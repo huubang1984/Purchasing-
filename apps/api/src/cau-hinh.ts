@@ -118,9 +118,27 @@ export interface CauHinhSes {
   readonly configurationSet: string | undefined;
 }
 
+/** [ADR-069] Kênh SMS qua AWS End User Messaging SMS. */
+export interface CauHinhSms {
+  readonly region: string;
+  /** Sender ID (brandname) hoặc ARN của nó — IAM của `tp-api` chỉ cho gửi từ danh tính này. */
+  readonly danhTinhGui: string;
+  readonly configurationSet: string | undefined;
+}
+
+/** [ADR-069] Kênh Zalo ZNS: token trong Secrets Manager, một template đã duyệt cho mỗi loại tin. */
+export interface CauHinhZalo {
+  readonly region: string;
+  readonly secretId: string;
+  readonly mau: { readonly otp: string; readonly loiMoi: string; readonly giaHan: string };
+}
+
 export interface GuiSes {
   readonly senderAdapter: "ses";
   readonly ses: CauHinhSes;
+  /** `undefined` = kênh SMS chưa bật: tin cho liên hệ khai SMS làm việc outbox thất bại (ADR-065 ⑴). */
+  readonly sms: CauHinhSms | undefined;
+  readonly zalo: CauHinhZalo | undefined;
 }
 
 export type CauHinhApi = CauHinhApiChung & (KhoaLocalDev | KhoaAwsKms) & (GuiDevMailbox | GuiSes);
@@ -397,13 +415,65 @@ function docKhoaKms(env: MoiTruong): CauHinhKms {
 
 const BIEN_GUI_DEV = ["TRUSTPROCURE_DEV_MAILBOX_DIR"] as const;
 const BIEN_GUI_SES = ["TRUSTPROCURE_SES_REGION", "TRUSTPROCURE_SES_FROM", "TRUSTPROCURE_SES_CONFIGURATION_SET"] as const;
+const BIEN_SMS = ["TRUSTPROCURE_SMS_REGION", "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY", "TRUSTPROCURE_SMS_CONFIGURATION_SET"] as const;
+const BIEN_ZALO = [
+  "TRUSTPROCURE_ZALO_REGION",
+  "TRUSTPROCURE_ZALO_SECRET_ID",
+  "TRUSTPROCURE_ZALO_TEMPLATE_OTP",
+  "TRUSTPROCURE_ZALO_TEMPLATE_INVITATION",
+  "TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE",
+] as const;
+const TEN_CAU_HINH_AWS = /^[A-Za-z0-9_-]{1,64}$/u;
+
+/**
+ * [ADR-069] Kênh SMS — bật khi có BẤT KỲ biến nào của nó; khi đã bật thì vùng và danh tính gửi là bắt buộc.
+ * Khai một nửa là lỗi, không phải "tắt": rơi âm thầm về "kênh chưa cấu hình" làm lời mời SMS thất bại ở tận outbox.
+ */
+function docSms(env: MoiTruong): CauHinhSms | undefined {
+  if (BIEN_SMS.every((b) => tuyChon(env, b) === undefined)) return undefined;
+  const region = bat(env, "TRUSTPROCURE_SMS_REGION");
+  if (!VUNG_AWS.test(region)) throw new CauHinhError("TRUSTPROCURE_SMS_REGION không phải một vùng AWS hợp lệ");
+  const danhTinhGui = bat(env, "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY");
+  if (!/^[A-Za-z0-9_:/+.-]{1,256}$/u.test(danhTinhGui)) {
+    throw new CauHinhError("TRUSTPROCURE_SMS_ORIGINATION_IDENTITY phải là sender ID hoặc ARN của nó");
+  }
+  const configurationSet = tuyChon(env, "TRUSTPROCURE_SMS_CONFIGURATION_SET");
+  if (configurationSet !== undefined && !TEN_CAU_HINH_AWS.test(configurationSet)) {
+    throw new CauHinhError("TRUSTPROCURE_SMS_CONFIGURATION_SET phải dài 1–64 ký tự [A-Za-z0-9_-]");
+  }
+  return { region, danhTinhGui, configurationSet };
+}
+
+/** [ADR-069] Kênh Zalo ZNS — cùng quy tắc bật/khai-một-nửa của `docSms`; cả ba template là bắt buộc. */
+function docZalo(env: MoiTruong): CauHinhZalo | undefined {
+  if (BIEN_ZALO.every((b) => tuyChon(env, b) === undefined)) return undefined;
+  const region = bat(env, "TRUSTPROCURE_ZALO_REGION");
+  if (!VUNG_AWS.test(region)) throw new CauHinhError("TRUSTPROCURE_ZALO_REGION không phải một vùng AWS hợp lệ");
+  const secretId = bat(env, "TRUSTPROCURE_ZALO_SECRET_ID");
+  if (!/^[A-Za-z0-9/_+=.@:-]{1,512}$/u.test(secretId)) throw new CauHinhError("TRUSTPROCURE_ZALO_SECRET_ID không phải tên/ARN secret hợp lệ");
+  const mau = (ten: string): string => {
+    const v = bat(env, ten);
+    if (!/^[A-Za-z0-9]{1,64}$/u.test(v)) throw new CauHinhError(`${ten} phải là ID template ZNS [A-Za-z0-9]`);
+    return v;
+  };
+  return {
+    region,
+    secretId,
+    mau: {
+      otp: mau("TRUSTPROCURE_ZALO_TEMPLATE_OTP"),
+      loiMoi: mau("TRUSTPROCURE_ZALO_TEMPLATE_INVITATION"),
+      giaHan: mau("TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE"),
+    },
+  };
+}
 
 /** Địa chỉ email đơn — cùng hình dạng `gui-ses.ts` kiểm lại lúc gửi. */
 const EMAIL_DON = /^[^\s@,;<>"]{1,64}@[^\s@,;<>"]{1,253}\.[^\s@,;<>"]{2,63}$/u;
 
 /** [ADR-065] Hai bộ biến gửi LOẠI TRỪ nhau — cùng quy tắc ⑷ của bộ biến khoá. */
 function docBoGui(env: MoiTruong, senderAdapter: "dev-mailbox" | "ses"): GuiDevMailbox | GuiSes {
-  const bienKhac = senderAdapter === "ses" ? BIEN_GUI_DEV : BIEN_GUI_SES;
+  // [ADR-069] Biến SMS/Zalo là của bộ gửi thật: dưới hộp thư dev chúng là "bộ gửi kia" (hộp thư dev ghi MỌI kênh ra tệp).
+  const bienKhac = senderAdapter === "ses" ? BIEN_GUI_DEV : [...BIEN_GUI_SES, ...BIEN_SMS, ...BIEN_ZALO];
   const sot = bienKhac.filter((b) => tuyChon(env, b) !== undefined);
   if (sot.length > 0) {
     throw new CauHinhError(`TRUSTPROCURE_SENDER_ADAPTER="${senderAdapter}" nhưng còn khai ${sot.join(", ")} của bộ gửi kia (ADR-065)`);
@@ -419,7 +489,7 @@ function docBoGui(env: MoiTruong, senderAdapter: "dev-mailbox" | "ses"): GuiDevM
   if (configurationSet !== undefined && !/^[A-Za-z0-9_-]{1,64}$/u.test(configurationSet)) {
     throw new CauHinhError("TRUSTPROCURE_SES_CONFIGURATION_SET phải dài 1–64 ký tự [A-Za-z0-9_-]");
   }
-  return { senderAdapter, ses: { region, tuDiaChi, configurationSet } };
+  return { senderAdapter, ses: { region, tuDiaChi, configurationSet }, sms: docSms(env), zalo: docZalo(env) };
 }
 
 export function docCauHinh(env: MoiTruong): CauHinhApi {

@@ -6507,3 +6507,48 @@ và nó không chuyển `X-Forwarded-For` nên mọi người dùng chung một 
 - Bộ chuyển tiếp của ADR-044 vẫn còn cho demo cục bộ (`pnpm web:dev`), và vẫn mang đúng những cái giá ADR ấy nêu.
 - Trang vẫn `cache-control: no-store` và nạp tệp một lần lúc khởi động — đổi trang = deploy lại, chấp nhận được khi deploy đã là
   một nút bấm.
+
+## ADR-069 — Kênh SMS qua AWS End User Messaging, Zalo ZNS với token trong Secrets Manager, và api ra internet qua NAT riêng
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: **ADR-015**, ADR-065, ADR-066
+
+### Bối cảnh
+
+ADR-015 chốt SMS là kênh OTP mặc định và Zalo ZNS là kênh thay thế; ADR-065 dựng bộ gửi thật chỉ cho EMAIL và để
+tin kênh SMS/ZALO_ZNS làm việc outbox thất bại. Hệ quả: nhà cung cấp chỉ khai số điện thoại không nhận được lời
+mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo chỉ có API công khai.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Định tuyến theo kênh** (`adapters/kenh-so.ts`): `EMAIL` → SES; `SMS` → AWS End User Messaging SMS; `ZALO_ZNS` →
+   Zalo. Link đăng nhập và thông báo duyệt vẫn chỉ là thư. Kênh chưa bật vẫn **NÉM** — không rơi về kênh khác
+   (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
+2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
+   `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
+   **ASCII không dấu, ≤ 160 ký tự** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
+   đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
+3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
+   `otp`, `duong_dan`, `han_nop`). **Token trong Secrets Manager** (`tp/api/zalo-oa`): refresh token dùng một lần và
+   xoay mỗi lần làm mới, nên api **đọc và ghi** secret lúc chạy — IAM Get + Put trên đúng secret ấy. Làm mới sớm 10
+   phút trước hạn, single-flight trong tiến trình, đọc kho trước khi làm mới và sau khi làm mới thất bại (task khác
+   có thể đã xoay). Xoay xong mà không ghi được kho là lỗi có tên riêng `ZaloTokenMatError`.
+4. **Đường ra: NAT Gateway một AZ, CHỈ cho api.** Api dời sang subnet riêng (`tp-api-*`) mà bảng định tuyến có tuyến
+   ra NAT; security group api mở ra ngoài đúng cổng 443. Worker, migrate, web giữ nguyên: không có tuyến ra
+   internet.
+
+### Hệ quả, nói thẳng
+
+- **Api ra được MỌI máy chủ HTTPS**, không chỉ Zalo và AWS: security group không lọc theo tên miền. Một api bị chiếm
+  quyền có đường tuồn dữ liệu mà trước ADR này nó không có. Lọc theo tên miền (AWS Network Firewall, ~300 USD/tháng)
+  hoặc một egress proxy là việc khi có dữ liệu thật đủ giá — không làm ở lát này.
+- **Chưa gọi thật** Zalo lẫn End User Messaging: đường dẫn và hình dạng phản hồi của Zalo theo tài liệu công khai,
+  đo trên fetch giả. Đăng ký brandname, duyệt template ZNS, cấp quyền OA là việc tay dài ngày (README, stack 85).
+- **Hai task api làm mới token Zalo ĐÚNG cùng lúc vẫn có thể giẫm nhau** — Zalo không có phép so-và-đổi; kho đọc lại
+  sau thất bại chỉ cứu được khi task kia đã ghi xong. Với `so_ban_api = 1` rủi ro gần như không có; tăng số bản thì
+  phải có khoá phân tán (Postgres advisory lock) trước.
+- Token bị thu hồi trước hạn: lần gửi hỏng xoá token trong bộ nhớ, lần sau đọc lại kho — nhưng không tự làm mới
+  khi kho vẫn ghi "còn hạn"; tự hồi phục khi access token hết hạn (≤ 25 giờ) hoặc khi người vận hành nạp lại.
+- NAT là một điểm hỏng ở một AZ: NAT chết thì SMS/Zalo chết, email và phần còn lại không. Chi phí ~35 USD/tháng +
+  phí dữ liệu.
+- `SENT` trong outbox vẫn không phải bằng chứng đã tới tay (ADR-015) — cả hai kênh đều có báo cáo giao tin riêng
+  (event destination của End User Messaging, webhook ZNS) chưa được nối.

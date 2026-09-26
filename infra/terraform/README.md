@@ -4,7 +4,7 @@ Hiện thực của **ADR-062** (khoá tổ chức là cặp khoá P-256; `tp-ap
 và **ADR-026 §4** (nơi cất mốc neo nằm ngoài tầm với của role deploy). Phạm vi: KMS, IAM,
 CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 
-## Mười stack, chạy đúng thứ tự
+## Mười một stack, chạy đúng thứ tự
 
 | Stack | Tài khoản | Profile | Tạo gì | Chạy được khi |
 |---|---|---|---|---|
@@ -17,7 +17,8 @@ CloudTrail, bucket neo. **Chưa có** VPC, ECS, RDS.
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker` (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
-| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng không NAT + VPC endpoint, RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
+| `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -136,6 +137,34 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 
 **Chưa có:** SMS và Zalo ZNS. Liên hệ khai kênh ấy thì bộ gửi SES NÉM, việc outbox thất bại.
 
+## Kênh SMS và Zalo ZNS — stack `85-sms-zalo` (ADR-069)
+
+**SMS.** Việt Nam chỉ nhận SMS từ **brandname đã đăng ký**, kèm **mẫu nội dung** đã đăng ký với nhà mạng.
+1. Console AWS End User Messaging SMS → *Registrations*: tạo hồ sơ sender ID cho Việt Nam (giấy tờ doanh nghiệp,
+   brandname, ba mẫu nội dung — chép NGUYÊN VĂN ba câu trong `apps/api/src/adapters/gui-sms.ts`, phần biến là mã,
+   đường dẫn, mốc giờ). Chờ duyệt — tính bằng tuần, không phải phút.
+2. `terraform apply -var sender_id=<BRANDNAME>` (thư mục `85-sms-zalo`). Nếu AWS từ chối vì chưa đăng ký xong,
+   quay lại bước 1. Output `sms.registered` phải là `true` trước khi bật kênh.
+3. Tài khoản mới ở *sandbox* SMS và có trần chi tiêu tháng: xin ra khỏi sandbox và đặt trần trong console.
+4. Stack 90: `sms = { danh_tinh_gui = "<BRANDNAME>", configuration_set = "tp-sms" }` trong `prod.tfvars`.
+
+**Zalo ZNS.** Cần Official Account đã xác thực, ứng dụng Zalo liên kết OA, số dư ZNS.
+1. Tạo ba template ZNS và chờ Zalo duyệt; tên tham số là hợp đồng với mã: OTP `otp`, lời mời `duong_dan`
+   (đường dẫn `https://<ten_mien>/i#…` — Zalo có thể đòi khai báo tên miền), gia hạn `han_nop`.
+2. Cấp quyền OA cho ứng dụng (OAuth v4 trên developers.zalo.me) để có **refresh token**.
+3. Nạp secret — tệp tạm, xoá ngay sau lệnh:
+   ```powershell
+   '{"app_id":"<id>","secret_key":"<khoá ứng dụng>","access_token":"","refresh_token":"<refresh token>","het_han_luc":0}' |
+     Set-Content -Encoding utf8 zalo.json
+   aws secretsmanager put-secret-value --profile tp-prod --secret-id tp/api/zalo-oa --secret-string file://zalo.json
+   Remove-Item zalo.json
+   ```
+   Từ đó `api` tự làm mới token và ghi lại. Refresh token dùng MỘT lần: đừng thử nó bằng tay sau khi nạp.
+4. Stack 90: `zalo = { template_otp, template_invitation, template_deadline }` trong `prod.tfvars`.
+
+**Kiểm:** mời một nhà cung cấp khai kênh SMS/Zalo; log `/tp/api` không có `GuiKenhError`/`ZaloTokenMatError`.
+`ZaloTokenMatError` nghĩa là token đã xoay mà không ghi được vào secret — cấp lại refresh token (bước 2–3).
+
 ## Chạy thật — stack `90-ecs` (ADR-066)
 
 **1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên).
@@ -160,7 +189,7 @@ terraform plan -var-file prod.tfvars -out plan.tfplan                   # bướ
 terraform apply plan.tfplan                                             # chờ ACM xác minh rồi tạo ALB
 ```
 
-`prod.tfvars` (không commit): `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
+`prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
 và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.

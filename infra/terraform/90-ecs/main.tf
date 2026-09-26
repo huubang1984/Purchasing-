@@ -1,8 +1,9 @@
 # Stack 90 — tài khoản PROD: chạy `api` và `unseal-worker` thật trên ECS Fargate (ADR-066).
 #
-#   Mạng     VPC 2 AZ. Subnet CÔNG KHAI chỉ cho ALB; task và RDS ở subnet RIÊNG, KHÔNG NAT — ra AWS qua
-#            VPC endpoint (KMS, ECR, Logs, Secrets Manager, SES; S3 gateway cho lớp image ECR). Task
-#            không có đường ra internet tuỳ ý.
+#   Mạng     VPC 2 AZ. Subnet CÔNG KHAI chỉ cho ALB; task và RDS ở subnet RIÊNG — ra AWS qua VPC endpoint
+#            (KMS, ECR, Logs, Secrets Manager, SES; S3 gateway cho lớp image ECR). [ADR-069] RIÊNG `api` ở
+#            subnet của nó, đi qua MỘT NAT Gateway, chỉ cổng 443 — cho SMS (End User Messaging) và Zalo ZNS.
+#            Worker, migrate, web không có tuyến ra internet.
 #   CSDL     RDS PostgreSQL 16, single-AZ, db.t4g.small, gp3 20 GB, mã hoá, force_ssl, backup 7 ngày,
 #            deletion protection. Mật khẩu master do RDS quản lý trong Secrets Manager.
 #   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-web` — thẻ bất biến, quét lúc đẩy.
@@ -98,6 +99,25 @@ variable "ses" {
   })
 }
 
+variable "sms" {
+  description = "[ADR-069] Kênh SMS của api — null = tắt. danh_tinh_gui: sender ID (brandname) đã đăng ký, khớp IAM của stack 85."
+  type = object({
+    danh_tinh_gui     = string
+    configuration_set = optional(string)
+  })
+  default = null
+}
+
+variable "zalo" {
+  description = "[ADR-069] Kênh Zalo ZNS của api — null = tắt. Ba ID template ZNS đã duyệt; secret token của stack 85."
+  type = object({
+    template_otp        = string
+    template_invitation = string
+    template_deadline   = string
+  })
+  default = null
+}
+
 variable "ses_endpoint_service" {
   description = "Tên dịch vụ VPC endpoint của SES API. Rỗng ⇒ không tạo (khi đó task KHÔNG gửi được thư)."
   type        = string
@@ -154,6 +174,15 @@ resource "aws_subnet" "ung_dung" {
   tags              = { Name = "tp-ung-dung-${count.index}" }
 }
 
+# [ADR-069] Subnet riêng của api: bảng định tuyến của nó — và CHỈ của nó — có tuyến ra NAT.
+resource "aws_subnet" "api" {
+  count             = 2
+  vpc_id            = aws_vpc.tp.id
+  cidr_block        = cidrsubnet(local.cidr, 8, 30 + count.index)
+  availability_zone = local.az[count.index]
+  tags              = { Name = "tp-api-${count.index}" }
+}
+
 resource "aws_subnet" "csdl" {
   count             = 2
   vpc_id            = aws_vpc.tp.id
@@ -191,6 +220,34 @@ resource "aws_route_table_association" "csdl" {
   count          = 2
   subnet_id      = aws_subnet.csdl[count.index].id
   route_table_id = aws_route_table.rieng.id
+}
+
+# [ADR-069] MỘT NAT ở AZ đầu (~35 USD/tháng + phí dữ liệu); api ở AZ kia đi chéo AZ. NAT hỏng thì SMS/Zalo
+# hỏng, email và mọi thứ khác không — chấp nhận ở quy mô này.
+resource "aws_eip" "nat" {
+  domain = "vpc"
+  tags   = { Name = "tp-nat" }
+}
+
+resource "aws_nat_gateway" "api" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.cong_khai[0].id
+  tags          = { Name = "tp-nat" }
+  depends_on    = [aws_internet_gateway.tp]
+}
+
+resource "aws_route_table" "api" {
+  vpc_id = aws_vpc.tp.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.api.id
+  }
+}
+
+resource "aws_route_table_association" "api" {
+  count          = 2
+  subnet_id      = aws_subnet.api[count.index].id
+  route_table_id = aws_route_table.api.id
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -288,6 +345,15 @@ resource "aws_vpc_security_group_ingress_rule" "api_tu_alb" {
   ip_protocol                  = "tcp"
   from_port                    = 8080
   to_port                      = 8080
+}
+
+# [ADR-069] api ra internet CHỈ 443 (SMS End User Messaging, Zalo ZNS). Không lọc theo tên miền — xem ADR-069.
+resource "aws_vpc_security_group_egress_rule" "api_internet" {
+  security_group_id = aws_security_group.api.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
 }
 
 resource "aws_vpc_security_group_egress_rule" "task_csdl" {
@@ -474,8 +540,24 @@ resource "aws_cloudwatch_log_group" "tp" {
 }
 
 locals {
+  # [ADR-069] Kênh số điện thoại: chỉ khai biến của kênh đã bật — api đọc "có biến" là "bật".
+  env_kenh_so = concat(
+    var.sms == null ? [] : concat([
+      { name = "TRUSTPROCURE_SMS_REGION", value = local.region },
+      { name = "TRUSTPROCURE_SMS_ORIGINATION_IDENTITY", value = var.sms.danh_tinh_gui },
+      ], var.sms.configuration_set == null ? [] : [
+      { name = "TRUSTPROCURE_SMS_CONFIGURATION_SET", value = var.sms.configuration_set },
+    ]),
+    var.zalo == null ? [] : [
+      { name = "TRUSTPROCURE_ZALO_REGION", value = local.region },
+      { name = "TRUSTPROCURE_ZALO_SECRET_ID", value = "tp/api/zalo-oa" },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_OTP", value = var.zalo.template_otp },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_INVITATION", value = var.zalo.template_invitation },
+      { name = "TRUSTPROCURE_ZALO_TEMPLATE_DEADLINE", value = var.zalo.template_deadline },
+    ],
+  )
   env = {
-    api = [
+    api = concat([
       { name = "NODE_ENV", value = "production" },
       { name = "TRUSTPROCURE_LISTEN_HOST", value = "0.0.0.0" },
       { name = "TRUSTPROCURE_LISTEN_PORT", value = "8080" },
@@ -496,7 +578,7 @@ locals {
       { name = "TRUSTPROCURE_SES_FROM", value = var.ses.tu_api },
       { name = "TRUSTPROCURE_SES_CONFIGURATION_SET", value = var.ses.configuration_set },
       { name = "TRUSTPROCURE_OTP_PEPPER_ACTIVE", value = "p1" },
-    ]
+    ], local.env_kenh_so)
     worker = [
       { name = "NODE_ENV", value = "production" },
       { name = "TRUSTPROCURE_KEY_ADAPTER", value = "aws-kms" },
@@ -694,7 +776,7 @@ resource "aws_ecs_service" "api" {
   desired_count   = var.so_ban_api
   launch_type     = "FARGATE"
   network_configuration {
-    subnets          = aws_subnet.ung_dung[*].id
+    subnets          = aws_subnet.api[*].id
     security_groups  = [aws_security_group.api.id]
     assign_public_ip = false
   }
