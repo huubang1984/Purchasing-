@@ -7549,3 +7549,208 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   xung đột nó quản, cấp lại, và chạy lại không đổi một byte. Lời khai viết tay (`gói + công cụ`) và
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.
+
+---
+
+## ADR-9201 — S4a mở vòng song song S3, là ngoại lệ HẸP thứ hai với ADR-043
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn ngày 2026-09-26, spec S4 §2.2 ⑶; chốt ở lượt soi
+S1.9102) · Liên quan: **ADR-043**, **ADR-080**, ADR-058 ⑷, ADR-090 · Spec:
+`docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` §2.3 (a), §2.5 ⒆
+
+**Bối cảnh.** ADR-043 chỉ cho khoản rổ A mở vòng. ADR-080 mở thêm đúng một đường, cho các hạng mục S3.x. Chủ dự án chọn cho
+nửa đầu của S4 — S4a, *Data Foundation* — chạy song song S3 ngay sau lượt soi hình dạng. Lượt soi S1.9102 đo ra rằng luật dừng
+của bản nháp (*"nhường S3.x khi hai bên sửa cùng một bảng"*) nổ ngay ở hạng mục đầu, vì ba hạng mục S4 sửa
+`org_procurement_policies` cùng S3.1.
+
+### Quyết định
+
+⑴ **Ngoại lệ HẸP.** Chỉ các hạng mục S4.0–S4.8 của spec S4 được mở vòng khi MVP1 chưa đóng. S4b không thuộc ngoại lệ này; nó
+chờ cổng (e), trừ S4b.1 (ADR-9205 ⑼). Đường này không mở khoản rổ B nào khác.
+
+⑵ **Dòng trỏ mảnh** của mỗi vòng S4.x: *"không chạm mảnh nào của `PRODUCT.md` §11; chạy song song S3 dưới ADR-9201"* — kèm, cho
+hạng mục chạm `/nop-thau` hay `/mo-thau`, một lượt đi thử luồng MVP1 ở khung 375×812 với tổ chức không khai gì của S4.
+
+⑶ **Luật thứ tự và luật dừng.** Hạng mục không chạm `org_procurement_policies` đi trước. Không hạng mục S4 nào sửa bảng ấy
+trước khi S3.1 vào `master`; mọi bộ đọc của S4 gọi hàm ghim `chinh_sach_tai` mà S3.1 dựng. Ngoài ra S4.x nhường S3.x khi hai
+bên sửa **cùng cột, cùng hàm ghim, hay cùng tệp mã**. Một vòng S4.x cũng nhường một khoản rổ A, hay một vòng triển khai thật
+hoặc pilot (khuôn ADR-080 ⑷).
+
+⑷ **Không có công tắc theo tổ chức.** Hành vi mới của S4a hoặc cộng thêm, hoặc tắt mặc định — với MỘT ngoại lệ chủ dự án chọn
+khi biết giá: ghim phiên bản chính sách lúc gói vào `OPEN` (ADR-9205 ⑸) đổi lượt chấm của mọi tổ chức.
+
+### Cái giá, nói thẳng
+
+- Hai lát cắt chung một năng lực làm việc. Ước lượng S4a 4–6 tuần không tính việc chờ S3.1, S3.2, S3.5.
+- ADR-090 gỡ phần đổi số; nó không gỡ xung đột ngữ nghĩa trên cùng bảng, cùng tệp. Luật ⑶ gỡ phần ấy bằng cách xếp hàng.
+
+### Điều ADR này KHÔNG nói
+
+Nó không nói S4 xong trước pilot, không đóng mảnh 3 hay mảnh 4, và không đổi luật rổ của ADR-043 cho bất kỳ việc gì ngoài
+S4.0–S4.8 và S4b.1.
+
+---
+
+## ADR-9202 — S4 giữ TypeScript + PostgreSQL; không service Python, không ML — sửa phần *Hệ quả* của ADR-001
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn, spec S4 §2.2 ⑵) · Liên quan: **ADR-001**, ADR-066,
+ADR-090 · Spec S4 §2.3 (b), §4.4
+
+**Bối cảnh.** ADR-001 ghi: *"Tới S4 (Intelligence), tách một service Python riêng cho chuẩn hóa item và benchmark"*. Hai điều
+kiện của lời ấy không có mặt: chưa có dữ liệu pilot để một mô hình học, và V2.1 §44 đặt *Data Quality Before AI*. Kho có một
+luật chịu lực mà một runtime thứ hai phá: *một luật, một chỗ* (`014` §(4)), với phép so nằm ở SQL.
+
+### Quyết định
+
+⑴ Chuẩn hoá, quy đổi, lịch sử giá và benchmark sống trong TypeScript + PostgreSQL. Làm sạch chuỗi và quy đổi đơn vị là HÀM
+SQL; khớp mờ để GỢI Ý là lõi TypeScript thuần có phiên bản. Không extension mới — `CREATE EXTENSION` trên `db/migrations` vẫn
+0 kết quả.
+
+⑵ **Điều kiện mở lại:** hàng đợi duyệt tay của một tổ chức THẬT giữ quá 500 dòng quá 30 ngày (GIẢ ĐỊNH), hoặc một nhu cầu
+mà luật tất định không diễn đạt được — ví dụ so nghĩa giữa hai mô tả không có từ chung.
+
+### Cái giá
+
+Ghép bằng luật tất định cộng người duyệt là nhiều việc tay hơn ghép bằng mô hình. Chủ dự án chọn thêm việc tay ở ADR-9205 ⑹.
+
+---
+
+## ADR-9203 — Lịch sử giá theo hạng mục là một HÀM as-of, không phải bảng giá dạng rõ thứ ba; ADR-054 khai thêm hai bảng *"giá không phải báo giá"*
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi S1.9102 chốt từ tiền lệ) · Liên quan: **ADR-054**, ADR-017,
+ADR-013, ADR-056, ADR-059 · Spec S4 §2.3 (c), §2.5 ⑿⒀⒁⒅, §4.5
+
+**Bối cảnh.** ADR-054 kết bằng câu: *mỗi bảng giá dạng rõ phải kèm một dòng khai vai ghi và cổng đọc; không khai được thì không
+thêm.* Bản nháp spec S4 đề xuất một VIEW `price_observations`. Lượt soi đo ra ba điều:
+- một view không nhận mốc của gói đang xét, nên không diễn đạt được luật mù;
+- mục (C) của hardening đã từ chối mọi materialized view lúc `migrate()`, nên chỗ hở *"matview lọt bước 14"* chỉ đúng cho đối
+  tượng dựng lúc chạy;
+- bộ quét của bước 14 tìm một mốc TỔNG, nên mù với đơn giá và giá phái sinh.
+
+### Quyết định
+
+⑴ **Hàm `quan_sat_gia(p_moc timestamptz) RETURNS TABLE`, `SECURITY INVOKER STABLE`.** Nó chọn mọi hàng dữ liệu nền là *mới
+nhất theo `seq` trong số hàng có `ghi_luc` < `p_moc`*, và gắn hai nhãn `HOI_TO`/`SAU_MOC`. Hàm không lưu gì. Mọi giá nó trả
+vẫn nằm ở `rfq_unsealed_bids`, dưới vai ghi `app_unseal`.
+
+⑵ **Bộ đọc `bid_dong_tho(payload) RETURNS TABLE`, `IMMUTABLE`, không bao giờ `RAISE`.** Nó từ chối đúng SÁU ca của
+`bid_so_tien` (`022:350-373`). Đơn giá = `amount / quantity`; phép kiểm dòng duy nhất là Σ `amount` = `totalAmount` — không
+thêm luật làm tròn thứ hai (ADR-050 ⑴, khoản 218).
+
+⑶ **Vị từ *"giá đã lộ"* là MỘT hàm SQL theo dữ liệu:** mọi vòng của gói có `unseal_requests` `EXECUTED`. Gói `CANCELLED` bị
+loại; gói `AWARDED` được tính.
+
+⑷ **Kết quả benchmark không lưu số tiền nào.** Nó ghi đúng một lần trong giao dịch tạo lượt chấm, với `policy_id` và một bảng
+con khoá ngoại `(org_id, bid_version_id)` → `rfq_unsealed_bids` kèm `line_no`.
+
+⑸ **Bảng của ADR-054 thêm hai dòng *"giá không phải báo giá"*:** `external_price_references` và `external_purchase_history`
+(ADR-9204). Vai ghi `app_api`, qua người giữ `item.manage`; cổng đọc `bid.view`. Bộ bằng chứng (ADR-059) được khai là NƠI MANG
+GIÁ, và định danh gói, nhà cung cấp của quan sát trong nó được băm có muối theo từng bundle.
+
+⑹ **Bước 14 của kịch bản 41** thêm `lines` và một kim ĐƠN GIÁ, quét cả hai bảng ở ⑸ bằng kim riêng, và nới `relkind` thêm
+`'v','m'` như lớp thứ hai. Năm bộ quét cùng dùng `relkind IN ('r','p')` — kê đủ cả năm.
+
+### Cái giá
+
+Mỗi lần đọc lịch sử là một lần phân tích `jsonb` trên mọi báo giá đã mở của tổ chức. Chỉ mục biểu thức KHÔNG phải lối thoát:
+một hàng có N dòng. Nếu phép đo ở S4.4 vượt ngưỡng GIẢ ĐỊNH (p95 < 500 ms ở 5.000 gói × 20 dòng), lối thoát thật là một bảng
+lưu, và bảng ấy chỉ được dựng sau một dòng khai mới ở ADR-054.
+
+### Điều ADR này KHÔNG nói
+
+Hàm as-of không phải ranh giới bí mật: `app_api` có `SELECT` mức bảng trên `rfq_unsealed_bids` (`019:459`). Nó là *một luật
+một chỗ*. Ranh giới là một test kiến trúc liệt kê mọi tệp đọc bảng ấy.
+
+---
+
+## ADR-9204 — Mốc giá ngoài và lịch sử mua ngoài hệ thống: ai nhập, đọc bằng gì, và cái nào được sinh nhãn
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** (lượt soi S1.9102; vế lịch sử ngoài hệ thống do chủ dự án chọn,
+ADR-9205 ⑽) · Liên quan: ADR-054, ADR-058, ADR-013, ADR-020, `033` · Spec S4 §2.3 (d), §4.6, §4.7
+
+**Bối cảnh.** Hai nguồn mà bên mua tự đưa vào: mốc giá ngoài (một mức giá tham chiếu, có nguồn) và lịch sử mua trước khi dùng
+TrustProcure (nguồn đầu tiên của V2.1 §15). ADR-058 nói chỉ một mốc ngoài mới bắt được một pool cùng một đội. Nhưng đó cũng là
+đầu vào mà người đặt thước tự gõ ra.
+
+### Quyết định
+
+⑴ **Người nhập:** vai `DATA_STEWARD` (`item.manage`), mù giá (ADR-9205 ⑺). Luật mù L1 áp nguyên: hàng ghi sau mốc của một gói
+không vào benchmark của gói ấy mà không mang nhãn.
+
+⑵ **Người đọc:** `bid.view`. Hai bảng mang giá.
+
+⑶ **Nguồn:** mốc ngoài mang `nguon` không rỗng — tên nguồn, ngày của mức giá, tham chiếu nếu có. Nguồn không được là một báo
+giá trong chính hệ thống; đó là lời khai của người nhập, có chủ thể, không phải phép kiểm máy.
+
+⑷ **Nhãn:** mốc ngoài chỉ hiện độ lệch, KHÔNG sinh nhãn. Lịch sử ngoài hệ thống hiện thành dải RIÊNG, cùng phương pháp của dải
+nội bộ, có nhãn RIÊNG ghi rõ nguồn. Không nguồn ngoài nào trộn vào dải nội bộ, và không nguồn nào tính cho cổng (e).
+
+⑸ **Nhập hàng loạt:** dán văn bản CSV vào một ô, thân JSON, không multipart — không chờ ADR (c) của S3 về tải tệp, không đụng
+điều kiện xét lại tầng HTTP của ADR-020. Mỗi lô một hàng sổ.
+
+⑹ **Thời hạn giữ:** cùng thời hạn của sổ kiểm toán. Bảng chỉ-ghi-thêm; rút bằng hàng rút, không xoá.
+
+### Cái giá
+
+Không gì chặn việc KHÔNG nhập mốc, hay chọn dòng lịch sử nào để nhập. Câu của ADR-058 vẫn đúng: mốc ngoài là điều kiện cần,
+chỉ đủ khi người nhập độc lập với người chọn — và vai mù giá là cách S4 mua sự độc lập ấy.
+
+---
+
+## ADR-9205 — Lượt soi hình dạng spec S4: bảy quyết định của chủ dự án, và những gì lượt soi chốt từ tiền lệ
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.9102 · Liên quan: ADR-017, ADR-043, ADR-050 (khuôn),
+**ADR-051**, ADR-053, **ADR-054**, ADR-058, ADR-080, ADR-082, ADR-084, ADR-9201…9204 · Biên bản:
+`evidence/security-reviews.md` §S1.9102
+
+**Bối cảnh.** Lượt soi S1.9102 chạy bốn góc độc lập trên bản nháp spec S4 — lời khai và mâu thuẫn nội tại, khả thi ở CSDL, đối
+kháng, phạm vi-luồng-kiểm thử. Bốn góc trả 48 phát hiện thô; khử trùng còn **32, trong đó 10 CAO**. Ba lời khai được **đo**
+trên Postgres 16 thật. Bảy chỗ là lựa chọn sản phẩm nên được trình; phần còn lại điền được từ tiền lệ, cùng khuôn ADR-050.
+
+### Bảy quyết định của chủ dự án, ngày 2026-09-26
+
+⑸ **Ghim phiên bản chính sách lúc gói vào `OPEN`.** Lượt chấm, TCO, benchmark và form nhà cung cấp của gói X dùng phiên bản mới
+nhất TẠO trước `opened_at` của X. Lượt chấm dưới phiên bản khác bị từ chối. Lý do: lượt chấm hôm nay đọc phiên bản mới nhất và
+chỉ chạy sau khi giá lộ, còn `FINANCE` giữ cùng lúc `policy.manage`, `bid.view` và `evaluation.perform`. Với S4 — thành phần
+TCO, `he_so`, ngưỡng benchmark — đó là cần gạt đảo được thứ hạng. **Đảo lựa chọn *"đọc mới nhất"* của S2 cho mọi tổ chức.**
+
+⑹ **`TU_DONG` chỉ khi chuỗi đã làm sạch trùng CHÍNH XÁC một bí danh còn hiệu lực**, kiểm lại được ở CSDL vì làm sạch là một hàm
+SQL. Mọi khớp mờ, kể cả ≥ 95%, là gợi ý chờ người. Ngưỡng 95/80 của V2.1 §14 rời chính sách.
+
+⑺ **Vai mới `DATA_STEWARD`, mù giá.** Vai ấy giữ `item.manage` và không giữ `bid.view`, `po.approve`, `award.recommend`,
+`rfq.create`, `rfq.invite` — cưỡng chế ở vai và ở người, khuôn `033`. Cái giá: thêm một người.
+
+⑻ **TCO giữ, lời khai thành cam kết.** Lời khai của báo giá được đề xuất lưu cùng award, vào bộ bằng chứng; nhãn *"theo lời khai
+của nhà cung cấp"*; hiện cả hạng theo giá và hạng TCO; lệch hạng thì đề xuất trao cần giải trình. Bỏ mã `thue`.
+
+⑼ **S4b.1 tách khỏi cổng (e), đặt sau S3.5.** Độ phủ dữ liệu dưới ngưỡng → `KHONG_XAC_DINH`, xử như `CAO`. Cần MFA trong cửa
+sổ, giải trình, và ghi nhận từng yếu tố đỏ bởi người ngoài {người tạo gói, người gây ra, người đề xuất, người duyệt}. Mức tính
+trên đầu vào đóng băng tại mốc mở giá. Không chọn nhánh *"hoặc phê duyệt kép"* của V2.1 §24.
+
+⑽ **Lịch sử mua ngoài hệ thống là nguồn thứ ba, hiện riêng** — ADR-9204.
+
+⑾ **Quần thể benchmark theo gói, loại `CANCELLED`.** Mỗi gói một trung vị trên các báo giá vị thế cuối, rồi trung vị của các
+gói; sàn ≥ 3 gói và ≥ 3 nhà cung cấp; màn hiện thành phần. *"Thấp bất thường"* chỉ dẫn tới yêu cầu làm rõ, không là căn cứ loại.
+
+### Chốt từ tiền lệ
+
+Mười bốn chốt ⑿–㉕, mỗi chốt kèm tiền lệ, ở bảng §2.5 của spec S4. Bốn chốt chịu lực nhất:
+- ⑿ luật mù cài bằng hàm as-of; mọi bảng nền chỉ-ghi-thêm có `seq` và `ghi_luc`; danh tính hàng chuẩn bất biến; hai nhãn
+  tính trên mọi hàng nền đã dùng (ADR-017, C-1 của `011`, khuôn `seq` của `018`/`059`);
+- ⒁ đơn giá từ `amount`, không luật làm tròn thứ hai (ADR-050 ⑴);
+- ⒃ chốt TCO kiểm lúc chấm, không `CHECK` mới; `he_so` của mã `TIEN` bằng 1 (ADR-053 ⑶, V2.1 §16);
+- ⒇ hàng bất biến tách bằng số mới, không hậu tố — bộ đọc sổ bỏ qua hậu tố mà không báo lỗi (đo, khoản 9403).
+
+### Hai chỗ lượt soi CỐ Ý không chốt
+
+- **ADR (e) — cổng dữ liệu của S4b.** Con số chỉ hiệu chỉnh được trên dữ liệu thật; lượt soi chỉ chốt rằng sàn đo theo từng tổ
+  chức và loại ánh xạ `NULL` khỏi tỷ lệ.
+- **Câu hỏi pháp lý về phân tích người mua** (spec S4 §8.7) — thuộc chủ dự án, ghi ở `docs/TIEN-DE-CHUA-DO.md`.
+
+### Ba lỗ của MVP1 mà lượt soi đo ra
+
+- **Khoản 9401** — một nhà cung cấp gõ tiền tệ khác `VND` chặn lượt chấm của cả gói.
+- **Khoản 9402** — lời khai *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* sai.
+- **Khoản 9403** — bộ đọc sổ bất biến bỏ qua hàng có hậu tố.
+
+Không khoản nào là của S4.
