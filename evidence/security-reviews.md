@@ -12445,9 +12445,9 @@ ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất 
   phiên agent) — **33 ca đạt**.
 - Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
 
-# §S1.9102 — KHOẢN 122 VÀ 144 ĐÓNG: TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ
+# §S1.155 — KHOẢN 122 VÀ 144 ĐÓNG: TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ
 
-**Rổ và mảnh (ADR-043 ⒞): khoản 122 và 144 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-9202). Không chạm mảnh nào của
+**Rổ và mảnh (ADR-043 ⒞): khoản 122 và 144 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-092). Không chạm mảnh nào của
 `docs/PRODUCT.md` §11.
 
 ## 1. Vòng này là gì
@@ -12483,7 +12483,7 @@ khi lần từ chối NÉM.
 
 ## 4. Đo sau khi sửa
 
-`apps/api/src/auth.int.test.ts`, khối *"[S1.9102 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên"*, trần 3 tiêm vào một bộ điều
+`apps/api/src/auth.int.test.ts`, khối *"[S1.155 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên"*, trần 3 tiêm vào một bộ điều
 phối riêng, PostgreSQL 16 thật:
 - ⒠ phiên NGƯỜI vai BUYER, `POST /suppliers` (thiếu `supplier.manage`): 3×403 và +3 hàng `PERMISSION_DENIED`; 3×429 với thân
   `{"error":"qua nhieu yeu cau"}`, `retry-after` 900, 0 hàng thêm; `POST /rfqs` của cùng phiên ⇒ 201; phiên khác ⇒ 403 và +1 hàng;
@@ -12507,4 +12507,4 @@ phối riêng, PostgreSQL 16 thật:
 
 - `pnpm t0` sạch; `pnpm test` xanh.
 - Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
-- Số tạm `S1.9102`, `ADR-9202` do `pnpm cap-so` cấp lúc merge.
+- Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.

@@ -150,7 +150,7 @@ export class AgentReadAuditFailedError extends Error {
 export const AGENT_DOC_TRAN_MOI_CUA_SO = 900;
 
 /**
- * [S1.9102 / khoản 122 · 144 / ADR-9202] Trần số lần TỪ CHỐI của MỘT phiên người mua (người hay agent) trong một cửa sổ
+ * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần TỪ CHỐI của MỘT phiên người mua (người hay agent) trong một cửa sổ
  * `OTP_RATE_WINDOW_SECONDS` — chung một bucket cho `PERMISSION_DENIED` của `requirePermission` và `AGENT_SCOPE_DENIED` của vế phạm
  * vi. Vượt trần ⇒ 429 TRƯỚC lần ghi sổ: sổ giữ N lần từ chối đầu của phiên ấy trong cửa sổ, phần còn lại bị đổ — không lấy khoá
  * chuỗi sổ, không giữ kết nối `auditPool`.
@@ -163,7 +163,7 @@ export const AGENT_DOC_TRAN_MOI_CUA_SO = 900;
 export const TU_CHOI_TRAN_MOI_CUA_SO = 30;
 
 /**
- * [S1.9102 / khoản 122 · 144 / ADR-9202] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
+ * [S1.155 / khoản 122 · 144 / ADR-092] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
  * không phải một lần từ chối để ghi sổ (cổng [INV-D5] nhận diện lớp từ chối bằng đuôi tên ấy) mà là lý do lần từ chối KHÔNG được
  * ghi. Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.
  */
@@ -226,7 +226,7 @@ export interface DispatcherDeps {
    */
   readonly tranDocAgent?: number;
   /**
-   * [S1.9102 / khoản 122 · 144 / ADR-9202] Trần số lần từ chối của một phiên người mua mỗi cửa sổ — mặc định
+   * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần từ chối của một phiên người mua mỗi cửa sổ — mặc định
    * `TU_CHOI_TRAN_MOI_CUA_SO`. Test tiêm số nhỏ; cùng khuôn `tranDocAgent`.
    */
   readonly tranTuChoi?: number;
@@ -636,7 +636,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               throw e;
             }
             // ==================================================================================
-            // [S1.9102 / khoản 122 · 144 / ADR-9202] TRẦN LẦN TỪ CHỐI THEO PHIÊN.
+            // [S1.155 / khoản 122 · 144 / ADR-092] TRẦN LẦN TỪ CHỐI THEO PHIÊN.
             //
             // Mỗi lần từ chối là một hàng sổ ở giao dịch ĐỘC LẬP, và mỗi hàng sổ lấy khoá tư vấn nối
             // tiếp TOÀN TỔ CHỨC dưới trần 2 s (050) — nên một phiên bắn liên tục vào route nó không

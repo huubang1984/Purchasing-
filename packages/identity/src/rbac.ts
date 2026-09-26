@@ -483,7 +483,7 @@ async function khangDinhGhiDuocDocLap(client: pg.PoolClient, orgId: string): Pro
 }
 
 /**
- * [S1.9102 / khoản 122 · 144 / ADR-9202] Tuỳ chọn của `requirePermission`. `truocKhiGhiTuChoi` chạy đúng một lần, chỉ trên đường
+ * [S1.155 / khoản 122 · 144 / ADR-092] Tuỳ chọn của `requirePermission`. `truocKhiGhiTuChoi` chạy đúng một lần, chỉ trên đường
  * TỪ CHỐI, trước lần ghi `PERMISSION_DENIED`; nó ném thì lần từ chối KHÔNG được ghi sổ và lỗi của nó đi ra nguyên dạng.
  */
 export interface TuyChonCongQuyen {
@@ -547,7 +547,7 @@ export async function requirePermission(
 
   const tuChoi = new PermissionDeniedError(requirement.userId, requirement.permission);
 
-  // [S1.9102 / khoản 122 · 144 / ADR-9202] Móc của người gọi, chạy SAU phép kiểm quyền và TRƯỚC lần ghi sổ — chỗ duy nhất biết
+  // [S1.155 / khoản 122 · 144 / ADR-092] Móc của người gọi, chạy SAU phép kiểm quyền và TRƯỚC lần ghi sổ — chỗ duy nhất biết
   // "lần này là một lần TỪ CHỐI" mà chưa chạm khoá chuỗi sổ. Lỗi của nó đi ra TRẦN (không bọc `PermissionAuditFailedError`): nó
   // không phải một lần ghi sổ hỏng mà là quyết định của người gọi rằng lần từ chối này không được ghi — hôm nay là trần theo phiên
   // của bộ điều phối (429). Không móc ⇒ hành vi y như trước.

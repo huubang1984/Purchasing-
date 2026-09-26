@@ -1679,7 +1679,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     });
   });
 
-  describe("[S1.9102 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên — 429 trước lần ghi sổ", () => {
+  describe("[S1.155 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên — 429 trước lần ghi sổ", () => {
     const TRAN = 3;
     const THAN_429 = JSON.stringify({ error: "qua nhieu yeu cau" });
     const NCC = { legalName: "NCC bi tu choi", taxCode: "0100000001" };

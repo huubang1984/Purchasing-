@@ -7605,9 +7605,9 @@ cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra 
   fail-closed (khoá sổ bị giữ ⇒ 500, không dữ liệu, không hàng), chuỗi sổ vẫn liền (`verifyAuditChain`), và trần (429, không hàng
   thêm; phiên agent khác và phiên người không bị ảnh hưởng). Hình dạng lời gọi canh ở `tests/architecture/cong-quyen-route.test.ts`.
 
-## ADR-9202 — Trần lần từ chối theo phiên: 429 trước lần ghi sổ
+## ADR-092 — Trần lần từ chối theo phiên: 429 trước lần ghi sổ
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.9102]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.155]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
 từ chối mất khỏi sổ khi khoá bị giữ) · **Liên quan:** ADR-091 (trần đọc của phiên agent, cùng bộ đếm), ADR-039 (phạm vi của chứng
 chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
 
