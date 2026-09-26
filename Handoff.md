@@ -85,7 +85,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 
 **[S1.85]** Dòng `008 … 051` của khối trên đã sửa thành `053` — S1.82 thêm `052` mà KHÔNG sửa dòng này (lần thiu thứ tư của chính nó, và là lần đầu KHÔNG ai sửa trong cùng vòng), S1.85 thêm `053`. Lần sửa tay thứ TƯ, và khoản 136 vẫn mở — con số này là số đo của nó. ~~**[S1.76]** Dòng `008 … 050` của khối trên đã sửa thành `051` — S1.76 thêm migration 051 (`sessions.kind`). Lần sửa tay thứ BA của cùng một dòng, và mỗi lần đều do một người nhớ ra chứ không do một cổng nào kêu — khoản 136 vẫn mở, và con số ba lần này là số đo của chính nó.~~
 
-~~**Bảy gói + hai công cụ:**~~ **[S1.123] 14 gói + 8 công cụ** (~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
+~~**Bảy gói + hai công cụ:**~~ **[S1.144] 14 gói + 9 công cụ** (~~**[S1.123] 8**~~ ~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
 
 | Gói | Vai trò |
 |---|---|
@@ -108,6 +108,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 | `tools/do-webcrypto` | Trang đo `crypto.subtle` trong webview thật, kèm server đột biến để chính trang đo bị thử |
 | `tools/neo-so-kiem-toan` | Ký mốc neo ngoài cho sổ kiểm toán (ADR-026) |
 | `tools/bo-xuat-danh-gia` | Xuất bộ bằng chứng đánh giá **tự đủ** + đặc tả phép tính, và kiểm nó bằng HAI lớp trong đó lớp chịu lực là một bản cài ĐỘC LẬP (S2.7, ADR-059) |
+| `tools/kiem-truoc-apply` | Kiểm `prod.tfvars` của stack 90 và tài khoản prod (chỉ đọc) trước plan/apply: giá trị giữ chỗ, image, secret, SES (ADR-087) |
 | `tools/chay-migrate` | Entry point của task ECS `tp-migrate`: `migrate()` rồi đảm bảo hai vai đăng nhập của api/worker từ chính URL của chúng (ADR-066) |
 
 **Hàng rào kiến trúc:** `dependency-cruiser`, tất cả theo khuôn **"mặc định đóng"** — một module
