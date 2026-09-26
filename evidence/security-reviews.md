@@ -12444,3 +12444,67 @@ ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất 
   374 ca đạt**; `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` và `db/check-an-ninh.int.test.ts` (hai tệp còn lại có
   phiên agent) — **33 ca đạt**.
 - Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+
+# §S1.155 — KHOẢN 122 VÀ 144 ĐÓNG: TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 122 và 144 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-092). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Khoản 122 (S1.69) và 144 (S1.76) là cùng một khe nhìn từ hai phía: nhánh `BUYER` của `apps/api/src/dispatch.ts` không có trần nào
+cho lần TỪ CHỐI, trong khi mỗi lần từ chối là một hàng sổ ở giao dịch độc lập và mỗi hàng sổ lấy khoá tư vấn nối tiếp toàn tổ chức
+dưới trần 2 s (050). 122 là phiên hợp lệ bắn vào route nó không có quyền; 144 là cookie agent rò bắn vào route ngoài phạm vi. Vòng
+S1.154 (ADR-091) đã thêm trần cho lần ĐỌC của agent và ghi rõ vì sao vế 403 còn hở: lần đếm trên `client` cuộn lại cùng giao dịch
+khi lần từ chối NÉM.
+
+## 2. Đo trước khi sửa
+
+- `requirePermission` (`packages/identity/src/rbac.ts`) gọi `hasPermission`, rồi ghi `PERMISSION_DENIED` qua `withTenant(auditPool, …)`,
+  rồi ném. Người gọi không có chỗ nào đứng giữa "biết là từ chối" và "ghi sổ" — và `hasPermission` cố ý không ra cửa gói.
+- Vế phạm vi của khoản 141 gọi `throwAuditedDenial(deps.auditPool, …)` trực tiếp: biết trước là từ chối, nên đếm được trước lần ghi.
+- Cả hai loại lỗi từ chối trước vòng này ném ra khỏi callback `withTenant` ⇒ ROLLBACK. Giao dịch ấy tới chỗ từ chối chỉ mới chạy
+  `resolveSessionByToken` (một câu `SELECT`) — không handler nào đã chạy.
+- RED trên mã cũ (suy ra, không chạy riêng): mã cũ không có đường nào ra 429 ở nhánh `BUYER` cho lần từ chối, nên ⒠ ⒡ ⒢ ⒣ đỏ ở
+  khẳng định 429 đầu tiên của mỗi vế. Vế ⒣ còn được đo riêng bằng đột biến ở mục 4.
+
+## 3. Thay đổi
+
+- `rbac.ts`: `requirePermission(client, requirement, auditPool, { truocKhiGhiTuChoi })` — móc chạy SAU phép kiểm quyền, TRƯỚC lần
+  ghi, chỉ trên đường từ chối; lỗi của nó đi ra nguyên dạng. Không móc ⇒ hành vi y như trước (mọi người gọi khác không đổi).
+- `dispatch.ts`, nhánh `BUYER`: `demTuChoi` đếm `tu-choi|<sessionId>` bằng `tangBucketNguoiGoi` trên `client`; quá
+  `TU_CHOI_TRAN_MOI_CUA_SO` (30) ⇒ `VuotTranTuChoiError`. `phanQuyetTuChoi` bọc vế phạm vi (đếm rồi `throwAuditedDenial`) và cổng
+  quyền (móc = `demTuChoi`), bắt lỗi NGAY TRONG callback và `return`: 429 + `retry-after`; 403 cho `PermissionDeniedError` và
+  `AgentScopeDeniedError`; 500 qua `loiNoiBo` cho `DenialAuditFailedError` và `PermissionAuditFailedError`. `return` ⇒ COMMIT ⇒ lần
+  đếm ở lại. `createDispatcher` nhận `tranTuChoi`.
+- `packages/identity/src/index.ts`: chú thích mặt tiền nêu móc là một cổng gác im lặng có tên, giam ở một chỗ.
+- `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`: tên móc chỉ được xuất hiện ở `rbac.ts` và `dispatch.ts`.
+- `tools/inv-matrix/src/so-khai-nhan.ts`: khai cặp (D5, `apps/api/src/auth.int.test.ts`).
+
+## 4. Đo sau khi sửa
+
+`apps/api/src/auth.int.test.ts`, khối *"[S1.155 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên"*, trần 3 tiêm vào một bộ điều
+phối riêng, PostgreSQL 16 thật:
+- ⒠ phiên NGƯỜI vai BUYER, `POST /suppliers` (thiếu `supplier.manage`): 3×403 và +3 hàng `PERMISSION_DENIED`; 3×429 với thân
+  `{"error":"qua nhieu yeu cau"}`, `retry-after` 900, 0 hàng thêm; `POST /rfqs` của cùng phiên ⇒ 201; phiên khác ⇒ 403 và +1 hàng;
+- ⒡ phiên AGENT, `GET /rfqs/:id/comparison` (ngoài phạm vi): 3×403 và +3 hàng `AGENT_SCOPE_DENIED`; rồi 429 không hàng; lần đọc
+  trong phạm vi ⇒ 200; phiên người của cùng người dùng ⇒ 403 (bucket khác);
+- ⒢ tám lời gọi CÙNG LÚC của một phiên ⇒ đúng `[403, 403, 403, 429, 429, 429, 429, 429]` và đúng +3 hàng — câu đếm khoá hàng
+  bucket tới COMMIT nên các lần từ chối của một phiên xếp hàng sau nhau;
+- ⒣ giữ khoá chuỗi sổ bằng một `audit_append` chưa commit: 3 lời gọi ⇒ 3×500 thân cố định, 0 hàng; nhả khoá, lời gọi thứ tư ⇒
+  429. **Đột biến:** gỡ nhánh `DenialAuditFailedError`/`PermissionAuditFailedError` của `phanQuyetTuChoi` ⇒ ⒣ đỏ, *"expected 403 to
+  be 429"* — lần đếm cuộn theo lần ghi hỏng, đúng khe mà nhánh ấy đóng.
+
+## 5. Ranh giới, nói ra
+
+- N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ; trần giới hạn một phiên, và một kẻ cầm nhiều phiên nhân được ngân sách.
+- Cửa sổ nhảy theo epoch: 30 lần có thể tới ở cuối cửa sổ này và 30 lần nữa ở đầu cửa sổ sau.
+- Lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không đi qua trần này.
+- `requirePermission` nay có một đường từ chối không vào sổ — chỉ khi người gọi cấp móc, và chỉ `dispatch.ts` được cấp.
+- Lần từ chối nay COMMIT giao dịch nghiệp vụ thay vì ROLLBACK; giao dịch ấy tới đó chỉ có câu đọc phiên và câu đếm.
+
+## 6. Số đo
+
+- `pnpm t0` sạch; `pnpm test` xanh.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
+- Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.

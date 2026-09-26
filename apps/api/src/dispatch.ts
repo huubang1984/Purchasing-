@@ -82,6 +82,8 @@ import { appendAuditEvent } from "@trustprocure/audit";
 import {
   conChoChoDuongPhu,
   MfaRequiredError,
+  DenialAuditFailedError,
+  PermissionAuditFailedError,
   PermissionDeniedError,
   requirePermission,
   resolveSessionByToken,
@@ -147,6 +149,31 @@ export class AgentReadAuditFailedError extends Error {
  */
 export const AGENT_DOC_TRAN_MOI_CUA_SO = 900;
 
+/**
+ * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần TỪ CHỐI của MỘT phiên người mua (người hay agent) trong một cửa sổ
+ * `OTP_RATE_WINDOW_SECONDS` — chung một bucket cho `PERMISSION_DENIED` của `requirePermission` và `AGENT_SCOPE_DENIED` của vế phạm
+ * vi. Vượt trần ⇒ 429 TRƯỚC lần ghi sổ: sổ giữ N lần từ chối đầu của phiên ấy trong cửa sổ, phần còn lại bị đổ — không lấy khoá
+ * chuỗi sổ, không giữ kết nối `auditPool`.
+ *
+ * Vì sao 30: giao diện người mua không hiện nút cho việc người dùng không có quyền, và công cụ MCP chỉ gọi route trong phạm vi —
+ * nên lần từ chối là một ca LỖI của máy khách, không phải nhịp làm việc. Ba mươi lần trong mười lăm phút đủ rộng cho một người
+ * bấm thử, đủ hẹp để một phiên không nối đuôi sổ của tổ chức quá 30 lần một cửa sổ. Cùng ranh giới cửa sổ NHẢY của
+ * `AGENT_DOC_TRAN_MOI_CUA_SO`.
+ */
+export const TU_CHOI_TRAN_MOI_CUA_SO = 30;
+
+/**
+ * [S1.155 / khoản 122 · 144 / ADR-092] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
+ * không phải một lần từ chối để ghi sổ (cổng [INV-D5] nhận diện lớp từ chối bằng đuôi tên ấy) mà là lý do lần từ chối KHÔNG được
+ * ghi. Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.
+ */
+class VuotTranTuChoiError extends Error {
+  constructor() {
+    super("phien da vuot tran tu choi cua cua so");
+    this.name = "VuotTranTuChoiError";
+  }
+}
+
 import { THAN_429_MFA, agentGoiDuoc } from "./route-types.js";
 import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
@@ -198,6 +225,11 @@ export interface DispatcherDeps {
    * tiêm số nhỏ để đo 429 mà không phải gọi 900 lần; cùng khuôn `treQuaTranMs`.
    */
   readonly tranDocAgent?: number;
+  /**
+   * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần từ chối của một phiên người mua mỗi cửa sổ — mặc định
+   * `TU_CHOI_TRAN_MOI_CUA_SO`. Test tiêm số nhỏ; cùng khuôn `tranDocAgent`.
+   */
+  readonly tranTuChoi?: number;
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
@@ -429,6 +461,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const routes = deps.routes ?? ROUTES;
   const treQuaTranMs = deps.treQuaTranMs ?? TRE_QUA_TRAN_TO_CHUC_MS;
   const tranDocAgent = deps.tranDocAgent ?? AGENT_DOC_TRAN_MOI_CUA_SO;
+  const tranTuChoi = deps.tranTuChoi ?? TU_CHOI_TRAN_MOI_CUA_SO;
 
   return async (vao) => {
     const requestId = randomUUID();
@@ -603,6 +636,46 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               throw e;
             }
             // ==================================================================================
+            // [S1.155 / khoản 122 · 144 / ADR-092] TRẦN LẦN TỪ CHỐI THEO PHIÊN.
+            //
+            // Mỗi lần từ chối là một hàng sổ ở giao dịch ĐỘC LẬP, và mỗi hàng sổ lấy khoá tư vấn nối
+            // tiếp TOÀN TỔ CHỨC dưới trần 2 s (050) — nên một phiên bắn liên tục vào route nó không
+            // có quyền (122), hay một cookie agent rò bắn vào route ngoài phạm vi (144), xếp mọi lần
+            // ghi sổ của tổ chức sau hàng của mình. `demTuChoi` đếm lần từ chối TRƯỚC lần ghi; quá
+            // trần thì ném `VuotTranTuChoiError` và lần ghi không xảy ra.
+            //
+            // VÌ SAO ĐẾM TRÊN `client` VÀ TRẢ 403 BẰNG `return`: lần từ chối trước vòng này NÉM ra
+            // khỏi callback ⇒ `withTenant` ROLLBACK ⇒ một lần đếm trên `client` biến theo — đúng lý
+            // do bản 142 để vế này mở. `phanQuyetTuChoi` bắt lỗi từ chối NGAY TRONG callback và trả
+            // phản hồi ⇒ giao dịch COMMIT ⇒ lần đếm ở lại. Giao dịch ấy tới đây chỉ mới đọc phiên và
+            // đếm — không handler nào đã chạy — nên COMMIT nó không làm sống thứ gì mà ROLLBACK từng
+            // bỏ. Không mở một `withTenant` lồng: cùng lý do khối S1.78 dưới đây (kết nối thứ hai).
+            // Câu đếm là `INSERT … ON CONFLICT DO UPDATE` nên hàng đếm bị khoá tới COMMIT: các lần
+            // từ chối CÙNG LÚC của một phiên xếp hàng sau nhau, và trần đúng tới từng lần (vế ⒢).
+            //
+            // LẦN GHI SỔ HỎNG (`DenialAuditFailedError`, `PermissionAuditFailedError`) cũng đi ra
+            // bằng `return` — 500 thân cố định qua `loiNoiBo`, y như trước — để lần đếm của nó ở
+            // lại. Không thế thì đúng ca mà 144 mô tả (khoá chuỗi sổ bị giữ, lần ghi gãy 55P03) là
+            // ca KHÔNG BAO GIỜ tiêu ngân sách: mỗi lần hỏng cuộn lần đếm của chính nó (vế ⒣).
+            // ==================================================================================
+            const demTuChoi = async (): Promise<void> => {
+              const soLan = await tangBucketNguoiGoi(client, `tu-choi|${actor.sessionId}`, deps.services.pepper);
+              if (soLan > tranTuChoi) throw new VuotTranTuChoiError();
+            };
+            const phanQuyetTuChoi = async (viec: () => Promise<void>): Promise<ApiResponse | null> => {
+              try {
+                await viec();
+                return null;
+              } catch (e) {
+                if (e instanceof VuotTranTuChoiError) {
+                  return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+                }
+                if (e instanceof PermissionDeniedError || e instanceof AgentScopeDeniedError) return { status: 403, body: THAN_403 };
+                if (e instanceof DenialAuditFailedError || e instanceof PermissionAuditFailedError) return loiNoiBo(e, requestId, route);
+                throw e;
+              }
+            };
+            // ==================================================================================
             // [khoản 141 / ADR-039] PHẠM VI CỦA CHỨNG CHỈ — và nó đứng TRƯỚC cổng quyền.
             //
             // VÌ SAO TRƯỚC: `requirePermission` trả lời "người này có được làm việc này không";
@@ -622,21 +695,25 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             // một hợp đồng chứ không phải một hệ quả tình cờ.
             // ==================================================================================
             if (actor.kind === "AGENT_READONLY" && !agentGoiDuoc(route)) {
-              await throwAuditedDenial(
-                deps.auditPool,
-                cookie.orgId,
-                {
-                  actorType: "USER",
-                  actorId: actor.id,
-                  action: "AGENT_SCOPE_DENIED",
-                  resourceType: "SESSION",
-                  resourceId: actor.sessionId,
-                  // KHÔNG nội suy tham số đường dẫn: `route.path` là MẪU đã khai trong `ROUTES`,
-                  // không phải chuỗi người gọi gửi. `requestId` để nối hàng sổ với dòng log.
-                  payload: { method: route.method, routePath: route.path, requestId },
-                },
-                new AgentScopeDeniedError(),
-              );
+              const phanHoiPhamVi = await phanQuyetTuChoi(async () => {
+                await demTuChoi();
+                await throwAuditedDenial(
+                  deps.auditPool,
+                  cookie.orgId,
+                  {
+                    actorType: "USER",
+                    actorId: actor.id,
+                    action: "AGENT_SCOPE_DENIED",
+                    resourceType: "SESSION",
+                    resourceId: actor.sessionId,
+                    // KHÔNG nội suy tham số đường dẫn: `route.path` là MẪU đã khai trong `ROUTES`,
+                    // không phải chuỗi người gọi gửi. `requestId` để nối hàng sổ với dòng log.
+                    payload: { method: route.method, routePath: route.path, requestId },
+                  },
+                  new AgentScopeDeniedError(),
+                );
+              });
+              if (phanHoiPhamVi !== null) return phanHoiPhamVi;
             }
             // ==================================================================================
             // [S1.154 / khoản 142 · 144 / ADR-091] LẦN ĐỌC CỦA AGENT: MỘT TRẦN, RỒI MỘT HÀNG SỔ.
@@ -702,18 +779,22 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
             if (route.mutates && route.self !== true) {
-              await requirePermission(
-                client,
-                {
-                  userId: actor.id,
-                  orgId: cookie.orgId,
-                  permission: route.permission,
-                  resourceType: route.resourceType,
-                  resourceId: route.resourceId?.(req) ?? null,
-                  requestId,
-                },
-                deps.auditPool,
+              const phanHoiQuyen = await phanQuyetTuChoi(() =>
+                requirePermission(
+                  client,
+                  {
+                    userId: actor.id,
+                    orgId: cookie.orgId,
+                    permission: route.permission,
+                    resourceType: route.resourceType,
+                    resourceId: route.resourceId?.(req) ?? null,
+                    requestId,
+                  },
+                  deps.auditPool,
+                  { truocKhiGhiTuChoi: demTuChoi },
+                ),
               );
+              if (phanHoiQuyen !== null) return phanHoiQuyen;
             }
             let phanHoiHandler: ApiResponse;
             try {
