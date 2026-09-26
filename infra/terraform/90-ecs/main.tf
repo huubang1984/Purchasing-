@@ -2,8 +2,9 @@
 #
 #   Mạng     VPC 2 AZ. Subnet CÔNG KHAI chỉ cho ALB; task và RDS ở subnet RIÊNG — ra AWS qua VPC endpoint
 #            (KMS, ECR, Logs, Secrets Manager, SES; S3 gateway cho lớp image ECR). [ADR-069] RIÊNG `api` ở
-#            subnet của nó, đi qua MỘT NAT Gateway, chỉ cổng 443 — cho SMS (End User Messaging) và Zalo ZNS.
-#            Worker, migrate, web không có tuyến ra internet.
+#            subnet của nó, đi qua MỘT NAT Gateway, chỉ cổng 443 — cho Zalo ZNS. Worker, migrate, web không có
+#            tuyến ra internet. [ADR-076] SMS đi qua VPC endpoint `sms-voice`; Route 53 DNS Firewall của VPC chỉ
+#            phân giải một danh sách tên đóng — mọi tên khác NXDOMAIN, ghi log, cảnh báo ⑸ của stack 60.
 #   CSDL     RDS PostgreSQL 16, single-AZ, db.t4g.small, gp3 20 GB, mã hoá, force_ssl, backup 7 ngày,
 #            deletion protection. Mật khẩu master do RDS quản lý trong Secrets Manager.
 #   Image    ECR `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-web` — thẻ bất biến, quét lúc đẩy.
@@ -158,6 +159,16 @@ variable "endpoint_mot_az" {
   description = "Đặt interface endpoint ở MỘT AZ để giảm nửa chi phí; task ở AZ kia đi chéo AZ."
   type        = bool
   default     = true
+}
+
+variable "che_do_dns" {
+  description = "[ADR-076] BLOCK (mặc định) hay ALERT (chỉ ghi log) cho mọi tên ngoài danh sách."
+  type        = string
+  default     = "BLOCK"
+  validation {
+    condition     = contains(["BLOCK", "ALERT"], var.che_do_dns)
+    error_message = "che_do_dns phải là BLOCK hoặc ALERT."
+  }
 }
 
 locals {
@@ -411,7 +422,8 @@ resource "aws_vpc_security_group_ingress_rule" "api_tu_alb" {
   to_port                      = 8080
 }
 
-# [ADR-069] api ra internet CHỈ 443 (SMS End User Messaging, Zalo ZNS). Không lọc theo tên miền — xem ADR-069.
+# [ADR-069] api ra internet CHỈ 443. [ADR-076] Tên miền lọc ở DNS Firewall (dưới): chỉ hai tên Zalo phân giải được
+# ra ngoài AWS. SG không lọc được theo tên — IP của Zalo không cố định —, nên kết nối THẲNG bằng IP vẫn đi qua; xem ADR-076.
 resource "aws_vpc_security_group_egress_rule" "api_internet" {
   security_group_id = aws_security_group.api.id
   cidr_ipv4         = "0.0.0.0/0"
@@ -480,6 +492,8 @@ locals {
     # [ADR-071] `sts`: job neo mượn tp-anchor-writer bằng sts:AssumeRole — task không có đường ra internet.
     ["kms", "ecr.api", "ecr.dkr", "logs", "secretsmanager", "sts"],
     var.ses_endpoint_service == "" ? [] : [var.ses_endpoint_service],
+    # [ADR-076] SMS (End User Messaging) không còn đi qua NAT: danh sách tên ra ngoài AWS chỉ còn Zalo.
+    var.sms == null ? [] : ["sms-voice"],
   )
   subnet_endpoint = var.endpoint_mot_az ? [aws_subnet.ung_dung[0].id] : aws_subnet.ung_dung[*].id
 }
@@ -492,6 +506,133 @@ resource "aws_vpc_endpoint" "giao_dien" {
   subnet_ids          = local.subnet_endpoint
   security_group_ids  = [aws_security_group.endpoint.id]
   private_dns_enabled = true
+}
+
+# ---------------------------------------------------------------------------------------------
+# [ADR-076] ROUTE 53 DNS FIREWALL — VPC CHỈ PHÂN GIẢI MỘT DANH SÁCH TÊN ĐÓNG
+# ---------------------------------------------------------------------------------------------
+# Áp cho MỌI task của VPC (một nhóm quy tắc gắn vào VPC, không gắn theo subnet). Danh sách là đúng những tên mà mã và
+# nền Fargate gọi — không có wildcard `*.amazonaws.com`: một wildcard như thế cho phân giải bucket S3 hay API Gateway
+# của BẤT KỲ ai, tức một đường tuồn dữ liệu qua NAT của api.
+#   AWS qua endpoint : kms, ecr (api + dkr của tài khoản prod), logs, secretsmanager, sts, email (SES), sms-voice.
+#   S3               : bucket lớp image của ECR ở region, và bucket neo (job neo — ADR-071). Không có `s3.<region>`
+#                      trơn, không có bucket nào khác.
+#   CSDL             : đúng địa chỉ RDS của stack này.
+#   Ngoài AWS        : business.openapi.zalo.me, oauth.zaloapp.com — hai URL của `apps/api/src/adapters/gui-zalo.ts`.
+# `TRUST_REDIRECTION_DOMAIN`: tên được phép thường là CNAME sang tên hạ tầng (S3, RDS, CDN của Zalo); kiểm cả chuỗi
+# CNAME thì mỗi lần nhà cung cấp đổi hạ tầng là một sự cố. Cái giá: một tên TRONG danh sách trỏ đi đâu cũng được đi theo.
+#
+# `che_do_dns = "ALERT"` chỉ ghi log, không chặn — dùng khi thêm một đích mới để xem truy vấn trước khi chặn.
+#
+# Giới hạn, nói thẳng: DNS Firewall chặn PHÂN GIẢI, không chặn KẾT NỐI. Mã độc trong api nối thẳng tới một IP (không
+# hỏi DNS) vẫn đi qua NAT cổng 443. Chặn cả đường ấy cần AWS Network Firewall (~300 USD/tháng) — ADR-076 ghi lý do không làm.
+locals {
+  ten_duoc_phan_giai = [
+    "kms.${local.region}.amazonaws.com",
+    "api.ecr.${local.region}.amazonaws.com",
+    "${local.prod}.dkr.ecr.${local.region}.amazonaws.com",
+    "logs.${local.region}.amazonaws.com",
+    "secretsmanager.${local.region}.amazonaws.com",
+    "sts.${local.region}.amazonaws.com",
+    "email.${local.region}.amazonaws.com",
+    "sms-voice.${local.region}.amazonaws.com",
+    "prod-${local.region}-starport-layer-bucket.s3.${local.region}.amazonaws.com",
+    "${module.chung.bucket.anchor}.s3.${local.region}.amazonaws.com",
+    aws_db_instance.tp.address,
+    "business.openapi.zalo.me",
+    "oauth.zaloapp.com",
+  ]
+  # Tên cảnh báo ⑸ của stack 60 bắt theo TÊN — đổi ở đây thì đổi cả ở đó (`hinh-dang-dns.test.ts` so hai phía).
+  ten_alarm_dns = "tp-dns-bi-chan"
+}
+
+resource "aws_route53_resolver_firewall_domain_list" "duoc_phep" {
+  name    = "tp-duoc-phan-giai"
+  domains = local.ten_duoc_phan_giai
+}
+
+resource "aws_route53_resolver_firewall_domain_list" "moi_ten" {
+  name    = "tp-moi-ten"
+  domains = ["*"]
+}
+
+resource "aws_route53_resolver_firewall_rule_group" "tp" {
+  name = "tp-loc-ten-mien"
+}
+
+resource "aws_route53_resolver_firewall_rule" "cho_phep" {
+  name                               = "cho-phep-danh-sach"
+  firewall_rule_group_id             = aws_route53_resolver_firewall_rule_group.tp.id
+  firewall_domain_list_id            = aws_route53_resolver_firewall_domain_list.duoc_phep.id
+  priority                           = 100
+  action                             = "ALLOW"
+  firewall_domain_redirection_action = "TRUST_REDIRECTION_DOMAIN"
+}
+
+resource "aws_route53_resolver_firewall_rule" "chan_con_lai" {
+  name                    = "chan-moi-ten-khac"
+  firewall_rule_group_id  = aws_route53_resolver_firewall_rule_group.tp.id
+  firewall_domain_list_id = aws_route53_resolver_firewall_domain_list.moi_ten.id
+  priority                = 200
+  action                  = var.che_do_dns
+  block_response          = var.che_do_dns == "BLOCK" ? "NXDOMAIN" : null
+}
+
+resource "aws_route53_resolver_firewall_rule_group_association" "tp" {
+  name                   = "tp-loc-ten-mien"
+  firewall_rule_group_id = aws_route53_resolver_firewall_rule_group.tp.id
+  vpc_id                 = aws_vpc.tp.id
+  priority               = 101
+  mutation_protection    = "ENABLED"
+}
+
+# Fail-closed: DNS Firewall không đánh giá được thì truy vấn bị chặn, không lọt.
+resource "aws_route53_resolver_firewall_config" "tp" {
+  resource_id        = aws_vpc.tp.id
+  firewall_fail_open = "DISABLED"
+}
+
+# Log mọi truy vấn của VPC; `firewall_rule_action` có mặt ở dòng bị quy tắc chặn/cảnh báo khớp.
+resource "aws_cloudwatch_log_group" "dns" {
+  name              = "/tp/dns"
+  retention_in_days = 90
+}
+
+resource "aws_route53_resolver_query_log_config" "tp" {
+  name            = "tp-truy-van-dns"
+  destination_arn = aws_cloudwatch_log_group.dns.arn
+}
+
+resource "aws_route53_resolver_query_log_config_association" "tp" {
+  resolver_query_log_config_id = aws_route53_resolver_query_log_config.tp.id
+  resource_id                  = aws_vpc.tp.id
+}
+
+resource "aws_cloudwatch_log_metric_filter" "dns_bi_chan" {
+  name           = "tp-dns-bi-chan"
+  log_group_name = aws_cloudwatch_log_group.dns.name
+  pattern        = "{ ($.firewall_rule_action = \"BLOCK\") || ($.firewall_rule_action = \"ALERT\") }"
+  metric_transformation {
+    name          = "TruyVanNgoaiDanhSach"
+    namespace     = "TrustProcure/DNS"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Một truy vấn ngoài danh sách là đủ: mã của dự án không bao giờ hỏi tên ngoài danh sách, nên đó là cấu hình thiếu
+# (một đích mới) hoặc api bị chiếm. Thư đi qua stack 60 ⑸ (EventBridge chuyển sang audit), không SNS ở prod.
+resource "aws_cloudwatch_metric_alarm" "dns_bi_chan" {
+  alarm_name          = local.ten_alarm_dns
+  alarm_description   = "[ADR-076] Truy van DNS ngoai danh sach duoc phep trong VPC tp-prod. Doc log /tp/dns (query_name, srcids.instance)."
+  namespace           = "TrustProcure/DNS"
+  metric_name         = "TruyVanNgoaiDanhSach"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
 }
 
 # ---------------------------------------------------------------------------------------------
