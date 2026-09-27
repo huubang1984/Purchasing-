@@ -107,7 +107,7 @@ const NHA_CUNG_CAP_THEM_S3: readonly string[] = ["Thep Hoa Sen", "Vat lieu Phu M
  * [S1.9101 / S3.1d] `--s3`: bối cảnh theo bảng vai §7 của spec S3 — thêm HAI người FINANCE vào năm người sẵn có: F1 khai
  * phiên bản chính sách có bậc, F2 ký nó. Chủ dự án chọn ký bằng HÀM GÓI dưới `withTenant`, cùng đường mọi hàm gói khác
  * của công cụ này đi: trigger `chinh_sach_kiem_nguoi_ky` vẫn kiểm đủ luật (khác người khai, giữ `policy.manage`, bản mới
- * nhất, đã tới ngày hiệu lực). Cờ triển khai ADR-9201 là cửa của ROUTE ký — đường của màn —, không phải của công cụ này.
+ * nhất, đã tới ngày hiệu lực). Cờ triển khai ADR-105 là cửa của ROUTE ký — đường của màn —, không phải của công cụ này.
  */
 const S3 = process.argv.slice(2).includes("--s3");
 
@@ -303,7 +303,7 @@ async function chinh(): Promise<void> {
       ra.push("");
       ra.push("TÀI CHÍNH — taichinh1 đã khai, taichinh2 đã ký phiên bản 1 (bốn bậc mặc định §4.1, ngưỡng kép 1 tỷ): S3 ĐÃ BẬT.");
       ra.push("  Màn /chinh-sach đọc trọn ma trận và số người tối thiểu mỗi bậc. Ký một phiên bản MỚI ở màn ấy cần `api` chạy");
-      ra.push("  với TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat (ADR-9201) — cờ ấy mặc định tắt, và không mở trên máy chủ thật.");
+      ra.push("  với TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat (ADR-105) — cờ ấy mặc định tắt, và không mở trên máy chủ thật.");
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
       }

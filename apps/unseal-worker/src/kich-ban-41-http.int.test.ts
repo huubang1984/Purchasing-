@@ -93,7 +93,7 @@ let ob: ReturnType<typeof outboxTest>;
 let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
-/** [S1.9101 / S3.1d] Máy chủ của luồng S3: cùng CSDL, cùng dịch vụ, cờ ký chính sách BẬT (ADR-9201). */
+/** [S1.9101 / S3.1d] Máy chủ của luồng S3: cùng CSDL, cùng dịch vụ, cờ ký chính sách BẬT (ADR-105). */
 let serverS3: ReturnType<typeof createApiServer>;
 let gocMacDinh: string;
 let gocS3: string;
