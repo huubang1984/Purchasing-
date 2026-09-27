@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.155 / S3.1a] MỌI CÂU SQL ĐỌC CHÍNH SÁCH MUA SẮM ĐI QUA `chinh_sach_hieu_luc` HOẶC THEO MỘT
+// [S1.156 / S3.1a] MỌI CÂU SQL ĐỌC CHÍNH SÁCH MUA SẮM ĐI QUA `chinh_sach_hieu_luc` HOẶC THEO MỘT
 // `policy_id` ĐÃ GHIM — KHÔNG CÂU NÀO TỰ CHỌN PHIÊN BẢN
 //
 // Lúc làm S3.1a, bốn chỗ tự chọn phiên bản hiện hành theo ba luật khác nhau; hai chỗ ở TypeScript
@@ -34,7 +34,7 @@ const TEP_DA_KHAI: readonly string[] = [
   "tools/gieo-demo/src/index.ts",
 ];
 
-describe("[S1.155] đọc chính sách mua sắm qua MỘT hàm", () => {
+describe("[S1.156] đọc chính sách mua sắm qua MỘT hàm", () => {
   const cau = moiCauSql().filter((c) => /\borg_procurement_policies\b/u.test(c.sql));
 
   it("không câu SQL nào của mã sản xuất tự chọn phiên bản chính sách; tập tệp chạm bảng là tập đã khai", () => {

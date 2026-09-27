@@ -9,7 +9,7 @@ import { addRfqItem, approveRfq, cancelRfq, createRfq, openRfq, submitRfqForAppr
 import { createProcurementPolicy, getActiveProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.155 / S3.1a] BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ PHIÊN BẢN HIỆU LỰC — ĐO TRÊN
+// [S1.156 / S3.1a] BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ PHIÊN BẢN HIỆU LỰC — ĐO TRÊN
 // POSTGRES THẬT DƯỚI `app_api`
 //
 // Migration `069_bac_va_chu_ky_chinh_sach`. Mỗi lớp của nó có ở đây một phép đo HÀNH VI và một ĐỘT

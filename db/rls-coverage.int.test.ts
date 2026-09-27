@@ -777,7 +777,7 @@ describe("phủ RLS", () => {
       // qua khi có yêu cầu đã duyệt chưa tiêu thụ; không có trigger ấy thì GRANT này là một lỗ.
       { grantee: "app_api", bang: "mfa_credentials", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "mfa_reset_requests", quyen: "SELECT" },
-      // [S1.155 / S3.1a] Chữ ký thứ hai của phiên bản chính sách: CHỈ ĐỌC ở mức bảng; ghi thêm bằng
+      // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách: CHỈ ĐỌC ở mức bảng; ghi thêm bằng
       // quyền theo cột ngay dưới, không UPDATE, không DELETE.
       { grantee: "app_api", bang: "org_policy_signatures", quyen: "SELECT" },
       { grantee: "app_api", bang: "org_procurement_policies", quyen: "SELECT" },
@@ -1141,7 +1141,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "org_key_pairs", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_key_pairs", cot: "public_key", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_key_pairs", cot: "wrapped_private_key", quyen: "INSERT" },
-      // [S1.155 / S3.1a] Chữ ký chính sách: CHỈ INSERT — `signed_at` do CSDL đặt, người ký là dẫn xuất
+      // [S1.156 / S3.1a] Chữ ký chính sách: CHỈ INSERT — `signed_at` do CSDL đặt, người ký là dẫn xuất
       // từ phiên (trigger `kiem_danh_tinh_theo_phien`).
       { grantee: "app_api", bang: "org_policy_signatures", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_policy_signatures", cot: "policy_id", quyen: "INSERT" },
@@ -1154,7 +1154,7 @@ describe("phủ RLS", () => {
       // UPDATE, cùng lý do đã ghi cho `strict_blind_mode`: bảng chỉ ghi thêm, đổi chính sách là thêm
       // một phiên bản.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "bafo_top_n", quyen: "INSERT" },
-      // [S1.155 / S3.1a] Bậc giá trị và hai cột mức chính sách — cùng lý do: INSERT, không UPDATE.
+      // [S1.156 / S3.1a] Bậc giá trị và hai cột mức chính sách — cùng lý do: INSERT, không UPDATE.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "chia_nho_cua_so_ngay", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by_session_id", quyen: "INSERT" },

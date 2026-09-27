@@ -464,7 +464,7 @@ describe("hình dạng file migration", () => {
       "mfa_reset_requests",
       // [ADR-062 / 063] Cặp khoá của tổ chức — chỉ-ghi-thêm bằng quyền, policy khách ĐÓNG HẲN.
       "org_key_pairs",
-      // [S1.155 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — chỉ-ghi-thêm, khoá ngoại hợp thành
+      // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — chỉ-ghi-thêm, khoá ngoại hợp thành
       // `(org_id, policy_id)` tới `org_procurement_policies`, policy khách ĐÓNG HẲN.
       "org_policy_signatures",
       "org_procurement_policies",

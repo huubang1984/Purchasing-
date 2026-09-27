@@ -203,7 +203,7 @@ export async function createProcurementPolicy(
 
 /**
  * Chính sách đang có hiệu lực: phiên bản CAO NHẤT đã tới ngày hiệu lực. ~~(đọc thẳng bảng)~~
- * **[S1.155]** Đọc qua `chinh_sach_hieu_luc` — hàm DUY NHẤT trả lời câu ấy, nên một phiên bản có bậc
+ * **[S1.156]** Đọc qua `chinh_sach_hieu_luc` — hàm DUY NHẤT trả lời câu ấy, nên một phiên bản có bậc
  * chưa có chữ ký thứ hai không có hiệu lực ở đây cũng như ở ba chỗ đọc còn lại (ADR-082 ⑺).
  *
  * Trả `null` khi tổ chức chưa đặt chính sách nào — và người gọi PHẢI xử lý ca đó chứ không được

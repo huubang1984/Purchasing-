@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 069_bac_va_chu_ky_chinh_sach — [S1.155 / S3.1a của spec S3] BẬC GIÁ TRỊ TRÊN PHIÊN BẢN CHÍNH
+-- 069_bac_va_chu_ky_chinh_sach — [S1.156 / S3.1a của spec S3] BẬC GIÁ TRỊ TRÊN PHIÊN BẢN CHÍNH
 -- SÁCH, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080, VÀ MỘT HÀM *PHIÊN BẢN HIỆU LỰC* CHO MỌI CHỖ ĐỌC CHÍNH SÁCH
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.1, §4.2, §9 (phần S3.1a).
@@ -24,7 +24,7 @@
 --     (trọng số chấm, không xét `effective_from`), `rfq_che_do_nghiem` (`020`) và hai hàm hạn xoá khoá
 --     (`026`, xếp `effective_from DESC`). Chỉ chặn ở một chỗ thì một người `policy.manage` tự tạo một
 --     phiên bản chưa ai ký vẫn đổi được trọng số chấm và hạn xoá khoá — đúng thứ chữ ký thứ hai sinh ra
---     để chặn. Chủ dự án chọn hợp nhất cả bốn (S1.155). Tổ chức chỉ có phiên bản không bậc: hành vi
+--     để chặn. Chủ dự án chọn hợp nhất cả bốn (S1.156). Tổ chức chỉ có phiên bản không bậc: hành vi
 --     không đổi, trừ hai chỗ nói ra — lượt chấm nay tôn trọng `effective_from`, và hàm hạn xoá khoá xếp
 --     theo `version DESC` như ba chỗ kia (khác nhau chỉ khi `effective_from` không đơn điệu theo phiên bản).
 -- (5) GHIM NGÂN SÁCH: ngân sách không ghim được một phiên bản có bậc CHƯA KÝ — đường ghi đi vòng qua

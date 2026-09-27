@@ -7010,7 +7010,7 @@ mở khoản rổ B nào khác. Biên bản của mỗi vòng S3.x vẫn mở đ
 đủ chữ ký thứ hai (ADR-082 ⑺). Trạng thái *đã bật* là **suy diễn từ dữ liệu**, không phải một cờ: một hàm SQL duy nhất
 hỏi *có tồn tại một phiên bản có bậc đã ký của tổ chức này không*. Phiên bản chính sách bất biến và không xoá được, nên
 công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ chối mọi phiên bản không bậc của tổ chức ấy.
-**[S1.155]** Hàm ấy là `to_chuc_da_bat_s3(org)` (`069_bac_va_chu_ky_chinh_sach`). *Đã bật* kéo theo *phiên bản hiệu lực
+**[S1.156]** Hàm ấy là `to_chuc_da_bat_s3(org)` (`069_bac_va_chu_ky_chinh_sach`). *Đã bật* kéo theo *phiên bản hiệu lực
 có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
 lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
 rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
@@ -7116,7 +7116,7 @@ sàn một chữ ký áp cho MỌI tổ chức từ `068`. Vế ước lượng 
 bản không ký trao thầu, không xác minh hay thẩm định, không ghi nhận tín hiệu trên gói ghim phiên bản ấy. Nộp duyệt đòi
 phiên bản ghim là phiên bản đang hiệu lực. Lý do: `FINANCE` giữ `policy.manage` VÀ `po.approve`, nên câu *"luật 033 phủ luôn
 bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt thước cho chính việc FINANCE làm.
-**[S1.155]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
+**[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
 ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
 là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
 
@@ -7517,7 +7517,7 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
    trên dòng nhánh thêm, đổi tên tệp migration, viết lại lời khai đếm. Kết quả được commit kèm dòng trailer `Cap-So:`
    mà lệnh in ra.
    - Ngoài Markdown chỉ dạng CÓ TIỀN TỐ được thay (`S1.91NN`, `ADR-92NN`, `khoản 94NN`, `95NN_ten.sql`, kể cả phần nối
-     của một dải). **[S1.155]** Cộng dạng `95NN_ten` KHÔNG đuôi — dạng các danh sách khai của
+     của một dải). **[S1.156]** Cộng dạng `95NN_ten` KHÔNG đuôi — dạng các danh sách khai của
      `db/migrations/hardening.always.sql` dùng (`mig || '.sql'` so với `schema_migrations`). Thiếu nó, tệp đổi tên mà
      dòng khai đứng nguyên, `--kiem` vẫn sạch, và phép kiểm của dòng ấy im lặng không bao giờ chạy — đo ở PR đầu tiên
      thêm migration dưới ADR này. Thu hồi và `--kiem` nhận cùng dạng ấy. Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
@@ -7614,3 +7614,51 @@ cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra 
 - Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 142: bảy route (agent: đúng một hàng mang mẫu route; người: không hàng nào),
   fail-closed (khoá sổ bị giữ ⇒ 500, không dữ liệu, không hàng), chuỗi sổ vẫn liền (`verifyAuditChain`), và trần (429, không hàng
   thêm; phiên agent khác và phiên người không bị ảnh hưởng). Hình dạng lời gọi canh ở `tests/architecture/cong-quyen-route.test.ts`.
+
+## ADR-092 — Trần lần từ chối theo phiên: 429 trước lần ghi sổ
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.155]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
+từ chối mất khỏi sổ khi khoá bị giữ) · **Liên quan:** ADR-091 (trần đọc của phiên agent, cùng bộ đếm), ADR-039 (phạm vi của chứng
+chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
+
+### Bối cảnh
+
+Mỗi lần TỪ CHỐI ở nhánh `BUYER` của `apps/api/src/dispatch.ts` là một hàng sổ ở giao dịch ĐỘC LẬP (bất biến D5):
+`PERMISSION_DENIED` của `requirePermission` trên route ghi, `AGENT_SCOPE_DENIED` của vế phạm vi (ADR-039). Mỗi hàng đi qua khoá
+tư vấn nối tiếp TOÀN TỔ CHỨC của `noi_chuoi_kiem_toan()` dưới trần 2 s (050). Khoản 122: một phiên hợp lệ bắn liên tục vào route
+nó không có quyền thì nối đuôi mọi lần ghi sổ của tổ chức và giữ kết nối nghiệp vụ trong lúc chờ. Khoản 144: đúng khuôn ấy với một
+cookie agent bị rò bắn vào route ngoài phạm vi. ADR-091 thêm trần cho lần ĐỌC nhưng để hở nhánh 403, vì lần đếm trên `client` cuộn
+lại cùng giao dịch khi lần từ chối NÉM.
+
+### Quyết định
+
+1. **Một bucket theo PHIÊN cho mọi lần từ chối ở bộ điều phối**, khoá `tu-choi|<sessionId>` đã băm bằng pepper, trên
+   `caller_rate_limits` (042) qua `tangBucketNguoiGoi` — cùng bộ đếm, cùng cửa sổ 900 s của ADR-091. Trần
+   `TU_CHOI_TRAN_MOI_CUA_SO = 30`; `createDispatcher` nhận `tranTuChoi` để test tiêm số nhỏ.
+2. **Đếm TRƯỚC lần ghi sổ.** Vế phạm vi đếm rồi mới gọi `throwAuditedDenial`. Với `requirePermission`, gói identity thêm tham số
+   thứ tư `{ truocKhiGhiTuChoi }`: móc chạy SAU phép kiểm quyền và TRƯỚC lần ghi `PERMISSION_DENIED`, chỉ trên đường từ chối, và lỗi
+   của nó đi ra nguyên dạng. Quá trần ⇒ móc ném `VuotTranTuChoiError` ⇒ 429 + `retry-after`, cùng thân của 429 nhánh ANON — không
+   hàng sổ, không chạm khoá chuỗi sổ, không lấy kết nối `auditPool`. Việc phiên ấy CÓ quyền vẫn đi qua: trần đếm lần từ chối, không
+   khoá phiên.
+3. **Lần từ chối đi ra bằng `return`, không bằng ném.** `phanQuyetTuChoi` bắt `PermissionDeniedError`/`AgentScopeDeniedError` ngay
+   trong callback của `withTenant` và trả 403 ⇒ giao dịch COMMIT ⇒ lần đếm ở lại. Tới chỗ ấy giao dịch mới chỉ đọc phiên và đếm,
+   chưa handler nào chạy, nên COMMIT không làm sống thứ gì mà ROLLBACK từng bỏ. Lần ghi sổ HỎNG (`DenialAuditFailedError`,
+   `PermissionAuditFailedError`) cũng đi ra bằng `return` qua `loiNoiBo` — 500 thân cố định, y như trước — để lần đếm của nó ở lại:
+   không thế thì đúng ca khoá chuỗi sổ bị giữ (144) là ca không bao giờ tiêu ngân sách.
+
+### Hệ quả, nói thẳng
+
+- **`requirePermission` nay có một cách để lần từ chối không vào sổ** — một cổng gác im lặng CÓ TÊN, trái với tiêu chí mà
+  `packages/identity/src/index.ts` dùng để cho hàm ra cửa. Nó được chấp nhận vì bị giam ở một chỗ:
+  `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên móc chỉ xuất hiện ở `rbac.ts` và `dispatch.ts`. Chỗ dùng thứ hai
+  phải sửa ADR này và test ấy.
+- **N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ.** Trần giới hạn một phiên ở 30 hàng mỗi cửa sổ, không xoá chi phí ấy. Một kẻ cầm
+  nhiều phiên nhân được ngân sách — mỗi phiên agent đòi một mã TOTP tươi, mỗi phiên người đòi một lần đăng nhập đủ MFA.
+- **Các lần từ chối cùng lúc của một phiên xếp hàng sau nhau**: câu đếm khoá hàng bucket tới COMMIT, tức tới sau lần ghi sổ. Trần
+  vì thế đúng tới từng lần (đo: tám lời gọi song song ⇒ đúng 3×403 + 5×429 và 3 hàng), và một phiên không dùng song song để giữ
+  nhiều kết nối nghiệp vụ cùng chờ khoá sổ.
+- **Không trái ADR-015 §5.** Khoá của bucket là chính phiên đang gọi: chỉ ai cầm cookie ấy mới tiêu được ngân sách ấy.
+- **Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
+  đi qua trần này; route khách và nhánh ANON không đổi.
+- Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 122 · 144: ⒠ phiên người (N×403 + N hàng, rồi 429 không hàng; việc có quyền vẫn
+  201; phiên khác không bị kéo), ⒡ phiên agent, ⒢ cùng lúc, ⒣ lần ghi sổ hỏng vẫn tiêu ngân sách (đột biến gỡ nhánh ấy ⇒ đỏ).
