@@ -96,7 +96,7 @@
 
 - **Không đóng điểm chặn 1** (*chưa có khách hàng pilot*) ở `docs/STATE.md`. Nó **hạ chi phí** của
   việc gỡ điểm chặn ấy, không gỡ hộ.
-- **[S1.9101] Pilot giả lập (`pnpm pilot:gia-lap`) không đổi dòng nào ở đây.** Nó đi được ĐƯỜNG MÃ của A1, A3, B1, B2,
+- **[S1.156] Pilot giả lập (`pnpm pilot:gia-lap`) không đổi dòng nào ở đây.** Nó đi được ĐƯỜNG MÃ của A1, A3, B1, B2,
   B4, C1, C3, C4 trên dữ liệu bịa; câu trả lời của một người mua thật thì không. Bảng *"giả lập trả lời được?"* nằm ở
   `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md` §1, và bậc 1 của thang ở §7 của tệp ấy là buổi làm việc mà tệp này
   hạ chi phí.

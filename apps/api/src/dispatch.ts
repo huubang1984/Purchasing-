@@ -20,6 +20,8 @@
 //   BUYER   cookie `__Host-tp_session=<orgId>.<token>` → `resolveSessionByToken` → nếu route ghi thì
 //           `requirePermission` → handler. Tất cả trong MỘT `withTenant` — [S1.70 / khoản 124, lượt soi 64a-4] trừ phần bù của một việc
 //           sau commit có bù, chạy trong một `withTenant` MỚI sau commit.
+//           [S1.154 / khoản 142 / ADR-091] Phiên `AGENT_READONLY` trên route ĐỌC: trần theo phiên (429) trước handler, và
+//           MỘT hàng `AGENT_READ` sau handler — cả hai trên CHÍNH `client` của giao dịch ấy; ghi sổ hỏng ⇒ 500, không dữ liệu.
 //
 // ---------------------------------------------------------------------------------------------
 // [S1.10.3] ĐƯỜNG GHI CỦA KHÁCH KHÔNG ĐI QUA `withGuestSession` — ĐO ĐƯỢC, KHÔNG PHẢI LỰA CHỌN TIỆN
@@ -76,9 +78,12 @@
 
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
+import { appendAuditEvent } from "@trustprocure/audit";
 import {
   conChoChoDuongPhu,
   MfaRequiredError,
+  DenialAuditFailedError,
+  PermissionAuditFailedError,
   PermissionDeniedError,
   requirePermission,
   resolveSessionByToken,
@@ -112,6 +117,60 @@ export class AgentScopeDeniedError extends Error {
   constructor() {
     super("chứng chỉ phiên không có phạm vi cho đường này");
     this.name = "AgentScopeDeniedError";
+  }
+}
+
+/**
+ * [S1.154 / khoản 142 / ADR-091] Lần ghi hàng `AGENT_READ` hỏng — bọc lỗi của `appendAuditEvent` để bộ điều phối trả 500.
+ *
+ * Tên KHÔNG kết thúc bằng `DeniedError`, có chủ đích: đây không phải một lần TỪ CHỐI (cổng [INV-D5] của
+ * `ghi-so-tu-choi-mot-duong.test.ts` nhận diện lớp từ chối bằng đuôi tên ấy), mà là một lần CHO QUA không ghi được sổ — và
+ * lần cho qua ấy vì thế KHÔNG được xảy ra. Lớp này không có trong bảng catch nào của tệp này, nên nó rơi xuống `loiNoiBo`:
+ * 500 thân cố định, và dòng log `AgentReadAuditFailedError <- error 55P03` (hay mã nào đó của lần ghi) nêu MẪU route.
+ */
+export class AgentReadAuditFailedError extends Error {
+  constructor(cause: unknown) {
+    super("khong ghi duoc so cho lan doc cua phien agent", { cause });
+    this.name = "AgentReadAuditFailedError";
+  }
+}
+
+/**
+ * [S1.154 / khoản 142 · 144 / ADR-091] Trần số lần ĐỌC của MỘT phiên `AGENT_READONLY` trong một cửa sổ `OTP_RATE_WINDOW_SECONDS`
+ * (900 s) của bộ đếm `caller_rate_limits` (042) — tức trung bình 60 lần mỗi phút.
+ *
+ * Vì sao cần: từ vòng này mỗi lần đọc của agent là một hàng sổ, và mỗi hàng sổ đi qua khoá tư vấn nối tiếp TOÀN TỔ CHỨC của
+ * `noi_chuoi_kiem_toan()` dưới trần 2 s (050). Không trần thì một cookie agent bị rò lặp lời gọi là xếp được mọi lần ghi sổ của tổ
+ * chức sau hàng của mình (khoản 144).
+ *
+ * RANH GIỚI, nói ra: cửa sổ là cửa sổ NHẢY làm tròn theo epoch (cùng bộ đếm của nhánh ANON), nên trần giới hạn TỔNG mỗi cửa sổ,
+ * không giới hạn một cơn dồn: 900 lần có thể tới trong một phút đầu cửa sổ. Một phiên agent sống tối đa một giờ (051), tức tối đa
+ * bốn cửa sổ.
+ */
+export const AGENT_DOC_TRAN_MOI_CUA_SO = 900;
+
+/**
+ * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần TỪ CHỐI của MỘT phiên người mua (người hay agent) trong một cửa sổ
+ * `OTP_RATE_WINDOW_SECONDS` — chung một bucket cho `PERMISSION_DENIED` của `requirePermission` và `AGENT_SCOPE_DENIED` của vế phạm
+ * vi. Vượt trần ⇒ 429 TRƯỚC lần ghi sổ: sổ giữ N lần từ chối đầu của phiên ấy trong cửa sổ, phần còn lại bị đổ — không lấy khoá
+ * chuỗi sổ, không giữ kết nối `auditPool`.
+ *
+ * Vì sao 30: giao diện người mua không hiện nút cho việc người dùng không có quyền, và công cụ MCP chỉ gọi route trong phạm vi —
+ * nên lần từ chối là một ca LỖI của máy khách, không phải nhịp làm việc. Ba mươi lần trong mười lăm phút đủ rộng cho một người
+ * bấm thử, đủ hẹp để một phiên không nối đuôi sổ của tổ chức quá 30 lần một cửa sổ. Cùng ranh giới cửa sổ NHẢY của
+ * `AGENT_DOC_TRAN_MOI_CUA_SO`.
+ */
+export const TU_CHOI_TRAN_MOI_CUA_SO = 30;
+
+/**
+ * [S1.155 / khoản 122 · 144 / ADR-092] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
+ * không phải một lần từ chối để ghi sổ (cổng [INV-D5] nhận diện lớp từ chối bằng đuôi tên ấy) mà là lý do lần từ chối KHÔNG được
+ * ghi. Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.
+ */
+class VuotTranTuChoiError extends Error {
+  constructor() {
+    super("phien da vuot tran tu choi cua cua so");
+    this.name = "VuotTranTuChoiError";
   }
 }
 
@@ -161,6 +220,16 @@ export interface DispatcherDeps {
    * ấy (§S1.92).
    */
   readonly outboxNudge?: (orgId: string) => void;
+  /**
+   * [S1.154 / khoản 144 / ADR-091] Trần số lần đọc của một phiên agent mỗi cửa sổ — mặc định `AGENT_DOC_TRAN_MOI_CUA_SO`. Test
+   * tiêm số nhỏ để đo 429 mà không phải gọi 900 lần; cùng khuôn `treQuaTranMs`.
+   */
+  readonly tranDocAgent?: number;
+  /**
+   * [S1.155 / khoản 122 · 144 / ADR-092] Trần số lần từ chối của một phiên người mua mỗi cửa sổ — mặc định
+   * `TU_CHOI_TRAN_MOI_CUA_SO`. Test tiêm số nhỏ; cùng khuôn `tranDocAgent`.
+   */
+  readonly tranTuChoi?: number;
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
@@ -391,6 +460,8 @@ function orgIdTuThan(body: unknown): string | null {
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const routes = deps.routes ?? ROUTES;
   const treQuaTranMs = deps.treQuaTranMs ?? TRE_QUA_TRAN_TO_CHUC_MS;
+  const tranDocAgent = deps.tranDocAgent ?? AGENT_DOC_TRAN_MOI_CUA_SO;
+  const tranTuChoi = deps.tranTuChoi ?? TU_CHOI_TRAN_MOI_CUA_SO;
 
   return async (vao) => {
     const requestId = randomUUID();
@@ -565,6 +636,46 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               throw e;
             }
             // ==================================================================================
+            // [S1.155 / khoản 122 · 144 / ADR-092] TRẦN LẦN TỪ CHỐI THEO PHIÊN.
+            //
+            // Mỗi lần từ chối là một hàng sổ ở giao dịch ĐỘC LẬP, và mỗi hàng sổ lấy khoá tư vấn nối
+            // tiếp TOÀN TỔ CHỨC dưới trần 2 s (050) — nên một phiên bắn liên tục vào route nó không
+            // có quyền (122), hay một cookie agent rò bắn vào route ngoài phạm vi (144), xếp mọi lần
+            // ghi sổ của tổ chức sau hàng của mình. `demTuChoi` đếm lần từ chối TRƯỚC lần ghi; quá
+            // trần thì ném `VuotTranTuChoiError` và lần ghi không xảy ra.
+            //
+            // VÌ SAO ĐẾM TRÊN `client` VÀ TRẢ 403 BẰNG `return`: lần từ chối trước vòng này NÉM ra
+            // khỏi callback ⇒ `withTenant` ROLLBACK ⇒ một lần đếm trên `client` biến theo — đúng lý
+            // do bản 142 để vế này mở. `phanQuyetTuChoi` bắt lỗi từ chối NGAY TRONG callback và trả
+            // phản hồi ⇒ giao dịch COMMIT ⇒ lần đếm ở lại. Giao dịch ấy tới đây chỉ mới đọc phiên và
+            // đếm — không handler nào đã chạy — nên COMMIT nó không làm sống thứ gì mà ROLLBACK từng
+            // bỏ. Không mở một `withTenant` lồng: cùng lý do khối S1.78 dưới đây (kết nối thứ hai).
+            // Câu đếm là `INSERT … ON CONFLICT DO UPDATE` nên hàng đếm bị khoá tới COMMIT: các lần
+            // từ chối CÙNG LÚC của một phiên xếp hàng sau nhau, và trần đúng tới từng lần (vế ⒢).
+            //
+            // LẦN GHI SỔ HỎNG (`DenialAuditFailedError`, `PermissionAuditFailedError`) cũng đi ra
+            // bằng `return` — 500 thân cố định qua `loiNoiBo`, y như trước — để lần đếm của nó ở
+            // lại. Không thế thì đúng ca mà 144 mô tả (khoá chuỗi sổ bị giữ, lần ghi gãy 55P03) là
+            // ca KHÔNG BAO GIỜ tiêu ngân sách: mỗi lần hỏng cuộn lần đếm của chính nó (vế ⒣).
+            // ==================================================================================
+            const demTuChoi = async (): Promise<void> => {
+              const soLan = await tangBucketNguoiGoi(client, `tu-choi|${actor.sessionId}`, deps.services.pepper);
+              if (soLan > tranTuChoi) throw new VuotTranTuChoiError();
+            };
+            const phanQuyetTuChoi = async (viec: () => Promise<void>): Promise<ApiResponse | null> => {
+              try {
+                await viec();
+                return null;
+              } catch (e) {
+                if (e instanceof VuotTranTuChoiError) {
+                  return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+                }
+                if (e instanceof PermissionDeniedError || e instanceof AgentScopeDeniedError) return { status: 403, body: THAN_403 };
+                if (e instanceof DenialAuditFailedError || e instanceof PermissionAuditFailedError) return loiNoiBo(e, requestId, route);
+                throw e;
+              }
+            };
+            // ==================================================================================
             // [khoản 141 / ADR-039] PHẠM VI CỦA CHỨNG CHỈ — và nó đứng TRƯỚC cổng quyền.
             //
             // VÌ SAO TRƯỚC: `requirePermission` trả lời "người này có được làm việc này không";
@@ -584,21 +695,45 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             // một hợp đồng chứ không phải một hệ quả tình cờ.
             // ==================================================================================
             if (actor.kind === "AGENT_READONLY" && !agentGoiDuoc(route)) {
-              await throwAuditedDenial(
-                deps.auditPool,
-                cookie.orgId,
-                {
-                  actorType: "USER",
-                  actorId: actor.id,
-                  action: "AGENT_SCOPE_DENIED",
-                  resourceType: "SESSION",
-                  resourceId: actor.sessionId,
-                  // KHÔNG nội suy tham số đường dẫn: `route.path` là MẪU đã khai trong `ROUTES`,
-                  // không phải chuỗi người gọi gửi. `requestId` để nối hàng sổ với dòng log.
-                  payload: { method: route.method, routePath: route.path, requestId },
-                },
-                new AgentScopeDeniedError(),
-              );
+              const phanHoiPhamVi = await phanQuyetTuChoi(async () => {
+                await demTuChoi();
+                await throwAuditedDenial(
+                  deps.auditPool,
+                  cookie.orgId,
+                  {
+                    actorType: "USER",
+                    actorId: actor.id,
+                    action: "AGENT_SCOPE_DENIED",
+                    resourceType: "SESSION",
+                    resourceId: actor.sessionId,
+                    // KHÔNG nội suy tham số đường dẫn: `route.path` là MẪU đã khai trong `ROUTES`,
+                    // không phải chuỗi người gọi gửi. `requestId` để nối hàng sổ với dòng log.
+                    payload: { method: route.method, routePath: route.path, requestId },
+                  },
+                  new AgentScopeDeniedError(),
+                );
+              });
+              if (phanHoiPhamVi !== null) return phanHoiPhamVi;
+            }
+            // ==================================================================================
+            // [S1.154 / khoản 142 · 144 / ADR-091] LẦN ĐỌC CỦA AGENT: MỘT TRẦN, RỒI MỘT HÀNG SỔ.
+            //
+            // Tới đây, một phiên `AGENT_READONLY` chỉ còn đi được route mà `agentGoiDuoc` cho qua
+            // — bảy route ĐỌC và `POST /auth/logout`. Vế này chỉ nhận route ĐỌC (`mutates` sai).
+            //
+            // TRẦN ĐẾM TRÊN CHÍNH `client`, không ở một `withTenant` riêng: cùng lý do khối S1.78
+            // dưới đây nêu — một `withTenant(deps.pool, …)` lồng lấy kết nối THỨ HAI của pool
+            // đang giữ giao dịch này. Vượt trần thì `return` (không ném) ⇒ giao dịch COMMIT ⇒ lần
+            // đếm ở lại; và 429 đi ra TRƯỚC handler và TRƯỚC hàng sổ — không dữ liệu, không hàng
+            // `AGENT_READ`, không chạm khoá tư vấn của chuỗi sổ. Cùng thân và `retry-after` với
+            // 429 của nhánh ANON.
+            // ==================================================================================
+            const laDocAgent = actor.kind === "AGENT_READONLY" && !route.mutates;
+            if (laDocAgent) {
+              const soLan = await tangBucketNguoiGoi(client, `agent-doc|${actor.sessionId}`, deps.services.pepper);
+              if (soLan > tranDocAgent) {
+                return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+              }
             }
             // ==================================================================================
             // [S1.78 / khoản 144 — ĐO] TRẦN THEO TRẠNG THÁI HỒ SƠ MFA, KHÔNG THEO CỬA SỔ.
@@ -644,21 +779,26 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             }
             // Route TỰ THÂN (đăng xuất) không có mã quyền — nó chỉ chạm phiên của chính người gọi.
             if (route.mutates && route.self !== true) {
-              await requirePermission(
-                client,
-                {
-                  userId: actor.id,
-                  orgId: cookie.orgId,
-                  permission: route.permission,
-                  resourceType: route.resourceType,
-                  resourceId: route.resourceId?.(req) ?? null,
-                  requestId,
-                },
-                deps.auditPool,
+              const phanHoiQuyen = await phanQuyetTuChoi(() =>
+                requirePermission(
+                  client,
+                  {
+                    userId: actor.id,
+                    orgId: cookie.orgId,
+                    permission: route.permission,
+                    resourceType: route.resourceType,
+                    resourceId: route.resourceId?.(req) ?? null,
+                    requestId,
+                  },
+                  deps.auditPool,
+                  { truocKhiGhiTuChoi: demTuChoi },
+                ),
               );
+              if (phanHoiQuyen !== null) return phanHoiQuyen;
             }
+            let phanHoiHandler: ApiResponse;
             try {
-              return await handler.chay(() =>
+              phanHoiHandler = await handler.chay(() =>
                 route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu }),
               );
             } finally {
@@ -666,6 +806,42 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               // của sản phẩm nằm trên đó, và là nhánh trước vòng này KHÔNG có đường đánh thức nào.
               daXepViec = layDauXepViec(client);
             }
+            // ==================================================================================
+            // [S1.154 / khoản 142 / ADR-091] GHI SỔ LẦN ĐỌC CỦA AGENT — CÙNG GIAO DỊCH ĐỌC.
+            //
+            // VÌ SAO TRÊN `client` CHỨ KHÔNG QUA `auditPool`: hàng sổ và câu trả lời phải cùng
+            // sống hay cùng chết. Ghi ở giao dịch độc lập rồi TRẢ VỀ là đúng cái "cổng gác im
+            // lặng" mà `packages/identity/src/index.ts` cấm; ghi ở đây thì lần ghi hỏng ném ra
+            // khỏi callback ⇒ `withTenant` ROLLBACK ⇒ `AgentReadAuditFailedError` không có trong
+            // bảng catch ⇒ `loiNoiBo` ⇒ 500 thân cố định. Phản hồi của handler nằm trong một biến
+            // cục bộ và KHÔNG BAO GIỜ đi ra: không có đường nào trả dữ liệu mà sổ không có hàng.
+            //
+            // VÌ SAO SAU HANDLER CHỨ KHÔNG TRƯỚC: `appendAuditEvent` lấy khoá tư vấn nối tiếp của
+            // tổ chức và giữ nó tới COMMIT. Ghi trước là giữ khoá suốt thời gian handler đọc; ghi
+            // sau thì khoá chỉ sống từ câu ghi tới COMMIT. Thứ tự không đổi được tính chất: handler
+            // NÉM (404 của `getSupplier`, lỗi CSDL) thì giao dịch rollback và không có hàng nào —
+            // cũng không có dữ liệu nào đi ra. Handler TRẢ VỀ (kể cả một mã 4xx bằng `return`) thì
+            // có đúng một hàng, mang mã trạng thái ấy.
+            //
+            // PAYLOAD: cùng quy ước của `AGENT_SCOPE_DENIED` ở trên — MẪU đường dẫn đã khai trong
+            // `ROUTES`, phương thức, `requestId`; cộng mã trạng thái. KHÔNG tham số đường dẫn,
+            // KHÔNG một byte nào của thân phản hồi.
+            // ==================================================================================
+            if (laDocAgent) {
+              try {
+                await appendAuditEvent(client, cookie.orgId, {
+                  actorType: "USER",
+                  actorId: actor.id,
+                  action: "AGENT_READ",
+                  resourceType: "SESSION",
+                  resourceId: actor.sessionId,
+                  payload: { method: route.method, routePath: route.path, requestId, status: phanHoiHandler.status },
+                });
+              } catch (loi) {
+                throw new AgentReadAuditFailedError(loi);
+              }
+            }
+            return phanHoiHandler;
           };
           const phanHoi = await handler.giaoDich(withTenant(deps.pool, cookie.orgId, trongGiaoDich)).then((r) => chaySauCommit(r, cookie.orgId));
           if (daXepViec && phanHoi.status < 400) deps.outboxNudge?.(cookie.orgId);

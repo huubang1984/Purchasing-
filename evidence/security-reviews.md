@@ -12375,11 +12375,145 @@ Không cấp ADR hay migration nào.
 - Lần hợp thứ hai mang #160 và #155, cũng không xung đột. `pnpm cap-so` cấp số vòng từ số tạm; chạy lại không đổi byte
   nào, và `pnpm cap-so --kiem` sạch. Cổng trên cây ấy: `pnpm t0` sạch; `pnpm test` **107 tệp, 1434 đạt, 1 bỏ qua**.
 
-# §S1.9101 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 9401
+# §S1.154 — KHOẢN 142 ĐÓNG: LẦN ĐỌC CỦA AGENT GHI SỔ CÙNG GIAO DỊCH ĐỌC; KHOẢN 144 THU HẸP BẰNG MỘT TRẦN THEO PHIÊN
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 142 rời rổ B vì ĐÓNG; khoản 144 ở lại rổ B, thu hẹp.** Không migration. Một ADR mới
+(ADR-091). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+ADR-039 (S1.76) đóng nhánh TỪ CHỐI của khoản 142 và để nhánh CHO QUA mở: một phiên `AGENT_READONLY` đọc bảy route mà
+`agentGoiDuoc` cho qua không để lại một dòng nào trong `audit_events`. ADR-039 §5 cũng từ chối cách vá dễ nhất — ghi một hàng ở
+giao dịch độc lập rồi TRẢ VỀ — vì đó là cái "cổng gác im lặng" mà `packages/identity/src/index.ts` cấm. Chủ dự án chọn phương
+án *"ghi sổ cùng giao dịch đọc"*.
+
+## 2. Đo trước khi sửa
+
+- Nhánh `BUYER` của `apps/api/src/dispatch.ts` đã chạy `resolveSessionByToken`, vế phạm vi, handler và COMMIT trong MỘT
+  `withTenant(deps.pool, …)`. Tức có sẵn một `client` ghi được trong đúng giao dịch của lần đọc: không cần dựng giao dịch mới.
+- `audit_events.action` không có CHECK tập giá trị nào (đọc `db/migrations/*.sql`), và `AGENT_SCOPE_DENIED` không đăng ký ở
+  đâu ngoài chính lời gọi. Hàng mới không cần migration.
+- Bộ đếm sẵn có: `tangBucketNguoiGoi` trên `caller_rate_limits` (042), cửa sổ 900 s cố định, khoá băm bằng pepper — bộ đếm của
+  `callerLimit` nhánh ANON. Nó nhận một `PoolClient`, nên đếm được trên chính `client` của giao dịch, tránh lỗi kết nối lồng mà
+  S1.78 đã đo.
+- RED trên mã cũ (chỉ `dispatch.ts` bị cất đi, tệp test giữ nguyên): vế ⒜ đỏ ở route đầu tiên, *"/me: phiên agent phải để lại
+  ĐÚNG MỘT hàng: expected +0 to be 1"*; vế ⒝ đỏ vì lời gọi trả 200 kèm danh sách nhà cung cấp dưới khoá sổ bị giữ; vế ⒟ đỏ ở
+  *"expected +0 to be 3"*. Vế ⒞ (chuỗi sổ liền) xanh trên cả hai bản — nó là phép canh không-hồi-quy, không phải phép đo lỗi.
+
+## 3. Thay đổi
+
+- `dispatch.ts`, nhánh `BUYER`, sau vế phạm vi: với phiên `AGENT_READONLY` trên route không `mutates`, đếm
+  `agent-doc|<sessionId>` trên `client`; vượt `AGENT_DOC_TRAN_MOI_CUA_SO` (900) ⇒ `return` 429, cùng thân và `retry-after` với
+  nhánh ANON — giao dịch COMMIT nên lần đếm ở lại; không handler, không hàng sổ.
+- Sau handler, trước khi callback trả về: `appendAuditEvent(client, orgId, { action: "AGENT_READ", actorType: "USER", actorId,
+  resourceType: "SESSION", resourceId: sessionId, payload: { method, routePath, requestId, status } })`. Lỗi được bọc thành
+  `AgentReadAuditFailedError`; lớp ấy không có trong bảng catch nào ⇒ `loiNoiBo` ⇒ 500 thân cố định, một dòng log nêu mẫu route
+  và SQLSTATE.
+- `createDispatcher` nhận `tranDocAgent` cho test, cùng khuôn `treQuaTranMs`.
+
+## 4. Đo sau khi sửa
+
+`apps/api/src/auth.int.test.ts`, khối *"[S1.154 / khoản 142] lần đọc của phiên agent ghi sổ cùng giao dịch"*, năm ca:
+- ⒜ tập route đo đúng bằng tập route ĐỌC mà `agentGoiDuoc` cho qua — không thừa, không thiếu;
+- ⒜ bảy route, dựng trên dữ liệu thật (nhà cung cấp, gói thầu, yêu cầu mở thầu) để handler trả 200: phiên agent ⇒ đúng một hàng
+  `AGENT_READ`, `routePath` là MẪU, payload đúng bốn khoá, `resource_id` là phiên agent; phiên người cùng route ⇒ 200 và 0 hàng;
+- ⒝ giữ khoá chuỗi sổ của tổ chức bằng một `audit_append` chưa commit ⇒ lời gọi ra 500 `{"error":"loi noi bo"}` sau 2 s, thân
+  không chứa tên nhà cung cấp, 0 hàng mới, đúng một dòng log `GET /suppliers … AgentReadAuditFailedError <- error 55P03` không
+  mang id tổ chức. Đối chứng dương cùng ca: không giữ khoá thì cùng lời gọi trả 200 kèm tên ấy;
+- ⒞ `verifyAuditChain` sau bảy lần đọc: không `SEQ_GAP`, `LINK_BROKEN`, `HASH_MISMATCH` (chỉ `NOT_ANCHORED` của phép gọi không
+  neo ngoài);
+- ⒟ trần 3 tiêm vào một bộ điều phối thứ hai: ba lần 200, ba lần 429 với `retry-after` 900 và không hàng thêm; một phiên agent
+  khác và phiên người của chính người ấy vẫn 200.
+
+`tests/architecture/cong-quyen-route.test.ts`: chú thích *"không công cụ nào để lại một dòng nào"* được gạch nghĩa bằng một
+ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất hiện đúng một lần trong `dispatch.ts`, trong một lời gọi
+`appendAuditEvent(client, …)`.
+
+## 5. Ranh giới, nói ra
+
+- Trần không phủ vế 403: lần đếm của một lần từ chối phạm vi rollback cùng giao dịch. Khoản 144 giữ vế ấy.
+- Cửa sổ nhảy: 900 lần có thể tới trong một phút đầu cửa sổ.
+- Lần đọc bị handler từ chối bằng lỗi ném (404) không để lại hàng nào — và cũng không dữ liệu nào đi ra.
+- Lần đọc của người vẫn không ghi sổ, và route đọc vẫn không gọi `requirePermission`.
+- Không gắn nhãn `[INV-…]` nào: không bất biến nào trong sổ đăng ký nói về dấu vết của lần đọc qua chứng chỉ agent.
+
+## 6. Số đo
+
+- `pnpm t0` sạch (396 module, 1551 phụ thuộc, không vi phạm); `pnpm test` **107 tệp, 1435 đạt, 1 bỏ qua**.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` (mọi tệp), `apps/mcp`, `qt3-cu-phap`, `qt3-ngu-phap` — **33 tệp,
+  374 ca đạt**; `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` và `db/check-an-ninh.int.test.ts` (hai tệp còn lại có
+  phiên agent) — **33 ca đạt**.
+- Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+
+# §S1.155 — KHOẢN 122 VÀ 144 ĐÓNG: TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 122 và 144 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-092). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Khoản 122 (S1.69) và 144 (S1.76) là cùng một khe nhìn từ hai phía: nhánh `BUYER` của `apps/api/src/dispatch.ts` không có trần nào
+cho lần TỪ CHỐI, trong khi mỗi lần từ chối là một hàng sổ ở giao dịch độc lập và mỗi hàng sổ lấy khoá tư vấn nối tiếp toàn tổ chức
+dưới trần 2 s (050). 122 là phiên hợp lệ bắn vào route nó không có quyền; 144 là cookie agent rò bắn vào route ngoài phạm vi. Vòng
+S1.154 (ADR-091) đã thêm trần cho lần ĐỌC của agent và ghi rõ vì sao vế 403 còn hở: lần đếm trên `client` cuộn lại cùng giao dịch
+khi lần từ chối NÉM.
+
+## 2. Đo trước khi sửa
+
+- `requirePermission` (`packages/identity/src/rbac.ts`) gọi `hasPermission`, rồi ghi `PERMISSION_DENIED` qua `withTenant(auditPool, …)`,
+  rồi ném. Người gọi không có chỗ nào đứng giữa "biết là từ chối" và "ghi sổ" — và `hasPermission` cố ý không ra cửa gói.
+- Vế phạm vi của khoản 141 gọi `throwAuditedDenial(deps.auditPool, …)` trực tiếp: biết trước là từ chối, nên đếm được trước lần ghi.
+- Cả hai loại lỗi từ chối trước vòng này ném ra khỏi callback `withTenant` ⇒ ROLLBACK. Giao dịch ấy tới chỗ từ chối chỉ mới chạy
+  `resolveSessionByToken` (một câu `SELECT`) — không handler nào đã chạy.
+- RED trên mã cũ (suy ra, không chạy riêng): mã cũ không có đường nào ra 429 ở nhánh `BUYER` cho lần từ chối, nên ⒠ ⒡ ⒢ ⒣ đỏ ở
+  khẳng định 429 đầu tiên của mỗi vế. Vế ⒣ còn được đo riêng bằng đột biến ở mục 4.
+
+## 3. Thay đổi
+
+- `rbac.ts`: `requirePermission(client, requirement, auditPool, { truocKhiGhiTuChoi })` — móc chạy SAU phép kiểm quyền, TRƯỚC lần
+  ghi, chỉ trên đường từ chối; lỗi của nó đi ra nguyên dạng. Không móc ⇒ hành vi y như trước (mọi người gọi khác không đổi).
+- `dispatch.ts`, nhánh `BUYER`: `demTuChoi` đếm `tu-choi|<sessionId>` bằng `tangBucketNguoiGoi` trên `client`; quá
+  `TU_CHOI_TRAN_MOI_CUA_SO` (30) ⇒ `VuotTranTuChoiError`. `phanQuyetTuChoi` bọc vế phạm vi (đếm rồi `throwAuditedDenial`) và cổng
+  quyền (móc = `demTuChoi`), bắt lỗi NGAY TRONG callback và `return`: 429 + `retry-after`; 403 cho `PermissionDeniedError` và
+  `AgentScopeDeniedError`; 500 qua `loiNoiBo` cho `DenialAuditFailedError` và `PermissionAuditFailedError`. `return` ⇒ COMMIT ⇒ lần
+  đếm ở lại. `createDispatcher` nhận `tranTuChoi`.
+- `packages/identity/src/index.ts`: chú thích mặt tiền nêu móc là một cổng gác im lặng có tên, giam ở một chỗ.
+- `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`: tên móc chỉ được xuất hiện ở `rbac.ts` và `dispatch.ts`.
+- `tools/inv-matrix/src/so-khai-nhan.ts`: khai cặp (D5, `apps/api/src/auth.int.test.ts`).
+
+## 4. Đo sau khi sửa
+
+`apps/api/src/auth.int.test.ts`, khối *"[S1.155 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên"*, trần 3 tiêm vào một bộ điều
+phối riêng, PostgreSQL 16 thật:
+- ⒠ phiên NGƯỜI vai BUYER, `POST /suppliers` (thiếu `supplier.manage`): 3×403 và +3 hàng `PERMISSION_DENIED`; 3×429 với thân
+  `{"error":"qua nhieu yeu cau"}`, `retry-after` 900, 0 hàng thêm; `POST /rfqs` của cùng phiên ⇒ 201; phiên khác ⇒ 403 và +1 hàng;
+- ⒡ phiên AGENT, `GET /rfqs/:id/comparison` (ngoài phạm vi): 3×403 và +3 hàng `AGENT_SCOPE_DENIED`; rồi 429 không hàng; lần đọc
+  trong phạm vi ⇒ 200; phiên người của cùng người dùng ⇒ 403 (bucket khác);
+- ⒢ tám lời gọi CÙNG LÚC của một phiên ⇒ đúng `[403, 403, 403, 429, 429, 429, 429, 429]` và đúng +3 hàng — câu đếm khoá hàng
+  bucket tới COMMIT nên các lần từ chối của một phiên xếp hàng sau nhau;
+- ⒣ giữ khoá chuỗi sổ bằng một `audit_append` chưa commit: 3 lời gọi ⇒ 3×500 thân cố định, 0 hàng; nhả khoá, lời gọi thứ tư ⇒
+  429. **Đột biến:** gỡ nhánh `DenialAuditFailedError`/`PermissionAuditFailedError` của `phanQuyetTuChoi` ⇒ ⒣ đỏ, *"expected 403 to
+  be 429"* — lần đếm cuộn theo lần ghi hỏng, đúng khe mà nhánh ấy đóng.
+
+## 5. Ranh giới, nói ra
+
+- N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ; trần giới hạn một phiên, và một kẻ cầm nhiều phiên nhân được ngân sách.
+- Cửa sổ nhảy theo epoch: 30 lần có thể tới ở cuối cửa sổ này và 30 lần nữa ở đầu cửa sổ sau.
+- Lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không đi qua trần này.
+- `requirePermission` nay có một đường từ chối không vào sổ — chỉ khi người gọi cấp móc, và chỉ `dispatch.ts` được cấp.
+- Lần từ chối nay COMMIT giao dịch nghiệp vụ thay vì ROLLBACK; giao dịch ấy tới đó chỉ có câu đọc phiên và câu đếm.
+
+## 6. Số đo
+
+- `pnpm t0` sạch; `pnpm test` xanh.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
+- Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.
+
+# §S1.156 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 243
 
 **Rổ và mảnh (ADR-043 ⒞): KHÔNG gỡ mảnh 4 (*khách hàng pilot*) của `docs/PRODUCT.md` §11 — vòng này dựng thứ để trình
-diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 9401 vào rổ B.** Không
-migration. Một ADR (ADR-9201). Nhánh `claude/pilot-simulation-plan-t2vak3` từ `master` `9b3cf8d`.
+diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 243 vào rổ B.** Không
+migration. Một ADR (ADR-093). Nhánh `claude/pilot-simulation-plan-t2vak3` từ `master` `9b3cf8d`.
 
 ## 1. Vòng này là gì
 
@@ -12393,7 +12527,7 @@ và có dữ liệu demo. Bốn lựa chọn chốt ngày 2026-09-26:
 Sản phẩm của vòng:
 - `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`);
 - kế hoạch `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`;
-- ADR-9201.
+- ADR-093.
 
 `docs/TIEN-DE-CHUA-DO.md` đặt ranh giới từ 2026-09-04 (*"Một pilot giả lập cho ra bằng chứng giả lập"*), và vòng này nhận
 ranh giới ấy làm luật: nhãn giả lập ở dòng đầu báo cáo, dữ liệu tự khai là bịa, không lùi ngày, không hiệu chỉnh tham số S3.
@@ -12534,7 +12668,7 @@ xu.
 duyệt, BUYER duyệt mở thầu, thiếu chữ ký trên ngưỡng, hai giá trùng, báo giá không được mời, hạn dưới sàn, người
 `khongXem` có quyền xem, người không tồn tại. Cả mười đều bị bắt.
 
-## 7. Phát hiện — khoản 9401
+## 7. Phát hiện — khoản 243
 
 Cột *Vào sổ* đếm hàng `audit_events` của tổ chức trước và sau mỗi lần thử sai. Lượt đầu (23:11) cho **9/16** lần từ chối
 vào sổ. Nhưng lượt ấy chưa từng chạy J3 vế 1: danh mục chỉ giao lần tự duyệt trao thầu cho người KHÔNG giữ `po.approve`,
@@ -12567,7 +12701,7 @@ Tám lần KHÔNG vào sổ, ở lượt sau khi sửa:
 
 `docs/PRODUCT.md` §5 (hàng S1.110) khai *"và mỗi lần từ chối để lại một dòng"*: sửa tại chỗ, gạch và giữ nguyên văn.
 
-Khoản **9401** vào **rổ B**, ba vế đọc ở chính hàng sổ. Khoản gồm J3 ×4, D2 ×1 và hai lần nộp phía nhà cung cấp. Bản đầu
+Khoản **243** vào **rổ B**, ba vế đọc ở chính hàng sổ. Khoản gồm J3 ×4, D2 ×1 và hai lần nộp phía nhà cung cấp. Bản đầu
 của biên bản này viết hai lần nộp ấy *"ở phía NHÀ CUNG CẤP, ngoài mệnh đề của ADR-060"*. Lượt soi đối kháng chỉ ra câu ấy
 trái với ADR-074: ADR ấy đã được chấp nhận cùng ngày, và nó đọc chính mệnh đề ADR-060 cho bước *nộp*. Lần mở link đã thu
 hồi là một lần xác thực token thất bại, không phải một bước của chuỗi, và ADR-060 không xếp lớp ấy. Nó được ghi ở đây,
@@ -12620,23 +12754,23 @@ kiểm chứng độc lập: 35 phát hiện, **32 xác nhận, 3 bị bác** �
 | 9 | đúng đắn | thấp | Tín hiệu dừng tới trong lúc khởi động cụm (có thể tới hai phút) vẫn để lại tiến trình con mồ côi | `khoiDongCum` trao hàm dừng TRƯỚC tiến trình con đầu tiên. Đo: SIGTERM 1,66 s sau khi chạy lệnh `cum` — `api` đã ra đời, chưa trả `/health` — ⇒ mã thoát 143, 0 tiến trình con còn sống |
 | 10 | đúng đắn | thấp | Một lần ĐỌC tệp hộp thư hỏng tạm thời bị nhớ như tin hỏng, vĩnh viễn | Chỉ nhớ khi nội dung sai hình dạng. Test mới đỏ khi gỡ bản sửa (đã chạy). **Người kiểm chứng BÁC** phát hiện: bên ghi hộp thư ghi `.tmp` rồi đổi tên, và trên Windows libuv mở tệp với cờ chia sẻ đọc, nên không đo được đường kích hoạt nào. Bản sửa giữ lại như một lớp phòng thủ vô hại |
 | 11 | đúng đắn | thấp | Chế độ chậm chạy phần có ghi sổ của SX-06 chồng lên các kịch bản nhanh cùng tổ chức: OTP cùng số điện thoại, và cửa sổ đo *Vào sổ* | SX-06 dựng gói, mời và nhận báo giá MỘT MÌNH; kịch bản nhanh chạy trong lúc nó đợi; nó chỉ đi tiếp sau hạn khi kịch bản nhanh đã xong |
-| 12 | xanh giả | vừa | J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt) chưa từng chạy, mà `PRODUCT.md` §5 và khoản 9401 khai đã đo J3 | SX-03 giao đề xuất cho phó giám đốc. Lần thử: 422 *"(J3)"*, **không vào sổ**, và nó vào khoản 9401. Một test đòi danh mục đo cả lớp 403 lẫn lớp J3 |
+| 12 | xanh giả | vừa | J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt) chưa từng chạy, mà `PRODUCT.md` §5 và khoản 243 khai đã đo J3 | SX-03 giao đề xuất cho phó giám đốc. Lần thử: 422 *"(J3)"*, **không vào sổ**, và nó vào khoản 243. Một test đòi danh mục đo cả lớp 403 lẫn lớp J3 |
 | 13 | xanh giả | vừa | Cột mốc, biên bản và Handoff khai *"mười một kịch bản qua API thật"* khi SX-06 chưa có kết quả | Các câu ấy nay gọi đó là DANH MỤC, và nói SX-06 chưa có kết quả cho tới khi có số đo |
-| 14 | xanh giả | vừa | Hai lần nộp phía nhà cung cấp bị gọi là *"ngoài mệnh đề của ADR-060"*, trái với cách ADR-074 đọc mệnh đề ấy | Vào khoản 9401 (mục 7) |
+| 14 | xanh giả | vừa | Hai lần nộp phía nhà cung cấp bị gọi là *"ngoài mệnh đề của ADR-060"*, trái với cách ADR-074 đọc mệnh đề ấy | Vào khoản 243 (mục 7) |
 | 15 | xanh giả | vừa | *"Bảy người là cỡ tối thiểu đo được"*, trong khi công cụ chưa chạy hồ sơ nào nhỏ hơn | Sửa: bảy là cỡ ĐỦ, đã đo; cỡ tối thiểu chưa đo |
 | 16 | xanh giả | thấp | Lời dẫn trình diễn của XD-05 gán lần tự duyệt của người tạo gói cho D2, trong khi cổng quyền chặn trước (403) | Lời dẫn của ba gói dở suy lớp chặn từ quyền của người thử. Minh hoạ XD-05 sửa người ký thứ hai cho khớp bước |
 | 17 | xanh giả | thấp | *"417 bước qua API thật"* đếm cả 149 phép KIEM | Báo cáo tách LAM + CHAN khỏi KIEM (mục 5) |
 | 18 | xanh giả | thấp | Báo cáo đóng dấu băm HEAD sạch lên cả lượt chạy trên mã đã đột biến | Thêm *"+ N tệp chưa commit"* khi cây làm việc bẩn |
 | 19 | xanh giả | thấp | Minh hoạ của SX-06 (*"có hàng `BID_DEADLINE_DENIED`"*, *"đóng sau hạn không cần lý do"*) và của SX-02 (*"bản cũ vẫn còn"*) được in ra mà không kiểm | SX-06: lần nộp trễ nay đòi ĐÚNG một hàng `BID_DEADLINE_DENIED`, đếm theo hành động; thiếu là KHÔNG ĐẠT. Câu *"không cần lý do"* bị bỏ: route luôn đòi `reason`, còn `early_close_reason` không lộ qua API. SX-02: xem dưới |
-| 20 | xanh giả | thấp | Chú thích của báo cáo gọi lần từ chối do trigger là *"không vào sổ được"* | Sửa: hôm nay nó không vào sổ khi lớp gói không bắt trước (khoản 9401). `submitBid` đã ghi được một nhánh trigger |
+| 20 | xanh giả | thấp | Chú thích của báo cáo gọi lần từ chối do trigger là *"không vào sổ được"* | Sửa: hôm nay nó không vào sổ khi lớp gói không bắt trước (khoản 243). `submitBid` đã ghi được một nhánh trigger |
 | 21 | xanh giả | thấp | Phép cô lập không có đối chứng dương | Hai đối chứng: người của chính tổ chức đọc cùng id ⇒ 200 |
 | 22 | xanh giả | thấp | Biên bản gọi việc thu hồi khoá là *"lớp chặn thật"* sau khi gói huỷ | Sửa (mục 7): lớp chặn là nhánh trạng thái C1 của trigger nộp |
-| 23 | xanh giả, cổng CI | thấp | Khai báo ở `duong-sql-ngoai-with-tenant.test.ts` và ADR-9201 kể một phép đọc đặc quyền; mã chạy ba | Kể đủ ba ở cả hai chỗ và ở đầu `csdl.ts` |
+| 23 | xanh giả, cổng CI | thấp | Khai báo ở `duong-sql-ngoai-with-tenant.test.ts` và ADR-093 kể một phép đọc đặc quyền; mã chạy ba | Kể đủ ba ở cả hai chỗ và ở đầu `csdl.ts` |
 | 24 | tài liệu | vừa | Lời dẫn trình diễn của XD-04 đặt lần tự duyệt SAU lần duyệt thật, trong khi `/mo-thau` chặn nút **Phê duyệt** ngay trên trình duyệt khi đề xuất đã duyệt — lần thử không bao giờ tới sản phẩm | Lần thử sai đi TRƯỚC ở cả ba gói dở (XD-03, XD-04, XD-05); kế hoạch §5 theo |
 | 25 | tài liệu | thấp | `--chi SX-01,XD-02` không nháy đi qua shim `pnpm.ps1` của PowerShell tới node thành `"SX-01 XD-02"` | `--chi` tách theo dấu phẩy và khoảng trắng; tài liệu viết danh sách trong nháy; test |
 | 26 | tài liệu | thấp | Khối lệnh Docker không đợi Postgres sẵn sàng, và lần nối đầu không thử lại | Thêm vòng `pg_isready` cho PowerShell và bash; kế hoạch ghi rõ hai khối ấy chưa chạy nguyên văn — máy của vòng không có Docker |
 | 27 | tài liệu | thấp | Đột biến *"tắt lớp giấu số báo giá ⇒ SX-01 KHÔNG ĐẠT"* là của một lượt `--chi SX-01`, đặt cạnh các con số N/10 của lượt đủ danh mục | Chạy lại trên cả danh mục: **4/10** KHÔNG ĐẠT (mục 6) |
-| 28 | tài liệu | thấp | *"Quyền 0700"* không đúng trên Windows: Node bỏ qua bit quyền, thư mục thừa hưởng ACL của thư mục cha | Viết lại ở kế hoạch, ADR-9201, `.gitignore` và chú thích mã: 0700 trên POSIX; trên Windows, đặt kho hay `--thu-muc` dưới hồ sơ người dùng |
+| 28 | tài liệu | thấp | *"Quyền 0700"* không đúng trên Windows: Node bỏ qua bit quyền, thư mục thừa hưởng ACL của thư mục cha | Viết lại ở kế hoạch, ADR-093, `.gitignore` và chú thích mã: 0700 trên POSIX; trên Windows, đặt kho hay `--thu-muc` dưới hồ sơ người dùng |
 | 29 | tài liệu | thấp | `cum` dựng lại cụm mà không in lại mã gói, và hạn nộp của SX-04 tính từ lượt chạy (ba ngày) chứ không từ lúc dựng lại | `cum` in các gói lượt mới nhất để lại kèm mã gói, và cảnh báo khi lượt đã quá hai ngày; `lien-ket` đánh dấu lượt mới nhất; kế hoạch nói khi nào phải chạy lại; test |
 | 30 | tài liệu | thấp | Nhãn nút trong lời dẫn không khớp trang (*"Mở gói"*, *"Duyệt trao thầu"*, *"Phê duyệt"* không số bước); `/tao-thau` chỉ mời được nhà cung cấp tạo trong cùng phiên trang | Nhãn thật: **Mở thầu**, **Phê duyệt** ở bước 3 hay bước 7, **Điều phối giải mã**, **Tải bộ bằng chứng**; lời dẫn XD-05 nói cách mời từ `/tao-thau` |
 
