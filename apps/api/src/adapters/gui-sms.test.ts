@@ -1,5 +1,5 @@
 // [ADR-069] Kênh SMS — đo trên client GIẢ: đúng lệnh, đúng danh tính gửi, TRANSACTIONAL, thân ASCII GSM-7 — ~~một đoạn~~
-// [S1.175 / ADR-107] một đoạn cho OTP và tin gia hạn, HAI đoạn cho lời mời (link mang mã tổ chức).
+// [S1.176 / ADR-107] một đoạn cho OTP và tin gia hạn, HAI đoạn cho lời mời (link mang mã tổ chức).
 import { PinpointSMSVoiceV2Client, SendTextMessageCommand, type SendTextMessageCommandOutput } from "@aws-sdk/client-pinpoint-sms-voice-v2";
 import { describe, expect, it } from "vitest";
 import { taoBoGuiSms, type SmsGuiTin } from "./gui-sms.js";
@@ -41,7 +41,7 @@ describe("[ADR-069] bộ gửi SMS", () => {
       // ASCII in được ⇒ GSM-7, không UCS-2; ~~một đoạn 160 ký tự (lời mời có link dài vẫn trong một đoạn)~~.
       expect(than, than).toMatch(/^[\x20-\x7e]+$/u);
     }
-    // [S1.175 / ADR-107] OTP và tin gia hạn: một đoạn 160. Lời mời: link mang mã tổ chức đẩy nó quá 160 — hai đoạn
+    // [S1.176 / ADR-107] OTP và tin gia hạn: một đoạn 160. Lời mời: link mang mã tổ chức đẩy nó quá 160 — hai đoạn
     // GSM-7 ghép (153 × 2), cái giá chủ dự án chọn trả; ba đoạn thì là một thay đổi khác cần được thấy.
     const doDai = sms.lenh.map((l) => (l.input.MessageBody ?? "").length);
     expect(doDai[0]).toBeLessThanOrEqual(160);

@@ -22,7 +22,7 @@
 // quyền 0700/0600, và không một byte nào của tin đi qua `console`.
 //
 // Dạng link theo ADR-020 mục 3: token ở FRAGMENT — ~~`/login#<token>` (người mua), `/i#<token>`
-// (nhà cung cấp)~~ **[S1.175 / ADR-107]** `/login#<orgId>:<token>` (người mua), `/i#<orgId>:<token>`
+// (nhà cung cấp)~~ **[S1.176 / ADR-107]** `/login#<orgId>:<token>` (người mua), `/i#<orgId>:<token>`
 // (nhà cung cấp) — đúng dạng bốn trang của `apps/web` đọc, vì `/auth/redeem` và `/guest/redeem` đòi cả
 // hai và thân thư của bộ gửi thật không mang `orgId`. Trình duyệt không gửi fragment lên máy chủ,
 // không vào log truy cập, không vào `Referer`. Mã OTP đi riêng, không kèm link.

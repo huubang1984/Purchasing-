@@ -58,10 +58,10 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
-/** [S1.175 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
+/** [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
 const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
-// [S1.175 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
+// [S1.176 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
 // không phải trạng thái phải bền: `orgId` không phải bí mật (ADR-107 mục 1), và kho trình duyệt có thể trống
 // hay ném (chế độ riêng tư), nên mọi lần đọc/ghi đều bọc và trang chạy đúng khi không có nó. Chỉ ghi SAU khi
 // vào thành công — một link lạ mang `#<orgId>` không được đặt mã tổ chức cho lần sau.
@@ -74,7 +74,7 @@ function nhoToChuc(orgId) {
 }
 
 /**
- * [S1.175 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
+ * [S1.176 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
  * chức nằm đúng ở đó trong mọi link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang
  * nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy chủ trong khi ô vẫn đầy.
  */
@@ -96,7 +96,7 @@ function docLink() {
   // chủ không biết người gọi thuộc tổ chức nào cho tới khi client nói ra. Bản đầu của trang này
   // chỉ đọc token và lượt chạy thử đầu tiên trả về đúng câu `thiếu trường "orgId"`.
   //
-  // [S1.175 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
+  // [S1.176 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
   // trơn — link của tin báo người duyệt khi hạn mức chặn mã đăng nhập. Nó điền ô tổ chức và XOÁ ô mã (mã
   // của người trước không được đứng lại), để ô xin link bên dưới dùng được ngay.
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
@@ -167,14 +167,14 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b7"), true);
     hien($("b8"), true);
   } catch {
-    // [S1.175] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
+    // [S1.176] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
     bao($("loi1"), MAT_KET_NOI);
   } finally {
     $("nut-vao").disabled = false;
   }
 });
 
-// [S1.175 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
+// [S1.176 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
 // không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
 // máy chủ cố ý không nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Câu ấy phải
 // đúng ở MỌI nhánh sau 200: việc gửi chạy SAU phản hồi (outbox), và một người đã có năm mã trong 15 phút
