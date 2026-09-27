@@ -639,7 +639,7 @@ describe("[S1.70 / khoản 124] POST /rfqs/:rfqId/invitations — link mời đi
 });
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / ADR-9203] Gửi lại link cho CÙNG lời mời — đi trên cùng đường sau commit, cùng bộ gửi do test điều khiển.
+// [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời — đi trên cùng đường sau commit, cùng bộ gửi do test điều khiển.
 // ---------------------------------------------------------------------------------------------
 /** Thân `502` của route gửi lại khi link không gửi được — lời mời giữ nguyên, chỉ token vừa phát bị thu hồi. */
 const THAN_502_GUI_LAI = { error: "khong gui duoc link moi, link moi da thu hoi" };
@@ -668,7 +668,7 @@ async function tokenDungDuoc(token: string): Promise<string | null> {
   );
 }
 
-describe("[S1.9101 / ADR-9203] POST /invitations/:invitationId/reissue — gửi lại link cho CÙNG lời mời", () => {
+describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi lại link cho CÙNG lời mời", () => {
   it("token MỚI cho chính lời mời ấy, tới đúng người liên hệ và kênh; link cũ chưa dùng hết hiệu lực; lời mời không đổi; sổ ghi INVITATION_LINK_REISSUED rồi MAGIC_LINK_TOKEN_ISSUED", async () => {
     const nguoiMoi = await taoNguoi("gl-1-k124@vidu.vn", "BUYER");
     const { ncc, id, token: cu } = await moiMot(nguoiMoi);

@@ -14404,8 +14404,8 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 - Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-107,
   chưa vào sổ nợ.
 - `/tao-thau` và `/chinh-sach` không có ô xin link.
-- ~~Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa.~~ **[S1.9101]** Đo trên Gmail ngày
-  2026-09-27 (§S1.9101 mục 3c): ba link trọn vẹn, chủ dự án mở và xác nhận; Outlook, Apple Mail, SMS và Zalo chưa đo. Dấu hai
+- ~~Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa.~~ **[S1.181]** Đo trên Gmail ngày
+  2026-09-27 (§S1.181 mục 3c): ba link trọn vẹn, chủ dự án mở và xác nhận; Outlook, Apple Mail, SMS và Zalo chưa đo. Dấu hai
   chấm hợp lệ trong fragment (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để
   trình tự nhận diện không cắt mất ký tự cuối.
 
@@ -14615,10 +14615,10 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 - ~~Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
   cung cấp cùng một gói trên một máy — hiếm, ví dụ một người đại diện cho hai doanh nghiệp — có thể nộp vào hồ sơ của nhau nếu
   bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).~~
-  **[S1.9101 / ADR-9201]** Đã làm — `GET /guest/rfq` mang tên doanh nghiệp được mời, khối hỏi nêu nó. §S1.9101.
+  **[S1.181 / ADR-109]** Đã làm — `GET /guest/rfq` mang tên doanh nghiệp được mời, khối hỏi nêu nó. §S1.181.
 - ~~Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
   phía bên mua). Người thấy khối hỏi mà không phải mình thì mở link mời của mình — lần xác minh thay cookie. Cookie khách tự hết
-  sau 4 giờ.~~ **[S1.9101 / ADR-9201]** Đã làm — `POST /guest/logout`, nút Thoát phiên nộp thầu ở bước 1 và bước 4. §S1.9101.
+  sau 4 giờ.~~ **[S1.181 / ADR-109]** Đã làm — `POST /guest/logout`, nút Thoát phiên nộp thầu ở bước 1 và bước 4. §S1.181.
 - Biên nhận của lần nộp trước (bước 4) không hiện lại sau khi tải lại trang.
 - Mã cuối được đo trên Chromium với API giả; luồng API thật (kể cả nộp) được đo trên commit trước lượt sửa của mục 3b.
 
@@ -14626,7 +14626,159 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 
 Không khoản nào mở hay đóng.
 
-# §S1.9101 — PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH; BÊN MUA GỬI LẠI LINK CHO CHÍNH LỜI MỜI (ADR-9201, ADR-9203)
+---
+
+# §S1.179 — KHOẢN 249: KHOÁ `depcruise` CỦA LỚP TEST XẾP HÀNG NGƯỜI CHỜ — NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC
+
+Không chạm mảnh nào của `PRODUCT.md` §11; chỉ đổi lớp test (ADR-043 ⒞).
+
+## 1. Việc gì
+
+PR #176, run 36325198665: job `T1+T2 — unit va contract (windows-latest)` đỏ đúng một ca —
+`apps/api/src/routes.test.ts › [g9-] … PROBE` ném *"[khoản nợ 59] chờ khoá depcruise quá 180000 ms"*. Cùng mã ấy (commit
+41062bb, chỉ khác `evidence/INV-matrix.md` và `evidence/security-reviews.md`) xanh ở chính job ấy mười lăm phút trước.
+
+## 2. Cơ chế, đọc từ mã và từ nhật ký job
+
+- Khoá của khoản 59 (`tests/architecture/khoa-depcruise.ts`) là một `mkdir` nguyên tử; người chờ hỏi lại mỗi `NHIP_MS`
+  (50 ms) và NÉM ở `HAN_CHO_MS` (180 s). Không có hàng chờ.
+- `tests/architecture/boundaries.test.ts` gọi `voiKhoaDepcruise` ở MỖI test — 74 lượt —, nhả rồi giành lại gần như ngay;
+  khe giữa `rmSync` và `mkdirSync` dưới một mili-giây. Người chờ chỉ lọt vào khi nhịp hỏi rơi đúng khe ấy, nên trên thực
+  tế nó chờ trọn tệp.
+- Trên runner ấy `boundaries.test.ts` chạy **194,5 s** (một lượt cruise riêng 22,7 s); `HAN_CHO_MS` đặt ngày 2026-09-08
+  khi tệp ấy chạy 79,6 s cho 68 test. Hạn chờ đã âm thầm thành hạn của cả một tệp khác.
+
+## 3. Sửa
+
+Người đến trước được trước:
+- Lượt giành hỏng đầu tiên đặt một DẤU CHỜ ở `<khoá>.cho/<mốc đến 15 chữ số>-<pid>-<số>` và đập nhịp tim lên nó mỗi nhịp.
+- Ai thấy một dấu CÒN SỐNG đến trước mình thì không giành — kể cả người vừa nhả khoá — mà xếp hàng sau.
+- Dấu của tiến trình đã chết bị dọn; dấu ngừng tim quá `HAN_TIM_DAU_CHO_MS` (10 s) bị bỏ qua nhưng không bị xoá.
+- Dấu chỉ quyết THỨ TỰ; loại trừ vẫn là `mkdir`. Mọi hỏng của dấu đưa lớp này về luật cũ, không ném, không treo.
+- Hạn chờ giữ nguyên và vẫn NÉM, kể cả ở nhịp chưa tới lượt. `CachCho` (`hanChoMs`, `nhuong`) chỉ phép đo truyền.
+
+## 4. Đo
+
+- **Sáu ca mới** ở `tests/architecture/khoa-depcruise.test.ts`, khối `[khoản 249]` — tệp **16/16**:
+  - người đến sau KHÔNG giành khi có một dấu còn sống đến trước, mà đặt dấu của mình sau nó (hai dấu trong hàng) và chờ
+    tới lúc dấu kia rời đi (≥ 1,4 s);
+  - đối chứng `nhuong: false` — đúng khoá cũ — giành ngay dù có người xếp hàng trước;
+  - dấu ngừng tim bị bỏ qua mà không bị xoá; dấu của tiến trình đã chết bị dọn;
+  - hạn chờ vẫn ném (`hanChoMs: 1000`) khi người đứng trước không bao giờ rời hàng, và dấu của lượt ném cũng đi;
+  - một tiến trình giữ-nhả liên tục nhường người đang xếp hàng; với `nhuong: false` nó giành lại đủ năm lượt trong khi có
+    người xếp hàng trước — chính cơ chế gây đói;
+  - hai tiến trình thật: người chờ chen vào giữa mười lượt giữ-nhả, tối đa một lượt mở thêm trước nó, và người kia còn giữ
+    tiếp ít nhất bảy lượt sau nó; không lượt nào chồng lấn.
+- **Năm đột biến, cả năm đỏ:**
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | bỏ nhường — mọi lượt giành như khoá cũ | năm ca: xếp hàng, dấu ngừng tim/chết, hạn, giữ-nhả, hai tiến trình |
+| M2 | bỏ kiểm hạn ở nhịp chưa tới lượt | ca hạn chờ — treo tới hạn của chính `it()` |
+| M3 | bản đồng bộ không gỡ dấu sau khi giành | ca hai tiến trình |
+| M4 | không dọn dấu của tiến trình đã chết | ca dấu ngừng tim/chết |
+| M5 | không bỏ qua dấu ngừng tim | ca dấu ngừng tim/chết |
+
+- **Ba tệp dùng khoá chạy chung** (`boundaries.test.ts`, `apps/api/src/routes.test.ts`, `apps/web/src/phuc-vu.test.ts`), cùng
+  máy, trước rồi sau bản vá:
+
+| Tệp | Trước | Sau |
+|---|---|---|
+| `routes.test.ts` | 113,5 s | 4,9 s |
+| `phuc-vu.test.ts` | 4,3 s | 9,6 s |
+| `boundaries.test.ts` | 143,1 s | 144,3 s |
+
+  Trước bản vá `routes.test.ts` chờ gần trọn `boundaries`; sau bản vá nó vào ở lần nhả kế tiếp. `phuc-vu.test.ts` chậm
+  thêm vì nay đứng trong hàng; `boundaries` không đổi.
+- `pnpm t0` sạch (429 module, 1682 phụ thuộc, không vi phạm); `pnpm test` **117 tệp, 1505 đạt, 1 bỏ qua** — thêm đúng sáu ca
+  của khối trên; `pnpm cap-so --dem` viết lại lời khai đếm (249 khoản, 84 còn mở). Số hiệu của vòng và của khoản do
+  `pnpm cap-so` cấp lúc merge (ADR-090).
+
+## 5. Giới hạn, nói ra
+
+- Chiều âm trên hai tiến trình thật ("không nhường thì đói") là đua tranh xác suất — mỗi vòng người chờ có cỡ khe/50 ms
+  cơ may lọt vào —, nên nó được đo ở CƠ CHẾ: một tiến trình giữ-nhả liên tục với `nhuong: false` giành lại mọi lượt khi có
+  người xếp hàng trước. Bằng chứng chiều âm ngoài đời là lần đỏ trên CI.
+- Thứ tự theo đồng hồ máy: hai người đến cùng mili-giây xếp theo `pid`. Không phải FIFO tuyệt đối, và không cần.
+- Không đo được trên Windows ở máy này; job `T1+T2 (windows-latest)` của PR là phép đo ấy.
+
+
+
+
+---
+
+# §S1.180 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+
+## 1. Vòng này là gì
+
+Hai phiên làm khoản 247 song song. #172 (§S1.167, ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi. Phiên này
+đã làm cùng khoản theo lựa chọn chủ dự án chốt ở đây — J3/D2 là `CONTROL_DENIED`, câu nộp là `BID_STATE_DENIED` mang mã — bằng
+cách kiểm trước ở lớp gói. Khi #172 vào `master`, chủ dự án chọn giữ cơ chế của #172 (một nguồn sự thật; ca đua nhau cũng vào sổ),
+bỏ nhánh kiểm-trước, và nắn hai điều: từ vựng về ba lớp của ADR-084 ⑸, và nhận diện bằng tên ràng buộc thay cho thông điệp. Câu
+hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-108.
+
+## 2. Đo trước (đọc, không chạy)
+
+- Trên `master` (`12645e9`), khối khoản 247 của ba tệp tích hợp khẳng định hàng `RFQ_AWARD_SOD_DENIED` `{viPham, ve}`,
+  `RFQ_APPROVAL_DENIED` `{viPham}` và `BID_SUBMIT_DENIED` `{rfqStatus}` — tức một truy vấn `action = 'CONTROL_DENIED'` không thấy
+  lần vi phạm J3/D2 nào, và `BID_STATE_DENIED` không có.
+- Nhận diện: `veJ3` đọc `code = 23514` + hậu tố `(J3)` + bốn tiền tố câu; `approveRfq` đọc `includes("(D2")`; `submitBid` ghi mọi
+  23514 không vì hạn, kể cả `CHECK` cỡ phong bì của bảng. Thân sáu hàm trigger (`011`, `018`, `059`, `061`, `064`, `066`) không
+  đặt tên ràng buộc nào ngoài `c1_qua_han_nop`.
+
+## 3. Thay đổi
+
+- `db/migrations/074_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
+  `bid_kiem_han_nop`, `bid_kiem_phien_khach`, `bid_kiem_vong_bafo` — thân trích nguyên văn bằng script, thêm `CONSTRAINT = …` ở
+  13 nhánh. Sáu bản ghim ở `hardening.always.sql` đổi cùng commit (tiêu đề, mốc phiên bản, thân khối `DO`, thân `$than$`); script
+  đối chiếu bản ghim cũ với thân cũ trước khi thay. `db/migrations.int.test.ts`: `HAM_56` trỏ sáu hàm sang migration mới, ba danh
+  sách migration đã áp thêm một dòng.
+- `packages/identity/src/chot-kiem-soat.ts` (MỚI): `CHOT_VAO_SO` dời xuống từ `packages/rfq` cùng `ChotKiemSoatError` (nay nhận
+  `cause`), `tuChoiTheoChot`, `laMaChot`; thêm bảy mã J3/D2, bảng `CHOT_THEO_RANG_BUOC` và `maChotTuLoi`.
+  `packages/rfq/src/chot-kiem-soat.ts` còn phần của K1 và chép lại từ vựng ra cửa tệp.
+- `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/trao-thau.ts`: nhánh bắt lỗi của #172 đổi sang `maChotTuLoi` +
+  `tuChoiTheoChot`; `veJ3`, `ghiTuChoiJ3` bỏ.
+- `packages/bidding/src/bidding.ts`: `MA_THEO_RANG_BUOC` (sáu tên → mã viết hoa); nhánh không vì hạn ghi `BID_STATE_DENIED`
+  `{ma}`, không đọc lại gói; `NopBiTuChoiError` mang `ma`; 23514 không tên ném `BiddingError` chung, không sổ.
+- Test: các ca J3/D2 đi qua lớp gói (`luot-danh-gia`, `rfq`) khẳng định `ChotKiemSoatError` + mã + tên ràng buộc ở `cause`; khối
+  khoản 247 khẳng định hàng `CONTROL_DENIED` / `BID_STATE_DENIED` mang mã; hai ca INSERT viết tay (phiên của người khác, phiên đã
+  đề xuất) khẳng định thêm `maChotTuLoi`; hai phép đo mới so tên ràng buộc trong `pg_proc.prosrc` với bảng tên → mã, hai chiều;
+  kịch bản 41 qua HTTP — bước 2 đọc câu mới và một hàng `D2_NGUOI_TAO_TU_DUYET`, bước 12d một hàng `BAFO_NGOAI_TOP_N`, bước 12h
+  một hàng `J3_NGUOI_TAO_DE_XUAT`.
+- `docs/DECISIONS.md` ADR-108, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
+
+## 4. Ranh giới, nói ra
+
+- Năm mã vào sổ nói về phiên hay dữ liệu, không về một bước đi sai thứ tự — rộng hơn chữ của ADR-060. Giữ vì #172 đã ghi chúng và
+  chủ dự án chọn không lùi phần phủ; mã tách chúng ra để lọc được.
+- Thông điệp người dùng thấy ở J3/D2 đổi sang câu của bảng chốt (có dấu, vẫn gọi tên bất biến); ADR-104 ⑵ từng nói không đổi.
+- Nhánh D2 của `approveUnseal` vẫn nhận diện bằng thông điệp — ngoài phạm vi.
+
+## 5. Số đo
+
+Trên cây đã hợp `master` ~~(`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`)~~ **(`f2fa608`, gồm thêm #175) và đã cấp lại
+số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: ~~**178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**~~ **178 tệp, 2845 ca, 2844 đạt, 1 bỏ qua,
+  0 hỏng** (ca thêm là của #175); **65/65** bất biến (43/43 nghiệp vụ +
+  22/22 hàng rào), cổng evidence XANH. `evidence/INV-matrix.md` không đổi byte nào: các ca đổi của vòng này nằm trong khối có
+  nhãn sẵn, và hai phép đo khớp tên không mang nhãn bất biến.
+- Tệp của vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60, `packages/danh-gia/src/luot-danh-gia.int.test.ts` 88/88,
+  `packages/bidding/src/bidding.int.test.ts` 22/22, `apps/api/src/guest.int.test.ts` 12/12, `apps/api/src/buyer.int.test.ts`
+  16/16, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` 29/29, `apps/unseal-worker/src/kich-ban-41.int.test.ts` 15/15,
+  `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
+- `pnpm t0` sạch (427 module, 1672 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua**; `pnpm cap-so --kiem` sạch.
+- Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
+  hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
+  đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
+- Số cấp cho vòng này trôi tám lần vì PR khác merge trước với cùng số: lần đầu S1.170, ADR-106, `073_tu_choi_co_ten` (#175 lấy
+  cả ba), rồi S1.171 (#180), S1.172 (#182), S1.173 (#177), S1.174 (#176), S1.175 (#183), S1.176 và ADR-107 (#184; #185, #187 lấy
+  S1.177, S1.178), S1.179 (#186). Mỗi lần `pnpm cap-so` thu hồi qua trailer `Cap-So:` và cấp lại; nay là S1.180, ADR-108,
+  `074_tu_choi_co_ten`. Số đo ở trên là của cây `f2fa608`. CI trên chính commit hợp xanh cả bảy job, gồm T3 và evidence, ở các đầu
+  `c637858`, `c637455` (sau #176 — hai tệp kịch bản 41 **88/88** cục bộ), `9f66fcf` và `2ccfe6b`. #186 chỉ chạm tài liệu và test kiến
+  trúc `khoa-depcruise`; trên cây đã hợp `pnpm t0` sạch, `pnpm test` 117 tệp, 1548 đạt, 1 bỏ qua, `pnpm cap-so --kiem` sạch.
+- Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
+
+# §S1.181 — PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH; BÊN MUA GỬI LẠI LINK CHO CHÍNH LỜI MỜI (ADR-109, ADR-110)
 
 ## 1. Việc gì
 
@@ -14638,19 +14790,19 @@ Chủ dự án chọn ngày 2026-09-27 hai giới hạn §S1.178 mục 4 để l
   hồi cả lời mời. Cookie `__Host-tp_guest` sống tới 4 giờ kể cả sau khi đóng trình duyệt.
 
 Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG mà lối thoát mở rộng: thoát rồi (hay hết 4 giờ — có từ trước) thì không
-đường nào đưa nhà cung cấp về hồ sơ báo giá của mình. Chủ dự án chọn làm đường thật trong cùng vòng: **ADR-9203**.
+đường nào đưa nhà cung cấp về hồ sơ báo giá của mình. Chủ dự án chọn làm đường thật trong cùng vòng: **ADR-110**.
 
 ## 2. Thay đổi
 
 - `packages/invitation`: `resolveGuestSessionByToken` nối thêm `suppliers` theo khoá chính và trả `supplierLegalName` — đọc dưới
   kết nối chỉ gắn tổ chức, trong cùng câu đã chứng minh token. `revokeGuestSession(client, orgId, guestSessionId)`:
   `assertTenantBound`, `UPDATE guest_sessions … WHERE id = $1 AND revoked_at IS NULL RETURNING …`, và CHỈ khi có hàng đổi thì ghi
-  `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id`, payload `invitationId`). **[ADR-9203]** `reissueInvitationLink`:
+  `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id`, payload `invitationId`). **[ADR-110]** `reissueInvitationLink`:
   khoá hàng lời mời (`FOR UPDATE`), đọc trạng thái gói bằng câu riêng, trần `LINK_MOI_TOI_DA_MOI_GIO` = 3 token/giờ/lời mời (đếm cả
   token của lần mời và token đã thu hồi), thu hồi token chưa dùng, ghi `INVITATION_LINK_REISSUED`, phát token qua
   `issueMagicLinkToken`; `revokeMagicLinkToken` là phần bù (lý do `LINK_SEND_FAILED`, ghi `MAGIC_LINK_TOKEN_REVOKED`).
 - `apps/api`: `GuestContext.supplierLegalName`; `GET /guest/rfq` thêm `supplier: { legalName }`; `POST /guest/logout` (GUEST,
-  `mutates: true`) trả 200 kèm `XOA_COOKIE_PHIEN_KHACH`. **[ADR-9203]** `POST /invitations/:invitationId/reissue` (BUYER, `rfq.invite`):
+  `mutates: true`) trả 200 kèm `XOA_COOKIE_PHIEN_KHACH`. **[ADR-110]** `POST /invitations/:invitationId/reissue` (BUYER, `rfq.invite`):
   404/409/409/429 + `Retry-After`, đích đọc từ `supplier_contacts`, gửi SAU commit, phần bù thu hồi đúng token vừa phát ⇒ 502.
   Đầu tệp `routes/guest.ts` sửa (gạch kèm nhãn): hai route GHI của khách chạy trên kết nối chỉ gắn tổ chức.
 - `apps/web/trang/nop-thau.*`: khối hỏi nêu tên doanh nghiệp và tên gói, thiếu tên doanh nghiệp thì không hỏi; bước 3 có dòng
@@ -14658,33 +14810,33 @@ Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG m
   ô OTP, tiền tệ, đếm ngược; lỗi thoát hiện cạnh nút đã bấm (`#loi4` mới ở bước 4); Tiếp tục bị khoá trong lúc thoát; thoát xong cuộn
   về bước 1; "Niêm phong và nộp" hỏi lại `GET /guest/rfq` và DỪNG khi phiên hiện hành không còn là phiên trên màn (khác gói hay khác
   tên doanh nghiệp); biên nhận về muộn sau khi đổi thế hệ bị bỏ; câu chữ chỉ đường "xin bên mua gửi lại link mời".
-- `apps/web/trang/tao-thau.js` **[ADR-9203]**: nút *Gửi lại link* cạnh *Thu hồi*; câu báo sau khi thu hồi nói báo giá đã nộp vẫn nằm
+- `apps/web/trang/tao-thau.js` **[ADR-110]**: nút *Gửi lại link* cạnh *Thu hồi*; câu báo sau khi thu hồi nói báo giá đã nộp vẫn nằm
   trong gói và chỉ đường gửi lại link, thay cho *"Mời lại nhà cung cấp ấy được rồi"*.
 - Canh kiến trúc: `revokeGuestSession` vào `HAM_DUONG_KHACH`; `reissueInvitationLink`, `revokeMagicLinkToken` vào `HAM_DOI_TRANG_THAI`
   (`tests/architecture/cong-quyen-route.test.ts`); năm tên vào danh sách trắng của mặt tiền `invitation`.
 - `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bộ quét route có ca cho `POST /guest/logout` và `POST /invitations/:invitationId/reissue`
   (mục 3b — commit trước của vòng làm đỏ bộ quét).
-- ADR-9201 (và các chỗ sửa sau lượt soi), ADR-9203, ghi muộn ở ADR-020 mục 4; ADR-107 (Hệ quả) và §S1.178 mục 4 gạch kèm nhãn;
-  §S1.176 mục 4 gạch kèm nhãn (mục 3c); STATE khoản 9402.
+- ADR-109 (và các chỗ sửa sau lượt soi), ADR-110, ghi muộn ở ADR-020 mục 4; ADR-107 (Hệ quả) và §S1.178 mục 4 gạch kèm nhãn;
+  §S1.176 mục 4 gạch kèm nhãn (mục 3c); STATE khoản 250.
 
 ## 3. Đo
 
-- `apps/api/src/guest.int.test.ts` khối `[S1.9101 / ADR-9201]`, 10 ca trên Postgres thật — tám qua HTTP, hai gọi thẳng hàm: hai nhà
+- `apps/api/src/guest.int.test.ts` khối `[S1.181 / ADR-109]`, 10 ca trên Postgres thật — tám qua HTTP, hai gọi thẳng hàm: hai nhà
   cung cấp cùng gói ⇒ hai tên, không thấy tên nhau, không mã nhà cung cấp, không người liên hệ; tên đọc lúc gọi; thoát ⇒ 200,
   `Set-Cookie` xoá đủ thuộc tính, cookie cũ 401 ở đọc và ghi, lời mời không thu hồi, đúng một hàng sổ, lần thoát thứ hai 401 không thêm
   hàng; chạm ĐÚNG phiên đang gọi; 401 không cookie/cookie rác/magic link trong cookie; **[lượt soi]** thoát không đổi một cột nào của
   lời mời, token và thách thức OTP (một link thứ hai đang chờ OTP lúc thoát vẫn xác minh được); **[lượt soi]** đua qua HTTP — một kết
   nối giữ khoá hàng phiên để câu UPDATE của handler chờ, thu hồi rồi thả ⇒ 200 kèm `Set-Cookie`, 0 hàng sổ; hai ca gọi thẳng hàm
-  (thu hồi giữa chừng ⇒ `false`; tổ chức khác ⇒ `false`, khai sai tổ chức ⇒ ném ở câu đầu); **[ADR-9203]** đầu-cuối: nộp, thoát, bên
+  (thu hồi giữa chừng ⇒ `false`; tổ chức khác ⇒ `false`, khai sai tổ chức ⇒ ném ở câu đầu); **[ADR-110]** đầu-cuối: nộp, thoát, bên
   mua gửi lại link QUA HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng, `vendor_bids` một hàng. 22/22.
-- `apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.9101 / ADR-9203]`, 6 ca: token mới cho chính lời mời, đúng người liên hệ và
+- `apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.181 / ADR-110]`, 6 ca: token mới cho chính lời mời, đúng người liên hệ và
   kênh, link cũ hết hiệu lực (`redeemMagicLink`), hai hàng sổ, thân phản hồi không mang token; trần ⇒ 429 + `Retry-After` 3600, không
   token/gửi/sổ, dời mốc tạo ra ngoài cửa sổ thì gửi được — tức token đã thu hồi vẫn bị đếm; ba lần gửi CHỒNG NHAU (một kết nối giữ
   khoá tư vấn ghi sổ của tổ chức tới khi ba lời gọi cùng chờ) ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời THẬT của tổ
   chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm một hàng `PERMISSION_DENIED`; `assertTenantBound` của hai hàm và lý do lạ lúc
   chạy; bộ gửi ném ⇒ 502, token vừa phát thu hồi với lý do, lời mời còn sống, một dòng log không token, gửi lại ⇒ 200. 15/15.
 - `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: 58/58, bộ quét route đi qua cả hai route mới.
-- `apps/web/src/phuc-vu.test.ts`, 15 ca `[S1.9101]` trên khung `node:vm` của §S1.177 — khung nay trả CÙNG phần tử cho cùng bộ chọn
+- `apps/web/src/phuc-vu.test.ts`, 15 ca `[S1.181]` trên khung `node:vm` của §S1.177 — khung nay trả CÙNG phần tử cho cùng bộ chọn
   (`querySelector`), có `crypto.subtle`, `atob`, `btoa`, `TextEncoder` giả và thư viện niêm phong giả đủ để "Niêm phong và nộp" đi tới
   `POST /guest/bids`: ngoài chín ca cũ (đã sửa theo lượt soi) có câu nói trước ở Tiếp tục và ở bước 4 (đọc tệp HTML), đường OTP gặp API
   cũ không tên doanh nghiệp, kiểm phiên trước khi niêm phong (thẻ khác đổi cookie ⇒ dừng, không `POST /guest/bids`; đối chứng cùng
@@ -14692,7 +14844,7 @@ Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG m
   Ca `[S1.178]` *"200 thiếu tên gói"* nay có tên doanh nghiệp và CHỈ thiếu tên gói. 75/75.
 - `pnpm t0` xanh; `pnpm test` 1557/1557; bộ tích hợp đầy đủ: mục 5.
 - Đột biến (chép tệp, chạy các ca liên quan, trả lại). **Lượt một** (trước lượt soi): 31 — 20 ở `nop-thau.js`, 11 ở API và gói — cả 31
-  đỏ, một cần thêm ca mới đỏ. **Lượt hai** (sau lượt soi và ADR-9203): 41, cả 41 đỏ — 16 ở `nop-thau.js` (không xoá bảng giá, dòng tổng,
+  đỏ, một cần thêm ca mới đỏ. **Lượt hai** (sau lượt soi và ADR-110): 41, cả 41 đỏ — 16 ở `nop-thau.js` (không xoá bảng giá, dòng tổng,
   ô OTP, tiền tệ; chỉ xoá hai vùng biên nhận; bỏ kiểm phiên trước khi nộp; không bỏ biên nhận về muộn; lỗi thoát luôn ở bước 1; chỉ
   bật lại một nút; hiện nút Thoát trước kết quả OTP; tên `String(undefined)`; luôn đẩy dòng doanh nghiệp; bỏ vế tên gói; câu Tiếp tục
   và câu sau khi thoát không chỉ đường; không khoá Tiếp tục), 5 ở `tao-thau.js` (gọi nhầm route thu hồi, 429 không nói, câu thu hồi cũ,
@@ -14717,13 +14869,13 @@ Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG m
 Workflow hai lăng kính (hành vi/an ninh; test/tài liệu); người kiểm cố bác năm phát hiện đầu của mỗi lăng kính. 18 phát hiện: lăng kính
 một 6 (1 NẶNG, 4 NHẸ, 1 INFO), lăng kính hai 12 (1 NẶNG, 8 NHẸ, 3 INFO). Mười phát hiện được kiểm: chín đứng, một bị bác. Tám phát hiện
 còn lại không có người kiểm: bốn đo lại bằng một đột biến sống trước khi sửa và chết sau khi sửa (bật lại một nút, nút Thoát trước kết
-quả OTP, nhánh API cũ, câu nói trước), ba đọc lại và đúng (đầu tệp `routes/guest.ts` cùng ADR-020 mục 4 và lời dẫn của ADR-9201; thiếu
+quả OTP, nhánh API cũ, câu nói trước), ba đọc lại và đúng (đầu tệp `routes/guest.ts` cùng ADR-020 mục 4 và lời dẫn của ADR-109; thiếu
 mục Giới hạn và Số; lệch phiên bản làm nút Thoát 404), một INFO sửa luôn (Tiếp tục không khoá lúc thoát). Mọi phát hiện đứng đã sửa:
 
 - **NẶNG — thoát rồi thì không có đường quay lại mà trang và chú thích hứa.** Mời lại 409, không route phát link cho lời mời đã có,
   thu hồi rồi mời lại là luồng báo giá thứ hai; người kiểm đo thêm bằng worker, bảng so sánh và bảng xếp hạng thật: nhà cung cấp đứng
-  hai hàng, giá cũ thắng hạng 1. Chủ dự án chọn làm route: ADR-9203. Phần có từ trước — báo giá của lời mời đã thu hồi vẫn dự thầu —
-  thành khoản 9402.
+  hai hàng, giá cũ thắng hạng 1. Chủ dự án chọn làm route: ADR-110. Phần có từ trước — báo giá của lời mời đã thu hồi vẫn dự thầu —
+  thành khoản 250.
 - **NẶNG (lăng kính hai) — ca `[S1.178]` "200 thiếu tên gói" không còn ghim vế tên gói**: thân `{items: []}` thiếu cả tên doanh nghiệp,
   nên đột biến bỏ vế tên gói (một trong 25 đột biến §S1.178 khai là đỏ) sống. Thân nay chỉ thiếu tên gói; đột biến đỏ lại.
 - **Thoát không xoá dòng tổng giá dạng rõ** (và ô OTP, tiền tệ) — sửa, có ca.
@@ -14767,8 +14919,8 @@ chủ dự án không nói đã mở trên ứng dụng hay thiết bị nào, c
 - Trang không hiện lại biên nhận hay các phiên bản đã nộp sau khi vào lại (có từ §S1.178); lượt Chromium đọc chúng bằng `fetch`.
 - Phiên đã chết thì Thoát không xoá được cookie (401 không `Set-Cookie`); cookie chết không mở được gì.
 - Gửi lại link: link cũ chưa dùng hết hiệu lực; gửi hỏng sau commit để nhà cung cấp không còn link nào tới lần gửi kế; khoá OTP theo
-  lời mời vẫn chặn link mới; ở `BAFO_OPEN` nhà cung cấp ngoài top-N vào được mà không nộp được (ADR-9203, Hệ quả).
-- Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai và báo giá cũ vẫn dự thầu — khoản 9402.
+  lời mời vẫn chặn link mới; ở `BAFO_OPEN` nhà cung cấp ngoài top-N vào được mà không nộp được (ADR-110, Hệ quả).
+- Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai và báo giá cũ vẫn dự thầu — khoản 250.
 - Lệch phiên bản: trang mới gặp API cũ ⇒ nút Thoát và nút Gửi lại link báo 404.
 - Pilot và lượt Chromium thứ hai chạy trên mã TRƯỚC lần tách câu khoá hàng của `reissueInvitationLink` (QT3 không đọc được `FOR UPDATE OF`);
   lần tách không đổi hành vi, và 15 ca của `loi-moi-sau-commit.int.test.ts` đo lại trên mã cuối.
@@ -14776,4 +14928,4 @@ chủ dự án không nói đã mở trên ứng dụng hay thiết bị nào, c
 
 ## 5. Số
 
-Khoản **9402** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối: SO_INT.
+Khoản **250** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối: SO_INT.

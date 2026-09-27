@@ -1035,7 +1035,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_INVITE,
     resourceType: "INVITATION",
     resourceId: invitationIdParam,
-    // [S1.9101 / ADR-9203] Gửi lại link cho CÙNG lời mời còn sống — đường quay lại của nhà cung cấp đã thoát phiên hay hết phiên
+    // [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời còn sống — đường quay lại của nhà cung cấp đã thoát phiên hay hết phiên
     // 4 giờ, về đúng hồ sơ báo giá của mình. Mời lại thì 409 (024), còn thu hồi rồi mời lại là một lời mời và một luồng báo giá
     // MỚI. Điều kiện và trần nằm trong `reissueInvitationLink`; đích đọc từ `supplier_contacts` như route mời (ADR-015 [C1]);
     // gửi SAU commit như route mời (khoản 124). Gửi hỏng ⇒ phần bù thu hồi ĐÚNG token vừa phát — lời mời giữ nguyên.

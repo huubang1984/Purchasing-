@@ -89,6 +89,30 @@
 // Khoá vẫn CÓ HẠN theo hai chiều: chờ tối đa `HAN_CHO_MS` rồi NÉM (một lượt treo im lặng còn tệ
 // hơn một lượt đỏ), và một khoá mà CHỦ của nó đã chết bị thu hồi ngay lập tức.
 // ==============================================================================================
+//
+// ==============================================================================================
+// ⑹ CHỖ HỎNG THỨ SÁU — CŨNG ĐẾN TỪ CI: KHOÁ KHÔNG XẾP HÀNG, NÊN NGƯỜI CHỜ ĐÓI. [khoản 249]
+//
+// Đo: PR #176, run 36325198665, job `T1+T2 (windows-latest)` ĐỎ đúng một ca — PROBE `g9-` của
+// `apps/api/src/routes.test.ts` ném *"chờ khoá depcruise quá 180000 ms"* — trong khi CÙNG mã ấy (commit
+// 41062bb, chỉ khác hai tệp `evidence/*.md`) xanh ở chính job ấy mười lăm phút trước.
+//
+// Cơ chế, đọc từ mã: `boundaries.test.ts` giành-nhả khoá ở MỖI lượt cruise và giành lại ngay ở test kế
+// — khe giữa `rmSync` và `mkdirSync` dưới một mili-giây —, còn người chờ chỉ hỏi mỗi `NHIP_MS`. Người chờ
+// chỉ lọt vào khi nhịp hỏi của nó rơi đúng khe ấy, nên trên thực tế nó chờ TRỌN tệp `boundaries`. Hạn
+// `HAN_CHO_MS` được đặt khi tệp ấy chạy 79,6 s (68 test); trên runner ấy nó chạy 194,5 s (74 test, một
+// lượt cruise riêng 22,7 s). Tức hạn chờ đã âm thầm thành hạn của cả một tệp KHÁC.
+//
+// Bản vá: NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC. Lượt giành hỏng đầu tiên đặt một DẤU CHỜ cạnh thư mục khoá
+// (`<khoá>.cho/<mốc đến>-<pid>-<số>`) và đập nhịp tim lên nó mỗi nhịp hỏi; ai thấy một dấu CÒN SỐNG đến
+// trước mình thì không giành — kể cả người vừa nhả khoá. Giới hạn của lớp mới, nói ra:
+//   • Dấu chỉ mua CÔNG BẰNG, không mua LOẠI TRỪ — loại trừ vẫn là `mkdir` nguyên tử. Nên mọi hỏng của
+//     dấu (không tạo được, không đọc được) chỉ đưa lớp này về luật cũ; nó không bao giờ NÉM hay treo.
+//   • Dấu của tiến trình đã chết bị dọn ngay (khuôn ⑶). Dấu mà tim ngừng quá `HAN_TIM_DAU_CHO_MS` bị BỎ
+//     QUA nhưng không bị xoá: chủ của nó có thể chỉ chậm, và xoá nhầm dấu của một người còn chờ là đẩy
+//     họ xuống cuối hàng.
+//   • Hạn chờ giữ nguyên và vẫn NÉM; người đứng sau trong hàng kiểm hạn ở mỗi nhịp dù chưa tới lượt.
+// ==============================================================================================
 
 import { mkdirSync, lstatSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -113,6 +137,10 @@ mkdirSync(dirname(DUONG_KHOA), { recursive: true });
  * `tests/architecture/boundaries.test.ts` chạy RIÊNG mất **79,6 giây** cho 68 test, và gần như mỗi
  * test là một lượt cruise thật GIỮ KHOÁ. Nên một chỗ gọi khác đợi sau nó phải chịu được cỡ ấy —
  * 180 giây để lại hơn hai lần biên. Vượt biên thì NÉM kèm thông điệp, không treo.
+ *
+ * [khoản 249] Câu trên chỉ đúng khi người chờ được vào ở lần nhả KẾ TIẾP — và khoá không xếp hàng thì
+ * không hứa điều ấy (⑹): trên CI tệp kia đã chạy 194,5 s. Nay dấu chờ xếp hàng người đến, nên hạn này bao
+ * một VỊ TRÍ TRONG HÀNG — vài lượt giữ khoá — chứ không bao trọn một tệp khác, và con số giữ nguyên.
  */
 const HAN_CHO_MS = 180_000;
 
@@ -141,6 +169,23 @@ const HAN_KHOA_MS = 30_000;
  */
 const CUA_SO_EPERM_MS = 2_000;
 const NHIP_MS = 50;
+/**
+ * [khoản 249] Một dấu chờ mà nhịp tim ngừng lâu hơn mốc này thì không còn được nhường. Người chờ đập
+ * tim mỗi `NHIP_MS`, nên mười giây là hai trăm nhịp lỡ liền — đủ để nói "không còn ai hỏi nữa" mà không
+ * phạt một tiến trình chỉ chậm một lúc. Sai về phía nào cũng KHÔNG phá loại trừ: dấu chỉ quyết thứ tự.
+ */
+const HAN_TIM_DAU_CHO_MS = 10_000;
+
+/**
+ * [khoản 249] Cách chờ của MỘT lượt giành. Mã của lớp test không truyền nó; chỉ phép đo về chính lớp
+ * khoá này truyền — cùng hạng với `duongKhoa` và `tao` ở dưới —, để đo được hạn chờ mà không đợi 180 giây
+ * và để dựng lại đúng khoá CŨ làm đối chứng (`nhuong: false`).
+ */
+export interface CachCho {
+  readonly hanChoMs: number;
+  readonly nhuong: boolean;
+}
+const CACH_CHO_MAC_DINH: CachCho = { hanChoMs: HAN_CHO_MS, nhuong: true };
 
 /** Ngủ ĐỒNG BỘ — `Atomics.wait` là cách duy nhất làm việc đó mà không quay vòng đốt CPU. */
 function nguDongBo(ms: number): void {
@@ -227,7 +272,22 @@ let mucLong = 0;
 /** Trạng thái chờ của MỘT lượt giành khoá — chung cho bản đồng bộ và bản bất đồng bộ. */
 interface TrangThaiCho {
   readonly han: number;
+  readonly hanChoMs: number;
   hanEperm: number | undefined;
+  /** [khoản 249] Tên dấu chờ của lượt này — có từ lần giành hỏng đầu tiên, hay ngay từ đầu nếu phải nhường. */
+  dau: string | undefined;
+  daThuLanDau: boolean;
+}
+
+function trangThaiMoi(cach: CachCho): TrangThaiCho {
+  return { han: Date.now() + cach.hanChoMs, hanChoMs: cach.hanChoMs, hanEperm: undefined, dau: undefined, daThuLanDau: false };
+}
+
+function loiHetHan(duongKhoa: string, tt: TrangThaiCho): Error {
+  return new Error(
+    `[khoản nợ 59] chờ khoá depcruise quá ${tt.hanChoMs} ms tại ${duongKhoa}. ` +
+      "Một lượt treo im lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM.",
+  );
 }
 
 /**
@@ -257,12 +317,7 @@ function thuGianhKhoa(duongKhoa: string, tao: (duong: string) => void, tt: Trang
     }
 
     // HẠN ĐỨNG TRƯỚC MỌI NHÁNH KHÁC. Không nhánh nào dưới đây được phép `continue` vượt qua nó.
-    if (Date.now() > tt.han) {
-      throw new Error(
-        `[khoản nợ 59] chờ khoá depcruise quá ${HAN_CHO_MS} ms tại ${duongKhoa}. ` +
-          "Một lượt treo im lặng còn tệ hơn một lượt đỏ, nên chỗ này NÉM.",
-      );
-    }
+    if (Date.now() > tt.han) throw loiHetHan(duongKhoa, tt);
 
     if (laKhoaRac(duongKhoa)) rmSync(duongKhoa, { recursive: true, force: true });
     return false;
@@ -286,6 +341,117 @@ function nhaKhoa(duongKhoa: string): void {
   if (chuKhoa(duongKhoa) === process.pid) rmSync(duongKhoa, { recursive: true, force: true });
 }
 
+// ----------------------------------------------------------------------------------------------
+// [khoản 249] HÀNG CHỜ — xem ⑹. Mọi hàm dưới đây nuốt lỗi hệ thống tệp, và đó là CHỦ Ý chứ không phải
+// cái `catch {}` trần mà ⑴ cấm: ⑴ cấm nuốt lỗi trên đường LOẠI TRỪ, nơi nuốt lỗi thành quay vòng vô hạn.
+// Ở đây nuốt lỗi chỉ làm lớp khoá quên thứ tự — tức quay về đúng luật trước ⑹ —, và không nhánh nào
+// vòng lại mà không đi qua hạn chờ và giấc ngủ của vòng ngoài.
+// ----------------------------------------------------------------------------------------------
+
+/** Thư mục dấu chờ nằm CẠNH thư mục khoá, không trong nó: thư mục khoá bị xoá mỗi lần nhả. */
+export function thuMucDauCho(duongKhoa: string): string {
+  return `${duongKhoa}.cho`;
+}
+
+/**
+ * Tên một dấu: mốc đến viết đủ mười lăm chữ số — nên thứ tự chữ là thứ tự đến —, rồi `pid` để biết chủ
+ * còn sống không, rồi số đếm trong tiến trình để hai lượt cùng mili-giây không trùng tên.
+ */
+export function tenDauCho(lucDen: number, pid: number, so: number): string {
+  return `${String(lucDen).padStart(15, "0")}-${String(pid)}-${String(so)}`;
+}
+
+const MAU_DAU_CHO = /^\d{15}-(\d+)-\d+$/u;
+let demDauCho = 0;
+
+function datDauCho(duongKhoa: string): string | undefined {
+  const ten = tenDauCho(Date.now(), process.pid, demDauCho++);
+  try {
+    mkdirSync(thuMucDauCho(duongKhoa), { recursive: true });
+    writeFileSync(join(thuMucDauCho(duongKhoa), ten), "", "utf8");
+    return ten;
+  } catch {
+    return undefined; // không đặt được dấu ⇒ lượt này chờ theo luật cũ
+  }
+}
+
+/** Nhịp tim: ghi lại tệp — tạo lại luôn nếu ai đó lỡ dọn nó, giữ nguyên tên nên giữ nguyên chỗ trong hàng. */
+function dapTim(duongKhoa: string, ten: string): void {
+  try {
+    writeFileSync(join(thuMucDauCho(duongKhoa), ten), "", "utf8");
+  } catch {
+    // mất một nhịp tim — nhịp sau ghi lại
+  }
+}
+
+function goDauCho(duongKhoa: string, ten: string | undefined): void {
+  if (ten === undefined) return;
+  try {
+    rmSync(join(thuMucDauCho(duongKhoa), ten), { force: true });
+  } catch {
+    // dấu còn lại thì tim của nó ngừng và người sau bỏ qua nó sau `HAN_TIM_DAU_CHO_MS`
+  }
+}
+
+/**
+ * Các dấu CÒN SỐNG, trừ dấu `tru` của chính lượt hỏi, theo thứ tự đến. Dấu của một tiến trình đã chết bị
+ * dọn — không ai còn chờ sau nó. Dấu mà tim đã ngừng thì bị BỎ QUA nhưng giữ lại (xem ⑹).
+ */
+function dauChoConSong(duongKhoa: string, tru: string | undefined): string[] {
+  const thuMuc = thuMucDauCho(duongKhoa);
+  let cacTen: string[];
+  try {
+    cacTen = readdirSync(thuMuc);
+  } catch {
+    return [];
+  }
+  const bayGio = Date.now();
+  const song: string[] = [];
+  for (const ten of cacTen) {
+    if (ten === tru) continue;
+    const khop = MAU_DAU_CHO.exec(ten);
+    if (khop === null) continue; // không phải dấu của lớp này
+    const duong = join(thuMuc, ten);
+    if (!conSong(Number(khop[1]))) {
+      goDauCho(duongKhoa, ten);
+      continue;
+    }
+    let tim: number;
+    try {
+      tim = lstatSync(duong).mtimeMs;
+    } catch {
+      continue; // vừa được gỡ — chủ của nó đã giành được khoá
+    }
+    if (bayGio - tim <= HAN_TIM_DAU_CHO_MS) song.push(ten);
+  }
+  return song.sort();
+}
+
+/**
+ * MỘT bước của vòng chờ — chung cho bản đồng bộ và bất đồng bộ, hai bản chỉ khác CÁCH ngủ. `true` = đã giữ
+ * khoá. Lượt đầu: không ai đứng chờ thì giành ngay như trước ⑹; có người thì KHÔNG giành mà xếp hàng. Từ
+ * đó mỗi nhịp đập tim, và chỉ giành khi không còn dấu sống nào đến trước — nhưng hạn chờ vẫn kiểm ở MỌI
+ * nhịp, kể cả nhịp chưa tới lượt.
+ */
+function motBuoc(duongKhoa: string, tao: (duong: string) => void, tt: TrangThaiCho, nhuong: boolean): boolean {
+  if (!nhuong) return thuGianhKhoa(duongKhoa, tao, tt);
+  if (!tt.daThuLanDau) {
+    tt.daThuLanDau = true;
+    if (dauChoConSong(duongKhoa, undefined).length === 0 && thuGianhKhoa(duongKhoa, tao, tt)) return true;
+    tt.dau = datDauCho(duongKhoa);
+    return false;
+  }
+  const dau = tt.dau;
+  if (dau !== undefined) {
+    dapTim(duongKhoa, dau);
+    if (dauChoConSong(duongKhoa, dau).some((ten) => ten < dau)) {
+      if (Date.now() > tt.han) throw loiHetHan(duongKhoa, tt);
+      return false;
+    }
+  }
+  return thuGianhKhoa(duongKhoa, tao, tt);
+}
+
 /**
  * Chạy `fn` với khoá `depcruise` trong tay. Mọi lời gọi `depcruise` đọc CÂY NGUỒN phải đi qua đây.
  *
@@ -306,11 +472,17 @@ export function voiKhoaDepcruise<T>(
   fn: () => T,
   duongKhoa: string = DUONG_KHOA,
   tao: (duong: string) => void = taoThuMucKhoa,
+  cach: CachCho = CACH_CHO_MAC_DINH,
 ): T {
   if (mucLong > 0) return fn(); // đã cầm khoá rồi — vào thẳng, đừng chờ chính mình
 
-  const tt: TrangThaiCho = { han: Date.now() + HAN_CHO_MS, hanEperm: undefined };
-  while (!thuGianhKhoa(duongKhoa, tao, tt)) nguDongBo(NHIP_MS); // không đường nào vòng lại mà không ngủ
+  const tt = trangThaiMoi(cach);
+  try {
+    while (!motBuoc(duongKhoa, tao, tt, cach.nhuong)) nguDongBo(NHIP_MS); // không đường nào vòng lại mà không ngủ
+  } finally {
+    // Giành được hay NÉM, dấu cũng phải đi NGAY: người sau không được nhường một người đã thôi chờ.
+    goDauCho(duongKhoa, tt.dau);
+  }
 
   mucLong += 1;
   try {
@@ -328,10 +500,18 @@ export function voiKhoaDepcruise<T>(
  * Không có nhánh lồng: `mucLong` là trạng thái của một luồng đồng bộ và không nói được gì về một lời hứa
  * đang chờ. Gọi lồng hàm này trong `fn` của chính nó là tự khoá chết cho tới hạn — và hạn NÉM.
  */
-export async function voiKhoaDepcruiseAsync<T>(fn: () => T | Promise<T>, duongKhoa: string = DUONG_KHOA): Promise<T> {
-  const tt: TrangThaiCho = { han: Date.now() + HAN_CHO_MS, hanEperm: undefined };
-  while (!thuGianhKhoa(duongKhoa, taoThuMucKhoa, tt)) {
-    await new Promise<void>((xong) => setTimeout(xong, NHIP_MS));
+export async function voiKhoaDepcruiseAsync<T>(
+  fn: () => T | Promise<T>,
+  duongKhoa: string = DUONG_KHOA,
+  cach: CachCho = CACH_CHO_MAC_DINH,
+): Promise<T> {
+  const tt = trangThaiMoi(cach);
+  try {
+    while (!motBuoc(duongKhoa, taoThuMucKhoa, tt, cach.nhuong)) {
+      await new Promise<void>((xong) => setTimeout(xong, NHIP_MS));
+    }
+  } finally {
+    goDauCho(duongKhoa, tt.dau);
   }
   try {
     return await fn();

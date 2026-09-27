@@ -1203,9 +1203,9 @@ export async function revokeInvitation(
 }
 
 // ==============================================================================================
-// [S1.9101 / ADR-9203] GỬI LẠI LINK CHO CÙNG LỜI MỜI — đường quay lại của nhà cung cấp mất phiên.
+// [S1.181 / ADR-110] GỬI LẠI LINK CHO CÙNG LỜI MỜI — đường quay lại của nhà cung cấp mất phiên.
 //
-// Mã trong link mời bị tiêu thụ ở lần xác minh OTP, phiên khách sống tối đa 4 giờ, và từ ADR-9201 nhà cung cấp tự thoát
+// Mã trong link mời bị tiêu thụ ở lần xác minh OTP, phiên khách sống tối đa 4 giờ, và từ ADR-109 nhà cung cấp tự thoát
 // được. Tới trước hàm này, hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (024: MỘT lời mời còn sống), nên
 // bên mua chỉ còn thu hồi rồi mời lại — tức một lời mời MỚI, một luồng báo giá MỚI (`vendor_bids` duy nhất theo lời
 // mời), và báo giá cũ vẫn đi vào lượt mở thầu (sổ nợ). Hàm này phát một token MỚI cho CHÍNH lời mời ấy: nhà cung cấp
@@ -1222,7 +1222,7 @@ export async function revokeInvitation(
 // OTP hay khoá OTP — gửi lại link không phải thu hồi, và gỡ khoá có đường riêng (`clearOtpLockout`).
 // ==============================================================================================
 
-/** [S1.9101 / ADR-9203] Trần số token của MỘT lời mời trong `CUA_SO_LINK_MOI_GIAY`, tính cả token của lần mời. */
+/** [S1.181 / ADR-110] Trần số token của MỘT lời mời trong `CUA_SO_LINK_MOI_GIAY`, tính cả token của lần mời. */
 export const LINK_MOI_TOI_DA_MOI_GIO = 3;
 export const CUA_SO_LINK_MOI_GIAY = 3600;
 
@@ -1285,7 +1285,7 @@ export async function reissueInvitationLink(
 }
 
 /**
- * [S1.9101 / ADR-9203] Phần BÙ của lần gửi lại hỏng sau commit: thu hồi ĐÚNG token vừa phát (của đúng lời mời ấy), ghi
+ * [S1.181 / ADR-110] Phần BÙ của lần gửi lại hỏng sau commit: thu hồi ĐÚNG token vừa phát (của đúng lời mời ấy), ghi
  * `MAGIC_LINK_TOKEN_REVOKED` với lý do. Lời mời KHÔNG bị thu hồi — khác phần bù của lần mời: ở đây lời mời đã có hồ sơ
  * báo giá, và người mua bấm gửi lại được ngay. Trả `false` (không ghi sổ) khi token đã thu hồi hay không tồn tại.
  */
@@ -1325,7 +1325,7 @@ export async function revokeMagicLinkToken(
 // KHÁC (đọc lại hàng phiên, từ chối thu hồi/hết hạn, đặt cả ba GUC, đọc lại cả ba). Một hàm vừa
 // tra vừa gắn là một chỗ để hai phép kiểm lệch nhau. Mọi ca hỏng ném CÙNG MỘT thông điệp.
 //
-// [S1.9101 / ADR-9201] Câu tra đọc thêm TÊN PHÁP LÝ của nhà cung cấp được mời — để trang nộp thầu nói phiên đang
+// [S1.181 / ADR-109] Câu tra đọc thêm TÊN PHÁP LÝ của nhà cung cấp được mời — để trang nộp thầu nói phiên đang
 // giữ là của doanh nghiệp nào. Đọc Ở ĐÂY, dưới kết nối chỉ gắn tổ chức, chứ không trong handler: handler đọc của
 // khách chạy dưới ba GUC, và `suppliers` ĐÓNG với phiên khách (027 mục 6). Mở một policy `suppliers_khach` là mở
 // CẢ HÀNG (MST, trạng thái, người tạo) cho mọi câu dưới phiên khách, vì `app_api` chung cho người mua và khách nên
@@ -1340,7 +1340,7 @@ export interface ResolvedGuestSession {
   /** DẪN XUẤT qua `rfq_invitations` — cùng cách `withGuestSession` dẫn xuất GUC thứ ba. */
   readonly rfqId: string;
   readonly verifiedChannel: Channel;
-  /** [S1.9101 / ADR-9201] `suppliers.legal_name` của nhà cung cấp được mời — DẪN XUẤT qua lời mời, như `rfqId`. */
+  /** [S1.181 / ADR-109] `suppliers.legal_name` của nhà cung cấp được mời — DẪN XUẤT qua lời mời, như `rfqId`. */
   readonly supplierLegalName: string;
 }
 
@@ -1383,7 +1383,7 @@ export async function resolveGuestSessionByToken(
 }
 
 // ==============================================================================================
-// [S1.9101 / ADR-9201] NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH CỦA MÌNH.
+// [S1.181 / ADR-109] NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH CỦA MÌNH.
 //
 // Trước vòng này không đường nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ
 // `revokeInvitation` phía bên mua, và nó thu hồi CẢ lời mời. Trên một máy dùng chung, cookie
@@ -1391,9 +1391,9 @@ export async function resolveGuestSessionByToken(
 //
 // Hàm chạm ĐÚNG một hàng: phiên có `id` do tầng HTTP dẫn xuất từ cookie (không từ thân yêu cầu). Nó
 // KHÔNG đụng lời mời, token hay thách thức OTP — lời mời vẫn sống ~~, bên mua mời lại hay gửi link mới
-// được như thường~~. **[S1.9101 / lượt soi, NẶNG]** Vế vừa gạch sai: mời lại cùng nhà cung cấp trả 409 (`024`), và tới
-// ADR-9203 không route nào phát link cho một lời mời đã có. Mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`), nên
-// thoát xong thì chỉ link bên mua GỬI LẠI cho chính lời mời (`reissueInvitationLink`, ADR-9203) đưa nhà cung cấp trở
+// được như thường~~. **[S1.181 / lượt soi, NẶNG]** Vế vừa gạch sai: mời lại cùng nhà cung cấp trả 409 (`024`), và tới
+// ADR-110 không route nào phát link cho một lời mời đã có. Mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`), nên
+// thoát xong thì chỉ link bên mua GỬI LẠI cho chính lời mời (`reissueInvitationLink`, ADR-110) đưa nhà cung cấp trở
 // lại — về đúng hồ sơ báo giá của mình; trang nộp thầu nói điều ấy trước khi họ bấm.
 //
 // Hàng sổ `GUEST_SESSION_REVOKED` chỉ ghi khi câu UPDATE THẬT SỰ đổi một hàng — cùng bài học `[M4]` của

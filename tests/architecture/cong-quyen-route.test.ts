@@ -73,7 +73,7 @@ const HAM_DOI_TRANG_THAI = [
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
   "openRfq",
-  // [S1.9101 / ADR-9203] Gửi lại link cho một lời mời còn sống: thu hồi token chưa dùng, phát token mới — route đòi
+  // [S1.181 / ADR-110] Gửi lại link cho một lời mời còn sống: thu hồi token chưa dùng, phát token mới — route đòi
   // `rfq.invite` như hai route mời và thu hồi; phần bù thu hồi đúng token vừa phát, dưới cùng mã quyền.
   "reissueInvitationLink",
   "requestUnseal",
@@ -144,7 +144,7 @@ const HAM_DUONG_KHACH = [
   "redeemMagicLink",
   // [ADR-020 / S1.10.2] cookie khách → phiên khách: tự chứng minh bằng token, không có mã quyền.
   "resolveGuestSessionByToken",
-  // [S1.9101 / ADR-9201] GHI (một `revoked_at` và một hàng sổ) nhưng người ghi là chính NHÀ CUNG CẤP, thu hồi
+  // [S1.181 / ADR-109] GHI (một `revoked_at` và một hàng sổ) nhưng người ghi là chính NHÀ CUNG CẤP, thu hồi
   // PHIÊN CỦA MÌNH: `guestSessionId` do dispatcher dẫn xuất từ cookie khách đã qua `resolveGuestSessionByToken`.
   // Cùng lập luận với `submitBid` dưới đây — một cổng quyền ở đây đòi một tài khoản người mua.
   "revokeGuestSession",

@@ -1897,8 +1897,8 @@ TRƯỚC khi gọi handler. Handler **không nhận `pool`**, và `apps/api/src/
 `routes/**` (cùng khuôn `cong-quyen-route.test.ts`). Quên gắn phiên trở thành **không viết được**,
 không phải "phải nhớ".
 
-**[S1.9101 / lượt soi — ghi muộn]** Mục này đúng cho route khách ĐỌC. Từ S1.10.3, route khách GHI (`mutates: true` —
-`POST /guest/bids`, và từ S1.9101 `POST /guest/logout`) nhận `ctx.client` mở bằng `withTenant` KHÔNG GUC phiên khách, vì kết nối
+**[S1.181 / lượt soi — ghi muộn]** Mục này đúng cho route khách ĐỌC. Từ S1.10.3, route khách GHI (`mutates: true` —
+`POST /guest/bids`, và từ S1.181 `POST /guest/logout`) nhận `ctx.client` mở bằng `withTenant` KHÔNG GUC phiên khách, vì kết nối
 gắn phiên khách không ghi được sổ (`apps/api/src/dispatch.ts` khối [S1.10.3] ghi lý do đo được). Trên kết nối ấy policy `AS
 RESTRICTIVE` của 027/028 không khoá theo lời mời; phạm vi của hai route ấy đến từ `guestSessionId` mà bộ điều phối dẫn xuất từ
 cookie và từ việc handler chỉ gọi hàm gói nhận id ấy, không viết SQL tay (`apps/api/src/routes.test.ts`). Quyết định ấy chưa có
@@ -8172,7 +8172,8 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.167]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
 (từ chối trạng thái vào sổ có chọn lọc), ADR-074 (lần chặn VÌ HẠN của câu nộp vào sổ), ADR-101 (pilot giả lập — nơi đo ra khoản
-này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi)
+này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi) · **[S1.180] Cách nhận diện ở ⑴, từ vựng và lời ném ở ⑵ ⑶
+SỬA BỞI ADR-108**; cơ chế bắt chính lỗi của trigger giữ nguyên
 
 ### Bối cảnh
 
@@ -8186,15 +8187,18 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 
 1. **Bắt CHÍNH lỗi của trigger, không chép vị từ ra TypeScript.** Trigger là lớp có thẩm quyền — nó đọc bảng lịch sử điều phối và
    hàng gói dưới đúng khoá của câu ghi. Kiểm trước ở lớp gói là hai nguồn sự thật cho một luật. Lớp gói bọc câu ghi, nhận diện lần
-   vi phạm (SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt), ghi, rồi để lỗi đi tiếp.
+   vi phạm (~~SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt~~ **[S1.180 / ADR-108]** SQLSTATE 23514 cộng TÊN
+   RÀNG BUỘC mà trigger đặt), ghi, rồi để lỗi đi tiếp.
 2. **J3 và D2 — phía người mua: ghi ở `auditPool`, giao dịch ĐỘC LẬP, qua `throwAuditedDenial`, rồi ném lại chính lỗi `pg`.** Cùng
-   khuôn nhánh D2 của `approveUnseal`. Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
+   khuôn nhánh D2 của `approveUnseal`. ~~Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
    `{ viPham: "J3", ve }`, `ve` ∈ `NGUOI_TAO · NGUOI_DIEU_PHOI · NGUOI_DE_XUAT · PHIEN_DE_XUAT`) và `RFQ_APPROVAL_DENIED` (payload
-   `{ viPham: "D2" }`), `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
+   `{ viPham: "D2" }`)~~ **[S1.180 / ADR-108]** Hàng: `CONTROL_DENIED` payload `{ ma }`, và lời ném là `ChotKiemSoatError` mang
+   lỗi `pg` ở `cause` — 422 giữ nguyên, thông điệp là câu của bảng `CHOT_VAO_SO`, `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
    thêm tham số `auditPool`, cùng hình dạng với mọi hàm gói có đường từ chối.
 3. **Câu nộp — phía nhà cung cấp: savepoint cộng một hàng trong giao dịch người gọi, như nhánh VÌ HẠN của ADR-074.** Route khách
-   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi `BID_SUBMIT_DENIED` (payload
-   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi), rồi ném
+   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi ~~`BID_SUBMIT_DENIED` (payload
+   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi)~~ **[S1.180 / ADR-108]**
+   `BID_STATE_DENIED` (payload `{ ma }` — tên ràng buộc của nhánh, viết hoa), rồi ném
    `NopBiTuChoiError`; route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng sống. Thông điệp giữ nguyên câu chung.
 
 ### Hệ quả, nói thẳng
@@ -8203,8 +8207,9 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
   một phiên dùng đường này để làm phình sổ — nhưng trần ấy đếm ở bộ điều phối, và lần vi phạm J3/D2 đi qua cổng quyền nên KHÔNG
   được đếm vào đó. Phía nhà cung cấp, không trần nào: một khách lặp lời nộp sai ghi một hàng mỗi lần, cùng rủi ro ADR-074 đã nhận
   cho nhánh VÌ HẠN.
-- **Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
-  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.
+- ~~**Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
+  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.~~ **[S1.180 / ADR-108]** Nhận diện bằng
+  tên ràng buộc; nhánh D2 của `approveUnseal` vẫn đọc thông điệp — ngoài phạm vi vòng ấy.
 - **Ca đua nhau trên các trigger khác** (ADR-060 *"Điều ADR này KHÔNG nói"*) vẫn im; ADR này chỉ phủ bảy lần pilot đo được.
 - Đo ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/rfq/src/rfq.int.test.ts` và
   `packages/bidding/src/bidding.int.test.ts` (khối khoản 247).
@@ -8342,7 +8347,7 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   không làm mất gì. ~~Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
   mời lại, có xoá fragment hay không.~~ **[S1.178]** Trang nộp thầu nay cũng hỏi lại phiên khách lúc tải (`GET /guest/rfq`,
   cookie `__Host-tp_guest` tới 4 giờ): tải lại sau khi xác minh ⇒ khối hỏi nêu tên gói thầu, "Tiếp tục nộp báo giá" ⇒ bước 3.
-  ~~Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.~~ **[S1.9101 / ADR-9201]**
+  ~~Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.~~ **[S1.181 / ADR-109]**
   `GET /guest/rfq` nay mang tên doanh nghiệp được mời và khối hỏi nêu nó; nhà cung cấp tự thoát phiên bằng `POST /guest/logout`.
 - **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.177]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
   tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
@@ -8367,13 +8372,67 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 (`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.178).
 
-## ADR-9201 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
+---
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101) · **Liên quan:** ADR-020 mục 4
-~~(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`)~~ **[S1.9101 / lượt soi]** (route ĐỌC của khách dưới ba GUC;
+## ADR-108 — Nắn ADR-104: lần từ chối do trigger của J3/D2 vào lớp `CONTROL_DENIED`, của câu nộp vào `BID_STATE_DENIED` mang mã, nhận diện bằng TÊN RÀNG BUỘC
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.180]** · **Khoản nợ liên quan:** 247 (đã đóng ở S1.167) ·
+**Liên quan:** ADR-104 (sửa ⑴ ⑵ ⑶ ở cách nhận diện, từ vựng và lời ném; giữ cơ chế), ADR-084 ⑷ ⑸ (ba lớp từ chối, `CONTROL_DENIED`),
+ADR-060 (luật chọn lọc), ADR-074 (lối ghi của câu nộp)
+
+### Bối cảnh
+
+Hai phiên làm khoản 247 song song. #172 (ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi — một nguồn sự thật, và
+ca hai người đua nhau cũng vào sổ. Ở phiên kia chủ dự án đã chốt lớp cho các lần từ chối ấy: J3 và D2 là `CONTROL_DENIED` (người vi
+phạm đủ quyền, đi đúng thứ tự — thứ chặn họ là một chốt), câu nộp là `BID_STATE_DENIED` mang mã trong payload. Khi #172 vào `master`,
+chủ dự án chọn giữ cơ chế của nó và nắn hai điều:
+
+1. **Từ vựng.** ADR-104 thêm ba `action` — `RFQ_AWARD_SOD_DENIED`, `RFQ_APPROVAL_DENIED`, `BID_SUBMIT_DENIED` — ngoài ba lớp của
+   ADR-084 ⑸ (`PERMISSION_DENIED` · `RFQ_STATE_DENIED` · `CONTROL_DENIED`). Người đọc sổ hỏi *"ai bị một chốt kiểm soát chặn"* bằng
+   `action = 'CONTROL_DENIED'` thì không thấy J3 hay D2.
+2. **Nhận diện bằng thông điệp.** Phía người mua đọc hậu tố *"(J3)"* / *"(D2"* cộng đầu câu; phía nộp không đọc gì — mọi 23514
+   không vì hạn. Đổi một câu `RAISE` là lần vi phạm rơi khỏi sổ, im lặng.
+
+### Quyết định
+
+1. **Mỗi nhánh mà ADR-104 ghi sổ mang một tên ràng buộc** (`RAISE … USING CONSTRAINT = …`), khuôn `c1_qua_han_nop` của `066`.
+   Migration `074_tu_choi_co_ten.sql` định nghĩa lại sáu hàm — thân trích nguyên văn, đổi đúng một chỗ ở mỗi nhánh — đặt 13 tên.
+   Chủ dự án chốt *đặt tên hết, vẫn ghi*: không bớt nhánh nào ADR-104 đang ghi, kể cả những nhánh ngoài bảy ca pilot đo được (D2/D1
+   phiên hỏng, D2 phiên của người khác, J3 phiên đã đề xuất đem đi duyệt, và mọi nhánh 23514 của ba trigger câu nộp). Nhánh
+   không tên thì không ghi: đúng tập ADR-104 đã để ngoài (không tìm thấy hàng cha, gói không ở `PENDING_APPROVAL`, đề xuất không còn
+   `PROPOSED`, hai vế J5).
+2. **J3 và D2 ⇒ `CONTROL_DENIED` payload `{ ma }`, qua `tuChoiTheoChot`.** Bảy mã ở `CHOT_VAO_SO`, và bảng DỜI XUỐNG
+   `packages/identity` từ `packages/rfq` — đúng lối mà chú thích của K1 đã hẹn khi một gói thứ hai cần (`danh-gia`). Bảng tên → mã
+   `CHOT_THEO_RANG_BUOC` đứng cạnh. Lời ném là `ChotKiemSoatError` mang lỗi `pg` ở `cause`: 422 giữ nguyên, thông điệp là câu của
+   bảng — có dấu, vẫn gọi tên `(J3)` / `(D2)` — thay câu không dấu của trigger. Câu của CSDL không đổi.
+3. **Câu nộp ⇒ `BID_STATE_DENIED` payload `{ ma }`**, `ma` là tên ràng buộc viết hoa (sáu mã). `NopBiTuChoiError` giữ tên, thêm
+   `ma`; thông điệp chung không đổi — nó không nói luồng này đứng ngoài top-N hay phiên đã hỏng. Một 23514 KHÔNG tên (hôm nay chỉ
+   `CHECK` cỡ phong bì của bảng) đi lối trước ADR-104: ném `BiddingError`, không sổ.
+4. **Hai phép đo khớp tên hai chiều trên thân hàm THẬT trong CSDL** — `packages/rfq/src/rfq.int.test.ts` cho ba trigger J3/D2,
+   `packages/bidding/src/bidding.int.test.ts` cho ba trigger câu nộp. Đổi tên ở một phía mà quên phía kia là đỏ.
+
+### Hệ quả, nói thẳng
+
+- **Vế ghi rộng hơn chữ của ADR-060 ở năm mã**: `D2_PHIEN_KHONG_HOP_LE`, `PHIEN_KHACH_KHONG_HOP_LE`, `PHIEN_KHACH_KHAC_LOI_MOI`,
+  `C1_KHONG_VONG_BAFO_DANG_MO`, `C1_KHONG_HAN_NOP` nói về phiên hay dữ liệu, không về một bước đi sai thứ tự. ADR-104 đã ghi chúng
+  (không phân biệt), và chủ dự án chọn không lùi phần phủ. Nay mã tách chúng ra, nên người đọc sổ lọc được.
+- **`BID_STATE_DENIED` mang cả mã không phải "trạng thái" theo nghĩa hẹp.** Một `action` cho lớp *câu nộp bị trigger chặn không
+  vì hạn*; mã phân biệt.
+- **Thông điệp người dùng thấy ở J3/D2 đổi** — ADR-104 ⑵ nói không đổi. 422 giữ nguyên, câu vẫn gọi tên bất biến; kịch bản 41 qua
+  HTTP khẳng định câu mới.
+- Hàng đã ghi dưới ba `action` của ADR-104 (nếu có) không sửa được (B4); giữa hai vòng không có triển khai nào.
+- Ca đua nhau trên các trigger KHÁC vẫn im (ADR-060 *"Điều ADR này KHÔNG nói"*), như ADR-104 đã nói.
+- **Khoản 248** (`CONTROL_DENIED` đứng ngoài trần lần từ chối theo phiên của ADR-092) nay phủ cả bảy mã J3/D2: ADR-104 đã nêu hai
+  `action` của nó không được đếm, nên đổi lớp không làm khe ấy rộng hơn — chỉ gom nó về một `action`. Phép đếm đề xuất ở hàng 248
+  đặt trong `tuChoiTheoChot` thì phủ luôn J3/D2.
+
+## ADR-109 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.181) · **Liên quan:** ADR-020 mục 4
+~~(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`)~~ **[S1.181 / lượt soi]** (route ĐỌC của khách dưới ba GUC;
 vế route GHI dưới `withTenant` không nằm ở ADR-020 mà ở khối [S1.10.3] của `apps/api/src/dispatch.ts`, chưa có ADR), ADR-016
-(danh tính dẫn xuất, không khai), ADR-107 (Hệ quả — tên gói không nói phiên của ai), **[S1.9101]** ADR-9203 (đường quay lại sau khi
-thoát) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+(danh tính dẫn xuất, không khai), ADR-107 (Hệ quả — tên gói không nói phiên của ai), **[S1.181]** ADR-110 (đường quay lại sau khi
+thoát) · **Biên bản:** `evidence/security-reviews.md` §S1.181
 
 ### Bối cảnh
 
@@ -8403,8 +8462,8 @@ trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả s
 4. **Trang nộp thầu.** Khối hỏi lúc tải nêu tên doanh nghiệp VÀ tên gói; 200 thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với
    thiếu tên gói. Bước 3 có dòng "Doanh nghiệp được mời". Nút **Thoát phiên nộp thầu** ở bước 1 (hiện cùng khối hỏi và suốt lúc
    phiên đang dùng) và ở bước 4; 401 coi như đã thoát (cùng khuôn nút Đăng xuất của ba trang người mua); câu báo nói thẳng rằng
-   muốn nộp tiếp phải xin ~~link mời mới~~ **[S1.9101 / ADR-9203]** bên mua gửi lại link mời — link gửi lại đưa về đúng hồ sơ báo
-   giá đã nộp. **[S1.9101 / lượt soi]** Thoát xoá mọi thứ của phiên trước trên màn — gói thầu, bảng giá, dòng tổng, ô mã OTP, biên
+   muốn nộp tiếp phải xin ~~link mời mới~~ **[S1.181 / ADR-110]** bên mua gửi lại link mời — link gửi lại đưa về đúng hồ sơ báo
+   giá đã nộp. **[S1.181 / lượt soi]** Thoát xoá mọi thứ của phiên trước trên màn — gói thầu, bảng giá, dòng tổng, ô mã OTP, biên
    nhận — và lỗi của nó hiện CẠNH nút đã bấm; biên nhận về muộn sau khi đã thoát bị bỏ; và ngay trước khi niêm phong, trang hỏi lại
    phiên hiện hành — cookie khách chung cho mọi thẻ, nên một thẻ khác vừa xác minh lời mời của doanh nghiệp khác thì lần nộp ở thẻ
    này DỪNG thay vì đi vào hồ sơ của doanh nghiệp ấy.
@@ -8423,51 +8482,51 @@ trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả s
 ### Hệ quả, nói thẳng
 
 - **Đổi hợp đồng HTTP**: một trường mới ở `GET /guest/rfq`, một route mới. Client không đọc trường mới vẫn chạy. Trang mới gặp API
-  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì. **[S1.9101 / lượt soi]**
+  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì. **[S1.181 / lượt soi]**
   Và nút Thoát (hiện sau lần xác minh OTP) nhận 404 `khong co duong nay` — nó BÁO LỖI, không thoát được, tới khi API mới lên; lần
   kiểm phiên trước khi niêm phong gặp API cũ (không có tên doanh nghiệp) thì không chặn nộp, vì tên trên màn cũng rỗng.
 - **Câu tra cookie của MỌI lời gọi khách** nối thêm một bảng theo khoá chính.
 - **Người cầm cookie khách đọc được tên doanh nghiệp được mời.** Chủ lời mời đã biết nó; kẻ cầm cookie trộm thì đã đọc được tên
   gói, hạng mục và nộp được báo giá từ trước — tên doanh nghiệp không mở thêm quyền nào.
 - ~~**Thoát rồi thì chỉ link mới của bên mua đưa nhà cung cấp trở lại**: mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`). Trang
-  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).~~ **[S1.9101 / lượt soi, NẶNG]** Câu vừa gạch
+  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).~~ **[S1.181 / lượt soi, NẶNG]** Câu vừa gạch
   hứa một đường không tồn tại: mời lại cùng nhà cung cấp trả 409 (`024`), không route nào phát link cho một lời mời đã có, và thu
   hồi rồi mời lại là một lời mời MỚI với một luồng báo giá MỚI — người kiểm đo được báo giá cũ vẫn được mở thầu và xếp hạng, nhà
-  cung cấp đứng hai hàng (khoản 9402). Chủ dự án chọn làm đường thật: **ADR-9203** — bên mua gửi lại link cho CHÍNH lời mời, nhà
+  cung cấp đứng hai hàng (khoản 250). Chủ dự án chọn làm đường thật: **ADR-110** — bên mua gửi lại link cho CHÍNH lời mời, nhà
   cung cấp về đúng hồ sơ báo giá, lần nộp kế là phiên bản kế. Trang nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau.
 - **Người thấy khối hỏi của phiên người khác thoát được phiên ấy** — chủ ý: đóng một phiên đang để ngỏ trên máy dùng chung. Chủ
-  phiên mất đường vào tới khi có link mới **[ADR-9203]** bên mua gửi lại; trước vòng này, người ấy dùng được luôn phiên của họ.
+  phiên mất đường vào tới khi có link mới **[ADR-110]** bên mua gửi lại; trước vòng này, người ấy dùng được luôn phiên của họ.
 - **Phiên đã chết thì nút Thoát không xoá được cookie** (401 không mang `Set-Cookie`); cookie chết không mở được gì và tự hết theo
   `Max-Age`.
 
 ### Đo
 
-`apps/api/src/guest.int.test.ts` khối `[S1.9101 / ADR-9201]` (Postgres thật; ~~qua HTTP~~ **[lượt soi]** tám ca qua HTTP, hai ca gọi thẳng
+`apps/api/src/guest.int.test.ts` khối `[S1.181 / ADR-109]` (Postgres thật; ~~qua HTTP~~ **[lượt soi]** tám ca qua HTTP, hai ca gọi thẳng
 hàm — phiên thu hồi giữa chừng và tổ chức khác; ca đua thu hồi QUA HTTP giữ khoá hàng phiên để câu UPDATE của handler chờ): hai nhà cung cấp cùng một gói thấy hai tên,
 không thấy tên nhau, không thấy mã nhà cung cấp hay người liên hệ; tên đọc lúc gọi; thoát ⇒ 200, cookie xoá cùng bộ thuộc tính,
 cookie cũ 401 ở cả đường đọc lẫn ghi, lời mời không bị thu hồi, đúng một hàng sổ mang người liên hệ đã xác minh, lần thoát thứ hai
 401 không thêm hàng; phiên thứ hai của cùng lời mời và phiên của nhà cung cấp khác vẫn sống; không cookie, cookie rác, magic link
 trong cookie ⇒ 401 không `Set-Cookie` không hàng sổ; phiên bị thu hồi giữa chừng ⇒ `false` không ghi sổ; tổ chức khác ⇒ `false`, và
-khai sai tổ chức ⇒ ném ở câu đầu. `apps/web/src/phuc-vu.test.ts` các ca `[S1.9101]` trên khung `node:vm` của §S1.177. Đột biến và
-Chromium trên cụm thật: §S1.9101.
+khai sai tổ chức ⇒ ném ở câu đầu. `apps/web/src/phuc-vu.test.ts` các ca `[S1.181]` trên khung `node:vm` của §S1.177. Đột biến và
+Chromium trên cụm thật: §S1.181.
 
-## ADR-9203 — Bên mua gửi lại link mời cho CHÍNH lời mời còn sống
+## ADR-110 — Bên mua gửi lại link mời cho CHÍNH lời mời còn sống
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn *"làm route gửi lại link ngay"* ngày 2026-09-27, vòng
-S1.9101, sau khi lượt soi đối kháng đo được đường cụt mà ADR-9201 để lại · **Liên quan:** ADR-9201 (thoát phiên khách), ADR-020
+S1.181, sau khi lượt soi đối kháng đo được đường cụt mà ADR-109 để lại · **Liên quan:** ADR-109 (thoát phiên khách), ADR-020
 tiểu mục [S1.70 / khoản 124] (link đi SAU commit, phần bù), ADR-015 [C1] (đích đọc từ `supplier_contacts`, không từ thân yêu cầu),
-ADR-016 (danh tính dẫn xuất từ phiên), `024` (một lời mời còn sống cho mỗi nhà cung cấp), khoản 9402 · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101
+ADR-016 (danh tính dẫn xuất từ phiên), `024` (một lời mời còn sống cho mỗi nhà cung cấp), khoản 250 · **Biên bản:**
+`evidence/security-reviews.md` §S1.181
 
 ### Bối cảnh
 
-Mã trong link mời bị tiêu thụ ở lần xác minh OTP (`[H5]`), phiên khách sống tối đa 4 giờ, và từ ADR-9201 nhà cung cấp tự thoát
+Mã trong link mời bị tiêu thụ ở lần xác minh OTP (`[H5]`), phiên khách sống tối đa 4 giờ, và từ ADR-109 nhà cung cấp tự thoát
 được. Hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (chỉ mục `rfq_invitations_mot_loi_moi_con_song` của `024`), và
 không route nào phát link cho một lời mời đã có — `issueMagicLinkToken` chỉ được gọi trong handler tạo lời mời. Đường duy nhất là
 thu hồi rồi mời lại: một lời mời MỚI và, vì `vendor_bids` duy nhất theo lời mời (`018`), một luồng báo giá MỚI. Người kiểm của
 lượt soi đo trên Postgres thật với worker thật: báo giá của lời mời đã thu hồi vẫn được mở thầu, so sánh và xếp hạng — nhà cung
-cấp đứng hai hàng, giá cũ thắng hạng 1 (khoản 9402). Trong khi ấy trang nộp thầu và chú thích của `revokeGuestSession` hứa *"xin
-bên mua gửi link mời mới"* — một phép sửa không tồn tại, và ADR-9201 biến nó từ đường hiếm (hết 4 giờ) thành đường được khuyên
+cấp đứng hai hàng, giá cũ thắng hạng 1 (khoản 250). Trong khi ấy trang nộp thầu và chú thích của `revokeGuestSession` hứa *"xin
+bên mua gửi link mời mới"* — một phép sửa không tồn tại, và ADR-109 biến nó từ đường hiếm (hết 4 giờ) thành đường được khuyên
 sau mỗi lần nộp trên máy dùng chung.
 
 ### Quyết định
@@ -8515,17 +8574,17 @@ sau mỗi lần nộp trên máy dùng chung.
 - **Gửi hỏng sau commit để nhà cung cấp không còn link nào**: token cũ đã thu hồi trong giao dịch đã commit, token mới bị phần bù thu
   hồi; bên mua thấy 502 và bấm lại.
 - **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá.
-- **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 9402; vòng này đóng đường KHIẾN người mua
+- **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 250; vòng này đóng đường KHIẾN người mua
   phải làm thế, không đổi ngữ nghĩa của thu hồi.
 - **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
 - **Lệch phiên bản**: `/tao-thau` mới gặp API cũ ⇒ 404, nút báo lỗi.
 
 ### Đo
 
-`apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.9101 / ADR-9203]` (Postgres thật, qua HTTP, bộ gửi do test điều khiển): token
+`apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.181 / ADR-110]` (Postgres thật, qua HTTP, bộ gửi do test điều khiển): token
 mới cho chính lời mời, đúng người liên hệ và kênh, link cũ hết hiệu lực, hai hàng sổ; trần 3/giờ ⇒ 429 + `Retry-After`, không token,
 không gửi, không sổ, token đã thu hồi vẫn bị đếm; ba lần gửi lại cùng lúc ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời
 của tổ chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm `PERMISSION_DENIED`; `assertTenantBound` của hai hàm gói; bộ gửi ném ⇒
-502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. `apps/api/src/guest.int.test.ts` ca `[ADR-9203]`: nộp,
+502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. `apps/api/src/guest.int.test.ts` ca `[ADR-110]`: nộp,
 thoát, bên mua gửi lại qua HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng. `apps/web/src/phuc-vu.test.ts`
-các ca `tao-thau`. Bộ quét route của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` có ca cho route này. Đột biến: §S1.9101.
+các ca `tao-thau`. Bộ quét route của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` có ca cho route này. Đột biến: §S1.181.

@@ -13,7 +13,7 @@
 // ============================================================================================
 export {
   CHANNELS,
-  // [S1.9101 / ADR-9203] Trần và cửa sổ của lần gửi lại link mời — route người mua đọc để trả `Retry-After`.
+  // [S1.181 / ADR-110] Trần và cửa sổ của lần gửi lại link mời — route người mua đọc để trả `Retry-After`.
   CUA_SO_LINK_MOI_GIAY,
   GUEST_SESSION_MAX_TTL_SECONDS,
   GUEST_SESSION_TOKEN_BYTES,
@@ -36,14 +36,14 @@ export {
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
-  // [S1.9101 / ADR-9203] Gửi lại link cho CÙNG lời mời còn sống, và phần bù của nó khi gửi hỏng sau commit.
+  // [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời còn sống, và phần bù của nó khi gửi hỏng sau commit.
   reissueInvitationLink,
   revokeMagicLinkToken,
   // [ADR-020 / S1.10.2] Cookie khách → phiên khách. Đường vào DUY NHẤT của `withGuestSession` từ apps/api.
   getInvitationNoticeTarget,
   resolveGuestSessionByToken,
   listInvitations,
-  // [S1.9101 / ADR-9201] Nhà cung cấp tự thoát phiên khách của mình — chạm đúng một hàng phiên, dẫn xuất từ cookie.
+  // [S1.181 / ADR-109] Nhà cung cấp tự thoát phiên khách của mình — chạm đúng một hàng phiên, dẫn xuất từ cookie.
   revokeGuestSession,
   revokeInvitation,
   // [sổ nợ 39] Bộ đếm bucket cho người gọi ba route /auth/* — chỉ mở kind LOGIN_CALLER; dispatcher gọi.

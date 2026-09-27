@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { PermissionDeniedError } from "@trustprocure/identity";
+import { PermissionDeniedError, maChotTuLoi } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { cancelRfq } from "@trustprocure/rfq";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
@@ -1698,7 +1698,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_TAO_DE_XUAT", cause: { constraint: "j3_nguoi_tao_de_xuat" } });
 
     // Và gói thầu KHÔNG đổi trạng thái — câu `UPDATE` đứng SAU câu `INSERT`, nên một trigger nổ
     // ở `INSERT` phải để lại đúng trạng thái cũ. Thiếu khẳng định này, một thứ tự ngược lại sẽ
@@ -1726,7 +1726,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT", cause: { constraint: "j3_nguoi_dieu_phoi_de_xuat" } });
 
     // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI. Không có vế này, ca trên xanh cả
     // khi trigger từ chối mọi đề xuất trên gói thầu ấy vì một lý do khác hẳn.
@@ -1766,7 +1766,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT", cause: { constraint: "j3_nguoi_dieu_phoi_de_xuat" } });
 
     const { rows: ls } = await db.pool.query<{ dispatched_by: string }>(
       "SELECT dispatched_by FROM unseal_dispatch_history WHERE org_id = $1 AND rfq_id = $2 " +
@@ -1835,7 +1835,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
       withTenant(apiPool, orgA, (c) =>
         duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
       ),
-    ).rejects.toThrow(/Nguoi de xuat trao thau khong duoc tu duyet/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DE_XUAT_TU_DUYET", cause: { constraint: "j3_nguoi_de_xuat_tu_duyet" } });
 
     // Không chữ ký nào được ghi, và hàng `APPROVED` không tồn tại.
     const { rows: ck } = await db.pool.query<{ n: string }>(
@@ -1879,7 +1879,11 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
             [orgA, dx.awardId, uDuyet, sDeXuat],
           ),
         ),
-      ).rejects.toThrow(/Phien da de xuat trao thau khong duoc dung de duyet/u);
+      ).rejects.toSatisfy(
+        // [S1.180 / ADR-108] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
+        (e: unknown) =>
+          /Phien da de xuat trao thau khong duoc dung de duyet/u.test((e as Error).message) && maChotTuLoi(e) === "J3_PHIEN_DE_XUAT_DUYET",
+      );
     } finally {
       await db.pool.query(
         "ALTER TABLE rfq_award_approvals ENABLE ALWAYS TRIGGER rfq_award_approvals_kiem_danh_tinh",
@@ -2878,26 +2882,33 @@ describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: hu�
 // [S1.167 / khoản 247 / ADR-104] MỖI LẦN VI PHẠM J3 ĐỂ LẠI MỘT HÀNG SỔ
 //
 // Ba vế của J3 sống ở trigger, nên lần vi phạm huỷ giao dịch của người gọi — trước vòng này 0 hàng sổ (`pnpm pilot:gia-lap`).
-// Nay lớp gói bắt lỗi của trigger, ghi `RFQ_AWARD_SOD_DENIED` ở giao dịch ĐỘC LẬP, rồi ném lại CHÍNH lỗi ấy: thông điệp và mã
+// Nay lớp gói bắt lỗi của trigger, ghi ~~`RFQ_AWARD_SOD_DENIED`~~ ở giao dịch ĐỘC LẬP, rồi ném lại CHÍNH lỗi ấy: thông điệp và mã
 // không đổi (các ca `[INV-J3]` ở trên vẫn khớp nguyên văn), và hàng sổ sống qua rollback.
+// **[S1.180 / ADR-108]** Hàng là `CONTROL_DENIED` mang mã chốt; lỗi ném ra là `ChotKiemSoatError` với lỗi của trigger ở
+// `cause` — các ca `[INV-J3]` ở trên nay khẳng định mã chốt và tên ràng buộc thay cho câu của trigger.
 // ==============================================================================================
-describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ_AWARD_SOD_DENIED`", { timeout: 300000 }, () => {
+describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng ~~`RFQ_AWARD_SOD_DENIED`~~ [S1.180] `CONTROL_DENIED`", { timeout: 300000 }, () => {
   async function hangSoJ3(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
-      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_AWARD_SOD_DENIED' AND resource_id = $2 ORDER BY seq",
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
       [orgA, rfqId],
     );
     return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
   }
 
-  it("vế 2 (người tạo) và vế 3 (người điều phối) ⇒ mỗi lần một hàng mang người thử và vế; thông điệp của trigger không đổi", async () => {
+  it("vế 2 (người tạo) và vế 3 (người điều phối) ⇒ mỗi lần một hàng mang người thử và mã chốt; lỗi của trigger ở `cause`", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     await expect(
       withTenant(apiPool, orgA, (c) =>
         deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu tao tu de xuat", actorSessionId: sYc }, apiPool),
       ),
-    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau.*\(J3\)/u);
-    expect(await hangSoJ3(rfqId)).toEqual([[uYc, "RFQ", { viPham: "J3", ve: "NGUOI_TAO" }]]);
+    ).rejects.toMatchObject({
+      name: "ChotKiemSoatError",
+      lyDo: "J3_NGUOI_TAO_DE_XUAT",
+      message: "Người tạo gói thầu không được đề xuất trao thầu cho chính gói ấy (J3).",
+      cause: { code: "23514", constraint: "j3_nguoi_tao_de_xuat" },
+    });
+    expect(await hangSoJ3(rfqId)).toEqual([[uYc, "RFQ", { ma: "J3_NGUOI_TAO_DE_XUAT" }]]);
 
     await db.pool.query(
       "UPDATE unseal_requests SET dispatched_by = $2, dispatched_by_session_id = $3, dispatched_at = now() WHERE org_id = $1 AND rfq_id = $4",
@@ -2907,17 +2918,17 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ
       withTenant(apiPool, orgA, (c) =>
         deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "dieu phoi roi de xuat", actorSessionId: sDeXuat }, apiPool),
       ),
-    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau.*\(J3\)/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT", cause: { constraint: "j3_nguoi_dieu_phoi_de_xuat" } });
     expect(await hangSoJ3(rfqId)).toEqual([
-      [uYc, "RFQ", { viPham: "J3", ve: "NGUOI_TAO" }],
-      [uDeXuat, "RFQ", { viPham: "J3", ve: "NGUOI_DIEU_PHOI" }],
+      [uYc, "RFQ", { ma: "J3_NGUOI_TAO_DE_XUAT" }],
+      [uDeXuat, "RFQ", { ma: "J3_NGUOI_DIEU_PHOI_DE_XUAT" }],
     ]);
     // Không đề xuất nào ra đời, gói thầu đứng yên — lần ghi sổ ở giao dịch độc lập không kéo theo gì.
     expect(await hangAward(rfqId)).toEqual([]);
     expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
   });
 
-  it("vế 1 — người đề xuất tự duyệt ⇒ một hàng `NGUOI_DE_XUAT`; đề xuất hợp lệ và lần duyệt hợp lệ KHÔNG thêm hàng nào", async () => {
+  it("vế 1 — người đề xuất tự duyệt ⇒ một hàng `J3_NGUOI_DE_XUAT_TU_DUYET`; đề xuất hợp lệ KHÔNG thêm hàng nào", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     const dx = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat roi tu duyet", actorSessionId: sDuyet }, apiPool),
@@ -2925,11 +2936,11 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ
     expect(await hangSoJ3(rfqId), "đề xuất hợp lệ không phải một lần từ chối").toEqual([]);
     await expect(
       withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool)),
-    ).rejects.toThrow(/Nguoi de xuat trao thau khong duoc tu duyet \(J3\)/u);
-    expect(await hangSoJ3(rfqId)).toEqual([[uDuyet, "RFQ", { viPham: "J3", ve: "NGUOI_DE_XUAT" }]]);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DE_XUAT_TU_DUYET", cause: { constraint: "j3_nguoi_de_xuat_tu_duyet" } });
+    expect(await hangSoJ3(rfqId)).toEqual([[uDuyet, "RFQ", { ma: "J3_NGUOI_DE_XUAT_TU_DUYET" }]]);
   });
 
-  it("lần ghi sổ HỎNG ⇒ `DenialAuditFailedError` giữ chính lỗi của trigger ở `denial` — không im lặng, không hàng nào", async () => {
+  it("lần ghi sổ HỎNG ⇒ `DenialAuditFailedError` giữ lời từ chối của chốt ở `denial` — không im lặng, không hàng nào", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
     let loi: unknown = null;
     try {
@@ -2938,7 +2949,7 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ
           "$$BEGIN RAISE EXCEPTION 'k247 thong diep noi bo' USING ERRCODE = 'TP247'; END$$",
       );
       await db.pool.query(
-        "CREATE TRIGGER k247_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'RFQ_AWARD_SOD_DENIED') " +
+        "CREATE TRIGGER k247_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'CONTROL_DENIED') " +
           "EXECUTE FUNCTION public.k247_chan_ghi_so()",
       );
       await withTenant(apiPool, orgA, (c) =>
@@ -2951,7 +2962,7 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ
       await db.pool.query("DROP FUNCTION IF EXISTS public.k247_chan_ghi_so()");
     }
     expect((loi as Error | null)?.name).toBe("DenialAuditFailedError");
-    expect(((loi as { denial?: Error }).denial as Error).message).toMatch(/\(J3\)$/u);
+    expect((loi as { denial?: unknown }).denial).toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_TAO_DE_XUAT" });
     expect(await hangSoJ3(rfqId)).toEqual([]);
   });
 });

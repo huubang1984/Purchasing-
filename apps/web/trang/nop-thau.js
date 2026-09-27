@@ -156,7 +156,7 @@ $("nut-xac").addEventListener("click", async () => {
   xoaManhLink();
   bao($("ok2"), "Đã xác minh. Phiên nằm trong cookie, mã phiên không đi qua JavaScript.");
   $("b2").classList.add("xong");
-  // [S1.9101 / ADR-9201] Từ đây trình duyệt giữ một phiên khách: thoát được, ở bước 1 và ở bước 4.
+  // [S1.181 / ADR-109] Từ đây trình duyệt giữ một phiên khách: thoát được, ở bước 1 và ở bước 4.
   hien($("nut-thoat-khach"), true);
   await napGoiThau();
 });
@@ -218,7 +218,7 @@ async function napGoiThau() {
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không đọc được gói thầu")); hien($("b3"), true); return false; }
   phien = {
     ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null,
-    // [S1.9101 / ADR-9201] Tên doanh nghiệp được mời — máy chủ dẫn xuất từ phiên, trang chỉ in lại.
+    // [S1.181 / ADR-109] Tên doanh nghiệp được mời — máy chủ dẫn xuất từ phiên, trang chỉ in lại.
     tenNhaCungCap: typeof r.body.supplier?.legalName === "string" ? r.body.supplier.legalName : "",
   };
 
@@ -333,11 +333,11 @@ $("nut-nop").addEventListener("click", async () => {
   const tong = tinhLai();
   if (tong === null) return;
   $("nut-nop").disabled = true;
-  // [S1.9101 / lượt soi] Thoát, hay đổi link trong cùng thẻ, trong lúc lần nộp còn bay: biên nhận về muộn là của phiên
+  // [S1.181 / lượt soi] Thoát, hay đổi link trong cùng thẻ, trong lúc lần nộp còn bay: biên nhận về muộn là của phiên
   // trước, không được mở lại bước 4 dưới câu "Đã thoát".
   const the = theHe;
   try {
-    // [S1.9101 / lượt soi] Tên doanh nghiệp trên màn là ảnh chụp lúc nạp; cookie khách thì chung cho mọi thẻ của trình
+    // [S1.181 / lượt soi] Tên doanh nghiệp trên màn là ảnh chụp lúc nạp; cookie khách thì chung cho mọi thẻ của trình
     // duyệt. Một thẻ khác vừa xác minh lời mời của doanh nghiệp khác thì lần nộp ở thẻ này sẽ đi vào hồ sơ của doanh nghiệp
     // ấy — nên hỏi lại phiên hiện hành ngay trước khi niêm phong, và dừng nếu nó không còn là phiên trên màn.
     const hienHanh = await goi("GET", "/guest/rfq");
@@ -466,7 +466,7 @@ window.addEventListener("hashchange", () => {
 // (route đã có, không ghi gì); 200 thì HỎI, không tự mở — cùng khuôn ba trang người mua (`thuPhienCo` ở
 // `mo-thau.js`): trên một máy dùng chung, phiên ấy có thể của người khác. Câu hỏi nêu tên gói thầu, thứ nhà cung
 // cấp nhận ra được — ~~nhưng tên gói KHÔNG nói phiên của nhà cung cấp nào: một gói mời nhiều nhà cung cấp, và không route
-// khách nào trả định danh người được mời; câu hỏi nói thẳng điều ấy.~~ **[S1.9101 / ADR-9201]** và tên DOANH NGHIỆP được
+// khách nào trả định danh người được mời; câu hỏi nói thẳng điều ấy.~~ **[S1.181 / ADR-109]** và tên DOANH NGHIỆP được
 // mời (`supplier.legalName` của `GET /guest/rfq`): một gói mời nhiều nhà cung cấp, nên chỉ tên gói thì hai nhà cung cấp
 // cùng gói trên một máy thấy cùng một câu hỏi. Thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với thiếu tên gói.
 // Cùng khối hỏi có nút Thoát phiên nộp thầu. `docLink()` phải chạy TRƯỚC hàm này; sau `await`,
@@ -508,7 +508,7 @@ function dongCacBuoc() {
   for (const b of ["b2", "b3", "b4"]) hien($(b), false);
   for (const id of ["tt-rfq", "tt-bn", "mo-ta-pb", "van-ban", "chu-ky"]) $(id).replaceChildren();
   $("bang-hang").querySelector("tbody").replaceChildren();
-  // [S1.9101 / lượt soi] Dòng tổng mang TỔNG GIÁ dạng rõ người trước đã gõ; ô OTP mang mã của người trước.
+  // [S1.181 / lượt soi] Dòng tổng mang TỔNG GIÁ dạng rõ người trước đã gõ; ô OTP mang mã của người trước.
   $("tong").textContent = "";
   $("ma").value = "";
   $("tien-te").value = "VND";
@@ -547,13 +547,13 @@ $("nut-dung-phien").addEventListener("click", async () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / ADR-9201] THOÁT PHIÊN NỘP THẦU.
+// [S1.181 / ADR-109] THOÁT PHIÊN NỘP THẦU.
 //
 // `POST /guest/logout` thu hồi CHÍNH phiên khách đang gọi (máy chủ dẫn xuất nó từ cookie) và xoá cookie
 // `__Host-tp_guest`. Trước vòng này không đường nào làm việc ấy: trên một máy dùng chung, phiên sống tới 4 giờ sau
 // khi người nộp đã rời đi. 401 nghĩa là phiên đã hết hay đã bị thu hồi — điều người bấm muốn vẫn đạt, nên trang cũng
 // về bước 1 (cùng khuôn nút Đăng xuất của ba trang người mua). Mã lời mời đã bị tiêu thụ ở lần xác minh, nên câu báo
-// nói thẳng: muốn nộp tiếp phải có link mới — ~~của một lời mời mới~~ **[S1.9101 / ADR-9203]** link bên mua GỬI LẠI cho
+// nói thẳng: muốn nộp tiếp phải có link mới — ~~của một lời mời mới~~ **[S1.181 / ADR-110]** link bên mua GỬI LẠI cho
 // chính lời mời ấy, đưa về đúng hồ sơ báo giá đã nộp. Lời gọi về muộn sau khi màn đã đổi thế hệ (đổi link trong cùng thẻ)
 // không được xoá màn của người sau. Lỗi hiện cạnh nút đã bấm — nút ở bước 4 nằm cuối trang, xa `#loi1`.
 // ==============================================================================================

@@ -1,6 +1,6 @@
 // ==============================================================================================
 // Route KHÁCH — nhà cung cấp đã qua magic link + OTP. ~~`ctx.client` ĐÃ gắn phiên khách, nên mọi
-// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời.~~ **[S1.9101 / lượt soi]** Đúng cho
+// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời.~~ **[S1.181 / lượt soi]** Đúng cho
 // route ĐỌC: `ctx.client` đã gắn phiên khách, và mọi câu SQL tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một
 // lời mời. Hai route GHI (`POST /guest/bids`, `POST /guest/logout`) chạy trên kết nối CHỈ gắn tổ chức (`dispatch.ts` khối
 // [S1.10.3]) — trên kết nối ấy policy không khoá theo lời mời, nên phạm vi của chúng đến từ id mà bộ điều phối dẫn xuất
@@ -10,12 +10,12 @@
 //   GET  /guest/session                       phiên đang cầm là gì (route đo khung của S1.10.2)
 //   GET  /guest/rfq                           gói thầu được mời: hạng mục + khoá CÔNG KHAI, KHÔNG ngân sách;
 //                                             [khoản 196] kèm `gioMayChu` — đồng hồ CSDL, nguồn phán xử hạn;
-//                                             [S1.9101 / ADR-9201] kèm `supplier.legalName` — tên doanh nghiệp được mời
+//                                             [S1.181 / ADR-109] kèm `supplier.legalName` — tên doanh nghiệp được mời
 //   POST /guest/bids   {envelope: base64}     nộp một phong bì; nhận biên nhận đã ký (B1/B2);
 //                                             [khoản 196] quá hạn ⇒ 422 kèm `gioPhanXu` + `hanNop`, có hàng sổ
 //   GET  /guest/bids                          các phiên bản đã nộp của CHÍNH MÌNH — không phong bì
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
-//   POST /guest/logout                        [S1.9101 / ADR-9201] thu hồi CHÍNH phiên đang gọi, xoá cookie khách
+//   POST /guest/logout                        [S1.181 / ADR-109] thu hồi CHÍNH phiên đang gọi, xoá cookie khách
 // ==============================================================================================
 import { NopBiTuChoiError, NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
 import { docVongBafoKhach } from "@trustprocure/danh-gia";
@@ -100,7 +100,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // những nhà cung cấp đã bỏ công dự thầu — kể cả sau khi giá của họ đã lộ, vì `071` mở bốn cạnh
       // huỷ sau khi đóng và đòi lý do ở đúng bốn cạnh ấy. Gói chưa huỷ luôn trả `null`.
       //
-      // [S1.9101 / ADR-9201] `supplier` mang ĐÚNG một trường — tên pháp lý của nhà cung cấp được mời, dẫn xuất ở bước
+      // [S1.181 / ADR-109] `supplier` mang ĐÚNG một trường — tên pháp lý của nhà cung cấp được mời, dẫn xuất ở bước
       // tra cookie (`ctx.supplierLegalName`), không đọc ở đây: `suppliers` đóng với kết nối gắn phiên khách (027). Trang
       // nộp thầu nêu nó trong câu hỏi phiên lúc tải, để hai nhà cung cấp của cùng một gói trên một máy phân biệt được
       // phiên của ai. Không MST, không người liên hệ, không mã nhà cung cấp.
@@ -158,7 +158,8 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         if (loi instanceof NopQuaHanError) {
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
-        // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang `BID_SUBMIT_DENIED`.
+        // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang ~~`BID_SUBMIT_DENIED`~~
+        // **[S1.180]** `BID_STATE_DENIED` mang mã của nhánh.
         if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message } };
         throw loi;
       }
@@ -217,7 +218,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
   },
   {
     // ==========================================================================================
-    // [S1.9101 / ADR-9201] NHÀ CUNG CẤP TỰ THOÁT — cùng khuôn `POST /auth/logout` của người mua.
+    // [S1.181 / ADR-109] NHÀ CUNG CẤP TỰ THOÁT — cùng khuôn `POST /auth/logout` của người mua.
     //
     // Route GHI của khách: `withTenant` không GUC (dispatch.ts khối [S1.10.3]), nên handler không viết SQL tay —
     // chỉ gọi `revokeGuestSession` với `guestSessionId` mà bộ điều phối dẫn xuất từ cookie. Phiên không hợp lệ ⇒

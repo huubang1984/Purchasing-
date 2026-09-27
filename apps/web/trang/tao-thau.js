@@ -364,7 +364,7 @@ async function napLoiMoi() {
     }
     const td = document.createElement("td");
     if (m.revokedAt === null) {
-      // [S1.9101 / ADR-9203] Nhà cung cấp mất phiên (thoát, hết 4 giờ, đổi máy) thì bên mua GỬI LẠI link cho chính lời mời
+      // [S1.181 / ADR-110] Nhà cung cấp mất phiên (thoát, hết 4 giờ, đổi máy) thì bên mua GỬI LẠI link cho chính lời mời
       // này — cùng người liên hệ, cùng kênh, về đúng hồ sơ báo giá đã nộp. Thu hồi rồi mời lại là một lời mời và một luồng
       // báo giá MỚI, nên không phải đường cho việc này.
       const guiLai = document.createElement("button");
@@ -387,7 +387,7 @@ async function napLoiMoi() {
         bao($("loi5"), ""); bao($("ok5"), "");
         const th = await goi("POST", `/invitations/${m.id}/revoke`);
         if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
-        // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.9101 / ADR-9203] Mời lại sau thu hồi là một hồ sơ báo giá
+        // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.181 / ADR-110] Mời lại sau thu hồi là một hồ sơ báo giá
         // MỚI, và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ) — nói ra, và chỉ đường gửi lại link.
         bao($("ok5"), "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) vẫn nằm trong gói thầu. Nhà cung cấp chỉ cần link " +
           "mới thì dùng «Gửi lại link», đừng thu hồi.");

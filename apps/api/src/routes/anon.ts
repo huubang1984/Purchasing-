@@ -51,7 +51,7 @@ export function cookiePhienKhach(orgId: string, sessionToken: string): string {
 }
 
 /**
- * [S1.9101 / ADR-9201] Dòng `Set-Cookie` xoá cookie khách — `POST /guest/logout`. Cùng tên, cùng `Path`, cùng bộ
+ * [S1.181 / ADR-109] Dòng `Set-Cookie` xoá cookie khách — `POST /guest/logout`. Cùng tên, cùng `Path`, cùng bộ
  * thuộc tính với dòng đặt: trình duyệt chỉ ghi đè cookie trùng cả tên lẫn `Path`, và `__Host-` đòi `Secure`, `Path=/`.
  */
 export const XOA_COOKIE_PHIEN_KHACH = `${COOKIE_PHIEN_KHACH}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;

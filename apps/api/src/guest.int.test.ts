@@ -572,9 +572,9 @@ describe("gói thầu và báo giá của khách", () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / ADR-9201] Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên của mình.
+// [S1.181 / ADR-109] Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên của mình.
 // ==============================================================================================
-describe("[S1.9101 / ADR-9201] tên nhà cung cấp được mời, và POST /guest/logout", () => {
+describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /guest/logout", () => {
   it("GET /guest/rfq mang tên pháp lý của CHÍNH nhà cung cấp được mời — hai nhà cung cấp cùng một gói thấy hai tên, không thấy tên nhau", async () => {
     const a = await moi("Cong ty Thep Hoa Phat Mien Bac");
     const b = await moi("Cong ty Co khi Tan Binh");
@@ -657,7 +657,7 @@ describe("[S1.9101 / ADR-9201] tên nhà cung cấp được mời, và POST /gu
     expect(dem[0]?.n).toBe("1");
   });
 
-  it("[ADR-9203] thoát rồi quay lại bằng link bên mua GỬI LẠI qua HTTP: đúng lời mời, thấy lại báo giá đã nộp, lần nộp kế là phiên bản 2 của CÙNG luồng", async () => {
+  it("[ADR-110] thoát rồi quay lại bằng link bên mua GỬI LẠI qua HTTP: đúng lời mời, thấy lại báo giá đã nộp, lần nộp kế là phiên bản 2 của CÙNG luồng", async () => {
     const a = await moi("NCC quay lai");
     const ck1 = await moPhienKhach(a);
     const khoa = await withTenant(apiPool, orgA, (c) => getRfqPublicKeys(c, orgA, rfqA));
