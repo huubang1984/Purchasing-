@@ -1561,18 +1561,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_de_xuat", migration: "9501_tu_choi_co_ten.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    { ham: "award_kiem_de_xuat", migration: "073_tu_choi_co_ten.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
     // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
     // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
     { ham: "award_kiem_mot_award_song", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
-    { ham: "award_kiem_nguoi_duyet", migration: "9501_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
+    { ham: "award_kiem_nguoi_duyet", migration: "073_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
-    { ham: "bid_kiem_han_nop", migration: "9501_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
-    { ham: "bid_kiem_phien_khach", migration: "9501_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
+    { ham: "bid_kiem_han_nop", migration: "073_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_phien_khach", migration: "073_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
     // [S1.108 / S2.5] Tên trigger được chọn để sắp SAU `vendor_bid_versions_kiem_han_nop` theo
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
-    { ham: "bid_kiem_vong_bafo", migration: "9501_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
+    { ham: "bid_kiem_vong_bafo", migration: "073_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
     // [S1.129 / khoản 233] Lớp GHI của lịch sử điều phối — nguồn dữ liệu duy nhất của J3 vế 3. Một
     // thân `RETURN NULL` làm bảng ngừng lớn và người điều phối lần đầu lại đề xuất được.
@@ -1624,7 +1624,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // rồi đổi đúng một chỗ.
     { ham: "rfq_kiem_chuyen_trang_thai", migration: "071_huy_sau_khi_dong.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
-    { ham: "rfq_kiem_nguoi_duyet", migration: "9501_tu_choi_co_ten.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
+    { ham: "rfq_kiem_nguoi_duyet", migration: "073_tu_choi_co_ten.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
     { ham: "rfq_kiem_nguong_phe_duyet_kep", migration: "014_procurement_policy.sql", trigger: ["rfq_packages_kiem_nguong_phe_duyet_kep"] },
     { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
@@ -3268,7 +3268,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
-        "9501_tu_choi_co_ten.sql",
+        "073_tu_choi_co_ten.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7684,7 +7684,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
-        "9501_tu_choi_co_ten.sql",
+        "073_tu_choi_co_ten.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7977,7 +7977,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
-        "9501_tu_choi_co_ten.sql",
+        "073_tu_choi_co_ten.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
