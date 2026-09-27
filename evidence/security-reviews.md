@@ -13720,3 +13720,48 @@ một ĐỘT BIẾN:
   một lượt trên PostgreSQL 16 cục bộ **177 tệp, 2822 ca — 2813 đạt, 1 bỏ qua, 8 đỏ** (đúng 8 ca `test-support` cần
   docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
   các dòng tổng và dòng mốc.
+
+# §S1.167 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI DO TRIGGER CỦA TÁCH BẠCH NHIỆM VỤ VÀ CỦA CÂU NỘP BÁO GIÁ ĐỂ LẠI HÀNG SỔ
+
+## 1. Việc gì
+
+Khoản 247 (S1.163, đo trên pilot giả lập): năm lần từ chối của tách bạch nhiệm vụ (J3 cả ba vế, D2 ở duyệt gói) và hai lần
+từ chối nộp báo giá (gói huỷ, ngoài top-N BAFO) trả 422 nhưng để lại **0 hàng sổ**, vì lần từ chối đến từ trigger và 422 của
+trigger huỷ giao dịch. Chủ dự án chọn *ghi sổ cả bảy lần* — ADR-104.
+
+## 2. Đo trước
+
+Test mới của vòng này chạy trên mã sản xuất của `master` (`trao-thau.ts`, `rfq.ts` bản cũ; lời ghi sổ của `submitBid` tắt):
+**5 đỏ, 1 xanh** — xanh là ca đối chứng *"lần từ chối trạng thái / người duyệt trùng không thêm hàng"* của `rfq`, đúng như
+mong đợi. Năm ca đỏ: D2 tự duyệt gói; nộp vào gói CLOSED; J3 vế 2 + vế 3; J3 vế 1; J3 với lần ghi sổ hỏng.
+
+## 3. Thay đổi
+
+- `packages/danh-gia/src/trao-thau.ts`: câu `INSERT` của `deXuatTraoThau` và `duyetTraoThau` bắt lỗi; lỗi 23514 mang đuôi
+  `(J3)` được phân vế theo tiền tố thông điệp (`NGUOI_TAO`, `NGUOI_DIEU_PHOI`, `NGUOI_DE_XUAT`, `PHIEN_DE_XUAT`) rồi ghi
+  `RFQ_AWARD_SOD_DENIED` `{viPham:"J3", ve}` qua `throwAuditedDenial` — giao dịch độc lập, ném lại CHÍNH lỗi của trigger.
+- `packages/rfq/src/rfq.ts`: `approveRfq` nhận thêm `auditPool` (bắt buộc); lỗi 23514 mang `(D2` ghi `RFQ_APPROVAL_DENIED`
+  `{viPham:"D2"}` theo cùng đường. 33 lời gọi cập nhật; route truyền `ctx.auditPool`.
+- `packages/bidding/src/bidding.ts`: nhánh check_violation không vì hạn của `submitBid` lùi về savepoint, đọc trạng thái gói,
+  ghi `BID_SUBMIT_DENIED` (`actorType SUPPLIER`, `{rfqStatus}`) trong chính giao dịch và ném `NopBiTuChoiError` (con của
+  `BiddingError`, giữ nguyên thông điệp chung). `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng ấy commit — tiền lệ
+  ADR-074.
+- `docs/PRODUCT.md` §5 (hàng S1.110) hết khai ngược cho J3; ADR-060 thêm ghi chú trỏ sang ADR-104; báo cáo pilot giả lập
+  sửa lời chú.
+
+## 4. Đo sau
+
+Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xanh; `apps/api` + `apps/unseal-worker` 32 tệp,
+405/405; công cụ pilot 39/39; unit toàn kho xanh.
+
+## 5. Giới hạn
+
+- Hai lần ghi J3/D2 KHÔNG tính vào trần từ chối của ADR-092 — trần ấy chỉ đếm lần từ chối quyền. Lần từ chối nộp của nhà cung
+  cấp cũng không có trần; một phiên khách hợp lệ có thể nhồi hàng `BID_SUBMIT_DENIED` bằng cách nộp lặp vào gói đã đóng.
+- Thông điệp trả người nộp giữ câu chung: phân biệt lý do (huỷ / đóng / ngoài top-N) trước người nộp là một quyết định khác.
+- Phân vế J3 dựa vào tiền tố thông điệp của trigger `061`; đổi câu chữ trigger mà không đổi `veJ3` sẽ ghi hàng với `ve: null`
+  thay vì mất hàng — test vế 1, 2, 3 bắt được.
+
+## 6. Số
+
+Khoản 247 đóng. Còn mở **86**; rổ B **61**.
