@@ -12481,6 +12481,18 @@ Bốn gói dở đứng đúng trạng thái: `OPEN`, `CLOSED` với yêu cầu 
 - sổ kiểm toán: SX 206 hàng, XD 172 hàng. SX ít hơn lượt đầu một hàng, vì lần tự duyệt trao thầu của SX-03 nay dừng ở
   trigger J3 chứ không ở cổng quyền.
 
+**Chế độ chậm, SX-06 — lượt chạy lại sau khi Postgres chết (mục 4)**, trên bản của commit `3342eb8`, CSDL riêng, từ
+23:09 tới 00:11 UTC:
+- **1/1** ĐẠT, trong 62 phút 5 giây. Hạn nộp đặt 62 phút sau khi tạo gói, và bộ giả lập đợi tới hạn cộng 3 giây;
+- nhà cung cấp S5 nộp một báo giá niêm phong hợp lệ sau hạn ⇒ **422** *"Đã quá hạn nộp báo giá theo giờ của hệ thống…"*.
+  Sổ của tổ chức có đúng **1** hàng `BID_DEADLINE_DENIED`; lượt chỉ có một lần nộp trễ, nên số đếm theo tổ chức quy được
+  về lần ấy. Bản công cụ của lượt này chưa có cột *Vào sổ* hay phép kiểm theo hành động;
+- đóng sau hạn: số báo giá công bố là 2 (S2, S4 — lần nộp trễ không được tính). Mở thầu qua cổng bốn vế, bảng so sánh
+  khớp 2/2, thứ hạng S4 > S2, trao thầu cho S4 và duyệt. Biên nhận 2/2; bộ bằng chứng 1/1;
+- 28 bước người dùng qua API (27 LAM, 1 CHAN), 14 KIEM, 23 bước chuẩn bị tổ chức;
+- báo cáo của lượt ghi *"trên mã `d8f493e`"*, và câu ấy SAI: dấu mã được lấy lúc ghi báo cáo, còn `d8f493e` được commit
+  GIỮA lượt chạy. Đó là một khiếm khuyết nữa của công cụ. Sửa: dấu mã lấy lúc bắt đầu, khi mã được nạp.
+
 **Đi thử trên trình duyệt thật** (Chromium qua Playwright, khung 375×812, trên cụm giữ bởi lệnh `cum`):
 - Phía nhà cung cấp, gói SX-04: `lien-ket` cho link, mở lời mời, gửi OTP, `otp <số>` cho mã, nhập đơn giá, bấm **Niêm
   phong và nộp**. Biên nhận hiện `alg=ECDSA_P256_SHA256 kid=k1 version=1`; phong bì X25519, 247 byte.
@@ -12560,9 +12572,8 @@ Hai quan sát, không mở khoản:
 
 - Lượt giả lập **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chạy 37 test đơn vị của công cụ và các cổng
   kiến trúc.
-- Kịch bản chậm SX-06 chưa có kết quả ghi ở biên bản này. Lượt chậm đầu chết cùng Postgres (mục 4); lượt chạy lại, và
-  một lượt trên bản đã sửa theo mục 9, còn đang đợi hạn nộp thật lúc commit này. Mọi câu về SX-06 ở trên là lời khai
-  của danh mục, chưa phải số đo.
+- Kịch bản chậm SX-06 có kết quả trên bản của commit đầu (mục 5). Lượt trên bản đã sửa theo mục 9 — lần nộp trễ nay
+  đòi đúng một hàng `BID_DEADLINE_DENIED` đếm theo hành động — còn đang đợi hạn nộp thật lúc commit này.
 - Tầng tích hợp (Testcontainers) không chạy cục bộ, vì container này không có Docker daemon. Mọi câu SQL mới của
   `csdl.ts` đã CHẠY THẬT trên Postgres 16 ở lượt giả lập — mạnh hơn `PREPARE` của `qt3-cu-phap.int.test.ts`, nhưng không
   phải chính phép đo ấy. Job T3 của CI là phép đo ấy.
@@ -12582,11 +12593,11 @@ kính. Lăng kính *tài liệu* chưa trả kết quả lúc commit này; phầ
 
 | # | Lăng kính | Mức | Phát hiện | Xử lý |
 |---|---|---|---|---|
-| 1 | an ninh, đúng đắn | cao | `kiemUrlCucBo` chỉ đọc tên máy của URL, còn `pg` để `?host=`, `?port=`, `?user=`, `?password=` ghi đè. `…@127.0.0.1/db?host=10.0.0.5` qua được phép kiểm rồi nối tới máy khác, chạy `migrate()` và đặt lại mật khẩu hai vai đăng nhập ở đó. Người viết đo bằng `pg-connection-string` của kho: `host: '10.0.0.5'` | Từ chối MỌI tham số truy vấn; test năm URL, cả qua `urlVaiDangNhap` |
+| 1 | an ninh, đúng đắn | vừa (người soi: cao) | `kiemUrlCucBo` chỉ đọc tên máy của URL, còn `pg` để `?host=`, `?port=`, `?user=`, `?password=` ghi đè. `…@127.0.0.1/db?host=10.0.0.5` qua được phép kiểm rồi nối tới máy khác, chạy `migrate()` và đặt lại mật khẩu hai vai đăng nhập — đúng tên vai của môi trường thật — ở đó. Người viết đo bằng `pg-connection-string` của kho: `host: '10.0.0.5'`. Người kiểm chứng hạ mức: `api` và worker KHÔNG lên được trên máy kia (`createPool` từ chối `host=` không phải socket; `api` từ chối SUPERUSER), và biến môi trường là của người vận hành | Từ chối MỌI tham số truy vấn; test năm URL, cả qua `urlVaiDangNhap`. Người kiểm chứng thử thêm `?` trần, `#?host=`, `%3F` và tên máy viết hoa trên bản sửa: mọi đầu vào qua được đều về 127.0.0.1 |
 | 2 | an ninh, cổng CI | cao | Mật khẩu thử trong `phu-tro.test.ts` đứng cạnh `app_api_login` khớp `generic-api-key` của gitleaks 8.24.3. Commit đầu đã lên nhánh, và job T0c quét cả dải commit của PR, nên một commit sửa sau không gỡ được | Giá trị entropy thấp (`"m".repeat(30)`). **Còn mở:** commit đầu vẫn mang chuỗi ấy — đo lại: 2 lộ lọt ở `3342eb8`. Gỡ nó cần viết lại lịch sử nhánh (nhánh của chính vòng, chưa có PR) rồi đẩy ép — thứ hook `git-safety` của kho chặn (H3), và lần thử viết lại cũng bị lớp an toàn của phiên chặn — nên việc ấy chờ chủ dự án quyết |
 | 3 | an ninh | vừa | Lệnh Docker của kế hoạch mở superuser, với mật khẩu viết trong tài liệu, trên mọi giao diện mạng — đúng nơi công cụ được dùng: máy trình diễn trên mạng của khách | `-p 127.0.0.1:55433:5432`. Công thức cùng hình dạng của ADR-044 không thuộc vòng, giữ nguyên |
 | 4 | an ninh | thấp | `--thu-muc demo` rơi vào `<gốc kho>/demo/`, ngoài `.gitignore`, nên `git add -A` có thể mang `cum.json` và bí mật TOTP đi | `kiemThuMucTrangThai`: trong kho chỉ nhận dưới một thư mục tên `.pilot-gia-lap`; test |
-| 5 | an ninh | thấp | `PGPASSWORD`, `PGOPTIONS`… đi xuống bốn tiến trình con và bộ kiểm bằng chứng | Bỏ mọi biến `PG*`; test |
+| 5 | an ninh | thấp | `PGPASSWORD`, `PGUSER`… đi xuống bốn tiến trình con và bộ kiểm bằng chứng (người kiểm chứng: `PGOPTIONS` thì không chạm được phiên CSDL của `api`, vì `createPool` truyền `options` tường minh) | Bỏ mọi biến `PG*`; test. Người kiểm chứng đo ra lần lệch do chính bản sửa gây ra: URL không ghi cổng cộng `PGPORT` — kết nối đặc quyền dùng `PGPORT`, còn `api` rơi về 5432. Sửa: URL của tiến trình con mang cổng theo đúng thứ tự của `pg` (URL, rồi `PGPORT`, rồi 5432); test |
 | 6 | đúng đắn | vừa | `trang-thai.json` bị ghi đè bằng tổ chức của lượt hiện tại: một lượt `--chi SX-04` xoá bí mật TOTP của người mua XD, mà ba gói XD để lại cần tới | Gộp, lượt mới nhất trước; `dang-nhap <email> [orgId]`; test |
 | 7 | đúng đắn, xanh giả | thấp | `--chi SX-06` thiếu `--cham` ⇒ 0 kịch bản, mã thoát 0, *"MỌI kịch bản ĐẠT"*. Một lượt chỉ một tổ chức cũng khai *"mọi phép kiểm ĐẠT"* dù phép cô lập không chạy | Gọi tên kịch bản chậm mà thiếu `--cham` là lỗi; danh sách rỗng là lỗi; báo cáo và dòng tổng kết nói *"cô lập KHÔNG chạy"*; test |
 | 8 | đúng đắn | thấp | Thông báo gia hạn đếm số TIN, không đếm lời mời | Đếm theo lời mời, và đòi đúng một tin cho mỗi lời mời |

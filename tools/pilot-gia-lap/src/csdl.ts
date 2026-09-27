@@ -61,11 +61,17 @@ export function kiemUrlCucBo(url: string): URL {
   return u;
 }
 
-/** URL của một vai đăng nhập ứng dụng trên cùng máy chủ và CSDL với URL đặc quyền. */
-export function urlVaiDangNhap(urlDacQuyen: string, ten: string, matKhau: string): string {
+/**
+ * URL của một vai đăng nhập ứng dụng trên cùng máy chủ, CỔNG và CSDL với URL đặc quyền. URL không ghi
+ * cổng thì `pg` của kết nối đặc quyền lấy `PGPORT` rồi 5432; tiến trình con không nhận `PGPORT`
+ * (`moiTruongSach` bỏ mọi `PG*`), nên URL của nó phải mang đúng cổng ấy — người kiểm chứng của lượt soi
+ * đối kháng đo ra lần lệch này ở chính bản sửa bỏ `PG*`.
+ */
+export function urlVaiDangNhap(urlDacQuyen: string, ten: string, matKhau: string, pgPort: string | undefined = process.env.PGPORT): string {
   const u = kiemUrlCucBo(urlDacQuyen);
   u.username = ten;
   u.password = matKhau;
+  if (u.port === "") u.port = pgPort?.trim() || "5432";
   return u.toString();
 }
 

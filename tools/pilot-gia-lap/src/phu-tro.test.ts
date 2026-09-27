@@ -90,8 +90,15 @@ describe("CSDL chỉ cục bộ", () => {
   });
 
   it("URL vai đăng nhập giữ máy chủ và CSDL, thay tên và mật khẩu", () => {
-    const u = new URL(urlVaiDangNhap("postgres://postgres:x@127.0.0.1:55433/pilot", "app_api_login", "m".repeat(30)));
+    const u = new URL(urlVaiDangNhap("postgres://postgres:x@127.0.0.1:55433/pilot", "app_api_login", "m".repeat(30), "6543"));
     expect([u.username, u.password, u.hostname, u.port, u.pathname]).toEqual(["app_api_login", "m".repeat(30), "127.0.0.1", "55433", "/pilot"]);
+  });
+
+  it("URL không ghi cổng: tiến trình con nhận ĐÚNG cổng mà pg của kết nối đặc quyền dùng — PGPORT, rồi 5432", () => {
+    // Tiến trình con không nhận PGPORT (moiTruongSach bỏ mọi PG*), nên cổng phải nằm trong URL của nó.
+    expect(new URL(urlVaiDangNhap("postgres://postgres@localhost/pilot", "app_api_login", "m".repeat(30), "55433")).port).toBe("55433");
+    expect(new URL(urlVaiDangNhap("postgres://postgres@localhost/pilot", "app_api_login", "m".repeat(30), undefined)).port).toBe("5432");
+    expect(new URL(urlVaiDangNhap("postgres://postgres@localhost/pilot", "app_api_login", "m".repeat(30), " ")).port).toBe("5432");
   });
 });
 

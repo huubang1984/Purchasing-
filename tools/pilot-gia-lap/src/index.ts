@@ -226,6 +226,9 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
   // Đọc trạng thái cũ TRƯỚC khi dựng cụm: một tệp hỏng phải dừng lượt chạy ngay, không phải sau một giờ.
   const trangThaiCu = await docTrangThaiNeuCo(thuMuc);
   const batDau = new Date().toISOString();
+  // Dấu mã lấy LÚC BẮT ĐẦU, khi mã của công cụ và của bốn tiến trình được nạp. Một lần đo ở vòng này:
+  // lượt chậm đầu lấy dấu lúc ghi báo cáo, một giờ sau, và đóng dấu một commit tạo ra GIỮA lượt chạy.
+  const maLuc = phienBanMa();
   const { cum, db } = await chuanBiCum(ts, thuMuc);
   let maThoat = 1;
   try {
@@ -354,7 +357,7 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
       });
     }
     const ketThuc = new Date().toISOString();
-    const kq = { batDau, ketThuc, cheDo: ts.cham ? "cham" : "nhanh", phienBanMa: phienBanMa(), toChuc: baoCaoToChuc, kichBan: ketQua, coLap, boQua } as const;
+    const kq = { batDau, ketThuc, cheDo: ts.cham ? "cham" : "nhanh", phienBanMa: maLuc, toChuc: baoCaoToChuc, kichBan: ketQua, coLap, boQua } as const;
     const thuMucBaoCao = join(thuMuc, "bao-cao", batDau.replace(/[:.]/gu, "-"));
     await mkdir(thuMucBaoCao, { recursive: true, mode: 0o700 });
     const md = dungBaoCaoMarkdown(kq);
