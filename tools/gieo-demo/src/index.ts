@@ -13,8 +13,11 @@
 // VÌ SAO NÓ DỰNG `pg.Pool` THẲNG THAY VÌ GỌI `createPool`, VÀ VÌ SAO ĐÓ LÀ MỘT QUYẾT ĐỊNH
 // ----------------------------------------------------------------------------------------------
 // `createPool` đòi một `role` và gắn nó vào MỌI client (`ganVaiTroChoPool`). Công cụ này không
-// dùng được vai ứng dụng: đo trên cụm thật, `app_api` **không có INSERT** trên `organizations`,
-// `users`, `user_roles` hay `sessions` — và đúng ra là không được có. Một script gieo tenant là
+// dùng được vai ứng dụng: đo trên cụm thật, `app_api` **không có INSERT** trên `organizations`~~,
+// `users`, `user_roles` hay `sessions`~~ — và đúng ra là không được có. **[Đo lại ngày 2026-09-27
+// sau 73 migration]** Trên `users`, `user_roles` và `sessions` nó CÓ INSERT theo cột (`002`, `005`);
+// chỉ `organizations` là không có quyền INSERT nào, và thế đã đủ để script phải dùng kết nối
+// đặc quyền. Một script gieo tenant là
 // việc của một kết nối ĐẶC QUYỀN theo định nghĩa: nó tạo ra chính cái tenant mà mọi lớp cô lập
 // sau đó nói về.
 //
