@@ -19,6 +19,19 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 `074_tu_choi_co_ten.sql` đặt 13 tên ràng buộc ở sáu trigger — không bớt nhánh nào S1.167 đang ghi. Không mở hay đóng khoản nào.
 Bằng chứng: `evidence/security-reviews.md` §S1.174.
 
+**[2026-09-27 / S1.174] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
+`/chinh-sach` VÀ `/tao-thau` TRÊN CỤM THẬT. S3.1 XONG.** Phần cuối trong bốn phần của S3.1 (spec S3 §9). Chủ dự án chốt bốn
+câu theo đề xuất:
+- `gieo:demo` mặc định giữ tổ chức chưa bật — hình dạng pilot chạy. `--s3` gieo tổ chức đã bật đủ bảy người của §7 (thêm
+  hai FINANCE), năm nhà cung cấp, phiên bản bốn bậc mặc định §4.1 do F1 khai và F2 ký bằng hàm gói dưới `withTenant`.
+- Kịch bản 41 — bản gói và bản HTTP — tham số hoá qua hai tổ chức, mọi bước dùng chung; luồng S3 thêm đúng bước khai và
+  ký (bản HTTP ký qua route, trên máy chủ cờ bật).
+- Một lượt đi thử T4 có biên bản trên cụm thật.
+
+Lượt đi thử đo ra một lỗi của chính `--s3` — gói gieo mang sáu chữ ký phê duyệt, kể cả hai người tài chính — sửa trong
+vòng. Hai bản chép mặc định §4.1 (màn, công cụ) khoá nhau bằng một test. Không migration, không ADR, không khoản nợ mới.
+Biên bản: `evidence/security-reviews.md` §S1.174.
+
 **[2026-09-27 / S1.173] HAI TÀI LIỆU CHO BƯỚC TIẾP THEO: BỘ TÀI LIỆU BUỔI BẬC 1, VÀ ĐỀ XUẤT TẠO TỔ CHỨC TRÊN PROD — KÈM
 MỘT CHỖ HỞ MỚI ĐO ĐƯỢC.** Hai việc trong đề xuất thứ hai ngày 2026-09-27, không cần chủ dự án quyết trước.
 - `docs/BUOI-BAC-1.md`: thứ người trình diễn cầm theo khi gặp một trưởng phòng mua hàng ở bậc 1 của thang pilot — việc

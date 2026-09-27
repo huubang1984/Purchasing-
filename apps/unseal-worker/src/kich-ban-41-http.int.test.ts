@@ -17,6 +17,11 @@
 // PHẦN CHÊNH của A2, nói trước: bộ quét đo PHẢN HỒI, HEADER và LOG BẮT ĐƯỢC của tiến trình api.
 // Nó KHÔNG đo heap, KHÔNG đo APM trace, KHÔNG đo lỗi ở tầng vận chuyển ngoài tiến trình. §4 của ma
 // trận ghi đúng ba vế ấy; ô ✅ của A2 KHÔNG được đọc rộng hơn.
+//
+// [S1.174 / S3.1d] HAI LUỒNG — spec S3 §8.11, cùng khuôn bản gói: mọi bước chạy cho tổ chức CHƯA bật (MVP1, trên bộ điều
+// phối cấu hình MẶC ĐỊNH — cờ ký tắt, đúng máy chủ thật hôm nay) rồi cho tổ chức ĐÃ BẬT (trên bộ điều phối cờ ký BẬT). Luồng
+// S3 khác ở bước 1 — người tài chính khai phiên bản CÓ BẬC, người tài chính thứ hai ký nó QUA ROUTE ký — và ở thân mà bộ
+// quét gửi cho `POST /policy`: tổ chức đã bật từ chối phiên bản không bậc.
 // ==============================================================================================
 import { spawnSync } from "node:child_process";
 import { createHash, createPublicKey } from "node:crypto";
@@ -40,6 +45,8 @@ import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.j
 import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
+// [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
+import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
@@ -86,6 +93,10 @@ let ob: ReturnType<typeof outboxTest>;
 let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
+/** [S1.174 / S3.1d] Máy chủ của luồng S3: cùng CSDL, cùng dịch vụ, cờ ký chính sách BẬT (ADR-105). */
+let serverS3: ReturnType<typeof createApiServer>;
+let gocMacDinh: string;
+let gocS3: string;
 const logLoi: string[] = [];
 
 interface Nguoi {
@@ -282,9 +293,15 @@ const trangThai: {
   gd1: Nguoi;
   gd2: Nguoi;
   taiChinh: Nguoi;
+  /** [S1.174 / S3.1d] Luồng S3: người tài chính THỨ HAI — ký phiên bản mà `taiChinh` khai. */
+  taiChinh2: Nguoi;
   /** [S1.157 / khoản 243] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
   cham: Nguoi;
-} = {
+} = trangThaiMoi();
+
+/** [S1.174 / S3.1d] Trạng thái rỗng của MỘT luồng — `dungToChuc` dựng lại nó trước mỗi luồng. */
+function trangThaiMoi(): typeof trangThai {
+  return {
   rfqId: "",
   loiMoi: [],
   bienNhan: [],
@@ -299,8 +316,10 @@ const trangThai: {
   gd1: { id: "", cookie: "" },
   gd2: { id: "", cookie: "" },
   taiChinh: { id: "", cookie: "" },
+  taiChinh2: { id: "", cookie: "" },
   cham: { id: "", cookie: "" },
-};
+  };
+}
 
 beforeAll(async () => {
   vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -308,7 +327,6 @@ beforeAll(async () => {
   });
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
-  orgA = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty Mua Sam A', 'cong-ty-a') RETURNING id")).rows[0]?.id ?? "";
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
@@ -316,7 +334,26 @@ beforeAll(async () => {
   ob = outboxTest(apiPool, dv.services);
   server = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services }));
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
-  goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  gocMacDinh = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const s3 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, choKyChinhSach: true }));
+  serverS3 = s3;
+  await new Promise<void>((xong) => s3.listen(0, "127.0.0.1", xong));
+  gocS3 = `http://127.0.0.1:${(s3.address() as AddressInfo).port}`;
+}, 240000);
+
+/**
+ * [S1.174 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, máy chủ của luồng, và mọi người đăng nhập qua HTTP như trước —
+ * luồng S3 thêm người tài chính thứ hai. Gọi ở `beforeAll` của từng luồng.
+ */
+async function dungToChuc(batS3: boolean): Promise<void> {
+  goc = batS3 ? gocS3 : gocMacDinh;
+  orgA = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+      batS3 ? ["Cong ty Mua Sam A (S3)", "cong-ty-a-s3"] : ["Cong ty Mua Sam A", "cong-ty-a"],
+    )
+  ).rows[0]?.id ?? "";
+  Object.assign(trangThai, trangThaiMoi());
   trangThai.mua = await dangNhap("mua@vidu.vn", "PROCUREMENT_MANAGER");
   trangThai.pm2 = await dangNhap("pm2@vidu.vn", "PROCUREMENT_MANAGER");
   trangThai.pm3 = await dangNhap("pm3@vidu.vn", "PROCUREMENT_MANAGER");
@@ -324,25 +361,46 @@ beforeAll(async () => {
   trangThai.gd2 = await dangNhap("gd2@vidu.vn", "DIRECTOR");
   // [033 / nợ 44] Ngưỡng phê duyệt kép do FINANCE đặt — PM (người đặt ước lượng, người duyệt) không được.
   trangThai.taiChinh = await dangNhap("taichinh@vidu.vn", "FINANCE");
-}, 240000);
+  if (batS3) trangThai.taiChinh2 = await dangNhap("taichinh2@vidu.vn", "FINANCE");
+}
 
 afterAll(async () => {
   vi.restoreAllMocks();
   await new Promise<void>((xong) => server?.close(() => xong()));
+  await new Promise<void>((xong) => (serverS3 === undefined ? xong() : serverS3.close(() => xong())));
   await apiPool?.end().catch(() => undefined);
   await auditPool?.end().catch(() => undefined);
   await unsealPool?.end().catch(() => undefined);
   await db?.stop();
 });
 
-describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", () => {
+/** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
+const LUONG = [
+  ["MVP1 — tổ chức CHƯA bật S3, cờ ký tắt", false],
+  ["S3 — tổ chức ĐÃ BẬT qua route ký, cờ ký bật", true],
+] as const;
+
+/** [S1.174 / S3.1d] Ma trận bậc mặc định §4.1 và hai cột mức — thân `POST /policy` của luồng S3. */
+const BAC_S3 = { tiers: BAC_MAC_DINH, chiaNhoCuaSoNgay: MUC_MAC_DINH.chiaNhoCuaSoNgay, thamDinhHieuLucThang: MUC_MAC_DINH.thamDinhHieuLucThang };
+
+describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", (_ten, batS3) => {
+  beforeAll(() => dungToChuc(batS3), 240000);
+
   it("bước 1 — người mua dựng RFQ 1 tỷ qua HTTP và nó GIỮ yêu cầu phê duyệt kép", async () => {
     const m = trangThai.mua.cookie;
     expect((await goi("POST", "/policy", m, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND" })).status).toBe(403);
     // [S1.107 / lượt soi ngang 77 — CAO ②] Chính sách NAY khai trọng số qua HTTP. Trước vòng này
     // `createProcurementPolicy` không có đường ghi `eval_components`, nên mọi tổ chức tạo qua
     // sản phẩm đều KHÔNG chấm thầu được — và không cổng nào thấy, vì mọi fixture ghi SQL thẳng.
-    expect((await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 })).status).toBe(201);
+    const cs = await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) });
+    expect(cs.status, cs.text).toBe(201);
+    if (batS3) {
+      // [S1.174 / S3.1d] Luồng S3: người tài chính THỨ HAI ký qua route ký (cờ bật) ⇒ lần ký đầu tiên của một phiên bản có
+      // bậc BẬT S3 cho tổ chức. Mọi bước sau chạy dưới K1: ngân sách dưới đây ghim đúng bản vừa ký.
+      const ky = await goi("POST", `/policy/${(cs.body as { policy: { id: string } }).policy.id}/sign`, trangThai.taiChinh2.cookie);
+      expect(ky.status, ky.text).toBe(201);
+      expect((ky.body as { chuKy: { daBat: boolean } }).chuKy.daBat).toBe(true);
+    }
     const rfq = await goi("POST", "/rfqs", m, { title: "Mua thep tam SS400 quy IV", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
     expect(rfq.status, rfq.text).toBe(201);
     trangThai.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
@@ -350,6 +408,13 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
     expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(true);
+    // [S1.174 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
+    // nào — bậc 2 của §4.1 (từ 1 tỷ) cho ngân sách 1 tỷ ở luồng S3, không bậc ở luồng MVP1.
+    const { rows: hai } = await db.pool.query<{ bat: boolean; bac: string | null }>(
+      "SELECT public.to_chuc_da_bat_s3($1) AS bat, (SELECT tier_tu_so_tien::text FROM rfq_budgets WHERE rfq_id = $2) AS bac",
+      [orgA, trangThai.rfqId],
+    );
+    expect(hai[0]).toEqual(batS3 ? { bat: true, bac: "1000000000.00" } : { bat: false, bac: null });
   });
 
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
@@ -543,7 +608,9 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
           return {
             path: r.path,
-            body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 },
+            // [S1.174 / S3.1d] Tổ chức đã bật từ chối phiên bản không bậc (`069`), nên luồng S3 gửi kèm bậc. Bản v2 ấy CHƯA
+            // KÝ nên không hiệu lực: luồng S3 chấm thầu trên bản 1 — cũng khai trọng số ở bước 1.
+            body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) },
             cookie: trangThai.taiChinh.cookie,
             sau: (ph) => {
               if (ph.status === 201) hy.policyId = (ph.body as { policy: { id: string } }).policy.id;
@@ -552,6 +619,8 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
         // [S1.169 / S3.1c] Lần ký đứng sau cờ triển khai (ADR-105), và bộ điều phối của kịch bản này không khai cờ ⇒ TẮT:
         // lời gọi qua cổng `policy.manage`, tới handler, và dừng ở 409 có tên — không ở một 422 hình dạng. Đích là bản v2 mà
         // ca ngay trên vừa tạo; cờ có mở thì lời gọi cũng dừng ở trigger (bản không bậc), không bật S3 cho tổ chức.
+        // [S1.174 / S3.1d] Luồng S3 chạy trên máy chủ CỜ BẬT: lời gọi tới trigger, và người gọi chính là người khai bản v2
+        // ⇒ 422 *"khong duoc tu ky"* có tên — bản v2 không thành hiệu lực, kịch bản không đổi chính sách giữa chừng.
         case "POST /policy/:policyId/sign":
           return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };
         case "POST /suppliers":
