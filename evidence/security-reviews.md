@@ -13910,3 +13910,13 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
   `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**, `apps/api/src/cau-hinh.test.ts` **36/36**,
   `apps/web/src/chinh-sach.test.ts` **9/9**, `apps/web/src/phuc-vu.test.ts` **18/18**.
 - Số hiệu của vòng do `pnpm cap-so` cấp (ADR-090): **S1.168**, **ADR-105**, **khoản 248**; `pnpm cap-so --kiem` sạch.
+- **Hợp `master` sau khi mở PR.** `master` nhận #172 — khoản 247 đóng, vòng **S1.167**, ADR-104 — lấy đúng số lần cấp đầu đã
+  cho vòng này. Xung đột ở cột mốc, bảng sổ nợ và rổ B của `docs/STATE.md` (gỡ tay: giữ cả hai cột mốc; hàng của vòng này
+  ngay sau hàng 247 của `master`; rổ B **61 → 62**), cùng `Handoff.md`, `docs/DECISIONS.md` và mục nối cuối biên bản (`pnpm
+  cap-so` tự gỡ). Ba dòng mơ hồ: hai nói về vòng này (về số tạm), một nói về S1.167 của `master` ⇒ `pnpm cap-so --mo-ho
+  master`. Kết quả: vòng này là **S1.168**, **ADR-105**, khoản vẫn **248**; `pnpm cap-so --kiem` sạch. #172 thêm hai hàng sổ
+  từ chối do handler — J3, D2 — mà ADR-104 tự nêu là không được đếm vào trần của ADR-092: cùng khe với khoản 248, và hàng
+  ấy nay ghi thêm điều đó. Trên cây đã hợp: `pnpm t0` sạch (426 module, 1666 phụ thuộc); `pnpm test` **116 tệp, 1496 đạt,
+  1 bỏ qua**; bốn tệp tích hợp chạm route người mua và `approveRfq` (#172 đổi chữ ký hàm ấy) — `apps/api/src/buyer.int.test.ts`,
+  `apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`,
+  `packages/rfq/src/rfq.int.test.ts` — **123/123**; phần còn lại do T3 của CI đo trên chính commit hợp.
