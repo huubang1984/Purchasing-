@@ -1897,6 +1897,13 @@ TRƯỚC khi gọi handler. Handler **không nhận `pool`**, và `apps/api/src/
 `routes/**` (cùng khuôn `cong-quyen-route.test.ts`). Quên gắn phiên trở thành **không viết được**,
 không phải "phải nhớ".
 
+**[S1.9101 / lượt soi — ghi muộn]** Mục này đúng cho route khách ĐỌC. Từ S1.10.3, route khách GHI (`mutates: true` —
+`POST /guest/bids`, và từ S1.9101 `POST /guest/logout`) nhận `ctx.client` mở bằng `withTenant` KHÔNG GUC phiên khách, vì kết nối
+gắn phiên khách không ghi được sổ (`apps/api/src/dispatch.ts` khối [S1.10.3] ghi lý do đo được). Trên kết nối ấy policy `AS
+RESTRICTIVE` của 027/028 không khoá theo lời mời; phạm vi của hai route ấy đến từ `guestSessionId` mà bộ điều phối dẫn xuất từ
+cookie và từ việc handler chỉ gọi hàm gói nhận id ấy, không viết SQL tay (`apps/api/src/routes.test.ts`). Quyết định ấy chưa có
+ADR riêng.
+
 Route `audience: "BUYER"` cùng khuôn: `ctx.client` mở bằng `withTenant`, `ctx.actor` là
 `SessionActor` dẫn xuất từ cookie; handler đổi trạng thái **phải** khai `permission`, và bộ điều
 phối gọi `requirePermission` **trước** handler — nên vị từ *"nhắc tới `requirePermission`"* của
@@ -8363,8 +8370,10 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 ## ADR-9201 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101) · **Liên quan:** ADR-020 mục 4
-(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`), ADR-016 (danh tính dẫn xuất, không khai), ADR-107 (Hệ quả —
-tên gói không nói phiên của ai) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+~~(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`)~~ **[S1.9101 / lượt soi]** (route ĐỌC của khách dưới ba GUC;
+vế route GHI dưới `withTenant` không nằm ở ADR-020 mà ở khối [S1.10.3] của `apps/api/src/dispatch.ts`, chưa có ADR), ADR-016
+(danh tính dẫn xuất, không khai), ADR-107 (Hệ quả — tên gói không nói phiên của ai), **[S1.9101]** ADR-9203 (đường quay lại sau khi
+thoát) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
 
 ### Bối cảnh
 
@@ -8394,7 +8403,11 @@ trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả s
 4. **Trang nộp thầu.** Khối hỏi lúc tải nêu tên doanh nghiệp VÀ tên gói; 200 thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với
    thiếu tên gói. Bước 3 có dòng "Doanh nghiệp được mời". Nút **Thoát phiên nộp thầu** ở bước 1 (hiện cùng khối hỏi và suốt lúc
    phiên đang dùng) và ở bước 4; 401 coi như đã thoát (cùng khuôn nút Đăng xuất của ba trang người mua); câu báo nói thẳng rằng
-   muốn nộp tiếp phải xin link mời mới.
+   muốn nộp tiếp phải xin ~~link mời mới~~ **[S1.9101 / ADR-9203]** bên mua gửi lại link mời — link gửi lại đưa về đúng hồ sơ báo
+   giá đã nộp. **[S1.9101 / lượt soi]** Thoát xoá mọi thứ của phiên trước trên màn — gói thầu, bảng giá, dòng tổng, ô mã OTP, biên
+   nhận — và lỗi của nó hiện CẠNH nút đã bấm; biên nhận về muộn sau khi đã thoát bị bỏ; và ngay trước khi niêm phong, trang hỏi lại
+   phiên hiện hành — cookie khách chung cho mọi thẻ, nên một thẻ khác vừa xác minh lời mời của doanh nghiệp khác thì lần nộp ở thẻ
+   này DỪNG thay vì đi vào hồ sơ của doanh nghiệp ấy.
 5. **Không migration, không đổi quyền CSDL.** `app_api` có `UPDATE (revoked_at)` trên `guest_sessions` từ `010`; trigger
    `guest_sessions_thu_hoi_don_dieu` giữ thu hồi đơn điệu như với mọi lần thu hồi khác.
 
@@ -8410,23 +8423,109 @@ trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả s
 ### Hệ quả, nói thẳng
 
 - **Đổi hợp đồng HTTP**: một trường mới ở `GET /guest/rfq`, một route mới. Client không đọc trường mới vẫn chạy. Trang mới gặp API
-  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì.
+  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì. **[S1.9101 / lượt soi]**
+  Và nút Thoát (hiện sau lần xác minh OTP) nhận 404 `khong co duong nay` — nó BÁO LỖI, không thoát được, tới khi API mới lên; lần
+  kiểm phiên trước khi niêm phong gặp API cũ (không có tên doanh nghiệp) thì không chặn nộp, vì tên trên màn cũng rỗng.
 - **Câu tra cookie của MỌI lời gọi khách** nối thêm một bảng theo khoá chính.
 - **Người cầm cookie khách đọc được tên doanh nghiệp được mời.** Chủ lời mời đã biết nó; kẻ cầm cookie trộm thì đã đọc được tên
   gói, hạng mục và nộp được báo giá từ trước — tên doanh nghiệp không mở thêm quyền nào.
-- **Thoát rồi thì chỉ link mới của bên mua đưa nhà cung cấp trở lại**: mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`). Trang
-  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).
+- ~~**Thoát rồi thì chỉ link mới của bên mua đưa nhà cung cấp trở lại**: mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`). Trang
+  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).~~ **[S1.9101 / lượt soi, NẶNG]** Câu vừa gạch
+  hứa một đường không tồn tại: mời lại cùng nhà cung cấp trả 409 (`024`), không route nào phát link cho một lời mời đã có, và thu
+  hồi rồi mời lại là một lời mời MỚI với một luồng báo giá MỚI — người kiểm đo được báo giá cũ vẫn được mở thầu và xếp hạng, nhà
+  cung cấp đứng hai hàng (khoản 9402). Chủ dự án chọn làm đường thật: **ADR-9203** — bên mua gửi lại link cho CHÍNH lời mời, nhà
+  cung cấp về đúng hồ sơ báo giá, lần nộp kế là phiên bản kế. Trang nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau.
 - **Người thấy khối hỏi của phiên người khác thoát được phiên ấy** — chủ ý: đóng một phiên đang để ngỏ trên máy dùng chung. Chủ
-  phiên mất đường vào tới khi có link mới; trước vòng này, người ấy dùng được luôn phiên của họ.
+  phiên mất đường vào tới khi có link mới **[ADR-9203]** bên mua gửi lại; trước vòng này, người ấy dùng được luôn phiên của họ.
 - **Phiên đã chết thì nút Thoát không xoá được cookie** (401 không mang `Set-Cookie`); cookie chết không mở được gì và tự hết theo
   `Max-Age`.
 
 ### Đo
 
-`apps/api/src/guest.int.test.ts` khối `[S1.9101 / ADR-9201]` (Postgres thật, qua HTTP): hai nhà cung cấp cùng một gói thấy hai tên,
+`apps/api/src/guest.int.test.ts` khối `[S1.9101 / ADR-9201]` (Postgres thật; ~~qua HTTP~~ **[lượt soi]** tám ca qua HTTP, hai ca gọi thẳng
+hàm — phiên thu hồi giữa chừng và tổ chức khác; ca đua thu hồi QUA HTTP giữ khoá hàng phiên để câu UPDATE của handler chờ): hai nhà cung cấp cùng một gói thấy hai tên,
 không thấy tên nhau, không thấy mã nhà cung cấp hay người liên hệ; tên đọc lúc gọi; thoát ⇒ 200, cookie xoá cùng bộ thuộc tính,
 cookie cũ 401 ở cả đường đọc lẫn ghi, lời mời không bị thu hồi, đúng một hàng sổ mang người liên hệ đã xác minh, lần thoát thứ hai
 401 không thêm hàng; phiên thứ hai của cùng lời mời và phiên của nhà cung cấp khác vẫn sống; không cookie, cookie rác, magic link
 trong cookie ⇒ 401 không `Set-Cookie` không hàng sổ; phiên bị thu hồi giữa chừng ⇒ `false` không ghi sổ; tổ chức khác ⇒ `false`, và
 khai sai tổ chức ⇒ ném ở câu đầu. `apps/web/src/phuc-vu.test.ts` các ca `[S1.9101]` trên khung `node:vm` của §S1.177. Đột biến và
 Chromium trên cụm thật: §S1.9101.
+
+## ADR-9203 — Bên mua gửi lại link mời cho CHÍNH lời mời còn sống
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn *"làm route gửi lại link ngay"* ngày 2026-09-27, vòng
+S1.9101, sau khi lượt soi đối kháng đo được đường cụt mà ADR-9201 để lại · **Liên quan:** ADR-9201 (thoát phiên khách), ADR-020
+tiểu mục [S1.70 / khoản 124] (link đi SAU commit, phần bù), ADR-015 [C1] (đích đọc từ `supplier_contacts`, không từ thân yêu cầu),
+ADR-016 (danh tính dẫn xuất từ phiên), `024` (một lời mời còn sống cho mỗi nhà cung cấp), khoản 9402 · **Biên bản:**
+`evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Mã trong link mời bị tiêu thụ ở lần xác minh OTP (`[H5]`), phiên khách sống tối đa 4 giờ, và từ ADR-9201 nhà cung cấp tự thoát
+được. Hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (chỉ mục `rfq_invitations_mot_loi_moi_con_song` của `024`), và
+không route nào phát link cho một lời mời đã có — `issueMagicLinkToken` chỉ được gọi trong handler tạo lời mời. Đường duy nhất là
+thu hồi rồi mời lại: một lời mời MỚI và, vì `vendor_bids` duy nhất theo lời mời (`018`), một luồng báo giá MỚI. Người kiểm của
+lượt soi đo trên Postgres thật với worker thật: báo giá của lời mời đã thu hồi vẫn được mở thầu, so sánh và xếp hạng — nhà cung
+cấp đứng hai hàng, giá cũ thắng hạng 1 (khoản 9402). Trong khi ấy trang nộp thầu và chú thích của `revokeGuestSession` hứa *"xin
+bên mua gửi link mời mới"* — một phép sửa không tồn tại, và ADR-9201 biến nó từ đường hiếm (hết 4 giờ) thành đường được khuyên
+sau mỗi lần nộp trên máy dùng chung.
+
+### Quyết định
+
+1. **`POST /invitations/:invitationId/reissue`** — route người mua ghi, mã quyền `rfq.invite` (cùng mã với mời và thu hồi),
+   `resourceType` `INVITATION`.
+2. **`reissueInvitationLink` (`packages/invitation`), một giao dịch, dưới khoá hàng của lời mời** (`FOR UPDATE` trên hàng lời mời — hai lần gửi
+   lại cùng lúc xếp hàng, nên phép đếm trần không đua):
+   - lời mời không tồn tại trong tổ chức đang gắn ⇒ 404 — RLS lọc tổ chức khác thành "không tồn tại", nên không oracle;
+   - lời mời đã thu hồi ⇒ 409 — thu hồi là quyết định loại nhà cung cấp, không phải chỗ để gửi link;
+   - gói thầu không ở `OPEN` hay `BAFO_OPEN` ⇒ 409 — link cho một gói không nhận báo giá là một tin nhắn vô ích;
+   - lời mời đã có `LINK_MOI_TOI_DA_MOI_GIO` = 3 token trong một giờ, KỂ CẢ token của lần mời và token đã thu hồi ⇒ 429 kèm
+     `Retry-After` bằng cả cửa sổ (3600) — mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức;
+   - rồi: thu hồi mọi token CHƯA dùng của lời mời (một lời mời, một link còn dùng được), ghi `INVITATION_LINK_REISSUED` (payload
+     `{revokedTokens}`), phát token mới qua `issueMagicLinkToken` (ghi `MAGIC_LINK_TOKEN_ISSUED`).
+3. **Đích và kênh của CHÍNH lời mời**: người liên hệ `contact_id`, đọc từ `supplier_contacts` như route mời; kênh `link_channel`.
+   **Gửi SAU commit** như route mời (khoản 124). Gửi hỏng hay quá trần ⇒ phần bù `revokeMagicLinkToken` thu hồi ĐÚNG token vừa phát,
+   ghi `MAGIC_LINK_TOKEN_REVOKED` (`{invitationId, reason: "LINK_SEND_FAILED"}`), phản hồi 502; phần bù cũng hỏng ⇒ 500. Lời mời
+   KHÔNG bị thu hồi ở nhánh nào — khác phần bù của route mời: ở đây lời mời đã có hồ sơ báo giá, và người mua bấm gửi lại được ngay.
+4. **Không chạm** phiên khách đang sống, thách thức OTP hay khoá OTP của lời mời — gửi lại không phải thu hồi; gỡ khoá có đường
+   riêng (`POST /invitations/:invitationId/unlock`).
+5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; câu báo sau khi thu hồi nói thẳng báo giá đã
+   nộp theo lời mời ấy vẫn nằm trong gói thầu, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
+   thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
+6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
+   `UPDATE (revoked_at, consumed_at)` trên token (`010`), và UPDATE theo cột trên `rfq_invitations` (`010`, `013`) — đủ cho
+   `FOR UPDATE`.
+
+### Phương án đã cân nhắc
+
+- **Chỉ sửa lời hứa, không route** (khuyến nghị ban đầu) — chủ dự án chọn làm đường thật trong cùng PR.
+- **Gửi lại mà không thu hồi token cũ** — nhiều link sống cho một lời mời; một link lạc (chuyển tiếp, hộp thư dùng chung) vẫn dùng
+  được sau khi bên mua đã gửi link khác.
+- **Thu hồi luôn phiên khách đang sống** — đá người đang nộp trên máy khác ra; thu hồi đã có đường riêng.
+- **Bucket hạn mức mới** (`otp_rate_limits` và một `kind` mới) — cần migration; đếm token của chính lời mời đọc được từ dữ liệu sẵn
+  có và không xoay được bằng chuỗi do người gọi truyền.
+- **Phần bù thu hồi cả lời mời** như route mời — với một lời mời đã có báo giá, đó là loại nhà cung cấp vì một lần gửi thư hỏng.
+
+### Hệ quả, nói thẳng
+
+- **Một đường mới gửi thư hay tin SMS tới người ngoài tổ chức theo nút bấm của người mua**: ai giữ `rfq.invite` (BUYER,
+  PROCUREMENT_MANAGER) bấm được; trần 3 link một giờ cho mỗi lời mời; mỗi lần có hai hàng sổ.
+- **Link cũ chưa dùng hết hiệu lực** khi gửi lại: nhà cung cấp đang giữa bước OTP bằng link cũ thì lần xác minh ấy hỏng — họ dùng
+  link mới.
+- **Gửi hỏng sau commit để nhà cung cấp không còn link nào**: token cũ đã thu hồi trong giao dịch đã commit, token mới bị phần bù thu
+  hồi; bên mua thấy 502 và bấm lại.
+- **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá.
+- **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 9402; vòng này đóng đường KHIẾN người mua
+  phải làm thế, không đổi ngữ nghĩa của thu hồi.
+- **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
+- **Lệch phiên bản**: `/tao-thau` mới gặp API cũ ⇒ 404, nút báo lỗi.
+
+### Đo
+
+`apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.9101 / ADR-9203]` (Postgres thật, qua HTTP, bộ gửi do test điều khiển): token
+mới cho chính lời mời, đúng người liên hệ và kênh, link cũ hết hiệu lực, hai hàng sổ; trần 3/giờ ⇒ 429 + `Retry-After`, không token,
+không gửi, không sổ, token đã thu hồi vẫn bị đếm; ba lần gửi lại cùng lúc ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời
+của tổ chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm `PERMISSION_DENIED`; `assertTenantBound` của hai hàm gói; bộ gửi ném ⇒
+502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. `apps/api/src/guest.int.test.ts` ca `[ADR-9203]`: nộp,
+thoát, bên mua gửi lại qua HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng. `apps/web/src/phuc-vu.test.ts`
+các ca `tao-thau`. Bộ quét route của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` có ca cho route này. Đột biến: §S1.9101.

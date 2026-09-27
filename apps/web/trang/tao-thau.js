@@ -364,6 +364,22 @@ async function napLoiMoi() {
     }
     const td = document.createElement("td");
     if (m.revokedAt === null) {
+      // [S1.9101 / ADR-9203] Nhà cung cấp mất phiên (thoát, hết 4 giờ, đổi máy) thì bên mua GỬI LẠI link cho chính lời mời
+      // này — cùng người liên hệ, cùng kênh, về đúng hồ sơ báo giá đã nộp. Thu hồi rồi mời lại là một lời mời và một luồng
+      // báo giá MỚI, nên không phải đường cho việc này.
+      const guiLai = document.createElement("button");
+      guiLai.className = "phu";
+      guiLai.textContent = "Gửi lại link";
+      guiLai.addEventListener("click", async () => {
+        bao($("loi5"), ""); bao($("ok5"), "");
+        guiLai.disabled = true;
+        const gl = await goi("POST", `/invitations/${m.id}/reissue`);
+        guiLai.disabled = false;
+        if (gl.status === 429) { bao($("loi5"), "Lời mời này đã được gửi đủ số link cho phép trong một giờ — thử lại sau."); return; }
+        if (gl.status !== 200) { bao($("loi5"), loiCua(gl, "Không gửi lại được link")); return; }
+        bao($("ok5"), `Đã gửi link mới tới ${m.contactName} qua ${m.linkChannel}. Link cũ chưa dùng (nếu có) đã hết hiệu lực; ` +
+          "nhà cung cấp vào lại đúng báo giá đã nộp.");
+      });
       const nut = document.createElement("button");
       nut.className = "phu";
       nut.textContent = "Thu hồi";
@@ -371,10 +387,13 @@ async function napLoiMoi() {
         bao($("loi5"), ""); bao($("ok5"), "");
         const th = await goi("POST", `/invitations/${m.id}/revoke`);
         if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
-        bao($("ok5"), "Đã thu hồi. Mời lại nhà cung cấp ấy được rồi.");
+        // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.9101 / ADR-9203] Mời lại sau thu hồi là một hồ sơ báo giá
+        // MỚI, và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ) — nói ra, và chỉ đường gửi lại link.
+        bao($("ok5"), "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) vẫn nằm trong gói thầu. Nhà cung cấp chỉ cần link " +
+          "mới thì dùng «Gửi lại link», đừng thu hồi.");
         await napLoiMoi();
       });
-      td.append(nut);
+      td.append(guiLai, nut);
     }
     tr.append(td);
     tb.append(tr);

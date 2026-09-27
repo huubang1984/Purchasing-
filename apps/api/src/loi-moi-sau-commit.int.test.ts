@@ -17,13 +17,22 @@
 //      mỗi yêu cầu tối đa MỘT việc có bù — đăng ký lần hai là lỗi của handler (64a-2); phần bù chạy trong giao dịch khác giao dịch của
 //      handler, đã gắn tổ chức.
 // ==============================================================================================
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, migrate } from "@trustprocure/db";
-import { InvitationError, revokeInvitation } from "@trustprocure/invitation";
+import {
+  CUA_SO_LINK_MOI_GIAY,
+  InvitationError,
+  LINK_MOI_TOI_DA_MOI_GIO,
+  createInvitation,
+  redeemMagicLink,
+  reissueInvitationLink,
+  revokeInvitation,
+  revokeMagicLinkToken,
+} from "@trustprocure/invitation";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -627,6 +636,217 @@ describe("[S1.70 / khoản 124] POST /rfqs/:rfqId/invitations — link mời đi
     expect(bat.log[1]).toMatch(/^\[api\] [0-9a-f-]{36} bu-sau-commit TenantError CONNECT_WAIT_EXCEEDED$/u);
     expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 1, tokenSong: 1 });
   }, 30000);
+});
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / ADR-9203] Gửi lại link cho CÙNG lời mời — đi trên cùng đường sau commit, cùng bộ gửi do test điều khiển.
+// ---------------------------------------------------------------------------------------------
+/** Thân `502` của route gửi lại khi link không gửi được — lời mời giữ nguyên, chỉ token vừa phát bị thu hồi. */
+const THAN_502_GUI_LAI = { error: "khong gui duoc link moi, link moi da thu hoi" };
+
+async function goiCoHeader(duong: string, cookie: string): Promise<{ status: number; body: string; retryAfter: string | null }> {
+  const res = await fetch(`${gocMacDinh}${duong}`, { method: "POST", headers: { cookie } });
+  return { status: res.status, body: await res.text(), retryAfter: res.headers.get("retry-after") };
+}
+
+async function moiMot(nguoiMoi: Nguoi): Promise<{ readonly ncc: Awaited<ReturnType<typeof nhaCungCap>>; readonly id: string; readonly token: string }> {
+  const ncc = await nhaCungCap();
+  datCheDo("thuong");
+  const r = await goi(gocMacDinh, "POST", `/rfqs/${rfqX}/invitations`, nguoiMoi.cookie, { supplierId: ncc.supplierId, contactId: ncc.contactId });
+  expect(r.status, r.body).toBe(201);
+  return { ncc, id: (JSON.parse(r.body) as { invitation: { id: string } }).invitation.id, token: daGui.at(-1)!.token };
+}
+
+/** `redeemMagicLink` như `/guest/redeem` gọi — token còn dùng được thì trả id lời mời, không thì `null`. */
+async function tokenDungDuoc(token: string): Promise<string | null> {
+  return withTenant(apiPool, orgX, (c) => redeemMagicLink(c, orgX, token)).then(
+    (r) => r.invitationId,
+    (e: unknown) => {
+      if (e instanceof InvitationError) return null;
+      throw e;
+    },
+  );
+}
+
+describe("[S1.9101 / ADR-9203] POST /invitations/:invitationId/reissue — gửi lại link cho CÙNG lời mời", () => {
+  it("token MỚI cho chính lời mời ấy, tới đúng người liên hệ và kênh; link cũ chưa dùng hết hiệu lực; lời mời không đổi; sổ ghi INVITATION_LINK_REISSUED rồi MAGIC_LINK_TOKEN_ISSUED", async () => {
+    const nguoiMoi = await taoNguoi("gl-1-k124@vidu.vn", "BUYER");
+    const { ncc, id, token: cu } = await moiMot(nguoiMoi);
+    expect(await tokenDungDuoc(cu)).toBe(id);
+    const truoc = daGui.length;
+    const r = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    expect(r.status, r.body).toBe(200);
+    expect(JSON.parse(r.body)).toEqual({ reissued: true, revokedLinks: 1 });
+    expect(daGui).toHaveLength(truoc + 1);
+    const moi = daGui.at(-1)!;
+    expect(moi).toMatchObject({ invitationId: id, destination: ncc.email, channel: "EMAIL" });
+    expect(moi.token).not.toBe(cu);
+    expect(r.body).not.toContain(moi.token);
+    expect(await tokenDungDuoc(cu), "link cũ chưa dùng phải hết hiệu lực").toBeNull();
+    expect(await tokenDungDuoc(moi.token)).toBe(id);
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 2, tokenSong: 1 });
+    const suKien = await suKienCuaLoiMoi(id);
+    expect(suKien.map((x) => x.action)).toEqual(["INVITATION_CREATED", "MAGIC_LINK_TOKEN_ISSUED", "INVITATION_LINK_REISSUED", "MAGIC_LINK_TOKEN_ISSUED"]);
+    expect(suKien[2]).toEqual({ action: "INVITATION_LINK_REISSUED", payload: { revokedTokens: 1 }, actorId: nguoiMoi.id });
+    expect(JSON.stringify(suKien)).not.toContain(moi.token);
+  });
+
+  it(`trần ${String(LINK_MOI_TOI_DA_MOI_GIO)} link một giờ, KỂ CẢ link của lần mời: lần vượt ⇒ 429 + Retry-After cả cửa sổ, không token, không gửi, không hàng sổ`, async () => {
+    const nguoiMoi = await taoNguoi("gl-2-k124@vidu.vn", "BUYER");
+    const { ncc, id } = await moiMot(nguoiMoi);
+    for (let i = 1; i < LINK_MOI_TOI_DA_MOI_GIO; i += 1) {
+      const r = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+      expect(r.status, r.body).toBe(200);
+    }
+    const truocGui = daGui.length;
+    const truocSo = (await suKienCuaLoiMoi(id)).length;
+    const vuot = await goiCoHeader(`/invitations/${id}/reissue`, nguoiMoi.cookie);
+    expect(vuot.status, vuot.body).toBe(429);
+    expect(JSON.parse(vuot.body)).toEqual({ error: "da gui qua nhieu link cho loi moi nay" });
+    expect(vuot.retryAfter).toBe(String(CUA_SO_LINK_MOI_GIAY));
+    expect(daGui).toHaveLength(truocGui);
+    expect((await suKienCuaLoiMoi(id)).length).toBe(truocSo);
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: LINK_MOI_TOI_DA_MOI_GIO, tokenSong: 1 });
+    // Token đã thu hồi vẫn bị đếm: dời mốc tạo của cả ba ra ngoài cửa sổ thì gửi lại được ngay.
+    await db.pool.query("UPDATE rfq_invitation_tokens SET created_at = created_at - interval '2 hours' WHERE invitation_id = $1", [id]);
+    expect((await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie)).status).toBe(200);
+  });
+
+  it("ba lần gửi lại CÙNG LÚC khi trần còn hai chỗ ⇒ đúng hai 200 và một 429 — phép đếm chạy dưới khoá hàng của lời mời", async () => {
+    const nguoiMoi = await taoNguoi("gl-3-k124@vidu.vn", "BUYER");
+    const { ncc, id } = await moiMot(nguoiMoi);
+    // Cho ba giao dịch CHỒNG NHAU thật: một kết nối ngoài giữ khoá tư vấn ghi sổ của tổ chức, nên giao dịch đi đầu dừng ở lần
+    // ghi sổ đầu tiên, còn hai giao dịch kia dừng ở khoá hàng lời mời (có khoá) — hay ở hàng token mà giao dịch đầu vừa thu hồi
+    // (không khoá: khi ấy cả ba đã ĐẾM xong và cả ba ra 200). Thả khi thấy đủ ba lời gọi đang chờ.
+    const giu = await db.pool.connect();
+    let kq: PhanHoi[];
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::text, 0))", [orgX]);
+      const hua = Promise.all([0, 1, 2].map(() => goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie)));
+      const het = Date.now() + 5000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_catalog.pg_stat_activity WHERE application_name = 'trustprocure' AND wait_event_type = 'Lock'",
+        );
+        if (rows[0]!.n >= 3) break;
+        if (Date.now() > het) throw new Error(`chỉ ${String(rows[0]!.n)} lời gọi đang chờ`);
+        await ngu(20);
+      }
+      await giu.query("COMMIT");
+      kq = await hua;
+    } finally {
+      giu.release();
+    }
+    expect(kq.map((r) => r.status).sort()).toEqual([200, 200, 429]);
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 3, tokenSong: 1 });
+  });
+
+  it("lời mời đã thu hồi ⇒ 409; id không tồn tại hay của tổ chức KHÁC ⇒ 404; gói không nhận báo giá ⇒ 409; không giữ rfq.invite ⇒ 403 — không lần nào phát token hay gửi", async () => {
+    const nguoiMoi = await taoNguoi("gl-4-k124@vidu.vn", "BUYER");
+    const { id } = await moiMot(nguoiMoi);
+    expect((await goi(gocMacDinh, "POST", `/invitations/${id}/revoke`, nguoiMoi.cookie)).status).toBe(200);
+    const truocGui = daGui.length;
+    const daThuHoi = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    expect(daThuHoi.status, daThuHoi.body).toBe(409);
+    expect(JSON.parse(daThuHoi.body)).toEqual({ error: "loi moi da thu hoi" });
+    expect((await goi(gocMacDinh, "POST", `/invitations/${randomUUID()}/reissue`, nguoiMoi.cookie)).status).toBe(404);
+
+    // Tổ chức khác: một lời mời thật của Y, gọi bằng người mua của X ⇒ RLS lọc thành "không tồn tại".
+    const orgY = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty Y K124', 'cong-ty-y-k124') RETURNING id")).rows[0]!.id;
+    const uY = (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, 'pm-y@vidu.vn', 'PM Y') RETURNING id", [orgY])).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [orgY, uY]);
+    const sY = (await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [orgY, uY, randomBytes(32)],
+    )).rows[0]!.id;
+    const nccY = (await db.pool.query<{ id: string }>("INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC Y', $2, $3) RETURNING id", [orgY, uY, sY])).rows[0]!.id;
+    const lhY = (await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'LH Y', 'lh-y@vidu.vn', $3, $4) RETURNING id",
+      [orgY, nccY, uY, sY],
+    )).rows[0]!.id;
+    const rfqY = (await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) VALUES ($1, 'RFQ Y', now() + interval '7 days', false, $2, $3) RETURNING id",
+      [orgY, uY, sY],
+    )).rows[0]!.id;
+    const loiY = await withTenant(apiPool, orgY, (c) => createInvitation(c, orgY, { rfqId: rfqY, supplierId: nccY, contactId: lhY, actorSessionId: sY }));
+    const xuyen = await goi(gocMacDinh, "POST", `/invitations/${loiY.id}/reissue`, nguoiMoi.cookie);
+    expect(xuyen.status, xuyen.body).toBe(404);
+
+    // Gói chưa mở (DRAFT) — createInvitation không xét trạng thái gói, nên lời mời ấy có thật; gửi lại thì không.
+    const rfqDraftX = (await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) VALUES ($1, 'RFQ nhap K124', now() + interval '7 days', false, $2, $3) RETURNING id",
+      [orgX, pm.id, pm.sessionId],
+    )).rows[0]!.id;
+    const nccNhap = await nhaCungCap();
+    const loiNhap = await withTenant(apiPool, orgX, (c) =>
+      createInvitation(c, orgX, { rfqId: rfqDraftX, supplierId: nccNhap.supplierId, contactId: nccNhap.contactId, actorSessionId: pm.sessionId }),
+    );
+    const nhap = await goi(gocMacDinh, "POST", `/invitations/${loiNhap.id}/reissue`, nguoiMoi.cookie);
+    expect(nhap.status, nhap.body).toBe(409);
+    expect(JSON.parse(nhap.body)).toEqual({ error: "goi thau khong nhan bao gia" });
+
+    const taiChinh = await taoNguoi("gl-4-tc-k124@vidu.vn", "FINANCE");
+    const { id: idSong } = await moiMot(nguoiMoi);
+    const truocGui2 = daGui.length;
+    const cam = await goi(gocMacDinh, "POST", `/invitations/${idSong}/reissue`, taiChinh.cookie);
+    expect(cam.status, cam.body).toBe(403);
+    expect(daGui).toHaveLength(truocGui2);
+    expect(daGui.length - truocGui).toBe(1); // chỉ lần mời `idSong`, không lần gửi lại nào
+    const { rows: tuChoi } = await db.pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED' AND actor_id = $2",
+      [orgX, taiChinh.id],
+    );
+    expect(tuChoi[0]!.n).toBe(1);
+  });
+
+  it("hai hàm gói ném ở câu ĐẦU khi kết nối gắn tổ chức khác tổ chức khai (`assertTenantBound`); phần bù từ chối lý do ngoài danh sách LÚC CHẠY", async () => {
+    const nguoiMoi = await taoNguoi("gl-6-k124@vidu.vn", "BUYER");
+    const { ncc, id } = await moiMot(nguoiMoi);
+    const khac = randomUUID();
+    await expect(withTenant(apiPool, orgX, (c) => reissueInvitationLink(c, khac, { invitationId: id, actorSessionId: nguoiMoi.sessionId }))).rejects.toThrow(
+      /^reissueInvitationLink: /u,
+    );
+    const { rows } = await db.pool.query<{ id: string }>("SELECT id FROM rfq_invitation_tokens WHERE invitation_id = $1", [id]);
+    await expect(
+      withTenant(apiPool, orgX, (c) => revokeMagicLinkToken(c, khac, { tokenId: rows[0]!.id, invitationId: id, actorSessionId: nguoiMoi.sessionId, reason: "LINK_SEND_FAILED" })),
+    ).rejects.toThrow(/^revokeMagicLinkToken: /u);
+    await expect(
+      withTenant(apiPool, orgX, (c) =>
+        revokeMagicLinkToken(c, orgX, { tokenId: rows[0]!.id, invitationId: id, actorSessionId: nguoiMoi.sessionId, reason: "LY_DO_LA" as "LINK_SEND_FAILED" }),
+      ),
+    ).rejects.toBeInstanceOf(InvitationError);
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 1, tokenSong: 1 });
+  });
+
+  it("bộ gửi NÉM ⇒ 502 thân cố định, token vừa phát bị thu hồi với lý do LINK_SEND_FAILED, lời mời vẫn sống; MỘT dòng log không mang token hay email; gửi lại ⇒ 200", async () => {
+    const nguoiMoi = await taoNguoi("gl-5-k124@vidu.vn", "BUYER");
+    const { ncc, id } = await moiMot(nguoiMoi);
+    datCheDo("nem");
+    const bat = batLog();
+    let r: PhanHoi;
+    try {
+      r = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    } finally {
+      bat.tra();
+    }
+    expect(r.status, r.body).toBe(502);
+    expect(JSON.parse(r.body)).toEqual(THAN_502_GUI_LAI);
+    expect(bat.log).toHaveLength(1);
+    expect(bat.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} sau-commit LoiGuiGiaLap$/u);
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 2, tokenSong: 0 });
+    const suKien = await suKienCuaLoiMoi(id);
+    expect(suKien.map((x) => x.action)).toEqual([
+      "INVITATION_CREATED", "MAGIC_LINK_TOKEN_ISSUED", "INVITATION_LINK_REISSUED", "MAGIC_LINK_TOKEN_ISSUED", "MAGIC_LINK_TOKEN_REVOKED",
+    ]);
+    expect(suKien.at(-1)).toEqual({ action: "MAGIC_LINK_TOKEN_REVOKED", payload: { invitationId: id, reason: "LINK_SEND_FAILED" }, actorId: nguoiMoi.id });
+
+    datCheDo("thuong");
+    const lai = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    expect(lai.status, lai.body).toBe(200);
+    expect(JSON.parse(lai.body)).toEqual({ reissued: true, revokedLinks: 0 });
+    expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 3, tokenSong: 1 });
+  });
 });
 
 describe("[S1.70 / khoản 124] bộ điều phối: việc sau commit CÓ BÙ, trên route giả", () => {

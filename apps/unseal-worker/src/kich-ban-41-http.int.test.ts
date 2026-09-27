@@ -596,6 +596,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { orgId: orgA, token: tokenGia, code: "000000" }, cookie: "" };
         case "POST /guest/bids":
           return { path: r.path, body: { envelope: Buffer.from(phongBiHy).toString("base64") }, cookie: kHy };
+        // [S1.9101 / ADR-9201] Thoát phiên khách HY SINH — sau lần nộp của nó (bảng route đặt route thoát sau route nộp; nếu thứ
+        // tự đổi, lần nộp ở trên gặp 401, không phải 422 hình dạng). Không đụng phiên của kịch bản.
+        case "POST /guest/logout":
+          return { path: r.path, body: {}, cookie: kHy };
         case "POST /policy":
           // [S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
@@ -644,6 +648,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":invitationId", UUID0), body: { reason: "thu hoi de quet" }, cookie: m };
         case "POST /invitations/:invitationId/unlock":
           return { path: r.path.replace(":invitationId", UUID0), body: { reason: "mo khoa de quet" }, cookie: m };
+        // [S1.9101 / ADR-9203] Gửi lại link cho lời mời HY SINH — tới nghiệp vụ (200, hay 409 nếu gói hy sinh đã đóng), không chạm
+        // lời mời nào của kịch bản.
+        case "POST /invitations/:invitationId/reissue":
+          return { path: r.path.replace(":invitationId", (lmHy.body as { invitation: { id: string } }).invitation.id), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/unseal":
           return {
             path: r.path.replace(":rfqId", hyA),

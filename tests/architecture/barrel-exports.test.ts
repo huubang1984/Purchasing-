@@ -558,9 +558,12 @@ const DANH_SACH_TRANG_INVITATION = [
   // [khoản nợ 37] Đường RA của khoá cấp-lời-mời. Xem khối chú thích của chính hàm.
   "clearOtpLockout",
   "CHANNELS",
+  // [S1.9101 / ADR-9203] Cửa sổ và trần của lần gửi lại link mời — hai hằng số, route người mua đọc cho `Retry-After`.
+  "CUA_SO_LINK_MOI_GIAY",
   "GUEST_SESSION_MAX_TTL_SECONDS",
   "GUEST_SESSION_TOKEN_BYTES",
   "InvitationError",
+  "LINK_MOI_TOI_DA_MOI_GIO",
   "MAGIC_LINK_MAX_TTL_SECONDS",
   "MAGIC_LINK_TOKEN_BYTES",
   "OTP_LOCKOUT_SECONDS",
@@ -589,6 +592,11 @@ const DANH_SACH_TRANG_INVITATION = [
   // than ham, va no o ro HAM_DOC_CO_QUYEN cua cong-quyen-route.test.ts.
   "listInvitations",
   "redeemMagicLink",
+  // [S1.9101 / ADR-9203] Phát token MỚI cho một lời mời còn sống, dưới phiên NGƯỜI MUA — cùng hình dạng
+  // `issueMagicLinkToken`: token dạng rõ chỉ về tay người gọi để trao cho bộ gửi, không trả phiên.
+  "reissueInvitationLink",
+  // [S1.9101 / ADR-9203] Phần bù khi gửi lại hỏng: thu hồi đúng một token theo id; trả boolean.
+  "revokeMagicLinkToken",
   // [ADR-020 / S1.10.2] Nhận TOKEN PHIÊN KHÁCH (thứ chỉ tồn tại SAU khi OTP đã đối chiếu) và trả
   // `guest_sessions.id` cho `withGuestSession`. Nó KHÔNG nhận magic link và KHÔNG mở phiên — tức
   // không phải ca "nhận token, trả phiên" mà khối chú thích trên cảnh báo; nó chỉ tra một phiên

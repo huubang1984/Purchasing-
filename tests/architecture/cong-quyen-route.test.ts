@@ -73,8 +73,12 @@ const HAM_DOI_TRANG_THAI = [
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
   "openRfq",
+  // [S1.9101 / ADR-9203] Gửi lại link cho một lời mời còn sống: thu hồi token chưa dùng, phát token mới — route đòi
+  // `rfq.invite` như hai route mời và thu hồi; phần bù thu hồi đúng token vừa phát, dưới cùng mã quyền.
+  "reissueInvitationLink",
   "requestUnseal",
   "revokeInvitation",
+  "revokeMagicLinkToken",
   "setRfqBudget",
   "submitRfqForApproval",
 ] as const;

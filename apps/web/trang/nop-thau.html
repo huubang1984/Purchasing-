@@ -83,9 +83,12 @@
     <div class="ma" id="van-ban"></div>
     <div class="ma" id="chu-ky"></div>
     <button id="nut-lai" class="phu">Nộp bản sửa đổi</button>
-    <p class="ghi">Nộp xong trên một máy dùng chung thì thoát phiên. Thoát rồi, muốn sửa báo giá phải xin bên mua gửi
-      link mời mới — link cũ đã dùng khi xác minh.</p>
+    <!-- [S1.9101 / ADR-9203] Đường quay lại sau khi thoát là link bên mua GỬI LẠI cho chính lời mời này — về đúng hồ sơ
+         báo giá đã nộp, lần nộp kế là bản sửa đổi của nó. -->
+    <p class="ghi">Nộp xong trên một máy dùng chung thì thoát phiên. Thoát rồi, muốn sửa báo giá thì xin bên mua gửi lại
+      link mời — link gửi lại đưa về đúng báo giá này; link cũ đã dùng khi xác minh.</p>
     <button id="nut-thoat-bn" class="phu">Thoát phiên nộp thầu</button>
+    <div class="bao loi" id="loi4" hidden></div>
   </section>
 
   <footer class="chan">Lát cắt demo — giá được mã hoá trong trình duyệt, máy chủ không đọc được.</footer>

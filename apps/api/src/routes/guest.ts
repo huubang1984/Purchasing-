@@ -1,7 +1,11 @@
 // ==============================================================================================
-// Route KHÁCH — nhà cung cấp đã qua magic link + OTP. `ctx.client` ĐÃ gắn phiên khách, nên mọi
-// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời. Handler không
-// có cách nào nới điều đó: nó không có pool, không có `withTenant`, không có `node:http`.
+// Route KHÁCH — nhà cung cấp đã qua magic link + OTP. ~~`ctx.client` ĐÃ gắn phiên khách, nên mọi
+// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời.~~ **[S1.9101 / lượt soi]** Đúng cho
+// route ĐỌC: `ctx.client` đã gắn phiên khách, và mọi câu SQL tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một
+// lời mời. Hai route GHI (`POST /guest/bids`, `POST /guest/logout`) chạy trên kết nối CHỈ gắn tổ chức (`dispatch.ts` khối
+// [S1.10.3]) — trên kết nối ấy policy không khoá theo lời mời, nên phạm vi của chúng đến từ id mà bộ điều phối dẫn xuất
+// từ cookie và từ việc handler chỉ gọi hàm gói nhận id ấy, không viết SQL tay. Handler không có cách nào nới điều đó: nó
+// không có pool, không có `withTenant`, không có `node:http`.
 //
 //   GET  /guest/session                       phiên đang cầm là gì (route đo khung của S1.10.2)
 //   GET  /guest/rfq                           gói thầu được mời: hạng mục + khoá CÔNG KHAI, KHÔNG ngân sách;
