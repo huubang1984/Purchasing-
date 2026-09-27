@@ -62,11 +62,23 @@ function docLink() {
   // Link gieo ra mang `#<mã tổ chức>:<mã đăng nhập>` — đường xác thực là đường VÔ DANH, nên máy
   // chủ không biết người gọi thuộc tổ chức nào cho tới khi client nói ra. Bản đầu của trang này
   // chỉ đọc token và lượt chạy thử đầu tiên trả về đúng câu `thiếu trường "orgId"`.
+  //
+  // [S1.9101 / ADR-9201] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
+  // trơn — link của tin báo người duyệt khi hạn mức chặn mã đăng nhập. Nó điền ô tổ chức và XOÁ ô mã (mã
+  // của người trước không được đứng lại), để ô xin link bên dưới dùng được ngay.
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   const i = h.indexOf(":");
-  if (i <= 0) { if (h !== "") $("token").value = h; return; }
-  $("org").value = h.slice(0, i);
-  $("token").value = h.slice(i + 1);
+  if (i > 0) {
+    $("org").value = h.slice(0, i);
+    $("token").value = h.slice(i + 1);
+    return;
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(h)) {
+    $("org").value = h;
+    $("token").value = "";
+    return;
+  }
+  if (h !== "") $("token").value = h;
 }
 
 $("nut-vao").addEventListener("click", async () => {
@@ -121,6 +133,29 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b8"), true);
   } finally {
     $("nut-vao").disabled = false;
+  }
+});
+
+// [S1.9101 / ADR-9201] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
+// không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
+// máy chủ cố ý không nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi.
+$("nut-xin-link").addEventListener("click", async () => {
+  bao($("loi-link"), ""); bao($("ok-link"), "");
+  const orgId = $("org").value.trim();
+  const email = $("email").value.trim();
+  if (orgId === "" || email === "") { bao($("loi-link"), "Cần mã tổ chức và email."); return; }
+  $("nut-xin-link").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/link", { orgId, email });
+    if (r.status === 200) {
+      bao($("ok-link"), "Nếu email này thuộc tổ chức, một link đăng nhập vừa được gửi tới đó. Link dùng một lần và có hạn — mở nó trên máy này.");
+    } else if (r.status === 429) {
+      bao($("loi-link"), "Đã xin quá nhiều link trong ít phút. Đợi một lúc rồi thử lại.");
+    } else {
+      bao($("loi-link"), loiCua(r, "Không gửi được yêu cầu"));
+    }
+  } finally {
+    $("nut-xin-link").disabled = false;
   }
 });
 
@@ -565,7 +600,7 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 window.addEventListener("hashchange", () => {
   docLink();
   phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh"]) {
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh", "loi-link", "ok-link"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }

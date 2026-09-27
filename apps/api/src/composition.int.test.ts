@@ -310,7 +310,9 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     const link = new URL(t0.duongLink);
     expect(link.origin + link.pathname).toBe("http://localhost:3000/login");
     expect(link.search).toBe("");
-    const token = link.hash.slice(1);
+    // [ADR-9201] Fragment là `<orgId>:<token>` — đúng dạng trang `/login` đọc, và tổ chức là tổ chức của tin.
+    const [orgTrongLink, token = ""] = link.hash.slice(1).split(":");
+    expect(orgTrongLink).toBe(org);
     expect(token.length).toBeGreaterThan(20);
 
     const r2 = await goi("POST", "/auth/redeem", { body: { orgId: org, token } });
@@ -367,7 +369,7 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     const tin = (await doiHopThu(2)).filter((t) => t.loai === "LOGIN_LINK");
     const t = tin.at(-1)!;
     if (t.loai !== "LOGIN_LINK") throw new Error("phai la LOGIN_LINK");
-    const token = new URL(t.duongLink).hash.slice(1);
+    const [, token = ""] = new URL(t.duongLink).hash.slice(1).split(":");
     const rd = await goi("POST", "/auth/redeem", { body: { orgId: org, token } });
     expect((rd.body as { needsEnrollment: boolean }).needsEnrollment).toBe(false);
     // Bí mật TOTP đã có (hồ sơ đã xác nhận ở test trước): đọc lại từ hộp thư không được — bí mật chỉ về client một lần.

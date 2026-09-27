@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -112,6 +113,49 @@ describe("bề mặt tệp", () => {
     // Đối chứng dương: nếu biểu thức này khớp 0 lần thì vế dưới đúng một cách rỗng tuếch.
     expect(duong.length, "không đọc được dạng link nào ở hop-thu-dev.ts").toBeGreaterThanOrEqual(3);
     for (const d of new Set(duong)) expect(Object.keys(TRANG), d).toContain(d);
+  });
+
+  // ============================================================================================
+  // [S1.9101 / ADR-9201] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
+  //
+  // Khoản 198 đóng ở S1.99 với hai lời khai mà vòng này đo là sai cho kênh thật: `nop-thau.js` bỏ qua
+  // fragment không có dấu hai chấm (không điền cả ô mã), và thân thư của SES, SMS, Zalo không mang
+  // `orgId` — chỉ bản ghi JSON của hộp thư dev có. Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang
+  // đòi thứ người nhận không có. Vế dưới nối hai phía: đọc VĂN BẢN của ba bộ gửi, và CHẠY `docLink()` của
+  // trang đích trên đúng dạng ấy.
+  // ============================================================================================
+  it("[ADR-9201] mọi link của ba bộ gửi mang `<orgId>:<token>` (hoặc `<orgId>` trơn ở tin báo không mã)", () => {
+    const tep = ["hop-thu-dev.ts", "gui-ses.ts", "kenh-so.ts"];
+    const link: { tep: string; duong: string; manh: string }[] = [];
+    for (const t of tep) {
+      const nguon = readFileSync(new URL(`../../api/src/adapters/${t}`, import.meta.url), "utf8");
+      for (const m of nguon.matchAll(/\$\{[A-Za-z]+\.baseUrl\}(\/[a-z0-9-]*)(#\$\{[^}]*\}(?::\$\{[^}]*\})?)?/gu)) {
+        link.push({ tep: t, duong: m[1] ?? "", manh: m[2] ?? "" });
+      }
+    }
+    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số.
+    expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(8);
+    for (const l of link) {
+      const hopLe = l.manh === "#${m.orgId}:${m.token}" || (l.duong === "/login" && l.manh === "#${m.orgId}");
+      expect(hopLe, `${l.tep}: ${l.duong}${l.manh}`).toBe(true);
+    }
+  });
+
+  it("[ADR-9201] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
+    const ORG = "11111111-1111-4111-8111-111111111111";
+    const chay = (trang: string, hash: string, truoc: { org: string; token: string }) => {
+      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
+      const ham = /^function docLink\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
+      expect(ham, `${trang}.js không còn hàm docLink`).toBeDefined();
+      const o = { org: { value: truoc.org }, token: { value: truoc.token } };
+      runInNewContext(`${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent });
+      return { org: o.org.value, token: o.token.value };
+    };
+    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau"]) {
+      expect(chay(trang, `#${ORG}:tokTokTokTokTokTok_-1`, { org: "", token: "" }), trang).toEqual({ org: ORG, token: "tokTokTokTokTokTok_-1" });
+    }
+    expect(chay("mo-thau", `#${ORG}`, { org: "", token: "ma-cu-cua-nguoi-truoc" })).toEqual({ org: ORG, token: "" });
+    expect(chay("mo-thau", "#chiCoMaTronKhongCoToChuc", { org: "go-tay", token: "" })).toEqual({ org: "go-tay", token: "chiCoMaTronKhongCoToChuc" });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {

@@ -453,7 +453,7 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   if (r.status !== 200) throw new PilotError(`/auth/link trả ${r.status} — cụm có đang chạy không?`);
   const tin = await hopThu.cho(`link đăng nhập của ${email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === tc.orgId && t.den === email);
   if (tin.loai !== "LOGIN_LINK") throw new PilotError("tin sai loại");
-  const token = tokenTuLink(tin.duongLink);
+  const token = tokenTuLink(tin.duongLink, tin.orgId);
   const web = `http://127.0.0.1:${ts.cong.web}`;
   viet(`${n.hoTen} — ${n.chucDanh} (${n.vai}) · ${tc.ten} · tổ chức ${tc.orgId}`);
   if (khop.length > 1) {

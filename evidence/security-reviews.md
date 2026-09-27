@@ -14121,3 +14121,59 @@ Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 
 ## 6. Số
 
 Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+
+# §S1.9101 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27, gộp cả ba kênh gửi (ADR-9201, sửa dạng link của ADR-020 mục 3). Hai chỗ hở, đo trên `master`
+`d506bf2`:
+
+- Mọi link bộ gửi THẬT dựng ra thiếu mã tổ chức mà trang đích đòi. `gui-ses.ts` dựng `/login#<token>` và `/i#<token>`,
+  `kenh-so.ts` dựng `/i#<token>` cho SMS và Zalo; thân thư và tin nhắn không mang `orgId` ở chỗ nào khác. `/auth/redeem` và
+  `/guest/redeem` đòi `{orgId, token}`. `apps/web/trang/nop-thau.js` còn bỏ qua fragment không có dấu hai chấm — không điền
+  cả ô mã. Khoản 198 đóng ở S1.99 với lời khai ngược lại (trang tự điền, *"tin nhắn mang sẵn `orgId` trong thân"*): đúng cho
+  bản ghi JSON của hộp thư dev, sai cho SES, SMS, ZNS.
+- Không trang nào gọi `POST /auth/link` (`grep -rn "auth/link" apps/web/trang` ⇒ 0 dòng). Magic link là đường vào duy nhất
+  của người mua, nên người dùng trên prod không tự đăng nhập được lần nào — không chỉ lần đầu.
+
+## 2. Thay đổi
+
+- `apps/api/src/adapters/gui-ses.ts`, `hop-thu-dev.ts`, `kenh-so.ts`: tám chỗ dựng link nay mang `${m.orgId}:${m.token}` ở
+  fragment; tin báo người duyệt không mã qua SES mang `/login#${m.orgId}`. Hộp thư dev giữ `duongLink: null` cho tin ấy.
+- `apps/web/trang/mo-thau.html` + `mo-thau.js` (trang `/login`): `docLink()` đọc thêm `#<orgId>` trơn — điền ô tổ chức, xoá
+  ô mã; ô *Gửi link đăng nhập* gọi `POST /auth/link`, một câu cho mọi 200, câu riêng cho 429, `loiCua` cho phần còn lại.
+- `tools/pilot-gia-lap/src/hop-thu.ts`: `tokenTuLink(duongLink, orgId)` đòi fragment `<orgId>:<token>` với `orgId` là tổ
+  chức của tin; ba chỗ gọi truyền `tin.orgId`.
+- Test: `gui-ses.test.ts`, `hop-thu-dev.test.ts`, `kenh-so.test.ts`, `composition.int.test.ts` (tổ chức trong link là tổ chức
+  của tin), `phu-tro.test.ts`; hai test mới ở `apps/web/src/phuc-vu.test.ts` — ⑴ đọc văn bản ba bộ gửi, đòi đúng tám chỗ dựng
+  link, mỗi chỗ mang `#${m.orgId}:${m.token}` (hoặc `#${m.orgId}` ở `/login`); ⑵ chạy `docLink()` của bốn trang trong
+  `node:vm` trên dạng ấy, và hai dạng riêng của `/login`.
+
+## 3. Đo
+
+- Đột biến trả `kenh-so.ts` về `/i#${m.token}` ⇒ 2 đỏ (test mới ⑴ và `kenh-so.test.ts`). Đột biến bỏ lần xoá ô mã ở
+  `docLink()` của `/login` ⇒ 1 đỏ (test mới ⑵).
+- `apps/api/src/composition.int.test.ts` trên Postgres thật: 19/19.
+- Pilot giả lập trên CSDL mới (`pnpm pilot:gia-lap --dung-sau`): 10/10 kịch bản ĐẠT, cô lập 2/2 (đối chứng 2/2). Mọi lần đăng
+  nhập và mọi lời mời của lượt chạy đi qua `tokenTuLink` mới, tức qua link dạng `<orgId>:<token>` của hộp thư dev.
+- Chromium 1194 (Playwright) trên cụm thật của lượt ấy, người dùng *Trưởng phòng Mua hàng* của tổ chức SX:
+  `/login#<org>` ⇒ ô tổ chức điền, ô mã rỗng; email lạ ⇒ câu báo; email thật ⇒ ĐÚNG câu ấy; hộp thư dev: một thư cho email
+  thật, 0 thư cho email lạ; thư mang `/login#<org>:<token>`; mở nó ⇒ hai ô điền; TOTP ⇒ *"Đã vào với người dùng…"*; 0 lỗi
+  JavaScript trên trang.
+- `pnpm t0`, `pnpm test`, `pnpm cap-so --kiem`: xem mục 5.
+
+## 4. Giới hạn
+
+- Tin SMS lời mời thành hai đoạn: 138–153 ⇒ 175–190 ký tự GSM-7 tuỳ tên miền (thân của `gui-sms.ts`, token 43 ký tự,
+  `orgId` 36 + `:`). Chủ dự án chọn trả.
+- Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-9201,
+  chưa vào sổ nợ.
+- `/tao-thau` và `/chinh-sach` không có ô xin link.
+- Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa. Dấu hai chấm hợp lệ trong fragment
+  (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để trình tự nhận diện không
+  cắt mất ký tự cuối.
+
+## 5. Số
+
+Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.
