@@ -117,7 +117,7 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.174 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
+  // [S1.175 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
   //
   // Khoản 198 đóng ở S1.99 với hai lời khai mà vòng này đo là sai cho kênh thật: `nop-thau.js` bỏ qua
   // fragment không có dấu hai chấm (không điền cả ô mã), và thân thư của SES, SMS, Zalo không mang
@@ -186,7 +186,7 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.175] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+  // [S1.176] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
   //
   // Phiên là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một
   // lần — trước vòng này mỗi trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới.
@@ -200,7 +200,7 @@ describe("bề mặt tệp", () => {
   // nút, trình nghe hashchange đều chạy như trên trình duyệt. Import `/lib/*` được thay bằng hàm rỗng — vế này
   // không đo tiền hay mật mã.
   // ============================================================================================
-  describe("[S1.175] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
+  describe("[S1.176] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
     const BUOC: Record<string, readonly string[]> = {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
@@ -245,7 +245,7 @@ describe("bề mặt tệp", () => {
     interface TuyChon {
       hash: string;
       cookie: Phien | null;
-      /** [S1.9103] Trình duyệt có giữ cookie khách `__Host-tp_guest` còn hạn không (trang nộp thầu). */
+      /** [S1.177] Trình duyệt có giữ cookie khách `__Host-tp_guest` còn hạn không (trang nộp thầu). */
       khach?: boolean;
       /** Ai được cookie sau `/auth/totp` thành công. */
       nguoiVao?: Phien;
@@ -462,7 +462,7 @@ describe("bề mặt tệp", () => {
       expect(p.loc.hash).toBe("");
     });
 
-    // [S1.9103] Trang nộp thầu hỏi lại phiên khách lúc tải — mã lời mời đã bị tiêu thụ ở lần xác minh, nên
+    // [S1.177] Trang nộp thầu hỏi lại phiên khách lúc tải — mã lời mời đã bị tiêu thụ ở lần xác minh, nên
     // trước vòng này tải lại trang là mất đường vào tới khi bên mua mời lại.
     const moBuoc3 = (p: Awaited<ReturnType<typeof dungTrang>>) => p.el("b3").hidden === false;
     const REDEEM = (l: string) => (l === "POST /guest/redeem" ? Promise.resolve({ status: 200, body: { linkChannel: "EMAIL", otpChannels: ["SMS"] } }) : undefined);
@@ -476,7 +476,7 @@ describe("bề mặt tệp", () => {
       return { g, thay };
     };
 
-    it("[S1.9103] nop-thau: có phiên khách còn hạn ⇒ HỎI, nêu tên gói thầu, không tự mở; Tiếp tục ⇒ bước 3", async () => {
+    it("[S1.177] nop-thau: có phiên khách còn hạn ⇒ HỎI, nêu tên gói thầu, không tự mở; Tiếp tục ⇒ bước 3", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
       expect(p.trangThai.goi).toEqual(["GET /guest/rfq"]);
       expect(moBuoc3(p), "bảng giá không được tự mở dưới một phiên chưa ai nhận").toBe(false);
@@ -494,7 +494,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên nộp thầu còn hạn/u);
     });
 
-    it("[S1.9103] nop-thau: link mời mang mã ⇒ KHÔNG hỏi phiên khách — thứ tự docLink() rồi thuPhienKhach() ở cấp tệp", async () => {
+    it("[S1.177] nop-thau: link mời mang mã ⇒ KHÔNG hỏi phiên khách — thứ tự docLink() rồi thuPhienKhach() ở cấp tệp", async () => {
       const p = await dungTrang("nop-thau", { hash: `#${ORG}:maLoiMoiMoi`, cookie: null, khach: true });
       expect(p.el("token").value).toBe("maLoiMoiMoi");
       expect(p.trangThai.goi).toEqual([]);
@@ -502,7 +502,7 @@ describe("bề mặt tệp", () => {
       expect(moBuoc3(p)).toBe(false);
     });
 
-    it("[S1.9103] nop-thau: không phiên khách (401), mất mạng, 200 thiếu tên gói hay 403 ⇒ không hỏi, và Tiếp tục không mở gì", async () => {
+    it("[S1.177] nop-thau: không phiên khách (401), mất mạng, 200 thiếu tên gói hay 403 ⇒ không hỏi, và Tiếp tục không mở gì", async () => {
       const lay = (r: Promise<{ status: number; body: unknown }>) => (l: string) => (l === "GET /guest/rfq" ? r : undefined);
       const cacCa = [
         await dungTrang("nop-thau", { hash: "", cookie: null }),
@@ -519,7 +519,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.9103] nop-thau: phiên chết trong lúc khối hỏi nằm chờ ⇒ Tiếp tục báo ở bước 1, KHÔNG mở bước 3 rỗng", async () => {
+    it("[S1.177] nop-thau: phiên chết trong lúc khối hỏi nằm chờ ⇒ Tiếp tục báo ở bước 1, KHÔNG mở bước 3 rỗng", async () => {
       let lan = 0;
       const p = await dungTrang("nop-thau", {
         hash: "", cookie: null, khach: true,
@@ -534,7 +534,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("loi1").textContent).toMatch(/hết hạn hoặc lời mời đã bị thu hồi/u);
     });
 
-    it("[S1.9103] nop-thau: khối hỏi đang hiện rồi nhà cung cấp khác mở link của mình trong CÙNG thẻ ⇒ khối hỏi biến mất", async () => {
+    it("[S1.177] nop-thau: khối hỏi đang hiện rồi nhà cung cấp khác mở link của mình trong CÙNG thẻ ⇒ khối hỏi biến mất", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
       expect(p.el("hoi-phien").hidden).toBe(false);
       await p.doiFragment(`#${ORG}:maCuaNhaCungCapKhac`);
@@ -545,7 +545,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).toEqual(["GET /guest/rfq"]);
     });
 
-    it("[S1.9103] nop-thau: bước 3 và 4 đang mở rồi hashchange sang link khác ⇒ bước 2–4 đóng, bỏ \"xong\", dừng đếm ngược, xoá biên nhận", async () => {
+    it("[S1.177] nop-thau: bước 3 và 4 đang mở rồi hashchange sang link khác ⇒ bước 2–4 đóng, bỏ \"xong\", dừng đếm ngược, xoá biên nhận", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
       await p.bam("nut-dung-phien");
       expect(moBuoc3(p)).toBe(true);
@@ -562,7 +562,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq"]);
     });
 
-    it("[S1.9103] nop-thau: đường link — Mở lời mời, rồi hashchange ⇒ bước 2 đóng, bước 1 hết \"xong\"", async () => {
+    it("[S1.177] nop-thau: đường link — Mở lời mời, rồi hashchange ⇒ bước 2 đóng, bước 1 hết \"xong\"", async () => {
       const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay: REDEEM });
       await p.bam("nut-mo");
       expect(p.el("b2").hidden).toBe(false);
@@ -572,7 +572,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("b1").lop.has("xong")).toBe(false);
     });
 
-    it("[S1.9103] nop-thau: trọn đường link — xác minh ⇒ bước 3; fragment bị xoá (hashchange không mã) ⇒ ô mã rỗng, đóng bước, HỎI lại", async () => {
+    it("[S1.177] nop-thau: trọn đường link — xác minh ⇒ bước 3; fragment bị xoá (hashchange không mã) ⇒ ô mã rỗng, đóng bước, HỎI lại", async () => {
       const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay: REDEEM });
       await p.bam("nut-mo");
       p.el("ma").value = "123456";
@@ -587,7 +587,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).toEqual(["POST /guest/redeem", "POST /guest/otp/verify", "GET /guest/rfq", "GET /guest/rfq"]);
     });
 
-    it("[S1.9103] nop-thau: đang ở bước 3 mà Mở một lời mời khác ⇒ bước 3 của cookie cũ đóng trước khi mở bước 2", async () => {
+    it("[S1.177] nop-thau: đang ở bước 3 mà Mở một lời mời khác ⇒ bước 3 của cookie cũ đóng trước khi mở bước 2", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: REDEEM });
       await p.bam("nut-dung-phien");
       expect(moBuoc3(p)).toBe(true);
@@ -599,7 +599,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("hoi-phien").hidden).toBe(true);
     });
 
-    it("[S1.9103] nop-thau: Mở lời mời từ khối hỏi đang hiện ⇒ khối hỏi biến mất và không mở lại được phiên cũ", async () => {
+    it("[S1.177] nop-thau: Mở lời mời từ khối hỏi đang hiện ⇒ khối hỏi biến mất và không mở lại được phiên cũ", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: REDEEM });
       expect(p.el("hoi-phien").hidden).toBe(false);
       p.el("org").value = ORG;
@@ -611,7 +611,7 @@ describe("bề mặt tệp", () => {
       expect(moBuoc3(p)).toBe(false);
     });
 
-    it("[S1.9103] nop-thau: /guest/rfq của khối hỏi về muộn SAU khi fragment đã đổi sang link mời khác ⇒ bị bỏ", async () => {
+    it("[S1.177] nop-thau: /guest/rfq của khối hỏi về muộn SAU khi fragment đã đổi sang link mời khác ⇒ bị bỏ", async () => {
       const { g, thay } = giu("GET /guest/rfq", 1);
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay });
       await p.doiFragment(`#${ORG}:maLoiMoiKhac`);
@@ -621,7 +621,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("nut-dung-phien").hidden).toBe(true);
     });
 
-    it("[S1.9103] nop-thau: gói thầu của Tiếp tục về muộn SAU khi fragment đã đổi ⇒ bị bỏ, bước 3 không mở lại", async () => {
+    it("[S1.177] nop-thau: gói thầu của Tiếp tục về muộn SAU khi fragment đã đổi ⇒ bị bỏ, bước 3 không mở lại", async () => {
       const { g, thay } = giu("GET /guest/rfq", 2);
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay });
       const bam = p.bam("nut-dung-phien");
@@ -635,7 +635,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("loi1").textContent).toBe("");
     });
 
-    it("[S1.9103] nop-thau: xác minh OTP về muộn SAU khi fragment đã đổi ⇒ không xoá fragment mới, không nạp gói thầu", async () => {
+    it("[S1.177] nop-thau: xác minh OTP về muộn SAU khi fragment đã đổi ⇒ không xoá fragment mới, không nạp gói thầu", async () => {
       const { g, thay } = giu("POST /guest/otp/verify", 1, REDEEM);
       const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay });
       await p.bam("nut-mo");
