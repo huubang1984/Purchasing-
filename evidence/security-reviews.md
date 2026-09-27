@@ -14623,3 +14623,79 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 ## 5. Số
 
 Không khoản nào mở hay đóng.
+
+---
+
+# §S1.179 — KHOẢN 249: KHOÁ `depcruise` CỦA LỚP TEST XẾP HÀNG NGƯỜI CHỜ — NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC
+
+Không chạm mảnh nào của `PRODUCT.md` §11; chỉ đổi lớp test (ADR-043 ⒞).
+
+## 1. Việc gì
+
+PR #176, run 36325198665: job `T1+T2 — unit va contract (windows-latest)` đỏ đúng một ca —
+`apps/api/src/routes.test.ts › [g9-] … PROBE` ném *"[khoản nợ 59] chờ khoá depcruise quá 180000 ms"*. Cùng mã ấy (commit
+41062bb, chỉ khác `evidence/INV-matrix.md` và `evidence/security-reviews.md`) xanh ở chính job ấy mười lăm phút trước.
+
+## 2. Cơ chế, đọc từ mã và từ nhật ký job
+
+- Khoá của khoản 59 (`tests/architecture/khoa-depcruise.ts`) là một `mkdir` nguyên tử; người chờ hỏi lại mỗi `NHIP_MS`
+  (50 ms) và NÉM ở `HAN_CHO_MS` (180 s). Không có hàng chờ.
+- `tests/architecture/boundaries.test.ts` gọi `voiKhoaDepcruise` ở MỖI test — 74 lượt —, nhả rồi giành lại gần như ngay;
+  khe giữa `rmSync` và `mkdirSync` dưới một mili-giây. Người chờ chỉ lọt vào khi nhịp hỏi rơi đúng khe ấy, nên trên thực
+  tế nó chờ trọn tệp.
+- Trên runner ấy `boundaries.test.ts` chạy **194,5 s** (một lượt cruise riêng 22,7 s); `HAN_CHO_MS` đặt ngày 2026-09-08
+  khi tệp ấy chạy 79,6 s cho 68 test. Hạn chờ đã âm thầm thành hạn của cả một tệp khác.
+
+## 3. Sửa
+
+Người đến trước được trước:
+- Lượt giành hỏng đầu tiên đặt một DẤU CHỜ ở `<khoá>.cho/<mốc đến 15 chữ số>-<pid>-<số>` và đập nhịp tim lên nó mỗi nhịp.
+- Ai thấy một dấu CÒN SỐNG đến trước mình thì không giành — kể cả người vừa nhả khoá — mà xếp hàng sau.
+- Dấu của tiến trình đã chết bị dọn; dấu ngừng tim quá `HAN_TIM_DAU_CHO_MS` (10 s) bị bỏ qua nhưng không bị xoá.
+- Dấu chỉ quyết THỨ TỰ; loại trừ vẫn là `mkdir`. Mọi hỏng của dấu đưa lớp này về luật cũ, không ném, không treo.
+- Hạn chờ giữ nguyên và vẫn NÉM, kể cả ở nhịp chưa tới lượt. `CachCho` (`hanChoMs`, `nhuong`) chỉ phép đo truyền.
+
+## 4. Đo
+
+- **Sáu ca mới** ở `tests/architecture/khoa-depcruise.test.ts`, khối `[khoản 249]` — tệp **16/16**:
+  - người đến sau KHÔNG giành khi có một dấu còn sống đến trước, mà đặt dấu của mình sau nó (hai dấu trong hàng) và chờ
+    tới lúc dấu kia rời đi (≥ 1,4 s);
+  - đối chứng `nhuong: false` — đúng khoá cũ — giành ngay dù có người xếp hàng trước;
+  - dấu ngừng tim bị bỏ qua mà không bị xoá; dấu của tiến trình đã chết bị dọn;
+  - hạn chờ vẫn ném (`hanChoMs: 1000`) khi người đứng trước không bao giờ rời hàng, và dấu của lượt ném cũng đi;
+  - một tiến trình giữ-nhả liên tục nhường người đang xếp hàng; với `nhuong: false` nó giành lại đủ năm lượt trong khi có
+    người xếp hàng trước — chính cơ chế gây đói;
+  - hai tiến trình thật: người chờ chen vào giữa mười lượt giữ-nhả, tối đa một lượt mở thêm trước nó, và người kia còn giữ
+    tiếp ít nhất bảy lượt sau nó; không lượt nào chồng lấn.
+- **Năm đột biến, cả năm đỏ:**
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | bỏ nhường — mọi lượt giành như khoá cũ | năm ca: xếp hàng, dấu ngừng tim/chết, hạn, giữ-nhả, hai tiến trình |
+| M2 | bỏ kiểm hạn ở nhịp chưa tới lượt | ca hạn chờ — treo tới hạn của chính `it()` |
+| M3 | bản đồng bộ không gỡ dấu sau khi giành | ca hai tiến trình |
+| M4 | không dọn dấu của tiến trình đã chết | ca dấu ngừng tim/chết |
+| M5 | không bỏ qua dấu ngừng tim | ca dấu ngừng tim/chết |
+
+- **Ba tệp dùng khoá chạy chung** (`boundaries.test.ts`, `apps/api/src/routes.test.ts`, `apps/web/src/phuc-vu.test.ts`), cùng
+  máy, trước rồi sau bản vá:
+
+| Tệp | Trước | Sau |
+|---|---|---|
+| `routes.test.ts` | 113,5 s | 4,9 s |
+| `phuc-vu.test.ts` | 4,3 s | 9,6 s |
+| `boundaries.test.ts` | 143,1 s | 144,3 s |
+
+  Trước bản vá `routes.test.ts` chờ gần trọn `boundaries`; sau bản vá nó vào ở lần nhả kế tiếp. `phuc-vu.test.ts` chậm
+  thêm vì nay đứng trong hàng; `boundaries` không đổi.
+- `pnpm t0` sạch (429 module, 1682 phụ thuộc, không vi phạm); `pnpm test` **117 tệp, 1505 đạt, 1 bỏ qua** — thêm đúng sáu ca
+  của khối trên; `pnpm cap-so --dem` viết lại lời khai đếm (249 khoản, 84 còn mở). Số hiệu của vòng và của khoản do
+  `pnpm cap-so` cấp lúc merge (ADR-090).
+
+## 5. Giới hạn, nói ra
+
+- Chiều âm trên hai tiến trình thật ("không nhường thì đói") là đua tranh xác suất — mỗi vòng người chờ có cỡ khe/50 ms
+  cơ may lọt vào —, nên nó được đo ở CƠ CHẾ: một tiến trình giữ-nhả liên tục với `nhuong: false` giành lại mọi lượt khi có
+  người xếp hàng trước. Bằng chứng chiều âm ngoài đời là lần đỏ trên CI.
+- Thứ tự theo đồng hồ máy: hai người đến cùng mili-giây xếp theo `pid`. Không phải FIFO tuyệt đối, và không cần.
+- Không đo được trên Windows ở máy này; job `T1+T2 (windows-latest)` của PR là phép đo ấy.
