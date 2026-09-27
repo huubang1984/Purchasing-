@@ -233,7 +233,11 @@ async function chinh(): Promise<void> {
     // HAI phê duyệt của HAI người KHÁC người soạn — ngân sách gieo ở trên vượt ngưỡng chính sách,
     // nên máy trạng thái ở tầng CSDL từ chối mở gói thầu khi chưa đủ. Lượt chạy đầu của script này
     // gãy đúng ở đó: *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*.
-    for (const nm of nguoiMua.slice(1)) {
+    // [S1.9101 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
+    // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
+    // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
+    const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
+    for (const nm of nguoiDuyetGoi) {
       await pool.query(
         "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
         [org, rfq, nm.id, nm.sessionId],
