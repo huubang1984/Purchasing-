@@ -231,7 +231,7 @@ export async function requestUnseal(
   // `tranRieng: HE_THONG_MAX_TOKENS_PER_WINDOW` mà handler truyền cho `issueLoginToken`, cộng với
   // quyền huỷ đã siết ở `cancelUnseal`. §S1.93.
   //
-  // [S1.9101 / khoản 200] Xếp tin TRƯỚC lần ghi sổ — cùng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline` (khoản 123): lần ghi sổ đầu của
+  // [S1.171 / khoản 200] Xếp tin TRƯỚC lần ghi sổ — cùng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline` (khoản 123): lần ghi sổ đầu của
   // giao dịch lấy khoá tư vấn ghi sổ của TỔ CHỨC (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT, trong khi mọi lần ghi sổ khác của tổ
   // chức chờ khoá ấy tối đa 2 s (050). Câu JOIN ba bảng của `listUserIdsWithPermission` cộng K lần `enqueueJob` đặt SAU lần ghi sổ là
   // chừng ấy thời gian giữ khoá thêm. Tin và bản ghi vẫn cùng giao dịch: hỏng ở đâu thì cả hai cùng rollback.
@@ -261,7 +261,7 @@ export async function requestUnseal(
     },
   });
 
-  // [S1.9101 / khoản 200, bài học 65c-1 của S1.71] ĐỌC LẠI người duyệt SAU lần ghi sổ. Câu đọc ở trên chạy TRƯỚC lúc chờ khoá ghi sổ,
+  // [S1.171 / khoản 200, bài học 65c-1 của S1.71] ĐỌC LẠI người duyệt SAU lần ghi sổ. Câu đọc ở trên chạy TRƯỚC lúc chờ khoá ghi sổ,
   // nên nó không thấy một lần cấp quyền đã ghi sổ nhưng chỉ COMMIT trong lúc lần ghi sổ ở trên chờ khoá — bản trước ghi sổ rồi mới đọc
   // nên thấy. Từ lúc lấy được khoá, giao dịch này giữ nó tới COMMIT, nên câu đọc dưới có cùng bảo đảm với bản trước. Bình thường không
   // có người mới, nên phần giữ khoá chỉ thêm một câu đọc.

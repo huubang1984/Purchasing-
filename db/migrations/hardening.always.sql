@@ -10134,8 +10134,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger unseal_kiem_yeu_cau_khi_ghi_ban_ro (019)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '019_unseal.sql')$q$,
+      $q$hàm + trigger unseal_kiem_yeu_cau_khi_ghi_ban_ro (019_unseal, thân từ 073_ban_ro_cung_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_ban_ro_cung_goi.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -10147,8 +10147,10 @@ $ham$;
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
   trang_thai text;
+  goi_yc uuid;
+  vong_yc uuid;
 BEGIN
-  SELECT r.status INTO trang_thai
+  SELECT r.status, r.rfq_id, r.bafo_round_id INTO trang_thai, goi_yc, vong_yc
     FROM public.unseal_requests r
    WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id
      AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id;
@@ -10159,6 +10161,20 @@ BEGIN
   IF trang_thai NOT IN ('APPROVED', 'EXECUTED') THEN
     RAISE EXCEPTION 'Chi ghi duoc ban ro duoi mot yeu cau da phe duyet; yeu cau dang o % (A1)',
       trang_thai
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.vendor_bid_versions v
+      JOIN public.vendor_bids b ON b.id OPERATOR(pg_catalog.=) v.bid_id AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+      JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+     WHERE v.id OPERATOR(pg_catalog.=) NEW.bid_version_id
+       AND v.org_id OPERATOR(pg_catalog.=) NEW.org_id
+       AND i.rfq_id OPERATOR(pg_catalog.=) goi_yc
+       AND v.bafo_round_id IS NOT DISTINCT FROM vong_yc
+  ) THEN
+    RAISE EXCEPTION 'Ban ro phai thuoc cung goi thau va cung vong voi yeu cau mo thau % (A1)',
+      NEW.unseal_request_id
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
@@ -10179,7 +10195,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; BEGIN SELECT r.status INTO trang_thai FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('APPROVED', 'EXECUTED') THEN RAISE EXCEPTION 'Chi ghi duoc ban ro duoi mot yeu cau da phe duyet; yeu cau dang o % (A1)', trang_thai USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; goi_yc uuid; vong_yc uuid; BEGIN SELECT r.status, r.rfq_id, r.bafo_round_id INTO trang_thai, goi_yc, vong_yc FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai NOT IN ('APPROVED', 'EXECUTED') THEN RAISE EXCEPTION 'Chi ghi duoc ban ro duoi mot yeu cau da phe duyet; yeu cau dang o % (A1)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF NOT EXISTS ( SELECT 1 FROM public.vendor_bid_versions v JOIN public.vendor_bids b ON b.id OPERATOR(pg_catalog.=) v.bid_id AND b.org_id OPERATOR(pg_catalog.=) v.org_id JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id WHERE v.id OPERATOR(pg_catalog.=) NEW.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) NEW.org_id AND i.rfq_id OPERATOR(pg_catalog.=) goi_yc AND v.bafo_round_id IS NOT DISTINCT FROM vong_yc ) THEN RAISE EXCEPTION 'Ban ro phai thuoc cung goi thau va cung vong voi yeu cau mo thau % (A1)', NEW.unseal_request_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

@@ -1087,6 +1087,18 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // Thứ thay thế là vế THẬT SỰ chịu lực cho J4 ở phía route: vai của `apps/api` không ghi được
     // một hàng bản rõ nào, bằng lối nào.
     // ------------------------------------------------------------------------------------------
+    // [S1.170 / khoản 228] `073` khép khe ấy: trigger nay đòi phong bì thuộc CÙNG gói và CÙNG vòng
+    // với yêu cầu — đúng vị từ worker dùng để chọn phong bì. Nên khẳng định của bản đầu quay lại, dưới
+    // chính vai DUY NHẤT được cấp `INSERT`: cùng câu, trigger bật, `app_unseal` ⇒ ĐỎ.
+    await expect(
+      withTenant(unsealPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) VALUES ($1, $2, $3, $4)",
+          [orgA, trangThai.unsealRequestId, versionId, JSON.stringify({ totalAmount: GIA_BAFO[0], currency: "VND" })],
+        ),
+      ),
+      "phong bì VÒNG HAI dưới yêu cầu mở thầu VÒNG MỘT — trigger phải chặn, kể cả với app_unseal",
+    ).rejects.toThrow(/Ban ro phai thuoc cung goi thau va cung vong/u);
     await expect(
       withTenant(apiPool, orgA, (c) =>
         c.query(

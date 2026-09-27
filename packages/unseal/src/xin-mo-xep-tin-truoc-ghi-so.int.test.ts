@@ -1,5 +1,5 @@
 // =============================================================================================
-// [S1.9101 / khoản 200] XIN MỞ THẦU XẾP TIN BÁO NGƯỜI DUYỆT TRƯỚC LẦN GHI SỔ — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
+// [S1.171 / khoản 200] XIN MỞ THẦU XẾP TIN BÁO NGƯỜI DUYỆT TRƯỚC LẦN GHI SỔ — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
 // Cùng khuôn `packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts` (S1.71 / khoản 123), cho hàm thứ hai. Lần ghi sổ đầu của giao
 // dịch lấy khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT; mọi lần ghi sổ khác của tổ chức chờ khoá ấy
@@ -162,7 +162,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9101 / khoản 200] xin mở thầu xếp tin báo người duyệt trước lần ghi sổ", () => {
+describe("[S1.171 / khoản 200] xin mở thầu xếp tin báo người duyệt trước lần ghi sổ", () => {
   it("mỗi lần xếp tin, giao dịch xin mở CHƯA giữ khoá tư vấn ghi sổ của tổ chức; đủ một tin mỗi người duyệt và một bản ghi sau COMMIT", async () => {
     const rfqId = await taoRfqDaDong();
     // Người duyệt hiện có: mọi người giữ `rfq.unseal.approve`, trừ chính người xin — đếm từ CSDL, không chép tay.
