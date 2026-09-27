@@ -13,6 +13,19 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-26 / S1.156] S3.1a — BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN
+CHỖ ĐỌC.** Phần đầu trong bốn phần của S3.1 (spec S3 §9). Migration `069_bac_va_chu_ky_chinh_sach`: bậc là mảng `jsonb`
+trên hàng chính sách, một trigger giữ hình dạng khi chèn, hai cột mức chính sách; bảng chữ ký chỉ-ghi-thêm
+`org_policy_signatures` — người ký khác người tạo, giữ `policy.manage`, ký bằng phiên của chính mình, chỉ phiên bản có bậc,
+mỗi phiên bản một chữ ký; `to_chuc_da_bat_s3(org)` là công tắc, và từ lúc bật CSDL từ chối phiên bản không bậc. Đo lúc làm:
+bốn chỗ tự chọn phiên bản hiện hành theo ba luật; chủ dự án chọn hợp nhất, nên `getActiveProcurementPolicy`, `docChinhSach`,
+`rfq_che_do_nghiem` và hai hàm hạn xoá khoá của `026` nay cùng hỏi `chinh_sach_hieu_luc(org, lúc)`. Để *đã bật ⇒ phiên bản
+hiệu lực có bậc* đúng bằng cấu tạo, chỉ ký được phiên bản MỚI NHẤT đã tới ngày hiệu lực, dưới một khoá tư vấn theo tổ chức
+— ba đột biến cho ra tổ chức đã bật mà phiên bản hiệu lực không bậc. Ngân sách không ghim được phiên bản có bậc chưa ký.
+`pnpm cap-so` nay nhận tên migration số tạm không đuôi. Chưa có route, màn hình, K1 hay ngân sách bắt buộc — đó là
+S3.1b–d; không thứ gì đọc bậc, nên mọi tổ chức vẫn chạy như MVP1. Không ADR mới, không khoản nợ mới. Biên bản:
+`evidence/security-reviews.md` §S1.156.
+
 **[2026-09-27 / S1.155] KHOẢN 122 VÀ 144 ĐÓNG — TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ.** Nhánh `BUYER` của
 `dispatch.ts` đếm mỗi lần từ chối (`PERMISSION_DENIED` của `requirePermission`, `AGENT_SCOPE_DENIED` của vế phạm vi) vào một
 bucket theo phiên trên `caller_rate_limits`, TRƯỚC lần ghi sổ; quá 30 lần mỗi cửa sổ 900 s ⇒ 429, không hàng sổ, không chạm khoá
