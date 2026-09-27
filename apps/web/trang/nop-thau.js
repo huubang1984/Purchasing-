@@ -156,6 +156,8 @@ $("nut-xac").addEventListener("click", async () => {
   xoaManhLink();
   bao($("ok2"), "Đã xác minh. Phiên nằm trong cookie, mã phiên không đi qua JavaScript.");
   $("b2").classList.add("xong");
+  // [S1.181 / ADR-109] Từ đây trình duyệt giữ một phiên khách: thoát được, ở bước 1 và ở bước 4.
+  hien($("nut-thoat-khach"), true);
   await napGoiThau();
 });
 
@@ -214,7 +216,11 @@ async function napGoiThau() {
   const nhanLuc = Date.now();
   if (the !== theHe) return false;
   if (r.status !== 200) { bao($("loi3"), loiCua(r, "Không đọc được gói thầu")); hien($("b3"), true); return false; }
-  phien = { ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null };
+  phien = {
+    ...phien, rfq: r.body.rfq, items: r.body.items ?? [], publicKeys: r.body.publicKeys ?? [], bafoRound: r.body.bafoRound ?? null,
+    // [S1.181 / ADR-109] Tên doanh nghiệp được mời — máy chủ dẫn xuất từ phiên, trang chỉ in lại.
+    tenNhaCungCap: typeof r.body.supplier?.legalName === "string" ? r.body.supplier.legalName : "",
+  };
 
   // [S1.109 / S2.5 / khoản 227⑶] HẠN NÀO LÀ HẠN ĐANG CÓ HIỆU LỰC.
   //
@@ -225,7 +231,9 @@ async function napGoiThau() {
   const vong = phien.bafoRound;
   const han = new Date(vong === null ? phien.rfq.deadlineAt : vong.deadlineAt);
   $("tt-rfq").replaceChildren();
-  const dong = [["Gói thầu", phien.rfq.title], ["Trạng thái", phien.rfq.status]];
+  const dong = [["Gói thầu", phien.rfq.title]];
+  if (phien.tenNhaCungCap !== "") dong.push(["Doanh nghiệp được mời", phien.tenNhaCungCap]);
+  dong.push(["Trạng thái", phien.rfq.status]);
   if (vong !== null) {
     dong.push(["Vòng", `BAFO ${vong.roundNo} — mời nộp lại, niêm phong như vòng một`]);
     dong.push(["Hạn nộp của vòng này", han.toLocaleString("vi-VN")]);
@@ -325,7 +333,29 @@ $("nut-nop").addEventListener("click", async () => {
   const tong = tinhLai();
   if (tong === null) return;
   $("nut-nop").disabled = true;
+  // [S1.181 / lượt soi] Thoát, hay đổi link trong cùng thẻ, trong lúc lần nộp còn bay: biên nhận về muộn là của phiên
+  // trước, không được mở lại bước 4 dưới câu "Đã thoát".
+  const the = theHe;
   try {
+    // [S1.181 / lượt soi] Tên doanh nghiệp trên màn là ảnh chụp lúc nạp; cookie khách thì chung cho mọi thẻ của trình
+    // duyệt. Một thẻ khác vừa xác minh lời mời của doanh nghiệp khác thì lần nộp ở thẻ này sẽ đi vào hồ sơ của doanh nghiệp
+    // ấy — nên hỏi lại phiên hiện hành ngay trước khi niêm phong, và dừng nếu nó không còn là phiên trên màn.
+    const hienHanh = await goi("GET", "/guest/rfq");
+    if (the !== theHe) return;
+    const tenHienHanh = typeof hienHanh.body?.supplier?.legalName === "string" ? hienHanh.body.supplier.legalName : "";
+    if (hienHanh.status !== 200 || hienHanh.body?.rfq?.id !== phien.rfq.id || tenHienHanh !== phien.tenNhaCungCap) {
+      // [lượt soi] Chỉ 401 là phiên chết. Mã khác (500, 502/503 của proxy) nói về máy chủ, không về phiên — câu "hết hạn,
+      // xin link mới" ở đó đẩy nhà cung cấp đi xin một link họ không cần. Vế `rfq.id` bắt ca CÙNG doanh nghiệp, KHÁC gói
+      // (hai lời mời, hai thẻ): phong bì niêm cho gói trên màn mà nộp vào luồng của gói kia thì không mở được khi mở thầu.
+      bao($("loi3"), hienHanh.status === 200
+        ? `Phiên nộp thầu trên trình duyệt này đã đổi${tenHienHanh === "" ? "" : ` sang «${tenHienHanh}»`} — có lẽ ở một thẻ khác. ` +
+          "Báo giá CHƯA được gửi. Tải lại trang để làm tiếp với đúng phiên."
+        : hienHanh.status === 401
+          ? "Phiên nộp thầu đã hết hạn hoặc đã thoát — báo giá CHƯA được gửi. Xin bên mua gửi lại link mời."
+          : `${loiCua(hienHanh, "Không kiểm được phiên nộp thầu")} — báo giá CHƯA được gửi. Thử lại sau ít phút.`);
+      $("nut-nop").disabled = false;
+      return;
+    }
     if (globalThis.crypto?.subtle === undefined) {
       throw new Error("Trình duyệt này không có crypto.subtle — thường gặp ở cửa sổ web trong Zalo hay Messenger. Hãy mở link bằng Chrome hoặc Safari.");
     }
@@ -346,6 +376,7 @@ $("nut-nop").addEventListener("click", async () => {
     });
 
     const r = await goi("POST", "/guest/bids", { envelope: sangB64(phongBi) });
+    if (the !== theHe) return;
     if (r.status !== 201) {
       // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
       // in cả hai, để người bị chặn đối chiếu được với đồng hồ của mình và với hạn trên màn hình.
@@ -363,6 +394,7 @@ $("nut-nop").addEventListener("click", async () => {
     }
     veBienNhan(r.body.receipt, phongBi, thuatToan, khoa.keyVersion);
   } catch (e) {
+    if (the !== theHe) return;
     bao($("loi3"), e instanceof Error ? e.message : "Niêm phong thất bại");
     $("nut-nop").disabled = false;
   }
@@ -438,8 +470,11 @@ window.addEventListener("hashchange", () => {
 // trên điện thoại, trình duyệt tự tải lại một thẻ bị đẩy xuống nền. Nay, ô mã rỗng thì hỏi `GET /guest/rfq`
 // (route đã có, không ghi gì); 200 thì HỎI, không tự mở — cùng khuôn ba trang người mua (`thuPhienCo` ở
 // `mo-thau.js`): trên một máy dùng chung, phiên ấy có thể của người khác. Câu hỏi nêu tên gói thầu, thứ nhà cung
-// cấp nhận ra được — nhưng tên gói KHÔNG nói phiên của nhà cung cấp nào: một gói mời nhiều nhà cung cấp, và không route
-// khách nào trả định danh người được mời; câu hỏi nói thẳng điều ấy. `docLink()` phải chạy TRƯỚC hàm này; sau `await`,
+// cấp nhận ra được — ~~nhưng tên gói KHÔNG nói phiên của nhà cung cấp nào: một gói mời nhiều nhà cung cấp, và không route
+// khách nào trả định danh người được mời; câu hỏi nói thẳng điều ấy.~~ **[S1.181 / ADR-109]** và tên DOANH NGHIỆP được
+// mời (`supplier.legalName` của `GET /guest/rfq`): một gói mời nhiều nhà cung cấp, nên chỉ tên gói thì hai nhà cung cấp
+// cùng gói trên một máy thấy cùng một câu hỏi. Thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với thiếu tên gói.
+// Cùng khối hỏi có nút Thoát phiên nộp thầu. `docLink()` phải chạy TRƯỚC hàm này; sau `await`,
 // thế hệ (`theHe`) và ô mã được kiểm lại: một phản hồi về muộn, sau khi người khác đã dán link của mình, bị bỏ.
 // ==============================================================================================
 let khachCho = false;
@@ -450,12 +485,13 @@ async function thuPhienKhach() {
   try {
     const r = await goi("GET", "/guest/rfq");
     if (the !== theHe || $("token").value.trim() !== "") return;
-    if (r.status !== 200 || typeof r.body?.rfq?.title !== "string") return;
+    if (r.status !== 200 || typeof r.body?.rfq?.title !== "string" || typeof r.body?.supplier?.legalName !== "string") return;
     khachCho = true;
-    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên nộp thầu còn hạn cho gói thầu «${r.body.rfq.title}», của lời mời ` +
-      "xác minh gần nhất trên trình duyệt này. Chắc đó là lời mời của anh/chị thì bấm Tiếp tục — không cần mở lại link hay " +
-      "nhập lại mã. Không chắc, hay máy này có người khác cũng được mời gói ấy, thì mở link mời của mình.");
+    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên nộp thầu còn hạn của «${r.body.supplier.legalName}» cho gói thầu ` +
+      `«${r.body.rfq.title}». Đúng là doanh nghiệp của anh/chị thì bấm Tiếp tục — không cần mở lại link hay nhập lại mã. ` +
+      "Không phải thì bấm Thoát phiên nộp thầu để đóng phiên ấy trên trình duyệt này, rồi mở link mời của mình.");
     hien($("nut-dung-phien"), true);
+    hien($("nut-thoat-khach"), true);
   } catch { /* mất mạng: trang ở lại bước 1 */ }
 }
 
@@ -477,8 +513,14 @@ function dongCacBuoc() {
   for (const b of ["b2", "b3", "b4"]) hien($(b), false);
   for (const id of ["tt-rfq", "tt-bn", "mo-ta-pb", "van-ban", "chu-ky"]) $(id).replaceChildren();
   $("bang-hang").querySelector("tbody").replaceChildren();
-  bao($("loi3"), "");
+  // [S1.181 / lượt soi] Dòng tổng mang TỔNG GIÁ dạng rõ người trước đã gõ; ô OTP mang mã của người trước.
+  $("tong").textContent = "";
+  $("ma").value = "";
+  $("tien-te").value = "VND";
+  bao($("dem-nguoc"), "");
+  for (const id of ["loi3", "loi4"]) bao($(id), "");
   boHoiPhien();
+  hien($("nut-thoat-khach"), false);
 }
 
 // Phiên có thể đã chết trong lúc khối hỏi nằm chờ (quá 4 giờ, bên mua thu hồi lời mời): khi ấy KHÔNG mở bước 3 rỗng với
@@ -499,12 +541,50 @@ $("nut-dung-phien").addEventListener("click", async () => {
   if (!duoc) {
     hien($("b3"), false);
     bao($("loi3"), "");
-    bao($("loi1"), "Phiên nộp thầu đã hết hạn hoặc lời mời đã bị thu hồi. Link mời cũ đã dùng rồi — xin bên mua gửi lời mời mới.");
+    hien($("nut-thoat-khach"), false);
+    bao($("loi1"), "Phiên nộp thầu đã hết hạn hoặc lời mời đã bị thu hồi. Link mời cũ đã dùng rồi — xin bên mua gửi lại link mời.");
     return;
   }
-  bao($("ok1"), "Đang dùng phiên nộp thầu còn hạn.");
+  const cua = phien.tenNhaCungCap === "" ? "" : ` của «${phien.tenNhaCungCap}»`;
+  bao($("ok1"), `Đang dùng phiên nộp thầu còn hạn${cua}. Nộp xong trên máy dùng chung thì bấm Thoát phiên nộp thầu — ` +
+    "thoát rồi, muốn vào lại thì xin bên mua gửi lại link mời.");
   $("b1").classList.add("xong");
 });
+
+// ==============================================================================================
+// [S1.181 / ADR-109] THOÁT PHIÊN NỘP THẦU.
+//
+// `POST /guest/logout` thu hồi CHÍNH phiên khách đang gọi (máy chủ dẫn xuất nó từ cookie) và xoá cookie
+// `__Host-tp_guest`. Trước vòng này không đường nào làm việc ấy: trên một máy dùng chung, phiên sống tới 4 giờ sau
+// khi người nộp đã rời đi. 401 nghĩa là phiên đã hết hay đã bị thu hồi — điều người bấm muốn vẫn đạt, nên trang cũng
+// về bước 1 (cùng khuôn nút Đăng xuất của ba trang người mua). Mã lời mời đã bị tiêu thụ ở lần xác minh, nên câu báo
+// nói thẳng: muốn nộp tiếp phải có link mới — ~~của một lời mời mới~~ **[S1.181 / ADR-110]** link bên mua GỬI LẠI cho
+// chính lời mời ấy, đưa về đúng hồ sơ báo giá đã nộp. Lời gọi về muộn sau khi màn đã đổi thế hệ (đổi link trong cùng thẻ)
+// không được xoá màn của người sau. Lỗi hiện cạnh nút đã bấm — nút ở bước 4 nằm cuối trang, xa `#loi1`.
+// ==============================================================================================
+async function thoatPhienKhach(oLoi) {
+  for (const id of ["loi1", "loi4", "ok1"]) bao($(id), "");
+  const cacNut = ["nut-thoat-khach", "nut-thoat-bn", "nut-dung-phien"];
+  for (const id of cacNut) $(id).disabled = true;
+  const the = theHe;
+  try {
+    const r = await goi("POST", "/guest/logout");
+    if (the !== theHe) return;
+    if (r.status !== 200 && r.status !== 401) { bao(oLoi, loiCua(r, "Không thoát được phiên nộp thầu")); return; }
+    phien = { orgId: $("org").value.trim(), token: $("token").value.trim(), rfq: null, items: [], publicKeys: [] };
+    for (const id of ["loi2", "loi3", "ok2"]) bao($(id), "");
+    dongCacBuoc();
+    bao($("ok1"), "Đã thoát phiên nộp thầu trên trình duyệt này. Muốn nộp hay sửa báo giá nữa thì xin bên mua gửi lại link " +
+      "mời — link gửi lại đưa về đúng báo giá đã nộp; link cũ đã dùng rồi.");
+    $("b1").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch {
+    if (the === theHe) bao(oLoi, "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    for (const id of cacNut) $(id).disabled = false;
+  }
+}
+$("nut-thoat-khach").addEventListener("click", () => thoatPhienKhach($("loi1")));
+$("nut-thoat-bn").addEventListener("click", () => thoatPhienKhach($("loi4")));
 
 docLink();
 thuPhienKhach();

@@ -214,30 +214,44 @@ describe("bề mặt tệp", () => {
     interface PhanTu {
       hidden: boolean; textContent: string; value: string; disabled: boolean; checked: boolean; className: string;
       dataset: Record<string, string>; lop: Set<string>; nghe: Nghe;
+      /** [S1.181] Con đã `append` — để đọc được bảng gói thầu (dt/dd). `replaceChildren` xoá nó. */
+      con: PhanTu[];
       classList: { add: (c: string) => void; remove: (c: string) => void; contains: (c: string) => boolean };
       addEventListener: (t: string, f: () => unknown) => void;
-      replaceChildren: () => void; append: () => void; appendChild: () => void; setAttribute: () => void;
-      querySelector: () => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
+      replaceChildren: () => void; append: (...c: PhanTu[]) => void; appendChild: () => void; setAttribute: () => void;
+      querySelector: (sel: string) => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
       scrollIntoView: () => void;
     }
     const taoPhanTu = (hidden: boolean): PhanTu => {
       const lop = new Set<string>();
       const nghe: Nghe = {};
+      // [S1.181 / lượt soi] Cùng bộ chọn thì cùng phần tử — như trình duyệt. Bản trước trả một phần tử MỚI mỗi lần gọi, nên
+      // `tbody` mà trang xoá và `tbody` mà test đọc là hai đối tượng khác nhau: bảng giá không đo được.
+      const qs: Record<string, PhanTu> = {};
       const e: PhanTu = {
-        hidden, textContent: "", value: "", disabled: false, checked: false, className: "", dataset: {}, lop, nghe,
+        hidden, textContent: "", value: "", disabled: false, checked: false, className: "", dataset: {}, lop, nghe, con: [],
         classList: { add: (c) => { lop.add(c); }, remove: (c) => { lop.delete(c); }, contains: (c) => lop.has(c) },
         addEventListener: (t, f) => { (nghe[t] ??= []).push(f); },
-        replaceChildren: () => { e.textContent = ""; }, append: () => undefined, appendChild: () => undefined, setAttribute: () => undefined,
-        querySelector: () => taoPhanTu(false), querySelectorAll: () => [], focus: () => undefined, remove: () => undefined,
+        replaceChildren: () => { e.textContent = ""; e.con.length = 0; }, append: (...c) => { e.con.push(...c); },
+        appendChild: () => undefined, setAttribute: () => undefined,
+        querySelector: (sel) => (qs[sel] ??= taoPhanTu(false)), querySelectorAll: () => [], focus: () => undefined, remove: () => undefined,
         scrollIntoView: () => undefined,
       };
       return e;
     };
     // `/lib/chinh-sach.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một hàm trả chuỗi rỗng.
-    const THU_VIEN: Record<string, unknown> = { ...chinhSach };
+    const THU_VIEN: Record<string, unknown> = {
+      ...chinhSach,
+      // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
+      sealBid: () => Promise.resolve(new Uint8Array(0)),
+      chooseKeyAgreementAlgorithm: () => "ECDH_P256",
+      describeEnvelope: () => ({ formatVersion: 1, algorithm: "ECDH_P256", ephemeralPublicKey: new Uint8Array(0) }),
+    };
     const cho = () => new Promise((r) => { setTimeout(r, 5); });
     const GOI_THAU_KHACH = {
       rfq: { id: "r-1", title: "Mua thép tấm quý IV", status: "OPEN", deadlineAt: "2099-01-01T00:00:00Z" },
+      // [S1.181 / ADR-109] Tên doanh nghiệp được mời — `GET /guest/rfq` nay mang nó.
+      supplier: { legalName: "Công ty Thép Miền Bắc" },
       items: [{ lineNo: 1, description: "Thép tấm", quantity: "10", unit: "tấn" }],
       publicKeys: [], bafoRound: null, gioMayChu: "2026-09-27T00:00:00Z",
     };
@@ -280,6 +294,11 @@ describe("bề mặt tệp", () => {
           }
           if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
+          if (lenh === "POST /guest/logout") {
+            const co = trangThai.khach;
+            trangThai.khach = false;
+            return co ? { status: 200, body: { ok: true } } : { status: 401, body: { error: "x" } };
+          }
           if (lenh === "POST /guest/otp/verify") { trangThai.khach = true; return { status: 200, body: {} }; }
           return { status: 401, body: { error: "x" } };
         })();
@@ -302,7 +321,9 @@ describe("bề mặt tệp", () => {
           },
         },
         localStorage: { getItem: () => null, setItem: () => undefined },
-        fetch, console, setTimeout, clearTimeout, URL, decodeURIComponent,
+        // [S1.181] `crypto.subtle` có mặt để trang không dừng ở câu "trình duyệt không có crypto.subtle".
+        crypto: { subtle: { generateKey: () => Promise.resolve({}) } },
+        fetch, console, setTimeout, clearTimeout, URL, decodeURIComponent, atob, btoa, TextEncoder,
       }, { filename: `${trang}.js` });
       await cho();
       return {
@@ -482,7 +503,8 @@ describe("bề mặt tệp", () => {
       expect(moBuoc3(p), "bảng giá không được tự mở dưới một phiên chưa ai nhận").toBe(false);
       expect(p.el("hoi-phien").hidden).toBe(false);
       expect(p.el("hoi-phien").textContent).toContain("«Mua thép tấm quý IV»");
-      expect(p.el("hoi-phien").textContent, "tên gói không nói phiên của ai — câu hỏi phải nói thẳng").toMatch(/người khác cũng được mời gói ấy/u);
+      // ~~tên gói không nói phiên của ai — câu hỏi phải nói thẳng~~ [S1.181 / ADR-109] câu hỏi nêu tên doanh nghiệp được mời.
+      expect(p.el("hoi-phien").textContent).toContain("«Công ty Thép Miền Bắc»");
       expect(p.el("nut-dung-phien").hidden).toBe(false);
       await p.bam("nut-dung-phien");
       expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq"]);
@@ -491,7 +513,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("b2").hidden, "không bắt nhập lại OTP").toBe(true);
       expect(p.el("hoi-phien").hidden).toBe(true);
       expect(p.el("nut-dung-phien").hidden).toBe(true);
-      expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên nộp thầu còn hạn/u);
+      expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên nộp thầu còn hạn của «Công ty Thép Miền Bắc»/u);
     });
 
     it("[S1.178] nop-thau: link mời mang mã ⇒ KHÔNG hỏi phiên khách — thứ tự docLink() rồi thuPhienKhach() ở cấp tệp", async () => {
@@ -507,7 +529,9 @@ describe("bề mặt tệp", () => {
       const cacCa = [
         await dungTrang("nop-thau", { hash: "", cookie: null }),
         await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: (l) => (l === "GET /guest/rfq" ? Promise.reject(new Error("mat mang")) : undefined) }),
-        await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: lay(Promise.resolve({ status: 200, body: { items: [] } })) }),
+        // [S1.181 / lượt soi] Thân có tên doanh nghiệp, CHỈ thiếu tên gói: bản trước dùng `{ items: [] }`, thiếu cả hai, nên từ
+        // khi câu hỏi đòi thêm tên doanh nghiệp thì bỏ vế `title` vẫn xanh.
+        await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: lay(Promise.resolve({ status: 200, body: { ...GOI_THAU_KHACH, rfq: { ...GOI_THAU_KHACH.rfq, title: undefined } } })) }),
         await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: lay(Promise.resolve({ status: 403, body: GOI_THAU_KHACH })) }),
       ];
       for (const [i, p] of cacCa.entries()) {
@@ -553,11 +577,21 @@ describe("bề mặt tệp", () => {
       p.el("b4").hidden = false;
       p.el("b3").lop.add("xong");
       p.el("tt-bn").textContent = "biên nhận của người trước";
+      // [S1.181 / lượt soi] Câu đếm ngược và hai dòng lỗi mang chữ của phiên trước. Đường này KHÔNG đi qua nút Thoát (nút ấy
+      // tự xoá `loi4`), nên chỉ `dongCacBuoc` giữ được chúng.
+      for (const id of ["dem-nguoc", "loi3", "loi4"]) {
+        p.el(id).textContent = `${id} của phiên trước`;
+        p.el(id).hidden = false;
+      }
       await p.doiFragment(`#${ORG}:maCuaNhaCungCapKhac`);
       for (const b of ["b2", "b3", "b4"]) expect(p.el(b).hidden, b).toBe(true);
       for (const b of ["b1", "b2", "b3"]) expect(p.el(b).lop.has("xong"), b).toBe(false);
       expect(p.trangThai.xoaHen, "đếm ngược của gói trước phải dừng").toEqual([1]);
       expect(p.el("tt-bn").textContent, "biên nhận của người trước phải bị xoá").toBe("");
+      for (const id of ["dem-nguoc", "loi3", "loi4"]) {
+        expect(p.el(id).textContent, id).toBe("");
+        expect(p.el(id).hidden, id).toBe(true);
+      }
       expect(p.el("token").value).toBe("maCuaNhaCungCapKhac");
       expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq"]);
     });
@@ -649,6 +683,399 @@ describe("bề mặt tệp", () => {
       expect(p.loc.hash).toBe(`#${ORG}:maB`);
       expect(moBuoc3(p)).toBe(false);
       expect(p.trangThai.goi).not.toContain("GET /guest/rfq");
+    });
+
+    // [S1.181 / ADR-109] Tên doanh nghiệp được mời trong câu hỏi và ở bước 3; nút Thoát phiên nộp thầu.
+    const bangGoiThau = (p: Awaited<ReturnType<typeof dungTrang>>) => p.el("tt-rfq").con.map((x) => x.textContent);
+
+    it("[S1.181] nop-thau: khối hỏi nêu tên doanh nghiệp VÀ tên gói; nút Thoát hiện cùng khối hỏi; Tiếp tục ⇒ bảng gói thầu có dòng doanh nghiệp", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      expect(p.el("hoi-phien").textContent).toContain("của «Công ty Thép Miền Bắc» cho gói thầu «Mua thép tấm quý IV»");
+      expect(p.el("nut-thoat-khach").hidden).toBe(false);
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(true);
+      const bang = bangGoiThau(p);
+      expect(bang.slice(0, 4)).toEqual(["Gói thầu", "Mua thép tấm quý IV", "Doanh nghiệp được mời", "Công ty Thép Miền Bắc"]);
+      expect(p.el("nut-thoat-khach").hidden, "đang dùng phiên thì phải thoát được").toBe(false);
+      expect(p.el("ok1").textContent).toMatch(/Thoát phiên nộp thầu/u);
+    });
+
+    it("[S1.181] nop-thau: /guest/rfq 200 mà thiếu tên doanh nghiệp ⇒ KHÔNG hỏi, không nút Thoát, Tiếp tục không mở gì", async () => {
+      const thieu = { ...GOI_THAU_KHACH, supplier: undefined };
+      const saiKieu = { ...GOI_THAU_KHACH, supplier: { legalName: 42 } };
+      for (const body of [thieu, saiKieu]) {
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body }) : undefined),
+        });
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-thoat-khach").hidden).toBe(true);
+        await p.bam("nut-dung-phien");
+        expect(moBuoc3(p)).toBe(false);
+        expect(p.trangThai.goi).toEqual(["GET /guest/rfq"]);
+      }
+    });
+
+    it("[S1.181] nop-thau: Thoát ở khối hỏi ⇒ POST /guest/logout, về bước 1, câu báo nói phải xin link mới; Tiếp tục cũ không mở lại được", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-thoat-khach");
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "POST /guest/logout"]);
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(p.el("nut-dung-phien").hidden).toBe(true);
+      expect(p.el("nut-thoat-khach").hidden).toBe(true);
+      expect(p.el("ok1").textContent).toMatch(/Đã thoát phiên nộp thầu/u);
+      // [S1.181 / ADR-110] Đường quay lại là link bên mua GỬI LẠI cho chính lời mời — không phải "lời mời mới".
+      expect(p.el("ok1").textContent).toMatch(/xin bên mua gửi lại link mời/u);
+      expect(p.el("ok1").textContent).toMatch(/đúng báo giá đã nộp/u);
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "POST /guest/logout"]);
+    });
+
+    it("[S1.181] nop-thau: Thoát từ bước 3 ⇒ bước 2–4 đóng; bảng giá, dòng tổng, ô mã OTP và gói thầu bị xoá; tiền tệ về VND; đếm ngược dừng và câu đếm ngược, lỗi bước 3–4 bị xoá", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(true);
+      const tbody = p.el("bang-hang").querySelector("tbody");
+      expect(tbody.con, "đối chứng: bảng giá có một hàng trước khi thoát").toHaveLength(1);
+      p.el("tong").textContent = "Tổng: 1.234.567.891 VND";
+      p.el("ma").value = "654321";
+      p.el("tien-te").value = "USD";
+      // [lượt soi] Ba dòng mang chữ của phiên trước: câu đếm ngược (hạn của gói ấy) và hai dòng lỗi.
+      for (const id of ["dem-nguoc", "loi3", "loi4"]) {
+        p.el(id).textContent = `${id} của phiên trước`;
+        p.el(id).hidden = false;
+      }
+      await p.bam("nut-thoat-khach");
+      for (const id of ["dem-nguoc", "loi3", "loi4"]) {
+        expect(p.el(id).textContent, id).toBe("");
+        expect(p.el(id).hidden, id).toBe(true);
+      }
+      expect(tbody.con, "bảng giá của phiên đã thoát phải bị xoá").toEqual([]);
+      expect(p.el("tong").textContent, "tổng giá dạng rõ của người trước").toBe("");
+      expect(p.el("ma").value, "mã OTP của người trước").toBe("");
+      expect(p.el("tien-te").value).toBe("VND");
+      for (const b of ["b2", "b3", "b4"]) expect(p.el(b).hidden, b).toBe(true);
+      expect(p.el("b1").lop.has("xong")).toBe(false);
+      expect(bangGoiThau(p), "gói thầu của phiên đã thoát phải bị xoá").toEqual([]);
+      expect(p.trangThai.xoaHen).toEqual([1]);
+      expect(p.el("nut-thoat-khach").hidden).toBe(true);
+    });
+
+    it("[S1.181] nop-thau: nút Thoát ở bước 4 cùng việc — biên nhận của phiên đã thoát bị xoá", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-dung-phien");
+      p.el("b4").hidden = false;
+      for (const id of ["tt-bn", "mo-ta-pb", "van-ban", "chu-ky"]) p.el(id).textContent = `${id} của lần nộp vừa rồi`;
+      await p.bam("nut-thoat-bn");
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq", "POST /guest/logout"]);
+      expect(p.el("b4").hidden).toBe(true);
+      for (const id of ["tt-bn", "mo-ta-pb", "van-ban", "chu-ky"]) expect(p.el(id).textContent, id).toBe("");
+      expect(p.el("ok1").textContent).toMatch(/Đã thoát phiên nộp thầu/u);
+    });
+
+    it("[S1.181] nop-thau: Thoát khi phiên đã chết (401) ⇒ vẫn về bước 1; 500 hay mất mạng ⇒ báo lỗi ở bước 1, KHÔNG đóng bước", async () => {
+      const p401 = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "POST /guest/logout" ? Promise.resolve({ status: 401, body: { error: "x" } }) : undefined),
+      });
+      await p401.bam("nut-dung-phien");
+      await p401.bam("nut-thoat-khach");
+      expect(moBuoc3(p401)).toBe(false);
+      expect(p401.el("ok1").textContent).toMatch(/Đã thoát phiên nộp thầu/u);
+      for (const [ten, tl] of [
+        ["500", () => Promise.resolve({ status: 500, body: { error: "loi noi bo" } })],
+        ["mất mạng", () => Promise.reject(new Error("mat mang"))],
+      ] as const) {
+        // [S1.181 / lượt soi] Lỗi hiện CẠNH nút đã bấm: nút ở bước 4 nằm cuối trang, xa `#loi1`.
+        for (const [nut, oLoi] of [["nut-thoat-khach", "loi1"], ["nut-thoat-bn", "loi4"]] as const) {
+          const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: (l) => (l === "POST /guest/logout" ? tl() : undefined) });
+          await p.bam("nut-dung-phien");
+          p.el("b4").hidden = false;
+          await p.bam(nut);
+          const ca = `${ten} / ${nut}`;
+          expect(moBuoc3(p), ca).toBe(true);
+          expect(p.el(oLoi).hidden, ca).toBe(false);
+          expect(p.el(oLoi === "loi1" ? "loi4" : "loi1").hidden, ca).toBe(true);
+          expect(p.el("ok1").textContent, ca).not.toMatch(/Đã thoát/u);
+          expect(p.el("nut-thoat-khach").hidden, ca).toBe(false);
+          for (const id of ["nut-thoat-khach", "nut-thoat-bn"]) expect(p.el(id).disabled, `${ca}: ${id} phải bấm lại được`).toBe(false);
+        }
+      }
+    });
+
+    it("[S1.181] nop-thau: OTP sai ⇒ chưa có nút Thoát; xác minh OTP xong ⇒ nút Thoát hiện; Mở lời mời khác hay hashchange ⇒ nút Thoát ẩn", async () => {
+      let lanXac = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: `#${ORG}:maA`, cookie: null,
+        thay: (l) => (l === "POST /guest/otp/verify" && ++lanXac === 1 ? Promise.resolve({ status: 422, body: { error: "ma khong dung" } }) : REDEEM(l)),
+      });
+      expect(p.el("nut-thoat-khach").hidden).toBe(true);
+      await p.bam("nut-mo");
+      expect(p.el("nut-thoat-khach").hidden, "chưa xác minh thì chưa có phiên để thoát").toBe(true);
+      p.el("ma").value = "000000";
+      await p.bam("nut-xac");
+      expect(p.el("loi2").hidden).toBe(false);
+      expect(p.el("nut-thoat-khach").hidden, "OTP sai: vẫn chưa có phiên — mã lời mời CHƯA bị tiêu thụ").toBe(true);
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.el("nut-thoat-khach").hidden).toBe(false);
+      expect(bangGoiThau(p)).toContain("Công ty Thép Miền Bắc");
+      await p.doiFragment(`#${ORG}:maB`);
+      expect(p.el("nut-thoat-khach").hidden).toBe(true);
+      const q = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: REDEEM });
+      await q.bam("nut-dung-phien");
+      expect(q.el("nut-thoat-khach").hidden).toBe(false);
+      q.el("org").value = ORG;
+      q.el("token").value = "maGoTay";
+      await q.bam("nut-mo");
+      expect(q.el("nut-thoat-khach").hidden, "lời mời mới đang mở: nút Thoát của phiên cũ phải ẩn").toBe(true);
+    });
+
+    it("[S1.181] nop-thau: Tiếp tục mà phiên đã chết ⇒ nút Thoát ẩn cùng lúc báo ở bước 1", async () => {
+      let lan = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" && ++lan === 2 ? Promise.resolve({ status: 401, body: { error: "x" } }) : undefined),
+      });
+      expect(p.el("nut-thoat-khach").hidden).toBe(false);
+      await p.bam("nut-dung-phien");
+      expect(p.el("nut-thoat-khach").hidden).toBe(true);
+      expect(p.el("loi1").textContent).toMatch(/hết hạn hoặc lời mời đã bị thu hồi/u);
+    });
+
+    it("[S1.181] nop-thau: Thoát về muộn SAU khi fragment đã đổi sang link khác ⇒ không đụng màn của người sau", async () => {
+      const { g, thay } = giu("POST /guest/logout", 1);
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay });
+      const bam = p.bam("nut-thoat-khach");
+      await cho();
+      expect(p.el("nut-dung-phien").disabled, "Tiếp tục bị khoá trong lúc lời gọi thoát còn bay").toBe(true);
+      await p.doiFragment(`#${ORG}:maCuaB`);
+      p.el("ok1").textContent = "câu của người sau";
+      g.tha();
+      await bam;
+      expect(p.el("ok1").textContent).toBe("câu của người sau");
+      expect(p.el("token").value).toBe("maCuaB");
+      expect(p.el("nut-thoat-khach").disabled).toBe(false);
+    });
+    it("[S1.181 / ADR-110] nop-thau: câu nói TRƯỚC hậu quả của việc thoát — lúc Tiếp tục và ở bước 4 — chỉ đường gửi lại link", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-dung-phien");
+      expect(p.el("ok1").textContent).toMatch(/muốn vào lại thì xin bên mua gửi lại link mời/u);
+      const html = readFileSync(new URL("../trang/nop-thau.html", import.meta.url), "utf8");
+      const b4 = html.slice(html.indexOf('id="b4"'), html.indexOf("</section>", html.indexOf('id="b4"')));
+      expect(b4).toMatch(/muốn sửa báo giá thì xin bên mua gửi lại\s+link mời — link gửi lại đưa về đúng báo giá này/u);
+      expect(b4).toContain('id="loi4"');
+    });
+
+    it("[S1.181] nop-thau: đường OTP mà /guest/rfq không mang tên doanh nghiệp (API cũ) ⇒ bảng gói thầu KHÔNG có dòng doanh nghiệp, không chữ 'undefined'", async () => {
+      const khongTen = { ...GOI_THAU_KHACH, supplier: undefined };
+      const p = await dungTrang("nop-thau", {
+        hash: `#${ORG}:maA`, cookie: null,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: khongTen }) : REDEEM(l)),
+      });
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(moBuoc3(p)).toBe(true);
+      const bang = bangGoiThau(p);
+      expect(bang).toContain("Mua thép tấm quý IV");
+      expect(bang).not.toContain("Doanh nghiệp được mời");
+      expect(bang.join(" ")).not.toContain("undefined");
+    });
+
+    /** Gói thầu có một khoá công khai khớp thuật toán mà thư viện giả chọn — đủ để "Niêm phong và nộp" đi tới POST /guest/bids. */
+    const GOI_NOP = { ...GOI_THAU_KHACH, publicKeys: [{ algorithm: "ECDH_P256", publicKey: "", keyVersion: "k1" }] };
+    const BIEN_NHAN = { status: 201, body: { receipt: { bidVersionId: "bv-1", version: 1, submittedAt: "2026-09-27T00:00:00Z", canonicalText: "van ban", signature: "ky" } } };
+
+    it("[S1.181 / lượt soi] nop-thau: trước khi niêm phong trang hỏi lại phiên — thẻ khác đã đổi cookie sang doanh nghiệp khác ⇒ DỪNG, không POST /guest/bids", async () => {
+      let lanRfq = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => {
+          if (l === "GET /guest/rfq") {
+            lanRfq += 1;
+            return Promise.resolve({ status: 200, body: lanRfq <= 2 ? GOI_NOP : { ...GOI_NOP, supplier: { legalName: "Công ty Khác" } } });
+          }
+          return l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined;
+        },
+      });
+      await p.bam("nut-dung-phien");
+      await p.bam("nut-nop");
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq", "GET /guest/rfq"]);
+      expect(p.el("loi3").textContent).toMatch(/đã đổi sang «Công ty Khác»/u);
+      expect(p.el("loi3").textContent).toMatch(/CHƯA được gửi/u);
+      expect(p.el("b4").hidden).toBe(true);
+      expect(p.el("nut-nop").disabled, "nút nộp bấm lại được").toBe(false);
+      // Đối chứng: cùng phiên ⇒ đi tới POST /guest/bids và vẽ biên nhận.
+      const q = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_NOP }) : l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined),
+      });
+      await q.bam("nut-dung-phien");
+      await q.bam("nut-nop");
+      expect(q.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq", "GET /guest/rfq", "POST /guest/bids"]);
+      expect(q.el("b4").hidden).toBe(false);
+    });
+
+    it("[S1.181 / lượt soi] nop-thau: lần hỏi lại phiên trước khi niêm phong — CÙNG doanh nghiệp KHÁC gói ⇒ dừng; 401 ⇒ 'hết hạn'; 500 hay 503 không JSON ⇒ lỗi máy chủ, KHÔNG bảo đi xin link mới; không lần nào POST /guest/bids", async () => {
+      const chayVoi = async (lan3: { status: number; body: unknown }) => {
+        let lanRfq = 0;
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => {
+            if (l === "GET /guest/rfq") {
+              lanRfq += 1;
+              return Promise.resolve(lanRfq <= 2 ? { status: 200, body: GOI_NOP } : lan3);
+            }
+            return l === "POST /guest/bids" ? Promise.resolve(BIEN_NHAN) : undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        await p.bam("nut-nop");
+        expect(p.trangThai.goi).not.toContain("POST /guest/bids");
+        expect(p.el("nut-nop").disabled).toBe(false);
+        expect(p.el("loi3").textContent).toMatch(/CHƯA được gửi/u);
+        return p.el("loi3").textContent;
+      };
+      // Cùng tên doanh nghiệp, gói KHÁC: phong bì niêm cho gói r-1 không được đi vào luồng của gói r-2.
+      expect(await chayVoi({ status: 200, body: { ...GOI_NOP, rfq: { ...GOI_NOP.rfq, id: "r-2" } } })).toMatch(/Phiên nộp thầu trên trình duyệt này đã đổi sang «Công ty Thép Miền Bắc»/u);
+      expect(await chayVoi({ status: 401, body: { error: "phien khong hop le" } })).toMatch(/Phiên nộp thầu đã hết hạn hoặc đã thoát — báo giá CHƯA được gửi\. Xin bên mua gửi lại link mời\./u);
+      for (const loi of [{ status: 500, body: { error: "loi may chu" } }, { status: 503, body: null }]) {
+        const cau = await chayVoi(loi);
+        expect(cau, String(loi.status)).toMatch(/Thử lại sau ít phút/u);
+        expect(cau, String(loi.status)).not.toMatch(/hết hạn|gửi lại link/u);
+      }
+    });
+
+    it("[S1.181 / lượt soi] nop-thau: lời hỏi lại phiên, hay lần nộp mất mạng, về muộn SAU khi đã Thoát ⇒ bị bỏ — không câu lỗi nào của phiên trước ở bước 3", async () => {
+      for (const ca of ["hỏi lại phiên về muộn", "POST /guest/bids ném sau khi thoát"] as const) {
+        const g = { tha: () => undefined as void };
+        let lanRfq = 0;
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => {
+            if (l === "GET /guest/rfq") {
+              lanRfq += 1;
+              if (ca === "hỏi lại phiên về muộn" && lanRfq === 3) return new Promise((r) => { g.tha = () => { r({ status: 401, body: { error: "x" } }); }; });
+              return Promise.resolve({ status: 200, body: GOI_NOP });
+            }
+            if (l === "POST /guest/bids") return new Promise((_r, tuChoi) => { g.tha = () => { tuChoi(new Error("mat mang")); }; });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        const nop = p.bam("nut-nop");
+        await cho();
+        await p.bam("nut-thoat-khach");
+        expect(p.el("ok1").textContent, ca).toMatch(/Đã thoát phiên nộp thầu/u);
+        g.tha();
+        await nop;
+        expect(p.el("loi3").textContent, ca).toBe("");
+        expect(p.el("loi3").hidden, ca).toBe(true);
+        expect(p.el("b3").hidden, ca).toBe(true);
+      }
+    });
+
+    it("[S1.181 / lượt soi] nop-thau: biên nhận về muộn SAU khi đã Thoát ⇒ bị bỏ, bước 4 không mở lại dưới câu 'Đã thoát'", async () => {
+      const g = { tha: () => undefined as void };
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => {
+          if (l === "GET /guest/rfq") return Promise.resolve({ status: 200, body: GOI_NOP });
+          if (l === "POST /guest/bids") return new Promise((r) => { g.tha = () => { r(BIEN_NHAN); }; });
+          return undefined;
+        },
+      });
+      await p.bam("nut-dung-phien");
+      const nop = p.bam("nut-nop");
+      await cho();
+      expect(p.trangThai.goi.at(-1)).toBe("POST /guest/bids");
+      await p.bam("nut-thoat-khach");
+      expect(p.el("ok1").textContent).toMatch(/Đã thoát phiên nộp thầu/u);
+      g.tha();
+      await nop;
+      expect(p.el("b4").hidden).toBe(true);
+      expect(p.el("tt-bn").con).toEqual([]);
+      expect(p.el("ok1").textContent).toMatch(/Đã thoát phiên nộp thầu/u);
+    });
+
+    // [S1.181 / ADR-110] `/tao-thau`: nút Gửi lại link ở mỗi lời mời còn sống.
+    const moDanhSachLoiMoi = async (thay: (l: string) => Promise<{ status: number; body: unknown }> | undefined) => {
+      const p = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          thay(l) ??
+          (l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: "OPEN" } } })
+            : l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [] } })
+            : l === "GET /rfqs/r-1/invitations"
+              ? Promise.resolve({ status: 200, body: { invitations: [{ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", status: "SENT", revokedAt: null }] } })
+              : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      p.el("rfq").value = "r-1";
+      await p.bam("nut-doc");
+      await p.bam("nut-doc-moi");
+      const tr = p.el("bang-moi").querySelector("tbody").con[0];
+      const nut = tr?.con[4]?.con ?? [];
+      return { p, nut };
+    };
+
+    it("[S1.181 / ADR-110] tao-thau: lời mời còn sống có HAI nút — Gửi lại link (POST /invitations/:id/reissue) và Thu hồi; 200, 429, lỗi khác", async () => {
+      const { p, nut } = await moDanhSachLoiMoi(() => undefined);
+      expect(nut.map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
+      for (const f of nut[0]?.nghe["click"] ?? []) await f();
+      expect(p.trangThai.goi.at(-1)).toBe("POST /invitations/i-1/reissue");
+      // Bộ fetch giả trả 401 cho route lạ: lỗi hiện ở bước 5.
+      expect(p.el("loi5").hidden).toBe(false);
+
+      const ok = await moDanhSachLoiMoi((l) => (l === "POST /invitations/i-1/reissue" ? Promise.resolve({ status: 200, body: { reissued: true } }) : undefined));
+      for (const f of ok.nut[0]?.nghe["click"] ?? []) await f();
+      expect(ok.p.el("ok5").textContent).toMatch(/Đã gửi link mới tới Chị Lan qua EMAIL/u);
+      expect(ok.p.el("ok5").textContent).toMatch(/đúng báo giá đã nộp/u);
+      expect(ok.nut[0]?.disabled).toBe(false);
+
+      const tran = await moDanhSachLoiMoi((l) => (l === "POST /invitations/i-1/reissue" ? Promise.resolve({ status: 429, body: { error: "da gui qua nhieu link cho loi moi nay" } }) : undefined));
+      for (const f of tran.nut[0]?.nghe["click"] ?? []) await f();
+      expect(tran.p.el("loi5").textContent).toMatch(/đủ số link cho phép trong một giờ/u);
+    });
+
+    it("[S1.181 / lượt soi] tao-thau: Gửi lại link TẮT trong lúc lời gọi còn bay (bấm đúp không tiêu hai chỗ của trần); mất mạng ⇒ câu báo, nút bật lại; 502 ⇒ nói link cũ đã hết hiệu lực và lần hỏng vẫn tính vào trần", async () => {
+      const g = { tha: () => undefined as void };
+      const bay = await moDanhSachLoiMoi((l) =>
+        l === "POST /invitations/i-1/reissue" ? new Promise((r) => { g.tha = () => { r({ status: 200, body: { reissued: true } }); }; }) : undefined,
+      );
+      const lan1 = Promise.all((bay.nut[0]?.nghe["click"] ?? []).map((f) => f()));
+      await cho();
+      expect(bay.nut[0]?.disabled, "nút tắt ngay khi bấm — trình duyệt không phát click thứ hai cho nút tắt").toBe(true);
+      g.tha();
+      await lan1;
+      expect(bay.nut[0]?.disabled).toBe(false);
+      expect(bay.p.trangThai.goi.filter((x) => x === "POST /invitations/i-1/reissue")).toHaveLength(1);
+
+      const matMang = await moDanhSachLoiMoi((l) => (l === "POST /invitations/i-1/reissue" ? Promise.reject(new Error("mat mang")) : undefined));
+      for (const f of matMang.nut[0]?.nghe["click"] ?? []) await f();
+      expect(matMang.nut[0]?.disabled, "mất mạng không được để nút kẹt ở trạng thái tắt").toBe(false);
+      expect(matMang.p.el("loi5").textContent).toMatch(/mất kết nối tới máy chủ/u);
+      expect(matMang.p.el("loi5").hidden).toBe(false);
+
+      const hong = await moDanhSachLoiMoi((l) =>
+        l === "POST /invitations/i-1/reissue"
+          ? Promise.resolve({ status: 502, body: { error: "khong gui duoc link moi; link moi da thu hoi, link cu chua dung da het hieu luc" } })
+          : undefined,
+      );
+      for (const f of hong.nut[0]?.nghe["click"] ?? []) await f();
+      expect(hong.p.el("loi5").textContent).toMatch(/Link cũ chưa dùng của lời mời này đã hết hiệu lực/u);
+      expect(hong.p.el("loi5").textContent).toMatch(/kể cả lần gửi hỏng/u);
+      expect(hong.p.el("ok5").hidden).toBe(true);
+    });
+
+    it("[S1.181 / ADR-110] tao-thau: Thu hồi xong ⇒ câu báo nói báo giá cũ vẫn nằm trong gói và chỉ đường Gửi lại link, không khuyên mời lại", async () => {
+      const { p, nut } = await moDanhSachLoiMoi((l) => (l === "POST /invitations/i-1/revoke" ? Promise.resolve({ status: 200, body: { revoked: true } }) : undefined));
+      for (const f of nut[1]?.nghe["click"] ?? []) await f();
+      expect(p.el("ok5").textContent).toMatch(/Báo giá đã nộp theo lời mời này \(nếu có\) vẫn nằm trong gói thầu/u);
+      expect(p.el("ok5").textContent).toMatch(/«Gửi lại link»/u);
+      expect(p.el("ok5").textContent).not.toMatch(/Mời lại/u);
     });
   });
 

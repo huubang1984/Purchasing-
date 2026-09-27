@@ -13,9 +13,12 @@
 // ============================================================================================
 export {
   CHANNELS,
+  // [S1.181 / ADR-110] Trần và cửa sổ của lần gửi lại link mời — route người mua đọc để trả `Retry-After`.
+  CUA_SO_LINK_MOI_GIAY,
   GUEST_SESSION_MAX_TTL_SECONDS,
   GUEST_SESSION_TOKEN_BYTES,
   InvitationError,
+  LINK_MOI_TOI_DA_MOI_GIO,
   MAGIC_LINK_MAX_TTL_SECONDS,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_LOCKOUT_SECONDS,
@@ -33,10 +36,15 @@ export {
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
+  // [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời còn sống, và phần bù của nó khi gửi hỏng sau commit.
+  reissueInvitationLink,
+  revokeMagicLinkToken,
   // [ADR-020 / S1.10.2] Cookie khách → phiên khách. Đường vào DUY NHẤT của `withGuestSession` từ apps/api.
   getInvitationNoticeTarget,
   resolveGuestSessionByToken,
   listInvitations,
+  // [S1.181 / ADR-109] Nhà cung cấp tự thoát phiên khách của mình — chạm đúng một hàng phiên, dẫn xuất từ cookie.
+  revokeGuestSession,
   revokeInvitation,
   // [sổ nợ 39] Bộ đếm bucket cho người gọi ba route /auth/* — chỉ mở kind LOGIN_CALLER; dispatcher gọi.
   tangBucketHanMuc,
@@ -52,6 +60,7 @@ export {
   type OtpIssueOutcome,
   type OtpVerifyResult,
   type RedeemedLink,
+  type ReissueLinkOutcome,
   type ResolvedGuestSession,
   type VerifyOtpInput,
 } from "./invitation.js";

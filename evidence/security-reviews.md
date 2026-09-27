@@ -14404,9 +14404,10 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 - Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-107,
   chưa vào sổ nợ.
 - `/tao-thau` và `/chinh-sach` không có ô xin link.
-- Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa. Dấu hai chấm hợp lệ trong fragment
-  (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để trình tự nhận diện không
-  cắt mất ký tự cuối.
+- ~~Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa.~~ **[S1.181]** Đo trên Gmail ngày
+  2026-09-27 (§S1.181 mục 3c): ba link trọn vẹn, chủ dự án mở và xác nhận; Outlook, Apple Mail, SMS và Zalo chưa đo. Dấu hai
+  chấm hợp lệ trong fragment (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để
+  trình tự nhận diện không cắt mất ký tự cuối.
 
 ## 5. Số
 
@@ -14611,12 +14612,13 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 
 ## 4. Giới hạn
 
-- Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
+- ~~Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
   cung cấp cùng một gói trên một máy — hiếm, ví dụ một người đại diện cho hai doanh nghiệp — có thể nộp vào hồ sơ của nhau nếu
-  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).
-- Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
+  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).~~
+  **[S1.181 / ADR-109]** Đã làm — `GET /guest/rfq` mang tên doanh nghiệp được mời, khối hỏi nêu nó. §S1.181.
+- ~~Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
   phía bên mua). Người thấy khối hỏi mà không phải mình thì mở link mời của mình — lần xác minh thay cookie. Cookie khách tự hết
-  sau 4 giờ.
+  sau 4 giờ.~~ **[S1.181 / ADR-109]** Đã làm — `POST /guest/logout`, nút Thoát phiên nộp thầu ở bước 1 và bước 4. §S1.181.
 - Biên nhận của lần nộp trước (bước 4) không hiện lại sau khi tải lại trang.
 - Mã cuối được đo trên Chromium với API giả; luồng API thật (kể cả nộp) được đo trên commit trước lượt sửa của mục 3b.
 
@@ -14775,3 +14777,221 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
   `c637858`, `c637455` (sau #176 — hai tệp kịch bản 41 **88/88** cục bộ), `9f66fcf` và `2ccfe6b`. #186 chỉ chạm tài liệu và test kiến
   trúc `khoa-depcruise`; trên cây đã hợp `pnpm t0` sạch, `pnpm test` 117 tệp, 1548 đạt, 1 bỏ qua, `pnpm cap-so --kiem` sạch.
 - Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
+
+# §S1.181 — PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH; BÊN MUA GỬI LẠI LINK CHO CHÍNH LỜI MỜI (ADR-109, ADR-110)
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27 hai giới hạn §S1.178 mục 4 để lại, cộng phép đo link trên hộp thư thật (§S1.176 mục 4):
+
+- Khối hỏi phiên của trang nộp thầu chỉ nêu tên gói. Một gói mời nhiều nhà cung cấp, nên hai nhà cung cấp của cùng một gói trên
+  một máy thấy cùng một câu hỏi và có thể nộp vào hồ sơ của nhau. Không route khách nào trả định danh người được mời.
+- Không route nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ `revokeInvitation` phía bên mua, và nó thu
+  hồi cả lời mời. Cookie `__Host-tp_guest` sống tới 4 giờ kể cả sau khi đóng trình duyệt.
+
+Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG mà lối thoát mở rộng: thoát rồi (hay hết 4 giờ — có từ trước) thì không
+đường nào đưa nhà cung cấp về hồ sơ báo giá của mình. Chủ dự án chọn làm đường thật trong cùng vòng: **ADR-110**.
+
+## 2. Thay đổi
+
+- `packages/invitation`: `resolveGuestSessionByToken` nối thêm `suppliers` theo khoá chính và trả `supplierLegalName` — đọc dưới
+  kết nối chỉ gắn tổ chức, trong cùng câu đã chứng minh token. `revokeGuestSession(client, orgId, guestSessionId)`:
+  `assertTenantBound`, `UPDATE guest_sessions … WHERE id = $1 AND revoked_at IS NULL RETURNING …`, và CHỈ khi có hàng đổi thì ghi
+  `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id`, payload `invitationId`). **[ADR-110]** `reissueInvitationLink`:
+  khoá hàng lời mời (~~`FOR UPDATE`~~ **[lượt soi hai]** `FOR NO KEY UPDATE`, mục 3d), đọc trạng thái gói ~~bằng câu riêng~~
+  **[lượt soi hai]** VÀ hạn — hạn gói ở `OPEN`, hạn vòng đang mở ở `BAFO_OPEN` — bằng câu riêng, trần `LINK_MOI_TOI_DA_MOI_GIO` = 3
+  token/giờ/lời mời (đếm cả token của lần mời và token đã thu hồi), thu hồi token chưa dùng, ghi `INVITATION_LINK_REISSUED`, phát
+  token qua `issueMagicLinkToken`; `revokeMagicLinkToken` là phần bù (lý do `LINK_SEND_FAILED`, ghi `MAGIC_LINK_TOKEN_REVOKED`).
+- `apps/api`: `GuestContext.supplierLegalName`; `GET /guest/rfq` thêm `supplier: { legalName }`; `POST /guest/logout` (GUEST,
+  `mutates: true`) trả 200 kèm `XOA_COOKIE_PHIEN_KHACH`. **[ADR-110]** `POST /invitations/:invitationId/reissue` (BUYER, `rfq.invite`):
+  404/409/409/429 + `Retry-After`, đích đọc từ `supplier_contacts`, gửi SAU commit, phần bù thu hồi đúng token vừa phát ⇒ 502.
+  **[lượt soi hai]** Thân 200 là `{reissued: true}` — bỏ `revokedLinks`; thân 502 nói link cũ chưa dùng đã hết hiệu lực.
+  Đầu tệp `routes/guest.ts` sửa (gạch kèm nhãn): hai route GHI của khách chạy trên kết nối chỉ gắn tổ chức.
+- `apps/web/trang/nop-thau.*`: khối hỏi nêu tên doanh nghiệp và tên gói, thiếu tên doanh nghiệp thì không hỏi; bước 3 có dòng
+  "Doanh nghiệp được mời"; nút Thoát ở bước 1 và bước 4 cùng `thoatPhienKhach(oLoi)`. Sau lượt soi: `dongCacBuoc` xoá thêm dòng tổng,
+  ô OTP, tiền tệ, đếm ngược; lỗi thoát hiện cạnh nút đã bấm (`#loi4` mới ở bước 4); Tiếp tục bị khoá trong lúc thoát; thoát xong cuộn
+  về bước 1; "Niêm phong và nộp" hỏi lại `GET /guest/rfq` và DỪNG khi phiên hiện hành không còn là phiên trên màn (khác gói hay khác
+  tên doanh nghiệp); biên nhận về muộn sau khi đổi thế hệ bị bỏ; câu chữ chỉ đường "xin bên mua gửi lại link mời". **[lượt soi hai]**
+  Lần hỏi lại phiên trước khi niêm phong: chỉ 401 là hết phiên, mã khác là lỗi máy chủ kèm lời "thử lại".
+- `apps/web/trang/tao-thau.js` **[ADR-110]**: nút *Gửi lại link* cạnh *Thu hồi*; câu báo sau khi thu hồi nói báo giá đã nộp vẫn nằm
+  trong gói và chỉ đường gửi lại link, thay cho *"Mời lại nhà cung cấp ấy được rồi"*. **[lượt soi hai]** Mất mạng có câu báo và nút
+  bật lại (`finally`); 502 có câu riêng — link cũ đã hết hiệu lực, lần hỏng tính vào trần.
+- Canh kiến trúc: `revokeGuestSession` vào `HAM_DUONG_KHACH`; `reissueInvitationLink`, `revokeMagicLinkToken` vào `HAM_DOI_TRANG_THAI`
+  (`tests/architecture/cong-quyen-route.test.ts`); năm tên vào danh sách trắng của mặt tiền `invitation`.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bộ quét route có ca cho `POST /guest/logout` và `POST /invitations/:invitationId/reissue`
+  (mục 3b — commit trước của vòng làm đỏ bộ quét); **[lượt soi hai]** bước 12c gửi lại link cho người top-N giữa vòng BAFO.
+- ADR-109 (và các chỗ sửa sau lượt soi), ADR-110, ghi muộn ở ADR-020 mục 4; ADR-107 (Hệ quả) và §S1.178 mục 4 gạch kèm nhãn;
+  §S1.176 mục 4 gạch kèm nhãn (mục 3c); STATE khoản 250.
+
+## 3. Đo
+
+- `apps/api/src/guest.int.test.ts` khối `[S1.181 / ADR-109]`, 10 ca trên Postgres thật — tám qua HTTP, hai gọi thẳng hàm: hai nhà
+  cung cấp cùng gói ⇒ hai tên, không thấy tên nhau, không mã nhà cung cấp, không người liên hệ; tên đọc lúc gọi; thoát ⇒ 200,
+  `Set-Cookie` xoá đủ thuộc tính, cookie cũ 401 ở đọc và ghi, lời mời không thu hồi, đúng một hàng sổ, lần thoát thứ hai 401 không thêm
+  hàng; chạm ĐÚNG phiên đang gọi; 401 không cookie/cookie rác/magic link trong cookie; **[lượt soi]** thoát không đổi một cột nào của
+  lời mời, token và thách thức OTP (một link thứ hai đang chờ OTP lúc thoát vẫn xác minh được); **[lượt soi]** đua qua HTTP — một kết
+  nối giữ khoá hàng phiên để câu UPDATE của handler chờ, thu hồi rồi thả ⇒ 200 kèm `Set-Cookie`, 0 hàng sổ; hai ca gọi thẳng hàm
+  (thu hồi giữa chừng ⇒ `false`; tổ chức khác ⇒ `false`, khai sai tổ chức ⇒ ném ở câu đầu); **[ADR-110]** đầu-cuối: nộp, thoát, bên
+  mua gửi lại link QUA HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng, `vendor_bids` một hàng. 22/22.
+- `apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.181 / ADR-110]`, 6 ca: token mới cho chính lời mời, đúng người liên hệ và
+  kênh, link cũ hết hiệu lực (`redeemMagicLink`), hai hàng sổ, thân phản hồi không mang token; trần ⇒ 429 + `Retry-After` 3600, không
+  token/gửi/sổ, dời mốc tạo ra ngoài cửa sổ thì gửi được — tức token đã thu hồi vẫn bị đếm; ba lần gửi CHỒNG NHAU (một kết nối giữ
+  khoá tư vấn ghi sổ của tổ chức tới khi ba lời gọi cùng chờ) ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời THẬT của tổ
+  chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm một hàng `PERMISSION_DENIED`; `assertTenantBound` của hai hàm và lý do lạ lúc
+  chạy; bộ gửi ném ⇒ 502, token vừa phát thu hồi với lý do, lời mời còn sống, một dòng log không token, gửi lại ⇒ 200. 15/15.
+  **[lượt soi hai]** Bốn ca mới và ba vế thêm, 19/19: gói `OPEN` quá hạn ⇒ 409, không token, không thư; `BAFO_OPEN` theo hạn của
+  VÒNG — hạn gói đã qua mà hạn vòng còn ⇒ 200, hạn vòng qua ⇒ 409, vòng đóng ⇒ 409 (hai trạng thái chỉ thời gian mới dựng được, nên
+  dựng bằng cách tắt trigger trong MỘT giao dịch superuser và bật lại đúng trạng thái cũ trước COMMIT — khuôn `bidding.int.test.ts`
+  [INV-C1], chặt hơn: nó so bảng `pg_trigger` trước/sau); kênh SMS ⇒ số điện thoại; phần bù lần hai hay khai sai lời mời ⇒ `false`,
+  không hàng sổ; đua với xác minh OTP bằng link cũ (một kết nối giữ hàng token để lần xác minh khoá nó TRƯỚC) ⇒ không 40P01, cả hai
+  200, sổ ghi `revokedTokens: 0`; thân 200 so bằng `{reissued: true}`; cửa sổ trần đúng một giờ (dời 50 phút vẫn 429); lần hỏng tính
+  vào trần (lời mời + hỏng + được ⇒ lần kế 429).
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: 58/58, bộ quét route đi qua cả hai route mới; **[lượt soi hai]** bước 12c gửi
+  lại link cho người top-1 giữa `BAFO_OPEN` ⇒ 200, và bước 12d nộp bằng CHÍNH phiên cũ của người ấy.
+- `apps/web/src/phuc-vu.test.ts`, 15 ca `[S1.181]` trên khung `node:vm` của §S1.177 — khung nay trả CÙNG phần tử cho cùng bộ chọn
+  (`querySelector`), có `crypto.subtle`, `atob`, `btoa`, `TextEncoder` giả và thư viện niêm phong giả đủ để "Niêm phong và nộp" đi tới
+  `POST /guest/bids`: ngoài chín ca cũ (đã sửa theo lượt soi) có câu nói trước ở Tiếp tục và ở bước 4 (đọc tệp HTML), đường OTP gặp API
+  cũ không tên doanh nghiệp, kiểm phiên trước khi niêm phong (thẻ khác đổi cookie ⇒ dừng, không `POST /guest/bids`; đối chứng cùng
+  phiên ⇒ nộp), biên nhận về muộn sau khi thoát bị bỏ, và hai ca `/tao-thau` (nút Gửi lại link, 200/429/lỗi, câu báo sau thu hồi).
+  Ca `[S1.178]` *"200 thiếu tên gói"* nay có tên doanh nghiệp và CHỈ thiếu tên gói. 75/75. **[lượt soi hai]** Ba ca mới, 78/78: nút Gửi
+  lại link TẮT trong lúc lời gọi bay (đúng một lời gọi), mất mạng ⇒ câu báo và nút bật lại, 502 ⇒ câu riêng; lần hỏi lại phiên trước
+  khi niêm phong — cùng doanh nghiệp KHÁC gói ⇒ dừng, 401 ⇒ câu hết phiên, 500 và 503 không JSON ⇒ lỗi máy chủ, không lần nào
+  `POST /guest/bids`; lời hỏi lại và lần nộp mất mạng về muộn SAU khi Thoát ⇒ bị bỏ. Hai ca cũ ghim thêm việc xoá câu đếm ngược, `#loi3`,
+  `#loi4` — một qua Thoát, một qua hashchange (đường KHÔNG đi qua nút Thoát, nút tự xoá `#loi4`).
+- `pnpm t0` xanh; `pnpm test` ~~1557/1557~~ **[lượt soi hai]** 1566/1566 (và một ca chỉ chạy trên CI bị bỏ qua cục bộ); bộ tích hợp đầy
+  đủ: mục 5.
+- Đột biến (chép tệp, chạy các ca liên quan, trả lại). **Lượt một** (trước lượt soi): 31 — 20 ở `nop-thau.js`, 11 ở API và gói — cả 31
+  đỏ, một cần thêm ca mới đỏ. **Lượt hai** (sau lượt soi và ADR-110): 41, cả 41 đỏ — 16 ở `nop-thau.js` (không xoá bảng giá, dòng tổng,
+  ô OTP, tiền tệ; chỉ xoá hai vùng biên nhận; bỏ kiểm phiên trước khi nộp; không bỏ biên nhận về muộn; lỗi thoát luôn ở bước 1; chỉ
+  bật lại một nút; hiện nút Thoát trước kết quả OTP; tên `String(undefined)`; luôn đẩy dòng doanh nghiệp; bỏ vế tên gói; câu Tiếp tục
+  và câu sau khi thoát không chỉ đường; không khoá Tiếp tục), 5 ở `tao-thau.js` (gọi nhầm route thu hồi, 429 không nói, câu thu hồi cũ,
+  mất nút, nút không bật lại), 16 ở gói và route gửi lại link (không thu hồi token cũ, trần `>`, bỏ khoá hàng, gửi lại lời mời đã thu
+  hồi, bỏ kiểm trạng thái gói — hai biến thể, trần chỉ đếm token sống, sổ sai mã, phần bù không thu hồi, 429 không `Retry-After`,
+  đích sai, bỏ hai `assertTenantBound`, phần bù nhận lý do lạ), 4 ở đường thoát (thu hồi token, tiêu thụ OTP, đổi trạng thái lời mời,
+  409 khi phiên vừa bị thu hồi). Đột biến *bỏ khoá hàng* sống ở một lượt chạy: ca "ba lần cùng lúc" bản đầu không bảo đảm ba giao dịch
+  chồng nhau; nay nó giữ khoá tư vấn của tổ chức, đỏ với đột biến và xanh 3/3 lần chạy lại trên mã đúng. **Lượt ba** (sau lượt soi
+  hai, mục 3d): 21, cả 21 đỏ — 11 ở gói và route (khoá hàng về `FOR UPDATE` ⇒ ca đua đỏ vì 40P01; cửa sổ 60 s; bỏ nhánh `BAFO_OPEN` —
+  đỏ cả ở kịch bản 41, 2 ca; `BAFO_OPEN` so hạn gói; `OPEN` không xét hạn; vòng đã đóng vẫn tính; đích luôn là email; phần bù luôn ghi
+  sổ; phần bù không ràng lời mời; thân 200 mang lại `revokedLinks`; thân 502 cũ), 10 ở trang (bỏ tắt nút; bỏ `catch` mất mạng; bỏ nhánh
+  502; bỏ vế `rfq.id`; mọi mã khác 200 là hết phiên; bỏ kiểm thế hệ sau lần hỏi lại và ở `catch`; `dongCacBuoc` không xoá câu đếm
+  ngược, không xoá `#loi4`; câu 401 sai). *Không xoá `#loi4`* sống ở lần chạy đầu — ca Thoát không đo được nó vì nút Thoát tự xoá
+  `#loi4` — và đỏ sau khi ca hashchange ghim thêm.
+- Pilot giả lập trên mã của vòng (trước lần tách câu khoá hàng ở mục 3b): 10/10 kịch bản, cô lập 2/2.
+- Chromium 1194 trên cụm thật của pilot — lượt một (mã trước lượt soi): hai nhà cung cấp cùng gói trong CÙNG ngữ cảnh trình duyệt, tên
+  đúng từng doanh nghiệp ở bước 3 và ở khối hỏi, thoát ở khối hỏi và ở bước 4 xoá cookie, `GET /api/guest/rfq` 401, 0 lỗi JavaScript.
+  **Lượt hai** (mã sau lượt soi, cùng bản pilot ở trên): nhà cung cấp mở link, OTP qua SMS, nộp ⇒ *"Lần nộp #1"*; Thoát ở bước 4 ⇒ câu
+  *"… xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp; link cũ đã dùng rồi."*, `GET /api/guest/rfq` 401. Người
+  mua vai BUYER đăng nhập bằng link + TOTP ở `/tao-thau`, đọc gói, đọc danh sách lời mời — bốn hàng, mỗi hàng hai nút — bấm *Gửi lại
+  link* ở hàng của nhà cung cấp ấy ⇒ *"Đã gửi link mới tới Châu Minh Khoa qua EMAIL…"*; hộp thư dev có đúng một link mới cho lời mời
+  ấy. Nhà cung cấp mở link mới, OTP, xác minh ⇒ bước 3 nêu đúng doanh nghiệp; `GET /api/guest/bids` ⇒ một hồ sơ, phiên bản `[1]`; nộp ⇒
+  *"Lần nộp #2"*. Gửi lại lần thứ hai ⇒ được; lần thứ ba (token thứ tư trong giờ) ⇒ *"Lời mời này đã được gửi đủ số link cho phép
+  trong một giờ — thử lại sau."* 0 lỗi JavaScript. **Lượt ba** (mã cuối `0b320eb`, sau lượt soi hai; cụm pilot dựng lại — 10/10 kịch
+  bản, cô lập 2/2): cùng đường, cùng kết quả — nộp #1, Thoát ⇒ `GET /api/guest/rfq` 401, bên mua gửi lại ⇒ hộp thư dev một link mới cho
+  đúng lời mời, nhà cung cấp vào lại đúng doanh nghiệp và hồ sơ (một hồ sơ, phiên bản `[1]`), nộp #2; gửi lại lần hai được, lần ba ⇒
+  câu 429. 0 lỗi JavaScript.
+
+## 3b. Soi đối kháng
+
+Workflow hai lăng kính (hành vi/an ninh; test/tài liệu); người kiểm cố bác năm phát hiện đầu của mỗi lăng kính. 18 phát hiện: lăng kính
+một 6 (1 NẶNG, 4 NHẸ, 1 INFO), lăng kính hai 12 (1 NẶNG, 8 NHẸ, 3 INFO). Mười phát hiện được kiểm: chín đứng, một bị bác. Tám phát hiện
+còn lại không có người kiểm: bốn đo lại bằng một đột biến sống trước khi sửa và chết sau khi sửa (bật lại một nút, nút Thoát trước kết
+quả OTP, nhánh API cũ, câu nói trước), ba đọc lại và đúng (đầu tệp `routes/guest.ts` cùng ADR-020 mục 4 và lời dẫn của ADR-109; thiếu
+mục Giới hạn và Số; lệch phiên bản làm nút Thoát 404), một INFO sửa luôn (Tiếp tục không khoá lúc thoát). Mọi phát hiện đứng đã sửa:
+
+- **NẶNG — thoát rồi thì không có đường quay lại mà trang và chú thích hứa.** Mời lại 409, không route phát link cho lời mời đã có,
+  thu hồi rồi mời lại là luồng báo giá thứ hai; người kiểm đo thêm bằng worker, bảng so sánh và bảng xếp hạng thật: nhà cung cấp đứng
+  hai hàng, giá cũ thắng hạng 1. Chủ dự án chọn làm route: ADR-110. Phần có từ trước — báo giá của lời mời đã thu hồi vẫn dự thầu —
+  thành khoản 250.
+- **NẶNG (lăng kính hai) — ca `[S1.178]` "200 thiếu tên gói" không còn ghim vế tên gói**: thân `{items: []}` thiếu cả tên doanh nghiệp,
+  nên đột biến bỏ vế tên gói (một trong 25 đột biến §S1.178 khai là đỏ) sống. Thân nay chỉ thiếu tên gói; đột biến đỏ lại.
+- **Thoát không xoá dòng tổng giá dạng rõ** (và ô OTP, tiền tệ) — sửa, có ca.
+- **Tên doanh nghiệp là ảnh chụp lúc tải**: hai thẻ trên một máy, bảng nêu A mà báo giá đi vào hồ sơ B (người kiểm dựng lại trên
+  Chromium) — kiểm phiên hiện hành trước khi niêm phong.
+- **Lỗi thoát ở bước 4 chỉ hiện ở `#loi1`** — `#loi4`, lỗi hiện cạnh nút đã bấm.
+- **Biên nhận về muộn sau khi thoát mở lại bước 4** — nút nộp chụp thế hệ.
+- **Lời khai "thoát không chạm lời mời, token, OTP" không có ca nào ghim** (ba đột biến sống) — ca mới so ba bảng trước/sau.
+- **"200 kể cả khi phiên vừa bị thu hồi giữa hai bước" không đo qua HTTP; ADR và biên bản nói "qua HTTP" cho cả khối** — ca đua qua HTTP,
+  câu chữ sửa.
+- **DOM giả không thấy `tbody`; ca "biên nhận bị xoá" chỉ đọc một vùng; một khẳng định chỉ đo fetch giả** — khung sửa, ca đọc đủ bốn
+  vùng, khẳng định thừa bỏ.
+
+Bác: *cột mốc S1.178 ở STATE và §S1.178 mục 2–3 vẫn khai "không route khách nào trả định danh người được mời"* — người kiểm cho thấy
+quy ước của kho không gạch cột mốc cũ; chỗ cần gạch (§S1.178 mục 4, ADR-107 Hệ quả) đã gạch.
+
+**Và một lỗi tự tìm, sau lượt soi:** commit đầu của vòng (`d2f4054`, đã đẩy lên nhánh) thêm `POST /guest/logout` mà không thêm ca vào bộ
+quét route của `kich-ban-41-http.int.test.ts` — bộ quét đòi mọi route ghi có một thân hợp lệ, nên hai ca của tệp ĐỎ trên commit ấy
+(đo: 2 failed / 58). Vòng trước chỉ chạy các tệp test chạm tới, không chạy bộ tích hợp đầy đủ trước khi đẩy.
+
+## 3c. Hộp thư thật — link `#<orgId>:<token>` (giới hạn cuối của §S1.176 mục 4)
+
+Chủ dự án chọn đo ở vòng này. Một thư gửi qua connector Gmail của phiên tới hộp thư của chính chủ dự án ngày 2026-09-27, ba link đúng
+khuôn ba bộ gửi dựng — thư đăng nhập `…/login#<orgId>:<token>`, thư mời `…/i#<orgId>:<token>`, tin báo không mã `…/login#<orgId>` —,
+mã GIẢ (32 byte ngẫu nhiên, base64url 43 ký tự), tên miền `example.com`, dưới mỗi link một dòng *"Phải kết thúc bằng …"*. Hai mã được
+chọn để có `-` và `_` sát cuối.
+
+- Đọc lại thư qua connector: mỗi link đã thành một thẻ `<a>` bọc qua `https://www.google.com/url?q=https://example.com/login%23<orgId>:<token>&…`
+  — `#` mã hoá thành `%23`, và toàn bộ phần sau nó, gồm `:`, `-`, `_`, nằm trong tham số `q`. Cả ba link.
+- Chủ dự án mở thư và bấm link, báo lại cùng ngày: *"Đã mở link, xác nhận đúng"*.
+- Ký tự cuối của mã 32 byte chỉ mang 4 bit, nên nó luôn thuộc `[AEIMQUYcgkosw048]` — không bao giờ là `-` hay `_`, hai ký tự mà bộ tự
+  nhận diện link hay bỏ ở cuối. (Lần đầu định sinh mã kết thúc bằng `-`/`_` để thử — vòng lặp không dừng; đây là lý do.)
+
+Giới hạn của phép đo: thư đi qua Gmail API của connector, không qua SES — thư thật có thể khác ở cấu trúc MIME và phần văn bản thuần;
+chủ dự án không nói đã mở trên ứng dụng hay thiết bị nào, cũng không nói từng link; Outlook, Apple Mail, tin SMS và Zalo chưa đo.
+
+## 3d. Soi đối kháng lượt hai — route gửi lại link (ADR-110)
+
+Một người soi, ba lăng kính (an ninh, hành vi, test), trên bản chép của `12a0e4d` (cây chính và worktree không bị chạm); ca dựng lại
+chạy trên Postgres thật và trên khung `node:vm`. Tám phát hiện, không cái nào NẶNG; tất cả đứng khi đọc lại mã, và mỗi cái có phép đo
+của người soi:
+
+1. **NHẸ, rò cho người trong** — thân 200 `revokedLinks` là 0 khi nhà cung cấp ĐÃ xác minh link, 1 khi chưa: `BUYER` (không giữ
+   `bid.view`, `GET /rfqs/:id/bid-count` ⇒ 403) đọc được nhà cung cấp nào đã vào phiên trước hạn. Sửa: bỏ khỏi thân, chỉ trong sổ.
+2. **NHẸ, khả dụng** — token cũ chết ở giao dịch đã commit, và token bị phần bù thu hồi vẫn tính vào trần: lời mời vừa gửi trong giờ,
+   hai lần hỏng liền ⇒ lần ba 429 tới hết cửa sổ, nhà cung cấp không có link nào; ADR-110 viết *"bên mua thấy 502 và bấm lại"*. Giữ
+   thiết kế, nói thật: thân 502 và câu của `/tao-thau` nói link cũ đã hết hiệu lực và lần hỏng tính vào trần; ADR-110 ghi vì sao chấp
+   nhận (không đếm lần hỏng cần cột lý do trên token — một migration; thu hồi token cũ SAU lần gửi được mở trạng thái hai link sống và
+   một cuộc đua giữa hai lần gửi lại sau commit); ca ghim *"lần hỏng tính vào trần"*.
+3. **NHẸ, bế tắc** — `FOR UPDATE` trên hàng lời mời, rồi `UPDATE` token; lần xác minh OTP bằng link cũ thì `UPDATE` token rồi chèn
+   `guest_sessions`, phép kiểm khoá ngoại lấy `FOR KEY SHARE` trên hàng lời mời: thứ tự ngược, 40P01 3/3 lần khi ép thứ tự. Sửa:
+   `FOR NO KEY UPDATE` (khuôn `rfq.ts`) — không chặn `FOR KEY SHARE`, vẫn xung đột với chính nó và với `UPDATE` của thu hồi; ca đua mới
+   đỏ dưới `FOR UPDATE` (lượt ba R1), xanh nay; ca "ba lần cùng lúc" vẫn đúng hai 200 và một 429.
+4. **NHẸ, trang nộp thầu** — lần hỏi lại phiên trước khi niêm phong coi MỌI mã khác 200 (500, 502/503 của proxy) là *"phiên đã hết
+   hạn … xin bên mua gửi lại link mời"*. Sửa: chỉ 401.
+5. **NHẸ, đột biến có nghĩa còn sống** — bỏ vế `rfq.id` (cùng doanh nghiệp, hai gói, hai thẻ); cửa sổ 3600 → 60 s; bỏ `BAFO_OPEN`; đích
+   luôn là email; phần bù luôn ghi sổ; bỏ tắt nút Gửi lại link; và bốn nhỏ (hai kiểm thế hệ, câu 401, `dongCacBuoc` không xoá câu đếm
+   ngược và `#loi4`). Sửa: ca cho từng cái — lượt ba, mục 3.
+6. **NHẸ/INFO** — `/tao-thau` không `try/finally`: mất mạng làm nút kẹt tắt, không câu báo. Sửa.
+7. **INFO** — chỉ xét trạng thái gói: gói còn `OPEN` mà đã quá hạn (đóng gói là thao tác tay) vẫn gửi lại được và vẫn gửi thư, trái
+   lý do ⑶ của ADR-110. Sửa: xét cả hạn, đúng hai vế của `bid_kiem_han_nop` (074).
+8. **INFO** — trần xin OTP theo (lời mời, đích), không theo token: ba lần xin OTP bằng link cũ thì link mới cũng 429 tới hết 900 s.
+   Ghi ở ADR-110 Hệ quả.
+
+Người soi đề xuất thêm, cho phát hiện 5 (vế `rfq.id`): gửi `rfqId` mong đợi trong `POST /guest/bids` để máy chủ so, đóng luôn khe giữa
+lần kiểm và lần nộp. Chưa làm — đổi hợp đồng của route nộp; ghi ở mục 4. Góc người soi đã soi mà không thấy lỗi: oracle xuyên tổ chức
+(RLS lọc trước khi khoá, 404 như id ngẫu nhiên), quyền, đích gửi (không đường nào đổi email hay số điện thoại của người liên hệ),
+đếm trần (`created_at` mặc định, `app_api` không ghi được), payload sổ, nhánh 429/404/409 (429 commit không ghi gì, 404/409 rollback),
+CSRF, đua gửi lại với thu hồi, và phép suy ký tự cuối base64url của mục 3c.
+
+## 4. Giới hạn
+
+- Kiểm phiên trước khi niêm phong so tên doanh nghiệp và mã gói, không so định danh lời mời: hai nhà cung cấp trùng TÊN PHÁP LÝ trong
+  cùng một gói đi lọt; và còn một khe giữa lần kiểm và lần nộp. Mỗi lần nộp thêm một lời gọi `GET /guest/rfq`. **[lượt soi hai]** Máy
+  chủ không đối chiếu được phong bì niêm cho gói nào (`rfqId` chỉ nằm trong HKDF info); đóng hẳn khe cần `POST /guest/bids` mang
+  `rfqId` mong đợi để máy chủ so — chưa làm.
+- Trang không hiện lại biên nhận hay các phiên bản đã nộp sau khi vào lại (có từ §S1.178); lượt Chromium đọc chúng bằng `fetch`.
+- Phiên đã chết thì Thoát không xoá được cookie (401 không `Set-Cookie`); cookie chết không mở được gì.
+- Gửi lại link: link cũ chưa dùng hết hiệu lực; gửi hỏng sau commit để nhà cung cấp không còn link nào tới lần gửi kế, và **[lượt soi
+  hai]** lần hỏng tính vào trần; khoá OTP theo lời mời, và trần xin OTP theo (lời mời, đích), vẫn chặn link mới; ở `BAFO_OPEN` nhà
+  cung cấp ngoài top-N vào được mà không nộp được (ADR-110, Hệ quả).
+- Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai và báo giá cũ vẫn dự thầu — khoản 250.
+- Lệch phiên bản: trang mới gặp API cũ ⇒ nút Thoát và nút Gửi lại link báo 404.
+- ~~Pilot và lượt Chromium thứ hai chạy trên mã TRƯỚC lần tách câu khoá hàng của `reissueInvitationLink` (QT3 không đọc được `FOR UPDATE OF`);
+  lần tách không đổi hành vi, và 15 ca của `loi-moi-sau-commit.int.test.ts` đo lại trên mã cuối.~~ **[lượt soi hai]** Pilot và lượt
+  Chromium thứ ba chạy trên mã cuối (mục 3). Chromium không đi nhánh 502 hay mất mạng của nút Gửi lại link — hai nhánh ấy chỉ đo
+  trên khung `node:vm`.
+- Hộp thư thật: mục 3c.
+
+## 5. Số
+
+Khoản **250** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối (`0b320eb`):
+64 tệp, **1418/1418**. (Trên bản đã hợp `13c2857`, trước lượt soi hai: 64 tệp, 1414/1414.)
