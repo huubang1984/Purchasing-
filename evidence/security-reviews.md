@@ -14121,8 +14121,219 @@ Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 
 ## 6. Số
 
 Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+# §S1.172 — KHOẢN 143 ĐÓNG: KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA
 
-# §S1.9101 — KHOẢN 215 ĐÓNG: YÊU CẦU MỞ THẦU KHÔNG BREAK-GLASS KHÔNG MANG ĐƯỢC CẶP NHÂN CHỨNG, Ở TẦNG CSDL
+## 1. Việc gì
+
+Khoản 143 (S1.75, lượt soi 70): bản vá khoản 139 bọc lần ghi `MFA_LOCKED` trong SAVEPOINT nhưng `catch` chỉ nuốt `55P03`. `40P01`
+(khoá chết) trên chính khoá tư vấn ghi sổ bắn ở `deadlock_timeout` mặc định 1 s — trước trần 2 s của `050` — và `57014` bắn nếu
+`statement_timeout` cạn trước. Khi ấy lỗi thoát ra, giao dịch rollback, và bộ đếm lẫn `locked_until` cùng mất: số lần đoán TOTP
+mất trần. Bất biến chạm: E3. Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/identity/src/mfa.int.test.ts`: một giao dịch (superuser, `SET LOCAL deadlock_timeout = '10s'`) giữ khoá ghi
+sổ của tổ chức; lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng) rồi chờ khoá ghi sổ; giao dịch kia xin `FOR UPDATE` hàng ấy. Trên
+`login.ts` của `master`: **ĐỎ** — `{"ok":false,"reason":"NEM:40P01"}`, bộ đếm/khoá sau đó `4/chua-khoa` — hồ sơ không khoá sau lần
+chạm ngưỡng. Khoản này từng ghi *"ĐỌC, chưa đo"*; nay là một phép đo.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `catch` quanh lần ghi `MFA_LOCKED` nuốt `55P03` **và** `40P01`, lùi về savepoint, trả
+  `auditSkipped`. `57014` vẫn ném: với `statement_timeout` 15 s mỗi câu (`createPool`), trần 2 s luôn tới trước, nên 57014 ở câu này
+  chỉ còn là lần huỷ có ý (`pg_cancel_backend`) — fail-closed có chủ ý.
+- `apps/api/src/routes/auth.ts`: hai dòng log của `auditSkipped` nêu cả hai mã.
+- `docs/DECISIONS.md` ADR-008 tiểu mục khoản 139, điều kiện ②: ghi nhận nới `catch`.
+
+## 4. Đo sau
+
+Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, mã ĐÚNG ngay sau đó bị chặn. Khối khoản 139 (55P03,
+42501 thoát nguyên, đối chứng ghi đủ một dòng) vẫn xanh.
+
+## 5. Giới hạn
+
+- 57014 vẫn gỡ khoá hồ sơ nếu một người vận hành huỷ đúng câu ấy — chấp nhận, như bản trước.
+- Cảnh khoá chết dựng bằng một giao dịch superuser xin khoá hàng; chưa đo đường sản xuất nào tự tạo được vòng ấy.
+
+## 6. Số
+
+Khoản 143 đóng. Còn mở **84**; rổ B **59**.
+
+---
+
+# §S1.174 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
+
+**Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Không migration, không ADR. Không chạm mảnh nào của
+`docs/PRODUCT.md` §11: `gieo:demo` không cờ và luồng MVP1 của kịch bản 41 giữ nguyên hình dạng.
+
+## 1. Vòng này là gì
+
+Phần cuối trong bốn phần của S3.1 (spec S3 §9): `gieo:demo` theo bảng vai §7, và kịch bản 41 chạy hai luồng. S3.1a–c
+(§S1.156, §S1.166, §S1.169) dựng bậc, K1, route ký và màn `/chinh-sach`. Tới vòng này bối cảnh demo không có người FINANCE
+nào, và kịch bản 41 chỉ chạy ở tổ chức chưa bật.
+
+## 2. Bốn quyết định của chủ dự án (S1.174) — cả bốn theo đề xuất
+
+- **Tổ chức demo:** không cờ thì giữ tổ chức chưa bật — pilot chạy MVP1, cờ ký tắt trên máy thật —; `--s3` gieo tổ chức
+  đã bật. Loại: luôn gieo hai tổ chức (in dài gấp đôi, người trình diễn dễ nhầm tổ chức); thay hẳn bằng tổ chức đã bật (demo
+  lệch khỏi hình dạng chạy thật).
+- **Chữ ký thứ hai khi gieo:** hàm gói dưới `withTenant`. Loại: route HTTP với cờ bật — công cụ SQL phải gọi một API đang
+  chạy và tự dựng cookie phiên. Ghi chú S3.1c ở spec §9 (*"gieo bằng route"*) gạch và sửa tại chỗ.
+- **Kịch bản 41:** tham số hoá hai tệp. Loại: một tệp S3 riêng — chép khoảng 2000 dòng, hai bản sẽ trôi.
+- **Lượt đi thử T4** có biên bản trên cụm thật, làm ngay.
+
+## 3. Thay đổi
+
+- **`tools/gieo-demo`**, cờ `--s3`:
+  - thêm `taichinh1`, `taichinh2` (FINANCE) — bảy người như §7; năm nhà cung cấp — gói 9 tỷ ở bậc 2, bậc ấy đòi năm;
+  - F1 khai phiên bản 1 bốn bậc mặc định §4.1 (ngưỡng kép 1 tỷ, 30 ngày, 12 tháng) bằng `createProcurementPolicy`, F2 ký
+    bằng `kyPhienBanChinhSach` — hai giao dịch dưới `withTenant`; ngân sách ghim phiên bản ấy; hai chữ ký mở gói của P2, P3;
+  - in link `/chinh-sach` cho hai người tài chính, kèm câu nói cờ ký của màn.
+
+  Không cờ thì không đổi gì. Ma trận ở `src/chinh-sach-demo.ts` — tách khỏi `index.ts` vì tệp ấy chạy ngay khi được import.
+  Phụ thuộc mới `@trustprocure/rfq`: lockfile đổi đúng ba dòng. Lần `pnpm install` đầu đổi 123 dòng, vì nó dựng lại hậu tố
+  ngữ cảnh `supports-color` của cả cây; em hoàn tác, sửa tay ba dòng, rồi kiểm bằng `pnpm install --offline --frozen-lockfile`.
+- **`tests/architecture/bac-mac-dinh-dong-bo.test.ts`:** `BAC_DEMO` của công cụ và `BAC_MAC_DINH` của màn khoá nhau, cùng hai
+  cột mức và ngưỡng kép; một vế chống rỗng ruột. Công cụ không import được app (app là lá), và màn không import được gói ngoài
+  các mô-đun nó phục vụ, nên hai bản là hai tệp — khuôn `packages/rfq/src/tien-te-dong-bo.test.ts`.
+- **Kịch bản 41**, bản gói và bản HTTP: `describe.each` qua hai luồng. Tổ chức, người và `trangThai` dựng lại ở `beforeAll`
+  của mỗi luồng, trên cùng CSDL. Bản HTTP có hai máy chủ: cấu hình mặc định (cờ tắt) cho luồng MVP1, cờ bật cho luồng S3.
+  Luồng S3 khác ở hai chỗ:
+  - bước 1: hai người tài chính khai và ký phiên bản có bậc; bản HTTP ký qua route;
+  - thân `POST /policy` của bộ quét rò rỉ mang bậc, vì tổ chức đã bật từ chối bản không bậc. Bản v2 ấy chưa ký nên không
+    hiệu lực, và lời ký của chính người khai dừng ở 422 có tên.
+
+  Bước 1 đo hai luồng khác nhau đúng chỗ: tổ chức đã bật hay chưa, gói mang bậc 2 (1 tỷ) hay không bậc.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Test kịch bản 41 import thẳng `BAC_MAC_DINH` của màn — import tương đối xuyên app, khuôn sẵn có của bản HTTP (*"test là nơi
+  duy nhất nối hai app"*). Chỉ công cụ phải chép.
+- Luồng MVP1 của bản HTTP chạy trên bộ điều phối cấu hình MẶC ĐỊNH — đúng máy chủ thật hôm nay; cờ chỉ bật cho luồng S3.
+- Ngưỡng kép của luồng S3 giữ 500 triệu như luồng MVP1: số chữ ký mở gói và mở thầu không đổi giữa hai luồng; chỉ K1 khác.
+- `--s3` ghi hai chữ ký mở gói (P2, P3) như §7. Không cờ thì giữ bốn chữ ký cũ — cả hai giám đốc, một lối tắt của câu SQL mà
+  route không cho, vì DIRECTOR không giữ `rfq.approve` — theo quyết định giữ nguyên mặc định.
+
+## 5. Lượt đi thử T4 — cụm thật
+
+Cụm: PostgreSQL 16 dựng bằng `initdb`; `pnpm gieo:demo` rồi `pnpm gieo:demo --s3` trên cùng CSDL; `apps/api` với
+`TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat`; `apps/web`; Chromium qua Playwright. Script nằm ngoài kho. Giữa các bước, CSDL được
+đọc bằng kết nối đặc quyền.
+
+- **Gieo.** Không cờ: tổ chức CHƯA bật; gói `OPEN`, không bậc, ba lời mời, bốn chữ ký — y như trước vòng này. `--s3`: tổ
+  chức đã bật; bảy người (PM 3, DIRECTOR 2, FINANCE 2); phiên bản 1 bốn bậc đã ký; gói `OPEN` mang bậc 1 000 000 000 (bậc 2),
+  năm lời mời, hai chữ ký; sổ có một `PROCUREMENT_POLICY_CREATED` và một `PROCUREMENT_POLICY_SIGNED`.
+- **F1 vào `/chinh-sach`** bằng link gieo in ra, ghi danh TOTP lần đầu. Khung tổ chức: *"ĐÃ BẬT — không tắt lại được"*,
+  *"Ký phiên bản trên máy chủ này: mở"*. Bảng: phiên bản 1 *đang hiệu lực*; khối ký ẩn vì bản mới nhất đã ký. Số người mỗi bậc
+  theo mẫu: 5 · 5 · 7 · *đấu thầu chính thức*.
+- **F1 soạn bản 2**: chép bản mới nhất, nâng bậc 1 lên bốn nhà cung cấp (không cảnh báo), tạo ⇒ *"Đã tạo phiên bản 2. Một
+  người KHÁC … phải ký"*. Bảng: bản 2 *chưa ký*, bản 1 vẫn *đang hiệu lực*. Khối ký hiện, nút tắt tới khi tích ô xác nhận. F1
+  tự ký ⇒ *"Nguoi tao phien ban chinh sach khong duoc tu ky (ADR-082)"*.
+- **F2 vào và ký bản 2** ⇒ *"Đã ký phiên bản 2. Kiểm soát theo bậc ĐÃ BẬT cho tổ chức."* Bảng: bản 2 *đang hiệu lực*, bản 1
+  thôi; khối ký ẩn.
+- **Người soạn (PM) ở `/tao-thau`**: tạo gói, thêm hạng mục, nộp duyệt KHI CHƯA CÓ ngân sách ⇒ màn hiện *"Tổ chức đã bật
+  kiểm soát theo bậc: gói thầu phải có ngân sách dự tính trước khi nộp duyệt."* Đặt ngân sách 150 triệu ⇒ nộp duyệt đi qua.
+  CSDL: gói `PENDING_APPROVAL`, bậc 100 000 000, ghim bản 2 — bản hiệu lực sau lần ký của F2. Sổ: đúng một `CONTROL_DENIED`
+  mã `THIEU_NGAN_SACH`, hai `PROCUREMENT_POLICY_CREATED`, hai `PROCUREMENT_POLICY_SIGNED`.
+- Không lỗi trang; console chỉ ghi hai phản hồi 422 — đúng hai lần từ chối ở trên.
+- **Lỗi đo ra, sửa trong vòng:** bản đầu của `--s3` gieo gói với SÁU chữ ký phê duyệt. Vòng gieo lấy mọi người trừ người
+  soạn, kể cả hai người tài chính vừa thêm. Nay đúng P2, P3; chạy lại cả lượt đi thử: hai chữ ký, mọi bước như trên.
+
+## 6. Đột biến
+
+Ba đột biến, cả ba đỏ:
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | luồng S3 bản gói khai phiên bản KHÔNG bậc — tổ chức không bật | bước 1 luồng S3: *"đã bật, bậc 2"* thành *"chưa bật, không bậc"* |
+| M2 | luồng S3 bản HTTP chạy trên máy chủ cờ TẮT | bước 1 luồng S3: route ký trả 409 thay vì 201 |
+| M3 | bản chép của `gieo:demo` lệch một ô (bậc 2 đòi 4 nhà cung cấp) | `bac-mac-dinh-dong-bo.test.ts` |
+
+## 7. Giới hạn, nói ra
+
+- Luồng S3 của kịch bản 41 hôm nay chỉ khác luồng MVP1 ở K1 — K2–K12 chưa có. Mỗi hạng mục S3.x thêm bước của nó vào
+  luồng S3.
+- Hai luồng chạy nối tiếp trên cùng CSDL và cùng địa chỉ người gọi, nên trần theo người gọi của các route vô danh (30 mỗi cửa
+  sổ 900 s) nay bị tiêu gấp đôi trong một lượt tệp HTTP. Hôm nay còn dư; thêm luồng thứ ba thì phải đo lại.
+- T3 dài thêm đúng một lượt kịch bản mỗi tệp.
+- Lượt đi thử T4 là một lần, không phải một cổng; script nằm ngoài kho.
+- Xác minh nhà cung cấp (K8a) và nhóm hàng (K10) chưa gieo — CSDL chưa có hai phần ấy.
+- `gieo:demo` không cờ vẫn ghi chữ ký mở gói của hai giám đốc (lối tắt SQL — route không cho). Giữ nguyên theo quyết định
+  giữ mặc định.
+
+## 8. Số đo
+
+- Cả kho một lượt trên PostgreSQL 16 cục bộ (dựng bằng `initdb`; container không có docker): **179 tệp, 2888 ca — 2879 đạt,
+  1 bỏ qua, 8 đỏ**, đúng 8 ca `packages/test-support/src/postgres.int.test.ts` cần docker. Kịch bản 41 bản gói **30/30**
+  (15 × 2), bản HTTP **58/58** (29 × 2); `tests/architecture/bac-mac-dinh-dong-bo.test.ts` **2/2**.
+- Ma trận sinh lại từ báo cáo ấy: **65/65** bất biến (43 + 22), cổng evidence XANH. Mười ba hàng đổi số ca đạt, vì mỗi ca có
+  nhãn của kịch bản 41 nay chạy hai lần: A1 5 → 6 · A2 6 → 9 · A3 5 → 6 · A4 18 → 20 · A5 19 → 20 · A6 11 → 12 · B1 10 → 11
+  · B2 25 → 26 · B5 9 → 10 · D1 34 → 35 · D2 41 → 42 · J3 9 → 10 · J4 3 → 6. Không hàng nào khác đổi.
+- `pnpm t0` sạch (428 module, 1673 phụ thuộc, không vi phạm); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**.
+- Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
+- **Hợp `master`.** Lúc CI của PR xanh đủ bảy việc, `master` nhận #175 — khoản 228, vòng **S1.170**, ADR-106, migration
+  `073` — lấy đúng số vòng lần cấp đầu đã đặt cho vòng này. Xung đột ở cột mốc của `docs/STATE.md` và mục cuối biên bản (gỡ
+  tay: giữ cả hai, mục của #175 đứng trước theo thứ tự merge), và ở `evidence/INV-matrix.md` (lấy bản `master`, sinh lại dưới
+  đây). `pnpm cap-so` không gặp dòng mơ hồ; `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0`
+  sạch (428 module, 1673 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**; cả kho trên PostgreSQL 16 cục bộ **179
+  tệp, 2889 ca — 2880 đạt, 1 bỏ qua, 8 đỏ** (vẫn đúng 8 ca docker; #175 thêm một ca A1). Kịch bản 41 bản gói **30/30**, bản
+  HTTP **58/58** — khẳng định J4 mới của #175 chạy ở cả hai luồng. Ma trận **65/65**, cổng evidence XANH; đúng mười ba hàng
+  trên đổi so với `master`, A1 nay **6 → 7** (một ca A1 của #175 cộng một lượt kịch bản 41 thứ hai).
+- **Job windows đỏ một lần, không do PR.** Trên commit của lần hợp ấy, `T1+T2 (windows-latest)` đỏ một ca: probe `g9-` của
+  `apps/api/src/routes.test.ts` chờ khoá `depcruise` quá 180 s, vì `boundaries.test.ts` nhả rồi giành lại khoá ở mỗi test
+  suốt 194,5 s. Cùng mã đã xanh ở commit hợp trước. Chạy lại một lần thì xanh. Bản sửa khoá đi một PR riêng.
+- **Hợp `master` lần hai.** Lúc Evidence pack của lần hợp đầu còn chạy, `master` nhận #178 (hàng J3 của PRODUCT §5), #180
+  — khoản 200, lấy đúng số vòng lần hợp đầu đã cấp — và #181 (sổ tay apply; một chú thích ở `tools/gieo-demo/src/index.ts`,
+  hợp tự động). Xung đột ở cột mốc `docs/STATE.md` và mục cuối biên bản, gỡ tay như lần đầu. Hai dòng mơ hồ — dòng biên
+  bản của cột mốc và dòng kết quả lần hợp đầu — đều nói về vòng này, nên `--mo-ho nhanh`; `pnpm cap-so --kiem`
+  sạch. Không PR nào trong ba chạm ma trận, nên `evidence/INV-matrix.md` giữ bản sinh ở
+  lần hợp đầu. Trên cây đã hợp: `pnpm t0` sạch (429 module, 1682 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**;
+  trên PostgreSQL 16 cục bộ, kịch bản 41 bản gói **30/30**, bản HTTP **58/58**, và tệp mới của #180 **2/2**. Tầng tích
+  hợp đầy đủ do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần ba.** Lúc T3 của lần hợp thứ hai còn chạy, `master` nhận #182 — khoản 143 — lấy đúng số vòng lần hợp
+  thứ hai đã cấp. Xung đột ở cùng hai chỗ, gỡ tay như trước; `pnpm cap-so --mo-ho nhanh` cấp lại số.
+  #182 không chạm ma trận. Trên cây đã hợp: xem commit cấp số.
+- **Hợp `master` lần bốn.** Lúc Evidence pack của lần hợp thứ ba còn chạy, `master` nhận #177 — bộ tài liệu buổi bậc 1,
+  chỉ tài liệu — lấy đúng số vòng lần hợp thứ ba đã cấp. Xung đột ở cột mốc `docs/STATE.md`, gỡ tay như trước;
+  `pnpm cap-so --mo-ho nhanh` cấp vòng này thành **S1.174**. #177 không chạm mã, test hay ma trận.
+# §S1.175 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
+
+## 1. Việc gì
+
+Khoản 145 (S1.76): `startAgentSession` ghi `AGENT_SESSION_ISSUED` trong cùng giao dịch với lần tiêu thụ mã TOTP và hàng phiên, không
+savepoint. Khoá ghi sổ bị giữ quá trần 2 s (050) thì 55P03 ném ra, cả giao dịch rollback. Khoản ấy tự ghi đây là câu hỏi TÍNH SẴN SÀNG,
+không an toàn, và đòi trả lời: *một chứng chỉ phát ra mà sổ không ghi thì có được phát không*. Chủ dự án chọn: KHÔNG. Chạm ADR-039.
+
+## 2. Đo trước
+
+Khối mới của `apps/api/src/auth.int.test.ts`: một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (`audit_append`), rồi
+`POST /auth/agent-session` với mã TOTP đúng. Trên `apps/api/src/routes/auth.ts` của `master`: **ĐỎ** — `500 {"error":"loi noi bo"}`,
+phiên/sổ trước `{0,0}` sau `{0,0}`, **0** dòng log. Tức mã cũ đã fail-closed về chứng chỉ; thứ thiếu là tên của lỗi và dấu vết.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `startAgentSession` đặt `SAVEPOINT` trước hàng phiên; lần ghi sổ gãy 55P03 hay 40P01 ⇒ lùi về
+  savepoint (hàng phiên biến mất cùng lần ghi hỏng) rồi ném `AgentSessionAuditBusyError` (xuất ở barrel, danh sách trắng cập nhật).
+  Mọi mã khác ném nguyên như trước.
+- `apps/api/src/routes/auth.ts`: bắt lỗi ấy ⇒ một dòng log cố định `[api] khoan 145: …` và trả **503** bằng đường TRẢ VỀ, nên giao
+  dịch commit lần tiêu thụ mã TOTP — mã ấy không phát lại được.
+- `docs/DECISIONS.md` ADR-039: một gạch ghi quyết định.
+
+## 4. Đo sau
+
+Ca mới xanh: 503 có tên; không phiên AGENT, không hàng `AGENT_SESSION_ISSUED`; đúng một dòng log, không nội suy id; dùng lại chính mã
+ấy ⇒ 401, vẫn không phát gì.
+
+## 5. Giới hạn
+
+- Người vận hành phải đợi mã TOTP kế tiếp (≤ 30 s) để thử lại — cái giá có chủ ý của việc commit lần tiêu thụ mã.
+- 57014 vẫn ném nguyên (500), cùng lập luận khoản 143.
+
+## 6. Số
+
+Khoản 145 đóng. Còn mở **83**; rổ B **58**.
+
+# §S1.176 — KHOẢN 215 ĐÓNG: YÊU CẦU MỞ THẦU KHÔNG BREAK-GLASS KHÔNG MANG ĐƯỢC CẶP NHÂN CHỨNG, Ở TẦNG CSDL
 
 ## 1. Việc gì
 
@@ -14134,12 +14345,12 @@ Bất biến chạm: D3 (nhân chứng break-glass). Không chạm khoản rổ 
 ## 2. Đo trước
 
 Khối mới của `packages/unseal/src/unseal.int.test.ts`, dưới chính vai `app_api` (có `GRANT INSERT` trên hai cột nhân chứng, `022`):
-INSERT `break_glass = false` kèm nhân chứng hợp lệ (người khác, phiên của chính họ) trên lược đồ của `master` (bỏ `9501`) ⇒ **ĐỎ** —
+INSERT `break_glass = false` kèm nhân chứng hợp lệ (người khác, phiên của chính họ) trên lược đồ của `master` (bỏ `074`) ⇒ **ĐỎ** —
 `{"code":"khong-nem"}`: câu ĐI QUA.
 
 ## 3. Thay đổi
 
-- `db/migrations/9501_nhan_chung_chi_break_glass.sql`: `ALTER TABLE unseal_requests ADD CONSTRAINT
+- `db/migrations/074_nhan_chung_chi_break_glass.sql`: `ALTER TABLE unseal_requests ADD CONSTRAINT
   unseal_requests_nhan_chung_chi_break_glass CHECK (break_glass OR (break_glass_witness_user_id IS NULL AND
   break_glass_witness_session_id IS NULL))`. Kiểm trên hàng cũ lúc thêm (không `NOT VALID`): cụm có hàng vi phạm thì migration dừng
   deploy — cố ý, hàng ấy cần người đọc.
@@ -14158,4 +14369,4 @@ Hai ca xanh: câu viết tay ⇒ `23514`, `constraint = unseal_requests_nhan_chu
 
 ## 6. Số
 
-Khoản 215 đóng. Còn mở **84**; rổ B **59**.
+Khoản 215 đóng. Còn mở **82**; rổ B **57**.

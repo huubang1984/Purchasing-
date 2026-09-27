@@ -70,6 +70,19 @@ export class LoginTokenError extends Error {
   }
 }
 
+/**
+ * [S1.175 / khoản 145] Lần PHÁT chứng chỉ agent không vào được sổ vì khoá tư vấn ghi sổ của tổ chức
+ * bị giữ quá trần 2 s (55P03, `050`) hay vướng một vòng khoá chết trên chính khoá ấy (40P01). Chứng chỉ
+ * KHÔNG được phát: hàng phiên đã lùi về savepoint cùng lần ghi hỏng. Người gọi (route) biến nó thành
+ * một 503 có tên — người vận hành thử lại với mã TOTP kế tiếp.
+ */
+export class AgentSessionAuditBusyError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super("sổ kiểm toán đang bận — chưa phát được chứng chỉ agent", options);
+    this.name = "AgentSessionAuditBusyError";
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/u;
 
@@ -313,6 +326,14 @@ export async function verifyTotpForLogin(
     // `catch` HẸP CÓ CHỦ Ý — chỉ 55P03, không 57014. Nếu `statement_timeout` cạn trước trần 2 s thì
     // lỗi là 57014 và câu dưới NÉM LẠI, tức rơi về hành vi cũ; đó là lựa chọn fail-closed, vì nuốt
     // 57014 sẽ nuốt luôn mọi lần huỷ câu chính đáng. Dư lượng ấy ghi ở khoản nợ 143.
+    //
+    // [S1.172 / khoản 143] ~~chỉ 55P03~~ — **55P03 VÀ 40P01.** Khoá chết trên khoá tư vấn ghi sổ
+    // (`004` đã ghi, phép đo khoản 126 đã thấy) bắn ở `deadlock_timeout` mặc định 1 s, tức TRƯỚC trần
+    // 2 s, và bản trước để nó rollback cả `locked_until` — đo ở `mfa.int.test.ts` khối khoản 143: hồ sơ
+    // KHÔNG khoá. 40P01 an toàn để nuốt như 55P03: Postgres chỉ huỷ CÂU chờ khoá của nạn nhân, không phải
+    // một lần huỷ do người hay do trần thời gian đặt ra, và `ROLLBACK TO SAVEPOINT` đưa giao dịch về
+    // lành. 57014 vẫn ném: với `statement_timeout` 15 s (`createPool`) mỗi câu, trần 2 s luôn tới trước,
+    // nên 57014 ở câu này chỉ còn là lần huỷ CÓ Ý (`pg_cancel_backend`) — fail-closed là đúng hướng.
     // ==========================================================================================
     await client.query("SAVEPOINT ghi_so_mfa_locked");
     try {
@@ -324,7 +345,7 @@ export async function verifyTotpForLogin(
         payload: { lockedUntil: kq.lockedUntil?.toISOString() ?? null },
       });
     } catch (e) {
-      if (!(e instanceof Error && "code" in e && e.code === "55P03")) throw e;
+      if (!(e instanceof Error && "code" in e && (e.code === "55P03" || e.code === "40P01"))) throw e;
       await client.query("ROLLBACK TO SAVEPOINT ghi_so_mfa_locked");
       return { ...kq, auditSkipped: true };
     }
@@ -473,6 +494,27 @@ export async function startAgentSession(
   }
 
   const token = randomBytes(LOGIN_TOKEN_BYTES).toString("base64url");
+  // [S1.175 / khoản 145] Hàng phiên và hàng sổ đi CÙNG một savepoint: một chứng chỉ phát ra mà sổ không
+  // ghi thì KHÔNG được phát — khác khoản 139, ở đây rollback không làm mất lớp an toàn nào, chỉ mất một lần
+  // phát. Nên khi lần ghi sổ gãy 55P03/40P01, cả hai lùi về savepoint và hàm ném một lỗi CÓ TÊN; phần còn
+  // lại của giao dịch (lần tiêu thụ mã TOTP) vẫn commit, để mã ấy không phát lại được. Mọi mã khác vẫn ném
+  // nguyên, giao dịch rollback như trước (fail-closed).
+  await client.query("SAVEPOINT phat_chung_chi_agent");
+  try {
+    return await phatChungChiAgent(client, orgId, input, token);
+  } catch (e) {
+    if (!(e instanceof Error && "code" in e && (e.code === "55P03" || e.code === "40P01"))) throw e;
+    await client.query("ROLLBACK TO SAVEPOINT phat_chung_chi_agent");
+    throw new AgentSessionAuditBusyError({ cause: e });
+  }
+}
+
+async function phatChungChiAgent(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly userId: string; readonly capBoiSessionId: string; readonly ip?: string | null },
+  token: string,
+): Promise<StartedAgentSession> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO public.sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at, ip, kind)
      VALUES ($1, $2, $3, (pg_catalog.now() OPERATOR(pg_catalog.+) pg_catalog.make_interval(secs => $4::pg_catalog.float8)),

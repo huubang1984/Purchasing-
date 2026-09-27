@@ -15,6 +15,7 @@
 import {
   enrollOrReplaceTotpForLogin,
   generateTotpSecret,
+  AgentSessionAuditBusyError,
   LoginTokenError,
   MFA_TRAN_SAI_DUONG_PHU,
   redeemLoginToken,
@@ -187,7 +188,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
           //
           // Dòng này CỐ ĐỊNH, không nội suy `orgId`, `userId` hay `lockedUntil` — cùng kỷ luật A2
           // với `dispatch.ts`: một dòng log của đường đăng nhập là thứ đi thẳng ra stderr.
-          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) — ho so VAN khoa");
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03 hay 40P01) — ho so VAN khoa");
         }
         // [review L-7] Hai giá trị cho client, không hơn: lý do chi tiết (NO_CREDENTIAL,
         // CODE_ALREADY_USED, …) là oracle cho kẻ cầm token bị chuyển tiếp; `lockedUntil` làm tròn
@@ -304,7 +305,7 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
           // đường HTTP nào sinh ra nó; một đường phát mới đi qua `verifyTotpForLogin` mà im lặng là
           // đúng cái lỗ ấy, chỉ ở chỗ khó thấy hơn. Chuỗi NÊU TÊN ĐƯỜNG: hai chỗ cùng một câu thì
           // dòng log không nói được cái thiếu nằm ở đâu.
-          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) tren duong phat agent — ho so VAN khoa");
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03 hay 40P01) tren duong phat agent — ho so VAN khoa");
         }
         // Cùng hai giá trị như `/auth/totp` (review L-7): lý do chi tiết là oracle, `lockedUntil`
         // làm tròn LÊN phút.
@@ -312,12 +313,22 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         const lam = kq.lockedUntil === null ? null : new Date(Math.ceil(kq.lockedUntil.getTime() / 60_000) * 60_000).toISOString();
         return { status: 401, body: { ok: false, reason: khoa ? "LOCKED_OUT" : "WRONG_CODE", lockedUntil: khoa ? lam : null } };
       }
-      const phien = await startAgentSession(ctx.client, ctx.orgId, {
-        userId: ctx.actor.id,
-        mfaProof: kq.proof,
-        capBoiSessionId: ctx.actor.sessionId,
-        ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
-      });
+      let phien: Awaited<ReturnType<typeof startAgentSession>>;
+      try {
+        phien = await startAgentSession(ctx.client, ctx.orgId, {
+          userId: ctx.actor.id,
+          mfaProof: kq.proof,
+          capBoiSessionId: ctx.actor.sessionId,
+          ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
+        });
+      } catch (loi) {
+        // [S1.175 / khoản 145] Sổ không nhận lần phát ⇒ KHÔNG phát. Trả bằng đường TRẢ VỀ để giao dịch commit
+        // lần tiêu thụ mã TOTP (hàng phiên đã lùi về savepoint trong `startAgentSession`): mã ấy không phát lại
+        // được, người vận hành thử lại với mã kế tiếp. Trước vòng này lỗi ném ra thành 500 thân cố định.
+        if (!(loi instanceof AgentSessionAuditBusyError)) throw loi;
+        console.error("[api] khoan 145: AGENT_SESSION_ISSUED khong ghi duoc so (55P03 hay 40P01) — KHONG phat chung chi");
+        return { status: 503, body: { error: "Sổ kiểm toán đang bận; chưa phát được chứng chỉ. Thử lại với mã kế tiếp sau ít giây." } };
+      }
       // Token đi trong THÂN: người vận hành chép sang biến môi trường của tiến trình MCP. Không
       // `setCookie` — một tiến trình không phải trình duyệt không dùng được cookie, và một chứng
       // chỉ agent nằm trong cookie của người gọi là đúng thứ khoản 141 muốn tách ra.

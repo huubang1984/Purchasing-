@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 9501 — [S1.9101 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS
+-- 9501 — [S1.176 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS
 -- =============================================================================================
 -- ĐỌC (S1.100, lúc đóng khoản 209), ĐO ở vòng này: `requestUnseal` chặn ở tầng ứng dụng (*"Chỉ yêu cầu break-glass mới mang người
 -- làm chứng"*), nhưng tầng CSDL thì không — `unseal_kiem_du_phe_duyet` (022) chỉ đọc hai cột nhân chứng trong nhánh

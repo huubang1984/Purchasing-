@@ -3271,7 +3271,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "9501_nhan_chung_chi_break_glass.sql",
+        "074_nhan_chung_chi_break_glass.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7688,7 +7688,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "9501_nhan_chung_chi_break_glass.sql",
+        "074_nhan_chung_chi_break_glass.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7982,7 +7982,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "9501_nhan_chung_chi_break_glass.sql",
+        "074_nhan_chung_chi_break_glass.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

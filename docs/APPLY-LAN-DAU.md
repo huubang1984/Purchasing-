@@ -34,7 +34,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **SMS brandname Việt Nam** (tuần): hồ sơ sender ID ở AWS End User Messaging SMS, ba mẫu nội dung chép nguyên văn từ
       `apps/api/src/adapters/gui-sms.ts` (README, mục stack 85). Không có thì bỏ qua SMS ở lần đầu.
 - [ ] **Zalo OA**: xác thực OA, ứng dụng liên kết, ba template ZNS (`otp`, `duong_dan`, `han_nop`). Không có thì bỏ qua Zalo.
-- [ ] **SES production access**: chỉ xin được sau bước 9 (stack 80), nhưng duyệt mất 1–2 ngày — xin ngay khi xong bước 9.
+- [ ] **SES production access**: chỉ xin được sau 5.1 (stack 80), nhưng duyệt mất 1–2 ngày — xin ngay ở 5.2.
 
 ---
 
@@ -59,7 +59,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **2.2 `40-kms-audit`** (`tp-audit-keyadmin`) — khoá ký mốc neo `alias/tp-anchor-sign`.
 - [ ] **2.3 `50-kms-prod`** (`tp-prod-keyadmin`) — `tp-org-wrap`, `tp-receipt-sign`, `tp-totp`.
 - [ ] **2.4** Tính **dấu vân tay khoá biên nhận** (README, "Khoá công khai biên nhận") và lưu lại — con số in vào hợp
-      đồng, và là biến GitHub `TP_RECEIPT_FINGERPRINT` ở bước 12.
+      đồng, và là biến GitHub `TP_RECEIPT_FINGERPRINT` ở 7.2.
 
 ## 3. Cảnh báo — trước mọi thứ chạy thật, để lần đầu cũng có người nghe
 
@@ -89,7 +89,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       chạy lượt nào — gọi tay một lần để về OK:
       `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
 - [ ] **3.6** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
-      OK sau lượt `lich` đầu tiên có tổ chức (bước 13).
+      OK sau lượt `lich` đầu tiên có tổ chức (8.3).
 
 ## 4. Phép đo ⒜ — bắt buộc trước dữ liệu thật
 
@@ -133,7 +133,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     neo         = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
   }
   so_ban_api         = 0     # bật ở 6.6, sau khi secret có host thật và migrate xong
-  so_ban_worker      = 0     # bật ở bước 13 (ADR-040)
+  so_ban_worker      = 0     # bật ở 8.2 (ADR-040)
   che_do_dns         = "ALERT"   # chuyển BLOCK ở 6.8
   ```
 
@@ -188,7 +188,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.8 DNS Firewall: ALERT ⇒ BLOCK
 
-- [ ] Sau ít nhất một ngày chạy (gồm một lượt `lich` 02:15 và một lần deploy ở bước 12), Logs Insights trên `/tp/dns`:
+- [ ] Sau ít nhất một ngày chạy (gồm một lượt `lich` 02:15 và một lần deploy ở 7.3), Logs Insights trên `/tp/dns`:
       `filter firewall_rule_action = "ALERT" | stats count() by query_name`. Mỗi tên hợp lệ còn thiếu ⇒ thêm vào
       `ten_duoc_phan_giai` (và test `hinh-dang-dns`), PR, deploy lại.
 - [ ] Không còn tên hợp lệ nào ⇒ `che_do_dns = "BLOCK"`, plan + apply. Mỗi truy vấn lạ về sau ⇒ thư ⑸.
@@ -213,10 +213,13 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
   - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040).
   - Cách làm chờ chủ dự án quyết. Đề xuất ngày 2026-09-27: một task ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
-    không mở route quản trị.
+    không mở route quản trị. **[S1.173]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
+    kể cả chỗ hở thứ hai đo ở vòng ấy: người dùng đầu tiên không có đường xin link đăng nhập qua giao diện.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
-- [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với `xuat=0 kiem=0`; alarm ⑷ trở về OK (có thư).
+- [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với ~~`xuat=0 kiem=0`~~ **[ghi muộn ngày 2026-09-27]** dòng
+      `lich: xuat=OK kiem=OK` — lệnh in `OK`/`HONG`, không in mã số (`tools/neo-so-kiem-toan/src/index.ts`, hàm `lich`);
+      alarm ⑷ trở về OK (có thư).
 
 ## 9. Trước dữ liệu thật — kiểm lại
 
