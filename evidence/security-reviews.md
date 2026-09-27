@@ -14226,9 +14226,5 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
 - Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
   hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
   đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
-- Số cấp cho vòng này trôi bốn lần vì PR khác merge trước với cùng số: lần đầu S1.170, ADR-106, `073_tu_choi_co_ten` (#175 lấy
-  cả ba), rồi S1.171 (#180), S1.172 (#182), S1.173 (#177) — ba lần sau chỉ lấy số vòng. Mỗi lần `pnpm cap-so` thu hồi qua trailer
-  `Cap-So:` và cấp lại; nay là S1.174, ADR-107, `074_tu_choi_co_ten`. Số đo ở trên là của cây `f2fa608`; các lần hợp #178, #180, #181,
-  #182, #177 sau đó không chạm tệp nào của vòng này. CI đo trên chính commit hợp: đầu `7466fd9` (sau #181, #182) xanh cả bảy job, gồm
-  T3 và evidence.
+- @@CAP_SO@@
 - Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
