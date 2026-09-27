@@ -12509,9 +12509,9 @@ phối riêng, PostgreSQL 16 thật:
 - Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
 - Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.
 
-# §S1.9103 — KHOẢN 9401 MỞ VÀ ĐÓNG CÙNG VÒNG: `POST /evaluate` KHÔNG CÒN TRẢ GIÁ CHO VAI THIẾU `bid.view`
+# §S1.156 — KHOẢN 243 MỞ VÀ ĐÓNG CÙNG VÒNG: `POST /evaluate` KHÔNG CÒN TRẢ GIÁ CHO VAI THIẾU `bid.view`
 
-**Rổ và mảnh (ADR-043 ⒞): khoản 9401 mở và đóng trong cùng vòng nên không vào rổ nào**, cùng tiền lệ 190 · 191 · 192 của S1.90.
+**Rổ và mảnh (ADR-043 ⒞): khoản 243 mở và đóng trong cùng vòng nên không vào rổ nào**, cùng tiền lệ 190 · 191 · 192 của S1.90.
 Không migration, không ADR mới — một ghi chú ở ADR-054. Không chạm mảnh nào của `docs/PRODUCT.md` §11.
 
 ## 1. Vòng này là gì
@@ -12569,4 +12569,4 @@ bỏ giá khỏi thân phản hồi, không đổi ma trận quyền.
 
 - `pnpm t0` sạch; `pnpm test` xanh; `so-no-tu-doi-chieu` xanh.
 - Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**.
-- Số tạm `S1.9103`, khoản `9401` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+- Số tạm `S1.156`, khoản `243` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.

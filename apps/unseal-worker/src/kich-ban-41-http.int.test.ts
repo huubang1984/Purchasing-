@@ -270,7 +270,7 @@ const trangThai: {
   gd1: Nguoi;
   gd2: Nguoi;
   taiChinh: Nguoi;
-  /** [S1.9103 / khoản 9401] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
+  /** [S1.156 / khoản 243] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
   cham: Nguoi;
 } = {
   rfqId: "",
@@ -741,8 +741,8 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // test. Đây là phép đo đầu tiên đi TRỌN đường chấm thầu bằng HTTP, trên chính sách mà người
     // mua tạo qua HTTP.
     const m = trangThai.mua.cookie;
-    // [S1.9103 / khoản 9401] Người BẤM CHẤM là một BUYER KHÔNG giữ `bid.view` (`005`): vai mà
-    // `evaluation.perform` cho qua còn cổng đọc giá thì không. Trước khoản 9401 thân phản hồi của
+    // [S1.156 / khoản 243] Người BẤM CHẤM là một BUYER KHÔNG giữ `bid.view` (`005`): vai mà
+    // `evaluation.perform` cho qua còn cổng đọc giá thì không. Trước khoản 243 thân phản hồi của
     // lần bấm ấy mang nguyên `lines` — giá và hạng của cả năm báo giá — tức một đường đọc thứ hai
     // của `rfq_evaluation_lines` mà ADR-054 không khai. Bảng xếp hạng đọc qua `GET /ranking` dưới
     // `m` (PROCUREMENT_MANAGER, giữ `bid.view`).
@@ -1143,7 +1143,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
 
   it("bước 12g — CHẤM LẠI sau BAFO: mỗi nhà cung cấp đúng MỘT hàng, và thứ hạng tính trên giá MỚI", async () => {
     const m = trangThai.mua.cookie;
-    // [S1.9103 / khoản 9401] Cùng người bấm chấm của bước 12b — BUYER không giữ `bid.view`. Ở đây
+    // [S1.156 / khoản 243] Cùng người bấm chấm của bước 12b — BUYER không giữ `bid.view`. Ở đây
     // cái được canh là giá BAFO: vòng hai vừa mở, và thân của lần bấm chấm là chỗ đầu tiên chúng
     // có thể lọt ra tới một vai không có cổng đọc.
     const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, trangThai.cham.cookie, {});

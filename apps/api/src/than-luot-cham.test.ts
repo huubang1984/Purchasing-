@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.9103 / khoản 9401] THÂN CỦA `POST /rfqs/:rfqId/evaluate` KHÔNG MANG GIÁ — đo ở T1, trên CHÍNH
+// [S1.156 / khoản 243] THÂN CỦA `POST /rfqs/:rfqId/evaluate` KHÔNG MANG GIÁ — đo ở T1, trên CHÍNH
 // handler của bảng `ROUTES`, không khởi động máy chủ, không cần Postgres.
 //
 // `taoLuotDanhGia` được thay bằng một bản giả trả một lượt chấm CÓ giá và hạng — đúng hình dạng mà
 // hàm thật trả (`lines{effectiveCost, rank, components}`). Câu hỏi của tệp này là câu hỏi của ROUTE:
-// thứ gói trả về có đi thẳng ra thân phản hồi không. Trên mã trước khoản 9401 ca đầu ĐỎ: thân mang
+// thứ gói trả về có đi thẳng ra thân phản hồi không. Trên mã trước khoản 243 ca đầu ĐỎ: thân mang
 // nguyên `lines`, tức giá và hạng của mọi báo giá, cho mọi vai giữ `evaluation.perform` — kể cả
 // REQUESTER, BUYER, TECHNICAL là ba vai KHÔNG giữ `bid.view`.
 //
@@ -46,7 +46,7 @@ const { thanLuotCham } = await import("./routes/buyer.js");
 
 const KHOA_DUOC_PHEP = ["currency", "evaluationId", "policyId", "policyVersion"];
 
-describe("[S1.9103 / khoản 9401] thân của POST /rfqs/:rfqId/evaluate", () => {
+describe("[S1.156 / khoản 243] thân của POST /rfqs/:rfqId/evaluate", () => {
   it("handler THẬT của bảng route trả đúng bốn khoá — không giá, không hạng, không thành phần, không số báo giá", async () => {
     const route = ROUTES.find((r) => r.method === "POST" && r.path === "/rfqs/:rfqId/evaluate");
     expect(route, "bảng ROUTES không còn đường POST /rfqs/:rfqId/evaluate").toBeDefined();

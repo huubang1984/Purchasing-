@@ -5563,7 +5563,7 @@ làm dòng ấy đỏ và buộc người sửa quay lại ADR này.
 như thế phải đi kèm một dòng trong bảng trên, và dòng ấy phải khai được vai ghi cùng cổng đọc. Không
 khai được thì không thêm.
 
-**[S1.9103 / khoản 9401] Lời khai *"đường đọc duy nhất đi qua `bid.view`"* SAI từ S1.106 tới vòng S1.9103, và
+**[S1.156 / khoản 243] Lời khai *"đường đọc duy nhất đi qua `bid.view`"* SAI từ S1.106 tới vòng S1.156, và
 bảng trên không làm lộ ra điều đó.** Bảng khai cổng đọc theo BẢNG, nhưng `rfq_evaluation_lines` còn một đường
 đọc không đi qua bảng: thân phản hồi của `POST /rfqs/:rfqId/evaluate` trả nguyên kết quả của `taoLuotDanhGia` —
 `effectiveCost`, `rank` và `components` của mọi báo giá — cho mọi vai giữ `evaluation.perform`, trong đó
