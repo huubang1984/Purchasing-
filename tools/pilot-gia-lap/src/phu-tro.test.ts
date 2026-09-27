@@ -9,7 +9,7 @@ import { HopThu, docTin, tokenTuLink } from "./hop-thu.js";
 import { diaChiGiaLap } from "./http.js";
 import { chonKichBan } from "./index.js";
 import { ThamSoError, docThamSo } from "./tham-so.js";
-import { gopTrangThai, type ToChucTrangThai } from "./trang-thai.js";
+import { gopTrangThai, luotMoiNhat, type ToChucTrangThai } from "./trang-thai.js";
 
 const thuMucTam: string[] = [];
 afterEach(async () => {
@@ -23,6 +23,8 @@ describe("tham số dòng lệnh", () => {
     expect(docThamSo(["dang-nhap", "a@b.invalid"], CONG_MAC_DINH).doiSo).toEqual(["a@b.invalid"]);
     expect(docThamSo(["dang-nhap", "a@b.invalid", "org-cu"], CONG_MAC_DINH).doiSo).toEqual(["a@b.invalid", "org-cu"]);
     expect(docThamSo(["--cong-web", "19090"], CONG_MAC_DINH).cong.web).toBe(19090);
+    // Shim pnpm.ps1 chuyển `--chi SX-01,XD-02` không nháy xuống node thành "SX-01 XD-02".
+    expect(docThamSo(["--chi", "SX-01 XD-02"], CONG_MAC_DINH).chi).toEqual(["SX-01", "XD-02"]);
   });
 
   it("từ chối lệnh lạ, tuỳ chọn lạ, đối số thiếu/thừa và cổng trùng", () => {
@@ -54,6 +56,14 @@ describe("trạng thái trình diễn", () => {
     expect(gopTrangThai(cu, [tc("o-sx-2", "SX")], "b").toChuc.map((t) => t.orgId)).toEqual(["o-sx-2", "o-sx-1", "o-xd-1"]);
     expect(gopTrangThai(cu, [tc("o-xd-1", "XD")], "c").toChuc.map((t) => t.orgId)).toEqual(["o-xd-1", "o-sx-1"]);
     expect(gopTrangThai(null, [tc("o", "SX")], "d")).toEqual({ phienBan: 1, taoLuc: "d", toChuc: [tc("o", "SX")] });
+  });
+
+  it("lượt mới nhất = các tổ chức đầu tệp cùng `luot`; tệp của bản đầu (không `luot`) chỉ lấy tổ chức đầu", () => {
+    const l = (orgId: string, luot?: string): ToChucTrangThai => ({ ...tc(orgId, "SX"), ...(luot === undefined ? {} : { luot }) });
+    const tt = gopTrangThai({ phienBan: 1, taoLuc: "a", toChuc: [l("cu-1", "L1"), l("cu-2", "L1")] }, [l("moi-1", "L2"), l("moi-2", "L2")], "b");
+    expect(luotMoiNhat(tt).map((t) => t.orgId)).toEqual(["moi-1", "moi-2"]);
+    expect(luotMoiNhat({ phienBan: 1, taoLuc: "c", toChuc: [l("x"), l("y")] }).map((t) => t.orgId)).toEqual(["x"]);
+    expect(luotMoiNhat({ phienBan: 1, taoLuc: "d", toChuc: [] })).toEqual([]);
   });
 
   it("thư mục trạng thái trong kho chỉ được nằm dưới `.pilot-gia-lap`; ngoài kho thì mọi chỗ", () => {

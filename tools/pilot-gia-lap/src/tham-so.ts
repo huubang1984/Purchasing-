@@ -1,13 +1,17 @@
 // ==============================================================================================
 // tools/pilot-gia-lap — ĐỌC DÒNG LỆNH (hàm thuần)
 //
-//   pnpm pilot:gia-lap [chay] [--cham] [--chi SX-01,XD-02] [--dung-sau]   chạy danh mục, giữ cụm cho trình diễn
+//   pnpm pilot:gia-lap [chay] [--cham] [--chi "SX-01,XD-02"] [--dung-sau] chạy danh mục, giữ cụm cho trình diễn
 //   pnpm pilot:gia-lap cum                                                  chỉ dựng lại cụm (dùng lại khoá), giữ chạy
 //   pnpm pilot:gia-lap dang-nhap <email> [orgId]                            link đăng nhập mới + mã TOTP hiện tại
 //   pnpm pilot:gia-lap otp <số điện thoại>                                  mã OTP mới nhất gửi tới số ấy
 //   pnpm pilot:gia-lap lien-ket                                             link mời còn chờ nộp của các gói để lại
 //
 // Tuỳ chọn chung: --thu-muc <dir> (mặc định `<gốc kho>/.pilot-gia-lap`), --cong-api/--cong-web/--cong-khoa <cổng>.
+//
+// `--chi` tách theo dấu phẩy VÀ khoảng trắng: PowerShell đọc `SX-01,XD-02` không nháy thành một mảng, và
+// shim `pnpm.ps1` (cài bằng npm hay corepack) chuyển mảng ấy xuống node thành "SX-01 XD-02" — lượt soi
+// tài liệu của vòng S1.9101 đo ra điều ấy. Tài liệu vẫn viết danh sách trong nháy.
 // ==============================================================================================
 
 import type { CongCum } from "./cum.js";
@@ -71,8 +75,8 @@ export function docThamSo(argv: readonly string[], macDinh: CongCum): ThamSo {
         break;
       case "--chi":
         i += 1;
-        chi = (argv[i] ?? "").split(",").map((s) => s.trim().toUpperCase()).filter((s) => s !== "");
-        if (chi.length === 0) throw new ThamSoError("--chi cần danh sách mã kịch bản, ví dụ SX-01,XD-02");
+        chi = (argv[i] ?? "").split(/[\s,]+/u).map((s) => s.trim().toUpperCase()).filter((s) => s !== "");
+        if (chi.length === 0) throw new ThamSoError('--chi cần danh sách mã kịch bản, ví dụ --chi "SX-01,XD-02"');
         break;
       case "--thu-muc":
         i += 1;
@@ -107,12 +111,12 @@ export function docThamSo(argv: readonly string[], macDinh: CongCum): ThamSo {
 
 export const TRO_GIUP = `pilot giả lập TrustProcure — công cụ DEV, không phải pilot thật
 
-  pnpm pilot:gia-lap [chay] [--cham] [--chi SX-01,XD-02] [--dung-sau]
+  pnpm pilot:gia-lap [chay] [--cham] [--chi "SX-01,XD-02"] [--dung-sau]
       Dựng cụm cục bộ (api, worker, web, khoá công khai), gieo hai doanh nghiệp giả lập, chạy danh
       mục kịch bản qua API thật, ghi báo cáo, rồi GIỮ cụm chạy cho buổi trình diễn (Ctrl+C để dừng).
       --cham     thêm kịch bản đợi hạn nộp thật (~65 phút)
       --dung-sau dừng cụm ngay khi chạy xong
-  pnpm pilot:gia-lap cum                 dựng lại cụm từ thư mục trạng thái, giữ chạy
+  pnpm pilot:gia-lap cum                 dựng lại cụm từ thư mục trạng thái, giữ chạy, in các gói lượt mới nhất để lại
   pnpm pilot:gia-lap dang-nhap <email> [orgId]
                                          link đăng nhập mới + mã TOTP hiện tại của một người mua giả lập
                                          (mặc định tổ chức của lượt chạy mới nhất có email ấy)

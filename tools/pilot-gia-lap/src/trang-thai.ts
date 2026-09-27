@@ -3,7 +3,8 @@
 //
 // Thứ người trình diễn cần mà báo cáo KHÔNG được mang: bí mật TOTP của mỗi người mua giả lập (để lệnh
 // `dang-nhap` in mã hiện tại), và token của những lời mời để lại cho nhà cung cấp nộp trực tiếp. Tệp
-// nằm trong thư mục trạng thái 0700, cạnh `cum.json`, và `.gitignore` chặn cả thư mục.
+// nằm trong thư mục trạng thái 0700 (trên POSIX; trên Windows nó thừa hưởng ACL của thư mục cha), cạnh
+// `cum.json`, và `.gitignore` chặn cả thư mục.
 //
 // Tệp GỘP qua các lượt chạy, tổ chức mới nhất trước (`gopTrangThai`): người mua của một lượt cũ đã ghi
 // danh TOTP, và bí mật của họ chỉ nằm ở đây — mất nó là mất đường đăng nhập vào các gói lượt ấy để lại.
@@ -33,6 +34,8 @@ export interface ToChucTrangThai {
   readonly ma: string;
   readonly ten: string;
   readonly orgId: string;
+  /** Lúc bắt đầu lượt chạy đã dựng tổ chức này — gom các tổ chức theo lượt. Tệp của bản đầu không có. */
+  readonly luot?: string;
   readonly nguoi: readonly NguoiTrangThai[];
   readonly loiMoiConLai: readonly LoiMoiTrangThai[];
   readonly goiDeLai: readonly { readonly kichBan: string; readonly rfqId: string; readonly buocTiep: readonly string[] }[];
@@ -63,6 +66,13 @@ export async function ghiTrangThai(thuMuc: string, tt: TrangThai): Promise<void>
 export function gopTrangThai(cu: TrangThai | null, moi: readonly ToChucTrangThai[], taoLuc: string): TrangThai {
   const idMoi = new Set(moi.map((t) => t.orgId));
   return { phienBan: 1, taoLuc, toChuc: [...moi, ...(cu?.toChuc ?? []).filter((t) => !idMoi.has(t.orgId))] };
+}
+
+/** Các tổ chức của lượt chạy MỚI NHẤT (đứng đầu tệp, cùng `luot`). */
+export function luotMoiNhat(tt: TrangThai): readonly ToChucTrangThai[] {
+  const dau = tt.toChuc[0];
+  if (dau === undefined) return [];
+  return dau.luot === undefined ? [dau] : tt.toChuc.filter((t) => t.luot === dau.luot);
 }
 
 /** `null` khi chưa có tệp; ném khi tệp có mà hỏng — không bao giờ lặng lẽ coi một tệp hỏng là trống. */

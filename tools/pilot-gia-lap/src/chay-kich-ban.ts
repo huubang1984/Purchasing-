@@ -424,9 +424,10 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       const conLai = hs.nguoi.find((n) => n.vai === "PROCUREMENT_MANAGER" && n.ma !== kb.vai.tao && !kb.vai.duyetGoi.includes(n.ma));
       demo = {
         buocTiep: [
-          `Đăng nhập bằng ${moTaNguoi(conLai)} ở /tao-thau, nạp gói, bấm "Phê duyệt" — chữ ký thứ hai.`,
-          `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === "tp"))} và bấm "Mở gói"; rồi mời nhà cung cấp.`,
-          `Thử để CHÍNH người tạo gói (${moTaNguoi(tao.hoSo)}) bấm phê duyệt: sản phẩm từ chối — ${lopTuChoi(tao.hoSo, "rfq.approve", "D2")}.`,
+          `Trước tiên, đăng nhập bằng ${moTaNguoi(tao.hoSo)} (người tạo gói) ở /tao-thau, ${NAP_GOI}, bước 4 bấm "Phê duyệt": sản phẩm từ chối — ${lopTuChoi(tao.hoSo, "rfq.approve", "D2")}.`,
+          `Đăng nhập bằng ${moTaNguoi(conLai)}, ${NAP_GOI}, bước 4 bấm "Phê duyệt" — chữ ký thứ hai.`,
+          `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === "tp"))}, bước 4 bấm "Mở thầu". Bước 5 chỉ mời được nhà cung cấp TẠO trong cùng phiên trang: ` +
+            `tạo một nhà cung cấp mới (mã số thuế chưa dùng), thêm người liên hệ, rồi bấm "Mời nhà cung cấp này".`,
         ],
         loiMoiConLai: [],
       };
@@ -483,8 +484,8 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
         .map((l) => ({ ncc: l.ncc, tenNcc: tenNcc(l.ncc), lienHe: l.lienHe.hoTen, soDienThoai: l.lienHe.soDienThoai, token: l.token }));
       demo = {
         buocTiep: [
-          "Mở link mời của một nhà cung cấp còn lại (lệnh `lien-ket`) ở /nop-thau, xin OTP; lấy mã bằng lệnh `otp <số điện thoại>`.",
-          "Nhập đơn giá, bấm niêm phong và nộp: giá được mã hoá TRONG trình duyệt; biên nhận ký số hiện ra.",
+          "Mở link mời của một nhà cung cấp còn lại (lệnh `lien-ket`) ở /nop-thau, bấm \"Mở lời mời\", rồi \"Gửi mã\"; lấy mã bằng lệnh `otp <số điện thoại>`, bấm \"Xác minh\".",
+          "Nhập đơn giá, bấm \"Niêm phong và nộp\": giá được mã hoá TRONG trình duyệt; biên nhận ký số hiện ra.",
           `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === "tp"))} ở /mo-thau: số báo giá vẫn bị giấu cho tới khi đóng.`,
         ],
         loiMoiConLai: conLai,
@@ -554,9 +555,9 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       const conLai = hs.nguoi.find((n) => n.vai === "DIRECTOR" && !(kb.vai.duyetMo ?? []).includes(n.ma));
       demo = {
         buocTiep: [
-          `Đăng nhập bằng ${moTaNguoi(conLai)} ở /mo-thau, nạp gói, bấm "Phê duyệt" — chữ ký thứ hai.`,
-          `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === kb.vai.xinMo))}, bấm "Điều phối": worker giải mã, bảng so sánh hiện ra đúng tới từng đồng.`,
-          `Thử để người xin mở thầu (${moTaNguoi(nguoi(kb.vai.xinMo).hoSo)}) tự phê duyệt: sản phẩm từ chối — ${lopTuChoi(nguoi(kb.vai.xinMo).hoSo, "rfq.unseal.approve", "D2/D3")}.`,
+          `Trước tiên, đăng nhập bằng ${moTaNguoi(nguoi(kb.vai.xinMo).hoSo)} (người xin mở thầu) ở /mo-thau, ${NAP_GOI}, bước 3 bấm "Phê duyệt": sản phẩm từ chối — ${lopTuChoi(nguoi(kb.vai.xinMo).hoSo, "rfq.unseal.approve", "D2/D3")}.`,
+          `Đăng nhập bằng ${moTaNguoi(conLai)}, ${NAP_GOI}, bước 3 bấm "Phê duyệt" — chữ ký thứ hai.`,
+          `Đăng nhập lại bằng người xin mở thầu, bước 3 bấm "Điều phối giải mã": worker giải mã; bước 4 bấm "Đọc bảng so sánh" — giá đúng tới từng đồng.`,
         ],
         loiMoiConLai: [],
       };
@@ -643,9 +644,11 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       const gd = hs.nguoi.find((n) => n.ma === "gd");
       demo = {
         buocTiep: [
-          `Đăng nhập bằng ${moTaNguoi(gd)} ở /mo-thau, nạp gói, bước 7: đọc đề xuất và bấm "Duyệt trao thầu".`,
-          `Thử để ${moTaNguoi(nguoiDeXuat.hoSo)} tự duyệt đề xuất của mình: sản phẩm từ chối — ${lopTuChoi(nguoiDeXuat.hoSo, "po.approve", "J3")}.`,
-          "Bước 8: tải bộ bằng chứng (hai tệp) và kiểm bằng `pnpm bang-chung kiem --bo <thư mục>` KHÔNG cần CSDL.",
+          // TRƯỚC lần duyệt thật: trang chặn nút "Phê duyệt" ngay trên trình duyệt khi đề xuất không còn
+          // PROPOSED, nên một lần thử SAU sẽ không bao giờ tới sản phẩm (lượt soi tài liệu của vòng này).
+          `Trước khi duyệt: đăng nhập bằng ${moTaNguoi(nguoiDeXuat.hoSo)} (người đề xuất) ở /mo-thau, ${NAP_GOI}, bước 7 bấm "Phê duyệt": sản phẩm từ chối — ${lopTuChoi(nguoiDeXuat.hoSo, "po.approve", "J3")}.`,
+          `Đăng nhập bằng ${moTaNguoi(gd)}, ${NAP_GOI}, bước 7: đọc đề xuất rồi bấm "Phê duyệt".`,
+          "Bước 8: bấm \"Tải bộ bằng chứng\" (hai tệp) và kiểm bằng `pnpm bang-chung kiem --bo <thư mục>` KHÔNG cần CSDL.",
         ],
         loiMoiConLai: [],
       };
@@ -730,6 +733,9 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     };
   }
 }
+
+/** Cách nạp một gói có sẵn trên /tao-thau và /mo-thau: bước 2 của cả hai trang. */
+const NAP_GOI = 'nạp gói (dán mã gói ở bước 2, bấm "Đọc")';
 
 function moTaNguoi(n: NguoiHoSo | undefined): string {
   return n === undefined ? "(không có)" : `${n.hoTen} — ${n.chucDanh}`;

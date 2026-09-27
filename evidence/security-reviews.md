@@ -12506,7 +12506,7 @@ Bốn gói dở đứng đúng trạng thái: `OPEN`, `CLOSED` với yêu cầu 
 
 | Mũi | Kết quả |
 |---|---|
-| `countReceivedBids` bỏ lớp giấu số báo giá (`if (false && …)`) | chết — SX-01 KHÔNG ĐẠT ở phép kiểm *"trước khi đóng, SỐ báo giá bị giấu"* |
+| `countReceivedBids` bỏ lớp giấu số báo giá (`if (false && …)`) | chết — SX-01 KHÔNG ĐẠT ở phép kiểm *"trước khi đóng, SỐ báo giá bị giấu"*. Lượt ấy là một lượt `--chi SX-01` (0/1). Chạy lại trên cả danh mục sau lượt soi (mục 9, dòng 27): **4/10** KHÔNG ĐẠT — SX-01, SX-02, SX-04, XD-01, đúng bốn gói có phép kiểm ấy; `git diff` của `packages/unseal` rỗng sau khi khôi phục |
 | bảng so sánh làm tròn tổng tới nghìn đồng | **LẦN ĐẦU SỐNG** — xem dưới; sau khi sửa dữ liệu: chết, 6/10 KHÔNG ĐẠT |
 | bảng so sánh cắt hàng xu | chết — 2/10 KHÔNG ĐẠT (hai gói có tổng lẻ xu) |
 
@@ -12589,7 +12589,10 @@ Hai quan sát, không mở khoản:
 **Hình thức:** năm người soi độc lập đọc bản của commit đầu cùng mọi tài liệu của vòng. Mỗi người một lăng kính: *đúng
 đắn*, *an ninh*, *xanh giả* (công cụ nói nhiều hơn nó đo), *cổng CI*, *tài liệu*. Người soi được chạy lệnh; một người dựng
 gitleaks 8.24.3 và 8.28.0 để đo. Người viết đo lại từng phát hiện trước khi sửa, và gộp phát hiện trùng giữa các lăng
-kính. Lăng kính *tài liệu* chưa trả kết quả lúc commit này; phần của nó ghi ở commit sau.
+kính. Lăng kính *tài liệu* trả kết quả sau commit sửa đầu; các dòng 24–30 là của nó. Sau đó mỗi phát hiện qua một người
+kiểm chứng độc lập: 35 phát hiện, **32 xác nhận, 3 bị bác** — dòng 10; bản của lăng kính CI ở dòng 23, vì commit sửa
+đầu đã sửa nó; và *"yêu cầu Node 22 quá lỏng"*, có thật nhưng có từ trước vòng này và trên cả kho (`engines.node`,
+`ARCHITECTURE.md`), nên không sửa ở đây.
 
 | # | Lăng kính | Mức | Phát hiện | Xử lý |
 |---|---|---|---|---|
@@ -12602,7 +12605,7 @@ kính. Lăng kính *tài liệu* chưa trả kết quả lúc commit này; phầ
 | 7 | đúng đắn, xanh giả | thấp | `--chi SX-06` thiếu `--cham` ⇒ 0 kịch bản, mã thoát 0, *"MỌI kịch bản ĐẠT"*. Một lượt chỉ một tổ chức cũng khai *"mọi phép kiểm ĐẠT"* dù phép cô lập không chạy | Gọi tên kịch bản chậm mà thiếu `--cham` là lỗi; danh sách rỗng là lỗi; báo cáo và dòng tổng kết nói *"cô lập KHÔNG chạy"*; test |
 | 8 | đúng đắn | thấp | Thông báo gia hạn đếm số TIN, không đếm lời mời | Đếm theo lời mời, và đòi đúng một tin cho mỗi lời mời |
 | 9 | đúng đắn | thấp | Tín hiệu dừng tới trong lúc khởi động cụm (có thể tới hai phút) vẫn để lại tiến trình con mồ côi | `khoiDongCum` trao hàm dừng TRƯỚC tiến trình con đầu tiên. Đo: SIGTERM 1,66 s sau khi chạy lệnh `cum` — `api` đã ra đời, chưa trả `/health` — ⇒ mã thoát 143, 0 tiến trình con còn sống |
-| 10 | đúng đắn | thấp | Một lần ĐỌC tệp hộp thư hỏng tạm thời bị nhớ như tin hỏng, vĩnh viễn | Chỉ nhớ khi nội dung sai hình dạng. Test mới đỏ khi gỡ bản sửa (đã chạy) |
+| 10 | đúng đắn | thấp | Một lần ĐỌC tệp hộp thư hỏng tạm thời bị nhớ như tin hỏng, vĩnh viễn | Chỉ nhớ khi nội dung sai hình dạng. Test mới đỏ khi gỡ bản sửa (đã chạy). **Người kiểm chứng BÁC** phát hiện: bên ghi hộp thư ghi `.tmp` rồi đổi tên, và trên Windows libuv mở tệp với cờ chia sẻ đọc, nên không đo được đường kích hoạt nào. Bản sửa giữ lại như một lớp phòng thủ vô hại |
 | 11 | đúng đắn | thấp | Chế độ chậm chạy phần có ghi sổ của SX-06 chồng lên các kịch bản nhanh cùng tổ chức: OTP cùng số điện thoại, và cửa sổ đo *Vào sổ* | SX-06 dựng gói, mời và nhận báo giá MỘT MÌNH; kịch bản nhanh chạy trong lúc nó đợi; nó chỉ đi tiếp sau hạn khi kịch bản nhanh đã xong |
 | 12 | xanh giả | vừa | J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt) chưa từng chạy, mà `PRODUCT.md` §5 và khoản 9401 khai đã đo J3 | SX-03 giao đề xuất cho phó giám đốc. Lần thử: 422 *"(J3)"*, **không vào sổ**, và nó vào khoản 9401. Một test đòi danh mục đo cả lớp 403 lẫn lớp J3 |
 | 13 | xanh giả | vừa | Cột mốc, biên bản và Handoff khai *"mười một kịch bản qua API thật"* khi SX-06 chưa có kết quả | Các câu ấy nay gọi đó là DANH MỤC, và nói SX-06 chưa có kết quả cho tới khi có số đo |
@@ -12616,6 +12619,13 @@ kính. Lăng kính *tài liệu* chưa trả kết quả lúc commit này; phầ
 | 21 | xanh giả | thấp | Phép cô lập không có đối chứng dương | Hai đối chứng: người của chính tổ chức đọc cùng id ⇒ 200 |
 | 22 | xanh giả | thấp | Biên bản gọi việc thu hồi khoá là *"lớp chặn thật"* sau khi gói huỷ | Sửa (mục 7): lớp chặn là nhánh trạng thái C1 của trigger nộp |
 | 23 | xanh giả, cổng CI | thấp | Khai báo ở `duong-sql-ngoai-with-tenant.test.ts` và ADR-9201 kể một phép đọc đặc quyền; mã chạy ba | Kể đủ ba ở cả hai chỗ và ở đầu `csdl.ts` |
+| 24 | tài liệu | vừa | Lời dẫn trình diễn của XD-04 đặt lần tự duyệt SAU lần duyệt thật, trong khi `/mo-thau` chặn nút **Phê duyệt** ngay trên trình duyệt khi đề xuất đã duyệt — lần thử không bao giờ tới sản phẩm | Lần thử sai đi TRƯỚC ở cả ba gói dở (XD-03, XD-04, XD-05); kế hoạch §5 theo |
+| 25 | tài liệu | thấp | `--chi SX-01,XD-02` không nháy đi qua shim `pnpm.ps1` của PowerShell tới node thành `"SX-01 XD-02"` | `--chi` tách theo dấu phẩy và khoảng trắng; tài liệu viết danh sách trong nháy; test |
+| 26 | tài liệu | thấp | Khối lệnh Docker không đợi Postgres sẵn sàng, và lần nối đầu không thử lại | Thêm vòng `pg_isready` cho PowerShell và bash; kế hoạch ghi rõ hai khối ấy chưa chạy nguyên văn — máy của vòng không có Docker |
+| 27 | tài liệu | thấp | Đột biến *"tắt lớp giấu số báo giá ⇒ SX-01 KHÔNG ĐẠT"* là của một lượt `--chi SX-01`, đặt cạnh các con số N/10 của lượt đủ danh mục | Chạy lại trên cả danh mục: **4/10** KHÔNG ĐẠT (mục 6) |
+| 28 | tài liệu | thấp | *"Quyền 0700"* không đúng trên Windows: Node bỏ qua bit quyền, thư mục thừa hưởng ACL của thư mục cha | Viết lại ở kế hoạch, ADR-9201, `.gitignore` và chú thích mã: 0700 trên POSIX; trên Windows, đặt kho hay `--thu-muc` dưới hồ sơ người dùng |
+| 29 | tài liệu | thấp | `cum` dựng lại cụm mà không in lại mã gói, và hạn nộp của SX-04 tính từ lượt chạy (ba ngày) chứ không từ lúc dựng lại | `cum` in các gói lượt mới nhất để lại kèm mã gói, và cảnh báo khi lượt đã quá hai ngày; `lien-ket` đánh dấu lượt mới nhất; kế hoạch nói khi nào phải chạy lại; test |
+| 30 | tài liệu | thấp | Nhãn nút trong lời dẫn không khớp trang (*"Mở gói"*, *"Duyệt trao thầu"*, *"Phê duyệt"* không số bước); `/tao-thau` chỉ mời được nhà cung cấp tạo trong cùng phiên trang | Nhãn thật: **Mở thầu**, **Phê duyệt** ở bước 3 hay bước 7, **Điều phối giải mã**, **Tải bộ bằng chứng**; lời dẫn XD-05 nói cách mời từ `/tao-thau` |
 
 **Một phép kiểm mới sai giả định, và lượt chạy đo ra điều ấy.** Để kiểm câu *"bản cũ vẫn còn"* của SX-02, bản đầu của
 phép kiểm đòi các phiên bản cũ HIỆN trong bảng so sánh với `isLatestForBid = false`. Lượt chạy cho **0/3** ở SX-02, XD-01

@@ -112,6 +112,7 @@ với mật khẩu viết trong tài liệu này không được nghe trên mạ
 ```powershell
 # Windows PowerShell — Postgres trong Docker
 docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
+do { Start-Sleep 1; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0)
 $env:TRUSTPROCURE_SEED_DATABASE_URL = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap"
 pnpm pilot:gia-lap
 ```
@@ -119,9 +120,14 @@ pnpm pilot:gia-lap
 ```bash
 # Linux/macOS
 docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
+until docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap; do sleep 1; done
 export TRUSTPROCURE_SEED_DATABASE_URL=postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap
 pnpm pilot:gia-lap
 ```
+
+Dòng `pg_isready` đợi Postgres nhận kết nối TCP: container mới chạy `initdb` và một máy chủ tạm chỉ nghe socket trong vài
+giây đầu, và công cụ không thử lại lần nối đầu tiên. Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
+có Docker, và các lượt đo dùng Postgres 16 cài thẳng.
 
 Lệnh ấy làm trọn các bước sau, không một bước tay nào:
 1. Sinh bí mật cụm: ba vòng khoá 32 byte đôi một khác nhau, khoá ký biên nhận P-256 và mật khẩu hai vai đăng nhập.
@@ -135,13 +141,15 @@ Lệnh ấy làm trọn các bước sau, không một bước tay nào:
 |---|---|
 | `pnpm pilot:gia-lap --dung-sau` | Chạy danh mục rồi dừng cụm; mã thoát 0 khi mọi kịch bản và phép cô lập ĐẠT — dùng làm kiểm hồi quy. Phép cô lập chỉ chạy khi lượt dựng cả hai tổ chức; khi nó không chạy, báo cáo và dòng tổng kết nói ra |
 | `pnpm pilot:gia-lap --cham` | Thêm SX-06: đợi hạn nộp thật (~65 phút). Phần trước và sau lúc đợi của SX-06 chạy một mình; các kịch bản nhanh chạy trong lúc nó đợi |
-| `pnpm pilot:gia-lap --chi SX-01,XD-02` | Chỉ chạy một phần danh mục (gọi tên SX-06 thì phải kèm `--cham`) |
-| `pnpm pilot:gia-lap cum` | Dựng lại cụm từ thư mục trạng thái (cùng CSDL), giữ chạy |
+| `pnpm pilot:gia-lap --chi "SX-01,XD-02"` | Chỉ chạy một phần danh mục (gọi tên SX-06 thì phải kèm `--cham`). Viết danh sách trong nháy: PowerShell đọc `SX-01,XD-02` không nháy thành một mảng |
+| `pnpm pilot:gia-lap cum` | Dựng lại cụm từ thư mục trạng thái (cùng CSDL), giữ chạy, và in các gói lượt mới nhất để lại kèm mã gói. Hạn nộp của gói để lại tính từ LƯỢT CHẠY — SX-04 hết nhận báo giá sau ba ngày — nên buổi trình diễn cách lượt chạy hơn hai ngày cần một lượt `pnpm pilot:gia-lap` mới, không phải `cum` |
 | `pnpm pilot:gia-lap dang-nhap <email> [orgId]` | Link đăng nhập mới cho một người mua giả lập, kèm mã TOTP hiện tại và URI `otpauth://`; mặc định là tổ chức của lượt chạy mới nhất có email ấy |
 | `pnpm pilot:gia-lap otp <số điện thoại>` | Mã OTP mới nhất gửi tới một nhà cung cấp giả lập |
-| `pnpm pilot:gia-lap lien-ket` | Link mời còn chờ nộp của các gói để lại |
+| `pnpm pilot:gia-lap lien-ket` | Link mời còn chờ nộp của các gói để lại, đánh dấu lượt mới nhất |
 
-**Thư mục trạng thái** mặc định là `.pilot-gia-lap/` ở gốc kho, quyền 0700, và nằm trong `.gitignore`. `--thu-muc` trỏ vào
+**Thư mục trạng thái** mặc định là `.pilot-gia-lap/` ở gốc kho và nằm trong `.gitignore`. Quyền 0700 chỉ có trên POSIX:
+trên Windows, Node bỏ qua bit quyền và thư mục thừa hưởng ACL của thư mục cha — nên để kho, hay `--thu-muc`, dưới hồ sơ
+người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. `--thu-muc` trỏ vào
 trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngoài kho thì chỗ nào cũng được. Nó chứa:
 - `cum.json`: bí mật cụm;
 - `trang-thai.json`: bí mật TOTP của người mua giả lập và token lời mời, GỘP qua các lượt chạy (lượt mới nhất trước) —
@@ -160,16 +168,21 @@ TLS.
 
 ## 5. Kịch bản trình diễn — 20 phút với một khách hàng tiềm năng
 
-Chạy `pnpm pilot:gia-lap` trước buổi gặp. Cụm ở lại cùng bốn gói dở. Không màn nào dưới đây cần gõ SQL.
+Chạy `pnpm pilot:gia-lap` trước buổi gặp — cùng ngày hay hôm trước, vì hạn nộp của SX-04 tính từ lượt chạy. Cụm ở lại
+cùng bốn gói dở; mã gói in ở cuối lượt chạy, và lệnh `cum` in lại. *Nạp gói* nghĩa là dán mã gói ở bước 2 của trang rồi
+bấm **Đọc**. Không màn nào dưới đây cần gõ SQL.
 
 | Phút | Màn | Làm gì | Thứ khách thấy |
 |---|---|---|---|
 | 0–2 | `bao-cao-moi-nhat.md` | Đọc nhãn GIẢ LẬP và mục 7 của báo cáo | Dự án nói thẳng đây không phải khách hàng thật |
-| 2–7 | `/nop-thau` (khung hẹp) | `lien-ket` lấy link SX-04 → mở lời mời → gửi OTP → `otp <số>` → nhập đơn giá → **Niêm phong và nộp** | Giá mã hoá ngay trong trình duyệt; biên nhận ký số hiện ra với `kid` và `ciphertext_sha256` |
+| 2–7 | `/nop-thau` (khung hẹp) | `lien-ket` lấy link SX-04 → **Mở lời mời** → **Gửi mã** → `otp <số>` → **Xác minh** → nhập đơn giá → **Niêm phong và nộp** | Giá mã hoá ngay trong trình duyệt; biên nhận ký số hiện ra với `kid` và `ciphertext_sha256` |
 | 7–9 | `/mo-thau` | `dang-nhap hung.nv@…` → vào bằng mã TOTP → nạp gói SX-04 | *"Số báo giá đang bị giấu"* — kể cả trưởng phòng cũng không thấy **số** báo giá trước khi đóng |
-| 9–13 | `/mo-thau` | Gói XD-03: đăng nhập Phó Tổng Giám đốc ký chữ ký thứ hai; trưởng phòng điều phối | Worker mở phong bì; bảng so sánh khớp tới từng đồng. Thử để người xin mở tự duyệt ⇒ bị chặn |
-| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: Tổng Giám đốc duyệt trao thầu; tải bộ bằng chứng; chạy `pnpm bang-chung kiem --bo <thư mục>` | Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
+| 9–13 | `/mo-thau` bước 3–4 | Gói XD-03: TRƯỚC TIÊN người xin mở thầu bấm **Phê duyệt** ở bước 3 ⇒ bị chặn; rồi Phó Tổng Giám đốc bấm **Phê duyệt** — chữ ký thứ hai; người xin mở bấm **Điều phối giải mã**; bước 4 **Đọc bảng so sánh** | Lần tự duyệt bị cổng quyền chặn (403). Worker mở phong bì; bảng so sánh khớp tới từng đồng |
+| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: TRƯỚC TIÊN người đề xuất bấm **Phê duyệt** ở bước 7 ⇒ bị chặn; rồi Tổng Giám đốc bấm **Phê duyệt**; bước 8 **Tải bộ bằng chứng**; chạy `pnpm bang-chung kiem --bo <thư mục>` | Lần tự duyệt bị cổng quyền chặn (403). Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
 | 17–20 | Hỏi khách | Ba câu nặng nhất của `TIEN-DE-CHUA-DO.md`: B4 → A1 → B1 | Chuyển sang bậc 1–2 của mục 7 |
+
+Lần tự duyệt phải đi TRƯỚC lần duyệt thật: sau khi đề xuất đã duyệt, trang `/mo-thau` chặn nút **Phê duyệt** ngay trên trình
+duyệt, và lần thử không bao giờ tới sản phẩm.
 
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 
@@ -189,7 +202,8 @@ bản §S1.9101 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trê
 | Đi thử trên trình duyệt thật (Chromium, khung 375×812) | Nhà cung cấp mở link SX-04, OTP lấy bằng lệnh `otp`, niêm phong và nộp trong trình duyệt, nhận biên nhận `version=1 kid=k1`; người mua đăng nhập bằng `dang-nhap` + TOTP và thấy số báo giá bị giấu |
 
 **Bộ giả lập có răng.** Ba đột biến trên mã sản phẩm, mỗi đột biến khôi phục ngay sau khi chạy:
-- tắt lớp giấu số báo giá (`countReceivedBids`) ⇒ SX-01 **KHÔNG ĐẠT**;
+- tắt lớp giấu số báo giá (`countReceivedBids`) ⇒ 4/10 **KHÔNG ĐẠT** (SX-01, SX-02, SX-04, XD-01 — bốn gói có phép kiểm ấy).
+  Lượt đầu của đột biến này chỉ chạy `--chi SX-01` (0/1); con số 4/10 là của lượt chạy lại trên cả danh mục;
 - làm tròn tổng của bảng so sánh tới nghìn đồng ⇒ 6/10 **KHÔNG ĐẠT**;
 - cắt hàng xu ⇒ 2/10 **KHÔNG ĐẠT**.
 

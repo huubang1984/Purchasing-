@@ -89,7 +89,7 @@ export function kiemThuMucTrangThai(goc: string, thuMuc: string): void {
   );
 }
 
-/** Thư mục trạng thái 0700, rồi đọc `cum.json` nếu có. */
+/** Thư mục trạng thái 0700 (POSIX — Windows bỏ qua bit quyền, thư mục thừa hưởng ACL của cha), rồi đọc `cum.json` nếu có. */
 export async function docBiMat(thuMuc: string): Promise<BiMatCum | null> {
   await mkdir(thuMuc, { recursive: true, mode: 0o700 });
   if (process.platform !== "win32") await chmod(thuMuc, 0o700);

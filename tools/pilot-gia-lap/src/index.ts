@@ -13,7 +13,7 @@
 // (`bao-cao.ts`). Ranh giới an toàn, và mỗi điều có một chỗ cưỡng chế:
 //   ⑴ chỉ nhận CSDL cục bộ (`csdl.ts` → `kiemUrlCucBo`), từ chối `NODE_ENV=production`;
 //   ⑵ biến môi trường RIÊNG (`TRUSTPROCURE_SEED_DATABASE_URL`), không mượn biến của `apps/api`;
-//   ⑶ token và bí mật TOTP chỉ nằm trong thư mục trạng thái 0700 (`cum.json`, `trang-thai.json`) và
+//   ⑶ token và bí mật TOTP chỉ nằm trong thư mục trạng thái 0700 trên POSIX (`cum.json`, `trang-thai.json`) và
 //      trên màn hình khi người trình diễn gọi `dang-nhap`/`otp`/`lien-ket` — không trong báo cáo;
 //   ⑷ mọi bước nghiệp vụ đi qua HTTP của `apps/api`; kết nối đặc quyền chỉ làm năm việc (`csdl.ts`).
 // ==============================================================================================
@@ -34,7 +34,7 @@ import { diaChiGiaLap, layChuoi, PhienHttp } from "./http.js";
 import { DANH_MUC, kiemDanhMuc, type KichBan } from "./kich-ban.js";
 import { layKhoaBienNhan } from "./kiem-doc-lap.js";
 import { TRO_GIUP, docThamSo, type ThamSo } from "./tham-so.js";
-import { docTrangThai, docTrangThaiNeuCo, ghiTrangThai, gopTrangThai, type ToChucTrangThai } from "./trang-thai.js";
+import { docTrangThai, docTrangThaiNeuCo, ghiTrangThai, gopTrangThai, luotMoiNhat, type TrangThai, type ToChucTrangThai } from "./trang-thai.js";
 
 class PilotError extends Error {
   constructor(message: string) {
@@ -369,6 +369,7 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
       ma,
       ten: t.tc.hs.ten,
       orgId: t.tc.orgId,
+      luot: batDau,
       nguoi: [...t.tc.nguoi.values()].map((n) => ({ ma: n.hoSo.ma, hoTen: n.hoSo.hoTen, chucDanh: n.hoSo.chucDanh, vai: n.hoSo.vai, email: n.email, totpBase32: n.biMatTotp })),
       loiMoiConLai: ketQua
         .filter((k) => k.toChuc === t.tc.hs.ten && k.demo !== null)
@@ -465,12 +466,34 @@ async function otp(ts: ThamSo, thuMuc: string): Promise<number> {
   return 0;
 }
 
+/**
+ * Gói mà lượt MỚI NHẤT để lại, kèm mã gói — thứ người trình diễn phải dán ở bước 2 của /tao-thau và
+ * /mo-thau. Lượt soi tài liệu của vòng này: sau `cum`, không lệnh nào in lại mã gói, và hạn nộp của gói
+ * để lại tính từ LƯỢT CHẠY (SX-04: ba ngày), không từ lúc dựng lại cụm.
+ */
+function inGoiDeLai(tt: TrangThai): void {
+  const moi = luotMoiNhat(tt);
+  const luot = moi[0]?.luot;
+  viet(`Gói lượt mới nhất để lại${luot === undefined ? "" : ` (lượt bắt đầu ${luot})`}:`);
+  for (const tc of moi) {
+    for (const g of tc.goiDeLai) {
+      viet(`  ${g.kichBan}  gói ${g.rfqId}  · ${tc.ten}`);
+      for (const b of g.buocTiep) viet(`      - ${b}`);
+    }
+  }
+  const tuoiMs = luot === undefined ? Number.NaN : Date.now() - Date.parse(luot);
+  if (Number.isFinite(tuoiMs) && tuoiMs > 2 * 24 * 60 * 60_000) {
+    viet(`  CẢNH BÁO: lượt này đã ${Math.floor(tuoiMs / (24 * 60 * 60_000))} ngày — hạn nộp của gói đang mở (SX-04: 3 ngày) tính từ lượt chạy. Trước buổi trình diễn, chạy lại \`pnpm pilot:gia-lap\`.`);
+  }
+}
+
 async function lienKet(ts: ThamSo, thuMuc: string): Promise<number> {
   const tt = await docTrangThai(thuMuc);
   const web = `http://127.0.0.1:${ts.cong.web}`;
+  const moi = new Set(luotMoiNhat(tt).map((t) => t.orgId));
   let n = 0;
   for (const tc of tt.toChuc) {
-    if (tc.loiMoiConLai.length > 0) viet(`— ${tc.ten} · tổ chức ${tc.orgId}`);
+    if (tc.loiMoiConLai.length > 0) viet(`— ${tc.ten} · tổ chức ${tc.orgId} · ${moi.has(tc.orgId) ? "LƯỢT MỚI NHẤT" : `lượt cũ${tc.luot === undefined ? "" : ` (${tc.luot})`}`}`);
     for (const l of tc.loiMoiConLai) {
       n += 1;
       viet(`${l.kichBan}  ${l.nhaCungCap} — ${l.lienHe} (OTP tới ${l.soDienThoai})`);
@@ -490,7 +513,14 @@ async function giuCum(ts: ThamSo, thuMuc: string): Promise<number> {
     await cum.dung();
     throw e;
   }
-  viet(`Cụm chạy — web: ${cum.webGoc}/mo-thau. Ctrl+C để dừng.`);
+  viet(`Cụm chạy — web: ${cum.webGoc}/mo-thau · ${cum.webGoc}/tao-thau · ${cum.webGoc}/nop-thau. Ctrl+C để dừng.`);
+  // Cụm đã lên: một trang-thai.json hỏng chỉ đáng một dòng báo, không đáng bỏ cụm chạy mà không ai dừng.
+  try {
+    const tt = await docTrangThaiNeuCo(thuMuc);
+    if (tt !== null) inGoiDeLai(tt);
+  } catch (e) {
+    bao(`không đọc được trang-thai.json — ${e instanceof Error ? e.message : String(e)}`);
+  }
   await giuChoToiKhiDung();
   return 0;
 }

@@ -51,7 +51,8 @@ Thumbs.db
 .hop-thu-dev/
 
 # [ADR-9201] Thư mục trạng thái của `pnpm pilot:gia-lap`: bí mật cụm (khoá, mật khẩu vai đăng nhập),
-# bí mật TOTP của người mua giả lập, token lời mời, hộp thư dev và báo cáo. Công cụ tạo nó 0700.
+# bí mật TOTP của người mua giả lập, token lời mời, hộp thư dev và báo cáo. Công cụ tạo nó 0700 trên
+# POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha.
 .pilot-gia-lap/
 
 # Evidence pack — bao cao tho va xuat xu moi luot chay khong vao git; MA TRAN thi CO.

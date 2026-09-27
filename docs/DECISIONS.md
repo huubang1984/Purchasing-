@@ -7581,7 +7581,7 @@ không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới
 5. **Dữ liệu tự khai là bịa, báo cáo tự khai là giả lập.**
    - Nhãn `[GIẢ LẬP]`/`[GL]`, tên miền `.invalid`, mã số thuế mở đầu bằng bảy số 0, IP thuộc `2001:db8::/32`.
    - Báo cáo mở đầu bằng *"KHÔNG PHẢI PILOT"* và không mang token nào; token và bí mật TOTP chỉ nằm ở thư mục trạng
-     thái 0700, có trong `.gitignore`.
+     thái 0700 (trên POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha), có trong `.gitignore`.
    - Công cụ chỉ nhận CSDL cục bộ.
 
 ### Hệ quả, nói thẳng
