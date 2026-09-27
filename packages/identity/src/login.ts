@@ -313,6 +313,14 @@ export async function verifyTotpForLogin(
     // `catch` HẸP CÓ CHỦ Ý — chỉ 55P03, không 57014. Nếu `statement_timeout` cạn trước trần 2 s thì
     // lỗi là 57014 và câu dưới NÉM LẠI, tức rơi về hành vi cũ; đó là lựa chọn fail-closed, vì nuốt
     // 57014 sẽ nuốt luôn mọi lần huỷ câu chính đáng. Dư lượng ấy ghi ở khoản nợ 143.
+    //
+    // [S1.172 / khoản 143] ~~chỉ 55P03~~ — **55P03 VÀ 40P01.** Khoá chết trên khoá tư vấn ghi sổ
+    // (`004` đã ghi, phép đo khoản 126 đã thấy) bắn ở `deadlock_timeout` mặc định 1 s, tức TRƯỚC trần
+    // 2 s, và bản trước để nó rollback cả `locked_until` — đo ở `mfa.int.test.ts` khối khoản 143: hồ sơ
+    // KHÔNG khoá. 40P01 an toàn để nuốt như 55P03: Postgres chỉ huỷ CÂU chờ khoá của nạn nhân, không phải
+    // một lần huỷ do người hay do trần thời gian đặt ra, và `ROLLBACK TO SAVEPOINT` đưa giao dịch về
+    // lành. 57014 vẫn ném: với `statement_timeout` 15 s (`createPool`) mỗi câu, trần 2 s luôn tới trước,
+    // nên 57014 ở câu này chỉ còn là lần huỷ CÓ Ý (`pg_cancel_backend`) — fail-closed là đúng hướng.
     // ==========================================================================================
     await client.query("SAVEPOINT ghi_so_mfa_locked");
     try {
@@ -324,7 +332,7 @@ export async function verifyTotpForLogin(
         payload: { lockedUntil: kq.lockedUntil?.toISOString() ?? null },
       });
     } catch (e) {
-      if (!(e instanceof Error && "code" in e && e.code === "55P03")) throw e;
+      if (!(e instanceof Error && "code" in e && (e.code === "55P03" || e.code === "40P01"))) throw e;
       await client.query("ROLLBACK TO SAVEPOINT ghi_so_mfa_locked");
       return { ...kq, auditSkipped: true };
     }
