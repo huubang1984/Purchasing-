@@ -594,6 +594,9 @@ const DANH_SACH_TRANG_INVITATION = [
   // không phải ca "nhận token, trả phiên" mà khối chú thích trên cảnh báo; nó chỉ tra một phiên
   // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
   "resolveGuestSessionByToken",
+  // [S1.9101 / ADR-9201] Thu hồi ĐÚNG một phiên khách theo id mà dispatcher dẫn xuất từ cookie; trả boolean, không
+  // nhận token, không trả phiên — không phải ca "nhận token, trả phiên" của khối chú thích trên.
+  "revokeGuestSession",
   "revokeInvitation",
   // [sổ nợ 39] Đếm-và-tăng một bucket LOGIN_CALLER; trả số, không trả phiên, không nhận token.
   "tangBucketHanMuc",

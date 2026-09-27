@@ -14611,15 +14611,78 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 
 ## 4. Giới hạn
 
-- Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
+- ~~Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
   cung cấp cùng một gói trên một máy — hiếm, ví dụ một người đại diện cho hai doanh nghiệp — có thể nộp vào hồ sơ của nhau nếu
-  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).
-- Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
+  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).~~
+  **[S1.9101 / ADR-9201]** Đã làm — `GET /guest/rfq` mang tên doanh nghiệp được mời, khối hỏi nêu nó. §S1.9101.
+- ~~Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
   phía bên mua). Người thấy khối hỏi mà không phải mình thì mở link mời của mình — lần xác minh thay cookie. Cookie khách tự hết
-  sau 4 giờ.
+  sau 4 giờ.~~ **[S1.9101 / ADR-9201]** Đã làm — `POST /guest/logout`, nút Thoát phiên nộp thầu ở bước 1 và bước 4. §S1.9101.
 - Biên nhận của lần nộp trước (bước 4) không hiện lại sau khi tải lại trang.
 - Mã cuối được đo trên Chromium với API giả; luồng API thật (kể cả nộp) được đo trên commit trước lượt sửa của mục 3b.
 
 ## 5. Số
 
 Không khoản nào mở hay đóng.
+
+# §S1.9101 — PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH (ADR-9201)
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27 hai giới hạn §S1.178 mục 4 để lại:
+
+- Khối hỏi phiên của trang nộp thầu chỉ nêu tên gói. Một gói mời nhiều nhà cung cấp, nên hai nhà cung cấp của cùng một gói trên
+  một máy thấy cùng một câu hỏi và có thể nộp vào hồ sơ của nhau. Không route khách nào trả định danh người được mời.
+- Không route nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ `revokeInvitation` phía bên mua, và nó thu
+  hồi cả lời mời. Cookie `__Host-tp_guest` sống tới 4 giờ kể cả sau khi đóng trình duyệt.
+
+## 2. Thay đổi
+
+- `packages/invitation`: `resolveGuestSessionByToken` nối thêm `suppliers` theo khoá chính và trả `supplierLegalName` — đọc dưới
+  kết nối chỉ gắn tổ chức, trong cùng câu đã chứng minh token. Hàm mới `revokeGuestSession(client, orgId, guestSessionId)`:
+  `assertTenantBound`, `UPDATE guest_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING …`, và
+  CHỈ khi có hàng đổi thì ghi `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id`, payload `invitationId`).
+- `apps/api`: `GuestContext.supplierLegalName`, bộ điều phối chuyển nó từ bước tra cookie; `GET /guest/rfq` thêm
+  `supplier: { legalName }`; route `POST /guest/logout` (GUEST, `mutates: true`) gọi `revokeGuestSession` và trả 200 kèm
+  `XOA_COOKIE_PHIEN_KHACH` (`routes/anon.ts`, cùng tên, `Path=/`, `Max-Age=0`, `HttpOnly; Secure; SameSite=Strict`).
+- `apps/web/trang/nop-thau.*`: khối hỏi nêu tên doanh nghiệp và tên gói, thiếu tên doanh nghiệp thì không hỏi; bước 3 có dòng
+  "Doanh nghiệp được mời"; nút `#nut-thoat-khach` ở bước 1 (cùng khối hỏi, sau lần xác minh, sau Tiếp tục; `dongCacBuoc()` và
+  nhánh phiên chết của Tiếp tục ẩn nó) và `#nut-thoat-bn` ở bước 4, cùng một hàm `thoatPhienKhach()`: 200 hay 401 ⇒ đóng các
+  bước, câu báo nói phải xin link mời mới; mã khác hay mất mạng ⇒ báo ở bước 1, không đóng gì; thế hệ `theHe` bỏ kết quả về muộn.
+- Hai danh sách canh kiến trúc: `revokeGuestSession` vào `HAM_DUONG_KHACH` (`tests/architecture/cong-quyen-route.test.ts`) và
+  danh sách trắng của mặt tiền `invitation` (`tests/architecture/barrel-exports.test.ts`).
+- ADR-9201; ADR-107 (Hệ quả) và §S1.178 mục 4 gạch kèm nhãn.
+
+## 3. Đo
+
+- `apps/api/src/guest.int.test.ts`, 7 ca `[S1.9101 / ADR-9201]` trên Postgres thật qua HTTP: hai nhà cung cấp cùng gói ⇒ hai tên,
+  không thấy tên nhau, không mã nhà cung cấp, không mã hay tên người liên hệ; tên đọc lúc gọi (bên mua sửa ⇒ tên mới); thoát ⇒ 200,
+  `Set-Cookie` xoá với đủ thuộc tính, cookie cũ 401 ở `GET /guest/rfq`, `GET /guest/bids`, `POST /guest/bids`, `revoked_at` đặt,
+  lời mời KHÔNG `REVOKED`, đúng một hàng sổ mang người liên hệ đã xác minh, lần thoát thứ hai 401 và không thêm hàng; phiên thứ
+  hai của CÙNG lời mời và phiên của nhà cung cấp khác vẫn 200; không cookie, cookie rác, magic link nhét vào cookie ⇒ 401, không
+  `Set-Cookie`, không hàng sổ; bên mua thu hồi giữa chừng ⇒ `revokeGuestSession` trả `false`, 0 hàng sổ; tổ chức khác ⇒ `false`
+  và phiên còn sống; khai sai tổ chức ⇒ ném `revokeGuestSession: …` ở câu đầu. 19/19 ca của tệp xanh.
+- `apps/web/src/phuc-vu.test.ts`, 9 ca `[S1.9101]` trên khung `node:vm` của §S1.177 (khung nay ghi con của `append` để đọc được
+  bảng gói thầu; `POST /guest/logout` giả xoá cookie khách): khối hỏi nêu tên doanh nghiệp và tên gói, nút Thoát hiện cùng; Tiếp
+  tục ⇒ bảng gói thầu có dòng doanh nghiệp; thiếu tên hay tên sai kiểu ⇒ không hỏi, không nút; Thoát ở khối hỏi, ở bước 3, ở bước
+  4; 401 ⇒ vẫn về bước 1; 500 và mất mạng ⇒ báo lỗi, không đóng bước, nút bấm lại được; xác minh xong ⇒ nút hiện; Mở lời mời
+  khác, hashchange, Tiếp tục khi phiên chết ⇒ nút ẩn; Thoát về muộn sau hashchange ⇒ không đụng màn của người sau. Fixture của
+  các ca `[S1.178]` thêm `supplier`; hai kỳ vọng câu chữ đổi theo câu hỏi mới. 69/69 ca của tệp xanh.
+- Đột biến (chép tệp, chạy các ca liên quan, trả lại): 20 ở `nop-thau.js` — bỏ đòi tên doanh nghiệp, câu hỏi bỏ tên, khối hỏi
+  không hiện nút, `dongCacBuoc` không ẩn nút, nhánh phiên chết không ẩn nút, xác minh xong không hiện nút, thoát không đóng bước,
+  401 thành lỗi, mọi mã thành công, bỏ kiểm thế hệ, không bật lại nút, nút bước 4 không nối, bảng thiếu dòng doanh nghiệp, câu
+  báo thiếu "link mới", gọi nhầm `/auth/logout`, đọc tên từ trường sai, mất mạng không báo, hiện nút khi không phiên, câu Tiếp tục
+  thiếu tên, `dongCacBuoc` không ẩn bước 4; 11 ở API và gói — `/guest/rfq` bỏ `supplier`, thoát không thu hồi, thoát không xoá
+  cookie, thu hồi mọi phiên của lời mời, ghi sổ cả khi không đổi hàng, cookie xoá sai `Path`, sổ ghi sai người, nối `suppliers`
+  theo tổ chức, lấy tên người liên hệ, bỏ `assertTenantBound`, bộ điều phối không chuyển tên. Cả 31 đỏ (đột biến bỏ
+  `assertTenantBound` sống ở lượt đầu — ca "khai sai tổ chức" thêm vào mới giết được nó).
+- Pilot giả lập trên mã của vòng: 10/10 kịch bản, cô lập 2/2.
+- Chromium 1194 trên cụm thật của pilot, bề rộng 390 px, hai lời mời còn chờ của CÙNG gói SX-04 (hai nhà cung cấp khác nhau), CÙNG
+  một ngữ cảnh trình duyệt: A mở link, OTP qua SMS, xác minh ⇒ bước 3 có *"Doanh nghiệp được mời — [GL] Công ty CP Thiết bị Cơ khí
+  Nam Việt"*, `location.hash` rỗng, nút Thoát hiện; tải lại ⇒ khối hỏi *"… còn hạn của «[GL] Công ty CP Thiết bị Cơ khí Nam Việt»
+  cho gói thầu «Vòng bi và bu lông bảo trì dây chuyền dập» …"*; Thoát ⇒ câu báo *"Đã thoát phiên nộp thầu …"*, `GET /api/guest/rfq`
+  401, trình duyệt không còn cookie nào; tải lại ⇒ không khối hỏi. B mở link của mình trong cùng ngữ cảnh ⇒ bước 3 nêu *"[GL] Công
+  ty TNHH Hoá chất và Dầu nhớt Bình Minh"*; tải lại ⇒ khối hỏi nêu tên B; Tiếp tục ⇒ câu báo nêu tên B; nhập giá, niêm phong và
+  nộp ⇒ biên nhận lần nộp #1; Thoát ở bước 4 ⇒ bước 3–4 ẩn, biên nhận xoá, `GET /api/guest/rfq` 401. 0 lỗi JavaScript (`pageerror`);
+  console chỉ có dòng "Failed to load resource" của các lời gọi `/api/guest/rfq` không phiên (401, dự kiến) và một 404 tải tài
+  nguyên không phải lời gọi của trang (trang trống đo riêng chỉ thấy `401 /api/guest/rfq`).

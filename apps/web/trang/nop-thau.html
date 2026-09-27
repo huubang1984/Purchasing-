@@ -30,6 +30,9 @@
          xác minh, nên tải lại trang từng là mất đường vào tới khi bên mua mời lại. -->
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục nộp báo giá</button>
+    <!-- [S1.9101 / ADR-9201] Thoát phiên nộp thầu: thu hồi phiên trên máy chủ và xoá cookie khách. Hiện cùng khối hỏi và
+         suốt lúc phiên đang dùng; bước 4 có nút thứ hai cùng việc. -->
+    <button id="nut-thoat-khach" class="phu" hidden>Thoát phiên nộp thầu</button>
   </section>
 
   <section class="buoc" id="b2" hidden>
@@ -80,6 +83,9 @@
     <div class="ma" id="van-ban"></div>
     <div class="ma" id="chu-ky"></div>
     <button id="nut-lai" class="phu">Nộp bản sửa đổi</button>
+    <p class="ghi">Nộp xong trên một máy dùng chung thì thoát phiên. Thoát rồi, muốn sửa báo giá phải xin bên mua gửi
+      link mời mới — link cũ đã dùng khi xác minh.</p>
+    <button id="nut-thoat-bn" class="phu">Thoát phiên nộp thầu</button>
   </section>
 
   <footer class="chan">Lát cắt demo — giá được mã hoá trong trình duyệt, máy chủ không đọc được.</footer>

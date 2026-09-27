@@ -13,6 +13,15 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-27 / S1.9101] PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH (ADR-9201).**
+Khối hỏi phiên của trang nộp thầu (S1.178) chỉ nêu tên gói, nên hai nhà cung cấp của cùng một gói trên một máy thấy cùng một câu
+hỏi; và không route nào cho nhà cung cấp tự đóng phiên của mình — cookie khách sống tới 4 giờ trên máy dùng chung. Nay
+`GET /guest/rfq` mang `supplier.legalName`, đọc ở bước tra cookie dưới kết nối chỉ gắn tổ chức (không mở `suppliers` cho phiên
+khách); khối hỏi và bước 3 nêu tên ấy. `POST /guest/logout` thu hồi ĐÚNG phiên đang gọi, xoá cookie, ghi `GUEST_SESSION_REVOKED`
+khi thật sự đổi hàng — không chạm lời mời hay phiên khác; nút Thoát phiên nộp thầu ở bước 1 và bước 4, câu báo nói phải xin link
+mới. 7 ca tích hợp, 9 ca trang, 31 đột biến đều đỏ; Chromium trên cụm thật với hai nhà cung cấp cùng gói trong một trình duyệt.
+Không migration, không đổi quyền CSDL, không đổi số khoản. Bằng chứng: `evidence/security-reviews.md` §S1.9101.
+
 **[2026-09-27 / S1.178] TRANG NỘP THẦU HỎI LẠI PHIÊN KHÁCH CÒN HẠN LÚC TẢI; ĐỔI LINK MỜI TRONG CÙNG THẺ THÌ ĐÓNG CÁC BƯỚC.**
 Mã lời mời bị tiêu thụ ở lần xác minh OTP, còn phiên khách là cookie sống tới 4 giờ; tới trước vòng này trang nộp thầu chỉ đọc
 gói thầu sau lần xác minh, nên tải lại trang — trên điện thoại, trình duyệt tự làm việc ấy với thẻ bị đẩy xuống nền — là mất

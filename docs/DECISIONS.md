@@ -8335,7 +8335,8 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   không làm mất gì. ~~Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
   mời lại, có xoá fragment hay không.~~ **[S1.178]** Trang nộp thầu nay cũng hỏi lại phiên khách lúc tải (`GET /guest/rfq`,
   cookie `__Host-tp_guest` tới 4 giờ): tải lại sau khi xác minh ⇒ khối hỏi nêu tên gói thầu, "Tiếp tục nộp báo giá" ⇒ bước 3.
-  Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.
+  ~~Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.~~ **[S1.9101 / ADR-9201]**
+  `GET /guest/rfq` nay mang tên doanh nghiệp được mời và khối hỏi nêu nó; nhà cung cấp tự thoát phiên bằng `POST /guest/logout`.
 - **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.177]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
   tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
   "Đăng xuất" (`POST /auth/logout`) — không tự mở, vì trên máy dùng chung phiên ấy có thể của người khác. Dùng lại phiên
@@ -8358,3 +8359,74 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 `docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.178).
+
+## ADR-9201 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101) · **Liên quan:** ADR-020 mục 4
+(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`), ADR-016 (danh tính dẫn xuất, không khai), ADR-107 (Hệ quả —
+tên gói không nói phiên của ai) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Từ S1.178 trang nộp thầu hỏi lại phiên khách lúc tải và nêu TÊN GÓI. Một gói mời nhiều nhà cung cấp, nên hai nhà cung cấp của
+cùng một gói dùng chung một máy thấy cùng một câu hỏi và có thể nộp vào hồ sơ của nhau; §S1.178 mục 4 ghi chỗ ấy, kèm cách sửa
+tận gốc — một định danh lời mời không bí mật trong phản hồi khách, tức đổi hợp đồng HTTP. Cùng mục ghi chỗ thứ hai: không route
+nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ `revokeInvitation` phía bên mua, và nó thu hồi CẢ lời mời —
+trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả sau khi đóng trình duyệt.
+
+### Quyết định
+
+1. **`GET /guest/rfq` mang `supplier: { legalName }`** — `suppliers.legal_name` của nhà cung cấp của lời mời mà phiên thuộc về.
+   ĐÚNG một trường: không mã nhà cung cấp, không MST, không người liên hệ. Bài toán là phân biệt hai DOANH NGHIỆP; tên người là dữ
+   liệu cá nhân trang không cần.
+2. **Đọc ở bước tra cookie, không ở handler.** `resolveGuestSessionByToken` (kết nối chỉ gắn tổ chức, cùng câu đã chứng minh
+   token) nối thêm `suppliers` theo khoá chính và trả `supplierLegalName`; bộ điều phối chuyển nó vào `GuestContext`. Handler đọc
+   của khách chạy dưới ba GUC, và `suppliers` ĐÓNG với phiên khách (`027` mục 6). Mở một policy `suppliers_khach` là mở CẢ HÀNG
+   (MST, trạng thái, người tạo) cho mọi câu dưới phiên khách — `app_api` chung cho người mua và khách, nên không `GRANT` theo cột
+   nào tách được hai đường. Khoá ngoại hợp thành `(org_id, supplier_id)` của `010` bảo đảm hàng tồn tại trong cùng tổ chức.
+3. **`POST /guest/logout`** — route GUEST ghi (`mutates: true`: `withTenant` không GUC, handler không viết SQL tay), gọi
+   `revokeGuestSession(client, orgId, guestSessionId)` của `packages/invitation`: đặt `revoked_at` của ĐÚNG hàng phiên mà bộ điều
+   phối dẫn xuất từ cookie; ghi `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id` của chính hàng ấy — cùng người
+   mà `GUEST_SESSION_STARTED` đã ghi; payload `invitationId`) CHỈ khi câu UPDATE thật sự đổi một hàng. Phản hồi 200 `{ok: true}`
+   kèm `Set-Cookie` xoá `__Host-tp_guest` — cùng tên, `Path=/`, `Max-Age=0`, `HttpOnly; Secure; SameSite=Strict`. Không chạm lời
+   mời, token, thách thức OTP, hay phiên khác của cùng lời mời. Không trần tần suất: một 429 trên đường thoát là một lớp GIỮ người
+   ta ở lại trong phiên — cùng lý do đã ghi cho `/auth/logout`. Phiên đã chết ⇒ 401 ở bước xác thực, không `Set-Cookie`.
+4. **Trang nộp thầu.** Khối hỏi lúc tải nêu tên doanh nghiệp VÀ tên gói; 200 thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với
+   thiếu tên gói. Bước 3 có dòng "Doanh nghiệp được mời". Nút **Thoát phiên nộp thầu** ở bước 1 (hiện cùng khối hỏi và suốt lúc
+   phiên đang dùng) và ở bước 4; 401 coi như đã thoát (cùng khuôn nút Đăng xuất của ba trang người mua); câu báo nói thẳng rằng
+   muốn nộp tiếp phải xin link mời mới.
+5. **Không migration, không đổi quyền CSDL.** `app_api` có `UPDATE (revoked_at)` trên `guest_sessions` từ `010`; trigger
+   `guest_sessions_thu_hoi_don_dieu` giữ thu hồi đơn điệu như với mọi lần thu hồi khác.
+
+### Phương án đã cân nhắc
+
+- **Policy `suppliers_khach` mở hàng nhà cung cấp của lời mời** — bác, mục 2.
+- **Hàm SECURITY DEFINER trả tên theo GUC phiên khách** — thêm một hàm đặc quyền cùng mục canh hardening cho một trường mà bước
+  tra cookie đã đọc được dưới quyền thường.
+- **Thoát bằng `revokeInvitation`** — đòi phiên người mua, và thu hồi cả link đang sống của lời mời; rộng hơn bài toán.
+- **Hộp thoại `confirm()` trước khi thoát** — cửa sổ web trong ứng dụng nhắn tin có thể chặn hộp thoại, và khi ấy nút thoát không
+  bao giờ chạy. Thay bằng câu nói trước hậu quả ở bước 4 và trong câu báo khi đang dùng phiên.
+
+### Hệ quả, nói thẳng
+
+- **Đổi hợp đồng HTTP**: một trường mới ở `GET /guest/rfq`, một route mới. Client không đọc trường mới vẫn chạy. Trang mới gặp API
+  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì.
+- **Câu tra cookie của MỌI lời gọi khách** nối thêm một bảng theo khoá chính.
+- **Người cầm cookie khách đọc được tên doanh nghiệp được mời.** Chủ lời mời đã biết nó; kẻ cầm cookie trộm thì đã đọc được tên
+  gói, hạng mục và nộp được báo giá từ trước — tên doanh nghiệp không mở thêm quyền nào.
+- **Thoát rồi thì chỉ link mới của bên mua đưa nhà cung cấp trở lại**: mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`). Trang
+  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).
+- **Người thấy khối hỏi của phiên người khác thoát được phiên ấy** — chủ ý: đóng một phiên đang để ngỏ trên máy dùng chung. Chủ
+  phiên mất đường vào tới khi có link mới; trước vòng này, người ấy dùng được luôn phiên của họ.
+- **Phiên đã chết thì nút Thoát không xoá được cookie** (401 không mang `Set-Cookie`); cookie chết không mở được gì và tự hết theo
+  `Max-Age`.
+
+### Đo
+
+`apps/api/src/guest.int.test.ts` khối `[S1.9101 / ADR-9201]` (Postgres thật, qua HTTP): hai nhà cung cấp cùng một gói thấy hai tên,
+không thấy tên nhau, không thấy mã nhà cung cấp hay người liên hệ; tên đọc lúc gọi; thoát ⇒ 200, cookie xoá cùng bộ thuộc tính,
+cookie cũ 401 ở cả đường đọc lẫn ghi, lời mời không bị thu hồi, đúng một hàng sổ mang người liên hệ đã xác minh, lần thoát thứ hai
+401 không thêm hàng; phiên thứ hai của cùng lời mời và phiên của nhà cung cấp khác vẫn sống; không cookie, cookie rác, magic link
+trong cookie ⇒ 401 không `Set-Cookie` không hàng sổ; phiên bị thu hồi giữa chừng ⇒ `false` không ghi sổ; tổ chức khác ⇒ `false`, và
+khai sai tổ chức ⇒ ném ở câu đầu. `apps/web/src/phuc-vu.test.ts` các ca `[S1.9101]` trên khung `node:vm` của §S1.177. Đột biến và
+Chromium trên cụm thật: §S1.9101.

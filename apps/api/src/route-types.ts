@@ -182,6 +182,11 @@ export interface GuestContext {
   /** DẪN XUẤT từ hàng phiên bởi `withGuestSession` — không đọc từ thân, không đọc từ đường dẫn. */
   readonly invitationId: string;
   readonly rfqId: string;
+  /**
+   * [S1.9101 / ADR-9201] Tên pháp lý của nhà cung cấp được mời — DẪN XUẤT ở bước tra cookie
+   * (`resolveGuestSessionByToken`, kết nối chỉ gắn tổ chức), vì `suppliers` đóng với kết nối gắn phiên khách.
+   */
+  readonly supplierLegalName: string;
   readonly services: ApiServices;
 }
 

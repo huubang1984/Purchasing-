@@ -1212,6 +1212,14 @@ export async function revokeInvitation(
 // Nó CHỈ tra, KHÔNG gắn GUC: gắn là việc của `withGuestSession`, và nó phải chạy ở một giao dịch
 // KHÁC (đọc lại hàng phiên, từ chối thu hồi/hết hạn, đặt cả ba GUC, đọc lại cả ba). Một hàm vừa
 // tra vừa gắn là một chỗ để hai phép kiểm lệch nhau. Mọi ca hỏng ném CÙNG MỘT thông điệp.
+//
+// [S1.9101 / ADR-9201] Câu tra đọc thêm TÊN PHÁP LÝ của nhà cung cấp được mời — để trang nộp thầu nói phiên đang
+// giữ là của doanh nghiệp nào. Đọc Ở ĐÂY, dưới kết nối chỉ gắn tổ chức, chứ không trong handler: handler đọc của
+// khách chạy dưới ba GUC, và `suppliers` ĐÓNG với phiên khách (027 mục 6). Mở một policy `suppliers_khach` là mở
+// CẢ HÀNG (MST, trạng thái, người tạo) cho mọi câu dưới phiên khách, vì `app_api` chung cho người mua và khách nên
+// không GRANT theo cột nào tách được hai đường; câu ở đây ra ĐÚNG một trường, của ĐÚNG nhà cung cấp của lời mời
+// mà token này đã chứng minh. Khoá ngoại hợp thành `(org_id, supplier_id)` của `010` bảo đảm hàng ấy tồn tại
+// trong cùng tổ chức, nên phép nối không bớt phiên hợp lệ nào.
 // ==============================================================================================
 
 export interface ResolvedGuestSession {
@@ -1220,6 +1228,8 @@ export interface ResolvedGuestSession {
   /** DẪN XUẤT qua `rfq_invitations` — cùng cách `withGuestSession` dẫn xuất GUC thứ ba. */
   readonly rfqId: string;
   readonly verifiedChannel: Channel;
+  /** [S1.9101 / ADR-9201] `suppliers.legal_name` của nhà cung cấp được mời — DẪN XUẤT qua lời mời, như `rfqId`. */
+  readonly supplierLegalName: string;
 }
 
 export async function resolveGuestSessionByToken(
@@ -1231,10 +1241,17 @@ export async function resolveGuestSessionByToken(
   if (!/^[A-Za-z0-9_-]{32,128}$/u.test(token)) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  const { rows } = await client.query<{ id: string; invitation_id: string; rfq_id: string; verified_channel: Channel }>(
-    `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel
+  const { rows } = await client.query<{
+    id: string;
+    invitation_id: string;
+    rfq_id: string;
+    verified_channel: Channel;
+    legal_name: string;
+  }>(
+    `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel, s.legal_name
        FROM public.guest_sessions g
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) g.invitation_id
+       JOIN public.suppliers s ON s.id OPERATOR(pg_catalog.=) i.supplier_id
       WHERE g.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
         AND g.revoked_at IS NULL
         AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()`,
@@ -1244,5 +1261,53 @@ export async function resolveGuestSessionByToken(
   if (hang === undefined) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  return { guestSessionId: hang.id, invitationId: hang.invitation_id, rfqId: hang.rfq_id, verifiedChannel: hang.verified_channel };
+  return {
+    guestSessionId: hang.id,
+    invitationId: hang.invitation_id,
+    rfqId: hang.rfq_id,
+    verifiedChannel: hang.verified_channel,
+    supplierLegalName: hang.legal_name,
+  };
+}
+
+// ==============================================================================================
+// [S1.9101 / ADR-9201] NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH CỦA MÌNH.
+//
+// Trước vòng này không đường nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ
+// `revokeInvitation` phía bên mua, và nó thu hồi CẢ lời mời. Trên một máy dùng chung, cookie
+// `__Host-tp_guest` sống tới 4 giờ sau khi người nộp đã rời đi.
+//
+// Hàm chạm ĐÚNG một hàng: phiên có `id` do tầng HTTP dẫn xuất từ cookie (không từ thân yêu cầu). Nó
+// KHÔNG đụng lời mời, token hay thách thức OTP — lời mời vẫn sống, bên mua mời lại hay gửi link mới
+// được như thường. Mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`), nên thoát xong thì chỉ một link
+// MỚI của bên mua đưa nhà cung cấp trở lại — trang nộp thầu nói điều ấy trước khi họ bấm.
+//
+// Hàng sổ `GUEST_SESSION_REVOKED` chỉ ghi khi câu UPDATE THẬT SỰ đổi một hàng — cùng bài học `[M4]` của
+// `revokeInvitation`: phiên đã bị thu hồi từ trước (bên mua thu hồi lời mời giữa lúc tầng HTTP xác thực
+// cookie và lúc hàm này chạy) thì hàm trả `false` và không ghi gì. `actorId` là người liên hệ ĐÃ XÁC
+// MINH của chính hàng phiên (`verified_contact_id`), cùng người mà `GUEST_SESSION_STARTED` đã ghi.
+//
+// Chạy dưới kết nối CHỈ gắn tổ chức — đường ghi của khách (`apps/api/src/dispatch.ts` khối [S1.10.3]): kết
+// nối gắn phiên khách không ghi được sổ.
+// ==============================================================================================
+
+export async function revokeGuestSession(client: pg.PoolClient, orgId: string, guestSessionId: string): Promise<boolean> {
+  await assertTenantBound(client, orgId, "revokeGuestSession");
+  const { rows } = await client.query<{ invitation_id: string; verified_contact_id: string }>(
+    "UPDATE public.guest_sessions SET revoked_at = pg_catalog.now() " +
+      " WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND revoked_at IS NULL " +
+      " RETURNING invitation_id, verified_contact_id",
+    [guestSessionId],
+  );
+  const hang = rows[0];
+  if (hang === undefined) return false;
+  await appendAuditEvent(client, orgId, {
+    actorType: "SUPPLIER",
+    actorId: hang.verified_contact_id,
+    action: "GUEST_SESSION_REVOKED",
+    resourceType: "guest_session",
+    resourceId: guestSessionId,
+    payload: { invitationId: hang.invitation_id },
+  });
+  return true;
 }

@@ -140,6 +140,10 @@ const HAM_DUONG_KHACH = [
   "redeemMagicLink",
   // [ADR-020 / S1.10.2] cookie khách → phiên khách: tự chứng minh bằng token, không có mã quyền.
   "resolveGuestSessionByToken",
+  // [S1.9101 / ADR-9201] GHI (một `revoked_at` và một hàng sổ) nhưng người ghi là chính NHÀ CUNG CẤP, thu hồi
+  // PHIÊN CỦA MÌNH: `guestSessionId` do dispatcher dẫn xuất từ cookie khách đã qua `resolveGuestSessionByToken`.
+  // Cùng lập luận với `submitBid` dưới đây — một cổng quyền ở đây đòi một tài khoản người mua.
+  "revokeGuestSession",
   "verifyOtpAndStartSession",
   // [khoản nợ 33] `submitBid` ở đây chứ không ở `HAM_DOI_TRANG_THAI`, và đó là một QUYẾT ĐỊNH:
   // nó ghi thật (một phiên bản báo giá cộng một biên nhận), nhưng người ghi là NHÀ CUNG CẤP, và

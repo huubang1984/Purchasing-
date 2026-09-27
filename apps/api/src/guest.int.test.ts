@@ -18,7 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
-import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken, revokeGuestSession, revokeInvitation } from "@trustprocure/invitation";
 import { cancelRfq } from "@trustprocure/rfq";
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
@@ -568,5 +568,156 @@ describe("gói thầu và báo giá của khách", () => {
     expect(rcB.text).toBe(khongCo.text);
     // Đối chứng dương: A đọc được của A.
     expect((await goi("GET", `/guest/bids/${idA}/receipt`, { cookie: ckA })).status).toBe(200);
+  });
+});
+
+// ==============================================================================================
+// [S1.9101 / ADR-9201] Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên của mình.
+// ==============================================================================================
+describe("[S1.9101 / ADR-9201] tên nhà cung cấp được mời, và POST /guest/logout", () => {
+  it("GET /guest/rfq mang tên pháp lý của CHÍNH nhà cung cấp được mời — hai nhà cung cấp cùng một gói thấy hai tên, không thấy tên nhau", async () => {
+    const a = await moi("Cong ty Thep Hoa Phat Mien Bac");
+    const b = await moi("Cong ty Co khi Tan Binh");
+    const ckA = await moPhienKhach(a);
+    const ckB = await moPhienKhach(b);
+    const rA = await goi("GET", "/guest/rfq", { cookie: ckA });
+    const rB = await goi("GET", "/guest/rfq", { cookie: ckB });
+    expect(rA.status, rA.text).toBe(200);
+    expect(rB.status, rB.text).toBe(200);
+    expect((rA.body as { supplier: unknown }).supplier).toEqual({ legalName: "Cong ty Thep Hoa Phat Mien Bac" });
+    expect((rB.body as { supplier: unknown }).supplier).toEqual({ legalName: "Cong ty Co khi Tan Binh" });
+    // Cùng một gói: tên gói không phân biệt được hai phiên, tên doanh nghiệp thì có.
+    expect((rA.body as { rfq: { title: string } }).rfq.title).toBe((rB.body as { rfq: { title: string } }).rfq.title);
+    expect(rA.text).not.toContain("Tan Binh");
+    expect(rB.text).not.toContain("Hoa Phat");
+    // `supplier` mang ĐÚNG một trường: không mã nhà cung cấp, không MST, không người liên hệ.
+    const { rows } = await db.pool.query<{ supplier_id: string; contact_id: string }>(
+      "SELECT supplier_id, contact_id FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    expect(rA.text).not.toContain(rows[0]?.supplier_id ?? "(thieu)");
+    expect(rA.text).not.toContain(rows[0]?.contact_id ?? "(thieu)");
+    expect(rA.text).not.toContain("Nguoi bao gia");
+  });
+
+  it("GET /guest/rfq đọc tên LÚC GỌI: bên mua sửa tên nhà cung cấp thì phiên đang sống thấy tên mới", async () => {
+    const a = await moi("Ten cu cua nha cung cap");
+    const ck = await moPhienKhach(a);
+    const { rows } = await db.pool.query<{ supplier_id: string }>("SELECT supplier_id FROM rfq_invitations WHERE id = $1", [a.invitationId]);
+    await db.pool.query("UPDATE suppliers SET legal_name = 'Ten moi cua nha cung cap' WHERE id = $1", [rows[0]?.supplier_id]);
+    const r = await goi("GET", "/guest/rfq", { cookie: ck });
+    expect((r.body as { supplier: unknown }).supplier).toEqual({ legalName: "Ten moi cua nha cung cap" });
+  });
+
+  it("POST /guest/logout: 200, xoá cookie cùng bộ thuộc tính, phiên chết ngay; lời mời KHÔNG bị thu hồi; một hàng sổ mang người liên hệ đã xác minh", async () => {
+    const a = await moi("NCC thoat");
+    const ck = await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
+
+    const r = await goi("POST", "/guest/logout", { cookie: ck });
+    expect(r.status, r.text).toBe(200);
+    expect(r.body).toEqual({ ok: true });
+    const sc = r.headers.get("set-cookie") ?? "";
+    expect(sc).toMatch(/^__Host-tp_guest=;/u);
+    for (const thuocTinh of ["Max-Age=0", "HttpOnly", "Secure", "SameSite=Strict", "Path=/;"]) expect(sc).toContain(thuocTinh);
+    expect(sc).not.toMatch(/domain=/iu);
+
+    // Cookie cũ không mở được gì nữa — cả đường đọc lẫn đường ghi.
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(401);
+    expect((await goi("GET", "/guest/bids", { cookie: ck })).status).toBe(401);
+    expect((await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: "AAAA" } })).status).toBe(401);
+
+    const { rows: phien } = await db.pool.query<{ revoked_at: Date | null; verified_contact_id: string }>(
+      "SELECT revoked_at, verified_contact_id FROM guest_sessions WHERE id = $1",
+      [gs],
+    );
+    expect(phien[0]?.revoked_at).not.toBeNull();
+    const { rows: loiMoi } = await db.pool.query<{ status: string; revoked_at: Date | null }>(
+      "SELECT status, revoked_at FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    expect(loiMoi[0]?.status, "thoát phiên không phải thu hồi lời mời").not.toBe("REVOKED");
+    expect(loiMoi[0]?.revoked_at).toBeNull();
+
+    const { rows: so } = await db.pool.query<{ actor_type: string; actor_id: string; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(so).toEqual([
+      { actor_type: "SUPPLIER", actor_id: phien[0]?.verified_contact_id, resource_type: "guest_session", payload: { invitationId: a.invitationId } },
+    ]);
+
+    // Lần thoát thứ hai với cookie đã chết: 401 ở bước xác thực, KHÔNG thêm hàng sổ.
+    expect((await goi("POST", "/guest/logout", { cookie: ck })).status).toBe(401);
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(dem[0]?.n).toBe("1");
+  });
+
+  it("POST /guest/logout chạm ĐÚNG phiên đang gọi: phiên khác của CÙNG lời mời và phiên của nhà cung cấp khác vẫn sống", async () => {
+    const a = await moi("NCC hai phien");
+    const b = await moi("NCC ben canh");
+    const ckA1 = await moPhienKhach(a);
+    // Bên mua gửi lại link cho CÙNG lời mời (mã đầu đã tiêu thụ) ⇒ phiên thứ hai của lời mời ấy.
+    const t2 = await withTenant(apiPool, orgA, (c) => issueMagicLinkToken(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    const ckA2 = await moPhienKhach({ invitationId: a.invitationId, token: t2.token });
+    const ckB = await moPhienKhach(b);
+    expect(ckA1).not.toBe(ckA2);
+
+    expect((await goi("POST", "/guest/logout", { cookie: ckA1 })).status).toBe(200);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckA1 })).status).toBe(401);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckA2 })).status, "phiên thứ hai của cùng lời mời không bị thoát theo").toBe(200);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckB })).status, "phiên của nhà cung cấp khác không bị thoát theo").toBe(200);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM guest_sessions WHERE invitation_id = $1 AND revoked_at IS NOT NULL",
+      [a.invitationId],
+    );
+    expect(rows[0]?.n).toBe("1");
+  });
+
+  it("POST /guest/logout không cookie, cookie sai hình dạng hay magic link nhét vào cookie ⇒ 401, không Set-Cookie, không hàng sổ", async () => {
+    const a = await moi("NCC thoat 401");
+    const truoc = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED'");
+    for (const cookie of [undefined, `${COOKIE_PHIEN_KHACH}=rac`, `${COOKIE_PHIEN_KHACH}=${orgA}.${a.token}`]) {
+      const r = await goi("POST", "/guest/logout", cookie === undefined ? {} : { cookie });
+      expect(r.status, String(cookie)).toBe(401);
+      expect(r.headers.get("set-cookie"), String(cookie)).toBeNull();
+    }
+    const sau = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED'");
+    expect(sau.rows[0]?.n).toBe(truoc.rows[0]?.n);
+  });
+
+  it("phiên bị bên mua thu hồi giữa bước xác thực và handler: `revokeGuestSession` trả false, KHÔNG ghi sổ", async () => {
+    const a = await moi("NCC thu hoi giua chung");
+    await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    const kq = await withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgA, gs));
+    expect(kq).toBe(false);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("`revokeGuestSession` của tổ chức khác không chạm phiên này (RLS lọc) — trả false", async () => {
+    const a = await moi("NCC to chuc khac");
+    const ck = await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    const orgKhac = (await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ('Cong ty khac', $1) RETURNING id",
+      [`cong-ty-khac-${randomBytes(4).toString("hex")}`],
+    )).rows[0]?.id ?? "";
+    const kq = await withTenant(apiPool, orgKhac, (c) => revokeGuestSession(c, orgKhac, gs));
+    expect(kq).toBe(false);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
+    // Kết nối gắn tổ chức A mà người gọi khai tổ chức khác ⇒ ném ở câu ĐẦU (`assertTenantBound`), trước câu UPDATE —
+    // không phải ở lần ghi sổ sau đó.
+    await expect(withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgKhac, gs))).rejects.toThrow(/^revokeGuestSession: /u);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
   });
 });

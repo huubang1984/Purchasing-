@@ -37,6 +37,8 @@ export {
   getInvitationNoticeTarget,
   resolveGuestSessionByToken,
   listInvitations,
+  // [S1.9101 / ADR-9201] Nhà cung cấp tự thoát phiên khách của mình — chạm đúng một hàng phiên, dẫn xuất từ cookie.
+  revokeGuestSession,
   revokeInvitation,
   // [sổ nợ 39] Bộ đếm bucket cho người gọi ba route /auth/* — chỉ mở kind LOGIN_CALLER; dispatcher gọi.
   tangBucketHanMuc,
