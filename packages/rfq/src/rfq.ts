@@ -372,7 +372,7 @@ export async function submitRfqForApproval(
   await assertTenantBound(client, orgId, "submitRfqForApproval");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
-  // [S1.157 / S3.1b / K1 · K12] Chốt ngân sách TRƯỚC câu ghi: cùng hàm vị từ mà trigger ở cạnh
+  // [S1.158 / S3.1b / K1 · K12] Chốt ngân sách TRƯỚC câu ghi: cùng hàm vị từ mà trigger ở cạnh
   // (`070_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
   // còn trigger chỉ tự nói khi có tranh chấp thật (một lần ký chính sách chen vào giữa hai câu).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGAN_SACH, [orgId, input.rfqId]);

@@ -132,7 +132,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 
 ### Nhóm K — Kiểm soát mua sắm (S3)
 
-> **[S1.157 / S3.1b] Nhóm này vào sổ theo hạng mục ĐO ĐƯỢC từng hàng** — spec S3 §5.1, khuôn nhóm J (S1.115). Mệnh đề
+> **[S1.158 / S3.1b] Nhóm này vào sổ theo hạng mục ĐO ĐƯỢC từng hàng** — spec S3 §5.1, khuôn nhóm J (S1.115). Mệnh đề
 > chịu lực là bản §5.1 của spec. K2–K12 chưa có ô: chốt của chúng chưa được dựng, và một ô mở cho một bất biến chưa cưỡng
 > chế là đúng thứ khoản 239 đã đo.
 
@@ -140,7 +140,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 |---|---|---|---|
 | **K1** | Mọi gói rời `DRAFT` ở tổ chức đã bật S3 có ngân sách và mang `tier_tu_so_tien` bằng kết quả `rfq_bac_cua` trên `rfq_budgets.policy_id`; phiên bản ấy đã có chữ ký thứ hai và là phiên bản đang hiệu lực lúc nộp duyệt. Tổ chức chưa bật chạy như MVP1 | Trigger `rfq_budgets_xep_bac` đặt bậc (cột ngoài `GRANT`); hàm vị từ `rfq_chot_ngan_sach` gọi ở tầng gói TRƯỚC mọi tác dụng phụ và ở trigger `rfq_packages_kiem_ngan_sach_khi_nop` — khoá tư vấn chia sẻ với lần ký, `submitted_at` đóng dấu sau khoá; lần từ chối `THIEU_NGAN_SACH` để lại `CONTROL_DENIED` (ADR-084 ⑷) — `070_bac_cua_goi` | T3 |
 
-**Tổng: ~~34 bất biến nghiệp vụ (nhóm A–G)~~ ~~[S1.115] 40~~ ~~[S1.116] 41~~ [S1.157] 42 bất biến nghiệp vụ (nhóm A–G, J và K).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ ~~**[S1.79] 56**~~ ~~**[S1.115] 62**~~ ~~**[S1.116] 63**~~ **[S1.157] 64** mã cùng chảy vào `evidence/INV-matrix.md` — ~~34 + 22 = 56~~ ~~40 + 22 = 62~~ ~~41 + 22 = 63~~ **42 + 22 = 64**, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
+**Tổng: ~~34 bất biến nghiệp vụ (nhóm A–G)~~ ~~[S1.115] 40~~ ~~[S1.116] 41~~ [S1.158] 42 bất biến nghiệp vụ (nhóm A–G, J và K).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ ~~**[S1.79] 56**~~ ~~**[S1.115] 62**~~ ~~**[S1.116] 63**~~ **[S1.158] 64** mã cùng chảy vào `evidence/INV-matrix.md` — ~~34 + 22 = 56~~ ~~40 + 22 = 62~~ ~~41 + 22 = 63~~ **42 + 22 = 64**, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 
