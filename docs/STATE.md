@@ -13,6 +13,15 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-27 / S1.9103] TRANG NỘP THẦU HỎI LẠI PHIÊN KHÁCH CÒN HẠN LÚC TẢI; ĐỔI LINK MỜI TRONG CÙNG THẺ THÌ ĐÓNG CÁC BƯỚC.**
+Mã lời mời bị tiêu thụ ở lần xác minh OTP, còn phiên khách là cookie sống tới 4 giờ; tới trước vòng này trang nộp thầu chỉ đọc
+gói thầu sau lần xác minh, nên tải lại trang — trên điện thoại, trình duyệt tự làm việc ấy với thẻ bị đẩy xuống nền — là mất
+đường vào giữa lúc nhập giá, tới khi bên mua mời lại. Nay lúc tải trang hỏi `GET /guest/rfq` (route đã có) và, có phiên, HỎI
+bằng tên gói thầu — "Tiếp tục nộp báo giá" — không tự mở. Trình nghe `hashchange` nay đóng bước 2–4: trước đây nhà cung cấp thứ
+hai mở link của mình trong thẻ của người thứ nhất thấy ngay bảng giá, và lần nộp đi dưới cookie của người thứ nhất. Chromium trên
+cụm thật: tải lại ⇒ hỏi ⇒ Tiếp tục ⇒ nộp được thật. Không migration, không ADR, không route mới, không đổi hợp đồng HTTP, không
+đổi số khoản. Bằng chứng: `evidence/security-reviews.md` §S1.9103.
+
 **[2026-09-27 / S1.175] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG.**
 Phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một lần
 (`startUserSession` tiêu thụ nó); tới trước vòng này `/login`, `/tao-thau`, `/chinh-sach` chỉ hỏi `/me` SAU khi đăng nhập, nên

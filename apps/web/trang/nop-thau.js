@@ -107,6 +107,7 @@ $("nut-mo").addEventListener("click", async () => {
   $("nut-mo").disabled = false;
   if (r.status !== 200) { bao($("loi1"), loiCua(r, "Không mở được lời mời")); return; }
   phien = { ...phien, orgId, token };
+  boHoiPhien();
   bao($("ok1"), `Lời mời hợp lệ. Link được gửi qua ${r.body.linkChannel}.`);
   const kenh = $("kenh");
   kenh.replaceChildren();
@@ -148,8 +149,9 @@ $("nut-xac").addEventListener("click", async () => {
 /**
  * [S1.175] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
  * mã lời mời (`[H5]`, `packages/invitation`), nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa
- * chỉ và lịch sử trình duyệt. `replaceState` không bắn `hashchange`. Trang này KHÔNG hỏi lại phiên khách lúc
- * tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được mời lại, có xoá fragment hay không.
+ * chỉ và lịch sử trình duyệt. `replaceState` không bắn `hashchange`. ~~Trang này KHÔNG hỏi lại phiên khách lúc
+ * tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được mời lại, có xoá fragment hay không.~~
+ * [S1.9103] Nay trang hỏi lại phiên khách lúc tải (`thuPhienKhach`, cuối tệp).
  */
 function xoaManhLink() {
   try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
@@ -395,6 +397,10 @@ $("nut-lai").addEventListener("click", () => {
 // Ngoài việc đọc lại hai ô, phải XOÁ trạng thái phiên đang dựng dở: một `redeem` của lời mời cũ
 // còn sống trong biến `phien` sẽ làm bước 2 gửi OTP cho đúng người của lời mời TRƯỚC.
 // ==============================================================================================
+//
+// [S1.9103] Và ĐÓNG các bước về bước 1 rồi hỏi lại phiên. Trước đây bước 3 đã mở vẫn để nguyên: nhà cung cấp thứ
+// hai mở link của mình trong thẻ của người thứ nhất thấy ngay bảng giá, và "Niêm phong và nộp" đi dưới cookie khách
+// của người THỨ NHẤT cho tới khi người thứ hai xác minh xong.
 window.addEventListener("hashchange", () => {
   docLink();
   phien = { orgId: $("org").value.trim(), token: $("token").value.trim(), rfq: null, items: [], publicKeys: [] };
@@ -402,6 +408,59 @@ window.addEventListener("hashchange", () => {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
+  dongCacBuoc();
+  thuPhienKhach();
+});
+
+// ==============================================================================================
+// [S1.9103] HỎI LẠI PHIÊN KHÁCH LÚC TẢI.
+//
+// Mã lời mời bị tiêu thụ ở lần xác minh OTP (`[H5]`, `packages/invitation`), còn phiên khách là cookie
+// `__Host-tp_guest` `Path=/` sống tới 4 giờ (`apps/api/src/routes/anon.ts`). Tới trước vòng này trang chỉ đọc gói
+// thầu SAU lần xác minh, nên tải lại trang là mất đường vào giữa lúc nhập giá, tới khi bên mua mời lại — và
+// trên điện thoại, trình duyệt tự tải lại một thẻ bị đẩy xuống nền. Nay, ô mã rỗng thì hỏi `GET /guest/rfq`
+// (route đã có, không ghi gì); 200 thì HỎI, không tự mở — cùng khuôn ba trang người mua (`thuPhienCo` ở
+// `mo-thau.js`): trên một máy dùng chung, phiên ấy có thể của người khác. Câu hỏi nêu tên gói thầu, thứ nhà cung
+// cấp nhận ra được. `docLink()` phải chạy TRƯỚC hàm này, và ô mã được kiểm lại sau `await`: một phản hồi về muộn,
+// sau khi người khác đã dán link của mình, bị bỏ.
+// ==============================================================================================
+let khachCho = false;
+
+async function thuPhienKhach() {
+  if ($("token").value.trim() !== "") return;
+  try {
+    const r = await goi("GET", "/guest/rfq");
+    if ($("token").value.trim() !== "") return;
+    if (r.status !== 200 || typeof r.body?.rfq?.title !== "string") return;
+    khachCho = true;
+    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên nộp thầu còn hạn cho gói thầu «${r.body.rfq.title}». ` +
+      "Đúng lời mời của anh/chị thì bấm Tiếp tục — không cần mở lại link hay nhập lại mã. Không phải thì mở link mời của mình.");
+    hien($("nut-dung-phien"), true);
+  } catch { /* mất mạng: trang ở lại bước 1 */ }
+}
+
+function boHoiPhien() {
+  khachCho = false;
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+}
+
+/** [S1.9103] Về lại bước 1: ẩn bước 2–4, bỏ dấu "xong", dừng đếm ngược, bỏ khối hỏi phiên. */
+function dongCacBuoc() {
+  if (henDemNguoc !== null) window.clearInterval(henDemNguoc);
+  henDemNguoc = null;
+  for (const b of ["b1", "b2", "b3"]) $(b).classList.remove("xong");
+  for (const b of ["b2", "b3", "b4"]) hien($(b), false);
+  boHoiPhien();
+}
+
+$("nut-dung-phien").addEventListener("click", async () => {
+  if (!khachCho) return;
+  boHoiPhien();
+  bao($("ok1"), "Đang dùng phiên nộp thầu còn hạn.");
+  $("b1").classList.add("xong");
+  await napGoiThau();
 });
 
 docLink();
+thuPhienKhach();
