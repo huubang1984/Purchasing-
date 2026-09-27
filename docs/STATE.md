@@ -13,6 +13,15 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-27 / S1.9102] BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG.**
+Phiên người mua là cookie `Path=/` sống tới 8 giờ, còn mã đăng nhập chỉ dùng được một lần (`startUserSession` tiêu thụ nó);
+tới trước vòng này `/login`, `/tao-thau`, `/chinh-sach` chỉ hỏi `/me` SAU khi đăng nhập, nên sang trang khác là phải xin link
+mới — mà link mới lại dẫn về `/login`. Nay mỗi trang hỏi `/me` lúc tải và mở các bước sau khi phiên còn (bước 1 vẫn hiện để
+đổi người), TRỪ khi fragment mang một mã đăng nhập — người mở link của mình không được thấy phiên của người khác. Bốn trang
+xoá fragment (`history.replaceState`, ADR-020 mục 3) ngay sau lần mã bị tiêu thụ: `/auth/totp` ở ba trang người mua,
+`/guest/otp/verify` ở trang nộp thầu. Đo trên Chromium và cụm thật. Không migration, không ADR, không đổi hợp đồng HTTP, không
+đổi số khoản. Bằng chứng: `evidence/security-reviews.md` §S1.9102.
+
 **[2026-09-27 / S1.173] ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK ĐĂNG NHẬP VÀ LINK MỜI MANG MÃ TỔ CHỨC; TRANG `/login` CÓ Ô XIN LINK.**
 Chủ dự án chọn, gộp cả ba kênh gửi (ADR-107, sửa dạng link của ADR-020 mục 3). Bộ gửi SES, SMS, Zalo và hộp thư dev dựng
 `/login#<orgId>:<token>` và `/i#<orgId>:<token>` — đúng dạng bốn trang đọc; tới trước vòng này thân thư và tin nhắn thật không

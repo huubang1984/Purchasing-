@@ -14237,3 +14237,49 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 ## 5. Số
 
 Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.
+
+# §S1.9102 — BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27 (đề xuất sau S1.173). Hai chỗ, đo trên nhánh của S1.173:
+
+- `apps/web/trang/{mo-thau,tao-thau,chinh-sach}.js` chỉ gọi `GET /me` SAU `/auth/totp`, không gọi lúc tải. Phiên người mua là
+  cookie `__Host-tp_session` `Path=/`, tới 8 giờ (`apps/api/src/routes/auth.ts`), dùng chung ba trang; mã đăng nhập bị tiêu thụ
+  ở `startUserSession` (`packages/identity/src/login.ts`, `consumed_at`). Nên người đã vào ở `/login` sang `/tao-thau` phải
+  đăng nhập lại bằng một link MỚI — và `/tao-thau` không có ô xin link, còn link mới dẫn về `/login`.
+- ADR-020 mục 3 viết trang xoá fragment sau khi đọc (`history.replaceState`); không trang nào làm (`grep replaceState` ⇒ 0),
+  nên mã đăng nhập hay mã lời mời nằm lại trong thanh địa chỉ và lịch sử trình duyệt. ADR-107 đã ghi điều này, chưa sửa.
+
+## 2. Thay đổi
+
+- Ba trang người mua: `thuPhienCo()` gọi ở cấp tệp — ô mã rỗng thì hỏi `/me`, 200 có `userId` thì `moSauDangNhap(me, true)` mở
+  các bước sau với câu báo *"Đang dùng phiên còn hạn của…"*; bước 1 vẫn hiện. Ô mã đã có mã (fragment mang mã) ⇒ không hỏi. Nhánh
+  đăng nhập thường dùng chung `moSauDangNhap(me, false)`.
+- Bốn trang: `xoaManhLink()` ngay sau lần mã bị tiêu thụ — `/auth/totp` (ba trang người mua), `/guest/otp/verify` (trang nộp
+  thầu; mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation/src/invitation.ts`). `replaceState` không bắn
+  `hashchange`, nên luồng đổi người của khoản 205 không đổi: link của người thứ hai đổi fragment từ rỗng sang có mã.
+- `eslint.config.js`: global `history` cho `apps/web/trang`.
+- ADR-107: chú thích hai giới hạn mà vòng này thu hẹp.
+
+## 3. Đo
+
+- `apps/web/src/phuc-vu.test.ts`, khối mới: chạy `thuPhienCo`/`moSauDangNhap`/`xoaManhLink` của từng trang trong `node:vm` với
+  DOM và `goi` giả — có phiên ⇒ đúng các bước mở; ô mã có mã ⇒ 0 lời gọi; 401 và mất mạng ⇒ ở bước 1; `xoaManhLink` đứng SAU
+  lần gọi tiêu thụ mã và trước bước kế; `replaceState` giữ đường và query. Đột biến: bỏ vế *"ô mã có mã thì thôi"* ở `tao-thau`
+  ⇒ đỏ; bỏ lời gọi `thuPhienCo()` ở `chinh-sach` ⇒ đỏ; bỏ `xoaManhLink()` ở `mo-thau` ⇒ đỏ.
+- Chromium 1194 trên cụm thật của pilot giả lập: đăng nhập ở `/login` bằng link từ ô xin link ⇒ `location.hash` rỗng, URL
+  `/login`; sang `/tao-thau`, `/chinh-sach`, tải lại `/login` ⇒ bước 2 hiện, câu *"Đang dùng phiên còn hạn…"*; trong thẻ đang có
+  phiên, mở link đăng nhập của NGƯỜI KHÁC ⇒ bước 2 ẩn, ô mã điền; ngữ cảnh mới không cookie ⇒ `/tao-thau` ở bước 1. Nhà cung
+  cấp (lời mời SX-04 còn lại): mở link, gửi mã, xác minh ⇒ `location.hash` rỗng. 0 lỗi JavaScript.
+
+## 4. Giới hạn
+
+- Trang nộp thầu chưa dùng lại phiên khách lúc tải; tải lại sau khi xác minh là phải mở lại link — link ấy đã bị tiêu thụ.
+- Hai người dùng chung một máy: người sau thấy phiên của người trước tới khi đăng nhập bằng link của mình — câu báo nói rõ
+  phiên của ai (tám ký tự đầu của mã người dùng và vai). Trang không có nút đăng xuất (`/auth/logout` có ở `api`, không trang
+  nào gọi).
+
+## 5. Số
+
+Không khoản nào mở hay đóng.
