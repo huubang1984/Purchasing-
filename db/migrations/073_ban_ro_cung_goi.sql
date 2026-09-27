@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 073 — [S1.9101 / khoản 228] BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG
+-- 073 — [S1.168 / khoản 228] BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG
 --        CỦA PHONG BÌ ẤY
 -- =============================================================================================
 -- ĐO (S1.109, ca đột biến J4 của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`): một câu
@@ -9,7 +9,7 @@
 -- đời dưới một yêu cầu đã được phê duyệt* — đúng theo nghĩa *"một"* yêu cầu, không *"yêu cầu của chính
 -- phong bì ấy"*: cùng khe ấy ghép được phong bì gói A với yêu cầu gói B.
 --
--- SỬA (chủ dự án chốt 2026-09-27, ADR-9201): thân hàm thêm ĐÚNG vị từ mà worker đã dùng để chọn phong
+-- SỬA (chủ dự án chốt 2026-09-27, ADR-105): thân hàm thêm ĐÚNG vị từ mà worker đã dùng để chọn phong
 -- bì (`apps/unseal-worker/src/index.ts`, câu `phongBi`): phiên bản báo giá thuộc `rfq_id` của yêu cầu
 -- (qua `vendor_bids` → `rfq_invitations`), VÀ `bafo_round_id` của nó `IS NOT DISTINCT FROM` của yêu
 -- cầu. Worker không đổi một dòng; trigger nay nói điều worker đã tự làm.

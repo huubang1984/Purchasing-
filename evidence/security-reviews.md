@@ -13766,13 +13766,13 @@ Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xa
 
 Khoản 247 đóng. Còn mở **86**; rổ B **61**.
 
-# §S1.9101 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
+# §S1.168 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
 
 ## 1. Việc gì
 
 Khoản 228 (S1.109): `rfq_unsealed_bids` không bị buộc thuộc cùng gói thầu với yêu cầu mở thầu nó trỏ tới. Ca đột biến J4 của
 `kich-ban-41-http.int.test.ts` ghép phong bì vòng hai với yêu cầu vòng một (`EXECUTED`) và câu INSERT đi qua với trigger bật.
-Chủ dự án chọn đóng khoản này — ADR-9201. Vòng chạm bất biến A1 (mảnh mở thầu), không chạm khoản rổ A nào.
+Chủ dự án chọn đóng khoản này — ADR-105. Vòng chạm bất biến A1 (mảnh mở thầu), không chạm khoản rổ A nào.
 
 ## 2. Đo trước
 
