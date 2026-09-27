@@ -1748,3 +1748,32 @@ describe("[khoản 190] yêu cầu mở thầu ĐANG MỞ của một gói thầ
     expect(theoId?.approvalCount).toBe(1);
   });
 });
+
+// ===============================================================================================
+// [S1.9101 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS — Ở TẦNG CSDL
+//
+// `requestUnseal` đã chặn ở tầng ứng dụng; ca này đo tầng có thẩm quyền, bằng một câu `INSERT` viết tay dưới chính vai `app_api`
+// (vai có `GRANT INSERT` trên hai cột nhân chứng, `022`). Trước `9501` câu ấy đi qua: nhân chứng hợp lệ (người khác, phiên của chính
+// họ) nên trigger `unseal_requests_kiem_nhan_chung` không từ chối, và `unseal_kiem_du_phe_duyet` chỉ đọc hai cột ấy khi `break_glass`.
+// ===============================================================================================
+describe("[S1.9101 / khoản 215] yêu cầu không break-glass không mang được cặp nhân chứng", () => {
+  const CHEN =
+    "INSERT INTO unseal_requests (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id, " +
+    "break_glass_witness_user_id, break_glass_witness_session_id) VALUES ($1, $2, 'viet tay', false, $3, $4, $5, $6) RETURNING id";
+
+  it("INSERT viết tay dưới app_api: break_glass = false kèm nhân chứng ⇒ 23514 của `unseal_requests_nhan_chung_chi_break_glass`", async () => {
+    const rfqId = await taoRfqDaDong();
+    const loi = await withTenant(apiPool, orgA, (c) => c.query(CHEN, [orgA, rfqId, uYc, sYc, uD1, sD1])).then(
+      () => ({ code: "khong-nem", constraint: undefined as string | undefined }),
+      (e: unknown) => e as { code?: string; constraint?: string },
+    );
+    expect(loi.code, `câu viết tay phải bị CSDL từ chối — ${JSON.stringify(loi)}`).toBe("23514");
+    expect(loi.constraint).toBe("unseal_requests_nhan_chung_chi_break_glass");
+  });
+
+  it("ĐỐI CHỨNG: cùng câu, không nhân chứng ⇒ đi qua — ràng buộc không chặn đường thường", async () => {
+    const rfqId = await taoRfqDaDong();
+    const { rowCount } = await withTenant(apiPool, orgA, (c) => c.query(CHEN, [orgA, rfqId, uYc, sYc, null, null]));
+    expect(rowCount).toBe(1);
+  });
+});

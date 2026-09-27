@@ -14121,3 +14121,41 @@ Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 
 ## 6. Số
 
 Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+
+# §S1.9101 — KHOẢN 215 ĐÓNG: YÊU CẦU MỞ THẦU KHÔNG BREAK-GLASS KHÔNG MANG ĐƯỢC CẶP NHÂN CHỨNG, Ở TẦNG CSDL
+
+## 1. Việc gì
+
+Khoản 215 (S1.100, đọc lúc đóng khoản 209): `requestUnseal` chặn ở tầng ứng dụng, nhưng tầng CSDL để một hàng `unseal_requests`
+`break_glass = false` mang cặp nhân chứng — `unseal_kiem_du_phe_duyet` (022) chỉ đọc hai cột ấy trong nhánh `IF NEW.break_glass`, và từ
+`055` cặp ấy bất biến. Không đặc quyền nào lấy được; hại nằm ở sổ sách — một hàng nói sai về đường nó đã đi (cùng lớp khoản 208).
+Bất biến chạm: D3 (nhân chứng break-glass). Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/unseal/src/unseal.int.test.ts`, dưới chính vai `app_api` (có `GRANT INSERT` trên hai cột nhân chứng, `022`):
+INSERT `break_glass = false` kèm nhân chứng hợp lệ (người khác, phiên của chính họ) trên lược đồ của `master` (bỏ `9501`) ⇒ **ĐỎ** —
+`{"code":"khong-nem"}`: câu ĐI QUA.
+
+## 3. Thay đổi
+
+- `db/migrations/9501_nhan_chung_chi_break_glass.sql`: `ALTER TABLE unseal_requests ADD CONSTRAINT
+  unseal_requests_nhan_chung_chi_break_glass CHECK (break_glass OR (break_glass_witness_user_id IS NULL AND
+  break_glass_witness_session_id IS NULL))`. Kiểm trên hàng cũ lúc thêm (không `NOT VALID`): cụm có hàng vi phạm thì migration dừng
+  deploy — cố ý, hàng ấy cần người đọc.
+- `db/migrations/hardening.always.sql`: một dòng trong `CHECK_AN_NINH_KHAI` (khoản 105) — tồn tại, `convalidated`, định nghĩa nguyên văn.
+- `db/migrations.int.test.ts`: ba danh sách migration thêm migration mới.
+
+## 4. Đo sau
+
+Hai ca xanh: câu viết tay ⇒ `23514`, `constraint = unseal_requests_nhan_chung_chi_break_glass`; đối chứng (không nhân chứng) ⇒ đi qua.
+`db/check-an-ninh.int.test.ts`, `db/migrations.int.test.ts`, `packages/unseal`: 6 tệp, 211/211. `tests/architecture/check-an-ninh-khai.test.ts`
+2/2.
+
+## 5. Giới hạn
+
+- Hàng vi phạm đã có trong một cụm (nếu có) chặn deploy thay vì được sửa tự động — người vận hành phải đọc và quyết.
+
+## 6. Số
+
+Khoản 215 đóng. Còn mở **84**; rổ B **59**.
