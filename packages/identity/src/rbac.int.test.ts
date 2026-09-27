@@ -1746,14 +1746,14 @@ describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ 
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 248 / ADR-9201] BỐI CẢNH TRẦN TỪ CHỐI CỦA MỘT YÊU CẦU
+// [S1.181 / khoản 248 / ADR-109] BỐI CẢNH TRẦN TỪ CHỐI CỦA MỘT YÊU CẦU
 //
 // Hai đường ghi sổ từ chối của `rbac.ts` đọc bối cảnh mà bộ điều phối đặt quanh lời gọi handler. Ba tính chất đo ở đây, dưới tầng
 // HTTP (`apps/api/src/auth.int.test.ts` vế ⒤–⒨ đo qua bộ điều phối thật): `dem` chạy đúng MỘT lần, ở giao dịch RIÊNG đã COMMIT trước
 // lần ghi sổ; lỗi của nó đi ra NGUYÊN DẠNG và không hàng sổ nào được ghi; lời gọi mang móc `truocKhiGhiTuChoi` — tức lời gọi của bộ
 // điều phối — không đếm lần thứ hai. Ngoài bối cảnh, không gì chạy.
 // ==============================================================================================
-describe("[INV-D5] [S1.9101 / khoản 248] bối cảnh trần từ chối của yêu cầu", () => {
+describe("[INV-D5] [S1.181 / khoản 248] bối cảnh trần từ chối của yêu cầu", () => {
   const suKien = (action: string) => ({
     actorType: "USER" as const,
     actorId: uid("BUYER"),

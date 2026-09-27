@@ -14778,14 +14778,14 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
 
 ---
 
-# §S1.9101 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
+# §S1.181 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
 
 ## 1. Vòng này là gì
 
 Khoản 248 (S1.169, rổ B, điều kiện đóng riêng: trước khi mở cờ ký chính sách trên máy chủ thật — ADR-105 ⑷(a)): trần lần từ chối
 theo phiên của ADR-092 chỉ đếm ở bộ điều phối, nên mọi lần từ chối mà handler tự ghi — `CONTROL_DENIED` của K1, J3, D2, bảng so sánh,
 cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá — không trần. Chủ dự án chọn phạm vi *mọi lần từ chối ở handler* và
-cơ chế *bối cảnh yêu cầu*. ADR-9201.
+cơ chế *bối cảnh yêu cầu*. ADR-109.
 
 ## 2. Đo trước khi sửa
 
@@ -14808,7 +14808,7 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
   `retry-after`, cùng thân với 429 của `phanQuyetTuChoi`.
 - Test: `apps/api/src/auth.int.test.ts` vế ⒤–⒨; `packages/identity/src/rbac.int.test.ts` khối khoản 248 (ba ca);
   `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` giam tên `chayVoiTranTuChoi` ở ba tệp.
-- Tài liệu: ADR-9201; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
+- Tài liệu: ADR-109; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
   danh sách còn mở và mốc.
 
 ## 4. Đo sau khi sửa
@@ -14830,3 +14830,12 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
 - Một cơ chế ngầm thứ hai để lần từ chối không vào sổ — bị giam bằng test kiến trúc theo TÊN; một bí danh qua biến thì mù, cùng giới
   hạn đã nói của tệp ấy.
 - Route khách và nhánh ANON ngoài phạm vi, như ADR-092. Việc `afterCommit` chạy ngoài bối cảnh.
+
+## 6. Số đo
+
+- Trên cây `master` `f6e7923` cộng vòng này (trước khi hợp #179): `pnpm evidence` — 179 tệp, 2855 ca, 2854 đạt, 1 bỏ qua, 0 hỏng;
+  **65/65** bất biến; `apps/api/src/auth.int.test.ts` và `packages/identity/src/rbac.int.test.ts` 100/100.
+- Vòng này dựng lại trên `master` `5a54dff` (sau #179 — J3/D2 nay ghi `CONTROL_DENIED` qua `tuChoiTheoChot`, tức qua `throwAuditedDenial`,
+  nên chúng cũng tiêu trần này): `pnpm t0` sạch; `pnpm test` 117 tệp, 1549 đạt, 1 bỏ qua; `ghi-so-tu-choi-mot-duong`, `barrel-exports`,
+  `so-no-tu-doi-chieu` 87/87; `pnpm cap-so --kiem` sạch. T3 và evidence đo trên CI, trên chính commit của PR.
+- Số tạm của vòng này cấp thành S1.181, ADR-109. Sổ nợ: khoản 248 đóng, rổ B **58 → 57**. **108 → 109** ADR.
