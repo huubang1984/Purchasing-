@@ -14355,47 +14355,96 @@ Chủ dự án chọn ngày 2026-09-27 (đề xuất sau vòng ba trang người
 
 - Mã lời mời bị tiêu thụ ở lần xác minh OTP (`[H5]`, `packages/invitation/src/invitation.ts`), còn phiên khách là cookie
   `__Host-tp_guest` `Path=/`, `Max-Age` 4 giờ (`apps/api/src/routes/anon.ts`). `apps/web/trang/nop-thau.js` chỉ đọc gói thầu
-  SAU lần xác minh, nên tải lại trang sau đó là mất đường vào — link đã chết, OTP không gửi lại được cho một lời mời đã tiêu
-  thụ — tới khi bên mua mời lại. Trên điện thoại, trình duyệt tự tải lại một thẻ bị đẩy xuống nền, đúng lúc nhà cung cấp
-  đang đi tìm giá để nhập.
+  SAU lần xác minh, nên tải lại trang sau đó là mất đường vào — `/guest/redeem` từ chối một mã đã tiêu thụ — tới khi bên mua
+  mời lại. Trên điện thoại, trình duyệt tự tải lại một thẻ bị đẩy xuống nền, đúng lúc nhà cung cấp đang đi tìm giá để nhập.
 - Trình nghe `hashchange` (khoản 204) xoá câu báo và dựng lại biến `phien`, nhưng để nguyên bước 3 đã mở: nhà cung cấp thứ hai
   mở link của mình trong thẻ của người thứ nhất thấy ngay bảng giá, và "Niêm phong và nộp" đi dưới cookie khách của người thứ
   NHẤT cho tới khi người thứ hai xác minh xong.
 
 ## 2. Thay đổi
 
-- `nop-thau.js`: lúc tải, `docLink()` rồi `thuPhienKhach()`. Ô mã rỗng thì hỏi `GET /guest/rfq` — route đã có, `mutates: false`,
-  không ghi gì; 200 có `rfq.title` thì hiện khối hỏi *"Trình duyệt này đang giữ một phiên nộp thầu còn hạn cho gói thầu «…»…"* và
-  nút **Tiếp tục nộp báo giá** (đánh dấu bước 1 xong, nạp bước 3 — không bắt nhập lại OTP). Không tự mở: cùng khuôn ba trang người
-  mua, vì trên một máy dùng chung phiên ấy có thể của người khác. Câu hỏi nêu TÊN gói thầu — thứ nhà cung cấp nhận ra được, khác
-  tám ký tự UUID của trang người mua. Ô mã được kiểm lại sau `await`; "Mở lời mời" thành công thì khối hỏi biến mất.
-- Trình nghe `hashchange`: thêm `dongCacBuoc()` (ẩn bước 2–4, bỏ dấu "xong", dừng đếm ngược, bỏ khối hỏi) rồi `thuPhienKhach()`.
+- `nop-thau.js`, lúc tải: `docLink()` rồi `thuPhienKhach()`. Ô mã rỗng thì hỏi `GET /guest/rfq` — route đã có, `mutates: false`,
+  không ghi gì; 200 có `rfq.title` thì hiện khối hỏi *"Trình duyệt này đang giữ một phiên nộp thầu còn hạn cho gói thầu «…», của
+  lời mời xác minh gần nhất trên trình duyệt này… Không chắc, hay máy này có người khác cũng được mời gói ấy, thì mở link mời của
+  mình"* và nút **Tiếp tục nộp báo giá** (nạp bước 3, không bắt nhập lại OTP). Không tự mở: cùng khuôn ba trang người mua, vì trên
+  một máy dùng chung phiên ấy có thể của người khác.
+- Tên gói KHÔNG nói phiên của nhà cung cấp nào — một gói mời nhiều nhà cung cấp, và không route khách nào trả định danh người
+  được mời — nên câu hỏi nói thẳng điều ấy thay vì hứa rằng tên gói xác nhận được lời mời.
+- "Tiếp tục" mà phiên đã chết (quá 4 giờ, lời mời bị thu hồi) thì báo ở bước 1 — *"Phiên nộp thầu đã hết hạn hoặc lời mời đã bị
+  thu hồi…"* — và KHÔNG mở bước 3 rỗng; câu "còn hạn" và dấu "xong" chỉ ghi sau khi nạp được gói thầu.
+- `dongCacBuoc()`: sang thế hệ mới (`theHe`), dừng đếm ngược, bỏ dấu "xong", ẩn bước 2–4 và XOÁ nội dung của chúng (gói thầu, các
+  ô giá đã gõ, biên nhận), bỏ khối hỏi. Gọi từ `hashchange` (rồi hỏi lại phiên) và từ "Mở lời mời" thành công (bước 3 của cookie
+  cũ đóng trước khi bước 2 của lời mời mới mở).
+- Thế hệ: `thuPhienKhach`, `napGoiThau`, "Mở lời mời", "Xác minh" và "Tiếp tục" chụp `theHe` trước `await` và bỏ kết quả nếu nó
+  đã đổi — một phản hồi về muộn không mở lại bước 3 dưới cookie của người trước, và một lần xác minh về muộn không xoá fragment
+  của link mới.
+- `docLink()`: fragment không mang mã thì ô mã rỗng — sau lần xác minh, ô còn giữ mã ĐÃ tiêu thụ, và ô mã có giá trị làm trang
+  không hỏi phiên nữa.
 - `nop-thau.html`: khối `#hoi-phien` và nút `#nut-dung-phien` ở bước 1.
 - ADR-107 (Hệ quả, Đo) và giới hạn ở §S1.175 mục 4: gạch kèm nhãn `[S1.9103]`.
 
 ## 3. Đo
 
-- `apps/web/src/phuc-vu.test.ts`, cùng khung nạp nguyên tệp trang của §S1.175 (thêm cookie khách, `setInterval` giả): bảy ca
-  `[S1.9103]` — có phiên khách ⇒ hỏi, nêu tên gói, không mở; Tiếp tục ⇒ bước 3, bước 2 vẫn ẩn; link mang mã ⇒ 0 lời gọi; 401, mất
-  mạng, 200 thiếu tên gói, 403 ⇒ không hỏi và Tiếp tục không mở gì; bước 3 đang mở rồi hashchange sang link khác ⇒ bước 2–4 đóng;
-  hashchange không mã ⇒ đóng rồi hỏi lại; "Mở lời mời" ⇒ khối hỏi biến mất; `/guest/rfq` về muộn sau hashchange ⇒ bị bỏ.
-- Đột biến (chép tệp, chạy các ca `nop-thau`, trả lại): đảo `thuPhienKhach()` lên trước `docLink()`; tự mở; bỏ phép kiểm lại sau
-  `await`; hashchange không đóng bước; hashchange không hỏi lại; "Mở lời mời" không bỏ khối hỏi; bỏ chốt `khachCho`; bỏ vế
-  `status`; bỏ vế `title`; bỏ lời gọi cuối tệp; `dongCacBuoc` không ẩn bước 3; không bỏ "xong"; Tiếp tục không đánh dấu "xong".
-  13 đột biến, cả 13 đỏ.
-- Chromium 1194 trên cụm thật của pilot giả lập, bề rộng 390 px, 0 lỗi JavaScript: mở link mời, gửi OTP qua SMS, xác minh ⇒
-  bước 3, `location.hash` rỗng; **tải lại** ⇒ khối hỏi *"… cho gói thầu «Vòng bi và bu lông bảo trì dây chuyền dập»"*, bước 2–3
-  ẩn; Tiếp tục ⇒ bước 3 với ba hàng; nhập giá, "Niêm phong và nộp" ⇒ biên nhận (bước 4) — phiên dùng lại nộp được thật; đổi
-  fragment của CÙNG thẻ sang link mời của nhà cung cấp khác ⇒ bước 2–4 ẩn, ô mã điền, không khối hỏi; ngữ cảnh mới không cookie
-  ⇒ `/i` không khối hỏi.
+- `apps/web/src/phuc-vu.test.ts`, cùng khung nạp nguyên tệp trang của §S1.175 (thêm cookie khách, `setInterval`/`clearInterval`
+  giả có đếm, `replaceChildren` xoá chữ). 13 ca `[S1.9103]`:
+  - có phiên khách ⇒ hỏi, nêu tên gói, câu hỏi nói tên gói không nói phiên của ai; Tiếp tục ⇒ bước 3, bước 2 vẫn ẩn;
+  - link mang mã ⇒ 0 lời gọi;
+  - 401, mất mạng, 200 thiếu tên gói, 403 ⇒ không hỏi, và bấm Tiếp tục ở cả bốn ca không mở gì, không gọi gì;
+  - phiên chết giữa lúc hỏi và lúc Tiếp tục ⇒ báo ở bước 1, bước 3 ẩn, không "xong";
+  - khối hỏi đang hiện rồi hashchange sang link khác ⇒ khối hỏi biến mất, Tiếp tục không mở;
+  - bước 3 và 4 đang mở rồi hashchange ⇒ bước 2–4 ẩn, không "xong" ở bước 1–3, đếm ngược dừng, biên nhận bị xoá;
+  - đường link: Mở lời mời ⇒ hashchange ⇒ bước 2 đóng;
+  - trọn đường link: xác minh ⇒ bước 3; hashchange không mã ⇒ ô mã rỗng, đóng bước, hỏi lại;
+  - đang ở bước 3 mà Mở một lời mời khác ⇒ bước 3 đóng, bước 2 mở; Mở lời mời từ khối hỏi ⇒ khối hỏi biến mất;
+  - về muộn sau hashchange: `/guest/rfq` của khối hỏi, gói thầu của Tiếp tục, lần xác minh OTP ⇒ cả ba bị bỏ (không mở bước 3,
+    không xoá fragment mới).
+- Đột biến (chép tệp, chạy các ca `nop-thau`, trả lại), 25 đột biến, cả 25 đỏ: đảo `thuPhienKhach()` lên trước `docLink()`; tự
+  mở; bỏ phép kiểm lại trong `thuPhienKhach`; hashchange không đóng bước; hashchange không hỏi lại; "Mở lời mời" không đóng bước;
+  bỏ chốt `khachCho`; bỏ vế `status`; bỏ vế `title`; bỏ lời gọi cuối tệp; `dongCacBuoc` không ẩn b2 / b3 / b4; chỉ bỏ "xong" ở
+  b1; không dừng đếm ngược; không bỏ khối hỏi; không tăng thế hệ; không xoá biên nhận; Tiếp tục không đánh dấu "xong"; Tiếp tục bỏ
+  nhánh phiên chết; `napGoiThau`, "Xác minh", "Tiếp tục" bỏ kiểm thế hệ; `docLink` không xoá ô mã; đặt `khachCho` trong `catch`.
+  (Lượt đầu, trước khi sửa theo lượt soi, 13 đột biến đỏ nhưng năm đột biến có nghĩa sống — mục 3b.)
+- Chromium 1194, cụm thật của pilot giả lập, bề rộng 390 px, trên commit TRƯỚC lượt sửa của mục 3b: mở link mời, gửi OTP qua SMS,
+  xác minh ⇒ bước 3, `location.hash` rỗng; **tải lại** ⇒ khối hỏi *"… cho gói thầu «Vòng bi và bu lông bảo trì dây chuyền dập»"*,
+  bước 2–3 ẩn; Tiếp tục ⇒ bước 3 với ba hàng; nhập giá, "Niêm phong và nộp" ⇒ biên nhận (bước 4) — phiên dùng lại nộp được thật;
+  đổi fragment của CÙNG thẻ sang link mời của nhà cung cấp khác ⇒ bước 2–4 ẩn; ngữ cảnh mới không cookie ⇒ `/i` không khối hỏi.
+  0 lỗi JavaScript.
+- Chromium 1194 trên mã CUỐI: trang do cụm thật phục vụ, `/api/guest/*` chặn bằng `page.route` trả phản hồi giả (lời mời thật
+  còn lại trong hộp thư giả lập đã hết hạn). Link ⇒ Mở lời mời ⇒ xác minh ⇒ bước 3, hash rỗng; tải lại ⇒ khối hỏi, ô mã rỗng;
+  Tiếp tục ⇒ bước 3 hai hàng; hashchange sang link khác ⇒ bước 2–3 ẩn, bảng giá trống, ô mã điền; hashchange rỗng ⇒ hỏi lại; Mở
+  một lời mời khác từ bước 3 ⇒ bước 3 ẩn, bước 2 mở; phiên chết lúc Tiếp tục ⇒ câu báo ở bước 1, bước 3 ẩn. 0 lỗi JavaScript.
+
+## 3b. Soi đối kháng
+
+Workflow hai lăng kính (hành vi/an ninh; test/tài liệu), mỗi phát hiện một người kiểm cố bác. 10 phát hiện, 8 xác nhận, 2 bác.
+Cả 8 đã sửa:
+
+- **Đua ở `napGoiThau`** (hai phát hiện trùng): gói thầu của "Tiếp tục" hay của lần xác minh về SAU một hashchange vẫn mở lại bước
+  3 dưới cookie cũ, kèm đếm ngược — đúng trạng thái vòng này nói đã đóng. Người kiểm dựng lại được trong `node:vm`, và thêm rằng
+  đường "Xác minh" hở rộng hơn: lần xác minh về muộn còn xoá fragment của link mới. ⇒ thế hệ `theHe`.
+- **Tên gói không nói phiên của ai**: hai nhà cung cấp cùng một gói trên một máy thấy cùng một câu hỏi. ⇒ câu hỏi nói thẳng; sửa
+  tận gốc cần một định danh lời mời không bí mật trong phản hồi khách — đổi hợp đồng HTTP, không làm ở vòng này (mục 4).
+- **Tiếp tục khi phiên đã chết** mở bước 3 rỗng với câu "còn hạn", và `dongCacBuoc` không xoá bảng giá/biên nhận cũ. ⇒ báo ở bước
+  1; `dongCacBuoc` xoá nội dung.
+- **Test không ghim**: bỏ `boHoiPhien()` trong `dongCacBuoc`; không ẩn b2; không ẩn b4; chỉ bỏ "xong" ở b1; không dừng đếm ngược —
+  cả năm sống. ⇒ thêm ca; cả năm nay đỏ.
+- **Evidence nói quá**: "13 đột biến" trình bày như độ phủ đủ; "Tiếp tục không mở gì" chỉ bấm ở một vế. ⇒ sửa mục 3.
+- **Hashchange không mã trên đường link** không hỏi lại, vì ô mã giữ mã đã tiêu thụ. ⇒ `docLink()` xoá ô mã.
+
+Bác: (a) dán mã tay rồi "Mở lời mời" để bước 3 cũ mở — người kiểm cho là có từ trước, nhưng vẫn sửa vì rẻ ("Mở lời mời" gọi
+`dongCacBuoc`); (b) mã đã tiêu thụ trong fragment thì không bao giờ hỏi phiên — người kiểm đo được rằng hành vi ấy có từ trước
+vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khác cho người mở link của mình.
 
 ## 4. Giới hạn
 
+- Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
+  cung cấp cùng một gói trên một máy — hiếm, ví dụ một người đại diện cho hai doanh nghiệp — có thể nộp vào hồ sơ của nhau nếu
+  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).
 - Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
   phía bên mua). Người thấy khối hỏi mà không phải mình thì mở link mời của mình — lần xác minh thay cookie. Cookie khách tự hết
   sau 4 giờ.
-- Người bấm Tiếp tục với phiên của người khác nộp báo giá dưới lời mời ấy — trang hỏi, không chặn được một người cố ý.
 - Biên nhận của lần nộp trước (bước 4) không hiện lại sau khi tải lại trang.
+- Mã cuối được đo trên Chromium với API giả; luồng API thật (kể cả nộp) được đo trên commit trước lượt sửa của mục 3b.
 
 ## 5. Số
 

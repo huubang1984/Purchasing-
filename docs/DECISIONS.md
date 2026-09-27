@@ -8330,6 +8330,7 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   không làm mất gì. ~~Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
   mời lại, có xoá fragment hay không.~~ **[S1.9103]** Trang nộp thầu nay cũng hỏi lại phiên khách lúc tải (`GET /guest/rfq`,
   cookie `__Host-tp_guest` tới 4 giờ): tải lại sau khi xác minh ⇒ khối hỏi nêu tên gói thầu, "Tiếp tục nộp báo giá" ⇒ bước 3.
+  Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.
 - **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.175]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
   tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
   "Đăng xuất" (`POST /auth/logout`) — không tự mở, vì trên máy dùng chung phiên ấy có thể của người khác. Dùng lại phiên
@@ -8350,5 +8351,5 @@ Chromium trên cụm thật: `/login#<org>` điền ô tổ chức; email lạ v
 `/login#<org>:<token>`, mở ra hai ô điền sẵn, TOTP ⇒ vào; 0 lỗi JavaScript. **[S1.175]** Cùng tệp test nạp NGUYÊN tệp ba
 trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ HTML cùng tên): hỏi-không-tự-mở, đăng xuất, thứ tự
 `docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
-(`evidence/security-reviews.md` §S1.175). **[S1.9103]** Trang nộp thầu: bảy ca cùng khung, 13 đột biến đều đỏ
+(`evidence/security-reviews.md` §S1.175). **[S1.9103]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.9103).
