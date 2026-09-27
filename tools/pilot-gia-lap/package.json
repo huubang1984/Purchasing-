@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "//": "[ADR-093] Cong cu DEV chay PILOT GIA LAP: hai to chuc gia lap, danh muc kich ban di qua API THAT (dang nhap TOTP, OTP, niem phong, mo thau, BAFO, trao thau, bang chung) va mot bao cao dan nhan GIA LAP. Khong phai duong san xuat, khong thay khach hang pilot: no doi bien moi truong RIENG, chi nhan CSDL cuc bo, va ghi token dang ro vao thu muc trang thai 0700.",
+  "//": "[ADR-101] Cong cu DEV chay PILOT GIA LAP: hai to chuc gia lap, danh muc kich ban di qua API THAT (dang nhap TOTP, OTP, niem phong, mo thau, BAFO, trao thau, bang chung) va mot bao cao dan nhan GIA LAP. Khong phai duong san xuat, khong thay khach hang pilot: no doi bien moi truong RIENG, chi nhan CSDL cuc bo, va ghi token dang ro vao thu muc trang thai 0700.",
   "dependencies": {
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/db": "workspace:*",

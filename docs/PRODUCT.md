@@ -57,7 +57,7 @@ phải chuyện câu chữ.
 | "AI phát hiện gian lận" | "Tạo bằng chứng kiểm toán" |
 | **"Kể cả chúng tôi cũng không xem được"** | **"Mọi lần truy cập đều để lại dấu vết bất biến"** |
 | ~~**[S1.108] "Vòng BAFO giữ kín giá của bạn với người mua"**~~ **[S1.109] "Vòng BAFO giữ kín giá của bạn với người mua"** | **"Giá vòng BAFO được niêm phong lại và chỉ mở qua cổng bốn vế; danh sách mời suy từ thứ hạng nên một lần mời ngoài top-N để lại dấu"** — [S1.109] nay ĐO được: một vòng quét mọi route với người mua ĐỦ QUYỀN không thấy một chữ số giá BAFO nào trước cổng, và thấy ngay sau |
-| **[S1.110] "Hai người ký thì không ai trao thầu cho người quen được"** | **"Hệ thống cưỡng chế rằng người ĐỀ XUẤT trao thầu không phải người TẠO gói thầu, không phải người ĐIỀU PHỐI mở thầu (của lần điều phối đang chạy), và không phải người DUYỆT — bốn vai, ba trigger đọc dữ liệu thật, ~~và mỗi lần từ chối để lại một dòng~~ **[S1.158]** và lần từ chối vì QUYỀN để lại một hàng sổ (đo ở pilot giả lập), lần từ chối vì TRẠNG THÁI cũng vậy (ADR-060) — còn lần từ chối của CHÍNH J3 thì KHÔNG, vì trigger huỷ giao dịch (đo ở pilot giả lập trên cả ba vế: người tạo tự đề xuất, người điều phối tự đề xuất, người đề xuất giữ quyền duyệt tự duyệt — khoản 244)"** — và phần phải nói ra: vế *điều phối* KHÔNG thấy người điều phối lần ĐẦU sau một lần điều phối lại (khoản 233), nên câu đúng là *ba trong bốn mắt xích được cưỡng chế theo hành vi, mắt thứ tư chỉ theo lần gần nhất*. Và không lớp nào của sản phẩm chặn được hai người bàn nhau ngoài hệ thống — thứ nó làm là để lại dấu vết cho một lượt kiểm toán SAU đó |
+| **[S1.110] "Hai người ký thì không ai trao thầu cho người quen được"** | **"Hệ thống cưỡng chế rằng người ĐỀ XUẤT trao thầu không phải người TẠO gói thầu, không phải người ĐIỀU PHỐI mở thầu (của lần điều phối đang chạy), và không phải người DUYỆT — bốn vai, ba trigger đọc dữ liệu thật, ~~và mỗi lần từ chối để lại một dòng~~ **[S1.163]** và lần từ chối vì QUYỀN để lại một hàng sổ (đo ở pilot giả lập), lần từ chối vì TRẠNG THÁI cũng vậy (ADR-060) — còn lần từ chối của CHÍNH J3 thì KHÔNG, vì trigger huỷ giao dịch (đo ở pilot giả lập trên cả ba vế: người tạo tự đề xuất, người điều phối tự đề xuất, người đề xuất giữ quyền duyệt tự duyệt — khoản 247)"** — và phần phải nói ra: vế *điều phối* KHÔNG thấy người điều phối lần ĐẦU sau một lần điều phối lại (khoản 233), nên câu đúng là *ba trong bốn mắt xích được cưỡng chế theo hành vi, mắt thứ tư chỉ theo lần gần nhất*. Và không lớp nào của sản phẩm chặn được hai người bàn nhau ngoài hệ thống — thứ nó làm là để lại dấu vết cho một lượt kiểm toán SAU đó |
 | **[S1.111] "Chống được thông đồng giữa người mua và nhà cung cấp"** | **"Làm việc móc nối đắt hơn và để lại dấu đọc được"** |
 
 Dòng *"Kể cả chúng tôi cũng không xem được"* là ràng buộc bổ sung phát sinh từ ADR-002:
@@ -98,8 +98,8 @@ Ba lát cắt thuộc MVP1: **S0** (nền móng, 2,5 tuần) + **S1** (sealed bi
 | S1 | Sealed Bid Core | MVP1 | Đã có spec |
 | S2 | Evaluation & Award (gồm BAFO) | MVP1 | ~~Chưa có spec~~ **[S1.103] Đã có spec** (vào kho ở S1.101) |
 | S3 | Governance | MVP2 | ~~Chưa có spec~~ ~~**[S1.138] Có spec BẢN NHÁP** — `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`, chưa qua lượt soi hình dạng~~ **[S1.139] Có spec, đã qua lượt soi hình dạng** — `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md`; ADR-080…082; chưa có mã. **[S1.142]** S3.0 chốt bảng mã quyền và lớp từ chối thứ ba của K12 (ADR-084); sàn một chữ ký rời S3.1, đã có cho mọi tổ chức (ADR-085) |
-| S4 | Data Foundation & Intelligence | MVP3 | Chưa có spec |
-| S5 | ERP Integration & Enterprise | Enterprise | Chưa có spec |
+| S4 | Data Foundation & Intelligence | MVP3 | ~~Chưa có spec~~ ~~**[S1.158] Có spec BẢN NHÁP** — `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`, chưa qua lượt soi hình dạng~~ **[S1.159] Có spec, đã qua lượt soi hình dạng** — `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`; ADR-093…097; chưa có mã. Chia S4a (nền dữ liệu, chạy song song S3 sau S3.1) và S4b (trí tuệ, chờ cổng dữ liệu; riêng S4b.1 chỉ chờ S3.5). **[S1.160]** S4b có spec chi tiết ~~BẢN NHÁP~~ riêng — `docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`, ~~chưa qua lượt soi hình dạng~~ **[S1.161] đã qua lượt soi hình dạng**, ADR-098, ADR-099; S4b.1 chỉ áp cho tổ chức đã bật S3; **[S1.162]** bảy câu còn lại chốt ở ADR-100 — Supplier Score hoãn tới S5, cổng dữ liệu có con số; không mã |
+| S5 | ERP Integration & Enterprise | Enterprise | Chưa có spec. **[S1.162]** Nhận Supplier Score từ S4b (ADR-100); thiết kế nháp ở spec S4b §7 |
 
 ## 8. Ràng buộc sản phẩm
 
@@ -109,13 +109,15 @@ Ba lát cắt thuộc MVP1: **S0** (nền móng, 2,5 tuần) + **S1** (sealed bi
 | 2 | Onboarding lũy tiến: Level 0 → Level 1 (Known Supplier) → Level 2 (Supplier Passport). Level 2 chỉ kích hoạt khi thắng thầu, tham gia lặp lại, ký hợp đồng, hoặc yêu cầu KYC | Mục 10 |
 | 3 | Magic link không bao giờ là URL công khai không giới hạn. Luôn cần token entropy cao + hết hạn + OTP | Mục 10 |
 | 4 | **Nhà cung cấp phải dùng trình duyệt có `crypto.subtle`.** Rủi ro thực tế: webview Zalo/Messenger. Phải dò tìm khả năng và hướng dẫn rõ ràng | ADR-007 |
-| 5 | Mọi ngưỡng chính sách (số NCC theo giá trị, ngưỡng phê duyệt kép, trọng số chấm điểm) phải cấu hình được theo từng doanh nghiệp. Không hard-code "3 báo giá" | Mục 12, 13, 21 |
+| 5 | Mọi ngưỡng chính sách (số NCC theo giá trị, ngưỡng phê duyệt kép, trọng số chấm điểm) phải cấu hình được theo từng doanh nghiệp. Không hard-code "3 báo giá". **[S1.161 / ADR-098 ㉘] Một ngoại lệ có ghi lý do:** ngưỡng của chốt S4b.1 — độ phủ, mức, luật nổ — là hằng của phương pháp, vì người đặt ngưỡng cũng là người ký trao | Mục 12, 13, 21 |
 | 6 | BAFO là tùy chọn theo chính sách, không bắt buộc mọi RFQ | Mục 9 |
 
 ## 9. Chỉ số
 
 **North Star Metric: Verified Competitive Spend** — giá trị mua sắm đã đi qua một quy
 trình cạnh tranh, có audit trail và risk assessment. Tốt hơn hẳn việc chỉ đếm số RFQ.
+**[S1.162 / ADR-100]** *"Có risk assessment"* nghĩa là gói có đánh giá rủi ro của S4b mức khác `KHONG_XAC_DINH`. Hệ quả:
+phần ấy bằng 0 ở tổ chức chưa bật S3, và ở tổ chức đã bật S3 cho tới khi S4b.2 có mã và tổ chức vượt sàn dữ liệu.
 
 Chữ *Verified* được hiện thực hóa bằng `evidence/INV-matrix.md` (xem `docs/TEST-PLAN.md`).
 
@@ -134,7 +136,7 @@ kiểm toán.
 **Chưa có khách hàng pilot.** Đây là rủi ro lớn nhất của dự án — lớn hơn mọi rủi ro kỹ
 thuật. Nên tiếp cận song song ngay từ S0, không đợi có sản phẩm.
 
-**[S1.158]** Câu trên KHÔNG đổi. Có thêm một **pilot giả lập** (`pnpm pilot:gia-lap`, ADR-093): hai doanh nghiệp bịa,
+**[S1.163]** Câu trên KHÔNG đổi. Có thêm một **pilot giả lập** (`pnpm pilot:gia-lap`, ADR-101): hai doanh nghiệp bịa,
 danh mục kịch bản đi qua API thật, và bộ dữ liệu để lại cho buổi trình diễn. Nó không gỡ mảnh 4 của §11. Nó đi kèm một thang
 năm bậc cam kết tăng dần tới pilot thật: `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md` §7.
 

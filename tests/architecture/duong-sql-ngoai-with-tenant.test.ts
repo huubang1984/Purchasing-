@@ -241,7 +241,7 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
   "tools/pilot-gia-lap/src/csdl.ts": {
     so: 1,
     lyDo:
-      "[ADR-093] pilot giả lập: cùng lý do với gieo-demo — nó TẠO tenant (tổ chức, người dùng, vai) mà app_api không có INSERT, " +
+      "[ADR-101] pilot giả lập: cùng lý do với gieo-demo — nó TẠO tenant (tổ chức, người dùng, vai) mà app_api không có INSERT, " +
       "chạy migrate() và đảm bảo hai vai đăng nhập như chay-migrate, nên không dùng được createPool có vai. Bán kính: công cụ DEV, " +
       "biến môi trường RIÊNG, CHỈ nhận CSDL cục bộ (kiemUrlCucBo); mọi bước nghiệp vụ còn lại đi qua HTTP của apps/api",
   },
@@ -294,7 +294,7 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 0,
     cau: 1,
     lyDo:
-      "[ADR-093] MỘT chỗ gọi (`cau`) mà mọi câu đặc quyền của pilot giả lập đi qua: kiểm/tạo hai vai đăng nhập, gieo tổ chức, " +
+      "[ADR-101] MỘT chỗ gọi (`cau`) mà mọi câu đặc quyền của pilot giả lập đi qua: kiểm/tạo hai vai đăng nhập, gieo tổ chức, " +
       "người dùng và vai — chạy trước khi tenant TỒN TẠI nên không gắn được tenant — và ba câu CHỈ ĐỌC: số hàng sổ kiểm toán " +
       "của một tổ chức (trước và sau mỗi lần thử sai, cho cột Vào sổ), số hàng sổ theo hành động (báo cáo, và lời khai " +
       "BID_DEADLINE_DENIED của SX-06), và CSDL đã có dấu kiểm vòng khoá ở master_key_check_values chưa (trước khi sinh bí mật " +

@@ -11,7 +11,7 @@
 //
 // `--chi` tách theo dấu phẩy VÀ khoảng trắng: PowerShell đọc `SX-01,XD-02` không nháy thành một mảng, và
 // shim `pnpm.ps1` (cài bằng npm hay corepack) chuyển mảng ấy xuống node thành "SX-01 XD-02" — lượt soi
-// tài liệu của vòng S1.158 đo ra điều ấy. Tài liệu vẫn viết danh sách trong nháy.
+// tài liệu của vòng S1.163 đo ra điều ấy. Tài liệu vẫn viết danh sách trong nháy.
 // ==============================================================================================
 
 import type { CongCum } from "./cum.js";

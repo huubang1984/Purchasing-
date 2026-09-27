@@ -3,7 +3,7 @@
 //
 //   pnpm pilot:gia-lap            (xem `tham-so.ts` cho mọi lệnh)
 //
-// [ADR-093] Vì sao có công cụ này: không đơn vị nào nhận pilot một sản phẩm chưa hoàn thiện, nên dự
+// [ADR-101] Vì sao có công cụ này: không đơn vị nào nhận pilot một sản phẩm chưa hoàn thiện, nên dự
 // án cần một cách (a) cho mọi tính năng của kịch bản `docs/PRODUCT.md` §11 chạy trọn trên một cụm có
 // đủ bốn tiến trình, bằng nhiều gói thầu, nhiều vai, nhiều nhánh, và (b) để lại một bộ dữ liệu demo
 // mà một người trình diễn đi tiếp được trên màn hình. `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL
