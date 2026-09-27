@@ -13765,3 +13765,52 @@ Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xa
 ## 6. Số
 
 Khoản 247 đóng. Còn mở **86**; rổ B **61**.
+
+---
+
+# §S1.9101 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+
+## 1. Vòng này là gì
+
+Hai phiên làm khoản 247 song song. #172 (§S1.167, ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi. Phiên này
+đã làm cùng khoản theo lựa chọn chủ dự án chốt ở đây — J3/D2 là `CONTROL_DENIED`, câu nộp là `BID_STATE_DENIED` mang mã — bằng
+cách kiểm trước ở lớp gói. Khi #172 vào `master`, chủ dự án chọn giữ cơ chế của #172 (một nguồn sự thật; ca đua nhau cũng vào sổ),
+bỏ nhánh kiểm-trước, và nắn hai điều: từ vựng về ba lớp của ADR-084 ⑸, và nhận diện bằng tên ràng buộc thay cho thông điệp. Câu
+hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-9201.
+
+## 2. Đo trước (đọc, không chạy)
+
+- Trên `master` (`12645e9`), khối khoản 247 của ba tệp tích hợp khẳng định hàng `RFQ_AWARD_SOD_DENIED` `{viPham, ve}`,
+  `RFQ_APPROVAL_DENIED` `{viPham}` và `BID_SUBMIT_DENIED` `{rfqStatus}` — tức một truy vấn `action = 'CONTROL_DENIED'` không thấy
+  lần vi phạm J3/D2 nào, và `BID_STATE_DENIED` không có.
+- Nhận diện: `veJ3` đọc `code = 23514` + hậu tố `(J3)` + bốn tiền tố câu; `approveRfq` đọc `includes("(D2")`; `submitBid` ghi mọi
+  23514 không vì hạn, kể cả `CHECK` cỡ phong bì của bảng. Thân sáu hàm trigger (`011`, `018`, `059`, `061`, `064`, `066`) không
+  đặt tên ràng buộc nào ngoài `c1_qua_han_nop`.
+
+## 3. Thay đổi
+
+- `db/migrations/9501_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
+  `bid_kiem_han_nop`, `bid_kiem_phien_khach`, `bid_kiem_vong_bafo` — thân trích nguyên văn bằng script, thêm `CONSTRAINT = …` ở
+  13 nhánh. Sáu bản ghim ở `hardening.always.sql` đổi cùng commit (tiêu đề, mốc phiên bản, thân khối `DO`, thân `$than$`); script
+  đối chiếu bản ghim cũ với thân cũ trước khi thay. `db/migrations.int.test.ts`: `HAM_56` trỏ sáu hàm sang migration mới, ba danh
+  sách migration đã áp thêm một dòng.
+- `packages/identity/src/chot-kiem-soat.ts` (MỚI): `CHOT_VAO_SO` dời xuống từ `packages/rfq` cùng `ChotKiemSoatError` (nay nhận
+  `cause`), `tuChoiTheoChot`, `laMaChot`; thêm bảy mã J3/D2, bảng `CHOT_THEO_RANG_BUOC` và `maChotTuLoi`.
+  `packages/rfq/src/chot-kiem-soat.ts` còn phần của K1 và chép lại từ vựng ra cửa tệp.
+- `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/trao-thau.ts`: nhánh bắt lỗi của #172 đổi sang `maChotTuLoi` +
+  `tuChoiTheoChot`; `veJ3`, `ghiTuChoiJ3` bỏ.
+- `packages/bidding/src/bidding.ts`: `MA_THEO_RANG_BUOC` (sáu tên → mã viết hoa); nhánh không vì hạn ghi `BID_STATE_DENIED`
+  `{ma}`, không đọc lại gói; `NopBiTuChoiError` mang `ma`; 23514 không tên ném `BiddingError` chung, không sổ.
+- Test: các ca J3/D2 đi qua lớp gói (`luot-danh-gia`, `rfq`) khẳng định `ChotKiemSoatError` + mã + tên ràng buộc ở `cause`; khối
+  khoản 247 khẳng định hàng `CONTROL_DENIED` / `BID_STATE_DENIED` mang mã; hai ca INSERT viết tay (phiên của người khác, phiên đã
+  đề xuất) khẳng định thêm `maChotTuLoi`; hai phép đo mới so tên ràng buộc trong `pg_proc.prosrc` với bảng tên → mã, hai chiều;
+  kịch bản 41 qua HTTP — bước 2 đọc câu mới và một hàng `D2_NGUOI_TAO_TU_DUYET`, bước 12d một hàng `BAFO_NGOAI_TOP_N`, bước 12h
+  một hàng `J3_NGUOI_TAO_DE_XUAT`.
+- `docs/DECISIONS.md` ADR-9201, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
+
+## 4. Ranh giới, nói ra
+
+- Năm mã vào sổ nói về phiên hay dữ liệu, không về một bước đi sai thứ tự — rộng hơn chữ của ADR-060. Giữ vì #172 đã ghi chúng và
+  chủ dự án chọn không lùi phần phủ; mã tách chúng ra để lọc được.
+- Thông điệp người dùng thấy ở J3/D2 đổi sang câu của bảng chốt (có dấu, vẫn gọi tên bất biến); ADR-104 ⑵ từng nói không đổi.
+- Nhánh D2 của `approveUnseal` vẫn nhận diện bằng thông điệp — ngoài phạm vi.

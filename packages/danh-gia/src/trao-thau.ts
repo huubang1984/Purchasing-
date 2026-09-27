@@ -52,11 +52,12 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 // ==============================================================================================
-// [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER
+// [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, ~~RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER~~
+// **[S1.9101 / ADR-9201] RỒI NÉM LỜI TỪ CHỐI CỦA CHỐT**
 //
 // J3 sống ở hai trigger của `061` (`award_kiem_de_xuat`, thân từ `064`, và `award_kiem_nguoi_duyet`). Lần vi phạm là một `RAISE
 // … (J3)` với SQLSTATE 23514: nó huỷ giao dịch của người gọi, nên trước vòng này không lối nào ghi được nó — `pnpm pilot:gia-lap`
@@ -65,35 +66,14 @@ import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 //
 // VÌ SAO BẮT LỖI CỦA TRIGGER CHỨ KHÔNG KIỂM TRƯỚC Ở ĐÂY: trigger là lớp có thẩm quyền và nó đọc bảng lịch sử điều phối dưới
 // đúng khoá của câu ghi. Chép vị từ ra TypeScript là hai nguồn sự thật cho một luật; bắt lỗi của nó thì sổ ghi đúng thứ CSDL đã
-// từ chối. Cùng khuôn nhánh D2 của `approveUnseal` (`packages/unseal/src/requests.ts`): `throwAuditedDenial` ghi ở `auditPool`
-// rồi ném lại chính lỗi `pg`, nên mã 422 và thông điệp người dùng thấy KHÔNG đổi. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500.
+// từ chối. ~~Cùng khuôn nhánh D2 của `approveUnseal` (`packages/unseal/src/requests.ts`): `throwAuditedDenial` ghi ở `auditPool`
+// rồi ném lại chính lỗi `pg`, nên mã 422 và thông điệp người dùng thấy KHÔNG đổi. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500.~~
+//
+// **[S1.9101 / ADR-9201]** Lớp của lần từ chối là `CONTROL_DENIED` — người vi phạm J3 có đủ quyền và đi đúng thứ tự, thứ chặn
+// họ là một chốt (ADR-084 ⑸) — và nó được nhận ra bằng TÊN RÀNG BUỘC mà trigger đặt (`9501_tu_choi_co_ten.sql`), không bằng
+// hậu tố *"(J3)"* cùng đầu câu. `tuChoiTheoChot` ghi một hàng mang mã ở `auditPool` rồi ném `ChotKiemSoatError` (422, thông
+// điệp của bảng `CHOT_VAO_SO`) mang lỗi `pg` ở `cause`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500, như trước.
 // ==============================================================================================
-
-/** Vế J3 đọc từ thông điệp của trigger; `null` khi lỗi không phải một lần vi phạm J3. */
-function veJ3(loi: unknown): "NGUOI_TAO" | "NGUOI_DIEU_PHOI" | "NGUOI_DE_XUAT" | "PHIEN_DE_XUAT" | null {
-  if (!(loi instanceof Error) || (loi as { code?: unknown }).code !== "23514" || !loi.message.endsWith("(J3)")) return null;
-  if (loi.message.startsWith("Nguoi tao goi thau")) return "NGUOI_TAO";
-  if (loi.message.startsWith("Nguoi dieu phoi mo thau")) return "NGUOI_DIEU_PHOI";
-  if (loi.message.startsWith("Nguoi de xuat trao thau")) return "NGUOI_DE_XUAT";
-  if (loi.message.startsWith("Phien da de xuat")) return "PHIEN_DE_XUAT";
-  return null;
-}
-
-async function ghiTuChoiJ3(
-  auditPool: pg.Pool,
-  orgId: string,
-  actorId: string,
-  rfqId: string,
-  ve: NonNullable<ReturnType<typeof veJ3>>,
-  loi: Error,
-): Promise<never> {
-  return throwAuditedDenial(
-    auditPool,
-    orgId,
-    { actorType: "USER", actorId, action: "RFQ_AWARD_SOD_DENIED", resourceType: "RFQ", resourceId: rfqId, payload: { viPham: "J3", ve } },
-    loi,
-  );
-}
 
 /** Lý do máy đọc được của một lần từ chối ở lớp này — cùng khuôn `LyDoTuChoiVong`. */
 // [S1.116 / khoản 239] Suy TỪ `MaTuChoiTrangThai` — xem `tu-choi-vao-so.ts`.
@@ -333,9 +313,9 @@ export async function deXuatTraoThau(
     ));
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
-    // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném lại CHÍNH lỗi của trigger — xem `ghiTuChoiJ3`.
-    const ve = veJ3(loi);
-    if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);
+    // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.9101] theo chốt).
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
   }
 
@@ -464,9 +444,10 @@ export async function duyetTraoThau(
     );
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
-    // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi chính lỗi trigger.
-    const ve = veJ3(loi);
-    if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);
+    // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi ~~chính lỗi trigger~~
+    // **[S1.9101]** lời từ chối của chốt.
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
   }
 

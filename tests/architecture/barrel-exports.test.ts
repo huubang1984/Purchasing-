@@ -259,6 +259,15 @@ const DANH_SACH_TRANG_IDENTITY = [
   "startUserSession",
   "verifyTotpForLogin",
   "verifyTotpAttempt",
+  // [S1.9101 / khoản 247 / ADR-9201] Từ vựng chốt kiểm soát dời xuống đây từ `packages/rfq`. `tuChoiTheoChot` NÉM ở mọi
+  // nhánh (cùng tiêu chí `throwAuditedDenial`); `laMaChot` và `maChotTuLoi` chỉ tra bảng — không câu hỏi quyền nào.
+  "ACTION_CHOT_KIEM_SOAT",
+  "CHOT_THEO_RANG_BUOC",
+  "CHOT_VAO_SO",
+  "ChotKiemSoatError",
+  "laMaChot",
+  "maChotTuLoi",
+  "tuChoiTheoChot",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);

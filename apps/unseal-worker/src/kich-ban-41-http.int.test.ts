@@ -356,9 +356,16 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const m = trangThai.mua.cookie;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
+    // [S1.9101 / khoản 247 / ADR-9201] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
+    // `CHOT_VAO_SO`, vẫn gọi tên `(D2)` — và để lại một hàng `CONTROL_DENIED`.
     const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
     expect(tuDuyet.status).toBe(422);
-    expect(tuDuyet.text).toContain("khong duoc la mot trong hai nguoi duyet (D2)");
+    expect(tuDuyet.text).toContain("Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).");
+    const { rows: soD2 } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'D2_NGUOI_TAO_TU_DUYET'",
+      [trangThai.rfqId],
+    );
+    expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
@@ -961,6 +968,13 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(bn2.status, bn2.text).toBe(422);
     // Và thông điệp KHÔNG chép lại câu của CSDL: hai trong ba câu ấy nội suy UUID.
     expect(bn2.text).not.toContain(trangThai.bafoRoundId);
+    // [S1.9101 / khoản 247 / ADR-9201] ...và lần chặn ấy để lại ĐÚNG MỘT hàng `BID_STATE_DENIED` mang mã của nhánh, qua đường
+    // HTTP thật: route khách trả 422 mà COMMIT.
+    const { rows: soBafo } = await db.pool.query<{ payload: unknown }>(
+      "SELECT payload FROM audit_events WHERE action = 'BID_STATE_DENIED' AND resource_id = $1",
+      [trangThai.rfqId],
+    );
+    expect(soBafo).toEqual([{ payload: { ma: "BAFO_NGOAI_TOP_N" } }]);
   });
 
   it("[INV-A2] [INV-J4] BỘ QUÉT RÒ RỈ LẦN BA — giá BAFO đã NẰM TRONG CSDL mà chưa qua cổng bốn vế: không route nào trả nó, KỂ CẢ cho người mua đủ quyền", async () => {
@@ -1224,9 +1238,18 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // đến từ một `RAISE` của trigger (`routine = exec_stmt_raise`) — đúng ca của ba trigger `061`,
     // vì thông điệp ấy do migration VIẾT chứ không nội suy dữ liệu người dùng. Nên J3 nói được cho
     // người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`.
+    //
+    // [S1.9101 / khoản 247 / ADR-9201] Nay câu ấy là của BẢNG CHỐT, không của trigger: `deXuatTraoThau` bắt lỗi của trigger theo
+    // TÊN ràng buộc, từ chối bằng `ChotKiemSoatError` (422 qua `LOI_NGHIEP_VU_422`) và để lại một hàng `CONTROL_DENIED`. Câu vẫn
+    // gọi tên `(J3)`.
     expect(tuChoi.status, tuChoi.text).toBe(422);
     expect(tuChoi.text, "câu từ chối phải GỌI TÊN bất biến, không chỉ nói không").toMatch(/\(J3\)/u);
     expect(await trangThaiRfq(), "lần từ chối KHÔNG được để lại một trạng thái nửa vời").toBe("EVALUATING");
+    const { rows: soJ3 } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'J3_NGUOI_TAO_DE_XUAT'",
+      [trangThai.rfqId],
+    );
+    expect(soJ3, "lần tự đề xuất ấy để lại đúng một hàng sổ").toHaveLength(1);
 
     // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI: `pm2` cũng là
     // `PROCUREMENT_MANAGER`, cũng giữ `award.recommend`, nhưng họ không tạo và không điều phối.

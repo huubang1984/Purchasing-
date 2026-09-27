@@ -11,63 +11,24 @@
 // qua `throwAuditedDenial`, và payload chỉ mang MÃ.
 //
 // ----------------------------------------------------------------------------------------------
-// BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
+// ~~BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG~~ [S1.9101] Nguồn ấy nay ở `@trustprocure/identity`
 // ----------------------------------------------------------------------------------------------
 // `Record` đầy đủ nên một mã thêm vào `MaChotKiemSoat` mà không có dòng ở đây là một lỗi BIÊN DỊCH.
 // Chiều kia — một mã mà hàm SQL trả về nhưng không có ở đây — thì kiểu không bắt được: tầng gói ném
 // một lỗi KHÔNG tên (500), và phép đo ở `bac-chinh-sach.int.test.ts` so tập mã trong thân hàm với bảng.
-// Hôm nay chỉ `packages/rfq` dùng bảng; khi một gói khác cần (K7, K9 ở trao thầu), bảng dời xuống
-// một gói cả hai cùng phụ thuộc — không mọc bảng thứ hai.
+// ~~Hôm nay chỉ `packages/rfq` dùng bảng; khi một gói khác cần (K7, K9 ở trao thầu), bảng dời xuống
+// một gói cả hai cùng phụ thuộc — không mọc bảng thứ hai.~~ **[S1.9101 / khoản 247 / ADR-9201]** Gói khác ấy đã tới
+// sớm hơn K7: J3 và D2 của `packages/danh-gia` và của `approveRfq`. Bảng, lời từ chối và hàm ghi sổ nay ở
+// `packages/identity/src/chot-kiem-soat.ts`; tệp này còn đúng phần của K1 — câu hỏi hàm vị từ SQL và `kiemChot`.
 // ==============================================================================================
 
 import type pg from "pg";
 import type { ActorType } from "@trustprocure/audit";
-import { throwAuditedDenial } from "@trustprocure/identity";
+import { laMaChot, tuChoiTheoChot } from "@trustprocure/identity";
 
-/** Toàn bộ từ vựng chốt kiểm soát của S3. Thêm một mã là thêm một dòng ở `CHOT_VAO_SO`. */
-export type MaChotKiemSoat = "BAC_LECH_HAM_PHAN_BAC" | "NGAN_SACH_GHIM_BAN_CU" | "THIEU_NGAN_SACH";
-
-export interface DongChot {
-  /** Bất biến nhóm K mà chốt này cưỡng chế. */
-  readonly chot: `K${number}`;
-  /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
-  readonly vaoSo: boolean;
-  /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
-  readonly lyDo: string;
-  /** Thông điệp cho người dùng: nói phải làm gì, không nội suy dữ liệu nào. */
-  readonly thongDiep: string;
-}
-
-/** Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166). */
-export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
-  THIEU_NGAN_SACH: {
-    chot: "K1",
-    vaoSo: true,
-    lyDo:
-      "một người nộp duyệt một gói KHÔNG có ngân sách ở tổ chức đã bật S3 — gói không ngân sách không có bậc, nên bỏ bước " +
-      "này là thoát MỌI chốt của S3 (spec §2.4 ⑸). Kiểm toán viên hỏi tới đúng lần cố ấy",
-    thongDiep: "Tổ chức đã bật kiểm soát theo bậc: gói thầu phải có ngân sách dự tính trước khi nộp duyệt.",
-  },
-  NGAN_SACH_GHIM_BAN_CU: {
-    chot: "K1",
-    vaoSo: false,
-    lyDo:
-      "chính sách đổi SAU khi gói đặt ngân sách — cấu hình đổi dưới chân người dùng, không ai cố lách, và CSDL chặn sẵn; " +
-      "ghi sổ thì mỗi lần đổi chính sách, mỗi gói nháp để lại một hàng vĩnh viễn",
-    thongDiep: "Chính sách mua sắm đã đổi từ khi đặt ngân sách: đặt lại ngân sách để gói nhận bậc theo chính sách hiện hành.",
-  },
-  BAC_LECH_HAM_PHAN_BAC: {
-    chot: "K1",
-    vaoSo: false,
-    lyDo:
-      "bậc đã lưu khác kết quả của hàm phân bậc hiện hành — chỉ tới được khi hàm phân bậc đổi sau lúc đặt ngân sách, hay " +
-      "khi chủ CSDL sửa tay; người dùng không gây ra nó, và sửa bằng cách đặt lại ngân sách",
-    thongDiep: "Bậc của gói thầu cần tính lại: đặt lại ngân sách dự tính rồi nộp duyệt.",
-  },
-};
-
-/** `action` của hàng sổ. MỘT mã cho mọi chốt; chốt cụ thể đi vào `payload`. */
-export const ACTION_CHOT_KIEM_SOAT = "CONTROL_DENIED";
+// [S1.9101 / khoản 247] Chép ra cửa của TỆP này (không của gói) cho các test đang đọc từ đây — cùng MỘT đối
+// tượng với bản ở `identity`, không phải bảng thứ hai.
+export { ACTION_CHOT_KIEM_SOAT, CHOT_VAO_SO, ChotKiemSoatError, type MaChotKiemSoat } from "@trustprocure/identity";
 
 /**
  * Câu hỏi hàm vị từ của K1 (`072_bac_cua_goi`): `$1` tổ chức, `$2` gói, mốc là giờ thật lúc hỏi. Câu đứng ở đây, cạnh
@@ -76,18 +37,6 @@ export const ACTION_CHOT_KIEM_SOAT = "CONTROL_DENIED";
  */
 export const CAU_CHOT_NGAN_SACH =
   "SELECT public.rfq_chot_ngan_sach($1::pg_catalog.uuid, $2::pg_catalog.uuid, pg_catalog.clock_timestamp()) AS ly_do";
-
-/** Lời từ chối có tên của một chốt kiểm soát. `dispatch.ts` trả nó ra dưới 422 kèm thông điệp. */
-export class ChotKiemSoatError extends Error {
-  constructor(readonly lyDo: MaChotKiemSoat) {
-    super(CHOT_VAO_SO[lyDo].thongDiep);
-    this.name = "ChotKiemSoatError";
-  }
-}
-
-function laMaChot(ma: string): ma is MaChotKiemSoat {
-  return Object.hasOwn(CHOT_VAO_SO, ma);
-}
 
 /**
  * Hỏi một hàm vị từ của chốt rồi ném theo bảng. Gọi TRƯỚC mọi tác dụng phụ của thao tác.
@@ -110,20 +59,5 @@ export async function kiemChot(
   if (!laMaChot(ma)) {
     throw new Error("hàm vị từ của chốt trả một mã không có trong CHOT_VAO_SO — hai bên đã trôi khỏi nhau");
   }
-  const loi = new ChotKiemSoatError(ma);
-  if (!CHOT_VAO_SO[ma].vaoSo) throw loi;
-  await throwAuditedDenial(
-    auditPool,
-    orgId,
-    {
-      actorType: actor.type,
-      actorId: actor.id,
-      action: ACTION_CHOT_KIEM_SOAT,
-      resourceType: "RFQ",
-      resourceId: rfqId,
-      // Chỉ MÃ, không thông điệp — cùng lý do `RFQ_STATE_DENIED` (`tu-choi-vao-so.ts`).
-      payload: { ma },
-    },
-    loi,
-  );
+  await tuChoiTheoChot(auditPool, orgId, actor, rfqId, ma);
 }

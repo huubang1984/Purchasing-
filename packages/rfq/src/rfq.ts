@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
@@ -446,24 +446,14 @@ export async function approveRfq(
   } catch (loi) {
     // [S1.167 / khoản 247 / ADR-104] D2 ở bước DUYỆT GÓI — người tạo tự duyệt, phiên không hợp lệ, phiên của người khác — sống
     // ở trigger `rfq_kiem_nguoi_duyet` (`011`): `RAISE … (D2)` với 23514 huỷ giao dịch, nên trước vòng này lần vi phạm không để lại
-    // hàng sổ nào (`pnpm pilot:gia-lap`: người tạo tự duyệt gói ⇒ 422 *"(D2)"*, 0 hàng). Cùng khuôn nhánh D2 của `approveUnseal`:
-    // ghi ở `auditPool` rồi ném lại CHÍNH lỗi của trigger, nên mã 422 và thông điệp không đổi; trigger vẫn là lớp có thẩm quyền.
-    // Lần từ chối vì TRẠNG THÁI (gói không ở `PENDING_APPROVAL`) không mang *"(D2)"* và đi thẳng như cũ.
-    if (loi instanceof Error && (loi as { code?: unknown }).code === "23514" && loi.message.includes("(D2")) {
-      await throwAuditedDenial(
-        auditPool,
-        orgId,
-        {
-          actorType: actor.type,
-          actorId: actor.id,
-          action: "RFQ_APPROVAL_DENIED",
-          resourceType: "RFQ",
-          resourceId: input.rfqId,
-          payload: { viPham: "D2" },
-        },
-        loi,
-      );
-    }
+    // hàng sổ nào (`pnpm pilot:gia-lap`: người tạo tự duyệt gói ⇒ 422 *"(D2)"*, 0 hàng). ~~Cùng khuôn nhánh D2 của `approveUnseal`:
+    // ghi ở `auditPool` rồi ném lại CHÍNH lỗi của trigger, nên mã 422 và thông điệp không đổi; trigger vẫn là lớp có thẩm quyền.~~
+    // **[S1.9101 / ADR-9201]** Vẫn bắt chính lỗi của trigger — trigger vẫn là lớp có thẩm quyền — nhưng nhận ra nó bằng TÊN RÀNG
+    // BUỘC (`9501_tu_choi_co_ten.sql`), không bằng hậu tố *"(D2"*, và từ chối theo chốt: một hàng `CONTROL_DENIED` mang mã ở giao
+    // dịch độc lập rồi `ChotKiemSoatError` (422, thông điệp của bảng `CHOT_VAO_SO`) mang lỗi `pg` ở `cause`.
+    // Lần từ chối vì TRẠNG THÁI (gói không ở `PENDING_APPROVAL`) không mang tên và đi thẳng như cũ.
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
   }
 
