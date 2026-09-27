@@ -68,10 +68,15 @@ function docLink() {
   $("token").value = h.slice(i + 1);
 }
 docLink();
+// [S1.9102] Đổi người trong cùng thẻ: đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của
+// người trước — rồi hỏi lại phiên (khuôn `mo-thau.js`).
 window.addEventListener("hashchange", () => {
   docLink();
+  phienCho = null;
   phien = { token: $("token").value.trim(), daRedeem: false };
   for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "ok2", "loi3", "ok3"]) bao($(id), "");
+  dongCacBuoc();
+  thuPhienCo();
 });
 
 $("nut-vao").addEventListener("click", async () => {
@@ -106,33 +111,83 @@ $("nut-vao").addEventListener("click", async () => {
   }
 });
 
-/** [S1.9102] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc lúc tải trang đã có phiên còn hạn. */
+const CAC_BUOC_SAU = ["b2", "b3"];
+
+/** [S1.9102] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này". */
 async function moSauDangNhap(me, dungLai) {
   const u = me?.userId;
-  bao($("ok1"), u === undefined
+  bao($("ok1"), typeof u !== "string"
     ? "Đã vào."
     : dungLai
-      ? `Đang dùng phiên còn hạn của người dùng ${String(u).slice(0, 8)}… — cần đổi người thì đăng nhập lại ở trên bằng link của người ấy.`
-      : `Đã vào với người dùng ${String(u).slice(0, 8)}…`);
+      ? `Đang dùng phiên còn hạn của người dùng ${u.slice(0, 8)}… — cần đổi người thì đăng nhập ở trên bằng link của người ấy.`
+      : `Đã vào với người dùng ${u.slice(0, 8)}…`);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
-  for (const b of ["b2", "b3"]) hien($(b), true);
+  for (const b of CAC_BUOC_SAU) hien($(b), true);
   await napPhienBan();
   if (bac.length === 0) dienMau();
 }
 
+/** [S1.9102] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+function dongCacBuoc() {
+  $("b1").classList.remove("xong");
+  for (const b of CAC_BUOC_SAU) hien($(b), false);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), false);
+}
+
 /**
- * [S1.9102] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ, dùng chung ba trang,
- * còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me` và dùng lại phiên còn hạn, TRỪ khi ô
- * mã đã có mã (người mở link của mình phải thấy ô đăng nhập, không thấy phiên của người khác). Sau
- * `/auth/totp` — mã đã tiêu thụ — xoá fragment khỏi thanh địa chỉ (ADR-020 mục 3).
+ * [S1.9102] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
+ * duyệt, dùng chung ba trang, còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me`. Có phiên
+ * còn hạn thì HỎI "Tiếp tục với phiên này" hay "Đăng xuất", không tự mở: trên máy dùng chung phiên ấy có thể
+ * của người khác, và bước 2 có nút Ký (người ký phải KHÁC người khai). Không hỏi khi ô mã đã có mã; `docLink()`
+ * phải chạy trước hàm này, và ô mã được kiểm lại sau `await`. Sau `/auth/totp` — mã đã tiêu thụ —
+ * xoá fragment khỏi thanh địa chỉ (ADR-020 mục 3).
  */
+let phienCho = null;
 async function thuPhienCo() {
   if ($("token").value.trim() !== "") return;
   try {
     const me = await goi("GET", "/me");
-    if (me.status === 200 && typeof me.body?.userId === "string") await moSauDangNhap(me.body, true);
+    if ($("token").value.trim() !== "") return;
+    if (me.status !== 200 || typeof me.body?.userId !== "string") return;
+    phienCho = me.body;
+    const toChuc = typeof me.body.orgId === "string" ? `, tổ chức ${me.body.orgId.slice(0, 8)}…` : "";
+    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên còn hạn: người dùng ${me.body.userId.slice(0, 8)}…${toChuc}. ` +
+      "Trang không biết tên người ấy. Không chắc đó là bạn thì bấm Đăng xuất, rồi đăng nhập bằng link của bạn.");
+    hien($("nut-dung-phien"), true);
+    hien($("nut-dang-xuat"), true);
   } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
 }
+
+$("nut-dung-phien").addEventListener("click", async () => {
+  if (phienCho === null) return;
+  const me = phienCho;
+  phienCho = null;
+  await moSauDangNhap(me, true);
+});
+
+// [S1.9102] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
+$("nut-dang-xuat").addEventListener("click", async () => {
+  bao($("loi1"), ""); bao($("ok1"), "");
+  $("nut-dang-xuat").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/logout");
+    if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
+    phienCho = null;
+    phien = { token: $("token").value.trim(), daRedeem: false };
+    dongCacBuoc();
+    bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
+  } catch {
+    bao($("loi1"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    $("nut-dang-xuat").disabled = false;
+  }
+});
+
 function xoaManhLink() {
   try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
 }

@@ -14238,47 +14238,109 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 
 Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.
 
-# §S1.9102 — BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+# §S1.9102 — BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
 
 ## 1. Việc gì
 
 Chủ dự án chọn ngày 2026-09-27 (đề xuất sau S1.173). Hai chỗ, đo trên nhánh của S1.173:
 
 - `apps/web/trang/{mo-thau,tao-thau,chinh-sach}.js` chỉ gọi `GET /me` SAU `/auth/totp`, không gọi lúc tải. Phiên người mua là
-  cookie `__Host-tp_session` `Path=/`, tới 8 giờ (`apps/api/src/routes/auth.ts`), dùng chung ba trang; mã đăng nhập bị tiêu thụ
-  ở `startUserSession` (`packages/identity/src/login.ts`, `consumed_at`). Nên người đã vào ở `/login` sang `/tao-thau` phải
-  đăng nhập lại bằng một link MỚI — và `/tao-thau` không có ô xin link, còn link mới dẫn về `/login`.
+  cookie `__Host-tp_session` `Path=/`, `Max-Age` 8 giờ (`apps/api/src/routes/auth.ts`) — sống cả sau khi đóng trình duyệt —
+  dùng chung ba trang; mã đăng nhập bị tiêu thụ ở `startUserSession` (`packages/identity/src/login.ts`, `consumed_at`). Nên người
+  đã vào ở `/login` sang `/tao-thau` phải đăng nhập lại bằng một link MỚI — và `/tao-thau` không có ô xin link, còn link mới
+  dẫn về `/login`.
 - ADR-020 mục 3 viết trang xoá fragment sau khi đọc (`history.replaceState`); không trang nào làm (`grep replaceState` ⇒ 0),
   nên mã đăng nhập hay mã lời mời nằm lại trong thanh địa chỉ và lịch sử trình duyệt. ADR-107 đã ghi điều này, chưa sửa.
 
 ## 2. Thay đổi
 
-- Ba trang người mua: `thuPhienCo()` gọi ở cấp tệp — ô mã rỗng thì hỏi `/me`, 200 có `userId` thì `moSauDangNhap(me, true)` mở
-  các bước sau với câu báo *"Đang dùng phiên còn hạn của…"*; bước 1 vẫn hiện. Ô mã đã có mã (fragment mang mã) ⇒ không hỏi. Nhánh
-  đăng nhập thường dùng chung `moSauDangNhap(me, false)`.
-- Bốn trang: `xoaManhLink()` ngay sau lần mã bị tiêu thụ — `/auth/totp` (ba trang người mua), `/guest/otp/verify` (trang nộp
-  thầu; mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation/src/invitation.ts`). `replaceState` không bắn
-  `hashchange`, nên luồng đổi người của khoản 205 không đổi: link của người thứ hai đổi fragment từ rỗng sang có mã.
-- `eslint.config.js`: global `history` cho `apps/web/trang`.
-- ADR-107: chú thích hai giới hạn mà vòng này thu hẹp.
+- Ba trang người mua, lúc tải: `docLink()` rồi `thuPhienCo()` ở cấp tệp. Ô mã rỗng thì hỏi `/me`; 200 có `userId` thì hiện khối
+  hỏi — *"Trình duyệt này đang giữ một phiên còn hạn: người dùng aaaaaaaa…, tổ chức 11111111…. Trang không biết tên người ấy…"* —
+  với hai nút: **Tiếp tục với phiên này** (mở các bước sau, bước 1 vẫn hiện để đổi người) và **Đăng xuất** (`POST /auth/logout`,
+  200 hay 401 đều về bước 1). Không tự mở. Ô mã đã có mã (link mang mã) ⇒ không hỏi. Ô mã được kiểm lại sau `await`: một `/me`
+  về muộn, sau khi người khác đã dán link của mình, bị bỏ.
+- Nút **Đăng xuất** hiện suốt lúc có phiên (sau đăng nhập, sau "Tiếp tục") — trước vòng này không trang nào gọi `/auth/logout`.
+- Trình nghe `hashchange` của ba trang (khoản 204/205) nay ĐÓNG các bước về bước 1 rồi hỏi lại phiên. Trước đây nó chỉ xoá câu
+  báo và để các bước đã mở nguyên dưới cookie của người trước; vì mọi link thư đều trỏ `/login`, người duyệt thứ hai mở link
+  của mình trong cùng thẻ là đúng đường này.
+- Câu báo bỏ *"vai: USER"*: `/me` trả `kind` là LOẠI phiên (`USER`/`AGENT_READONLY`, và cookie trình duyệt luôn là `USER`), không
+  phải vai nghiệp vụ. `/login` nói thêm rằng điều phối giải mã vẫn đòi mã sáu số trong 15 phút gần nhất.
+- Bốn trang: `xoaManhLink()` ngay sau lần mã bị tiêu thụ thành công — `/auth/totp` (ba trang người mua), `/guest/otp/verify`
+  (trang nộp thầu; mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation/src/invitation.ts`). `replaceState` không
+  bắn `hashchange`.
+- `tools/pilot-gia-lap` lệnh `dang-nhap`: in MỘT link (bản trước in `/mo-thau#` và `/tao-thau#` cùng một mã dùng một lần, nên
+  link thứ hai luôn chết) và một dòng *"mở /tao-thau hay /chinh-sach KHÔNG kèm #"*.
+- `eslint.config.js`: global `history`. ADR-020 mục 3 và ADR-107 (Hệ quả, Đo): chú thích `[S1.9102]`.
 
 ## 3. Đo
 
-- `apps/web/src/phuc-vu.test.ts`, khối mới: chạy `thuPhienCo`/`moSauDangNhap`/`xoaManhLink` của từng trang trong `node:vm` với
-  DOM và `goi` giả — có phiên ⇒ đúng các bước mở; ô mã có mã ⇒ 0 lời gọi; 401 và mất mạng ⇒ ở bước 1; `xoaManhLink` đứng SAU
-  lần gọi tiêu thụ mã và trước bước kế; `replaceState` giữ đường và query. Đột biến: bỏ vế *"ô mã có mã thì thôi"* ở `tao-thau`
-  ⇒ đỏ; bỏ lời gọi `thuPhienCo()` ở `chinh-sach` ⇒ đỏ; bỏ `xoaManhLink()` ở `mo-thau` ⇒ đỏ.
-- Chromium 1194 trên cụm thật của pilot giả lập: đăng nhập ở `/login` bằng link từ ô xin link ⇒ `location.hash` rỗng, URL
-  `/login`; sang `/tao-thau`, `/chinh-sach`, tải lại `/login` ⇒ bước 2 hiện, câu *"Đang dùng phiên còn hạn…"*; trong thẻ đang có
-  phiên, mở link đăng nhập của NGƯỜI KHÁC ⇒ bước 2 ẩn, ô mã điền; ngữ cảnh mới không cookie ⇒ `/tao-thau` ở bước 1. Nhà cung
-  cấp (lời mời SX-04 còn lại): mở link, gửi mã, xác minh ⇒ `location.hash` rỗng. 0 lỗi JavaScript.
+- `apps/web/src/phuc-vu.test.ts`, khối `[S1.9102]`: nạp NGUYÊN tệp trang vào `node:vm` — DOM giả dựng từ id và `hidden` của
+  tệp HTML cùng tên, `fetch` giả giữ một "cookie", `history`/`location` giả, import `/lib/chinh-sach.js` là bản thật, các import
+  khác là hàm rỗng. Mỗi trang người mua tám ca: có phiên ⇒ khối hỏi, không bước nào mở, "Tiếp tục" mới mở; "Đăng xuất" ⇒
+  `POST /auth/logout`, về bước 1, nút "Tiếp tục" cũ không mở lại được; link mang mã của B trong trình duyệt có phiên của A ⇒ 0
+  lời gọi; 401 hay mất mạng ⇒ bước 1; `/me` 200 không `userId` hay khác 200 có `userId` ⇒ không hỏi; TOTP sai ⇒ fragment ở lại,
+  TOTP đúng ⇒ `replaceState` đúng một lần, rồi `/me`, rồi các bước mở với *"Đã vào với…"*; đã mở rồi hashchange sang link của B
+  ⇒ các bước đóng; `/me` về muộn sau hashchange ⇒ bị bỏ. Thêm: `/login#<mã tổ chức>` có phiên ⇒ hỏi, không mở; trang nộp thầu:
+  mã OTP sai ⇒ fragment ở lại, đúng ⇒ xoá đúng một lần.
+- Đột biến (chép tệp, chạy khối, trả lại): ở mỗi trang người mua — đảo `thuPhienCo()` lên trước `docLink()`; tự mở thay vì hỏi;
+  bỏ phép kiểm lại ô mã sau `await`; dời `xoaManhLink()` vào nhánh TOTP sai; hashchange không đóng bước; đăng xuất giữ phiên chờ;
+  bỏ `moSauDangNhap(me.body, false)`; bỏ vế `status === 200`; bỏ vế `userId` — cộng dời `xoaManhLink()` vào nhánh OTP sai ở trang
+  nộp thầu. 28 đột biến, cả 28 đỏ. (Vế `userId` sống ở lượt đầu — bỏ nó thì `slice` ném và `catch` nuốt, khối hỏi vẫn ẩn nhưng
+  phiên chờ đã bị giữ; ca ấy nay bấm "Tiếp tục" và đòi không bước nào mở.)
+- Chromium 1194 trên cụm thật của pilot giả lập: xem mục 3c.
+
+## 3b. Soi đối kháng
+
+Workflow hai lăng kính (hành vi/an ninh; test/tài liệu), mỗi phát hiện hai người kiểm độc lập. 11 phát hiện, 10 xác nhận, 1 bác.
+Cả 10 đã sửa:
+
+- **Máy dùng chung** (2/2): bản đầu TỰ MỞ các bước dưới phiên còn hạn. Cookie sống 8 giờ sau khi đóng trình duyệt; câu báo chỉ có
+  tám ký tự UUID và *"vai: USER"*; không nút đăng xuất. Người duyệt B mở `/login` từ dấu trang hay từ tin báo `/login#<mã tổ chức>`
+  thấy các nút Phê duyệt dưới danh tính A, và máy chủ ghi chữ ký của A — cổng chống tự duyệt không chặn được vì danh tính gửi
+  lên đúng là của A. Là hồi quy: trước vòng này thẻ mới đứng ở bước 1. ⇒ khối hỏi + Đăng xuất.
+- **Test không ghim thứ tự `docLink()` → `thuPhienCo()`** (2/2, cao): bản đầu trích hàm bằng regex; đảo hai lời gọi ở cả ba trang
+  vẫn xanh. ⇒ test nạp nguyên tệp.
+- **Lời hứa "người mở link của mình không thấy phiên của người khác"** sai với `/login#<mã tổ chức>` và với hashchange trong cùng
+  thẻ (2/2). ⇒ khối hỏi; hashchange đóng bước.
+- **Evidence nói câu báo "nói rõ phiên của ai"** (2/2): sai — xem trên. ⇒ bỏ "vai", sửa mục 4.
+- **Cổng MFA 15 phút của điều phối giải mã** (1/2): ADR-107 nói dùng lại phiên tới 8 giờ mà không nói điều phối vẫn đòi TOTP
+  gần đây. Người kiểm bác đo đúng rằng trang nhận 422 *"phiên chưa qua MFA trong cửa sổ cho phép"* (`tuChoi` ném
+  `UnsealDeniedError`), không phải 401 như phát hiện viết; phần tài liệu vẫn đúng. ⇒ chú thích ADR-107, STATE, câu báo `/login`.
+- **Lệnh `dang-nhap` của pilot in hai link cùng một mã** (1/2). ⇒ một link.
+- **Nhánh đăng nhập thường không có test** (2/2) và **phép kiểm thứ tự `xoaManhLink` chỉ so vị trí chuỗi** (2/2). ⇒ test nguyên
+  tệp bấm nút Vào với TOTP sai rồi đúng.
+- **"Tải lại trang không mất gì"** mâu thuẫn với mục 4 ở trang nộp thầu (2/2). ⇒ *"xoá nó không làm mất gì"*, và nói rõ trang nộp
+  thầu tải lại vẫn mất đường vào.
+- **Tài liệu phụ** (1/2): ADR-020 mục 3 chưa chú thích; chú thích *"sau khi đọc"*; eslint *"Ba trang"*; mục Đo của ADR-107. ⇒ sửa cả bốn.
+
+Bác: `/me` về muộn ghi đè trạng thái — người kiểm đo được rằng nó chỉ để lại một nhãn cũ, còn mọi lệnh đi theo cookie. Vẫn
+thêm phép kiểm lại ô mã sau `await` vì rẻ.
+
+## 3c. Chromium
+
+Chromium 1194 trên cụm thật của pilot giả lập (`pnpm pilot:gia-lap cum`), mã cuối của vòng, 0 lỗi JavaScript:
+
+- A đăng nhập ở `/login` bằng link từ ô xin link ⇒ `location.hash` rỗng, bước 2 mở, nút Đăng xuất hiện, *"Đã vào với người dùng
+  7917f6f2…"*.
+- Sang `/tao-thau` rồi `/chinh-sach` không link ⇒ khối hỏi hiện, bước 2 ẩn; bấm "Tiếp tục với phiên này" ⇒ bước 2 mở, *"Đang
+  dùng phiên còn hạn của người dùng 7917f6f2…"*. Ở bề rộng 390 px khối hỏi và hai nút nằm cuối bước 1, không tràn ngang.
+- `/login#<mã tổ chức>` (tin báo người duyệt) trong trình duyệt có phiên ⇒ khối hỏi, bước 2 ẩn.
+- Bước đã mở, rồi đổi fragment của CÙNG thẻ sang link của B ⇒ bước 2 ẩn, bước 1 hết "xong", nút Đăng xuất ẩn; B nhập TOTP ⇒
+  *"Đã vào với người dùng de222994…"*, `location.hash` rỗng.
+- Đăng xuất ⇒ về bước 1, *"Đã đăng xuất…"*; `GET /api/me` ⇒ 401; tải lại `/tao-thau` ⇒ không khối hỏi.
+- Ngữ cảnh mới không cookie ⇒ `/chinh-sach` ở bước 1, không khối hỏi.
+- Nhà cung cấp (đo ở bản đầu của vòng, mã trang nộp thầu vòng này chỉ đổi chú thích): mở link, gửi mã, xác minh ⇒
+  `location.hash` rỗng.
 
 ## 4. Giới hạn
 
+- Trang không biết tên người giữ phiên: `/me` cố ý không trả tên hay email, nên khối hỏi chỉ nêu tám ký tự đầu của mã người dùng
+  và của mã tổ chức. Người dùng không nhận ra UUID của mình; điều bảo vệ họ là trang HỎI và có nút Đăng xuất, không phải câu báo.
+- Người bấm "Tiếp tục" với phiên của người khác vẫn thao tác dưới danh tính người ấy — trang hỏi, không chặn được một người cố ý.
+  Một người có quyền dùng máy và cố ý thì trước vòng này cũng dùng được cookie ấy.
+- Đóng thẻ không đăng xuất: cookie còn tới hết 8 giờ. Nút Đăng xuất là việc của người dùng.
+- Dùng lại phiên không làm mới MFA: điều phối giải mã đòi lần nhập mã sáu số trong 15 phút gần nhất; quá hạn là phải xin link mới.
 - Trang nộp thầu chưa dùng lại phiên khách lúc tải; tải lại sau khi xác minh là phải mở lại link — link ấy đã bị tiêu thụ.
-- Hai người dùng chung một máy: người sau thấy phiên của người trước tới khi đăng nhập bằng link của mình — câu báo nói rõ
-  phiên của ai (tám ký tự đầu của mã người dùng và vai). Trang không có nút đăng xuất (`/auth/logout` có ở `api`, không trang
-  nào gọi).
 
 ## 5. Số
 

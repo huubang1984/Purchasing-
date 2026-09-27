@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
+import * as chinhSach from "./chinh-sach.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -185,95 +186,266 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.9102] BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+  // [S1.9102] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
   //
-  // Phiên là cookie `Path=/` sống tới 8 giờ, còn mã đăng nhập chỉ dùng được một lần — trước vòng này mỗi
-  // trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới. Vế dưới CHẠY hai hàm
-  // của từng trang trong `node:vm` với DOM và `goi` giả: có phiên ⇒ các bước mở; ô mã đã có mã ⇒ KHÔNG hỏi
-  // `/me` (người mở link của mình không được thấy phiên của người khác); 401 hay mất mạng ⇒ ở lại bước 1.
+  // Phiên là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một
+  // lần — trước vòng này mỗi trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới.
+  // Nay trang hỏi lúc tải và, có phiên, HỎI người dùng thay vì tự mở: trên máy dùng chung phiên ấy có thể của
+  // người khác (lượt soi đo được một chữ ký duyệt ghi dưới danh tính của người không hề duyệt).
+  //
+  // Bản đầu của vế này trích từng hàm bằng regex và gọi chúng lẻ — lượt soi đảo `thuPhienCo();` lên trước
+  // `docLink();` ở cả ba trang mà vế vẫn xanh, trong khi đúng thứ tự ấy là thứ giữ link của người B không mở
+  // phiên của người A. Nay vế NẠP NGUYÊN TỆP TRANG vào `node:vm`, với DOM giả dựng từ id và `hidden` của tệp
+  // HTML cùng tên, `fetch` giả giữ một "cookie", và `history`/`location` giả: thứ tự ở cấp tệp, trình nghe
+  // nút, trình nghe hashchange đều chạy như trên trình duyệt. Import `/lib/*` được thay bằng hàm rỗng — vế này
+  // không đo tiền hay mật mã.
   // ============================================================================================
-  describe("[S1.9102] dùng lại phiên lúc tải và xoá fragment sau khi dùng mã", () => {
+  describe("[S1.9102] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
     const BUOC: Record<string, readonly string[]> = {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
     };
-    const ham = (js: string, ten: string): string => {
-      const m = new RegExp(`^(?:async )?function ${ten}\\([^)]*\\) \\{[\\s\\S]*?^\\}`, "mu").exec(js)?.[0];
-      expect(m, ten).toBeDefined();
-      return m ?? "";
-    };
-    const chay = async (trang: string, tuyChon: { token: string; me: () => Promise<{ status: number; body: unknown }> }) => {
-      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
-      const el: Record<string, { hidden: boolean; textContent: string; value: string; classList: { add: (c: string) => void } }> = {};
-      const lay = (id: string) =>
-        (el[id] ??= { hidden: true, textContent: "", value: id === "token" ? tuyChon.token : "", classList: { add: () => undefined } });
-      const goiDaGoi: string[] = [];
-      const ctx: Record<string, unknown> = {
-        $: lay,
-        hien: (e: { hidden: boolean }, co: boolean) => { e.hidden = !co; },
-        bao: (e: { textContent: string; hidden: boolean }, chu: string) => { e.textContent = chu; e.hidden = chu === ""; },
-        goi: async (m: string, d: string) => { goiDaGoi.push(`${m} ${d}`); return tuyChon.me(); },
-        napPhienBan: async () => undefined,
-        dienMau: () => undefined,
-        bac: [],
+    const ORG = "11111111-2222-4333-8444-555555555555";
+    const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
+    const B = { userId: "bbbbbbbb-0000-4000-8000-000000000000", sessionId: "s-b", orgId: ORG, kind: "USER" };
+    type Phien = typeof A;
+    type Nghe = Record<string, Array<() => unknown>>;
+    interface PhanTu {
+      hidden: boolean; textContent: string; value: string; disabled: boolean; checked: boolean; className: string;
+      dataset: Record<string, string>; lop: Set<string>; nghe: Nghe;
+      classList: { add: (c: string) => void; remove: (c: string) => void; contains: (c: string) => boolean };
+      addEventListener: (t: string, f: () => unknown) => void;
+      replaceChildren: () => void; append: () => void; appendChild: () => void; setAttribute: () => void;
+      querySelector: () => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
+    }
+    const taoPhanTu = (hidden: boolean): PhanTu => {
+      const lop = new Set<string>();
+      const nghe: Nghe = {};
+      const e: PhanTu = {
+        hidden, textContent: "", value: "", disabled: false, checked: false, className: "", dataset: {}, lop, nghe,
+        classList: { add: (c) => { lop.add(c); }, remove: (c) => { lop.delete(c); }, contains: (c) => lop.has(c) },
+        addEventListener: (t, f) => { (nghe[t] ??= []).push(f); },
+        replaceChildren: () => undefined, append: () => undefined, appendChild: () => undefined, setAttribute: () => undefined,
+        querySelector: () => taoPhanTu(false), querySelectorAll: () => [], focus: () => undefined, remove: () => undefined,
       };
-      runInNewContext(`${ham(js, "moSauDangNhap")}\n${ham(js, "thuPhienCo")}\nketQua = thuPhienCo();`, ctx);
-      await (ctx["ketQua"] as Promise<void>);
-      return { mo: (BUOC[trang] ?? []).every((b) => lay(b).hidden === false), ok1: lay("ok1").textContent, goiDaGoi };
+      return e;
     };
-    const coPhien = async () => ({ status: 200, body: { userId: "7917f6f2-0000-4000-8000-000000000000", kind: "USER" } });
+    // `/lib/chinh-sach.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một hàm trả chuỗi rỗng.
+    const THU_VIEN: Record<string, unknown> = { ...chinhSach };
+    const cho = () => new Promise((r) => { setTimeout(r, 5); });
 
-    it("nop-thau: xoá fragment SAU /guest/otp/verify — lượt tiêu thụ mã lời mời — và trước khi nạp gói", () => {
-      const js = readFileSync(new URL("../trang/nop-thau.js", import.meta.url), "utf8");
-      const xacMinh = js.indexOf('goi("POST", "/guest/otp/verify"');
-      const xoa = js.indexOf("xoaManhLink();", xacMinh);
-      const nap = js.indexOf("await napGoiThau();", xacMinh);
-      expect(xacMinh).toBeGreaterThan(0);
-      expect(xoa).toBeGreaterThan(xacMinh);
-      expect(xoa).toBeLessThan(nap);
-      const goiThay: unknown[][] = [];
-      runInNewContext(`${ham(js, "xoaManhLink")}\nxoaManhLink();`, {
-        history: { replaceState: (...a: unknown[]) => goiThay.push(a) },
-        location: { pathname: "/i", search: "", hash: "#org:ma" },
-      });
-      expect(goiThay).toEqual([[null, "", "/i"]]);
-    });
+    interface TuyChon {
+      hash: string;
+      cookie: Phien | null;
+      /** Ai được cookie sau `/auth/totp` thành công. */
+      nguoiVao?: Phien;
+      /** Trả thay phản hồi mặc định cho một lời gọi; `undefined` là dùng mặc định. */
+      thay?: (lenh: string) => Promise<{ status: number; body: unknown }> | undefined;
+    }
+    const dungTrang = async (trang: string, tuyChon: TuyChon) => {
+      const html = readFileSync(new URL(`../trang/${trang}.html`, import.meta.url), "utf8");
+      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8").replace(
+        /^import \{([^}]*)\} from "[^"]+";$/gmu,
+        (_m, ten: string) => `const {${ten}} = __thuVien;`,
+      );
+      const el: Record<string, PhanTu> = {};
+      for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
+        el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `));
+      }
+      const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false));
+      const trangThai = { cookie: tuyChon.cookie, goi: [] as string[], thayUrl: [] as string[] };
+      const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
+      const ngheCuaSo: Nghe = {};
+      const fetch = async (url: string, init: { method: string }) => {
+        const lenh = `${init.method} ${url.replace(/^\/api/u, "")}`;
+        trangThai.goi.push(lenh);
+        const r = (await tuyChon.thay?.(lenh)) ?? (() => {
+          if (lenh === "GET /me") return trangThai.cookie === null ? { status: 401, body: { error: "x" } } : { status: 200, body: trangThai.cookie };
+          if (lenh === "POST /auth/redeem") return { status: 200, body: { needsEnrollment: false } };
+          if (lenh === "POST /auth/totp") { trangThai.cookie = tuyChon.nguoiVao ?? B; return { status: 200, body: { ok: true } }; }
+          if (lenh === "POST /auth/logout") {
+            const co = trangThai.cookie !== null;
+            trangThai.cookie = null;
+            return co ? { status: 200, body: { ok: true } } : { status: 401, body: { error: "x" } };
+          }
+          if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
+          return { status: 401, body: { error: "x" } };
+        })();
+        return { status: r.status, text: () => Promise.resolve(JSON.stringify(r.body)) };
+      };
+      const thuVien = new Proxy(THU_VIEN, { get: (t, k: string) => (k in t ? t[k] : () => "") });
+      runInNewContext(js, {
+        __thuVien: thuVien,
+        document: { getElementById: lay, createElement: () => taoPhanTu(false), body: taoPhanTu(false) },
+        window: { addEventListener: (t: string, f: () => unknown) => { (ngheCuaSo[t] ??= []).push(f); } },
+        location: loc,
+        history: {
+          replaceState: (_s: unknown, _t: string, url: string) => {
+            trangThai.thayUrl.push(url);
+            loc.hash = "";
+          },
+        },
+        localStorage: { getItem: () => null, setItem: () => undefined },
+        fetch, console, setTimeout, clearTimeout, URL, decodeURIComponent,
+      }, { filename: `${trang}.js` });
+      await cho();
+      return {
+        el: lay,
+        trangThai,
+        loc,
+        buocMo: () => (BUOC[trang] ?? []).filter((b) => lay(b).hidden === false),
+        bam: async (id: string) => {
+          for (const f of lay(id).nghe["click"] ?? []) await f();
+          await cho();
+        },
+        doiFragment: async (h: string) => {
+          loc.hash = h;
+          for (const f of ngheCuaSo["hashchange"] ?? []) await f();
+          await cho();
+        },
+      };
+    };
 
     for (const trang of Object.keys(BUOC)) {
-      it(`${trang}: có phiên còn hạn ⇒ các bước mở, và câu báo nói đó là phiên đang dùng`, async () => {
-        const r = await chay(trang, { token: "", me: coPhien });
-        expect(r.goiDaGoi).toEqual(["GET /me"]);
-        expect(r.mo).toBe(true);
-        expect(r.ok1).toMatch(/Đang dùng phiên còn hạn/u);
+      const tatCa = BUOC[trang] ?? [];
+
+      it(`${trang}: có phiên còn hạn ⇒ HỎI, không tự mở; "Tiếp tục" mới mở, và câu báo không nói "vai"`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        expect(p.trangThai.goi).toEqual(["GET /me"]);
+        expect(p.buocMo(), "không bước nào được tự mở dưới một phiên chưa ai nhận").toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(false);
+        expect(p.el("hoi-phien").textContent).toContain("aaaaaaaa…");
+        expect(p.el("nut-dung-phien").hidden).toBe(false);
+        expect(p.el("nut-dang-xuat").hidden).toBe(false);
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual(tatCa);
+        expect(p.el("b1").lop.has("xong")).toBe(true);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.el("nut-dang-xuat").hidden, "đang dùng phiên thì phải đăng xuất được").toBe(false);
+        expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên còn hạn của người dùng aaaaaaaa…/u);
+        expect(p.el("ok1").textContent).not.toMatch(/vai/u);
       });
-      it(`${trang}: ô mã đã có mã (mở link của mình) ⇒ KHÔNG hỏi /me, không mở bước nào`, async () => {
-        const r = await chay(trang, { token: "maDangNhapCuaNguoiMoLink", me: coPhien });
-        expect(r.goiDaGoi).toEqual([]);
-        expect(r.mo).toBe(false);
+
+      it(`${trang}: "Đăng xuất" ở khối hỏi ⇒ POST /auth/logout, về bước 1, cookie không còn`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        await p.bam("nut-dang-xuat");
+        expect(p.trangThai.goi).toEqual(["GET /me", "POST /auth/logout"]);
+        expect(p.trangThai.cookie).toBeNull();
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.el("nut-dang-xuat").hidden).toBe(true);
+        expect(p.el("ok1").textContent).toMatch(/Đã đăng xuất/u);
+        // Nút "Tiếp tục" cũ không mở lại được phiên đã thu hồi.
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual([]);
       });
-      it(`${trang}: 401 hay mất mạng ⇒ ở lại bước đăng nhập, không ném`, async () => {
-        expect((await chay(trang, { token: "", me: async () => ({ status: 401, body: null }) })).mo).toBe(false);
-        expect((await chay(trang, { token: "", me: () => Promise.reject(new Error("mat mang")) })).mo).toBe(false);
+
+      it(`${trang}: link mang mã (của người B) mở trong trình duyệt có phiên của A ⇒ KHÔNG hỏi /me — thứ tự docLink() rồi thuPhienCo() ở cấp tệp`, async () => {
+        const p = await dungTrang(trang, { hash: `#${ORG}:maDangNhapCuaB`, cookie: A });
+        expect(p.el("token").value).toBe("maDangNhapCuaB");
+        expect(p.trangThai.goi).toEqual([]);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
       });
-      it(`${trang}: xoá fragment SAU /auth/totp và TRƯỚC /me; replaceState giữ đường và query`, () => {
-        const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
-        const totp = js.indexOf('goi("POST", "/auth/totp"');
-        const xoa = js.indexOf("xoaManhLink();", totp);
-        const me = js.indexOf('goi("GET", "/me")', totp);
-        // Hàm có mà không ai gọi lúc tải thì vế trên xanh một cách rỗng tuếch.
-        expect(js, "trang phải gọi thuPhienCo() ở cấp tệp").toMatch(/^thuPhienCo\(\);$/mu);
-        expect(totp).toBeGreaterThan(0);
-        expect(xoa).toBeGreaterThan(totp);
-        expect(xoa).toBeLessThan(me);
-        const goiThay: unknown[][] = [];
-        runInNewContext(`${ham(js, "xoaManhLink")}\nxoaManhLink();`, {
-          history: { replaceState: (...a: unknown[]) => goiThay.push(a) },
-          location: { pathname: "/login", search: "?x=1", hash: "#org:ma" },
+
+      it(`${trang}: không cookie (401) hay mất mạng ⇒ ở lại bước 1, không khối hỏi`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: null });
+        expect(p.trangThai.goi).toEqual(["GET /me"]);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        const q = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.reject(new Error("mat mang")) : undefined) });
+        expect(q.buocMo()).toEqual([]);
+        expect(q.el("hoi-phien").hidden).toBe(true);
+      });
+
+      it(`${trang}: /me 200 mà không có userId hay /me khác 200 mà có userId ⇒ không hỏi`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.resolve({ status: 200, body: { orgId: ORG } }) : undefined) });
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo(), "phiên không có userId không được giữ chờ để mở").toEqual([]);
+        const q = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.resolve({ status: 403, body: A }) : undefined) });
+        expect(q.el("hoi-phien").hidden).toBe(true);
+      });
+
+      it(`${trang}: đăng nhập bằng link ⇒ xoá fragment đúng MỘT lần sau /auth/totp thành công; TOTP sai thì fragment ở lại`, async () => {
+        const p = await dungTrang(trang, {
+          hash: `#${ORG}:maCuaB`, cookie: null,
+          thay: (l) => (l === "POST /auth/totp" && p.trangThai.goi.filter((g) => g === l).length === 1 ? Promise.resolve({ status: 401, body: { reason: "BAD_CODE" } }) : undefined),
         });
-        expect(goiThay).toEqual([[null, "", "/login?x=1"]]);
+        p.el("ma").value = "123456";
+        await p.bam("nut-vao");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp"]);
+        expect(p.trangThai.thayUrl, "mã chưa tiêu thụ thì chưa được xoá").toEqual([]);
+        expect(p.loc.hash).toBe(`#${ORG}:maCuaB`);
+        expect(p.buocMo()).toEqual([]);
+        await p.bam("nut-vao");
+        const sauTotp = p.trangThai.goi.lastIndexOf("POST /auth/totp");
+        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(trang === "chinh-sach" ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.thayUrl).toEqual([p.loc.pathname]);
+        expect(p.loc.hash).toBe("");
+        expect(p.buocMo()).toEqual(tatCa);
+        expect(p.el("ok1").textContent).toMatch(/Đã vào với người dùng bbbbbbbb…/u);
+        expect(p.el("nut-dang-xuat").hidden).toBe(false);
+      });
+
+      it(`${trang}: đã mở các bước rồi người khác mở link của mình trong CÙNG thẻ (hashchange) ⇒ các bước đóng, không hỏi lại`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual(tatCa);
+        await p.doiFragment(`#${ORG}:maCuaB`);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("b1").lop.has("xong")).toBe(false);
+        expect(p.el("nut-dang-xuat").hidden).toBe(true);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.trangThai.goi).toEqual(["GET /me", ...(trang === "chinh-sach" ? ["GET /policy/versions"] : [])]);
+      });
+
+      it(`${trang}: /me của lượt cũ về SAU khi fragment đã đổi sang link của B ⇒ bị bỏ, không mở khối hỏi`, async () => {
+        let tha: () => void = () => undefined;
+        const p = await dungTrang(trang, {
+          hash: "", cookie: A,
+          thay: (l) => (l === "GET /me" ? new Promise((r) => { tha = () => { r({ status: 200, body: A }); }; }) : undefined),
+        });
+        await p.doiFragment(`#${ORG}:maCuaB`);
+        tha();
+        await cho();
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.buocMo()).toEqual([]);
       });
     }
+
+    it("mo-thau: tin báo người duyệt `/login#<mã tổ chức>` (không mã) trong trình duyệt có phiên ⇒ HỎI, không tự mở", async () => {
+      const p = await dungTrang("mo-thau", { hash: `#${ORG}`, cookie: A });
+      expect(p.el("org").value).toBe(ORG);
+      expect(p.el("token").value).toBe("");
+      expect(p.trangThai.goi).toEqual(["GET /me"]);
+      expect(p.buocMo()).toEqual([]);
+      expect(p.el("hoi-phien").hidden).toBe(false);
+    });
+
+    it("nop-thau: xoá fragment đúng MỘT lần sau /guest/otp/verify thành công; mã sai thì fragment ở lại", async () => {
+      let lanXac = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: `#${ORG}:maLoiMoi`, cookie: null,
+        thay: (l) => {
+          if (l === "POST /guest/redeem") return Promise.resolve({ status: 200, body: { linkChannel: "EMAIL", otpChannels: ["EMAIL"] } });
+          if (l === "POST /guest/otp/verify") { lanXac += 1; return Promise.resolve(lanXac === 1 ? { status: 401, body: { error: "sai" } } : { status: 200, body: {} }); }
+          return undefined;
+        },
+      });
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.trangThai.thayUrl).toEqual([]);
+      expect(p.loc.hash).toBe(`#${ORG}:maLoiMoi`);
+      await p.bam("nut-xac");
+      expect(p.trangThai.thayUrl).toEqual(["/nop-thau"]);
+      expect(p.loc.hash).toBe("");
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {

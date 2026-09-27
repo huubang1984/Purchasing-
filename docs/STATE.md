@@ -13,14 +13,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-27 / S1.9102] BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG.**
-Phiên người mua là cookie `Path=/` sống tới 8 giờ, còn mã đăng nhập chỉ dùng được một lần (`startUserSession` tiêu thụ nó);
-tới trước vòng này `/login`, `/tao-thau`, `/chinh-sach` chỉ hỏi `/me` SAU khi đăng nhập, nên sang trang khác là phải xin link
-mới — mà link mới lại dẫn về `/login`. Nay mỗi trang hỏi `/me` lúc tải và mở các bước sau khi phiên còn (bước 1 vẫn hiện để
-đổi người), TRỪ khi fragment mang một mã đăng nhập — người mở link của mình không được thấy phiên của người khác. Bốn trang
+**[2026-09-27 / S1.9102] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG.**
+Phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một lần
+(`startUserSession` tiêu thụ nó); tới trước vòng này `/login`, `/tao-thau`, `/chinh-sach` chỉ hỏi `/me` SAU khi đăng nhập, nên
+sang trang khác là phải xin link mới — mà link mới lại dẫn về `/login`. Nay mỗi trang hỏi `/me` lúc tải và, có phiên còn hạn, HỎI
+"Tiếp tục với phiên này" hay "Đăng xuất" (`POST /auth/logout`, trước đây không trang nào gọi) — KHÔNG tự mở các bước: lượt soi
+đối kháng đo được rằng bản tự mở, trên máy dùng chung, để người sau bấm Phê duyệt dưới danh tính người trước. Link mang mã đăng
+nhập thì trang không hỏi; người khác mở link của mình trong CÙNG thẻ (hashchange) thì các bước đóng về bước 1 — trước đây chúng
+để nguyên dưới cookie cũ. Dùng lại phiên không làm mới MFA: điều phối giải mã vẫn đòi mã sáu số trong 15 phút gần nhất. Bốn trang
 xoá fragment (`history.replaceState`, ADR-020 mục 3) ngay sau lần mã bị tiêu thụ: `/auth/totp` ở ba trang người mua,
-`/guest/otp/verify` ở trang nộp thầu. Đo trên Chromium và cụm thật. Không migration, không ADR, không đổi hợp đồng HTTP, không
-đổi số khoản. Bằng chứng: `evidence/security-reviews.md` §S1.9102.
+`/guest/otp/verify` ở trang nộp thầu. Test nạp nguyên tệp trang vào `node:vm`; đo trên Chromium và cụm thật. Không migration,
+không ADR, không đổi hợp đồng HTTP, không đổi số khoản. Bằng chứng: `evidence/security-reviews.md` §S1.9102.
 
 **[2026-09-27 / S1.173] ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK ĐĂNG NHẬP VÀ LINK MỜI MANG MÃ TỔ CHỨC; TRANG `/login` CÓ Ô XIN LINK.**
 Chủ dự án chọn, gộp cả ba kênh gửi (ADR-107, sửa dạng link của ADR-020 mục 3). Bộ gửi SES, SMS, Zalo và hộp thư dev dựng

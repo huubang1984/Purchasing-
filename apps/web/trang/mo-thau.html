@@ -29,6 +29,11 @@
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
     <div class="bao luu" id="ghi-danh" hidden></div>
+    <!-- [S1.9102] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước: cookie phiên sống
+         tới 8 giờ kể cả sau khi đóng trình duyệt, và trên máy dùng chung nó có thể của người khác. -->
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
+    <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
     <!-- [S1.173 / ADR-107] Tới trước vòng này không trang nào gọi `/auth/link`: người dùng trên prod không
          tự xin được link đăng nhập. Máy chủ trả CÙNG một 200 cho mọi email, có người hay không — trang cũng
          nói cùng một câu. -->

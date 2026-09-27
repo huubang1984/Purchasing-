@@ -1875,9 +1875,12 @@ Ba ràng buộc đi kèm, cả ba cưỡng chế được:
 
 - **Magic link = ~~`https://<host>/i#<token>`~~ [S1.173 / ADR-107] `https://<host>/i#<orgId>:<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
   fragment lên máy chủ, không ghi vào log truy cập, không đi vào `Referer`. Trang `/i` là tĩnh;
-  JS đọc `location.hash`, xoá nó (`history.replaceState`), rồi **POST** token trong thân JSON tới
+  JS đọc `location.hash`, ~~xoá nó (`history.replaceState`), rồi~~ **POST** token trong thân JSON tới
   `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: ~~`/login#<token>`~~ **[S1.173 / ADR-107]**
   `/login#<orgId>:<token>` — hai route redeem đòi cả hai, và thư/tin nhắn không có chỗ nào khác nói tổ chức.
+  **[S1.9102]** Trang xoá fragment (`history.replaceState`) SAU lần mã bị tiêu thụ — `/guest/otp/verify` ở `/i`,
+  `/auth/totp` ở ba trang người mua — không phải lúc đọc: trước lúc ấy mã vẫn còn dùng được, và tải lại trang hay gõ
+  sai mã sáu số vẫn cần nó. Tới S1.9102 không trang nào xoá (ADR-107, mục Hệ quả).
 - **Mọi phản hồi** mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (trừ
   `public-keys`, đã có chính sách riêng), `X-Content-Type-Options: nosniff`.
 - **Phiên khách** đi trong cookie như phiên người mua; **mã OTP** chỉ đi trong thân POST.
@@ -8323,10 +8326,15 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   nào của `apps/web` gọi `replaceState`. Token nằm lại trong thanh địa chỉ và lịch sử trình duyệt tới khi dùng hoặc hết hạn.
   Vòng này KHÔNG đổi điều ấy (xoá fragment thì tải lại trang là mất mã, và trình nghe `hashchange` của bốn trang dựa vào
   fragment); ghi ra để chủ dự án xếp. **[S1.9102]** Bốn trang nay xoá fragment ngay sau lần mã bị tiêu thụ — `/auth/totp` ở ba trang người mua,
-  `/guest/otp/verify` ở trang nộp thầu (mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation`) — nên tải lại
-  trang không mất gì.
-- **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.9102]** Và nay chỉ phải xin MỘT lần: ba trang dùng lại phiên
-  còn hạn lúc tải (cookie `Path=/`, tới 8 giờ), nên đăng nhập ở `/login` rồi sang hai trang kia không cần link mới.
+  `/guest/otp/verify` ở trang nộp thầu (mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation`) — nên xoá nó
+  không làm mất gì. Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
+  mời lại, có xoá fragment hay không.
+- **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.9102]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
+  tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
+  "Đăng xuất" (`POST /auth/logout`) — không tự mở, vì trên máy dùng chung phiên ấy có thể của người khác. Dùng lại phiên
+  KHÔNG làm mới MFA: điều phối giải mã vẫn đòi lần nhập mã sáu số trong 15 phút gần nhất (`UNSEAL_MFA_MAX_AGE_SECONDS`), và
+  không route nào làm mới `mfa_verified_at` ngoài một lần đăng nhập mới — quá hạn thì trang nhận 422 *"phiên chưa qua MFA trong
+  cửa sổ cho phép"* và phải xin link mới.
 - **Người chưa từng vào trên máy này và không còn link nào** vẫn phải được ai đó cho mã tổ chức — trang không tra được
   tổ chức từ email (đó là hướng ⒞, đã bác).
 
@@ -8338,4 +8346,7 @@ trả `kenh-so.ts` về `/i#<token>` ⇒ đỏ; bỏ lần xoá ô mã ở `/log
 đổi đường của tin ấy sang một trang không có ⇒ đỏ. Pilot giả lập
 (`tools/pilot-gia-lap`, `tokenTuLink` nay đòi mã tổ chức trong link khớp tổ chức của tin) 10/10 kịch bản, cô lập 2/2.
 Chromium trên cụm thật: `/login#<org>` điền ô tổ chức; email lạ và email thật nhận cùng một câu; thư tới mang
-`/login#<org>:<token>`, mở ra hai ô điền sẵn, TOTP ⇒ vào; 0 lỗi JavaScript.
+`/login#<org>:<token>`, mở ra hai ô điền sẵn, TOTP ⇒ vào; 0 lỗi JavaScript. **[S1.9102]** Cùng tệp test nạp NGUYÊN tệp ba
+trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ HTML cùng tên): hỏi-không-tự-mở, đăng xuất, thứ tự
+`docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
+(`evidence/security-reviews.md` §S1.9102).
