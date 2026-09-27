@@ -64,6 +64,15 @@ describe("thay số tạm", () => {
     ).toBe("const PORT = 9201; // [S1.141 / ADR-083…085] `068_moi.sql`; id 'ab9201cd', 1234-9101-5678, Xy9201Qz==");
   });
 
+  it("[dòng khai của hardening] tên migration KHÔNG đuôi được thay; đuôi khác `.sql` và tên dính chữ, số đứng yên", () => {
+    // `('public', 'bang', '95NN_ten')` là khuôn các danh sách khai của `hardening.always.sql`: chúng so
+    // `mig || '.sql'` với `schema_migrations`. Thiếu dạng này, tệp đổi tên mà dòng khai đứng nguyên.
+    expect(thaySoTam("('public', 'bang_moi', '9501_moi'), -- version = '9501_moi.sql'", BANG_A, false)).toBe(
+      "('public', 'bang_moi', '068_moi'), -- version = '068_moi.sql'",
+    );
+    expect(thaySoTam("9501_moi.txt x9501_moi 19501_moi 9502_moi", BANG_A, false)).toBe("9501_moi.txt x9501_moi 19501_moi 9502_moi");
+  });
+
   it("[review #155 mục 1] trong Markdown, số trần dính chữ, số, `_` hay `-` đứng yên", () => {
     expect(thaySoTam("uuid 1234-9101-5678, sha Xy9201Qz, ab9201cd, x_9401, `9501`", BANG_A, true)).toBe(
       "uuid 1234-9101-5678, sha Xy9201Qz, ab9201cd, x_9401, `068`",
@@ -117,6 +126,13 @@ describe("thu hồi theo token", () => {
     const duoi = new Set(["_moi.sql"]);
     expect(thuHoiTheoToken("S1.141, ADR-083, khoản nợ 243, `068_moi.sql`, `068_khac.sql`, `068`", BANG_A, duoi, false)).toBe(
       "S1.9101, ADR-9201, khoản nợ 9401, `9501_moi.sql`, `068_khac.sql`, `068`",
+    );
+  });
+
+  it("[dòng khai của hardening] tên migration KHÔNG đuôi của nhánh cũng về số tạm; tên của master đứng yên", () => {
+    const duoi = new Set(["_moi.sql"]);
+    expect(thuHoiTheoToken("('public', 'b', '068_moi'), ('public', 'c', '068_khac'), '068_moi.txt'", BANG_A, duoi, false)).toBe(
+      "('public', 'b', '9501_moi'), ('public', 'c', '068_khac'), '068_moi.txt'",
     );
   });
 
@@ -430,6 +446,17 @@ describe("kho thật — một nhánh cấp số lần đầu", () => {
     expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
   });
 
+  it("[dòng khai của hardening] dòng khai tên migration không đuôi theo đúng số mới của tệp; `--kiem` sạch", () => {
+    const goc = dungKho();
+    lamViec(goc, "a", 1);
+    ghi(goc, "db/migrations/hardening.always.sql", "  BANG ('public', 'bang_a', '9501_a');\n  -- version = '9501_a.sql'\n");
+    commit(goc, "a: khai bảng");
+    capVaCommit(goc, "a");
+    expect(doc(goc, "db/migrations/hardening.always.sql")).toBe("  BANG ('public', 'bang_a', '002_a');\n  -- version = '002_a.sql'\n");
+    expect(existsSync(join(goc, "db/migrations/002_a.sql"))).toBe(true);
+    expect(kiem(goc)).toEqual([]);
+  });
+
   it("symlink chưa theo dõi (như `node_modules` trỏ đi nơi khác) không bị đọc như văn bản — kể cả tệp PHÍA SAU nó", () => {
     const goc = dungKho();
     lamViec(goc, "a", 1);
@@ -646,6 +673,11 @@ describe("--kiem", () => {
     const loiMoi = kiem(goc);
     expect(loiMoi.some((l) => l.startsWith("còn số tạm: Handoff.md") && l.includes("Chỉ nhắc khoản 9401"))).toBe(true);
     expect(loiMoi.some((l) => l.startsWith("còn số tạm: Handoff.md") && l.includes("Và tệp `9501_a.sql`"))).toBe(true);
+
+    // [dòng khai của hardening] Dạng không đuôi còn sót cũng bị bắt — trước bản vá, lệnh im ở đây.
+    ghi(goc, "db/khai.sql", "('public', 'bang_a', '9501_a');\n");
+    commit(goc, "a: khai không đuôi");
+    expect(kiem(goc).some((l) => l.startsWith("còn số tạm: db/khai.sql") && l.includes("'9501_a'"))).toBe(true);
 
     const sach = dungKho();
     ghi(sach, "db/migrations/001_hai.sql", "SELECT 2;\n");

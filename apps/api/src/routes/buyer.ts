@@ -461,7 +461,7 @@ const doc: readonly BuyerReadRoute[] = [
 ];
 
 // ----------------------------------------------------------------------------------------------
-// [S1.156 / khoản 243] THÂN CỦA `POST /rfqs/:rfqId/evaluate` — DANH SÁCH TRẮNG, không mang một
+// [S1.157 / khoản 243] THÂN CỦA `POST /rfqs/:rfqId/evaluate` — DANH SÁCH TRẮNG, không mang một
 // mức giá nào.
 //
 // `taoLuotDanhGia` trả cả `lines` — `effectiveCost`, `rank` và `components` của TỪNG báo giá, tức
@@ -510,7 +510,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     // sổ `PERMISSION_DENIED`, và lúc ấy lượt đánh giá chưa tồn tại.
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    // [S1.156 / khoản 243] Thân là `thanLuotCham` — xem khối ngay trên mảng này.
+    // [S1.157 / khoản 243] Thân là `thanLuotCham` — xem khối ngay trên mảng này.
     handler: async (ctx) => ({
       status: 201,
       body: {

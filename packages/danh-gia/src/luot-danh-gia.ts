@@ -131,12 +131,13 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
   readonly version: number;
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
 }> {
+  // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách hiện hành: một phiên bản có bậc chưa
+  // có chữ ký thứ hai không đổi được trọng số chấm (ADR-082 ⑺). Hệ quả phụ, nói ra: bản cũ bỏ qua
+  // `effective_from`, nên một phiên bản hẹn giờ được chấm theo TRƯỚC giờ hiệu lực của nó.
   const { rows } = await client.query<HangChinhSach>(
     `SELECT o.id, o.version, o.eval_components
        FROM public.org_procurement_policies o
-      WHERE o.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-      ORDER BY o.version DESC
-      LIMIT 1`,
+      WHERE o.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now())`,
     [orgId],
   );
   const cs = rows[0];
