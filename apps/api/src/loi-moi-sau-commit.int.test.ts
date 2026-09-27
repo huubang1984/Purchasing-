@@ -66,6 +66,7 @@ let apiPool: pg.Pool;
 let auditPool: pg.Pool;
 let orgX = "";
 let rfqX = "";
+let csX = "";
 let pm: Nguoi;
 let gocMacDinh = "";
 let gocTranNgan = "";
@@ -81,6 +82,8 @@ const dk: { cheDo: CheDoGui; daGoi: number; tha: (() => void) | null; tokenDaCom
   phienThuHoi: "",
 };
 const daGui: { readonly invitationId: string; readonly token: string; readonly destination: string; readonly channel: string }[] = [];
+/** [S1.181 / lượt soi] Dịch vụ test của bộ điều phối — giữ tham chiếu để đọc mã OTP đã "gửi" (`otpDaGui`). */
+const dv = dichVuTest();
 
 function datCheDo(cheDo: CheDoGui, phienThuHoi = ""): void {
   dk.cheDo = cheDo;
@@ -385,7 +388,7 @@ beforeAll(async () => {
   auditPool = createPool(db.connectionString, 4, { role: "app_api" });
 
   // RFQ OPEN có khoá — cùng công thức với guest.int.test.ts.
-  const cs = (
+  csX = (
     await db.pool.query<{ id: string }>(
       "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
         "VALUES ($1, 1, '10000000000.00', 'VND', $2, $3) RETURNING id",
@@ -405,7 +408,7 @@ beforeAll(async () => {
   );
   await db.pool.query(
     "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) VALUES ($1, $2, '1000.00', 'VND', $3, $4, $5)",
-    [orgX, rfqX, cs, pm.id, pm.sessionId],
+    [orgX, rfqX, csX, pm.id, pm.sessionId],
   );
   await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [
     rfqX,
@@ -423,7 +426,7 @@ beforeAll(async () => {
   });
 
   const services: ApiServices = {
-    ...dichVuTest().services,
+    ...dv.services,
     invitationLinkSender: {
       name: "bo-gui-dieu-khien",
       send: async (m) => {
@@ -641,8 +644,9 @@ describe("[S1.70 / khoản 124] POST /rfqs/:rfqId/invitations — link mời đi
 // ---------------------------------------------------------------------------------------------
 // [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời — đi trên cùng đường sau commit, cùng bộ gửi do test điều khiển.
 // ---------------------------------------------------------------------------------------------
-/** Thân `502` của route gửi lại khi link không gửi được — lời mời giữ nguyên, chỉ token vừa phát bị thu hồi. */
-const THAN_502_GUI_LAI = { error: "khong gui duoc link moi, link moi da thu hoi" };
+/** Thân `502` của route gửi lại khi link không gửi được — lời mời giữ nguyên, token vừa phát bị thu hồi, và **[lượt soi]** thân nói
+ * cả điều bên mua không tự thấy: link cũ chưa dùng đã hết hiệu lực từ giao dịch đã commit. */
+const THAN_502_GUI_LAI = { error: "khong gui duoc link moi; link moi da thu hoi, link cu chua dung da het hieu luc" };
 
 async function goiCoHeader(duong: string, cookie: string): Promise<{ status: number; body: string; retryAfter: string | null }> {
   const res = await fetch(`${gocMacDinh}${duong}`, { method: "POST", headers: { cookie } });
@@ -668,6 +672,80 @@ async function tokenDungDuoc(token: string): Promise<string | null> {
   );
 }
 
+/** [S1.181 / lượt soi] Lời gọi của trang nộp thầu — không cookie. */
+async function goiKhach(duong: string, than: unknown): Promise<PhanHoi> {
+  const res = await fetch(`${gocMacDinh}${duong}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(than) });
+  return { status: res.status, body: await res.text() };
+}
+
+/** [S1.181 / lượt soi] Một gói OPEN mới có khoá, cùng công thức với `rfqX` — cho các ca phải đổi hạn hay trạng thái của CHÍNH gói. */
+async function goiMoMoi(ten: string): Promise<string> {
+  const rfq = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, now() + interval '7 days', false, $3, $4) RETURNING id",
+      [orgX, ten, pm.id, pm.sessionId],
+    )
+  ).rows[0]!.id;
+  await db.pool.query(
+    "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) VALUES ($1, $2, 1, 'Thep', '1.0000', 'tam', $3, $4)",
+    [orgX, rfq, pm.id, pm.sessionId],
+  );
+  await db.pool.query(
+    "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) VALUES ($1, $2, '1000.00', 'VND', $3, $4, $5)",
+    [orgX, rfq, csX, pm.id, pm.sessionId],
+  );
+  await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfq, pm.id, pm.sessionId]);
+  await kyMotChuKy(orgX, rfq);
+  await withTenant(apiPool, orgX, async (c) => {
+    await issueRfqKeyPair(c, orgX, { rfqId: rfq, actorSessionId: pm.sessionId, orgKeys: dichVuTest().services.orgKeyProvisioner });
+    await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfq, pm.id, pm.sessionId]);
+  });
+  return rfq;
+}
+
+/**
+ * [S1.181 / lượt soi] Dựng trạng thái mà chỉ THỜI GIAN mới dựng được trên đường thật: hạn gói đã qua (trigger máy trạng thái cấm
+ * lùi hạn và đòi cửa sổ 1 giờ lúc mở), vòng BAFO mở SAU hạn gói. Khuôn `bidding.int.test.ts` [INV-C1] — tắt trigger để dựng
+ * fixture, trigger ĐANG ĐO (ở đây: không trigger nào, phép đo nằm trong `reissueInvitationLink`) không liên quan — nhưng trong
+ * MỘT giao dịch superuser: tắt MỌI trigger của các bảng nêu tên (cả trigger khoá ngoại), chạy câu dựng, bật lại ĐÚNG trạng thái cũ
+ * của từng trigger (hardening để chúng ở `ENABLE ALWAYS`) rồi mới COMMIT. `session_replication_role = replica` không đủ — trigger
+ * canh là ENABLE ALWAYS, và đó chính là lý do chúng được để như vậy.
+ */
+async function dungTrangThai(bang: readonly string[], cau: readonly (readonly [string, readonly unknown[]])[]): Promise<void> {
+  const c = await db.pool.connect();
+  const trangThai = async (): Promise<string[]> =>
+    (
+      await c.query<{ d: string }>(
+        "SELECT tgrelid::regclass::text || '.' || tgname || '=' || tgenabled::text AS d FROM pg_catalog.pg_trigger WHERE tgrelid = ANY ($1::regclass[]) ORDER BY 1",
+        [[...bang]],
+      )
+    ).rows.map((r) => r.d);
+  try {
+    await c.query("BEGIN");
+    const truoc = await trangThai();
+    const { rows: khacGoc } = await c.query<{ bang: string; ten: string; bat: string }>(
+      "SELECT tgrelid::regclass::text AS bang, tgname AS ten, tgenabled::text AS bat FROM pg_catalog.pg_trigger " +
+        "WHERE tgrelid = ANY ($1::regclass[]) AND tgenabled <> 'O'",
+      [[...bang]],
+    );
+    for (const b of bang) await c.query(`ALTER TABLE ${b} DISABLE TRIGGER ALL`);
+    for (const [sql, thamSo] of cau) await c.query(sql, [...thamSo]);
+    for (const b of bang) await c.query(`ALTER TABLE ${b} ENABLE TRIGGER ALL`);
+    for (const t of khacGoc) {
+      const lenh = t.bat === "A" ? "ENABLE ALWAYS TRIGGER" : t.bat === "R" ? "ENABLE REPLICA TRIGGER" : "DISABLE TRIGGER";
+      await c.query(`ALTER TABLE ${t.bang} ${lenh} "${t.ten}"`);
+    }
+    expect(await trangThai(), "trigger phải về ĐÚNG trạng thái cũ trước COMMIT").toEqual(truoc);
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK");
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
 describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi lại link cho CÙNG lời mời", () => {
   it("token MỚI cho chính lời mời ấy, tới đúng người liên hệ và kênh; link cũ chưa dùng hết hiệu lực; lời mời không đổi; sổ ghi INVITATION_LINK_REISSUED rồi MAGIC_LINK_TOKEN_ISSUED", async () => {
     const nguoiMoi = await taoNguoi("gl-1-k124@vidu.vn", "BUYER");
@@ -676,7 +754,9 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
     const truoc = daGui.length;
     const r = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
     expect(r.status, r.body).toBe(200);
-    expect(JSON.parse(r.body)).toEqual({ reissued: true, revokedLinks: 1 });
+    // [lượt soi] Thân KHÔNG mang số link cũ bị thu hồi: 0 hay 1 là "nhà cung cấp đã xác minh link hay chưa" — thứ `BUYER` không
+    // được đọc (A6). Con số nằm trong sổ, dưới quyền đọc sổ.
+    expect(JSON.parse(r.body)).toEqual({ reissued: true });
     expect(daGui).toHaveLength(truoc + 1);
     const moi = daGui.at(-1)!;
     expect(moi).toMatchObject({ invitationId: id, destination: ncc.email, channel: "EMAIL" });
@@ -707,6 +787,9 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
     expect(daGui).toHaveLength(truocGui);
     expect((await suKienCuaLoiMoi(id)).length).toBe(truocSo);
     expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: LINK_MOI_TOI_DA_MOI_GIO, tokenSong: 1 });
+    // [lượt soi] Cửa sổ là MỘT GIỜ, không ngắn hơn: dời mốc tạo của cả ba lùi 50 phút thì vẫn trong cửa sổ, vẫn 429.
+    await db.pool.query("UPDATE rfq_invitation_tokens SET created_at = created_at - interval '50 minutes' WHERE invitation_id = $1", [id]);
+    expect((await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie)).status).toBe(429);
     // Token đã thu hồi vẫn bị đếm: dời mốc tạo của cả ba ra ngoài cửa sổ thì gửi lại được ngay.
     await db.pool.query("UPDATE rfq_invitation_tokens SET created_at = created_at - interval '2 hours' WHERE invitation_id = $1", [id]);
     expect((await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie)).status).toBe(200);
@@ -844,9 +927,137 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
     datCheDo("thuong");
     const lai = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
     expect(lai.status, lai.body).toBe(200);
-    expect(JSON.parse(lai.body)).toEqual({ reissued: true, revokedLinks: 0 });
+    expect(JSON.parse(lai.body)).toEqual({ reissued: true });
     expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 3, tokenSong: 1 });
+    // [lượt soi] Lần HỎNG vẫn tính vào trần — lời mời + lần hỏng + lần được = 3 trong giờ ⇒ lần kế 429. Thân 502 và câu báo của
+    // `/tao-thau` nói ra điều này; ADR-110 ghi vì sao chấp nhận.
+    expect((await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie)).status).toBe(429);
   });
+
+  it("[lượt soi] gói còn OPEN mà đã QUÁ HẠN ⇒ 409, không token, không thư; ở BAFO_OPEN hạn của VÒNG quyết, không hạn của gói; vòng đóng ⇒ 409", async () => {
+    const nguoiMoi = await taoNguoi("gl-7-k124@vidu.vn", "BUYER");
+    const rfq = await goiMoMoi("RFQ qua han K124");
+    const ncc = await nhaCungCap();
+    datCheDo("thuong");
+    const m = await goi(gocMacDinh, "POST", `/rfqs/${rfq}/invitations`, nguoiMoi.cookie, { supplierId: ncc.supplierId, contactId: ncc.contactId });
+    expect(m.status, m.body).toBe(201);
+    const id = (JSON.parse(m.body) as { invitation: { id: string } }).invitation.id;
+    const soToken = async (): Promise<number> =>
+      (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_invitation_tokens WHERE invitation_id = $1", [id])).rows[0]!.n;
+    const guiLai = (): Promise<PhanHoi> => goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    const tuChoi = async (ca: string): Promise<void> => {
+      const truocGui = daGui.length;
+      const truocToken = await soToken();
+      const r = await guiLai();
+      expect(r.status, `${ca}: ${r.body}`).toBe(409);
+      expect(JSON.parse(r.body), ca).toEqual({ error: "goi thau khong nhan bao gia" });
+      expect(daGui, ca).toHaveLength(truocGui);
+      expect(await soToken(), ca).toBe(truocToken);
+    };
+    expect((await guiLai()).status, "đối chứng: gói còn hạn").toBe(200);
+
+    // Đóng gói là thao tác tay: một gói quá hạn còn nằm ở OPEN là trạng thái thường, và `bid_kiem_han_nop` chặn mọi lần nộp.
+    await dungTrangThai(["public.rfq_packages"], [["UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1", [rfq]]]);
+    await tuChoi("OPEN quá hạn");
+
+    // Vòng hai mở SAU hạn gói — trạng thái thường của BAFO: hạn gói đã qua, hạn vòng còn ⇒ gửi lại được.
+    const vong = randomUUID();
+    await dungTrangThai(["public.rfq_packages", "public.rfq_bafo_rounds"], [
+      ["UPDATE rfq_packages SET status = 'BAFO_OPEN', closed_at = now() WHERE id = $1", [rfq]],
+      [
+        "INSERT INTO rfq_bafo_rounds (id, org_id, rfq_id, evaluation_id, policy_id, top_n, round_no, deadline_at, opened_by, opened_by_session_id) " +
+          "VALUES ($1, $2, $3, $4, $5, 2, 1, now() + interval '1 day', $6, $7)",
+        [vong, orgX, rfq, randomUUID(), csX, pm.id, pm.sessionId],
+      ],
+    ]);
+    const bafo = await guiLai();
+    expect(bafo.status, `BAFO_OPEN, hạn vòng còn: ${bafo.body}`).toBe(200);
+    await dungTrangThai(["public.rfq_bafo_rounds"], [["UPDATE rfq_bafo_rounds SET deadline_at = now() - interval '1 minute' WHERE id = $1", [vong]]]);
+    await tuChoi("BAFO_OPEN, hạn vòng đã qua");
+    await dungTrangThai(["public.rfq_bafo_rounds"], [["UPDATE rfq_bafo_rounds SET deadline_at = now() + interval '1 day', closed_at = now() WHERE id = $1", [vong]]]);
+    await tuChoi("BAFO_OPEN, không vòng nào đang mở");
+  });
+
+  it("[lượt soi] lời mời kênh SMS ⇒ link gửi lại đi tới SỐ ĐIỆN THOẠI của người liên hệ, qua SMS — không tới email", async () => {
+    const nguoiMoi = await taoNguoi("gl-8-k124@vidu.vn", "BUYER");
+    const ncc = await nhaCungCap();
+    datCheDo("thuong");
+    const m = await goi(gocMacDinh, "POST", `/rfqs/${rfqX}/invitations`, nguoiMoi.cookie, { supplierId: ncc.supplierId, contactId: ncc.contactId, linkChannel: "SMS" });
+    expect(m.status, m.body).toBe(201);
+    const id = (JSON.parse(m.body) as { invitation: { id: string } }).invitation.id;
+    const { rows } = await db.pool.query<{ phone: string }>("SELECT phone FROM supplier_contacts WHERE id = $1", [ncc.contactId]);
+    const r = await goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+    expect(r.status, r.body).toBe(200);
+    expect(daGui.at(-1)).toMatchObject({ invitationId: id, channel: "SMS", destination: rows[0]!.phone });
+    expect(daGui.at(-1)!.destination).not.toBe(ncc.email);
+  });
+
+  it("[lượt soi] phần bù trên token ĐÃ thu hồi ⇒ `false`, KHÔNG hàng sổ nào; token khai sai lời mời ⇒ `false`, token còn sống", async () => {
+    const nguoiMoi = await taoNguoi("gl-9-k124@vidu.vn", "BUYER");
+    const a = await moiMot(nguoiMoi);
+    const b = await moiMot(nguoiMoi);
+    const { rows } = await db.pool.query<{ id: string }>("SELECT id FROM rfq_invitation_tokens WHERE invitation_id = $1", [a.id]);
+    const bu = (tokenId: string, invitationId: string): Promise<boolean> =>
+      withTenant(apiPool, orgX, (c) => revokeMagicLinkToken(c, orgX, { tokenId, invitationId, actorSessionId: nguoiMoi.sessionId, reason: "LINK_SEND_FAILED" }));
+    expect(await bu(rows[0]!.id, b.id), "token của lời mời A khai là của B").toBe(false);
+    expect(await tokenDungDuoc(a.token)).toBe(a.id);
+    expect(await bu(rows[0]!.id, a.id)).toBe(true);
+    const truocSo = (await suKienCuaLoiMoi(a.id)).length;
+    expect(await bu(rows[0]!.id, a.id), "lần hai trên token đã thu hồi").toBe(false);
+    expect((await suKienCuaLoiMoi(a.id)).length, "lần hai không ghi sổ").toBe(truocSo);
+    expect(await tokenDungDuoc(a.token)).toBeNull();
+  });
+
+  it("[lượt soi] gửi lại ĐUA với xác minh OTP bằng link cũ, lần xác minh khoá hàng token TRƯỚC ⇒ không bế tắc (40P01): cả hai 200", async () => {
+    const nguoiMoi = await taoNguoi("gl-10-k124@vidu.vn", "BUYER");
+    const { id, token: cu } = await moiMot(nguoiMoi);
+    expect((await goiKhach("/guest/redeem", { orgId: orgX, token: cu })).status).toBe(200);
+    const otp = await goiKhach("/guest/otp", { orgId: orgX, token: cu, channel: "SMS" });
+    expect(otp.status, otp.body).toBe(200);
+    const ma = dv.otpDaGui.at(-1)!.code;
+    const { rows: tk } = await db.pool.query<{ id: string }>("SELECT id FROM rfq_invitation_tokens WHERE invitation_id = $1", [id]);
+    const choKhoa = async (mau: string): Promise<void> => {
+      const het = Date.now() + 5000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_catalog.pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE $1",
+          [mau],
+        );
+        if (rows[0]!.n > 0) return;
+        if (Date.now() > het) throw new Error(`không thấy câu đang chờ khoá: ${mau}`);
+        await ngu(10);
+      }
+    };
+    // Một kết nối ngoài giữ hàng token cũ MỘT LÚC — chỉ để ép hai giao dịch vào thứ tự tự nhiên của cửa sổ vài ms ngoài đời:
+    // lần xác minh đã tới câu tiêu thụ token, rồi lần gửi lại khoá hàng lời mời và tới câu thu hồi token. Khi hàng token được
+    // thả, lần xác minh chèn `guest_sessions` — phép kiểm khoá ngoại lấy `FOR KEY SHARE` trên hàng lời mời mà lần gửi lại
+    // đang khoá. Dưới `FOR UPDATE` đó là bế tắc; dưới `FOR NO KEY UPDATE` thì không.
+    const e = await db.pool.connect();
+    const bat = batLog();
+    let xacMinh: Promise<PhanHoi> | undefined;
+    let guiLai: Promise<PhanHoi> | undefined;
+    try {
+      await e.query("BEGIN");
+      await e.query("SELECT 1 FROM rfq_invitation_tokens WHERE id = $1 FOR UPDATE", [tk[0]!.id]);
+      xacMinh = goiKhach("/guest/otp/verify", { orgId: orgX, token: cu, code: ma });
+      await choKhoa("UPDATE public.rfq_invitation_tokens SET consumed_at%");
+      guiLai = goi(gocMacDinh, "POST", `/invitations/${id}/reissue`, nguoiMoi.cookie);
+      await choKhoa("UPDATE public.rfq_invitation_tokens SET revoked_at%");
+      await e.query("COMMIT");
+    } finally {
+      e.release();
+    }
+    const [rx, rg] = await Promise.all([xacMinh, guiLai]);
+    bat.tra();
+    expect(bat.log.join("\n")).not.toMatch(/40P01/u);
+    expect(rx.status, rx.body).toBe(200);
+    expect(rg.status, rg.body).toBe(200);
+    expect(JSON.parse(rg.body), "thân không nói nhà cung cấp đã xác minh hay chưa").toEqual({ reissued: true });
+    // Lần xác minh tiêu thụ token cũ trước, nên lần gửi lại không còn token chưa dùng nào để thu hồi — sổ ghi 0.
+    const suKien = await suKienCuaLoiMoi(id);
+    expect(suKien.find((x) => x.action === "INVITATION_LINK_REISSUED")?.payload).toEqual({ revokedTokens: 0 });
+    expect(await tokenDungDuoc(daGui.at(-1)!.token)).toBe(id);
+  }, 30_000);
 });
 
 describe("[S1.70 / khoản 124] bộ điều phối: việc sau commit CÓ BÙ, trên route giả", () => {

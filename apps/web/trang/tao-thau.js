@@ -373,9 +373,23 @@ async function napLoiMoi() {
       guiLai.addEventListener("click", async () => {
         bao($("loi5"), ""); bao($("ok5"), "");
         guiLai.disabled = true;
-        const gl = await goi("POST", `/invitations/${m.id}/reissue`);
-        guiLai.disabled = false;
+        // [lượt soi] Mất mạng giữa chừng thì `goi` NÉM: không có `finally` thì nút kẹt ở trạng thái tắt, không một câu báo.
+        let gl;
+        try {
+          gl = await goi("POST", `/invitations/${m.id}/reissue`);
+        } catch {
+          bao($("loi5"), "Không gửi lại được link — mất kết nối tới máy chủ. Kiểm tra mạng rồi bấm lại.");
+          return;
+        } finally {
+          guiLai.disabled = false;
+        }
         if (gl.status === 429) { bao($("loi5"), "Lời mời này đã được gửi đủ số link cho phép trong một giờ — thử lại sau."); return; }
+        // [lượt soi] 502: link cũ chưa dùng đã hết hiệu lực TRƯỚC lần gửi, và lần hỏng vẫn tính vào trần 3 link một giờ.
+        if (gl.status === 502) {
+          bao($("loi5"), "Không gửi được link mới. Link cũ chưa dùng của lời mời này đã hết hiệu lực, nên nhà cung cấp hiện " +
+            "không có link nào — bấm lại sau ít phút. Mỗi lời mời gửi được tối đa 3 link mỗi giờ, kể cả lần gửi hỏng.");
+          return;
+        }
         if (gl.status !== 200) { bao($("loi5"), loiCua(gl, "Không gửi lại được link")); return; }
         bao($("ok5"), `Đã gửi link mới tới ${m.contactName} qua ${m.linkChannel}. Link cũ chưa dùng (nếu có) đã hết hiệu lực; ` +
           "nhà cung cấp vào lại đúng báo giá đã nộp.");

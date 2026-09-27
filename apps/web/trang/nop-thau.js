@@ -344,10 +344,15 @@ $("nut-nop").addEventListener("click", async () => {
     if (the !== theHe) return;
     const tenHienHanh = typeof hienHanh.body?.supplier?.legalName === "string" ? hienHanh.body.supplier.legalName : "";
     if (hienHanh.status !== 200 || hienHanh.body?.rfq?.id !== phien.rfq.id || tenHienHanh !== phien.tenNhaCungCap) {
+      // [lượt soi] Chỉ 401 là phiên chết. Mã khác (500, 502/503 của proxy) nói về máy chủ, không về phiên — câu "hết hạn,
+      // xin link mới" ở đó đẩy nhà cung cấp đi xin một link họ không cần. Vế `rfq.id` bắt ca CÙNG doanh nghiệp, KHÁC gói
+      // (hai lời mời, hai thẻ): phong bì niêm cho gói trên màn mà nộp vào luồng của gói kia thì không mở được khi mở thầu.
       bao($("loi3"), hienHanh.status === 200
         ? `Phiên nộp thầu trên trình duyệt này đã đổi${tenHienHanh === "" ? "" : ` sang «${tenHienHanh}»`} — có lẽ ở một thẻ khác. ` +
           "Báo giá CHƯA được gửi. Tải lại trang để làm tiếp với đúng phiên."
-        : "Phiên nộp thầu đã hết hạn hoặc đã thoát — báo giá CHƯA được gửi. Xin bên mua gửi lại link mời.");
+        : hienHanh.status === 401
+          ? "Phiên nộp thầu đã hết hạn hoặc đã thoát — báo giá CHƯA được gửi. Xin bên mua gửi lại link mời."
+          : `${loiCua(hienHanh, "Không kiểm được phiên nộp thầu")} — báo giá CHƯA được gửi. Thử lại sau ít phút.`);
       $("nut-nop").disabled = false;
       return;
     }

@@ -8533,19 +8533,28 @@ sau mỗi lần nộp trên máy dùng chung.
 
 1. **`POST /invitations/:invitationId/reissue`** — route người mua ghi, mã quyền `rfq.invite` (cùng mã với mời và thu hồi),
    `resourceType` `INVITATION`.
-2. **`reissueInvitationLink` (`packages/invitation`), một giao dịch, dưới khoá hàng của lời mời** (`FOR UPDATE` trên hàng lời mời — hai lần gửi
-   lại cùng lúc xếp hàng, nên phép đếm trần không đua):
+2. **`reissueInvitationLink` (`packages/invitation`), một giao dịch, dưới khoá hàng của lời mời** (~~`FOR UPDATE`~~ **[lượt soi]**
+   `FOR NO KEY UPDATE` trên hàng lời mời — hai lần gửi lại cùng lúc, hay gửi lại và thu hồi, vẫn xếp hàng, nên phép đếm trần không
+   đua; `FOR UPDATE` bế tắc (40P01, đo 3/3 lần) với lần xác minh OTP bằng link cũ: lần ấy khoá hàng token rồi chèn `guest_sessions`,
+   và phép kiểm khoá ngoại của câu chèn lấy `FOR KEY SHARE` trên chính hàng lời mời):
    - lời mời không tồn tại trong tổ chức đang gắn ⇒ 404 — RLS lọc tổ chức khác thành "không tồn tại", nên không oracle;
    - lời mời đã thu hồi ⇒ 409 — thu hồi là quyết định loại nhà cung cấp, không phải chỗ để gửi link;
-   - gói thầu không ở `OPEN` hay `BAFO_OPEN` ⇒ 409 — link cho một gói không nhận báo giá là một tin nhắn vô ích;
+   - gói thầu không ở `OPEN` hay `BAFO_OPEN` ⇒ 409 — link cho một gói không nhận báo giá là một tin nhắn vô ích; **[lượt soi]** và
+     cả khi đã QUÁ HẠN — hạn gói ở `OPEN`, hạn vòng đang mở ở `BAFO_OPEN`, đúng hai vế của `bid_kiem_han_nop` (074). Đóng gói là
+     thao tác tay, nên một gói quá hạn còn nằm ở `OPEN` là trạng thái thường;
    - lời mời đã có `LINK_MOI_TOI_DA_MOI_GIO` = 3 token trong một giờ, KỂ CẢ token của lần mời và token đã thu hồi ⇒ 429 kèm
-     `Retry-After` bằng cả cửa sổ (3600) — mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức;
+     `Retry-After` bằng cả cửa sổ (3600) — mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức; **[lượt soi]** kể cả
+     token mà phần bù thu hồi sau một lần gửi hỏng: trần đếm lần THỬ gửi, không đếm lần tới nơi;
    - rồi: thu hồi mọi token CHƯA dùng của lời mời (một lời mời, một link còn dùng được), ghi `INVITATION_LINK_REISSUED` (payload
      `{revokedTokens}`), phát token mới qua `issueMagicLinkToken` (ghi `MAGIC_LINK_TOKEN_ISSUED`).
 3. **Đích và kênh của CHÍNH lời mời**: người liên hệ `contact_id`, đọc từ `supplier_contacts` như route mời; kênh `link_channel`.
    **Gửi SAU commit** như route mời (khoản 124). Gửi hỏng hay quá trần ⇒ phần bù `revokeMagicLinkToken` thu hồi ĐÚNG token vừa phát,
    ghi `MAGIC_LINK_TOKEN_REVOKED` (`{invitationId, reason: "LINK_SEND_FAILED"}`), phản hồi 502; phần bù cũng hỏng ⇒ 500. Lời mời
    KHÔNG bị thu hồi ở nhánh nào — khác phần bù của route mời: ở đây lời mời đã có hồ sơ báo giá, và người mua bấm gửi lại được ngay.
+   **[lượt soi]** Thân 502 nói cả điều bên mua không tự thấy — link cũ chưa dùng đã hết hiệu lực ở giao dịch đã commit — và
+   `/tao-thau` nói thêm rằng lần hỏng vẫn tính vào trần. Thân 200 là `{reissued: true}` và KHÔNG mang số token cũ bị thu hồi:
+   0 hay 1 là *"nhà cung cấp đã xác minh link chưa"*, thứ mà `BUYER` — không giữ `bid.view` — không được đọc trước hạn (A6);
+   con số chỉ nằm trong sổ.
 4. **Không chạm** phiên khách đang sống, thách thức OTP hay khoá OTP của lời mời — gửi lại không phải thu hồi; gỡ khoá có đường
    riêng (`POST /invitations/:invitationId/unlock`).
 5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; câu báo sau khi thu hồi nói thẳng báo giá đã
@@ -8553,7 +8562,7 @@ sau mỗi lần nộp trên máy dùng chung.
    thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
 6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
    `UPDATE (revoked_at, consumed_at)` trên token (`010`), và UPDATE theo cột trên `rfq_invitations` (`010`, `013`) — đủ cho
-   `FOR UPDATE`.
+   ~~`FOR UPDATE`~~ `FOR NO KEY UPDATE`; **[lượt soi]** và SELECT trên `rfq_bafo_rounds` (`059`) cho hạn của vòng.
 
 ### Phương án đã cân nhắc
 
@@ -8572,8 +8581,14 @@ sau mỗi lần nộp trên máy dùng chung.
 - **Link cũ chưa dùng hết hiệu lực** khi gửi lại: nhà cung cấp đang giữa bước OTP bằng link cũ thì lần xác minh ấy hỏng — họ dùng
   link mới.
 - **Gửi hỏng sau commit để nhà cung cấp không còn link nào**: token cũ đã thu hồi trong giao dịch đã commit, token mới bị phần bù thu
-  hồi; bên mua thấy 502 và bấm lại.
-- **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá.
+  hồi; ~~bên mua thấy 502 và bấm lại~~ **[lượt soi]** bên mua thấy 502 (thân và câu báo nói link cũ đã hết hiệu lực) và bấm lại được
+  trong phần CÒN LẠI của trần — lần hỏng vẫn tính vào trần, vì hàng token không mang lý do thu hồi. Đo (người soi): lời mời vừa
+  gửi trong giờ, hai lần hỏng liền ⇒ lần ba 429 tới hết cửa sổ, nhà cung cấp không có link nào. Chấp nhận có lý do: hai lần hỏng
+  liền là bộ gửi đang sập, và lần gửi thứ ba cũng khó tới nơi; không đếm lần hỏng cần một cột lý do trên token (một migration), còn
+  thu hồi token cũ SAU lần gửi được thì mở một trạng thái hai link sống và một cuộc đua giữa hai lần gửi lại sau commit.
+- **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá. **[lượt soi]** Và trần xin OTP
+  theo (lời mời, đích) (khoản nợ 35) không gắn với token: ba lần xin OTP bằng link cũ trong cửa sổ 900 s thì link mới cũng nhận
+  429 tới hết cửa sổ ấy (đo: `[200, 200, 200, 429]` rồi link mới 429).
 - **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 250; vòng này đóng đường KHIẾN người mua
   phải làm thế, không đổi ngữ nghĩa của thu hồi.
 - **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
@@ -8585,6 +8600,10 @@ sau mỗi lần nộp trên máy dùng chung.
 mới cho chính lời mời, đúng người liên hệ và kênh, link cũ hết hiệu lực, hai hàng sổ; trần 3/giờ ⇒ 429 + `Retry-After`, không token,
 không gửi, không sổ, token đã thu hồi vẫn bị đếm; ba lần gửi lại cùng lúc ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời
 của tổ chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm `PERMISSION_DENIED`; `assertTenantBound` của hai hàm gói; bộ gửi ném ⇒
-502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. `apps/api/src/guest.int.test.ts` ca `[ADR-110]`: nộp,
-thoát, bên mua gửi lại qua HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng. `apps/web/src/phuc-vu.test.ts`
-các ca `tao-thau`. Bộ quét route của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` có ca cho route này. Đột biến: §S1.181.
+502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. **[lượt soi]** Thêm: cửa sổ đúng một giờ (dời 50 phút vẫn
+429); lần hỏng tính vào trần; gói OPEN quá hạn ⇒ 409, `BAFO_OPEN` theo hạn của VÒNG, vòng đóng ⇒ 409; kênh SMS ⇒ số điện thoại;
+phần bù lần hai hay khai sai lời mời ⇒ `false`, không sổ; đua với xác minh OTP bằng link cũ ⇒ không 40P01, cả hai 200, thân không
+nói nhà cung cấp đã xác minh. `apps/api/src/guest.int.test.ts` ca `[ADR-110]`: nộp, thoát, bên mua gửi lại qua HTTP, phiên mới thấy
+lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng. `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bộ quét route có ca
+cho route này, và **[lượt soi]** bước 12c gửi lại link cho người top-N giữa vòng BAFO trên đường thật ⇒ 200. `apps/web/src/phuc-vu.test.ts`
+các ca `tao-thau` — **[lượt soi]** kể cả nút tắt trong lúc lời gọi bay, mất mạng, và câu 502. Đột biến: §S1.181.

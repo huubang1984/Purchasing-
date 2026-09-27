@@ -1215,11 +1215,17 @@ export async function revokeInvitation(
 //   ⑴ lời mời tồn tại trong tổ chức đang gắn — không thì NOT_FOUND (RLS lọc tổ chức khác thành "không tồn tại");
 //   ⑵ lời mời chưa thu hồi — thu hồi là quyết định loại nhà cung cấp, không phải chỗ để gửi link;
 //   ⑶ gói thầu đang nhận báo giá (`OPEN`, `BAFO_OPEN`) — link cho một gói đã đóng là một tin nhắn vô ích;
+//      **[lượt soi]** và CÒN HẠN: hạn của gói ở `OPEN`, hạn của vòng đang mở ở `BAFO_OPEN` — cùng hai hạn mà trigger
+//      `bid_kiem_han_nop` (074) so. Đóng gói là thao tác tay, nên một gói quá hạn còn nằm ở `OPEN` là trạng thái thường;
 //   ⑷ lời mời chưa có quá `LINK_MOI_TOI_DA_MOI_GIO` token trong một giờ, KỂ CẢ token của lần mời và token đã thu hồi —
-//      mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức.
+//      mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức. **[lượt soi]** Kể cả token mà phần bù thu hồi sau
+//      một lần gửi HỎNG: trần đếm lần THỬ gửi, không đếm lần tới nơi (hàng token không mang lý do thu hồi).
 // Rồi: thu hồi mọi token CHƯA dùng của lời mời (một lời mời, một link còn dùng được), ghi `INVITATION_LINK_REISSUED`, và
 // phát token mới qua `issueMagicLinkToken` (ghi `MAGIC_LINK_TOKEN_ISSUED`). KHÔNG chạm phiên khách đang sống, thách thức
 // OTP hay khoá OTP — gửi lại link không phải thu hồi, và gỡ khoá có đường riêng (`clearOtpLockout`).
+// **[lượt soi]** Hai hệ quả nói ra: link cũ chết ở CHÍNH giao dịch này, trước lần gửi — gửi hỏng thì nhà cung cấp không còn
+// link nào tới lần gửi kế đi được (thân 502 nói vậy); và trần xin OTP tính theo (lời mời, đích), không theo token — ba lần
+// xin OTP bằng link cũ thì link mới cũng chờ hết cửa sổ của trần ấy.
 // ==============================================================================================
 
 /** [S1.181 / ADR-110] Trần số token của MỘT lời mời trong `CUA_SO_LINK_MOI_GIAY`, tính cả token của lần mời. */
@@ -1239,23 +1245,39 @@ export async function reissueInvitationLink(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   // Khoá CHỈ hàng lời mời — không khoá hàng gói thầu (mọi thao tác khác của gói sẽ xếp hàng sau một lần gửi thư).
+  // [lượt soi] ~~`FOR UPDATE`~~ `FOR NO KEY UPDATE`: xác minh OTP bằng link cũ khoá hàng token rồi chèn `guest_sessions`, và
+  // phép kiểm khoá ngoại của câu chèn ấy lấy `FOR KEY SHARE` trên CHÍNH hàng lời mời — `FOR UPDATE` chặn nó, còn hàm này thì
+  // chờ hàng token mà lần xác minh đang giữ: hai thứ tự ngược nhau, 40P01 (đo: 3/3 lần). `FOR NO KEY UPDATE` không chặn
+  // `FOR KEY SHARE` mà vẫn xung đột với chính nó và với `UPDATE` của `revokeInvitation` — hai lần gửi lại, hay gửi lại và
+  // thu hồi, vẫn xếp hàng. Cùng khuôn `rfq.ts`.
   const { rows } = await client.query<HangInvitation & { da_thu_hoi: boolean }>(
     `SELECT id, rfq_id, supplier_id, contact_id, link_channel, status,
             (revoked_at IS NOT NULL OR status OPERATOR(pg_catalog.=) 'REVOKED'::pg_catalog.text) AS da_thu_hoi
        FROM public.rfq_invitations
       WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-        FOR UPDATE`,
+        FOR NO KEY UPDATE`,
     [input.invitationId],
   );
   const hang = rows[0];
   if (hang === undefined) return { ok: false, reason: "NOT_FOUND" };
   if (hang.da_thu_hoi) return { ok: false, reason: "REVOKED" };
-  const { rows: goi } = await client.query<{ status: string }>(
-    "SELECT status FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid",
+  // [lượt soi] Nhận báo giá = trạng thái VÀ hạn, đúng hai vế của `bid_kiem_han_nop`: `OPEN` so hạn của gói, `BAFO_OPEN` so
+  // hạn của vòng đang mở (074; 059 giữ nhiều nhất một vòng mở mỗi gói). Hạn NULL hay trạng thái khác ⇒ `con_han` NULL.
+  const { rows: goi } = await client.query<{ con_han: boolean | null }>(
+    `SELECT CASE
+              WHEN p.status OPERATOR(pg_catalog.=) 'OPEN'::pg_catalog.text THEN p.deadline_at
+              WHEN p.status OPERATOR(pg_catalog.=) 'BAFO_OPEN'::pg_catalog.text THEN
+                (SELECT r.deadline_at
+                   FROM public.rfq_bafo_rounds r
+                  WHERE r.rfq_id OPERATOR(pg_catalog.=) p.id
+                    AND r.org_id OPERATOR(pg_catalog.=) p.org_id
+                    AND r.closed_at IS NULL)
+            END OPERATOR(pg_catalog.>) pg_catalog.now() AS con_han
+       FROM public.rfq_packages p
+      WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
     [hang.rfq_id],
   );
-  const trangThaiGoi = goi[0]?.status;
-  if (trangThaiGoi !== "OPEN" && trangThaiGoi !== "BAFO_OPEN") return { ok: false, reason: "RFQ_NOT_ACCEPTING" };
+  if (goi[0]?.con_han !== true) return { ok: false, reason: "RFQ_NOT_ACCEPTING" };
 
   const { rows: dem } = await client.query<{ n: number }>(
     `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n

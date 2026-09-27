@@ -1063,10 +1063,15 @@ const ghi: readonly BuyerWriteRoute[] = [
         bu: async (client) => {
           await revokeMagicLinkToken(client, ctx.orgId, { tokenId: t.tokenId, invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
         },
-        phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, link moi da thu hoi" } },
+        // [lượt soi] Thân 502 nói cả điều bên mua không tự thấy: link CŨ chưa dùng đã hết hiệu lực ở giao dịch vừa commit, và
+        // lần gửi hỏng vẫn tính vào trần — nên sau lần hỏng, nhà cung cấp không còn link nào cho tới lần gửi được.
+        phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi; link moi da thu hoi, link cu chua dung da het hieu luc" } },
         phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc link moi" } },
       });
-      return { status: 200, body: { reissued: true, revokedLinks: kq.revokedTokens } };
+      // [lượt soi] ~~`revokedLinks`~~ — số link cũ bị thu hồi là 0 khi nhà cung cấp ĐÃ xác minh link (token tiêu thụ) và 1 khi
+      // chưa: thân phản hồi ấy cho `BUYER`, vai không giữ `bid.view`, biết nhà cung cấp nào đã vào phiên trước hạn (A6 giấu cả
+      // số báo giá). Con số chỉ nằm trong sổ (`INVITATION_LINK_REISSUED`), dưới quyền đọc sổ.
+      return { status: 200, body: { reissued: true } };
     },
   },
   {

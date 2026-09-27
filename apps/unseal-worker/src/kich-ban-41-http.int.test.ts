@@ -1019,6 +1019,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hanVongBafo = new Date(String(br!.deadlineAt)).getTime();
     expect(hanVongBafo, "hai hạn phải KHÁC nhau — nếu bằng thì trường mới không mua gì").not.toBe(hanVongMot);
     expect(hanVongMot, "ở kịch bản này gói thầu đóng SỚM, nên hạn vòng một còn XA HƠN hạn BAFO").toBeGreaterThan(hanVongBafo);
+
+    // [S1.181 / ADR-110 — lượt soi] Người trong top-N mất phiên giữa vòng hai thì bên mua GỬI LẠI được link: `BAFO_OPEN` còn
+    // hạn của vòng là trạng thái nhận báo giá. Phiên khách đang sống không bị chạm — bước 12d nộp bằng chính cookie ấy.
+    const guiLai = await goi("POST", `/invitations/${lm.invitationId}/reissue`, m);
+    expect(guiLai.status, guiLai.text).toBe(200);
+    expect(guiLai.body).toEqual({ reissued: true });
   });
 
   it("bước 12d — TOP-2 nộp lại NIÊM PHONG; người NGOÀI top-2 bị chặn, và bằng 422 chứ không 500", async () => {

@@ -23,8 +23,12 @@ mở thầu và xếp hạng. Chủ dự án chọn làm đường thật: `POST
 thu hồi link cũ chưa dùng, gửi sau commit) và nút *Gửi lại link* ở `/tao-thau` — nhà cung cấp về đúng hồ sơ, lần nộp kế là phiên bản
 kế. Phần có từ trước (báo giá của lời mời đã thu hồi vẫn dự thầu) thành khoản **250**, rổ B. Mười sáu phát hiện khác của lượt soi đã
 sửa, gồm kiểm phiên hiện hành trước khi niêm phong. Commit đầu của vòng làm đỏ bộ quét route của kịch bản 41 (thiếu ca cho route mới) —
-đã sửa. Link `#<orgId>:<token>` đo trên Gmail thật. 72 đột biến đều đỏ qua hai lượt; Chromium trên cụm thật đi trọn nộp → thoát → gửi
-lại → nộp #2. Không migration, không đổi quyền CSDL. Bằng chứng: `evidence/security-reviews.md` §S1.181.
+đã sửa. Lượt soi THỨ HAI, riêng route gửi lại link, tám phát hiện NHẸ/INFO, đều sửa hay ghi: khoá hàng lời mời đổi sang
+`FOR NO KEY UPDATE` (bế tắc 40P01 với lần xác minh OTP bằng link cũ), gói quá hạn — kể cả vòng BAFO quá hạn — không gửi lại được,
+thân 200 không còn cho `BUYER` biết nhà cung cấp đã xác minh link chưa, câu 502 nói link cũ đã hết hiệu lực và lần hỏng tính vào
+trần, trang chịu được mất mạng và chỉ 401 mới là hết phiên. Link `#<orgId>:<token>` đo trên Gmail thật. 93 đột biến đều đỏ qua ba
+lượt; Chromium trên cụm thật đi trọn nộp → thoát → gửi lại → nộp #2. Không migration, không đổi quyền CSDL. Bằng chứng:
+`evidence/security-reviews.md` §S1.181.
 
 **[2026-09-27 / S1.180] KHOẢN 247 NẮN LẠI — LẦN TỪ CHỐI CỦA J3/D2 VÀO LỚP `CONTROL_DENIED`, CỦA CÂU NỘP VÀO
 `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC.** Hai phiên làm khoản 247 song song; #172 (S1.167) merge trước. Chủ dự
