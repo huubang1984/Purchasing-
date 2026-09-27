@@ -14775,3 +14775,58 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
   `c637858`, `c637455` (sau #176 — hai tệp kịch bản 41 **88/88** cục bộ), `9f66fcf` và `2ccfe6b`. #186 chỉ chạm tài liệu và test kiến
   trúc `khoa-depcruise`; trên cây đã hợp `pnpm t0` sạch, `pnpm test` 117 tệp, 1548 đạt, 1 bỏ qua, `pnpm cap-so --kiem` sạch.
 - Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
+
+---
+
+# §S1.9101 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
+
+## 1. Vòng này là gì
+
+Khoản 248 (S1.169, rổ B, điều kiện đóng riêng: trước khi mở cờ ký chính sách trên máy chủ thật — ADR-105 ⑷(a)): trần lần từ chối
+theo phiên của ADR-092 chỉ đếm ở bộ điều phối, nên mọi lần từ chối mà handler tự ghi — `CONTROL_DENIED` của K1, J3, D2, bảng so sánh,
+cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá — không trần. Chủ dự án chọn phạm vi *mọi lần từ chối ở handler* và
+cơ chế *bối cảnh yêu cầu*. ADR-9201.
+
+## 2. Đo trước khi sửa
+
+Trên mã `master` (`f6e7923`), hai ca mới ở khối ADR-092 của `apps/api/src/auth.int.test.ts`, trần tiêm 3:
+- ⒤ người mua không giữ `bid.view` gọi `GET /rfqs/:rfqId/comparison` — `buildComparisonTable` hỏi quyền ở handler: lần 4 vẫn **403**
+  kèm một hàng `PERMISSION_DENIED` (mong 429).
+- ⒥ người giữ `bid.view` (FINANCE thuần) hỏi bảng so sánh của gói DRAFT — lần từ chối A4 qua `throwAuditedDenial`: lần 4 vẫn **422**
+  kèm một hàng `COMPARISON_DENIED` (mong 429).
+
+Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigger D2 của `033` chặn (`policy.manage` không đứng cùng `rfq.create`) —
+đúng luật; ca dùng một người FINANCE thuần và một người mua khác tạo gói.
+
+## 3. Thay đổi
+
+- `packages/identity/src/rbac.ts`: `BoiCanhTranTuChoi`, kho AsyncLocalStorage và `chayVoiTranTuChoi`; `demTheoBoiCanh` đếm ở giao dịch
+  riêng trên `auditPool` (trần chờ `TRAN_CHO_KET_NOI_AUDIT_MS`). `requirePermission` không móc và `throwAuditedDenial` gọi nó TRƯỚC lần
+  ghi, ngoài khối bọc lỗi. `packages/identity/src/index.ts` cho `chayVoiTranTuChoi` ra cửa; danh sách trắng của barrel thêm một dòng.
+- `apps/api/src/dispatch.ts`: `demTuChoiCuaHandler` — cùng bucket `tu-choi|<phiên>`, cùng `tranTuChoi` — đếm trên kết nối `auditPool`
+  mà `rbac.ts` đưa; bối cảnh đặt quanh lời gọi handler người mua; `anhXaLoiHandler` trả `VuotTranTuChoiError` thành 429 kèm
+  `retry-after`, cùng thân với 429 của `phanQuyetTuChoi`.
+- Test: `apps/api/src/auth.int.test.ts` vế ⒤–⒨; `packages/identity/src/rbac.int.test.ts` khối khoản 248 (ba ca);
+  `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` giam tên `chayVoiTranTuChoi` ở ba tệp.
+- Tài liệu: ADR-9201; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
+  danh sách còn mở và mốc.
+
+## 4. Đo sau khi sửa
+
+- ⒤ ⒥ xanh: N lần 403/422 mỗi lần một hàng, rồi 429 thân cố định kèm `retry-after`, không hàng.
+- ⒦ một ngân sách cho hai tầng: hai 403 của bộ điều phối (`POST /suppliers`) cộng một 403 của handler tiêu hết trần 3; lần sau 429 ở
+  CẢ HAI tầng.
+- ⒧ tám lời gọi cùng lúc ở handler ⇒ đúng 3 × 403 + 5 × 429 và đúng 3 hàng.
+- ⒨ khoá chuỗi sổ bị giữ ⇒ ba lần 500, không hàng; khoá nhả ⇒ lần kế tiếp 429 — lần đếm đã commit trước lần ghi hỏng.
+- `rbac.int`: `dem` chạy đúng một lần, số hàng lúc đếm là 0, `txid_status` của giao dịch đếm là `committed`; ngoài bối cảnh không đếm;
+  `dem` ném ⇒ chính lỗi ấy ra, không hàng; `requirePermission` mang móc ⇒ chỉ móc chạy.
+- `pnpm evidence` đầy đủ trên cây `master` `f6e7923` cộng vòng này (trước khi hợp #179): 179 tệp, 2855 ca, 2854 đạt, 1 bỏ qua,
+  0 hỏng, 65/65 bất biến — không kịch bản nào có sẵn vượt trần 30 lần từ chối ở handler trong một phiên.
+
+## 5. Ranh giới, nói ra
+
+- Tính chất *xếp hàng sau nhau* của ADR-092 yếu hơn ở tầng handler: khoá hàng bucket nhả trước lần ghi, nên tối đa N lần đầu của một
+  phiên có thể cùng chờ khoá chuỗi sổ. Phép đếm vẫn đúng tới từng lần (⒧).
+- Một cơ chế ngầm thứ hai để lần từ chối không vào sổ — bị giam bằng test kiến trúc theo TÊN; một bí danh qua biến thì mù, cùng giới
+  hạn đã nói của tệp ấy.
+- Route khách và nhánh ANON ngoài phạm vi, như ADR-092. Việc `afterCommit` chạy ngoài bối cảnh.
