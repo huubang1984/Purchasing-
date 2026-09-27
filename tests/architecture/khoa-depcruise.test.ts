@@ -13,11 +13,11 @@
 // ==============================================================================================
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { voiKhoaDepcruise } from "./khoa-depcruise.js";
+import { tenDauCho, thuMucDauCho, voiKhoaDepcruise, voiKhoaDepcruiseAsync } from "./khoa-depcruise.js";
 
 // Trên Windows, `import "D:\..."` ném ERR_UNSUPPORTED_ESM_URL_SCHEME — phải là một URL file://.
 const KHOA_URL = new URL("./khoa-depcruise.ts", import.meta.url).href;
@@ -302,3 +302,216 @@ function vietKichBanChoKhoa(duong: string): string {
   );
   return tep;
 }
+
+// ==============================================================================================
+// [khoản 9401] ⑹ NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC — xem khối ⑹ trong `khoa-depcruise.ts`
+//
+// PR #176, run 36325198665: `T1+T2 (windows-latest)` đỏ đúng một ca — PROBE `g9-` của
+// `apps/api/src/routes.test.ts` chờ khoá quá 180 s — vì `boundaries.test.ts` nhả rồi giành lại khoá ở
+// mỗi test, suốt 194,5 s, và người chờ không bao giờ tới lượt.
+//
+// RANH GIỚI CỦA CÁC PHÉP ĐO DƯỚI, nói ra vì nó quyết định cách đọc chúng: chiều âm trên hai tiến trình
+// thật — "không nhường thì người chờ ĐÓI" — là một đua tranh XÁC SUẤT. Khe giữa lần nhả và lần giành
+// lại dưới một mili-giây, người chờ hỏi mỗi 50 ms, nên mỗi vòng nó có cỡ khe/50 ms cơ may lọt vào: một
+// khẳng định "đói" viết trên hai tiến trình thật là một test chập chờn, đúng thứ khoản nợ 59 sinh ra để
+// diệt. Nên chiều âm đo ở CƠ CHẾ gây đói, và đo tất định: một tiến trình giữ-nhả liên tục mà không
+// nhường thì giành lại MỌI lượt trong khi có người xếp hàng trước nó. Chiều dương đo cả hai cách — bằng
+// dấu chờ dựng tay, và bằng một người chờ thật chen được vào giữa vòng giữ-nhả của một tiến trình khác.
+// ==============================================================================================
+
+/** Kịch bản con: chờ tín hiệu `choTruoc` (nếu có), rồi giữ-nhả khoá `soVong` lượt liền, mỗi lượt `giuMs`. */
+function vietKichBanGiuNhaLienTuc(): string {
+  const tep = join(thuMuc, "giu-nha-lien-tuc.mjs");
+  writeFileSync(
+    tep,
+    [
+      'import { existsSync, writeFileSync } from "node:fs";',
+      `import { voiKhoaDepcruise } from ${JSON.stringify(KHOA_URL)};`,
+      "const [duong, soVong, giuMs, nhuong, choTruoc, baoDangGiu] = process.argv.slice(2);",
+      "const ngu = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);",
+      'if (choTruoc !== "-") while (!existsSync(choTruoc)) ngu(10);',
+      "const khoiDong = Date.now();",
+      "const cac = [];",
+      "for (let i = 0; i < Number(soVong); i += 1) {",
+      "  cac.push(voiKhoaDepcruise(() => {",
+      "    const batDau = Date.now();",
+      '    if (i === 0 && baoDangGiu !== "-") writeFileSync(baoDangGiu, "");',
+      "    ngu(Number(giuMs));",
+      "    return { batDau, ketThuc: Date.now() };",
+      '  }, duong, undefined, { hanChoMs: 60000, nhuong: nhuong === "1" }));',
+      "}",
+      "process.stdout.write(JSON.stringify({ khoiDong, cac }));",
+    ].join("\n"),
+  );
+  return tep;
+}
+
+/** Kịch bản con: báo sẵn sàng, chờ tới khi người kia đang giữ khoá, rồi giành MỘT lượt. */
+function vietKichBanNguoiCho(): string {
+  const tep = join(thuMuc, "nguoi-cho.mjs");
+  writeFileSync(
+    tep,
+    [
+      'import { existsSync, writeFileSync } from "node:fs";',
+      `import { voiKhoaDepcruise } from ${JSON.stringify(KHOA_URL)};`,
+      "const [duong, baoSanSang, choDangGiu] = process.argv.slice(2);",
+      "const ngu = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);",
+      'writeFileSync(baoSanSang, "");',
+      "while (!existsSync(choDangGiu)) ngu(10);",
+      "const den = Date.now();",
+      "const kq = voiKhoaDepcruise(() => { const batDau = Date.now(); ngu(50); return { batDau, ketThuc: Date.now() }; }, duong);",
+      "process.stdout.write(JSON.stringify({ den, ...kq }));",
+    ].join("\n"),
+  );
+  return tep;
+}
+
+function chayCon<T>(tep: string, thamSo: readonly string[]): Promise<T> {
+  return new Promise((giaiQuyet, tuChoi) => {
+    const con = spawn(process.execPath, ["--experimental-transform-types", tep, ...thamSo], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let ra = "";
+    let loi = "";
+    con.stdout.on("data", (d: Buffer) => (ra += d.toString()));
+    con.stderr.on("data", (d: Buffer) => (loi += d.toString()));
+    con.on("close", (ma) => {
+      if (ma !== 0) tuChoi(new Error(`tiến trình con thoát ${String(ma)}: ${loi}`));
+      else giaiQuyet(JSON.parse(ra) as T);
+    });
+  });
+}
+
+/** Dựng tay dấu của một người chờ ĐẾN TRƯỚC, còn sống (chủ là tiến trình test), và giữ tim nó đập. */
+function datDauGia(duongKhoa: string, pid: number = process.pid): { readonly duong: string; readonly thoi: () => void } {
+  mkdirSync(thuMucDauCho(duongKhoa), { recursive: true });
+  const duong = join(thuMucDauCho(duongKhoa), tenDauCho(Date.now() - 1_000, pid, 0));
+  writeFileSync(duong, "", "utf8");
+  const tim = setInterval(() => {
+    const bayGio = new Date();
+    try {
+      utimesSync(duong, bayGio, bayGio);
+    } catch {
+      // dấu đã được gỡ
+    }
+  }, 100);
+  return {
+    duong,
+    thoi: () => {
+      clearInterval(tim);
+      rmSync(duong, { force: true });
+    },
+  };
+}
+
+describe("[khoản 9401] khoá xếp hàng: người đến trước được trước", () => {
+  it("người đến sau KHÔNG giành khi có một người chờ còn sống đến trước — mà xếp hàng sau họ", { timeout: 30_000 }, async () => {
+    const duong = join(thuMuc, "nhuong-dau-song.lock");
+    const gia = datDauGia(duong);
+    const truoc = Date.now();
+    setTimeout(gia.thoi, 1_500);
+    let dauTrongHang = 0;
+    setTimeout(() => (dauTrongHang = readdirSync(thuMucDauCho(duong)).length), 700);
+    const cho = await voiKhoaDepcruiseAsync(() => Date.now() - truoc, duong);
+    expect(dauTrongHang, "lượt đến sau phải đặt dấu của nó SAU dấu kia").toBe(2);
+    expect(cho, "khoá trống mà vẫn phải chờ người đến trước rời hàng").toBeGreaterThanOrEqual(1_400);
+    expect(readdirSync(thuMucDauCho(duong)), "giành được rồi thì dấu của mình phải đi").toEqual([]);
+  });
+
+  it("ĐỐI CHỨNG: `nhuong: false` — đúng khoá cũ — giành ngay dù có người xếp hàng trước", { timeout: 30_000 }, async () => {
+    const duong = join(thuMuc, "khong-nhuong.lock");
+    const gia = datDauGia(duong);
+    const truoc = Date.now();
+    const cho = await voiKhoaDepcruiseAsync(() => Date.now() - truoc, duong, { hanChoMs: 60_000, nhuong: false });
+    gia.thoi();
+    expect(cho, "khoá cũ không nhìn hàng chờ — đây là cơ chế làm người chờ đói").toBeLessThan(1_000);
+  });
+
+  it("dấu NGỪNG TIM bị bỏ qua nhưng không bị xoá; dấu của tiến trình ĐÃ CHẾT bị dọn", { timeout: 30_000 }, async () => {
+    const duongNgung = join(thuMuc, "dau-ngung-tim.lock");
+    const ngung = datDauGia(duongNgung);
+    ngung.thoi(); // dừng tim…
+    writeFileSync(ngung.duong, "", "utf8"); // …rồi đặt lại tệp với mốc tim cũ hơn hạn
+    const cu = new Date(Date.now() - 60_000);
+    utimesSync(ngung.duong, cu, cu);
+    const t1 = Date.now();
+    expect(await voiKhoaDepcruiseAsync(() => Date.now() - t1, duongNgung)).toBeLessThan(1_000);
+    expect(existsSync(ngung.duong), "dấu ngừng tim có thể chỉ là chủ chậm — không được xoá").toBe(true);
+
+    const duongChet = join(thuMuc, "dau-chu-chet.lock");
+    const chet = datDauGia(duongChet, await pidDaChet());
+    const t2 = Date.now();
+    expect(await voiKhoaDepcruiseAsync(() => Date.now() - t2, duongChet)).toBeLessThan(1_000);
+    expect(existsSync(chet.duong), "dấu của một tiến trình đã chết phải được dọn").toBe(false);
+    chet.thoi();
+  });
+
+  it("hạn chờ vẫn NÉM khi người đứng trước không bao giờ rời hàng — và dấu của lượt ném cũng đi", { timeout: 30_000 }, async () => {
+    const duong = join(thuMuc, "han-khi-xep-hang.lock");
+    const gia = datDauGia(duong);
+    const truoc = Date.now();
+    await expect(voiKhoaDepcruiseAsync(() => 1, duong, { hanChoMs: 1_000, nhuong: true })).rejects.toThrow(
+      /chờ khoá depcruise quá 1000 ms/u,
+    );
+    expect(Date.now() - truoc, "ném ở hạn, không treo").toBeLessThan(10_000);
+    expect(readdirSync(thuMucDauCho(duong)), "chỉ còn dấu của người đứng trước").toEqual([basename(gia.duong)]);
+    gia.thoi();
+  });
+
+  it("một tiến trình giữ-nhả liên tục NHƯỜNG người đang xếp hàng; không nhường thì giành lại MỌI lượt", { timeout: 60_000 }, async () => {
+    const tep = vietKichBanGiuNhaLienTuc();
+    type KetQua = { readonly khoiDong: number; readonly cac: readonly Khoang[] };
+
+    const duongNhuong = join(thuMuc, "giu-nha-nhuong.lock");
+    const gia = datDauGia(duongNhuong);
+    // Mốc rời hàng đo ở CHÍNH tiến trình test, cùng đồng hồ máy với tiến trình con — không đo từ lúc
+    // sinh con, vì thời gian khởi động của `node` trên một runner chậm ăn mất một phần khoảng chờ.
+    let roiHang = Number.POSITIVE_INFINITY;
+    setTimeout(() => {
+      roiHang = Date.now();
+      gia.thoi();
+    }, 2_500);
+    const nhuong = await chayCon<KetQua>(tep, [duongNhuong, "5", "100", "1", "-", "-"]);
+    expect(nhuong.khoiDong, "đối chứng hỏng: tiến trình con lên SAU lúc người xếp hàng rời đi").toBeLessThan(roiHang);
+    expect(nhuong.cac, "đủ năm lượt giữ sau khi tới lượt").toHaveLength(5);
+    expect(
+      nhuong.cac[0]!.batDau,
+      "người giữ-nhả phải đợi người xếp hàng trước nó rời hàng",
+    ).toBeGreaterThanOrEqual(roiHang);
+
+    const duongKhong = join(thuMuc, "giu-nha-khong-nhuong.lock");
+    const gia2 = datDauGia(duongKhong);
+    const khong = await chayCon<KetQua>(tep, [duongKhong, "5", "100", "0", "-", "-"]);
+    const conXepHang = existsSync(gia2.duong);
+    gia2.thoi();
+    expect(conXepHang, "đối chứng hỏng: người xếp hàng đã rời hàng giữa chừng").toBe(true);
+    expect(khong.cac, "khoá cũ: đủ năm lượt giữ trong khi có người xếp hàng trước").toHaveLength(5);
+    expect(khong.cac[0]!.batDau - khong.khoiDong, "khoá cũ giành ngay, không nhìn hàng chờ").toBeLessThan(1_000);
+  });
+
+  it("HAI TIẾN TRÌNH THẬT: người chờ chen được vào giữa vòng giữ-nhả, không phải chờ trọn vòng", { timeout: 60_000 }, async () => {
+    const duong = join(thuMuc, "hai-tien-trinh-xep-hang.lock");
+    const sanSang = join(thuMuc, "nguoi-cho-san-sang");
+    const dangGiu = join(thuMuc, "giu-nha-dang-giu");
+    const [h, w] = await Promise.all([
+      chayCon<{ readonly khoiDong: number; readonly cac: readonly Khoang[] }>(vietKichBanGiuNhaLienTuc(), [
+        duong,
+        "10",
+        "250",
+        "1",
+        sanSang,
+        dangGiu,
+      ]),
+      chayCon<Khoang & { readonly den: number }>(vietKichBanNguoiCho(), [duong, sanSang, dangGiu]),
+    ]);
+    // Loại trừ vẫn nguyên: lượt của người chờ không chồng lấn lượt nào của người kia.
+    for (const k of h.cac) expect(chongLan(k, w), JSON.stringify({ k, w })).toBe(false);
+    // Công bằng: từ lúc người chờ đến tới lúc nó vào, người kia mở THÊM nhiều nhất một lượt — lượt ấy
+    // chỉ có khi nó giành lại đúng trong khe trước khi người chờ kịp đặt dấu.
+    const chenTruoc = h.cac.filter((k) => k.batDau > w.den && k.batDau < w.batDau).length;
+    expect(chenTruoc, `người chờ bị chen: ${JSON.stringify({ h: h.cac, w })}`).toBeLessThanOrEqual(1);
+    // Và nó vào GIỮA vòng, không phải sau lượt cuối: người kia còn giữ tiếp nhiều lượt sau nó.
+    const sauNguoiCho = h.cac.filter((k) => k.batDau >= w.ketThuc).length;
+    expect(sauNguoiCho, "người chờ chỉ vào được khi vòng giữ-nhả đã hết — tức vẫn đói").toBeGreaterThanOrEqual(7);
+  });
+});
