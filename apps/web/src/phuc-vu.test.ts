@@ -136,9 +136,14 @@ describe("bề mặt tệp", () => {
     // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số.
     expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(8);
     for (const l of link) {
-      const hopLe = l.manh === "#${m.orgId}:${m.token}" || (l.duong === "/login" && l.manh === "#${m.orgId}");
-      expect(hopLe, `${l.tep}: ${l.duong}${l.manh}`).toBe(true);
+      // Mọi đường — không chỉ của hộp thư dev như vế khoản 198 ở trên — phải là đường `apps/web` phục vụ.
+      expect(Object.keys(TRANG), `${l.tep}: ${l.duong}`).toContain(l.duong);
+      expect(l.manh === "#${m.orgId}:${m.token}" || l.manh === "#${m.orgId}", `${l.tep}: ${l.duong}${l.manh}`).toBe(true);
     }
+    // Dạng `#<orgId>` trơn đúng MỘT chỗ: nhánh `token === null` của tin báo người duyệt qua SES. Cho nó ở chỗ
+    // khác là để một bộ gửi rơi mất token mà vẫn xanh.
+    const tron = link.filter((l) => l.manh === "#${m.orgId}");
+    expect(tron.map((l) => `${l.tep}${l.duong}`)).toEqual(["gui-ses.ts/login"]);
   });
 
   it("[ADR-9201] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
@@ -147,8 +152,10 @@ describe("bề mặt tệp", () => {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
       const ham = /^function docLink\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
       expect(ham, `${trang}.js không còn hàm docLink`).toBeDefined();
+      // `/login` dùng hằng `LA_UUID` chung của trang; ba trang kia không có nó.
+      const hang = /^const LA_UUID = .*;$/mu.exec(js)?.[0] ?? "";
       const o = { org: { value: truoc.org }, token: { value: truoc.token } };
-      runInNewContext(`${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent });
+      runInNewContext(`${hang}\n${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent });
       return { org: o.org.value, token: o.token.value };
     };
     for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau"]) {
@@ -156,6 +163,25 @@ describe("bề mặt tệp", () => {
     }
     expect(chay("mo-thau", `#${ORG}`, { org: "", token: "ma-cu-cua-nguoi-truoc" })).toEqual({ org: ORG, token: "" });
     expect(chay("mo-thau", "#chiCoMaTronKhongCoToChuc", { org: "go-tay", token: "" })).toEqual({ org: "go-tay", token: "chiCoMaTronKhongCoToChuc" });
+  });
+
+  it("[ADR-9201] ô tổ chức của /login nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
+    const ORG = "11111111-1111-4111-8111-111111111111";
+    const js = readFileSync(new URL("../trang/mo-thau.js", import.meta.url), "utf8");
+    const hang = /^const LA_UUID = .*;$/mu.exec(js)?.[0];
+    const ham = /^function docToChuc\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
+    expect(hang).toBeDefined();
+    expect(ham).toBeDefined();
+    const doc = (v: string): unknown => {
+      const ctx: Record<string, unknown> = { $: () => ({ value: v }) };
+      runInNewContext(`${hang ?? ""}\n${ham ?? ""}\nketQua = docToChuc();`, ctx);
+      return ctx["ketQua"];
+    };
+    expect(doc(ORG)).toBe(ORG);
+    expect(doc(`  https://mua.vidu.vn/login#${ORG}:tokTokTokTokTokTok_-1 `)).toBe(ORG);
+    expect(doc(`#${ORG}`)).toBe(ORG);
+    expect(doc("")).toBe("");
+    expect(doc("cong-ty-a")).toBeNull();
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {

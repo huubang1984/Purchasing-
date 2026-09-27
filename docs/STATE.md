@@ -18,8 +18,10 @@ Chủ dự án chọn, gộp cả ba kênh gửi (ADR-9201, sửa dạng link c�
 `/login#<orgId>:<token>` và `/i#<orgId>:<token>` — đúng dạng bốn trang đọc; tới trước vòng này thân thư và tin nhắn thật không
 mang `orgId` ở đâu cả, nên người nhận không vào được trang mình được dẫn tới. Tin báo người duyệt không mã mang `/login#<orgId>`.
 Trang `/login` có ô *Gửi link đăng nhập* gọi `POST /auth/link` — trước đó không trang nào gọi, tức người mua trên prod không tự
-xin được link cho bất kỳ lần đăng nhập nào — và nói một câu cho mọi 200. Sửa lời đóng của khoản 198 (hàng 198). Tin SMS lời mời
-thành hai đoạn. Đo: pilot giả lập 10/10, Chromium trên cụm thật đi trọn *xin link → thư → mở → TOTP → vào*. Không migration,
+xin được link cho bất kỳ lần đăng nhập nào — và nói một câu cho mọi 200; ô tổ chức nhận nguyên link cũ dán vào, và trang
+nhớ mã tổ chức sau lần vào đầu tiên. Sửa lời đóng của khoản 198 (hàng 198). Tin SMS lời mời thành hai đoạn. Đo: pilot giả
+lập 10/10, Chromium trên cụm thật đi trọn *xin link → thư → mở → TOTP → vào*; lượt soi đối kháng 10 phát hiện, 7 đứng, cả 7
+đã sửa. Không migration,
 không đổi hợp đồng HTTP, không đổi số khoản. Chưa làm: trang xoá fragment sau khi đọc (ADR-020 mục 3 viết thế, không trang nào
 làm) — ghi trong ADR, chưa vào sổ nợ. Bằng chứng: `evidence/security-reviews.md` §S1.9101.
 

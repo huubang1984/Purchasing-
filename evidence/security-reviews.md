@@ -14163,6 +14163,29 @@ Chủ dự án chọn ngày 2026-09-27, gộp cả ba kênh gửi (ADR-9201, s�
   JavaScript trên trang.
 - `pnpm t0`, `pnpm test`, `pnpm cap-so --kiem`: xem mục 5.
 
+## 3b. Lượt soi đối kháng — ba lăng kính (an ninh; đúng đắn và đủ chỗ; hành vi trang `/login`), mỗi phát hiện hai người
+kiểm cố bác
+
+10 phát hiện, 7 đứng, 0 về an ninh. Cả 7 đã sửa:
+
+1. Nhánh tin báo người duyệt CÓ mã của SES không có test nào, và test mới chấp nhận `#<orgId>` trơn ở mọi chỗ dựng `/login`
+   — bỏ token ở nhánh ấy vẫn xanh; test mới cũng không đòi đường nằm trong `TRANG`. Sửa: ca SES có mã; `#<orgId>` trơn đúng
+   một chỗ; mọi đường phải có trong `TRANG`. Hai đột biến tương ứng ⇒ đỏ.
+2. `gui-sms.test.ts` nuôi mình bằng link dạng cũ và khẳng định lời mời ≤ 160 ký tự; `gui-zalo.test.ts` cũng dạng cũ; ADR-069
+   mục 2 viết *"≤ 160 ký tự"*. Sửa: fixture dạng mới; OTP và tin gia hạn ≤ 160, lời mời > 160 và ≤ 306; gạch câu ADR-069.
+3. Tài liệu và chú thích hiện hành vẫn tả dạng cũ (ADR-020 mục 3, hộp thư dev ở ADR-021, `auth.ts`, `cau-hinh.ts`,
+   `.env.example`, `phuc-vu.ts`). Sửa: gạch kèm nhãn hoặc viết lại chú thích.
+4. Tới `/login` không kèm fragment — kể cả qua liên kết điều hướng của chính ba trang kia — thì ô tổ chức rỗng và không có
+   cách biết nó. Sửa: ô tổ chức nhận nguyên link cũ; trang nhớ mã tổ chức sau lần vào đầu tiên (`localStorage`, bọc `try`);
+   câu dẫn nói mã nằm ở đâu.
+5. Câu báo cho 200 nói *"vừa được gửi"* trong khi việc gửi chạy sau phản hồi và người đã có năm mã/15 phút không nhận gì.
+   Sửa câu, vẫn một câu cho mọi 200.
+6. Mã tổ chức sai hình dạng hiện thành `thiếu trường "orgId"`. Sửa: trang kiểm hình dạng trước và nói đúng lỗi.
+7. `fetch` ném (mất mạng) ⇒ nút bật lại mà không một chữ. Sửa: câu báo mất kết nối ở cả nút Vào và nút xin link.
+
+Ba phát hiện bị bác: ô email không bị xoá khi đổi fragment (hai lần, cùng một ý — email không phải credential và không
+mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi lời mời nào).
+
 ## 4. Giới hạn
 
 - Tin SMS lời mời thành hai đoạn: 138–153 ⇒ 175–190 ký tự GSM-7 tuỳ tên miền (thân của `gui-sms.ts`, token 43 ký tự,

@@ -1868,10 +1868,11 @@ Ba ràng buộc đi kèm, cả ba cưỡng chế được:
 
 ### 3. E6 — token KHÔNG BAO GIỜ vào đường dẫn hay query
 
-- **Magic link = `https://<host>/i#<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
+- **Magic link = ~~`https://<host>/i#<token>`~~ [S1.9101 / ADR-9201] `https://<host>/i#<orgId>:<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
   fragment lên máy chủ, không ghi vào log truy cập, không đi vào `Referer`. Trang `/i` là tĩnh;
   JS đọc `location.hash`, xoá nó (`history.replaceState`), rồi **POST** token trong thân JSON tới
-  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: `/login#<token>`.
+  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: ~~`/login#<token>`~~ **[S1.9101 / ADR-9201]**
+  `/login#<orgId>:<token>` — hai route redeem đòi cả hai, và thư/tin nhắn không có chỗ nào khác nói tổ chức.
 - **Mọi phản hồi** mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (trừ
   `public-keys`, đã có chính sách riêng), `X-Content-Type-Options: nosniff`.
 - **Phiên khách** đi trong cookie như phiên người mua; **mã OTP** chỉ đi trong thân POST.
@@ -2127,7 +2128,8 @@ test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
   được, không bao giờ trả rỗng; `kind` phân biệt. KHÔNG phải bản chép của `local-dev-shared.ts`
   (không import được, và không nên: nhãn HKDF khác nên cùng khoá chính cũng cho khoá dẫn xuất khác).
 - **Hộp thư dev (`adapters/hop-thu-dev.ts`)**: ba bộ gửi ghi mỗi tin một tệp JSON (0700/0600) vào
-  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (`/login#<token>`, `/i#<token>`); không
+  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (~~`/login#<token>`, `/i#<token>`~~ **[S1.9101 / ADR-9201]**
+  `/login#<orgId>:<token>`, `/i#<orgId>:<token>`); không
   một byte nào qua `console`. Đây là adapter DUY NHẤT hôm nay: bộ gửi thật (SMTP/SES/SMS) là hạ
   tầng chưa có, và cách đóng đúng vẫn là nợ 38 (outbox cho mọi email, token phát trong handler).
 - Cả hai gọi `assertLocalDevAllowed()` NGAY KHI TẠO — cùng hàm với `createLocalDevWrapper` và
@@ -6562,7 +6564,8 @@ mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo ch�
    (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
 2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
    `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
-   **ASCII không dấu, ≤ 160 ký tự** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
+   **ASCII không dấu, ~~≤ 160 ký tự~~** **[S1.9101 / ADR-9201] ≤ 160 ký tự cho OTP và tin gia hạn; lời mời
+   mang link có mã tổ chức nên thành hai đoạn GSM-7** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
    đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
 3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
    `otp`, `duong_dan`, `han_nop`). **Token trong Secrets Manager** (`tp/api/zalo-oa`): refresh token dùng một lần và
@@ -8287,9 +8290,14 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
    điền ô tổ chức, xoá ô mã — mã của người trước không được đứng lại. Hộp thư dev giữ `duongLink: null` cho tin ấy.
 3. **Trang `/login` có ô xin link đăng nhập** gọi `POST /auth/link` với mã tổ chức ở ô trên và email. Máy chủ trả CÙNG một
    200 cho mọi email (nợ 38), nên trang cũng nói MỘT câu cho mọi 200 — trang không được biết thêm điều máy chủ cố ý không
-   nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Chỉ trang `/login`: đó là nơi mọi link đăng nhập
-   dẫn tới; `/tao-thau` và `/chinh-sach` không có ô này.
-4. **Không đổi hợp đồng HTTP nào.** `/auth/link`, `/auth/redeem`, `/guest/redeem` giữ nguyên thân và phản hồi; không migration.
+   nói — và câu ấy đúng ở mọi nhánh sau 200 (việc gửi chạy sau phản hồi; người đã có năm mã trong 15 phút nhận 200 mà
+   không nhận thư). Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Chỉ trang `/login`: đó là nơi mọi
+   link đăng nhập dẫn tới; `/tao-thau` và `/chinh-sach` không có ô này.
+4. **Người tới `/login` không kèm fragment vẫn đi tiếp được.** Ô tổ chức nhận nguyên một link cũ dán vào (lấy phần sau
+   `#`, trước `:`) và nói đúng khi mã sai hình dạng. Trang nhớ mã tổ chức trong `localStorage` SAU lần vào thành công
+   đầu tiên trên máy — tiện cho từng người xem, không phải trạng thái phải bền; đọc/ghi bọc `try`, và một link lạ mang
+   `#<orgId>` không đặt được mã cho lần sau.
+5. **Không đổi hợp đồng HTTP nào.** `/auth/link`, `/auth/redeem`, `/guest/redeem` giữ nguyên thân và phản hồi; không migration.
 
 ### Phương án đã cân nhắc
 
@@ -8311,11 +8319,15 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   Vòng này KHÔNG đổi điều ấy (xoá fragment thì tải lại trang là mất mã, và trình nghe `hashchange` của bốn trang dựa vào
   fragment); ghi ra để chủ dự án xếp.
 - **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`.
+- **Người chưa từng vào trên máy này và không còn link nào** vẫn phải được ai đó cho mã tổ chức — trang không tra được
+  tổ chức từ email (đó là hướng ⒞, đã bác).
 
 ### Đo
 
-`apps/web/src/phuc-vu.test.ts` đọc văn bản ba bộ gửi (tám chỗ dựng link) và chạy `docLink()` của bốn trang trong `node:vm`
-trên đúng dạng ấy; đột biến trả `kenh-so.ts` về `/i#<token>` ⇒ đỏ, đột biến bỏ lần xoá ô mã ở `/login` ⇒ đỏ. Pilot giả lập
+`apps/web/src/phuc-vu.test.ts` đọc văn bản ba bộ gửi (tám chỗ dựng link, mỗi đường phải có trong `TRANG`, dạng
+`#<orgId>` trơn đúng một chỗ) và chạy `docLink()` của bốn trang, `docToChuc()` của `/login`, trong `node:vm`. Đột biến
+trả `kenh-so.ts` về `/i#<token>` ⇒ đỏ; bỏ lần xoá ô mã ở `/login` ⇒ đỏ; bỏ token ở tin báo người duyệt có mã của SES ⇒ đỏ;
+đổi đường của tin ấy sang một trang không có ⇒ đỏ. Pilot giả lập
 (`tools/pilot-gia-lap`, `tokenTuLink` nay đòi mã tổ chức trong link khớp tổ chức của tin) 10/10 kịch bản, cô lập 2/2.
 Chromium trên cụm thật: `/login#<org>` điền ô tổ chức; email lạ và email thật nhận cùng một câu; thư tới mang
 `/login#<org>:<token>`, mở ra hai ô điền sẵn, TOTP ⇒ vào; 0 lỗi JavaScript.
