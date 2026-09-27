@@ -50,7 +50,7 @@
 | **A3** | Nhà cung cấp mở link **trong một trình duyệt có `crypto.subtle`** | ADR-007, ADR-011, `tools/do-webcrypto` | Toàn bộ đường nộp thầu. Đã đo iOS 18.7 ✅; **Android còn trống** (khoản nợ 23) | *"Nhà cung cấp của anh mở link bằng gì — Zalo, Messenger, hay trình duyệt?"* |
 | **A4** | Nhà cung cấp **chấp nhận hai bước** (link + OTP) cho lần báo giá đầu | ADR-015 mục 1; E2 | Ràng buộc sản phẩm 1 nói *friction thấp là điều kiện sống còn*. Nếu hai bước làm tụt tỷ lệ phản hồi, USP 1 mất chỗ dựa | *"Nếu phải bấm thêm một mã OTP mới vào được, anh nghĩ bao nhiêu nhà cung cấp bỏ cuộc?"* |
 | **A5** | **Người giữ kênh** và **người ngồi trước màn hình** thường là **một** | `010` `guest_sessions.verified_contact_id`; ADR-015 §*Cái này KHÔNG đóng* | E5 ghi *danh tính thực tế đã xác thực*. Nếu chuyển tiếp cả link lẫn OTP là **thói quen bình thường**, cột ấy ghi một người không làm gì | *"Có bao giờ một người nhận email rồi chuyển cho đồng nghiệp làm báo giá không?"* |
-| **A6** | **[S1.157]** Nhà cung cấp **không sửa ô tiền tệ** điền sẵn `VND` | `apps/web/trang/nop-thau.html:54`; `packages/danh-gia/src/luot-danh-gia.ts:310-321`; khoản **243** | Một nhà cung cấp gõ `VNĐ` hay `vnd` là lượt chấm của cả gói bị từ chối, và không ai trao thầu được | *"Nhà cung cấp của anh ghi đơn vị tiền thế nào trên báo giá — VND, VNĐ, hay đ?"* **[S1.9101]** Khoản 243 đóng không chờ câu trả lời: ô chọn VND/USD và tập bí danh đóng (ADR-9201). Câu hỏi còn giá trị ở vế ngược — một cách viết NGOÀI tập (`VND.`, `vnđ.`) vẫn làm lượt chấm từ chối cả gói, nay bằng mã có tên và một lối huỷ. |
+| **A6** | **[S1.159]** Nhà cung cấp **không sửa ô tiền tệ** điền sẵn `VND` | `apps/web/trang/nop-thau.html:54`; `packages/danh-gia/src/luot-danh-gia.ts:310-321`; khoản **244** | Một nhà cung cấp gõ `VNĐ` hay `vnd` là lượt chấm của cả gói bị từ chối, và không ai trao thầu được | *"Nhà cung cấp của anh ghi đơn vị tiền thế nào trên báo giá — VND, VNĐ, hay đ?"* **[S1.9101]** Khoản 244 đóng không chờ câu trả lời: ô chọn VND/USD và tập bí danh đóng (ADR-9201). Câu hỏi còn giá trị ở vế ngược — một cách viết NGOÀI tập (`VND.`, `vnđ.`) vẫn làm lượt chấm từ chối cả gói, nay bằng mã có tên và một lối huỷ. |
 
 ## B. Về NGƯỜI MUA
 
@@ -80,7 +80,7 @@
 | **D1** | Khách hàng **chấp nhận khoá nằm ở AWS KMS Singapore** | ADR-009 §*Khi nào phải MỞ LẠI* | ADR-009 tự liệt kê ba điều kiện lật ngược: chủ quyền dữ liệu trong nước, khách FDI đã chuẩn hoá Azure, yêu cầu đa đám mây. **Đổi KMS sau khi có khoá thật là một cuộc di trú** | *"Dữ liệu và khoá mã hoá có buộc phải nằm trong lãnh thổ Việt Nam không?"* |
 | **D2** | Kiểm chứng biên nhận diễn ra **trong trình duyệt** của nhà cung cấp | ADR-011 mục 2 | `Ed25519` chỉ vào WebCrypto ở **Chrome 137**. Nếu kiểm chứng phải chạy trong trình duyệt máy cũ, ứng viên đầu của B2 kế thừa đúng vấn đề đuôi mà mục 1 vừa gỡ | *"Khi cần chứng minh 'tôi đã nộp lúc 15:42', nhà cung cấp của anh sẽ tự kiểm hay nhờ ai kiểm?"* |
 
-## E. Về DỮ LIỆU — S4 **[S1.157]**
+## E. Về DỮ LIỆU — S4 **[S1.159]**
 
 Suy từ spec S4 (`docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`) sau lượt soi hình dạng. Chưa
 dòng mã nào của S4, nên *"nằm ở đâu"* trỏ vào mục spec mà mã sắp cư xử theo.
@@ -93,10 +93,10 @@ dòng mã nào của S4, nên *"nằm ở đâu"* trỏ vào mục spec mà mã 
 | **E4** | Cùng một mặt hàng **được mua lại** ≥ 3 gói, từ ≥ 3 nhà cung cấp, trong 12 tháng | Spec S4 §4.6, §2.4 ⑾ | Mọi dòng hiện *"chưa đủ lịch sử"*; benchmark nội bộ không bao giờ ra nhãn | *"Trong một năm anh mua lại cùng một mặt hàng bao nhiêu lần, từ bao nhiêu nơi?"* |
 | **E5** | Giá **từng dòng** nhà cung cấp khai là giá thật của dòng ấy — không dồn giá | Spec S4 §8.4 | Lịch sử theo dòng méo; tổng vẫn đúng nên không ai thấy | *"Nhà cung cấp có hay dồn giá vào vài dòng để tổng không đổi không?"* |
 | **E6** | Bên mua có **mốc giá ngoài** và **lịch sử PO xuất được** — Excel hay ERP — trích dẫn được nguồn | Spec S4 §4.7, §2.4 ⑽; ADR-096 | S4a không có phép so nào từ ngày đầu | *"Anh có bảng giá tham khảo, hay lịch sử đơn mua xuất ra Excel được không?"* |
-| **E7** | Phân tích tỷ lệ chọn nhà cung cấp của **từng nhân viên** là hợp pháp và được người lao động biết | Spec S4 §8.7, §4.9 — chủ: chủ dự án. **[S1.159]** Spec S4b §2.4 ㉖: cả F2a | ~~S4b.4~~ **[S1.159]** S4b.5 — phân tích người mua và F2a — không làm được, hoặc làm được mà vi phạm | *"Nhân viên mua hàng của anh có biết và đồng ý việc phân tích tỷ lệ chọn nhà cung cấp của từng người không?"* |
+| **E7** | Phân tích tỷ lệ chọn nhà cung cấp của **từng nhân viên** là hợp pháp và được người lao động biết | Spec S4 §8.7, §4.9 — chủ: chủ dự án. **[S1.161]** Spec S4b §2.4 ㉖: cả F2a | ~~S4b.4~~ **[S1.161]** S4b.5 — phân tích người mua và F2a — không làm được, hoặc làm được mà vi phạm | *"Nhân viên mua hàng của anh có biết và đồng ý việc phân tích tỷ lệ chọn nhà cung cấp của từng người không?"* |
 
-**[S1.159]** Sáu dòng dưới suy từ spec S4b (`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`) sau
-lượt soi hình dạng; góc D⑪ của biên bản §S1.159.
+**[S1.161]** Sáu dòng dưới suy từ spec S4b (`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`) sau
+lượt soi hình dạng; góc D⑪ của biên bản §S1.161.
 
 | # | Tiền đề | Nằm ở đâu | Sai thì mất gì | Câu hỏi |
 |---|---|---|---|---|
@@ -105,8 +105,8 @@ lượt soi hình dạng; góc D⑪ của biên bản §S1.159.
 | **E10** | Một nhóm nhà cung cấp cùng dự ≥ 6 gói (F1) và ≥ 9 gói (F2b) trong 12 tháng | Spec S4b §4.1 F1, F2b | Yếu tố chuỗi mãi `CHUA_DU_LICH_SU`; S4b.1 nổ ở mọi lần trao, mãi mãi | *"Một nhóm nhà cung cấp quen của anh cùng dự bao nhiêu gói một năm?"* |
 | **E11** | *"Khoảng cách thắng–nhì ổn định nghĩa là thông đồng"* (ADR-058 ⑸) đúng ở thị trường này, và biên của cạnh tranh thật nằm ngoài ngưỡng tuyệt đối của F1 (1%, 0,5 điểm) | Spec S4b §2.5 ㊻; phép mô phỏng M2 dùng phân phối GIẢ ĐỊNH | F1 báo sai trên cạnh tranh thật, hoặc mù | *"Khi anh nhận ba báo giá thật cho cùng một hàng, giá thứ hai thường cao hơn giá thấp nhất bao nhiêu phần trăm?"* |
 | **E12** | Khách chịu ma sát S4b.1 ở MỌI lần trao suốt ít nhất sáu tháng đầu | Spec S4b §2.5 ㉚ — độ phủ tối đa 27% trước S4b.2 | Công tắc ADR-080 một chiều nên không tắt được; khách rời bỏ thay vì tắt | *"Nếu nửa năm đầu mỗi lần duyệt trao cần thêm một người ký xác nhận đã đọc cảnh báo, anh có chấp nhận không?"* |
-| **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score. **[S1.160]** Supplier Score hoãn tới S5 (ADR-100): dòng này chờ spec S5 | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
-| **E14** **[S1.160]** | Tổ chức có **một người kiểm toán** không mua, không duyệt, không xem giá, và đủ thời gian đọc sổ tín hiệu | Spec S4b §2.7 Q2 — vai `AUDITOR`; ADR-100 | Không ai đọc sổ tín hiệu và phân tích người mua; hai màn ấy thành công cụ không người dùng — nhân lên từ B4 và E1 | *"Công ty anh có ai kiểm tra việc mua hàng mà không trực tiếp mua hay duyệt không — kiểm soát nội bộ, kiểm toán nội bộ?"* |
+| **E13** | Mỗi nhà cung cấp được mời ≥ 5 gói trong 12 tháng | Spec S4b §7 — sàn Supplier Score. **[S1.162]** Supplier Score hoãn tới S5 (ADR-100): dòng này chờ spec S5 | Supplier Score mãi *"chưa đủ lịch sử"* | *"Một nhà cung cấp quen được mời bao nhiêu gói mỗi năm?"* |
+| **E14** **[S1.162]** | Tổ chức có **một người kiểm toán** không mua, không duyệt, không xem giá, và đủ thời gian đọc sổ tín hiệu | Spec S4b §2.7 Q2 — vai `AUDITOR`; ADR-100 | Không ai đọc sổ tín hiệu và phân tích người mua; hai màn ấy thành công cụ không người dùng — nhân lên từ B4 và E1 | *"Công ty anh có ai kiểm tra việc mua hàng mà không trực tiếp mua hay duyệt không — kiểm soát nội bộ, kiểm toán nội bộ?"* |
 
 ---
 

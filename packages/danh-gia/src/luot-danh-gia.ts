@@ -131,12 +131,13 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
   readonly version: number;
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
 }> {
+  // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách hiện hành: một phiên bản có bậc chưa
+  // có chữ ký thứ hai không đổi được trọng số chấm (ADR-082 ⑺). Hệ quả phụ, nói ra: bản cũ bỏ qua
+  // `effective_from`, nên một phiên bản hẹn giờ được chấm theo TRƯỚC giờ hiệu lực của nó.
   const { rows } = await client.query<HangChinhSach>(
     `SELECT o.id, o.version, o.eval_components
        FROM public.org_procurement_policies o
-      WHERE o.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-      ORDER BY o.version DESC
-      LIMIT 1`,
+      WHERE o.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now())`,
     [orgId],
   );
   const cs = rows[0];
@@ -310,7 +311,7 @@ export async function taoLuotDanhGia(
   // Spec §2.3⑻: lệch tiền tệ thì TỪ CHỐI cả lượt. Mạnh hơn `buildComparisonTable` (nó trả `null`
   // vì nó chỉ HIỂN THỊ) là cố ý — một `rank` thì không có giá trị `null` nào có nghĩa.
   //
-  // [S1.9101 / khoản 243] `currency` đã đi qua `public.bid_currency` ở `docBaoGia`, nên nó chỉ còn
+  // [S1.9101 / khoản 244] `currency` đã đi qua `public.bid_currency` ở `docBaoGia`, nên nó chỉ còn
   // là `VND`, `USD` hay `null` — `VNĐ`, `vnd`, `₫`… đã gộp về `VND` ở MỘT hàm SQL mà bảng so sánh
   // cũng gọi. Hệ quả đo được: một tập đồng nhất lạ (mọi báo giá ghi `VNĐ`) không còn lọt qua đây rồi
   // vỡ ở `CHECK` của `057` thành một 422 không tên — chuỗi ngoài tập đóng thành `null`, và `null`

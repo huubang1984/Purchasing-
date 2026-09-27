@@ -763,7 +763,7 @@ export async function cancelRfq(
 
   // [S1.9101 / khoản 225] Danh sách trắng thêm BỐN trạng thái nguồn — `CLOSED`, `UNSEALED` và hai ảnh
   // BAFO — cùng lúc bảng cạnh của `9502` thêm bốn cạnh; hai lớp đổi trong CÙNG vòng, như `058`. Trước
-  // vòng ấy, một gói bị từ chối chấm vì lệch tiền tệ (khoản 243) đứng yên ở `UNSEALED` mãi mãi. Lý do
+  // vòng ấy, một gói bị từ chối chấm vì lệch tiền tệ (khoản 244) đứng yên ở `UNSEALED` mãi mãi. Lý do
   // nay đi vào `cancel_reason` cho MỌI lần huỷ — nhà cung cấp đọc nó ở trang nộp thầu —, và trigger
   // đòi nó ở bốn cạnh mới dù lời gọi này đã `batBuoc` rồi: một đường ghi thứ hai không được quên nó.
 

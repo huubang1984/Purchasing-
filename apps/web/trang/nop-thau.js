@@ -281,7 +281,7 @@ function tinhLai() {
   return tong;
 }
 
-// [S1.9101 / khoản 243] `#tien-te` nay là một <select>. `change` là sự kiện mà mọi trình duyệt phát
+// [S1.9101 / khoản 244] `#tien-te` nay là một <select>. `change` là sự kiện mà mọi trình duyệt phát
 // cho ô chọn; `input` thì trình duyệt cũ và vài cửa sổ web trong ứng dụng không phát — nghe cả hai.
 $("tien-te").addEventListener("change", tinhLai);
 $("tien-te").addEventListener("input", tinhLai);

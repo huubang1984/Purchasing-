@@ -2544,7 +2544,7 @@ describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có 
 });
 
 // ===============================================================================================
-// [S1.9101 / khoản 243] J8 — tiền tệ của báo giá đọc qua MỘT hàm, về tập đóng {VND, USD, NULL}
+// [S1.9101 / khoản 244] J8 — tiền tệ của báo giá đọc qua MỘT hàm, về tập đóng {VND, USD, NULL}
 // ===============================================================================================
 // ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.9101): `VND` + `VNĐ` ném `LECH_TIEN_TE`; MỘT
 // nhà cung cấp gõ `VNĐ` — hay hai nhà cung cấp cùng gõ `vnd` — thì phép so tập cho qua và câu INSERT
@@ -2552,7 +2552,7 @@ describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có 
 // `rfq_evaluations_currency_check`, `routine` `ExecConstraints`, tức một 422 KHÔNG TÊN ở API. Gói
 // đứng yên ở `UNSEALED`, và `UNSEALED` không có cạnh huỷ nào — gói kẹt. Các ca dưới là ĐÍCH của vòng
 // sửa: đỏ trước migration `9501`, xanh sau nó.
-describe("[INV-J8] [S1.9101 / khoản 243] tiền tệ báo giá đọc qua MỘT hàm", { timeout: 300000 }, () => {
+describe("[INV-J8] [S1.9101 / khoản 244] tiền tệ báo giá đọc qua MỘT hàm", { timeout: 300000 }, () => {
   const tuChoiTrangThai = async (rfqId: string): Promise<number> => {
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2",
@@ -2697,7 +2697,7 @@ describe("[INV-J8] [S1.9101 / khoản 243] tiền tệ báo giá đọc qua MỘ
       ]);
       await expect(
         withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
-        "không có hàm chuẩn hoá thì lỗi của khoản 243 quay lại — tức hàm ấy là lớp chịu lực, không trang trí",
+        "không có hàm chuẩn hoá thì lỗi của khoản 244 quay lại — tức hàm ấy là lớp chịu lực, không trang trí",
       ).rejects.toMatchObject({ lyDo: "LECH_TIEN_TE" });
     } finally {
       await db.pool.query(thanGoc);
@@ -2707,7 +2707,7 @@ describe("[INV-J8] [S1.9101 / khoản 243] tiền tệ báo giá đọc qua MỘ
   });
 });
 
-// [S1.9101 / khoản 225] Khoản 243 đã hẹp lối từ chối lại còn đúng những gói lệch tiền tệ THẬT (`VND` +
+// [S1.9101 / khoản 225] Khoản 244 đã hẹp lối từ chối lại còn đúng những gói lệch tiền tệ THẬT (`VND` +
 // `USD`), hay mang một chuỗi ngoài tập đóng. Những gói ấy vẫn đứng ở `UNSEALED`, và báo giá đã niêm
 // phong không sửa được. `9502` cho chúng một lối ra — huỷ, kèm lý do nhà cung cấp đọc được — và
 // describe này đo lối ấy ở đúng hai trạng thái lượt chấm từ chối được: `UNSEALED` và `BAFO_UNSEALED`,

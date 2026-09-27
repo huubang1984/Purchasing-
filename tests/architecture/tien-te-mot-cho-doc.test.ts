@@ -1,9 +1,9 @@
 // ==============================================================================================
-// [INV-J8] [S1.9101 / khoản 243] TIỀN TỆ CỦA BÁO GIÁ CHỈ ĐƯỢC ĐỌC QUA `public.bid_currency`
+// [INV-J8] [S1.9101 / khoản 244] TIỀN TỆ CỦA BÁO GIÁ CHỈ ĐƯỢC ĐỌC QUA `public.bid_currency`
 //
 // Trước vòng S1.9101, NĂM chỗ đọc `payload ->> 'currency'` trần — một ở lượt chấm, bốn ở bảng so
 // sánh — và mỗi chỗ tự quyết `VNĐ` có phải `VND` không. Chúng quyết giống nhau (đều "không"), và đó
-// là cả khoản 243: một nhà cung cấp gõ `VNĐ` làm lượt chấm của CẢ GÓI bị từ chối. Vòng ấy đưa năm chỗ
+// là cả khoản 244: một nhà cung cấp gõ `VNĐ` làm lượt chấm của CẢ GÓI bị từ chối. Vòng ấy đưa năm chỗ
 // qua MỘT hàm SQL. Lớp này giữ con số MỘT: một bộ đọc thứ sáu đọc chuỗi trần — `bid_don_gia` mà spec
 // S4 §4.5 định viết là ứng viên gần nhất — sẽ đỏ ở đây thay vì âm thầm cho `VNĐ` và `VND` là hai đơn vị.
 //

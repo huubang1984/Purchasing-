@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 9501 — [S1.9101 / khoản 243] TIỀN TỆ CỦA BÁO GIÁ ĐỌC QUA MỘT HÀM, VỀ TẬP ĐÓNG {VND, USD, NULL}
+-- 9501 — [S1.9101 / khoản 244] TIỀN TỆ CỦA BÁO GIÁ ĐỌC QUA MỘT HÀM, VỀ TẬP ĐÓNG {VND, USD, NULL}
 -- =============================================================================================
 -- ĐO (vòng S1.9101, Postgres 16 thật, trước khi viết dòng này — biên bản §S1.9101):
 --   · báo giá `VND` + `VNĐ` ⇒ lượt chấm ném `LECH_TIEN_TE`, gói đứng yên ở `UNSEALED`;

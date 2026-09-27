@@ -1,4 +1,4 @@
-// [S1.9101 / khoản 243] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
+// [S1.9101 / khoản 244] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
 //
 // ⑴ `CURRENCIES` của gói này — thứ API người mua dùng để từ chối một chính sách hay ngân sách lạ.
 // ⑵ `CHECK (currency IN (…))` của `057` — thứ CSDL dùng để từ chối một lượt chấm lạ.
@@ -8,14 +8,14 @@
 // `apps/web` cố ý không phụ thuộc gói nào (ADR-044: `dependencies` rỗng là một bảo đảm), nên nó không
 // import được ⑴; test đặt ở đây và ĐỌC ba bản kia như tệp — cùng khuôn `transitions.test.ts` đọc bảng
 // cạnh. Một đơn vị thêm ở một bản mà quên bản khác sẽ đỏ ở đây: thêm `EUR` vào ô chọn mà không vào hàm
-// chuẩn hoá thì mọi báo giá EUR bị lượt chấm từ chối — đúng hình dạng khoản 243, chỉ khác chuỗi.
+// chuẩn hoá thì mọi báo giá EUR bị lượt chấm từ chối — đúng hình dạng khoản 244, chỉ khác chuỗi.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CURRENCIES } from "./procurement-policy.js";
 
 const doc = (duong: string): string => readFileSync(new URL(duong, import.meta.url), "utf8");
 
-describe("[S1.9101 / khoản 243] tập đơn vị tiền đồng bộ", () => {
+describe("[S1.9101 / khoản 244] tập đơn vị tiền đồng bộ", () => {
   it("CURRENCIES = CHECK của 057 = đích của bid_currency = các lựa chọn ở trang nộp thầu", () => {
     const tapTs = [...CURRENCIES].sort();
 

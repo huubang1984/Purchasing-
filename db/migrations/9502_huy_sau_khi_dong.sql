@@ -6,7 +6,7 @@
 -- chối vì lệch tiền tệ thì ĐỨNG YÊN — `UPDATE … SET status = 'CANCELLED'` bị trigger này từ chối
 -- (*"UNSEALED -> CANCELLED"*), và danh sách trắng của `cancelRfq` cũng không có `UNSEALED`. Khoản 225
 -- đã đo hai trạng thái hút ấy từ S1.107 và để mở vì nó là một câu hỏi NGHIỆP VỤ: huỷ sau khi giá đã lộ
--- có hệ quả với nhà cung cấp. Khoản 243 biến câu hỏi ấy thành một lối kẹt thật.
+-- có hệ quả với nhà cung cấp. Khoản 244 biến câu hỏi ấy thành một lối kẹt thật.
 --
 -- SỬA (chủ dự án chốt ngày 2026-09-27, ADR-9201) — đúng *"sửa đúng cách"* mà khoản 225 tự ghi:
 --   ⑴ bốn cạnh MỚI trong `CANH_HOP_LE`: `CLOSED`, `UNSEALED`, `BAFO_CLOSED`, `BAFO_UNSEALED` → `CANCELLED`;
@@ -54,7 +54,7 @@ DECLARE
   -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6.
   --
   -- [S1.9101 / khoản 225] BỐN cạnh huỷ MỚI — `CLOSED`, `UNSEALED` và hai ảnh BAFO của chúng. Trước
-  -- vòng này bốn trạng thái ấy là trạng thái HÚT, và khoản 243 đo ra lối rơi vào đó: một báo giá ghi
+  -- vòng này bốn trạng thái ấy là trạng thái HÚT, và khoản 244 đo ra lối rơi vào đó: một báo giá ghi
   -- đơn vị tiền khác làm lượt chấm bị từ chối, gói đứng yên ở `UNSEALED` và không đường nào của sản
   -- phẩm kết thúc được nó. Chủ dự án chốt ngày 2026-09-27 (ADR-9201): mở bốn cạnh, và lần huỷ SAU
   -- KHI ĐÓNG phải mang lý do — vế (i) dưới — vì nhà cung cấp đã bỏ công dự thầu, và từ `UNSEALED`

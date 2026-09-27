@@ -505,12 +505,12 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
 });
 
 // ===============================================================================================
-// [INV-J8] [S1.9101 / khoản 243] BẢNG SO SÁNH ĐỌC TIỀN TỆ QUA CÙNG HÀM VỚI LƯỢT CHẤM
+// [INV-J8] [S1.9101 / khoản 244] BẢNG SO SÁNH ĐỌC TIỀN TỆ QUA CÙNG HÀM VỚI LƯỢT CHẤM
 // ===============================================================================================
 // ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.9101): `VND` + `VNĐ` cho HAI nhóm và mọi phép tổng
 // hợp thành `null`; hai báo giá cùng `vnd` dưới ngân sách 1.000.000 VND cho `belowBudget` = 0 — vế
 // ngân sách so `'VND' = 'vnd'` — trong khi cả hai con số đều dưới ngân sách. Ba ca dưới là ĐÍCH.
-describe("[INV-J8] [S1.9101 / khoản 243] bảng so sánh và lượt chấm cùng một phán quyết tiền tệ", () => {
+describe("[INV-J8] [S1.9101 / khoản 244] bảng so sánh và lượt chấm cùng một phán quyết tiền tệ", () => {
   it("[INV-J8] ĐÍCH của đo M4: `VND` + `VNĐ` là MỘT nhóm `VND`, phép tổng hợp có số, và dòng mang đơn vị đã chuẩn hoá", async () => {
     const rfqId = await taoRfqMo(csNghiem);
     const v1 = await nopBaoGia(rfqId, "NCC Chinh tac");

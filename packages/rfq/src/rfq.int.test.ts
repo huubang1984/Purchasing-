@@ -367,7 +367,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
 
   // [S1.9101 / khoản 225] Ca ranh giới dưới đây từng khẳng định CẢ HAI lớp nói KHÔNG với `CLOSED` và
   // `UNSEALED`, và khoản 225 tự hẹn: *"ngày nào quyết định đổi thì dòng ấy đỏ"*. Quyết định đã đổi
-  // (ADR-9201, 2026-09-27): khoản 243 đo ra một gói bị từ chối chấm vì lệch tiền tệ đứng yên ở
+  // (ADR-9201, 2026-09-27): khoản 244 đo ra một gói bị từ chối chấm vì lệch tiền tệ đứng yên ở
   // `UNSEALED` mãi. Ca cũ được viết lại thành ba ca: hai lớp nay nói CÓ, và nói có với ĐIỀU KIỆN.
   it("[S1.9101 / khoản 225] `CLOSED` và `UNSEALED` huỷ ĐƯỢC qua `cancelRfq` — lý do vào `cancel_reason`, một hàng sổ, khoá bị thu hồi", async () => {
     const dong = await rfqNhap();
