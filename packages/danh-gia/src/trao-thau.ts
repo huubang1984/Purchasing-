@@ -57,7 +57,7 @@ import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 // ==============================================================================================
 // [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, ~~RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER~~
-// **[S1.175 / ADR-107] RỒI NÉM LỜI TỪ CHỐI CỦA CHỐT**
+// **[S1.176 / ADR-107] RỒI NÉM LỜI TỪ CHỐI CỦA CHỐT**
 //
 // J3 sống ở hai trigger của `061` (`award_kiem_de_xuat`, thân từ `064`, và `award_kiem_nguoi_duyet`). Lần vi phạm là một `RAISE
 // … (J3)` với SQLSTATE 23514: nó huỷ giao dịch của người gọi, nên trước vòng này không lối nào ghi được nó — `pnpm pilot:gia-lap`
@@ -69,7 +69,7 @@ import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 // từ chối. ~~Cùng khuôn nhánh D2 của `approveUnseal` (`packages/unseal/src/requests.ts`): `throwAuditedDenial` ghi ở `auditPool`
 // rồi ném lại chính lỗi `pg`, nên mã 422 và thông điệp người dùng thấy KHÔNG đổi. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500.~~
 //
-// **[S1.175 / ADR-107]** Lớp của lần từ chối là `CONTROL_DENIED` — người vi phạm J3 có đủ quyền và đi đúng thứ tự, thứ chặn
+// **[S1.176 / ADR-107]** Lớp của lần từ chối là `CONTROL_DENIED` — người vi phạm J3 có đủ quyền và đi đúng thứ tự, thứ chặn
 // họ là một chốt (ADR-084 ⑸) — và nó được nhận ra bằng TÊN RÀNG BUỘC mà trigger đặt (`074_tu_choi_co_ten.sql`), không bằng
 // hậu tố *"(J3)"* cùng đầu câu. `tuChoiTheoChot` ghi một hàng mang mã ở `auditPool` rồi ném `ChotKiemSoatError` (422, thông
 // điệp của bảng `CHOT_VAO_SO`) mang lỗi `pg` ở `cause`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500, như trước.
@@ -313,7 +313,7 @@ export async function deXuatTraoThau(
     ));
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
-    // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.175] theo chốt).
+    // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.176] theo chốt).
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
@@ -445,7 +445,7 @@ export async function duyetTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
     // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi ~~chính lỗi trigger~~
-    // **[S1.175]** lời từ chối của chốt.
+    // **[S1.176]** lời từ chối của chốt.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;

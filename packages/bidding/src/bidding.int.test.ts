@@ -33,7 +33,7 @@ import {
   type ReceiptKeyPair,
   type ReceiptSigner,
 } from "./index.js";
-// [S1.175] Bảng tên → mã KHÔNG ra cửa gói; test đọc nó ở mô-đun để đo khớp với thân trigger.
+// [S1.176] Bảng tên → mã KHÔNG ra cửa gói; test đọc nó ở mô-đun để đo khớp với thân trigger.
 import { MA_THEO_RANG_BUOC } from "./bidding.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -843,7 +843,7 @@ describe("[ADR-016] danh tính của nhà cung cấp là DẪN XUẤT của phi�
 // Trước vòng này, nộp khi gói đã đóng hay đã huỷ — và nộp ngoài top-N của vòng BAFO — ra một `BiddingError` NÉM: giao dịch rollback,
 // 0 hàng sổ (`pnpm pilot:gia-lap` đo được). Nay cùng hợp đồng với nhánh VÌ HẠN: lỗi có tên, giao dịch CÒN LÀNH, và commit để lại
 // đúng một hàng `BID_SUBMIT_DENIED` mang người đã xác thực và trạng thái gói — không một phiên bản, không một luồng báo giá nào.
-// **[S1.175 / ADR-107]** Hàng là `BID_STATE_DENIED` mang MÃ của nhánh — tên ràng buộc trigger đặt, viết hoa — không trạng thái gói.
+// **[S1.176 / ADR-107]** Hàng là `BID_STATE_DENIED` mang MÃ của nhánh — tên ràng buộc trigger đặt, viết hoa — không trạng thái gói.
 // ==============================================================================================
 describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để lại một hàng sổ", () => {
   it("gói đã ĐÓNG ⇒ NopBiTuChoiError; giao dịch còn lành; commit để lại đúng một `BID_STATE_DENIED` { ma: C1_GOI_KHONG_NHAN_BAO_GIA }, không luồng nào", async () => {
@@ -887,7 +887,7 @@ describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để 
     expect(han, "không phải lần chặn VÌ HẠN").toHaveLength(0);
   });
 
-  // [S1.175 / ADR-107] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
+  // [S1.176 / ADR-107] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
   // CSDL: mọi tên ràng buộc mà ba trigger của câu nộp đặt — trừ `c1_qua_han_nop`, nhánh VÌ HẠN có lối riêng — đều có mã, và mọi
   // dòng của bảng tên → mã đều có một nhánh đặt nó.
   it("tên ràng buộc ở ba trigger của câu nộp và bảng `MA_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {

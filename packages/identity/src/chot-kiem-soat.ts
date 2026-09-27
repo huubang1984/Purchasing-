@@ -9,7 +9,7 @@
 // lời từ chối nói dữ liệu hay cấu hình vừa đổi dưới chân họ thì không. Hàng sổ ở giao dịch ĐỘC LẬP
 // qua `throwAuditedDenial`, và payload chỉ mang MÃ.
 //
-// [S1.175 / khoản 247 / ADR-107] BẢNG DỜI XUỐNG GÓI NÀY từ `packages/rfq/src/chot-kiem-soat.ts`, đúng như
+// [S1.176 / khoản 247 / ADR-107] BẢNG DỜI XUỐNG GÓI NÀY từ `packages/rfq/src/chot-kiem-soat.ts`, đúng như
 // chú thích ở đó đã hẹn: khi một gói khác cần, bảng dời xuống một gói cả hai cùng phụ thuộc — không mọc
 // bảng thứ hai. Gói khác ấy là `packages/danh-gia`: các lần từ chối của TÁCH BẠCH NHIỆM VỤ — J3 ở đề xuất và
 // duyệt trao thầu, D2 ở duyệt gói. ADR-104 (S1.167) đã cho chúng vào sổ bằng cách bắt CHÍNH lỗi của trigger (`011`,
@@ -52,7 +52,7 @@ export interface DongChot {
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
   readonly lyDo: string;
   /**
-   * Thông điệp cho người dùng: nói phải làm gì, không nội suy dữ liệu nào. [S1.175] Chốt của tách bạch nhiệm vụ GỌI TÊN
+   * Thông điệp cho người dùng: nói phải làm gì, không nội suy dữ liệu nào. [S1.176] Chốt của tách bạch nhiệm vụ GỌI TÊN
    * bất biến ở cuối câu — `(J3)`, `(D2)` — như câu của trigger mà nó đứng trước ([review H2-10]: người bị chặn đọc được lý do).
    */
   readonly thongDiep: string;
@@ -60,7 +60,7 @@ export interface DongChot {
 
 /**
  * Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166); bảy dòng J3/D2
- * cũng vậy (S1.175 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi").
+ * cũng vậy (S1.176 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi").
  */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
@@ -100,7 +100,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     vaoSo: true,
     lyDo:
       "phiên ký phê duyệt đã hết hạn, bị thu hồi hay chưa qua MFA — vế D1 của D2 (`011` [H-2]). Qua `approveRfq` nó chỉ tới được " +
-      "khi phiên đổi giữa lúc phân giải và câu ghi; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.175)",
+      "khi phiên đổi giữa lúc phân giải và câu ghi; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.176)",
     thongDiep: "Phiên đăng nhập không còn hợp lệ để duyệt — hết hạn, bị thu hồi hoặc chưa qua MFA; đăng nhập lại rồi duyệt (D2/D1).",
   },
   D2_PHIEN_NGUOI_KHAC: {
@@ -140,13 +140,13 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     vaoSo: true,
     lyDo:
       "phiên đã dùng để đề xuất trao thầu đem đi duyệt chính đề xuất ấy — vế PHIÊN của J3 (`061`), đứng sau vế người. Tới được khi " +
-      "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.175)",
+      "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.176)",
     thongDiep: "Phiên đã dùng để đề xuất trao thầu không được dùng để duyệt đề xuất ấy (J3).",
   },
 };
 
 /**
- * [S1.175 / ADR-107] Tên ràng buộc mà trigger đặt vào lần từ chối (`CONSTRAINT = …`, `074_tu_choi_co_ten.sql`) → mã chốt.
+ * [S1.176 / ADR-107] Tên ràng buộc mà trigger đặt vào lần từ chối (`CONSTRAINT = …`, `074_tu_choi_co_ten.sql`) → mã chốt.
  * Nhận diện bằng TÊN, không bằng thông điệp: đổi câu `RAISE` không làm lần vi phạm rơi khỏi sổ. Tên không có ở đây ⇒ `null`,
  * và người gọi để lỗi gốc đi tiếp như trước ADR-104.
  */
