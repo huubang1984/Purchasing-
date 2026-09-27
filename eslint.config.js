@@ -137,7 +137,11 @@ export default tseslint.config(
         crypto: "readonly",
         document: "readonly",
         fetch: "readonly",
+        // [S1.177] Bốn trang (ba trang người mua và trang nộp thầu) xoá fragment sau khi mã đã tiêu thụ (ADR-020 mục 3).
+        history: "readonly",
         location: "readonly",
+        // [S1.176 / ADR-107] Trang `/login` nhớ mã tổ chức (không phải bí mật) sau lần vào đầu tiên.
+        localStorage: "readonly",
         setTimeout: "readonly",
         TextEncoder: "readonly",
         URL: "readonly",

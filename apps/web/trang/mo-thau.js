@@ -58,24 +58,70 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
+/** [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
+const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+// [S1.176 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
+// không phải trạng thái phải bền: `orgId` không phải bí mật (ADR-107 mục 1), và kho trình duyệt có thể trống
+// hay ném (chế độ riêng tư), nên mọi lần đọc/ghi đều bọc và trang chạy đúng khi không có nó. Chỉ ghi SAU khi
+// vào thành công — một link lạ mang `#<orgId>` không được đặt mã tổ chức cho lần sau.
+const KHOA_TO_CHUC = "tp-ma-to-chuc";
+function toChucDaNho() {
+  try { return localStorage.getItem(KHOA_TO_CHUC) ?? ""; } catch { return ""; }
+}
+function nhoToChuc(orgId) {
+  try { localStorage.setItem(KHOA_TO_CHUC, orgId); } catch { /* không nhớ được thì thôi */ }
+}
+
+/**
+ * [S1.176 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
+ * chức nằm đúng ở đó trong mọi link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang
+ * nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy chủ trong khi ô vẫn đầy.
+ */
+function docToChuc() {
+  let s = $("org").value.trim();
+  const h = s.indexOf("#");
+  if (h >= 0) s = s.slice(h + 1);
+  const c = s.indexOf(":");
+  if (c >= 0) s = s.slice(0, c);
+  s = s.trim();
+  if (s === "") return "";
+  return LA_UUID.test(s) ? s : null;
+}
+const SAI_TO_CHUC = "Mã tổ chức có dạng 00000000-0000-0000-0000-000000000000 — phần sau dấu # và trước dấu hai chấm của một link TrustProcure đã gửi.";
+const MAT_KET_NOI = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+
 function docLink() {
   // Link gieo ra mang `#<mã tổ chức>:<mã đăng nhập>` — đường xác thực là đường VÔ DANH, nên máy
   // chủ không biết người gọi thuộc tổ chức nào cho tới khi client nói ra. Bản đầu của trang này
   // chỉ đọc token và lượt chạy thử đầu tiên trả về đúng câu `thiếu trường "orgId"`.
+  //
+  // [S1.176 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
+  // trơn — link của tin báo người duyệt khi hạn mức chặn mã đăng nhập. Nó điền ô tổ chức và XOÁ ô mã (mã
+  // của người trước không được đứng lại), để ô xin link bên dưới dùng được ngay.
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   const i = h.indexOf(":");
-  if (i <= 0) { if (h !== "") $("token").value = h; return; }
-  $("org").value = h.slice(0, i);
-  $("token").value = h.slice(i + 1);
+  if (i > 0) {
+    $("org").value = h.slice(0, i);
+    $("token").value = h.slice(i + 1);
+    return;
+  }
+  if (LA_UUID.test(h)) {
+    $("org").value = h;
+    $("token").value = "";
+    return;
+  }
+  if (h !== "") $("token").value = h;
 }
 
 $("nut-vao").addEventListener("click", async () => {
   bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = $("org").value.trim();
+  const orgId = docToChuc();
   const token = $("token").value.trim();
   const code = $("ma").value.trim();
   // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải redeem lại cho token mới.
   if (token !== phien.token) phien = { ...phien, token, daRedeem: false };
+  if (orgId === null) { bao($("loi1"), SAI_TO_CHUC); return; }
   if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
   $("nut-vao").disabled = true;
   try {
@@ -103,24 +149,144 @@ $("nut-vao").addEventListener("click", async () => {
       return;
     }
     phien = { ...phien, orgId, token };
+    nhoToChuc(orgId);
+    xoaManhLink();
     // `/me` trả `{userId, sessionId, orgId, kind}` — CỐ Ý không trả email hay tên: một route
     // "tôi là ai" trả về dữ liệu cá nhân là một route mà mọi lỗ IDOR đều muốn có. Bản đầu của
     // trang này đoán sai hình dạng ấy và in "(không đọc được)" suốt cả lượt chạy thử.
     const me = await goi("GET", "/me");
-    const u = me.body?.userId;
-    bao($("ok1"), u === undefined
-      ? "Đã vào. Phiên nằm trong cookie HttpOnly."
-      : `Đã vào với người dùng ${String(u).slice(0, 8)}… (vai: ${me.body?.kind ?? "?"}). Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
-    $("b1").classList.add("xong");
-    hien($("b2"), true);
-    hien($("b3"), true);
-    hien($("b4"), true);
-    hien($("b5"), true);
-    hien($("b6"), true);
-    hien($("b7"), true);
-    hien($("b8"), true);
+    moSauDangNhap(me.body, false);
+  } catch {
+    // [S1.176] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
+    bao($("loi1"), MAT_KET_NOI);
   } finally {
     $("nut-vao").disabled = false;
+  }
+});
+
+const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5", "b6", "b7", "b8"];
+
+/**
+ * [S1.177] Mở các bước sau đăng nhập. Hai lối vào: vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với
+ * phiên này" ở khối hỏi của `thuPhienCo`. Bước 1 VẪN hiện: màn này đăng nhập lại được bằng người duyệt thứ hai.
+ * Câu báo chỉ nêu tám ký tự đầu của mã người dùng — `/me` cố ý không trả tên hay email, và `kind` là LOẠI phiên
+ * (luôn `USER` với cookie trình duyệt), không phải vai nghiệp vụ, nên trang không in nó.
+ */
+function moSauDangNhap(me, dungLai) {
+  const u = me?.userId;
+  const ai = typeof u === "string" ? `người dùng ${u.slice(0, 8)}…` : "";
+  bao($("ok1"), ai === ""
+    ? "Đã vào. Phiên nằm trong cookie HttpOnly."
+    : dungLai
+      ? `Đang dùng phiên còn hạn của ${ai}. Cần đổi người thì đăng nhập ở trên bằng link của người ấy. ` +
+        "Điều phối giải mã ở bước 3 vẫn đòi lần nhập mã sáu số trong 15 phút gần nhất — quá hạn thì xin link mới."
+      : `Đã vào với ${ai}. Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), true);
+  $("b1").classList.add("xong");
+  for (const b of CAC_BUOC_SAU) hien($(b), true);
+}
+
+/** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+function dongCacBuoc() {
+  $("b1").classList.remove("xong");
+  for (const b of CAC_BUOC_SAU) hien($(b), false);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), false);
+}
+
+/**
+ * [S1.177] Phiên người mua là cookie `Path=/` sống tới 8 giờ, KỂ CẢ sau khi đóng trình duyệt (`Max-Age`), dùng
+ * chung cả ba trang — còn mã đăng nhập chỉ dùng được MỘT lần (`startUserSession` tiêu thụ nó). Trước vòng này
+ * trang chỉ hỏi `/me` SAU khi đăng nhập, nên sang trang khác là phải xin link mới. Nay hỏi lúc tải, nhưng
+ * KHÔNG tự mở các bước: trên máy dùng chung phiên ấy có thể của người khác, và mở sẵn các nút Phê duyệt dưới
+ * danh tính người ấy là để một người trung thực ký thay họ. Trang hỏi — "Tiếp tục với phiên này" hay "Đăng
+ * xuất" — và chỉ mở khi được bảo.
+ *
+ * Không hỏi khi ô mã đã có mã: người mở link của mình thấy ô đăng nhập. `docLink()` phải chạy TRƯỚC hàm này
+ * (cuối tệp), vì phép kiểm ô mã chạy đồng bộ trước `await` đầu tiên. Kiểm LẠI sau `await`: một `/me` về muộn,
+ * sau khi người khác đã dán link của mình (hashchange) hay đã đăng nhập, bị bỏ — ô mã lúc ấy đã có mã.
+ */
+let phienCho = null;
+async function thuPhienCo() {
+  if ($("token").value.trim() !== "") return;
+  try {
+    const me = await goi("GET", "/me");
+    if ($("token").value.trim() !== "") return;
+    if (me.status !== 200 || typeof me.body?.userId !== "string") return;
+    phienCho = me.body;
+    const toChuc = typeof me.body.orgId === "string" ? `, tổ chức ${me.body.orgId.slice(0, 8)}…` : "";
+    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên còn hạn: người dùng ${me.body.userId.slice(0, 8)}…${toChuc}. ` +
+      "Trang không biết tên người ấy. Không chắc đó là bạn thì bấm Đăng xuất, rồi đăng nhập bằng link của bạn.");
+    hien($("nut-dung-phien"), true);
+    hien($("nut-dang-xuat"), true);
+  } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
+}
+
+$("nut-dung-phien").addEventListener("click", () => {
+  if (phienCho === null) return;
+  const me = phienCho;
+  phienCho = null;
+  moSauDangNhap(me, true);
+});
+
+/**
+ * [S1.177] `POST /auth/logout` thu hồi CHÍNH phiên đang gọi và xoá cookie. 401 nghĩa là phiên đã hết hay đã
+ * bị thu hồi — điều người bấm muốn vẫn đạt, nên trang cũng về bước 1.
+ */
+$("nut-dang-xuat").addEventListener("click", async () => {
+  bao($("loi1"), ""); bao($("ok1"), "");
+  $("nut-dang-xuat").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/logout");
+    if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
+    phienCho = null;
+    phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
+    dongCacBuoc();
+    bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
+  } catch {
+    bao($("loi1"), MAT_KET_NOI);
+  } finally {
+    $("nut-dang-xuat").disabled = false;
+  }
+});
+
+/**
+ * [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/auth/totp` — lúc mã đã bị tiêu
+ * thụ nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa chỉ và lịch sử trình duyệt.
+ * `replaceState` không bắn `hashchange`.
+ */
+function xoaManhLink() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
+}
+
+// [S1.176 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
+// không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
+// máy chủ cố ý không nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Câu ấy phải
+// đúng ở MỌI nhánh sau 200: việc gửi chạy SAU phản hồi (outbox), và một người đã có năm mã trong 15 phút
+// (`LOGIN_MAX_TOKENS_PER_WINDOW`, đếm cả mã hệ thống phát) nhận 200 mà không nhận thư.
+$("nut-xin-link").addEventListener("click", async () => {
+  bao($("loi-link"), ""); bao($("ok-link"), "");
+  const orgId = docToChuc();
+  const email = $("email").value.trim();
+  if (orgId === null) { bao($("loi-link"), SAI_TO_CHUC); return; }
+  if (orgId === "" || email === "") { bao($("loi-link"), "Cần mã tổ chức và email."); return; }
+  $("nut-xin-link").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/link", { orgId, email });
+    if (r.status === 200) {
+      bao($("ok-link"), "Nếu email này thuộc tổ chức, link đăng nhập sẽ tới trong ít phút. Mỗi người nhận tối đa 5 link mỗi 15 phút, và link đã tới vẫn dùng được trong 15 phút — đừng bấm lại.");
+    } else if (r.status === 429) {
+      bao($("loi-link"), "Đã xin quá nhiều link trong ít phút. Đợi một lúc rồi thử lại.");
+    } else {
+      bao($("loi-link"), loiCua(r, "Không gửi được yêu cầu"));
+    }
+  } catch {
+    bao($("loi-link"), MAT_KET_NOI);
+  } finally {
+    $("nut-xin-link").disabled = false;
   }
 });
 
@@ -562,13 +728,22 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 // đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (khoản 204 ghi sai rằng trang ấy không lặp
 // lại khiếm khuyết).
 // ==============================================================================================
+// [S1.177] Trình nghe này từng chỉ xoá câu báo, còn các bước 2–8 đã mở thì ĐỂ NGUYÊN — dưới cookie của
+// người trước, và giờ không còn câu nào nói phiên ấy của ai. Mọi link thư đều trỏ `/login`, nên người duyệt
+// thứ hai mở link của mình trong cùng thẻ chính là đường này. Nay đóng các bước về bước 1, rồi hỏi lại phiên
+// (link không mang mã, như `#<mã tổ chức>` của tin báo người duyệt, vẫn được hỏi thay vì tự mở).
 window.addEventListener("hashchange", () => {
   docLink();
+  phienCho = null;
   phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh"]) {
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh", "loi-link", "ok-link"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
+  dongCacBuoc();
+  thuPhienCo();
 });
 
 docLink();
+if ($("org").value.trim() === "") $("org").value = toChucDaNho();
+thuPhienCo();

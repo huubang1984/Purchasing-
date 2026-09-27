@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -24,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
+import * as chinhSach from "./chinh-sach.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -112,6 +114,542 @@ describe("bề mặt tệp", () => {
     // Đối chứng dương: nếu biểu thức này khớp 0 lần thì vế dưới đúng một cách rỗng tuếch.
     expect(duong.length, "không đọc được dạng link nào ở hop-thu-dev.ts").toBeGreaterThanOrEqual(3);
     for (const d of new Set(duong)) expect(Object.keys(TRANG), d).toContain(d);
+  });
+
+  // ============================================================================================
+  // [S1.176 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
+  //
+  // Khoản 198 đóng ở S1.99 với hai lời khai mà vòng này đo là sai cho kênh thật: `nop-thau.js` bỏ qua
+  // fragment không có dấu hai chấm (không điền cả ô mã), và thân thư của SES, SMS, Zalo không mang
+  // `orgId` — chỉ bản ghi JSON của hộp thư dev có. Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang
+  // đòi thứ người nhận không có. Vế dưới nối hai phía: đọc VĂN BẢN của ba bộ gửi, và CHẠY `docLink()` của
+  // trang đích trên đúng dạng ấy.
+  // ============================================================================================
+  it("[ADR-107] mọi link của ba bộ gửi mang `<orgId>:<token>` (hoặc `<orgId>` trơn ở tin báo không mã)", () => {
+    const tep = ["hop-thu-dev.ts", "gui-ses.ts", "kenh-so.ts"];
+    const link: { tep: string; duong: string; manh: string }[] = [];
+    for (const t of tep) {
+      const nguon = readFileSync(new URL(`../../api/src/adapters/${t}`, import.meta.url), "utf8");
+      for (const m of nguon.matchAll(/\$\{[A-Za-z]+\.baseUrl\}(\/[a-z0-9-]*)(#\$\{[^}]*\}(?::\$\{[^}]*\})?)?/gu)) {
+        link.push({ tep: t, duong: m[1] ?? "", manh: m[2] ?? "" });
+      }
+    }
+    // Đối chứng dương: 3 ở hộp thư dev, 4 ở SES (đăng nhập, mời, tin báo có mã và không mã), 1 ở kênh số.
+    expect(link.length, "không đọc được đủ các chỗ dựng link").toBe(8);
+    for (const l of link) {
+      // Mọi đường — không chỉ của hộp thư dev như vế khoản 198 ở trên — phải là đường `apps/web` phục vụ.
+      expect(Object.keys(TRANG), `${l.tep}: ${l.duong}`).toContain(l.duong);
+      expect(l.manh === "#${m.orgId}:${m.token}" || l.manh === "#${m.orgId}", `${l.tep}: ${l.duong}${l.manh}`).toBe(true);
+    }
+    // Dạng `#<orgId>` trơn đúng MỘT chỗ: nhánh `token === null` của tin báo người duyệt qua SES. Cho nó ở chỗ
+    // khác là để một bộ gửi rơi mất token mà vẫn xanh.
+    const tron = link.filter((l) => l.manh === "#${m.orgId}");
+    expect(tron.map((l) => `${l.tep}${l.duong}`)).toEqual(["gui-ses.ts/login"]);
+  });
+
+  it("[ADR-107] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
+    const ORG = "11111111-1111-4111-8111-111111111111";
+    const chay = (trang: string, hash: string, truoc: { org: string; token: string }) => {
+      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
+      const ham = /^function docLink\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
+      expect(ham, `${trang}.js không còn hàm docLink`).toBeDefined();
+      // `/login` dùng hằng `LA_UUID` chung của trang; ba trang kia không có nó.
+      const hang = /^const LA_UUID = .*;$/mu.exec(js)?.[0] ?? "";
+      const o = { org: { value: truoc.org }, token: { value: truoc.token } };
+      runInNewContext(`${hang}\n${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent });
+      return { org: o.org.value, token: o.token.value };
+    };
+    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau"]) {
+      expect(chay(trang, `#${ORG}:tokTokTokTokTokTok_-1`, { org: "", token: "" }), trang).toEqual({ org: ORG, token: "tokTokTokTokTokTok_-1" });
+    }
+    expect(chay("mo-thau", `#${ORG}`, { org: "", token: "ma-cu-cua-nguoi-truoc" })).toEqual({ org: ORG, token: "" });
+    expect(chay("mo-thau", "#chiCoMaTronKhongCoToChuc", { org: "go-tay", token: "" })).toEqual({ org: "go-tay", token: "chiCoMaTronKhongCoToChuc" });
+  });
+
+  it("[ADR-107] ô tổ chức của /login nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
+    const ORG = "11111111-1111-4111-8111-111111111111";
+    const js = readFileSync(new URL("../trang/mo-thau.js", import.meta.url), "utf8");
+    const hang = /^const LA_UUID = .*;$/mu.exec(js)?.[0];
+    const ham = /^function docToChuc\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
+    expect(hang).toBeDefined();
+    expect(ham).toBeDefined();
+    const doc = (v: string): unknown => {
+      const ctx: Record<string, unknown> = { $: () => ({ value: v }) };
+      runInNewContext(`${hang ?? ""}\n${ham ?? ""}\nketQua = docToChuc();`, ctx);
+      return ctx["ketQua"];
+    };
+    expect(doc(ORG)).toBe(ORG);
+    expect(doc(`  https://mua.vidu.vn/login#${ORG}:tokTokTokTokTokTok_-1 `)).toBe(ORG);
+    expect(doc(`#${ORG}`)).toBe(ORG);
+    expect(doc("")).toBe("");
+    expect(doc("cong-ty-a")).toBeNull();
+  });
+
+  // ============================================================================================
+  // [S1.177] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+  //
+  // Phiên là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một
+  // lần — trước vòng này mỗi trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới.
+  // Nay trang hỏi lúc tải và, có phiên, HỎI người dùng thay vì tự mở: trên máy dùng chung phiên ấy có thể của
+  // người khác (lượt soi đo được một chữ ký duyệt ghi dưới danh tính của người không hề duyệt).
+  //
+  // Bản đầu của vế này trích từng hàm bằng regex và gọi chúng lẻ — lượt soi đảo `thuPhienCo();` lên trước
+  // `docLink();` ở cả ba trang mà vế vẫn xanh, trong khi đúng thứ tự ấy là thứ giữ link của người B không mở
+  // phiên của người A. Nay vế NẠP NGUYÊN TỆP TRANG vào `node:vm`, với DOM giả dựng từ id và `hidden` của tệp
+  // HTML cùng tên, `fetch` giả giữ một "cookie", và `history`/`location` giả: thứ tự ở cấp tệp, trình nghe
+  // nút, trình nghe hashchange đều chạy như trên trình duyệt. Import `/lib/*` được thay bằng hàm rỗng — vế này
+  // không đo tiền hay mật mã.
+  // ============================================================================================
+  describe("[S1.177] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
+    const BUOC: Record<string, readonly string[]> = {
+      "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
+      "tao-thau": ["b2", "b3", "b4", "b5"],
+      "chinh-sach": ["b2", "b3"],
+    };
+    const ORG = "11111111-2222-4333-8444-555555555555";
+    const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
+    const B = { userId: "bbbbbbbb-0000-4000-8000-000000000000", sessionId: "s-b", orgId: ORG, kind: "USER" };
+    type Phien = typeof A;
+    type Nghe = Record<string, Array<() => unknown>>;
+    interface PhanTu {
+      hidden: boolean; textContent: string; value: string; disabled: boolean; checked: boolean; className: string;
+      dataset: Record<string, string>; lop: Set<string>; nghe: Nghe;
+      classList: { add: (c: string) => void; remove: (c: string) => void; contains: (c: string) => boolean };
+      addEventListener: (t: string, f: () => unknown) => void;
+      replaceChildren: () => void; append: () => void; appendChild: () => void; setAttribute: () => void;
+      querySelector: () => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
+      scrollIntoView: () => void;
+    }
+    const taoPhanTu = (hidden: boolean): PhanTu => {
+      const lop = new Set<string>();
+      const nghe: Nghe = {};
+      const e: PhanTu = {
+        hidden, textContent: "", value: "", disabled: false, checked: false, className: "", dataset: {}, lop, nghe,
+        classList: { add: (c) => { lop.add(c); }, remove: (c) => { lop.delete(c); }, contains: (c) => lop.has(c) },
+        addEventListener: (t, f) => { (nghe[t] ??= []).push(f); },
+        replaceChildren: () => { e.textContent = ""; }, append: () => undefined, appendChild: () => undefined, setAttribute: () => undefined,
+        querySelector: () => taoPhanTu(false), querySelectorAll: () => [], focus: () => undefined, remove: () => undefined,
+        scrollIntoView: () => undefined,
+      };
+      return e;
+    };
+    // `/lib/chinh-sach.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một hàm trả chuỗi rỗng.
+    const THU_VIEN: Record<string, unknown> = { ...chinhSach };
+    const cho = () => new Promise((r) => { setTimeout(r, 5); });
+    const GOI_THAU_KHACH = {
+      rfq: { id: "r-1", title: "Mua thép tấm quý IV", status: "OPEN", deadlineAt: "2099-01-01T00:00:00Z" },
+      items: [{ lineNo: 1, description: "Thép tấm", quantity: "10", unit: "tấn" }],
+      publicKeys: [], bafoRound: null, gioMayChu: "2026-09-27T00:00:00Z",
+    };
+
+    interface TuyChon {
+      hash: string;
+      cookie: Phien | null;
+      /** [S1.178] Trình duyệt có giữ cookie khách `__Host-tp_guest` còn hạn không (trang nộp thầu). */
+      khach?: boolean;
+      /** Ai được cookie sau `/auth/totp` thành công. */
+      nguoiVao?: Phien;
+      /** Trả thay phản hồi mặc định cho một lời gọi; `undefined` là dùng mặc định. */
+      thay?: (lenh: string) => Promise<{ status: number; body: unknown }> | undefined;
+    }
+    const dungTrang = async (trang: string, tuyChon: TuyChon) => {
+      const html = readFileSync(new URL(`../trang/${trang}.html`, import.meta.url), "utf8");
+      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8").replace(
+        /^import \{([^}]*)\} from "[^"]+";$/gmu,
+        (_m, ten: string) => `const {${ten}} = __thuVien;`,
+      );
+      const el: Record<string, PhanTu> = {};
+      for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
+        el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `));
+      }
+      const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false));
+      const trangThai = { cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[] };
+      const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
+      const ngheCuaSo: Nghe = {};
+      const fetch = async (url: string, init: { method: string }) => {
+        const lenh = `${init.method} ${url.replace(/^\/api/u, "")}`;
+        trangThai.goi.push(lenh);
+        const r = (await tuyChon.thay?.(lenh)) ?? (() => {
+          if (lenh === "GET /me") return trangThai.cookie === null ? { status: 401, body: { error: "x" } } : { status: 200, body: trangThai.cookie };
+          if (lenh === "POST /auth/redeem") return { status: 200, body: { needsEnrollment: false } };
+          if (lenh === "POST /auth/totp") { trangThai.cookie = tuyChon.nguoiVao ?? B; return { status: 200, body: { ok: true } }; }
+          if (lenh === "POST /auth/logout") {
+            const co = trangThai.cookie !== null;
+            trangThai.cookie = null;
+            return co ? { status: 200, body: { ok: true } } : { status: 401, body: { error: "x" } };
+          }
+          if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
+          if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
+          if (lenh === "POST /guest/otp/verify") { trangThai.khach = true; return { status: 200, body: {} }; }
+          return { status: 401, body: { error: "x" } };
+        })();
+        return { status: r.status, text: () => Promise.resolve(JSON.stringify(r.body)) };
+      };
+      const thuVien = new Proxy(THU_VIEN, { get: (t, k: string) => (k in t ? t[k] : () => "") });
+      runInNewContext(js, {
+        __thuVien: thuVien,
+        document: { getElementById: lay, createElement: () => taoPhanTu(false), body: taoPhanTu(false) },
+        window: {
+          addEventListener: (t: string, f: () => unknown) => { (ngheCuaSo[t] ??= []).push(f); },
+          // Đếm ngược của trang nộp thầu: không cần chạy thật, chỉ cần không ném và không để hẹn giờ treo test.
+          setInterval: () => 1, clearInterval: (h: unknown) => { trangThai.xoaHen.push(h); },
+        },
+        location: loc,
+        history: {
+          replaceState: (_s: unknown, _t: string, url: string) => {
+            trangThai.thayUrl.push(url);
+            loc.hash = "";
+          },
+        },
+        localStorage: { getItem: () => null, setItem: () => undefined },
+        fetch, console, setTimeout, clearTimeout, URL, decodeURIComponent,
+      }, { filename: `${trang}.js` });
+      await cho();
+      return {
+        el: lay,
+        trangThai,
+        loc,
+        buocMo: () => (BUOC[trang] ?? []).filter((b) => lay(b).hidden === false),
+        bam: async (id: string) => {
+          for (const f of lay(id).nghe["click"] ?? []) await f();
+          await cho();
+        },
+        doiFragment: async (h: string) => {
+          loc.hash = h;
+          for (const f of ngheCuaSo["hashchange"] ?? []) await f();
+          await cho();
+        },
+      };
+    };
+
+    for (const trang of Object.keys(BUOC)) {
+      const tatCa = BUOC[trang] ?? [];
+
+      it(`${trang}: có phiên còn hạn ⇒ HỎI, không tự mở; "Tiếp tục" mới mở, và câu báo không nói "vai"`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        expect(p.trangThai.goi).toEqual(["GET /me"]);
+        expect(p.buocMo(), "không bước nào được tự mở dưới một phiên chưa ai nhận").toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(false);
+        expect(p.el("hoi-phien").textContent).toContain("aaaaaaaa…");
+        expect(p.el("nut-dung-phien").hidden).toBe(false);
+        expect(p.el("nut-dang-xuat").hidden).toBe(false);
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual(tatCa);
+        expect(p.el("b1").lop.has("xong")).toBe(true);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.el("nut-dang-xuat").hidden, "đang dùng phiên thì phải đăng xuất được").toBe(false);
+        expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên còn hạn của người dùng aaaaaaaa…/u);
+        expect(p.el("ok1").textContent).not.toMatch(/vai/u);
+      });
+
+      it(`${trang}: "Đăng xuất" ở khối hỏi ⇒ POST /auth/logout, về bước 1, cookie không còn`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        await p.bam("nut-dang-xuat");
+        expect(p.trangThai.goi).toEqual(["GET /me", "POST /auth/logout"]);
+        expect(p.trangThai.cookie).toBeNull();
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.el("nut-dang-xuat").hidden).toBe(true);
+        expect(p.el("ok1").textContent).toMatch(/Đã đăng xuất/u);
+        // Nút "Tiếp tục" cũ không mở lại được phiên đã thu hồi.
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual([]);
+      });
+
+      it(`${trang}: link mang mã (của người B) mở trong trình duyệt có phiên của A ⇒ KHÔNG hỏi /me — thứ tự docLink() rồi thuPhienCo() ở cấp tệp`, async () => {
+        const p = await dungTrang(trang, { hash: `#${ORG}:maDangNhapCuaB`, cookie: A });
+        expect(p.el("token").value).toBe("maDangNhapCuaB");
+        expect(p.trangThai.goi).toEqual([]);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+      });
+
+      it(`${trang}: không cookie (401) hay mất mạng ⇒ ở lại bước 1, không khối hỏi`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: null });
+        expect(p.trangThai.goi).toEqual(["GET /me"]);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        const q = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.reject(new Error("mat mang")) : undefined) });
+        expect(q.buocMo()).toEqual([]);
+        expect(q.el("hoi-phien").hidden).toBe(true);
+      });
+
+      it(`${trang}: /me 200 mà không có userId hay /me khác 200 mà có userId ⇒ không hỏi`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.resolve({ status: 200, body: { orgId: ORG } }) : undefined) });
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo(), "phiên không có userId không được giữ chờ để mở").toEqual([]);
+        const q = await dungTrang(trang, { hash: "", cookie: A, thay: (l) => (l === "GET /me" ? Promise.resolve({ status: 403, body: A }) : undefined) });
+        expect(q.el("hoi-phien").hidden).toBe(true);
+      });
+
+      it(`${trang}: đăng nhập bằng link ⇒ xoá fragment đúng MỘT lần sau /auth/totp thành công; TOTP sai thì fragment ở lại`, async () => {
+        const p = await dungTrang(trang, {
+          hash: `#${ORG}:maCuaB`, cookie: null,
+          thay: (l) => (l === "POST /auth/totp" && p.trangThai.goi.filter((g) => g === l).length === 1 ? Promise.resolve({ status: 401, body: { reason: "BAD_CODE" } }) : undefined),
+        });
+        p.el("ma").value = "123456";
+        await p.bam("nut-vao");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp"]);
+        expect(p.trangThai.thayUrl, "mã chưa tiêu thụ thì chưa được xoá").toEqual([]);
+        expect(p.loc.hash).toBe(`#${ORG}:maCuaB`);
+        expect(p.buocMo()).toEqual([]);
+        await p.bam("nut-vao");
+        const sauTotp = p.trangThai.goi.lastIndexOf("POST /auth/totp");
+        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(trang === "chinh-sach" ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.thayUrl).toEqual([p.loc.pathname]);
+        expect(p.loc.hash).toBe("");
+        expect(p.buocMo()).toEqual(tatCa);
+        expect(p.el("ok1").textContent).toMatch(/Đã vào với người dùng bbbbbbbb…/u);
+        expect(p.el("nut-dang-xuat").hidden).toBe(false);
+      });
+
+      it(`${trang}: đã mở các bước rồi người khác mở link của mình trong CÙNG thẻ (hashchange) ⇒ các bước đóng, không hỏi lại`, async () => {
+        const p = await dungTrang(trang, { hash: "", cookie: A });
+        await p.bam("nut-dung-phien");
+        expect(p.buocMo()).toEqual(tatCa);
+        await p.doiFragment(`#${ORG}:maCuaB`);
+        expect(p.buocMo()).toEqual([]);
+        expect(p.el("b1").lop.has("xong")).toBe(false);
+        expect(p.el("nut-dang-xuat").hidden).toBe(true);
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.trangThai.goi).toEqual(["GET /me", ...(trang === "chinh-sach" ? ["GET /policy/versions"] : [])]);
+      });
+
+      it(`${trang}: /me của lượt cũ về SAU khi fragment đã đổi sang link của B ⇒ bị bỏ, không mở khối hỏi`, async () => {
+        let tha: () => void = () => undefined;
+        const p = await dungTrang(trang, {
+          hash: "", cookie: A,
+          thay: (l) => (l === "GET /me" ? new Promise((r) => { tha = () => { r({ status: 200, body: A }); }; }) : undefined),
+        });
+        await p.doiFragment(`#${ORG}:maCuaB`);
+        tha();
+        await cho();
+        expect(p.el("hoi-phien").hidden).toBe(true);
+        expect(p.el("nut-dung-phien").hidden).toBe(true);
+        expect(p.buocMo()).toEqual([]);
+      });
+    }
+
+    it("mo-thau: tin báo người duyệt `/login#<mã tổ chức>` (không mã) trong trình duyệt có phiên ⇒ HỎI, không tự mở", async () => {
+      const p = await dungTrang("mo-thau", { hash: `#${ORG}`, cookie: A });
+      expect(p.el("org").value).toBe(ORG);
+      expect(p.el("token").value).toBe("");
+      expect(p.trangThai.goi).toEqual(["GET /me"]);
+      expect(p.buocMo()).toEqual([]);
+      expect(p.el("hoi-phien").hidden).toBe(false);
+    });
+
+    it("nop-thau: xoá fragment đúng MỘT lần sau /guest/otp/verify thành công; mã sai thì fragment ở lại", async () => {
+      let lanXac = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: `#${ORG}:maLoiMoi`, cookie: null,
+        thay: (l) => {
+          if (l === "POST /guest/redeem") return Promise.resolve({ status: 200, body: { linkChannel: "EMAIL", otpChannels: ["EMAIL"] } });
+          if (l === "POST /guest/otp/verify") { lanXac += 1; return Promise.resolve(lanXac === 1 ? { status: 401, body: { error: "sai" } } : { status: 200, body: {} }); }
+          return undefined;
+        },
+      });
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.trangThai.thayUrl).toEqual([]);
+      expect(p.loc.hash).toBe(`#${ORG}:maLoiMoi`);
+      await p.bam("nut-xac");
+      expect(p.trangThai.thayUrl).toEqual(["/nop-thau"]);
+      expect(p.loc.hash).toBe("");
+    });
+
+    // [S1.178] Trang nộp thầu hỏi lại phiên khách lúc tải — mã lời mời đã bị tiêu thụ ở lần xác minh, nên
+    // trước vòng này tải lại trang là mất đường vào tới khi bên mua mời lại.
+    const moBuoc3 = (p: Awaited<ReturnType<typeof dungTrang>>) => p.el("b3").hidden === false;
+    const REDEEM = (l: string) => (l === "POST /guest/redeem" ? Promise.resolve({ status: 200, body: { linkChannel: "EMAIL", otpChannels: ["SMS"] } }) : undefined);
+    /** Giữ lần gọi thứ `lan` của `lenh` tới khi `tha()`; mọi lời gọi khác theo mặc định (hay theo `khac`). */
+    const giu = (lenh: string, lan: number, khac?: (l: string) => Promise<{ status: number; body: unknown }> | undefined) => {
+      const g = { tha: () => undefined as void, dem: 0 };
+      const thay = (l: string) => {
+        if (l === lenh && ++g.dem === lan) return new Promise<{ status: number; body: unknown }>((r) => { g.tha = () => { r({ status: 200, body: lenh === "GET /guest/rfq" ? GOI_THAU_KHACH : {} }); }; });
+        return khac?.(l);
+      };
+      return { g, thay };
+    };
+
+    it("[S1.178] nop-thau: có phiên khách còn hạn ⇒ HỎI, nêu tên gói thầu, không tự mở; Tiếp tục ⇒ bước 3", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq"]);
+      expect(moBuoc3(p), "bảng giá không được tự mở dưới một phiên chưa ai nhận").toBe(false);
+      expect(p.el("hoi-phien").hidden).toBe(false);
+      expect(p.el("hoi-phien").textContent).toContain("«Mua thép tấm quý IV»");
+      expect(p.el("hoi-phien").textContent, "tên gói không nói phiên của ai — câu hỏi phải nói thẳng").toMatch(/người khác cũng được mời gói ấy/u);
+      expect(p.el("nut-dung-phien").hidden).toBe(false);
+      await p.bam("nut-dung-phien");
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq"]);
+      expect(moBuoc3(p)).toBe(true);
+      expect(p.el("b1").lop.has("xong")).toBe(true);
+      expect(p.el("b2").hidden, "không bắt nhập lại OTP").toBe(true);
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(p.el("nut-dung-phien").hidden).toBe(true);
+      expect(p.el("ok1").textContent).toMatch(/Đang dùng phiên nộp thầu còn hạn/u);
+    });
+
+    it("[S1.178] nop-thau: link mời mang mã ⇒ KHÔNG hỏi phiên khách — thứ tự docLink() rồi thuPhienKhach() ở cấp tệp", async () => {
+      const p = await dungTrang("nop-thau", { hash: `#${ORG}:maLoiMoiMoi`, cookie: null, khach: true });
+      expect(p.el("token").value).toBe("maLoiMoiMoi");
+      expect(p.trangThai.goi).toEqual([]);
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(moBuoc3(p)).toBe(false);
+    });
+
+    it("[S1.178] nop-thau: không phiên khách (401), mất mạng, 200 thiếu tên gói hay 403 ⇒ không hỏi, và Tiếp tục không mở gì", async () => {
+      const lay = (r: Promise<{ status: number; body: unknown }>) => (l: string) => (l === "GET /guest/rfq" ? r : undefined);
+      const cacCa = [
+        await dungTrang("nop-thau", { hash: "", cookie: null }),
+        await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: (l) => (l === "GET /guest/rfq" ? Promise.reject(new Error("mat mang")) : undefined) }),
+        await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: lay(Promise.resolve({ status: 200, body: { items: [] } })) }),
+        await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: lay(Promise.resolve({ status: 403, body: GOI_THAU_KHACH })) }),
+      ];
+      for (const [i, p] of cacCa.entries()) {
+        expect(p.trangThai.goi, `ca ${i}`).toEqual(["GET /guest/rfq"]);
+        expect(p.el("hoi-phien").hidden, `ca ${i}`).toBe(true);
+        await p.bam("nut-dung-phien");
+        expect(moBuoc3(p), `ca ${i}`).toBe(false);
+        expect(p.trangThai.goi, `ca ${i}: Tiếp tục không được gọi gì`).toEqual(["GET /guest/rfq"]);
+      }
+    });
+
+    it("[S1.178] nop-thau: phiên chết trong lúc khối hỏi nằm chờ ⇒ Tiếp tục báo ở bước 1, KHÔNG mở bước 3 rỗng", async () => {
+      let lan = 0;
+      const p = await dungTrang("nop-thau", {
+        hash: "", cookie: null, khach: true,
+        thay: (l) => (l === "GET /guest/rfq" && ++lan === 2 ? Promise.resolve({ status: 401, body: { error: "phien khong hop le" } }) : undefined),
+      });
+      expect(p.el("hoi-phien").hidden).toBe(false);
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.el("b1").lop.has("xong")).toBe(false);
+      expect(p.el("ok1").textContent).toBe("");
+      expect(p.el("loi3").hidden).toBe(true);
+      expect(p.el("loi1").textContent).toMatch(/hết hạn hoặc lời mời đã bị thu hồi/u);
+    });
+
+    it("[S1.178] nop-thau: khối hỏi đang hiện rồi nhà cung cấp khác mở link của mình trong CÙNG thẻ ⇒ khối hỏi biến mất", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      expect(p.el("hoi-phien").hidden).toBe(false);
+      await p.doiFragment(`#${ORG}:maCuaNhaCungCapKhac`);
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(p.el("nut-dung-phien").hidden).toBe(true);
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq"]);
+    });
+
+    it("[S1.178] nop-thau: bước 3 và 4 đang mở rồi hashchange sang link khác ⇒ bước 2–4 đóng, bỏ \"xong\", dừng đếm ngược, xoá biên nhận", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(true);
+      // Giả như vừa nộp xong: biên nhận (bước 4) đang hiện, bước 3 đã "xong".
+      p.el("b4").hidden = false;
+      p.el("b3").lop.add("xong");
+      p.el("tt-bn").textContent = "biên nhận của người trước";
+      await p.doiFragment(`#${ORG}:maCuaNhaCungCapKhac`);
+      for (const b of ["b2", "b3", "b4"]) expect(p.el(b).hidden, b).toBe(true);
+      for (const b of ["b1", "b2", "b3"]) expect(p.el(b).lop.has("xong"), b).toBe(false);
+      expect(p.trangThai.xoaHen, "đếm ngược của gói trước phải dừng").toEqual([1]);
+      expect(p.el("tt-bn").textContent, "biên nhận của người trước phải bị xoá").toBe("");
+      expect(p.el("token").value).toBe("maCuaNhaCungCapKhac");
+      expect(p.trangThai.goi).toEqual(["GET /guest/rfq", "GET /guest/rfq"]);
+    });
+
+    it("[S1.178] nop-thau: đường link — Mở lời mời, rồi hashchange ⇒ bước 2 đóng, bước 1 hết \"xong\"", async () => {
+      const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay: REDEEM });
+      await p.bam("nut-mo");
+      expect(p.el("b2").hidden).toBe(false);
+      expect(p.el("b1").lop.has("xong")).toBe(true);
+      await p.doiFragment(`#${ORG}:maB`);
+      expect(p.el("b2").hidden).toBe(true);
+      expect(p.el("b1").lop.has("xong")).toBe(false);
+    });
+
+    it("[S1.178] nop-thau: trọn đường link — xác minh ⇒ bước 3; fragment bị xoá (hashchange không mã) ⇒ ô mã rỗng, đóng bước, HỎI lại", async () => {
+      const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay: REDEEM });
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      await p.bam("nut-xac");
+      expect(p.trangThai.khach, "xác minh xong thì trình duyệt có cookie khách").toBe(true);
+      expect(moBuoc3(p)).toBe(true);
+      expect(p.el("token").value, "ô vẫn giữ mã đã tiêu thụ").toBe("maA");
+      await p.doiFragment("");
+      expect(p.el("token").value).toBe("");
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.el("hoi-phien").hidden).toBe(false);
+      expect(p.trangThai.goi).toEqual(["POST /guest/redeem", "POST /guest/otp/verify", "GET /guest/rfq", "GET /guest/rfq"]);
+    });
+
+    it("[S1.178] nop-thau: đang ở bước 3 mà Mở một lời mời khác ⇒ bước 3 của cookie cũ đóng trước khi mở bước 2", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: REDEEM });
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(true);
+      p.el("org").value = ORG;
+      p.el("token").value = "maGoTay";
+      await p.bam("nut-mo");
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.el("b2").hidden).toBe(false);
+      expect(p.el("hoi-phien").hidden).toBe(true);
+    });
+
+    it("[S1.178] nop-thau: Mở lời mời từ khối hỏi đang hiện ⇒ khối hỏi biến mất và không mở lại được phiên cũ", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay: REDEEM });
+      expect(p.el("hoi-phien").hidden).toBe(false);
+      p.el("org").value = ORG;
+      p.el("token").value = "maGoTay";
+      await p.bam("nut-mo");
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(p.el("nut-dung-phien").hidden).toBe(true);
+      await p.bam("nut-dung-phien");
+      expect(moBuoc3(p)).toBe(false);
+    });
+
+    it("[S1.178] nop-thau: /guest/rfq của khối hỏi về muộn SAU khi fragment đã đổi sang link mời khác ⇒ bị bỏ", async () => {
+      const { g, thay } = giu("GET /guest/rfq", 1);
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay });
+      await p.doiFragment(`#${ORG}:maLoiMoiKhac`);
+      g.tha();
+      await cho();
+      expect(p.el("hoi-phien").hidden).toBe(true);
+      expect(p.el("nut-dung-phien").hidden).toBe(true);
+    });
+
+    it("[S1.178] nop-thau: gói thầu của Tiếp tục về muộn SAU khi fragment đã đổi ⇒ bị bỏ, bước 3 không mở lại", async () => {
+      const { g, thay } = giu("GET /guest/rfq", 2);
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true, thay });
+      const bam = p.bam("nut-dung-phien");
+      await cho();
+      await p.doiFragment(`#${ORG}:maCuaB`);
+      g.tha();
+      await bam;
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.el("b1").lop.has("xong")).toBe(false);
+      expect(p.el("ok1").textContent).toBe("");
+      expect(p.el("loi1").textContent).toBe("");
+    });
+
+    it("[S1.178] nop-thau: xác minh OTP về muộn SAU khi fragment đã đổi ⇒ không xoá fragment mới, không nạp gói thầu", async () => {
+      const { g, thay } = giu("POST /guest/otp/verify", 1, REDEEM);
+      const p = await dungTrang("nop-thau", { hash: `#${ORG}:maA`, cookie: null, thay });
+      await p.bam("nut-mo");
+      p.el("ma").value = "123456";
+      const bam = p.bam("nut-xac");
+      await cho();
+      await p.doiFragment(`#${ORG}:maB`);
+      g.tha();
+      await bam;
+      expect(p.trangThai.thayUrl).toEqual([]);
+      expect(p.loc.hash).toBe(`#${ORG}:maB`);
+      expect(moBuoc3(p)).toBe(false);
+      expect(p.trangThai.goi).not.toContain("GET /guest/rfq");
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {

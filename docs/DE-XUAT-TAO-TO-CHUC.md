@@ -28,11 +28,14 @@ tới khi có tổ chức đầu tiên. Không tạo được tổ chức thì b
 
 **Hệ quả thứ hai, đo thêm ở vòng này — người dùng đầu tiên không có đường đăng nhập qua giao diện.**
 - Đăng nhập của người mua là link một lần cộng TOTP. Link được xin qua `POST /auth/link` với `{orgId, email}`
-  (`apps/api/src/routes/auth.ts`). **Không trang nào trong `apps/web` gọi route này** — hôm nay chỉ công cụ giả lập gọi.
-- Thư đăng nhập qua SES chứa `…/login#<token>`, **không kèm mã tổ chức** (`apps/api/src/adapters/gui-ses.ts`), dù bộ gửi
-  nhận `orgId` trong thông điệp.
-- Trang `/login` đòi cả hai: *"Cần cả mã tổ chức và mã đăng nhập."* (`apps/web/trang/mo-thau.js`). Người dùng phải tự gõ
-  một UUID tổ chức.
+  (`apps/api/src/routes/auth.ts`). ~~**Không trang nào trong `apps/web` gọi route này** — hôm nay chỉ công cụ giả lập gọi.~~
+  **[S1.176 / ADR-107]** `/login` nay có ô *Gửi link đăng nhập* gọi route này.
+- ~~Thư đăng nhập qua SES chứa `…/login#<token>`, **không kèm mã tổ chức** (`apps/api/src/adapters/gui-ses.ts`), dù bộ gửi
+  nhận `orgId` trong thông điệp.~~ **[S1.176 / ADR-107]** Thư đăng nhập mang `…/login#<orgId>:<token>`; SMS và Zalo cũng vậy.
+- Trang `/login` đòi cả hai: *"Cần cả mã tổ chức và mã đăng nhập."* (`apps/web/trang/mo-thau.js`). ~~Người dùng phải tự gõ
+  một UUID tổ chức.~~ **[S1.176 / ADR-107]** Link điền sẵn cả hai; người tới `/login` không kèm link thì dán một link cũ vào ô
+  tổ chức, hoặc trang nhớ mã sau lần vào đầu tiên trên máy. Người chưa từng vào và không còn link nào vẫn phải được ai đó cho
+  mã tổ chức — với người dùng đầu tiên của một tổ chức mới, đó là người tạo tổ chức.
 - `POST /users/:userId/mfa-reset` không cứu được ngày đầu: nó đòi hai người quản lý đã đăng nhập, khác người và khác
   phiên.
 
@@ -74,7 +77,8 @@ Một công cụ mới, `tools/khoi-tao-to-chuc`, đọc một bản khai — t�
    của những tổ chức mà chính nó đã thấy xếp việc (`apps/api/src/composition.ts`, khoản 156 — khoản 197 chỉ đóng ca
    xếp việc bên trong `api`), còn worker không nhận loại job này. Nó chỉ được nhặt khi chính tổ chức ấy có một yêu cầu
    xếp việc qua `api` — với một tổ chức mới mà chưa ai đăng nhập được, tức là không bao giờ. Link đầu tiên đi bằng một lời gọi `POST /api/auth/link` `{orgId, email}` cho mỗi người, qua ALB, sau
-   khi task xong — lời gọi ấy xếp việc và đánh thức bộ chạy ngay trong `api`. Cần sửa thư đăng nhập trước (mục 4, việc 2).
+   khi task xong — lời gọi ấy xếp việc và đánh thức bộ chạy ngay trong `api`. ~~Cần sửa thư đăng nhập trước (mục 4, việc 2).~~
+   **[S1.176 / ADR-107]** Thư đã mang mã tổ chức (mục 4, việc 2 đã làm).
 
 Công cụ đóng gói thành đích `khoi-tao` của `deploy/Dockerfile` và task definition `tp-khoi-tao` trong stack `90-ecs`,
 chạy bằng `aws ecs run-task` như `tp-migrate` và `tp-neo`, dưới vai deploy và environment `prod` có người duyệt
@@ -124,7 +128,7 @@ Người vận hành nối vào RDS bằng vai master rồi chạy một tệp S
 1. **Vai CSDL hẹp riêng cho task** (mục 5, lựa chọn ⒝), không dùng vai master.
 2. **Sửa thư đăng nhập để kèm mã tổ chức** — `/login#<tổ chức>:<token>` thay cho `/login#<token>`. Việc này nhỏ, đứng
    riêng được, và nên làm dù chọn phương án nào: không có nó thì người dùng nào cũng phải tự gõ UUID tổ chức, ở mọi lần
-   xin link về sau chứ không riêng ngày đầu.
+   xin link về sau chứ không riêng ngày đầu. **[S1.176 / ADR-107]** Đã làm, gộp cả SMS và Zalo, kèm ô xin link trên `/login`.
 3. **Ghi chỗ hở vào sổ nợ, rổ A theo vế ⒞** (không triển khai được), tới khi task chạy được trên prod.
 4. **Một ADR** chốt bốn câu ở mục 6.
 

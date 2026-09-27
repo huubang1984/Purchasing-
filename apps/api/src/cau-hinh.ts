@@ -56,7 +56,7 @@ export interface CauHinhApiChung {
   readonly dbPoolMax: number;
   readonly listenHost: string;
   readonly listenPort: number;
-  /** Gốc của `/login#<token>` và `/i#<token>` (ADR-020 mục 3). `https:` — `http:` chỉ cho localhost. */
+  /** Gốc của `/login#<orgId>:<token>` và `/i#<orgId>:<token>` (ADR-020 mục 3, ADR-107). `https:` — `http:` chỉ cho localhost. */
   readonly publicBaseUrl: string;
   /** [review M-3] Origin được phép gửi yêu cầu không-GET kèm cookie. Rỗng = mọi trình duyệt bị 403. */
   readonly allowedOrigins: readonly string[];

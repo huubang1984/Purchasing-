@@ -215,6 +215,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   - Cách làm chờ chủ dự án quyết. Đề xuất ngày 2026-09-27: một task ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
     không mở route quản trị. **[S1.173]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
     kể cả chỗ hở thứ hai đo ở vòng ấy: người dùng đầu tiên không có đường xin link đăng nhập qua giao diện.
+    **[S1.176 / ADR-107]** Chỗ hở thứ hai đã sửa: `/login` có ô xin link, và thư đăng nhập mang mã tổ chức.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với ~~`xuat=0 kiem=0`~~ **[ghi muộn ngày 2026-09-27]** dòng
