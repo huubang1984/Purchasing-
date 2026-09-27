@@ -8137,3 +8137,43 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
   KHÔNG báo đẩy — họ đọc khi mở lại link. Thông báo đẩy là việc sau.
 - Một người giữ `rfq.cancel` huỷ được gói ở `UNSEALED` sau khi thấy giá, một mình. Hàng sổ và lý do là dấu vết; phân
   tách nhiệm vụ cho hành vi này để S3.
+
+## ADR-9201 — Bảy lần từ chối của khoản 247 vào sổ: J3/D2 thành chốt `CONTROL_DENIED`, hai lần chặn nộp thành `BID_STATE_DENIED`
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.9101 · Liên quan: ADR-060, ADR-074, **ADR-084 ⑷ ⑸**, ADR-101
+· Khoản: **247** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.9101
+
+**Bối cảnh.** Pilot giả lập (S1.163) đo bảy lần từ chối không để lại hàng sổ hay dòng log: J3 ×4 (người tạo gói đề xuất, người
+điều phối mở thầu đề xuất, người kiêm cả hai đề xuất, người đề xuất tự duyệt), D2 ×1 (người tạo tự duyệt gói), và hai lần nộp
+báo giá (sau khi gói huỷ, ngoài top-N của vòng BAFO). Cơ chế chung: lớp chặn duy nhất là trigger, và trigger huỷ cả giao dịch.
+ADR-060 đã khai giới hạn ấy nhưng gắn nó với ca TRANH CHẤP; với bảy lần này, đường thuận không có lớp gói nào bắt trước.
+
+**Ba quyết định của chủ dự án, ngày 2026-09-27, cả ba theo đề xuất.**
+
+⑴ **Cả bảy lần vào sổ.** Năm lần của tách bạch nhiệm vụ và hai lần nộp — hai lần sau theo đúng cách ADR-074 đọc vế GHI của
+ADR-060 cho bước nộp.
+
+⑵ **J3 và D2 là chốt kiểm soát: `CONTROL_DENIED`.** Đúng định nghĩa ADR-084 ⑸ — đủ quyền, đúng thứ tự, nhưng một chốt chặn.
+Bốn mã mới trong bảng chốt: `J3_NGUOI_TAO_DE_XUAT`, `J3_NGUOI_DIEU_PHOI_DE_XUAT`, `J3_NGUOI_DE_XUAT_TU_DUYET`,
+`D2_NGUOI_TAO_TU_DUYET`, cả bốn `vaoSo: true`. Tầng gói (`deXuatTraoThau`, `duyetTraoThau`, `approveRfq`) hỏi TRƯỚC câu ghi,
+đọc đúng dữ liệu trigger đọc, rồi từ chối qua `throwAuditedDenial` ở giao dịch độc lập. `approveRfq` nhận thêm `auditPool`.
+Bảng chốt (`CHOT_VAO_SO`), lời từ chối và hàm ghi sổ (`tuChoiTheoChot`) dời từ `packages/rfq` xuống
+`packages/identity` — gói mà `rfq` lẫn `danh-gia` cùng phụ thuộc — đúng như chú thích của bảng đã hẹn. ADR-084 ⑷ liệt kê
+K2/K3/K5/K9/K10; lớp ấy nay nhận thêm J3 và D2, và kiểu `DongChot.chot` nới từ `K${number}` ra `D|J|K`.
+
+⑶ **Hai lần chặn nộp: một nhãn `BID_STATE_DENIED`, mã trong payload** (`GOI_KHONG_NHAN_BAO_GIA`, `NGOAI_TOP_N_BAFO`). `9501`
+đặt tên ràng buộc cho hai nhánh trigger (`c1_goi_khong_nhan_bao_gia`, `bafo_ngoai_top_n`), khuôn `c1_qua_han_nop` của `066`;
+`submitBid` lùi savepoint, ghi hàng sổ trong giao dịch còn lành, ném `BaoGiaKhongNhanError`; route khách trả 422 mà COMMIT —
+cùng đường `BID_DEADLINE_DENIED`. Thông điệp cho nhà cung cấp giữ nguyên câu chung.
+
+**Chốt từ tiền lệ, không hỏi.**
+- Trigger giữ nguyên làm lớp có thẩm quyền. Ca hai người tranh nhau cùng lúc vẫn chỉ tới trigger và vẫn không vào sổ — giới hạn
+  ADR-060 đã khai, nay đúng nghĩa đen: đường thuận có lớp gói bắt trước.
+- Payload chỉ mang MÃ (ADR-060, ADR-084 ⑷). Vế PHIÊN của J3 vế 1 không có mã riêng: qua tầng gói, phiên là dẫn xuất của người.
+- Lần ghi sổ hỏng làm lời từ chối gãy ồn ào — `DenialAuditFailedError` mang lời từ chối gốc (vế ⒞ của ADR-060).
+
+**Cái giá — nói thẳng.**
+- Mỗi lần thử sai thêm một hàng vĩnh viễn vào chuỗi mà `verifyAuditChain` đọc O(n) (ADR-060 ⑷). Bảy mã này hiếm trên đường
+  thuận — chúng là tín hiệu, không phải ma sát thường ngày.
+- Hai bản của cùng một vị từ — tầng gói và trigger — có thể trôi khỏi nhau. Trôi về phía gói lỏng hơn thì trigger vẫn chặn, chỉ
+  mất hàng sổ; trôi về phía gói chặt hơn thì người dùng bị chặn oan. Các test đích của vòng này ghim cả hai lớp cho từng vế.

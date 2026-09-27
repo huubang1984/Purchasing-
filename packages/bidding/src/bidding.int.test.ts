@@ -252,13 +252,16 @@ afterAll(async () => {
  *   ⑵ gói ánh xạ nó thành một lỗi nghiệp vụ **CÓ TÊN**, không để lỗi trần đi lên thành 500.
  * Bản cũ chỉ đo ⑴, và nó xanh cả khi lỗi đi ra dưới dạng một sự cố máy chủ.
  */
-async function tuChoiTuCsdl(viec: Promise<unknown>, mau: RegExp): Promise<void> {
+// [S1.9101 / khoản 247] `ten`: hai nhánh có tên của trigger nộp (`9501`) nay ra `BaoGiaKhongNhanError` — con của
+// `BiddingError`, nên vế "lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần" giữ nguyên nghĩa.
+async function tuChoiTuCsdl(viec: Promise<unknown>, mau: RegExp, ten = "BiddingError"): Promise<void> {
   const loi = await viec.then(
     () => null,
     (e: unknown) => e,
   );
   expect(loi, "lần nộp này phải bị từ chối").not.toBeNull();
-  expect((loi as Error).name, "phải là lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần").toBe("BiddingError");
+  expect(loi, "phải là lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần").toBeInstanceOf(BiddingError);
+  expect((loi as Error).name).toBe(ten);
   const nguyenNhan = (loi as { cause?: unknown }).cause;
   expect(nguyenNhan, "câu của CSDL phải còn ở cause").toBeInstanceOf(Error);
   expect((nguyenNhan as { code?: unknown }).code, "và nó phải là check_violation của một trigger").toBe("23514");
@@ -584,6 +587,7 @@ describe("[INV-C1] hạn nộp", () => {
         submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }),
       ),
       /khong nhan bao gia khi dang o trang thai CLOSED/u,
+      "BaoGiaKhongNhanError",
     );
   });
 
@@ -655,7 +659,10 @@ describe("[INV-C1] hạn nộp", () => {
     expect(luong[0]?.n, "luồng báo giá tạo trong lần nộp bị chặn phải rút theo").toBe("0");
   });
 
-  it("[khoản 196] ĐỐI CHỨNG: RFQ CLOSED vẫn ra BiddingError chung — chỉ lần chặn VÌ HẠN mang hai dấu thời gian và vào sổ", async () => {
+  // [S1.9101 / khoản 247] Tên cũ của ca này — *"RFQ CLOSED vẫn ra BiddingError chung — chỉ lần chặn VÌ HẠN mang hai dấu
+  // thời gian và vào sổ"* — đúng tới vòng ấy; nay lần chặn CLOSED có tên riêng và hàng sổ riêng (`BID_STATE_DENIED`), còn
+  // hai dấu thời gian và `BID_DEADLINE_DENIED` vẫn chỉ thuộc lần chặn VÌ HẠN.
+  it("[khoản 196] ĐỐI CHỨNG: RFQ CLOSED ra `BaoGiaKhongNhanError`, KHÔNG mang hai dấu thời gian và KHÔNG ghi `BID_DEADLINE_DENIED`", async () => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
     await withTenant(apiPool, orgA, (c) =>
@@ -668,9 +675,50 @@ describe("[INV-C1] hạn nộp", () => {
     await tuChoiTuCsdl(
       withTenant(apiPool, orgA, (c) => submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy })),
       /khong nhan bao gia khi dang o trang thai CLOSED/u,
+      "BaoGiaKhongNhanError",
     );
     const { rows } = await db.pool.query("SELECT 1 FROM audit_events WHERE action = 'BID_DEADLINE_DENIED' AND resource_id = $1", [bc.rfqId]);
     expect(rows).toHaveLength(0);
+  });
+
+  // [S1.9101 / khoản 247 / ADR-9201] Nộp vào gói ĐÃ HUỶ — pilot giả lập đo 422 và 0 hàng sổ. Nhánh trạng thái
+  // của C1 nay mang tên ràng buộc (`c1_goi_khong_nhan_bao_gia`); tầng gói lùi savepoint, ghi `BID_STATE_DENIED`
+  // với mã, rồi ném lỗi có tên — cùng khuôn `BID_DEADLINE_DENIED` của khoản 196.
+  it("[khoản 247] gói đã HUỶ ⇒ `BaoGiaKhongNhanError` mã `GOI_KHONG_NHAN_BAO_GIA`; giao dịch còn lành; commit để lại đúng một hàng `BID_STATE_DENIED`", async () => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = $2, " +
+        "cancelled_by_session_id = $3 WHERE id = $1",
+      [bc.rfqId, uA, sA],
+    );
+    const { rows: nguoi } = await db.pool.query<{ id: string }>(
+      "SELECT verified_contact_id AS id FROM guest_sessions WHERE id = $1",
+      [bc.guestSessionId],
+    );
+    let loi: unknown = null;
+    let sauLoi = "";
+    await withTenant(apiPool, orgA, async (c) => {
+      loi = await submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: boKy }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      sauLoi = (await c.query<{ x: string }>("SELECT 'con lanh' AS x")).rows[0]?.x ?? "";
+    });
+    expect(loi).toBeInstanceOf(BiddingError);
+    expect(loi).toMatchObject({ name: "BaoGiaKhongNhanError", ma: "GOI_KHONG_NHAN_BAO_GIA" });
+    expect(((loi as { cause?: Error }).cause as Error).message).toMatch(/khong nhan bao gia khi dang o trang thai CANCELLED/u);
+    expect(sauLoi).toBe("con lanh");
+    const { rows: so } = await db.pool.query<{ actor_type: string; actor_id: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, payload FROM audit_events WHERE action = 'BID_STATE_DENIED' AND resource_id = $1",
+      [bc.rfqId],
+    );
+    expect(so).toEqual([{ actor_type: "SUPPLIER", actor_id: nguoi[0]?.id, payload: { ma: "GOI_KHONG_NHAN_BAO_GIA" } }]);
+    const { rows: luong } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM vendor_bids b JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [bc.rfqId],
+    );
+    expect(luong[0]?.n, "luồng báo giá tạo trong lần nộp bị chặn phải rút theo").toBe("0");
   });
 
   it("[INV-C1] ĐỘT BIẾN: gỡ trigger hạn nộp thì một báo giá TRỄ đi lọt", async () => {

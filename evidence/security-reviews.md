@@ -13526,8 +13526,8 @@ PostgreSQL 16 thật (testcontainers):
 
 ## 7. Số đo
 
-Trên cây đã merge `master` `431cc93` và cấp lại số (`4697eca`), PostgreSQL 16 thật qua testcontainers:
-- `pnpm evidence` — vitest thoát mã 0: **676 tệp, 2798 ca, 2797 đạt, 1 bỏ qua, 0 hỏng**; **64/64** bất biến (42/42 nghiệp vụ +
+Trên cây đã merge `master` ~~`431cc93` và cấp lại số (`4697eca`)~~ **[S1.9101]** `bbf538b` và cấp lại số (`c882c53`, đầu đã merge của #169), PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: ~~**676 tệp, 2798 ca, 2797 đạt, 1 bỏ qua, 0 hỏng**~~ **[S1.9101] 678 tệp, 2804 ca, 2803 đạt, 1 bỏ qua, 0 hỏng**; **64/64** bất biến (42/42 nghiệp vụ +
   22/22 hàng rào). Cổng chặn đúng một lượt đòi nâng tay `MOC_GHIM.soPhuToiThieu` 63 → 64 — cùng khuôn S1.29 và S1.115.
 - Tệp của vòng này: `luot-danh-gia.int.test.ts` 83/83, `comparison.int.test.ts` 17/17, `rfq.int.test.ts` 57/57,
   `guest.int.test.ts` 12/12, `migrations.int.test.ts` 117/117, `rls-coverage.int.test.ts` 51/51, `tien-te-mot-cho-doc.test.ts`
@@ -13720,3 +13720,67 @@ một ĐỘT BIẾN:
   một lượt trên PostgreSQL 16 cục bộ **177 tệp, 2822 ca — 2813 đạt, 1 bỏ qua, 8 đỏ** (đúng 8 ca `test-support` cần
   docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
   các dòng tổng và dòng mốc.
+
+# §S1.9101 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI MÀ PILOT GIẢ LẬP ĐO LÀ IM NAY ĐỀU VÀO SỔ
+
+**Rổ và mảnh (ADR-043):** khoản 247 rời rổ B vì ĐÓNG. Một migration (`9501`). Một ADR mới (ADR-9201). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Khoản 247 (S1.163) ghi bảy lần từ chối không để lại hàng sổ hay dòng log, đo bằng cột *Vào sổ* của `pnpm pilot:gia-lap`. Chủ
+dự án chọn làm khoản này thay vì S3.1c/S3.1d (đang ở một phiên khác), rồi chốt ba câu theo đề xuất (ADR-9201): cả bảy vào sổ;
+J3/D2 dùng `CONTROL_DENIED`; hai lần nộp dùng `BID_STATE_DENIED` với mã trong payload.
+
+## 2. Đo trước khi sửa
+
+PostgreSQL 16 thật (testcontainers), bằng chính các test đích của vòng này chạy trên mã trước khi sửa:
+- **J3 vế 2** (người tạo đề xuất), **J3 vế 3** (người từng điều phối đề xuất), **J3 vế 1** (người đề xuất tự duyệt): lỗi `pg` trần
+  (`name: "error"`) mang câu của trigger `award_kiem_de_xuat` / `award_kiem_nguoi_duyet`; 0 hàng `CONTROL_DENIED`.
+- **D2** (người tạo tự duyệt gói qua `approveRfq`): lỗi `pg` trần của `rfq_kiem_nguoi_duyet`; 0 hàng.
+- **Nộp vào gói ĐÃ HUỶ** (`submitBid`): `BiddingError` chung, và câu SQL kế tiếp trong cùng giao dịch ném *"current transaction
+  is aborted"* — không lối nào ghi được sổ.
+- **Nộp ngoài top-N BAFO qua HTTP** (kịch bản 41, bước 12d): 422, 0 hàng `BID_STATE_DENIED`.
+- Đột biến chặn lần ghi `CONTROL_DENIED`: lỗi `pg` trần — chưa có lần ghi nào để chặn.
+
+## 3. Thay đổi
+
+- `packages/identity/src/chot-kiem-soat.ts` (mới) — bảng chốt `CHOT_VAO_SO`, `ChotKiemSoatError`, `laMaChot`, `tuChoiTheoChot`
+  dời từ `packages/rfq`; bốn mã mới J3/D2, cả bốn `vaoSo: true`; `DongChot.chot` nới ra `D|J|K`. Cửa gói và danh sách trắng
+  barrel thêm năm tên. `packages/rfq/src/chot-kiem-soat.ts` giữ câu hỏi SQL của K1 và `kiemChot`, chép lại từ vựng ra cửa TỆP
+  cho các test đang đọc từ đó.
+- `packages/danh-gia/src/trao-thau.ts` — `deXuatTraoThau` hỏi người tạo gói và lịch sử điều phối (`064`) TRƯỚC câu ghi;
+  `duyetTraoThau` hỏi người đề xuất trước câu ghi chữ ký. Từ chối qua `tuChoiTheoChot`.
+- `packages/rfq/src/rfq.ts` — `approveRfq(…, auditPool)` hỏi người tạo gói trước câu ghi; route `POST /rfqs/:id/approve` truyền
+  `ctx.auditPool`; mọi chỗ gọi trong test cập nhật.
+- `db/migrations/9501_tu_choi_nop_co_ten.sql` — thân `bid_kiem_han_nop` (`066`) và `bid_kiem_vong_bafo` (`059`) trích bằng
+  script, mỗi hàm thêm đúng một `CONSTRAINT`: `c1_goi_khong_nhan_bao_gia`, `bafo_ngoai_top_n`. Bản ghim ở
+  `hardening.always.sql` đổi cùng commit (tiêu đề, phiên bản canh, thân, thân chuẩn hoá); script kiểm trước rằng bản ghim cũ
+  bằng thân của migration cũ.
+- `packages/bidding/src/bidding.ts` — `BaoGiaKhongNhanError` (con của `BiddingError`, cùng hợp đồng "giao dịch còn lành" với
+  `NopQuaHanError`); nhánh bắt hai tên ràng buộc lùi savepoint, ghi `BID_STATE_DENIED` `{ma}`, ném. `apps/api/src/routes/guest.ts`
+  trả 422 bằng đường TRẢ VỀ, nên giao dịch mang hàng sổ được COMMIT.
+- `docs/PRODUCT.md` §5 — dòng J3 sửa tại chỗ lần nữa.
+
+## 4. Đo sau khi sửa
+
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối `[INV-J3] [S1.9101 / khoản 247]`: ba vế J3 mỗi vế đúng một hàng
+  `CONTROL_DENIED` mang mã vế và người thử, không award, gói đứng yên, không chữ ký; **đột biến** chặn lần ghi ⇒
+  `DenialAuditFailedError` mang `ChotKiemSoatError` gốc, không award; **lớp cuối** — câu ghi thẳng vẫn bị trigger J3 chặn và
+  không vào sổ. Bốn ca J3 cũ (đường sản xuất) đổi kỳ vọng sang lời từ chối có tên.
+- `packages/rfq/src/rfq.int.test.ts`, khối `[INV-D2] [S1.9101 / khoản 247]`: người tạo tự duyệt ⇒ đúng một hàng, không chữ ký;
+  lớp cuối — câu ghi thẳng vẫn bị trigger D2 chặn. Hai ca D2 cũ đổi kỳ vọng.
+- `packages/bidding/src/bidding.int.test.ts`: gói đã huỷ ⇒ `BaoGiaKhongNhanError` mã `GOI_KHONG_NHAN_BAO_GIA`, giao dịch còn
+  lành, commit để lại đúng một hàng `BID_STATE_DENIED` mang nhà cung cấp đã xác thực, không luồng báo giá nào. Hai ca CLOSED cũ
+  đổi kỳ vọng; ca đối chứng của khoản 196 đổi tên tại chỗ, vẫn khẳng định không `BID_DEADLINE_DENIED`.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bước 2 — tự duyệt qua HTTP ⇒ 422 với thông điệp có tên và đúng một
+  hàng `D2_NGUOI_TAO_TU_DUYET`; bước 12d — nộp ngoài top-N ⇒ 422 và đúng một hàng `BID_STATE_DENIED` `{ma: "NGOAI_TOP_N_BAFO"}`.
+
+## 5. Ranh giới, nói ra
+
+- Ca hai người tranh nhau cùng lúc vẫn chỉ tới trigger và không vào sổ — giới hạn ADR-060, nay đúng nghĩa đen.
+- Vị từ J3/D2 có hai bản (tầng gói, trigger). Trôi về phía gói lỏng hơn thì chỉ mất hàng sổ; về phía gói chặt hơn thì chặn oan.
+  Test ghim cả hai lớp cho từng vế, không ghim rằng hai vị từ bằng nhau trên mọi dữ liệu.
+- Nhánh `bid_kiem_phien_khach` và nhánh "dữ liệu hỏng" của trigger nộp vẫn không tên và không vào sổ: chúng nói về phiên hay dữ
+  liệu, không về một bước đi sai thứ tự.
+- Thông điệp cho nhà cung cấp không phân biệt "gói đã đổi trạng thái" với "ngoài top-N" — mã chỉ ở sổ.

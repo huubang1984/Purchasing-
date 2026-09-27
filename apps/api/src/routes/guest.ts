@@ -11,7 +11,7 @@
 //   GET  /guest/bids                          các phiên bản đã nộp của CHÍNH MÌNH — không phong bì
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
 // ==============================================================================================
-import { NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
+import { BaoGiaKhongNhanError, NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
 import { docVongBafoKhach } from "@trustprocure/danh-gia";
 import { getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
@@ -143,6 +143,11 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         // Hai dấu thời gian là thứ người bị chặn đối chiếu với đồng hồ của mình; không mang gì khác.
         if (loi instanceof NopQuaHanError) {
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
+        }
+        // [S1.9101 / khoản 247] Cùng đường TRẢ VỀ cho hai lần chặn có tên còn lại: giao dịch mang hàng `BID_STATE_DENIED`.
+        // Thân chỉ mang thông điệp chung — không mã, vì mã phân biệt "ngoài top-N" với "gói đã đổi trạng thái".
+        if (loi instanceof BaoGiaKhongNhanError) {
+          return { status: 422, body: { error: loi.message } };
         }
         throw loi;
       }

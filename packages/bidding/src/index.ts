@@ -52,6 +52,8 @@ export {
   type CiphertextAuditRow,
 } from "./ciphertext-audit.js";
 export {
+  // [S1.9101 / khoản 247] Hai lần chặn còn lại của câu nộp, có tên và có hàng sổ — cùng hợp đồng "giao dịch còn lành".
+  BaoGiaKhongNhanError,
   BiddingError,
   // [khoản 196] Lần chặn VÌ HẠN mang giờ CSDL lúc phán xử và hạn đã so — route khách trả chúng cho
   // nhà cung cấp. Xem hợp đồng "giao dịch còn lành" ở docstring của lớp.
@@ -60,6 +62,7 @@ export {
   listBidVersions,
   submitBid,
   type BidReceiptRecord,
+  type MaKhongNhanBaoGia,
   type BidVersionRecord,
   type SubmitBidInput,
 } from "./bidding.js";

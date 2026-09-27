@@ -1698,7 +1698,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_TAO_DE_XUAT" }); // [S1.9101 / khoản 247] Tầng gói chặn TRƯỚC trigger và ghi sổ — lời từ chối nay là chốt có tên; trigger là lớp cuối.
 
     // Và gói thầu KHÔNG đổi trạng thái — câu `UPDATE` đứng SAU câu `INSERT`, nên một trigger nổ
     // ở `INSERT` phải để lại đúng trạng thái cũ. Thiếu khẳng định này, một thứ tự ngược lại sẽ
@@ -1726,7 +1726,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT" }); // [S1.9101 / khoản 247] Tầng gói chặn TRƯỚC trigger và ghi sổ — lời từ chối nay là chốt có tên; trigger là lớp cuối.
 
     // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI. Không có vế này, ca trên xanh cả
     // khi trigger từ chối mọi đề xuất trên gói thầu ấy vì một lý do khác hẳn.
@@ -1766,7 +1766,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           apiPool,
         ),
       ),
-    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT" }); // [S1.9101 / khoản 247] Tầng gói chặn TRƯỚC trigger và ghi sổ — lời từ chối nay là chốt có tên; trigger là lớp cuối.
 
     const { rows: ls } = await db.pool.query<{ dispatched_by: string }>(
       "SELECT dispatched_by FROM unseal_dispatch_history WHERE org_id = $1 AND rfq_id = $2 " +
@@ -1835,7 +1835,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
       withTenant(apiPool, orgA, (c) =>
         duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
       ),
-    ).rejects.toThrow(/Nguoi de xuat trao thau khong duoc tu duyet/u);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DE_XUAT_TU_DUYET" }); // [S1.9101 / khoản 247] Tầng gói chặn TRƯỚC trigger và ghi sổ — lời từ chối nay là chốt có tên; trigger là lớp cuối.
 
     // Không chữ ký nào được ghi, và hàng `APPROVED` không tồn tại.
     const { rows: ck } = await db.pool.query<{ n: string }>(
@@ -2871,5 +2871,101 @@ describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: hu�
       );
       expect(khoa[0]?.con_song, `${dich}: huỷ thu hồi toàn bộ vật liệu khoá`).toBe("0");
     }
+  });
+});
+
+// ===============================================================================================
+// [S1.9101 / khoản 247] J3 — LẦN TỪ CHỐI CỦA TÁCH BẠCH NHIỆM VỤ ĐỂ LẠI MỘT HÀNG `CONTROL_DENIED`
+// ===============================================================================================
+// Pilot giả lập (S1.163) đo: người tạo gói đề xuất, người điều phối mở thầu đề xuất, và người đề xuất
+// tự duyệt — cả ba bị trigger của `061`/`064` chặn với 422 và **0 hàng sổ**, vì trigger huỷ cả giao
+// dịch. Chủ dự án chốt (ADR-9201): kiểm ở tầng gói TRƯỚC câu ghi, ghi `CONTROL_DENIED` với mã chốt ở
+// giao dịch độc lập (ADR-084 ⑷). Trigger vẫn là lớp cuối — ca tranh chấp — và vẫn không ghi sổ.
+describe("[INV-J3] [S1.9101 / khoản 247] J3 — lần từ chối vào sổ `CONTROL_DENIED`, trước câu ghi", { timeout: 300000 }, () => {
+  async function hangChot(rfqId: string, ma: string): Promise<readonly { actor_id: string; resource_type: string }[]> {
+    const { rows } = await db.pool.query<{ actor_id: string; resource_type: string }>(
+      "SELECT actor_id, resource_type FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' " +
+        "AND resource_id = $2 AND payload->>'ma' = $3 ORDER BY seq",
+      [orgA, rfqId, ma],
+    );
+    return rows;
+  }
+
+  it("vế 2 — người TẠO gói đề xuất ⇒ `J3_NGUOI_TAO_DE_XUAT`, đúng một hàng sổ mang người ấy, không award, gói đứng yên", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu tao tu de xuat", actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_TAO_DE_XUAT" });
+    expect(await hangChot(rfqId, "J3_NGUOI_TAO_DE_XUAT")).toEqual([{ actor_id: uYc, resource_type: "RFQ" }]);
+    expect(await hangAward(rfqId)).toEqual([]);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("vế 3 — người TỪNG ĐIỀU PHỐI mở thầu đề xuất ⇒ `J3_NGUOI_DIEU_PHOI_DE_XUAT`, đúng một hàng sổ", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const { rowCount } = await db.pool.query(
+      "UPDATE unseal_requests SET dispatched_by = $2, dispatched_by_session_id = $3, " +
+        "dispatched_at = coalesce(dispatched_at, now()) WHERE org_id = $1 AND rfq_id = $4",
+      [orgA, uDeXuat, sDeXuat, rfqId],
+    );
+    expect(rowCount, "tiền đề: đúng một yêu cầu mở thầu").toBe(1);
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "dieu phoi roi de xuat", actorSessionId: sDeXuat }, apiPool),
+      ),
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DIEU_PHOI_DE_XUAT" });
+    expect(await hangChot(rfqId, "J3_NGUOI_DIEU_PHOI_DE_XUAT")).toEqual([{ actor_id: uDeXuat, resource_type: "RFQ" }]);
+    expect(await hangAward(rfqId)).toEqual([]);
+  });
+
+  it("vế 1 — người ĐỀ XUẤT tự duyệt ⇒ `J3_NGUOI_DE_XUAT_TU_DUYET`, đúng một hàng sổ, đề xuất vẫn chờ", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat roi tu duyet", actorSessionId: sDuyet }, apiPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool)),
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_DE_XUAT_TU_DUYET" });
+    expect(await hangChot(rfqId, "J3_NGUOI_DE_XUAT_TU_DUYET")).toEqual([{ actor_id: uDuyet, resource_type: "RFQ" }]);
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+    const { rows } = await db.pool.query("SELECT 1 FROM rfq_award_approvals WHERE award_id = $1", [dx.awardId]);
+    expect(rows, "không chữ ký nào được ghi").toEqual([]);
+  });
+
+  it("ĐỘT BIẾN — chặn lần ghi `CONTROL_DENIED` ⇒ lời từ chối GÃY ỒN ÀO (`DenialAuditFailedError` mang lời từ chối gốc)", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    let loi: unknown = null;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k247_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k247 thong diep noi bo' USING ERRCODE = 'TP247'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k247_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW " +
+          "WHEN (NEW.action = 'CONTROL_DENIED') EXECUTE FUNCTION public.k247_chan_ghi_so()",
+      );
+      loi = await withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "so bi chan", actorSessionId: sYc }, apiPool),
+      ).then(
+        () => null,
+        (e: unknown) => e,
+      );
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k247_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k247_chan_ghi_so()");
+    }
+    expect(loi).toMatchObject({ name: "DenialAuditFailedError", action: "CONTROL_DENIED" });
+    expect((loi as { denial?: unknown }).denial).toMatchObject({ name: "ChotKiemSoatError", lyDo: "J3_NGUOI_TAO_DE_XUAT" });
+    expect(await hangAward(rfqId)).toEqual([]);
+  });
+
+  it("LỚP CUỐI — câu ghi thẳng đi vòng qua tầng gói vẫn bị trigger J3 chặn (và ca ấy không vào sổ — giới hạn ADR-060)", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    await expect(
+      chenAwardTho({ rfqId, evaluationId: luotId, bidVersionId: banRo[1] ?? "", status: "PROPOSED", actedBy: uYc, actedBySessionId: sYc }),
+    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay \(J3\)/u);
+    expect(await hangChot(rfqId, "J3_NGUOI_TAO_DE_XUAT")).toEqual([]);
   });
 });

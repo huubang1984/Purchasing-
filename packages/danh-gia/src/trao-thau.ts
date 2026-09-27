@@ -52,7 +52,7 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 /** Lý do máy đọc được của một lần từ chối ở lớp này — cùng khuôn `LyDoTuChoiVong`. */
@@ -271,6 +271,27 @@ export async function deXuatTraoThau(
     );
   }
 
+  // [S1.9101 / khoản 247 / ADR-9201] J3 vế 2 và vế 3 — hỏi ở ĐÂY, trước câu ghi, cùng dữ liệu mà `award_kiem_de_xuat`
+  // (`064`) đọc: người tạo gói, và LỊCH SỬ điều phối mở thầu (khoản 233). Lần cố vào sổ `CONTROL_DENIED`. Trigger vẫn hỏi
+  // lại và vẫn là lớp có thẩm quyền; nó huỷ cả giao dịch, nên trước vòng này lần cố đi ra 422 mà sổ không một hàng.
+  const { rows: tachBach } = await client.query<{ la_nguoi_tao: boolean; da_dieu_phoi: boolean }>(
+    `SELECT p.created_by OPERATOR(pg_catalog.=) $3::pg_catalog.uuid AS la_nguoi_tao,
+            EXISTS (SELECT 1 FROM public.unseal_dispatch_history h
+                     WHERE h.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+                       AND h.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+                       AND h.dispatched_by OPERATOR(pg_catalog.=) $3::pg_catalog.uuid) AS da_dieu_phoi
+       FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId, actor.id],
+  );
+  if (tachBach[0]?.la_nguoi_tao === true) {
+    await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, "J3_NGUOI_TAO_DE_XUAT");
+  }
+  if (tachBach[0]?.da_dieu_phoi === true) {
+    await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, "J3_NGUOI_DIEU_PHOI_DE_XUAT");
+  }
+
   const { rows: award } = await client.query<HangAward>(
     `INSERT INTO public.rfq_awards
        (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
@@ -404,6 +425,13 @@ export async function duyetTraoThau(
     },
     auditPool,
   );
+
+  // [S1.9101 / khoản 247 / ADR-9201] J3 vế 1 — người đề xuất không tự duyệt — hỏi trước câu ghi chữ ký, cùng khuôn
+  // hai vế ở `deXuatTraoThau`. Vế PHIÊN của `award_kiem_nguoi_duyet` không tới được qua đây: phiên là dẫn xuất của
+  // người (`resolveSessionActor`), nên một phiên đã đề xuất luôn là một phiên của chính người đề xuất.
+  if (dx.acted_by === actor.id) {
+    await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, "J3_NGUOI_DE_XUAT_TU_DUYET");
+  }
 
   await client.query(
     `INSERT INTO public.rfq_award_approvals

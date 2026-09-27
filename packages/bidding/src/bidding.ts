@@ -73,6 +73,46 @@ export class NopQuaHanError extends BiddingError {
 }
 
 /**
+ * [S1.9101 / khoản 247 / ADR-9201] Hai lần chặn còn lại của câu nộp, nay có tên (`9501`): gói không còn nhận báo giá
+ * (nhánh trạng thái của C1), và luồng báo giá ngoài top-N của vòng BAFO. Tên đọc ở trường `constraint` của lỗi `pg`,
+ * không đọc chuỗi thông điệp. Mã đi vào `payload` của hàng `BID_STATE_DENIED`.
+ */
+const MA_THEO_RANG_BUOC = {
+  c1_goi_khong_nhan_bao_gia: "GOI_KHONG_NHAN_BAO_GIA",
+  bafo_ngoai_top_n: "NGOAI_TOP_N_BAFO",
+} as const;
+
+export type MaKhongNhanBaoGia = (typeof MA_THEO_RANG_BUOC)[keyof typeof MA_THEO_RANG_BUOC];
+
+function docMaKhongNhan(loi: unknown): MaKhongNhanBaoGia | null {
+  const ten = (loi as { constraint?: unknown }).constraint;
+  return typeof ten === "string" && Object.hasOwn(MA_THEO_RANG_BUOC, ten)
+    ? MA_THEO_RANG_BUOC[ten as keyof typeof MA_THEO_RANG_BUOC]
+    : null;
+}
+
+/**
+ * [S1.9101 / khoản 247 / ADR-9201] Lần nộp bị chặn vì gói không nhận báo giá, hay vì luồng này không được mời nộp lại
+ * ở vòng BAFO. Cùng HỢP ĐỒNG với `NopQuaHanError`: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** và đã MANG
+ * một hàng sổ `BID_STATE_DENIED` — người gọi muốn hàng ấy sống thì COMMIT (route `POST /guest/bids` trả 422 bằng đường
+ * TRẢ VỀ). Thông điệp giữ nguyên câu chung của trước vòng này: nó không nói luồng này đứng ngoài top-N hay gói đã đổi
+ * trạng thái — hai điều nhà cung cấp đọc được ở `GET /guest/rfq` — và không chép câu của CSDL, vốn nội suy UUID.
+ */
+export class BaoGiaKhongNhanError extends BiddingError {
+  constructor(
+    readonly ma: MaKhongNhanBaoGia,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
+        "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
+      options,
+    );
+    this.name = "BaoGiaKhongNhanError";
+  }
+}
+
+/**
  * Đọc hai dấu thời gian của lần chặn VÌ HẠN từ lỗi `pg`. Không phải nhánh ấy (trường `constraint`
  * khác, `DETAIL` hỏng hình dạng) ⇒ `null`, và người gọi rơi về `BiddingError` chung — fail về phía
  * lời từ chối KHÔNG số, không bao giờ về phía một con số đoán.
@@ -250,6 +290,24 @@ export async function submitBid(
           payload: { gioCsdl: viHan.gioCsdl, hanNop: viHan.hanNop },
         });
         throw new NopQuaHanError(viHan.gioCsdl, viHan.hanNop, { cause: loi });
+      }
+      // [S1.9101 / khoản 247 / ADR-9201] Hai nhánh có tên còn lại — cùng đường với nhánh VÌ HẠN ngay trên: lùi savepoint,
+      // ghi sổ trong giao dịch còn lành, ném lỗi có tên. Nộp vào gói đã đóng hay huỷ, hay nộp khi không được mời nộp lại ở
+      // vòng BAFO, là một người dùng đi một bước của chuỗi khi chuỗi không còn cho phép — vế GHI của ADR-060, theo đúng
+      // cách ADR-074 đọc nó cho bước nộp. Nhánh `bid_kiem_phien_khach` và nhánh "dữ liệu hỏng" không tên, rơi xuống dưới.
+      const ma = docMaKhongNhan(loi);
+      if (ma !== null) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NOP}`);
+        await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
+        await appendAuditEvent(client, orgId, {
+          actorType: "SUPPLIER",
+          actorId: p.verified_contact_id,
+          action: "BID_STATE_DENIED",
+          resourceType: "rfq_package",
+          resourceId: p.rfq_id,
+          payload: { ma },
+        });
+        throw new BaoGiaKhongNhanError(ma, { cause: loi });
       }
       throw new BiddingError(
         "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +

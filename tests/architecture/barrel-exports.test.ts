@@ -259,6 +259,13 @@ const DANH_SACH_TRANG_IDENTITY = [
   "startUserSession",
   "verifyTotpForLogin",
   "verifyTotpAttempt",
+  // [S1.9101 / khoản 247 / ADR-9201] Từ vựng chốt kiểm soát dời xuống đây từ `packages/rfq`. `tuChoiTheoChot` NÉM ở mọi
+  // nhánh (cùng tiêu chí `throwAuditedDenial`); `laMaChot` chỉ hỏi mã có trong bảng không — không câu hỏi quyền nào.
+  "ACTION_CHOT_KIEM_SOAT",
+  "CHOT_VAO_SO",
+  "ChotKiemSoatError",
+  "laMaChot",
+  "tuChoiTheoChot",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);
@@ -739,6 +746,8 @@ describe("bề mặt export công khai của sealed-envelope", () => {
 // phát hiện sai — không ném. Tiêu chí lọc vẫn giữ, chỉ đọc đúng: nó không phải một cổng gác,
 // nên "người gọi có lỡ bỏ qua lời từ chối được không" không phải câu hỏi áp cho nó.
 const DANH_SACH_TRANG_BIDDING = [
+  // [S1.9101 / khoản 247] Lớp lỗi của hai lần chặn nộp còn lại — mang mã, không mang năng lực nào.
+  "BaoGiaKhongNhanError",
   "BiddingError",
   // [khoản 196] Lớp lỗi của lần chặn VÌ HẠN — mang hai dấu thời gian do trigger `066` đặt; không mang năng lực nào.
   "NopQuaHanError",

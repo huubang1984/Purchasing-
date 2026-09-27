@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
@@ -432,9 +432,24 @@ export async function approveRfq(
   client: pg.PoolClient,
   orgId: string,
   input: ApproveRfqInput,
+  auditPool: pg.Pool,
 ): Promise<void> {
   await assertTenantBound(client, orgId, "approveRfq");
   const actor = await resolveSessionActor(client, orgId, input.sessionId);
+
+  // [S1.9101 / khoản 247 / ADR-9201] D2 — người tạo gói không duyệt được chính gói ấy — hỏi ở ĐÂY, trước câu ghi, để lần
+  // cố ấy để lại một hàng `CONTROL_DENIED`. Trigger `rfq_kiem_nguoi_duyet` (011) vẫn hỏi lại cùng câu và vẫn là lớp có
+  // thẩm quyền; nhưng nó huỷ cả giao dịch, nên trước vòng này lần cố ấy đi ra 422 mà sổ không một hàng (pilot giả lập đo).
+  // Ca hai người tranh nhau vẫn chỉ tới trigger — giới hạn ADR-060 đã khai.
+  const { rows: goi } = await client.query<{ created_by: string }>(
+    `SELECT p.created_by FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
+  );
+  if (goi[0]?.created_by === actor.id) {
+    await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, "D2_NGUOI_TAO_TU_DUYET");
+  }
 
   await client.query(
     `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id)

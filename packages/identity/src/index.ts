@@ -56,6 +56,18 @@ export {
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";
+// [S1.9101 / khoản 247 / ADR-9201] Từ vựng chốt kiểm soát (`CONTROL_DENIED`) dời xuống gói này để `rfq` và `danh-gia`
+// cùng đọc MỘT bảng. Ra cửa cùng tiêu chí với `throwAuditedDenial`: `tuChoiTheoChot` NÉM ở mọi nhánh, `laMaChot` chỉ trả lời
+// *mã này có trong bảng không* — không câu hỏi quyền nào — nên không dựng ra được một cổng gác im lặng.
+export {
+  ACTION_CHOT_KIEM_SOAT,
+  CHOT_VAO_SO,
+  ChotKiemSoatError,
+  laMaChot,
+  tuChoiTheoChot,
+  type DongChot,
+  type MaChotKiemSoat,
+} from "./chot-kiem-soat.js";
 // ============================================================================================
 // [vòng fix 1 — MỤC 4] `verifyTotpCode` ĐÃ ĐƯỢC RÚT KHỎI CỬA NÀY — CÙNG TIÊU CHÍ VỚI
 // `hasPermission`, ÁP CHO E3 THAY VÌ D5
