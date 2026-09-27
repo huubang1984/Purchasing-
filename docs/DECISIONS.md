@@ -283,8 +283,13 @@ Ba điều kiện đi kèm, và cả ba nay đều có một lớp giữ — nh�
    không nội suy giá trị; gói `identity` không tự ghi `console.*` (cùng kỷ luật với `outbox`).
    **Đo:** qua HTTP thật ở `apps/api/src/auth.int.test.ts` — khoá bị giữ, sai đủ ngưỡng ⇒ 401 (không
    500), hồ sơ khoá, sổ 0 dòng, và ĐÚNG một dòng log không mang `orgId` lẫn `userId`;
-2. `catch` **hẹp** — chỉ 55P03. Mọi mã khác vẫn ném nguyên (fail-closed). **Đo:** một trigger dựng
-   lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra nguyên và giao dịch vẫn rollback;
+2. `catch` **hẹp** — ~~chỉ 55P03~~ **[S1.172 / khoản 143] 55P03 và 40P01**. Mọi mã khác vẫn ném nguyên
+   (fail-closed). **Đo:** một trigger dựng lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra
+   nguyên và giao dịch vẫn rollback. Khoá chết trên khoá ghi sổ bắn ở `deadlock_timeout` 1 s — trước trần
+   2 s — và đo được trên `master`: lần chạm ngưỡng ném `40P01`, hồ sơ KHÔNG khoá (`4/chua-khoa`). Chủ dự án
+   chọn nới `catch` cho mã ấy (2026-09-27): Postgres chỉ huỷ câu chờ khoá của nạn nhân, không phải một lần
+   huỷ có ý, nên nó cùng loại với 55P03. `57014` vẫn ném — với `statement_timeout` 15 s mỗi câu, trần 2 s
+   luôn tới trước, nên 57014 ở câu này chỉ còn là lần huỷ có ý (`pg_cancel_backend`);
 3. một **đối chứng** giữ cho bản vá khỏi thành *bỏ ghi sổ luôn cho xong*: không ai giữ khoá thì lần
    chạm ngưỡng vẫn ghi đủ một dòng và không bật cờ. **Đo:** `packages/identity/src/mfa.int.test.ts`.
 

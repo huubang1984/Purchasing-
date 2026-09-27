@@ -2,10 +2,11 @@
 // tools/pilot-gia-lap — KẾT NỐI ĐẶC QUYỀN, VÀ NHỮNG VIỆC DUY NHẤT NÓ ĐƯỢC LÀM
 //
 // Cùng lý do với `tools/gieo-demo` (ADR-044) và `tools/chay-migrate` (ADR-066): có những việc KHÔNG
-// có đường ứng dụng, theo thiết kế — `app_api` không có INSERT trên `organizations`, `users`,
-// `user_roles`; không vai nào giữ `role.grant`; và vai đăng nhập của `api`/`worker` là việc của
-// người vận hành. Nên tệp này dựng `pg.Pool` thẳng, khai ở `duong-sql-ngoai-with-tenant.test.ts`, và
-// giới hạn nó vào đúng năm việc:
+// có đường ứng dụng, theo thiết kế — `app_api` không có INSERT trên `organizations`~~, `users`,
+// `user_roles`~~ **[đo ngày 2026-09-27 sau 73 migration]** (nó CÓ INSERT theo cột trên `users` và
+// `user_roles` — `002`, `005` — nhưng không route nào dùng); không vai nào giữ `role.grant`; và vai
+// đăng nhập của `api`/`worker` là việc của người vận hành. Nên tệp này dựng `pg.Pool` thẳng, khai ở
+// `duong-sql-ngoai-with-tenant.test.ts`, và giới hạn nó vào đúng năm việc:
 //   ⑴ `migrate()`;
 //   ⑵ đảm bảo hai vai đăng nhập `app_api_login` / `app_unseal_login` (cùng câu lệnh `chay-migrate`);
 //   ⑶ tạo tổ chức;
