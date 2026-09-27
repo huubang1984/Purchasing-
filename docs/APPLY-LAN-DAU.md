@@ -204,7 +204,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 8. Tổ chức đầu tiên và worker
 
-- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. **[S1.167] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
+- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. **[S1.168] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
       tổ chức, người dùng hay gán vai trên prod.**
   - `app_api` không có INSERT trên `organizations` (chỉ SELECT và UPDATE(name) — `db/migrations/002_organizations_and_users.sql`).
     Nó có INSERT trên `users` và `user_roles`, nhưng không route nào dùng, và không vai nào giữ `role.grant`.

@@ -13721,7 +13721,52 @@ một ĐỘT BIẾN:
   docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
   các dòng tổng và dòng mốc.
 
-# §S1.167 — CHUẨN BỊ BẬC 1: KHỐI LỆNH DOCKER CHẠY NGUYÊN VĂN, BẢN NODE CHẠY ĐƯỢC ĐO TỪNG BẢN, NĂM LỜI KHAI THIU Ở CHÍN CHỖ
+# §S1.167 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI DO TRIGGER CỦA TÁCH BẠCH NHIỆM VỤ VÀ CỦA CÂU NỘP BÁO GIÁ ĐỂ LẠI HÀNG SỔ
+
+## 1. Việc gì
+
+Khoản 247 (S1.163, đo trên pilot giả lập): năm lần từ chối của tách bạch nhiệm vụ (J3 cả ba vế, D2 ở duyệt gói) và hai lần
+từ chối nộp báo giá (gói huỷ, ngoài top-N BAFO) trả 422 nhưng để lại **0 hàng sổ**, vì lần từ chối đến từ trigger và 422 của
+trigger huỷ giao dịch. Chủ dự án chọn *ghi sổ cả bảy lần* — ADR-104.
+
+## 2. Đo trước
+
+Test mới của vòng này chạy trên mã sản xuất của `master` (`trao-thau.ts`, `rfq.ts` bản cũ; lời ghi sổ của `submitBid` tắt):
+**5 đỏ, 1 xanh** — xanh là ca đối chứng *"lần từ chối trạng thái / người duyệt trùng không thêm hàng"* của `rfq`, đúng như
+mong đợi. Năm ca đỏ: D2 tự duyệt gói; nộp vào gói CLOSED; J3 vế 2 + vế 3; J3 vế 1; J3 với lần ghi sổ hỏng.
+
+## 3. Thay đổi
+
+- `packages/danh-gia/src/trao-thau.ts`: câu `INSERT` của `deXuatTraoThau` và `duyetTraoThau` bắt lỗi; lỗi 23514 mang đuôi
+  `(J3)` được phân vế theo tiền tố thông điệp (`NGUOI_TAO`, `NGUOI_DIEU_PHOI`, `NGUOI_DE_XUAT`, `PHIEN_DE_XUAT`) rồi ghi
+  `RFQ_AWARD_SOD_DENIED` `{viPham:"J3", ve}` qua `throwAuditedDenial` — giao dịch độc lập, ném lại CHÍNH lỗi của trigger.
+- `packages/rfq/src/rfq.ts`: `approveRfq` nhận thêm `auditPool` (bắt buộc); lỗi 23514 mang `(D2` ghi `RFQ_APPROVAL_DENIED`
+  `{viPham:"D2"}` theo cùng đường. 33 lời gọi cập nhật; route truyền `ctx.auditPool`.
+- `packages/bidding/src/bidding.ts`: nhánh check_violation không vì hạn của `submitBid` lùi về savepoint, đọc trạng thái gói,
+  ghi `BID_SUBMIT_DENIED` (`actorType SUPPLIER`, `{rfqStatus}`) trong chính giao dịch và ném `NopBiTuChoiError` (con của
+  `BiddingError`, giữ nguyên thông điệp chung). `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng ấy commit — tiền lệ
+  ADR-074.
+- `docs/PRODUCT.md` §5 (hàng S1.110) hết khai ngược cho J3; ADR-060 thêm ghi chú trỏ sang ADR-104; báo cáo pilot giả lập
+  sửa lời chú.
+
+## 4. Đo sau
+
+Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xanh; `apps/api` + `apps/unseal-worker` 32 tệp,
+405/405; công cụ pilot 39/39; unit toàn kho xanh.
+
+## 5. Giới hạn
+
+- Hai lần ghi J3/D2 KHÔNG tính vào trần từ chối của ADR-092 — trần ấy chỉ đếm lần từ chối quyền. Lần từ chối nộp của nhà cung
+  cấp cũng không có trần; một phiên khách hợp lệ có thể nhồi hàng `BID_SUBMIT_DENIED` bằng cách nộp lặp vào gói đã đóng.
+- Thông điệp trả người nộp giữ câu chung: phân biệt lý do (huỷ / đóng / ngoài top-N) trước người nộp là một quyết định khác.
+- Phân vế J3 dựa vào tiền tố thông điệp của trigger `061`; đổi câu chữ trigger mà không đổi `veJ3` sẽ ghi hàng với `ve: null`
+  thay vì mất hàng — test vế 1, 2, 3 bắt được.
+
+## 6. Số
+
+Khoản 247 đóng. Còn mở **86**; rổ B **61**.
+
+# §S1.168 — CHUẨN BỊ BẬC 1: KHỐI LỆNH DOCKER CHẠY NGUYÊN VĂN, BẢN NODE CHẠY ĐƯỢC ĐO TỪNG BẢN, NĂM LỜI KHAI THIU Ở CHÍN CHỖ
 
 **Rổ và mảnh (ADR-043 ⒞): không đóng mảnh nào của `docs/PRODUCT.md` §11, không chạm khoản rổ A/B/C nào.** Vòng này làm hai
 việc B1 và B4 của đề xuất ngày 2026-09-27 sau pilot giả lập: chuẩn bị điều kiện vào bậc 1 (cụm chạy trên máy người trình
@@ -13805,7 +13850,14 @@ Sửa:
 qua API cộng 155 phép KIEM; 16/16 lần thử sai bị chặn, 8/16 vào sổ; cô lập 2/2, đối chứng 2/2; biên nhận 35/35; bộ bằng
 chứng 5/5. Các số ấy trùng S1.163. Riêng sổ kiểm toán tăng: SX 206 → 217 hàng, XD 172 → 180 hàng (mục §2 của báo cáo).
 Mức tăng hợp với #171 — khoản 245: mỗi lượt đọc giá sau mở thầu (bảng so sánh, bảng xếp hạng, xuất bộ bằng chứng) ghi
-một hàng sổ; phép đo không tách theo hành động. Khoản 247 vẫn đúng như đã ghi.
+một hàng sổ; phép đo không tách theo hành động.
+
+Trong lúc vòng này chạy, `master` nhận #172 — khoản 247 đóng, ADR-104 — và vòng này hợp nó vào (`12645e9`). Lượt nhanh trên
+cây đã hợp: **10/10 ĐẠT**; 268 bước, 155 KIEM, 16/16 bị chặn; lần từ chối vào sổ **8/16 → 15/16**; cô lập 2/2, biên nhận
+35/35, bộ bằng chứng 5/5; sổ kiểm toán SX 224, XD 180 hàng. Lần duy nhất không vào sổ là mở link mời đã thu hồi — một lần
+xác thực token thất bại, mà S1.163 đã tách khỏi khoản 247 ngay từ đầu. Đây là phép đo độc lập đầu tiên của #172 bằng bộ
+giả lập: bảy lần mà khoản 247 gọi tên nay để lại hàng sổ. Kế hoạch pilot giả lập §6 (bảng kết quả), phát hiện ⑴ và §9
+mục 3 sửa tại chỗ theo.
 
 ## 4. Năm lời khai thiu, chín chỗ
 
@@ -13814,7 +13866,7 @@ một hàng sổ; phép đo không tách theo hành động. Khoản 247 vẫn �
 | `docs/STATE.md`, lý do rổ A của khoản 15 | *"chưa có tài khoản AWS, chưa có CMK, chưa có role"* | Tài khoản có từ S1.119 (hàng 15); còn thiếu CMK và role (stack 30/50 chưa apply), stack `90-ecs` chưa apply, `deploy.yml` chưa chạy thật |
 | `docs/PRODUCT.md` §11, mảnh 3 | cùng câu | như trên, cộng chỗ hở ở dòng cuối bảng này |
 | `Handoff.md`, mục *Chưa triển khai* | cùng câu | như trên |
-| `Handoff.md` §11 mục 1 | rổ A *"SÁU"* (15 · 102 · 105 · 109 · 165 · 196), rổ B 58, rổ C 21 | Rổ A còn một khoản (15); rổ B 62, rổ C 24 (dòng RỔ ở `docs/STATE.md`). Lớp lỗi của khoản 212, lần thứ hai: mục này thôi chép số và trỏ về nguồn |
+| `Handoff.md` §11 mục 1 | rổ A *"SÁU"* (15 · 102 · 105 · 109 · 165 · 196), rổ B 58, rổ C 21 | Rổ A còn một khoản (15); rổ B 61 sau #172, rổ C 24 (dòng RỔ ở `docs/STATE.md`). Lớp lỗi của khoản 212, lần thứ hai: mục này thôi chép số và trỏ về nguồn |
 | `docs/STATE.md` (điểm chặn 1, bảng tham chiếu), `Handoff.md` (bảng tham chiếu) | *"18 tiền đề"* | 33: A1–A6, B1–B6, C1–C5, D1–D2 (19) và E1–E14 cho S4 (14, từ S1.159) |
 | `docs/TIEN-DE-CHUA-DO.md` A3 | *"Android còn trống (khoản nợ 23)"* | Khoản 23 ĐÓNG 2026-09-08 (ADR-031): Zalo, Messenger trên Android 12 ĐẠT kể cả `X25519` |
 | `docs/APPLY-LAN-DAU.md` 8.1 | *"Tạo tổ chức đầu tiên qua sản phẩm"* | Không có đường nào: `app_api` không có INSERT trên `organizations` (`002`); không route nào tạo người dùng hay gán vai; không vai nào giữ `role.grant`; `deploy/Dockerfile` không có đích nào làm việc ấy. Chỉ `tools/gieo-demo` và `tools/pilot-gia-lap` chèn được, cả hai là công cụ DEV. 8.2 kẹt theo (worker cần một tổ chức — ADR-040) |

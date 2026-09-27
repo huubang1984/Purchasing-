@@ -104,7 +104,7 @@ Ngoài các kịch bản trên, công cụ còn đo ba thứ ở mỗi lượt:
 
 ## 4. Cách chạy
 
-**Cần:** ~~Node 22~~ **[S1.167] Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25.** Nên dùng bản mới nhất của dòng 22 — cùng
+**Cần:** ~~Node 22~~ **[S1.168] Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25.** Nên dùng bản mới nhất của dòng 22 — cùng
 dòng với CI và ảnh deploy (22.23.3) — và đừng lấy bản mới nhất trên nodejs.org: từ Node 26 kho không chạy. Đo bằng lượt
 chạy thật trên từng bản:
 - dưới 22.7, và 26: Node dừng ngay với `bad option: --experimental-transform-types` (26 đã bỏ cờ ấy);
@@ -139,7 +139,7 @@ Dòng `pg_isready` đợi Postgres nhận kết nối TCP: container mới chạ
 giây đầu, và công cụ không thử lại lần nối đầu tiên. ~~Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
 có Docker, và các lượt đo dùng Postgres 16 cài thẳng.~~
 
-**[S1.167] Hai khối đã chạy nguyên văn, và bản đầu hỏng ở lần chạy thứ hai.** Bản đầu gọi `docker run` mỗi lần. Chạy lại
+**[S1.168] Hai khối đã chạy nguyên văn, và bản đầu hỏng ở lần chạy thứ hai.** Bản đầu gọi `docker run` mỗi lần. Chạy lại
 khi container đã dừng — tức sau khi khởi động lại máy, đúng lúc người trình diễn chạy lại cho buổi gặp — thì `docker run`
 báo trùng tên, còn vòng `pg_isready` gõ vào một container không chạy và lặp mãi. Bản trên bật lại container cũ nếu có, chỉ
 tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.1, Postgres `16-alpine`, mã của vòng này:
@@ -225,7 +225,7 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
 | Lần thử sai bị chặn đúng | **16/16**; cô lập **2/2**, mỗi lần sau một đối chứng dương (**2/2**) |
 | Biên nhận kiểm bằng khoá công khai từ `/.well-known/trustprocure-receipt-keys` | **35/35** |
 | Bộ bằng chứng qua `pnpm bang-chung kiem` không CSDL | **5/5** |
-| Lần từ chối để lại hàng sổ kiểm toán | **8/16** — xem phát hiện ⑴. Lượt đầu cho 9/16, vì J3 vế 1 khi ấy chưa được thử |
+| Lần từ chối để lại hàng sổ kiểm toán | ~~**8/16** — xem phát hiện ⑴. Lượt đầu cho 9/16, vì J3 vế 1 khi ấy chưa được thử~~ **[S1.168] 15/16** sau #172 (khoản 247 đóng, ADR-104), đo trên `12645e9`; lần còn lại là mở link đã thu hồi |
 | Chế độ chậm (SX-06) | **1/1 ĐẠT** ở cả hai lượt, mỗi lượt 62 phút — trên bản của commit đầu, và trên bản đã sửa: nộp sau hạn ⇒ 422 và **đúng một** hàng `BID_DEADLINE_DENIED` (lượt sau kiểm theo hành động, thiếu là KHÔNG ĐẠT); đóng sau hạn; trao thầu cho giá thấp nhất trong hai báo giá đúng hạn |
 | Đi thử trên trình duyệt thật (Chromium, khung 375×812) | Nhà cung cấp mở link SX-04, OTP lấy bằng lệnh `otp`, niêm phong và nộp trong trình duyệt, nhận biên nhận `version=1 kid=k1`; người mua đăng nhập bằng `dang-nhap` + TOTP và thấy số báo giá bị giấu |
 
@@ -247,7 +247,8 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    J3 và D2 là tách bạch nhiệm vụ cưỡng chế bằng trigger, và `docs/PRODUCT.md` §5 từng khai cho J3 *"mỗi lần từ chối để
    lại một dòng"* — câu ấy đã được sửa tại chỗ. Hai lần nộp thuộc vế ghi sổ của ADR-060 theo cách ADR-074 đọc nó cho bước
    nộp. Bảy lần ấy là **khoản 247** (rổ B). Lần mở link đã thu hồi là một lần xác thực token thất bại; ADR-060 không xếp
-   lớp ấy, và nó chỉ được ghi ở biên bản.
+   lớp ấy, và nó chỉ được ghi ở biên bản. **[S1.168] Khoản 247 ĐÓNG ở S1.167 (ADR-104): bảy lần ấy nay để lại hàng sổ, và
+   lượt giả lập trên `12645e9` đo 15/16.**
 2. **Đột biến *làm tròn nghìn* SỐNG SÓT ở lần chạy đầu.** Dữ liệu khi ấy toàn số tròn nghìn: đơn giá tròn 100 đồng, số
    lượng nguyên. Dữ liệu đã sửa: đơn giá tròn 10 đồng, và mỗi gói có một dòng số lượng lẻ tới hai chữ số thập phân. Một test
    (`kich-ban.test.ts`, *ĐỘ SẮC*) giữ tính chất ấy.
@@ -293,7 +294,7 @@ Người ta từ chối pilot vì nó đòi *dữ liệu thật + nhà cung cấ
 
 1. Chủ dự án chọn: có mở bậc 1 của mục 7 với một doanh nghiệp cụ thể không.
 2. Nhập gói từ CSV cho bậc 2.
-3. Khoản 247: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
+3. ~~Khoản 247: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
    sổ (khuôn `nemTuChoi`, hay savepoint như `BID_DEADLINE_DENIED` của ADR-074), hay giữ giới hạn và khai nó. Đây là một
-   quyết định, không phải một lỗi đánh máy.
+   quyết định, không phải một lỗi đánh máy.~~ **[S1.168] XONG** — chủ dự án chọn ghi sổ cả bảy lần (ADR-104, S1.167).
 4. Một cụm TLS để trình diễn trên điện thoại thật.

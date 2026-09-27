@@ -73,6 +73,25 @@ export class NopQuaHanError extends BiddingError {
 }
 
 /**
+ * [S1.167 / khoản 247 / ADR-104] Lần nộp bị chặn KHÔNG vì hạn — gói thầu không ở trạng thái nhận báo giá (đã huỷ, đã đóng…),
+ * luồng báo giá nằm ngoài top-N của vòng BAFO, hay phiên khách hỏng giữa lần kiểm và câu ghi.
+ *
+ * CÙNG HỢP ĐỒNG VỚI `NopQuaHanError`, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** — `submitBid` đã lùi về
+ * savepoint của chính nó — và nó đã MANG một hàng sổ `BID_SUBMIT_DENIED`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
+ * hàng ấy sống. Thông điệp giữ NGUYÊN câu chung của bản trước: phân biệt ba lý do trước người nộp là một quyết định khác.
+ */
+export class NopBiTuChoiError extends BiddingError {
+  constructor(options?: { cause?: unknown }) {
+    super(
+      "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
+        "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
+      options,
+    );
+    this.name = "NopBiTuChoiError";
+  }
+}
+
+/**
  * Đọc hai dấu thời gian của lần chặn VÌ HẠN từ lỗi `pg`. Không phải nhánh ấy (trường `constraint`
  * khác, `DETAIL` hỏng hình dạng) ⇒ `null`, và người gọi rơi về `BiddingError` chung — fail về phía
  * lời từ chối KHÔNG số, không bao giờ về phía một con số đoán.
@@ -251,11 +270,27 @@ export async function submitBid(
         });
         throw new NopQuaHanError(viHan.gioCsdl, viHan.hanNop, { cause: loi });
       }
-      throw new BiddingError(
-        "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
-          "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
-        { cause: loi },
+      // [S1.167 / khoản 247 / ADR-104] Hai nhánh còn lại của C1 và nhánh BAFO — nộp khi gói đã huỷ hay đã đóng, nộp ngoài
+      // top-N — trước vòng này đi ra dưới một `BiddingError` NÉM, tức giao dịch rollback và không hàng sổ nào (`pnpm
+      // pilot:gia-lap`: hai lần 422, 0 hàng). Chúng là vế GHI của ADR-060 theo đúng cách ADR-074 đọc nó cho bước nộp: một người
+      // đi bước nộp khi chuỗi không còn cho phép. Cùng lối của nhánh VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn lành,
+      // rồi ném lỗi mà route trả bằng đường TRẢ VỀ. Payload là trạng thái gói ĐỌC SAU khi lùi — thứ phân biệt *đã huỷ* với *đang
+      // ở vòng BAFO* mà không đọc chuỗi lỗi của trigger; không `bid_id`, không `bafo_round_id`.
+      await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NOP}`);
+      await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
+      const { rows: tt } = await client.query<{ status: string }>(
+        "SELECT status FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid",
+        [p.rfq_id],
       );
+      await appendAuditEvent(client, orgId, {
+        actorType: "SUPPLIER",
+        actorId: p.verified_contact_id,
+        action: "BID_SUBMIT_DENIED",
+        resourceType: "rfq_package",
+        resourceId: p.rfq_id,
+        payload: { rfqStatus: tt[0]?.status ?? null },
+      });
+      throw new NopBiTuChoiError({ cause: loi });
     }
     throw loi;
   }
