@@ -53,10 +53,10 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 // [S1.142 / khoản 241] `068` viết lại thân lần nữa (sàn một chữ ký), nên con trỏ bảng cạnh dời sang
 // `068`; tập đóng vẫn ở `061`.
 //
-// [S1.9101 / khoản 225] `9502` viết lại thân lần nữa (bốn cạnh huỷ sau khi đóng), nên con trỏ bảng cạnh
-// dời sang `9502`; tập đóng vẫn ở `061`.
+// [S1.163 / khoản 225] `071` viết lại thân lần nữa (bốn cạnh huỷ sau khi đóng), nên con trỏ bảng cạnh
+// dời sang `071`; tập đóng vẫn ở `061`.
 const DUONG_DAN_BANG_CANH = fileURLToPath(
-  new URL("../../../db/migrations/9502_huy_sau_khi_dong.sql", import.meta.url),
+  new URL("../../../db/migrations/071_huy_sau_khi_dong.sql", import.meta.url),
 );
 const DUONG_DAN_TAP_DONG = fileURLToPath(
   new URL("../../../db/migrations/061_trao_thau.sql", import.meta.url),
@@ -82,7 +82,7 @@ function bocCanhTuSql(): string[] {
   const khoi = /CANH_HOP_LE constant text\[\] :=\s*ARRAY\[([\s\S]*?)\]\s*;/.exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy khối CANH_HOP_LE trong 9502_huy_sau_khi_dong.sql. Nếu bảng cạnh đã được " +
+      "Không tìm thấy khối CANH_HOP_LE trong 071_huy_sau_khi_dong.sql. Nếu bảng cạnh đã được " +
         "viết lại một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
     );
   }
@@ -141,17 +141,17 @@ describe("bảng cạnh của máy trạng thái RFQ", () => {
     expect(bocCanhTuSql()).not.toContain("EVALUATING->BAFO_UNSEALED");
   });
 
-  it("[S1.9101 / khoản 225] bốn cạnh huỷ SAU KHI ĐÓNG có mặt ở cả hai lớp; `AWARDED->CANCELLED` vẫn KHÔNG", () => {
+  it("[S1.163 / khoản 225] bốn cạnh huỷ SAU KHI ĐÓNG có mặt ở cả hai lớp; `AWARDED->CANCELLED` vẫn KHÔNG", () => {
     // ~~Đây KHÔNG phải một tính chất mong muốn: nó là cùng câu hỏi nghiệp vụ mà `CLOSED` và
     // `UNSEALED` đang treo ở khoản 225, chép sang ảnh BAFO. Ghim để ngày nào khoản ấy được quyết
-    // thì CẢ HAI cặp cùng đỏ — không một cặp.~~ [S1.9101] Khoản 225 được quyết (ADR-9201): `9502`
+    // thì CẢ HAI cặp cùng đỏ — không một cặp.~~ [S1.163] Khoản 225 được quyết (ADR-101): `071`
     // thêm CẢ BỐN cạnh trong một vòng, và test này đổi chiều — bốn cạnh PHẢI có mặt, ở cả bảng SQL
     // lẫn `RFQ_TRANSITIONS`.
     //
     // [S1.110 / S2.6] ~~Và nay là cặp THỨ BA~~: `061` thêm `AWARDED` mà KHÔNG thêm
     // `AWARDED->CANCELLED`. `cancelRfq` cũng không nhận `AWARDED` trong danh sách trắng của nó,
     // nên hai lớp nói cùng một câu. Đường ra khỏi `AWARDED` là `AWARDED->EVALUATING` — huỷ AWARD,
-    // không huỷ gói thầu. [S1.9101] Vòng khoản 225 KHÔNG đổi điều này: chủ dự án chốt lối huỷ cho gói
+    // không huỷ gói thầu. [S1.163] Vòng khoản 225 KHÔNG đổi điều này: chủ dự án chốt lối huỷ cho gói
     // đã đóng mà chưa trao; gói đã trao đi qua `AWARDED->EVALUATING` trước.
     const canh = bocCanhTuSql();
     expect(canh).not.toContain("AWARDED->CANCELLED");

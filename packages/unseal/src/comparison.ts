@@ -106,7 +106,7 @@ export interface ComparisonRow {
   /** Số tiền dạng CHUỖI thập phân, hoặc `null` nếu bản rõ không nói ra một con số hợp lệ. */
   readonly totalAmount: string | null;
   /**
-   * [S1.9101 / khoản 244] Đơn vị tiền SAU `public.bid_currency`: `VND`, `USD`, hoặc `null` khi chuỗi
+   * [S1.163 / khoản 244] Đơn vị tiền SAU `public.bid_currency`: `VND`, `USD`, hoặc `null` khi chuỗi
    * nhà cung cấp gõ nằm ngoài tập đóng. Chuỗi gốc vẫn ở nguyên trong `payload`.
    */
   readonly currency: string | null;
@@ -154,7 +154,7 @@ export interface ComparisonAggregates {
   readonly unparsed: number;
   readonly currency: string | null;
   /**
-   * `true` khi các báo giá đọc được KHÔNG cùng một đơn vị tiền. **[S1.9101 / khoản 244]** Đơn vị là
+   * `true` khi các báo giá đọc được KHÔNG cùng một đơn vị tiền. **[S1.163 / khoản 244]** Đơn vị là
    * đơn vị SAU `public.bid_currency`, nên `VND` và `VNĐ` là một; và một nhóm duy nhất mà đơn vị không
    * nhận ra được (`null`) cũng là lệch. Lúc ấy `min`/`max`/`average`/
    * `belowBudget` đều là `null`: `min(1000 USD, 2000 VND)` là một con số không có nghĩa, và
@@ -346,7 +346,7 @@ export async function buildComparisonTable(
   // Gom theo TIỀN TỆ chứ không gom một cục: nếu truy vấn trả về nhiều hơn một nhóm thì các phép
   // tổng hợp không có nghĩa, và đó là điều duy nhất phía TypeScript cần biết để quyết.
   //
-  // [S1.9101 / khoản 244] Bốn chỗ đọc tiền tệ ở hai câu dưới — cột của hàng, cột nhóm, vế ngân sách
+  // [S1.163 / khoản 244] Bốn chỗ đọc tiền tệ ở hai câu dưới — cột của hàng, cột nhóm, vế ngân sách
   // và `GROUP BY` — đều đi qua `public.bid_currency`, cùng hàm mà lượt chấm gọi. Đo trước khi sửa:
   // `VND` + `VNĐ` cho hai nhóm và mọi phép tổng hợp thành `null`; cùng một `vnd` thì vế ngân sách so
   // `'VND' = 'vnd'` và `belowBudget` ra 0 thay vì 2 — một con số SAI không dấu vết.
@@ -383,7 +383,7 @@ export async function buildComparisonTable(
   );
 
   const doc = th.reduce((s, r) => s + r.n, 0);
-  // [S1.9101 / khoản 244] Một nhóm DUY NHẤT mà tiền tệ là `null` — mọi báo giá đọc được mang một
+  // [S1.163 / khoản 244] Một nhóm DUY NHẤT mà tiền tệ là `null` — mọi báo giá đọc được mang một
   // chuỗi ngoài tập đóng — cũng là lệch: không có đơn vị nào để đọc các con số ấy. Lượt chấm đã từ
   // chối đúng ca này (`donVi[0] === null`); bảng so sánh nay nói cùng một câu thay vì in min/max của
   // những con số không có đơn vị.

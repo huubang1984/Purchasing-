@@ -1,8 +1,8 @@
-// [S1.9101 / khoản 244] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
+// [S1.163 / khoản 244] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
 //
 // ⑴ `CURRENCIES` của gói này — thứ API người mua dùng để từ chối một chính sách hay ngân sách lạ.
 // ⑵ `CHECK (currency IN (…))` của `057` — thứ CSDL dùng để từ chối một lượt chấm lạ.
-// ⑶ Hai giá trị `RETURN '…'` của `public.bid_currency` (`9501`) — tập ĐÍCH của phép chuẩn hoá.
+// ⑶ Hai giá trị `RETURN '…'` của `public.bid_currency` (`070`) — tập ĐÍCH của phép chuẩn hoá.
 // ⑷ Các `<option>` của `#tien-te` ở trang nộp thầu — thứ nhà cung cấp được chọn.
 //
 // `apps/web` cố ý không phụ thuộc gói nào (ADR-044: `dependencies` rỗng là một bảo đảm), nên nó không
@@ -15,7 +15,7 @@ import { CURRENCIES } from "./procurement-policy.js";
 
 const doc = (duong: string): string => readFileSync(new URL(duong, import.meta.url), "utf8");
 
-describe("[S1.9101 / khoản 244] tập đơn vị tiền đồng bộ", () => {
+describe("[S1.163 / khoản 244] tập đơn vị tiền đồng bộ", () => {
   it("CURRENCIES = CHECK của 057 = đích của bid_currency = các lựa chọn ở trang nộp thầu", () => {
     const tapTs = [...CURRENCIES].sort();
 
@@ -26,7 +26,7 @@ describe("[S1.9101 / khoản 244] tập đơn vị tiền đồng bộ", () => {
     const tapCheck = [...(check?.[1] ?? "").matchAll(/'([A-Z]{3})'/gu)].map((m) => m[1]).sort();
 
     const tapHam = [
-      ...new Set([...doc("../../../db/migrations/9501_bid_currency.sql").matchAll(/RETURN '([A-Z]{3})'/gu)].map((m) => m[1])),
+      ...new Set([...doc("../../../db/migrations/070_bid_currency.sql").matchAll(/RETURN '([A-Z]{3})'/gu)].map((m) => m[1])),
     ].sort();
 
     const html = doc("../../../apps/web/trang/nop-thau.html");

@@ -276,7 +276,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
    * chỗ để chúng lệch nhau — và chính tệp `transitions.test.ts` bên cạnh tồn tại vì đúng lý do
    * ấy ở một cặp khác.
    */
-  // [S1.9101 / khoản 225] Tách đoạn tới `UNSEALED` ra khỏi `rfqToiEvaluating`: bốn cạnh huỷ mới cần
+  // [S1.163 / khoản 225] Tách đoạn tới `UNSEALED` ra khỏi `rfqToiEvaluating`: bốn cạnh huỷ mới cần
   // một gói ĐỨNG ở `UNSEALED`, và đoạn dựng yêu cầu mở thầu dưới đây là cách duy nhất tới đó.
   async function rfqToiUnsealed(): Promise<string> {
     const rfqId = await rfqNhap();
@@ -365,11 +365,11 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     ).rejects.toThrow(/EVALUATING -> OPEN/u);
   });
 
-  // [S1.9101 / khoản 225] Ca ranh giới dưới đây từng khẳng định CẢ HAI lớp nói KHÔNG với `CLOSED` và
+  // [S1.163 / khoản 225] Ca ranh giới dưới đây từng khẳng định CẢ HAI lớp nói KHÔNG với `CLOSED` và
   // `UNSEALED`, và khoản 225 tự hẹn: *"ngày nào quyết định đổi thì dòng ấy đỏ"*. Quyết định đã đổi
-  // (ADR-9201, 2026-09-27): khoản 244 đo ra một gói bị từ chối chấm vì lệch tiền tệ đứng yên ở
+  // (ADR-101, 2026-09-27): khoản 244 đo ra một gói bị từ chối chấm vì lệch tiền tệ đứng yên ở
   // `UNSEALED` mãi. Ca cũ được viết lại thành ba ca: hai lớp nay nói CÓ, và nói có với ĐIỀU KIỆN.
-  it("[S1.9101 / khoản 225] `CLOSED` và `UNSEALED` huỷ ĐƯỢC qua `cancelRfq` — lý do vào `cancel_reason`, một hàng sổ, khoá bị thu hồi", async () => {
+  it("[S1.163 / khoản 225] `CLOSED` và `UNSEALED` huỷ ĐƯỢC qua `cancelRfq` — lý do vào `cancel_reason`, một hàng sổ, khoá bị thu hồi", async () => {
     const dong = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId: dong, actorSessionId: s1 });
@@ -397,7 +397,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     }
   });
 
-  it("[S1.9101 / khoản 225] lớp CSDL: huỷ SAU KHI ĐÓNG mà không có lý do bị trigger chặn — kể cả khi đi vòng qua ứng dụng", async () => {
+  it("[S1.163 / khoản 225] lớp CSDL: huỷ SAU KHI ĐÓNG mà không có lý do bị trigger chặn — kể cả khi đi vòng qua ứng dụng", async () => {
     const rfqId = await rfqToiUnsealed();
     for (const lyDo of [null, "   "]) {
       await expect(
@@ -423,7 +423,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     expect(sau?.status).toBe("CANCELLED");
   });
 
-  it("[S1.9101 / khoản 225] `cancel_reason` chỉ đặt được ĐÚNG MỘT LẦN và ĐÚNG ở cạnh vào `CANCELLED`", async () => {
+  it("[S1.163 / khoản 225] `cancel_reason` chỉ đặt được ĐÚNG MỘT LẦN và ĐÚNG ở cạnh vào `CANCELLED`", async () => {
     const song = await rfqNhap();
     await expect(
       withTenant(apiPool, orgA, (c) =>
@@ -980,10 +980,10 @@ describe("huỷ RFQ", () => {
     ).rejects.toThrow(/không ở trạng thái nguồn hợp lệ/);
   });
 
-  // ~~KHÔNG huỷ được RFQ đã CLOSED — cạnh đó không có trong bảng cạnh.~~ [S1.9101 / khoản 225] Ca này
+  // ~~KHÔNG huỷ được RFQ đã CLOSED — cạnh đó không có trong bảng cạnh.~~ [S1.163 / khoản 225] Ca này
   // từng khẳng định điều ngược lại, theo docs/ARCHITECTURE.md §6 — *"sau CLOSED thì huỷ là một nghiệp vụ
-  // khác cần thiết kế riêng"*. Thiết kế ấy nay có (ADR-9201): cạnh `CLOSED->CANCELLED` đòi lý do.
-  it("[S1.9101 / khoản 225] huỷ được RFQ đã CLOSED khi có lý do, và sau khi huỷ thì không mở thầu được", async () => {
+  // khác cần thiết kế riêng"*. Thiết kế ấy nay có (ADR-101): cạnh `CLOSED->CANCELLED` đòi lý do.
+  it("[S1.163 / khoản 225] huỷ được RFQ đã CLOSED khi có lý do, và sau khi huỷ thì không mở thầu được", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });

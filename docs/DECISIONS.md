@@ -5283,9 +5283,9 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
   được ~~cho tới khi tổ chức chuẩn hoá đơn vị~~. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
-  không thấy một bảng xếp hạng gần đúng. **[S1.9101 / ADR-9201] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
+  không thấy một bảng xếp hạng gần đúng. **[S1.163 / ADR-101] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
   đã niêm phong, và `rfq_unsealed_bids` chỉ-ghi-thêm. Đo ra thêm rằng cánh cửa này đóng cả với cách viết khác của
-  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-9201 thu cánh cửa về đúng lệch THẬT, và cho
+  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-101 thu cánh cửa về đúng lệch THẬT, và cho
   gói ấy lối huỷ có lý do.
 - **ADR này quyết trên ĐỌC, không trên CHẠY.** Cả năm quyết định rút từ mã nguồn và tài liệu; vòng này không
   dựng một cụm nào, vì không có mã nào để chạy. Phép đo thật là điều kiện của S2.0–S2.2, và chúng chưa tồn tại.
@@ -7990,13 +7990,13 @@ của *Verified Competitive Spend* bằng 0 ở tổ chức chưa bật S3, và 
 
 Hai bất biến mới ở spec S4b §11.1: **L24** (dấu dữ liệu mẫu) và **L25** (vai `AUDITOR`). Không mã, không migration, không khoản nợ.
 
-## ADR-9201 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+## ADR-101 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.9101 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
-ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.9101
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.163 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
+ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.163
 
 **Bối cảnh.** Khoản 244 ghi, bằng phép đọc, rằng một nhà cung cấp gõ `VNĐ` làm lượt chấm của cả gói bị từ chối. Vòng
-S1.9101 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
+S1.163 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
 một nhà cung cấp — thì lượt chấm không từ chối mà vỡ ở `CHECK` của `057` (23514, một 422 không tên); ⒝ bảng so sánh
 trả một `belowBudget` SAI không dấu khi mọi báo giá cùng một cách viết lạ; ⒞ *"lối ra duy nhất là huỷ gói"* cũng sai —
 gói đứng ở `UNSEALED`, và cạnh huỷ từ đó chưa có (khoản 225). Báo giá đã niêm phong trong trình duyệt, nên máy chủ không
@@ -8004,7 +8004,7 @@ thấy chuỗi tiền tệ trước lúc mở thầu, và `rfq_unsealed_bids` ch
 
 **Ba quyết định của chủ dự án, ngày 2026-09-27, cả ba theo đề xuất.**
 
-⑴ **Hình dạng: một hàm SQL + ô chọn VND/USD.** `public.bid_currency(text)` (`9501`), `IMMUTABLE STRICT`, không bao giờ
+⑴ **Hình dạng: một hàm SQL + ô chọn VND/USD.** `public.bid_currency(text)` (`070`), `IMMUTABLE STRICT`, không bao giờ
 ném, khuôn `bid_so_tien`. Mọi câu SQL sản xuất đọc `payload ->> 'currency'` gọi nó — hôm nay năm chỗ: lượt chấm một,
 bảng so sánh bốn (cột hàng, cột tổng hợp, lọc ngân sách, `GROUP BY`). Ô tiền tệ của trang nộp thầu thành `<select>`
 VND/USD, VND chọn sẵn. Ô chọn theo tiền tệ của chính sách để sang S3.1.
@@ -8014,7 +8014,7 @@ VND/USD, VND chọn sẵn. Ô chọn theo tiền tệ của chính sách để s
 `USD` ← `USD` · `Usd` · `usd` · `US$`. Còn lại `NULL`. Không `lower()`/`upper()` — với ký tự ngoài ASCII chúng phụ thuộc
 thư viện C của cụm (khoản 71). `$` trần và `Ð` (U+00D0, chữ eth) ra `NULL`: ký tự dễ nhầm không được đoán.
 
-⑶ **Đóng luôn khoản 225.** `9502` thêm `CLOSED->CANCELLED`, `UNSEALED->CANCELLED`, `BAFO_CLOSED->CANCELLED`,
+⑶ **Đóng luôn khoản 225.** `071` thêm `CLOSED->CANCELLED`, `UNSEALED->CANCELLED`, `BAFO_CLOSED->CANCELLED`,
 `BAFO_UNSEALED->CANCELLED` vào bảng cạnh ghim, và cột `rfq_packages.cancel_reason`: trigger đòi nó khác rỗng ở bốn cạnh
 ấy, chỉ cho đặt ở cạnh vào `CANCELLED`, và chỉ một lần. `cancelRfq` ghi lý do cho MỌI lần huỷ; hàng sổ `RFQ_CANCELLED`
 và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp đọc lý do ở `GET /guest/rfq` và trang nộp thầu.

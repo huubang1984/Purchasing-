@@ -111,14 +111,14 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["AWARDED", "EVALUATING"],
   // [S1.108] Cạnh huỷ thứ tư, và nó suy ra từ ảnh: `OPEN->CANCELLED` CÓ nên
   // `BAFO_OPEN->CANCELLED` có. ~~`BAFO_CLOSED` và `BAFO_UNSEALED` KHÔNG có, đúng như `CLOSED` và
-  // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.~~ [S1.9101] Cả hai cặp
+  // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.~~ [S1.163] Cả hai cặp
   // nay có — cuối bảng.
   ["BAFO_OPEN", "CANCELLED"],
   // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
   // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
   ["EVALUATING", "CANCELLED"],
-  // [S1.9101 / khoản 225, 9502] BỐN cạnh huỷ sau khi đóng — `CLOSED`, `UNSEALED` và hai ảnh BAFO của
-  // chúng thôi là trạng thái hút. Chúng đòi `cancel_reason` ở chính trigger (vế (i) của `9502`).
+  // [S1.163 / khoản 225, 071] BỐN cạnh huỷ sau khi đóng — `CLOSED`, `UNSEALED` và hai ảnh BAFO của
+  // chúng thôi là trạng thái hút. Chúng đòi `cancel_reason` ở chính trigger (vế (i) của `071`).
   ["CLOSED", "CANCELLED"],
   ["UNSEALED", "CANCELLED"],
   ["BAFO_CLOSED", "CANCELLED"],
@@ -172,7 +172,7 @@ export interface RfqRecord {
   readonly closedAt: Date | null;
   readonly cancelledAt: Date | null;
   /**
-   * [S1.9101 / khoản 225] Lý do huỷ mà người huỷ viết — `null` khi gói chưa huỷ, và cho các gói huỷ
+   * [S1.163 / khoản 225] Lý do huỷ mà người huỷ viết — `null` khi gói chưa huỷ, và cho các gói huỷ
    * trước vòng ấy (lý do của chúng chỉ nằm trong hàng sổ `RFQ_CANCELLED`). Nhà cung cấp ĐỌC được nó
    * (`GET /guest/rfq`), nên nó là một lời nói với bên ngoài, không phải ghi chú nội bộ.
    */
@@ -761,8 +761,8 @@ export async function cancelRfq(
   );
   const reason = batBuoc(input.reason, "reason", 2000);
 
-  // [S1.9101 / khoản 225] Danh sách trắng thêm BỐN trạng thái nguồn — `CLOSED`, `UNSEALED` và hai ảnh
-  // BAFO — cùng lúc bảng cạnh của `9502` thêm bốn cạnh; hai lớp đổi trong CÙNG vòng, như `058`. Trước
+  // [S1.163 / khoản 225] Danh sách trắng thêm BỐN trạng thái nguồn — `CLOSED`, `UNSEALED` và hai ảnh
+  // BAFO — cùng lúc bảng cạnh của `071` thêm bốn cạnh; hai lớp đổi trong CÙNG vòng, như `058`. Trước
   // vòng ấy, một gói bị từ chối chấm vì lệch tiền tệ (khoản 244) đứng yên ở `UNSEALED` mãi mãi. Lý do
   // nay đi vào `cancel_reason` cho MỌI lần huỷ — nhà cung cấp đọc nó ở trang nộp thầu —, và trigger
   // đòi nó ở bốn cạnh mới dù lời gọi này đã `batBuoc` rồi: một đường ghi thứ hai không được quên nó.

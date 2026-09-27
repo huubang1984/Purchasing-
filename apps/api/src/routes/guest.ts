@@ -88,8 +88,8 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // cấp vẫn nộp được. `topN` và `openedBy` KHÔNG ra khỏi đây — `docVongBafoKhach` trả đúng
       // hai trường, và policy `rfq_bafo_rounds_khach` (`060`) canh HÀNG ở một tầng khác.
       //
-      // [S1.9101 / khoản 225] `cancelReason` CHỈ khi gói đã huỷ: đó là câu người huỷ viết cho chính
-      // những nhà cung cấp đã bỏ công dự thầu — kể cả sau khi giá của họ đã lộ, vì `9502` mở bốn cạnh
+      // [S1.163 / khoản 225] `cancelReason` CHỈ khi gói đã huỷ: đó là câu người huỷ viết cho chính
+      // những nhà cung cấp đã bỏ công dự thầu — kể cả sau khi giá của họ đã lộ, vì `071` mở bốn cạnh
       // huỷ sau khi đóng và đòi lý do ở đúng bốn cạnh ấy. Gói chưa huỷ luôn trả `null`.
       return {
         status: 200,

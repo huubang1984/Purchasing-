@@ -118,7 +118,7 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   },
   LECH_TIEN_TE: {
     vaoSo: false,
-    lyDo: "các báo giá đọc được không cùng một đơn vị tiền nhận ra được, SAU khi `bid_currency` đã gộp các cách viết của VND và USD — một vấn đề DỮ LIỆU của vòng thầu (một nhà cung cấp báo bằng tiền khác, hay một chuỗi ngoài tập đóng). [S1.9101 / khoản 244] Bản trước viết *gặp một lần rồi chuẩn hoá*: sai, vì báo giá đã niêm phong không sửa được. Lối ra là huỷ gói kèm lý do, và lần huỷ ấy vào sổ (`RFQ_CANCELLED`), nên lần từ chối này không cần một hàng thứ hai",
+    lyDo: "các báo giá đọc được không cùng một đơn vị tiền nhận ra được, SAU khi `bid_currency` đã gộp các cách viết của VND và USD — một vấn đề DỮ LIỆU của vòng thầu (một nhà cung cấp báo bằng tiền khác, hay một chuỗi ngoài tập đóng). [S1.163 / khoản 244] Bản trước viết *gặp một lần rồi chuẩn hoá*: sai, vì báo giá đã niêm phong không sửa được. Lối ra là huỷ gói kèm lý do, và lần huỷ ấy vào sổ (`RFQ_CANCELLED`), nên lần từ chối này không cần một hàng thứ hai",
   },
   KHONG_CO_BAO_GIA_DOC_DUOC: {
     vaoSo: false,

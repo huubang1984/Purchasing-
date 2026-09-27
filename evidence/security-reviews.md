@@ -13085,10 +13085,10 @@ E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, �
 - **99 → 100** ADR (100; số do `pnpm cap-so` cấp). Sổ nợ **246**, mở **89**, không đổi. **69** migration, không đổi.
 
 
-# §S1.9101 — KHOẢN 244 VÀ 225 ĐÓNG: TIỀN TỆ BÁO GIÁ ĐỌC QUA MỘT HÀM, GÓI ĐÃ ĐÓNG HUỶ ĐƯỢC KÈM LÝ DO
+# §S1.163 — KHOẢN 244 VÀ 225 ĐÓNG: TIỀN TỆ BÁO GIÁ ĐỌC QUA MỘT HÀM, GÓI ĐÃ ĐÓNG HUỶ ĐƯỢC KÈM LÝ DO
 
-**Rổ và mảnh (ADR-043):** khoản 244 rời rổ A và khoản 225 rời rổ B, cả hai vì ĐÓNG. Hai migration (`9501`, `9502`). Một ADR mới
-(ADR-9201). Chạm mảnh *chấm và chọn nhà cung cấp* của `docs/PRODUCT.md` §11.
+**Rổ và mảnh (ADR-043):** khoản 244 rời rổ A và khoản 225 rời rổ B, cả hai vì ĐÓNG. Hai migration (`070`, `071`). Một ADR mới
+(ADR-101). Chạm mảnh *chấm và chọn nhà cung cấp* của `docs/PRODUCT.md` §11.
 
 ## 1. Vòng này là gì
 
@@ -13112,22 +13112,22 @@ PostgreSQL 16 thật, qua `taoLuotDanhGia` và `buildComparisonTable` của chí
 - **M5** — bảng so sánh trên gói hai báo giá cùng `vnd`, cả hai dưới ngân sách ⇒ `currency: "vnd"`, `belowBudget: 0`. Đúng phải
   là 2. Một con số SAI, không dấu nào.
 
-## 3. Ba quyết định (ADR-9201)
+## 3. Ba quyết định (ADR-101)
 
 - **Hình dạng:** một hàm SQL gọi ở mọi chỗ đọc, cộng ô chọn VND/USD — không chỉ một trong hai.
-- **Tập bí danh:** rộng có kiểm soát (ADR-9201 ⑵), khớp chính xác sau khi bỏ khoảng trắng hai đầu và NFC; không `lower()`.
+- **Tập bí danh:** rộng có kiểm soát (ADR-101 ⑵), khớp chính xác sau khi bỏ khoảng trắng hai đầu và NFC; không `lower()`.
 - **Khoản 225:** đóng luôn — bốn cạnh huỷ sau khi đóng, lý do bắt buộc, nhà cung cấp đọc được.
 
 ## 4. Thay đổi
 
-- `db/migrations/9501_bid_currency.sql` — `public.bid_currency(text)`, `IMMUTABLE STRICT`, `SET search_path`, không bao giờ ném
+- `db/migrations/070_bid_currency.sql` — `public.bid_currency(text)`, `IMMUTABLE STRICT`, `SET search_path`, không bao giờ ném
   (`normalize` bọc trong khối `EXCEPTION`). Ký tự ngoài ASCII viết bằng mã `\u`.
 - `packages/danh-gia/src/luot-danh-gia.ts` — câu đọc báo giá gọi hàm; thông điệp `LECH_TIEN_TE` đếm theo đơn vị ĐÃ chuẩn hoá
   (*"1 báo giá VND, 1 báo giá USD"*, *"2 báo giá có đơn vị tiền không nhận ra"*), không nhắc lại chuỗi đã gõ, và nêu lối huỷ.
   `tu-choi-vao-so.ts`: lý do của mã viết lại; `vaoSo` vẫn `false`.
 - `packages/unseal/src/comparison.ts` — bốn chỗ đọc gọi hàm; một nhóm duy nhất mang đơn vị `NULL` là lệch, không phải một đơn vị.
 - `apps/web/trang/nop-thau.html` — ô tiền tệ thành `<select>` VND/USD, VND chọn sẵn.
-- `db/migrations/9502_huy_sau_khi_dong.sql` — cột `rfq_packages.cancel_reason` (UPDATE cột cho `app_api`); thân
+- `db/migrations/071_huy_sau_khi_dong.sql` — cột `rfq_packages.cancel_reason` (UPDATE cột cho `app_api`); thân
   `rfq_kiem_chuyen_trang_thai` trích từ `068` bằng script, thêm bốn cạnh và mệnh đề lý do; bản ghim ở `hardening.always.sql` đổi
   cùng commit (tiêu đề, phiên bản canh, thân, thân chuẩn hoá).
 - `packages/rfq/src/rfq.ts` — `RFQ_TRANSITIONS` thêm bốn cạnh; `cancelRfq` nhận bốn trạng thái nguồn và ghi lý do vào cột;
@@ -13135,7 +13135,7 @@ PostgreSQL 16 thật, qua `taoLuotDanhGia` và `buildComparisonTable` của chí
 - `apps/api/src/routes/guest.ts` — `GET /guest/rfq` trả `cancelReason` khi gói đã huỷ, `null` khi còn sống.
 - `apps/web/trang/nop-thau.js` — hiện lý do huỷ, tắt nút nộp; `mo-thau.html`/`.js` — nút huỷ gói kèm lý do ở bước 2.
 - `db/migrations.int.test.ts` — bộ lọc tên migration nới `^\d{3}_` → `^\d{3,4}_` để thấy số tạm; ba danh sách migration đã áp;
-  mục ghim HAM_56 trỏ `9502`. `db/rls-coverage.int.test.ts` — tổng điều tra quyền cột thêm `cancel_reason`.
+  mục ghim HAM_56 trỏ `071`. `db/rls-coverage.int.test.ts` — tổng điều tra quyền cột thêm `cancel_reason`.
 - `docs/TEST-PLAN.md`, `tools/inv-matrix/src/so-khai-nhan.ts` — hàng **J8**.
 
 ## 5. Đo sau khi sửa
@@ -13157,7 +13157,7 @@ PostgreSQL 16 thật (testcontainers):
   dong phai co ly do"*; `cancel_reason` trên gói chưa huỷ và lần đặt thứ hai bị chặn. Ca ranh giới cũ (*"CẢ HAI lớp đang nói
   không"*) đỏ đúng như thân khoản 225 hẹn, và được thay; ca *"KHÔNG huỷ được RFQ đã CLOSED"* gạch tại chỗ, thay bằng: huỷ được,
   rồi `CANCELLED -> UNSEALED` bị chặn.
-- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối `[S1.9101 / khoản 225]` — gói `VND` + `USD` ⇒ `LECH_TIEN_TE` ⇒ huỷ có
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối `[S1.163 / khoản 225]` — gói `VND` + `USD` ⇒ `LECH_TIEN_TE` ⇒ huỷ có
   lý do ⇒ `CANCELLED`, chấm lại ⇒ `RFQ_KHONG_CHAM_DUOC`; `BAFO_CLOSED` và `BAFO_UNSEALED`: đường ghi trần không lý do bị chặn,
   `cancelRfq` đi qua, khoá thu hồi hết.
 - `apps/api/src/guest.int.test.ts` — `cancelReason` `null` khi `OPEN`, đúng câu người huỷ viết sau `cancelRfq`, và gói khác vẫn
@@ -13174,4 +13174,5 @@ PostgreSQL 16 thật (testcontainers):
   một lớp chặn; phân tách nhiệm vụ cho hành vi này để S3.
 - Hàm không ghim ở `hardening.always.sql` (khuôn `bid_so_tien`): một thân bị thay sau deploy không làm `migrate()` kế tiếp dừng.
   Đột biến ở mục 5 đo rằng nó chịu lực, không đo rằng nó tự chữa.
-- Nhánh xếp chồng: số tạm `S1.9101`, `ADR-9201`, `9501`, `9502` do `pnpm cap-so` cấp SAU khi nhánh của lượt soi S4 merge.
+- Nhánh xếp chồng lên PR #165: số `S1.163`, `ADR-101`, `070`, `071` do `pnpm cap-so --base origin/claude/s4-spec-tiev0v` cấp,
+  tức tính trên cây của #165. Master nhận thêm số trước khi hai PR merge thì `pnpm cap-so` chạy lại trên `origin/master`.

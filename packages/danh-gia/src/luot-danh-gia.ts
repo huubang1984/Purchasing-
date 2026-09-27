@@ -311,7 +311,7 @@ export async function taoLuotDanhGia(
   // Spec §2.3⑻: lệch tiền tệ thì TỪ CHỐI cả lượt. Mạnh hơn `buildComparisonTable` (nó trả `null`
   // vì nó chỉ HIỂN THỊ) là cố ý — một `rank` thì không có giá trị `null` nào có nghĩa.
   //
-  // [S1.9101 / khoản 244] `currency` đã đi qua `public.bid_currency` ở `docBaoGia`, nên nó chỉ còn
+  // [S1.163 / khoản 244] `currency` đã đi qua `public.bid_currency` ở `docBaoGia`, nên nó chỉ còn
   // là `VND`, `USD` hay `null` — `VNĐ`, `vnd`, `₫`… đã gộp về `VND` ở MỘT hàm SQL mà bảng so sánh
   // cũng gọi. Hệ quả đo được: một tập đồng nhất lạ (mọi báo giá ghi `VNĐ`) không còn lọt qua đây rồi
   // vỡ ở `CHECK` của `057` thành một 422 không tên — chuỗi ngoài tập đóng thành `null`, và `null`
