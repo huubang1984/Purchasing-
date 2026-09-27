@@ -14032,3 +14032,13 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
   1 bỏ qua**; bốn tệp tích hợp chạm route người mua và `approveRfq` (#172 đổi chữ ký hàm ấy) — `apps/api/src/buyer.int.test.ts`,
   `apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`,
   `packages/rfq/src/rfq.int.test.ts` — **123/123**; phần còn lại do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần hai.** Trong lúc CI chạy trên commit hợp đầu (xanh đủ bảy việc), `master` nhận #174 — chuẩn bị bậc 1
+  của thang pilot, vòng **S1.168**, không ADR, không khoản nợ — lấy đúng số vòng lần hợp đầu đã cấp cho vòng này. Xung đột
+  ở cột mốc của `docs/STATE.md` (gỡ tay: giữ cả hai, số vòng của nhánh về số tạm) và mục nối cuối biên bản (`pnpm cap-so`
+  tự gỡ). Ba dòng mơ hồ — hàng khoản 248, mục của nó ở rổ B, dòng kết quả của lần hợp trước — đều nói về vòng này, nên
+  `--mo-ho nhanh`. Kết quả: vòng này là **S1.169**; **ADR-105** và **khoản 248** giữ nguyên; `pnpm cap-so --kiem` sạch. Trên
+  cây đã hợp: `pnpm t0` sạch (426 module, 1666 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua** (#174 thêm một ca);
+  `apps/api/src/buyer.int.test.ts`, `apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`
+  chạy chung một lượt **64/64**. Lượt chạy chung đầu tiên đỏ ở bước dựng của tệp composition — 19 ca bị bỏ qua, không khẳng
+  định nào chạy —, cùng triệu chứng cụm Postgres cục bộ đã ghi ở §S1.166; chạy riêng tệp ấy 19/19, rồi chạy lại cả ba 64/64.
+  Tầng tích hợp đầy đủ do T3 của CI đo trên chính commit hợp.
