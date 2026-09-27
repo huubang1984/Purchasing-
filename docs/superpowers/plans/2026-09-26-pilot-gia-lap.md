@@ -104,32 +104,60 @@ Ngoài các kịch bản trên, công cụ còn đo ba thứ ở mỗi lượt:
 
 ## 4. Cách chạy
 
-**Cần:** Node 22, pnpm (`pnpm install`), và một **Postgres 16 cục bộ với một CSDL riêng**. Công cụ từ chối mọi máy chủ
+**Cần:** ~~Node 22~~ **[S1.167] Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25.** Nên dùng bản mới nhất của dòng 22 — cùng
+dòng với CI và ảnh deploy (22.23.3) — và đừng lấy bản mới nhất trên nodejs.org: từ Node 26 kho không chạy. Đo bằng lượt
+chạy thật trên từng bản:
+- dưới 22.7, và 26: Node dừng ngay với `bad option: --experimental-transform-types` (26 đã bỏ cờ ấy);
+- 22.7–22.12 và 23.0–23.1: `web` chết lúc khởi động vì thiếu `module.stripTypeScriptTypes`. Công cụ nay tự từ chối các
+  bản này bằng một câu nói rõ.
+
+Thêm: pnpm (`pnpm install`), và một **Postgres 16 cục bộ với một CSDL riêng**. Công cụ từ chối mọi máy chủ
 không phải `localhost`/`127.0.0.1`/`::1`, và mọi URL mang tham số truy vấn (`?host=` của pg ghi đè máy chủ của URL), vì
 nó chạy `migrate()`, đặt lại mật khẩu hai vai đăng nhập và thêm tổ chức. Cổng Docker ghim vào `127.0.0.1`: superuser
 với mật khẩu viết trong tài liệu này không được nghe trên mạng của phòng trình diễn.
 
 ```powershell
 # Windows PowerShell — Postgres trong Docker
-docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
-do { Start-Sleep 1; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0)
+docker start tp-pilot-gia-lap 2>$null
+if ($LASTEXITCODE -ne 0) { docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine }
+$n = 0
+do { Start-Sleep 1; $n++; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0 -or $n -ge 60)
+if ($LASTEXITCODE -ne 0) { throw "Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?" }
 $env:TRUSTPROCURE_SEED_DATABASE_URL = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap"
 pnpm pilot:gia-lap
 ```
 
 ```bash
 # Linux/macOS
-docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
-until docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap; do sleep 1; done
+docker start tp-pilot-gia-lap 2>/dev/null || docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
+for i in $(seq 60); do docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap && break; sleep 1; done
 export TRUSTPROCURE_SEED_DATABASE_URL=postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap
 pnpm pilot:gia-lap
 ```
 
 Dòng `pg_isready` đợi Postgres nhận kết nối TCP: container mới chạy `initdb` và một máy chủ tạm chỉ nghe socket trong vài
-giây đầu, và công cụ không thử lại lần nối đầu tiên. Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
-có Docker, và các lượt đo dùng Postgres 16 cài thẳng.
+giây đầu, và công cụ không thử lại lần nối đầu tiên. ~~Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
+có Docker, và các lượt đo dùng Postgres 16 cài thẳng.~~
 
-Lệnh ấy làm trọn các bước sau, không một bước tay nào:
+**[S1.167] Hai khối đã chạy nguyên văn, và bản đầu hỏng ở lần chạy thứ hai.** Bản đầu gọi `docker run` mỗi lần. Chạy lại
+khi container đã dừng — tức sau khi khởi động lại máy, đúng lúc người trình diễn chạy lại cho buổi gặp — thì `docker run`
+báo trùng tên, còn vòng `pg_isready` gõ vào một container không chạy và lặp mãi. Bản trên bật lại container cũ nếu có, chỉ
+tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.1, Postgres `16-alpine`, mã của vòng này:
+- khối PowerShell chạy bằng PowerShell 7.4.6 trên Linux, khối bash bằng bash;
+- mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
+  ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
+  Docker Desktop đã chạy chưa, bash với `ECONNREFUSED` của công cụ;
+- **chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
+  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.
+
+Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:
+- xoá thư mục trạng thái mà giữ container: công cụ từ chối trước khi dựng cụm và nói cách sửa;
+- xoá container mà giữ thư mục: lượt mới chạy bình thường, nhưng các lượt cũ trong thư mục trỏ tới tổ chức không còn — chỉ
+  dùng các dòng đánh dấu LƯỢT MỚI NHẤT.
+
+Làm lại từ đầu thì xoá cả hai: `docker rm -f tp-pilot-gia-lap` và thư mục `.pilot-gia-lap/`.
+
+`pnpm pilot:gia-lap` làm trọn các bước sau, không một bước tay nào:
 1. Sinh bí mật cụm: ba vòng khoá 32 byte đôi một khác nhau, khoá ký biên nhận P-256 và mật khẩu hai vai đăng nhập.
 2. Chạy `migrate()` và đảm bảo hai vai đăng nhập.
 3. Dựng `api`, `web`, `public-keys`, gieo hai tổ chức, rồi dựng `unseal-worker`. Worker phải lên SAU tổ chức đầu tiên

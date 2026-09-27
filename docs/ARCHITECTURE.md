@@ -24,7 +24,7 @@
 | Mã hoá phía trình duyệt | `packages/sealed-envelope/src/browser.ts` — WebCrypto, máy chủ gỡ kiểu rồi phục vụ ở `/lib/` |
 | API | ~~NestJS~~ **`node:http` trần + bảng route khai báo** (ADR-020, 2026-09-06) |
 | Worker mở thầu | ~~NestJS~~ hàm thuần + composition root, `node` trần (process riêng) |
-| Tiến trình `api` | [S1.11 / ADR-021] composition root trong `apps/api`; `pnpm api:dev` chạy TypeScript trực tiếp bằng Node ≥ 22 — chưa có bước build |
+| Tiến trình `api` | [S1.11 / ADR-021] composition root trong `apps/api`; `pnpm api:dev` chạy TypeScript trực tiếp bằng ~~Node ≥ 22~~ **[S1.167] Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25** (đo: 22.7–22.12 và 23.0–23.1 chạy được `api` nhưng `web` cần `module.stripTypeScriptTypes`; 26 đã bỏ cờ `--experimental-transform-types`, nên mọi script dừng ngay; `engines.node` siết theo đúng các bản đã đo) — chưa có bước build |
 | Cơ sở dữ liệu | PostgreSQL — RLS, trigger, quyền theo cột |
 | Quản lý khóa | AWS KMS / HashiCorp Vault (qua interface `KeyProvider`) |
 | Test | Vitest · fast-check · Testcontainers · Playwright · k6 |
