@@ -80,6 +80,7 @@ import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent } from "@trustprocure/audit";
 import {
+  chayVoiTranTuChoi,
   conChoChoDuongPhu,
   MfaRequiredError,
   DenialAuditFailedError,
@@ -165,7 +166,9 @@ export const TU_CHOI_TRAN_MOI_CUA_SO = 30;
 /**
  * [S1.155 / khoản 122 · 144 / ADR-092] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
  * không phải một lần từ chối để ghi sổ (cổng [INV-D5] nhận diện lớp từ chối bằng đuôi tên ấy) mà là lý do lần từ chối KHÔNG được
- * ghi. Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.
+ * ghi. ~~Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.~~
+ * **[S1.9101 / khoản 248 / ADR-9201]** Đi ra từ `demTuChoi` — bắt ở `phanQuyetTuChoi` — và từ `demTuChoiCuaHandler`, qua lần ghi sổ từ
+ * chối của một handler: tới `anhXaLoiHandler`, cùng 429 và `retry-after`.
  */
 class VuotTranTuChoiError extends Error {
   constructor() {
@@ -409,6 +412,10 @@ function anhXaLoiPostgres(err: Error & { code?: unknown; routine?: unknown }): A
 
 function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResponse {
   if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
+  // [S1.9101 / khoản 248] Lần từ chối thứ N+1 của phiên, do handler ghi — cùng thân và `retry-after` với 429 của `phanQuyetTuChoi`.
+  if (err instanceof VuotTranTuChoiError) {
+    return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
+  }
   if (err instanceof PermissionDeniedError) return { status: 403, body: THAN_403 };
   if (err instanceof MfaRequiredError) return { status: 401, body: THAN_401 };
   // [S1.67 / khoản 118] Trước vòng này khối catch ngoài cùng trả 401 cho MỌI `SessionInvalidError`. Nay nhánh người mua bọc lỗi của
@@ -671,6 +678,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               const soLan = await tangBucketNguoiGoi(client, `tu-choi|${actor.sessionId}`, deps.services.pepper);
               if (soLan > tranTuChoi) throw new VuotTranTuChoiError();
             };
+            // [S1.9101 / khoản 248 / ADR-9201] CÙNG bucket, cùng trần, cho lần từ chối do HANDLER ghi — `requirePermission` gọi từ một gói,
+            // `throwAuditedDenial` của cổng mở thầu, bảng so sánh, `CONTROL_DENIED`. Khác `demTuChoi` ở đúng một chỗ: đếm trên `c`, kết nối
+            // `auditPool` mà `packages/identity/src/rbac.ts` mở ở giao dịch RIÊNG, không trên `client`. Handler từ chối thì NÉM, giao dịch
+            // của `client` rollback, và một lần đếm trên nó biến theo — đúng lý do ADR-092 để lần từ chối của handler ngoài phạm vi.
+            const demTuChoiCuaHandler = async (c: pg.PoolClient): Promise<void> => {
+              const soLan = await tangBucketNguoiGoi(c, `tu-choi|${actor.sessionId}`, deps.services.pepper);
+              if (soLan > tranTuChoi) throw new VuotTranTuChoiError();
+            };
             const phanQuyetTuChoi = async (viec: () => Promise<void>): Promise<ApiResponse | null> => {
               try {
                 await viec();
@@ -808,7 +823,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             let phanHoiHandler: ApiResponse;
             try {
               phanHoiHandler = await handler.chay(() =>
-                route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, choKyChinhSach }),
+                chayVoiTranTuChoi({ dem: demTuChoiCuaHandler }, () =>
+                  route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, choKyChinhSach }),
+                ),
               );
             } finally {
               // [S1.92 / khoản 156] Xem khối cùng nhãn ở nhánh ANON. Đây là nhánh mà ba chỗ xếp việc

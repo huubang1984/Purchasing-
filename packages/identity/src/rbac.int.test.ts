@@ -10,6 +10,7 @@ import {
   PermissionAuditFailedError,
   PermissionDeniedError,
   SEPARATION_OF_DUTIES_CHAIN,
+  chayVoiTranTuChoi,
   requirePermission,
   throwAuditedDenial,
 } from "./index.js";
@@ -1742,4 +1743,95 @@ describe("[INV-D5] [S1.68 / khoản 119] throwAuditedDenial ghi sổ lần từ 
       await poolNho.end();
     }
   }, 20000);
+});
+
+// ==============================================================================================
+// [S1.9101 / khoản 248 / ADR-9201] BỐI CẢNH TRẦN TỪ CHỐI CỦA MỘT YÊU CẦU
+//
+// Hai đường ghi sổ từ chối của `rbac.ts` đọc bối cảnh mà bộ điều phối đặt quanh lời gọi handler. Ba tính chất đo ở đây, dưới tầng
+// HTTP (`apps/api/src/auth.int.test.ts` vế ⒤–⒨ đo qua bộ điều phối thật): `dem` chạy đúng MỘT lần, ở giao dịch RIÊNG đã COMMIT trước
+// lần ghi sổ; lỗi của nó đi ra NGUYÊN DẠNG và không hàng sổ nào được ghi; lời gọi mang móc `truocKhiGhiTuChoi` — tức lời gọi của bộ
+// điều phối — không đếm lần thứ hai. Ngoài bối cảnh, không gì chạy.
+// ==============================================================================================
+describe("[INV-D5] [S1.9101 / khoản 248] bối cảnh trần từ chối của yêu cầu", () => {
+  const suKien = (action: string) => ({
+    actorType: "USER" as const,
+    actorId: uid("BUYER"),
+    action,
+    resourceType: "RFQ",
+    resourceId: null,
+    payload: { k248: true },
+  });
+  const demHang = async (action: string): Promise<number> => {
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND action = $2", [
+      orgId,
+      action,
+    ]);
+    return rows[0]?.n ?? -1;
+  };
+
+  it("[INV-D5] `throwAuditedDenial` trong bối cảnh ⇒ `dem` chạy đúng một lần, ở giao dịch riêng đã COMMIT trước lần ghi; ngoài bối cảnh ⇒ không chạy", async () => {
+    const lan: { txid: string; hangLucDem: number }[] = [];
+    const dem = async (c: pg.PoolClient): Promise<void> => {
+      const { rows } = await c.query<{ t: string }>("SELECT txid_current()::text AS t");
+      lan.push({ txid: rows[0]?.t ?? "", hangLucDem: await demHang("K248_TRONG_BOI_CANH") });
+    };
+    const tuChoi = new Error("tu choi k248");
+    await expect(
+      chayVoiTranTuChoi({ dem }, () => throwAuditedDenial(auditPool, orgId, suKien("K248_TRONG_BOI_CANH"), tuChoi)),
+    ).rejects.toBe(tuChoi);
+    expect(lan).toHaveLength(1);
+    expect(lan[0]?.hangLucDem, "đếm TRƯỚC lần ghi").toBe(0);
+    const { rows: tt } = await db.pool.query<{ s: string }>("SELECT txid_status($1::bigint) AS s", [lan[0]?.txid]);
+    expect(tt[0]?.s, "giao dịch đếm đã commit — độc lập với lần ghi").toBe("committed");
+    expect(await demHang("K248_TRONG_BOI_CANH")).toBe(1);
+
+    await expect(throwAuditedDenial(auditPool, orgId, suKien("K248_NGOAI_BOI_CANH"), tuChoi)).rejects.toBe(tuChoi);
+    expect(lan, "ngoài bối cảnh — worker, job — không đếm").toHaveLength(1);
+    expect(await demHang("K248_NGOAI_BOI_CANH")).toBe(1);
+  });
+
+  it("[INV-D5] `dem` ném ⇒ lỗi của nó ra NGUYÊN DẠNG (không bọc `DenialAuditFailedError`), và không hàng sổ nào", async () => {
+    const vuot = Object.assign(new Error("vuot tran k248"), { name: "VuotTranK248" });
+    const loi = await chayVoiTranTuChoi(
+      {
+        dem: () => Promise.reject(vuot),
+      },
+      () => throwAuditedDenial(auditPool, orgId, suKien("K248_VUOT_TRAN"), new Error("tu choi k248")),
+    ).catch((e: unknown) => e);
+    expect(loi).toBe(vuot);
+    expect(await demHang("K248_VUOT_TRAN")).toBe(0);
+  });
+
+  it("[INV-D5] `requirePermission` từ handler (không móc) ⇒ `dem` một lần; có móc — lời gọi của bộ điều phối — ⇒ chỉ móc chạy, không đếm hai lần", async () => {
+    let soLanDem = 0;
+    let soLanMoc = 0;
+    const yeuCau = { userId: uid("BUYER"), orgId, permission: PERMISSIONS.RFQ_UNSEAL, resourceType: "RFQ", resourceId: null };
+    await chayVoiTranTuChoi(
+      {
+        dem: () => {
+          soLanDem += 1;
+          return Promise.resolve();
+        },
+      },
+      async () => {
+        await expect(withTenant(apiPool, orgId, (c) => requirePermission(c, yeuCau, auditPool))).rejects.toBeInstanceOf(
+          PermissionDeniedError,
+        );
+        expect(soLanDem).toBe(1);
+        await expect(
+          withTenant(apiPool, orgId, (c) =>
+            requirePermission(c, yeuCau, auditPool, {
+              truocKhiGhiTuChoi: () => {
+                soLanMoc += 1;
+                return Promise.resolve();
+              },
+            }),
+          ),
+        ).rejects.toBeInstanceOf(PermissionDeniedError);
+      },
+    );
+    expect(soLanMoc).toBe(1);
+    expect(soLanDem, "móc của người gọi thay bối cảnh, không cộng thêm").toBe(1);
+  });
 });

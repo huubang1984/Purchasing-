@@ -270,6 +270,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   "laMaChot",
   "maChotTuLoi",
   "tuChoiTheoChot",
+  // [S1.9101 / khoản 248 / ADR-9201] Đặt trần theo phiên cho lần từ chối do handler ghi — chỉ làm lần từ chối thứ N+1 ném 429 thay vì
+  // ghi sổ, không cho qua gì. Một người gọi: `apps/api/src/dispatch.ts` (`ghi-so-tu-choi-mot-duong.test.ts` giam).
+  "chayVoiTranTuChoi",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);
