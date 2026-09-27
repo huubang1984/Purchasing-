@@ -261,7 +261,7 @@ const DANH_SACH_TRANG_IDENTITY = [
   "startUserSession",
   "verifyTotpForLogin",
   "verifyTotpAttempt",
-  // [S1.179 / khoản 247 / ADR-108] Từ vựng chốt kiểm soát dời xuống đây từ `packages/rfq`. `tuChoiTheoChot` NÉM ở mọi
+  // [S1.180 / khoản 247 / ADR-108] Từ vựng chốt kiểm soát dời xuống đây từ `packages/rfq`. `tuChoiTheoChot` NÉM ở mọi
   // nhánh (cùng tiêu chí `throwAuditedDenial`); `laMaChot` và `maChotTuLoi` chỉ tra bảng — không câu hỏi quyền nào.
   "ACTION_CHOT_KIEM_SOAT",
   "CHOT_THEO_RANG_BUOC",
