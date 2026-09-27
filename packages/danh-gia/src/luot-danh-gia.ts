@@ -199,7 +199,7 @@ async function docBaoGia(
     `SELECT DISTINCT ON (v.bid_id)
             u.bid_version_id,
             public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS tien,
-            (u.payload OPERATOR(pg_catalog.->>) 'currency') AS currency
+            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency')) AS currency
        FROM public.rfq_unsealed_bids u
        JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id
                                        AND v.org_id OPERATOR(pg_catalog.=) u.org_id
@@ -309,12 +309,24 @@ export async function taoLuotDanhGia(
   }
   // Spec §2.3⑻: lệch tiền tệ thì TỪ CHỐI cả lượt. Mạnh hơn `buildComparisonTable` (nó trả `null`
   // vì nó chỉ HIỂN THỊ) là cố ý — một `rank` thì không có giá trị `null` nào có nghĩa.
+  //
+  // [S1.9101 / khoản 243] `currency` đã đi qua `public.bid_currency` ở `docBaoGia`, nên nó chỉ còn
+  // là `VND`, `USD` hay `null` — `VNĐ`, `vnd`, `₫`… đã gộp về `VND` ở MỘT hàm SQL mà bảng so sánh
+  // cũng gọi. Hệ quả đo được: một tập đồng nhất lạ (mọi báo giá ghi `VNĐ`) không còn lọt qua đây rồi
+  // vỡ ở `CHECK` của `057` thành một 422 không tên — chuỗi ngoài tập đóng thành `null`, và `null`
+  // bị từ chối ngay dưới bằng mã có tên. Thông điệp KHÔNG nhắc lại chuỗi nhà cung cấp gõ: route chấm
+  // mở cho người giữ `evaluation.perform`, và ba vai trong số ấy không giữ `bid.view`.
   const donVi = [...new Set(docDuoc.map((b) => b.currency))];
   if (donVi.length !== 1 || donVi[0] === null) {
+    const dem = (dv: string | null): number => docDuoc.filter((b) => b.currency === dv).length;
+    const phan = [
+      ...(["VND", "USD"] as const).filter((dv) => dem(dv) > 0).map((dv) => `${String(dem(dv))} báo giá ${dv}`),
+      ...(dem(null) > 0 ? [`${String(dem(null))} báo giá có đơn vị tiền không nhận ra`] : []),
+    ];
     throw new DanhGiaTuChoiError(
       "LECH_TIEN_TE",
-      `Các báo giá đọc được không cùng một đơn vị tiền (${donVi.map((d) => d ?? "(trống)").join(", ")}); ` +
-        "chuẩn hoá đơn vị tiền trước khi chấm.",
+      `Các báo giá đọc được không cùng một đơn vị tiền nhận ra được (${phan.join(", ")}); không xếp hạng được. ` +
+        "Báo giá đã niêm phong không sửa được — gói thầu này chỉ còn lối huỷ, kèm lý do mà nhà cung cấp đọc được.",
     );
   }
   // `donVi[0]` đã qua hai vế lọc ngay trên (đúng một phần tử, và không `null`), nhưng TS không

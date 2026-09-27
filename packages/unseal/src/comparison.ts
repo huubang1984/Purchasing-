@@ -105,6 +105,10 @@ export interface ComparisonRow {
   readonly payload: Record<string, unknown>;
   /** Số tiền dạng CHUỖI thập phân, hoặc `null` nếu bản rõ không nói ra một con số hợp lệ. */
   readonly totalAmount: string | null;
+  /**
+   * [S1.9101 / khoản 243] Đơn vị tiền SAU `public.bid_currency`: `VND`, `USD`, hoặc `null` khi chuỗi
+   * nhà cung cấp gõ nằm ngoài tập đóng. Chuỗi gốc vẫn ở nguyên trong `payload`.
+   */
   readonly currency: string | null;
   /**
    * [S1.109 / S2.5 / khoản 227⑵] Số vòng BAFO đã sinh ra dòng này — `null` cho vòng MỘT.
@@ -150,7 +154,9 @@ export interface ComparisonAggregates {
   readonly unparsed: number;
   readonly currency: string | null;
   /**
-   * `true` khi các báo giá đọc được KHÔNG cùng một đơn vị tiền. Lúc ấy `min`/`max`/`average`/
+   * `true` khi các báo giá đọc được KHÔNG cùng một đơn vị tiền. **[S1.9101 / khoản 243]** Đơn vị là
+   * đơn vị SAU `public.bid_currency`, nên `VND` và `VNĐ` là một; và một nhóm duy nhất mà đơn vị không
+   * nhận ra được (`null`) cũng là lệch. Lúc ấy `min`/`max`/`average`/
    * `belowBudget` đều là `null`: `min(1000 USD, 2000 VND)` là một con số không có nghĩa, và
    * hiển thị nó ra còn tệ hơn không hiển thị gì.
    */
@@ -322,7 +328,7 @@ export async function buildComparisonTable(
             s.legal_name,
             u.payload,
             public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS total_amount,
-            (u.payload OPERATOR(pg_catalog.->>) 'currency')                       AS currency,
+            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
             r.round_no                                   AS bafo_round_no,
             (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
                OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
@@ -340,6 +346,11 @@ export async function buildComparisonTable(
   // Gom theo TIỀN TỆ chứ không gom một cục: nếu truy vấn trả về nhiều hơn một nhóm thì các phép
   // tổng hợp không có nghĩa, và đó là điều duy nhất phía TypeScript cần biết để quyết.
   //
+  // [S1.9101 / khoản 243] Bốn chỗ đọc tiền tệ ở hai câu dưới — cột của hàng, cột nhóm, vế ngân sách
+  // và `GROUP BY` — đều đi qua `public.bid_currency`, cùng hàm mà lượt chấm gọi. Đo trước khi sửa:
+  // `VND` + `VNĐ` cho hai nhóm và mọi phép tổng hợp thành `null`; cùng một `vnd` thì vế ngân sách so
+  // `'VND' = 'vnd'` và `belowBudget` ra 0 thay vì 2 — một con số SAI không dấu vết.
+  //
   // [S1.109 / S2.5] `moi_nhat` là vế KHỬ TRÙNG, và nó là bản sao của luật mà worker
   // (`index.ts`) và `docBaoGia` của `packages/danh-gia` đã chọn: `DISTINCT ON (v.bid_id) …
   // ORDER BY v.version DESC` — lần nộp SAU thay lần nộp TRƯỚC. Ba bộ đọc, một luật, và không bộ
@@ -354,26 +365,30 @@ export async function buildComparisonTable(
         WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
         ORDER BY v.bid_id, v.version DESC
      )
-     SELECT (u.payload OPERATOR(pg_catalog.->>) 'currency')                                     AS currency,
+     SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))                AS currency,
             pg_catalog.count(*)::pg_catalog.int4                                              AS n,
             pg_catalog.min(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_min,
             pg_catalog.max(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_max,
             pg_catalog.round(pg_catalog.avg(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))), 2)::pg_catalog.text AS gia_tb,
             pg_catalog.count(*) FILTER (
               WHERE ns.estimated_value IS NOT NULL
-                AND ns.currency OPERATOR(pg_catalog.=) (u.payload OPERATOR(pg_catalog.->>) 'currency')
+                AND ns.currency OPERATOR(pg_catalog.=) public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))
                 AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) OPERATOR(pg_catalog.<=) ns.estimated_value
             )::pg_catalog.int4                                                     AS duoi_ngan_sach
        FROM moi_nhat u
        LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) u.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) u.org_id
       WHERE public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
-      GROUP BY (u.payload OPERATOR(pg_catalog.->>) 'currency')`,
+      GROUP BY public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))`,
     [rfqId],
   );
 
   const doc = th.reduce((s, r) => s + r.n, 0);
-  const lechTien = th.length > 1;
-  const mot = th.length === 1 ? th[0] : undefined;
+  // [S1.9101 / khoản 243] Một nhóm DUY NHẤT mà tiền tệ là `null` — mọi báo giá đọc được mang một
+  // chuỗi ngoài tập đóng — cũng là lệch: không có đơn vị nào để đọc các con số ấy. Lượt chấm đã từ
+  // chối đúng ca này (`donVi[0] === null`); bảng so sánh nay nói cùng một câu thay vì in min/max của
+  // những con số không có đơn vị.
+  const lechTien = th.length > 1 || (th.length === 1 && th[0]?.currency === null);
+  const mot = !lechTien && th.length === 1 ? th[0] : undefined;
 
   return {
     rfqId,

@@ -23,6 +23,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { PermissionDeniedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
+import { cancelRfq } from "@trustprocure/rfq";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docBangXepHang } from "./doc-bang-xep-hang.js";
@@ -2539,5 +2540,250 @@ describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có 
     const lai = await deXuatLanHai(rfqId, banRo[2] ?? "");
     expect(lai).toMatchObject({ lyDo: "RFQ_KHONG_DE_XUAT_DUOC" });
     expect((await hangTuChoiTrangThai(rfqId)).map((h) => h.ma)).toEqual(["RFQ_KHONG_DE_XUAT_DUOC"]);
+  });
+});
+
+// ===============================================================================================
+// [S1.9101 / khoản 243] J8 — tiền tệ của báo giá đọc qua MỘT hàm, về tập đóng {VND, USD, NULL}
+// ===============================================================================================
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.9101): `VND` + `VNĐ` ném `LECH_TIEN_TE`; MỘT
+// nhà cung cấp gõ `VNĐ` — hay hai nhà cung cấp cùng gõ `vnd` — thì phép so tập cho qua và câu INSERT
+// vỡ ở `CHECK (currency IN ('VND','USD'))` của `057`: `DatabaseError` 23514
+// `rfq_evaluations_currency_check`, `routine` `ExecConstraints`, tức một 422 KHÔNG TÊN ở API. Gói
+// đứng yên ở `UNSEALED`, và `UNSEALED` không có cạnh huỷ nào — gói kẹt. Các ca dưới là ĐÍCH của vòng
+// sửa: đỏ trước migration `9501`, xanh sau nó.
+describe("[INV-J8] [S1.9101 / khoản 243] tiền tệ báo giá đọc qua MỘT hàm", { timeout: 300000 }, () => {
+  const tuChoiTrangThai = async (rfqId: string): Promise<number> => {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    return Number(rows[0]?.n ?? "-1");
+  };
+
+  it("[INV-J8] BẢNG CA của `bid_currency` dưới `app_api`: mười sáu cách viết vào, đúng hai đơn vị ra; ký tự dễ nhầm và chuỗi lạ ra NULL", async () => {
+    const ca: readonly (readonly [string | null, string | null, string])[] = [
+      ["VND", "VND", "chính tắc"],
+      ["VNĐ", "VND", "VNĐ — Đ là U+0110"],
+      ["VNđ", "VND", "VNđ"],
+      ["Vnđ", "VND", "Vnđ"],
+      ["vnđ", "VND", "vnđ"],
+      ["Vnd", "VND", "Vnd"],
+      ["vnd", "VND", "vnd"],
+      ["đ", "VND", "đ"],
+      ["Đ", "VND", "Đ"],
+      ["₫", "VND", "₫ — ký hiệu đồng"],
+      ["đồng", "VND", "đồng, dạng dựng sẵn"],
+      ["Đồng", "VND", "Đồng, dạng dựng sẵn"],
+      ["USD", "USD", "chính tắc"],
+      ["Usd", "USD", "Usd"],
+      ["usd", "USD", "usd"],
+      ["US$", "USD", "US$"],
+      // Khoảng trắng hai đầu bị bỏ — kể cả NBSP mà `btrim()` mặc định KHÔNG bỏ.
+      [" VND ", "VND", "dấu cách hai đầu"],
+      ["\tvnd\n", "VND", "tab và xuống dòng"],
+      [" VNĐ ", "VND", "NBSP hai đầu"],
+      // Dạng TỔ HỢP của `đồng` (o + dấu mũ U+0302 + dấu huyền U+0300) — `normalize(NFC)` gộp nó.
+      ["đồng", "VND", "đồng, dạng tổ hợp"],
+      // Hướng an toàn: không đoán.
+      [null, null, "NULL vào, NULL ra (STRICT)"],
+      ["", null, "chuỗi rỗng"],
+      ["EUR", null, "đơn vị ngoài tập"],
+      ["VNÐ", null, "VNÐ — Ð là chữ eth U+00D0, DỄ NHẦM với Đ"],
+      ["$", null, "$ trần không nói là đô la nào"],
+      ["VN D", null, "khoảng trắng GIỮA chuỗi"],
+      ["VND​", null, "ký tự rộng-bằng-không không bị bỏ"],
+      ["vNĐ", null, "hoa thường lẫn không có trong danh sách"],
+      ["US $", null, "US $ có khoảng trắng"],
+    ];
+    const ra = await withTenant(apiPool, orgA, async (c) => {
+      const kq: (string | null)[] = [];
+      for (const [vao] of ca) {
+        const { rows } = await c.query<{ ra: string | null }>("SELECT public.bid_currency($1::text) AS ra", [vao]);
+        kq.push(rows[0]?.ra ?? null);
+      }
+      return kq;
+    });
+    ca.forEach(([vao, mong, ten], i) => {
+      expect(ra[i], `${ten} — vào ${JSON.stringify(vao)}`).toBe(mong);
+    });
+  });
+
+  it("[INV-J8] ĐÍCH của đo M1: `VND` + `VNĐ` ⇒ chấm ĐƯỢC, một đơn vị `VND`, xếp hạng theo giá", async () => {
+    const { rfqId, banRo } = await goiDaMo([
+      ["100.00", "VND"],
+      ["90.00", "VNĐ"],
+    ]);
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.currency).toBe("VND");
+    const theoId = new Map(kq.lines.map((l) => [l.bidVersionId, l.rank]));
+    expect([banRo[0], banRo[1]].map((id) => theoId.get(id ?? ""))).toEqual([2, 1]);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("[INV-J8] ĐÍCH của đo M2: MỘT nhà cung cấp gõ `VNĐ`, hay hai nhà cung cấp cùng gõ `vnd` ⇒ chấm ĐƯỢC, không còn 23514", async () => {
+    const mot = await goiDaMo([["100.00", "VNĐ"]]);
+    const kq1 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId: mot.rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq1.currency).toBe("VND");
+    const hai = await goiDaMo([
+      ["100.00", "vnd"],
+      ["90.00", "vnd"],
+    ]);
+    const kq2 = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId: hai.rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kq2.currency).toBe("VND");
+    const { rows } = await db.pool.query<{ currency: string }>(
+      "SELECT currency FROM rfq_evaluations WHERE rfq_id = ANY($1::uuid[]) ORDER BY currency",
+      [[mot.rfqId, hai.rfqId]],
+    );
+    expect(rows.map((r) => r.currency), "đơn vị GHI xuống là đơn vị chính tắc — CHECK của `057` không bao giờ bị chạm").toEqual([
+      "VND",
+      "VND",
+    ]);
+  });
+
+  it("[INV-J8] chuỗi NGOÀI tập đóng — kể cả khi MỌI báo giá cùng ghi nó — bị từ chối bằng mã CÓ TÊN, không bằng 23514; thông điệp không nhắc lại chuỗi đã gõ", async () => {
+    const { rfqId } = await goiDaMo([
+      ["100.00", "EUR"],
+      ["90.00", "EUR"],
+    ]);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi, "bản trước: DatabaseError 23514 của CHECK, không phải một lời từ chối có tên").toBeInstanceOf(DanhGiaTuChoiError);
+    expect((loi as DanhGiaTuChoiError).lyDo).toBe("LECH_TIEN_TE");
+    expect((loi as DanhGiaTuChoiError).message).toContain("2 báo giá có đơn vị tiền không nhận ra");
+    expect(
+      (loi as DanhGiaTuChoiError).message,
+      "route chấm mở cho ba vai không giữ `bid.view` — chuỗi nhà cung cấp gõ không đi qua thông điệp",
+    ).not.toContain("EUR");
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+    expect(await tuChoiTrangThai(rfqId), "J6: `LECH_TIEN_TE` vẫn là mã CẤU HÌNH, không vào sổ").toBe(0);
+  });
+
+  it("[INV-J8] lệch THẬT (`VND` + `USD`) vẫn bị từ chối cả lượt; thông điệp đếm theo đơn vị đã chuẩn hoá", async () => {
+    const { rfqId } = await goiDaMo([
+      ["100.00", "vnd"],
+      ["100.00", "US$"],
+    ]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toMatchObject({
+      lyDo: "LECH_TIEN_TE",
+      message: expect.stringContaining("1 báo giá VND, 1 báo giá USD") as unknown,
+    });
+  });
+
+  it("[INV-J8] ĐỘT BIẾN — thay thân `bid_currency` bằng hàm đồng nhất lúc chạy ⇒ ca M1 đỏ lại; khôi phục thân gốc", async () => {
+    const { rows: goc } = await db.pool.query<{ def: string }>(
+      "SELECT pg_get_functiondef('public.bid_currency(text)'::regprocedure) AS def",
+    );
+    const thanGoc = goc[0]?.def ?? "";
+    expect(thanGoc).toContain("normalize");
+    try {
+      await db.pool.query(
+        "CREATE OR REPLACE FUNCTION public.bid_currency(p_van text) RETURNS text LANGUAGE sql IMMUTABLE STRICT " +
+          "SET search_path = pg_catalog, public AS $$ SELECT p_van $$",
+      );
+      const { rfqId } = await goiDaMo([
+        ["100.00", "VND"],
+        ["90.00", "VNĐ"],
+      ]);
+      await expect(
+        withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+        "không có hàm chuẩn hoá thì lỗi của khoản 243 quay lại — tức hàm ấy là lớp chịu lực, không trang trí",
+      ).rejects.toMatchObject({ lyDo: "LECH_TIEN_TE" });
+    } finally {
+      await db.pool.query(thanGoc);
+    }
+    const { rows: sau } = await db.pool.query<{ ra: string | null }>("SELECT public.bid_currency($1) AS ra", ["VNĐ"]);
+    expect(sau[0]?.ra, "thân gốc đã về").toBe("VND");
+  });
+});
+
+// [S1.9101 / khoản 225] Khoản 243 đã hẹp lối từ chối lại còn đúng những gói lệch tiền tệ THẬT (`VND` +
+// `USD`), hay mang một chuỗi ngoài tập đóng. Những gói ấy vẫn đứng ở `UNSEALED`, và báo giá đã niêm
+// phong không sửa được. `9502` cho chúng một lối ra — huỷ, kèm lý do nhà cung cấp đọc được — và
+// describe này đo lối ấy ở đúng hai trạng thái lượt chấm từ chối được: `UNSEALED` và `BAFO_UNSEALED`,
+// cộng `BAFO_CLOSED` là trạng thái đứng trước `BAFO_UNSEALED` trong cùng vòng.
+describe("[S1.9101 / khoản 225] gói bị từ chối chấm có lối ra: huỷ kèm lý do", { timeout: 300000 }, () => {
+  const lyDoHuy = async (rfqId: string): Promise<string | null> => {
+    const { rows } = await db.pool.query<{ cancel_reason: string | null }>(
+      "SELECT cancel_reason FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    return rows[0]?.cancel_reason ?? null;
+  };
+
+  it("`UNSEALED` lệch tiền tệ THẬT ⇒ `LECH_TIEN_TE` ⇒ huỷ kèm lý do ⇒ `CANCELLED`; chấm sau đó bị từ chối theo trạng thái", async () => {
+    const { rfqId } = await goiDaMo([
+      ["100.00", "VND"],
+      ["100.00", "USD"],
+    ]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toMatchObject({ lyDo: "LECH_TIEN_TE" });
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+
+    const LY_DO = "Hai bao gia hai don vi tien; goi thau se moi lai voi mot don vi";
+    await withTenant(apiPool, orgA, (c) => cancelRfq(c, orgA, { rfqId, reason: LY_DO, actorSessionId: sYc }, apiPool));
+    expect(await trangThaiRfq(rfqId)).toBe("CANCELLED");
+    expect(await lyDoHuy(rfqId)).toBe(LY_DO);
+
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+      "gói đã huỷ không chấm được — cạnh `CANCELLED->EVALUATING` không tồn tại",
+    ).rejects.toMatchObject({ lyDo: "RFQ_KHONG_CHAM_DUOC" });
+  });
+
+  it("`BAFO_CLOSED` và `BAFO_UNSEALED` huỷ được qua `cancelRfq`; đường ghi trần không lý do bị trigger chặn ở cả hai", async () => {
+    for (const dich of ["BAFO_CLOSED", "BAFO_UNSEALED"] as const) {
+      const { rfqId, banRo, luotId } = await daCham(
+        [
+          ["100.00", "VND"],
+          ["200.00", "VND"],
+        ],
+        2,
+      );
+      const vong = await moVongBafo(rfqId, luotId, 2);
+      const lai = await nopLaiBafo(rfqId, banRo[0] ?? "");
+      if (dich === "BAFO_CLOSED") {
+        await withTenant(apiPool, orgA, async (c) => {
+          await c.query("UPDATE rfq_bafo_rounds SET closed_at = now() WHERE id = $1", [vong]);
+          await c.query("UPDATE rfq_packages SET status = 'BAFO_CLOSED' WHERE id = $1", [rfqId]);
+        });
+      } else {
+        await moThauBafo(rfqId, vong, [[lai, { totalAmount: "90.00", currency: "VND" }]]);
+      }
+      expect(await trangThaiRfq(rfqId)).toBe(dich);
+
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          c.query(
+            "UPDATE rfq_packages SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = $2, " +
+              "cancelled_by_session_id = $3 WHERE id = $1",
+            [rfqId, uYc, sYc],
+          ),
+        ),
+        `${dich}: đường ghi thứ hai không được quên lý do`,
+      ).rejects.toThrow(/Huy RFQ sau khi dong phai co ly do/u);
+      expect(await trangThaiRfq(rfqId)).toBe(dich);
+
+      const LY_DO = `Huy goi o ${dich}: ngan sach bi rut`;
+      await withTenant(apiPool, orgA, (c) => cancelRfq(c, orgA, { rfqId, reason: LY_DO, actorSessionId: sYc }, apiPool));
+      expect(await trangThaiRfq(rfqId)).toBe("CANCELLED");
+      expect(await lyDoHuy(rfqId)).toBe(LY_DO);
+      const { rows: khoa } = await db.pool.query<{ con_song: string }>(
+        "SELECT count(*) FILTER (WHERE revoked_at IS NULL)::text AS con_song FROM rfq_key_material WHERE rfq_id = $1",
+        [rfqId],
+      );
+      expect(khoa[0]?.con_song, `${dich}: huỷ thu hồi toàn bộ vật liệu khoá`).toBe("0");
+    }
   });
 });

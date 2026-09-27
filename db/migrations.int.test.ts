@@ -1567,7 +1567,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.142 / khoản 241] `068` định nghĩa lại thân lần nữa (phép đếm chữ ký ở cạnh vào OPEN chạy cho
     // MỌI gói — sàn một chữ ký), nên con trỏ dời sang `068`. Thân `068` được TRÍCH từ `067` bằng script
     // rồi đổi đúng một chỗ.
-    { ham: "rfq_kiem_chuyen_trang_thai", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
+    { ham: "rfq_kiem_chuyen_trang_thai", migration: "9502_huy_sau_khi_dong.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
     { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
@@ -1635,7 +1635,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   it("[S1.15 / nợ 56] migration ghi trong mỗi mục ghim là migration CUỐI CÙNG định nghĩa hàm ấy", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const tenFile = readdirSync(thuMuc)
-      .filter((f) => /^\d{3}_.*\.sql$/u.test(f))
+      .filter((f) => /^\d{3,4}_.*\.sql$/u.test(f))
       .sort();
     for (const { ham, migration } of HAM_GHIM) {
       const dinhNghiaO = tenFile.filter((f) =>
@@ -3209,6 +3209,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
+        "9501_bid_currency.sql",
+        "9502_huy_sau_khi_dong.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7620,6 +7622,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
+        "9501_bid_currency.sql",
+        "9502_huy_sau_khi_dong.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7908,6 +7912,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "066_han_nop_mang_gio_phan_xu.sql",
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
+        "9501_bid_currency.sql",
+        "9502_huy_sau_khi_dong.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -51,7 +51,15 @@
       <tbody></tbody>
     </table>
     <label for="tien-te">Tiền tệ</label>
-    <input id="tien-te" value="VND" autocomplete="off" spellcheck="false">
+    <!-- [S1.9101 / khoản 243] Danh sách chọn, không ô gõ tự do: ô gõ niêm phong nguyên chuỗi người
+         gõ, và một nhà cung cấp gõ "VNĐ" — cách viết tự nhiên nhất — làm lượt chấm của CẢ GÓI bị từ
+         chối. Hai giá trị là tập `CURRENCIES` của `packages/rfq`; test ở `apps/web/src/phuc-vu.test.ts`
+         đòi hai bên khớp nhau. Máy chủ vẫn chuẩn hoá ở lớp đọc (`bid_currency`), vì phong bì dựng
+         ngoài trang này thì không qua ô chọn nào. -->
+    <select id="tien-te">
+      <option value="VND" selected>VND — đồng Việt Nam</option>
+      <option value="USD">USD — đô la Mỹ</option>
+    </select>
     <div class="bao luu" id="tong"></div>
     <button id="nut-nop">Niêm phong và nộp</button>
     <div class="bao loi" id="loi3" hidden></div>

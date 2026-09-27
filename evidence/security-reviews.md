@@ -12881,3 +12881,94 @@ E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, �
 - `pnpm t0` — **0 vi phạm**; `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`. `pnpm cap-so --dem` viết lại số đếm.
 - **99 → 100** ADR (100; số do `pnpm cap-so` cấp). Sổ nợ **245**, mở **89**, không đổi. **68** migration, không đổi.
 
+
+# §S1.9101 — KHOẢN 243 VÀ 225 ĐÓNG: TIỀN TỆ BÁO GIÁ ĐỌC QUA MỘT HÀM, GÓI ĐÃ ĐÓNG HUỶ ĐƯỢC KÈM LÝ DO
+
+**Rổ và mảnh (ADR-043):** khoản 243 rời rổ A và khoản 225 rời rổ B, cả hai vì ĐÓNG. Hai migration (`9501`, `9502`). Một ADR mới
+(ADR-9201). Chạm mảnh *chấm và chọn nhà cung cấp* của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Chủ dự án chốt ngày 2026-09-27 *"sửa khoản 243 trước pilot"*, trên một nhánh riêng xếp chồng lên nhánh của lượt soi S4 (khoản
+243 sinh ở đó). Khoản 243 ghi, bằng phép đọc, rằng một nhà cung cấp gõ `VNĐ` làm lượt chấm của cả gói bị từ chối, và *"lối ra
+duy nhất là huỷ gói"*. Vòng này đo trước, rồi hỏi ba câu hình dạng.
+
+## 2. Đo trước khi sửa
+
+PostgreSQL 16 thật, qua `taoLuotDanhGia` và `buildComparisonTable` của chính kho, trên gói dựng bằng giàn cảnh của
+`luot-danh-gia.int.test.ts`:
+- **M1** — `VND` + `VNĐ` ⇒ `DanhGiaTuChoiError` `LECH_TIEN_TE`, thông điệp *"(VND, VNĐ); chuẩn hoá đơn vị tiền trước khi chấm"*;
+  gói đứng ở `UNSEALED`. Đúng thân khoản.
+- **M2** — MỌI báo giá cùng `VNĐ` (gói MỘT nhà cung cấp) hay cùng `vnd` (hai nhà cung cấp) ⇒ phép so tập cho qua, rồi INSERT vỡ:
+  `DatabaseError` 23514, ràng buộc `rfq_evaluations_currency_check`, routine `ExecConstraints`. API trả một 422 không tên. Thân
+  khoản không thấy ca này.
+- **M3** — huỷ gói của M1 ⇒ 23514 `exec_stmt_raise` *"Chuyen trang thai RFQ khong hop le: UNSEALED -> CANCELLED"*. Lời khai
+  *"lối ra duy nhất là huỷ gói"* SAI: không có lối ra nào — khoản 225.
+- **M4** — bảng so sánh trên gói M1 ⇒ `currencyMismatch: true`, `min`/`max`/`average`/`belowBudget` đều `null`; cột hàng
+  `["VNĐ","VND"]`.
+- **M5** — bảng so sánh trên gói hai báo giá cùng `vnd`, cả hai dưới ngân sách ⇒ `currency: "vnd"`, `belowBudget: 0`. Đúng phải
+  là 2. Một con số SAI, không dấu nào.
+
+## 3. Ba quyết định (ADR-9201)
+
+- **Hình dạng:** một hàm SQL gọi ở mọi chỗ đọc, cộng ô chọn VND/USD — không chỉ một trong hai.
+- **Tập bí danh:** rộng có kiểm soát (ADR-9201 ⑵), khớp chính xác sau khi bỏ khoảng trắng hai đầu và NFC; không `lower()`.
+- **Khoản 225:** đóng luôn — bốn cạnh huỷ sau khi đóng, lý do bắt buộc, nhà cung cấp đọc được.
+
+## 4. Thay đổi
+
+- `db/migrations/9501_bid_currency.sql` — `public.bid_currency(text)`, `IMMUTABLE STRICT`, `SET search_path`, không bao giờ ném
+  (`normalize` bọc trong khối `EXCEPTION`). Ký tự ngoài ASCII viết bằng mã `\u`.
+- `packages/danh-gia/src/luot-danh-gia.ts` — câu đọc báo giá gọi hàm; thông điệp `LECH_TIEN_TE` đếm theo đơn vị ĐÃ chuẩn hoá
+  (*"1 báo giá VND, 1 báo giá USD"*, *"2 báo giá có đơn vị tiền không nhận ra"*), không nhắc lại chuỗi đã gõ, và nêu lối huỷ.
+  `tu-choi-vao-so.ts`: lý do của mã viết lại; `vaoSo` vẫn `false`.
+- `packages/unseal/src/comparison.ts` — bốn chỗ đọc gọi hàm; một nhóm duy nhất mang đơn vị `NULL` là lệch, không phải một đơn vị.
+- `apps/web/trang/nop-thau.html` — ô tiền tệ thành `<select>` VND/USD, VND chọn sẵn.
+- `db/migrations/9502_huy_sau_khi_dong.sql` — cột `rfq_packages.cancel_reason` (UPDATE cột cho `app_api`); thân
+  `rfq_kiem_chuyen_trang_thai` trích từ `068` bằng script, thêm bốn cạnh và mệnh đề lý do; bản ghim ở `hardening.always.sql` đổi
+  cùng commit (tiêu đề, phiên bản canh, thân, thân chuẩn hoá).
+- `packages/rfq/src/rfq.ts` — `RFQ_TRANSITIONS` thêm bốn cạnh; `cancelRfq` nhận bốn trạng thái nguồn và ghi lý do vào cột;
+  `RfqRecord.cancelReason`.
+- `apps/api/src/routes/guest.ts` — `GET /guest/rfq` trả `cancelReason` khi gói đã huỷ, `null` khi còn sống.
+- `apps/web/trang/nop-thau.js` — hiện lý do huỷ, tắt nút nộp; `mo-thau.html`/`.js` — nút huỷ gói kèm lý do ở bước 2.
+- `db/migrations.int.test.ts` — bộ lọc tên migration nới `^\d{3}_` → `^\d{3,4}_` để thấy số tạm; ba danh sách migration đã áp;
+  mục ghim HAM_56 trỏ `9502`. `db/rls-coverage.int.test.ts` — tổng điều tra quyền cột thêm `cancel_reason`.
+- `docs/TEST-PLAN.md`, `tools/inv-matrix/src/so-khai-nhan.ts` — hàng **J8**.
+
+## 5. Đo sau khi sửa
+
+PostgreSQL 16 thật (testcontainers):
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối `[INV-J8]` — bảng 29 ca của `bid_currency` dưới `app_api` (mười sáu
+  cách viết nhận, NBSP hai đầu bỏ, dạng tổ hợp của `đồng` gộp, `Ð` U+00D0, `$` trần, khoảng trắng giữa, U+200B, `vNĐ` ra
+  `NULL`); đích M1 (chấm được, hạng [2, 1], `EVALUATING`); đích M2 (một `VNĐ`, hai `vnd` ⇒ chấm được, `currency` ghi `VND`);
+  EUR ⇒ `LECH_TIEN_TE` có tên, không 23514, thông điệp không chứa `EUR`, 0 hàng `RFQ_STATE_DENIED`; `vnd` + `US$` ⇒ thông điệp
+  đếm theo đơn vị. **Đột biến:** thay thân hàm bằng hàm đồng nhất lúc chạy ⇒ ca M1 đỏ lại (`LECH_TIEN_TE`); thân gốc khôi phục
+  trong `finally`.
+- `packages/unseal/src/comparison.int.test.ts`, khối `[INV-J8]` — đích M4 (không lệch, `VND`, min/max đúng, cột hàng
+  `["VND","VND"]` trong khi bản rõ vẫn là `["VNĐ","VND"]`); đích M5 (`belowBudget` 2); EUR ⇒ lệch, tổng hợp `null`.
+- `tests/architecture/tien-te-mot-cho-doc.test.ts` — không câu SQL sản xuất nào và không migration nào đọc `'currency'` trần; đối
+  chứng dương: đúng hai tệp, đúng năm lần đọc qua hàm.
+- `packages/rfq/src/tien-te-dong-bo.test.ts` — `CURRENCIES` = `CHECK` của `057` = đích của hàm = các lựa chọn của ô chọn.
+- Khoản 225, `packages/rfq/src/rfq.int.test.ts` — huỷ từ `CLOSED` và `UNSEALED` qua `cancelRfq`: `cancelReason` đúng, +1 hàng
+  `RFQ_CANCELLED`, 0 vật liệu khoá còn sống; đường ghi trần với lý do `NULL` hay chỉ khoảng trắng bị trigger chặn *"Huy RFQ sau khi
+  dong phai co ly do"*; `cancel_reason` trên gói chưa huỷ và lần đặt thứ hai bị chặn. Ca ranh giới cũ (*"CẢ HAI lớp đang nói
+  không"*) đỏ đúng như thân khoản 225 hẹn, và được thay; ca *"KHÔNG huỷ được RFQ đã CLOSED"* gạch tại chỗ, thay bằng: huỷ được,
+  rồi `CANCELLED -> UNSEALED` bị chặn.
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối `[S1.9101 / khoản 225]` — gói `VND` + `USD` ⇒ `LECH_TIEN_TE` ⇒ huỷ có
+  lý do ⇒ `CANCELLED`, chấm lại ⇒ `RFQ_KHONG_CHAM_DUOC`; `BAFO_CLOSED` và `BAFO_UNSEALED`: đường ghi trần không lý do bị chặn,
+  `cancelRfq` đi qua, khoá thu hồi hết.
+- `apps/api/src/guest.int.test.ts` — `cancelReason` `null` khi `OPEN`, đúng câu người huỷ viết sau `cancelRfq`, và gói khác vẫn
+  `null`.
+- `packages/rfq/src/transitions.test.ts` — ca *"`BAFO_CLOSED->CANCELLED`… KHÔNG có mặt"* đổi chiều: bốn cạnh có mặt ở bảng SQL
+  lẫn `RFQ_TRANSITIONS`; `AWARDED->CANCELLED` vẫn không.
+
+## 6. Ranh giới, nói ra
+
+- Tập bí danh là một danh sách. `VND.` hay `vnđ.` vẫn làm lượt chấm từ chối cả gói — nay bằng mã có tên và một lối huỷ.
+- Ô chọn đóng đường trang; một phong bì dựng ngoài trang vẫn mang chuỗi tự do, và chỉ lớp đọc đỡ nó.
+- Không thông báo đẩy khi gói bị huỷ: nhà cung cấp đọc lý do khi mở lại link.
+- Một người giữ `rfq.cancel` huỷ được gói đã mở niêm phong, một mình, sau khi thấy giá. Lý do và hàng sổ là dấu vết, không phải
+  một lớp chặn; phân tách nhiệm vụ cho hành vi này để S3.
+- Hàm không ghim ở `hardening.always.sql` (khuôn `bid_so_tien`): một thân bị thay sau deploy không làm `migrate()` kế tiếp dừng.
+  Đột biến ở mục 5 đo rằng nó chịu lực, không đo rằng nó tự chữa.
+- Nhánh xếp chồng: số tạm `S1.9101`, `ADR-9201`, `9501`, `9502` do `pnpm cap-so` cấp SAU khi nhánh của lượt soi S4 merge.
