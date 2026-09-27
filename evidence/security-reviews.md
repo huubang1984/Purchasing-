@@ -13847,3 +13847,21 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
 
 ## 7. Số đo
 
+
+- `pnpm t0` sạch (426 module, 1666 phụ thuộc, không vi phạm); `pnpm test` **116 tệp, 1496 đạt, 1 bỏ qua**.
+- Lượt `pnpm test` đầu đỏ BỐN ca, cả bốn là sổ đăng ký buộc khai một hàm hay một route mới — đúng việc chúng sinh ra để
+  làm: danh sách trắng cửa `@trustprocure/rfq` (`[INV-H16]`, `[INV-H18]`); phân loại hàm của ADR-016 — `kyPhienBanChinhSach`
+  là hàm ghi, `lietKePhienBanChinhSach` là hàm đọc —; và bảng công cụ MCP — `GET /policy/versions` khai KHÔNG PHƠI kèm lý do.
+  Lời khai đầu `apps/mcp/src/cong-cu.ts` đã thiu một nấc từ trước vòng này (*TÁM* trong khi bảng có chín dòng); nay *MƯỜI*,
+  đúng số dòng.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ (dựng bằng `initdb`; container không có docker), cả kho một lượt: **178 tệp, 2835
+  ca — 2825 đạt, 1 bỏ qua, 9 đỏ**: 8 ca `packages/test-support/src/postgres.int.test.ts` cần docker, và MỘT ca của vòng này —
+  bộ quét rò rỉ của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` đòi MỌI route ghi có một thân hợp lệ khai sẵn (sổ
+  nợ 49), và route ký chưa có. Thêm ca ấy — đích là bản v2 bộ quét vừa tạo, người gọi giữ `policy.manage`, cờ tắt ⇒ 409 có
+  tên — rồi chạy lại tệp: **29/29**; `GET /policy/versions` đi qua bộ quét mà không lọt chữ số giá nào.
+- Ma trận sinh lại từ báo cáo của lượt ấy, ghép kết quả chạy lại của tệp kịch bản 41: **65/65** bất biến (43 + 22), cổng
+  evidence XANH, khớp từng byte bản đang commit — vòng này không thêm ca mang nhãn bất biến nào.
+- Các tệp vòng này chạm: `apps/api/src/buyer.int.test.ts` **16/16**, `apps/api/src/composition.int.test.ts` **19/19**,
+  `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**, `apps/api/src/cau-hinh.test.ts` **36/36**,
+  `apps/web/src/chinh-sach.test.ts` **9/9**, `apps/web/src/phuc-vu.test.ts` **18/18**.
+- Số hiệu của vòng do `pnpm cap-so` cấp (ADR-090): **S1.167**, **ADR-104**, **khoản 248**; `pnpm cap-so --kiem` sạch.
