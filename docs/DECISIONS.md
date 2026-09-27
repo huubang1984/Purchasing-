@@ -8137,3 +8137,45 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
   KHÔNG báo đẩy — họ đọc khi mở lại link. Thông báo đẩy là việc sau.
 - Một người giữ `rfq.cancel` huỷ được gói ở `UNSEALED` sau khi thấy giá, một mình. Hàng sổ và lý do là dấu vết; phân
   tách nhiệm vụ cho hành vi này để S3.
+
+---
+
+## ADR-9201 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101) · Liên quan: ADR-080 ⑵,
+ADR-082 ⑺, ADR-084 ⑷, ADR-092 · Khoản: **9401** (rổ B) · Spec: S3 §9 S3.1c, §8.1, §8.10 · Biên bản:
+`evidence/security-reviews.md` §S1.9101
+
+**Bối cảnh.** S3.1c dựng route ký phiên bản chính sách (`POST /policy/:policyId/sign`) và màn `/chinh-sach`. Lần ký đầu
+tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). `master` là nguồn triển khai thật, và sau S3.1b
+chỉ K1 được cưỡng chế; K2–K12 chưa có. Một tổ chức bật S3 hôm nay thấy trên màn số nhà cung cấp tối thiểu, số chữ ký trao
+thầu, thẩm định trước trao — mà không chốt nào giữ chúng. Đó là *kiểm soát giả* của spec §8.1, lần này do sản phẩm chứ không
+do cấu hình. §S1.166 mục 6 đã nói trước rủi ro ấy.
+
+**Quyết định của chủ dự án, ngày 2026-09-27, theo đề xuất.**
+
+⑴ **Route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT.** Cờ chỉ nhận `bat` hoặc
+`tat`; giá trị khác làm tiến trình không lên (`CauHinhError` nêu tên biến) — một cờ mở cửa một chiều không được đoán từ
+`true`, `1` hay `on`. Không khai ⇒ TẮT ở cả hai tầng: `docCauHinh`, và `createDispatcher` — một bộ điều phối lắp tay (test,
+công cụ) không mở được cửa ấy bằng cách quên một tham số.
+
+⑵ **Cờ tắt ⇒ route ký trả 409 có tên, TRƯỚC mọi câu ghi**: không hàng `org_policy_signatures`, không hàng sổ. Route đọc
+`GET /policy/versions` trả thêm `choKy` để màn khoá nút ký và nói vì sao; cửa thật vẫn là route ký, đọc cùng cờ.
+
+⑶ **Tạo phiên bản có bậc KHÔNG đứng sau cờ.** Phiên bản có bậc chưa ký không có hiệu lực (ADR-082 ⑺), nên tạo nó không đổi
+hành vi của tổ chức; màn soạn — cảnh báo và số người tối thiểu — dùng được trước ngày bật, đúng điều §8.10 đòi.
+
+⑷ **Điều kiện mở cờ trên một máy chủ thật**, cả hai:
+- (a) khoản 9401 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092;
+- (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
+  rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
+
+Test và demo bật cờ tuỳ ý. Không đổi hạ tầng nào: mặc định đã là TẮT.
+
+**Cái giá — nói thẳng.**
+- Tới ngày mở cờ, S3 không bật được trên máy chủ thật, trừ bằng SQL dưới chủ sở hữu CSDL. Đó là mục đích.
+- Cờ là cấu hình TIẾN TRÌNH, không theo tổ chức: mở là mở cho mọi tổ chức của máy chủ ấy. Cho một tổ chức pilot S3 mà không
+  cho tổ chức khác cần một cờ theo tổ chức — việc sau, nếu có khách đòi.
+- Tắt cờ SAU khi một tổ chức đã bật không tắt S3 của tổ chức ấy (ADR-080 ⑵), và làm nó không đổi được chính sách nữa: phiên
+  bản mới phải có bậc (`069`) và chỉ có hiệu lực khi được ký, mà lần ký đứng sau cờ. Cờ vì thế là cửa MỘT CHIỀU theo thực
+  tế, như chính công tắc: mở rồi thì giữ mở.
