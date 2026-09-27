@@ -1,25 +1,25 @@
 # TrustProcure V2 — Thiết kế S4b: Trí tuệ mua sắm (Intelligence · MVP3, nửa sau)
 
-> **Ngày:** 2026-09-26 · **Trạng thái:** ~~**BẢN NHÁP — chưa qua lượt soi hình dạng.**~~ **[S1.158] ĐÃ QUA LƯỢT SOI HÌNH
+> **Ngày:** 2026-09-26 · **Trạng thái:** ~~**BẢN NHÁP — chưa qua lượt soi hình dạng.**~~ **[S1.159] ĐÃ QUA LƯỢT SOI HÌNH
 > DẠNG — 33 phát hiện, 8 CAO; sáu lời khai đo trên Postgres 16 thật, hai con số tính bằng đếm vét cạn và mô phỏng**
-> (`evidence/security-reviews.md` §S1.158). Viết TRƯỚC cổng dữ liệu (e), theo lựa
+> (`evidence/security-reviews.md` §S1.159). Viết TRƯỚC cổng dữ liệu (e), theo lựa
 > chọn của chủ dự án ngày 2026-09-26: thiết kế đầy đủ bây giờ, không viết mã; mọi con số mang nhãn GIẢ ĐỊNH; cổng (e) vẫn
-> chặn mã của S4b.2 trở đi. ~~Sáu câu hỏi cho chủ dự án ở §2.3.~~ **[S1.158]** Bốn quyết định của chủ dự án sau lượt soi ở
-> §2.4 (ADR-097), hai mươi mốt chốt từ tiền lệ ở §2.5 (ADR-098), ~~bảy câu còn chờ chủ dự án ở §2.6 — không câu nào chặn một
-> vòng đang chạy.~~ **[S1.159]** bảy câu của §2.6 chủ dự án chốt cả bảy theo đề xuất (ADR-099), hệ quả ở §2.7 — trong đó
+> chặn mã của S4b.2 trở đi. ~~Sáu câu hỏi cho chủ dự án ở §2.3.~~ **[S1.159]** Bốn quyết định của chủ dự án sau lượt soi ở
+> §2.4 (ADR-098), hai mươi mốt chốt từ tiền lệ ở §2.5 (ADR-099), ~~bảy câu còn chờ chủ dự án ở §2.6 — không câu nào chặn một
+> vòng đang chạy.~~ **[S1.160]** bảy câu của §2.6 chủ dự án chốt cả bảy theo đề xuất (ADR-100), hệ quả ở §2.7 — trong đó
 > **Supplier Score hoãn tới S5** và **cổng (e) có con số**. Chưa một dòng mã nào của S4b.
-> **[S1.158] Đọc §2.4–§2.6, §4.1, §10.1, §11.1, §14.1 và §15.1 cùng phần gốc** — **[S1.159]** và §2.7,: phần gốc giữ nguyên văn, chỗ sai gạch tại
+> **[S1.159] Đọc §2.4–§2.6, §4.1, §10.1, §11.1, §14.1 và §15.1 cùng phần gốc** — **[S1.160]** và §2.7,: phần gốc giữ nguyên văn, chỗ sai gạch tại
 > chỗ, mệnh đề chịu lực là bản đã sửa.
 > **Là nửa sau của:** `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` (spec S4, đã qua lượt soi
-> S1.156). Tài liệu này thay §4.9 của spec ấy ở mức chi tiết; §4.9 chỉ giữ HÌNH DẠNG. Mọi quyết định của spec S4 — §2.2
-> ⑴–⑷, §2.4 ⑸–⑾, §2.5 ⑿–㉕, ADR-092…096 — áp nguyên ở đây.
+> S1.157). Tài liệu này thay §4.9 của spec ấy ở mức chi tiết; §4.9 chỉ giữ HÌNH DẠNG. Mọi quyết định của spec S4 — §2.2
+> ⑴–⑷, §2.4 ⑸–⑾, §2.5 ⑿–㉕, ADR-093…097 — áp nguyên ở đây.
 > **Nguồn:** V2.1 §13 *Supplier Intelligence*, §17 *Risk Engine*, §19 *Risk Score mẫu*, §20 *AI / Analytics*, §22 *Award
 > Recommendation*, §24 *Executive Experience*, §36 *KPI*, §41 *Kịch bản Demo*. Bản nguồn không nằm trong kho; bản đọc là bản
 > trên Drive của chủ dự án, cùng bản spec S4 đã đối chiếu.
-> ~~**Đóng khi có mã:**~~ **[S1.158] Có mặt khi có mã, trong giới hạn §12.6:** bốn mục spec S4 ghi *"nhận về, chưa đóng"* — Risk Score, phát hiện bất thường, phân tích người mua,
+> ~~**Đóng khi có mã:**~~ **[S1.159] Có mặt khi có mã, trong giới hạn §12.6:** bốn mục spec S4 ghi *"nhận về, chưa đóng"* — Risk Score, phát hiện bất thường, phân tích người mua,
 > phát hiện xoay vòng bằng thống kê (ADR-058 ⑸) — cộng S4b.1 (cấm duyệt một chạm, V2.1 §24) và màn *Executive* (V2.1 §24).
 > Chữ *đóng* hứa quá: S4b chỉ bắt mẫu ĐỀU ĐẶN; một nhóm chủ ý ngẫu nhiên hoá biên và thứ tự thắng không để lại tín hiệu nào
-> S4b đo (góc C⑦, khuôn góc D⑤ của lượt soi S1.156).
+> S4b đo (góc C⑦, khuôn góc D⑤ của lượt soi S1.157).
 > **Không đóng:** tín hiệu danh tính và kỹ thuật của §17, đồ thị quan hệ §18 (spec S4 §2.2 ⑴); *Quality*, *Delivery* của
 > Supplier Score (S5); *specification anomaly* của §20 (kho không lưu lịch sử sửa hạng mục ở `DRAFT`).
 
@@ -42,7 +42,7 @@ Nên tài liệu này không mở vòng mã nào. Nó làm ba việc để khi c
    Mỗi con số đi kèm thành phần của nó và phần trọng số thật sự có dữ liệu.
 3. **Tách phần cắn được trước cổng khỏi phần chờ cổng.** S4b.1 — không duyệt một chạm ở rủi ro cao — có nghĩa từ gói đầu
    tiên, vì ở tổ chức chưa đủ dữ liệu mức là `KHONG_XAC_DINH` và bị xử như `CAO` (spec S4 §2.4 ⑼). Phần còn lại chờ cổng (e).
-   **[S1.158]** *"Từ gói đầu tiên"* của tổ chức ĐÃ BẬT S3 — S4b.1 đi theo công tắc ADR-080 (§2.4 ㉙). Và *"có nghĩa"* đòi
+   **[S1.159]** *"Từ gói đầu tiên"* của tổ chức ĐÃ BẬT S3 — S4b.1 đi theo công tắc ADR-080 (§2.4 ㉙). Và *"có nghĩa"* đòi
    S4b.1 mang theo chính lớp tái lập và bảng đầu vào mà bản nháp để ở S4b.2 và S4b.7 (§15.1).
 
 Rủi ro chi phối của S4b, và nó khác của S4a: ***một con số đọc như một phán quyết.*** Một điểm 82/100 bên cạnh tên một nhà
@@ -58,15 +58,15 @@ cung cấp hay tên một nhân viên sẽ được đọc là *"người này g
 | 1 | **Risk Signal ≠ Fraud Verdict** | PRODUCT §4 ⑸, §5; V2.1 §18, §19, §20 | Chữ trên màn: *"điểm rủi ro — chỉ báo cần xem xét"*. Nhãn thuộc tập đóng. Không màn nào có chữ *gian lận*, *thông đồng*, *bất thường* gắn với tên một người |
 | 2 | Mọi tín hiệu mang đủ năm trường | V2.1 §19; spec S3 §4.6 | Nguồn, thời điểm, bằng chứng, độ tin cậy, giải thích — trên MỖI hàng yếu tố |
 | 3 | Không lưu kết luận trần; tái lập được | ADR-017; khuôn J2 | Điểm và mức lưu kèm đầu vào, phiên bản phương pháp và `policy_id`; tính lại ra đúng |
-| 4 | Đầu vào đóng băng tại mốc mở giá | spec S4 §2.4 ⑼, §2.5 ⑿ | ~~Mọi yếu tố là hàm as-of của mốc mở giá gói đang xét.~~ **[S1.158]** THƯỚC — chính sách, dữ liệu nền, lịch sử các gói khác — là hàm as-of của mốc mở giá gói đang xét. SỰ KIỆN VỀ CHÍNH GÓI ẤY — báo giá được đề xuất (kể cả vòng BAFO), tín hiệu S3, ánh xạ dòng của nó — đọc as-of lúc đề xuất (§2.5 ㊲). Không đọc chính sách, ánh xạ hay lịch sử hiện hành lúc ký |
+| 4 | Đầu vào đóng băng tại mốc mở giá | spec S4 §2.4 ⑼, §2.5 ⑿ | ~~Mọi yếu tố là hàm as-of của mốc mở giá gói đang xét.~~ **[S1.159]** THƯỚC — chính sách, dữ liệu nền, lịch sử các gói khác — là hàm as-of của mốc mở giá gói đang xét. SỰ KIỆN VỀ CHÍNH GÓI ẤY — báo giá được đề xuất (kể cả vòng BAFO), tín hiệu S3, ánh xạ dòng của nó — đọc as-of lúc đề xuất (§2.5 ㊲). Không đọc chính sách, ánh xạ hay lịch sử hiện hành lúc ký |
 | 5 | Độ phủ thấp không bao giờ đọc là *an toàn* | spec S4 §2.4 ⑼, L10, L11 | Dưới ngưỡng độ phủ → `KHONG_XAC_DINH`, xử như `CAO` |
 | 6 | Bí mật giá lan sang phái sinh | A4, A5, A6, J4; spec S4 §2.5 ⒀ | Chỉ đọc gói đã mở niêm phong theo vị từ *"giá đã lộ"* của spec S4. Không đầu ra nào tới phiên khách hay màn nhà cung cấp |
 | 7 | Bằng chứng không mang số tiền | ADR-054; spec S3 §2.5 ⒁ | Bằng chứng là tỷ lệ, thứ hạng, số đếm, định danh — không một số tiền nào. Nếu không, bảng yếu tố thành bảng giá dạng rõ thứ ba |
-| 8 | Không ML, không runtime thứ hai | ADR-093 | Thống kê tất định: trung vị, tứ phân vị, độ lệch tuyệt đối trung vị (MAD), số đếm. Lõi thuần TypeScript trên số nguyên hoặc `numeric` dạng chuỗi |
-| 9 | Không phụ thuộc lịch chạy nền | ~~ADR-005~~ **[S1.158]** Tinh thần ADR-005 (`DECISIONS.md:136`: tính đúng không phụ thuộc tiến trình nền). ADR-005 ⑵ vẫn giữ một job đóng RFQ để hiển thị (`:129`), nên ràng buộc này là lựa chọn của S4b, không phải chữ của ADR-005 | Không job định kỳ nào. Mọi phép tính chạy khi có người đọc hay khi có một sự kiện (đề xuất trao, ký) |
-| 10 | Tách người theo HÀNH VI | ADR-051; spec S4 §2.4 ⑼ | Người ghi nhận yếu tố đỏ nằm ngoài ~~{người tạo gói, người gây ra yếu tố, người đề xuất, người duyệt}~~ **[S1.158]** tập của §2.5 ㉞ — bốn vai của ⑼ đọc theo hành vi thật, cộng hai người mà ADR-082 ⑺ và ADR-081 ⑸ đã loại khỏi quyết định trao |
+| 8 | Không ML, không runtime thứ hai | ADR-094 | Thống kê tất định: trung vị, tứ phân vị, độ lệch tuyệt đối trung vị (MAD), số đếm. Lõi thuần TypeScript trên số nguyên hoặc `numeric` dạng chuỗi |
+| 9 | Không phụ thuộc lịch chạy nền | ~~ADR-005~~ **[S1.159]** Tinh thần ADR-005 (`DECISIONS.md:136`: tính đúng không phụ thuộc tiến trình nền). ADR-005 ⑵ vẫn giữ một job đóng RFQ để hiển thị (`:129`), nên ràng buộc này là lựa chọn của S4b, không phải chữ của ADR-005 | Không job định kỳ nào. Mọi phép tính chạy khi có người đọc hay khi có một sự kiện (đề xuất trao, ký) |
+| 10 | Tách người theo HÀNH VI | ADR-051; spec S4 §2.4 ⑼ | Người ghi nhận yếu tố đỏ nằm ngoài ~~{người tạo gói, người gây ra yếu tố, người đề xuất, người duyệt}~~ **[S1.159]** tập của §2.5 ㉞ — bốn vai của ⑼ đọc theo hành vi thật, cộng hai người mà ADR-082 ⑺ và ADR-081 ⑸ đã loại khỏi quyết định trao |
 | 11 | Effective Cost chỉ gồm tiền | J1; ADR-053 | Supplier Score và Risk Score KHÔNG vào `effective_cost` và KHÔNG đổi `rank`. Chúng hiện cạnh bảng xếp hạng |
-| 12 | Phân tích người mua là dữ liệu về nhân viên | spec S4 §8.7; tiền đề E7 | S4b.5 không bắt đầu trước khi câu hỏi pháp lý có câu trả lời. **[S1.158]** F2a cũng là phân tích ấy, nên đi cùng S4b.5; mọi đường trả dữ liệu mang tên nhân viên đều để một hàng sổ (§2.4 ㉖) |
+| 12 | Phân tích người mua là dữ liệu về nhân viên | spec S4 §8.7; tiền đề E7 | S4b.5 không bắt đầu trước khi câu hỏi pháp lý có câu trả lời. **[S1.159]** F2a cũng là phân tích ấy, nên đi cùng S4b.5; mọi đường trả dữ liệu mang tên nhân viên đều để một hàng sổ (§2.4 ㉖) |
 
 ### 2.1. ADR-058 ⑸ nói về độ ỔN ĐỊNH của khoảng cách, không phải về một khoảng cách
 
@@ -76,7 +76,7 @@ của cùng một nhóm nhà cung cấp, trong khi cạnh tranh thật cho kho�
 là một thống kê trên CHUỖI gói, không phải một phép so trên một gói. Đó cũng là lý do nó không có nghĩa trước khi có lịch sử.
 
 Thứ hai trong ADR-058 ⑸ là *"ma trận tỷ lệ thắng theo nhà cung cấp và theo chu kỳ"* — F2. Thứ ba, IP/thiết bị/metadata, nằm
-ngoài S4. **[S1.158]** ⑸ không có trục NGƯỜI MỜI: nó ứng với F2b và F4. Trục người mời của F2a đến từ ADR-058 ⑶(b) và spec
+ngoài S4. **[S1.159]** ⑸ không có trục NGƯỜI MỜI: nó ứng với F2b và F4. Trục người mời của F2a đến từ ADR-058 ⑶(b) và spec
 S4 §4.9, và F2a rời Risk Score cho tới S4b.5 (§2.4 ㉖).
 
 ### 2.2. Các quyết định của chủ dự án áp cho S4b
@@ -91,7 +91,7 @@ S4 §4.9, và F2a rời Risk Score cho tới S4b.5 (§2.4 ㉖).
 
 ### 2.3. Sáu câu hỏi cho chủ dự án — trả lời ở lượt soi hình dạng
 
-**[S1.158]** Bảng dưới giữ nguyên văn. Q6 được trả lời từ vai, không còn là câu hỏi (§2.5 ㊷). Q1–Q5 sang §2.6 cùng hai
+**[S1.159]** Bảng dưới giữ nguyên văn. Q6 được trả lời từ vai, không còn là câu hỏi (§2.5 ㊷). Q1–Q5 sang §2.6 cùng hai
 câu lượt soi thêm; Q5 trích sai đề xuất của spec S4 (dòng Q5). Lượt soi còn thấy bảng thiếu những chỗ bản nháp tự chốt mà
 lẽ ra phải hỏi — trọng số và ngưỡng của Risk Score, ai đọc sổ tín hiệu (góc D⑧) — nên bốn chỗ nặng nhất đã được hỏi ngay
 trong lượt soi (§2.4).
@@ -102,13 +102,13 @@ trong lượt soi (§2.4).
 | **Q2** | **Ai đọc phân tích người mua, và người bị phân tích có đọc được dòng của chính mình không.** `audit.read` do `FINANCE` và `DIRECTOR` giữ — cũng chính là người đề xuất và người duyệt, tức cũng là người bị phân tích | Lựa chọn về quản trị nhân sự, không phải kỹ thuật |
 | **Q3** | **Bảo hành.** Thành phần *Warranty* của V2.1 §13 cần một ô khai `warrantyMonths` mà S4a không có. Thêm vào form nộp thầu (ma sát cho nhà cung cấp, PRODUCT §8 ⑴), hay để trống thành phần ấy | Lựa chọn giữa đủ thành phần và ma sát |
 | **Q4** | **Nút *[REQUEST REVIEW]* của màn Executive (V2.1 §24).** Kho không có hành vi *"yêu cầu xem xét"*. Làm nó thành một hàng ghi nhận có người nhận, hay bỏ nút | Thêm một hành vi mới vào chuỗi trao thầu |
-| **Q5** | **Số của cổng (e) — ADR (e).** Đề xuất GIẢ ĐỊNH của spec S4: ≥ 30 gói mở niêm phong, ~~≥ 60% giá trị dòng~~ **[S1.158]** ≥ 60% HẠNG MỤC (spec S4 §2.3 (e); đếm theo giá trị phải đọc giá) có ánh xạ hiệu lực (loại `NULL`), ≥ 6 tháng — theo TỪNG tổ chức | Con số chỉ hiệu chỉnh được trên dữ liệu thật; nhưng không có con số thì cổng không có trạng thái *đạt* |
-| **Q6** | **Người đề xuất có thấy Risk Score trước khi đề xuất không.** Thấy thì họ tránh được nhà cung cấp rủi ro — và cũng *"mua sắm"* được một nhà cung cấp cho ra mức `THAP` | Đánh đổi giữa hỗ trợ quyết định và khả năng lách. **[S1.158] Không phải một lựa chọn:** §3.3 và §10 của chính bản nháp đã trả lời — xem §2.5 ㊷ |
+| **Q5** | **Số của cổng (e) — ADR (e).** Đề xuất GIẢ ĐỊNH của spec S4: ≥ 30 gói mở niêm phong, ~~≥ 60% giá trị dòng~~ **[S1.159]** ≥ 60% HẠNG MỤC (spec S4 §2.3 (e); đếm theo giá trị phải đọc giá) có ánh xạ hiệu lực (loại `NULL`), ≥ 6 tháng — theo TỪNG tổ chức | Con số chỉ hiệu chỉnh được trên dữ liệu thật; nhưng không có con số thì cổng không có trạng thái *đạt* |
+| **Q6** | **Người đề xuất có thấy Risk Score trước khi đề xuất không.** Thấy thì họ tránh được nhà cung cấp rủi ro — và cũng *"mua sắm"* được một nhà cung cấp cho ra mức `THAP` | Đánh đổi giữa hỗ trợ quyết định và khả năng lách. **[S1.159] Không phải một lựa chọn:** §3.3 và §10 của chính bản nháp đã trả lời — xem §2.5 ㊷ |
 
-### 2.4. [S1.158] Bốn quyết định của chủ dự án, sau lượt soi hình dạng
+### 2.4. [S1.159] Bốn quyết định của chủ dự án, sau lượt soi hình dạng
 
-Lượt soi S1.158 tìm ra mười một chỗ là lựa chọn sản phẩm. Bốn chỗ nặng nhất được hỏi ngay; chủ dự án chốt cả bốn ngày
-2026-09-26, đều theo đề xuất của lượt soi. Đánh số nối tiếp spec S4 (⑴–㉕). Đầy đủ lý do ở **ADR-097**. Bảy chỗ còn lại ở
+Lượt soi S1.159 tìm ra mười một chỗ là lựa chọn sản phẩm. Bốn chỗ nặng nhất được hỏi ngay; chủ dự án chốt cả bốn ngày
+2026-09-26, đều theo đề xuất của lượt soi. Đánh số nối tiếp spec S4 (⑴–㉕). Đầy đủ lý do ở **ADR-098**. Bảy chỗ còn lại ở
 §2.6.
 
 | # | Phát hiện | Quyết định |
@@ -116,12 +116,12 @@ Lượt soi S1.158 tìm ra mười một chỗ là lựa chọn sản phẩm. B�
 | ㉖ | **F2a đi vòng qua câu hỏi pháp lý E7** (CAO ①). F2a tính, cho TỪNG người mời, tỷ lệ chọn nhà cung cấp — đúng câu E7 hỏi. Bản nháp cho nó chạy từ S4b.2, tự lưu tên người vào `nguoi_gay_ra` ở mọi đề xuất, và cho đọc bằng `bid.view` — PM giữ cả `rfq.invite` lẫn `bid.view` (`005:298-301`), nên đọc được mình đã bị gắn cờ chưa. Sổ tín hiệu tính F2a mà không để dấu. F8 gắn tên người ánh xạ và ra `DO` từ MỘT dòng | **F2a rời Risk Score và sổ tín hiệu, sang S4b.5**, chờ E7 và Q2. **F8 giữ**, nhưng: không hiện tên ở cổng `bid.view`; có sàn; người viết mô tả dòng vào tập người gây ra cạnh người ghi ánh xạ. **Mọi đường trả dữ liệu mang tên nhân viên đều để một hàng sổ lượt đọc**, mang đối tượng bị xem (§2.5 ㊹). Cái giá: tới S4b.5, không yếu tố nào theo trục người mời — F1, F2b, F4 không tính theo người mời nên rải người mời không làm chúng mù, nhưng một người mời thiên vị một nhà cung cấp trên nhiều nhóm hàng thì không bị đo |
 | ㉗ | **S4b.1 nổ quá hẹp, và độ phủ mua được** (CAO ②). F1 + F2b + F3 cùng `DO` = 50 điểm = `VUA` → duyệt một chạm. Càng nhiều yếu tố xanh có dữ liệu, điểm càng thấp. `KHONG_AP_DUNG` rút khỏi mẫu số: gói một báo giá đọc được (F1), tổ chức chưa bật S3 (F6), gói không nhóm hàng (F4) cho độ phủ 61,5% và mức `THAP`. F5, F7, F8 không sàn nên luôn *"có dữ liệu"* và gần như luôn xanh — chúng mua độ phủ | **S4b.1 nổ khi có ≥ 1 yếu tố `DO` hoặc mức `KHONG_XAC_DINH`. Điểm chỉ để hiển thị.** Yếu tố vắng không bao giờ làm tăng độ phủ; yếu tố không cần lịch sử không vào độ phủ (§2.5 ㉚). Thêm yếu tố **F10 — cạnh tranh thực tế**: gói chỉ một báo giá đọc được là `DO`. Cái giá: ma sát cao hơn — mọi `DO`, không chỉ mức `CAO`, đòi một người thứ hai |
 | ㉘ | **Người đặt ngưỡng là người ký trao** (CAO ③). `rui_ro` nằm trên phiên bản chính sách, do người giữ `policy.manage` ghi — `FINANCE`, người cũng giữ `po.approve`. Đặt ngưỡng độ phủ 0% MỘT LẦN, trước mọi gói, là tắt chốt; ghim lúc `OPEN` không chặn được | **Ngưỡng độ phủ, ngưỡng mức, luật nổ và `KHONG_XAC_DINH` ≡ `CAO` là HẰNG của phiên bản phương pháp, không cấu hình được. Trọng số — chỉ đổi điểm hiển thị — vẫn cấu hình được, có sàn dưới.** Ngoại lệ có ghi lý do với PRODUCT §8 ⑸ và ràng buộc 10 của spec S4 (*"mọi ngưỡng cấu hình được"*): một chốt mà người bị chốt tắt được thì không phải chốt |
-| ㉙ | **Phạm vi của S4b.1** (CAO ④). Bản nháp không nói. Áp cho mọi tổ chức thì mọi lần trao của kịch bản pilot (PRODUCT §11) thêm đăng nhập lại, giải trình và một người ghi nhận, suốt ít nhất 6 tháng; lật bước 12i của `kich-ban-41-http.int.test.ts:1217`, sáu lời gọi `duyetTraoThau` ở `luot-danh-gia.int.test.ts`, `bo-xuat.int.test.ts:288` và bước 7 của `mo-thau.js:451-463`; và là ngoại lệ đổi hành vi thứ hai mà ADR-092 ⑷ không ghi | **Theo công tắc ADR-080: chỉ tổ chức đã bật S3.** Tổ chức chạy MVP1 — đúng hình dạng pilot — không đổi, và không ca nào của MVP1 lật. Cái giá: tổ chức chưa bật S3 không có chốt này |
+| ㉙ | **Phạm vi của S4b.1** (CAO ④). Bản nháp không nói. Áp cho mọi tổ chức thì mọi lần trao của kịch bản pilot (PRODUCT §11) thêm đăng nhập lại, giải trình và một người ghi nhận, suốt ít nhất 6 tháng; lật bước 12i của `kich-ban-41-http.int.test.ts:1217`, sáu lời gọi `duyetTraoThau` ở `luot-danh-gia.int.test.ts`, `bo-xuat.int.test.ts:288` và bước 7 của `mo-thau.js:451-463`; và là ngoại lệ đổi hành vi thứ hai mà ADR-093 ⑷ không ghi | **Theo công tắc ADR-080: chỉ tổ chức đã bật S3.** Tổ chức chạy MVP1 — đúng hình dạng pilot — không đổi, và không ca nào của MVP1 lật. Cái giá: tổ chức chưa bật S3 không có chốt này |
 
-### 2.5. [S1.158] Chốt từ tiền lệ
+### 2.5. [S1.159] Chốt từ tiền lệ
 
 Hai mươi mốt chỗ điền được từ tiền lệ đo được trong kho hay từ chính các quyết định trên, cùng khuôn ADR-050. Tóm ở
-**ADR-098**. M1–M8 là phép đo và phép tính của biên bản §S1.158.
+**ADR-099**. M1–M8 là phép đo và phép tính của biên bản §S1.159.
 
 | # | Phát hiện | Chốt | Tiền lệ |
 |---|---|---|---|
@@ -144,14 +144,14 @@ Hai mươi mốt chỗ điền được từ tiền lệ đo được trong kho 
 | ㊻ | **F1 không tính được đúng ca mạnh nhất, và thước của nó đảo chiều** (TRUNG 10, 17). `rank` là xếp hạng thi đấu 1, 1, 3; `rank` NULL khi EC NULL (`057:161`); một gói nhiều lượt chấm; sau S4.7 có hai hạng. M2: hệ số MAD/trung vị của nhóm bọc lót sát 0–0,3% là 0,415, CAO hơn cạnh tranh thật 1–15% (0,363); chỉ 7,2% chuỗi bọc lót rơi dưới P10 | Đồng hạng 1 ⇒ g = 0; EC NULL ⇒ loại dòng; lượt chấm = `rfq_awards.evaluation_id` của đề xuất trong từng gói; hạng theo `gia`, không TCO. **Đo bằng số TUYỆT ĐỐI**: trung vị g và MAD của g theo điểm phần trăm, không chia cho trung vị — trên cùng dữ liệu mô phỏng, cả hai số tuyệt đối tách hẳn hai quần thể (M2). Ngưỡng cũng tuyệt đối, không theo phân vị của chính tổ chức (§4.1). Ngưỡng vẫn GIẢ ĐỊNH, và phân phối *"cạnh tranh thật"* của phép mô phỏng cũng là GIẢ ĐỊNH | `luot-danh-gia.ts:22-26, 222-236`; ADR-058 ⑸ (*"giá thắng và giá nhì"*) |
 | ㊼ | **F2b báo sai ở tỷ lệ đáng kể trên cạnh tranh thật** (TRUNG 17). M1, đếm vét cạn dưới mô hình rỗng — k nhà cung cấp ngang sức, người thắng độc lập: `VANG` ở chuỗi 6 báo sai 4,1% (k = 3) và 12,3% (k = 4); `DO` ở chuỗi 9 báo sai 0,9% và 2,6% | `VANG` ở 9–11 gói; `DO` ở ≥ 12 gói — báo sai 0,2% ở cả k = 3 và k = 4. *"Chen chân"* = có lời mời còn sống tại mốc | M1 |
 | ㊽ | **Ba yếu tố mới** (CAO ②⑧, TRUNG 19) | **F9** phân bổ giá lệch giữa các dòng — *unbalanced bid*, spec S4 §10 dòng cuối đã hứa là yếu tố của S4b mà bản nháp làm rơi; **F10** cạnh tranh thực tế (㉗); **F11** đề xuất–huỷ–đề xuất lại (㊷). Định nghĩa ở §4.1 | spec S4 §10; ㉗; ㊷ |
-| ㊾ | **Supplier Score là cần gạt hạ nhà cung cấp trung thực** (TRUNG 18, 21) | *Responsiveness* chỉ đếm lời mời trong nhóm hàng N khai ở Passport, và chỉ gói thoả vị từ *"giá đã lộ"* — không đọc từ `CLOSED`, vì so điểm trước và sau lúc X đóng là biết N đã nộp chưa, trước mở thầu. *Compliance* hiện người thẩm định hay thu hồi cùng lý do; nộp Passport mới không tính là thu hồi. *Risk* chỉ đếm mẫu mà N là thành viên; bằng chứng F5 ghi cặp nhà cung cấp. *Price Competitiveness* loại gói có < 3 báo giá đọc được | A5; spec S4 §2.5 ⒀ và góc C⑦ của S1.156; ADR-081 |
+| ㊾ | **Supplier Score là cần gạt hạ nhà cung cấp trung thực** (TRUNG 18, 21) | *Responsiveness* chỉ đếm lời mời trong nhóm hàng N khai ở Passport, và chỉ gói thoả vị từ *"giá đã lộ"* — không đọc từ `CLOSED`, vì so điểm trước và sau lúc X đóng là biết N đã nộp chưa, trước mở thầu. *Compliance* hiện người thẩm định hay thu hồi cùng lý do; nộp Passport mới không tính là thu hồi. *Risk* chỉ đếm mẫu mà N là thành viên; bằng chứng F5 ghi cặp nhà cung cấp. *Price Competitiveness* loại gói có < 3 báo giá đọc được | A5; spec S4 §2.5 ⒀ và góc C⑦ của S1.157; ADR-081 |
 | ㊿ | **Sổ tín hiệu: người bị soi chọn khung, đọc không dấu, ghi nhận để khép** (TRUNG 20) | Chuỗi luôn tính trên 12 tháng tới cuối khung; khung chỉ lọc gói cuối. Mỗi lượt đọc một hàng sổ (㊹). Người ghi nhận một dòng nằm ngoài mọi người đã đề xuất, ký hay ghi nhận trao trong chuỗi. Ghi nhận không bao giờ ẩn dòng. Ai đọc: Q2 (§2.6) | ADR-051; ㊹ |
 
-### 2.6. [S1.158] Bảy câu ~~còn chờ chủ dự án~~ [S1.159] chủ dự án đã chốt
+### 2.6. [S1.159] Bảy câu ~~còn chờ chủ dự án~~ [S1.160] chủ dự án đã chốt
 
 Không câu nào chặn một vòng đang chạy: mọi hạng mục của S4b còn chờ S3.5, S4.5 hay cổng (e). Mỗi câu chặn đúng hạng mục ở cột
 cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~Cột giữa là đề xuất của lượt soi, CHƯA phải quyết định.~~
-**[S1.159]** Chủ dự án chốt cả bảy ngày 2026-09-26, đều theo đề xuất — **ADR-099**. Cột giữa nay là quyết định; hệ quả ở §2.7.
+**[S1.160]** Chủ dự án chốt cả bảy ngày 2026-09-26, đều theo đề xuất — **ADR-100**. Cột giữa nay là quyết định; hệ quả ở §2.7.
 
 | # | Câu hỏi | Lượt soi đề xuất | Chặn |
 |---|---|---|---|
@@ -163,7 +163,7 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~C
 | **Q7** | North Star của PRODUCT §9 — *"có risk assessment"* đếm gói nào | Chỉ gói có đánh giá mức khác `KHONG_XAC_DINH`. Đếm mọi gói có hàng đánh giá thì North Star tầm thường ở mọi tổ chức đã bật S3 | S4b.2 |
 | **Q8** | Dữ liệu gieo có được dùng cho kịch bản demo V2.1 §41 trước pilot không | Được, mang nhãn *"dữ liệu mẫu"* trên mọi màn, và không bao giờ tính cho cổng (e) | S4b.6 |
 
-### 2.7. [S1.159] Hệ quả của bảy quyết định
+### 2.7. [S1.160] Hệ quả của bảy quyết định
 
 | # | Quyết định | Đổi gì |
 |---|---|---|
@@ -184,9 +184,9 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~C
 | Đã có, hoặc sẽ có trước S4b | S4b dùng cho |
 |---|---|
 | `rfq_evaluation_lines.rank`, `effective_cost` (`057`) | F1 khoảng cách thắng–nhì (dạng tỷ lệ); thành phần giá của Supplier Score |
-| `rfq_awards` (`061`): `bid_version_id`, `status`, `acted_by` | Người thắng theo gói; người đề xuất; chuỗi thắng cho F2. **[S1.158]** Người thắng đọc qua hàm của S3.5, không đọc thẳng `status` (spec S4 §3.4; §2.5 ㊳) |
+| `rfq_awards` (`061`): `bid_version_id`, `status`, `acted_by` | Người thắng theo gói; người đề xuất; chuỗi thắng cho F2. **[S1.159]** Người thắng đọc qua hàm của S3.5, không đọc thẳng `status` (spec S4 §3.4; §2.5 ㊳) |
 | `rfq_award_approvals` (`061`) | Người duyệt — cho tập loại trừ và cho phân tích người mua |
-| `rfq_invitations.invited_by` (`013`) | Ma trận người mời × nhà cung cấp (F2a). **[S1.158]** Từ S4b.5 (㉖); trước đó `rfq_invitations` chỉ cho lời mời còn sống tại mốc, đọc qua `revoked_at` (㊳) |
+| `rfq_invitations.invited_by` (`013`) | Ma trận người mời × nhà cung cấp (F2a). **[S1.159]** Từ S4b.5 (㉖); trước đó `rfq_invitations` chỉ cho lời mời còn sống tại mốc, đọc qua `revoked_at` (㊳) |
 | `vendor_bid_versions.submitted_at`, `version` (`018`) | F5 thời điểm nộp và số lần sửa |
 | `unseal_requests` `EXECUTED`, vị từ *"giá đã lộ"* (spec S4 §2.5 ⒀) | Quần thể mọi yếu tố |
 | `quan_sat_gia(p_moc)`, kết quả benchmark (spec S4 §4.5–§4.6) | F3 độ lệch benchmark; F7 dòng hỏng |
@@ -208,7 +208,7 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~C
   không phụ thuộc `sealed-envelope`, `unseal`, `crypto-keys` (spec S4 §3.2), và không phụ thuộc `danh-gia` theo chiều
   ngược lại — `danh-gia` không được đọc điểm để xếp hạng (ràng buộc 11).
 - **Tầng gói** — đọc as-of bằng các hàm SQL của S4a và S3, gọi lõi, ghi kết quả. ~~Mỗi chốt là một hàm vị từ SQL mà tầng gói
-  gọi trước mọi tác dụng phụ, khuôn spec S3 §2.5 ⒂.~~ **[S1.158]** Câu vừa gạch mâu thuẫn §5.2: vế MFA (`assertFreshMfa`) và
+  gọi trước mọi tác dụng phụ, khuôn spec S3 §2.5 ⒂.~~ **[S1.159]** Câu vừa gạch mâu thuẫn §5.2: vế MFA (`assertFreshMfa`) và
   mức từng yếu tố là TypeScript. Chỗ ở chịu lực của từng vế là §10.1: phép tổng hợp, luật nổ, người và thứ tự ở CSDL (§2.5
   ㉜㉝); MFA và mức từng yếu tố ở tầng gói.
 
@@ -217,8 +217,8 @@ cuối, và phải có câu trả lời trước khi hạng mục ấy mở. ~~C
 | Đầu ra | Tính lúc | Lưu? |
 |---|---|---|
 | Đánh giá rủi ro của một đề xuất trao | Trong giao dịch ghi đề xuất trao (`PROPOSED`) | Có — bảng `rfq_risk_assessments` + yếu tố |
-| Kiểm lại lúc ký | Trong giao dịch ghi chữ ký trao | Không — tính lại từ đầu vào as-of đã lưu, so với bản lưu. **[S1.158]** Tái lập chạy TRƯỚC câu INSERT chữ ký; luật nổ và người do trigger L11 tính lại ở mỗi chữ ký (§2.5 ㉝㊶) |
-| Supplier Score | Khi có người đọc; và chụp vào đánh giá rủi ro lúc đề xuất | Chỉ bản chụp lúc đề xuất. **[S1.159]** Hoãn tới S5 (Q1) |
+| Kiểm lại lúc ký | Trong giao dịch ghi chữ ký trao | Không — tính lại từ đầu vào as-of đã lưu, so với bản lưu. **[S1.159]** Tái lập chạy TRƯỚC câu INSERT chữ ký; luật nổ và người do trigger L11 tính lại ở mỗi chữ ký (§2.5 ㉝㊶) |
+| Supplier Score | Khi có người đọc; và chụp vào đánh giá rủi ro lúc đề xuất | Chỉ bản chụp lúc đề xuất. **[S1.160]** Hoãn tới S5 (Q1) |
 | Sổ tín hiệu (§6) | Khi có người đọc | Chỉ các hàng đã được ghi nhận |
 | Phân tích người mua (§8) | Khi có người đọc | Không; mỗi lần đọc một hàng sổ |
 
@@ -237,7 +237,7 @@ trên gói — xem cột *vắng*). **Mức**: `XANH` · `VANG` · `DO`. Mọi n
 
 | Mã | Tên trên màn | Nguồn | Phép tính | Sàn | Mức | Người gây ra | Vắng |
 |---|---|---|---|---|---|---|---|
-| **F1** | Khoảng cách thắng–nhì ổn định bất thường | `rfq_evaluation_lines` của mọi gói có CÙNG tập nhà cung cấp chen chân (≥ 2 nhà cung cấp chung) với X trong 12 tháng | Với mỗi gói: g = (EC hạng 2 − EC hạng 1) / EC hạng 1. Trên chuỗi g: hệ số phân tán = MAD / trung vị. So với hệ số phân tán của toàn tổ chức cùng nhóm hàng | ≥ 6 gói trong chuỗi; ≥ 20 gói toàn tổ chức | `DO` khi phân tán của chuỗi < P10 toàn tổ chức; `VANG` khi < P25 | Không người dùng nào (nhà cung cấp) | Gói chỉ một báo giá đọc được → `KHONG_AP_DUNG`, ~~và F6 bắt ca ấy (một nhà cung cấp)~~ **[S1.158]** và F10 bắt ca ấy. F6 không bắt: nó `KHONG_AP_DUNG` khi chưa bật S3 và chỉ cho `VANG` khi đã bật (góc C①) |
+| **F1** | Khoảng cách thắng–nhì ổn định bất thường | `rfq_evaluation_lines` của mọi gói có CÙNG tập nhà cung cấp chen chân (≥ 2 nhà cung cấp chung) với X trong 12 tháng | Với mỗi gói: g = (EC hạng 2 − EC hạng 1) / EC hạng 1. Trên chuỗi g: hệ số phân tán = MAD / trung vị. So với hệ số phân tán của toàn tổ chức cùng nhóm hàng | ≥ 6 gói trong chuỗi; ≥ 20 gói toàn tổ chức | `DO` khi phân tán của chuỗi < P10 toàn tổ chức; `VANG` khi < P25 | Không người dùng nào (nhà cung cấp) | Gói chỉ một báo giá đọc được → `KHONG_AP_DUNG`, ~~và F6 bắt ca ấy (một nhà cung cấp)~~ **[S1.159]** và F10 bắt ca ấy. F6 không bắt: nó `KHONG_AP_DUNG` khi chưa bật S3 và chỉ cho `VANG` khi đã bật (góc C①) |
 | **F2a** | Tỷ lệ chọn lệch khỏi mặt bằng — người mời × nhà cung cấp | `rfq_invitations.invited_by`, `rfq_awards` | Với mỗi người mời của X: tỷ lệ N thắng trong các gói người ấy mời, so với tỷ lệ N thắng trong các gói người khác mời | ≥ 8 gói của người mời có N; ≥ 8 gói của người khác có N | `DO` khi tỷ lệ gấp ≥ 3 lần và chênh ≥ 30 điểm phần trăm; `VANG` khi gấp ≥ 2 | Người mời ấy | Không người mời nào đủ sàn → `CHUA_DU_LICH_SU` |
 | **F2b** | Mẫu luân phiên thắng | `rfq_awards`, tập nhà cung cấp chen chân | Trên chuỗi gói có ≥ 3 nhà cung cấp chung với X: người thắng có luân phiên đều không — số lần mỗi nhà cung cấp thắng lệch khỏi đều ≤ 1, và không ai thắng hai gói liền nhau | ≥ 6 gói trong chuỗi | `DO` khi luân phiên đều trên ≥ 9 gói; `VANG` trên 6–8 gói | Không người dùng nào | Chuỗi < 6 → `CHUA_DU_LICH_SU` |
 | **F3** | Giá thắng lệch khỏi dải nội bộ | Nhãn benchmark của S4a cho các dòng của báo giá N (spec S4 §4.6, L7) | Tỷ lệ giá trị dòng của N mang `LECH_CAO` trên tổng giá trị dòng đo được | Độ phủ benchmark của báo giá ≥ 50% giá trị | `DO` khi ≥ 30% giá trị dòng `LECH_CAO`; `VANG` khi ≥ 10% | Không người dùng nào | Độ phủ < 50% → `CHUA_DU_LICH_SU` |
@@ -247,11 +247,11 @@ trên gói — xem cột *vắng*). **Mức**: `XANH` · `VANG` · `DO`. Mọi n
 | **F7** | Báo giá không đo được theo dòng | `bid_dong_tho` (spec S4 §2.5 ⒁) | Báo giá của N có tổng đọc được mà dòng hỏng (Σ `amount` ≠ `totalAmount`, hay dòng không đọc được) | Không | `DO` — trình duyệt của sản phẩm không sinh ra ca ấy | Không người dùng nào | — |
 | **F8** | Ánh xạ lệch thuộc tính trích được | `rfq_item_mappings.dau_vao` của các dòng của X | Tỷ lệ dòng mà một thuộc tính trọng yếu trích được từ mô tả KHÁC thuộc tính của hàng chuẩn đã ánh xạ | Không | `DO` khi có ≥ 1 dòng như thế ghi bởi `NGUOI_DUYET`; `VANG` khi chỉ ở `TU_DONG` | Người ghi ánh xạ | Dòng chưa ánh xạ → không tính |
 
-**[S1.158] Bảng trên giữ nguyên văn; bảng chịu lực là §4.1.**
+**[S1.159] Bảng trên giữ nguyên văn; bảng chịu lực là §4.1.**
 
 **Ba luật chung.**
 - **Bằng chứng** (`jsonb`) mang tỷ lệ, phân vị, số đếm, và định danh các gói và phiên bản báo giá đã dùng — KHÔNG một số tiền
-  nào (ràng buộc 7). **[S1.158]** Định danh rõ chỉ trong CSDL, dưới RLS; bộ bằng chứng mang định danh băm có muối và thống kê
+  nào (ràng buộc 7). **[S1.159]** Định danh rõ chỉ trong CSDL, dưới RLS; bộ bằng chứng mang định danh băm có muối và thống kê
   cấp chuỗi (§2.5 ㊴ ⑸). Tập khoá của mỗi mã yếu tố là tập đóng (㊴ ⑴). *"g = 2,1%, phân tán 0,08, P10 toàn tổ chức 0,21, 9 gói"* là một bằng chứng; *"hạng 1: 1,20 tỷ"* thì
   không.
 - **Độ tin cậy** không phải một xác suất. Nó là một trong ba giá trị `THAP` · `VUA` · `CAO`, suy từ độ dài chuỗi so với sàn
@@ -261,13 +261,13 @@ trên gói — xem cột *vắng*). **Mức**: `XANH` · `VANG` · `DO`. Mọi n
   tổ chức. Cạnh tranh thật thường cho khoảng cách dao động rộng. Đây là chỉ báo cần xem xét, không phải kết luận."*
 
 **Vì sao F1, F2b không gắn người dùng nào.** Hai mẫu ấy nói về một NHÓM nhà cung cấp; chúng không chỉ ra người mua nào cả.
-~~Chỉ F2a gắn với một người mời, và F8 với một người ánh xạ.~~ **[S1.158]** Câu vừa gạch sai: F6 cũng gắn người — người gây
+~~Chỉ F2a gắn với một người mời, và F8 với một người ánh xạ.~~ **[S1.159]** Câu vừa gạch sai: F6 cũng gắn người — người gây
 ra đã ghi trên tín hiệu S3 —, và với ánh xạ `TU_DONG`, F8 gắn người kích hoạt chuẩn hoá, người mà spec S4 §4.4 nói *"không
 chịu lực"* (góc A⑪). Sau §2.4 ㉖: F2a rời sang S4b.5; F6, F8, F11 gắn người qua bảng con ㉟, và không màn nào ở cổng
 `bid.view` hiện tên ấy. Sự bất đối xứng ấy có chủ ý: yếu tố gắn tên một nhân viên là yếu
 tố gây hại nhất khi sai (§12.1).
 
-### 4.1. [S1.158] Danh mục yếu tố chịu lực
+### 4.1. [S1.159] Danh mục yếu tố chịu lực
 
 Phiên bản phương pháp `RUI_RO_V1` (S4b.1) và `RUI_RO_V2` (S4b.2) có CÙNG tập mã và cùng trọng số; chúng chỉ khác ở mã nào mang
 `CHUA_CAI`. Đổi phép tính của một yếu tố là một phiên bản mới — nếu không, tính lại một đánh giá cũ bằng mã mới ra kết quả
@@ -307,7 +307,7 @@ Trọng số là khoá `rui_ro` (`jsonb`) trên phiên bản chính sách, ghim 
 |---|---|---|---|---|---|---|---|---|
 | 20 | 10 | 15 | 15 | 5 | 10 | 10 | 5 | 10 |
 
-**[S1.158]** Bảng trên sai ở hai chỗ: F2a rời (㉖), và thiếu F9, F10, F11 (㊽). Trọng số mặc định của phương pháp — GIẢ ĐỊNH;
+**[S1.159]** Bảng trên sai ở hai chỗ: F2a rời (㉖), và thiếu F9, F10, F11 (㊽). Trọng số mặc định của phương pháp — GIẢ ĐỊNH;
 không còn đòi tổng bằng 100, vì điểm là trung bình có trọng số:
 
 | F1 | F2b | F3 | F4 | F5 | F6 | F7 | F8 | F9 | F10 | F11 |
@@ -317,14 +317,14 @@ không còn đòi tổng bằng 100, vì điểm là trung bình có trọng s�
 - Điểm yếu tố: `XANH` 0 · `VANG` 50 · `DO` 100.
 - ~~**Độ phủ** = Σ trọng số của yếu tố `CO_DU_LIEU` / Σ trọng số của yếu tố không `KHONG_AP_DUNG`. Yếu tố `KHONG_AP_DUNG` ra
   khỏi cả tử lẫn mẫu, vì điều kiện của nó vắng trên gói và một yếu tố khác bắt đúng ca ấy (cột *vắng* ở §4).~~
-  **[S1.158]** Độ phủ theo §2.5 ㉚: chỉ yếu tố có lịch sử, trên trọng số của PHƯƠNG PHÁP; yếu tố vắng không bao giờ ra khỏi
+  **[S1.159]** Độ phủ theo §2.5 ㉚: chỉ yếu tố có lịch sử, trên trọng số của PHƯƠNG PHÁP; yếu tố vắng không bao giờ ra khỏi
   mẫu. Câu *"một yếu tố khác bắt đúng ca ấy"* chỉ đúng cho F1, và yếu tố bù được gọi tên (F6) không bắt (góc C①).
 - **Điểm** = làm tròn nửa-ra-xa-0 của Σ (trọng số × điểm yếu tố) / Σ trọng số, trên các yếu tố `CO_DU_LIEU`. Số nguyên
-  0–100, tính trên `bigint` (~~khuôn ADR-052~~ **[S1.158]** luật làm tròn là ADR-050 ⑴; ADR-052 là *"làm tròn từng thành phần
-  rồi cộng"* — cùng lỗi trích mà spec S4 đã gạch). **[S1.158]** Trọng số dùng cho điểm là trọng số của phiên bản chính sách
+  0–100, tính trên `bigint` (~~khuôn ADR-052~~ **[S1.159]** luật làm tròn là ADR-050 ⑴; ADR-052 là *"làm tròn từng thành phần
+  rồi cộng"* — cùng lỗi trích mà spec S4 đã gạch). **[S1.159]** Trọng số dùng cho điểm là trọng số của phiên bản chính sách
   ghim, mỗi trọng số ≥ sàn (㊵); điểm do CSDL tính (㉜) và CHỈ để hiển thị (㉗).
 - **Mức**: độ phủ < 60% → `KHONG_XAC_DINH`. Ngược lại: điểm ≥ 60 → `CAO`; ≥ 30 → `VUA`; còn lại `THAP`. **Và một yếu tố `DO`
-  bất kỳ đẩy mức lên tối thiểu `VUA`** — một yếu tố đỏ không được trung bình hoá cho mất. **[S1.158]** Đẩy nhãn lên `VUA`
+  bất kỳ đẩy mức lên tối thiểu `VUA`** — một yếu tố đỏ không được trung bình hoá cho mất. **[S1.159]** Đẩy nhãn lên `VUA`
   không đổi CHỐT (góc C②); chốt nổ theo ㉗. 60% và 60/30 là hằng của phiên bản phương pháp (㉘), không phải khoá của
   `rui_ro`. Không có `DO` thì điểm không vượt 50, nên mức `CAO` luôn kéo theo ít nhất một `DO`.
 
@@ -333,14 +333,14 @@ phủ đi kèm là một lỗi hiển thị, và vòng quét route (§11) bắt 
 
 ### 5.2. Chốt S4b.1
 
-Chữ ký duyệt trao thầu cho một gói mà đánh giá rủi ro của đề xuất ~~ở mức `CAO` hay `KHONG_XAC_DINH`~~ **[S1.158]** làm chốt
+Chữ ký duyệt trao thầu cho một gói mà đánh giá rủi ro của đề xuất ~~ở mức `CAO` hay `KHONG_XAC_DINH`~~ **[S1.159]** làm chốt
 nổ — có ≥ 1 yếu tố `DO` hoặc mức `KHONG_XAC_DINH` (㉗), ở tổ chức đã bật S3 (㉙) — cần đủ bốn thứ:
 1. MFA trong cửa sổ 15 phút, qua `assertFreshMfa`;
 2. giải trình không rỗng của người ký;
 3. một hàng ghi nhận cho MỖI yếu tố `DO`, và cho hàng *độ phủ* khi mức là `KHONG_XAC_DINH`, do một người giữ `po.approve`
-   nằm ngoài ~~{người tạo gói, người gây ra yếu tố ấy, người đề xuất, người duyệt}~~ **[S1.158]** tập §2.5 ㉞; hàng độ phủ là
+   nằm ngoài ~~{người tạo gói, người gây ra yếu tố ấy, người đề xuất, người duyệt}~~ **[S1.159]** tập §2.5 ㉞; hàng độ phủ là
    `DO_PHU` (㊱);
-4. đánh giá rủi ro là ~~bản MỚI NHẤT của đề xuất ấy~~ **[S1.158]** ĐÚNG MỘT đánh giá của hàng `PROPOSED` ấy, ghi cùng giao dịch
+4. đánh giá rủi ro là ~~bản MỚI NHẤT của đề xuất ấy~~ **[S1.159]** ĐÚNG MỘT đánh giá của hàng `PROPOSED` ấy, ghi cùng giao dịch
    (㉛), và tính lại từ đầu vào as-of đã lưu ra đúng điểm và mức.
 
 **Chỗ ở của từng vế.** Vế ① ở tầng gói, cùng chỗ với D1 của mở thầu: `app_api` được cấp `UPDATE (mfa_verified_at)` (`006`),
@@ -349,16 +349,16 @@ trên cổng trao thầu của S3.5, không viết lại thân ghim. ~~Vế ④ 
 không tính lại được. Giới hạn ấy nói ra, cùng lớp với J2: một ứng dụng hỏng ghi được mức `THAP`, và thứ bắt nó là phép tái
 lập trên bộ bằng chứng, không phải một trigger.~~
 
-**[S1.158] Đoạn vừa gạch đặt sai ba vế.** Trigger L11 nằm trên `rfq_award_approvals` và tính lại luật nổ, giải trình và người
+**[S1.159] Đoạn vừa gạch đặt sai ba vế.** Trigger L11 nằm trên `rfq_award_approvals` và tính lại luật nổ, giải trình và người
 ở MỖI chữ ký, dưới cùng khoá với đường ghi nhận (㉝). Phép tổng hợp — điểm, độ phủ, mức, luật nổ — tính được ở CSDL từ các
 hàng yếu tố, nên CSDL tính (㉜). Chỉ MỨC TỪNG YẾU TỐ còn ở lõi TypeScript: một ứng dụng hỏng ghi được một yếu tố `XANH` thay
 cho `DO`, và thứ bắt nó là phép tái lập ở tầng gói lúc ký và trên bộ bằng chứng. Một kiểm `mfa_verified_at IS NOT NULL` ở
 trigger (khuôn `011` H-2) vẫn bắt được ca QUÊN gọi `assertFreshMfa` khi S3.5 dựng lại cổng trao, dù không mạnh hơn ứng dụng.
 
-**Hệ quả về người**, cộng vào spec S4 §7.1: một gói ~~ở mức `CAO` hay `KHONG_XAC_DINH`~~ **[S1.158]** làm chốt nổ cần ít nhất
-~~HAI người~~ **[S1.158]** (số chữ ký của bậc + 1) người giữ `po.approve`
+**Hệ quả về người**, cộng vào spec S4 §7.1: một gói ~~ở mức `CAO` hay `KHONG_XAC_DINH`~~ **[S1.159]** làm chốt nổ cần ít nhất
+~~HAI người~~ **[S1.159]** (số chữ ký của bậc + 1) người giữ `po.approve`
 ngoài người đề xuất — ~~một người duyệt, một người ghi nhận~~ người ký theo bậc, cộng một người ghi nhận. Ở tổ chức mới, đó là MỌI gói. ~~`gieo:demo` có hai `DIRECTOR`, đủ.~~
-**[S1.158]** `gieo:demo` có hai `DIRECTOR`, không `FINANCE` (`tools/gieo-demo/src/index.ts:142-150`): đủ ở bậc một chữ ký,
+**[S1.159]** `gieo:demo` có hai `DIRECTOR`, không `FINANCE` (`tools/gieo-demo/src/index.ts:142-150`): đủ ở bậc một chữ ký,
 THIẾU ở bậc 2 của S3 — nơi kịch bản V2.1 §41 (gói 1 tỷ) rơi vào. Dữ liệu gieo cho tổ chức đã bật S3 cần thêm một người giữ
 `po.approve`. Theo ㉙, không tổ chức MVP1 nào chịu điều này, và **không ca nào của MVP1 lật**: bước 12i của
 `kich-ban-41-http.int.test.ts:1217`, các lời gọi `duyetTraoThau` của `luot-danh-gia.int.test.ts`, `bo-xuat.int.test.ts:288` và
@@ -371,7 +371,7 @@ nằm trong bộ test của S3.5 ở tổ chức đã bật S3 — kê tên khi 
 yếu tố với đủ năm trường. Supplier Score của N chụp vào cùng bản ghi. Bộ bằng chứng (ADR-059) mang cả hai, cộng một đặc tả
 phép tính trong `DAC-TA.md` đủ để cài lại chín yếu tố và phép tổng hợp — khuôn S2.7.
 
-**[S1.158]** Ba sửa. ⑴ Cột bản chụp Supplier Score có từ S4b.1 và là `NULL` tới S4b.4. **[S1.159]** Không dựng cột ấy ở S4b (Q1). ⑵ Lõi của lớp rủi ro trong bộ bằng
+**[S1.159]** Ba sửa. ⑴ Cột bản chụp Supplier Score có từ S4b.1 và là `NULL` tới S4b.4. **[S1.160]** Không dựng cột ấy ở S4b (Q1). ⑵ Lõi của lớp rủi ro trong bộ bằng
 chứng và mục `DAC-TA.md` cho các yếu tố đã có mã đi cùng S4b.1, không đợi S4b.7 — nếu không, từ S4b.1 tới S4b.7 không lớp nào
 bắt được một yếu tố bị hạ (góc A②, D②). ⑶ Lớp ấy mang định danh băm có muối và thống kê cấp chuỗi (㊴ ⑸).
 
@@ -379,7 +379,7 @@ bắt được một yếu tố bị hạ (góc A②, D②). ⑶ Lớp ấy mang
 
 ## 6. Sổ tín hiệu — phần *"phát hiện bất thường"*
 
-V2.1 §20 kể sáu loại bất thường. ~~S4b phủ bốn, qua yếu tố của §4, và nói thẳng hai loại còn lại:~~ **[S1.158]** Bảng dưới có
+V2.1 §20 kể sáu loại bất thường. ~~S4b phủ bốn, qua yếu tố của §4, và nói thẳng hai loại còn lại:~~ **[S1.159]** Bảng dưới có
 năm loại có nguồn và một loại *"Không"*; *"phủ"* nghĩa là có một yếu tố đo MẪU ĐỀU ĐẶN của loại ấy, trong giới hạn §12.6. Buyer
 anomaly chờ S4b.5 (㉖):
 
@@ -387,17 +387,17 @@ anomaly chờ S4b.5 (㉖):
 |---|---|---|
 | Price anomaly | F3, cộng nhãn benchmark của S4a | — |
 | Supplier anomaly — thắng bất thường | F2b, F4 | — |
-| Buyer anomaly | F2a, cộng §8 | Chờ câu hỏi pháp lý. **[S1.158]** Cả F2a — S4b.5 |
+| Buyer anomaly | F2a, cộng §8 | Chờ câu hỏi pháp lý. **[S1.159]** Cả F2a — S4b.5 |
 | Purchase splitting | F6 (tín hiệu S3) | S4b không tính lại |
 | Specification anomaly | **Không** | Kho không lưu lịch sử sửa hạng mục ở `DRAFT` (spec S4 §10) |
-| Collusion pattern | F1, F2b, F5 | Mẫu giữa các nhà cung cấp; mẫu Buyer–Supplier Network là §18, ngoài S4. **[S1.158]** Cộng F9, F10, F11; chỉ mẫu đều đặn (§12.6) |
+| Collusion pattern | F1, F2b, F5 | Mẫu giữa các nhà cung cấp; mẫu Buyer–Supplier Network là §18, ngoài S4. **[S1.159]** Cộng F9, F10, F11; chỉ mẫu đều đặn (§12.6) |
 
 **Sổ tín hiệu** là một màn đọc, không phải một job: người giữ `audit.read` chọn một khoảng thời gian, và hàm as-of tính các
 yếu tố F1, F2a, F2b, F4 trên MỌI chuỗi gói của tổ chức trong khoảng ấy — không chỉ trên gói có đề xuất trao. Kết quả là một
 danh sách *"chuỗi gói cần xem xét"*, mỗi dòng mang năm trường. Không dòng nào được lưu cho tới khi một người ghi nhận nó —
 lúc ấy một hàng `risk_register_acks` ghi người, lý do và bằng chứng as-of tại lúc ghi nhận.
 
-**[S1.158]** Bốn sửa. ⑴ F2a rời sổ tới S4b.5 (㉖). ⑵ *"Người giữ `audit.read`"* là `FINANCE`, `DIRECTOR` — chính người đã
+**[S1.159]** Bốn sửa. ⑴ F2a rời sổ tới S4b.5 (㉖). ⑵ *"Người giữ `audit.read`"* là `FINANCE`, `DIRECTOR` — chính người đã
 đề xuất và ký các trao trong chuỗi; ai đọc là Q2 (§2.6). ⑶ Khung, lượt đọc, người ghi nhận và việc dòng đã ghi nhận vẫn hiện
 theo §2.5 ㊿. ⑷ Không gì buộc ai mở sổ: một chuỗi đã trao xong không bao giờ chạm S4b.1 nữa. Sổ là công cụ cho người muốn
 xem, không phải một chốt.
@@ -409,7 +409,7 @@ Lý do không lưu trước: một bảng *"các nhà cung cấp bị gắn cờ
 
 ## 7. Supplier Score
 
-**[S1.159] Cả mục này hoãn tới S5 (Q1, ADR-099).** Giữ nguyên văn làm đầu vào cho spec S5, cùng các sửa của §2.5 ㊾.
+**[S1.160] Cả mục này hoãn tới S5 (Q1, ADR-100).** Giữ nguyên văn làm đầu vào cho spec S5, cùng các sửa của §2.5 ㊾.
 
 **Thành phần có nguồn trong S4** — tám thành phần của V2.1 §13 chia theo nguồn:
 
@@ -424,10 +424,10 @@ Lý do không lưu trước: một bảng *"các nhà cung cấp bị gắn cờ
 | Quality · Delivery | **Không có nguồn tới S5** | — |
 
 - **Trọng số** là khoá `diem_ncc` trên phiên bản chính sách. Phiên bản khai trọng số cho một thành phần không có nguồn bị từ
-  chối ~~lúc chấm~~, bằng một mã gọi tên — cùng chỗ spec S4 §2.5 ⒃ đặt chốt TCO. Bộ mặc định: **Q1**. **[S1.158]** Supplier Score
+  chối ~~lúc chấm~~, bằng một mã gọi tên — cùng chỗ spec S4 §2.5 ⒃ đặt chốt TCO. Bộ mặc định: **Q1**. **[S1.159]** Supplier Score
   không tính ở lượt chấm, nên *"lúc chấm"* không có nghĩa; từ chối lúc GHI phiên bản chính sách, bằng `CHECK` dạng khẳng định
   (㊵) — đúng chỗ spec S4 §5 đặt L9 (góc A⑩).
-- **[S1.158] Bốn thành phần có nguồn đều là cần gạt** (góc C⑧) — sửa theo §2.5 ㊾. Q1 (§2.6) có thêm một lý do cho lối ⒞.
+- **[S1.159] Bốn thành phần có nguồn đều là cần gạt** (góc C⑧) — sửa theo §2.5 ㊾. Q1 (§2.6) có thêm một lý do cho lối ⒞.
 - **Sàn**: N chen chân ≥ 5 gói đã mở niêm phong trong 12 tháng. Dưới sàn: *"chưa đủ lịch sử"*, không số.
 - **Supplier Score không vào `effective_cost` và không đổi `rank`** (ràng buộc 11). Nó hiện cạnh bảng xếp hạng, ở màn nhà cung
   cấp của bên mua, và trong bản chụp lúc đề xuất trao.
@@ -460,7 +460,7 @@ làm mọi lượt `verifyAuditChain` về sau chậm hơn —, và nó được
 chính nó thành công cụ giám sát không ai giám sát. Khác với bảng so sánh (khoản 244), ở đây lời khai *"mọi lần đọc có sổ"* là
 một bất biến có phép đo (L19).
 
-**[S1.158]** Hàng sổ mang cả ĐỐI TƯỢNG bị xem, và được ghi theo §2.5 ㊹: route `POST`, ghi ở cuối handler, ghi hỏng thì không
+**[S1.159]** Hàng sổ mang cả ĐỐI TƯỢNG bị xem, và được ghi theo §2.5 ㊹: route `POST`, ghi ở cuối handler, ghi hỏng thì không
 trả dữ liệu — không có tiền lệ ghi sổ khi đọc thành công, và GET không được đổi trạng thái. Người đọc giữ `audit.read` cũng là
 người bị phân tích ở ma trận *Duyệt*: Q2 (§2.6).
 
@@ -482,12 +482,12 @@ người bị phân tích ở ma trận *Duyệt*: Q2 (§2.6).
 | Price Benchmark | Nhãn tổng hợp của S4a cho báo giá được đề xuất | *"chưa đủ lịch sử"* |
 | [VIEW ANALYSIS] | Mở `/mo-thau` ở bước so sánh | — |
 | [UNSEAL] | Đường mở thầu hiện có | — |
-| [REQUEST REVIEW] | **Q4** — **[S1.159]** bỏ | — |
+| [REQUEST REVIEW] | **Q4** — **[S1.160]** bỏ | — |
 
 Màn là một trang mới trong bản đồ `TRANG`, dưới luật ADR-044, cho người giữ `bid.view`. Nó chỉ ĐỌC: không hành vi nào của nó
 là mới, trừ nút của Q4.
 
-**[S1.158] Bốn nguồn trong bảng trên sai** (góc A⑫). *Value*: ước lượng nằm ở `rfq_budgets.estimated_value` (`014:109`), không
+**[S1.159] Bốn nguồn trong bảng trên sai** (góc A⑫). *Value*: ước lượng nằm ở `rfq_budgets.estimated_value` (`014:109`), không
 ở `rfq_packages`. *Technical qualified*: lượt chấm từ chối mọi chính sách khác đúng một mã `gia`/`TIEN`
 (`luot-danh-gia.ts:156-163`), nên S2 không chấm điểm phi giá — kết luận *"chưa có nguồn"* vẫn đúng. *Price Benchmark*: S4a chỉ
 có nhãn theo dòng và độ phủ theo báo giá, không có nhãn tổng hợp; màn hiện số dòng theo từng nhãn, và không dùng chữ *NORMAL*
@@ -506,7 +506,7 @@ Policy Compliance (㊺).
 
 ~~Mỗi route mới khai `agent: false` (ADR-039): không đầu ra nào của S4b đi qua MCP.~~
 
-**[S1.158]** Câu vừa gạch sai với route GHI (§2.5 ㊺). Ba sửa nữa: ⑴ người giữ `award.recommend` mà không giữ `bid.view` —
+**[S1.159]** Câu vừa gạch sai với route GHI (§2.5 ㊺). Ba sửa nữa: ⑴ người giữ `award.recommend` mà không giữ `bid.view` —
 `BUYER` (`005:290-293`) — không xem được đánh giá; cổng đọc là `bid.view` như §10 và T2. ⑵ *"Hồ sơ nhà cung cấp phía bên mua"*
 chưa có trong bản đồ `TRANG` (`phuc-vu.ts:92-110`) và không hạng mục nào dựng nó: S4b.4 dựng nó, hoặc gắn vào màn của S3.8 nếu
 S3.8 dựng trước — đối chiếu lúc mở S4b.4. ⑶ Danh sách route:
@@ -517,10 +517,10 @@ S3.8 dựng trước — đối chiếu lúc mở S4b.4. ⑶ Danh sách route:
 | POST `/rfqs/:id/award/:awardId/rui-ro/ghi-nhan` — ghi nhận một yếu tố | Ghi | `po.approve` | không khai |
 | POST `/rfqs/:id/award/:awardId/approve` — thêm giải trình vào thân yêu cầu hiện có | Ghi | `po.approve` | không khai |
 | GET `/tong-quan` — màn Executive | Đọc | `bid.view` | `false` |
-| POST `/so-tin-hieu/doc`, POST `/so-tin-hieu/ghi-nhan` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.159]** `analytics.review` | không khai |
-| POST `/phan-tich/doc` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.159]** `analytics.review` | không khai |
-| **[S1.159]** GET `/toi/luot-doc` — lượt đọc về chính mình (Q2) | Đọc, tự thân | người dùng mua đã đăng nhập | `false` |
-| ~~GET `/nha-cung-cap/:id/diem`~~ **[S1.159]** bỏ — Q1 | Đọc | `bid.view` | `false` |
+| POST `/so-tin-hieu/doc`, POST `/so-tin-hieu/ghi-nhan` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.160]** `analytics.review` | không khai |
+| POST `/phan-tich/doc` | Ghi (đọc có sổ, ㊹) | Q2 — **[S1.160]** `analytics.review` | không khai |
+| **[S1.160]** GET `/toi/luot-doc` — lượt đọc về chính mình (Q2) | Đọc, tự thân | người dùng mua đã đăng nhập | `false` |
+| ~~GET `/nha-cung-cap/:id/diem`~~ **[S1.160]** bỏ — Q1 | Đọc | `bid.view` | `false` |
 
 Đọc có tên nhân viên đi route `POST` có sổ, không GET (㊹). Trang `/mo-thau` ở bước duyệt nói rõ luồng *"đăng nhập lại để có MFA
 mới"* (㊺).
@@ -533,12 +533,12 @@ Mọi bảng theo tổ chức, chỉ-ghi-thêm, khuôn khoá tư vấn → `seq`
 
 | Bảng | Giữ gì |
 |---|---|
-| `rfq_risk_assessments` | ~~Một hàng cho mỗi lần tính trên một đề xuất trao~~ **[S1.158]** Đúng một hàng cho một hàng `PROPOSED` (㉛): `award_id`, `bid_version_id`, `policy_id`, `phien_ban_phuong_phap`, `moc_mo_gia`, **[S1.158]** `moc_de_xuat`, `diem`, `muc`, `do_phu`, **[S1.158]** `co_no`, ~~bản chụp Supplier Score (`NULL` tới S4b.4)~~ **[S1.159]** không có bản chụp Supplier Score (Q1), tác giả + phiên |
-| `rfq_risk_factors` | Một hàng mỗi yếu tố: `ma`, `trang_thai`, `muc`, `trong_so`, `nguon`, `thoi_diem`, `bang_chung jsonb`, `do_tin_cay`, `giai_thich`, ~~`nguoi_gay_ra uuid[]`~~. `CHECK`: `bang_chung` không mang khoá nào trong tập tên trường tiền đã khai (`tien`, `gia`, `so_tien`, `amount`, `unitPrice`, `totalAmount`). **[S1.158]** Người gây ra là bảng con (㉟); `CHECK` là lược đồ đóng theo mã cộng dây bẫy không phân biệt hoa thường (㊴); `giai_thich` là (mã mẫu, tham số) |
-| `rfq_risk_factor_inputs` | Bảng con khoá ngoại tới mọi gói và phiên bản báo giá mà yếu tố đã đọc — để tái lập (khuôn spec S4 §2.5 ⑿). **[S1.158]** Đa hình theo nguồn, `num_nonnulls = 1` (㊳) |
-| **[S1.158]** `rfq_risk_factor_causers` | Người gây ra: `(org_id, factor_id, user_id)`, khoá ngoại hợp thành tới `users`, trigger suy từ bảng đầu vào (㉟) |
-| **[S1.158]** `rfq_risk_nen` | Ảnh chụp nền tổ chức theo (tổ chức, nhóm hàng, mốc): mẫu số của F4 và phân vị bối cảnh của F1; chỉ-ghi-thêm, dùng chung (㊳). S4b.2 |
-| `rfq_risk_acks` | Ghi nhận: `factor_id`, người + phiên, lý do không rỗng. **[S1.158]** `factor_id` trỏ được hàng `DO_PHU` (㊱); trigger kiểm người theo ㉞ dưới khoá ㉝ |
+| `rfq_risk_assessments` | ~~Một hàng cho mỗi lần tính trên một đề xuất trao~~ **[S1.159]** Đúng một hàng cho một hàng `PROPOSED` (㉛): `award_id`, `bid_version_id`, `policy_id`, `phien_ban_phuong_phap`, `moc_mo_gia`, **[S1.159]** `moc_de_xuat`, `diem`, `muc`, `do_phu`, **[S1.159]** `co_no`, ~~bản chụp Supplier Score (`NULL` tới S4b.4)~~ **[S1.160]** không có bản chụp Supplier Score (Q1), tác giả + phiên |
+| `rfq_risk_factors` | Một hàng mỗi yếu tố: `ma`, `trang_thai`, `muc`, `trong_so`, `nguon`, `thoi_diem`, `bang_chung jsonb`, `do_tin_cay`, `giai_thich`, ~~`nguoi_gay_ra uuid[]`~~. `CHECK`: `bang_chung` không mang khoá nào trong tập tên trường tiền đã khai (`tien`, `gia`, `so_tien`, `amount`, `unitPrice`, `totalAmount`). **[S1.159]** Người gây ra là bảng con (㉟); `CHECK` là lược đồ đóng theo mã cộng dây bẫy không phân biệt hoa thường (㊴); `giai_thich` là (mã mẫu, tham số) |
+| `rfq_risk_factor_inputs` | Bảng con khoá ngoại tới mọi gói và phiên bản báo giá mà yếu tố đã đọc — để tái lập (khuôn spec S4 §2.5 ⑿). **[S1.159]** Đa hình theo nguồn, `num_nonnulls = 1` (㊳) |
+| **[S1.159]** `rfq_risk_factor_causers` | Người gây ra: `(org_id, factor_id, user_id)`, khoá ngoại hợp thành tới `users`, trigger suy từ bảng đầu vào (㉟) |
+| **[S1.159]** `rfq_risk_nen` | Ảnh chụp nền tổ chức theo (tổ chức, nhóm hàng, mốc): mẫu số của F4 và phân vị bối cảnh của F1; chỉ-ghi-thêm, dùng chung (㊳). S4b.2 |
+| `rfq_risk_acks` | Ghi nhận: `factor_id`, người + phiên, lý do không rỗng. **[S1.159]** `factor_id` trỏ được hàng `DO_PHU` (㊱); trigger kiểm người theo ㉞ dưới khoá ㉝ |
 | `rfq_award_justifications` | Giải trình của người ký ở mức `CAO`/`KHONG_XAC_DINH`; tách khỏi `rfq_award_approvals` để không đổi hình dạng bảng của `061`, thứ S3.5 đang dựng lại |
 | `risk_register_acks` | Ghi nhận một dòng của sổ tín hiệu: loại, bằng chứng as-of, người, lý do |
 
@@ -546,11 +546,11 @@ Nhóm khoá mới trên phiên bản chính sách: `rui_ro` (trọng số, ngư�
 sàn). Cả hai đi dưới luật thứ tự của spec S4 §2.5 ⒆: sau S3.1, đọc qua `chinh_sach_tai`.
 
 **Quyền.** Không mã quyền mới — nguyên tắc ADR-084 ⑴. Đọc đánh giá rủi ro, Supplier Score, màn Executive: `bid.view`. Ghi
-nhận yếu tố: `po.approve`. Sổ tín hiệu: `audit.read`. Phân tích người mua: Q2. **[S1.158]** Ở cổng `bid.view` không hiện tên
-người gây ra (㉖). Sổ tín hiệu: Q2 — lượt soi đề xuất một mã mới, đúng tiêu chí tách người của ADR-084 ⑴ (§2.6). **[S1.159]** Chốt: một mã mới
+nhận yếu tố: `po.approve`. Sổ tín hiệu: `audit.read`. Phân tích người mua: Q2. **[S1.159]** Ở cổng `bid.view` không hiện tên
+người gây ra (㉖). Sổ tín hiệu: Q2 — lượt soi đề xuất một mã mới, đúng tiêu chí tách người của ADR-084 ⑴ (§2.6). **[S1.160]** Chốt: một mã mới
 `analytics.review`, chỉ vai `AUDITOR` giữ, cho sổ tín hiệu và phân tích người mua (§2.7 Q2).
 
-### 10.1. [S1.158] Cưỡng chế ở CSDL
+### 10.1. [S1.159] Cưỡng chế ở CSDL
 
 Gom các chốt của §2.5 theo bảng. Mọi trigger mới ENABLE ALWAYS, ghim ở `hardening.always.sql` trong cùng commit với migration.
 
@@ -593,7 +593,7 @@ Nối tiếp L1–L15 của spec S4. L9, L10, L11 của spec S4 được viết 
 Mỗi hàng vào sổ của TEST-PLAN ở đúng hạng mục đo được nó, SAU khi đo — khuôn spec S3 §5.1 và spec S4 §5.1. Hàng tách mang số
 mới, không hậu tố (khoản 245).
 
-### 11.1. [S1.158] Bảng bất biến chịu lực
+### 11.1. [S1.159] Bảng bất biến chịu lực
 
 Bảng trên giữ nguyên văn. Nó sai ở bốn chỗ (góc D⑥, A⑩): L10 và L11 dựa vào bảng đầu vào và phép tổng hợp mà bảng trên để ở
 S4b.2, trong khi L11 ở S4b.1; L16, L18, L20, L21 đo được — và phải đo — từ S4b.1, vì bảng, route và `/mo-thau` có từ S4b.1;
@@ -602,19 +602,19 @@ phiên bản mà không đánh dấu. Tách theo luật *"mỗi nửa một số
 
 | Mã | Mệnh đề | Cưỡng chế | Hạng mục |
 |---|---|---|---|
-| **L9** | Như bảng trên; phiên bản khai trọng số cho thành phần không có nguồn bị từ chối LÚC GHI phiên bản | `CHECK` dạng khẳng định trên phiên bản (㊵) + lõi thuần + test tái lập | ~~S4b.4~~ **[S1.159]** S5 (Q1) |
+| **L9** | Như bảng trên; phiên bản khai trọng số cho thành phần không có nguồn bị từ chối LÚC GHI phiên bản | `CHECK` dạng khẳng định trên phiên bản (㊵) + lõi thuần + test tái lập | ~~S4b.4~~ **[S1.160]** S5 (Q1) |
 | **L10** | Mỗi đánh giá có đủ hàng yếu tố của phiên bản phương pháp, mỗi hàng năm trường; `diem`, `do_phu`, `muc`, `co_no` do CSDL tính từ hàng yếu tố; độ phủ theo ㉚; tính lại từ bảng đầu vào ra đúng bản lưu cho mọi yếu tố KHÔNG phải chuỗi (F3, F5–F11) | Deferred trigger (㉜); lõi thuần; test tái lập khuôn J2; đột biến bỏ một hàng yếu tố | S4b.1 |
 | **L11** | Chữ ký trao ở đề xuất làm chốt nổ cần MFA mới, giải trình của người ký, và ghi nhận từng hàng `DO` — kể cả `DO_PHU` — bởi người giữ `po.approve` ngoài tập ㉞ tính tại lúc ký; đề xuất có đúng một đánh giá ghi cùng giao dịch; chỉ ở tổ chức đã bật S3 | Trigger trên `rfq_award_approvals` (㉝), deferred trên `rfq_awards` (㉛), vế MFA và tái lập ở tầng gói; đo cả ca song song của M8 | S4b.1 |
 | **L16** | Không hàng yếu tố, không bằng chứng, không bản chụp, không bộ bằng chứng nào của S4b mang một số tiền, hay đủ để suy ra giá của gói khác | Lược đồ đóng + dây bẫy (㊴); bước 14 kịch bản 41 quét các bảng S4b bằng kim đơn giá và kim tổng, chạy sau bước 12h — trên biến thể ở tổ chức ĐÃ BẬT S3, vì theo ㉙ tổ chức MVP1 không có đánh giá nào | S4b.1 |
 | **L17** | THƯỚC đọc as-of `moc_mo_gia`, SỰ KIỆN VỀ X đọc as-of `moc_de_xuat` (㊲); ghi dữ liệu sau mốc rồi tính lại ra đúng bản lưu; ĐỐI CHỨNG DƯƠNG: cùng dữ liệu ghi TRƯỚC mốc thì kết quả đổi | Test hai chiều | S4b.1 (F3, F6, F8), S4b.2 (chuỗi) |
 | **L18** | Như bảng trên, cộng: không đầu ra nào của S4b trước mở thầu ngoài bốn trường của ㊺; không tên người gây ra ở cổng `bid.view` | Vòng quét route khuôn A2/J4, có đối chứng dương | S4b.1 |
-| **L19** | Mọi đường trả dữ liệu mang tên nhân viên để đúng một hàng sổ mang người đọc, khung và đối tượng; ghi sổ hỏng thì không trả dữ liệu. **[S1.159]** Đối tượng đọc được mọi hàng về chính mình qua route tự thân, và không đọc được hàng về người khác (Q2) | Test đếm hàng sổ; đột biến gỡ lần ghi; ca *"ghi sổ hỏng"*; **[S1.159]** ca tự thân và ca người khác | S4b.3 (đường đầu tiên), S4b.5 |
+| **L19** | Mọi đường trả dữ liệu mang tên nhân viên để đúng một hàng sổ mang người đọc, khung và đối tượng; ghi sổ hỏng thì không trả dữ liệu. **[S1.160]** Đối tượng đọc được mọi hàng về chính mình qua route tự thân, và không đọc được hàng về người khác (Q2) | Test đếm hàng sổ; đột biến gỡ lần ghi; ca *"ghi sổ hỏng"*; **[S1.160]** ca tự thân và ca người khác | S4b.3 (đường đầu tiên), S4b.5 |
 | **L20** | Mỗi bảng S4b chỉ có hàng từ đúng một đường: đánh giá, yếu tố, đầu vào, người gây ra — đường đề xuất trao, cùng giao dịch; ghi nhận — đường ghi nhận; giải trình — đường ký; `risk_register_acks` — đường ghi nhận sổ. Sổ tín hiệu không lưu dòng nào chưa có người ghi nhận | Trigger ㉛ ở CSDL cho vế *cùng giao dịch*; test kiến trúc cho phần còn lại | S4b.1 (vế CSDL), S4b.3 (sổ) |
 | **L21** | Như bảng trên | Như bảng trên | S4b.1 |
 | **L22** — mới, tách từ L10 | Yếu tố chuỗi (F1, F2b, F4) tính lại từ bảng đầu vào và ảnh chụp nền `rfq_risk_nen` ra đúng bản lưu; một đánh giá < 2 giây ở 5.000 gói, thời gian giữ khoá sổ của tổ chức trong lúc tính bằng 0 | Test tái lập; đo hiệu năng có biên bản | S4b.2 |
 | **L23** — mới | Ngưỡng độ phủ, ngưỡng mức, luật nổ và `KHONG_XAC_DINH` ≡ `CAO` là hằng của phiên bản phương pháp; `rui_ro` chỉ mang trọng số, mỗi trọng số ≥ sàn; `rui_ro` NULL ⇒ mặc định của phương pháp | Hàm SQL `IMMUTABLE` khai phương pháp; `CHECK` dạng khẳng định; test: phiên bản đặt trọng số dưới sàn bị từ chối, phiên bản không có `rui_ro` vẫn đề xuất được | S4b.1 |
-| **L24** — mới **[S1.159]** | Tổ chức mang dấu dữ liệu mẫu không bao giờ vào phép đo cổng (e), và mọi màn S4b của nó hiện nhãn *"dữ liệu mẫu"*; `app_api` không đặt và không gỡ được dấu ấy (Q8) | Dấu ngoài GRANT; test của công cụ đo trên một tổ chức mang dấu; vòng quét màn | S4b.0 (công cụ đo), S4b.6 (màn) |
-| **L25** — mới **[S1.159]** | `analytics.review` chỉ ở vai `AUDITOR`; vai và người giữ nó không giữ `rfq.create`, `rfq.invite`, `award.recommend`, `po.approve`, `bid.view`, `policy.manage`, `item.manage` (Q2) | Hai trigger khuôn `033`; vòng quét route | S4b.3 |
+| **L24** — mới **[S1.160]** | Tổ chức mang dấu dữ liệu mẫu không bao giờ vào phép đo cổng (e), và mọi màn S4b của nó hiện nhãn *"dữ liệu mẫu"*; `app_api` không đặt và không gỡ được dấu ấy (Q8) | Dấu ngoài GRANT; test của công cụ đo trên một tổ chức mang dấu; vòng quét màn | S4b.0 (công cụ đo), S4b.6 (màn) |
+| **L25** — mới **[S1.160]** | `analytics.review` chỉ ở vai `AUDITOR`; vai và người giữ nó không giữ `rfq.create`, `rfq.invite`, `award.recommend`, `po.approve`, `bid.view`, `policy.manage`, `item.manage` (Q2) | Hai trigger khuôn `033`; vòng quét route | S4b.3 |
 
 ---
 
@@ -627,7 +627,7 @@ NHÂN VIÊN (F2a, §8) tốn danh dự của một người có tên, và không
 và cần hai điều kiện cùng lúc (gấp ≥ 3 lần VÀ chênh ≥ 30 điểm); chữ trên màn không bao giờ là *bất thường*; §8 chờ câu hỏi
 pháp lý; mỗi lần đọc có sổ (L19).
 
-**[S1.158]** Hai điều bản nháp chưa tính. ⑴ Báo sai trên nhóm nhà cung cấp cũng có tỷ lệ nền đo được: F2b như bản nháp báo
+**[S1.159]** Hai điều bản nháp chưa tính. ⑴ Báo sai trên nhóm nhà cung cấp cũng có tỷ lệ nền đo được: F2b như bản nháp báo
 sai 4,1–12,3% ở chuỗi 6 gói dưới mô hình rỗng (M1), và F1 so với phân vị của chính tổ chức gắn cờ ≈ 10% chuỗi trung thực theo
 cấu tạo (góc D⑦) — cả hai đã sửa (㊻㊼). ⑵ Yếu tố gắn tên trồng được: mô tả dòng do người tạo gói viết, nên chèn một thuộc tính
 mâu thuẫn là trồng được F8 lên người ánh xạ (góc C④) — vì vậy F8 có sàn, người viết mô tả vào tập người gây ra, và không màn
@@ -641,24 +641,24 @@ S4b mãi là `KHONG_XAC_DINH`, và S4b.1 mãi đòi ghi nhận. Đó là hệ qu
 tục — hình dạng spec S3 §8.2. Tỷ lệ ghi nhận theo tổ chức hiện ở màn quản trị; không ngưỡng nào ở đây được gọi là *đã hiệu
 chỉnh* trước dữ liệu thật.
 
-**[S1.158]** Tỷ lệ ghi nhận THEO TỔ CHỨC là 100% theo cấu tạo ở tổ chức mới, nên không mang tin; màn hiện tỷ lệ theo NGƯỜI
+**[S1.159]** Tỷ lệ ghi nhận THEO TỔ CHỨC là 100% theo cấu tạo ở tổ chức mới, nên không mang tin; màn hiện tỷ lệ theo NGƯỜI
 ghi nhận (góc C⑥). Không gì chứng minh người ghi nhận đã mở bằng chứng — cùng hình dạng khoản 244 —, và giải trình *"không
 rỗng"* nhận cả một dấu chấm. S4b.1 buộc một người thứ hai KÝ TÊN vào việc đã đọc; nó không chặn hai người bàn nhau. Câu ấy
 vào PRODUCT §5 khi S4b.1 có mã.
 
 ### 12.3. Lách bằng cách giữ yếu tố dưới sàn
 
-Góc C⑥ của lượt soi S1.156 đã ~~đo~~ **[S1.158]** đọc (`security-reviews.md:12428, 12532`; phép đo là một mũi T5 chưa
+Góc C⑥ của lượt soi S1.157 đã ~~đo~~ **[S1.159]** đọc (`security-reviews.md:12428, 12532`; phép đo là một mũi T5 chưa
 chạy, spec S4 §6) đường này: rải gói qua nhiều người mời để mỗi cặp dưới sàn. F2a vì vậy không đứng một mình:
 F1, F2b, F4 tính trên nhóm nhà cung cấp và nhóm hàng, không theo người mời, nên rải người mời không làm chúng mù. ~~Và dưới sàn
-là `KHONG_XAC_DINH`, không phải `THAP`.~~ **[S1.158]** Câu vừa gạch sai với một yếu tố lẻ: một yếu tố dưới sàn chỉ hạ độ phủ.
+là `KHONG_XAC_DINH`, không phải `THAP`.~~ **[S1.159]** Câu vừa gạch sai với một yếu tố lẻ: một yếu tố dưới sàn chỉ hạ độ phủ.
 Nó đúng cho gói khi các yếu tố có lịch sử cùng dưới sàn đủ để độ phủ < 60% (㉚). Chọn một nhóm hàng ít dùng ở `DRAFT` làm F1
 và F4 dưới sàn — 25/55 trọng số —, nên độ phủ tối đa còn 30/55 ≈ 55%, và gói ra `KHONG_XAC_DINH`.
 
 ### 12.4. Goodhart
 
 Khi người đề xuất thấy Risk Score (Q6), điểm thành một mục tiêu: chọn nhà cung cấp cho ra `THAP`, hay tách gói để chuỗi ngắn
-lại. Phần sau đã có F6 (chia nhỏ). Phần trước là câu hỏi Q6. **[S1.158]** Q6 đã trả lời *"thấy"* (㊷): dò bằng đề xuất–huỷ để
+lại. Phần sau đã có F6 (chia nhỏ). Phần trước là câu hỏi Q6. **[S1.159]** Q6 đã trả lời *"thấy"* (㊷): dò bằng đề xuất–huỷ để
 lại dấu ở F11; chọn một nhà cung cấp cho ra ít `DO` hơn thì không yếu tố nào đo.
 
 ### 12.5. Hiệu năng
@@ -667,10 +667,10 @@ F1, F2b và sổ tín hiệu đọc chuỗi gói của cả tổ chức. Không 
 Ngưỡng GIẢ ĐỊNH: một đánh giá rủi ro < 2 giây ở 5.000 gói; sổ tín hiệu < 10 giây cho 12 tháng. Đo ở S4b.2 trên dữ liệu gieo,
 có biên bản. Vượt ngưỡng thì lối thoát là một bảng tổng hợp chỉ-ghi-thêm theo gói — không mang tiền, nên không chạm ADR-054.
 
-**[S1.158]** S4b.1 đã tính rủi ro trong giao dịch đề xuất, nên đo từ S4b.1 — cùng thời gian giữ khoá sổ của tổ chức (㊶). Ảnh
+**[S1.159]** S4b.1 đã tính rủi ro trong giao dịch đề xuất, nên đo từ S4b.1 — cùng thời gian giữ khoá sổ của tổ chức (㊶). Ảnh
 chụp nền `rfq_risk_nen` là đơn vị đầu vào ngay từ S4b.2, không chỉ là lối thoát (㊳).
 
-### 12.6. [S1.158] S4b chỉ bắt mẫu đều đặn
+### 12.6. [S1.159] S4b chỉ bắt mẫu đều đặn
 
 Mọi yếu tố chuỗi đo sự ĐỀU ĐẶN (góc C⑦). Một nhóm biết phép tính — `DAC-TA.md` công bố đủ để cài lại — né được:
 - F1: ngẫu nhiên hoá biên bọc lót; không tốn gì, vì người bọc lót không định thắng. Mời thêm một nhà cung cấp đệm chen vào hạng 2.
@@ -702,7 +702,7 @@ không để lại tín hiệu nào S4b đo"* vào PRODUCT §5 khi S4b.2 có mã
   được nó.
 - T4 vẫn chưa dựng: màn hình nghiệm thu bằng lượt đi thử có biên bản (khuôn S1.97).
 
-**[S1.158] Bổ sung** (góc D⑦): dữ liệu tổng hợp của T1 chỉ chứng minh cách người viết dựng quần thể, và bộ ca thiếu đối chứng
+**[S1.159] Bổ sung** (góc D⑦): dữ liệu tổng hợp của T1 chỉ chứng minh cách người viết dựng quần thể, và bộ ca thiếu đối chứng
 dương.
 - **Test thuộc tính** bằng `fast-check` (đã có trong `package.json`), seed cố định: ghim tỷ lệ nền của F2b dưới mô hình rỗng
   (M1: ≈ 0,9–2,6% `VANG` ở 9 gói, ≈ 0,2% `DO` ở 12 gói) và sự tách của F1 theo số tuyệt đối (M2) như sự thật cấu trúc.
@@ -730,7 +730,7 @@ dương.
 > nhận hàng độ phủ bởi một người khác. D2 ghi nhận; D1 ký. Bộ bằng chứng mang đánh giá, và tính lại ra đúng mức ấy khi đã ngắt
 > CSDL.
 
-**[S1.158] Câu trên thay bằng câu dưới.** Độ phủ 15% không ra được theo ㉚; tổ chức phải đã bật S3 (㉙); và câu cũ bỏ chữ
+**[S1.159] Câu trên thay bằng câu dưới.** Độ phủ 15% không ra được theo ㉚; tổ chức phải đã bật S3 (㉙); và câu cũ bỏ chữ
 *"trên giao diện"*.
 
 > **Trên giao diện**, ở một tổ chức mới dựng ĐÃ BẬT S3 — 0 gói lịch sử —, một gói bậc một chữ ký đi trọn tới đề xuất trao.
@@ -745,12 +745,12 @@ dương.
 > kiểm toán ghi nhận nó kèm lý do, và dòng ấy vào sổ. Không màn nào hiện chữ *gian lận*, và không bảng nào lưu chuỗi ấy trước
 > khi người kiểm toán ghi nhận.
 
-**[S1.158]** Ba sửa. ⑴ Theo ㊼, chuỗi 9 gói luân phiên ra `VANG`, không `DO`; câu nghiệm thu dùng chuỗi 12 gói. ⑵ Sản phẩm
+**[S1.159]** Ba sửa. ⑴ Theo ㊼, chuỗi 9 gói luân phiên ra `VANG`, không `DO`; câu nghiệm thu dùng chuỗi 12 gói. ⑵ Sản phẩm
 không có vai kiểm toán: *"người kiểm toán"* là vai mà Q2 chốt. ⑶ Dữ liệu *"của tổ chức đã vượt sàn"* là dữ liệu thật; demo V2.1
-§41 trên dữ liệu gieo theo Q8. **[S1.159]** Người kiểm toán là người giữ vai `AUDITOR`; demo chạy trên tổ chức mang dấu dữ liệu
+§41 trên dữ liệu gieo theo Q8. **[S1.160]** Người kiểm toán là người giữ vai `AUDITOR`; demo chạy trên tổ chức mang dấu dữ liệu
 mẫu, và mọi màn hiện nhãn ấy; kịch bản V2.1 §41 của spec S4 §7.2 bỏ Supplier Score (Q1).
 
-### 14.1. [S1.158] Cách đếm KPI của V2.1 §36
+### 14.1. [S1.159] Cách đếm KPI của V2.1 §36
 
 Bản nháp nhắc KPI và North Star ở đầu trang mà không nói cách đếm (góc D⑨). Đếm trên đánh giá rủi ro, theo tổ chức, theo tháng:
 
@@ -759,7 +759,7 @@ Bản nháp nhắc KPI và North Star ở đầu trang mà không nói cách đ�
 | *High-risk RFQ detected* | Đánh giá có ≥ 1 yếu tố `DO` thật — không tính `DO_PHU` | `KHONG_XAC_DINH` đếm RIÊNG; gộp vào thì chỉ số ở tổ chức mới ≈ 100% |
 | *Price anomaly* | Đánh giá có F3 hay F9 ở `DO` | Nhãn `LECH_CAO` từng dòng của S4a — đó là chỉ số của S4a |
 | *Supplier network alerts* | — | V2.1 §18, ngoài S4 (§16) |
-| North Star *"có risk assessment"* (PRODUCT §9) | **Q7** (§2.6) — **[S1.159]** gói có đánh giá rủi ro mức khác `KHONG_XAC_DINH` | Gói chỉ có đánh giá `KHONG_XAC_DINH`; gói ở tổ chức chưa bật S3 |
+| North Star *"có risk assessment"* (PRODUCT §9) | **Q7** (§2.6) — **[S1.160]** gói có đánh giá rủi ro mức khác `KHONG_XAC_DINH` | Gói chỉ có đánh giá `KHONG_XAC_DINH`; gói ở tổ chức chưa bật S3 |
 
 ---
 
@@ -779,11 +779,11 @@ Bản nháp nhắc KPI và North Star ở đầu trang mà không nói cách đ�
 Mỗi hạng mục đi đúng vòng lặp của spec S0+S1 §9: đo trước khi viết, một bất biến một phép đo, đột biến, rồi tài liệu. Mọi
 hàm và trigger mới ghim ở `hardening.always.sql` trong cùng commit với migration.
 
-### 15.1. [S1.158] Bảng hạng mục chịu lực
+### 15.1. [S1.159] Bảng hạng mục chịu lực
 
 Bảng trên giữ nguyên văn. Nó sai ở ba chỗ (góc D②, D④, A②): S4b.1 không đạt được câu nghiệm thu của chính nó, vì lớp bằng
 chứng, bảng đầu vào và phép tổng hợp nằm sau cổng; F6 cần S3.6 mà cột *Chờ* không ghi; S4b.4 và S4b.5 thiếu cổng (e), trong
-khi ADR-092 ⑴ chỉ miễn cổng cho S4b.1.
+khi ADR-093 ⑴ chỉ miễn cổng cho S4b.1.
 
 | # | Hạng mục | Ra cái gì | Chờ |
 |---|---|---|---|
@@ -796,7 +796,7 @@ khi ADR-092 ⑴ chỉ miễn cổng cho S4b.1.
 | **S4b.6** | Màn Executive | `/tong-quan` với trạng thái trước mở thầu; nút theo Q4; demo theo Q8 | S4b.2; Q4, Q8 |
 | **S4b.7** | Bằng chứng trọn | Lớp rủi ro trong bộ xuất ADR-059 cho mọi yếu tố chuỗi; `DAC-TA.md` trọn | S4b.2 |
 
-**[S1.159] Sau ADR-099**, mọi Q trong cột *Chờ* đã có câu trả lời. **S4b.4 rời S4b, sang S5** (Q1), và S3.8 rời điều kiện
+**[S1.160] Sau ADR-100**, mọi Q trong cột *Chờ* đã có câu trả lời. **S4b.4 rời S4b, sang S5** (Q1), và S3.8 rời điều kiện
 của cổng (e). S4b.3 dựng vai `AUDITOR`, mã `analytics.review` và route tự thân của Q2 (**L25**, L19 mở rộng); S4b.0 chờ pilot để
 ĐO, với con số của Q5, và dựng dấu dữ liệu mẫu cho công cụ đo (**L24**); S4b.6 không có nút *[REQUEST REVIEW]*, và hiện nhãn dữ
 liệu mẫu (**L24**); S4b.2 đếm North Star theo Q7.
@@ -812,11 +812,11 @@ liệu mẫu (**L24**); S4b.2 đếm North Star theo Q7.
 | S4.5 — bảng kết quả benchmark | F3, F9 |
 | S4.7 — hai hạng giá/TCO | F1, *Price Competitiveness* |
 | S3.1 — `chinh_sach_tai` | §5.1, ㊵ |
-| S3.7, S3.8 — thẩm định, view hiệu suất | §7, ㊾ — **[S1.159]** S3.7 cho ㉞ (người thẩm định N); §7 và S3.8 sang S5 |
+| S3.7, S3.8 — thẩm định, view hiệu suất | §7, ㊾ — **[S1.160]** S3.7 cho ㉞ (người thẩm định N); §7 và S3.8 sang S5 |
 
-**Về quy trình.** Quyết định *"viết spec S4b trước cổng"* đã ghi ở §2.2; nay có ADR-097. Viết spec trước cổng không phạm
-ADR-043 hay ADR-092, vì hai ADR ấy chặn vòng MÃ — tiền lệ S1.138, S1.155. ~~Số tạm ADR-092…098 và khoản 243–245 chỉ đúng khi spec S4, lượt soi S1.156, spec S4b và lượt soi S1.158 vào cùng một PR, vì `cap-so` cấp số theo từng lần hợp; tách PR thì số tạm trỏ sai (góc D⑫, CHƯA ĐO).~~ **[S1.159]** Cả năm vòng
-S1.155–S1.159 vào cùng một PR, và `pnpm cap-so` cấp ADR-092…099, khoản 243–245 một lần cho cả nhánh; rủi ro của góc D⑫ không
+**Về quy trình.** Quyết định *"viết spec S4b trước cổng"* đã ghi ở §2.2; nay có ADR-098. Viết spec trước cổng không phạm
+ADR-043 hay ADR-093, vì hai ADR ấy chặn vòng MÃ — tiền lệ S1.138, S1.156. ~~Số tạm ADR-093…099 và khoản 243–245 chỉ đúng khi spec S4, lượt soi S1.157, spec S4b và lượt soi S1.159 vào cùng một PR, vì `cap-so` cấp số theo từng lần hợp; tách PR thì số tạm trỏ sai (góc D⑫, CHƯA ĐO).~~ **[S1.160]** Cả năm vòng
+S1.156–S1.160 vào cùng một PR, và `pnpm cap-so` cấp ADR-093…100, khoản 243–245 một lần cho cả nhánh; rủi ro của góc D⑫ không
 xảy ra.
 
 ---
@@ -827,14 +827,14 @@ xảy ra.
   trùng tài khoản ngân hàng hay địa chỉ giữa các nhà cung cấp cùng được mời vào một gói.
 - **Specification anomaly** (V2.1 §20) — cần một sổ sửa hạng mục trước.
 - **Quality, Delivery, Claim rate, Contract compliance** (V2.1 §13) — S5.
-- **[S1.159] Supplier Score trọn** — S5 (Q1, ADR-099). §7 giữ làm đầu vào cho spec S5.
-- **Học máy, mô hình dự báo** — ADR-093.
+- **[S1.160] Supplier Score trọn** — S5 (Q1, ADR-100). §7 giữ làm đầu vào cho spec S5.
+- **Học máy, mô hình dự báo** — ADR-094.
 - **Chia sẻ điểm hay sổ tín hiệu xuyên tổ chức** — ADR-013; một nhà cung cấp bị gắn cờ ở tổ chức A không được theo sang tổ chức B.
 - **Dùng điểm để tự động loại hay tự động trao** — V2.1 §20: *"AI chỉ đưa ra Risk / Recommendation; con người đưa ra
   Investigation / Decision"*. Không đầu ra nào của S4b chặn một cạnh, trừ vế ghi nhận của S4b.1 — và vế ấy chặn việc KHÔNG AI
-  ĐỌC tín hiệu, không chặn việc trao. **[S1.158]** Câu ấy sai với bản nháp — mọi `DO` ở mức `VUA` đi qua một chạm (góc C②) —
+  ĐỌC tín hiệu, không chặn việc trao. **[S1.159]** Câu ấy sai với bản nháp — mọi `DO` ở mức `VUA` đi qua một chạm (góc C②) —
   và chỉ đúng từ ㉗. Nó vẫn nói quá một chút: vế ghi nhận chặn việc không AI KÝ TÊN vào việc đã đọc, không chứng minh việc đọc
   (§12.2).
-- **[S1.158] V2.1 §22 *Award Recommendation*** — trích làm nguồn ở đầu trang nhưng không làm: *Recommended Supplier* trên màn
+- **[S1.159] V2.1 §22 *Award Recommendation*** — trích làm nguồn ở đầu trang nhưng không làm: *Recommended Supplier* trên màn
   Executive là đề xuất của người.
-- **[S1.158] Yếu tố không dựa vào đều đặn** (§12.6) — một phiên bản phương pháp sau.
+- **[S1.159] Yếu tố không dựa vào đều đặn** (§12.6) — một phiên bản phương pháp sau.

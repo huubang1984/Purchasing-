@@ -401,4 +401,15 @@ describe("[INV-D5] [S1.68 / khoản 119] một đường ghi sổ từ chối �
       CHO_TRAN_DUOC_PHEP.map((c) => `${c.tep} › ${c.ham} › ${c.lop} — ném trần`).sort(),
     );
   });
+
+  it("[INV-D5] [S1.155 / khoản 122 · 144] móc `truocKhiGhiTuChoi` của `requirePermission` — cách DUY NHẤT để một lần từ chối quyền không vào sổ — chỉ có ở `rbac.ts` (khai) và `dispatch.ts` (trần theo phiên)", () => {
+    const co = maSanXuat()
+      .filter((duong) => readFileSync(duong, "utf8").includes("truocKhiGhiTuChoi"))
+      .map((duong) => relative(GOC, duong).split(sep).join("/"))
+      .sort();
+    expect(co, "một chỗ mới dùng móc bỏ sổ — nó phải được khai ở ADR-092 và thêm vào đây có chủ đích").toEqual([
+      "apps/api/src/dispatch.ts",
+      "packages/identity/src/rbac.ts",
+    ]);
+  });
 });

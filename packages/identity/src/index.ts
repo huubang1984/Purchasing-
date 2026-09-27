@@ -26,6 +26,12 @@
 // nằm cùng gói), và một lần từ chối ở TẦNG CSDL (RLS/GRANT) cũng không sinh bản ghi nào — đo
 // được. Việc barrel không xuất nó đóng đúng một đường: một gói KHÁC vô tình dựng cổng gác bằng
 // nó.
+//
+// [S1.155 / khoản 122 · 144 / ADR-092] `requirePermission` NAY CÓ MỘT CÁCH để lần từ chối không vào sổ: tham số thứ tư
+// (móc "trước khi ghi từ chối"), chạy trên đường từ chối TRƯỚC lần ghi — nó ném thì không có hàng sổ. Đó là một cổng gác im lặng
+// CÓ TÊN, và chỉ một chỗ được dùng nó: trần lần từ chối theo phiên của `apps/api/src/dispatch.ts` (429 sau N lần đã ghi sổ trong
+// cửa sổ). Lớp cưỡng chế: `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên móc chỉ xuất hiện (trừ chú thích này, cố ý không viết tên) ở `rbac.ts` và
+// `dispatch.ts`.
 // ============================================================================================
 export {
   CHAIN_COVERING_ROLE_PAIRS,

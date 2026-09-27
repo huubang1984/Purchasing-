@@ -12445,7 +12445,71 @@ ghi chú tại chỗ; một khối mới canh HÌNH DẠNG: `AGENT_READ` xuất 
   phiên agent) — **33 ca đạt**.
 - Số tạm `S1.154`, `ADR-091` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
 
-# §S1.156 — LƯỢT SOI HÌNH DẠNG SPEC S4, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 32 PHÁT HIỆN, MƯỜI CAO, BA LỜI KHAI ĐO TRÊN POSTGRES THẬT — VÀ BA LỖ CỦA MVP1
+# §S1.155 — KHOẢN 122 VÀ 144 ĐÓNG: TRẦN LẦN TỪ CHỐI THEO PHIÊN, 429 TRƯỚC LẦN GHI SỔ
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 122 và 144 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-092). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Khoản 122 (S1.69) và 144 (S1.76) là cùng một khe nhìn từ hai phía: nhánh `BUYER` của `apps/api/src/dispatch.ts` không có trần nào
+cho lần TỪ CHỐI, trong khi mỗi lần từ chối là một hàng sổ ở giao dịch độc lập và mỗi hàng sổ lấy khoá tư vấn nối tiếp toàn tổ chức
+dưới trần 2 s (050). 122 là phiên hợp lệ bắn vào route nó không có quyền; 144 là cookie agent rò bắn vào route ngoài phạm vi. Vòng
+S1.154 (ADR-091) đã thêm trần cho lần ĐỌC của agent và ghi rõ vì sao vế 403 còn hở: lần đếm trên `client` cuộn lại cùng giao dịch
+khi lần từ chối NÉM.
+
+## 2. Đo trước khi sửa
+
+- `requirePermission` (`packages/identity/src/rbac.ts`) gọi `hasPermission`, rồi ghi `PERMISSION_DENIED` qua `withTenant(auditPool, …)`,
+  rồi ném. Người gọi không có chỗ nào đứng giữa "biết là từ chối" và "ghi sổ" — và `hasPermission` cố ý không ra cửa gói.
+- Vế phạm vi của khoản 141 gọi `throwAuditedDenial(deps.auditPool, …)` trực tiếp: biết trước là từ chối, nên đếm được trước lần ghi.
+- Cả hai loại lỗi từ chối trước vòng này ném ra khỏi callback `withTenant` ⇒ ROLLBACK. Giao dịch ấy tới chỗ từ chối chỉ mới chạy
+  `resolveSessionByToken` (một câu `SELECT`) — không handler nào đã chạy.
+- RED trên mã cũ (suy ra, không chạy riêng): mã cũ không có đường nào ra 429 ở nhánh `BUYER` cho lần từ chối, nên ⒠ ⒡ ⒢ ⒣ đỏ ở
+  khẳng định 429 đầu tiên của mỗi vế. Vế ⒣ còn được đo riêng bằng đột biến ở mục 4.
+
+## 3. Thay đổi
+
+- `rbac.ts`: `requirePermission(client, requirement, auditPool, { truocKhiGhiTuChoi })` — móc chạy SAU phép kiểm quyền, TRƯỚC lần
+  ghi, chỉ trên đường từ chối; lỗi của nó đi ra nguyên dạng. Không móc ⇒ hành vi y như trước (mọi người gọi khác không đổi).
+- `dispatch.ts`, nhánh `BUYER`: `demTuChoi` đếm `tu-choi|<sessionId>` bằng `tangBucketNguoiGoi` trên `client`; quá
+  `TU_CHOI_TRAN_MOI_CUA_SO` (30) ⇒ `VuotTranTuChoiError`. `phanQuyetTuChoi` bọc vế phạm vi (đếm rồi `throwAuditedDenial`) và cổng
+  quyền (móc = `demTuChoi`), bắt lỗi NGAY TRONG callback và `return`: 429 + `retry-after`; 403 cho `PermissionDeniedError` và
+  `AgentScopeDeniedError`; 500 qua `loiNoiBo` cho `DenialAuditFailedError` và `PermissionAuditFailedError`. `return` ⇒ COMMIT ⇒ lần
+  đếm ở lại. `createDispatcher` nhận `tranTuChoi`.
+- `packages/identity/src/index.ts`: chú thích mặt tiền nêu móc là một cổng gác im lặng có tên, giam ở một chỗ.
+- `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`: tên móc chỉ được xuất hiện ở `rbac.ts` và `dispatch.ts`.
+- `tools/inv-matrix/src/so-khai-nhan.ts`: khai cặp (D5, `apps/api/src/auth.int.test.ts`).
+
+## 4. Đo sau khi sửa
+
+`apps/api/src/auth.int.test.ts`, khối *"[S1.155 / khoản 122 · 144] trần lần TỪ CHỐI theo phiên"*, trần 3 tiêm vào một bộ điều
+phối riêng, PostgreSQL 16 thật:
+- ⒠ phiên NGƯỜI vai BUYER, `POST /suppliers` (thiếu `supplier.manage`): 3×403 và +3 hàng `PERMISSION_DENIED`; 3×429 với thân
+  `{"error":"qua nhieu yeu cau"}`, `retry-after` 900, 0 hàng thêm; `POST /rfqs` của cùng phiên ⇒ 201; phiên khác ⇒ 403 và +1 hàng;
+- ⒡ phiên AGENT, `GET /rfqs/:id/comparison` (ngoài phạm vi): 3×403 và +3 hàng `AGENT_SCOPE_DENIED`; rồi 429 không hàng; lần đọc
+  trong phạm vi ⇒ 200; phiên người của cùng người dùng ⇒ 403 (bucket khác);
+- ⒢ tám lời gọi CÙNG LÚC của một phiên ⇒ đúng `[403, 403, 403, 429, 429, 429, 429, 429]` và đúng +3 hàng — câu đếm khoá hàng
+  bucket tới COMMIT nên các lần từ chối của một phiên xếp hàng sau nhau;
+- ⒣ giữ khoá chuỗi sổ bằng một `audit_append` chưa commit: 3 lời gọi ⇒ 3×500 thân cố định, 0 hàng; nhả khoá, lời gọi thứ tư ⇒
+  429. **Đột biến:** gỡ nhánh `DenialAuditFailedError`/`PermissionAuditFailedError` của `phanQuyetTuChoi` ⇒ ⒣ đỏ, *"expected 403 to
+  be 429"* — lần đếm cuộn theo lần ghi hỏng, đúng khe mà nhánh ấy đóng.
+
+## 5. Ranh giới, nói ra
+
+- N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ; trần giới hạn một phiên, và một kẻ cầm nhiều phiên nhân được ngân sách.
+- Cửa sổ nhảy theo epoch: 30 lần có thể tới ở cuối cửa sổ này và 30 lần nữa ở đầu cửa sổ sau.
+- Lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không đi qua trần này.
+- `requirePermission` nay có một đường từ chối không vào sổ — chỉ khi người gọi cấp móc, và chỉ `dispatch.ts` được cấp.
+- Lần từ chối nay COMMIT giao dịch nghiệp vụ thay vì ROLLBACK; giao dịch ấy tới đó chỉ có câu đọc phiên và câu đếm.
+
+## 6. Số đo
+
+- `pnpm t0` sạch; `pnpm test` xanh.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
+- Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.
+
+# §S1.157 — LƯỢT SOI HÌNH DẠNG SPEC S4, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 32 PHÁT HIỆN, MƯỜI CAO, BA LỜI KHAI ĐO TRÊN POSTGRES THẬT — VÀ BA LỖ CỦA MVP1
 
 **Mảnh của `docs/PRODUCT.md` §11 mà vòng này chạm (ADR-043 ⒞): không mảnh nào.** Vòng này soi một spec. Khoản **243** mở ở
 vòng này nằm ở rổ A, nhưng vòng này không sửa nó.
@@ -12453,15 +12517,15 @@ vòng này nằm ở rổ A, nhưng vòng này không sửa nó.
 ## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
 
 Chủ dự án yêu cầu một lượt soi hình dạng cho bản nháp spec S4
-(`docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`), vào kho ở vòng S1.155. Khuôn là S1.139: soi
+(`docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md`), vào kho ở vòng S1.156. Khuôn là S1.139: soi
 TRƯỚC dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản phẩm, tự chốt phần tiền lệ trả lời được, rồi sửa spec tại chỗ.
 
-Bản nháp là của chính vòng S1.155, nên phần lớn chỗ sai là chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn
-`[S1.156]`, không viết lại.
+Bản nháp là của chính vòng S1.156, nên phần lớn chỗ sai là chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn
+`[S1.157]`, không viết lại.
 
 Thứ vòng này để lại:
 - spec sửa tại chỗ — §2.4, §2.5, §3.5, §5.1, câu nghiệm thu mới ở §7.1, §8.10–§8.14, bảng thứ tự mới ở §9;
-- năm ADR — 092…096;
+- năm ADR — 093…097;
 - ba khoản nợ — 243, 244, 245 — cả ba của MVP1;
 - tiền đề A6 và nhóm E (E1–E7) ở `docs/TIEN-DE-CHUA-DO.md`.
 
@@ -12516,7 +12580,7 @@ Hội tụ đáng đọc:
 | 2 | `bid_so_tien` từ chối SÁU ca, không bốn (`022:350-373`) — **đo** (M1) | A③ | §5.1 L5 |
 | 3 | Bước 14 xanh vì phạm vi: phong bì kịch bản 41 không có `lines`, kim quét là TỔNG; năm bộ quét; hardening đã chặn matview | A① · D⑦ · B⑥ | ⒅ |
 | 4 | L8 khai nới `057` mà không `CHECK` nào liệt kê mã; chốt *"chỉ `gia`"* ở TS; `he_so` tuỳ ý | A⑤ · B⑤ | ⒃ |
-| 5 | `bid_don_gia` thiếu tham số, không `IMMUTABLE` được; *"chỉ mục biểu thức"* không phải lối thoát | B⑦ | ⒁ · ADR-094 |
+| 5 | `bid_don_gia` thiếu tham số, không `IMMUTABLE` được; *"chỉ mục biểu thức"* không phải lối thoát | B⑦ | ⒁ · ADR-095 |
 | 6 | View không phải ranh giới: `app_api` có `SELECT` trên `rfq_unsealed_bids`; vị từ khách trong thân là thừa | B⑧ | ⑿ · §5.1 L6 |
 | 7 | *"`seq` dưới khoá tư vấn"* viện dẫn một khuôn chưa có mã; SEQUENCE là oracle xuyên tổ chức | B⑨ | ⑿ · §4.4 |
 | 8 | Bí danh toàn cục trong `uom_aliases` không cài được dưới FORCE RLS; `uom_units` là thước nhưng sửa được | B⑩ | §5.1 L4 |
@@ -12565,7 +12629,7 @@ Bảy chỗ là lựa chọn sản phẩm. Mỗi câu hỏi được trình kèm
 - ⑽ lịch sử mua ngoài hệ thống là nguồn thứ ba, hiện riêng;
 - ⑾ quần thể benchmark theo gói, loại `CANCELLED`.
 
-Mười bốn chốt từ tiền lệ (⑿–㉕) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-096 và bảng §2.5 của spec.
+Mười bốn chốt từ tiền lệ (⑿–㉕) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-097 và bảng §2.5 của spec.
 
 Hai chỗ lượt soi CỐ Ý không chốt:
 - **ADR (e)** — con số của cổng dữ liệu chỉ hiệu chỉnh được trên dữ liệu thật;
@@ -12611,14 +12675,15 @@ Hai chỗ lượt soi CỐ Ý không chốt:
 - `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**; `[INV-H20]` sổ nợ tự đối chiếu 45/45.
 - Tầng tích hợp KHÔNG chạy ở vòng này: vòng này không đổi một dòng mã, migration hay test nào, và ma trận bất biến không có
   gì để sinh lại.
-- Sổ nợ **242 → 245** khoản, mở **88 → 91**: mở 243, 244, 245; không đóng khoản nào. Rổ A **1 → 2**, rổ B **64 → 65**,
-  rổ C **23 → 24**; ba rổ cộng đúng: 2 + 65 + 24 = 91. Tính trên `master` sau #162 (S1.154 đóng khoản 142).
-- **91 → 96** ADR (092…096; số do `pnpm cap-so` cấp, ADR-090). **68** migration, không đổi. Sổ đăng ký bất biến **63**, không đổi.
+- Sổ nợ **242 → 245** khoản, mở **86 → 89**: mở 243, 244, 245; không đóng khoản nào. Rổ A **1 → 2**, rổ B **62 → 63**,
+  rổ C **23 → 24**; ba rổ cộng đúng: 2 + 63 + 24 = 89. Tính trên `master` sau #162 và #164 (S1.154 đóng khoản 142; S1.155 đóng
+  khoản 122 và 144).
+- **92 → 97** ADR (093…097; số do `pnpm cap-so` cấp, ADR-090). **68** migration, không đổi. Sổ đăng ký bất biến **63**, không đổi.
 - Spec: **737 → 1100 dòng**. Trạng thái đổi từ *"bản nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
-- `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`, `ADR-093NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so`
+- `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`, `ADR-094NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so`
   cấp số thật lúc merge.
 
-# §S1.158 — LƯỢT SOI HÌNH DẠNG SPEC S4b, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 33 PHÁT HIỆN, TÁM CAO, SÁU LỜI KHAI ĐO TRÊN POSTGRES THẬT — VÀ KHÔNG LỖ NÀO CỦA MVP1
+# §S1.159 — LƯỢT SOI HÌNH DẠNG SPEC S4b, TRƯỚC DÒNG MÃ ĐẦU TIÊN: 33 PHÁT HIỆN, TÁM CAO, SÁU LỜI KHAI ĐO TRÊN POSTGRES THẬT — VÀ KHÔNG LỖ NÀO CỦA MVP1
 
 **Mảnh của `docs/PRODUCT.md` §11 mà vòng này chạm (ADR-043 ⒞): không mảnh nào.** Vòng này soi một spec. Quyết định ㉙ của vòng
 này giữ đúng điều ấy khi S4b.1 có mã: S4b.1 chỉ áp cho tổ chức đã bật S3, nên kịch bản pilot không đổi.
@@ -12626,17 +12691,17 @@ này giữ đúng điều ấy khi S4b.1 có mã: S4b.1 chỉ áp cho tổ chứ
 ## 1. Vòng này là gì, và vì sao nó KHÔNG cài một dòng nào
 
 Chủ dự án chọn viết spec chi tiết S4b TRƯỚC cổng dữ liệu (e), rồi cho qua lượt soi hình dạng
-(`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`, vào kho ở vòng S1.157). Khuôn là S1.139 và
-S1.156: soi trước dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản phẩm, tự chốt phần tiền lệ trả lời được, rồi sửa
+(`docs/superpowers/specs/2026-09-26-trustprocure-s4b-tri-tue-mua-sam.md`, vào kho ở vòng S1.158). Khuôn là S1.139 và
+S1.157: soi trước dòng mã đầu, trình chủ dự án những chỗ là lựa chọn sản phẩm, tự chốt phần tiền lệ trả lời được, rồi sửa
 spec tại chỗ.
 
-Bản nháp là của chính vòng S1.157, nên phần lớn chỗ sai là chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn
-`[S1.158]`, không viết lại.
+Bản nháp là của chính vòng S1.158, nên phần lớn chỗ sai là chỗ sai của chính tác giả. Chúng được GẠCH tại chỗ kèm nhãn
+`[S1.159]`, không viết lại.
 
 Thứ vòng này để lại:
 - spec S4b sửa tại chỗ — §2.4 (bốn quyết định), §2.5 (hai mươi mốt chốt), §2.6 (bảy câu còn mở), §4.1, §10.1, §11.1, §12.6,
   §14.1, §15.1;
-- hai ADR — 097, 098 — và một dòng sửa tại chỗ ở ADR-096 ⑼;
+- hai ADR — 098, 099 — và một dòng sửa tại chỗ ở ADR-097 ⑼;
 - ba chỗ trôi số ở spec S4 (§4.9, §5.1, §9) và ở tiền đề E7, đánh dấu tại chỗ;
 - tiền đề E8–E13 ở `docs/TIEN-DE-CHUA-DO.md`.
 
@@ -12743,11 +12808,11 @@ chốt cả bốn ngày 2026-09-26, đều theo đề xuất:
 - ㉘ ngưỡng của S4b.1 là hằng của phương pháp; trọng số cấu hình được, có sàn — ngoại lệ với PRODUCT §8 ⑸;
 - ㉙ S4b.1 theo công tắc ADR-080.
 
-**Bảy câu còn lại CHƯA được hỏi trong vòng này** (spec §2.6): Q1, Q2, Q3, Q4, Q5, Q7, Q8. **[S1.159]** Hỏi ngay sau vòng
+**Bảy câu còn lại CHƯA được hỏi trong vòng này** (spec §2.6): Q1, Q2, Q3, Q4, Q5, Q7, Q8. **[S1.160]** Hỏi ngay sau vòng
 này; chủ dự án chốt cả bảy theo đề xuất — mục 11. Chúng ghi kèm đề xuất của lượt soi,
 và mỗi câu chặn đúng một hạng mục — không câu nào chặn một vòng đang chạy. Lượt soi không tự chốt câu nào trong số ấy.
 
-Hai mươi mốt chốt từ tiền lệ (㉚–㊿) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-098 và bảng §2.5 của spec.
+Hai mươi mốt chốt từ tiền lệ (㉚–㊿) theo khuôn ADR-050, mỗi chốt ghi tiền lệ nó dựa vào, ở ADR-099 và bảng §2.5 của spec.
 
 ## 7. Lời khai của bản nháp mà lượt soi XÁC NHẬN
 
@@ -12779,7 +12844,7 @@ vế `exists()` cho mọi khoá, nên không mang hình dạng M5.
 - **Sáu phép đo chạy trên bảng tối giản ở bộ dựng cục bộ, không trên lược đồ của kho, không trên CI.** Spec §13 ghi chúng thành
   test thường trực ở hạng mục tương ứng — M6, M7, M8 ở S4b.1.
 - **Trong 33 phát hiện, sáu có phép đo và hai có phép tính.** Phần còn lại là phép đọc trên tệp:dòng của bốn báo cáo.
-- ~~**Bảy câu cho chủ dự án chưa được hỏi.** Spec §2.6 ghi đề xuất, không ghi quyết định.~~ **[S1.159]** Đã hỏi và đã chốt —
+- ~~**Bảy câu cho chủ dự án chưa được hỏi.** Spec §2.6 ghi đề xuất, không ghi quyết định.~~ **[S1.160]** Đã hỏi và đã chốt —
   mục 11.
 - **Không chống được hai người bàn nhau**, và không chứng minh được người ghi nhận đã đọc bằng chứng (spec §12.2). S4b chỉ bắt
   mẫu đều đặn (spec §12.6).
@@ -12791,17 +12856,17 @@ vế `exists()` cho mọi khoá, nên không mang hình dạng M5.
 - `pnpm t0` — **0 vi phạm**, 396 module / 1547 phụ thuộc; typecheck và `eslint` sạch.
 - `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`.
 - Tầng tích hợp KHÔNG chạy ở vòng này: vòng này không đổi một dòng mã, migration hay test nào.
-- Sổ nợ **245** khoản, mở **91**, không đổi; rổ A 2, rổ B 65, rổ C 24.
-- **96 → 98** ADR (097, 098; số do `pnpm cap-so` cấp, ADR-090). **68** migration, không đổi. Sổ đăng ký bất biến **63**, không đổi.
+- Sổ nợ **245** khoản, mở **89**, không đổi; rổ A 2, rổ B 63, rổ C 24.
+- **97 → 99** ADR (098, 099; số do `pnpm cap-so` cấp, ADR-090). **68** migration, không đổi. Sổ đăng ký bất biến **63**, không đổi.
 - Spec S4b: **472 → 813 dòng**. Spec S4: **1100 → 1116 dòng** (ba chỗ đánh dấu trôi số). Trạng thái spec S4b đổi từ *"bản
   nháp, chưa qua lượt soi hình dạng"* sang *"đã qua lượt soi hình dạng"*.
 - `pnpm cap-so --dem` viết lại số đếm ở `docs/STATE.md` và `Handoff.md`. `pnpm cap-so --kiem` còn đỏ vì số tạm `S1.91NN`,
-  `ADR-093NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so` cấp số thật lúc merge.
+  `ADR-094NN`, `94NN` trên nhánh — đúng như ADR-090 định; `pnpm cap-so` cấp số thật lúc merge.
 
-## 11. [S1.159] Bảy câu còn lại — chủ dự án chốt cả bảy theo đề xuất
+## 11. [S1.160] Bảy câu còn lại — chủ dự án chốt cả bảy theo đề xuất
 
 Sau commit của vòng này, bảy câu của spec §2.6 được trình trong một lượt. Chủ dự án trả lời *"cả bảy câu theo đề xuất"*, ngày
-2026-09-26. Ghi ở **ADR-099**; hệ quả ở spec S4b §2.7:
+2026-09-26. Ghi ở **ADR-100**; hệ quả ở spec S4b §2.7:
 - Q1 — Supplier Score hoãn tới S5; §7, L9 và S4b.4 rời S4b;
 - Q2 — vai mới `AUDITOR` giữ đúng một mã mới `analytics.review`; người bị phân tích đọc được lượt đọc về mình;
 - Q3 — không thêm ô bảo hành;
@@ -12811,8 +12876,8 @@ Sau commit của vòng này, bảy câu của spec §2.6 được trình trong m
 - Q8 — dữ liệu gieo dùng cho demo, mang nhãn, không tính cho cổng (e).
 
 Không phép đo mới: bảy câu là lựa chọn sản phẩm, không phải lời khai về mã. Hai bất biến mới trên giấy — L24, L25 —, tiền đề
-E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, §7.2, §9), PRODUCT (§7, §8 ⑸, §9) và ADR-096, ADR-097.
+E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, §7.2, §9), PRODUCT (§7, §8 ⑸, §9) và ADR-097, ADR-098.
 
 - `pnpm t0` — **0 vi phạm**; `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`. `pnpm cap-so --dem` viết lại số đếm.
-- **98 → 99** ADR (099; số do `pnpm cap-so` cấp). Sổ nợ **245**, mở **91**, không đổi. **68** migration, không đổi.
+- **99 → 100** ADR (100; số do `pnpm cap-so` cấp). Sổ nợ **245**, mở **89**, không đổi. **68** migration, không đổi.
 
