@@ -14150,6 +14150,5 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
 - Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
   hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
   đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
-- Lần cấp đầu cho vòng này S1.170, ADR-106, `073_tu_choi_co_ten`; #175 (khoản 228) merge trước với đúng ba số ấy, nên sau lần hợp
-  `pnpm cap-so` thu hồi qua trailer `Cap-So:` và cấp lại thành S1.171, ADR-107, `074_tu_choi_co_ten`.
+- @@CAP_SO@@
 - Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
