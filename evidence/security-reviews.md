@@ -14299,7 +14299,7 @@ Ba đột biến, cả ba đỏ:
 
 ---
 
-# §S1.9101 — KHOẢN 9401: KHOÁ `depcruise` CỦA LỚP TEST XẾP HÀNG NGƯỜI CHỜ — NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC
+# §S1.175 — KHOẢN 249: KHOÁ `depcruise` CỦA LỚP TEST XẾP HÀNG NGƯỜI CHỜ — NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC
 
 Không chạm mảnh nào của `PRODUCT.md` §11; chỉ đổi lớp test (ADR-043 ⒞).
 
@@ -14330,7 +14330,7 @@ Người đến trước được trước:
 
 ## 4. Đo
 
-- **Sáu ca mới** ở `tests/architecture/khoa-depcruise.test.ts`, khối `[khoản 9401]` — tệp **16/16**:
+- **Sáu ca mới** ở `tests/architecture/khoa-depcruise.test.ts`, khối `[khoản 249]` — tệp **16/16**:
   - người đến sau KHÔNG giành khi có một dấu còn sống đến trước, mà đặt dấu của mình sau nó (hai dấu trong hàng) và chờ
     tới lúc dấu kia rời đi (≥ 1,4 s);
   - đối chứng `nhuong: false` — đúng khoá cũ — giành ngay dù có người xếp hàng trước;

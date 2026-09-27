@@ -91,7 +91,7 @@
 // ==============================================================================================
 //
 // ==============================================================================================
-// ⑹ CHỖ HỎNG THỨ SÁU — CŨNG ĐẾN TỪ CI: KHOÁ KHÔNG XẾP HÀNG, NÊN NGƯỜI CHỜ ĐÓI. [khoản 9401]
+// ⑹ CHỖ HỎNG THỨ SÁU — CŨNG ĐẾN TỪ CI: KHOÁ KHÔNG XẾP HÀNG, NÊN NGƯỜI CHỜ ĐÓI. [khoản 249]
 //
 // Đo: PR #176, run 36325198665, job `T1+T2 (windows-latest)` ĐỎ đúng một ca — PROBE `g9-` của
 // `apps/api/src/routes.test.ts` ném *"chờ khoá depcruise quá 180000 ms"* — trong khi CÙNG mã ấy (commit
@@ -138,7 +138,7 @@ mkdirSync(dirname(DUONG_KHOA), { recursive: true });
  * test là một lượt cruise thật GIỮ KHOÁ. Nên một chỗ gọi khác đợi sau nó phải chịu được cỡ ấy —
  * 180 giây để lại hơn hai lần biên. Vượt biên thì NÉM kèm thông điệp, không treo.
  *
- * [khoản 9401] Câu trên chỉ đúng khi người chờ được vào ở lần nhả KẾ TIẾP — và khoá không xếp hàng thì
+ * [khoản 249] Câu trên chỉ đúng khi người chờ được vào ở lần nhả KẾ TIẾP — và khoá không xếp hàng thì
  * không hứa điều ấy (⑹): trên CI tệp kia đã chạy 194,5 s. Nay dấu chờ xếp hàng người đến, nên hạn này bao
  * một VỊ TRÍ TRONG HÀNG — vài lượt giữ khoá — chứ không bao trọn một tệp khác, và con số giữ nguyên.
  */
@@ -170,14 +170,14 @@ const HAN_KHOA_MS = 30_000;
 const CUA_SO_EPERM_MS = 2_000;
 const NHIP_MS = 50;
 /**
- * [khoản 9401] Một dấu chờ mà nhịp tim ngừng lâu hơn mốc này thì không còn được nhường. Người chờ đập
+ * [khoản 249] Một dấu chờ mà nhịp tim ngừng lâu hơn mốc này thì không còn được nhường. Người chờ đập
  * tim mỗi `NHIP_MS`, nên mười giây là hai trăm nhịp lỡ liền — đủ để nói "không còn ai hỏi nữa" mà không
  * phạt một tiến trình chỉ chậm một lúc. Sai về phía nào cũng KHÔNG phá loại trừ: dấu chỉ quyết thứ tự.
  */
 const HAN_TIM_DAU_CHO_MS = 10_000;
 
 /**
- * [khoản 9401] Cách chờ của MỘT lượt giành. Mã của lớp test không truyền nó; chỉ phép đo về chính lớp
+ * [khoản 249] Cách chờ của MỘT lượt giành. Mã của lớp test không truyền nó; chỉ phép đo về chính lớp
  * khoá này truyền — cùng hạng với `duongKhoa` và `tao` ở dưới —, để đo được hạn chờ mà không đợi 180 giây
  * và để dựng lại đúng khoá CŨ làm đối chứng (`nhuong: false`).
  */
@@ -274,7 +274,7 @@ interface TrangThaiCho {
   readonly han: number;
   readonly hanChoMs: number;
   hanEperm: number | undefined;
-  /** [khoản 9401] Tên dấu chờ của lượt này — có từ lần giành hỏng đầu tiên, hay ngay từ đầu nếu phải nhường. */
+  /** [khoản 249] Tên dấu chờ của lượt này — có từ lần giành hỏng đầu tiên, hay ngay từ đầu nếu phải nhường. */
   dau: string | undefined;
   daThuLanDau: boolean;
 }
@@ -342,7 +342,7 @@ function nhaKhoa(duongKhoa: string): void {
 }
 
 // ----------------------------------------------------------------------------------------------
-// [khoản 9401] HÀNG CHỜ — xem ⑹. Mọi hàm dưới đây nuốt lỗi hệ thống tệp, và đó là CHỦ Ý chứ không phải
+// [khoản 249] HÀNG CHỜ — xem ⑹. Mọi hàm dưới đây nuốt lỗi hệ thống tệp, và đó là CHỦ Ý chứ không phải
 // cái `catch {}` trần mà ⑴ cấm: ⑴ cấm nuốt lỗi trên đường LOẠI TRỪ, nơi nuốt lỗi thành quay vòng vô hạn.
 // Ở đây nuốt lỗi chỉ làm lớp khoá quên thứ tự — tức quay về đúng luật trước ⑹ —, và không nhánh nào
 // vòng lại mà không đi qua hạn chờ và giấc ngủ của vòng ngoài.

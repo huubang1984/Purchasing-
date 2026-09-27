@@ -304,7 +304,7 @@ function vietKichBanChoKhoa(duong: string): string {
 }
 
 // ==============================================================================================
-// [khoản 9401] ⑹ NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC — xem khối ⑹ trong `khoa-depcruise.ts`
+// [khoản 249] ⑹ NGƯỜI ĐẾN TRƯỚC ĐƯỢC TRƯỚC — xem khối ⑹ trong `khoa-depcruise.ts`
 //
 // PR #176, run 36325198665: `T1+T2 (windows-latest)` đỏ đúng một ca — PROBE `g9-` của
 // `apps/api/src/routes.test.ts` chờ khoá quá 180 s — vì `boundaries.test.ts` nhả rồi giành lại khoá ở
@@ -404,7 +404,7 @@ function datDauGia(duongKhoa: string, pid: number = process.pid): { readonly duo
   };
 }
 
-describe("[khoản 9401] khoá xếp hàng: người đến trước được trước", () => {
+describe("[khoản 249] khoá xếp hàng: người đến trước được trước", () => {
   it("người đến sau KHÔNG giành khi có một người chờ còn sống đến trước — mà xếp hàng sau họ", { timeout: 30_000 }, async () => {
     const duong = join(thuMuc, "nhuong-dau-song.lock");
     const gia = datDauGia(duong);
