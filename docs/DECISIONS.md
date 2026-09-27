@@ -7025,7 +7025,7 @@ công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ ch�
 có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
 lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
 rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
-**[S1.163]** `signed_at` nay đóng dấu SAU khoá (`070_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
+**[S1.164]** `signed_at` nay đóng dấu SAU khoá (`070_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
 nộp duyệt: K1 đòi phiên bản hiệu lực tại `submitted_at`, và một `signed_at` là giờ ĐẦU giao dịch ký làm phép tái lập ấy
 sai — đo bằng đột biến trả thân `069`.
 
@@ -7133,7 +7133,7 @@ bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt th
 **[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
 ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
 là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
-**[S1.163]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
+**[S1.164]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
 (`NGAN_SACH_GHIM_BAN_CU`), ở tầng gói và ở trigger cạnh. Chủ dự án chọn TỪ CHỐI chứ không tự ghim lại lúc nộp: người nộp
 đặt lại ngân sách và thấy bậc mới trước khi nộp, không để bậc và số chữ ký đổi dưới tay mình.
 
@@ -7304,7 +7304,7 @@ gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
 `CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
 (`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
 mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
-dịch được. **[S1.163]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
+dịch được. **[S1.164]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
 hai vế: `THIEU_NGAN_SACH` vào sổ — bỏ bước ngân sách là thoát mọi chốt của S3 —, `NGAN_SACH_GHIM_BAN_CU` thì không —
 chính sách đổi dưới chân người dùng. `BAC_LECH_HAM_PHAN_BAC` không vào sổ theo cùng luật.
 
@@ -7994,3 +7994,46 @@ của *Verified Competitive Spend* bằng 0 ở tổ chức chưa bật S3, và 
 (e). Tổ chức do công cụ gieo dựng mang một dấu trên `organizations`, ngoài GRANT của `app_api`.
 
 Hai bất biến mới ở spec S4b §11.1: **L24** (dấu dữ liệu mẫu) và **L25** (vai `AUDITOR`). Không mã, không migration, không khoản nợ.
+
+---
+
+## ADR-101 — Pilot giả lập: danh mục kịch bản đi qua API thật, và một ranh giới không thay khách hàng pilot
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-043, ADR-044, ADR-060, ADR-062 · Kế hoạch:
+`docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`
+
+### Bối cảnh
+
+Mảnh 4 của `docs/PRODUCT.md` §11 (*khách hàng pilot*) đứng yên từ 2026-08-27, và không đơn vị nào nhận pilot một sản
+phẩm chưa hoàn thiện. Thứ dự án có để cho xem là lát cắt demo của ADR-044: `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL
+thô. Gói ấy không có hàng sổ `RFQ_CREATED`, `RFQ_APPROVED` hay `RFQ_OPENED`, và tổ chức của nó không có FINANCE, nên
+không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới: *"Một pilot giả lập cho ra bằng chứng giả lập"*.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Tài liệu + công cụ** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`). Công cụ tự dựng một cụm cục bộ đủ bốn tiến
+   trình, gieo **hai** doanh nghiệp giả lập (Sản xuất cơ khí, Xây dựng) và chạy một danh mục mười một kịch bản viết bằng
+   dữ liệu.
+2. **Mọi bước nghiệp vụ đi qua HTTP của `apps/api`**, gồm đăng nhập bằng link cộng TOTP và OTP của nhà cung cấp; nhà cung
+   cấp niêm phong bằng `sealBid`. Kết nối đặc quyền chỉ làm năm việc không có đường ứng dụng — `migrate()`, hai vai đăng
+   nhập, tổ chức, người dùng kèm vai, và ba câu CHỈ ĐỌC: tổng số hàng sổ kiểm toán của một tổ chức (trước và sau mỗi lần
+   thử sai), số hàng sổ theo hành động, và dấu kiểm vòng khoá ở `master_key_check_values` — và nó được khai ở
+   `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`.
+3. **Thời gian thật, không lùi ngày.** Chế độ nhanh đóng sớm có lý do; cờ `--cham` đợi hạn nộp thật. Sổ kiểm toán ép
+   `clock_timestamp()`, nên một bộ dữ liệu lùi ngày sẽ mâu thuẫn với chính sổ.
+4. **Dữ liệu dùng cho cả kiểm tính năng lẫn trình diễn.** Bốn gói dừng cố ý ở trạng thái dở; ba lệnh `dang-nhap`, `otp`,
+   `lien-ket` cho người trình diễn đi tiếp trên màn hình mà không gõ SQL.
+5. **Dữ liệu tự khai là bịa, báo cáo tự khai là giả lập.**
+   - Nhãn `[GIẢ LẬP]`/`[GL]`, tên miền `.invalid`, mã số thuế mở đầu bằng bảy số 0, IP thuộc `2001:db8::/32`.
+   - Báo cáo mở đầu bằng *"KHÔNG PHẢI PILOT"* và không mang token nào; token và bí mật TOTP chỉ nằm ở thư mục trạng
+     thái 0700 (trên POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha), có trong `.gitignore`.
+   - Công cụ chỉ nhận CSDL cục bộ.
+
+### Hệ quả, nói thẳng
+
+- **Không đóng mảnh 4, không đổi rổ A.** Thang bậc tới pilot thật ở mục 7 của kế hoạch là ĐỀ XUẤT, chưa được chọn.
+- Công cụ gắn chặt với hình dạng route. Một thay đổi route làm lượt giả lập đỏ, và đó là điều muốn có, nhưng lượt ấy
+  **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chỉ chạy test đơn vị của công cụ.
+- Trình diễn trên điện thoại thật cần một cụm TLS (cookie `Secure`, ADR-044). Cụm của công cụ chỉ nghe trên 127.0.0.1.
+- Lượt đầu đo ra khoản **247**: lần từ chối J3 và D2 không để lại hàng sổ hay dòng log nào. Câu *"mỗi lần từ chối để lại
+  một dòng"* ở `docs/PRODUCT.md` §5 được sửa tại chỗ.

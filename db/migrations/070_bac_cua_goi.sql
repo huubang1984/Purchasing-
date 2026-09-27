@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 070_bac_cua_goi — [S1.163 / S3.1b của spec S3] BẬC CỦA GÓI THẦU, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG
+-- 070_bac_cua_goi — [S1.164 / S3.1b của spec S3] BẬC CỦA GÓI THẦU, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG
 -- PHIÊN BẢN HIỆU LỰC, VÀ K1
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.2, §5.1 (K1, K12), §9 (phần
