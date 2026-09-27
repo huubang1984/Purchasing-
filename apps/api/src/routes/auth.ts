@@ -322,7 +322,7 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
           ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
         });
       } catch (loi) {
-        // [S1.173 / khoản 145] Sổ không nhận lần phát ⇒ KHÔNG phát. Trả bằng đường TRẢ VỀ để giao dịch commit
+        // [S1.174 / khoản 145] Sổ không nhận lần phát ⇒ KHÔNG phát. Trả bằng đường TRẢ VỀ để giao dịch commit
         // lần tiêu thụ mã TOTP (hàng phiên đã lùi về savepoint trong `startAgentSession`): mã ấy không phát lại
         // được, người vận hành thử lại với mã kế tiếp. Trước vòng này lỗi ném ra thành 500 thân cố định.
         if (!(loi instanceof AgentSessionAuditBusyError)) throw loi;

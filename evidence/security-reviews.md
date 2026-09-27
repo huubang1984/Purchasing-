@@ -14158,7 +14158,7 @@ Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, m
 ## 6. Số
 
 Khoản 143 đóng. Còn mở **84**; rổ B **59**.
-# §S1.173 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
+# §S1.174 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
 
 ## 1. Việc gì
 

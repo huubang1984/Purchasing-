@@ -190,7 +190,7 @@ describe("bề mặt export công khai của crypto-keys", () => {
 // cái giá của việc mua lớp canh SAU: bốn gói không có lớp lại chính là bốn gói cũ nhất, tức lớp
 // mỏng nhất nằm đúng chỗ mã đã sống lâu nhất.
 const DANH_SACH_TRANG_IDENTITY = [
-  // [S1.173 / khoản 145] Lớp lỗi của lần phát chứng chỉ agent mà sổ không nhận — không trả lời câu hỏi quyền nào.
+  // [S1.174 / khoản 145] Lớp lỗi của lần phát chứng chỉ agent mà sổ không nhận — không trả lời câu hỏi quyền nào.
   "AgentSessionAuditBusyError",
   "CHAIN_COVERING_ROLE_PAIRS",
   "MAX_TOTP_WINDOW",
