@@ -23,6 +23,7 @@ import {
   huyTraoThau,
   moVongBafo,
   taoLuotDanhGia,
+  type LuotDanhGia,
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
@@ -460,6 +461,31 @@ const doc: readonly BuyerReadRoute[] = [
 ];
 
 // ----------------------------------------------------------------------------------------------
+// [S1.157 / khoản 243] THÂN CỦA `POST /rfqs/:rfqId/evaluate` — DANH SÁCH TRẮNG, không mang một
+// mức giá nào.
+//
+// `taoLuotDanhGia` trả cả `lines` — `effectiveCost`, `rank` và `components` của TỪNG báo giá, tức
+// GIÁ và THỨ HẠNG. Bản trước trả nguyên kết quả ấy, nên mọi vai giữ `evaluation.perform` — năm
+// trên sáu vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
+// và hạng của mọi nhà cung cấp ngay trong thân phản hồi của lần bấm chấm. ADR-054 khai `bid.view`
+// là cổng ĐỌC duy nhất của `rfq_evaluation_lines`: đường ấy là `GET /rfqs/:rfqId/ranking`
+// (`docBangXepHang`), và thân route này là một đường đọc thứ hai không đi qua cổng.
+//
+// VÌ SAO DỰNG TỪNG TRƯỜNG CHỨ KHÔNG BỎ `lines`: một phép bỏ (`{ ...ld, lines: undefined }`) để lọt
+// mọi trường mà `LuotDanhGia` thêm về sau; một danh sách trắng thì trường mới phải được thêm TẠI
+// ĐÂY, có chủ đích. Cũng KHÔNG trả số báo giá: `GET /rfqs/:rfqId/bid-count` giữ con số ấy sau cổng
+// `bid.view`. Hạng và giá đọc qua `GET /ranking`, với người giữ `bid.view`.
+// ----------------------------------------------------------------------------------------------
+export function thanLuotCham(ld: LuotDanhGia): {
+  readonly evaluationId: string;
+  readonly policyId: string;
+  readonly policyVersion: number;
+  readonly currency: string;
+} {
+  return { evaluationId: ld.evaluationId, policyId: ld.policyId, policyVersion: ld.policyVersion, currency: ld.currency };
+}
+
+// ----------------------------------------------------------------------------------------------
 // GHI — mỗi route một mã quyền. `resourceId` đọc từ ĐƯỜNG DẪN, không từ thân.
 // ----------------------------------------------------------------------------------------------
 const ghi: readonly BuyerWriteRoute[] = [
@@ -484,14 +510,17 @@ const ghi: readonly BuyerWriteRoute[] = [
     // sổ `PERMISSION_DENIED`, và lúc ấy lượt đánh giá chưa tồn tại.
     resourceType: "RFQ",
     resourceId: rfqIdParam,
+    // [S1.157 / khoản 243] Thân là `thanLuotCham` — xem khối ngay trên mảng này.
     handler: async (ctx) => ({
       status: 201,
       body: {
-        evaluation: await taoLuotDanhGia(
-          ctx.client,
-          ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
-          ctx.auditPool,
+        evaluation: thanLuotCham(
+          await taoLuotDanhGia(
+            ctx.client,
+            ctx.orgId,
+            { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+            ctx.auditPool,
+          ),
         ),
       },
     }),

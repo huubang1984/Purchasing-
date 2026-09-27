@@ -12649,3 +12649,65 @@ Tổng điều tra của `[INV-H19]` bắt kịp: `org_policy_signatures` vào `
   quả: vòng này là **S1.156**, migration vẫn `069` (#164 không thêm migration), `pnpm cap-so --kiem` sạch. Trên cây đã
   hợp: `pnpm t0` sạch (398 module, 1562 phụ thuộc); `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua**; tầng tích hợp do job
   T3 của CI đo trên chính commit hợp. **69** migration, **92** ADR.
+
+# §S1.157 — KHOẢN 243 MỞ VÀ ĐÓNG CÙNG VÒNG: `POST /evaluate` KHÔNG CÒN TRẢ GIÁ CHO VAI THIẾU `bid.view`
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 243 mở và đóng trong cùng vòng nên không vào rổ nào**, cùng tiền lệ 190 · 191 · 192 của S1.90.
+Không migration, không ADR mới — một ghi chú ở ADR-054. Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Một lượt chấm lại 62 khoản rổ B còn mở (sáu người chấm độc lập, rồi một lượt phản biện cho ba ứng viên đầu) bác cả ba ứng viên
+điểm cao nhất — 220, 112, 228 — vì mức răng bị thổi phồng hoặc vì lõi của chúng chờ chủ dự án chọn. Nhưng người chấm khoản 220
+đo được một hệ quả mà hàng 220 chưa ghi, và người phản biện xác nhận nó trên master `a8d80ff`: thân phản hồi của
+`POST /rfqs/:rfqId/evaluate` mang giá và hạng của mọi báo giá tới những vai không giữ `bid.view`. Chủ dự án chọn phương án *(a)*:
+bỏ giá khỏi thân phản hồi, không đổi ma trận quyền.
+
+## 2. Đo trước khi sửa
+
+- `db/migrations/005_identity.sql`: `evaluation.perform` cấp cho REQUESTER, BUYER, TECHNICAL, PROCUREMENT_MANAGER, FINANCE;
+  `bid.view` chỉ cho PROCUREMENT_MANAGER, FINANCE, DIRECTOR.
+- `apps/api/src/routes/buyer.ts`: handler của route chấm trả `{ evaluation: await taoLuotDanhGia(…) }` nguyên vẹn.
+- `packages/danh-gia/src/luot-danh-gia.ts`: `taoLuotDanhGia` trả `{ evaluationId, policyId, policyVersion, currency, lines }`, với
+  `lines{bidVersionId, effectiveCost, rank, components}`.
+- Đường đọc có khai của cùng dữ liệu, `GET /rfqs/:rfqId/ranking` (`docBangXepHang`), đòi `bid.view`; ADR-054 khai `bid.view` là
+  cổng đọc duy nhất của `rfq_evaluation_lines`. `/rfqs/:rfqId/bid-count` cũng đứng sau `bid.view`.
+- Không lớp nào bắt: vòng quét rò rỉ lần hai của `kich-ban-41-http.int.test.ts` chỉ lặp route `GET`; bước 12b và 12g — hai lần
+  gọi route chấm thật — gọi bằng `trangThai.mua`, một PROCUREMENT_MANAGER có `bid.view`.
+- Giao diện `apps/web/trang/mo-thau.js` chỉ đọc `evaluation.policyVersion` từ thân ấy; bảng xếp hạng nó vẽ đọc qua `GET /ranking`.
+- Không route ghi nào khác trả `effectiveCost` (đọc `packages/danh-gia/src/trao-thau.ts`, `vong-bafo.ts`, `apps/api/src/routes/*.ts`).
+
+## 3. Thay đổi
+
+- `apps/api/src/routes/buyer.ts`: hàm `thanLuotCham(ld)` dựng thân từ ĐÚNG bốn trường — `evaluationId`, `policyId`, `policyVersion`,
+  `currency`. Dựng từng trường chứ không bỏ `lines`: một trường mới của `LuotDanhGia` không tự đi ra. Không trả số báo giá, vì
+  con số ấy cũng đứng sau `bid.view`. API của gói `@trustprocure/danh-gia` không đổi — `bo-bang-chung`, `tools/inv-matrix` và các
+  test của gói vẫn đọc `lines` từ hàm.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: người bấm chấm ở bước 12b và 12g là một BUYER không giữ `bid.view`
+  (`trangThai.cham`); các khẳng định về số hàng và thứ hạng chuyển sang `GET /ranking` dưới `trangThai.mua`.
+
+## 4. Đo sau khi sửa
+
+- T1 `apps/api/src/than-luot-cham.test.ts` — gọi CHÍNH handler của bảng `ROUTES`, `taoLuotDanhGia` thay bằng một bản giả trả một
+  lượt chấm có giá: thân đúng bốn khoá, không chữ số nào của giá, không khoá `lines`/`effectiveCost`/`rank`/`components`/`soBaoGia`;
+  và `thanLuotCham` không cho một trường mới đi ra. **Đỏ trên route cũ** (cả hai ca).
+- T3 kịch bản 41 qua HTTP, PostgreSQL 16 thật: bước 12b — BUYER không giữ `bid.view` chấm ⇒ 201, thân đúng bốn khoá, bộ quét rò rỉ
+  (rút số theo mọi cách viết, giải base64/base64url/hex hai tầng) không thấy giá nào trong thân và header, `GET /ranking` của chính
+  người ấy ⇒ 403; bảng xếp hạng đọc bằng PROCUREMENT_MANAGER vẫn đủ năm hàng, hạng 1–5, thành phần đi ra. Bước 12g — cùng người
+  chấm lại sau BAFO: thân không mang giá nào, kể cả hai giá BAFO; bảng xếp hạng là của lượt vừa tạo, năm hàng, hạng tính trên giá
+  mới. **29/29 xanh; trên route cũ, 12b và 12g đỏ** ở khẳng định danh sách trắng (thân có năm khoá, có `lines`).
+
+## 5. Ranh giới, nói ra
+
+- Lõi của khoản 220 còn nguyên: REQUESTER, BUYER, TECHNICAL vẫn bấm chấm được, tức vẫn đẩy được cạnh `UNSEALED->EVALUATING` một
+  chiều — chỉ không còn thấy giá. Thu hẹp `005` hay ghi cổng này là lớp NÔNG vẫn là quyết định của chủ dự án.
+- Vòng quét rò rỉ lần hai vẫn chỉ quét route `GET`. Route chấm nay có phép đo riêng; một route GHI mới trả giá sẽ không bị vòng
+  quét ấy bắt.
+- Không gắn nhãn `[INV-…]`: A1–A6 nói về giá TRƯỚC mở thầu và J4 về giá BAFO trước khi vòng ấy mở; không bất biến nào trong sổ
+  đăng ký nói về cổng đọc SAU mở thầu. Lời khai của cổng ấy sống ở ADR-054.
+
+## 6. Số đo
+
+- `pnpm t0` sạch; `pnpm test` xanh; `so-no-tu-doi-chieu` xanh.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**.
+- Số tạm `S1.157`, khoản `243` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.

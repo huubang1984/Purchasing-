@@ -5563,6 +5563,17 @@ làm dòng ấy đỏ và buộc người sửa quay lại ADR này.
 như thế phải đi kèm một dòng trong bảng trên, và dòng ấy phải khai được vai ghi cùng cổng đọc. Không
 khai được thì không thêm.
 
+**[S1.157 / khoản 243] Lời khai *"đường đọc duy nhất đi qua `bid.view`"* SAI từ S1.106 tới vòng S1.157, và
+bảng trên không làm lộ ra điều đó.** Bảng khai cổng đọc theo BẢNG, nhưng `rfq_evaluation_lines` còn một đường
+đọc không đi qua bảng: thân phản hồi của `POST /rfqs/:rfqId/evaluate` trả nguyên kết quả của `taoLuotDanhGia` —
+`effectiveCost`, `rank` và `components` của mọi báo giá — cho mọi vai giữ `evaluation.perform`, trong đó
+REQUESTER, BUYER, TECHNICAL không giữ `bid.view`. Chủ dự án chọn không đổi quyền: thân ấy nay là danh sách
+trắng bốn trường (`thanLuotCham` ở `apps/api/src/routes/buyer.ts` — mã lượt chấm, chính sách, phiên bản, tiền
+tệ), nên cổng đọc lại đúng như bảng khai. Hệ quả cho người đọc bảng: cột *cổng ĐỌC* khai cổng của MỌI đường
+đưa giá ra khỏi tiến trình — kể cả thân phản hồi của một route GHI — chứ không chỉ của phép đọc bảng. Đo: T1
+`apps/api/src/than-luot-cham.test.ts`; T3 bước 12b và 12g của `kich-ban-41-http.int.test.ts`, người bấm chấm
+là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, chưa quyết.
+
 ---
 
 ## ADR-055 — Vòng BAFO có trạng thái *"phong bì đã mở"* của riêng nó, và ai mở vòng là một mã quyền MỚI
