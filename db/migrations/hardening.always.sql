@@ -7498,10 +7498,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm chinh_sach_hieu_luc(uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong.
+    -- [S1.180 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong.
     ARRAY[
-      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (9501_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_danh_sach_moi.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (074_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_danh_sach_moi.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bam_danh_sach(p_rfq uuid) RETURNS bytea
   LANGUAGE sql
   STABLE
@@ -7533,10 +7533,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bam_danh_sach(uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
+    -- [S1.180 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
     ARRAY[
-      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (9501_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (074_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_danh_sach_moi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7599,10 +7599,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_danh_sach() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
+    -- [S1.180 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (9501_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (074_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_danh_sach_moi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7676,10 +7676,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_chu_ky_danh_sach_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
+    -- [S1.180 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
     ARRAY[
-      $q$hàm + trigger rfq_invitations_kiem_danh_sach (9501_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_invitations_kiem_danh_sach (074_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_danh_sach_moi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7774,10 +7774,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_invitations_kiem_danh_sach() và bảng public.rfq_invitations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2a / K6] Khong token moi cho goi chua mo cua to chuc da bat. Than `RETURN NEW` de link di truoc chu ky.
+    -- [S1.180 / S3.2a / K6] Khong token moi cho goi chua mo cua to chuc da bat. Than `RETURN NEW` de link di truoc chu ky.
     ARRAY[
-      $q$hàm + trigger rfq_invitation_tokens_kiem_goi_da_mo (9501_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_invitation_tokens_kiem_goi_da_mo (074_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_danh_sach_moi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

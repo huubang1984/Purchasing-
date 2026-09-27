@@ -14702,17 +14702,17 @@ Người đến trước được trước:
 
 ---
 
-# §S1.9101 — S3.2a: DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), KHÔNG TOKEN MỜI CHO GÓI CHƯA MỞ (K6); KHOẢN 246 ĐÓNG
+# §S1.180 — S3.2a: DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), KHÔNG TOKEN MỜI CHO GÓI CHƯA MỞ (K6); KHOẢN 246 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 246 (rổ C)
-đóng; khoản 9401 mở ở rổ B. Một migration (`9501_danh_sach_moi`). Không ADR mới.
+đóng; khoản 250 mở ở rổ B. Một migration (`074_danh_sach_moi`). Không ADR mới.
 
 ## 1. Vòng này là gì
 
 Phần đầu trong ba phần của S3.2 (spec S3 §9), lớp CSDL: K4a, K4b và K6 cưỡng chế ở trigger, trạng thái *chưa gửi* có trong
 lược đồ. Tầng gói, route (S3.2b) và màn, `gieo:demo`, kịch bản 41 theo thứ tự mới (S3.2c) đi sau.
 
-## 2. Bốn quyết định của chủ dự án (S1.9101)
+## 2. Bốn quyết định của chủ dự án (S1.180)
 
 - Ba PR: CSDL · gói + route · màn.
 - Cạnh `PENDING_APPROVAL→DRAFT` chỉ mở cho tổ chức đã bật — dựng ở S3.2b.
@@ -14722,7 +14722,7 @@ lược đồ. Tầng gói, route (S3.2b) và màn, `gieo:demo`, kịch bản 41
 
 ## 3. Thay đổi
 
-**Migration `9501_danh_sach_moi`** — mọi chốt chỉ áp cho tổ chức đã bật (`to_chuc_da_bat_s3`):
+**Migration `074_danh_sach_moi`** — mọi chốt chỉ áp cho tổ chức đã bật (`to_chuc_da_bat_s3`):
 - `rfq_bam_danh_sach(gói)`: SHA-256 các dòng `MOI|nhà cung cấp|người liên hệ|kênh` của mọi lời mời còn sống, xếp theo chính
   chuỗi dòng dưới collation `"C"`, nối `\n`. Hàm RIÊNG — `rfq_bam_noi_dung` không đổi (§2.5 ⑾). `STABLE`, không `SECURITY
   DEFINER`: chạy dưới RLS của người gọi.
@@ -14796,7 +14796,7 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
   `SENT`, không nhãn, băm danh sách NULL. Thêm lời mời ở `PENDING_APPROVAL` rồi cùng người ký lại ⇒ 23505, và gói cấp kép không
   mở với một người. Hai đột biến của điểm chịu lực — băm cho MỌI tổ chức, `UNIQUE` mất `NULLS NOT DISTINCT` — ⇒ gói cấp kép
   MỞ với một người.
-- **Chuyển tiếp lúc bật (khoản 9401, đo giới hạn):** token thời MVP1 của gói chưa mở còn sống sau khi bật, token mới bị chặn.
+- **Chuyển tiếp lúc bật (khoản 250, đo giới hạn):** token thời MVP1 của gói chưa mở còn sống sau khi bật, token mới bị chặn.
   Chữ ký thời MVP1 của gói đang `PENDING_APPROVAL` không được K4b đếm; người ấy ký lại được. Với gói cấp kép, hai hàng của một
   người qua được `071` mà K4b chặn *"moi co 1"*; người thứ hai ký thì mở.
 - **Khoản 246** (`tools/inv-matrix/src/parse.test.ts`, `tests/architecture/nhan-bat-bien-cho-dat.test.ts`,
@@ -14806,11 +14806,11 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
   tố; khuôn nhận chữ hoa; khuôn nhận nhiều chữ; vế *nhãn chưa khai* về khuôn cũ; phép đếm độc lập nới chữ nhóm — cũng làm sổ
   thật NÉM vì bảng tầng `T0`…`T6`; P6 về khuôn cũ.
 - **Ghim:** thân bốn hàm trigger và hàm trợ giúp ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, danh sách
-  migration của ba phép kiểm có `9501`; `migrate()` và hardening đi qua trên cụm mới.
+  migration của ba phép kiểm có `074`; `migrate()` và hardening đi qua trên cụm mới.
 
 ## 6. Giới hạn, nói ra
 
-- **Khoản 9401 — gói đang bay lúc bật.** K6 chặn lần ĐÚC, không thu hồi token đã đúc thời MVP1, và `docToken` không hỏi gói
+- **Khoản 250 — gói đang bay lúc bật.** K6 chặn lần ĐÚC, không thu hồi token đã đúc thời MVP1, và `docToken` không hỏi gói
   đã mở chưa. Đo, không vá: hôm nay không tổ chức thật nào bật được S3 (lần ký sau cờ triển khai mặc định tắt, ADR-105). Hình
   dạng đề xuất cho S3.2b ở hàng sổ nợ.
 - **Route mời, tới S3.2b (đọc từ mã).** Ở tổ chức đã bật: mời ở `DRAFT` qua `POST /rfqs/:rfqId/invitations` ⇒ câu đúc token

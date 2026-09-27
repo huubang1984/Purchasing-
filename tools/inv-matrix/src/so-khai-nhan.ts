@@ -118,7 +118,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/identity/src/ma-tran-quyen.test.ts",
     "packages/identity/src/rbac.int.test.ts",
     "packages/rfq/src/rfq.int.test.ts",
-    // [S1.9101 / S3.2a] Điểm chịu lực của băm danh sách NULL ở MVP1: thêm lời mời ở PENDING_APPROVAL rồi cùng người ký lại vẫn bị
+    // [S1.180 / S3.2a] Điểm chịu lực của băm danh sách NULL ở MVP1: thêm lời mời ở PENDING_APPROVAL rồi cùng người ký lại vẫn bị
     // UNIQUE chặn, và hai đột biến (băm cho mọi tổ chức, UNIQUE mất `NULLS NOT DISTINCT`) mở gói cấp kép với MỘT người.
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/unseal/src/unseal.int.test.ts",
@@ -364,7 +364,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/buyer.int.test.ts",
     "packages/rfq/src/bac-chinh-sach.int.test.ts",
   ],
-  // K4a · K4b · K6 — [S1.9101 / S3.2a] danh sách mời. `danh-sach-moi` đo ba chốt CSDL dưới `app_api`: mỗi trạng thái của gói
+  // K4a · K4b · K6 — [S1.180 / S3.2a] danh sách mời. `danh-sach-moi` đo ba chốt CSDL dưới `app_api`: mỗi trạng thái của gói
   // một ca, đua `FOR SHARE` với cạnh nộp duyệt, đổi danh sách GIỮA hai chữ ký, và mỗi trigger một đột biến. Tầng gói và route
   // của lời mời đổi ở S3.2b.
   K4a: ["packages/rfq/src/danh-sach-moi.int.test.ts"],

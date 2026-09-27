@@ -9,10 +9,10 @@ import { addRfqItem, approveRfq, cancelRfq, createRfq, extendRfqDeadline, openRf
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.9101 / S3.2a] DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), VÀ KHÔNG TOKEN MỜI NÀO CHO MỘT GÓI
+// [S1.180 / S3.2a] DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), VÀ KHÔNG TOKEN MỜI NÀO CHO MỘT GÓI
 // CHƯA MỞ (K6) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `9501_danh_sach_moi`. Mỗi chốt có ở đây một phép đo HÀNH VI, một đối chứng và một ĐỘT BIẾN: tắt (hay viết
+// Migration `074_danh_sach_moi`. Mỗi chốt có ở đây một phép đo HÀNH VI, một đối chứng và một ĐỘT BIẾN: tắt (hay viết
 // lại) đúng lớp ấy thì chính câu vừa bị chặn đi lọt. Mọi chốt chỉ áp cho tổ chức ĐÃ BẬT S3; khối cuối đo nhánh MVP1.
 //
 // Lời mời và token được chèn bằng CÂU của đường sản xuất (`createInvitation`, `issueMagicLinkToken` của
@@ -794,9 +794,9 @@ describe("S3.2a — tổ chức chưa bật chạy nguyên MVP1; băm danh sách
 });
 
 // =============================================================================================
-// (5) GIỚI HẠN, ĐO — GÓI ĐANG BAY LÚC TỔ CHỨC BẬT S3 (khoản 9401)
+// (5) GIỚI HẠN, ĐO — GÓI ĐANG BAY LÚC TỔ CHỨC BẬT S3 (khoản 250)
 // =============================================================================================
-describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 (khoản 9401)", () => {
+describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 (khoản 250)", () => {
   it("token đúc thời MVP1 cho gói chưa mở còn sống sau khi bật — K6 chặn lần đúc MỚI, không thu hồi cái đã đúc", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
@@ -804,7 +804,7 @@ describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 
     const cu = await token(t, a.id);
     await batS3(t);
     const { rows } = await db.pool.query<{ r: Date | null }>("SELECT revoked_at AS r FROM rfq_invitation_tokens WHERE id = $1", [cu]);
-    expect(rows[0]?.r, "khoản 9401: token thời MVP1 của gói chưa mở vẫn chưa thu hồi").toBeNull();
+    expect(rows[0]?.r, "khoản 250: token thời MVP1 của gói chưa mở vẫn chưa thu hồi").toBeNull();
     expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
     expect((await loi(token(t, a.id)))?.message).toBe(LOI_TOKEN);
   });

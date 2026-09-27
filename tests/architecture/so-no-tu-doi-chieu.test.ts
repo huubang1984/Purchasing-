@@ -461,7 +461,7 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
  *
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
  * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.153]** `J` và `K` cũng là nghiệp vụ.
- * **[S1.9101 / khoản 246]** Một mã mang một chữ thường sau số (`K4a`) là MỘT hàng — cùng khuôn mã với bộ đọc sổ
+ * **[S1.180 / khoản 246]** Một mã mang một chữ thường sau số (`K4a`) là MỘT hàng — cùng khuôn mã với bộ đọc sổ
  * (`tools/inv-matrix/src/parse.ts`, `MA_BAT_BIEN`); đếm thiếu nó thì lời khai lệch ma trận.
  */
 export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
@@ -944,7 +944,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const soHangK = (themK.match(/^\|\s*\*\*[A-HJK]\d+[a-z]?\*\*\s*\|/gm) ?? []).length;
     const soHangRaoK = (themK.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loiK[0]).toContain(`sổ đăng ký có ${soHangK} (${soHangK - soHangRaoK} + ${soHangRaoK})`);
-    // [S1.9101 / khoản 246] Một hàng mang một chữ thường sau số cũng là một hàng. Mũi đưa `viPhamSoBatBien` về khuôn
+    // [S1.180 / khoản 246] Một hàng mang một chữ thường sau số cũng là một hàng. Mũi đưa `viPhamSoBatBien` về khuôn
     // không hậu tố chết ở đây: nó không đếm hàng thêm, nên không có gì lệch.
     const themK4a = `${TEST_PLAN}\n| **K99a** | một hàng tách không ai đếm | \`x.ts\` | **T3** |\n`;
     expect(viPhamSoBatBien(STATE, themK4a, "docs/STATE.md")).toHaveLength(1);

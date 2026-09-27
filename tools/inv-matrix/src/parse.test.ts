@@ -157,7 +157,7 @@ describe("phân tích ma trận bất biến", () => {
     expect(demHangUngVien(md), "phép đếm độc lập cũng KHÔNG được thấy `I1`").toEqual(["A1"]);
   });
 
-  it("[S1.9101 / khoản 246] hàng mang MỘT chữ thường sau số (K4a, K4b) đọc được cạnh hàng trần cùng số — mũi gỡ hậu tố ở bộ đọc phải chết", () => {
+  it("[S1.180 / khoản 246] hàng mang MỘT chữ thường sau số (K4a, K4b) đọc được cạnh hàng trần cùng số — mũi gỡ hậu tố ở bộ đọc phải chết", () => {
     // Đo của khoản 246 trước bản vá: bảng này cho đúng `["A1"]`, không ném. `K4` đứng cạnh để một bộ đọc gộp `K4a` về
     // `K4` — hay coi chữ thường là vế — cũng đỏ: ba hàng, ba mã, không mã nào nuốt mã nào.
     const md = [
@@ -246,7 +246,7 @@ describe("ranh giới của nhãn được tính là độ phủ", () => {
     expect([...coverage.keys()].sort()).toEqual(["J1", "K1"]);
   });
 
-  it("[S1.9101 / khoản 246] nhãn TRẦN mang một chữ thường được tính cho ĐÚNG mã ấy; chữ hoa, hai chữ, hay vế thì không", () => {
+  it("[S1.180 / khoản 246] nhãn TRẦN mang một chữ thường được tính cho ĐÚNG mã ấy; chữ hoa, hai chữ, hay vế thì không", () => {
     // Hai bộ đọc sổ và gom độ phủ nay chung một khuôn mã; ca này đỏ nếu khuôn chung mất hậu tố (K4a không có độ phủ),
     // nhận chữ hoa (`K4A` đổ vào một ô không tồn tại), nhận nhiều chữ (`K4ab`), hay coi `K4a` là vế của `K4`.
     const coverage = collectCoverage(
@@ -311,7 +311,7 @@ describe("điểm danh nhãn và đối chiếu với sổ đăng ký", () => {
     expect(findUnregisteredLabels(uses, ["E3"])).toEqual([]);
   });
 
-  it("[S1.9101 / khoản 246] điểm danh tách `K4a(2)` thành mã `K4a` và vế `2`; `K4A` là một mã LẠ, phải ồn ào", () => {
+  it("[S1.180 / khoản 246] điểm danh tách `K4a(2)` thành mã `K4a` và vế `2`; `K4A` là một mã LẠ, phải ồn ào", () => {
     const uses = collectLabelUses(
       baoCao([
         { fullName: "[INV-K4a(2)] một vế", status: "passed" },
@@ -355,7 +355,7 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
     expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
   });
 
-  it("[S1.9101 / khoản 246] mã LỆCH KHUÔN (chữ hoa, hai chữ, gạch, vế) NÉM kèm tên — không biến mất khỏi cả hai bộ đếm", () => {
+  it("[S1.180 / khoản 246] mã LỆCH KHUÔN (chữ hoa, hai chữ, gạch, vế) NÉM kèm tên — không biến mất khỏi cả hai bộ đếm", () => {
     // Trước bản vá, hai bộ dùng chung khuôn `[A-HJK]\d+` nên `K4a` biến mất khỏi CẢ HAI và phép so thấy hai con số bằng
     // nhau. Nay phép đếm độc lập nhận mọi ô đầu mở bằng chữ nhóm và một chữ số, nên mỗi dạng dưới đây được ĐẾM mà không
     // được ĐỌC. Ca này đỏ nếu phép đếm thu về khuôn của bộ đọc — dù có hay không có hậu tố.
