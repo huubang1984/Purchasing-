@@ -73,7 +73,7 @@ export class NopQuaHanError extends BiddingError {
 }
 
 /**
- * [S1.176 / khoản 247 / ADR-107] Tên ràng buộc mà trigger của câu nộp đặt vào lần chặn không vì hạn (`074_tu_choi_co_ten.sql`)
+ * [S1.179 / khoản 247 / ADR-108] Tên ràng buộc mà trigger của câu nộp đặt vào lần chặn không vì hạn (`074_tu_choi_co_ten.sql`)
  * → mã đi vào `payload` của hàng `BID_STATE_DENIED`. Mã là tên viết hoa. Đọc ở trường `constraint` của lỗi `pg`, không đọc
  * chuỗi thông điệp — ADR-104 bắt MỌI 23514 không vì hạn; nay đúng các nhánh trigger ấy, mỗi nhánh một tên.
  */
@@ -100,7 +100,7 @@ function docMaNopBiTuChoi(loi: unknown): MaNopBiTuChoi | null {
  * luồng báo giá nằm ngoài top-N của vòng BAFO, hay phiên khách hỏng giữa lần kiểm và câu ghi.
  *
  * CÙNG HỢP ĐỒNG VỚI `NopQuaHanError`, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** — `submitBid` đã lùi về
- * savepoint của chính nó — và nó đã MANG một hàng sổ ~~`BID_SUBMIT_DENIED`~~ **[S1.176]** `BID_STATE_DENIED` mang `ma`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
+ * savepoint của chính nó — và nó đã MANG một hàng sổ ~~`BID_SUBMIT_DENIED`~~ **[S1.179]** `BID_STATE_DENIED` mang `ma`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
  * hàng ấy sống. Thông điệp giữ NGUYÊN câu chung của bản trước: phân biệt ba lý do trước người nộp là một quyết định khác.
  */
 export class NopBiTuChoiError extends BiddingError {
@@ -303,7 +303,7 @@ export async function submitBid(
       // rồi ném lỗi mà route trả bằng đường TRẢ VỀ. ~~Payload là trạng thái gói ĐỌC SAU khi lùi — thứ phân biệt *đã huỷ* với *đang
       // ở vòng BAFO* mà không đọc chuỗi lỗi của trigger; không `bid_id`, không `bafo_round_id`.~~
       //
-      // **[S1.176 / ADR-107]** Action là `BID_STATE_DENIED`, payload là MÃ của nhánh — tên ràng buộc trigger đặt, viết hoa — nên
+      // **[S1.179 / ADR-108]** Action là `BID_STATE_DENIED`, payload là MÃ của nhánh — tên ràng buộc trigger đặt, viết hoa — nên
       // sổ phân biệt *gói đã đổi trạng thái* với *ngoài top-N* với *phiên khách hỏng* mà không đọc lại gói. Một 23514 KHÔNG tên
       // (hôm nay chỉ còn `CHECK` cỡ phong bì của bảng) đi lối trước ADR-104: ném, không sổ — nó nói về hình dạng dữ liệu, không về
       // một bước đi khi chuỗi không cho phép.

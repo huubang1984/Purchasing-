@@ -560,7 +560,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
         ),
       ),
     ).rejects.toSatisfy(
-      // [S1.176 / ADR-107] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
+      // [S1.179 / ADR-108] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
       (e: unknown) => /Phien duoc dan ra khong thuoc ve nguoi duyet/u.test((e as Error).message) && maChotTuLoi(e) === "D2_PHIEN_NGUOI_KHAC",
     );
 
@@ -1669,11 +1669,11 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
 // [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM D2 Ở BƯỚC DUYỆT GÓI ĐỂ LẠI MỘT HÀNG SỔ
 //
 // `rfq_kiem_nguoi_duyet` (`011`) chặn người tạo tự duyệt bằng một `RAISE … (D2)`, huỷ giao dịch — trước vòng này 0 hàng sổ. Nay
-// `approveRfq` ghi ~~`RFQ_APPROVAL_DENIED`~~ **[S1.176 / ADR-107]** `CONTROL_DENIED` mang mã chốt ở giao dịch ĐỘC LẬP rồi ném
+// `approveRfq` ghi ~~`RFQ_APPROVAL_DENIED`~~ **[S1.179 / ADR-108]** `CONTROL_DENIED` mang mã chốt ở giao dịch ĐỘC LẬP rồi ném
 // ~~lại CHÍNH lỗi ấy~~ `ChotKiemSoatError` mang lỗi ấy ở `cause`. Lần từ chối vì TRẠNG THÁI và lần trùng người duyệt không mang
 // ~~*"(D2)"*~~ tên ràng buộc nào nên không thêm hàng nào.
 // ==============================================================================================
-describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng ~~`RFQ_APPROVAL_DENIED`~~ [S1.176] `CONTROL_DENIED`", () => {
+describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng ~~`RFQ_APPROVAL_DENIED`~~ [S1.179] `CONTROL_DENIED`", () => {
   async function hangSoD2(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
       "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
@@ -1716,7 +1716,7 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
     expect(await hangSoD2(rfqId)).toEqual([]);
   });
 
-  // [S1.176 / ADR-107] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
+  // [S1.179 / ADR-108] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
   // CSDL: mọi tên ràng buộc mà ba trigger J3/D2 đặt đều có mã chốt, và mọi dòng của bảng tên → mã đều có một nhánh đặt nó.
   it("tên ràng buộc ở ba trigger J3/D2 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
