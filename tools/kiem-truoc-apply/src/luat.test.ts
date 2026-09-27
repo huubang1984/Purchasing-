@@ -118,7 +118,7 @@ function awsGia(ghiDe: Partial<{ taiKhoan: string; secret: Record<string, MoTaSe
 }
 
 describe("kiemAws", () => {
-  it("mọi thứ có ⇒ không DO; hỏi đúng bốn secret, sáu image theo digest, một miền SES", async () => {
+  it("mọi thứ có ⇒ không DO; hỏi đúng năm secret, sáu image theo digest, một miền SES", async () => {
     const aws = awsGia();
     const kq = await kiemAws(TOT, HANG, aws);
     expect(muc(kq, "DO")).toEqual([]);
@@ -127,6 +127,7 @@ describe("kiemAws", () => {
       "secret tp/api/otp-peppers",
       "secret tp/worker/database-url",
       "secret tp/neo/database-url",
+      "secret tp/khoi-tao/database-url",
       "ecr tp-api sha256:" + D,
       "ecr tp-unseal-worker sha256:" + D,
       "ecr tp-migrate sha256:" + D,
