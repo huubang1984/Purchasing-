@@ -343,7 +343,9 @@ export interface MocGhim {
 // [S1.165 / khoan 244] 63 -> 64: J8 vao so dang ky (tien te bao gia doc qua MOT ham, ADR-103). Cong
 // CHAN dung mot luot truoc khi dong nay duoc viet, lan thu ba cung khuon S1.29 va S1.115.
 // [S1.166 / S3.1b] 64 -> 65: K1 — hang dau cua nhom K — vao so dang ky cung luot voi chot cua no.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 65, coDanhSachToiDa: 0 };
+// [S1.180 / S3.2a] 65 -> 68: K4a, K4b, K6 vao so dang ky cung luot voi chot CSDL cua chung; K4a/K4b doc duoc
+// nho bo doc so noi hau to chu thuong (khoan 246). Cong CHAN dung mot luot truoc khi dong nay duoc viet.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 68, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —
