@@ -7,7 +7,9 @@
 // BA QUY ƯỚC VỀ REGEX Ở ĐÂY LÀ RÀNG BUỘC AN NINH, KHÔNG PHẢI LỰA CHỌN PHONG CÁCH:
 //
 // (1) `NHAN_PHU_DO_DUOC` — nhãn ĐƯỢC TÍNH LÀ ĐỘ PHỦ — CỐ Ý HẸP: đúng `[INV-<chữ><số>]`, không
-//     hậu tố. Nới nó để nhận `[INV-E3(3)]` sẽ đổ chín test hàm thuần vào hàng E3 và làm E3
+//     hậu tố VẾ. **[S1.9101 / khoản 246]** Một chữ thường liền sau số (`K4a`, `K4b`) KHÔNG phải hậu tố vế
+//     mà là một phần của MÃ: spec S3 §5.1 tách K4 thành hai hàng sổ, mỗi hàng một bất biến đủ vế.
+//     Nới nó để nhận `[INV-E3(3)]` sẽ đổ chín test hàm thuần vào hàng E3 và làm E3
 //     trông như "đã phủ" — trong khi E3 có NĂM vế và ~~vế *giới hạn tần suất* không có một
 //     dòng mã nào trong toàn S0~~ **[S1.21] vế ấy nay CÓ LỚP trên cả hai đường OTP (khoản nợ
 //     1 đóng)**. Quy ước KHÔNG đổi theo: nó nói về CÁCH ĐẾM (một nhãn vế không chứng minh
@@ -30,6 +32,10 @@
 //     ma trận trong im lặng, tức fail-OPEN ở đúng nơi không được phép fail-open. Vì vậy
 //     `parseInvariants` KHÔNG chỉ đọc: nó ĐẾM ĐỘC LẬP bằng một quy tắc khác (`demHangUngVien`)
 //     rồi NÉM nếu hai con số lệch.
+//     **[S1.9101 / khoản 246]** Hai bộ từng dùng CHUNG một khuôn mã, nên một hàng mà mã lệch khuôn biến mất khỏi CẢ
+//     HAI và phép so không thấy gì — đo: bảng `A1`, `K4a`, `K4b` cho đúng `["A1"]`, không ném. Nay mã đọc được là
+//     `<chữ nhóm><số>` cộng TỐI ĐA một chữ thường (`MA_BAT_BIEN`), còn phép đếm độc lập nhận MỌI ô đầu bắt đầu bằng
+//     chữ nhóm và một chữ số — `K4A`, `K4ab`, `K4-a`, `E3(3)` được ĐẾM mà không được ĐỌC, nên lệch và NÉM kèm tên.
 // =============================================================================================
 
 export interface Invariant {
@@ -56,16 +62,34 @@ export interface LabelUse {
   readonly file: string;
 }
 
-const HANG_BAT_BIEN = /^\|\s*\*\*([A-HJK]\d+)\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$/;
+/**
+ * [S1.9101 / khoản 246] KHUÔN MÃ của một hàng sổ: chữ nhóm, số, tối đa MỘT chữ thường (`K4a`). Một nguồn cho bộ đọc
+ * sổ, bộ gom độ phủ và vế *nhãn chưa khai* — ba bộ từng giữ ba bản chép của cùng một khuôn, và nới một bản mà quên
+ * hai bản kia là cách một hàng có ô mà không có độ phủ.
+ */
+const KHUON_MA = String.raw`[A-HJK]\d+[a-z]?`;
+
+const MA_BAT_BIEN = new RegExp(`^${KHUON_MA}$`);
+
+const HANG_BAT_BIEN = new RegExp(String.raw`^\|\s*\*\*(${KHUON_MA})\*\*\s*\|(.+?)\|(.+?)\|(.+?)\|\s*$`);
 
 /** HẸP CÓ CHỦ Ý — xem quy ước (1) ở đầu file. Đừng nới. */
-const NHAN_PHU_DO_DUOC = /\[INV-([A-HJK]\d+)\]/g;
+const NHAN_PHU_DO_DUOC = new RegExp(String.raw`\[INV-(${KHUON_MA})\]`, "g");
 
 /** RỘNG CÓ CHỦ Ý, và KHÔNG BAO GIỜ nuôi độ phủ — xem quy ước (2) ở đầu file. */
 const NHAN_BAT_KY = /\[INV-([^\]\s]+)\]/g;
 
-/** `E3(3)` -> base `E3`, clause `3`. Một mã không có hậu tố cho clause `null`. */
-const MA_CO_VE = /^([A-Za-z]+\d+)(?:\((.+)\))?$/;
+/**
+ * `E3(3)` -> base `E3`, clause `3`. Một mã không có hậu tố cho clause `null`. [S1.9101 / khoản 246] `K4a(2)` -> base
+ * `K4a`, clause `2`: chữ thường thuộc MÃ, ngoặc mới là vế.
+ */
+const MA_CO_VE = /^([A-Za-z]+\d+[a-z]?)(?:\((.+)\))?$/;
+
+/**
+ * [S1.9101 / khoản 246] Ô đầu TRÔNG NHƯ một mã sổ: chữ nhóm rồi một chữ số, đuôi gì cũng được. Rộng hơn `MA_BAT_BIEN`
+ * có chủ ý — chênh lệch giữa hai khuôn là thứ làm một mã lệch khuôn NÉM thay vì biến mất.
+ */
+const O_DAU_NHU_MA = /^[A-HJK]\d/;
 
 /**
  * Bỏ dấu ** chỉ khi TOÀN BỘ ô in đậm. `[^*]+` là cố ý: một ô kiểu `**X** và **Y**` KHÔNG được
@@ -82,6 +106,10 @@ function lamSach(cell: string): string {
  *
  * Bỏ qua nội dung trong khối mã ```: `docs/TEST-PLAN.md` §4 có một khối mẫu chứa hai dòng
  * `| A1 | ... |` và `| A4 | ... |` KHÔNG phải hàng sổ đăng ký (đo được: đếm 49 thay vì 47).
+ *
+ * [S1.9101 / khoản 246] Khuôn của ô đầu ở đây là `O_DAU_NHU_MA`, RỘNG hơn khuôn mã của bộ đọc: một hàng `**K4A**` hay
+ * `**K4ab**` được đếm mà không được đọc, nên `parseInvariants` NÉM kèm tên nó. Dải chữ nhóm thì GIỮ Y NHƯ bộ đọc:
+ * bảng tầng test `T0`…`T6` của cùng tệp mở đầu bằng chữ ngoài dải và không phải hàng sổ.
  */
 export function demHangUngVien(markdown: string): string[] {
   const ma: string[] = [];
@@ -96,7 +124,7 @@ export function demHangUngVien(markdown: string): string[] {
     // 4 ô nội dung => 6 phần tử: phần rỗng đầu, bốn ô, phần rỗng cuối.
     if (o.length < 6) continue;
     const dau = lamSach(o[1] ?? "");
-    if (/^[A-HJK]\d+$/.test(dau)) ma.push(dau);
+    if (O_DAU_NHU_MA.test(dau)) ma.push(dau);
   }
   return ma;
 }
@@ -240,8 +268,8 @@ export function duongTuongDoi(file: string, goc: string): string {
 /**
  * [INV-H22, khoản nợ 12] MỌI CẶP (mã, tệp) ĐƯỢC TÍNH LÀ ĐỘ PHỦ PHẢI CÓ TRONG SỔ KHAI — VÀ NGƯỢC LẠI.
  *
- * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (~~`[A-H]\d+`~~ **[S1.153]** `[A-HJK]\d+`, không hậu tố vế) — không hơn,
- * không kém — lấy từ CHÍNH báo cáo này, nên không có cách viết test nào làm hai bộ đọc lệch
+ * Chủ thể là ĐÚNG những nhãn `collectCoverage` đếm (~~`[A-H]\d+`~~ ~~**[S1.153]** `[A-HJK]\d+`~~ **[S1.9101]** `MA_BAT_BIEN`,
+ * không hậu tố vế) — không hơn, không kém — lấy từ CHÍNH báo cáo này, nên không có cách viết test nào làm hai bộ đọc lệch
  * nhau. Chiều thứ hai (khai thiu) đồng thời là ĐỐI CHỨNG DƯƠNG: một báo cáo rỗng hay một sổ đọc
  * hỏng làm MỌI dòng khai hụt, tức đỏ ồn ào thay vì xanh im lặng.
  */
@@ -253,7 +281,7 @@ export function findMisplacedLabels(
   const thay = new Set<string>();
   const chuaKhai = new Set<string>();
   for (const u of uses) {
-    if (u.clause !== null || !/^[A-HJK]\d+$/.test(u.base)) continue;
+    if (u.clause !== null || !MA_BAT_BIEN.test(u.base)) continue;
     const tep = duongTuongDoi(u.file, goc);
     thay.add(`${u.base}\u0000${tep}`);
     if (!(soKhai[u.base] ?? []).includes(tep)) {

@@ -461,11 +461,13 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
  *
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
  * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.153]** `J` và `K` cũng là nghiệp vụ.
+ * **[S1.9101 / khoản 246]** Một mã mang một chữ thường sau số (`K4a`) là MỘT hàng — cùng khuôn mã với bộ đọc sổ
+ * (`tools/inv-matrix/src/parse.ts`, `MA_BAT_BIEN`); đếm thiếu nó thì lời khai lệch ma trận.
  */
 export function viPhamSoBatBien(van: string, testPlan: string, nhan: string): readonly string[] {
   const le = viPhamCapGach(van, nhan);
   if (le.length > 0) return le;
-  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-HJK])(\d+)\*\*\s*\|/gm)].map((m) => m[1]!);
+  const ma = [...testPlan.matchAll(/^\|\s*\*\*([A-HJK])(\d+)[a-z]?\*\*\s*\|/gm)].map((m) => m[1]!);
   const hangRao = ma.filter((n) => n === "H").length;
   const nghiepVu = ma.length - hangRao;
   const reBB = new RegExp(
@@ -931,7 +933,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     expect(loi).toHaveLength(1);
     // Con số phải SUY từ chính `them`, không chép tay: bản trước ghim "55 (34 + 21)" và nó ĐỎ ở
     // đúng vòng sau, khi sổ đăng ký lớn thêm một hàng — cùng lớp lỗi mà tệp này đi đóng.
-    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+[a-z]?\*\*\s*\|/gm) ?? []).length;
     const soHangRao = (them.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang} (${soHang - soHangRao} + ${soHangRao})`);
     // [S1.153 / S3.0] Một hàng NHÓM K cũng phải được đếm, vào vế nghiệp vụ. Sổ thật chưa có hàng K
@@ -939,9 +941,13 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const themK = `${TEST_PLAN}\n| **K99** | một hàng kiểm soát không ai đếm | \`x.ts\` | **T3** |\n`;
     const loiK = viPhamSoBatBien(STATE, themK, "docs/STATE.md");
     expect(loiK).toHaveLength(1);
-    const soHangK = (themK.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHangK = (themK.match(/^\|\s*\*\*[A-HJK]\d+[a-z]?\*\*\s*\|/gm) ?? []).length;
     const soHangRaoK = (themK.match(/^\|\s*\*\*H\d+\*\*\s*\|/gm) ?? []).length;
     expect(loiK[0]).toContain(`sổ đăng ký có ${soHangK} (${soHangK - soHangRaoK} + ${soHangRaoK})`);
+    // [S1.9101 / khoản 246] Một hàng mang một chữ thường sau số cũng là một hàng. Mũi đưa `viPhamSoBatBien` về khuôn
+    // không hậu tố chết ở đây: nó không đếm hàng thêm, nên không có gì lệch.
+    const themK4a = `${TEST_PLAN}\n| **K99a** | một hàng tách không ai đếm | \`x.ts\` | **T3** |\n`;
+    expect(viPhamSoBatBien(STATE, themK4a, "docs/STATE.md")).toHaveLength(1);
   });
 
   it("P5 — bộ đọc số đếm tiếng Việt đọc đúng cả bốn dạng đã từng xuất hiện ở STATE", () => {
@@ -1003,7 +1009,7 @@ describe("[INV-H20] sổ nợ tự đối chiếu", () => {
     const them = `${TEST_PLAN}\n| **H99** | một hàng rào không ai đếm | \`x.ts\` | **T1** |\n`;
     const loi = viPhamSoBatBien(HANDOFF, them, "Handoff.md");
     expect(loi).toHaveLength(1);
-    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+\*\*\s*\|/gm) ?? []).length;
+    const soHang = (them.match(/^\|\s*\*\*[A-HJK]\d+[a-z]?\*\*\s*\|/gm) ?? []).length;
     expect(loi[0]).toContain(`sổ đăng ký có ${soHang}`);
   });
 

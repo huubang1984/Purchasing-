@@ -385,7 +385,7 @@ describe("cấu hình ghim đối chiếu với docs/TEST-PLAN.md thật", () =>
   it("sổ đăng ký thật đọc được, và mọi mã đều đúng khuôn nhóm-số", () => {
     const ds = soDangKy();
     expect(ds.length, "chống rỗng ruột: sổ đăng ký phải có hàng").toBeGreaterThan(0);
-    expect(ds.filter((i) => !/^[A-HJK]\d+$/.test(i.id))).toEqual([]);
+    expect(ds.filter((i) => !/^[A-HJK]\d+[a-z]?$/.test(i.id))).toEqual([]);
     expect(ds.filter((i) => i.statement.length === 0)).toEqual([]);
     // Mọi nhóm A–H đều phải CÓ MẶT. Nếu một mũi thu hẹp dải của bộ đọc, nhóm bị cắt biến mất
     // ở đây trước khi kịp biến mất khỏi ma trận. [S1.166] K vào khi K1 vào sổ (spec S3 §9, S3.0); J vào cùng lượt —

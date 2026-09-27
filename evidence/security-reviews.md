@@ -14699,3 +14699,132 @@ Người đến trước được trước:
   người xếp hàng trước. Bằng chứng chiều âm ngoài đời là lần đỏ trên CI.
 - Thứ tự theo đồng hồ máy: hai người đến cùng mili-giây xếp theo `pid`. Không phải FIFO tuyệt đối, và không cần.
 - Không đo được trên Windows ở máy này; job `T1+T2 (windows-latest)` của PR là phép đo ấy.
+
+---
+
+# §S1.9101 — S3.2a: DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), KHÔNG TOKEN MỜI CHO GÓI CHƯA MỞ (K6); KHOẢN 246 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 246 (rổ C)
+đóng; khoản 9401 mở ở rổ B. Một migration (`9501_danh_sach_moi`). Không ADR mới.
+
+## 1. Vòng này là gì
+
+Phần đầu trong ba phần của S3.2 (spec S3 §9), lớp CSDL: K4a, K4b và K6 cưỡng chế ở trigger, trạng thái *chưa gửi* có trong
+lược đồ. Tầng gói, route (S3.2b) và màn, `gieo:demo`, kịch bản 41 theo thứ tự mới (S3.2c) đi sau.
+
+## 2. Bốn quyết định của chủ dự án (S1.9101)
+
+- Ba PR: CSDL · gói + route · màn.
+- Cạnh `PENDING_APPROVAL→DRAFT` chỉ mở cho tổ chức đã bật — dựng ở S3.2b.
+- Thu hồi lời mời ở `OPEN` bị CHẶN tới S3.6, khi tín hiệu `INVITE_LIST_NARROWED` có mặt. Spec §5.1 cho thu hồi có lý do kèm
+  tín hiệu; không có tín hiệu thì vế ấy là thu hồi trần, nên chặn hẳn.
+- Khoản 246: nới bộ đọc sổ bất biến, giữ `K4a`/`K4b` của spec; không đổi sang số mới.
+
+## 3. Thay đổi
+
+**Migration `9501_danh_sach_moi`** — mọi chốt chỉ áp cho tổ chức đã bật (`to_chuc_da_bat_s3`):
+- `rfq_bam_danh_sach(gói)`: SHA-256 các dòng `MOI|nhà cung cấp|người liên hệ|kênh` của mọi lời mời còn sống, xếp theo chính
+  chuỗi dòng dưới collation `"C"`, nối `\n`. Hàm RIÊNG — `rfq_bam_noi_dung` không đổi (§2.5 ⑾). `STABLE`, không `SECURITY
+  DEFINER`: chạy dưới RLS của người gọi.
+- `rfq_approvals.approved_list_hash` (ngoài `GRANT`) do trigger `rfq_approvals_dat_bam_danh_sach` đặt: tổ chức đã bật ⇒ băm
+  lúc ký; chưa bật ⇒ NULL.
+- Hai `UNIQUE` của `rfq_approvals` thành (tổ chức, gói, người | phiên, băm nội dung, băm danh sách) `NULLS NOT DISTINCT`, giữ
+  nguyên tên ràng buộc.
+- Trigger `rfq_packages_kiem_danh_sach_khi_mo`, `WHEN` đúng cạnh `PENDING_APPROVAL→OPEN` (khuôn `014` §(4)): đếm người ký
+  KHÁC NHAU mà chữ ký khớp CẢ nội dung LẪN danh sách hiện tại — hai nếu gói cấp kép, một nếu không. Khối đếm của `071` giữ
+  nguyên văn và vẫn chạy cho mọi tổ chức.
+- `rfq_invitations`: trạng thái `UNSENT` trong `CHECK` (giữ tên tự sinh của `010`), cột `moi_sau_khi_ky` (ngoài `GRANT`).
+  Trigger `rfq_invitations_kiem_danh_sach` khoá `FOR SHARE` hàng gói rồi: chèn chỉ ở `DRAFT` hay `OPEN` — ở `OPEN` đặt nhãn —
+  và luôn đặt `UNSENT`; thu hồi chỉ ở `DRAFT`; `UNSENT→SENT` chỉ khi `OPEN`; không có `SENT→UNSENT`.
+- Trigger `rfq_invitation_tokens_kiem_goi_da_mo`: không token nào cho gói có `opened_at IS NULL`.
+
+**Hardening:** bốn hàm trigger ghim thân và định nghĩa trigger; `rfq_bam_danh_sach` ghim theo khuôn hàm trợ giúp của
+`la_duong_ung_dung` (037) — một thân trả hằng làm mọi danh sách cùng một băm. Bốn hàm vào `HAM_KHONG_PHAI_CANH` của
+`db/hardening-suy-tu-tinh-chat.int.test.ts`: từ chối có điều kiện, và kịch bản của tệp ấy chạy câu duyệt, mở gói, mời, thu
+hồi và đúc token qua cả bốn khi tổ chức còn chưa bật.
+
+**Bộ sinh evidence — khoản 246.** `tools/inv-matrix/src/parse.ts` giữ MỘT khuôn mã (`KHUON_MA`: chữ nhóm, số, tối đa một chữ
+thường) cho bộ đọc sổ, bộ gom độ phủ và vế *nhãn chưa khai* — ba bộ từng giữ ba bản chép. Vế tách mã khỏi vế đọc `K4a(2)`
+thành mã `K4a`, vế `2`. Phép đếm độc lập nay nhận MỌI ô đầu mở bằng chữ nhóm và một chữ số (`O_DAU_NHU_MA`), rộng hơn khuôn
+mã có chủ ý: `K4A`, `K4ab`, `K4-a`, `E3(3)` được đếm mà không được đọc, và `parseInvariants` NÉM kèm tên. Bảy chỗ ghim khác
+của dải nhãn nới theo: bốn ở `tests/architecture/so-no-tu-doi-chieu.test.ts`, một ở `nhan-bat-bien-cho-dat.test.ts`, một ở
+`tools/inv-matrix/src/danh-gia.test.ts`, một ở `packages/outbox`.
+
+**Sổ đăng ký:** K4a, K4b, K6 vào `docs/TEST-PLAN.md` nhóm K — 68 bất biến (46 + 22). Mỗi hàng nói đúng vế đã cưỡng chế và đo, và
+nêu tên hạng mục đo phần còn lại: vế *ngoại lệ* của K4a ở S3.3; vế *chưa gửi khi gửi hỏng* và lối *gửi lại* của K6 ở S3.2b,
+vế *nhãn vào bộ bằng chứng* ở S3.9.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Băm danh sách NULL ở tổ chức chưa bật là chịu lực, không phải tiện.** MVP1 không chặn thêm lời mời ở `PENDING_APPROVAL`.
+  Nếu mọi chữ ký mang băm danh sách, `UNIQUE` mới cho một người ký lần hai trên CÙNG nội dung sau khi danh sách đổi, và khối
+  đếm `count(*)` của `071` đếm người ấy hai lần: gói cấp kép MỞ với một người. Đo bằng đột biến (§5).
+- **`UNIQUE` mới tương đương `UNIQUE` cũ ở tổ chức chưa bật.** Chữ ký chỉ chèn được ở `PENDING_APPROVAL`; ở đó nội dung không
+  đổi được (`071` vế (c) cho hạn nộp và tiêu đề, `rfq_items_chi_sua_khi_soan` cho hạng mục); MVP1 không có đường về `DRAFT`.
+  Nên mọi chữ ký của một gói MVP1 mang cùng một băm nội dung, băm danh sách NULL, và ràng buộc năm cột nói đúng câu của
+  `009`: một người một lần trên mỗi gói.
+- **Nhãn loại trong dòng băm.** Dòng `MOI|…` để S3.3 thêm dòng `NGOAI_LE|…` mà gói không ngoại lệ giữ đúng băm hôm nay — lần
+  deploy S3.3 không vô hiệu chữ ký nào. Người liên hệ và kênh nằm trong băm: đổi đích nhận link là đổi danh sách.
+- **Collation `"C"`.** Thứ tự dòng không được đổi theo locale của cụm; băm lệch là chữ ký vô hiệu.
+- **K4b đếm NGƯỜI, không đếm hàng.** Ở tổ chức đã bật, một người mang được hai hàng khớp nội dung hiện tại (ký lại sau khi danh
+  sách đổi). `count(*)` của `071` thấy hai; trigger K4b đếm `DISTINCT` trên danh sách hiện tại và là lớp giữ D2 ở tổ chức đã
+  bật. Đo ở §5.
+- **K4a khoá `FOR SHARE` hàng gói.** Không khoá, một câu thêm lời mời đọc `DRAFT` từ ảnh chụp trong khi cạnh nộp duyệt đang
+  dở, và lời mời vào danh sách của một gói đã rời `DRAFT`. Khoá chia sẻ nên các lần mời không chờ nhau. Đo cả hai thứ tự (§5).
+- **K6 hỏi `opened_at IS NULL`, không hỏi `status`.** Mệnh đề là *gói chưa từng mở*; `opened_at` đặt một lần ở cạnh vào
+  `OPEN` và không bao giờ về NULL.
+- **Trạng thái và nhãn do trigger đặt.** `status` đã ngoài `GRANT INSERT` từ `010`; `moi_sau_khi_ky` ngoài mọi `GRANT`. Bên gọi
+  không khai được mình mời lúc nào, cũng không khai được link đã gửi.
+
+## 5. Đo
+
+`packages/rfq/src/danh-sach-moi.int.test.ts`, trên Postgres thật dưới `app_api`, mỗi phép đo một tổ chức riêng:
+- **K4a:** `DRAFT` thêm và thu hồi đi qua; `PENDING_APPROVAL` chặn cả hai (23514, đúng thông điệp); `OPEN` thêm đi qua với nhãn,
+  thu hồi bị chặn — cả lời mời có từ `DRAFT`; gói đã huỷ chặn cả hai. **Đua:** cạnh nộp duyệt chưa COMMIT ⇒ câu thêm ĐỨNG CHỜ
+  (đo ở `pg_stat_activity`) rồi đọc `PENDING_APPROVAL` và bị chặn; câu thêm chưa COMMIT ⇒ cạnh nộp duyệt đứng chờ, rồi gói rời
+  `DRAFT` với lời mời trong danh sách. Đột biến gỡ `FOR SHARE` ⇒ câu thêm không chờ ai, đọc `DRAFT` cũ và đi lọt; tắt trigger ⇒
+  thêm ở `PENDING_APPROVAL` đi lọt.
+- **K4b:** chữ ký mang đúng băm của danh sách lúc ký; `app_api` khai cột ⇒ 42501. Đổi danh sách GIỮA hai chữ ký của gói cấp kép
+  (câu dựng đi vòng K4a — đường thật là cạnh về `DRAFT` của S3.2b) ⇒ khối đếm `071` cho qua, K4b chặn *"moi co 1"*; người cũ ký
+  lại ⇒ mở; ký lần nữa trên cùng cặp ⇒ 23505 đúng tên `rfq_approvals_mot_nguoi_mot_lan`. Gói cấp kép gia hạn HAI lần sau khi
+  mở (khoản 240). Đột biến tắt trigger ở cạnh ⇒ chữ ký cũ mở được gói; đột biến băm bỏ người liên hệ ⇒ thay người nhận link
+  của cùng nhà cung cấp mà chữ ký cũ vẫn mở được gói.
+- **K6:** token ở `DRAFT` và `PENDING_APPROVAL` bị chặn, ở `OPEN` đúc được; `UNSENT→SENT` ở `DRAFT` bị chặn, ở `OPEN` đi qua;
+  `SENT→UNSENT` bị chặn; `app_api` khai `status` lúc chèn hay nhãn lúc sửa ⇒ 42501. Đột biến tắt trigger token ⇒ token cho gói
+  `DRAFT` đi lọt; tắt trigger lời mời ⇒ lời mời thêm ở `OPEN` mang `SENT` và không nhãn.
+- **MVP1 và D2:** tổ chức chưa bật mời ở `DRAFT`, `PENDING_APPROVAL` và `OPEN`, đúc token ở `DRAFT`, thu hồi ở `OPEN`, lời mời
+  `SENT`, không nhãn, băm danh sách NULL. Thêm lời mời ở `PENDING_APPROVAL` rồi cùng người ký lại ⇒ 23505, và gói cấp kép không
+  mở với một người. Hai đột biến của điểm chịu lực — băm cho MỌI tổ chức, `UNIQUE` mất `NULLS NOT DISTINCT` — ⇒ gói cấp kép
+  MỞ với một người.
+- **Chuyển tiếp lúc bật (khoản 9401, đo giới hạn):** token thời MVP1 của gói chưa mở còn sống sau khi bật, token mới bị chặn.
+  Chữ ký thời MVP1 của gói đang `PENDING_APPROVAL` không được K4b đếm; người ấy ký lại được. Với gói cấp kép, hai hàng của một
+  người qua được `071` mà K4b chặn *"moi co 1"*; người thứ hai ký thì mở.
+- **Khoản 246** (`tools/inv-matrix/src/parse.test.ts`, `tests/architecture/nhan-bat-bien-cho-dat.test.ts`,
+  `so-no-tu-doi-chieu.test.ts`): `A1`, `K4`, `K4a`, `K4b` đọc được và đếm được; `[INV-K4a]` tính cho `K4a`, không cho `K4`;
+  `K4A`, `K4ab` và vế không được tính; bốn mã lệch khuôn NÉM kèm tên; vế *nhãn chưa khai* xét `K4a`; P6 đếm hàng `K99a`.
+  Chín đột biến, chín lần đỏ: khuôn chung mất hậu tố; phép đếm độc lập thu về khuôn bộ đọc; thu về khuôn cũ; tách vế mất hậu
+  tố; khuôn nhận chữ hoa; khuôn nhận nhiều chữ; vế *nhãn chưa khai* về khuôn cũ; phép đếm độc lập nới chữ nhóm — cũng làm sổ
+  thật NÉM vì bảng tầng `T0`…`T6`; P6 về khuôn cũ.
+- **Ghim:** thân bốn hàm trigger và hàm trợ giúp ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, danh sách
+  migration của ba phép kiểm có `9501`; `migrate()` và hardening đi qua trên cụm mới.
+
+## 6. Giới hạn, nói ra
+
+- **Khoản 9401 — gói đang bay lúc bật.** K6 chặn lần ĐÚC, không thu hồi token đã đúc thời MVP1, và `docToken` không hỏi gói
+  đã mở chưa. Đo, không vá: hôm nay không tổ chức thật nào bật được S3 (lần ký sau cờ triển khai mặc định tắt, ADR-105). Hình
+  dạng đề xuất cho S3.2b ở hàng sổ nợ.
+- **Route mời, tới S3.2b (đọc từ mã).** Ở tổ chức đã bật: mời ở `DRAFT` qua `POST /rfqs/:rfqId/invitations` ⇒ câu đúc token
+  bị K6 chặn ⇒ 422 mang thông điệp của trigger, giao dịch rollback. Mời ở `OPEN` đi qua, và lời mời mang `UNSENT` dù link đã
+  đi — `SENT` là việc của S3.2b. Lối bù *gửi hỏng thì thu hồi* ở `OPEN` bị K4a chặn ⇒ phản hồi 500 mang `invitationId` (hợp
+  đồng *bù hỏng* của khoản 124), và người mua không thu hồi, không mời lại được cho tới lối *gửi lại* của S3.2b. Tổ chức chưa
+  bật không đổi.
+- `gieo:demo --s3` mở gói rồi mới mời, nên lời mời của nó mang nhãn *mời sau khi ký* và `UNSENT`; S3.2c đổi thứ tự. Kịch bản
+  41 luồng S3 đi qua nguyên vẹn.
+- Hai giao dịch cùng thêm lời mời rồi cùng sửa hàng gói trong CÙNG giao dịch sẽ khoá chết nhau (hai khoá chia sẻ, rồi hai lần
+  xin khoá ghi); Postgres huỷ một bên. Không đường sản xuất nào làm thế hôm nay.
+- Băm tính dưới RLS của người gọi. Một phiên khách thấy đúng lời mời của mình và ra băm khác — phiên khách không ký gói và
+  không mở gói.
+
+## 7. Số đo
+
+(điền)
