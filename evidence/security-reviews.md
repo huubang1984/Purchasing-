@@ -14136,8 +14136,10 @@ hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot
 
 ## 5. Số đo
 
-Trên cây đã hợp `master` (`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`), PostgreSQL 16 thật qua testcontainers:
-- `pnpm evidence` — vitest thoát mã 0: **178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**; **65/65** bất biến (43/43 nghiệp vụ +
+Trên cây đã hợp `master` ~~(`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`)~~ **(`f2fa608`, gồm thêm #175) và đã cấp lại
+số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: ~~**178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**~~ **178 tệp, 2845 ca, 2844 đạt, 1 bỏ qua,
+  0 hỏng** (ca thêm là của #175); **65/65** bất biến (43/43 nghiệp vụ +
   22/22 hàng rào), cổng evidence XANH. `evidence/INV-matrix.md` không đổi byte nào: các ca đổi của vòng này nằm trong khối có
   nhãn sẵn, và hai phép đo khớp tên không mang nhãn bất biến.
 - Tệp của vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60, `packages/danh-gia/src/luot-danh-gia.int.test.ts` 88/88,
