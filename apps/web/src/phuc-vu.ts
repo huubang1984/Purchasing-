@@ -104,7 +104,7 @@ export const TRANG: Readonly<Record<string, string>> = {
   "/chung.css": "chung.css",
   // [S1.99 / khoản 198] HAI ĐƯỜNG MÀ SẢN PHẨM ĐÃ SINH RA LINK TỪ S1.12 MÀ KHO CHƯA BAO GIỜ PHỤC
   // VỤ. `apps/api/src/adapters/hop-thu-dev.ts` dựng `${baseUrl}/login#<mã>` cho người mua và
-  // `${baseUrl}/i#<mã>` cho nhà cung cấp theo ADR-020 mục 3 (**[S1.175 / ADR-107]** nay mọi bộ gửi dựng
+  // `${baseUrl}/i#<mã>` cho nhà cung cấp theo ADR-020 mục 3 (**[S1.176 / ADR-107]** nay mọi bộ gửi dựng
   // `#<orgId>:<mã>` — dạng các trang đọc); cả hai trả 404 cho tới vòng này, nên
   // MỌI link do sản phẩm sinh ra đều không bấm được và lượt đi thử chỉ đi được nhờ link VIẾT TAY
   // của `tools/gieo-demo`.

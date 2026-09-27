@@ -68,7 +68,7 @@ function docLink() {
   $("token").value = h.slice(i + 1);
 }
 docLink();
-// [S1.176] Đổi người trong cùng thẻ: đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của
+// [S1.177] Đổi người trong cùng thẻ: đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của
 // người trước — rồi hỏi lại phiên (khuôn `mo-thau.js`).
 window.addEventListener("hashchange", () => {
   docLink();
@@ -113,7 +113,7 @@ $("nut-vao").addEventListener("click", async () => {
 
 const CAC_BUOC_SAU = ["b2", "b3"];
 
-/** [S1.176] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này". */
+/** [S1.177] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này". */
 async function moSauDangNhap(me, dungLai) {
   const u = me?.userId;
   bao($("ok1"), typeof u !== "string"
@@ -130,7 +130,7 @@ async function moSauDangNhap(me, dungLai) {
   if (bac.length === 0) dienMau();
 }
 
-/** [S1.176] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+/** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
 function dongCacBuoc() {
   $("b1").classList.remove("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), false);
@@ -140,7 +140,7 @@ function dongCacBuoc() {
 }
 
 /**
- * [S1.176] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
+ * [S1.177] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
  * duyệt, dùng chung ba trang, còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me`. Có phiên
  * còn hạn thì HỎI "Tiếp tục với phiên này" hay "Đăng xuất", không tự mở: trên máy dùng chung phiên ấy có thể
  * của người khác, và bước 2 có nút Ký (người ký phải KHÁC người khai). Không hỏi khi ô mã đã có mã; `docLink()`
@@ -170,7 +170,7 @@ $("nut-dung-phien").addEventListener("click", async () => {
   await moSauDangNhap(me, true);
 });
 
-// [S1.176] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
+// [S1.177] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
 $("nut-dang-xuat").addEventListener("click", async () => {
   bao($("loi1"), ""); bao($("ok1"), "");
   $("nut-dang-xuat").disabled = true;
@@ -408,5 +408,5 @@ $("nut-tao-pb").addEventListener("click", async () => {
   }
 });
 
-// [S1.176] Cuối tệp: mọi `let` của trang đã khởi tạo khi `moSauDangNhap` chạy.
+// [S1.177] Cuối tệp: mọi `let` của trang đã khởi tạo khi `moSauDangNhap` chạy.
 thuPhienCo();

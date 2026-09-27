@@ -14296,8 +14296,44 @@ Ba đột biến, cả ba đỏ:
 - **Hợp `master` lần bốn.** Lúc Evidence pack của lần hợp thứ ba còn chạy, `master` nhận #177 — bộ tài liệu buổi bậc 1,
   chỉ tài liệu — lấy đúng số vòng lần hợp thứ ba đã cấp. Xung đột ở cột mốc `docs/STATE.md`, gỡ tay như trước;
   `pnpm cap-so --mo-ho nhanh` cấp vòng này thành **S1.174**. #177 không chạm mã, test hay ma trận.
+# §S1.175 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
 
-# §S1.175 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+## 1. Việc gì
+
+Khoản 145 (S1.76): `startAgentSession` ghi `AGENT_SESSION_ISSUED` trong cùng giao dịch với lần tiêu thụ mã TOTP và hàng phiên, không
+savepoint. Khoá ghi sổ bị giữ quá trần 2 s (050) thì 55P03 ném ra, cả giao dịch rollback. Khoản ấy tự ghi đây là câu hỏi TÍNH SẴN SÀNG,
+không an toàn, và đòi trả lời: *một chứng chỉ phát ra mà sổ không ghi thì có được phát không*. Chủ dự án chọn: KHÔNG. Chạm ADR-039.
+
+## 2. Đo trước
+
+Khối mới của `apps/api/src/auth.int.test.ts`: một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (`audit_append`), rồi
+`POST /auth/agent-session` với mã TOTP đúng. Trên `apps/api/src/routes/auth.ts` của `master`: **ĐỎ** — `500 {"error":"loi noi bo"}`,
+phiên/sổ trước `{0,0}` sau `{0,0}`, **0** dòng log. Tức mã cũ đã fail-closed về chứng chỉ; thứ thiếu là tên của lỗi và dấu vết.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `startAgentSession` đặt `SAVEPOINT` trước hàng phiên; lần ghi sổ gãy 55P03 hay 40P01 ⇒ lùi về
+  savepoint (hàng phiên biến mất cùng lần ghi hỏng) rồi ném `AgentSessionAuditBusyError` (xuất ở barrel, danh sách trắng cập nhật).
+  Mọi mã khác ném nguyên như trước.
+- `apps/api/src/routes/auth.ts`: bắt lỗi ấy ⇒ một dòng log cố định `[api] khoan 145: …` và trả **503** bằng đường TRẢ VỀ, nên giao
+  dịch commit lần tiêu thụ mã TOTP — mã ấy không phát lại được.
+- `docs/DECISIONS.md` ADR-039: một gạch ghi quyết định.
+
+## 4. Đo sau
+
+Ca mới xanh: 503 có tên; không phiên AGENT, không hàng `AGENT_SESSION_ISSUED`; đúng một dòng log, không nội suy id; dùng lại chính mã
+ấy ⇒ 401, vẫn không phát gì.
+
+## 5. Giới hạn
+
+- Người vận hành phải đợi mã TOTP kế tiếp (≤ 30 s) để thử lại — cái giá có chủ ý của việc commit lần tiêu thụ mã.
+- 57014 vẫn ném nguyên (500), cùng lập luận khoản 143.
+
+## 6. Số
+
+Khoản 145 đóng. Còn mở **83**; rổ B **58**.
+
+# §S1.176 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
 
 ## 1. Việc gì
 
@@ -14376,7 +14412,7 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 
 Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.
 
-# §S1.176 — BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+# §S1.177 — BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
 
 ## 1. Việc gì
 
@@ -14408,11 +14444,11 @@ Chủ dự án chọn ngày 2026-09-27 (đề xuất sau vòng đường đăng 
   bắn `hashchange`.
 - `tools/pilot-gia-lap` lệnh `dang-nhap`: in MỘT link (bản trước in `/mo-thau#` và `/tao-thau#` cùng một mã dùng một lần, nên
   link thứ hai luôn chết) và một dòng *"mở /tao-thau hay /chinh-sach KHÔNG kèm #"*.
-- `eslint.config.js`: global `history`. ADR-020 mục 3 và ADR-107 (Hệ quả, Đo): chú thích `[S1.176]`.
+- `eslint.config.js`: global `history`. ADR-020 mục 3 và ADR-107 (Hệ quả, Đo): chú thích `[S1.177]`.
 
 ## 3. Đo
 
-- `apps/web/src/phuc-vu.test.ts`, khối `[S1.176]`: nạp NGUYÊN tệp trang vào `node:vm` — DOM giả dựng từ id và `hidden` của
+- `apps/web/src/phuc-vu.test.ts`, khối `[S1.177]`: nạp NGUYÊN tệp trang vào `node:vm` — DOM giả dựng từ id và `hidden` của
   tệp HTML cùng tên, `fetch` giả giữ một "cookie", `history`/`location` giả, import `/lib/chinh-sach.js` là bản thật, các import
   khác là hàm rỗng. Mỗi trang người mua tám ca: có phiên ⇒ khối hỏi, không bước nào mở, "Tiếp tục" mới mở; "Đăng xuất" ⇒
   `POST /auth/logout`, về bước 1, nút "Tiếp tục" cũ không mở lại được; link mang mã của B trong trình duyệt có phiên của A ⇒ 0
@@ -14479,13 +14515,13 @@ Chromium 1194 trên cụm thật của pilot giả lập (`pnpm pilot:gia-lap cu
 - Đóng thẻ không đăng xuất: cookie còn tới hết 8 giờ. Nút Đăng xuất là việc của người dùng.
 - Dùng lại phiên không làm mới MFA: điều phối giải mã đòi lần nhập mã sáu số trong 15 phút gần nhất; quá hạn là phải xin link mới.
 - ~~Trang nộp thầu chưa dùng lại phiên khách lúc tải; tải lại sau khi xác minh là phải mở lại link — link ấy đã bị tiêu thụ.~~
-  **[S1.177]** Đã làm — §S1.177.
+  **[S1.178]** Đã làm — §S1.178.
 
 ## 5. Số
 
 Không khoản nào mở hay đóng.
 
-# §S1.177 — TRANG NỘP THẦU HỎI LẠI PHIÊN KHÁCH CÒN HẠN LÚC TẢI; ĐỔI LINK MỜI TRONG CÙNG THẺ THÌ ĐÓNG CÁC BƯỚC
+# §S1.178 — TRANG NỘP THẦU HỎI LẠI PHIÊN KHÁCH CÒN HẠN LÚC TẢI; ĐỔI LINK MỜI TRONG CÙNG THẺ THÌ ĐÓNG CÁC BƯỚC
 
 ## 1. Việc gì
 
@@ -14519,12 +14555,12 @@ Chủ dự án chọn ngày 2026-09-27 (đề xuất sau vòng ba trang người
 - `docLink()`: fragment không mang mã thì ô mã rỗng — sau lần xác minh, ô còn giữ mã ĐÃ tiêu thụ, và ô mã có giá trị làm trang
   không hỏi phiên nữa.
 - `nop-thau.html`: khối `#hoi-phien` và nút `#nut-dung-phien` ở bước 1.
-- ADR-107 (Hệ quả, Đo) và giới hạn ở §S1.176 mục 4: gạch kèm nhãn `[S1.177]`.
+- ADR-107 (Hệ quả, Đo) và giới hạn ở §S1.177 mục 4: gạch kèm nhãn `[S1.178]`.
 
 ## 3. Đo
 
-- `apps/web/src/phuc-vu.test.ts`, cùng khung nạp nguyên tệp trang của §S1.176 (thêm cookie khách, `setInterval`/`clearInterval`
-  giả có đếm, `replaceChildren` xoá chữ). 13 ca `[S1.177]`:
+- `apps/web/src/phuc-vu.test.ts`, cùng khung nạp nguyên tệp trang của §S1.177 (thêm cookie khách, `setInterval`/`clearInterval`
+  giả có đếm, `replaceChildren` xoá chữ). 13 ca `[S1.178]`:
   - có phiên khách ⇒ hỏi, nêu tên gói, câu hỏi nói tên gói không nói phiên của ai; Tiếp tục ⇒ bước 3, bước 2 vẫn ẩn;
   - link mang mã ⇒ 0 lời gọi;
   - 401, mất mạng, 200 thiếu tên gói, 403 ⇒ không hỏi, và bấm Tiếp tục ở cả bốn ca không mở gì, không gọi gì;

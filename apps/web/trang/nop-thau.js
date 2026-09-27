@@ -26,7 +26,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 let phien = { orgId: "", token: "", rfq: null, items: [], publicKeys: [] };
 /**
- * [S1.177] Thế hệ của màn: tăng mỗi lần các bước bị đóng về bước 1 (`dongCacBuoc` — đổi link trong cùng thẻ, mở một
+ * [S1.178] Thế hệ của màn: tăng mỗi lần các bước bị đóng về bước 1 (`dongCacBuoc` — đổi link trong cùng thẻ, mở một
  * lời mời khác). Mọi lời gọi đang bay chụp nó trước `await` và bỏ kết quả nếu nó đã đổi: một phản hồi về muộn của lượt
  * cũ không được mở lại bước 3 dưới cookie của người trước.
  */
@@ -98,7 +98,7 @@ async function trinhDuyetLamDuocGi() {
 function docLink() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   const i = h.indexOf(":");
-  // [S1.177] Fragment không mang mã thì ô mã cũng rỗng: sau lần xác minh, ô còn giữ mã lời mời ĐÃ tiêu thụ, và một ô
+  // [S1.178] Fragment không mang mã thì ô mã cũng rỗng: sau lần xác minh, ô còn giữ mã lời mời ĐÃ tiêu thụ, và một ô
   // mã có giá trị làm `thuPhienKhach` không hỏi phiên nữa.
   if (i <= 0) { $("token").value = ""; return; }
   $("org").value = h.slice(0, i);
@@ -116,7 +116,7 @@ $("nut-mo").addEventListener("click", async () => {
   $("nut-mo").disabled = false;
   if (the !== theHe) return;
   if (r.status !== 200) { bao($("loi1"), loiCua(r, "Không mở được lời mời")); return; }
-  // [S1.177] Một lời mời khác vừa mở: bước 3 đang hiện (nếu có) là của cookie cũ — đóng về bước 1 trước khi mở bước 2.
+  // [S1.178] Một lời mời khác vừa mở: bước 3 đang hiện (nếu có) là của cookie cũ — đóng về bước 1 trước khi mở bước 2.
   dongCacBuoc();
   phien = { ...phien, orgId, token };
   bao($("ok1"), `Lời mời hợp lệ. Link được gửi qua ${r.body.linkChannel}.`);
@@ -160,11 +160,11 @@ $("nut-xac").addEventListener("click", async () => {
 });
 
 /**
- * [S1.176] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
+ * [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
  * mã lời mời (`[H5]`, `packages/invitation`), nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa
  * chỉ và lịch sử trình duyệt. `replaceState` không bắn `hashchange`. ~~Trang này KHÔNG hỏi lại phiên khách lúc
  * tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được mời lại, có xoá fragment hay không.~~
- * [S1.177] Nay trang hỏi lại phiên khách lúc tải (`thuPhienKhach`, cuối tệp).
+ * [S1.178] Nay trang hỏi lại phiên khách lúc tải (`thuPhienKhach`, cuối tệp).
  */
 function xoaManhLink() {
   try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
@@ -206,7 +206,7 @@ function gioDoc(chuoi) {
   return ms === null ? String(chuoi) : new Date(ms).toLocaleString("vi-VN");
 }
 
-/** Trả `true` khi đã nạp và mở bước 3; `false` khi lỗi hay khi màn đã đổi thế hệ trong lúc chờ ([S1.177]). */
+/** Trả `true` khi đã nạp và mở bước 3; `false` khi lỗi hay khi màn đã đổi thế hệ trong lúc chờ ([S1.178]). */
 async function napGoiThau() {
   const guiLuc = Date.now();
   const the = theHe;
@@ -415,7 +415,7 @@ $("nut-lai").addEventListener("click", () => {
 // còn sống trong biến `phien` sẽ làm bước 2 gửi OTP cho đúng người của lời mời TRƯỚC.
 // ==============================================================================================
 //
-// [S1.177] Và ĐÓNG các bước về bước 1 rồi hỏi lại phiên. Trước đây bước 3 đã mở vẫn để nguyên: nhà cung cấp thứ
+// [S1.178] Và ĐÓNG các bước về bước 1 rồi hỏi lại phiên. Trước đây bước 3 đã mở vẫn để nguyên: nhà cung cấp thứ
 // hai mở link của mình trong thẻ của người thứ nhất thấy ngay bảng giá, và "Niêm phong và nộp" đi dưới cookie khách
 // của người THỨ NHẤT cho tới khi người thứ hai xác minh xong.
 window.addEventListener("hashchange", () => {
@@ -430,7 +430,7 @@ window.addEventListener("hashchange", () => {
 });
 
 // ==============================================================================================
-// [S1.177] HỎI LẠI PHIÊN KHÁCH LÚC TẢI.
+// [S1.178] HỎI LẠI PHIÊN KHÁCH LÚC TẢI.
 //
 // Mã lời mời bị tiêu thụ ở lần xác minh OTP (`[H5]`, `packages/invitation`), còn phiên khách là cookie
 // `__Host-tp_guest` `Path=/` sống tới 4 giờ (`apps/api/src/routes/anon.ts`). Tới trước vòng này trang chỉ đọc gói
@@ -466,7 +466,7 @@ function boHoiPhien() {
 }
 
 /**
- * [S1.177] Về lại bước 1: sang thế hệ mới, dừng đếm ngược, bỏ dấu "xong", ẩn bước 2–4 và XOÁ nội dung của chúng (gói
+ * [S1.178] Về lại bước 1: sang thế hệ mới, dừng đếm ngược, bỏ dấu "xong", ẩn bước 2–4 và XOÁ nội dung của chúng (gói
  * thầu, các ô giá đã gõ, biên nhận — của phiên trước), bỏ khối hỏi phiên.
  */
 function dongCacBuoc() {
