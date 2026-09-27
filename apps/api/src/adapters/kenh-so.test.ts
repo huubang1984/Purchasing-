@@ -48,7 +48,7 @@ describe("[ADR-069] chuanHoaE164", () => {
 });
 
 describe("[ADR-069] taoBoGuiTheoKenh", () => {
-  it("EMAIL về bộ gửi thư; SMS/ZALO_ZNS về đúng kênh với số E.164 và link /i#", async () => {
+  it("EMAIL về bộ gửi thư; SMS/ZALO_ZNS về đúng kênh với số E.164 và link /i#<org>:<token> [ADR-107]", async () => {
     const so: Lan[] = [];
     const g = taoBoGuiTheoKenh({ email: emailGhi(so), sms: kenhGhi("sms", so), zalo: kenhGhi("zalo", so), baseUrl: BASE });
     await g.invitationLinkSender.send({ orgId: ORG, invitationId: "i1", channel: "EMAIL", destination: "a@vidu.vn", token: "t0" });
@@ -57,7 +57,7 @@ describe("[ADR-069] taoBoGuiTheoKenh", () => {
     await g.deadlineNoticeSender.send({ orgId: ORG, invitationId: "i1", channel: "SMS", destination: "+84901234567", newDeadlineAt: "2026-10-01T10:00:00Z" });
     await g.loginLinkSender.send({ orgId: ORG, email: "b@vidu.vn", token: "t2" });
     expect(so.map((l) => l[0])).toEqual(["email:moi", "sms:moi", "zalo:otp", "sms:han", "email:login"]);
-    expect(so[1]).toEqual(["sms:moi", "+84901234567", `${BASE}/i#t1`]);
+    expect(so[1]).toEqual(["sms:moi", "+84901234567", `${BASE}/i#${ORG}:t1`]);
     expect(so[2]).toEqual(["zalo:otp", "+84901234567", "123456"]);
     expect(so[3]).toEqual(["sms:han", "+84901234567", "2026-10-01T10:00:00Z"]);
   });

@@ -304,7 +304,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     const invitationId = layChuoi(r.body, "invitation", "id");
     const tin = await bc.hopThu.cho(`link mời ${invitationId}`, (t) => t.loai === "INVITATION_LINK" && t.invitationId === invitationId);
     if (tin.loai !== "INVITATION_LINK") throw new BuocHong("tin sai loại");
-    return { ncc, invitationId, token: tokenTuLink(tin.duongLink), lienHe: lh, phien: null };
+    return { ncc, invitationId, token: tokenTuLink(tin.duongLink, tin.orgId), lienHe: lh, phien: null };
   };
 
   /** Xin mở thầu, duyệt, (tuỳ) điều phối và đợi worker. Trả về id yêu cầu. */

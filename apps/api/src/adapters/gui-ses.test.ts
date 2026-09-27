@@ -46,12 +46,20 @@ describe("[ADR-065] bộ gửi SES của api", () => {
       expect(l.input.Content?.Simple?.Subject?.Data).toMatch(/^TrustProcure — /u);
     }
     expect(ses.lenh.map((l) => l.input.Destination?.ToAddresses?.[0])).toEqual(["a@vidu.vn", "b@vidu.vn", "c@vidu.vn", "d@vidu.vn", "e@vidu.vn"]);
-    expect(than(ses.lenh[0]!)).toContain(`${BASE}/login#tok-dang-nhap`);
-    expect(than(ses.lenh[1]!)).toContain(`${BASE}/i#tok-moi`);
+    expect(than(ses.lenh[0]!)).toContain(`${BASE}/login#${ORG}:tok-dang-nhap`);
+    expect(than(ses.lenh[1]!)).toContain(`${BASE}/i#${ORG}:tok-moi`);
     expect(than(ses.lenh[2]!)).toContain("123456");
-    expect(than(ses.lenh[3]!)).toContain(`${BASE}/login`);
-    expect(than(ses.lenh[3]!)).not.toContain("#");
+    // [ADR-107] Tin báo không mã: link chỉ mang tổ chức — trang điền sẵn ô ấy cho ô xin link — và không mang gì sau nó.
+    expect(than(ses.lenh[3]!)).toContain(`${BASE}/login#${ORG}\n`);
+    expect(than(ses.lenh[3]!)).not.toContain(`${ORG}:`);
     expect(than(ses.lenh[4]!)).toContain("2026-10-01T10:00:00Z");
+  });
+
+  it("[ADR-107] tin báo người duyệt CÓ mã mang `/login#<orgId>:<token>` — mã do ngân sách riêng phát phải tới tay người duyệt", async () => {
+    const ses = new SesGia();
+    const g = taoBoGuiSes({ client: ses, tuDiaChi: TU, baseUrl: BASE });
+    await g.approvalNoticeSender.send({ orgId: ORG, email: "d@vidu.vn", rfqId: "r1", unsealRequestId: "u1", token: "tok-duyet" });
+    expect(than(ses.lenh[0]!)).toContain(`${BASE}/login#${ORG}:tok-duyet\n`);
   });
 
   it("kênh SMS/ZALO_ZNS ⇒ NÉM trước khi gọi SES — không rơi về kênh khác", async () => {

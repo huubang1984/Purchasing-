@@ -21,7 +21,7 @@ function docTin(): TinHopThuDev[] {
 }
 
 describe("[S1.11] hộp thư dev", () => {
-  it("ba loại tin, ba tệp; link đăng nhập /login#<token>, link mời /i#<token>, OTP chỉ có mã; không qua console", async () => {
+  it("ba loại tin, ba tệp; link đăng nhập /login#<org>:<token>, link mời /i#<org>:<token> [ADR-107], OTP chỉ có mã; không qua console", async () => {
     const loi = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     thuMuc = join(mkdtempSync(join(tmpdir(), "tp-hop-thu-")), "con");
@@ -34,8 +34,8 @@ describe("[S1.11] hộp thư dev", () => {
     expect(tin).toHaveLength(3);
     expect(tin.map((t) => t.loai)).toEqual(["LOGIN_LINK", "INVITATION_LINK", "OTP"]);
     const [dn, moi, otp] = tin as [TinHopThuDev, TinHopThuDev, TinHopThuDev];
-    expect(dn.loai === "LOGIN_LINK" && dn.duongLink).toBe("https://mua.vidu.vn/login#TOKEN-DANG-NHAP");
-    expect(moi.loai === "INVITATION_LINK" && moi.duongLink).toBe("https://mua.vidu.vn/i#TOKEN-MOI");
+    expect(dn.loai === "LOGIN_LINK" && dn.duongLink).toBe("https://mua.vidu.vn/login#org-1:TOKEN-DANG-NHAP");
+    expect(moi.loai === "INVITATION_LINK" && moi.duongLink).toBe("https://mua.vidu.vn/i#org-1:TOKEN-MOI");
     expect(otp.loai === "OTP" && otp.ma).toBe("123456");
     // Token không bao giờ vào đường dẫn hay query — chỉ sau `#`.
     for (const t of tin)
@@ -93,7 +93,7 @@ describe("[S1.11] hộp thư dev", () => {
 
     if (mangMa.loai !== "UNSEAL_APPROVAL_NOTICE") throw new Error("tin dau phai la UNSEAL_APPROVAL_NOTICE");
     expect(mangMa.duongLink, "mã CHỈ đứng sau `#` — đây là vế mà đột biến query string phải giết").toBe(
-      "https://mua.vidu.vn/login#TOKEN-BAO-DUYET",
+      "https://mua.vidu.vn/login#org-1:TOKEN-BAO-DUYET",
     );
     const u = new URL(mangMa.duongLink ?? "");
     expect(u.pathname + u.search, "không một byte nào của mã được ra ngoài fragment").not.toMatch(/TOKEN/u);

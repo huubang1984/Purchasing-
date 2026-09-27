@@ -453,15 +453,18 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   if (r.status !== 200) throw new PilotError(`/auth/link trả ${r.status} — cụm có đang chạy không?`);
   const tin = await hopThu.cho(`link đăng nhập của ${email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === tc.orgId && t.den === email);
   if (tin.loai !== "LOGIN_LINK") throw new PilotError("tin sai loại");
-  const token = tokenTuLink(tin.duongLink);
+  const token = tokenTuLink(tin.duongLink, tin.orgId);
   const web = `http://127.0.0.1:${ts.cong.web}`;
   viet(`${n.hoTen} — ${n.chucDanh} (${n.vai}) · ${tc.ten} · tổ chức ${tc.orgId}`);
   if (khop.length > 1) {
     viet(`  (email này có ở ${khop.length} tổ chức giả lập của các lượt chạy — đang dùng lượt MỚI NHẤT; lượt cũ hơn: ${khop.slice(1).map((t) => t.orgId).join(", ")} — thêm orgId sau email để chọn)`);
   }
-  viet(`  mở thầu / trao thầu : ${web}/mo-thau#${tc.orgId}:${token}`);
-  viet(`  tạo gói / mời       : ${web}/tao-thau#${tc.orgId}:${token}`);
+  // [S1.177] MỘT link: bản trước in hai link /mo-thau# và /tao-thau# cùng một mã dùng một lần, nên link thứ hai
+  // luôn chết sau khi dùng link thứ nhất. Trang sau đó hỏi lại phiên còn hạn — mở nó KHÔNG kèm `#`.
+  viet(`  link đăng nhập      : ${web}/mo-thau#${tc.orgId}:${token}`);
   viet("  (link dùng MỘT lần, hết hạn sau 15 phút)");
+  viet(`  sau khi vào         : mở ${web}/tao-thau hay ${web}/chinh-sach KHÔNG kèm # rồi bấm "Tiếp tục với phiên này"`);
+  viet("                        (phiên sống tới 8 giờ; điều phối giải mã vẫn đòi mã sáu số trong 15 phút gần nhất)");
   if (n.totpBase32 !== null) {
     const m = maTotpHienTai(n.totpBase32);
     viet(`  mã TOTP hiện tại    : ${m.ma}  (còn ${m.conGiay} giây)`);

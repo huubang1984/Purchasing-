@@ -1873,10 +1873,14 @@ Ba ràng buộc đi kèm, cả ba cưỡng chế được:
 
 ### 3. E6 — token KHÔNG BAO GIỜ vào đường dẫn hay query
 
-- **Magic link = `https://<host>/i#<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
+- **Magic link = ~~`https://<host>/i#<token>`~~ [S1.176 / ADR-107] `https://<host>/i#<orgId>:<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
   fragment lên máy chủ, không ghi vào log truy cập, không đi vào `Referer`. Trang `/i` là tĩnh;
-  JS đọc `location.hash`, xoá nó (`history.replaceState`), rồi **POST** token trong thân JSON tới
-  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: `/login#<token>`.
+  JS đọc `location.hash`, ~~xoá nó (`history.replaceState`), rồi~~ **POST** token trong thân JSON tới
+  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: ~~`/login#<token>`~~ **[S1.176 / ADR-107]**
+  `/login#<orgId>:<token>` — hai route redeem đòi cả hai, và thư/tin nhắn không có chỗ nào khác nói tổ chức.
+  **[S1.177]** Trang xoá fragment (`history.replaceState`) SAU lần mã bị tiêu thụ — `/guest/otp/verify` ở `/i`,
+  `/auth/totp` ở ba trang người mua — không phải lúc đọc: trước lúc ấy mã vẫn còn dùng được, và tải lại trang hay gõ
+  sai mã sáu số vẫn cần nó. Tới S1.177 không trang nào xoá (ADR-107, mục Hệ quả).
 - **Mọi phản hồi** mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (trừ
   `public-keys`, đã có chính sách riêng), `X-Content-Type-Options: nosniff`.
 - **Phiên khách** đi trong cookie như phiên người mua; **mã OTP** chỉ đi trong thân POST.
@@ -2132,7 +2136,8 @@ test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
   được, không bao giờ trả rỗng; `kind` phân biệt. KHÔNG phải bản chép của `local-dev-shared.ts`
   (không import được, và không nên: nhãn HKDF khác nên cùng khoá chính cũng cho khoá dẫn xuất khác).
 - **Hộp thư dev (`adapters/hop-thu-dev.ts`)**: ba bộ gửi ghi mỗi tin một tệp JSON (0700/0600) vào
-  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (`/login#<token>`, `/i#<token>`); không
+  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (~~`/login#<token>`, `/i#<token>`~~ **[S1.176 / ADR-107]**
+  `/login#<orgId>:<token>`, `/i#<orgId>:<token>`); không
   một byte nào qua `console`. Đây là adapter DUY NHẤT hôm nay: bộ gửi thật (SMTP/SES/SMS) là hạ
   tầng chưa có, và cách đóng đúng vẫn là nợ 38 (outbox cho mọi email, token phát trong handler).
 - Cả hai gọi `assertLocalDevAllowed()` NGAY KHI TẠO — cùng hàm với `createLocalDevWrapper` và
@@ -6572,7 +6577,8 @@ mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo ch�
    (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
 2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
    `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
-   **ASCII không dấu, ≤ 160 ký tự** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
+   **ASCII không dấu, ~~≤ 160 ký tự~~** **[S1.176 / ADR-107] ≤ 160 ký tự cho OTP và tin gia hạn; lời mời
+   mang link có mã tổ chức nên thành hai đoạn GSM-7** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
    đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
 3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
    `otp`, `duong_dan`, `han_nop`). **Token trong Secrets Manager** (`tp/api/zalo-oa`): refresh token dùng một lần và
@@ -8264,3 +8270,91 @@ một yêu cầu — nhưng A1 đúng theo nghĩa hẹp hơn nghĩa người đ�
 - Fixture test ghi bản rõ trực tiếp phải dùng phong bì thuộc đúng yêu cầu; mọi fixture hiện có đã thoả.
 - Đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts` (gói A × gói B, cùng đối chứng) và ca đột biến J4 của
   `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (vòng hai × yêu cầu vòng một, dưới `app_unseal`).
+
+## ADR-107 — Link đăng nhập và link mời mang mã tổ chức trong fragment; trang `/login` có ô xin link đăng nhập
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.176, gộp cả ba kênh gửi) ·
+**Sửa:** ADR-020 mục 3 (dạng link) · **Liên quan:** ADR-022 (nợ 38 — `/auth/link` trả cùng một 200), ADR-044 (hai màn demo),
+ADR-065 (SES), ADR-069 (SMS, Zalo ZNS) · **Khoản:** 198 (đã đóng ở S1.99 — vòng này sửa lời đóng) · **Biên bản:**
+`evidence/security-reviews.md` §S1.176
+
+### Bối cảnh
+
+ADR-020 mục 3 viết link là `/login#<token>` và `/i#<token>`. Nhưng `/auth/redeem` và `/guest/redeem` đòi `{orgId, token}` —
+đường vô danh không biết người gọi thuộc tổ chức nào cho tới khi client nói ra — và bốn trang của `apps/web` đọc fragment dạng
+`<orgId>:<token>`. Khoản 198 nêu đúng chỗ lệch ấy ở S1.92, đưa ba hướng (⒜ trang hỏi tổ chức, ⒝ bộ gửi đưa `orgId` vào
+fragment, ⒞ máy chủ tự suy tổ chức từ mã), rồi đóng ở S1.99 bằng hai bí danh trang, với lời khai: trang đã tự điền mã khi
+fragment thiếu dấu hai chấm, và *"tin nhắn mang sẵn `orgId` trong thân"*. Đo ngày 2026-09-27, hai vế ấy sai cho kênh thật:
+
+- `apps/web/trang/nop-thau.js` bỏ qua fragment không có dấu hai chấm — không điền cả ô mã lời mời;
+- thân thư SES, tin SMS và tham số ZNS không mang `orgId` ở đâu cả — chỉ bản ghi JSON của hộp thư dev có.
+
+Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ người nhận không có. Cùng lúc, không trang nào gọi
+`POST /auth/link`: người dùng trên prod không tự xin được link đăng nhập — mà magic link là đường vào DUY NHẤT của người mua
+(ADR-020 mục 2), cho MỌI lần đăng nhập chứ không chỉ lần đầu.
+
+### Quyết định
+
+1. **Hướng ⒝ của khoản 198.** Mọi link bộ gửi dựng mang `<orgId>:<token>` ở fragment: `/login#<orgId>:<token>` (link đăng
+   nhập, tin báo người duyệt có mã) và `/i#<orgId>:<token>` (lời mời, cả ba kênh EMAIL, SMS, ZALO_ZNS). Token VẪN chỉ ở
+   fragment — E6 không đổi: không vào đường dẫn, query, log truy cập hay `Referer`. `orgId` không phải bí mật (ADR-020 đã
+   để nó đi trong thân POST; `LOGIN_LINK_MAX_PER_ORG` cũng lập luận thế), và nó là UUIDv4 (ADR-012).
+2. **Tin báo người duyệt KHÔNG mã** (hạn mức chặn, ADR-048) mang `/login#<orgId>` ở thư SES. Trang `/login` đọc dạng ấy:
+   điền ô tổ chức, xoá ô mã — mã của người trước không được đứng lại. Hộp thư dev giữ `duongLink: null` cho tin ấy.
+3. **Trang `/login` có ô xin link đăng nhập** gọi `POST /auth/link` với mã tổ chức ở ô trên và email. Máy chủ trả CÙNG một
+   200 cho mọi email (nợ 38), nên trang cũng nói MỘT câu cho mọi 200 — trang không được biết thêm điều máy chủ cố ý không
+   nói — và câu ấy đúng ở mọi nhánh sau 200 (việc gửi chạy sau phản hồi; người đã có năm mã trong 15 phút nhận 200 mà
+   không nhận thư). Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Chỉ trang `/login`: đó là nơi mọi
+   link đăng nhập dẫn tới; `/tao-thau` và `/chinh-sach` không có ô này.
+4. **Người tới `/login` không kèm fragment vẫn đi tiếp được.** Ô tổ chức nhận nguyên một link cũ dán vào (lấy phần sau
+   `#`, trước `:`) và nói đúng khi mã sai hình dạng. Trang nhớ mã tổ chức trong `localStorage` SAU lần vào thành công
+   đầu tiên trên máy — tiện cho từng người xem, không phải trạng thái phải bền; đọc/ghi bọc `try`, và một link lạ mang
+   `#<orgId>` không đặt được mã cho lần sau.
+5. **Không đổi hợp đồng HTTP nào.** `/auth/link`, `/auth/redeem`, `/guest/redeem` giữ nguyên thân và phản hồi; không migration.
+
+### Phương án đã cân nhắc
+
+- **⒜ Trang hỏi tổ chức, link giữ dạng cũ** — người nhận không biết UUID tổ chức của mình, và không kênh nào gửi nó cho họ.
+- **⒞ Máy chủ tự suy tổ chức từ mã** — đổi hợp đồng của hai route ANON và mở một đường tra mã không cần biết tổ chức, tức một
+  câu đọc xuyên tổ chức dưới RLS. Đắt và rộng hơn bài toán.
+- **Mã tổ chức rút gọn (base64url 22 ký tự thay vì UUID 36)** để SMS ngắn hơn — thêm một phép mã hoá ở ba bộ gửi và bốn
+  trang để tiết kiệm 14 ký tự, mà tin SMS vẫn vượt 160 (161–176 ký tự).
+
+### Hệ quả, nói thẳng
+
+- **Tin SMS lời mời thành hai đoạn.** Thân không dấu là 138–153 ký tự GSM-7 tuỳ tên miền; thêm 37 ký tự thành 175–190, vượt
+  160 ⇒ hai đoạn, gấp đôi tiền mỗi lời mời qua SMS. Tham số `duong_dan` của ZNS dài thêm 37 ký tự. Đổi lúc brandname và mẫu
+  ZNS chưa đăng ký là lúc rẻ nhất.
+- **Thư và tin nhắn nay mang mã tổ chức.** Người đọc được thư biết UUID tổ chức — thứ mà ADR-020 và `LOGIN_LINK_MAX_PER_ORG`
+  đã coi là không bí mật; nó không mở thêm route nào.
+- **Trang chưa xoá fragment sau khi đọc.** ADR-020 mục 3 viết trang *"xoá nó (`history.replaceState`)"*; đo: không trang
+  nào của `apps/web` gọi `replaceState`. Token nằm lại trong thanh địa chỉ và lịch sử trình duyệt tới khi dùng hoặc hết hạn.
+  Vòng này KHÔNG đổi điều ấy (xoá fragment thì tải lại trang là mất mã, và trình nghe `hashchange` của bốn trang dựa vào
+  fragment); ghi ra để chủ dự án xếp. **[S1.177]** Bốn trang nay xoá fragment ngay sau lần mã bị tiêu thụ — `/auth/totp` ở ba trang người mua,
+  `/guest/otp/verify` ở trang nộp thầu (mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation`) — nên xoá nó
+  không làm mất gì. ~~Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
+  mời lại, có xoá fragment hay không.~~ **[S1.178]** Trang nộp thầu nay cũng hỏi lại phiên khách lúc tải (`GET /guest/rfq`,
+  cookie `__Host-tp_guest` tới 4 giờ): tải lại sau khi xác minh ⇒ khối hỏi nêu tên gói thầu, "Tiếp tục nộp báo giá" ⇒ bước 3.
+  Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.
+- **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.177]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
+  tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
+  "Đăng xuất" (`POST /auth/logout`) — không tự mở, vì trên máy dùng chung phiên ấy có thể của người khác. Dùng lại phiên
+  KHÔNG làm mới MFA: điều phối giải mã vẫn đòi lần nhập mã sáu số trong 15 phút gần nhất (`UNSEAL_MFA_MAX_AGE_SECONDS`), và
+  không route nào làm mới `mfa_verified_at` ngoài một lần đăng nhập mới — quá hạn thì trang nhận 422 *"phiên chưa qua MFA trong
+  cửa sổ cho phép"* và phải xin link mới.
+- **Người chưa từng vào trên máy này và không còn link nào** vẫn phải được ai đó cho mã tổ chức — trang không tra được
+  tổ chức từ email (đó là hướng ⒞, đã bác).
+
+### Đo
+
+`apps/web/src/phuc-vu.test.ts` đọc văn bản ba bộ gửi (tám chỗ dựng link, mỗi đường phải có trong `TRANG`, dạng
+`#<orgId>` trơn đúng một chỗ) và chạy `docLink()` của bốn trang, `docToChuc()` của `/login`, trong `node:vm`. Đột biến
+trả `kenh-so.ts` về `/i#<token>` ⇒ đỏ; bỏ lần xoá ô mã ở `/login` ⇒ đỏ; bỏ token ở tin báo người duyệt có mã của SES ⇒ đỏ;
+đổi đường của tin ấy sang một trang không có ⇒ đỏ. Pilot giả lập
+(`tools/pilot-gia-lap`, `tokenTuLink` nay đòi mã tổ chức trong link khớp tổ chức của tin) 10/10 kịch bản, cô lập 2/2.
+Chromium trên cụm thật: `/login#<org>` điền ô tổ chức; email lạ và email thật nhận cùng một câu; thư tới mang
+`/login#<org>:<token>`, mở ra hai ô điền sẵn, TOTP ⇒ vào; 0 lỗi JavaScript. **[S1.177]** Cùng tệp test nạp NGUYÊN tệp ba
+trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ HTML cùng tên): hỏi-không-tự-mở, đăng xuất, thứ tự
+`docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
+(`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
+(`evidence/security-reviews.md` §S1.178).

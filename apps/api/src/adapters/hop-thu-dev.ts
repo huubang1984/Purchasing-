@@ -21,9 +21,11 @@
 // Hộp thư dev là "hộp thư" — nó nằm ở một thư mục do người vận hành chỉ định (`TRUSTPROCURE_DEV_MAILBOX_DIR`),
 // quyền 0700/0600, và không một byte nào của tin đi qua `console`.
 //
-// Dạng link theo ADR-020 mục 3: token ở FRAGMENT — `/login#<token>` (người mua), `/i#<token>`
-// (nhà cung cấp). Trình duyệt không gửi fragment lên máy chủ, không vào log truy cập, không vào
-// `Referer`. Mã OTP đi riêng, không kèm link.
+// Dạng link theo ADR-020 mục 3: token ở FRAGMENT — ~~`/login#<token>` (người mua), `/i#<token>`
+// (nhà cung cấp)~~ **[S1.176 / ADR-107]** `/login#<orgId>:<token>` (người mua), `/i#<orgId>:<token>`
+// (nhà cung cấp) — đúng dạng bốn trang của `apps/web` đọc, vì `/auth/redeem` và `/guest/redeem` đòi cả
+// hai và thân thư của bộ gửi thật không mang `orgId`. Trình duyệt không gửi fragment lên máy chủ,
+// không vào log truy cập, không vào `Referer`. Mã OTP đi riêng, không kèm link.
 // ==============================================================================================
 
 import { randomBytes } from "node:crypto";
@@ -121,7 +123,7 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
   return {
     loginLinkSender: {
       name: TEN,
-      send: (m) => ghi({ loai: "LOGIN_LINK", orgId: m.orgId, den: m.email, duongLink: `${tuyChon.baseUrl}/login#${m.token}`, luc: luc() }),
+      send: (m) => ghi({ loai: "LOGIN_LINK", orgId: m.orgId, den: m.email, duongLink: `${tuyChon.baseUrl}/login#${m.orgId}:${m.token}`, luc: luc() }),
     },
     invitationLinkSender: {
       name: TEN,
@@ -132,7 +134,7 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
           invitationId: m.invitationId,
           kenh: m.channel,
           den: m.destination,
-          duongLink: `${tuyChon.baseUrl}/i#${m.token}`,
+          duongLink: `${tuyChon.baseUrl}/i#${m.orgId}:${m.token}`,
           luc: luc(),
         }),
     },
@@ -149,7 +151,7 @@ export function taoHopThuDev(tuyChon: TuyChonHopThuDev): HopThuDev {
           den: m.email,
           rfqId: m.rfqId,
           unsealRequestId: m.unsealRequestId,
-          duongLink: m.token === null ? null : `${tuyChon.baseUrl}/login#${m.token}`,
+          duongLink: m.token === null ? null : `${tuyChon.baseUrl}/login#${m.orgId}:${m.token}`,
           luc: luc(),
         }),
     },

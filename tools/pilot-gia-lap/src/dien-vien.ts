@@ -73,7 +73,7 @@ export class NguoiMua {
     if (link.status !== 200) throw new HttpError(`/auth/link ${link.status}: ${link.text}`, link.status);
     const tin = await hopThu.cho(`link đăng nhập của ${this.email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === this.orgId && t.den === this.email);
     if (tin.loai !== "LOGIN_LINK") throw new Error("tin sai loại");
-    const token = tokenTuLink(tin.duongLink);
+    const token = tokenTuLink(tin.duongLink, tin.orgId);
     const rd = await this.http.goi("POST", "/auth/redeem", { orgId: this.orgId, token });
     if (rd.status !== 200) throw new HttpError(`/auth/redeem ${rd.status}: ${rd.text}`, rd.status);
     if (lay(rd.body, "needsEnrollment") === true) this.biMatTotp = layChuoi(rd.body, "totpSecretBase32");
