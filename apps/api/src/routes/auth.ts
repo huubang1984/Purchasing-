@@ -7,7 +7,7 @@
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
-// E6: token chỉ đi trong THÂN; link là ~~`/login#<token>`~~ [S1.174 / ADR-107] `/login#<orgId>:<token>` (trang
+// E6: token chỉ đi trong THÂN; link là ~~`/login#<token>`~~ [S1.175 / ADR-107] `/login#<orgId>:<token>` (trang
 // tĩnh đọc `location.hash` rồi POST).
 // Bí mật TOTP lúc ghi danh đi thẳng về client trong MỘT phản hồi và không đi đâu khác — đúng điều
 // khối chú thích `generateTotpSecret` (totp.ts) đòi, và `auth.int.test.ts` khẳng định không một
