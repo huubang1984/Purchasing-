@@ -14161,7 +14161,7 @@ Khoản 143 đóng. Còn mở **84**; rổ B **59**.
 
 ---
 
-# §S1.173 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
+# §S1.174 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
 
 **Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Không migration, không ADR. Không chạm mảnh nào của
 `docs/PRODUCT.md` §11: `gieo:demo` không cờ và luồng MVP1 của kịch bản 41 giữ nguyên hình dạng.
@@ -14172,7 +14172,7 @@ Phần cuối trong bốn phần của S3.1 (spec S3 §9): `gieo:demo` theo bả
 (§S1.156, §S1.166, §S1.169) dựng bậc, K1, route ký và màn `/chinh-sach`. Tới vòng này bối cảnh demo không có người FINANCE
 nào, và kịch bản 41 chỉ chạy ở tổ chức chưa bật.
 
-## 2. Bốn quyết định của chủ dự án (S1.173) — cả bốn theo đề xuất
+## 2. Bốn quyết định của chủ dự án (S1.174) — cả bốn theo đề xuất
 
 - **Tổ chức demo:** không cờ thì giữ tổ chức chưa bật — pilot chạy MVP1, cờ ký tắt trên máy thật —; `--s3` gieo tổ chức
   đã bật. Loại: luôn gieo hai tổ chức (in dài gấp đôi, người trình diễn dễ nhầm tổ chức); thay hẳn bằng tổ chức đã bật (demo
@@ -14291,5 +14291,8 @@ Ba đột biến, cả ba đỏ:
   trên PostgreSQL 16 cục bộ, kịch bản 41 bản gói **30/30**, bản HTTP **58/58**, và tệp mới của #180 **2/2**. Tầng tích
   hợp đầy đủ do T3 của CI đo trên chính commit hợp.
 - **Hợp `master` lần ba.** Lúc T3 của lần hợp thứ hai còn chạy, `master` nhận #182 — khoản 143 — lấy đúng số vòng lần hợp
-  thứ hai đã cấp. Xung đột ở cùng hai chỗ, gỡ tay như trước; `pnpm cap-so --mo-ho nhanh` cấp vòng này thành **S1.173**.
+  thứ hai đã cấp. Xung đột ở cùng hai chỗ, gỡ tay như trước; `pnpm cap-so --mo-ho nhanh` cấp lại số.
   #182 không chạm ma trận. Trên cây đã hợp: xem commit cấp số.
+- **Hợp `master` lần bốn.** Lúc Evidence pack của lần hợp thứ ba còn chạy, `master` nhận #177 — bộ tài liệu buổi bậc 1,
+  chỉ tài liệu — lấy đúng số vòng lần hợp thứ ba đã cấp. Xung đột ở cột mốc `docs/STATE.md`, gỡ tay như trước;
+  `pnpm cap-so --mo-ho nhanh` cấp vòng này thành **S1.174**. #177 không chạm mã, test hay ma trận.

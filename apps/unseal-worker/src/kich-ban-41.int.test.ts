@@ -23,7 +23,7 @@
 //    hàng rào có việc để làm sẽ không thấy trước những chỗ hàng rào chạm tới.
 //
 // ---------------------------------------------------------------------------------------------
-// [S1.173 / S3.1d] HAI LUỒNG — CÙNG MỘT KỊCH BẢN, HAI TỔ CHỨC
+// [S1.174 / S3.1d] HAI LUỒNG — CÙNG MỘT KỊCH BẢN, HAI TỔ CHỨC
 // ---------------------------------------------------------------------------------------------
 // Spec S3 §8.11: ADR-080 giữ hai luồng sống song song dưới công tắc, và kịch bản này phải chạy ở CẢ HAI. Mọi bước dùng
 // chung; mỗi luồng một tổ chức mới trên cùng CSDL. Luồng MVP1 là tổ chức CHƯA bật — mọi bước y như trước vòng này. Luồng
@@ -77,7 +77,7 @@ import {
 } from "@trustprocure/unseal";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
-// [S1.173 / S3.1d] Mẫu bậc của màn `/chinh-sach` — import TƯƠNG ĐỐI xuyên app, có chủ đích: test là nơi duy nhất nối
+// [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — import TƯƠNG ĐỐI xuyên app, có chủ đích: test là nơi duy nhất nối
 // hai app, và luồng S3 nên khai đúng ma trận mà người tài chính thấy trên màn.
 import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
 
@@ -127,7 +127,7 @@ let orgA: string;
 /** uMua tạo RFQ (PROCUREMENT_MANAGER); uGd1/uGd2 duyệt (DIRECTOR). */
 let uMua: string, uGd1: string, uGd2: string;
 let sMua: string, sGd1: string, sGd2: string;
-/** [S1.173 / S3.1d] Luồng S3: hai người FINANCE — một khai phiên bản chính sách có bậc, một ký. */
+/** [S1.174 / S3.1d] Luồng S3: hai người FINANCE — một khai phiên bản chính sách có bậc, một ký. */
 let sTc1: string, sTc2: string;
 let boKy: ReceiptSigner;
 let khoaKyCongKhai: Uint8Array;
@@ -177,7 +177,7 @@ beforeAll(async () => {
 }, 180000);
 
 /**
- * [S1.173 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, ba người như trước, và — luồng S3 — hai người FINANCE. Gọi ở
+ * [S1.174 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, ba người như trước, và — luồng S3 — hai người FINANCE. Gọi ở
  * `beforeAll` của từng luồng; mọi biến theo tổ chức ở trên và `trangThai` dưới được dựng lại, nên các bước đọc đúng
  * tổ chức của luồng đang chạy.
  */
@@ -225,7 +225,7 @@ interface TrangThaiKichBan {
 const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], phienKhach: [], bienNhan: [], unsealRequestId: "" });
 const trangThai: TrangThaiKichBan = trangThaiMoi();
 
-/** [S1.173 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
+/** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
 const LUONG = [
   ["MVP1 — tổ chức CHƯA bật S3", false],
   ["S3 — tổ chức ĐÃ BẬT, phiên bản có bậc đã ký", true],
@@ -235,7 +235,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
   beforeAll(() => dungToChuc(batS3));
 
   it("bước 1 — người mua dựng RFQ 1 tỷ và nó GIỮ yêu cầu phê duyệt kép", async () => {
-    // [S1.173 / S3.1d] Luồng S3: hai người FINANCE khai rồi ký phiên bản CÓ BẬC — hai giao dịch, hai phiên — và tổ chức
+    // [S1.174 / S3.1d] Luồng S3: hai người FINANCE khai rồi ký phiên bản CÓ BẬC — hai giao dịch, hai phiên — và tổ chức
     // bật. Ngưỡng kép giữ 500 triệu như luồng MVP1: số chữ ký mở gói và mở thầu không đổi giữa hai luồng.
     if (batS3) {
       const cs = await withTenant(apiPool, orgA, (c) =>
@@ -290,7 +290,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       ).toBe(true);
     });
     expect(trangThai.rfqId).not.toBe("");
-    // [S1.173 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
+    // [S1.174 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
     // nào — bậc 2 của §4.1 (từ 1 tỷ) cho ngân sách 1 tỷ ở luồng S3, không bậc ở luồng MVP1.
     const { rows: hai } = await db.pool.query<{ bat: boolean; bac: string | null }>(
       "SELECT public.to_chuc_da_bat_s3($1) AS bat, (SELECT tier_tu_so_tien::text FROM rfq_budgets WHERE rfq_id = $2) AS bac",

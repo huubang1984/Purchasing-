@@ -18,7 +18,7 @@
 // Nó KHÔNG đo heap, KHÔNG đo APM trace, KHÔNG đo lỗi ở tầng vận chuyển ngoài tiến trình. §4 của ma
 // trận ghi đúng ba vế ấy; ô ✅ của A2 KHÔNG được đọc rộng hơn.
 //
-// [S1.173 / S3.1d] HAI LUỒNG — spec S3 §8.11, cùng khuôn bản gói: mọi bước chạy cho tổ chức CHƯA bật (MVP1, trên bộ điều
+// [S1.174 / S3.1d] HAI LUỒNG — spec S3 §8.11, cùng khuôn bản gói: mọi bước chạy cho tổ chức CHƯA bật (MVP1, trên bộ điều
 // phối cấu hình MẶC ĐỊNH — cờ ký tắt, đúng máy chủ thật hôm nay) rồi cho tổ chức ĐÃ BẬT (trên bộ điều phối cờ ký BẬT). Luồng
 // S3 khác ở bước 1 — người tài chính khai phiên bản CÓ BẬC, người tài chính thứ hai ký nó QUA ROUTE ký — và ở thân mà bộ
 // quét gửi cho `POST /policy`: tổ chức đã bật từ chối phiên bản không bậc.
@@ -45,7 +45,7 @@ import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.j
 import { COOKIE_PHIEN_KHACH } from "../../api/src/routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "../../api/src/routes/auth.js";
 import { dichVuTest, outboxTest, type DichVuTest } from "../../api/src/test-services.js";
-// [S1.173 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
+// [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — cùng lý do import tương đối xuyên app ở trên.
 import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
@@ -93,7 +93,7 @@ let ob: ReturnType<typeof outboxTest>;
 let orgA: string;
 let goc: string;
 let server: ReturnType<typeof createApiServer>;
-/** [S1.173 / S3.1d] Máy chủ của luồng S3: cùng CSDL, cùng dịch vụ, cờ ký chính sách BẬT (ADR-105). */
+/** [S1.174 / S3.1d] Máy chủ của luồng S3: cùng CSDL, cùng dịch vụ, cờ ký chính sách BẬT (ADR-105). */
 let serverS3: ReturnType<typeof createApiServer>;
 let gocMacDinh: string;
 let gocS3: string;
@@ -293,13 +293,13 @@ const trangThai: {
   gd1: Nguoi;
   gd2: Nguoi;
   taiChinh: Nguoi;
-  /** [S1.173 / S3.1d] Luồng S3: người tài chính THỨ HAI — ký phiên bản mà `taiChinh` khai. */
+  /** [S1.174 / S3.1d] Luồng S3: người tài chính THỨ HAI — ký phiên bản mà `taiChinh` khai. */
   taiChinh2: Nguoi;
   /** [S1.157 / khoản 243] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
   cham: Nguoi;
 } = trangThaiMoi();
 
-/** [S1.173 / S3.1d] Trạng thái rỗng của MỘT luồng — `dungToChuc` dựng lại nó trước mỗi luồng. */
+/** [S1.174 / S3.1d] Trạng thái rỗng của MỘT luồng — `dungToChuc` dựng lại nó trước mỗi luồng. */
 function trangThaiMoi(): typeof trangThai {
   return {
   rfqId: "",
@@ -342,7 +342,7 @@ beforeAll(async () => {
 }, 240000);
 
 /**
- * [S1.173 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, máy chủ của luồng, và mọi người đăng nhập qua HTTP như trước —
+ * [S1.174 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, máy chủ của luồng, và mọi người đăng nhập qua HTTP như trước —
  * luồng S3 thêm người tài chính thứ hai. Gọi ở `beforeAll` của từng luồng.
  */
 async function dungToChuc(batS3: boolean): Promise<void> {
@@ -374,13 +374,13 @@ afterAll(async () => {
   await db?.stop();
 });
 
-/** [S1.173 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
+/** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
 const LUONG = [
   ["MVP1 — tổ chức CHƯA bật S3, cờ ký tắt", false],
   ["S3 — tổ chức ĐÃ BẬT qua route ký, cờ ký bật", true],
 ] as const;
 
-/** [S1.173 / S3.1d] Ma trận bậc mặc định §4.1 và hai cột mức — thân `POST /policy` của luồng S3. */
+/** [S1.174 / S3.1d] Ma trận bậc mặc định §4.1 và hai cột mức — thân `POST /policy` của luồng S3. */
 const BAC_S3 = { tiers: BAC_MAC_DINH, chiaNhoCuaSoNgay: MUC_MAC_DINH.chiaNhoCuaSoNgay, thamDinhHieuLucThang: MUC_MAC_DINH.thamDinhHieuLucThang };
 
 describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", (_ten, batS3) => {
@@ -395,7 +395,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const cs = await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) });
     expect(cs.status, cs.text).toBe(201);
     if (batS3) {
-      // [S1.173 / S3.1d] Luồng S3: người tài chính THỨ HAI ký qua route ký (cờ bật) ⇒ lần ký đầu tiên của một phiên bản có
+      // [S1.174 / S3.1d] Luồng S3: người tài chính THỨ HAI ký qua route ký (cờ bật) ⇒ lần ký đầu tiên của một phiên bản có
       // bậc BẬT S3 cho tổ chức. Mọi bước sau chạy dưới K1: ngân sách dưới đây ghim đúng bản vừa ký.
       const ky = await goi("POST", `/policy/${(cs.body as { policy: { id: string } }).policy.id}/sign`, trangThai.taiChinh2.cookie);
       expect(ky.status, ky.text).toBe(201);
@@ -408,7 +408,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
     expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(true);
-    // [S1.173 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
+    // [S1.174 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
     // nào — bậc 2 của §4.1 (từ 1 tỷ) cho ngân sách 1 tỷ ở luồng S3, không bậc ở luồng MVP1.
     const { rows: hai } = await db.pool.query<{ bat: boolean; bac: string | null }>(
       "SELECT public.to_chuc_da_bat_s3($1) AS bat, (SELECT tier_tu_so_tien::text FROM rfq_budgets WHERE rfq_id = $2) AS bac",
@@ -601,7 +601,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
           return {
             path: r.path,
-            // [S1.173 / S3.1d] Tổ chức đã bật từ chối phiên bản không bậc (`069`), nên luồng S3 gửi kèm bậc. Bản v2 ấy CHƯA
+            // [S1.174 / S3.1d] Tổ chức đã bật từ chối phiên bản không bậc (`069`), nên luồng S3 gửi kèm bậc. Bản v2 ấy CHƯA
             // KÝ nên không hiệu lực: luồng S3 chấm thầu trên bản 1 — cũng khai trọng số ở bước 1.
             body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) },
             cookie: trangThai.taiChinh.cookie,
@@ -612,7 +612,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // [S1.169 / S3.1c] Lần ký đứng sau cờ triển khai (ADR-105), và bộ điều phối của kịch bản này không khai cờ ⇒ TẮT:
         // lời gọi qua cổng `policy.manage`, tới handler, và dừng ở 409 có tên — không ở một 422 hình dạng. Đích là bản v2 mà
         // ca ngay trên vừa tạo; cờ có mở thì lời gọi cũng dừng ở trigger (bản không bậc), không bật S3 cho tổ chức.
-        // [S1.173 / S3.1d] Luồng S3 chạy trên máy chủ CỜ BẬT: lời gọi tới trigger, và người gọi chính là người khai bản v2
+        // [S1.174 / S3.1d] Luồng S3 chạy trên máy chủ CỜ BẬT: lời gọi tới trigger, và người gọi chính là người khai bản v2
         // ⇒ 422 *"khong duoc tu ky"* có tên — bản v2 không thành hiệu lực, kịch bản không đổi chính sách giữa chừng.
         case "POST /policy/:policyId/sign":
           return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };

@@ -13,7 +13,7 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-27 / S1.173] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
+**[2026-09-27 / S1.174] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
 `/chinh-sach` VÀ `/tao-thau` TRÊN CỤM THẬT. S3.1 XONG.** Phần cuối trong bốn phần của S3.1 (spec S3 §9). Chủ dự án chốt bốn
 câu theo đề xuất:
 - `gieo:demo` mặc định giữ tổ chức chưa bật — hình dạng pilot chạy. `--s3` gieo tổ chức đã bật đủ bảy người của §7 (thêm
@@ -24,7 +24,22 @@ câu theo đề xuất:
 
 Lượt đi thử đo ra một lỗi của chính `--s3` — gói gieo mang sáu chữ ký phê duyệt, kể cả hai người tài chính — sửa trong
 vòng. Hai bản chép mặc định §4.1 (màn, công cụ) khoá nhau bằng một test. Không migration, không ADR, không khoản nợ mới.
-Biên bản: `evidence/security-reviews.md` §S1.173.
+Biên bản: `evidence/security-reviews.md` §S1.174.
+
+**[2026-09-27 / S1.173] HAI TÀI LIỆU CHO BƯỚC TIẾP THEO: BỘ TÀI LIỆU BUỔI BẬC 1, VÀ ĐỀ XUẤT TẠO TỔ CHỨC TRÊN PROD — KÈM
+MỘT CHỖ HỞ MỚI ĐO ĐƯỢC.** Hai việc trong đề xuất thứ hai ngày 2026-09-27, không cần chủ dự án quyết trước.
+- `docs/BUOI-BAC-1.md`: thứ người trình diễn cầm theo khi gặp một trưởng phòng mua hàng ở bậc 1 của thang pilot — việc
+  trước ngày gặp, chương trình 60 phút, câu hỏi B4 → A1 → B1 và các câu thêm (có câu mới về thời hạn lưu hồ sơ, đối
+  chiếu Object Lock 365 ngày của ADR-062), phiếu ghi có TÊN và NGÀY, năm câu không được nói, việc trong 24 giờ sau.
+- `docs/DE-XUAT-TAO-TO-CHUC.md`: **ĐỀ XUẤT, chưa chọn** — ba phương án tạo tổ chức, người dùng và vai trên prod (task
+  chạy một lần, route quản trị, sổ tay SQL), khuyến nghị task chạy một lần dưới một vai CSDL hẹp riêng, và bốn câu chỉ
+  chủ dự án chốt được.
+- **Chỗ hở mới, đo ở vòng này:** người dùng đầu tiên trên prod không có đường xin link đăng nhập qua giao diện — không trang
+  nào gọi `POST /auth/link`, và thư SES chứa `/login#<token>` không kèm mã tổ chức trong khi trang `/login` đòi cả hai.
+  Ghi trong đề xuất; chưa vào sổ nợ, cùng chỗ hở ở bước 8.1.
+
+Thang bậc vẫn là đề xuất (ADR-101). Không mã, không migration, không ADR, không khoản nợ; vòng này không đóng mảnh nào của
+`docs/PRODUCT.md` §11 và không chạm khoản rổ A/B/C nào.
 
 **[2026-09-27 / S1.172] KHOẢN 143 ĐÓNG — KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA.** Chủ dự án chọn khoản
 143. Đo trước trên `master`: dựng một vòng khoá chết thật giữa khoá ghi sổ của tổ chức và khoá hàng `mfa_credentials` ở lần đoán sai
@@ -3987,6 +4002,8 @@ adapter KMS và bộ gửi thật; tiến trình từ chối khởi động khi 
 | Tài liệu | Nội dung |
 |---|---|
 | `docs/TIEN-DE-CHUA-DO.md` | ~~**17 tiền đề**~~ ~~**[S1.78] 18 tiền đề về CON NGƯỜI và QUY TRÌNH mà S1 đang cư xử như thật.**~~ **[S1.168] 33 tiền đề** (đếm ngày 2026-09-27: 19 về nhà cung cấp, người mua, quy trình, triển khai — A1–A6, B1–B6, C1–C5, D1–D2 — và 14 về dữ liệu của S4, E1–E14, thêm từ S1.159) **về CON NGƯỜI, QUY TRÌNH và DỮ LIỆU mà mã đang cư xử như thật.** Mỗi dòng trỏ tới một chỗ có địa chỉ trong kho, kèm *sai thì mất gì* và **một câu hỏi cho người mua thật**. KHÔNG thay một khách hàng pilot — nó hạ chi phí của buổi làm việc đầu tiên |
+| `docs/BUOI-BAC-1.md` | **[S1.173]** Bộ tài liệu cho buổi bậc 1 của thang pilot (60 phút với một trưởng phòng mua hàng): việc trước ngày gặp, chương trình, câu hỏi B4 → A1 → B1 và các câu thêm, phiếu ghi có TÊN và NGÀY, những câu không được nói, việc trong 24 giờ sau buổi gặp. Trỏ về kế hoạch pilot giả lập §5 và `TIEN-DE-CHUA-DO.md`, không chép lại |
+| `docs/DE-XUAT-TAO-TO-CHUC.md` | **[S1.173] ĐỀ XUẤT, chờ chủ dự án chọn.** Tạo tổ chức, người dùng và vai trên prod — hôm nay không có đường nào (`docs/APPLY-LAN-DAU.md` bước 8.1), và người dùng đầu tiên không có đường xin link đăng nhập qua giao diện. Ba phương án, trade-off, khuyến nghị, bốn câu cần chốt |
 | `docs/PRODUCT.md` | Định vị, phạm vi, ràng buộc sản phẩm, những điều không được tuyên bố |
 | `docs/ARCHITECTURE.md` | Kiến trúc hiện tại |
 | `docs/DECISIONS.md` | ~~**Mười hai ADR**~~ ~~**Mười lăm ADR**~~ ~~**Mười tám ADR**~~ ~~**Mười chín ADR**~~ ~~**Hai mươi ADR**~~ ~~**HAI MƯƠI LĂM ADR**~~ ~~**HAI MƯƠI SÁU ADR**~~ ~~**HAI MƯƠI BẢY ADR**~~ ~~**HAI MƯƠI TÁM ADR**~~ ~~**HAI MƯƠI CHÍN ADR**~~ ~~**BA MƯƠI ADR**~~ ~~**BA MƯƠI MỐT ADR**~~ ~~**BA MƯƠI HAI ADR**~~ ~~**BA MƯƠI BA ADR**~~ ~~**BA MƯƠI BỐN ADR**~~ ~~**BA MƯƠI LĂM ADR**~~ ~~**BA MƯƠI SÁU ADR**~~ ~~**BA MƯƠI BẢY ADR**~~ ~~**BA MƯƠI TÁM ADR**~~ ~~**BA MƯƠI CHÍN ADR**~~ ~~**BỐN MƯƠI ADR**~~ ~~**BỐN MƯƠI MỐT ADR**~~ ~~**BỐN MƯƠI HAI ADR**~~ ~~**BỐN MƯƠI BA ADR**~~ ~~**BỐN MƯƠI BỐN ADR**~~ ~~**BỐN MƯƠI LĂM ADR**~~ ~~**BỐN MƯƠI SÁU ADR**~~ ~~**BỐN MƯƠI BẢY ADR**~~ ~~**BỐN MƯƠI TÁM ADR**~~ ~~**BỐN MƯƠI CHÍN ADR**~~ ~~**NĂM MƯƠI ADR**~~ ~~**NĂM MƯƠI MỐT ADR**~~ ~~**NĂM MƯƠI HAI ADR**~~ ~~**NĂM MƯƠI BA ADR**~~ ~~**NĂM MƯƠI TƯ ADR**~~ ~~**NĂM MƯƠI LĂM ADR**~~ ~~**[S1.111] NĂM MƯƠI TÁM ADR**~~ ~~**[S1.113] NĂM MƯƠI CHÍN ADR**~~ ~~**[S1.116] SÁU MƯƠI ADR**~~ ~~**[S1.118] SÁU MƯƠI MỐT ADR**~~ ~~**[S1.119] SÁU MƯƠI HAI ADR**~~ ~~**[S1.120] SÁU MƯƠI BA ADR**~~ ~~**[S1.121] SÁU MƯƠI TƯ ADR**~~ ~~**[S1.122] SÁU MƯƠI LĂM ADR**~~ ~~**[S1.123] SÁU MƯƠI SÁU ADR**~~ ~~**[S1.124] SÁU MƯƠI BẢY ADR**~~ ~~**[S1.125] SÁU MƯƠI TÁM ADR**~~ ~~**[S1.126] SÁU MƯƠI CHÍN ADR**~~ ~~**[S1.127] BẢY MƯƠI ADR**~~ ~~**[S1.128] BẢY MƯƠI MỐT ADR**~~ ~~**[S1.130] BẢY MƯƠI HAI ADR**~~ ~~**[S1.131] BẢY MƯƠI BA ADR**~~ ~~**[S1.132] BẢY MƯƠI TƯ ADR**~~ ~~**[S1.133] BẢY MƯƠI LĂM ADR**~~ ~~**[S1.134] BẢY MƯƠI SÁU ADR**~~ ~~**[S1.135] BẢY MƯƠI BẢY ADR**~~ ~~**[S1.136] BẢY MƯƠI TÁM ADR**~~ ~~**[S1.137] BẢY MƯƠI CHÍN ADR**~~ ~~**[S1.139] TÁM MƯƠI HAI ADR**~~ ~~**[S1.141] TÁM MƯƠI BA ADR**~~ ~~**[S1.142] TÁM MƯƠI LĂM ADR**~~ ~~**[S1.143] TÁM MƯƠI SÁU ADR**~~ ~~**[S1.144] TÁM MƯƠI BẢY ADR**~~ ~~**[S1.145] TÁM MƯƠI TÁM ADR**~~ **[S1.146] 106 ADR** (**026** artefact neo ngoài, **027** biên giới module là một tính chất, **028** ranh giới tự chữa/phán xét của hardening) — và lần thiu này là lần **thứ hai** của cùng một dòng: S1.20 thêm ADR-028 mà không sửa con số, đúng như dòng cảnh báo ngay sau đây đã tự nói về chính nó. `[INV-H20]` P5 nay đọc **mọi** lời khai chưa bị gạch trong tệp này, nên hai lời khai lệch nhau (mục *Cột mốc* khai 28, dòng này khai 27) là ĐỎ — dòng này đã thiu qua bốn vòng (021–024 ra đời mà con số không đổi; [S1.15] đối chiếu và sửa): 001–010 và 012–019 *Đã chấp nhận*; **021** (vai ứng dụng là thành viên), **022** (`/auth/link` chỉ xếp hàng), **023** (việc SAU COMMIT của runner), **024** (bộ đếm người gọi ngoài cây tenant), **025** (bảng tenant dọn được mà không đọc được) *Đã chấp nhận*; **020** (tầng HTTP của `apps/api`) *Đã chấp nhận* 2026-09-06, mở S1.10; ~~**011** (định dạng phong bì + chữ ký biên nhận) ***Đang mở***, chặn S1.4/S1.5 và **chỉ được chốt sau khi đo Zalo/Android** (khoản nợ 23).~~ **011 chốt 2026-09-04 cho mục 1** (P-256 mặc định, X25519 cơ hội); ~~mục 2 (thuật toán chữ ký biên nhận) và mục 3 (xoay khoá ký) còn mở nhưng **không chặn S1.4**.~~ **[S1.79]** mục 2 và mục 3 **chốt CÙNG NGÀY 2026-09-04** (S1.5) — ADR-011 tự ghi *"ĐÃ CHẤP NHẬN TRỌN VẸN … gỡ chặn S1.5"*; lời khai *"còn mở"* ở đây sống qua 106 commit sửa chính tệp này. **019** nơi cặp khoá RFQ ra đời (S1.4). **013** phạm vi sổ NCC (S1.1), **014** nơi cưỡng chế máy trạng thái RFQ (S1.2), **015** kênh OTP + nền giới hạn tần suất (S1.3). **016** cổng quyền ở tầng ứng dụng + danh tính là dẫn xuất, **017** chính sách tính `requires_dual_approval`, **018** pepper cho băm đích — ba ADR của ba MEDIUM mà vòng sửa an ninh cố ý không đóng bằng mã |

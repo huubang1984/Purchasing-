@@ -2,7 +2,7 @@
 // tools/gieo-demo — GIEO MỘT VÒNG THẦU ĐỦ ĐỂ DEMO, RỒI IN RA SÁU ĐƯỜNG LINK
 //
 //   pnpm gieo:demo          tổ chức CHƯA bật S3 — luồng MVP1, hình dạng mà pilot chạy
-//   pnpm gieo:demo --s3     [S1.173 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3
+//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3
 //
 // [ADR-044] Vì sao có công cụ này thay vì làm mọi thứ qua giao diện: tạo một RFQ đầy đủ là bảy
 // màn hình (tổ chức, chính sách, người dùng, nhà cung cấp, người liên hệ, gói thầu, hạng mục,
@@ -101,13 +101,13 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
 
 const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "Vat tu Truong Thanh"];
 /**
- * [S1.173 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
+ * [S1.174 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
  * bối cảnh demo khai đúng số mà bậc của chính nó đòi, để lúc K2 có mặt nó không gãy ở bước mời).
  */
 const NHA_CUNG_CAP_THEM_S3: readonly string[] = ["Thep Hoa Sen", "Vat lieu Phu My"];
 
 /**
- * [S1.173 / S3.1d] `--s3`: bối cảnh theo bảng vai §7 của spec S3 — thêm HAI người FINANCE vào năm người sẵn có: F1 khai
+ * [S1.174 / S3.1d] `--s3`: bối cảnh theo bảng vai §7 của spec S3 — thêm HAI người FINANCE vào năm người sẵn có: F1 khai
  * phiên bản chính sách có bậc, F2 ký nó. Chủ dự án chọn ký bằng HÀM GÓI dưới `withTenant`, cùng đường mọi hàm gói khác
  * của công cụ này đi: trigger `chinh_sach_kiem_nguoi_ky` vẫn kiểm đủ luật (khác người khai, giữ `policy.manage`, bản mới
  * nhất, đã tới ngày hiệu lực). Cờ triển khai ADR-105 là cửa của ROUTE ký — đường của màn —, không phải của công cụ này.
@@ -182,7 +182,7 @@ async function chinh(): Promise<void> {
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
 
-    // [S1.173 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
+    // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
     const chinhSach = S3
       ? await (async (): Promise<string> => {
@@ -236,7 +236,7 @@ async function chinh(): Promise<void> {
     // HAI phê duyệt của HAI người KHÁC người soạn — ngân sách gieo ở trên vượt ngưỡng chính sách,
     // nên máy trạng thái ở tầng CSDL từ chối mở gói thầu khi chưa đủ. Lượt chạy đầu của script này
     // gãy đúng ở đó: *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*.
-    // [S1.173 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
+    // [S1.174 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
     // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
