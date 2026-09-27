@@ -11,13 +11,13 @@
 // qua `throwAuditedDenial`, và payload chỉ mang MÃ.
 //
 // ----------------------------------------------------------------------------------------------
-// ~~BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG~~ [S1.170] Nguồn ấy nay ở `@trustprocure/identity`
+// ~~BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG~~ [S1.171] Nguồn ấy nay ở `@trustprocure/identity`
 // ----------------------------------------------------------------------------------------------
 // `Record` đầy đủ nên một mã thêm vào `MaChotKiemSoat` mà không có dòng ở đây là một lỗi BIÊN DỊCH.
 // Chiều kia — một mã mà hàm SQL trả về nhưng không có ở đây — thì kiểu không bắt được: tầng gói ném
 // một lỗi KHÔNG tên (500), và phép đo ở `bac-chinh-sach.int.test.ts` so tập mã trong thân hàm với bảng.
 // ~~Hôm nay chỉ `packages/rfq` dùng bảng; khi một gói khác cần (K7, K9 ở trao thầu), bảng dời xuống
-// một gói cả hai cùng phụ thuộc — không mọc bảng thứ hai.~~ **[S1.170 / khoản 247 / ADR-106]** Gói khác ấy đã tới
+// một gói cả hai cùng phụ thuộc — không mọc bảng thứ hai.~~ **[S1.171 / khoản 247 / ADR-107]** Gói khác ấy đã tới
 // sớm hơn K7: J3 và D2 của `packages/danh-gia` và của `approveRfq`. Bảng, lời từ chối và hàm ghi sổ nay ở
 // `packages/identity/src/chot-kiem-soat.ts`; tệp này còn đúng phần của K1 — câu hỏi hàm vị từ SQL và `kiemChot`.
 // ==============================================================================================
@@ -26,7 +26,7 @@ import type pg from "pg";
 import type { ActorType } from "@trustprocure/audit";
 import { laMaChot, tuChoiTheoChot } from "@trustprocure/identity";
 
-// [S1.170 / khoản 247] Chép ra cửa của TỆP này (không của gói) cho các test đang đọc từ đây — cùng MỘT đối
+// [S1.171 / khoản 247] Chép ra cửa của TỆP này (không của gói) cho các test đang đọc từ đây — cùng MỘT đối
 // tượng với bản ở `identity`, không phải bảng thứ hai.
 export { ACTION_CHOT_KIEM_SOAT, CHOT_VAO_SO, ChotKiemSoatError, type MaChotKiemSoat } from "@trustprocure/identity";
 

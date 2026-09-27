@@ -5672,8 +5672,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger bid_kiem_han_nop (066, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger bid_kiem_han_nop (066, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -5799,8 +5799,8 @@ $ham$;
     -- CHU CAI: `kiem_han_nop` < `kiem_phien_khach` < `kiem_vong_bafo` (h < p < v). Mot lan doi
     -- ten trong vo hai se lam phep kiem doc mot cot chua duoc dat.
     ARRAY[
-      $q$hàm + trigger bid_kiem_vong_bafo (059, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger bid_kiem_vong_bafo (059, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6100,8 +6100,8 @@ $ham$;
     -- khong mot cong nao khac cua kho thay dieu do. [S1.129 / khoan 233] Tu `064` ve *nguoi
     -- dieu phoi* doc `unseal_dispatch_history` — moi nguoi TUNG dieu phoi, khong chi lan dang chay.
     ARRAY[
-      $q$hàm + trigger award_kiem_de_xuat (061, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger award_kiem_de_xuat (061, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6434,8 +6434,8 @@ $ham$;
     -- tinh buoc cap nguoi-phien la DAN XUAT) nen no chi do duoc bang mot lan tat trigger ay
     -- luc chay — co mot ca lam dung the o `luot-danh-gia.int.test.ts`.
     ARRAY[
-      $q$hàm + trigger award_kiem_nguoi_duyet (061, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger award_kiem_nguoi_duyet (061, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6529,8 +6529,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger bid_kiem_phien_khach (018, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger bid_kiem_phien_khach (018, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9100,8 +9100,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger rfq_kiem_nguoi_duyet (011, thân từ 073_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '073_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger rfq_kiem_nguoi_duyet (011, thân từ 074_tu_choi_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

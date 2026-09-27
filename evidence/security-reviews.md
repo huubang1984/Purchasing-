@@ -14087,7 +14087,7 @@ Khoản 228 đóng. Còn mở **86**; rổ B **61**.
 
 ---
 
-# §S1.170 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+# §S1.171 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
 
 ## 1. Vòng này là gì
 
@@ -14095,7 +14095,7 @@ Hai phiên làm khoản 247 song song. #172 (§S1.167, ADR-104) merge trước: 
 đã làm cùng khoản theo lựa chọn chủ dự án chốt ở đây — J3/D2 là `CONTROL_DENIED`, câu nộp là `BID_STATE_DENIED` mang mã — bằng
 cách kiểm trước ở lớp gói. Khi #172 vào `master`, chủ dự án chọn giữ cơ chế của #172 (một nguồn sự thật; ca đua nhau cũng vào sổ),
 bỏ nhánh kiểm-trước, và nắn hai điều: từ vựng về ba lớp của ADR-084 ⑸, và nhận diện bằng tên ràng buộc thay cho thông điệp. Câu
-hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-106.
+hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-107.
 
 ## 2. Đo trước (đọc, không chạy)
 
@@ -14108,7 +14108,7 @@ hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot
 
 ## 3. Thay đổi
 
-- `db/migrations/073_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
+- `db/migrations/074_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
   `bid_kiem_han_nop`, `bid_kiem_phien_khach`, `bid_kiem_vong_bafo` — thân trích nguyên văn bằng script, thêm `CONSTRAINT = …` ở
   13 nhánh. Sáu bản ghim ở `hardening.always.sql` đổi cùng commit (tiêu đề, mốc phiên bản, thân khối `DO`, thân `$than$`); script
   đối chiếu bản ghim cũ với thân cũ trước khi thay. `db/migrations.int.test.ts`: `HAM_56` trỏ sáu hàm sang migration mới, ba danh
@@ -14125,7 +14125,7 @@ hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot
   đề xuất) khẳng định thêm `maChotTuLoi`; hai phép đo mới so tên ràng buộc trong `pg_proc.prosrc` với bảng tên → mã, hai chiều;
   kịch bản 41 qua HTTP — bước 2 đọc câu mới và một hàng `D2_NGUOI_TAO_TU_DUYET`, bước 12d một hàng `BAFO_NGOAI_TOP_N`, bước 12h
   một hàng `J3_NGUOI_TAO_DE_XUAT`.
-- `docs/DECISIONS.md` ADR-106, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
+- `docs/DECISIONS.md` ADR-107, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
 
 ## 4. Ranh giới, nói ra
 
@@ -14148,4 +14148,6 @@ Trên cây đã hợp `master` (`d0ce6ec`, gồm #173 và #174) và đã cấp s
 - Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
   hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
   đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
-- @@CAP_SO@@
+- Lần cấp đầu cho vòng này S1.170, ADR-106, `073_tu_choi_co_ten`; #175 (khoản 228) merge trước với đúng ba số ấy, nên sau lần hợp
+  `pnpm cap-so` thu hồi qua trailer `Cap-So:` và cấp lại thành S1.171, ADR-107, `074_tu_choi_co_ten`.
+- Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
