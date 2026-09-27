@@ -19,6 +19,7 @@ import type pg from "pg";
 import { verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
 import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { cancelRfq } from "@trustprocure/rfq";
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -341,6 +342,51 @@ describe("gói thầu và báo giá của khách", () => {
     expect(n).toBe(0);
     const thatSu = await db.pool.query("SELECT 1 FROM rfq_budgets WHERE rfq_id = $1", [rfqA]);
     expect(thatSu.rows).toHaveLength(1);
+  });
+
+  it("[S1.165 / khoản 225] GET /guest/rfq: `cancelReason` là `null` khi gói còn sống, và là ĐÚNG câu người huỷ viết khi gói đã huỷ", async () => {
+    // Gói riêng — huỷ `rfqA` sẽ làm đổ mọi test khác của tệp. Cùng công thức `beforeAll`.
+    const { rows: g } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Goi se bi huy', now() + interval '7 days', false, $2, $3) RETURNING id",
+      [orgA, uA, sA],
+    );
+    const rfqHuy = g[0]?.id ?? "";
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Ong thep', '10.0000', 'ong', $3, $4)",
+      [orgA, rfqHuy, uA, sA],
+    );
+    const { rows: cs } = await db.pool.query<{ id: string }>(
+      "SELECT id FROM org_procurement_policies WHERE org_id = $1 ORDER BY version DESC LIMIT 1",
+      [orgA],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
+      [orgA, rfqHuy, cs[0]?.id, uA, sA],
+    );
+    await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfqHuy, uA, sA]);
+    await kyMotChuKy(orgA, rfqHuy);
+    await withTenant(apiPool, orgA, async (c) => {
+      await issueRfqKeyPair(c, orgA, { rfqId: rfqHuy, actorSessionId: sA, orgKeys: boBocTest });
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqHuy, uA, sA]);
+    });
+
+    const ck = await moPhienKhach(await moi("NCC goi bi huy", rfqHuy));
+    const truoc = await goi("GET", "/guest/rfq", { cookie: ck });
+    expect(truoc.status, truoc.text).toBe(200);
+    expect((truoc.body as { rfq: { status: string; cancelReason: unknown } }).rfq).toMatchObject({ status: "OPEN", cancelReason: null });
+
+    const LY_DO = "Bao gia lech don vi tien; goi thau se moi lai tuan sau";
+    await withTenant(apiPool, orgA, (c) => cancelRfq(c, orgA, { rfqId: rfqHuy, reason: LY_DO, actorSessionId: sA }, auditPool));
+
+    const sau = await goi("GET", "/guest/rfq", { cookie: ck });
+    expect(sau.status, sau.text).toBe(200);
+    expect((sau.body as { rfq: { status: string; cancelReason: unknown } }).rfq).toMatchObject({ status: "CANCELLED", cancelReason: LY_DO });
+
+    // Đối chứng: gói `rfqA` còn sống, cùng route, trả `null` — trường không rò lý do của gói khác.
+    const khac = await goi("GET", "/guest/rfq", { cookie: await moPhienKhach(await moi("NCC goi song")) });
+    expect((khac.body as { rfq: { cancelReason: unknown } }).rfq.cancelReason).toBeNull();
   });
 
   it("[028] ĐỐI CHỨNG: dưới policy đóng của 027, cùng đường trả publicKeys RỖNG; khôi phục 028 thì có khoá", async () => {

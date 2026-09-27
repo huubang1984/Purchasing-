@@ -52,8 +52,11 @@ import { RFQ_STATUSES, RFQ_TRANSITIONS } from "./rfq.js";
 //
 // [S1.142 / khoản 241] `068` viết lại thân lần nữa (sàn một chữ ký), nên con trỏ bảng cạnh dời sang
 // `068`; tập đóng vẫn ở `061`.
+//
+// [S1.165 / khoản 225] `071` viết lại thân lần nữa (bốn cạnh huỷ sau khi đóng), nên con trỏ bảng cạnh
+// dời sang `071`; tập đóng vẫn ở `061`.
 const DUONG_DAN_BANG_CANH = fileURLToPath(
-  new URL("../../../db/migrations/068_san_mot_chu_ky.sql", import.meta.url),
+  new URL("../../../db/migrations/071_huy_sau_khi_dong.sql", import.meta.url),
 );
 const DUONG_DAN_TAP_DONG = fileURLToPath(
   new URL("../../../db/migrations/061_trao_thau.sql", import.meta.url),
@@ -79,7 +82,7 @@ function bocCanhTuSql(): string[] {
   const khoi = /CANH_HOP_LE constant text\[\] :=\s*ARRAY\[([\s\S]*?)\]\s*;/.exec(sql);
   if (khoi?.[1] === undefined) {
     throw new Error(
-      "Không tìm thấy khối CANH_HOP_LE trong 068_san_mot_chu_ky.sql. Nếu bảng cạnh đã được " +
+      "Không tìm thấy khối CANH_HOP_LE trong 071_huy_sau_khi_dong.sql. Nếu bảng cạnh đã được " +
         "viết lại một cách khác, lớp canh này phải được viết lại CÙNG LÚC — không được xoá.",
     );
   }
@@ -138,24 +141,26 @@ describe("bảng cạnh của máy trạng thái RFQ", () => {
     expect(bocCanhTuSql()).not.toContain("EVALUATING->BAFO_UNSEALED");
   });
 
-  it("`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED` và `AWARDED->CANCELLED` KHÔNG có mặt — khoản 225, BA cặp", () => {
-    // Đây KHÔNG phải một tính chất mong muốn: nó là cùng câu hỏi nghiệp vụ mà `CLOSED` và
+  it("[S1.165 / khoản 225] bốn cạnh huỷ SAU KHI ĐÓNG có mặt ở cả hai lớp; `AWARDED->CANCELLED` vẫn KHÔNG", () => {
+    // ~~Đây KHÔNG phải một tính chất mong muốn: nó là cùng câu hỏi nghiệp vụ mà `CLOSED` và
     // `UNSEALED` đang treo ở khoản 225, chép sang ảnh BAFO. Ghim để ngày nào khoản ấy được quyết
-    // thì CẢ HAI cặp cùng đỏ — không một cặp.
+    // thì CẢ HAI cặp cùng đỏ — không một cặp.~~ [S1.165] Khoản 225 được quyết (ADR-103): `071`
+    // thêm CẢ BỐN cạnh trong một vòng, và test này đổi chiều — bốn cạnh PHẢI có mặt, ở cả bảng SQL
+    // lẫn `RFQ_TRANSITIONS`.
     //
-    // [S1.110 / S2.6] Và nay là cặp THỨ BA: `061` thêm `AWARDED` mà KHÔNG thêm
-    // `AWARDED->CANCELLED`, cùng một lý do và cùng một khoản. `cancelRfq` cũng không nhận
-    // `AWARDED` trong danh sách trắng của nó, nên hai lớp nói cùng một câu. Đường ra khỏi
-    // `AWARDED` mà vòng này DỰNG là `AWARDED->EVALUATING` — huỷ AWARD, không huỷ gói thầu.
+    // [S1.110 / S2.6] ~~Và nay là cặp THỨ BA~~: `061` thêm `AWARDED` mà KHÔNG thêm
+    // `AWARDED->CANCELLED`. `cancelRfq` cũng không nhận `AWARDED` trong danh sách trắng của nó,
+    // nên hai lớp nói cùng một câu. Đường ra khỏi `AWARDED` là `AWARDED->EVALUATING` — huỷ AWARD,
+    // không huỷ gói thầu. [S1.165] Vòng khoản 225 KHÔNG đổi điều này: chủ dự án chốt lối huỷ cho gói
+    // đã đóng mà chưa trao; gói đã trao đi qua `AWARDED->EVALUATING` trước.
     const canh = bocCanhTuSql();
     expect(canh).not.toContain("AWARDED->CANCELLED");
     expect(RFQ_TRANSITIONS.some(([tu, den]) => tu === "AWARDED" && den === "CANCELLED")).toBe(false);
-    expect(canh).not.toContain("CLOSED->CANCELLED");
-    expect(canh).not.toContain("UNSEALED->CANCELLED");
-    expect(canh).not.toContain("BAFO_CLOSED->CANCELLED");
-    expect(canh).not.toContain("BAFO_UNSEALED->CANCELLED");
-    // Và đối chứng DƯƠNG: hai trạng thái *đang nhận báo giá* thì huỷ ĐƯỢC, ở cả hai vòng. Không
-    // có vế này, bốn khẳng định trên cũng xanh với một bảng cạnh không có cạnh huỷ nào.
+    for (const tu of ["CLOSED", "UNSEALED", "BAFO_CLOSED", "BAFO_UNSEALED"] as const) {
+      expect(canh).toContain(`${tu}->CANCELLED`);
+      expect(RFQ_TRANSITIONS.some(([t, d]) => t === tu && d === "CANCELLED"), `${tu}->CANCELLED ở bản TS`).toBe(true);
+    }
+    // Và hai trạng thái *đang nhận báo giá* vẫn huỷ ĐƯỢC, ở cả hai vòng.
     expect(canh).toContain("OPEN->CANCELLED");
     expect(canh).toContain("BAFO_OPEN->CANCELLED");
   });

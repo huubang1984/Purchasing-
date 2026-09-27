@@ -141,6 +141,7 @@ $("nut-doc").addEventListener("click", async () => {
     ["Trạng thái", rfq.status],
     ["Hạn nộp", new Date(rfq.deadlineAt).toLocaleString("vi-VN")],
     ["Cần hai người duyệt", rfq.requiresDualApproval === true ? "có" : "không"],
+    ...(rfq.status === "CANCELLED" ? [["Lý do huỷ", rfq.cancelReason ?? "(gói huỷ trước khi hệ thống lưu lý do)"]] : []),
   ]);
   const d = await goi("GET", `/rfqs/${id}/bid-count`);
   if (d.status === 200) {
@@ -151,6 +152,20 @@ $("nut-doc").addEventListener("click", async () => {
   }
   // [S1.90 / khoản 190] Bấm Đọc là lúc người duyệt thứ hai lấy được yêu cầu đang treo.
   await napYeuCau(id);
+});
+
+// [S1.165 / khoản 225] Huỷ gói thầu. Trước vòng ấy, gói đã đóng hay đã mở thầu KHÔNG huỷ được bằng
+// bất kỳ đường nào — và một lượt chấm bị từ chối vì lệch tiền tệ để gói đứng yên ở `UNSEALED` mãi.
+// Lý do BẮT BUỘC ở máy chủ (`cancelRfq`, và trigger ở bốn cạnh sau khi đóng); trang chỉ nói trước.
+$("nut-huy-goi").addEventListener("click", async () => {
+  bao($("loi2"), ""); bao($("ok2"), "");
+  if (!phien.rfqId) { bao($("loi2"), "Đọc gói thầu trước."); return; }
+  const lyDo = $("ly-do-huy").value.trim();
+  if (lyDo === "") { bao($("loi2"), "Lý do là BẮT BUỘC — nhà cung cấp đã mời sẽ đọc câu này."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/cancel`, { reason: lyDo });
+  if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không huỷ được")); return; }
+  bao($("ok2"), "Đã huỷ gói thầu. Khoá của gói bị thu hồi, lý do vào sổ kiểm toán và hiện ở trang nộp thầu.");
+  $("nut-doc").click();
 });
 
 // ---------------------------------------------------------------------------------------------
