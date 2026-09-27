@@ -2335,7 +2335,7 @@ describe("[S1.75 / khoản 139] khoá ghi sổ của tổ chức bị giữ thì
 });
 
 // =============================================================================================
-// [S1.9101 / khoản 143] KHOÁ CHẾT TRÊN KHOÁ GHI SỔ Ở LẦN CHẠM NGƯỠNG ⇒ HỒ SƠ VẪN KHOÁ
+// [S1.172 / khoản 143] KHOÁ CHẾT TRÊN KHOÁ GHI SỔ Ở LẦN CHẠM NGƯỠNG ⇒ HỒ SƠ VẪN KHOÁ
 //
 // Khoản 139 nuốt 55P03 (trần 2 s của `noi_chuoi_kiem_toan()`, 050). Nhưng bộ dò khoá chết bắn ở `deadlock_timeout` mặc định 1 s — TRƯỚC
 // trần ấy — và `004` đã ghi rằng khoá tư vấn ghi sổ tham gia được một vòng khoá chết. Cảnh dựng: một giao dịch khác GIỮ khoá ghi sổ của
@@ -2344,7 +2344,7 @@ describe("[S1.75 / khoản 139] khoá ghi sổ của tổ chức bị giữ thì
 //
 // Trên bản trước, 40P01 ném ra, giao dịch rollback và mang theo `locked_until` — ĐỎ ở vế ⑵. Không nhãn INV, cùng lý do khối khoản 139.
 // =============================================================================================
-describe("[S1.9101 / khoản 143] khoá chết trên khoá ghi sổ ở lần chạm ngưỡng không gỡ khoá hồ sơ", () => {
+describe("[S1.172 / khoản 143] khoá chết trên khoá ghi sổ ở lần chạm ngưỡng không gỡ khoá hồ sơ", () => {
   it("lần ghi `MFA_LOCKED` gãy 40P01 ⇒ không ném, `auditSkipped`, hồ sơ KHOÁ — mã ĐÚNG ngay sau đó bị chặn", async () => {
     await db.pool.query(
       "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",

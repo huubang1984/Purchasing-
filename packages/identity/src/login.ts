@@ -314,7 +314,7 @@ export async function verifyTotpForLogin(
     // lỗi là 57014 và câu dưới NÉM LẠI, tức rơi về hành vi cũ; đó là lựa chọn fail-closed, vì nuốt
     // 57014 sẽ nuốt luôn mọi lần huỷ câu chính đáng. Dư lượng ấy ghi ở khoản nợ 143.
     //
-    // [S1.9101 / khoản 143] ~~chỉ 55P03~~ — **55P03 VÀ 40P01.** Khoá chết trên khoá tư vấn ghi sổ
+    // [S1.172 / khoản 143] ~~chỉ 55P03~~ — **55P03 VÀ 40P01.** Khoá chết trên khoá tư vấn ghi sổ
     // (`004` đã ghi, phép đo khoản 126 đã thấy) bắn ở `deadlock_timeout` mặc định 1 s, tức TRƯỚC trần
     // 2 s, và bản trước để nó rollback cả `locked_until` — đo ở `mfa.int.test.ts` khối khoản 143: hồ sơ
     // KHÔNG khoá. 40P01 an toàn để nuốt như 55P03: Postgres chỉ huỷ CÂU chờ khoá của nạn nhân, không phải
