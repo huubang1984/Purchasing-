@@ -13176,3 +13176,15 @@ PostgreSQL 16 thật (testcontainers):
   Đột biến ở mục 5 đo rằng nó chịu lực, không đo rằng nó tự chữa.
 - Nhánh xếp chồng lên PR #165: số `S1.163`, `ADR-101`, `070`, `071` do `pnpm cap-so --base origin/claude/s4-spec-tiev0v` cấp,
   tức tính trên cây của #165. Master nhận thêm số trước khi hai PR merge thì `pnpm cap-so` chạy lại trên `origin/master`.
+
+## 7. Số đo
+
+Trên cây đã cấp số (`09577dd` + mốc độ phủ), PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: **662 tệp, 2759 ca, 2758 đạt, 1 bỏ qua, 0 hỏng**; **64/64** bất biến (42/42 nghiệp vụ +
+  22/22 hàng rào). Cổng chặn đúng một lượt đòi nâng tay `MOC_GHIM.soPhuToiThieu` 63 → 64 — cùng khuôn S1.29 và S1.115.
+- Tệp của vòng này: `luot-danh-gia.int.test.ts` 83/83, `comparison.int.test.ts` 17/17, `rfq.int.test.ts` 57/57,
+  `guest.int.test.ts` 12/12, `migrations.int.test.ts` 117/117, `rls-coverage.int.test.ts` 51/51, `tien-te-mot-cho-doc.test.ts`
+  3/3, `tien-te-dong-bo.test.ts` 1/1.
+- `pnpm t0` sạch (401 module); `pnpm test` 111 tệp, 1447 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
+- Sổ nợ **246** khoản, mở **89 → 87**; rổ A **2 → 1**, rổ B **63 → 62**, rổ C 24. **100 → 101** ADR. **69 → 71** migration.
+  Sổ đăng ký bất biến **63 → 64**.
