@@ -26,7 +26,7 @@
 // ==============================================================================================
 
 import type pg from "pg";
-import { assertTenantBound } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 
 /**
@@ -374,6 +374,32 @@ export async function buildComparisonTable(
   const doc = th.reduce((s, r) => s + r.n, 0);
   const lechTien = th.length > 1;
   const mot = th.length === 1 ? th[0] : undefined;
+
+  // ==============================================================================================
+  // [S1.9101 / khoản 245 / ADR-9201] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC.
+  //
+  // `docs/PRODUCT.md` §5 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC trước
+  // rò nghiệp vụ của BAFO; tới vòng này chỉ lần TỪ CHỐI được ghi (`PERMISSION_DENIED` ở cổng trên, `COMPARISON_DENIED` ở nhánh
+  // trạng thái). Hàng này ghi lần CHO QUA.
+  //
+  // VÌ SAO TRÊN `client` CHỨ KHÔNG QUA `auditPool`: hàng sổ và bảng giá phải cùng sống hay cùng chết. Ghi ở giao dịch độc lập rồi
+  // trả bảng là đúng cái *"cổng gác im lặng"* mà `packages/identity/src/index.ts` cấm — sổ hỏng mà giá vẫn đi. Ghi ở đây thì lần
+  // ghi hỏng NÉM ra khỏi hàm, giao dịch của người gọi ROLLBACK, và bảng không bao giờ đi ra; qua HTTP, lỗi Postgres ấy không
+  // thuộc bảng ánh xạ nào của bộ điều phối nên thành 500 thân cố định kèm một dòng log nêu mẫu route và SQLSTATE (55P03 khi
+  // khoá chuỗi sổ bị giữ quá 2 s). Cùng khuôn `AGENT_READ` của ADR-091.
+  //
+  // VÌ SAO Ở CUỐI: `audit_append` giữ khoá tư vấn nối tiếp của tổ chức tới COMMIT; ghi sau mọi câu đọc thì khoá chỉ sống từ câu
+  // ghi tới COMMIT. PAYLOAD: trạng thái gói (đã có trong chính thông điệp trả người gọi, không phải giá) và phiên đã đọc —
+  // KHÔNG một con số nào của bảng.
+  // ==============================================================================================
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: nguoiXem.id,
+    action: "COMPARISON_VIEWED",
+    resourceType: "RFQ",
+    resourceId: rfqId,
+    payload: { rfqStatus: trangThai, viewedBySessionId: input.actorSessionId },
+  });
 
   return {
     rfqId,

@@ -13084,3 +13084,73 @@ E14, và các chỗ chú tại chỗ ở spec S4 (§2.2 ⑴, §2.3 (e), §4.9, �
 - `pnpm t0` — **0 vi phạm**; `pnpm test` — **107 tệp / 1434 đạt, 1 bỏ qua**, gồm `[INV-H20]`. `pnpm cap-so --dem` viết lại số đếm.
 - **99 → 100** ADR (100; số do `pnpm cap-so` cấp). Sổ nợ **246**, mở **89**, không đổi. **69** migration, không đổi.
 
+
+# §S1.9101 — KHOẢN 245 ĐÓNG: MỖI LƯỢT ĐỌC GIÁ SAU MỞ THẦU GHI MỘT HÀNG SỔ, TRONG CHÍNH GIAO DỊCH ĐỌC
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 245 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-9201). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Hàng 245 (S1.159, lượt soi hình dạng spec S4) đọc ra rằng vế ⑵ trong ba thứ sản phẩm LÀM ĐƯỢC trước rò nghiệp vụ của BAFO —
+*"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"*, ở `docs/PRODUCT.md` §5 và ADR-055 — sai: chỉ lần TỪ CHỐI được ghi. Hàng
+ấy nêu một câu phải chọn. Chủ dự án chọn *ghi sổ mỗi lượt đọc*, chấp nhận cái giá vĩnh viễn ở `verifyAuditChain` (ADR-060).
+
+## 2. Đo trước khi sửa
+
+- `packages/identity/src/rbac.ts`: `requirePermission` trả về mà không ghi khi người gọi có quyền.
+- `packages/unseal/src/comparison.ts`: `buildComparisonTable` chỉ ghi `COMPARISON_DENIED` (nhánh trạng thái, giao dịch độc lập).
+- Mọi đường đưa giá dạng rõ SAU mở thầu ra khỏi tiến trình, tìm theo cổng `bid.view`: `buildComparisonTable`, `docBangXepHang`
+  (`packages/danh-gia/src/doc-bang-xep-hang.ts`) và `xuatBoBangChung` (`packages/danh-gia/src/bo-bang-chung.ts`, thêm cổng
+  `audit.read`) mang giá; `countReceivedBids` mang một số đếm và `docTraoThau` mang người thắng — không mức giá nào. Không đường nào
+  trong ba đường mang giá ghi lượt đọc thành công.
+- Ba hàm đều chạy trong giao dịch `withTenant` mà bộ điều phối mở cho route `GET` của người mua — giao dịch GHI được (khoản 142 đã
+  ghi `AGENT_READ` trên chính loại giao dịch ấy).
+- Bộ bằng chứng không chứa hàng nào của `audit_events` (đọc `bo-bang-chung.ts`), nên một hàng sổ ghi ở lần xuất không làm lệch
+  byte giữa lần xuất qua HTTP và lần dựng của CLI.
+
+## 3. Thay đổi
+
+- `buildComparisonTable`: sau mọi câu đọc, trước khi trả bảng, `appendAuditEvent(client, …)` với `COMPARISON_VIEWED`, payload
+  `{ rfqStatus, viewedBySessionId }`.
+- `docBangXepHang`: cùng chỗ, `RANKING_VIEWED`, payload `{ evaluationId, viewedBySessionId }` — chỉ khi có bảng để trả.
+- `xuatBoBangChung`: sau khi bộ dựng xong, `EVIDENCE_BUNDLE_EXPORTED`, payload `{ exportedBySessionId }` — chỉ khi có bộ để trả.
+- Ba hàng cùng hình dạng: `actorType = USER`, `actorId` người đọc, `resourceType = RFQ`, `resourceId` gói thầu; không payload nào
+  mang một con số. Lần ghi hỏng không bị bắt: nó ném ra khỏi hàm, giao dịch rollback, dữ liệu không đi ra; qua HTTP, lỗi Postgres
+  ấy không thuộc bảng ánh xạ nào của bộ điều phối nên thành 500 thân cố định kèm một dòng log nêu mẫu route và SQLSTATE.
+- `docs/PRODUCT.md` §5 và ADR-055: ghi chú tại chỗ rằng vế ⑵ sai tới vòng này và nay đúng. ADR-9201 mới.
+
+## 4. Đo sau khi sửa
+
+- `packages/unseal/src/comparison.int.test.ts`, khối khoản 245: ⒜ hai lượt đọc của hai người ⇒ đúng hai hàng, hình dạng trọn
+  `[USER, người đọc, RFQ, { rfqStatus: UNSEALED, viewedBySessionId }]`, không chữ số nào của giá; ⒝ BUYER thiếu `bid.view` ⇒
+  `PermissionDeniedError` và 0 hàng, gói chưa mở ⇒ `ComparisonDeniedError` và 0 hàng; ⒞ giao dịch đọc ném sau khi đọc ⇒ 0 hàng —
+  ngược hẳn `COMPARISON_DENIED`, thứ sống qua rollback; ⒟ một trigger chặn đúng lần ghi `COMPARISON_VIEWED` (SQLSTATE `TP245`) ⇒ hàm
+  ném chính lỗi ấy, không bảng nào đi ra, 0 hàng; gỡ lớp chặn thì cùng lời gọi đọc được và ghi đúng một hàng.
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối khoản 245: ⒜ `null` (chưa chấm) ⇒ 0 hàng; chấm rồi đọc ⇒ đúng một hàng
+  `[USER, người đọc, RFQ, { evaluationId, viewedBySessionId }]`; REQUESTER thiếu `bid.view` ⇒ `PermissionDeniedError`, không thêm
+  hàng; ⒝ rollback ⇒ 0 hàng; lần ghi bị chặn ⇒ hàm ném `TP245`, không bảng nào đi ra.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` qua HTTP thật: bước 12 — `GET /comparison` của PROCUREMENT_MANAGER ⇒ +1
+  `COMPARISON_VIEWED` của đúng người ấy; bước 12b — `GET /ranking` của BUYER thiếu `bid.view` ⇒ 403 và 0 hàng, của
+  PROCUREMENT_MANAGER ⇒ +1 `RANKING_VIEWED`; bước 12j — xuất bộ bằng chứng bị từ chối ⇒ 0 hàng, của DIRECTOR ⇒ +1
+  `EVIDENCE_BUNDLE_EXPORTED`, và phép so byte với CLI vẫn xanh. Bước 14 — quét giá dạng rõ trên MỌI bảng — vẫn thấy đúng hai bảng
+  được khai, tức không payload mới nào mang giá.
+- **Đỏ trên mã cũ** (ba tệp sản xuất trả về bản trước vòng, test giữ nguyên): 7 ca đỏ — ⒜ và ⒟ của bảng so sánh, ⒜ và ⒝ của bảng
+  xếp hạng, bước 12, 12b, 12j của kịch bản. ⒝ và ⒞ của bảng so sánh xanh trên cả hai bản: chúng canh hình dạng (lần từ chối không
+  ghi, hàng không sống qua rollback), không đo lỗi.
+
+## 5. Ranh giới, nói ra
+
+- Đường CLI `tools/bo-xuat-danh-gia` dựng bộ bằng chứng bằng `dungBoBangChung` dưới kết nối vận hành, không ghi lượt xuất.
+- Mỗi lượt đọc giá nay lấy khoá tư vấn nối tiếp của tổ chức, từ câu ghi tới COMMIT; khoá chuỗi sổ bị giữ quá 2 s thì lượt đọc ra
+  500 thay vì ra bảng. Không có trần tần suất riêng cho lượt đọc giá: lượt đọc hiếm và chỉ ba vai giữ `bid.view`; trần lần TỪ CHỐI
+  theo phiên (ADR-092) vẫn áp cho lần bị từ chối.
+- Chuỗi sổ dài thêm một hàng cho mỗi lượt đọc giá, vĩnh viễn (ADR-060).
+- Không gắn nhãn `[INV-…]`: không bất biến nào trong sổ đăng ký nói về dấu vết của lượt ĐỌC giá sau mở thầu.
+
+## 6. Số đo
+
+- Trước khi thêm test mới, toàn bộ test tích hợp đã có trên PostgreSQL 16 cục bộ vẫn xanh với mã mới: `packages/unseal/src` và
+  `packages/danh-gia/src` **6 tệp, 189 ca**; `apps/api/src`, `apps/unseal-worker/src`, `apps/mcp/src` **40 tệp, 510 ca**.
+- Ba tệp mang test mới: **124/124** trên mã mới; **7 đỏ** trên mã cũ.
+- Số tạm `S1.9101`, `ADR-9201` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.

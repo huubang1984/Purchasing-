@@ -19,7 +19,7 @@
 // ==============================================================================================
 
 import type pg from "pg";
-import { assertTenantBound } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 
 /** Một thành phần đã quy đổi, đúng như nó nằm trong cột `components`. */
@@ -148,6 +148,19 @@ export async function docBangXepHang(
       ORDER BY l.rank ASC NULLS LAST, s.legal_name ASC`,
     [orgId, l.id],
   );
+
+  // [S1.9101 / khoản 245 / ADR-9201] Lượt đọc bảng xếp hạng — giá hiệu dụng và thứ hạng của mọi báo giá — để lại một hàng sổ
+  // trên CHÍNH `client`, sau mọi câu đọc: ghi hỏng thì NÉM và bảng không đi ra. Cùng khuôn và cùng lý do với `COMPARISON_VIEWED`
+  // của `buildComparisonTable` (`packages/unseal/src/comparison.ts`). Chỉ ghi khi có bảng để trả: `null` — *"chưa chấm"* — không
+  // mang một con số nào. Payload: lượt chấm đã đọc và phiên đã đọc, không một giá nào.
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: actor.id,
+    action: "RANKING_VIEWED",
+    resourceType: "RFQ",
+    resourceId: input.rfqId,
+    payload: { evaluationId: l.id, viewedBySessionId: input.actorSessionId },
+  });
 
   return {
     evaluationId: l.id,
