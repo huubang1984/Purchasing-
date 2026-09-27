@@ -803,7 +803,14 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: rfqIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { rfq: await submitRfqForApproval(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: {
+        rfq: await submitRfqForApproval(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
     }),
   },
   {

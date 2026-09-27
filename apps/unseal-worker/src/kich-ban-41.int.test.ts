@@ -237,7 +237,7 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
 
   it("bước 2 — hai giám đốc KHÁC NHAU duyệt, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua });
+      await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd1 });
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd2 });
       const mo = await openRfq(c, orgA, {

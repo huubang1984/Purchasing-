@@ -131,7 +131,17 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **J7** | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 |
 | **J8** | [S1.165 / khoản 244] Tiền tệ của một báo giá đã mở được đọc qua **MỘT** hàm — `public.bid_currency`, tập bí danh đóng về `VND`/`USD`, còn lại `NULL` — ở MỌI câu SQL sản xuất; nên lượt chấm và bảng so sánh ra cùng một phán quyết về đơn vị, cách viết khác của cùng một đơn vị không chặn lượt chấm, và chuỗi ngoài tập bị từ chối bằng mã có tên (`LECH_TIEN_TE`) chứ không bằng một `CHECK` vỡ | Hàm `IMMUTABLE STRICT` của `070`, năm chỗ gọi (`luot-danh-gia.ts` một, `comparison.ts` bốn), cổng kiến trúc cấm đọc `'currency'` trần; đột biến thay thân hàm lúc chạy làm ca `VND` + `VNĐ` đỏ lại | T1, T3 |
 
-**Tổng: ~~34 bất biến nghiệp vụ (nhóm A–G)~~ ~~[S1.115] 40~~ ~~[S1.116] 41~~ [S1.165] 42 bất biến nghiệp vụ (nhóm A–G và J).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ ~~**[S1.79] 56**~~ ~~**[S1.115] 62**~~ ~~**[S1.116] 63**~~ **[S1.165] 64** mã cùng chảy vào `evidence/INV-matrix.md` — ~~34 + 22 = 56~~ ~~40 + 22 = 62~~ **41 + 22 = 63**, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
+### Nhóm K — Kiểm soát mua sắm (S3)
+
+> **[S1.166 / S3.1b] Nhóm này vào sổ theo hạng mục ĐO ĐƯỢC từng hàng** — spec S3 §5.1, khuôn nhóm J (S1.115). Mệnh đề
+> chịu lực là bản §5.1 của spec. K2–K12 chưa có ô: chốt của chúng chưa được dựng, và một ô mở cho một bất biến chưa cưỡng
+> chế là đúng thứ khoản 239 đã đo.
+
+| ID | Bất biến | Cưỡng chế | Tầng test |
+|---|---|---|---|
+| **K1** | Mọi gói rời `DRAFT` ở tổ chức đã bật S3 có ngân sách và mang `tier_tu_so_tien` bằng kết quả `rfq_bac_cua` trên `rfq_budgets.policy_id`; phiên bản ấy đã có chữ ký thứ hai và là phiên bản đang hiệu lực lúc nộp duyệt. Tổ chức chưa bật chạy như MVP1 | Trigger `rfq_budgets_xep_bac` đặt bậc (cột ngoài `GRANT`); hàm vị từ `rfq_chot_ngan_sach` gọi ở tầng gói TRƯỚC mọi tác dụng phụ và ở trigger `rfq_packages_kiem_ngan_sach_khi_nop` — khoá tư vấn chia sẻ với lần ký, `submitted_at` đóng dấu sau khoá; lần từ chối `THIEU_NGAN_SACH` để lại `CONTROL_DENIED` (ADR-084 ⑷) — `072_bac_cua_goi` | T3 |
+
+**Tổng: ~~34 bất biến nghiệp vụ (nhóm A–G)~~ ~~[S1.115] 40~~ ~~[S1.116] 41~~ ~~[S1.165] 42~~ [S1.166] 43 bất biến nghiệp vụ (nhóm A–G, J và K).** Cộng thêm ~~13~~ ~~15~~ ~~16~~ ~~17~~ ~~18~~ ~~19~~ ~~20~~ ~~**21**~~ **22** bất biến hàng rào (nhóm H, §5) là ~~47~~ ~~49~~ ~~50~~ ~~51~~ ~~52~~ ~~53~~ ~~54~~ ~~**55**~~ ~~**[S1.79] 56**~~ ~~**[S1.115] 62**~~ ~~**[S1.116] 63**~~ ~~**[S1.165] 64**~~ **[S1.166] 65** mã cùng chảy vào `evidence/INV-matrix.md` — ~~34 + 22 = 56~~ ~~40 + 22 = 62~~ ~~41 + 22 = 63~~ ~~42 + 22 = 64~~ **43 + 22 = 65**, và cổng evidence vẫn in *56/56* suốt thời gian dòng này viết 55.
 
 > **[S1.18] Dòng trên đã THIU một nhịp và không ai bắt được:** H17 vào sổ ở S1.10.2 mà hai con số này đứng yên ở 16/50, trong khi bảng §5 có 17 hàng và `evidence/INV-matrix.md` báo 51 mã. Bộ sinh đọc BẢNG chứ không đọc dòng này, nên phần chênh không làm cổng nào đỏ — đúng lớp "một câu sai sống sót vì không lớp nào đọc nó". Sửa cùng lượt thêm H18, và ghi ra thay vì lặng lẽ đổi số.
 

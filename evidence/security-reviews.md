@@ -13535,3 +13535,188 @@ Trên cây đã merge `master` `431cc93` và cấp lại số (`4697eca`), Postg
 - `pnpm t0` sạch (421 module); `pnpm test` 115 tệp, 1486 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
 - Sổ nợ **247** khoản, mở **89 → 87**; rổ A **2 → 1**, rổ B **63 → 62**, rổ C 24. **102 → 103** ADR. **69 → 71** migration.
   Sổ đăng ký bất biến **63 → 64**.
+
+---
+
+# §S1.166 — S3.1b: BẬC CỦA GÓI, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG PHIÊN BẢN HIỆU LỰC, K1 VÀ LỚP `CONTROL_DENIED`
+
+**Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Một migration (`072_bac_cua_goi`). Không ADR mới. Không chạm mảnh
+nào của `docs/PRODUCT.md` §11: tổ chức chưa bật S3 — mọi tổ chức hôm nay — chạy như MVP1.
+
+## 1. Vòng này là gì
+
+Phần hai trong bốn phần của S3.1 (spec S3 §9): bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng
+phiên bản hiệu lực, K1, lớp từ chối `CONTROL_DENIED`. S3.1a (§S1.156) dựng bậc trên phiên bản chính sách, chữ ký thứ hai và
+công tắc; tới vòng này chưa thứ gì đọc bậc.
+
+## 2. Hai quyết định của chủ dự án (S1.166)
+
+- **Gói ghim một phiên bản không còn hiệu lực** (chính sách đổi sau khi đặt ngân sách, hay gói có từ trước ngày bật): nộp
+  duyệt bị TỪ CHỐI, KHÔNG vào sổ. Người dùng đặt lại ngân sách, thấy bậc mới rồi mới nộp. Hai phương án bị loại: từ chối và
+  ghi sổ (mỗi lần đổi chính sách, mỗi gói nháp để lại một hàng vĩnh viễn); tự ghim lại lúc nộp (bậc và số chữ ký đổi dưới
+  tay người nộp).
+- **Nộp duyệt khi chưa có ngân sách, ở tổ chức đã bật:** từ chối VÀ ghi sổ `CONTROL_DENIED` — đúng lối thoát spec §2.4 ⑸ gọi
+  tên: bỏ bước ngân sách là thoát mọi chốt của S3.
+
+## 3. Thay đổi
+
+**Migration `072_bac_cua_goi`:**
+- `rfq_bac_cua(policy_id, ước lượng, tiền tệ)` — hàm phân bậc duy nhất: bậc có `tu_so_tien` lớn nhất `≤` ước lượng. NÉM khi
+  phiên bản không bậc hay tiền tệ lệch (spec §4.1: không quy đổi tiền tệ).
+- `rfq_budgets.tier_tu_so_tien`, ngoài `GRANT INSERT`/`UPDATE`; trigger `rfq_budgets_xep_bac` đặt nó ở mọi lần chèn hay sửa
+  ngân sách. Ghim phiên bản không bậc ⇒ NULL.
+- `rfq_chot_ngan_sach(org, gói, lúc)` — hàm vị từ của chốt (K12): NULL khi cho qua, còn không thì một trong ba mã
+  `THIEU_NGAN_SACH`, `NGAN_SACH_GHIM_BAN_CU`, `BAC_LECH_HAM_PHAN_BAC`. Tổ chức chưa bật, hay gói không ở DRAFT: NULL.
+- Trigger `rfq_packages_kiem_ngan_sach_khi_nop`, `WHEN` đúng cạnh `DRAFT→PENDING_APPROVAL`: lấy khoá tư vấn theo tổ chức ở
+  chế độ CHIA SẺ (lần ký và lần chèn phiên bản giữ nó ĐỘC QUYỀN — `069`), đóng dấu `rfq_packages.submitted_at` bằng giờ thật,
+  rồi hỏi hàm vị từ tại đúng mốc ấy.
+- `chinh_sach_kiem_nguoi_ky`: thân `069` cộng một dòng — `signed_at` đóng dấu SAU khoá.
+
+**Tầng gói:** `packages/rfq/src/chot-kiem-soat.ts` mang bảng `CHOT_VAO_SO` (từ vựng, quyết định ghi sổ, lý do, thông điệp)
+và `kiemChot`, gọi hàm vị từ rồi ném theo bảng — vào sổ qua `throwAuditedDenial` ở giao dịch độc lập, payload chỉ mang mã.
+`submitRfqForApproval` nhận `auditPool` (khuôn `openRfq`, `cancelRfq`) và hỏi chốt TRƯỚC câu ghi. `dispatch.ts` trả
+`ChotKiemSoatError` dưới 422 kèm thông điệp của bảng. 36 lời gọi `submitRfqForApproval` (35 trong test, một route) thêm đối
+số ấy; không khẳng định nào đổi.
+
+**Hardening:** ghim hai hàm trigger mới, ghim lại thân hàm ký (con trỏ dời sang `072`), và ghim bốn hàm trợ giúp của chuỗi
+K1 theo khuôn `la_duong_ung_dung` (037) — `rfq_chot_ngan_sach`, `rfq_bac_cua`, cùng `to_chuc_da_bat_s3` và
+`chinh_sach_hieu_luc` của `069`.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Mốc giờ trùng thứ tự khoá.** K1 đòi *phiên bản hiệu lực lúc nộp duyệt*. `069` đóng dấu `signed_at` bằng `now()` — giờ ĐẦU
+  giao dịch ký, có thể trước lúc nó lấy được khoá. Đo: lần ký BẮT ĐẦU trước, lần nộp chạy trọn và commit, rồi lần ký mới lấy
+  khoá — `signed_at` đứng TRƯỚC `submitted_at`, nên `chinh_sach_hieu_luc(org, submitted_at)` tính lại ra bản MỚI trong khi gói
+  ghim bản cũ: K1 đúng lúc chạy mà sai khi tái lập. Đóng dấu cả hai mốc bằng `clock_timestamp()` SAU khoá thì thứ tự giờ trùng
+  thứ tự khoá. `submitted_at` là cột mới; K10 (S3.6) cũng neo vào nó.
+- **Khoá chia sẻ ở cạnh nộp duyệt.** Không có nó, lần nộp đọc trên ảnh chụp chưa thấy một chữ ký đang dở, đi qua với bản sắp
+  hết hiệu lực, rồi chữ ký commit với `signed_at` TRƯỚC `submitted_at`. Chế độ chia sẻ nên các lần nộp không chờ nhau.
+- **Ghim bốn hàm trợ giúp**, kể cả hai hàm của `069` mà §S1.156 nêu là chưa ghim: K1 đứng trên chúng, và một thân rỗng ruột ở
+  bất kỳ hàm nào tắt K1 mà không trigger nào đổi. Giới hạn của §S1.156 còn lại hai hàm không thuộc K1 (`rfq_che_do_nghiem`,
+  `rfq_khoa_du_dieu_kien_xoa`).
+- **Chốt chỉ nói về gói đang ở DRAFT.** Gói đã rời DRAFT hay không có thật: hàm vị từ trả NULL, lời gọi rơi xuống lỗi trạng
+  thái như trước, và sổ không nhận hàng nào cho một cạnh không đi được.
+- **`BAC_LECH_HAM_PHAN_BAC` không vào sổ** — cùng luật ADR-060 với vế ghim bản cũ: chỉ tới được khi hàm phân bậc đổi sau lúc
+  đặt ngân sách hay khi chủ CSDL sửa tay; người dùng không gây ra nó.
+- **Phép kiểm nhóm có mặt** (`tools/inv-matrix/src/danh-gia.test.ts`) thêm K như spec §9 định, và thêm J — nhóm có hàng từ
+  S1.115 mà phép kiểm chưa đòi.
+- **Sổ khai nhãn** (`tools/inv-matrix/src/so-khai-nhan.ts`, `[INV-H22]`) thêm hai cặp của K1: `bac-chinh-sach.int.test.ts`
+  (tầng gói và CSDL) và `apps/api/src/buyer.int.test.ts` (qua HTTP). Thiếu dòng ấy, cổng evidence đỏ ở nhãn chưa khai.
+
+## 5. Đo
+
+`packages/rfq/src/bac-chinh-sach.int.test.ts`, mục (6), trên Postgres thật dưới `app_api`. Mỗi lớp một phép đo HÀNH VI và
+một ĐỘT BIẾN:
+- **Bảng mười ca biên hằng số** qua `setRfqBudget` (lần chèn và lần sửa): 0 · 0,01 · 99 999 999,99 · đúng 100 triệu · … ·
+  đúng 10 tỷ · trần `numeric(18,2)`. Đột biến `<=` → `<` trong `rfq_bac_cua`: ba ca đúng biên rơi xuống bậc dưới và ca 0 hết
+  bậc — trong khi phép so bậc đã lưu với CHÍNH hàm vẫn xanh, tức vì sao K1 đo bằng hằng số.
+- **Bậc chỉ do CSDL đặt:** `app_api` ghi `tier_tu_so_tien` ⇒ 42501; chủ sở hữu ghi tay ⇒ trigger ghi đè bằng bậc thật; tiền
+  tệ lệch ⇒ `rfq_bac_cua` ném. Tắt `rfq_budgets_xep_bac` ⇒ bậc NULL và cạnh chặn `BAC_LECH_HAM_PHAN_BAC`; tắt thêm vế ấy của
+  hàm vị từ ⇒ gói bậc NULL rời DRAFT.
+- **Cạnh nộp duyệt:** tổ chức đã bật, không ngân sách ⇒ lời từ chối có tên và ĐÚNG MỘT hàng `CONTROL_DENIED` mang mã và
+  người; đặt ngân sách ⇒ đi qua, sổ không thêm hàng. Câu UPDATE viết tay ⇒ trigger chặn cùng mã; tắt trigger ⇒ lọt. Ghim bản
+  cũ — gói có từ trước ngày bật, và chính sách đổi sau khi đặt ngân sách — ⇒ từ chối có tên, KHÔNG vào sổ; đặt lại ⇒ đi, với
+  bậc của bản mới. Đột biến ở từng vế của `rfq_chot_ngan_sach`: bỏ vế ghim ⇒ gói ghim bản đã hết hiệu lực rời DRAFT; cho qua
+  khi thiếu ngân sách ⇒ gói không ngân sách rời DRAFT; bỏ nhánh *đã bật* ⇒ tổ chức CHƯA bật không nộp được gói không ngân
+  sách (§8.11); bỏ vế DRAFT ⇒ sổ nhận một hàng cho một cạnh không đi được.
+- **Sổ fail-closed:** chặn lần ghi `CONTROL_DENIED` ⇒ `DenialAuditFailedError`, không hàng nào; gỡ chặn ⇒ ghi được.
+- **Từ vựng không trôi:** tập mã trong thân `rfq_chot_ngan_sach` bằng tập mã K1 của `CHOT_VAO_SO`.
+- **Tranh chấp:** lần nộp ĐỨNG CHỜ một lần ký đang dở (đo ở `pg_stat_activity`) rồi bị chặn vì bản vừa hết hiệu lực; gỡ khoá
+  chia sẻ ⇒ gói rời DRAFT và tái lập ra bản mới. Lần ký bắt đầu trước mà lấy khoá sau lần nộp ⇒ `signed_at` sau
+  `submitted_at`, tái lập đúng bản đã ghim; trả thân `069` ⇒ tái lập ra bản khác. `submitted_at` nằm giữa hai lần đọc đồng hồ
+  quanh lần nộp, ở cả tổ chức chưa bật; `app_api` ghi nó ⇒ 42501.
+- **Hardening:** thay thân rỗng ruột ở hai trigger, bốn hàm trợ giúp và hàm ký, tắt trigger ở cạnh ⇒ lần `migrate()` sau
+  trả lại tất cả. Tĩnh: thân bốn hàm trợ giúp ở migration CUỐI CÙNG và ở hardening khớp nhau (`db/migrations.int.test.ts`).
+- **Qua HTTP** (`apps/api/src/buyer.int.test.ts`): tổ chức đã bật, nộp gói không ngân sách ⇒ 422 mang thông điệp của bảng
+  (không 500) và một hàng `CONTROL_DENIED`; đặt ngân sách ⇒ 200.
+
+## 6. Giới hạn, nói ra
+
+- **Gói ở bậc đấu thầu chính thức vẫn rời DRAFT** cho tới K2 (S3.2). Chưa có lỗ thật: ngoài SQL chưa ai bật được S3.
+- **Rủi ro cho S3.1c, nói trước:** `master` là nguồn triển khai thật. Khi màn ký chính sách có mặt, khách bật được S3 trong khi
+  K2–K12 chưa có — bậc hiện ra mà chưa được cưỡng chế (spec §8.1). Vòng S3.1c nên khoá nút bật tới khi S3 đủ.
+- Ở tổ chức đã bật, gói khác tiền tệ với chính sách không rời DRAFT được — spec §4.1 chốt, đa tiền tệ là Enterprise.
+- Từ chối do TRIGGER vẫn không vào sổ (giới hạn J6, ADR-084): dưới tranh chấp thật, lần nộp gãy ở trigger với 23514 thay vì
+  lời từ chối có tên.
+- **`CONTROL_DENIED` đứng ngoài trần lần từ chối theo phiên của ADR-092** (§S1.155): trần ấy đếm lần
+  từ chối ở bộ điều phối, còn `kiemChot` gọi `throwAuditedDenial` từ HANDLER — cùng loại với bảng so sánh và cổng mở thầu,
+  mà ADR-092 nêu là ngoài phạm vi. Mỗi lần một phiên giữ `rfq.submit` nộp một gói không ngân sách ở tổ chức đã bật là một
+  hàng sổ, qua khoá chuỗi sổ toàn tổ chức. Chưa ai bật được S3 ngoài SQL; khi S3.1c mở nút bật, vế này cần một câu trả lời.
+- Khoá tư vấn và mốc giờ chỉ đúng dưới READ COMMITTED — mức của mọi đường ứng dụng.
+- Tổ chức CHƯA bật nhận hai thứ ở cạnh nộp duyệt: một khoá tư vấn chia sẻ và dấu `submitted_at`. Hành vi không đổi.
+- `rfq_che_do_nghiem`, `rfq_khoa_du_dieu_kien_xoa` vẫn không có mục ghim thân (xem §S1.156).
+
+## 7. Số đo
+
+- `pnpm t0` sạch (399 module, 1567 phụ thuộc, không vi phạm); `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua** — vòng này không
+  thêm ca đơn vị; phép kiểm nhóm có mặt đổi dải.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ (dựng bằng `initdb`; container không có docker), cả kho một lượt: **170 tệp, 2757 ca —
+  2746 đạt, 1 bỏ qua, 10 đỏ**, không ca đỏ nào của vòng này:
+  - 8 ca `packages/test-support/src/postgres.int.test.ts` cần docker;
+  - `db/migrations.int.test.ts` — *migration CUỐI CÙNG định nghĩa hàm*: trên cây số tạm bộ đọc chỉ nhận tên migration ba chữ
+    số, nên thân `chinh_sach_kiem_nguoi_ky` ghim ở migration mang số tạm bị đọc là của `069` — cùng ca đỏ trên cây số tạm
+    của §S1.156; xanh sau cấp số;
+  - `db/migrations.int.test.ts` — *[CR1] trigger BEFORE INSERT lạ*: `pg_ctl start` của cụm cục bộ không lên; chạy lại riêng cả tệp thì ca ấy
+    xanh — **117/118**, ca còn đỏ là ca số tạm ở trên.
+- Các tệp vòng này chạm: `packages/rfq/src/bac-chinh-sach.int.test.ts` **42/42** (26 của S3.1a + 16 mới), `apps/api/src/buyer.int.test.ts`
+  **14/14**, `packages/rfq/src/rfq.int.test.ts` **55/55**, `apps/unseal-worker/src/kich-ban-41.int.test.ts` **15/15**,
+  `packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts` **2/2**, `db/hardening-suy-tu-tinh-chat.int.test.ts` **36/36**,
+  `db/rls-coverage.int.test.ts` **51/51**, `db/check-an-ninh.int.test.ts` **4/4**.
+- Lượt đầu đỏ thêm một ca của vòng này: `[INV-H20]` P6 — lời khai *"Sổ đăng ký n bất biến"* ở `docs/STATE.md` còn 63 trong
+  khi sổ đăng ký có 64 hàng. Lời khai ở `Handoff.md` đã được sửa, lời khai ở STATE thì chưa: đúng chiều hỏng P6 sinh ra để bắt.
+  Sửa, chạy lại tệp ấy: 45/45.
+- Ma trận sinh lại từ báo cáo của lượt ấy (ghép kết quả chạy lại của tệp P6): **64/64** bất biến (42 + 22), cổng evidence XANH.
+  Bộ sinh đòi nâng tay mốc ghim độ phủ 63 → 64 (`MOC_GHIM.soPhuToiThieu`). Diff của `evidence/INV-matrix.md`: hàng K1
+  (**11** ca đạt — 10 ở `bac-chinh-sach`, 1 qua HTTP), các dòng tổng và dòng mốc; không hàng nào khác đổi.
+- Số tạm `S1.166`, `072_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
+- **Trên cây đã cấp số** (vòng S1.166, migration `072_bac_cua_goi`), `pnpm test` đỏ MỘT ca: `[INV-H21]` sàn-theo-tệp của bộ
+  đọc QT3 — `chot-kiem-soat.ts` gọi `.query(` với câu truyền từ `rfq.ts`, nên tệp ấy không mang câu nào. Các lượt trên không
+  thấy vì bộ liệt kê tệp đọc `git ls-files`, và khi ấy `chot-kiem-soat.ts` cùng migration mới còn CHƯA được theo dõi: mọi
+  phép kiểm liệt kê bằng git đã đo một cây thiếu hai tệp mới. Sửa: câu hỏi của K1 thành hằng `CAU_CHOT_NGAN_SACH` cạnh bảng
+  `CHOT_VAO_SO`. Rồi đo lại TẤT CẢ trên cây đã commit: `pnpm t0` sạch; `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua**; cả kho
+  một lượt **170 tệp, 2757 ca — 2748 đạt, 1 bỏ qua, 8 đỏ** (đúng 8 ca `test-support` cần docker); `db/migrations.int.test.ts`
+  **118/118**; `qt3-cu-phap`, `qt3-ngu-phap` xanh; ma trận sinh lại từ báo cáo ấy khớp từng byte bản đã commit, cổng evidence
+  XANH; `pnpm cap-so --kiem` sạch.
+- **Hợp `master` sau khi mở PR.** Trong lúc CI chạy, `master` nhận #166 — vòng S1.157 (khoản 243 mở và đóng cùng vòng),
+  đúng số lần cấp đầu đã cho vòng này. Lần hợp xung đột ở cột mốc của `docs/STATE.md` (gỡ tay, giữ cả hai) và mục nối cuối
+  biên bản (`pnpm cap-so` tự gỡ); dòng mơ hồ duy nhất là gạch đầu dòng *"Trên cây đã cấp số"* ở trên, nói về vòng của
+  nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này là **S1.166**, migration vẫn `070` (#166 không thêm migration),
+  `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch; `pnpm test` **109 tệp, 1443 đạt, 1 bỏ qua**; ba tệp tích hợp
+  chạm route người mua — `apps/api/src/buyer.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (#166 sửa),
+  `packages/rfq/src/bac-chinh-sach.int.test.ts` — **85/85**; phần còn lại do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần hai.** Trong lúc CI chạy trên commit hợp đầu, `master` nhận #165 — spec S4 và S4b cùng hai lượt soi,
+  vòng **S1.158–S1.162**, ADR-093…100, khoản 244–246 — lấy đúng số lần hợp đầu đã cấp cho vòng này. Lần hợp xung đột ở
+  cột mốc và bảng tham chiếu của `docs/STATE.md`, bảng tài liệu của `Handoff.md` (dòng lời khai số ADR lấy bản của
+  `master`, dòng lời khai sổ đăng ký giữ bản của nhánh, số vòng về số tạm) và mục nối cuối biên bản (`pnpm cap-so` tự gỡ);
+  dòng mơ hồ duy nhất là dòng kết quả ở gạch đầu dòng trên, nói về vòng của nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này
+  là **S1.166**, migration vẫn `070` (#165 chỉ đổi tài liệu), `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch;
+  `pnpm test` **109 tệp, 1443 đạt, 1 bỏ qua**; ma trận sinh lại từ báo cáo đầy đủ gần nhất vẫn khớp từng byte, cổng evidence
+  XANH; tầng tích hợp do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần ba.** Trong lúc CI chạy trên commit hợp lần hai, `master` nhận #167 — pilot giả lập, vòng **S1.163**,
+  ADR-101, khoản 247 — lấy đúng số lần hợp trước đã cấp cho vòng này. Xung đột ở đúng ba chỗ như lần hai, gỡ cùng cách;
+  dòng mơ hồ duy nhất là dòng kết quả ở gạch đầu dòng trên, nói về vòng của nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này
+  là **S1.166**, migration vẫn `070` (#167 không thêm migration), `pnpm cap-so --kiem` sạch. #167 thêm `tools/pilot-gia-lap`
+  — nó nộp duyệt qua HTTP (`POST /rfqs/:id/submit`), trên tổ chức chưa bật S3, nên đi luồng MVP1 — và không thêm ca mang
+  nhãn INV nào, nên ma trận không đổi. Trên cây đã hợp: `pnpm t0` sạch (420 module, 1652 phụ thuộc); `pnpm test` **113 tệp,
+  1482 đạt, 1 bỏ qua**; tầng tích hợp do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần bốn.** `master` nhận #170 (một dòng rổ C ở `docs/STATE.md`, không cấp số, hợp không xung đột) rồi
+  #171 — khoản 245 đóng, vòng **S1.164**, ADR-102 — lấy đúng số lần hợp trước đã cấp cho vòng này. Xung đột ở ba chỗ như
+  các lần trước, gỡ cùng cách; `--mo-ho nhanh` cho dòng kết quả ở gạch đầu dòng trên. Kết quả: vòng này là **S1.166**,
+  migration vẫn `070` (#171 không thêm migration; nó sửa `packages/unseal` và `packages/danh-gia`, không chạm tệp nào của
+  vòng này), `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch; `pnpm test` **113 tệp, 1482 đạt, 1 bỏ qua**; tầng
+  tích hợp do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần năm — lần đầu có va chạm thật ngoài số hiệu.** `master` nhận #169 — khoản 244 · 225, vòng **S1.165**,
+  ADR-103, và HAI migration `070_bid_currency`, `071_huy_sau_khi_dong` — lấy cả số vòng lẫn số migration của vòng này, và
+  đưa J8 vào sổ đăng ký bất biến cùng lúc với K1. Gỡ:
+  - `packages/rfq/src/rfq.int.test.ts`: ca huỷ-sau-khi-đóng của #169 gọi `submitRfqForApproval` ba đối số; bản hợp thêm
+    `apiPool` như mọi lời gọi khác của vòng này. `pnpm t0` là phép đo: không còn lời gọi nào thiếu đối số;
+  - `db/migrations.int.test.ts`: ba danh sách migration mang `070`, `071` của #169 rồi migration của vòng này;
+  - sổ đăng ký: `docs/TEST-PLAN.md` giữ J8 (#169) rồi nhóm K; tổng **43 + 22 = 65**; mốc ghim độ phủ 64 → **65**; sổ khai
+    nhãn giữ cả J8 lẫn K1; lời khai *"Sổ đăng ký n bất biến"* ở `docs/STATE.md` và `Handoff.md` thêm **65** (43 + 22);
+  - cột mốc, bảng tham chiếu và mục nối cuối biên bản như các lần trước. Bốn dòng mơ hồ: ba nói về S1.165 của #169 (lời
+    khai sổ đăng ký 64 của J8), một nói về vòng của nhánh — dòng ấy về số tạm rồi `pnpm cap-so --mo-ho master`.
+  Kết quả: vòng này là **S1.166**, migration thành **`072_bac_cua_goi`** (chạy sau `070`, `071`), `pnpm cap-so --kiem`
+  sạch. Trên cây đã hợp: `pnpm t0` sạch (422 module, 1661 phụ thuộc); `pnpm test` **115 tệp, 1486 đạt, 1 bỏ qua**; cả kho
+  một lượt trên PostgreSQL 16 cục bộ **177 tệp, 2822 ca — 2813 đạt, 1 bỏ qua, 8 đỏ** (đúng 8 ca `test-support` cần
+  docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
+  các dòng tổng và dòng mốc.

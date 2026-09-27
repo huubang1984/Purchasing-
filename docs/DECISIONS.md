@@ -7032,6 +7032,9 @@ công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ ch�
 có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
 lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
 rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
+**[S1.166]** `signed_at` nay đóng dấu SAU khoá (`072_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
+nộp duyệt: K1 đòi phiên bản hiệu lực tại `submitted_at`, và một `signed_at` là giờ ĐẦU giao dịch ký làm phép tái lập ấy
+sai — đo bằng đột biến trả thân `069`.
 
 ⑶ **Tổ chức chưa bật chạy đúng hành vi MVP1** — mời sau khi mở gói, ước lượng tuỳ chọn, sàn 0 chữ ký dưới ngưỡng kép.
 
@@ -7137,6 +7140,9 @@ bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt th
 **[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
 ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
 là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
+**[S1.166]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
+(`NGAN_SACH_GHIM_BAN_CU`), ở tầng gói và ở trigger cạnh. Chủ dự án chọn TỪ CHỐI chứ không tự ghim lại lúc nộp: người nộp
+đặt lại ngân sách và thấy bậc mới trước khi nộp, không để bậc và số chữ ký đổi dưới tay mình.
 
 ⑻ **Công tắc một chiều theo tổ chức** — ADR-080.
 
@@ -7305,7 +7311,9 @@ gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
 `CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
 (`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
 mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
-dịch được.
+dịch được. **[S1.166]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
+hai vế: `THIEU_NGAN_SACH` vào sổ — bỏ bước ngân sách là thoát mọi chốt của S3 —, `NGAN_SACH_GHIM_BAN_CU` thì không —
+chính sách đổi dưới chân người dùng. `BAC_LECH_HAM_PHAN_BAC` không vào sổ theo cùng luật.
 
 ⑸ **Ba lớp tách nhau, và bộ bằng chứng đếm từng lớp.** `PERMISSION_DENIED` — thiếu quyền. `RFQ_STATE_DENIED` — đi sai thứ
 tự. `CONTROL_DENIED` — đủ quyền, đúng thứ tự, nhưng một chốt kiểm soát chặn. Luật chọn lọc của ADR-060 giữ nguyên: lời từ

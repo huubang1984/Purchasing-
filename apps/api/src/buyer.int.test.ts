@@ -9,6 +9,7 @@
 //   [INV-A4]  bảng so sánh bị từ chối khi RFQ chưa UNSEALED (kể cả sau khi đã điều phối mở thầu).
 //   [INV-E6]  token magic link mời thầu KHÔNG về client — chỉ tới bộ gửi, đích đọc từ supplier_contacts.
 //   [INV-D1]  điều phối mở thầu cần cổng bốn vế; hai phê duyệt bởi hai giám đốc khác người yêu cầu.
+//   [INV-K1]  [S1.166] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -44,21 +45,21 @@ function sha256(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
 }
 
-async function nguoi(email: string, roles: readonly string[]): Promise<Nguoi> {
+async function nguoi(email: string, roles: readonly string[], org: string = orgA): Promise<Nguoi> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi') RETURNING id",
-    [orgA, email],
+    [org, email],
   );
   const id = rows[0]?.id ?? "";
   for (const r of roles) {
-    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgA, id, r]);
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, r]);
   }
   const token = randomBytes(32).toString("base64url");
   const s = await db.pool.query<{ id: string }>(
     "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
-    [orgA, id, sha256(token)],
+    [org, id, sha256(token)],
   );
-  return { id, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${token}`, sessionId: s.rows[0]?.id ?? "" };
+  return { id, cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}`, sessionId: s.rows[0]?.id ?? "" };
 }
 
 interface PhanHoi {
@@ -808,5 +809,64 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
     expect(dsHai.filter((m) => m.status === "REVOKED").map((m) => m.id)).toEqual([idKet]);
     expect(dsHai.filter((m) => m.revokedAt === null)).toHaveLength(1);
     expect(ds2.text, "danh sách lời mời KHÔNG được mang mã mời").not.toContain(tokenThat);
+  });
+});
+
+describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT KIỂM SOÁT đi ra dưới 422 có tên", () => {
+  it("[INV-K1] tổ chức đã bật: nộp duyệt gói không ngân sách ⇒ 422 mang thông điệp của bảng chốt và một hàng `CONTROL_DENIED`; đặt ngân sách thì 200", async () => {
+    // Tổ chức RIÊNG: công tắc ADR-080 một chiều, bật ở `orgA` là đổi mọi ca khác của tệp này.
+    const orgB = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty B', 'cong-ty-b-k1') RETURNING id")
+    ).rows[0]?.id ?? "";
+    const pm = await nguoi("pm-k1@vidu.vn", ["PROCUREMENT_MANAGER"], orgB);
+    const tc = await nguoi("tc-k1@vidu.vn", ["FINANCE"], orgB);
+    const tc2 = await nguoi("tc2-k1@vidu.vn", ["FINANCE"], orgB);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+    // Phiên bản có bậc và chữ ký thứ hai: câu DỰNG dưới chủ sở hữu — route của chúng là S3.1c. Mọi trigger vẫn chạy.
+    const bac = [
+      {
+        tu_so_tien: 0,
+        so_ncc_toi_thieu: 1,
+        award_vai_khac_nhau: false,
+        ky_danh_sach_moi: false,
+        xoay_vong_n: 0,
+        award_so_chu_ky: 1,
+        award_vai: ["DIRECTOR"],
+        tham_dinh_truoc_trao: false,
+        khai_xung_dot: false,
+        dau_thau_chinh_thuc: false,
+      },
+      { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true },
+    ];
+    const v2 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+          "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
+        [orgB, JSON.stringify(bac), tc.id, tc.sessionId],
+      )
+    ).rows[0]?.id;
+    await db.pool.query(
+      "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
+      [orgB, v2, tc2.id, tc2.sessionId],
+    );
+
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Mua thep K1", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
+    // 422 CÓ TÊN, không 500: thiếu dòng `ChotKiemSoatError` ở `LOI_NGHIEP_VU_422` thì lời từ chối đi ra như một sự cố.
+    expect(nop.status, nop.text).toBe(422);
+    expect(nop.text).toContain("phải có ngân sách dự tính trước khi nộp duyệt");
+    const { rows } = await db.pool.query<{ ma: string; actor: string }>(
+      "SELECT payload->>'ma' AS ma, actor_id::text AS actor FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2",
+      [orgB, rfqId],
+    );
+    expect(rows).toEqual([{ ma: "THIEU_NGAN_SACH", actor: pm.id }]);
+
+    const ns = await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "150000000.00", currency: "VND" });
+    expect(ns.status, ns.text).toBe(200);
+    const lai = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
+    expect(lai.status, lai.text).toBe(200);
   });
 });
