@@ -14,7 +14,7 @@
 // số mà master đã cấp:
 //
 //   vòng       S1.91NN          ADR         ADR-92NN
-//   khoản nợ   94NN             migration   95NN_ten.sql
+//   khoản nợ   94NN             migration   95NN_ten.sql (và `95NN_ten` không đuôi, dạng khai của hardening)
 //
 // NN = 01, 02, … theo thứ tự nhánh tạo ra chúng. Dải được chọn bằng phép đo: không số tự nhiên nào
 // của kho rơi vào 91xx, 92xx, 94xx, 95xx (90xx có `9000` ms, 93xx có thời gian đo, 99xx có `9999`).
@@ -137,6 +137,14 @@ const RE_TAM_TIEN_TO: ReadonlyArray<readonly [Day, RegExp]> = [
 ];
 const RE_TAM_MIGRATION = /(?<![\p{L}\p{N}])(95\d\d)(?=_[A-Za-z0-9_]+\.sql)/gu;
 /**
+ * Tên migration số tạm KHÔNG đuôi — `'95NN_ten'`. Đó là dạng các danh sách khai của
+ * `db/migrations/hardening.always.sql` dùng (bảng tenant, `CHECK` an ninh…): chúng so `mig || '.sql'`
+ * với `schema_migrations`. Thiếu dạng này, lệnh đổi tên tệp mà để nguyên dòng khai, `--kiem` vẫn
+ * sạch, và phép kiểm của dòng ấy im lặng không bao giờ chạy — đo được ở PR đầu tiên thêm migration
+ * dưới luật cấp số lúc merge. Đuôi khác `.sql` (`95NN_ten.txt`) và tên dính chữ, số thì đứng yên.
+ */
+const RE_TAM_MIGRATION_KHONG_DUOI = /(?<![\p{L}\p{N}])(95\d\d)(?=_[A-Za-z0-9_]+(?![A-Za-z0-9_.]))/gu;
+/**
  * Số tạm TRẦN, chỉ trong Markdown, và không dính chữ, số, `_` hay `-`: một UUID (`…-9101-…`), một
  * digest (`Xy9201Qz`) hay một chuỗi hex không khớp. Ngoài Markdown số trần KHÔNG bao giờ bị thay —
  * `PORT = 9201` trong một tệp `.ts` là một cổng, không phải một ADR (review PR #155, mục 1).
@@ -163,7 +171,7 @@ export function thaySoTam(dong: string, bang: BangCap, markdown: boolean): strin
   for (const [d, re] of RE_TAM_TIEN_TO) {
     ra = ra.replace(re, (_toan, dau: string, so: string, noi: string) => `${dau}${thay(d)(so)}${noi.replace(/9\d\d\d/g, thay(d))}`);
   }
-  ra = ra.replace(RE_TAM_MIGRATION, thay("migration"));
+  ra = ra.replace(RE_TAM_MIGRATION, thay("migration")).replace(RE_TAM_MIGRATION_KHONG_DUOI, thay("migration"));
   if (!markdown) return ra;
   return ra.replace(RE_TAM_TRAN_MD, (toan: string, so: string) => {
     const d = dayCuaSoTam(Number(so));
@@ -269,17 +277,22 @@ function thuHoiDoan(
       return tam === undefined ? toan : `${a}${tam}${b}`;
     });
   }
-  return ra.replace(/(?<!\d)(\d+)(_[A-Za-z0-9_]+\.sql)/g, (toan, so: string, duoi: string) => {
-    const tam = migration.get(Number(so));
-    return tam === undefined || !duoiMigrationCuaNhanh.has(duoi) ? toan : `${tam}${duoi}`;
-  });
+  return ra
+    .replace(/(?<!\d)(\d+)(_[A-Za-z0-9_]+\.sql)/g, (toan, so: string, duoi: string) => {
+      const tam = migration.get(Number(so));
+      return tam === undefined || !duoiMigrationCuaNhanh.has(duoi) ? toan : `${tam}${duoi}`;
+    })
+    .replace(/(?<![\p{L}\p{N}])(\d+)(_[A-Za-z0-9_]+)(?![A-Za-z0-9_.])/gu, (toan, so: string, ten: string) => {
+      const tam = migration.get(Number(so));
+      return tam === undefined || !duoiMigrationCuaNhanh.has(`${ten}.sql`) ? toan : `${tam}${ten}`;
+    });
 }
 
 function dayTheoNguCanh(truoc: string, sau: string): Day | null {
   if (truoc.endsWith("S1.")) return "vong";
   if (truoc.endsWith("ADR-")) return "adr";
   if (/khoản(?: nợ)?\s+$/.test(truoc) || /^\s*\|\s*$/.test(truoc)) return "khoan";
-  if (/^_[A-Za-z0-9_]+\.sql/.test(sau)) return "migration";
+  if (/^_[A-Za-z0-9_]+(?:\.sql|(?![A-Za-z0-9_.]))/.test(sau)) return "migration";
   return null;
 }
 
@@ -1053,7 +1066,7 @@ export function kiem(goc: string): readonly string[] {
   const loi: string[] = [];
   const sot = gitThu(goc, [
     "grep", "-n", "-I", "-E",
-    "S1\\.91[0-9]{2}([^0-9]|$)|ADR-92[0-9]{2}([^0-9]|$)|khoản( nợ)? 94[0-9]{2}([^0-9]|$)|(^|[^0-9A-Za-z])95[0-9]{2}_[A-Za-z0-9_]+\\.sql",
+    "S1\\.91[0-9]{2}([^0-9]|$)|ADR-92[0-9]{2}([^0-9]|$)|khoản( nợ)? 94[0-9]{2}([^0-9]|$)|(^|[^0-9A-Za-z])95[0-9]{2}_[A-Za-z0-9_]+(\\.sql|[^A-Za-z0-9_.]|$)",
     "--", ".", LOAI_TRU,
   ]).ra;
   for (const l of sot.split("\n").filter((x) => x !== "")) loi.push(`còn số tạm: ${l.slice(0, 160)}`);
@@ -1289,7 +1302,7 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
           (d === "vong" && moi.slice(0, m.index).endsWith("S1.")) ||
           (d === "adr" && moi.slice(0, m.index).endsWith("ADR-")) ||
           (d === "khoan" && /khoản(?: nợ)?\s+$/.test(moi.slice(0, m.index))) ||
-          (d === "migration" && /^_[A-Za-z0-9_]+\.sql/.test(moi.slice(m.index + 4)));
+          (d === "migration" && /^_[A-Za-z0-9_]+(?:\.sql|(?![A-Za-z0-9_.]))/.test(moi.slice(m.index + 4)));
         if (coTienTo) loi.push(`${p}:${so}: số tạm ${m[1]} không có chỗ khai (đầu mục ADR, hàng sổ nợ hay tệp migration)`);
         else if (d !== null && bang[d].has(Number(m[1]))) {
           bao.push(`${p}:${so}: để nguyên số trần ${m[1]} (trùng một số tạm đã khai) — sửa tay nếu nó là số tạm`);
