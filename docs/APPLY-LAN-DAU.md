@@ -213,7 +213,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
   - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040).
   - Cách làm chờ chủ dự án quyết. Đề xuất ngày 2026-09-27: một task ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
-    không mở route quản trị. **[S1.171]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
+    không mở route quản trị. **[S1.172]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
     kể cả chỗ hở thứ hai đo ở vòng ấy: người dùng đầu tiên không có đường xin link đăng nhập qua giao diện.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.

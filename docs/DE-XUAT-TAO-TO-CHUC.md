@@ -1,6 +1,6 @@
 # Đề xuất — tạo tổ chức đầu tiên, người dùng và vai trên prod
 
-> **Ngày:** 2026-09-27 · **Vòng:** S1.171 · **Trạng thái:** **ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
+> **Ngày:** 2026-09-27 · **Vòng:** S1.172 · **Trạng thái:** **ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
 > thành một ADR, bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về ADR ấy, và tệp này giữ lại làm hồ sơ cân nhắc.
 >
 > Tệp này trả lời một câu: **ngày đầu tiên trên prod, ai tạo tổ chức của khách, những người dùng của họ và vai của từng người,

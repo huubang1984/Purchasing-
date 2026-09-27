@@ -1,6 +1,6 @@
 # Buổi bậc 1 — sáu mươi phút đi thử có hướng dẫn với một người mua thật
 
-> **Ngày:** 2026-09-27 · **Vòng:** S1.171 · **Bậc:** 1 của thang ở `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md` §7
+> **Ngày:** 2026-09-27 · **Vòng:** S1.172 · **Bậc:** 1 của thang ở `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md` §7
 > — thang ấy vẫn là **ĐỀ XUẤT, chưa được chọn** (ADR-101).
 >
 > Tệp này là thứ người trình diễn cầm theo: việc phải xong trước ngày gặp, chương trình sáu mươi phút, các câu hỏi, phiếu
