@@ -14159,7 +14159,7 @@ Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, m
 
 Khoản 143 đóng. Còn mở **84**; rổ B **59**.
 
-# §S1.173 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+# §S1.174 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
 
 ## 1. Việc gì
 

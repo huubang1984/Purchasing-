@@ -292,7 +292,8 @@ Người ta từ chối pilot vì nó đòi *dữ liệu thật + nhà cung cấ
 
 ## 9. Việc tiếp theo — đề xuất, chưa làm
 
-1. Chủ dự án chọn: có mở bậc 1 của mục 7 với một doanh nghiệp cụ thể không.
+1. Chủ dự án chọn: có mở bậc 1 của mục 7 với một doanh nghiệp cụ thể không. **[S1.173]** Bộ tài liệu cho buổi ấy — việc
+   trước ngày gặp, chương trình 60 phút, câu hỏi, phiếu ghi, việc sau buổi gặp — ở `docs/BUOI-BAC-1.md`.
 2. Nhập gói từ CSV cho bậc 2.
 3. ~~Khoản 247: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
    sổ (khuôn `nemTuChoi`, hay savepoint như `BID_DEADLINE_DENIED` của ADR-074), hay giữ giới hạn và khai nó. Đây là một
