@@ -14301,7 +14301,7 @@ Ba đột biến, cả ba đỏ:
 
 ---
 
-# §S1.174 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+# §S1.175 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
 
 ## 1. Vòng này là gì
 
@@ -14364,5 +14364,10 @@ số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
 - Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
   hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
   đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
-- @@CAP_SO@@
+- Số cấp cho vòng này trôi năm lần vì PR khác merge trước với cùng số: lần đầu S1.170, ADR-106, `073_tu_choi_co_ten` (#175 lấy
+  cả ba), rồi S1.171 (#180), S1.172 (#182), S1.173 (#177), S1.174 (#176) — bốn lần sau chỉ lấy số vòng. Mỗi lần `pnpm cap-so` thu hồi
+  qua trailer `Cap-So:` và cấp lại; nay là S1.175, ADR-107, `074_tu_choi_co_ten`. Số đo ở trên là của cây `f2fa608`; các lần hợp
+  #178, #180, #181, #182, #177 không chạm tệp nào của vòng này, và CI trên đầu `c637858` (sau #177) xanh cả bảy job, gồm T3 và
+  evidence. #176 (S3.1d) chạm hai tệp kịch bản 41 — tự hợp; trên cây đã hợp `kich-ban-41-http.int.test.ts` và `kich-ban-41.int.test.ts`
+  **88/88** (cả luồng S3 mà #176 thêm), `pnpm t0` sạch, `pnpm test` 117 tệp, 1499 đạt, 1 bỏ qua.
 - Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
