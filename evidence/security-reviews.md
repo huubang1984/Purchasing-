@@ -14196,3 +14196,11 @@ Ba đột biến, cả ba đỏ:
   · B2 25 → 26 · B5 9 → 10 · D1 34 → 35 · D2 41 → 42 · J3 9 → 10 · J4 3 → 6. Không hàng nào khác đổi.
 - `pnpm t0` sạch (428 module, 1673 phụ thuộc, không vi phạm); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
+- **Hợp `master`.** Lúc CI của PR xanh đủ bảy việc, `master` nhận #175 — khoản 228, vòng **S1.170**, ADR-106, migration
+  `073` — lấy đúng số vòng lần cấp đầu đã đặt cho vòng này. Xung đột ở cột mốc của `docs/STATE.md` và mục cuối biên bản (gỡ
+  tay: giữ cả hai, mục của #175 đứng trước theo thứ tự merge), và ở `evidence/INV-matrix.md` (lấy bản `master`, sinh lại dưới
+  đây). `pnpm cap-so` không gặp dòng mơ hồ: vòng này là **S1.171**; `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0`
+  sạch (428 module, 1673 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**; cả kho trên PostgreSQL 16 cục bộ **179
+  tệp, 2889 ca — 2880 đạt, 1 bỏ qua, 8 đỏ** (vẫn đúng 8 ca docker; #175 thêm một ca A1). Kịch bản 41 bản gói **30/30**, bản
+  HTTP **58/58** — khẳng định J4 mới của #175 chạy ở cả hai luồng. Ma trận **65/65**, cổng evidence XANH; đúng mười ba hàng
+  trên đổi so với `master`, A1 nay **6 → 7** (một ca A1 của #175 cộng một lượt kịch bản 41 thứ hai).
