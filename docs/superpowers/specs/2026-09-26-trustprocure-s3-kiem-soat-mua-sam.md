@@ -299,11 +299,11 @@ hàng `rfq_budgets` không rời DRAFT. Bản nháp để hở ca này, và cả
 Câu *"vì sao gói này chỉ cần ba nhà cung cấp và một chữ ký"* trả lời được từ dữ liệu, không cần hỏi ai và không cần
 chạy lại ứng dụng ở phiên bản hôm đó — ADR-017 áp nguyên.
 
-**[S1.164]** S3.1b cài mục này ở `070_bac_cua_goi`: trigger `rfq_budgets_xep_bac` đặt cột; hàm vị từ `rfq_chot_ngan_sach`
+**[S1.165]** S3.1b cài mục này ở `070_bac_cua_goi`: trigger `rfq_budgets_xep_bac` đặt cột; hàm vị từ `rfq_chot_ngan_sach`
 giữ K1 ở cạnh nộp duyệt, gọi ở tầng gói rồi ở trigger; cạnh ấy đóng dấu `rfq_packages.submitted_at` sau một khoá tư vấn
 chia sẻ với lần ký chính sách. Lần ký nay đóng dấu `signed_at` SAU khoá: `069` để nó là giờ đầu giao dịch ký, nên một lần
 nộp xếp trước lần ký theo khoá có thể đứng sau `signed_at` theo giờ, và *phiên bản hiệu lực lúc nộp* tái lập ra bản khác
-bản đã ghim (`evidence/security-reviews.md` §S1.164, mục 4).
+bản đã ghim (`evidence/security-reviews.md` §S1.165, mục 4).
 
 ### 4.3. Nhóm hàng
 
@@ -524,7 +524,7 @@ tạo được, K5 bỏ sót người bỏ tên khỏi danh sách, và cả hai 
 
 | Mã | Sửa | Nguồn |
 |---|---|---|
-| **K1** | Mọi gói rời DRAFT ở tổ chức đã bật S3 **có ngân sách** và mang `tier_tu_so_tien` bằng kết quả `rfq_bac_cua` trên `rfq_budgets.policy_id`. Phiên bản ấy phải đã có chữ ký thứ hai và phải là phiên bản đang hiệu lực lúc nộp duyệt. Đo bằng BẢNG CA BIÊN HẰNG SỐ (đúng 100 triệu, đúng 1 tỷ…), không bằng so với chính `rfq_bac_cua` — so thế là trùng ngôn, và đột biến `≤`→`<` ở biên sống sót. **[S1.164]** Vào sổ ở S3.1b: mười ca biên hằng số, mỗi vế của `rfq_chot_ngan_sach` một đột biến, và đột biến `≤`→`<` được đo sống sót qua phép so với chính hàm | §2.4 ⑸⑺; §2.5 ⑽ |
+| **K1** | Mọi gói rời DRAFT ở tổ chức đã bật S3 **có ngân sách** và mang `tier_tu_so_tien` bằng kết quả `rfq_bac_cua` trên `rfq_budgets.policy_id`. Phiên bản ấy phải đã có chữ ký thứ hai và phải là phiên bản đang hiệu lực lúc nộp duyệt. Đo bằng BẢNG CA BIÊN HẰNG SỐ (đúng 100 triệu, đúng 1 tỷ…), không bằng so với chính `rfq_bac_cua` — so thế là trùng ngôn, và đột biến `≤`→`<` ở biên sống sót. **[S1.165]** Vào sổ ở S3.1b: mười ca biên hằng số, mỗi vế của `rfq_chot_ngan_sach` một đột biến, và đột biến `≤`→`<` được đo sống sót qua phép so với chính hàm | §2.4 ⑸⑺; §2.5 ⑽ |
 | **K2** | Đếm theo bốn luật (§2.4 ⑹): không đếm nhà cung cấp/người liên hệ do người tạo gói hay người mời tạo; chỉ đếm nhà cung cấp có MST và xác minh còn hiệu lực; mỗi MST, mỗi đích liên hệ một lần. **K2b** (vào sổ ở S3.5): hậu kiểm lúc trao | §2.4 ⑹ |
 | **K3** | Cửa sổ chỉ gồm gói đã `opened_at`, xếp `opened_at DESC, id DESC`, loại chính gói đang xét, và chỉ tính lời mời không bị thu hồi trước `opened_at` | §2.5 ⒀ |
 | **K4** | Tách hai: **K4a** — lời mời và ngoại lệ chỉ đổi được ở DRAFT; ở OPEN chỉ THÊM, hoặc THU HỒI có lý do kèm tín hiệu. **K4b** — hàm băm danh sách RIÊNG ghim trên cột mới của `rfq_approvals`; UNIQUE theo (người, băm). Đo K4b bằng đổi danh sách GIỮA hai chữ ký, và bằng hai lần gia hạn một gói cấp kép (khoản **240**) | §2.5 ⑾ |
@@ -785,7 +785,7 @@ chữ ký chính sách — nên nếu có trôi thì trôi lên.
 | # | Thêm hoặc đổi |
 |---|---|
 | **S3.0** | ADR-080/081 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. **[S1.142]** Cả hai đã chốt ở ADR-084; S3.0 còn đúng phần nới dải nhãn dưới đây. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1. **[S1.153] S3.0 KHÉP.** Đo lúc làm vẫn đúng 10 chỗ; cả mười nay là `[A-HJK]`, mẫu của `parse.test.ts` có hàng K1, và năm mũi thu dải cùng hai mũi nới sai dải đều chết (`evidence/security-reviews.md` §S1.153) |
-| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.156]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`069_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.156). **S3.1b XONG** (`070_bac_cua_goi`, §S1.164) |
+| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.156]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`069_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.156). **S3.1b XONG** (`070_bac_cua_goi`, §S1.165) |
 | **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; ~~sửa khoản 240 nếu nó chưa được sửa ở vòng riêng~~ **[S1.140]** khoản 240 đã sửa ở vòng riêng (`067`) |
 | **S3.3** | **Xác minh nội bộ lên đây** (K8a) — K2 cần nó; bốn luật đếm; ngoại lệ có hàng rút; K3 theo định nghĩa §5.1; tập loại trừ K5 mở rộng |
 | **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; ~~đóng khoản 242 ⑴~~ **[S1.142]** lời khai của khoản 242 ⑴ đã sửa ở `068`; S3.5 dựng chữ ký sống độc lập với hàng `APPROVED` và phải lật khối đo `[S1.142 / khoản 242 ⑴]` |

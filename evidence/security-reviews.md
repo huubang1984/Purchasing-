@@ -13362,9 +13362,79 @@ Câu minh hoạ của SX-02 được viết lại theo.
 - `pnpm t0` sạch: typecheck, lint, depcruise (416 module, 0 vi phạm);
 - gitleaks 8.24.3 trên mọi tệp đã đổi: 0 lộ lọt; trên commit đầu `3342eb8`: 2 (điểm 2, còn mở).
 
+# §S1.164 — KHOẢN 245 ĐÓNG: MỖI LƯỢT ĐỌC GIÁ SAU MỞ THẦU GHI MỘT HÀNG SỔ, TRONG CHÍNH GIAO DỊCH ĐỌC
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 245 rời rổ B vì ĐÓNG.** Không migration. Một ADR mới (ADR-102). Không chạm mảnh nào của
+`docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Hàng 245 (S1.159, lượt soi hình dạng spec S4) đọc ra rằng vế ⑵ trong ba thứ sản phẩm LÀM ĐƯỢC trước rò nghiệp vụ của BAFO —
+*"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"*, ở `docs/PRODUCT.md` §5 và ADR-055 — sai: chỉ lần TỪ CHỐI được ghi. Hàng
+ấy nêu một câu phải chọn. Chủ dự án chọn *ghi sổ mỗi lượt đọc*, chấp nhận cái giá vĩnh viễn ở `verifyAuditChain` (ADR-060).
+
+## 2. Đo trước khi sửa
+
+- `packages/identity/src/rbac.ts`: `requirePermission` trả về mà không ghi khi người gọi có quyền.
+- `packages/unseal/src/comparison.ts`: `buildComparisonTable` chỉ ghi `COMPARISON_DENIED` (nhánh trạng thái, giao dịch độc lập).
+- Mọi đường đưa giá dạng rõ SAU mở thầu ra khỏi tiến trình, tìm theo cổng `bid.view`: `buildComparisonTable`, `docBangXepHang`
+  (`packages/danh-gia/src/doc-bang-xep-hang.ts`) và `xuatBoBangChung` (`packages/danh-gia/src/bo-bang-chung.ts`, thêm cổng
+  `audit.read`) mang giá; `countReceivedBids` mang một số đếm và `docTraoThau` mang người thắng — không mức giá nào. Không đường nào
+  trong ba đường mang giá ghi lượt đọc thành công.
+- Ba hàm đều chạy trong giao dịch `withTenant` mà bộ điều phối mở cho route `GET` của người mua — giao dịch GHI được (khoản 142 đã
+  ghi `AGENT_READ` trên chính loại giao dịch ấy).
+- Bộ bằng chứng không chứa hàng nào của `audit_events` (đọc `bo-bang-chung.ts`), nên một hàng sổ ghi ở lần xuất không làm lệch
+  byte giữa lần xuất qua HTTP và lần dựng của CLI.
+
+## 3. Thay đổi
+
+- `buildComparisonTable`: sau mọi câu đọc, trước khi trả bảng, `appendAuditEvent(client, …)` với `COMPARISON_VIEWED`, payload
+  `{ rfqStatus, viewedBySessionId }`.
+- `docBangXepHang`: cùng chỗ, `RANKING_VIEWED`, payload `{ evaluationId, viewedBySessionId }` — chỉ khi có bảng để trả.
+- `xuatBoBangChung`: sau khi bộ dựng xong, `EVIDENCE_BUNDLE_EXPORTED`, payload `{ exportedBySessionId }` — chỉ khi có bộ để trả.
+- Ba hàng cùng hình dạng: `actorType = USER`, `actorId` người đọc, `resourceType = RFQ`, `resourceId` gói thầu; không payload nào
+  mang một con số. Lần ghi hỏng không bị bắt: nó ném ra khỏi hàm, giao dịch rollback, dữ liệu không đi ra; qua HTTP, lỗi Postgres
+  ấy không thuộc bảng ánh xạ nào của bộ điều phối nên thành 500 thân cố định kèm một dòng log nêu mẫu route và SQLSTATE.
+- `docs/PRODUCT.md` §5 và ADR-055: ghi chú tại chỗ rằng vế ⑵ sai tới vòng này và nay đúng. ADR-102 mới.
+
+## 4. Đo sau khi sửa
+
+- `packages/unseal/src/comparison.int.test.ts`, khối khoản 245: ⒜ hai lượt đọc của hai người ⇒ đúng hai hàng, hình dạng trọn
+  `[USER, người đọc, RFQ, { rfqStatus: UNSEALED, viewedBySessionId }]`, không chữ số nào của giá; ⒝ BUYER thiếu `bid.view` ⇒
+  `PermissionDeniedError` và 0 hàng, gói chưa mở ⇒ `ComparisonDeniedError` và 0 hàng; ⒞ giao dịch đọc ném sau khi đọc ⇒ 0 hàng —
+  ngược hẳn `COMPARISON_DENIED`, thứ sống qua rollback; ⒟ một trigger chặn đúng lần ghi `COMPARISON_VIEWED` (SQLSTATE `TP245`) ⇒ hàm
+  ném chính lỗi ấy, không bảng nào đi ra, 0 hàng; gỡ lớp chặn thì cùng lời gọi đọc được và ghi đúng một hàng.
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`, khối khoản 245: ⒜ `null` (chưa chấm) ⇒ 0 hàng; chấm rồi đọc ⇒ đúng một hàng
+  `[USER, người đọc, RFQ, { evaluationId, viewedBySessionId }]`; REQUESTER thiếu `bid.view` ⇒ `PermissionDeniedError`, không thêm
+  hàng; ⒝ rollback ⇒ 0 hàng; lần ghi bị chặn ⇒ hàm ném `TP245`, không bảng nào đi ra.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` qua HTTP thật: bước 12 — `GET /comparison` của PROCUREMENT_MANAGER ⇒ +1
+  `COMPARISON_VIEWED` của đúng người ấy; bước 12b — `GET /ranking` của BUYER thiếu `bid.view` ⇒ 403 và 0 hàng, của
+  PROCUREMENT_MANAGER ⇒ +1 `RANKING_VIEWED`; bước 12j — xuất bộ bằng chứng bị từ chối ⇒ 0 hàng, của DIRECTOR ⇒ +1
+  `EVIDENCE_BUNDLE_EXPORTED`, và phép so byte với CLI vẫn xanh. Bước 14 — quét giá dạng rõ trên MỌI bảng — vẫn thấy đúng hai bảng
+  được khai, tức không payload mới nào mang giá.
+- **Đỏ trên mã cũ** (ba tệp sản xuất trả về bản trước vòng, test giữ nguyên): 7 ca đỏ — ⒜ và ⒟ của bảng so sánh, ⒜ và ⒝ của bảng
+  xếp hạng, bước 12, 12b, 12j của kịch bản. ⒝ và ⒞ của bảng so sánh xanh trên cả hai bản: chúng canh hình dạng (lần từ chối không
+  ghi, hàng không sống qua rollback), không đo lỗi.
+
+## 5. Ranh giới, nói ra
+
+- Đường CLI `tools/bo-xuat-danh-gia` dựng bộ bằng chứng bằng `dungBoBangChung` dưới kết nối vận hành, không ghi lượt xuất.
+- Mỗi lượt đọc giá nay lấy khoá tư vấn nối tiếp của tổ chức, từ câu ghi tới COMMIT; khoá chuỗi sổ bị giữ quá 2 s thì lượt đọc ra
+  500 thay vì ra bảng. Không có trần tần suất riêng cho lượt đọc giá: lượt đọc hiếm và chỉ ba vai giữ `bid.view`; trần lần TỪ CHỐI
+  theo phiên (ADR-092) vẫn áp cho lần bị từ chối.
+- Chuỗi sổ dài thêm một hàng cho mỗi lượt đọc giá, vĩnh viễn (ADR-060).
+- Không gắn nhãn `[INV-…]`: không bất biến nào trong sổ đăng ký nói về dấu vết của lượt ĐỌC giá sau mở thầu.
+
+## 6. Số đo
+
+- Trước khi thêm test mới, toàn bộ test tích hợp đã có trên PostgreSQL 16 cục bộ vẫn xanh với mã mới: `packages/unseal/src` và
+  `packages/danh-gia/src` **6 tệp, 189 ca**; `apps/api/src`, `apps/unseal-worker/src`, `apps/mcp/src` **40 tệp, 510 ca**.
+- Ba tệp mang test mới: **124/124** trên mã mới; **7 đỏ** trên mã cũ.
+- Số tạm `S1.164`, `ADR-102` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+
 ---
 
-# §S1.164 — S3.1b: BẬC CỦA GÓI, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG PHIÊN BẢN HIỆU LỰC, K1 VÀ LỚP `CONTROL_DENIED`
+# §S1.165 — S3.1b: BẬC CỦA GÓI, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG PHIÊN BẢN HIỆU LỰC, K1 VÀ LỚP `CONTROL_DENIED`
 
 **Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Một migration (`070_bac_cua_goi`). Không ADR mới. Không chạm mảnh
 nào của `docs/PRODUCT.md` §11: tổ chức chưa bật S3 — mọi tổ chức hôm nay — chạy như MVP1.
@@ -13375,7 +13445,7 @@ Phần hai trong bốn phần của S3.1 (spec S3 §9): bậc của gói (`rfq_b
 phiên bản hiệu lực, K1, lớp từ chối `CONTROL_DENIED`. S3.1a (§S1.156) dựng bậc trên phiên bản chính sách, chữ ký thứ hai và
 công tắc; tới vòng này chưa thứ gì đọc bậc.
 
-## 2. Hai quyết định của chủ dự án (S1.164)
+## 2. Hai quyết định của chủ dự án (S1.165)
 
 - **Gói ghim một phiên bản không còn hiệu lực** (chính sách đổi sau khi đặt ngân sách, hay gói có từ trước ngày bật): nộp
   duyệt bị TỪ CHỐI, KHÔNG vào sổ. Người dùng đặt lại ngân sách, thấy bậc mới rồi mới nộp. Hai phương án bị loại: từ chối và
@@ -13494,8 +13564,8 @@ một ĐỘT BIẾN:
 - Ma trận sinh lại từ báo cáo của lượt ấy (ghép kết quả chạy lại của tệp P6): **64/64** bất biến (42 + 22), cổng evidence XANH.
   Bộ sinh đòi nâng tay mốc ghim độ phủ 63 → 64 (`MOC_GHIM.soPhuToiThieu`). Diff của `evidence/INV-matrix.md`: hàng K1
   (**11** ca đạt — 10 ở `bac-chinh-sach`, 1 qua HTTP), các dòng tổng và dòng mốc; không hàng nào khác đổi.
-- Số tạm `S1.164`, `070_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
-- **Trên cây đã cấp số** (vòng S1.164, migration `070_bac_cua_goi`), `pnpm test` đỏ MỘT ca: `[INV-H21]` sàn-theo-tệp của bộ
+- Số tạm `S1.165`, `070_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
+- **Trên cây đã cấp số** (vòng S1.165, migration `070_bac_cua_goi`), `pnpm test` đỏ MỘT ca: `[INV-H21]` sàn-theo-tệp của bộ
   đọc QT3 — `chot-kiem-soat.ts` gọi `.query(` với câu truyền từ `rfq.ts`, nên tệp ấy không mang câu nào. Các lượt trên không
   thấy vì bộ liệt kê tệp đọc `git ls-files`, và khi ấy `chot-kiem-soat.ts` cùng migration mới còn CHƯA được theo dõi: mọi
   phép kiểm liệt kê bằng git đã đo một cây thiếu hai tệp mới. Sửa: câu hỏi của K1 thành hằng `CAU_CHOT_NGAN_SACH` cạnh bảng
@@ -13506,7 +13576,7 @@ một ĐỘT BIẾN:
 - **Hợp `master` sau khi mở PR.** Trong lúc CI chạy, `master` nhận #166 — vòng S1.157 (khoản 243 mở và đóng cùng vòng),
   đúng số lần cấp đầu đã cho vòng này. Lần hợp xung đột ở cột mốc của `docs/STATE.md` (gỡ tay, giữ cả hai) và mục nối cuối
   biên bản (`pnpm cap-so` tự gỡ); dòng mơ hồ duy nhất là gạch đầu dòng *"Trên cây đã cấp số"* ở trên, nói về vòng của
-  nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này là **S1.164**, migration vẫn `070` (#166 không thêm migration),
+  nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này là **S1.165**, migration vẫn `070` (#166 không thêm migration),
   `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch; `pnpm test` **109 tệp, 1443 đạt, 1 bỏ qua**; ba tệp tích hợp
   chạm route người mua — `apps/api/src/buyer.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (#166 sửa),
   `packages/rfq/src/bac-chinh-sach.int.test.ts` — **85/85**; phần còn lại do T3 của CI đo trên chính commit hợp.
@@ -13515,13 +13585,19 @@ một ĐỘT BIẾN:
   cột mốc và bảng tham chiếu của `docs/STATE.md`, bảng tài liệu của `Handoff.md` (dòng lời khai số ADR lấy bản của
   `master`, dòng lời khai sổ đăng ký giữ bản của nhánh, số vòng về số tạm) và mục nối cuối biên bản (`pnpm cap-so` tự gỡ);
   dòng mơ hồ duy nhất là dòng kết quả ở gạch đầu dòng trên, nói về vòng của nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này
-  là **S1.164**, migration vẫn `070` (#165 chỉ đổi tài liệu), `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch;
+  là **S1.165**, migration vẫn `070` (#165 chỉ đổi tài liệu), `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch;
   `pnpm test` **109 tệp, 1443 đạt, 1 bỏ qua**; ma trận sinh lại từ báo cáo đầy đủ gần nhất vẫn khớp từng byte, cổng evidence
   XANH; tầng tích hợp do T3 của CI đo trên chính commit hợp.
 - **Hợp `master` lần ba.** Trong lúc CI chạy trên commit hợp lần hai, `master` nhận #167 — pilot giả lập, vòng **S1.163**,
   ADR-101, khoản 247 — lấy đúng số lần hợp trước đã cấp cho vòng này. Xung đột ở đúng ba chỗ như lần hai, gỡ cùng cách;
   dòng mơ hồ duy nhất là dòng kết quả ở gạch đầu dòng trên, nói về vòng của nhánh, nên `--mo-ho nhanh`. Kết quả: vòng này
-  là **S1.164**, migration vẫn `070` (#167 không thêm migration), `pnpm cap-so --kiem` sạch. #167 thêm `tools/pilot-gia-lap`
+  là **S1.165**, migration vẫn `070` (#167 không thêm migration), `pnpm cap-so --kiem` sạch. #167 thêm `tools/pilot-gia-lap`
   — nó nộp duyệt qua HTTP (`POST /rfqs/:id/submit`), trên tổ chức chưa bật S3, nên đi luồng MVP1 — và không thêm ca mang
   nhãn INV nào, nên ma trận không đổi. Trên cây đã hợp: `pnpm t0` sạch (420 module, 1652 phụ thuộc); `pnpm test` **113 tệp,
   1482 đạt, 1 bỏ qua**; tầng tích hợp do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần bốn.** `master` nhận #170 (một dòng rổ C ở `docs/STATE.md`, không cấp số, hợp không xung đột) rồi
+  #171 — khoản 245 đóng, vòng **S1.164**, ADR-102 — lấy đúng số lần hợp trước đã cấp cho vòng này. Xung đột ở ba chỗ như
+  các lần trước, gỡ cùng cách; `--mo-ho nhanh` cho dòng kết quả ở gạch đầu dòng trên. Kết quả: vòng này là **S1.165**,
+  migration vẫn `070` (#171 không thêm migration; nó sửa `packages/unseal` và `packages/danh-gia`, không chạm tệp nào của
+  vòng này), `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch; `pnpm test` **113 tệp, 1482 đạt, 1 bỏ qua**; tầng
+  tích hợp do T3 của CI đo trên chính commit hợp.

@@ -17,7 +17,7 @@ import { CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
 // BIẾN: tắt (hay viết lại) đúng lớp ấy thì chính câu vừa bị chặn đi lọt. Không nhãn INV: bất biến S3
 // có nhãn (K1) ra đời ở S3.1b, khi có thứ đọc bậc.
 //
-// [S1.164 / S3.1b] Mục (6) đo K1 trên `070_bac_cua_goi`: bậc của gói, ngân sách bắt buộc ghim đúng
+// [S1.165 / S3.1b] Mục (6) đo K1 trên `070_bac_cua_goi`: bậc của gói, ngân sách bắt buộc ghim đúng
 // phiên bản hiệu lực, cạnh nộp duyệt, và lớp từ chối `CONTROL_DENIED`. Các ca ấy mang nhãn `[INV-K1]`.
 //
 // Mỗi phép đo dựng TỔ CHỨC RIÊNG (`taoToChuc`): công tắc ADR-080 một chiều, nên dùng chung một tổ
@@ -845,7 +845,7 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       chinh_sach_phien_ban_tang_dan: "KHAC",
       kiem_thanh_phan_theo_chinh_sach: "THEO_ID",
       ngan_sach_khong_ghim_ban_chua_ky: "THEO_ID",
-      // [S1.164 / S3.1b] Hàm phân bậc và trigger đặt bậc: cả hai đọc ĐÚNG phiên bản ngân sách ghim.
+      // [S1.165 / S3.1b] Hàm phân bậc và trigger đặt bậc: cả hai đọc ĐÚNG phiên bản ngân sách ghim.
       ngan_sach_xep_bac: "THEO_ID",
       rfq_bac_cua: "THEO_ID",
       rfq_can_phe_duyet_kep: "THEO_ID",
@@ -902,7 +902,7 @@ describe("S3.1a — ngân sách không ghim được phiên bản có bậc CHƯ
 });
 
 // =============================================================================================
-// (6) [S1.164 / S3.1b] K1 — BẬC CỦA GÓI VÀ CẠNH NỘP DUYỆT (`070_bac_cua_goi`)
+// (6) [S1.165 / S3.1b] K1 — BẬC CỦA GÓI VÀ CẠNH NỘP DUYỆT (`070_bac_cua_goi`)
 // =============================================================================================
 /** Bảng bậc mặc định của spec §4.1 — biên 100 triệu, 1 tỷ, 10 tỷ; bậc cuối là đấu thầu chính thức. */
 const BAC_MAC_DINH: readonly Bac[] = [

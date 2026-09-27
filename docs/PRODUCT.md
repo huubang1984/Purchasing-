@@ -78,6 +78,10 @@ trong đầu một con người hợp lệ. Ba thứ sản phẩm LÀM ĐƯỢC,
 sánh sau mở thầu đều có hàng sổ; ⑶ giá vòng hai niêm phong LẠI, nên người mua không thấy
 vòng hai trước khi nó được mở qua đúng cổng bốn vế.
 
+**[S1.164 / khoản 245 / ADR-102]** Vế ⑵ sai từ lúc viết tới vòng S1.164 — chỉ lần TỪ CHỐI có sổ. Nay nó đúng, và rộng hơn
+chữ: mỗi lượt đọc bảng so sánh, bảng xếp hạng và mỗi lần xuất bộ bằng chứng để lại một hàng sổ trong CHÍNH giao dịch đọc; sổ
+không ghi được thì giá không đi ra.
+
 ## 6. Quyết định phạm vi MVP1
 
 **Đã chốt 2026-08-27: giữ trọn phạm vi MVP1, chấp nhận 9–11 tuần.**

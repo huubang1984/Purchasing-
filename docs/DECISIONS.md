@@ -5666,6 +5666,10 @@ người, và một câu *"anh đang đứng thứ hai, hạ 3% là thắng"* n�
 nào thấy. Thứ S2 làm được là ⑴ danh sách mời SUY ra nên một lần mời ngoài top-N để lại dấu, ⑵ mọi
 lần đọc bảng so sánh đã có sổ, ⑶ giá vòng hai niêm phong lại.
 
+**[S1.164 / khoản 245]** Vế ⑵ SAI từ lúc viết tới vòng S1.164: chỉ lần TỪ CHỐI đọc bảng so sánh có sổ. ADR-102 làm nó đúng,
+và rộng hơn chữ của nó: mỗi lượt đọc bảng so sánh, bảng xếp hạng và mỗi lần xuất bộ bằng chứng ghi một hàng sổ trong chính giao
+dịch đọc.
+
 Nó **không** nói bốn cạnh ấy đã có người đi qua. Sau `059` chúng **tồn tại và được canh**, nhưng
 KHÔNG đường sản xuất nào đi qua — route, worker, màn hình và **J4** thuộc S1.109, và lý do chia
 không phải sức chứa mà là phép đo: J4 là một vòng quét ROUTE, và quét khi chưa route nào tồn tại
@@ -7025,7 +7029,7 @@ công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ ch�
 có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
 lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
 rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
-**[S1.164]** `signed_at` nay đóng dấu SAU khoá (`070_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
+**[S1.165]** `signed_at` nay đóng dấu SAU khoá (`070_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
 nộp duyệt: K1 đòi phiên bản hiệu lực tại `submitted_at`, và một `signed_at` là giờ ĐẦU giao dịch ký làm phép tái lập ấy
 sai — đo bằng đột biến trả thân `069`.
 
@@ -7133,7 +7137,7 @@ bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt th
 **[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
 ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
 là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
-**[S1.164]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
+**[S1.165]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
 (`NGAN_SACH_GHIM_BAN_CU`), ở tầng gói và ở trigger cạnh. Chủ dự án chọn TỪ CHỐI chứ không tự ghim lại lúc nộp: người nộp
 đặt lại ngân sách và thấy bậc mới trước khi nộp, không để bậc và số chữ ký đổi dưới tay mình.
 
@@ -7304,7 +7308,7 @@ gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
 `CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
 (`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
 mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
-dịch được. **[S1.164]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
+dịch được. **[S1.165]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
 hai vế: `THIEU_NGAN_SACH` vào sổ — bỏ bước ngân sách là thoát mọi chốt của S3 —, `NGAN_SACH_GHIM_BAN_CU` thì không —
 chính sách đổi dưới chân người dùng. `BAC_LECH_HAM_PHAN_BAC` không vào sổ theo cùng luật.
 
@@ -8037,3 +8041,49 @@ không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới
 - Trình diễn trên điện thoại thật cần một cụm TLS (cookie `Secure`, ADR-044). Cụm của công cụ chỉ nghe trên 127.0.0.1.
 - Lượt đầu đo ra khoản **247**: lần từ chối J3 và D2 không để lại hàng sổ hay dòng log nào. Câu *"mỗi lần từ chối để lại
   một dòng"* ở `docs/PRODUCT.md` §5 được sửa tại chỗ.
+
+## ADR-102 — Lượt đọc giá sau mở thầu ghi sổ trong chính giao dịch đọc
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.164]** · **Khoản nợ liên quan:** 245 (đóng) · **Liên quan:**
+ADR-055 (vế ⑵ của ba thứ S2 làm được trước rò nghiệp vụ của BAFO), ADR-054 (giá dạng rõ và cổng đọc `bid.view`), ADR-091 (khuôn
+`AGENT_READ`: ghi sổ cùng giao dịch đọc), ADR-060 (cái giá vĩnh viễn của mỗi hàng sổ ở `verifyAuditChain`)
+
+### Bối cảnh
+
+`docs/PRODUCT.md` §5 và ADR-055 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC
+trước rò nghiệp vụ của BAFO. Lượt soi hình dạng spec S4 (S1.159) đọc ra điều ngược lại: `requirePermission` trả về mà không ghi khi
+người gọi có quyền, `buildComparisonTable` chỉ ghi `COMPARISON_DENIED`, và không đường nào ghi lượt đọc THÀNH CÔNG. Hàng 245 nêu câu
+phải chọn: ghi một hàng sổ cho mỗi lượt đọc — cái giá vĩnh viễn ở `verifyAuditChain` mà ADR-060 đã đo — hay viết lại lời khai.
+Đọc thêm lúc làm: giá dạng rõ sau mở thầu đi ra khỏi tiến trình qua ĐÚNG BA đường sau cổng `bid.view` — bảng so sánh
+(`buildComparisonTable`), bảng xếp hạng (`docBangXepHang`) và bộ bằng chứng (`xuatBoBangChung`, cổng `audit.read` cộng `bid.view`).
+Hai đường còn lại sau `bid.view` — `countReceivedBids` và `docTraoThau` — không mang một mức giá nào.
+
+### Quyết định (chủ dự án chọn "ghi sổ mỗi lượt đọc")
+
+1. **Mỗi lượt đọc trả giá để lại đúng một hàng sổ, trên CHÍNH `client` của giao dịch đọc**, ghi SAU mọi câu đọc và TRƯỚC khi hàm
+   trả về: `COMPARISON_VIEWED` (payload `{ rfqStatus, viewedBySessionId }`), `RANKING_VIEWED` (`{ evaluationId, viewedBySessionId }`),
+   `EVIDENCE_BUNDLE_EXPORTED` (`{ exportedBySessionId }`). `actorType = USER`, `actorId` là người đọc, `resourceType = RFQ`,
+   `resourceId` là gói thầu. Không payload nào mang một con số của bảng.
+2. **Hỏng thì hỏng cả lượt đọc.** Lần ghi hỏng NÉM ra khỏi hàm, giao dịch của người gọi rollback, và dữ liệu không đi ra. Qua HTTP,
+   lỗi ấy không thuộc bảng ánh xạ nào của bộ điều phối nên thành 500 thân cố định kèm một dòng log nêu mẫu route và SQLSTATE.
+3. **Hàng nằm TRONG giao dịch đọc, không ở giao dịch độc lập.** Ghi độc lập rồi trả dữ liệu là cái *"cổng gác im lặng"* mà
+   `packages/identity/src/index.ts` cấm: sổ hỏng mà giá vẫn đi. Hệ quả ngược với hàng từ chối: `COMPARISON_DENIED` sống qua rollback
+   của người gọi, còn `COMPARISON_VIEWED` cuộn lại cùng giao dịch đọc — lượt đọc không hoàn tất thì không có gì để ghi.
+4. **Chỉ lượt đọc TRẢ GIÁ mới ghi.** Lần từ chối giữ nguyên đường của nó (`PERMISSION_DENIED`, `COMPARISON_DENIED`); `null` của bảng
+   xếp hạng (*chưa chấm*) và của bộ bằng chứng (*chưa có gì để xuất*) không mang một con số nào nên không ghi.
+5. Không migration: `audit_events.action` không có CHECK tập giá trị.
+
+### Hệ quả, nói thẳng
+
+- **Chuỗi sổ dài thêm một hàng cho mỗi lượt đọc giá, vĩnh viễn** (ADR-060). Lượt đọc giá hiếm — vài lần mỗi gói thầu, do ba vai giữ
+  `bid.view` — nên cái giá nhỏ; nó không bị chặn trên bởi một trần tần suất nào.
+- **Mỗi lượt đọc giá nay lấy khoá tư vấn nối tiếp của tổ chức**, từ câu ghi tới COMMIT, dưới trần 2 s của 050. Khoá chuỗi sổ bị giữ
+  quá 2 s thì lượt đọc ra 500 thay vì ra bảng. Hướng đúng: không đọc được còn hơn đọc không có sổ.
+- **Đường CLI của bộ bằng chứng không ghi.** `tools/bo-xuat-danh-gia` gọi thẳng `dungBoBangChung` dưới một kết nối vận hành, không đi
+  qua `xuatBoBangChung`; người chạy nó đã cầm CSDL. Bộ bằng chứng KHÔNG chứa hàng nào của `audit_events`, nên hàng mới không làm lệch
+  byte giữa lần xuất qua HTTP và lần dựng của CLI (bước 12j của kịch bản 41 vẫn đo điều ấy).
+- **Hàng sổ không phải cổng quyền.** Cổng vẫn là `bid.view` (và `audit.read` cho bộ bằng chứng), đứng thẳng trong thân từng hàm.
+- Đo ở `packages/unseal/src/comparison.int.test.ts` và `packages/danh-gia/src/luot-danh-gia.int.test.ts` (khối khoản 245: đúng một
+  hàng với hình dạng payload trọn, không hàng cho lần từ chối hay `null`, hàng cuộn lại cùng giao dịch đọc, lần ghi hỏng thì không
+  dữ liệu nào đi ra), và ở bước 12, 12b, 12j của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` qua HTTP thật.
+
