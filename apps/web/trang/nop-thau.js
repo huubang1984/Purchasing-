@@ -139,10 +139,21 @@ $("nut-xac").addEventListener("click", async () => {
   const r = await goi("POST", "/guest/otp/verify", { orgId: phien.orgId, token: phien.token, code });
   $("nut-xac").disabled = false;
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Mã không đúng")); return; }
+  xoaManhLink();
   bao($("ok2"), "Đã xác minh. Phiên nằm trong cookie, mã phiên không đi qua JavaScript.");
   $("b2").classList.add("xong");
   await napGoiThau();
 });
+
+/**
+ * [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
+ * mã lời mời (`[H5]`, `packages/invitation`), nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa
+ * chỉ và lịch sử trình duyệt. `replaceState` không bắn `hashchange`. Trang này KHÔNG hỏi lại phiên khách lúc
+ * tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được mời lại, có xoá fragment hay không.
+ */
+function xoaManhLink() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Bước 3 — gói thầu và bảng giá
