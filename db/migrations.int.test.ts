@@ -1635,7 +1635,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
     { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
-    { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "019_unseal.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
+    // [S1.170 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
+    // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "073_ban_ro_cung_goi.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
     { ham: "users_thu_hoi_phien_khi_dinh_chi", migration: "034_dinh_chi_thu_hoi_phien.sql", trigger: ["users_thu_hoi_phien_khi_dinh_chi"] },
   ];
 
@@ -3268,6 +3270,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
+        "073_ban_ro_cung_goi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7683,6 +7686,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
+        "073_ban_ro_cung_goi.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7975,6 +7979,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "070_bid_currency.sql",
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
+        "073_ban_ro_cung_goi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
