@@ -70,9 +70,10 @@ Một công cụ mới, `tools/khoi-tao-to-chuc`, đọc một bản khai — t�
 2. chèn người dùng và vai. Trigger D3 và `033` chạy như với mọi lần gán vai;
 3. ghi một hàng sổ cho việc tạo tổ chức và một hàng cho mỗi lần gán vai (`actor_type` `SYSTEM`) — chuỗi sổ có hàng đầu
    tiên từ ngày đầu, và lượt neo đầu tiên có gì để neo;
-4. **không** tự xếp job gửi link đăng nhập. Một job do task chèn sẽ nằm chờ mãi: tiến trình `api` chỉ quét hàng đợi
-   của những tổ chức mà chính nó đã thấy xếp việc (`apps/api/src/composition.ts`, khoản 156), còn worker không nhận
-   loại job này. Link đầu tiên đi bằng một lời gọi `POST /api/auth/link` `{orgId, email}` cho mỗi người, qua ALB, sau
+4. **không** tự xếp job gửi link đăng nhập. Một job do task chèn sẽ nằm `PENDING`: tiến trình `api` chỉ quét hàng đợi
+   của những tổ chức mà chính nó đã thấy xếp việc (`apps/api/src/composition.ts`, khoản 156 — khoản 197 chỉ đóng ca
+   xếp việc bên trong `api`), còn worker không nhận loại job này. Nó chỉ được nhặt khi chính tổ chức ấy có một yêu cầu
+   xếp việc qua `api` — với một tổ chức mới mà chưa ai đăng nhập được, tức là không bao giờ. Link đầu tiên đi bằng một lời gọi `POST /api/auth/link` `{orgId, email}` cho mỗi người, qua ALB, sau
    khi task xong — lời gọi ấy xếp việc và đánh thức bộ chạy ngay trong `api`. Cần sửa thư đăng nhập trước (mục 4, việc 2).
 
 Công cụ đóng gói thành đích `khoi-tao` của `deploy/Dockerfile` và task definition `tp-khoi-tao` trong stack `90-ecs`,
