@@ -272,7 +272,7 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   // `CHUA_CHAM_LAN_NAO`, `KHONG_CO_DE_XUAT_DANG_CHO`, `KHONG_CO_AWARD_CON_SONG`). Ba lần liên
   // tiếp dòng này bị quên là ba lần một câu "gói thầu đang ở trạng thái khác" đi ra dưới 500.
   "TraoThauTuChoiError",
-  // [S1.158 / S3.1b / ADR-084 ⑷] Lớp từ chối thứ ba của K12 — một CHỐT KIỂM SOÁT chặn (`CHOT_VAO_SO`,
+  // [S1.163 / S3.1b / ADR-084 ⑷] Lớp từ chối thứ ba của K12 — một CHỐT KIỂM SOÁT chặn (`CHOT_VAO_SO`,
   // `packages/rfq/src/chot-kiem-soat.ts`). Thông điệp là hằng của bảng, không nội suy dữ liệu nào.
   "ChotKiemSoatError",
 ]);
