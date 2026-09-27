@@ -427,6 +427,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/test-support
 
+  tools/pilot-gia-lap:
+    dependencies:
+      '@trustprocure/bidding':
+        specifier: workspace:*
+        version: link:../../packages/bidding
+      '@trustprocure/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@trustprocure/sealed-envelope':
+        specifier: workspace:*
+        version: link:../../packages/sealed-envelope
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
 packages:
 
   '@aws-sdk/checksums@3.1001.1':

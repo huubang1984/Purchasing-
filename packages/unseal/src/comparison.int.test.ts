@@ -763,13 +763,13 @@ describe("[INV-D5] [S1.72 / khoản 121] bảng so sánh từ chối vì A4 thì
 });
 
 // ===============================================================================================
-// [S1.9101 / khoản 245 / ADR-9201] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
+// [S1.164 / khoản 245 / ADR-102] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
 //
 // `docs/PRODUCT.md` §5 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC trước
 // rò nghiệp vụ của BAFO. Trước vòng này chỉ lần TỪ CHỐI vào sổ (khối `[INV-D5]` ngay trên đo đúng điều đó: *"lần cho qua không
 // ghi"*). Khối này đo lần CHO QUA: đúng một hàng, cùng sống cùng chết với giao dịch đọc, và ghi hỏng thì không bảng nào đi ra.
 // ===============================================================================================
-describe("[S1.9101 / khoản 245] lượt ĐỌC bảng so sánh để lại một hàng sổ, trong chính giao dịch đọc", () => {
+describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại một hàng sổ, trong chính giao dịch đọc", () => {
   const GIA_A = "4440000.00";
   const GIA_B = "5550000.00";
 

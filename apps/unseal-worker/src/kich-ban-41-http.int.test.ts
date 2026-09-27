@@ -256,7 +256,7 @@ async function trangThaiRfq(): Promise<string> {
 }
 
 /**
- * [S1.9101 / khoản 245] Số hàng sổ của một `action` trên gói thầu của kịch bản, và người ghi hàng MỚI NHẤT — đọc dưới vai superuser.
+ * [S1.164 / khoản 245] Số hàng sổ của một `action` trên gói thầu của kịch bản, và người ghi hàng MỚI NHẤT — đọc dưới vai superuser.
  * Ba lượt đọc giá (bảng so sánh, bảng xếp hạng, bộ bằng chứng) mỗi lượt để lại đúng một hàng; lần bị từ chối không để lại hàng nào.
  */
 async function soHangDoc(action: string): Promise<{ n: number; nguoiMoiNhat: string | null }> {
@@ -735,7 +735,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const truocXem = await soHangDoc("COMPARISON_VIEWED");
     const r = await goi("GET", `/rfqs/${trangThai.rfqId}/comparison`, trangThai.mua.cookie);
     expect(r.status, r.text).toBe(200);
-    // [S1.9101 / khoản 245] Lần đầu giá đi ra cũng là lần đầu có một hàng `COMPARISON_VIEWED` — của đúng người đã đọc.
+    // [S1.164 / khoản 245] Lần đầu giá đi ra cũng là lần đầu có một hàng `COMPARISON_VIEWED` — của đúng người đã đọc.
     const sauXem = await soHangDoc("COMPARISON_VIEWED");
     expect(sauXem.n - truocXem.n, "một lượt đọc bảng so sánh ⇒ đúng một hàng sổ").toBe(1);
     expect(sauXem.nguoiMoiNhat).toBe(trangThai.mua.id);
@@ -773,12 +773,12 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // Và cổng đọc đứng đúng chỗ: người bấm chấm không có `bid.view` thì không đọc được bảng xếp hạng.
     const truocXem = await soHangDoc("RANKING_VIEWED");
     expect((await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, trangThai.cham.cookie)).status).toBe(403);
-    expect((await soHangDoc("RANKING_VIEWED")).n, "[S1.9101 / khoản 245] lần bị từ chối KHÔNG phải một lượt đọc").toBe(truocXem.n);
+    expect((await soHangDoc("RANKING_VIEWED")).n, "[S1.164 / khoản 245] lần bị từ chối KHÔNG phải một lượt đọc").toBe(truocXem.n);
 
     const bxh = await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, m);
     expect(bxh.status, bxh.text).toBe(200);
     const sauXem = await soHangDoc("RANKING_VIEWED");
-    expect(sauXem.n - truocXem.n, "[S1.9101 / khoản 245] một lượt đọc bảng xếp hạng ⇒ đúng một hàng sổ").toBe(1);
+    expect(sauXem.n - truocXem.n, "[S1.164 / khoản 245] một lượt đọc bảng xếp hạng ⇒ đúng một hàng sổ").toBe(1);
     expect(sauXem.nguoiMoiNhat).toBe(trangThai.mua.id);
     const bang = (bxh.body as {
       ranking: {
@@ -1293,11 +1293,11 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const truocXuat = await soHangDoc("EVIDENCE_BUNDLE_EXPORTED");
     const chan = await goi("GET", duong, trangThai.mua.cookie);
     expect(chan.status, chan.text).toBe(403);
-    expect((await soHangDoc("EVIDENCE_BUNDLE_EXPORTED")).n, "[S1.9101 / khoản 245] lần xuất bị từ chối KHÔNG vào sổ như một lần xuất").toBe(truocXuat.n);
+    expect((await soHangDoc("EVIDENCE_BUNDLE_EXPORTED")).n, "[S1.164 / khoản 245] lần xuất bị từ chối KHÔNG vào sổ như một lần xuất").toBe(truocXuat.n);
 
     const ok = await goi("GET", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(200);
-    // [S1.9101 / khoản 245] Bộ bằng chứng mang giá của từng báo giá — lần xuất là một lượt đọc giá, nên để lại đúng một hàng.
+    // [S1.164 / khoản 245] Bộ bằng chứng mang giá của từng báo giá — lần xuất là một lượt đọc giá, nên để lại đúng một hàng.
     const sauXuat = await soHangDoc("EVIDENCE_BUNDLE_EXPORTED");
     expect(sauXuat.n - truocXuat.n).toBe(1);
     expect(sauXuat.nguoiMoiNhat).toBe(trangThai.gd1.id);

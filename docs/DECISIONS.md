@@ -5666,7 +5666,7 @@ người, và một câu *"anh đang đứng thứ hai, hạ 3% là thắng"* n�
 nào thấy. Thứ S2 làm được là ⑴ danh sách mời SUY ra nên một lần mời ngoài top-N để lại dấu, ⑵ mọi
 lần đọc bảng so sánh đã có sổ, ⑶ giá vòng hai niêm phong lại.
 
-**[S1.9101 / khoản 245]** Vế ⑵ SAI từ lúc viết tới vòng S1.9101: chỉ lần TỪ CHỐI đọc bảng so sánh có sổ. ADR-9201 làm nó đúng,
+**[S1.164 / khoản 245]** Vế ⑵ SAI từ lúc viết tới vòng S1.164: chỉ lần TỪ CHỐI đọc bảng so sánh có sổ. ADR-102 làm nó đúng,
 và rộng hơn chữ của nó: mỗi lượt đọc bảng so sánh, bảng xếp hạng và mỗi lần xuất bộ bằng chứng ghi một hàng sổ trong chính giao
 dịch đọc.
 
@@ -7993,9 +7993,50 @@ Hai bất biến mới ở spec S4b §11.1: **L24** (dấu dữ liệu mẫu) v�
 
 ---
 
-## ADR-9201 — Lượt đọc giá sau mở thầu ghi sổ trong chính giao dịch đọc
+## ADR-101 — Pilot giả lập: danh mục kịch bản đi qua API thật, và một ranh giới không thay khách hàng pilot
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.9101]** · **Khoản nợ liên quan:** 245 (đóng) · **Liên quan:**
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-043, ADR-044, ADR-060, ADR-062 · Kế hoạch:
+`docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`
+
+### Bối cảnh
+
+Mảnh 4 của `docs/PRODUCT.md` §11 (*khách hàng pilot*) đứng yên từ 2026-08-27, và không đơn vị nào nhận pilot một sản
+phẩm chưa hoàn thiện. Thứ dự án có để cho xem là lát cắt demo của ADR-044: `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL
+thô. Gói ấy không có hàng sổ `RFQ_CREATED`, `RFQ_APPROVED` hay `RFQ_OPENED`, và tổ chức của nó không có FINANCE, nên
+không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới: *"Một pilot giả lập cho ra bằng chứng giả lập"*.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Tài liệu + công cụ** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`). Công cụ tự dựng một cụm cục bộ đủ bốn tiến
+   trình, gieo **hai** doanh nghiệp giả lập (Sản xuất cơ khí, Xây dựng) và chạy một danh mục mười một kịch bản viết bằng
+   dữ liệu.
+2. **Mọi bước nghiệp vụ đi qua HTTP của `apps/api`**, gồm đăng nhập bằng link cộng TOTP và OTP của nhà cung cấp; nhà cung
+   cấp niêm phong bằng `sealBid`. Kết nối đặc quyền chỉ làm năm việc không có đường ứng dụng — `migrate()`, hai vai đăng
+   nhập, tổ chức, người dùng kèm vai, và ba câu CHỈ ĐỌC: tổng số hàng sổ kiểm toán của một tổ chức (trước và sau mỗi lần
+   thử sai), số hàng sổ theo hành động, và dấu kiểm vòng khoá ở `master_key_check_values` — và nó được khai ở
+   `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`.
+3. **Thời gian thật, không lùi ngày.** Chế độ nhanh đóng sớm có lý do; cờ `--cham` đợi hạn nộp thật. Sổ kiểm toán ép
+   `clock_timestamp()`, nên một bộ dữ liệu lùi ngày sẽ mâu thuẫn với chính sổ.
+4. **Dữ liệu dùng cho cả kiểm tính năng lẫn trình diễn.** Bốn gói dừng cố ý ở trạng thái dở; ba lệnh `dang-nhap`, `otp`,
+   `lien-ket` cho người trình diễn đi tiếp trên màn hình mà không gõ SQL.
+5. **Dữ liệu tự khai là bịa, báo cáo tự khai là giả lập.**
+   - Nhãn `[GIẢ LẬP]`/`[GL]`, tên miền `.invalid`, mã số thuế mở đầu bằng bảy số 0, IP thuộc `2001:db8::/32`.
+   - Báo cáo mở đầu bằng *"KHÔNG PHẢI PILOT"* và không mang token nào; token và bí mật TOTP chỉ nằm ở thư mục trạng
+     thái 0700 (trên POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha), có trong `.gitignore`.
+   - Công cụ chỉ nhận CSDL cục bộ.
+
+### Hệ quả, nói thẳng
+
+- **Không đóng mảnh 4, không đổi rổ A.** Thang bậc tới pilot thật ở mục 7 của kế hoạch là ĐỀ XUẤT, chưa được chọn.
+- Công cụ gắn chặt với hình dạng route. Một thay đổi route làm lượt giả lập đỏ, và đó là điều muốn có, nhưng lượt ấy
+  **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chỉ chạy test đơn vị của công cụ.
+- Trình diễn trên điện thoại thật cần một cụm TLS (cookie `Secure`, ADR-044). Cụm của công cụ chỉ nghe trên 127.0.0.1.
+- Lượt đầu đo ra khoản **247**: lần từ chối J3 và D2 không để lại hàng sổ hay dòng log nào. Câu *"mỗi lần từ chối để lại
+  một dòng"* ở `docs/PRODUCT.md` §5 được sửa tại chỗ.
+
+## ADR-102 — Lượt đọc giá sau mở thầu ghi sổ trong chính giao dịch đọc
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.164]** · **Khoản nợ liên quan:** 245 (đóng) · **Liên quan:**
 ADR-055 (vế ⑵ của ba thứ S2 làm được trước rò nghiệp vụ của BAFO), ADR-054 (giá dạng rõ và cổng đọc `bid.view`), ADR-091 (khuôn
 `AGENT_READ`: ghi sổ cùng giao dịch đọc), ADR-060 (cái giá vĩnh viễn của mỗi hàng sổ ở `verifyAuditChain`)
 

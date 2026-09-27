@@ -238,6 +238,13 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
       "buộc phải có `role`, nên một kết nối đặc quyền phải dựng pool thẳng. Bán kính: công cụ DEV, đòi một biến môi " +
       "trường RIÊNG (TRUSTPROCURE_SEED_DATABASE_URL) chứ không mượn biến của apps/api, và phần CÓ tenant vẫn đi qua withTenant",
   },
+  "tools/pilot-gia-lap/src/csdl.ts": {
+    so: 1,
+    lyDo:
+      "[ADR-101] pilot giả lập: cùng lý do với gieo-demo — nó TẠO tenant (tổ chức, người dùng, vai) mà app_api không có INSERT, " +
+      "chạy migrate() và đảm bảo hai vai đăng nhập như chay-migrate, nên không dùng được createPool có vai. Bán kính: công cụ DEV, " +
+      "biến môi trường RIÊNG, CHỈ nhận CSDL cục bộ (kiemUrlCucBo); mọi bước nghiệp vụ còn lại đi qua HTTP của apps/api",
+  },
   "packages/test-support/src/postgres.ts": {
     so: 3,
     lyDo: "hạ tầng test: pg.Client dựng CSDL của cụm thử, pool superuser của cụm là cố ý, poolAs bọc ganVaiTroChoPool",
@@ -282,6 +289,16 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "phê duyệt RFQ — chạy trước khi tenant ấy TỒN TẠI, nên chúng không gắn được tenant theo định nghĩa: `withTenant` " +
       "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
       "withTenant, và đó là ranh giới thật giữa hai nửa của script",
+  },
+  "tools/pilot-gia-lap/src/csdl.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[ADR-101] MỘT chỗ gọi (`cau`) mà mọi câu đặc quyền của pilot giả lập đi qua: kiểm/tạo hai vai đăng nhập, gieo tổ chức, " +
+      "người dùng và vai — chạy trước khi tenant TỒN TẠI nên không gắn được tenant — và ba câu CHỈ ĐỌC: số hàng sổ kiểm toán " +
+      "của một tổ chức (trước và sau mỗi lần thử sai, cho cột Vào sổ), số hàng sổ theo hành động (báo cáo, và lời khai " +
+      "BID_DEADLINE_DENIED của SX-06), và CSDL đã có dấu kiểm vòng khoá ở master_key_check_values chưa (trước khi sinh bí mật " +
+      "cụm). Không một bước nghiệp vụ nào (gói thầu, lời mời, báo giá, mở thầu, trao thầu) đi qua đây",
   },
   "tools/neo-so-kiem-toan/src/index.ts": {
     lay: 0,

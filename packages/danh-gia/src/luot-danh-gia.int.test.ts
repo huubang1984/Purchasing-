@@ -2543,13 +2543,13 @@ describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có 
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 245 / ADR-9201] LƯỢT ĐỌC BẢNG XẾP HẠNG ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
+// [S1.164 / khoản 245 / ADR-102] LƯỢT ĐỌC BẢNG XẾP HẠNG ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
 //
 // Bảng xếp hạng mang `effectiveCost` và thứ hạng của mọi báo giá — cùng hạng tin với bảng so sánh — nên nó chịu cùng luật với
 // `COMPARISON_VIEWED` (`packages/unseal/src/comparison.int.test.ts`): đúng một hàng cho mỗi lượt đọc trả bảng, không hàng nào cho
 // lần từ chối hay cho `null`, hàng cuộn lại cùng giao dịch đọc, và ghi hỏng thì không bảng nào đi ra.
 // ==============================================================================================
-describe("[S1.9101 / khoản 245] lượt ĐỌC bảng xếp hạng để lại một hàng sổ, trong chính giao dịch đọc", { timeout: 180000 }, () => {
+describe("[S1.164 / khoản 245] lượt ĐỌC bảng xếp hạng để lại một hàng sổ, trong chính giao dịch đọc", { timeout: 180000 }, () => {
   async function demXem(rfqId: string): Promise<number> {
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RANKING_VIEWED' AND resource_id = $2",

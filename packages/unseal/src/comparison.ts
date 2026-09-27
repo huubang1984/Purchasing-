@@ -376,7 +376,7 @@ export async function buildComparisonTable(
   const mot = th.length === 1 ? th[0] : undefined;
 
   // ==============================================================================================
-  // [S1.9101 / khoản 245 / ADR-9201] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC.
+  // [S1.164 / khoản 245 / ADR-102] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC.
   //
   // `docs/PRODUCT.md` §5 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC trước
   // rò nghiệp vụ của BAFO; tới vòng này chỉ lần TỪ CHỐI được ghi (`PERMISSION_DENIED` ở cổng trên, `COMPARISON_DENIED` ở nhánh
