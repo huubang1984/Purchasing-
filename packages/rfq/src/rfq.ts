@@ -444,7 +444,7 @@ export async function approveRfq(
       [orgId, input.rfqId, actor.id, actor.sessionId],
     );
   } catch (loi) {
-    // [S1.9101 / khoản 247 / ADR-9201] D2 ở bước DUYỆT GÓI — người tạo tự duyệt, phiên không hợp lệ, phiên của người khác — sống
+    // [S1.167 / khoản 247 / ADR-104] D2 ở bước DUYỆT GÓI — người tạo tự duyệt, phiên không hợp lệ, phiên của người khác — sống
     // ở trigger `rfq_kiem_nguoi_duyet` (`011`): `RAISE … (D2)` với 23514 huỷ giao dịch, nên trước vòng này lần vi phạm không để lại
     // hàng sổ nào (`pnpm pilot:gia-lap`: người tạo tự duyệt gói ⇒ 422 *"(D2)"*, 0 hàng). Cùng khuôn nhánh D2 của `approveUnseal`:
     // ghi ở `auditPool` rồi ném lại CHÍNH lỗi của trigger, nên mã 422 và thông điệp không đổi; trigger vẫn là lớp có thẩm quyền.

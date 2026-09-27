@@ -6116,9 +6116,9 @@ không lối nào ở tầng gói ghi được. Lớp gói bắt trước ở đ
 chấp thật — và khi ấy sổ im. Đó là giới hạn còn lại, và nó được ghi ra chứ không để người sau tưởng đã
 kín. Và nó **không** đổi cách `requirePermission` ghi từ chối QUYỀN: đường ấy không đổi một dòng.
 
-**[S1.9101 / khoản 247 / ADR-9201]** Câu *"không lối nào ở tầng gói ghi được"* đúng với lối ghi của ADR này (`nemTuChoi` trước câu
+**[S1.167 / khoản 247 / ADR-104]** Câu *"không lối nào ở tầng gói ghi được"* đúng với lối ghi của ADR này (`nemTuChoi` trước câu
 ghi), nhưng tiền đề *"lớp gói bắt trước ở đường thuận"* thì SAI với bảy lần từ chối mà pilot giả lập đo được: J3 cả ba vế, D2 ở
-duyệt gói và hai nhánh chặn của câu nộp không có lớp gói nào bắt trước. ADR-9201 ghi chúng bằng một lối khác — bắt CHÍNH lỗi
+duyệt gói và hai nhánh chặn của câu nộp không có lớp gói nào bắt trước. ADR-104 ghi chúng bằng một lối khác — bắt CHÍNH lỗi
 của trigger rồi ghi ở giao dịch độc lập — nên với bảy lần ấy sổ không còn im. Ca đua nhau trên các trigger khác vẫn như câu trên.
 
 ---
@@ -8145,9 +8145,9 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 ---
 
-## ADR-9201 — Lần từ chối do TRIGGER của tách bạch nhiệm vụ và của câu nộp vào sổ: bắt chính lỗi của trigger rồi ghi
+## ADR-104 — Lần từ chối do TRIGGER của tách bạch nhiệm vụ và của câu nộp vào sổ: bắt chính lỗi của trigger rồi ghi
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.9101]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.167]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
 (từ chối trạng thái vào sổ có chọn lọc), ADR-074 (lần chặn VÌ HẠN của câu nộp vào sổ), ADR-101 (pilot giả lập — nơi đo ra khoản
 này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi)
 

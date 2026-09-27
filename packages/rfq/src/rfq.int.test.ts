@@ -1662,13 +1662,13 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 247 / ADR-9201] LẦN VI PHẠM D2 Ở BƯỚC DUYỆT GÓI ĐỂ LẠI MỘT HÀNG SỔ
+// [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM D2 Ở BƯỚC DUYỆT GÓI ĐỂ LẠI MỘT HÀNG SỔ
 //
 // `rfq_kiem_nguoi_duyet` (`011`) chặn người tạo tự duyệt bằng một `RAISE … (D2)`, huỷ giao dịch — trước vòng này 0 hàng sổ. Nay
 // `approveRfq` ghi `RFQ_APPROVAL_DENIED` ở giao dịch ĐỘC LẬP rồi ném lại CHÍNH lỗi ấy. Lần từ chối vì TRẠNG THÁI và lần trùng
 // người duyệt không mang *"(D2)"* nên không thêm hàng nào.
 // ==============================================================================================
-describe("[S1.9101 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng `RFQ_APPROVAL_DENIED`", () => {
+describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng `RFQ_APPROVAL_DENIED`", () => {
   async function hangSoD2(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
       "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_APPROVAL_DENIED' AND resource_id = $2 ORDER BY seq",

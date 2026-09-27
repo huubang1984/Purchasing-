@@ -742,7 +742,7 @@ const DANH_SACH_TRANG_BIDDING = [
   "BiddingError",
   // [khoản 196] Lớp lỗi của lần chặn VÌ HẠN — mang hai dấu thời gian do trigger `066` đặt; không mang năng lực nào.
   "NopQuaHanError",
-  // [S1.9101 / khoản 247] Lớp lỗi của hai nhánh chặn còn lại của câu nộp — cùng hợp đồng giao dịch-còn-lành; không mang năng lực nào.
+  // [S1.167 / khoản 247] Lớp lỗi của hai nhánh chặn còn lại của câu nộp — cùng hợp đồng giao dịch-còn-lành; không mang năng lực nào.
   "NopBiTuChoiError",
   "auditStoredCiphertexts",
   "RECEIPT_FORMAT_LABEL",

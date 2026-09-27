@@ -2875,13 +2875,13 @@ describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: hu�
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 247 / ADR-9201] MỖI LẦN VI PHẠM J3 ĐỂ LẠI MỘT HÀNG SỔ
+// [S1.167 / khoản 247 / ADR-104] MỖI LẦN VI PHẠM J3 ĐỂ LẠI MỘT HÀNG SỔ
 //
 // Ba vế của J3 sống ở trigger, nên lần vi phạm huỷ giao dịch của người gọi — trước vòng này 0 hàng sổ (`pnpm pilot:gia-lap`).
 // Nay lớp gói bắt lỗi của trigger, ghi `RFQ_AWARD_SOD_DENIED` ở giao dịch ĐỘC LẬP, rồi ném lại CHÍNH lỗi ấy: thông điệp và mã
 // không đổi (các ca `[INV-J3]` ở trên vẫn khớp nguyên văn), và hàng sổ sống qua rollback.
 // ==============================================================================================
-describe("[S1.9101 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ_AWARD_SOD_DENIED`", { timeout: 300000 }, () => {
+describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ_AWARD_SOD_DENIED`", { timeout: 300000 }, () => {
   async function hangSoJ3(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
       "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_AWARD_SOD_DENIED' AND resource_id = $2 ORDER BY seq",

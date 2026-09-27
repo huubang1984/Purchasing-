@@ -73,7 +73,7 @@ export class NopQuaHanError extends BiddingError {
 }
 
 /**
- * [S1.9101 / khoản 247 / ADR-9201] Lần nộp bị chặn KHÔNG vì hạn — gói thầu không ở trạng thái nhận báo giá (đã huỷ, đã đóng…),
+ * [S1.167 / khoản 247 / ADR-104] Lần nộp bị chặn KHÔNG vì hạn — gói thầu không ở trạng thái nhận báo giá (đã huỷ, đã đóng…),
  * luồng báo giá nằm ngoài top-N của vòng BAFO, hay phiên khách hỏng giữa lần kiểm và câu ghi.
  *
  * CÙNG HỢP ĐỒNG VỚI `NopQuaHanError`, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** — `submitBid` đã lùi về
@@ -270,7 +270,7 @@ export async function submitBid(
         });
         throw new NopQuaHanError(viHan.gioCsdl, viHan.hanNop, { cause: loi });
       }
-      // [S1.9101 / khoản 247 / ADR-9201] Hai nhánh còn lại của C1 và nhánh BAFO — nộp khi gói đã huỷ hay đã đóng, nộp ngoài
+      // [S1.167 / khoản 247 / ADR-104] Hai nhánh còn lại của C1 và nhánh BAFO — nộp khi gói đã huỷ hay đã đóng, nộp ngoài
       // top-N — trước vòng này đi ra dưới một `BiddingError` NÉM, tức giao dịch rollback và không hàng sổ nào (`pnpm
       // pilot:gia-lap`: hai lần 422, 0 hàng). Chúng là vế GHI của ADR-060 theo đúng cách ADR-074 đọc nó cho bước nộp: một người
       // đi bước nộp khi chuỗi không còn cho phép. Cùng lối của nhánh VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn lành,

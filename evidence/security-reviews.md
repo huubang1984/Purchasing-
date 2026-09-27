@@ -13721,13 +13721,13 @@ một ĐỘT BIẾN:
   docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
   các dòng tổng và dòng mốc.
 
-# §S1.9101 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI DO TRIGGER CỦA TÁCH BẠCH NHIỆM VỤ VÀ CỦA CÂU NỘP BÁO GIÁ ĐỂ LẠI HÀNG SỔ
+# §S1.167 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI DO TRIGGER CỦA TÁCH BẠCH NHIỆM VỤ VÀ CỦA CÂU NỘP BÁO GIÁ ĐỂ LẠI HÀNG SỔ
 
 ## 1. Việc gì
 
 Khoản 247 (S1.163, đo trên pilot giả lập): năm lần từ chối của tách bạch nhiệm vụ (J3 cả ba vế, D2 ở duyệt gói) và hai lần
 từ chối nộp báo giá (gói huỷ, ngoài top-N BAFO) trả 422 nhưng để lại **0 hàng sổ**, vì lần từ chối đến từ trigger và 422 của
-trigger huỷ giao dịch. Chủ dự án chọn *ghi sổ cả bảy lần* — ADR-9201.
+trigger huỷ giao dịch. Chủ dự án chọn *ghi sổ cả bảy lần* — ADR-104.
 
 ## 2. Đo trước
 
@@ -13746,7 +13746,7 @@ mong đợi. Năm ca đỏ: D2 tự duyệt gói; nộp vào gói CLOSED; J3 v�
   ghi `BID_SUBMIT_DENIED` (`actorType SUPPLIER`, `{rfqStatus}`) trong chính giao dịch và ném `NopBiTuChoiError` (con của
   `BiddingError`, giữ nguyên thông điệp chung). `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng ấy commit — tiền lệ
   ADR-074.
-- `docs/PRODUCT.md` §5 (hàng S1.110) hết khai ngược cho J3; ADR-060 thêm ghi chú trỏ sang ADR-9201; báo cáo pilot giả lập
+- `docs/PRODUCT.md` §5 (hàng S1.110) hết khai ngược cho J3; ADR-060 thêm ghi chú trỏ sang ADR-104; báo cáo pilot giả lập
   sửa lời chú.
 
 ## 4. Đo sau

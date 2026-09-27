@@ -56,7 +56,7 @@ import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 
 // ==============================================================================================
-// [S1.9101 / khoản 247 / ADR-9201] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER
+// [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER
 //
 // J3 sống ở hai trigger của `061` (`award_kiem_de_xuat`, thân từ `064`, và `award_kiem_nguoi_duyet`). Lần vi phạm là một `RAISE
 // … (J3)` với SQLSTATE 23514: nó huỷ giao dịch của người gọi, nên trước vòng này không lối nào ghi được nó — `pnpm pilot:gia-lap`
@@ -332,7 +332,7 @@ export async function deXuatTraoThau(
       ],
     ));
   } catch (loi) {
-    // [S1.9101 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
+    // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
     // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném lại CHÍNH lỗi của trigger — xem `ghiTuChoiJ3`.
     const ve = veJ3(loi);
     if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);
@@ -463,7 +463,7 @@ export async function duyetTraoThau(
       [orgId, dx.id, actor.id, input.actorSessionId],
     );
   } catch (loi) {
-    // [S1.9101 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
+    // [S1.167 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
     // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi chính lỗi trigger.
     const ve = veJ3(loi);
     if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);

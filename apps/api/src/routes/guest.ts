@@ -144,7 +144,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         if (loi instanceof NopQuaHanError) {
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
-        // [S1.9101 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang `BID_SUBMIT_DENIED`.
+        // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang `BID_SUBMIT_DENIED`.
         if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message } };
         throw loi;
       }

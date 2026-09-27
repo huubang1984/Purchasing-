@@ -208,7 +208,7 @@ export function dungBaoCaoMarkdown(kq: KetQuaChay): string {
   ra.push(
     "*Vào sổ* là một phép ĐO (số hàng `audit_events` của tổ chức trước và sau lần thử), không phải điều kiện đạt: luật ghi sổ từ chối " +
       "của dự án là chọn lọc (ADR-060). Bảy lần từ chối do trigger mà khoản 247 đo được — J3 ba vế, D2 ở duyệt gói, nộp sau khi gói " +
-      "đóng hay huỷ, nộp ngoài top-N — vào sổ từ S1.9101 (ADR-9201): lớp gói bắt lỗi của trigger rồi ghi. " +
+      "đóng hay huỷ, nộp ngoài top-N — vào sổ từ S1.167 (ADR-104): lớp gói bắt lỗi của trigger rồi ghi. " +
       "Một dòng **không** ở đây là thứ cần đối chiếu với lời khai của chính ràng buộc ấy — không tự động là một khiếm khuyết.",
     "",
   );

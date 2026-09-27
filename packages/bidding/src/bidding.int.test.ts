@@ -259,7 +259,7 @@ async function tuChoiTuCsdl(viec: Promise<unknown>, mau: RegExp): Promise<void> 
     (e: unknown) => e,
   );
   expect(loi, "lần nộp này phải bị từ chối").not.toBeNull();
-  // [S1.9101 / khoản 247] Lần chặn của trigger KHÔNG vì hạn nay mang tên riêng `NopBiTuChoiError` — vẫn là một `BiddingError`.
+  // [S1.167 / khoản 247] Lần chặn của trigger KHÔNG vì hạn nay mang tên riêng `NopBiTuChoiError` — vẫn là một `BiddingError`.
   expect((loi as Error).name, "phải là lỗi nghiệp vụ CÓ TÊN, không phải lỗi pg trần").toBe("NopBiTuChoiError");
   expect(loi).toBeInstanceOf(BiddingError);
   const nguyenNhan = (loi as { cause?: unknown }).cause;
@@ -836,13 +836,13 @@ describe("[ADR-016] danh tính của nhà cung cấp là DẪN XUẤT của phi�
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 247 / ADR-9201] HAI NHÁNH CHẶN CÒN LẠI CỦA CÂU NỘP CŨNG VÀO SỔ
+// [S1.167 / khoản 247 / ADR-104] HAI NHÁNH CHẶN CÒN LẠI CỦA CÂU NỘP CŨNG VÀO SỔ
 //
 // Trước vòng này, nộp khi gói đã đóng hay đã huỷ — và nộp ngoài top-N của vòng BAFO — ra một `BiddingError` NÉM: giao dịch rollback,
 // 0 hàng sổ (`pnpm pilot:gia-lap` đo được). Nay cùng hợp đồng với nhánh VÌ HẠN: lỗi có tên, giao dịch CÒN LÀNH, và commit để lại
 // đúng một hàng `BID_SUBMIT_DENIED` mang người đã xác thực và trạng thái gói — không một phiên bản, không một luồng báo giá nào.
 // ==============================================================================================
-describe("[S1.9101 / khoản 247] lần nộp bị chặn không vì hạn để lại một hàng sổ", () => {
+describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để lại một hàng sổ", () => {
   it("gói đã ĐÓNG ⇒ NopBiTuChoiError; giao dịch còn lành; commit để lại đúng một `BID_SUBMIT_DENIED` { rfqStatus: CLOSED }, không luồng nào", async () => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
