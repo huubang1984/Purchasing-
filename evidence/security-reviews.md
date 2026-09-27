@@ -12783,3 +12783,11 @@ một ĐỘT BIẾN:
   Bộ sinh đòi nâng tay mốc ghim độ phủ 63 → 64 (`MOC_GHIM.soPhuToiThieu`). Diff của `evidence/INV-matrix.md`: hàng K1
   (**11** ca đạt — 10 ở `bac-chinh-sach`, 1 qua HTTP), các dòng tổng và dòng mốc; không hàng nào khác đổi.
 - Số tạm `S1.157`, `070_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
+- **Trên cây đã cấp số** (vòng S1.157, migration `070_bac_cua_goi`), `pnpm test` đỏ MỘT ca: `[INV-H21]` sàn-theo-tệp của bộ
+  đọc QT3 — `chot-kiem-soat.ts` gọi `.query(` với câu truyền từ `rfq.ts`, nên tệp ấy không mang câu nào. Các lượt trên không
+  thấy vì bộ liệt kê tệp đọc `git ls-files`, và khi ấy `chot-kiem-soat.ts` cùng migration mới còn CHƯA được theo dõi: mọi
+  phép kiểm liệt kê bằng git đã đo một cây thiếu hai tệp mới. Sửa: câu hỏi của K1 thành hằng `CAU_CHOT_NGAN_SACH` cạnh bảng
+  `CHOT_VAO_SO`. Rồi đo lại TẤT CẢ trên cây đã commit: `pnpm t0` sạch; `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua**; cả kho
+  một lượt **170 tệp, 2757 ca — 2748 đạt, 1 bỏ qua, 8 đỏ** (đúng 8 ca `test-support` cần docker); `db/migrations.int.test.ts`
+  **118/118**; `qt3-cu-phap`, `qt3-ngu-phap` xanh; ma trận sinh lại từ báo cáo ấy khớp từng byte bản đã commit, cổng evidence
+  XANH; `pnpm cap-so --kiem` sạch.
