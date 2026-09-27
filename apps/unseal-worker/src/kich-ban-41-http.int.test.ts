@@ -514,7 +514,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
-    const hy: { unsealId: string; mfaResetId: string } = { unsealId: UUID0, mfaResetId: UUID0 };
+    const hy: { unsealId: string; mfaResetId: string; policyId: string } = { unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0 };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
     const thanHopLe = (r: (typeof ROUTES)[number]): { path: string; body: unknown; cookie: string; sau?: (ph: PhanHoi) => void } | null => {
@@ -541,7 +541,19 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
         case "POST /policy":
           // [S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
-          return { path: r.path, body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 }, cookie: trangThai.taiChinh.cookie };
+          return {
+            path: r.path,
+            body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 },
+            cookie: trangThai.taiChinh.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.policyId = (ph.body as { policy: { id: string } }).policy.id;
+            },
+          };
+        // [S1.169 / S3.1c] Lần ký đứng sau cờ triển khai (ADR-105), và bộ điều phối của kịch bản này không khai cờ ⇒ TẮT:
+        // lời gọi qua cổng `policy.manage`, tới handler, và dừng ở 409 có tên — không ở một 422 hình dạng. Đích là bản v2 mà
+        // ca ngay trên vừa tạo; cờ có mở thì lời gọi cũng dừng ở trigger (bản không bậc), không bật S3 cho tổ chức.
+        case "POST /policy/:policyId/sign":
+          return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };
         case "POST /suppliers":
           return { path: r.path, body: { legalName: "Cong ty Quet", taxCode: "0388888888" }, cookie: m };
         case "POST /suppliers/:supplierId/contacts":
