@@ -4490,6 +4490,11 @@ MAI SAU, và nó nay có phép đo riêng: một route tự thân có handler N�
 - **`breakGlassWitnessSessionId`** (`packages/unseal/src/requests.ts`) là chỗ duy nhất trong kho một `sessionId` thứ hai là ĐẦU VÀO, và
   `resolveSessionActor` sẽ không từ chối một phiên agent ở đó. Hôm nay không gọi được qua HTTP; ngày break-glass có đường HTTP, một phiên
   `AGENT_READONLY` thoả được luật hai người. Viết ra lúc nó còn rẻ.
+- **[S1.175 / khoản 145] Một chứng chỉ phát ra mà sổ không ghi thì KHÔNG được phát** (chủ dự án chọn 2026-09-27). Khác
+  khoản 139: ở đây rollback không làm mất lớp an toàn nào, chỉ mất một lần phát. Khi lần ghi `AGENT_SESSION_ISSUED` gãy 55P03
+  hay 40P01, hàng phiên và hàng sổ cùng lùi về một savepoint, `startAgentSession` ném `AgentSessionAuditBusyError`, route trả
+  503 có tên và một dòng log cố định; lần tiêu thụ mã TOTP vẫn commit để mã ấy không phát lại được. Trước đó lỗi ra 500 thân
+  cố định, không dòng log nào.
 
 ## ADR-040 — Nguồn danh sách tổ chức cho tiến trình worker: một hàm `SECURITY DEFINER`, một vai chủ hàm riêng, và một policy hẹp
 
