@@ -236,7 +236,7 @@ async function goiDaHuy(t: ToChuc): Promise<string> {
     });
     await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
   });
-  await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }));
+  await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }, apiPool));
   await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
   await withTenant(apiPool, t.org, (c) =>
     cancelRfq(c, t.org, { rfqId, reason: "Huy de do han xoa khoa", actorSessionId: t.pm.s }, apiPool),

@@ -52,8 +52,48 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
+
+// ==============================================================================================
+// [S1.9101 / khoản 247 / ADR-9201] LẦN VI PHẠM J3 VÀO SỔ — Ở GIAO DỊCH ĐỘC LẬP, RỒI NÉM LẠI CHÍNH LỖI CỦA TRIGGER
+//
+// J3 sống ở hai trigger của `061` (`award_kiem_de_xuat`, thân từ `064`, và `award_kiem_nguoi_duyet`). Lần vi phạm là một `RAISE
+// … (J3)` với SQLSTATE 23514: nó huỷ giao dịch của người gọi, nên trước vòng này không lối nào ghi được nó — `pnpm pilot:gia-lap`
+// đo bốn lần 422 *"(J3)"*, 0 hàng sổ. Đây là đúng lớp dấu vết mà nguyên tắc 1 của `docs/PRODUCT.md` §4 cần: một người cố nắm hai
+// mắt xích của chuỗi *tạo RFQ → điều phối mở thầu → đề xuất → duyệt*.
+//
+// VÌ SAO BẮT LỖI CỦA TRIGGER CHỨ KHÔNG KIỂM TRƯỚC Ở ĐÂY: trigger là lớp có thẩm quyền và nó đọc bảng lịch sử điều phối dưới
+// đúng khoá của câu ghi. Chép vị từ ra TypeScript là hai nguồn sự thật cho một luật; bắt lỗi của nó thì sổ ghi đúng thứ CSDL đã
+// từ chối. Cùng khuôn nhánh D2 của `approveUnseal` (`packages/unseal/src/requests.ts`): `throwAuditedDenial` ghi ở `auditPool`
+// rồi ném lại chính lỗi `pg`, nên mã 422 và thông điệp người dùng thấy KHÔNG đổi. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500.
+// ==============================================================================================
+
+/** Vế J3 đọc từ thông điệp của trigger; `null` khi lỗi không phải một lần vi phạm J3. */
+function veJ3(loi: unknown): "NGUOI_TAO" | "NGUOI_DIEU_PHOI" | "NGUOI_DE_XUAT" | "PHIEN_DE_XUAT" | null {
+  if (!(loi instanceof Error) || (loi as { code?: unknown }).code !== "23514" || !loi.message.endsWith("(J3)")) return null;
+  if (loi.message.startsWith("Nguoi tao goi thau")) return "NGUOI_TAO";
+  if (loi.message.startsWith("Nguoi dieu phoi mo thau")) return "NGUOI_DIEU_PHOI";
+  if (loi.message.startsWith("Nguoi de xuat trao thau")) return "NGUOI_DE_XUAT";
+  if (loi.message.startsWith("Phien da de xuat")) return "PHIEN_DE_XUAT";
+  return null;
+}
+
+async function ghiTuChoiJ3(
+  auditPool: pg.Pool,
+  orgId: string,
+  actorId: string,
+  rfqId: string,
+  ve: NonNullable<ReturnType<typeof veJ3>>,
+  loi: Error,
+): Promise<never> {
+  return throwAuditedDenial(
+    auditPool,
+    orgId,
+    { actorType: "USER", actorId, action: "RFQ_AWARD_SOD_DENIED", resourceType: "RFQ", resourceId: rfqId, payload: { viPham: "J3", ve } },
+    loi,
+  );
+}
 
 /** Lý do máy đọc được của một lần từ chối ở lớp này — cùng khuôn `LyDoTuChoiVong`. */
 // [S1.116 / khoản 239] Suy TỪ `MaTuChoiTrangThai` — xem `tu-choi-vao-so.ts`.
@@ -271,24 +311,34 @@ export async function deXuatTraoThau(
     );
   }
 
-  const { rows: award } = await client.query<HangAward>(
-    `INSERT INTO public.rfq_awards
-       (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
-        acted_by, acted_by_session_id)
-     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
-             $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
-     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
-    [
-      orgId,
-      input.rfqId,
-      lv.id,
-      input.bidVersionId,
-      "PROPOSED",
-      input.reason,
-      actor.id,
-      input.actorSessionId,
-    ],
-  );
+  let award: HangAward[];
+  try {
+    ({ rows: award } = await client.query<HangAward>(
+      `INSERT INTO public.rfq_awards
+         (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
+          acted_by, acted_by_session_id)
+       VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
+               $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
+       RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+      [
+        orgId,
+        input.rfqId,
+        lv.id,
+        input.bidVersionId,
+        "PROPOSED",
+        input.reason,
+        actor.id,
+        input.actorSessionId,
+      ],
+    ));
+  } catch (loi) {
+    // [S1.9101 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
+    // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném lại CHÍNH lỗi của trigger — xem `ghiTuChoiJ3`.
+    const ve = veJ3(loi);
+    if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);
+    throw loi;
+  }
+
   const a = award[0];
   if (a === undefined) throw new Error("Không ghi được đề xuất trao thầu.");
 
@@ -405,12 +455,20 @@ export async function duyetTraoThau(
     auditPool,
   );
 
-  await client.query(
-    `INSERT INTO public.rfq_award_approvals
-       (org_id, award_id, approver_user_id, approver_session_id)
-     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid)`,
-    [orgId, dx.id, actor.id, input.actorSessionId],
-  );
+  try {
+    await client.query(
+      `INSERT INTO public.rfq_award_approvals
+         (org_id, award_id, approver_user_id, approver_session_id)
+       VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid)`,
+      [orgId, dx.id, actor.id, input.actorSessionId],
+    );
+  } catch (loi) {
+    // [S1.9101 / khoản 247] J3 vế 1 — người đề xuất tự duyệt, hay phiên đã đề xuất đem đi duyệt — sống ở trigger
+    // `award_kiem_nguoi_duyet` (`061`). Cùng lối ra với đường đề xuất: một hàng sổ ở giao dịch độc lập, rồi chính lỗi trigger.
+    const ve = veJ3(loi);
+    if (ve !== null) await ghiTuChoiJ3(auditPool, orgId, actor.id, input.rfqId, ve, loi as Error);
+    throw loi;
+  }
 
   // Hàng `APPROVED` phải chép ĐÚNG `evaluation_id`/`bid_version_id` của đề xuất —
   // `award_kiem_mot_award_song` từ chối nếu lệch, và vế ấy tồn tại để một hàng "duyệt" không nói

@@ -11,7 +11,7 @@
 //   GET  /guest/bids                          các phiên bản đã nộp của CHÍNH MÌNH — không phong bì
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
 // ==============================================================================================
-import { NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
+import { NopBiTuChoiError, NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
 import { docVongBafoKhach } from "@trustprocure/danh-gia";
 import { getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
@@ -144,6 +144,8 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         if (loi instanceof NopQuaHanError) {
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
+        // [S1.9101 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang `BID_SUBMIT_DENIED`.
+        if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message } };
         throw loi;
       }
       return {

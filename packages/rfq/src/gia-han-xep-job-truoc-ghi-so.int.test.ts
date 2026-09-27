@@ -103,7 +103,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 }, apiPool);
-      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 });
+      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 }, apiPool);
       await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });
@@ -174,7 +174,7 @@ describe("[S1.71 / khoản 123] gia hạn RFQ xếp job thông báo trước l�
       await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: "1000000.00", currency: "VND", actorSessionId: s1 });
       await addRfqItem(c, orgA, { rfqId: r.id, lineNo: 1, description: "Thep", quantity: "1.0000", unit: "tam", actorSessionId: s1 });
       await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 }, apiPool);
-      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 });
+      await approveRfq(c, orgA, { rfqId: r.id, sessionId: s2 }, apiPool);
       await openRfq(c, orgA, { rfqId: r.id, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       return r.id;
     });

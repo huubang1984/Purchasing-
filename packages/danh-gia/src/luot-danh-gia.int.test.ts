@@ -2873,3 +2873,86 @@ describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: hu�
     }
   });
 });
+
+// ==============================================================================================
+// [S1.9101 / khoản 247 / ADR-9201] MỖI LẦN VI PHẠM J3 ĐỂ LẠI MỘT HÀNG SỔ
+//
+// Ba vế của J3 sống ở trigger, nên lần vi phạm huỷ giao dịch của người gọi — trước vòng này 0 hàng sổ (`pnpm pilot:gia-lap`).
+// Nay lớp gói bắt lỗi của trigger, ghi `RFQ_AWARD_SOD_DENIED` ở giao dịch ĐỘC LẬP, rồi ném lại CHÍNH lỗi ấy: thông điệp và mã
+// không đổi (các ca `[INV-J3]` ở trên vẫn khớp nguyên văn), và hàng sổ sống qua rollback.
+// ==============================================================================================
+describe("[S1.9101 / khoản 247] lần vi phạm J3 để lại một hàng `RFQ_AWARD_SOD_DENIED`", { timeout: 300000 }, () => {
+  async function hangSoJ3(rfqId: string): Promise<readonly (readonly unknown[])[]> {
+    const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_AWARD_SOD_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
+  }
+
+  it("vế 2 (người tạo) và vế 3 (người điều phối) ⇒ mỗi lần một hàng mang người thử và vế; thông điệp của trigger không đổi", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu tao tu de xuat", actorSessionId: sYc }, apiPool),
+      ),
+    ).rejects.toThrow(/Nguoi tao goi thau khong duoc de xuat trao thau.*\(J3\)/u);
+    expect(await hangSoJ3(rfqId)).toEqual([[uYc, "RFQ", { viPham: "J3", ve: "NGUOI_TAO" }]]);
+
+    await db.pool.query(
+      "UPDATE unseal_requests SET dispatched_by = $2, dispatched_by_session_id = $3, dispatched_at = now() WHERE org_id = $1 AND rfq_id = $4",
+      [orgA, uDeXuat, sDeXuat, rfqId],
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "dieu phoi roi de xuat", actorSessionId: sDeXuat }, apiPool),
+      ),
+    ).rejects.toThrow(/Nguoi dieu phoi mo thau khong duoc de xuat trao thau.*\(J3\)/u);
+    expect(await hangSoJ3(rfqId)).toEqual([
+      [uYc, "RFQ", { viPham: "J3", ve: "NGUOI_TAO" }],
+      [uDeXuat, "RFQ", { viPham: "J3", ve: "NGUOI_DIEU_PHOI" }],
+    ]);
+    // Không đề xuất nào ra đời, gói thầu đứng yên — lần ghi sổ ở giao dịch độc lập không kéo theo gì.
+    expect(await hangAward(rfqId)).toEqual([]);
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("vế 1 — người đề xuất tự duyệt ⇒ một hàng `NGUOI_DE_XUAT`; đề xuất hợp lệ và lần duyệt hợp lệ KHÔNG thêm hàng nào", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    const dx = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat roi tu duyet", actorSessionId: sDuyet }, apiPool),
+    );
+    expect(await hangSoJ3(rfqId), "đề xuất hợp lệ không phải một lần từ chối").toEqual([]);
+    await expect(
+      withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool)),
+    ).rejects.toThrow(/Nguoi de xuat trao thau khong duoc tu duyet \(J3\)/u);
+    expect(await hangSoJ3(rfqId)).toEqual([[uDuyet, "RFQ", { viPham: "J3", ve: "NGUOI_DE_XUAT" }]]);
+  });
+
+  it("lần ghi sổ HỎNG ⇒ `DenialAuditFailedError` giữ chính lỗi của trigger ở `denial` — không im lặng, không hàng nào", async () => {
+    const { rfqId, banRo } = await sanSangTraoThau();
+    let loi: unknown = null;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k247_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k247 thong diep noi bo' USING ERRCODE = 'TP247'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k247_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'RFQ_AWARD_SOD_DENIED') " +
+          "EXECUTE FUNCTION public.k247_chan_ghi_so()",
+      );
+      await withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[1] ?? "", reason: "tu tao tu de xuat", actorSessionId: sYc }, apiPool),
+      ).catch((e: unknown) => {
+        loi = e;
+      });
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k247_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k247_chan_ghi_so()");
+    }
+    expect((loi as Error | null)?.name).toBe("DenialAuditFailedError");
+    expect(((loi as { denial?: Error }).denial as Error).message).toMatch(/\(J3\)$/u);
+    expect(await hangSoJ3(rfqId)).toEqual([]);
+  });
+});
+
