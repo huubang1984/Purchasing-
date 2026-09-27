@@ -62,7 +62,7 @@ export {
   submitBid,
   type BidReceiptRecord,
   type BidVersionRecord,
-  // [S1.171 / khoản 247] Mã của lần nộp bị chặn không vì hạn — tên ràng buộc trigger đặt, viết hoa.
+  // [S1.172 / khoản 247] Mã của lần nộp bị chặn không vì hạn — tên ràng buộc trigger đặt, viết hoa.
   type MaNopBiTuChoi,
   type SubmitBidInput,
 } from "./bidding.js";
