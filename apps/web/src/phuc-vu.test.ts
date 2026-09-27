@@ -117,7 +117,7 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.174 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
+  // [S1.175 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
   //
   // Khoản 198 đóng ở S1.99 với hai lời khai mà vòng này đo là sai cho kênh thật: `nop-thau.js` bỏ qua
   // fragment không có dấu hai chấm (không điền cả ô mã), và thân thư của SES, SMS, Zalo không mang
@@ -186,7 +186,7 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.175] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+  // [S1.176] BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
   //
   // Phiên là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình duyệt, còn mã đăng nhập chỉ dùng được một
   // lần — trước vòng này mỗi trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới.
@@ -200,7 +200,7 @@ describe("bề mặt tệp", () => {
   // nút, trình nghe hashchange đều chạy như trên trình duyệt. Import `/lib/*` được thay bằng hàm rỗng — vế này
   // không đo tiền hay mật mã.
   // ============================================================================================
-  describe("[S1.175] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
+  describe("[S1.176] hỏi lại phiên lúc tải, đăng xuất, đổi người, và xoá fragment sau khi dùng mã", () => {
     const BUOC: Record<string, readonly string[]> = {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
