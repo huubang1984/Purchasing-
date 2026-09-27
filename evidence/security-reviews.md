@@ -14084,6 +14084,44 @@ lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
 
 Khoản 228 đóng. Còn mở **86**; rổ B **61**.
 
+# §S1.171 — KHOẢN 200 ĐÓNG: XIN MỞ THẦU XẾP TIN BÁO NGƯỜI DUYỆT TRƯỚC LẦN GHI SỔ
+
+## 1. Việc gì
+
+Khoản 200 (S1.93, lượt soi ngang 75 góc 1): `requestUnseal` xếp tin báo người duyệt SAU lần ghi sổ `UNSEAL_REQUESTED`. Lần ghi sổ
+đầu của giao dịch lấy khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT, trong khi mọi lần ghi sổ
+khác của tổ chức chờ khoá ấy tối đa 2 s (050). Câu JOIN ba bảng của `listUserIdsWithPermission` cộng K lần `enqueueJob` vì thế
+chạy trong lúc giữ khoá. Cùng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline` (khoản 123). Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+`packages/unseal/src/xin-mo-xep-tin-truoc-ghi-so.int.test.ts` trên `requests.ts` của `master`: ca một **ĐỎ** — `expected [ 1, 1 ]
+to deeply equal [ +0, +0 ]`: cả hai lần xếp tin đều chạy khi giao dịch đang giữ khoá ghi sổ. Ca hai xanh — mã cũ ghi sổ rồi mới
+đọc nên không sót người được cấp quyền trong lúc chờ khoá; ca ấy canh bản sửa khỏi làm mất tính chất đó.
+
+## 3. Thay đổi
+
+- `packages/unseal/src/requests.ts`: đọc người duyệt và xếp tin TRƯỚC `appendAuditEvent`; SAU lần ghi sổ đọc lại người duyệt và
+  xếp tin cho người chưa có (bài học 65c-1 của S1.71). Tin và bản ghi vẫn cùng giao dịch; `dedupeKey` không đổi.
+- Test mới, hai ca, theo khuôn `packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts`: ⑴ mỗi lần `enqueueJob`, một kết nối khác
+  đếm khoá tư vấn ghi sổ của tổ chức mà giao dịch xin mở đang giữ — phải là 0, kèm đối chứng dương sau lần ghi sổ phải là 1;
+  ⑵ một giao dịch cấp vai DIRECTOR cho người thứ ba giữ khoá ghi sổ, `requestUnseal` chờ khoá, COMMIT — người mới phải có tin.
+
+## 4. Đo sau
+
+Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 2 to be 3`). `packages/unseal`, `apps/api`, `apps/unseal-worker`:
+36 tệp, 496/496.
+
+## 5. Giới hạn
+
+- Khuôn *xếp việc trước ghi sổ* vẫn được ghim từng hàm một, không bằng một cổng chung — một hàm thứ ba lặp lại khuôn cũ sẽ không
+  bị cổng nào bắt (đúng lý do khoản 200 lọt).
+- Chưa đo bán kính thời gian giữ khoá của bản cũ trên tiến trình thật; K là số người duyệt, nhỏ.
+
+## 6. Số
+
+Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+
 
 ---
 

@@ -210,19 +210,6 @@ export async function requestUnseal(
   const h = rows[0];
   if (h === undefined) throw new UnsealError("Không ghi được yêu cầu mở thầu.");
 
-  await appendAuditEvent(client, orgId, {
-    actorType: actor.type,
-    actorId: actor.id,
-    action: h.break_glass ? "UNSEAL_REQUESTED_BREAK_GLASS" : "UNSEAL_REQUESTED",
-    resourceType: "unseal_request",
-    resourceId: h.id,
-    payload: {
-      rfqId: input.rfqId,
-      reason,
-      ...(nhanChung === null ? {} : { breakGlassWitnessUserId: nhanChung.id }),
-    },
-  });
-
   // [S1.91 / khoản 194] BÁO CHO NGƯỜI DUYỆT — vì tới trước vòng này KHÔNG AI BÁO CHO HỌ CẢ.
   //
   // Mở thầu đòi HAI người (D2), và cho tới S1.90 `requestUnseal` không xếp một việc nào: người duyệt
@@ -243,14 +230,45 @@ export async function requestUnseal(
   // đo trên ngăn xếp thật phát 5 mã cho mỗi người duyệt trong 3 giây. Vế an ninh THẬT nay nằm ở
   // `tranRieng: HE_THONG_MAX_TOKENS_PER_WINDOW` mà handler truyền cho `issueLoginToken`, cộng với
   // quyền huỷ đã siết ở `cancelUnseal`. §S1.93.
-  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
-  for (const userId of nguoiDuyet) {
-    if (userId === actor.id) continue;
+  //
+  // [S1.171 / khoản 200] Xếp tin TRƯỚC lần ghi sổ — cùng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline` (khoản 123): lần ghi sổ đầu của
+  // giao dịch lấy khoá tư vấn ghi sổ của TỔ CHỨC (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT, trong khi mọi lần ghi sổ khác của tổ
+  // chức chờ khoá ấy tối đa 2 s (050). Câu JOIN ba bảng của `listUserIdsWithPermission` cộng K lần `enqueueJob` đặt SAU lần ghi sổ là
+  // chừng ấy thời gian giữ khoá thêm. Tin và bản ghi vẫn cùng giao dịch: hỏng ở đâu thì cả hai cùng rollback.
+  const xepTin = async (userId: string): Promise<void> => {
     await enqueueJob(client, orgId, {
       kind: UNSEAL_NOTICE_KIND,
       payload: { unsealRequestId: h.id, rfqId: input.rfqId, userId },
       dedupeKey: `unseal-notice:${h.id}:${userId}`,
     });
+  };
+  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
+  for (const userId of nguoiDuyet) {
+    if (userId === actor.id) continue;
+    await xepTin(userId);
+  }
+
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: h.break_glass ? "UNSEAL_REQUESTED_BREAK_GLASS" : "UNSEAL_REQUESTED",
+    resourceType: "unseal_request",
+    resourceId: h.id,
+    payload: {
+      rfqId: input.rfqId,
+      reason,
+      ...(nhanChung === null ? {} : { breakGlassWitnessUserId: nhanChung.id }),
+    },
+  });
+
+  // [S1.171 / khoản 200, bài học 65c-1 của S1.71] ĐỌC LẠI người duyệt SAU lần ghi sổ. Câu đọc ở trên chạy TRƯỚC lúc chờ khoá ghi sổ,
+  // nên nó không thấy một lần cấp quyền đã ghi sổ nhưng chỉ COMMIT trong lúc lần ghi sổ ở trên chờ khoá — bản trước ghi sổ rồi mới đọc
+  // nên thấy. Từ lúc lấy được khoá, giao dịch này giữ nó tới COMMIT, nên câu đọc dưới có cùng bảo đảm với bản trước. Bình thường không
+  // có người mới, nên phần giữ khoá chỉ thêm một câu đọc.
+  const daXep = new Set(nguoiDuyet);
+  for (const userId of await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE)) {
+    if (userId === actor.id || daXep.has(userId)) continue;
+    await xepTin(userId);
   }
 
   return doiYeuCau(h);
