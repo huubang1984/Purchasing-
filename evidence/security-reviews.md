@@ -14091,3 +14091,20 @@ hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot
   chủ dự án chọn không lùi phần phủ; mã tách chúng ra để lọc được.
 - Thông điệp người dùng thấy ở J3/D2 đổi sang câu của bảng chốt (có dấu, vẫn gọi tên bất biến); ADR-104 ⑵ từng nói không đổi.
 - Nhánh D2 của `approveUnseal` vẫn nhận diện bằng thông điệp — ngoài phạm vi.
+
+## 5. Số đo
+
+Trên cây đã hợp `master` (`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`), PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: **178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**; **65/65** bất biến (43/43 nghiệp vụ +
+  22/22 hàng rào), cổng evidence XANH. `evidence/INV-matrix.md` không đổi byte nào: các ca đổi của vòng này nằm trong khối có
+  nhãn sẵn, và hai phép đo khớp tên không mang nhãn bất biến.
+- Tệp của vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60, `packages/danh-gia/src/luot-danh-gia.int.test.ts` 88/88,
+  `packages/bidding/src/bidding.int.test.ts` 22/22, `apps/api/src/guest.int.test.ts` 12/12, `apps/api/src/buyer.int.test.ts`
+  16/16, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` 29/29, `apps/unseal-worker/src/kich-ban-41.int.test.ts` 15/15,
+  `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
+- `pnpm t0` sạch (427 module, 1672 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua**; `pnpm cap-so --kiem` sạch.
+- Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
+  hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
+  đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
+- Số tạm `S1.9101`, `ADR-9201`, `9501_tu_choi_co_ten` do `pnpm cap-so` cấp thành S1.170, ADR-106, `073_tu_choi_co_ten`.
+- Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **105 → 106** ADR. **72 → 73** migration.
