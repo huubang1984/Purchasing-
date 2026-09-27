@@ -14083,3 +14083,41 @@ lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
 ## 6. Số
 
 Khoản 228 đóng. Còn mở **86**; rổ B **61**.
+
+# §S1.9101 — KHOẢN 143 ĐÓNG: KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA
+
+## 1. Việc gì
+
+Khoản 143 (S1.75, lượt soi 70): bản vá khoản 139 bọc lần ghi `MFA_LOCKED` trong SAVEPOINT nhưng `catch` chỉ nuốt `55P03`. `40P01`
+(khoá chết) trên chính khoá tư vấn ghi sổ bắn ở `deadlock_timeout` mặc định 1 s — trước trần 2 s của `050` — và `57014` bắn nếu
+`statement_timeout` cạn trước. Khi ấy lỗi thoát ra, giao dịch rollback, và bộ đếm lẫn `locked_until` cùng mất: số lần đoán TOTP
+mất trần. Bất biến chạm: E3. Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/identity/src/mfa.int.test.ts`: một giao dịch (superuser, `SET LOCAL deadlock_timeout = '10s'`) giữ khoá ghi
+sổ của tổ chức; lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng) rồi chờ khoá ghi sổ; giao dịch kia xin `FOR UPDATE` hàng ấy. Trên
+`login.ts` của `master`: **ĐỎ** — `{"ok":false,"reason":"NEM:40P01"}`, bộ đếm/khoá sau đó `4/chua-khoa` — hồ sơ không khoá sau lần
+chạm ngưỡng. Khoản này từng ghi *"ĐỌC, chưa đo"*; nay là một phép đo.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `catch` quanh lần ghi `MFA_LOCKED` nuốt `55P03` **và** `40P01`, lùi về savepoint, trả
+  `auditSkipped`. `57014` vẫn ném: với `statement_timeout` 15 s mỗi câu (`createPool`), trần 2 s luôn tới trước, nên 57014 ở câu này
+  chỉ còn là lần huỷ có ý (`pg_cancel_backend`) — fail-closed có chủ ý.
+- `apps/api/src/routes/auth.ts`: hai dòng log của `auditSkipped` nêu cả hai mã.
+- `docs/DECISIONS.md` ADR-008 tiểu mục khoản 139, điều kiện ②: ghi nhận nới `catch`.
+
+## 4. Đo sau
+
+Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, mã ĐÚNG ngay sau đó bị chặn. Khối khoản 139 (55P03,
+42501 thoát nguyên, đối chứng ghi đủ một dòng) vẫn xanh.
+
+## 5. Giới hạn
+
+- 57014 vẫn gỡ khoá hồ sơ nếu một người vận hành huỷ đúng câu ấy — chấp nhận, như bản trước.
+- Cảnh khoá chết dựng bằng một giao dịch superuser xin khoá hàng; chưa đo đường sản xuất nào tự tạo được vòng ấy.
+
+## 6. Số
+
+Khoản 143 đóng. Còn mở **85**; rổ B **60**.

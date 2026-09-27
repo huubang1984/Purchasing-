@@ -2333,3 +2333,90 @@ describe("[S1.75 / khoản 139] khoá ghi sổ của tổ chức bị giữ thì
     expect((kq as { auditSkipped?: true }).auditSkipped, `không được bật cờ khi lần ghi sổ thành công — ${ke}`).toBeUndefined();
   }, 60_000);
 });
+
+// =============================================================================================
+// [S1.9101 / khoản 143] KHOÁ CHẾT TRÊN KHOÁ GHI SỔ Ở LẦN CHẠM NGƯỠNG ⇒ HỒ SƠ VẪN KHOÁ
+//
+// Khoản 139 nuốt 55P03 (trần 2 s của `noi_chuoi_kiem_toan()`, 050). Nhưng bộ dò khoá chết bắn ở `deadlock_timeout` mặc định 1 s — TRƯỚC
+// trần ấy — và `004` đã ghi rằng khoá tư vấn ghi sổ tham gia được một vòng khoá chết. Cảnh dựng: một giao dịch khác GIỮ khoá ghi sổ của
+// tổ chức, lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng `mfa_credentials`) rồi chờ khoá ghi sổ; giao dịch kia sau đó xin khoá hàng
+// ấy. Giao dịch kia đặt `deadlock_timeout` 10 s, nên bộ dò của lần đoán sai bắn trước và nó là nạn nhân: 40P01 ngay ở lần ghi `MFA_LOCKED`.
+//
+// Trên bản trước, 40P01 ném ra, giao dịch rollback và mang theo `locked_until` — ĐỎ ở vế ⑵. Không nhãn INV, cùng lý do khối khoản 139.
+// =============================================================================================
+describe("[S1.9101 / khoản 143] khoá chết trên khoá ghi sổ ở lần chạm ngưỡng không gỡ khoá hồ sơ", () => {
+  it("lần ghi `MFA_LOCKED` gãy 40P01 ⇒ không ném, `auditSkipped`, hồ sơ KHOÁ — mã ĐÚNG ngay sau đó bị chặn", async () => {
+    await db.pool.query(
+      "UPDATE mfa_credentials SET failed_attempts = $2, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+      [nguoiA, MFA_MAX_FAILED_ATTEMPTS - 1],
+    );
+    const maDung = deriveTotpCode(biMatA, counterForTime(Date.now()));
+    const maSai = maDung === "000000" ? "111111" : "000000";
+
+    const giu = await db.pool.connect();
+    let dangGiu = false;
+    let chanHang: Promise<unknown> | undefined;
+    let kq: { ok: boolean; reason?: string; auditSkipped?: true } | undefined;
+    let trangThai = "?";
+    let kqDung: Awaited<ReturnType<typeof verifyTotpForLogin>> | undefined;
+    try {
+      await giu.query("BEGIN");
+      dangGiu = true;
+      // Giao dịch này KHÔNG được là nạn nhân: bộ dò của nó bắn muộn hơn hẳn 1 s của lần đoán sai.
+      await giu.query("SET LOCAL deadlock_timeout = '10s'");
+      await giu.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1::text, 0))", [orgA]);
+
+      const doanSai = withTenant(apiPool, orgA, (c) =>
+        verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maSai }, congMoBiMat),
+      ).then(
+        (x) => x as { ok: boolean; reason?: string; auditSkipped?: true },
+        (e: unknown) => ({ ok: false, reason: `NEM:${(e as { code?: string }).code ?? "?"}` }),
+      );
+      // Đợi lần đoán sai chờ khoá ghi sổ — tức nó đã đặt khoá hồ sơ và giữ khoá hàng.
+      const han = Date.now() + 10_000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND NOT granted " +
+            "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+            "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+          [orgA],
+        );
+        if ((rows[0]?.n ?? 0) >= 1) break;
+        if (Date.now() > han) throw new Error("het 10000ms: lan doan sai khong cho khoa ghi so");
+        await new Promise((xong) => setTimeout(xong, 10));
+      }
+      // Khép vòng: xin khoá hàng mà lần đoán sai đang giữ.
+      chanHang = giu.query("SELECT 1 FROM mfa_credentials WHERE user_id = $1 FOR UPDATE", [nguoiA]);
+      kq = await doanSai;
+      await chanHang;
+      await giu.query("ROLLBACK");
+      dangGiu = false;
+
+      const { rows } = await db.pool.query<{ f: number; l: Date | null }>(
+        "SELECT failed_attempts AS f, locked_until AS l FROM mfa_credentials WHERE user_id = $1",
+        [nguoiA],
+      );
+      trangThai = `${rows[0]!.f}/${rows[0]!.l === null ? "chua-khoa" : "da-khoa"}`;
+      kqDung = await withTenant(apiPool, orgA, (c) =>
+        verifyTotpForLogin(c, { orgId: orgA, userId: nguoiA, code: maDung }, congMoBiMat),
+      );
+    } finally {
+      if (dangGiu) await giu.query("ROLLBACK").catch(() => undefined);
+      if (chanHang !== undefined) await Promise.allSettled([chanHang]);
+      giu.release();
+      await db.pool.query(
+        "UPDATE mfa_credentials SET failed_attempts = 0, locked_until = NULL, last_used_counter = NULL WHERE user_id = $1",
+        [nguoiA],
+      );
+    }
+
+    const ke = `kết quả lần đoán sai: ${JSON.stringify(kq)}; bộ đếm/khoá sau đó: ${trangThai}`;
+    // ⑴ Không ném — 40P01 bị SAVEPOINT nuốt, và cái thiếu để lại dấu.
+    expect(kq?.reason, `lần đoán sai không được ném — ${ke}`).not.toMatch(/^NEM:/);
+    expect(kq?.auditSkipped, `cờ auditSkipped phải bật — ${ke}`).toBe(true);
+    // ⑵ Vế chịu lực: khoá hồ sơ đứng.
+    expect(trangThai, `hồ sơ phải KHOÁ sau lần chạm ngưỡng — ${ke}`).toBe(`${MFA_MAX_FAILED_ATTEMPTS}/da-khoa`);
+    // ⑶ Và nó CẮN: mã đúng ngay sau đó bị chặn.
+    expect(kqDung?.ok, `mã ĐÚNG phải bị chặn khi hồ sơ đã khoá — ${ke}`).toBe(false);
+  }, 60_000);
+});
