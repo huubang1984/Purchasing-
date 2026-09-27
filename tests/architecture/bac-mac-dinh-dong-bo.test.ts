@@ -1,0 +1,32 @@
+// ==============================================================================================
+// [S1.174 / S3.1d] MẶC ĐỊNH §4.1 CỦA SPEC S3 Ở HAI CHỖ CHÉP — VÀ HAI CHỖ ẤY KHOÁ NHAU Ở ĐÂY
+//
+// `apps/web/src/chinh-sach.ts` (`BAC_MAC_DINH`) là mẫu điền sẵn của màn `/chinh-sach`; `tools/gieo-demo/src/chinh-sach-demo.ts`
+// (`BAC_DEMO`) là ma trận `pnpm gieo:demo --s3` khai. Công cụ không import được app (app là lá — `pham-vi-san-xuat.test.ts`),
+// và màn không import được gói ngoài các mô-đun nó phục vụ, nên hai bản là hai tệp. Cùng khuôn khoá bản chép của
+// `packages/rfq/src/tien-te-dong-bo.test.ts`: một bản chép không được đối chiếu thì trôi (ADR-029).
+// ==============================================================================================
+
+import { describe, expect, it } from "vitest";
+import { BAC_MAC_DINH, MUC_MAC_DINH, NGUONG_KEP_MAC_DINH } from "../../apps/web/src/chinh-sach.js";
+import { BAC_DEMO, MUC_DEMO } from "../../tools/gieo-demo/src/chinh-sach-demo.js";
+
+describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:demo --s3 khai CÙNG một chính sách", () => {
+  it("ma trận bậc trùng từng ô, và hai cột mức cùng ngưỡng kép trùng nhau", () => {
+    expect(BAC_DEMO).toEqual(BAC_MAC_DINH);
+    expect([MUC_DEMO.chiaNhoCuaSoNgay, MUC_DEMO.thamDinhHieuLucThang, MUC_DEMO.nguongKep]).toEqual([
+      MUC_MAC_DINH.chiaNhoCuaSoNgay,
+      MUC_MAC_DINH.thamDinhHieuLucThang,
+      NGUONG_KEP_MAC_DINH,
+    ]);
+  });
+
+  it("chống rỗng ruột: bốn bậc, bậc cuối là đấu thầu chính thức — so hai mảng rỗng thì cũng bằng nhau", () => {
+    expect(BAC_DEMO.map((b) => [b.tu_so_tien, b.dau_thau_chinh_thuc])).toEqual([
+      [0, false],
+      [100000000, false],
+      [1000000000, false],
+      [10000000000, true],
+    ]);
+  });
+});

@@ -71,7 +71,7 @@ export class LoginTokenError extends Error {
 }
 
 /**
- * [S1.174 / khoản 145] Lần PHÁT chứng chỉ agent không vào được sổ vì khoá tư vấn ghi sổ của tổ chức
+ * [S1.175 / khoản 145] Lần PHÁT chứng chỉ agent không vào được sổ vì khoá tư vấn ghi sổ của tổ chức
  * bị giữ quá trần 2 s (55P03, `050`) hay vướng một vòng khoá chết trên chính khoá ấy (40P01). Chứng chỉ
  * KHÔNG được phát: hàng phiên đã lùi về savepoint cùng lần ghi hỏng. Người gọi (route) biến nó thành
  * một 503 có tên — người vận hành thử lại với mã TOTP kế tiếp.
@@ -494,7 +494,7 @@ export async function startAgentSession(
   }
 
   const token = randomBytes(LOGIN_TOKEN_BYTES).toString("base64url");
-  // [S1.174 / khoản 145] Hàng phiên và hàng sổ đi CÙNG một savepoint: một chứng chỉ phát ra mà sổ không
+  // [S1.175 / khoản 145] Hàng phiên và hàng sổ đi CÙNG một savepoint: một chứng chỉ phát ra mà sổ không
   // ghi thì KHÔNG được phát — khác khoản 139, ở đây rollback không làm mất lớp an toàn nào, chỉ mất một lần
   // phát. Nên khi lần ghi sổ gãy 55P03/40P01, cả hai lùi về savepoint và hàm ném một lỗi CÓ TÊN; phần còn
   // lại của giao dịch (lần tiêu thụ mã TOTP) vẫn commit, để mã ấy không phát lại được. Mọi mã khác vẫn ném

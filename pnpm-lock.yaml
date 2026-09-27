@@ -385,6 +385,9 @@ importers:
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/rfq':
+        specifier: workspace:*
+        version: link:../../packages/rfq
       '@trustprocure/sealed-envelope':
         specifier: workspace:*
         version: link:../../packages/sealed-envelope
