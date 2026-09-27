@@ -51,6 +51,22 @@ const bao = (s: string): void => {
 };
 
 /**
+ * Bản Node chạy được cụm, đo bằng một lượt chạy thật trên từng bản:
+ * - 22.6: không biết `--experimental-transform-types`; 26.0: đã bỏ cờ ấy. Cả hai làm Node dừng trước khi vào tệp này;
+ * - 22.7–22.12 và 23.0–23.1: `api` lên, nhưng `web` chết lúc khởi động vì `module.stripTypeScriptTypes`
+ *   (`apps/web/src/phuc-vu.ts`) có ở 23.2 và được đưa về 22.13;
+ * - 22.13, 22.22, 23.2, 24.21, 25.9: 10/10.
+ * Không có phép kiểm này thì người trình diễn chỉ thấy "tiến trình web dừng lúc khởi động" kèm một `SyntaxError` trong log.
+ */
+export function kiemPhienBanNode(phienBan: string = process.versions.node): void {
+  const [lon = Number.NaN, nho = Number.NaN] = phienBan.split(".").map((s) => Number.parseInt(s, 10));
+  const duoc = Number.isInteger(lon) && Number.isInteger(nho) && ((lon === 22 && nho >= 13) || (lon === 23 && nho >= 2) || (lon >= 24 && lon <= 25));
+  if (!duoc) {
+    throw new PilotError(`cần Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25 — máy này đang chạy Node ${phienBan}`);
+  }
+}
+
+/**
  * Mã mà lượt chạy đứng trên. Cây làm việc có thay đổi chưa commit thì nói ra — một lần soi ở vòng này:
  * bản đầu đóng dấu băm HEAD sạch lên cả những lượt chạy trên mã sản phẩm đã bị đột biến.
  */
@@ -534,6 +550,7 @@ async function chinh(argv: readonly string[]): Promise<number> {
   if (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod") {
     throw new PilotError("từ chối chạy khi NODE_ENV=production — đây là công cụ DEV");
   }
+  kiemPhienBanNode();
   const thuMuc = resolve(ts.thuMuc ?? join(GOC_KHO, ".pilot-gia-lap"));
   kiemThuMucTrangThai(GOC_KHO, thuMuc);
   switch (ts.lenh) {
