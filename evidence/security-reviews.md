@@ -14121,10 +14121,47 @@ Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 
 ## 6. Số
 
 Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+# §S1.172 — KHOẢN 143 ĐÓNG: KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA
+
+## 1. Việc gì
+
+Khoản 143 (S1.75, lượt soi 70): bản vá khoản 139 bọc lần ghi `MFA_LOCKED` trong SAVEPOINT nhưng `catch` chỉ nuốt `55P03`. `40P01`
+(khoá chết) trên chính khoá tư vấn ghi sổ bắn ở `deadlock_timeout` mặc định 1 s — trước trần 2 s của `050` — và `57014` bắn nếu
+`statement_timeout` cạn trước. Khi ấy lỗi thoát ra, giao dịch rollback, và bộ đếm lẫn `locked_until` cùng mất: số lần đoán TOTP
+mất trần. Bất biến chạm: E3. Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/identity/src/mfa.int.test.ts`: một giao dịch (superuser, `SET LOCAL deadlock_timeout = '10s'`) giữ khoá ghi
+sổ của tổ chức; lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng) rồi chờ khoá ghi sổ; giao dịch kia xin `FOR UPDATE` hàng ấy. Trên
+`login.ts` của `master`: **ĐỎ** — `{"ok":false,"reason":"NEM:40P01"}`, bộ đếm/khoá sau đó `4/chua-khoa` — hồ sơ không khoá sau lần
+chạm ngưỡng. Khoản này từng ghi *"ĐỌC, chưa đo"*; nay là một phép đo.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `catch` quanh lần ghi `MFA_LOCKED` nuốt `55P03` **và** `40P01`, lùi về savepoint, trả
+  `auditSkipped`. `57014` vẫn ném: với `statement_timeout` 15 s mỗi câu (`createPool`), trần 2 s luôn tới trước, nên 57014 ở câu này
+  chỉ còn là lần huỷ có ý (`pg_cancel_backend`) — fail-closed có chủ ý.
+- `apps/api/src/routes/auth.ts`: hai dòng log của `auditSkipped` nêu cả hai mã.
+- `docs/DECISIONS.md` ADR-008 tiểu mục khoản 139, điều kiện ②: ghi nhận nới `catch`.
+
+## 4. Đo sau
+
+Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, mã ĐÚNG ngay sau đó bị chặn. Khối khoản 139 (55P03,
+42501 thoát nguyên, đối chứng ghi đủ một dòng) vẫn xanh.
+
+## 5. Giới hạn
+
+- 57014 vẫn gỡ khoá hồ sơ nếu một người vận hành huỷ đúng câu ấy — chấp nhận, như bản trước.
+- Cảnh khoá chết dựng bằng một giao dịch superuser xin khoá hàng; chưa đo đường sản xuất nào tự tạo được vòng ấy.
+
+## 6. Số
+
+Khoản 143 đóng. Còn mở **84**; rổ B **59**.
 
 ---
 
-# §S1.172 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
+# §S1.173 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
 
 **Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Không migration, không ADR. Không chạm mảnh nào của
 `docs/PRODUCT.md` §11: `gieo:demo` không cờ và luồng MVP1 của kịch bản 41 giữ nguyên hình dạng.
@@ -14135,7 +14172,7 @@ Phần cuối trong bốn phần của S3.1 (spec S3 §9): `gieo:demo` theo bả
 (§S1.156, §S1.166, §S1.169) dựng bậc, K1, route ký và màn `/chinh-sach`. Tới vòng này bối cảnh demo không có người FINANCE
 nào, và kịch bản 41 chỉ chạy ở tổ chức chưa bật.
 
-## 2. Bốn quyết định của chủ dự án (S1.172) — cả bốn theo đề xuất
+## 2. Bốn quyết định của chủ dự án (S1.173) — cả bốn theo đề xuất
 
 - **Tổ chức demo:** không cờ thì giữ tổ chức chưa bật — pilot chạy MVP1, cờ ký tắt trên máy thật —; `--s3` gieo tổ chức
   đã bật. Loại: luôn gieo hai tổ chức (in dài gấp đôi, người trình diễn dễ nhầm tổ chức); thay hẳn bằng tổ chức đã bật (demo
@@ -14248,8 +14285,11 @@ Ba đột biến, cả ba đỏ:
 - **Hợp `master` lần hai.** Lúc Evidence pack của lần hợp đầu còn chạy, `master` nhận #178 (hàng J3 của PRODUCT §5), #180
   — khoản 200, lấy đúng số vòng lần hợp đầu đã cấp — và #181 (sổ tay apply; một chú thích ở `tools/gieo-demo/src/index.ts`,
   hợp tự động). Xung đột ở cột mốc `docs/STATE.md` và mục cuối biên bản, gỡ tay như lần đầu. Hai dòng mơ hồ — dòng biên
-  bản của cột mốc và dòng kết quả lần hợp đầu — đều nói về vòng này, nên `--mo-ho nhanh`. Kết quả: vòng này là
-  **S1.172**; `pnpm cap-so --kiem` sạch. Không PR nào trong ba chạm ma trận, nên `evidence/INV-matrix.md` giữ bản sinh ở
+  bản của cột mốc và dòng kết quả lần hợp đầu — đều nói về vòng này, nên `--mo-ho nhanh`; `pnpm cap-so --kiem`
+  sạch. Không PR nào trong ba chạm ma trận, nên `evidence/INV-matrix.md` giữ bản sinh ở
   lần hợp đầu. Trên cây đã hợp: `pnpm t0` sạch (429 module, 1682 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**;
   trên PostgreSQL 16 cục bộ, kịch bản 41 bản gói **30/30**, bản HTTP **58/58**, và tệp mới của #180 **2/2**. Tầng tích
   hợp đầy đủ do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần ba.** Lúc T3 của lần hợp thứ hai còn chạy, `master` nhận #182 — khoản 143 — lấy đúng số vòng lần hợp
+  thứ hai đã cấp. Xung đột ở cùng hai chỗ, gỡ tay như trước; `pnpm cap-so --mo-ho nhanh` cấp vòng này thành **S1.173**.
+  #182 không chạm ma trận. Trên cây đã hợp: xem commit cấp số.

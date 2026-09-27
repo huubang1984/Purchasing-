@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.172 / S3.1d] MA TRẬN BẬC MÀ `pnpm gieo:demo --s3` KHAI — MẶC ĐỊNH CỦA SPEC S3 §4.1
+// [S1.173 / S3.1d] MA TRẬN BẬC MÀ `pnpm gieo:demo --s3` KHAI — MẶC ĐỊNH CỦA SPEC S3 §4.1
 //
 // Bảng vai của §7 — bảy người, năm nhà cung cấp cho gói bậc 2 — được tính DƯỚI mặc định này và ngưỡng kép một tỷ, nên
 // bối cảnh demo khai đúng nó chứ không khai một ma trận riêng. Mọi ô là GIẢ ĐỊNH của spec, hiệu chỉnh sau pilot.
