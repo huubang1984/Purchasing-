@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { DenialAuditFailedError } from "@trustprocure/identity";
+import { DenialAuditFailedError, PermissionDeniedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -505,12 +505,12 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
 });
 
 // ===============================================================================================
-// [INV-J8] [S1.164 / khoản 244] BẢNG SO SÁNH ĐỌC TIỀN TỆ QUA CÙNG HÀM VỚI LƯỢT CHẤM
+// [INV-J8] [S1.165 / khoản 244] BẢNG SO SÁNH ĐỌC TIỀN TỆ QUA CÙNG HÀM VỚI LƯỢT CHẤM
 // ===============================================================================================
-// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.164): `VND` + `VNĐ` cho HAI nhóm và mọi phép tổng
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.165): `VND` + `VNĐ` cho HAI nhóm và mọi phép tổng
 // hợp thành `null`; hai báo giá cùng `vnd` dưới ngân sách 1.000.000 VND cho `belowBudget` = 0 — vế
 // ngân sách so `'VND' = 'vnd'` — trong khi cả hai con số đều dưới ngân sách. Ba ca dưới là ĐÍCH.
-describe("[INV-J8] [S1.164 / khoản 244] bảng so sánh và lượt chấm cùng một phán quyết tiền tệ", () => {
+describe("[INV-J8] [S1.165 / khoản 244] bảng so sánh và lượt chấm cùng một phán quyết tiền tệ", () => {
   it("[INV-J8] ĐÍCH của đo M4: `VND` + `VNĐ` là MỘT nhóm `VND`, phép tổng hợp có số, và dòng mang đơn vị đã chuẩn hoá", async () => {
     const rfqId = await taoRfqMo(csNghiem);
     const v1 = await nopBaoGia(rfqId, "NCC Chinh tac");
@@ -817,5 +817,116 @@ describe("[INV-D5] [S1.72 / khoản 121] bảng so sánh từ chối vì A4 thì
     expect((x.denial as ComparisonDeniedError).rfqStatus).toBe("OPEN");
     expect((x.cause as { code?: unknown }).code).toBe("TP121");
     expect(await demTuChoiSoSanh(rfqId)).toBe(0);
+  });
+});
+
+// ===============================================================================================
+// [S1.164 / khoản 245 / ADR-102] MỖI LƯỢT ĐỌC BẢNG SO SÁNH ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
+//
+// `docs/PRODUCT.md` §5 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC trước
+// rò nghiệp vụ của BAFO. Trước vòng này chỉ lần TỪ CHỐI vào sổ (khối `[INV-D5]` ngay trên đo đúng điều đó: *"lần cho qua không
+// ghi"*). Khối này đo lần CHO QUA: đúng một hàng, cùng sống cùng chết với giao dịch đọc, và ghi hỏng thì không bảng nào đi ra.
+// ===============================================================================================
+describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại một hàng sổ, trong chính giao dịch đọc", () => {
+  const GIA_A = "4440000.00";
+  const GIA_B = "5550000.00";
+
+  async function demXem(rfqId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'COMPARISON_VIEWED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  async function goiDaMo(): Promise<string> {
+    const rfqId = await taoRfqMo(csNghiem);
+    const v1 = await nopBaoGia(rfqId, `NCC xem A ${randomBytes(3).toString("hex")}`);
+    const v2 = await nopBaoGia(rfqId, `NCC xem B ${randomBytes(3).toString("hex")}`);
+    await moThau(rfqId, [
+      [v1, { totalAmount: GIA_A, currency: "VND" }],
+      [v2, { totalAmount: GIA_B, currency: "VND" }],
+    ]);
+    return rfqId;
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  it("⒜ mỗi lượt đọc được ⇒ ĐÚNG MỘT hàng `COMPARISON_VIEWED` nêu người đọc, gói thầu và phiên — không một con số nào của bảng", async () => {
+    const rfqId = await goiDaMo();
+    expect(await demXem(rfqId)).toBe(0);
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.rows.map((r) => r.totalAmount)).toEqual([GIA_A, GIA_B]);
+    await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sD1 }, apiPool));
+    expect(await demXem(rfqId), "hai lượt đọc ⇒ hai hàng").toBe(2);
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'COMPARISON_VIEWED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    // HÌNH DẠNG TRỌN của payload: trạng thái gói và phiên đã đọc — không giá, không số dòng.
+    expect(rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload])).toEqual([
+      ["USER", uYc, "RFQ", { rfqStatus: "UNSEALED", viewedBySessionId: sYc }],
+      ["USER", uD1, "RFQ", { rfqStatus: "UNSEALED", viewedBySessionId: sD1 }],
+    ]);
+    const van = JSON.stringify(rows);
+    for (const gia of [GIA_A, GIA_B]) expect(van).not.toContain(gia.slice(0, 4));
+  });
+
+  it("⒝ lượt bị TỪ CHỐI không ghi `COMPARISON_VIEWED` — thiếu `bid.view`, và gói chưa mở thầu", async () => {
+    const rfqId = await goiDaMo();
+    const uMua = await taoNguoi(orgA, `mua-k245-${randomBytes(3).toString("hex")}@vidu.vn`, "BUYER");
+    const sMua = await taoPhien(orgA, uMua);
+    const loi = await loiCua(withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sMua }, apiPool)));
+    expect(loi, "BUYER không giữ `bid.view` mà vẫn đọc được bảng").toBeInstanceOf(PermissionDeniedError);
+    expect(await demXem(rfqId), "lần từ chối quyền KHÔNG phải một lượt đọc").toBe(0);
+
+    const chuaMo = await taoRfqMo(csNghiem);
+    const loi2 = await loiCua(withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: chuaMo, actorSessionId: sYc }, apiPool)));
+    expect(loi2).toBeInstanceOf(ComparisonDeniedError);
+    expect(await demXem(chuaMo), "lần từ chối A4 KHÔNG phải một lượt đọc").toBe(0);
+  });
+
+  it("⒞ hàng sổ và bảng CÙNG SỐNG HAY CÙNG CHẾT: giao dịch của người đọc cuộn lại thì hàng biến theo — khác hẳn `COMPARISON_DENIED`", async () => {
+    const rfqId = await goiDaMo();
+    const CHAN = new Error("chan-lai-sau-khi-doc");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+    expect(await demXem(rfqId), "hàng của lượt đọc phải nằm TRONG giao dịch đọc, không ở một giao dịch độc lập").toBe(0);
+  });
+
+  it("⒟ fail-closed: lần ghi `COMPARISON_VIEWED` hỏng ⇒ hàm NÉM chính lỗi ấy, không bảng nào đi ra, không hàng sổ nào", async () => {
+    const rfqId = await goiDaMo();
+    let bang: unknown = "chua-goi";
+    let loi: unknown = null;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k245_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k245 thong diep noi bo' USING ERRCODE = 'TP245'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k245_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'COMPARISON_VIEWED') " +
+          "EXECUTE FUNCTION public.k245_chan_ghi_so()",
+      );
+      bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    } catch (e) {
+      loi = e;
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k245_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k245_chan_ghi_so()");
+    }
+    expect(bang, "bảng đi ra dù sổ không ghi được").toBe("chua-goi");
+    expect((loi as { code?: unknown } | null)?.code).toBe("TP245");
+    expect(await demXem(rfqId)).toBe(0);
+    // Đối chứng: gỡ lớp chặn thì cùng lời gọi ấy đọc được và ghi đúng một hàng.
+    await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(await demXem(rfqId)).toBe(1);
   });
 });

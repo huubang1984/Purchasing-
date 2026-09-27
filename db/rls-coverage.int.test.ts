@@ -1337,7 +1337,7 @@ describe("phủ RLS", () => {
       // tu 'hai nguoi khac nguoi tao' xuong 'mot nguoi khac nguoi tao'.
       // [H-4, 011] `early_close_reason`: dong som la mot hanh vi CO TEN, khong phai mot `reason`
       // chi di vao payload kiem toan.
-      // [S1.164 / khoan 225, 071] `cancel_reason`: huy mot goi DA DONG la mot hanh vi nha cung cap
+      // [S1.165 / khoan 225, 071] `cancel_reason`: huy mot goi DA DONG la mot hanh vi nha cung cap
       // doc duoc ly do; trigger doi no o bon canh moi, chi cho dat mot lan va chi o canh vao CANCELLED.
       { grantee: "app_api", bang: "rfq_packages", cot: "cancel_reason", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_at", quyen: "UPDATE" },

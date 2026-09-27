@@ -5283,9 +5283,9 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
   được ~~cho tới khi tổ chức chuẩn hoá đơn vị~~. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
-  không thấy một bảng xếp hạng gần đúng. **[S1.164 / ADR-102] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
+  không thấy một bảng xếp hạng gần đúng. **[S1.165 / ADR-103] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
   đã niêm phong, và `rfq_unsealed_bids` chỉ-ghi-thêm. Đo ra thêm rằng cánh cửa này đóng cả với cách viết khác của
-  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-102 thu cánh cửa về đúng lệch THẬT, và cho
+  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-103 thu cánh cửa về đúng lệch THẬT, và cho
   gói ấy lối huỷ có lý do.
 - **ADR này quyết trên ĐỌC, không trên CHẠY.** Cả năm quyết định rút từ mã nguồn và tài liệu; vòng này không
   dựng một cụm nào, vì không có mã nào để chạy. Phép đo thật là điều kiện của S2.0–S2.2, và chúng chưa tồn tại.
@@ -5668,6 +5668,10 @@ Nó **không** nói vòng BAFO chặn được người mua rò tin. Spec §8.1 
 người, và một câu *"anh đang đứng thứ hai, hạ 3% là thắng"* nói bằng miệng thì không lớp mật mã
 nào thấy. Thứ S2 làm được là ⑴ danh sách mời SUY ra nên một lần mời ngoài top-N để lại dấu, ⑵ mọi
 lần đọc bảng so sánh đã có sổ, ⑶ giá vòng hai niêm phong lại.
+
+**[S1.164 / khoản 245]** Vế ⑵ SAI từ lúc viết tới vòng S1.164: chỉ lần TỪ CHỐI đọc bảng so sánh có sổ. ADR-102 làm nó đúng,
+và rộng hơn chữ của nó: mỗi lượt đọc bảng so sánh, bảng xếp hạng và mỗi lần xuất bộ bằng chứng ghi một hàng sổ trong chính giao
+dịch đọc.
 
 Nó **không** nói bốn cạnh ấy đã có người đi qua. Sau `059` chúng **tồn tại và được canh**, nhưng
 KHÔNG đường sản xuất nào đi qua — route, worker, màn hình và **J4** thuộc S1.109, và lý do chia
@@ -8033,13 +8037,58 @@ không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới
 - Lượt đầu đo ra khoản **247**: lần từ chối J3 và D2 không để lại hàng sổ hay dòng log nào. Câu *"mỗi lần từ chối để lại
   một dòng"* ở `docs/PRODUCT.md` §5 được sửa tại chỗ.
 
-## ADR-102 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+## ADR-102 — Lượt đọc giá sau mở thầu ghi sổ trong chính giao dịch đọc
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.164 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
-ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.164
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.164]** · **Khoản nợ liên quan:** 245 (đóng) · **Liên quan:**
+ADR-055 (vế ⑵ của ba thứ S2 làm được trước rò nghiệp vụ của BAFO), ADR-054 (giá dạng rõ và cổng đọc `bid.view`), ADR-091 (khuôn
+`AGENT_READ`: ghi sổ cùng giao dịch đọc), ADR-060 (cái giá vĩnh viễn của mỗi hàng sổ ở `verifyAuditChain`)
+
+### Bối cảnh
+
+`docs/PRODUCT.md` §5 và ADR-055 kể *"mọi lần đọc bảng so sánh sau mở thầu đều có hàng sổ"* là một trong ba thứ sản phẩm LÀM ĐƯỢC
+trước rò nghiệp vụ của BAFO. Lượt soi hình dạng spec S4 (S1.159) đọc ra điều ngược lại: `requirePermission` trả về mà không ghi khi
+người gọi có quyền, `buildComparisonTable` chỉ ghi `COMPARISON_DENIED`, và không đường nào ghi lượt đọc THÀNH CÔNG. Hàng 245 nêu câu
+phải chọn: ghi một hàng sổ cho mỗi lượt đọc — cái giá vĩnh viễn ở `verifyAuditChain` mà ADR-060 đã đo — hay viết lại lời khai.
+Đọc thêm lúc làm: giá dạng rõ sau mở thầu đi ra khỏi tiến trình qua ĐÚNG BA đường sau cổng `bid.view` — bảng so sánh
+(`buildComparisonTable`), bảng xếp hạng (`docBangXepHang`) và bộ bằng chứng (`xuatBoBangChung`, cổng `audit.read` cộng `bid.view`).
+Hai đường còn lại sau `bid.view` — `countReceivedBids` và `docTraoThau` — không mang một mức giá nào.
+
+### Quyết định (chủ dự án chọn "ghi sổ mỗi lượt đọc")
+
+1. **Mỗi lượt đọc trả giá để lại đúng một hàng sổ, trên CHÍNH `client` của giao dịch đọc**, ghi SAU mọi câu đọc và TRƯỚC khi hàm
+   trả về: `COMPARISON_VIEWED` (payload `{ rfqStatus, viewedBySessionId }`), `RANKING_VIEWED` (`{ evaluationId, viewedBySessionId }`),
+   `EVIDENCE_BUNDLE_EXPORTED` (`{ exportedBySessionId }`). `actorType = USER`, `actorId` là người đọc, `resourceType = RFQ`,
+   `resourceId` là gói thầu. Không payload nào mang một con số của bảng.
+2. **Hỏng thì hỏng cả lượt đọc.** Lần ghi hỏng NÉM ra khỏi hàm, giao dịch của người gọi rollback, và dữ liệu không đi ra. Qua HTTP,
+   lỗi ấy không thuộc bảng ánh xạ nào của bộ điều phối nên thành 500 thân cố định kèm một dòng log nêu mẫu route và SQLSTATE.
+3. **Hàng nằm TRONG giao dịch đọc, không ở giao dịch độc lập.** Ghi độc lập rồi trả dữ liệu là cái *"cổng gác im lặng"* mà
+   `packages/identity/src/index.ts` cấm: sổ hỏng mà giá vẫn đi. Hệ quả ngược với hàng từ chối: `COMPARISON_DENIED` sống qua rollback
+   của người gọi, còn `COMPARISON_VIEWED` cuộn lại cùng giao dịch đọc — lượt đọc không hoàn tất thì không có gì để ghi.
+4. **Chỉ lượt đọc TRẢ GIÁ mới ghi.** Lần từ chối giữ nguyên đường của nó (`PERMISSION_DENIED`, `COMPARISON_DENIED`); `null` của bảng
+   xếp hạng (*chưa chấm*) và của bộ bằng chứng (*chưa có gì để xuất*) không mang một con số nào nên không ghi.
+5. Không migration: `audit_events.action` không có CHECK tập giá trị.
+
+### Hệ quả, nói thẳng
+
+- **Chuỗi sổ dài thêm một hàng cho mỗi lượt đọc giá, vĩnh viễn** (ADR-060). Lượt đọc giá hiếm — vài lần mỗi gói thầu, do ba vai giữ
+  `bid.view` — nên cái giá nhỏ; nó không bị chặn trên bởi một trần tần suất nào.
+- **Mỗi lượt đọc giá nay lấy khoá tư vấn nối tiếp của tổ chức**, từ câu ghi tới COMMIT, dưới trần 2 s của 050. Khoá chuỗi sổ bị giữ
+  quá 2 s thì lượt đọc ra 500 thay vì ra bảng. Hướng đúng: không đọc được còn hơn đọc không có sổ.
+- **Đường CLI của bộ bằng chứng không ghi.** `tools/bo-xuat-danh-gia` gọi thẳng `dungBoBangChung` dưới một kết nối vận hành, không đi
+  qua `xuatBoBangChung`; người chạy nó đã cầm CSDL. Bộ bằng chứng KHÔNG chứa hàng nào của `audit_events`, nên hàng mới không làm lệch
+  byte giữa lần xuất qua HTTP và lần dựng của CLI (bước 12j của kịch bản 41 vẫn đo điều ấy).
+- **Hàng sổ không phải cổng quyền.** Cổng vẫn là `bid.view` (và `audit.read` cho bộ bằng chứng), đứng thẳng trong thân từng hàm.
+- Đo ở `packages/unseal/src/comparison.int.test.ts` và `packages/danh-gia/src/luot-danh-gia.int.test.ts` (khối khoản 245: đúng một
+  hàng với hình dạng payload trọn, không hàng cho lần từ chối hay `null`, hàng cuộn lại cùng giao dịch đọc, lần ghi hỏng thì không
+  dữ liệu nào đi ra), và ở bước 12, 12b, 12j của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` qua HTTP thật.
+
+## ADR-103 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.165 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
+ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.165
 
 **Bối cảnh.** Khoản 244 ghi, bằng phép đọc, rằng một nhà cung cấp gõ `VNĐ` làm lượt chấm của cả gói bị từ chối. Vòng
-S1.164 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
+S1.165 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
 một nhà cung cấp — thì lượt chấm không từ chối mà vỡ ở `CHECK` của `057` (23514, một 422 không tên); ⒝ bảng so sánh
 trả một `belowBudget` SAI không dấu khi mọi báo giá cùng một cách viết lạ; ⒞ *"lối ra duy nhất là huỷ gói"* cũng sai —
 gói đứng ở `UNSEALED`, và cạnh huỷ từ đó chưa có (khoản 225). Báo giá đã niêm phong trong trình duyệt, nên máy chủ không

@@ -2543,16 +2543,102 @@ describe("[S1.116 / khoản 239] J6 — từ chối TRẠNG THÁI vào sổ có 
   });
 });
 
+// ==============================================================================================
+// [S1.164 / khoản 245 / ADR-102] LƯỢT ĐỌC BẢNG XẾP HẠNG ĐỂ LẠI MỘT HÀNG SỔ — CÙNG GIAO DỊCH ĐỌC
+//
+// Bảng xếp hạng mang `effectiveCost` và thứ hạng của mọi báo giá — cùng hạng tin với bảng so sánh — nên nó chịu cùng luật với
+// `COMPARISON_VIEWED` (`packages/unseal/src/comparison.int.test.ts`): đúng một hàng cho mỗi lượt đọc trả bảng, không hàng nào cho
+// lần từ chối hay cho `null`, hàng cuộn lại cùng giao dịch đọc, và ghi hỏng thì không bảng nào đi ra.
+// ==============================================================================================
+describe("[S1.164 / khoản 245] lượt ĐỌC bảng xếp hạng để lại một hàng sổ, trong chính giao dịch đọc", { timeout: 180000 }, () => {
+  async function demXem(rfqId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RANKING_VIEWED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    return Number(rows[0]?.n ?? "-1");
+  }
+
+  it("⒜ đọc được ⇒ ĐÚNG MỘT hàng `RANKING_VIEWED` nêu người đọc, lượt chấm và phiên — không một con số nào; `null` và lần từ chối KHÔNG ghi", async () => {
+    const { rfqId } = await goiDaMo([
+      ["731000000.00", "VND"],
+      ["742000000.00", "VND"],
+    ]);
+    // `null` — chưa chấm — không mang một con số nào, nên không phải một lượt đọc giá.
+    expect(await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool))).toBeNull();
+    expect(await demXem(rfqId)).toBe(0);
+
+    const luot = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const kq = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq?.rows.map((r) => r.effectiveCost)).toEqual(["731000000.00", "742000000.00"]);
+    expect(await demXem(rfqId)).toBe(1);
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RANKING_VIEWED' AND resource_id = $2",
+      [orgA, rfqId],
+    );
+    expect(rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload])).toEqual([
+      ["USER", uYc, "RFQ", { evaluationId: luot.evaluationId, viewedBySessionId: sYc }],
+    ]);
+    expect(JSON.stringify(rows)).not.toContain("731000000");
+
+    // Lần từ chối quyền (REQUESTER không giữ `bid.view`) ghi `PERMISSION_DENIED` như cũ — KHÔNG `RANKING_VIEWED`.
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      docBangXepHang(c, orgA, { rfqId, actorSessionId: sKhongXem }, apiPool).then(
+        () => null,
+        (e: unknown) => e,
+      ),
+    );
+    expect(loi).toBeInstanceOf(PermissionDeniedError);
+    expect(await demXem(rfqId)).toBe(1);
+  });
+
+  it("⒝ giao dịch đọc cuộn lại ⇒ hàng biến theo; lần ghi hỏng ⇒ hàm NÉM chính lỗi ấy và không bảng nào đi ra", async () => {
+    const { rfqId } = await goiDaMo([["751000000.00", "VND"]]);
+    await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+
+    const CHAN = new Error("chan-lai-sau-khi-doc");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+    expect(await demXem(rfqId), "hàng của lượt đọc phải nằm TRONG giao dịch đọc").toBe(0);
+
+    let bang: unknown = "chua-goi";
+    let loi: unknown = null;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k245_chan_xep_hang() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k245 thong diep noi bo' USING ERRCODE = 'TP245'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k245_chan_xep_hang BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'RANKING_VIEWED') " +
+          "EXECUTE FUNCTION public.k245_chan_xep_hang()",
+      );
+      bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    } catch (e) {
+      loi = e;
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k245_chan_xep_hang ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k245_chan_xep_hang()");
+    }
+    expect(bang, "bảng xếp hạng đi ra dù sổ không ghi được").toBe("chua-goi");
+    expect((loi as { code?: unknown } | null)?.code).toBe("TP245");
+    expect(await demXem(rfqId)).toBe(0);
+  });
+});
+
 // ===============================================================================================
-// [S1.164 / khoản 244] J8 — tiền tệ của báo giá đọc qua MỘT hàm, về tập đóng {VND, USD, NULL}
+// [S1.165 / khoản 244] J8 — tiền tệ của báo giá đọc qua MỘT hàm, về tập đóng {VND, USD, NULL}
 // ===============================================================================================
-// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.164): `VND` + `VNĐ` ném `LECH_TIEN_TE`; MỘT
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.165): `VND` + `VNĐ` ném `LECH_TIEN_TE`; MỘT
 // nhà cung cấp gõ `VNĐ` — hay hai nhà cung cấp cùng gõ `vnd` — thì phép so tập cho qua và câu INSERT
 // vỡ ở `CHECK (currency IN ('VND','USD'))` của `057`: `DatabaseError` 23514
 // `rfq_evaluations_currency_check`, `routine` `ExecConstraints`, tức một 422 KHÔNG TÊN ở API. Gói
 // đứng yên ở `UNSEALED`, và `UNSEALED` không có cạnh huỷ nào — gói kẹt. Các ca dưới là ĐÍCH của vòng
 // sửa: đỏ trước migration `070`, xanh sau nó.
-describe("[INV-J8] [S1.164 / khoản 244] tiền tệ báo giá đọc qua MỘT hàm", { timeout: 300000 }, () => {
+describe("[INV-J8] [S1.165 / khoản 244] tiền tệ báo giá đọc qua MỘT hàm", { timeout: 300000 }, () => {
   const tuChoiTrangThai = async (rfqId: string): Promise<number> => {
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2",
@@ -2707,12 +2793,12 @@ describe("[INV-J8] [S1.164 / khoản 244] tiền tệ báo giá đọc qua MỘT
   });
 });
 
-// [S1.164 / khoản 225] Khoản 244 đã hẹp lối từ chối lại còn đúng những gói lệch tiền tệ THẬT (`VND` +
+// [S1.165 / khoản 225] Khoản 244 đã hẹp lối từ chối lại còn đúng những gói lệch tiền tệ THẬT (`VND` +
 // `USD`), hay mang một chuỗi ngoài tập đóng. Những gói ấy vẫn đứng ở `UNSEALED`, và báo giá đã niêm
 // phong không sửa được. `071` cho chúng một lối ra — huỷ, kèm lý do nhà cung cấp đọc được — và
 // describe này đo lối ấy ở đúng hai trạng thái lượt chấm từ chối được: `UNSEALED` và `BAFO_UNSEALED`,
 // cộng `BAFO_CLOSED` là trạng thái đứng trước `BAFO_UNSEALED` trong cùng vòng.
-describe("[S1.164 / khoản 225] gói bị từ chối chấm có lối ra: huỷ kèm lý do", { timeout: 300000 }, () => {
+describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: huỷ kèm lý do", { timeout: 300000 }, () => {
   const lyDoHuy = async (rfqId: string): Promise<string | null> => {
     const { rows } = await db.pool.query<{ cancel_reason: string | null }>(
       "SELECT cancel_reason FROM rfq_packages WHERE id = $1",

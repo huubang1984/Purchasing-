@@ -1,14 +1,14 @@
 -- =============================================================================================
--- 071 — [S1.164 / khoản 225] HUỶ ĐƯỢC SAU KHI ĐÓNG VÀ SAU KHI MỞ NIÊM PHONG — CÓ LÝ DO, CÓ SỔ, VÀ
+-- 071 — [S1.165 / khoản 225] HUỶ ĐƯỢC SAU KHI ĐÓNG VÀ SAU KHI MỞ NIÊM PHONG — CÓ LÝ DO, CÓ SỔ, VÀ
 --        NHÀ CUNG CẤP ĐỌC ĐƯỢC LÝ DO
 -- =============================================================================================
--- ĐO (vòng S1.164, Postgres 16 thật — biên bản §S1.164): một gói ở `UNSEALED` mà lượt chấm bị từ
+-- ĐO (vòng S1.165, Postgres 16 thật — biên bản §S1.165): một gói ở `UNSEALED` mà lượt chấm bị từ
 -- chối vì lệch tiền tệ thì ĐỨNG YÊN — `UPDATE … SET status = 'CANCELLED'` bị trigger này từ chối
 -- (*"UNSEALED -> CANCELLED"*), và danh sách trắng của `cancelRfq` cũng không có `UNSEALED`. Khoản 225
 -- đã đo hai trạng thái hút ấy từ S1.107 và để mở vì nó là một câu hỏi NGHIỆP VỤ: huỷ sau khi giá đã lộ
 -- có hệ quả với nhà cung cấp. Khoản 244 biến câu hỏi ấy thành một lối kẹt thật.
 --
--- SỬA (chủ dự án chốt ngày 2026-09-27, ADR-102) — đúng *"sửa đúng cách"* mà khoản 225 tự ghi:
+-- SỬA (chủ dự án chốt ngày 2026-09-27, ADR-103) — đúng *"sửa đúng cách"* mà khoản 225 tự ghi:
 --   ⑴ bốn cạnh MỚI trong `CANH_HOP_LE`: `CLOSED`, `UNSEALED`, `BAFO_CLOSED`, `BAFO_UNSEALED` → `CANCELLED`;
 --   ⑵ cột `cancel_reason`: đặt đúng một lần, ở cạnh vào `CANCELLED`; BẮT BUỘC ở bốn cạnh mới — vế (i);
 --   ⑶ `cancelRfq` ghi lý do vào cột ấy cho MỌI lần huỷ, cạnh hàng sổ `RFQ_CANCELLED` đã có;
@@ -53,10 +53,10 @@ DECLARE
   --
   -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6.
   --
-  -- [S1.164 / khoản 225] BỐN cạnh huỷ MỚI — `CLOSED`, `UNSEALED` và hai ảnh BAFO của chúng. Trước
+  -- [S1.165 / khoản 225] BỐN cạnh huỷ MỚI — `CLOSED`, `UNSEALED` và hai ảnh BAFO của chúng. Trước
   -- vòng này bốn trạng thái ấy là trạng thái HÚT, và khoản 244 đo ra lối rơi vào đó: một báo giá ghi
   -- đơn vị tiền khác làm lượt chấm bị từ chối, gói đứng yên ở `UNSEALED` và không đường nào của sản
-  -- phẩm kết thúc được nó. Chủ dự án chốt ngày 2026-09-27 (ADR-102): mở bốn cạnh, và lần huỷ SAU
+  -- phẩm kết thúc được nó. Chủ dự án chốt ngày 2026-09-27 (ADR-103): mở bốn cạnh, và lần huỷ SAU
   -- KHI ĐÓNG phải mang lý do — vế (i) dưới — vì nhà cung cấp đã bỏ công dự thầu, và từ `UNSEALED`
   -- giá của họ đã lộ. Lý do ấy nhà cung cấp ĐỌC ĐƯỢC ở trang nộp thầu (`cancel_reason`).
   CANH_HOP_LE constant text[] := ARRAY[
@@ -138,7 +138,7 @@ BEGIN
     RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation';
   END IF;
 
-  -- (i) [S1.164 / khoản 225] LÝ DO HUỶ. Nó chỉ được đặt ĐÚNG MỘT LẦN, và đúng ở cạnh vào
+  -- (i) [S1.165 / khoản 225] LÝ DO HUỶ. Nó chỉ được đặt ĐÚNG MỘT LẦN, và đúng ở cạnh vào
   -- `CANCELLED` — một lý do viết sau khi huỷ, hay viết lên một gói chưa huỷ, là một lời khai nhà cung
   -- cấp đọc được mà không gắn với sự kiện nào. Huỷ SAU KHI ĐÓNG thì lý do là BẮT BUỘC ở chính tầng
   -- này, không chỉ ở `cancelRfq`: bốn cạnh ấy mở ra ở vòng này với đúng điều kiện đó.

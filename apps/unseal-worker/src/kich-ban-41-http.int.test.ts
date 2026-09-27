@@ -255,6 +255,18 @@ async function trangThaiRfq(): Promise<string> {
   return rows[0]?.status ?? "";
 }
 
+/**
+ * [S1.164 / khoản 245] Số hàng sổ của một `action` trên gói thầu của kịch bản, và người ghi hàng MỚI NHẤT — đọc dưới vai superuser.
+ * Ba lượt đọc giá (bảng so sánh, bảng xếp hạng, bộ bằng chứng) mỗi lượt để lại đúng một hàng; lần bị từ chối không để lại hàng nào.
+ */
+async function soHangDoc(action: string): Promise<{ n: number; nguoiMoiNhat: string | null }> {
+  const { rows } = await db.pool.query<{ n: string; nguoi: string | null }>(
+    "SELECT count(*) OVER ()::text AS n, actor_id AS nguoi FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq DESC LIMIT 1",
+    [orgA, action, trangThai.rfqId],
+  );
+  return { n: Number(rows[0]?.n ?? "0"), nguoiMoiNhat: rows[0]?.nguoi ?? null };
+}
+
 const trangThai: {
   rfqId: string;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string; cookie: string }[];
@@ -720,8 +732,13 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   });
 
   it("bước 12 — BẢNG SO SÁNH qua HTTP: năm dòng, sắp theo giá, giá SỬA LẠI thắng — và đây là lần ĐẦU giá đi ra", async () => {
+    const truocXem = await soHangDoc("COMPARISON_VIEWED");
     const r = await goi("GET", `/rfqs/${trangThai.rfqId}/comparison`, trangThai.mua.cookie);
     expect(r.status, r.text).toBe(200);
+    // [S1.164 / khoản 245] Lần đầu giá đi ra cũng là lần đầu có một hàng `COMPARISON_VIEWED` — của đúng người đã đọc.
+    const sauXem = await soHangDoc("COMPARISON_VIEWED");
+    expect(sauXem.n - truocXem.n, "một lượt đọc bảng so sánh ⇒ đúng một hàng sổ").toBe(1);
+    expect(sauXem.nguoiMoiNhat).toBe(trangThai.mua.id);
     const bang = (r.body as { comparison: { rfqStatus: string; rows: { supplierLegalName: string; totalAmount: string }[]; aggregates: { min: string; max: string; belowBudget: number } } }).comparison;
     expect(bang.rfqStatus).toBe("UNSEALED");
     const mongDoi = [...trangThai.loiMoi].sort((a, b) => Number(a.gia) - Number(b.gia));
@@ -754,10 +771,15 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(Object.keys(ld).sort(), "thân của lần bấm chấm là danh sách trắng").toEqual(["currency", "evaluationId", "policyId", "policyVersion"]);
     expect(quetRoRi(r.text + "\n" + [...r.headers.entries()].map(([a, b]) => `${a}: ${b}`).join("\n")), "lần bấm chấm KHÔNG trả một mức giá nào").toEqual([]);
     // Và cổng đọc đứng đúng chỗ: người bấm chấm không có `bid.view` thì không đọc được bảng xếp hạng.
+    const truocXem = await soHangDoc("RANKING_VIEWED");
     expect((await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, trangThai.cham.cookie)).status).toBe(403);
+    expect((await soHangDoc("RANKING_VIEWED")).n, "[S1.164 / khoản 245] lần bị từ chối KHÔNG phải một lượt đọc").toBe(truocXem.n);
 
     const bxh = await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, m);
     expect(bxh.status, bxh.text).toBe(200);
+    const sauXem = await soHangDoc("RANKING_VIEWED");
+    expect(sauXem.n - truocXem.n, "[S1.164 / khoản 245] một lượt đọc bảng xếp hạng ⇒ đúng một hàng sổ").toBe(1);
+    expect(sauXem.nguoiMoiNhat).toBe(trangThai.mua.id);
     const bang = (bxh.body as {
       ranking: {
         evaluationId: string;
@@ -1268,11 +1290,17 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
   it("bước 12j — XUẤT BỘ BẰNG CHỨNG qua HTTP: cổng audit.read, cùng byte với CLI, và qua bộ kiểm độc lập", async () => {
     const duong = `/rfqs/${trangThai.rfqId}/evidence-bundle`;
 
+    const truocXuat = await soHangDoc("EVIDENCE_BUNDLE_EXPORTED");
     const chan = await goi("GET", duong, trangThai.mua.cookie);
     expect(chan.status, chan.text).toBe(403);
+    expect((await soHangDoc("EVIDENCE_BUNDLE_EXPORTED")).n, "[S1.164 / khoản 245] lần xuất bị từ chối KHÔNG vào sổ như một lần xuất").toBe(truocXuat.n);
 
     const ok = await goi("GET", duong, trangThai.gd1.cookie);
     expect(ok.status, ok.text).toBe(200);
+    // [S1.164 / khoản 245] Bộ bằng chứng mang giá của từng báo giá — lần xuất là một lượt đọc giá, nên để lại đúng một hàng.
+    const sauXuat = await soHangDoc("EVIDENCE_BUNDLE_EXPORTED");
+    expect(sauXuat.n - truocXuat.n).toBe(1);
+    expect(sauXuat.nguoiMoiNhat).toBe(trangThai.gd1.id);
     const eb = (ok.body as {
       evidenceBundle: { tep: Record<string, string>; soLuotCham: number; soHang: number; soTraoThau: number };
     }).evidenceBundle;
