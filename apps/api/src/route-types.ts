@@ -202,7 +202,7 @@ export interface BuyerContext {
   /** [S1.70 / khoản 124] Việc sau commit mà kết quả quyết phản hồi — xem `ViecSauCommitCoBu`. */
   readonly afterCommitCoBu: AfterCommitCoBu;
   /**
-   * [S1.9101 / S3.1c / ADR-9201] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
+   * [S1.167 / S3.1c / ADR-104] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
    * (`choKyChinhSach`), mặc định TẮT; route ký đọc nó TRƯỚC mọi câu ghi.
    */
   readonly choKyChinhSach: boolean;

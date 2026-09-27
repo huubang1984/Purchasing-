@@ -13723,10 +13723,10 @@ một ĐỘT BIẾN:
 
 ---
 
-# §S1.9101 — S3.1c: ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ ĐỨNG SAU MỘT CỜ TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`
+# §S1.167 — S3.1c: ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ ĐỨNG SAU MỘT CỜ TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`
 
-**Rổ và mảnh (ADR-043 ⒞):** một khoản mới, **9401**, vào rổ B với điều kiện đóng riêng — trước khi mở cờ. Không migration.
-Một ADR mới (ADR-9201). Không chạm mảnh nào của `docs/PRODUCT.md` §11: cờ tắt thì không tổ chức nào bật được S3, và tổ chức
+**Rổ và mảnh (ADR-043 ⒞):** một khoản mới, **248**, vào rổ B với điều kiện đóng riêng — trước khi mở cờ. Không migration.
+Một ADR mới (ADR-104). Không chạm mảnh nào của `docs/PRODUCT.md` §11: cờ tắt thì không tổ chức nào bật được S3, và tổ chức
 chưa bật chạy như MVP1.
 
 ## 1. Vòng này là gì
@@ -13735,12 +13735,12 @@ Phần ba trong bốn phần của S3.1 (spec S3 §9): route tạo và ký phiê
 bậc, chữ ký thứ hai và công tắc ở CSDL; S3.1b (§S1.166) cho gói đọc bậc và dựng K1. Tới vòng này, cách duy nhất để khai bậc
 hay ký một phiên bản là SQL dưới chủ sở hữu CSDL.
 
-## 2. Bốn quyết định của chủ dự án (S1.9101)
+## 2. Bốn quyết định của chủ dự án (S1.167)
 
-- **Nút bật:** route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT (ADR-9201). Hai
+- **Nút bật:** route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT (ADR-104). Hai
   phương án bị loại: mở luôn kèm một lời cảnh báo trên màn — bậc hiện ra mà K2–K12 chưa cưỡng chế, tức kiểm soát giả của
   §8.1 do chính sản phẩm; hoãn route ký tới khi S3 đủ — S3.1d phải ký bằng SQL, và màn soạn không có đường đi trọn vòng.
-- **`CONTROL_DENIED` ngoài trần ADR-092:** ghi khoản 9401, giải trước khi mở cờ. Phương án bị loại: giải ngay trong vòng
+- **`CONTROL_DENIED` ngoài trần ADR-092:** ghi khoản 248, giải trước khi mở cờ. Phương án bị loại: giải ngay trong vòng
   này — một thay đổi ở bộ điều phối và `packages/identity`, ngoài phạm vi S3.1c, cho một khe hôm nay không có đường sống.
 - **Số người tối thiểu:** tính theo bảng vai §7, từng bậc. Phương án bị loại: chỉ báo *"cần ≥ 2 người giữ `policy.manage`"*
   — không đạt §8.10.
@@ -13780,7 +13780,7 @@ vụ ở `/lib/chinh-sach.js`, khuôn `so-tien.ts`. Trang `trang/chinh-sach.html
 - **Route không chép luật của trigger.** Bản nháp đề xuất bốn lời từ chối có tên ở tầng gói; tôi không làm: lời của trigger
   đã đi ra 422 có tên (`RAISE` ⇒ `exec_stmt_raise`, qua `anhXaLoiPostgres`), và một bản sao TypeScript chỉ thêm một chỗ để
   trôi. Phiên bản không tồn tại ra 422 thân cố định (23503).
-- **Tạo phiên bản có bậc không đứng sau cờ** (ADR-9201 ⑶).
+- **Tạo phiên bản có bậc không đứng sau cờ** (ADR-104 ⑶).
 - **`GET /policy/versions` không mở cho agent.** Lịch sử phiên bản cùng người ký là dữ liệu quản trị; không công cụ đọc nào
   của agent cần nó. Mở sau là một quyết định có tên.
 - **Cờ nhận đúng hai chuỗi.** `true`, `1`, `on`, `BAT` làm tiến trình không lên, lời lỗi nêu tên biến.
@@ -13792,8 +13792,8 @@ vụ ở `/lib/chinh-sach.js`, khuôn `so-tien.ts`. Trang `trang/chinh-sach.html
 
 ## 5. Đo
 
-**HTTP** (`apps/api/src/buyer.int.test.ts`, khối `[S1.9101 / S3.1c]`; một máy chủ thứ hai trên cùng CSDL, cờ bật):
-- Cờ tắt: người ký hợp lệ ở mọi luật của trigger vẫn nhận 409 mang `ADR-9201`; 0 chữ ký; tổ chức không bật.
+**HTTP** (`apps/api/src/buyer.int.test.ts`, khối `[S1.167 / S3.1c]`; một máy chủ thứ hai trên cùng CSDL, cờ bật):
+- Cờ tắt: người ký hợp lệ ở mọi luật của trigger vẫn nhận 409 mang `ADR-104`; 0 chữ ký; tổ chức không bật.
   `GET /policy/versions` trả trọn ma trận, người tạo, hai cột mức và `hieuLuc` đúng — bản có bậc chưa ký KHÔNG hiệu lực, bản 1
   hiệu lực, khớp `GET /policy` —, `choKy: false`. Bản có bậc chưa ký không chặn bản kế tiếp.
 - Cờ bật: bốn lời từ chối — bản không bậc, bản không mới nhất, người tạo tự ký, phiên bản không tồn tại — mỗi cái một 422
@@ -13834,15 +13834,15 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
 
 ## 6. Giới hạn, nói ra
 
-- **Khoản 9401** — `CONTROL_DENIED` ngoài trần ADR-092 — chặn việc mở cờ.
+- **Khoản 248** — `CONTROL_DENIED` ngoài trần ADR-092 — chặn việc mở cờ.
 - Cờ theo TIẾN TRÌNH, không theo tổ chức; tắt cờ sau khi một tổ chức đã bật làm tổ chức ấy không đổi được chính sách nữa
-  (ADR-9201, *Cái giá*).
+  (ADR-104, *Cái giá*).
 - Số người tối thiểu là của mô hình mỗi-người-một-vai, không phải cận dưới đã chứng minh: một người mang cả FINANCE lẫn
   DIRECTOR hạ được nó, và màn nói điều đó.
 - Cảnh báo là lời nói, không phải chốt; máy chủ không đọc hai hàm ấy.
 - Màn không có test trình duyệt tự động: lượt chạy thử ở trên là một lần, không phải một cổng. Hai hàm tính có test đơn vị;
   phần DOM thì không.
-- Màn chưa nói chốt nào của S3 đang được cưỡng chế — vế (b) của ADR-9201 ⑷ đòi điều đó nếu cờ mở trước khi S3 đủ.
+- Màn chưa nói chốt nào của S3 đang được cưỡng chế — vế (b) của ADR-104 ⑷ đòi điều đó nếu cờ mở trước khi S3 đủ.
 - S3.1d gieo `gieo:demo` với chữ ký thứ hai: phải chạy dưới cờ bật.
 
 ## 7. Số đo

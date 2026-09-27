@@ -72,13 +72,13 @@ export interface CreateProcurementPolicyInput {
   /** Số nhà thầu vào vòng BAFO. `0` nghĩa là tổ chức KHÔNG dùng BAFO — xem `056`. */
   readonly bafoTopN?: number | null;
   /**
-   * [S1.9101 / S3.1c] Bậc giá trị (spec S3 §4.1). Khoá viết theo lối CSDL (`tu_so_tien`, `so_ncc_toi_thieu`, …), cùng lý do
+   * [S1.167 / S3.1c] Bậc giá trị (spec S3 §4.1). Khoá viết theo lối CSDL (`tu_so_tien`, `so_ncc_toi_thieu`, …), cùng lý do
    * `ThanhPhanTrongSoVao`: hình dạng bên trong là hợp đồng do trigger `chinh_sach_kiem_bac` (`069`) cưỡng chế — mười khoá
    * đúng kiểu, bậc 0, cận dưới tăng ngặt, bậc đấu thầu chính thức chỉ đứng cuối — và một cách viết thứ hai ở TypeScript
    * là một bản sao sẽ trôi. Tầng này chỉ kiểm hình dạng NGOÀI. `undefined` hay `null` ⇒ phiên bản không bậc.
    */
   readonly tiers?: readonly Readonly<Record<string, unknown>>[] | null;
-  /** [S1.9101] Hai cột mức chính sách (`069`): tất-cả-hoặc-không cùng `tiers`, dương — CSDL phán. */
+  /** [S1.167] Hai cột mức chính sách (`069`): tất-cả-hoặc-không cùng `tiers`, dương — CSDL phán. */
   readonly chiaNhoCuaSoNgay?: number | null;
   readonly thamDinhHieuLucThang?: number | null;
   readonly actorSessionId: string;
@@ -155,7 +155,7 @@ function trongSoJson(input: CreateProcurementPolicyInput): { tp: string | null; 
 }
 
 /**
- * [S1.9101 / S3.1c] Hình dạng NGOÀI của bậc và hai cột mức, và chỉ hình dạng ngoài: mảng không rỗng các đối tượng, hai số
+ * [S1.167 / S3.1c] Hình dạng NGOÀI của bậc và hai cột mức, và chỉ hình dạng ngoài: mảng không rỗng các đối tượng, hai số
  * nguyên. Mọi luật còn lại — khoá, kiểu, thứ tự bậc, tất-cả-hoặc-không, *tổ chức đã bật thì phải có bậc* — là của `069`.
  */
 function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chiaNho: number | null; thamDinh: number | null } {
@@ -226,7 +226,7 @@ export async function createProcurementPolicy(
       currency: hang.currency,
       soThanhPhan: input.evalComponents?.length ?? 0,
       bafoTopN: topN,
-      // [S1.9101] Cùng lý do `soThanhPhan`: sổ nói phiên bản có bậc hay không và bao nhiêu bậc; ma trận nằm ở chính hàng
+      // [S1.167] Cùng lý do `soThanhPhan`: sổ nói phiên bản có bậc hay không và bao nhiêu bậc; ma trận nằm ở chính hàng
       // chính sách, bất biến, xuất được.
       soBac: input.tiers?.length ?? 0,
     },
@@ -235,7 +235,7 @@ export async function createProcurementPolicy(
   return doiChinhSach(hang);
 }
 
-/** [S1.9101 / S3.1c] Chữ ký thứ hai của một phiên bản chính sách, như CSDL đã đóng dấu. */
+/** [S1.167 / S3.1c] Chữ ký thứ hai của một phiên bản chính sách, như CSDL đã đóng dấu. */
 export interface ChuKyChinhSach {
   readonly policyId: string;
   readonly version: number;
@@ -246,14 +246,14 @@ export interface ChuKyChinhSach {
 }
 
 /**
- * [S1.9101 / S3.1c / ADR-082 ⑺] Ký một phiên bản chính sách có bậc — và lần ký đầu tiên như thế BẬT S3 cho tổ chức.
+ * [S1.167 / S3.1c / ADR-082 ⑺] Ký một phiên bản chính sách có bậc — và lần ký đầu tiên như thế BẬT S3 cho tổ chức.
  *
  * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ `072`): phiên bản có bậc, người ký khác
  * người tạo và giữ `policy.manage`, là phiên bản MỚI NHẤT, đã tới ngày hiệu lực, dưới khoá tư vấn theo tổ chức; `signed_by`
  * dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); mỗi phiên bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật
  * nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
  *
- * Cờ triển khai (ADR-9201) KHÔNG nằm ở đây mà ở route — hàm này là cơ chế, route là cửa.
+ * Cờ triển khai (ADR-104) KHÔNG nằm ở đây mà ở route — hàm này là cơ chế, route là cửa.
  */
 export async function kyPhienBanChinhSach(
   client: pg.PoolClient,
@@ -295,7 +295,7 @@ export async function kyPhienBanChinhSach(
   return { policyId: input.policyId, version: hang.version, signedBy: actor.id, signedAt: ky.signed_at, daBat: hang.da_bat };
 }
 
-/** [S1.9101 / S3.1c] Một phiên bản chính sách như màn `/chinh-sach` đọc: trọn ma trận, chữ ký, và có đang hiệu lực không. */
+/** [S1.167 / S3.1c] Một phiên bản chính sách như màn `/chinh-sach` đọc: trọn ma trận, chữ ký, và có đang hiệu lực không. */
 export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly tiers: readonly Readonly<Record<string, unknown>>[] | null;
   readonly chiaNhoCuaSoNgay: number | null;
@@ -325,7 +325,7 @@ interface HangPhienBan extends HangChinhSach {
 }
 
 /**
- * [S1.9101 / S3.1c] Mọi phiên bản chính sách của tổ chức, mới nhất trước — cho màn `/chinh-sach` và cho phép tính phiên bản
+ * [S1.167 / S3.1c] Mọi phiên bản chính sách của tổ chức, mới nhất trước — cho màn `/chinh-sach` và cho phép tính phiên bản
  * KẾ TIẾP của `POST /policy`.
  *
  * Câu này đọc MỌI phiên bản nên nó không chọn phiên bản nào; phiên bản hiệu lực được đánh dấu bằng CHÍNH

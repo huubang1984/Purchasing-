@@ -10,7 +10,7 @@
 //   [INV-E6]  token magic link mời thầu KHÔNG về client — chỉ tới bộ gửi, đích đọc từ supplier_contacts.
 //   [INV-D1]  điều phối mở thầu cần cổng bốn vế; hai phê duyệt bởi hai giám đốc khác người yêu cầu.
 //   [INV-K1]  [S1.166] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
-//   [S1.9101] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
+//   [S1.167] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
 //             thứ hai ký bản mới nhất ⇒ bật S3; phiên bản kế tiếp tính theo bản MỚI NHẤT, không theo bản hiệu lực.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
@@ -70,7 +70,7 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-/** `tai`: gốc của máy chủ nhận lời gọi — mặc định máy chủ chung của tệp; [S1.9101] ca ký chính sách dựng máy chủ thứ hai. */
+/** `tai`: gốc của máy chủ nhận lời gọi — mặc định máy chủ chung của tệp; [S1.167] ca ký chính sách dựng máy chủ thứ hai. */
 async function goi(method: string, path: string, ai: Nguoi | null, body?: unknown, tai: string = goc): Promise<PhanHoi> {
   const headers: Record<string, string> = {};
   if (ai !== null) headers.cookie = ai.cookie;
@@ -226,7 +226,7 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     const cs = await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" });
     expect(cs.status, cs.text).toBe(201);
     expect((await goi("GET", "/policy", buyer)).status).toBe(200);
-    // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng ~~hiện hành~~ [S1.9101] mới nhất + 1. Một `2147483647` (trần
+    // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng ~~hiện hành~~ [S1.167] mới nhất + 1. Một `2147483647` (trần
     // int4 — ghim tổ chức vĩnh viễn vì trigger 022 đòi "lớn hơn" và không có UPDATE/DELETE) bị 422.
     const ghim = await goi("POST", "/policy", tc, { version: 2147483647, dualApprovalThreshold: "0.01", currency: "VND" });
     expect(ghim.status, ghim.text).toBe(422);
@@ -874,7 +874,7 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
   });
 });
 
-describe("[S1.9101 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậc, đọc, và ký sau cờ triển khai (ADR-9201)", () => {
+describe("[S1.167 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậc, đọc, và ký sau cờ triển khai (ADR-104)", () => {
   // Máy chủ THỨ HAI trên cùng CSDL, cờ BẬT. Máy chủ chung của tệp không khai cờ nên giữ mặc định TẮT của `createDispatcher`
   // — đúng cấu hình một máy chủ thật có khi không ai khai biến môi trường — và mọi ca khác của tệp, kể cả hai lượt quét
   // [INV-H17], chạy dưới cấu hình ấy.
@@ -952,7 +952,7 @@ describe("[S1.9101 / S3.1c] phiên bản chính sách qua HTTP — tạo có b�
     // ⑴ Cửa đóng TRƯỚC mọi câu ghi: người ký hợp lệ ở mọi luật của trigger mà vẫn 409, và CSDL không thấy một hàng.
     const ky = await goi("POST", `/policy/${idV2}/sign`, tc2);
     expect(ky.status, ky.text).toBe(409);
-    expect(ky.text).toContain("ADR-9201");
+    expect(ky.text).toContain("ADR-104");
     expect(await soChuKy(org)).toBe(0);
     expect(await daBat(org)).toBe(false);
 

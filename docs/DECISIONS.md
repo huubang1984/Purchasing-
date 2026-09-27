@@ -8140,11 +8140,11 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 ---
 
-## ADR-9201 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
+## ADR-104 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101) · Liên quan: ADR-080 ⑵,
-ADR-082 ⑺, ADR-084 ⑷, ADR-092 · Khoản: **9401** (rổ B) · Spec: S3 §9 S3.1c, §8.1, §8.10 · Biên bản:
-`evidence/security-reviews.md` §S1.9101
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.167) · Liên quan: ADR-080 ⑵,
+ADR-082 ⑺, ADR-084 ⑷, ADR-092 · Khoản: **248** (rổ B) · Spec: S3 §9 S3.1c, §8.1, §8.10 · Biên bản:
+`evidence/security-reviews.md` §S1.167
 
 **Bối cảnh.** S3.1c dựng route ký phiên bản chính sách (`POST /policy/:policyId/sign`) và màn `/chinh-sach`. Lần ký đầu
 tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). `master` là nguồn triển khai thật, và sau S3.1b
@@ -8166,7 +8166,7 @@ công cụ) không mở được cửa ấy bằng cách quên một tham số.
 hành vi của tổ chức; màn soạn — cảnh báo và số người tối thiểu — dùng được trước ngày bật, đúng điều §8.10 đòi.
 
 ⑷ **Điều kiện mở cờ trên một máy chủ thật**, cả hai:
-- (a) khoản 9401 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092;
+- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092;
 - (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
   rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
 
