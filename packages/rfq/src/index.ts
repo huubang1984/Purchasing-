@@ -45,7 +45,7 @@ export {
   MONEY_PATTERN,
   createProcurementPolicy,
   getActiveProcurementPolicy,
-  // [S1.168 / S3.1c] Lần ký chính sách (bật S3) và danh sách phiên bản cho màn `/chinh-sach`.
+  // [S1.169 / S3.1c] Lần ký chính sách (bật S3) và danh sách phiên bản cho màn `/chinh-sach`.
   kyPhienBanChinhSach,
   lietKePhienBanChinhSach,
   setRfqBudget,

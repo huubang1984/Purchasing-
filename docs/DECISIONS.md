@@ -8188,9 +8188,9 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 
 ## ADR-105 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.168) · Liên quan: ADR-080 ⑵,
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.169) · Liên quan: ADR-080 ⑵,
 ADR-082 ⑺, ADR-084 ⑷, ADR-092 · Khoản: **248** (rổ B) · Spec: S3 §9 S3.1c, §8.1, §8.10 · Biên bản:
-`evidence/security-reviews.md` §S1.168
+`evidence/security-reviews.md` §S1.169
 
 **Bối cảnh.** S3.1c dựng route ký phiên bản chính sách (`POST /policy/:policyId/sign`) và màn `/chinh-sach`. Lần ký đầu
 tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). `master` là nguồn triển khai thật, và sau S3.1b

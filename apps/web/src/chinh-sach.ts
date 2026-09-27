@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.168 / S3.1c] MÀN KHAI CHÍNH SÁCH — CẢNH BÁO CẤU HÌNH RỖNG RUỘT VÀ SỐ NGƯỜI TỐI THIỂU
+// [S1.169 / S3.1c] MÀN KHAI CHÍNH SÁCH — CẢNH BÁO CẤU HÌNH RỖNG RUỘT VÀ SỐ NGƯỜI TỐI THIỂU
 //
 // Spec S3 §8.1 ⑵: màn khai chính sách CẢNH BÁO — không chặn — ba cấu hình rỗng ruột. §8.10: màn phải cho thấy số người
 // tối thiểu mà một cấu hình đòi, TRƯỚC khi tổ chức bật S3 — vì khi thiếu người, lối thoát dễ nhất là nới chính sách, tức

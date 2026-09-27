@@ -69,7 +69,7 @@ const HAM_DOI_TRANG_THAI = [
   "dispatchUnseal",
   "extendRfqDeadline",
   "issueMagicLinkToken",
-  // [S1.168 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
+  // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
   "openRfq",
@@ -113,7 +113,7 @@ const HAM_CHI_DOC = [
   // lập luận đã ghi cho `listSuppliers` và `auditStoredCiphertexts`.
   "getInvitationNoticeTarget",
   "listBidVersions",
-  // [S1.168 / S3.1c] Mọi phiên bản chính sách cùng chữ ký — cùng hạng với `getActiveProcurementPolicy`: chính sách không
+  // [S1.169 / S3.1c] Mọi phiên bản chính sách cùng chữ ký — cùng hạng với `getActiveProcurementPolicy`: chính sách không
   // phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`), không ở đây.
   "lietKePhienBanChinhSach",
   "listRfqItems",

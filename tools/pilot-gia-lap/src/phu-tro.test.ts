@@ -7,7 +7,7 @@ import { CONG_MAC_DINH, CumError, kiemThuMucTrangThai, moiTruongSach, moiTruongT
 import { giaiMaBase32, maTotpHienTai } from "./dien-vien.js";
 import { HopThu, docTin, tokenTuLink } from "./hop-thu.js";
 import { diaChiGiaLap } from "./http.js";
-import { chonKichBan } from "./index.js";
+import { chonKichBan, kiemPhienBanNode } from "./index.js";
 import { ThamSoError, docThamSo } from "./tham-so.js";
 import { gopTrangThai, luotMoiNhat, type ToChucTrangThai } from "./trang-thai.js";
 
@@ -45,6 +45,15 @@ describe("chọn kịch bản", () => {
     expect(chonKichBan({ chi: ["SX-06"], cham: true }).chon.map((k) => k.ma)).toEqual(["SX-06"]);
     expect(chonKichBan({ chi: [], cham: false }).boQua).toEqual(["SX-06"]);
     expect(() => chonKichBan({ chi: ["SX-99"], cham: false })).toThrow(/không có kịch bản/u);
+  });
+});
+
+describe("phiên bản Node", () => {
+  it("chỉ nhận các bản đã đo chạy được cụm, và từ chối bằng một câu nói rõ thay vì để web chết giữa chừng", () => {
+    for (const hong of ["20.18.0", "22.6.0", "22.12.0", "23.0.0", "23.1.0", "26.0.0", "v22.13.0", ""]) {
+      expect(() => kiemPhienBanNode(hong)).toThrow(/cần Node 22 từ 22\.13/u);
+    }
+    for (const duoc of ["22.13.0", "22.22.2", "23.2.0", "24.21.0", "25.9.0"]) expect(() => kiemPhienBanNode(duoc)).not.toThrow();
   });
 });
 

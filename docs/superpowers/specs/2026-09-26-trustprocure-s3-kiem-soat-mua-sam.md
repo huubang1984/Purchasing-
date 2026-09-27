@@ -640,7 +640,7 @@ Thứ S3 làm được: ⑴ người khai chính sách không cầm thứ bị �
 một bậc LỎNG hơn bậc dưới nó (số nhà cung cấp hay số chữ ký giảm khi giá trị tăng); `ky_danh_sach_moi` tắt ở mọi bậc;
 ⑶ mọi phiên bản chính sách xuất được, nên kiểm toán viên đọc được chính sách lúc gói ấy chạy.
 
-**[S1.168]** S3.1c cài ⑵ ở màn `/chinh-sach`: ba cảnh báo là hàm thuần `canhBaoChinhSach` (`apps/web/src/chinh-sach.ts`),
+**[S1.169]** S3.1c cài ⑵ ở màn `/chinh-sach`: ba cảnh báo là hàm thuần `canhBaoChinhSach` (`apps/web/src/chinh-sach.ts`),
 tính lại ở mỗi lần sửa, không chặn; ngưỡng kép đứng đầu khung soạn, cạnh bảng bậc. Và một lớp mà đoạn trên không có: lần ký —
 nút bật — đứng sau một cờ triển khai mặc định tắt tới khi S3 cưỡng chế được điều màn hiện ra (ADR-105).
 
@@ -753,7 +753,7 @@ loại trừ K5; chữ ký thứ hai cho chính sách; người thẩm định v
 nhỏ sẽ gặp điều này ở gói lớn đầu tiên — và khi thiếu người, lối thoát dễ nhất là nới chính sách, tức đúng kiểm soát
 giả ở §8.1. Màn khai chính sách phải cho thấy số người tối thiểu mà một cấu hình đòi, trước khi tổ chức bật S3.
 
-**[S1.168]** S3.1c cài ở màn `/chinh-sach`: `soNguoiToiThieu` (`apps/web/src/chinh-sach.ts`) tính lại bảng vai §7 cho
+**[S1.169]** S3.1c cài ở màn `/chinh-sach`: `soNguoiToiThieu` (`apps/web/src/chinh-sach.ts`) tính lại bảng vai §7 cho
 từng bậc của cấu hình đang soạn — mặc định ra 5 · 5 · 7 người, bật `award_vai_khac_nhau` ở bậc 2 ra 8, đúng hai con số của
 tài liệu này. Con số là của mô hình MỖI NGƯỜI MỘT VAI mà §7 dùng: D3 không cấm một người mang cả FINANCE lẫn DIRECTOR, nên
 con số thật có thể thấp hơn, và màn nói điều đó. Màn soạn dùng được trước ngày bật: tạo phiên bản có bậc không đứng sau cờ.
@@ -794,7 +794,7 @@ chữ ký chính sách — nên nếu có trôi thì trôi lên.
 | # | Thêm hoặc đổi |
 |---|---|
 | **S3.0** | ADR-080/081 đã chốt ở lượt soi. Việc còn lại: **bảng mã quyền** cho hành vi mới (lập ngoại lệ, ghi nhận tín hiệu, quản lý nhóm hàng, xác minh, cạnh về DRAFT, gửi lại link) và **lớp từ chối thứ ba** của K12 — cả hai do chủ dự án chốt. **[S1.142]** Cả hai đã chốt ở ADR-084; S3.0 còn đúng phần nới dải nhãn dưới đây. Nới dải `[A-HJ]`→`[A-HJK]` ở mọi chỗ ghim đếm bằng grep lúc làm (hôm nay 10 chỗ trong mã, cộng mẫu của `parse.test.ts`), kèm một hàng K mẫu và ca giết mũi thu dải. Phép kiểm `"ABCDEFGH"` ở `tools/inv-matrix/src/danh-gia.test.ts` chỉ thêm K khi K1 đã vào sổ, tức S3.1. **[S1.153] S3.0 KHÉP.** Đo lúc làm vẫn đúng 10 chỗ; cả mười nay là `[A-HJK]`, mẫu của `parse.test.ts` có hàng K1, và năm mũi thu dải cùng hai mũi nới sai dải đều chết (`evidence/security-reviews.md` §S1.153) |
-| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.156]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`069_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.156). **S3.1b XONG** (`072_bac_cua_goi`, §S1.166). **S3.1c XONG** (route tạo, đọc và ký phiên bản — lần ký sau cờ triển khai mặc định tắt, ADR-105; màn `/chinh-sach`; §S1.168). S3.1d gieo chữ ký thứ hai bằng route ấy với cờ bật trong môi trường demo, không bằng SQL |
+| **S3.1** | Bậc `jsonb` trên hàng chính sách; chữ ký thứ hai cho phiên bản; hàm *đã bật* của công tắc ADR-080; ngân sách bắt buộc; ~~sàn một chữ ký~~ **[S1.142]** (đã có cho mọi tổ chức — `068`, ADR-085); K1; gieo lại `gieo:demo` theo bảng vai của §7. **[S1.156]** Chủ dự án chia bốn phần, mỗi phần một PR: **S3.1a** lược đồ — bậc, mức, chữ ký thứ hai, công tắc, phiên bản hiệu lực; **S3.1b** bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`), ngân sách bắt buộc ghim đúng phiên bản hiệu lực, K1, lớp `CONTROL_DENIED`; **S3.1c** route tạo và ký phiên bản, màn `/chinh-sach`; **S3.1d** `gieo:demo` theo bảng vai §7 và kịch bản 41 chạy hai luồng. **S3.1a XONG** (`069_bac_va_chu_ky_chinh_sach`, `evidence/security-reviews.md` §S1.156). **S3.1b XONG** (`072_bac_cua_goi`, §S1.166). **S3.1c XONG** (route tạo, đọc và ký phiên bản — lần ký sau cờ triển khai mặc định tắt, ADR-105; màn `/chinh-sach`; §S1.169). S3.1d gieo chữ ký thứ hai bằng route ấy với cờ bật trong môi trường demo, không bằng SQL |
 | **S3.2** | Băm danh sách RIÊNG + UNIQUE (người, băm); hàm, route và mã quyền cho cạnh về DRAFT; đúc token lúc mở gói; trạng thái *chưa gửi* và lối *gửi lại*; K4a/K4b, K6; ~~sửa khoản 240 nếu nó chưa được sửa ở vòng riêng~~ **[S1.140]** khoản 240 đã sửa ở vòng riêng (`067`) |
 | **S3.3** | **Xác minh nội bộ lên đây** (K8a) — K2 cần nó; bốn luật đếm; ngoại lệ có hàng rút; K3 theo định nghĩa §5.1; tập loại trừ K5 mở rộng |
 | **S3.5** | Hàm số chữ ký NÉM khi NULL; từ chối bậc đấu thầu chính thức; kiểm lại K2/K5/K8 ở bậc cao hơn; hậu kiểm (K2b); tác giả chính sách bị loại; cổng trao thầu thành các trigger RIÊNG; ~~đóng khoản 242 ⑴~~ **[S1.142]** lời khai của khoản 242 ⑴ đã sửa ở `068`; S3.5 dựng chữ ký sống độc lập với hàng `APPROVED` và phải lật khối đo `[S1.142 / khoản 242 ⑴]` |

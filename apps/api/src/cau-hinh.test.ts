@@ -100,7 +100,7 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "10" }))).toThrow("TRUSTPROCURE_CLOCK_SKEW_CHECK_MS");
   });
 
-  it("[S1.168 / ADR-105] cờ ký chính sách: không khai ⇒ TẮT; chỉ `bat`/`tat`; chữ khác làm tiến trình không lên, không đọc thành tắt", () => {
+  it("[S1.169 / ADR-105] cờ ký chính sách: không khai ⇒ TẮT; chỉ `bat`/`tat`; chữ khác làm tiến trình không lên, không đọc thành tắt", () => {
     expect(docCauHinh(envHopLe()).choKyChinhSach).toBe(false);
     expect(docCauHinh(envHopLe({ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: "bat" })).choKyChinhSach).toBe(true);
     expect(docCauHinh(envHopLe({ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: "tat" })).choKyChinhSach).toBe(false);

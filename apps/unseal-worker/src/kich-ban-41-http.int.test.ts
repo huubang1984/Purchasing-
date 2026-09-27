@@ -542,7 +542,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
               if (ph.status === 201) hy.policyId = (ph.body as { policy: { id: string } }).policy.id;
             },
           };
-        // [S1.168 / S3.1c] Lần ký đứng sau cờ triển khai (ADR-105), và bộ điều phối của kịch bản này không khai cờ ⇒ TẮT:
+        // [S1.169 / S3.1c] Lần ký đứng sau cờ triển khai (ADR-105), và bộ điều phối của kịch bản này không khai cờ ⇒ TẮT:
         // lời gọi qua cổng `policy.manage`, tới handler, và dừng ở 409 có tên — không ở một 422 hình dạng. Đích là bản v2 mà
         // ca ngay trên vừa tạo; cờ có mở thì lời gọi cũng dừng ở trigger (bản không bậc), không bật S3 cho tổ chức.
         case "POST /policy/:policyId/sign":

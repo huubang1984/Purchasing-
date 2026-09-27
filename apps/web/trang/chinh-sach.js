@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.168 / S3.1c] MÀN KHAI CHÍNH SÁCH — spec S3 §9 (S3.1c), §8.1 ⑵, §8.10
+// [S1.169 / S3.1c] MÀN KHAI CHÍNH SÁCH — spec S3 §9 (S3.1c), §8.1 ⑵, §8.10
 //
 // Ba việc, và không việc nào là chốt: ⑴ đọc các phiên bản — trọn ma trận, chữ ký, phiên bản hiệu lực; ⑵ soạn một phiên
 // bản mới, với cảnh báo cấu hình rỗng ruột và số người tối thiểu tính lại ở mỗi lần sửa; ⑶ ký phiên bản mới nhất. Mọi

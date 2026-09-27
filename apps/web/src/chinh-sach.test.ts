@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.168 / S3.1c] PHÉP ĐO CHO HAI PHÉP TÍNH CỦA MÀN KHAI CHÍNH SÁCH
+// [S1.169 / S3.1c] PHÉP ĐO CHO HAI PHÉP TÍNH CỦA MÀN KHAI CHÍNH SÁCH
 //
 // Hai đối chứng neo vào CHÍNH spec, không vào hàm: bậc 2 mặc định ra 7 người (§7), và bật `award_vai_khac_nhau` ở bậc
 // ấy ra 8 (§4.1, câu về `award_vai_khac_nhau`). Còn lại là bảng ca biên của ngưỡng kép — so bằng số nguyên đồng, một
@@ -18,7 +18,7 @@ function doiBac(i: number, doi: Partial<Bac>): Bac[] {
   return BAC_MAC_DINH.map((b, j) => (j === i ? { ...b, ...doi } : b));
 }
 
-describe("[S1.168 / S3.1c] số người tối thiểu theo bảng vai §7", () => {
+describe("[S1.169 / S3.1c] số người tối thiểu theo bảng vai §7", () => {
   it("mặc định §4.1 với ngưỡng kép 1 tỷ: bậc 0 và 1 cần 5 người, bậc 2 cần ĐÚNG 7 — con số §7 tự nêu; bậc 3 là đấu thầu chính thức", () => {
     const kq = soNguoiToiThieu(BAC_MAC_DINH, NGUONG_KEP_MAC_DINH);
     expect(nguoi(kq[0])).toEqual({ tong: 5, finance: 2, muaSam: 2, giamDoc: 1, s: 1 });
@@ -63,7 +63,7 @@ describe("[S1.168 / S3.1c] số người tối thiểu theo bảng vai §7", () 
   });
 });
 
-describe("[S1.168 / S3.1c] ba cảnh báo của §8.1 ⑵ — không chặn", () => {
+describe("[S1.169 / S3.1c] ba cảnh báo của §8.1 ⑵ — không chặn", () => {
   it("mặc định §4.1 không sinh cảnh báo nào", () => {
     expect(canhBaoChinhSach(BAC_MAC_DINH)).toEqual([]);
   });
