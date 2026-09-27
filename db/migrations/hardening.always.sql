@@ -7003,10 +7003,10 @@ $ham$;
     ],
 
     -- [S1.156 / ADR-082 (7)] Chu ky thu hai cua phien ban chinh sach: khac nguoi tao, giu policy.manage, chi phien ban co bac. Than no-op cho mot nguoi tu ky — dung thu chu ky thu hai sinh ra de chan.
-    -- [S1.165] Than tu `070_bac_cua_goi`: `signed_at` dong dau SAU khoa tu van, de thu tu gio trung thu tu khoa voi lan nop duyet (K1).
+    -- [S1.166] Than tu `072_bac_cua_goi`: `signed_at` dong dau SAU khoa tu van, de thu tu gio trung thu tu khoa voi lan nop duyet (K1).
     ARRAY[
-      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 070_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 072_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '072_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7174,10 +7174,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngan_sach_khong_ghim_ban_chua_ky() và bảng public.rfq_budgets (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165 / S3.1b] Bac ap cua goi do CSDL dat (`rfq_bac_cua`). Than `RETURN NEW` de ben goi khong dat duoc cot nay — cot o lai NULL, va K1 o canh chan moi goi cua to chuc da bat.
+    -- [S1.166 / S3.1b] Bac ap cua goi do CSDL dat (`rfq_bac_cua`). Than `RETURN NEW` de ben goi khong dat duoc cot nay — cot o lai NULL, va K1 o canh chan moi goi cua to chuc da bat.
     ARRAY[
-      $q$hàm + trigger ngan_sach_xep_bac (070_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger ngan_sach_xep_bac (072_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '072_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7241,10 +7241,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngan_sach_xep_bac() và bảng public.rfq_budgets (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165 / S3.1b / K1] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: co ngan sach, ghim dung phien ban hieu luc, bac khop. Than `RETURN NEW` tat S3 bang cach bo mot buoc — dung lo spec §2.4 (5) goi ten.
+    -- [S1.166 / S3.1b / K1] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: co ngan sach, ghim dung phien ban hieu luc, bac khop. Than `RETURN NEW` tat S3 bang cach bo mot buoc — dung lo spec §2.4 (5) goi ten.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_ngan_sach_khi_nop (070_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger rfq_kiem_ngan_sach_khi_nop (072_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '072_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7312,10 +7312,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_ngan_sach_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165 / S3.1b / K1] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K1 o CA HAI cho ma khong trigger nao doi.
+    -- [S1.166 / S3.1b / K1] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K1 o CA HAI cho ma khong trigger nao doi.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) (070_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) (072_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '072_bac_cua_goi.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_ngan_sach(p_org uuid, p_rfq uuid, p_luc timestamptz) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -7365,10 +7365,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165 / S3.1b] Ham phan bac DUY NHAT. Doi `<=` thanh `<` o than la doi bac cua moi goi dung bien.
+    -- [S1.166 / S3.1b] Ham phan bac DUY NHAT. Doi `<=` thanh `<` o than la doi bac cua moi goi dung bien.
     ARRAY[
-      $q$định nghĩa hàm rfq_bac_cua(uuid, numeric, text) (070_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
+      $q$định nghĩa hàm rfq_bac_cua(uuid, numeric, text) (072_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '072_bac_cua_goi.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bac_cua(p_policy uuid, p_gia_tri numeric, p_tien_te text) RETURNS numeric
   LANGUAGE plpgsql
   STABLE
@@ -7428,7 +7428,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bac_cua(uuid, numeric, text) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165] Cong tac ADR-080 (`069`). Ghim o vong nay vi K1 dung tren no: mot than `SELECT false` tat K1 cho moi to chuc.
+    -- [S1.166] Cong tac ADR-080 (`069`). Ghim o vong nay vi K1 dung tren no: mot than `SELECT false` tat K1 cho moi to chuc.
     ARRAY[
       $q$định nghĩa hàm to_chuc_da_bat_s3(uuid) (069_bac_va_chu_ky_chinh_sach)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
@@ -7461,7 +7461,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm to_chuc_da_bat_s3(uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.165] Ham phien ban hieu luc (`069`). Ghim o vong nay vi K1 dung tren no: bo ve chu ky o than la mot phien ban chua ky co hieu luc.
+    -- [S1.166] Ham phien ban hieu luc (`069`). Ghim o vong nay vi K1 dung tren no: bo ve chu ky o than la mot phien ban chua ky co hieu luc.
     ARRAY[
       $q$định nghĩa hàm chinh_sach_hieu_luc(uuid, timestamptz) (069_bac_va_chu_ky_chinh_sach)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
@@ -8779,8 +8779,8 @@ $ham$;
     ],
 
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chuyen_trang_thai (061, thân từ 068)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '068_san_mot_chu_ky.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chuyen_trang_thai (061, thân từ 071)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '071_huy_sau_khi_dong.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8816,6 +8816,13 @@ DECLARE
   -- để mở, và chúng cố ý im lặng cùng một chỗ với ảnh gốc.
   --
   -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6.
+  --
+  -- [S1.165 / khoản 225] BỐN cạnh huỷ MỚI — `CLOSED`, `UNSEALED` và hai ảnh BAFO của chúng. Trước
+  -- vòng này bốn trạng thái ấy là trạng thái HÚT, và khoản 244 đo ra lối rơi vào đó: một báo giá ghi
+  -- đơn vị tiền khác làm lượt chấm bị từ chối, gói đứng yên ở `UNSEALED` và không đường nào của sản
+  -- phẩm kết thúc được nó. Chủ dự án chốt ngày 2026-09-27 (ADR-103): mở bốn cạnh, và lần huỷ SAU
+  -- KHI ĐÓNG phải mang lý do — vế (i) dưới — vì nhà cung cấp đã bỏ công dự thầu, và từ `UNSEALED`
+  -- giá của họ đã lộ. Lý do ấy nhà cung cấp ĐỌC ĐƯỢC ở trang nộp thầu (`cancel_reason`).
   CANH_HOP_LE constant text[] := ARRAY[
     'DRAFT->PENDING_APPROVAL',
     'PENDING_APPROVAL->DRAFT',
@@ -8838,7 +8845,11 @@ DECLARE
     'PENDING_APPROVAL->CANCELLED',
     'OPEN->CANCELLED',
     'BAFO_OPEN->CANCELLED',
-    'EVALUATING->CANCELLED'
+    'EVALUATING->CANCELLED',
+    'CLOSED->CANCELLED',
+    'UNSEALED->CANCELLED',
+    'BAFO_CLOSED->CANCELLED',
+    'BAFO_UNSEALED->CANCELLED'
   ];
   -- Cửa sổ thầu tối thiểu. ARCHITECTURE §6 đòi "deadline ≥ now + cửa sổ tối thiểu" và KHÔNG tầng
   -- nào cài đặt nó (M-5). Sàn dưới ở đây là sàn CỦA HỆ, không phải chính sách của tổ chức: một
@@ -8889,6 +8900,24 @@ BEGIN
   END IF;
   IF OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN
     RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- (i) [S1.165 / khoản 225] LÝ DO HUỶ. Nó chỉ được đặt ĐÚNG MỘT LẦN, và đúng ở cạnh vào
+  -- `CANCELLED` — một lý do viết sau khi huỷ, hay viết lên một gói chưa huỷ, là một lời khai nhà cung
+  -- cấp đọc được mà không gắn với sự kiện nào. Huỷ SAU KHI ĐÓNG thì lý do là BẮT BUỘC ở chính tầng
+  -- này, không chỉ ở `cancelRfq`: bốn cạnh ấy mở ra ở vòng này với đúng điều kiện đó.
+  IF NEW.cancel_reason IS DISTINCT FROM OLD.cancel_reason THEN
+    IF OLD.cancel_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'cancel_reason chi dat duoc mot lan' USING ERRCODE = 'check_violation';
+    END IF;
+    IF NOT (NEW.status = 'CANCELLED' AND OLD.status <> 'CANCELLED') THEN
+      RAISE EXCEPTION 'cancel_reason chi dat duoc o canh vao CANCELLED' USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  IF NEW.status = 'CANCELLED' AND OLD.status IN ('CLOSED', 'UNSEALED', 'BAFO_CLOSED', 'BAFO_UNSEALED')
+     AND (NEW.cancel_reason IS NULL OR btrim(NEW.cancel_reason) = '') THEN
+    RAISE EXCEPTION 'Huy RFQ sau khi dong phai co ly do (cancel_reason) — % -> CANCELLED', OLD.status
+      USING ERRCODE = 'check_violation';
   END IF;
 
   -- (g) [M-5] Cửa sổ thầu tối thiểu, kiểm ở CẢ HAI cạnh đi vào vòng phê duyệt và vòng mở.
@@ -8958,7 +8987,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE -- `PENDING_APPROVAL->DRAFT` là cạnh của vòng sửa C-1 (`011`): sau C-1, hạng mục chỉ sửa được ở -- DRAFT, nên phải có đường quay lại. [S1.140 / khoản 242 ⑵] Cạnh ấy KHÔNG xoá chữ ký nào. Bản -- trước viết rằng nó xoá mọi chữ ký bằng một "trigger dưới" — trigger ấy chưa bao giờ được dựng, -- và `011` C-1 chọn đúng điều ngược lại: chữ ký cũ vô hiệu bằng BĂM, hàng cũ ở lại làm dấu vết. -- -- [S1.107 / lượt soi ngang 77 — CAO ①] `EVALUATING->CANCELLED` là cạnh MỚI của `058`, và -- nó đóng một TRẠNG THÁI HÚT. Trước nó `EVALUATING` KHÔNG có một cạnh ra nào: nó chỉ đứng -- làm đích của `UNSEALED->EVALUATING`, còn `EVALUATING->BAFO_OPEN` và `EVALUATING->AWARDED` -- mới chỉ có trong spec §4.3 — `BAFO_CLOSED` và `AWARDED` chưa phải giá trị nào trong tập -- đóng của `009`. Điều đó vô hại suốt từ `009` vì KHÔNG ROUTE NÀO đi qua cạnh vào; S1.106 -- mở đúng cửa ấy ra HTTP (`POST /rfqs/:rfqId/evaluate`) và đặt một nút lên nó, mà -- `evaluation.perform` thì NĂM trên SÁU vai giữ (khoản 220). Từ đó một cú bấm của vai thấp -- nhất làm một gói thầu THẬT không huỷ được, không chấm lại được, không trao được. -- -- [S1.108 / S2.5] NĂM cạnh MỚI của `059` mở vòng BAFO. Bốn cạnh đầu là một chu trình: -- `EVALUATING->BAFO_OPEN->BAFO_CLOSED->BAFO_UNSEALED->EVALUATING`, và nó đi qua BAFO_UNSEALED -- chứ không nối thẳng `BAFO_CLOSED->EVALUATING` như spec §4.3 khai. Lý do là một phép đo, không -- một khẩu vị: cạnh `CLOSED->UNSEALED` tồn tại để `rfq_kiem_yeu_cau_mo_thau` đòi một yêu cầu -- mở thầu ĐÃ PHÊ DUYỆT, và nối thẳng sẽ cho một lượt chấm LẠI chạy trong khi phong bì vòng hai -- còn nguyên niêm — bảng xếp hạng khi ấy vẫn là bảng vòng một và không lớp nào kêu. Cạnh thứ -- năm `BAFO_OPEN->CANCELLED` là ảnh của `OPEN->CANCELLED`; hai cạnh KHÔNG mở -- (`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED`) là ảnh của hai cạnh khoản **225** còn -- để mở, và chúng cố ý im lặng cùng một chỗ với ảnh gốc. -- -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6. CANH_HOP_LE constant text[] := ARRAY[ 'DRAFT->PENDING_APPROVAL', 'PENDING_APPROVAL->DRAFT', 'PENDING_APPROVAL->OPEN', 'OPEN->CLOSED', 'CLOSED->UNSEALED', 'UNSEALED->EVALUATING', 'EVALUATING->BAFO_OPEN', 'BAFO_OPEN->BAFO_CLOSED', 'BAFO_CLOSED->BAFO_UNSEALED', 'BAFO_UNSEALED->EVALUATING', -- [S1.110 / S2.6 / §8.3] HAI cạnh của trao thầu. `EVALUATING->AWARDED` là cạnh spec -- §4.3 khai từ đầu; `AWARDED->EVALUATING` là quyết định của chủ dự án ngày 2026-09-22, -- và nó làm `AWARDED` nghĩa là *đang có một award CÒN SỐNG* thay vì *đã từng trao*. -- Không có cạnh về, `AWARDED` là trạng thái HÚT thứ BA (sau `CLOSED` và `UNSEALED` — -- khoản 225), và một award bị huỷ để RFQ đứng ở `AWARDED` mà không có award nào sống. 'EVALUATING->AWARDED', 'AWARDED->EVALUATING', 'DRAFT->CANCELLED', 'PENDING_APPROVAL->CANCELLED', 'OPEN->CANCELLED', 'BAFO_OPEN->CANCELLED', 'EVALUATING->CANCELLED' ]; -- Cửa sổ thầu tối thiểu. ARCHITECTURE §6 đòi "deadline ≥ now + cửa sổ tối thiểu" và KHÔNG tầng -- nào cài đặt nó (M-5). Sàn dưới ở đây là sàn CỦA HỆ, không phải chính sách của tổ chức: một -- RFQ mở với deadline đã ở quá khứ là một trạng thái hỏng TRÊN DỮ LIỆU. CUA_SO_TOI_THIEU constant interval := interval '1 hour'; so_hang_muc integer; so_phe_duyet integer; bam_hien_tai bytea; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status || '->' || NEW.status) = ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai RFQ khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- (b) deadline không bao giờ lùi. [L-1] Vế `NEW.deadline_at IS NULL` được thêm ở vòng sửa này: -- bản 009 chỉ chạy khi CẢ HAI giá trị NOT NULL, nên ở DRAFT hai câu `SET NULL` rồi `SET <sớm -- hơn>` lùi được deadline. Chú thích và tên test của 009 vì vậy rộng hơn mã; nay thì không. IF OLD.deadline_at IS NOT NULL AND (NEW.deadline_at IS NULL OR NEW.deadline_at < OLD.deadline_at) THEN RAISE EXCEPTION 'Khong duoc rut ngan hay xoa deadline cua RFQ (C4)' USING ERRCODE = 'check_violation'; END IF; -- (c) [C-1] `PENDING_APPROVAL` BỊ GỠ khỏi danh sách được đổi deadline: sau khi đã nộp duyệt, -- đổi deadline là đổi nội dung mà người duyệt sẽ ký. IF NEW.deadline_at IS DISTINCT FROM OLD.deadline_at AND OLD.status NOT IN ('DRAFT', 'OPEN') THEN RAISE EXCEPTION 'Chi doi duoc deadline khi RFQ dang DRAFT hoac OPEN (C4)' USING ERRCODE = 'check_violation'; END IF; IF (NEW.title IS DISTINCT FROM OLD.title OR NEW.requires_dual_approval IS DISTINCT FROM OLD.requires_dual_approval) AND OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'Chi sua duoc tieu de va nguong phe duyet khi RFQ con o DRAFT' USING ERRCODE = 'check_violation'; END IF; -- (f) [H-3] BA MỐC CHỈ ĐẶT ĐƯỢC MỘT LẦN. Không có vế này, gọi lại `openRfq` trên một RFQ đang -- OPEN đẩy `opened_at` tới hiện tại, và mọi phép kiểm khác im lặng vì status không đổi. IF OLD.opened_at IS NOT NULL AND NEW.opened_at IS DISTINCT FROM OLD.opened_at THEN RAISE EXCEPTION 'opened_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.closed_at IS NOT NULL AND NEW.closed_at IS DISTINCT FROM OLD.closed_at THEN RAISE EXCEPTION 'closed_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; -- (g) [M-5] Cửa sổ thầu tối thiểu, kiểm ở CẢ HAI cạnh đi vào vòng phê duyệt và vòng mở. IF NEW.status IN ('PENDING_APPROVAL', 'OPEN') AND NEW.status IS DISTINCT FROM OLD.status THEN IF NEW.deadline_at IS NULL OR NEW.deadline_at < now() + CUA_SO_TOI_THIEU THEN RAISE EXCEPTION 'Cua so thau phai con it nhat % ke tu bay gio', CUA_SO_TOI_THIEU USING ERRCODE = 'check_violation'; END IF; END IF; -- (h) [H-4] ĐÓNG SỚM là một hành vi có tên. Đóng đúng hạn không đòi gì thêm. IF NEW.status = 'CLOSED' AND OLD.status = 'OPEN' AND now() < OLD.deadline_at THEN IF NEW.early_close_reason IS NULL THEN RAISE EXCEPTION 'Dong RFQ truoc han phai co ly do tuong minh (early_close_reason)' USING ERRCODE = 'check_violation'; END IF; END IF; -- [S1.140 / khoản 240] Điều kiện để MỞ chỉ được hỏi ở CẠNH vào OPEN, cùng cách vế (g). Bản `061` -- hỏi ở MỌI câu UPDATE trên gói đang OPEN; băm nội dung có `deadline_at` còn trigger này đọc hàng -- CŨ, nên lần gia hạn THỨ HAI của một gói cấp kép bị từ chối như thể thiếu chữ ký. Gia hạn không -- đòi ký lại (spec S0+S1 §4.4). Ở cạnh vào OPEN, phép đếm TRÊN NỘI DUNG HIỆN TẠI giữ nguyên. IF NEW.status = 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status THEN SELECT count(*) INTO so_hang_muc FROM public.rfq_items i WHERE i.rfq_id = NEW.id; IF so_hang_muc = 0 THEN RAISE EXCEPTION 'Khong mo duoc RFQ khong co hang muc nao' USING ERRCODE = 'check_violation'; END IF; -- [C-1] Đây là dòng đóng CRITICAL: đếm phê duyệt TRÊN ĐÚNG NỘI DUNG hiện tại, không đếm -- "có bao nhiêu hàng". Thêm một hạng mục sau khi đã duyệt làm băm đổi, và chữ ký cũ không -- còn đếm được nữa. -- -- [S1.142 / khoản 241] Phép đếm chạy cho MỌI gói. Bản trước chỉ đếm khi gói cấp kép, nên gói -- dưới ngưỡng mở được với 0 chữ ký — trái spec S0+S1 §4.3 (*"phê duyệt hợp lệ"*) và ADR-017 -- (*"một phê duyệt là đủ"*, tức phải CÓ một). Người tạo không tự ký được: `rfq_kiem_nguoi_duyet`. bam_hien_tai := public.rfq_bam_noi_dung(NEW.id); SELECT count(*) INTO so_phe_duyet FROM public.rfq_approvals a WHERE a.rfq_id = NEW.id AND a.approved_content_hash = bam_hien_tai; IF NEW.requires_dual_approval THEN IF so_phe_duyet < 2 THEN RAISE EXCEPTION 'RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co % (D2)', so_phe_duyet USING ERRCODE = 'check_violation'; END IF; ELSIF so_phe_duyet < 1 THEN RAISE EXCEPTION 'RFQ nay can 1 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2, san mot chu ky)' USING ERRCODE = 'check_violation'; END IF; END IF; RETURN NEW; END$than$
+                = $than$DECLARE -- `PENDING_APPROVAL->DRAFT` là cạnh của vòng sửa C-1 (`011`): sau C-1, hạng mục chỉ sửa được ở -- DRAFT, nên phải có đường quay lại. [S1.140 / khoản 242 ⑵] Cạnh ấy KHÔNG xoá chữ ký nào. Bản -- trước viết rằng nó xoá mọi chữ ký bằng một "trigger dưới" — trigger ấy chưa bao giờ được dựng, -- và `011` C-1 chọn đúng điều ngược lại: chữ ký cũ vô hiệu bằng BĂM, hàng cũ ở lại làm dấu vết. -- -- [S1.107 / lượt soi ngang 77 — CAO ①] `EVALUATING->CANCELLED` là cạnh MỚI của `058`, và -- nó đóng một TRẠNG THÁI HÚT. Trước nó `EVALUATING` KHÔNG có một cạnh ra nào: nó chỉ đứng -- làm đích của `UNSEALED->EVALUATING`, còn `EVALUATING->BAFO_OPEN` và `EVALUATING->AWARDED` -- mới chỉ có trong spec §4.3 — `BAFO_CLOSED` và `AWARDED` chưa phải giá trị nào trong tập -- đóng của `009`. Điều đó vô hại suốt từ `009` vì KHÔNG ROUTE NÀO đi qua cạnh vào; S1.106 -- mở đúng cửa ấy ra HTTP (`POST /rfqs/:rfqId/evaluate`) và đặt một nút lên nó, mà -- `evaluation.perform` thì NĂM trên SÁU vai giữ (khoản 220). Từ đó một cú bấm của vai thấp -- nhất làm một gói thầu THẬT không huỷ được, không chấm lại được, không trao được. -- -- [S1.108 / S2.5] NĂM cạnh MỚI của `059` mở vòng BAFO. Bốn cạnh đầu là một chu trình: -- `EVALUATING->BAFO_OPEN->BAFO_CLOSED->BAFO_UNSEALED->EVALUATING`, và nó đi qua BAFO_UNSEALED -- chứ không nối thẳng `BAFO_CLOSED->EVALUATING` như spec §4.3 khai. Lý do là một phép đo, không -- một khẩu vị: cạnh `CLOSED->UNSEALED` tồn tại để `rfq_kiem_yeu_cau_mo_thau` đòi một yêu cầu -- mở thầu ĐÃ PHÊ DUYỆT, và nối thẳng sẽ cho một lượt chấm LẠI chạy trong khi phong bì vòng hai -- còn nguyên niêm — bảng xếp hạng khi ấy vẫn là bảng vòng một và không lớp nào kêu. Cạnh thứ -- năm `BAFO_OPEN->CANCELLED` là ảnh của `OPEN->CANCELLED`; hai cạnh KHÔNG mở -- (`BAFO_CLOSED->CANCELLED`, `BAFO_UNSEALED->CANCELLED`) là ảnh của hai cạnh khoản **225** còn -- để mở, và chúng cố ý im lặng cùng một chỗ với ảnh gốc. -- -- KHÔNG có `EVALUATING->AWARDED`: `AWARDED` chưa phải giá trị nào trong tập đóng. S2.6. -- -- [S1.165 / khoản 225] BỐN cạnh huỷ MỚI — `CLOSED`, `UNSEALED` và hai ảnh BAFO của chúng. Trước -- vòng này bốn trạng thái ấy là trạng thái HÚT, và khoản 244 đo ra lối rơi vào đó: một báo giá ghi -- đơn vị tiền khác làm lượt chấm bị từ chối, gói đứng yên ở `UNSEALED` và không đường nào của sản -- phẩm kết thúc được nó. Chủ dự án chốt ngày 2026-09-27 (ADR-103): mở bốn cạnh, và lần huỷ SAU -- KHI ĐÓNG phải mang lý do — vế (i) dưới — vì nhà cung cấp đã bỏ công dự thầu, và từ `UNSEALED` -- giá của họ đã lộ. Lý do ấy nhà cung cấp ĐỌC ĐƯỢC ở trang nộp thầu (`cancel_reason`). CANH_HOP_LE constant text[] := ARRAY[ 'DRAFT->PENDING_APPROVAL', 'PENDING_APPROVAL->DRAFT', 'PENDING_APPROVAL->OPEN', 'OPEN->CLOSED', 'CLOSED->UNSEALED', 'UNSEALED->EVALUATING', 'EVALUATING->BAFO_OPEN', 'BAFO_OPEN->BAFO_CLOSED', 'BAFO_CLOSED->BAFO_UNSEALED', 'BAFO_UNSEALED->EVALUATING', -- [S1.110 / S2.6 / §8.3] HAI cạnh của trao thầu. `EVALUATING->AWARDED` là cạnh spec -- §4.3 khai từ đầu; `AWARDED->EVALUATING` là quyết định của chủ dự án ngày 2026-09-22, -- và nó làm `AWARDED` nghĩa là *đang có một award CÒN SỐNG* thay vì *đã từng trao*. -- Không có cạnh về, `AWARDED` là trạng thái HÚT thứ BA (sau `CLOSED` và `UNSEALED` — -- khoản 225), và một award bị huỷ để RFQ đứng ở `AWARDED` mà không có award nào sống. 'EVALUATING->AWARDED', 'AWARDED->EVALUATING', 'DRAFT->CANCELLED', 'PENDING_APPROVAL->CANCELLED', 'OPEN->CANCELLED', 'BAFO_OPEN->CANCELLED', 'EVALUATING->CANCELLED', 'CLOSED->CANCELLED', 'UNSEALED->CANCELLED', 'BAFO_CLOSED->CANCELLED', 'BAFO_UNSEALED->CANCELLED' ]; -- Cửa sổ thầu tối thiểu. ARCHITECTURE §6 đòi "deadline ≥ now + cửa sổ tối thiểu" và KHÔNG tầng -- nào cài đặt nó (M-5). Sàn dưới ở đây là sàn CỦA HỆ, không phải chính sách của tổ chức: một -- RFQ mở với deadline đã ở quá khứ là một trạng thái hỏng TRÊN DỮ LIỆU. CUA_SO_TOI_THIEU constant interval := interval '1 hour'; so_hang_muc integer; so_phe_duyet integer; bam_hien_tai bytea; BEGIN IF NEW.status IS DISTINCT FROM OLD.status THEN IF NOT ((OLD.status || '->' || NEW.status) = ANY (CANH_HOP_LE)) THEN RAISE EXCEPTION 'Chuyen trang thai RFQ khong hop le: % -> %', OLD.status, NEW.status USING ERRCODE = 'check_violation'; END IF; END IF; -- (b) deadline không bao giờ lùi. [L-1] Vế `NEW.deadline_at IS NULL` được thêm ở vòng sửa này: -- bản 009 chỉ chạy khi CẢ HAI giá trị NOT NULL, nên ở DRAFT hai câu `SET NULL` rồi `SET <sớm -- hơn>` lùi được deadline. Chú thích và tên test của 009 vì vậy rộng hơn mã; nay thì không. IF OLD.deadline_at IS NOT NULL AND (NEW.deadline_at IS NULL OR NEW.deadline_at < OLD.deadline_at) THEN RAISE EXCEPTION 'Khong duoc rut ngan hay xoa deadline cua RFQ (C4)' USING ERRCODE = 'check_violation'; END IF; -- (c) [C-1] `PENDING_APPROVAL` BỊ GỠ khỏi danh sách được đổi deadline: sau khi đã nộp duyệt, -- đổi deadline là đổi nội dung mà người duyệt sẽ ký. IF NEW.deadline_at IS DISTINCT FROM OLD.deadline_at AND OLD.status NOT IN ('DRAFT', 'OPEN') THEN RAISE EXCEPTION 'Chi doi duoc deadline khi RFQ dang DRAFT hoac OPEN (C4)' USING ERRCODE = 'check_violation'; END IF; IF (NEW.title IS DISTINCT FROM OLD.title OR NEW.requires_dual_approval IS DISTINCT FROM OLD.requires_dual_approval) AND OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'Chi sua duoc tieu de va nguong phe duyet khi RFQ con o DRAFT' USING ERRCODE = 'check_violation'; END IF; -- (f) [H-3] BA MỐC CHỈ ĐẶT ĐƯỢC MỘT LẦN. Không có vế này, gọi lại `openRfq` trên một RFQ đang -- OPEN đẩy `opened_at` tới hiện tại, và mọi phép kiểm khác im lặng vì status không đổi. IF OLD.opened_at IS NOT NULL AND NEW.opened_at IS DISTINCT FROM OLD.opened_at THEN RAISE EXCEPTION 'opened_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.closed_at IS NOT NULL AND NEW.closed_at IS DISTINCT FROM OLD.closed_at THEN RAISE EXCEPTION 'closed_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at THEN RAISE EXCEPTION 'cancelled_at chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; -- (i) [S1.165 / khoản 225] LÝ DO HUỶ. Nó chỉ được đặt ĐÚNG MỘT LẦN, và đúng ở cạnh vào -- `CANCELLED` — một lý do viết sau khi huỷ, hay viết lên một gói chưa huỷ, là một lời khai nhà cung -- cấp đọc được mà không gắn với sự kiện nào. Huỷ SAU KHI ĐÓNG thì lý do là BẮT BUỘC ở chính tầng -- này, không chỉ ở `cancelRfq`: bốn cạnh ấy mở ra ở vòng này với đúng điều kiện đó. IF NEW.cancel_reason IS DISTINCT FROM OLD.cancel_reason THEN IF OLD.cancel_reason IS NOT NULL THEN RAISE EXCEPTION 'cancel_reason chi dat duoc mot lan' USING ERRCODE = 'check_violation'; END IF; IF NOT (NEW.status = 'CANCELLED' AND OLD.status <> 'CANCELLED') THEN RAISE EXCEPTION 'cancel_reason chi dat duoc o canh vao CANCELLED' USING ERRCODE = 'check_violation'; END IF; END IF; IF NEW.status = 'CANCELLED' AND OLD.status IN ('CLOSED', 'UNSEALED', 'BAFO_CLOSED', 'BAFO_UNSEALED') AND (NEW.cancel_reason IS NULL OR btrim(NEW.cancel_reason) = '') THEN RAISE EXCEPTION 'Huy RFQ sau khi dong phai co ly do (cancel_reason) — % -> CANCELLED', OLD.status USING ERRCODE = 'check_violation'; END IF; -- (g) [M-5] Cửa sổ thầu tối thiểu, kiểm ở CẢ HAI cạnh đi vào vòng phê duyệt và vòng mở. IF NEW.status IN ('PENDING_APPROVAL', 'OPEN') AND NEW.status IS DISTINCT FROM OLD.status THEN IF NEW.deadline_at IS NULL OR NEW.deadline_at < now() + CUA_SO_TOI_THIEU THEN RAISE EXCEPTION 'Cua so thau phai con it nhat % ke tu bay gio', CUA_SO_TOI_THIEU USING ERRCODE = 'check_violation'; END IF; END IF; -- (h) [H-4] ĐÓNG SỚM là một hành vi có tên. Đóng đúng hạn không đòi gì thêm. IF NEW.status = 'CLOSED' AND OLD.status = 'OPEN' AND now() < OLD.deadline_at THEN IF NEW.early_close_reason IS NULL THEN RAISE EXCEPTION 'Dong RFQ truoc han phai co ly do tuong minh (early_close_reason)' USING ERRCODE = 'check_violation'; END IF; END IF; -- [S1.140 / khoản 240] Điều kiện để MỞ chỉ được hỏi ở CẠNH vào OPEN, cùng cách vế (g). Bản `061` -- hỏi ở MỌI câu UPDATE trên gói đang OPEN; băm nội dung có `deadline_at` còn trigger này đọc hàng -- CŨ, nên lần gia hạn THỨ HAI của một gói cấp kép bị từ chối như thể thiếu chữ ký. Gia hạn không -- đòi ký lại (spec S0+S1 §4.4). Ở cạnh vào OPEN, phép đếm TRÊN NỘI DUNG HIỆN TẠI giữ nguyên. IF NEW.status = 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status THEN SELECT count(*) INTO so_hang_muc FROM public.rfq_items i WHERE i.rfq_id = NEW.id; IF so_hang_muc = 0 THEN RAISE EXCEPTION 'Khong mo duoc RFQ khong co hang muc nao' USING ERRCODE = 'check_violation'; END IF; -- [C-1] Đây là dòng đóng CRITICAL: đếm phê duyệt TRÊN ĐÚNG NỘI DUNG hiện tại, không đếm -- "có bao nhiêu hàng". Thêm một hạng mục sau khi đã duyệt làm băm đổi, và chữ ký cũ không -- còn đếm được nữa. -- -- [S1.142 / khoản 241] Phép đếm chạy cho MỌI gói. Bản trước chỉ đếm khi gói cấp kép, nên gói -- dưới ngưỡng mở được với 0 chữ ký — trái spec S0+S1 §4.3 (*"phê duyệt hợp lệ"*) và ADR-017 -- (*"một phê duyệt là đủ"*, tức phải CÓ một). Người tạo không tự ký được: `rfq_kiem_nguoi_duyet`. bam_hien_tai := public.rfq_bam_noi_dung(NEW.id); SELECT count(*) INTO so_phe_duyet FROM public.rfq_approvals a WHERE a.rfq_id = NEW.id AND a.approved_content_hash = bam_hien_tai; IF NEW.requires_dual_approval THEN IF so_phe_duyet < 2 THEN RAISE EXCEPTION 'RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co % (D2)', so_phe_duyet USING ERRCODE = 'check_violation'; END IF; ELSIF so_phe_duyet < 1 THEN RAISE EXCEPTION 'RFQ nay can 1 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2, san mot chu ky)' USING ERRCODE = 'check_violation'; END IF; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

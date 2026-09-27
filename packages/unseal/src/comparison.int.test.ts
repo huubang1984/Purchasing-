@@ -505,6 +505,64 @@ describe("[INV-A4] trường phái sinh chỉ tồn tại sau khi mở thầu", 
 });
 
 // ===============================================================================================
+// [INV-J8] [S1.165 / khoản 244] BẢNG SO SÁNH ĐỌC TIỀN TỆ QUA CÙNG HÀM VỚI LƯỢT CHẤM
+// ===============================================================================================
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.165): `VND` + `VNĐ` cho HAI nhóm và mọi phép tổng
+// hợp thành `null`; hai báo giá cùng `vnd` dưới ngân sách 1.000.000 VND cho `belowBudget` = 0 — vế
+// ngân sách so `'VND' = 'vnd'` — trong khi cả hai con số đều dưới ngân sách. Ba ca dưới là ĐÍCH.
+describe("[INV-J8] [S1.165 / khoản 244] bảng so sánh và lượt chấm cùng một phán quyết tiền tệ", () => {
+  it("[INV-J8] ĐÍCH của đo M4: `VND` + `VNĐ` là MỘT nhóm `VND`, phép tổng hợp có số, và dòng mang đơn vị đã chuẩn hoá", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const v1 = await nopBaoGia(rfqId, "NCC Chinh tac");
+    const v2 = await nopBaoGia(rfqId, "NCC Go dau");
+    await moThau(rfqId, [
+      [v1, { totalAmount: "2000000.00", currency: "VND" }],
+      [v2, { totalAmount: "900000.00", currency: "VN\u0110" }],
+    ]);
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.aggregates.currencyMismatch).toBe(false);
+    expect(bang.aggregates.currency).toBe("VND");
+    expect(bang.aggregates.min).toBe("900000.00");
+    expect(bang.aggregates.max).toBe("2000000.00");
+    expect(bang.aggregates.belowBudget, "ngân sách fixture 1.000.000 VND — một báo giá dưới").toBe(1);
+    expect(bang.rows.map((r) => r.currency)).toEqual(["VND", "VND"]);
+    // Chuỗi GỐC vẫn còn nguyên trong `payload` — lớp đọc chuẩn hoá, bản rõ không bị sửa.
+    expect(bang.rows.map((r) => (r.payload as { currency?: string }).currency)).toEqual(["VN\u0110", "VND"]);
+  });
+
+  it("[INV-J8] ĐÍCH của đo M5: hai báo giá cùng `vnd` ⇒ đơn vị `VND`, và vế ngân sách đếm ĐÚNG 2 thay vì 0", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const v1 = await nopBaoGia(rfqId, "NCC Mot vnd");
+    const v2 = await nopBaoGia(rfqId, "NCC Hai vnd");
+    await moThau(rfqId, [
+      [v1, { totalAmount: "500000.00", currency: "vnd" }],
+      [v2, { totalAmount: "900000.00", currency: "vnd" }],
+    ]);
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.aggregates.currency).toBe("VND");
+    expect(bang.aggregates.currencyMismatch).toBe(false);
+    expect(bang.aggregates.belowBudget).toBe(2);
+  });
+
+  it("[INV-J8] một nhóm DUY NHẤT mà đơn vị không nhận ra ⇒ lệch, như lượt chấm nói; không in min/max của những con số không đơn vị", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const v1 = await nopBaoGia(rfqId, "NCC EUR mot");
+    const v2 = await nopBaoGia(rfqId, "NCC EUR hai");
+    await moThau(rfqId, [
+      [v1, { totalAmount: "500000.00", currency: "EUR" }],
+      [v2, { totalAmount: "900000.00", currency: "EUR" }],
+    ]);
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.aggregates.currencyMismatch, "bản trước: `false`, một nhóm `EUR` đọc như một đơn vị hợp lệ").toBe(true);
+    expect(bang.aggregates.currency).toBeNull();
+    expect(bang.aggregates.min).toBeNull();
+    expect(bang.aggregates.belowBudget).toBeNull();
+    expect(bang.rows.map((r) => r.currency)).toEqual([null, null]);
+    expect(bang.aggregates.parsed, "hai con số vẫn ĐỌC ĐƯỢC — chỉ đơn vị thì không").toBe(2);
+  });
+});
+
+// ===============================================================================================
 // [INV-A6] SỐ BÁO GIÁ ĐÃ NHẬN LÀ THÔNG TIN NHẠY CẢM
 // ===============================================================================================
 describe("[INV-A6] chế độ nghiêm giấu số báo giá đã nhận trước giờ đóng", () => {

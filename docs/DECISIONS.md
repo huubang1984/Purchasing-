@@ -5282,8 +5282,11 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
 - **Một trigger đắt hơn một chỉ mục, và nó cần đột biến riêng.** Một chỉ mục UNIQUE sai thì CSDL vẫn chặn; một
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
-  được cho tới khi tổ chức chuẩn hoá đơn vị. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
-  không thấy một bảng xếp hạng gần đúng.
+  được ~~cho tới khi tổ chức chuẩn hoá đơn vị~~. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
+  không thấy một bảng xếp hạng gần đúng. **[S1.165 / ADR-103] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
+  đã niêm phong, và `rfq_unsealed_bids` chỉ-ghi-thêm. Đo ra thêm rằng cánh cửa này đóng cả với cách viết khác của
+  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-103 thu cánh cửa về đúng lệch THẬT, và cho
+  gói ấy lối huỷ có lý do.
 - **ADR này quyết trên ĐỌC, không trên CHẠY.** Cả năm quyết định rút từ mã nguồn và tài liệu; vòng này không
   dựng một cụm nào, vì không có mã nào để chạy. Phép đo thật là điều kiện của S2.0–S2.2, và chúng chưa tồn tại.
 
@@ -7029,7 +7032,7 @@ công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ ch�
 có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
 lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
 rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
-**[S1.165]** `signed_at` nay đóng dấu SAU khoá (`070_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
+**[S1.166]** `signed_at` nay đóng dấu SAU khoá (`072_bac_cua_goi`), để thứ tự giờ của lần ký trùng thứ tự khoá với lần
 nộp duyệt: K1 đòi phiên bản hiệu lực tại `submitted_at`, và một `signed_at` là giờ ĐẦU giao dịch ký làm phép tái lập ấy
 sai — đo bằng đột biến trả thân `069`.
 
@@ -7137,7 +7140,7 @@ bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt th
 **[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
 ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
 là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
-**[S1.165]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
+**[S1.166]** Vế nộp duyệt cài ở S3.1b: `rfq_chot_ngan_sach` chặn gói ghim một phiên bản không còn hiệu lực
 (`NGAN_SACH_GHIM_BAN_CU`), ở tầng gói và ở trigger cạnh. Chủ dự án chọn TỪ CHỐI chứ không tự ghim lại lúc nộp: người nộp
 đặt lại ngân sách và thấy bậc mới trước khi nộp, không để bậc và số chữ ký đổi dưới tay mình.
 
@@ -7308,7 +7311,7 @@ gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
 `CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
 (`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
 mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
-dịch được. **[S1.165]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
+dịch được. **[S1.166]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
 hai vế: `THIEU_NGAN_SACH` vào sổ — bỏ bước ngân sách là thoát mọi chốt của S3 —, `NGAN_SACH_GHIM_BAN_CU` thì không —
 chính sách đổi dưới chân người dùng. `BAC_LECH_HAM_PHAN_BAC` không vào sổ theo cùng luật.
 
@@ -8087,3 +8090,50 @@ Hai đường còn lại sau `bid.view` — `countReceivedBids` và `docTraoThau
   hàng với hình dạng payload trọn, không hàng cho lần từ chối hay `null`, hàng cuộn lại cùng giao dịch đọc, lần ghi hỏng thì không
   dữ liệu nào đi ra), và ở bước 12, 12b, 12j của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` qua HTTP thật.
 
+## ADR-103 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.165 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
+ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.165
+
+**Bối cảnh.** Khoản 244 ghi, bằng phép đọc, rằng một nhà cung cấp gõ `VNĐ` làm lượt chấm của cả gói bị từ chối. Vòng
+S1.165 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
+một nhà cung cấp — thì lượt chấm không từ chối mà vỡ ở `CHECK` của `057` (23514, một 422 không tên); ⒝ bảng so sánh
+trả một `belowBudget` SAI không dấu khi mọi báo giá cùng một cách viết lạ; ⒞ *"lối ra duy nhất là huỷ gói"* cũng sai —
+gói đứng ở `UNSEALED`, và cạnh huỷ từ đó chưa có (khoản 225). Báo giá đã niêm phong trong trình duyệt, nên máy chủ không
+thấy chuỗi tiền tệ trước lúc mở thầu, và `rfq_unsealed_bids` chỉ-ghi-thêm: lớp duy nhất sửa được mọi cách viết là lớp ĐỌC.
+
+**Ba quyết định của chủ dự án, ngày 2026-09-27, cả ba theo đề xuất.**
+
+⑴ **Hình dạng: một hàm SQL + ô chọn VND/USD.** `public.bid_currency(text)` (`070`), `IMMUTABLE STRICT`, không bao giờ
+ném, khuôn `bid_so_tien`. Mọi câu SQL sản xuất đọc `payload ->> 'currency'` gọi nó — hôm nay năm chỗ: lượt chấm một,
+bảng so sánh bốn (cột hàng, cột tổng hợp, lọc ngân sách, `GROUP BY`). Ô tiền tệ của trang nộp thầu thành `<select>`
+VND/USD, VND chọn sẵn. Ô chọn theo tiền tệ của chính sách để sang S3.1.
+
+⑵ **Tập bí danh: rộng có kiểm soát, khớp CHÍNH XÁC sau khi bỏ khoảng trắng hai đầu và đưa về NFC.**
+`VND` ← `VND` · `VNĐ` · `VNđ` · `Vnđ` · `vnđ` · `Vnd` · `vnd` · `đ` · `Đ` · `₫` · `đồng` · `Đồng`;
+`USD` ← `USD` · `Usd` · `usd` · `US$`. Còn lại `NULL`. Không `lower()`/`upper()` — với ký tự ngoài ASCII chúng phụ thuộc
+thư viện C của cụm (khoản 71). `$` trần và `Ð` (U+00D0, chữ eth) ra `NULL`: ký tự dễ nhầm không được đoán.
+
+⑶ **Đóng luôn khoản 225.** `071` thêm `CLOSED->CANCELLED`, `UNSEALED->CANCELLED`, `BAFO_CLOSED->CANCELLED`,
+`BAFO_UNSEALED->CANCELLED` vào bảng cạnh ghim, và cột `rfq_packages.cancel_reason`: trigger đòi nó khác rỗng ở bốn cạnh
+ấy, chỉ cho đặt ở cạnh vào `CANCELLED`, và chỉ một lần. `cancelRfq` ghi lý do cho MỌI lần huỷ; hàng sổ `RFQ_CANCELLED`
+và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp đọc lý do ở `GET /guest/rfq` và trang nộp thầu.
+`AWARDED->CANCELLED` vẫn KHÔNG có — ra khỏi `AWARDED` là `AWARDED->EVALUATING`.
+
+**Chốt từ tiền lệ, không hỏi.**
+- `LECH_TIEN_TE` vẫn là mã CẤU HÌNH, không vào sổ (ADR-060): lệch tiền tệ là dữ liệu của nhà cung cấp, không phải người
+  mua đi sai thứ tự. Thông điệp đếm theo đơn vị ĐÃ chuẩn hoá và không nhắc lại chuỗi đã gõ — route chấm mở cho vai không
+  giữ `bid.view`.
+- Hàm không ghim ở `hardening.always.sql`, cùng khuôn `bid_so_tien`; đột biến thay thân hàm lúc chạy chứng minh nó là lớp
+  chịu lực. Cổng `tests/architecture/tien-te-mot-cho-doc.test.ts` giữ con số MỘT: bộ đọc thứ sáu — `bid_don_gia` của
+  spec S4 §4.5 là ứng viên gần nhất — phải đi qua hàm.
+- Bốn bản chép của tập đơn vị (`CURRENCIES`, `CHECK` của `057`, đích của hàm, ô chọn) khoá nhau bằng một test đọc tệp.
+
+**Cái giá — nói thẳng.**
+- Tập bí danh là một danh sách, và danh sách thiếu. Một cách viết ngoài danh sách (`VND.`, `vnđ.`) vẫn làm lượt chấm từ
+  chối cả gói — nay bằng một mã có tên và một lối huỷ, không bằng một 422 không tên. Ô chọn đóng đường trang; một phong
+  bì dựng ngoài trang vẫn mang được chuỗi tự do.
+- Huỷ SAU khi giá đã lộ là một hành vi có hệ quả với nhà cung cấp đã bỏ công. Lớp này đòi lý do và cho họ đọc nó; nó
+  KHÔNG báo đẩy — họ đọc khi mở lại link. Thông báo đẩy là việc sau.
+- Một người giữ `rfq.cancel` huỷ được gói ở `UNSEALED` sau khi thấy giá, một mình. Hàng sổ và lý do là dấu vết; phân
+  tách nhiệm vụ cho hành vi này để S3.

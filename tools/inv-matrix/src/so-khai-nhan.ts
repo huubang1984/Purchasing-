@@ -347,7 +347,14 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   J6: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
   // J7 — tối đa MỘT award còn sống.
   J7: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
-  // K1 — [S1.165 / S3.1b] gói rời DRAFT mang đúng bậc. `bac-chinh-sach` đo ở tầng gói và tầng CSDL: bảng ca biên hằng
+  // J8 — tiền tệ báo giá đọc qua MỘT hàm. Ba tệp vì ba câu hỏi: lượt chấm (bảng ca, đích M1/M2, đột
+  // biến thay thân hàm), bảng so sánh (đích M4/M5), và cổng kiến trúc cấm một bộ đọc thứ sáu đọc trần.
+  J8: [
+    "packages/danh-gia/src/luot-danh-gia.int.test.ts",
+    "packages/unseal/src/comparison.int.test.ts",
+    "tests/architecture/tien-te-mot-cho-doc.test.ts",
+  ],
+  // K1 — [S1.166 / S3.1b] gói rời DRAFT mang đúng bậc. `bac-chinh-sach` đo ở tầng gói và tầng CSDL: bảng ca biên hằng
   // số, mỗi vế của `rfq_chot_ngan_sach` một đột biến, đua với lần ký. Tệp HTTP đo lời từ chối có tên qua route thật và
   // hàng `CONTROL_DENIED` nó để lại.
   K1: [

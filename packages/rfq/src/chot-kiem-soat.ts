@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.165 / S3.1b / ADR-084 ⑷] LỚP TỪ CHỐI THỨ BA CỦA K12 — `CONTROL_DENIED`
+// [S1.166 / S3.1b / ADR-084 ⑷] LỚP TỪ CHỐI THỨ BA CỦA K12 — `CONTROL_DENIED`
 //
 // Ba lớp tách nhau (ADR-084 ⑸): `PERMISSION_DENIED` — thiếu quyền; `RFQ_STATE_DENIED` — đi sai thứ tự
 // (`packages/danh-gia/src/tu-choi-vao-so.ts`); `CONTROL_DENIED` — đủ quyền, đúng thứ tự, nhưng một CHỐT
@@ -38,7 +38,7 @@ export interface DongChot {
   readonly thongDiep: string;
 }
 
-/** Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.165). */
+/** Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166). */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
     chot: "K1",
@@ -70,7 +70,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
 export const ACTION_CHOT_KIEM_SOAT = "CONTROL_DENIED";
 
 /**
- * Câu hỏi hàm vị từ của K1 (`070_bac_cua_goi`): `$1` tổ chức, `$2` gói, mốc là giờ thật lúc hỏi. Câu đứng ở đây, cạnh
+ * Câu hỏi hàm vị từ của K1 (`072_bac_cua_goi`): `$1` tổ chức, `$2` gói, mốc là giờ thật lúc hỏi. Câu đứng ở đây, cạnh
  * bảng, vì `kiemChot` là chỗ gọi `.query(`: bộ đọc QT3 (`tests/architecture/qt3-doc-sql.ts`) rút câu theo TỆP, và một
  * tệp gọi `.query(` mà không mang câu nào là một hình dạng nó mù.
  */

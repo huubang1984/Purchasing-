@@ -111,12 +111,19 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   ["EVALUATING", "AWARDED"],
   ["AWARDED", "EVALUATING"],
   // [S1.108] Cạnh huỷ thứ tư, và nó suy ra từ ảnh: `OPEN->CANCELLED` CÓ nên
-  // `BAFO_OPEN->CANCELLED` có. `BAFO_CLOSED` và `BAFO_UNSEALED` KHÔNG có, đúng như `CLOSED` và
-  // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.
+  // `BAFO_OPEN->CANCELLED` có. ~~`BAFO_CLOSED` và `BAFO_UNSEALED` KHÔNG có, đúng như `CLOSED` và
+  // `UNSEALED` không có — khoản 225 giữ câu hỏi ấy mở cho CẢ HAI cặp cùng lúc.~~ [S1.165] Cả hai cặp
+  // nay có — cuối bảng.
   ["BAFO_OPEN", "CANCELLED"],
   // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
   // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
   ["EVALUATING", "CANCELLED"],
+  // [S1.165 / khoản 225, 071] BỐN cạnh huỷ sau khi đóng — `CLOSED`, `UNSEALED` và hai ảnh BAFO của
+  // chúng thôi là trạng thái hút. Chúng đòi `cancel_reason` ở chính trigger (vế (i) của `071`).
+  ["CLOSED", "CANCELLED"],
+  ["UNSEALED", "CANCELLED"],
+  ["BAFO_CLOSED", "CANCELLED"],
+  ["BAFO_UNSEALED", "CANCELLED"],
 ];
 
 // ===========================================================================================
@@ -165,6 +172,12 @@ export interface RfqRecord {
   readonly openedAt: Date | null;
   readonly closedAt: Date | null;
   readonly cancelledAt: Date | null;
+  /**
+   * [S1.165 / khoản 225] Lý do huỷ mà người huỷ viết — `null` khi gói chưa huỷ, và cho các gói huỷ
+   * trước vòng ấy (lý do của chúng chỉ nằm trong hàng sổ `RFQ_CANCELLED`). Nhà cung cấp ĐỌC được nó
+   * (`GET /guest/rfq`), nên nó là một lời nói với bên ngoài, không phải ghi chú nội bộ.
+   */
+  readonly cancelReason: string | null;
 }
 
 export interface AddRfqItemInput {
@@ -197,6 +210,7 @@ interface HangRfq {
   opened_at: Date | null;
   closed_at: Date | null;
   cancelled_at: Date | null;
+  cancel_reason: string | null;
 }
 
 interface HangItem {
@@ -210,7 +224,7 @@ interface HangItem {
 
 const COT_RFQ =
   "id, title, status, deadline_at, requires_dual_approval, created_by, created_at, " +
-  "opened_at, closed_at, cancelled_at";
+  "opened_at, closed_at, cancelled_at, cancel_reason";
 const COT_ITEM = "id, rfq_id, line_no, description, quantity, unit";
 
 function doiRfq(h: HangRfq): RfqRecord {
@@ -225,6 +239,7 @@ function doiRfq(h: HangRfq): RfqRecord {
     openedAt: h.opened_at,
     closedAt: h.closed_at,
     cancelledAt: h.cancelled_at,
+    cancelReason: h.cancel_reason,
   };
 }
 
@@ -372,8 +387,8 @@ export async function submitRfqForApproval(
   await assertTenantBound(client, orgId, "submitRfqForApproval");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
-  // [S1.165 / S3.1b / K1 · K12] Chốt ngân sách TRƯỚC câu ghi: cùng hàm vị từ mà trigger ở cạnh
-  // (`070_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
+  // [S1.166 / S3.1b / K1 · K12] Chốt ngân sách TRƯỚC câu ghi: cùng hàm vị từ mà trigger ở cạnh
+  // (`072_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
   // còn trigger chỉ tự nói khi có tranh chấp thật (một lần ký chính sách chen vào giữa hai câu).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGAN_SACH, [orgId, input.rfqId]);
 
@@ -753,13 +768,20 @@ export async function cancelRfq(
   );
   const reason = batBuoc(input.reason, "reason", 2000);
 
+  // [S1.165 / khoản 225] Danh sách trắng thêm BỐN trạng thái nguồn — `CLOSED`, `UNSEALED` và hai ảnh
+  // BAFO — cùng lúc bảng cạnh của `071` thêm bốn cạnh; hai lớp đổi trong CÙNG vòng, như `058`. Trước
+  // vòng ấy, một gói bị từ chối chấm vì lệch tiền tệ (khoản 244) đứng yên ở `UNSEALED` mãi mãi. Lý do
+  // nay đi vào `cancel_reason` cho MỌI lần huỷ — nhà cung cấp đọc nó ở trang nộp thầu —, và trigger
+  // đòi nó ở bốn cạnh mới dù lời gọi này đã `batBuoc` rồi: một đường ghi thứ hai không được quên nó.
+
   const { rows } = await client.query<HangRfq>(
     `UPDATE public.rfq_packages SET status = 'CANCELLED', cancelled_at = pg_catalog.now(),
-            cancelled_by = $2, cancelled_by_session_id = $3
+            cancelled_by = $2, cancelled_by_session_id = $3, cancel_reason = $4
       WHERE id OPERATOR(pg_catalog.=) $1
-        AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN', 'BAFO_OPEN', 'EVALUATING')
+        AND status IN ('DRAFT', 'PENDING_APPROVAL', 'OPEN', 'BAFO_OPEN', 'EVALUATING',
+                       'CLOSED', 'UNSEALED', 'BAFO_CLOSED', 'BAFO_UNSEALED')
         RETURNING ${COT_RFQ}`,
-    [input.rfqId, actor.id, actor.sessionId],
+    [input.rfqId, actor.id, actor.sessionId, reason],
   );
   const hang = rows[0];
   if (hang === undefined) {

@@ -38,7 +38,14 @@
     <button id="nut-doc" class="phu">Đọc</button>
     <dl class="tt" id="tt-rfq"></dl>
     <div class="bao luu" id="dem" hidden></div>
+    <!-- [S1.165 / khoản 225] Lối ra khi gói thầu không đi tiếp được — ví dụ lượt chấm bị từ chối vì
+         các báo giá không cùng một đơn vị tiền. Huỷ được ở mọi trạng thái trước khi trao, kể cả sau khi
+         mở thầu; lý do là BẮT BUỘC và nhà cung cấp đã mời ĐỌC ĐƯỢC nó ở trang nộp thầu. -->
+    <label for="ly-do-huy">Lý do huỷ gói thầu — nhà cung cấp đã mời sẽ đọc được câu này</label>
+    <input id="ly-do-huy" type="text" autocomplete="off" placeholder="vì sao gói thầu này dừng lại">
+    <button id="nut-huy-goi" class="phu">Huỷ gói thầu</button>
     <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
   </section>
 
   <section class="buoc" id="b3" hidden>
