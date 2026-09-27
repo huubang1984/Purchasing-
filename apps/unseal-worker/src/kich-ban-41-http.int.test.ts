@@ -1237,9 +1237,18 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // đến từ một `RAISE` của trigger (`routine = exec_stmt_raise`) — đúng ca của ba trigger `061`,
     // vì thông điệp ấy do migration VIẾT chứ không nội suy dữ liệu người dùng. Nên J3 nói được cho
     // người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`.
+    //
+    // [S1.9101 / khoản 247 / ADR-9201] Nay câu ấy là của TẦNG GÓI, không của trigger: `deXuatTraoThau` hỏi J3 trước câu ghi,
+    // từ chối bằng `ChotKiemSoatError` (422 qua `LOI_NGHIEP_VU_422`) và để lại một hàng `CONTROL_DENIED` — trước vòng ấy
+    // lần từ chối này không để lại hàng sổ nào (pilot giả lập đo). Câu vẫn gọi tên `(J3)`; trigger là lớp cuối.
     expect(tuChoi.status, tuChoi.text).toBe(422);
     expect(tuChoi.text, "câu từ chối phải GỌI TÊN bất biến, không chỉ nói không").toMatch(/\(J3\)/u);
     expect(await trangThaiRfq(), "lần từ chối KHÔNG được để lại một trạng thái nửa vời").toBe("EVALUATING");
+    const { rows: soJ3 } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'J3_NGUOI_TAO_DE_XUAT'",
+      [trangThai.rfqId],
+    );
+    expect(soJ3, "lần tự đề xuất ấy để lại đúng một hàng sổ").toHaveLength(1);
 
     // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI: `pm2` cũng là
     // `PROCUREMENT_MANAGER`, cũng giữ `award.recommend`, nhưng họ không tạo và không điều phối.

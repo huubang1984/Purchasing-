@@ -47,7 +47,10 @@ export interface DongChot {
   readonly vaoSo: boolean;
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
   readonly lyDo: string;
-  /** Thông điệp cho người dùng: nói phải làm gì, không nội suy dữ liệu nào. */
+  /**
+   * Thông điệp cho người dùng: nói phải làm gì, không nội suy dữ liệu nào. [S1.9101] Chốt của tách bạch nhiệm vụ GỌI TÊN
+   * bất biến ở cuối câu — `(J3)`, `(D2)` — như câu của trigger mà nó đứng trước ([review H2-10]: người bị chặn đọc được lý do).
+   */
   readonly thongDiep: string;
 }
 
@@ -86,7 +89,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     lyDo:
       "người tạo gói duyệt chính gói ấy — đúng cặp *tạo → duyệt* mà nguyên tắc 1 (PRODUCT §4) cấm một người giữ trọn. Lần cố ấy " +
       "là thứ kiểm toán viên hỏi đầu tiên; trước khoản 247 nó chỉ bị trigger `rfq_kiem_nguoi_duyet` (011) chặn và không để lại dấu vết",
-    thongDiep: "Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt.",
+    thongDiep: "Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).",
   },
   J3_NGUOI_TAO_DE_XUAT: {
     chot: "J3",
@@ -94,7 +97,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     lyDo:
       "người tạo gói đề xuất trao thầu cho chính gói ấy — vế 2 của J3. Người ấy có `award.recommend` và gói đang `EVALUATING`, " +
       "nên chỉ chốt này chặn; lần cố là một tín hiệu về đúng chuỗi mà nguyên tắc 1 bảo vệ",
-    thongDiep: "Người tạo gói thầu không được đề xuất trao thầu cho chính gói ấy.",
+    thongDiep: "Người tạo gói thầu không được đề xuất trao thầu cho chính gói ấy (J3).",
   },
   J3_NGUOI_DIEU_PHOI_DE_XUAT: {
     chot: "J3",
@@ -102,7 +105,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     lyDo:
       "người từng điều phối mở thầu gói này đề xuất trao thầu cho nó — vế 3 của J3, đọc lịch sử điều phối (`064`, khoản 233). " +
       "Người đã chạm bản rõ trước mọi người khác mà chọn luôn người thắng là đúng ca kiểm toán viên cần thấy",
-    thongDiep: "Người từng điều phối mở thầu gói này không được đề xuất trao thầu cho nó.",
+    thongDiep: "Người từng điều phối mở thầu gói này không được đề xuất trao thầu cho nó (J3).",
   },
   J3_NGUOI_DE_XUAT_TU_DUYET: {
     chot: "J3",
@@ -110,7 +113,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     lyDo:
       "người đề xuất trao thầu tự duyệt đề xuất của chính mình — vế 1 của J3. `FINANCE` giữ cả `award.recommend` lẫn " +
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
-    thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt.",
+    thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
 };
 
