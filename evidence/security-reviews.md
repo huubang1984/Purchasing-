@@ -12509,7 +12509,148 @@ phối riêng, PostgreSQL 16 thật:
 - Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/api/src` và `packages/identity/src` — **31 tệp, 420 ca đạt**.
 - Số tạm `S1.155`, `ADR-092` do `pnpm cap-so` cấp lúc merge.
 
-# §S1.156 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 243
+---
+
+# §S1.156 — S3.1a: BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ MỘT HÀM PHIÊN BẢN HIỆU LỰC CHO CẢ BỐN CHỖ ĐỌC
+
+**Rổ và mảnh (ADR-043 ⒞): không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080.** Không khoản nợ nào
+vào hay ra. Một migration (`069_bac_va_chu_ky_chinh_sach`), không ADR mới. Nhánh khởi lại từ `master` `9b3cf8d` sau khi
+#161 merge.
+
+## 1. Vòng này là gì
+
+Phần đầu trong bốn phần của S3.1 mà chủ dự án chọn (spec S3 §9): **S3.1a** lược đồ; **S3.1b** bậc của gói và K1; **S3.1c**
+route và màn khai chính sách; **S3.1d** `gieo:demo` và kịch bản 41 chạy hai luồng. Mỗi phần một PR. Không có thứ gì ĐỌC bậc
+trước S3.1b, nên tổ chức nào cũng chạy như MVP1 sau vòng này: cụm test hiện có là đối chứng.
+
+## 2. Đo trước khi viết
+
+- **Bốn chỗ tự chọn phiên bản hiện hành, theo ba luật.** `getActiveProcurementPolicy` (ngưỡng kép, ghim ngân sách) và
+  `rfq_che_do_nghiem` nhánh ⑵ (`020`): phiên bản cao nhất đã tới `effective_from`. `docChinhSach` (trọng số chấm): phiên bản
+  cao nhất, KHÔNG xét `effective_from`. Hai hàm hạn xoá khoá (`026`): `effective_from` muộn nhất. Chặn phiên bản chưa ký ở
+  một chỗ thì một người `policy.manage` tự tạo một phiên bản chưa ai ký vẫn đổi được trọng số chấm và hạn xoá khoá — đúng
+  thứ chữ ký thứ hai sinh ra để chặn. Chủ dự án chọn hợp nhất cả bốn.
+- **Mục ghim thiu kéo hàm lùi.** Định nghĩa lại `rfq_key_material_bat_bien` mà không sửa mục ghim của `026` thì lượt sửa sau
+  vòng migration dựng lại thân cũ: đo trên cụm cục bộ, thân sống sau `migrate()` là thân `026`. Mục ghim nay mang thân mới.
+- **`cap-so` bỏ sót tên migration không đuôi.** Hardening khai migration bằng tên KHÔNG `.sql` (`BANG_TENANT_KHAI`,
+  `CHECK_AN_NINH_KHAI` nối `mig || '.sql'`). Đo trên một worktree nháp: `'069_thu_cap_so'` còn nguyên sau `cap-so`, và
+  `cap-so --kiem` vẫn sạch — hardening sẽ mất dòng khai trong im lặng. Sửa trong commit riêng đầu PR (ADR-090 ② ghi chú).
+
+## 3. Lược đồ — `069_bac_va_chu_ky_chinh_sach`
+
+- **Bậc** là mảng `jsonb` trên hàng chính sách, khuôn `eval_components` (`056`). `chinh_sach_kiem_bac` kiểm khi chèn: mảng
+  không rỗng; mười khoá, không khoá lạ; `tu_so_tien` là số không âm vừa `numeric(18,2)`, bậc đầu từ 0, tăng ngặt; bậc đấu
+  thầu chính thức chỉ đứng cuối và chỉ mang hai khoá; kiểu từng khoá; `award_vai` là tập vai không lặp, mỗi vai giữ
+  `po.approve`; hai chữ ký ở hai vai khác nhau thì phải có hai vai. Hai cột mức chính sách, tất-cả-hoặc-không, dương, và
+  bắt buộc khi có bậc.
+- **Chữ ký thứ hai**: `org_policy_signatures`, chỉ-ghi-thêm khuôn `061` (không UPDATE/DELETE cho `app_api`, `bid_chi_ghi_them`
+  ở UPDATE/DELETE và TRUNCATE, cả ba `ENABLE ALWAYS`), policy khách RESTRICTIVE đóng hẳn, người ký là dẫn xuất của phiên.
+  `chinh_sach_kiem_nguoi_ky`: phiên bản phải có bậc, người ký khác người tạo và giữ `policy.manage`. Một phiên bản một
+  chữ ký; `signed_at` do CSDL đặt.
+- **Công tắc**: `to_chuc_da_bat_s3(org)` — có một phiên bản có bậc đã ký. Từ lúc bật, `chinh_sach_da_bat_thi_phai_co_bac`
+  từ chối phiên bản không bậc.
+- **Phiên bản hiệu lực**: `chinh_sach_hieu_luc(org, lúc)` — phiên bản cao nhất đã tới `effective_from`, và nếu có bậc thì
+  đã ký trước lúc ấy. Bốn chỗ đọc ở mục 2 nay cùng hỏi hàm này; thân còn lại của `rfq_che_do_nghiem` và hai hàm `026` giữ
+  nguyên văn.
+- **Ghim ngân sách**: `ngan_sach_khong_ghim_ban_chua_ky` chặn INSERT/UPDATE ngân sách trỏ một phiên bản có bậc chưa ký —
+  đường ghi SQL viết tay là đường thứ năm để một bản chưa ký có hiệu lực (`rfq_can_phe_duyet_kep` và nhánh ⑴ của
+  `rfq_che_do_nghiem` đọc bản mà ngân sách ghim).
+
+Bốn hàm trigger mới và thân mới của `rfq_key_material_bat_bien` ghim ở `hardening.always.sql` trong cùng commit; bảng mới
+vào `BANG_TENANT_KHAI`, ba trigger của nó vào hai mục ghim có sẵn (`kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them`).
+
+## 4. *Đã bật ⇒ phiên bản hiệu lực có bậc* — lỗ đọc ra khi viết test, đóng trong vòng
+
+ADR-080 nói công tắc bật khi có một phiên bản có bậc đã ký. Bản đầu của `069` cài đúng chữ ấy, và nó để hở một trạng
+thái: v1 không bậc, v2 có bậc, v3 không bậc (chưa bật nên được), rồi ký v2 — tổ chức đã bật mà phiên bản hiệu lực là v3,
+không bậc. Mọi phần sau của S3 rẽ nhánh theo *đã bật* rồi đọc bậc của phiên bản hiệu lực. Cùng lớp: ký một phiên bản hẹn
+giờ trước ngày của nó, và một lần chèn v3 chạy đồng thời với lần ký v2.
+
+Ba vế ở lần ký, cả ba trong `chinh_sach_kiem_nguoi_ky`:
+- phiên bản được ký là phiên bản MỚI NHẤT của tổ chức;
+- nó đã tới ngày hiệu lực lúc ký (`effective_from <= signed_at`);
+- một khoá tư vấn theo tổ chức (`hashtextextended(org_id, 2)`; hạt `0` là khoá sổ của `004`), cũng lấy ở
+  `chinh_sach_da_bat_thi_phai_co_bac`: lần ký và lần chèn phiên bản cùng tổ chức xếp hàng, và câu đọc sau khoá lấy ảnh
+  chụp mới (READ COMMITTED; hàm trigger VOLATILE).
+
+Sau lần ký, mọi phiên bản mới đều có bậc, và bản vừa ký đã có hiệu lực — nên phiên bản hiệu lực từ đó luôn có bậc. Đo ở
+mục 5: hai thứ tự của cuộc đua và ba đột biến.
+
+## 5. Phép đo và đột biến
+
+`packages/rfq/src/bac-chinh-sach.int.test.ts`, trên Postgres thật dưới `app_api`; mỗi phép đo một tổ chức riêng, vì công
+tắc không quay lại được. Không nhãn INV — K1 vào sổ ở S3.1b.
+
+| Lớp | Đo | Đột biến |
+|---|---|---|
+| hình dạng bậc | 29 ca hỏng, mỗi ca đúng thông điệp và `where` là `chinh_sach_kiem_bac`, không ca nào tiêu số phiên bản; 4 ca đúng; `jsonb` đọc lại nguyên văn; ba `CHECK` mức theo tên | tắt trigger ⇒ mảng rỗng đi lọt |
+| người ký | người khác người tạo và giữ `policy.manage` ký được, `signed_at` nằm giữa hai mốc đồng hồ; tự ký, BUYER, PM, DIRECTOR, phiên người khác, phiên đã thu hồi, phiên bản không bậc, chữ ký thứ hai đều bị từ chối | tắt trigger ⇒ người tạo tự ký được |
+| chỉ-ghi-thêm | `app_api`: UPDATE, DELETE, ký lùi ngày ⇒ 42501; chủ sở hữu: UPDATE, DELETE, TRUNCATE ⇒ `bid_chi_ghi_them` | — (mục ghim `bid_chi_ghi_them` và `[INV-H19]` đã đo khuôn) |
+| cô lập | tổ chức khác không thấy chữ ký và thấy công tắc là `false`; phiên khách không thấy gì; ký chéo tổ chức bị từ chối | — |
+| công tắc | chưa bật thì phiên bản không bậc vẫn thêm được; ký v2 khi v3 đứng trên bị từ chối; ký v4 thì bật, phiên bản hiệu lực là v4; từ đó phiên bản không bậc bị từ chối | tắt trigger ⇒ tổ chức đã bật thêm được bản không bậc; bỏ vế MỚI NHẤT hay vế NGÀY HIỆU LỰC ⇒ đã bật mà hiệu lực không bậc |
+| khoá | hai giao dịch đồng thời, hai thứ tự: kẻ đến sau đứng chờ khoá tư vấn (đo ở `pg_stat_activity`), rồi thấy trạng thái mới và bị từ chối | gỡ khoá ⇒ thứ tự ① đi lọt, tổ chức đã bật mà phiên bản hiệu lực không bậc |
+| phiên bản hiệu lực | theo mốc: đúng lúc ký là v2, một micro giây trước là v1, trước phiên bản đầu là NULL; bản hẹn giờ tới ngày mới có hiệu lực; `getActiveProcurementPolicy` và `setRfqBudget` ghim v1 rồi v2; `rfq_che_do_nghiem` nhánh ⑵ và hai hàm `026` cho gói tạo giữa lúc tạo v2 và lúc ký đọc v1 — luật cũ chọn v2 | viết lại hàm theo luật cũ ⇒ bản chưa ký có hiệu lực ở cả `getActiveProcurementPolicy` lẫn `rfq_che_do_nghiem` |
+| một hàm chọn phiên bản | tổng điều tra: 11 hàm của lược đồ đọc bảng chính sách, mỗi hàm đúng một lớp khai; chỉ `chinh_sach_hieu_luc` xếp theo phiên bản; ba hàm QUA_HAM gọi nó | — |
+| ghim ngân sách | INSERT và UPDATE ghim bản chưa ký bị chặn; bản không bậc và bản đã ký thì ghim được | tắt trigger ⇒ ghim được bản chưa ký |
+
+Nửa TypeScript của tổng điều tra ở `tests/architecture/doc-chinh-sach-mot-ham.test.ts`, bằng cùng bộ đọc SQL của
+`[INV-H21]`: mọi câu chạm bảng chính sách là GHI, QUA_HAM hay THEO_ID (một `policy_id` đã ghim); tập tệp chạm bảng là tập
+khai. Đột biến: trả câu của `getActiveProcurementPolicy` về hình dạng cũ ⇒ đỏ, nêu `procurement-policy.ts:219`.
+
+Tổng điều tra của `[INV-H19]` bắt kịp: `org_policy_signatures` vào `BANG_CHI_GHI_THEM_THAT`, bốn hàm mới vào
+`HAM_KHONG_PHAI_CANH`, và `dungKichBan()` chèn phiên bản 2 có bậc rồi ký nó dưới `app_api` — nhân chứng cho
+`chinh_sach_kiem_nguoi_ky` và cho `kiem_danh_tinh_theo_phien` trên bảng mới. Kịch bản ấy ký ở CUỐI, vì lần ký bật công tắc.
+
+## 6. Giới hạn, nói ra
+
+- **Hai hàm SQL mới không có mục ghim thân**: `chinh_sach_hieu_luc` và `to_chuc_da_bat_s3`, cùng thân mới của
+  `rfq_che_do_nghiem` và `rfq_khoa_du_dieu_kien_xoa`. Hardening ghim hàm TRIGGER; hàm trợ giúp là cùng loại với ba hàm MVP1
+  mà lượt soi S1.139 nêu, và việc đối chiếu với danh mục ADR-028/036 vẫn nằm ngoài S3. Tổng điều tra ở mục 5 canh HÌNH
+  DẠNG của chúng trong test; nó không canh CSDL sống.
+- **Khoá tư vấn chỉ đúng dưới READ COMMITTED.** Dưới REPEATABLE READ, ảnh chụp cố định từ câu đầu giao dịch, nên câu đọc
+  sau khoá không thấy lần ghi vừa commit. SERIALIZABLE bắt ca ấy bằng lỗi tuần tự hoá (ghi lệch). Mọi đường của ứng dụng
+  chạy READ COMMITTED.
+- **`docChinhSach` chỉ có phép đo hình dạng**: nó gọi hàm (tổng điều tra TypeScript), nhưng không có phép đo hành vi riêng —
+  dựng một lượt chấm cần cả chuỗi mở thầu. Đột biến ở mục 5 đo hàm mà nó gọi.
+- **Hai thay đổi hành vi cho tổ chức chỉ có phiên bản không bậc:** lượt chấm nay tôn trọng `effective_from` (bản cũ chấm
+  theo phiên bản hẹn giờ trước giờ hiệu lực của nó), và hai hàm `026` xếp theo `version` như ba chỗ kia. Hai luật cũ chỉ
+  khác nhau khi `effective_from` không đơn điệu theo phiên bản.
+- **Chưa có route, màn hình, K1, ngân sách bắt buộc hay lớp `CONTROL_DENIED`** — S3.1b và S3.1c. Chưa ai ký được phiên bản
+  qua ứng dụng, nên công tắc chỉ bật được bằng SQL.
+
+## 7. Số đo
+
+- `packages/rfq/src/bac-chinh-sach.int.test.ts` **26/26**; `tests/architecture/doc-chinh-sach-mot-ham.test.ts` **2/2**; bốn ca
+  mới của `tools/cap-so` (dạng không đuôi) đỏ khi gỡ bản sửa, xanh khi có.
+- `pnpm cap-so` cấp vòng S1.156 và migration `069`, kể cả tên không đuôi trong hai danh sách khai của hardening;
+  `pnpm cap-so --kiem` sạch. `master` vẫn ở `9b3cf8d` nên không có lần hợp nào.
+- Trên cây đã cấp số: `pnpm t0` sạch; `pnpm test` **108 tệp, 1439 đạt, 1 bỏ qua**.
+- Tầng tích hợp chạy cục bộ trên cụm Postgres 16 dựng bằng `initdb` (container này không có docker), cây đã cấp số:
+  **172 tệp, 2730 ca — 2720 đạt, 1 bỏ qua, 9 đỏ ngoài vòng này**: 8 ca của `packages/test-support/src/postgres.int.test.ts`
+  cần docker; 1 ca của `qt3-cu-phap.int.test.ts` gãy ở `pg_ctl start` của cụm cục bộ và xanh khi chạy lại riêng. Lượt ấy
+  còn một lỗi chưa bắt khi harness dừng một cụm lúc pool của `packages/db/src/vai-tro.int.test.ts` còn kết nối rảnh; tệp
+  ấy xanh khi chạy lại riêng (18/18).
+- Trên cây số tạm, hai ca đỏ vì bộ đọc chỉ nhận tên migration ba chữ số (`rls-coverage` — `BANG_TENANT_KHAI`;
+  `migrations.int` — *migration CUỐI CÙNG định nghĩa hàm*); cấp số xong thì xanh. Lượt ấy `tests/architecture/boundaries.test.ts`
+  đỏ một lần (depcruise thoát mã 1), rồi xanh khi chạy riêng và ở lượt sau; nguyên nhân chưa rõ.
+- Ma trận không sinh lại cục bộ: vòng này không thêm ca mang nhãn INV nào, nên ma trận phải giữ nguyên từng byte; job
+  *Evidence pack* của CI đo điều ấy.
+- Không khoản nợ mới, không ADR mới. **69** migration, **90** ADR.
+- **Hợp `master` sau khi mở PR.** `master` nhận #162 — vòng S1.154 (khoản 142 đóng, ADR-091), cùng số vòng mà lần cấp
+  đầu đã cho vòng này. Lần hợp xung đột ở hai chỗ: cột mốc của `docs/STATE.md` (gỡ tay, giữ cả hai, cột mốc của vòng này
+  về số tạm) và mục nối cuối biên bản (`pnpm cap-so` tự gỡ). Một dòng của mục này viết SAU lần cấp đầu nhắc S1.154 — số
+  master nay cũng khai —, nên `pnpm cap-so` từ chối như ADR-090 ③ định; dòng ấy nói về vòng của nhánh, nên lệnh chạy lại
+  với `--mo-ho nhanh`. Kết quả: vòng này là **S1.156**, migration giữ `069` (master không thêm migration),
+  `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0` sạch; `pnpm test` **108 tệp, 1440 đạt, 1 bỏ qua**; tầng tích
+  hợp do job T3 của CI đo trên chính commit hợp. **69** migration, **91** ADR.
+- **Hợp `master` lần hai.** Trong lúc CI chạy trên commit hợp đầu, `master` nhận #164 — vòng S1.155 (khoản 122 và 144
+  đóng, ADR-092), đúng số lần hợp đầu đã cấp cho vòng này. Lần hợp xung đột ở đúng hai chỗ như lần đầu và được gỡ theo
+  cùng cách; dòng mơ hồ duy nhất là dòng kết quả ở gạch đầu dòng trên, nói về vòng của nhánh, nên `--mo-ho nhanh`. Kết
+  quả: vòng này là **S1.156**, migration vẫn `069` (#164 không thêm migration), `pnpm cap-so --kiem` sạch. Trên cây đã
+  hợp: `pnpm t0` sạch (398 module, 1562 phụ thuộc); `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua**; tầng tích hợp do job
+  T3 của CI đo trên chính commit hợp. **69** migration, **92** ADR.
+
+# §S1.157 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 243
 
 **Rổ và mảnh (ADR-043 ⒞): KHÔNG gỡ mảnh 4 (*khách hàng pilot*) của `docs/PRODUCT.md` §11 — vòng này dựng thứ để trình
 diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 243 vào rổ B.** Không

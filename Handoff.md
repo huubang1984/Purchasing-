@@ -61,7 +61,7 @@ Lượt đỏ đầu tiên là lượt **có giá trị nhất** của cả dự
 ## 3. Trong mã có gì
 
 ~~**Bảy migration** + một lớp cưỡng chế chạy ở mọi lần `migrate()`:~~
-**[S1.142] 68 migration đánh số** (~~**[S1.140] 67**~~, ~~**[S1.132] 66**~~, ~~**[S1.130] 65**~~, ~~**[S1.129] 64**~~, ~~**[S1.119] 63**~~, ~~**[S1.118] 62**~~, ~~**[S1.110] 61**~~, ~~**[S1.109] 60**~~, ~~**[S1.108] 59**~~, ~~**[S1.105] 58**~~, ~~**[S1.102] 56**~~, ~~**[S1.100] 55**~~, ~~**[S1.96] 54**~~, ~~**[S1.85] 53**~~, ~~**[S1.82] 52**~~, ~~**[S1.76] 51**~~, ~~**[S1.71] 50**~~, ~~**[S1.61] 49**~~, ~~**[S1.28] 48**~~) + một lớp cưỡng chế chạy ở mọi lần `migrate()`. Con số ấy
+**[S1.142] 69 migration đánh số** (~~**[S1.140] 67**~~, ~~**[S1.132] 66**~~, ~~**[S1.130] 65**~~, ~~**[S1.129] 64**~~, ~~**[S1.119] 63**~~, ~~**[S1.118] 62**~~, ~~**[S1.110] 61**~~, ~~**[S1.109] 60**~~, ~~**[S1.108] 59**~~, ~~**[S1.105] 58**~~, ~~**[S1.102] 56**~~, ~~**[S1.100] 55**~~, ~~**[S1.96] 54**~~, ~~**[S1.85] 53**~~, ~~**[S1.82] 52**~~, ~~**[S1.76] 51**~~, ~~**[S1.71] 50**~~, ~~**[S1.61] 49**~~, ~~**[S1.28] 48**~~) + một lớp cưỡng chế chạy ở mọi lần `migrate()`. Con số ấy
 nay do `[INV-H20]` **suy ra từ `git ls-files`**, không còn chép tay — khoản nợ 61. Bảy tệp
 đầu là nền của S0:
 
@@ -85,7 +85,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 
 **[S1.85]** Dòng `008 … 051` của khối trên đã sửa thành `053` — S1.82 thêm `052` mà KHÔNG sửa dòng này (lần thiu thứ tư của chính nó, và là lần đầu KHÔNG ai sửa trong cùng vòng), S1.85 thêm `053`. Lần sửa tay thứ TƯ, và khoản 136 vẫn mở — con số này là số đo của nó. ~~**[S1.76]** Dòng `008 … 050` của khối trên đã sửa thành `051` — S1.76 thêm migration 051 (`sessions.kind`). Lần sửa tay thứ BA của cùng một dòng, và mỗi lần đều do một người nhớ ra chứ không do một cổng nào kêu — khoản 136 vẫn mở, và con số ba lần này là số đo của chính nó.~~
 
-~~**Bảy gói + hai công cụ:**~~ **[S1.156] 14 gói + 12 công cụ** (~~**[S1.152] 11**~~ ~~**[S1.146] 10**~~ ~~**[S1.144] 9**~~ ~~**[S1.123] 8**~~ ~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
+~~**Bảy gói + hai công cụ:**~~ **[S1.157] 14 gói + 12 công cụ** (~~**[S1.152] 11**~~ ~~**[S1.146] 10**~~ ~~**[S1.144] 9**~~ ~~**[S1.123] 8**~~ ~~**[S1.114] 7**~~ ~~**[S1.104] 6**~~ ~~**[S1.89] 13**~~ ~~**[S1.28] 5**~~ — cùng khuôn với lời khai migration ở trên: lịch sử giữ con số trần, vì mẫu của cổng khớp CỤM ĐẦY ĐỦ và hai cụm đầy đủ làm phép đột biến của chính nó rỗng ruột) — cũng suy từ `git ls-files`:
 
 | Gói | Vai trò |
 |---|---|

@@ -7010,6 +7010,10 @@ mở khoản rổ B nào khác. Biên bản của mỗi vòng S3.x vẫn mở đ
 đủ chữ ký thứ hai (ADR-082 ⑺). Trạng thái *đã bật* là **suy diễn từ dữ liệu**, không phải một cờ: một hàm SQL duy nhất
 hỏi *có tồn tại một phiên bản có bậc đã ký của tổ chức này không*. Phiên bản chính sách bất biến và không xoá được, nên
 công tắc **một chiều bằng cấu tạo**. Từ lúc bật, CSDL từ chối mọi phiên bản không bậc của tổ chức ấy.
+**[S1.156]** Hàm ấy là `to_chuc_da_bat_s3(org)` (`069_bac_va_chu_ky_chinh_sach`). *Đã bật* kéo theo *phiên bản hiệu lực
+có bậc* bằng ba vế ở lần ký: phiên bản được ký là phiên bản MỚI NHẤT của tổ chức, nó đã tới ngày hiệu lực, và lần ký với
+lần chèn phiên bản xếp hàng sau một khoá tư vấn theo tổ chức. Thiếu vế đầu, chuỗi v1 không bậc · v2 có bậc · v3 không bậc
+rồi ký v2 cho ra tổ chức đã bật mà phiên bản hiệu lực là v3 — đo bằng đột biến.
 
 ⑶ **Tổ chức chưa bật chạy đúng hành vi MVP1** — mời sau khi mở gói, ước lượng tuỳ chọn, sàn 0 chữ ký dưới ngưỡng kép.
 
@@ -7112,6 +7116,9 @@ sàn một chữ ký áp cho MỌI tổ chức từ `068`. Vế ước lượng 
 bản không ký trao thầu, không xác minh hay thẩm định, không ghi nhận tín hiệu trên gói ghim phiên bản ấy. Nộp duyệt đòi
 phiên bản ghim là phiên bản đang hiệu lực. Lý do: `FINANCE` giữ `policy.manage` VÀ `po.approve`, nên câu *"luật 033 phủ luôn
 bậc mà không cần sửa"* của bản nháp là sai — bậc nay đặt thước cho chính việc FINANCE làm.
+**[S1.156]** Vế *chỉ có hiệu lực khi đã ký* cài ở `chinh_sach_hieu_luc(org, lúc)`, hàm DUY NHẤT chọn phiên bản; chữ ký nằm
+ở `org_policy_signatures` (`069_bac_va_chu_ky_chinh_sach`). Vế *nộp duyệt đòi phiên bản ghim là phiên bản đang hiệu lực*
+là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
 
 ⑻ **Công tắc một chiều theo tổ chức** — ADR-080.
 
@@ -7510,7 +7517,10 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
    trên dòng nhánh thêm, đổi tên tệp migration, viết lại lời khai đếm. Kết quả được commit kèm dòng trailer `Cap-So:`
    mà lệnh in ra.
    - Ngoài Markdown chỉ dạng CÓ TIỀN TỐ được thay (`S1.91NN`, `ADR-92NN`, `khoản 94NN`, `95NN_ten.sql`, kể cả phần nối
-     của một dải). Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
+     của một dải). **[S1.156]** Cộng dạng `95NN_ten` KHÔNG đuôi — dạng các danh sách khai của
+     `db/migrations/hardening.always.sql` dùng (`mig || '.sql'` so với `schema_migrations`). Thiếu nó, tệp đổi tên mà
+     dòng khai đứng nguyên, `--kiem` vẫn sạch, và phép kiểm của dòng ấy im lặng không bao giờ chạy — đo ở PR đầu tiên
+     thêm migration dưới ADR này. Thu hồi và `--kiem` nhận cùng dạng ấy. Số tạm TRẦN chỉ được thay trong Markdown, và chỉ khi không dính chữ, số, `_` hay `-` — `PORT = 92NN`
      trong mã, một UUID hay một digest đứng yên. Số trần còn lại mà trùng một số tạm đã khai thì được cảnh báo.
    - Base là `origin/master` thì phải bằng remote lúc chạy (`git ls-remote`); bản cục bộ cũ thì lệnh từ chối.
 3. **Thua cuộc đua thì chạy lại lệnh.** PR khác merge trước với cùng số thì: merge master, rồi `pnpm cap-so`. Lệnh tự

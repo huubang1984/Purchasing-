@@ -777,6 +777,9 @@ describe("phủ RLS", () => {
       // qua khi có yêu cầu đã duyệt chưa tiêu thụ; không có trigger ấy thì GRANT này là một lỗ.
       { grantee: "app_api", bang: "mfa_credentials", quyen: "DELETE,SELECT" },
       { grantee: "app_api", bang: "mfa_reset_requests", quyen: "SELECT" },
+      // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách: CHỈ ĐỌC ở mức bảng; ghi thêm bằng
+      // quyền theo cột ngay dưới, không UPDATE, không DELETE.
+      { grantee: "app_api", bang: "org_policy_signatures", quyen: "SELECT" },
       { grantee: "app_api", bang: "org_procurement_policies", quyen: "SELECT" },
       { grantee: "app_api", bang: "organizations", quyen: "SELECT" },
       { grantee: "app_api", bang: "otp_rate_limits", quyen: "DELETE,SELECT" },
@@ -1138,6 +1141,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "org_key_pairs", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_key_pairs", cot: "public_key", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_key_pairs", cot: "wrapped_private_key", quyen: "INSERT" },
+      // [S1.156 / S3.1a] Chữ ký chính sách: CHỈ INSERT — `signed_at` do CSDL đặt, người ký là dẫn xuất
+      // từ phiên (trigger `kiem_danh_tinh_theo_phien`).
+      { grantee: "app_api", bang: "org_policy_signatures", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_policy_signatures", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_policy_signatures", cot: "signed_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_policy_signatures", cot: "signed_by_session_id", quyen: "INSERT" },
       // [ADR-017 / 014] Chinh sach mua sam: CHI GHI THEM. Khong UPDATE, khong DELETE — sua duoc
       // nguong cua mot phien ban DA DUNG nghia la phan loai cua moi RFQ cu doi theo ma khong ai
       // biet, tuc "tai lap duoc" thanh mot loi hua rong. Do la toan bo co che.
@@ -1145,6 +1154,8 @@ describe("phủ RLS", () => {
       // UPDATE, cùng lý do đã ghi cho `strict_blind_mode`: bảng chỉ ghi thêm, đổi chính sách là thêm
       // một phiên bản.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "bafo_top_n", quyen: "INSERT" },
+      // [S1.156 / S3.1a] Bậc giá trị và hai cột mức chính sách — cùng lý do: INSERT, không UPDATE.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "chia_nho_cua_so_ngay", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by_session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "currency", quyen: "INSERT" },
@@ -1155,6 +1166,8 @@ describe("phủ RLS", () => {
       // [S1.7] Cột chế độ nghiêm của A6. Nó vào tập INSERT chứ KHÔNG vào tập UPDATE: bảng này
       // chỉ ghi thêm, và đổi chính sách nghĩa là thêm một phiên bản — xem 014 và 020.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "strict_blind_mode", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "tham_dinh_hieu_luc_thang", quyen: "INSERT" },
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "tiers", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "version", quyen: "INSERT" },
       { grantee: "app_api", bang: "organizations", cot: "name", quyen: "UPDATE" },
       { grantee: "app_api", bang: "otp_rate_limits", cot: "bucket_hash", quyen: "INSERT" },
@@ -1890,7 +1903,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
   return Object.fromEntries([
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
-      "mfa_reset_requests", "org_key_pairs", "org_procurement_policies", "organizations",
+      "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs", "rfq_approvals",
       // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết

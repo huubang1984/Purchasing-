@@ -1,6 +1,6 @@
 # Phương án pilot giả lập — TrustProcure V2
 
-> **Ngày:** 2026-09-26 · **Vòng:** S1.156 · **Quyết định:** ADR-093 · **Công cụ:** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`)
+> **Ngày:** 2026-09-26 · **Vòng:** S1.157 · **Quyết định:** ADR-093 · **Công cụ:** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`)
 >
 > **Phạm vi chủ dự án chọn ngày 2026-09-26:** tài liệu + công cụ; hai doanh nghiệp giả lập (Sản xuất + Xây dựng); chế độ
 > nhanh, có thêm chế độ chậm; dữ liệu dùng cho CẢ kiểm tính năng LẪN trình diễn.
@@ -187,7 +187,7 @@ duyệt, và lần thử không bao giờ tới sản phẩm.
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 
 Chạy trên Postgres 16.13 cục bộ. Lượt đầu chạy trên bản của commit đầu của vòng. Lượt soi đối kháng năm lăng kính (biên
-bản §S1.156 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên bản đã sửa; bảng dưới là số của lượt sau.
+bản §S1.157 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên bản đã sửa; bảng dưới là số của lượt sau.
 
 | Chỉ số | Kết quả |
 |---|---|
@@ -228,7 +228,7 @@ bản §S1.156 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    - tín hiệu dừng gửi giữa lượt chạy để lại bốn tiến trình con mồ côi;
    - thư mục trạng thái mới trên một CSDL cũ làm `api` chết lúc khởi động.
 4. **Lượt soi đối kháng năm lăng kính** (an ninh, đúng đắn, xanh giả, cổng CI, tài liệu) tìm thêm những chỗ công cụ nói
-   nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.156 mục 9 kê từng điểm và cách sửa.
+   nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.157 mục 9 kê từng điểm và cách sửa.
 
 ## 7. Thang bậc tới pilot thật — trả lời thẳng cho "không ai nhận pilot"
 
