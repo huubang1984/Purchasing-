@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Chính sách mua sắm — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Chính sách mua sắm theo bậc giá trị</h1>
+    <span class="vai">Tài chính</span>
+    <nav><a href="/tao-thau">Màn tạo gói</a> · <a href="/mo-thau">Màn mở thầu</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Người khai và người ký một phiên bản phải là HAI người giữ quyền khai chính sách —
+      màn này đăng nhập lại được bằng người thứ hai để ký.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-vao">Vào</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Các phiên bản</h2>
+    <p class="ghi">Phiên bản chính sách không sửa được và không xoá được: đổi chính sách là thêm một
+      phiên bản. Một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC người khai đã ký nó.</p>
+    <dl class="tt" id="tt-to-chuc"></dl>
+    <table id="bang-pb">
+      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="nut-doc-pb" class="phu">Đọc lại</button>
+    <div id="khoi-ky" hidden>
+      <p class="ghi" id="mo-ta-ky"></p>
+      <label><input type="checkbox" id="hieu-ky"> Tôi hiểu: ký phiên bản có bậc đầu tiên là BẬT kiểm soát
+        theo bậc cho cả tổ chức, và không tắt lại được.</label>
+      <button id="nut-ky" disabled>Ký phiên bản này</button>
+    </div>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Soạn phiên bản mới</h2>
+    <p class="ghi">Mẫu mặc định là GIẢ ĐỊNH của đặc tả, không phải lời khuyên: hiệu chỉnh theo tổ
+      chức mình. Màn cảnh báo — không chặn — những cấu hình trông như kiểm soát mà không kiểm soát gì.</p>
+    <div class="doi">
+      <button id="nut-mau" class="phu">Điền mẫu mặc định</button>
+      <button id="nut-chep" class="phu">Chép phiên bản mới nhất</button>
+    </div>
+    <label for="nguong">Ngưỡng phê duyệt kép (gói từ mức này cần hai người duyệt mở gói và mở thầu)</label>
+    <input id="nguong" inputmode="decimal" autocomplete="off" placeholder="1000000000.00">
+    <label for="tien-te">Tiền tệ</label>
+    <input id="tien-te" autocomplete="off" value="VND">
+    <label for="chia-nho">Cửa sổ phát hiện chia nhỏ gói (ngày)</label>
+    <input id="chia-nho" inputmode="numeric" autocomplete="off" placeholder="30">
+    <label for="tham-dinh">Hiệu lực của một lần thẩm định nhà cung cấp (tháng)</label>
+    <input id="tham-dinh" inputmode="numeric" autocomplete="off" placeholder="12">
+    <table id="bang-bac">
+      <thead><tr>
+        <th class="so">Từ số tiền</th><th>Đấu thầu chính thức</th><th class="so">NCC tối thiểu</th><th>Ký danh sách mời</th>
+        <th class="so">Xoay vòng N</th><th class="so">Chữ ký trao thầu</th><th>Vai ký trao thầu</th>
+        <th>Hai vai khác nhau</th><th>Thẩm định trước trao</th><th>Khai xung đột</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="doi">
+      <button id="nut-them-bac" class="phu">Thêm bậc</button>
+      <button id="nut-xoa-bac" class="phu">Xoá bậc cuối</button>
+    </div>
+    <h3>Số người tối thiểu mỗi bậc</h3>
+    <p class="ghi">Theo bảng vai của đặc tả, MỖI NGƯỜI MỘT VAI: tài chính (người khai, người ký, thẩm
+      định), mua sắm (người tạo gói, người ký mở gói), giám đốc (người duyệt mở thầu). Một người giữ
+      cùng lúc vai tài chính và giám đốc có thể làm con số thật thấp hơn.</p>
+    <table id="bang-nguoi">
+      <thead><tr><th class="so">Từ số tiền</th><th class="so">Tài chính</th><th class="so">Mua sắm</th><th class="so">Giám đốc</th><th class="so">Tổng</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao luu" id="canh-bao" hidden></div>
+    <button id="nut-tao-pb">Tạo phiên bản</button>
+    <div class="bao loi" id="loi3" hidden></div>
+    <div class="bao ok" id="ok3" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — mọi lần tạo và ký phiên bản đều để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/chinh-sach.js"></script>
+</body>
+</html>

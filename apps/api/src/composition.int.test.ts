@@ -739,3 +739,42 @@ describe("[S1.11] main.ts — tiến trình con thật", () => {
     }
   }, 90_000);
 });
+
+describe("[S1.169 / ADR-105] cờ ký chính sách đi từ MÔI TRƯỜNG tới route — đúng đường `main.ts` dựng", () => {
+  it("không khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH` ⇒ `choKy: false`, route ký 409 trước mọi câu ghi; `bat` ⇒ `choKy: true`, route ký đi tới trigger", async () => {
+    // Phiên chèn thẳng: thứ cần đo là cờ chảy qua `docCauHinh` → `taoTienTrinhApi` → bộ điều phối — đăng nhập đo ở khối trên.
+    const id = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, 'tc-co@vidu.vn', 'Tai chinh', 'ACTIVE') RETURNING id",
+        [org],
+      )
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'FINANCE')", [org, id]);
+    const token = randomBytes(32).toString("base64url");
+    await db.pool.query(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+      [org, id, createHash("sha256").update(token, "utf8").digest()],
+    );
+    const cookie = `${COOKIE_PHIEN_NGUOI_MUA}=${org}.${token}`;
+    const KHONG_CO = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    for (const [ghiDe, mong] of [
+      [{}, { choKy: false, ky: 409 }],
+      // Cửa mở thì lời gọi tới trigger: phiên bản không tồn tại ⇒ `foreign_key_violation` ⇒ 422 — không một hàng nào đổi.
+      [{ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: "bat" }, { choKy: true, ky: 422 }],
+    ] as const) {
+      const tt = taoTienTrinhApi(docCauHinh(moiTruong(ghiDe)));
+      try {
+        const dc = await tt.batDau();
+        const ds = await fetch(`http://${dc.host}:${dc.port}/policy/versions`, { headers: { cookie } });
+        expect(ds.status).toBe(200);
+        expect(((await ds.json()) as { choKy: boolean }).choKy).toBe(mong.choKy);
+        const ky = await fetch(`http://${dc.host}:${dc.port}/policy/${KHONG_CO}/sign`, { method: "POST", headers: { cookie } });
+        expect(ky.status, await ky.text()).toBe(mong.ky);
+      } finally {
+        await tt.dung();
+      }
+    }
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM org_policy_signatures WHERE org_id = $1", [org]);
+    expect(rows0(rows)).toBe("0");
+  });
+});
