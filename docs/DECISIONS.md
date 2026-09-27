@@ -8186,3 +8186,32 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 - Đo ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/rfq/src/rfq.int.test.ts` và
   `packages/bidding/src/bidding.int.test.ts` (khối khoản 247).
 
+
+## ADR-9201 — Bản rõ chỉ ghi được dưới yêu cầu mở thầu của chính gói và chính vòng của phong bì
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.9101]** · **Khoản nợ liên quan:** 228 (đóng) · **Liên quan:**
+ADR-006 (chỉ worker giải mã), ADR-058 (vòng BAFO — nguồn của `bafo_round_id`), bất biến A1
+
+### Bối cảnh
+
+`rfq_unsealed_bids` có hai khoá ngoại hợp thành, `(org_id, unseal_request_id)` và `(org_id, bid_version_id)`, trỏ về hai bảng KHÁC
+nhau, không về nhau. Trigger `unseal_kiem_yeu_cau_khi_ghi_ban_ro` (`019`) chỉ đòi yêu cầu ở `APPROVED`/`EXECUTED`. Ca đột biến J4
+(S1.109) đo được: phong bì VÒNG HAI ghép với yêu cầu VÒNG MỘT đã `EXECUTED` đi qua, trigger đã bật; cùng khe ghép được phong bì gói A
+với yêu cầu gói B. Không đường sản xuất nào đi qua khe ấy — chỉ `app_unseal` có `INSERT`, và worker suy cả hai giá trị từ cùng
+một yêu cầu — nhưng A1 đúng theo nghĩa hẹp hơn nghĩa người đọc hiểu.
+
+### Quyết định
+
+1. **Thêm vào CHÍNH trigger của A1, không dựng trigger thứ hai.** `073_ban_ro_cung_goi` định nghĩa lại thân: sau vế trạng thái,
+   phiên bản báo giá phải thuộc `rfq_id` của yêu cầu (qua `vendor_bids` → `rfq_invitations`) và `bafo_round_id` của nó
+   `IS NOT DISTINCT FROM` của yêu cầu. Một hàm cho A1 giữ thứ tự thông báo khỏi phụ thuộc vào thứ tự tên trigger.
+2. **Vị từ là ĐÚNG vị từ worker dùng để chọn phong bì** (`apps/unseal-worker/src/index.ts`, câu `phongBi`). Worker không đổi; mọi
+   hàng worker ghi đã thoả nó. Thêm vế VÒNG vì đó là ca đột biến thật đã đo — chỉ vế GÓI thì ca J4 vẫn xanh.
+3. **SECURITY INVOKER, giữ nguyên.** `app_unseal` đã có `SELECT` trên đúng các cột đọc (`018`, `019`, `059`); RLS vẫn áp.
+
+### Hệ quả, nói thẳng
+
+- Mỗi lần ghi bản rõ đọc thêm một phép nối ba bảng theo khoá chính — một lần mỗi phong bì, trong lượt mở thầu.
+- Fixture test ghi bản rõ trực tiếp phải dùng phong bì thuộc đúng yêu cầu; mọi fixture hiện có đã thoả.
+- Đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts` (gói A × gói B, cùng đối chứng) và ca đột biến J4 của
+  `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (vòng hai × yêu cầu vòng một, dưới `app_unseal`).

@@ -768,6 +768,38 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     }
   });
 
+  it("[INV-A1] [S1.9101 / khoản 228] bản rõ chỉ ghi được dưới yêu cầu của CHÍNH gói thầu của phong bì", async () => {
+    // Trước `073`, trigger chỉ đòi yêu cầu ở `APPROVED`/`EXECUTED` — không hỏi yêu cầu ấy là của gói
+    // NÀO. Nên phong bì gói B ghép với yêu cầu đã duyệt của gói A đi qua ở tầng lược đồ.
+    const rfqA = await taoRfqMo();
+    const vA = await nopBaoGia(rfqA, JSON.stringify({ donGia: 100 }));
+    const rfqB = await taoRfqMo();
+    const vB = await nopBaoGia(rfqB, JSON.stringify({ donGia: 200 }));
+    const requestA = await dongVaXinMoThau(rfqA);
+
+    await expect(
+      withTenant(unsealPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) " +
+            "VALUES ($1, $2, $3, '{}'::jsonb)",
+          [orgA, requestA, vB],
+        ),
+      ),
+      "phong bì gói B dưới yêu cầu mở thầu gói A",
+    ).rejects.toThrow(/Ban ro phai thuoc cung goi thau va cung vong voi yeu cau mo thau .* \(A1\)/);
+
+    // ĐỐI CHỨNG: cùng yêu cầu, phong bì của CHÍNH gói ấy — đi qua. Thiếu vế này, một trigger từ chối
+    // mọi hàng cũng làm ca trên xanh.
+    const { rowCount } = await withTenant(unsealPool, orgA, (c) =>
+      c.query(
+        "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) " +
+          "VALUES ($1, $2, $3, '{}'::jsonb)",
+        [orgA, requestA, vA],
+      ),
+    );
+    expect(rowCount).toBe(1);
+  });
+
   it("một phong bì KHÔNG mở được không chặn việc mở của những người còn lại", async () => {
     // Tính SẴN SÀNG, và nó là một quyết định sản phẩm: một nhà cung cấp gửi thứ không mở được —
     // cố ý hay do lỗi trình duyệt — KHÔNG được phép giữ cả cuộc thầu làm con tin.

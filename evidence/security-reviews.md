@@ -13765,3 +13765,45 @@ Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xa
 ## 6. Số
 
 Khoản 247 đóng. Còn mở **86**; rổ B **61**.
+
+# §S1.9101 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
+
+## 1. Việc gì
+
+Khoản 228 (S1.109): `rfq_unsealed_bids` không bị buộc thuộc cùng gói thầu với yêu cầu mở thầu nó trỏ tới. Ca đột biến J4 của
+`kich-ban-41-http.int.test.ts` ghép phong bì vòng hai với yêu cầu vòng một (`EXECUTED`) và câu INSERT đi qua với trigger bật.
+Chủ dự án chọn đóng khoản này — ADR-9201. Vòng chạm bất biến A1 (mảnh mở thầu), không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Hai ca mới chạy trên lược đồ của `master` (bỏ `073`): **cả hai ĐỎ** — `promise resolved "Result{ command: 'INSERT' … }" instead of
+rejecting`. Gói A × gói B dưới `app_unseal` đi qua; vòng hai × yêu cầu vòng một dưới `app_unseal` đi qua, và hàng lạc ấy làm đỏ
+dây chuyền bảy bước sau của kịch bản 41 (bước 12e trở đi).
+
+## 3. Thay đổi
+
+- `db/migrations/073_ban_ro_cung_goi.sql`: định nghĩa lại `unseal_kiem_yeu_cau_khi_ghi_ban_ro` — đọc thêm `rfq_id`,
+  `bafo_round_id` của yêu cầu; sau vế trạng thái, đòi phiên bản báo giá thuộc gói ấy (qua `vendor_bids` → `rfq_invitations`) và
+  `bafo_round_id IS NOT DISTINCT FROM` của yêu cầu, không thì `check_violation` *"Ban ro phai thuoc cung goi thau va cung vong voi
+  yeu cau mo thau … (A1)"*. Đúng vị từ câu `phongBi` của worker; worker không đổi.
+- `db/migrations/hardening.always.sql`: mục ghim của hàm ấy dời điều kiện sang `073_ban_ro_cung_goi.sql`, thân sửa chữa và thân
+  chuẩn hoá theo bản mới.
+- `db/migrations.int.test.ts`: con trỏ hàm dời sang `073`; ba danh sách migration thêm `073`.
+- Test: `unseal-worker.int.test.ts` thêm ca gói A × gói B kèm đối chứng (phong bì của chính gói đi qua);
+  `kich-ban-41-http.int.test.ts` thêm vào ca đột biến J4 khẳng định bản đầu — cùng câu, trigger bật, `app_unseal` ⇒ ĐỎ.
+
+## 4. Đo sau
+
+Hai ca mới xanh. `apps/unseal-worker` 8 tệp, 139/139. Một lượt chung `db`, `apps/unseal-worker`, `packages/unseal`,
+`packages/danh-gia`, `tools/bo-xuat-danh-gia`: 877 đạt, 5 bỏ qua; một tệp (`composition.int.test.ts`) lỗi cấp tệp dưới tải của
+lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
+
+## 5. Giới hạn
+
+- Trigger nhận diện gói qua `vendor_bids` → `rfq_invitations`; một đường ghi phiên bản báo giá không qua lời mời sẽ không thoả
+  vị từ — hôm nay không có đường ấy (khoá ngoại `018`).
+- Không đổi quyền: `app_api` vẫn không có `INSERT` trên bảng bản rõ — lớp giữ J4 ở phía route vẫn là lớp ấy.
+
+## 6. Số
+
+Khoản 228 đóng. Còn mở **85**; rổ B **60**.
