@@ -7571,7 +7571,8 @@ không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới
    dữ liệu.
 2. **Mọi bước nghiệp vụ đi qua HTTP của `apps/api`**, gồm đăng nhập bằng link cộng TOTP và OTP của nhà cung cấp; nhà cung
    cấp niêm phong bằng `sealBid`. Kết nối đặc quyền chỉ làm năm việc không có đường ứng dụng — `migrate()`, hai vai đăng
-   nhập, tổ chức, người dùng kèm vai, và một phép ĐẾM sổ kiểm toán — và nó được khai ở
+   nhập, tổ chức, người dùng kèm vai, và ba câu CHỈ ĐỌC: tổng số hàng sổ kiểm toán của một tổ chức (trước và sau mỗi lần
+   thử sai), số hàng sổ theo hành động, và dấu kiểm vòng khoá ở `master_key_check_values` — và nó được khai ở
    `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`.
 3. **Thời gian thật, không lùi ngày.** Chế độ nhanh đóng sớm có lý do; cờ `--cham` đợi hạn nộp thật. Sổ kiểm toán ép
    `clock_timestamp()`, nên một bộ dữ liệu lùi ngày sẽ mâu thuẫn với chính sổ.

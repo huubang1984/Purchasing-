@@ -1,13 +1,15 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CsdlError, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
-import { CONG_MAC_DINH, moiTruongSach, moiTruongTienTrinh, type BiMatCum } from "./cum.js";
+import { CONG_MAC_DINH, CumError, kiemThuMucTrangThai, moiTruongSach, moiTruongTienTrinh, type BiMatCum } from "./cum.js";
 import { giaiMaBase32, maTotpHienTai } from "./dien-vien.js";
 import { HopThu, docTin, tokenTuLink } from "./hop-thu.js";
 import { diaChiGiaLap } from "./http.js";
+import { chonKichBan } from "./index.js";
 import { ThamSoError, docThamSo } from "./tham-so.js";
+import { gopTrangThai, type ToChucTrangThai } from "./trang-thai.js";
 
 const thuMucTam: string[] = [];
 afterEach(async () => {
@@ -19,6 +21,7 @@ describe("tham số dòng lệnh", () => {
     const ts = docThamSo(["--cham", "--chi", "sx-01, XD-02", "--dung-sau"], CONG_MAC_DINH);
     expect(ts).toMatchObject({ lenh: "chay", cham: true, dungSau: true, chi: ["SX-01", "XD-02"] });
     expect(docThamSo(["dang-nhap", "a@b.invalid"], CONG_MAC_DINH).doiSo).toEqual(["a@b.invalid"]);
+    expect(docThamSo(["dang-nhap", "a@b.invalid", "org-cu"], CONG_MAC_DINH).doiSo).toEqual(["a@b.invalid", "org-cu"]);
     expect(docThamSo(["--cong-web", "19090"], CONG_MAC_DINH).cong.web).toBe(19090);
   });
 
@@ -26,9 +29,40 @@ describe("tham số dòng lệnh", () => {
     expect(() => docThamSo(["xoa-het"], CONG_MAC_DINH)).toThrow(ThamSoError);
     expect(() => docThamSo(["--nhanh-hon"], CONG_MAC_DINH)).toThrow(ThamSoError);
     expect(() => docThamSo(["dang-nhap"], CONG_MAC_DINH)).toThrow(ThamSoError);
+    expect(() => docThamSo(["dang-nhap", "a@b.invalid", "o", "thua"], CONG_MAC_DINH)).toThrow(ThamSoError);
+    expect(() => docThamSo(["otp", "0900", "thua"], CONG_MAC_DINH)).toThrow(ThamSoError);
     expect(() => docThamSo(["chay", "thua"], CONG_MAC_DINH)).toThrow(ThamSoError);
     expect(() => docThamSo(["--cong-web", String(CONG_MAC_DINH.api)], CONG_MAC_DINH)).toThrow(ThamSoError);
     expect(() => docThamSo(["--cong-api", "80"], CONG_MAC_DINH)).toThrow(ThamSoError);
+  });
+});
+
+describe("chọn kịch bản", () => {
+  it("gọi tên kịch bản chậm mà thiếu --cham là lỗi, không phải một lượt rỗng ĐẠT", () => {
+    expect(() => chonKichBan({ chi: ["SX-06"], cham: false })).toThrow(/chỉ chạy khi có --cham/u);
+    expect(chonKichBan({ chi: ["SX-06"], cham: true }).chon.map((k) => k.ma)).toEqual(["SX-06"]);
+    expect(chonKichBan({ chi: [], cham: false }).boQua).toEqual(["SX-06"]);
+    expect(() => chonKichBan({ chi: ["SX-99"], cham: false })).toThrow(/không có kịch bản/u);
+  });
+});
+
+describe("trạng thái trình diễn", () => {
+  const tc = (orgId: string, ma: string): ToChucTrangThai => ({ ma, ten: ma, orgId, nguoi: [], loiMoiConLai: [], goiDeLai: [] });
+
+  it("lượt mới đứng đầu, tổ chức của các lượt cũ được GIỮ — bí mật TOTP của họ chỉ nằm ở đây", () => {
+    const cu = { phienBan: 1 as const, taoLuc: "a", toChuc: [tc("o-sx-1", "SX"), tc("o-xd-1", "XD")] };
+    expect(gopTrangThai(cu, [tc("o-sx-2", "SX")], "b").toChuc.map((t) => t.orgId)).toEqual(["o-sx-2", "o-sx-1", "o-xd-1"]);
+    expect(gopTrangThai(cu, [tc("o-xd-1", "XD")], "c").toChuc.map((t) => t.orgId)).toEqual(["o-xd-1", "o-sx-1"]);
+    expect(gopTrangThai(null, [tc("o", "SX")], "d")).toEqual({ phienBan: 1, taoLuc: "d", toChuc: [tc("o", "SX")] });
+  });
+
+  it("thư mục trạng thái trong kho chỉ được nằm dưới `.pilot-gia-lap`; ngoài kho thì mọi chỗ", () => {
+    for (const ok of ["/kho/.pilot-gia-lap", "/kho/.pilot-gia-lap/lan-2", "/kho/tools/.pilot-gia-lap", "/tmp/pgl", "/"]) {
+      expect(() => kiemThuMucTrangThai("/kho", ok), ok).not.toThrow();
+    }
+    for (const sai of ["/kho", "/kho/demo", "/kho/..la", "/kho/tools/pilot-gia-lap"]) {
+      expect(() => kiemThuMucTrangThai("/kho", sai), sai).toThrow(CumError);
+    }
   });
 });
 
@@ -42,9 +76,22 @@ describe("CSDL chỉ cục bộ", () => {
     }
   });
 
+  it("từ chối mọi tham số truy vấn — pg để `?host=`/`?port=`/`?user=` ghi đè phần máy chủ và vai của URL", () => {
+    for (const url of [
+      "postgres://u:p@127.0.0.1:5432/db?host=10.0.0.5",
+      "postgres://u:p@localhost/db?host=/cloudsql/du-an:vung:may",
+      "postgres://u:p@127.0.0.1/db?port=6543",
+      "postgres://u:p@127.0.0.1/db?user=postgres&password=x",
+      "postgres://u:p@127.0.0.1/db?sslmode=disable",
+    ]) {
+      expect(() => kiemUrlCucBo(url), url).toThrow(CsdlError);
+      expect(() => urlVaiDangNhap(url, "app_api_login", "m".repeat(30)), url).toThrow(CsdlError);
+    }
+  });
+
   it("URL vai đăng nhập giữ máy chủ và CSDL, thay tên và mật khẩu", () => {
-    const u = new URL(urlVaiDangNhap("postgres://postgres:x@127.0.0.1:55433/pilot", "app_api_login", "abc_DEF-123456789012345678"));
-    expect([u.username, u.password, u.hostname, u.port, u.pathname]).toEqual(["app_api_login", "abc_DEF-123456789012345678", "127.0.0.1", "55433", "/pilot"]);
+    const u = new URL(urlVaiDangNhap("postgres://postgres:x@127.0.0.1:55433/pilot", "app_api_login", "m".repeat(30)));
+    expect([u.username, u.password, u.hostname, u.port, u.pathname]).toEqual(["app_api_login", "m".repeat(30), "127.0.0.1", "55433", "/pilot"]);
   });
 });
 
@@ -87,8 +134,16 @@ describe("môi trường tiến trình của cụm", () => {
     expect(JSON.stringify(k)).not.toContain(biMat.receiptPkcs8);
   });
 
-  it("môi trường nền bỏ mọi biến của dự án — URL đặc quyền không đi xuống tiến trình con", () => {
-    const sach = moiTruongSach({ PATH: "/bin", TRUSTPROCURE_SEED_DATABASE_URL: "postgres://postgres@127.0.0.1/x", DATABASE_URL: "x", NODE_ENV: "production" });
+  it("môi trường nền bỏ mọi biến của dự án và của libpq — URL đặc quyền, PGPASSWORD không đi xuống tiến trình con", () => {
+    const sach = moiTruongSach({
+      PATH: "/bin",
+      TRUSTPROCURE_SEED_DATABASE_URL: "postgres://postgres@127.0.0.1/x",
+      DATABASE_URL: "x",
+      NODE_ENV: "production",
+      PGPASSWORD: "x",
+      PGOPTIONS: "-c search_path=x",
+      PGUSER: "postgres",
+    });
     expect(sach).toEqual({ PATH: "/bin" });
   });
 });
@@ -114,6 +169,18 @@ describe("hộp thư dev", () => {
     expect(t.loai === "OTP" ? t.ma : "").toBe("222222");
     await expect(h.cho("otp lần hai", (x) => x.loai === "OTP" && x.den === "0900", 300)).rejects.toThrow(/chưa có otp lần hai/u);
     expect((await h.otpMoiNhat("0900"))?.ma).toBe("222222");
+  });
+
+  it("một lần ĐỌC hỏng không bị nhớ như tin hỏng — lượt quét sau đọc lại tệp", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pgl-hop-thu-"));
+    thuMucTam.push(dir);
+    const h = await HopThu.mo(dir);
+    const tep = join(dir, "0001-moi.json");
+    await mkdir(tep); // readFile → EISDIR: đứng thay cho khoá chia sẻ tạm của trình quét virus
+    expect(await h.xem(() => true)).toEqual([]);
+    await rmdir(tep);
+    await writeFile(tep, JSON.stringify({ loai: "OTP", kenh: "SMS", den: "0900", ma: "333333" }));
+    expect(await h.xem((x) => x.loai === "OTP")).toHaveLength(1);
   });
 });
 

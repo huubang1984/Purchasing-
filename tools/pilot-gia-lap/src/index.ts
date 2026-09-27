@@ -24,9 +24,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { stderr, stdout } from "node:process";
 import { dungBaoCaoJson, dungBaoCaoMarkdown, type KiemCoLap, type ToChucBaoCao } from "./bao-cao.js";
-import { chayKichBan, type BoiCanhChay, type KetQuaKichBan, type NhaCungCapChay, type ToChucChay } from "./chay-kich-ban.js";
+import { chayKichBan, type BoiCanhChay, type DongBoCham, type KetQuaKichBan, type NhaCungCapChay, type ToChucChay } from "./chay-kich-ban.js";
 import { CsdlDacQuyen, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
-import { CONG_MAC_DINH, GOC_KHO, docBiMat, khoiDongCum, taoBiMat, type Cum } from "./cum.js";
+import { CONG_MAC_DINH, GOC_KHO, docBiMat, khoiDongCum, kiemThuMucTrangThai, taoBiMat, type Cum } from "./cum.js";
 import { NguoiMua, maTotpHienTai } from "./dien-vien.js";
 import { emailLienHe, emailNguoi, hoSo, type HoSoToChuc, type MaToChuc } from "./ho-so.js";
 import { HopThu, tokenTuLink } from "./hop-thu.js";
@@ -34,7 +34,7 @@ import { diaChiGiaLap, layChuoi, PhienHttp } from "./http.js";
 import { DANH_MUC, kiemDanhMuc, type KichBan } from "./kich-ban.js";
 import { layKhoaBienNhan } from "./kiem-doc-lap.js";
 import { TRO_GIUP, docThamSo, type ThamSo } from "./tham-so.js";
-import { docTrangThai, ghiTrangThai, type ToChucTrangThai } from "./trang-thai.js";
+import { docTrangThai, docTrangThaiNeuCo, ghiTrangThai, gopTrangThai, type ToChucTrangThai } from "./trang-thai.js";
 
 class PilotError extends Error {
   constructor(message: string) {
@@ -50,9 +50,15 @@ const bao = (s: string): void => {
   stderr.write(`[pilot-gia-lap] ${s}\n`);
 };
 
+/**
+ * Mã mà lượt chạy đứng trên. Cây làm việc có thay đổi chưa commit thì nói ra — một lần soi ở vòng này:
+ * bản đầu đóng dấu băm HEAD sạch lên cả những lượt chạy trên mã sản phẩm đã bị đột biến.
+ */
 function phienBanMa(): string {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: GOC_KHO, encoding: "utf8" }).trim();
+    const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: GOC_KHO, encoding: "utf8" }).trim();
+    const doi = execFileSync("git", ["status", "--porcelain"], { cwd: GOC_KHO, encoding: "utf8" }).split("\n").filter((d) => d.trim() !== "").length;
+    return doi === 0 ? head : `${head} + ${doi} tệp chưa commit`;
   } catch {
     return "không rõ";
   }
@@ -128,9 +134,13 @@ async function dungToChuc(
 // Lệnh `chay`
 // ----------------------------------------------------------------------------------------------
 
-function chonKichBan(ts: ThamSo): { readonly chon: readonly KichBan[]; readonly boQua: readonly string[] } {
+export function chonKichBan(ts: Pick<ThamSo, "chi" | "cham">): { readonly chon: readonly KichBan[]; readonly boQua: readonly string[] } {
   const khongCo = ts.chi.filter((m) => !DANH_MUC.some((k) => k.ma === m));
   if (khongCo.length > 0) throw new PilotError(`--chi: không có kịch bản ${khongCo.join(", ")}`);
+  // Gọi tên một kịch bản chậm mà thiếu `--cham` là một lời gọi sai, không phải một lượt rỗng ĐẠT: bản
+  // đầu lặng lẽ bỏ nó, chạy 0 kịch bản, rồi báo "MỌI kịch bản ĐẠT" với mã thoát 0.
+  const chamThieuCo = ts.cham ? [] : ts.chi.filter((m) => DANH_MUC.some((k) => k.ma === m && k.cham === true));
+  if (chamThieuCo.length > 0) throw new PilotError(`--chi ${chamThieuCo.join(", ")}: kịch bản chậm (đợi hạn nộp thật) chỉ chạy khi có --cham`);
   const chon: KichBan[] = [];
   const boQua: string[] = [];
   for (const kb of DANH_MUC) {
@@ -138,22 +148,24 @@ function chonKichBan(ts: ThamSo): { readonly chon: readonly KichBan[]; readonly 
     if (trongChi && (kb.cham !== true || ts.cham)) chon.push(kb);
     else boQua.push(kb.ma);
   }
+  if (chon.length === 0) throw new PilotError("không có kịch bản nào để chạy");
   return { chon, boQua };
 }
 
 /**
- * Dừng cụm khi nhận SIGINT/SIGTERM ở BẤT KỲ lúc nào sau khi cụm lên — kể cả giữa một kịch bản hay
- * trong lúc đợi hạn nộp thật. Một lần đo ở vòng này: bản đầu chỉ nghe tín hiệu ở pha giữ cụm cho trình
- * diễn, nên một `kill` gửi tới tiến trình công cụ trong lúc chạy để lại bốn tiến trình con mồ côi vẫn
- * giữ cổng. (Ctrl+C ở terminal gửi tín hiệu cho cả nhóm tiến trình nên không lộ ra điều ấy.)
+ * Dừng cụm khi nhận SIGINT/SIGTERM ở BẤT KỲ lúc nào từ khi tiến trình con đầu tiên ra đời — giữa lúc
+ * khởi động, giữa một kịch bản hay trong lúc đợi hạn nộp thật. Hai lần đo ở vòng này: bản đầu chỉ nghe
+ * tín hiệu ở pha giữ cụm cho trình diễn, bản sau chỉ từ khi cụm đã lên; cả hai để lại tiến trình con mồ
+ * côi vẫn giữ cổng khi một `kill` tới sớm hơn. (Ctrl+C ở terminal gửi tín hiệu cho cả nhóm tiến trình
+ * nên không lộ ra điều ấy.)
  */
-function dungKhiCoTinHieu(cum: Cum): void {
+function dungKhiCoTinHieu(dung: () => Promise<void>): void {
   let dangDung = false;
   const xuLy = (tinHieu: NodeJS.Signals): void => {
     if (dangDung) return;
     dangDung = true;
     bao(`nhận ${tinHieu} — đang dừng cụm...`);
-    void cum.dung().finally(() => process.exit(tinHieu === "SIGINT" ? 130 : 143));
+    void dung().finally(() => process.exit(tinHieu === "SIGINT" ? 130 : 143));
   };
   process.on("SIGINT", xuLy);
   process.on("SIGTERM", xuLy);
@@ -189,14 +201,16 @@ async function chuanBiCum(ts: ThamSo, thuMuc: string): Promise<{ readonly cum: C
     }
     await db.damBaoVaiDangNhap("app_api_login", biMat.matKhauApi);
     await db.damBaoVaiDangNhap("app_unseal_login", biMat.matKhauWorker);
-    const cum = await khoiDongCum({
-      thuMuc,
-      cong: ts.cong,
-      biMat,
-      urlApi: urlVaiDangNhap(seed, "app_api_login", biMat.matKhauApi),
-      urlWorker: urlVaiDangNhap(seed, "app_unseal_login", biMat.matKhauWorker),
-    });
-    dungKhiCoTinHieu(cum);
+    const cum = await khoiDongCum(
+      {
+        thuMuc,
+        cong: ts.cong,
+        biMat,
+        urlApi: urlVaiDangNhap(seed, "app_api_login", biMat.matKhauApi),
+        urlWorker: urlVaiDangNhap(seed, "app_unseal_login", biMat.matKhauWorker),
+      },
+      dungKhiCoTinHieu,
+    );
     bao(`cụm đã sẵn sàng — web ${cum.webGoc}, api ${cum.apiGoc}, khoá công khai ${cum.khoaGoc}; log ở ${cum.logDir}`);
     return { cum, db };
   } catch (e) {
@@ -209,6 +223,8 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
   const loiDanhMuc = kiemDanhMuc();
   if (loiDanhMuc.length > 0) throw new PilotError(`danh mục kịch bản không chạy được:\n  ${loiDanhMuc.join("\n  ")}`);
   const { chon, boQua } = chonKichBan(ts);
+  // Đọc trạng thái cũ TRƯỚC khi dựng cụm: một tệp hỏng phải dừng lượt chạy ngay, không phải sau một giờ.
+  const trangThaiCu = await docTrangThaiNeuCo(thuMuc);
   const batDau = new Date().toISOString();
   const { cum, db } = await chuanBiCum(ts, thuMuc);
   let maThoat = 1;
@@ -231,6 +247,7 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
       },
       bao,
       demSoKiemToan: (orgId) => db.demTongSoKiemToan(orgId),
+      demSoKiemToanTheoHanhDong: (orgId) => db.demSoKiemToan(orgId),
     };
     // Số điện thoại: 10 chữ số, đầu 09, bốn số của lượt chạy rồi bốn số thứ tự — đúng CHECK của `008`.
     const soDienThoai = (): string => {
@@ -252,21 +269,44 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
       return t.tc;
     };
 
-    // Kịch bản CHẬM chạy song song: nó dựng gói, nhận báo giá, rồi ĐỢI hạn thật — trong lúc ấy các
-    // kịch bản nhanh chạy. Chỉ phần đợi chồng lên nhau; hai phần có ghi sổ thì cách nhau gần một giờ.
+    // Kịch bản CHẬM dựng gói, mời, nhận báo giá MỘT MÌNH; các kịch bản nhanh chạy trong lúc nó ĐỢI hạn
+    // thật; và nó chỉ đi tiếp sau hạn khi các kịch bản nhanh đã xong. Một lần soi ở vòng này: bản đầu để
+    // hai phần ấy chồng lên nhau trong cùng tổ chức SX — hai phiên OTP cùng số điện thoại của S2/S4 có
+    // thể lấy nhầm mã của nhau (tin OTP không mang lời mời), và hàng sổ của kịch bản chậm lọt được vào
+    // cửa sổ đo "vào sổ" của một bước CHAN kịch bản nhanh.
     const cham = chon.filter((k) => k.cham === true);
     const nhanh = chon.filter((k) => k.cham !== true);
+    let nhanhXong = (): void => undefined;
+    const choNhanhXong = new Promise<void>((kq) => {
+      nhanhXong = kq;
+    });
     const hua: Promise<KetQuaKichBan>[] = [];
-    for (const kb of cham) {
-      bao(`[${kb.ma}] bắt đầu (chế độ chậm)...`);
-      hua.push(chayKichBan(kb, tcCua(kb), bc, true));
+    try {
+      for (const kb of cham) {
+        bao(`[${kb.ma}] bắt đầu (chế độ chậm)...`);
+        let dangDoi = (): void => undefined;
+        const daVaoDoi = new Promise<void>((kq) => {
+          dangDoi = kq;
+        });
+        const dongBo: DongBoCham = { baoDangDoi: () => dangDoi(), choDiTiep: choNhanhXong };
+        const p = chayKichBan(kb, tcCua(kb), bc, true, dongBo);
+        hua.push(p);
+        await Promise.race([daVaoDoi, p.then(() => undefined)]);
+      }
+    } catch (e) {
+      nhanhXong();
+      throw e;
     }
     const ketQua: KetQuaKichBan[] = [];
-    for (const kb of nhanh) {
-      bao(`[${kb.ma}] ${kb.ten}...`);
-      const kq = await chayKichBan(kb, tcCua(kb), bc, false);
-      bao(`[${kb.ma}] ${kq.dat ? "ĐẠT" : `KHÔNG ĐẠT — ${kq.loi ?? ""}`} (${Math.round(kq.soLieu.thoiGianMs / 1000)} giây)`);
-      ketQua.push(kq);
+    try {
+      for (const kb of nhanh) {
+        bao(`[${kb.ma}] ${kb.ten}...`);
+        const kq = await chayKichBan(kb, tcCua(kb), bc, false);
+        bao(`[${kb.ma}] ${kq.dat ? "ĐẠT" : `KHÔNG ĐẠT — ${kq.loi ?? ""}`} (${Math.round(kq.soLieu.thoiGianMs / 1000)} giây)`);
+        ketQua.push(kq);
+      }
+    } finally {
+      nhanhXong();
     }
     for (const kq of await Promise.all(hua)) {
       bao(`[${kq.ma}] ${kq.dat ? "ĐẠT" : `KHÔNG ĐẠT — ${kq.loi ?? ""}`}`);
@@ -274,7 +314,9 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
     }
     ketQua.sort((a, b) => DANH_MUC.findIndex((k) => k.ma === a.ma) - DANH_MUC.findIndex((k) => k.ma === b.ma));
 
-    // Cô lập giữa hai tổ chức: người của tổ chức này hỏi thẳng id của tổ chức kia.
+    // Cô lập giữa hai tổ chức: người của tổ chức này hỏi thẳng id của tổ chức kia — mỗi lần đọc chéo đi
+    // sau một ĐỐI CHỨNG DƯƠNG (người của chính tổ chức đọc cùng id ⇒ 200), để 404 không thể đến từ một
+    // đường đọc hỏng cho mọi người.
     const coLap: KiemCoLap[] = [];
     const sx = toChuc.get("SX");
     const xd = toChuc.get("XD");
@@ -283,11 +325,15 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
       const tpSx = sx.tc.nguoi.get("tp");
       const tpXd = xd.tc.nguoi.get("tp");
       const nccSx = sx.tc.ncc.get("S1")?.supplierId;
-      if (goiXd != null && tpSx !== undefined) {
+      if (goiXd != null && tpSx !== undefined && tpXd !== undefined) {
+        const dc = await tpXd.http.goi("GET", `/rfqs/${goiXd}`);
+        coLap.push({ viec: `${tpXd.nhan} (XD) đọc gói thầu của chính XD`, mongDoi: "200", thucTe: String(dc.status), dat: dc.status === 200, doiChung: true });
         const r = await tpSx.http.goi("GET", `/rfqs/${goiXd}`);
         coLap.push({ viec: `${tpSx.nhan} (SX) đọc thẳng id gói thầu của XD`, mongDoi: "404", thucTe: String(r.status), dat: r.status === 404 });
       }
-      if (nccSx !== undefined && tpXd !== undefined) {
+      if (nccSx !== undefined && tpXd !== undefined && tpSx !== undefined) {
+        const dc = await tpSx.http.goi("GET", `/suppliers/${nccSx}`);
+        coLap.push({ viec: `${tpSx.nhan} (SX) đọc nhà cung cấp của chính SX`, mongDoi: "200", thucTe: String(dc.status), dat: dc.status === 200, doiChung: true });
         const r = await tpXd.http.goi("GET", `/suppliers/${nccSx}`);
         coLap.push({ viec: `${tpXd.nhan} (XD) đọc thẳng id nhà cung cấp của SX`, mongDoi: "404", thucTe: String(r.status), dat: r.status === 404 });
       }
@@ -328,12 +374,18 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
         .filter((k) => k.toChuc === t.tc.hs.ten && k.demo !== null && k.rfqId !== null)
         .map((k) => ({ kichBan: k.ma, rfqId: k.rfqId ?? "", buocTiep: k.demo?.buocTiep ?? [] })),
     }));
-    await ghiTrangThai(thuMuc, { phienBan: 1, taoLuc: ketThuc, toChuc: tt });
+    await ghiTrangThai(thuMuc, gopTrangThai(trangThaiCu, tt, ketThuc));
 
     const soDat = ketQua.filter((k) => k.dat).length;
-    const tatCa = soDat === ketQua.length && coLap.every((c) => c.dat);
+    const tatCa = ketQua.length > 0 && soDat === ketQua.length && coLap.every((c) => c.dat);
     viet("");
-    viet(`=== PILOT GIẢ LẬP — ${soDat}/${ketQua.length} kịch bản ĐẠT${coLap.length > 0 ? `, cô lập ${coLap.filter((c) => c.dat).length}/${coLap.length}` : ""} ===`);
+    const coLapChan = coLap.filter((c) => c.doiChung !== true);
+    viet(
+      `=== PILOT GIẢ LẬP — ${soDat}/${ketQua.length} kịch bản ĐẠT, ` +
+        (coLapChan.length > 0
+          ? `cô lập ${coLapChan.filter((c) => c.dat).length}/${coLapChan.length} (đối chứng ${coLap.filter((c) => c.doiChung === true && c.dat).length}/${coLap.length - coLapChan.length}) ===`
+          : "cô lập KHÔNG chạy (lượt chỉ dựng một tổ chức) ==="),
+    );
     viet(`Báo cáo: ${join(thuMucBaoCao, "bao-cao.md")}`);
     for (const k of ketQua) viet(`  ${k.dat ? "ĐẠT      " : "KHÔNG ĐẠT"} ${k.ma}  ${k.ten}${k.dat ? "" : ` — ${k.loi ?? ""}`}`);
     maThoat = tatCa ? 0 : 1;
@@ -362,11 +414,18 @@ async function chay(ts: ThamSo, thuMuc: string): Promise<number> {
 
 async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   const email = (ts.doiSo[0] ?? "").toLowerCase();
+  const chonOrg = ts.doiSo[1];
   const tt = await docTrangThai(thuMuc);
-  const tc = tt.toChuc.find((t) => t.nguoi.some((n) => n.email === email));
+  // Mỗi lượt `chay` dựng tổ chức MỚI với cùng các email, và trạng thái giữ mọi lượt (mới nhất trước):
+  // mặc định là tổ chức mới nhất có email ấy, orgId sau email chọn một tổ chức cũ hơn.
+  const khop = tt.toChuc.filter((t) => t.nguoi.some((x) => x.email === email) && (chonOrg === undefined || t.orgId === chonOrg));
+  const tc = khop[0];
   const n = tc?.nguoi.find((x) => x.email === email);
   if (tc === undefined || n === undefined) {
-    throw new PilotError(`không có người mua giả lập ${email} — có: ${tt.toChuc.flatMap((t) => t.nguoi.map((x) => x.email)).join(", ")}`);
+    throw new PilotError(
+      `không có người mua giả lập ${email}${chonOrg === undefined ? "" : ` ở tổ chức ${chonOrg}`} — có: ` +
+        [...new Set(tt.toChuc.flatMap((t) => t.nguoi.map((x) => x.email)))].join(", "),
+    );
   }
   const hopThu = await HopThu.mo(join(thuMuc, "hop-thu"));
   const http = new PhienHttp(`http://127.0.0.1:${ts.cong.api}`, "127.0.0.1");
@@ -376,7 +435,10 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   if (tin.loai !== "LOGIN_LINK") throw new PilotError("tin sai loại");
   const token = tokenTuLink(tin.duongLink);
   const web = `http://127.0.0.1:${ts.cong.web}`;
-  viet(`${n.hoTen} — ${n.chucDanh} (${n.vai}) · ${tc.ten}`);
+  viet(`${n.hoTen} — ${n.chucDanh} (${n.vai}) · ${tc.ten} · tổ chức ${tc.orgId}`);
+  if (khop.length > 1) {
+    viet(`  (email này có ở ${khop.length} tổ chức giả lập của các lượt chạy — đang dùng lượt MỚI NHẤT; lượt cũ hơn: ${khop.slice(1).map((t) => t.orgId).join(", ")} — thêm orgId sau email để chọn)`);
+  }
   viet(`  mở thầu / trao thầu : ${web}/mo-thau#${tc.orgId}:${token}`);
   viet(`  tạo gói / mời       : ${web}/tao-thau#${tc.orgId}:${token}`);
   viet("  (link dùng MỘT lần, hết hạn sau 15 phút)");
@@ -405,6 +467,7 @@ async function lienKet(ts: ThamSo, thuMuc: string): Promise<number> {
   const web = `http://127.0.0.1:${ts.cong.web}`;
   let n = 0;
   for (const tc of tt.toChuc) {
+    if (tc.loiMoiConLai.length > 0) viet(`— ${tc.ten} · tổ chức ${tc.orgId}`);
     for (const l of tc.loiMoiConLai) {
       n += 1;
       viet(`${l.kichBan}  ${l.nhaCungCap} — ${l.lienHe} (OTP tới ${l.soDienThoai})`);
@@ -439,6 +502,7 @@ async function chinh(argv: readonly string[]): Promise<number> {
     throw new PilotError("từ chối chạy khi NODE_ENV=production — đây là công cụ DEV");
   }
   const thuMuc = resolve(ts.thuMuc ?? join(GOC_KHO, ".pilot-gia-lap"));
+  kiemThuMucTrangThai(GOC_KHO, thuMuc);
   switch (ts.lenh) {
     case "chay":
       return chay(ts, thuMuc);

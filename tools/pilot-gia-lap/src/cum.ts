@@ -15,15 +15,16 @@
 // chức mà lượt đầu tạo ra phải mở được ở lượt sau, và `api` từ chối khởi động khi dấu kiểm vòng khoá
 // lệch với dấu đã ghi trong CSDL (khoản 165). Một thư mục trạng thái đi với MỘT CSDL.
 //
-// Tiến trình con nhận môi trường SẠCH: mọi biến `TRUSTPROCURE_*` và `DATABASE_URL` của người gọi bị
-// bỏ trước khi đặt biến của cụm — URL đặc quyền không đi xuống `api`.
+// Tiến trình con nhận môi trường SẠCH: mọi biến `TRUSTPROCURE_*`, `PG*` và `DATABASE_URL` của người gọi
+// bị bỏ trước khi đặt biến của cụm — URL đặc quyền, và mật khẩu superuser mà `PGPASSWORD` có thể mang
+// cho kết nối đặc quyền, không đi xuống `api`.
 // ==============================================================================================
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
@@ -72,6 +73,22 @@ function sinhBiMat(): BiMatCum {
   };
 }
 
+/**
+ * Thư mục trạng thái giữ vòng khoá bọc, bí mật TOTP và token lời mời, nên nó KHÔNG được nằm ở một chỗ
+ * git theo dõi. Một lần soi ở vòng này: `--thu-muc demo` rơi vào `<gốc kho>/demo/`, ngoài `.gitignore`,
+ * và `git add -A` sẽ mang `cum.json` đi. Trong kho thì chỉ nhận dưới một thư mục tên `.pilot-gia-lap`
+ * (mẫu của `.gitignore`); ngoài kho thì nhận mọi chỗ.
+ */
+export function kiemThuMucTrangThai(goc: string, thuMuc: string): void {
+  const r = relative(goc, thuMuc);
+  if (r === ".." || r.startsWith(`..${sep}`) || isAbsolute(r)) return;
+  if (r.split(sep).includes(".pilot-gia-lap")) return;
+  throw new CumError(
+    `thư mục trạng thái ${thuMuc} nằm trong kho mà không dưới một thư mục \`.pilot-gia-lap\` — nó sẽ giữ khoá và bí mật TOTP ` +
+      "ở chỗ git theo dõi. Dùng một đường dẫn ngoài kho, hay <gốc kho>/.pilot-gia-lap/<tên>",
+  );
+}
+
 /** Thư mục trạng thái 0700, rồi đọc `cum.json` nếu có. */
 export async function docBiMat(thuMuc: string): Promise<BiMatCum | null> {
   await mkdir(thuMuc, { recursive: true, mode: 0o700 });
@@ -102,7 +119,7 @@ export function moiTruongSach(goc: NodeJS.ProcessEnv): Record<string, string> {
   const ra: Record<string, string> = {};
   for (const [k, v] of Object.entries(goc)) {
     if (v === undefined) continue;
-    if (k.startsWith("TRUSTPROCURE_") || k === "DATABASE_URL" || k === "NODE_ENV" || k.startsWith("NODE_OPTIONS")) continue;
+    if (k.startsWith("TRUSTPROCURE_") || k.startsWith("PG") || k === "DATABASE_URL" || k === "NODE_ENV" || k.startsWith("NODE_OPTIONS")) continue;
     ra[k] = v;
   }
   return ra;
@@ -251,8 +268,12 @@ async function dungMot(tt: TienTrinhCon): Promise<void> {
   if ((await Promise.race([xong.then(() => "xong" as const), hetGio])) === "het") tt.con.kill("SIGKILL");
 }
 
-/** Dựng api, web, khoá công khai và đợi từng cái sẵn sàng; worker bật riêng (`batWorker`). Ném thì mọi tiến trình đã dựng đều bị dừng. */
-export async function khoiDongCum(ts: ThamSoCum): Promise<Cum> {
+/**
+ * Dựng api, web, khoá công khai và đợi từng cái sẵn sàng; worker bật riêng (`batWorker`). Ném thì mọi
+ * tiến trình đã dựng đều bị dừng. `khiCoDung` nhận hàm dừng cụm TRƯỚC khi tiến trình con đầu tiên ra
+ * đời — để một tín hiệu tới giữa lúc khởi động (có thể tới hai phút) cũng dừng được những gì đã dựng.
+ */
+export async function khoiDongCum(ts: ThamSoCum, khiCoDung: (dung: () => Promise<void>) => void = () => undefined): Promise<Cum> {
   const apiGoc = `http://127.0.0.1:${ts.cong.api}`;
   const webGoc = `http://127.0.0.1:${ts.cong.web}`;
   const khoaGoc = `http://127.0.0.1:${ts.cong.khoa}`;
@@ -273,6 +294,7 @@ export async function khoiDongCum(ts: ThamSoCum): Promise<Cum> {
   const dung = async (): Promise<void> => {
     await Promise.all(con.map((c) => dungMot(c)));
   };
+  khiCoDung(dung);
   try {
     const api = khoi("api", ts, logDir, nen);
     con.push(api);

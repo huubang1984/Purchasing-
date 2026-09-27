@@ -295,8 +295,10 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     cau: 1,
     lyDo:
       "[ADR-9201] MỘT chỗ gọi (`cau`) mà mọi câu đặc quyền của pilot giả lập đi qua: kiểm/tạo hai vai đăng nhập, gieo tổ chức, " +
-      "người dùng và vai — chạy trước khi tenant TỒN TẠI nên không gắn được tenant — và một câu CHỈ ĐỌC đếm sổ kiểm toán theo " +
-      "hành động cho báo cáo. Không một bước nghiệp vụ nào (gói thầu, lời mời, báo giá, mở thầu, trao thầu) đi qua đây",
+      "người dùng và vai — chạy trước khi tenant TỒN TẠI nên không gắn được tenant — và ba câu CHỈ ĐỌC: số hàng sổ kiểm toán " +
+      "của một tổ chức (trước và sau mỗi lần thử sai, cho cột Vào sổ), số hàng sổ theo hành động (báo cáo, và lời khai " +
+      "BID_DEADLINE_DENIED của SX-06), và CSDL đã có dấu kiểm vòng khoá ở master_key_check_values chưa (trước khi sinh bí mật " +
+      "cụm). Không một bước nghiệp vụ nào (gói thầu, lời mời, báo giá, mở thầu, trao thầu) đi qua đây",
   },
   "tools/neo-so-kiem-toan/src/index.ts": {
     lay: 0,

@@ -10,7 +10,8 @@
 //   ⑵ đảm bảo hai vai đăng nhập `app_api_login` / `app_unseal_login` (cùng câu lệnh `chay-migrate`);
 //   ⑶ tạo tổ chức;
 //   ⑷ tạo người dùng và gán MỘT vai;
-//   ⑸ ĐỌC: số sự kiện sổ kiểm toán theo hành động của một tổ chức, cho báo cáo; và CSDL đã có dấu
+//   ⑸ BA câu ĐỌC: tổng số hàng sổ kiểm toán của một tổ chức (trước và sau mỗi lần thử sai — cột "Vào
+//      sổ"); số hàng sổ theo hành động (báo cáo, và lời khai `BID_DEADLINE_DENIED`); và CSDL đã có dấu
 //      kiểm vòng khoá bọc chưa, trước khi sinh bí mật cụm mới.
 // Mọi thứ khác của lượt chạy — chính sách, nhà cung cấp, gói thầu, lời mời, báo giá, mở thầu, chấm,
 // trao thầu, bộ bằng chứng — đi qua HTTP của `apps/api`, tức qua cổng quyền, RLS và trigger thật.
@@ -45,6 +46,15 @@ export function kiemUrlCucBo(url: string): URL {
     throw new CsdlError(
       "TRUSTPROCURE_SEED_DATABASE_URL phải trỏ vào máy CỤC BỘ (localhost/127.0.0.1/::1) — pilot giả lập đặt lại mật khẩu " +
         "hai vai đăng nhập và thêm tổ chức; nó không bao giờ được chạm một cụm dùng chung",
+    );
+  }
+  // Một lần soi ở vòng này: `pg` (qua `pg-connection-string`) cho MỌI tham số truy vấn ghi đè phần tương
+  // ứng của URL — `…@127.0.0.1/db?host=10.0.0.5` qua được phép kiểm tên máy ở trên rồi nối tới 10.0.0.5,
+  // và `?user=…&password=…` còn thay cả vai mà `urlVaiDangNhap` đặt. Cụm cục bộ không cần tham số nào.
+  if (u.search !== "") {
+    throw new CsdlError(
+      "TRUSTPROCURE_SEED_DATABASE_URL không được mang tham số truy vấn — `?host=`, `?port=`, `?user=`… của pg ghi đè máy chủ " +
+        "và vai của URL, nên phép kiểm máy cục bộ sẽ thành vô nghĩa",
     );
   }
   if (u.pathname === "/" || u.pathname === "") throw new CsdlError("TRUSTPROCURE_SEED_DATABASE_URL thiếu tên CSDL");

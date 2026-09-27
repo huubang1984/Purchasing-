@@ -3,7 +3,7 @@
 //
 //   pnpm pilot:gia-lap [chay] [--cham] [--chi SX-01,XD-02] [--dung-sau]   chạy danh mục, giữ cụm cho trình diễn
 //   pnpm pilot:gia-lap cum                                                  chỉ dựng lại cụm (dùng lại khoá), giữ chạy
-//   pnpm pilot:gia-lap dang-nhap <email>                                    link đăng nhập mới + mã TOTP hiện tại
+//   pnpm pilot:gia-lap dang-nhap <email> [orgId]                            link đăng nhập mới + mã TOTP hiện tại
 //   pnpm pilot:gia-lap otp <số điện thoại>                                  mã OTP mới nhất gửi tới số ấy
 //   pnpm pilot:gia-lap lien-ket                                             link mời còn chờ nộp của các gói để lại
 //
@@ -97,9 +97,8 @@ export function docThamSo(argv: readonly string[], macDinh: CongCum): ThamSo {
     }
   }
   if (new Set([c.api, c.web, c.khoa]).size !== 3) throw new ThamSoError("ba cổng api/web/khoá phải khác nhau");
-  if ((lenh === "dang-nhap" || lenh === "otp") && doiSo.length !== 1) {
-    throw new ThamSoError(lenh === "dang-nhap" ? "dang-nhap cần đúng một email" : "otp cần đúng một số điện thoại");
-  }
+  if (lenh === "dang-nhap" && (doiSo.length < 1 || doiSo.length > 2)) throw new ThamSoError("dang-nhap cần một email, và tuỳ chọn một orgId");
+  if (lenh === "otp" && doiSo.length !== 1) throw new ThamSoError("otp cần đúng một số điện thoại");
   if ((lenh === "chay" || lenh === "cum" || lenh === "lien-ket" || lenh === "tro-giup") && doiSo.length > 0) {
     throw new ThamSoError(`đối số thừa: ${doiSo.join(" ")}`);
   }
@@ -114,7 +113,9 @@ export const TRO_GIUP = `pilot giả lập TrustProcure — công cụ DEV, khô
       --cham     thêm kịch bản đợi hạn nộp thật (~65 phút)
       --dung-sau dừng cụm ngay khi chạy xong
   pnpm pilot:gia-lap cum                 dựng lại cụm từ thư mục trạng thái, giữ chạy
-  pnpm pilot:gia-lap dang-nhap <email>   link đăng nhập mới + mã TOTP hiện tại của một người mua giả lập
+  pnpm pilot:gia-lap dang-nhap <email> [orgId]
+                                         link đăng nhập mới + mã TOTP hiện tại của một người mua giả lập
+                                         (mặc định tổ chức của lượt chạy mới nhất có email ấy)
   pnpm pilot:gia-lap otp <số điện thoại> mã OTP mới nhất gửi tới một nhà cung cấp giả lập
   pnpm pilot:gia-lap lien-ket            link mời còn chờ nộp của các gói để lại cho trình diễn
 

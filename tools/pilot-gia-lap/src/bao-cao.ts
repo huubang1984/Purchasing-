@@ -19,6 +19,11 @@ export interface KiemCoLap {
   readonly mongDoi: string;
   readonly thucTe: string;
   readonly dat: boolean;
+  /**
+   * Đối chứng DƯƠNG: người của chính tổ chức đọc cùng loại tài nguyên và phải được. Không có nó thì một
+   * lần đọc chéo trả 404 không phân biệt được "RLS chặn" với "đường đọc hỏng cho mọi người".
+   */
+  readonly doiChung?: boolean;
 }
 
 export interface ToChucBaoCao {
@@ -83,7 +88,10 @@ const TEN_DUNG: Record<KetQuaKichBan["dungO"], string> = {
 export function tongHop(kq: KetQuaChay): {
   readonly soDat: number;
   readonly soKichBan: number;
-  readonly soBuoc: number;
+  /** LAM + CHAN của người dùng — mỗi bước là ít nhất một lần gọi HTTP tới `apps/api`. */
+  readonly soBuocApi: number;
+  /** KIEM — phép so của bộ giả lập trên dữ liệu trả về; nhiều phép không gọi mạng. */
+  readonly soKiem: number;
   readonly soChanDat: number;
   readonly soChan: number;
   readonly soChanVaoSo: number;
@@ -100,7 +108,8 @@ export function tongHop(kq: KetQuaChay): {
   return {
     soDat: kq.kichBan.filter((k) => k.dat).length,
     soKichBan: kq.kichBan.length,
-    soBuoc: buoc.length,
+    soBuocApi: buoc.filter((b) => b.loai !== "KIEM" && b.ai !== "bộ giả lập").length,
+    soKiem: buoc.filter((b) => b.loai === "KIEM").length,
     soChanDat: buoc.filter((b) => b.loai === "CHAN" && b.dat).length,
     soChan: buoc.filter((b) => b.loai === "CHAN").length,
     soChanVaoSo: buoc.filter((b) => b.loai === "CHAN" && b.vaoSo === true).length,
@@ -117,18 +126,28 @@ export function tongHop(kq: KetQuaChay): {
 export function dungBaoCaoMarkdown(kq: KetQuaChay): string {
   const th = tongHop(kq);
   const ra: string[] = [];
-  const tatCaDat = th.soDat === th.soKichBan && kq.coLap.every((c) => c.dat) && kq.toChuc.every((t) => t.chuanBi.every((c) => c.dat));
+  const kichBanDat = th.soKichBan > 0 && th.soDat === th.soKichBan && kq.toChuc.every((t) => t.chuanBi.every((c) => c.dat));
+  const coLapChan = kq.coLap.filter((c) => c.doiChung !== true);
+  const ketLuan = !kichBanDat || !kq.coLap.every((c) => c.dat)
+    ? "CÓ kịch bản hoặc phép kiểm KHÔNG ĐẠT — đọc mục 3 và mục 5"
+    : coLapChan.length === 0
+      ? "MỌI kịch bản ĐẠT; phép cô lập giữa hai tổ chức KHÔNG chạy (lượt này chỉ dựng một tổ chức)"
+      : "MỌI kịch bản và mọi phép kiểm ĐẠT";
   ra.push(BANNER, "");
   ra.push(`# Báo cáo pilot giả lập — ${kq.batDau.slice(0, 10)}`, "");
   ra.push(`Chạy từ ${kq.batDau} tới ${kq.ketThuc}, chế độ **${kq.cheDo === "cham" ? "chậm (có đợi hạn nộp thật)" : "nhanh (đóng sớm có lý do)"}**, trên mã \`${kq.phienBanMa}\`.`, "");
-  ra.push(`**Kết luận của lượt chạy: ${tatCaDat ? "MỌI kịch bản và mọi phép kiểm ĐẠT" : "CÓ kịch bản hoặc phép kiểm KHÔNG ĐẠT — đọc mục 3 và mục 5"}.**`, "");
+  ra.push(`**Kết luận của lượt chạy: ${ketLuan}.**`, "");
 
   ra.push("## 1. Tóm tắt", "");
   ra.push("| Chỉ số | Giá trị |", "|---|---|");
   ra.push(`| Kịch bản đạt | ${th.soDat}/${th.soKichBan} |`);
-  ra.push(`| Bước đã chạy qua API thật | ${th.soBuoc} |`);
+  ra.push(`| Bước người dùng qua API thật (LAM + CHAN) | ${th.soBuocApi} |`);
+  ra.push(`| Phép kiểm của bộ giả lập trên dữ liệu trả về (KIEM) | ${th.soKiem} |`);
   ra.push(`| Lần thử SAI bị sản phẩm chặn đúng | ${th.soChanDat}/${th.soChan} |`);
   ra.push(`| Trong đó: lần từ chối để lại hàng sổ kiểm toán | ${th.soChanVaoSo}/${th.soChan} — xem cột *Vào sổ* ở mục 4 |`);
+  ra.push(
+    `| Cô lập giữa hai tổ chức | ${coLapChan.length === 0 ? "**không chạy** — lượt này chỉ dựng một tổ chức" : `${coLapChan.filter((c) => c.dat).length}/${coLapChan.length} chặn đúng, đối chứng ${kq.coLap.filter((c) => c.doiChung === true && c.dat).length}/${kq.coLap.length - coLapChan.length}`} |`,
+  );
   ra.push(`| Phiên bản báo giá niêm phong đã nộp | ${th.soPhienBanNop} |`);
   ra.push(`| Biên nhận kiểm chứng được bằng khoá công khai | ${th.soBienNhanHopLe}/${th.soBienNhanDaKiem} |`);
   ra.push(`| Bộ bằng chứng qua bộ kiểm độc lập (không CSDL) | ${th.soBoBangChungOk}/${th.soBoBangChungCan} |`);
@@ -181,12 +200,16 @@ export function dungBaoCaoMarkdown(kq: KetQuaChay): string {
       );
     }
   }
-  for (const c of kq.coLap) ra.push(`| cô lập | — | ${o(c.viec)} | ${o(c.mongDoi)} | ${o(c.thucTe)} | RLS theo tổ chức | ${c.dat ? "chặn đúng" : "**KHÔNG CHẶN**"} | — |`);
+  for (const c of kq.coLap) {
+    const ketQua = c.doiChung === true ? (c.dat ? "đọc được (đối chứng)" : "**KHÔNG đọc được**") : c.dat ? "chặn đúng" : "**KHÔNG CHẶN**";
+    ra.push(`| cô lập | — | ${o(c.viec)} | ${o(c.mongDoi)} | ${o(c.thucTe)} | ${c.doiChung === true ? "đối chứng dương" : "RLS theo tổ chức"} | ${ketQua} | — |`);
+  }
   ra.push("");
   ra.push(
     "*Vào sổ* là một phép ĐO (số hàng `audit_events` của tổ chức trước và sau lần thử), không phải điều kiện đạt: luật ghi sổ từ chối " +
-      "của dự án là chọn lọc (ADR-060), và lần từ chối do trigger huỷ giao dịch thì không vào sổ được. Một dòng **không** ở đây là thứ " +
-      "cần đối chiếu với lời khai của chính ràng buộc ấy — không tự động là một khiếm khuyết.",
+      "của dự án là chọn lọc (ADR-060), và lần từ chối do trigger mà lớp gói không bắt trước thì hôm nay không vào sổ (khoản 9401) — " +
+      "một lựa chọn chưa làm, không phải một điều bất khả: `submitBid` đã ghi được lần chặn của trigger hạn nộp (ADR-074). " +
+      "Một dòng **không** ở đây là thứ cần đối chiếu với lời khai của chính ràng buộc ấy — không tự động là một khiếm khuyết.",
     "",
   );
 

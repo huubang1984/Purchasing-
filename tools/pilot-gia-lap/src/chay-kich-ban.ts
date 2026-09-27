@@ -14,6 +14,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sealBid } from "@trustprocure/sealed-envelope";
 import { NguoiMua, PhienKhach } from "./dien-vien.js";
+import type { DemHanhDong } from "./csdl.js";
 import { coQuyen, hoSo, type HoSoToChuc, type NguoiHoSo } from "./ho-so.js";
 import type { HopThu } from "./hop-thu.js";
 import { tokenTuLink } from "./hop-thu.js";
@@ -104,6 +105,8 @@ export interface BoiCanhChay {
   bao(dong: string): void;
   /** Tổng số hàng sổ kiểm toán hiện có của một tổ chức (kết nối đặc quyền, chỉ đọc). */
   demSoKiemToan(orgId: string): Promise<number>;
+  /** Số hàng sổ theo từng hành động của một tổ chức (kết nối đặc quyền, chỉ đọc). */
+  demSoKiemToanTheoHanhDong(orgId: string): Promise<readonly DemHanhDong[]>;
 }
 
 class BuocHong extends Error {
@@ -128,8 +131,18 @@ interface LoiMoiChay {
   phien: PhienKhach | null;
 }
 
+/**
+ * Chỗ nối của kịch bản CHẬM với phần còn lại của lượt chạy: nó báo khi bắt đầu đợi hạn nộp thật, và
+ * chỉ đi tiếp sau hạn khi `choDiTiep` xong — để hai phần có ghi sổ của nó không bao giờ chồng lên các
+ * kịch bản nhanh cùng tổ chức (xem `index.ts`).
+ */
+export interface DongBoCham {
+  baoDangDoi(): void;
+  readonly choDiTiep: Promise<void>;
+}
+
 /** Chạy MỘT kịch bản. Không bao giờ ném: mọi lỗi đi vào `KetQuaKichBan.loi`. */
-export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, cheDoCham: boolean): Promise<KetQuaKichBan> {
+export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, cheDoCham: boolean, dongBo?: DongBoCham): Promise<KetQuaKichBan> {
   const batDau = Date.now();
   const buoc: BuocKetQua[] = [];
   const hs = hoSo(kb.toChuc);
@@ -147,6 +160,8 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
   const giaHieuLuc = new Map<string, string>();
   /** Hệ số của phiên bản cuối — để tính giá BAFO. */
   const heSoCuoi = new Map<string, number>();
+  /** Giá của MỌI phiên bản đã nộp, theo thứ tự — để biết bao nhiêu bản cũ phải còn niêm phong sau mở thầu. */
+  const giaCacBan = new Map<string, string[]>();
   /** Khoá công khai ECDH_P256 của gói, như một nhà cung cấp đã đọc nó lúc gói còn mở. */
   let khoaDaBiet: Uint8Array | null = null;
 
@@ -169,10 +184,14 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     if (!dat) throw new BuocHong(`${viec}: mong ${mong}, nhận ${r.status}`);
     return r;
   };
+  const demHanhDong = async (action: string): Promise<number> =>
+    (await bc.demSoKiemToanTheoHanhDong(tc.orgId)).find((d) => d.action === action)?.n ?? 0;
   /**
    * Một lần thử sai phải bị TỪ CHỐI bằng một trong `mong`. `batBien` gọi tên LỚP đã chặn theo mã thật:
    * 403 là cổng quyền (vai không giữ mã quyền), 422 là ràng buộc nghiệp vụ (D2, J3, A4, …) — hai lớp
-   * khác nhau, và báo cáo không được gán lần chặn của lớp này cho lớp kia.
+   * khác nhau, và báo cáo không được gán lần chặn của lớp này cho lớp kia. `hanhDongSo`: hành động sổ
+   * mà sản phẩm KHAI sẽ ghi cho lần từ chối này — có thì thiếu đúng một hàng ấy là KHÔNG ĐẠT, không
+   * còn là một phép đo (một lần soi ở vòng này: SX-06 khai `BID_DEADLINE_DENIED` mà không kiểm nó).
    */
   const chan = async (
     ai: NguoiMua | string,
@@ -180,14 +199,21 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     goi: () => Promise<PhanHoi>,
     mong: readonly number[],
     batBien: string | ((status: number) => string),
+    hanhDongSo?: string,
   ): Promise<void> => {
     const truoc = await bc.demSoKiemToan(tc.orgId);
+    const truocHd = hanhDongSo === undefined ? 0 : await demHanhDong(hanhDongSo);
     const r = await goi();
     const vaoSo = (await bc.demSoKiemToan(tc.orgId)) > truoc;
-    const dat = mong.includes(r.status);
+    const themHd = hanhDongSo === undefined ? 0 : (await demHanhDong(hanhDongSo)) - truocHd;
+    const tuChoi = mong.includes(r.status);
+    const dat = tuChoi && (hanhDongSo === undefined || themHd === 1);
     const nhan = typeof batBien === "string" ? batBien : batBien(r.status);
-    ghi({ loai: "CHAN", ai: typeof ai === "string" ? ai : ai.nhan, viec, mongDoi: `từ chối ${mong.join("/")}`, thucTe: `${r.status} ${catNgan(r.text, 160)}`, dat, batBien: nhan, vaoSo });
-    if (!dat) throw new BuocHong(`KIỂM SOÁT KHÔNG BẬT — ${viec}: mong từ chối ${mong.join("/")}, nhận ${r.status}`);
+    const soKhai = hanhDongSo === undefined ? "" : ` + 1 hàng ${hanhDongSo}`;
+    const soThay = hanhDongSo === undefined ? "" : ` · +${themHd} ${hanhDongSo}`;
+    ghi({ loai: "CHAN", ai: typeof ai === "string" ? ai : ai.nhan, viec, mongDoi: `từ chối ${mong.join("/")}${soKhai}`, thucTe: `${r.status} ${catNgan(r.text, 160)}${soThay}`, dat, batBien: nhan, vaoSo });
+    if (!tuChoi) throw new BuocHong(`KIỂM SOÁT KHÔNG BẬT — ${viec}: mong từ chối ${mong.join("/")}, nhận ${r.status}`);
+    if (!dat) throw new BuocHong(`LỜI KHAI SỔ KHÔNG ĐÚNG — ${viec}: mong 1 hàng ${String(hanhDongSo)}, có ${themHd}`);
   };
   const kiem = (viec: string, dat: boolean, thucTe: string, mongDoi = "khớp"): void => {
     ghi({ loai: "KIEM", ai: "bộ giả lập", viec, mongDoi, thucTe, dat });
@@ -256,6 +282,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     kiem(`biên nhận v${phienBan} của ${tenNcc(lm.ncc)} kiểm bằng khoá công khai`, hopLe, hopLe ? "chữ ký ECDSA P-256 hợp lệ" : "chữ ký KHÔNG hợp lệ", "hợp lệ");
     giaHieuLuc.set(lm.ncc, pb.tong);
     heSoCuoi.set(lm.ncc, heSo);
+    giaCacBan.set(lm.ncc, [...(giaCacBan.get(lm.ncc) ?? []), pb.tong]);
   };
 
   const nopTheoBaoGia = async (bg: BaoGia): Promise<void> => {
@@ -331,6 +358,21 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       lech.length === 0 && thay.size === giaHieuLuc.size ? `${thay.size}/${giaHieuLuc.size} dòng khớp` : `lệch: ${lech.join(", ")}; thấy ${thay.size} dòng`, `${giaHieuLuc.size}/${giaHieuLuc.size} dòng khớp`);
     const khongDoc = laySo(r.body, "comparison", "aggregates", "unparsed");
     kiem("không phong bì nào không đọc được", khongDoc === 0, String(khongDoc), "0");
+    // Mở thầu chỉ giải mã bản CUỐI của mỗi luồng báo giá (`apps/unseal-worker`, `DISTINCT ON (bid_id)`);
+    // mọi bản cũ vẫn niêm phong (B1). Một lần đo ở vòng này: bản đầu của phép kiểm này đòi bản cũ HIỆN
+    // trong bảng so sánh, và 0/3 — sai giả định của bộ giả lập, không phải lỗi sản phẩm. Chỉ kiểm ở vòng
+    // một: bảng sau BAFO cố ý giữ cả hai vòng.
+    if (nhan === "vòng một") {
+      const tatCa = layMang(r.body, "comparison", "rows");
+      const dongCu = tatCa.filter((h) => lay(h, "isLatestForBid") === false).length;
+      const soBanCu = [...giaCacBan.values()].reduce((t, ds) => t + ds.length - 1, 0);
+      kiem(
+        `mở thầu chỉ giải mã bản CUỐI của mỗi luồng báo giá${soBanCu > 0 ? ` — ${soBanCu} bản sửa giá trước đó vẫn niêm phong` : ""}`,
+        dongCu === 0 && tatCa.length === giaHieuLuc.size,
+        `${tatCa.length} dòng, ${dongCu} dòng của bản cũ`,
+        `${giaHieuLuc.size} dòng, 0 dòng của bản cũ`,
+      );
+    }
   };
 
   /** Chấm, rồi kiểm hạng 1 là giá thấp nhất. Trả về các hàng xếp hạng. */
@@ -384,7 +426,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
         buocTiep: [
           `Đăng nhập bằng ${moTaNguoi(conLai)} ở /tao-thau, nạp gói, bấm "Phê duyệt" — chữ ký thứ hai.`,
           `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === "tp"))} và bấm "Mở gói"; rồi mời nhà cung cấp.`,
-          "Thử để CHÍNH người tạo gói bấm phê duyệt: sản phẩm từ chối (D2).",
+          `Thử để CHÍNH người tạo gói (${moTaNguoi(tao.hoSo)}) bấm phê duyệt: sản phẩm từ chối — ${lopTuChoi(tao.hoSo, "rfq.approve", "D2")}.`,
         ],
         loiMoiConLai: [],
       };
@@ -417,15 +459,21 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       const moi = new Date(cu + kb.giaHan.themPhut * 60_000).toISOString();
       await lam(gh, `gia hạn hạn nộp thêm ${Math.round(kb.giaHan.themPhut / 60 / 24)} ngày — ${kb.giaHan.lyDo}`, () =>
         gh.http.goi("POST", `/rfqs/${String(rfqId)}/extend`, { newDeadlineAt: moi, reason: kb.giaHan?.lyDo }), 200);
+      // Đếm theo TỪNG lời mời, không theo số tin: hai tin cho một lời mời và không tin nào cho lời mời
+      // khác cũng cho đúng tổng — một lần soi ở vòng này bắt bản đầu chỉ so tổng.
       const ids = new Set([...loiMoi.values()].map((l) => l.invitationId));
       const hanCho = Date.now() + 15_000;
-      let n = 0;
+      let tin: readonly string[] = [];
       for (;;) {
-        n = await bc.hopThu.dem((t) => t.loai === "DEADLINE_NOTICE" && t.orgId === tc.orgId && ids.has(t.invitationId));
-        if (n >= ids.size || Date.now() > hanCho) break;
+        tin = (await bc.hopThu.xem((t) => t.loai === "DEADLINE_NOTICE" && t.orgId === tc.orgId && ids.has(t.invitationId))).map((t) =>
+          t.loai === "DEADLINE_NOTICE" ? t.invitationId : "",
+        );
+        if (new Set(tin).size >= ids.size || Date.now() > hanCho) break;
         await new Promise((xong) => setTimeout(xong, 300));
       }
-      kiem("mỗi nhà cung cấp được mời nhận một thông báo hạn mới", n === ids.size, `${n}/${ids.size} thông báo`, `${ids.size}/${ids.size} thông báo`);
+      const coTin = new Set(tin).size;
+      kiem("mỗi nhà cung cấp được mời nhận đúng một thông báo hạn mới", coTin === ids.size && tin.length === ids.size,
+        `${coTin}/${ids.size} lời mời có thông báo, ${tin.length} tin`, `${ids.size}/${ids.size} lời mời có thông báo, ${ids.size} tin`);
     }
     for (const bg of kb.baoGia) if (bg.sauGiaHan === true) await nopTheoBaoGia(bg);
 
@@ -472,17 +520,20 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     if (kb.cham === true && cheDoCham) {
       const hanNop = new Date(await dong.http.goi("GET", `/rfqs/${String(rfqId)}`).then((x) => layChuoi(x.body, "rfq", "deadlineAt"))).getTime();
       ghi({ loai: "LAM", ai: "bộ giả lập", viec: `đợi hạn nộp thật trôi qua (${new Date(hanNop).toISOString()})`, mongDoi: "—", thucTe: "đang đợi", dat: true });
+      dongBo?.baoDangDoi();
       while (Date.now() < hanNop + 3000) {
         bc.bao(`[${kb.ma}] còn ${Math.ceil((hanNop + 3000 - Date.now()) / 60_000)} phút tới hạn nộp thật`);
         await new Promise((xong) => setTimeout(xong, Math.min(HAI_PHUT, Math.max(1000, hanNop + 3000 - Date.now()))));
       }
+      await dongBo?.choDiTiep;
       if (treHan !== undefined) {
         const lm = loiMoi.get(treHan.ncc);
         if (lm === undefined) throw new BuocHong(`${treHan.ncc} chưa được mời`);
         const p = await moPhien(lm);
         const pb = await niemPhong(p, treHan.heSo);
         if (pb === null) throw new BuocHong("gói không còn khoá công khai để thử nộp trễ");
-        await chan(aiNcc(lm), "nộp báo giá niêm phong hợp lệ SAU hạn nộp", () => p.http.goi("POST", "/guest/bids", { envelope: pb.b64 }), [422], "C1");
+        await chan(aiNcc(lm), "nộp báo giá niêm phong hợp lệ SAU hạn nộp", () => p.http.goi("POST", "/guest/bids", { envelope: pb.b64 }), [422], "C1",
+          "BID_DEADLINE_DENIED");
       }
       await lam(dong, "đóng gói sau hạn nộp", () => dong.http.goi("POST", `/rfqs/${String(rfqId)}/close`, { reason: kb.lyDoDong ?? "Đã quá hạn nộp" }), 200);
     } else {
@@ -505,7 +556,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
         buocTiep: [
           `Đăng nhập bằng ${moTaNguoi(conLai)} ở /mo-thau, nạp gói, bấm "Phê duyệt" — chữ ký thứ hai.`,
           `Đăng nhập bằng ${moTaNguoi(hs.nguoi.find((n) => n.ma === kb.vai.xinMo))}, bấm "Điều phối": worker giải mã, bảng so sánh hiện ra đúng tới từng đồng.`,
-          "Thử để người xin mở thầu tự phê duyệt: sản phẩm từ chối.",
+          `Thử để người xin mở thầu (${moTaNguoi(nguoi(kb.vai.xinMo).hoSo)}) tự phê duyệt: sản phẩm từ chối — ${lopTuChoi(nguoi(kb.vai.xinMo).hoSo, "rfq.unseal.approve", "D2/D3")}.`,
         ],
         loiMoiConLai: [],
       };
@@ -593,7 +644,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       demo = {
         buocTiep: [
           `Đăng nhập bằng ${moTaNguoi(gd)} ở /mo-thau, nạp gói, bước 7: đọc đề xuất và bấm "Duyệt trao thầu".`,
-          `Thử để ${moTaNguoi(nguoiDeXuat.hoSo)} tự duyệt đề xuất của mình: sản phẩm từ chối.`,
+          `Thử để ${moTaNguoi(nguoiDeXuat.hoSo)} tự duyệt đề xuất của mình: sản phẩm từ chối — ${lopTuChoi(nguoiDeXuat.hoSo, "po.approve", "J3")}.`,
           "Bước 8: tải bộ bằng chứng (hai tệp) và kiểm bằng `pnpm bang-chung kiem --bo <thư mục>` KHÔNG cần CSDL.",
         ],
         loiMoiConLai: [],
@@ -601,9 +652,12 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
       return ketThuc(null);
     }
     if (kb.kiem.tuDuyetTraoThau === true) {
-      await chan(nguoiDeXuat, "người đề xuất tự duyệt đề xuất trao thầu của mình", () =>
-        nguoiDeXuat.http.goi("POST", `/rfqs/${String(rfqId)}/award/${awardId}/approve`), [403, 422],
-        (st) => (st === 403 ? "quyền po.approve" : "J3"));
+      // Hai LỚP khác nhau, và danh mục đo cả hai (`kiemDanhMuc`): người đề xuất KHÔNG giữ `po.approve`
+      // bị cổng quyền chặn (403); người GIỮ nó đi qua cổng quyền và chỉ trigger J3 vế 1 của `061` chặn.
+      const giuQuyen = coQuyen(nguoiDeXuat.hoSo.vai, "po.approve");
+      await chan(nguoiDeXuat, `người đề xuất tự duyệt đề xuất trao thầu của mình${giuQuyen ? " (vai CÓ po.approve)" : ""}`, () =>
+        nguoiDeXuat.http.goi("POST", `/rfqs/${String(rfqId)}/award/${awardId}/approve`), giuQuyen ? [422] : [403],
+        giuQuyen ? "J3 (vế 1)" : "quyền po.approve");
     }
     const dtt = nguoi(kb.vai.duyetTraoThau);
     const ra = await lam(dtt, "duyệt trao thầu", () => dtt.http.goi("POST", `/rfqs/${String(rfqId)}/award/${awardId}/approve`), 201);
@@ -679,6 +733,11 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
 
 function moTaNguoi(n: NguoiHoSo | undefined): string {
   return n === undefined ? "(không có)" : `${n.hoTen} — ${n.chucDanh}`;
+}
+
+/** Lớp sẽ chặn một lần tự duyệt, theo QUYỀN của người thử — để lời dẫn trình diễn không gán nhầm lớp. */
+function lopTuChoi(n: NguoiHoSo, quyen: Parameters<typeof coQuyen>[1], rangBuoc: string): string {
+  return coQuyen(n.vai, quyen) ? `ràng buộc ${rangBuoc} (422)` : `cổng quyền (403 — vai ${n.vai} không có ${quyen})`;
 }
 
 /** Giá trị kỳ vọng của kịch bản, cho báo cáo và cho test — không gọi mạng. */

@@ -93,7 +93,6 @@ export class HopThuError extends Error {
 }
 
 export class HopThu {
-  private readonly daDoc = new Set<string>();
   private readonly daNhan = new Set<string>();
   private readonly boDem = new Map<string, TinHopThu | null>();
 
@@ -117,14 +116,21 @@ export class HopThu {
 
   private async doc(ten: string): Promise<TinHopThu | null> {
     if (this.boDem.has(ten)) return this.boDem.get(ten) ?? null;
+    let tho: string;
+    try {
+      tho = await readFile(join(this.thuMuc, ten), "utf8");
+    } catch {
+      // Lỗi ĐỌC (khoá chia sẻ tạm của trình quét virus trên Windows, EMFILE) không phải một tin hỏng:
+      // không nhớ gì, lượt quét sau đọc lại. Chỉ nội dung sai hình dạng mới được nhớ là `null`.
+      return null;
+    }
     let tin: TinHopThu | null;
     try {
-      tin = docTin(JSON.parse(await readFile(join(this.thuMuc, ten), "utf8")) as unknown);
+      tin = docTin(JSON.parse(tho) as unknown);
     } catch {
       tin = null;
     }
     this.boDem.set(ten, tin);
-    this.daDoc.add(ten);
     return tin;
   }
 
@@ -145,15 +151,15 @@ export class HopThu {
     }
   }
 
-  /** Đếm các tin MỚI (chưa nhận) khớp `loc` mà không nhận chúng — dùng để đo số thông báo gia hạn. */
-  async dem(loc: (t: TinHopThu) => boolean): Promise<number> {
-    let n = 0;
+  /** Các tin MỚI (chưa nhận) khớp `loc`, KHÔNG nhận chúng — dùng để đo thông báo gia hạn theo từng lời mời. */
+  async xem(loc: (t: TinHopThu) => boolean): Promise<readonly TinHopThu[]> {
+    const ra: TinHopThu[] = [];
     for (const ten of await this.lietKe()) {
       if (this.daNhan.has(ten)) continue;
       const tin = await this.doc(ten);
-      if (tin !== null && loc(tin)) n += 1;
+      if (tin !== null && loc(tin)) ra.push(tin);
     }
-    return n;
+    return ra;
   }
 
   /** Tin OTP MỚI NHẤT (kể cả đã nhận) gửi tới `den` — cho lệnh `otp` của người trình diễn. */

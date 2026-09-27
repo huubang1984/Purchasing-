@@ -79,7 +79,10 @@ export interface KiemSoatKichBan {
   readonly tuDuyetMo?: boolean;
   /** Người tạo gói hay người điều phối mở thầu đề xuất trao thầu ⇒ 422 (J3). */
   readonly j3?: boolean;
-  /** Người đề xuất tự duyệt đề xuất của mình ⇒ 403. */
+  /**
+   * Người đề xuất tự duyệt đề xuất của mình. Lớp chặn tuỳ QUYỀN của người ấy, và danh mục đo cả hai
+   * (`kich-ban.test.ts`): không giữ `po.approve` ⇒ 403 ở cổng quyền; giữ nó ⇒ 422 ở trigger J3 vế 1.
+   */
   readonly tuDuyetTraoThau?: boolean;
   /** Mã một người KHÔNG có `bid.view` đọc bảng so sánh sau mở thầu ⇒ 403. */
   readonly khongXem?: string;
@@ -179,7 +182,7 @@ export const DANH_MUC: readonly KichBan[] = [
     toChuc: "SX",
     ten: "Vật tư tiêu hao xưởng gia công — nhà cung cấp sửa giá trước hạn",
     minhHoa: [
-      "nhà cung cấp sửa giá hai lần trước hạn: mỗi lần một phiên bản, bản cũ vẫn còn, bảng so sánh lấy bản cuối",
+      "nhà cung cấp sửa giá hai lần trước hạn: mỗi lần một phiên bản mới có biên nhận riêng (v1→v3); mở thầu chỉ giải mã bản CUỐI — hai bản cũ vẫn niêm phong, bảng so sánh không có giá cũ nào",
       "giám đốc xin mở thầu rồi tự duyệt ⇒ bị chặn; phó giám đốc duyệt",
       "trưởng phòng đề xuất, phó giám đốc duyệt trao thầu",
     ],
@@ -231,6 +234,7 @@ export const DANH_MUC: readonly KichBan[] = [
       "vòng BAFO: danh sách mời SUY từ thứ hạng; người ngoài top-2 nộp ⇒ 422",
       "giá vòng hai niêm phong lại và chỉ mở qua cổng bốn vế lần hai",
       "người tạo gói đề xuất trao thầu ⇒ 422 (J3)",
+      "phó giám đốc (GIỮ quyền duyệt trao thầu) đề xuất rồi tự duyệt ⇒ 422 (J3 vế 1); giám đốc duyệt",
     ],
     dungO: "AWARD_APPROVED",
     goi: {
@@ -255,7 +259,7 @@ export const DANH_MUC: readonly KichBan[] = [
       dieuPhoi: "tp",
       cham: "cv",
       moBafo: "tp",
-      deXuat: "pp",
+      deXuat: "pgd",
       duyetTraoThau: "gd",
       xuatBangChung: "gd",
     },
@@ -331,9 +335,8 @@ export const DANH_MUC: readonly KichBan[] = [
     ten: "Hạn nộp thật — nộp trễ bị từ chối, đóng đúng hạn",
     cham: true,
     minhHoa: [
-      "hạn nộp 62 phút: bộ giả lập ĐỢI hạn thật trôi qua, không đóng sớm",
-      "nhà cung cấp nộp sau hạn ⇒ 422, và lần từ chối có hàng sổ `BID_DEADLINE_DENIED`",
-      "đóng gói sau hạn không cần lý do đóng sớm",
+      "hạn nộp 62 phút: bộ giả lập ĐỢI hạn thật trôi qua rồi mới đóng — không đóng sớm",
+      "nhà cung cấp nộp báo giá niêm phong hợp lệ sau hạn ⇒ 422, và lần từ chối để lại ĐÚNG một hàng sổ `BID_DEADLINE_DENIED` (kiểm theo hành động)",
     ],
     dungO: "AWARD_APPROVED",
     goi: {
@@ -553,7 +556,7 @@ export const DANH_MUC: readonly KichBan[] = [
     ten: "Ống HDPE thoát nước — chờ chữ ký duyệt gói thứ hai",
     minhHoa: [
       "gói 2,2 tỷ vượt ngưỡng: đã có MỘT trên HAI chữ ký duyệt gói",
-      "người trình diễn đăng nhập bằng kỹ sư vật tư để ký chữ ký thứ hai, rồi trưởng phòng mở gói",
+      "người trình diễn đăng nhập bằng trưởng phòng mua hàng để ký chữ ký thứ hai, rồi mở gói",
     ],
     dungO: "PENDING_APPROVAL",
     goi: {
@@ -700,7 +703,10 @@ export function kiemKichBan(kb: KichBan): readonly string[] {
     vai(kb.vai.huyGoi, "rfq.cancel", "huỷ gói");
     if (kb.lyDoHuyGoi === undefined) loi.push(`${kb.ma}: huỷ gói cần lý do`);
     if (kb.kiem.nopSauHuy !== undefined && !kb.baoGia.some((b) => b.ncc === kb.kiem.nopSauHuy)) {
-      loi.push(`${kb.ma}: nhà cung cấp thử nộp sau huỷ phải là người ĐÃ nộp — người chưa nộp không giữ khoá công khai nào của gói`);
+      // Người ĐÃ nộp chắc chắn đã đọc khoá công khai lúc gói còn mở; người chưa từng mở trang thì sau
+      // huỷ không còn khoá nào để đọc. Lớp CHẶN lần nộp là nhánh C1 của trigger trạng thái, không phải
+      // việc thu hồi khoá — `submitBid` không đối chiếu phong bì với khoá nào.
+      loi.push(`${kb.ma}: nhà cung cấp thử nộp sau huỷ phải là người ĐÃ nộp — người chắc chắn đã giữ khoá công khai của gói`);
     }
   }
   if (kb.dungO === "OPEN" && kb.baoGia.length >= kb.moi.length) loi.push(`${kb.ma}: gói để mở cho trình diễn phải còn lời mời chưa nộp`);
@@ -751,10 +757,7 @@ export function kiemKichBan(kb: KichBan): readonly string[] {
     if (duyetTT !== undefined && duyetTT === deXuatCuoi) loi.push(`${kb.ma}: người duyệt trao thầu là người đề xuất`);
     vai(kb.vai.xuatBangChung, "audit.read", "xuất bộ bằng chứng");
     vai(kb.vai.xuatBangChung, "bid.view", "xuất bộ bằng chứng");
-    if (kb.kiem.tuDuyetTraoThau === true) {
-      const n = coMat(() => nguoiTheoMa(hs, deXuatCuoi ?? ""));
-      if (n !== undefined && coQuyen(n.vai, "po.approve")) loi.push(`${kb.ma}: người đề xuất CÓ po.approve — lần tự duyệt sẽ đo J3 chứ không đo 403`);
-    }
+    if (kb.kiem.tuDuyetTraoThau === true) coMat(() => nguoiTheoMa(hs, deXuatCuoi ?? ""));
   }
   if (kb.kiem.khongXem !== undefined) {
     const n = coMat(() => nguoiTheoMa(hs, kb.kiem.khongXem ?? ""));

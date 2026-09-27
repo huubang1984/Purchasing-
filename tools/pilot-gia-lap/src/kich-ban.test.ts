@@ -34,6 +34,18 @@ describe("danh mục kịch bản — kiểm TRƯỚC khi chạy", () => {
     }
   });
 
+  it("tự duyệt trao thầu đo CẢ HAI lớp: cổng quyền (403) và trigger J3 vế 1 (422)", () => {
+    // Một lần soi ở vòng này: bản đầu chỉ giao lần tự duyệt cho người KHÔNG giữ po.approve, nên J3 vế 1
+    // chưa từng chạy mà tài liệu vẫn khai đã đo.
+    const giuQuyen = DANH_MUC.filter((k) => k.kiem.tuDuyetTraoThau === true).map((k) => {
+      const deXuat = k.huyTraoThau !== undefined ? k.vai.deXuatLai : k.vai.deXuat;
+      const n = hoSo(k.toChuc).nguoi.find((x) => x.ma === deXuat);
+      return n !== undefined && coQuyen(n.vai, "po.approve");
+    });
+    expect(giuQuyen).toContain(true);
+    expect(giuQuyen).toContain(false);
+  });
+
   it("ĐỘT BIẾN — bộ kiểm có răng: mỗi lỗi danh mục thường gặp đều bị bắt", () => {
     const goc = layKb("SX-01");
     const dotBien: readonly [string, KichBan, RegExp][] = [

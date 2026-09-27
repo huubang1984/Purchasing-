@@ -112,7 +112,7 @@ db/migrations/001_roles_and_functions.sql     roles, hàm nền
 | `tools/canh-dang-ky` | Nguồn Lambda `tp-canh-dang-ky` (stack 60, audit): mỗi địa chỉ nhận cảnh báo có đăng ký SNS đã xác nhận (ADR-089) |
 | `tools/chay-migrate` | Entry point của task ECS `tp-migrate`: `migrate()` rồi đảm bảo hai vai đăng nhập của api/worker từ chính URL của chúng (ADR-066) |
 | `tools/cap-so` | `pnpm cap-so`: cấp số thật cho số tạm của nhánh lúc merge, viết lại lời khai đếm; `--kiem` là cổng CI (ADR-090) |
-| `tools/pilot-gia-lap` | `pnpm pilot:gia-lap`: pilot GIẢ LẬP — dựng cụm cục bộ bốn tiến trình, hai doanh nghiệp bịa, mười một kịch bản qua API thật, báo cáo dán nhãn giả lập và gói để lại cho trình diễn. KHÔNG thay khách hàng pilot (ADR-9201, `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`) |
+| `tools/pilot-gia-lap` | `pnpm pilot:gia-lap`: pilot GIẢ LẬP — dựng cụm cục bộ bốn tiến trình, hai doanh nghiệp bịa, danh mục mười một kịch bản qua API thật, báo cáo dán nhãn giả lập và gói để lại cho trình diễn. KHÔNG thay khách hàng pilot (ADR-9201, `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`) |
 
 **Hàng rào kiến trúc:** `dependency-cruiser`, tất cả theo khuôn **"mặc định đóng"** — một module
 MỚI trong thư mục nhạy cảm đã bị chặn sẵn, không ai phải nhớ thêm quy tắc.
