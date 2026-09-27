@@ -14124,7 +14124,7 @@ Khoản 200 đóng. Còn mở **85**; rổ B **60**.
 
 ---
 
-# §S1.171 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
+# §S1.172 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
 
 **Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Không migration, không ADR. Không chạm mảnh nào của
 `docs/PRODUCT.md` §11: `gieo:demo` không cờ và luồng MVP1 của kịch bản 41 giữ nguyên hình dạng.
@@ -14135,7 +14135,7 @@ Phần cuối trong bốn phần của S3.1 (spec S3 §9): `gieo:demo` theo bả
 (§S1.156, §S1.166, §S1.169) dựng bậc, K1, route ký và màn `/chinh-sach`. Tới vòng này bối cảnh demo không có người FINANCE
 nào, và kịch bản 41 chỉ chạy ở tổ chức chưa bật.
 
-## 2. Bốn quyết định của chủ dự án (S1.171) — cả bốn theo đề xuất
+## 2. Bốn quyết định của chủ dự án (S1.172) — cả bốn theo đề xuất
 
 - **Tổ chức demo:** không cờ thì giữ tổ chức chưa bật — pilot chạy MVP1, cờ ký tắt trên máy thật —; `--s3` gieo tổ chức
   đã bật. Loại: luôn gieo hai tổ chức (in dài gấp đôi, người trình diễn dễ nhầm tổ chức); thay hẳn bằng tổ chức đã bật (demo
@@ -14237,8 +14237,19 @@ Ba đột biến, cả ba đỏ:
 - **Hợp `master`.** Lúc CI của PR xanh đủ bảy việc, `master` nhận #175 — khoản 228, vòng **S1.170**, ADR-106, migration
   `073` — lấy đúng số vòng lần cấp đầu đã đặt cho vòng này. Xung đột ở cột mốc của `docs/STATE.md` và mục cuối biên bản (gỡ
   tay: giữ cả hai, mục của #175 đứng trước theo thứ tự merge), và ở `evidence/INV-matrix.md` (lấy bản `master`, sinh lại dưới
-  đây). `pnpm cap-so` không gặp dòng mơ hồ: vòng này là **S1.171**; `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0`
+  đây). `pnpm cap-so` không gặp dòng mơ hồ; `pnpm cap-so --kiem` sạch. Trên cây đã hợp: `pnpm t0`
   sạch (428 module, 1673 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**; cả kho trên PostgreSQL 16 cục bộ **179
   tệp, 2889 ca — 2880 đạt, 1 bỏ qua, 8 đỏ** (vẫn đúng 8 ca docker; #175 thêm một ca A1). Kịch bản 41 bản gói **30/30**, bản
   HTTP **58/58** — khẳng định J4 mới của #175 chạy ở cả hai luồng. Ma trận **65/65**, cổng evidence XANH; đúng mười ba hàng
   trên đổi so với `master`, A1 nay **6 → 7** (một ca A1 của #175 cộng một lượt kịch bản 41 thứ hai).
+- **Job windows đỏ một lần, không do PR.** Trên commit của lần hợp ấy, `T1+T2 (windows-latest)` đỏ một ca: probe `g9-` của
+  `apps/api/src/routes.test.ts` chờ khoá `depcruise` quá 180 s, vì `boundaries.test.ts` nhả rồi giành lại khoá ở mỗi test
+  suốt 194,5 s. Cùng mã đã xanh ở commit hợp trước. Chạy lại một lần thì xanh. Bản sửa khoá đi một PR riêng.
+- **Hợp `master` lần hai.** Lúc Evidence pack của lần hợp đầu còn chạy, `master` nhận #178 (hàng J3 của PRODUCT §5), #180
+  — khoản 200, lấy đúng số vòng lần hợp đầu đã cấp — và #181 (sổ tay apply; một chú thích ở `tools/gieo-demo/src/index.ts`,
+  hợp tự động). Xung đột ở cột mốc `docs/STATE.md` và mục cuối biên bản, gỡ tay như lần đầu. Hai dòng mơ hồ — dòng biên
+  bản của cột mốc và dòng kết quả lần hợp đầu — đều nói về vòng này, nên `--mo-ho nhanh`. Kết quả: vòng này là
+  **S1.172**; `pnpm cap-so --kiem` sạch. Không PR nào trong ba chạm ma trận, nên `evidence/INV-matrix.md` giữ bản sinh ở
+  lần hợp đầu. Trên cây đã hợp: `pnpm t0` sạch (429 module, 1682 phụ thuộc); `pnpm test` **117 tệp, 1499 đạt, 1 bỏ qua**;
+  trên PostgreSQL 16 cục bộ, kịch bản 41 bản gói **30/30**, bản HTTP **58/58**, và tệp mới của #180 **2/2**. Tầng tích
+  hợp đầy đủ do T3 của CI đo trên chính commit hợp.
