@@ -104,32 +104,60 @@ Ngoài các kịch bản trên, công cụ còn đo ba thứ ở mỗi lượt:
 
 ## 4. Cách chạy
 
-**Cần:** Node 22, pnpm (`pnpm install`), và một **Postgres 16 cục bộ với một CSDL riêng**. Công cụ từ chối mọi máy chủ
+**Cần:** ~~Node 22~~ **[S1.168] Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25.** Nên dùng bản mới nhất của dòng 22 — cùng
+dòng với CI và ảnh deploy (22.23.3) — và đừng lấy bản mới nhất trên nodejs.org: từ Node 26 kho không chạy. Đo bằng lượt
+chạy thật trên từng bản:
+- dưới 22.7, và 26: Node dừng ngay với `bad option: --experimental-transform-types` (26 đã bỏ cờ ấy);
+- 22.7–22.12 và 23.0–23.1: `web` chết lúc khởi động vì thiếu `module.stripTypeScriptTypes`. Công cụ nay tự từ chối các
+  bản này bằng một câu nói rõ.
+
+Thêm: pnpm (`pnpm install`), và một **Postgres 16 cục bộ với một CSDL riêng**. Công cụ từ chối mọi máy chủ
 không phải `localhost`/`127.0.0.1`/`::1`, và mọi URL mang tham số truy vấn (`?host=` của pg ghi đè máy chủ của URL), vì
 nó chạy `migrate()`, đặt lại mật khẩu hai vai đăng nhập và thêm tổ chức. Cổng Docker ghim vào `127.0.0.1`: superuser
 với mật khẩu viết trong tài liệu này không được nghe trên mạng của phòng trình diễn.
 
 ```powershell
 # Windows PowerShell — Postgres trong Docker
-docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
-do { Start-Sleep 1; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0)
+docker start tp-pilot-gia-lap 2>$null
+if ($LASTEXITCODE -ne 0) { docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine }
+$n = 0
+do { Start-Sleep 1; $n++; docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap } until ($LASTEXITCODE -eq 0 -or $n -ge 60)
+if ($LASTEXITCODE -ne 0) { throw "Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?" }
 $env:TRUSTPROCURE_SEED_DATABASE_URL = "postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap"
 pnpm pilot:gia-lap
 ```
 
 ```bash
 # Linux/macOS
-docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
-until docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap; do sleep 1; done
+docker start tp-pilot-gia-lap 2>/dev/null || docker run -d --name tp-pilot-gia-lap -e POSTGRES_PASSWORD=pilot-gia-lap -e POSTGRES_DB=pilot_gia_lap -p 127.0.0.1:55433:5432 postgres:16-alpine
+for i in $(seq 60); do docker exec tp-pilot-gia-lap pg_isready -h 127.0.0.1 -U postgres -d pilot_gia_lap && break; sleep 1; done
 export TRUSTPROCURE_SEED_DATABASE_URL=postgres://postgres:pilot-gia-lap@127.0.0.1:55433/pilot_gia_lap
 pnpm pilot:gia-lap
 ```
 
 Dòng `pg_isready` đợi Postgres nhận kết nối TCP: container mới chạy `initdb` và một máy chủ tạm chỉ nghe socket trong vài
-giây đầu, và công cụ không thử lại lần nối đầu tiên. Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
-có Docker, và các lượt đo dùng Postgres 16 cài thẳng.
+giây đầu, và công cụ không thử lại lần nối đầu tiên. ~~Hai khối lệnh này chưa được chạy nguyên văn — máy của vòng này không
+có Docker, và các lượt đo dùng Postgres 16 cài thẳng.~~
 
-Lệnh ấy làm trọn các bước sau, không một bước tay nào:
+**[S1.168] Hai khối đã chạy nguyên văn, và bản đầu hỏng ở lần chạy thứ hai.** Bản đầu gọi `docker run` mỗi lần. Chạy lại
+khi container đã dừng — tức sau khi khởi động lại máy, đúng lúc người trình diễn chạy lại cho buổi gặp — thì `docker run`
+báo trùng tên, còn vòng `pg_isready` gõ vào một container không chạy và lặp mãi. Bản trên bật lại container cũ nếu có, chỉ
+tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.1, Postgres `16-alpine`, mã của vòng này:
+- khối PowerShell chạy bằng PowerShell 7.4.6 trên Linux, khối bash bằng bash;
+- mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
+  ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
+  Docker Desktop đã chạy chưa, bash với `ECONNREFUSED` của công cụ;
+- **chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
+  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.
+
+Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:
+- xoá thư mục trạng thái mà giữ container: công cụ từ chối trước khi dựng cụm và nói cách sửa;
+- xoá container mà giữ thư mục: lượt mới chạy bình thường, nhưng các lượt cũ trong thư mục trỏ tới tổ chức không còn — chỉ
+  dùng các dòng đánh dấu LƯỢT MỚI NHẤT.
+
+Làm lại từ đầu thì xoá cả hai: `docker rm -f tp-pilot-gia-lap` và thư mục `.pilot-gia-lap/`.
+
+`pnpm pilot:gia-lap` làm trọn các bước sau, không một bước tay nào:
 1. Sinh bí mật cụm: ba vòng khoá 32 byte đôi một khác nhau, khoá ký biên nhận P-256 và mật khẩu hai vai đăng nhập.
 2. Chạy `migrate()` và đảm bảo hai vai đăng nhập.
 3. Dựng `api`, `web`, `public-keys`, gieo hai tổ chức, rồi dựng `unseal-worker`. Worker phải lên SAU tổ chức đầu tiên
@@ -197,7 +225,7 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
 | Lần thử sai bị chặn đúng | **16/16**; cô lập **2/2**, mỗi lần sau một đối chứng dương (**2/2**) |
 | Biên nhận kiểm bằng khoá công khai từ `/.well-known/trustprocure-receipt-keys` | **35/35** |
 | Bộ bằng chứng qua `pnpm bang-chung kiem` không CSDL | **5/5** |
-| Lần từ chối để lại hàng sổ kiểm toán | **8/16** — xem phát hiện ⑴. Lượt đầu cho 9/16, vì J3 vế 1 khi ấy chưa được thử |
+| Lần từ chối để lại hàng sổ kiểm toán | ~~**8/16** — xem phát hiện ⑴. Lượt đầu cho 9/16, vì J3 vế 1 khi ấy chưa được thử~~ **[S1.168] 15/16** sau #172 (khoản 247 đóng, ADR-104), đo trên `12645e9`; lần còn lại là mở link đã thu hồi |
 | Chế độ chậm (SX-06) | **1/1 ĐẠT** ở cả hai lượt, mỗi lượt 62 phút — trên bản của commit đầu, và trên bản đã sửa: nộp sau hạn ⇒ 422 và **đúng một** hàng `BID_DEADLINE_DENIED` (lượt sau kiểm theo hành động, thiếu là KHÔNG ĐẠT); đóng sau hạn; trao thầu cho giá thấp nhất trong hai báo giá đúng hạn |
 | Đi thử trên trình duyệt thật (Chromium, khung 375×812) | Nhà cung cấp mở link SX-04, OTP lấy bằng lệnh `otp`, niêm phong và nộp trong trình duyệt, nhận biên nhận `version=1 kid=k1`; người mua đăng nhập bằng `dang-nhap` + TOTP và thấy số báo giá bị giấu |
 
@@ -219,7 +247,8 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    J3 và D2 là tách bạch nhiệm vụ cưỡng chế bằng trigger, và `docs/PRODUCT.md` §5 từng khai cho J3 *"mỗi lần từ chối để
    lại một dòng"* — câu ấy đã được sửa tại chỗ. Hai lần nộp thuộc vế ghi sổ của ADR-060 theo cách ADR-074 đọc nó cho bước
    nộp. Bảy lần ấy là **khoản 247** (rổ B). Lần mở link đã thu hồi là một lần xác thực token thất bại; ADR-060 không xếp
-   lớp ấy, và nó chỉ được ghi ở biên bản.
+   lớp ấy, và nó chỉ được ghi ở biên bản. **[S1.168] Khoản 247 ĐÓNG ở S1.167 (ADR-104): bảy lần ấy nay để lại hàng sổ, và
+   lượt giả lập trên `12645e9` đo 15/16.**
 2. **Đột biến *làm tròn nghìn* SỐNG SÓT ở lần chạy đầu.** Dữ liệu khi ấy toàn số tròn nghìn: đơn giá tròn 100 đồng, số
    lượng nguyên. Dữ liệu đã sửa: đơn giá tròn 10 đồng, và mỗi gói có một dòng số lượng lẻ tới hai chữ số thập phân. Một test
    (`kich-ban.test.ts`, *ĐỘ SẮC*) giữ tính chất ấy.
@@ -265,7 +294,7 @@ Người ta từ chối pilot vì nó đòi *dữ liệu thật + nhà cung cấ
 
 1. Chủ dự án chọn: có mở bậc 1 của mục 7 với một doanh nghiệp cụ thể không.
 2. Nhập gói từ CSV cho bậc 2.
-3. Khoản 247: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
+3. ~~Khoản 247: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
    sổ (khuôn `nemTuChoi`, hay savepoint như `BID_DEADLINE_DENIED` của ADR-074), hay giữ giới hạn và khai nó. Đây là một
-   quyết định, không phải một lỗi đánh máy.
+   quyết định, không phải một lỗi đánh máy.~~ **[S1.168] XONG** — chủ dự án chọn ghi sổ cả bảy lần (ADR-104, S1.167).
 4. Một cụm TLS để trình diễn trên điện thoại thật.

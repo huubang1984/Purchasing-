@@ -1635,7 +1635,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
     { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
-    // [S1.168 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
+    // [S1.169 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
     // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "073_ban_ro_cung_goi.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
     { ham: "users_thu_hoi_phien_khi_dinh_chi", migration: "034_dinh_chi_thu_hoi_phien.sql", trigger: ["users_thu_hoi_phien_khi_dinh_chi"] },

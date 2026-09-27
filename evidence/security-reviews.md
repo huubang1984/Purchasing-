@@ -13766,7 +13766,118 @@ Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xa
 
 Khoản 247 đóng. Còn mở **86**; rổ B **61**.
 
-# §S1.168 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
+# §S1.168 — CHUẨN BỊ BẬC 1: KHỐI LỆNH DOCKER CHẠY NGUYÊN VĂN, BẢN NODE CHẠY ĐƯỢC ĐO TỪNG BẢN, NĂM LỜI KHAI THIU Ở CHÍN CHỖ
+
+**Rổ và mảnh (ADR-043 ⒞): không đóng mảnh nào của `docs/PRODUCT.md` §11, không chạm khoản rổ A/B/C nào.** Vòng này làm hai
+việc B1 và B4 của đề xuất ngày 2026-09-27 sau pilot giả lập: chuẩn bị điều kiện vào bậc 1 (cụm chạy trên máy người trình
+diễn — kế hoạch pilot giả lập §7), và sửa các lời khai thiu mà người quyết các việc kế tiếp sẽ đọc. Không migration, không
+ADR, không khoản nợ.
+
+## 1. Khối lệnh Docker của kế hoạch §4
+
+Máy của vòng này có Docker 29.3.1 (daemon bật tay trong container), `postgres:16-alpine` kéo mới, và PowerShell 7.4.6 cho
+Linux. Mỗi khối chạy trong một tệp gọi: thêm `cd`/`Set-Location` về gốc kho, và dòng cuối thêm `--dung-sau --thu-muc
+<thư mục riêng>` để lượt chạy tự dừng. Các dòng còn lại nguyên văn.
+
+**Bản đầu.**
+- Lần đầu (chưa có container): cả hai khối đạt; lượt giả lập 10/10.
+- Chạy lại khi container **đã dừng** (tức sau khi khởi động lại máy): `docker run` báo trùng tên `/tp-pilot-gia-lap`,
+  rồi vòng `pg_isready` gõ vào một container không chạy và không có điểm dừng. PowerShell: 24 lần
+  `container … is not running` trong 25 giây, cắt bằng `timeout`. Bash nguyên văn: 25 lần trong 25 giây, cắt bằng
+  `timeout`. Lần đo bash đầu tiên dừng ngay ở `docker run` — tệp gọi của nó có thêm `set -e`, bản nguyên văn thì không; đo
+  lại không `set -e` mới ra vòng lặp.
+- Chạy lại khi container **đang chạy** (bash nguyên văn): `docker run` báo trùng tên, vòng đợi qua được, lượt đi tiếp.
+
+**Bản mới** — `docker start` trước, chỉ `docker run` khi chưa có container, và đợi tối đa 60 lần một giây:
+
+| Tình huống | PowerShell 7.4.6 | bash |
+|---|---|---|
+| Chưa có container | 10/10 ĐẠT | 10/10 ĐẠT |
+| Container đã dừng (cùng thư mục trạng thái, lượt sau) | 10/10 ĐẠT | 10/10 ĐẠT |
+| Container đang chạy | 10/10 ĐẠT | 10/10 ĐẠT |
+| Docker không chạy (daemon tắt) | dừng sau 62 giây: *"Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?"* | dừng sau 62 giây: công cụ báo `ECONNREFUSED 127.0.0.1:55433` |
+
+Bản mới giữ container giữa các lần chạy, nên đo thêm hai cách lệch giữa container và thư mục trạng thái:
+- giữ container, thư mục trạng thái mới: công cụ từ chối trước khi dựng cụm (dấu kiểm vòng khoá — khoản 165) và nói cách
+  sửa;
+- container mới, giữ thư mục trạng thái cũ: lượt mới 10/10, và `lien-ket` in đúng mục LƯỢT MỚI NHẤT; các lượt cũ trong
+  thư mục trỏ tới tổ chức không còn.
+
+Kế hoạch §4 nay ghi cả hai, và cách làm lại từ đầu.
+
+**Không đo:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Kế hoạch §4 giao việc ấy cho người
+trình diễn: chạy một lần trên chính máy của buổi gặp, trước ngày gặp.
+
+## 2. Bản Node chạy được
+
+Mỗi bản chạy trọn một lượt `pnpm pilot:gia-lap --dung-sau` trên một CSDL mới của cùng container. Tiến trình con của cụm
+chạy bằng chính `process.execPath` (`tools/pilot-gia-lap/src/cum.ts`), nên cả bốn tiến trình dùng bản đang đo.
+
+| Node | Kết quả |
+|---|---|
+| 22.6.0 | `node: bad option: --experimental-transform-types`, thoát 9 — trước khi vào công cụ |
+| 22.7.0 | `api` lên; `web` chết lúc khởi động: `SyntaxError: … 'node:module' does not provide an export named 'stripTypeScriptTypes'` (`apps/web/src/phuc-vu.ts:47`) |
+| 22.12.0 | như 22.7.0 |
+| 22.13.0 | 10/10 ĐẠT, cô lập 2/2 |
+| 22.22.2 (máy của vòng) | 10/10 ĐẠT |
+| 23.1.0 | như 22.7.0 |
+| 23.2.0 | 10/10 ĐẠT |
+| 24.21.0 | 10/10 ĐẠT |
+| 25.9.0 | 10/10 ĐẠT |
+| 26.0.0 | `node: bad option: --experimental-transform-types`, thoát 9 — Node 26 đã bỏ cờ này |
+
+`module.stripTypeScriptTypes` có ở 23.2 và được đưa về 22.13; đó là lý do cặp 22.12/22.13 và 23.1/23.2. Dòng 26 đáng chú
+ý hơn cả: mọi script `pnpm` của kho chạy TypeScript bằng chính cờ đã bị bỏ, nên trên Node 26 không script nào khởi động.
+Người trình diễn tải "bản mới nhất" từ nodejs.org là gặp đúng ca này.
+
+Ảnh deploy `node:22-bookworm-slim` ghim trong `deploy/Dockerfile` là 22.23.3. CI dùng `node-version: 22` — bản 22.x có sẵn
+trong toolcache của runner, không ghim. Nên chỗ hở chủ yếu ở máy dev và máy trình diễn.
+
+Sửa:
+- `package.json`: `engines.node` `>=22.0.0` → `^22.13.0 || >=23.2.0 <26.0.0`. Đo: pnpm 10.33 **không** cưỡng chế trường
+  này, và kho không có `.npmrc` bật `engine-strict` — `pnpm install` và `pnpm cap-so` vẫn chạy dưới 22.12. Nó là lời khai,
+  không phải cổng;
+- cổng thật cho người trình diễn: `kiemPhienBanNode` ở `tools/pilot-gia-lap/src/index.ts`, gọi đầu `chinh`, chỉ nhận
+  đúng các bản đã đo chạy được. Chạy bằng 22.12 (cổng không với tới 22.6 và 26, vì Node dừng ở cờ trước):
+  *"cần Node 22 từ 22.13, 23 từ 23.2, hoặc 24–25 — máy này đang chạy Node 22.12.0"*, thoát 1, trước khi chạm CSDL. Test ở
+  `phu-tro.test.ts`;
+- `docs/ARCHITECTURE.md` (hàng tiến trình `api`) và kế hoạch §4 ghi đúng các dải này. ADR-021 trong `docs/DECISIONS.md`
+  giữ nguyên văn — một ADR là quyết định tại thời điểm của nó.
+
+## 3. Lượt giả lập trên `master` mới nhất
+
+`401d32e` (sau #168 — S3.1b, #169 — tiền tệ và huỷ sau khi đóng, #171 — sổ cho lượt đọc giá): **10/10 ĐẠT**; 268 bước
+qua API cộng 155 phép KIEM; 16/16 lần thử sai bị chặn, 8/16 vào sổ; cô lập 2/2, đối chứng 2/2; biên nhận 35/35; bộ bằng
+chứng 5/5. Các số ấy trùng S1.163. Riêng sổ kiểm toán tăng: SX 206 → 217 hàng, XD 172 → 180 hàng (mục §2 của báo cáo).
+Mức tăng hợp với #171 — khoản 245: mỗi lượt đọc giá sau mở thầu (bảng so sánh, bảng xếp hạng, xuất bộ bằng chứng) ghi
+một hàng sổ; phép đo không tách theo hành động.
+
+Trong lúc vòng này chạy, `master` nhận #172 — khoản 247 đóng, ADR-104 — và vòng này hợp nó vào (`12645e9`). Lượt nhanh trên
+cây đã hợp: **10/10 ĐẠT**; 268 bước, 155 KIEM, 16/16 bị chặn; lần từ chối vào sổ **8/16 → 15/16**; cô lập 2/2, biên nhận
+35/35, bộ bằng chứng 5/5; sổ kiểm toán SX 224, XD 180 hàng. Lần duy nhất không vào sổ là mở link mời đã thu hồi — một lần
+xác thực token thất bại, mà S1.163 đã tách khỏi khoản 247 ngay từ đầu. Đây là phép đo độc lập đầu tiên của #172 bằng bộ
+giả lập: bảy lần mà khoản 247 gọi tên nay để lại hàng sổ. Kế hoạch pilot giả lập §6 (bảng kết quả), phát hiện ⑴ và §9
+mục 3 sửa tại chỗ theo.
+
+## 4. Năm lời khai thiu, chín chỗ
+
+| Chỗ | Lời khai cũ | Sự thật, và nguồn |
+|---|---|---|
+| `docs/STATE.md`, lý do rổ A của khoản 15 | *"chưa có tài khoản AWS, chưa có CMK, chưa có role"* | Tài khoản có từ S1.119 (hàng 15); còn thiếu CMK và role (stack 30/50 chưa apply), stack `90-ecs` chưa apply, `deploy.yml` chưa chạy thật |
+| `docs/PRODUCT.md` §11, mảnh 3 | cùng câu | như trên, cộng chỗ hở ở dòng cuối bảng này |
+| `Handoff.md`, mục *Chưa triển khai* | cùng câu | như trên |
+| `Handoff.md` §11 mục 1 | rổ A *"SÁU"* (15 · 102 · 105 · 109 · 165 · 196), rổ B 58, rổ C 21 | Rổ A còn một khoản (15); rổ B 61 sau #172, rổ C 24 (dòng RỔ ở `docs/STATE.md`). Lớp lỗi của khoản 212, lần thứ hai: mục này thôi chép số và trỏ về nguồn |
+| `docs/STATE.md` (điểm chặn 1, bảng tham chiếu), `Handoff.md` (bảng tham chiếu) | *"18 tiền đề"* | 33: A1–A6, B1–B6, C1–C5, D1–D2 (19) và E1–E14 cho S4 (14, từ S1.159) |
+| `docs/TIEN-DE-CHUA-DO.md` A3 | *"Android còn trống (khoản nợ 23)"* | Khoản 23 ĐÓNG 2026-09-08 (ADR-031): Zalo, Messenger trên Android 12 ĐẠT kể cả `X25519` |
+| `docs/APPLY-LAN-DAU.md` 8.1 | *"Tạo tổ chức đầu tiên qua sản phẩm"* | Không có đường nào: `app_api` không có INSERT trên `organizations` (`002`); không route nào tạo người dùng hay gán vai; không vai nào giữ `role.grant`; `deploy/Dockerfile` không có đích nào làm việc ấy. Chỉ `tools/gieo-demo` và `tools/pilot-gia-lap` chèn được, cả hai là công cụ DEV. 8.2 kẹt theo (worker cần một tổ chức — ADR-040) |
+
+Dòng cuối là một chỗ hở, không chỉ một lời khai thiu. Theo vế ⒞ của định nghĩa rổ A, nó chặn triển khai thật. Nhưng xếp
+nó vào sổ, và chọn cách làm, là quyết định của chủ dự án; vòng này chỉ ghi sự thật vào đúng chỗ người vận hành sẽ vấp.
+
+## 5. Kiểm
+
+`pnpm t0` sạch; `pnpm test` xanh; `pnpm cap-so --kiem` và `--dem` sạch. Tầng tích hợp do T3 của CI đo.
+# §S1.169 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
 
 ## 1. Việc gì
 

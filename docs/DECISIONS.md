@@ -8189,7 +8189,7 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 
 ## ADR-105 — Bản rõ chỉ ghi được dưới yêu cầu mở thầu của chính gói và chính vòng của phong bì
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.168]** · **Khoản nợ liên quan:** 228 (đóng) · **Liên quan:**
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.169]** · **Khoản nợ liên quan:** 228 (đóng) · **Liên quan:**
 ADR-006 (chỉ worker giải mã), ADR-058 (vòng BAFO — nguồn của `bafo_round_id`), bất biến A1
 
 ### Bối cảnh

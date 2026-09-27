@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 073 — [S1.168 / khoản 228] BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG
+-- 073 — [S1.169 / khoản 228] BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG
 --        CỦA PHONG BÌ ẤY
 -- =============================================================================================
 -- ĐO (S1.109, ca đột biến J4 của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`): một câu

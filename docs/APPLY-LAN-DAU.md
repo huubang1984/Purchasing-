@@ -204,7 +204,16 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 8. Tổ chức đầu tiên và worker
 
-- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm.
+- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. **[S1.168] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
+      tổ chức, người dùng hay gán vai trên prod.**
+  - `app_api` không có INSERT trên `organizations` (chỉ SELECT và UPDATE(name) — `db/migrations/002_organizations_and_users.sql`).
+    Nó có INSERT trên `users` và `user_roles`, nhưng không route nào dùng, và không vai nào giữ `role.grant`.
+  - `deploy/Dockerfile` không có đích nào làm việc này.
+  - Chỉ hai công cụ DEV chèn được tổ chức: `tools/gieo-demo` tự khai không phải đường sản xuất (in token dạng rõ),
+    `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
+  - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040).
+  - Cách làm chờ chủ dự án quyết. Đề xuất ngày 2026-09-27: một task ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
+    không mở route quản trị.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với `xuat=0 kiem=0`; alarm ⑷ trở về OK (có thư).
