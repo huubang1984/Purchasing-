@@ -8322,8 +8322,11 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
 - **Trang chưa xoá fragment sau khi đọc.** ADR-020 mục 3 viết trang *"xoá nó (`history.replaceState`)"*; đo: không trang
   nào của `apps/web` gọi `replaceState`. Token nằm lại trong thanh địa chỉ và lịch sử trình duyệt tới khi dùng hoặc hết hạn.
   Vòng này KHÔNG đổi điều ấy (xoá fragment thì tải lại trang là mất mã, và trình nghe `hashchange` của bốn trang dựa vào
-  fragment); ghi ra để chủ dự án xếp.
-- **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`.
+  fragment); ghi ra để chủ dự án xếp. **[S1.9102]** Bốn trang nay xoá fragment ngay sau lần mã bị tiêu thụ — `/auth/totp` ở ba trang người mua,
+  `/guest/otp/verify` ở trang nộp thầu (mã lời mời bị tiêu thụ cùng lượt, `[H5]` của `packages/invitation`) — nên tải lại
+  trang không mất gì.
+- **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.9102]** Và nay chỉ phải xin MỘT lần: ba trang dùng lại phiên
+  còn hạn lúc tải (cookie `Path=/`, tới 8 giờ), nên đăng nhập ở `/login` rồi sang hai trang kia không cần link mới.
 - **Người chưa từng vào trên máy này và không còn link nào** vẫn phải được ai đó cho mã tổ chức — trang không tra được
   tổ chức từ email (đó là hướng ⒞, đã bác).
 

@@ -98,17 +98,45 @@ $("nut-vao").addEventListener("click", async () => {
       bao($("loi1"), r2.body?.reason === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng");
       return;
     }
+    xoaManhLink();
     const me = await goi("GET", "/me");
-    const u = me.body?.userId;
-    bao($("ok1"), u === undefined ? "Đã vào." : `Đã vào với người dùng ${String(u).slice(0, 8)}…`);
-    $("b1").classList.add("xong");
-    for (const b of ["b2", "b3"]) hien($(b), true);
-    await napPhienBan();
-    if (bac.length === 0) dienMau();
+    await moSauDangNhap(me.body, false);
   } finally {
     $("nut-vao").disabled = false;
   }
 });
+
+/** [S1.9102] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc lúc tải trang đã có phiên còn hạn. */
+async function moSauDangNhap(me, dungLai) {
+  const u = me?.userId;
+  bao($("ok1"), u === undefined
+    ? "Đã vào."
+    : dungLai
+      ? `Đang dùng phiên còn hạn của người dùng ${String(u).slice(0, 8)}… — cần đổi người thì đăng nhập lại ở trên bằng link của người ấy.`
+      : `Đã vào với người dùng ${String(u).slice(0, 8)}…`);
+  $("b1").classList.add("xong");
+  for (const b of ["b2", "b3"]) hien($(b), true);
+  await napPhienBan();
+  if (bac.length === 0) dienMau();
+}
+
+/**
+ * [S1.9102] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ, dùng chung ba trang,
+ * còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me` và dùng lại phiên còn hạn, TRỪ khi ô
+ * mã đã có mã (người mở link của mình phải thấy ô đăng nhập, không thấy phiên của người khác). Sau
+ * `/auth/totp` — mã đã tiêu thụ — xoá fragment khỏi thanh địa chỉ (ADR-020 mục 3).
+ */
+async function thuPhienCo() {
+  if ($("token").value.trim() !== "") return;
+  try {
+    const me = await goi("GET", "/me");
+    if (me.status === 200 && typeof me.body?.userId === "string") await moSauDangNhap(me.body, true);
+  } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
+}
+function xoaManhLink() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
+}
+
 
 // ---------------------------------------------------------------------------------------------
 // Bước 2 — các phiên bản và lần ký
@@ -324,3 +352,6 @@ $("nut-tao-pb").addEventListener("click", async () => {
     $("nut-tao-pb").disabled = false;
   }
 });
+
+// [S1.9102] Cuối tệp: mọi `let` của trang đã khởi tạo khi `moSauDangNhap` chạy.
+thuPhienCo();

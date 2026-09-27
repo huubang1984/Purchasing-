@@ -150,22 +150,12 @@ $("nut-vao").addEventListener("click", async () => {
     }
     phien = { ...phien, orgId, token };
     nhoToChuc(orgId);
+    xoaManhLink();
     // `/me` trả `{userId, sessionId, orgId, kind}` — CỐ Ý không trả email hay tên: một route
     // "tôi là ai" trả về dữ liệu cá nhân là một route mà mọi lỗ IDOR đều muốn có. Bản đầu của
     // trang này đoán sai hình dạng ấy và in "(không đọc được)" suốt cả lượt chạy thử.
     const me = await goi("GET", "/me");
-    const u = me.body?.userId;
-    bao($("ok1"), u === undefined
-      ? "Đã vào. Phiên nằm trong cookie HttpOnly."
-      : `Đã vào với người dùng ${String(u).slice(0, 8)}… (vai: ${me.body?.kind ?? "?"}). Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
-    $("b1").classList.add("xong");
-    hien($("b2"), true);
-    hien($("b3"), true);
-    hien($("b4"), true);
-    hien($("b5"), true);
-    hien($("b6"), true);
-    hien($("b7"), true);
-    hien($("b8"), true);
+    moSauDangNhap(me.body, false);
   } catch {
     // [S1.173] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
     bao($("loi1"), MAT_KET_NOI);
@@ -173,6 +163,46 @@ $("nut-vao").addEventListener("click", async () => {
     $("nut-vao").disabled = false;
   }
 });
+
+/**
+ * [S1.9102] Mở các bước sau đăng nhập. Hai lối vào: vừa đăng nhập xong, hoặc lúc tải trang đã có một phiên
+ * còn hạn (`thuPhienCo`). Bước 1 VẪN hiện: màn này đăng nhập lại được bằng người duyệt thứ hai.
+ */
+function moSauDangNhap(me, dungLai) {
+  const u = me?.userId;
+  const ai = u === undefined ? "" : `người dùng ${String(u).slice(0, 8)}… (vai: ${me?.kind ?? "?"})`;
+  bao($("ok1"), u === undefined
+    ? "Đã vào. Phiên nằm trong cookie HttpOnly."
+    : dungLai
+      ? `Đang dùng phiên còn hạn của ${ai}. Cần đổi người thì đăng nhập lại ở trên bằng link của người ấy.`
+      : `Đã vào với ${ai}. Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
+  $("b1").classList.add("xong");
+  for (const b of ["b2", "b3", "b4", "b5", "b6", "b7", "b8"]) hien($(b), true);
+}
+
+/**
+ * [S1.9102] Phiên người mua là cookie `Path=/` sống tới 8 giờ, dùng chung cả ba trang — còn mã đăng nhập
+ * chỉ dùng được MỘT lần (`startUserSession` tiêu thụ nó). Trước vòng này trang chỉ hỏi `/me` SAU khi đăng
+ * nhập, nên sang trang khác là phải xin link mới. Nay hỏi lúc tải. KHÔNG hỏi khi ô mã đã có mã (fragment
+ * mang một mã đăng nhập): người mở link của mình trong một thẻ đang có phiên của người khác phải thấy ô
+ * đăng nhập, không thấy phiên của người kia.
+ */
+async function thuPhienCo() {
+  if ($("token").value.trim() !== "") return;
+  try {
+    const me = await goi("GET", "/me");
+    if (me.status === 200 && typeof me.body?.userId === "string") moSauDangNhap(me.body, true);
+  } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
+}
+
+/**
+ * [S1.9102] ADR-020 mục 3: trang xoá fragment sau khi đọc. Làm SAU `/auth/totp` — lúc mã đã bị tiêu thụ nên
+ * tải lại trang không mất gì — để mã không nằm lại trong thanh địa chỉ và lịch sử trình duyệt.
+ * `replaceState` không bắn `hashchange`.
+ */
+function xoaManhLink() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
+}
 
 // [S1.173 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
 // không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
@@ -651,3 +681,4 @@ window.addEventListener("hashchange", () => {
 
 docLink();
 if ($("org").value.trim() === "") $("org").value = toChucDaNho();
+thuPhienCo();

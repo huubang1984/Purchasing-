@@ -184,6 +184,98 @@ describe("bề mặt tệp", () => {
     expect(doc("cong-ty-a")).toBeNull();
   });
 
+  // ============================================================================================
+  // [S1.9102] BA TRANG NGƯỜI MUA DÙNG LẠI PHIÊN CÒN HẠN LÚC TẢI, VÀ XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+  //
+  // Phiên là cookie `Path=/` sống tới 8 giờ, còn mã đăng nhập chỉ dùng được một lần — trước vòng này mỗi
+  // trang chỉ hỏi `/me` sau khi đăng nhập, nên sang trang khác là phải xin link mới. Vế dưới CHẠY hai hàm
+  // của từng trang trong `node:vm` với DOM và `goi` giả: có phiên ⇒ các bước mở; ô mã đã có mã ⇒ KHÔNG hỏi
+  // `/me` (người mở link của mình không được thấy phiên của người khác); 401 hay mất mạng ⇒ ở lại bước 1.
+  // ============================================================================================
+  describe("[S1.9102] dùng lại phiên lúc tải và xoá fragment sau khi dùng mã", () => {
+    const BUOC: Record<string, readonly string[]> = {
+      "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
+      "tao-thau": ["b2", "b3", "b4", "b5"],
+      "chinh-sach": ["b2", "b3"],
+    };
+    const ham = (js: string, ten: string): string => {
+      const m = new RegExp(`^(?:async )?function ${ten}\\([^)]*\\) \\{[\\s\\S]*?^\\}`, "mu").exec(js)?.[0];
+      expect(m, ten).toBeDefined();
+      return m ?? "";
+    };
+    const chay = async (trang: string, tuyChon: { token: string; me: () => Promise<{ status: number; body: unknown }> }) => {
+      const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
+      const el: Record<string, { hidden: boolean; textContent: string; value: string; classList: { add: (c: string) => void } }> = {};
+      const lay = (id: string) =>
+        (el[id] ??= { hidden: true, textContent: "", value: id === "token" ? tuyChon.token : "", classList: { add: () => undefined } });
+      const goiDaGoi: string[] = [];
+      const ctx: Record<string, unknown> = {
+        $: lay,
+        hien: (e: { hidden: boolean }, co: boolean) => { e.hidden = !co; },
+        bao: (e: { textContent: string; hidden: boolean }, chu: string) => { e.textContent = chu; e.hidden = chu === ""; },
+        goi: async (m: string, d: string) => { goiDaGoi.push(`${m} ${d}`); return tuyChon.me(); },
+        napPhienBan: async () => undefined,
+        dienMau: () => undefined,
+        bac: [],
+      };
+      runInNewContext(`${ham(js, "moSauDangNhap")}\n${ham(js, "thuPhienCo")}\nketQua = thuPhienCo();`, ctx);
+      await (ctx["ketQua"] as Promise<void>);
+      return { mo: (BUOC[trang] ?? []).every((b) => lay(b).hidden === false), ok1: lay("ok1").textContent, goiDaGoi };
+    };
+    const coPhien = async () => ({ status: 200, body: { userId: "7917f6f2-0000-4000-8000-000000000000", kind: "USER" } });
+
+    it("nop-thau: xoá fragment SAU /guest/otp/verify — lượt tiêu thụ mã lời mời — và trước khi nạp gói", () => {
+      const js = readFileSync(new URL("../trang/nop-thau.js", import.meta.url), "utf8");
+      const xacMinh = js.indexOf('goi("POST", "/guest/otp/verify"');
+      const xoa = js.indexOf("xoaManhLink();", xacMinh);
+      const nap = js.indexOf("await napGoiThau();", xacMinh);
+      expect(xacMinh).toBeGreaterThan(0);
+      expect(xoa).toBeGreaterThan(xacMinh);
+      expect(xoa).toBeLessThan(nap);
+      const goiThay: unknown[][] = [];
+      runInNewContext(`${ham(js, "xoaManhLink")}\nxoaManhLink();`, {
+        history: { replaceState: (...a: unknown[]) => goiThay.push(a) },
+        location: { pathname: "/i", search: "", hash: "#org:ma" },
+      });
+      expect(goiThay).toEqual([[null, "", "/i"]]);
+    });
+
+    for (const trang of Object.keys(BUOC)) {
+      it(`${trang}: có phiên còn hạn ⇒ các bước mở, và câu báo nói đó là phiên đang dùng`, async () => {
+        const r = await chay(trang, { token: "", me: coPhien });
+        expect(r.goiDaGoi).toEqual(["GET /me"]);
+        expect(r.mo).toBe(true);
+        expect(r.ok1).toMatch(/Đang dùng phiên còn hạn/u);
+      });
+      it(`${trang}: ô mã đã có mã (mở link của mình) ⇒ KHÔNG hỏi /me, không mở bước nào`, async () => {
+        const r = await chay(trang, { token: "maDangNhapCuaNguoiMoLink", me: coPhien });
+        expect(r.goiDaGoi).toEqual([]);
+        expect(r.mo).toBe(false);
+      });
+      it(`${trang}: 401 hay mất mạng ⇒ ở lại bước đăng nhập, không ném`, async () => {
+        expect((await chay(trang, { token: "", me: async () => ({ status: 401, body: null }) })).mo).toBe(false);
+        expect((await chay(trang, { token: "", me: () => Promise.reject(new Error("mat mang")) })).mo).toBe(false);
+      });
+      it(`${trang}: xoá fragment SAU /auth/totp và TRƯỚC /me; replaceState giữ đường và query`, () => {
+        const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
+        const totp = js.indexOf('goi("POST", "/auth/totp"');
+        const xoa = js.indexOf("xoaManhLink();", totp);
+        const me = js.indexOf('goi("GET", "/me")', totp);
+        // Hàm có mà không ai gọi lúc tải thì vế trên xanh một cách rỗng tuếch.
+        expect(js, "trang phải gọi thuPhienCo() ở cấp tệp").toMatch(/^thuPhienCo\(\);$/mu);
+        expect(totp).toBeGreaterThan(0);
+        expect(xoa).toBeGreaterThan(totp);
+        expect(xoa).toBeLessThan(me);
+        const goiThay: unknown[][] = [];
+        runInNewContext(`${ham(js, "xoaManhLink")}\nxoaManhLink();`, {
+          history: { replaceState: (...a: unknown[]) => goiThay.push(a) },
+          location: { pathname: "/login", search: "?x=1", hash: "#org:ma" },
+        });
+        expect(goiThay).toEqual([[null, "", "/login?x=1"]]);
+      });
+    }
+  });
+
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {
     const ri = await goi("/i");
     expect(ri.status).toBe(200);
