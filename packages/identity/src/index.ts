@@ -56,7 +56,7 @@ export {
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";
-// [S1.173 / khoản 247 / ADR-107] Từ vựng chốt kiểm soát (`CONTROL_DENIED`) dời xuống gói này để `rfq` và `danh-gia`
+// [S1.174 / khoản 247 / ADR-107] Từ vựng chốt kiểm soát (`CONTROL_DENIED`) dời xuống gói này để `rfq` và `danh-gia`
 // cùng đọc MỘT bảng. Ra cửa cùng tiêu chí với `throwAuditedDenial`: `tuChoiTheoChot` NÉM ở mọi nhánh, `laMaChot` chỉ trả lời
 // *mã này có trong bảng không*, `maChotTuLoi` chỉ đọc tên ràng buộc của một lỗi — không câu hỏi quyền nào — nên không
 // dựng ra được một cổng gác im lặng.

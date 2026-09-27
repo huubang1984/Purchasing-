@@ -448,7 +448,7 @@ export async function approveRfq(
     // ở trigger `rfq_kiem_nguoi_duyet` (`011`): `RAISE … (D2)` với 23514 huỷ giao dịch, nên trước vòng này lần vi phạm không để lại
     // hàng sổ nào (`pnpm pilot:gia-lap`: người tạo tự duyệt gói ⇒ 422 *"(D2)"*, 0 hàng). ~~Cùng khuôn nhánh D2 của `approveUnseal`:
     // ghi ở `auditPool` rồi ném lại CHÍNH lỗi của trigger, nên mã 422 và thông điệp không đổi; trigger vẫn là lớp có thẩm quyền.~~
-    // **[S1.173 / ADR-107]** Vẫn bắt chính lỗi của trigger — trigger vẫn là lớp có thẩm quyền — nhưng nhận ra nó bằng TÊN RÀNG
+    // **[S1.174 / ADR-107]** Vẫn bắt chính lỗi của trigger — trigger vẫn là lớp có thẩm quyền — nhưng nhận ra nó bằng TÊN RÀNG
     // BUỘC (`074_tu_choi_co_ten.sql`), không bằng hậu tố *"(D2"*, và từ chối theo chốt: một hàng `CONTROL_DENIED` mang mã ở giao
     // dịch độc lập rồi `ChotKiemSoatError` (422, thông điệp của bảng `CHOT_VAO_SO`) mang lỗi `pg` ở `cause`.
     // Lần từ chối vì TRẠNG THÁI (gói không ở `PENDING_APPROVAL`) không mang tên và đi thẳng như cũ.
