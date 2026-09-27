@@ -14885,7 +14885,10 @@ Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG m
   link* ở hàng của nhà cung cấp ấy ⇒ *"Đã gửi link mới tới Châu Minh Khoa qua EMAIL…"*; hộp thư dev có đúng một link mới cho lời mời
   ấy. Nhà cung cấp mở link mới, OTP, xác minh ⇒ bước 3 nêu đúng doanh nghiệp; `GET /api/guest/bids` ⇒ một hồ sơ, phiên bản `[1]`; nộp ⇒
   *"Lần nộp #2"*. Gửi lại lần thứ hai ⇒ được; lần thứ ba (token thứ tư trong giờ) ⇒ *"Lời mời này đã được gửi đủ số link cho phép
-  trong một giờ — thử lại sau."* 0 lỗi JavaScript.
+  trong một giờ — thử lại sau."* 0 lỗi JavaScript. **Lượt ba** (mã cuối `0b320eb`, sau lượt soi hai; cụm pilot dựng lại — 10/10 kịch
+  bản, cô lập 2/2): cùng đường, cùng kết quả — nộp #1, Thoát ⇒ `GET /api/guest/rfq` 401, bên mua gửi lại ⇒ hộp thư dev một link mới cho
+  đúng lời mời, nhà cung cấp vào lại đúng doanh nghiệp và hồ sơ (một hồ sơ, phiên bản `[1]`), nộp #2; gửi lại lần hai được, lần ba ⇒
+  câu 429. 0 lỗi JavaScript.
 
 ## 3b. Soi đối kháng
 
@@ -14982,10 +14985,13 @@ CSRF, đua gửi lại với thu hồi, và phép suy ký tự cuối base64url 
   cung cấp ngoài top-N vào được mà không nộp được (ADR-110, Hệ quả).
 - Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai và báo giá cũ vẫn dự thầu — khoản 250.
 - Lệch phiên bản: trang mới gặp API cũ ⇒ nút Thoát và nút Gửi lại link báo 404.
-- Pilot và lượt Chromium thứ hai chạy trên mã TRƯỚC lần tách câu khoá hàng của `reissueInvitationLink` (QT3 không đọc được `FOR UPDATE OF`);
-  lần tách không đổi hành vi, và 15 ca của `loi-moi-sau-commit.int.test.ts` đo lại trên mã cuối.
+- ~~Pilot và lượt Chromium thứ hai chạy trên mã TRƯỚC lần tách câu khoá hàng của `reissueInvitationLink` (QT3 không đọc được `FOR UPDATE OF`);
+  lần tách không đổi hành vi, và 15 ca của `loi-moi-sau-commit.int.test.ts` đo lại trên mã cuối.~~ **[lượt soi hai]** Pilot và lượt
+  Chromium thứ ba chạy trên mã cuối (mục 3). Chromium không đi nhánh 502 hay mất mạng của nút Gửi lại link — hai nhánh ấy chỉ đo
+  trên khung `node:vm`.
 - Hộp thư thật: mục 3c.
 
 ## 5. Số
 
-Khoản **250** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối: SO_INT.
+Khoản **250** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối (`0b320eb`):
+64 tệp, **1418/1418**. (Trên bản đã hợp `13c2857`, trước lượt soi hai: 64 tệp, 1414/1414.)
