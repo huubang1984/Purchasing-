@@ -3223,6 +3223,8 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 
 **[ADR-072 phần 1 / 065] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_NEO_SAI`** — *quyền quan hệ của `app_neo`*, vai chỉ-đọc của job neo. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_neo` gọi được hàm liệt kê tổ chức mà `app_api` cố ý không có (ADR-040), và đổi lại nó được ĐỊNH NGHĨA bằng việc không ghi được gì — một `GRANT INSERT … TO app_neo` hay `GRANT SELECT ON <bảng nghiệp vụ> TO app_neo` sau deploy biến vai liệt kê-mọi-tổ-chức thành một vai đọc/ghi dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG (`has_*_privilege`), hai chiều: THỪA (mọi quyền ghi trên mọi quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, cột mốc neo ngoài `org_id, seq, hash`, mọi quyền sequence) và THIẾU (đúng các quyền 065 cấp). Câu sửa **đơn điệu theo §2⑵**: `REVOKE` những gì cấp ĐÍCH DANH cho `app_neo` ngoài danh sách, `GRANT` lại đúng danh sách của 065 — thứ 065 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi (chạm mọi vai của cụm) — mục phán xét và nêu lối ra. Đo ở `db/vai-neo.int.test.ts`.
 
+**[S1.9102 / ADR-9202 / 9501] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — năng lực mà `app_api` cố ý không có (002) — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 9501; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 9501 — thứ 9501 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
+
 ### 7. Đo bằng gì
 
 **[S1.49 / khoản 93] Bảy mục canh sổ kiểm toán, gọi đúng tên loại của chúng theo §2 — lượt soi 41 NẶNG-2 bác bản đầu vì nó gọi cả bảy là "phán xét" rồi lại khai `REVOKE` là *không* đơn điệu, ngược chính §2⑵ và ngược mã:** BỐN mục PHÁN XÉT (câu sửa no-op) — `CAU_CHI_GHI_THEM_QUYEN` và `CAU_CHI_GHI_THEM_VAT_LY` (quyền GHI và trạng thái vật lý của bảng chỉ-ghi-thêm SUY TỪ TÍNH CHẤT, không ghim tên bảng), `CAU_HINH_DANG_CHINH_TAC` và `CAU_COT_NGOAI_CHUOI` (hình dạng cột của bảng sổ chính tắc: một cột thêm vào sổ là một chỗ dữ liệu đi ra ngoài chuỗi hash, và một cột bị đổi tên làm `audit_events` rớt khỏi tập `can_co` ⇒ lớp C mất khả năng tự chữa trigger nối chuỗi, trong im lặng). BA mục TỰ CHỮA rồi mới phán xét ở hậu điều kiện — `CAU_TRIGGER_CHAN_SAI` (dựng lại bốn trigger chặn: ĐƠN ĐIỆU), `CAU_BANG_SO_VAT_LY` (`SET LOGGED` + thêm `UNIQUE (org_id, seq)`: đơn điệu), `CAU_QUYEN_BANG_SO_MO_TA` (`REVOKE … CASCADE`: đơn điệu — §2⑵ đã xếp `REVOKE` vào nhóm tự chữa được, và lượt sửa chạy đúng thế). Cùng nhóm, mục *không có overload lạ của bốn hàm chuỗi kiểm toán* (`audit_compute_hash`, `noi_chuoi_kiem_toan`, `audit_append`, `chot_moc_neo` — đúng BỐN, không hơn) viết THẲNG SQL ở hậu điều kiện thay vì qua một hằng, nên khoá tra cứu của nó là chính TÊN MỤC: một overload cùng tên khác chữ ký là một hàm thứ năm mà một lời gọi không đủ điều kiện có thể rơi vào. Hai phán xét sống NGOÀI mảng `bang` — BƯỚC 3 chạy `CAU_MEMBERSHIP_LA` (tư cách thành viên LẠ của `app_api`/`app_unseal`: BƯỚC 1 gỡ được thì tự chữa, gỡ không được thì chặn) và `CAU_ADMIN_LA` (quyền ADMIN OPTION lạ trên hai vai ấy) thẳng vào `loi_gom` trước vòng lặp — cùng hạng phán xét, chỉ khác chỗ đứng (lượt soi 41 CAO-2). Cổng `tests/architecture/hardening-co-ly-do.test.ts` ([INV-H19]) đòi mọi phán xét của hardening — nhận diện theo TÍNH CHẤT *ô câu sửa là no-op*, không theo tên hằng — có một khoá tra cứu trong ADR-028, ADR-036 hay ADR-037, và không nằm trong vùng đã gạch.
@@ -8358,3 +8360,97 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 `docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.178).
+
+## ADR-9202 — Tổ chức, người dùng và vai trên prod: một task ECS chạy một lần dưới vai CSDL hẹp `app_khoi_tao`
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6 ngày
+2026-09-27: phương án **A** với vai **⒝**; bản khai ở **Secrets Manager**, xoá sau khi chạy; chạy dưới **vai deploy và environment
+`prod` có người duyệt**; thêm người về sau bằng **chính task này**. · **Liên quan:** ADR-016 (ai giữ `role.grant` — vẫn để ngỏ),
+ADR-028 §6 (dòng lý do của `CAU_QUYEN_KHOI_TAO_SAI`), ADR-066, ADR-067, ADR-072 (khuôn vai hẹp `app_neo`), ADR-107 (link đăng nhập
+mang mã tổ chức; `/login` có ô xin link) · **Hồ sơ cân nhắc:** `docs/DE-XUAT-TAO-TO-CHUC.md` · **Biên bản:**
+`evidence/security-reviews.md` §S1.9102
+
+### Bối cảnh
+
+Ngày đầu trên prod không có đường nào tạo tổ chức của khách, người dùng của họ hay vai của từng người (đề xuất, mục 1):
+`app_api` cố ý không INSERT được `organizations` (002), không route nào gán vai, và hai công cụ chèn được tổ chức đều là công cụ
+DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040, ADR-066), kẹt luôn 8.2.
+
+### Quyết định
+
+1. **Phương án A** — công cụ `tools/khoi-tao-to-chuc`, chạy trên prod thành task ECS `tp-khoi-tao` bằng `aws ecs run-task`, cùng
+   khuôn `tp-migrate` và `tp-neo`. Không mở thêm bề mặt HTTP nào.
+2. **Vai hẹp ⒝ — `app_khoi_tao` (NOLOGIN) và `app_khoi_tao_login`.** Quyền đúng danh sách của migration `9501`, theo CỘT:
+   `INSERT (id, name, slug)` trên `organizations`; `INSERT (org_id, email, full_name)` và `SELECT (id)` (cho `RETURNING`) trên
+   `users`; `INSERT` và `SELECT` trên ba cột của `user_roles`, `SELECT (role_code, permission_code)` trên `role_permissions` (hai
+   trigger vai là SECURITY INVOKER); ghi sổ như `app_api` — `INSERT` theo các cột 003 cấp sau lần thu hồi của 004, `SELECT (id,
+   org_id, seq, prev_hash, hash, occurred_at)` cho trigger nối chuỗi và `RETURNING` của `audit_append()`, `EXECUTE` hai hàm sổ; và
+   `app_current_org_id()`. KHÔNG `UPDATE`/`DELETE` ở đâu cả, không đọc email hay họ tên, không đọc payload sổ, không bảng nghiệp vụ,
+   không hàm liệt kê tổ chức. RLS FORCE và NOBYPASSRLS ⇒ mọi hàng chèn được phải mang ĐÚNG tổ chức đang gắn.
+   Hardening dựng và canh vai như ba cặp kia (BƯỚC 0, `ROLE_CANH`, `CAP_HOP_LE`, tập vai kết nối, thuộc tính, cấu hình phiên,
+   `public`/`app_private`, `app_current_org_id()`), cộng mục `CAU_QUYEN_KHOI_TAO_SAI`: quyền HIỆU DỤNG theo từng cột, thừa hay thiếu
+   đều đỏ ở deploy; phần cấp đích danh tự chữa. `tools/chay-migrate` dựng `app_khoi_tao_login` từ
+   `TRUSTPROCURE_KHOI_TAO_DATABASE_URL` (secret `tp/khoi-tao/database-url`) — bắt buộc như ba URL kia.
+3. **Hai chế độ, MỘT giao dịch mỗi lần chạy.** `tao`: sinh UUIDv4, `withTenant` gắn chính nó, chèn `organizations (id, …)` — vế
+   WITH CHECK `id = app_current_org_id()` nhận đúng hàng ấy —, rồi người dùng, vai, sổ. `them-nguoi`: gắn tổ chức đã có; tổ chức
+   không tồn tại thì khoá ngoại của `users.org_id` từ chối. Vai của một người đi trong MỘT câu INSERT ~~để D3 (`005`) và `033` xét
+   trọn tập~~ **[lượt soi]** — cho gọn, không phải điều kiện: D3 (`005`) và `033` là trigger AFTER ROW đọc `user_roles` trong cùng
+   giao dịch, nên chèn từng câu cũng bị chặn như nhau (người soi đo). Lỗi nào cũng rollback TRỌN.
+4. **Sổ từ hàng đầu tiên, không dữ liệu cá nhân trong sổ.** Ba mã hành động mới, `actor_type = 'SYSTEM'`, `actor_id` NULL:
+   `ORG_CREATED` (payload `{slug, nguon}`), `USER_CREATED` (payload `{nguon}` — email và họ tên ở bảng `users`, không vào sổ
+   chỉ-ghi-thêm nơi chúng không xoá được), `ROLE_GRANTED` (payload `{roleCode, nguon}`).
+5. **Bản khai sống ở Secrets Manager** dưới `tp/khoi-tao/ban-khai/<slug>`; lệnh chỉ mang TÊN bí mật, task role đọc giá trị, bí
+   mật bị xoá sau lần chạy (vòng hạ tầng kế). Công cụ từ chối mọi tên ngoài tiền tố ấy — task role đọc được cả nhánh
+   `tp/khoi-tao/*`, kể cả URL CSDL của chính nó. Chạy cục bộ (test, dev) nhận `--ban-khai-tep`. Email hạ chữ bằng
+   `pg_catalog.lower()` lúc chèn — cùng hàm với CHECK của `048` và đường đăng nhập.
+6. **Không in email hay họ tên** ra stdout, stderr hay thông điệp lỗi — chúng đi vào CloudWatch Logs của prod. Đầu ra — **[lượt
+   soi]** của tiến trình `node` mà task chạy; `pnpm khoi-tao` thêm hai dòng tiêu đề của pnpm trừ khi `--silent` — là một dòng:
+   chế độ, mã tổ chức, số người, số vai **[lượt soi]** — và `VersionId` của bí mật bản khai đã đọc, khi đọc từ Secrets Manager.
+   Lỗi lạ của pg in tên kèm SQLSTATE (không mang dữ liệu); tên khoá lạ của bản khai chỉ in khi trông như một tên trường. Một lần
+   chạy nhận tối đa 50 người: khoá chuỗi sổ của tổ chức bị giữ từ lần ghi sổ đầu tới COMMIT (200 người × 3 vai đo được 3,7 s, quá
+   trần 2 s của mọi lần ghi sổ khác trong tổ chức ấy). Mã tổ chức không bí mật (ADR-107): người vận hành gửi `/login#<mã tổ chức>` cho từng
+   người, và mỗi người tự xin link ở ô của `/login`. Task KHÔNG xếp job gửi link (đề xuất §3A.4: job do task chèn nằm `PENDING`).
+7. **Ai chạy:** vai deploy, environment `prod` có người duyệt (ADR-067) — người chạy khác người duyệt. **Thêm người về sau:**
+   chính task, chế độ `them-nguoi`, tới khi có màn quản trị vai; câu *ai giữ `role.grant`* để lại cho màn ấy (ADR-016).
+8. **Hai vòng.** Vòng này: ADR, vai CSDL, công cụ, test, và secret `tp/khoi-tao/database-url` cho task migrate. Vòng kế: đích
+   `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition `tp-khoi-tao`, task role và quyền của vai deploy (stack 30/90),
+   workflow chạy có người duyệt và xoá bí mật, bước 8.1 của `docs/APPLY-LAN-DAU.md`.
+
+### Phương án đã cân nhắc
+
+- **B — route quản trị qua HTTP**: bề mặt tấn công lớn nhất — một route xuyên tổ chức, ngược mô hình RLS một tổ chức mỗi phiên;
+  và buộc chốt ngay ai giữ `role.grant`. Để dành cho màn quản trị vai trong từng tổ chức, sau pilot.
+- **C — sổ tay SQL chạy tay** dưới vai master: phải mở đường vào RDS, không sổ, mỗi khách trả nguyên giá. Chỉ còn là đường khẩn cấp.
+- **⒜ — vai master của RDS cho task**: lỗi chạy với quyền mạnh nhất (BYPASSRLS theo ADR-061). Bác cùng lý do đã chọn `app_neo`.
+- **Bản khai trong `containerOverrides`**: email của nhân viên khách nằm lại trong CloudTrail của tài khoản prod.
+
+### Hệ quả, nói thẳng
+
+- **Một vai thứ tư chèn được tổ chức, người dùng và vai** — mọi vai, trừ tổ hợp D3/`033` chặn — trong tổ chức mà nó gắn. Mật khẩu
+  chỉ ở secret `tp/khoi-tao/database-url`; ~~task role và execution role là vòng kế~~ **[lượt soi]** execution role CHUNG của các
+  task (stack 30) đã đọc được nhánh `tp/*`, và task `tp-migrate` bơm secret ấy từ vòng này; task definition `tp-khoi-tao` và task
+  role đọc bản khai là vòng kế.
+- **Vai này dò được UUID tổ chức hay slug có tồn tại** (`organizations_pkey`, `organizations_slug_key` là ràng buộc toàn cục) — thứ
+  người mở tổ chức vốn phải biết; nó không có đường HTTP nào. `users.id` KHÔNG cấp, nên oracle `users_pkey` của 002 không mở lại.
+- **Không màn quản trị vai**: thu hồi vai, đổi email, vô hiệu một người dùng vẫn chưa có đường trên prod — chế độ `them-nguoi`
+  chỉ THÊM.
+- **Hồ sơ N3** (vai deploy CREATEROLE không superuser, `db/migrations.int.test.ts`): BƯỚC 0 dựng thêm `app_khoi_tao` dưới vai ấy,
+  nên lối ra một lần của superuser gỡ thêm một membership ngầm — cùng lối ra với ba vai kia, cùng câu hỏi mở cho RDS (khoản 15).
+- **Chưa chạy thật**: không lần nào trên RDS; task, image và workflow thuộc vòng kế. Bước 8.1 vẫn chưa làm được tới lúc ấy.
+- **[lượt soi] Lộ mật khẩu của vai là chiếm được mọi tổ chức mà sổ không kể lại.** Vai này — như `app_api` — chèn được người và
+  vai vào BẤT KỲ tổ chức nào biết UUID (UUID không bí mật, ADR-107), chèn mà không ghi hàng sổ nào (không trigger nào trên `users`
+  hay `user_roles` tự ghi sổ), và ghi được hàng sổ giả với `actor_id`, `ip`, `user_agent` tuỳ ý qua `audit_append()`. "Sổ từ hàng
+  đầu tiên" là hành vi của CÔNG CỤ, không phải ràng buộc của VAI. Lớp giữ là secret `tp/khoi-tao/database-url`, vai deploy và người
+  duyệt. Hẹp hơn nữa (ép `actor_type = 'SYSTEM'` và ba mã hành động khi `current_user = app_khoi_tao`, bỏ bốn cột người/mạng khỏi
+  quyền INSERT) cần một trigger mới — chưa làm.
+- **[lượt soi] Người duyệt duyệt một TÊN bí mật, không duyệt nội dung**: giữa lúc duyệt và lúc chạy, nội dung của tên ấy đổi được
+  (thêm người, đổi `toChuc.id`). Dòng kết quả in `VersionId` đã đọc để đối chiếu SAU; ghim phiên bản TRƯỚC — lệnh mang `VersionId`
+  đã duyệt, workflow hiện tổ chức và số người/vai — là việc của vòng hạ tầng (khoản 9401).
+- **[lượt soi] Hai oracle không ghi ở trên**: `user_roles.user_id` tham chiếu `users(id)` TOÀN CỤC (`005` tự ghi là oracle đã
+  biết, MINOR) — nên vai này dò được một UUID người dùng có tồn tại ở đâu đó, và chèn được một hàng vai trỏ người của tổ chức khác
+  (vô hại vì phiên của người ấy thuộc tổ chức kia, nhưng là rác); và `users_org_id_email_key` trả lời "email này có trong tổ chức
+  X chưa". Công cụ không đi hai đường ấy: nó chỉ gán vai cho người vừa chèn trong cùng giao dịch.
+- **[lượt soi] Mất mã tổ chức khi COMMIT mất ACK**: mã chỉ in sau COMMIT, và vai này không đọc được `organizations`; chạy lại báo
+  "slug đã có". Lấy lại mã bằng vai master của RDS — đường khẩn cấp có biên bản của đề xuất (phương án C).
+- **[lượt soi] Kế thừa, như ba vai kia**: đổi CHỦ một bảng sang vai này qua được hardening (góc mù quyền sở hữu); `GRANT` trên
+  `pg_catalog` không được canh; và ở hồ sơ N3, sau lối ra của superuser, vai deploy không còn ADMIN để cấp lại cặp đăng nhập.

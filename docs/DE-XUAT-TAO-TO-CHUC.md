@@ -1,7 +1,9 @@
 # Đề xuất — tạo tổ chức đầu tiên, người dùng và vai trên prod
 
-> **Ngày:** 2026-09-27 · **Vòng:** S1.173 · **Trạng thái:** **ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
-> thành một ADR, bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về ADR ấy, và tệp này giữ lại làm hồ sơ cân nhắc.
+> **Ngày:** 2026-09-27 · **Vòng:** S1.173 · **Trạng thái:** ~~**ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
+> thành một ADR, bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về ADR ấy, và tệp này giữ lại làm hồ sơ cân nhắc.~~
+> **[S1.9102] ĐÃ CHỐT — `docs/DECISIONS.md` ADR-9202** (câu trả lời ở mục 6). Bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về
+> ADR ấy; tệp này giữ lại làm hồ sơ cân nhắc.
 >
 > Tệp này trả lời một câu: **ngày đầu tiên trên prod, ai tạo tổ chức của khách, những người dùng của họ và vai của từng người,
 > bằng đường nào?** Hôm nay không có đường nào. Mục 1 là phép đo, mục 3 là ba phương án, mục 4 là khuyến nghị, mục 6 là
@@ -152,14 +154,16 @@ phép đo cụ thể là việc của vòng làm.
 
 ## 6. Câu chỉ chủ dự án chốt được
 
-1. **Chọn phương án** — A, B hay C — và vai CSDL ⒜ hay ⒝.
+1. **Chọn phương án** — A, B hay C — và vai CSDL ⒜ hay ⒝. **[S1.9102] Chủ dự án chốt: A, vai ⒝** (`app_khoi_tao`,
+   migration `9501`).
 2. **Bản khai sống ở đâu.** Truyền bản khai trong `containerOverrides` thì email của nhân viên khách nằm trong CloudTrail
    của tài khoản prod. Để nó trong Secrets Manager (`tp/khoi-tao/<slug>`, task role đọc) thì CloudTrail chỉ thấy tên
-   bí mật. Khuyến nghị: Secrets Manager, và xoá bí mật sau khi task xong.
+   bí mật. Khuyến nghị: Secrets Manager, và xoá bí mật sau khi task xong. **[S1.9102] Chủ dự án chốt theo khuyến nghị**;
+   tên bí mật nằm dưới `tp/khoi-tao/ban-khai/`, và công cụ từ chối mọi tên ngoài tiền tố ấy (ADR-9202 mục 5).
 3. **Ai được chạy task.** Khuyến nghị: cùng vai deploy và cùng environment `prod` có người duyệt như lần deploy
-   (ADR-067) — người chạy khác người duyệt.
+   (ADR-067) — người chạy khác người duyệt. **[S1.9102] Chủ dự án chốt theo khuyến nghị**; workflow thuộc vòng hạ tầng kế.
 4. **Thêm người về sau.** Khuyến nghị: dùng chính task này, chế độ thêm người, cho tới khi có màn quản trị vai. Câu *"ai
-   giữ `role.grant`"* để lại cho màn ấy.
+   giữ `role.grant`"* để lại cho màn ấy. **[S1.9102] Chủ dự án chốt theo khuyến nghị** — chế độ `them-nguoi`.
 
 ## 7. Không thuộc tệp này
 

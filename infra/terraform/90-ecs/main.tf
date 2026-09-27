@@ -767,6 +767,9 @@ data "aws_secretsmanager_secret" "api_pepper" { name = "tp/api/otp-peppers" }
 data "aws_secretsmanager_secret" "worker_db" { name = "tp/worker/database-url" }
 # [ADR-072 phần 1] Job neo đăng nhập bằng app_neo_login (vai chỉ-đọc sổ, liệt kê được tổ chức) — secret riêng.
 data "aws_secretsmanager_secret" "neo_db" { name = "tp/neo/database-url" }
+# [S1.9102 / ADR-9202] Task khởi tạo tổ chức đăng nhập bằng app_khoi_tao_login — secret riêng. Task migrate đọc nó để dựng vai
+# đăng nhập (tools/chay-migrate); task `tp-khoi-tao` (vòng hạ tầng kế) đọc nó làm DATABASE_URL.
+data "aws_secretsmanager_secret" "khoi_tao_db" { name = "tp/khoi-tao/database-url" }
 
 # Secret master do RDS tạo (tên `rds!db-…`) nằm NGOÀI nhánh `tp/*` mà stack 30 cấp cho execution role.
 resource "aws_iam_role_policy" "execution_rds_master" {
@@ -895,6 +898,7 @@ locals {
       { name = "TRUSTPROCURE_API_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.api_db.arn },
       { name = "TRUSTPROCURE_WORKER_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.worker_db.arn },
       { name = "TRUSTPROCURE_NEO_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
+      { name = "TRUSTPROCURE_KHOI_TAO_DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.khoi_tao_db.arn },
     ]
     web         = []
     public_keys = []

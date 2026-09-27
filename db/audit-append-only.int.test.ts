@@ -496,12 +496,20 @@ describe("sổ kiểm toán chỉ ghi thêm", () => {
       "audit_events.action:INSERT",
       "audit_events.actor_id:INSERT",
       "audit_events.actor_type:INSERT",
+      // [S1.9102 / ADR-9202 / 9501] SELECT theo CỘT của app_khoi_tao — đúng các cột trigger nối chuỗi và `RETURNING` của
+      // `audit_append()` đọc dưới quyền người ghi; không `payload`, không cột nào khác.
+      "audit_events.hash:SELECT",
+      "audit_events.id:SELECT",
       "audit_events.ip:INSERT",
+      "audit_events.occurred_at:SELECT",
       "audit_events.org_id:INSERT",
+      "audit_events.org_id:SELECT",
       "audit_events.payload:INSERT",
+      "audit_events.prev_hash:SELECT",
       "audit_events.request_id:INSERT",
       "audit_events.resource_id:INSERT",
       "audit_events.resource_type:INSERT",
+      "audit_events.seq:SELECT",
       "audit_events.user_agent:INSERT",
     ]);
   }

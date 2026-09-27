@@ -115,8 +115,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     --service-names com.amazonaws.ap-southeast-1.sms-voice com.amazonaws.ap-southeast-1.email --query 'ServiceNames'
   ```
   Thiếu `sms-voice` ⇒ bỏ nó khỏi `dich_vu_endpoint` (README, "Lọc tên miền"). Thiếu `email` ⇒ đổi `ses_endpoint_service`.
-- [ ] **Tạo bốn secret** với host RDS TẠM (README, stack 90 bước 1): `tp/api/otp-peppers`, `tp/api/database-url`,
-      `tp/worker/database-url`, `tp/neo/database-url`. Mật khẩu ≥ 24 ký tự ngẫu nhiên, mỗi vai một mật khẩu.
+- [ ] **Tạo ~~bốn~~ [S1.9102] năm secret** với host RDS TẠM (README, stack 90 bước 1): `tp/api/otp-peppers`, `tp/api/database-url`,
+      `tp/worker/database-url`, `tp/neo/database-url`, **[S1.9102 / ADR-9202]** `tp/khoi-tao/database-url` (vai
+      `app_khoi_tao_login` — task migrate đọc nó để dựng vai). Mật khẩu ≥ 24 ký tự ngẫu nhiên, mỗi vai một mật khẩu.
 - [ ] **`prod.tfvars`** (không commit) — lần đầu KHÔNG chạy api và chỉ ghi log DNS:
   ```hcl
   ten_mien           = "<app.domain>"
@@ -158,7 +159,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   pnpm kiem-truoc-apply --var-file infra\terraform\90-ecs\prod.tfvars
   ```
   Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
-  `000…`; image nằm đúng kho ECR của prod và có thật; bốn secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
+  `000…`; image nằm đúng kho ECR của prod và có thật; ~~bốn~~ **[S1.9102]** năm secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
   giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
   `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt.
   Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
@@ -168,10 +169,10 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.5 Nối CSDL và migrate
 
-- [ ] `terraform output rds_endpoint` ⇒ `put-secret-value` lại ba secret `*/database-url` với host thật.
+- [ ] `terraform output rds_endpoint` ⇒ `put-secret-value` lại ~~ba~~ **[S1.9102]** bốn secret `*/database-url` với host thật.
 - [ ] Thêm CNAME `cong_khai` (output `ban_ghi_dns`) trỏ tới ALB.
 - [ ] `terraform output lenh_chay_migrate` ⇒ chạy; `/tp/migrate` phải có `da ap N migration` và các dòng `vai …`
-      (gồm `app_neo_login`). Từ chối ⇒ **dừng**, đọc thông điệp, không sửa tay trong CSDL (ADR-061).
+      (gồm `app_neo_login`, **[S1.9102]** và `app_khoi_tao_login`). Từ chối ⇒ **dừng**, đọc thông điệp, không sửa tay trong CSDL (ADR-061).
 
 ### 6.6 Bật api
 
@@ -212,10 +213,17 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   - Chỉ hai công cụ DEV chèn được tổ chức: `tools/gieo-demo` tự khai không phải đường sản xuất (in token dạng rõ),
     `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
   - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040).
-  - Cách làm chờ chủ dự án quyết. Đề xuất ngày 2026-09-27: một task ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
+  - ~~Cách làm chờ chủ dự án quyết.~~ **[S1.9102]** Đã chốt — gạch đầu dòng cuối của bước này. Đề xuất ngày 2026-09-27: một task
+    ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
     không mở route quản trị. **[S1.173]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
     kể cả chỗ hở thứ hai đo ở vòng ấy: người dùng đầu tiên không có đường xin link đăng nhập qua giao diện.
     **[S1.176 / ADR-107]** Chỗ hở thứ hai đã sửa: `/login` có ô xin link, và thư đăng nhập mang mã tổ chức.
+  - **[S1.9102 / ADR-9202] Chủ dự án đã chốt: phương án A, vai CSDL hẹp.** Đã có: vai `app_khoi_tao` (migration `9501`,
+    canh ở `hardening.always.sql`), secret `tp/khoi-tao/database-url` cho task migrate (6.1), và công cụ
+    `tools/khoi-tao-to-chuc` — `pnpm khoi-tao tao|them-nguoi`, một giao dịch mỗi lần, có sổ từ hàng đầu tiên, không in
+    email hay họ tên. **Vẫn chưa làm được trên prod:** đích `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition
+    `tp-khoi-tao`, task role, workflow chạy có người duyệt và xoá bí mật bản khai thuộc vòng hạ tầng kế (ADR-9202 mục 8;
+    STATE khoản 9401). Bước này sẽ viết lại khi vòng ấy xong.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với ~~`xuat=0 kiem=0`~~ **[ghi muộn ngày 2026-09-27]** dòng

@@ -32,8 +32,11 @@ import { viPhamLuocDoTuyetDoi } from "./luoc-do-an-toan.js";
  * tên kia, 065 cấp quyền). Thêm vào đây kéo theo hai lớp khác, cố ý: `khangDinhPhienDangNhapUngDung`
  * từ chối một phiên api/worker là thành viên của `app_neo` (và ngược lại), và `migrate()` đếm hàng
  * cấu hình mức vai của `app_neo`/`app_neo_login` như của hai cặp cũ.
+ *
+ * [S1.9102 / ADR-9202] Tên thứ tư `app_khoi_tao` — vai của task khởi tạo tổ chức (hardening dựng và canh như ba tên kia,
+ * 9501 cấp quyền INSERT/SELECT theo cột). Cùng hai lớp kéo theo như `app_neo`.
  */
-export const VAI_UNG_DUNG = ["app_api", "app_unseal", "app_neo"] as const;
+export const VAI_UNG_DUNG = ["app_api", "app_unseal", "app_neo", "app_khoi_tao"] as const;
 export type VaiUngDung = (typeof VAI_UNG_DUNG)[number];
 
 export function laVaiUngDung(giaTri: string): giaTri is VaiUngDung {

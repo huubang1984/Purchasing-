@@ -14623,3 +14623,151 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 ## 5. Số
 
 Không khoản nào mở hay đóng.
+
+# §S1.9102 — TẠO TỔ CHỨC TRÊN PROD, VÒNG MÃ: VAI CSDL HẸP `app_khoi_tao` VÀ CÔNG CỤ `tools/khoi-tao-to-chuc` (ADR-9202)
+
+## 1. Việc gì
+
+Chủ dự án chốt ngày 2026-09-27 bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6, cả bốn theo khuyến nghị: phương án **A** (task ECS chạy
+một lần) với vai CSDL hẹp **⒝**; bản khai ở **Secrets Manager**, xoá sau khi chạy; chạy dưới **vai deploy và environment `prod` có
+người duyệt**; thêm người về sau bằng **chính task này**. Câu *ai giữ `role.grant`* để ngỏ. Vòng này là vòng MÃ của hai vòng (ADR-9202
+mục 8): vai, công cụ, test, và secret của task migrate. Đích Dockerfile, task definition, IAM và workflow là vòng hạ tầng kế — khoản
+9401.
+
+## 2. Thay đổi
+
+- `db/migrations/9501_vai_khoi_tao.sql` — chỉ GRANT, theo cột: `INSERT (id, name, slug)` trên `organizations`; `INSERT (org_id,
+  email, full_name)` và `SELECT (id)` trên `users`; `INSERT`/`SELECT` ba cột của `user_roles`; `SELECT (role_code, permission_code)`
+  trên `role_permissions`; ghi sổ như `app_api` (INSERT theo cột, `SELECT (id, org_id, seq, prev_hash, hash, occurred_at)`, EXECUTE
+  hai hàm sổ); `app_current_org_id()`.
+- `db/migrations/hardening.always.sql` — dựng `app_khoi_tao` ở BƯỚC 0; thêm vào `ROLE_CANH`, `CAP_HOP_LE`, tập vai kết nối; sáu mục
+  thuộc tính / cấu hình vai / cấu hình IN DATABASE cho hai tên; `public`, `app_private`, `app_current_org_id()` mở rộng; hằng
+  `CAU_QUYEN_KHOI_TAO_SAI` (quyền HIỆU DỤNG theo từng cột, thừa và thiếu) và mục tự chữa "quyền quan hệ của app_khoi_tao" (thu hồi
+  `CASCADE` mọi thứ cấp đích danh rồi cấp lại đúng danh sách); mục EXECUTE của hàm liệt kê tổ chức nay đòi `app_khoi_tao` KHÔNG có.
+- `packages/db/src/vai-tro.ts` — `VAI_UNG_DUNG` thêm `app_khoi_tao`.
+- `tools/chay-migrate` — dựng `app_khoi_tao_login` từ `TRUSTPROCURE_KHOI_TAO_DATABASE_URL` (bắt buộc như ba URL kia); test mới
+  `khop-stack-90.test.ts` đòi mỗi URL vai mà `docCauHinh` đọc có trong `bi_mat.migrate` của stack 90.
+- `tools/khoi-tao-to-chuc` (mới) — `ban-khai.ts` (đọc và kiểm bản khai, thông điệp nêu vị trí không nêu giá trị), `khoi-tao.ts` (một
+  `withTenant`; sổ `ORG_CREATED`/`USER_CREATED`/`ROLE_GRANTED`, actor SYSTEM, `resourceType` `ORGANIZATION`/`USER`; lỗi nào — kể cả
+  lỗi của lần ghi sổ — cũng thành thông điệp nêu vị trí và SQLSTATE, 55P03/40P01 là lỗi tạm chạy lại được), `index.ts` (CLI, tệp hay
+  Secrets Manager dưới `tp/khoi-tao/ban-khai/`; dòng kết quả mang `VersionId` của bí mật đã đọc; lỗi pg không tên in kèm SQLSTATE).
+- `tools/kiem-truoc-apply/src/luat.ts`, `infra/terraform/90-ecs/main.tf`, `infra/terraform/README.md` — secret `tp/khoi-tao/database-url`.
+- Test DB cập nhật: `db/migrations.int.test.ts` (danh sách migration, hồ sơ N3, và **[lượt soi]** chiều (a) của vùng canh cho
+  `app_unseal_login`, `app_neo_login`), `db/hardening-suy-tu-tinh-chat.int.test.ts`, `db/rls-coverage.int.test.ts`,
+  `db/audit-append-only.int.test.ts` (SELECT theo cột mới trên sổ); mới `db/vai-khoi-tao.int.test.ts`.
+- Tài liệu: ADR-9202 và một dòng lý do ở ADR-028 §6; `docs/DE-XUAT-TAO-TO-CHUC.md` (đã chốt); `docs/APPLY-LAN-DAU.md` §6.1, §6.4,
+  §6.5, §8.1; `Handoff.md`; STATE khoản 9401.
+
+## 3. Đo
+
+- `db/vai-khoi-tao.int.test.ts`, 9 ca. Quyền đo dưới role đăng nhập `app_khoi_tao_login`, `createPool(…, { role: "app_khoi_tao" })`,
+  `withTenant`, `appendAuditEvent` — không đo quyền bằng superuser; câu GHI của nhóm ⑴ là bản viết trần các câu của công cụ:
+  - ⑴ làm được: tạo tổ chức mới cùng người, vai, sổ trong một giao dịch, sổ bắt đầu ở seq 1 và kiểm chứng được; thêm người vào tổ
+    chức đã có sổ, chuỗi nối tiếp; D3 (PROCUREMENT_MANAGER + DIRECTOR) và `033` (FINANCE + BUYER) chạy dưới vai này và vẫn chặn — 42501
+    **[lượt soi]** kèm ĐÚNG thông điệp của trigger ("(D3)", "(D2, 033)"), rollback trọn;
+  - ⑵ không làm được: đọc 21 bảng nghiệp vụ, email, họ tên, trạng thái người dùng, payload và người làm của sổ, hàm liệt kê tổ chức
+    ⇒ 42501 (đối chứng: đúng các cột 9501 cấp thì đọc được); 15 câu sửa/xoá/ghi cột không cấp ⇒ 42501; hàng của tổ chức khác ⇒ RLS
+    từ chối; `app_private`, tạo bảng, bảng tạm ⇒ không; câu phán xét của CHÍNH hardening ⇒ rỗng; `app_api` không `SET ROLE` sang được;
+  - ⑶ trôi tự chữa: hai mươi bốn trôi cùng lúc, **[lượt soi]** mỗi hàng hardening mới một trôi — thuộc tính của hai tên, NOLOGIN của
+    vai nhóm, cấu hình vai và IN DATABASE của CẢ HAI tên, membership lạ theo hai chiều của role đăng nhập (`pg_read_all_data` vào nó;
+    một vai khác thừa kế nó) và của vai nhóm, quyền cột thừa và thiếu, quyền nhận kèm quyền cấp tiếp đã cấp tiếp cho vai khác,
+    EXECUTE trên hàm liệt kê tổ chức, `app_private`, `CREATE` trên `public`, `app_current_org_id()` — lượt đầu dừng đòi kết nối mới,
+    lượt kế sửa hết (hai người gọi hợp lệ của hàm liệt kê giữ quyền, role đăng nhập giữ LOGIN), đường sản xuất sống lại, chạy lại là
+    no-op; quyền đến qua PUBLIC ⇒ deploy dừng, nêu đúng tên mục.
+- `tools/khoi-tao-to-chuc`: 46 ca đơn vị (`ban-khai.test.ts` — bản khai hai chế độ, 26 ca hỏng hình dạng, tên khoá lạ, thông điệp
+  không mang email hay họ tên kể cả **[lượt soi]** khi JSON hỏng, regex `EMAIL` ghim bằng chữ vào regex của bộ gửi SES, dòng lệnh) và
+  14 ca tích hợp (`khoi-tao.int.test.ts` — bảy người tám vai, email hạ chữ bằng hàm CSDL và người đầu tiên xin được link bằng email
+  viết hoa, **[lượt soi]** một email mang điểm mã mà JS và CSDL hạ khác nhau (Ⓐ, tiền đề đo tại chỗ) vẫn xin được link, sổ 16 hàng
+  kiểm chứng được và không dữ liệu cá nhân, **[lượt soi]** `resource_id` từng hàng sổ trùng khít tổ chức, người và cặp (người, vai)
+  của `user_roles`, `resourceType` theo quy ước của kho, danh mục vai khớp bảng `roles`, thêm người nối chuỗi, bốn đường rollback
+  trọn — nguyên nhân của D3/033 là CHÍNH trigger —, khoá sổ bị giữ ⇒ lỗi tạm 55P03 có vị trí rồi chạy lại được, dòng lệnh thành công và
+  hỏng — kể cả lỗi pg không tên in kèm SQLSTATE mà không in mật khẩu —, **[lượt soi]** script `pnpm --silent khoi-tao`, và đường
+  Secrets Manager trên một máy chủ Secrets Manager GIẢ trong tiến trình test: hỏi ĐÚNG tên dưới tiền tố một lần, dòng kết quả mang
+  `VersionId`, lỗi của SM chỉ in tên lỗi, không ARN).
+- `tools/chay-migrate/src/khop-stack-90.test.ts`: mỗi URL vai của `docCauHinh` là một secret của `bi_mat.migrate` trỏ một data secret có khai.
+- Bộ tích hợp đầy đủ trước lượt soi: 1414/1415 — một ca đỏ (`db/audit-append-only.int.test.ts` ghim tập quyền cột trên sổ, vai mới có
+  SELECT theo cột) đã cập nhật và chạy lại 22/22. Sau hai lượt soi: SO_INT_A.
+- Đột biến: lượt một 28, cả 28 đỏ — chín ở công cụ (không hạ chữ bằng CSDL, bỏ ba hàng sổ, payload, nuốt lỗi một người, lộ thông điệp
+  trigger, lộ cause ở CLI, chèn tổ chức bằng UUID khác UUID đang gắn), bảy ở bản khai và dòng lệnh, bảy ở hardening (tự chữa không cấp
+  lại, không thu hồi, câu phán xét bỏ nhánh thừa theo cột, bỏ nhánh thiếu, cho phép `users.email`, cặp hợp lệ, thuộc tính), một ở
+  `VAI_UNG_DUNG`, bốn ở dây nối (luật kiểm trước apply, `chay-migrate`, task migrate, data secret). Lượt hai (sau lượt soi an ninh) 11:
+  mười đỏ — bỏ REVOKE hàm liệt kê, bỏ CASCADE, lỗi ghi sổ không qua `loiCua`, bỏ nhánh lỗi tạm, trần về 200, in nguyên tên khoá lạ,
+  email nhận ký tự điều khiển, lọc trùng chỉ ASCII, CLI không in SQLSTATE, `resourceType` chữ thường. **Một sống:** bỏ vế
+  `app_khoi_tao` khỏi hậu điều kiện của mục hàm liệt kê — câu sửa của mục chạy VÔ ĐIỀU KIỆN mỗi lần deploy, nên vế ấy chỉ có việc khi
+  câu sửa bị nuốt vì thiếu quyền (deploy không phải chủ hàm); không ca nào dựng hồ sơ ấy cho mục này — cùng tình trạng với vế `app_api`
+  của cùng mục. Lượt ba (sau lượt soi test và tài liệu): 13, cả 13 đỏ — hạ chữ bằng JS (ca email Ⓐ); bỏ `app_khoi_tao_login` khỏi
+  `ROLE_CANH`; tắt ba hàng hardening mới (IN DATABASE của vai nhóm, cấu hình vai của role đăng nhập, NOLOGIN); nhánh JSON hỏng mang
+  thông điệp của V8 — SỐNG ở lần chạy đầu vì mảnh email trong thông điệp bị cắt giữa chừng (`giam.doc.r`), đỏ sau khi ca đòi ĐÚNG câu
+  cố định; script `pnpm khoi-tao` hỏng; đọc bí mật sai tên; `resource_id` của `ROLE_GRANTED` là tổ chức, của `USER_CREATED` bỏ trống;
+  regex `EMAIL` lệch bộ gửi SES; bỏ `app_unseal_login`, bỏ `app_neo_login` khỏi `ROLE_CANH` (ca [CR2-T3]). Đột biến *chèn vai từng
+  câu* của người soi vẫn sống, và đó là điều lời khai đã sửa nói: một câu INSERT không phải điều kiện của D3/`033`.
+
+## 3b. Soi đối kháng
+
+Hai người soi, hai lăng kính, mỗi người trên bản chép riêng của worktree và Postgres riêng.
+
+**Lăng kính an ninh** — không NẶNG; 5 NHẸ, 9 INFO:
+
+1. **NHẸ — hardening không canh EXECUTE của `app_khoi_tao` trên hàm liệt kê tổ chức** (hàm SECURITY DEFINER duy nhất): một `GRANT`
+   sống qua mọi deploy, và vai liệt kê được mọi tổ chức. Sửa: câu sửa `REVOKE` và vế hậu điều kiện; trôi này vào ca ⑶.
+2. **NHẸ — vai ghi được hàng sổ giả, và thêm người/vai mà không để lại hàng sổ nào**, ở mọi tổ chức biết UUID (người soi đo cả hai).
+   Ghi vào ADR-9202 Hệ quả: *"sổ từ hàng đầu tiên"* là hành vi của công cụ, không phải ràng buộc của vai; lớp giữ là secret, vai
+   deploy và người duyệt. Trigger ép `actor_type`/mã hành động dưới vai này — chưa làm.
+3. **NHẸ — lỗi của lần ghi sổ ra stderr chỉ là `HONG: error`** (người soi đo 40P01 khi hai `them-nguoi` chạy song song). Sửa: lần ghi
+   sổ đi qua `loiCua`; 55P03/40P01 là lỗi tạm; CLI in SQLSTATE của lỗi pg không tên.
+4. **NHẸ — `them-nguoi` cỡ lớn giữ khoá chuỗi sổ quá trần 2 s** (200 người × 3 vai: 3,69 s; một lần ghi sổ song song 55P03). Sửa: trần
+   50 người mỗi lần chạy.
+5. **NHẸ — người duyệt duyệt một TÊN bí mật, không duyệt nội dung.** Dòng kết quả in `VersionId` đã đọc; ghim phiên bản TRƯỚC khi chạy
+   là việc của vòng hạ tầng (khoản 9401, ADR-9202 Hệ quả).
+6. INFO — hai oracle (UUID người dùng toàn cục qua `user_roles.user_id`; email theo tổ chức) — ghi ADR.
+7. INFO — góc mù quyền sở hữu (kế thừa, như ba vai kia) — ghi ADR.
+8. INFO — câu tự chữa không `CASCADE` (fail-closed, nhưng thông điệp nói "tự thu hồi") — thêm `CASCADE`, trôi quyền cấp tiếp vào ca ⑶.
+9. INFO — bản khai: tên khoá lạ in nguyên văn; `EMAIL` nhận ký tự điều khiển; lọc trùng chỉ ASCII — cả ba sửa, có ca.
+10. INFO — mất mã tổ chức khi COMMIT mất ACK — ghi ADR (lấy lại bằng vai master, đường khẩn cấp).
+11. INFO — tên tệp `9501_…` đứng sai thứ tự từ vựng — số tạm; `pnpm cap-so` cấp số thật lúc hợp.
+12. INFO — `resourceType` viết thường — sửa theo quy ước của kho.
+13. INFO — cổng sổ nợ đỏ với tài liệu chưa stage — sửa (dấu `|` trong hàng 9401, số đếm qua `pnpm cap-so --dem`).
+14. INFO — kế thừa: `GRANT` trên `pg_catalog` không được canh; ở hồ sơ N3 vai deploy không còn ADMIN để cấp cặp đăng nhập — ghi ADR.
+
+**Lăng kính test và tài liệu** — 1 NẶNG (lỗ của test, mã đúng), còn lại NHẸ/INFO; mọi kết luận đo lại trên bản chép cuối:
+
+1. **NẶNG — không test nào đo chiều (a) của vùng canh cho `app_khoi_tao_login`**: trôi `GRANT app_api TO app_khoi_tao_login` bị bắt
+   bằng chiều (b), nên bỏ tên ấy khỏi `ROLE_CANH` mà 523 test DB vẫn xanh — trong khi dưới đột biến ấy role đăng nhập mang
+   `pg_read_all_data` qua được `migrate` và đọc được email mà không cần `SET ROLE`. Sửa: trôi `pg_read_all_data` vào role đăng nhập,
+   và một vai khác thừa kế nó (chiều b). Hai cặp cũ cùng lỗ (`app_unseal_login`, `app_neo_login`): thêm vào ca [CR2-T3].
+2. NHẸ — sáu đột biến có nghĩa còn sống, mỗi cái một ca mới: hạ chữ bằng JS (email Ⓐ), ba hàng hardening mới không có trôi (NOLOGIN,
+   IN DATABASE của vai nhóm, cấu hình vai của role đăng nhập — lời khai "mọi hàng hardening mới sửa được trôi của chính nó" sai), nhánh
+   JSON hỏng không có ca chống rò (V8 trích một mảnh email vào thông điệp), `resource_id` của sổ do công cụ ghi không bị ghim.
+3. NHẸ — nhóm ⑷ "dòng lệnh `pnpm khoi-tao`" không chạy `pnpm` (script trỏ tệp không tồn tại vẫn xanh), và "đầu ra một dòng" chỉ đúng
+   khi gọi `node`: ca `pnpm --silent`, lời khai sửa ở `index.ts` và ADR-9202 mục 6.
+4. NHẸ — đường Secrets Manager (đường prod) không có ca nào: máy chủ Secrets Manager giả trong tiến trình test, qua
+   `AWS_ENDPOINT_URL_SECRETS_MANAGER`.
+5. NHẸ — regex `EMAIL` là bản chép của bộ gửi SES mà không gì giữ đồng bộ: ca so CHỮ hai tệp.
+6. NHẸ — bốn lời khai sai hay nói quá, đều sửa: *"vai của một người trong MỘT câu INSERT để D3/033 xét trọn tập"* (không cần — trigger
+   AFTER ROW đọc cả câu trước trong cùng giao dịch; đột biến chèn từng câu xanh, người soi đo câu thứ hai vẫn 42501 "(D3)"), JSDoc
+   *"dưới vai khác câu đầu tiên ném 42501"* (pool `app_api` chạy trọn `them-nguoi`), đầu tệp `khoi-tao.ts` nêu payload thiếu `nguon`,
+   ADR-9202 *"task role và execution role là vòng kế"* (execution role đã đọc `tp/*`); và `APPLY-LAN-DAU.md` còn câu *"chờ chủ dự án
+   quyết"* chưa gạch.
+7. INFO — ca D3/033 chỉ khớp 42501, không phân biệt với một GRANT thiếu: khớp thêm thông điệp của trigger.
+8. INFO — chú thích `9501` *"policy không có TO"* thiếu chính xác; hàng `tools/chay-migrate` của Handoff còn *"hai vai"* — sửa cả hai.
+
+Góc hai người soi đã soi mà không thấy lỗi: quyền hiệu dụng khớp `9501` theo từng cột và mỗi cột SELECT đều cần (trigger D3, `033`,
+nối chuỗi, `RETURNING` của `audit_append`); không SECURITY DEFINER nào gọi được qua PUBLIC; mọi trôi khác của vùng canh (chéo, chỉ-ADMIN,
+`pg_write_all_data`, TEMP/CREATE, bảng lạ) bị gỡ hay chặn deploy; rollback trọn ở mọi ca đã thử, kể cả ba lần `tao` đồng thời cùng
+slug; D3/033 không lách được bằng `tao` rồi `them-nguoi`; không email hay họ tên lọt ra ở mọi đường lỗi; `docThamSo` từ chối ARN, xuống
+dòng, khoảng trắng; số secret và thứ tự bước khớp giữa APPLY-LAN-DAU, README và `luat.ts`.
+
+## 4. Giới hạn
+
+- **Chưa chạy trên RDS, chưa có task**: đích Dockerfile, ECR, task definition `tp-khoi-tao`, task role, workflow có người duyệt và xoá
+  bí mật — vòng hạ tầng kế, khoản 9401. APPLY-LAN-DAU bước 8.1 và 8.2 vẫn kẹt tới lúc ấy.
+- **Lộ mật khẩu của vai là thêm được người và vai vào mọi tổ chức, và ghi được hàng sổ giả** — như `app_api`; chưa có trigger ép
+  (ADR-9202 Hệ quả).
+- **Người duyệt duyệt tên bí mật, không nội dung** tới khi workflow ghim `VersionId` (khoản 9401).
+- **Một đột biến sống có lý do** — vế `app_khoi_tao` của hậu điều kiện mục hàm liệt kê (mục 3).
+- Đường Secrets Manager đo trên máy chủ giả, không trên AWS: IAM, KMS của bí mật và tên thật chưa đo.
+- Kế thừa như ba vai kia: góc mù quyền sở hữu, `GRANT` trên `pg_catalog`, hồ sơ N3 (khoản 15).
+
+## 5. Số
+
+Khoản **9401** mở, rổ A (vế ⒞ — bước 8.1 của lần apply đầu): rổ A **1 → 2**. Không khoản nào đóng. ADR-9202 mới.
