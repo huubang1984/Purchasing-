@@ -99,6 +99,15 @@ describe("[S1.11] docCauHinh — bộ cấu hình hợp lệ", () => {
     expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_MAX_MS: "0" }))).toThrow("TRUSTPROCURE_CLOCK_SKEW_MAX_MS");
     expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_CLOCK_SKEW_CHECK_MS: "10" }))).toThrow("TRUSTPROCURE_CLOCK_SKEW_CHECK_MS");
   });
+
+  it("[S1.9101 / ADR-9201] cờ ký chính sách: không khai ⇒ TẮT; chỉ `bat`/`tat`; chữ khác làm tiến trình không lên, không đọc thành tắt", () => {
+    expect(docCauHinh(envHopLe()).choKyChinhSach).toBe(false);
+    expect(docCauHinh(envHopLe({ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: "bat" })).choKyChinhSach).toBe(true);
+    expect(docCauHinh(envHopLe({ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: "tat" })).choKyChinhSach).toBe(false);
+    for (const sai of ["true", "1", "BAT", "on"]) {
+      expect(() => docCauHinh(envHopLe({ TRUSTPROCURE_S3_CHO_KY_CHINH_SACH: sai })), sai).toThrow("TRUSTPROCURE_S3_CHO_KY_CHINH_SACH");
+    }
+  });
 });
 
 describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN biến", () => {

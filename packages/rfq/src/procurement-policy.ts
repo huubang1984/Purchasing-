@@ -71,6 +71,16 @@ export interface CreateProcurementPolicyInput {
   readonly evalComponents?: readonly ThanhPhanTrongSoVao[] | null;
   /** Số nhà thầu vào vòng BAFO. `0` nghĩa là tổ chức KHÔNG dùng BAFO — xem `056`. */
   readonly bafoTopN?: number | null;
+  /**
+   * [S1.9101 / S3.1c] Bậc giá trị (spec S3 §4.1). Khoá viết theo lối CSDL (`tu_so_tien`, `so_ncc_toi_thieu`, …), cùng lý do
+   * `ThanhPhanTrongSoVao`: hình dạng bên trong là hợp đồng do trigger `chinh_sach_kiem_bac` (`069`) cưỡng chế — mười khoá
+   * đúng kiểu, bậc 0, cận dưới tăng ngặt, bậc đấu thầu chính thức chỉ đứng cuối — và một cách viết thứ hai ở TypeScript
+   * là một bản sao sẽ trôi. Tầng này chỉ kiểm hình dạng NGOÀI. `undefined` hay `null` ⇒ phiên bản không bậc.
+   */
+  readonly tiers?: readonly Readonly<Record<string, unknown>>[] | null;
+  /** [S1.9101] Hai cột mức chính sách (`069`): tất-cả-hoặc-không cùng `tiers`, dương — CSDL phán. */
+  readonly chiaNhoCuaSoNgay?: number | null;
+  readonly thamDinhHieuLucThang?: number | null;
   readonly actorSessionId: string;
 }
 
@@ -145,6 +155,26 @@ function trongSoJson(input: CreateProcurementPolicyInput): { tp: string | null; 
 }
 
 /**
+ * [S1.9101 / S3.1c] Hình dạng NGOÀI của bậc và hai cột mức, và chỉ hình dạng ngoài: mảng không rỗng các đối tượng, hai số
+ * nguyên. Mọi luật còn lại — khoá, kiểu, thứ tự bậc, tất-cả-hoặc-không, *tổ chức đã bật thì phải có bậc* — là của `069`.
+ */
+function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chiaNho: number | null; thamDinh: number | null } {
+  const tho: unknown = input.tiers ?? null;
+  const chiaNho = input.chiaNhoCuaSoNgay ?? null;
+  const thamDinh = input.thamDinhHieuLucThang ?? null;
+  for (const [ten, n] of [["chiaNhoCuaSoNgay", chiaNho], ["thamDinhHieuLucThang", thamDinh]] as const) {
+    if (n !== null && !Number.isInteger(n)) throw new RfqError(`${ten} phải là số nguyên`);
+  }
+  if (tho === null) return { bac: null, chiaNho, thamDinh };
+  const mang: readonly unknown[] = Array.isArray(tho) ? (tho as readonly unknown[]) : [];
+  if (mang.length === 0) throw new RfqError("tiers phải là mảng không rỗng");
+  for (const b of mang) {
+    if (b === null || typeof b !== "object" || Array.isArray(b)) throw new RfqError("mỗi bậc của tiers phải là một đối tượng");
+  }
+  return { bac: JSON.stringify(mang), chiaNho, thamDinh };
+}
+
+/**
  * Thêm MỘT PHIÊN BẢN chính sách. Không có hàm sửa, và đó là toàn bộ cơ chế: `app_api` không có
  * `UPDATE`/`DELETE` trên bảng này (014). Sửa được ngưỡng của một phiên bản đã dùng nghĩa là phân
  * loại của mọi RFQ cũ đổi theo mà không ai biết — tức "tái lập được" thành một lời hứa rỗng.
@@ -166,14 +196,15 @@ export async function createProcurementPolicy(
   }
 
   const { tp, topN } = trongSoJson(input);
+  const { bac, chiaNho, thamDinh } = bacJson(input);
 
   const { rows } = await client.query<HangChinhSach>(
     `INSERT INTO public.org_procurement_policies
        (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n,
-        created_by, created_by_session_id)
-     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8)
+        created_by, created_by_session_id, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang)
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8, $9::pg_catalog.jsonb, $10, $11)
      RETURNING ${COT_CHINH_SACH}`,
-    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId],
+    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId, bac, chiaNho, thamDinh],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("Câu INSERT org_procurement_policies không trả về hàng");
@@ -195,10 +226,143 @@ export async function createProcurementPolicy(
       currency: hang.currency,
       soThanhPhan: input.evalComponents?.length ?? 0,
       bafoTopN: topN,
+      // [S1.9101] Cùng lý do `soThanhPhan`: sổ nói phiên bản có bậc hay không và bao nhiêu bậc; ma trận nằm ở chính hàng
+      // chính sách, bất biến, xuất được.
+      soBac: input.tiers?.length ?? 0,
     },
   });
 
   return doiChinhSach(hang);
+}
+
+/** [S1.9101 / S3.1c] Chữ ký thứ hai của một phiên bản chính sách, như CSDL đã đóng dấu. */
+export interface ChuKyChinhSach {
+  readonly policyId: string;
+  readonly version: number;
+  readonly signedBy: string;
+  readonly signedAt: Date;
+  /** `to_chuc_da_bat_s3` ngay sau lần ký: lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). */
+  readonly daBat: boolean;
+}
+
+/**
+ * [S1.9101 / S3.1c / ADR-082 ⑺] Ký một phiên bản chính sách có bậc — và lần ký đầu tiên như thế BẬT S3 cho tổ chức.
+ *
+ * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ `072`): phiên bản có bậc, người ký khác
+ * người tạo và giữ `policy.manage`, là phiên bản MỚI NHẤT, đã tới ngày hiệu lực, dưới khoá tư vấn theo tổ chức; `signed_by`
+ * dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); mỗi phiên bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật
+ * nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
+ *
+ * Cờ triển khai (ADR-9201) KHÔNG nằm ở đây mà ở route — hàm này là cơ chế, route là cửa.
+ */
+export async function kyPhienBanChinhSach(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly policyId: string; readonly actorSessionId: string },
+): Promise<ChuKyChinhSach> {
+  await assertTenantBound(client, orgId, "kyPhienBanChinhSach");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  const { rows } = await client.query<{ signed_at: Date }>(
+    `INSERT INTO public.org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id)
+     VALUES ($1, $2, $3, $4)
+     RETURNING signed_at`,
+    [orgId, input.policyId, actor.id, actor.sessionId],
+  );
+  const ky = rows[0];
+  if (ky === undefined) throw new RfqError("Câu INSERT org_policy_signatures không trả về hàng");
+
+  const { rows: pb } = await client.query<{ version: number; da_bat: boolean }>(
+    `SELECT p.version, public.to_chuc_da_bat_s3($1::pg_catalog.uuid) AS da_bat
+       FROM public.org_policy_signatures s
+       JOIN public.org_procurement_policies p ON p.id OPERATOR(pg_catalog.=) s.policy_id
+      WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND s.policy_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.policyId],
+  );
+  const hang = pb[0];
+  if (hang === undefined) throw new RfqError("Không đọc lại được phiên bản vừa ký");
+
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "PROCUREMENT_POLICY_SIGNED",
+    resourceType: "procurement_policy",
+    resourceId: input.policyId,
+    payload: { version: hang.version, daBat: hang.da_bat },
+  });
+
+  return { policyId: input.policyId, version: hang.version, signedBy: actor.id, signedAt: ky.signed_at, daBat: hang.da_bat };
+}
+
+/** [S1.9101 / S3.1c] Một phiên bản chính sách như màn `/chinh-sach` đọc: trọn ma trận, chữ ký, và có đang hiệu lực không. */
+export interface PhienBanChinhSach extends ProcurementPolicyRecord {
+  readonly tiers: readonly Readonly<Record<string, unknown>>[] | null;
+  readonly chiaNhoCuaSoNgay: number | null;
+  readonly thamDinhHieuLucThang: number | null;
+  readonly createdBy: string;
+  readonly signedBy: string | null;
+  readonly signedAt: Date | null;
+  /** Đúng phiên bản `chinh_sach_hieu_luc(org, now())` chọn — hàm DUY NHẤT trả lời câu ấy (S1.156). */
+  readonly hieuLuc: boolean;
+}
+
+export interface DanhSachChinhSach {
+  /** Mọi phiên bản của tổ chức, mới nhất trước. */
+  readonly phienBan: readonly PhienBanChinhSach[];
+  /** `to_chuc_da_bat_s3(org)`. */
+  readonly daBat: boolean;
+}
+
+interface HangPhienBan extends HangChinhSach {
+  tiers: Record<string, unknown>[] | null;
+  chia_nho_cua_so_ngay: number | null;
+  tham_dinh_hieu_luc_thang: number | null;
+  created_by: string;
+  signed_by: string | null;
+  signed_at: Date | null;
+  hieu_luc: boolean | null;
+}
+
+/**
+ * [S1.9101 / S3.1c] Mọi phiên bản chính sách của tổ chức, mới nhất trước — cho màn `/chinh-sach` và cho phép tính phiên bản
+ * KẾ TIẾP của `POST /policy`.
+ *
+ * Câu này đọc MỌI phiên bản nên nó không chọn phiên bản nào; phiên bản hiệu lực được đánh dấu bằng CHÍNH
+ * `chinh_sach_hieu_luc`, nên tổng điều tra *một hàm chọn phiên bản* (`tests/architecture/doc-chinh-sach-mot-ham.test.ts`)
+ * xếp nó vào lớp `QUA_HAM` và không lớp thứ tư nào phải mở.
+ */
+export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: string): Promise<DanhSachChinhSach> {
+  await assertTenantBound(client, orgId, "lietKePhienBanChinhSach");
+
+  const { rows } = await client.query<HangPhienBan>(
+    `SELECT p.id, p.version, p.dual_approval_threshold, p.currency, p.effective_from, p.tiers,
+            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.created_by, s.signed_by, s.signed_at,
+            p.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now()) AS hieu_luc
+       FROM public.org_procurement_policies p
+       LEFT JOIN public.org_policy_signatures s
+         ON s.org_id OPERATOR(pg_catalog.=) p.org_id AND s.policy_id OPERATOR(pg_catalog.=) p.id
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+      ORDER BY p.version DESC`,
+    [orgId],
+  );
+  const { rows: bat } = await client.query<{ da_bat: boolean }>(
+    "SELECT public.to_chuc_da_bat_s3($1::pg_catalog.uuid) AS da_bat",
+    [orgId],
+  );
+  return {
+    phienBan: rows.map((h) => ({
+      ...doiChinhSach(h),
+      tiers: h.tiers,
+      chiaNhoCuaSoNgay: h.chia_nho_cua_so_ngay,
+      thamDinhHieuLucThang: h.tham_dinh_hieu_luc_thang,
+      createdBy: h.created_by,
+      signedBy: h.signed_by,
+      signedAt: h.signed_at,
+      hieuLuc: h.hieu_luc === true,
+    })),
+    daBat: bat[0]?.da_bat === true,
+  };
 }
 
 /**

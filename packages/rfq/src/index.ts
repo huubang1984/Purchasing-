@@ -45,7 +45,13 @@ export {
   MONEY_PATTERN,
   createProcurementPolicy,
   getActiveProcurementPolicy,
+  // [S1.9101 / S3.1c] Lần ký chính sách (bật S3) và danh sách phiên bản cho màn `/chinh-sach`.
+  kyPhienBanChinhSach,
+  lietKePhienBanChinhSach,
   setRfqBudget,
+  type ChuKyChinhSach,
+  type DanhSachChinhSach,
+  type PhienBanChinhSach,
   type CreateProcurementPolicyInput,
   type Currency,
   type ProcurementPolicyRecord,
