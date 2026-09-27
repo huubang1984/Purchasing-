@@ -270,6 +270,8 @@ const trangThai: {
   gd1: Nguoi;
   gd2: Nguoi;
   taiChinh: Nguoi;
+  /** [S1.9103 / khoản 9401] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
+  cham: Nguoi;
 } = {
   rfqId: "",
   loiMoi: [],
@@ -285,6 +287,7 @@ const trangThai: {
   gd1: { id: "", cookie: "" },
   gd2: { id: "", cookie: "" },
   taiChinh: { id: "", cookie: "" },
+  cham: { id: "", cookie: "" },
 };
 
 beforeAll(async () => {
@@ -738,12 +741,20 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // test. Đây là phép đo đầu tiên đi TRỌN đường chấm thầu bằng HTTP, trên chính sách mà người
     // mua tạo qua HTTP.
     const m = trangThai.mua.cookie;
-    const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, m, {});
+    // [S1.9103 / khoản 9401] Người BẤM CHẤM là một BUYER KHÔNG giữ `bid.view` (`005`): vai mà
+    // `evaluation.perform` cho qua còn cổng đọc giá thì không. Trước khoản 9401 thân phản hồi của
+    // lần bấm ấy mang nguyên `lines` — giá và hạng của cả năm báo giá — tức một đường đọc thứ hai
+    // của `rfq_evaluation_lines` mà ADR-054 không khai. Bảng xếp hạng đọc qua `GET /ranking` dưới
+    // `m` (PROCUREMENT_MANAGER, giữ `bid.view`).
+    trangThai.cham = await dangNhap("cham-khong-xem@vidu.vn", "BUYER");
+    const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, trangThai.cham.cookie, {});
     expect(r.status, r.text).toBe(201);
-    const ld = (r.body as { evaluation: { evaluationId: string; currency: string; lines: { rank: number | null }[] } }).evaluation;
+    const ld = (r.body as { evaluation: { evaluationId: string; currency: string } }).evaluation;
     expect(ld.currency).toBe("VND");
-    expect(ld.lines).toHaveLength(5);
-    expect([...ld.lines].map((x) => x.rank).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5]);
+    expect(Object.keys(ld).sort(), "thân của lần bấm chấm là danh sách trắng").toEqual(["currency", "evaluationId", "policyId", "policyVersion"]);
+    expect(quetRoRi(r.text + "\n" + [...r.headers.entries()].map(([a, b]) => `${a}: ${b}`).join("\n")), "lần bấm chấm KHÔNG trả một mức giá nào").toEqual([]);
+    // Và cổng đọc đứng đúng chỗ: người bấm chấm không có `bid.view` thì không đọc được bảng xếp hạng.
+    expect((await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, trangThai.cham.cookie)).status).toBe(403);
 
     const bxh = await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, m);
     expect(bxh.status, bxh.text).toBe(200);
@@ -754,6 +765,8 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
       };
     }).ranking;
     expect(bang.evaluationId).toBe(ld.evaluationId);
+    expect(bang.rows).toHaveLength(5);
+    expect([...bang.rows].map((x) => x.rank).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5]);
     const mongDoi = [...trangThai.loiMoi].sort((a, b) => Number(a.gia) - Number(b.gia));
     expect(bang.rows.map((x) => x.supplierName)).toEqual(mongDoi.map((x) => x.ten));
     expect(bang.rows[0]?.effectiveCost).toBe(GIA_SUA_LAI);
@@ -1130,18 +1143,22 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
 
   it("bước 12g — CHẤM LẠI sau BAFO: mỗi nhà cung cấp đúng MỘT hàng, và thứ hạng tính trên giá MỚI", async () => {
     const m = trangThai.mua.cookie;
-    const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, m, {});
+    // [S1.9103 / khoản 9401] Cùng người bấm chấm của bước 12b — BUYER không giữ `bid.view`. Ở đây
+    // cái được canh là giá BAFO: vòng hai vừa mở, và thân của lần bấm chấm là chỗ đầu tiên chúng
+    // có thể lọt ra tới một vai không có cổng đọc.
+    const r = await goi("POST", `/rfqs/${trangThai.rfqId}/evaluate`, trangThai.cham.cookie, {});
     expect(r.status, r.text).toBe(201);
-    const ld = (r.body as { evaluation: { evaluationId: string; lines: { bidVersionId: string; effectiveCost: string | null; rank: number | null }[] } }).evaluation;
-
-    // NĂM hàng — không bảy. Đây là vế mà mục 7d của §S1.108 vá ở `docBaoGia`, và ca này là phép
-    // đo của nó trên đường HTTP thật.
-    expect(ld.lines, "một hàng mỗi LUỒNG báo giá, không một hàng mỗi phong bì đã mở").toHaveLength(5);
-    expect([...ld.lines].map((x) => x.rank).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5]);
+    const ld = (r.body as { evaluation: { evaluationId: string } }).evaluation;
+    expect(Object.keys(ld).sort()).toEqual(["currency", "evaluationId", "policyId", "policyVersion"]);
+    expect(quetRoRi(r.text), "lần chấm lại sau BAFO KHÔNG trả một mức giá nào — kể cả giá BAFO").toEqual([]);
 
     const bxh = await goi("GET", `/rfqs/${trangThai.rfqId}/ranking`, m);
-    const bang = (bxh.body as { ranking: { rows: { supplierName: string; effectiveCost: string | null; rank: number | null }[] } }).ranking;
-    expect(bang.rows).toHaveLength(5);
+    const bang = (bxh.body as { ranking: { evaluationId: string; rows: { supplierName: string; effectiveCost: string | null; rank: number | null }[] } }).ranking;
+    expect(bang.evaluationId, "bảng xếp hạng là của lượt chấm VỪA tạo").toBe(ld.evaluationId);
+    // NĂM hàng — không bảy. Đây là vế mà mục 7d của §S1.108 vá ở `docBaoGia`, và ca này là phép
+    // đo của nó trên đường HTTP thật.
+    expect(bang.rows, "một hàng mỗi LUỒNG báo giá, không một hàng mỗi phong bì đã mở").toHaveLength(5);
+    expect([...bang.rows].map((x) => x.rank).sort((a, b) => Number(a) - Number(b))).toEqual([1, 2, 3, 4, 5]);
     // Hạng NHẤT là giá BAFO thấp nhất — bảng xếp hạng tính LẠI thật, không giữ bảng vòng một.
     const nhat = bang.rows.find((x) => x.rank === 1)!;
     expect(nhat.effectiveCost).toBe([...GIA_BAFO].sort((a, b) => Number(a) - Number(b))[0]);
