@@ -1797,3 +1797,62 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     }, 30_000);
   });
 });
+
+// ==============================================================================================
+// [S1.9101 / khoản 145] KHOÁ GHI SỔ BỊ GIỮ LÚC PHÁT CHỨNG CHỈ AGENT ⇒ KHÔNG PHÁT, 503 CÓ TÊN
+//
+// `startAgentSession` ghi `AGENT_SESSION_ISSUED` trong cùng giao dịch với hàng phiên và lần tiêu thụ mã TOTP. Khoá tư vấn ghi sổ của tổ
+// chức bị giữ quá trần 2 s (050) thì lần ghi gãy 55P03. Trước vòng này lỗi ném ra thành 500 thân cố định — không ai biết vì sao, và
+// không dòng log nào nói. Chủ dự án chọn: một chứng chỉ phát ra mà sổ không ghi thì KHÔNG được phát (khác khoản 139). Vế đo: 503 có
+// tên, không hàng phiên AGENT nào, không hàng sổ nào, một dòng log cố định; mã TOTP đã tiêu thụ không dùng lại được. Đường phát bình
+// thường có đo riêng ở khối khoản 141 (`phienAgent`).
+// ==============================================================================================
+describe("[S1.9101 / khoản 145] sổ không nhận lần phát chứng chỉ agent thì chứng chỉ không được phát", () => {
+  it("khoá ghi sổ bị giữ ⇒ 503 có tên, không phiên AGENT, không hàng sổ, một dòng log; mã đã tiêu thụ không phát lại được", async () => {
+    await taoNguoi("k145-agent@vd.test");
+    const nguoi = await dangNhap("k145-agent@vd.test");
+    const dem = async (): Promise<{ phien: number; so: number }> => {
+      const p = await db.pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.org_id = $1 AND s.kind = 'AGENT_READONLY' AND u.email = $2",
+        [orgA, "k145-agent@vd.test"],
+      );
+      const so = await db.pool.query<{ n: number }>(
+        "SELECT count(*)::int AS n FROM audit_events a JOIN users u ON u.id = a.actor_id WHERE a.org_id = $1 AND a.action = 'AGENT_SESSION_ISSUED' AND u.email = $2",
+        [orgA, "k145-agent@vd.test"],
+      );
+      return { phien: p.rows[0]!.n, so: so.rows[0]!.n };
+    };
+    const truoc = await dem();
+    const buoc = counterForTime(Date.now());
+    const maMot = deriveTotpCode(nguoi.biMat, buoc + 1);
+
+    const giu = await apiPool.connect();
+    const mocLog = logLoi.length;
+    let r: PhanHoi | undefined;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+      await giu.query(
+        "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K145_GIU_KHOA', 'K145', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+        [orgA],
+      );
+      r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: maMot } });
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+    const sauGiu = await dem();
+    const dong = logLoi.slice(mocLog).filter((d) => d.includes("khoan 145"));
+    const ke = `status: ${String(r?.status)} ${r?.text ?? ""}; phiên/sổ trước ${JSON.stringify(truoc)} sau ${JSON.stringify(sauGiu)}; log: ${dong.length}`;
+
+    expect(r?.status, `sổ không nhận thì phải 503 có tên, không 500 — ${ke}`).toBe(503);
+    expect(sauGiu, `không chứng chỉ nào được phát, không hàng sổ nào — ${ke}`).toEqual(truoc);
+    expect(dong.length, `đúng một dòng log cố định — ${ke}`).toBe(1);
+    expect(dong[0], "dòng log không nội suy giá trị").not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/u);
+
+    // Mã đã tiêu thụ trong lần 503 KHÔNG dùng lại được — giao dịch đã commit lần tiêu thụ ấy.
+    const lai = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: maMot } });
+    expect(lai.status, `mã đã tiêu thụ không phát lại được — ${lai.text}`).toBe(401);
+    expect(await dem(), "lần thử lại bị từ chối cũng không phát gì").toEqual(truoc);
+  }, 60_000);
+});

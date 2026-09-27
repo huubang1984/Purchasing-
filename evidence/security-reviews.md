@@ -14083,3 +14083,40 @@ lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
 ## 6. Số
 
 Khoản 228 đóng. Còn mở **86**; rổ B **61**.
+
+# §S1.9101 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
+
+## 1. Việc gì
+
+Khoản 145 (S1.76): `startAgentSession` ghi `AGENT_SESSION_ISSUED` trong cùng giao dịch với lần tiêu thụ mã TOTP và hàng phiên, không
+savepoint. Khoá ghi sổ bị giữ quá trần 2 s (050) thì 55P03 ném ra, cả giao dịch rollback. Khoản ấy tự ghi đây là câu hỏi TÍNH SẴN SÀNG,
+không an toàn, và đòi trả lời: *một chứng chỉ phát ra mà sổ không ghi thì có được phát không*. Chủ dự án chọn: KHÔNG. Chạm ADR-039.
+
+## 2. Đo trước
+
+Khối mới của `apps/api/src/auth.int.test.ts`: một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (`audit_append`), rồi
+`POST /auth/agent-session` với mã TOTP đúng. Trên `apps/api/src/routes/auth.ts` của `master`: **ĐỎ** — `500 {"error":"loi noi bo"}`,
+phiên/sổ trước `{0,0}` sau `{0,0}`, **0** dòng log. Tức mã cũ đã fail-closed về chứng chỉ; thứ thiếu là tên của lỗi và dấu vết.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `startAgentSession` đặt `SAVEPOINT` trước hàng phiên; lần ghi sổ gãy 55P03 hay 40P01 ⇒ lùi về
+  savepoint (hàng phiên biến mất cùng lần ghi hỏng) rồi ném `AgentSessionAuditBusyError` (xuất ở barrel, danh sách trắng cập nhật).
+  Mọi mã khác ném nguyên như trước.
+- `apps/api/src/routes/auth.ts`: bắt lỗi ấy ⇒ một dòng log cố định `[api] khoan 145: …` và trả **503** bằng đường TRẢ VỀ, nên giao
+  dịch commit lần tiêu thụ mã TOTP — mã ấy không phát lại được.
+- `docs/DECISIONS.md` ADR-039: một gạch ghi quyết định.
+
+## 4. Đo sau
+
+Ca mới xanh: 503 có tên; không phiên AGENT, không hàng `AGENT_SESSION_ISSUED`; đúng một dòng log, không nội suy id; dùng lại chính mã
+ấy ⇒ 401, vẫn không phát gì.
+
+## 5. Giới hạn
+
+- Người vận hành phải đợi mã TOTP kế tiếp (≤ 30 s) để thử lại — cái giá có chủ ý của việc commit lần tiêu thụ mã.
+- 57014 vẫn ném nguyên (500), cùng lập luận khoản 143.
+
+## 6. Số
+
+Khoản 145 đóng. Còn mở **85**; rổ B **60**.
