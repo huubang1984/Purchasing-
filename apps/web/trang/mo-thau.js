@@ -58,24 +58,70 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
+/** [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
+const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+// [S1.176 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
+// không phải trạng thái phải bền: `orgId` không phải bí mật (ADR-107 mục 1), và kho trình duyệt có thể trống
+// hay ném (chế độ riêng tư), nên mọi lần đọc/ghi đều bọc và trang chạy đúng khi không có nó. Chỉ ghi SAU khi
+// vào thành công — một link lạ mang `#<orgId>` không được đặt mã tổ chức cho lần sau.
+const KHOA_TO_CHUC = "tp-ma-to-chuc";
+function toChucDaNho() {
+  try { return localStorage.getItem(KHOA_TO_CHUC) ?? ""; } catch { return ""; }
+}
+function nhoToChuc(orgId) {
+  try { localStorage.setItem(KHOA_TO_CHUC, orgId); } catch { /* không nhớ được thì thôi */ }
+}
+
+/**
+ * [S1.176 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
+ * chức nằm đúng ở đó trong mọi link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang
+ * nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy chủ trong khi ô vẫn đầy.
+ */
+function docToChuc() {
+  let s = $("org").value.trim();
+  const h = s.indexOf("#");
+  if (h >= 0) s = s.slice(h + 1);
+  const c = s.indexOf(":");
+  if (c >= 0) s = s.slice(0, c);
+  s = s.trim();
+  if (s === "") return "";
+  return LA_UUID.test(s) ? s : null;
+}
+const SAI_TO_CHUC = "Mã tổ chức có dạng 00000000-0000-0000-0000-000000000000 — phần sau dấu # và trước dấu hai chấm của một link TrustProcure đã gửi.";
+const MAT_KET_NOI = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
+
 function docLink() {
   // Link gieo ra mang `#<mã tổ chức>:<mã đăng nhập>` — đường xác thực là đường VÔ DANH, nên máy
   // chủ không biết người gọi thuộc tổ chức nào cho tới khi client nói ra. Bản đầu của trang này
   // chỉ đọc token và lượt chạy thử đầu tiên trả về đúng câu `thiếu trường "orgId"`.
+  //
+  // [S1.176 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
+  // trơn — link của tin báo người duyệt khi hạn mức chặn mã đăng nhập. Nó điền ô tổ chức và XOÁ ô mã (mã
+  // của người trước không được đứng lại), để ô xin link bên dưới dùng được ngay.
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   const i = h.indexOf(":");
-  if (i <= 0) { if (h !== "") $("token").value = h; return; }
-  $("org").value = h.slice(0, i);
-  $("token").value = h.slice(i + 1);
+  if (i > 0) {
+    $("org").value = h.slice(0, i);
+    $("token").value = h.slice(i + 1);
+    return;
+  }
+  if (LA_UUID.test(h)) {
+    $("org").value = h;
+    $("token").value = "";
+    return;
+  }
+  if (h !== "") $("token").value = h;
 }
 
 $("nut-vao").addEventListener("click", async () => {
   bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = $("org").value.trim();
+  const orgId = docToChuc();
   const token = $("token").value.trim();
   const code = $("ma").value.trim();
   // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải redeem lại cho token mới.
   if (token !== phien.token) phien = { ...phien, token, daRedeem: false };
+  if (orgId === null) { bao($("loi1"), SAI_TO_CHUC); return; }
   if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
   $("nut-vao").disabled = true;
   try {
@@ -103,6 +149,7 @@ $("nut-vao").addEventListener("click", async () => {
       return;
     }
     phien = { ...phien, orgId, token };
+    nhoToChuc(orgId);
     // `/me` trả `{userId, sessionId, orgId, kind}` — CỐ Ý không trả email hay tên: một route
     // "tôi là ai" trả về dữ liệu cá nhân là một route mà mọi lỗ IDOR đều muốn có. Bản đầu của
     // trang này đoán sai hình dạng ấy và in "(không đọc được)" suốt cả lượt chạy thử.
@@ -119,8 +166,39 @@ $("nut-vao").addEventListener("click", async () => {
     hien($("b6"), true);
     hien($("b7"), true);
     hien($("b8"), true);
+  } catch {
+    // [S1.176] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
+    bao($("loi1"), MAT_KET_NOI);
   } finally {
     $("nut-vao").disabled = false;
+  }
+});
+
+// [S1.176 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
+// không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
+// máy chủ cố ý không nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Câu ấy phải
+// đúng ở MỌI nhánh sau 200: việc gửi chạy SAU phản hồi (outbox), và một người đã có năm mã trong 15 phút
+// (`LOGIN_MAX_TOKENS_PER_WINDOW`, đếm cả mã hệ thống phát) nhận 200 mà không nhận thư.
+$("nut-xin-link").addEventListener("click", async () => {
+  bao($("loi-link"), ""); bao($("ok-link"), "");
+  const orgId = docToChuc();
+  const email = $("email").value.trim();
+  if (orgId === null) { bao($("loi-link"), SAI_TO_CHUC); return; }
+  if (orgId === "" || email === "") { bao($("loi-link"), "Cần mã tổ chức và email."); return; }
+  $("nut-xin-link").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/link", { orgId, email });
+    if (r.status === 200) {
+      bao($("ok-link"), "Nếu email này thuộc tổ chức, link đăng nhập sẽ tới trong ít phút. Mỗi người nhận tối đa 5 link mỗi 15 phút, và link đã tới vẫn dùng được trong 15 phút — đừng bấm lại.");
+    } else if (r.status === 429) {
+      bao($("loi-link"), "Đã xin quá nhiều link trong ít phút. Đợi một lúc rồi thử lại.");
+    } else {
+      bao($("loi-link"), loiCua(r, "Không gửi được yêu cầu"));
+    }
+  } catch {
+    bao($("loi-link"), MAT_KET_NOI);
+  } finally {
+    $("nut-xin-link").disabled = false;
   }
 });
 
@@ -565,10 +643,11 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 window.addEventListener("hashchange", () => {
   docLink();
   phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
-  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh"]) {
+  for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh", "loi-link", "ok-link"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
 });
 
 docLink();
+if ($("org").value.trim() === "") $("org").value = toChucDaNho();

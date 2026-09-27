@@ -138,6 +138,8 @@ export default tseslint.config(
         document: "readonly",
         fetch: "readonly",
         location: "readonly",
+        // [S1.176 / ADR-107] Trang `/login` nhớ mã tổ chức (không phải bí mật) sau lần vào đầu tiên.
+        localStorage: "readonly",
         setTimeout: "readonly",
         TextEncoder: "readonly",
         URL: "readonly",

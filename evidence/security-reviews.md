@@ -14332,3 +14332,82 @@ Ca mới xanh: 503 có tên; không phiên AGENT, không hàng `AGENT_SESSION_IS
 ## 6. Số
 
 Khoản 145 đóng. Còn mở **83**; rổ B **58**.
+
+# §S1.176 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27, gộp cả ba kênh gửi (ADR-107, sửa dạng link của ADR-020 mục 3). Hai chỗ hở, đo trên `master`
+`d506bf2`:
+
+- Mọi link bộ gửi THẬT dựng ra thiếu mã tổ chức mà trang đích đòi. `gui-ses.ts` dựng `/login#<token>` và `/i#<token>`,
+  `kenh-so.ts` dựng `/i#<token>` cho SMS và Zalo; thân thư và tin nhắn không mang `orgId` ở chỗ nào khác. `/auth/redeem` và
+  `/guest/redeem` đòi `{orgId, token}`. `apps/web/trang/nop-thau.js` còn bỏ qua fragment không có dấu hai chấm — không điền
+  cả ô mã. Khoản 198 đóng ở S1.99 với lời khai ngược lại (trang tự điền, *"tin nhắn mang sẵn `orgId` trong thân"*): đúng cho
+  bản ghi JSON của hộp thư dev, sai cho SES, SMS, ZNS.
+- Không trang nào gọi `POST /auth/link` (`grep -rn "auth/link" apps/web/trang` ⇒ 0 dòng). Magic link là đường vào duy nhất
+  của người mua, nên người dùng trên prod không tự đăng nhập được lần nào — không chỉ lần đầu.
+
+## 2. Thay đổi
+
+- `apps/api/src/adapters/gui-ses.ts`, `hop-thu-dev.ts`, `kenh-so.ts`: tám chỗ dựng link nay mang `${m.orgId}:${m.token}` ở
+  fragment; tin báo người duyệt không mã qua SES mang `/login#${m.orgId}`. Hộp thư dev giữ `duongLink: null` cho tin ấy.
+- `apps/web/trang/mo-thau.html` + `mo-thau.js` (trang `/login`): `docLink()` đọc thêm `#<orgId>` trơn — điền ô tổ chức, xoá
+  ô mã; ô *Gửi link đăng nhập* gọi `POST /auth/link`, một câu cho mọi 200, câu riêng cho 429, `loiCua` cho phần còn lại.
+- `tools/pilot-gia-lap/src/hop-thu.ts`: `tokenTuLink(duongLink, orgId)` đòi fragment `<orgId>:<token>` với `orgId` là tổ
+  chức của tin; ba chỗ gọi truyền `tin.orgId`.
+- Test: `gui-ses.test.ts`, `hop-thu-dev.test.ts`, `kenh-so.test.ts`, `composition.int.test.ts` (tổ chức trong link là tổ chức
+  của tin), `phu-tro.test.ts`; hai test mới ở `apps/web/src/phuc-vu.test.ts` — ⑴ đọc văn bản ba bộ gửi, đòi đúng tám chỗ dựng
+  link, mỗi chỗ mang `#${m.orgId}:${m.token}` (hoặc `#${m.orgId}` ở `/login`); ⑵ chạy `docLink()` của bốn trang trong
+  `node:vm` trên dạng ấy, và hai dạng riêng của `/login`.
+
+## 3. Đo
+
+- Đột biến trả `kenh-so.ts` về `/i#${m.token}` ⇒ 2 đỏ (test mới ⑴ và `kenh-so.test.ts`). Đột biến bỏ lần xoá ô mã ở
+  `docLink()` của `/login` ⇒ 1 đỏ (test mới ⑵).
+- `apps/api/src/composition.int.test.ts` trên Postgres thật: 19/19.
+- Pilot giả lập trên CSDL mới (`pnpm pilot:gia-lap --dung-sau`): 10/10 kịch bản ĐẠT, cô lập 2/2 (đối chứng 2/2). Mọi lần đăng
+  nhập và mọi lời mời của lượt chạy đi qua `tokenTuLink` mới, tức qua link dạng `<orgId>:<token>` của hộp thư dev.
+- Chromium 1194 (Playwright) trên cụm thật của lượt ấy, người dùng *Trưởng phòng Mua hàng* của tổ chức SX:
+  `/login#<org>` ⇒ ô tổ chức điền, ô mã rỗng; email lạ ⇒ câu báo; email thật ⇒ ĐÚNG câu ấy; hộp thư dev: một thư cho email
+  thật, 0 thư cho email lạ; thư mang `/login#<org>:<token>`; mở nó ⇒ hai ô điền; TOTP ⇒ *"Đã vào với người dùng…"*; 0 lỗi
+  JavaScript trên trang.
+- `pnpm t0`, `pnpm test`, `pnpm cap-so --kiem`: xem mục 5.
+
+## 3b. Lượt soi đối kháng — ba lăng kính (an ninh; đúng đắn và đủ chỗ; hành vi trang `/login`), mỗi phát hiện hai người
+kiểm cố bác
+
+10 phát hiện, 7 đứng, 0 về an ninh. Cả 7 đã sửa:
+
+1. Nhánh tin báo người duyệt CÓ mã của SES không có test nào, và test mới chấp nhận `#<orgId>` trơn ở mọi chỗ dựng `/login`
+   — bỏ token ở nhánh ấy vẫn xanh; test mới cũng không đòi đường nằm trong `TRANG`. Sửa: ca SES có mã; `#<orgId>` trơn đúng
+   một chỗ; mọi đường phải có trong `TRANG`. Hai đột biến tương ứng ⇒ đỏ.
+2. `gui-sms.test.ts` nuôi mình bằng link dạng cũ và khẳng định lời mời ≤ 160 ký tự; `gui-zalo.test.ts` cũng dạng cũ; ADR-069
+   mục 2 viết *"≤ 160 ký tự"*. Sửa: fixture dạng mới; OTP và tin gia hạn ≤ 160, lời mời > 160 và ≤ 306; gạch câu ADR-069.
+3. Tài liệu và chú thích hiện hành vẫn tả dạng cũ (ADR-020 mục 3, hộp thư dev ở ADR-021, `auth.ts`, `cau-hinh.ts`,
+   `.env.example`, `phuc-vu.ts`). Sửa: gạch kèm nhãn hoặc viết lại chú thích.
+4. Tới `/login` không kèm fragment — kể cả qua liên kết điều hướng của chính ba trang kia — thì ô tổ chức rỗng và không có
+   cách biết nó. Sửa: ô tổ chức nhận nguyên link cũ; trang nhớ mã tổ chức sau lần vào đầu tiên (`localStorage`, bọc `try`);
+   câu dẫn nói mã nằm ở đâu.
+5. Câu báo cho 200 nói *"vừa được gửi"* trong khi việc gửi chạy sau phản hồi và người đã có năm mã/15 phút không nhận gì.
+   Sửa câu, vẫn một câu cho mọi 200.
+6. Mã tổ chức sai hình dạng hiện thành `thiếu trường "orgId"`. Sửa: trang kiểm hình dạng trước và nói đúng lỗi.
+7. `fetch` ném (mất mạng) ⇒ nút bật lại mà không một chữ. Sửa: câu báo mất kết nối ở cả nút Vào và nút xin link.
+
+Ba phát hiện bị bác: ô email không bị xoá khi đổi fragment (hai lần, cùng một ý — email không phải credential và không
+mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi lời mời nào).
+
+## 4. Giới hạn
+
+- Tin SMS lời mời thành hai đoạn: 138–153 ⇒ 175–190 ký tự GSM-7 tuỳ tên miền (thân của `gui-sms.ts`, token 43 ký tự,
+  `orgId` 36 + `:`). Chủ dự án chọn trả.
+- Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-107,
+  chưa vào sổ nợ.
+- `/tao-thau` và `/chinh-sach` không có ô xin link.
+- Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa. Dấu hai chấm hợp lệ trong fragment
+  (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để trình tự nhận diện không
+  cắt mất ký tự cuối.
+
+## 5. Số
+
+Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.

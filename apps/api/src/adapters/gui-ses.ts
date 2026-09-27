@@ -14,6 +14,10 @@
 //   ⑶ ĐÍCH phải là một địa chỉ email đơn, không CR/LF, không dấu phẩy — một đích mang hai địa chỉ là
 //      một lần gửi token cho người thứ hai. Kiểm ở đây, trước khi gọi SES.
 //
+// [S1.176 / ADR-107] Mọi link mang `<orgId>:<token>` ở fragment: thân thư không có chỗ nào khác
+// nói tổ chức, mà trang đích đòi cả hai. Tin báo người duyệt không có mã (hạn mức chặn) vẫn mang
+// `#<orgId>` để trang điền sẵn ô tổ chức cho ô xin link.
+//
 // Lỗi của SES đi ra dưới dạng NÉM với lỗi gốc ở `cause` — bộ điều phối sau commit ghi TÊN lỗi, không
 // ghi thông điệp (có thể mang địa chỉ). Không chỗ nào trong tệp này ghi log.
 // ==============================================================================================
@@ -92,7 +96,7 @@ export function taoBoGuiSes(tuyChon: TuyChonGuiSes): HopThuDev {
         gui(
           m.email,
           "TrustProcure — đường dẫn đăng nhập",
-          `Đường dẫn đăng nhập của bạn (dùng một lần, có hạn):\n${tuyChon.baseUrl}/login#${m.token}${CHAN}`,
+          `Đường dẫn đăng nhập của bạn (dùng một lần, có hạn):\n${tuyChon.baseUrl}/login#${m.orgId}:${m.token}${CHAN}`,
         ),
     },
     invitationLinkSender: {
@@ -103,7 +107,7 @@ export function taoBoGuiSes(tuyChon: TuyChonGuiSes): HopThuDev {
           m.destination,
           "TrustProcure — lời mời tham gia báo giá",
           `Bạn được mời tham gia một gói báo giá trên TrustProcure.\n` +
-            `Mở đường dẫn sau để xem lời mời và nộp báo giá:\n${tuyChon.baseUrl}/i#${m.token}${CHAN}`,
+            `Mở đường dẫn sau để xem lời mời và nộp báo giá:\n${tuyChon.baseUrl}/i#${m.orgId}:${m.token}${CHAN}`,
         );
       },
     },
@@ -122,8 +126,8 @@ export function taoBoGuiSes(tuyChon: TuyChonGuiSes): HopThuDev {
           "TrustProcure — yêu cầu duyệt mở thầu",
           `Có một yêu cầu mở thầu cần bạn duyệt (gói ${m.rfqId}, yêu cầu ${m.unsealRequestId}).\n` +
             (m.token === null
-              ? `Hãy đăng nhập TrustProcure để duyệt: ${tuyChon.baseUrl}/login`
-              : `Đăng nhập để duyệt:\n${tuyChon.baseUrl}/login#${m.token}`) +
+              ? `Hãy đăng nhập TrustProcure để duyệt — trang có ô xin đường dẫn đăng nhập:\n${tuyChon.baseUrl}/login#${m.orgId}`
+              : `Đăng nhập để duyệt:\n${tuyChon.baseUrl}/login#${m.orgId}:${m.token}`) +
             CHAN,
         ),
     },

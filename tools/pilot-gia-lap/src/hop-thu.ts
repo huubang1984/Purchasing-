@@ -77,10 +77,17 @@ export function docTin(tho: unknown): TinHopThu | null {
   return null;
 }
 
-/** Token sau dấu `#` của một đường link (`…/login#<token>`, `…/i#<token>`). */
-export function tokenTuLink(duongLink: string): string {
+/**
+ * Token trong fragment của một đường link. ~~(`…/login#<token>`, `…/i#<token>`)~~ **[S1.176 / ADR-107]**
+ * Bộ gửi dựng `…/login#<orgId>:<token>` và `…/i#<orgId>:<token>`; mã tổ chức trong link phải là CHÍNH tổ
+ * chức của tin — một link mang tổ chức khác là bộ gửi hỏng, không phải một token để dùng.
+ */
+export function tokenTuLink(duongLink: string, orgId: string): string {
   const i = duongLink.indexOf("#");
-  const t = i < 0 ? "" : duongLink.slice(i + 1);
+  const f = i < 0 ? "" : duongLink.slice(i + 1);
+  const j = f.indexOf(":");
+  if (j < 0 || f.slice(0, j) !== orgId) throw new Error("đường link trong hộp thư không mang đúng mã tổ chức của tin");
+  const t = f.slice(j + 1);
   if (!/^[A-Za-z0-9_-]{16,}$/u.test(t)) throw new Error("đường link trong hộp thư không mang token đúng hình dạng");
   return t;
 }

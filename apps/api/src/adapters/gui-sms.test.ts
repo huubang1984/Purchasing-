@@ -1,4 +1,5 @@
-// [ADR-069] Kênh SMS — đo trên client GIẢ: đúng lệnh, đúng danh tính gửi, TRANSACTIONAL, thân ASCII một đoạn GSM-7.
+// [ADR-069] Kênh SMS — đo trên client GIẢ: đúng lệnh, đúng danh tính gửi, TRANSACTIONAL, thân ASCII GSM-7 — ~~một đoạn~~
+// [S1.176 / ADR-107] một đoạn cho OTP và tin gia hạn, HAI đoạn cho lời mời (link mang mã tổ chức).
 import { PinpointSMSVoiceV2Client, SendTextMessageCommand, type SendTextMessageCommandOutput } from "@aws-sdk/client-pinpoint-sms-voice-v2";
 import { describe, expect, it } from "vitest";
 import { taoBoGuiSms, type SmsGuiTin } from "./gui-sms.js";
@@ -27,7 +28,8 @@ describe("[ADR-069] bộ gửi SMS", () => {
     const sms = new SmsGia();
     const g = taoBoGuiSms({ client: sms, danhTinhGui: "TRUSTPROC", configurationSet: "tp-sms" });
     await g.guiOtp(SO, "123456");
-    await g.guiLoiMoi(SO, "https://app.vidu.vn/i#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCd");
+    // Đúng dạng `kenh-so.ts` dựng: `<orgId>:<token>`, token 43 ký tự (32 byte base64url).
+    await g.guiLoiMoi(SO, "https://app.vidu.vn/i#11111111-1111-4111-8111-111111111111:AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCd");
     await g.guiGiaHan(SO, "2026-10-01T10:00:00.000Z");
     expect(sms.lenh).toHaveLength(3);
     for (const l of sms.lenh) {
@@ -36,12 +38,18 @@ describe("[ADR-069] bộ gửi SMS", () => {
       expect(l.input.MessageType).toBe("TRANSACTIONAL");
       expect(l.input.ConfigurationSetName).toBe("tp-sms");
       const than = l.input.MessageBody ?? "";
-      // ASCII in được ⇒ GSM-7, không UCS-2; một đoạn 160 ký tự (lời mời có link dài vẫn trong một đoạn).
+      // ASCII in được ⇒ GSM-7, không UCS-2; ~~một đoạn 160 ký tự (lời mời có link dài vẫn trong một đoạn)~~.
       expect(than, than).toMatch(/^[\x20-\x7e]+$/u);
-      expect(than.length, than).toBeLessThanOrEqual(160);
     }
+    // [S1.176 / ADR-107] OTP và tin gia hạn: một đoạn 160. Lời mời: link mang mã tổ chức đẩy nó quá 160 — hai đoạn
+    // GSM-7 ghép (153 × 2), cái giá chủ dự án chọn trả; ba đoạn thì là một thay đổi khác cần được thấy.
+    const doDai = sms.lenh.map((l) => (l.input.MessageBody ?? "").length);
+    expect(doDai[0]).toBeLessThanOrEqual(160);
+    expect(doDai[2]).toBeLessThanOrEqual(160);
+    expect(doDai[1]).toBeGreaterThan(160);
+    expect(doDai[1]).toBeLessThanOrEqual(306);
     expect(sms.lenh[0]!.input.MessageBody).toContain("123456");
-    expect(sms.lenh[1]!.input.MessageBody).toContain("/i#AbCd");
+    expect(sms.lenh[1]!.input.MessageBody).toContain("/i#11111111-1111-4111-8111-111111111111:AbCd");
     expect(sms.lenh[2]!.input.MessageBody).toContain("2026-10-01T10:00:00.000Z");
   });
 

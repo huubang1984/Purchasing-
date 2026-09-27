@@ -6,7 +6,8 @@
 // (stack Terraform `85-sms-zalo`). Không khoá bí mật nào: quyền đi bằng IAM.
 //
 // NỘI DUNG KHÔNG DẤU, và đó là một lựa chọn có số: tiếng Việt có dấu buộc mã hoá UCS-2 — 70 ký tự một
-// đoạn thay vì 160 của GSM-7 — nên một lời mời mang đường dẫn thành ba đoạn, trả ba lần tiền. Mọi thân tin
+// đoạn thay vì 160 của GSM-7 — nên một lời mời mang đường dẫn thành ba đoạn, trả ba lần tiền. [S1.176 / ADR-107]
+// Không dấu, lời mời nay vẫn là HAI đoạn GSM-7: link mang mã tổ chức đẩy nó quá 160. Mọi thân tin
 // ở đây là ASCII, và test giữ điều ấy. Nhà mạng Việt Nam còn đòi ĐĂNG KÝ MẪU nội dung cho brandname:
 // đổi một câu ở đây là đổi một mẫu đã đăng ký (README, stack 85).
 //
