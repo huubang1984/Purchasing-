@@ -12650,10 +12650,72 @@ Tổng điều tra của `[INV-H19]` bắt kịp: `org_policy_signatures` vào `
   hợp: `pnpm t0` sạch (398 module, 1562 phụ thuộc); `pnpm test` **108 tệp, 1441 đạt, 1 bỏ qua**; tầng tích hợp do job
   T3 của CI đo trên chính commit hợp. **69** migration, **92** ADR.
 
-# §S1.157 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 243
+# §S1.157 — KHOẢN 243 MỞ VÀ ĐÓNG CÙNG VÒNG: `POST /evaluate` KHÔNG CÒN TRẢ GIÁ CHO VAI THIẾU `bid.view`
+
+**Rổ và mảnh (ADR-043 ⒞): khoản 243 mở và đóng trong cùng vòng nên không vào rổ nào**, cùng tiền lệ 190 · 191 · 192 của S1.90.
+Không migration, không ADR mới — một ghi chú ở ADR-054. Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+
+Một lượt chấm lại 62 khoản rổ B còn mở (sáu người chấm độc lập, rồi một lượt phản biện cho ba ứng viên đầu) bác cả ba ứng viên
+điểm cao nhất — 220, 112, 228 — vì mức răng bị thổi phồng hoặc vì lõi của chúng chờ chủ dự án chọn. Nhưng người chấm khoản 220
+đo được một hệ quả mà hàng 220 chưa ghi, và người phản biện xác nhận nó trên master `a8d80ff`: thân phản hồi của
+`POST /rfqs/:rfqId/evaluate` mang giá và hạng của mọi báo giá tới những vai không giữ `bid.view`. Chủ dự án chọn phương án *(a)*:
+bỏ giá khỏi thân phản hồi, không đổi ma trận quyền.
+
+## 2. Đo trước khi sửa
+
+- `db/migrations/005_identity.sql`: `evaluation.perform` cấp cho REQUESTER, BUYER, TECHNICAL, PROCUREMENT_MANAGER, FINANCE;
+  `bid.view` chỉ cho PROCUREMENT_MANAGER, FINANCE, DIRECTOR.
+- `apps/api/src/routes/buyer.ts`: handler của route chấm trả `{ evaluation: await taoLuotDanhGia(…) }` nguyên vẹn.
+- `packages/danh-gia/src/luot-danh-gia.ts`: `taoLuotDanhGia` trả `{ evaluationId, policyId, policyVersion, currency, lines }`, với
+  `lines{bidVersionId, effectiveCost, rank, components}`.
+- Đường đọc có khai của cùng dữ liệu, `GET /rfqs/:rfqId/ranking` (`docBangXepHang`), đòi `bid.view`; ADR-054 khai `bid.view` là
+  cổng đọc duy nhất của `rfq_evaluation_lines`. `/rfqs/:rfqId/bid-count` cũng đứng sau `bid.view`.
+- Không lớp nào bắt: vòng quét rò rỉ lần hai của `kich-ban-41-http.int.test.ts` chỉ lặp route `GET`; bước 12b và 12g — hai lần
+  gọi route chấm thật — gọi bằng `trangThai.mua`, một PROCUREMENT_MANAGER có `bid.view`.
+- Giao diện `apps/web/trang/mo-thau.js` chỉ đọc `evaluation.policyVersion` từ thân ấy; bảng xếp hạng nó vẽ đọc qua `GET /ranking`.
+- Không route ghi nào khác trả `effectiveCost` (đọc `packages/danh-gia/src/trao-thau.ts`, `vong-bafo.ts`, `apps/api/src/routes/*.ts`).
+
+## 3. Thay đổi
+
+- `apps/api/src/routes/buyer.ts`: hàm `thanLuotCham(ld)` dựng thân từ ĐÚNG bốn trường — `evaluationId`, `policyId`, `policyVersion`,
+  `currency`. Dựng từng trường chứ không bỏ `lines`: một trường mới của `LuotDanhGia` không tự đi ra. Không trả số báo giá, vì
+  con số ấy cũng đứng sau `bid.view`. API của gói `@trustprocure/danh-gia` không đổi — `bo-bang-chung`, `tools/inv-matrix` và các
+  test của gói vẫn đọc `lines` từ hàm.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: người bấm chấm ở bước 12b và 12g là một BUYER không giữ `bid.view`
+  (`trangThai.cham`); các khẳng định về số hàng và thứ hạng chuyển sang `GET /ranking` dưới `trangThai.mua`.
+
+## 4. Đo sau khi sửa
+
+- T1 `apps/api/src/than-luot-cham.test.ts` — gọi CHÍNH handler của bảng `ROUTES`, `taoLuotDanhGia` thay bằng một bản giả trả một
+  lượt chấm có giá: thân đúng bốn khoá, không chữ số nào của giá, không khoá `lines`/`effectiveCost`/`rank`/`components`/`soBaoGia`;
+  và `thanLuotCham` không cho một trường mới đi ra. **Đỏ trên route cũ** (cả hai ca).
+- T3 kịch bản 41 qua HTTP, PostgreSQL 16 thật: bước 12b — BUYER không giữ `bid.view` chấm ⇒ 201, thân đúng bốn khoá, bộ quét rò rỉ
+  (rút số theo mọi cách viết, giải base64/base64url/hex hai tầng) không thấy giá nào trong thân và header, `GET /ranking` của chính
+  người ấy ⇒ 403; bảng xếp hạng đọc bằng PROCUREMENT_MANAGER vẫn đủ năm hàng, hạng 1–5, thành phần đi ra. Bước 12g — cùng người
+  chấm lại sau BAFO: thân không mang giá nào, kể cả hai giá BAFO; bảng xếp hạng là của lượt vừa tạo, năm hàng, hạng tính trên giá
+  mới. **29/29 xanh; trên route cũ, 12b và 12g đỏ** ở khẳng định danh sách trắng (thân có năm khoá, có `lines`).
+
+## 5. Ranh giới, nói ra
+
+- Lõi của khoản 220 còn nguyên: REQUESTER, BUYER, TECHNICAL vẫn bấm chấm được, tức vẫn đẩy được cạnh `UNSEALED->EVALUATING` một
+  chiều — chỉ không còn thấy giá. Thu hẹp `005` hay ghi cổng này là lớp NÔNG vẫn là quyết định của chủ dự án.
+- Vòng quét rò rỉ lần hai vẫn chỉ quét route `GET`. Route chấm nay có phép đo riêng; một route GHI mới trả giá sẽ không bị vòng
+  quét ấy bắt.
+- Không gắn nhãn `[INV-…]`: A1–A6 nói về giá TRƯỚC mở thầu và J4 về giá BAFO trước khi vòng ấy mở; không bất biến nào trong sổ
+  đăng ký nói về cổng đọc SAU mở thầu. Lời khai của cổng ấy sống ở ADR-054.
+
+## 6. Số đo
+
+- `pnpm t0` sạch; `pnpm test` xanh; `so-no-tu-doi-chieu` xanh.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ: `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**.
+- Số tạm `S1.157`, khoản `243` do `pnpm cap-so` cấp lúc merge; lời khai đếm do `pnpm cap-so --dem` viết.
+
+# §S1.158 — PILOT GIẢ LẬP: HAI DOANH NGHIỆP BỊA, DANH MỤC MƯỜI MỘT KỊCH BẢN QUA API THẬT; LƯỢT ĐẦU ĐO RA KHOẢN 244
 
 **Rổ và mảnh (ADR-043 ⒞): KHÔNG gỡ mảnh 4 (*khách hàng pilot*) của `docs/PRODUCT.md` §11 — vòng này dựng thứ để trình
-diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 243 vào rổ B.** Không
+diễn và một thang bậc tới pilot thật, không dựng pilot; không chạm khoản rổ A nào; mở khoản 244 vào rổ B.** Không
 migration. Một ADR (ADR-093). Nhánh `claude/pilot-simulation-plan-t2vak3` từ `master` `9b3cf8d`.
 
 ## 1. Vòng này là gì
@@ -12809,7 +12871,7 @@ xu.
 duyệt, BUYER duyệt mở thầu, thiếu chữ ký trên ngưỡng, hai giá trùng, báo giá không được mời, hạn dưới sàn, người
 `khongXem` có quyền xem, người không tồn tại. Cả mười đều bị bắt.
 
-## 7. Phát hiện — khoản 243
+## 7. Phát hiện — khoản 244
 
 Cột *Vào sổ* đếm hàng `audit_events` của tổ chức trước và sau mỗi lần thử sai. Lượt đầu (23:11) cho **9/16** lần từ chối
 vào sổ. Nhưng lượt ấy chưa từng chạy J3 vế 1: danh mục chỉ giao lần tự duyệt trao thầu cho người KHÔNG giữ `po.approve`,
@@ -12842,7 +12904,7 @@ Tám lần KHÔNG vào sổ, ở lượt sau khi sửa:
 
 `docs/PRODUCT.md` §5 (hàng S1.110) khai *"và mỗi lần từ chối để lại một dòng"*: sửa tại chỗ, gạch và giữ nguyên văn.
 
-Khoản **243** vào **rổ B**, ba vế đọc ở chính hàng sổ. Khoản gồm J3 ×4, D2 ×1 và hai lần nộp phía nhà cung cấp. Bản đầu
+Khoản **244** vào **rổ B**, ba vế đọc ở chính hàng sổ. Khoản gồm J3 ×4, D2 ×1 và hai lần nộp phía nhà cung cấp. Bản đầu
 của biên bản này viết hai lần nộp ấy *"ở phía NHÀ CUNG CẤP, ngoài mệnh đề của ADR-060"*. Lượt soi đối kháng chỉ ra câu ấy
 trái với ADR-074: ADR ấy đã được chấp nhận cùng ngày, và nó đọc chính mệnh đề ADR-060 cho bước *nộp*. Lần mở link đã thu
 hồi là một lần xác thực token thất bại, không phải một bước của chuỗi, và ADR-060 không xếp lớp ấy. Nó được ghi ở đây,
@@ -12895,15 +12957,15 @@ kiểm chứng độc lập: 35 phát hiện, **32 xác nhận, 3 bị bác** �
 | 9 | đúng đắn | thấp | Tín hiệu dừng tới trong lúc khởi động cụm (có thể tới hai phút) vẫn để lại tiến trình con mồ côi | `khoiDongCum` trao hàm dừng TRƯỚC tiến trình con đầu tiên. Đo: SIGTERM 1,66 s sau khi chạy lệnh `cum` — `api` đã ra đời, chưa trả `/health` — ⇒ mã thoát 143, 0 tiến trình con còn sống |
 | 10 | đúng đắn | thấp | Một lần ĐỌC tệp hộp thư hỏng tạm thời bị nhớ như tin hỏng, vĩnh viễn | Chỉ nhớ khi nội dung sai hình dạng. Test mới đỏ khi gỡ bản sửa (đã chạy). **Người kiểm chứng BÁC** phát hiện: bên ghi hộp thư ghi `.tmp` rồi đổi tên, và trên Windows libuv mở tệp với cờ chia sẻ đọc, nên không đo được đường kích hoạt nào. Bản sửa giữ lại như một lớp phòng thủ vô hại |
 | 11 | đúng đắn | thấp | Chế độ chậm chạy phần có ghi sổ của SX-06 chồng lên các kịch bản nhanh cùng tổ chức: OTP cùng số điện thoại, và cửa sổ đo *Vào sổ* | SX-06 dựng gói, mời và nhận báo giá MỘT MÌNH; kịch bản nhanh chạy trong lúc nó đợi; nó chỉ đi tiếp sau hạn khi kịch bản nhanh đã xong |
-| 12 | xanh giả | vừa | J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt) chưa từng chạy, mà `PRODUCT.md` §5 và khoản 243 khai đã đo J3 | SX-03 giao đề xuất cho phó giám đốc. Lần thử: 422 *"(J3)"*, **không vào sổ**, và nó vào khoản 243. Một test đòi danh mục đo cả lớp 403 lẫn lớp J3 |
+| 12 | xanh giả | vừa | J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt) chưa từng chạy, mà `PRODUCT.md` §5 và khoản 244 khai đã đo J3 | SX-03 giao đề xuất cho phó giám đốc. Lần thử: 422 *"(J3)"*, **không vào sổ**, và nó vào khoản 244. Một test đòi danh mục đo cả lớp 403 lẫn lớp J3 |
 | 13 | xanh giả | vừa | Cột mốc, biên bản và Handoff khai *"mười một kịch bản qua API thật"* khi SX-06 chưa có kết quả | Các câu ấy nay gọi đó là DANH MỤC, và nói SX-06 chưa có kết quả cho tới khi có số đo |
-| 14 | xanh giả | vừa | Hai lần nộp phía nhà cung cấp bị gọi là *"ngoài mệnh đề của ADR-060"*, trái với cách ADR-074 đọc mệnh đề ấy | Vào khoản 243 (mục 7) |
+| 14 | xanh giả | vừa | Hai lần nộp phía nhà cung cấp bị gọi là *"ngoài mệnh đề của ADR-060"*, trái với cách ADR-074 đọc mệnh đề ấy | Vào khoản 244 (mục 7) |
 | 15 | xanh giả | vừa | *"Bảy người là cỡ tối thiểu đo được"*, trong khi công cụ chưa chạy hồ sơ nào nhỏ hơn | Sửa: bảy là cỡ ĐỦ, đã đo; cỡ tối thiểu chưa đo |
 | 16 | xanh giả | thấp | Lời dẫn trình diễn của XD-05 gán lần tự duyệt của người tạo gói cho D2, trong khi cổng quyền chặn trước (403) | Lời dẫn của ba gói dở suy lớp chặn từ quyền của người thử. Minh hoạ XD-05 sửa người ký thứ hai cho khớp bước |
 | 17 | xanh giả | thấp | *"417 bước qua API thật"* đếm cả 149 phép KIEM | Báo cáo tách LAM + CHAN khỏi KIEM (mục 5) |
 | 18 | xanh giả | thấp | Báo cáo đóng dấu băm HEAD sạch lên cả lượt chạy trên mã đã đột biến | Thêm *"+ N tệp chưa commit"* khi cây làm việc bẩn |
 | 19 | xanh giả | thấp | Minh hoạ của SX-06 (*"có hàng `BID_DEADLINE_DENIED`"*, *"đóng sau hạn không cần lý do"*) và của SX-02 (*"bản cũ vẫn còn"*) được in ra mà không kiểm | SX-06: lần nộp trễ nay đòi ĐÚNG một hàng `BID_DEADLINE_DENIED`, đếm theo hành động; thiếu là KHÔNG ĐẠT. Câu *"không cần lý do"* bị bỏ: route luôn đòi `reason`, còn `early_close_reason` không lộ qua API. SX-02: xem dưới |
-| 20 | xanh giả | thấp | Chú thích của báo cáo gọi lần từ chối do trigger là *"không vào sổ được"* | Sửa: hôm nay nó không vào sổ khi lớp gói không bắt trước (khoản 243). `submitBid` đã ghi được một nhánh trigger |
+| 20 | xanh giả | thấp | Chú thích của báo cáo gọi lần từ chối do trigger là *"không vào sổ được"* | Sửa: hôm nay nó không vào sổ khi lớp gói không bắt trước (khoản 244). `submitBid` đã ghi được một nhánh trigger |
 | 21 | xanh giả | thấp | Phép cô lập không có đối chứng dương | Hai đối chứng: người của chính tổ chức đọc cùng id ⇒ 200 |
 | 22 | xanh giả | thấp | Biên bản gọi việc thu hồi khoá là *"lớp chặn thật"* sau khi gói huỷ | Sửa (mục 7): lớp chặn là nhánh trạng thái C1 của trigger nộp |
 | 23 | xanh giả, cổng CI | thấp | Khai báo ở `duong-sql-ngoai-with-tenant.test.ts` và ADR-093 kể một phép đọc đặc quyền; mã chạy ba | Kể đủ ba ở cả hai chỗ và ở đầu `csdl.ts` |

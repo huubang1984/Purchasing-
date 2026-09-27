@@ -1,6 +1,6 @@
 # Phương án pilot giả lập — TrustProcure V2
 
-> **Ngày:** 2026-09-26 · **Vòng:** S1.157 · **Quyết định:** ADR-093 · **Công cụ:** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`)
+> **Ngày:** 2026-09-26 · **Vòng:** S1.158 · **Quyết định:** ADR-093 · **Công cụ:** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`)
 >
 > **Phạm vi chủ dự án chọn ngày 2026-09-26:** tài liệu + công cụ; hai doanh nghiệp giả lập (Sản xuất + Xây dựng); chế độ
 > nhanh, có thêm chế độ chậm; dữ liệu dùng cho CẢ kiểm tính năng LẪN trình diễn.
@@ -41,7 +41,7 @@ nó được cưỡng chế ở bốn chỗ:
 | Bảng so sánh có đúng tới từng chữ số với thứ đã niêm phong không | **Có** — so từng gói, có đột biến chứng minh răng (mục 6) |
 | Biên nhận có kiểm được bằng khoá công khai một mình không | **Có** |
 | Bộ bằng chứng có tự đủ, kiểm được khi không có CSDL không | **Có** |
-| Mỗi lần bị từ chối có để lại dấu kiểm toán không | **Có** — cột *Vào sổ* của báo cáo, và nó đã tìm ra khoản 243 |
+| Mỗi lần bị từ chối có để lại dấu kiểm toán không | **Có** — cột *Vào sổ* của báo cáo, và nó đã tìm ra khoản 244 |
 | Nhà cung cấp thật có chịu bấm link + OTP không; webview Zalo; tỷ lệ bỏ cuộc | **Không** |
 | Ngưỡng một-con-số, dự toán trước khi mời, đủ người để tách vai có đúng với doanh nghiệp thật không | **Không** — chỉ đi được *đường mã* của B1, B2, B4 |
 | Khách có chấp nhận khoá ở AWS KMS Singapore, TOTP thay SSO không | **Không** |
@@ -187,7 +187,7 @@ duyệt, và lần thử không bao giờ tới sản phẩm.
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 
 Chạy trên Postgres 16.13 cục bộ. Lượt đầu chạy trên bản của commit đầu của vòng. Lượt soi đối kháng năm lăng kính (biên
-bản §S1.157 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên bản đã sửa; bảng dưới là số của lượt sau.
+bản §S1.158 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên bản đã sửa; bảng dưới là số của lượt sau.
 
 | Chỉ số | Kết quả |
 |---|---|
@@ -218,7 +218,7 @@ bản §S1.157 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
 
    J3 và D2 là tách bạch nhiệm vụ cưỡng chế bằng trigger, và `docs/PRODUCT.md` §5 từng khai cho J3 *"mỗi lần từ chối để
    lại một dòng"* — câu ấy đã được sửa tại chỗ. Hai lần nộp thuộc vế ghi sổ của ADR-060 theo cách ADR-074 đọc nó cho bước
-   nộp. Bảy lần ấy là **khoản 243** (rổ B). Lần mở link đã thu hồi là một lần xác thực token thất bại; ADR-060 không xếp
+   nộp. Bảy lần ấy là **khoản 244** (rổ B). Lần mở link đã thu hồi là một lần xác thực token thất bại; ADR-060 không xếp
    lớp ấy, và nó chỉ được ghi ở biên bản.
 2. **Đột biến *làm tròn nghìn* SỐNG SÓT ở lần chạy đầu.** Dữ liệu khi ấy toàn số tròn nghìn: đơn giá tròn 100 đồng, số
    lượng nguyên. Dữ liệu đã sửa: đơn giá tròn 10 đồng, và mỗi gói có một dòng số lượng lẻ tới hai chữ số thập phân. Một test
@@ -228,7 +228,7 @@ bản §S1.157 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    - tín hiệu dừng gửi giữa lượt chạy để lại bốn tiến trình con mồ côi;
    - thư mục trạng thái mới trên một CSDL cũ làm `api` chết lúc khởi động.
 4. **Lượt soi đối kháng năm lăng kính** (an ninh, đúng đắn, xanh giả, cổng CI, tài liệu) tìm thêm những chỗ công cụ nói
-   nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.157 mục 9 kê từng điểm và cách sửa.
+   nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.158 mục 9 kê từng điểm và cách sửa.
 
 ## 7. Thang bậc tới pilot thật — trả lời thẳng cho "không ai nhận pilot"
 
@@ -265,7 +265,7 @@ Người ta từ chối pilot vì nó đòi *dữ liệu thật + nhà cung cấ
 
 1. Chủ dự án chọn: có mở bậc 1 của mục 7 với một doanh nghiệp cụ thể không.
 2. Nhập gói từ CSV cho bậc 2.
-3. Khoản 243: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
+3. Khoản 244: có đưa J3 (cả ba vế), D2 duyệt gói và hai lần từ chối nộp của nhà cung cấp qua lớp gói để lần từ chối vào
    sổ (khuôn `nemTuChoi`, hay savepoint như `BID_DEADLINE_DENIED` của ADR-074), hay giữ giới hạn và khai nó. Đây là một
    quyết định, không phải một lỗi đánh máy.
 4. Một cụm TLS để trình diễn trên điện thoại thật.
