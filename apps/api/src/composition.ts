@@ -275,6 +275,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
       auditPool,
       services,
       outboxNudge,
+      choKyChinhSach: ch.choKyChinhSach,
       ...(ch.afterCommitTimeoutMs === undefined ? {} : { afterCommitTimeoutMs: ch.afterCommitTimeoutMs }),
     }),
     // [sổ nợ 41] Địa chỉ người gọi: socket, trừ khi socket là một proxy đã khai — xem dia-chi.ts.

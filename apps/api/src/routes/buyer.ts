@@ -46,6 +46,8 @@ import {
   extendRfqDeadline,
   getActiveProcurementPolicy,
   getRfq,
+  kyPhienBanChinhSach,
+  lietKePhienBanChinhSach,
   listRfqItems,
   openRfq,
   setRfqBudget,
@@ -114,6 +116,13 @@ function soNguyen(body: unknown, ten: string): number {
  * phán xử. Ba lớp, mỗi lớp một việc, và không lớp nào chép lại luật của lớp kia.
  */
 function mangTrongSo(body: unknown, ten: string): readonly ThanhPhanTrongSoVao[] | undefined {
+  return mangObjectTuyChon(body, ten) as readonly ThanhPhanTrongSoVao[] | undefined;
+}
+/**
+ * Mảng các object, TUỲ CHỌN — hình dạng NGOÀI và chỉ hình dạng ngoài. [S1.169] Chung cho `evalComponents` và `tiers`
+ * (bậc giá trị, S3.1c): luật bên trong của cả hai là của CSDL (`057`, `069`).
+ */
+function mangObjectTuyChon(body: unknown, ten: string): readonly Readonly<Record<string, unknown>>[] | undefined {
   const v = truong(body, ten);
   if (v === undefined || v === null) return undefined;
   if (!Array.isArray(v)) throw new HttpError(422, `trường "${ten}" phải là mảng`);
@@ -122,7 +131,7 @@ function mangTrongSo(body: unknown, ten: string): readonly ThanhPhanTrongSoVao[]
       throw new HttpError(422, `trường "${ten}" phải là mảng các object`);
     }
   }
-  return v as readonly ThanhPhanTrongSoVao[];
+  return v as readonly Readonly<Record<string, unknown>>[];
 }
 
 /** Số nguyên TUỲ CHỌN — `undefined` khi vắng, để `packages/rfq` phán xử cặp với `evalComponents`. */
@@ -169,6 +178,7 @@ const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId"
 const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
+const policyIdParam = (req: ApiRequest): string => uuidParam(req, "policyId");
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -234,6 +244,20 @@ const doc: readonly BuyerReadRoute[] = [
     // [khoản 141] ngưỡng phê duyệt của chính tổ chức
     agent: true,
     handler: async (ctx) => ({ status: 200, body: { policy: await getActiveProcurementPolicy(ctx.client, ctx.orgId) } }),
+  },
+  {
+    method: "GET",
+    path: "/policy/versions",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.169 / S3.1c] KHÔNG cho agent: màn `/chinh-sach` là màn của người, và lịch sử phiên bản cùng người ký là dữ liệu
+    // quản trị mà không công cụ đọc nào của agent cần. Mở sau là một quyết định có tên, không phải một lần quên.
+    agent: false,
+    handler: async (ctx) => {
+      const ds = await lietKePhienBanChinhSach(ctx.client, ctx.orgId);
+      // `choKy` để màn biết nút ký có mở không — chính cửa vẫn là route ký, đọc cùng cờ ấy.
+      return { status: 200, body: { phienBan: ds.phienBan, daBat: ds.daBat, choKy: ctx.choKyChinhSach } };
+    },
   },
   {
     method: "GET",
@@ -684,12 +708,16 @@ const ghi: readonly BuyerWriteRoute[] = [
     handler: async (ctx) => {
       // [review H2-3] `version` do người gọi chọn + cột `integer` + trigger 022 "phải LỚN HƠN" + không
       // UPDATE/DELETE ⇒ một `version: 2147483647` GHIM tổ chức vào chính sách ấy vĩnh viễn. Ở tầng
-      // HTTP, `version` chỉ là GIÁ TRỊ KỲ VỌNG (chống đua): phải bằng phiên bản hiện hành + 1.
-      // Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.
+      // HTTP, `version` chỉ là GIÁ TRỊ KỲ VỌNG (chống đua): phải bằng phiên bản ~~hiện hành~~ MỚI NHẤT + 1.
+      // ~~Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.~~ [`035`, sổ nợ 45 đã đóng] trigger đòi ĐÚNG lớn nhất + 1.
+      // [S1.169 / S3.1c] ~~`getActiveProcurementPolicy` + 1~~ Từ S1.156 phiên bản HIỆU LỰC có thể đi sau phiên bản MỚI NHẤT:
+      // một phiên bản có bậc chưa ký không có hiệu lực (ADR-082 ⑺). Tính theo bản hiệu lực thì route đòi một số mà trigger
+      // `035` từ chối, và tổ chức không tạo được phiên bản nào nữa cho tới khi bản kia được ký. Nay tính theo bản mới nhất —
+      // đúng số trigger đòi — đọc qua `lietKePhienBanChinhSach`, câu không tự chọn phiên bản (S1.156).
       const version = soNguyen(ctx.req.body, "version");
-      const hienHanh = await getActiveProcurementPolicy(ctx.client, ctx.orgId);
-      const keTiep = (hienHanh?.version ?? 0) + 1;
-      if (version !== keTiep) throw new HttpError(422, `trường "version" phải bằng phiên bản hiện hành + 1 (${keTiep})`);
+      const moiNhat = (await lietKePhienBanChinhSach(ctx.client, ctx.orgId)).phienBan[0];
+      const keTiep = (moiNhat?.version ?? 0) + 1;
+      if (version !== keTiep) throw new HttpError(422, `trường "version" phải bằng phiên bản mới nhất + 1 (${keTiep})`);
       const policy = await createProcurementPolicy(ctx.client, ctx.orgId, {
         version,
         dualApprovalThreshold: chuoiBatBuoc(ctx.req.body, "dualApprovalThreshold"),
@@ -699,9 +727,34 @@ const ghi: readonly BuyerWriteRoute[] = [
         // CÓ TÊN khi chỉ một trong hai được khai, thay vì để người gọi đọc một `23514`.
         evalComponents: mangTrongSo(ctx.req.body, "evalComponents"),
         bafoTopN: soNguyenTuyChon(ctx.req.body, "bafoTopN"),
+        // [S1.169 / S3.1c] Bậc giá trị và hai cột mức — cùng khuôn: cửa này kiểm hình dạng ngoài, `069` phán phần còn lại.
+        tiers: mangObjectTuyChon(ctx.req.body, "tiers"),
+        chiaNhoCuaSoNgay: soNguyenTuyChon(ctx.req.body, "chiaNhoCuaSoNgay"),
+        thamDinhHieuLucThang: soNguyenTuyChon(ctx.req.body, "thamDinhHieuLucThang"),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { policy } };
+    },
+  },
+  {
+    method: "POST",
+    path: "/policy/:policyId/sign",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.POLICY_MANAGE,
+    resourceType: "PROCUREMENT_POLICY",
+    resourceId: policyIdParam,
+    handler: async (ctx) => {
+      // [S1.169 / S3.1c / ADR-105] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều, trong khi
+      // K2–K12 chưa có — bậc hiện ra mà chưa được cưỡng chế (spec §8.1). Cờ triển khai mặc định TẮT; đọc TRƯỚC mọi câu ghi.
+      if (!ctx.choKyChinhSach) {
+        throw new HttpError(409, "Ký phiên bản chính sách chưa mở trên máy chủ này: S3 chưa đủ chốt để bật (ADR-105)");
+      }
+      const chuKy = await kyPhienBanChinhSach(ctx.client, ctx.orgId, {
+        policyId: policyIdParam(ctx.req),
+        actorSessionId: ctx.actor.sessionId,
+      });
+      return { status: 201, body: { chuKy } };
     },
   },
   {

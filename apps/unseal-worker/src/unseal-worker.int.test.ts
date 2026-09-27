@@ -768,7 +768,7 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
     }
   });
 
-  it("[INV-A1] [S1.9101 / khoản 228] bản rõ chỉ ghi được dưới yêu cầu của CHÍNH gói thầu của phong bì", async () => {
+  it("[INV-A1] [S1.170 / khoản 228] bản rõ chỉ ghi được dưới yêu cầu của CHÍNH gói thầu của phong bì", async () => {
     // Trước `073`, trigger chỉ đòi yêu cầu ở `APPROVED`/`EXECUTED` — không hỏi yêu cầu ấy là của gói
     // NÀO. Nên phong bì gói B ghép với yêu cầu đã duyệt của gói A đi qua ở tầng lược đồ.
     const rfqA = await taoRfqMo();

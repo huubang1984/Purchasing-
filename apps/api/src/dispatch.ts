@@ -230,6 +230,11 @@ export interface DispatcherDeps {
    * `TU_CHOI_TRAN_MOI_CUA_SO`. Test tiêm số nhỏ; cùng khuôn `tranDocAgent`.
    */
   readonly tranTuChoi?: number;
+  /**
+   * [S1.169 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách (nút BẬT S3). Không khai ⇒ TẮT: một bộ điều phối lắp
+   * tay — test, công cụ — không mở được cửa ấy bằng cách quên một tham số. Composition root đọc nó từ cấu hình.
+   */
+  readonly choKyChinhSach?: boolean;
 }
 
 const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
@@ -465,6 +470,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   const treQuaTranMs = deps.treQuaTranMs ?? TRE_QUA_TRAN_TO_CHUC_MS;
   const tranDocAgent = deps.tranDocAgent ?? AGENT_DOC_TRAN_MOI_CUA_SO;
   const tranTuChoi = deps.tranTuChoi ?? TU_CHOI_TRAN_MOI_CUA_SO;
+  const choKyChinhSach = deps.choKyChinhSach ?? false;
 
   return async (vao) => {
     const requestId = randomUUID();
@@ -802,7 +808,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             let phanHoiHandler: ApiResponse;
             try {
               phanHoiHandler = await handler.chay(() =>
-                route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu }),
+                route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, choKyChinhSach }),
               );
             } finally {
               // [S1.92 / khoản 156] Xem khối cùng nhãn ở nhánh ANON. Đây là nhánh mà ba chỗ xếp việc

@@ -85,8 +85,10 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * tên lạ vào đó làm cổng ấy đỏ, đúng như nó phải thế. Hai gốc khác nhau thì hai lời khai.
  *
  * [khoản 196 / ADR-074 phần 3] `dong-ho-may-chu` — phép tính giờ máy chủ và đếm ngược của trang nộp.
+ *
+ * [S1.169 / S3.1c] `chinh-sach` — cảnh báo cấu hình rỗng ruột và số người tối thiểu của màn khai chính sách.
  */
-export const MODULE_WEB = ["so-tien", "dong-ho-may-chu"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {
@@ -96,6 +98,9 @@ export const TRANG: Readonly<Record<string, string>> = {
   "/mo-thau.js": "mo-thau.js",
   "/tao-thau": "tao-thau.html",
   "/tao-thau.js": "tao-thau.js",
+  // [S1.169 / S3.1c] Màn khai và ký chính sách theo bậc (spec S3 §9 S3.1c).
+  "/chinh-sach": "chinh-sach.html",
+  "/chinh-sach.js": "chinh-sach.js",
   "/chung.css": "chung.css",
   // [S1.99 / khoản 198] HAI ĐƯỜNG MÀ SẢN PHẨM ĐÃ SINH RA LINK TỪ S1.12 MÀ KHO CHƯA BAO GIỜ PHỤC
   // VỤ. `apps/api/src/adapters/hop-thu-dev.ts` dựng `${baseUrl}/login#<mã>` cho người mua và

@@ -13877,13 +13877,178 @@ nó vào sổ, và chọn cách làm, là quyết định của chủ dự án; 
 ## 5. Kiểm
 
 `pnpm t0` sạch; `pnpm test` xanh; `pnpm cap-so --kiem` và `--dem` sạch. Tầng tích hợp do T3 của CI đo.
-# §S1.9101 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
+
+---
+
+# §S1.169 — S3.1c: ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ ĐỨNG SAU MỘT CỜ TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`
+
+**Rổ và mảnh (ADR-043 ⒞):** một khoản mới, **248**, vào rổ B với điều kiện đóng riêng — trước khi mở cờ. Không migration.
+Một ADR mới (ADR-105). Không chạm mảnh nào của `docs/PRODUCT.md` §11: cờ tắt thì không tổ chức nào bật được S3, và tổ chức
+chưa bật chạy như MVP1.
+
+## 1. Vòng này là gì
+
+Phần ba trong bốn phần của S3.1 (spec S3 §9): route tạo và ký phiên bản chính sách, màn `/chinh-sach`. S3.1a (§S1.156) dựng
+bậc, chữ ký thứ hai và công tắc ở CSDL; S3.1b (§S1.166) cho gói đọc bậc và dựng K1. Tới vòng này, cách duy nhất để khai bậc
+hay ký một phiên bản là SQL dưới chủ sở hữu CSDL.
+
+## 2. Bốn quyết định của chủ dự án (S1.169)
+
+- **Nút bật:** route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT (ADR-105). Hai
+  phương án bị loại: mở luôn kèm một lời cảnh báo trên màn — bậc hiện ra mà K2–K12 chưa cưỡng chế, tức kiểm soát giả của
+  §8.1 do chính sản phẩm; hoãn route ký tới khi S3 đủ — S3.1d phải ký bằng SQL, và màn soạn không có đường đi trọn vòng.
+- **`CONTROL_DENIED` ngoài trần ADR-092:** ghi khoản 248, giải trước khi mở cờ. Phương án bị loại: giải ngay trong vòng
+  này — một thay đổi ở bộ điều phối và `packages/identity`, ngoài phạm vi S3.1c, cho một khe hôm nay không có đường sống.
+- **Số người tối thiểu:** tính theo bảng vai §7, từng bậc. Phương án bị loại: chỉ báo *"cần ≥ 2 người giữ `policy.manage`"*
+  — không đạt §8.10.
+- **Làm ngay** sau khi chốt.
+
+## 3. Thay đổi
+
+**Tầng gói** (`packages/rfq/src/procurement-policy.ts`):
+- `createProcurementPolicy` nhận `tiers`, `chiaNhoCuaSoNgay`, `thamDinhHieuLucThang`. Tầng này kiểm HÌNH DẠNG NGOÀI — mảng
+  không rỗng các đối tượng, hai số nguyên — và để mọi luật còn lại cho `069`: khoá, kiểu, thứ tự bậc, tất-cả-hoặc-không,
+  *đã bật thì phải có bậc*. Hàng sổ `PROCUREMENT_POLICY_CREATED` thêm `soBac`.
+- `kyPhienBanChinhSach`: INSERT `org_policy_signatures` dưới danh tính của phiên, đọc lại phiên bản cùng `to_chuc_da_bat_s3`,
+  ghi `PROCUREMENT_POLICY_SIGNED` (payload `version`, `daBat`) trong cùng giao dịch. Không kiểm lại luật nào của trigger
+  `chinh_sach_kiem_nguoi_ky`.
+- `lietKePhienBanChinhSach`: mọi phiên bản, mới nhất trước, cùng chữ ký, và cờ `hieuLuc` tính bằng CHÍNH
+  `chinh_sach_hieu_luc` — nên tổng điều tra *một hàm chọn phiên bản* (`tests/architecture/doc-chinh-sach-mot-ham.test.ts`)
+  xếp câu này vào lớp `QUA_HAM`, không lớp thứ tư nào phải mở.
+
+**API** (`apps/api`):
+- Cấu hình `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH` ∈ {`bat`, `tat`}, mặc định `tat`; `DispatcherDeps.choKyChinhSach` mặc định
+  `false`; `BuyerContext.choKyChinhSach`; composition truyền cờ từ cấu hình. `.env.example` khai biến, để trống.
+- `GET /policy/versions`, không cho agent: `{ phienBan, daBat, choKy }`.
+- `POST /policy`: nhận ba trường mới; phiên bản kế tiếp tính theo bản MỚI NHẤT (mục 4).
+- `POST /policy/:policyId/sign`: `policy.manage`, toạ độ `PROCUREMENT_POLICY`; cờ tắt ⇒ 409 có tên TRƯỚC mọi câu ghi; cờ
+  bật ⇒ 201 `{ chuKy }`.
+
+**Web** (`apps/web`): `src/chinh-sach.ts` — hai hàm thuần `canhBaoChinhSach`, `soNguoiToiThieu` và mẫu mặc định §4.1 — phục
+vụ ở `/lib/chinh-sach.js`, khuôn `so-tien.ts`. Trang `trang/chinh-sach.html` + `chinh-sach.js`: đăng nhập (khuôn
+`/tao-thau`), bảng phiên bản cùng khối ký, khung soạn với bảng bậc, bảng số người và cảnh báo. Mọi chuỗi đi qua `textContent`.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Lỗi đo được lúc làm, sửa trong vòng: `POST /policy` kẹt tổ chức.** Route đòi `version` = phiên bản HIỆU LỰC + 1, còn
+  trigger `022` (thân `035`) đòi đúng lớn nhất + 1. Từ S1.156 hai số ấy tách nhau: một bản có bậc chưa ký không có hiệu lực.
+  Tổ chức có một bản như thế thì route đòi đúng số trigger từ chối — không tạo được phiên bản nào nữa cho tới khi bản kia được
+  ký, mà cờ tắt thì không ký được. Nay route tính theo bản mới nhất. RED THẬT: vế ⑶ của khối cờ tắt, và đột biến M2 dưới.
+- **Route không chép luật của trigger.** Bản nháp đề xuất bốn lời từ chối có tên ở tầng gói; tôi không làm: lời của trigger
+  đã đi ra 422 có tên (`RAISE` ⇒ `exec_stmt_raise`, qua `anhXaLoiPostgres`), và một bản sao TypeScript chỉ thêm một chỗ để
+  trôi. Phiên bản không tồn tại ra 422 thân cố định (23503).
+- **Tạo phiên bản có bậc không đứng sau cờ** (ADR-105 ⑶).
+- **`GET /policy/versions` không mở cho agent.** Lịch sử phiên bản cùng người ký là dữ liệu quản trị; không công cụ đọc nào
+  của agent cần nó. Mở sau là một quyết định có tên.
+- **Cờ nhận đúng hai chuỗi.** `true`, `1`, `on`, `BAT` làm tiến trình không lên, lời lỗi nêu tên biến.
+- **Mô hình số người**, ghi ở đầu `apps/web/src/chinh-sach.ts`: mỗi người một vai; F1 khai, F2 ký phiên bản và thẩm định; P1
+  tạo gói; `s` người ký mở gói (PM) và `s` người duyệt mở thầu (DIRECTOR), với `s` = 2 khi đầu trên của bậc vượt ngưỡng kép
+  hay bậc không có đầu trên — so bằng số nguyên đồng, không `double`; người ký trao thầu dùng lại người đã có, trừ F1 và, khi
+  bậc có thẩm định, F2. Đối chứng neo vào spec: 7 và 8.
+- **"Thêm bậc" chen TRƯỚC bậc đấu thầu chính thức** — bậc ấy chỉ đứng cuối (`069`).
+
+## 5. Đo
+
+**HTTP** (`apps/api/src/buyer.int.test.ts`, khối `[S1.169 / S3.1c]`; một máy chủ thứ hai trên cùng CSDL, cờ bật):
+- Cờ tắt: người ký hợp lệ ở mọi luật của trigger vẫn nhận 409 mang `ADR-105`; 0 chữ ký; tổ chức không bật.
+  `GET /policy/versions` trả trọn ma trận, người tạo, hai cột mức và `hieuLuc` đúng — bản có bậc chưa ký KHÔNG hiệu lực, bản 1
+  hiệu lực, khớp `GET /policy` —, `choKy: false`. Bản có bậc chưa ký không chặn bản kế tiếp.
+- Cờ bật: bốn lời từ chối — bản không bậc, bản không mới nhất, người tạo tự ký, phiên bản không tồn tại — mỗi cái một 422
+  mang lời của trigger; vai không giữ `policy.manage` ⇒ 403 và ĐÚNG MỘT `PERMISSION_DENIED` mang toạ độ phiên bản; 0 chữ ký
+  sau cả năm lần. Người thứ hai ký bản mới nhất ⇒ 201, `daBat: true`, tổ chức bật, ĐÚNG MỘT hàng `PROCUREMENT_POLICY_SIGNED`
+  mang `version` và `daBat`; ký lại ⇒ 409, vẫn một chữ ký. Sau khi bật: bản không bậc ⇒ 422 của `069`; bậc lệch ⇒ 422 của
+  `069`; `tiers` không phải mảng, hay mảng không phải đối tượng ⇒ 422 của route; không phiên bản nào lọt.
+- Hai lượt quét `[INV-H17]` xanh, không đổi con số khai: route mới khai toạ độ, nên *"ba route ghi không toạ độ"* giữ nguyên;
+  với cờ tắt, người giữ đúng `policy.manage` qua cổng rồi nhận 409.
+
+**Composition** (`apps/api/src/composition.int.test.ts`), đúng đường `main.ts`: không khai biến ⇒ `choKy: false`, route ký
+409; `bat` ⇒ `choKy: true`, lời ký tới trigger (422, phiên bản không tồn tại); 0 chữ ký.
+
+**Đơn vị:** `apps/api/src/cau-hinh.test.ts` — mặc định tắt, `bat`/`tat`, bốn giá trị lạ ném mang tên biến.
+`apps/web/src/chinh-sach.test.ts`, chín ca — 5 · 5 · 7 và bậc đấu thầu chính thức dưới mặc định; 8 khi bật
+`award_vai_khac_nhau` ở bậc 2; ngưỡng kép ở đúng mép (999 999 999,99 ⇒ 2 chữ ký; 1 000 000 000,00 và ,01 ⇒ 1; bậc không đầu
+trên ⇒ 2; ngưỡng 100 triệu ⇒ bậc 1 ra 7); dùng lại người ký trao thầu (9, 8, 6); cấu hình không thực hiện được; mỗi cảnh báo
+một ca dương, một ca âm.
+
+**Đột biến** — chín, cả chín đỏ:
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | bỏ cửa cờ ở route ký | `buyer.int` |
+| M2 | phiên bản kế tiếp theo bản hiệu lực | `buyer.int`, hai ca |
+| M3 | `createDispatcher` mặc định bật | `buyer.int` |
+| M4 | `choKy` khai cứng `true` | `buyer.int` |
+| M5 | route bỏ `tiers` | `buyer.int`, hai ca |
+| M6 | `docCauHinh` mặc định bật | `cau-hinh.test` |
+| M7 | cấu hình nhận `"true"` | `cau-hinh.test` |
+| M8 | composition không truyền cờ | `composition.int` |
+| M9 | hàng sổ thiếu `daBat` | `buyer.int` |
+
+**Trình duyệt:** màn chạy thử một lượt trong Chromium, máy chủ web thật và một API giả (không commit): mẫu ra 5 · 5 · 7 ·
+*đấu thầu chính thức*; bật hai vai ở bậc 2 ra 8; hạ số nhà cung cấp bậc 1 xuống 1 hiện hai cảnh báo; "Thêm bậc" chen trước bậc
+cuối; nút tạo gửi đúng thân (bậc thường mười khoá, bậc cuối hai); khối ký chỉ hiện cho bản mới nhất có bậc chưa ký, nút mở
+khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu lực*. Không lỗi trang.
+
+## 6. Giới hạn, nói ra
+
+- **Khoản 248** — `CONTROL_DENIED` ngoài trần ADR-092 — chặn việc mở cờ.
+- Cờ theo TIẾN TRÌNH, không theo tổ chức; tắt cờ sau khi một tổ chức đã bật làm tổ chức ấy không đổi được chính sách nữa
+  (ADR-105, *Cái giá*).
+- Số người tối thiểu là của mô hình mỗi-người-một-vai, không phải cận dưới đã chứng minh: một người mang cả FINANCE lẫn
+  DIRECTOR hạ được nó, và màn nói điều đó.
+- Cảnh báo là lời nói, không phải chốt; máy chủ không đọc hai hàm ấy.
+- Màn không có test trình duyệt tự động: lượt chạy thử ở trên là một lần, không phải một cổng. Hai hàm tính có test đơn vị;
+  phần DOM thì không.
+- Màn chưa nói chốt nào của S3 đang được cưỡng chế — vế (b) của ADR-105 ⑷ đòi điều đó nếu cờ mở trước khi S3 đủ.
+- S3.1d gieo `gieo:demo` với chữ ký thứ hai: phải chạy dưới cờ bật.
+
+## 7. Số đo
+
+
+- `pnpm t0` sạch (426 module, 1666 phụ thuộc, không vi phạm); `pnpm test` **116 tệp, 1496 đạt, 1 bỏ qua**.
+- Lượt `pnpm test` đầu đỏ BỐN ca, cả bốn là sổ đăng ký buộc khai một hàm hay một route mới — đúng việc chúng sinh ra để
+  làm: danh sách trắng cửa `@trustprocure/rfq` (`[INV-H16]`, `[INV-H18]`); phân loại hàm của ADR-016 — `kyPhienBanChinhSach`
+  là hàm ghi, `lietKePhienBanChinhSach` là hàm đọc —; và bảng công cụ MCP — `GET /policy/versions` khai KHÔNG PHƠI kèm lý do.
+  Lời khai đầu `apps/mcp/src/cong-cu.ts` đã thiu một nấc từ trước vòng này (*TÁM* trong khi bảng có chín dòng); nay *MƯỜI*,
+  đúng số dòng.
+- Tầng tích hợp trên PostgreSQL 16 cục bộ (dựng bằng `initdb`; container không có docker), cả kho một lượt: **178 tệp, 2835
+  ca — 2825 đạt, 1 bỏ qua, 9 đỏ**: 8 ca `packages/test-support/src/postgres.int.test.ts` cần docker, và MỘT ca của vòng này —
+  bộ quét rò rỉ của `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` đòi MỌI route ghi có một thân hợp lệ khai sẵn (sổ
+  nợ 49), và route ký chưa có. Thêm ca ấy — đích là bản v2 bộ quét vừa tạo, người gọi giữ `policy.manage`, cờ tắt ⇒ 409 có
+  tên — rồi chạy lại tệp: **29/29**; `GET /policy/versions` đi qua bộ quét mà không lọt chữ số giá nào.
+- Ma trận sinh lại từ báo cáo của lượt ấy, ghép kết quả chạy lại của tệp kịch bản 41: **65/65** bất biến (43 + 22), cổng
+  evidence XANH, khớp từng byte bản đang commit — vòng này không thêm ca mang nhãn bất biến nào.
+- Các tệp vòng này chạm: `apps/api/src/buyer.int.test.ts` **16/16**, `apps/api/src/composition.int.test.ts` **19/19**,
+  `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**, `apps/api/src/cau-hinh.test.ts` **36/36**,
+  `apps/web/src/chinh-sach.test.ts` **9/9**, `apps/web/src/phuc-vu.test.ts` **18/18**.
+- Số hiệu của vòng do `pnpm cap-so` cấp (ADR-090): **S1.169**, **ADR-105**, **khoản 248**; `pnpm cap-so --kiem` sạch.
+- **Hợp `master` sau khi mở PR.** `master` nhận #172 — khoản 247 đóng, vòng **S1.167**, ADR-104 — lấy đúng số lần cấp đầu đã
+  cho vòng này. Xung đột ở cột mốc, bảng sổ nợ và rổ B của `docs/STATE.md` (gỡ tay: giữ cả hai cột mốc; hàng của vòng này
+  ngay sau hàng 247 của `master`; rổ B **61 → 62**), cùng `Handoff.md`, `docs/DECISIONS.md` và mục nối cuối biên bản (`pnpm
+  cap-so` tự gỡ). Ba dòng mơ hồ: hai nói về vòng này (về số tạm), một nói về S1.167 của `master` ⇒ `pnpm cap-so --mo-ho
+  master`. Kết quả: vòng này là **S1.169**, **ADR-105**, khoản vẫn **248**; `pnpm cap-so --kiem` sạch. #172 thêm hai hàng sổ
+  từ chối do handler — J3, D2 — mà ADR-104 tự nêu là không được đếm vào trần của ADR-092: cùng khe với khoản 248, và hàng
+  ấy nay ghi thêm điều đó. Trên cây đã hợp: `pnpm t0` sạch (426 module, 1666 phụ thuộc); `pnpm test` **116 tệp, 1496 đạt,
+  1 bỏ qua**; bốn tệp tích hợp chạm route người mua và `approveRfq` (#172 đổi chữ ký hàm ấy) — `apps/api/src/buyer.int.test.ts`,
+  `apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`,
+  `packages/rfq/src/rfq.int.test.ts` — **123/123**; phần còn lại do T3 của CI đo trên chính commit hợp.
+- **Hợp `master` lần hai.** Trong lúc CI chạy trên commit hợp đầu (xanh đủ bảy việc), `master` nhận #174 — chuẩn bị bậc 1
+  của thang pilot, vòng **S1.168**, không ADR, không khoản nợ — lấy đúng số vòng lần hợp đầu đã cấp cho vòng này. Xung đột
+  ở cột mốc của `docs/STATE.md` (gỡ tay: giữ cả hai, số vòng của nhánh về số tạm) và mục nối cuối biên bản (`pnpm cap-so`
+  tự gỡ). Ba dòng mơ hồ — hàng khoản 248, mục của nó ở rổ B, dòng kết quả của lần hợp trước — đều nói về vòng này, nên
+  `--mo-ho nhanh`. Kết quả: vòng này là **S1.169**; **ADR-105** và **khoản 248** giữ nguyên; `pnpm cap-so --kiem` sạch. Trên
+  cây đã hợp: `pnpm t0` sạch (426 module, 1666 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua** (#174 thêm một ca);
+  `apps/api/src/buyer.int.test.ts`, `apps/api/src/composition.int.test.ts`, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`
+  chạy chung một lượt **64/64**. Lượt chạy chung đầu tiên đỏ ở bước dựng của tệp composition — 19 ca bị bỏ qua, không khẳng
+  định nào chạy —, cùng triệu chứng cụm Postgres cục bộ đã ghi ở §S1.166; chạy riêng tệp ấy 19/19, rồi chạy lại cả ba 64/64.
+  Tầng tích hợp đầy đủ do T3 của CI đo trên chính commit hợp.
+# §S1.170 — KHOẢN 228 ĐÓNG: BẢN RÕ CHỈ RA ĐỜI DƯỚI YÊU CẦU MỞ THẦU CỦA CHÍNH GÓI VÀ CHÍNH VÒNG CỦA PHONG BÌ
 
 ## 1. Việc gì
 
 Khoản 228 (S1.109): `rfq_unsealed_bids` không bị buộc thuộc cùng gói thầu với yêu cầu mở thầu nó trỏ tới. Ca đột biến J4 của
 `kich-ban-41-http.int.test.ts` ghép phong bì vòng hai với yêu cầu vòng một (`EXECUTED`) và câu INSERT đi qua với trigger bật.
-Chủ dự án chọn đóng khoản này — ADR-9201. Vòng chạm bất biến A1 (mảnh mở thầu), không chạm khoản rổ A nào.
+Chủ dự án chọn đóng khoản này — ADR-106. Vòng chạm bất biến A1 (mảnh mở thầu), không chạm khoản rổ A nào.
 
 ## 2. Đo trước
 
@@ -13917,4 +14082,4 @@ lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
 
 ## 6. Số
 
-Khoản 228 đóng. Còn mở **85**; rổ B **60**.
+Khoản 228 đóng. Còn mở **86**; rổ B **61**.
