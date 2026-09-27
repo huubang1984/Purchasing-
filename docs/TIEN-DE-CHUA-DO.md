@@ -50,7 +50,7 @@
 | **A3** | Nhà cung cấp mở link **trong một trình duyệt có `crypto.subtle`** | ADR-007, ADR-011, `tools/do-webcrypto` | Toàn bộ đường nộp thầu. Đã đo iOS 18.7 ✅; **Android còn trống** (khoản nợ 23) | *"Nhà cung cấp của anh mở link bằng gì — Zalo, Messenger, hay trình duyệt?"* |
 | **A4** | Nhà cung cấp **chấp nhận hai bước** (link + OTP) cho lần báo giá đầu | ADR-015 mục 1; E2 | Ràng buộc sản phẩm 1 nói *friction thấp là điều kiện sống còn*. Nếu hai bước làm tụt tỷ lệ phản hồi, USP 1 mất chỗ dựa | *"Nếu phải bấm thêm một mã OTP mới vào được, anh nghĩ bao nhiêu nhà cung cấp bỏ cuộc?"* |
 | **A5** | **Người giữ kênh** và **người ngồi trước màn hình** thường là **một** | `010` `guest_sessions.verified_contact_id`; ADR-015 §*Cái này KHÔNG đóng* | E5 ghi *danh tính thực tế đã xác thực*. Nếu chuyển tiếp cả link lẫn OTP là **thói quen bình thường**, cột ấy ghi một người không làm gì | *"Có bao giờ một người nhận email rồi chuyển cho đồng nghiệp làm báo giá không?"* |
-| **A6** | **[S1.159]** Nhà cung cấp **không sửa ô tiền tệ** điền sẵn `VND` | `apps/web/trang/nop-thau.html:54`; `packages/danh-gia/src/luot-danh-gia.ts:310-321`; khoản **244** | Một nhà cung cấp gõ `VNĐ` hay `vnd` là lượt chấm của cả gói bị từ chối, và không ai trao thầu được | *"Nhà cung cấp của anh ghi đơn vị tiền thế nào trên báo giá — VND, VNĐ, hay đ?"* **[S1.163]** Khoản 244 đóng không chờ câu trả lời: ô chọn VND/USD và tập bí danh đóng (ADR-101). Câu hỏi còn giá trị ở vế ngược — một cách viết NGOÀI tập (`VND.`, `vnđ.`) vẫn làm lượt chấm từ chối cả gói, nay bằng mã có tên và một lối huỷ. |
+| **A6** | **[S1.159]** Nhà cung cấp **không sửa ô tiền tệ** điền sẵn `VND` | `apps/web/trang/nop-thau.html:54`; `packages/danh-gia/src/luot-danh-gia.ts:310-321`; khoản **244** | Một nhà cung cấp gõ `VNĐ` hay `vnd` là lượt chấm của cả gói bị từ chối, và không ai trao thầu được | *"Nhà cung cấp của anh ghi đơn vị tiền thế nào trên báo giá — VND, VNĐ, hay đ?"* **[S1.164]** Khoản 244 đóng không chờ câu trả lời: ô chọn VND/USD và tập bí danh đóng (ADR-102). Câu hỏi còn giá trị ở vế ngược — một cách viết NGOÀI tập (`VND.`, `vnđ.`) vẫn làm lượt chấm từ chối cả gói, nay bằng mã có tên và một lối huỷ. |
 
 ## B. Về NGƯỜI MUA
 
@@ -125,6 +125,10 @@ lượt soi hình dạng; góc D⑪ của biên bản §S1.161.
 
 - **Không đóng điểm chặn 1** (*chưa có khách hàng pilot*) ở `docs/STATE.md`. Nó **hạ chi phí** của
   việc gỡ điểm chặn ấy, không gỡ hộ.
+- **[S1.163] Pilot giả lập (`pnpm pilot:gia-lap`) không đổi dòng nào ở đây.** Nó đi được ĐƯỜNG MÃ của A1, A3, B1, B2,
+  B4, C1, C3, C4 trên dữ liệu bịa; câu trả lời của một người mua thật thì không. Bảng *"giả lập trả lời được?"* nằm ở
+  `docs/superpowers/plans/2026-09-26-pilot-gia-lap.md` §1, và bậc 1 của thang ở §7 của tệp ấy là buổi làm việc mà tệp này
+  hạ chi phí.
 - **Không có dòng nào ở đây được kiểm chứng.** Toàn bộ file là một danh sách câu hỏi. Ngày nào có
   dòng đầu tiên mang tên người và ngày, dòng ấy chuyển sang `docs/DECISIONS.md` dưới dạng một ADR
   hoặc một sửa đổi ADR — **không** ở lại đây dưới dạng một dấu tích.

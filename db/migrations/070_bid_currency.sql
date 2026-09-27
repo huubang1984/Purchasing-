@@ -1,7 +1,7 @@
 -- =============================================================================================
--- 070 — [S1.163 / khoản 244] TIỀN TỆ CỦA BÁO GIÁ ĐỌC QUA MỘT HÀM, VỀ TẬP ĐÓNG {VND, USD, NULL}
+-- 070 — [S1.164 / khoản 244] TIỀN TỆ CỦA BÁO GIÁ ĐỌC QUA MỘT HÀM, VỀ TẬP ĐÓNG {VND, USD, NULL}
 -- =============================================================================================
--- ĐO (vòng S1.163, Postgres 16 thật, trước khi viết dòng này — biên bản §S1.163):
+-- ĐO (vòng S1.164, Postgres 16 thật, trước khi viết dòng này — biên bản §S1.164):
 --   · báo giá `VND` + `VNĐ` ⇒ lượt chấm ném `LECH_TIEN_TE`, gói đứng yên ở `UNSEALED`;
 --   · MỌI báo giá cùng ghi `VNĐ` (kể cả gói một nhà cung cấp) hay cùng ghi `vnd` ⇒ phép so tập
 --     trong `luot-danh-gia.ts` cho qua, rồi câu INSERT vỡ ở `CHECK (currency IN ('VND','USD'))`
@@ -15,7 +15,7 @@
 -- SỬA: năm chỗ đọc `payload ->> 'currency'` (lượt chấm một chỗ, bảng so sánh bốn chỗ) gọi đúng hàm
 -- này, khuôn `bid_so_tien` (`020`, `022`): một luật một chỗ, IMMUTABLE STRICT, không bao giờ ném.
 --
--- TẬP ĐÓNG — chủ dự án chốt ngày 2026-09-27 (ADR-101), khớp CHÍNH XÁC sau khi bỏ khoảng trắng hai
+-- TẬP ĐÓNG — chủ dự án chốt ngày 2026-09-27 (ADR-102), khớp CHÍNH XÁC sau khi bỏ khoảng trắng hai
 -- đầu và đưa về dạng NFC:
 --   VND ← VND · VNĐ · VNđ · Vnđ · vnđ · Vnd · vnd · đ · Đ · ₫ · đồng · Đồng
 --   USD ← USD · Usd · usd · US$

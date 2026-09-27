@@ -340,7 +340,7 @@ export interface MocGhim {
 // co hang — menh de cua no rong hon thu dang duoc cuong che, xem khoan 239. Cong lai CHAN dung
 // mot luot truoc khi dong nay duoc viet, y nhu lan S1.29: moc nay phai duoc NANG TAY.
 // [S1.116 / khoan 239] 62 -> 63: J6 vao so dang ky sau khi ADR-060 chot luat ghi so CHON LOC.
-// [S1.163 / khoan 244] 63 -> 64: J8 vao so dang ky (tien te bao gia doc qua MOT ham, ADR-101). Cong
+// [S1.164 / khoan 244] 63 -> 64: J8 vao so dang ky (tien te bao gia doc qua MOT ham, ADR-102). Cong
 // CHAN dung mot luot truoc khi dong nay duoc viet, lan thu ba cung khuon S1.29 va S1.115.
 export const MOC_GHIM: MocGhim = { soPhuToiThieu: 64, coDanhSachToiDa: 0 };
 

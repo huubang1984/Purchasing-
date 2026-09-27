@@ -206,7 +206,7 @@ async function napGoiThau() {
   }
   lechMayChu = doLechMayChu(r.body.gioMayChu, guiLuc, nhanLuc);
   if (lechMayChu !== null) dong.push(["Giờ hệ thống lúc tải", gioDoc(r.body.gioMayChu)]);
-  // [S1.163 / khoản 225] Gói đã huỷ thì nói ra VÌ SAO — người huỷ viết lý do cho chính anh/chị, kể cả
+  // [S1.164 / khoản 225] Gói đã huỷ thì nói ra VÌ SAO — người huỷ viết lý do cho chính anh/chị, kể cả
   // khi huỷ sau lúc mở thầu. Gói huỷ trước vòng ấy không có lý do lưu ở đây.
   if (phien.rfq.status === "CANCELLED") {
     dong.push(["Lý do huỷ", phien.rfq.cancelReason ?? "(bên mua không ghi lý do)"]);
@@ -276,12 +276,12 @@ function tinhLai() {
       : hong !== null
         ? `Đơn giá "${hong}" không đọc được. Đơn giá là số nguyên đồng, và dấu chấm chỉ dùng để nhóm nghìn — viết 1.500.000 hoặc 1500000.`
         : "Nhập đơn giá cho tất cả hạng mục để ra tổng.";
-  // [S1.163 / khoản 225] Gói đã huỷ: không niêm phong một báo giá mà máy chủ chắc chắn từ chối.
+  // [S1.164 / khoản 225] Gói đã huỷ: không niêm phong một báo giá mà máy chủ chắc chắn từ chối.
   $("nut-nop").disabled = tong === null || phien?.rfq?.status === "CANCELLED";
   return tong;
 }
 
-// [S1.163 / khoản 244] `#tien-te` nay là một <select>. `change` là sự kiện mà mọi trình duyệt phát
+// [S1.164 / khoản 244] `#tien-te` nay là một <select>. `change` là sự kiện mà mọi trình duyệt phát
 // cho ô chọn; `input` thì trình duyệt cũ và vài cửa sổ web trong ứng dụng không phát — nghe cả hai.
 $("tien-te").addEventListener("change", tinhLai);
 $("tien-te").addEventListener("input", tinhLai);

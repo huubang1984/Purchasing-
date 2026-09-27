@@ -1,4 +1,4 @@
-// [S1.163 / khoản 244] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
+// [S1.164 / khoản 244] TẬP ĐƠN VỊ TIỀN CÓ BỐN BẢN CHÉP, VÀ CHÚNG PHẢI LÀ MỘT TẬP.
 //
 // ⑴ `CURRENCIES` của gói này — thứ API người mua dùng để từ chối một chính sách hay ngân sách lạ.
 // ⑵ `CHECK (currency IN (…))` của `057` — thứ CSDL dùng để từ chối một lượt chấm lạ.
@@ -15,7 +15,7 @@ import { CURRENCIES } from "./procurement-policy.js";
 
 const doc = (duong: string): string => readFileSync(new URL(duong, import.meta.url), "utf8");
 
-describe("[S1.163 / khoản 244] tập đơn vị tiền đồng bộ", () => {
+describe("[S1.164 / khoản 244] tập đơn vị tiền đồng bộ", () => {
   it("CURRENCIES = CHECK của 057 = đích của bid_currency = các lựa chọn ở trang nộp thầu", () => {
     const tapTs = [...CURRENCIES].sort();
 

@@ -475,7 +475,7 @@ numeric, ly_do text)`. Nó từ chối đúng ~~bốn~~ **[S1.159] SÁU** ca c�
 - hai phần tử cùng `lineNo`;
 - `lineNo` không có trong `rfq_items` của gói;
 - `payload ->> 'currency'` khác tiền tệ của phiên bản chính sách. ~~Ô tiền tệ ở `nop-thau.js` là ô NHẬP TỰ DO của nhà cung
-  cấp, và đa tiền tệ là Enterprise;~~ **[S1.163 / khoản 244 / ADR-101]** Đọc QUA `public.bid_currency` (`070`), không
+  cấp, và đa tiền tệ là Enterprise;~~ **[S1.164 / khoản 244 / ADR-102]** Đọc QUA `public.bid_currency` (`070`), không
   đọc chuỗi trần: cổng `tests/architecture/tien-te-mot-cho-doc.test.ts` đỏ với bộ đọc thứ sáu đọc trần. Ô tiền tệ nay là
   ô chọn VND/USD, nhưng một phong bì dựng ngoài trang vẫn mang chuỗi tự do; đa tiền tệ vẫn là Enterprise;
 - **tổng lệch:** Σ `amount` ≠ `totalAmount`.

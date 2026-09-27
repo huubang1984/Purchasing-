@@ -344,7 +344,7 @@ describe("gói thầu và báo giá của khách", () => {
     expect(thatSu.rows).toHaveLength(1);
   });
 
-  it("[S1.163 / khoản 225] GET /guest/rfq: `cancelReason` là `null` khi gói còn sống, và là ĐÚNG câu người huỷ viết khi gói đã huỷ", async () => {
+  it("[S1.164 / khoản 225] GET /guest/rfq: `cancelReason` là `null` khi gói còn sống, và là ĐÚNG câu người huỷ viết khi gói đã huỷ", async () => {
     // Gói riêng — huỷ `rfqA` sẽ làm đổ mọi test khác của tệp. Cùng công thức `beforeAll`.
     const { rows: g } = await db.pool.query<{ id: string }>(
       "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +

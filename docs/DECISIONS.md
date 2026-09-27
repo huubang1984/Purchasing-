@@ -5283,9 +5283,9 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
   được ~~cho tới khi tổ chức chuẩn hoá đơn vị~~. Đó là fail-closed, và nó có giá: người mua thấy một lời từ chối chứ
-  không thấy một bảng xếp hạng gần đúng. **[S1.163 / ADR-101] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
+  không thấy một bảng xếp hạng gần đúng. **[S1.164 / ADR-102] Vế *"chuẩn hoá đơn vị"* không làm được:** báo giá
   đã niêm phong, và `rfq_unsealed_bids` chỉ-ghi-thêm. Đo ra thêm rằng cánh cửa này đóng cả với cách viết khác của
-  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-101 thu cánh cửa về đúng lệch THẬT, và cho
+  CÙNG một đơn vị (`VNĐ`, `vnd`), và gói bị từ chối không huỷ được. ADR-102 thu cánh cửa về đúng lệch THẬT, và cho
   gói ấy lối huỷ có lý do.
 - **ADR này quyết trên ĐỌC, không trên CHẠY.** Cả năm quyết định rút từ mã nguồn và tài liệu; vòng này không
   dựng một cụm nào, vì không có mã nào để chạy. Phép đo thật là điều kiện của S2.0–S2.2, và chúng chưa tồn tại.
@@ -7990,13 +7990,56 @@ của *Verified Competitive Spend* bằng 0 ở tổ chức chưa bật S3, và 
 
 Hai bất biến mới ở spec S4b §11.1: **L24** (dấu dữ liệu mẫu) và **L25** (vai `AUDITOR`). Không mã, không migration, không khoản nợ.
 
-## ADR-101 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+---
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.163 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
-ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.163
+## ADR-101 — Pilot giả lập: danh mục kịch bản đi qua API thật, và một ranh giới không thay khách hàng pilot
+
+**Ngày:** 2026-09-26 · **Trạng thái:** **Đã chấp nhận** · Liên quan: ADR-043, ADR-044, ADR-060, ADR-062 · Kế hoạch:
+`docs/superpowers/plans/2026-09-26-pilot-gia-lap.md`
+
+### Bối cảnh
+
+Mảnh 4 của `docs/PRODUCT.md` §11 (*khách hàng pilot*) đứng yên từ 2026-08-27, và không đơn vị nào nhận pilot một sản
+phẩm chưa hoàn thiện. Thứ dự án có để cho xem là lát cắt demo của ADR-044: `tools/gieo-demo` gieo MỘT gói ở OPEN bằng SQL
+thô. Gói ấy không có hàng sổ `RFQ_CREATED`, `RFQ_APPROVED` hay `RFQ_OPENED`, và tổ chức của nó không có FINANCE, nên
+không đi tới trao thầu. `docs/TIEN-DE-CHUA-DO.md` đặt sẵn ranh giới: *"Một pilot giả lập cho ra bằng chứng giả lập"*.
+
+### Quyết định (chủ dự án chọn 2026-09-26)
+
+1. **Tài liệu + công cụ** `tools/pilot-gia-lap` (`pnpm pilot:gia-lap`). Công cụ tự dựng một cụm cục bộ đủ bốn tiến
+   trình, gieo **hai** doanh nghiệp giả lập (Sản xuất cơ khí, Xây dựng) và chạy một danh mục mười một kịch bản viết bằng
+   dữ liệu.
+2. **Mọi bước nghiệp vụ đi qua HTTP của `apps/api`**, gồm đăng nhập bằng link cộng TOTP và OTP của nhà cung cấp; nhà cung
+   cấp niêm phong bằng `sealBid`. Kết nối đặc quyền chỉ làm năm việc không có đường ứng dụng — `migrate()`, hai vai đăng
+   nhập, tổ chức, người dùng kèm vai, và ba câu CHỈ ĐỌC: tổng số hàng sổ kiểm toán của một tổ chức (trước và sau mỗi lần
+   thử sai), số hàng sổ theo hành động, và dấu kiểm vòng khoá ở `master_key_check_values` — và nó được khai ở
+   `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`.
+3. **Thời gian thật, không lùi ngày.** Chế độ nhanh đóng sớm có lý do; cờ `--cham` đợi hạn nộp thật. Sổ kiểm toán ép
+   `clock_timestamp()`, nên một bộ dữ liệu lùi ngày sẽ mâu thuẫn với chính sổ.
+4. **Dữ liệu dùng cho cả kiểm tính năng lẫn trình diễn.** Bốn gói dừng cố ý ở trạng thái dở; ba lệnh `dang-nhap`, `otp`,
+   `lien-ket` cho người trình diễn đi tiếp trên màn hình mà không gõ SQL.
+5. **Dữ liệu tự khai là bịa, báo cáo tự khai là giả lập.**
+   - Nhãn `[GIẢ LẬP]`/`[GL]`, tên miền `.invalid`, mã số thuế mở đầu bằng bảy số 0, IP thuộc `2001:db8::/32`.
+   - Báo cáo mở đầu bằng *"KHÔNG PHẢI PILOT"* và không mang token nào; token và bí mật TOTP chỉ nằm ở thư mục trạng
+     thái 0700 (trên POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha), có trong `.gitignore`.
+   - Công cụ chỉ nhận CSDL cục bộ.
+
+### Hệ quả, nói thẳng
+
+- **Không đóng mảnh 4, không đổi rổ A.** Thang bậc tới pilot thật ở mục 7 của kế hoạch là ĐỀ XUẤT, chưa được chọn.
+- Công cụ gắn chặt với hình dạng route. Một thay đổi route làm lượt giả lập đỏ, và đó là điều muốn có, nhưng lượt ấy
+  **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chỉ chạy test đơn vị của công cụ.
+- Trình diễn trên điện thoại thật cần một cụm TLS (cookie `Secure`, ADR-044). Cụm của công cụ chỉ nghe trên 127.0.0.1.
+- Lượt đầu đo ra khoản **247**: lần từ chối J3 và D2 không để lại hàng sổ hay dòng log nào. Câu *"mỗi lần từ chối để lại
+  một dòng"* ở `docs/PRODUCT.md` §5 được sửa tại chỗ.
+
+## ADR-102 — Tiền tệ của báo giá đọc qua MỘT hàm về tập đóng, và gói đã đóng huỷ được kèm lý do nhà cung cấp đọc được
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · Vòng: S1.164 · Liên quan: ADR-050 ⑷, ADR-055, ADR-060,
+ADR-085 · Khoản: **244** (rổ A), **225** (rổ B) · Biên bản: `evidence/security-reviews.md` §S1.164
 
 **Bối cảnh.** Khoản 244 ghi, bằng phép đọc, rằng một nhà cung cấp gõ `VNĐ` làm lượt chấm của cả gói bị từ chối. Vòng
-S1.163 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
+S1.164 đo trên Postgres 16 thật trước khi sửa, và phép đo rộng hơn thân khoản: ⒜ cùng `VNĐ` ở MỌI báo giá — kể cả gói
 một nhà cung cấp — thì lượt chấm không từ chối mà vỡ ở `CHECK` của `057` (23514, một 422 không tên); ⒝ bảng so sánh
 trả một `belowBudget` SAI không dấu khi mọi báo giá cùng một cách viết lạ; ⒞ *"lối ra duy nhất là huỷ gói"* cũng sai —
 gói đứng ở `UNSEALED`, và cạnh huỷ từ đó chưa có (khoản 225). Báo giá đã niêm phong trong trình duyệt, nên máy chủ không

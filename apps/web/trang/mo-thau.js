@@ -154,7 +154,7 @@ $("nut-doc").addEventListener("click", async () => {
   await napYeuCau(id);
 });
 
-// [S1.163 / khoản 225] Huỷ gói thầu. Trước vòng ấy, gói đã đóng hay đã mở thầu KHÔNG huỷ được bằng
+// [S1.164 / khoản 225] Huỷ gói thầu. Trước vòng ấy, gói đã đóng hay đã mở thầu KHÔNG huỷ được bằng
 // bất kỳ đường nào — và một lượt chấm bị từ chối vì lệch tiền tệ để gói đứng yên ở `UNSEALED` mãi.
 // Lý do BẮT BUỘC ở máy chủ (`cancelRfq`, và trigger ở bốn cạnh sau khi đóng); trang chỉ nói trước.
 $("nut-huy-goi").addEventListener("click", async () => {

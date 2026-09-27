@@ -50,6 +50,11 @@ Thumbs.db
 # đường dẫn TUYỆT ĐỐI nên bình thường nó không nằm trong cây repo; dòng này là lớp thứ hai.
 .hop-thu-dev/
 
+# [ADR-101] Thư mục trạng thái của `pnpm pilot:gia-lap`: bí mật cụm (khoá, mật khẩu vai đăng nhập),
+# bí mật TOTP của người mua giả lập, token lời mời, hộp thư dev và báo cáo. Công cụ tạo nó 0700 trên
+# POSIX; trên Windows thư mục thừa hưởng ACL của thư mục cha.
+.pilot-gia-lap/
+
 # Evidence pack — bao cao tho va xuat xu moi luot chay khong vao git; MA TRAN thi CO.
 # Liet ke TUNG FILE chu khong dung `evidence/*` + phu dinh: mot file bang chung MOI them vao
 # thu muc nay phai duoc quyet dinh mot cach co y thuc, khong duoc bien mat trong im lang.
