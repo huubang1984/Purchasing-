@@ -10,6 +10,8 @@
 //   [INV-E6]  token magic link mời thầu KHÔNG về client — chỉ tới bộ gửi, đích đọc từ supplier_contacts.
 //   [INV-D1]  điều phối mở thầu cần cổng bốn vế; hai phê duyệt bởi hai giám đốc khác người yêu cầu.
 //   [INV-K1]  [S1.166] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
+//   [S1.9101] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
+//             thứ hai ký bản mới nhất ⇒ bật S3; phiên bản kế tiếp tính theo bản MỚI NHẤT, không theo bản hiệu lực.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -68,7 +70,8 @@ interface PhanHoi {
   readonly body: unknown;
 }
 
-async function goi(method: string, path: string, ai: Nguoi | null, body?: unknown): Promise<PhanHoi> {
+/** `tai`: gốc của máy chủ nhận lời gọi — mặc định máy chủ chung của tệp; [S1.9101] ca ký chính sách dựng máy chủ thứ hai. */
+async function goi(method: string, path: string, ai: Nguoi | null, body?: unknown, tai: string = goc): Promise<PhanHoi> {
   const headers: Record<string, string> = {};
   if (ai !== null) headers.cookie = ai.cookie;
   let than: string | undefined;
@@ -76,7 +79,7 @@ async function goi(method: string, path: string, ai: Nguoi | null, body?: unknow
     than = JSON.stringify(body);
     headers["content-type"] = "application/json";
   }
-  const res = await fetch(`${goc}${path}`, { method, headers, body: than });
+  const res = await fetch(`${tai}${path}`, { method, headers, body: than });
   const text = await res.text();
   return { status: res.status, text, body: text === "" ? undefined : (JSON.parse(text) as unknown) };
 }
@@ -223,11 +226,11 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     const cs = await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" });
     expect(cs.status, cs.text).toBe(201);
     expect((await goi("GET", "/policy", buyer)).status).toBe(200);
-    // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng hiện hành + 1. Một `2147483647` (trần
+    // [review H2-3] `version` chỉ là giá trị KỲ VỌNG: phải bằng ~~hiện hành~~ [S1.9101] mới nhất + 1. Một `2147483647` (trần
     // int4 — ghim tổ chức vĩnh viễn vì trigger 022 đòi "lớn hơn" và không có UPDATE/DELETE) bị 422.
     const ghim = await goi("POST", "/policy", tc, { version: 2147483647, dualApprovalThreshold: "0.01", currency: "VND" });
     expect(ghim.status, ghim.text).toBe(422);
-    expect(ghim.text).toContain("hiện hành + 1 (2)");
+    expect(ghim.text).toContain("mới nhất + 1 (2)");
     expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "0.01", currency: "VND" })).status).toBe(422);
     expect((await goi("GET", "/policy", buyer)).text).toContain('"version":1');
 
@@ -868,5 +871,189 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
     expect(ns.status, ns.text).toBe(200);
     const lai = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(lai.status, lai.text).toBe(200);
+  });
+});
+
+describe("[S1.9101 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậc, đọc, và ký sau cờ triển khai (ADR-9201)", () => {
+  // Máy chủ THỨ HAI trên cùng CSDL, cờ BẬT. Máy chủ chung của tệp không khai cờ nên giữ mặc định TẮT của `createDispatcher`
+  // — đúng cấu hình một máy chủ thật có khi không ai khai biến môi trường — và mọi ca khác của tệp, kể cả hai lượt quét
+  // [INV-H17], chạy dưới cấu hình ấy.
+  let gocKy = "";
+  let serverKy: ReturnType<typeof createApiServer> | undefined;
+
+  beforeAll(async () => {
+    const s = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, choKyChinhSach: true }));
+    serverKy = s;
+    await new Promise<void>((xong) => s.listen(0, "127.0.0.1", xong));
+    gocKy = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((xong) => (serverKy === undefined ? xong() : serverKy.close(() => xong())));
+  });
+
+  // Ma trận hợp lệ nhỏ nhất: một bậc thường từ 0 và bậc đấu thầu chính thức — luật hình dạng là của `069`.
+  const BAC = [
+    {
+      tu_so_tien: 0,
+      so_ncc_toi_thieu: 2,
+      award_vai_khac_nhau: false,
+      ky_danh_sach_moi: true,
+      xoay_vong_n: 0,
+      award_so_chu_ky: 1,
+      award_vai: ["FINANCE", "DIRECTOR"],
+      tham_dinh_truoc_trao: false,
+      khai_xung_dot: true,
+      dau_thau_chinh_thuc: false,
+    },
+    { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true },
+  ];
+  const MUC = { chiaNhoCuaSoNgay: 30, thamDinhHieuLucThang: 12 };
+
+  interface PhienBanDoc {
+    readonly id: string;
+    readonly version: number;
+    readonly tiers: unknown;
+    readonly chiaNhoCuaSoNgay: number | null;
+    readonly thamDinhHieuLucThang: number | null;
+    readonly createdBy: string;
+    readonly signedBy: string | null;
+    readonly hieuLuc: boolean;
+  }
+  interface DanhSachDoc {
+    readonly phienBan: readonly PhienBanDoc[];
+    readonly daBat: boolean;
+    readonly choKy: boolean;
+  }
+
+  // Tổ chức RIÊNG cho mỗi ca: công tắc ADR-080 một chiều.
+  async function toChuc(slug: string): Promise<string> {
+    const { rows } = await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug]);
+    return rows[0]?.id ?? "";
+  }
+  async function soChuKy(org: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM org_policy_signatures WHERE org_id = $1", [org]);
+    return Number(rows[0]?.n ?? "-1");
+  }
+  async function daBat(org: string): Promise<boolean> {
+    const { rows } = await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [org]);
+    return rows[0]?.b === true;
+  }
+
+  it("cờ TẮT — mặc định: route ký ⇒ 409 có tên, KHÔNG một chữ ký, tổ chức KHÔNG bật; `GET /policy/versions` đọc trọn ma trận và nói `choKy: false`; bản có bậc chưa ký KHÔNG chặn phiên bản kế tiếp", async () => {
+    const org = await toChuc("cs-co-tat");
+    const tc = await nguoi("tc-cs-tat@vidu.vn", ["FINANCE"], org);
+    const tc2 = await nguoi("tc2-cs-tat@vidu.vn", ["FINANCE"], org);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+    const v2 = await goi("POST", "/policy", tc, { version: 2, dualApprovalThreshold: "1000000000.00", currency: "VND", tiers: BAC, ...MUC });
+    expect(v2.status, v2.text).toBe(201);
+    const idV2 = (v2.body as { policy: { id: string } }).policy.id;
+
+    // ⑴ Cửa đóng TRƯỚC mọi câu ghi: người ký hợp lệ ở mọi luật của trigger mà vẫn 409, và CSDL không thấy một hàng.
+    const ky = await goi("POST", `/policy/${idV2}/sign`, tc2);
+    expect(ky.status, ky.text).toBe(409);
+    expect(ky.text).toContain("ADR-9201");
+    expect(await soChuKy(org)).toBe(0);
+    expect(await daBat(org)).toBe(false);
+
+    // ⑵ Đọc: bản 2 có bậc, chưa ký, KHÔNG hiệu lực (ADR-082 ⑺); bản 1 vẫn hiệu lực — đúng điều `GET /policy` trả.
+    const ds = await goi("GET", "/policy/versions", tc2);
+    expect(ds.status, ds.text).toBe(200);
+    const b = ds.body as DanhSachDoc;
+    expect([b.daBat, b.choKy]).toEqual([false, false]);
+    expect(b.phienBan.map((p) => [p.version, p.hieuLuc, p.signedBy])).toEqual([
+      [2, false, null],
+      [1, true, null],
+    ]);
+    expect(b.phienBan[0]?.tiers).toEqual(BAC);
+    expect([b.phienBan[0]?.chiaNhoCuaSoNgay, b.phienBan[0]?.thamDinhHieuLucThang, b.phienBan[0]?.createdBy]).toEqual([30, 12, tc.id]);
+    expect([b.phienBan[1]?.tiers, b.phienBan[1]?.chiaNhoCuaSoNgay]).toEqual([null, null]);
+    expect(((await goi("GET", "/policy", tc)).body as { policy: { version: number } }).policy.version).toBe(1);
+
+    // ⑶ Phiên bản KẾ TIẾP tính theo bản MỚI NHẤT. RED THẬT trước vòng này: route đòi "hiện hành + 1" = 2, trigger `022`
+    //    (thân `035`) đòi ĐÚNG lớn nhất + 1 = 3, và tổ chức không tạo được phiên bản nào nữa cho tới khi bản 2 được ký —
+    //    mà cờ đang tắt.
+    const sai = await goi("POST", "/policy", tc, { version: 2, dualApprovalThreshold: "100000000.00", currency: "VND" });
+    expect(sai.status, sai.text).toBe(422);
+    expect(sai.text).toContain("phải bằng phiên bản mới nhất + 1 (3)");
+    const v3 = await goi("POST", "/policy", tc, { version: 3, dualApprovalThreshold: "100000000.00", currency: "VND" });
+    expect(v3.status, v3.text).toBe(201);
+  });
+
+  it("cờ BẬT: mỗi luật của trigger một 422 có tên; không `policy.manage` ⇒ 403 mang toạ độ; người thứ hai ký bản mới nhất ⇒ 201, BẬT S3, đúng một hàng `PROCUREMENT_POLICY_SIGNED`; ký lại ⇒ 409", async () => {
+    const org = await toChuc("cs-co-bat");
+    const tcA = await nguoi("tca-cs-bat@vidu.vn", ["FINANCE"], org);
+    const tcB = await nguoi("tcb-cs-bat@vidu.vn", ["FINANCE"], org);
+    const pm = await nguoi("pm-cs-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const tao = async (version: number, coBac: boolean): Promise<string> => {
+      const than = { version, dualApprovalThreshold: "1000000000.00", currency: "VND", ...(coBac ? { tiers: BAC, ...MUC } : {}) };
+      const r = await goi("POST", "/policy", tcA, than, gocKy);
+      expect(r.status, r.text).toBe(201);
+      return (r.body as { policy: { id: string } }).policy.id;
+    };
+    const v1 = await tao(1, false);
+    const v2 = await tao(2, true);
+    const v3 = await tao(3, true);
+    const ky = (id: string, ai: Nguoi): Promise<PhanHoi> => goi("POST", `/policy/${id}/sign`, ai, undefined, gocKy);
+
+    // ⑴ Route không chép lại luật nào của `chinh_sach_kiem_nguoi_ky`: mỗi lời từ chối là lời của trigger, đi ra 422.
+    const tuChoi = [
+      [await ky(v1, tcB), "Chi phien ban chinh sach CO BAC moi nhan chu ky thu hai"],
+      [await ky(v2, tcB), "Chi ky duoc phien ban chinh sach MOI NHAT"],
+      [await ky(v3, tcA), "Nguoi tao phien ban chinh sach khong duoc tu ky"],
+      [await ky(UUID0, tcB), "tham chieu khong hop le"],
+    ] as const;
+    for (const [r, loi] of tuChoi) {
+      expect(r.status, r.text).toBe(422);
+      expect(r.text).toContain(loi);
+    }
+    // ⑵ Không giữ `policy.manage`: cổng của bộ điều phối, trước handler — 403 và một PERMISSION_DENIED trỏ ĐÚNG phiên bản.
+    expect((await ky(v3, pm)).status).toBe(403);
+    const { rows: tuChoiQuyen } = await db.pool.query<{ res: string; loai: string }>(
+      "SELECT resource_id::text AS res, resource_type AS loai FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [org, pm.id],
+    );
+    expect(tuChoiQuyen).toEqual([{ res: v3, loai: "PROCUREMENT_POLICY" }]);
+    expect(await soChuKy(org)).toBe(0);
+    expect(await daBat(org)).toBe(false);
+
+    // ⑶ Người thứ hai ký bản mới nhất: lần ký đầu tiên của một bản có bậc BẬT S3, một chiều (ADR-080 ⑵).
+    const ok = await ky(v3, tcB);
+    expect(ok.status, ok.text).toBe(201);
+    expect((ok.body as { chuKy: unknown }).chuKy).toMatchObject({ policyId: v3, version: 3, signedBy: tcB.id, daBat: true });
+    expect(await daBat(org)).toBe(true);
+    const { rows: so } = await db.pool.query<{ actor: string; res: string; payload: unknown }>(
+      "SELECT actor_id::text AS actor, resource_id::text AS res, payload FROM audit_events WHERE org_id = $1 AND action = 'PROCUREMENT_POLICY_SIGNED'",
+      [org],
+    );
+    expect(so).toEqual([{ actor: tcB.id, res: v3, payload: { version: 3, daBat: true } }]);
+
+    // ⑷ Ký lại: `UNIQUE (org_id, policy_id)` ⇒ 23505 ⇒ 409, không hàng thứ hai, không dòng sổ thứ hai.
+    expect((await ky(v3, tcB)).status).toBe(409);
+    expect(await soChuKy(org)).toBe(1);
+
+    // ⑸ Đọc: bản 3 hiệu lực và mang người ký; tổ chức đã bật; màn biết cửa ký đang mở.
+    const ds = await goi("GET", "/policy/versions", tcA, undefined, gocKy);
+    expect(ds.status, ds.text).toBe(200);
+    const b = ds.body as DanhSachDoc;
+    expect([b.daBat, b.choKy]).toEqual([true, true]);
+    expect(b.phienBan.map((p) => [p.version, p.hieuLuc, p.signedBy])).toEqual([
+      [3, true, tcB.id],
+      [2, false, null],
+      [1, false, null],
+    ]);
+    expect(((await goi("GET", "/policy", tcA, undefined, gocKy)).body as { policy: { version: number } }).policy.version).toBe(3);
+
+    // ⑹ Đã bật thì phiên bản mới phải có bậc, và bậc sai hình đi ra với lời của `069` — hai tầng, mỗi tầng một việc.
+    const moi = { version: 4, dualApprovalThreshold: "1000000000.00", currency: "VND" };
+    const khongBac = await goi("POST", "/policy", tcA, moi, gocKy);
+    expect([khongBac.status, khongBac.text]).toEqual([422, expect.stringContaining("phien ban chinh sach moi phai khai bac gia tri")]);
+    const bacLech = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: [{ ...BAC[0], tu_so_tien: 5 }, BAC[1]] }, gocKy);
+    expect([bacLech.status, bacLech.text]).toEqual([422, expect.stringContaining("bac dau phai co tu_so_tien = 0")]);
+    const khongMang = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: "bac" }, gocKy);
+    expect([khongMang.status, khongMang.text]).toEqual([422, expect.stringContaining('trường \\"tiers\\" phải là mảng')]);
+    const khongObject = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: [1] }, gocKy);
+    expect([khongObject.status, khongObject.text]).toEqual([422, expect.stringContaining("phải là mảng các object")]);
+    expect((await goi("GET", "/policy/versions", tcA, undefined, gocKy)).text).not.toContain('"version":4');
   });
 });

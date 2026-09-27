@@ -290,7 +290,13 @@ $("nut-mau").addEventListener("click", () => { bao($("loi3"), ""); dienMau(); })
 $("nut-chep").addEventListener("click", () => { bao($("loi3"), ""); chepMoiNhat(); });
 $("nut-them-bac").addEventListener("click", () => {
   const cuoi = bac[bac.length - 1];
-  bac.push(bacThuong(cuoi === undefined ? 0 : cuoi.tu_so_tien * 10));
+  if (cuoi?.dau_thau_chinh_thuc === true) {
+    // Bậc đấu thầu chính thức chỉ đứng cuối (`069`): bậc mới chen TRƯỚC nó, cận dưới ở giữa hai hàng xóm — người khai sửa.
+    const truoc = bac[bac.length - 2];
+    bac.splice(bac.length - 1, 0, bacThuong(truoc === undefined ? 0 : Math.floor((truoc.tu_so_tien + cuoi.tu_so_tien) / 2)));
+  } else {
+    bac.push(bacThuong(cuoi === undefined ? 0 : cuoi.tu_so_tien * 10));
+  }
   veBac();
 });
 $("nut-xoa-bac").addEventListener("click", () => { bac.pop(); veBac(); });

@@ -709,11 +709,11 @@ const ghi: readonly BuyerWriteRoute[] = [
       // [review H2-3] `version` do người gọi chọn + cột `integer` + trigger 022 "phải LỚN HƠN" + không
       // UPDATE/DELETE ⇒ một `version: 2147483647` GHIM tổ chức vào chính sách ấy vĩnh viễn. Ở tầng
       // HTTP, `version` chỉ là GIÁ TRỊ KỲ VỌNG (chống đua): phải bằng phiên bản ~~hiện hành~~ MỚI NHẤT + 1.
-      // Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.
+      // ~~Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.~~ [`035`, sổ nợ 45 đã đóng] trigger đòi ĐÚNG lớn nhất + 1.
       // [S1.9101 / S3.1c] ~~`getActiveProcurementPolicy` + 1~~ Từ S1.156 phiên bản HIỆU LỰC có thể đi sau phiên bản MỚI NHẤT:
-      // một phiên bản có bậc chưa ký không có hiệu lực (ADR-082 ⑺). Tính theo bản hiệu lực thì route đòi đúng số mà trigger
-      // "phải LỚN HƠN" từ chối, và tổ chức không tạo được phiên bản nào nữa cho tới khi bản kia được ký. Nay tính theo bản
-      // mới nhất, đọc qua `lietKePhienBanChinhSach` — câu không tự chọn phiên bản (S1.156).
+      // một phiên bản có bậc chưa ký không có hiệu lực (ADR-082 ⑺). Tính theo bản hiệu lực thì route đòi một số mà trigger
+      // `035` từ chối, và tổ chức không tạo được phiên bản nào nữa cho tới khi bản kia được ký. Nay tính theo bản mới nhất —
+      // đúng số trigger đòi — đọc qua `lietKePhienBanChinhSach`, câu không tự chọn phiên bản (S1.156).
       const version = soNguyen(ctx.req.body, "version");
       const moiNhat = (await lietKePhienBanChinhSach(ctx.client, ctx.orgId)).phienBan[0];
       const keTiep = (moiNhat?.version ?? 0) + 1;
