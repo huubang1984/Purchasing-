@@ -13,7 +13,7 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-27 / S1.9101] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
+**[2026-09-27 / S1.170] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
 `/chinh-sach` VÀ `/tao-thau` TRÊN CỤM THẬT. S3.1 XONG.** Phần cuối trong bốn phần của S3.1 (spec S3 §9). Chủ dự án chốt bốn
 câu theo đề xuất:
 - `gieo:demo` mặc định giữ tổ chức chưa bật — hình dạng pilot chạy. `--s3` gieo tổ chức đã bật đủ bảy người của §7 (thêm
@@ -24,7 +24,7 @@ câu theo đề xuất:
 
 Lượt đi thử đo ra một lỗi của chính `--s3` — gói gieo mang sáu chữ ký phê duyệt, kể cả hai người tài chính — sửa trong
 vòng. Hai bản chép mặc định §4.1 (màn, công cụ) khoá nhau bằng một test. Không migration, không ADR, không khoản nợ mới.
-Biên bản: `evidence/security-reviews.md` §S1.9101.
+Biên bản: `evidence/security-reviews.md` §S1.170.
 
 **[2026-09-27 / S1.169] S3.1c — ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ — NÚT BẬT S3 — ĐỨNG SAU MỘT CỜ
 TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`.** Phần ba trong bốn phần của S3.1 (spec S3 §9). `POST /policy` nhận bậc và hai

@@ -14045,7 +14045,7 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
 
 ---
 
-# §S1.9101 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
+# §S1.170 — S3.1d: `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 TRÊN CỤM THẬT — S3.1 XONG
 
 **Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Không migration, không ADR. Không chạm mảnh nào của
 `docs/PRODUCT.md` §11: `gieo:demo` không cờ và luồng MVP1 của kịch bản 41 giữ nguyên hình dạng.
@@ -14056,7 +14056,7 @@ Phần cuối trong bốn phần của S3.1 (spec S3 §9): `gieo:demo` theo bả
 (§S1.156, §S1.166, §S1.169) dựng bậc, K1, route ký và màn `/chinh-sach`. Tới vòng này bối cảnh demo không có người FINANCE
 nào, và kịch bản 41 chỉ chạy ở tổ chức chưa bật.
 
-## 2. Bốn quyết định của chủ dự án (S1.9101) — cả bốn theo đề xuất
+## 2. Bốn quyết định của chủ dự án (S1.170) — cả bốn theo đề xuất
 
 - **Tổ chức demo:** không cờ thì giữ tổ chức chưa bật — pilot chạy MVP1, cờ ký tắt trên máy thật —; `--s3` gieo tổ chức
   đã bật. Loại: luôn gieo hai tổ chức (in dài gấp đôi, người trình diễn dễ nhầm tổ chức); thay hẳn bằng tổ chức đã bật (demo
