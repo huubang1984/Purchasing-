@@ -7003,10 +7003,10 @@ $ham$;
     ],
 
     -- [S1.156 / ADR-082 (7)] Chu ky thu hai cua phien ban chinh sach: khac nguoi tao, giu policy.manage, chi phien ban co bac. Than no-op cho mot nguoi tu ky — dung thu chu ky thu hai sinh ra de chan.
-    -- [S1.9102] Than tu `9502_bac_cua_goi`: `signed_at` dong dau SAU khoa tu van, de thu tu gio trung thu tu khoa voi lan nop duyet (K1).
+    -- [S1.157] Than tu `070_bac_cua_goi`: `signed_at` dong dau SAU khoa tu van, de thu tu gio trung thu tu khoa voi lan nop duyet (K1).
     ARRAY[
-      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 9502_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9502_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger chinh_sach_kiem_nguoi_ky (069_bac_va_chu_ky_chinh_sach, thân từ 070_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7174,10 +7174,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngan_sach_khong_ghim_ban_chua_ky() và bảng public.rfq_budgets (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102 / S3.1b] Bac ap cua goi do CSDL dat (`rfq_bac_cua`). Than `RETURN NEW` de ben goi khong dat duoc cot nay — cot o lai NULL, va K1 o canh chan moi goi cua to chuc da bat.
+    -- [S1.157 / S3.1b] Bac ap cua goi do CSDL dat (`rfq_bac_cua`). Than `RETURN NEW` de ben goi khong dat duoc cot nay — cot o lai NULL, va K1 o canh chan moi goi cua to chuc da bat.
     ARRAY[
-      $q$hàm + trigger ngan_sach_xep_bac (9502_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9502_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger ngan_sach_xep_bac (070_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7241,10 +7241,10 @@ $ham$;
       $q$quyền sở hữu hàm public.ngan_sach_xep_bac() và bảng public.rfq_budgets (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102 / S3.1b / K1] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: co ngan sach, ghim dung phien ban hieu luc, bac khop. Than `RETURN NEW` tat S3 bang cach bo mot buoc — dung lo spec §2.4 (5) goi ten.
+    -- [S1.157 / S3.1b / K1] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: co ngan sach, ghim dung phien ban hieu luc, bac khop. Than `RETURN NEW` tat S3 bang cach bo mot buoc — dung lo spec §2.4 (5) goi ten.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_ngan_sach_khi_nop (9502_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9502_bac_cua_goi.sql')$q$,
+      $q$hàm + trigger rfq_kiem_ngan_sach_khi_nop (070_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7312,10 +7312,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_ngan_sach_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102 / S3.1b / K1] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K1 o CA HAI cho ma khong trigger nao doi.
+    -- [S1.157 / S3.1b / K1] Ham vi tu cua chot — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat K1 o CA HAI cho ma khong trigger nao doi.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) (9502_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9502_bac_cua_goi.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) (070_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_ngan_sach(p_org uuid, p_rfq uuid, p_luc timestamptz) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -7365,10 +7365,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_chot_ngan_sach(uuid, uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102 / S3.1b] Ham phan bac DUY NHAT. Doi `<=` thanh `<` o than la doi bac cua moi goi dung bien.
+    -- [S1.157 / S3.1b] Ham phan bac DUY NHAT. Doi `<=` thanh `<` o than la doi bac cua moi goi dung bien.
     ARRAY[
-      $q$định nghĩa hàm rfq_bac_cua(uuid, numeric, text) (9502_bac_cua_goi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9502_bac_cua_goi.sql')$q$,
+      $q$định nghĩa hàm rfq_bac_cua(uuid, numeric, text) (070_bac_cua_goi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '070_bac_cua_goi.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bac_cua(p_policy uuid, p_gia_tri numeric, p_tien_te text) RETURNS numeric
   LANGUAGE plpgsql
   STABLE
@@ -7428,7 +7428,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bac_cua(uuid, numeric, text) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102] Cong tac ADR-080 (`069`). Ghim o vong nay vi K1 dung tren no: mot than `SELECT false` tat K1 cho moi to chuc.
+    -- [S1.157] Cong tac ADR-080 (`069`). Ghim o vong nay vi K1 dung tren no: mot than `SELECT false` tat K1 cho moi to chuc.
     ARRAY[
       $q$định nghĩa hàm to_chuc_da_bat_s3(uuid) (069_bac_va_chu_ky_chinh_sach)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,
@@ -7461,7 +7461,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm to_chuc_da_bat_s3(uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9102] Ham phien ban hieu luc (`069`). Ghim o vong nay vi K1 dung tren no: bo ve chu ky o than la mot phien ban chua ky co hieu luc.
+    -- [S1.157] Ham phien ban hieu luc (`069`). Ghim o vong nay vi K1 dung tren no: bo ve chu ky o than la mot phien ban chua ky co hieu luc.
     ARRAY[
       $q$định nghĩa hàm chinh_sach_hieu_luc(uuid, timestamptz) (069_bac_va_chu_ky_chinh_sach)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '069_bac_va_chu_ky_chinh_sach.sql')$q$,

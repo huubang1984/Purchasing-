@@ -274,7 +274,7 @@ const HAM_KHONG_PHAI_CANH = [
   // ngân sách ghim một phiên bản có bậc CHƯA KÝ. Câu chèn và câu sửa ngân sách của `dungKichBan()` ghim
   // phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
   "public.ngan_sach_khong_ghim_ban_chua_ky",
-  // [S1.9102 / S3.1b / `9502_bac_cua_goi`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: ĐẶT `tier_tu_so_tien` từ `rfq_bac_cua`,
+  // [S1.157 / S3.1b / `070_bac_cua_goi`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: ĐẶT `tier_tu_so_tien` từ `rfq_bac_cua`,
   // và từ chối CÓ ĐIỀU KIỆN — chỉ khi tiền tệ lệch một phiên bản có bậc. Câu chèn và câu sửa ngân sách của
   // `dungKichBan()` ghim phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
   "public.ngan_sach_xep_bac",
@@ -292,7 +292,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_khoa_chi_thu_hoi_khi_huy",
   "public.rfq_kiem_chuyen_trang_thai",
   "public.rfq_kiem_khoa_khi_mo",
-  // [S1.9102 / S3.1b / K1] BEFORE UPDATE `WHEN` cạnh DRAFT→PENDING_APPROVAL: từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức đã
+  // [S1.157 / S3.1b / K1] BEFORE UPDATE `WHEN` cạnh DRAFT→PENDING_APPROVAL: từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức đã
   // bật S3 mà ngân sách thiếu, ghim bản cũ hay lệch bậc. Câu nộp duyệt của `dungKichBan()` đi qua: một nhân chứng.
   "public.rfq_kiem_ngan_sach_khi_nop",
   "public.rfq_kiem_nguong_phe_duyet_kep",

@@ -9,7 +9,7 @@
 //   [INV-A4]  bảng so sánh bị từ chối khi RFQ chưa UNSEALED (kể cả sau khi đã điều phối mở thầu).
 //   [INV-E6]  token magic link mời thầu KHÔNG về client — chỉ tới bộ gửi, đích đọc từ supplier_contacts.
 //   [INV-D1]  điều phối mở thầu cần cổng bốn vế; hai phê duyệt bởi hai giám đốc khác người yêu cầu.
-//   [INV-K1]  [S1.9102] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
+//   [INV-K1]  [S1.157] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -812,7 +812,7 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
   });
 });
 
-describe("[S1.9102 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT KIỂM SOÁT đi ra dưới 422 có tên", () => {
+describe("[S1.157 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT KIỂM SOÁT đi ra dưới 422 có tên", () => {
   it("[INV-K1] tổ chức đã bật: nộp duyệt gói không ngân sách ⇒ 422 mang thông điệp của bảng chốt và một hàng `CONTROL_DENIED`; đặt ngân sách thì 200", async () => {
     // Tổ chức RIÊNG: công tắc ADR-080 một chiều, bật ở `orgA` là đổi mọi ca khác của tệp này.
     const orgB = (

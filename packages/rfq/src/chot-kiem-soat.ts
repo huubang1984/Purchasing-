@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9102 / S3.1b / ADR-084 ⑷] LỚP TỪ CHỐI THỨ BA CỦA K12 — `CONTROL_DENIED`
+// [S1.157 / S3.1b / ADR-084 ⑷] LỚP TỪ CHỐI THỨ BA CỦA K12 — `CONTROL_DENIED`
 //
 // Ba lớp tách nhau (ADR-084 ⑸): `PERMISSION_DENIED` — thiếu quyền; `RFQ_STATE_DENIED` — đi sai thứ tự
 // (`packages/danh-gia/src/tu-choi-vao-so.ts`); `CONTROL_DENIED` — đủ quyền, đúng thứ tự, nhưng một CHỐT
@@ -38,7 +38,7 @@ export interface DongChot {
   readonly thongDiep: string;
 }
 
-/** Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.9102). */
+/** Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.157). */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
     chot: "K1",

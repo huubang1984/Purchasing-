@@ -388,7 +388,7 @@ describe("cấu hình ghim đối chiếu với docs/TEST-PLAN.md thật", () =>
     expect(ds.filter((i) => !/^[A-HJK]\d+$/.test(i.id))).toEqual([]);
     expect(ds.filter((i) => i.statement.length === 0)).toEqual([]);
     // Mọi nhóm A–H đều phải CÓ MẶT. Nếu một mũi thu hẹp dải của bộ đọc, nhóm bị cắt biến mất
-    // ở đây trước khi kịp biến mất khỏi ma trận. [S1.9102] K vào khi K1 vào sổ (spec S3 §9, S3.0); J vào cùng lượt —
+    // ở đây trước khi kịp biến mất khỏi ma trận. [S1.157] K vào khi K1 vào sổ (spec S3 §9, S3.0); J vào cùng lượt —
     // nhóm J có hàng từ S1.115 mà phép kiểm này chưa đòi.
     expect(
       [..."ABCDEFGHJK"].filter((g) => !ds.some((i) => i.id.startsWith(g))),

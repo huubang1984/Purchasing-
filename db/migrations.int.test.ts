@@ -1445,17 +1445,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
-  // [S1.9102 / S3.1b] Bốn hàm TRỢ GIÚP của chuỗi K1 — không `RETURNS trigger`, nên đứng ngoài `HAM_GHIM` và ghim theo
+  // [S1.157 / S3.1b] Bốn hàm TRỢ GIÚP của chuỗi K1 — không `RETURNS trigger`, nên đứng ngoài `HAM_GHIM` và ghim theo
   // khuôn `la_duong_ung_dung` (037). Một thân rỗng ruột ở bất kỳ hàm nào tắt K1 mà không trigger nào đổi: vị từ trả
   // NULL, công tắc trả `false`, phiên bản hiệu lực bỏ vế chữ ký, hay phân bậc lệch biên.
   const HAM_TRO_GIUP_K1: readonly { ham: string; chuKy: string; migration: string }[] = [
-    { ham: "rfq_chot_ngan_sach", chuKy: "uuid, uuid, timestamptz", migration: "9502_bac_cua_goi.sql" },
-    { ham: "rfq_bac_cua", chuKy: "uuid, numeric, text", migration: "9502_bac_cua_goi.sql" },
+    { ham: "rfq_chot_ngan_sach", chuKy: "uuid, uuid, timestamptz", migration: "070_bac_cua_goi.sql" },
+    { ham: "rfq_bac_cua", chuKy: "uuid, numeric, text", migration: "070_bac_cua_goi.sql" },
     { ham: "to_chuc_da_bat_s3", chuKy: "uuid", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "chinh_sach_hieu_luc", chuKy: "uuid, timestamptz", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
   ];
 
-  it("[S1.9102] bốn hàm trợ giúp của K1: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.157] bốn hàm trợ giúp của K1: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1597,14 +1597,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // hay ghim ngân sách vào một phiên bản chưa ký.
     { ham: "chinh_sach_kiem_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_kiem_bac"] },
     { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
-    // [S1.9102 / S3.1b] `9502_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
+    // [S1.157 / S3.1b] `070_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    { ham: "chinh_sach_kiem_nguoi_ky", migration: "9502_bac_cua_goi.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
+    { ham: "chinh_sach_kiem_nguoi_ky", migration: "070_bac_cua_goi.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },
-    // [S1.9102 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
+    // [S1.157 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
     // `rfq_kiem_ngan_sach_khi_nop` thì cạnh nộp duyệt chỉ còn tầng gói canh — một câu UPDATE viết tay tắt được S3.
-    { ham: "ngan_sach_xep_bac", migration: "9502_bac_cua_goi.sql", trigger: ["rfq_budgets_xep_bac"] },
-    { ham: "rfq_kiem_ngan_sach_khi_nop", migration: "9502_bac_cua_goi.sql", trigger: ["rfq_packages_kiem_ngan_sach_khi_nop"] },
+    { ham: "ngan_sach_xep_bac", migration: "070_bac_cua_goi.sql", trigger: ["rfq_budgets_xep_bac"] },
+    { ham: "rfq_kiem_ngan_sach_khi_nop", migration: "070_bac_cua_goi.sql", trigger: ["rfq_packages_kiem_ngan_sach_khi_nop"] },
     { ham: "rfq_khoa_chi_sinh_luc_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_sinh_luc_mo"] },
     { ham: "rfq_khoa_chi_thu_hoi_khi_huy", migration: "017_rfq_key_material.sql", trigger: ["rfq_key_material_chi_thu_hoi_khi_huy"] },
     { ham: "rfq_khoa_phai_di_kem_lan_mo", migration: "059_vong_bafo.sql", trigger: ["rfq_key_material_phai_di_kem_lan_mo"] },
@@ -3265,7 +3265,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
         "069_bac_va_chu_ky_chinh_sach.sql",
-        "9502_bac_cua_goi.sql",
+        "070_bac_cua_goi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7678,7 +7678,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
         "069_bac_va_chu_ky_chinh_sach.sql",
-        "9502_bac_cua_goi.sql",
+        "070_bac_cua_goi.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7968,7 +7968,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "067_dem_chu_ky_o_canh_mo_goi.sql",
         "068_san_mot_chu_ky.sql",
         "069_bac_va_chu_ky_chinh_sach.sql",
-        "9502_bac_cua_goi.sql",
+        "070_bac_cua_goi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

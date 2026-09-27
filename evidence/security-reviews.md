@@ -12652,9 +12652,9 @@ Tổng điều tra của `[INV-H19]` bắt kịp: `org_policy_signatures` vào `
 
 ---
 
-# §S1.9102 — S3.1b: BẬC CỦA GÓI, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG PHIÊN BẢN HIỆU LỰC, K1 VÀ LỚP `CONTROL_DENIED`
+# §S1.157 — S3.1b: BẬC CỦA GÓI, NGÂN SÁCH BẮT BUỘC GHIM ĐÚNG PHIÊN BẢN HIỆU LỰC, K1 VÀ LỚP `CONTROL_DENIED`
 
-**Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Một migration (`9502_bac_cua_goi`). Không ADR mới. Không chạm mảnh
+**Rổ và mảnh (ADR-043 ⒞):** không khoản nợ nào đổi rổ. Một migration (`070_bac_cua_goi`). Không ADR mới. Không chạm mảnh
 nào của `docs/PRODUCT.md` §11: tổ chức chưa bật S3 — mọi tổ chức hôm nay — chạy như MVP1.
 
 ## 1. Vòng này là gì
@@ -12663,7 +12663,7 @@ Phần hai trong bốn phần của S3.1 (spec S3 §9): bậc của gói (`rfq_b
 phiên bản hiệu lực, K1, lớp từ chối `CONTROL_DENIED`. S3.1a (§S1.156) dựng bậc trên phiên bản chính sách, chữ ký thứ hai và
 công tắc; tới vòng này chưa thứ gì đọc bậc.
 
-## 2. Hai quyết định của chủ dự án (S1.9102)
+## 2. Hai quyết định của chủ dự án (S1.157)
 
 - **Gói ghim một phiên bản không còn hiệu lực** (chính sách đổi sau khi đặt ngân sách, hay gói có từ trước ngày bật): nộp
   duyệt bị TỪ CHỐI, KHÔNG vào sổ. Người dùng đặt lại ngân sách, thấy bậc mới rồi mới nộp. Hai phương án bị loại: từ chối và
@@ -12674,7 +12674,7 @@ công tắc; tới vòng này chưa thứ gì đọc bậc.
 
 ## 3. Thay đổi
 
-**Migration `9502_bac_cua_goi`:**
+**Migration `070_bac_cua_goi`:**
 - `rfq_bac_cua(policy_id, ước lượng, tiền tệ)` — hàm phân bậc duy nhất: bậc có `tu_so_tien` lớn nhất `≤` ước lượng. NÉM khi
   phiên bản không bậc hay tiền tệ lệch (spec §4.1: không quy đổi tiền tệ).
 - `rfq_budgets.tier_tu_so_tien`, ngoài `GRANT INSERT`/`UPDATE`; trigger `rfq_budgets_xep_bac` đặt nó ở mọi lần chèn hay sửa
@@ -12692,7 +12692,7 @@ và `kiemChot`, gọi hàm vị từ rồi ném theo bảng — vào sổ qua `t
 `ChotKiemSoatError` dưới 422 kèm thông điệp của bảng. 36 lời gọi `submitRfqForApproval` (35 trong test, một route) thêm đối
 số ấy; không khẳng định nào đổi.
 
-**Hardening:** ghim hai hàm trigger mới, ghim lại thân hàm ký (con trỏ dời sang `9502`), và ghim bốn hàm trợ giúp của chuỗi
+**Hardening:** ghim hai hàm trigger mới, ghim lại thân hàm ký (con trỏ dời sang `070`), và ghim bốn hàm trợ giúp của chuỗi
 K1 theo khuôn `la_duong_ung_dung` (037) — `rfq_chot_ngan_sach`, `rfq_bac_cua`, cùng `to_chuc_da_bat_s3` và
 `chinh_sach_hieu_luc` của `069`.
 
@@ -12782,4 +12782,4 @@ một ĐỘT BIẾN:
 - Ma trận sinh lại từ báo cáo của lượt ấy (ghép kết quả chạy lại của tệp P6): **64/64** bất biến (42 + 22), cổng evidence XANH.
   Bộ sinh đòi nâng tay mốc ghim độ phủ 63 → 64 (`MOC_GHIM.soPhuToiThieu`). Diff của `evidence/INV-matrix.md`: hàng K1
   (**11** ca đạt — 10 ở `bac-chinh-sach`, 1 qua HTTP), các dòng tổng và dòng mốc; không hàng nào khác đổi.
-- Số tạm `S1.9102`, `9502_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
+- Số tạm `S1.157`, `070_bac_cua_goi` do `pnpm cap-so` cấp lúc merge.
