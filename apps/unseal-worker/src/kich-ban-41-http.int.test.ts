@@ -356,7 +356,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     const m = trangThai.mua.cookie;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
-    // [S1.172 / khoản 247 / ADR-107] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
+    // [S1.173 / khoản 247 / ADR-107] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
     // `CHOT_VAO_SO`, vẫn gọi tên `(D2)` — và để lại một hàng `CONTROL_DENIED`.
     const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
     expect(tuDuyet.status).toBe(422);
@@ -980,7 +980,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     expect(bn2.status, bn2.text).toBe(422);
     // Và thông điệp KHÔNG chép lại câu của CSDL: hai trong ba câu ấy nội suy UUID.
     expect(bn2.text).not.toContain(trangThai.bafoRoundId);
-    // [S1.172 / khoản 247 / ADR-107] ...và lần chặn ấy để lại ĐÚNG MỘT hàng `BID_STATE_DENIED` mang mã của nhánh, qua đường
+    // [S1.173 / khoản 247 / ADR-107] ...và lần chặn ấy để lại ĐÚNG MỘT hàng `BID_STATE_DENIED` mang mã của nhánh, qua đường
     // HTTP thật: route khách trả 422 mà COMMIT.
     const { rows: soBafo } = await db.pool.query<{ payload: unknown }>(
       "SELECT payload FROM audit_events WHERE action = 'BID_STATE_DENIED' AND resource_id = $1",
@@ -1263,7 +1263,7 @@ describe("[KỊCH BẢN 41 — QUA HTTP] RFQ 1 tỷ, 5 nhà cung cấp, sửa gi
     // vì thông điệp ấy do migration VIẾT chứ không nội suy dữ liệu người dùng. Nên J3 nói được cho
     // người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`.
     //
-    // [S1.172 / khoản 247 / ADR-107] Nay câu ấy là của BẢNG CHỐT, không của trigger: `deXuatTraoThau` bắt lỗi của trigger theo
+    // [S1.173 / khoản 247 / ADR-107] Nay câu ấy là của BẢNG CHỐT, không của trigger: `deXuatTraoThau` bắt lỗi của trigger theo
     // TÊN ràng buộc, từ chối bằng `ChotKiemSoatError` (422 qua `LOI_NGHIEP_VU_422`) và để lại một hàng `CONTROL_DENIED`. Câu vẫn
     // gọi tên `(J3)`.
     expect(tuChoi.status, tuChoi.text).toBe(422);

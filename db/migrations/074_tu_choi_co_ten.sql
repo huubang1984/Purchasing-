@@ -1,5 +1,5 @@
 -- =============================================================================================
--- `074_tu_choi_co_ten.sql` — [S1.172 / khoản 247 / ADR-107] MỌI LẦN TỪ CHỐI CỦA TRIGGER MÀ TẦNG GÓI GHI SỔ ĐỀU MANG TÊN
+-- `074_tu_choi_co_ten.sql` — [S1.173 / khoản 247 / ADR-107] MỌI LẦN TỪ CHỐI CỦA TRIGGER MÀ TẦNG GÓI GHI SỔ ĐỀU MANG TÊN
 -- =============================================================================================
 -- ADR-104 (S1.167) cho tầng gói bắt CHÍNH lỗi của trigger rồi ghi sổ — trigger vẫn là lớp có thẩm quyền, và ca hai người
 -- đua nhau cũng vào sổ. Nhưng nó nhận ra lần vi phạm bằng THÔNG ĐIỆP: SQLSTATE 23514 cộng hậu tố *"(J3)"* / *"(D2"* và đầu

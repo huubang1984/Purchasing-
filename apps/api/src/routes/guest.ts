@@ -145,7 +145,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
         // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang ~~`BID_SUBMIT_DENIED`~~
-        // **[S1.172]** `BID_STATE_DENIED` mang mã của nhánh.
+        // **[S1.173]** `BID_STATE_DENIED` mang mã của nhánh.
         if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message } };
         throw loi;
       }

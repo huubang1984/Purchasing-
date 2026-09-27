@@ -1880,7 +1880,7 @@ describe("[S1.110 / S2.6] J3 — ba vế, và mỗi vế một câu gọi tên",
           ),
         ),
       ).rejects.toSatisfy(
-        // [S1.172 / ADR-107] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
+        // [S1.173 / ADR-107] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
         (e: unknown) =>
           /Phien da de xuat trao thau khong duoc dung de duyet/u.test((e as Error).message) && maChotTuLoi(e) === "J3_PHIEN_DE_XUAT_DUYET",
       );
@@ -2884,10 +2884,10 @@ describe("[S1.165 / khoản 225] gói bị từ chối chấm có lối ra: hu�
 // Ba vế của J3 sống ở trigger, nên lần vi phạm huỷ giao dịch của người gọi — trước vòng này 0 hàng sổ (`pnpm pilot:gia-lap`).
 // Nay lớp gói bắt lỗi của trigger, ghi ~~`RFQ_AWARD_SOD_DENIED`~~ ở giao dịch ĐỘC LẬP, rồi ném lại CHÍNH lỗi ấy: thông điệp và mã
 // không đổi (các ca `[INV-J3]` ở trên vẫn khớp nguyên văn), và hàng sổ sống qua rollback.
-// **[S1.172 / ADR-107]** Hàng là `CONTROL_DENIED` mang mã chốt; lỗi ném ra là `ChotKiemSoatError` với lỗi của trigger ở
+// **[S1.173 / ADR-107]** Hàng là `CONTROL_DENIED` mang mã chốt; lỗi ném ra là `ChotKiemSoatError` với lỗi của trigger ở
 // `cause` — các ca `[INV-J3]` ở trên nay khẳng định mã chốt và tên ràng buộc thay cho câu của trigger.
 // ==============================================================================================
-describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng ~~`RFQ_AWARD_SOD_DENIED`~~ [S1.172] `CONTROL_DENIED`", { timeout: 300000 }, () => {
+describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng ~~`RFQ_AWARD_SOD_DENIED`~~ [S1.173] `CONTROL_DENIED`", { timeout: 300000 }, () => {
   async function hangSoJ3(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
       "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
