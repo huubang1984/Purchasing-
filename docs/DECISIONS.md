@@ -8165,7 +8165,8 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.167]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
 (từ chối trạng thái vào sổ có chọn lọc), ADR-074 (lần chặn VÌ HẠN của câu nộp vào sổ), ADR-101 (pilot giả lập — nơi đo ra khoản
-này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi)
+này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi) · **[S1.180] Cách nhận diện ở ⑴, từ vựng và lời ném ở ⑵ ⑶
+SỬA BỞI ADR-108**; cơ chế bắt chính lỗi của trigger giữ nguyên
 
 ### Bối cảnh
 
@@ -8179,15 +8180,18 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 
 1. **Bắt CHÍNH lỗi của trigger, không chép vị từ ra TypeScript.** Trigger là lớp có thẩm quyền — nó đọc bảng lịch sử điều phối và
    hàng gói dưới đúng khoá của câu ghi. Kiểm trước ở lớp gói là hai nguồn sự thật cho một luật. Lớp gói bọc câu ghi, nhận diện lần
-   vi phạm (SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt), ghi, rồi để lỗi đi tiếp.
+   vi phạm (~~SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt~~ **[S1.180 / ADR-108]** SQLSTATE 23514 cộng TÊN
+   RÀNG BUỘC mà trigger đặt), ghi, rồi để lỗi đi tiếp.
 2. **J3 và D2 — phía người mua: ghi ở `auditPool`, giao dịch ĐỘC LẬP, qua `throwAuditedDenial`, rồi ném lại chính lỗi `pg`.** Cùng
-   khuôn nhánh D2 của `approveUnseal`. Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
+   khuôn nhánh D2 của `approveUnseal`. ~~Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
    `{ viPham: "J3", ve }`, `ve` ∈ `NGUOI_TAO · NGUOI_DIEU_PHOI · NGUOI_DE_XUAT · PHIEN_DE_XUAT`) và `RFQ_APPROVAL_DENIED` (payload
-   `{ viPham: "D2" }`), `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
+   `{ viPham: "D2" }`)~~ **[S1.180 / ADR-108]** Hàng: `CONTROL_DENIED` payload `{ ma }`, và lời ném là `ChotKiemSoatError` mang
+   lỗi `pg` ở `cause` — 422 giữ nguyên, thông điệp là câu của bảng `CHOT_VAO_SO`, `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
    thêm tham số `auditPool`, cùng hình dạng với mọi hàm gói có đường từ chối.
 3. **Câu nộp — phía nhà cung cấp: savepoint cộng một hàng trong giao dịch người gọi, như nhánh VÌ HẠN của ADR-074.** Route khách
-   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi `BID_SUBMIT_DENIED` (payload
-   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi), rồi ném
+   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi ~~`BID_SUBMIT_DENIED` (payload
+   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi)~~ **[S1.180 / ADR-108]**
+   `BID_STATE_DENIED` (payload `{ ma }` — tên ràng buộc của nhánh, viết hoa), rồi ném
    `NopBiTuChoiError`; route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng sống. Thông điệp giữ nguyên câu chung.
 
 ### Hệ quả, nói thẳng
@@ -8196,8 +8200,9 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
   một phiên dùng đường này để làm phình sổ — nhưng trần ấy đếm ở bộ điều phối, và lần vi phạm J3/D2 đi qua cổng quyền nên KHÔNG
   được đếm vào đó. Phía nhà cung cấp, không trần nào: một khách lặp lời nộp sai ghi một hàng mỗi lần, cùng rủi ro ADR-074 đã nhận
   cho nhánh VÌ HẠN.
-- **Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
-  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.
+- ~~**Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
+  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.~~ **[S1.180 / ADR-108]** Nhận diện bằng
+  tên ràng buộc; nhánh D2 của `approveUnseal` vẫn đọc thông điệp — ngoài phạm vi vòng ấy.
 - **Ca đua nhau trên các trigger khác** (ADR-060 *"Điều ADR này KHÔNG nói"*) vẫn im; ADR này chỉ phủ bảy lần pilot đo được.
 - Đo ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/rfq/src/rfq.int.test.ts` và
   `packages/bidding/src/bidding.int.test.ts` (khối khoản 247).
@@ -8358,3 +8363,57 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 `docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.178).
+
+---
+
+## ADR-108 — Nắn ADR-104: lần từ chối do trigger của J3/D2 vào lớp `CONTROL_DENIED`, của câu nộp vào `BID_STATE_DENIED` mang mã, nhận diện bằng TÊN RÀNG BUỘC
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.180]** · **Khoản nợ liên quan:** 247 (đã đóng ở S1.167) ·
+**Liên quan:** ADR-104 (sửa ⑴ ⑵ ⑶ ở cách nhận diện, từ vựng và lời ném; giữ cơ chế), ADR-084 ⑷ ⑸ (ba lớp từ chối, `CONTROL_DENIED`),
+ADR-060 (luật chọn lọc), ADR-074 (lối ghi của câu nộp)
+
+### Bối cảnh
+
+Hai phiên làm khoản 247 song song. #172 (ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi — một nguồn sự thật, và
+ca hai người đua nhau cũng vào sổ. Ở phiên kia chủ dự án đã chốt lớp cho các lần từ chối ấy: J3 và D2 là `CONTROL_DENIED` (người vi
+phạm đủ quyền, đi đúng thứ tự — thứ chặn họ là một chốt), câu nộp là `BID_STATE_DENIED` mang mã trong payload. Khi #172 vào `master`,
+chủ dự án chọn giữ cơ chế của nó và nắn hai điều:
+
+1. **Từ vựng.** ADR-104 thêm ba `action` — `RFQ_AWARD_SOD_DENIED`, `RFQ_APPROVAL_DENIED`, `BID_SUBMIT_DENIED` — ngoài ba lớp của
+   ADR-084 ⑸ (`PERMISSION_DENIED` · `RFQ_STATE_DENIED` · `CONTROL_DENIED`). Người đọc sổ hỏi *"ai bị một chốt kiểm soát chặn"* bằng
+   `action = 'CONTROL_DENIED'` thì không thấy J3 hay D2.
+2. **Nhận diện bằng thông điệp.** Phía người mua đọc hậu tố *"(J3)"* / *"(D2"* cộng đầu câu; phía nộp không đọc gì — mọi 23514
+   không vì hạn. Đổi một câu `RAISE` là lần vi phạm rơi khỏi sổ, im lặng.
+
+### Quyết định
+
+1. **Mỗi nhánh mà ADR-104 ghi sổ mang một tên ràng buộc** (`RAISE … USING CONSTRAINT = …`), khuôn `c1_qua_han_nop` của `066`.
+   Migration `074_tu_choi_co_ten.sql` định nghĩa lại sáu hàm — thân trích nguyên văn, đổi đúng một chỗ ở mỗi nhánh — đặt 13 tên.
+   Chủ dự án chốt *đặt tên hết, vẫn ghi*: không bớt nhánh nào ADR-104 đang ghi, kể cả những nhánh ngoài bảy ca pilot đo được (D2/D1
+   phiên hỏng, D2 phiên của người khác, J3 phiên đã đề xuất đem đi duyệt, và mọi nhánh 23514 của ba trigger câu nộp). Nhánh
+   không tên thì không ghi: đúng tập ADR-104 đã để ngoài (không tìm thấy hàng cha, gói không ở `PENDING_APPROVAL`, đề xuất không còn
+   `PROPOSED`, hai vế J5).
+2. **J3 và D2 ⇒ `CONTROL_DENIED` payload `{ ma }`, qua `tuChoiTheoChot`.** Bảy mã ở `CHOT_VAO_SO`, và bảng DỜI XUỐNG
+   `packages/identity` từ `packages/rfq` — đúng lối mà chú thích của K1 đã hẹn khi một gói thứ hai cần (`danh-gia`). Bảng tên → mã
+   `CHOT_THEO_RANG_BUOC` đứng cạnh. Lời ném là `ChotKiemSoatError` mang lỗi `pg` ở `cause`: 422 giữ nguyên, thông điệp là câu của
+   bảng — có dấu, vẫn gọi tên `(J3)` / `(D2)` — thay câu không dấu của trigger. Câu của CSDL không đổi.
+3. **Câu nộp ⇒ `BID_STATE_DENIED` payload `{ ma }`**, `ma` là tên ràng buộc viết hoa (sáu mã). `NopBiTuChoiError` giữ tên, thêm
+   `ma`; thông điệp chung không đổi — nó không nói luồng này đứng ngoài top-N hay phiên đã hỏng. Một 23514 KHÔNG tên (hôm nay chỉ
+   `CHECK` cỡ phong bì của bảng) đi lối trước ADR-104: ném `BiddingError`, không sổ.
+4. **Hai phép đo khớp tên hai chiều trên thân hàm THẬT trong CSDL** — `packages/rfq/src/rfq.int.test.ts` cho ba trigger J3/D2,
+   `packages/bidding/src/bidding.int.test.ts` cho ba trigger câu nộp. Đổi tên ở một phía mà quên phía kia là đỏ.
+
+### Hệ quả, nói thẳng
+
+- **Vế ghi rộng hơn chữ của ADR-060 ở năm mã**: `D2_PHIEN_KHONG_HOP_LE`, `PHIEN_KHACH_KHONG_HOP_LE`, `PHIEN_KHACH_KHAC_LOI_MOI`,
+  `C1_KHONG_VONG_BAFO_DANG_MO`, `C1_KHONG_HAN_NOP` nói về phiên hay dữ liệu, không về một bước đi sai thứ tự. ADR-104 đã ghi chúng
+  (không phân biệt), và chủ dự án chọn không lùi phần phủ. Nay mã tách chúng ra, nên người đọc sổ lọc được.
+- **`BID_STATE_DENIED` mang cả mã không phải "trạng thái" theo nghĩa hẹp.** Một `action` cho lớp *câu nộp bị trigger chặn không
+  vì hạn*; mã phân biệt.
+- **Thông điệp người dùng thấy ở J3/D2 đổi** — ADR-104 ⑵ nói không đổi. 422 giữ nguyên, câu vẫn gọi tên bất biến; kịch bản 41 qua
+  HTTP khẳng định câu mới.
+- Hàng đã ghi dưới ba `action` của ADR-104 (nếu có) không sửa được (B4); giữa hai vòng không có triển khai nào.
+- Ca đua nhau trên các trigger KHÁC vẫn im (ADR-060 *"Điều ADR này KHÔNG nói"*), như ADR-104 đã nói.
+- **Khoản 248** (`CONTROL_DENIED` đứng ngoài trần lần từ chối theo phiên của ADR-092) nay phủ cả bảy mã J3/D2: ADR-104 đã nêu hai
+  `action` của nó không được đếm, nên đổi lớp không làm khe ấy rộng hơn — chỉ gom nó về một `action`. Phép đếm đề xuất ở hàng 248
+  đặt trong `tuChoiTheoChot` thì phủ luôn J3/D2.

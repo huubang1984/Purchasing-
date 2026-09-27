@@ -14699,3 +14699,79 @@ Người đến trước được trước:
   người xếp hàng trước. Bằng chứng chiều âm ngoài đời là lần đỏ trên CI.
 - Thứ tự theo đồng hồ máy: hai người đến cùng mili-giây xếp theo `pid`. Không phải FIFO tuyệt đối, và không cần.
 - Không đo được trên Windows ở máy này; job `T1+T2 (windows-latest)` của PR là phép đo ấy.
+
+
+
+
+---
+
+# §S1.180 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+
+## 1. Vòng này là gì
+
+Hai phiên làm khoản 247 song song. #172 (§S1.167, ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi. Phiên này
+đã làm cùng khoản theo lựa chọn chủ dự án chốt ở đây — J3/D2 là `CONTROL_DENIED`, câu nộp là `BID_STATE_DENIED` mang mã — bằng
+cách kiểm trước ở lớp gói. Khi #172 vào `master`, chủ dự án chọn giữ cơ chế của #172 (một nguồn sự thật; ca đua nhau cũng vào sổ),
+bỏ nhánh kiểm-trước, và nắn hai điều: từ vựng về ba lớp của ADR-084 ⑸, và nhận diện bằng tên ràng buộc thay cho thông điệp. Câu
+hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-108.
+
+## 2. Đo trước (đọc, không chạy)
+
+- Trên `master` (`12645e9`), khối khoản 247 của ba tệp tích hợp khẳng định hàng `RFQ_AWARD_SOD_DENIED` `{viPham, ve}`,
+  `RFQ_APPROVAL_DENIED` `{viPham}` và `BID_SUBMIT_DENIED` `{rfqStatus}` — tức một truy vấn `action = 'CONTROL_DENIED'` không thấy
+  lần vi phạm J3/D2 nào, và `BID_STATE_DENIED` không có.
+- Nhận diện: `veJ3` đọc `code = 23514` + hậu tố `(J3)` + bốn tiền tố câu; `approveRfq` đọc `includes("(D2")`; `submitBid` ghi mọi
+  23514 không vì hạn, kể cả `CHECK` cỡ phong bì của bảng. Thân sáu hàm trigger (`011`, `018`, `059`, `061`, `064`, `066`) không
+  đặt tên ràng buộc nào ngoài `c1_qua_han_nop`.
+
+## 3. Thay đổi
+
+- `db/migrations/074_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
+  `bid_kiem_han_nop`, `bid_kiem_phien_khach`, `bid_kiem_vong_bafo` — thân trích nguyên văn bằng script, thêm `CONSTRAINT = …` ở
+  13 nhánh. Sáu bản ghim ở `hardening.always.sql` đổi cùng commit (tiêu đề, mốc phiên bản, thân khối `DO`, thân `$than$`); script
+  đối chiếu bản ghim cũ với thân cũ trước khi thay. `db/migrations.int.test.ts`: `HAM_56` trỏ sáu hàm sang migration mới, ba danh
+  sách migration đã áp thêm một dòng.
+- `packages/identity/src/chot-kiem-soat.ts` (MỚI): `CHOT_VAO_SO` dời xuống từ `packages/rfq` cùng `ChotKiemSoatError` (nay nhận
+  `cause`), `tuChoiTheoChot`, `laMaChot`; thêm bảy mã J3/D2, bảng `CHOT_THEO_RANG_BUOC` và `maChotTuLoi`.
+  `packages/rfq/src/chot-kiem-soat.ts` còn phần của K1 và chép lại từ vựng ra cửa tệp.
+- `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/trao-thau.ts`: nhánh bắt lỗi của #172 đổi sang `maChotTuLoi` +
+  `tuChoiTheoChot`; `veJ3`, `ghiTuChoiJ3` bỏ.
+- `packages/bidding/src/bidding.ts`: `MA_THEO_RANG_BUOC` (sáu tên → mã viết hoa); nhánh không vì hạn ghi `BID_STATE_DENIED`
+  `{ma}`, không đọc lại gói; `NopBiTuChoiError` mang `ma`; 23514 không tên ném `BiddingError` chung, không sổ.
+- Test: các ca J3/D2 đi qua lớp gói (`luot-danh-gia`, `rfq`) khẳng định `ChotKiemSoatError` + mã + tên ràng buộc ở `cause`; khối
+  khoản 247 khẳng định hàng `CONTROL_DENIED` / `BID_STATE_DENIED` mang mã; hai ca INSERT viết tay (phiên của người khác, phiên đã
+  đề xuất) khẳng định thêm `maChotTuLoi`; hai phép đo mới so tên ràng buộc trong `pg_proc.prosrc` với bảng tên → mã, hai chiều;
+  kịch bản 41 qua HTTP — bước 2 đọc câu mới và một hàng `D2_NGUOI_TAO_TU_DUYET`, bước 12d một hàng `BAFO_NGOAI_TOP_N`, bước 12h
+  một hàng `J3_NGUOI_TAO_DE_XUAT`.
+- `docs/DECISIONS.md` ADR-108, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
+
+## 4. Ranh giới, nói ra
+
+- Năm mã vào sổ nói về phiên hay dữ liệu, không về một bước đi sai thứ tự — rộng hơn chữ của ADR-060. Giữ vì #172 đã ghi chúng và
+  chủ dự án chọn không lùi phần phủ; mã tách chúng ra để lọc được.
+- Thông điệp người dùng thấy ở J3/D2 đổi sang câu của bảng chốt (có dấu, vẫn gọi tên bất biến); ADR-104 ⑵ từng nói không đổi.
+- Nhánh D2 của `approveUnseal` vẫn nhận diện bằng thông điệp — ngoài phạm vi.
+
+## 5. Số đo
+
+Trên cây đã hợp `master` ~~(`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`)~~ **(`f2fa608`, gồm thêm #175) và đã cấp lại
+số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: ~~**178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**~~ **178 tệp, 2845 ca, 2844 đạt, 1 bỏ qua,
+  0 hỏng** (ca thêm là của #175); **65/65** bất biến (43/43 nghiệp vụ +
+  22/22 hàng rào), cổng evidence XANH. `evidence/INV-matrix.md` không đổi byte nào: các ca đổi của vòng này nằm trong khối có
+  nhãn sẵn, và hai phép đo khớp tên không mang nhãn bất biến.
+- Tệp của vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60, `packages/danh-gia/src/luot-danh-gia.int.test.ts` 88/88,
+  `packages/bidding/src/bidding.int.test.ts` 22/22, `apps/api/src/guest.int.test.ts` 12/12, `apps/api/src/buyer.int.test.ts`
+  16/16, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` 29/29, `apps/unseal-worker/src/kich-ban-41.int.test.ts` 15/15,
+  `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
+- `pnpm t0` sạch (427 module, 1672 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua**; `pnpm cap-so --kiem` sạch.
+- Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
+  hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
+  đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
+- Số cấp cho vòng này trôi tám lần vì PR khác merge trước với cùng số: lần đầu S1.170, ADR-106, `073_tu_choi_co_ten` (#175 lấy
+  cả ba), rồi S1.171 (#180), S1.172 (#182), S1.173 (#177), S1.174 (#176), S1.175 (#183), S1.176 và ADR-107 (#184; #185, #187 lấy
+  S1.177, S1.178), S1.179 (#186). Mỗi lần `pnpm cap-so` thu hồi qua trailer `Cap-So:` và cấp lại; nay là S1.180, ADR-108,
+  `074_tu_choi_co_ten`. Số đo ở trên là của cây `f2fa608`. CI trên chính commit hợp xanh cả bảy job, gồm T3 và evidence, ở các đầu
+  `c637858`, `c637455` (sau #176 — hai tệp kịch bản 41 **88/88** cục bộ), `9f66fcf` và `2ccfe6b`. #186 chỉ chạm tài liệu và test kiến
+  trúc `khoa-depcruise`; trên cây đã hợp `pnpm t0` sạch, `pnpm test` 117 tệp, 1548 đạt, 1 bỏ qua, `pnpm cap-so --kiem` sạch.
+- Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
