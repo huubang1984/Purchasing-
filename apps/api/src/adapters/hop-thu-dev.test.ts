@@ -21,7 +21,7 @@ function docTin(): TinHopThuDev[] {
 }
 
 describe("[S1.11] hộp thư dev", () => {
-  it("ba loại tin, ba tệp; link đăng nhập /login#<org>:<token>, link mời /i#<org>:<token> [ADR-9201], OTP chỉ có mã; không qua console", async () => {
+  it("ba loại tin, ba tệp; link đăng nhập /login#<org>:<token>, link mời /i#<org>:<token> [ADR-107], OTP chỉ có mã; không qua console", async () => {
     const loi = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     thuMuc = join(mkdtempSync(join(tmpdir(), "tp-hop-thu-")), "con");

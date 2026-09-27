@@ -78,7 +78,7 @@ export function docTin(tho: unknown): TinHopThu | null {
 }
 
 /**
- * Token trong fragment của một đường link. ~~(`…/login#<token>`, `…/i#<token>`)~~ **[S1.9101 / ADR-9201]**
+ * Token trong fragment của một đường link. ~~(`…/login#<token>`, `…/i#<token>`)~~ **[S1.173 / ADR-107]**
  * Bộ gửi dựng `…/login#<orgId>:<token>` và `…/i#<orgId>:<token>`; mã tổ chức trong link phải là CHÍNH tổ
  * chức của tin — một link mang tổ chức khác là bộ gửi hỏng, không phải một token để dùng.
  */

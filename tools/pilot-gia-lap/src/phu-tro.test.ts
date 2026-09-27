@@ -181,7 +181,7 @@ describe("hộp thư dev", () => {
     expect(docTin({ loai: "OTP", den: "0912" })).toBeNull();
     expect(docTin({ loai: "LA", den: "x" })).toBeNull();
     expect(docTin(null)).toBeNull();
-    // [ADR-9201] Link mang `<orgId>:<token>`; tổ chức trong link phải là tổ chức của tin.
+    // [ADR-107] Link mang `<orgId>:<token>`; tổ chức trong link phải là tổ chức của tin.
     expect(tokenTuLink("http://127.0.0.1:18090/i#org-1:abcdefghijklmnopQRST_-12", "org-1")).toBe("abcdefghijklmnopQRST_-12");
     expect(() => tokenTuLink("http://127.0.0.1:18090/i#org-2:abcdefghijklmnopQRST_-12", "org-1")).toThrow(/tổ chức/u);
     expect(() => tokenTuLink("http://127.0.0.1:18090/i#abcdefghijklmnopQRST_-12", "org-1")).toThrow(/tổ chức/u);

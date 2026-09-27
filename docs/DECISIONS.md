@@ -283,8 +283,13 @@ Ba điều kiện đi kèm, và cả ba nay đều có một lớp giữ — nh�
    không nội suy giá trị; gói `identity` không tự ghi `console.*` (cùng kỷ luật với `outbox`).
    **Đo:** qua HTTP thật ở `apps/api/src/auth.int.test.ts` — khoá bị giữ, sai đủ ngưỡng ⇒ 401 (không
    500), hồ sơ khoá, sổ 0 dòng, và ĐÚNG một dòng log không mang `orgId` lẫn `userId`;
-2. `catch` **hẹp** — chỉ 55P03. Mọi mã khác vẫn ném nguyên (fail-closed). **Đo:** một trigger dựng
-   lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra nguyên và giao dịch vẫn rollback;
+2. `catch` **hẹp** — ~~chỉ 55P03~~ **[S1.172 / khoản 143] 55P03 và 40P01**. Mọi mã khác vẫn ném nguyên
+   (fail-closed). **Đo:** một trigger dựng lúc chạy làm lần ghi gãy bằng `42501`; mã ấy phải thoát ra
+   nguyên và giao dịch vẫn rollback. Khoá chết trên khoá ghi sổ bắn ở `deadlock_timeout` 1 s — trước trần
+   2 s — và đo được trên `master`: lần chạm ngưỡng ném `40P01`, hồ sơ KHÔNG khoá (`4/chua-khoa`). Chủ dự án
+   chọn nới `catch` cho mã ấy (2026-09-27): Postgres chỉ huỷ câu chờ khoá của nạn nhân, không phải một lần
+   huỷ có ý, nên nó cùng loại với 55P03. `57014` vẫn ném — với `statement_timeout` 15 s mỗi câu, trần 2 s
+   luôn tới trước, nên 57014 ở câu này chỉ còn là lần huỷ có ý (`pg_cancel_backend`);
 3. một **đối chứng** giữ cho bản vá khỏi thành *bỏ ghi sổ luôn cho xong*: không ai giữ khoá thì lần
    chạm ngưỡng vẫn ghi đủ một dòng và không bật cờ. **Đo:** `packages/identity/src/mfa.int.test.ts`.
 
@@ -1868,10 +1873,10 @@ Ba ràng buộc đi kèm, cả ba cưỡng chế được:
 
 ### 3. E6 — token KHÔNG BAO GIỜ vào đường dẫn hay query
 
-- **Magic link = ~~`https://<host>/i#<token>`~~ [S1.9101 / ADR-9201] `https://<host>/i#<orgId>:<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
+- **Magic link = ~~`https://<host>/i#<token>`~~ [S1.173 / ADR-107] `https://<host>/i#<orgId>:<token>`.** Token nằm ở **fragment**: trình duyệt không gửi
   fragment lên máy chủ, không ghi vào log truy cập, không đi vào `Referer`. Trang `/i` là tĩnh;
   JS đọc `location.hash`, xoá nó (`history.replaceState`), rồi **POST** token trong thân JSON tới
-  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: ~~`/login#<token>`~~ **[S1.9101 / ADR-9201]**
+  `/guest/redeem`. Cùng khuôn cho link đăng nhập người mua: ~~`/login#<token>`~~ **[S1.173 / ADR-107]**
   `/login#<orgId>:<token>` — hai route redeem đòi cả hai, và thư/tin nhắn không có chỗ nào khác nói tổ chức.
 - **Mọi phản hồi** mang `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (trừ
   `public-keys`, đã có chính sách riêng), `X-Content-Type-Options: nosniff`.
@@ -2128,7 +2133,7 @@ test-support cố ý đăng nhập bằng superuser rồi SET ROLE.
   được, không bao giờ trả rỗng; `kind` phân biệt. KHÔNG phải bản chép của `local-dev-shared.ts`
   (không import được, và không nên: nhãn HKDF khác nên cùng khoá chính cũng cho khoá dẫn xuất khác).
 - **Hộp thư dev (`adapters/hop-thu-dev.ts`)**: ba bộ gửi ghi mỗi tin một tệp JSON (0700/0600) vào
-  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (~~`/login#<token>`, `/i#<token>`~~ **[S1.9101 / ADR-9201]**
+  `TRUSTPROCURE_DEV_MAILBOX_DIR`; link theo ADR-020 mục 3 (~~`/login#<token>`, `/i#<token>`~~ **[S1.173 / ADR-107]**
   `/login#<orgId>:<token>`, `/i#<orgId>:<token>`); không
   một byte nào qua `console`. Đây là adapter DUY NHẤT hôm nay: bộ gửi thật (SMTP/SES/SMS) là hạ
   tầng chưa có, và cách đóng đúng vẫn là nợ 38 (outbox cho mọi email, token phát trong handler).
@@ -6564,7 +6569,7 @@ mời hay OTP. Stack 90 (ADR-066) không có đường ra internet, mà Zalo ch�
    (ADR-015 mục 1). Số điện thoại chuẩn hoá về E.164 ở MỘT chỗ; `0…` được hiểu là số Việt Nam.
 2. **SMS = AWS End User Messaging SMS** (`SendTextMessage`, TRANSACTIONAL) từ đúng một sender ID Việt Nam; IAM của
    `tp-api` chỉ cho gửi từ sender ID ấy qua configuration set `tp-sms` (stack 85). Không bí mật nào. Thân tin
-   **ASCII không dấu, ~~≤ 160 ký tự~~** **[S1.9101 / ADR-9201] ≤ 160 ký tự cho OTP và tin gia hạn; lời mời
+   **ASCII không dấu, ~~≤ 160 ký tự~~** **[S1.173 / ADR-107] ≤ 160 ký tự cho OTP và tin gia hạn; lời mời
    mang link có mã tổ chức nên thành hai đoạn GSM-7** — tiếng Việt có dấu buộc UCS-2 (70 ký tự/đoạn), và brandname Việt Nam đòi
    đăng ký mẫu nội dung, nên mỗi câu là một mẫu đã đăng ký.
 3. **Zalo ZNS** gọi `business.openapi.zalo.me/message/template` với một template đã duyệt cho mỗi loại tin (tham số
@@ -8258,12 +8263,12 @@ một yêu cầu — nhưng A1 đúng theo nghĩa hẹp hơn nghĩa người đ�
 - Đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts` (gói A × gói B, cùng đối chứng) và ca đột biến J4 của
   `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` (vòng hai × yêu cầu vòng một, dưới `app_unseal`).
 
-## ADR-9201 — Link đăng nhập và link mời mang mã tổ chức trong fragment; trang `/login` có ô xin link đăng nhập
+## ADR-107 — Link đăng nhập và link mời mang mã tổ chức trong fragment; trang `/login` có ô xin link đăng nhập
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.9101, gộp cả ba kênh gửi) ·
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.173, gộp cả ba kênh gửi) ·
 **Sửa:** ADR-020 mục 3 (dạng link) · **Liên quan:** ADR-022 (nợ 38 — `/auth/link` trả cùng một 200), ADR-044 (hai màn demo),
 ADR-065 (SES), ADR-069 (SMS, Zalo ZNS) · **Khoản:** 198 (đã đóng ở S1.99 — vòng này sửa lời đóng) · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101
+`evidence/security-reviews.md` §S1.173
 
 ### Bối cảnh
 

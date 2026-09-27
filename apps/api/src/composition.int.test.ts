@@ -310,7 +310,7 @@ describe("[S1.11] tiến trình dựng từ môi trường: người mua đi tr�
     const link = new URL(t0.duongLink);
     expect(link.origin + link.pathname).toBe("http://localhost:3000/login");
     expect(link.search).toBe("");
-    // [ADR-9201] Fragment là `<orgId>:<token>` — đúng dạng trang `/login` đọc, và tổ chức là tổ chức của tin.
+    // [ADR-107] Fragment là `<orgId>:<token>` — đúng dạng trang `/login` đọc, và tổ chức là tổ chức của tin.
     const [orgTrongLink, token = ""] = link.hash.slice(1).split(":");
     expect(orgTrongLink).toBe(org);
     expect(token.length).toBeGreaterThan(20);

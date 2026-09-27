@@ -64,7 +64,7 @@ export function taoBoGuiTheoKenh(t: TuyChonTheoKenh): HopThuDev {
       name: ten,
       send: async (m) => {
         if (m.channel === "EMAIL") return t.email.invitationLinkSender.send(m);
-        // [S1.9101 / ADR-9201] `<orgId>:<token>` như thư: tin nhắn không có chỗ nào khác nói tổ chức. Tin SMS
+        // [S1.173 / ADR-107] `<orgId>:<token>` như thư: tin nhắn không có chỗ nào khác nói tổ chức. Tin SMS
         // lời mời vì thế dài hơn 160 ký tự GSM-7 và đi thành hai đoạn — cái giá chủ dự án đã chọn trả.
         return kenhSo(m.channel).guiLoiMoi(chuanHoaE164(m.destination), `${t.baseUrl}/i#${m.orgId}:${m.token}`);
       },

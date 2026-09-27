@@ -14,7 +14,7 @@
 //   ⑶ ĐÍCH phải là một địa chỉ email đơn, không CR/LF, không dấu phẩy — một đích mang hai địa chỉ là
 //      một lần gửi token cho người thứ hai. Kiểm ở đây, trước khi gọi SES.
 //
-// [S1.9101 / ADR-9201] Mọi link mang `<orgId>:<token>` ở fragment: thân thư không có chỗ nào khác
+// [S1.173 / ADR-107] Mọi link mang `<orgId>:<token>` ở fragment: thân thư không có chỗ nào khác
 // nói tổ chức, mà trang đích đòi cả hai. Tin báo người duyệt không có mã (hạn mức chặn) vẫn mang
 // `#<orgId>` để trang điền sẵn ô tổ chức cho ô xin link.
 //

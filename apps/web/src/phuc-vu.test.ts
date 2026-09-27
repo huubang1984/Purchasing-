@@ -116,7 +116,7 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.9101 / ADR-9201] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
+  // [S1.173 / ADR-107] HÌNH DẠNG LINK CỦA BỘ GỬI PHẢI LÀ HÌNH DẠNG TRANG ĐÍCH ĐỌC ĐƯỢC
   //
   // Khoản 198 đóng ở S1.99 với hai lời khai mà vòng này đo là sai cho kênh thật: `nop-thau.js` bỏ qua
   // fragment không có dấu hai chấm (không điền cả ô mã), và thân thư của SES, SMS, Zalo không mang
@@ -124,7 +124,7 @@ describe("bề mặt tệp", () => {
   // đòi thứ người nhận không có. Vế dưới nối hai phía: đọc VĂN BẢN của ba bộ gửi, và CHẠY `docLink()` của
   // trang đích trên đúng dạng ấy.
   // ============================================================================================
-  it("[ADR-9201] mọi link của ba bộ gửi mang `<orgId>:<token>` (hoặc `<orgId>` trơn ở tin báo không mã)", () => {
+  it("[ADR-107] mọi link của ba bộ gửi mang `<orgId>:<token>` (hoặc `<orgId>` trơn ở tin báo không mã)", () => {
     const tep = ["hop-thu-dev.ts", "gui-ses.ts", "kenh-so.ts"];
     const link: { tep: string; duong: string; manh: string }[] = [];
     for (const t of tep) {
@@ -146,7 +146,7 @@ describe("bề mặt tệp", () => {
     expect(tron.map((l) => `${l.tep}${l.duong}`)).toEqual(["gui-ses.ts/login"]);
   });
 
-  it("[ADR-9201] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
+  it("[ADR-107] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
     const ORG = "11111111-1111-4111-8111-111111111111";
     const chay = (trang: string, hash: string, truoc: { org: string; token: string }) => {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
@@ -165,7 +165,7 @@ describe("bề mặt tệp", () => {
     expect(chay("mo-thau", "#chiCoMaTronKhongCoToChuc", { org: "go-tay", token: "" })).toEqual({ org: "go-tay", token: "chiCoMaTronKhongCoToChuc" });
   });
 
-  it("[ADR-9201] ô tổ chức của /login nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
+  it("[ADR-107] ô tổ chức của /login nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
     const ORG = "11111111-1111-4111-8111-111111111111";
     const js = readFileSync(new URL("../trang/mo-thau.js", import.meta.url), "utf8");
     const hang = /^const LA_UUID = .*;$/mu.exec(js)?.[0];

@@ -48,7 +48,7 @@ describe("[ADR-069] chuanHoaE164", () => {
 });
 
 describe("[ADR-069] taoBoGuiTheoKenh", () => {
-  it("EMAIL về bộ gửi thư; SMS/ZALO_ZNS về đúng kênh với số E.164 và link /i#<org>:<token> [ADR-9201]", async () => {
+  it("EMAIL về bộ gửi thư; SMS/ZALO_ZNS về đúng kênh với số E.164 và link /i#<org>:<token> [ADR-107]", async () => {
     const so: Lan[] = [];
     const g = taoBoGuiTheoKenh({ email: emailGhi(so), sms: kenhGhi("sms", so), zalo: kenhGhi("zalo", so), baseUrl: BASE });
     await g.invitationLinkSender.send({ orgId: ORG, invitationId: "i1", channel: "EMAIL", destination: "a@vidu.vn", token: "t0" });

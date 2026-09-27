@@ -14121,12 +14121,49 @@ Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 
 ## 6. Số
 
 Khoản 200 đóng. Còn mở **85**; rổ B **60**.
-
-# §S1.9101 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+# §S1.172 — KHOẢN 143 ĐÓNG: KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA
 
 ## 1. Việc gì
 
-Chủ dự án chọn ngày 2026-09-27, gộp cả ba kênh gửi (ADR-9201, sửa dạng link của ADR-020 mục 3). Hai chỗ hở, đo trên `master`
+Khoản 143 (S1.75, lượt soi 70): bản vá khoản 139 bọc lần ghi `MFA_LOCKED` trong SAVEPOINT nhưng `catch` chỉ nuốt `55P03`. `40P01`
+(khoá chết) trên chính khoá tư vấn ghi sổ bắn ở `deadlock_timeout` mặc định 1 s — trước trần 2 s của `050` — và `57014` bắn nếu
+`statement_timeout` cạn trước. Khi ấy lỗi thoát ra, giao dịch rollback, và bộ đếm lẫn `locked_until` cùng mất: số lần đoán TOTP
+mất trần. Bất biến chạm: E3. Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/identity/src/mfa.int.test.ts`: một giao dịch (superuser, `SET LOCAL deadlock_timeout = '10s'`) giữ khoá ghi
+sổ của tổ chức; lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng) rồi chờ khoá ghi sổ; giao dịch kia xin `FOR UPDATE` hàng ấy. Trên
+`login.ts` của `master`: **ĐỎ** — `{"ok":false,"reason":"NEM:40P01"}`, bộ đếm/khoá sau đó `4/chua-khoa` — hồ sơ không khoá sau lần
+chạm ngưỡng. Khoản này từng ghi *"ĐỌC, chưa đo"*; nay là một phép đo.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `catch` quanh lần ghi `MFA_LOCKED` nuốt `55P03` **và** `40P01`, lùi về savepoint, trả
+  `auditSkipped`. `57014` vẫn ném: với `statement_timeout` 15 s mỗi câu (`createPool`), trần 2 s luôn tới trước, nên 57014 ở câu này
+  chỉ còn là lần huỷ có ý (`pg_cancel_backend`) — fail-closed có chủ ý.
+- `apps/api/src/routes/auth.ts`: hai dòng log của `auditSkipped` nêu cả hai mã.
+- `docs/DECISIONS.md` ADR-008 tiểu mục khoản 139, điều kiện ②: ghi nhận nới `catch`.
+
+## 4. Đo sau
+
+Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, mã ĐÚNG ngay sau đó bị chặn. Khối khoản 139 (55P03,
+42501 thoát nguyên, đối chứng ghi đủ một dòng) vẫn xanh.
+
+## 5. Giới hạn
+
+- 57014 vẫn gỡ khoá hồ sơ nếu một người vận hành huỷ đúng câu ấy — chấp nhận, như bản trước.
+- Cảnh khoá chết dựng bằng một giao dịch superuser xin khoá hàng; chưa đo đường sản xuất nào tự tạo được vòng ấy.
+
+## 6. Số
+
+Khoản 143 đóng. Còn mở **84**; rổ B **59**.
+
+# §S1.173 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27, gộp cả ba kênh gửi (ADR-107, sửa dạng link của ADR-020 mục 3). Hai chỗ hở, đo trên `master`
 `d506bf2`:
 
 - Mọi link bộ gửi THẬT dựng ra thiếu mã tổ chức mà trang đích đòi. `gui-ses.ts` dựng `/login#<token>` và `/i#<token>`,
@@ -14190,7 +14227,7 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 
 - Tin SMS lời mời thành hai đoạn: 138–153 ⇒ 175–190 ký tự GSM-7 tuỳ tên miền (thân của `gui-sms.ts`, token 43 ký tự,
   `orgId` 36 + `:`). Chủ dự án chọn trả.
-- Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-9201,
+- Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-107,
   chưa vào sổ nợ.
 - `/tao-thau` và `/chinh-sach` không có ô xin link.
 - Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa. Dấu hai chấm hợp lệ trong fragment
