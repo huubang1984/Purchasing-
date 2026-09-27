@@ -58,10 +58,10 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
-/** [S1.173 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
+/** [S1.174 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
 const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
-// [S1.173 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
+// [S1.174 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
 // không phải trạng thái phải bền: `orgId` không phải bí mật (ADR-107 mục 1), và kho trình duyệt có thể trống
 // hay ném (chế độ riêng tư), nên mọi lần đọc/ghi đều bọc và trang chạy đúng khi không có nó. Chỉ ghi SAU khi
 // vào thành công — một link lạ mang `#<orgId>` không được đặt mã tổ chức cho lần sau.
@@ -74,7 +74,7 @@ function nhoToChuc(orgId) {
 }
 
 /**
- * [S1.173 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
+ * [S1.174 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
  * chức nằm đúng ở đó trong mọi link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang
  * nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy chủ trong khi ô vẫn đầy.
  */
@@ -96,7 +96,7 @@ function docLink() {
   // chủ không biết người gọi thuộc tổ chức nào cho tới khi client nói ra. Bản đầu của trang này
   // chỉ đọc token và lượt chạy thử đầu tiên trả về đúng câu `thiếu trường "orgId"`.
   //
-  // [S1.173 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
+  // [S1.174 / ADR-107] Nay mọi bộ gửi của sản phẩm dựng đúng dạng ấy. Thêm một dạng: `#<mã tổ chức>`
   // trơn — link của tin báo người duyệt khi hạn mức chặn mã đăng nhập. Nó điền ô tổ chức và XOÁ ô mã (mã
   // của người trước không được đứng lại), để ô xin link bên dưới dùng được ngay.
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
@@ -157,7 +157,7 @@ $("nut-vao").addEventListener("click", async () => {
     const me = await goi("GET", "/me");
     moSauDangNhap(me.body, false);
   } catch {
-    // [S1.173] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
+    // [S1.174] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
     bao($("loi1"), MAT_KET_NOI);
   } finally {
     $("nut-vao").disabled = false;
@@ -167,7 +167,7 @@ $("nut-vao").addEventListener("click", async () => {
 const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5", "b6", "b7", "b8"];
 
 /**
- * [S1.9102] Mở các bước sau đăng nhập. Hai lối vào: vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với
+ * [S1.175] Mở các bước sau đăng nhập. Hai lối vào: vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với
  * phiên này" ở khối hỏi của `thuPhienCo`. Bước 1 VẪN hiện: màn này đăng nhập lại được bằng người duyệt thứ hai.
  * Câu báo chỉ nêu tám ký tự đầu của mã người dùng — `/me` cố ý không trả tên hay email, và `kind` là LOẠI phiên
  * (luôn `USER` với cookie trình duyệt), không phải vai nghiệp vụ, nên trang không in nó.
@@ -188,7 +188,7 @@ function moSauDangNhap(me, dungLai) {
   for (const b of CAC_BUOC_SAU) hien($(b), true);
 }
 
-/** [S1.9102] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+/** [S1.175] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
 function dongCacBuoc() {
   $("b1").classList.remove("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), false);
@@ -198,7 +198,7 @@ function dongCacBuoc() {
 }
 
 /**
- * [S1.9102] Phiên người mua là cookie `Path=/` sống tới 8 giờ, KỂ CẢ sau khi đóng trình duyệt (`Max-Age`), dùng
+ * [S1.175] Phiên người mua là cookie `Path=/` sống tới 8 giờ, KỂ CẢ sau khi đóng trình duyệt (`Max-Age`), dùng
  * chung cả ba trang — còn mã đăng nhập chỉ dùng được MỘT lần (`startUserSession` tiêu thụ nó). Trước vòng này
  * trang chỉ hỏi `/me` SAU khi đăng nhập, nên sang trang khác là phải xin link mới. Nay hỏi lúc tải, nhưng
  * KHÔNG tự mở các bước: trên máy dùng chung phiên ấy có thể của người khác, và mở sẵn các nút Phê duyệt dưới
@@ -233,7 +233,7 @@ $("nut-dung-phien").addEventListener("click", () => {
 });
 
 /**
- * [S1.9102] `POST /auth/logout` thu hồi CHÍNH phiên đang gọi và xoá cookie. 401 nghĩa là phiên đã hết hay đã
+ * [S1.175] `POST /auth/logout` thu hồi CHÍNH phiên đang gọi và xoá cookie. 401 nghĩa là phiên đã hết hay đã
  * bị thu hồi — điều người bấm muốn vẫn đạt, nên trang cũng về bước 1.
  */
 $("nut-dang-xuat").addEventListener("click", async () => {
@@ -254,7 +254,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
 });
 
 /**
- * [S1.9102] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/auth/totp` — lúc mã đã bị tiêu
+ * [S1.175] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/auth/totp` — lúc mã đã bị tiêu
  * thụ nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa chỉ và lịch sử trình duyệt.
  * `replaceState` không bắn `hashchange`.
  */
@@ -262,7 +262,7 @@ function xoaManhLink() {
   try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
 }
 
-// [S1.173 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
+// [S1.174 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
 // không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
 // máy chủ cố ý không nói. Chỉ 429 (trần theo người gọi) và 422 (sai hình dạng) nói khác đi. Câu ấy phải
 // đúng ở MỌI nhánh sau 200: việc gửi chạy SAU phản hồi (outbox), và một người đã có năm mã trong 15 phút
@@ -728,7 +728,7 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 // đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (khoản 204 ghi sai rằng trang ấy không lặp
 // lại khiếm khuyết).
 // ==============================================================================================
-// [S1.9102] Trình nghe này từng chỉ xoá câu báo, còn các bước 2–8 đã mở thì ĐỂ NGUYÊN — dưới cookie của
+// [S1.175] Trình nghe này từng chỉ xoá câu báo, còn các bước 2–8 đã mở thì ĐỂ NGUYÊN — dưới cookie của
 // người trước, và giờ không còn câu nào nói phiên ấy của ai. Mọi link thư đều trỏ `/login`, nên người duyệt
 // thứ hai mở link của mình trong cùng thẻ chính là đường này. Nay đóng các bước về bước 1, rồi hỏi lại phiên
 // (link không mang mã, như `#<mã tổ chức>` của tin báo người duyệt, vẫn được hỏi thay vì tự mở).

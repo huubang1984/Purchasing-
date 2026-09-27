@@ -146,7 +146,7 @@ $("nut-xac").addEventListener("click", async () => {
 });
 
 /**
- * [S1.9102] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
+ * [S1.175] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/guest/otp/verify` — lượt ấy tiêu thụ
  * mã lời mời (`[H5]`, `packages/invitation`), nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa
  * chỉ và lịch sử trình duyệt. `replaceState` không bắn `hashchange`. Trang này KHÔNG hỏi lại phiên khách lúc
  * tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được mời lại, có xoá fragment hay không.

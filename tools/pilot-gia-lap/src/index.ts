@@ -459,7 +459,7 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   if (khop.length > 1) {
     viet(`  (email này có ở ${khop.length} tổ chức giả lập của các lượt chạy — đang dùng lượt MỚI NHẤT; lượt cũ hơn: ${khop.slice(1).map((t) => t.orgId).join(", ")} — thêm orgId sau email để chọn)`);
   }
-  // [S1.9102] MỘT link: bản trước in hai link /mo-thau# và /tao-thau# cùng một mã dùng một lần, nên link thứ hai
+  // [S1.175] MỘT link: bản trước in hai link /mo-thau# và /tao-thau# cùng một mã dùng một lần, nên link thứ hai
   // luôn chết sau khi dùng link thứ nhất. Trang sau đó hỏi lại phiên còn hạn — mở nó KHÔNG kèm `#`.
   viet(`  link đăng nhập      : ${web}/mo-thau#${tc.orgId}:${token}`);
   viet("  (link dùng MỘT lần, hết hạn sau 15 phút)");

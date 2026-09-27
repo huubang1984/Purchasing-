@@ -68,7 +68,7 @@ function docLink() {
 // trang này *"mang sẵn listener ấy, nên nó không lặp lại khiếm khuyết"* — lời khai ấy sai: một
 // nửa trạng thái phiên sống sót qua lần đổi người, và bốn con trỏ ấy được đọc dưới quyền của
 // người TRƯỚC. Dựng lại trọn vẹn là câu duy nhất không cần ai nhớ trường nào phải xoá.
-// [S1.9102] Và đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của người trước — rồi hỏi lại
+// [S1.175] Và đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của người trước — rồi hỏi lại
 // phiên (khuôn `mo-thau.js`).
 window.addEventListener("hashchange", () => {
   docLink();
@@ -118,7 +118,7 @@ $("nut-vao").addEventListener("click", async () => {
 const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5"];
 
 /**
- * [S1.9102] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này".
+ * [S1.175] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này".
  * Cùng khuôn `mo-thau.js`: câu báo không in `kind` (loại phiên, không phải vai).
  */
 function moSauDangNhap(me, dungLai) {
@@ -136,7 +136,7 @@ function moSauDangNhap(me, dungLai) {
   for (const b of CAC_BUOC_SAU) hien($(b), true);
 }
 
-/** [S1.9102] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+/** [S1.175] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
 function dongCacBuoc() {
   $("b1").classList.remove("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), false);
@@ -146,7 +146,7 @@ function dongCacBuoc() {
 }
 
 /**
- * [S1.9102] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
+ * [S1.175] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
  * duyệt, dùng chung ba trang, còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me`. Có phiên
  * còn hạn thì HỎI "Tiếp tục với phiên này" hay "Đăng xuất", không tự mở: trên máy dùng chung phiên ấy có thể
  * của người khác, và bước 4 có nút Phê duyệt. Không hỏi khi ô mã đã có mã; `docLink()` phải chạy trước hàm
@@ -176,7 +176,7 @@ $("nut-dung-phien").addEventListener("click", () => {
   moSauDangNhap(me, true);
 });
 
-// [S1.9102] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
+// [S1.175] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
 $("nut-dang-xuat").addEventListener("click", async () => {
   bao($("loi1"), ""); bao($("ok1"), "");
   $("nut-dang-xuat").disabled = true;

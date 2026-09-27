@@ -14159,7 +14159,7 @@ Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, m
 
 Khoản 143 đóng. Còn mở **84**; rổ B **59**.
 
-# §S1.173 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
+# §S1.174 — ĐƯỜNG ĐĂNG NHẬP TRÊN PROD: LINK MANG MÃ TỔ CHỨC, TRANG `/login` CÓ Ô XIN LINK
 
 ## 1. Việc gì
 
@@ -14238,11 +14238,11 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 
 Không khoản nào mở hay đóng; khoản 198 giữ ĐÓNG, lời đóng được sửa. ADR 106 ⇒ 107.
 
-# §S1.9102 — BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
+# §S1.175 — BA TRANG NGƯỜI MUA HỎI LẠI PHIÊN CÒN HẠN LÚC TẢI VÀ CÓ NÚT ĐĂNG XUẤT; BỐN TRANG XOÁ MÃ KHỎI THANH ĐỊA CHỈ SAU KHI DÙNG
 
 ## 1. Việc gì
 
-Chủ dự án chọn ngày 2026-09-27 (đề xuất sau S1.173). Hai chỗ, đo trên nhánh của S1.173:
+Chủ dự án chọn ngày 2026-09-27 (đề xuất sau vòng đường đăng nhập prod, ADR-107). Hai chỗ, đo trên nhánh của vòng ấy:
 
 - `apps/web/trang/{mo-thau,tao-thau,chinh-sach}.js` chỉ gọi `GET /me` SAU `/auth/totp`, không gọi lúc tải. Phiên người mua là
   cookie `__Host-tp_session` `Path=/`, `Max-Age` 8 giờ (`apps/api/src/routes/auth.ts`) — sống cả sau khi đóng trình duyệt —
@@ -14270,11 +14270,11 @@ Chủ dự án chọn ngày 2026-09-27 (đề xuất sau S1.173). Hai chỗ, đo
   bắn `hashchange`.
 - `tools/pilot-gia-lap` lệnh `dang-nhap`: in MỘT link (bản trước in `/mo-thau#` và `/tao-thau#` cùng một mã dùng một lần, nên
   link thứ hai luôn chết) và một dòng *"mở /tao-thau hay /chinh-sach KHÔNG kèm #"*.
-- `eslint.config.js`: global `history`. ADR-020 mục 3 và ADR-107 (Hệ quả, Đo): chú thích `[S1.9102]`.
+- `eslint.config.js`: global `history`. ADR-020 mục 3 và ADR-107 (Hệ quả, Đo): chú thích `[S1.175]`.
 
 ## 3. Đo
 
-- `apps/web/src/phuc-vu.test.ts`, khối `[S1.9102]`: nạp NGUYÊN tệp trang vào `node:vm` — DOM giả dựng từ id và `hidden` của
+- `apps/web/src/phuc-vu.test.ts`, khối `[S1.175]`: nạp NGUYÊN tệp trang vào `node:vm` — DOM giả dựng từ id và `hidden` của
   tệp HTML cùng tên, `fetch` giả giữ một "cookie", `history`/`location` giả, import `/lib/chinh-sach.js` là bản thật, các import
   khác là hàm rỗng. Mỗi trang người mua tám ca: có phiên ⇒ khối hỏi, không bước nào mở, "Tiếp tục" mới mở; "Đăng xuất" ⇒
   `POST /auth/logout`, về bước 1, nút "Tiếp tục" cũ không mở lại được; link mang mã của B trong trình duyệt có phiên của A ⇒ 0
