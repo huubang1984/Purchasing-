@@ -740,7 +740,7 @@ describe("[S1.11] main.ts — tiến trình con thật", () => {
   }, 90_000);
 });
 
-describe("[S1.167 / ADR-104] cờ ký chính sách đi từ MÔI TRƯỜNG tới route — đúng đường `main.ts` dựng", () => {
+describe("[S1.168 / ADR-105] cờ ký chính sách đi từ MÔI TRƯỜNG tới route — đúng đường `main.ts` dựng", () => {
   it("không khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH` ⇒ `choKy: false`, route ký 409 trước mọi câu ghi; `bat` ⇒ `choKy: true`, route ký đi tới trigger", async () => {
     // Phiên chèn thẳng: thứ cần đo là cờ chảy qua `docCauHinh` → `taoTienTrinhApi` → bộ điều phối — đăng nhập đo ở khối trên.
     const id = (

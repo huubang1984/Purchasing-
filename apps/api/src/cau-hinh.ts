@@ -83,7 +83,7 @@ export interface CauHinhApiChung {
   /** [khoản 196] Nhịp đo lại lúc chạy, ms (`TRUSTPROCURE_CLOCK_SKEW_CHECK_MS`, 1 000–3 600 000; mặc định 60 000). */
   readonly chuKyCanhDongHoMs: number;
   /**
-   * [S1.167 / S3.1c / ADR-104] Cửa `POST /policy/:policyId/sign` — lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ
+   * [S1.168 / S3.1c / ADR-105] Cửa `POST /policy/:policyId/sign` — lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ
    * chức, một chiều (ADR-080 ⑵), trong khi K2–K12 chưa có. `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`: `bat` | `tat`; KHÔNG khai ⇒
    * TẮT. Một giá trị khác hai chữ ấy làm tiến trình không lên, không bị đọc thành "tắt": một lỗi gõ ở biến này không được
    * lặng lẽ đổi hành vi theo chiều nào.
@@ -175,7 +175,7 @@ function tuyChon(env: MoiTruong, ten: string): string | undefined {
   return v === undefined || v === "" ? undefined : v;
 }
 
-/** [S1.167] Cờ hai trạng thái: `bat` | `tat`, không khai ⇒ `macDinh`. Mọi chữ khác là lỗi cấu hình, không phải "tắt". */
+/** [S1.168] Cờ hai trạng thái: `bat` | `tat`, không khai ⇒ `macDinh`. Mọi chữ khác là lỗi cấu hình, không phải "tắt". */
 function coBatTat(env: MoiTruong, ten: string, macDinh: boolean): boolean {
   const v = tuyChon(env, ten);
   if (v === undefined) return macDinh;

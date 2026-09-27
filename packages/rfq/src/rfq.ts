@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
@@ -432,15 +432,40 @@ export async function approveRfq(
   client: pg.PoolClient,
   orgId: string,
   input: ApproveRfqInput,
+  auditPool: pg.Pool,
 ): Promise<void> {
   await assertTenantBound(client, orgId, "approveRfq");
   const actor = await resolveSessionActor(client, orgId, input.sessionId);
 
-  await client.query(
-    `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
-     VALUES ($1, $2, $3, $4)`,
-    [orgId, input.rfqId, actor.id, actor.sessionId],
-  );
+  try {
+    await client.query(
+      `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
+       VALUES ($1, $2, $3, $4)`,
+      [orgId, input.rfqId, actor.id, actor.sessionId],
+    );
+  } catch (loi) {
+    // [S1.167 / khoản 247 / ADR-104] D2 ở bước DUYỆT GÓI — người tạo tự duyệt, phiên không hợp lệ, phiên của người khác — sống
+    // ở trigger `rfq_kiem_nguoi_duyet` (`011`): `RAISE … (D2)` với 23514 huỷ giao dịch, nên trước vòng này lần vi phạm không để lại
+    // hàng sổ nào (`pnpm pilot:gia-lap`: người tạo tự duyệt gói ⇒ 422 *"(D2)"*, 0 hàng). Cùng khuôn nhánh D2 của `approveUnseal`:
+    // ghi ở `auditPool` rồi ném lại CHÍNH lỗi của trigger, nên mã 422 và thông điệp không đổi; trigger vẫn là lớp có thẩm quyền.
+    // Lần từ chối vì TRẠNG THÁI (gói không ở `PENDING_APPROVAL`) không mang *"(D2)"* và đi thẳng như cũ.
+    if (loi instanceof Error && (loi as { code?: unknown }).code === "23514" && loi.message.includes("(D2")) {
+      await throwAuditedDenial(
+        auditPool,
+        orgId,
+        {
+          actorType: actor.type,
+          actorId: actor.id,
+          action: "RFQ_APPROVAL_DENIED",
+          resourceType: "RFQ",
+          resourceId: input.rfqId,
+          payload: { viPham: "D2" },
+        },
+        loi,
+      );
+    }
+    throw loi;
+  }
 
   await appendAuditEvent(client, orgId, {
     actorType: actor.type,

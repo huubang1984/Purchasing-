@@ -119,7 +119,7 @@ function mangTrongSo(body: unknown, ten: string): readonly ThanhPhanTrongSoVao[]
   return mangObjectTuyChon(body, ten) as readonly ThanhPhanTrongSoVao[] | undefined;
 }
 /**
- * Mảng các object, TUỲ CHỌN — hình dạng NGOÀI và chỉ hình dạng ngoài. [S1.167] Chung cho `evalComponents` và `tiers`
+ * Mảng các object, TUỲ CHỌN — hình dạng NGOÀI và chỉ hình dạng ngoài. [S1.168] Chung cho `evalComponents` và `tiers`
  * (bậc giá trị, S3.1c): luật bên trong của cả hai là của CSDL (`057`, `069`).
  */
 function mangObjectTuyChon(body: unknown, ten: string): readonly Readonly<Record<string, unknown>>[] | undefined {
@@ -250,7 +250,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/policy/versions",
     audience: "BUYER",
     mutates: false,
-    // [S1.167 / S3.1c] KHÔNG cho agent: màn `/chinh-sach` là màn của người, và lịch sử phiên bản cùng người ký là dữ liệu
+    // [S1.168 / S3.1c] KHÔNG cho agent: màn `/chinh-sach` là màn của người, và lịch sử phiên bản cùng người ký là dữ liệu
     // quản trị mà không công cụ đọc nào của agent cần. Mở sau là một quyết định có tên, không phải một lần quên.
     agent: false,
     handler: async (ctx) => {
@@ -710,7 +710,7 @@ const ghi: readonly BuyerWriteRoute[] = [
       // UPDATE/DELETE ⇒ một `version: 2147483647` GHIM tổ chức vào chính sách ấy vĩnh viễn. Ở tầng
       // HTTP, `version` chỉ là GIÁ TRỊ KỲ VỌNG (chống đua): phải bằng phiên bản ~~hiện hành~~ MỚI NHẤT + 1.
       // ~~Vế CSDL (trigger tự gán `max + 1`) chưa làm — sổ nợ, xem STATE.~~ [`035`, sổ nợ 45 đã đóng] trigger đòi ĐÚNG lớn nhất + 1.
-      // [S1.167 / S3.1c] ~~`getActiveProcurementPolicy` + 1~~ Từ S1.156 phiên bản HIỆU LỰC có thể đi sau phiên bản MỚI NHẤT:
+      // [S1.168 / S3.1c] ~~`getActiveProcurementPolicy` + 1~~ Từ S1.156 phiên bản HIỆU LỰC có thể đi sau phiên bản MỚI NHẤT:
       // một phiên bản có bậc chưa ký không có hiệu lực (ADR-082 ⑺). Tính theo bản hiệu lực thì route đòi một số mà trigger
       // `035` từ chối, và tổ chức không tạo được phiên bản nào nữa cho tới khi bản kia được ký. Nay tính theo bản mới nhất —
       // đúng số trigger đòi — đọc qua `lietKePhienBanChinhSach`, câu không tự chọn phiên bản (S1.156).
@@ -727,7 +727,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         // CÓ TÊN khi chỉ một trong hai được khai, thay vì để người gọi đọc một `23514`.
         evalComponents: mangTrongSo(ctx.req.body, "evalComponents"),
         bafoTopN: soNguyenTuyChon(ctx.req.body, "bafoTopN"),
-        // [S1.167 / S3.1c] Bậc giá trị và hai cột mức — cùng khuôn: cửa này kiểm hình dạng ngoài, `069` phán phần còn lại.
+        // [S1.168 / S3.1c] Bậc giá trị và hai cột mức — cùng khuôn: cửa này kiểm hình dạng ngoài, `069` phán phần còn lại.
         tiers: mangObjectTuyChon(ctx.req.body, "tiers"),
         chiaNhoCuaSoNgay: soNguyenTuyChon(ctx.req.body, "chiaNhoCuaSoNgay"),
         thamDinhHieuLucThang: soNguyenTuyChon(ctx.req.body, "thamDinhHieuLucThang"),
@@ -745,10 +745,10 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceType: "PROCUREMENT_POLICY",
     resourceId: policyIdParam,
     handler: async (ctx) => {
-      // [S1.167 / S3.1c / ADR-104] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều, trong khi
+      // [S1.168 / S3.1c / ADR-105] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều, trong khi
       // K2–K12 chưa có — bậc hiện ra mà chưa được cưỡng chế (spec §8.1). Cờ triển khai mặc định TẮT; đọc TRƯỚC mọi câu ghi.
       if (!ctx.choKyChinhSach) {
-        throw new HttpError(409, "Ký phiên bản chính sách chưa mở trên máy chủ này: S3 chưa đủ chốt để bật (ADR-104)");
+        throw new HttpError(409, "Ký phiên bản chính sách chưa mở trên máy chủ này: S3 chưa đủ chốt để bật (ADR-105)");
       }
       const chuKy = await kyPhienBanChinhSach(ctx.client, ctx.orgId, {
         policyId: policyIdParam(ctx.req),
@@ -875,7 +875,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceType: "RFQ",
     resourceId: rfqIdParam,
     handler: async (ctx) => {
-      await approveRfq(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId });
+      await approveRfq(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId }, ctx.auditPool);
       return { status: 200, body: { rfq: await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } };
     },
   },

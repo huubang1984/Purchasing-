@@ -231,7 +231,7 @@ export interface DispatcherDeps {
    */
   readonly tranTuChoi?: number;
   /**
-   * [S1.167 / S3.1c / ADR-104] Cờ triển khai của lần ký chính sách (nút BẬT S3). Không khai ⇒ TẮT: một bộ điều phối lắp
+   * [S1.168 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách (nút BẬT S3). Không khai ⇒ TẮT: một bộ điều phối lắp
    * tay — test, công cụ — không mở được cửa ấy bằng cách quên một tham số. Composition root đọc nó từ cấu hình.
    */
   readonly choKyChinhSach?: boolean;

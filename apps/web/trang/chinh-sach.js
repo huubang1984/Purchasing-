@@ -1,9 +1,9 @@
 // ==============================================================================================
-// [S1.167 / S3.1c] MÀN KHAI CHÍNH SÁCH — spec S3 §9 (S3.1c), §8.1 ⑵, §8.10
+// [S1.168 / S3.1c] MÀN KHAI CHÍNH SÁCH — spec S3 §9 (S3.1c), §8.1 ⑵, §8.10
 //
 // Ba việc, và không việc nào là chốt: ⑴ đọc các phiên bản — trọn ma trận, chữ ký, phiên bản hiệu lực; ⑵ soạn một phiên
 // bản mới, với cảnh báo cấu hình rỗng ruột và số người tối thiểu tính lại ở mỗi lần sửa; ⑶ ký phiên bản mới nhất. Mọi
-// luật của cả ba nằm ở máy chủ và CSDL (`069`, `072`, cờ triển khai ADR-104): màn này không kiểm lại luật nào, nó chỉ nói
+// luật của cả ba nằm ở máy chủ và CSDL (`069`, `072`, cờ triển khai ADR-105): màn này không kiểm lại luật nào, nó chỉ nói
 // trước điều máy chủ sẽ nói. Hai phép tính cảnh báo và số người ở `/lib/chinh-sach.js` — một bản cài, `tsc` gác, vitest đo.
 //
 // Trang không chèn chuỗi nào của máy chủ vào HTML: mọi ô đi qua `textContent`.

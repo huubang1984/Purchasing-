@@ -6116,6 +6116,11 @@ không lối nào ở tầng gói ghi được. Lớp gói bắt trước ở đ
 chấp thật — và khi ấy sổ im. Đó là giới hạn còn lại, và nó được ghi ra chứ không để người sau tưởng đã
 kín. Và nó **không** đổi cách `requirePermission` ghi từ chối QUYỀN: đường ấy không đổi một dòng.
 
+**[S1.167 / khoản 247 / ADR-104]** Câu *"không lối nào ở tầng gói ghi được"* đúng với lối ghi của ADR này (`nemTuChoi` trước câu
+ghi), nhưng tiền đề *"lớp gói bắt trước ở đường thuận"* thì SAI với bảy lần từ chối mà pilot giả lập đo được: J3 cả ba vế, D2 ở
+duyệt gói và hai nhánh chặn của câu nộp không có lớp gói nào bắt trước. ADR-104 ghi chúng bằng một lối khác — bắt CHÍNH lỗi
+của trigger rồi ghi ở giao dịch độc lập — nên với bảy lần ấy sổ không còn im. Ca đua nhau trên các trigger khác vẫn như câu trên.
+
 ---
 
 ## ADR-061 — Vai chạy `migrate()` đã là CHỦ bảng FORCE thì phải có BYPASSRLS; `migrate()` từ chối chạy thay vì để backfill ra 0 hàng
@@ -8140,11 +8145,52 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 ---
 
-## ADR-104 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
+## ADR-104 — Lần từ chối do TRIGGER của tách bạch nhiệm vụ và của câu nộp vào sổ: bắt chính lỗi của trigger rồi ghi
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.167) · Liên quan: ADR-080 ⑵,
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.167]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
+(từ chối trạng thái vào sổ có chọn lọc), ADR-074 (lần chặn VÌ HẠN của câu nộp vào sổ), ADR-101 (pilot giả lập — nơi đo ra khoản
+này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi)
+
+### Bối cảnh
+
+Pilot giả lập (S1.163) đo trên cụm đủ bốn tiến trình: bảy lần từ chối không để lại hàng sổ hay dòng log nào — J3 vế 2 và 3 (người
+tạo gói, người điều phối mở thầu tự đề xuất trao thầu), J3 vế 1 (người đề xuất giữ `po.approve` tự duyệt), D2 ở bước duyệt gói
+(người tạo tự duyệt), và hai lần nộp báo giá bị chặn không vì hạn (gói đã huỷ hay đã đóng, luồng ngoài top-N của vòng BAFO). Cả
+bảy là một `RAISE … USING ERRCODE = 'check_violation'` của trigger, huỷ giao dịch của người gọi. `docs/PRODUCT.md` §5 khai
+ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi phí sổ mà ADR-060 đã cân — hay sửa lời khai. Chủ dự án chọn ghi.
+
+### Quyết định
+
+1. **Bắt CHÍNH lỗi của trigger, không chép vị từ ra TypeScript.** Trigger là lớp có thẩm quyền — nó đọc bảng lịch sử điều phối và
+   hàng gói dưới đúng khoá của câu ghi. Kiểm trước ở lớp gói là hai nguồn sự thật cho một luật. Lớp gói bọc câu ghi, nhận diện lần
+   vi phạm (SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt), ghi, rồi để lỗi đi tiếp.
+2. **J3 và D2 — phía người mua: ghi ở `auditPool`, giao dịch ĐỘC LẬP, qua `throwAuditedDenial`, rồi ném lại chính lỗi `pg`.** Cùng
+   khuôn nhánh D2 của `approveUnseal`. Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
+   `{ viPham: "J3", ve }`, `ve` ∈ `NGUOI_TAO · NGUOI_DIEU_PHOI · NGUOI_DE_XUAT · PHIEN_DE_XUAT`) và `RFQ_APPROVAL_DENIED` (payload
+   `{ viPham: "D2" }`), `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
+   thêm tham số `auditPool`, cùng hình dạng với mọi hàm gói có đường từ chối.
+3. **Câu nộp — phía nhà cung cấp: savepoint cộng một hàng trong giao dịch người gọi, như nhánh VÌ HẠN của ADR-074.** Route khách
+   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi `BID_SUBMIT_DENIED` (payload
+   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi), rồi ném
+   `NopBiTuChoiError`; route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng sống. Thông điệp giữ nguyên câu chung.
+
+### Hệ quả, nói thẳng
+
+- **Chuỗi sổ dài thêm một hàng cho mỗi lần thử sai loại này** (ADR-060). Phía người mua, trần lần từ chối theo phiên (ADR-092) chặn
+  một phiên dùng đường này để làm phình sổ — nhưng trần ấy đếm ở bộ điều phối, và lần vi phạm J3/D2 đi qua cổng quyền nên KHÔNG
+  được đếm vào đó. Phía nhà cung cấp, không trần nào: một khách lặp lời nộp sai ghi một hàng mỗi lần, cùng rủi ro ADR-074 đã nhận
+  cho nhánh VÌ HẠN.
+- **Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
+  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.
+- **Ca đua nhau trên các trigger khác** (ADR-060 *"Điều ADR này KHÔNG nói"*) vẫn im; ADR này chỉ phủ bảy lần pilot đo được.
+- Đo ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/rfq/src/rfq.int.test.ts` và
+  `packages/bidding/src/bidding.int.test.ts` (khối khoản 247).
+
+## ADR-105 — Lần ký phiên bản chính sách — nút BẬT S3 — đứng sau một cờ triển khai, mặc định TẮT, tới khi S3 đủ chốt
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.168) · Liên quan: ADR-080 ⑵,
 ADR-082 ⑺, ADR-084 ⑷, ADR-092 · Khoản: **248** (rổ B) · Spec: S3 §9 S3.1c, §8.1, §8.10 · Biên bản:
-`evidence/security-reviews.md` §S1.167
+`evidence/security-reviews.md` §S1.168
 
 **Bối cảnh.** S3.1c dựng route ký phiên bản chính sách (`POST /policy/:policyId/sign`) và màn `/chinh-sach`. Lần ký đầu
 tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). `master` là nguồn triển khai thật, và sau S3.1b

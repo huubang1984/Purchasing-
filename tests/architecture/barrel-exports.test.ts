@@ -508,7 +508,7 @@ const DANH_SACH_TRANG_RFQ = [
   "extendRfqDeadline",
   "getActiveProcurementPolicy",
   "getRfq",
-  // [S1.167 / S3.1c] Ký phiên bản chính sách (luật ở trigger `chinh_sach_kiem_nguoi_ky`) và liệt kê mọi phiên bản cho màn
+  // [S1.168 / S3.1c] Ký phiên bản chính sách (luật ở trigger `chinh_sach_kiem_nguoi_ky`) và liệt kê mọi phiên bản cho màn
   // `/chinh-sach` — câu đọc chọn phiên bản hiệu lực bằng CHÍNH `chinh_sach_hieu_luc`, không bằng luật thứ hai.
   "kyPhienBanChinhSach",
   "lietKePhienBanChinhSach",
@@ -746,6 +746,8 @@ const DANH_SACH_TRANG_BIDDING = [
   "BiddingError",
   // [khoản 196] Lớp lỗi của lần chặn VÌ HẠN — mang hai dấu thời gian do trigger `066` đặt; không mang năng lực nào.
   "NopQuaHanError",
+  // [S1.167 / khoản 247] Lớp lỗi của hai nhánh chặn còn lại của câu nộp — cùng hợp đồng giao dịch-còn-lành; không mang năng lực nào.
+  "NopBiTuChoiError",
   "auditStoredCiphertexts",
   "RECEIPT_FORMAT_LABEL",
   "RECEIPT_SIGNING_ALGORITHM",

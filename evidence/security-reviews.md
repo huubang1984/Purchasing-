@@ -13721,12 +13721,57 @@ một ĐỘT BIẾN:
   docker); ma trận sinh lại **65/65** (43 + 22), cổng evidence XANH, và so với bản của `master` chỉ khác hàng K1 (11 ca),
   các dòng tổng và dòng mốc.
 
+# §S1.167 — KHOẢN 247 ĐÓNG: BẢY LẦN TỪ CHỐI DO TRIGGER CỦA TÁCH BẠCH NHIỆM VỤ VÀ CỦA CÂU NỘP BÁO GIÁ ĐỂ LẠI HÀNG SỔ
+
+## 1. Việc gì
+
+Khoản 247 (S1.163, đo trên pilot giả lập): năm lần từ chối của tách bạch nhiệm vụ (J3 cả ba vế, D2 ở duyệt gói) và hai lần
+từ chối nộp báo giá (gói huỷ, ngoài top-N BAFO) trả 422 nhưng để lại **0 hàng sổ**, vì lần từ chối đến từ trigger và 422 của
+trigger huỷ giao dịch. Chủ dự án chọn *ghi sổ cả bảy lần* — ADR-104.
+
+## 2. Đo trước
+
+Test mới của vòng này chạy trên mã sản xuất của `master` (`trao-thau.ts`, `rfq.ts` bản cũ; lời ghi sổ của `submitBid` tắt):
+**5 đỏ, 1 xanh** — xanh là ca đối chứng *"lần từ chối trạng thái / người duyệt trùng không thêm hàng"* của `rfq`, đúng như
+mong đợi. Năm ca đỏ: D2 tự duyệt gói; nộp vào gói CLOSED; J3 vế 2 + vế 3; J3 vế 1; J3 với lần ghi sổ hỏng.
+
+## 3. Thay đổi
+
+- `packages/danh-gia/src/trao-thau.ts`: câu `INSERT` của `deXuatTraoThau` và `duyetTraoThau` bắt lỗi; lỗi 23514 mang đuôi
+  `(J3)` được phân vế theo tiền tố thông điệp (`NGUOI_TAO`, `NGUOI_DIEU_PHOI`, `NGUOI_DE_XUAT`, `PHIEN_DE_XUAT`) rồi ghi
+  `RFQ_AWARD_SOD_DENIED` `{viPham:"J3", ve}` qua `throwAuditedDenial` — giao dịch độc lập, ném lại CHÍNH lỗi của trigger.
+- `packages/rfq/src/rfq.ts`: `approveRfq` nhận thêm `auditPool` (bắt buộc); lỗi 23514 mang `(D2` ghi `RFQ_APPROVAL_DENIED`
+  `{viPham:"D2"}` theo cùng đường. 33 lời gọi cập nhật; route truyền `ctx.auditPool`.
+- `packages/bidding/src/bidding.ts`: nhánh check_violation không vì hạn của `submitBid` lùi về savepoint, đọc trạng thái gói,
+  ghi `BID_SUBMIT_DENIED` (`actorType SUPPLIER`, `{rfqStatus}`) trong chính giao dịch và ném `NopBiTuChoiError` (con của
+  `BiddingError`, giữ nguyên thông điệp chung). `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng ấy commit — tiền lệ
+  ADR-074.
+- `docs/PRODUCT.md` §5 (hàng S1.110) hết khai ngược cho J3; ADR-060 thêm ghi chú trỏ sang ADR-104; báo cáo pilot giả lập
+  sửa lời chú.
+
+## 4. Đo sau
+
+Cùng sáu ca: **6/6 xanh**. Tích hợp `rfq`, `danh-gia` (88/88), `bidding` xanh; `apps/api` + `apps/unseal-worker` 32 tệp,
+405/405; công cụ pilot 39/39; unit toàn kho xanh.
+
+## 5. Giới hạn
+
+- Hai lần ghi J3/D2 KHÔNG tính vào trần từ chối của ADR-092 — trần ấy chỉ đếm lần từ chối quyền. Lần từ chối nộp của nhà cung
+  cấp cũng không có trần; một phiên khách hợp lệ có thể nhồi hàng `BID_SUBMIT_DENIED` bằng cách nộp lặp vào gói đã đóng.
+- Thông điệp trả người nộp giữ câu chung: phân biệt lý do (huỷ / đóng / ngoài top-N) trước người nộp là một quyết định khác.
+- Phân vế J3 dựa vào tiền tố thông điệp của trigger `061`; đổi câu chữ trigger mà không đổi `veJ3` sẽ ghi hàng với `ve: null`
+  thay vì mất hàng — test vế 1, 2, 3 bắt được.
+
+## 6. Số
+
+Khoản 247 đóng. Còn mở **86**; rổ B **61**.
+
 ---
 
-# §S1.167 — S3.1c: ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ ĐỨNG SAU MỘT CỜ TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`
+# §S1.168 — S3.1c: ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ ĐỨNG SAU MỘT CỜ TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`
 
 **Rổ và mảnh (ADR-043 ⒞):** một khoản mới, **248**, vào rổ B với điều kiện đóng riêng — trước khi mở cờ. Không migration.
-Một ADR mới (ADR-104). Không chạm mảnh nào của `docs/PRODUCT.md` §11: cờ tắt thì không tổ chức nào bật được S3, và tổ chức
+Một ADR mới (ADR-105). Không chạm mảnh nào của `docs/PRODUCT.md` §11: cờ tắt thì không tổ chức nào bật được S3, và tổ chức
 chưa bật chạy như MVP1.
 
 ## 1. Vòng này là gì
@@ -13735,9 +13780,9 @@ Phần ba trong bốn phần của S3.1 (spec S3 §9): route tạo và ký phiê
 bậc, chữ ký thứ hai và công tắc ở CSDL; S3.1b (§S1.166) cho gói đọc bậc và dựng K1. Tới vòng này, cách duy nhất để khai bậc
 hay ký một phiên bản là SQL dưới chủ sở hữu CSDL.
 
-## 2. Bốn quyết định của chủ dự án (S1.167)
+## 2. Bốn quyết định của chủ dự án (S1.168)
 
-- **Nút bật:** route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT (ADR-104). Hai
+- **Nút bật:** route ký có mặt, đứng sau cờ triển khai `TRUSTPROCURE_S3_CHO_KY_CHINH_SACH`, mặc định TẮT (ADR-105). Hai
   phương án bị loại: mở luôn kèm một lời cảnh báo trên màn — bậc hiện ra mà K2–K12 chưa cưỡng chế, tức kiểm soát giả của
   §8.1 do chính sản phẩm; hoãn route ký tới khi S3 đủ — S3.1d phải ký bằng SQL, và màn soạn không có đường đi trọn vòng.
 - **`CONTROL_DENIED` ngoài trần ADR-092:** ghi khoản 248, giải trước khi mở cờ. Phương án bị loại: giải ngay trong vòng
@@ -13780,7 +13825,7 @@ vụ ở `/lib/chinh-sach.js`, khuôn `so-tien.ts`. Trang `trang/chinh-sach.html
 - **Route không chép luật của trigger.** Bản nháp đề xuất bốn lời từ chối có tên ở tầng gói; tôi không làm: lời của trigger
   đã đi ra 422 có tên (`RAISE` ⇒ `exec_stmt_raise`, qua `anhXaLoiPostgres`), và một bản sao TypeScript chỉ thêm một chỗ để
   trôi. Phiên bản không tồn tại ra 422 thân cố định (23503).
-- **Tạo phiên bản có bậc không đứng sau cờ** (ADR-104 ⑶).
+- **Tạo phiên bản có bậc không đứng sau cờ** (ADR-105 ⑶).
 - **`GET /policy/versions` không mở cho agent.** Lịch sử phiên bản cùng người ký là dữ liệu quản trị; không công cụ đọc nào
   của agent cần nó. Mở sau là một quyết định có tên.
 - **Cờ nhận đúng hai chuỗi.** `true`, `1`, `on`, `BAT` làm tiến trình không lên, lời lỗi nêu tên biến.
@@ -13792,8 +13837,8 @@ vụ ở `/lib/chinh-sach.js`, khuôn `so-tien.ts`. Trang `trang/chinh-sach.html
 
 ## 5. Đo
 
-**HTTP** (`apps/api/src/buyer.int.test.ts`, khối `[S1.167 / S3.1c]`; một máy chủ thứ hai trên cùng CSDL, cờ bật):
-- Cờ tắt: người ký hợp lệ ở mọi luật của trigger vẫn nhận 409 mang `ADR-104`; 0 chữ ký; tổ chức không bật.
+**HTTP** (`apps/api/src/buyer.int.test.ts`, khối `[S1.168 / S3.1c]`; một máy chủ thứ hai trên cùng CSDL, cờ bật):
+- Cờ tắt: người ký hợp lệ ở mọi luật của trigger vẫn nhận 409 mang `ADR-105`; 0 chữ ký; tổ chức không bật.
   `GET /policy/versions` trả trọn ma trận, người tạo, hai cột mức và `hieuLuc` đúng — bản có bậc chưa ký KHÔNG hiệu lực, bản 1
   hiệu lực, khớp `GET /policy` —, `choKy: false`. Bản có bậc chưa ký không chặn bản kế tiếp.
 - Cờ bật: bốn lời từ chối — bản không bậc, bản không mới nhất, người tạo tự ký, phiên bản không tồn tại — mỗi cái một 422
@@ -13836,13 +13881,13 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
 
 - **Khoản 248** — `CONTROL_DENIED` ngoài trần ADR-092 — chặn việc mở cờ.
 - Cờ theo TIẾN TRÌNH, không theo tổ chức; tắt cờ sau khi một tổ chức đã bật làm tổ chức ấy không đổi được chính sách nữa
-  (ADR-104, *Cái giá*).
+  (ADR-105, *Cái giá*).
 - Số người tối thiểu là của mô hình mỗi-người-một-vai, không phải cận dưới đã chứng minh: một người mang cả FINANCE lẫn
   DIRECTOR hạ được nó, và màn nói điều đó.
 - Cảnh báo là lời nói, không phải chốt; máy chủ không đọc hai hàm ấy.
 - Màn không có test trình duyệt tự động: lượt chạy thử ở trên là một lần, không phải một cổng. Hai hàm tính có test đơn vị;
   phần DOM thì không.
-- Màn chưa nói chốt nào của S3 đang được cưỡng chế — vế (b) của ADR-104 ⑷ đòi điều đó nếu cờ mở trước khi S3 đủ.
+- Màn chưa nói chốt nào của S3 đang được cưỡng chế — vế (b) của ADR-105 ⑷ đòi điều đó nếu cờ mở trước khi S3 đủ.
 - S3.1d gieo `gieo:demo` với chữ ký thứ hai: phải chạy dưới cờ bật.
 
 ## 7. Số đo
@@ -13864,4 +13909,4 @@ khi tích ô xác nhận; ký xong thì khối ẩn và bảng ghi *đang hiệu
 - Các tệp vòng này chạm: `apps/api/src/buyer.int.test.ts` **16/16**, `apps/api/src/composition.int.test.ts` **19/19**,
   `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **29/29**, `apps/api/src/cau-hinh.test.ts` **36/36**,
   `apps/web/src/chinh-sach.test.ts` **9/9**, `apps/web/src/phuc-vu.test.ts` **18/18**.
-- Số hiệu của vòng do `pnpm cap-so` cấp (ADR-090): **S1.167**, **ADR-104**, **khoản 248**; `pnpm cap-so --kiem` sạch.
+- Số hiệu của vòng do `pnpm cap-so` cấp (ADR-090): **S1.168**, **ADR-105**, **khoản 248**; `pnpm cap-so --kiem` sạch.
