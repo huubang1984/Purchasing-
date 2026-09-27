@@ -234,14 +234,16 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     so: 1,
     lyDo:
       "[ADR-044] script gieo bối cảnh demo: nó TẠO RA tenant, nên nó không dùng được vai ứng dụng — đo trên cụm thật, " +
-      "app_api KHÔNG có INSERT trên organizations/users/user_roles/sessions, và đúng ra là không được có. `createPool` " +
+      "app_api KHÔNG có INSERT trên organizations, và đúng ra là không được có (trên users/user_roles/sessions nó chỉ có " +
+      "INSERT theo cột — đo lại ngày 2026-09-27). `createPool` " +
       "buộc phải có `role`, nên một kết nối đặc quyền phải dựng pool thẳng. Bán kính: công cụ DEV, đòi một biến môi " +
       "trường RIÊNG (TRUSTPROCURE_SEED_DATABASE_URL) chứ không mượn biến của apps/api, và phần CÓ tenant vẫn đi qua withTenant",
   },
   "tools/pilot-gia-lap/src/csdl.ts": {
     so: 1,
     lyDo:
-      "[ADR-101] pilot giả lập: cùng lý do với gieo-demo — nó TẠO tenant (tổ chức, người dùng, vai) mà app_api không có INSERT, " +
+      "[ADR-101] pilot giả lập: cùng lý do với gieo-demo — nó TẠO tenant (tổ chức, người dùng, vai) mà app_api không tạo được " +
+      "vì không có INSERT trên organizations, " +
       "chạy migrate() và đảm bảo hai vai đăng nhập như chay-migrate, nên không dùng được createPool có vai. Bán kính: công cụ DEV, " +
       "biến môi trường RIÊNG, CHỈ nhận CSDL cục bộ (kiemUrlCucBo); mọi bước nghiệp vụ còn lại đi qua HTTP của apps/api",
   },

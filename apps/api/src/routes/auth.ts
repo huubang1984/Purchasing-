@@ -188,7 +188,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
           //
           // Dòng này CỐ ĐỊNH, không nội suy `orgId`, `userId` hay `lockedUntil` — cùng kỷ luật A2
           // với `dispatch.ts`: một dòng log của đường đăng nhập là thứ đi thẳng ra stderr.
-          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) — ho so VAN khoa");
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03 hay 40P01) — ho so VAN khoa");
         }
         // [review L-7] Hai giá trị cho client, không hơn: lý do chi tiết (NO_CREDENTIAL,
         // CODE_ALREADY_USED, …) là oracle cho kẻ cầm token bị chuyển tiếp; `lockedUntil` làm tròn
@@ -305,7 +305,7 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
           // đường HTTP nào sinh ra nó; một đường phát mới đi qua `verifyTotpForLogin` mà im lặng là
           // đúng cái lỗ ấy, chỉ ở chỗ khó thấy hơn. Chuỗi NÊU TÊN ĐƯỜNG: hai chỗ cùng một câu thì
           // dòng log không nói được cái thiếu nằm ở đâu.
-          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03) tren duong phat agent — ho so VAN khoa");
+          console.error("[api] khoan 139: MFA_LOCKED khong ghi duoc so (55P03 hay 40P01) tren duong phat agent — ho so VAN khoa");
         }
         // Cùng hai giá trị như `/auth/totp` (review L-7): lý do chi tiết là oracle, `lockedUntil`
         // làm tròn LÊN phút.
@@ -322,7 +322,7 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
           ip: ctx.req.remoteAddress === "" ? null : ctx.req.remoteAddress,
         });
       } catch (loi) {
-        // [S1.9101 / khoản 145] Sổ không nhận lần phát ⇒ KHÔNG phát. Trả bằng đường TRẢ VỀ để giao dịch commit
+        // [S1.173 / khoản 145] Sổ không nhận lần phát ⇒ KHÔNG phát. Trả bằng đường TRẢ VỀ để giao dịch commit
         // lần tiêu thụ mã TOTP (hàng phiên đã lùi về savepoint trong `startAgentSession`): mã ấy không phát lại
         // được, người vận hành thử lại với mã kế tiếp. Trước vòng này lỗi ném ra thành 500 thân cố định.
         if (!(loi instanceof AgentSessionAuditBusyError)) throw loi;

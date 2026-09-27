@@ -1799,7 +1799,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 145] KHOÁ GHI SỔ BỊ GIỮ LÚC PHÁT CHỨNG CHỈ AGENT ⇒ KHÔNG PHÁT, 503 CÓ TÊN
+// [S1.173 / khoản 145] KHOÁ GHI SỔ BỊ GIỮ LÚC PHÁT CHỨNG CHỈ AGENT ⇒ KHÔNG PHÁT, 503 CÓ TÊN
 //
 // `startAgentSession` ghi `AGENT_SESSION_ISSUED` trong cùng giao dịch với hàng phiên và lần tiêu thụ mã TOTP. Khoá tư vấn ghi sổ của tổ
 // chức bị giữ quá trần 2 s (050) thì lần ghi gãy 55P03. Trước vòng này lỗi ném ra thành 500 thân cố định — không ai biết vì sao, và
@@ -1807,7 +1807,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
 // tên, không hàng phiên AGENT nào, không hàng sổ nào, một dòng log cố định; mã TOTP đã tiêu thụ không dùng lại được. Đường phát bình
 // thường có đo riêng ở khối khoản 141 (`phienAgent`).
 // ==============================================================================================
-describe("[S1.9101 / khoản 145] sổ không nhận lần phát chứng chỉ agent thì chứng chỉ không được phát", () => {
+describe("[S1.173 / khoản 145] sổ không nhận lần phát chứng chỉ agent thì chứng chỉ không được phát", () => {
   it("khoá ghi sổ bị giữ ⇒ 503 có tên, không phiên AGENT, không hàng sổ, một dòng log; mã đã tiêu thụ không phát lại được", async () => {
     await taoNguoi("k145-agent@vd.test");
     const nguoi = await dangNhap("k145-agent@vd.test");

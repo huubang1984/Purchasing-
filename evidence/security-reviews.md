@@ -14084,7 +14084,81 @@ lượt chung, chạy riêng 5/5 và trong lượt riêng thư mục xanh.
 
 Khoản 228 đóng. Còn mở **86**; rổ B **61**.
 
-# §S1.9101 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
+# §S1.171 — KHOẢN 200 ĐÓNG: XIN MỞ THẦU XẾP TIN BÁO NGƯỜI DUYỆT TRƯỚC LẦN GHI SỔ
+
+## 1. Việc gì
+
+Khoản 200 (S1.93, lượt soi ngang 75 góc 1): `requestUnseal` xếp tin báo người duyệt SAU lần ghi sổ `UNSEAL_REQUESTED`. Lần ghi sổ
+đầu của giao dịch lấy khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`, 004) và giữ tới COMMIT, trong khi mọi lần ghi sổ
+khác của tổ chức chờ khoá ấy tối đa 2 s (050). Câu JOIN ba bảng của `listUserIdsWithPermission` cộng K lần `enqueueJob` vì thế
+chạy trong lúc giữ khoá. Cùng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline` (khoản 123). Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+`packages/unseal/src/xin-mo-xep-tin-truoc-ghi-so.int.test.ts` trên `requests.ts` của `master`: ca một **ĐỎ** — `expected [ 1, 1 ]
+to deeply equal [ +0, +0 ]`: cả hai lần xếp tin đều chạy khi giao dịch đang giữ khoá ghi sổ. Ca hai xanh — mã cũ ghi sổ rồi mới
+đọc nên không sót người được cấp quyền trong lúc chờ khoá; ca ấy canh bản sửa khỏi làm mất tính chất đó.
+
+## 3. Thay đổi
+
+- `packages/unseal/src/requests.ts`: đọc người duyệt và xếp tin TRƯỚC `appendAuditEvent`; SAU lần ghi sổ đọc lại người duyệt và
+  xếp tin cho người chưa có (bài học 65c-1 của S1.71). Tin và bản ghi vẫn cùng giao dịch; `dedupeKey` không đổi.
+- Test mới, hai ca, theo khuôn `packages/rfq/src/gia-han-xep-job-truoc-ghi-so.int.test.ts`: ⑴ mỗi lần `enqueueJob`, một kết nối khác
+  đếm khoá tư vấn ghi sổ của tổ chức mà giao dịch xin mở đang giữ — phải là 0, kèm đối chứng dương sau lần ghi sổ phải là 1;
+  ⑵ một giao dịch cấp vai DIRECTOR cho người thứ ba giữ khoá ghi sổ, `requestUnseal` chờ khoá, COMMIT — người mới phải có tin.
+
+## 4. Đo sau
+
+Hai ca xanh. Đột biến bỏ vòng đọc lại: ca hai **ĐỎ** (`expected 2 to be 3`). `packages/unseal`, `apps/api`, `apps/unseal-worker`:
+36 tệp, 496/496.
+
+## 5. Giới hạn
+
+- Khuôn *xếp việc trước ghi sổ* vẫn được ghim từng hàm một, không bằng một cổng chung — một hàm thứ ba lặp lại khuôn cũ sẽ không
+  bị cổng nào bắt (đúng lý do khoản 200 lọt).
+- Chưa đo bán kính thời gian giữ khoá của bản cũ trên tiến trình thật; K là số người duyệt, nhỏ.
+
+## 6. Số
+
+Khoản 200 đóng. Còn mở **85**; rổ B **60**.
+# §S1.172 — KHOẢN 143 ĐÓNG: KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA
+
+## 1. Việc gì
+
+Khoản 143 (S1.75, lượt soi 70): bản vá khoản 139 bọc lần ghi `MFA_LOCKED` trong SAVEPOINT nhưng `catch` chỉ nuốt `55P03`. `40P01`
+(khoá chết) trên chính khoá tư vấn ghi sổ bắn ở `deadlock_timeout` mặc định 1 s — trước trần 2 s của `050` — và `57014` bắn nếu
+`statement_timeout` cạn trước. Khi ấy lỗi thoát ra, giao dịch rollback, và bộ đếm lẫn `locked_until` cùng mất: số lần đoán TOTP
+mất trần. Bất biến chạm: E3. Không chạm khoản rổ A nào.
+
+## 2. Đo trước
+
+Khối mới của `packages/identity/src/mfa.int.test.ts`: một giao dịch (superuser, `SET LOCAL deadlock_timeout = '10s'`) giữ khoá ghi
+sổ của tổ chức; lần đoán sai thứ N đặt khoá hồ sơ (giữ khoá hàng) rồi chờ khoá ghi sổ; giao dịch kia xin `FOR UPDATE` hàng ấy. Trên
+`login.ts` của `master`: **ĐỎ** — `{"ok":false,"reason":"NEM:40P01"}`, bộ đếm/khoá sau đó `4/chua-khoa` — hồ sơ không khoá sau lần
+chạm ngưỡng. Khoản này từng ghi *"ĐỌC, chưa đo"*; nay là một phép đo.
+
+## 3. Thay đổi
+
+- `packages/identity/src/login.ts`: `catch` quanh lần ghi `MFA_LOCKED` nuốt `55P03` **và** `40P01`, lùi về savepoint, trả
+  `auditSkipped`. `57014` vẫn ném: với `statement_timeout` 15 s mỗi câu (`createPool`), trần 2 s luôn tới trước, nên 57014 ở câu này
+  chỉ còn là lần huỷ có ý (`pg_cancel_backend`) — fail-closed có chủ ý.
+- `apps/api/src/routes/auth.ts`: hai dòng log của `auditSkipped` nêu cả hai mã.
+- `docs/DECISIONS.md` ADR-008 tiểu mục khoản 139, điều kiện ②: ghi nhận nới `catch`.
+
+## 4. Đo sau
+
+Ca khoản 143 xanh (~1 s): không ném, `auditSkipped`, hồ sơ `5/da-khoa`, mã ĐÚNG ngay sau đó bị chặn. Khối khoản 139 (55P03,
+42501 thoát nguyên, đối chứng ghi đủ một dòng) vẫn xanh.
+
+## 5. Giới hạn
+
+- 57014 vẫn gỡ khoá hồ sơ nếu một người vận hành huỷ đúng câu ấy — chấp nhận, như bản trước.
+- Cảnh khoá chết dựng bằng một giao dịch superuser xin khoá hàng; chưa đo đường sản xuất nào tự tạo được vòng ấy.
+
+## 6. Số
+
+Khoản 143 đóng. Còn mở **84**; rổ B **59**.
+# §S1.173 — KHOẢN 145 ĐÓNG: SỔ KHÔNG NHẬN LẦN PHÁT CHỨNG CHỈ AGENT THÌ CHỨNG CHỈ KHÔNG ĐƯỢC PHÁT, VÀ NÓI RA BẰNG TÊN
 
 ## 1. Việc gì
 
@@ -14119,4 +14193,4 @@ Ca mới xanh: 503 có tên; không phiên AGENT, không hàng `AGENT_SESSION_IS
 
 ## 6. Số
 
-Khoản 145 đóng. Còn mở **85**; rổ B **60**.
+Khoản 145 đóng. Còn mở **83**; rổ B **58**.
