@@ -7,6 +7,7 @@ import {
   revokeRfqKeyMaterial,
   type OrgKeyProvisioner,
 } from "@trustprocure/sealed-envelope";
+import { kiemChot } from "./chot-kiem-soat.js";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -366,9 +367,23 @@ export async function submitRfqForApproval(
   client: pg.PoolClient,
   orgId: string,
   input: { readonly rfqId: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
 ): Promise<RfqRecord> {
   await assertTenantBound(client, orgId, "submitRfqForApproval");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  // [S1.9102 / S3.1b / K1 · K12] Chốt ngân sách TRƯỚC câu ghi: cùng hàm vị từ mà trigger ở cạnh
+  // (`9502_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
+  // còn trigger chỉ tự nói khi có tranh chấp thật (một lần ký chính sách chen vào giữa hai câu).
+  await kiemChot(
+    client,
+    auditPool,
+    orgId,
+    actor,
+    input.rfqId,
+    "SELECT public.rfq_chot_ngan_sach($1::pg_catalog.uuid, $2::pg_catalog.uuid, pg_catalog.clock_timestamp()) AS ly_do",
+    [orgId, input.rfqId],
+  );
 
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái

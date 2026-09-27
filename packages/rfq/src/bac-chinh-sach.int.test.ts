@@ -7,6 +7,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { addRfqItem, approveRfq, cancelRfq, createRfq, openRfq, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, getActiveProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
+import { CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
 
 // =============================================================================================
 // [S1.156 / S3.1a] BẬC GIÁ TRỊ, CHỮ KÝ THỨ HAI, CÔNG TẮC ADR-080 VÀ PHIÊN BẢN HIỆU LỰC — ĐO TRÊN
@@ -15,6 +16,9 @@ import { createProcurementPolicy, getActiveProcurementPolicy, setRfqBudget } fro
 // Migration `069_bac_va_chu_ky_chinh_sach`. Mỗi lớp của nó có ở đây một phép đo HÀNH VI và một ĐỘT
 // BIẾN: tắt (hay viết lại) đúng lớp ấy thì chính câu vừa bị chặn đi lọt. Không nhãn INV: bất biến S3
 // có nhãn (K1) ra đời ở S3.1b, khi có thứ đọc bậc.
+//
+// [S1.9102 / S3.1b] Mục (6) đo K1 trên `9502_bac_cua_goi`: bậc của gói, ngân sách bắt buộc ghim đúng
+// phiên bản hiệu lực, cạnh nộp duyệt, và lớp từ chối `CONTROL_DENIED`. Các ca ấy mang nhãn `[INV-K1]`.
 //
 // Mỗi phép đo dựng TỔ CHỨC RIÊNG (`taoToChuc`): công tắc ADR-080 một chiều, nên dùng chung một tổ
 // chức là để thứ tự chạy quyết định kết quả.
@@ -230,7 +234,7 @@ async function goiDaHuy(t: ToChuc): Promise<string> {
       unit: "tam",
       actorSessionId: t.pm.s,
     });
-    await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s });
+    await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
   });
   await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }));
   await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
@@ -841,6 +845,9 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       chinh_sach_phien_ban_tang_dan: "KHAC",
       kiem_thanh_phan_theo_chinh_sach: "THEO_ID",
       ngan_sach_khong_ghim_ban_chua_ky: "THEO_ID",
+      // [S1.9102 / S3.1b] Hàm phân bậc và trigger đặt bậc: cả hai đọc ĐÚNG phiên bản ngân sách ghim.
+      ngan_sach_xep_bac: "THEO_ID",
+      rfq_bac_cua: "THEO_ID",
       rfq_can_phe_duyet_kep: "THEO_ID",
       rfq_che_do_nghiem: "QUA_HAM",
       rfq_key_material_bat_bien: "QUA_HAM",
@@ -891,5 +898,539 @@ describe("S3.1a — ngân sách không ghim được phiên bản có bậc CHƯ
     expect(await khiTatTrigger("rfq_budgets", "rfq_budgets_khong_ghim_ban_chua_ky", t.org, CAU_NGAN_SACH, [t.org, r, v2, t.pm.u, t.pm.s])).toBeNull();
     expect(await trangThaiTrigger("rfq_budgets_khong_ghim_ban_chua_ky")).toBe("A");
     expect((await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_NGAN_SACH, [t.org, r, v2, t.pm.u, t.pm.s]))))?.message).toMatch(/CHUA KY/u);
+  });
+});
+
+// =============================================================================================
+// (6) [S1.9102 / S3.1b] K1 — BẬC CỦA GÓI VÀ CẠNH NỘP DUYỆT (`9502_bac_cua_goi`)
+// =============================================================================================
+/** Bảng bậc mặc định của spec §4.1 — biên 100 triệu, 1 tỷ, 10 tỷ; bậc cuối là đấu thầu chính thức. */
+const BAC_MAC_DINH: readonly Bac[] = [
+  bacThuong(0),
+  bacThuong(100_000_000),
+  bacThuong(1_000_000_000),
+  bacChinhThuc(10_000_000_000),
+];
+
+/** Tổ chức ĐÃ BẬT: phiên bản 2 có bậc, PM tạo, FINANCE ký. */
+async function toChucDaBat(bac: readonly Bac[] = BAC_MAC_DINH): Promise<{ readonly t: ToChuc; readonly v2: string }> {
+  const t = await taoToChuc();
+  const v2 = await chenPhienBan(t, { tiers: bac });
+  await ky(t, v2, t.tc);
+  return { t, v2 };
+}
+
+async function datNganSach(t: ToChuc, rfqId: string, giaTri: string): Promise<void> {
+  await withTenant(apiPool, t.org, (c) =>
+    setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s }),
+  );
+}
+
+const CAU_BAC_DA_LUU = "SELECT tier_tu_so_tien::text AS b FROM rfq_budgets WHERE rfq_id = $1";
+
+async function bacDaLuu(t: ToChuc, rfqId: string): Promise<string | null> {
+  const { rows } = await withTenant(apiPool, t.org, (c) => c.query<{ b: string | null }>(CAU_BAC_DA_LUU, [rfqId]));
+  return rows[0]?.b ?? null;
+}
+
+/** Nộp duyệt qua ĐƯỜNG SẢN XUẤT — `null` khi đi qua, còn không thì chính lỗi. */
+async function nop(t: ToChuc, rfqId: string): Promise<unknown> {
+  return withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool)).then(
+    () => null,
+    (e: unknown) => e,
+  );
+}
+
+async function trangThaiGoi(rfqId: string): Promise<{ readonly status: string; readonly submittedAt: Date | null }> {
+  const { rows } = await db.pool.query<{ status: string; submitted_at: Date | null }>(
+    "SELECT status, submitted_at FROM rfq_packages WHERE id = $1",
+    [rfqId],
+  );
+  return { status: rows[0]!.status, submittedAt: rows[0]!.submitted_at };
+}
+
+/** Hàng `CONTROL_DENIED` của một gói: mã trong payload và người. `resource_id`, không đọc payload để tìm gói. */
+async function hangChot(org: string, rfqId: string): Promise<{ ma: string; actor: string }[]> {
+  const { rows } = await db.pool.query<{ ma: string; actor: string }>(
+    "SELECT payload->>'ma' AS ma, actor_id::text AS actor FROM audit_events " +
+      "WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+    [org, rfqId],
+  );
+  return rows;
+}
+
+/** Câu nộp duyệt VIẾT TAY dưới `app_api` — đi vòng tầng gói, chỉ trigger ở cạnh còn canh. */
+const CAU_NOP_TAY =
+  "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1";
+
+const HAM_CHOT = "public.rfq_chot_ngan_sach(uuid, uuid, timestamptz)";
+const HAM_CANH = "public.rfq_kiem_ngan_sach_khi_nop()";
+
+/** Định nghĩa của một hàm sau MỘT phép thay chuỗi trên `pg_get_functiondef` — chuỗi phải khớp đúng một chỗ. */
+async function defDotBien(ham: string, cu: string, moi: string): Promise<string> {
+  const goc = (await db.pool.query<{ def: string }>("SELECT pg_get_functiondef($1::regprocedure) AS def", [ham])).rows[0]!.def;
+  expect(goc.split(cu).length - 1, `đột biến phải khớp ĐÚNG một chỗ trong ${ham}`).toBe(1);
+  return goc.replace(cu, moi);
+}
+
+/**
+ * ĐỘT BIẾN trong MỘT giao dịch rồi ROLLBACK: chủ sở hữu chạy `dotBien`, rồi `viec` chạy dưới `app_api`
+ * trong tổ chức trên CÙNG kết nối — nên đi được trọn đường sản xuất, `submitRfqForApproval(c, …)`.
+ */
+async function trongDotBien<T>(org: string, dotBien: readonly string[], viec: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  const c = await db.pool.connect();
+  try {
+    await c.query("BEGIN");
+    for (const cau of dotBien) await c.query(cau);
+    await c.query("SET LOCAL ROLE app_api");
+    await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [org]);
+    return await viec(c);
+  } finally {
+    await c.query("ROLLBACK");
+    c.release();
+  }
+}
+
+/** Như `defDotBien` nhưng COMMIT — để một kết nối KHÁC thấy thân đột biến — rồi trả lại thân gốc. */
+async function voiHamDotBien<T>(ham: string, cu: string, moi: string, viec: () => Promise<T>): Promise<T> {
+  const goc = (await db.pool.query<{ def: string }>("SELECT pg_get_functiondef($1::regprocedure) AS def", [ham])).rows[0]!.def;
+  await db.pool.query(await defDotBien(ham, cu, moi));
+  try {
+    return await viec();
+  } finally {
+    await db.pool.query(goc);
+  }
+}
+
+describe("S3.1b — K1: bậc của gói (`rfq_bac_cua`, `tier_tu_so_tien`)", () => {
+  // [spec §5.1 K1] Đo bằng HẰNG SỐ, không bằng so với chính `rfq_bac_cua`: phép so ấy trùng ngôn, và
+  // đột biến `<=` → `<` ở biên sống sót qua nó (ca đột biến dưới đo đúng điều đó).
+  const CA_BIEN: readonly (readonly [string, string])[] = [
+    ["0.00", "0.00"],
+    ["0.01", "0.00"],
+    ["99999999.99", "0.00"],
+    ["100000000.00", "100000000.00"],
+    ["100000000.01", "100000000.00"],
+    ["999999999.99", "100000000.00"],
+    ["1000000000.00", "1000000000.00"],
+    ["9999999999.99", "1000000000.00"],
+    ["10000000000.00", "10000000000.00"],
+    ["9999999999999999.99", "10000000000.00"],
+  ];
+
+  it("[INV-K1] BẢNG CA BIÊN HẰNG SỐ: bậc lưu trên ngân sách đúng ở mọi biên — đo qua `setRfqBudget`, cả lần chèn lẫn lần sửa", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const sai: string[] = [];
+    for (const [giaTri, bac] of CA_BIEN) {
+      await datNganSach(t, rfqId, giaTri);
+      if ((await bacDaLuu(t, rfqId)) !== bac) sai.push(giaTri);
+    }
+    expect(sai).toEqual([]);
+    // Tổ chức CHƯA bật: ngân sách ghim phiên bản không bậc, nên không có bậc nào — MVP1 giữ nguyên.
+    const h = await taoToChuc();
+    const r2 = await taoGoi(h);
+    await datNganSach(h, r2, "150000000.00");
+    expect(await bacDaLuu(h, r2)).toBeNull();
+  });
+
+  it("ĐỘT BIẾN: `<=` → `<` trong `rfq_bac_cua` thì ba ca ĐÚNG BIÊN rơi xuống bậc dưới và ca 0 hết bậc — bảng hằng số bắt được, phép so với chính hàm thì không", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const hong = await defDotBien("public.rfq_bac_cua(uuid, numeric, text)", "::numeric <= p_gia_tri", "::numeric < p_gia_tri");
+    const { sai, trungNgon } = await trongDotBien(t.org, [hong], async (c) => {
+      const ra: string[] = [];
+      let soVoiHam = true;
+      for (const [giaTri, bac] of CA_BIEN) {
+        await c.query("SAVEPOINT ca");
+        try {
+          await setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s });
+          const { rows } = await c.query<{ b: string; k: boolean }>(
+            "SELECT tier_tu_so_tien::text AS b, tier_tu_so_tien = public.rfq_bac_cua(policy_id, estimated_value, currency) AS k " +
+              "FROM rfq_budgets WHERE rfq_id = $1",
+            [rfqId],
+          );
+          if (rows[0]!.b !== bac) ra.push(giaTri);
+          soVoiHam &&= rows[0]!.k;
+          await c.query("RELEASE SAVEPOINT ca");
+        } catch {
+          await c.query("ROLLBACK TO SAVEPOINT ca");
+          ra.push(`${giaTri} ném`);
+        }
+      }
+      return { sai: ra, trungNgon: soVoiHam };
+    });
+    expect(sai).toEqual(["0.00 ném", "100000000.00", "1000000000.00", "10000000000.00"]);
+    expect(trungNgon, "so bậc đã lưu với CHÍNH hàm phân bậc vẫn xanh dưới đột biến — vì sao K1 đo bằng hằng số").toBe(true);
+  });
+
+  it("[INV-K1] bậc chỉ do CSDL đặt: `app_api` không ghi được `tier_tu_so_tien` (42501), chủ sở hữu ghi tay thì trigger ghi đè; tiền tệ lệch chính sách thì không phân bậc", async () => {
+    const { t, v2 } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const chen =
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id, tier_tu_so_tien) " +
+      "VALUES ($1, $2, '150000000.00', 'VND', $3, $4, $5, 0)";
+    expect((await loi(withTenant(apiPool, t.org, (c) => c.query(chen, [t.org, rfqId, v2, t.pm.u, t.pm.s]))))?.code).toBe("42501");
+    await datNganSach(t, rfqId, "150000000.00");
+    expect(
+      (await loi(withTenant(apiPool, t.org, (c) => c.query("UPDATE rfq_budgets SET tier_tu_so_tien = 0 WHERE rfq_id = $1", [rfqId]))))?.code,
+    ).toBe("42501");
+    await db.pool.query("UPDATE rfq_budgets SET tier_tu_so_tien = 0 WHERE rfq_id = $1", [rfqId]);
+    expect(await bacDaLuu(t, rfqId), "chủ sở hữu ghi tay: `rfq_budgets_xep_bac` ghi đè bằng bậc thật").toBe("100000000.00");
+
+    const r2 = await taoGoi(t);
+    const lech = await loi(
+      withTenant(apiPool, t.org, (c) =>
+        c.query(
+          "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+            "VALUES ($1, $2, '150000000.00', 'USD', $3, $4, $5)",
+          [t.org, r2, v2, t.pm.u, t.pm.s],
+        ),
+      ),
+    );
+    expect(lech?.message).toMatch(/Don vi tien te cua uoc luong \(USD\) khac cua chinh sach \(VND\)/u);
+    expect(lech?.where).toMatch(/function rfq_bac_cua\(/u);
+  });
+
+  it("[INV-K1] ĐỘT BIẾN: tắt `rfq_budgets_xep_bac` thì bậc KHÔNG được đặt và cạnh nộp duyệt chặn `BAC_LECH_HAM_PHAN_BAC`; bỏ thêm vế bậc khỏi `rfq_chot_ngan_sach` thì gói bậc NULL rời DRAFT", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const veBac =
+      "  IF ns.tier_tu_so_tien IS DISTINCT FROM public.rfq_bac_cua(ns.policy_id, ns.estimated_value, ns.currency) THEN\n" +
+      "    RETURN 'BAC_LECH_HAM_PHAN_BAC';\n  END IF;\n";
+    const kichBan = (them: readonly string[]): Promise<{ bac: string | null; kq: unknown }> =>
+      trongDotBien(t.org, ["ALTER TABLE public.rfq_budgets DISABLE TRIGGER rfq_budgets_xep_bac", ...them], async (c) => {
+        await setRfqBudget(c, t.org, { rfqId, estimatedValue: "150000000.00", currency: "VND", actorSessionId: t.pm.s });
+        const bac = (await c.query<{ b: string | null }>(CAU_BAC_DA_LUU, [rfqId])).rows[0]!.b;
+        const kq = await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool).then(
+          (r) => r.status,
+          (e: unknown) => e,
+        );
+        return { bac, kq };
+      });
+    const tat = await kichBan([]);
+    expect(tat.bac).toBeNull();
+    expect(tat.kq).toMatchObject({ name: "ChotKiemSoatError", lyDo: "BAC_LECH_HAM_PHAN_BAC" });
+    const tatVaBo = await kichBan([await defDotBien(HAM_CHOT, veBac, "")]);
+    expect(tatVaBo.bac).toBeNull();
+    expect(tatVaBo.kq).toBe("PENDING_APPROVAL");
+    expect(await trangThaiTrigger("rfq_budgets_xep_bac")).toBe("A");
+    expect(await hangChot(t.org, rfqId), "`BAC_LECH_HAM_PHAN_BAC` KHÔNG vào sổ").toEqual([]);
+  });
+});
+
+describe("S3.1b — K1: cạnh DRAFT→PENDING_APPROVAL và lớp từ chối `CONTROL_DENIED`", () => {
+  it("[INV-K1] tổ chức ĐÃ BẬT: gói không ngân sách không rời DRAFT — lời từ chối CÓ TÊN và ĐÚNG MỘT hàng `CONTROL_DENIED` mang mã và người; tổ chức chưa bật thì đi như MVP1", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const e = await nop(t, rfqId);
+    expect(e).toBeInstanceOf(ChotKiemSoatError);
+    expect(e).toMatchObject({ lyDo: "THIEU_NGAN_SACH", message: CHOT_VAO_SO.THIEU_NGAN_SACH.thongDiep });
+    expect(await hangChot(t.org, rfqId)).toEqual([{ ma: "THIEU_NGAN_SACH", actor: t.pm.u }]);
+    expect((await trangThaiGoi(rfqId)).status).toBe("DRAFT");
+    // ĐỐI CHỨNG DƯƠNG: đặt ngân sách thì cùng lời gọi đi qua, và đường thuận không ghi thêm hàng nào.
+    await datNganSach(t, rfqId, "150000000.00");
+    expect(await nop(t, rfqId)).toBeNull();
+    expect((await trangThaiGoi(rfqId)).status).toBe("PENDING_APPROVAL");
+    expect(await hangChot(t.org, rfqId)).toHaveLength(1);
+
+    // Tổ chức CHƯA bật: ước lượng tuỳ chọn (ADR-085 ⑵) — gói không ngân sách nộp được, sổ không có gì.
+    const h = await taoToChuc();
+    const r2 = await taoGoi(h);
+    expect(await nop(h, r2)).toBeNull();
+    expect(await hangChot(h.org, r2)).toEqual([]);
+  });
+
+  it("[INV-K1] lớp CSDL: câu nộp VIẾT TAY dưới `app_api` bị trigger ở cạnh chặn với cùng mã; tắt trigger thì gói không ngân sách rời DRAFT", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const e = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_NOP_TAY, [rfqId, t.pm.u, t.pm.s])));
+    expect(e?.message).toMatch(/Goi thau chua roi DRAFT duoc \(K1\): THIEU_NGAN_SACH/u);
+    expect(e?.where).toMatch(/function rfq_kiem_ngan_sach_khi_nop\(/u);
+    expect(await khiTatTrigger("rfq_packages", "rfq_packages_kiem_ngan_sach_khi_nop", t.org, CAU_NOP_TAY, [rfqId, t.pm.u, t.pm.s])).toBeNull();
+    expect(await trangThaiTrigger("rfq_packages_kiem_ngan_sach_khi_nop")).toBe("A");
+    expect((await trangThaiGoi(rfqId)).status).toBe("DRAFT");
+  });
+
+  it("[INV-K1] nộp duyệt đòi ngân sách ghim ĐÚNG phiên bản hiệu lực: ghim bản cũ ⇒ từ chối CÓ TÊN, KHÔNG vào sổ; đặt lại ngân sách thì đi, với bậc của bản mới — kể cả gói có từ trước ngày bật", async () => {
+    // ⑴ Gói có từ trước ngày bật: ngân sách ghim v1 không bậc.
+    const t = await taoToChuc();
+    const rfqId = await taoGoi(t);
+    await datNganSach(t, rfqId, "150000000.00");
+    expect(await bacDaLuu(t, rfqId)).toBeNull();
+    const v2 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
+    await ky(t, v2, t.tc);
+    expect(await nop(t, rfqId)).toMatchObject({ name: "ChotKiemSoatError", lyDo: "NGAN_SACH_GHIM_BAN_CU" });
+    await datNganSach(t, rfqId, "150000000.00");
+    expect(await bacDaLuu(t, rfqId)).toBe("100000000.00");
+    expect(await nop(t, rfqId)).toBeNull();
+
+    // ⑵ Chính sách đổi SAU khi đặt ngân sách: v3 hạ biên bậc 1 xuống 50 triệu, nên gói 60 triệu lên bậc.
+    const r2 = await taoGoi(t);
+    await datNganSach(t, r2, "60000000.00");
+    expect(await bacDaLuu(t, r2)).toBe("0.00");
+    const v3 = await chenPhienBan(t, {
+      tiers: [bacThuong(0), bacThuong(50_000_000), bacThuong(1_000_000_000), bacChinhThuc(10_000_000_000)],
+    });
+    await ky(t, v3, t.tc);
+    expect(await nop(t, r2)).toMatchObject({ lyDo: "NGAN_SACH_GHIM_BAN_CU" });
+    await datNganSach(t, r2, "60000000.00");
+    expect(await bacDaLuu(t, r2)).toBe("50000000.00");
+    expect(await nop(t, r2)).toBeNull();
+    expect([...(await hangChot(t.org, rfqId)), ...(await hangChot(t.org, r2))], "`NGAN_SACH_GHIM_BAN_CU` KHÔNG vào sổ").toEqual([]);
+  });
+
+  it("ĐỘT BIẾN: bỏ vế *ghim đúng phiên bản hiệu lực* khỏi `rfq_chot_ngan_sach` thì gói ghim bản ĐÃ HẾT hiệu lực rời DRAFT — ở cả tầng gói lẫn trigger, vì hai lớp hỏi cùng một hàm", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    await datNganSach(t, rfqId, "150000000.00");
+    const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
+    await ky(t, v3, t.tc);
+    const veGhim =
+      "  IF ns.policy_id IS DISTINCT FROM public.chinh_sach_hieu_luc(p_org, p_luc) THEN\n" +
+      "    RETURN 'NGAN_SACH_GHIM_BAN_CU';\n  END IF;\n";
+    const hong = await defDotBien(HAM_CHOT, veGhim, "");
+    const kq = await trongDotBien(t.org, [hong], (c) =>
+      submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool).then(
+        (r) => r.status,
+        (e: unknown) => e,
+      ),
+    );
+    expect(kq).toBe("PENDING_APPROVAL");
+    // Ngoài đột biến, cùng gói bị chặn — ca trên xanh vì ĐỘT BIẾN, không vì một lý do khác.
+    expect(await nop(t, rfqId)).toMatchObject({ lyDo: "NGAN_SACH_GHIM_BAN_CU" });
+  });
+
+  it("ĐỘT BIẾN: cho qua khi thiếu ngân sách thì gói không ngân sách rời DRAFT; quên rẽ nhánh theo hàm *đã bật* thì tổ chức CHƯA bật không nộp được gói không ngân sách (§8.11)", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    const choQua = await defDotBien(HAM_CHOT, "    RETURN 'THIEU_NGAN_SACH';", "    RETURN NULL;");
+    expect(
+      await trongDotBien(t.org, [choQua], (c) =>
+        submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool).then((r) => r.status),
+      ),
+    ).toBe("PENDING_APPROVAL");
+
+    const h = await taoToChuc();
+    const r2 = await taoGoi(h);
+    const quenReNhanh = await defDotBien(HAM_CHOT, "  IF NOT public.to_chuc_da_bat_s3(p_org) THEN\n    RETURN NULL;\n  END IF;\n", "");
+    expect(
+      await trongDotBien(h.org, [quenReNhanh], (c) =>
+        submitRfqForApproval(c, h.org, { rfqId: r2, actorSessionId: h.pm.s }, apiPool).then(
+          (r) => r.status,
+          (e: unknown) => e,
+        ),
+      ),
+    ).toMatchObject({ lyDo: "THIEU_NGAN_SACH" });
+    expect(await nop(h, r2), "ngoài đột biến: tổ chức chưa bật nộp được").toBeNull();
+  });
+
+  it("chốt chỉ nói về gói ĐANG Ở DRAFT: gói đã rời DRAFT hay không có thật ⇒ lỗi trạng thái như cũ, KHÔNG hàng sổ nào; bỏ vế DRAFT thì sổ nhận một hàng cho một cạnh không đi được", async () => {
+    const t = await taoToChuc();
+    const rfqId = await taoGoi(t);
+    expect(await nop(t, rfqId)).toBeNull();
+    const v2 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
+    await ky(t, v2, t.tc);
+    const khongCo = randomUUID();
+    for (const r of [rfqId, khongCo]) {
+      expect(await nop(t, r)).toMatchObject({ name: "RfqError" });
+      expect(await hangChot(t.org, r)).toEqual([]);
+    }
+    const veDraft =
+      "  IF NOT EXISTS (SELECT 1 FROM public.rfq_packages r\n" +
+      "                  WHERE r.org_id = p_org AND r.id = p_rfq AND r.status = 'DRAFT') THEN\n" +
+      "    RETURN NULL;\n  END IF;\n";
+    const kq = await trongDotBien(t.org, [await defDotBien(HAM_CHOT, veDraft, "")], (c) =>
+      submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool).then(
+        (r) => r.status,
+        (e: unknown) => e,
+      ),
+    );
+    expect(kq).toMatchObject({ lyDo: "THIEU_NGAN_SACH" });
+    expect(await hangChot(t.org, rfqId)).toEqual([{ ma: "THIEU_NGAN_SACH", actor: t.pm.u }]);
+  });
+
+  it("[INV-K1] ĐỘT BIẾN — chặn lần ghi `CONTROL_DENIED` thì lời từ chối GÃY ỒN ÀO (`DenialAuditFailedError`), không im lặng đi qua", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    let e: unknown;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k1_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k1 thong diep noi bo' USING ERRCODE = 'TPK01'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k1_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW " +
+          "WHEN (NEW.action = 'CONTROL_DENIED') EXECUTE FUNCTION public.k1_chan_ghi_so()",
+      );
+      e = await nop(t, rfqId);
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k1_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k1_chan_ghi_so()");
+    }
+    expect((e as Error).name, "lần ghi sổ hỏng phải đổi HÌNH DẠNG lỗi, không được nuốt").toBe("DenialAuditFailedError");
+    expect((e as { denial?: { lyDo?: string } }).denial?.lyDo).toBe("THIEU_NGAN_SACH");
+    expect(await hangChot(t.org, rfqId)).toEqual([]);
+    // ĐỐI CHỨNG: gỡ trigger thì cùng lời gọi ghi được.
+    expect(await nop(t, rfqId)).toMatchObject({ lyDo: "THIEU_NGAN_SACH" });
+    expect(await hangChot(t.org, rfqId)).toHaveLength(1);
+  });
+
+  it("mã của `rfq_chot_ngan_sach` BẰNG tập mã K1 của `CHOT_VAO_SO` — hàm SQL và bảng không trôi khỏi nhau", async () => {
+    const src = (await db.pool.query<{ s: string }>("SELECT prosrc AS s FROM pg_proc WHERE oid = $1::regprocedure", [HAM_CHOT])).rows[0]!.s;
+    const trongHam = [...src.matchAll(/RETURN '([A-Z_]+)'/gu)].map((m) => m[1]!).sort();
+    const trongBang = Object.entries(CHOT_VAO_SO)
+      .filter(([, d]) => d.chot === "K1")
+      .map(([ma]) => ma)
+      .sort();
+    expect(trongHam.length, "bộ đọc không thấy mã nào — đang mù").toBeGreaterThan(0);
+    expect(trongHam).toEqual(trongBang);
+  });
+});
+
+describe("S3.1b — K1 dưới tranh chấp: khoá chia sẻ và mốc giờ", () => {
+  it("[INV-K1] mốc nộp do CSDL đóng: `submitted_at` nằm giữa hai lần đọc đồng hồ quanh lần nộp, ở cả tổ chức chưa bật; `app_api` không ghi được nó (42501)", async () => {
+    const { t } = await toChucDaBat();
+    const rfqId = await taoGoi(t);
+    await datNganSach(t, rfqId, "150000000.00");
+    const h = await taoToChuc();
+    const r2 = await taoGoi(h);
+    const dongHo = async (): Promise<number> =>
+      (await db.pool.query<{ l: Date }>("SELECT clock_timestamp() AS l")).rows[0]!.l.getTime();
+    const truoc = await dongHo();
+    expect(await nop(t, rfqId)).toBeNull();
+    expect(await nop(h, r2)).toBeNull();
+    const sau = await dongHo();
+    for (const r of [rfqId, r2]) {
+      const moc = (await trangThaiGoi(r)).submittedAt?.getTime() ?? Number.NaN;
+      expect(moc, r).toBeGreaterThanOrEqual(truoc);
+      expect(moc, r).toBeLessThanOrEqual(sau);
+    }
+    const r3 = await taoGoi(h);
+    expect(
+      (await loi(withTenant(apiPool, h.org, (c) => c.query("UPDATE rfq_packages SET submitted_at = now() WHERE id = $1", [r3]))))?.code,
+    ).toBe("42501");
+  });
+
+  it("[INV-K1] ĐUA: lần nộp ĐỨNG CHỜ một lần ký đang dở rồi đọc trạng thái SAU nó — ghim bản vừa hết hiệu lực thì bị chặn; gỡ khoá chia sẻ thì gói rời DRAFT với bản đã hết hiệu lực", async () => {
+    const khoa =
+      "  PERFORM pg_catalog.pg_advisory_xact_lock_shared(\n" +
+      "            pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 2));\n";
+    const kichBan = async (coKhoa: boolean) => {
+      const { t, v2 } = await toChucDaBat();
+      const rfqId = await taoGoi(t);
+      await datNganSach(t, rfqId, "150000000.00");
+      const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
+      const ky3 = await moGiaoDich(t.org);
+      const nopTay = await moGiaoDich(t.org);
+      try {
+        await ky3.query(CAU_KY, [t.org, v3, t.tc.u, t.tc.s]); // giữ khoá ĐỘC QUYỀN, chưa commit
+        const pid = await pidCua(nopTay);
+        const ketQua = loi(nopTay.query(CAU_NOP_TAY, [rfqId, t.pm.u, t.pm.s]));
+        // Có khoá: lần nộp ĐỨNG CHỜ lần ký — đo ở `pg_stat_activity`, không đoán bằng giờ.
+        // Không khoá: nó không chờ ai, và đi qua trên ảnh chụp chưa thấy chữ ký.
+        if (coKhoa) await choKhoaTuVan(pid);
+        else expect(await ketQua).toBeNull();
+        await ky3.query("COMMIT");
+        const loiNop = await ketQua;
+        await nopTay.query(loiNop === null ? "COMMIT" : "ROLLBACK");
+        const { rows } = await db.pool.query<{ status: string; ghim: string; tai_lap: string | null }>(
+          "SELECT r.status, b.policy_id AS ghim, public.chinh_sach_hieu_luc(r.org_id, r.submitted_at) AS tai_lap " +
+            "FROM rfq_packages r JOIN rfq_budgets b ON b.rfq_id = r.id WHERE r.id = $1",
+          [rfqId],
+        );
+        return { loiNop, ...rows[0]!, v2, v3 };
+      } finally {
+        ky3.release();
+        nopTay.release();
+      }
+    };
+    const dung = await kichBan(true);
+    expect(dung.loiNop?.message).toMatch(/\(K1\): NGAN_SACH_GHIM_BAN_CU/u);
+    expect(dung.status).toBe("DRAFT");
+
+    const hong = await voiHamDotBien(HAM_CANH, khoa, "", () => kichBan(false));
+    expect(hong.loiNop).toBeNull();
+    expect(hong.status).toBe("PENDING_APPROVAL");
+    expect(hong.ghim).toBe(hong.v2);
+    expect(hong.tai_lap, "tái lập *phiên bản hiệu lực lúc nộp* ra bản MỚI — gói rời DRAFT với bản đã hết hiệu lực").toBe(hong.v3);
+  });
+
+  it("[INV-K1] `signed_at` đóng dấu SAU khoá: lần ký BẮT ĐẦU trước một lần nộp mà lấy khoá sau nó thì mang mốc SAU `submitted_at` — tái lập ra đúng bản đã ghim; trả thân `069` thì tái lập ra bản khác", async () => {
+    const kichBan = async () => {
+      const { t, v2 } = await toChucDaBat();
+      const rfqId = await taoGoi(t);
+      await datNganSach(t, rfqId, "150000000.00");
+      const v3 = await chenPhienBan(t, { tiers: BAC_MAC_DINH });
+      const ky3 = await moGiaoDich(t.org); // giao dịch ký BẮT ĐẦU ở đây: `now()` của nó đứng ở mốc này
+      try {
+        expect(await nop(t, rfqId)).toBeNull(); // nộp trọn và commit khi lần ký chưa lấy khoá
+        await ky3.query(CAU_KY, [t.org, v3, t.tc.u, t.tc.s]);
+        await ky3.query("COMMIT");
+      } finally {
+        ky3.release();
+      }
+      const { rows } = await db.pool.query<{ ghim: string; tai_lap: string; ky_sau_nop: boolean }>(
+        "SELECT b.policy_id AS ghim, public.chinh_sach_hieu_luc(r.org_id, r.submitted_at) AS tai_lap, " +
+          "       (SELECT s.signed_at > r.submitted_at FROM org_policy_signatures s WHERE s.policy_id = $2) AS ky_sau_nop " +
+          "  FROM rfq_packages r JOIN rfq_budgets b ON b.rfq_id = r.id WHERE r.id = $1",
+        [rfqId, v3],
+      );
+      return { ...rows[0]!, v2, v3 };
+    };
+    const dung = await kichBan();
+    expect(dung.ghim).toBe(dung.v2);
+    expect(dung.ky_sau_nop).toBe(true);
+    expect(dung.tai_lap, "tái lập ra đúng bản đã ghim").toBe(dung.v2);
+
+    const hong = await voiHamDotBien("public.chinh_sach_kiem_nguoi_ky()", "  NEW.signed_at := pg_catalog.clock_timestamp();\n", "", kichBan);
+    expect(hong.ky_sau_nop, "`signed_at` là `now()` — giờ ĐẦU giao dịch ký, trước lần nộp").toBe(false);
+    expect(hong.tai_lap, "K1 đúng lúc chạy mà sai khi tái lập").toBe(hong.v3);
+  });
+});
+
+describe("S3.1b — hardening ghim chuỗi K1", () => {
+  it("thân rỗng ruột ở hai trigger, bốn hàm trợ giúp và hàm ký, cộng trigger ở cạnh bị tắt — lần `migrate()` sau trả lại tất cả", async () => {
+    const HAM = [
+      HAM_CHOT,
+      HAM_CANH,
+      "public.rfq_bac_cua(uuid, numeric, text)",
+      "public.to_chuc_da_bat_s3(uuid)",
+      "public.chinh_sach_hieu_luc(uuid, timestamptz)",
+      "public.ngan_sach_xep_bac()",
+      "public.chinh_sach_kiem_nguoi_ky()",
+    ];
+    const than = async (): Promise<Record<string, string>> =>
+      Object.fromEntries(
+        (
+          await db.pool.query<{ ten: string; src: string }>(
+            "SELECT p.oid::regprocedure::text AS ten, p.prosrc AS src FROM pg_proc p WHERE p.oid = ANY ($1::regprocedure[])",
+            [HAM],
+          )
+        ).rows.map((r) => [r.ten, r.src]),
+      );
+    const truoc = await than();
+    expect(Object.keys(truoc)).toHaveLength(HAM.length);
+    const trigger = "LANGUAGE plpgsql SET search_path = pg_catalog, public AS $x$BEGIN RETURN NEW; END$x$";
+    for (const cau of [
+      "CREATE OR REPLACE FUNCTION public.rfq_chot_ngan_sach(p_org uuid, p_rfq uuid, p_luc timestamptz) RETURNS text " +
+        "LANGUAGE plpgsql STABLE SET search_path = pg_catalog, public AS $x$BEGIN RETURN NULL; END$x$",
+      "CREATE OR REPLACE FUNCTION public.rfq_bac_cua(p_policy uuid, p_gia_tri numeric, p_tien_te text) RETURNS numeric " +
+        "LANGUAGE plpgsql STABLE SET search_path = pg_catalog, public AS $x$BEGIN RETURN 0; END$x$",
+      "CREATE OR REPLACE FUNCTION public.to_chuc_da_bat_s3(p_org uuid) RETURNS boolean " +
+        "LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $x$ SELECT false $x$",
+      "CREATE OR REPLACE FUNCTION public.chinh_sach_hieu_luc(p_org uuid, p_luc timestamptz) RETURNS uuid " +
+        "LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $x$ SELECT NULL::uuid $x$",
+      `CREATE OR REPLACE FUNCTION public.ngan_sach_xep_bac() RETURNS trigger ${trigger}`,
+      `CREATE OR REPLACE FUNCTION public.rfq_kiem_ngan_sach_khi_nop() RETURNS trigger ${trigger}`,
+      `CREATE OR REPLACE FUNCTION public.chinh_sach_kiem_nguoi_ky() RETURNS trigger ${trigger}`,
+      "ALTER TABLE public.rfq_packages DISABLE TRIGGER rfq_packages_kiem_ngan_sach_khi_nop",
+    ]) {
+      await db.pool.query(cau);
+    }
+    for (const [ten, src] of Object.entries(await than())) expect(src, `tiền đề: ${ten} đã bị thay`).not.toBe(truoc[ten]);
+    await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    expect(await than()).toEqual(truoc);
+    expect(await trangThaiTrigger("rfq_packages_kiem_ngan_sach_khi_nop")).toBe("A");
   });
 });

@@ -198,7 +198,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
   it("ĐI VÒNG QUA ỨNG DỤNG: `UPDATE ... SET status='OPEN'` trên RFQ đã CLOSED bị TRIGGER chặn", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -220,7 +220,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     // quyền cột, hay một sự trùng hợp. Ở đây trigger bị gỡ, cùng câu lệnh chạy lại, và nó QUA.
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -279,7 +279,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
   async function rfqToiEvaluating(): Promise<string> {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -361,7 +361,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
     // và hai trạng thái kia vẫn là trạng thái hút. Khoản 225 giữ câu hỏi ấy mở.
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -404,7 +404,7 @@ describe("máy trạng thái — cưỡng chế ở tầng CSDL, không ở tầ
         currency: "VND",
         actorSessionId: s1,
       });
-      await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId: r.id, actorSessionId: s1 }, apiPool);
       return r.id;
     });
 
@@ -418,7 +418,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
   it("RFQ cần hai phê duyệt KHÔNG mở được khi mới có một", async () => {
     const rfqId = await rfqNhap(orgA, true);
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
     });
 
@@ -440,7 +440,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
     const rfqId = await rfqNhap(orgA, true);
     const s1 = await taoPhien(orgA, u1);
     await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
+      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool),
     );
 
     await expect(
@@ -453,7 +453,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
   it("một người không duyệt được hai lần, kể cả từ hai phiên khác nhau", async () => {
     const rfqId = await rfqNhap(orgA, true);
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
     });
 
@@ -483,7 +483,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
   it("LỚP CSDL VẪN CÒN RĂNG: INSERT viết tay khai người duyệt lệch chủ phiên bị trigger chặn", async () => {
     const rfqId = await rfqNhap(orgA, true);
     await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
+      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool),
     );
 
     // u3 là người duyệt được khai, nhưng phiên dẫn ra là của u2.
@@ -562,7 +562,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
   it("gia hạn khi đang OPEN thì được, và nó để lại lý do trong sổ kiểm toán", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await extendRfqDeadline(c, orgA, {
@@ -585,7 +585,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
   it("gia hạn KHÔNG được nữa sau khi RFQ đã CLOSED", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -624,7 +624,7 @@ describe("C4 — deadline (phần cưỡng chế được ở S1.2)", () => {
   it("[INV-C4] [S1.151 / khoản 127] hai lần gia hạn đồng thời tới cùng một hạn: đúng MỘT bản ghi RFQ_DEADLINE_EXTENDED, lần sau bị từ chối", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
@@ -719,7 +719,7 @@ describe("[INV-D2] [S1.140 / khoản 240] chữ ký D2 chỉ được đếm ở
   async function goiCapKepDaMo(): Promise<string> {
     const rfqId = await rfqNhap(orgA, true);
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await approveRfq(c, orgA, { rfqId, sessionId: s3 });
     });
@@ -752,7 +752,7 @@ describe("[INV-D2] [S1.140 / khoản 240] chữ ký D2 chỉ được đếm ở
     // vế dương: một bản sửa XOÁ hẳn khối đếm cũng làm ca gia hạn ở trên xanh.
     const rfqId = await rfqNhap(orgA, true);
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
     });
     await expect(
@@ -801,7 +801,7 @@ describe("[INV-D2] [S1.142 / khoản 241] sàn một chữ ký — gói dưới 
   /** Gói dưới ngưỡng, đã nộp duyệt, CHƯA có chữ ký nào. */
   async function goiDuoiNguongChoDuyet(): Promise<string> {
     const rfqId = await rfqNhap(orgA, false);
-    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }));
+    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool));
     const goi = await withTenant(apiPool, orgA, (c) => getRfq(c, orgA, rfqId));
     expect(goi?.requiresDualApproval, "tiền đề: gói này nằm DƯỚI ngưỡng phê duyệt kép").toBe(false);
     return rfqId;
@@ -853,7 +853,7 @@ describe("hạng mục chỉ sửa được khi RFQ còn soạn", () => {
   it("thêm/sửa/xoá hạng mục bị chặn sau khi RFQ đã OPEN", async () => {
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
@@ -913,7 +913,7 @@ describe("huỷ RFQ", () => {
     expect(huy.cancelledAt).not.toBeNull();
 
     await expect(
-      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 })),
+      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool)),
     ).rejects.toThrow(/không ở trạng thái nguồn hợp lệ/);
   });
 
@@ -923,7 +923,7 @@ describe("huỷ RFQ", () => {
     // "huỷ" lúc đó là một nghiệp vụ khác cần thiết kế riêng, không phải một cạnh thêm vào.
     const rfqId = await rfqNhap();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "het han", actorSessionId: s1 });
@@ -985,7 +985,7 @@ describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
 
     // Nhưng cạnh đi vào vòng phê duyệt thì đòi BẰNG CHỨNG, và bằng chứng nói ngược lại.
     await expect(
-      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 })),
+      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool)),
     ).rejects.toThrow(/phai can hai phe duyet/);
   });
 
@@ -1009,7 +1009,7 @@ describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
     });
 
     await expect(
-      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 })),
+      withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool)),
     ).rejects.toThrow(/chua co ngan sach va chinh sach/);
   });
 
@@ -1047,7 +1047,7 @@ describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
 
   it("bằng chứng không sửa được sau khi RFQ rời DRAFT", async () => {
     const rfqId = await rfqNhap(orgA, false);
-    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }));
+    await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool));
 
     await expect(
       withTenant(apiPool, orgA, (c) =>
@@ -1072,7 +1072,7 @@ describe("chính sách mua sắm và ngưỡng phê duyệt kép", () => {
     );
     try {
       await withTenant(apiPool, orgA, (c) =>
-        submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
+        submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool),
       );
       const { rows } = await db.pool.query<{ status: string }>(
         "SELECT status FROM rfq_packages WHERE id = $1",
@@ -1160,7 +1160,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
   it("ĐỐI CHỨNG DƯƠNG: nộp duyệt, mở, đóng — mỗi cạnh ghi đúng người và đúng phiên", async () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s2, orgKeys: boBocGia }, apiPool);
       await closeRfq(c, orgA, { rfqId, reason: "du bao gia", actorSessionId: s3 });
@@ -1199,7 +1199,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
   it("LỚP CÓ THẨM QUYỀN Ở CSDL: mở RFQ bằng SQL viết tay mà không ký tên bị TRIGGER chặn", async () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
       // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
@@ -1225,7 +1225,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
   it("khai người mở LỆCH chủ phiên cũng bị chặn — không chỉ thiếu, mà cả sai", async () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
       // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
@@ -1256,7 +1256,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
   it("sổ kiểm toán ghi CHỦ PHIÊN — hằng `ACTOR` cũ đã không còn chỗ nào để khai", async () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s2 }),
+      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s2 }, apiPool),
     );
     const { rows } = await db.pool.query<{ actor_type: string; actor_id: string }>(
       "SELECT actor_type, actor_id FROM audit_events " +
@@ -1271,7 +1271,7 @@ describe("bốn cạnh chuyển trạng thái mang chữ ký", () => {
   it("ĐỘT BIẾN: gỡ trigger người-mở thì câu UPDATE không ký tên ĐI LỌT", async () => {
     const rfqId = await rfqDuoiMoiNguong();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       // [S1.142 / khoản 241] Một chữ ký cho sàn của `068` — không có nó, trigger cạnh (chạy trước theo
       // thứ tự chữ cái) từ chối vì THIẾU CHỮ KÝ, và ca này xanh vì một lý do khác lý do nó đo.
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
@@ -1354,7 +1354,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     const rfqId = await rfqNhap(orgA, false);
     const sLa = await nguoiKhongVaiTro();
     await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
+      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool),
     );
 
     await expect(
@@ -1381,7 +1381,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     const rfqId = await rfqMoDuoc();
     const sLa = await nguoiKhongVaiTro();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
@@ -1423,7 +1423,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     // luôn đường hợp pháp và không ai mở được gói thầu nào nữa.
     const rfqId = await rfqMoDuoc();
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 });
+      await submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool);
       await approveRfq(c, orgA, { rfqId, sessionId: s2 });
       await openRfq(c, orgA, { rfqId, actorSessionId: s1, orgKeys: boBocGia }, apiPool);
     });
@@ -1448,7 +1448,7 @@ describe("[INV-D3] mở và huỷ RFQ đòi quyền, và một lần từ chối
     const sGd = await taoPhien(orgA, uGd);
     const rfqId = await rfqNhap(orgA, false);
     await withTenant(apiPool, orgA, (c) =>
-      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }),
+      submitRfqForApproval(c, orgA, { rfqId, actorSessionId: s1 }, apiPool),
     );
     await expect(
       withTenant(apiPool, orgA, (c) =>
