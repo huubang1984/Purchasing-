@@ -12493,6 +12493,18 @@ Bốn gói dở đứng đúng trạng thái: `OPEN`, `CLOSED` với yêu cầu 
 - báo cáo của lượt ghi *"trên mã `d8f493e`"*, và câu ấy SAI: dấu mã được lấy lúc ghi báo cáo, còn `d8f493e` được commit
   GIỮA lượt chạy. Đó là một khiếm khuyết nữa của công cụ. Sửa: dấu mã lấy lúc bắt đầu, khi mã được nạp.
 
+**Chế độ chậm, SX-06 — lượt trên bản đã sửa theo mục 9**, CSDL riêng thứ hai, từ 23:55 tới 00:57 UTC. Mã của lượt là cây
+làm việc lúc 23:57; đo bằng diff, nó chỉ khác `d8f493e` ở hai dòng chú thích. Báo cáo của nó ghi *"trên mã `37e29c7`"* vì
+cùng khiếm khuyết trên — tiến trình khởi động trước bản sửa lấy dấu:
+- **1/1** ĐẠT, trong 62 phút 5 giây;
+- nộp sau hạn ⇒ **422**, và phép kiểm theo hành động đo **đúng +1** hàng `BID_DEADLINE_DENIED` — lần này là điều kiện
+  đạt, không chỉ một phép đo; cột *Vào sổ*: có;
+- đóng sau hạn ⇒ 200; phép kiểm mới *"mở thầu chỉ giải mã bản CUỐI"*: 2 dòng, 0 dòng của bản cũ; thứ hạng, trao thầu,
+  duyệt như lượt trước; biên nhận 2/2; bộ bằng chứng 1/1;
+- 28 bước người dùng qua API (27 LAM, 1 CHAN), 15 KIEM, 23 bước chuẩn bị tổ chức;
+- báo cáo tự nói *"phép cô lập giữa hai tổ chức KHÔNG chạy (lượt này chỉ dựng một tổ chức)"* thay cho *"mọi phép kiểm
+  ĐẠT"* — sửa của mục 9, dòng 7, chạy thật.
+
 **Đi thử trên trình duyệt thật** (Chromium qua Playwright, khung 375×812, trên cụm giữ bởi lệnh `cum`):
 - Phía nhà cung cấp, gói SX-04: `lien-ket` cho link, mở lời mời, gửi OTP, `otp <số>` cho mã, nhập đơn giá, bấm **Niêm
   phong và nộp**. Biên nhận hiện `alg=ECDSA_P256_SHA256 kid=k1 version=1`; phong bì X25519, 247 byte.
@@ -12572,8 +12584,9 @@ Hai quan sát, không mở khoản:
 
 - Lượt giả lập **không ở CI**: nó cần Postgres cộng bốn tiến trình. CI chạy 37 test đơn vị của công cụ và các cổng
   kiến trúc.
-- Kịch bản chậm SX-06 có kết quả trên bản của commit đầu (mục 5). Lượt trên bản đã sửa theo mục 9 — lần nộp trễ nay
-  đòi đúng một hàng `BID_DEADLINE_DENIED` đếm theo hành động — còn đang đợi hạn nộp thật lúc commit này.
+- Kịch bản chậm SX-06 chạy hai lượt, cả hai ĐẠT (mục 5): một trên bản của commit đầu, một trên bản đã sửa theo mục 9 —
+  lượt sau đòi đúng một hàng `BID_DEADLINE_DENIED` đếm theo hành động. Chế độ chậm chưa chạy chung với mười kịch bản
+  nhanh trong một lượt; phần đồng bộ giữa chúng (mục 9, dòng 11) vì thế chưa có lượt đo trọn.
 - Tầng tích hợp (Testcontainers) không chạy cục bộ, vì container này không có Docker daemon. Mọi câu SQL mới của
   `csdl.ts` đã CHẠY THẬT trên Postgres 16 ở lượt giả lập — mạnh hơn `PREPARE` của `qt3-cu-phap.int.test.ts`, nhưng không
   phải chính phép đo ấy. Job T3 của CI là phép đo ấy.
@@ -12635,7 +12648,7 @@ và XD-02 — ba kịch bản có sửa giá. `apps/unseal-worker` chỉ giải 
 Câu minh hoạ của SX-02 được viết lại theo.
 
 **Đo lại sau khi sửa:**
-- lượt nhanh 10/10 (mục 5);
-- `pnpm test`: 111 tệp, 1 471 test đạt, 1 bỏ qua;
-- `pnpm typecheck` và `eslint` sạch;
+- lượt nhanh 10/10 (mục 5), chạy lại trên bản cuối cùng các con số ấy; lượt chậm SX-06 1/1 (mục 5);
+- `pnpm test`: 111 tệp, 1 473 test đạt, 1 bỏ qua — 39 test của công cụ;
+- `pnpm t0` sạch: typecheck, lint, depcruise (416 module, 0 vi phạm);
 - gitleaks 8.24.3 trên mọi tệp đã đổi: 0 lộ lọt; trên commit đầu `3342eb8`: 2 (điểm 2, còn mở).

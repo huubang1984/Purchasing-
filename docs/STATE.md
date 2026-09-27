@@ -22,8 +22,8 @@ BAFO, trao thầu, huỷ trao thầu, bộ bằng chứng. Đo trên Postgres 16
 **10/10** kịch bản ĐẠT trong 20 giây, 268 bước người dùng qua API cộng 155 phép kiểm của bộ giả lập, **16/16** lần thử sai
 bị chặn, cô lập **2/2** có đối chứng dương, biên nhận **35/35** kiểm bằng khoá công khai, bộ bằng chứng **5/5** qua `pnpm
 bang-chung kiem` không CSDL; ba đột biến trên `packages/unseal` đều làm lượt giả lập KHÔNG ĐẠT; đi thử trên Chromium khung
-375×812 đạt cả phía nhà cung cấp lẫn người mua. Kịch bản chậm SX-06, trên bản của commit đầu: **1/1** ĐẠT trong 62 phút —
-nộp sau hạn ⇒ 422 và đúng một hàng `BID_DEADLINE_DENIED`. Phát
+375×812 đạt cả phía nhà cung cấp lẫn người mua. Kịch bản chậm SX-06: **1/1** ĐẠT ở hai lượt 62 phút, trên bản của commit
+đầu và trên bản đã sửa — nộp sau hạn ⇒ 422 và đúng một hàng `BID_DEADLINE_DENIED`, lượt sau kiểm theo hành động. Phát
 hiện: **8/16** lần từ chối không để lại hàng sổ — J3 ×4 (cả ba vế) và D2 duyệt gói ×1 là tách bạch nhiệm vụ, hai lần nộp
 của nhà cung cấp thuộc vế ghi sổ của ADR-060 theo cách ADR-074 đọc nó — nên `PRODUCT.md` §5 được sửa tại chỗ và khoản
 **9401** vào rổ B. **Không đóng

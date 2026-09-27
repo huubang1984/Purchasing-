@@ -198,7 +198,7 @@ bản §S1.9101 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trê
 | Biên nhận kiểm bằng khoá công khai từ `/.well-known/trustprocure-receipt-keys` | **35/35** |
 | Bộ bằng chứng qua `pnpm bang-chung kiem` không CSDL | **5/5** |
 | Lần từ chối để lại hàng sổ kiểm toán | **8/16** — xem phát hiện ⑴. Lượt đầu cho 9/16, vì J3 vế 1 khi ấy chưa được thử |
-| Chế độ chậm (SX-06) | **1/1 ĐẠT** trên bản của commit đầu, 62 phút: nộp sau hạn ⇒ 422, sổ có đúng một hàng `BID_DEADLINE_DENIED`; đóng sau hạn, trao thầu cho giá thấp nhất trong hai báo giá đúng hạn. Lượt trên bản đã sửa đang chạy |
+| Chế độ chậm (SX-06) | **1/1 ĐẠT** ở cả hai lượt, mỗi lượt 62 phút — trên bản của commit đầu, và trên bản đã sửa: nộp sau hạn ⇒ 422 và **đúng một** hàng `BID_DEADLINE_DENIED` (lượt sau kiểm theo hành động, thiếu là KHÔNG ĐẠT); đóng sau hạn; trao thầu cho giá thấp nhất trong hai báo giá đúng hạn |
 | Đi thử trên trình duyệt thật (Chromium, khung 375×812) | Nhà cung cấp mở link SX-04, OTP lấy bằng lệnh `otp`, niêm phong và nộp trong trình duyệt, nhận biên nhận `version=1 kid=k1`; người mua đăng nhập bằng `dang-nhap` + TOTP và thấy số báo giá bị giấu |
 
 **Bộ giả lập có răng.** Ba đột biến trên mã sản phẩm, mỗi đột biến khôi phục ngay sau khi chạy:
