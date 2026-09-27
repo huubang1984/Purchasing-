@@ -21,6 +21,14 @@
 //    Đây là lần THỨ HAI một hàng rào dựng từ S0 quyết định chỗ ở của một file có thật, và lần
 //    này nó bác một dòng của kế hoạch. Ghi lại vì đó là thông tin: một kế hoạch viết trước khi
 //    hàng rào có việc để làm sẽ không thấy trước những chỗ hàng rào chạm tới.
+//
+// ---------------------------------------------------------------------------------------------
+// [S1.174 / S3.1d] HAI LUỒNG — CÙNG MỘT KỊCH BẢN, HAI TỔ CHỨC
+// ---------------------------------------------------------------------------------------------
+// Spec S3 §8.11: ADR-080 giữ hai luồng sống song song dưới công tắc, và kịch bản này phải chạy ở CẢ HAI. Mọi bước dùng
+// chung; mỗi luồng một tổ chức mới trên cùng CSDL. Luồng MVP1 là tổ chức CHƯA bật — mọi bước y như trước vòng này. Luồng
+// S3 khác đúng một chỗ, ở bước 1: hai người FINANCE khai và ký phiên bản chính sách CÓ BẬC (mặc định §4.1), nên tổ chức
+// BẬT S3 và mọi bước sau chạy dưới K1 — ngân sách đặt trước khi nộp duyệt, ghim đúng bản hiệu lực.
 // =============================================================================================
 
 import { createPublicKey, generateKeyPairSync, randomBytes } from "node:crypto";
@@ -37,6 +45,7 @@ import {
   closeRfq,
   createProcurementPolicy,
   createRfq,
+  kyPhienBanChinhSach,
   openRfq,
   setRfqBudget,
   submitRfqForApproval,
@@ -68,6 +77,9 @@ import {
 } from "@trustprocure/unseal";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
+// [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — import TƯƠNG ĐỐI xuyên app, có chủ đích: test là nơi duy nhất nối
+// hai app, và luồng S3 nên khai đúng ma trận mà người tài chính thấy trên màn.
+import { BAC_MAC_DINH, MUC_MAC_DINH } from "../../web/src/chinh-sach.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const HAN_NOP = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -115,6 +127,8 @@ let orgA: string;
 /** uMua tạo RFQ (PROCUREMENT_MANAGER); uGd1/uGd2 duyệt (DIRECTOR). */
 let uMua: string, uGd1: string, uGd2: string;
 let sMua: string, sGd1: string, sGd2: string;
+/** [S1.174 / S3.1d] Luồng S3: hai người FINANCE — một khai phiên bản chính sách có bậc, một ký. */
+let sTc1: string, sTc2: string;
 let boKy: ReceiptSigner;
 let khoaKyCongKhai: Uint8Array;
 const pepper = new PepperRing("pepper-2026-09", { "pepper-2026-09": randomBytes(32) });
@@ -145,19 +159,8 @@ async function taoPhien(userId: string): Promise<string> {
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
-  const orgs = await db.pool.query<{ id: string }>(
-    "INSERT INTO organizations (name, slug) VALUES ('Cong ty Mua Sam A', 'cong-ty-a') RETURNING id",
-  );
-  orgA = orgs.rows[0]?.id ?? "";
   apiPool = db.poolAs("app_api");
   unsealPool = db.poolAs("app_unseal");
-
-  uMua = await taoNguoi("mua@vidu.vn", "PROCUREMENT_MANAGER");
-  uGd1 = await taoNguoi("gd1@vidu.vn", "DIRECTOR");
-  uGd2 = await taoNguoi("gd2@vidu.vn", "DIRECTOR");
-  sMua = await taoPhien(uMua);
-  sGd1 = await taoPhien(uGd1);
-  sGd2 = await taoPhien(uGd2);
 
   const { generateKeyPairSync } = await import("node:crypto");
   const cap = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -171,8 +174,32 @@ beforeAll(async () => {
     }),
   );
 
-  expect([orgA, uMua, uGd1, uGd2, sMua, sGd1, sGd2].filter((x) => x === "")).toEqual([]);
 }, 180000);
+
+/**
+ * [S1.174 / S3.1d] Bối cảnh của MỘT luồng: tổ chức mới, ba người như trước, và — luồng S3 — hai người FINANCE. Gọi ở
+ * `beforeAll` của từng luồng; mọi biến theo tổ chức ở trên và `trangThai` dưới được dựng lại, nên các bước đọc đúng
+ * tổ chức của luồng đang chạy.
+ */
+async function dungToChuc(batS3: boolean): Promise<void> {
+  const orgs = await db.pool.query<{ id: string }>(
+    "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+    batS3 ? ["Cong ty Mua Sam A (S3)", "cong-ty-a-s3"] : ["Cong ty Mua Sam A", "cong-ty-a"],
+  );
+  orgA = orgs.rows[0]?.id ?? "";
+
+  uMua = await taoNguoi("mua@vidu.vn", "PROCUREMENT_MANAGER");
+  uGd1 = await taoNguoi("gd1@vidu.vn", "DIRECTOR");
+  uGd2 = await taoNguoi("gd2@vidu.vn", "DIRECTOR");
+  sMua = await taoPhien(uMua);
+  sGd1 = await taoPhien(uGd1);
+  sGd2 = await taoPhien(uGd2);
+  sTc1 = batS3 ? await taoPhien(await taoNguoi("tc1@vidu.vn", "FINANCE")) : "";
+  sTc2 = batS3 ? await taoPhien(await taoNguoi("tc2@vidu.vn", "FINANCE")) : "";
+  Object.assign(trangThai, trangThaiMoi());
+
+  expect([orgA, uMua, uGd1, uGd2, sMua, sGd1, sGd2].filter((x) => x === "")).toEqual([]);
+}
 
 afterAll(async () => {
   await apiPool?.end().catch(() => undefined);
@@ -188,25 +215,55 @@ afterAll(async () => {
 // nhau. Cái giá phải trả được nói ra: một bước đỏ làm các bước sau đỏ theo, và thứ tự khai báo
 // trong file LÀ hợp đồng.
 // ===============================================================================================
-const trangThai: {
+interface TrangThaiKichBan {
   rfqId: string;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string }[];
   phienKhach: string[];
   bienNhan: { canonicalText: string; signature: Uint8Array; ten: string }[];
   unsealRequestId: string;
-} = { rfqId: "", loiMoi: [], phienKhach: [], bienNhan: [], unsealRequestId: "" };
+}
+const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], phienKhach: [], bienNhan: [], unsealRequestId: "" });
+const trangThai: TrangThaiKichBan = trangThaiMoi();
 
-describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", () => {
+/** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
+const LUONG = [
+  ["MVP1 — tổ chức CHƯA bật S3", false],
+  ["S3 — tổ chức ĐÃ BẬT, phiên bản có bậc đã ký", true],
+] as const;
+
+describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở thầu phê duyệt kép, bảng so sánh", (_ten, batS3) => {
+  beforeAll(() => dungToChuc(batS3));
+
   it("bước 1 — người mua dựng RFQ 1 tỷ và nó GIỮ yêu cầu phê duyệt kép", async () => {
+    // [S1.174 / S3.1d] Luồng S3: hai người FINANCE khai rồi ký phiên bản CÓ BẬC — hai giao dịch, hai phiên — và tổ chức
+    // bật. Ngưỡng kép giữ 500 triệu như luồng MVP1: số chữ ký mở gói và mở thầu không đổi giữa hai luồng.
+    if (batS3) {
+      const cs = await withTenant(apiPool, orgA, (c) =>
+        createProcurementPolicy(c, orgA, {
+          version: 1,
+          dualApprovalThreshold: "500000000.00",
+          currency: "VND",
+          // Trải từng bậc: `Bac` là interface, còn cửa của gói nhận bản ghi JSON — `Record<string, unknown>`.
+          tiers: BAC_MAC_DINH.map((b) => ({ ...b })),
+          chiaNhoCuaSoNgay: MUC_MAC_DINH.chiaNhoCuaSoNgay,
+          thamDinhHieuLucThang: MUC_MAC_DINH.thamDinhHieuLucThang,
+          actorSessionId: sTc1,
+        }),
+      );
+      const ky = await withTenant(apiPool, orgA, (c) => kyPhienBanChinhSach(c, orgA, { policyId: cs.id, actorSessionId: sTc2 }));
+      expect(ky.daBat, "luồng S3: lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức").toBe(true);
+    }
     await withTenant(apiPool, orgA, async (c) => {
       // Ngưỡng 500 triệu, ngân sách 1 tỷ -> VƯỢT ngưỡng -> `requires_dual_approval` GIỮ `true`.
       // Đây là chỗ con số "1 tỷ" của kịch bản có tác dụng THẬT chứ không phải một nhãn trang trí.
-      await createProcurementPolicy(c, orgA, {
-        version: 1,
-        dualApprovalThreshold: "500000000.00",
-        currency: "VND",
-        actorSessionId: sMua,
-      });
+      if (!batS3) {
+        await createProcurementPolicy(c, orgA, {
+          version: 1,
+          dualApprovalThreshold: "500000000.00",
+          currency: "VND",
+          actorSessionId: sMua,
+        });
+      }
       const rfq = await createRfq(c, orgA, {
         title: "Mua thep tam cho nha may Q4",
         deadlineAt: HAN_NOP,
@@ -233,6 +290,13 @@ describe("[KỊCH BẢN 41] RFQ 1 tỷ, 5 nhà cung cấp, sửa giá, mở th�
       ).toBe(true);
     });
     expect(trangThai.rfqId).not.toBe("");
+    // [S1.174 / S3.1d] Hai luồng khác nhau ĐÚNG ở đây, và phép đo nói ra điều ấy: tổ chức đã bật hay chưa, và gói mang bậc
+    // nào — bậc 2 của §4.1 (từ 1 tỷ) cho ngân sách 1 tỷ ở luồng S3, không bậc ở luồng MVP1.
+    const { rows: hai } = await db.pool.query<{ bat: boolean; bac: string | null }>(
+      "SELECT public.to_chuc_da_bat_s3($1) AS bat, (SELECT tier_tu_so_tien::text FROM rfq_budgets WHERE rfq_id = $2) AS bac",
+      [orgA, trangThai.rfqId],
+    );
+    expect(hai[0]).toEqual(batS3 ? { bat: true, bac: "1000000000.00" } : { bat: false, bac: null });
   });
 
   it("bước 2 — hai giám đốc KHÁC NHAU duyệt, rồi RFQ mở kèm cặp khoá của chính nó", async () => {

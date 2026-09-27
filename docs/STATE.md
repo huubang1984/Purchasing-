@@ -13,6 +13,19 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-27 / S1.174] S3.1d — `gieo:demo --s3` THEO BẢNG VAI §7, KỊCH BẢN 41 CHẠY HAI LUỒNG, LƯỢT ĐI THỬ T4 CỦA
+`/chinh-sach` VÀ `/tao-thau` TRÊN CỤM THẬT. S3.1 XONG.** Phần cuối trong bốn phần của S3.1 (spec S3 §9). Chủ dự án chốt bốn
+câu theo đề xuất:
+- `gieo:demo` mặc định giữ tổ chức chưa bật — hình dạng pilot chạy. `--s3` gieo tổ chức đã bật đủ bảy người của §7 (thêm
+  hai FINANCE), năm nhà cung cấp, phiên bản bốn bậc mặc định §4.1 do F1 khai và F2 ký bằng hàm gói dưới `withTenant`.
+- Kịch bản 41 — bản gói và bản HTTP — tham số hoá qua hai tổ chức, mọi bước dùng chung; luồng S3 thêm đúng bước khai và
+  ký (bản HTTP ký qua route, trên máy chủ cờ bật).
+- Một lượt đi thử T4 có biên bản trên cụm thật.
+
+Lượt đi thử đo ra một lỗi của chính `--s3` — gói gieo mang sáu chữ ký phê duyệt, kể cả hai người tài chính — sửa trong
+vòng. Hai bản chép mặc định §4.1 (màn, công cụ) khoá nhau bằng một test. Không migration, không ADR, không khoản nợ mới.
+Biên bản: `evidence/security-reviews.md` §S1.174.
+
 **[2026-09-27 / S1.173] HAI TÀI LIỆU CHO BƯỚC TIẾP THEO: BỘ TÀI LIỆU BUỔI BẬC 1, VÀ ĐỀ XUẤT TẠO TỔ CHỨC TRÊN PROD — KÈM
 MỘT CHỖ HỞ MỚI ĐO ĐƯỢC.** Hai việc trong đề xuất thứ hai ngày 2026-09-27, không cần chủ dự án quyết trước.
 - `docs/BUOI-BAC-1.md`: thứ người trình diễn cầm theo khi gặp một trưởng phòng mua hàng ở bậc 1 của thang pilot — việc
@@ -27,11 +40,13 @@ MỘT CHỖ HỞ MỚI ĐO ĐƯỢC.** Hai việc trong đề xuất thứ hai n
 
 Thang bậc vẫn là đề xuất (ADR-101). Không mã, không migration, không ADR, không khoản nợ; vòng này không đóng mảnh nào của
 `docs/PRODUCT.md` §11 và không chạm khoản rổ A/B/C nào.
+
 **[2026-09-27 / S1.172] KHOẢN 143 ĐÓNG — KHOÁ CHẾT TRÊN KHOÁ GHI SỔ KHÔNG CÒN GỠ ĐƯỢC KHOÁ HỒ SƠ MFA.** Chủ dự án chọn khoản
 143. Đo trước trên `master`: dựng một vòng khoá chết thật giữa khoá ghi sổ của tổ chức và khoá hàng `mfa_credentials` ở lần đoán sai
 chạm ngưỡng — bộ dò bắn sau ~1 s (trước trần 2 s của 050), lần ghi `MFA_LOCKED` ném `40P01`, giao dịch rollback và hồ sơ KHÔNG
 khoá: đúng lỗ khoản 139 qua một mã khác. Nay `catch` nuốt 55P03 và 40P01; 57014 vẫn ném (fail-closed, ADR-008 điều kiện ②). Rổ B
 còn 59; còn mở 84. Bằng chứng: `evidence/security-reviews.md` §S1.172.
+
 **[2026-09-27 / S1.171] KHOẢN 200 ĐÓNG — XIN MỞ THẦU XẾP TIN BÁO NGƯỜI DUYỆT TRƯỚC LẦN GHI SỔ.** Chủ dự án chọn khoản 200.
 `requestUnseal` từ S1.91 chạy câu JOIN ba bảng tìm người duyệt và K lần `enqueueJob` SAU lần ghi sổ `UNSEAL_REQUESTED`, tức trong
 lúc giữ khoá ghi sổ của cả tổ chức — đúng khuôn S1.71 đã gỡ khỏi `extendRfqDeadline`. Nay xếp tin trước, đọc lại người duyệt sau
@@ -44,6 +59,7 @@ ngoài trạng thái `APPROVED`/`EXECUTED`, trigger nay đòi phiên bản báo 
 vị từ worker đã dùng để chọn phong bì, nên worker không đổi. A1 nay đúng theo nghĩa người đọc hiểu: *yêu cầu của chính phong bì
 ấy*, không *một* yêu cầu bất kỳ. Ca đột biến J4 lấy lại khẳng định bản đầu (ĐỎ dưới `app_unseal`). Rổ B còn 60; còn mở 85.
 Bằng chứng: `evidence/security-reviews.md` §S1.170.
+
 **[2026-09-27 / S1.169] S3.1c — ROUTE TẠO, ĐỌC VÀ KÝ PHIÊN BẢN CHÍNH SÁCH; LẦN KÝ — NÚT BẬT S3 — ĐỨNG SAU MỘT CỜ
 TRIỂN KHAI MẶC ĐỊNH TẮT; MÀN `/chinh-sach`.** Phần ba trong bốn phần của S3.1 (spec S3 §9). `POST /policy` nhận bậc và hai
 cột mức; `GET /policy/versions` đọc mọi phiên bản cùng chữ ký và phiên bản hiệu lực; `POST /policy/:policyId/sign` ghi chữ

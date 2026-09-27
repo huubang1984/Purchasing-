@@ -1,7 +1,8 @@
 // ==============================================================================================
 // tools/gieo-demo — GIEO MỘT VÒNG THẦU ĐỦ ĐỂ DEMO, RỒI IN RA SÁU ĐƯỜNG LINK
 //
-//   pnpm gieo:demo
+//   pnpm gieo:demo          tổ chức CHƯA bật S3 — luồng MVP1, hình dạng mà pilot chạy
+//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3
 //
 // [ADR-044] Vì sao có công cụ này thay vì làm mọi thứ qua giao diện: tạo một RFQ đầy đủ là bảy
 // màn hình (tổ chức, chính sách, người dùng, nhà cung cấp, người liên hệ, gói thầu, hạng mục,
@@ -54,8 +55,10 @@ import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/cr
 import { migrate } from "@trustprocure/db";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { createProcurementPolicy, kyPhienBanChinhSach } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
+import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -97,6 +100,19 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
 ];
 
 const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "Vat tu Truong Thanh"];
+/**
+ * [S1.174 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
+ * bối cảnh demo khai đúng số mà bậc của chính nó đòi, để lúc K2 có mặt nó không gãy ở bước mời).
+ */
+const NHA_CUNG_CAP_THEM_S3: readonly string[] = ["Thep Hoa Sen", "Vat lieu Phu My"];
+
+/**
+ * [S1.174 / S3.1d] `--s3`: bối cảnh theo bảng vai §7 của spec S3 — thêm HAI người FINANCE vào năm người sẵn có: F1 khai
+ * phiên bản chính sách có bậc, F2 ký nó. Chủ dự án chọn ký bằng HÀM GÓI dưới `withTenant`, cùng đường mọi hàm gói khác
+ * của công cụ này đi: trigger `chinh_sach_kiem_nguoi_ky` vẫn kiểm đủ luật (khác người khai, giữ `policy.manage`, bản mới
+ * nhất, đã tới ngày hiệu lực). Cờ triển khai ADR-105 là cửa của ROUTE ký — đường của màn —, không phải của công cụ này.
+ */
+const S3 = process.argv.slice(2).includes("--s3");
 
 async function chinh(): Promise<void> {
   const url = bat("TRUSTPROCURE_SEED_DATABASE_URL");
@@ -143,13 +159,16 @@ async function chinh(): Promise<void> {
     // Hai người DUYỆT mang vai DIRECTOR vẫn cần thiết và không thay được: `rfq.unseal.approve`
     // chỉ của DIRECTOR. Nên bối cảnh này có NĂM người, hai vai, hai loại phê duyệt khác nhau —
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
-    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2"]) {
+    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
       const email = `${ten}.${duoi}@vidu.vn`;
+      const hoTen = ten.startsWith("soan")
+        ? `Nguoi soan goi thau ${ten.slice(4)}`.trim()
+        : ten.startsWith("duyet") ? `Nguoi duyet ${ten.slice(-1)}` : `Nguoi tai chinh ${ten.slice(-1)}`;
       const id = (await q<{ id: string }>(
         "INSERT INTO public.users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id",
-        [org, email, ten.startsWith("soan") ? `Nguoi soan goi thau ${ten.slice(4)}`.trim() : `Nguoi duyet ${ten.slice(-1)}`],
+        [org, email, hoTen],
       )).id;
-      const vai = ten.startsWith("soan") ? "PROCUREMENT_MANAGER" : "DIRECTOR";
+      const vai = ten.startsWith("soan") ? "PROCUREMENT_MANAGER" : ten.startsWith("duyet") ? "DIRECTOR" : "FINANCE";
       await pool.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vai]);
       // MỖI người một phiên riêng: mọi lần ghi có kiểm danh tính (013) đòi một phiên còn sống, và
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
@@ -163,11 +182,33 @@ async function chinh(): Promise<void> {
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
 
-    const chinhSach = (await q<{ id: string }>(
-      "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
-        "VALUES ($1, 1, '1000000000.00', 'VND', $2, $3) RETURNING id",
-      [org, nguoiGieo, phienGieo],
-    )).id;
+    // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
+    // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
+    const chinhSach = S3
+      ? await (async (): Promise<string> => {
+          const f1 = nguoiMua.find((n) => n.email.startsWith("taichinh1."));
+          const f2 = nguoiMua.find((n) => n.email.startsWith("taichinh2."));
+          if (f1 === undefined || f2 === undefined) throw new GieoError("--s3: thiếu người tài chính");
+          const cs = await withTenant(pool, org, (c) =>
+            createProcurementPolicy(c, org, {
+              version: 1,
+              dualApprovalThreshold: MUC_DEMO.nguongKep,
+              currency: "VND",
+              tiers: BAC_DEMO,
+              chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
+              thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
+              actorSessionId: f1.sessionId,
+            }),
+          );
+          const ky = await withTenant(pool, org, (c) => kyPhienBanChinhSach(c, org, { policyId: cs.id, actorSessionId: f2.sessionId }));
+          if (!ky.daBat) throw new GieoError("--s3: ký xong mà tổ chức chưa bật S3");
+          return cs.id;
+        })()
+      : (await q<{ id: string }>(
+          "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
+            "VALUES ($1, 1, '1000000000.00', 'VND', $2, $3) RETURNING id",
+          [org, nguoiGieo, phienGieo],
+        )).id;
 
     const rfq = (await q<{ id: string }>(
       "INSERT INTO public.rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
@@ -195,7 +236,11 @@ async function chinh(): Promise<void> {
     // HAI phê duyệt của HAI người KHÁC người soạn — ngân sách gieo ở trên vượt ngưỡng chính sách,
     // nên máy trạng thái ở tầng CSDL từ chối mở gói thầu khi chưa đủ. Lượt chạy đầu của script này
     // gãy đúng ở đó: *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0 (D2)"*.
-    for (const nm of nguoiMua.slice(1)) {
+    // [S1.174 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
+    // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
+    // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
+    const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
+    for (const nm of nguoiDuyetGoi) {
       await pool.query(
         "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
         [org, rfq, nm.id, nm.sessionId],
@@ -213,7 +258,7 @@ async function chinh(): Promise<void> {
         [rfq, nguoiGieo, phienGieo],
       );
 
-      for (const [i, ten] of NHA_CUNG_CAP.entries()) {
+      for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
         const ncc = (await c.query<{ id: string }>(
           "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
           [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
@@ -244,7 +289,7 @@ async function chinh(): Promise<void> {
 
     const ra: string[] = [];
     ra.push("");
-    ra.push("=== ĐÃ GIEO MỘT VÒNG THẦU ===");
+    ra.push(S3 ? "=== ĐÃ GIEO MỘT VÒNG THẦU — TỔ CHỨC ĐÃ BẬT S3 (bảng vai §7) ===" : "=== ĐÃ GIEO MỘT VÒNG THẦU ===");
     ra.push(`tổ chức : ${org}`);
     ra.push(`gói thầu: ${rfq}   (hạn nộp sau 2 giờ, cần HAI người duyệt để mở)`);
     ra.push("");
@@ -254,7 +299,18 @@ async function chinh(): Promise<void> {
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
     ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
     ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
-    for (const nm of tokenNguoiMua) ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
+    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh"))) {
+      ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
+    }
+    if (S3) {
+      ra.push("");
+      ra.push("TÀI CHÍNH — taichinh1 đã khai, taichinh2 đã ký phiên bản 1 (bốn bậc mặc định §4.1, ngưỡng kép 1 tỷ): S3 ĐÃ BẬT.");
+      ra.push("  Màn /chinh-sach đọc trọn ma trận và số người tối thiểu mỗi bậc. Ký một phiên bản MỚI ở màn ấy cần `api` chạy");
+      ra.push("  với TRUSTPROCURE_S3_CHO_KY_CHINH_SACH=bat (ADR-105) — cờ ấy mặc định tắt, và không mở trên máy chủ thật.");
+      for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
+        ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
+      }
+    }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);
     ra.push("");
