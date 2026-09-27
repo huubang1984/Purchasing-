@@ -69,6 +69,14 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
 /** `action` của hàng sổ. MỘT mã cho mọi chốt; chốt cụ thể đi vào `payload`. */
 export const ACTION_CHOT_KIEM_SOAT = "CONTROL_DENIED";
 
+/**
+ * Câu hỏi hàm vị từ của K1 (`070_bac_cua_goi`): `$1` tổ chức, `$2` gói, mốc là giờ thật lúc hỏi. Câu đứng ở đây, cạnh
+ * bảng, vì `kiemChot` là chỗ gọi `.query(`: bộ đọc QT3 (`tests/architecture/qt3-doc-sql.ts`) rút câu theo TỆP, và một
+ * tệp gọi `.query(` mà không mang câu nào là một hình dạng nó mù.
+ */
+export const CAU_CHOT_NGAN_SACH =
+  "SELECT public.rfq_chot_ngan_sach($1::pg_catalog.uuid, $2::pg_catalog.uuid, pg_catalog.clock_timestamp()) AS ly_do";
+
 /** Lời từ chối có tên của một chốt kiểm soát. `dispatch.ts` trả nó ra dưới 422 kèm thông điệp. */
 export class ChotKiemSoatError extends Error {
   constructor(readonly lyDo: MaChotKiemSoat) {
