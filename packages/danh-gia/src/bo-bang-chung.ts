@@ -47,7 +47,7 @@
 
 import { createHash } from "node:crypto";
 import type pg from "pg";
-import { assertTenantBound } from "@trustprocure/audit";
+import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import { DAC_TA } from "./dac-ta.js";
 
@@ -381,5 +381,20 @@ export async function xuatBoBangChung(
     auditPool,
   );
 
-  return dungBoBangChung(client, orgId, input.rfqId, new Date());
+  // [S1.164 / khoản 245 / ADR-102] Bộ bằng chứng mang `effectiveCost` và `components` của TỪNG báo giá — một lượt đọc giá — nên
+  // lần xuất để lại một hàng sổ, trên CHÍNH `client` và sau khi bộ đã dựng xong: ghi hỏng thì NÉM và bộ không đi ra. Bộ KHÔNG
+  // chứa hàng nào của `audit_events`, nên hàng này không làm lệch byte giữa lần xuất qua HTTP và lần dựng của CLI
+  // (`tools/bo-xuat-danh-gia` gọi thẳng `dungBoBangChung`, không đi qua đây). `null` — chưa có gì để xuất — không ghi.
+  const bo = await dungBoBangChung(client, orgId, input.rfqId, new Date());
+  if (bo !== null) {
+    await appendAuditEvent(client, orgId, {
+      actorType: "USER",
+      actorId: actor.id,
+      action: "EVIDENCE_BUNDLE_EXPORTED",
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+      payload: { exportedBySessionId: input.actorSessionId },
+    });
+  }
+  return bo;
 }
