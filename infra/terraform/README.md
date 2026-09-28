@@ -210,6 +210,9 @@ aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url
   --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
 aws secretsmanager create-secret --profile tp-prod --name tp/neo/database-url `
   --secret-string "postgres://app_neo_login:<mat-khau-neo>@<rds-host>:5432/trustprocure"
+# [S1.182 / ADR-111] Task khởi tạo tổ chức — vai app_khoi_tao_login, mật khẩu riêng.
+aws secretsmanager create-secret --profile tp-prod --name tp/khoi-tao/database-url `
+  --secret-string "postgres://app_khoi_tao_login:<mat-khau-khoi-tao>@<rds-host>:5432/trustprocure"
 ```
 
 **2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:
@@ -232,7 +235,7 @@ mới apply phần còn lại.
 hiệu lực qua `terraform console`, rồi hỏi tài khoản prod (chỉ đọc): giá trị giữ chỗ, image có trong ECR, secret có giá
 trị, domain SES đã xác minh. Có `[DO]` ⇒ thoát 1, không plan (ADR-087; `docs/APPLY-LAN-DAU.md` 6.4).
 
-**3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
+**3.** Cập nhật ~~hai~~ **[S1.182]** bốn secret `*/database-url` (api, worker, neo, khoi-tao) bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
 
 **4. Build và đẩy image** (từ gốc kho):
 
