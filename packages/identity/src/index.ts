@@ -45,7 +45,7 @@ export {
 // [S1.85 / khoản 131] `moTaHangDongCuaLanTuChoi` ra cửa theo cùng tiêu chí, và nó KHÔNG trả lời câu hỏi quyền nào: một hàm THUẦN
 // nhận một lỗi và trả các HẰNG ĐÓNG của lần từ chối đã không ghi được sổ, cho dòng log. Hai tiến trình đọc nó — bộ điều phối `api`
 // và worker mở thầu — nên phần hằng của hai dòng log không lệch nhau được.
-// [S1.183 / khoản 248 / ADR-112] `chayVoiTranTuChoi` ra cửa cho ĐÚNG MỘT người gọi — bộ điều phối `api`, quanh lời gọi handler. Nó KHÔNG
+// [S1.184 / khoản 248 / ADR-112] `chayVoiTranTuChoi` ra cửa cho ĐÚNG MỘT người gọi — bộ điều phối `api`, quanh lời gọi handler. Nó KHÔNG
 // trả lời câu hỏi quyền nào và không cho qua gì: nó chỉ đặt trần theo phiên cho lần từ chối do handler ghi, tức chỉ có thể làm lần từ
 // chối thứ N+1 NÉM 429 thay vì ghi sổ — cùng loại với móc trần của ADR-092 ở `requirePermission`, và bị giam cùng một test kiến trúc.
 export {

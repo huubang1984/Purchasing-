@@ -1797,7 +1797,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     }, 30_000);
 
     // ============================================================================================
-    // [S1.183 / khoản 248 / ADR-112] LẦN TỪ CHỐI DO HANDLER CŨNG TIÊU CÙNG NGÂN SÁCH
+    // [S1.184 / khoản 248 / ADR-112] LẦN TỪ CHỐI DO HANDLER CŨNG TIÊU CÙNG NGÂN SÁCH
     //
     // ADR-092 để ngoài phạm vi mọi lần từ chối mà HANDLER tự ghi — `requirePermission` gọi từ gói, `throwAuditedDenial` của cổng mở
     // thầu, bảng so sánh, và (khoản 247) mọi `CONTROL_DENIED`. Bảng so sánh có đủ hai lối: người không giữ `bid.view` bị

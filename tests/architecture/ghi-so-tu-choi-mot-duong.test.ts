@@ -413,7 +413,7 @@ describe("[INV-D5] [S1.68 / khoản 119] một đường ghi sổ từ chối �
     ]);
   });
 
-  it("[INV-D5] [S1.183 / khoản 248] bối cảnh trần từ chối `chayVoiTranTuChoi` — cách THỨ HAI để một lần từ chối không vào sổ — chỉ có ở `rbac.ts` (khai), `index.ts` (ra cửa) và `dispatch.ts` (đặt quanh handler)", () => {
+  it("[INV-D5] [S1.184 / khoản 248] bối cảnh trần từ chối `chayVoiTranTuChoi` — cách THỨ HAI để một lần từ chối không vào sổ — chỉ có ở `rbac.ts` (khai), `index.ts` (ra cửa) và `dispatch.ts` (đặt quanh handler)", () => {
     const co = maSanXuat()
       .filter((duong) => readFileSync(duong, "utf8").includes("chayVoiTranTuChoi"))
       .map((duong) => relative(GOC, duong).split(sep).join("/"))
