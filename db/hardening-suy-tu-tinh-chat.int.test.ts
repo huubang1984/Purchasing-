@@ -2035,7 +2035,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       const { rows } = await db.pool.query<{ rolname: string }>(
         `SELECT vai.rolname FROM pg_roles vai
           WHERE NOT vai.rolsuper
-            AND EXISTS (SELECT 1 FROM unnest(ARRAY['app_api', 'app_unseal', 'app_neo']) AS g(ten)
+            AND EXISTS (SELECT 1 FROM unnest(ARRAY['app_api', 'app_unseal', 'app_neo', 'app_khoi_tao']) AS g(ten)
                          WHERE to_regrole(g.ten) IS NOT NULL
                            AND pg_has_role(vai.oid, to_regrole(g.ten)::oid, 'MEMBER'))
           ORDER BY 1`,
@@ -2049,9 +2049,12 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       .sort();
     // [ADR-072 phần 1] SÁU tên, không còn bốn — đúng ca mà khối trên dự báo: danh sách trắng mở cho cặp thứ ba
     // (app_neo, app_neo_login) và người mở GHIM nó (hai khối thuộc tính role của hardening), không viết lý do né.
-    expect(daGhim, "sáu tên được ghim NOBYPASSRLS").toEqual([
+    // [S1.182 / ADR-111] TÁM tên: cặp thứ tư (app_khoi_tao, app_khoi_tao_login) của task khởi tạo, cùng khuôn.
+    expect(daGhim, "tám tên được ghim NOBYPASSRLS").toEqual([
       "app_api",
       "app_api_login",
+      "app_khoi_tao",
+      "app_khoi_tao_login",
       "app_neo",
       "app_neo_login",
       "app_unseal",

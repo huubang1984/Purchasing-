@@ -7,11 +7,12 @@
 //        app_api_login    LOGIN, thành viên app_api
 //        app_unseal_login LOGIN, thành viên app_unseal
 //        app_neo_login    LOGIN, thành viên app_neo   [ADR-072 phần 1 — job neo, chỉ ĐỌC sổ]
-//      Mật khẩu lấy từ CHÍNH URL mà ba tiến trình dùng (`TRUSTPROCURE_API_DATABASE_URL`,
-//      `TRUSTPROCURE_WORKER_DATABASE_URL`, `TRUSTPROCURE_NEO_DATABASE_URL`, cùng secret Secrets
-//      Manager): một nguồn sự thật — đổi mật khẩu là đổi secret rồi chạy lại task này, không có bản
-//      chép thứ hai để trôi. Ba cặp này là đúng ba cặp `CAP_HOP_LE` của hardening; một cặp thứ tư
-//      tạo ở đây sẽ bị chính lượt `migrate()` kế gỡ membership.
+//        app_khoi_tao_login LOGIN, thành viên app_khoi_tao [S1.182 / ADR-111 — task khởi tạo tổ chức]
+//      Mật khẩu lấy từ CHÍNH URL mà ~~ba~~ bốn tiến trình dùng (`TRUSTPROCURE_API_DATABASE_URL`,
+//      `TRUSTPROCURE_WORKER_DATABASE_URL`, `TRUSTPROCURE_NEO_DATABASE_URL`, `TRUSTPROCURE_KHOI_TAO_DATABASE_URL`,
+//      cùng secret Secrets Manager): một nguồn sự thật — đổi mật khẩu là đổi secret rồi chạy lại task này, không có
+//      bản chép thứ hai để trôi. ~~Ba~~ Bốn cặp này là đúng ~~ba~~ bốn cặp `CAP_HOP_LE` của hardening; một cặp thứ
+//      ~~tư~~ năm tạo ở đây sẽ bị chính lượt `migrate()` kế gỡ membership.
 //
 // Vì sao ② ở đây chứ không phải một lệnh psql tay: CSDL nằm trong subnet riêng, không đường vào từ
 // ngoài VPC; task này là đường DUY NHẤT tới nó lúc deploy.
@@ -95,6 +96,9 @@ export function docCauHinh(env: MoiTruong): CauHinhChayMigrate {
       // [ADR-072 phần 1] BẮT BUỘC như hai biến trên, không tuỳ chọn: một task migrate thiếu nó vẫn chạy xanh
       // mà job neo thì rớt ở lần chạy đầu (vai đăng nhập không tồn tại) — lỗi ở đúng chỗ ít ai nhìn nhất.
       docVaiTuUrl("TRUSTPROCURE_NEO_DATABASE_URL", bat(env, "TRUSTPROCURE_NEO_DATABASE_URL"), "app_neo_login", "app_neo"),
+      // [S1.182 / ADR-111] Cùng lý do, cùng mức bắt buộc: thiếu thì task khởi tạo rớt ở lần chạy đầu — tức đúng ngày
+      // khách đầu tiên được mở tài khoản.
+      docVaiTuUrl("TRUSTPROCURE_KHOI_TAO_DATABASE_URL", bat(env, "TRUSTPROCURE_KHOI_TAO_DATABASE_URL"), "app_khoi_tao_login", "app_khoi_tao"),
     ],
   };
 }

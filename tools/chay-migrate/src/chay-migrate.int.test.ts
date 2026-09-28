@@ -66,10 +66,15 @@ describe("[ADR-066] chay-migrate — vai đăng nhập của api và worker", ()
       const mk4 = mk();
       expect(await damBaoVaiDangNhap(c, { ten: "app_neo_login", nhom: "app_neo", matKhau: mk4 })).toBe("tao");
       expect(await dangNhap("app_neo_login", mk4)).toEqual({ ok: true, nhom: ["app_neo"] });
-      // Lần migrate() kế (deploy sau) KHÔNG gỡ ba membership ấy — chúng là cặp hardening chấp nhận.
+      // [S1.182 / ADR-111] Vai đăng nhập thứ tư: task khởi tạo tổ chức, thành viên app_khoi_tao và CHỈ app_khoi_tao.
+      const mk5 = mk();
+      expect(await damBaoVaiDangNhap(c, { ten: "app_khoi_tao_login", nhom: "app_khoi_tao", matKhau: mk5 })).toBe("tao");
+      expect(await dangNhap("app_khoi_tao_login", mk5)).toEqual({ ok: true, nhom: ["app_khoi_tao"] });
+      // Lần migrate() kế (deploy sau) KHÔNG gỡ ~~ba~~ bốn membership ấy — chúng là cặp hardening chấp nhận.
       await migrate(db.pool, MIGRATIONS_DIR);
       expect((await dangNhap("app_unseal_login", mk3)).nhom).toEqual(["app_unseal"]);
       expect((await dangNhap("app_neo_login", mk4)).nhom).toEqual(["app_neo"]);
+      expect((await dangNhap("app_khoi_tao_login", mk5)).nhom).toEqual(["app_khoi_tao"]);
     } finally {
       c.release();
     }
@@ -100,7 +105,7 @@ describe("[ADR-066] chay-migrate — cấu hình", () => {
     expect(v.matKhau).toBe("p@ss/word+" + "x".repeat(20));
   });
 
-  it("[ADR-072 phần 1] thiếu TRUSTPROCURE_NEO_DATABASE_URL ⇒ ném nêu đúng tên biến; đủ ⇒ ba vai theo thứ tự api, worker, neo", () => {
+  it("[ADR-072 phần 1] thiếu TRUSTPROCURE_NEO_DATABASE_URL ⇒ ném nêu đúng tên biến; đủ ⇒ ~~ba~~ bốn vai theo thứ tự api, worker, neo, khoi-tao [S1.182]", () => {
     const url = (ten: string): string => `postgres://${ten}:${"m".repeat(30)}@h/db`;
     const env = {
       TRUSTPROCURE_MIGRATE_DB_HOST: "h",
@@ -113,11 +118,18 @@ describe("[ADR-066] chay-migrate — cấu hình", () => {
       TRUSTPROCURE_WORKER_DATABASE_URL: url("app_unseal_login"),
     };
     expect(() => docCauHinh(env)).toThrow(/TRUSTPROCURE_NEO_DATABASE_URL/u);
-    const ch = docCauHinh({ ...env, TRUSTPROCURE_NEO_DATABASE_URL: url("app_neo_login") });
+    // [S1.182 / ADR-111] URL của task khởi tạo cũng BẮT BUỘC, và phải đăng nhập đúng `app_khoi_tao_login`.
+    const coNeo = { ...env, TRUSTPROCURE_NEO_DATABASE_URL: url("app_neo_login") };
+    expect(() => docCauHinh(coNeo)).toThrow(/TRUSTPROCURE_KHOI_TAO_DATABASE_URL/u);
+    expect(() => docCauHinh({ ...coNeo, TRUSTPROCURE_KHOI_TAO_DATABASE_URL: url("app_neo_login") })).toThrow(
+      /TRUSTPROCURE_KHOI_TAO_DATABASE_URL phải đăng nhập bằng vai "app_khoi_tao_login"/u,
+    );
+    const ch = docCauHinh({ ...coNeo, TRUSTPROCURE_KHOI_TAO_DATABASE_URL: url("app_khoi_tao_login") });
     expect(ch.vai.map((v) => [v.ten, v.nhom])).toEqual([
       ["app_api_login", "app_api"],
       ["app_unseal_login", "app_unseal"],
       ["app_neo_login", "app_neo"],
+      ["app_khoi_tao_login", "app_khoi_tao"],
     ]);
   });
 });

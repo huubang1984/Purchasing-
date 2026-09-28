@@ -33,7 +33,14 @@ export const KHO_ECR: Readonly<Record<TenAnh, string>> = {
 };
 
 /** Secret stack 90 đọc bằng `data "aws_secretsmanager_secret"` — thiếu một cái thì plan đỏ, có mà rỗng thì task chết lúc chạy. */
-export const SECRET_LUON_CAN = ["tp/api/database-url", "tp/api/otp-peppers", "tp/worker/database-url", "tp/neo/database-url"] as const;
+export const SECRET_LUON_CAN = [
+  "tp/api/database-url",
+  "tp/api/otp-peppers",
+  "tp/worker/database-url",
+  "tp/neo/database-url",
+  // [S1.182 / ADR-111] Task migrate đọc nó để dựng `app_khoi_tao_login` — thiếu thì migrate chết lúc chạy.
+  "tp/khoi-tao/database-url",
+] as const;
 /** Secret token Zalo OA (stack 85) — chỉ cần khi `zalo != null`. */
 export const SECRET_ZALO = "tp/api/zalo-oa";
 
