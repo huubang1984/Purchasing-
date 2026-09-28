@@ -109,7 +109,9 @@ function docNguoi(x: unknown, i: number): NguoiKhai {
 export function docBanKhai(json: string, lenh: CheDo): BanKhai {
   let tho: unknown;
   try {
-    tho = JSON.parse(json) as unknown;
+    // [S1.9103] Bỏ MỘT dấu BOM ở đầu: Notepad và PowerShell 5 ghi UTF-8 kèm BOM, và `JSON.parse` từ chối nó. Băm SHA-256 mà người
+    // duyệt duyệt tính trên nội dung GỐC (`index.ts`), nên bỏ BOM ở đây không làm lệch băm.
+    tho = JSON.parse(json.startsWith("\uFEFF") ? json.slice(1) : json) as unknown;
   } catch {
     throw new BanKhaiError("bản khai không phải JSON hợp lệ");
   }
@@ -153,25 +155,35 @@ export function docBanKhai(json: string, lenh: CheDo): BanKhai {
 
 /**
  * [S1.9103 / ADR-111] Điều người duyệt THẤY trước khi bấm duyệt (bảng của job `build` trong `.github/workflows/khoi-tao.yml`):
- * tổ chức (slug khi tạo, mã khi thêm người), số người, tổng số cặp người–vai. Người duyệt không đọc được bản khai — nó mang
- * email và họ tên —, nên thứ họ duyệt là bộ ba này cộng TÊN và PHIÊN BẢN của bí mật; phiên bản thì bất biến ở Secrets Manager.
+ * tổ chức (slug khi tạo, mã khi thêm người), số người, và số người mang TỪNG mã vai (`vaiTheoMa`). Người duyệt không đọc được bản
+ * khai — nó mang email và họ tên —, nên thứ họ duyệt là bộ này cộng tên, phiên bản và băm SHA-256 của bí mật (`index.ts`).
+ * ~~tổng số cặp người–vai~~ **[lượt soi]** số theo từng mã vai: cùng tổng mà đổi `REQUESTER` thành `DIRECTOR` thì tổng không lệch.
  */
 export interface KyVong {
   readonly toChuc: string;
   readonly soNguoi: number;
-  readonly soVai: number;
+  /** Dạng chuẩn `MA=n,MA=n` theo thứ tự `MA_VAI`, chỉ mã có người — `vaiTheoMa` dựng đúng dạng ấy từ bản khai. */
+  readonly vai: string;
+}
+
+/** Số người mang từng mã vai, dạng chuẩn `MA=n` nối bằng dấu phẩy, theo thứ tự `MA_VAI`, bỏ mã không ai mang. */
+export function vaiTheoMa(bk: BanKhai): string {
+  return MA_VAI.map((ma) => [ma, bk.nguoi.filter((n) => n.vai.includes(ma)).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([ma, n]) => `${ma}=${String(n)}`)
+    .join(",");
 }
 
 /**
  * Bản khai ở đúng phiên bản đã đọc phải khớp điều đã duyệt — kiểm TRƯỚC khi mở CSDL. Lệch ⇒ `BanKhaiError` nêu từng trường
- * lệch với hai giá trị: slug, mã tổ chức và hai con số không phải dữ liệu cá nhân (mã tổ chức không bí mật, ADR-107).
+ * lệch với hai giá trị: slug, mã tổ chức, số người và số theo mã vai không phải dữ liệu cá nhân (mã tổ chức không bí mật, ADR-107).
  */
 export function kiemKhop(bk: BanKhai, kv: KyVong): void {
   const lech: string[] = [];
   const toChuc = bk.cheDo === "tao" ? bk.slug : bk.orgId;
   if (toChuc !== kv.toChuc) lech.push(`tổ chức: bản khai "${toChuc}", đã duyệt "${kv.toChuc}"`);
   if (bk.nguoi.length !== kv.soNguoi) lech.push(`số người: bản khai ${String(bk.nguoi.length)}, đã duyệt ${String(kv.soNguoi)}`);
-  const soVai = bk.nguoi.reduce((tong, n) => tong + n.vai.length, 0);
-  if (soVai !== kv.soVai) lech.push(`số vai: bản khai ${String(soVai)}, đã duyệt ${String(kv.soVai)}`);
+  const vai = vaiTheoMa(bk);
+  if (vai !== kv.vai) lech.push(`vai: bản khai "${vai}", đã duyệt "${kv.vai}"`);
   if (lech.length > 0) throw new BanKhaiError(`bản khai không khớp điều đã duyệt — ${lech.join("; ")}`);
 }

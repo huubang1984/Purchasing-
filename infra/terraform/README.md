@@ -340,7 +340,7 @@ AWS bằng OIDC.
 `ca-hai`. Job `build` dựng image không có quyền AWS; job `api` chờ duyệt ở `prod`, đẩy image, chạy
 migrate (dừng nếu exit ≠ 0), cập nhật `tp-api` rồi `tp-web`; job `worker` chờ duyệt riêng ở `prod-worker`. Tóm tắt
 của run ghi ARN các bản task definition vừa đăng ký. Migrate hỏng ⇒ đọc `/tp/migrate` bằng tay (role
-deploy không đọc log ấy — **[S1.9103]** nó chỉ lọc được `/tp/khoi-tao`).
+deploy không đọc log).
 
 **[ADR-078] Kiểm sau deploy** (`deploy/kiem-sau-deploy.sh`): job `kiem` — không quyền AWS — gọi `https://<ten_mien>`:
 `/api/health`, `/nop-thau`, `/.well-known/trustprocure-receipt-keys` trả 200; HSTS, `x-frame-options: DENY`, `nosniff`, không

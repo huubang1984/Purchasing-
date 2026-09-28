@@ -168,8 +168,9 @@ locals {
       repos        = local.repo_app
       services     = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
       pass_roles   = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job, local.role_arn.khoi_tao]
-      # [S1.9103] Chỉ để in dòng kết quả của task khởi tạo (mã tổ chức, số người, số vai — không dữ liệu cá nhân).
-      doc_log = ["/tp/khoi-tao"]
+      # [S1.9103 / lượt soi] KHÔNG đọc log nào — cả `/tp/khoi-tao`: kết quả của task khởi tạo suy từ đầu vào đã duyệt (mã tổ
+      # chức do workflow chọn), và một quyền đọc log là một kênh đọc sạch cho task tự đăng ký in secret vào nhóm log ấy.
+      doc_log = []
       # [S1.9103] Xoá bí mật bản khai sau khi task thoát 0 (chủ dự án chọn: xoá ngay, không cửa sổ khôi phục).
       xoa_secret = ["${local.secret_arn}/khoi-tao/ban-khai/*"]
     }

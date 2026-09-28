@@ -5,23 +5,24 @@ name: Khoi tao to chuc — prod (bam tay)
 # =============================================================================================
 # Chi `workflow_dispatch` tren `master`. Hai job:
 #
-#   build   KHONG co quyen AWS nao. Kiem dau vao TRUOC (sai dang thi dung, khong build), in BANG
-#           nguoi duyet duyet vao tom tat cua run, roi `docker build` dich `khoi-tao` va giao image
-#           duoi dang artifact — cung ranh gioi voi `deploy.yml` (ADR-067).
-#   chay    environment `prod-khoi-tao` (Required reviewers + Prevent self-review: nguoi bam KHONG tu
-#           duyet duoc), role `tp-deploy`: day image, dang ky task definition `tp-khoi-tao`, chay task
-#           MOT LAN voi dung dau vao da duyet; task thoat 0 thi XOA bi mat ban khai (khong cua so khoi
-#           phuc) va in dong ket qua (ma to chuc, so nguoi, so vai). Task hong thi bi mat CON, de sua
-#           va chay lai voi phien ban moi.
+#   build   KHONG co quyen AWS nao. Kiem dau vao va NGUOI BAM (bot thi dung) TRUOC; voi `tao`, chon
+#           ma to chuc (UUIDv4) ngay tai day; in BANG nguoi duyet duyet vao tom tat cua run; roi
+#           `docker build` dich `khoi-tao` va giao image duoi dang artifact — cung ranh gioi voi
+#           `deploy.yml` (ADR-067).
+#   chay    environment `prod-khoi-tao` (Required reviewers + Prevent self-review, tat "admin bypass").
+#           Buoc DAU, truoc khi lay quyen AWS: lich su duyet cua run phai co mot NGUOI khac nguoi bam
+#           duyet `prod-khoi-tao` — kiem KET QUA cua cai dat, khong tin cai dat. Roi role `tp-deploy`:
+#           day image, dang ky `tp-khoi-tao` (ghim hinh dang container), chay task MOT LAN voi dung dau
+#           vao da duyet; thoat 0 thi XOA bi mat ban khai (khong cua so khoi phuc) va in ket qua suy tu
+#           dau vao. Task hong thi bi mat CON.
 #
-# Nguoi duyet KHONG doc duoc ban khai (email, ho ten). Ho duyet dung bang cua job `build`: ten va
-# PHIEN BAN (VersionId) cua bi mat, to chuc, so nguoi, so vai. Mot phien ban cua Secrets Manager
-# khong doi noi dung duoc; cong cu doc DUNG phien ban ay va dung TRUOC khi cham CSDL neu ban khai
-# khong khop ba ky vong. Them nguoi sau luc duyet = phien ban moi = mot lan chay va mot lan duyet moi.
+# Nguoi duyet KHONG doc duoc ban khai (email, ho ten). Ho duyet dung bang cua job `build`: ten,
+# PHIEN BAN va BAM SHA-256 cua bi mat, ma to chuc, so nguoi, so nguoi theo tung ma vai, ai bam. Cong
+# cu doc DUNG phien ban ay, so bam, va dung TRUOC khi cham CSDL neu ban khai lech.
 #
-# Dau vao di qua `env:` — KHONG noi suy `${{ inputs.* }}` vao `run:`. `concurrency` dung CHUNG nhom
-# voi `deploy.yml`: task khoi tao khong chay cung luc migrate (hardening thu hoi roi cap lai quyen cua
-# app_khoi_tao). Cac buoc AWS nam o `deploy/trien-khai.sh`.
+# Dau vao di qua `env:` — KHONG noi suy `${{ inputs.* }}` vao `run:`. `concurrency` RIENG: mot lan
+# khoi tao cho duyet (toi 30 ngay) khong chan hotfix cua `deploy.yml`. Kho la kho CONG KHAI: moi dau
+# vao va tom tat cua run ai cung doc duoc — ADR-111. Cac buoc AWS nam o `deploy/trien-khai.sh`.
 # =============================================================================================
 
 on:
@@ -33,11 +34,15 @@ on:
         options: [tao, them-nguoi]
         default: tao
       bi_mat:
-        description: "Ten bi mat ban khai, duoi tp/khoi-tao/ban-khai/"
+        description: "Ten bi mat ban khai: tp/khoi-tao/ban-khai/<slug>"
         type: string
         required: true
       phien_ban:
         description: "VersionId cua bi mat (create-secret / put-secret-value in ra)"
+        type: string
+        required: true
+      bam:
+        description: "SHA-256 cua tep ban khai, 64 ky tu hex chu thuong"
         type: string
         required: true
       to_chuc:
@@ -48,15 +53,15 @@ on:
         description: "So nguoi trong ban khai"
         type: string
         required: true
-      so_vai:
-        description: "Tong so cap nguoi-vai trong ban khai"
+      vai:
+        description: "So nguoi theo tung ma vai, vd BUYER=1,PROCUREMENT_MANAGER=2,DIRECTOR=1"
         type: string
         required: true
 
 permissions: {}
 
 concurrency:
-  group: deploy-prod
+  group: khoi-tao-prod
   cancel-in-progress: false
 
 jobs:
@@ -67,18 +72,33 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      ma_to_chuc: ${{ steps.chon.outputs.ma_to_chuc }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - name: Kiem dau vao, in bang nguoi duyet duyet
+      - name: Chon ma to chuc (tao)
+        id: chon
+        env:
+          CHE_DO: ${{ inputs.che_do }}
+        run: |
+          set -euo pipefail
+          ma=""
+          if [ "$CHE_DO" = tao ]; then ma=$(cat /proc/sys/kernel/random/uuid); fi
+          echo "ma_to_chuc=$ma" >> "$GITHUB_OUTPUT"
+      - name: Kiem dau vao va nguoi bam, in bang nguoi duyet duyet
         env:
           CHE_DO: ${{ inputs.che_do }}
           BI_MAT: ${{ inputs.bi_mat }}
           PHIEN_BAN: ${{ inputs.phien_ban }}
+          BAM: ${{ inputs.bam }}
           TO_CHUC: ${{ inputs.to_chuc }}
           SO_NGUOI: ${{ inputs.so_nguoi }}
-          SO_VAI: ${{ inputs.so_vai }}
+          VAI: ${{ inputs.vai }}
+          MA_TO_CHUC: ${{ steps.chon.outputs.ma_to_chuc }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: bash deploy/trien-khai.sh kiem-khoi-tao >> "$GITHUB_STEP_SUMMARY"
       - name: Build image khoi-tao
         run: |
@@ -101,6 +121,7 @@ jobs:
     environment: prod-khoi-tao
     permissions:
       contents: read
+      actions: read
       id-token: write
     env:
       AWS_REGION: ap-southeast-1
@@ -110,6 +131,15 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+      - name: Kiem nguoi duyet (truoc khi lay quyen AWS)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" > "$RUNNER_TEMP/duyet.json"
+          bash deploy/trien-khai.sh kiem-nguoi-duyet "$RUNNER_TEMP/duyet.json" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: anh-khoi-tao
@@ -129,9 +159,13 @@ jobs:
           CHE_DO: ${{ inputs.che_do }}
           BI_MAT: ${{ inputs.bi_mat }}
           PHIEN_BAN: ${{ inputs.phien_ban }}
+          BAM: ${{ inputs.bam }}
           TO_CHUC: ${{ inputs.to_chuc }}
           SO_NGUOI: ${{ inputs.so_nguoi }}
-          SO_VAI: ${{ inputs.so_vai }}
+          VAI: ${{ inputs.vai }}
+          MA_TO_CHUC: ${{ needs.build.outputs.ma_to_chuc }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
           anh_kt=$(bash deploy/trien-khai.sh day anh/khoi-tao.tar.gz tp-khoi-tao "$THE")

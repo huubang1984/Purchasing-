@@ -14,6 +14,7 @@
 //      khớp ba kỳ vọng (tổ chức, số người, số vai) mà người duyệt đã thấy.
 // ==============================================================================================
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -318,17 +319,20 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       traLoi = (ten) => ({
         status: 200,
         body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-AbCdEf`, Name: ten, VersionId: PHIEN_BAN,
-          SecretString: banKhaiTao("qua-sm", [nguoi("qua.sm@dong-lenh.vn", ["BUYER"], "Họ Tên Qua SM")]) },
+          SecretString: banKhaiSm },
       });
-      // [S1.9103] Đường prod mang phiên bản và ba kỳ vọng — đúng lệnh `deploy/trien-khai.sh khoi-tao` dựng.
-      const duyet = (ten: string, toChuc: string, soNguoi = "1", soVai = "1", pb = PHIEN_BAN) =>
-        ["tao", "--ban-khai-secret", ten, "--phien-ban", pb, "--to-chuc", toChuc, "--so-nguoi", soNguoi, "--so-vai", soVai];
-      const r = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/qua-sm", "qua-sm"), env);
+      // [S1.9103] Đường prod mang phiên bản, băm, mã tổ chức do workflow chọn và ba kỳ vọng — đúng lệnh `trien-khai.sh khoi-tao`.
+      const bam = (noiDung: string) => createHash("sha256").update(noiDung, "utf8").digest("hex");
+      const MA = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+      const duyet = (ten: string, toChuc: string, h: string, soNguoi = "1", vai = "BUYER=1", pb = PHIEN_BAN, ma = MA) =>
+        ["tao", "--ban-khai-secret", ten, "--phien-ban", pb, "--bam", h, "--ma-to-chuc", ma, "--to-chuc", toChuc, "--so-nguoi", soNguoi, "--vai", vai];
+      const banKhaiSm = banKhaiTao("qua-sm", [nguoi("qua.sm@dong-lenh.vn", ["BUYER"], "Họ Tên Qua SM")]);
+      const r = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/qua-sm", "qua-sm", bam(banKhaiSm)), env);
       expect(r.status, r.stderr).toBe(0);
       expect(hoi).toEqual([{ target: "secretsmanager.GetSecretValue", than: { SecretId: "tp/khoi-tao/ban-khai/qua-sm", VersionId: PHIEN_BAN } }]);
-      const m = new RegExp(`^\\[khoi-tao\\] tao: to chuc ([0-9a-f-]{36}), 1 nguoi, 1 vai, ban khai phien ban ${PHIEN_BAN}\\n$`, "u").exec(r.stdout);
-      expect(m, r.stdout).not.toBeNull();
-      expect(await dem(m![1]!)).toEqual({ to_chuc: 1, nguoi: 1, vai: 1, so: 3 });
+      // Mã tổ chức là ĐÚNG mã workflow đã chọn trước lúc duyệt — tóm tắt của run in nó mà không đọc log.
+      expect(r.stdout).toBe(`[khoi-tao] tao: to chuc ${MA}, 1 nguoi, 1 vai, ban khai phien ban ${PHIEN_BAN}\n`);
+      expect(await dem(MA)).toEqual({ to_chuc: 1, nguoi: 1, vai: 1, so: 3 });
       for (const dau of [r.stdout, r.stderr]) {
         expect(dau).not.toContain("qua.sm");
         expect(dau).not.toContain("Họ Tên Qua SM");
@@ -337,7 +341,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       // SM từ chối ⇒ thoát 1, stderr nêu TÊN lỗi của SDK — không ARN, không thông điệp của SM.
       hoi.length = 0;
       traLoi = () => ({ status: 400, body: { __type: "ResourceNotFoundException", message: "khong thay arn:aws:secretsmanager:bi-mat-la" } });
-      const hong = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/khong-co", "khong-co"), env);
+      const hong = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/khong-co", "khong-co", bam("x")), env);
       expect(hong.status).toBe(1);
       expect(hong.stderr).toMatch(/^\[khoi-tao\] HONG: không đọc được bí mật bản khai \(ResourceNotFoundException\)\n$/u);
       expect(hong.stderr).not.toContain("arn:");
@@ -353,26 +357,42 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
           VersionId: "11111111-2222-4333-8444-555555555555",
           SecretString: banKhaiTao("sm-phien-ban-khac", [nguoi("pb.khac@dong-lenh.vn", ["BUYER"])]) },
       });
-      const khac = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-phien-ban-khac", "sm-phien-ban-khac"), env);
+      const khac = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-phien-ban-khac", "sm-phien-ban-khac", bam("x")), env);
       expect(khac.status).toBe(1);
       expect(khac.stderr).toBe("[khoi-tao] HONG: Secrets Manager trả một phiên bản khác phiên bản đã duyệt\n");
       expect(await soToChuc("sm-phien-ban-khac")).toBe(0);
 
       // [S1.9103] Bản khai ở ĐÚNG phiên bản đã duyệt nhưng không khớp điều người duyệt thấy (thêm một người sau lúc khai số)
       // ⇒ dừng TRƯỚC CSDL; thông điệp nêu trường lệch, không email, không họ tên.
+      const banKhaiLech = banKhaiTao("sm-lech", [nguoi("lech.mot@dong-lenh.vn", ["BUYER"]), nguoi("lech.hai@dong-lenh.vn", ["FINANCE"], "Họ Tên Lệch")]);
       traLoi = (ten) => ({
         status: 200,
         body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-AbCdEf`, Name: ten, VersionId: PHIEN_BAN,
-          SecretString: banKhaiTao("sm-lech", [nguoi("lech.mot@dong-lenh.vn", ["BUYER"]), nguoi("lech.hai@dong-lenh.vn", ["FINANCE"], "Họ Tên Lệch")]) },
+          SecretString: banKhaiLech },
       });
-      const lech = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-lech", "sm-lech", "1", "1"), env);
+      const lech = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-lech", "sm-lech", bam(banKhaiLech)), env);
       expect(lech.status).toBe(1);
-      expect(lech.stderr).toBe("[khoi-tao] HONG: bản khai không khớp điều đã duyệt — số người: bản khai 2, đã duyệt 1; số vai: bản khai 2, đã duyệt 1\n");
+      expect(lech.stderr).toBe('[khoi-tao] HONG: bản khai không khớp điều đã duyệt — số người: bản khai 2, đã duyệt 1; vai: bản khai "BUYER=1,FINANCE=1", đã duyệt "BUYER=1"\n');
       expect(await soToChuc("sm-lech")).toBe(0);
       for (const dau of [lech.stdout, lech.stderr]) {
         expect(dau).not.toContain("lech.hai");
         expect(dau).not.toContain("Họ Tên Lệch");
       }
+
+      // [S1.9103 / lượt soi] Xoá hẳn một bí mật rồi tạo lại CÙNG tên với `--client-request-token` bằng VersionId cũ: cùng cặp
+      // (tên, VersionId), nội dung KHÁC — ở đây cùng tổ chức, cùng số người, cùng vai, chỉ đổi người. Ba kỳ vọng đều khớp; băm thì
+      // không ⇒ dừng TRƯỚC CSDL.
+      const daDuyet = banKhaiTao("sm-tao-lai", [nguoi("that@khach.vn", ["DIRECTOR"])]);
+      const taoLai = banKhaiTao("sm-tao-lai", [nguoi("ke.gian@ngoai.vn", ["DIRECTOR"])]);
+      traLoi = (ten) => ({
+        status: 200,
+        body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-Zq9Xw1`, Name: ten, VersionId: PHIEN_BAN,
+          SecretString: taoLai },
+      });
+      const doi = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-tao-lai", "sm-tao-lai", bam(daDuyet), "1", "DIRECTOR=1"), env);
+      expect(doi.status).toBe(1);
+      expect(doi.stderr).toBe("[khoi-tao] HONG: bản khai không khớp băm SHA-256 đã duyệt\n");
+      expect(await soToChuc("sm-tao-lai")).toBe(0);
     } finally {
       await new Promise<void>((xong) => { sv.close(() => { xong(); }); });
     }
@@ -381,19 +401,32 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
   it("[S1.9103] kỳ vọng lệch với tệp bản khai ⇒ dừng TRƯỚC khi mở CSDL (URL CSDL trỏ một cổng không ai nghe mà lỗi vẫn là lỗi lệch)", () => {
     const tep = join(thuMuc, "lech.json");
     writeFileSync(tep, banKhaiTao("tep-lech", [nguoi("tep.lech@dong-lenh.vn", ["BUYER", "TECHNICAL"])]));
-    const r = chayLenh(["tao", "--ban-khai-tep", tep, "--to-chuc", "tep-khac", "--so-nguoi", "1", "--so-vai", "2"], {
+    const r = chayLenh(["tao", "--ban-khai-tep", tep, "--to-chuc", "tep-khac", "--so-nguoi", "1", "--vai", "BUYER=1,TECHNICAL=1"], {
       DATABASE_URL: "postgres://khong-ai:khong-co@127.0.0.1:1/khong-co",
     });
     expect(r.status).toBe(1);
     expect(r.stdout).toBe("");
     expect(r.stderr).toBe('[khoi-tao] HONG: bản khai không khớp điều đã duyệt — tổ chức: bản khai "tep-lech", đã duyệt "tep-khac"\n');
     // Cùng tệp, kỳ vọng khớp ⇒ tới được bước mở CSDL (và hỏng ở đó, vì cổng 1 không ai nghe) — tức ca trên dừng TRƯỚC bước ấy.
-    const toi = chayLenh(["tao", "--ban-khai-tep", tep, "--to-chuc", "tep-lech", "--so-nguoi", "1", "--so-vai", "2"], {
+    const toi = chayLenh(["tao", "--ban-khai-tep", tep, "--to-chuc", "tep-lech", "--so-nguoi", "1", "--vai", "BUYER=1,TECHNICAL=1"], {
       DATABASE_URL: "postgres://khong-ai:khong-co@127.0.0.1:1/khong-co",
     });
     expect(toi.status).toBe(1);
     // [S1.9103] Lỗi mạng in kèm mã hệ thống của Node — dòng lỗi đo được ở image với bó CA sai chỉ còn "HONG: Error".
     expect(toi.stderr).toBe("[khoi-tao] HONG: Error (ma ECONNREFUSED)\n");
+  });
+
+  it("[S1.9103] băm tính trên BYTE của tệp — tệp UTF-8 kèm BOM (Notepad) khớp Get-FileHash và vẫn đọc được; lệch một byte thì dừng", () => {
+    const tep = join(thuMuc, "bom.json");
+    const noiDung = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(banKhaiTao("tep-bom", [nguoi("bom@dong-lenh.vn", ["BUYER"], "Người Có Dấu")]), "utf8")]);
+    writeFileSync(tep, noiDung);
+    const dung = createHash("sha256").update(noiDung).digest("hex");
+    const url = { DATABASE_URL: "postgres://khong-ai:khong-co@127.0.0.1:1/khong-co" };
+    const qua = chayLenh(["tao", "--ban-khai-tep", tep, "--bam", dung, "--to-chuc", "tep-bom", "--so-nguoi", "1", "--vai", "BUYER=1"], url);
+    expect(qua.stderr).toBe("[khoi-tao] HONG: Error (ma ECONNREFUSED)\n"); // qua băm, qua bản khai, tới bước mở CSDL
+    const sai = createHash("sha256").update(noiDung.subarray(3)).digest("hex"); // băm của bản KHÔNG BOM
+    const lech = chayLenh(["tao", "--ban-khai-tep", tep, "--bam", sai, "--to-chuc", "tep-bom", "--so-nguoi", "1", "--vai", "BUYER=1"], url);
+    expect(lech.stderr).toBe("[khoi-tao] HONG: bản khai không khớp băm SHA-256 đã duyệt\n");
   });
 
   it("hỏng: thoát 1, stderr một dòng nêu vị trí; không email, không họ tên, không thông điệp gốc của Postgres", () => {

@@ -114,8 +114,11 @@ async function chenNguoi(c: pg.PoolClient, orgId: string, n: NguoiKhai, i: numbe
  * ~~dưới vai khác, câu đầu tiên ném 42501~~ **[lượt soi]** Dưới một vai RỘNG hơn thì không gì chặn: pool `app_api` (có INSERT
  * trên `users` và `user_roles`) chạy trọn chế độ `them-nguoi` — người soi đo.
  */
-export async function khoiTao(pool: pg.Pool, bk: BanKhai): Promise<KetQuaKhoiTao> {
-  const orgId = bk.cheDo === "tao" ? randomUUID() : bk.orgId;
+export async function khoiTao(pool: pg.Pool, bk: BanKhai, tuyChon: { readonly maToChuc?: string } = {}): Promise<KetQuaKhoiTao> {
+  // [S1.9103] Chế độ `tao` nhận mã tổ chức do workflow chọn TRƯỚC lúc duyệt (`--ma-to-chuc`): người duyệt thấy nó, tóm tắt của run
+  // in nó mà không cần đọc log, và COMMIT mất ACK không còn làm mất mã (ADR-111 Hệ quả). Không có thì sinh ở đây như trước.
+  if (bk.cheDo === "them-nguoi" && tuyChon.maToChuc !== undefined) throw new Error("khoiTao: maToChuc chỉ dùng cho chế độ tao");
+  const orgId = bk.cheDo === "tao" ? (tuyChon.maToChuc ?? randomUUID()) : bk.orgId;
   let soVai = 0;
   await withTenant(pool, orgId, async (c) => {
     if (bk.cheDo === "tao") {

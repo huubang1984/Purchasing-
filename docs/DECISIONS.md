@@ -6530,8 +6530,7 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   được đo với `aws`/`docker` giả (12 ca: đẩy mới, dùng lại, thẻ sai, đăng ký, role sai, image ngoài
   registry, migrate đạt/hỏng, subnet sai, cập nhật đạt, rollback, chờ quá hạn).
 - **Lần đầu vẫn tay:** stack 90 cần image có sẵn để tạo task definition đầu tiên (README, bước 4).
-- ~~Role deploy không đọc được CloudWatch Logs~~ **[S1.9103 / ADR-111]** `tp-deploy` chỉ lọc được nhóm log `/tp/khoi-tao` —
-  để chép dòng kết quả của task khởi tạo —, không đọc `/tp/migrate`: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
+- Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
   người vận hành đọc `/tp/migrate` bằng tay.
 - `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
 
