@@ -413,12 +413,12 @@ describe("[INV-D5] [S1.68 / khoản 119] một đường ghi sổ từ chối �
     ]);
   });
 
-  it("[INV-D5] [S1.181 / khoản 248] bối cảnh trần từ chối `chayVoiTranTuChoi` — cách THỨ HAI để một lần từ chối không vào sổ — chỉ có ở `rbac.ts` (khai), `index.ts` (ra cửa) và `dispatch.ts` (đặt quanh handler)", () => {
+  it("[INV-D5] [S1.182 / khoản 248] bối cảnh trần từ chối `chayVoiTranTuChoi` — cách THỨ HAI để một lần từ chối không vào sổ — chỉ có ở `rbac.ts` (khai), `index.ts` (ra cửa) và `dispatch.ts` (đặt quanh handler)", () => {
     const co = maSanXuat()
       .filter((duong) => readFileSync(duong, "utf8").includes("chayVoiTranTuChoi"))
       .map((duong) => relative(GOC, duong).split(sep).join("/"))
       .sort();
-    expect(co, "một chỗ mới đặt bối cảnh trần — nó phải được khai ở ADR-109 và thêm vào đây có chủ đích").toEqual([
+    expect(co, "một chỗ mới đặt bối cảnh trần — nó phải được khai ở ADR-111 và thêm vào đây có chủ đích").toEqual([
       "apps/api/src/dispatch.ts",
       "packages/identity/src/index.ts",
       "packages/identity/src/rbac.ts",

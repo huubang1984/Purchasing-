@@ -167,7 +167,7 @@ export const TU_CHOI_TRAN_MOI_CUA_SO = 30;
  * [S1.155 / khoản 122 · 144 / ADR-092] Phiên đã hết ngân sách từ chối của cửa sổ. Tên KHÔNG kết thúc bằng `DeniedError`: nó
  * không phải một lần từ chối để ghi sổ (cổng [INV-D5] nhận diện lớp từ chối bằng đuôi tên ấy) mà là lý do lần từ chối KHÔNG được
  * ghi. ~~Chỉ đi ra từ `demTuChoi` bên dưới và chỉ được bắt ở `phanQuyetTuChoi` — không bao giờ tới bảng catch cuối hàm.~~
- * **[S1.181 / khoản 248 / ADR-109]** Đi ra từ `demTuChoi` — bắt ở `phanQuyetTuChoi` — và từ `demTuChoiCuaHandler`, qua lần ghi sổ từ
+ * **[S1.182 / khoản 248 / ADR-111]** Đi ra từ `demTuChoi` — bắt ở `phanQuyetTuChoi` — và từ `demTuChoiCuaHandler`, qua lần ghi sổ từ
  * chối của một handler: tới `anhXaLoiHandler`, cùng 429 và `retry-after`.
  */
 class VuotTranTuChoiError extends Error {
@@ -412,7 +412,7 @@ function anhXaLoiPostgres(err: Error & { code?: unknown; routine?: unknown }): A
 
 function anhXaLoiHandler(err: unknown, requestId: string, route: Route): ApiResponse {
   if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
-  // [S1.181 / khoản 248] Lần từ chối thứ N+1 của phiên, do handler ghi — cùng thân và `retry-after` với 429 của `phanQuyetTuChoi`.
+  // [S1.182 / khoản 248] Lần từ chối thứ N+1 của phiên, do handler ghi — cùng thân và `retry-after` với 429 của `phanQuyetTuChoi`.
   if (err instanceof VuotTranTuChoiError) {
     return { status: 429, body: THAN_429, headers: { "retry-after": String(OTP_RATE_WINDOW_SECONDS) } };
   }
@@ -678,7 +678,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
               const soLan = await tangBucketNguoiGoi(client, `tu-choi|${actor.sessionId}`, deps.services.pepper);
               if (soLan > tranTuChoi) throw new VuotTranTuChoiError();
             };
-            // [S1.181 / khoản 248 / ADR-109] CÙNG bucket, cùng trần, cho lần từ chối do HANDLER ghi — `requirePermission` gọi từ một gói,
+            // [S1.182 / khoản 248 / ADR-111] CÙNG bucket, cùng trần, cho lần từ chối do HANDLER ghi — `requirePermission` gọi từ một gói,
             // `throwAuditedDenial` của cổng mở thầu, bảng so sánh, `CONTROL_DENIED`. Khác `demTuChoi` ở đúng một chỗ: đếm trên `c`, kết nối
             // `auditPool` mà `packages/identity/src/rbac.ts` mở ở giao dịch RIÊNG, không trên `client`. Handler từ chối thì NÉM, giao dịch
             // của `client` rollback, và một lần đếm trên nó biến theo — đúng lý do ADR-092 để lần từ chối của handler ngoài phạm vi.
