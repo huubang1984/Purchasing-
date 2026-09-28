@@ -15060,4 +15060,4 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
   `so-no-tu-doi-chieu` 87/87; `pnpm cap-so --kiem` sạch. T3 và evidence đo trên CI, trên chính commit của PR.
 - Dựng lại lần hai trên `master` `90fed26` (sau #191 — khoản 250 mở, rổ B 59): chỉ tài liệu xung đột; cổng tĩnh và unit đo lại, T3 và
   evidence trên CI.
-- Số tạm của vòng này cấp thành S1.182, ADR-111. Sổ nợ: khoản 248 đóng, rổ B **59 → 58**. **110 → 111** ADR.
+@@CAP_SO@@
