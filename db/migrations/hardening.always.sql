@@ -7576,6 +7576,360 @@ $ham$$q$,
       $q$quyền sở hữu hàm chinh_sach_hieu_luc(uuid, timestamptz) hoặc SUPERUSER$q$
     ],
 
+    -- [S1.185 / S3.2a / K4b] Bam danh sach moi — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren danh sach moi, dung lo K4b dong.
+    ARRAY[
+      $q$định nghĩa hàm rfq_bam_danh_sach(uuid) (076_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_bam_danh_sach(p_rfq uuid) RETURNS bytea
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT sha256(convert_to(
+    coalesce((SELECT string_agg(d.dong, E'\n' ORDER BY d.dong COLLATE "C")
+                FROM (SELECT 'MOI|' || i.supplier_id::text || '|' || i.contact_id::text || '|' || i.link_channel AS dong
+                        FROM public.rfq_invitations i
+                       WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL) d), ''),
+    'UTF8'))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT sha256(convert_to( coalesce((SELECT string_agg(d.dong, E'\n' ORDER BY d.dong COLLATE "C") FROM (SELECT 'MOI|' || i.supplier_id::text || '|' || i.contact_id::text || '|' || i.link_channel AS dong FROM public.rfq_invitations i WHERE i.rfq_id = p_rfq AND i.revoked_at IS NULL) d), ''), 'UTF8'))$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 1
+            AND p.prorettype = 'pg_catalog.bytea'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_bam_danh_sach(uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_bam_danh_sach(uuid)')),
+                  'hàm public.rfq_bam_danh_sach(uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_bam_danh_sach(uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.185 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
+    ARRAY[
+      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (076_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_approvals_dat_bam_danh_sach()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_approvals_dat_bam_danh_sach();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_approvals_dat_bam_danh_sach() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    NEW.approved_list_hash := public.rfq_bam_danh_sach(NEW.rfq_id);
+  ELSE
+    NEW.approved_list_hash := NULL;
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_approvals')
+                                 AND t.tgname = 'rfq_approvals_dat_bam_danh_sach'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_approvals_dat_bam_danh_sach()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_approvals_dat_bam_danh_sach BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION rfq_approvals_dat_bam_danh_sach()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_approvals_dat_bam_danh_sach ON public.rfq_approvals;
+             CREATE TRIGGER rfq_approvals_dat_bam_danh_sach BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION public.rfq_approvals_dat_bam_danh_sach();
+             ALTER TABLE public.rfq_approvals ENABLE ALWAYS TRIGGER rfq_approvals_dat_bam_danh_sach;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF public.to_chuc_da_bat_s3(NEW.org_id) THEN NEW.approved_list_hash := public.rfq_bam_danh_sach(NEW.rfq_id); ELSE NEW.approved_list_hash := NULL; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_approvals')
+                           AND t.tgname = 'rfq_approvals_dat_bam_danh_sach'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_approvals_dat_bam_danh_sach()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_approvals_dat_bam_danh_sach BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION rfq_approvals_dat_bam_danh_sach()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_approvals_dat_bam_danh_sach()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_approvals_dat_bam_danh_sach()')),
+                  'hàm public.rfq_approvals_dat_bam_danh_sach() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_approvals_dat_bam_danh_sach() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
+    ARRAY[
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_kiem_chu_ky_danh_sach_khi_mo()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  can integer;
+  co integer;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RETURN NEW;
+  END IF;
+  can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END;
+  SELECT count(DISTINCT a.approver_user_id) INTO co
+    FROM public.rfq_approvals a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id
+     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)
+     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id);
+  IF co < can THEN
+    RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_danh_sach_khi_mo'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_kiem_chu_ky_danh_sach_khi_mo()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION rfq_kiem_chu_ky_danh_sach_khi_mo()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_danh_sach_khi_mo ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo();
+             ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_danh_sach_khi_mo;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE can integer; co integer; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                           AND t.tgname = 'rfq_packages_kiem_danh_sach_khi_mo'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_kiem_chu_ky_danh_sach_khi_mo()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION rfq_kiem_chu_ky_danh_sach_khi_mo()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_kiem_chu_ky_danh_sach_khi_mo()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_kiem_chu_ky_danh_sach_khi_mo()')),
+                  'hàm public.rfq_kiem_chu_ky_danh_sach_khi_mo() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_kiem_chu_ky_danh_sach_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.185 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
+    ARRAY[
+      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_invitations_kiem_danh_sach()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_invitations_kiem_danh_sach();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_invitations_kiem_danh_sach() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RETURN NEW;
+  END IF;
+  SELECT p.status INTO trang_thai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+     FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF trang_thai = 'DRAFT' THEN
+      NEW.moi_sau_khi_ky := false;
+    ELSIF trang_thai = 'OPEN' THEN
+      NEW.moi_sau_khi_ky := true;
+    ELSE
+      RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai
+        USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.status := 'UNSENT';
+    RETURN NEW;
+  END IF;
+  IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN
+    RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN
+    RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN
+    RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_invitations') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                                 AND t.tgname = 'rfq_invitations_kiem_danh_sach'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_invitations_kiem_danh_sach()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_danh_sach BEFORE INSERT OR UPDATE ON public.rfq_invitations FOR EACH ROW EXECUTE FUNCTION rfq_invitations_kiem_danh_sach()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_invitations_kiem_danh_sach ON public.rfq_invitations;
+             CREATE TRIGGER rfq_invitations_kiem_danh_sach BEFORE INSERT OR UPDATE ON public.rfq_invitations FOR EACH ROW EXECUTE FUNCTION public.rfq_invitations_kiem_danh_sach();
+             ALTER TABLE public.rfq_invitations ENABLE ALWAYS TRIGGER rfq_invitations_kiem_danh_sach;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_invitations')
+                           AND t.tgname = 'rfq_invitations_kiem_danh_sach'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_invitations_kiem_danh_sach()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitations_kiem_danh_sach BEFORE INSERT OR UPDATE ON public.rfq_invitations FOR EACH ROW EXECUTE FUNCTION rfq_invitations_kiem_danh_sach()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_invitations_kiem_danh_sach()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_invitations_kiem_danh_sach()')),
+                  'hàm public.rfq_invitations_kiem_danh_sach() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_invitations_kiem_danh_sach() và bảng public.rfq_invitations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.185 / S3.2a / K6] Khong token moi cho goi chua mo cua to chuc da bat. Than `RETURN NEW` de link di truoc chu ky.
+    ARRAY[
+      $q$hàm + trigger rfq_invitation_tokens_kiem_goi_da_mo (076_danh_sach_moi)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_invitation_tokens_kiem_goi_da_mo()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_invitation_tokens_kiem_goi_da_mo();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_invitation_tokens_kiem_goi_da_mo() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  mo_luc timestamptz;
+BEGIN
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RETURN NEW;
+  END IF;
+  SELECT p.opened_at INTO mo_luc
+    FROM public.rfq_invitations i
+    JOIN public.rfq_packages p ON p.org_id = i.org_id AND p.id = i.rfq_id
+   WHERE i.org_id = NEW.org_id AND i.id = NEW.invitation_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay loi moi cua token (K6)'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF mo_luc IS NULL THEN
+    RAISE EXCEPTION 'Khong duc token moi cho goi thau chua mo (K6)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_invitation_tokens') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_invitation_tokens')
+                                 AND t.tgname = 'rfq_invitation_tokens_kiem_goi_da_mo'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_invitation_tokens_kiem_goi_da_mo()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitation_tokens_kiem_goi_da_mo BEFORE INSERT ON public.rfq_invitation_tokens FOR EACH ROW EXECUTE FUNCTION rfq_invitation_tokens_kiem_goi_da_mo()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_invitation_tokens_kiem_goi_da_mo ON public.rfq_invitation_tokens;
+             CREATE TRIGGER rfq_invitation_tokens_kiem_goi_da_mo BEFORE INSERT ON public.rfq_invitation_tokens FOR EACH ROW EXECUTE FUNCTION public.rfq_invitation_tokens_kiem_goi_da_mo();
+             ALTER TABLE public.rfq_invitation_tokens ENABLE ALWAYS TRIGGER rfq_invitation_tokens_kiem_goi_da_mo;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE mo_luc timestamptz; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.opened_at INTO mo_luc FROM public.rfq_invitations i JOIN public.rfq_packages p ON p.org_id = i.org_id AND p.id = i.rfq_id WHERE i.org_id = NEW.org_id AND i.id = NEW.invitation_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay loi moi cua token (K6)' USING ERRCODE = 'foreign_key_violation'; END IF; IF mo_luc IS NULL THEN RAISE EXCEPTION 'Khong duc token moi cho goi thau chua mo (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_invitation_tokens')
+                           AND t.tgname = 'rfq_invitation_tokens_kiem_goi_da_mo'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_invitation_tokens_kiem_goi_da_mo()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_invitation_tokens_kiem_goi_da_mo BEFORE INSERT ON public.rfq_invitation_tokens FOR EACH ROW EXECUTE FUNCTION rfq_invitation_tokens_kiem_goi_da_mo()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_invitation_tokens_kiem_goi_da_mo()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_invitation_tokens_kiem_goi_da_mo()')),
+                  'hàm public.rfq_invitation_tokens_kiem_goi_da_mo() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_invitation_tokens_kiem_goi_da_mo() và bảng public.rfq_invitation_tokens (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
     ARRAY[
       $q$hàm + trigger guest_session_kiem_danh_tinh (012)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '012_invitation_hardening.sql')$q$,
