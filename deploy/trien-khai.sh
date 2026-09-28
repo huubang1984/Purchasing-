@@ -7,7 +7,7 @@
 #   trien-khai.sh migrate  <arn-task-def>                      ⇒ chạy một lần, thoát 0 chỉ khi exit code 0
 #   trien-khai.sh neo      <arn-task-def>                      ⇒ [ADR-071] job neo (lệnh mặc định: neo khoá biên nhận)
 #   trien-khai.sh cap-nhat <service> <arn-task-def>            ⇒ cập nhật service, chờ ổn định
-#   [S1.9103 / ADR-111] `.github/workflows/khoi-tao.yml`:
+#   [S1.183 / ADR-111] `.github/workflows/khoi-tao.yml`:
 #   trien-khai.sh kiem-khoi-tao                                ⇒ KHÔNG AWS: kiểm đầu vào và người bấm, in bảng người duyệt
 #                                                                duyệt (markdown)
 #   trien-khai.sh kiem-nguoi-duyet <tệp JSON>                  ⇒ KHÔNG AWS: lịch sử duyệt của run phải có một NGƯỜI khác người
@@ -15,7 +15,7 @@
 #   trien-khai.sh khoi-tao <arn-task-def>                      ⇒ chạy task khởi tạo với đúng đầu vào ấy; thoát 0 ⇒ XOÁ bí mật
 #                                                                bản khai, in kết quả suy từ đầu vào (markdown)
 #
-# Biến bắt buộc: AWS_REGION, TAI_KHOAN, CLUSTER ~~;~~ **[S1.9103]** (trừ `kiem-khoi-tao`); `migrate` cần thêm SUBNETS (phẩy
+# Biến bắt buộc: AWS_REGION, TAI_KHOAN, CLUSTER ~~;~~ **[S1.183]** (trừ `kiem-khoi-tao`); `migrate` cần thêm SUBNETS (phẩy
 # ngăn cách) và SG_MIGRATE; `neo` cần SUBNETS và SG_NEO; `khoi-tao` cần SUBNETS và SG_KHOI_TAO. Đầu vào của khởi tạo đi qua
 # biến môi trường — workflow chuyển `inputs` vào `env:`, không nội suy vào mã: CHE_DO, BI_MAT, PHIEN_BAN, ~~TO_CHUC,
 # SO_NGUOI, SO_VAI~~ **[lượt soi]** BAM, MA_TO_CHUC (workflow chọn, chỉ `tao`), TO_CHUC, SO_NGUOI, VAI; cộng ACTOR,
@@ -33,14 +33,14 @@
 # ==============================================================================================
 set -euo pipefail
 
-# [S1.9103] `kiem-khoi-tao` (job `build`) và `kiem-nguoi-duyet` (trước khi job `chay` lấy quyền AWS) — không biến AWS.
+# [S1.183] `kiem-khoi-tao` (job `build`) và `kiem-nguoi-duyet` (trước khi job `chay` lấy quyền AWS) — không biến AWS.
 if [[ ${1:-} != kiem-khoi-tao && ${1:-} != kiem-nguoi-duyet ]]; then
   : "${AWS_REGION:?}" "${TAI_KHOAN:?}" "${CLUSTER:?}"
 fi
 REGISTRY="${TAI_KHOAN:-}.dkr.ecr.${AWS_REGION:-}.amazonaws.com"
 SO_LAN_CHO=3 # mỗi lần `aws ecs wait` tối đa ~10 phút
-TASK_ARN=""  # [S1.9103] task mà `chay_mot_lan` vừa chạy — `khoi_tao` đọc log của đúng task ấy
-KHI_HONG=""  # [S1.9103] một dòng dặn thêm khi `loi` dừng giữa chừng (bí mật bản khai còn hay đã xoá)
+TASK_ARN=""  # [S1.183] task mà `chay_mot_lan` vừa chạy — `khoi_tao` đọc log của đúng task ấy
+KHI_HONG=""  # [S1.183] một dòng dặn thêm khi `loi` dừng giữa chừng (bí mật bản khai còn hay đã xoá)
 
 loi() {
   echo "LOI: $*" >&2
@@ -80,7 +80,7 @@ dang_ky() {
       .family == $ho and (.taskRoleArn // "") == $role
       and (.containerDefinitions | length) == 1 and .containerDefinitions[0].name == $ho' \
     "$tam/cu.json" >/dev/null || loi "bản mới nhất của họ $ho không đúng hình dạng (họ, task role $role, một container)"
-  # [S1.9103 / lượt soi] Họ `tp-khoi-tao` mang dữ liệu cá nhân và gán vai: bản mới nhất bị cài một biến (`NODE_OPTIONS`), một
+  # [S1.183 / lượt soi] Họ `tp-khoi-tao` mang dữ liệu cá nhân và gán vai: bản mới nhất bị cài một biến (`NODE_OPTIONS`), một
   # secret, một lệnh hay một root filesystem ghi được thì pipeline KHÔNG nhân bản nó — ghim trọn container theo stack 90.
   [[ $ho != tp-khoi-tao ]] || jq -e --arg exec "arn:aws:iam::${TAI_KHOAN}:role/tp-ecs-execution" --arg region "$AWS_REGION" \
     --arg sm "^arn:aws:secretsmanager:${AWS_REGION}:${TAI_KHOAN}:secret:tp/khoi-tao/database-url-[A-Za-z0-9]{6}$" '
@@ -149,7 +149,7 @@ neo() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# [S1.9103 / ADR-111] Khởi tạo tổ chức. Người duyệt của environment `prod-khoi-tao` không đọc được bản khai (email, họ tên),
+# [S1.183 / ADR-111] Khởi tạo tổ chức. Người duyệt của environment `prod-khoi-tao` không đọc được bản khai (email, họ tên),
 # nên thứ họ duyệt là bảng `bang_duyet` in ở job `build`: tên, PHIÊN BẢN và BĂM SHA-256 của bí mật, mã tổ chức, số người, số
 # người theo từng mã vai, và ai bấm. Công cụ (`tools/khoi-tao-to-chuc`) đọc ĐÚNG phiên bản ấy, so băm và ba kỳ vọng, và dừng
 # TRƯỚC CSDL khi lệch. Luật của `kiem_dau_vao` là luật của `docThamSo` — `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên
@@ -194,7 +194,7 @@ kiem_dau_vao() {
   ((tong >= SO_NGUOI)) || loi "vai: tổng phải ít nhất bằng so_nguoi — ai cũng có ít nhất một vai"
 }
 
-# [S1.9103 / lượt soi] Người bấm phải là NGƯỜI: một run do token bot (GITHUB_TOKEN của một workflow khác, hay một GitHub App)
+# [S1.183 / lượt soi] Người bấm phải là NGƯỜI: một run do token bot (GITHUB_TOKEN của một workflow khác, hay một GitHub App)
 # khởi thì *Prevent self-review* so với bot, và chính người đứng sau nó duyệt được.
 kiem_nguoi_bam() {
   : "${ACTOR:?}" "${TRIGGERING_ACTOR:?}"
@@ -225,7 +225,7 @@ khác người bấm; chạy xong (thoát 0) thì bí mật bị xoá, không c�
 EOF
 }
 
-# [S1.9103 / lượt soi] Kiểm KẾT QUẢ của *Prevent self-review* chứ không tin cài đặt: phải có một lần DUYỆT environment
+# [S1.183 / lượt soi] Kiểm KẾT QUẢ của *Prevent self-review* chứ không tin cài đặt: phải có một lần DUYỆT environment
 # `prod-khoi-tao` của một NGƯỜI khác người bấm. Admin bỏ qua luật duyệt thì không có bản ghi ấy — job dừng.
 kiem_nguoi_duyet() {
   local tep=$1 ai

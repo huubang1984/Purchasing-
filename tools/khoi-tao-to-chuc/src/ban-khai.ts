@@ -51,7 +51,7 @@ export type BanKhai =
  */
 export const TRAN_SO_NGUOI = 50;
 const TRAN_TEN = 200;
-// [S1.9103] Hai mẫu dưới được xuất cho `docThamSo` (`index.ts`), và `deploy/trien-khai.sh` (`kiem_dau_vao`) mang cùng hai mẫu
+// [S1.183] Hai mẫu dưới được xuất cho `docThamSo` (`index.ts`), và `deploy/trien-khai.sh` (`kiem_dau_vao`) mang cùng hai mẫu
 // ấy bằng bash — `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên cùng một bộ đầu vào.
 export const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // Slug là định danh trong URL, duy nhất TOÀN CỤC (002): chữ thường không dấu, số, gạch nối ở giữa; 3–63 ký tự.
@@ -109,7 +109,7 @@ function docNguoi(x: unknown, i: number): NguoiKhai {
 export function docBanKhai(json: string, lenh: CheDo): BanKhai {
   let tho: unknown;
   try {
-    // [S1.9103] Bỏ MỘT dấu BOM ở đầu: Notepad và PowerShell 5 ghi UTF-8 kèm BOM, và `JSON.parse` từ chối nó. Băm SHA-256 mà người
+    // [S1.183] Bỏ MỘT dấu BOM ở đầu: Notepad và PowerShell 5 ghi UTF-8 kèm BOM, và `JSON.parse` từ chối nó. Băm SHA-256 mà người
     // duyệt duyệt tính trên nội dung GỐC (`index.ts`), nên bỏ BOM ở đây không làm lệch băm.
     tho = JSON.parse(json.startsWith("\uFEFF") ? json.slice(1) : json) as unknown;
   } catch {
@@ -154,7 +154,7 @@ export function docBanKhai(json: string, lenh: CheDo): BanKhai {
 }
 
 /**
- * [S1.9103 / ADR-111] Điều người duyệt THẤY trước khi bấm duyệt (bảng của job `build` trong `.github/workflows/khoi-tao.yml`):
+ * [S1.183 / ADR-111] Điều người duyệt THẤY trước khi bấm duyệt (bảng của job `build` trong `.github/workflows/khoi-tao.yml`):
  * tổ chức (slug khi tạo, mã khi thêm người), số người, và số người mang TỪNG mã vai (`vaiTheoMa`). Người duyệt không đọc được bản
  * khai — nó mang email và họ tên —, nên thứ họ duyệt là bộ này cộng tên, phiên bản và băm SHA-256 của bí mật (`index.ts`).
  * ~~tổng số cặp người–vai~~ **[lượt soi]** số theo từng mã vai: cùng tổng mà đổi `REQUESTER` thành `DIRECTOR` thì tổng không lệch.

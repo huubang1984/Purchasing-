@@ -54,7 +54,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 2. Danh tính và khoá
 
-- [ ] **2.0 [S1.9103 / lượt soi] Ba environment GitHub TRƯỚC 2.1** — `prod`, `prod-worker`, `prod-khoi-tao`, đủ luật bảo vệ
+- [ ] **2.0 [S1.183 / lượt soi] Ba environment GitHub TRƯỚC 2.1** — `prod`, `prod-worker`, `prod-khoi-tao`, đủ luật bảo vệ
       của 7.1 (người duyệt, chỉ `master`, và với `prod-khoi-tao`: *Prevent self-review*, tắt admin bypass); biến của chúng điền
       ở 7.1. Trust policy của stack 30 chỉ ghim TÊN environment, và GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow
       nhắc tên chưa có: apply 2.1 trước thì trong khoảng tới 7.1, một workflow trên nhánh bất kỳ khai `environment: prod` là
@@ -137,7 +137,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     web         = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
     public_keys = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
     neo         = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-    khoi_tao    = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"   # [S1.9103] task khởi tạo tổ chức
+    khoi_tao    = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"   # [S1.183] task khởi tạo tổ chức
   }
   so_ban_api         = 0     # bật ở 6.6, sau khi secret có host thật và migrate xong
   so_ban_worker      = 0     # bật ở 8.2 (ADR-040)
@@ -155,7 +155,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.3 Build và đẩy image
 
-- [ ] Theo README stack 90 bước 4 (~~sáu~~ **[S1.9103]** bảy target: api, worker, migrate, web, public-keys, neo, khoi-tao), thẻ = SHA commit.
+- [ ] Theo README stack 90 bước 4 (~~sáu~~ **[S1.183]** bảy target: api, worker, migrate, web, public-keys, neo, khoi-tao), thẻ = SHA commit.
 - [ ] Điền `anh` trong `prod.tfvars` bằng URI **@sha256:** (`aws ecr describe-images ... --query 'imageDetails[0].imageDigest'`).
 
 ### 6.4 Phần còn lại
@@ -204,7 +204,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 - [ ] **7.1** Environments: `prod` (Required reviewers, chỉ `master`, biến từ `terraform output bien_github`) và
       `prod-worker` (người duyệt khác người bấm). Tên phải đúng — trust policy của stack 30 ghim chúng.
-      **[S1.9103 / ADR-111]** Và `prod-khoi-tao`: Required reviewers **và *Prevent self-review* BẬT** (người bấm không tự
+      **[S1.183 / ADR-111]** Và `prod-khoi-tao`: Required reviewers **và *Prevent self-review* BẬT** (người bấm không tự
       duyệt được lần tạo tổ chức và gán vai ~~— không mã nào của kho kiểm được cài đặt này~~), **[lượt soi] và BỎ CHỌN *Allow
       administrators to bypass configured protection rules*** — mặc định nó BẬT, và chủ kho cá nhân là admin, tự bấm rồi tự vượt
       được; ít nhất hai người duyệt để người bấm luôn có người khác duyệt, chỉ `master`, biến `TP_SUBNETS_UNG_DUNG` và
@@ -219,14 +219,14 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 8. Tổ chức đầu tiên và worker
 
 - [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. ~~**[S1.168] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
-      tổ chức, người dùng hay gán vai trên prod.**~~ **[S1.9103]** Làm bằng workflow khởi tạo — gạch đầu dòng cuối của bước này;
+      tổ chức, người dùng hay gán vai trên prod.**~~ **[S1.183]** Làm bằng workflow khởi tạo — gạch đầu dòng cuối của bước này;
       các gạch đầu dòng ngay dưới là lịch sử của lúc bước này còn kẹt.
   - `app_api` không có INSERT trên `organizations` (chỉ SELECT và UPDATE(name) — `db/migrations/002_organizations_and_users.sql`).
     Nó có INSERT trên `users` và `user_roles`, nhưng không route nào dùng, và không vai nào giữ `role.grant`.
-  - ~~`deploy/Dockerfile` không có đích nào làm việc này.~~ **[S1.9103]** Có đích `khoi-tao`.
+  - ~~`deploy/Dockerfile` không có đích nào làm việc này.~~ **[S1.183]** Có đích `khoi-tao`.
   - Chỉ hai công cụ DEV chèn được tổ chức: `tools/gieo-demo` tự khai không phải đường sản xuất (in token dạng rõ),
     `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
-  - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040). **[S1.9103]** Hết kẹt khi 8.1 chạy
+  - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040). **[S1.183]** Hết kẹt khi 8.1 chạy
     xong.
   - ~~Cách làm chờ chủ dự án quyết.~~ **[S1.182]** Đã chốt — gạch đầu dòng cuối của bước này. Đề xuất ngày 2026-09-27: một task
     ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
@@ -239,7 +239,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     email hay họ tên. ~~**Vẫn chưa làm được trên prod:** đích `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition
     `tp-khoi-tao`, task role, workflow chạy có người duyệt và xoá bí mật bản khai thuộc vòng hạ tầng kế (ADR-111 mục 8;
     STATE khoản 251). Bước này sẽ viết lại khi vòng ấy xong.~~
-  - **[S1.9103 / ADR-111] BƯỚC NÀY NAY LÀ LỆNH CHẠY** — workflow *Khoi tao to chuc — prod (bam tay)*; cần 6.3 có image
+  - **[S1.183 / ADR-111] BƯỚC NÀY NAY LÀ LỆNH CHẠY** — workflow *Khoi tao to chuc — prod (bam tay)*; cần 6.3 có image
     `khoi_tao`, 6.4 đã apply với nó, và environment `prod-khoi-tao` của 7.1. **[lượt soi]** Bảy đầu vào thay sáu: thêm băm
     SHA-256 của bản khai, và số người THEO TỪNG MÃ VAI thay tổng số vai; mã tổ chức do workflow chọn.
     1. Viết bản khai JSON (mẫu ở đầu `tools/khoi-tao-to-chuc/src/ban-khai.ts`) bằng một trình soạn lưu UTF-8 (VS Code, Notepad)

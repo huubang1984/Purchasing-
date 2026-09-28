@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9103 / ADR-111] `deploy/trien-khai.sh` — HAI LỆNH CỦA WORKFLOW KHỞI TẠO, ĐO BẰNG `aws` GIẢ
+// [S1.183 / ADR-111] `deploy/trien-khai.sh` — HAI LỆNH CỦA WORKFLOW KHỞI TẠO, ĐO BẰNG `aws` GIẢ
 //
 //   ⑴ `kiem-khoi-tao` (job `build`, không quyền AWS): không cần biến AWS, không gọi `aws`, in bảng người duyệt duyệt; người
 //      bấm là bot thì dừng.
@@ -121,7 +121,7 @@ function dungLocale(thu: string): Record<string, string> | null {
   return null;
 }
 
-describe.skipIf(process.platform === "win32")("[S1.9103] trien-khai.sh — kiem-khoi-tao, kiem-nguoi-duyet, khoi-tao, dang-ky tp-khoi-tao", () => {
+describe.skipIf(process.platform === "win32")("[S1.183] trien-khai.sh — kiem-khoi-tao, kiem-nguoi-duyet, khoi-tao, dang-ky tp-khoi-tao", () => {
   beforeAll(() => {
     thuMuc = mkdtempSync(join(tmpdir(), "khoi-tao-sh-"));
     binGia = join(thuMuc, "bin");

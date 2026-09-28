@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9103 / ADR-111] HÌNH DẠNG CỦA ĐƯỜNG KHỞI TẠO TỔ CHỨC TRÊN PROD — WORKFLOW, IAM, TASK, IMAGE
+// [S1.183 / ADR-111] HÌNH DẠNG CỦA ĐƯỜNG KHỞI TẠO TỔ CHỨC TRÊN PROD — WORKFLOW, IAM, TASK, IMAGE
 //
 // Bảo đảm của đường này rải ở năm tệp cấu hình, và mỗi tệp cần mốc chết của nó:
 //   ⑴ `khoi-tao.yml`: chỉ workflow_dispatch; quyền mặc định RỖNG; ~~CHUNG nhóm concurrency với deploy.yml~~ **[lượt soi]** nhóm
@@ -65,7 +65,7 @@ function khoiDeploy(ten: string): string {
 
 const DAU_VAO = ["CHE_DO", "BI_MAT", "PHIEN_BAN", "BAM", "TO_CHUC", "SO_NGUOI", "VAI"];
 
-describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
+describe("[S1.183] hình dạng của khoi-tao.yml", () => {
   const dong = coNghia(VAN);
 
   it("⑴ mức cao nhất {name, on, permissions, concurrency, jobs}; `permissions: {}`; chỉ workflow_dispatch; nhóm concurrency RIÊNG", () => {
@@ -165,7 +165,7 @@ describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
   });
 });
 
-describe("[S1.9103] IAM của stack 30 cho đường khởi tạo", () => {
+describe("[S1.183] IAM của stack 30 cho đường khởi tạo", () => {
   it("⑷ tp-deploy tin đúng [prod, prod-khoi-tao] — tên environment của workflow; worker chỉ prod-worker", () => {
     expect(khoiDeploy("deploy")).toMatch(/\n? {6}environments += \["prod", "prod-khoi-tao"\]\n/u);
     expect(khoiDeploy("deploy_worker")).toMatch(/\n? {6}environments += \["prod-worker"\]\n/u);
@@ -213,7 +213,7 @@ describe("[S1.9103] IAM của stack 30 cho đường khởi tạo", () => {
   });
 });
 
-describe("[S1.9103] task tp-khoi-tao của stack 90 và image", () => {
+describe("[S1.183] task tp-khoi-tao của stack 90 và image", () => {
   it("⑸ task: role tp-khoi-tao, log khoi-tao, một secret DATABASE_URL, region cho Secrets Manager; SG nói được với CSDL", () => {
     expect(TF90).toContain('khoi_tao = { ho = "tp-khoi-tao", role = local.role_arn.khoi_tao, cpu = 256, mem = 512, log = "khoi-tao", cong = [] }');
     const biMat = /\n {4}khoi_tao = \[\n([\s\S]*?)\n {4}\]/gu;
@@ -270,7 +270,7 @@ describe("[S1.9103] task tp-khoi-tao của stack 90 và image", () => {
   });
 });
 
-describe("[S1.9103 / lượt soi] job nhac và tài liệu vận hành", () => {
+describe("[S1.183 / lượt soi] job nhac và tài liệu vận hành", () => {
   it("nhac: không quyền, không environment, không AWS; chạy khi build xanh mà chay không xanh", () => {
     const nhac = thanJob("nhac");
     expect(nhac).toContain("\n    needs: [build, chay]\n    if: always() && needs.build.result == 'success' && needs.chay.result != 'success'\n");

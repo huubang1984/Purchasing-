@@ -10,7 +10,7 @@
 //   ⑷ dòng lệnh: stdout một dòng mang mã tổ chức; stdout/stderr không mang email hay họ tên; thoát 1 khi hỏng. **[lượt soi]**
 //      Ba đường vào: lệnh `node` mà task sẽ chạy, script `pnpm khoi-tao` (`--silent`), và đường Secrets Manager — đường PROD —
 //      trên một máy chủ Secrets Manager GIẢ trong tiến trình test (`AWS_ENDPOINT_URL_SECRETS_MANAGER`).
-//      **[S1.9103]** Đường prod hỏi ĐÚNG phiên bản đã duyệt, từ chối phiên bản khác, và dừng TRƯỚC CSDL khi bản khai không
+//      **[S1.183]** Đường prod hỏi ĐÚNG phiên bản đã duyệt, từ chối phiên bản khác, và dừng TRƯỚC CSDL khi bản khai không
 //      khớp ba kỳ vọng (tổ chức, số người, số vai) mà người duyệt đã thấy.
 // ==============================================================================================
 import { spawn, spawnSync } from "node:child_process";
@@ -321,7 +321,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
         body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-AbCdEf`, Name: ten, VersionId: PHIEN_BAN,
           SecretString: banKhaiSm },
       });
-      // [S1.9103] Đường prod mang phiên bản, băm, mã tổ chức do workflow chọn và ba kỳ vọng — đúng lệnh `trien-khai.sh khoi-tao`.
+      // [S1.183] Đường prod mang phiên bản, băm, mã tổ chức do workflow chọn và ba kỳ vọng — đúng lệnh `trien-khai.sh khoi-tao`.
       const bam = (noiDung: string) => createHash("sha256").update(noiDung, "utf8").digest("hex");
       const MA = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
       const duyet = (ten: string, toChuc: string, h: string, soNguoi = "1", vai = "BUYER=1", pb = PHIEN_BAN, ma = MA) =>
@@ -350,7 +350,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       const soToChuc = async (slug: string) =>
         (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM organizations WHERE slug = $1", [slug])).rows[0]!.n;
 
-      // [S1.9103] SM trả một phiên bản KHÁC phiên bản đã hỏi ⇒ dừng, không chạm CSDL.
+      // [S1.183] SM trả một phiên bản KHÁC phiên bản đã hỏi ⇒ dừng, không chạm CSDL.
       traLoi = (ten) => ({
         status: 200,
         body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-AbCdEf`, Name: ten,
@@ -373,7 +373,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       expect(thieu.stderr).toBe("[khoi-tao] HONG: Secrets Manager trả một phiên bản khác phiên bản đã duyệt\n");
       expect(await soToChuc("sm-thieu-pb")).toBe(0);
 
-      // [S1.9103] Bản khai ở ĐÚNG phiên bản đã duyệt nhưng không khớp điều người duyệt thấy (thêm một người sau lúc khai số)
+      // [S1.183] Bản khai ở ĐÚNG phiên bản đã duyệt nhưng không khớp điều người duyệt thấy (thêm một người sau lúc khai số)
       // ⇒ dừng TRƯỚC CSDL; thông điệp nêu trường lệch, không email, không họ tên.
       const banKhaiLech = banKhaiTao("sm-lech", [nguoi("lech.mot@dong-lenh.vn", ["BUYER"]), nguoi("lech.hai@dong-lenh.vn", ["FINANCE"], "Họ Tên Lệch")]);
       traLoi = (ten) => ({
@@ -390,7 +390,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
         expect(dau).not.toContain("Họ Tên Lệch");
       }
 
-      // [S1.9103 / lượt soi] Xoá hẳn một bí mật rồi tạo lại CÙNG tên với `--client-request-token` bằng VersionId cũ: cùng cặp
+      // [S1.183 / lượt soi] Xoá hẳn một bí mật rồi tạo lại CÙNG tên với `--client-request-token` bằng VersionId cũ: cùng cặp
       // (tên, VersionId), nội dung KHÁC — ở đây cùng tổ chức, cùng số người, cùng vai, chỉ đổi người. Ba kỳ vọng đều khớp; băm thì
       // không ⇒ dừng TRƯỚC CSDL.
       const daDuyet = banKhaiTao("sm-tao-lai", [nguoi("that@khach.vn", ["DIRECTOR"])]);
@@ -409,7 +409,7 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
     }
   }, 120_000);
 
-  it("[S1.9103] kỳ vọng lệch với tệp bản khai ⇒ dừng TRƯỚC khi mở CSDL (URL CSDL trỏ một cổng không ai nghe mà lỗi vẫn là lỗi lệch)", () => {
+  it("[S1.183] kỳ vọng lệch với tệp bản khai ⇒ dừng TRƯỚC khi mở CSDL (URL CSDL trỏ một cổng không ai nghe mà lỗi vẫn là lỗi lệch)", () => {
     const tep = join(thuMuc, "lech.json");
     writeFileSync(tep, banKhaiTao("tep-lech", [nguoi("tep.lech@dong-lenh.vn", ["BUYER", "TECHNICAL"])]));
     const r = chayLenh(["tao", "--ban-khai-tep", tep, "--to-chuc", "tep-khac", "--so-nguoi", "1", "--vai", "BUYER=1,TECHNICAL=1"], {
@@ -423,11 +423,11 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       DATABASE_URL: "postgres://khong-ai:khong-co@127.0.0.1:1/khong-co",
     });
     expect(toi.status).toBe(1);
-    // [S1.9103] Lỗi mạng in kèm mã hệ thống của Node — dòng lỗi đo được ở image với bó CA sai chỉ còn "HONG: Error".
+    // [S1.183] Lỗi mạng in kèm mã hệ thống của Node — dòng lỗi đo được ở image với bó CA sai chỉ còn "HONG: Error".
     expect(toi.stderr).toBe("[khoi-tao] HONG: Error (ma ECONNREFUSED)\n");
   });
 
-  it("[S1.9103] băm tính trên BYTE của tệp — tệp UTF-8 kèm BOM (Notepad) khớp Get-FileHash và vẫn đọc được; lệch một byte thì dừng", () => {
+  it("[S1.183] băm tính trên BYTE của tệp — tệp UTF-8 kèm BOM (Notepad) khớp Get-FileHash và vẫn đọc được; lệch một byte thì dừng", () => {
     const tep = join(thuMuc, "bom.json");
     const noiDung = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(banKhaiTao("tep-bom", [nguoi("bom@dong-lenh.vn", ["BUYER"], "Người Có Dấu")]), "utf8")]);
     writeFileSync(tep, noiDung);

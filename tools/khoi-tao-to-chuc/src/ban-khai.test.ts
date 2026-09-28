@@ -161,7 +161,7 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
       bam: null,
       maToChuc: null,
     });
-    // ~~bí mật chỉ cần tên~~ [S1.9103] bí mật đi cùng phiên bản, băm, ba kỳ vọng; thứ tự cờ tuỳ ý.
+    // ~~bí mật chỉ cần tên~~ [S1.183] bí mật đi cùng phiên bản, băm, ba kỳ vọng; thứ tự cờ tuỳ ý.
     expect(docThamSo(["them-nguoi", "--vai", "BUYER=1,DIRECTOR=2", "--ban-khai-secret", `${TIEN_TO_BI_MAT}thep-viet`, "--to-chuc", ORG,
       "--bam", BAM, "--phien-ban", PB, "--so-nguoi", "2"])).toEqual({
       lenh: "them-nguoi",
@@ -184,7 +184,7 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
     expect(docThamSo(bo({ toChuc: "a".repeat(63), ten: `${TIEN_TO_BI_MAT}${"a".repeat(63)}` })).kyVong).toMatchObject({ toChuc: "a".repeat(63) });
   });
 
-  it("[S1.9103] maLoi: in SQLSTATE và mã hệ thống của Node; không in mã mang chữ thường, khoảng trắng, dấu chấm hay đường dẫn", () => {
+  it("[S1.183] maLoi: in SQLSTATE và mã hệ thống của Node; không in mã mang chữ thường, khoảng trắng, dấu chấm hay đường dẫn", () => {
     const loi = (code: unknown) => Object.assign(new Error("x"), { code });
     expect(maLoi(loi("23505"))).toBe(" (ma 23505)");
     expect(maLoi(loi("ECONNREFUSED"))).toBe(" (ma ECONNREFUSED)");
@@ -209,12 +209,12 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
     [["tao", "--ban-khai-secret", "tp/api/otp-peppers"], /tp\/khoi-tao\/ban-khai\/<slug>/u],
     [["tao", "--ban-khai-secret", TIEN_TO_BI_MAT], /tp\/khoi-tao\/ban-khai\/<slug>/u],
     [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}a b`], /tp\/khoi-tao\/ban-khai\/<slug>/u],
-    // [S1.9103 / lượt soi] Tên dạng slug: một tên mang `@`/`.`/`/`/chữ hoa không qua — nó vào CloudTrail và run công khai.
+    // [S1.183 / lượt soi] Tên dạng slug: một tên mang `@`/`.`/`/`/chữ hoa không qua — nó vào CloudTrail và run công khai.
     [bo({ ten: `${TIEN_TO_BI_MAT}nguyen.van.a@khach.vn` }), /<slug>/u],
     [bo({ ten: `${TIEN_TO_BI_MAT}a/b` }), /<slug>/u],
     [bo({ ten: `${TIEN_TO_BI_MAT}Thep-Viet` }), /<slug>/u],
     [bo({ ten: `${TIEN_TO_BI_MAT}ab` }), /<slug>/u],
-    // [S1.9103] Đường prod: phiên bản, băm, ba kỳ vọng — và mã tổ chức khi tạo — là bắt buộc.
+    // [S1.183] Đường prod: phiên bản, băm, ba kỳ vọng — và mã tổ chức khi tạo — là bắt buộc.
     [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}xyz`], /cần --phien-ban/u],
     [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}xyz`, "--to-chuc", "thep-viet", "--so-nguoi", "1", "--vai", "BUYER=1"], /cần --phien-ban/u],
     [bo({ bam: null }), /cần --bam/u],
@@ -277,7 +277,7 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
   });
 });
 
-describe("[S1.9103] kiemKhop — bản khai ở phiên bản đã đọc khớp điều người duyệt thấy", () => {
+describe("[S1.183] kiemKhop — bản khai ở phiên bản đã đọc khớp điều người duyệt thấy", () => {
   const bk = docBanKhai(tao([nguoi("a@congty.vn", ["BUYER"]), nguoi("b@congty.vn", ["PROCUREMENT_MANAGER", "TECHNICAL"])]), "tao");
   const them = docBanKhai(JSON.stringify({ cheDo: "them-nguoi", toChuc: { id: ORG }, nguoi: [nguoi("c@congty.vn")] }), "them-nguoi");
 
@@ -310,7 +310,7 @@ describe("[S1.9103] kiemKhop — bản khai ở phiên bản đã đọc khớp 
     expect((loi as Error).message).not.toMatch(/c@congty|Nguyễn/u);
   });
 
-  it("[S1.9103] một BOM ở đầu (Notepad, PowerShell 5) không làm hỏng bản khai; hai BOM thì hỏng", () => {
+  it("[S1.183] một BOM ở đầu (Notepad, PowerShell 5) không làm hỏng bản khai; hai BOM thì hỏng", () => {
     expect(docBanKhai(`﻿${tao()}`, "tao")).toMatchObject({ slug: "thep-viet" });
     expect(() => docBanKhai(`﻿﻿${tao()}`, "tao")).toThrow(new BanKhaiError("bản khai không phải JSON hợp lệ"));
   });

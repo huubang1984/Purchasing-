@@ -1,7 +1,7 @@
 name: Khoi tao to chuc — prod (bam tay)
 
 # =============================================================================================
-# [S1.9103 / ADR-111] TAO TO CHUC, NGUOI DUNG VA VAI TREN PROD: BAM TAY, NGUOI KHAC DUYET, XOA BAN KHAI
+# [S1.183 / ADR-111] TAO TO CHUC, NGUOI DUNG VA VAI TREN PROD: BAM TAY, NGUOI KHAC DUYET, XOA BAN KHAI
 # =============================================================================================
 # Chi `workflow_dispatch` tren `master`. Ba job:
 #

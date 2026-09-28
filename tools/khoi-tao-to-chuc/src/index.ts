@@ -4,11 +4,11 @@
 //   pnpm khoi-tao tao        --ban-khai-tep <đường dẫn>      (cục bộ: test, dev)
 //   pnpm khoi-tao tao        --ban-khai-secret <tên bí mật>  (prod: Secrets Manager, tên dưới tp/khoi-tao/ban-khai/)
 //   pnpm khoi-tao them-nguoi --ban-khai-tep … | --ban-khai-secret …
-//   **[S1.9103]** với `--ban-khai-secret` thì BẮT BUỘC thêm `--phien-ban <VersionId>` và ba KỲ VỌNG `--to-chuc <slug khi tao |
+//   **[S1.183]** với `--ban-khai-secret` thì BẮT BUỘC thêm `--phien-ban <VersionId>` và ba KỲ VỌNG `--to-chuc <slug khi tao |
 //   mã tổ chức khi them-nguoi> --so-nguoi <n> --so-vai <tổng cặp người–vai>`; với `--ban-khai-tep`, kỳ vọng tuỳ chọn (có thì
 //   vẫn kiểm), `--phien-ban` bị từ chối.
 //
-// [S1.9103] VÌ SAO LỆNH MANG PHIÊN BẢN VÀ KỲ VỌNG (khoản 251): người duyệt của environment `prod-khoi-tao` không đọc được bản
+// [S1.183] VÌ SAO LỆNH MANG PHIÊN BẢN VÀ KỲ VỌNG (khoản 251): người duyệt của environment `prod-khoi-tao` không đọc được bản
 // khai — nó mang dữ liệu cá nhân — nên họ duyệt điều job `build` của workflow in ra: tên, `VersionId`, tổ chức, số người, số
 // vai. Công cụ đọc ĐÚNG phiên bản ấy (một phiên bản của Secrets Manager không đổi nội dung được) và dừng TRƯỚC khi mở CSDL nếu
 // bản khai ở phiên bản ấy không khớp ba kỳ vọng. Thêm người hay đổi tổ chức sau lúc duyệt thì phải tạo phiên bản mới — tức
@@ -63,20 +63,20 @@ export class ThamSoError extends Error {
 
 export type NguonBanKhai =
   | { readonly loai: "tep"; readonly duong: string }
-  // [S1.9103] Phiên bản đi cùng tên: công cụ đọc ĐÚNG phiên bản người duyệt đã duyệt, không đọc nhãn AWSCURRENT.
+  // [S1.183] Phiên bản đi cùng tên: công cụ đọc ĐÚNG phiên bản người duyệt đã duyệt, không đọc nhãn AWSCURRENT.
   | { readonly loai: "secret"; readonly ten: string; readonly phienBan: string };
 
 export interface ThamSo {
   readonly lenh: CheDo;
   readonly nguon: NguonBanKhai;
-  /** [S1.9103] Điều người duyệt đã thấy — bắt buộc khi đọc từ Secrets Manager, tuỳ chọn với tệp; `null` = không kiểm. */
+  /** [S1.183] Điều người duyệt đã thấy — bắt buộc khi đọc từ Secrets Manager, tuỳ chọn với tệp; `null` = không kiểm. */
   readonly kyVong: KyVong | null;
   /**
-   * [S1.9103 / lượt soi] SHA-256 (hex chữ thường) của ĐÚNG byte bản khai — bắt buộc với bí mật. Cặp (tên, VersionId) không đủ:
+   * [S1.183 / lượt soi] SHA-256 (hex chữ thường) của ĐÚNG byte bản khai — bắt buộc với bí mật. Cặp (tên, VersionId) không đủ:
    * xoá hẳn một bí mật rồi tạo lại cùng tên với `--client-request-token` bằng VersionId cũ thì ra cùng cặp, nội dung khác.
    */
   readonly bam: string | null;
-  /** [S1.9103] Mã tổ chức workflow chọn trước lúc duyệt — chỉ chế độ `tao`; bắt buộc khi `tao` đọc từ bí mật. */
+  /** [S1.183] Mã tổ chức workflow chọn trước lúc duyệt — chỉ chế độ `tao`; bắt buộc khi `tao` đọc từ bí mật. */
   readonly maToChuc: string | null;
 }
 
@@ -112,7 +112,7 @@ function loiVai(vai: string, soNguoi: number): string | null {
 
 /**
  * Đọc dòng lệnh — hàm thuần. Đúng MỘT nguồn bản khai; tên bí mật phải nằm dưới `TIEN_TO_BI_MAT`, mỗi cờ tối đa một lần.
- * **[S1.9103]** Bí mật đi kèm `--phien-ban`, `--bam`, đủ ba kỳ vọng, và — chế độ `tao` — `--ma-to-chuc`; `deploy/trien-khai.sh`
+ * **[S1.183]** Bí mật đi kèm `--phien-ban`, `--bam`, đủ ba kỳ vọng, và — chế độ `tao` — `--ma-to-chuc`; `deploy/trien-khai.sh`
  * (`kiem_dau_vao`) kiểm cùng các luật ấy trước lúc duyệt — `tests/deploy/khoi-tao-sh.test.ts` so hai phía.
  */
 export function docThamSo(ds: readonly string[]): ThamSo {
@@ -160,7 +160,7 @@ export function docThamSo(ds: readonly string[]): ThamSo {
 
   const phienBan = gt.get("--phien-ban");
   if (ten !== undefined) {
-    // [S1.9103 / lượt soi] Tên dạng slug dưới tiền tố: tên bí mật đi vào CloudTrail và vào run CÔNG KHAI của workflow — một tên
+    // [S1.183 / lượt soi] Tên dạng slug dưới tiền tố: tên bí mật đi vào CloudTrail và vào run CÔNG KHAI của workflow — một tên
     // mang `@` hay `.` (một email) là dữ liệu cá nhân lộ ra ngoài.
     if (!ten.startsWith(TIEN_TO_BI_MAT) || !SLUG.test(ten.slice(TIEN_TO_BI_MAT.length))) {
       throw new ThamSoError(`--ban-khai-secret phải là "${TIEN_TO_BI_MAT}<slug>" (a-z, 0-9, gạch nối ở giữa; 3–63 ký tự)`);
@@ -203,7 +203,7 @@ async function docNguon(nguon: NguonBanKhai): Promise<{ readonly noiDung: string
   }
   const client = new SecretsManagerClient({ region: batBuoc("TRUSTPROCURE_KHOI_TAO_REGION") });
   try {
-    // [S1.9103] Hỏi ĐÚNG phiên bản đã duyệt. ~~một phiên bản đã có của Secrets Manager không đổi nội dung được~~ **[lượt soi]**
+    // [S1.183] Hỏi ĐÚNG phiên bản đã duyệt. ~~một phiên bản đã có của Secrets Manager không đổi nội dung được~~ **[lượt soi]**
     // Trong MỘT bí mật thì đúng; xoá hẳn rồi tạo lại cùng tên thì một VersionId cũ mang được nội dung mới — nên còn so băm.
     const kq = await client.send(new GetSecretValueCommand({ SecretId: nguon.ten, VersionId: nguon.phienBan }));
     if (typeof kq.SecretString !== "string") throw new ThamSoError("bí mật bản khai không có SecretString");
@@ -221,7 +221,7 @@ async function docNguon(nguon: NguonBanKhai): Promise<{ readonly noiDung: string
 
 /**
  * Phần `" (ma X)"` của dòng lỗi lạ — hay chuỗi rỗng. [lượt soi] SQLSTATE không mang dữ liệu — in kèm tên, để một lỗi lạ của pg
- * vẫn chẩn đoán được. **[S1.9103]** Cả mã lỗi hệ thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `SELF_SIGNED_CERT_IN_CHAIN`,
+ * vẫn chẩn đoán được. **[S1.183]** Cả mã lỗi hệ thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `SELF_SIGNED_CERT_IN_CHAIN`,
  * `ERR_TLS_CERT_ALTNAME_INVALID`…): đo image với bó CA sai, dòng lỗi chỉ còn "HONG: Error" — mà lần chạy đầu trên RDS hỏng thì
  * nhiều khả năng hỏng đúng ở mạng hay TLS. Mã là HẰNG SỐ viết hoa, không mang dữ liệu; mẫu không nhận chữ thường, khoảng
  * trắng, dấu chấm hay dấu hai chấm — một `code` mang đường dẫn hay giá trị thì không in.
@@ -235,7 +235,7 @@ export async function chay(ds: readonly string[]): Promise<string> {
   const ts = docThamSo(ds);
   const url = batBuoc("DATABASE_URL");
   const nguon = await docNguon(ts.nguon);
-  // [S1.9103] Trước khi mở CSDL: đúng byte đã duyệt (băm), rồi bản khai khớp điều người duyệt thấy (kỳ vọng).
+  // [S1.183] Trước khi mở CSDL: đúng byte đã duyệt (băm), rồi bản khai khớp điều người duyệt thấy (kỳ vọng).
   if (ts.bam !== null && nguon.bam !== ts.bam) throw new BanKhaiError("bản khai không khớp băm SHA-256 đã duyệt");
   const bk = docBanKhai(nguon.noiDung, ts.lenh);
   if (ts.kyVong !== null) kiemKhop(bk, ts.kyVong);
@@ -249,7 +249,7 @@ export async function chay(ds: readonly string[]): Promise<string> {
     const kq = await khoiTao(pool, bk, ts.maToChuc === null ? {} : { maToChuc: ts.maToChuc });
     // [lượt soi] Phiên bản bí mật đã đọc đi vào dòng kết quả: ~~người duyệt duyệt một TÊN bí mật, còn nội dung của tên ấy đổi
     // được tới lúc chạy — dòng này cho đối chiếu SAU. Ghim phiên bản TRƯỚC (lệnh mang `VersionId` đã duyệt) là việc của vòng
-    // hạ tầng (khoản 251).~~ **[S1.9103]** lệnh nay mang `VersionId` và băm đã duyệt, công cụ đọc đúng phiên bản ấy và so băm
+    // hạ tầng (khoản 251).~~ **[S1.183]** lệnh nay mang `VersionId` và băm đã duyệt, công cụ đọc đúng phiên bản ấy và so băm
     // (`docNguon`, `chay`); dòng này ở lại trong log `/tp/khoi-tao` để đối chiếu với lần duyệt.
     return `[khoi-tao] ${kq.cheDo}: to chuc ${kq.orgId}, ${String(kq.soNguoi)} nguoi, ${String(kq.soVai)} vai` +
       (nguon.phienBan === null ? "" : `, ban khai phien ban ${nguon.phienBan}`);

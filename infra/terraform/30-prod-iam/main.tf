@@ -75,7 +75,7 @@ locals {
     unseal_worker = "worker"
     migrate       = "migrate"
     anchor_job    = "anchor"
-    # [S1.9103 / ADR-111] Bản khai `tp/khoi-tao/ban-khai/*`. Nhánh này còn có `tp/khoi-tao/database-url` — URL mà execution
+    # [S1.183 / ADR-111] Bản khai `tp/khoi-tao/ban-khai/*`. Nhánh này còn có `tp/khoi-tao/database-url` — URL mà execution
     # role đã bơm vào CHÍNH container ấy, nên đọc lại nó không mở thêm gì; công cụ từ chối mọi tên ngoài `ban-khai/`.
     khoi_tao = "khoi-tao"
   }
@@ -158,7 +158,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 # tp-deploy: environment "prod". tp-deploy-worker: environment "prod-worker" — bật "Required
 # reviewers" cho CẢ HAI environment trên GitHub. Tách hai role vì role nào PassRole được task
 # role của worker thì chạy được một task bất kỳ mang quyền kms:Decrypt (ADR-062, rủi ro còn lại).
-# [S1.9103 / ADR-111] tp-deploy nhận thêm environment "prod-khoi-tao" — workflow `khoi-tao.yml` chạy task tạo tổ chức dưới
+# [S1.183 / ADR-111] tp-deploy nhận thêm environment "prod-khoi-tao" — workflow `khoi-tao.yml` chạy task tạo tổ chức dưới
 # CÙNG role, nhưng environment ấy bật thêm "Prevent self-review": người bấm không tự duyệt được lần tạo tổ chức và gán vai.
 # Deploy api vẫn đi environment "prod" với luật cũ. Role không đổi quyền theo environment — ranh giới là workflow trên master.
 locals {
@@ -168,10 +168,10 @@ locals {
       repos        = local.repo_app
       services     = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
       pass_roles   = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job, local.role_arn.khoi_tao]
-      # [S1.9103 / lượt soi] KHÔNG đọc log nào — cả `/tp/khoi-tao`: kết quả của task khởi tạo suy từ đầu vào đã duyệt (mã tổ
+      # [S1.183 / lượt soi] KHÔNG đọc log nào — cả `/tp/khoi-tao`: kết quả của task khởi tạo suy từ đầu vào đã duyệt (mã tổ
       # chức do workflow chọn), và một quyền đọc log là một kênh đọc sạch cho task tự đăng ký in secret vào nhóm log ấy.
       doc_log = []
-      # [S1.9103] Xoá bí mật bản khai sau khi task thoát 0 (chủ dự án chọn: xoá ngay, không cửa sổ khôi phục).
+      # [S1.183] Xoá bí mật bản khai sau khi task thoát 0 (chủ dự án chọn: xoá ngay, không cửa sổ khôi phục).
       xoa_secret = ["${local.secret_arn}/khoi-tao/ban-khai/*"]
     }
     deploy_worker = {
@@ -273,7 +273,7 @@ data "aws_iam_policy_document" "deploy" {
     }
   }
 
-  # [S1.9103 / ADR-111] Xoá — chỉ xoá, không đọc, không ghi — bí mật bản khai của task khởi tạo, sau khi task thoát 0.
+  # [S1.183 / ADR-111] Xoá — chỉ xoá, không đọc, không ghi — bí mật bản khai của task khởi tạo, sau khi task thoát 0.
   dynamic "statement" {
     for_each = length(each.value.xoa_secret) == 0 ? [] : [1]
     content {

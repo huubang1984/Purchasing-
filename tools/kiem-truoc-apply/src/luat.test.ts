@@ -35,7 +35,7 @@ describe("kiemBien", () => {
     expect(muc(kq, "VANG")).toEqual([]);
   });
 
-  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho ~~sáu~~ [S1.9103] bảy image và mọi chỗ <...>; VANG cho api, worker, DNS", () => {
+  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho ~~sáu~~ [S1.183] bảy image và mọi chỗ <...>; VANG cho api, worker, DNS", () => {
     const tam = "tam@sha256:" + "0".repeat(64);
     const kq = kiemBien(
       {

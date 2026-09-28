@@ -30,7 +30,7 @@ export const KHO_ECR: Readonly<Record<TenAnh, string>> = {
   web: "tp-web",
   public_keys: "tp-public-keys",
   neo: "tp-neo",
-  // [S1.9103 / ADR-111] Task khởi tạo tổ chức.
+  // [S1.183 / ADR-111] Task khởi tạo tổ chức.
   khoi_tao: "tp-khoi-tao",
 };
 
