@@ -1,22 +1,30 @@
 // ==============================================================================================
-// Route KHÁCH — nhà cung cấp đã qua magic link + OTP. `ctx.client` ĐÃ gắn phiên khách, nên mọi
-// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời. Handler không
-// có cách nào nới điều đó: nó không có pool, không có `withTenant`, không có `node:http`.
+// Route KHÁCH — nhà cung cấp đã qua magic link + OTP. ~~`ctx.client` ĐÃ gắn phiên khách, nên mọi
+// câu SQL ở đây tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một lời mời.~~ **[S1.181 / lượt soi]** Đúng cho
+// route ĐỌC: `ctx.client` đã gắn phiên khách, và mọi câu SQL tự bị policy `AS RESTRICTIVE` của 027/028 khoá vào đúng một
+// lời mời. Hai route GHI (`POST /guest/bids`, `POST /guest/logout`) chạy trên kết nối CHỈ gắn tổ chức (`dispatch.ts` khối
+// [S1.10.3]) — trên kết nối ấy policy không khoá theo lời mời, nên phạm vi của chúng đến từ id mà bộ điều phối dẫn xuất
+// từ cookie và từ việc handler chỉ gọi hàm gói nhận id ấy, không viết SQL tay. Handler không có cách nào nới điều đó: nó
+// không có pool, không có `withTenant`, không có `node:http`.
 //
 //   GET  /guest/session                       phiên đang cầm là gì (route đo khung của S1.10.2)
 //   GET  /guest/rfq                           gói thầu được mời: hạng mục + khoá CÔNG KHAI, KHÔNG ngân sách;
-//                                             [khoản 196] kèm `gioMayChu` — đồng hồ CSDL, nguồn phán xử hạn
+//                                             [khoản 196] kèm `gioMayChu` — đồng hồ CSDL, nguồn phán xử hạn;
+//                                             [S1.181 / ADR-109] kèm `supplier.legalName` — tên doanh nghiệp được mời
 //   POST /guest/bids   {envelope: base64}     nộp một phong bì; nhận biên nhận đã ký (B1/B2);
 //                                             [khoản 196] quá hạn ⇒ 422 kèm `gioPhanXu` + `hanNop`, có hàng sổ
 //   GET  /guest/bids                          các phiên bản đã nộp của CHÍNH MÌNH — không phong bì
 //   GET  /guest/bids/:bidVersionId/receipt    biên nhận, để kiểm chứng độc lập bằng khoá công khai
+//   POST /guest/logout                        [S1.181 / ADR-109] thu hồi CHÍNH phiên đang gọi, xoá cookie khách
 // ==============================================================================================
 import { NopBiTuChoiError, NopQuaHanError, getBidReceipt, listBidVersions, submitBid } from "@trustprocure/bidding";
 import { docVongBafoKhach } from "@trustprocure/danh-gia";
+import { revokeGuestSession } from "@trustprocure/invitation";
 import { getRfq, listRfqItems } from "@trustprocure/rfq";
 import { getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { HttpError } from "../http.js";
 import type { GuestRoute } from "../route-types.js";
+import { XOA_COOKIE_PHIEN_KHACH } from "./anon.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -91,6 +99,11 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // [S1.165 / khoản 225] `cancelReason` CHỈ khi gói đã huỷ: đó là câu người huỷ viết cho chính
       // những nhà cung cấp đã bỏ công dự thầu — kể cả sau khi giá của họ đã lộ, vì `071` mở bốn cạnh
       // huỷ sau khi đóng và đòi lý do ở đúng bốn cạnh ấy. Gói chưa huỷ luôn trả `null`.
+      //
+      // [S1.181 / ADR-109] `supplier` mang ĐÚNG một trường — tên pháp lý của nhà cung cấp được mời, dẫn xuất ở bước
+      // tra cookie (`ctx.supplierLegalName`), không đọc ở đây: `suppliers` đóng với kết nối gắn phiên khách (027). Trang
+      // nộp thầu nêu nó trong câu hỏi phiên lúc tải, để hai nhà cung cấp của cùng một gói trên một máy phân biệt được
+      // phiên của ai. Không MST, không người liên hệ, không mã nhà cung cấp.
       return {
         status: 200,
         body: {
@@ -101,6 +114,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
             deadlineAt: rfq.deadlineAt,
             cancelReason: rfq.status === "CANCELLED" ? rfq.cancelReason : null,
           },
+          supplier: { legalName: ctx.supplierLegalName },
           gioMayChu: gio[0]?.gio ?? null,
           bafoRound: vongBafo,
           items: items.map((i) => ({
@@ -144,7 +158,8 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         if (loi instanceof NopQuaHanError) {
           return { status: 422, body: { error: loi.message, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
-        // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang `BID_SUBMIT_DENIED`.
+        // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang ~~`BID_SUBMIT_DENIED`~~
+        // **[S1.180]** `BID_STATE_DENIED` mang mã của nhánh.
         if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message } };
         throw loi;
       }
@@ -199,6 +214,25 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
       // lọc trước khi hàm nhìn thấy, nên hàm không phân biệt được — và đó là điều mong muốn.
       if (bn === null) throw new HttpError(404, "khong co bien nhan");
       return { status: 200, body: { canonicalText: bn.canonicalText, signature: b64(bn.signature) } };
+    },
+  },
+  {
+    // ==========================================================================================
+    // [S1.181 / ADR-109] NHÀ CUNG CẤP TỰ THOÁT — cùng khuôn `POST /auth/logout` của người mua.
+    //
+    // Route GHI của khách: `withTenant` không GUC (dispatch.ts khối [S1.10.3]), nên handler không viết SQL tay —
+    // chỉ gọi `revokeGuestSession` với `guestSessionId` mà bộ điều phối dẫn xuất từ cookie. Phiên không hợp lệ ⇒
+    // 401 ở bước xác thực, trước handler. 200 kể cả khi phiên vừa bị bên mua thu hồi giữa hai bước (hàm trả
+    // `false`, không ghi sổ): điều người bấm muốn — phiên chết, cookie đi — vẫn đạt. Không trần tần suất: một
+    // 429 trên đường thoát là một lớp GIỮ người ta ở lại trong phiên — cùng lý do đã ghi cho `/auth/logout`.
+    // ==========================================================================================
+    method: "POST",
+    path: "/guest/logout",
+    audience: "GUEST",
+    mutates: true,
+    handler: async (ctx) => {
+      await revokeGuestSession(ctx.client, ctx.orgId, ctx.guestSessionId);
+      return { status: 200, body: { ok: true }, setCookie: [XOA_COOKIE_PHIEN_KHACH] };
     },
   },
 ];

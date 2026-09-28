@@ -1897,6 +1897,13 @@ TRƯỚC khi gọi handler. Handler **không nhận `pool`**, và `apps/api/src/
 `routes/**` (cùng khuôn `cong-quyen-route.test.ts`). Quên gắn phiên trở thành **không viết được**,
 không phải "phải nhớ".
 
+**[S1.181 / lượt soi — ghi muộn]** Mục này đúng cho route khách ĐỌC. Từ S1.10.3, route khách GHI (`mutates: true` —
+`POST /guest/bids`, và từ S1.181 `POST /guest/logout`) nhận `ctx.client` mở bằng `withTenant` KHÔNG GUC phiên khách, vì kết nối
+gắn phiên khách không ghi được sổ (`apps/api/src/dispatch.ts` khối [S1.10.3] ghi lý do đo được). Trên kết nối ấy policy `AS
+RESTRICTIVE` của 027/028 không khoá theo lời mời; phạm vi của hai route ấy đến từ `guestSessionId` mà bộ điều phối dẫn xuất từ
+cookie và từ việc handler chỉ gọi hàm gói nhận id ấy, không viết SQL tay (`apps/api/src/routes.test.ts`). Quyết định ấy chưa có
+ADR riêng.
+
 Route `audience: "BUYER"` cùng khuôn: `ctx.client` mở bằng `withTenant`, `ctx.actor` là
 `SessionActor` dẫn xuất từ cookie; handler đổi trạng thái **phải** khai `permission`, và bộ điều
 phối gọi `requirePermission` **trước** handler — nên vị từ *"nhắc tới `requirePermission`"* của
@@ -3222,6 +3229,8 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 **[S1.86 / khoản 128 — ADR-042] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_KHOA_TU_VAN_PHIEN_SAI`** — *quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng*. Lý do nó là một phán xét CHẶN ĐƯỢC DEPLOY chứ không phải một lời khuyên: một phiên vai `app_api` lấy `pg_advisory_lock` trên khoá ghi sổ của một tổ chức rồi đứng yên làm MỌI lần ghi sổ của tổ chức ấy gãy `55P03` vô thời hạn — `idle_in_transaction_session_timeout` không với tới vì phiên ấy KHÔNG ở trong giao dịch, và pool không đặt `idle_session_timeout` (đo §S1.86). Câu sửa là `REVOKE … FROM PUBLIC` — **đơn điệu**, đúng nhóm tự chữa được của §2⑵ — cộng một câu `GRANT … TO CURRENT_USER` trả lại đúng hàm mà `migrate()` lấy ở câu ĐẦU TIÊN của nó. Hậu điều kiện đọc theo `proname` nên nó phủ CẢ HAI dạng đối số mà không ghim chữ ký: **[S1.87 / lượt soi ngang 74 — ĐO]** `pg_proc` có MỘT HÀNG cho mỗi overload, nên bỏ ngỏ dạng `(integer, integer)` để lại một hàng ở hậu điều kiện ⇒ `migrate()` gãy ở BƯỚC 3 (đo: đột biến M2). Lời khai CŨ giải thích cùng phép đo ấy bằng một tiền đề SAI — ~~`pg_advisory_lock(integer, integer)` lấy CÙNG một khoá~~ — và phép đo bác: PostgreSQL giữ HAI không gian khoá tư vấn RỜI NHAU (`pg_locks.objsubid` = 1 cho dạng `bigint`, 2 cho cặp `(integer, integer)`); với phiên A đang giữ `pg_advisory_lock(k)` dạng `bigint`, phiên B LẤY ĐƯỢC `pg_try_advisory_lock(hi, lo)` trên chính hai nửa của `k` (true) trong khi dạng `bigint` trượt (false), và `pg_locks` cho hai hàng `objsubid` 1 và 2. Nên thu hồi dạng hai đối số là PHÒNG THỦ CHIỀU SÂU cho một không gian khoá KHÁC, không phải việc bịt một đường vòng tới khoá ghi sổ. Ranh giới, nói ra: mục này KHÔNG chạm `*_xact_lock*` — `noi_chuoi_kiem_toan()` là SECURITY INVOKER nên vai ứng dụng buộc phải giữ chúng, và nửa ấy là khoản 178, không phải một thiếu sót của mục này.
 
 **[ADR-072 phần 1 / 065] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_NEO_SAI`** — *quyền quan hệ của `app_neo`*, vai chỉ-đọc của job neo. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_neo` gọi được hàm liệt kê tổ chức mà `app_api` cố ý không có (ADR-040), và đổi lại nó được ĐỊNH NGHĨA bằng việc không ghi được gì — một `GRANT INSERT … TO app_neo` hay `GRANT SELECT ON <bảng nghiệp vụ> TO app_neo` sau deploy biến vai liệt kê-mọi-tổ-chức thành một vai đọc/ghi dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG (`has_*_privilege`), hai chiều: THỪA (mọi quyền ghi trên mọi quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, cột mốc neo ngoài `org_id, seq, hash`, mọi quyền sequence) và THIẾU (đúng các quyền 065 cấp). Câu sửa **đơn điệu theo §2⑵**: `REVOKE` những gì cấp ĐÍCH DANH cho `app_neo` ngoài danh sách, `GRANT` lại đúng danh sách của 065 — thứ 065 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi (chạm mọi vai của cụm) — mục phán xét và nêu lối ra. Đo ở `db/vai-neo.int.test.ts`.
+
+**[S1.182 / ADR-111 / 075] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — năng lực mà `app_api` cố ý không có (002) — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 075; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 075 — thứ 075 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
 
 ### 7. Đo bằng gì
 
@@ -6497,7 +6506,8 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
 
 1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
    GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
-   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy.
+   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy. **[S1.183 / ADR-111]** `tp-deploy` tin thêm
+   environment `prod-khoi-tao` (workflow `khoi-tao.yml`), bật thêm *Prevent self-review*.
 2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
    ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
    `api` (role `tp-deploy`) và `worker` (role `tp-deploy-worker`) chỉ chạy mã của kho ở cùng commit.
@@ -7666,7 +7676,8 @@ cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra 
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.155]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
 từ chối mất khỏi sổ khi khoá bị giữ) · **Liên quan:** ADR-091 (trần đọc của phiên agent, cùng bộ đếm), ADR-039 (phạm vi của chứng
-chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
+chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng) · **[S1.184] Mục *Ngoài phạm vi* SỬA BỞI
+ADR-112**: lần từ chối do handler ghi nay cũng tiêu ngân sách này
 
 ### Bối cảnh
 
@@ -7698,15 +7709,17 @@ lại cùng giao dịch khi lần từ chối NÉM.
 - **`requirePermission` nay có một cách để lần từ chối không vào sổ** — một cổng gác im lặng CÓ TÊN, trái với tiêu chí mà
   `packages/identity/src/index.ts` dùng để cho hàm ra cửa. Nó được chấp nhận vì bị giam ở một chỗ:
   `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên móc chỉ xuất hiện ở `rbac.ts` và `dispatch.ts`. Chỗ dùng thứ hai
-  phải sửa ADR này và test ấy.
+  phải sửa ADR này và test ấy. **[S1.184 / ADR-112]** Cách thứ hai cùng loại — bối cảnh trần `chayVoiTranTuChoi` — bị giam ở cùng
+  tệp test, với ba chỗ `rbac.ts`, `index.ts`, `dispatch.ts`.
 - **N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ.** Trần giới hạn một phiên ở 30 hàng mỗi cửa sổ, không xoá chi phí ấy. Một kẻ cầm
   nhiều phiên nhân được ngân sách — mỗi phiên agent đòi một mã TOTP tươi, mỗi phiên người đòi một lần đăng nhập đủ MFA.
 - **Các lần từ chối cùng lúc của một phiên xếp hàng sau nhau**: câu đếm khoá hàng bucket tới COMMIT, tức tới sau lần ghi sổ. Trần
   vì thế đúng tới từng lần (đo: tám lời gọi song song ⇒ đúng 3×403 + 5×429 và 3 hàng), và một phiên không dùng song song để giữ
   nhiều kết nối nghiệp vụ cùng chờ khoá sổ.
 - **Không trái ADR-015 §5.** Khoá của bucket là chính phiên đang gọi: chỉ ai cầm cookie ấy mới tiêu được ngân sách ấy.
-- **Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
-  đi qua trần này; route khách và nhánh ANON không đổi.
+- ~~**Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
+  đi qua trần này;~~ **[S1.184 / khoản 248 / ADR-112]** lần từ chối do HANDLER ghi nay đi qua cùng trần, qua bối cảnh yêu cầu;
+  route khách và nhánh ANON không đổi.
 - Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 122 · 144: ⒠ phiên người (N×403 + N hàng, rồi 429 không hàng; việc có quyền vẫn
   201; phiên khác không bị kéo), ⒡ phiên agent, ⒢ cùng lúc, ⒣ lần ghi sổ hỏng vẫn tiêu ngân sách (đột biến gỡ nhánh ấy ⇒ đỏ).
 
@@ -8165,7 +8178,8 @@ và phép thu hồi toàn bộ vật liệu khoá giữ nguyên. Nhà cung cấp
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.167]** · **Khoản nợ liên quan:** 247 (đóng) · **Liên quan:** ADR-060
 (từ chối trạng thái vào sổ có chọn lọc), ADR-074 (lần chặn VÌ HẠN của câu nộp vào sổ), ADR-101 (pilot giả lập — nơi đo ra khoản
-này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi)
+này), nhánh D2 của `approveUnseal` (khoản 119: tiền lệ của lối ghi) · **[S1.180] Cách nhận diện ở ⑴, từ vựng và lời ném ở ⑵ ⑶
+SỬA BỞI ADR-108**; cơ chế bắt chính lỗi của trigger giữ nguyên
 
 ### Bối cảnh
 
@@ -8179,15 +8193,18 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
 
 1. **Bắt CHÍNH lỗi của trigger, không chép vị từ ra TypeScript.** Trigger là lớp có thẩm quyền — nó đọc bảng lịch sử điều phối và
    hàng gói dưới đúng khoá của câu ghi. Kiểm trước ở lớp gói là hai nguồn sự thật cho một luật. Lớp gói bọc câu ghi, nhận diện lần
-   vi phạm (SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt), ghi, rồi để lỗi đi tiếp.
+   vi phạm (~~SQLSTATE 23514 cộng hậu tố *"(J3)"* hay *"(D2"* mà trigger đặt~~ **[S1.180 / ADR-108]** SQLSTATE 23514 cộng TÊN
+   RÀNG BUỘC mà trigger đặt), ghi, rồi để lỗi đi tiếp.
 2. **J3 và D2 — phía người mua: ghi ở `auditPool`, giao dịch ĐỘC LẬP, qua `throwAuditedDenial`, rồi ném lại chính lỗi `pg`.** Cùng
-   khuôn nhánh D2 của `approveUnseal`. Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
+   khuôn nhánh D2 của `approveUnseal`. ~~Mã 422 và thông điệp người dùng thấy KHÔNG đổi. Hàng: `RFQ_AWARD_SOD_DENIED` (payload
    `{ viPham: "J3", ve }`, `ve` ∈ `NGUOI_TAO · NGUOI_DIEU_PHOI · NGUOI_DE_XUAT · PHIEN_DE_XUAT`) và `RFQ_APPROVAL_DENIED` (payload
-   `{ viPham: "D2" }`), `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
+   `{ viPham: "D2" }`)~~ **[S1.180 / ADR-108]** Hàng: `CONTROL_DENIED` payload `{ ma }`, và lời ném là `ChotKiemSoatError` mang
+   lỗi `pg` ở `cause` — 422 giữ nguyên, thông điệp là câu của bảng `CHOT_VAO_SO`, `resourceType = RFQ`. Ghi hỏng ⇒ `DenialAuditFailedError` ⇒ 500 — không im lặng. `approveRfq` vì thế nhận
    thêm tham số `auditPool`, cùng hình dạng với mọi hàm gói có đường từ chối.
 3. **Câu nộp — phía nhà cung cấp: savepoint cộng một hàng trong giao dịch người gọi, như nhánh VÌ HẠN của ADR-074.** Route khách
-   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi `BID_SUBMIT_DENIED` (payload
-   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi), rồi ném
+   cố ý không cầm pool nào (A5 §4), nên lối ghi là lùi về savepoint của `submitBid`, ghi ~~`BID_SUBMIT_DENIED` (payload
+   `{ rfqStatus }` đọc SAU khi lùi — phân biệt *đã huỷ* với *đang ở vòng BAFO* mà không đọc chuỗi lỗi)~~ **[S1.180 / ADR-108]**
+   `BID_STATE_DENIED` (payload `{ ma }` — tên ràng buộc của nhánh, viết hoa), rồi ném
    `NopBiTuChoiError`; route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để hàng sống. Thông điệp giữ nguyên câu chung.
 
 ### Hệ quả, nói thẳng
@@ -8196,8 +8213,9 @@ ngược lại cho J3. Hàng 247 nêu câu phải chọn: ghi cả bảy — chi
   một phiên dùng đường này để làm phình sổ — nhưng trần ấy đếm ở bộ điều phối, và lần vi phạm J3/D2 đi qua cổng quyền nên KHÔNG
   được đếm vào đó. Phía nhà cung cấp, không trần nào: một khách lặp lời nộp sai ghi một hàng mỗi lần, cùng rủi ro ADR-074 đã nhận
   cho nhánh VÌ HẠN.
-- **Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
-  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.
+- ~~**Nhận diện bằng thông điệp của trigger.** Đổi câu `RAISE` mà quên hậu tố thì lần vi phạm rơi về đường cũ — ném, không sổ — và
+  các ca của khối khoản 247 đỏ. Cùng giới hạn đã nhận ở nhánh D2 của `approveUnseal`.~~ **[S1.180 / ADR-108]** Nhận diện bằng
+  tên ràng buộc; nhánh D2 của `approveUnseal` vẫn đọc thông điệp — ngoài phạm vi vòng ấy.
 - **Ca đua nhau trên các trigger khác** (ADR-060 *"Điều ADR này KHÔNG nói"*) vẫn im; ADR này chỉ phủ bảy lần pilot đo được.
 - Đo ở `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/rfq/src/rfq.int.test.ts` và
   `packages/bidding/src/bidding.int.test.ts` (khối khoản 247).
@@ -8228,7 +8246,8 @@ công cụ) không mở được cửa ấy bằng cách quên một tham số.
 hành vi của tổ chức; màn soạn — cảnh báo và số người tối thiểu — dùng được trước ngày bật, đúng điều §8.10 đòi.
 
 ⑷ **Điều kiện mở cờ trên một máy chủ thật**, cả hai:
-- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092;
+- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092; **[S1.184] ĐẠT** — khoản 248 đóng bằng ADR-112,
+  với phạm vi rộng hơn: mọi lần từ chối do handler ghi;
 - (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
   rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
 
@@ -8335,7 +8354,8 @@ Nên mọi link do bộ gửi THẬT sinh ra dẫn tới một trang đòi thứ
   không làm mất gì. ~~Trang nộp thầu KHÔNG hỏi lại phiên khách lúc tải: tải lại sau khi xác minh vẫn mất đường vào tới khi được
   mời lại, có xoá fragment hay không.~~ **[S1.178]** Trang nộp thầu nay cũng hỏi lại phiên khách lúc tải (`GET /guest/rfq`,
   cookie `__Host-tp_guest` tới 4 giờ): tải lại sau khi xác minh ⇒ khối hỏi nêu tên gói thầu, "Tiếp tục nộp báo giá" ⇒ bước 3.
-  Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.
+  ~~Tên gói không nói phiên của nhà cung cấp nào — không route khách nào trả định danh người được mời.~~ **[S1.181 / ADR-109]**
+  `GET /guest/rfq` nay mang tên doanh nghiệp được mời và khối hỏi nêu nó; nhà cung cấp tự thoát phiên bằng `POST /guest/logout`.
 - **`/tao-thau` và `/chinh-sach` vẫn không có ô xin link**; người dùng xin ở `/login`. **[S1.177]** Và nay chỉ phải xin MỘT lần: ba trang hỏi `/me` lúc
   tải (cookie `Path=/`, tới 8 giờ kể cả sau khi đóng trình duyệt) và, có phiên còn hạn, HỎI "Tiếp tục với phiên này" hay
   "Đăng xuất" (`POST /auth/logout`) — không tự mở, vì trên máy dùng chung phiên ấy có thể của người khác. Dùng lại phiên
@@ -8358,3 +8378,478 @@ trang người mua và trang nộp thầu vào `node:vm` (DOM giả dựng từ 
 `docLink()` rồi `thuPhienCo()`, đóng bước khi hashchange, fragment chỉ bị xoá sau lần tiêu thụ thành công; 28 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.177). **[S1.178]** Trang nộp thầu: 13 ca cùng khung, 25 đột biến đều đỏ
 (`evidence/security-reviews.md` §S1.178).
+
+---
+
+## ADR-108 — Nắn ADR-104: lần từ chối do trigger của J3/D2 vào lớp `CONTROL_DENIED`, của câu nộp vào `BID_STATE_DENIED` mang mã, nhận diện bằng TÊN RÀNG BUỘC
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.180]** · **Khoản nợ liên quan:** 247 (đã đóng ở S1.167) ·
+**Liên quan:** ADR-104 (sửa ⑴ ⑵ ⑶ ở cách nhận diện, từ vựng và lời ném; giữ cơ chế), ADR-084 ⑷ ⑸ (ba lớp từ chối, `CONTROL_DENIED`),
+ADR-060 (luật chọn lọc), ADR-074 (lối ghi của câu nộp)
+
+### Bối cảnh
+
+Hai phiên làm khoản 247 song song. #172 (ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi — một nguồn sự thật, và
+ca hai người đua nhau cũng vào sổ. Ở phiên kia chủ dự án đã chốt lớp cho các lần từ chối ấy: J3 và D2 là `CONTROL_DENIED` (người vi
+phạm đủ quyền, đi đúng thứ tự — thứ chặn họ là một chốt), câu nộp là `BID_STATE_DENIED` mang mã trong payload. Khi #172 vào `master`,
+chủ dự án chọn giữ cơ chế của nó và nắn hai điều:
+
+1. **Từ vựng.** ADR-104 thêm ba `action` — `RFQ_AWARD_SOD_DENIED`, `RFQ_APPROVAL_DENIED`, `BID_SUBMIT_DENIED` — ngoài ba lớp của
+   ADR-084 ⑸ (`PERMISSION_DENIED` · `RFQ_STATE_DENIED` · `CONTROL_DENIED`). Người đọc sổ hỏi *"ai bị một chốt kiểm soát chặn"* bằng
+   `action = 'CONTROL_DENIED'` thì không thấy J3 hay D2.
+2. **Nhận diện bằng thông điệp.** Phía người mua đọc hậu tố *"(J3)"* / *"(D2"* cộng đầu câu; phía nộp không đọc gì — mọi 23514
+   không vì hạn. Đổi một câu `RAISE` là lần vi phạm rơi khỏi sổ, im lặng.
+
+### Quyết định
+
+1. **Mỗi nhánh mà ADR-104 ghi sổ mang một tên ràng buộc** (`RAISE … USING CONSTRAINT = …`), khuôn `c1_qua_han_nop` của `066`.
+   Migration `074_tu_choi_co_ten.sql` định nghĩa lại sáu hàm — thân trích nguyên văn, đổi đúng một chỗ ở mỗi nhánh — đặt 13 tên.
+   Chủ dự án chốt *đặt tên hết, vẫn ghi*: không bớt nhánh nào ADR-104 đang ghi, kể cả những nhánh ngoài bảy ca pilot đo được (D2/D1
+   phiên hỏng, D2 phiên của người khác, J3 phiên đã đề xuất đem đi duyệt, và mọi nhánh 23514 của ba trigger câu nộp). Nhánh
+   không tên thì không ghi: đúng tập ADR-104 đã để ngoài (không tìm thấy hàng cha, gói không ở `PENDING_APPROVAL`, đề xuất không còn
+   `PROPOSED`, hai vế J5).
+2. **J3 và D2 ⇒ `CONTROL_DENIED` payload `{ ma }`, qua `tuChoiTheoChot`.** Bảy mã ở `CHOT_VAO_SO`, và bảng DỜI XUỐNG
+   `packages/identity` từ `packages/rfq` — đúng lối mà chú thích của K1 đã hẹn khi một gói thứ hai cần (`danh-gia`). Bảng tên → mã
+   `CHOT_THEO_RANG_BUOC` đứng cạnh. Lời ném là `ChotKiemSoatError` mang lỗi `pg` ở `cause`: 422 giữ nguyên, thông điệp là câu của
+   bảng — có dấu, vẫn gọi tên `(J3)` / `(D2)` — thay câu không dấu của trigger. Câu của CSDL không đổi.
+3. **Câu nộp ⇒ `BID_STATE_DENIED` payload `{ ma }`**, `ma` là tên ràng buộc viết hoa (sáu mã). `NopBiTuChoiError` giữ tên, thêm
+   `ma`; thông điệp chung không đổi — nó không nói luồng này đứng ngoài top-N hay phiên đã hỏng. Một 23514 KHÔNG tên (hôm nay chỉ
+   `CHECK` cỡ phong bì của bảng) đi lối trước ADR-104: ném `BiddingError`, không sổ.
+4. **Hai phép đo khớp tên hai chiều trên thân hàm THẬT trong CSDL** — `packages/rfq/src/rfq.int.test.ts` cho ba trigger J3/D2,
+   `packages/bidding/src/bidding.int.test.ts` cho ba trigger câu nộp. Đổi tên ở một phía mà quên phía kia là đỏ.
+
+### Hệ quả, nói thẳng
+
+- **Vế ghi rộng hơn chữ của ADR-060 ở năm mã**: `D2_PHIEN_KHONG_HOP_LE`, `PHIEN_KHACH_KHONG_HOP_LE`, `PHIEN_KHACH_KHAC_LOI_MOI`,
+  `C1_KHONG_VONG_BAFO_DANG_MO`, `C1_KHONG_HAN_NOP` nói về phiên hay dữ liệu, không về một bước đi sai thứ tự. ADR-104 đã ghi chúng
+  (không phân biệt), và chủ dự án chọn không lùi phần phủ. Nay mã tách chúng ra, nên người đọc sổ lọc được.
+- **`BID_STATE_DENIED` mang cả mã không phải "trạng thái" theo nghĩa hẹp.** Một `action` cho lớp *câu nộp bị trigger chặn không
+  vì hạn*; mã phân biệt.
+- **Thông điệp người dùng thấy ở J3/D2 đổi** — ADR-104 ⑵ nói không đổi. 422 giữ nguyên, câu vẫn gọi tên bất biến; kịch bản 41 qua
+  HTTP khẳng định câu mới.
+- Hàng đã ghi dưới ba `action` của ADR-104 (nếu có) không sửa được (B4); giữa hai vòng không có triển khai nào.
+- Ca đua nhau trên các trigger KHÁC vẫn im (ADR-060 *"Điều ADR này KHÔNG nói"*), như ADR-104 đã nói.
+- **Khoản 248** (`CONTROL_DENIED` đứng ngoài trần lần từ chối theo phiên của ADR-092) nay phủ cả bảy mã J3/D2: ADR-104 đã nêu hai
+  `action` của nó không được đếm, nên đổi lớp không làm khe ấy rộng hơn — chỉ gom nó về một `action`. Phép đếm đề xuất ở hàng 248
+  đặt trong `tuChoiTheoChot` thì phủ luôn J3/D2.
+
+## ADR-109 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-27, vòng S1.181) · **Liên quan:** ADR-020 mục 4
+~~(đường khách: route đọc dưới ba GUC, route ghi dưới `withTenant`)~~ **[S1.181 / lượt soi]** (route ĐỌC của khách dưới ba GUC;
+vế route GHI dưới `withTenant` không nằm ở ADR-020 mà ở khối [S1.10.3] của `apps/api/src/dispatch.ts`, chưa có ADR), ADR-016
+(danh tính dẫn xuất, không khai), ADR-107 (Hệ quả — tên gói không nói phiên của ai), **[S1.181]** ADR-110 (đường quay lại sau khi
+thoát) · **Biên bản:** `evidence/security-reviews.md` §S1.181
+
+### Bối cảnh
+
+Từ S1.178 trang nộp thầu hỏi lại phiên khách lúc tải và nêu TÊN GÓI. Một gói mời nhiều nhà cung cấp, nên hai nhà cung cấp của
+cùng một gói dùng chung một máy thấy cùng một câu hỏi và có thể nộp vào hồ sơ của nhau; §S1.178 mục 4 ghi chỗ ấy, kèm cách sửa
+tận gốc — một định danh lời mời không bí mật trong phản hồi khách, tức đổi hợp đồng HTTP. Cùng mục ghi chỗ thứ hai: không route
+nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ `revokeInvitation` phía bên mua, và nó thu hồi CẢ lời mời —
+trong khi cookie `__Host-tp_guest` sống tới 4 giờ (`Max-Age`), kể cả sau khi đóng trình duyệt.
+
+### Quyết định
+
+1. **`GET /guest/rfq` mang `supplier: { legalName }`** — `suppliers.legal_name` của nhà cung cấp của lời mời mà phiên thuộc về.
+   ĐÚNG một trường: không mã nhà cung cấp, không MST, không người liên hệ. Bài toán là phân biệt hai DOANH NGHIỆP; tên người là dữ
+   liệu cá nhân trang không cần.
+2. **Đọc ở bước tra cookie, không ở handler.** `resolveGuestSessionByToken` (kết nối chỉ gắn tổ chức, cùng câu đã chứng minh
+   token) nối thêm `suppliers` theo khoá chính và trả `supplierLegalName`; bộ điều phối chuyển nó vào `GuestContext`. Handler đọc
+   của khách chạy dưới ba GUC, và `suppliers` ĐÓNG với phiên khách (`027` mục 6). Mở một policy `suppliers_khach` là mở CẢ HÀNG
+   (MST, trạng thái, người tạo) cho mọi câu dưới phiên khách — `app_api` chung cho người mua và khách, nên không `GRANT` theo cột
+   nào tách được hai đường. Khoá ngoại hợp thành `(org_id, supplier_id)` của `010` bảo đảm hàng tồn tại trong cùng tổ chức.
+3. **`POST /guest/logout`** — route GUEST ghi (`mutates: true`: `withTenant` không GUC, handler không viết SQL tay), gọi
+   `revokeGuestSession(client, orgId, guestSessionId)` của `packages/invitation`: đặt `revoked_at` của ĐÚNG hàng phiên mà bộ điều
+   phối dẫn xuất từ cookie; ghi `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id` của chính hàng ấy — cùng người
+   mà `GUEST_SESSION_STARTED` đã ghi; payload `invitationId`) CHỈ khi câu UPDATE thật sự đổi một hàng. Phản hồi 200 `{ok: true}`
+   kèm `Set-Cookie` xoá `__Host-tp_guest` — cùng tên, `Path=/`, `Max-Age=0`, `HttpOnly; Secure; SameSite=Strict`. Không chạm lời
+   mời, token, thách thức OTP, hay phiên khác của cùng lời mời. Không trần tần suất: một 429 trên đường thoát là một lớp GIỮ người
+   ta ở lại trong phiên — cùng lý do đã ghi cho `/auth/logout`. Phiên đã chết ⇒ 401 ở bước xác thực, không `Set-Cookie`.
+4. **Trang nộp thầu.** Khối hỏi lúc tải nêu tên doanh nghiệp VÀ tên gói; 200 thiếu tên doanh nghiệp thì KHÔNG hỏi — cùng luật với
+   thiếu tên gói. Bước 3 có dòng "Doanh nghiệp được mời". Nút **Thoát phiên nộp thầu** ở bước 1 (hiện cùng khối hỏi và suốt lúc
+   phiên đang dùng) và ở bước 4; 401 coi như đã thoát (cùng khuôn nút Đăng xuất của ba trang người mua); câu báo nói thẳng rằng
+   muốn nộp tiếp phải xin ~~link mời mới~~ **[S1.181 / ADR-110]** bên mua gửi lại link mời — link gửi lại đưa về đúng hồ sơ báo
+   giá đã nộp. **[S1.181 / lượt soi]** Thoát xoá mọi thứ của phiên trước trên màn — gói thầu, bảng giá, dòng tổng, ô mã OTP, biên
+   nhận — và lỗi của nó hiện CẠNH nút đã bấm; biên nhận về muộn sau khi đã thoát bị bỏ; và ngay trước khi niêm phong, trang hỏi lại
+   phiên hiện hành — cookie khách chung cho mọi thẻ, nên một thẻ khác vừa xác minh lời mời của doanh nghiệp khác thì lần nộp ở thẻ
+   này DỪNG thay vì đi vào hồ sơ của doanh nghiệp ấy.
+5. **Không migration, không đổi quyền CSDL.** `app_api` có `UPDATE (revoked_at)` trên `guest_sessions` từ `010`; trigger
+   `guest_sessions_thu_hoi_don_dieu` giữ thu hồi đơn điệu như với mọi lần thu hồi khác.
+
+### Phương án đã cân nhắc
+
+- **Policy `suppliers_khach` mở hàng nhà cung cấp của lời mời** — bác, mục 2.
+- **Hàm SECURITY DEFINER trả tên theo GUC phiên khách** — thêm một hàm đặc quyền cùng mục canh hardening cho một trường mà bước
+  tra cookie đã đọc được dưới quyền thường.
+- **Thoát bằng `revokeInvitation`** — đòi phiên người mua, và thu hồi cả link đang sống của lời mời; rộng hơn bài toán.
+- **Hộp thoại `confirm()` trước khi thoát** — cửa sổ web trong ứng dụng nhắn tin có thể chặn hộp thoại, và khi ấy nút thoát không
+  bao giờ chạy. Thay bằng câu nói trước hậu quả ở bước 4 và trong câu báo khi đang dùng phiên.
+
+### Hệ quả, nói thẳng
+
+- **Đổi hợp đồng HTTP**: một trường mới ở `GET /guest/rfq`, một route mới. Client không đọc trường mới vẫn chạy. Trang mới gặp API
+  cũ thì không hỏi lại phiên — lần triển khai lệch phiên bản làm mất tính năng hỏi lại, không làm lộ gì. **[S1.181 / lượt soi]**
+  Và nút Thoát (hiện sau lần xác minh OTP) nhận 404 `khong co duong nay` — nó BÁO LỖI, không thoát được, tới khi API mới lên; lần
+  kiểm phiên trước khi niêm phong gặp API cũ (không có tên doanh nghiệp) thì không chặn nộp, vì tên trên màn cũng rỗng.
+- **Câu tra cookie của MỌI lời gọi khách** nối thêm một bảng theo khoá chính.
+- **Người cầm cookie khách đọc được tên doanh nghiệp được mời.** Chủ lời mời đã biết nó; kẻ cầm cookie trộm thì đã đọc được tên
+  gói, hạng mục và nộp được báo giá từ trước — tên doanh nghiệp không mở thêm quyền nào.
+- ~~**Thoát rồi thì chỉ link mới của bên mua đưa nhà cung cấp trở lại**: mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`). Trang
+  nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau (câu báo khi đã thoát).~~ **[S1.181 / lượt soi, NẶNG]** Câu vừa gạch
+  hứa một đường không tồn tại: mời lại cùng nhà cung cấp trả 409 (`024`), không route nào phát link cho một lời mời đã có, và thu
+  hồi rồi mời lại là một lời mời MỚI với một luồng báo giá MỚI — người kiểm đo được báo giá cũ vẫn được mở thầu và xếp hạng, nhà
+  cung cấp đứng hai hàng (khoản 250). Chủ dự án chọn làm đường thật: **ADR-110** — bên mua gửi lại link cho CHÍNH lời mời, nhà
+  cung cấp về đúng hồ sơ báo giá, lần nộp kế là phiên bản kế. Trang nói điều ấy trước (bước 4, câu báo lúc dùng phiên) và sau.
+- **Người thấy khối hỏi của phiên người khác thoát được phiên ấy** — chủ ý: đóng một phiên đang để ngỏ trên máy dùng chung. Chủ
+  phiên mất đường vào tới khi có link mới **[ADR-110]** bên mua gửi lại; trước vòng này, người ấy dùng được luôn phiên của họ.
+- **Phiên đã chết thì nút Thoát không xoá được cookie** (401 không mang `Set-Cookie`); cookie chết không mở được gì và tự hết theo
+  `Max-Age`.
+
+### Đo
+
+`apps/api/src/guest.int.test.ts` khối `[S1.181 / ADR-109]` (Postgres thật; ~~qua HTTP~~ **[lượt soi]** tám ca qua HTTP, hai ca gọi thẳng
+hàm — phiên thu hồi giữa chừng và tổ chức khác; ca đua thu hồi QUA HTTP giữ khoá hàng phiên để câu UPDATE của handler chờ): hai nhà cung cấp cùng một gói thấy hai tên,
+không thấy tên nhau, không thấy mã nhà cung cấp hay người liên hệ; tên đọc lúc gọi; thoát ⇒ 200, cookie xoá cùng bộ thuộc tính,
+cookie cũ 401 ở cả đường đọc lẫn ghi, lời mời không bị thu hồi, đúng một hàng sổ mang người liên hệ đã xác minh, lần thoát thứ hai
+401 không thêm hàng; phiên thứ hai của cùng lời mời và phiên của nhà cung cấp khác vẫn sống; không cookie, cookie rác, magic link
+trong cookie ⇒ 401 không `Set-Cookie` không hàng sổ; phiên bị thu hồi giữa chừng ⇒ `false` không ghi sổ; tổ chức khác ⇒ `false`, và
+khai sai tổ chức ⇒ ném ở câu đầu. `apps/web/src/phuc-vu.test.ts` các ca `[S1.181]` trên khung `node:vm` của §S1.177. Đột biến và
+Chromium trên cụm thật: §S1.181.
+
+## ADR-110 — Bên mua gửi lại link mời cho CHÍNH lời mời còn sống
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn *"làm route gửi lại link ngay"* ngày 2026-09-27, vòng
+S1.181, sau khi lượt soi đối kháng đo được đường cụt mà ADR-109 để lại · **Liên quan:** ADR-109 (thoát phiên khách), ADR-020
+tiểu mục [S1.70 / khoản 124] (link đi SAU commit, phần bù), ADR-015 [C1] (đích đọc từ `supplier_contacts`, không từ thân yêu cầu),
+ADR-016 (danh tính dẫn xuất từ phiên), `024` (một lời mời còn sống cho mỗi nhà cung cấp), khoản 250 · **Biên bản:**
+`evidence/security-reviews.md` §S1.181
+
+### Bối cảnh
+
+Mã trong link mời bị tiêu thụ ở lần xác minh OTP (`[H5]`), phiên khách sống tối đa 4 giờ, và từ ADR-109 nhà cung cấp tự thoát
+được. Hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (chỉ mục `rfq_invitations_mot_loi_moi_con_song` của `024`), và
+không route nào phát link cho một lời mời đã có — `issueMagicLinkToken` chỉ được gọi trong handler tạo lời mời. Đường duy nhất là
+thu hồi rồi mời lại: một lời mời MỚI và, vì `vendor_bids` duy nhất theo lời mời (`018`), một luồng báo giá MỚI. Người kiểm của
+lượt soi đo trên Postgres thật với worker thật: báo giá của lời mời đã thu hồi vẫn được mở thầu, so sánh và xếp hạng — nhà cung
+cấp đứng hai hàng, giá cũ thắng hạng 1 (khoản 250). Trong khi ấy trang nộp thầu và chú thích của `revokeGuestSession` hứa *"xin
+bên mua gửi link mời mới"* — một phép sửa không tồn tại, và ADR-109 biến nó từ đường hiếm (hết 4 giờ) thành đường được khuyên
+sau mỗi lần nộp trên máy dùng chung.
+
+### Quyết định
+
+1. **`POST /invitations/:invitationId/reissue`** — route người mua ghi, mã quyền `rfq.invite` (cùng mã với mời và thu hồi),
+   `resourceType` `INVITATION`.
+2. **`reissueInvitationLink` (`packages/invitation`), một giao dịch, dưới khoá hàng của lời mời** (~~`FOR UPDATE`~~ **[lượt soi]**
+   `FOR NO KEY UPDATE` trên hàng lời mời — hai lần gửi lại cùng lúc, hay gửi lại và thu hồi, vẫn xếp hàng, nên phép đếm trần không
+   đua; `FOR UPDATE` bế tắc (40P01, đo 3/3 lần) với lần xác minh OTP bằng link cũ: lần ấy khoá hàng token rồi chèn `guest_sessions`,
+   và phép kiểm khoá ngoại của câu chèn lấy `FOR KEY SHARE` trên chính hàng lời mời):
+   - lời mời không tồn tại trong tổ chức đang gắn ⇒ 404 — RLS lọc tổ chức khác thành "không tồn tại", nên không oracle;
+   - lời mời đã thu hồi ⇒ 409 — thu hồi là quyết định loại nhà cung cấp, không phải chỗ để gửi link;
+   - gói thầu không ở `OPEN` hay `BAFO_OPEN` ⇒ 409 — link cho một gói không nhận báo giá là một tin nhắn vô ích; **[lượt soi]** và
+     cả khi đã QUÁ HẠN — hạn gói ở `OPEN`, hạn vòng đang mở ở `BAFO_OPEN`, đúng hai vế của `bid_kiem_han_nop` (074). Đóng gói là
+     thao tác tay, nên một gói quá hạn còn nằm ở `OPEN` là trạng thái thường;
+   - lời mời đã có `LINK_MOI_TOI_DA_MOI_GIO` = 3 token trong một giờ, KỂ CẢ token của lần mời và token đã thu hồi ⇒ 429 kèm
+     `Retry-After` bằng cả cửa sổ (3600) — mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức; **[lượt soi]** kể cả
+     token mà phần bù thu hồi sau một lần gửi hỏng: trần đếm lần THỬ gửi, không đếm lần tới nơi;
+   - rồi: thu hồi mọi token CHƯA dùng của lời mời (một lời mời, một link còn dùng được), ghi `INVITATION_LINK_REISSUED` (payload
+     `{revokedTokens}`), phát token mới qua `issueMagicLinkToken` (ghi `MAGIC_LINK_TOKEN_ISSUED`).
+3. **Đích và kênh của CHÍNH lời mời**: người liên hệ `contact_id`, đọc từ `supplier_contacts` như route mời; kênh `link_channel`.
+   **Gửi SAU commit** như route mời (khoản 124). Gửi hỏng hay quá trần ⇒ phần bù `revokeMagicLinkToken` thu hồi ĐÚNG token vừa phát,
+   ghi `MAGIC_LINK_TOKEN_REVOKED` (`{invitationId, reason: "LINK_SEND_FAILED"}`), phản hồi 502; phần bù cũng hỏng ⇒ 500. Lời mời
+   KHÔNG bị thu hồi ở nhánh nào — khác phần bù của route mời: ở đây lời mời đã có hồ sơ báo giá, và người mua bấm gửi lại được ngay.
+   **[lượt soi]** Thân 502 nói cả điều bên mua không tự thấy — link cũ chưa dùng đã hết hiệu lực ở giao dịch đã commit — và
+   `/tao-thau` nói thêm rằng lần hỏng vẫn tính vào trần. Thân 200 là `{reissued: true}` và KHÔNG mang số token cũ bị thu hồi:
+   0 hay 1 là *"nhà cung cấp đã xác minh link chưa"*, thứ mà `BUYER` — không giữ `bid.view` — không được đọc trước hạn (A6);
+   con số chỉ nằm trong sổ.
+4. **Không chạm** phiên khách đang sống, thách thức OTP hay khoá OTP của lời mời — gửi lại không phải thu hồi; gỡ khoá có đường
+   riêng (`POST /invitations/:invitationId/unlock`).
+5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; câu báo sau khi thu hồi nói thẳng báo giá đã
+   nộp theo lời mời ấy vẫn nằm trong gói thầu, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
+   thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
+6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
+   `UPDATE (revoked_at, consumed_at)` trên token (`010`), và UPDATE theo cột trên `rfq_invitations` (`010`, `013`) — đủ cho
+   ~~`FOR UPDATE`~~ `FOR NO KEY UPDATE`; **[lượt soi]** và SELECT trên `rfq_bafo_rounds` (`059`) cho hạn của vòng.
+
+### Phương án đã cân nhắc
+
+- **Chỉ sửa lời hứa, không route** (khuyến nghị ban đầu) — chủ dự án chọn làm đường thật trong cùng PR.
+- **Gửi lại mà không thu hồi token cũ** — nhiều link sống cho một lời mời; một link lạc (chuyển tiếp, hộp thư dùng chung) vẫn dùng
+  được sau khi bên mua đã gửi link khác.
+- **Thu hồi luôn phiên khách đang sống** — đá người đang nộp trên máy khác ra; thu hồi đã có đường riêng.
+- **Bucket hạn mức mới** (`otp_rate_limits` và một `kind` mới) — cần migration; đếm token của chính lời mời đọc được từ dữ liệu sẵn
+  có và không xoay được bằng chuỗi do người gọi truyền.
+- **Phần bù thu hồi cả lời mời** như route mời — với một lời mời đã có báo giá, đó là loại nhà cung cấp vì một lần gửi thư hỏng.
+
+### Hệ quả, nói thẳng
+
+- **Một đường mới gửi thư hay tin SMS tới người ngoài tổ chức theo nút bấm của người mua**: ai giữ `rfq.invite` (BUYER,
+  PROCUREMENT_MANAGER) bấm được; trần 3 link một giờ cho mỗi lời mời; mỗi lần có hai hàng sổ.
+- **Link cũ chưa dùng hết hiệu lực** khi gửi lại: nhà cung cấp đang giữa bước OTP bằng link cũ thì lần xác minh ấy hỏng — họ dùng
+  link mới.
+- **Gửi hỏng sau commit để nhà cung cấp không còn link nào**: token cũ đã thu hồi trong giao dịch đã commit, token mới bị phần bù thu
+  hồi; ~~bên mua thấy 502 và bấm lại~~ **[lượt soi]** bên mua thấy 502 (thân và câu báo nói link cũ đã hết hiệu lực) và bấm lại được
+  trong phần CÒN LẠI của trần — lần hỏng vẫn tính vào trần, vì hàng token không mang lý do thu hồi. Đo (người soi): lời mời vừa
+  gửi trong giờ, hai lần hỏng liền ⇒ lần ba 429 tới hết cửa sổ, nhà cung cấp không có link nào. Chấp nhận có lý do: hai lần hỏng
+  liền là bộ gửi đang sập, và lần gửi thứ ba cũng khó tới nơi; không đếm lần hỏng cần một cột lý do trên token (một migration), còn
+  thu hồi token cũ SAU lần gửi được thì mở một trạng thái hai link sống và một cuộc đua giữa hai lần gửi lại sau commit.
+- **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá. **[lượt soi]** Và trần xin OTP
+  theo (lời mời, đích) (khoản nợ 35) không gắn với token: ba lần xin OTP bằng link cũ trong cửa sổ 900 s thì link mới cũng nhận
+  429 tới hết cửa sổ ấy (đo: `[200, 200, 200, 429]` rồi link mới 429).
+- **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 250; vòng này đóng đường KHIẾN người mua
+  phải làm thế, không đổi ngữ nghĩa của thu hồi.
+- **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
+- **Lệch phiên bản**: `/tao-thau` mới gặp API cũ ⇒ 404, nút báo lỗi.
+
+### Đo
+
+`apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.181 / ADR-110]` (Postgres thật, qua HTTP, bộ gửi do test điều khiển): token
+mới cho chính lời mời, đúng người liên hệ và kênh, link cũ hết hiệu lực, hai hàng sổ; trần 3/giờ ⇒ 429 + `Retry-After`, không token,
+không gửi, không sổ, token đã thu hồi vẫn bị đếm; ba lần gửi lại cùng lúc ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời
+của tổ chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm `PERMISSION_DENIED`; `assertTenantBound` của hai hàm gói; bộ gửi ném ⇒
+502, token vừa phát bị thu hồi với lý do, lời mời còn sống, gửi lại ⇒ 200. **[lượt soi]** Thêm: cửa sổ đúng một giờ (dời 50 phút vẫn
+429); lần hỏng tính vào trần; gói OPEN quá hạn ⇒ 409, `BAFO_OPEN` theo hạn của VÒNG, vòng đóng ⇒ 409; kênh SMS ⇒ số điện thoại;
+phần bù lần hai hay khai sai lời mời ⇒ `false`, không sổ; đua với xác minh OTP bằng link cũ ⇒ không 40P01, cả hai 200, thân không
+nói nhà cung cấp đã xác minh. `apps/api/src/guest.int.test.ts` ca `[ADR-110]`: nộp, thoát, bên mua gửi lại qua HTTP, phiên mới thấy
+lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng. `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bộ quét route có ca
+cho route này, và **[lượt soi]** bước 12c gửi lại link cho người top-N giữa vòng BAFO trên đường thật ⇒ 200. `apps/web/src/phuc-vu.test.ts`
+các ca `tao-thau` — **[lượt soi]** kể cả nút tắt trong lúc lời gọi bay, mất mạng, và câu 502. Đột biến: §S1.181.
+
+## ADR-111 — Tổ chức, người dùng và vai trên prod: một task ECS chạy một lần dưới vai CSDL hẹp `app_khoi_tao`
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — **[S1.183]** cả hai vòng đã làm (khoản 251 đóng); chủ dự án chốt bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6 ngày
+2026-09-27: phương án **A** với vai **⒝**; bản khai ở **Secrets Manager**, xoá sau khi chạy; chạy dưới **vai deploy và environment
+`prod` có người duyệt**; thêm người về sau bằng **chính task này**. · **Liên quan:** ADR-016 (ai giữ `role.grant` — vẫn để ngỏ),
+ADR-028 §6 (dòng lý do của `CAU_QUYEN_KHOI_TAO_SAI`), ADR-066, ADR-067, ADR-072 (khuôn vai hẹp `app_neo`), ADR-107 (link đăng nhập
+mang mã tổ chức; `/login` có ô xin link) · **Hồ sơ cân nhắc:** `docs/DE-XUAT-TAO-TO-CHUC.md` · **Biên bản:**
+`evidence/security-reviews.md` §S1.182
+
+### Bối cảnh
+
+Ngày đầu trên prod không có đường nào tạo tổ chức của khách, người dùng của họ hay vai của từng người (đề xuất, mục 1):
+`app_api` cố ý không INSERT được `organizations` (002), không route nào gán vai, và hai công cụ chèn được tổ chức đều là công cụ
+DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040, ADR-066), kẹt luôn 8.2.
+
+### Quyết định
+
+1. **Phương án A** — công cụ `tools/khoi-tao-to-chuc`, chạy trên prod thành task ECS `tp-khoi-tao` bằng `aws ecs run-task`, cùng
+   khuôn `tp-migrate` và `tp-neo`. Không mở thêm bề mặt HTTP nào.
+2. **Vai hẹp ⒝ — `app_khoi_tao` (NOLOGIN) và `app_khoi_tao_login`.** Quyền đúng danh sách của migration `075`, theo CỘT:
+   `INSERT (id, name, slug)` trên `organizations`; `INSERT (org_id, email, full_name)` và `SELECT (id)` (cho `RETURNING`) trên
+   `users`; `INSERT` và `SELECT` trên ba cột của `user_roles`, `SELECT (role_code, permission_code)` trên `role_permissions` (hai
+   trigger vai là SECURITY INVOKER); ghi sổ như `app_api` — `INSERT` theo các cột 003 cấp sau lần thu hồi của 004, `SELECT (id,
+   org_id, seq, prev_hash, hash, occurred_at)` cho trigger nối chuỗi và `RETURNING` của `audit_append()`, `EXECUTE` hai hàm sổ; và
+   `app_current_org_id()`. KHÔNG `UPDATE`/`DELETE` ở đâu cả, không đọc email hay họ tên, không đọc payload sổ, không bảng nghiệp vụ,
+   không hàm liệt kê tổ chức. RLS FORCE và NOBYPASSRLS ⇒ mọi hàng chèn được phải mang ĐÚNG tổ chức đang gắn.
+   Hardening dựng và canh vai như ba cặp kia (BƯỚC 0, `ROLE_CANH`, `CAP_HOP_LE`, tập vai kết nối, thuộc tính, cấu hình phiên,
+   `public`/`app_private`, `app_current_org_id()`), cộng mục `CAU_QUYEN_KHOI_TAO_SAI`: quyền HIỆU DỤNG theo từng cột, thừa hay thiếu
+   đều đỏ ở deploy; phần cấp đích danh tự chữa. `tools/chay-migrate` dựng `app_khoi_tao_login` từ
+   `TRUSTPROCURE_KHOI_TAO_DATABASE_URL` (secret `tp/khoi-tao/database-url`) — bắt buộc như ba URL kia.
+3. **Hai chế độ, MỘT giao dịch mỗi lần chạy.** `tao`: sinh UUIDv4 (**[S1.183]** hay nhận mã workflow đã chọn trước lúc duyệt,
+   `--ma-to-chuc`), `withTenant` gắn chính nó, chèn `organizations (id, …)` — vế
+   WITH CHECK `id = app_current_org_id()` nhận đúng hàng ấy —, rồi người dùng, vai, sổ. `them-nguoi`: gắn tổ chức đã có; tổ chức
+   không tồn tại thì khoá ngoại của `users.org_id` từ chối. Vai của một người đi trong MỘT câu INSERT ~~để D3 (`005`) và `033` xét
+   trọn tập~~ **[lượt soi]** — cho gọn, không phải điều kiện: D3 (`005`) và `033` là trigger AFTER ROW đọc `user_roles` trong cùng
+   giao dịch, nên chèn từng câu cũng bị chặn như nhau (người soi đo). Lỗi nào cũng rollback TRỌN.
+4. **Sổ từ hàng đầu tiên, không dữ liệu cá nhân trong sổ.** Ba mã hành động mới, `actor_type = 'SYSTEM'`, `actor_id` NULL:
+   `ORG_CREATED` (payload `{slug, nguon}`), `USER_CREATED` (payload `{nguon}` — email và họ tên ở bảng `users`, không vào sổ
+   chỉ-ghi-thêm nơi chúng không xoá được), `ROLE_GRANTED` (payload `{roleCode, nguon}`).
+5. **Bản khai sống ở Secrets Manager** dưới `tp/khoi-tao/ban-khai/<slug>`; lệnh chỉ mang TÊN bí mật, task role đọc giá trị, bí
+   mật bị xoá sau lần chạy (~~vòng hạ tầng kế~~ **[S1.183]** workflow `khoi-tao.yml` xoá ngay khi task thoát 0, không cửa sổ
+   khôi phục). Công cụ từ chối mọi tên ngoài tiền tố ấy — task role đọc được cả nhánh
+   `tp/khoi-tao/*`, kể cả URL CSDL của chính nó. Chạy cục bộ (test, dev) nhận `--ban-khai-tep`. Email hạ chữ bằng
+   `pg_catalog.lower()` lúc chèn — cùng hàm với CHECK của `048` và đường đăng nhập.
+6. **Không in email hay họ tên** ra stdout, stderr hay thông điệp lỗi — chúng đi vào CloudWatch Logs của prod. Đầu ra — **[lượt
+   soi]** của tiến trình `node` mà task chạy; `pnpm khoi-tao` thêm hai dòng tiêu đề của pnpm trừ khi `--silent` — là một dòng:
+   chế độ, mã tổ chức, số người, số vai **[lượt soi]** — và `VersionId` của bí mật bản khai đã đọc, khi đọc từ Secrets Manager.
+   Lỗi lạ của pg in tên kèm SQLSTATE (không mang dữ liệu); tên khoá lạ của bản khai chỉ in khi trông như một tên trường. Một lần
+   chạy nhận tối đa 50 người: khoá chuỗi sổ của tổ chức bị giữ từ lần ghi sổ đầu tới COMMIT (200 người × 3 vai đo được 3,7 s, quá
+   trần 2 s của mọi lần ghi sổ khác trong tổ chức ấy). Mã tổ chức không bí mật (ADR-107): người vận hành gửi `/login#<mã tổ chức>` cho từng
+   người, và mỗi người tự xin link ở ô của `/login`. Task KHÔNG xếp job gửi link (đề xuất §3A.4: job do task chèn nằm `PENDING`).
+7. **Ai chạy:** vai deploy, environment ~~`prod`~~ **[S1.183]** `prod-khoi-tao` — environment riêng bật *Required reviewers* và
+   *Prevent self-review*, `tp-deploy` tin thêm nó (chủ dự án chọn 2026-09-28; `prod` chỉ bật *Required reviewers* nên một người
+   tự bấm tự duyệt được, và bật chặn ấy ở `prod` thì mọi lần deploy api cũng cần người thứ hai) — có người duyệt (ADR-067) —
+   người chạy khác người duyệt. **Thêm người về sau:**
+   chính task, chế độ `them-nguoi`, tới khi có màn quản trị vai; câu *ai giữ `role.grant`* để lại cho màn ấy (ADR-016).
+8. **Hai vòng.** Vòng này: ADR, vai CSDL, công cụ, test, và secret `tp/khoi-tao/database-url` cho task migrate. Vòng kế: đích
+   `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition `tp-khoi-tao`, task role và quyền của vai deploy (stack 30/90),
+   workflow chạy có người duyệt và xoá bí mật, bước 8.1 của `docs/APPLY-LAN-DAU.md`. **[S1.183] Vòng kế ĐÃ LÀM** — khối *Vòng hạ tầng* dưới.
+
+### Phương án đã cân nhắc
+
+- **B — route quản trị qua HTTP**: bề mặt tấn công lớn nhất — một route xuyên tổ chức, ngược mô hình RLS một tổ chức mỗi phiên;
+  và buộc chốt ngay ai giữ `role.grant`. Để dành cho màn quản trị vai trong từng tổ chức, sau pilot.
+- **C — sổ tay SQL chạy tay** dưới vai master: phải mở đường vào RDS, không sổ, mỗi khách trả nguyên giá. Chỉ còn là đường khẩn cấp.
+- **⒜ — vai master của RDS cho task**: lỗi chạy với quyền mạnh nhất (BYPASSRLS theo ADR-061). Bác cùng lý do đã chọn `app_neo`.
+- **Bản khai trong `containerOverrides`**: email của nhân viên khách nằm lại trong CloudTrail của tài khoản prod.
+
+### Hệ quả, nói thẳng
+
+- **Một vai thứ tư chèn được tổ chức, người dùng và vai** — mọi vai, trừ tổ hợp D3/`033` chặn — trong tổ chức mà nó gắn. Mật khẩu
+  chỉ ở secret `tp/khoi-tao/database-url`; ~~task role và execution role là vòng kế~~ **[lượt soi]** execution role CHUNG của các
+  task (stack 30) đã đọc được nhánh `tp/*`, và task `tp-migrate` bơm secret ấy từ vòng này; task definition `tp-khoi-tao` và task
+  role đọc bản khai ~~là vòng kế~~ **[S1.183]** đã có (stack 90, stack 30).
+- **Vai này dò được UUID tổ chức hay slug có tồn tại** (`organizations_pkey`, `organizations_slug_key` là ràng buộc toàn cục) — thứ
+  người mở tổ chức vốn phải biết; nó không có đường HTTP nào. `users.id` KHÔNG cấp, nên oracle `users_pkey` của 002 không mở lại.
+- **Không màn quản trị vai**: thu hồi vai, đổi email, vô hiệu một người dùng vẫn chưa có đường trên prod — chế độ `them-nguoi`
+  chỉ THÊM.
+- **Hồ sơ N3** (vai deploy CREATEROLE không superuser, `db/migrations.int.test.ts`): BƯỚC 0 dựng thêm `app_khoi_tao` dưới vai ấy,
+  nên lối ra một lần của superuser gỡ thêm một membership ngầm — cùng lối ra với ba vai kia, cùng câu hỏi mở cho RDS (khoản 15).
+- **Chưa chạy thật**: không lần nào trên RDS; ~~task, image và workflow thuộc vòng kế. Bước 8.1 vẫn chưa làm được tới lúc ấy.~~
+  **[S1.183]** image `khoi-tao` và `migrate` đã chạy trên Docker cục bộ — Postgres bắt TLS, Secrets Manager giả — nhưng chưa lần
+  nào trên AWS hay qua GitHub Actions (khoản 15). Bước 8.1 nay là lệnh chạy.
+- **[lượt soi] Lộ mật khẩu của vai là chiếm được mọi tổ chức mà sổ không kể lại.** Vai này — như `app_api` — chèn được người và
+  vai vào BẤT KỲ tổ chức nào biết UUID (UUID không bí mật, ADR-107), chèn mà không ghi hàng sổ nào (không trigger nào trên `users`
+  hay `user_roles` tự ghi sổ), và ghi được hàng sổ giả với `actor_id`, `ip`, `user_agent` tuỳ ý qua `audit_append()`. "Sổ từ hàng
+  đầu tiên" là hành vi của CÔNG CỤ, không phải ràng buộc của VAI. Lớp giữ là secret `tp/khoi-tao/database-url`, vai deploy và người
+  duyệt. Hẹp hơn nữa (ép `actor_type = 'SYSTEM'` và ba mã hành động khi `current_user = app_khoi_tao`, bỏ bốn cột người/mạng khỏi
+  quyền INSERT) cần một trigger mới — chưa làm.
+- **[lượt soi] Người duyệt duyệt một TÊN bí mật, không duyệt nội dung**: giữa lúc duyệt và lúc chạy, nội dung của tên ấy đổi được
+  (thêm người, đổi `toChuc.id`). Dòng kết quả in `VersionId` đã đọc để đối chiếu SAU; ghim phiên bản TRƯỚC — lệnh mang `VersionId`
+  đã duyệt, workflow hiện tổ chức và số người/vai — là việc của vòng hạ tầng (khoản 251). **[S1.183] ĐÃ LÀM** — khối dưới.
+- **[lượt soi] Hai oracle không ghi ở trên**: `user_roles.user_id` tham chiếu `users(id)` TOÀN CỤC (`005` tự ghi là oracle đã
+  biết, MINOR) — nên vai này dò được một UUID người dùng có tồn tại ở đâu đó, và chèn được một hàng vai trỏ người của tổ chức khác
+  (vô hại vì phiên của người ấy thuộc tổ chức kia, nhưng là rác); và `users_org_id_email_key` trả lời "email này có trong tổ chức
+  X chưa". Công cụ không đi hai đường ấy: nó chỉ gán vai cho người vừa chèn trong cùng giao dịch.
+- **[lượt soi] Mất mã tổ chức khi COMMIT mất ACK**: mã chỉ in sau COMMIT, và vai này không đọc được `organizations`; chạy lại báo
+  "slug đã có". Lấy lại mã bằng vai master của RDS — đường khẩn cấp có biên bản của đề xuất (phương án C). **[S1.183]** Trên
+  đường workflow thì không còn: mã do job `build` chọn TRƯỚC lúc duyệt và in ở bảng duyệt.
+- **[lượt soi] Kế thừa, như ba vai kia**: đổi CHỦ một bảng sang vai này qua được hardening (góc mù quyền sở hữu); `GRANT` trên
+  `pg_catalog` không được canh; và ở hồ sơ N3, sau lối ra của superuser, vai deploy không còn ADMIN để cấp lại cặp đăng nhập.
+
+### [S1.183] Vòng hạ tầng — đường chạy trên prod (khoản 251)
+
+**Chủ dự án chốt ngày 2026-09-28:** ⑴ environment GitHub RIÊNG `prod-khoi-tao` (*Required reviewers* + *Prevent self-review*,
+chỉ `master`), `tp-deploy` tin thêm environment ấy — thay cho `prod` ở mục 7; ⑵ bí mật bản khai xoá NGAY khi task thoát 0,
+`--force-delete-without-recovery`; task hỏng thì bí mật còn, để sửa và chạy lại.
+
+- **Người duyệt duyệt một BỘ, không duyệt một TÊN.** Workflow `.github/workflows/khoi-tao.yml`, `workflow_dispatch` trên `master`,
+  ~~sáu~~ **[lượt soi]** bảy đầu vào: chế độ, tên bí mật, `VersionId`, **[lượt soi]** băm SHA-256 của bản khai, tổ chức (slug khi
+  tạo, mã khi thêm người), số người, ~~tổng số cặp người–vai~~ **[lượt soi]** số người mang TỪNG mã vai (cùng tổng mà đổi
+  `REQUESTER` thành `DIRECTOR` thì tổng không lệch). Job `build` (không quyền AWS) kiểm đầu vào và **[lượt soi]** người bấm TRƯỚC,
+  **[lượt soi]** chọn mã tổ chức khi tạo, rồi in bảng ấy vào tóm tắt của run, rồi build đích `khoi-tao`; job `chay` chờ duyệt ở
+  `prod-khoi-tao`. Công cụ nhận `--phien-ban`, `--bam` và ba kỳ vọng — BẮT BUỘC khi đọc Secrets Manager —, đọc ĐÚNG phiên bản ấy
+  ~~(một phiên bản của Secrets Manager không đổi nội dung được)~~ **[lượt soi]** và so băm của đúng byte đã đọc: một phiên bản
+  không đổi nội dung TRONG một bí mật, nhưng xoá hẳn rồi tạo lại cùng tên với `--client-request-token` bằng VersionId cũ thì ra
+  cùng cặp (tên, VersionId) với nội dung khác —, và dừng TRƯỚC khi mở CSDL nếu băm hay ba kỳ vọng lệch. Thêm người sau lúc duyệt ⇒
+  phiên bản và băm mới ⇒ một lần chạy, một lần duyệt mới. Luật đầu vào của script (`kiem_dau_vao`) là luật của `docThamSo`;
+  `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên cùng bộ đầu vào, ở locale C và ở một locale có collation.
+- **[lượt soi] Kiểm KẾT QUẢ của luật duyệt, không tin cài đặt.** Bước đầu của job `chay`, TRƯỚC khi lấy quyền AWS
+  (`actions: read`, `gh api …/runs/<id>/approvals`): phải có một lần DUYỆT `prod-khoi-tao` của một NGƯỜI (không phải bot) khác
+  cả `github.actor` lẫn `github.triggering_actor`. Admin bỏ qua luật duyệt thì không có bản ghi ấy — job dừng (suy từ tài liệu
+  GitHub, chưa đo). Người bấm là bot thì cả hai job dừng: một run do token bot khởi (GITHUB_TOKEN của một workflow khác gọi
+  `workflow_dispatch`, hay một GitHub App) thì *Prevent self-review* so với bot, và người đứng sau nó duyệt được.
+- **Thứ tự của job `chay`** (`deploy/trien-khai.sh khoi-tao`): đẩy image (thẻ = SHA commit, ghim digest), đăng ký bản task
+  definition mới của họ `tp-khoi-tao` CHỈ đổi image (kiểm task role đúng `tp-khoi-tao`; **[lượt soi]** và ghim trọn container
+  theo stack 90 — hai biến đúng giá trị, một secret đúng nguồn, root filesystem chỉ đọc, không lệnh, không user, không tệp
+  biến, không volume, log `/tp/khoi-tao`, execution role đúng: một bản mới nhất bị cài `NODE_OPTIONS` thì mọi lần chạy đã duyệt
+  sau đó chạy mã lạ), chạy task một lần với lệnh dựng bằng `jq` từ đầu vào — không nội suy vào mã —, chờ dừng, đọc mã thoát; 0 ⇒
+  xoá bí mật NGAY, rồi ~~chép dòng kết quả (mã tổ chức, số người, số vai, phiên bản) từ log của CHÍNH task ấy sang tóm tắt, chỉ
+  khi dòng khớp TRỌN mẫu~~ **[lượt soi]** in kết quả suy từ đầu vào đã duyệt — không đọc log. ~~Chung nhóm `concurrency` với
+  `deploy.yml`: task khởi tạo không chạy cùng migrate (hardening thu hồi rồi cấp lại quyền của `app_khoi_tao`).~~ **[lượt soi]**
+  Nhóm `concurrency` RIÊNG: một lần khởi tạo chờ duyệt (tới 30 ngày) giữ nhóm chung thì chặn luôn hotfix. Chạy trùng migrate vẫn
+  an toàn: hardening thu hồi rồi cấp lại trong MỘT giao dịch, nên task khởi tạo không thấy quyền nửa vời. **[lượt soi]** Job
+  `nhac` (không quyền nào) nói ra ở tóm tắt khi `chay` không xanh — hỏng, bị từ chối, bị huỷ, artifact hết hạn — rằng bí mật CÒN.
+- **IAM (stack 30):** role `tp-khoi-tao` (tên ở `infra/terraform/chung`) đọc nhánh `tp/khoi-tao/*`. `tp-deploy` thêm: tin
+  `prod-khoi-tao`, đẩy image vào `tp-khoi-tao`, PassRole `tp-khoi-tao`, `secretsmanager:DeleteSecret` CHỈ trên
+  `tp/khoi-tao/ban-khai/*`~~, `logs:FilterLogEvents` CHỈ trên `/tp/khoi-tao`~~. **[lượt soi]** Không quyền đọc log nào: task tự
+  đăng ký (RegisterTaskDefinition `*`, PassRole execution role) in được mọi secret vào nhóm log ấy, nên quyền đọc nó là một kênh
+  đọc sạch — không mở lớp quyền mới (đường ra internet của SG `tp-api` đã có), nhưng thừa khi kết quả suy được từ đầu vào.
+  `tp-deploy-worker` không đổi.
+- **Stack 90:** kho ECR và nhóm log `/tp/khoi-tao` (90 ngày), security group `tp-khoi-tao` (CSDL; Secrets Manager, ECR, Logs qua
+  endpoint), task definition `tp-khoi-tao` (256/512, root filesystem chỉ đọc, MỘT secret: `DATABASE_URL` từ
+  `tp/khoi-tao/database-url`; bản khai KHÔNG ở đây), `var.anh.khoi_tao`, output `bien_github_khoi_tao` cho biến của environment.
+  Đích `khoi-tao` của `deploy/Dockerfile`: ENTRYPOINT là công cụ, KHÔNG có CMD mặc định.
+- **Dòng lỗi mang mã hệ thống của Node** (`ECONNREFUSED`, `ENOTFOUND`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…), như SQLSTATE: đo image
+  với bó CA sai, dòng lỗi chỉ còn `HONG: Error` — mà lần chạy đầu trên RDS hỏng thì nhiều khả năng hỏng đúng ở mạng hay TLS.
+- **[lượt soi] Tên bí mật dạng slug** dưới `tp/khoi-tao/ban-khai/`: tên vào CloudTrail và vào run công khai, nên một tên mang `@`
+  hay `.` (một email) bị từ chối. **Bản khai mở đầu bằng BOM** (Notepad, PowerShell 5) được đọc; băm tính trên byte gốc.
+
+**Hệ quả, nói thẳng:**
+
+- ***Prevent self-review* là một CÀI ĐẶT của GitHub~~, không mã nào của kho đọc được nó~~.** `docs/APPLY-LAN-DAU.md` 7.1 ghi nó;
+  thiếu nó thì một người tự bấm tự duyệt, đúng như ở `prod`. **[lượt soi]** Mặc định GitHub cho ADMIN bỏ qua luật bảo vệ, và chủ
+  kho cá nhân là admin: 7.1 đòi bỏ chọn *Allow administrators to bypass configured protection rules*, và job `chay` kiểm KẾT QUẢ
+  (một lần duyệt của người khác) nên admin bỏ qua thì job dừng.
+- **[lượt soi] Với quyền quản trị AWS của prod, "hai người" là THỦ TỤC, không phải ranh giới.** Người vận hành tạo bản khai bằng
+  profile `tp-prod` (AdministratorAccess) — cùng danh tính ấy chạy thẳng `aws ecs run-task --task-definition tp-khoi-tao
+  --overrides …`, không qua GitHub, và không cảnh báo nào kêu (stack 60 chỉ canh họ task của worker). Cảnh báo cho mọi lần chạy họ
+  `tp-khoi-tao` và cho mọi thay đổi dưới `tp/khoi-tao/ban-khai/`, cùng một permission set hẹp cho người tạo bản khai, là khoản
+  **252** (rổ B).
+- **Role không đổi quyền theo environment.** `tp-deploy` dưới `prod` — nơi một người tự duyệt được — cũng chạy được task
+  `tp-khoi-tao` với lệnh bất kỳ và xoá được bí mật bản khai, NẾU mã workflow trên `master` làm việc ấy. `deploy.yml` không làm (test
+  hình dạng ghim: **[lượt soi]** không workflow nào ngoài `khoi-tao.yml` nhắc `khoi-tao`, `ban-khai` hay `secretsmanager`), nên
+  ranh giới là mã trên `master` cộng bảo vệ nhánh. Tách hẳn cần một role riêng chỉ `prod-khoi-tao` đảm nhận được — chủ dự án chọn
+  dùng chung `tp-deploy`.
+- **[lượt soi] Trust policy chỉ ghim TÊN environment**, mà GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow nhắc tên
+  chưa có: `docs/APPLY-LAN-DAU.md` 2.0 tạo ba environment TRƯỚC khi apply stack 30. Ghim thêm `job_workflow_ref` (tuỳ biến claim
+  `sub` của OIDC) thuộc khoản **252**.
+- **Người duyệt thấy SỐ, không thấy NGƯỜI**: bảng nói ~~không~~ **[lượt soi]** bao nhiêu người mang `DIRECTOR`, không nói AI.
+  Người có quyền đọc Secrets Manager của prod mở được đúng phiên bản ấy để đối chiếu, và người có tệp bản khai đối chiếu được băm;
+  workflow không làm hộ.
+- **Task hỏng ⇒ dữ liệu cá nhân nằm lại** ở Secrets Manager tới khi chạy lại hay xoá tay; dòng lỗi của job nói điều ấy và in lệnh
+  xoá, **[lượt soi]** và job `nhac` nói nó cả khi job `chay` bị từ chối, bị huỷ hay hỏng trước bước chạy task. Xoá hỏng SAU khi task
+  thoát 0 ⇒ job đỏ, dòng lỗi nói giao dịch ĐÃ commit. **[lượt soi]** Runner mất giữa lúc task thoát 0 và lúc xoá thì không bước nào
+  kịp nói — `docs/APPLY-LAN-DAU.md` 8.1 đòi soát bí mật còn sót sau MỌI lần không xanh.
+- **Xoá không cửa sổ khôi phục**: sau lần chạy, bản khai chỉ còn ở `users`/`user_roles`; sổ không mang email hay họ tên.
+- ~~**Chung nhóm `concurrency`** với `deploy.yml`: một lượt chờ mới HUỶ lượt đang CHỜ trước đó trong nhóm (hành vi của GitHub) —
+  bấm lại là đủ.~~ **[lượt soi]** Nhóm riêng (khối trên); trong nhóm ấy, một lượt chờ mới vẫn HUỶ lượt đang CHỜ trước đó (hành vi
+  của GitHub) — bấm lại là đủ.
+- **[lượt soi] Kho là kho CÔNG KHAI**: đầu vào và tóm tắt của mọi run — slug, mã tổ chức, số người theo vai, thời điểm — ai cũng
+  đọc được, tức danh sách khách hàng. Không mã nào che được điều ấy; đặt slug và tên bí mật không nói tên khách nếu danh sách ấy là
+  bí mật kinh doanh.
+- **`pg` kiểm chứng chỉ theo tên `localhost` khi host là địa chỉ IP** (đo trong phép e2e): RDS được gọi bằng tên DNS
+  (`aws_db_instance.address`) nên không dính; ai đổi secret sang IP thì task hỏng `ERR_TLS_CERT_ALTNAME_INVALID`.
+- **[lượt soi] Mã hoá của AWS CLI trên Windows**: `file://` đọc theo code page (cp1252) nếu không đặt `AWS_CLI_FILE_ENCODING` —
+  tiếng Việt thành chữ vỡ mà không báo lỗi; nay băm lệch nên task dừng trước CSDL, và 8.1 đặt biến ấy.
+- **Chưa chạy thật trên AWS hay GitHub**: IAM đo bằng `terraform plan` offline trên bản sao stack 30 (JSON policy thật), stack 90
+  bằng `terraform validate`; image đo e2e trên Docker cục bộ; lịch sử duyệt của GitHub đo bằng tệp mẫu theo tài liệu. Lần chạy
+  thật đầu tiên thuộc khoản 15.
+
+---
+
+## ADR-112 — Trần lần từ chối theo phiên phủ cả lần từ chối do HANDLER ghi: bối cảnh yêu cầu, đếm ở giao dịch riêng trước lần ghi
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.184]** · **Khoản nợ liên quan:** 248 (đóng) · **Liên quan:** ADR-092
+(trần lần từ chối theo phiên — sửa mục *Ngoài phạm vi*), ADR-105 ⑷(a) (điều kiện mở cờ ký chính sách), ADR-084 ⑷ ⑸ (`CONTROL_DENIED`),
+ADR-060 (luật ghi sổ từ chối có chọn lọc)
+
+### Bối cảnh
+
+ADR-092 đếm lần từ chối ở BỘ ĐIỀU PHỐI — `requirePermission` qua móc, và vế phạm vi agent — và nói thẳng rằng lần từ chối do
+HANDLER ghi nằm ngoài phạm vi. Handler từ chối thì NÉM, giao dịch của yêu cầu rollback, và một lần đếm trên kết nối ấy biến theo.
+Khoản 248 (S1.169) đo lỗ ấy ở `kiemChot`: một phiên giữ `rfq.submit` ở tổ chức đã bật S3 lặp một lần nộp duyệt bị K1 chặn, mỗi lần
+một 422 và một hàng sổ qua khoá chuỗi sổ toàn tổ chức, không trần. Cùng hình dạng ở mọi lần từ chối do handler ghi: bảng so sánh
+(`bid.view`, A4), cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá, và từ khoản 247 J3/D2. Đo trước bản vá trên
+`master` (`apps/api/src/auth.int.test.ts` vế ⒤ ⒥, trần tiêm 3): lần thứ 4 vẫn 403/422 kèm một hàng. Khoản này chặn việc mở cờ ký
+chính sách trên máy chủ thật (ADR-105 ⑷(a)).
+
+### Quyết định
+
+1. **Phạm vi: mọi lần từ chối do handler ghi** (chủ dự án chọn), không chỉ `CONTROL_DENIED`. Hai đường ghi sổ từ chối của
+   `packages/identity/src/rbac.ts` — `requirePermission` không mang móc, và `throwAuditedDenial` — là chỗ đếm; mọi lần từ chối
+   ở handler đi qua một trong hai.
+2. **Cơ chế: bối cảnh yêu cầu** (chủ dự án chọn). Bộ điều phối đặt `chayVoiTranTuChoi({ dem })` — AsyncLocalStorage — quanh lời
+   gọi handler người mua; hai đường ghi sổ đọc nó. Không hàm gói nào đổi chữ ký, và một lần từ chối viết ngày mai tự được đếm.
+   Không bối cảnh — worker, job, test gọi gói trực tiếp — thì không đếm, y như trước.
+3. **Cùng bucket, cùng trần** với bộ điều phối: `tu-choi|<phiên>`, 30 lần / 900 s. Một phiên có MỘT ngân sách từ chối.
+4. **Đếm ở giao dịch RIÊNG trên `auditPool`, commit TRƯỚC lần ghi sổ.** Lần ghi hỏng vẫn tiêu ngân sách (vế ⒣ của ADR-092); vượt trần
+   ném `VuotTranTuChoiError` trước khi chạm khoá chuỗi sổ ⇒ 429 thân cố định kèm `retry-after`, không hàng sổ. Lỗi của phép đếm đi
+   ra NGUYÊN DẠNG, không bọc `…AuditFailedError`; đếm hỏng (không lấy được kết nối) ⇒ 500, không cho qua.
+5. **Không đếm hai lần:** lời gọi `requirePermission` của bộ điều phối luôn mang móc, và bối cảnh chỉ bao lời gọi handler.
+
+### Hệ quả, nói thẳng
+
+- **Một cơ chế NGẦM thứ hai để một lần từ chối không vào sổ.** Cùng loại với móc của ADR-092, và bị giam cùng cách:
+  `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên `chayVoiTranTuChoi` chỉ ở `rbac.ts`, `index.ts`, `dispatch.ts`.
+- **Tính chất *xếp hàng sau nhau* của ADR-092 yếu hơn ở tầng handler.** Khoá hàng bucket nhả khi giao dịch đếm commit, trước lần ghi
+  sổ. Phép đếm vẫn đúng tới từng lần — tám lời gọi cùng lúc ra đúng 3 × 403 + 5 × 429 và 3 hàng (vế ⒧) — nhưng tối đa N lần đầu của
+  một phiên có thể cùng chờ khoá chuỗi sổ, mỗi lần giữ một kết nối nghiệp vụ và một kết nối `auditPool`.
+- **Mỗi lần từ chối ở handler tốn thêm một lần lấy kết nối `auditPool` và một giao dịch ngắn.** Lần lấy có trần
+  `TRAN_CHO_KET_NOI_AUDIT_MS`, như lần ghi.
+- **Bối cảnh theo chuỗi bất đồng bộ.** Việc handler xếp chạy SAU khi yêu cầu trả về (`afterCommit`) nằm ngoài bối cảnh — không có lần
+  từ chối nào ghi ở đó hôm nay.
+- Route khách (`BID_*`, ghi trong giao dịch người gọi) và nhánh ANON vẫn ngoài phạm vi, như ADR-092.
+- Đo ở `apps/api/src/auth.int.test.ts` vế ⒤ (quyền ở handler), ⒥ (A4 qua `throwAuditedDenial`), ⒦ (một ngân sách cho hai tầng),
+  ⒧ (cùng lúc), ⒨ (lần ghi hỏng vẫn tiêu ngân sách); `packages/identity/src/rbac.int.test.ts` khối khoản 248 (đếm một lần, ở giao dịch
+  đã commit trước lần ghi; lỗi ra nguyên dạng; không đếm hai lần; ngoài bối cảnh không đếm).

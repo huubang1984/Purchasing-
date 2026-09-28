@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 074_danh_sach_moi — [S1.180 / S3.2a của spec S3] DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), VÀ KHÔNG
+-- 076_danh_sach_moi — [S1.185 / S3.2a của spec S3] DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), VÀ KHÔNG
 -- TOKEN MỜI NÀO CHO MỘT GÓI CHƯA MỞ (K6)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §3.3, §5.1 (K4, K6), §9 (phần S3.2),

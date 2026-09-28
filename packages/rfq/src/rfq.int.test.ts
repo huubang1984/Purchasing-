@@ -5,6 +5,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { CHOT_THEO_RANG_BUOC, maChotTuLoi } from "@trustprocure/identity";
 import {
   RfqError,
   addRfqItem,
@@ -510,7 +511,7 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
       withTenant(apiPool, orgA, (c) =>
         approveRfq(c, orgA, { rfqId, sessionId: s1 }, apiPool),
       ),
-    ).rejects.toThrow(/Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet/);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "D2_NGUOI_TAO_TU_DUYET", cause: { constraint: "d2_nguoi_tao_tu_duyet" } });
   });
 
   it("một người không duyệt được hai lần, kể cả từ hai phiên khác nhau", async () => {
@@ -558,7 +559,10 @@ describe("D2 — phê duyệt kép ở phía RFQ", () => {
           [orgA, rfqId, u3, s2],
         ),
       ),
-    ).rejects.toThrow(/Phien duoc dan ra khong thuoc ve nguoi duyet/);
+    ).rejects.toSatisfy(
+      // [S1.180 / ADR-108] Câu của trigger còn nguyên, và nhánh mang TÊN mà tầng gói tra ra mã chốt.
+      (e: unknown) => /Phien duoc dan ra khong thuoc ve nguoi duyet/u.test((e as Error).message) && maChotTuLoi(e) === "D2_PHIEN_NGUOI_KHAC",
+    );
 
     // ĐỐI CHỨNG DƯƠNG: cùng câu INSERT ấy, với cặp KHỚP nhau, đi qua.
     const { rowCount } = await withTenant(apiPool, orgA, (c) =>
@@ -883,7 +887,7 @@ describe("[INV-D2] [S1.142 / khoản 241] sàn một chữ ký — gói dưới 
     const rfqId = await goiDuoiNguongChoDuyet();
     await expect(
       withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: s1 }, apiPool)),
-    ).rejects.toThrow(/Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet/);
+    ).rejects.toMatchObject({ name: "ChotKiemSoatError", lyDo: "D2_NGUOI_TAO_TU_DUYET", cause: { constraint: "d2_nguoi_tao_tu_duyet" } });
     await expect(moGoi(rfqId)).rejects.toThrow(/moi co 0 \(D2, san mot chu ky\)/);
   });
 
@@ -1665,32 +1669,38 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
 // [S1.167 / khoản 247 / ADR-104] LẦN VI PHẠM D2 Ở BƯỚC DUYỆT GÓI ĐỂ LẠI MỘT HÀNG SỔ
 //
 // `rfq_kiem_nguoi_duyet` (`011`) chặn người tạo tự duyệt bằng một `RAISE … (D2)`, huỷ giao dịch — trước vòng này 0 hàng sổ. Nay
-// `approveRfq` ghi `RFQ_APPROVAL_DENIED` ở giao dịch ĐỘC LẬP rồi ném lại CHÍNH lỗi ấy. Lần từ chối vì TRẠNG THÁI và lần trùng
-// người duyệt không mang *"(D2)"* nên không thêm hàng nào.
+// `approveRfq` ghi ~~`RFQ_APPROVAL_DENIED`~~ **[S1.180 / ADR-108]** `CONTROL_DENIED` mang mã chốt ở giao dịch ĐỘC LẬP rồi ném
+// ~~lại CHÍNH lỗi ấy~~ `ChotKiemSoatError` mang lỗi ấy ở `cause`. Lần từ chối vì TRẠNG THÁI và lần trùng người duyệt không mang
+// ~~*"(D2)"*~~ tên ràng buộc nào nên không thêm hàng nào.
 // ==============================================================================================
-describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng `RFQ_APPROVAL_DENIED`", () => {
+describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại một hàng ~~`RFQ_APPROVAL_DENIED`~~ [S1.180] `CONTROL_DENIED`", () => {
   async function hangSoD2(rfqId: string): Promise<readonly (readonly unknown[])[]> {
     const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
-      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_APPROVAL_DENIED' AND resource_id = $2 ORDER BY seq",
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
       [orgA, rfqId],
     );
     return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
   }
 
-  it("người tạo tự duyệt ⇒ thông điệp của trigger không đổi, và ĐÚNG MỘT hàng sống qua rollback; lần duyệt hợp lệ không thêm hàng", async () => {
+  it("người tạo tự duyệt ⇒ `ChotKiemSoatError` mang lỗi của trigger ở `cause`, và ĐÚNG MỘT hàng sống qua rollback; lần duyệt hợp lệ không thêm hàng", async () => {
     const rfqId = await rfqNhap(orgA, true);
     const sTao = await taoPhien(orgA, u1);
     await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId, actorSessionId: sTao }, apiPool));
     await expect(
       withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: sTao }, apiPool)),
-    ).rejects.toThrow(/Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet \(D2\)/u);
-    expect(await hangSoD2(rfqId)).toEqual([[u1, "RFQ", { viPham: "D2" }]]);
+    ).rejects.toMatchObject({
+      name: "ChotKiemSoatError",
+      lyDo: "D2_NGUOI_TAO_TU_DUYET",
+      message: "Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).",
+      cause: { code: "23514", constraint: "d2_nguoi_tao_tu_duyet", message: "Nguoi tao RFQ khong duoc la mot trong hai nguoi duyet (D2)" },
+    });
+    expect(await hangSoD2(rfqId)).toEqual([[u1, "RFQ", { ma: "D2_NGUOI_TAO_TU_DUYET" }]]);
 
     await withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: s2 }, apiPool));
     expect(await hangSoD2(rfqId), "lần duyệt hợp lệ không phải một lần từ chối").toHaveLength(1);
   });
 
-  it("từ chối vì TRẠNG THÁI (gói chưa nộp duyệt) và vì TRÙNG người duyệt ⇒ KHÔNG hàng `RFQ_APPROVAL_DENIED` nào", async () => {
+  it("từ chối vì TRẠNG THÁI (gói chưa nộp duyệt) và vì TRÙNG người duyệt ⇒ KHÔNG hàng `CONTROL_DENIED` nào", async () => {
     const chuaNop = await rfqNhap(orgA, true);
     await expect(withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId: chuaNop, sessionId: s2 }, apiPool))).rejects.toThrow(
       /PENDING_APPROVAL/u,
@@ -1704,6 +1714,18 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
     });
     await expect(withTenant(apiPool, orgA, (c) => approveRfq(c, orgA, { rfqId, sessionId: s2b }, apiPool))).rejects.toThrow();
     expect(await hangSoD2(rfqId)).toEqual([]);
+  });
+
+  // [S1.180 / ADR-108] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
+  // CSDL: mọi tên ràng buộc mà ba trigger J3/D2 đặt đều có mã chốt, và mọi dòng của bảng tên → mã đều có một nhánh đặt nó.
+  it("tên ràng buộc ở ba trigger J3/D2 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+    const { rows } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
+        "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure)",
+    );
+    expect(rows).toHaveLength(3);
+    const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
+    expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
 });
 

@@ -15,6 +15,7 @@ const TOT: BienStack90 = {
     web: ecr("tp-web"),
     public_keys: ecr("tp-public-keys"),
     neo: ecr("tp-neo"),
+    khoi_tao: ecr("tp-khoi-tao"),
   },
   so_ban_api: 1,
   so_ban_worker: 1,
@@ -34,13 +35,13 @@ describe("kiemBien", () => {
     expect(muc(kq, "VANG")).toEqual([]);
   });
 
-  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho sáu image và mọi chỗ <...>; VANG cho api, worker, DNS", () => {
+  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho ~~sáu~~ [S1.183] bảy image và mọi chỗ <...>; VANG cho api, worker, DNS", () => {
     const tam = "tam@sha256:" + "0".repeat(64);
     const kq = kiemBien(
       {
         ...TOT,
         ten_mien: "<app.domain>",
-        anh: { api: tam, worker: tam, migrate: tam, web: tam, public_keys: tam, neo: tam },
+        anh: { api: tam, worker: tam, migrate: tam, web: tam, public_keys: tam, neo: tam, khoi_tao: tam },
         ses: { tu_api: "<dia_chi_gui>@<domain>", tu_canh_bao: "<dia_chi_canh_bao>@<domain>", nhan_canh_bao: ["<email>"], configuration_set: "tp-thu" },
         so_ban_api: 0,
         so_ban_worker: 0,
@@ -55,6 +56,7 @@ describe("kiemBien", () => {
       "anh.web",
       "anh.public_keys",
       "anh.neo",
+      "anh.khoi_tao",
       "ten_mien",
       "ses.tu_api",
       "ses.tu_canh_bao",
@@ -118,7 +120,7 @@ function awsGia(ghiDe: Partial<{ taiKhoan: string; secret: Record<string, MoTaSe
 }
 
 describe("kiemAws", () => {
-  it("mọi thứ có ⇒ không DO; hỏi đúng bốn secret, sáu image theo digest, một miền SES", async () => {
+  it("mọi thứ có ⇒ không DO; hỏi đúng năm secret, sáu image theo digest, một miền SES", async () => {
     const aws = awsGia();
     const kq = await kiemAws(TOT, HANG, aws);
     expect(muc(kq, "DO")).toEqual([]);
@@ -127,12 +129,14 @@ describe("kiemAws", () => {
       "secret tp/api/otp-peppers",
       "secret tp/worker/database-url",
       "secret tp/neo/database-url",
+      "secret tp/khoi-tao/database-url",
       "ecr tp-api sha256:" + D,
       "ecr tp-unseal-worker sha256:" + D,
       "ecr tp-migrate sha256:" + D,
       "ecr tp-web sha256:" + D,
       "ecr tp-public-keys sha256:" + D,
       "ecr tp-neo sha256:" + D,
+      "ecr tp-khoi-tao sha256:" + D,
       "ses thu-mua.vn",
     ]);
   });

@@ -1448,17 +1448,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // [S1.166 / S3.1b] Bốn hàm TRỢ GIÚP của chuỗi K1 — không `RETURNS trigger`, nên đứng ngoài `HAM_GHIM` và ghim theo
   // khuôn `la_duong_ung_dung` (037). Một thân rỗng ruột ở bất kỳ hàm nào tắt K1 mà không trigger nào đổi: vị từ trả
   // NULL, công tắc trả `false`, phiên bản hiệu lực bỏ vế chữ ký, hay phân bậc lệch biên.
-  // [S1.180 / S3.2a] Thêm hàm thứ năm, `rfq_bam_danh_sach` của K4b: một thân trả một hằng làm mọi danh sách cùng một băm,
+  // [S1.185 / S3.2a] Thêm hàm thứ năm, `rfq_bam_danh_sach` của K4b: một thân trả một hằng làm mọi danh sách cùng một băm,
   // và cạnh mở gói đếm chữ ký cũ như thể danh sách chưa đổi.
   const HAM_TRO_GIUP_K1: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "rfq_chot_ngan_sach", chuKy: "uuid, uuid, timestamptz", migration: "072_bac_cua_goi.sql" },
     { ham: "rfq_bac_cua", chuKy: "uuid, numeric, text", migration: "072_bac_cua_goi.sql" },
     { ham: "to_chuc_da_bat_s3", chuKy: "uuid", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "chinh_sach_hieu_luc", chuKy: "uuid, timestamptz", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
-    { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "074_danh_sach_moi.sql" },
+    { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "076_danh_sach_moi.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ [S1.180] năm hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ [S1.185] năm hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1564,18 +1564,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_de_xuat", migration: "064_lich_su_dieu_phoi.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    { ham: "award_kiem_de_xuat", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
     // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
     // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
     { ham: "award_kiem_mot_award_song", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
-    { ham: "award_kiem_nguoi_duyet", migration: "061_trao_thau.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
+    { ham: "award_kiem_nguoi_duyet", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
-    { ham: "bid_kiem_han_nop", migration: "066_han_nop_mang_gio_phan_xu.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
-    { ham: "bid_kiem_phien_khach", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
+    { ham: "bid_kiem_han_nop", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
+    { ham: "bid_kiem_phien_khach", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_phien_khach"] },
     // [S1.108 / S2.5] Tên trigger được chọn để sắp SAU `vendor_bid_versions_kiem_han_nop` theo
     // thứ tự chữ cái (v > p > h): nó đọc `NEW.bafo_round_id` mà C1 vừa đặt.
-    { ham: "bid_kiem_vong_bafo", migration: "059_vong_bafo.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
+    { ham: "bid_kiem_vong_bafo", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_vong_bafo"] },
     { ham: "bid_phai_co_bien_nhan", migration: "018_vendor_bids.sql", trigger: ["vendor_bid_versions_phai_co_bien_nhan"] },
     // [S1.129 / khoản 233] Lớp GHI của lịch sử điều phối — nguồn dữ liệu duy nhất của J3 vế 3. Một
     // thân `RETURN NULL` làm bảng ngừng lớn và người điều phối lần đầu lại đề xuất được.
@@ -1627,7 +1627,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // rồi đổi đúng một chỗ.
     { ham: "rfq_kiem_chuyen_trang_thai", migration: "071_huy_sau_khi_dong.sql", trigger: ["rfq_packages_kiem_chuyen_trang_thai"] },
     { ham: "rfq_kiem_khoa_khi_mo", migration: "017_rfq_key_material.sql", trigger: ["rfq_packages_kiem_khoa_khi_mo"] },
-    { ham: "rfq_kiem_nguoi_duyet", migration: "011_rfq_hardening.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
+    { ham: "rfq_kiem_nguoi_duyet", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_approvals_kiem_nguoi_duyet"] },
     { ham: "rfq_kiem_nguoi_tao", migration: "011_rfq_hardening.sql", trigger: ["rfq_packages_kiem_nguoi_tao"] },
     { ham: "rfq_kiem_nguong_phe_duyet_kep", migration: "014_procurement_policy.sql", trigger: ["rfq_packages_kiem_nguong_phe_duyet_kep"] },
     { ham: "rfq_kiem_yeu_cau_mo_thau", migration: "059_vong_bafo.sql", trigger: ["rfq_packages_kiem_yeu_cau_mo_thau"] },
@@ -1642,13 +1642,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "unseal_kiem_yeu_cau_khi_ghi_ban_ro", migration: "073_ban_ro_cung_goi.sql", trigger: ["rfq_unsealed_bids_kiem_yeu_cau"] },
     { ham: "users_thu_hoi_phien_khi_dinh_chi", migration: "034_dinh_chi_thu_hoi_phien.sql", trigger: ["users_thu_hoi_phien_khi_dinh_chi"] },
-    // [S1.180 / S3.2a / K4a · K4b · K6] Bốn hàm trigger của danh sách mời. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại
+    // [S1.185 / S3.2a / K4a · K4b · K6] Bốn hàm trigger của danh sách mời. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại
     // đúng lỗ nó đóng: chữ ký không mang băm danh sách (UNIQUE mới thành trang trí), cạnh mở gói không đếm trên danh sách
     // hiện tại, lời mời đổi ở PENDING_APPROVAL, hay token đúc cho gói chưa mở.
-    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "074_danh_sach_moi.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
-    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "074_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
-    { ham: "rfq_invitations_kiem_danh_sach", migration: "074_danh_sach_moi.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
-    { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "074_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
+    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
+    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
+    { ham: "rfq_invitations_kiem_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
+    { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -2418,9 +2418,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await db.pool.query("CREATE ROLE app_neo_login LOGIN PASSWORD 'mk-neo' IN ROLE app_neo");
       await db.pool.query("GRANT app_neo TO app_api_login");
       await db.pool.query("GRANT app_api TO app_neo_login");
+      // [S1.182 — lượt soi] (3) cho HAI role đăng nhập còn lại: nhóm lạ `nhom_xau` ngoài vùng canh, nên chỉ chiều (a) của
+      // `ROLE_CANH` bắt được. Trước đây chỉ `app_api_login` có ca này — bỏ `app_unseal_login` hay `app_neo_login` khỏi
+      // `ROLE_CANH` thì mọi test vẫn xanh. (`app_khoi_tao_login`: `db/vai-khoi-tao.int.test.ts`.)
+      await db.pool.query("GRANT nhom_xau TO app_unseal_login");
+      await db.pool.query("GRANT nhom_xau TO app_neo_login");
 
       const truoc = await db.pool.query<MembershipConLai>(CAU_MEMBERSHIP_CON_LAI);
-      expect(truoc.rows).toHaveLength(9); // 3 hợp lệ + 4 lạ (cặp (5) trùng cặp hợp lệ) + 2 chéo
+      expect(truoc.rows).toHaveLength(11); // 3 hợp lệ + 4 lạ (cặp (5) trùng cặp hợp lệ) + 2 chéo + 2 nhóm lạ của role đăng nhập
       expect(
         truoc.rows.find((r) => r.thanh_vien === "app_api_login" && r.nhom === "app_api")
           ?.admin_option,
@@ -3281,7 +3286,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "074_danh_sach_moi.sql",
+        "074_tu_choi_co_ten.sql",
+        "075_vai_khoi_tao.sql",
+        "076_danh_sach_moi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7698,7 +7705,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "074_danh_sach_moi.sql",
+        "074_tu_choi_co_ten.sql",
+        "075_vai_khoi_tao.sql",
+        "076_danh_sach_moi.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -7992,7 +8001,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "071_huy_sau_khi_dong.sql",
         "072_bac_cua_goi.sql",
         "073_ban_ro_cung_goi.sql",
-        "074_danh_sach_moi.sql",
+        "074_tu_choi_co_ten.sql",
+        "075_vai_khoi_tao.sql",
+        "076_danh_sach_moi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
@@ -8064,7 +8075,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // (c) Tập vai theo USAGE/SET KHÔNG chứa vai deploy (membership chỉ-admin không phải kết nối ứng dụng); ⑵ rỗng.
         const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
         const tap = (await db.pool.query<{ rolname: string }>(docHangHardeningTu(HARDENING, "VAI_KET_NOI_UNG_DUNG"))).rows.map((r) => r.rolname).sort();
-        expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_neo", "app_unseal"]);
+        // [S1.182 / ADR-111] Cây thứ tư `app_khoi_tao` — BƯỚC 0 dựng nó cùng lượt, dưới cùng vai deploy.
+        expect(tap, "vai deploy không phải kết nối ứng dụng").toEqual(["app_api", "app_khoi_tao", "app_neo", "app_unseal"]);
         // [ADR-072 phần 1] 065 đi qua dưới vai deploy KHÔNG superuser: nó MƯỢN quyền chủ hàm liệt kê tổ chức để cấp cho
         // app_neo (bản đầu — GRANT trần — ném "permission denied for function outbox_danh_sach_to_chuc" ở đúng hồ sơ này),
         // và TRẢ LẠI: vai deploy không giữ membership kế thừa nào vào app_liet_ke_to_chuc.
@@ -8081,13 +8093,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // giữ con số ở đây có chủ đích để lần thêm sau phải nhìn thấy hồ sơ N3.
         expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 2 mục:/u);
         // [ADR-072 phần 1] Ba membership ngầm, không còn hai: BƯỚC 0 dựng thêm `app_neo` dưới cùng vai deploy.
-        expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal/app_neo và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai; app_neo -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
+        // [S1.182 / ADR-111] Vai thứ tư `app_khoi_tao` do BƯỚC 0 dựng dưới cùng vai deploy ⇒ cùng một membership chỉ-admin ngầm.
+        expect(kq).toContain('- "tư cách thành viên LẠ của app_api/app_unseal/app_neo/app_khoi_tao và role đăng nhập của chúng": còn sót (app_api -> trien_khai; app_unseal -> trien_khai; app_neo -> trien_khai; app_khoi_tao -> trien_khai). Cần quyền: ADMIN OPTION trên các role đó hoặc SUPERUSER.');
         expect(kq).toContain('- "quyền gọi hàm khoá tư vấn MỨC PHIÊN của vai ứng dụng"');
         // (e) Lối ra đúng như thông báo, và nay nó gồm HAI việc của superuser — cả hai chạy MỘT LẦN:
         //     ⑴ gỡ hai membership ngầm; ⑵ thu hồi các hàm lấy khoá mức phiên khỏi PUBLIC (khoản 128).
         //     Vai deploy giữ được `pg_advisory_lock(bigint)` vì khuôn dựng ở trên đã cấp RIÊNG cho nó — một
         //     lần `GRANT` của superuser, đúng tiền điều kiện mà `TU_CHOI_KHOA_MIGRATE` nêu ra.
-        await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai; REVOKE app_neo FROM trien_khai");
+        // [S1.182 / ADR-111] ~~ba~~ bốn membership ngầm: thêm `app_khoi_tao`, cùng lối ra.
+        await db.pool.query("REVOKE app_api FROM trien_khai; REVOKE app_unseal FROM trien_khai; REVOKE app_neo FROM trien_khai; REVOKE app_khoi_tao FROM trien_khai");
         for (const f of [
           "pg_advisory_lock(bigint)", "pg_advisory_lock(integer, integer)",
           "pg_advisory_lock_shared(bigint)", "pg_advisory_lock_shared(integer, integer)",

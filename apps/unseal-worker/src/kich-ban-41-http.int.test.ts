@@ -421,9 +421,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const m = trangThai.mua.cookie;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
+    // [S1.180 / khoản 247 / ADR-108] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
+    // `CHOT_VAO_SO`, vẫn gọi tên `(D2)` — và để lại một hàng `CONTROL_DENIED`.
     const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
     expect(tuDuyet.status).toBe(422);
-    expect(tuDuyet.text).toContain("khong duoc la mot trong hai nguoi duyet (D2)");
+    expect(tuDuyet.text).toContain("Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).");
+    const { rows: soD2 } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'D2_NGUOI_TAO_TU_DUYET'",
+      [trangThai.rfqId],
+    );
+    expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
@@ -596,6 +603,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { orgId: orgA, token: tokenGia, code: "000000" }, cookie: "" };
         case "POST /guest/bids":
           return { path: r.path, body: { envelope: Buffer.from(phongBiHy).toString("base64") }, cookie: kHy };
+        // [S1.181 / ADR-109] Thoát phiên khách HY SINH — sau lần nộp của nó (bảng route đặt route thoát sau route nộp; nếu thứ
+        // tự đổi, lần nộp ở trên gặp 401, không phải 422 hình dạng). Không đụng phiên của kịch bản.
+        case "POST /guest/logout":
+          return { path: r.path, body: {}, cookie: kHy };
         case "POST /policy":
           // [S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.
@@ -644,6 +655,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":invitationId", UUID0), body: { reason: "thu hoi de quet" }, cookie: m };
         case "POST /invitations/:invitationId/unlock":
           return { path: r.path.replace(":invitationId", UUID0), body: { reason: "mo khoa de quet" }, cookie: m };
+        // [S1.181 / ADR-110] Gửi lại link cho lời mời HY SINH — tới nghiệp vụ (200, hay 409 nếu gói hy sinh đã đóng), không chạm
+        // lời mời nào của kịch bản.
+        case "POST /invitations/:invitationId/reissue":
+          return { path: r.path.replace(":invitationId", (lmHy.body as { invitation: { id: string } }).invitation.id), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/unseal":
           return {
             path: r.path.replace(":rfqId", hyA),
@@ -1004,6 +1019,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hanVongBafo = new Date(String(br!.deadlineAt)).getTime();
     expect(hanVongBafo, "hai hạn phải KHÁC nhau — nếu bằng thì trường mới không mua gì").not.toBe(hanVongMot);
     expect(hanVongMot, "ở kịch bản này gói thầu đóng SỚM, nên hạn vòng một còn XA HƠN hạn BAFO").toBeGreaterThan(hanVongBafo);
+
+    // [S1.181 / ADR-110 — lượt soi] Người trong top-N mất phiên giữa vòng hai thì bên mua GỬI LẠI được link: `BAFO_OPEN` còn
+    // hạn của vòng là trạng thái nhận báo giá. Phiên khách đang sống không bị chạm — bước 12d nộp bằng chính cookie ấy.
+    const guiLai = await goi("POST", `/invitations/${lm.invitationId}/reissue`, m);
+    expect(guiLai.status, guiLai.text).toBe(200);
+    expect(guiLai.body).toEqual({ reissued: true });
   });
 
   it("bước 12d — TOP-2 nộp lại NIÊM PHONG; người NGOÀI top-2 bị chặn, và bằng 422 chứ không 500", async () => {
@@ -1042,6 +1063,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(bn2.status, bn2.text).toBe(422);
     // Và thông điệp KHÔNG chép lại câu của CSDL: hai trong ba câu ấy nội suy UUID.
     expect(bn2.text).not.toContain(trangThai.bafoRoundId);
+    // [S1.180 / khoản 247 / ADR-108] ...và lần chặn ấy để lại ĐÚNG MỘT hàng `BID_STATE_DENIED` mang mã của nhánh, qua đường
+    // HTTP thật: route khách trả 422 mà COMMIT.
+    const { rows: soBafo } = await db.pool.query<{ payload: unknown }>(
+      "SELECT payload FROM audit_events WHERE action = 'BID_STATE_DENIED' AND resource_id = $1",
+      [trangThai.rfqId],
+    );
+    expect(soBafo).toEqual([{ payload: { ma: "BAFO_NGOAI_TOP_N" } }]);
   });
 
   it("[INV-A2] [INV-J4] BỘ QUÉT RÒ RỈ LẦN BA — giá BAFO đã NẰM TRONG CSDL mà chưa qua cổng bốn vế: không route nào trả nó, KỂ CẢ cho người mua đủ quyền", async () => {
@@ -1317,9 +1345,18 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // đến từ một `RAISE` của trigger (`routine = exec_stmt_raise`) — đúng ca của ba trigger `061`,
     // vì thông điệp ấy do migration VIẾT chứ không nội suy dữ liệu người dùng. Nên J3 nói được cho
     // người bấm biết vì sao, mà không cần một dòng nào ở `LOI_NGHIEP_VU_422`.
+    //
+    // [S1.180 / khoản 247 / ADR-108] Nay câu ấy là của BẢNG CHỐT, không của trigger: `deXuatTraoThau` bắt lỗi của trigger theo
+    // TÊN ràng buộc, từ chối bằng `ChotKiemSoatError` (422 qua `LOI_NGHIEP_VU_422`) và để lại một hàng `CONTROL_DENIED`. Câu vẫn
+    // gọi tên `(J3)`.
     expect(tuChoi.status, tuChoi.text).toBe(422);
     expect(tuChoi.text, "câu từ chối phải GỌI TÊN bất biến, không chỉ nói không").toMatch(/\(J3\)/u);
     expect(await trangThaiRfq(), "lần từ chối KHÔNG được để lại một trạng thái nửa vời").toBe("EVALUATING");
+    const { rows: soJ3 } = await db.pool.query(
+      "SELECT 1 FROM audit_events WHERE action = 'CONTROL_DENIED' AND resource_id = $1 AND payload->>'ma' = 'J3_NGUOI_TAO_DE_XUAT'",
+      [trangThai.rfqId],
+    );
+    expect(soJ3, "lần tự đề xuất ấy để lại đúng một hàng sổ").toHaveLength(1);
 
     // ĐỐI CHỨNG DƯƠNG — cùng gói, cùng báo giá, chỉ đổi NGƯỜI: `pm2` cũng là
     // `PROCUREMENT_MANAGER`, cũng giữ `award.recommend`, nhưng họ không tạo và không điều phối.

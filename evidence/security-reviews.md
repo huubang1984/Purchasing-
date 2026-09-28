@@ -14404,9 +14404,10 @@ mở gì); link mời `/i#<token>` gửi trước bản này (prod chưa gửi l
 - Trang chưa xoá fragment sau khi đọc (ADR-020 mục 3 viết `history.replaceState`; không trang nào gọi). Ghi trong ADR-107,
   chưa vào sổ nợ.
 - `/tao-thau` và `/chinh-sach` không có ô xin link.
-- Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa. Dấu hai chấm hợp lệ trong fragment
-  (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để trình tự nhận diện không
-  cắt mất ký tự cuối.
+- ~~Chưa đo trên hộp thư thật: cách một ứng dụng thư tự nhận diện URL có `#…:…` ở giữa.~~ **[S1.181]** Đo trên Gmail ngày
+  2026-09-27 (§S1.181 mục 3c): ba link trọn vẹn, chủ dự án mở và xác nhận; Outlook, Apple Mail, SMS và Zalo chưa đo. Dấu hai
+  chấm hợp lệ trong fragment (RFC 3986 `pchar`), và link `#<orgId>` của tin không mã cố ý không kết thúc bằng dấu hai chấm để
+  trình tự nhận diện không cắt mất ký tự cuối.
 
 ## 5. Số
 
@@ -14611,12 +14612,13 @@ vòng này, và hỏi phiên khi fragment mang mã là mở phiên người khá
 
 ## 4. Giới hạn
 
-- Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
+- ~~Tên gói không xác nhận được lời mời của ai: `GET /guest/rfq` và `GET /guest/session` không trả định danh người được mời. Hai nhà
   cung cấp cùng một gói trên một máy — hiếm, ví dụ một người đại diện cho hai doanh nghiệp — có thể nộp vào hồ sơ của nhau nếu
-  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).
-- Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
+  bấm Tiếp tục mà không chắc. Sửa tận gốc: thêm tên doanh nghiệp được mời vào phản hồi khách (đổi hợp đồng HTTP, cần ADR).~~
+  **[S1.181 / ADR-109]** Đã làm — `GET /guest/rfq` mang tên doanh nghiệp được mời, khối hỏi nêu nó. §S1.181.
+- ~~Không có nút thoát phiên khách: không route nào thu hồi phiên khách theo yêu cầu của chính nhà cung cấp (chỉ thu hồi lời mời
   phía bên mua). Người thấy khối hỏi mà không phải mình thì mở link mời của mình — lần xác minh thay cookie. Cookie khách tự hết
-  sau 4 giờ.
+  sau 4 giờ.~~ **[S1.181 / ADR-109]** Đã làm — `POST /guest/logout`, nút Thoát phiên nộp thầu ở bước 1 và bước 4. §S1.181.
 - Biên nhận của lần nộp trước (bước 4) không hiện lại sau khi tải lại trang.
 - Mã cuối được đo trên Chromium với API giả; luồng API thật (kể cả nộp) được đo trên commit trước lượt sửa của mục 3b.
 
@@ -14700,19 +14702,667 @@ Người đến trước được trước:
 - Thứ tự theo đồng hồ máy: hai người đến cùng mili-giây xếp theo `pid`. Không phải FIFO tuyệt đối, và không cần.
 - Không đo được trên Windows ở máy này; job `T1+T2 (windows-latest)` của PR là phép đo ấy.
 
+
+
+
 ---
 
-# §S1.180 — S3.2a: DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), KHÔNG TOKEN MỜI CHO GÓI CHƯA MỞ (K6); KHOẢN 246 ĐÓNG
+# §S1.180 — KHOẢN 247 NẮN LẠI: J3/D2 VÀO LỚP `CONTROL_DENIED`, CÂU NỘP VÀO `BID_STATE_DENIED` MANG MÃ, NHẬN DIỆN BẰNG TÊN RÀNG BUỘC
+
+## 1. Vòng này là gì
+
+Hai phiên làm khoản 247 song song. #172 (§S1.167, ADR-104) merge trước: lớp gói bắt CHÍNH lỗi của trigger rồi ghi. Phiên này
+đã làm cùng khoản theo lựa chọn chủ dự án chốt ở đây — J3/D2 là `CONTROL_DENIED`, câu nộp là `BID_STATE_DENIED` mang mã — bằng
+cách kiểm trước ở lớp gói. Khi #172 vào `master`, chủ dự án chọn giữ cơ chế của #172 (một nguồn sự thật; ca đua nhau cũng vào sổ),
+bỏ nhánh kiểm-trước, và nắn hai điều: từ vựng về ba lớp của ADR-084 ⑸, và nhận diện bằng tên ràng buộc thay cho thông điệp. Câu
+hỏi thứ hai của chủ dự án: các nhánh #172 ghi NGOÀI bảy ca pilot đo được — *đặt tên hết, vẫn ghi*. ADR-108.
+
+## 2. Đo trước (đọc, không chạy)
+
+- Trên `master` (`12645e9`), khối khoản 247 của ba tệp tích hợp khẳng định hàng `RFQ_AWARD_SOD_DENIED` `{viPham, ve}`,
+  `RFQ_APPROVAL_DENIED` `{viPham}` và `BID_SUBMIT_DENIED` `{rfqStatus}` — tức một truy vấn `action = 'CONTROL_DENIED'` không thấy
+  lần vi phạm J3/D2 nào, và `BID_STATE_DENIED` không có.
+- Nhận diện: `veJ3` đọc `code = 23514` + hậu tố `(J3)` + bốn tiền tố câu; `approveRfq` đọc `includes("(D2")`; `submitBid` ghi mọi
+  23514 không vì hạn, kể cả `CHECK` cỡ phong bì của bảng. Thân sáu hàm trigger (`011`, `018`, `059`, `061`, `064`, `066`) không
+  đặt tên ràng buộc nào ngoài `c1_qua_han_nop`.
+
+## 3. Thay đổi
+
+- `db/migrations/074_tu_choi_co_ten.sql`: định nghĩa lại `rfq_kiem_nguoi_duyet`, `award_kiem_de_xuat`, `award_kiem_nguoi_duyet`,
+  `bid_kiem_han_nop`, `bid_kiem_phien_khach`, `bid_kiem_vong_bafo` — thân trích nguyên văn bằng script, thêm `CONSTRAINT = …` ở
+  13 nhánh. Sáu bản ghim ở `hardening.always.sql` đổi cùng commit (tiêu đề, mốc phiên bản, thân khối `DO`, thân `$than$`); script
+  đối chiếu bản ghim cũ với thân cũ trước khi thay. `db/migrations.int.test.ts`: `HAM_56` trỏ sáu hàm sang migration mới, ba danh
+  sách migration đã áp thêm một dòng.
+- `packages/identity/src/chot-kiem-soat.ts` (MỚI): `CHOT_VAO_SO` dời xuống từ `packages/rfq` cùng `ChotKiemSoatError` (nay nhận
+  `cause`), `tuChoiTheoChot`, `laMaChot`; thêm bảy mã J3/D2, bảng `CHOT_THEO_RANG_BUOC` và `maChotTuLoi`.
+  `packages/rfq/src/chot-kiem-soat.ts` còn phần của K1 và chép lại từ vựng ra cửa tệp.
+- `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/trao-thau.ts`: nhánh bắt lỗi của #172 đổi sang `maChotTuLoi` +
+  `tuChoiTheoChot`; `veJ3`, `ghiTuChoiJ3` bỏ.
+- `packages/bidding/src/bidding.ts`: `MA_THEO_RANG_BUOC` (sáu tên → mã viết hoa); nhánh không vì hạn ghi `BID_STATE_DENIED`
+  `{ma}`, không đọc lại gói; `NopBiTuChoiError` mang `ma`; 23514 không tên ném `BiddingError` chung, không sổ.
+- Test: các ca J3/D2 đi qua lớp gói (`luot-danh-gia`, `rfq`) khẳng định `ChotKiemSoatError` + mã + tên ràng buộc ở `cause`; khối
+  khoản 247 khẳng định hàng `CONTROL_DENIED` / `BID_STATE_DENIED` mang mã; hai ca INSERT viết tay (phiên của người khác, phiên đã
+  đề xuất) khẳng định thêm `maChotTuLoi`; hai phép đo mới so tên ràng buộc trong `pg_proc.prosrc` với bảng tên → mã, hai chiều;
+  kịch bản 41 qua HTTP — bước 2 đọc câu mới và một hàng `D2_NGUOI_TAO_TU_DUYET`, bước 12d một hàng `BAFO_NGOAI_TOP_N`, bước 12h
+  một hàng `J3_NGUOI_TAO_DE_XUAT`.
+- `docs/DECISIONS.md` ADR-108, ghi chú sửa ở ADR-104; `docs/PRODUCT.md` hàng S1.110; `docs/STATE.md` hàng 247 và mốc.
+
+## 4. Ranh giới, nói ra
+
+- Năm mã vào sổ nói về phiên hay dữ liệu, không về một bước đi sai thứ tự — rộng hơn chữ của ADR-060. Giữ vì #172 đã ghi chúng và
+  chủ dự án chọn không lùi phần phủ; mã tách chúng ra để lọc được.
+- Thông điệp người dùng thấy ở J3/D2 đổi sang câu của bảng chốt (có dấu, vẫn gọi tên bất biến); ADR-104 ⑵ từng nói không đổi.
+- Nhánh D2 của `approveUnseal` vẫn nhận diện bằng thông điệp — ngoài phạm vi.
+
+## 5. Số đo
+
+Trên cây đã hợp `master` ~~(`d0ce6ec`, gồm #173 và #174) và đã cấp số (`508353e`)~~ **(`f2fa608`, gồm thêm #175) và đã cấp lại
+số (`66f657a`)**, PostgreSQL 16 thật qua testcontainers:
+- `pnpm evidence` — vitest thoát mã 0: ~~**178 tệp, 2844 ca, 2843 đạt, 1 bỏ qua, 0 hỏng**~~ **178 tệp, 2845 ca, 2844 đạt, 1 bỏ qua,
+  0 hỏng** (ca thêm là của #175); **65/65** bất biến (43/43 nghiệp vụ +
+  22/22 hàng rào), cổng evidence XANH. `evidence/INV-matrix.md` không đổi byte nào: các ca đổi của vòng này nằm trong khối có
+  nhãn sẵn, và hai phép đo khớp tên không mang nhãn bất biến.
+- Tệp của vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60, `packages/danh-gia/src/luot-danh-gia.int.test.ts` 88/88,
+  `packages/bidding/src/bidding.int.test.ts` 22/22, `apps/api/src/guest.int.test.ts` 12/12, `apps/api/src/buyer.int.test.ts`
+  16/16, `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` 29/29, `apps/unseal-worker/src/kich-ban-41.int.test.ts` 15/15,
+  `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
+- `pnpm t0` sạch (427 module, 1672 phụ thuộc); `pnpm test` **116 tệp, 1497 đạt, 1 bỏ qua**; `pnpm cap-so --kiem` sạch.
+- Trước lần hợp, trên cây số tạm: bốn tệp gói (`rfq`, `danh-gia`, `bidding`, `guest`) 182/182; năm tệp migration, kịch bản và
+  hardening 212/212. Lượt `pnpm test` đầu đỏ 6 ca ở `[INV-H20]`: hai tệp mới chưa được git theo dõi (P4) và lời khai số ADR chưa
+  đếm lại (P5, P7) — sửa bằng `git add -N` và `pnpm cap-so --dem`, chạy lại tệp ấy 45/45.
+- Số cấp cho vòng này trôi tám lần vì PR khác merge trước với cùng số: lần đầu S1.170, ADR-106, `073_tu_choi_co_ten` (#175 lấy
+  cả ba), rồi S1.171 (#180), S1.172 (#182), S1.173 (#177), S1.174 (#176), S1.175 (#183), S1.176 và ADR-107 (#184; #185, #187 lấy
+  S1.177, S1.178), S1.179 (#186). Mỗi lần `pnpm cap-so` thu hồi qua trailer `Cap-So:` và cấp lại; nay là S1.180, ADR-108,
+  `074_tu_choi_co_ten`. Số đo ở trên là của cây `f2fa608`. CI trên chính commit hợp xanh cả bảy job, gồm T3 và evidence, ở các đầu
+  `c637858`, `c637455` (sau #176 — hai tệp kịch bản 41 **88/88** cục bộ), `9f66fcf` và `2ccfe6b`. #186 chỉ chạm tài liệu và test kiến
+  trúc `khoa-depcruise`; trên cây đã hợp `pnpm t0` sạch, `pnpm test` 117 tệp, 1548 đạt, 1 bỏ qua, `pnpm cap-so --kiem` sạch.
+- Sổ nợ không đổi: 248 khoản, không mở hay đóng khoản nào. **106 → 107** ADR. **73 → 74** migration.
+
+# §S1.181 — PHIÊN KHÁCH NÓI TÊN DOANH NGHIỆP ĐƯỢC MỜI; NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH; BÊN MUA GỬI LẠI LINK CHO CHÍNH LỜI MỜI (ADR-109, ADR-110)
+
+## 1. Việc gì
+
+Chủ dự án chọn ngày 2026-09-27 hai giới hạn §S1.178 mục 4 để lại, cộng phép đo link trên hộp thư thật (§S1.176 mục 4):
+
+- Khối hỏi phiên của trang nộp thầu chỉ nêu tên gói. Một gói mời nhiều nhà cung cấp, nên hai nhà cung cấp của cùng một gói trên
+  một máy thấy cùng một câu hỏi và có thể nộp vào hồ sơ của nhau. Không route khách nào trả định danh người được mời.
+- Không route nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ `revokeInvitation` phía bên mua, và nó thu
+  hồi cả lời mời. Cookie `__Host-tp_guest` sống tới 4 giờ kể cả sau khi đóng trình duyệt.
+
+Lượt soi đối kháng (mục 3b) đo được một đường cụt NẶNG mà lối thoát mở rộng: thoát rồi (hay hết 4 giờ — có từ trước) thì không
+đường nào đưa nhà cung cấp về hồ sơ báo giá của mình. Chủ dự án chọn làm đường thật trong cùng vòng: **ADR-110**.
+
+## 2. Thay đổi
+
+- `packages/invitation`: `resolveGuestSessionByToken` nối thêm `suppliers` theo khoá chính và trả `supplierLegalName` — đọc dưới
+  kết nối chỉ gắn tổ chức, trong cùng câu đã chứng minh token. `revokeGuestSession(client, orgId, guestSessionId)`:
+  `assertTenantBound`, `UPDATE guest_sessions … WHERE id = $1 AND revoked_at IS NULL RETURNING …`, và CHỈ khi có hàng đổi thì ghi
+  `GUEST_SESSION_REVOKED` (actor `SUPPLIER` = `verified_contact_id`, payload `invitationId`). **[ADR-110]** `reissueInvitationLink`:
+  khoá hàng lời mời (~~`FOR UPDATE`~~ **[lượt soi hai]** `FOR NO KEY UPDATE`, mục 3d), đọc trạng thái gói ~~bằng câu riêng~~
+  **[lượt soi hai]** VÀ hạn — hạn gói ở `OPEN`, hạn vòng đang mở ở `BAFO_OPEN` — bằng câu riêng, trần `LINK_MOI_TOI_DA_MOI_GIO` = 3
+  token/giờ/lời mời (đếm cả token của lần mời và token đã thu hồi), thu hồi token chưa dùng, ghi `INVITATION_LINK_REISSUED`, phát
+  token qua `issueMagicLinkToken`; `revokeMagicLinkToken` là phần bù (lý do `LINK_SEND_FAILED`, ghi `MAGIC_LINK_TOKEN_REVOKED`).
+- `apps/api`: `GuestContext.supplierLegalName`; `GET /guest/rfq` thêm `supplier: { legalName }`; `POST /guest/logout` (GUEST,
+  `mutates: true`) trả 200 kèm `XOA_COOKIE_PHIEN_KHACH`. **[ADR-110]** `POST /invitations/:invitationId/reissue` (BUYER, `rfq.invite`):
+  404/409/409/429 + `Retry-After`, đích đọc từ `supplier_contacts`, gửi SAU commit, phần bù thu hồi đúng token vừa phát ⇒ 502.
+  **[lượt soi hai]** Thân 200 là `{reissued: true}` — bỏ `revokedLinks`; thân 502 nói link cũ chưa dùng đã hết hiệu lực.
+  Đầu tệp `routes/guest.ts` sửa (gạch kèm nhãn): hai route GHI của khách chạy trên kết nối chỉ gắn tổ chức.
+- `apps/web/trang/nop-thau.*`: khối hỏi nêu tên doanh nghiệp và tên gói, thiếu tên doanh nghiệp thì không hỏi; bước 3 có dòng
+  "Doanh nghiệp được mời"; nút Thoát ở bước 1 và bước 4 cùng `thoatPhienKhach(oLoi)`. Sau lượt soi: `dongCacBuoc` xoá thêm dòng tổng,
+  ô OTP, tiền tệ, đếm ngược; lỗi thoát hiện cạnh nút đã bấm (`#loi4` mới ở bước 4); Tiếp tục bị khoá trong lúc thoát; thoát xong cuộn
+  về bước 1; "Niêm phong và nộp" hỏi lại `GET /guest/rfq` và DỪNG khi phiên hiện hành không còn là phiên trên màn (khác gói hay khác
+  tên doanh nghiệp); biên nhận về muộn sau khi đổi thế hệ bị bỏ; câu chữ chỉ đường "xin bên mua gửi lại link mời". **[lượt soi hai]**
+  Lần hỏi lại phiên trước khi niêm phong: chỉ 401 là hết phiên, mã khác là lỗi máy chủ kèm lời "thử lại".
+- `apps/web/trang/tao-thau.js` **[ADR-110]**: nút *Gửi lại link* cạnh *Thu hồi*; câu báo sau khi thu hồi nói báo giá đã nộp vẫn nằm
+  trong gói và chỉ đường gửi lại link, thay cho *"Mời lại nhà cung cấp ấy được rồi"*. **[lượt soi hai]** Mất mạng có câu báo và nút
+  bật lại (`finally`); 502 có câu riêng — link cũ đã hết hiệu lực, lần hỏng tính vào trần.
+- Canh kiến trúc: `revokeGuestSession` vào `HAM_DUONG_KHACH`; `reissueInvitationLink`, `revokeMagicLinkToken` vào `HAM_DOI_TRANG_THAI`
+  (`tests/architecture/cong-quyen-route.test.ts`); năm tên vào danh sách trắng của mặt tiền `invitation`.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: bộ quét route có ca cho `POST /guest/logout` và `POST /invitations/:invitationId/reissue`
+  (mục 3b — commit trước của vòng làm đỏ bộ quét); **[lượt soi hai]** bước 12c gửi lại link cho người top-N giữa vòng BAFO.
+- ADR-109 (và các chỗ sửa sau lượt soi), ADR-110, ghi muộn ở ADR-020 mục 4; ADR-107 (Hệ quả) và §S1.178 mục 4 gạch kèm nhãn;
+  §S1.176 mục 4 gạch kèm nhãn (mục 3c); STATE khoản 250.
+
+## 3. Đo
+
+- `apps/api/src/guest.int.test.ts` khối `[S1.181 / ADR-109]`, 10 ca trên Postgres thật — tám qua HTTP, hai gọi thẳng hàm: hai nhà
+  cung cấp cùng gói ⇒ hai tên, không thấy tên nhau, không mã nhà cung cấp, không người liên hệ; tên đọc lúc gọi; thoát ⇒ 200,
+  `Set-Cookie` xoá đủ thuộc tính, cookie cũ 401 ở đọc và ghi, lời mời không thu hồi, đúng một hàng sổ, lần thoát thứ hai 401 không thêm
+  hàng; chạm ĐÚNG phiên đang gọi; 401 không cookie/cookie rác/magic link trong cookie; **[lượt soi]** thoát không đổi một cột nào của
+  lời mời, token và thách thức OTP (một link thứ hai đang chờ OTP lúc thoát vẫn xác minh được); **[lượt soi]** đua qua HTTP — một kết
+  nối giữ khoá hàng phiên để câu UPDATE của handler chờ, thu hồi rồi thả ⇒ 200 kèm `Set-Cookie`, 0 hàng sổ; hai ca gọi thẳng hàm
+  (thu hồi giữa chừng ⇒ `false`; tổ chức khác ⇒ `false`, khai sai tổ chức ⇒ ném ở câu đầu); **[ADR-110]** đầu-cuối: nộp, thoát, bên
+  mua gửi lại link QUA HTTP, phiên mới thấy lại đúng hồ sơ và lần nộp kế là phiên bản 2 của CÙNG luồng, `vendor_bids` một hàng. 22/22.
+- `apps/api/src/loi-moi-sau-commit.int.test.ts` khối `[S1.181 / ADR-110]`, 6 ca: token mới cho chính lời mời, đúng người liên hệ và
+  kênh, link cũ hết hiệu lực (`redeemMagicLink`), hai hàng sổ, thân phản hồi không mang token; trần ⇒ 429 + `Retry-After` 3600, không
+  token/gửi/sổ, dời mốc tạo ra ngoài cửa sổ thì gửi được — tức token đã thu hồi vẫn bị đếm; ba lần gửi CHỒNG NHAU (một kết nối giữ
+  khoá tư vấn ghi sổ của tổ chức tới khi ba lời gọi cùng chờ) ⇒ đúng hai 200 và một 429; thu hồi ⇒ 409, id lạ và lời mời THẬT của tổ
+  chức khác ⇒ 404, gói nháp ⇒ 409, FINANCE ⇒ 403 kèm một hàng `PERMISSION_DENIED`; `assertTenantBound` của hai hàm và lý do lạ lúc
+  chạy; bộ gửi ném ⇒ 502, token vừa phát thu hồi với lý do, lời mời còn sống, một dòng log không token, gửi lại ⇒ 200. 15/15.
+  **[lượt soi hai]** Bốn ca mới và ba vế thêm, 19/19: gói `OPEN` quá hạn ⇒ 409, không token, không thư; `BAFO_OPEN` theo hạn của
+  VÒNG — hạn gói đã qua mà hạn vòng còn ⇒ 200, hạn vòng qua ⇒ 409, vòng đóng ⇒ 409 (hai trạng thái chỉ thời gian mới dựng được, nên
+  dựng bằng cách tắt trigger trong MỘT giao dịch superuser và bật lại đúng trạng thái cũ trước COMMIT — khuôn `bidding.int.test.ts`
+  [INV-C1], chặt hơn: nó so bảng `pg_trigger` trước/sau); kênh SMS ⇒ số điện thoại; phần bù lần hai hay khai sai lời mời ⇒ `false`,
+  không hàng sổ; đua với xác minh OTP bằng link cũ (một kết nối giữ hàng token để lần xác minh khoá nó TRƯỚC) ⇒ không 40P01, cả hai
+  200, sổ ghi `revokedTokens: 0`; thân 200 so bằng `{reissued: true}`; cửa sổ trần đúng một giờ (dời 50 phút vẫn 429); lần hỏng tính
+  vào trần (lời mời + hỏng + được ⇒ lần kế 429).
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: 58/58, bộ quét route đi qua cả hai route mới; **[lượt soi hai]** bước 12c gửi
+  lại link cho người top-1 giữa `BAFO_OPEN` ⇒ 200, và bước 12d nộp bằng CHÍNH phiên cũ của người ấy.
+- `apps/web/src/phuc-vu.test.ts`, 15 ca `[S1.181]` trên khung `node:vm` của §S1.177 — khung nay trả CÙNG phần tử cho cùng bộ chọn
+  (`querySelector`), có `crypto.subtle`, `atob`, `btoa`, `TextEncoder` giả và thư viện niêm phong giả đủ để "Niêm phong và nộp" đi tới
+  `POST /guest/bids`: ngoài chín ca cũ (đã sửa theo lượt soi) có câu nói trước ở Tiếp tục và ở bước 4 (đọc tệp HTML), đường OTP gặp API
+  cũ không tên doanh nghiệp, kiểm phiên trước khi niêm phong (thẻ khác đổi cookie ⇒ dừng, không `POST /guest/bids`; đối chứng cùng
+  phiên ⇒ nộp), biên nhận về muộn sau khi thoát bị bỏ, và hai ca `/tao-thau` (nút Gửi lại link, 200/429/lỗi, câu báo sau thu hồi).
+  Ca `[S1.178]` *"200 thiếu tên gói"* nay có tên doanh nghiệp và CHỈ thiếu tên gói. 75/75. **[lượt soi hai]** Ba ca mới, 78/78: nút Gửi
+  lại link TẮT trong lúc lời gọi bay (đúng một lời gọi), mất mạng ⇒ câu báo và nút bật lại, 502 ⇒ câu riêng; lần hỏi lại phiên trước
+  khi niêm phong — cùng doanh nghiệp KHÁC gói ⇒ dừng, 401 ⇒ câu hết phiên, 500 và 503 không JSON ⇒ lỗi máy chủ, không lần nào
+  `POST /guest/bids`; lời hỏi lại và lần nộp mất mạng về muộn SAU khi Thoát ⇒ bị bỏ. Hai ca cũ ghim thêm việc xoá câu đếm ngược, `#loi3`,
+  `#loi4` — một qua Thoát, một qua hashchange (đường KHÔNG đi qua nút Thoát, nút tự xoá `#loi4`).
+- `pnpm t0` xanh; `pnpm test` ~~1557/1557~~ **[lượt soi hai]** 1566/1566 (và một ca chỉ chạy trên CI bị bỏ qua cục bộ); bộ tích hợp đầy
+  đủ: mục 5.
+- Đột biến (chép tệp, chạy các ca liên quan, trả lại). **Lượt một** (trước lượt soi): 31 — 20 ở `nop-thau.js`, 11 ở API và gói — cả 31
+  đỏ, một cần thêm ca mới đỏ. **Lượt hai** (sau lượt soi và ADR-110): 41, cả 41 đỏ — 16 ở `nop-thau.js` (không xoá bảng giá, dòng tổng,
+  ô OTP, tiền tệ; chỉ xoá hai vùng biên nhận; bỏ kiểm phiên trước khi nộp; không bỏ biên nhận về muộn; lỗi thoát luôn ở bước 1; chỉ
+  bật lại một nút; hiện nút Thoát trước kết quả OTP; tên `String(undefined)`; luôn đẩy dòng doanh nghiệp; bỏ vế tên gói; câu Tiếp tục
+  và câu sau khi thoát không chỉ đường; không khoá Tiếp tục), 5 ở `tao-thau.js` (gọi nhầm route thu hồi, 429 không nói, câu thu hồi cũ,
+  mất nút, nút không bật lại), 16 ở gói và route gửi lại link (không thu hồi token cũ, trần `>`, bỏ khoá hàng, gửi lại lời mời đã thu
+  hồi, bỏ kiểm trạng thái gói — hai biến thể, trần chỉ đếm token sống, sổ sai mã, phần bù không thu hồi, 429 không `Retry-After`,
+  đích sai, bỏ hai `assertTenantBound`, phần bù nhận lý do lạ), 4 ở đường thoát (thu hồi token, tiêu thụ OTP, đổi trạng thái lời mời,
+  409 khi phiên vừa bị thu hồi). Đột biến *bỏ khoá hàng* sống ở một lượt chạy: ca "ba lần cùng lúc" bản đầu không bảo đảm ba giao dịch
+  chồng nhau; nay nó giữ khoá tư vấn của tổ chức, đỏ với đột biến và xanh 3/3 lần chạy lại trên mã đúng. **Lượt ba** (sau lượt soi
+  hai, mục 3d): 21, cả 21 đỏ — 11 ở gói và route (khoá hàng về `FOR UPDATE` ⇒ ca đua đỏ vì 40P01; cửa sổ 60 s; bỏ nhánh `BAFO_OPEN` —
+  đỏ cả ở kịch bản 41, 2 ca; `BAFO_OPEN` so hạn gói; `OPEN` không xét hạn; vòng đã đóng vẫn tính; đích luôn là email; phần bù luôn ghi
+  sổ; phần bù không ràng lời mời; thân 200 mang lại `revokedLinks`; thân 502 cũ), 10 ở trang (bỏ tắt nút; bỏ `catch` mất mạng; bỏ nhánh
+  502; bỏ vế `rfq.id`; mọi mã khác 200 là hết phiên; bỏ kiểm thế hệ sau lần hỏi lại và ở `catch`; `dongCacBuoc` không xoá câu đếm
+  ngược, không xoá `#loi4`; câu 401 sai). *Không xoá `#loi4`* sống ở lần chạy đầu — ca Thoát không đo được nó vì nút Thoát tự xoá
+  `#loi4` — và đỏ sau khi ca hashchange ghim thêm.
+- Pilot giả lập trên mã của vòng (trước lần tách câu khoá hàng ở mục 3b): 10/10 kịch bản, cô lập 2/2.
+- Chromium 1194 trên cụm thật của pilot — lượt một (mã trước lượt soi): hai nhà cung cấp cùng gói trong CÙNG ngữ cảnh trình duyệt, tên
+  đúng từng doanh nghiệp ở bước 3 và ở khối hỏi, thoát ở khối hỏi và ở bước 4 xoá cookie, `GET /api/guest/rfq` 401, 0 lỗi JavaScript.
+  **Lượt hai** (mã sau lượt soi, cùng bản pilot ở trên): nhà cung cấp mở link, OTP qua SMS, nộp ⇒ *"Lần nộp #1"*; Thoát ở bước 4 ⇒ câu
+  *"… xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp; link cũ đã dùng rồi."*, `GET /api/guest/rfq` 401. Người
+  mua vai BUYER đăng nhập bằng link + TOTP ở `/tao-thau`, đọc gói, đọc danh sách lời mời — bốn hàng, mỗi hàng hai nút — bấm *Gửi lại
+  link* ở hàng của nhà cung cấp ấy ⇒ *"Đã gửi link mới tới Châu Minh Khoa qua EMAIL…"*; hộp thư dev có đúng một link mới cho lời mời
+  ấy. Nhà cung cấp mở link mới, OTP, xác minh ⇒ bước 3 nêu đúng doanh nghiệp; `GET /api/guest/bids` ⇒ một hồ sơ, phiên bản `[1]`; nộp ⇒
+  *"Lần nộp #2"*. Gửi lại lần thứ hai ⇒ được; lần thứ ba (token thứ tư trong giờ) ⇒ *"Lời mời này đã được gửi đủ số link cho phép
+  trong một giờ — thử lại sau."* 0 lỗi JavaScript. **Lượt ba** (mã cuối `0b320eb`, sau lượt soi hai; cụm pilot dựng lại — 10/10 kịch
+  bản, cô lập 2/2): cùng đường, cùng kết quả — nộp #1, Thoát ⇒ `GET /api/guest/rfq` 401, bên mua gửi lại ⇒ hộp thư dev một link mới cho
+  đúng lời mời, nhà cung cấp vào lại đúng doanh nghiệp và hồ sơ (một hồ sơ, phiên bản `[1]`), nộp #2; gửi lại lần hai được, lần ba ⇒
+  câu 429. 0 lỗi JavaScript.
+
+## 3b. Soi đối kháng
+
+Workflow hai lăng kính (hành vi/an ninh; test/tài liệu); người kiểm cố bác năm phát hiện đầu của mỗi lăng kính. 18 phát hiện: lăng kính
+một 6 (1 NẶNG, 4 NHẸ, 1 INFO), lăng kính hai 12 (1 NẶNG, 8 NHẸ, 3 INFO). Mười phát hiện được kiểm: chín đứng, một bị bác. Tám phát hiện
+còn lại không có người kiểm: bốn đo lại bằng một đột biến sống trước khi sửa và chết sau khi sửa (bật lại một nút, nút Thoát trước kết
+quả OTP, nhánh API cũ, câu nói trước), ba đọc lại và đúng (đầu tệp `routes/guest.ts` cùng ADR-020 mục 4 và lời dẫn của ADR-109; thiếu
+mục Giới hạn và Số; lệch phiên bản làm nút Thoát 404), một INFO sửa luôn (Tiếp tục không khoá lúc thoát). Mọi phát hiện đứng đã sửa:
+
+- **NẶNG — thoát rồi thì không có đường quay lại mà trang và chú thích hứa.** Mời lại 409, không route phát link cho lời mời đã có,
+  thu hồi rồi mời lại là luồng báo giá thứ hai; người kiểm đo thêm bằng worker, bảng so sánh và bảng xếp hạng thật: nhà cung cấp đứng
+  hai hàng, giá cũ thắng hạng 1. Chủ dự án chọn làm route: ADR-110. Phần có từ trước — báo giá của lời mời đã thu hồi vẫn dự thầu —
+  thành khoản 250.
+- **NẶNG (lăng kính hai) — ca `[S1.178]` "200 thiếu tên gói" không còn ghim vế tên gói**: thân `{items: []}` thiếu cả tên doanh nghiệp,
+  nên đột biến bỏ vế tên gói (một trong 25 đột biến §S1.178 khai là đỏ) sống. Thân nay chỉ thiếu tên gói; đột biến đỏ lại.
+- **Thoát không xoá dòng tổng giá dạng rõ** (và ô OTP, tiền tệ) — sửa, có ca.
+- **Tên doanh nghiệp là ảnh chụp lúc tải**: hai thẻ trên một máy, bảng nêu A mà báo giá đi vào hồ sơ B (người kiểm dựng lại trên
+  Chromium) — kiểm phiên hiện hành trước khi niêm phong.
+- **Lỗi thoát ở bước 4 chỉ hiện ở `#loi1`** — `#loi4`, lỗi hiện cạnh nút đã bấm.
+- **Biên nhận về muộn sau khi thoát mở lại bước 4** — nút nộp chụp thế hệ.
+- **Lời khai "thoát không chạm lời mời, token, OTP" không có ca nào ghim** (ba đột biến sống) — ca mới so ba bảng trước/sau.
+- **"200 kể cả khi phiên vừa bị thu hồi giữa hai bước" không đo qua HTTP; ADR và biên bản nói "qua HTTP" cho cả khối** — ca đua qua HTTP,
+  câu chữ sửa.
+- **DOM giả không thấy `tbody`; ca "biên nhận bị xoá" chỉ đọc một vùng; một khẳng định chỉ đo fetch giả** — khung sửa, ca đọc đủ bốn
+  vùng, khẳng định thừa bỏ.
+
+Bác: *cột mốc S1.178 ở STATE và §S1.178 mục 2–3 vẫn khai "không route khách nào trả định danh người được mời"* — người kiểm cho thấy
+quy ước của kho không gạch cột mốc cũ; chỗ cần gạch (§S1.178 mục 4, ADR-107 Hệ quả) đã gạch.
+
+**Và một lỗi tự tìm, sau lượt soi:** commit đầu của vòng (`d2f4054`, đã đẩy lên nhánh) thêm `POST /guest/logout` mà không thêm ca vào bộ
+quét route của `kich-ban-41-http.int.test.ts` — bộ quét đòi mọi route ghi có một thân hợp lệ, nên hai ca của tệp ĐỎ trên commit ấy
+(đo: 2 failed / 58). Vòng trước chỉ chạy các tệp test chạm tới, không chạy bộ tích hợp đầy đủ trước khi đẩy.
+
+## 3c. Hộp thư thật — link `#<orgId>:<token>` (giới hạn cuối của §S1.176 mục 4)
+
+Chủ dự án chọn đo ở vòng này. Một thư gửi qua connector Gmail của phiên tới hộp thư của chính chủ dự án ngày 2026-09-27, ba link đúng
+khuôn ba bộ gửi dựng — thư đăng nhập `…/login#<orgId>:<token>`, thư mời `…/i#<orgId>:<token>`, tin báo không mã `…/login#<orgId>` —,
+mã GIẢ (32 byte ngẫu nhiên, base64url 43 ký tự), tên miền `example.com`, dưới mỗi link một dòng *"Phải kết thúc bằng …"*. Hai mã được
+chọn để có `-` và `_` sát cuối.
+
+- Đọc lại thư qua connector: mỗi link đã thành một thẻ `<a>` bọc qua `https://www.google.com/url?q=https://example.com/login%23<orgId>:<token>&…`
+  — `#` mã hoá thành `%23`, và toàn bộ phần sau nó, gồm `:`, `-`, `_`, nằm trong tham số `q`. Cả ba link.
+- Chủ dự án mở thư và bấm link, báo lại cùng ngày: *"Đã mở link, xác nhận đúng"*.
+- Ký tự cuối của mã 32 byte chỉ mang 4 bit, nên nó luôn thuộc `[AEIMQUYcgkosw048]` — không bao giờ là `-` hay `_`, hai ký tự mà bộ tự
+  nhận diện link hay bỏ ở cuối. (Lần đầu định sinh mã kết thúc bằng `-`/`_` để thử — vòng lặp không dừng; đây là lý do.)
+
+Giới hạn của phép đo: thư đi qua Gmail API của connector, không qua SES — thư thật có thể khác ở cấu trúc MIME và phần văn bản thuần;
+chủ dự án không nói đã mở trên ứng dụng hay thiết bị nào, cũng không nói từng link; Outlook, Apple Mail, tin SMS và Zalo chưa đo.
+
+## 3d. Soi đối kháng lượt hai — route gửi lại link (ADR-110)
+
+Một người soi, ba lăng kính (an ninh, hành vi, test), trên bản chép của `12a0e4d` (cây chính và worktree không bị chạm); ca dựng lại
+chạy trên Postgres thật và trên khung `node:vm`. Tám phát hiện, không cái nào NẶNG; tất cả đứng khi đọc lại mã, và mỗi cái có phép đo
+của người soi:
+
+1. **NHẸ, rò cho người trong** — thân 200 `revokedLinks` là 0 khi nhà cung cấp ĐÃ xác minh link, 1 khi chưa: `BUYER` (không giữ
+   `bid.view`, `GET /rfqs/:id/bid-count` ⇒ 403) đọc được nhà cung cấp nào đã vào phiên trước hạn. Sửa: bỏ khỏi thân, chỉ trong sổ.
+2. **NHẸ, khả dụng** — token cũ chết ở giao dịch đã commit, và token bị phần bù thu hồi vẫn tính vào trần: lời mời vừa gửi trong giờ,
+   hai lần hỏng liền ⇒ lần ba 429 tới hết cửa sổ, nhà cung cấp không có link nào; ADR-110 viết *"bên mua thấy 502 và bấm lại"*. Giữ
+   thiết kế, nói thật: thân 502 và câu của `/tao-thau` nói link cũ đã hết hiệu lực và lần hỏng tính vào trần; ADR-110 ghi vì sao chấp
+   nhận (không đếm lần hỏng cần cột lý do trên token — một migration; thu hồi token cũ SAU lần gửi được mở trạng thái hai link sống và
+   một cuộc đua giữa hai lần gửi lại sau commit); ca ghim *"lần hỏng tính vào trần"*.
+3. **NHẸ, bế tắc** — `FOR UPDATE` trên hàng lời mời, rồi `UPDATE` token; lần xác minh OTP bằng link cũ thì `UPDATE` token rồi chèn
+   `guest_sessions`, phép kiểm khoá ngoại lấy `FOR KEY SHARE` trên hàng lời mời: thứ tự ngược, 40P01 3/3 lần khi ép thứ tự. Sửa:
+   `FOR NO KEY UPDATE` (khuôn `rfq.ts`) — không chặn `FOR KEY SHARE`, vẫn xung đột với chính nó và với `UPDATE` của thu hồi; ca đua mới
+   đỏ dưới `FOR UPDATE` (lượt ba R1), xanh nay; ca "ba lần cùng lúc" vẫn đúng hai 200 và một 429.
+4. **NHẸ, trang nộp thầu** — lần hỏi lại phiên trước khi niêm phong coi MỌI mã khác 200 (500, 502/503 của proxy) là *"phiên đã hết
+   hạn … xin bên mua gửi lại link mời"*. Sửa: chỉ 401.
+5. **NHẸ, đột biến có nghĩa còn sống** — bỏ vế `rfq.id` (cùng doanh nghiệp, hai gói, hai thẻ); cửa sổ 3600 → 60 s; bỏ `BAFO_OPEN`; đích
+   luôn là email; phần bù luôn ghi sổ; bỏ tắt nút Gửi lại link; và bốn nhỏ (hai kiểm thế hệ, câu 401, `dongCacBuoc` không xoá câu đếm
+   ngược và `#loi4`). Sửa: ca cho từng cái — lượt ba, mục 3.
+6. **NHẸ/INFO** — `/tao-thau` không `try/finally`: mất mạng làm nút kẹt tắt, không câu báo. Sửa.
+7. **INFO** — chỉ xét trạng thái gói: gói còn `OPEN` mà đã quá hạn (đóng gói là thao tác tay) vẫn gửi lại được và vẫn gửi thư, trái
+   lý do ⑶ của ADR-110. Sửa: xét cả hạn, đúng hai vế của `bid_kiem_han_nop` (074).
+8. **INFO** — trần xin OTP theo (lời mời, đích), không theo token: ba lần xin OTP bằng link cũ thì link mới cũng 429 tới hết 900 s.
+   Ghi ở ADR-110 Hệ quả.
+
+Người soi đề xuất thêm, cho phát hiện 5 (vế `rfq.id`): gửi `rfqId` mong đợi trong `POST /guest/bids` để máy chủ so, đóng luôn khe giữa
+lần kiểm và lần nộp. Chưa làm — đổi hợp đồng của route nộp; ghi ở mục 4. Góc người soi đã soi mà không thấy lỗi: oracle xuyên tổ chức
+(RLS lọc trước khi khoá, 404 như id ngẫu nhiên), quyền, đích gửi (không đường nào đổi email hay số điện thoại của người liên hệ),
+đếm trần (`created_at` mặc định, `app_api` không ghi được), payload sổ, nhánh 429/404/409 (429 commit không ghi gì, 404/409 rollback),
+CSRF, đua gửi lại với thu hồi, và phép suy ký tự cuối base64url của mục 3c.
+
+## 4. Giới hạn
+
+- Kiểm phiên trước khi niêm phong so tên doanh nghiệp và mã gói, không so định danh lời mời: hai nhà cung cấp trùng TÊN PHÁP LÝ trong
+  cùng một gói đi lọt; và còn một khe giữa lần kiểm và lần nộp. Mỗi lần nộp thêm một lời gọi `GET /guest/rfq`. **[lượt soi hai]** Máy
+  chủ không đối chiếu được phong bì niêm cho gói nào (`rfqId` chỉ nằm trong HKDF info); đóng hẳn khe cần `POST /guest/bids` mang
+  `rfqId` mong đợi để máy chủ so — chưa làm.
+- Trang không hiện lại biên nhận hay các phiên bản đã nộp sau khi vào lại (có từ §S1.178); lượt Chromium đọc chúng bằng `fetch`.
+- Phiên đã chết thì Thoát không xoá được cookie (401 không `Set-Cookie`); cookie chết không mở được gì.
+- Gửi lại link: link cũ chưa dùng hết hiệu lực; gửi hỏng sau commit để nhà cung cấp không còn link nào tới lần gửi kế, và **[lượt soi
+  hai]** lần hỏng tính vào trần; khoá OTP theo lời mời, và trần xin OTP theo (lời mời, đích), vẫn chặn link mới; ở `BAFO_OPEN` nhà
+  cung cấp ngoài top-N vào được mà không nộp được (ADR-110, Hệ quả).
+- Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai và báo giá cũ vẫn dự thầu — khoản 250.
+- Lệch phiên bản: trang mới gặp API cũ ⇒ nút Thoát và nút Gửi lại link báo 404.
+- ~~Pilot và lượt Chromium thứ hai chạy trên mã TRƯỚC lần tách câu khoá hàng của `reissueInvitationLink` (QT3 không đọc được `FOR UPDATE OF`);
+  lần tách không đổi hành vi, và 15 ca của `loi-moi-sau-commit.int.test.ts` đo lại trên mã cuối.~~ **[lượt soi hai]** Pilot và lượt
+  Chromium thứ ba chạy trên mã cuối (mục 3). Chromium không đi nhánh 502 hay mất mạng của nút Gửi lại link — hai nhánh ấy chỉ đo
+  trên khung `node:vm`.
+- Hộp thư thật: mục 3c.
+
+## 5. Số
+
+Khoản **250** mở, rổ B: rổ B **58 → 59**, tổng còn mở **83 → 84**. Không khoản nào đóng. Bộ tích hợp đầy đủ trên mã cuối (`0b320eb`):
+64 tệp, **1418/1418**. (Trên bản đã hợp `13c2857`, trước lượt soi hai: 64 tệp, 1414/1414.)
+
+# §S1.182 — TẠO TỔ CHỨC TRÊN PROD, VÒNG MÃ: VAI CSDL HẸP `app_khoi_tao` VÀ CÔNG CỤ `tools/khoi-tao-to-chuc` (ADR-111)
+
+## 1. Việc gì
+
+Chủ dự án chốt ngày 2026-09-27 bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6, cả bốn theo khuyến nghị: phương án **A** (task ECS chạy
+một lần) với vai CSDL hẹp **⒝**; bản khai ở **Secrets Manager**, xoá sau khi chạy; chạy dưới **vai deploy và environment `prod` có
+người duyệt**; thêm người về sau bằng **chính task này**. Câu *ai giữ `role.grant`* để ngỏ. Vòng này là vòng MÃ của hai vòng (ADR-111
+mục 8): vai, công cụ, test, và secret của task migrate. Đích Dockerfile, task definition, IAM và workflow là vòng hạ tầng kế — khoản
+251.
+
+## 2. Thay đổi
+
+- `db/migrations/075_vai_khoi_tao.sql` — chỉ GRANT, theo cột: `INSERT (id, name, slug)` trên `organizations`; `INSERT (org_id,
+  email, full_name)` và `SELECT (id)` trên `users`; `INSERT`/`SELECT` ba cột của `user_roles`; `SELECT (role_code, permission_code)`
+  trên `role_permissions`; ghi sổ như `app_api` (INSERT theo cột, `SELECT (id, org_id, seq, prev_hash, hash, occurred_at)`, EXECUTE
+  hai hàm sổ); `app_current_org_id()`.
+- `db/migrations/hardening.always.sql` — dựng `app_khoi_tao` ở BƯỚC 0; thêm vào `ROLE_CANH`, `CAP_HOP_LE`, tập vai kết nối; sáu mục
+  thuộc tính / cấu hình vai / cấu hình IN DATABASE cho hai tên; `public`, `app_private`, `app_current_org_id()` mở rộng; hằng
+  `CAU_QUYEN_KHOI_TAO_SAI` (quyền HIỆU DỤNG theo từng cột, thừa và thiếu) và mục tự chữa "quyền quan hệ của app_khoi_tao" (thu hồi
+  `CASCADE` mọi thứ cấp đích danh rồi cấp lại đúng danh sách); mục EXECUTE của hàm liệt kê tổ chức nay đòi `app_khoi_tao` KHÔNG có.
+- `packages/db/src/vai-tro.ts` — `VAI_UNG_DUNG` thêm `app_khoi_tao`.
+- `tools/chay-migrate` — dựng `app_khoi_tao_login` từ `TRUSTPROCURE_KHOI_TAO_DATABASE_URL` (bắt buộc như ba URL kia); test mới
+  `khop-stack-90.test.ts` đòi mỗi URL vai mà `docCauHinh` đọc có trong `bi_mat.migrate` của stack 90.
+- `tools/khoi-tao-to-chuc` (mới) — `ban-khai.ts` (đọc và kiểm bản khai, thông điệp nêu vị trí không nêu giá trị), `khoi-tao.ts` (một
+  `withTenant`; sổ `ORG_CREATED`/`USER_CREATED`/`ROLE_GRANTED`, actor SYSTEM, `resourceType` `ORGANIZATION`/`USER`; lỗi nào — kể cả
+  lỗi của lần ghi sổ — cũng thành thông điệp nêu vị trí và SQLSTATE, 55P03/40P01 là lỗi tạm chạy lại được), `index.ts` (CLI, tệp hay
+  Secrets Manager dưới `tp/khoi-tao/ban-khai/`; dòng kết quả mang `VersionId` của bí mật đã đọc; lỗi pg không tên in kèm SQLSTATE).
+- `tools/kiem-truoc-apply/src/luat.ts`, `infra/terraform/90-ecs/main.tf`, `infra/terraform/README.md` — secret `tp/khoi-tao/database-url`.
+- Test DB cập nhật: `db/migrations.int.test.ts` (danh sách migration, hồ sơ N3, và **[lượt soi]** chiều (a) của vùng canh cho
+  `app_unseal_login`, `app_neo_login`), `db/hardening-suy-tu-tinh-chat.int.test.ts`, `db/rls-coverage.int.test.ts`,
+  `db/audit-append-only.int.test.ts` (SELECT theo cột mới trên sổ); mới `db/vai-khoi-tao.int.test.ts`.
+- Tài liệu: ADR-111 và một dòng lý do ở ADR-028 §6; `docs/DE-XUAT-TAO-TO-CHUC.md` (đã chốt); `docs/APPLY-LAN-DAU.md` §6.1, §6.4,
+  §6.5, §8.1; `Handoff.md`; STATE khoản 251.
+
+## 3. Đo
+
+- `db/vai-khoi-tao.int.test.ts`, 9 ca. Quyền đo dưới role đăng nhập `app_khoi_tao_login`, `createPool(…, { role: "app_khoi_tao" })`,
+  `withTenant`, `appendAuditEvent` — không đo quyền bằng superuser; câu GHI của nhóm ⑴ là bản viết trần các câu của công cụ:
+  - ⑴ làm được: tạo tổ chức mới cùng người, vai, sổ trong một giao dịch, sổ bắt đầu ở seq 1 và kiểm chứng được; thêm người vào tổ
+    chức đã có sổ, chuỗi nối tiếp; D3 (PROCUREMENT_MANAGER + DIRECTOR) và `033` (FINANCE + BUYER) chạy dưới vai này và vẫn chặn — 42501
+    **[lượt soi]** kèm ĐÚNG thông điệp của trigger ("(D3)", "(D2, 033)"), rollback trọn;
+  - ⑵ không làm được: đọc 21 bảng nghiệp vụ, email, họ tên, trạng thái người dùng, payload và người làm của sổ, hàm liệt kê tổ chức
+    ⇒ 42501 (đối chứng: đúng các cột 075 cấp thì đọc được); 15 câu sửa/xoá/ghi cột không cấp ⇒ 42501; hàng của tổ chức khác ⇒ RLS
+    từ chối; `app_private`, tạo bảng, bảng tạm ⇒ không; câu phán xét của CHÍNH hardening ⇒ rỗng; `app_api` không `SET ROLE` sang được;
+  - ⑶ trôi tự chữa: hai mươi bốn trôi cùng lúc, **[lượt soi]** mỗi hàng hardening mới một trôi — thuộc tính của hai tên, NOLOGIN của
+    vai nhóm, cấu hình vai và IN DATABASE của CẢ HAI tên, membership lạ theo hai chiều của role đăng nhập (`pg_read_all_data` vào nó;
+    một vai khác thừa kế nó) và của vai nhóm, quyền cột thừa và thiếu, quyền nhận kèm quyền cấp tiếp đã cấp tiếp cho vai khác,
+    EXECUTE trên hàm liệt kê tổ chức, `app_private`, `CREATE` trên `public`, `app_current_org_id()` — lượt đầu dừng đòi kết nối mới,
+    lượt kế sửa hết (hai người gọi hợp lệ của hàm liệt kê giữ quyền, role đăng nhập giữ LOGIN), đường sản xuất sống lại, chạy lại là
+    no-op; quyền đến qua PUBLIC ⇒ deploy dừng, nêu đúng tên mục.
+- `tools/khoi-tao-to-chuc`: 46 ca đơn vị (`ban-khai.test.ts` — bản khai hai chế độ, 26 ca hỏng hình dạng, tên khoá lạ, thông điệp
+  không mang email hay họ tên kể cả **[lượt soi]** khi JSON hỏng, regex `EMAIL` ghim bằng chữ vào regex của bộ gửi SES, dòng lệnh) và
+  14 ca tích hợp (`khoi-tao.int.test.ts` — bảy người tám vai, email hạ chữ bằng hàm CSDL và người đầu tiên xin được link bằng email
+  viết hoa, **[lượt soi]** một email mang điểm mã mà JS và CSDL hạ khác nhau (Ⓐ, tiền đề đo tại chỗ) vẫn xin được link, sổ 16 hàng
+  kiểm chứng được và không dữ liệu cá nhân, **[lượt soi]** `resource_id` từng hàng sổ trùng khít tổ chức, người và cặp (người, vai)
+  của `user_roles`, `resourceType` theo quy ước của kho, danh mục vai khớp bảng `roles`, thêm người nối chuỗi, bốn đường rollback
+  trọn — nguyên nhân của D3/033 là CHÍNH trigger —, khoá sổ bị giữ ⇒ lỗi tạm 55P03 có vị trí rồi chạy lại được, dòng lệnh thành công và
+  hỏng — kể cả lỗi pg không tên in kèm SQLSTATE mà không in mật khẩu —, **[lượt soi]** script `pnpm --silent khoi-tao`, và đường
+  Secrets Manager trên một máy chủ Secrets Manager GIẢ trong tiến trình test: hỏi ĐÚNG tên dưới tiền tố một lần, dòng kết quả mang
+  `VersionId`, lỗi của SM chỉ in tên lỗi, không ARN).
+- `tools/chay-migrate/src/khop-stack-90.test.ts`: mỗi URL vai của `docCauHinh` là một secret của `bi_mat.migrate` trỏ một data secret có khai.
+- Bộ tích hợp đầy đủ trước lượt soi: 1414/1415 — một ca đỏ (`db/audit-append-only.int.test.ts` ghim tập quyền cột trên sổ, vai mới có
+  SELECT theo cột) đã cập nhật và chạy lại 22/22. Sau hai lượt soi, trên `7b194e2` (đã gộp master `90fed26`): 66 tệp, 1441/1441.
+  Lần chạy đầu trên cùng commit không tính: môi trường vừa khởi động lại, Docker chưa chạy, 64 tệp gãy ở bước dựng container
+  ("Could not find a working container runtime strategy") trước khi tới thân test.
+- Đột biến: lượt một 28, cả 28 đỏ — chín ở công cụ (không hạ chữ bằng CSDL, bỏ ba hàng sổ, payload, nuốt lỗi một người, lộ thông điệp
+  trigger, lộ cause ở CLI, chèn tổ chức bằng UUID khác UUID đang gắn), bảy ở bản khai và dòng lệnh, bảy ở hardening (tự chữa không cấp
+  lại, không thu hồi, câu phán xét bỏ nhánh thừa theo cột, bỏ nhánh thiếu, cho phép `users.email`, cặp hợp lệ, thuộc tính), một ở
+  `VAI_UNG_DUNG`, bốn ở dây nối (luật kiểm trước apply, `chay-migrate`, task migrate, data secret). Lượt hai (sau lượt soi an ninh) 11:
+  mười đỏ — bỏ REVOKE hàm liệt kê, bỏ CASCADE, lỗi ghi sổ không qua `loiCua`, bỏ nhánh lỗi tạm, trần về 200, in nguyên tên khoá lạ,
+  email nhận ký tự điều khiển, lọc trùng chỉ ASCII, CLI không in SQLSTATE, `resourceType` chữ thường. **Một sống:** bỏ vế
+  `app_khoi_tao` khỏi hậu điều kiện của mục hàm liệt kê — câu sửa của mục chạy VÔ ĐIỀU KIỆN mỗi lần deploy, nên vế ấy chỉ có việc khi
+  câu sửa bị nuốt vì thiếu quyền (deploy không phải chủ hàm); không ca nào dựng hồ sơ ấy cho mục này — cùng tình trạng với vế `app_api`
+  của cùng mục. Lượt ba (sau lượt soi test và tài liệu): 13, cả 13 đỏ — hạ chữ bằng JS (ca email Ⓐ); bỏ `app_khoi_tao_login` khỏi
+  `ROLE_CANH`; tắt ba hàng hardening mới (IN DATABASE của vai nhóm, cấu hình vai của role đăng nhập, NOLOGIN); nhánh JSON hỏng mang
+  thông điệp của V8 — SỐNG ở lần chạy đầu vì mảnh email trong thông điệp bị cắt giữa chừng (`giam.doc.r`), đỏ sau khi ca đòi ĐÚNG câu
+  cố định; script `pnpm khoi-tao` hỏng; đọc bí mật sai tên; `resource_id` của `ROLE_GRANTED` là tổ chức, của `USER_CREATED` bỏ trống;
+  regex `EMAIL` lệch bộ gửi SES; bỏ `app_unseal_login`, bỏ `app_neo_login` khỏi `ROLE_CANH` (ca [CR2-T3]). Đột biến *chèn vai từng
+  câu* của người soi vẫn sống, và đó là điều lời khai đã sửa nói: một câu INSERT không phải điều kiện của D3/`033`.
+
+## 3b. Soi đối kháng
+
+Hai người soi, hai lăng kính, mỗi người trên bản chép riêng của worktree và Postgres riêng.
+
+**Lăng kính an ninh** — không NẶNG; 5 NHẸ, 9 INFO:
+
+1. **NHẸ — hardening không canh EXECUTE của `app_khoi_tao` trên hàm liệt kê tổ chức** (hàm SECURITY DEFINER duy nhất): một `GRANT`
+   sống qua mọi deploy, và vai liệt kê được mọi tổ chức. Sửa: câu sửa `REVOKE` và vế hậu điều kiện; trôi này vào ca ⑶.
+2. **NHẸ — vai ghi được hàng sổ giả, và thêm người/vai mà không để lại hàng sổ nào**, ở mọi tổ chức biết UUID (người soi đo cả hai).
+   Ghi vào ADR-111 Hệ quả: *"sổ từ hàng đầu tiên"* là hành vi của công cụ, không phải ràng buộc của vai; lớp giữ là secret, vai
+   deploy và người duyệt. Trigger ép `actor_type`/mã hành động dưới vai này — chưa làm.
+3. **NHẸ — lỗi của lần ghi sổ ra stderr chỉ là `HONG: error`** (người soi đo 40P01 khi hai `them-nguoi` chạy song song). Sửa: lần ghi
+   sổ đi qua `loiCua`; 55P03/40P01 là lỗi tạm; CLI in SQLSTATE của lỗi pg không tên.
+4. **NHẸ — `them-nguoi` cỡ lớn giữ khoá chuỗi sổ quá trần 2 s** (200 người × 3 vai: 3,69 s; một lần ghi sổ song song 55P03). Sửa: trần
+   50 người mỗi lần chạy.
+5. **NHẸ — người duyệt duyệt một TÊN bí mật, không duyệt nội dung.** Dòng kết quả in `VersionId` đã đọc; ghim phiên bản TRƯỚC khi chạy
+   là việc của vòng hạ tầng (khoản 251, ADR-111 Hệ quả).
+6. INFO — hai oracle (UUID người dùng toàn cục qua `user_roles.user_id`; email theo tổ chức) — ghi ADR.
+7. INFO — góc mù quyền sở hữu (kế thừa, như ba vai kia) — ghi ADR.
+8. INFO — câu tự chữa không `CASCADE` (fail-closed, nhưng thông điệp nói "tự thu hồi") — thêm `CASCADE`, trôi quyền cấp tiếp vào ca ⑶.
+9. INFO — bản khai: tên khoá lạ in nguyên văn; `EMAIL` nhận ký tự điều khiển; lọc trùng chỉ ASCII — cả ba sửa, có ca.
+10. INFO — mất mã tổ chức khi COMMIT mất ACK — ghi ADR (lấy lại bằng vai master, đường khẩn cấp).
+11. INFO — tên tệp `075_…` đứng sai thứ tự từ vựng — số tạm; `pnpm cap-so` cấp số thật lúc hợp.
+12. INFO — `resourceType` viết thường — sửa theo quy ước của kho.
+13. INFO — cổng sổ nợ đỏ với tài liệu chưa stage — sửa (dấu `|` trong hàng 251, số đếm qua `pnpm cap-so --dem`).
+14. INFO — kế thừa: `GRANT` trên `pg_catalog` không được canh; ở hồ sơ N3 vai deploy không còn ADMIN để cấp cặp đăng nhập — ghi ADR.
+
+**Lăng kính test và tài liệu** — 1 NẶNG (lỗ của test, mã đúng), còn lại NHẸ/INFO; mọi kết luận đo lại trên bản chép cuối:
+
+1. **NẶNG — không test nào đo chiều (a) của vùng canh cho `app_khoi_tao_login`**: trôi `GRANT app_api TO app_khoi_tao_login` bị bắt
+   bằng chiều (b), nên bỏ tên ấy khỏi `ROLE_CANH` mà 523 test DB vẫn xanh — trong khi dưới đột biến ấy role đăng nhập mang
+   `pg_read_all_data` qua được `migrate` và đọc được email mà không cần `SET ROLE`. Sửa: trôi `pg_read_all_data` vào role đăng nhập,
+   và một vai khác thừa kế nó (chiều b). Hai cặp cũ cùng lỗ (`app_unseal_login`, `app_neo_login`): thêm vào ca [CR2-T3].
+2. NHẸ — sáu đột biến có nghĩa còn sống, mỗi cái một ca mới: hạ chữ bằng JS (email Ⓐ), ba hàng hardening mới không có trôi (NOLOGIN,
+   IN DATABASE của vai nhóm, cấu hình vai của role đăng nhập — lời khai "mọi hàng hardening mới sửa được trôi của chính nó" sai), nhánh
+   JSON hỏng không có ca chống rò (V8 trích một mảnh email vào thông điệp), `resource_id` của sổ do công cụ ghi không bị ghim.
+3. NHẸ — nhóm ⑷ "dòng lệnh `pnpm khoi-tao`" không chạy `pnpm` (script trỏ tệp không tồn tại vẫn xanh), và "đầu ra một dòng" chỉ đúng
+   khi gọi `node`: ca `pnpm --silent`, lời khai sửa ở `index.ts` và ADR-111 mục 6.
+4. NHẸ — đường Secrets Manager (đường prod) không có ca nào: máy chủ Secrets Manager giả trong tiến trình test, qua
+   `AWS_ENDPOINT_URL_SECRETS_MANAGER`.
+5. NHẸ — regex `EMAIL` là bản chép của bộ gửi SES mà không gì giữ đồng bộ: ca so CHỮ hai tệp.
+6. NHẸ — bốn lời khai sai hay nói quá, đều sửa: *"vai của một người trong MỘT câu INSERT để D3/033 xét trọn tập"* (không cần — trigger
+   AFTER ROW đọc cả câu trước trong cùng giao dịch; đột biến chèn từng câu xanh, người soi đo câu thứ hai vẫn 42501 "(D3)"), JSDoc
+   *"dưới vai khác câu đầu tiên ném 42501"* (pool `app_api` chạy trọn `them-nguoi`), đầu tệp `khoi-tao.ts` nêu payload thiếu `nguon`,
+   ADR-111 *"task role và execution role là vòng kế"* (execution role đã đọc `tp/*`); và `APPLY-LAN-DAU.md` còn câu *"chờ chủ dự án
+   quyết"* chưa gạch.
+7. INFO — ca D3/033 chỉ khớp 42501, không phân biệt với một GRANT thiếu: khớp thêm thông điệp của trigger.
+8. INFO — chú thích `075` *"policy không có TO"* thiếu chính xác; hàng `tools/chay-migrate` của Handoff còn *"hai vai"* — sửa cả hai.
+
+Góc hai người soi đã soi mà không thấy lỗi: quyền hiệu dụng khớp `075` theo từng cột và mỗi cột SELECT đều cần (trigger D3, `033`,
+nối chuỗi, `RETURNING` của `audit_append`); không SECURITY DEFINER nào gọi được qua PUBLIC; mọi trôi khác của vùng canh (chéo, chỉ-ADMIN,
+`pg_write_all_data`, TEMP/CREATE, bảng lạ) bị gỡ hay chặn deploy; rollback trọn ở mọi ca đã thử, kể cả ba lần `tao` đồng thời cùng
+slug; D3/033 không lách được bằng `tao` rồi `them-nguoi`; không email hay họ tên lọt ra ở mọi đường lỗi; `docThamSo` từ chối ARN, xuống
+dòng, khoảng trắng; số secret và thứ tự bước khớp giữa APPLY-LAN-DAU, README và `luat.ts`.
+
+## 4. Giới hạn
+
+- **Chưa chạy trên RDS, chưa có task**: đích Dockerfile, ECR, task definition `tp-khoi-tao`, task role, workflow có người duyệt và xoá
+  bí mật — vòng hạ tầng kế, khoản 251. APPLY-LAN-DAU bước 8.1 và 8.2 vẫn kẹt tới lúc ấy.
+- **Lộ mật khẩu của vai là thêm được người và vai vào mọi tổ chức, và ghi được hàng sổ giả** — như `app_api`; chưa có trigger ép
+  (ADR-111 Hệ quả).
+- **Người duyệt duyệt tên bí mật, không nội dung** tới khi workflow ghim `VersionId` (khoản 251).
+- **Một đột biến sống có lý do** — vế `app_khoi_tao` của hậu điều kiện mục hàm liệt kê (mục 3).
+- Đường Secrets Manager đo trên máy chủ giả, không trên AWS: IAM, KMS của bí mật và tên thật chưa đo.
+- Kế thừa như ba vai kia: góc mù quyền sở hữu, `GRANT` trên `pg_catalog`, hồ sơ N3 (khoản 15).
+
+## 5. Số
+
+Khoản **251** mở, rổ A (vế ⒞ — bước 8.1 của lần apply đầu): rổ A **1 → 2**. Không khoản nào đóng. ADR-111 mới.
+
+# §S1.183 — TẠO TỔ CHỨC TRÊN PROD, VÒNG HẠ TẦNG: ĐÍCH `khoi-tao`, TASK `tp-khoi-tao`, WORKFLOW `khoi-tao.yml` (ADR-111)
+
+## 1. Việc gì
+
+Vòng hạ tầng của ADR-111 (mục 8), đóng khoản 251. Chủ dự án chốt ngày 2026-09-28 hai câu mà vòng này hỏi: ⑴ environment GitHub
+RIÊNG `prod-khoi-tao` (*Required reviewers* + *Prevent self-review*), `tp-deploy` tin thêm nó — vì `prod` chỉ bật *Required
+reviewers*, một người tự bấm tự duyệt được, và bật chặn ấy ở `prod` thì mọi lần deploy api cũng cần người thứ hai; ⑵ bí mật bản
+khai xoá NGAY khi task thoát 0, không cửa sổ khôi phục; task hỏng thì bí mật còn. Và vế còn treo của lượt soi S1.182: người duyệt
+duyệt một TÊN bí mật, còn nội dung của tên ấy đổi được tới lúc chạy. Hai lượt soi đối kháng (§3b) đổi thiết kế đáng kể: băm bản
+khai, mã tổ chức chọn trước, số người theo mã vai, kiểm KẾT QUẢ của luật duyệt, ghim hình dạng task definition, bỏ đọc log, nhóm
+concurrency riêng, job nhắc bí mật còn.
+
+## 2. Thay đổi
+
+- `tools/khoi-tao-to-chuc/src/index.ts` — với `--ban-khai-secret`, BẮT BUỘC: `--phien-ban <VersionId>`, `--bam <sha256>` (băm của
+  ĐÚNG byte bản khai), ba kỳ vọng `--to-chuc`, `--so-nguoi`, `--vai <MA=n,…>` (số người mang từng mã vai, theo thứ tự `MA_VAI`),
+  và — chế độ `tao` — `--ma-to-chuc <uuid>` do workflow chọn; với tệp, các cờ ấy tuỳ chọn (có thì vẫn kiểm), `--phien-ban` bị từ
+  chối; mỗi cờ tối đa một lần; tên bí mật là `tp/khoi-tao/ban-khai/<slug>`. `GetSecretValue` hỏi `{SecretId, VersionId}` và từ chối
+  phiên bản trả về khác phiên bản đã hỏi (kể cả thiếu). Trước khi mở CSDL: so băm, rồi `kiemKhop`. `maLoi` in SQLSTATE và mã hệ
+  thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…). `ban-khai.ts` — `vaiTheoMa`, `kiemKhop`; bỏ
+  MỘT BOM ở đầu bản khai. `khoi-tao.ts` — `khoiTao` nhận mã tổ chức chọn trước.
+- `deploy/Dockerfile` — đích `khoi-tao` (cài phụ thuộc sản xuất của đúng gói, user `node`, bó CA của RDS, ENTRYPOINT là công cụ,
+  KHÔNG CMD).
+- `deploy/trien-khai.sh` — `kiem-khoi-tao` (không biến AWS, không gọi `aws`: kiểm đầu vào và người bấm, in bảng người duyệt
+  duyệt), `kiem-nguoi-duyet <tệp>` (lịch sử duyệt của run phải có một NGƯỜI, không bot, khác `actor` và `triggering_actor`, duyệt
+  `prod-khoi-tao`), `khoi-tao <arn>` (lệnh dựng bằng `jq`; chạy; thoát 0 ⇒ `delete-secret --force-delete-without-recovery` NGAY,
+  rồi in kết quả suy từ đầu vào — không đọc log; hỏng ⇒ không xoá, dặn bí mật CÒN, chạy lại an toàn, lệnh xoá tay). `dang_ky` ghim
+  trọn container của họ `tp-khoi-tao` theo stack 90. `chay_mot_lan` nhận overrides và nhớ task vừa chạy; `loi` in thêm một dòng
+  dặn khi có.
+- `.github/workflows/khoi-tao.yml` (mới) — `workflow_dispatch` trên `master`, `permissions: {}`, nhóm `concurrency` RIÊNG; bảy đầu
+  vào qua `env:`; `build` không quyền AWS chọn mã tổ chức, kiểm đầu vào và người bấm TRƯỚC `docker build`; `chay` ở environment
+  `prod-khoi-tao`, `actions: read` để đọc lịch sử duyệt TRƯỚC khi lấy role `tp-deploy`; `nhac` không quyền nào, nói bí mật CÒN khi
+  `chay` không xanh; artifact giữ 7 ngày.
+- `infra/terraform/chung` — role `khoi_tao = "tp-khoi-tao"`. Stack 30 — task role `tp-khoi-tao` (đọc `tp/khoi-tao/*`); `tp-deploy`:
+  tin `[prod, prod-khoi-tao]`, kho `tp-khoi-tao`, PassRole `tp-khoi-tao`, `secretsmanager:DeleteSecret` CHỈ trên
+  `tp/khoi-tao/ban-khai/*`, không đọc log nào. Stack 90 — kho ECR, nhóm log, SG `tp-khoi-tao` (CSDL, endpoint), task definition (một
+  secret `DATABASE_URL`), `var.anh.khoi_tao`, output `bien_github_khoi_tao`.
+- `tools/kiem-truoc-apply` — image thứ bảy (`khoi_tao` ⇒ `tp-khoi-tao`).
+- Test mới: `tests/deploy/khoi-tao-sh.test.ts`, `tests/architecture/hinh-dang-khoi-tao.test.ts`; cập nhật `ban-khai.test.ts`,
+  `khoi-tao.int.test.ts`, `luat.test.ts`, `nguon.test.ts`.
+- Tài liệu: ADR-111 (mục 3, 5, 7, 8, Hệ quả; khối *Vòng hạ tầng*), ADR-067 (mục 1); `docs/APPLY-LAN-DAU.md` 2.0, 6.1, 6.3, 7.1,
+  8.1; `infra/terraform/README.md`; `Handoff.md`; STATE khoản 251 (đóng), khoản 252 (mở, rổ B), rổ A, rổ B, mốc.
+
+## 3. Đo
+
+- `pnpm t0` xanh. `pnpm test` 121 tệp, 1699/1699 (một ca chỉ chạy trên CI). Bộ tích hợp đầy đủ trên `58c0a02`: 66 tệp, 1443/1443.
+- `ban-khai.test.ts` 109 ca: 65 ca `ThamSoError` (đường prod thiếu phiên bản, băm, kỳ vọng hay mã tổ chức; tên bí mật không phải
+  slug; VersionId 31/65 ký tự, gạch dưới, khoảng trắng, mở đầu gạch nối; băm chữ hoa, thiếu, thừa một ký tự; mã tổ chức chữ hoa,
+  sai phiên bản, sai biến thể, ở `them-nguoi`; slug biên 2/63/64, chữ hoa, gạch dưới, gạch nối đầu; UUID sai phiên bản, sai biến
+  thể; số người 0/51/`01`/`1.5`/`+1`; `--vai` sai dạng, mã lạ, chữ thường, `0`, `01`, dấu phẩy thừa, khoảng trắng, sai thứ tự, lặp
+  mã, vượt số người, tổng thiếu), `kiemKhop` khớp/lệch từng trường (kể cả đổi mã vai cùng tổng), BOM một/hai lần, `maLoi` in/không
+  in. `khoi-tao.int.test.ts` 16/16: đường Secrets Manager trên máy chủ SM giả hỏi `{SecretId, VersionId}`; mã tổ chức là ĐÚNG mã đã
+  chọn; phiên bản khác hay THIẾU VersionId ⇒ dừng, không tổ chức nào; bản khai đúng phiên bản mà thêm người ⇒ dừng TRƯỚC CSDL; tạo
+  lại cùng tên, cùng VersionId, nội dung khác (cùng tổ chức, cùng số, cùng vai) ⇒ lệch băm, dừng; kỳ vọng lệch với tệp ⇒ lỗi lệch dù
+  URL CSDL trỏ một cổng không ai nghe; tệp UTF-8 kèm BOM: băm trên byte của tệp khớp, băm của bản không BOM thì lệch.
+- `tests/deploy/khoi-tao-sh.test.ts` 9/9, bash thật với `aws` giả ghi từng lời gọi: ⑴ `kiem-khoi-tao` không biến AWS, không lời gọi
+  nào, người bấm là bot ⇒ dừng; ⑵ 87 bộ đầu vào — script và `docThamSo` nhận/từ chối như nhau ở MỌI ca (16 nhận,
+  71 từ chối), ở locale C và ở `en_US.UTF-8` (sinh bằng `localedef` vào `LOCPATH` tạm, dò thật rằng ở đó `[a-z]` khớp
+  `á`), cộng biên tuyệt đối; ⑶ lệnh của task đúng các đầu vào (`--ma-to-chuc` chỉ ở `tao`), thứ tự run → chờ → mã thoát → xoá, kết
+  quả từ đầu vào, `/login#…` chỉ ở `tao`; ⑷ thoát 1 hay không mã ⇒ không xoá, dặn bí mật CÒN; xoá hỏng ⇒ thoát 1, nói đã commit;
+  đầu vào sai, người bấm là bot ⇒ không lời gọi `aws` nào; ⑸ `kiem-nguoi-duyet`: người khác duyệt ⇒ xanh; không bản ghi (admin
+  bỏ qua), tự duyệt (kể cả khác hoa thường), bị từ chối, environment khác, bot duyệt, người khởi run gốc duyệt lần chạy lại, người
+  bấm là bot ⇒ dừng; migrate và neo vẫn như trước; ⑹ `dang-ky tp-khoi-tao`: bản đúng hình dạng thì nhân bản; 15 biến thể độc
+  (`NODE_OPTIONS`, `NODE_ENV` khác, region khác, secret thêm hay đổi nguồn, root fs ghi được hay không khai, privileged,
+  `entryPoint`, `command`, `user`, `environmentFiles`, log group khác, execution role khác, volume) ⇒ dừng trước khi đăng ký.
+- `tests/architecture/hinh-dang-khoi-tao.test.ts` 14/14 (workflow, IAM, task, image, job `nhac`, tài liệu vận hành).
+- **Terraform** 1.13.3 (checksum khớp `SHA256SUMS` của HashiCorp); `registry.terraform.io` bị chính sách mạng chặn (403), nên
+  provider `hashicorp/aws` 6.66.0 lấy từ `releases.hashicorp.com` (checksum khớp) qua mirror cục bộ. `terraform validate` sạch cho
+  stack 30 và 90; `terraform plan` offline trên bản sao stack 30 (credential giả, không backend) cho JSON policy thật: `tp-deploy`
+  tin `repo:…:environment:prod` và `…:prod-khoi-tao`, worker chỉ `prod-worker`; `XoaBanKhai` = `secretsmanager:DeleteSecret` trên
+  `…:secret:tp/khoi-tao/ban-khai/*`, không có ở worker; PassRole có `tp-khoi-tao`; task role `tp-khoi-tao` đọc
+  `…:secret:tp/khoi-tao/*`. `terraform fmt -check` sạch. (Plan đo trước lượt soi, khi `tp-deploy` còn lọc `/tp/khoi-tao`; lượt soi
+  bỏ quyền ấy — test hình dạng ghim `doc_log = []`.)
+- **E2E trên Docker cục bộ**, image build từ `deploy/Dockerfile` (bản chép chỉ thêm CA của proxy vào stage `nguon` để build tải được
+  pnpm; stage cuối không đổi), container `--read-only`, user `node`, image build lại SAU lượt soi: Postgres 16 bật TLS bằng một CA
+  thử, `pg_hba` từ chối mọi kết nối không TLS; image `migrate` áp 75 migration và dựng bốn vai đăng nhập; image `khoi-tao` với
+  Secrets Manager giả: (a) V1 đã duyệt, băm và kỳ vọng khớp ⇒ tổ chức MANG ĐÚNG MÃ workflow chọn, 3 người, 4 vai, 8 hàng sổ, email
+  hạ chữ; (b) V2 hiện hành (thêm một người sau lúc duyệt) với băm của V1 ⇒ lệch băm; (c) tạo lại cùng tên, cùng VersionId, nội
+  dung khác (DIRECTOR đổi người) ⇒ lệch băm, không tổ chức nào; (d) chạy lại V1 ⇒ "slug đã có"; (e) `them-nguoi` qua TLS ⇒ 4 người,
+  5 vai, 10 hàng sổ, mọi actor SYSTEM. Trước lượt soi, cùng dựng ấy còn đo: bó CA RDS thật của image ⇒ `Error (ma
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE)`; tên máy CSDL sai ⇒ `Error (ma ENOTFOUND)`; `pg` kiểm chứng chỉ theo tên `localhost` khi nối
+  bằng địa chỉ IP. Kịch bản: `chay-e2e.sh` ở scratchpad của phiên.
+
+## 3b. Hai lượt soi đối kháng
+
+**Lăng kính an ninh** (soi `fed8ca8`): một NẶNG, năm NHẸ, bốn INFO.
+
+- **NẶNG-1 — lời khai "người bấm không tự duyệt được" không đứng: ba đường một người làm một mình.** ⒜ Admin bỏ qua luật bảo vệ
+  (mặc định BẬT; chủ kho cá nhân là admin) ⇒ 7.1 và README đòi tắt *Allow administrators to bypass configured protection rules*,
+  và job `chay` kiểm KẾT QUẢ: một lần duyệt của NGƯỜI khác người bấm, không có thì dừng trước khi lấy quyền AWS. ⒝ Dispatch bằng
+  token bot (GITHUB_TOKEN của một workflow khác, GitHub App) ⇒ *Prevent self-review* so với bot ⇒ cả hai job dừng khi người bấm là
+  bot. ⒞ Người vận hành có AdministratorAccess ở prod chạy thẳng `aws ecs run-task` ⇒ ghi thẳng ở ADR-111 ("hai người" là thủ tục
+  với quản trị AWS), cảnh báo và permission set hẹp là khoản 252 (rổ B).
+- **NHẸ-2 — (tên, VersionId) không định danh nội dung**: xoá hẳn rồi tạo lại cùng tên với `--client-request-token` cũ ⇒ cùng cặp,
+  nội dung khác ⇒ `--bam`, đo ở test tích hợp và e2e.
+- **NHẸ-3 — `logs:FilterLogEvents /tp/khoi-tao` là kênh đọc sạch cho task tự đăng ký** ⇒ bỏ quyền ấy; mã tổ chức do workflow chọn
+  nên kết quả suy từ đầu vào.
+- **NHẸ-4 — `dang_ky` nhân bản bản mới nhất đã bị cài độc** (người soi đo `NODE_OPTIONS=--import=data:…` in mật khẩu CSDL trước khi
+  công cụ chạy) ⇒ ghim trọn container của họ `tp-khoi-tao`. Các họ khác giữ kiểm cũ (ADR-067) — rủi ro có từ trước, không đổi.
+- **NHẸ-5 — kho CÔNG KHAI** ⇒ ghi ở ADR-111 và 8.1; tên bí mật siết về dạng slug (không `@`, `.`).
+- **NHẸ-6 — ba kỳ vọng không ràng buộc vai** ⇒ `--vai` theo từng mã vai thay tổng.
+- INFO-7 (concurrency chung chặn hotfix ⇒ nhóm riêng), INFO-8 (lời dặn khi mất ACK ⇒ "chạy lại an toàn"; runner mất ⇒ 8.1 đòi soát
+  bí mật còn sót), INFO-9 (GitHub tự tạo environment không bảo vệ ⇒ 2.0 tạo trước stack 30; ghim `job_workflow_ref` ⇒ khoản 252),
+  INFO-10 (biên bản đếm sai — viết lại ở §3).
+
+**Lăng kính test và tài liệu** (soi `fed8ca8`, 90 đột biến: 64 đỏ, 26 sống — ba trong số sống là đối chứng hay tương đương):
+
+- **NẶNG-1 — AWS CLI v2 trên Windows đọc `file://` theo code page** ⇒ tiếng Việt vỡ không báo lỗi, BOM làm task hỏng sau khi duyệt ⇒
+  8.1 đặt `AWS_CLI_FILE_ENCODING`, công cụ bỏ một BOM, băm làm chữ vỡ thành lỗi ồn ào trước CSDL.
+- **NẶNG-2 — admin bypass** ⇒ như NẶNG-1 của lăng kính an ninh.
+- NHẸ: đếm sai trong biên bản (viết lại); "deploy.yml không làm" chưa có test ⇒ không workflow nào khác nhắc đường khởi tạo; test
+  DeleteSecret chỉ đếm một chuỗi ⇒ danh sách cho phép đóng cho mọi quyền `secretsmanager:` của mọi stack và cấm ký tự đại diện ở
+  stack 30; `CMD` viết thường/thụt lề và ENTRYPOINT thứ hai ⇒ mẫu không phân biệt hoa thường, đúng một ENTRYPOINT; `LC_ALL=C`
+  không được ghim ⇒ so ở `en_US.UTF-8`; test chạy mã ở mức module dù bỏ qua trên Windows ⇒ dựng trong `beforeAll`; job `build` đi
+  tiếp khi kiểm hỏng (`|| true`, `continue-on-error`, `if: always()`) ⇒ cấm; biên tuyệt đối ⇒ thêm; "Job đỏ ⇒ dòng lỗi in lệnh
+  xoá" chỉ đúng một phần ⇒ job `nhac`.
+- INFO: `them-nguoi` của mẫu kết quả (mẫu đã bỏ cùng việc đọc log); phản hồi thiếu VersionId và mẫu mã lỗi ⇒ thêm ca; tài liệu
+  không test nào đọc ⇒ test đọc 7.1, README, 6.1, 8.1; bước 3 của 8.1 mơ hồ ⇒ người duyệt đối chiếu với YÊU CẦU mở tổ chức.
+
+**Đột biến sau khi sửa:** 46 con, cả 46 ĐỎ. Mười tám con sống của lượt soi test và tài liệu, đo lại trên mã đã sửa: DY1, DY2 (`deploy.yml` chạy khởi tạo hay xoá bản khai), TF3, TF3b, TF3c (task role thêm `secretsmanager:Delete*`, `tp-deploy` thêm `secretsmanager:*`, thêm `s3:*` trong danh sách nhiều dòng), D1b, D1c, D2 (`cmd` viết thường, `CMD` thụt lề, ENTRYPOINT thứ hai), S1 (bỏ `LC_ALL=C`), W3, W4, W12 (`|| true`, `continue-on-error`, `if: always()`), T4b (nhận phản hồi thiếu VersionId), T14 (mẫu mã lỗi nhận mọi chuỗi), T17, T18 (slug 64 ký tự, UUID biến thể `c` — CẢ HAI phía cùng nới), DOC1–DOC3 (bỏ *Prevent self-review* ở 7.1, ở README, bỏ `khoi_tao` khỏi mẫu 6.1); cộng DOC4, DOC5 (bỏ `AWS_CLI_FILE_ENCODING`, bỏ lời tắt admin bypass). Hai mươi lăm con cho mã mới: bỏ so băm; băm trên nội dung đã bỏ BOM; bỏ qua `--ma-to-chuc`; `kiemKhop` bỏ so vai; bí mật không cần `--bam`; `tao` không cần `--ma-to-chuc`; `--vai` bỏ luật thứ tự; lịch sử duyệt nhận chính người bấm, nhận bot, nhận environment bất kỳ; bỏ chặn người bấm là bot; ghim bỏ root fs chỉ đọc, bỏ so biến, không áp cho `tp-khoi-tao`; lệnh task thiếu `--bam`; kiểm người duyệt SAU khi lấy quyền AWS; `nhac` chỉ khi `failure`; `tp-deploy` đọc lại `/tp/khoi-tao`; tên bí mật nhận `@` và `.` (bash, TS); bỏ bỏ-BOM; `MA_TO_CHUC` của `chay` lấy từ input; `them-nguoi` nhận `MA_TO_CHUC`; `loi` xoá bí mật; xoá có cửa sổ khôi phục. Bộ chạy: `dot-bien2.mjs` ở scratchpad của phiên (đổi được nhiều tệp trong một đột biến).
+
+## 4. Còn lại
+
+- Chưa chạy trên AWS hay GitHub Actions (khoản 15): lịch sử duyệt của GitHub đo bằng tệp mẫu theo tài liệu; việc admin bỏ qua luật
+  không để lại bản ghi `approved` là suy từ tài liệu, chưa đo — nếu có để lại, *Prevent self-review* vẫn chặn người bấm tự duyệt,
+  còn admin khác người bấm thì là người duyệt thật.
+- Với quyền quản trị AWS của prod, không cảnh báo nào kêu khi task `tp-khoi-tao` chạy ngoài workflow — khoản 252.
+- Kho công khai: đầu vào và tóm tắt của run là công khai.
+
+## 5. Số
+
+Khoản **251** ĐÓNG (rổ A **2 → 1**). Khoản **252** mở, rổ B (**59 → 60**). Không ADR mới — ADR-111 và ADR-067 sửa tại chỗ. Không
+migration mới.
+
+---
+
+# §S1.184 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
+
+## 1. Vòng này là gì
+
+Khoản 248 (S1.169, rổ B, điều kiện đóng riêng: trước khi mở cờ ký chính sách trên máy chủ thật — ADR-105 ⑷(a)): trần lần từ chối
+theo phiên của ADR-092 chỉ đếm ở bộ điều phối, nên mọi lần từ chối mà handler tự ghi — `CONTROL_DENIED` của K1, J3, D2, bảng so sánh,
+cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá — không trần. Chủ dự án chọn phạm vi *mọi lần từ chối ở handler* và
+cơ chế *bối cảnh yêu cầu*. ADR-112.
+
+## 2. Đo trước khi sửa
+
+Trên mã `master` (`f6e7923`), hai ca mới ở khối ADR-092 của `apps/api/src/auth.int.test.ts`, trần tiêm 3:
+- ⒤ người mua không giữ `bid.view` gọi `GET /rfqs/:rfqId/comparison` — `buildComparisonTable` hỏi quyền ở handler: lần 4 vẫn **403**
+  kèm một hàng `PERMISSION_DENIED` (mong 429).
+- ⒥ người giữ `bid.view` (FINANCE thuần) hỏi bảng so sánh của gói DRAFT — lần từ chối A4 qua `throwAuditedDenial`: lần 4 vẫn **422**
+  kèm một hàng `COMPARISON_DENIED` (mong 429).
+
+Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigger D2 của `033` chặn (`policy.manage` không đứng cùng `rfq.create`) —
+đúng luật; ca dùng một người FINANCE thuần và một người mua khác tạo gói.
+
+## 3. Thay đổi
+
+- `packages/identity/src/rbac.ts`: `BoiCanhTranTuChoi`, kho AsyncLocalStorage và `chayVoiTranTuChoi`; `demTheoBoiCanh` đếm ở giao dịch
+  riêng trên `auditPool` (trần chờ `TRAN_CHO_KET_NOI_AUDIT_MS`). `requirePermission` không móc và `throwAuditedDenial` gọi nó TRƯỚC lần
+  ghi, ngoài khối bọc lỗi. `packages/identity/src/index.ts` cho `chayVoiTranTuChoi` ra cửa; danh sách trắng của barrel thêm một dòng.
+- `apps/api/src/dispatch.ts`: `demTuChoiCuaHandler` — cùng bucket `tu-choi|<phiên>`, cùng `tranTuChoi` — đếm trên kết nối `auditPool`
+  mà `rbac.ts` đưa; bối cảnh đặt quanh lời gọi handler người mua; `anhXaLoiHandler` trả `VuotTranTuChoiError` thành 429 kèm
+  `retry-after`, cùng thân với 429 của `phanQuyetTuChoi`.
+- Test: `apps/api/src/auth.int.test.ts` vế ⒤–⒨; `packages/identity/src/rbac.int.test.ts` khối khoản 248 (ba ca);
+  `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` giam tên `chayVoiTranTuChoi` ở ba tệp.
+- Tài liệu: ADR-112; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
+  danh sách còn mở và mốc.
+
+## 4. Đo sau khi sửa
+
+- ⒤ ⒥ xanh: N lần 403/422 mỗi lần một hàng, rồi 429 thân cố định kèm `retry-after`, không hàng.
+- ⒦ một ngân sách cho hai tầng: hai 403 của bộ điều phối (`POST /suppliers`) cộng một 403 của handler tiêu hết trần 3; lần sau 429 ở
+  CẢ HAI tầng.
+- ⒧ tám lời gọi cùng lúc ở handler ⇒ đúng 3 × 403 + 5 × 429 và đúng 3 hàng.
+- ⒨ khoá chuỗi sổ bị giữ ⇒ ba lần 500, không hàng; khoá nhả ⇒ lần kế tiếp 429 — lần đếm đã commit trước lần ghi hỏng.
+- `rbac.int`: `dem` chạy đúng một lần, số hàng lúc đếm là 0, `txid_status` của giao dịch đếm là `committed`; ngoài bối cảnh không đếm;
+  `dem` ném ⇒ chính lỗi ấy ra, không hàng; `requirePermission` mang móc ⇒ chỉ móc chạy.
+- `pnpm evidence` đầy đủ trên cây `master` `f6e7923` cộng vòng này (trước khi hợp #179): 179 tệp, 2855 ca, 2854 đạt, 1 bỏ qua,
+  0 hỏng, 65/65 bất biến — không kịch bản nào có sẵn vượt trần 30 lần từ chối ở handler trong một phiên.
+
+## 5. Ranh giới, nói ra
+
+- Tính chất *xếp hàng sau nhau* của ADR-092 yếu hơn ở tầng handler: khoá hàng bucket nhả trước lần ghi, nên tối đa N lần đầu của một
+  phiên có thể cùng chờ khoá chuỗi sổ. Phép đếm vẫn đúng tới từng lần (⒧).
+- Một cơ chế ngầm thứ hai để lần từ chối không vào sổ — bị giam bằng test kiến trúc theo TÊN; một bí danh qua biến thì mù, cùng giới
+  hạn đã nói của tệp ấy.
+- Route khách và nhánh ANON ngoài phạm vi, như ADR-092. Việc `afterCommit` chạy ngoài bối cảnh.
+
+## 6. Số đo
+
+- Trên cây `master` `f6e7923` cộng vòng này (trước khi hợp #179): `pnpm evidence` — 179 tệp, 2855 ca, 2854 đạt, 1 bỏ qua, 0 hỏng;
+  **65/65** bất biến; `apps/api/src/auth.int.test.ts` và `packages/identity/src/rbac.int.test.ts` 100/100.
+- Vòng này dựng lại trên `master` `5a54dff` (sau #179 — J3/D2 nay ghi `CONTROL_DENIED` qua `tuChoiTheoChot`, tức qua `throwAuditedDenial`,
+  nên chúng cũng tiêu trần này): `pnpm t0` sạch; `pnpm test` 117 tệp, 1549 đạt, 1 bỏ qua; `ghi-so-tu-choi-mot-duong`, `barrel-exports`,
+  `so-no-tu-doi-chieu` 87/87; `pnpm cap-so --kiem` sạch. T3 và evidence đo trên CI, trên chính commit của PR.
+- Dựng lại lần hai trên `master` `90fed26` (sau #191 — khoản 250 mở, rổ B 59): chỉ tài liệu xung đột; cổng tĩnh và unit đo lại, T3 và
+  evidence trên CI.
+- Dựng lại lần ba trên `master` `d2bdc93` (sau #192 — khoản 251 mở ở rổ A, migration 075): chỉ tài liệu xung đột; cổng tĩnh và unit
+  đo lại, T3 và evidence trên CI.
+- Dựng lại lần bốn trên `master` `7616ae2` (sau #193 — khoản 252 mở ở rổ B): chỉ tài liệu xung đột; cổng tĩnh và unit đo lại, T3 và
+  evidence trên CI.
+- Số tạm của vòng này cấp thành S1.184, ADR-112. Sổ nợ: khoản 248 đóng, rổ B **60 → 59**. **111 → 112** ADR.
+
+---
+
+# §S1.185 — S3.2a: DANH SÁCH ĐƯỢC KÝ LÀ DANH SÁCH ĐƯỢC MỜI (K4a, K4b), KHÔNG TOKEN MỜI CHO GÓI CHƯA MỞ (K6); KHOẢN 246 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 246 (rổ C)
-đóng; khoản 250 mở ở rổ B. Một migration (`074_danh_sach_moi`). Không ADR mới.
+đóng; khoản 253 mở ở rổ B. Một migration (`076_danh_sach_moi`). Không ADR mới.
 
 ## 1. Vòng này là gì
 
 Phần đầu trong ba phần của S3.2 (spec S3 §9), lớp CSDL: K4a, K4b và K6 cưỡng chế ở trigger, trạng thái *chưa gửi* có trong
 lược đồ. Tầng gói, route (S3.2b) và màn, `gieo:demo`, kịch bản 41 theo thứ tự mới (S3.2c) đi sau.
 
-## 2. Bốn quyết định của chủ dự án (S1.180)
+## 2. Bốn quyết định của chủ dự án (S1.185)
 
 - Ba PR: CSDL · gói + route · màn.
 - Cạnh `PENDING_APPROVAL→DRAFT` chỉ mở cho tổ chức đã bật — dựng ở S3.2b.
@@ -14722,7 +15372,7 @@ lược đồ. Tầng gói, route (S3.2b) và màn, `gieo:demo`, kịch bản 41
 
 ## 3. Thay đổi
 
-**Migration `074_danh_sach_moi`** — mọi chốt chỉ áp cho tổ chức đã bật (`to_chuc_da_bat_s3`):
+**Migration `076_danh_sach_moi`** — mọi chốt chỉ áp cho tổ chức đã bật (`to_chuc_da_bat_s3`):
 - `rfq_bam_danh_sach(gói)`: SHA-256 các dòng `MOI|nhà cung cấp|người liên hệ|kênh` của mọi lời mời còn sống, xếp theo chính
   chuỗi dòng dưới collation `"C"`, nối `\n`. Hàm RIÊNG — `rfq_bam_noi_dung` không đổi (§2.5 ⑾). `STABLE`, không `SECURITY
   DEFINER`: chạy dưới RLS của người gọi.
@@ -14796,7 +15446,7 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
   `SENT`, không nhãn, băm danh sách NULL. Thêm lời mời ở `PENDING_APPROVAL` rồi cùng người ký lại ⇒ 23505, và gói cấp kép không
   mở với một người. Hai đột biến của điểm chịu lực — băm cho MỌI tổ chức, `UNIQUE` mất `NULLS NOT DISTINCT` — ⇒ gói cấp kép
   MỞ với một người.
-- **Chuyển tiếp lúc bật (khoản 250, đo giới hạn):** token thời MVP1 của gói chưa mở còn sống sau khi bật, token mới bị chặn.
+- **Chuyển tiếp lúc bật (khoản 253, đo giới hạn):** token thời MVP1 của gói chưa mở còn sống sau khi bật, token mới bị chặn.
   Chữ ký thời MVP1 của gói đang `PENDING_APPROVAL` không được K4b đếm; người ấy ký lại được. Với gói cấp kép, hai hàng của một
   người qua được `071` mà K4b chặn *"moi co 1"*; người thứ hai ký thì mở.
 - **Khoản 246** (`tools/inv-matrix/src/parse.test.ts`, `tests/architecture/nhan-bat-bien-cho-dat.test.ts`,
@@ -14806,18 +15456,19 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
   tố; khuôn nhận chữ hoa; khuôn nhận nhiều chữ; vế *nhãn chưa khai* về khuôn cũ; phép đếm độc lập nới chữ nhóm — cũng làm sổ
   thật NÉM vì bảng tầng `T0`…`T6`; P6 về khuôn cũ.
 - **Ghim:** thân bốn hàm trigger và hàm trợ giúp ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, danh sách
-  migration của ba phép kiểm có `074`; `migrate()` và hardening đi qua trên cụm mới.
+  migration của ba phép kiểm có `076`; `migrate()` và hardening đi qua trên cụm mới.
 
 ## 6. Giới hạn, nói ra
 
-- **Khoản 250 — gói đang bay lúc bật.** K6 chặn lần ĐÚC, không thu hồi token đã đúc thời MVP1, và `docToken` không hỏi gói
+- **Khoản 253 — gói đang bay lúc bật.** K6 chặn lần ĐÚC, không thu hồi token đã đúc thời MVP1, và `docToken` không hỏi gói
   đã mở chưa. Đo, không vá: hôm nay không tổ chức thật nào bật được S3 (lần ký sau cờ triển khai mặc định tắt, ADR-105). Hình
   dạng đề xuất cho S3.2b ở hàng sổ nợ.
 - **Route mời, tới S3.2b (đọc từ mã).** Ở tổ chức đã bật: mời ở `DRAFT` qua `POST /rfqs/:rfqId/invitations` ⇒ câu đúc token
   bị K6 chặn ⇒ 422 mang thông điệp của trigger, giao dịch rollback. Mời ở `OPEN` đi qua, và lời mời mang `UNSENT` dù link đã
   đi — `SENT` là việc của S3.2b. Lối bù *gửi hỏng thì thu hồi* ở `OPEN` bị K4a chặn ⇒ phản hồi 500 mang `invitationId` (hợp
-  đồng *bù hỏng* của khoản 124), và người mua không thu hồi, không mời lại được cho tới lối *gửi lại* của S3.2b. Tổ chức chưa
-  bật không đổi.
+  đồng *bù hỏng* của khoản 124). Lời mời ở lại `UNSENT` mà vẫn sống, nên người mua gửi lại link được bằng route của ADR-110
+  (S1.181) — nó chỉ chạy khi gói đang nhận báo giá, không sửa hàng lời mời, và đúc token khi gói đã mở, nên K4a và K6 đều
+  không chặn nó; thu hồi hay mời lại thì không được tới S3.6. Tổ chức chưa bật không đổi.
 - `gieo:demo --s3` mở gói rồi mới mời, nên lời mời của nó mang nhãn *mời sau khi ký* và `UNSENT`; S3.2c đổi thứ tự. Kịch bản
   41 luồng S3 đi qua nguyên vẹn.
 - Hai giao dịch cùng thêm lời mời rồi cùng sửa hàng gói trong CÙNG giao dịch sẽ khoá chết nhau (hai khoá chia sẻ, rồi hai lần
@@ -14828,7 +15479,7 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
 ## 7. Số đo
 
 - `packages/rfq/src/danh-sach-moi.int.test.ts`: 21/21 trên Postgres 16 thật — mười chín ca của K4a, K4b, K6, MVP1 và D2 (tám
-  đột biến trong số đó), cộng hai ca đo giới hạn của khoản 250.
+  đột biến trong số đó), cộng hai ca đo giới hạn của khoản 253.
 - `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
 - Khoản 246: `tools/inv-matrix` 73/73 (năm ca biên mới ở `parse.test.ts`), `nhan-bat-bien-cho-dat` 8/8, `so-no-tu-doi-chieu`
   45/45; chín đột biến, chín lần đỏ.
