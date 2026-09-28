@@ -14838,4 +14838,4 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
 - Vòng này dựng lại trên `master` `5a54dff` (sau #179 — J3/D2 nay ghi `CONTROL_DENIED` qua `tuChoiTheoChot`, tức qua `throwAuditedDenial`,
   nên chúng cũng tiêu trần này): `pnpm t0` sạch; `pnpm test` 117 tệp, 1549 đạt, 1 bỏ qua; `ghi-so-tu-choi-mot-duong`, `barrel-exports`,
   `so-no-tu-doi-chieu` 87/87; `pnpm cap-so --kiem` sạch. T3 và evidence đo trên CI, trên chính commit của PR.
-- Số tạm của vòng này cấp thành S1.181, ADR-109. Sổ nợ: khoản 248 đóng, rổ B **58 → 57**. **108 → 109** ADR.
+@@CAP_SO@@
