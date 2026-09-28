@@ -877,7 +877,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         case "GUEST": {
           const cookie = tachCookiePhien(req.cookies[COOKIE_PHIEN_KHACH]);
           if (cookie === null) return { status: 401, body: THAN_401 };
-          let phien: { guestSessionId: string; invitationId: string; rfqId: string };
+          let phien: { guestSessionId: string; invitationId: string; rfqId: string; supplierLegalName: string };
           try {
             phien = await withTenant(deps.pool, cookie.orgId, (client) =>
               resolveGuestSessionByToken(client, cookie.orgId, cookie.token),
@@ -899,6 +899,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                 guestSessionId: phien.guestSessionId,
                 invitationId: phien.invitationId,
                 rfqId: phien.rfqId,
+                supplierLegalName: phien.supplierLegalName,
                 services: deps.services,
               }),
             );
