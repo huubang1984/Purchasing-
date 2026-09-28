@@ -649,7 +649,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyA), body: { reason: "dong de quet" }, cookie: m };
         case "POST /rfqs/:rfqId/cancel":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "huy de quet" }, cookie: m };
-        // [S1.9101 / S3.2b1 / K4a] Bảng route đặt route này SAU route huỷ, nên gói hy sinh B đã HUỶ khi tới đây: luồng S3 dừng ở
+        // [S1.186 / S3.2b1 / K4a] Bảng route đặt route này SAU route huỷ, nên gói hy sinh B đã HUỶ khi tới đây: luồng S3 dừng ở
         // lời từ chối trạng thái có tên, luồng MVP1 ở lời từ chối *tổ chức chưa bật* — cả hai là 422 NGHIỆP VỤ, không đổi gói nào.
         case "POST /rfqs/:rfqId/return-to-draft":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "tra ve de quet" }, cookie: m };

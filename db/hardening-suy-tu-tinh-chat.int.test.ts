@@ -303,7 +303,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
   "public.rfq_invitations_kiem_danh_sach",
   "public.rfq_kiem_chu_ky_danh_sach_khi_mo",
-  // [S1.9101 / S3.2b1 / K4a · K6 / `9501_tra_ve_nhap`] HAI hàm: cạnh về DRAFT từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức chưa bật —, và
+  // [S1.186 / S3.2b1 / K4a · K6 / `077_tra_ve_nhap`] HAI hàm: cạnh về DRAFT từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức chưa bật —, và
   // `rfq_invitation_tokens_ghi_goi_da_mo` không bao giờ từ chối (nó GHI cột). `dungKichBan()` nộp một gói trước lần bật rồi
   // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
   "public.rfq_invitation_tokens_ghi_goi_da_mo",
@@ -1685,7 +1685,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
   // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
   // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
-  // [S1.9101 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
+  // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
   // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
   const rfqVe = await rfqSoan();
   await so.chung(
@@ -1726,7 +1726,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
-  // [S1.9101 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
   doiSoHang(
     await so.chung(
       "public.rfq_packages",

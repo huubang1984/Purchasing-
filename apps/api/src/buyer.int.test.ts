@@ -125,7 +125,7 @@ afterAll(async () => {
 });
 
 describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên không có vai trò nào", () => {
-  // [S1.9101] Hai lượt quét dồn MỌI lần từ chối vào một phiên — tới một lần mỗi route ghi. Trần từ chối theo phiên
+  // [S1.186] Hai lượt quét dồn MỌI lần từ chối vào một phiên — tới một lần mỗi route ghi. Trần từ chối theo phiên
   // (`TU_CHOI_TRAN_MOI_CUA_SO` = 30, khoản 144 · 248) là một phép đo KHÁC, ở `auth.int.test.ts`; khi số route ghi vượt 30
   // (S3.2b1 thêm route thứ 31), route cuối của lượt quét nhận 429 của trần chứ không nhận 403 của cổng quyền. Nên hai lượt
   // quét chạy trên máy chủ THỨ HAI có trần rộng hơn số route, suy từ chính bảng; máy chủ chung giữ trần mặc định.
@@ -893,7 +893,7 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
   });
 });
 
-describe("[S1.9101 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
+describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
   /** Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên. */
   async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; rfqId: string }> {
     const org = (

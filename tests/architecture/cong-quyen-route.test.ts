@@ -77,6 +77,9 @@ const HAM_DOI_TRANG_THAI = [
   // `rfq.invite` như hai route mời và thu hồi; phần bù thu hồi đúng token vừa phát, dưới cùng mã quyền.
   "reissueInvitationLink",
   "requestUnseal",
+  // [S1.186 / S3.2b1 / K4a] Cạnh `PENDING_APPROVAL→DRAFT` — chỉ ở tổ chức đã bật. Route của nó đòi `rfq.create`; hàm gói hỏi
+  // tiếp `rfq.approve` khi người gọi không phải người tạo gói.
+  "returnRfqToDraft",
   "revokeInvitation",
   "revokeMagicLinkToken",
   "setRfqBudget",

@@ -365,9 +365,9 @@ async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise
 }
 
 /*
- * [S1.9101 / S3.2b1 / K6 · khoản 253] Vế CUỐI của câu dưới là K6 đọc ở phía DÙNG. K6 (`076`) chặn lần ĐÚC token cho gói chưa
+ * [S1.186 / S3.2b1 / K6 · khoản 253] Vế CUỐI của câu dưới là K6 đọc ở phía DÙNG. K6 (`076`) chặn lần ĐÚC token cho gói chưa
  * mở ở tổ chức đã bật; token đúc thời MVP1 khi gói còn DRAFT hay PENDING_APPROVAL thì sống qua lần bật S3. Cột
- * `duc_khi_goi_da_mo` ghi, LÚC ĐÚC, đúng điều K6 hỏi (`9501_tra_ve_nhap`), nên ở tổ chức đã bật một token như thế thôi đổi được —
+ * `duc_khi_goi_da_mo` ghi, LÚC ĐÚC, đúng điều K6 hỏi (`077_tra_ve_nhap`), nên ở tổ chức đã bật một token như thế thôi đổi được —
  * ở cả ba đường dùng token (đổi link, xin OTP, xác minh OTP), vì cả ba đi qua hàm này. Cùng MỘT thông báo với bốn ca hỏng kia:
  * phân biệt được là một oracle. Tổ chức chưa bật giữ nguyên MVP1. Phiên khách đã mở trước lần bật không đi qua đây — nó sống
  * tới hết hạn của nó.

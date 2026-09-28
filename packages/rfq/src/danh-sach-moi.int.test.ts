@@ -796,8 +796,8 @@ describe("S3.2a — tổ chức chưa bật chạy nguyên MVP1; băm danh sách
 // =============================================================================================
 // (5) GIỚI HẠN, ĐO — GÓI ĐANG BAY LÚC TỔ CHỨC BẬT S3 (khoản 253)
 //
-// [S1.9101 / S3.2b1] Khoản 253 ĐÓNG Ở PHÍA DÙNG. Ca đầu dưới đây vẫn đúng nguyên văn — token thời MVP1 còn trong bảng, chưa
-// thu hồi —, nhưng nó mang `duc_khi_goi_da_mo = false` (`9501_tra_ve_nhap`), nên ở tổ chức đã bật nó không đổi link, không
+// [S1.186 / S3.2b1] Khoản 253 ĐÓNG Ở PHÍA DÙNG. Ca đầu dưới đây vẫn đúng nguyên văn — token thời MVP1 còn trong bảng, chưa
+// thu hồi —, nhưng nó mang `duc_khi_goi_da_mo = false` (`077_tra_ve_nhap`), nên ở tổ chức đã bật nó không đổi link, không
 // xin, không xác minh OTP được nữa: `apps/api/src/token-goi-da-mo.int.test.ts`.
 // =============================================================================================
 describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 (khoản 253)", () => {

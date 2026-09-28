@@ -24,9 +24,9 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 
 // =============================================================================================
-// [S1.9101 / S3.2b1 / K6 · khoản 253] TOKEN ĐÚC KHI GÓI CHƯA MỞ THÔI DÙNG ĐƯỢC SAU KHI TỔ CHỨC BẬT S3 — ĐO Ở PHÍA DÙNG
+// [S1.186 / S3.2b1 / K6 · khoản 253] TOKEN ĐÚC KHI GÓI CHƯA MỞ THÔI DÙNG ĐƯỢC SAU KHI TỔ CHỨC BẬT S3 — ĐO Ở PHÍA DÙNG
 //
-// K6 (`076`) chặn lần ĐÚC; khoản 253 đo rằng token thời MVP1 của gói chưa mở sống qua lần bật. `9501_tra_ve_nhap` ghi, lúc
+// K6 (`076`) chặn lần ĐÚC; khoản 253 đo rằng token thời MVP1 của gói chưa mở sống qua lần bật. `077_tra_ve_nhap` ghi, lúc
 // đúc, gói đã mở chưa (`duc_khi_goi_da_mo`), và `docToken` của `packages/invitation` đòi cột ấy ở tổ chức đã bật — ở cả
 // ba đường dùng token: đổi link, xin OTP, xác minh OTP. Tệp này đứng ở `apps/api` vì nó cần CẢ gói `rfq` (mở gói thật) LẪN gói
 // `invitation` (đường dùng thật). Vế CSDL của cột đo ở `packages/rfq/src/tra-ve-nhap.int.test.ts`.

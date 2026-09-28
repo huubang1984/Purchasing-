@@ -15492,10 +15492,10 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
 
 ---
 
-# §S1.9101 — S3.2b1: CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT, CÓ NGƯỜI VÀ CÓ LÝ DO (K4a); KHOẢN 253 ĐÓNG Ở PHÍA DÙNG (K6)
+# §S1.186 — S3.2b1: CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT, CÓ NGƯỜI VÀ CÓ LÝ DO (K4a); KHOẢN 253 ĐÓNG Ở PHÍA DÙNG (K6)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 253 (rổ B)
-đóng. Một migration (`9501_tra_ve_nhap`), một route mới. Không ADR mới.
+đóng. Một migration (`077_tra_ve_nhap`), một route mới. Không ADR mới.
 
 ## 1. Vòng này là gì
 
@@ -15504,7 +15504,7 @@ NHẤT để đổi danh sách hay nội dung sau khi nộp duyệt — cạnh v
 mở thôi dùng được sau khi tổ chức bật S3. Luồng mời mới — mời ở `DRAFT` không đúc token, đúc lúc mở gói, gửi sau commit,
 `SENT` sau lần gửi được — là S3.2b2.
 
-## 2. Quyết định của chủ dự án (S1.9101)
+## 2. Quyết định của chủ dự án (S1.186)
 
 - S3.2b chia hai PR: S3.2b1 là cạnh về `DRAFT` cộng khoản 253; S3.2b2 là luồng mời mới.
 - Lần trả về `DRAFT` BẮT BUỘC lý do.
@@ -15513,7 +15513,7 @@ mở thôi dùng được sau khi tổ chức bật S3. Luồng mời mới — 
 
 ## 3. Thay đổi
 
-**Migration `9501_tra_ve_nhap`:**
+**Migration `077_tra_ve_nhap`:**
 - Trigger `rfq_packages_tra_ve_nhap_chi_khi_bat_s3`, `WHEN` đúng cạnh `PENDING_APPROVAL→DRAFT` (khuôn `014` §(4)), `ENABLE
   ALWAYS`: tổ chức chưa bật ⇒ 23514 *"Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)"*.
 - Cột `rfq_invitation_tokens.duc_khi_goi_da_mo boolean NOT NULL DEFAULT false`, ngoài `GRANT`, do trigger
@@ -15594,7 +15594,7 @@ chức chưa bật đỏ — lời từ chối rơi xuống trigger); gộp quy�
 `AND status = 'PENDING_APPROVAL'` (ca gói `OPEN` đỏ — `OPEN→DRAFT` sai cạnh); lý do không bắt buộc (ca lý do rỗng đỏ).
 
 **Ghim:** thân hai hàm trigger ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, danh sách migration của ba
-phép kiểm có `9501`; nhân chứng hành vi của hai hàm mới có mặt.
+phép kiểm có `077`; nhân chứng hành vi của hai hàm mới có mặt.
 
 ## 6. Giới hạn, nói ra
 
@@ -15609,4 +15609,16 @@ phép kiểm có `9501`; nhân chứng hành vi của hai hàm mới có mặt.
 
 ## 7. Số đo
 
-(điền sau lượt T3 toàn bộ)
+- `packages/rfq/src/tra-ve-nhap.int.test.ts` 15/15; `apps/api/src/token-goi-da-mo.int.test.ts` 4/4; `apps/api/src/buyer.int.test.ts`
+  18/18 (hai ca mới của route, hai lượt quét [INV-H17] trên máy chủ thứ hai).
+- `db/migrations.int.test.ts` 118/118; `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36; kịch bản 41 — `kich-ban-41` 30/30,
+  `kich-ban-41-http` 58/58 (bộ quét route có ca cho route mới); `danh-sach-moi` 21/21; `invitation.int` 72/72; `guest.int` 22/22;
+  `loi-moi-sau-commit.int` 19/19.
+- Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 189 tệp, 3195 khẳng định, 3184 đạt, 1 bỏ qua, 10 đỏ. Chín ca đỏ là hai ca
+  cũ của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Ca thứ mười là của vòng này và đã sửa:
+  `tests/architecture/cong-quyen-route.test.ts` đòi mọi hàm export mới của gói nghiệp vụ được phân loại ghi hay đọc —
+  `returnRfqToDraft` vào `HAM_DOI_TRANG_THAI`, tệp ấy chạy lại 15/15. Ca ấy không mang nhãn bất biến.
+- Năm đột biến ở mã TypeScript, năm lần đỏ (§5).
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3195 khẳng định; K4a 6 → 15, K4b 5 → 8, K6 4 → 12. Mốc
+  `MOC_GHIM` không đổi — không mã mới.

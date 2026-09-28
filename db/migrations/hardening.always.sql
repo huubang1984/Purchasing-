@@ -7930,10 +7930,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_invitation_tokens_kiem_goi_da_mo() và bảng public.rfq_invitation_tokens (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2b1 / K4a] Canh PENDING_APPROVAL->DRAFT chi mo o to chuc da bat. Than `RETURN NEW` mo lai duong ve DRAFT cho MVP1, ma rang buoc chu ky cua 076 (3) dua vao viec MVP1 khong co duong ay.
+    -- [S1.186 / S3.2b1 / K4a] Canh PENDING_APPROVAL->DRAFT chi mo o to chuc da bat. Than `RETURN NEW` mo lai duong ve DRAFT cho MVP1, ma rang buoc chu ky cua 076 (3) dua vao viec MVP1 khong co duong ay.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_tra_ve_nhap (9501_tra_ve_nhap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tra_ve_nhap.sql')$q$,
+      $q$hàm + trigger rfq_kiem_tra_ve_nhap (077_tra_ve_nhap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '077_tra_ve_nhap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7995,10 +7995,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.2b1 / K6 / khoan 253] Token ghi lai, LUC DUC, goi da mo chua — cho moi to chuc. Than `RETURN NEW` de cot o gia tri mac dinh, va lan doi link cua to chuc da bat tu choi moi token.
+    -- [S1.186 / S3.2b1 / K6 / khoan 253] Token ghi lai, LUC DUC, goi da mo chua — cho moi to chuc. Than `RETURN NEW` de cot o gia tri mac dinh, va lan doi link cua to chuc da bat tu choi moi token.
     ARRAY[
-      $q$hàm + trigger rfq_invitation_tokens_ghi_goi_da_mo (9501_tra_ve_nhap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tra_ve_nhap.sql')$q$,
+      $q$hàm + trigger rfq_invitation_tokens_ghi_goi_da_mo (077_tra_ve_nhap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '077_tra_ve_nhap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

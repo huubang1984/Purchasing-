@@ -9,10 +9,10 @@ import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfq
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.9101 / S3.2b1] CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT (K4a), CHỮ KÝ CŨ MẤT HIỆU LỰC BẰNG BĂM (K4b),
+// [S1.186 / S3.2b1] CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT (K4a), CHỮ KÝ CŨ MẤT HIỆU LỰC BẰNG BĂM (K4b),
 // VÀ TOKEN GHI LẠI LÚC ĐÚC GÓI ĐÃ MỞ CHƯA (K6, khoản 253) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `9501_tra_ve_nhap`, hàm gói `returnRfqToDraft`. Mỗi chốt một phép đo hành vi, một đối chứng và một ĐỘT BIẾN. Vế
+// Migration `077_tra_ve_nhap`, hàm gói `returnRfqToDraft`. Mỗi chốt một phép đo hành vi, một đối chứng và một ĐỘT BIẾN. Vế
 // PHÍA DÙNG của khoản 253 — lần đổi link, xin OTP, xác minh OTP — đo ở `apps/api/src/token-goi-da-mo.int.test.ts`, nơi gói
 // `invitation` và gói `rfq` cùng có mặt.
 //

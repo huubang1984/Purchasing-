@@ -418,9 +418,9 @@ export async function submitRfqForApproval(
 }
 
 /**
- * [S1.9101 / S3.2b1 / K4a · ADR-084 ⑵] Trả một gói đang chờ duyệt về `DRAFT` — đường DUY NHẤT để đổi danh sách mời hay nội
+ * [S1.186 / S3.2b1 / K4a · ADR-084 ⑵] Trả một gói đang chờ duyệt về `DRAFT` — đường DUY NHẤT để đổi danh sách mời hay nội
  * dung sau khi nộp duyệt, và chỉ ở tổ chức đã bật S3 (chủ dự án chốt ngày 2026-09-27). Lớp chặn cuối là trigger
- * `rfq_packages_tra_ve_nhap_chi_khi_bat_s3` (`9501_tra_ve_nhap`).
+ * `rfq_packages_tra_ve_nhap_chi_khi_bat_s3` (`077_tra_ve_nhap`).
  *
  * AI: người TẠO gói (giữ `rfq.create`) rút về để sửa, hoặc người giữ `rfq.approve` trả về thay vì không ký. Hai nhánh là hai lần
  * `requirePermission`, nên mỗi lần từ chối vào sổ (D5) — `hasPermission` không ra mặt tiền gói, vì một cổng quyền im lặng là đúng

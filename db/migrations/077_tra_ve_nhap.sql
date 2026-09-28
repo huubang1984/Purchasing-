@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_tra_ve_nhap — [S1.9101 / S3.2b1 của spec S3] CẠNH `PENDING_APPROVAL→DRAFT` CHỈ MỞ Ở TỔ CHỨC ĐÃ BẬT (K4a), VÀ
+-- 077_tra_ve_nhap — [S1.186 / S3.2b1 của spec S3] CẠNH `PENDING_APPROVAL→DRAFT` CHỈ MỞ Ở TỔ CHỨC ĐÃ BẬT (K4a), VÀ
 -- TOKEN ĐÚC KHI GÓI CHƯA MỞ KHÔNG DÙNG ĐƯỢC SAU KHI TỔ CHỨC BẬT S3 (K6, khoản 253)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §3.3 (hàng PENDING_APPROVAL), §9 (phần
