@@ -132,6 +132,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     web         = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
     public_keys = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
     neo         = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    khoi_tao    = "tam@sha256:0000000000000000000000000000000000000000000000000000000000000000"   # [S1.9103] task khởi tạo tổ chức
   }
   so_ban_api         = 0     # bật ở 6.6, sau khi secret có host thật và migrate xong
   so_ban_worker      = 0     # bật ở 8.2 (ADR-040)
@@ -149,7 +150,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.3 Build và đẩy image
 
-- [ ] Theo README stack 90 bước 4 (sáu target: api, worker, migrate, web, public-keys, neo), thẻ = SHA commit.
+- [ ] Theo README stack 90 bước 4 (~~sáu~~ **[S1.9103]** bảy target: api, worker, migrate, web, public-keys, neo, khoi-tao), thẻ = SHA commit.
 - [ ] Điền `anh` trong `prod.tfvars` bằng URI **@sha256:** (`aws ecr describe-images ... --query 'imageDetails[0].imageDigest'`).
 
 ### 6.4 Phần còn lại
@@ -198,6 +199,10 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 - [ ] **7.1** Environments: `prod` (Required reviewers, chỉ `master`, biến từ `terraform output bien_github`) và
       `prod-worker` (người duyệt khác người bấm). Tên phải đúng — trust policy của stack 30 ghim chúng.
+      **[S1.9103 / ADR-111]** Và `prod-khoi-tao`: Required reviewers **và *Prevent self-review* BẬT** (người bấm không tự
+      duyệt được lần tạo tổ chức và gán vai — không mã nào của kho kiểm được cài đặt này), ít nhất hai người duyệt để người bấm
+      luôn có người khác duyệt, chỉ `master`, biến `TP_SUBNETS_UNG_DUNG` và `TP_SG_KHOI_TAO` từ `terraform output
+      bien_github_khoi_tao` (biến environment không dùng chung giữa hai environment).
 - [ ] **7.2** Biến cấp **repository**: `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` (`terraform output bien_github_repo`),
       `TP_RECEIPT_FINGERPRINT` (bước 2.4).
 - [ ] **7.3** Chạy *Deploy — prod (bam tay)* với `api` ⇒ job `api` xanh (migrate không làm gì, service chạy bản mới,
@@ -205,14 +210,16 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 8. Tổ chức đầu tiên và worker
 
-- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. **[S1.168] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
-      tổ chức, người dùng hay gán vai trên prod.**
+- [ ] **8.1** Tạo tổ chức đầu tiên qua sản phẩm. ~~**[S1.168] BƯỚC NÀY CHƯA LÀM ĐƯỢC: sản phẩm chưa có đường nào tạo
+      tổ chức, người dùng hay gán vai trên prod.**~~ **[S1.9103]** Làm bằng workflow khởi tạo — gạch đầu dòng cuối của bước này;
+      các gạch đầu dòng ngay dưới là lịch sử của lúc bước này còn kẹt.
   - `app_api` không có INSERT trên `organizations` (chỉ SELECT và UPDATE(name) — `db/migrations/002_organizations_and_users.sql`).
     Nó có INSERT trên `users` và `user_roles`, nhưng không route nào dùng, và không vai nào giữ `role.grant`.
-  - `deploy/Dockerfile` không có đích nào làm việc này.
+  - ~~`deploy/Dockerfile` không có đích nào làm việc này.~~ **[S1.9103]** Có đích `khoi-tao`.
   - Chỉ hai công cụ DEV chèn được tổ chức: `tools/gieo-demo` tự khai không phải đường sản xuất (in token dạng rõ),
     `tools/pilot-gia-lap` chỉ nhận CSDL cục bộ.
-  - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040).
+  - Hệ quả: 8.2 cũng kẹt, vì worker từ chối khởi động khi chưa có tổ chức nào (ADR-040). **[S1.9103]** Hết kẹt khi 8.1 chạy
+    xong.
   - ~~Cách làm chờ chủ dự án quyết.~~ **[S1.182]** Đã chốt — gạch đầu dòng cuối của bước này. Đề xuất ngày 2026-09-27: một task
     ECS chạy một lần, cùng khuôn `tp-migrate` và `tp-neo`,
     không mở route quản trị. **[S1.173]** Ba phương án, trade-off và các câu cần chốt: `docs/DE-XUAT-TAO-TO-CHUC.md` —
@@ -221,9 +228,26 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   - **[S1.182 / ADR-111] Chủ dự án đã chốt: phương án A, vai CSDL hẹp.** Đã có: vai `app_khoi_tao` (migration `075`,
     canh ở `hardening.always.sql`), secret `tp/khoi-tao/database-url` cho task migrate (6.1), và công cụ
     `tools/khoi-tao-to-chuc` — `pnpm khoi-tao tao|them-nguoi`, một giao dịch mỗi lần, có sổ từ hàng đầu tiên, không in
-    email hay họ tên. **Vẫn chưa làm được trên prod:** đích `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition
+    email hay họ tên. ~~**Vẫn chưa làm được trên prod:** đích `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition
     `tp-khoi-tao`, task role, workflow chạy có người duyệt và xoá bí mật bản khai thuộc vòng hạ tầng kế (ADR-111 mục 8;
-    STATE khoản 251). Bước này sẽ viết lại khi vòng ấy xong.
+    STATE khoản 251). Bước này sẽ viết lại khi vòng ấy xong.~~
+  - **[S1.9103 / ADR-111] BƯỚC NÀY NAY LÀ LỆNH CHẠY** — workflow *Khoi tao to chuc — prod (bam tay)*; cần 6.3 có image
+    `khoi_tao`, 6.4 đã apply với nó, và environment `prod-khoi-tao` của 7.1.
+    1. Viết bản khai JSON (mẫu ở đầu `tools/khoi-tao-to-chuc/src/ban-khai.ts`) — nó mang email và họ tên, nên chỉ ở máy
+       người vận hành, và XOÁ tệp ngay sau lệnh dưới:
+       ```powershell
+       aws secretsmanager create-secret --profile tp-prod --name tp/khoi-tao/ban-khai/<slug> `
+         --secret-string file://ban-khai.json --query VersionId --output text      # ghi lại VersionId
+       ```
+    2. Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master`: `che_do = tao`, `bi_mat =
+       tp/khoi-tao/ban-khai/<slug>`, `phien_ban = <VersionId>`, `to_chuc = <slug>`, `so_nguoi`, `so_vai` (tổng cặp người–vai).
+    3. Người KHÁC người bấm đọc bảng *điều người duyệt duyệt* ở tóm tắt của job `build`, đối chiếu với bản khai được giao, rồi
+       duyệt ở `prod-khoi-tao`.
+    4. Job `chay` xanh ⇒ tóm tắt có dòng `[khoi-tao] tao: to chuc <mã>, … vai, ban khai phien ban <VersionId>` và *đã xoá*. Gửi
+       `/login#<mã>` cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107).
+    5. Job đỏ ⇒ bí mật CÒN (dòng lỗi in lệnh xoá tay). Đọc `/tp/khoi-tao`; sửa bản khai bằng `put-secret-value` (VersionId
+       MỚI) rồi chạy lại — một lần duyệt mới —, hoặc xoá tay. Bản khai lệch bảng đã duyệt thì task dừng TRƯỚC khi chạm CSDL.
+    Thêm người về sau: như trên với `che_do = them-nguoi`, `to_chuc = <mã tổ chức>`.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với ~~`xuat=0 kiem=0`~~ **[ghi muộn ngày 2026-09-27]** dòng

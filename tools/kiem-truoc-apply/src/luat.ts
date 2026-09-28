@@ -19,7 +19,7 @@ export interface KetQua {
   readonly noiDung: string;
 }
 
-export const TEN_ANH = ["api", "worker", "migrate", "web", "public_keys", "neo"] as const;
+export const TEN_ANH = ["api", "worker", "migrate", "web", "public_keys", "neo", "khoi_tao"] as const;
 export type TenAnh = (typeof TEN_ANH)[number];
 
 /** Khoá của `var.anh` ⇒ kho ECR (`aws_ecr_repository.tp` của stack 90). `hinh-dang-kiem-truoc-apply.test.ts` so hai phía. */
@@ -30,6 +30,8 @@ export const KHO_ECR: Readonly<Record<TenAnh, string>> = {
   web: "tp-web",
   public_keys: "tp-public-keys",
   neo: "tp-neo",
+  // [S1.9103 / ADR-111] Task khởi tạo tổ chức.
+  khoi_tao: "tp-khoi-tao",
 };
 
 /** Secret stack 90 đọc bằng `data "aws_secretsmanager_secret"` — thiếu một cái thì plan đỏ, có mà rỗng thì task chết lúc chạy. */

@@ -41,7 +41,7 @@ locals {
   secret_arn = "arn:aws:secretsmanager:${local.region}:${local.prod}:secret:tp"
 
   # Image và ECS service do tp-deploy quản; worker tách hẳn sang tp-deploy-worker.
-  repo_app    = ["tp-api", "tp-web", "tp-mcp", "tp-migrate", "tp-public-keys", "tp-neo"]
+  repo_app    = ["tp-api", "tp-web", "tp-mcp", "tp-migrate", "tp-public-keys", "tp-neo", "tp-khoi-tao"]
   repo_worker = ["tp-unseal-worker"]
 }
 
@@ -75,6 +75,9 @@ locals {
     unseal_worker = "worker"
     migrate       = "migrate"
     anchor_job    = "anchor"
+    # [S1.9103 / ADR-111] Bản khai `tp/khoi-tao/ban-khai/*`. Nhánh này còn có `tp/khoi-tao/database-url` — URL mà execution
+    # role đã bơm vào CHÍNH container ấy, nên đọc lại nó không mở thêm gì; công cụ từ chối mọi tên ngoài `ban-khai/`.
+    khoi_tao = "khoi-tao"
   }
 }
 
@@ -155,22 +158,29 @@ resource "aws_iam_openid_connect_provider" "github" {
 # tp-deploy: environment "prod". tp-deploy-worker: environment "prod-worker" — bật "Required
 # reviewers" cho CẢ HAI environment trên GitHub. Tách hai role vì role nào PassRole được task
 # role của worker thì chạy được một task bất kỳ mang quyền kms:Decrypt (ADR-062, rủi ro còn lại).
+# [S1.9103 / ADR-111] tp-deploy nhận thêm environment "prod-khoi-tao" — workflow `khoi-tao.yml` chạy task tạo tổ chức dưới
+# CÙNG role, nhưng environment ấy bật thêm "Prevent self-review": người bấm không tự duyệt được lần tạo tổ chức và gán vai.
+# Deploy api vẫn đi environment "prod" với luật cũ. Role không đổi quyền theo environment — ranh giới là workflow trên master.
 locals {
   deploy = {
     deploy = {
-      environment = "prod"
-      repos       = local.repo_app
-      services    = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
-      pass_roles  = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job]
-      doc_log     = []
+      environments = ["prod", "prod-khoi-tao"]
+      repos        = local.repo_app
+      services     = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
+      pass_roles   = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job, local.role_arn.khoi_tao]
+      # [S1.9103] Chỉ để in dòng kết quả của task khởi tạo (mã tổ chức, số người, số vai — không dữ liệu cá nhân).
+      doc_log = ["/tp/khoi-tao"]
+      # [S1.9103] Xoá bí mật bản khai sau khi task thoát 0 (chủ dự án chọn: xoá ngay, không cửa sổ khôi phục).
+      xoa_secret = ["${local.secret_arn}/khoi-tao/ban-khai/*"]
     }
     deploy_worker = {
-      environment = "prod-worker"
-      repos       = local.repo_worker
-      services    = ["tp-unseal-worker"]
-      pass_roles  = [local.role_arn.unseal_worker]
+      environments = ["prod-worker"]
+      repos        = local.repo_worker
+      services     = ["tp-unseal-worker"]
+      pass_roles   = [local.role_arn.unseal_worker]
       # [ADR-078] Kiểm sau deploy: tìm dòng lỗi khởi động trong log của worker.
-      doc_log = ["/tp/unseal-worker"]
+      doc_log    = ["/tp/unseal-worker"]
+      xoa_secret = []
     }
   }
 }
@@ -191,7 +201,7 @@ data "aws_iam_policy_document" "deploy_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${module.chung.github_repo}:environment:${each.value.environment}"]
+      values   = [for e in each.value.environments : "repo:${module.chung.github_repo}:environment:${e}"]
     }
   }
 }
@@ -259,6 +269,16 @@ data "aws_iam_policy_document" "deploy" {
       sid       = "KiemLogSauDeploy"
       actions   = ["logs:FilterLogEvents"]
       resources = [for g in each.value.doc_log : "arn:aws:logs:${local.region}:${local.prod}:log-group:${g}:*"]
+    }
+  }
+
+  # [S1.9103 / ADR-111] Xoá — chỉ xoá, không đọc, không ghi — bí mật bản khai của task khởi tạo, sau khi task thoát 0.
+  dynamic "statement" {
+    for_each = length(each.value.xoa_secret) == 0 ? [] : [1]
+    content {
+      sid       = "XoaBanKhai"
+      actions   = ["secretsmanager:DeleteSecret"]
+      resources = each.value.xoa_secret
     }
   }
 

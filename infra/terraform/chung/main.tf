@@ -24,6 +24,8 @@ locals {
     migrate       = "tp-migrate"
     ecs_execution = "tp-ecs-execution"
     anchor_job    = "tp-anchor-job"
+    # [S1.9103 / ADR-111] Task khởi tạo tổ chức: chỉ đọc nhánh secret `tp/khoi-tao/*` (bản khai).
+    khoi_tao      = "tp-khoi-tao"
     deploy        = "tp-deploy"
     deploy_worker = "tp-deploy-worker"
   }

@@ -1,7 +1,7 @@
 // [S1.182 / ADR-111] Bản khai và dòng lệnh của task khởi tạo tổ chức — hàm thuần, không CSDL.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BanKhaiError, MA_VAI, TRAN_SO_NGUOI, docBanKhai } from "./ban-khai.js";
+import { BanKhaiError, MA_VAI, TRAN_SO_NGUOI, docBanKhai, kiemKhop } from "./ban-khai.js";
 import { TIEN_TO_BI_MAT, ThamSoError, docThamSo } from "./index.js";
 
 const ORG = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
@@ -138,13 +138,30 @@ describe("[S1.182 / lượt soi] regex EMAIL là regex của bộ gửi SES cộ
   });
 });
 
+const PB = "0f1e2d3c-4b5a-4968-8776-655443322110";
+/** Đủ bộ của đường prod: bí mật, phiên bản, ba kỳ vọng. */
+const bo = (lenh: string, toChuc: string, soNguoi = "1", soVai = "1", ten = `${TIEN_TO_BI_MAT}thep-viet`, pb = PB) =>
+  [lenh, "--ban-khai-secret", ten, "--phien-ban", pb, "--to-chuc", toChuc, "--so-nguoi", soNguoi, "--so-vai", soVai];
+
 describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai", () => {
   it("tệp hay bí mật dưới tiền tố; lệnh là tao hoặc them-nguoi", () => {
-    expect(docThamSo(["tao", "--ban-khai-tep", "/tmp/bk.json"])).toEqual({ lenh: "tao", nguon: { loai: "tep", duong: "/tmp/bk.json" } });
-    expect(docThamSo(["them-nguoi", "--ban-khai-secret", `${TIEN_TO_BI_MAT}thep-viet`])).toEqual({
-      lenh: "them-nguoi",
-      nguon: { loai: "secret", ten: `${TIEN_TO_BI_MAT}thep-viet` },
+    expect(docThamSo(["tao", "--ban-khai-tep", "/tmp/bk.json"])).toEqual({
+      lenh: "tao",
+      nguon: { loai: "tep", duong: "/tmp/bk.json" },
+      kyVong: null,
     });
+    // ~~bí mật chỉ cần tên~~ [S1.9103] bí mật đi cùng phiên bản và ba kỳ vọng, thứ tự cờ tuỳ ý.
+    expect(docThamSo(["them-nguoi", "--so-vai", "3", "--ban-khai-secret", `${TIEN_TO_BI_MAT}thep-viet`, "--to-chuc", ORG,
+      "--phien-ban", PB, "--so-nguoi", "2"])).toEqual({
+      lenh: "them-nguoi",
+      nguon: { loai: "secret", ten: `${TIEN_TO_BI_MAT}thep-viet`, phienBan: PB },
+      kyVong: { toChuc: ORG, soNguoi: 2, soVai: 3 },
+    });
+    expect(docThamSo(["tao", "--ban-khai-tep", "/tmp/bk.json", "--to-chuc", "thep-viet", "--so-nguoi", "50", "--so-vai", "300"]).kyVong)
+      .toEqual({ toChuc: "thep-viet", soNguoi: 50, soVai: 300 });
+    // VersionId: UUID do SM sinh, hay ClientRequestToken 32–64 ký tự.
+    expect(docThamSo(bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}thep-viet`, "a".repeat(32))).nguon).toMatchObject({ phienBan: "a".repeat(32) });
+    expect(docThamSo(bo("tao", "thep-viet", "1", "6", `${TIEN_TO_BI_MAT}thep-viet`, "A-9".repeat(21) + "z")).kyVong).toMatchObject({ soVai: 6 });
   });
 
   it.each([
@@ -160,8 +177,69 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
     [["tao", "--ban-khai-secret", "tp/api/otp-peppers"], /dưới "tp\/khoi-tao\/ban-khai\/"/u],
     [["tao", "--ban-khai-secret", TIEN_TO_BI_MAT], /dưới "tp\/khoi-tao\/ban-khai\/"/u],
     [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}a b`], /dưới "tp\/khoi-tao\/ban-khai\/"/u],
+    // [S1.9103] Đường prod: phiên bản và ba kỳ vọng là bắt buộc — người duyệt duyệt đúng bộ ấy.
+    [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}x`], /cần --phien-ban/u],
+    [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}x`, "--to-chuc", "thep-viet", "--so-nguoi", "1", "--so-vai", "1"], /cần --phien-ban/u],
+    [["tao", "--ban-khai-secret", `${TIEN_TO_BI_MAT}x`, "--phien-ban", PB], /cần ba kỳ vọng/u],
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, "a".repeat(31)), /VersionId/u],
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, "a".repeat(65)), /VersionId/u],
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, `${"a".repeat(31)}_`), /VersionId/u],
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, `${"a".repeat(31)} `), /VersionId/u],
+    // Mở đầu bằng gạch nối: với `docThamSo` một giá trị `--…` là CỜ — script phải nói cùng một lời (tests/deploy/khoi-tao-sh).
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, `-${"a".repeat(31)}`), /VersionId/u],
+    [bo("tao", "thep-viet", "1", "1", `${TIEN_TO_BI_MAT}x`, `--${"a".repeat(30)}`), /cần một giá trị/u],
+    [["tao", "--ban-khai-tep", "a", "--phien-ban", PB], /chỉ đi với --ban-khai-secret/u],
+    [["tao", "--ban-khai-tep", "a", "--to-chuc", "thep-viet"], /đi đủ ba/u],
+    [["tao", "--ban-khai-tep", "a", "--so-nguoi", "1", "--so-vai", "1"], /đi đủ ba/u],
+    [["tao", "--ban-khai-tep", "a", "--ban-khai-tep", "b"], /khai hai lần/u],
+    [["tao", "--ban-khai-tep", "a", "--so-nguoi", "1", "--so-nguoi", "1"], /khai hai lần/u],
+    // tổ chức: slug khi tạo, UUIDv4 chữ thường khi thêm người — không lẫn.
+    // (Một UUID chữ thường LÀ một slug hợp lệ về cú pháp — nên không có ca "UUID ở lệnh tao".)
+    [bo("tao", "thep_viet"), /slug của tổ chức mới/u],
+    [bo("tao", "Thep-Viet"), /slug của tổ chức mới/u],
+    [bo("tao", "ab"), /slug của tổ chức mới/u],
+    [bo("tao", "-thep"), /slug của tổ chức mới/u],
+    [bo("them-nguoi", "thep-viet"), /UUIDv4 chữ thường/u],
+    [bo("them-nguoi", ORG.toUpperCase()), /UUIDv4 chữ thường/u],
+    // số người 1–50; số vai từ số người tới 6 lần số người.
+    [bo("tao", "thep-viet", "0"), /--so-nguoi/u],
+    [bo("tao", "thep-viet", String(TRAN_SO_NGUOI + 1), "60"), /--so-nguoi/u],
+    [bo("tao", "thep-viet", "01"), /--so-nguoi/u],
+    [bo("tao", "thep-viet", "1.5"), /--so-nguoi/u],
+    [bo("tao", "thep-viet", "+1"), /--so-nguoi/u],
+    [bo("tao", "thep-viet", "2", "1"), /--so-vai/u],
+    [bo("tao", "thep-viet", "1", String(MA_VAI.length + 1)), /--so-vai/u],
+    [bo("tao", "thep-viet", "1", "1e0"), /--so-vai/u],
   ])("%j ⇒ ThamSoError", (ds, mau) => {
     expect(() => docThamSo(ds)).toThrow(ThamSoError);
     expect(() => docThamSo(ds)).toThrow(mau);
+  });
+});
+
+describe("[S1.9103] kiemKhop — bản khai ở phiên bản đã đọc khớp điều người duyệt thấy", () => {
+  const bk = docBanKhai(tao([nguoi("a@congty.vn", ["BUYER"]), nguoi("b@congty.vn", ["PROCUREMENT_MANAGER", "TECHNICAL"])]), "tao");
+  const them = docBanKhai(JSON.stringify({ cheDo: "them-nguoi", toChuc: { id: ORG }, nguoi: [nguoi("c@congty.vn")] }), "them-nguoi");
+
+  it("khớp ⇒ không ném; tổ chức là slug khi tạo, mã khi thêm người; số vai là tổng cặp người–vai", () => {
+    expect(() => { kiemKhop(bk, { toChuc: "thep-viet", soNguoi: 2, soVai: 3 }); }).not.toThrow();
+    expect(() => { kiemKhop(them, { toChuc: ORG, soNguoi: 1, soVai: 1 }); }).not.toThrow();
+  });
+
+  it.each([
+    [{ toChuc: "thep-nam", soNguoi: 2, soVai: 3 }, 'tổ chức: bản khai "thep-viet", đã duyệt "thep-nam"'],
+    [{ toChuc: "thep-viet", soNguoi: 3, soVai: 3 }, "số người: bản khai 2, đã duyệt 3"],
+    [{ toChuc: "thep-viet", soNguoi: 2, soVai: 2 }, "số vai: bản khai 3, đã duyệt 2"],
+    [{ toChuc: "x-y-z", soNguoi: 1, soVai: 1 }, 'tổ chức: bản khai "thep-viet", đã duyệt "x-y-z"; số người: bản khai 2, đã duyệt 1; số vai: bản khai 3, đã duyệt 1'],
+  ])("lệch %j ⇒ BanKhaiError nêu từng trường lệch", (kv, mau) => {
+    expect(() => { kiemKhop(bk, kv); }).toThrow(new BanKhaiError(`bản khai không khớp điều đã duyệt — ${mau}`));
+  });
+
+  it("thêm người: mã tổ chức khác ⇒ lệch; thông điệp không mang email hay họ tên", () => {
+    const khac = "9b2d0c1e-8f7a-4b6c-9d5e-3a2b1c0d9e8f";
+    let loi: unknown;
+    try { kiemKhop(them, { toChuc: khac, soNguoi: 1, soVai: 1 }); } catch (e) { loi = e; }
+    expect(loi).toBeInstanceOf(BanKhaiError);
+    expect((loi as Error).message).toBe(`bản khai không khớp điều đã duyệt — tổ chức: bản khai "${ORG}", đã duyệt "${khac}"`);
+    expect((loi as Error).message).not.toMatch(/c@congty|Nguyễn/u);
   });
 });

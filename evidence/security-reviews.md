@@ -15145,3 +15145,68 @@ dòng, khoảng trắng; số secret và thứ tự bước khớp giữa APPLY-
 ## 5. Số
 
 Khoản **251** mở, rổ A (vế ⒞ — bước 8.1 của lần apply đầu): rổ A **1 → 2**. Không khoản nào đóng. ADR-111 mới.
+
+# §S1.9103 — TẠO TỔ CHỨC TRÊN PROD, VÒNG HẠ TẦNG: ĐÍCH `khoi-tao`, TASK `tp-khoi-tao`, WORKFLOW `khoi-tao.yml` (ADR-111)
+
+## 1. Việc gì
+
+Vòng hạ tầng của ADR-111 (mục 8), đóng khoản 251. Chủ dự án chốt ngày 2026-09-28 hai câu mà vòng này hỏi: ⑴ environment GitHub
+RIÊNG `prod-khoi-tao` (*Required reviewers* + *Prevent self-review*), `tp-deploy` tin thêm nó — vì `prod` chỉ bật *Required
+reviewers*, một người tự bấm tự duyệt được, và bật chặn ấy ở `prod` thì mọi lần deploy api cũng cần người thứ hai; ⑵ bí mật bản
+khai xoá NGAY khi task thoát 0, không cửa sổ khôi phục; task hỏng thì bí mật còn. Và vế còn treo của lượt soi S1.182: người duyệt
+duyệt một TÊN bí mật, còn nội dung của tên ấy đổi được tới lúc chạy.
+
+## 2. Thay đổi
+
+- `tools/khoi-tao-to-chuc/src/index.ts` — `--phien-ban <VersionId>` và ba kỳ vọng `--to-chuc`, `--so-nguoi`, `--so-vai`: BẮT BUỘC
+  với `--ban-khai-secret`, tuỳ chọn với tệp (có thì vẫn kiểm), `--phien-ban` với tệp bị từ chối; mỗi cờ tối đa một lần.
+  `GetSecretValue` hỏi `{SecretId, VersionId}` và từ chối phiên bản trả về khác phiên bản đã hỏi. Dòng lỗi in thêm mã hệ thống của
+  Node (`ECONNREFUSED`, `ENOTFOUND`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…). `ban-khai.ts` — `kiemKhop` (so bản khai với ba kỳ vọng,
+  TRƯỚC khi mở CSDL; thông điệp nêu trường lệch và hai giá trị: slug, mã tổ chức, hai con số — không dữ liệu cá nhân).
+- `deploy/Dockerfile` — đích `khoi-tao` (cài phụ thuộc sản xuất của đúng gói, user `node`, bó CA của RDS, ENTRYPOINT là công cụ,
+  KHÔNG CMD).
+- `deploy/trien-khai.sh` — `kiem-khoi-tao` (không biến AWS, không gọi `aws`: kiểm sáu đầu vào, in bảng người duyệt duyệt) và
+  `khoi-tao <arn>` (lệnh dựng bằng `jq` từ đúng sáu đầu vào; chạy; thoát 0 ⇒ `delete-secret --force-delete-without-recovery` NGAY
+  rồi chép dòng kết quả khớp TRỌN mẫu từ log của chính task; hỏng ⇒ không xoá, dặn bí mật CÒN và in lệnh xoá tay). `chay_mot_lan`
+  nhận overrides và nhớ task vừa chạy; `loi` in thêm một dòng dặn khi có.
+- `.github/workflows/khoi-tao.yml` (mới) — `workflow_dispatch` trên `master`, `permissions: {}`, chung nhóm `concurrency` với
+  `deploy.yml`; `build` không quyền AWS kiểm đầu vào TRƯỚC `docker build`; `chay` ở environment `prod-khoi-tao`, role `tp-deploy`.
+  Đầu vào đi qua `env:`, không nội suy vào `run:`.
+- `infra/terraform/chung` — role `khoi_tao = "tp-khoi-tao"`. Stack 30 — task role `tp-khoi-tao` (đọc `tp/khoi-tao/*`); `tp-deploy`:
+  tin `[prod, prod-khoi-tao]`, kho `tp-khoi-tao`, PassRole `tp-khoi-tao`, `secretsmanager:DeleteSecret` CHỈ trên
+  `tp/khoi-tao/ban-khai/*`, `logs:FilterLogEvents` CHỈ trên `/tp/khoi-tao`. Stack 90 — kho ECR, nhóm log, SG `tp-khoi-tao` (CSDL,
+  endpoint), task definition (một secret `DATABASE_URL`), `var.anh.khoi_tao`, output `bien_github_khoi_tao`.
+- `tools/kiem-truoc-apply` — image thứ bảy (`khoi_tao` ⇒ `tp-khoi-tao`).
+- Test mới: `tests/deploy/khoi-tao-sh.test.ts`, `tests/architecture/hinh-dang-khoi-tao.test.ts`; cập nhật `ban-khai.test.ts`,
+  `khoi-tao.int.test.ts`, `luat.test.ts`, `nguon.test.ts`.
+- Tài liệu: ADR-111 (mục 5, 7, 8, Hệ quả; khối *Vòng hạ tầng*), ADR-067 (mục 1, Hệ quả); `docs/APPLY-LAN-DAU.md` 6.1, 6.3, 7.1, 8.1;
+  `infra/terraform/README.md`; `Handoff.md`; STATE khoản 251, rổ A, mốc.
+
+## 3. Đo
+
+- `pnpm t0` xanh. `ban-khai.test.ts` 80 ca (kỳ vọng và phiên bản: 32 ca từ chối mới; `kiemKhop` khớp/lệch từng trường, lệch cả
+  ba, thông điệp không mang email). `khoi-tao.int.test.ts` 15/15: đường Secrets Manager trên máy chủ SM giả hỏi
+  `{SecretId, VersionId}`; SM trả phiên bản khác ⇒ dừng, không tổ chức nào; bản khai ở đúng phiên bản nhưng thêm một người ⇒
+  dừng TRƯỚC CSDL, không tổ chức nào; kỳ vọng lệch với tệp ⇒ lỗi lệch dù URL CSDL trỏ một cổng không ai nghe (tức dừng trước khi
+  mở CSDL), còn kỳ vọng khớp ⇒ tới bước mở CSDL và hỏng `Error (ma ECONNREFUSED)`.
+- `tests/deploy/khoi-tao-sh.test.ts` 7/7, bash thật với `aws` giả ghi từng lời gọi: ⑴ `kiem-khoi-tao` không biến AWS, không lời gọi
+  nào; ⑵ 57 bộ đầu vào (biên của slug, UUIDv4 phiên bản 4 và biến thể, VersionId 31/32/64/65 ký tự, mở đầu gạch nối, số có số 0
+  đầu, dấu cộng, chữ số Ả Rập-Ấn, xuống dòng, tiêm lệnh) — script và `docThamSo` nhận/từ chối như nhau ở MỌI ca; ⑶ lệnh của task
+  đúng sáu đầu vào, thứ tự run → chờ → mã thoát → xoá (`--force-delete-without-recovery`) → log; ⑷ thoát 1 hay không mã ⇒ không
+  xoá, không đọc log, dặn bí mật CÒN; xoá hỏng ⇒ thoát 1, nói đã commit; đầu vào sai ở job `chay` ⇒ không lời gọi `aws` nào;
+  ⑸ dòng log mang thêm liên kết markdown, hay có tiền tố, không được chép.
+- `tests/architecture/hinh-dang-khoi-tao.test.ts` 11/11 (workflow, IAM, task, image — sáu nhóm ở đầu tệp).
+- **Terraform** 1.13.3 (checksum khớp `SHA256SUMS` của HashiCorp); `registry.terraform.io` bị chính sách mạng chặn (403), nên
+  provider `hashicorp/aws` 6.66.0 lấy từ `releases.hashicorp.com` (checksum khớp) qua mirror cục bộ. `terraform validate` sạch cho
+  stack 30 và 90; `terraform plan` offline trên bản sao stack 30 (credential giả, không backend) cho JSON policy thật: `tp-deploy`
+  tin `repo:…:environment:prod` và `…:prod-khoi-tao`, worker chỉ `prod-worker`; `XoaBanKhai` = `secretsmanager:DeleteSecret` trên
+  `…:secret:tp/khoi-tao/ban-khai/*`, không có ở worker; `KiemLogSauDeploy` = `/tp/khoi-tao:*`; PassRole có `tp-khoi-tao`; task
+  role `tp-khoi-tao` đọc `…:secret:tp/khoi-tao/*`. `terraform fmt -check` sạch.
+- **E2E trên Docker cục bộ**, image build từ `deploy/Dockerfile` (bản chép chỉ thêm CA của proxy vào stage `nguon` để build tải được
+  pnpm; stage cuối không đổi), container `--read-only`, user `node`: Postgres 16 bật TLS bằng một CA thử; image `migrate` áp 75
+  migration và dựng bốn vai đăng nhập; rồi image `khoi-tao` với Secrets Manager giả mang HAI phiên bản của một bản khai — V1 đã
+  duyệt (3 người, 4 vai) và V2 hiện hành (thêm một người sau lúc duyệt): (a) V1 ⇒ tổ chức, 3 người, 4 vai, 8 hàng sổ, email hạ chữ,
+  người của V2 không lọt; (b) V2 với kỳ vọng cũ ⇒ dừng trước CSDL; (c) chạy lại V1 ⇒ "slug đã có"; (d) `pg_hba` từ chối mọi kết nối
+  không TLS, `them-nguoi` qua TLS ⇒ 4 người, 5 vai, 10 hàng sổ, mọi actor SYSTEM; (e) bó CA RDS thật của image ⇒
+  `Error (ma UNABLE_TO_VERIFY_LEAF_SIGNATURE)`; (f) tên máy CSDL sai ⇒ `Error (ma ENOTFOUND)`; CSDL không đổi sau (e), (f). Đo
+  được thêm: `pg` kiểm chứng chỉ theo tên `localhost` khi nối bằng địa chỉ IP (ADR-111 Hệ quả).

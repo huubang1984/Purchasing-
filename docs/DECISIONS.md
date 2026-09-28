@@ -6506,7 +6506,8 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
 
 1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
    GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
-   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy.
+   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy. **[S1.9103 / ADR-111]** `tp-deploy` tin thêm
+   environment `prod-khoi-tao` (workflow `khoi-tao.yml`), bật thêm *Prevent self-review*.
 2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
    ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
    `api` (role `tp-deploy`) và `worker` (role `tp-deploy-worker`) chỉ chạy mã của kho ở cùng commit.
@@ -6529,7 +6530,8 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
   được đo với `aws`/`docker` giả (12 ca: đẩy mới, dùng lại, thẻ sai, đăng ký, role sai, image ngoài
   registry, migrate đạt/hỏng, subnet sai, cập nhật đạt, rollback, chờ quá hạn).
 - **Lần đầu vẫn tay:** stack 90 cần image có sẵn để tạo task definition đầu tiên (README, bước 4).
-- Role deploy không đọc được CloudWatch Logs: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
+- ~~Role deploy không đọc được CloudWatch Logs~~ **[S1.9103 / ADR-111]** `tp-deploy` chỉ lọc được nhóm log `/tp/khoi-tao` —
+  để chép dòng kết quả của task khởi tạo —, không đọc `/tp/migrate`: migrate hỏng thì pipeline báo mã thoát và `stoppedReason`,
   người vận hành đọc `/tp/migrate` bằng tay.
 - `apps/web` chưa có đích image — ADR-066 đã nêu; khi có, nó vào job `api` (cùng role `tp-deploy`).
 
@@ -8612,7 +8614,7 @@ các ca `tao-thau` — **[lượt soi]** kể cả nút tắt trong lúc lời g
 
 ## ADR-111 — Tổ chức, người dùng và vai trên prod: một task ECS chạy một lần dưới vai CSDL hẹp `app_khoi_tao`
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6 ngày
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** — **[S1.9103]** cả hai vòng đã làm (khoản 251 đóng); chủ dự án chốt bốn câu của `docs/DE-XUAT-TAO-TO-CHUC.md` mục 6 ngày
 2026-09-27: phương án **A** với vai **⒝**; bản khai ở **Secrets Manager**, xoá sau khi chạy; chạy dưới **vai deploy và environment
 `prod` có người duyệt**; thêm người về sau bằng **chính task này**. · **Liên quan:** ADR-016 (ai giữ `role.grant` — vẫn để ngỏ),
 ADR-028 §6 (dòng lý do của `CAU_QUYEN_KHOI_TAO_SAI`), ADR-066, ADR-067, ADR-072 (khuôn vai hẹp `app_neo`), ADR-107 (link đăng nhập
@@ -8649,7 +8651,8 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
    `ORG_CREATED` (payload `{slug, nguon}`), `USER_CREATED` (payload `{nguon}` — email và họ tên ở bảng `users`, không vào sổ
    chỉ-ghi-thêm nơi chúng không xoá được), `ROLE_GRANTED` (payload `{roleCode, nguon}`).
 5. **Bản khai sống ở Secrets Manager** dưới `tp/khoi-tao/ban-khai/<slug>`; lệnh chỉ mang TÊN bí mật, task role đọc giá trị, bí
-   mật bị xoá sau lần chạy (vòng hạ tầng kế). Công cụ từ chối mọi tên ngoài tiền tố ấy — task role đọc được cả nhánh
+   mật bị xoá sau lần chạy (~~vòng hạ tầng kế~~ **[S1.9103]** workflow `khoi-tao.yml` xoá ngay khi task thoát 0, không cửa sổ
+   khôi phục). Công cụ từ chối mọi tên ngoài tiền tố ấy — task role đọc được cả nhánh
    `tp/khoi-tao/*`, kể cả URL CSDL của chính nó. Chạy cục bộ (test, dev) nhận `--ban-khai-tep`. Email hạ chữ bằng
    `pg_catalog.lower()` lúc chèn — cùng hàm với CHECK của `048` và đường đăng nhập.
 6. **Không in email hay họ tên** ra stdout, stderr hay thông điệp lỗi — chúng đi vào CloudWatch Logs của prod. Đầu ra — **[lượt
@@ -8659,11 +8662,14 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
    chạy nhận tối đa 50 người: khoá chuỗi sổ của tổ chức bị giữ từ lần ghi sổ đầu tới COMMIT (200 người × 3 vai đo được 3,7 s, quá
    trần 2 s của mọi lần ghi sổ khác trong tổ chức ấy). Mã tổ chức không bí mật (ADR-107): người vận hành gửi `/login#<mã tổ chức>` cho từng
    người, và mỗi người tự xin link ở ô của `/login`. Task KHÔNG xếp job gửi link (đề xuất §3A.4: job do task chèn nằm `PENDING`).
-7. **Ai chạy:** vai deploy, environment `prod` có người duyệt (ADR-067) — người chạy khác người duyệt. **Thêm người về sau:**
+7. **Ai chạy:** vai deploy, environment ~~`prod`~~ **[S1.9103]** `prod-khoi-tao` — environment riêng bật *Required reviewers* và
+   *Prevent self-review*, `tp-deploy` tin thêm nó (chủ dự án chọn 2026-09-28; `prod` chỉ bật *Required reviewers* nên một người
+   tự bấm tự duyệt được, và bật chặn ấy ở `prod` thì mọi lần deploy api cũng cần người thứ hai) — có người duyệt (ADR-067) —
+   người chạy khác người duyệt. **Thêm người về sau:**
    chính task, chế độ `them-nguoi`, tới khi có màn quản trị vai; câu *ai giữ `role.grant`* để lại cho màn ấy (ADR-016).
 8. **Hai vòng.** Vòng này: ADR, vai CSDL, công cụ, test, và secret `tp/khoi-tao/database-url` cho task migrate. Vòng kế: đích
    `khoi-tao` của `deploy/Dockerfile`, kho ECR và task definition `tp-khoi-tao`, task role và quyền của vai deploy (stack 30/90),
-   workflow chạy có người duyệt và xoá bí mật, bước 8.1 của `docs/APPLY-LAN-DAU.md`.
+   workflow chạy có người duyệt và xoá bí mật, bước 8.1 của `docs/APPLY-LAN-DAU.md`. **[S1.9103] Vòng kế ĐÃ LÀM** — khối *Vòng hạ tầng* dưới.
 
 ### Phương án đã cân nhắc
 
@@ -8678,14 +8684,16 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
 - **Một vai thứ tư chèn được tổ chức, người dùng và vai** — mọi vai, trừ tổ hợp D3/`033` chặn — trong tổ chức mà nó gắn. Mật khẩu
   chỉ ở secret `tp/khoi-tao/database-url`; ~~task role và execution role là vòng kế~~ **[lượt soi]** execution role CHUNG của các
   task (stack 30) đã đọc được nhánh `tp/*`, và task `tp-migrate` bơm secret ấy từ vòng này; task definition `tp-khoi-tao` và task
-  role đọc bản khai là vòng kế.
+  role đọc bản khai ~~là vòng kế~~ **[S1.9103]** đã có (stack 90, stack 30).
 - **Vai này dò được UUID tổ chức hay slug có tồn tại** (`organizations_pkey`, `organizations_slug_key` là ràng buộc toàn cục) — thứ
   người mở tổ chức vốn phải biết; nó không có đường HTTP nào. `users.id` KHÔNG cấp, nên oracle `users_pkey` của 002 không mở lại.
 - **Không màn quản trị vai**: thu hồi vai, đổi email, vô hiệu một người dùng vẫn chưa có đường trên prod — chế độ `them-nguoi`
   chỉ THÊM.
 - **Hồ sơ N3** (vai deploy CREATEROLE không superuser, `db/migrations.int.test.ts`): BƯỚC 0 dựng thêm `app_khoi_tao` dưới vai ấy,
   nên lối ra một lần của superuser gỡ thêm một membership ngầm — cùng lối ra với ba vai kia, cùng câu hỏi mở cho RDS (khoản 15).
-- **Chưa chạy thật**: không lần nào trên RDS; task, image và workflow thuộc vòng kế. Bước 8.1 vẫn chưa làm được tới lúc ấy.
+- **Chưa chạy thật**: không lần nào trên RDS; ~~task, image và workflow thuộc vòng kế. Bước 8.1 vẫn chưa làm được tới lúc ấy.~~
+  **[S1.9103]** image `khoi-tao` và `migrate` đã chạy trên Docker cục bộ — Postgres bắt TLS, Secrets Manager giả — nhưng chưa lần
+  nào trên AWS hay qua GitHub Actions (khoản 15). Bước 8.1 nay là lệnh chạy.
 - **[lượt soi] Lộ mật khẩu của vai là chiếm được mọi tổ chức mà sổ không kể lại.** Vai này — như `app_api` — chèn được người và
   vai vào BẤT KỲ tổ chức nào biết UUID (UUID không bí mật, ADR-107), chèn mà không ghi hàng sổ nào (không trigger nào trên `users`
   hay `user_roles` tự ghi sổ), và ghi được hàng sổ giả với `actor_id`, `ip`, `user_agent` tuỳ ý qua `audit_append()`. "Sổ từ hàng
@@ -8694,7 +8702,7 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
   quyền INSERT) cần một trigger mới — chưa làm.
 - **[lượt soi] Người duyệt duyệt một TÊN bí mật, không duyệt nội dung**: giữa lúc duyệt và lúc chạy, nội dung của tên ấy đổi được
   (thêm người, đổi `toChuc.id`). Dòng kết quả in `VersionId` đã đọc để đối chiếu SAU; ghim phiên bản TRƯỚC — lệnh mang `VersionId`
-  đã duyệt, workflow hiện tổ chức và số người/vai — là việc của vòng hạ tầng (khoản 251).
+  đã duyệt, workflow hiện tổ chức và số người/vai — là việc của vòng hạ tầng (khoản 251). **[S1.9103] ĐÃ LÀM** — khối dưới.
 - **[lượt soi] Hai oracle không ghi ở trên**: `user_roles.user_id` tham chiếu `users(id)` TOÀN CỤC (`005` tự ghi là oracle đã
   biết, MINOR) — nên vai này dò được một UUID người dùng có tồn tại ở đâu đó, và chèn được một hàng vai trỏ người của tổ chức khác
   (vô hại vì phiên của người ấy thuộc tổ chức kia, nhưng là rác); và `users_org_id_email_key` trả lời "email này có trong tổ chức
@@ -8703,3 +8711,51 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
   "slug đã có". Lấy lại mã bằng vai master của RDS — đường khẩn cấp có biên bản của đề xuất (phương án C).
 - **[lượt soi] Kế thừa, như ba vai kia**: đổi CHỦ một bảng sang vai này qua được hardening (góc mù quyền sở hữu); `GRANT` trên
   `pg_catalog` không được canh; và ở hồ sơ N3, sau lối ra của superuser, vai deploy không còn ADMIN để cấp lại cặp đăng nhập.
+
+### [S1.9103] Vòng hạ tầng — đường chạy trên prod (khoản 251)
+
+**Chủ dự án chốt ngày 2026-09-28:** ⑴ environment GitHub RIÊNG `prod-khoi-tao` (*Required reviewers* + *Prevent self-review*,
+chỉ `master`), `tp-deploy` tin thêm environment ấy — thay cho `prod` ở mục 7; ⑵ bí mật bản khai xoá NGAY khi task thoát 0,
+`--force-delete-without-recovery`; task hỏng thì bí mật còn, để sửa và chạy lại.
+
+- **Người duyệt duyệt một BỘ, không duyệt một TÊN.** Workflow `.github/workflows/khoi-tao.yml`, `workflow_dispatch` trên `master`,
+  sáu đầu vào: chế độ, tên bí mật, `VersionId`, tổ chức (slug khi tạo, mã khi thêm người), số người, tổng số cặp người–vai. Job
+  `build` (không quyền AWS) kiểm đầu vào TRƯỚC rồi in bảng ấy vào tóm tắt của run, rồi build đích `khoi-tao`; job `chay` chờ duyệt
+  ở `prod-khoi-tao`. Công cụ nhận `--phien-ban` và ba kỳ vọng — BẮT BUỘC khi đọc Secrets Manager —, đọc ĐÚNG phiên bản ấy (một
+  phiên bản của Secrets Manager không đổi nội dung được), và dừng TRƯỚC khi mở CSDL nếu bản khai không khớp ba kỳ vọng. Thêm người
+  sau lúc duyệt ⇒ phiên bản mới ⇒ một lần chạy, một lần duyệt mới. Luật đầu vào của script (`kiem_dau_vao`) là luật của
+  `docThamSo`; `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên cùng bộ đầu vào.
+- **Thứ tự của job `chay`** (`deploy/trien-khai.sh khoi-tao`): đẩy image (thẻ = SHA commit, ghim digest), đăng ký bản task
+  definition mới của họ `tp-khoi-tao` CHỈ đổi image (kiểm task role đúng `tp-khoi-tao`), chạy task một lần với lệnh dựng bằng `jq`
+  từ đầu vào — không nội suy vào mã —, chờ dừng, đọc mã thoát; 0 ⇒ xoá bí mật NGAY, rồi chép dòng kết quả (mã tổ chức, số người,
+  số vai, phiên bản) từ log của CHÍNH task ấy sang tóm tắt, chỉ khi dòng khớp TRỌN mẫu. Chung nhóm `concurrency` với `deploy.yml`:
+  task khởi tạo không chạy cùng migrate (hardening thu hồi rồi cấp lại quyền của `app_khoi_tao`).
+- **IAM (stack 30):** role `tp-khoi-tao` (tên ở `infra/terraform/chung`) đọc nhánh `tp/khoi-tao/*`. `tp-deploy` thêm: tin
+  `prod-khoi-tao`, đẩy image vào `tp-khoi-tao`, PassRole `tp-khoi-tao`, `secretsmanager:DeleteSecret` CHỈ trên
+  `tp/khoi-tao/ban-khai/*`, `logs:FilterLogEvents` CHỈ trên `/tp/khoi-tao`. `tp-deploy-worker` không đổi.
+- **Stack 90:** kho ECR và nhóm log `/tp/khoi-tao` (90 ngày), security group `tp-khoi-tao` (CSDL; Secrets Manager, ECR, Logs qua
+  endpoint), task definition `tp-khoi-tao` (256/512, root filesystem chỉ đọc, MỘT secret: `DATABASE_URL` từ
+  `tp/khoi-tao/database-url`; bản khai KHÔNG ở đây), `var.anh.khoi_tao`, output `bien_github_khoi_tao` cho biến của environment.
+  Đích `khoi-tao` của `deploy/Dockerfile`: ENTRYPOINT là công cụ, KHÔNG có CMD mặc định.
+- **Dòng lỗi mang mã hệ thống của Node** (`ECONNREFUSED`, `ENOTFOUND`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…), như SQLSTATE: đo image
+  với bó CA sai, dòng lỗi chỉ còn `HONG: Error` — mà lần chạy đầu trên RDS hỏng thì nhiều khả năng hỏng đúng ở mạng hay TLS.
+
+**Hệ quả, nói thẳng:**
+
+- ***Prevent self-review* là một CÀI ĐẶT của GitHub, không mã nào của kho đọc được nó.** `docs/APPLY-LAN-DAU.md` 7.1 ghi nó;
+  thiếu nó thì một người tự bấm tự duyệt, đúng như ở `prod`.
+- **Role không đổi quyền theo environment.** `tp-deploy` dưới `prod` — nơi một người tự duyệt được — cũng chạy được task
+  `tp-khoi-tao` với lệnh bất kỳ và xoá được bí mật bản khai, NẾU mã workflow trên `master` làm việc ấy. `deploy.yml` không làm (test
+  hình dạng ghim), nên ranh giới là mã trên `master` cộng bảo vệ nhánh. Tách hẳn cần một role riêng chỉ `prod-khoi-tao` đảm nhận
+  được — chủ dự án chọn dùng chung `tp-deploy`.
+- **Người duyệt thấy SỐ, không thấy NGƯỜI**: bảng không nói ai được gán `DIRECTOR`. Người có quyền đọc Secrets Manager của prod
+  mở được đúng phiên bản ấy để đối chiếu; workflow không làm hộ.
+- **Task hỏng ⇒ dữ liệu cá nhân nằm lại** ở Secrets Manager tới khi chạy lại hay xoá tay; dòng lỗi của job nói điều ấy và in lệnh
+  xoá. Xoá hỏng SAU khi task thoát 0 ⇒ job đỏ, dòng lỗi nói giao dịch ĐÃ commit.
+- **Xoá không cửa sổ khôi phục**: sau lần chạy, bản khai chỉ còn ở `users`/`user_roles`; sổ không mang email hay họ tên.
+- **Chung nhóm `concurrency`** với `deploy.yml`: một lượt chờ mới HUỶ lượt đang CHỜ trước đó trong nhóm (hành vi của GitHub) —
+  bấm lại là đủ.
+- **`pg` kiểm chứng chỉ theo tên `localhost` khi host là địa chỉ IP** (đo trong phép e2e): RDS được gọi bằng tên DNS
+  (`aws_db_instance.address`) nên không dính; ai đổi secret sang IP thì task hỏng `ERR_TLS_CERT_ALTNAME_INVALID`.
+- **Chưa chạy thật trên AWS hay GitHub**: IAM đo bằng `terraform plan` offline trên bản sao stack 30 (JSON policy thật), stack 90
+  bằng `terraform validate`; image đo e2e trên Docker cục bộ. Lần chạy thật đầu tiên thuộc khoản 15.

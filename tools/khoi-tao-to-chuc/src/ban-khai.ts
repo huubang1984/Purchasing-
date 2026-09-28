@@ -51,9 +51,11 @@ export type BanKhai =
  */
 export const TRAN_SO_NGUOI = 50;
 const TRAN_TEN = 200;
-const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+// [S1.9103] Hai mẫu dưới được xuất cho `docThamSo` (`index.ts`), và `deploy/trien-khai.sh` (`kiem_dau_vao`) mang cùng hai mẫu
+// ấy bằng bash — `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên cùng một bộ đầu vào.
+export const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // Slug là định danh trong URL, duy nhất TOÀN CỤC (002): chữ thường không dấu, số, gạch nối ở giữa; 3–63 ký tự.
-const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u;
+export const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u;
 // Cùng hình dạng bộ gửi SES dùng (`apps/api/src/adapters/gui-ses.ts`): một địa chỉ đơn, không khoảng trắng, không dấu phẩy.
 // [lượt soi] Và không ký tự điều khiển hay định dạng (`\p{C}`: `\u0001`, zero-width, đảo chiều): `/auth/link` từ chối một email
 // mang chúng, nên người ấy không bao giờ xin được link đăng nhập.
@@ -147,4 +149,29 @@ export function docBanKhai(json: string, lenh: CheDo): BanKhai {
   const orgId = chuoi(toChuc, "id", "toChuc");
   if (!UUID_V4.test(orgId)) throw new BanKhaiError('toChuc: "id" phải là UUIDv4 chữ thường');
   return { cheDo, orgId, nguoi };
+}
+
+/**
+ * [S1.9103 / ADR-111] Điều người duyệt THẤY trước khi bấm duyệt (bảng của job `build` trong `.github/workflows/khoi-tao.yml`):
+ * tổ chức (slug khi tạo, mã khi thêm người), số người, tổng số cặp người–vai. Người duyệt không đọc được bản khai — nó mang
+ * email và họ tên —, nên thứ họ duyệt là bộ ba này cộng TÊN và PHIÊN BẢN của bí mật; phiên bản thì bất biến ở Secrets Manager.
+ */
+export interface KyVong {
+  readonly toChuc: string;
+  readonly soNguoi: number;
+  readonly soVai: number;
+}
+
+/**
+ * Bản khai ở đúng phiên bản đã đọc phải khớp điều đã duyệt — kiểm TRƯỚC khi mở CSDL. Lệch ⇒ `BanKhaiError` nêu từng trường
+ * lệch với hai giá trị: slug, mã tổ chức và hai con số không phải dữ liệu cá nhân (mã tổ chức không bí mật, ADR-107).
+ */
+export function kiemKhop(bk: BanKhai, kv: KyVong): void {
+  const lech: string[] = [];
+  const toChuc = bk.cheDo === "tao" ? bk.slug : bk.orgId;
+  if (toChuc !== kv.toChuc) lech.push(`tổ chức: bản khai "${toChuc}", đã duyệt "${kv.toChuc}"`);
+  if (bk.nguoi.length !== kv.soNguoi) lech.push(`số người: bản khai ${String(bk.nguoi.length)}, đã duyệt ${String(kv.soNguoi)}`);
+  const soVai = bk.nguoi.reduce((tong, n) => tong + n.vai.length, 0);
+  if (soVai !== kv.soVai) lech.push(`số vai: bản khai ${String(soVai)}, đã duyệt ${String(kv.soVai)}`);
+  if (lech.length > 0) throw new BanKhaiError(`bản khai không khớp điều đã duyệt — ${lech.join("; ")}`);
 }
