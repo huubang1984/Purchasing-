@@ -15145,3 +15145,137 @@ dòng, khoảng trắng; số secret và thứ tự bước khớp giữa APPLY-
 ## 5. Số
 
 Khoản **251** mở, rổ A (vế ⒞ — bước 8.1 của lần apply đầu): rổ A **1 → 2**. Không khoản nào đóng. ADR-111 mới.
+
+# §S1.183 — TẠO TỔ CHỨC TRÊN PROD, VÒNG HẠ TẦNG: ĐÍCH `khoi-tao`, TASK `tp-khoi-tao`, WORKFLOW `khoi-tao.yml` (ADR-111)
+
+## 1. Việc gì
+
+Vòng hạ tầng của ADR-111 (mục 8), đóng khoản 251. Chủ dự án chốt ngày 2026-09-28 hai câu mà vòng này hỏi: ⑴ environment GitHub
+RIÊNG `prod-khoi-tao` (*Required reviewers* + *Prevent self-review*), `tp-deploy` tin thêm nó — vì `prod` chỉ bật *Required
+reviewers*, một người tự bấm tự duyệt được, và bật chặn ấy ở `prod` thì mọi lần deploy api cũng cần người thứ hai; ⑵ bí mật bản
+khai xoá NGAY khi task thoát 0, không cửa sổ khôi phục; task hỏng thì bí mật còn. Và vế còn treo của lượt soi S1.182: người duyệt
+duyệt một TÊN bí mật, còn nội dung của tên ấy đổi được tới lúc chạy. Hai lượt soi đối kháng (§3b) đổi thiết kế đáng kể: băm bản
+khai, mã tổ chức chọn trước, số người theo mã vai, kiểm KẾT QUẢ của luật duyệt, ghim hình dạng task definition, bỏ đọc log, nhóm
+concurrency riêng, job nhắc bí mật còn.
+
+## 2. Thay đổi
+
+- `tools/khoi-tao-to-chuc/src/index.ts` — với `--ban-khai-secret`, BẮT BUỘC: `--phien-ban <VersionId>`, `--bam <sha256>` (băm của
+  ĐÚNG byte bản khai), ba kỳ vọng `--to-chuc`, `--so-nguoi`, `--vai <MA=n,…>` (số người mang từng mã vai, theo thứ tự `MA_VAI`),
+  và — chế độ `tao` — `--ma-to-chuc <uuid>` do workflow chọn; với tệp, các cờ ấy tuỳ chọn (có thì vẫn kiểm), `--phien-ban` bị từ
+  chối; mỗi cờ tối đa một lần; tên bí mật là `tp/khoi-tao/ban-khai/<slug>`. `GetSecretValue` hỏi `{SecretId, VersionId}` và từ chối
+  phiên bản trả về khác phiên bản đã hỏi (kể cả thiếu). Trước khi mở CSDL: so băm, rồi `kiemKhop`. `maLoi` in SQLSTATE và mã hệ
+  thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`…). `ban-khai.ts` — `vaiTheoMa`, `kiemKhop`; bỏ
+  MỘT BOM ở đầu bản khai. `khoi-tao.ts` — `khoiTao` nhận mã tổ chức chọn trước.
+- `deploy/Dockerfile` — đích `khoi-tao` (cài phụ thuộc sản xuất của đúng gói, user `node`, bó CA của RDS, ENTRYPOINT là công cụ,
+  KHÔNG CMD).
+- `deploy/trien-khai.sh` — `kiem-khoi-tao` (không biến AWS, không gọi `aws`: kiểm đầu vào và người bấm, in bảng người duyệt
+  duyệt), `kiem-nguoi-duyet <tệp>` (lịch sử duyệt của run phải có một NGƯỜI, không bot, khác `actor` và `triggering_actor`, duyệt
+  `prod-khoi-tao`), `khoi-tao <arn>` (lệnh dựng bằng `jq`; chạy; thoát 0 ⇒ `delete-secret --force-delete-without-recovery` NGAY,
+  rồi in kết quả suy từ đầu vào — không đọc log; hỏng ⇒ không xoá, dặn bí mật CÒN, chạy lại an toàn, lệnh xoá tay). `dang_ky` ghim
+  trọn container của họ `tp-khoi-tao` theo stack 90. `chay_mot_lan` nhận overrides và nhớ task vừa chạy; `loi` in thêm một dòng
+  dặn khi có.
+- `.github/workflows/khoi-tao.yml` (mới) — `workflow_dispatch` trên `master`, `permissions: {}`, nhóm `concurrency` RIÊNG; bảy đầu
+  vào qua `env:`; `build` không quyền AWS chọn mã tổ chức, kiểm đầu vào và người bấm TRƯỚC `docker build`; `chay` ở environment
+  `prod-khoi-tao`, `actions: read` để đọc lịch sử duyệt TRƯỚC khi lấy role `tp-deploy`; `nhac` không quyền nào, nói bí mật CÒN khi
+  `chay` không xanh; artifact giữ 7 ngày.
+- `infra/terraform/chung` — role `khoi_tao = "tp-khoi-tao"`. Stack 30 — task role `tp-khoi-tao` (đọc `tp/khoi-tao/*`); `tp-deploy`:
+  tin `[prod, prod-khoi-tao]`, kho `tp-khoi-tao`, PassRole `tp-khoi-tao`, `secretsmanager:DeleteSecret` CHỈ trên
+  `tp/khoi-tao/ban-khai/*`, không đọc log nào. Stack 90 — kho ECR, nhóm log, SG `tp-khoi-tao` (CSDL, endpoint), task definition (một
+  secret `DATABASE_URL`), `var.anh.khoi_tao`, output `bien_github_khoi_tao`.
+- `tools/kiem-truoc-apply` — image thứ bảy (`khoi_tao` ⇒ `tp-khoi-tao`).
+- Test mới: `tests/deploy/khoi-tao-sh.test.ts`, `tests/architecture/hinh-dang-khoi-tao.test.ts`; cập nhật `ban-khai.test.ts`,
+  `khoi-tao.int.test.ts`, `luat.test.ts`, `nguon.test.ts`.
+- Tài liệu: ADR-111 (mục 3, 5, 7, 8, Hệ quả; khối *Vòng hạ tầng*), ADR-067 (mục 1); `docs/APPLY-LAN-DAU.md` 2.0, 6.1, 6.3, 7.1,
+  8.1; `infra/terraform/README.md`; `Handoff.md`; STATE khoản 251 (đóng), khoản 252 (mở, rổ B), rổ A, rổ B, mốc.
+
+## 3. Đo
+
+- `pnpm t0` xanh. `pnpm test` 121 tệp, 1699/1699 (một ca chỉ chạy trên CI). Bộ tích hợp đầy đủ trên `58c0a02`: 66 tệp, 1443/1443.
+- `ban-khai.test.ts` 109 ca: 65 ca `ThamSoError` (đường prod thiếu phiên bản, băm, kỳ vọng hay mã tổ chức; tên bí mật không phải
+  slug; VersionId 31/65 ký tự, gạch dưới, khoảng trắng, mở đầu gạch nối; băm chữ hoa, thiếu, thừa một ký tự; mã tổ chức chữ hoa,
+  sai phiên bản, sai biến thể, ở `them-nguoi`; slug biên 2/63/64, chữ hoa, gạch dưới, gạch nối đầu; UUID sai phiên bản, sai biến
+  thể; số người 0/51/`01`/`1.5`/`+1`; `--vai` sai dạng, mã lạ, chữ thường, `0`, `01`, dấu phẩy thừa, khoảng trắng, sai thứ tự, lặp
+  mã, vượt số người, tổng thiếu), `kiemKhop` khớp/lệch từng trường (kể cả đổi mã vai cùng tổng), BOM một/hai lần, `maLoi` in/không
+  in. `khoi-tao.int.test.ts` 16/16: đường Secrets Manager trên máy chủ SM giả hỏi `{SecretId, VersionId}`; mã tổ chức là ĐÚNG mã đã
+  chọn; phiên bản khác hay THIẾU VersionId ⇒ dừng, không tổ chức nào; bản khai đúng phiên bản mà thêm người ⇒ dừng TRƯỚC CSDL; tạo
+  lại cùng tên, cùng VersionId, nội dung khác (cùng tổ chức, cùng số, cùng vai) ⇒ lệch băm, dừng; kỳ vọng lệch với tệp ⇒ lỗi lệch dù
+  URL CSDL trỏ một cổng không ai nghe; tệp UTF-8 kèm BOM: băm trên byte của tệp khớp, băm của bản không BOM thì lệch.
+- `tests/deploy/khoi-tao-sh.test.ts` 9/9, bash thật với `aws` giả ghi từng lời gọi: ⑴ `kiem-khoi-tao` không biến AWS, không lời gọi
+  nào, người bấm là bot ⇒ dừng; ⑵ 87 bộ đầu vào — script và `docThamSo` nhận/từ chối như nhau ở MỌI ca (16 nhận,
+  71 từ chối), ở locale C và ở `en_US.UTF-8` (sinh bằng `localedef` vào `LOCPATH` tạm, dò thật rằng ở đó `[a-z]` khớp
+  `á`), cộng biên tuyệt đối; ⑶ lệnh của task đúng các đầu vào (`--ma-to-chuc` chỉ ở `tao`), thứ tự run → chờ → mã thoát → xoá, kết
+  quả từ đầu vào, `/login#…` chỉ ở `tao`; ⑷ thoát 1 hay không mã ⇒ không xoá, dặn bí mật CÒN; xoá hỏng ⇒ thoát 1, nói đã commit;
+  đầu vào sai, người bấm là bot ⇒ không lời gọi `aws` nào; ⑸ `kiem-nguoi-duyet`: người khác duyệt ⇒ xanh; không bản ghi (admin
+  bỏ qua), tự duyệt (kể cả khác hoa thường), bị từ chối, environment khác, bot duyệt, người khởi run gốc duyệt lần chạy lại, người
+  bấm là bot ⇒ dừng; migrate và neo vẫn như trước; ⑹ `dang-ky tp-khoi-tao`: bản đúng hình dạng thì nhân bản; 15 biến thể độc
+  (`NODE_OPTIONS`, `NODE_ENV` khác, region khác, secret thêm hay đổi nguồn, root fs ghi được hay không khai, privileged,
+  `entryPoint`, `command`, `user`, `environmentFiles`, log group khác, execution role khác, volume) ⇒ dừng trước khi đăng ký.
+- `tests/architecture/hinh-dang-khoi-tao.test.ts` 14/14 (workflow, IAM, task, image, job `nhac`, tài liệu vận hành).
+- **Terraform** 1.13.3 (checksum khớp `SHA256SUMS` của HashiCorp); `registry.terraform.io` bị chính sách mạng chặn (403), nên
+  provider `hashicorp/aws` 6.66.0 lấy từ `releases.hashicorp.com` (checksum khớp) qua mirror cục bộ. `terraform validate` sạch cho
+  stack 30 và 90; `terraform plan` offline trên bản sao stack 30 (credential giả, không backend) cho JSON policy thật: `tp-deploy`
+  tin `repo:…:environment:prod` và `…:prod-khoi-tao`, worker chỉ `prod-worker`; `XoaBanKhai` = `secretsmanager:DeleteSecret` trên
+  `…:secret:tp/khoi-tao/ban-khai/*`, không có ở worker; PassRole có `tp-khoi-tao`; task role `tp-khoi-tao` đọc
+  `…:secret:tp/khoi-tao/*`. `terraform fmt -check` sạch. (Plan đo trước lượt soi, khi `tp-deploy` còn lọc `/tp/khoi-tao`; lượt soi
+  bỏ quyền ấy — test hình dạng ghim `doc_log = []`.)
+- **E2E trên Docker cục bộ**, image build từ `deploy/Dockerfile` (bản chép chỉ thêm CA của proxy vào stage `nguon` để build tải được
+  pnpm; stage cuối không đổi), container `--read-only`, user `node`, image build lại SAU lượt soi: Postgres 16 bật TLS bằng một CA
+  thử, `pg_hba` từ chối mọi kết nối không TLS; image `migrate` áp 75 migration và dựng bốn vai đăng nhập; image `khoi-tao` với
+  Secrets Manager giả: (a) V1 đã duyệt, băm và kỳ vọng khớp ⇒ tổ chức MANG ĐÚNG MÃ workflow chọn, 3 người, 4 vai, 8 hàng sổ, email
+  hạ chữ; (b) V2 hiện hành (thêm một người sau lúc duyệt) với băm của V1 ⇒ lệch băm; (c) tạo lại cùng tên, cùng VersionId, nội
+  dung khác (DIRECTOR đổi người) ⇒ lệch băm, không tổ chức nào; (d) chạy lại V1 ⇒ "slug đã có"; (e) `them-nguoi` qua TLS ⇒ 4 người,
+  5 vai, 10 hàng sổ, mọi actor SYSTEM. Trước lượt soi, cùng dựng ấy còn đo: bó CA RDS thật của image ⇒ `Error (ma
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE)`; tên máy CSDL sai ⇒ `Error (ma ENOTFOUND)`; `pg` kiểm chứng chỉ theo tên `localhost` khi nối
+  bằng địa chỉ IP. Kịch bản: `chay-e2e.sh` ở scratchpad của phiên.
+
+## 3b. Hai lượt soi đối kháng
+
+**Lăng kính an ninh** (soi `fed8ca8`): một NẶNG, năm NHẸ, bốn INFO.
+
+- **NẶNG-1 — lời khai "người bấm không tự duyệt được" không đứng: ba đường một người làm một mình.** ⒜ Admin bỏ qua luật bảo vệ
+  (mặc định BẬT; chủ kho cá nhân là admin) ⇒ 7.1 và README đòi tắt *Allow administrators to bypass configured protection rules*,
+  và job `chay` kiểm KẾT QUẢ: một lần duyệt của NGƯỜI khác người bấm, không có thì dừng trước khi lấy quyền AWS. ⒝ Dispatch bằng
+  token bot (GITHUB_TOKEN của một workflow khác, GitHub App) ⇒ *Prevent self-review* so với bot ⇒ cả hai job dừng khi người bấm là
+  bot. ⒞ Người vận hành có AdministratorAccess ở prod chạy thẳng `aws ecs run-task` ⇒ ghi thẳng ở ADR-111 ("hai người" là thủ tục
+  với quản trị AWS), cảnh báo và permission set hẹp là khoản 252 (rổ B).
+- **NHẸ-2 — (tên, VersionId) không định danh nội dung**: xoá hẳn rồi tạo lại cùng tên với `--client-request-token` cũ ⇒ cùng cặp,
+  nội dung khác ⇒ `--bam`, đo ở test tích hợp và e2e.
+- **NHẸ-3 — `logs:FilterLogEvents /tp/khoi-tao` là kênh đọc sạch cho task tự đăng ký** ⇒ bỏ quyền ấy; mã tổ chức do workflow chọn
+  nên kết quả suy từ đầu vào.
+- **NHẸ-4 — `dang_ky` nhân bản bản mới nhất đã bị cài độc** (người soi đo `NODE_OPTIONS=--import=data:…` in mật khẩu CSDL trước khi
+  công cụ chạy) ⇒ ghim trọn container của họ `tp-khoi-tao`. Các họ khác giữ kiểm cũ (ADR-067) — rủi ro có từ trước, không đổi.
+- **NHẸ-5 — kho CÔNG KHAI** ⇒ ghi ở ADR-111 và 8.1; tên bí mật siết về dạng slug (không `@`, `.`).
+- **NHẸ-6 — ba kỳ vọng không ràng buộc vai** ⇒ `--vai` theo từng mã vai thay tổng.
+- INFO-7 (concurrency chung chặn hotfix ⇒ nhóm riêng), INFO-8 (lời dặn khi mất ACK ⇒ "chạy lại an toàn"; runner mất ⇒ 8.1 đòi soát
+  bí mật còn sót), INFO-9 (GitHub tự tạo environment không bảo vệ ⇒ 2.0 tạo trước stack 30; ghim `job_workflow_ref` ⇒ khoản 252),
+  INFO-10 (biên bản đếm sai — viết lại ở §3).
+
+**Lăng kính test và tài liệu** (soi `fed8ca8`, 90 đột biến: 64 đỏ, 26 sống — ba trong số sống là đối chứng hay tương đương):
+
+- **NẶNG-1 — AWS CLI v2 trên Windows đọc `file://` theo code page** ⇒ tiếng Việt vỡ không báo lỗi, BOM làm task hỏng sau khi duyệt ⇒
+  8.1 đặt `AWS_CLI_FILE_ENCODING`, công cụ bỏ một BOM, băm làm chữ vỡ thành lỗi ồn ào trước CSDL.
+- **NẶNG-2 — admin bypass** ⇒ như NẶNG-1 của lăng kính an ninh.
+- NHẸ: đếm sai trong biên bản (viết lại); "deploy.yml không làm" chưa có test ⇒ không workflow nào khác nhắc đường khởi tạo; test
+  DeleteSecret chỉ đếm một chuỗi ⇒ danh sách cho phép đóng cho mọi quyền `secretsmanager:` của mọi stack và cấm ký tự đại diện ở
+  stack 30; `CMD` viết thường/thụt lề và ENTRYPOINT thứ hai ⇒ mẫu không phân biệt hoa thường, đúng một ENTRYPOINT; `LC_ALL=C`
+  không được ghim ⇒ so ở `en_US.UTF-8`; test chạy mã ở mức module dù bỏ qua trên Windows ⇒ dựng trong `beforeAll`; job `build` đi
+  tiếp khi kiểm hỏng (`|| true`, `continue-on-error`, `if: always()`) ⇒ cấm; biên tuyệt đối ⇒ thêm; "Job đỏ ⇒ dòng lỗi in lệnh
+  xoá" chỉ đúng một phần ⇒ job `nhac`.
+- INFO: `them-nguoi` của mẫu kết quả (mẫu đã bỏ cùng việc đọc log); phản hồi thiếu VersionId và mẫu mã lỗi ⇒ thêm ca; tài liệu
+  không test nào đọc ⇒ test đọc 7.1, README, 6.1, 8.1; bước 3 của 8.1 mơ hồ ⇒ người duyệt đối chiếu với YÊU CẦU mở tổ chức.
+
+**Đột biến sau khi sửa:** 46 con, cả 46 ĐỎ. Mười tám con sống của lượt soi test và tài liệu, đo lại trên mã đã sửa: DY1, DY2 (`deploy.yml` chạy khởi tạo hay xoá bản khai), TF3, TF3b, TF3c (task role thêm `secretsmanager:Delete*`, `tp-deploy` thêm `secretsmanager:*`, thêm `s3:*` trong danh sách nhiều dòng), D1b, D1c, D2 (`cmd` viết thường, `CMD` thụt lề, ENTRYPOINT thứ hai), S1 (bỏ `LC_ALL=C`), W3, W4, W12 (`|| true`, `continue-on-error`, `if: always()`), T4b (nhận phản hồi thiếu VersionId), T14 (mẫu mã lỗi nhận mọi chuỗi), T17, T18 (slug 64 ký tự, UUID biến thể `c` — CẢ HAI phía cùng nới), DOC1–DOC3 (bỏ *Prevent self-review* ở 7.1, ở README, bỏ `khoi_tao` khỏi mẫu 6.1); cộng DOC4, DOC5 (bỏ `AWS_CLI_FILE_ENCODING`, bỏ lời tắt admin bypass). Hai mươi lăm con cho mã mới: bỏ so băm; băm trên nội dung đã bỏ BOM; bỏ qua `--ma-to-chuc`; `kiemKhop` bỏ so vai; bí mật không cần `--bam`; `tao` không cần `--ma-to-chuc`; `--vai` bỏ luật thứ tự; lịch sử duyệt nhận chính người bấm, nhận bot, nhận environment bất kỳ; bỏ chặn người bấm là bot; ghim bỏ root fs chỉ đọc, bỏ so biến, không áp cho `tp-khoi-tao`; lệnh task thiếu `--bam`; kiểm người duyệt SAU khi lấy quyền AWS; `nhac` chỉ khi `failure`; `tp-deploy` đọc lại `/tp/khoi-tao`; tên bí mật nhận `@` và `.` (bash, TS); bỏ bỏ-BOM; `MA_TO_CHUC` của `chay` lấy từ input; `them-nguoi` nhận `MA_TO_CHUC`; `loi` xoá bí mật; xoá có cửa sổ khôi phục. Bộ chạy: `dot-bien2.mjs` ở scratchpad của phiên (đổi được nhiều tệp trong một đột biến).
+
+## 4. Còn lại
+
+- Chưa chạy trên AWS hay GitHub Actions (khoản 15): lịch sử duyệt của GitHub đo bằng tệp mẫu theo tài liệu; việc admin bỏ qua luật
+  không để lại bản ghi `approved` là suy từ tài liệu, chưa đo — nếu có để lại, *Prevent self-review* vẫn chặn người bấm tự duyệt,
+  còn admin khác người bấm thì là người duyệt thật.
+- Với quyền quản trị AWS của prod, không cảnh báo nào kêu khi task `tp-khoi-tao` chạy ngoài workflow — khoản 252.
+- Kho công khai: đầu vào và tóm tắt của run là công khai.
+
+## 5. Số
+
+Khoản **251** ĐÓNG (rổ A **2 → 1**). Khoản **252** mở, rổ B (**59 → 60**). Không ADR mới — ADR-111 và ADR-067 sửa tại chỗ. Không
+migration mới.

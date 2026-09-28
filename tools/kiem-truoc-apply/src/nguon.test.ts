@@ -11,7 +11,7 @@ const consoleIn = (v: unknown): string => `${JSON.stringify(JSON.stringify(v))}\
 const BIEN = {
   bien: {
     ten_mien: "app.thu-mua.vn",
-    anh: { api: "a", worker: "b", migrate: "c", web: "d", public_keys: "e", neo: "f" },
+    anh: { api: "a", worker: "b", migrate: "c", web: "d", public_keys: "e", neo: "f", khoi_tao: "g" },
     so_ban_api: 1,
     so_ban_worker: 0,
     ses: { tu_api: "x@thu-mua.vn", tu_canh_bao: "y@thu-mua.vn", nhan_canh_bao: ["z@thu-mua.vn"], configuration_set: "tp-thu" },
