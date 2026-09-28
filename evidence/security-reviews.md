@@ -15483,7 +15483,9 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
 - `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
 - Khoản 246: `tools/inv-matrix` 73/73 (năm ca biên mới ở `parse.test.ts`), `nhan-bat-bien-cho-dat` 8/8, `so-no-tu-doi-chieu`
   45/45; chín đột biến, chín lần đỏ.
-- Toàn bộ T3 cục bộ trên cây cuối: 181 tệp, 2967 khẳng định, 2958 đạt, 1 bỏ qua; 8 ca đỏ đều của
-  `packages/test-support/src/postgres.int.test.ts` — máy đo không có container runtime cho `testcontainers`, không liên quan.
-  Kịch bản 41 (cả hai luồng), `buyer.int` và `gieo:demo` đi qua nguyên vẹn.
+- Toàn bộ T3 cục bộ trên cây cuối (đã hợp master tới S1.184): 187 tệp, 3174 khẳng định, 3164 đạt, 1 bỏ qua, 9 đỏ không
+  liên quan — 8 ca của `packages/test-support/src/postgres.int.test.ts` (máy đo không có container runtime cho
+  `testcontainers`) và 1 ca của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale `lower()` so với
+  `toLowerCase()` trên `Ⓐ`, lệch dưới cụm glibc UTF-8 của máy đo; không mang nhãn bất biến). Kịch bản 41 (cả hai luồng),
+  `buyer.int`, `gieo:demo` và route gửi lại của ADR-110 đi qua nguyên vẹn.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); mốc `MOC_GHIM.soPhuToiThieu` nâng tay 65 → 68.
