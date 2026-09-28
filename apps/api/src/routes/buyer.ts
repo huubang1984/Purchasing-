@@ -53,6 +53,7 @@ import {
   lietKePhienBanChinhSach,
   listRfqItems,
   openRfq,
+  returnRfqToDraft,
   setRfqBudget,
   submitRfqForApproval,
   type Currency,
@@ -953,6 +954,29 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 200,
       body: {
         rfq: await cancelRfq(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/return-to-draft",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.2b1 / K4a · ADR-084 ⑵] Cổng của bộ điều phối là `rfq.create`; hàm gói hỏi tiếp đúng nhánh — người tạo gói
+    // giữ `rfq.create`, người khác phải giữ `rfq.approve` —, và mỗi lần từ chối vào sổ. Mọi vai giữ `rfq.approve` hôm nay cũng
+    // giữ `rfq.create` (test ghim), nên cổng này không chặn oan người duyệt nào. Chỉ tổ chức đã bật S3; lý do bắt buộc.
+    permission: PERMISSIONS.RFQ_CREATE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        rfq: await returnRfqToDraft(
           ctx.client,
           ctx.orgId,
           { rfqId: rfqIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
