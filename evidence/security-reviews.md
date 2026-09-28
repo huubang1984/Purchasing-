@@ -15191,7 +15191,7 @@ concurrency riêng, job nhắc bí mật còn.
 
 ## 3. Đo
 
-- `pnpm t0` xanh. `pnpm test` «SO_TEST_DAY». Bộ tích hợp đầy đủ «SO_INT_DAY».
+- `pnpm t0` xanh. `pnpm test` 121 tệp, 1699/1699 (một ca chỉ chạy trên CI). Bộ tích hợp đầy đủ trên `58c0a02`: 66 tệp, 1443/1443.
 - `ban-khai.test.ts` 109 ca: 65 ca `ThamSoError` (đường prod thiếu phiên bản, băm, kỳ vọng hay mã tổ chức; tên bí mật không phải
   slug; VersionId 31/65 ký tự, gạch dưới, khoảng trắng, mở đầu gạch nối; băm chữ hoa, thiếu, thừa một ký tự; mã tổ chức chữ hoa,
   sai phiên bản, sai biến thể, ở `them-nguoi`; slug biên 2/63/64, chữ hoa, gạch dưới, gạch nối đầu; UUID sai phiên bản, sai biến
