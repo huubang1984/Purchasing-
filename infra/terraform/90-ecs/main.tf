@@ -14,6 +14,9 @@
 #            công khai (đọc từ state của stack 50), không task role, không KMS, không CSDL.
 #   Neo      [ADR-071] task một lần `tp-neo` (role tp-anchor-job ⇒ mượn tp-anchor-writer ở audit): neo tài liệu khoá
 #            biên nhận và mốc neo sổ kiểm toán vào bucket neo, ký bằng alias/tp-anchor-sign (stack 40).
+#   Khởi tạo [S1.183 / ADR-111] task một lần `tp-khoi-tao` (role tp-khoi-tao: chỉ đọc `tp/khoi-tao/*`): tạo tổ chức, người
+#            dùng và vai dưới vai CSDL hẹp `app_khoi_tao`. Không service, không lịch — chỉ workflow `khoi-tao.yml` chạy nó,
+#            qua environment `prod-khoi-tao` (người duyệt khác người bấm).
 #   Web      [ADR-068] MỘT tên miền: ALB chuyển `/api/*` THẲNG tới `tp-api` (bỏ tiền tố `/api`), mọi đường khác tới
 #            service `tp-web` — `apps/web` ở chế độ chỉ tĩnh, không thấy cookie phiên, không CSDL, không task role.
 #
@@ -82,8 +85,8 @@ variable "ten_mien" {
 }
 
 variable "anh" {
-  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys, neo } = \"<ecr>/tp-api@sha256:…\"."
-  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string, neo = string })
+  description = "URI image theo DIGEST cho từng tiến trình: { api, worker, migrate, web, public_keys, neo, khoi_tao } = \"<ecr>/tp-api@sha256:…\"."
+  type        = object({ api = string, worker = string, migrate = string, web = string, public_keys = string, neo = string, khoi_tao = string })
   validation {
     condition     = alltrue([for u in values(var.anh) : can(regex("@sha256:[0-9a-f]{64}$", u))])
     error_message = "Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."
@@ -340,6 +343,13 @@ resource "aws_security_group" "migrate" {
   vpc_id      = aws_vpc.tp.id
 }
 
+# [S1.183 / ADR-111] Task khởi tạo tổ chức: CSDL, và Secrets Manager/ECR/Logs qua endpoint — không gì khác.
+resource "aws_security_group" "khoi_tao" {
+  name        = "tp-khoi-tao"
+  description = "Task khoi-tao (CSDL, Secrets Manager qua endpoint)"
+  vpc_id      = aws_vpc.tp.id
+}
+
 resource "aws_security_group" "csdl" {
   name        = "tp-csdl"
   description = "RDS: 5432 chi tu ba nhom task"
@@ -360,6 +370,8 @@ locals {
     migrate = aws_security_group.migrate.id
     # [ADR-071] job neo đọc đầu chuỗi kiểm toán (app_api) để ký mốc neo.
     neo = aws_security_group.neo.id
+    # [S1.183 / ADR-111] task khởi tạo chèn tổ chức, người dùng, vai (app_khoi_tao).
+    khoi_tao = aws_security_group.khoi_tao.id
   }
   # Nhóm cần đường ra AWS (kéo image ECR, đẩy log) — web có mặt ở đây, KHÔNG có mặt ở CSDL.
   nhom_ra_aws = merge(local.nhom_task, { web = aws_security_group.web.id, public_keys = aws_security_group.public_keys.id })
@@ -739,7 +751,7 @@ resource "aws_db_instance" "tp" {
 # ECR
 # ---------------------------------------------------------------------------------------------
 resource "aws_ecr_repository" "tp" {
-  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys", "tp-neo"])
+  for_each             = toset(["tp-api", "tp-unseal-worker", "tp-migrate", "tp-web", "tp-public-keys", "tp-neo", "tp-khoi-tao"])
   name                 = each.key
   image_tag_mutability = "IMMUTABLE"
   image_scanning_configuration { scan_on_push = true }
@@ -768,7 +780,7 @@ data "aws_secretsmanager_secret" "worker_db" { name = "tp/worker/database-url" }
 # [ADR-072 phần 1] Job neo đăng nhập bằng app_neo_login (vai chỉ-đọc sổ, liệt kê được tổ chức) — secret riêng.
 data "aws_secretsmanager_secret" "neo_db" { name = "tp/neo/database-url" }
 # [S1.182 / ADR-111] Task khởi tạo tổ chức đăng nhập bằng app_khoi_tao_login — secret riêng. Task migrate đọc nó để dựng vai
-# đăng nhập (tools/chay-migrate); task `tp-khoi-tao` (vòng hạ tầng kế) đọc nó làm DATABASE_URL.
+# đăng nhập (tools/chay-migrate); task `tp-khoi-tao` ~~(vòng hạ tầng kế)~~ **[S1.183]** đọc nó làm DATABASE_URL.
 data "aws_secretsmanager_secret" "khoi_tao_db" { name = "tp/khoi-tao/database-url" }
 
 # Secret master do RDS tạo (tên `rds!db-…`) nằm NGOÀI nhánh `tp/*` mà stack 30 cấp cho execution role.
@@ -798,7 +810,7 @@ resource "aws_ecs_cluster" "tp" {
 }
 
 resource "aws_cloudwatch_log_group" "tp" {
-  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys", "neo"])
+  for_each          = toset(["api", "unseal-worker", "migrate", "web", "public-keys", "neo", "khoi-tao"])
   name              = "/tp/${each.key}"
   retention_in_days = 90
 }
@@ -883,6 +895,11 @@ locals {
       { name = "TRUSTPROCURE_NEO_KHOA_CONG_KHAI", value = join(",", [for kid, k in local.neo.khoa_cong_khai : "${kid}=${k}"]) },
       { name = "TRUSTPROCURE_RECEIPT_PUBLIC_KEYS", value = jsonencode(local.bien_nhan.khoa_cong_khai) },
     ]
+    # [S1.183 / ADR-111] Lệnh (chế độ, bí mật, phiên bản, kỳ vọng) đến từ containerOverrides.command của workflow.
+    khoi_tao = [
+      { name = "NODE_ENV", value = "production" },
+      { name = "TRUSTPROCURE_KHOI_TAO_REGION", value = local.region },
+    ]
   }
   bi_mat = {
     api = [
@@ -907,6 +924,10 @@ locals {
     neo = [
       { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.neo_db.arn },
     ]
+    # [S1.183 / ADR-111] Vai app_khoi_tao_login; bản khai KHÔNG ở đây — task role đọc nó theo tên và phiên bản lúc chạy.
+    khoi_tao = [
+      { name = "DATABASE_URL", valueFrom = data.aws_secretsmanager_secret.khoi_tao_db.arn },
+    ]
   }
   task = {
     api     = { ho = "tp-api", role = local.role_arn.api, cpu = 512, mem = 1024, log = "api", cong = [8080] }
@@ -918,6 +939,8 @@ locals {
     public_keys = { ho = "tp-public-keys", role = null, cpu = 256, mem = 512, log = "public-keys", cong = [8070] }
     # [ADR-071] Task một lần — không service. Role duy nhất có sts:AssumeRole sang tp-anchor-writer.
     neo = { ho = "tp-neo", role = local.role_arn.anchor_job, cpu = 256, mem = 512, log = "neo", cong = [] }
+    # [S1.183 / ADR-111] Task một lần — không service, không lịch. Role chỉ đọc nhánh secret `tp/khoi-tao/*`.
+    khoi_tao = { ho = "tp-khoi-tao", role = local.role_arn.khoi_tao, cpu = 256, mem = 512, log = "khoi-tao", cong = [] }
   }
 }
 
@@ -1496,6 +1519,16 @@ output "bien_github" {
     TP_SUBNETS_UNG_DUNG = join(",", aws_subnet.ung_dung[*].id)
     TP_SG_MIGRATE       = aws_security_group.migrate.id
     TP_SG_NEO           = aws_security_group.neo.id
+  }
+}
+
+# [S1.183 / ADR-111] Biến của environment GitHub `prod-khoi-tao` (workflow `khoi-tao.yml`) — biến environment không dùng
+# chung giữa hai environment, nên environment ấy cần bản của riêng nó.
+output "bien_github_khoi_tao" {
+  description = "Biến của environment GitHub `prod-khoi-tao` cho workflow khởi tạo tổ chức (ADR-111)."
+  value = {
+    TP_SUBNETS_UNG_DUNG = join(",", aws_subnet.ung_dung[*].id)
+    TP_SG_KHOI_TAO      = aws_security_group.khoi_tao.id
   }
 }
 

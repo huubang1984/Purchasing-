@@ -51,9 +51,11 @@ export type BanKhai =
  */
 export const TRAN_SO_NGUOI = 50;
 const TRAN_TEN = 200;
-const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+// [S1.183] Hai mẫu dưới được xuất cho `docThamSo` (`index.ts`), và `deploy/trien-khai.sh` (`kiem_dau_vao`) mang cùng hai mẫu
+// ấy bằng bash — `tests/deploy/khoi-tao-sh.test.ts` so hai phía trên cùng một bộ đầu vào.
+export const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // Slug là định danh trong URL, duy nhất TOÀN CỤC (002): chữ thường không dấu, số, gạch nối ở giữa; 3–63 ký tự.
-const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u;
+export const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u;
 // Cùng hình dạng bộ gửi SES dùng (`apps/api/src/adapters/gui-ses.ts`): một địa chỉ đơn, không khoảng trắng, không dấu phẩy.
 // [lượt soi] Và không ký tự điều khiển hay định dạng (`\p{C}`: `\u0001`, zero-width, đảo chiều): `/auth/link` từ chối một email
 // mang chúng, nên người ấy không bao giờ xin được link đăng nhập.
@@ -107,7 +109,9 @@ function docNguoi(x: unknown, i: number): NguoiKhai {
 export function docBanKhai(json: string, lenh: CheDo): BanKhai {
   let tho: unknown;
   try {
-    tho = JSON.parse(json) as unknown;
+    // [S1.183] Bỏ MỘT dấu BOM ở đầu: Notepad và PowerShell 5 ghi UTF-8 kèm BOM, và `JSON.parse` từ chối nó. Băm SHA-256 mà người
+    // duyệt duyệt tính trên nội dung GỐC (`index.ts`), nên bỏ BOM ở đây không làm lệch băm.
+    tho = JSON.parse(json.startsWith("\uFEFF") ? json.slice(1) : json) as unknown;
   } catch {
     throw new BanKhaiError("bản khai không phải JSON hợp lệ");
   }
@@ -147,4 +151,39 @@ export function docBanKhai(json: string, lenh: CheDo): BanKhai {
   const orgId = chuoi(toChuc, "id", "toChuc");
   if (!UUID_V4.test(orgId)) throw new BanKhaiError('toChuc: "id" phải là UUIDv4 chữ thường');
   return { cheDo, orgId, nguoi };
+}
+
+/**
+ * [S1.183 / ADR-111] Điều người duyệt THẤY trước khi bấm duyệt (bảng của job `build` trong `.github/workflows/khoi-tao.yml`):
+ * tổ chức (slug khi tạo, mã khi thêm người), số người, và số người mang TỪNG mã vai (`vaiTheoMa`). Người duyệt không đọc được bản
+ * khai — nó mang email và họ tên —, nên thứ họ duyệt là bộ này cộng tên, phiên bản và băm SHA-256 của bí mật (`index.ts`).
+ * ~~tổng số cặp người–vai~~ **[lượt soi]** số theo từng mã vai: cùng tổng mà đổi `REQUESTER` thành `DIRECTOR` thì tổng không lệch.
+ */
+export interface KyVong {
+  readonly toChuc: string;
+  readonly soNguoi: number;
+  /** Dạng chuẩn `MA=n,MA=n` theo thứ tự `MA_VAI`, chỉ mã có người — `vaiTheoMa` dựng đúng dạng ấy từ bản khai. */
+  readonly vai: string;
+}
+
+/** Số người mang từng mã vai, dạng chuẩn `MA=n` nối bằng dấu phẩy, theo thứ tự `MA_VAI`, bỏ mã không ai mang. */
+export function vaiTheoMa(bk: BanKhai): string {
+  return MA_VAI.map((ma) => [ma, bk.nguoi.filter((n) => n.vai.includes(ma)).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([ma, n]) => `${ma}=${String(n)}`)
+    .join(",");
+}
+
+/**
+ * Bản khai ở đúng phiên bản đã đọc phải khớp điều đã duyệt — kiểm TRƯỚC khi mở CSDL. Lệch ⇒ `BanKhaiError` nêu từng trường
+ * lệch với hai giá trị: slug, mã tổ chức, số người và số theo mã vai không phải dữ liệu cá nhân (mã tổ chức không bí mật, ADR-107).
+ */
+export function kiemKhop(bk: BanKhai, kv: KyVong): void {
+  const lech: string[] = [];
+  const toChuc = bk.cheDo === "tao" ? bk.slug : bk.orgId;
+  if (toChuc !== kv.toChuc) lech.push(`tổ chức: bản khai "${toChuc}", đã duyệt "${kv.toChuc}"`);
+  if (bk.nguoi.length !== kv.soNguoi) lech.push(`số người: bản khai ${String(bk.nguoi.length)}, đã duyệt ${String(kv.soNguoi)}`);
+  const vai = vaiTheoMa(bk);
+  if (vai !== kv.vai) lech.push(`vai: bản khai "${vai}", đã duyệt "${kv.vai}"`);
+  if (lech.length > 0) throw new BanKhaiError(`bản khai không khớp điều đã duyệt — ${lech.join("; ")}`);
 }
