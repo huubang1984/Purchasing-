@@ -3,24 +3,30 @@
 //
 // Bảo đảm của đường này rải ở năm tệp cấu hình, và mỗi tệp cần mốc chết của nó:
 //   ⑴ `khoi-tao.yml`: chỉ workflow_dispatch; quyền mặc định RỖNG; ~~CHUNG nhóm concurrency với deploy.yml~~ **[lượt soi]** nhóm
-//      concurrency RIÊNG (một lần khởi tạo chờ duyệt không chặn hotfix); đúng hai job [build, chay]; build không
+//      concurrency RIÊNG (một lần khởi tạo chờ duyệt không chặn hotfix); đúng ~~hai~~ **[lượt soi]** ba job [build, chay, nhac];
+//      không bước nào được phép hỏng mà job vẫn đi (`continue-on-error`, `|| true`), `chay` không `if:`; build không
 //      id-token/environment/AWS, chọn mã tổ chức và KIỂM ĐẦU VÀO trước docker build; chay ở environment `prod-khoi-tao`, role
 //      tp-deploy, sau build, và **[lượt soi]** kiểm người duyệt TRƯỚC khi lấy quyền AWS.
 //   ⑵ `inputs.*` chỉ ở dòng `env:` — không nội suy vào `run:` —, và hai job nhận ĐÚNG ~~sáu~~ **[lượt soi]** bảy đầu vào ấy.
 //   ⑶ `uses:` ghim SHA; checkout không giữ credential; pnpm/npm/docker build chỉ ở build; không secrets; ~~không GITHUB_TOKEN~~
-//      **[lượt soi]** `github.token` ở ĐÚNG một bước — bước đọc lịch sử duyệt (`actions: read`).
+//      **[lượt soi]** `github.token` ở ĐÚNG một bước — bước đọc lịch sử duyệt (`actions: read`); **[lượt soi]** workflow KHÁC
+//      không chạm đường khởi tạo (không `khoi-tao`, không `secretsmanager`).
 //   ⑷ stack 30: tp-deploy tin ĐÚNG [prod, prod-khoi-tao] (tên environment của workflow), worker chỉ prod-worker; DeleteSecret
 //      CHỈ trên `tp/khoi-tao/ban-khai/*` và chỉ ở tp-deploy; ~~đọc log chỉ `/tp/khoi-tao`~~ **[lượt soi]** tp-deploy không đọc log
-//      nào; PassRole có tp-khoi-tao; task role khởi tạo chỉ đọc `tp/khoi-tao/*`.
+//      nào; PassRole có tp-khoi-tao; task role khởi tạo chỉ đọc `tp/khoi-tao/*`; **[lượt soi]** mọi quyền `secretsmanager:` của
+//      mọi stack nằm trong một danh sách cho phép đóng, và stack 30 không có ký tự đại diện nào ngoài `kms:*` của câu CẤM.
 //   ⑸ stack 90: task `tp-khoi-tao` mang role tp-khoi-tao, log `/tp/khoi-tao`, MỘT secret (DATABASE_URL từ
 //      tp/khoi-tao/database-url), region cho Secrets Manager; SG nói được với CSDL; output `bien_github_khoi_tao` là ĐÚNG hai
 //      biến workflow đọc.
 //   ⑹ image: đích `khoi-tao` có ENTRYPOINT là công cụ và KHÔNG CMD; workflow build đúng đích ấy; tên container trong lệnh của
-//      script = họ task definition; **[lượt soi]** hình dạng mà `dang-ky` ghim cho họ `tp-khoi-tao` = task definition của stack 90.
+//      script = họ task definition; **[lượt soi]** hình dạng mà `dang-ky` ghim cho họ `tp-khoi-tao` = task definition của stack 90;
+//      CMD viết hoa hay thường, thụt lề hay không, đều không có; đúng MỘT ENTRYPOINT.
+//   ⑺ **[lượt soi]** tài liệu vận hành: 7.1 và bảng README đòi `prod-khoi-tao` bật *Prevent self-review* và TẮT admin bypass;
+//      mẫu `prod.tfvars` có `khoi_tao`; bước 8.1 nêu MỌI đầu vào của workflow.
 // Đọc bằng regex như `hinh-dang-deploy.test.ts` — dự án không có phụ thuộc YAML/HCL; cái giá (bám cách viết) là chủ đích.
 // ==============================================================================================
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -75,13 +81,16 @@ describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
 
   it("⑴ job đúng [build, chay]; build không AWS, kiểm đầu vào TRƯỚC docker build; chay ở prod-khoi-tao, role tp-deploy, sau build", () => {
     const jobs = dong.slice(dong.indexOf("jobs:") + 1).filter((d) => /^ {2}[A-Za-z0-9_-]+:/u.test(d));
-    expect(jobs.map((d) => d.trim())).toEqual(["build:", "chay:"]);
+    expect(jobs.map((d) => d.trim())).toEqual(["build:", "chay:", "nhac:"]);
+    // [lượt soi] Một bước kiểm hỏng thì job DỪNG: không `continue-on-error`, không `|| true`, `chay` không mang `if:` nào.
+    expect(VAN).not.toMatch(/continue-on-error|\|\| *true/u);
+    expect(thanJob("chay")).not.toMatch(/\n {4}if:/u);
     const build = thanJob("build");
     expect(build).not.toMatch(/id-token|environment:|configure-aws-credentials|role-to-assume/u);
     expect(build).toMatch(/ {4}permissions:\n {6}contents: read\n {4}outputs:\n/u);
     expect(build).toMatch(/if: github\.ref == 'refs\/heads\/master'/u);
     const chon = build.indexOf("if [ \"$CHE_DO\" = tao ]; then ma=$(cat /proc/sys/kernel/random/uuid); fi");
-    const kiem = build.indexOf('run: bash deploy/trien-khai.sh kiem-khoi-tao >> "$GITHUB_STEP_SUMMARY"');
+    const kiem = build.indexOf('\n        run: bash deploy/trien-khai.sh kiem-khoi-tao >> "$GITHUB_STEP_SUMMARY"\n');
     expect(chon).toBeGreaterThan(-1);
     expect(kiem).toBeGreaterThan(chon);
     expect(build.indexOf("docker build -f deploy/Dockerfile --target khoi-tao")).toBeGreaterThan(kiem);
@@ -93,7 +102,7 @@ describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
     expect(chay).toMatch(/ {4}permissions:\n {6}contents: read\n {6}actions: read\n {6}id-token: write\n/u);
     expect([...VAN.matchAll(/actions: read/gu)]).toHaveLength(1);
     // [lượt soi] Lịch sử duyệt được kiểm TRƯỚC khi job có quyền AWS.
-    const duyet = chay.indexOf('bash deploy/trien-khai.sh kiem-nguoi-duyet "$RUNNER_TEMP/duyet.json"');
+    const duyet = chay.indexOf('\n          bash deploy/trien-khai.sh kiem-nguoi-duyet "$RUNNER_TEMP/duyet.json" >> "$GITHUB_STEP_SUMMARY"\n');
     expect(duyet).toBeGreaterThan(-1);
     expect(chay.indexOf("configure-aws-credentials")).toBeGreaterThan(duyet);
     expect(chay).toContain('gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" > "$RUNNER_TEMP/duyet.json"');
@@ -114,7 +123,9 @@ describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
   it("⑵ inputs.* và mọi giá trị ngoài chỉ ở dòng env: (không nội suy vào run:); hai job nhận ĐÚNG bảy đầu vào", () => {
     const dongInput = dong.filter((d) => /\$\{\{ (inputs|needs|steps)\./u.test(d) && !d.includes("outputs:") && !/^ {6}ma_to_chuc:/u.test(d));
     expect(dongInput.length).toBeGreaterThan(0);
-    for (const d of dongInput) expect(d, d).toMatch(/^ {10}[A-Z_]+: \$\{\{ (inputs\.[a-z_]+|steps\.chon\.outputs\.ma_to_chuc|needs\.build\.outputs\.ma_to_chuc) \}\}$/u);
+    for (const d of dongInput) {
+      expect(d, d).toMatch(/^ {10}[A-Z_]+: \$\{\{ (inputs\.[a-z_]+|steps\.chon\.outputs\.ma_to_chuc|needs\.build\.outputs\.ma_to_chuc|needs\.chay\.result) \}\}$/u);
+    }
     for (const d of dong.filter((x) => /^ {8}run:|^ {10}\S/u.test(x) && x.includes("${{"))) {
       expect(d, d).not.toMatch(/^ {8}run:.*\$\{\{/u);
     }
@@ -146,6 +157,11 @@ describe("[S1.9103] hình dạng của khoi-tao.yml", () => {
     // [lượt soi] `github.token` ở đúng một dòng, của bước đọc lịch sử duyệt — trước khi có quyền AWS.
     const token = dong.filter((d) => d.includes("github.token"));
     expect(token).toEqual(["          GH_TOKEN: ${{ github.token }}"]);
+    // [lượt soi] Workflow KHÁC không chạm đường khởi tạo: `deploy.yml` chạy dưới `prod`, nơi người bấm tự duyệt được.
+    for (const ten of readdirSync(fileURLToPath(new URL("../../.github/workflows/", import.meta.url)))) {
+      if (ten === "khoi-tao.yml") continue;
+      expect(coNghia(doc(`.github/workflows/${ten}`)).join("\n"), ten).not.toMatch(/khoi-tao|khoi_tao|secretsmanager|ban-khai/iu);
+    }
   });
 });
 
@@ -164,6 +180,26 @@ describe("[S1.9103] IAM của stack 30 cho đường khởi tạo", () => {
     expect([...TF30.matchAll(/secretsmanager:DeleteSecret/gu)]).toHaveLength(1);
     expect(TF30).toMatch(/actions += \["secretsmanager:DeleteSecret"\]\n {6}resources = each\.value\.xoa_secret\n/u);
     expect(khoiDeploy("deploy")).toMatch(/\n {6}doc_log = \[\]/u);
+    // [lượt soi] Mọi quyền secretsmanager của mọi stack, đúng danh sách — thêm `Delete*` cho task role, hay `secretsmanager:*` vào
+    // một câu của tp-deploy, là đỏ.
+    const quyenSm = readdirSync(fileURLToPath(new URL("../../infra/terraform/", import.meta.url)), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d\d-/u.test(d.name))
+      .flatMap((d) => {
+        const tf = doc(`infra/terraform/${d.name}/main.tf`);
+        return tf.split("\n").filter((l) => /secretsmanager:/u.test(l.replace(/arn:aws:secretsmanager:/gu, ""))).map((l) => `${d.name}: ${l.trim()}`);
+      });
+    expect(quyenSm).toEqual([
+      '30-prod-iam: actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]',
+      '30-prod-iam: actions   = ["secretsmanager:GetSecretValue"]',
+      '30-prod-iam: actions   = ["secretsmanager:DeleteSecret"]',
+      '85-sms-zalo: actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]',
+      '90-ecs: Action   = "secretsmanager:GetSecretValue"',
+    ]);
+    // Stack 30: ký tự đại diện trong MỌI danh sách actions / not_actions (kể cả danh sách nhiều dòng) chỉ có `kms:*` của câu CẤM.
+    const hanhDong = [...TF30.matchAll(/\b(?:not_)?actions\s*=\s*\[([\s\S]*?)\]/gu)].flatMap((m) => [...(m[1] ?? "").matchAll(/"([^"]+)"/gu)].map((x) => x[1] ?? ""));
+    expect(hanhDong.length).toBeGreaterThan(15);
+    expect(hanhDong.filter((x) => x.includes("*"))).toEqual(["kms:*"]);
+    expect(TF30).toMatch(/sid += "KhongChamKhoa"\n {4}effect += "Deny"\n {4}actions += \["kms:\*"\]/u);
     expect(SCRIPT).not.toMatch(/filter-log-events|logs /u);
     expect(khoiDeploy("deploy")).toMatch(/pass_roles += \[[^\]]*local\.role_arn\.khoi_tao\]/u);
     expect(khoiDeploy("deploy_worker")).not.toMatch(/khoi_tao/u);
@@ -205,7 +241,8 @@ describe("[S1.9103] task tp-khoi-tao của stack 90 và image", () => {
     expect(dich).toContain("COPY --from=cai-khoi-tao --chown=root:root /app /app\nUSER node\n");
     expect(dich).toContain("NODE_EXTRA_CA_CERTS=/app/rds-ca.pem");
     expect(dich).toContain('ENTRYPOINT ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/khoi-tao-to-chuc/register-ts-resolve.mjs", "tools/khoi-tao-to-chuc/src/index.ts"]');
-    expect(dich).not.toMatch(/^CMD /mu);
+    expect(dich).not.toMatch(/^\s*cmd\b/imu);
+    expect(dich.match(/^\s*entrypoint\b/gimu)).toHaveLength(1);
     expect(DOCKER).toContain('FROM nguon AS cai-khoi-tao\nRUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/khoi-tao-to-chuc..." && rm -rf /pnpm/store\n');
     expect(DOCKER).toContain("COPY tools/khoi-tao-to-chuc tools/khoi-tao-to-chuc\n");
   });
@@ -230,5 +267,34 @@ describe("[S1.9103] task tp-khoi-tao của stack 90 và image", () => {
     expect(SCRIPT).toContain('--arg exec "arn:aws:iam::${TAI_KHOAN}:role/tp-ecs-execution"');
     expect(giaTriChung("ecs_execution")).toBe("tp-ecs-execution");
     expect(TF90).toMatch(/execution_role_arn += local\.role_arn\.ecs_execution\n/u);
+  });
+});
+
+describe("[S1.9103 / lượt soi] job nhac và tài liệu vận hành", () => {
+  it("nhac: không quyền, không environment, không AWS; chạy khi build xanh mà chay không xanh", () => {
+    const nhac = thanJob("nhac");
+    expect(nhac).toContain("\n    needs: [build, chay]\n    if: always() && needs.build.result == 'success' && needs.chay.result != 'success'\n");
+    expect(nhac).toContain("\n    permissions: {}\n");
+    expect(nhac).not.toMatch(/id-token|environment:|configure-aws-credentials|role-to-assume|trien-khai\.sh/u);
+    // Lệnh xoá tay chỉ được IN (echo), không được chạy.
+    expect(nhac.split("\n").filter((d) => /^\s+aws\s/u.test(d))).toEqual([]);
+    expect(nhac).toContain("--force-delete-without-recovery");
+  });
+
+  it("⑺ 7.1 và bảng README: prod-khoi-tao bật Prevent self-review, TẮT admin bypass; mẫu 6.1 có khoi_tao; 8.1 nêu mọi đầu vào", () => {
+    const hd = doc("docs/APPLY-LAN-DAU.md");
+    const muc71 = hd.slice(hd.indexOf("- [ ] **7.1**"), hd.indexOf("- [ ] **7.2**"));
+    expect(muc71).toMatch(/`prod-khoi-tao`[\s\S]*Prevent\s+self-review[\s\S]*Allow\s+administrators\s+to\s+bypass\s+configured\s+protection\s+rules/u);
+    const readme = doc("infra/terraform/README.md");
+    const hang = readme.split("\n").find((d) => d.startsWith("| `prod-khoi-tao`")) ?? "";
+    expect(hang).toMatch(/Prevent self-review/u);
+    expect(hang).toMatch(/admin bypass/u);
+    const mau = /```hcl\n([\s\S]*?)```/u.exec(hd.slice(hd.indexOf("`prod.tfvars`")))?.[1] ?? "";
+    expect(mau).toMatch(/^ {4}khoi_tao += "tam@sha256:0{64}"/mu);
+    const muc81 = hd.slice(hd.indexOf("- [ ] **8.1**"), hd.indexOf("- [ ] **8.2**"));
+    const dauVao = [...VAN.matchAll(/^ {6}([a-z_]+):\n {8}description:/gmu)].map((m) => m[1] ?? "");
+    expect(dauVao.length).toBe(7);
+    for (const d of dauVao) expect(muc81, d).toContain(`\`${d}`);
+    expect(muc81).toContain("AWS_CLI_FILE_ENCODING");
   });
 });

@@ -325,7 +325,7 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 |---|---|---|---|
 | `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE`, `TP_SG_NEO` — lấy từ `terraform output bien_github` (stack 90) |
 | `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
-| `prod-khoi-tao` **[S1.9103]** | bật, **và *Prevent self-review***; ít nhất hai người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_KHOI_TAO` — `terraform output bien_github_khoi_tao` (stack 90) |
+| `prod-khoi-tao` **[S1.9103]** | bật, **và *Prevent self-review***, **[lượt soi] TẮT admin bypass** (*Allow administrators to bypass configured protection rules*); ít nhất hai người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_KHOI_TAO` — `terraform output bien_github_khoi_tao` (stack 90) |
 
 **[ADR-078] Biến cấp repository** (Settings → Secrets and variables → Actions → *Variables*, KHÔNG gắn environment — job
 `kiem` không có environment): `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` lấy từ `terraform output bien_github_repo` (stack 90);
@@ -355,18 +355,22 @@ tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo
 ## Khởi tạo tổ chức — `.github/workflows/khoi-tao.yml` (ADR-111, S1.9103)
 
 Tạo tổ chức, người dùng và vai (hay thêm người vào tổ chức đã có) bằng task một lần `tp-khoi-tao` dưới vai CSDL hẹp
-`app_khoi_tao`. Bản khai (JSON, email và họ tên) sống ở Secrets Manager dưới `tp/khoi-tao/ban-khai/`; lệnh chỉ mang TÊN và
-PHIÊN BẢN (`VersionId`). Các bước người vận hành: `docs/APPLY-LAN-DAU.md` 8.1.
+`app_khoi_tao`. Bản khai (JSON, email và họ tên) sống ở Secrets Manager dưới `tp/khoi-tao/ban-khai/<slug>`; lệnh chỉ mang TÊN,
+PHIÊN BẢN (`VersionId`) và BĂM SHA-256 của nó. Các bước người vận hành: `docs/APPLY-LAN-DAU.md` 8.1.
 
-- **Chạy:** Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master` với sáu đầu vào. Job `build` (không
-  quyền AWS) kiểm đầu vào, in bảng *điều người duyệt duyệt* vào tóm tắt, build đích `khoi-tao`. Job `chay` chờ duyệt ở
-  `prod-khoi-tao` — người bấm không tự duyệt được —, rồi đẩy image, đăng ký `tp-khoi-tao`, chạy task (`deploy/trien-khai.sh
-  khoi-tao`).
-- **Task đọc ĐÚNG phiên bản đã duyệt** và dừng TRƯỚC khi chạm CSDL nếu bản khai không khớp tổ chức, số người, số vai của bảng.
-- **Thoát 0 ⇒ bí mật bị XOÁ ngay** (`--force-delete-without-recovery`), tóm tắt chép dòng kết quả (mã tổ chức, số người, số vai
-  — không dữ liệu cá nhân) từ `/tp/khoi-tao`. **Hỏng ⇒ bí mật CÒN**: dòng lỗi in lệnh xoá tay; sửa bằng `put-secret-value`
-  (VersionId mới) rồi chạy lại.
-- Chung nhóm `concurrency` với *Deploy — prod*: không chạy cùng migrate.
+- **Chạy:** Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master` với bảy đầu vào. Job `build` (không
+  quyền AWS) kiểm đầu vào và người bấm (bot thì dừng), chọn mã tổ chức khi tạo, in bảng *điều người duyệt duyệt* vào tóm tắt,
+  build đích `khoi-tao`. Job `chay` chờ duyệt ở `prod-khoi-tao`; bước đầu, TRƯỚC khi lấy quyền AWS, đòi lịch sử duyệt của run
+  có một NGƯỜI khác người bấm; rồi đẩy image, đăng ký `tp-khoi-tao` (bản mới nhất lệch hình dạng stack 90 thì dừng), chạy task
+  (`deploy/trien-khai.sh khoi-tao`).
+- **Task đọc ĐÚNG phiên bản đã duyệt, so băm**, và dừng TRƯỚC khi chạm CSDL nếu bản khai lệch tổ chức, số người hay số người
+  theo từng mã vai của bảng.
+- **Thoát 0 ⇒ bí mật bị XOÁ ngay** (`--force-delete-without-recovery`); tóm tắt in kết quả suy từ đầu vào đã duyệt (mã tổ
+  chức, số người, vai) — không đọc log. **Không xanh ⇒ bí mật CÒN**: job `nhac` nói điều ấy; chạy lại (an toàn), hay sửa bằng
+  `put-secret-value` (VersionId và băm mới), hay xoá tay.
+- Nhóm `concurrency` RIÊNG (`khoi-tao-prod`): một lần khởi tạo chờ duyệt không chặn deploy. Chạy trùng migrate vẫn an toàn —
+  hardening thu hồi rồi cấp lại quyền của `app_khoi_tao` trong MỘT giao dịch.
+- Kho CÔNG KHAI: đầu vào và tóm tắt của run ai cũng đọc được — slug, mã tổ chức, số người theo vai.
 
 ## Nguồn thời gian (ADR-074, khoản 196)
 

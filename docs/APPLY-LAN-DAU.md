@@ -54,6 +54,11 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ## 2. Danh tính và khoá
 
+- [ ] **2.0 [S1.9103 / lượt soi] Ba environment GitHub TRƯỚC 2.1** — `prod`, `prod-worker`, `prod-khoi-tao`, đủ luật bảo vệ
+      của 7.1 (người duyệt, chỉ `master`, và với `prod-khoi-tao`: *Prevent self-review*, tắt admin bypass); biến của chúng điền
+      ở 7.1. Trust policy của stack 30 chỉ ghim TÊN environment, và GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow
+      nhắc tên chưa có: apply 2.1 trước thì trong khoảng tới 7.1, một workflow trên nhánh bất kỳ khai `environment: prod` là
+      nhận được `tp-deploy`.
 - [ ] **2.1 `30-prod-iam`** (`tp-prod`) — OIDC GitHub, task role, execution role, hai role deploy. **Trước 50**: KMS từ chối
       key policy trỏ tới role chưa tồn tại.
 - [ ] **2.2 `40-kms-audit`** (`tp-audit-keyadmin`) — khoá ký mốc neo `alias/tp-anchor-sign`.
@@ -200,9 +205,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **7.1** Environments: `prod` (Required reviewers, chỉ `master`, biến từ `terraform output bien_github`) và
       `prod-worker` (người duyệt khác người bấm). Tên phải đúng — trust policy của stack 30 ghim chúng.
       **[S1.9103 / ADR-111]** Và `prod-khoi-tao`: Required reviewers **và *Prevent self-review* BẬT** (người bấm không tự
-      duyệt được lần tạo tổ chức và gán vai — không mã nào của kho kiểm được cài đặt này), ít nhất hai người duyệt để người bấm
-      luôn có người khác duyệt, chỉ `master`, biến `TP_SUBNETS_UNG_DUNG` và `TP_SG_KHOI_TAO` từ `terraform output
-      bien_github_khoi_tao` (biến environment không dùng chung giữa hai environment).
+      duyệt được lần tạo tổ chức và gán vai ~~— không mã nào của kho kiểm được cài đặt này~~), **[lượt soi] và BỎ CHỌN *Allow
+      administrators to bypass configured protection rules*** — mặc định nó BẬT, và chủ kho cá nhân là admin, tự bấm rồi tự vượt
+      được; ít nhất hai người duyệt để người bấm luôn có người khác duyệt, chỉ `master`, biến `TP_SUBNETS_UNG_DUNG` và
+      `TP_SG_KHOI_TAO` từ `terraform output bien_github_khoi_tao` (biến environment không dùng chung giữa hai environment).
+      **[lượt soi]** Job `chay` kiểm KẾT QUẢ của các cài đặt ấy: lịch sử duyệt của run phải có một NGƯỜI khác người bấm duyệt
+      `prod-khoi-tao`, không thì dừng trước khi lấy quyền AWS. Nên bỏ chọn admin bypass ở cả `prod-worker`.
 - [ ] **7.2** Biến cấp **repository**: `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` (`terraform output bien_github_repo`),
       `TP_RECEIPT_FINGERPRINT` (bước 2.4).
 - [ ] **7.3** Chạy *Deploy — prod (bam tay)* với `api` ⇒ job `api` xanh (migrate không làm gì, service chạy bản mới,
@@ -232,21 +240,34 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     `tp-khoi-tao`, task role, workflow chạy có người duyệt và xoá bí mật bản khai thuộc vòng hạ tầng kế (ADR-111 mục 8;
     STATE khoản 251). Bước này sẽ viết lại khi vòng ấy xong.~~
   - **[S1.9103 / ADR-111] BƯỚC NÀY NAY LÀ LỆNH CHẠY** — workflow *Khoi tao to chuc — prod (bam tay)*; cần 6.3 có image
-    `khoi_tao`, 6.4 đã apply với nó, và environment `prod-khoi-tao` của 7.1.
-    1. Viết bản khai JSON (mẫu ở đầu `tools/khoi-tao-to-chuc/src/ban-khai.ts`) — nó mang email và họ tên, nên chỉ ở máy
-       người vận hành, và XOÁ tệp ngay sau lệnh dưới:
+    `khoi_tao`, 6.4 đã apply với nó, và environment `prod-khoi-tao` của 7.1. **[lượt soi]** Bảy đầu vào thay sáu: thêm băm
+    SHA-256 của bản khai, và số người THEO TỪNG MÃ VAI thay tổng số vai; mã tổ chức do workflow chọn.
+    1. Viết bản khai JSON (mẫu ở đầu `tools/khoi-tao-to-chuc/src/ban-khai.ts`) bằng một trình soạn lưu UTF-8 (VS Code, Notepad)
+       — KHÔNG bằng `>` hay `Out-File` của PowerShell 5 (UTF-16). Nó mang email và họ tên, nên chỉ ở máy người vận hành, và XOÁ
+       tệp ngay sau các lệnh dưới. **[lượt soi]** AWS CLI v2 đọc `file://` theo code page của Windows (cp1252) nếu không đặt
+       biến dưới — tiếng Việt thành chữ vỡ mà không báo lỗi:
        ```powershell
+       $env:AWS_CLI_FILE_ENCODING = "UTF-8"
+       (Get-FileHash ban-khai.json -Algorithm SHA256).Hash.ToLower()                 # ghi lại: bam
        aws secretsmanager create-secret --profile tp-prod --name tp/khoi-tao/ban-khai/<slug> `
-         --secret-string file://ban-khai.json --query VersionId --output text      # ghi lại VersionId
+         --secret-string file://ban-khai.json --query VersionId --output text      # ghi lại: phien_ban
        ```
-    2. Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master`: `che_do = tao`, `bi_mat =
-       tp/khoi-tao/ban-khai/<slug>`, `phien_ban = <VersionId>`, `to_chuc = <slug>`, `so_nguoi`, `so_vai` (tổng cặp người–vai).
-    3. Người KHÁC người bấm đọc bảng *điều người duyệt duyệt* ở tóm tắt của job `build`, đối chiếu với bản khai được giao, rồi
-       duyệt ở `prod-khoi-tao`.
-    4. Job `chay` xanh ⇒ tóm tắt có dòng `[khoi-tao] tao: to chuc <mã>, … vai, ban khai phien ban <VersionId>` và *đã xoá*. Gửi
-       `/login#<mã>` cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107).
-    5. Job đỏ ⇒ bí mật CÒN (dòng lỗi in lệnh xoá tay). Đọc `/tp/khoi-tao`; sửa bản khai bằng `put-secret-value` (VersionId
-       MỚI) rồi chạy lại — một lần duyệt mới —, hoặc xoá tay. Bản khai lệch bảng đã duyệt thì task dừng TRƯỚC khi chạm CSDL.
+       Tên bí mật là `tp/khoi-tao/ban-khai/` + một slug (a-z, 0-9, gạch nối) — kho là kho CÔNG KHAI, tên và mọi đầu vào của
+       run ai cũng đọc được: đừng đặt email hay tên khách vào đó nếu danh sách khách là bí mật kinh doanh.
+    2. Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master`: `che_do = tao`, `bi_mat`, `phien_ban`,
+       `bam`, `to_chuc = <slug>`, `so_nguoi`, `vai` (số người mang từng mã vai theo thứ tự `REQUESTER, BUYER, TECHNICAL,
+       PROCUREMENT_MANAGER, FINANCE, DIRECTOR`, vd `BUYER=1,PROCUREMENT_MANAGER=2,DIRECTOR=1`).
+    3. Người KHÁC người bấm đọc bảng *điều người duyệt duyệt* ở tóm tắt của job `build` — người bấm, tên, phiên bản, băm, slug,
+       mã tổ chức, số người, số theo vai —, đối chiếu với YÊU CẦU mở tổ chức (khách nào, bao nhiêu người, ai mang vai gì; có tệp
+       bản khai qua kênh khác thì đối chiếu cả băm), rồi duyệt ở `prod-khoi-tao`.
+    4. Job `chay` xanh ⇒ tóm tắt có *Người duyệt: @…*, dòng kết quả (mã tổ chức, số người, vai) và *đã xoá*. Gửi `/login#<mã>`
+       cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107).
+    5. **[lượt soi]** Job `chay` KHÔNG xanh — hỏng, bị từ chối, bị huỷ, hay artifact hết hạn — ⇒ bí mật CÒN; job `nhac` nói điều
+       ấy ở tóm tắt. Chạy lại là an toàn (đã commit thì dừng ở "slug đã có" / "email đã có"); sửa bản khai thì `put-secret-value`
+       với cùng biến mã hoá — VersionId và băm MỚI, một lần duyệt mới —; bỏ thì xoá tay. Sau MỌI lần không xanh, soát bí mật
+       còn sót: `aws secretsmanager list-secrets --profile tp-prod --filters Key=name,Values=tp/khoi-tao/ban-khai/ --query
+       'SecretList[].Name'`. Bản khai lệch bảng đã duyệt — băm, tổ chức, số người, số theo vai — thì task dừng TRƯỚC khi chạm
+       CSDL.
     Thêm người về sau: như trên với `che_do = them-nguoi`, `to_chuc = <mã tổ chức>`.
 - [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.

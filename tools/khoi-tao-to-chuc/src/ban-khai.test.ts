@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { BanKhaiError, MA_VAI, TRAN_SO_NGUOI, docBanKhai, kiemKhop, vaiTheoMa } from "./ban-khai.js";
-import { TIEN_TO_BI_MAT, ThamSoError, docThamSo } from "./index.js";
+import { TIEN_TO_BI_MAT, ThamSoError, docThamSo, maLoi } from "./index.js";
 
 const ORG = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const nguoi = (email: string, vai: unknown = ["BUYER"], hoTen = "Nguyễn Văn A") => ({ email, hoTen, vai });
@@ -180,6 +180,20 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
     expect(docThamSo(bo({ pb: "a".repeat(32) })).nguon).toMatchObject({ phienBan: "a".repeat(32) });
     expect(docThamSo(bo({ pb: "A-9".repeat(21) + "z" })).nguon).toMatchObject({ phienBan: "A-9".repeat(21) + "z" });
     expect(docThamSo(bo({ soNguoi: "3", vai: "BUYER=1,PROCUREMENT_MANAGER=2" })).kyVong).toMatchObject({ soNguoi: 3 });
+    // [lượt soi] Biên tuyệt đối phía nhận: slug 63 ký tự, tên bí mật với slug 63 ký tự.
+    expect(docThamSo(bo({ toChuc: "a".repeat(63), ten: `${TIEN_TO_BI_MAT}${"a".repeat(63)}` })).kyVong).toMatchObject({ toChuc: "a".repeat(63) });
+  });
+
+  it("[S1.9103] maLoi: in SQLSTATE và mã hệ thống của Node; không in mã mang chữ thường, khoảng trắng, dấu chấm hay đường dẫn", () => {
+    const loi = (code: unknown) => Object.assign(new Error("x"), { code });
+    expect(maLoi(loi("23505"))).toBe(" (ma 23505)");
+    expect(maLoi(loi("ECONNREFUSED"))).toBe(" (ma ECONNREFUSED)");
+    expect(maLoi(loi("ERR_TLS_CERT_ALTNAME_INVALID"))).toBe(" (ma ERR_TLS_CERT_ALTNAME_INVALID)");
+    for (const c of ["ma-thuong", "E CONN", "EACCES: /home/node/ban-khai.json", "a.b@c.vn", "X", "A".repeat(65), "", 42, null]) {
+      expect(maLoi(loi(c)), String(c)).toBe("");
+    }
+    expect(maLoi("khong phai doi tuong")).toBe("");
+    expect(maLoi(new Error("khong co code"))).toBe("");
   });
 
   it.each([
@@ -251,6 +265,12 @@ describe("[S1.182] docThamSo — một lệnh, đúng một nguồn bản khai",
     [bo({ soNguoi: "2", vai: "BUYER=1,BUYER=1" }), /thứ tự/u],
     [bo({ vai: "BUYER=2" }), /không vượt --so-nguoi/u],
     [bo({ soNguoi: "3", vai: "BUYER=1,DIRECTOR=1" }), /tổng phải ít nhất bằng --so-nguoi/u],
+    // [lượt soi] Biên TUYỆT ĐỐI — phép so bash với docThamSo (tests/deploy) không bắt khi CẢ HAI phía cùng nới.
+    [bo({ toChuc: "a".repeat(64) }), /slug của tổ chức mới/u],
+    [bo({ ten: `${TIEN_TO_BI_MAT}${"a".repeat(64)}` }), /<slug>/u],
+    [bo({ lenh: "them-nguoi", toChuc: "3f2504e0-4f89-11d3-9a0c-0305e82c3301" }), /UUIDv4 chữ thường/u],
+    [bo({ lenh: "them-nguoi", toChuc: "3f2504e0-4f89-41d3-ca0c-0305e82c3301" }), /UUIDv4 chữ thường/u],
+    [bo({ ma: "9b2d0c1e-8f7a-4b6c-cd5e-3a2b1c0d9e8f" }), /--ma-to-chuc phải là UUIDv4/u],
   ])("%j ⇒ ThamSoError", (ds, mau) => {
     expect(() => docThamSo(ds)).toThrow(ThamSoError);
     expect(() => docThamSo(ds)).toThrow(mau);

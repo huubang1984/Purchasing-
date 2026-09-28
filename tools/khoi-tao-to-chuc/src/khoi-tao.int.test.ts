@@ -362,6 +362,17 @@ describe("[S1.182 / ADR-111] ⑷ dòng lệnh — lệnh `node` của task, scri
       expect(khac.stderr).toBe("[khoi-tao] HONG: Secrets Manager trả một phiên bản khác phiên bản đã duyệt\n");
       expect(await soToChuc("sm-phien-ban-khac")).toBe(0);
 
+      // [lượt soi] Phản hồi THIẾU VersionId cũng là "phiên bản khác": không nhận một nội dung mà SM không nói nó thuộc phiên bản nào.
+      const thieuNoiDung = banKhaiTao("sm-thieu-pb", [nguoi("thieu.pb@dong-lenh.vn", ["BUYER"])]);
+      traLoi = (ten) => ({
+        status: 200,
+        body: { ARN: `arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:${ten}-AbCdEf`, Name: ten, SecretString: thieuNoiDung },
+      });
+      const thieu = await chayLenhBatDongBo(duyet("tp/khoi-tao/ban-khai/sm-thieu-pb", "sm-thieu-pb", bam(thieuNoiDung)), env);
+      expect(thieu.status).toBe(1);
+      expect(thieu.stderr).toBe("[khoi-tao] HONG: Secrets Manager trả một phiên bản khác phiên bản đã duyệt\n");
+      expect(await soToChuc("sm-thieu-pb")).toBe(0);
+
       // [S1.9103] Bản khai ở ĐÚNG phiên bản đã duyệt nhưng không khớp điều người duyệt thấy (thêm một người sau lúc khai số)
       // ⇒ dừng TRƯỚC CSDL; thông điệp nêu trường lệch, không email, không họ tên.
       const banKhaiLech = banKhaiTao("sm-lech", [nguoi("lech.mot@dong-lenh.vn", ["BUYER"]), nguoi("lech.hai@dong-lenh.vn", ["FINANCE"], "Họ Tên Lệch")]);

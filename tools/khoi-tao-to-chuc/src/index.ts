@@ -219,6 +219,18 @@ async function docNguon(nguon: NguonBanKhai): Promise<{ readonly noiDung: string
   }
 }
 
+/**
+ * Phần `" (ma X)"` của dòng lỗi lạ — hay chuỗi rỗng. [lượt soi] SQLSTATE không mang dữ liệu — in kèm tên, để một lỗi lạ của pg
+ * vẫn chẩn đoán được. **[S1.9103]** Cả mã lỗi hệ thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `SELF_SIGNED_CERT_IN_CHAIN`,
+ * `ERR_TLS_CERT_ALTNAME_INVALID`…): đo image với bó CA sai, dòng lỗi chỉ còn "HONG: Error" — mà lần chạy đầu trên RDS hỏng thì
+ * nhiều khả năng hỏng đúng ở mạng hay TLS. Mã là HẰNG SỐ viết hoa, không mang dữ liệu; mẫu không nhận chữ thường, khoảng
+ * trắng, dấu chấm hay dấu hai chấm — một `code` mang đường dẫn hay giá trị thì không in.
+ */
+export function maLoi(loi: unknown): string {
+  if (typeof loi !== "object" || loi === null || !("code" in loi) || typeof loi.code !== "string") return "";
+  return /^[0-9A-Z][0-9A-Z_]{1,63}$/u.test(loi.code) ? ` (ma ${loi.code})` : "";
+}
+
 export async function chay(ds: readonly string[]): Promise<string> {
   const ts = docThamSo(ds);
   const url = batBuoc("DATABASE_URL");
@@ -254,12 +266,7 @@ if (argv[1] !== undefined && fileURLToPath(import.meta.url) === argv[1]) {
     // Ba lớp lỗi CÓ TÊN mang thông điệp đã được viết để in ra (vị trí và mã, không giá trị); mọi lỗi khác chỉ in TÊN — thông
     // điệp gốc của Postgres có thể trích dòng dữ liệu vi phạm, tức email của người trong bản khai.
     const coTen = loi instanceof ThamSoError || loi instanceof BanKhaiError || loi instanceof KhoiTaoError;
-    // [lượt soi] SQLSTATE không mang dữ liệu — in kèm tên, để một lỗi lạ của pg vẫn chẩn đoán được. **[S1.9103]** Cả mã lỗi hệ
-    // thống của Node (`ECONNREFUSED`, `ENOTFOUND`, `SELF_SIGNED_CERT_IN_CHAIN`, `ERR_TLS_CERT_ALTNAME_INVALID`…): đo image với
-    // bó CA sai, dòng lỗi chỉ còn "HONG: Error" — mà lần chạy đầu trên RDS hỏng thì nhiều khả năng hỏng đúng ở mạng hay TLS.
-    // Mã là HẰNG SỐ viết hoa, không mang dữ liệu; mẫu dưới không nhận chữ thường, khoảng trắng hay dấu chấm.
-    const ma = typeof loi === "object" && loi !== null && "code" in loi && typeof loi.code === "string" && /^[0-9A-Z][0-9A-Z_]{1,63}$/u.test(loi.code) ? ` (ma ${loi.code})` : "";
-    stderr.write(`[khoi-tao] HONG: ${coTen ? loi.message : loi instanceof Error ? `${loi.name}${ma}` : "loi la"}\n`);
+    stderr.write(`[khoi-tao] HONG: ${coTen ? loi.message : loi instanceof Error ? `${loi.name}${maLoi(loi)}` : "loi la"}\n`);
     exit(1);
   }
 }

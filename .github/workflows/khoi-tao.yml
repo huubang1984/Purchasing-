@@ -3,7 +3,7 @@ name: Khoi tao to chuc — prod (bam tay)
 # =============================================================================================
 # [S1.9103 / ADR-111] TAO TO CHUC, NGUOI DUNG VA VAI TREN PROD: BAM TAY, NGUOI KHAC DUYET, XOA BAN KHAI
 # =============================================================================================
-# Chi `workflow_dispatch` tren `master`. Hai job:
+# Chi `workflow_dispatch` tren `master`. Ba job:
 #
 #   build   KHONG co quyen AWS nao. Kiem dau vao va NGUOI BAM (bot thi dung) TRUOC; voi `tao`, chon
 #           ma to chuc (UUIDv4) ngay tai day; in BANG nguoi duyet duyet vao tom tat cua run; roi
@@ -15,8 +15,10 @@ name: Khoi tao to chuc — prod (bam tay)
 #           day image, dang ky `tp-khoi-tao` (ghim hinh dang container), chay task MOT LAN voi dung dau
 #           vao da duyet; thoat 0 thi XOA bi mat ban khai (khong cua so khoi phuc) va in ket qua suy tu
 #           dau vao. Task hong thi bi mat CON.
+#   nhac    KHONG quyen nao. `chay` khong xanh (hong, bi tu choi, bi huy, het han artifact) thi bi mat
+#           mang du lieu ca nhan CON — job nay noi ra dieu ay trong tom tat cua run.
 #
-# Nguoi duyet KHONG doc duoc ban khai (email, ho ten). Ho duyet dung bang cua job `build`: ten,
+# Workflow khong cho nguoi duyet xem ban khai (email, ho ten). Ho duyet dung bang cua job `build`: ten,
 # PHIEN BAN va BAM SHA-256 cua bi mat, ma to chuc, so nguoi, so nguoi theo tung ma vai, ai bam. Cong
 # cu doc DUNG phien ban ay, so bam, va dung TRUOC khi cham CSDL neu ban khai lech.
 #
@@ -110,7 +112,8 @@ jobs:
         with:
           name: anh-khoi-tao
           path: anh/
-          retention-days: 1
+          # Nguoi duyet co the duyet cham hon mot ngay; artifact chi mang image (ma cua kho), khong bi mat.
+          retention-days: 7
           if-no-files-found: error
 
   chay:
@@ -172,3 +175,23 @@ jobs:
           td_kt=$(bash deploy/trien-khai.sh dang-ky tp-khoi-tao "$anh_kt" tp-khoi-tao)
           echo "- task definition: \`$td_kt\`" >> "$GITHUB_STEP_SUMMARY"
           bash deploy/trien-khai.sh khoi-tao "$td_kt" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  nhac:
+    name: Nhac bi mat ban khai con (chay khong xanh)
+    needs: [build, chay]
+    if: always() && needs.build.result == 'success' && needs.chay.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Nhac xoa hay chay lai
+        env:
+          BI_MAT: ${{ inputs.bi_mat }}
+          KET_QUA: ${{ needs.chay.result }}
+        run: |
+          {
+            echo "### Khởi tạo tổ chức — bí mật bản khai CÒN"
+            echo ""
+            echo "Job \`chay\` kết thúc \`$KET_QUA\` (hỏng, bị từ chối, bị huỷ, hay không chạy): bí mật \`$BI_MAT\` — mang email và họ tên — CHƯA bị xoá."
+            echo "Chạy lại (một lần duyệt mới), hay xoá tay: \`aws secretsmanager delete-secret --secret-id $BI_MAT --force-delete-without-recovery\`."
+          } >> "$GITHUB_STEP_SUMMARY"

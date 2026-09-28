@@ -14,11 +14,11 @@
 // Script chạy trên runner Linux của GitHub, nên test chạy bash thật; Windows không có môi trường ấy — bỏ qua ở đó.
 // ==============================================================================================
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { docThamSo } from "../../tools/khoi-tao-to-chuc/src/index.js";
 
 const SCRIPT = fileURLToPath(new URL("../../deploy/trien-khai.sh", import.meta.url));
@@ -26,8 +26,6 @@ const PB = "0f1e2d3c-4b5a-4968-8776-655443322110";
 const ORG = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const TASK = "arn:aws:ecs:ap-southeast-1:942091277863:task/tp-prod/0123456789abcdef0123456789abcdef";
 
-const thuMuc = mkdtempSync(join(tmpdir(), "khoi-tao-sh-"));
-afterAll(() => { rmSync(thuMuc, { recursive: true, force: true }); });
 
 // `aws` giả: ghi mỗi lời gọi thành một mảng JSON, trả lời theo biến AWS_GIA_* của ca test.
 const AWS_GIA = `#!/usr/bin/env bash
@@ -44,10 +42,9 @@ case "$1 $2" in
   *) echo "aws gia: lenh la $*" >&2; exit 99 ;;
 esac
 `;
-const binGia = join(thuMuc, "bin");
-spawnSync("mkdir", ["-p", binGia]);
-writeFileSync(join(binGia, "aws"), AWS_GIA);
-chmodSync(join(binGia, "aws"), 0o755);
+// [lượt soi] Không dựng gì ở mức module: Windows bỏ qua cả khối, nên không được chạy `mkdir` hay ghi tệp trước khi bỏ qua.
+let thuMuc = "";
+let binGia = "";
 
 interface DauVao {
   CHE_DO: string; BI_MAT: string; PHIEN_BAN: string; BAM: string; MA_TO_CHUC: string; TO_CHUC: string; SO_NGUOI: string; VAI: string;
@@ -63,13 +60,13 @@ const THEM: Partial<DauVao> = { CHE_DO: "them-nguoi", MA_TO_CHUC: "", TO_CHUC: O
 const AWS_ENV = { AWS_REGION: "ap-southeast-1", TAI_KHOAN: "942091277863", CLUSTER: "tp-prod", SUBNETS: "subnet-0a1b,subnet-2c3d", SG_KHOI_TAO: "sg-0abc123" };
 
 let dem = 0;
-function chay(lenh: string[], env: Record<string, string>): { status: number | null; stdout: string; stderr: string; goi: string[][] } {
+function chay(lenh: string[], env: Record<string, string>, locale: Record<string, string> = {}): { status: number | null; stdout: string; stderr: string; goi: string[][] } {
   dem += 1;
   const goi = join(thuMuc, `goi-${String(dem)}.jsonl`);
   writeFileSync(goi, "");
   const r = spawnSync("bash", [SCRIPT, ...lenh], {
     encoding: "utf8",
-    env: { PATH: `${binGia}${delimiter}${process.env["PATH"] ?? ""}`, AWS_GIA_GOI: goi, ...env },
+    env: { PATH: `${binGia}${delimiter}${process.env["PATH"] ?? ""}`, AWS_GIA_GOI: goi, ...locale, ...env },
     timeout: 30_000,
   });
   const dong = readFileSync(goi, "utf8").split("\n").filter((d) => d !== "");
@@ -106,7 +103,35 @@ const doiContainer = (f: (c: Record<string, unknown>) => void): TD => {
 };
 const ANH = "942091277863.dkr.ecr.ap-southeast-1.amazonaws.com/tp-khoi-tao@sha256:" + "2".repeat(64);
 
+/**
+ * [lượt soi] Một locale CÓ collation (en_US.UTF-8), nơi `[a-z]` của bash khớp `á` và `[0-9]` khớp `٣` — tức nơi script bỏ
+ * `LC_ALL=C` thì nới. Máy không cài sẵn thì sinh bằng `localedef` vào thư mục tạm (`LOCPATH`); dò thật rằng locale ấy CÓ nới,
+ * không thì bỏ ca locale (không ghim trên một locale vô hiệu).
+ */
+let LOCALE: Record<string, string> | null = null;
+function dungLocale(thu: string): Record<string, string> | null {
+  const loc = join(thu, "locale");
+  mkdirSync(loc, { recursive: true });
+  spawnSync("localedef", ["-c", "-i", "en_US", "-f", "UTF-8", join(loc, "en_US.UTF-8")], { encoding: "utf8" });
+  const ungVien: Record<string, string>[] = [{ LOCPATH: loc, LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" }, { LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" }];
+  for (const ung of ungVien) {
+    const r = spawnSync("bash", ["-c", '[[ "á" =~ ^[a-z]$ && "٣" =~ ^[0-9]$ ]]'], { env: { PATH: process.env["PATH"] ?? "", ...ung } });
+    if (r.status === 0) return ung;
+  }
+  return null;
+}
+
 describe.skipIf(process.platform === "win32")("[S1.9103] trien-khai.sh — kiem-khoi-tao, kiem-nguoi-duyet, khoi-tao, dang-ky tp-khoi-tao", () => {
+  beforeAll(() => {
+    thuMuc = mkdtempSync(join(tmpdir(), "khoi-tao-sh-"));
+    binGia = join(thuMuc, "bin");
+    mkdirSync(binGia, { recursive: true });
+    writeFileSync(join(binGia, "aws"), AWS_GIA);
+    chmodSync(join(binGia, "aws"), 0o755);
+    LOCALE = dungLocale(thuMuc);
+  });
+  afterAll(() => { if (thuMuc !== "") rmSync(thuMuc, { recursive: true, force: true }); });
+
   it("⑴ kiem-khoi-tao: không biến AWS, không gọi aws; in bảng đã duyệt; người bấm là bot ⇒ dừng", () => {
     const r = chay(["kiem-khoi-tao"], { ...TOT });
     expect(r.status, r.stderr).toBe(0);
@@ -157,14 +182,24 @@ describe.skipIf(process.platform === "win32")("[S1.9103] trien-khai.sh — kiem-
     ];
     const lech: string[] = [];
     let nhan = 0;
-    for (const c of ca) {
-      const d = { ...TOT, ...c };
-      const sh = chay(["kiem-khoi-tao"], { ...d });
-      expect(sh.goi).toEqual([]);
-      if ((sh.status === 0) !== tsNhan(d)) lech.push(`${JSON.stringify(c)}: script ${String(sh.status)}, docThamSo ${String(tsNhan(d))}`);
-      if (sh.status === 0) nhan += 1;
+    // [lượt soi] Cả ở locale C lẫn ở một locale CÓ collation: bỏ `LC_ALL=C` trong script thì phía bash nới ở locale ấy.
+    const cacLocale: Record<string, string>[] = [{}, ...(LOCALE === null ? [] : [LOCALE])];
+    for (const locale of cacLocale) {
+      for (const c of ca) {
+        const d = { ...TOT, ...c };
+        const sh = chay(["kiem-khoi-tao"], { ...d }, locale);
+        expect(sh.goi).toEqual([]);
+        if ((sh.status === 0) !== tsNhan(d)) lech.push(`${JSON.stringify(locale)} ${JSON.stringify(c)}: script ${String(sh.status)}, docThamSo ${String(tsNhan(d))}`);
+        if (sh.status === 0 && Object.keys(locale).length === 0) nhan += 1;
+      }
     }
     expect(lech).toEqual([]);
+    // [lượt soi] Biên TUYỆT ĐỐI của phía bash — phép so ở trên không bắt khi CẢ HAI phía cùng nới.
+    for (const c of [{ TO_CHUC: "a".repeat(64) }, { BI_MAT: `tp/khoi-tao/ban-khai/${"a".repeat(64)}` }, { MA_TO_CHUC: "9b2d0c1e-8f7a-4b6c-cd5e-3a2b1c0d9e8f" },
+      { ...THEM, TO_CHUC: "3f2504e0-4f89-41d3-ca0c-0305e82c3301" }, { TO_CHUC: "tháp-việt" }, { SO_NGUOI: "３", VAI: "BUYER=3" }]) {
+      expect(chay(["kiem-khoi-tao"], { ...TOT, ...c }, LOCALE ?? {}).status, JSON.stringify(c)).toBe(1);
+    }
+    expect(chay(["kiem-khoi-tao"], { ...TOT, TO_CHUC: "a".repeat(63), BI_MAT: `tp/khoi-tao/ban-khai/${"a".repeat(63)}` }).status).toBe(0);
     // Bộ ca phải có cả hai phía — một bộ toàn từ chối thì phép so rỗng nghĩa.
     expect(nhan).toBeGreaterThanOrEqual(15);
     expect(ca.length - nhan).toBeGreaterThanOrEqual(50);
@@ -253,6 +288,19 @@ describe.skipIf(process.platform === "win32")("[S1.9103] trien-khai.sh — kiem-
     }
     writeFileSync(join(thuMuc, "hong.json"), "khong phai json");
     expect(chay(["kiem-nguoi-duyet", join(thuMuc, "hong.json")], { ACTOR: "a", TRIGGERING_ACTOR: "a" }).status).toBe(1);
+  });
+
+  it("[lượt soi] migrate và neo vẫn chạy như trước qua chay_mot_lan: không overrides; hỏng thì dòng lỗi không mang lời dặn của khởi tạo", () => {
+    for (const [lenh, sg] of [["migrate", { SG_MIGRATE: "sg-0aaa111" }], ["neo", { SG_NEO: "sg-0bbb222" }]] as const) {
+      const ok = chay([lenh, "arn:td"], { ...AWS_ENV, ...sg });
+      expect(ok.status, ok.stderr).toBe(0);
+      expect(ok.goi.map((g) => `${g[0] ?? ""} ${g[1] ?? ""}`)).toEqual(["ecs run-task", "ecs wait", "ecs describe-tasks"]);
+      expect(ok.goi[0]).not.toContain("--overrides");
+      const hong = chay([lenh, "arn:td"], { ...AWS_ENV, ...sg, AWS_GIA_MA: "3" });
+      expect(hong.status).toBe(1);
+      expect(hong.stderr).toContain(`LOI: ${lenh} thoát mã 3`);
+      expect(hong.stderr).not.toMatch(/Bí mật|delete-secret/u);
+    }
   });
 
   it("⑹ dang-ky tp-khoi-tao: bản mới nhất đúng hình dạng stack 90 thì nhân bản (chỉ đổi image); bị cài độc thì dừng trước khi đăng ký", () => {
