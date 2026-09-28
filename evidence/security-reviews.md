@@ -15058,7 +15058,9 @@ mục 8): vai, công cụ, test, và secret của task migrate. Đích Dockerfil
   `VersionId`, lỗi của SM chỉ in tên lỗi, không ARN).
 - `tools/chay-migrate/src/khop-stack-90.test.ts`: mỗi URL vai của `docCauHinh` là một secret của `bi_mat.migrate` trỏ một data secret có khai.
 - Bộ tích hợp đầy đủ trước lượt soi: 1414/1415 — một ca đỏ (`db/audit-append-only.int.test.ts` ghim tập quyền cột trên sổ, vai mới có
-  SELECT theo cột) đã cập nhật và chạy lại 22/22. Sau hai lượt soi: SO_INT_A.
+  SELECT theo cột) đã cập nhật và chạy lại 22/22. Sau hai lượt soi, trên `7b194e2` (đã gộp master `90fed26`): 66 tệp, 1441/1441.
+  Lần chạy đầu trên cùng commit không tính: môi trường vừa khởi động lại, Docker chưa chạy, 64 tệp gãy ở bước dựng container
+  ("Could not find a working container runtime strategy") trước khi tới thân test.
 - Đột biến: lượt một 28, cả 28 đỏ — chín ở công cụ (không hạ chữ bằng CSDL, bỏ ba hàng sổ, payload, nuốt lỗi một người, lộ thông điệp
   trigger, lộ cause ở CLI, chèn tổ chức bằng UUID khác UUID đang gắn), bảy ở bản khai và dòng lệnh, bảy ở hardening (tự chữa không cấp
   lại, không thu hồi, câu phán xét bỏ nhánh thừa theo cột, bỏ nhánh thiếu, cho phép `users.email`, cặp hợp lệ, thuộc tính), một ở
