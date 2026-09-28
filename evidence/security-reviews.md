@@ -15148,14 +15148,14 @@ Khoản **251** mở, rổ A (vế ⒞ — bước 8.1 của lần apply đầu)
 
 ---
 
-# §S1.182 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
+# §S1.183 — KHOẢN 248 ĐÓNG: LẦN TỪ CHỐI DO HANDLER GHI CŨNG TIÊU TRẦN THEO PHIÊN CỦA ADR-092
 
 ## 1. Vòng này là gì
 
 Khoản 248 (S1.169, rổ B, điều kiện đóng riêng: trước khi mở cờ ký chính sách trên máy chủ thật — ADR-105 ⑷(a)): trần lần từ chối
 theo phiên của ADR-092 chỉ đếm ở bộ điều phối, nên mọi lần từ chối mà handler tự ghi — `CONTROL_DENIED` của K1, J3, D2, bảng so sánh,
 cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá — không trần. Chủ dự án chọn phạm vi *mọi lần từ chối ở handler* và
-cơ chế *bối cảnh yêu cầu*. ADR-111.
+cơ chế *bối cảnh yêu cầu*. ADR-112.
 
 ## 2. Đo trước khi sửa
 
@@ -15178,7 +15178,7 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
   `retry-after`, cùng thân với 429 của `phanQuyetTuChoi`.
 - Test: `apps/api/src/auth.int.test.ts` vế ⒤–⒨; `packages/identity/src/rbac.int.test.ts` khối khoản 248 (ba ca);
   `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` giam tên `chayVoiTranTuChoi` ở ba tệp.
-- Tài liệu: ADR-111; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
+- Tài liệu: ADR-112; ghi chú sửa ở ADR-092 (mục *Ngoài phạm vi*, hệ quả thứ nhất) và ADR-105 ⑷(a); `docs/STATE.md` hàng 248, rổ B,
   danh sách còn mở và mốc.
 
 ## 4. Đo sau khi sửa
@@ -15210,4 +15210,6 @@ Lần viết đầu của ⒥ gán FINANCE cho một người mua và bị trigg
   `so-no-tu-doi-chieu` 87/87; `pnpm cap-so --kiem` sạch. T3 và evidence đo trên CI, trên chính commit của PR.
 - Dựng lại lần hai trên `master` `90fed26` (sau #191 — khoản 250 mở, rổ B 59): chỉ tài liệu xung đột; cổng tĩnh và unit đo lại, T3 và
   evidence trên CI.
-@@CAP_SO@@
+- Dựng lại lần ba trên `master` `d2bdc93` (sau #192 — khoản 251 mở ở rổ A, migration 075): chỉ tài liệu xung đột; cổng tĩnh và unit
+  đo lại, T3 và evidence trên CI.
+- Số tạm của vòng này cấp thành S1.183, ADR-112. Sổ nợ: khoản 248 đóng, rổ B **59 → 58**. **111 → 112** ADR.

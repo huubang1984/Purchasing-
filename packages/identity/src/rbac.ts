@@ -484,7 +484,7 @@ async function khangDinhGhiDuocDocLap(client: pg.PoolClient, orgId: string): Pro
 }
 
 /**
- * [S1.182 / khoản 248 / ADR-111] Trần lần từ chối theo phiên cho lần từ chối do HANDLER ghi — bối cảnh của MỘT yêu cầu.
+ * [S1.183 / khoản 248 / ADR-112] Trần lần từ chối theo phiên cho lần từ chối do HANDLER ghi — bối cảnh của MỘT yêu cầu.
  *
  * ADR-092 đếm lần từ chối ở BỘ ĐIỀU PHỐI và để ngoài phạm vi mọi lần từ chối mà handler tự ghi: `requirePermission` gọi từ một gói,
  * `throwAuditedDenial` của cổng mở thầu, bảng so sánh, và mọi `CONTROL_DENIED` (khoản 247). Một phiên lặp một thao tác bị từ chối
@@ -588,7 +588,7 @@ export async function requirePermission(
   // "lần này là một lần TỪ CHỐI" mà chưa chạm khoá chuỗi sổ. Lỗi của nó đi ra TRẦN (không bọc `PermissionAuditFailedError`): nó
   // không phải một lần ghi sổ hỏng mà là quyết định của người gọi rằng lần từ chối này không được ghi — hôm nay là trần theo phiên
   // của bộ điều phối (429). ~~Không móc ⇒ hành vi y như trước.~~
-  // [S1.182 / khoản 248] Không móc ⇒ bối cảnh trần của yêu cầu, nếu có: lần gọi từ HANDLER — lời
+  // [S1.183 / khoản 248] Không móc ⇒ bối cảnh trần của yêu cầu, nếu có: lần gọi từ HANDLER — lời
   // gọi của bộ điều phối luôn mang móc, và bối cảnh chỉ bao lời gọi handler, nên một lần từ chối không bị đếm hai lần.
   if (tuyChon.truocKhiGhiTuChoi !== undefined) await tuyChon.truocKhiGhiTuChoi();
   else await demTheoBoiCanh(auditPool, requirement.orgId);
@@ -689,7 +689,7 @@ export async function throwAuditedDenial(
   event: AuditEventInput,
   denial: Error,
 ): Promise<never> {
-  // [S1.182 / khoản 248 / ADR-111] Đếm TRƯỚC lần ghi, ngoài khối bọc lỗi: vượt trần ném nguyên dạng — xem `BoiCanhTranTuChoi`.
+  // [S1.183 / khoản 248 / ADR-112] Đếm TRƯỚC lần ghi, ngoài khối bọc lỗi: vượt trần ném nguyên dạng — xem `BoiCanhTranTuChoi`.
   await demTheoBoiCanh(auditPool, orgId);
   try {
     if (!HINH_DANG_LOAI_TAI_NGUYEN.test(event.action) || !HINH_DANG_LOAI_TAI_NGUYEN.test(event.resourceType)) {

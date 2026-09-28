@@ -7675,8 +7675,8 @@ cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra 
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.155]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
 từ chối mất khỏi sổ khi khoá bị giữ) · **Liên quan:** ADR-091 (trần đọc của phiên agent, cùng bộ đếm), ADR-039 (phạm vi của chứng
-chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng) · **[S1.182] Mục *Ngoài phạm vi* SỬA BỞI
-ADR-111**: lần từ chối do handler ghi nay cũng tiêu ngân sách này
+chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng) · **[S1.183] Mục *Ngoài phạm vi* SỬA BỞI
+ADR-112**: lần từ chối do handler ghi nay cũng tiêu ngân sách này
 
 ### Bối cảnh
 
@@ -7708,7 +7708,7 @@ lại cùng giao dịch khi lần từ chối NÉM.
 - **`requirePermission` nay có một cách để lần từ chối không vào sổ** — một cổng gác im lặng CÓ TÊN, trái với tiêu chí mà
   `packages/identity/src/index.ts` dùng để cho hàm ra cửa. Nó được chấp nhận vì bị giam ở một chỗ:
   `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên móc chỉ xuất hiện ở `rbac.ts` và `dispatch.ts`. Chỗ dùng thứ hai
-  phải sửa ADR này và test ấy. **[S1.182 / ADR-111]** Cách thứ hai cùng loại — bối cảnh trần `chayVoiTranTuChoi` — bị giam ở cùng
+  phải sửa ADR này và test ấy. **[S1.183 / ADR-112]** Cách thứ hai cùng loại — bối cảnh trần `chayVoiTranTuChoi` — bị giam ở cùng
   tệp test, với ba chỗ `rbac.ts`, `index.ts`, `dispatch.ts`.
 - **N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ.** Trần giới hạn một phiên ở 30 hàng mỗi cửa sổ, không xoá chi phí ấy. Một kẻ cầm
   nhiều phiên nhân được ngân sách — mỗi phiên agent đòi một mã TOTP tươi, mỗi phiên người đòi một lần đăng nhập đủ MFA.
@@ -7717,7 +7717,7 @@ lại cùng giao dịch khi lần từ chối NÉM.
   nhiều kết nối nghiệp vụ cùng chờ khoá sổ.
 - **Không trái ADR-015 §5.** Khoá của bucket là chính phiên đang gọi: chỉ ai cầm cookie ấy mới tiêu được ngân sách ấy.
 - ~~**Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
-  đi qua trần này;~~ **[S1.182 / khoản 248 / ADR-111]** lần từ chối do HANDLER ghi nay đi qua cùng trần, qua bối cảnh yêu cầu;
+  đi qua trần này;~~ **[S1.183 / khoản 248 / ADR-112]** lần từ chối do HANDLER ghi nay đi qua cùng trần, qua bối cảnh yêu cầu;
   route khách và nhánh ANON không đổi.
 - Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 122 · 144: ⒠ phiên người (N×403 + N hàng, rồi 429 không hàng; việc có quyền vẫn
   201; phiên khác không bị kéo), ⒡ phiên agent, ⒢ cùng lúc, ⒣ lần ghi sổ hỏng vẫn tiêu ngân sách (đột biến gỡ nhánh ấy ⇒ đỏ).
@@ -8245,7 +8245,7 @@ công cụ) không mở được cửa ấy bằng cách quên một tham số.
 hành vi của tổ chức; màn soạn — cảnh báo và số người tối thiểu — dùng được trước ngày bật, đúng điều §8.10 đòi.
 
 ⑷ **Điều kiện mở cờ trên một máy chủ thật**, cả hai:
-- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092; **[S1.182] ĐẠT** — khoản 248 đóng bằng ADR-111,
+- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092; **[S1.183] ĐẠT** — khoản 248 đóng bằng ADR-112,
   với phạm vi rộng hơn: mọi lần từ chối do handler ghi;
 - (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
   rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
@@ -8710,9 +8710,9 @@ DEV. `docs/APPLY-LAN-DAU.md` kẹt ở bước 8.1, và vì worker từ chối k
 
 ---
 
-## ADR-111 — Trần lần từ chối theo phiên phủ cả lần từ chối do HANDLER ghi: bối cảnh yêu cầu, đếm ở giao dịch riêng trước lần ghi
+## ADR-112 — Trần lần từ chối theo phiên phủ cả lần từ chối do HANDLER ghi: bối cảnh yêu cầu, đếm ở giao dịch riêng trước lần ghi
 
-**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.182]** · **Khoản nợ liên quan:** 248 (đóng) · **Liên quan:** ADR-092
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.183]** · **Khoản nợ liên quan:** 248 (đóng) · **Liên quan:** ADR-092
 (trần lần từ chối theo phiên — sửa mục *Ngoài phạm vi*), ADR-105 ⑷(a) (điều kiện mở cờ ký chính sách), ADR-084 ⑷ ⑸ (`CONTROL_DENIED`),
 ADR-060 (luật ghi sổ từ chối có chọn lọc)
 
