@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound, type AuditEventInput } from "@trustprocure/audit";
 import { withTenant } from "@trustprocure/tenancy";
@@ -483,6 +484,42 @@ async function khangDinhGhiDuocDocLap(client: pg.PoolClient, orgId: string): Pro
 }
 
 /**
+ * [S1.184 / khoản 248 / ADR-112] Trần lần từ chối theo phiên cho lần từ chối do HANDLER ghi — bối cảnh của MỘT yêu cầu.
+ *
+ * ADR-092 đếm lần từ chối ở BỘ ĐIỀU PHỐI và để ngoài phạm vi mọi lần từ chối mà handler tự ghi: `requirePermission` gọi từ một gói,
+ * `throwAuditedDenial` của cổng mở thầu, bảng so sánh, và mọi `CONTROL_DENIED` (khoản 247). Một phiên lặp một thao tác bị từ chối
+ * như thế nối đuôi khoá chuỗi sổ của cả tổ chức mà không trần nào chặn — khoản 248. Chủ dự án chọn phạm vi *mọi lần từ chối ở handler*
+ * và cơ chế *bối cảnh yêu cầu*: bộ điều phối đặt `dem` quanh lời gọi handler, và hai đường ghi sổ từ chối của tệp này đọc nó —
+ * không hàm gói nào đổi chữ ký, và một lần từ chối mới viết ngày mai tự được đếm.
+ *
+ * `dem` chạy trên một kết nối của `auditPool`, ở giao dịch RIÊNG commit TRƯỚC lần ghi sổ: lần ghi hỏng vẫn tiêu ngân sách (vế ⒣ của
+ * ADR-092), và lần vượt trần ném trước khi chạm khoá chuỗi sổ. Lỗi của nó đi ra NGUYÊN DẠNG, không bọc `…AuditFailedError`: nó không
+ * phải một lần ghi sổ hỏng mà là quyết định rằng lần từ chối này không được ghi — cùng hợp đồng với móc `truocKhiGhiTuChoi`. Không
+ * bối cảnh — worker, job, test gọi gói trực tiếp — thì không đếm gì, y như trước.
+ *
+ * Chỗ ĐẶT bối cảnh bị giam ở `apps/api/src/dispatch.ts` (`tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`): nó là cách thứ hai để
+ * một lần từ chối không vào sổ, cùng loại với móc của ADR-092.
+ */
+export interface BoiCanhTranTuChoi {
+  /** Đếm một lần từ chối của phiên đang gọi trên `c`; vượt trần thì ném. */
+  readonly dem: (c: pg.PoolClient) => Promise<void>;
+}
+
+const khoTranTuChoi = new AsyncLocalStorage<BoiCanhTranTuChoi>();
+
+/** Chạy `viec` — lời gọi handler của một yêu cầu — với bối cảnh trần từ chối của phiên đang gọi. Chỉ bộ điều phối gọi. */
+export function chayVoiTranTuChoi<T>(boiCanh: BoiCanhTranTuChoi, viec: () => Promise<T>): Promise<T> {
+  return khoTranTuChoi.run(boiCanh, viec);
+}
+
+/** Đếm theo bối cảnh của yêu cầu đang chạy, ở giao dịch riêng trên `auditPool`; không bối cảnh thì không làm gì. */
+async function demTheoBoiCanh(auditPool: pg.Pool, orgId: string): Promise<void> {
+  const boiCanh = khoTranTuChoi.getStore();
+  if (boiCanh === undefined) return;
+  await withTenant(auditPool, orgId, (c) => boiCanh.dem(c), { maxConnectWaitMs: TRAN_CHO_KET_NOI_AUDIT_MS });
+}
+
+/**
  * [S1.155 / khoản 122 · 144 / ADR-092] Tuỳ chọn của `requirePermission`. `truocKhiGhiTuChoi` chạy đúng một lần, chỉ trên đường
  * TỪ CHỐI, trước lần ghi `PERMISSION_DENIED`; nó ném thì lần từ chối KHÔNG được ghi sổ và lỗi của nó đi ra nguyên dạng.
  */
@@ -550,8 +587,11 @@ export async function requirePermission(
   // [S1.155 / khoản 122 · 144 / ADR-092] Móc của người gọi, chạy SAU phép kiểm quyền và TRƯỚC lần ghi sổ — chỗ duy nhất biết
   // "lần này là một lần TỪ CHỐI" mà chưa chạm khoá chuỗi sổ. Lỗi của nó đi ra TRẦN (không bọc `PermissionAuditFailedError`): nó
   // không phải một lần ghi sổ hỏng mà là quyết định của người gọi rằng lần từ chối này không được ghi — hôm nay là trần theo phiên
-  // của bộ điều phối (429). Không móc ⇒ hành vi y như trước.
-  await tuyChon.truocKhiGhiTuChoi?.();
+  // của bộ điều phối (429). ~~Không móc ⇒ hành vi y như trước.~~
+  // [S1.184 / khoản 248] Không móc ⇒ bối cảnh trần của yêu cầu, nếu có: lần gọi từ HANDLER — lời
+  // gọi của bộ điều phối luôn mang móc, và bối cảnh chỉ bao lời gọi handler, nên một lần từ chối không bị đếm hai lần.
+  if (tuyChon.truocKhiGhiTuChoi !== undefined) await tuyChon.truocKhiGhiTuChoi();
+  else await demTheoBoiCanh(auditPool, requirement.orgId);
 
   try {
     // ~~THỨ TỰ HAI DÒNG NÀY LÀ LOAD-BEARING, và bản đầu viết ngược. `khangDinhAuditPoolDungQuyen`
@@ -649,6 +689,8 @@ export async function throwAuditedDenial(
   event: AuditEventInput,
   denial: Error,
 ): Promise<never> {
+  // [S1.184 / khoản 248 / ADR-112] Đếm TRƯỚC lần ghi, ngoài khối bọc lỗi: vượt trần ném nguyên dạng — xem `BoiCanhTranTuChoi`.
+  await demTheoBoiCanh(auditPool, orgId);
   try {
     if (!HINH_DANG_LOAI_TAI_NGUYEN.test(event.action) || !HINH_DANG_LOAI_TAI_NGUYEN.test(event.resourceType)) {
       throw new Error(

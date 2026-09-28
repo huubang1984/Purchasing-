@@ -7676,7 +7676,8 @@ cái "cổng gác im lặng" mà `packages/identity/src/index.ts` không cho ra 
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.155]** · **Khoản nợ liên quan:** 122 (đóng), 144 (đóng), 131 (lần
 từ chối mất khỏi sổ khi khoá bị giữ) · **Liên quan:** ADR-091 (trần đọc của phiên agent, cùng bộ đếm), ADR-039 (phạm vi của chứng
-chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng)
+chỉ agent), ADR-015 §5 và ADR-024 (bộ đếm tần suất), ADR-016 (cổng quyền ở tầng ứng dụng) · **[S1.184] Mục *Ngoài phạm vi* SỬA BỞI
+ADR-112**: lần từ chối do handler ghi nay cũng tiêu ngân sách này
 
 ### Bối cảnh
 
@@ -7708,15 +7709,17 @@ lại cùng giao dịch khi lần từ chối NÉM.
 - **`requirePermission` nay có một cách để lần từ chối không vào sổ** — một cổng gác im lặng CÓ TÊN, trái với tiêu chí mà
   `packages/identity/src/index.ts` dùng để cho hàm ra cửa. Nó được chấp nhận vì bị giam ở một chỗ:
   `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên móc chỉ xuất hiện ở `rbac.ts` và `dispatch.ts`. Chỗ dùng thứ hai
-  phải sửa ADR này và test ấy.
+  phải sửa ADR này và test ấy. **[S1.184 / ADR-112]** Cách thứ hai cùng loại — bối cảnh trần `chayVoiTranTuChoi` — bị giam ở cùng
+  tệp test, với ba chỗ `rbac.ts`, `index.ts`, `dispatch.ts`.
 - **N lần đầu mỗi cửa sổ vẫn lấy khoá chuỗi sổ.** Trần giới hạn một phiên ở 30 hàng mỗi cửa sổ, không xoá chi phí ấy. Một kẻ cầm
   nhiều phiên nhân được ngân sách — mỗi phiên agent đòi một mã TOTP tươi, mỗi phiên người đòi một lần đăng nhập đủ MFA.
 - **Các lần từ chối cùng lúc của một phiên xếp hàng sau nhau**: câu đếm khoá hàng bucket tới COMMIT, tức tới sau lần ghi sổ. Trần
   vì thế đúng tới từng lần (đo: tám lời gọi song song ⇒ đúng 3×403 + 5×429 và 3 hàng), và một phiên không dùng song song để giữ
   nhiều kết nối nghiệp vụ cùng chờ khoá sổ.
 - **Không trái ADR-015 §5.** Khoá của bucket là chính phiên đang gọi: chỉ ai cầm cookie ấy mới tiêu được ngân sách ấy.
-- **Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
-  đi qua trần này; route khách và nhánh ANON không đổi.
+- ~~**Ngoài phạm vi:** lần từ chối do HANDLER tự gọi `requirePermission` hay `throwAuditedDenial` (bảng so sánh, cổng mở thầu) không
+  đi qua trần này;~~ **[S1.184 / khoản 248 / ADR-112]** lần từ chối do HANDLER ghi nay đi qua cùng trần, qua bối cảnh yêu cầu;
+  route khách và nhánh ANON không đổi.
 - Đo ở `apps/api/src/auth.int.test.ts`, khối khoản 122 · 144: ⒠ phiên người (N×403 + N hàng, rồi 429 không hàng; việc có quyền vẫn
   201; phiên khác không bị kéo), ⒡ phiên agent, ⒢ cùng lúc, ⒣ lần ghi sổ hỏng vẫn tiêu ngân sách (đột biến gỡ nhánh ấy ⇒ đỏ).
 
@@ -8243,7 +8246,8 @@ công cụ) không mở được cửa ấy bằng cách quên một tham số.
 hành vi của tổ chức; màn soạn — cảnh báo và số người tối thiểu — dùng được trước ngày bật, đúng điều §8.10 đòi.
 
 ⑷ **Điều kiện mở cờ trên một máy chủ thật**, cả hai:
-- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092;
+- (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092; **[S1.184] ĐẠT** — khoản 248 đóng bằng ADR-112,
+  với phạm vi rộng hơn: mọi lần từ chối do handler ghi;
 - (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
   rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
 
@@ -8801,3 +8805,51 @@ chỉ `master`), `tp-deploy` tin thêm environment ấy — thay cho `prod` ở 
 - **Chưa chạy thật trên AWS hay GitHub**: IAM đo bằng `terraform plan` offline trên bản sao stack 30 (JSON policy thật), stack 90
   bằng `terraform validate`; image đo e2e trên Docker cục bộ; lịch sử duyệt của GitHub đo bằng tệp mẫu theo tài liệu. Lần chạy
   thật đầu tiên thuộc khoản 15.
+
+---
+
+## ADR-112 — Trần lần từ chối theo phiên phủ cả lần từ chối do HANDLER ghi: bối cảnh yêu cầu, đếm ở giao dịch riêng trước lần ghi
+
+**Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.184]** · **Khoản nợ liên quan:** 248 (đóng) · **Liên quan:** ADR-092
+(trần lần từ chối theo phiên — sửa mục *Ngoài phạm vi*), ADR-105 ⑷(a) (điều kiện mở cờ ký chính sách), ADR-084 ⑷ ⑸ (`CONTROL_DENIED`),
+ADR-060 (luật ghi sổ từ chối có chọn lọc)
+
+### Bối cảnh
+
+ADR-092 đếm lần từ chối ở BỘ ĐIỀU PHỐI — `requirePermission` qua móc, và vế phạm vi agent — và nói thẳng rằng lần từ chối do
+HANDLER ghi nằm ngoài phạm vi. Handler từ chối thì NÉM, giao dịch của yêu cầu rollback, và một lần đếm trên kết nối ấy biến theo.
+Khoản 248 (S1.169) đo lỗ ấy ở `kiemChot`: một phiên giữ `rfq.submit` ở tổ chức đã bật S3 lặp một lần nộp duyệt bị K1 chặn, mỗi lần
+một 422 và một hàng sổ qua khoá chuỗi sổ toàn tổ chức, không trần. Cùng hình dạng ở mọi lần từ chối do handler ghi: bảng so sánh
+(`bid.view`, A4), cổng mở thầu, đặt lại MFA, từ chối trạng thái của lớp đánh giá, và từ khoản 247 J3/D2. Đo trước bản vá trên
+`master` (`apps/api/src/auth.int.test.ts` vế ⒤ ⒥, trần tiêm 3): lần thứ 4 vẫn 403/422 kèm một hàng. Khoản này chặn việc mở cờ ký
+chính sách trên máy chủ thật (ADR-105 ⑷(a)).
+
+### Quyết định
+
+1. **Phạm vi: mọi lần từ chối do handler ghi** (chủ dự án chọn), không chỉ `CONTROL_DENIED`. Hai đường ghi sổ từ chối của
+   `packages/identity/src/rbac.ts` — `requirePermission` không mang móc, và `throwAuditedDenial` — là chỗ đếm; mọi lần từ chối
+   ở handler đi qua một trong hai.
+2. **Cơ chế: bối cảnh yêu cầu** (chủ dự án chọn). Bộ điều phối đặt `chayVoiTranTuChoi({ dem })` — AsyncLocalStorage — quanh lời
+   gọi handler người mua; hai đường ghi sổ đọc nó. Không hàm gói nào đổi chữ ký, và một lần từ chối viết ngày mai tự được đếm.
+   Không bối cảnh — worker, job, test gọi gói trực tiếp — thì không đếm, y như trước.
+3. **Cùng bucket, cùng trần** với bộ điều phối: `tu-choi|<phiên>`, 30 lần / 900 s. Một phiên có MỘT ngân sách từ chối.
+4. **Đếm ở giao dịch RIÊNG trên `auditPool`, commit TRƯỚC lần ghi sổ.** Lần ghi hỏng vẫn tiêu ngân sách (vế ⒣ của ADR-092); vượt trần
+   ném `VuotTranTuChoiError` trước khi chạm khoá chuỗi sổ ⇒ 429 thân cố định kèm `retry-after`, không hàng sổ. Lỗi của phép đếm đi
+   ra NGUYÊN DẠNG, không bọc `…AuditFailedError`; đếm hỏng (không lấy được kết nối) ⇒ 500, không cho qua.
+5. **Không đếm hai lần:** lời gọi `requirePermission` của bộ điều phối luôn mang móc, và bối cảnh chỉ bao lời gọi handler.
+
+### Hệ quả, nói thẳng
+
+- **Một cơ chế NGẦM thứ hai để một lần từ chối không vào sổ.** Cùng loại với móc của ADR-092, và bị giam cùng cách:
+  `tests/architecture/ghi-so-tu-choi-mot-duong.test.ts` đòi tên `chayVoiTranTuChoi` chỉ ở `rbac.ts`, `index.ts`, `dispatch.ts`.
+- **Tính chất *xếp hàng sau nhau* của ADR-092 yếu hơn ở tầng handler.** Khoá hàng bucket nhả khi giao dịch đếm commit, trước lần ghi
+  sổ. Phép đếm vẫn đúng tới từng lần — tám lời gọi cùng lúc ra đúng 3 × 403 + 5 × 429 và 3 hàng (vế ⒧) — nhưng tối đa N lần đầu của
+  một phiên có thể cùng chờ khoá chuỗi sổ, mỗi lần giữ một kết nối nghiệp vụ và một kết nối `auditPool`.
+- **Mỗi lần từ chối ở handler tốn thêm một lần lấy kết nối `auditPool` và một giao dịch ngắn.** Lần lấy có trần
+  `TRAN_CHO_KET_NOI_AUDIT_MS`, như lần ghi.
+- **Bối cảnh theo chuỗi bất đồng bộ.** Việc handler xếp chạy SAU khi yêu cầu trả về (`afterCommit`) nằm ngoài bối cảnh — không có lần
+  từ chối nào ghi ở đó hôm nay.
+- Route khách (`BID_*`, ghi trong giao dịch người gọi) và nhánh ANON vẫn ngoài phạm vi, như ADR-092.
+- Đo ở `apps/api/src/auth.int.test.ts` vế ⒤ (quyền ở handler), ⒥ (A4 qua `throwAuditedDenial`), ⒦ (một ngân sách cho hai tầng),
+  ⒧ (cùng lúc), ⒨ (lần ghi hỏng vẫn tiêu ngân sách); `packages/identity/src/rbac.int.test.ts` khối khoản 248 (đếm một lần, ở giao dịch
+  đã commit trước lần ghi; lỗi ra nguyên dạng; không đếm hai lần; ngoài bối cảnh không đếm).
