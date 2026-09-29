@@ -1491,7 +1491,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   const HAM_DON_VI_DO: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "chuoi_sach", chuKy: "text", migration: "079_don_vi_do.sql" },
     { ham: "don_vi_tai", chuKy: "uuid, text, timestamptz", migration: "079_don_vi_do.sql" },
-    { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "079_don_vi_do.sql" },
+    // [S1.197 / S4.2a] Thân thêm vế ⑵ (quy đổi riêng, ADR-116) — con trỏ theo migration CUỐI CÙNG.
+    { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "083_hang_chuan.sql" },
   ];
 
   it("[S1.192] ba hàm của đơn vị đo: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
@@ -1566,6 +1567,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "unseal_approvals_kiem_danh_tinh",
         // [S1.192 / S4.1] Bí danh đơn vị của tổ chức — người khai là DẪN XUẤT từ phiên (L1).
         "uom_aliases_kiem_danh_tinh",
+        // [S1.197 / S4.2a] Bốn bảng hàng chuẩn — cùng khuôn.
+        "canonical_item_versions_kiem_danh_tinh",
+        "canonical_items_kiem_danh_tinh",
+        "item_aliases_kiem_danh_tinh",
+        "item_uom_conversions_kiem_danh_tinh",
         "unseal_requests_kiem_danh_tinh",
         "unseal_requests_kiem_nguoi_dieu_phoi",
         "unseal_requests_kiem_nhan_chung",
@@ -1590,7 +1596,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -1696,7 +1702,33 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
-    { ham: "du_lieu_nen_dat_thu_tu", migration: "079_don_vi_do.sql", trigger: ["uom_aliases_dat_thu_tu"] },
+    // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
+    {
+      ham: "du_lieu_nen_dat_thu_tu",
+      migration: "079_don_vi_do.sql",
+      trigger: [
+        "canonical_item_versions_dat_thu_tu",
+        "canonical_items_dat_thu_tu",
+        "item_aliases_dat_thu_tu",
+        "item_uom_conversions_dat_thu_tu",
+        "uom_aliases_dat_thu_tu",
+      ],
+    },
+    // [S1.197 / S4.2a / L3] Khuôn `033` cho người đặt thước dữ liệu mù giá, và cổng GHI của dữ liệu nền. Một thân `RETURN NULL`/
+    // `RETURN NEW` sớm ở bất kỳ cái nào cho một vai, một người, hay một người không quyền ghi đặt thước trong lúc thấy giá.
+    { ham: "kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro", migration: "083_hang_chuan.sql", trigger: ["role_permissions_quan_ly_du_lieu_mu_gia"] },
+    { ham: "kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung", migration: "083_hang_chuan.sql", trigger: ["user_roles_quan_ly_du_lieu_mu_gia"] },
+    {
+      ham: "du_lieu_nen_kiem_quyen_ghi",
+      migration: "083_hang_chuan.sql",
+      trigger: [
+        "canonical_item_versions_kiem_quyen_ghi",
+        "canonical_items_kiem_quyen_ghi",
+        "item_aliases_kiem_quyen_ghi",
+        "item_uom_conversions_kiem_quyen_ghi",
+        "uom_aliases_kiem_quyen_ghi",
+      ],
+    },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3341,6 +3373,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "083_hang_chuan.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7764,6 +7797,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "083_hang_chuan.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8064,6 +8098,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "083_hang_chuan.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

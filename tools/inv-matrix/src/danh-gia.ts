@@ -347,7 +347,9 @@ export interface MocGhim {
 // nho bo doc so noi hau to chu thuong (khoan 246). Cong CHAN dung mot luot truoc khi dong nay duoc viet.
 // [S1.192 / S4.1] 68 -> 70: L1, L4 — hai hang dau cua nhom L — vao so dang ky cung luot voi khuon nen va ham quy doi;
 // dai ma noi [A-HJK] -> [A-HJ-L] o S4.0. Cong CHAN dung mot luot truoc khi dong nay duoc viet.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 70, coDanhSachToiDa: 0 };
+// [S1.197 / S4.2a] 70 -> 71: L3 vào sổ đăng ký cùng hai trigger khuôn `033` của vai quản lý dữ liệu và cổng ghi CSDL. Cổng
+// CHẶN đúng một lượt trước khi dòng này được viết.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 71, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

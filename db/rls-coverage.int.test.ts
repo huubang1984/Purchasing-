@@ -769,8 +769,13 @@ describe("phủ RLS", () => {
       // bộ đếm theo người gọi phải chung cho tổ chức thật lẫn tổ chức lạ, nếu không 429 là một
       // oracle tồn tại tổ chức. DELETE mức bảng cho bộ dọn — cùng đánh đổi đã ghi ở 010.
       { grantee: "app_api", bang: "caller_rate_limits", quyen: "DELETE,SELECT" },
+      // [S1.197 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
+      { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
+      { grantee: "app_api", bang: "item_aliases", quyen: "SELECT" },
+      { grantee: "app_api", bang: "item_uom_conversions", quyen: "SELECT" },
       // [khoản 165 / 062] Dấu kiểm vòng khoá bọc: đọc để SO, không UPDATE/DELETE — bảng chỉ-ghi-thêm.
       { grantee: "app_api", bang: "master_key_check_values", quyen: "SELECT" },
       // [040 / sổ nợ 40] DELETE: đường đặt lại TOTP — trigger `mfa_credentials_xoa_can_yeu_cau` chỉ cho
@@ -1073,6 +1078,20 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "INSERT" },
       { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "UPDATE" },
       { grantee: "app_api", bang: "caller_rate_limits", cot: "window_start", quyen: "INSERT" },
+      // [S1.197 / S4.2a] Hàng chuẩn: ghi thêm theo cột; `id`, `seq`, `ghi_luc` ngoài GRANT (L1).
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "ten", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "thuoc_tinh", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "thuoc_tinh_trong_yeu", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_item_versions", cot: "trang_thai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_items", cot: "don_vi_goc", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_items", cot: "ma", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_items", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_items", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "canonical_items", cot: "tac_gia", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "challenge_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },
@@ -1103,6 +1122,20 @@ describe("phủ RLS", () => {
       // vi mot bam khong khop trong y het mot bam sai.
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "pepper_version", quyen: "INSERT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", cot: "token_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "bi_danh_sach", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "rut", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_aliases", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "he_so", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "rut", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "sang_don_vi", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "item_uom_conversions", cot: "tu_don_vi", quyen: "INSERT" },
       // [khoản 165 / 062] Theo CỘT: `recorded_at` do CSDL đặt.
       { grantee: "app_api", bang: "master_key_check_values", cot: "kcv", quyen: "INSERT" },
       { grantee: "app_api", bang: "master_key_check_values", cot: "key_version", quyen: "INSERT" },
@@ -1919,6 +1952,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
   return Object.fromEntries([
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
+      // [S1.197 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
+      "canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs", "rfq_approvals",

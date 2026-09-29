@@ -16304,3 +16304,112 @@ hardening — sửa một bên thì hardening dựng lại thân ghim và đột
 - **Sau khi cấp số** (`080_k4a_co_ten`, ADR-114): năm tệp tích hợp chạm migration chạy lại **307/307** — `db/migrations.int`,
   `hardening-suy-tu-tinh-chat.int`, `luong-moi-s3.int`, `rfq.int`, `invitation.int`. Tám đột biến, tám lần đỏ (§6).
 - Số hiệu của vòng, ADR và migration do `pnpm cap-so` cấp lúc merge (ADR-090).
+
+# §S1.197 — S4.2a: HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-116
+
+## 1. Vòng này là gì
+
+Nửa đầu của S4.2 (spec S4 §9): lớp CSDL và gói của hàng chuẩn. Không route, không màn hình — S4.2b dựng route và màn `/du-lieu`.
+Bất biến vào sổ: **L3** (vế vai + cổng ghi). **L1** thêm bốn bảng; **L4** thêm vế ⑵.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-29, năm đề xuất của lượt bàn S4.2:
+
+1. Tách S4.2 thành S4.2a (CSDL + gói) và S4.2b (API + màn).
+2. Quy đổi riêng: tối đa một cạnh riêng, ghép quy đổi chung cùng thứ nguyên ở hai đầu, được chiều ngược; không ghép hai cạnh
+   riêng — ghi thành ADR-116.
+3. `don_vi_goc` là khoá ngoại tới `uom_units` — không đơn vị đóng gói.
+4. Chưa thêm `category_id` — đợi nhóm hàng của S3.6 (ADR-084 ⑶).
+5. `ma` hàng chuẩn do người quản lý dữ liệu nhập, `UNIQUE (org_id, ma)`, có `CHECK` hình dạng.
+
+## 3. Thay đổi
+
+- **`083_hang_chuan` (1) — vai.** Mã `item.manage`, vai `DATA_STEWARD` giữ đúng mã ấy. Hai trigger khuôn `033`
+  (`kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro` trên `role_permissions`, `…_nguoi_dung` trên `user_roles`, AFTER ROW, `ENABLE ALWAYS`)
+  chặn `item.manage` đứng cùng `bid.view`, `po.approve`, `award.recommend`, `rfq.create`, `rfq.invite`. Trigger tạo trước câu seed.
+- **(2) — cổng ghi.** `du_lieu_nen_kiem_quyen_ghi` (BEFORE INSERT, `ENABLE ALWAYS`) trên `uom_aliases` và bốn bảng mới: người ghi
+  phải giữ `item.manage` trong tổ chức của hàng; từ chối mang ràng buộc `du_lieu_nen_can_item_manage`.
+- **(3) — bốn bảng.** `canonical_items` (danh tính: `ma` viết hoa, `don_vi_goc` khoá ngoại tới danh mục, `UNIQUE (org_id, ma)`,
+  `UNIQUE (org_id, id)` làm đích cho ba khoá ngoại hợp thành), `canonical_item_versions` (tên, thuộc tính phẳng khoá → chuỗi, thuộc
+  tính trọng yếu phải có giá trị, trạng thái), `item_aliases` (hàng rút không mang hàng chuẩn), `item_uom_conversions` (hệ số dương,
+  hàng rút không mang hệ số, hai đầu khác nhau). Mỗi bảng năm trigger — thứ tự, danh tính, cổng ghi, chỉ-ghi-thêm, chốt `TRUNCATE`;
+  RLS `FORCE`, policy khách đóng hẳn, `GRANT INSERT` theo cột.
+- **(4) — `quy_doi_don_vi` vế ⑵.** Thân mới: ⑴ đi trước; ⑵ cạnh riêng mới nhất theo `seq` ghi trước mốc của đúng hàng chuẩn và tổ
+  chức, xuôi hoặc ngược, ghép quy đổi chung ở hai đầu; đúng một ứng viên ⇒ `QUY_DOI_RIENG`, không hay nhiều hơn ⇒
+  `KHONG_QUY_DOI_DUOC`.
+- **Hardening.** Mục ghim mới cho hai trigger khuôn `033` và cổng ghi (năm trigger); nhóm `bid_chi_ghi_them` thêm tám trigger, nhóm
+  `kiem_danh_tinh_theo_phien` bốn, `du_lieu_nen_dat_thu_tu` bốn; bản ghim `quy_doi_don_vi` dời sang thân của `083` (lượt chạy đầu cho
+  thấy lớp ghim làm đúng việc: nó đè thân mới bằng thân `079` cho tới khi bản ghim dời theo); bốn bảng vào `BANG_TENANT_KHAI`.
+- **TypeScript.** `PERMISSIONS.ITEM_MANAGE`; `ITEM_MANAGE_EXCLUDES` và mốc ghim `ITEM_MANAGE_CONFLICT_ROLE_PAIRS` (năm cặp:
+  `DATA_STEWARD` chỉ ghép được với `TECHNICAL`). Gói `du-lieu-nen`: `taoHangChuan`, `taoPhienBanHangChuan`, `khaiBiDanhHang`,
+  `rutBiDanhHang`, `khaiQuyDoiRieng`, `rutQuyDoiRieng`, `docHangChuan`, lớp lỗi `DuLieuNenError` mang mã; mỗi hàm ghi có sổ kiểm
+  toán trong cùng giao dịch; `quyDoiDonVi` nhận `QUY_DOI_RIENG`. Gói phụ thuộc thêm `@trustprocure/identity`.
+- **Cổng khai theo.** `cong-quyen-route` (gói vào `CUA_GOI`, sáu hàm ghi vào rổ ghi, ba hàm đọc vào rổ đọc), `barrel-exports`,
+  `ma-tran-quyen` (bảy vai, `roles` đọc ở mọi migration, bộ đọc nhận số tạm bốn chữ số, bốn ca mới), tổng điều tra H19 (bốn bảng chỉ-
+  ghi-thêm, ba hàm KHÔNG-CANH, nhân chứng dưới một `DATA_STEWARD`), `migrations.int`, `rls-coverage`, `check-an-ninh`,
+  `migration-shape`; `don-vi.int` — người ghi trong test mang `DATA_STEWARD`, `BANG_DU_LIEU_NEN` năm bảng.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Cổng `item.manage` ở CSDL thay vì trong hàm gói.** Tôi đã nói *"mỗi hàm kiểm `item.manage`"*. ADR-016 đặt `requirePermission` ở
+  tầng ứng dụng (route của S4.2b sẽ khai mã), nên hàm gói không gọi nó; thứ thay vào là một trigger CSDL — chặt hơn: câu SQL viết
+  tay dưới `app_api` cũng bị chặn. ADR-116 ⑹.
+- **Cổng ghi áp cả `uom_aliases` của S4.1** — spec §4.3: `item.manage` giữ mọi thao tác ghi ở §4.2.
+- **Nhập dữ liệu gốc nhận MÃ danh mục.** `donViGoc`, `sangDonVi`, `tuDonVi` do người quản lý dữ liệu nhập: dạng sạch trùng một mã
+  (*"m"*, *"T"*) là chính mã ấy, rồi mới tới bí danh. Chuỗi tự do của dòng RFQ vẫn không khớp mã trực tiếp (§S1.192). Lý do: `m` và `t`
+  không có bí danh chung, nên không luật này thì không tạo được hàng chuẩn gốc mét hay tấn bằng chính mã của nó.
+- **Hai cạnh cùng dùng được ⇒ mơ hồ** kể cả khi hai hệ số khớp nhau (ADR-116 ⑶).
+- **Tầng gói từ chối khai quy đổi riêng giữa hai đơn vị cùng thứ nguyên** (`QUY_DOI_CHUNG_DA_CO`): ⑴ luôn đi trước nên hàng ấy không
+  bao giờ được đọc.
+- **Rút chỉ khi có hàng đang hiệu lực** (`KHONG_CO_BI_DANH`, `KHONG_CO_QUY_DOI`) — hàng rút không để làm nhiễu lịch sử.
+
+## 5. Đo
+
+Đo trước (lượt đầu trên migration mới, trước khi khai): `don-vi.int` 7 đỏ (người ghi không giữ `item.manage` — đúng cổng mới);
+`hang-chuan.int` 6 đỏ, trong đó 3 vì hardening đè thân mới của `quy_doi_don_vi` bằng bản ghim `079`, 2 vì `m`/`t` không có bí danh
+chung, 1 vì test tự nuốt lỗi trong giao dịch; `rls-coverage` 1 đỏ (thứ tự sổ quyền); `so-no-tu-doi-chieu` 5 rồi 2 đỏ (lời khai 70
+bất biến, 79 migration, rồi số ADR). Mọi ca ấy xanh sau khi khai.
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | Tầng gói bỏ chặn quy đổi riêng cùng thứ nguyên | `[INV-L4]` khai quy đổi riêng |
+| M2 | Tầng gói bỏ kiểm bí danh còn hiệu lực trước khi rút | `[INV-L1]` bí danh hàng |
+| M3 | Trigger mức người rơi `rfq.invite` khỏi danh sách loại trừ (văn bản migration) | `[INV-L3]` ba bản khớp nguyên văn |
+| M4 | Ma trận tĩnh: `DATA_STEWARD` thêm `bid.view` (trong test) | `[INV-L3]` phép kiểm không rỗng ruột |
+| M5 | Gỡ trigger mức người lúc chạy (trong test) | `FINANCE` nhận được `DATA_STEWARD` |
+| M6 | Gỡ cổng ghi lúc chạy (trong test) | người `TECHNICAL` ghi được `uom_aliases` |
+| M7 | Bỏ vế `ghi_luc < p_moc` của cạnh riêng (trong test) | `[INV-L4]` cạnh ghi sau mốc lọt vào |
+
+## 6. Giới hạn, nói ra
+
+- **Không route, không màn hình, không `gieo:demo`.** `tools/khoi-tao-to-chuc` chưa gán được `DATA_STEWARD` (danh sách vai của nó còn
+  sáu) — S4.2b.
+- **Khe hở `005` §(3) áp nguyên cho hai trigger mới**: sửa `role_permissions` sau khi người đã mang vai thì trục người không được kiểm
+  lại. Ma trận chỉ đổi bằng migration, và meta-test tĩnh đọc mọi migration.
+- **Hai cạnh chồng nhau làm mọi phép qua chúng thành `KHONG_QUY_DOI_DUOC`** cho tới khi rút một cạnh; tầng gói chưa cảnh báo lúc khai.
+- **`KHONG_QUY_DOI_DUOC` không nói lý do** (không cạnh, hay mơ hồ) — bộ đọc đầu tiên cần phân biệt (S4.4) thì thêm mã.
+- **L3 vế hành vi** (người ghi ánh xạ `NGUOI_DUYET` ngoài tập ADR-082 ⑿) ở S4.3.
+
+## 7. Số đo
+
+- `packages/du-lieu-nen/src/hang-chuan.int.test.ts` 15/15 (L3 bốn ca, L1 năm ca, L4 sáu ca); `don-vi.int` 12/12 dưới cổng ghi mới;
+  `packages/identity/src/ma-tran-quyen.test.ts` 22/22 (bốn ca L3). Cổng census trên cây cuối: `migrations.int` 119/119,
+  `hardening-suy-tu-tinh-chat.int` 36/36, `rls-coverage.int` 51/51, `check-an-ninh.int` 4/4, `ghim-trigger-tu-chua.int` 4/4,
+  `rbac.int` 45/45, `unique-oracle.int` 13/13, `vai-khoi-tao.int` 9/9, `khoi-tao.int` 16/16, `qt3-cu-phap.int` 1/1.
+- Toàn bộ T3 cục bộ (sau merge `master` tới #201): 3266 khẳng định, 3263 đạt, 1 bỏ qua, 2 đỏ — cả hai của vòng này và đã sửa:
+  `qt3-cu-phap` (sáu thông báo lỗi mở đầu bằng chữ `INSERT` bị bộ đọc QT3 coi là câu SQL) và `khoi-tao.int` (danh mục vai của công
+  cụ phải khớp bảng `roles`, nên `DATA_STEWARD` vào `MA_VAI` sớm hơn S4.2b). Bốn tệp chạm hai lỗi ấy chạy lại và ghép vào báo cáo:
+  3266 khẳng định, 3265 đạt, 1 bỏ qua, 0 đỏ.
+- `pnpm t0` sạch. `pnpm test`: 122 tệp, 1731 đạt, 1 bỏ qua.
+- Bảy đột biến, bảy lần đỏ (§5).
+- Ma trận: 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3266 khẳng định; L1 6 → 11, L4 5 → 11, L3 mới 8. Mốc
+  `MOC_GHIM` 70 → 71 — cổng CHẶN đúng một lượt trước khi dòng ấy được sửa.
+- **Hợp `master` sau #198** (S3.2c2, phần bù trên nền #200 — màn `/tao-thau` và kịch bản 41, không chạm dữ liệu nền) lúc CI của vòng
+  này đã xanh cả bảy việc: xung đột chỉ ở cột mốc `docs/STATE.md` và cuối biên bản, giữ cả hai mục, mục của vòng này đứng sau mục của
+  #198; `pnpm cap-so` cấp lại số vòng.
+- **Hợp `master` sau #206** (S3.2d, khoản 255 — lời mời K4a vào sổ `CONTROL_DENIED`) trong lúc CI của lượt hợp #198 chưa kịp chạy:
+  #206 lấy cả ba số của vòng này — số vòng, số ADR, số migration. Xung đột ở cột mốc, cuối biên bản, cuối `docs/DECISIONS.md` (hai
+  ADR cùng số: giữ cả hai, ADR của vòng này đứng sau), lời khai đếm sổ đăng ký (giữ bản của nhánh, `cap-so --dem` viết lại) và ba danh
+  sách tên migration ở `db/migrations.int.test.ts` (giữ cả hai tên, migration của vòng này đứng sau). `hardening.always.sql` hợp tự
+  động: hai bên ghim hai hàm khác nhau. `pnpm cap-so` cấp lại cả ba số.
