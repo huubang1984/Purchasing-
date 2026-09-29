@@ -519,12 +519,17 @@ const DANH_SACH_TRANG_RFQ = [
   "closeRfq",
   "createProcurementPolicy",
   "createRfq",
+  // [S1.201 / S3.6a] Nhóm hàng: gán cho gói đang soạn (route `rfq.create`), hai hàm quản lý hỏi `category.manage` ở chính hàm,
+  // và danh sách — không giá, không phiên.
+  "datNhomHangChoGoi",
+  "doiTrangThaiNhomHang",
   "extendRfqDeadline",
   "getActiveProcurementPolicy",
   "getRfq",
   // [S1.169 / S3.1c] Ký phiên bản chính sách (luật ở trigger `chinh_sach_kiem_nguoi_ky`) và liệt kê mọi phiên bản cho màn
   // `/chinh-sach` — câu đọc chọn phiên bản hiệu lực bằng CHÍNH `chinh_sach_hieu_luc`, không bằng luật thứ hai.
   "kyPhienBanChinhSach",
+  "lietKeNhomHang",
   "lietKePhienBanChinhSach",
   "listRfqItems",
   "openRfq",
@@ -532,6 +537,7 @@ const DANH_SACH_TRANG_RFQ = [
   "returnRfqToDraft",
   "setRfqBudget",
   "submitRfqForApproval",
+  "taoNhomHang",
 ];
 
 const RFQ_PACKAGE_JSON_URL = new URL("../../packages/rfq/package.json", import.meta.url);

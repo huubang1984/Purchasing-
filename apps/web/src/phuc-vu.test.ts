@@ -28,6 +28,7 @@ import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/arc
 import * as chinhSach from "./chinh-sach.js";
 import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
+import * as nhomHang from "./nhom-hang.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -209,6 +210,16 @@ describe("bề mặt tệp", () => {
       "chinh-sach": ["b2", "b3"],
       // [S1.199 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
       "du-lieu": ["b2", "b3", "b5"],
+      // [S1.201 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
+      "nhom-hang": ["b2", "b3"],
+    };
+    /** Lời gọi mỗi trang tự đi sau khi mở các bước — trước lượt đo riêng của từng trang. */
+    const SAU_MO: Record<string, readonly string[]> = {
+      "chinh-sach": ["GET /policy/versions"],
+      "tao-thau": ["GET /policy/versions"],
+      "nhom-hang": ["GET /categories"],
+      // [S1.199 / S4.2b] Màn dữ liệu nền nạp danh sách hàng chuẩn rồi danh mục đơn vị.
+      "du-lieu": ["GET /items", "GET /uom"],
     };
     const ORG = "11111111-2222-4333-8444-555555555555";
     const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
@@ -257,6 +268,8 @@ describe("bề mặt tệp", () => {
     // hàm trả chuỗi rỗng.
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
+      // [S1.201 / S3.6a] `/lib/nhom-hang.js` là bản thật: ô chọn nhóm hàng của `/tao-thau` và bảng của `/nhom-hang` đọc từ nó.
+      ...nhomHang,
       // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
       ...taoThau,
       // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
@@ -313,12 +326,17 @@ describe("bề mặt tệp", () => {
         };
       }
       const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false, id));
-      const trangThai = { cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[] };
+      const trangThai = {
+        cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[],
+        /** [S1.201 / S3.6a] Thân của từng lời gọi, theo thứ tự — để đo trang GỬI gì, không chỉ gọi gì. */
+        than: [] as { lenh: string; than: unknown }[],
+      };
       const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
       const ngheCuaSo: Nghe = {};
-      const fetch = async (url: string, init: { method: string }) => {
+      const fetch = async (url: string, init: { method: string; body?: string }) => {
         const lenh = `${init.method} ${url.replace(/^\/api/u, "")}`;
         trangThai.goi.push(lenh);
+        trangThai.than.push({ lenh, than: init.body === undefined ? undefined : JSON.parse(init.body) });
         const r = (await tuyChon.thay?.(lenh)) ?? (() => {
           if (lenh === "GET /me") return trangThai.cookie === null ? { status: 401, body: { error: "x" } } : { status: 200, body: trangThai.cookie };
           if (lenh === "POST /auth/redeem") return { status: 200, body: { needsEnrollment: false } };
@@ -331,6 +349,7 @@ describe("bề mặt tệp", () => {
           if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
           if (lenh === "GET /items" && trangThai.cookie !== null) return { status: 200, body: { hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 } };
           if (lenh === "GET /uom" && trangThai.cookie !== null) return { status: 200, body: { donVi: [], biDanhChung: [], biDanhToChuc: [] } };
+          if (lenh === "GET /categories" && trangThai.cookie !== null) return { status: 200, body: { nhomHang: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
           if (lenh === "POST /guest/logout") {
             const co = trangThai.khach;
@@ -383,10 +402,6 @@ describe("bề mặt tệp", () => {
         },
       };
     };
-
-    /** Lời gọi mà mỗi trang tự làm ngay sau khi mở các bước — trước lượt bấm nào của người dùng. */
-    const NAP_SAU_DANG_NHAP = (trang: string): readonly string[] =>
-      trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : trang === "du-lieu" ? ["GET /items", "GET /uom"] : [];
 
     for (const trang of Object.keys(BUOC)) {
       const tatCa = BUOC[trang] ?? [];
@@ -464,7 +479,7 @@ describe("bề mặt tệp", () => {
         expect(p.buocMo()).toEqual([]);
         await p.bam("nut-vao");
         const sauTotp = p.trangThai.goi.lastIndexOf("POST /auth/totp");
-        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...NAP_SAU_DANG_NHAP(trang)]);
+        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(SAU_MO[trang] ?? [])]);
         expect(p.trangThai.thayUrl).toEqual([p.loc.pathname]);
         expect(p.loc.hash).toBe("");
         expect(p.buocMo()).toEqual(tatCa);
@@ -481,7 +496,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("b1").lop.has("xong")).toBe(false);
         expect(p.el("nut-dang-xuat").hidden).toBe(true);
         expect(p.el("hoi-phien").hidden).toBe(true);
-        expect(p.trangThai.goi).toEqual(["GET /me", ...NAP_SAU_DANG_NHAP(trang)]);
+        expect(p.trangThai.goi).toEqual(["GET /me", ...(SAU_MO[trang] ?? [])]);
       });
 
       it(`${trang}: /me của lượt cũ về SAU khi fragment đã đổi sang link của B ⇒ bị bỏ, không mở khối hỏi`, async () => {
@@ -1348,6 +1363,134 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-bi-danh");
       expect(p.trangThai.goi).not.toContain("POST /items/h-1/aliases");
       expect(p.el("loi4").textContent).toMatch(/Chưa mở hàng chuẩn nào/u);
+    });
+
+    // ==========================================================================================
+    // [S1.201 / S3.6a] NHÓM HÀNG: ô chọn ở màn tạo gói — chỉ ở tổ chức đã bật —, lần tạo mang nhóm đã chọn, «Đặt nhóm hàng»
+    // chỉ ở DRAFT; và màn `/nhom-hang` của người giữ `category.manage`. Nhóm đã ngừng dùng không được chọn MỚI, trừ khi gói đang
+    // giữ nó (ngừng dùng chỉ chặn lần gán mới).
+    // ==========================================================================================
+    const DS_NHOM = {
+      nhomHang: [
+        { id: "c-thep", ma: "THEP", ten: "Thép", conDung: true },
+        { id: "c-cu", ma: "CU", ten: "Nhóm cũ", conDung: false },
+        { id: "c-vpp", ma: "VPP", ten: "Văn phòng phẩm", conDung: true },
+      ],
+    };
+    const moTaoThauNhom = async (
+      daBat: boolean,
+      trangThaiGoi: string,
+      categoryId: string | null,
+      thay: (l: string) => Promise<{ status: number; body: unknown }> | undefined = () => undefined,
+    ) =>
+      moTaoThau(daBat, trangThaiGoi, (l) =>
+        thay(l) ??
+        (l === "GET /categories" ? Promise.resolve({ status: 200, body: DS_NHOM })
+          : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi, categoryId } } })
+          : undefined));
+    const cho5 = () => new Promise((r) => { setTimeout(r, 5); });
+
+    it("[S1.201 / S3.6a] tao-thau: tổ chức đã bật ⇒ ô chọn nhóm hàng hiện với nhóm còn dùng (và nhóm gói đang giữ); chưa bật ⇒ ẩn, không hỏi /categories", async () => {
+      const bat = await moTaoThauNhom(true, "DRAFT", "c-cu");
+      expect(bat.p.el("khoi-nhom-hang").hidden).toBe(false);
+      expect(bat.p.el("nhom-hang").con.map((o) => [o.value, o.textContent])).toEqual([
+        ["", "— chọn nhóm hàng —"],
+        ["c-thep", "THEP — Thép"],
+        ["c-cu", "CU — Nhóm cũ (đã ngừng dùng)"],
+        ["c-vpp", "VPP — Văn phòng phẩm"],
+      ]);
+      expect(bat.p.el("nhom-hang").value).toBe("c-cu");
+      expect(bat.p.el("nut-nhom-hang").hidden).toBe(false);
+      const tt = bat.p.el("tt-rfq").con.map((x) => x.textContent);
+      expect(tt).toContain("Nhóm hàng");
+      expect(tt).toContain("CU — Nhóm cũ (đã ngừng dùng)");
+      const chua = await moTaoThauNhom(false, "DRAFT", null);
+      expect(chua.p.el("khoi-nhom-hang").hidden).toBe(true);
+      expect(chua.p.el("nut-nhom-hang").hidden).toBe(true);
+      expect(chua.p.trangThai.goi).not.toContain("GET /categories");
+      expect(chua.p.el("tt-rfq").con.map((x) => x.textContent)).not.toContain("Nhóm hàng");
+      // Gói đã rời DRAFT: nhóm hàng khoá — không nút đặt.
+      expect((await moTaoThauNhom(true, "PENDING_APPROVAL", "c-thep")).p.el("nut-nhom-hang").hidden).toBe(true);
+    });
+
+    it("[S1.201 / S3.6a] tao-thau: «Tạo gói thầu» ở tổ chức đã bật mang nhóm đã chọn; chưa chọn ⇒ không mang; chưa bật ⇒ không bao giờ mang", async () => {
+      const taoVoi = async (daBat: boolean, chon: string): Promise<unknown> => {
+        const { p } = await moTaoThauNhom(daBat, "DRAFT", null, (l) => (l === "POST /rfqs" ? Promise.resolve({ status: 201, body: { rfq: { id: "r-1" } } }) : undefined));
+        p.el("tieu-de").value = "Mua thep";
+        p.el("han").value = "2099-01-01T10:00";
+        p.el("nhom-hang").value = chon;
+        await p.bam("nut-tao");
+        return p.trangThai.than.find((t) => t.lenh === "POST /rfqs")?.than;
+      };
+      expect(await taoVoi(true, "c-thep")).toMatchObject({ title: "Mua thep", categoryId: "c-thep" });
+      expect(await taoVoi(true, "")).not.toHaveProperty("categoryId");
+      expect(await taoVoi(false, "c-thep")).not.toHaveProperty("categoryId");
+    });
+
+    it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
+      const { p } = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1" } } }) : undefined));
+      p.el("nhom-hang").value = "";
+      await p.bam("nut-nhom-hang");
+      expect(p.trangThai.goi).not.toContain("PUT /rfqs/r-1/category");
+      expect(p.el("loi2").textContent).toBe("Chọn một nhóm hàng.");
+      p.el("nhom-hang").value = "c-vpp";
+      await p.bam("nut-nhom-hang");
+      expect(p.trangThai.than.find((t) => t.lenh === "PUT /rfqs/r-1/category")?.than).toEqual({ categoryId: "c-vpp" });
+      expect(p.el("ok2").textContent).toBe("Đã đặt nhóm hàng cho gói.");
+      const cau = "Nhóm hàng này đã ngừng dùng — chọn một nhóm hàng khác.";
+      const tu = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 422, body: { error: cau } }) : undefined));
+      tu.p.el("nhom-hang").value = "c-thep";
+      await tu.p.bam("nut-nhom-hang");
+      expect(tu.p.el("loi2").textContent).toBe(cau);
+    });
+
+    it("[S1.201 / S3.6a] nhom-hang: bảng vẽ mã, tên, trạng thái và một nút mỗi dòng; «Ngừng dùng» ⇒ PUT …/status {conDung: false}; «Dùng lại» ⇒ {conDung: true}", async () => {
+      const p = await dungTrang("nhom-hang", {
+        hash: "", cookie: A,
+        thay: (l) => (l === "GET /categories" ? Promise.resolve({ status: 200, body: DS_NHOM })
+          : l.startsWith("PUT /categories/") ? Promise.resolve({ status: 200, body: { nhomHang: {} } })
+          : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      const dong = [...p.el("bang-nhom").querySelector("tbody").con];
+      expect(dong.map((tr) => tr.con.slice(0, 3).map((td) => td.textContent))).toEqual([
+        ["THEP", "Thép", "đang dùng"],
+        ["CU", "Nhóm cũ", "đã ngừng dùng"],
+        ["VPP", "Văn phòng phẩm", "đang dùng"],
+      ]);
+      const nut = dong.map((tr) => tr.con[3]!.con[0]!);
+      expect(nut.map((n) => n.textContent)).toEqual(["Ngừng dùng", "Dùng lại", "Ngừng dùng"]);
+      for (const f of nut[0]!.nghe["click"] ?? []) await f();
+      await cho5();
+      for (const f of nut[1]!.nghe["click"] ?? []) await f();
+      await cho5();
+      expect(p.trangThai.than.filter((t) => t.lenh.startsWith("PUT /categories/"))).toEqual([
+        { lenh: "PUT /categories/c-thep/status", than: { conDung: false } },
+        { lenh: "PUT /categories/c-cu/status", than: { conDung: true } },
+      ]);
+      expect(p.el("ok2").textContent).toBe("Đã dùng lại nhóm CU.");
+    });
+
+    it("[S1.201 / S3.6a] nhom-hang: mã sai hình dạng hay tên rỗng ⇒ không gọi máy chủ; mã viết thường ⇒ POST /categories với mã VIẾT HOA", async () => {
+      const p = await dungTrang("nhom-hang", {
+        hash: "", cookie: A,
+        thay: (l) => (l === "POST /categories" ? Promise.resolve({ status: 201, body: { nhomHang: { ma: "THEP-01" } } }) : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      p.el("ma-nhom").value = "thép";
+      p.el("ten-nhom").value = "Thép";
+      await p.bam("nut-tao-nhom");
+      expect(p.trangThai.goi).not.toContain("POST /categories");
+      expect(p.el("loi3").textContent).toMatch(/^Mã gồm chữ không dấu/u);
+      p.el("ma-nhom").value = " thep-01 ";
+      p.el("ten-nhom").value = "  ";
+      await p.bam("nut-tao-nhom");
+      expect(p.el("loi3").textContent).toBe("Nhập tên nhóm hàng.");
+      p.el("ten-nhom").value = "Thép xây dựng";
+      await p.bam("nut-tao-nhom");
+      expect(p.trangThai.than.find((t) => t.lenh === "POST /categories")?.than).toEqual({ ma: "THEP-01", ten: "Thép xây dựng" });
+      expect(p.el("ok3").textContent).toBe("Đã tạo nhóm THEP-01.");
+      expect(p.el("ma-nhom").value).toBe("");
     });
   });
 

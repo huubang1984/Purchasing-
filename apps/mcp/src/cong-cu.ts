@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.199] MƯỜI BA route đọc ở
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.201] MƯỜI MỘT, [S1.199] MƯỜI BỐN route đọc ở
 //      `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
@@ -129,6 +129,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "trị nào thì đòi bao nhiêu nhà cung cấp, bao nhiêu chữ ký — tức đúng thứ một người muốn xếp gói ngay dưới mốc cần " +
     "biết, cộng danh tính những người giữ `policy.manage`. Route khai `agent: false` và dòng này khai vì sao; ngày nào " +
     "có việc cần thì đổi một dòng và viết một ADR. [S1.169 / S3.1c]",
+  // [S1.201 / S3.6a]
+  "/categories":
+    "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
+    "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
+    "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
   "/items":
     "DANH SÁCH HÀNG CHUẨN của tổ chức, cùng cờ người đang gọi có ghi được không và số người giữ `item.manage`. Hàng chuẩn " +
     "không mang giá, nên dòng này không nói về giá: nó nói về THƯỚC. Nó là dữ liệu làm việc của màn `/du-lieu`, một màn của " +
