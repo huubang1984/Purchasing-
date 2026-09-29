@@ -16894,6 +16894,13 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
   Toàn bộ unit + T3 cục bộ trên cây cuối: 195 tệp, 3327 khẳng định, 3317 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận
   sinh lại: 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào; L3 vào ở #204), đọc từ 3327 khẳng định; K4b 40, D2 64, K4a 26 như trên.
   `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #210 (S3.6a: tổ chức đã bật không nộp duyệt được gói không nhóm hàng) — và chạy lại `cap-so`:**
+  số của vòng giữ nguyên (`087_lan_nop_da_xem` vẫn lớn hơn `086`). Xung đột mã với S3.6a gộp tay: `RfqRecord` mang cả nhóm hàng lẫn
+  lần nộp; hàm dựng gói đã nộp của `buyer.int` (nay ở mức tệp) dựng và gán nhóm hàng ở tổ chức đã bật; kịch bản 41 qua HTTP giữ cả
+  nhóm hàng lẫn lần nộp của gói hy sinh; màn `/tao-thau` hiện cả hai. `lan-nop-da-xem.int.test.ts` dựng nhóm hàng theo khuôn #210.
+  Toàn bộ unit + T3 cục bộ trên cây cuối: 197 tệp, 3368 khẳng định, 3358 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận
+  sinh lại trùng bản đã commit: 71/71 bất biến, đọc từ 3368 khẳng định; K4b 40, D2 64, K4a 26 như trên. `tsc`, `eslint`, `depcruise`
+  sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
