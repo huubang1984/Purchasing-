@@ -16630,6 +16630,56 @@ Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của 
 
 **[Người tích hợp, 2026-09-29]** Khoản 9411 trong bàn giao lô này không vào sổ: cổng `duong-sql-ngoai-with-tenant` đã được khai tệp `postgres-cuc-bo.ts` ở commit tích hợp lô L7 (a4595fa) trước khi gộp lô này, nên khoảng trống ấy không còn ở HEAD.
 
+# §S1.9131 — TRẢ NỢ LÔ L3: BẢNG SO SÁNH TÍNH SỐ TIỀN MỘT LẦN MỖI HÀNG, CHỈ KHI VÔ HƯỚNG (114); KHOẢN 160 ĐÓNG BẰNG PHÉP ĐỌC LẠI `055`
+
+**Rổ và mảnh (ADR-043 ⒞):** hai khoản rổ B. Mảnh §11 chạm: bước *"bảng so sánh hiện ra với giá đúng tới từng chữ số"* — kết quả không đổi, chỉ rẻ hơn; 160 nằm ngoài §11 (S1.95). Không migration, không ADR. Mở khoản 9431.
+
+## 1. Vòng này là gì
+Lô L3 của đợt trả nợ song song (S1.9110). Hai khoản trong `packages/unseal`: **114** — bảng so sánh gọi `bid_so_tien(payload->>'totalAmount')` bảy lần mỗi báo giá và `->>` trên một `totalAmount` không vô hướng dựng cả cây thành văn bản; **160** — lời khai "trigger nhân chứng đòi phiên còn sống ở mọi `UPDATE`" đã sai từ `055` mục (3) mà hàng sổ và một khối chú thích ở `requests.ts` chưa ai sửa.
+
+## 2. Quyết định của chủ dự án
+Không có; vòng trả nợ theo phân công ngày 2026-09-29.
+
+## 3. Đo trước
+- **114**, trên `c9e13b4`, `comparison.int.test.ts` khối `[S1.9131 / khoản 114]` (ba ca mới, chạy trước khi sửa `comparison.ts`): ⒜ xanh (kết quả bảng đúng cả trước lẫn sau — mảng cho `null`, `unparsed = 1`, tổng hợp đúng; thời lượng 313 ms); ⒝ ĐỎ — `expected [ 6540000, 6540000, 6540000 ] to deeply equal []`: ba lần `bid_so_tien` nhận 6 540 000 ký tự cho một mảng 20 000 phần tử `1e324`; ⒞ ĐỎ — `expected [ 4, 4, 4, 9, 9, 9, 9, 9, 9, 9, …(10) ] to deeply equal [ 9, 9, 9, 9 ]`: 20 lần gọi cho sáu báo giá — bảy cho mỗi báo giá đọc được (2 câu hàng + 5 câu tổng hợp), ba cho boolean `true` (4 ký tự), ba cho đối tượng `{"so": "900000.00"}` (19 ký tự).
+- Mili-giây `buildComparisonTable` trên mã cũ (5 lượt, `performance.now()` quanh lời gọi, tạm thêm rồi gỡ): N = 20 000 ⇒ 277, 246, 247, 259, 237; N = 100 000 ⇒ 1 445, 1 205, 1 112, 1 075, 1 130.
+- **160**: đọc `055` mục (3) và bản ghim ở `hardening.always.sql` (`pg_get_triggerdef` = `… BEFORE INSERT ON public.unseal_requests …`); ca `[khoản 210] phiên nhân chứng bị THU HỒI: câu EXECUTED của worker VẪN đi được` đã xanh từ S1.100. Chưa ca nào dựng cảnh "nhân chứng chết giữa lần điều phối và lần bấm lại" trên lối `dieuPhoiLaiSauKhiChet`.
+
+## 4. Thay đổi
+- `packages/unseal/src/comparison.ts` (chỉ hai câu SQL của `buildComparisonTable` và chú thích): `so_tien` = `CASE WHEN pg_catalog.jsonb_typeof(payload->'totalAmount') = ANY ('{number,string}') THEN public.bid_so_tien(payload->>'totalAmount') END`. Câu hàng: biểu thức nằm trong subquery `d` cùng `row_number()` (hàm cửa sổ ⇒ không bị `pull_up_simple_subquery`), câu ngoài chọn `d.so_tien::text` và `ORDER BY d.so_tien`. Câu tổng hợp: biểu thức nằm trong CTE `moi_nhat` (`DISTINCT ON` ⇒ không bị kéo lên), câu ngoài `min/max/avg/FILTER/WHERE` tham chiếu `u.so_tien`. Bốn chỗ đọc tiền tệ qua `bid_currency` giữ nguyên hình S1.165 (lớp `tien-te-mot-cho-doc.test.ts` ghim đúng năm lời gọi trong mã sản xuất).
+- `packages/unseal/src/comparison.int.test.ts`: `moThau` nhận `payload` là CHUỖI làm văn bản JSON thô (vì `JSON.stringify` không viết ra được `1e324`); khối `[S1.9131 / khoản 114]` ba ca, đếm lần gọi qua hàm bọc `public.bid_so_tien` (IMMUTABLE STRICT, `RAISE NOTICE 'k114 do_dai=%'`, gọi `bid_so_tien_goc`), gỡ trong `finally`, so `prosrc` trước/sau.
+- `packages/unseal/src/requests.ts`: gạch khối "RANH GIỚI NÓI RA … Đó là khoản 160, và vòng này KHÔNG đóng nó" ở `dieuPhoiLaiSauKhiChet`, viết câu đúng trỏ `055`/khoản 210 và các ca đo.
+- `packages/unseal/src/unseal.int.test.ts`: hai ca `[INV-D3] [S1.9131 / khoản 160]` trong khối `[INV-D3] [khoản 209 + 210]` (tệp đã khai cho D3 ở `so-khai-nhan.ts`).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Đếm lần gọi thay vì đòi trần mili-giây: máy 4 lõi dùng chung với bốn agent, một trần thời gian là một test lúc đỏ lúc xanh; số lần gọi và độ dài đối số thì không. Mili-giây được đo và ghi ở đây, không khẳng định trong test.
+- Hàm bọc là IMMUTABLE STRICT như hàm gốc để bộ lập kế hoạch đối xử y hệt — một hàm bọc VOLATILE sẽ tự chặn kéo lên và làm test xanh giả trên một bản vá chỉ dựa vào subquery đơn thuần. Hàm bọc phát NOTICE mang độ dài, không mang giá trị.
+- "Một lần cho mỗi báo giá" đo thành "một lần cho mỗi HÀNG bản rõ mỗi câu": câu hàng vốn trả mọi phiên bản; CTE `DISTINCT ON` chiếu trước khi chọn nên biểu thức chạy cho mọi phiên bản của một luồng. Với một phiên bản mỗi luồng là đúng hai lần; với BAFO là hai lần mỗi phiên bản — rẻ, vì chỉ vô hướng mới tới `bid_so_tien`. Nói ra trong chú thích tại chỗ.
+- Bản đầu của vá còn gom tiền tệ về một lần mỗi câu (`u.currency`); `tests/architecture/tien-te-mot-cho-doc.test.ts` ghim đúng NĂM lời gọi `bid_currency` trong mã sản xuất và đỏ (`expected 3 to be 5`). Trả lại bốn chỗ đọc như S1.165 thay vì sửa lớp canh — tiền tệ không phải thứ 114 đo, và một chuỗi tiền tệ không phình khi `->>`.
+- Không chạm `apps/unseal-worker/src/index.ts` (`thanhJson`) đúng đề bài; vế ấy thành khoản 9431.
+
+## 6. Đột biến
+- **114-M1** — bỏ vế `jsonb_typeof` ở câu hàng (gọi thẳng `bid_so_tien(->>)` trong subquery): ⒝ đỏ `expected [ 6540000 ] to deeply equal []`; ⒞ đỏ `[ 4, 9, 9, 9, 9, 19 ]` — boolean và đối tượng lại tới hàm.
+- **114-M3** — câu tổng hợp tính lại biểu thức (có vế `jsonb_typeof`) ở năm chỗ ngoài CTE: ⒝ đỏ `expected [ 10, 10, 10, 10, 10, 10 ] to deeply equal [ 10, 10 ]` (1 câu hàng + 5 câu tổng hợp); ⒞ đỏ 12 lần thay vì 4.
+- **160** — đột biến nằm NGAY TRONG ca thứ hai: `DROP TRIGGER` rồi tạo lại hình `022` (`BEFORE INSERT OR UPDATE`) + `ENABLE ALWAYS` ⇒ `dispatchUnseal` bấm lại gãy `23514 Phien khong hop le`, `ketCucJob = ["FAILED"]`; `finally` trả lại hình `055` và so `[tgenabled, pg_get_triggerdef]` với bản đọc trước đột biến.
+
+## 7. Giới hạn, nói ra
+- Test đếm bằng cách đổi tên hàm sản xuất trong cụm test dùng một lần (`ALTER FUNCTION … RENAME`); nếu ca ngắt giữa chừng, các ca sau của tệp ấy chạy trên hàm bọc — cùng lớp rủi ro với các ca `DROP TRIGGER`/`CREATE TRIGGER` đã có, và `finally` + so `prosrc` là lớp đỡ.
+- Mili-giây đo trên cụm cục bộ PG 16 (glibc), máy 4 lõi có bốn agent khác — con số là khoảng của 5 lượt, không phải một benchmark. Phần còn lại của N = 100 000 (357–433 ms) là trả nguyên `payload` (100 000 × 325 chữ số ≈ 32,7 MB văn bản jsonb → Node) — tính, chưa tách đo; khoản 9431.
+- `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` đỏ 3/6 trong cổng cuối — ĐÃ ĐỎ Y HỆT trên `c9e13b4` khi stash toàn bộ thay đổi của lô: `packages/test-support/src/postgres-cuc-bo.ts` (S1.9110) chưa khai ở ba danh sách của lớp ấy (`new pg.Client`: 1; `{cau: 0, lay: 1}`; listener `'error'`: 1). Ngoài phạm vi lô (tệp cấm + `tests/architecture`); ghi ở mục 6 của bàn giao cho người tích hợp.
+- Trong lượt chạy cổng, hai tệp dò `apps/tmp-probe-test-support-moi/` và `packages/test-support/src/zzprobe-module-moi.ts` xuất hiện rồi biến mất (test kiến trúc ghi probe vào cây nguồn) — không phải của lô, không còn sau khi chạy.
+
+## 8. Số đo
+- `pnpm typecheck`: xanh. `pnpm exec eslint` bốn tệp đã chạm: 0 lỗi. `pnpm exec depcruise packages/unseal --config .dependency-cruiser.cjs`: 56 module, 145 phụ thuộc, 0 vi phạm.
+- `pnpm vitest run packages/unseal/src/comparison.int.test.ts -t "khoản 114"`: trước vá 1 xanh / 2 đỏ; sau vá 3/3; M1 và M3 mỗi lần 2 đỏ.
+- `pnpm vitest run packages/unseal/src/unseal.int.test.ts -t "khoản 160"`: 2/2 (đột biến nằm trong ca).
+- `pnpm vitest run packages/unseal/src/comparison.int.test.ts tests/architecture/tien-te-mot-cho-doc.test.ts tests/architecture/qt3-ghim-schema.test.ts`: 39/39.
+- Cổng cuối `pnpm vitest run packages/unseal tests/architecture` (hai biến cụm cục bộ): 38 tệp — 37 xanh, 1 đỏ (`tests/architecture/duong-sql-ngoai-with-tenant.test.ts`, 3/6, ĐỎ SẴN trên `c9e13b4`, xem mục 6 ⑺); 460 test — 456 xanh, 3 đỏ (ba ca ấy), 1 bỏ qua (sẵn có ở `xuong-dong-ts.test.ts`); 184 s. Trong đó `comparison.int.test.ts` 24/24, `unseal.int.test.ts` 63/63, `xin-mo-xep-tin-truoc-ghi-so.int.test.ts` 2/2, `loc-vi-pham-d2.test.ts` 5/5, `tien-te-mot-cho-doc.test.ts` 3/3, `qt3-ghim-schema.test.ts` 12/12, `qt3-cu-phap.int.test.ts` 1/1.
+- `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` riêng, trên `c9e13b4` (stash): 3 đỏ / 3 xanh — y hệt trên nhánh.
+- Mili-giây (5 lượt): N = 20 000: trước 277, 246, 247, 259, 237 → sau 102, 110, 94, 80, 82; N = 100 000: trước 1 445, 1 205, 1 112, 1 075, 1 130 → sau 375, 421, 357, 362, 433.
+
+— hết biên bản §S1.9131 —
+
 # §S1.9151 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không
