@@ -135,7 +135,7 @@ export function tuDocNganSach(userId: string, createdBy: unknown): boolean {
   return userId !== "" && createdBy === userId;
 }
 
-/** [S1.200 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `081`). */
+/** [S1.200 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `086`). */
 export function hangNganSach(budget: unknown): readonly (readonly [string, string | null])[] {
   const b = (budget !== null && typeof budget === "object" ? budget : {}) as Record<string, unknown>;
   const chu = (v: unknown): string | null => (typeof v === "string" || typeof v === "number" ? String(v) : null);
