@@ -16134,6 +16134,10 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 
 - Bốn tệp sổ đăng ký CSDL (`check-an-ninh`, `hardening-suy-tu-tinh-chat` — kể cả nhân chứng hành vi của `ncc_kiem_xac_minh` —,
   `migrations`, `rls-coverage`): đỏ 16 ca trước khi khai, xanh sau. `migrate()` hai lượt liên tiếp trên CSDL mới: sạch.
+- Lượt T3 toàn bộ đầu tiên đỏ ba tệp, cả ba là sổ đăng ký chưa khai: bộ quét rò rỉ của kịch bản 41 qua HTTP (hai route ghi mới
+  chưa có thân hợp lệ — nay xác minh và thu hồi trên nhà cung cấp HY SINH bằng tài chính), lớp đọc `org_procurement_policies`
+  (`ncc_kiem_xac_minh` khai `QUA_HAM`), và phép khớp tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (nay đọc cả thân trigger K8a). Sau khai: xanh.
+- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành S1.193 và `080`; mốc `MOC_GHIM` 70 → 71.
 - `pnpm t0` sạch; `pnpm test` sạch.
 
 ## 4. Giới hạn

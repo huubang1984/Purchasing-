@@ -847,6 +847,8 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       ngan_sach_khong_ghim_ban_chua_ky: "THEO_ID",
       // [S1.166 / S3.1b] Hàm phân bậc và trigger đặt bậc: cả hai đọc ĐÚNG phiên bản ngân sách ghim.
       ngan_sach_xep_bac: "THEO_ID",
+      // [S1.193 / S3.3a] Hạn hiệu lực của xác minh nhà cung cấp đọc phiên bản chính sách hiện hành QUA hàm chọn.
+      ncc_kiem_xac_minh: "QUA_HAM",
       rfq_bac_cua: "THEO_ID",
       rfq_can_phe_duyet_kep: "THEO_ID",
       rfq_che_do_nghiem: "QUA_HAM",
