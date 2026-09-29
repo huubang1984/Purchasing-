@@ -3295,6 +3295,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
         "077_tra_ve_nhap.sql",
+        "078_nhan_chung_chi_break_glass.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7715,6 +7716,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
         "077_tra_ve_nhap.sql",
+        "078_nhan_chung_chi_break_glass.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8012,6 +8014,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
         "077_tra_ve_nhap.sql",
+        "078_nhan_chung_chi_break_glass.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
