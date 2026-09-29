@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CHAIN_COVERING_ROLE_PAIRS,
+  ITEM_MANAGE_CONFLICT_ROLE_PAIRS,
+  ITEM_MANAGE_EXCLUDES,
   PERMISSIONS,
   POLICY_MANAGE_CONFLICT_ROLE_PAIRS,
   POLICY_MANAGE_EXCLUDES,
@@ -59,8 +61,10 @@ function catValuesNeuCo(pSql: string, pBang: string): string {
   }
 }
 
+// [S1.197] `\d{3,4}`: số migration TẠM `95NN` của `pnpm cap-so` (ADR-090) có bốn chữ số — `\d{3}` làm ma trận tĩnh mù với
+// chính migration của nhánh đang thêm vai, đúng lúc phép ghim cần đọc nó.
 const MOI_MIGRATION = readdirSync(THU_MUC)
-  .filter((f) => /^\d{3}_.*\.sql$/.test(f))
+  .filter((f) => /^\d{3,4}_.*\.sql$/.test(f))
   .sort()
   .map((f) => ({ ten: f, sql: readFileSync(`${THU_MUC}/${f}`, "utf8") }));
 
@@ -231,9 +235,10 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     expect(maTran.get("PROCUREMENT_MANAGER")).not.toContain(PERMISSIONS.POLICY_MANAGE);
   });
 
-  it("chống rỗng ruột: ma trận đọc được và có đủ sáu vai trò", () => {
+  it("chống rỗng ruột: ma trận đọc được và có đủ ~~sáu~~ [S1.197] bảy vai trò", () => {
     expect([...maTran.keys()].sort()).toEqual([
       "BUYER",
+      "DATA_STEWARD",
       "DIRECTOR",
       "FINANCE",
       "PROCUREMENT_MANAGER",
@@ -243,9 +248,11 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
   });
 
   it("mọi vai trò trong role_permissions đều có trong bảng `roles`", () => {
+    // [S1.197] Đọc `roles` ở MỌI migration — `DATA_STEWARD` vào ở S4.2a, không ở `005`.
     const maVaiTro = new Set(
-      cacChuoi(catValues(SQL_005, "roles")).filter((_v, i) => i % 2 === 0),
+      MOI_MIGRATION.flatMap(({ sql }) => cacChuoi(catValuesNeuCo(sql, "roles")).filter((_v, i) => i % 2 === 0)),
     );
+    expect(maVaiTro.size, "chống rỗng ruột").toBeGreaterThanOrEqual(7);
     for (const vaiTro of maTran.keys()) expect(maVaiTro).toContain(vaiTro);
   });
 
@@ -471,5 +478,64 @@ describe("[INV-D2] [033] thước đo không cùng tay: policy.manage tách kh�
       .filter(([, tap]) => tap.has(PERMISSIONS.POLICY_MANAGE) && POLICY_MANAGE_EXCLUDES.some((ma) => tap.has(ma)))
       .map(([v]) => v);
     expect(viPham).toEqual(["PROCUREMENT_MANAGER"]);
+  });
+});
+
+describe("[INV-L3] [S1.197 / S4.2a] người đặt thước dữ liệu mù giá: item.manage tách khỏi năm mã thấy giá hay cầm thứ bị đo", () => {
+  const TEP_S42A = MOI_MIGRATION.filter(({ sql }) => sql.includes("$tqv$"));
+  const maTran = (() => {
+    const ketQua = new Map<string, Set<string>>();
+    for (const { sql } of MOI_MIGRATION) {
+      for (const [vaiTro, quyen] of catDeletes(sql)) ketQua.get(vaiTro)?.delete(quyen);
+      for (const [, vaiTro, quyen] of catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)) {
+        const tap = ketQua.get(vaiTro!) ?? new Set<string>();
+        tap.add(quyen!);
+        ketQua.set(vaiTro!, tap);
+      }
+    }
+    return ketQua;
+  })();
+  const viPhamVai = (m: ReadonlyMap<string, ReadonlySet<string>>): string[] =>
+    [...m.entries()].filter(([, tap]) => tap.has(PERMISSIONS.ITEM_MANAGE) && ITEM_MANAGE_EXCLUDES.some((ma) => tap.has(ma))).map(([v]) => v);
+
+  it("danh sách loại trừ khớp NGUYÊN VĂN ở ba bản: TypeScript, thân trigger mức vai trò, thân trigger mức người dùng", () => {
+    expect(TEP_S42A.map((t) => t.ten), "đúng một migration dựng hai trigger").toHaveLength(1);
+    const sql = TEP_S42A[0]!.sql;
+    const vaiTro = chuoiTrongThan(catTheDollar(sql, "tqv"), "$tqv$");
+    const nguoiDung = chuoiTrongThan(catTheDollar(sql, "tqn"), "$tqn$");
+    expect(vaiTro.length, "chống rỗng ruột").toBe(5);
+    expect([...ITEM_MANAGE_EXCLUDES]).toEqual(vaiTro);
+    expect([...ITEM_MANAGE_EXCLUDES]).toEqual(nguoiDung);
+    for (const than of [catTheDollar(sql, "tqv"), catTheDollar(sql, "tqn")]) {
+      expect(cacChuoi(than)).toContain(PERMISSIONS.ITEM_MANAGE);
+    }
+    const hopLe = new Set<string>(Object.values(PERMISSIONS));
+    for (const ma of ITEM_MANAGE_EXCLUDES) expect(hopLe).toContain(ma);
+  });
+
+  it("đúng MỘT vai giữ item.manage — DATA_STEWARD — và vai ấy không giữ mã loại trừ nào", () => {
+    const giu = [...maTran.entries()].filter(([, tap]) => tap.has(PERMISSIONS.ITEM_MANAGE)).map(([v]) => v);
+    expect(giu).toEqual(["DATA_STEWARD"]);
+    expect(viPhamVai(maTran)).toEqual([]);
+  });
+
+  it("tập CẶP vai trò mà một người mang cả hai sẽ vi phạm — đúng bằng mốc đã GHIM", () => {
+    const ten = [...maTran.keys()].sort();
+    const doDuoc: string[] = [];
+    for (let i = 0; i < ten.length; i += 1) {
+      for (let j = i + 1; j < ten.length; j += 1) {
+        const hop = new Set([...(maTran.get(ten[i]!) ?? []), ...(maTran.get(ten[j]!) ?? [])]);
+        if (hop.has(PERMISSIONS.ITEM_MANAGE) && ITEM_MANAGE_EXCLUDES.some((ma) => hop.has(ma))) doDuoc.push(`${ten[i]}+${ten[j]}`);
+      }
+    }
+    const daGhim = ITEM_MANAGE_CONFLICT_ROLE_PAIRS.map((c) => [...c].sort().join("+")).sort();
+    expect(daGhim.length, "chống rỗng ruột").toBeGreaterThan(0);
+    expect(doDuoc.sort()).toEqual(daGhim);
+  });
+
+  it("phép kiểm KHÔNG rỗng ruột: cho DATA_STEWARD thêm bid.view thì bị bắt", () => {
+    const xau = new Map([...maTran].map(([k, v]) => [k, new Set(v)] as const));
+    xau.get("DATA_STEWARD")!.add(PERMISSIONS.BID_VIEW);
+    expect(viPhamVai(xau)).toEqual(["DATA_STEWARD"]);
   });
 });

@@ -9,9 +9,12 @@ import { assertTenantBound } from "@trustprocure/audit";
 
 export const KHONG_QUY_DOI_DUOC = "KHONG_QUY_DOI_DUOC" as const;
 
-/** `CUNG_DON_VI` là hệ số `1` CÓ NGUỒN — cùng một mã; mọi ca không nguồn là `KHONG_QUY_DOI_DUOC` (L4). */
+/**
+ * `CUNG_DON_VI` là hệ số `1` CÓ NGUỒN — cùng một mã; mọi ca không nguồn là `KHONG_QUY_DOI_DUOC` (L4). **[S1.197 / S4.2a]**
+ * `QUY_DOI_RIENG`: đúng một quy đổi riêng của hàng chuẩn, ghép với quy đổi chung ở hai đầu (ADR-116).
+ */
 export type KetQuaQuyDoi =
-  | { readonly quyDoiDuoc: true; readonly heSo: string; readonly ma: "CUNG_DON_VI" | "QUY_DOI_CHUNG" }
+  | { readonly quyDoiDuoc: true; readonly heSo: string; readonly ma: "CUNG_DON_VI" | "QUY_DOI_CHUNG" | "QUY_DOI_RIENG" }
   | { readonly quyDoiDuoc: false; readonly ma: typeof KHONG_QUY_DOI_DUOC };
 
 export interface QuyDoiDonViInput {
@@ -21,7 +24,7 @@ export interface QuyDoiDonViInput {
   readonly sang: string;
   /** Mốc: chỉ bí danh của tổ chức có `ghi_luc` TRƯỚC mốc được dùng (L1). */
   readonly moc: Date;
-  /** Hàng chuẩn — vế quy đổi riêng thuộc S4.2; ở S4.1 tham số này không đổi kết quả. */
+  /** Hàng chuẩn — **[S1.197 / S4.2a]** quy đổi riêng của ĐÚNG hàng này, ghi trước mốc, vào cuộc khi quy đổi chung không có. */
   readonly hangChuanId?: string | null;
 }
 
@@ -33,7 +36,7 @@ export async function quyDoiDonVi(client: pg.PoolClient, input: QuyDoiDonViInput
   );
   const hang = rows[0];
   if (hang === undefined) throw new Error("quy_doi_don_vi không trả hàng nào");
-  if ((hang.ma === "CUNG_DON_VI" || hang.ma === "QUY_DOI_CHUNG") && hang.he_so !== null) {
+  if ((hang.ma === "CUNG_DON_VI" || hang.ma === "QUY_DOI_CHUNG" || hang.ma === "QUY_DOI_RIENG") && hang.he_so !== null) {
     return { quyDoiDuoc: true, heSo: hang.he_so, ma: hang.ma };
   }
   if (hang.ma === KHONG_QUY_DOI_DUOC && hang.he_so === null) return { quyDoiDuoc: false, ma: KHONG_QUY_DOI_DUOC };
