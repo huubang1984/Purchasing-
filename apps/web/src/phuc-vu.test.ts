@@ -1323,6 +1323,26 @@ describe("bề mặt tệp", () => {
       expect(q.el("loi4").textContent).toBe("khong o PENDING_APPROVAL");
       expect(q.el("ly-do-tra-ve").value, "hỏng thì giữ lý do đã gõ").toBe("x");
     });
+
+    // Trần của máy chủ là 2000 BYTE UTF-8 (`returnRfqToDraft`), không phải 2000 ký tự: "ế" là ba byte.
+    it("[S3.2c] tao-thau: Trả về nháp — lý do quá 2000 byte UTF-8 (700 chữ «ế», 2100 byte) ⇒ không gọi route; đúng 2000 byte ⇒ gọi", async () => {
+      const p = await moTaoThau({
+        daBat: true, trangThaiGoi: "PENDING_APPROVAL",
+        thay: (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "DRAFT" } } }) : undefined),
+      });
+      p.el("ly-do-tra-ve").value = "ế".repeat(700);
+      await p.bam("nut-tra-ve");
+      expect(p.el("loi4").textContent).toMatch(/^Lý do dài quá — tối đa 2000 byte/u);
+      expect(p.trangThai.goi).not.toContain("POST /rfqs/r-1/return-to-draft");
+      expect(p.el("ly-do-tra-ve").value, "giữ lý do đã gõ để người dùng sửa").toBe("ế".repeat(700));
+
+      const vuaDu = `${"ế".repeat(666)}ab`;
+      p.el("ly-do-tra-ve").value = vuaDu;
+      await p.bam("nut-tra-ve");
+      const i = p.trangThai.goi.indexOf("POST /rfqs/r-1/return-to-draft");
+      expect(i, "đúng 2000 byte thì qua").toBeGreaterThan(-1);
+      expect(p.trangThai.than[i]).toEqual({ reason: vuaDu });
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {

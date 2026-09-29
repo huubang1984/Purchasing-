@@ -15947,6 +15947,8 @@ S3.2b2 (§S1.188) dựng lớp CSDL, cạnh về `DRAFT` và hai route. Tới v�
   khi `unsentInvitationIds` không rỗng, chỉ nói khoá đã sinh, còn khung lỗi nói số link chưa gửi và chỉ đường gửi lại —; rồi đọc lại
   bảng lời mời. Nộp duyệt ở tổ chức đã bật nói danh sách đã khoá.
 - **Khối *Trả về nháp*:** ô lý do — màn kiểm ô trống trước, cửa thật là route — và nút gọi `POST /rfqs/:rfqId/return-to-draft`.
+  **[Lúc chủ dự án chọn #198 thay #200]** Màn kiểm thêm trần 2000 BYTE UTF-8 của `returnRfqToDraft` — phép kiểm lấy từ #200: chữ
+  có dấu là hai hay ba byte, nên 700 chữ «ế» (2100 byte) bị chặn ở màn, còn đúng 2000 byte thì qua.
 - Trạng thái phiên của trang dựng lại bằng MỘT hàm (`phienMoi`) ở cả hai chỗ đổi người, thêm `s3` và `trangThaiGoi`.
 
 **Gói `invitation`:** `listInvitations` — và thân `GET /rfqs/:rfqId/invitations` — trả thêm `moiSauKhiKy`.
@@ -16096,4 +16098,8 @@ M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại m�
 - **Hợp `master` lần hai.** #197 — vòng **S1.190**, S3.2c1 — merge trong lúc PR của vòng này chờ CI; `pnpm cap-so` cấp lại số vòng.
   Xung đột ở `tools/gieo-demo`, hai tệp kịch bản 41, cột mốc `docs/STATE.md`, hàng S3.2 của spec §9 và cuối biên bản; gỡ tay: mã lấy
   bản của `master` (#197), bước 15 của vòng này gắn lại nguyên văn; tài liệu giữ cả hai mục, mục của vòng này đứng sau §S1.190.
+- **Hai PR cho cùng S3.2c2.** #200, của phiên làm #197, dựng cùng màn theo cách khác: phần tính gom vào một module có unit test, bước
+  mời dời bằng CSS `order`. Chủ dự án chọn giữ #198 — thứ tự trong DOM giữ đúng thứ tự phím Tab và trình đọc màn hình — và đóng
+  #200; phép kiểm lý do theo trần byte của #200 đi vào #198. Đo: `phuc-vu.test.ts` **86/86**, một ca mới; hai đột biến — bỏ phép kiểm,
+  đếm ký tự thay vì byte — cả hai đỏ đúng ca ấy. `pnpm t0` sạch; `pnpm test` 121 tệp, 1712 đạt, 1 bỏ qua; `cap-so --kiem` sạch.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).

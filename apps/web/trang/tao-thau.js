@@ -380,11 +380,18 @@ for (const [nut, duong, xong] of [
 // nộp duyệt, chỉ ở tổ chức đã bật. Lý do bắt buộc (chủ dự án chốt ngày 2026-09-28) và vào sổ; trang kiểm ô trống trước để
 // không tiêu một lần gọi, còn cửa thật là route. Không chữ ký nào bị xoá: chữ ký cũ chỉ còn tính khi nội dung và danh sách
 // không đổi (K4b).
+// Trần của lý do tính bằng BYTE UTF-8, cùng đơn vị với `returnRfqToDraft` (`batBuoc(…, 2000)`, `packages/rfq`): chữ có dấu là
+// hai hay ba byte, nên 2000 ký tự tiếng Việt vượt trần của máy chủ. Kiểm ở đây để không tiêu một lần gọi; cửa thật vẫn là route.
+const TRAN_LY_DO_BYTE = 2000;
 $("nut-tra-ve").addEventListener("click", async () => {
   bao($("loi4"), ""); bao($("ok4"), "");
   if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
   const reason = $("ly-do-tra-ve").value.trim();
   if (reason === "") { bao($("loi4"), "Cần lý do trả gói về nháp — lý do vào sổ kiểm toán."); return; }
+  if (new TextEncoder().encode(reason).length > TRAN_LY_DO_BYTE) {
+    bao($("loi4"), `Lý do dài quá — tối đa ${TRAN_LY_DO_BYTE} byte; chữ có dấu tính hai hay ba byte.`);
+    return;
+  }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/return-to-draft`, { reason });
   if (r.status !== 200) { bao($("loi4"), loiCua(r, "Không trả gói về nháp được")); return; }
   $("ly-do-tra-ve").value = "";
