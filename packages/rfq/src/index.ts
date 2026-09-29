@@ -24,6 +24,7 @@ export {
   getRfq,
   listRfqItems,
   openRfq,
+  returnRfqToDraft,
   submitRfqForApproval,
   type AddRfqItemInput,
   type ApproveRfqInput,

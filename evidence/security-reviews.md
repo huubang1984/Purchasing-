@@ -15489,3 +15489,136 @@ vế *nhãn vào bộ bằng chứng* ở S3.9.
   `toLowerCase()` trên `Ⓐ`, lệch dưới cụm glibc UTF-8 của máy đo; không mang nhãn bất biến). Kịch bản 41 (cả hai luồng),
   `buyer.int`, `gieo:demo` và route gửi lại của ADR-110 đi qua nguyên vẹn.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); mốc `MOC_GHIM.soPhuToiThieu` nâng tay 65 → 68.
+
+---
+
+# §S1.186 — S3.2b1: CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT, CÓ NGƯỜI VÀ CÓ LÝ DO (K4a); KHOẢN 253 ĐÓNG Ở PHÍA DÙNG (K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 253 (rổ B)
+đóng. Một migration (`077_tra_ve_nhap`), một route mới. Không ADR mới.
+
+## 1. Vòng này là gì
+
+Phần đầu trong hai phần của S3.2b (spec S3 §9). S3.2a (§S1.185) dựng lớp CSDL của danh sách mời; vòng này dựng đường DUY
+NHẤT để đổi danh sách hay nội dung sau khi nộp duyệt — cạnh về `DRAFT` —, và đóng khoản 253: token đúc thời MVP1 khi gói chưa
+mở thôi dùng được sau khi tổ chức bật S3. Luồng mời mới — mời ở `DRAFT` không đúc token, đúc lúc mở gói, gửi sau commit,
+`SENT` sau lần gửi được — là S3.2b2.
+
+## 2. Quyết định của chủ dự án (S1.186)
+
+- S3.2b chia hai PR: S3.2b1 là cạnh về `DRAFT` cộng khoản 253; S3.2b2 là luồng mời mới.
+- Lần trả về `DRAFT` BẮT BUỘC lý do.
+- Lần mở gói mà một phần link gửi hỏng trả 200 kèm danh sách lời mời chưa gửi — áp ở S3.2b2.
+- (Từ S1.185) Cạnh `PENDING_APPROVAL→DRAFT` chỉ mở cho tổ chức đã bật. Ai đi cạnh ấy: bảng ADR-084 ⑵.
+
+## 3. Thay đổi
+
+**Migration `077_tra_ve_nhap`:**
+- Trigger `rfq_packages_tra_ve_nhap_chi_khi_bat_s3`, `WHEN` đúng cạnh `PENDING_APPROVAL→DRAFT` (khuôn `014` §(4)), `ENABLE
+  ALWAYS`: tổ chức chưa bật ⇒ 23514 *"Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)"*.
+- Cột `rfq_invitation_tokens.duc_khi_goi_da_mo boolean NOT NULL DEFAULT false`, ngoài `GRANT`, do trigger
+  `rfq_invitation_tokens_ghi_goi_da_mo` (BEFORE INSERT, mọi tổ chức, `ENABLE ALWAYS`) đặt LÚC ĐÚC: gói của lời mời đã có
+  `opened_at` chưa — đúng điều K6 hỏi. Hàng cũ điền `true` khi `created_at >= opened_at`.
+
+**Hardening:** hai hàm trigger ghim thân và định nghĩa trigger ở `hardening.always.sql`; hai hàm vào `HAM_KHONG_PHAI_CANH`
+của `db/hardening-suy-tu-tinh-chat.int.test.ts`, và `dungKichBan()` có nhân chứng cho hàm cạnh: nộp một gói TRƯỚC lần bật,
+trả nó về `DRAFT` SAU lần bật.
+
+**Tầng gói — `returnRfqToDraft` (`packages/rfq`):** tổ chức chưa bật ⇒ lời từ chối có tên, không vào sổ; người TẠO gói ⇒
+`requirePermission(rfq.create)`, người khác ⇒ `requirePermission(rfq.approve)` — mỗi lần từ chối một hàng `PERMISSION_DENIED`;
+lý do rỗng ⇒ từ chối có tên; `UPDATE … AND status = 'PENDING_APPROVAL'`; hàng sổ `RFQ_RETURNED_TO_DRAFT` mang `{reason}`.
+
+**Route — `POST /rfqs/:rfqId/return-to-draft`:** cổng của bộ điều phối là `rfq.create`, thân `{reason}` bắt buộc. Bộ quét route
+của kịch bản 41 HTTP có ca cho nó.
+
+**Phía dùng token — `docToken` (`packages/invitation`):** thêm vế `(t.duc_khi_goi_da_mo OR NOT to_chuc_da_bat_s3(t.org_id))`.
+Ba đường dùng token — đổi link, xin OTP, xác minh OTP — đều đi qua hàm này; cùng MỘT thông báo với bốn ca hỏng cũ.
+
+**Lượt quét [INV-H17] (`apps/api/src/buyer.int.test.ts`):** route mới là route ghi thứ 31 của người mua, và hai lượt quét dồn
+mọi lần từ chối vào một phiên — lần thứ 31 chạm trần từ chối theo phiên 30 (`TU_CHOI_TRAN_MOI_CUA_SO`, khoản 144 · 248) và nhận
+429 thay vì 403. Trần là một phép đo khác, ở `auth.int.test.ts`; hai lượt quét nay chạy trên máy chủ thứ hai có trần bằng số
+route ghi cộng một, suy từ chính bảng route. Máy chủ chung giữ trần mặc định.
+
+**Sổ đăng ký:** hàng K4a và K6 của `docs/TEST-PLAN.md` nói thêm vế vừa cưỡng chế; `so-khai-nhan.ts` khai ba tệp test mới
+cho K4a, K4b, K6. Không mã mới — 68 bất biến.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Khoản 253 đóng bằng MỘT CỘT, không bằng phép so thời gian mà hàng sổ nợ đề xuất.** `created_at` là giờ BẮT ĐẦU giao dịch
+  đúc. Một giao dịch mời bắt đầu trước lần mở gói, chờ khoá `FOR SHARE` của K4a, rồi đúc sau khi lần mở commit, mang
+  `created_at` sớm hơn `opened_at` — phép so sẽ giết một link hợp lệ, im lặng. Đo được (§5). Cột ghi điều trigger THẤY lúc đúc,
+  nên nó không đua.
+- **Cột đặt cho MỌI tổ chức, không chỉ tổ chức đã bật.** Tổ chức bật S3 SAU lần đúc — chính ca khoản 253 —, nên cột phải đúng
+  từ lần đúc. Trigger riêng, không sửa hàm K6 của `076`: bản ghim của hàm ấy giữ nguyên.
+- **Quyền kép là hai lần `requirePermission`, không phải một lần hỏi im lặng.** `hasPermission` cố ý không ra mặt tiền gói.
+  Hệ quả: người tạo gói đã mất `rfq.create` mà còn giữ `rfq.approve` bị từ chối ở nhánh người tạo. Hôm nay không vai nào ở ca
+  ấy — và test ghim tiền đề *mọi vai giữ `rfq.approve` cũng giữ `rfq.create`*, cũng là tiền đề của cổng `rfq.create` ở route.
+- **Người và lý do ở tầng gói, không ở cột.** Cạnh đi được nhiều lần; một cột chỉ giữ lần cuối (`016` §(3), cùng lý do việc gia
+  hạn không có cột). Sổ giữ mọi lần. Trigger ở cạnh chỉ canh *tổ chức đã bật* — cùng tầng với các cạnh khác của gói, mà quyền
+  của chúng (mở, nộp, đóng) cũng hỏi ở tầng gói.
+- **Không xoá chữ ký.** Chữ ký cũ ở lại làm dấu vết và mất hiệu lực bằng băm (`011` C-1, K4b). Gói trả về rồi nộp lại y nguyên
+  thì chữ ký cũ vẫn đếm — người duyệt đã ký đúng thứ ấy.
+- **Tổ chức chưa bật: không vào sổ.** Lời từ chối nói cấu hình chưa sẵn sàng, không nói người dùng đi sai thứ tự (ADR-060).
+- **Kiểm *đã bật* trước kiểm quyền.** Một người không quyền ở tổ chức chưa bật nhận lời *chưa bật* chứ không nhận 403 — trạng
+  thái bật S3 của tổ chức không phải bí mật với người trong tổ chức, và lời từ chối không vào sổ.
+
+## 5. Đo
+
+`packages/rfq/src/tra-ve-nhap.int.test.ts` — 15 ca trên Postgres thật dưới `app_api`, mỗi ca một tổ chức riêng:
+- **K4a:** người tạo trả về ⇒ `DRAFT`, một hàng sổ mang người và lý do; ở `DRAFT` thêm và thu hồi lời mời được lại, nộp lại
+  được. BUYER và FINANCE không phải người tạo ⇒ `PermissionDeniedError`, mỗi lần một hàng `PERMISSION_DENIED` trên
+  `rfq.approve`; PM khác người tạo ⇒ trả về được. BUYER là người tạo ⇒ trả về được. Lý do rỗng hay chỉ khoảng trắng ⇒ từ chối có
+  tên, gói ở nguyên, không hàng sổ. Gói ở `DRAFT` hay `OPEN` ⇒ từ chối trạng thái. Tổ chức chưa bật ⇒ tầng gói từ chối có tên
+  và số hàng sổ của tổ chức không đổi; câu `UPDATE` thô dưới `app_api` ⇒ 23514 đúng thông điệp. Đột biến tắt trigger ⇒ câu thô
+  ở tổ chức chưa bật về `DRAFT`. Tiền đề `rfq.approve` ⊂ `rfq.create` theo vai.
+- **K4b:** ký → trả về → thêm lời mời → nộp lại ⇒ mở bị chặn *"moi co 0 (K4b)"*; người cũ ký lại ⇒ mở; hai hàng chữ ký ở lại.
+  Trả về rồi nộp lại y nguyên ⇒ mở không cần ký lại. Gói cấp kép trả về rồi sửa hạng mục ⇒ *"moi co 0 (D2)"*; hai người ký lại
+  ⇒ mở.
+- **K6, cột:** tổ chức chưa bật — token ở `DRAFT` mang `false`, ở `OPEN` mang `true`; tổ chức đã bật ở `OPEN` mang `true`.
+  `app_api` khai cột lúc đúc hay sửa nó ⇒ 42501. **Đua:** giao dịch mời mở trước lần mở gói, đúc sau khi lần mở commit ⇒
+  `created_at` < `opened_at` mà cột `true`. Đột biến tắt trigger ghi cột ⇒ token đúc cho gói đã mở mang `false`.
+
+`apps/api/src/token-goi-da-mo.int.test.ts` — 4 ca, gói `rfq` và gói `invitation` thật:
+- Token thời MVP1 của gói `DRAFT`: trước lần bật đổi link và xin OTP được; SAU lần bật đổi link, xin OTP, và xác minh OTP bằng
+  mã ĐÚNG của thách thức đã phát đều ném cùng một thông báo; không phiên khách nào mở.
+- Tổ chức đã bật, token đúc sau lần mở gói ⇒ đổi link, xin và xác minh OTP được.
+- Đối chứng MVP1: tổ chức chưa bật, token ở `DRAFT` mang `false` mà vẫn đổi link được.
+- Đột biến đặt tay cột thành `true` ⇒ token thời MVP1 đổi được sau lần bật: cột là vế duy nhất phân biệt hai token.
+
+`apps/api/src/buyer.int.test.ts` — 2 ca HTTP: BUYER không phải người tạo ⇒ 403 và đúng một hàng `PERMISSION_DENIED` trên
+`rfq.approve`; thiếu lý do ⇒ 422 *thiếu trường "reason"*; người tạo có lý do ⇒ 200, gói `DRAFT`; lần hai ⇒ 422 trạng thái; tổ
+chức chưa bật ⇒ 422 có tên, gói ở nguyên.
+
+**Đột biến ở mã TypeScript, năm, cả năm đỏ:** bỏ vế khoản 253 ở `docToken` (hai ca đỏ); bỏ kiểm *đã bật* ở tầng gói (ca tổ
+chức chưa bật đỏ — lời từ chối rơi xuống trigger); gộp quyền kép về `rfq.create` (ca BUYER không phải người tạo đỏ); bỏ
+`AND status = 'PENDING_APPROVAL'` (ca gói `OPEN` đỏ — `OPEN→DRAFT` sai cạnh); lý do không bắt buộc (ca lý do rỗng đỏ).
+
+**Ghim:** thân hai hàm trigger ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, danh sách migration của ba
+phép kiểm có `077`; nhân chứng hành vi của hai hàm mới có mặt.
+
+## 6. Giới hạn, nói ra
+
+- **Phiên khách đã mở trước lần bật** bằng một token thời MVP1 sống tới hết hạn của nó (tối đa 4 giờ). Cột canh lần đổi link,
+  không canh phiên đã mở. Token cũ không bị thu hồi — chỉ thôi dùng được.
+- **Trigger ở cạnh không hỏi AI và VÌ SAO** — tầng gói hỏi. Một câu `UPDATE` thô dưới `app_api` ở tổ chức đã bật trả gói về
+  `DRAFT` không lý do, không hàng sổ — cùng lớp với các cạnh khác của gói, mà quyền của chúng cũng hỏi ở tầng gói.
+- **Tiền đề `rfq.approve` ⊂ `rfq.create`** giữ cổng của route đúng. Một vai tương lai giữ `rfq.approve` mà không giữ
+  `rfq.create` làm test tiền đề đỏ — khi ấy cổng của route phải đổi.
+- **Tới S3.2b2, ở tổ chức đã bật:** mời ở `DRAFT` qua route vẫn trả 422 (K6 chặn đúc token); mở gói chưa đúc token cho lời mời
+  đã có; lời mời thêm ở `OPEN` vẫn `UNSENT` dù link đã đi. Tổ chức chưa bật không đổi.
+
+## 7. Số đo
+
+- `packages/rfq/src/tra-ve-nhap.int.test.ts` 15/15; `apps/api/src/token-goi-da-mo.int.test.ts` 4/4; `apps/api/src/buyer.int.test.ts`
+  18/18 (hai ca mới của route, hai lượt quét [INV-H17] trên máy chủ thứ hai).
+- `db/migrations.int.test.ts` 118/118; `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36; kịch bản 41 — `kich-ban-41` 30/30,
+  `kich-ban-41-http` 58/58 (bộ quét route có ca cho route mới); `danh-sach-moi` 21/21; `invitation.int` 72/72; `guest.int` 22/22;
+  `loi-moi-sau-commit.int` 19/19.
+- Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 189 tệp, 3195 khẳng định, 3184 đạt, 1 bỏ qua, 10 đỏ. Chín ca đỏ là hai ca
+  cũ của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Ca thứ mười là của vòng này và đã sửa:
+  `tests/architecture/cong-quyen-route.test.ts` đòi mọi hàm export mới của gói nghiệp vụ được phân loại ghi hay đọc —
+  `returnRfqToDraft` vào `HAM_DOI_TRANG_THAI`, tệp ấy chạy lại 15/15. Ca ấy không mang nhãn bất biến.
+- Năm đột biến ở mã TypeScript, năm lần đỏ (§5).
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3195 khẳng định; K4a 6 → 15, K4b 5 → 8, K6 4 → 12. Mốc
+  `MOC_GHIM` không đổi — không mã mới.

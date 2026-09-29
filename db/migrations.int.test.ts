@@ -1649,6 +1649,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
     { ham: "rfq_invitations_kiem_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
     { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
+    // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
+    // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
+    // hay để cột ở `false` cho mọi token, và lần đổi link của tổ chức đã bật từ chối cả token hợp lệ.
+    { ham: "rfq_kiem_tra_ve_nhap", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
+    { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3289,6 +3294,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "077_tra_ve_nhap.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7708,6 +7714,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "077_tra_ve_nhap.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8004,6 +8011,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "077_tra_ve_nhap.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

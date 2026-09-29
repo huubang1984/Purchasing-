@@ -303,6 +303,11 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
   "public.rfq_invitations_kiem_danh_sach",
   "public.rfq_kiem_chu_ky_danh_sach_khi_mo",
+  // [S1.186 / S3.2b1 / K4a · K6 / `077_tra_ve_nhap`] HAI hàm: cạnh về DRAFT từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức chưa bật —, và
+  // `rfq_invitation_tokens_ghi_goi_da_mo` không bao giờ từ chối (nó GHI cột). `dungKichBan()` nộp một gói trước lần bật rồi
+  // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
+  "public.rfq_invitation_tokens_ghi_goi_da_mo",
+  "public.rfq_kiem_tra_ve_nhap",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
@@ -1680,6 +1685,19 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
   // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
   // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
+  // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
+  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
+  const rfqVe = await rfqSoan();
+  await so.chung(
+    "public.rfq_packages",
+    "UPDATE",
+    api(
+      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+        "RETURNING status, submitted_by, submitted_by_session_id",
+      [rfqVe, pm.u, pm.s],
+      { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+    ),
+  );
   const tc = await nguoi("FINANCE");
   const cs2 = await chenNC(
     "public.org_procurement_policies",
@@ -1707,6 +1725,16 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "org_policy_signatures",
+  );
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" }),
+    ),
+    1,
+    "rfq_packages",
   );
 
   return { orgId: org };

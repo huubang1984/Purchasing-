@@ -528,6 +528,8 @@ const DANH_SACH_TRANG_RFQ = [
   "lietKePhienBanChinhSach",
   "listRfqItems",
   "openRfq",
+  // [S1.186 / S3.2b1 / K4a] Cạnh `PENDING_APPROVAL→DRAFT` — chỉ ở tổ chức đã bật S3; lớp chặn cuối là trigger của `077_tra_ve_nhap`.
+  "returnRfqToDraft",
   "setRfqBudget",
   "submitRfqForApproval",
 ];
