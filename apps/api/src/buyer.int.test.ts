@@ -161,7 +161,7 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     // dẫn) để lại `resource_id = UUID0`; số bản ghi có toạ độ bằng đúng số route khai nó.
     const coToaDo = routeGhi.filter((r) => "resourceId" in r && r.resourceId !== undefined).length;
     expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
-    // [S1.9101 / S3.6a] Thêm `POST /categories` — tạo mới, chưa có toạ độ.
+    // [S1.201 / S3.6a] Thêm `POST /categories` — tạo mới, chưa có toạ độ.
     expect(routeGhi.length - coToaDo, "route ghi KHÔNG có toạ độ: chỉ POST /policy, /suppliers, /rfqs, /categories (tạo mới)").toBe(4);
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' AND resource_id = $3",
@@ -889,7 +889,7 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
 
     const ns = await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "150000000.00", currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
-    // [S1.9101 / S3.6a] Có ngân sách mà chưa có nhóm hàng ⇒ chốt thứ hai của cạnh nói, cùng khuôn: 422 có tên và MỘT hàng sổ.
+    // [S1.201 / S3.6a] Có ngân sách mà chưa có nhóm hàng ⇒ chốt thứ hai của cạnh nói, cùng khuôn: 422 có tên và MỘT hàng sổ.
     const thieuNhom = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(thieuNhom.status, thieuNhom.text).toBe(422);
     expect(thieuNhom.text).toContain("phải có nhóm hàng trước khi nộp duyệt");
@@ -970,7 +970,7 @@ describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ
     expect(rfq.status, rfq.text).toBe(201);
     const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
     expect((await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
-    // [S1.9101 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — người tài chính dựng nhóm, người tạo gói gán nó.
+    // [S1.201 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — người tài chính dựng nhóm, người tạo gói gán nó.
     if (bat) {
       const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
       expect(nhom.status, nhom.text).toBe(201);

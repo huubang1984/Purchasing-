@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chuanMa, docNhomHang, hienDatNhomHang, loiMa, luaChonNhomHang, nhanNhomHangCuaGoi, nhanTrangThaiNhom, nutDoiTrangThai } from "./nhom-hang.js";
 
-// [S1.9101 / S3.6a] Phép tính thuần của hai màn chạm nhóm hàng — `/nhom-hang` và ô chọn ở `/tao-thau`.
+// [S1.201 / S3.6a] Phép tính thuần của hai màn chạm nhóm hàng — `/nhom-hang` và ô chọn ở `/tao-thau`.
 
 const DS = [
   { id: "a", ma: "THEP", ten: "Thép", conDung: true },
@@ -15,7 +15,7 @@ describe("S3.6a — nhóm hàng trên màn", () => {
     expect(docNhomHang({ nhomHang: "khong" })).toEqual([]);
   });
 
-  it("mã: cắt khoảng trắng, viết hoa; khuôn cùng CHECK của `9501` — chữ có dấu, ký tự đầu lạ, dài quá 32 bị nói trước", () => {
+  it("mã: cắt khoảng trắng, viết hoa; khuôn cùng CHECK của `085_nhom_hang` — chữ có dấu, ký tự đầu lạ, dài quá 32 bị nói trước", () => {
     expect(chuanMa("  thep-01 ")).toBe("THEP-01");
     expect(loiMa(" thep-01 ")).toBeNull();
     expect(loiMa("A".repeat(32))).toBeNull();

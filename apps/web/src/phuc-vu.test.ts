@@ -207,7 +207,7 @@ describe("bề mặt tệp", () => {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
-      // [S1.9101 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
+      // [S1.201 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
       "nhom-hang": ["b2", "b3"],
     };
     /** Lời gọi mỗi trang tự đi sau khi mở các bước — trước lượt đo riêng của từng trang. */
@@ -263,7 +263,7 @@ describe("bề mặt tệp", () => {
     // hàm trả chuỗi rỗng.
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
-      // [S1.9101 / S3.6a] `/lib/nhom-hang.js` là bản thật: ô chọn nhóm hàng của `/tao-thau` và bảng của `/nhom-hang` đọc từ nó.
+      // [S1.201 / S3.6a] `/lib/nhom-hang.js` là bản thật: ô chọn nhóm hàng của `/tao-thau` và bảng của `/nhom-hang` đọc từ nó.
       ...nhomHang,
       // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
       ...taoThau,
@@ -321,7 +321,7 @@ describe("bề mặt tệp", () => {
       const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false, id));
       const trangThai = {
         cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[],
-        /** [S1.9101 / S3.6a] Thân của từng lời gọi, theo thứ tự — để đo trang GỬI gì, không chỉ gọi gì. */
+        /** [S1.201 / S3.6a] Thân của từng lời gọi, theo thứ tự — để đo trang GỬI gì, không chỉ gọi gì. */
         than: [] as { lenh: string; than: unknown }[],
       };
       const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
@@ -1269,7 +1269,7 @@ describe("bề mặt tệp", () => {
     });
 
     // ==========================================================================================
-    // [S1.9101 / S3.6a] NHÓM HÀNG: ô chọn ở màn tạo gói — chỉ ở tổ chức đã bật —, lần tạo mang nhóm đã chọn, «Đặt nhóm hàng»
+    // [S1.201 / S3.6a] NHÓM HÀNG: ô chọn ở màn tạo gói — chỉ ở tổ chức đã bật —, lần tạo mang nhóm đã chọn, «Đặt nhóm hàng»
     // chỉ ở DRAFT; và màn `/nhom-hang` của người giữ `category.manage`. Nhóm đã ngừng dùng không được chọn MỚI, trừ khi gói đang
     // giữ nó (ngừng dùng chỉ chặn lần gán mới).
     // ==========================================================================================
@@ -1293,7 +1293,7 @@ describe("bề mặt tệp", () => {
           : undefined));
     const cho5 = () => new Promise((r) => { setTimeout(r, 5); });
 
-    it("[S1.9101 / S3.6a] tao-thau: tổ chức đã bật ⇒ ô chọn nhóm hàng hiện với nhóm còn dùng (và nhóm gói đang giữ); chưa bật ⇒ ẩn, không hỏi /categories", async () => {
+    it("[S1.201 / S3.6a] tao-thau: tổ chức đã bật ⇒ ô chọn nhóm hàng hiện với nhóm còn dùng (và nhóm gói đang giữ); chưa bật ⇒ ẩn, không hỏi /categories", async () => {
       const bat = await moTaoThauNhom(true, "DRAFT", "c-cu");
       expect(bat.p.el("khoi-nhom-hang").hidden).toBe(false);
       expect(bat.p.el("nhom-hang").con.map((o) => [o.value, o.textContent])).toEqual([
@@ -1316,7 +1316,7 @@ describe("bề mặt tệp", () => {
       expect((await moTaoThauNhom(true, "PENDING_APPROVAL", "c-thep")).p.el("nut-nhom-hang").hidden).toBe(true);
     });
 
-    it("[S1.9101 / S3.6a] tao-thau: «Tạo gói thầu» ở tổ chức đã bật mang nhóm đã chọn; chưa chọn ⇒ không mang; chưa bật ⇒ không bao giờ mang", async () => {
+    it("[S1.201 / S3.6a] tao-thau: «Tạo gói thầu» ở tổ chức đã bật mang nhóm đã chọn; chưa chọn ⇒ không mang; chưa bật ⇒ không bao giờ mang", async () => {
       const taoVoi = async (daBat: boolean, chon: string): Promise<unknown> => {
         const { p } = await moTaoThauNhom(daBat, "DRAFT", null, (l) => (l === "POST /rfqs" ? Promise.resolve({ status: 201, body: { rfq: { id: "r-1" } } }) : undefined));
         p.el("tieu-de").value = "Mua thep";
@@ -1330,7 +1330,7 @@ describe("bề mặt tệp", () => {
       expect(await taoVoi(false, "c-thep")).not.toHaveProperty("categoryId");
     });
 
-    it("[S1.9101 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
+    it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
       const { p } = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1" } } }) : undefined));
       p.el("nhom-hang").value = "";
       await p.bam("nut-nhom-hang");
@@ -1347,7 +1347,7 @@ describe("bề mặt tệp", () => {
       expect(tu.p.el("loi2").textContent).toBe(cau);
     });
 
-    it("[S1.9101 / S3.6a] nhom-hang: bảng vẽ mã, tên, trạng thái và một nút mỗi dòng; «Ngừng dùng» ⇒ PUT …/status {conDung: false}; «Dùng lại» ⇒ {conDung: true}", async () => {
+    it("[S1.201 / S3.6a] nhom-hang: bảng vẽ mã, tên, trạng thái và một nút mỗi dòng; «Ngừng dùng» ⇒ PUT …/status {conDung: false}; «Dùng lại» ⇒ {conDung: true}", async () => {
       const p = await dungTrang("nhom-hang", {
         hash: "", cookie: A,
         thay: (l) => (l === "GET /categories" ? Promise.resolve({ status: 200, body: DS_NHOM })
@@ -1374,7 +1374,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok2").textContent).toBe("Đã dùng lại nhóm CU.");
     });
 
-    it("[S1.9101 / S3.6a] nhom-hang: mã sai hình dạng hay tên rỗng ⇒ không gọi máy chủ; mã viết thường ⇒ POST /categories với mã VIẾT HOA", async () => {
+    it("[S1.201 / S3.6a] nhom-hang: mã sai hình dạng hay tên rỗng ⇒ không gọi máy chủ; mã viết thường ⇒ POST /categories với mã VIẾT HOA", async () => {
       const p = await dungTrang("nhom-hang", {
         hash: "", cookie: A,
         thay: (l) => (l === "POST /categories" ? Promise.resolve({ status: 201, body: { nhomHang: { ma: "THEP-01" } } }) : undefined),

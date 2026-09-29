@@ -90,7 +90,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.191 / S3.2c2] `tao-thau` — thứ tự bước, nút của dòng lời mời và câu báo của màn tạo gói theo luồng mời của tổ chức.
  *
- * [S1.9101 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
+ * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
  */
 export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang"] as const;
 
@@ -105,7 +105,7 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.169 / S3.1c] Màn khai và ký chính sách theo bậc (spec S3 §9 S3.1c).
   "/chinh-sach": "chinh-sach.html",
   "/chinh-sach.js": "chinh-sach.js",
-  // [S1.9101 / S3.6a] Màn quản lý nhóm hàng của người giữ `category.manage` (spec S3 §4.3).
+  // [S1.201 / S3.6a] Màn quản lý nhóm hàng của người giữ `category.manage` (spec S3 §4.3).
   "/nhom-hang": "nhom-hang.html",
   "/nhom-hang.js": "nhom-hang.js",
   "/chung.css": "chung.css",

@@ -20,7 +20,7 @@ export {
   cancelRfq,
   closeRfq,
   createRfq,
-  // [S1.9101 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN — route đòi `rfq.create`, như ngân sách và hạng mục.
+  // [S1.201 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN — route đòi `rfq.create`, như ngân sách và hạng mục.
   datNhomHangChoGoi,
   extendRfqDeadline,
   getRfq,
@@ -39,7 +39,7 @@ export {
   type RfqStatus,
 } from "./rfq.js";
 // ============================================================================================
-// [S1.9101 / S3.6a] NHÓM HÀNG — danh sách của tổ chức, khoá của tín hiệu chia nhỏ (K10). Hai hàm ghi hỏi `category.manage` ở
+// [S1.201 / S3.6a] NHÓM HÀNG — danh sách của tổ chức, khoá của tín hiệu chia nhỏ (K10). Hai hàm ghi hỏi `category.manage` ở
 // chính hàm (cổng ở hàm, khuôn xác minh nhà cung cấp); hàm đọc không mang giá.
 // ============================================================================================
 export { doiTrangThaiNhomHang, lietKeNhomHang, taoNhomHang, type NhomHang } from "./nhom-hang.js";

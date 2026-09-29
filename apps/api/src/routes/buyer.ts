@@ -104,7 +104,7 @@ function uuidBody(body: unknown, ten: string): string {
   if (!UUID_RE.test(v)) throw new HttpError(422, `trường "${ten}" phải là UUID`);
   return v;
 }
-/** [S1.9101 / S3.6a] Định danh TUỲ CHỌN trong thân — vắng hay `null` là không có; có mặt thì phải đúng dạng UUID. */
+/** [S1.201 / S3.6a] Định danh TUỲ CHỌN trong thân — vắng hay `null` là không có; có mặt thì phải đúng dạng UUID. */
 function uuidTuyChon(body: unknown, ten: string): string | null {
   const v = truong(body, ten);
   if (v === undefined || v === null) return null;
@@ -287,7 +287,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/categories",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.6a] Danh sách nhóm hàng của tổ chức — người soạn gói chọn từ đây, người giữ `category.manage` quản lý ở
+    // [S1.201 / S3.6a] Danh sách nhóm hàng của tổ chức — người soạn gói chọn từ đây, người giữ `category.manage` quản lý ở
     // `/nhom-hang`. KHÔNG cho agent: nhóm hàng là khoá của tín hiệu chia nhỏ (K10), dữ liệu kiểm soát của bên mua; mở sau là
     // một quyết định có tên.
     agent: false,
@@ -817,7 +817,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceType: "PROCUREMENT_CATEGORY",
     resourceId: categoryIdParam,
     handler: async (ctx) => {
-      // [S1.9101 / S3.6a] `conDung: false` là ngừng dùng, `true` là dùng lại — một hàng đổi MỚI, không sửa hàng nào. Gói đang
+      // [S1.201 / S3.6a] `conDung: false` là ngừng dùng, `true` là dùng lại — một hàng đổi MỚI, không sửa hàng nào. Gói đang
       // giữ nhóm ấy không đổi; ngừng dùng chỉ chặn lần gán mới.
       const nhomHang = await doiTrangThaiNhomHang(
         ctx.client,
@@ -875,7 +875,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         title: chuoiBatBuoc(ctx.req.body, "title"),
         deadlineAt: ngayTuyChon(ctx.req.body, "deadlineAt"),
         createdBySessionId: ctx.actor.sessionId,
-        // [S1.9101 / S3.6a] Nhóm hàng — tuỳ chọn lúc tạo; tổ chức đã bật đòi nó trước lần nộp duyệt.
+        // [S1.201 / S3.6a] Nhóm hàng — tuỳ chọn lúc tạo; tổ chức đã bật đòi nó trước lần nộp duyệt.
         categoryId: uuidTuyChon(ctx.req.body, "categoryId"),
       });
       return { status: 201, body: { rfq } };
@@ -924,7 +924,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/rfqs/:rfqId/category",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.6a] Cùng cổng với ngân sách và hạng mục: nhóm hàng là một phần của gói đang soạn, người soạn đặt nó.
+    // [S1.201 / S3.6a] Cùng cổng với ngân sách và hạng mục: nhóm hàng là một phần của gói đang soạn, người soạn đặt nó.
     permission: PERMISSIONS.RFQ_CREATE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,

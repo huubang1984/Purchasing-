@@ -97,7 +97,7 @@ export const PERMISSIONS = {
    */
   ITEM_MANAGE: "item.manage",
   /**
-   * [S1.9101 / S3.6a / ADR-084 ⑵] Quản lý danh sách nhóm hàng — tạo, ngừng dùng, dùng lại. Cấp cho `FINANCE`. Nhóm hàng là khoá
+   * [S1.201 / S3.6a / ADR-084 ⑵] Quản lý danh sách nhóm hàng — tạo, ngừng dùng, dùng lại. Cấp cho `FINANCE`. Nhóm hàng là khoá
    * của tín hiệu chia nhỏ (K10): một vai tạo gói mà chỉnh được nhóm hàng thì chỉnh được chính tín hiệu soi mình. `FINANCE` giữ
    * `policy.manage`, và `033` cấm một NGƯỜI giữ mã ấy cùng `rfq.create` — nên người quản lý nhóm hàng không tạo được gói. Trigger
    * `nhom_hang_kiem_nguoi_tao`, `nhom_hang_kiem_doi` đòi mã này ở người ghi.

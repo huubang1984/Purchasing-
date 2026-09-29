@@ -11,9 +11,9 @@ import { doiTrangThaiNhomHang, lietKeNhomHang, taoNhomHang } from "./nhom-hang.j
 import { CAU_CHOT_NHOM_HANG, CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
 
 // =============================================================================================
-// [S1.9101 / S3.6a] NHÓM HÀNG — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
+// [S1.201 / S3.6a] NHÓM HÀNG — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `9501_nhom_hang`. Chủ dự án chốt ngày 2026-09-29: nhóm hàng bắt buộc để rời DRAFT ở tổ chức đã bật ngay S3.6a;
+// Migration `085_nhom_hang`. Chủ dự án chốt ngày 2026-09-29: nhóm hàng bắt buộc để rời DRAFT ở tổ chức đã bật ngay S3.6a;
 // lần từ chối `THIEU_NHOM_HANG` vào sổ; nhóm hàng chỉ tạo, ngừng dùng và dùng lại.
 //
 // Mỗi lớp có một phép đo HÀNH VI và một ĐỘT BIẾN: tắt (hay viết lại) đúng lớp ấy thì chính câu vừa bị chặn đi lọt. Không nhãn

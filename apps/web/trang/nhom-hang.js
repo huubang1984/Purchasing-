@@ -1,9 +1,9 @@
 // ==============================================================================================
-// [S1.9101 / S3.6a] MÀN NHÓM HÀNG — spec S3 §4.3, ADR-084 ⑵
+// [S1.201 / S3.6a] MÀN NHÓM HÀNG — spec S3 §4.3, ADR-084 ⑵
 //
 // Người giữ `category.manage` (mặc định FINANCE) tạo, ngừng dùng và dùng lại nhóm hàng của tổ chức. Chủ dự án chốt ngày
 // 2026-09-29: mã và tên không sửa; màn riêng này, không một khối trong `/chinh-sach`. Mọi luật nằm ở máy chủ và CSDL
-// (`9501_nhom_hang`): màn không kiểm lại luật nào, nó chỉ nói trước điều máy chủ sẽ nói. Phép tính ở `/lib/nhom-hang.js`.
+// (`085_nhom_hang`): màn không kiểm lại luật nào, nó chỉ nói trước điều máy chủ sẽ nói. Phép tính ở `/lib/nhom-hang.js`.
 //
 // Trang không chèn chuỗi nào của máy chủ vào HTML: mọi ô đi qua `textContent`.
 // ==============================================================================================

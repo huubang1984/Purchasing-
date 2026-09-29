@@ -9077,13 +9077,13 @@ S4.2b không lớp nào đòi `item.manage` cho một câu ghi viết tay dướ
 - Khe hở `005` §(3) áp nguyên cho hai trigger mới: sửa `role_permissions` sau khi người đã mang vai thì trigger mức người không chạy.
   Ma trận quyền chỉ đổi bằng migration, và meta-test tĩnh đọc mọi migration.
 
-## ADR-9201 — S3.6a: nhóm hàng — hai bảng chỉ ghi thêm, bắt buộc để gói rời DRAFT ở tổ chức đã bật, `THIEU_NHOM_HANG` vào sổ
+## ADR-119 — S3.6a: nhóm hàng — hai bảng chỉ ghi thêm, bắt buộc để gói rời DRAFT ở tổ chức đã bật, `THIEU_NHOM_HANG` vào sổ
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29: S3.6 chia bốn PR, S3.6a là nhóm hàng;
 nhóm hàng bắt buộc để rời DRAFT ở tổ chức đã bật ngay S3.6a; lần từ chối `THIEU_NHOM_HANG` vào sổ; nhóm hàng chỉ tạo, ngừng dùng và
-dùng lại — mã và tên không sửa; người quản lý ở màn riêng `/nhom-hang` · **[S1.9101]** · **Liên quan:** ADR-084 ⑵ ⑶ ⑷ (mã
+dùng lại — mã và tên không sửa; người quản lý ở màn riêng `/nhom-hang` · **[S1.201]** · **Liên quan:** ADR-084 ⑵ ⑶ ⑷ (mã
 `category.manage` cho `FINANCE`, mã vào CSDL ở đúng hạng mục, `CONTROL_DENIED`), ADR-080 (công tắc), ADR-051 (luật người đọc dữ liệu
-thật), ADR-108 (tên ràng buộc) · **Spec:** S3 §4.3, §4.6, §9 (S3.6) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+thật), ADR-108 (tên ràng buộc) · **Spec:** S3 §4.3, §4.6, §9 (S3.6) · **Biên bản:** `evidence/security-reviews.md` §S1.201
 
 ### Bối cảnh
 
@@ -9152,4 +9152,4 @@ cửa sổ `chia_nho_cua_so_ngay`. Không có nhóm hàng thì tín hiệu phả
 
 `packages/rfq/src/nhom-hang.int.test.ts` — 22 ca trên Postgres thật, gồm sáu đột biến trong giao dịch (tắt hay viết lại từng trigger,
 hàm vị từ trả NULL, câu hỏi trạng thái trả hằng) và hai ca đua; `apps/api/src/buyer.int.test.ts` qua HTTP; kịch bản 41 hai bản ở luồng S3; hai màn ở
-`apps/web/src/phuc-vu.test.ts` và `nhom-hang.test.ts`. Đột biến ở mã nguồn: §S1.9101.
+`apps/web/src/phuc-vu.test.ts` và `nhom-hang.test.ts`. Đột biến ở mã nguồn: §S1.201.

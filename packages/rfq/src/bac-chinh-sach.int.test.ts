@@ -216,7 +216,7 @@ async function daBat(t: ToChuc, hoi: string = t.org): Promise<boolean> {
 }
 
 /**
- * [S1.9101 / S3.6a] Nhóm hàng của tổ chức, dựng MỘT lần bởi người FINANCE (giữ `category.manage`): tổ chức đã bật không nộp duyệt
+ * [S1.201 / S3.6a] Nhóm hàng của tổ chức, dựng MỘT lần bởi người FINANCE (giữ `category.manage`): tổ chức đã bật không nộp duyệt
  * được gói không nhóm hàng — K1 ở tệp này đo ngân sách, không đo nhóm hàng (`nhom-hang.int.test.ts`). Tổ chức chưa bật nhận cùng
  * nhóm; ở đó nó tuỳ chọn.
  */

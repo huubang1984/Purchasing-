@@ -4,10 +4,10 @@ import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocu
 import { RfqError } from "./rfq.js";
 
 // =============================================================================================
-// [S1.9101 / S3.6a] NHÓM HÀNG — DANH SÁCH CỦA TỔ CHỨC (spec S3 §4.3)
+// [S1.201 / S3.6a] NHÓM HÀNG — DANH SÁCH CỦA TỔ CHỨC (spec S3 §4.3)
 //
 // Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10, S3.6b): tín hiệu gộp các gói cùng nhóm trong cửa sổ. Chủ dự án chốt ngày
-// 2026-09-29: nhóm hàng chỉ tạo, ngừng dùng và dùng lại — mã và tên không sửa. Hai bảng CHỈ GHI THÊM (`9501_nhom_hang`):
+// 2026-09-29: nhóm hàng chỉ tạo, ngừng dùng và dùng lại — mã và tên không sửa. Hai bảng CHỈ GHI THÊM (`085_nhom_hang`):
 // `procurement_categories` giữ mã và tên; `procurement_category_changes` giữ mỗi lần ngừng dùng hay dùng lại, và trạng thái là
 // hàng mới nhất — câu hỏi DUY NHẤT về nó là hàm SQL `nhom_hang_con_dung`.
 //
@@ -35,7 +35,7 @@ interface HangNhomHang {
   created_at: Date;
 }
 
-/** Mã là một định danh, không phải tên — cùng khuôn với `CHECK` của `9501_nhom_hang`. */
+/** Mã là một định danh, không phải tên — cùng khuôn với `CHECK` của `085_nhom_hang`. */
 const MA_NHOM_HANG = /^[A-Z0-9][A-Z0-9_.-]{0,31}$/u;
 
 /** Tài nguyên của lời từ chối quyền trong sổ. */

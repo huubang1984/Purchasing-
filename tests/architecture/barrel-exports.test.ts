@@ -519,7 +519,7 @@ const DANH_SACH_TRANG_RFQ = [
   "closeRfq",
   "createProcurementPolicy",
   "createRfq",
-  // [S1.9101 / S3.6a] Nhóm hàng: gán cho gói đang soạn (route `rfq.create`), hai hàm quản lý hỏi `category.manage` ở chính hàm,
+  // [S1.201 / S3.6a] Nhóm hàng: gán cho gói đang soạn (route `rfq.create`), hai hàm quản lý hỏi `category.manage` ở chính hàm,
   // và danh sách — không giá, không phiên.
   "datNhomHangChoGoi",
   "doiTrangThaiNhomHang",

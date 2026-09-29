@@ -476,7 +476,7 @@ describe("hình dạng file migration", () => {
       "organizations",
       "otp_rate_limits",
       "outbox_jobs",
-      // [S1.9101 / S3.6a / migration nhóm hàng] Nhóm hàng và lần đổi trạng thái — chỉ-ghi-thêm, khoá ngoại hợp thành
+      // [S1.201 / S3.6a / migration nhóm hàng] Nhóm hàng và lần đổi trạng thái — chỉ-ghi-thêm, khoá ngoại hợp thành
       // `(org_id, category_id)`, policy khách ĐÓNG HẲN.
       "procurement_categories",
       "procurement_category_changes",

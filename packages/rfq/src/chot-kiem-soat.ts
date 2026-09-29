@@ -39,7 +39,7 @@ export const CAU_CHOT_NGAN_SACH =
   "SELECT public.rfq_chot_ngan_sach($1::pg_catalog.uuid, $2::pg_catalog.uuid, pg_catalog.clock_timestamp()) AS ly_do";
 
 /**
- * [S1.9101 / S3.6a] Câu hỏi chốt nhóm hàng (`9501_nhom_hang`): `$1` tổ chức, `$2` gói. Hàm vị từ nhận GIÁ TRỊ cột nhóm hàng — trigger
+ * [S1.201 / S3.6a] Câu hỏi chốt nhóm hàng (`085_nhom_hang`): `$1` tổ chức, `$2` gói. Hàm vị từ nhận GIÁ TRỊ cột nhóm hàng — trigger
  * ở cạnh đưa giá trị MỚI —, còn câu này đưa giá trị của hàng DRAFT; gói không ở DRAFT thì không hàng nào, tức cho qua, và câu
  * ghi của thao tác nói lời từ chối trạng thái — tầng gói không ghi sổ cho một lời gọi sai gói, như K1.
  */

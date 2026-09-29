@@ -245,7 +245,7 @@ async function toChucDaBat(): Promise<ToChuc> {
 
 
 /**
- * [S1.9101 / S3.6a] Nhóm hàng của tổ chức, dựng MỘT lần bởi người FINANCE (giữ `category.manage`): tổ chức đã bật không nộp duyệt
+ * [S1.201 / S3.6a] Nhóm hàng của tổ chức, dựng MỘT lần bởi người FINANCE (giữ `category.manage`): tổ chức đã bật không nộp duyệt
  * được gói không nhóm hàng. Tổ chức chưa bật nhận cùng nhóm — ở đó nó tuỳ chọn.
  */
 const NHOM_CUA = new Map<string, string>();

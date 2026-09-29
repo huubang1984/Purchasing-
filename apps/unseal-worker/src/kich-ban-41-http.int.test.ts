@@ -280,7 +280,7 @@ async function soHangDoc(action: string): Promise<{ n: number; nguoiMoiNhat: str
 
 const trangThai: {
   rfqId: string;
-  /** [S1.9101 / S3.6a] Luồng S3: nhóm hàng người tài chính dựng ở bước 1 — gói chính và hai gói hy sinh mang nó. */
+  /** [S1.201 / S3.6a] Luồng S3: nhóm hàng người tài chính dựng ở bước 1 — gói chính và hai gói hy sinh mang nó. */
   nhomHangId: string | null;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string; cookie: string }[];
   bienNhan: { canonicalText: string; signature: string; ten: string; bidVersionId: string }[];
@@ -423,7 +423,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       expect((ky.body as { chuKy: { daBat: boolean } }).chuKy.daBat).toBe(true);
     }
     if (batS3) {
-      // [S1.9101 / S3.6a] Người tài chính dựng nhóm hàng qua route (`category.manage`); người mua không dựng được — và gói của
+      // [S1.201 / S3.6a] Người tài chính dựng nhóm hàng qua route (`category.manage`); người mua không dựng được — và gói của
       // tổ chức đã bật không nộp duyệt được khi thiếu nhóm hàng. Luồng MVP1: không nhóm hàng nào.
       expect((await goi("POST", "/categories", m, { ma: "THEP", ten: "Thep tam" })).status).toBe(403);
       const nhom = await goi("POST", "/categories", trangThai.taiChinh.cookie, { ma: "thep", ten: "Thep tam" });
@@ -605,7 +605,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // Không chạm RFQ chính: bộ quét không được làm hỏng kịch bản nó đang bảo vệ.
     const GIA_MOI = "777000000.00";
     const taoRfqHy = async (ten: string): Promise<string> => {
-      // [S1.9101 / S3.6a] Luồng S3: gói hy sinh cũng mang nhóm hàng — nếu không, lần nộp duyệt của nó dừng ở chốt nhóm hàng.
+      // [S1.201 / S3.6a] Luồng S3: gói hy sinh cũng mang nhóm hàng — nếu không, lần nộp duyệt của nó dừng ở chốt nhóm hàng.
       const r = await goi("POST", "/rfqs", m, {
         title: ten,
         deadlineAt: new Date(Date.now() + 5 * 86400_000).toISOString(),
@@ -690,7 +690,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // ⇒ 422 *"khong duoc tu ky"* có tên — bản v2 không thành hiệu lực, kịch bản không đổi chính sách giữa chừng.
         case "POST /policy/:policyId/sign":
           return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };
-        // [S1.9101 / S3.6a] Nhóm hàng HY SINH: người tài chính dựng, rồi ngừng dùng — không chạm nhóm của kịch bản. Bảng route đặt
+        // [S1.201 / S3.6a] Nhóm hàng HY SINH: người tài chính dựng, rồi ngừng dùng — không chạm nhóm của kịch bản. Bảng route đặt
         // hai route ấy trước `PUT /rfqs/:rfqId/category`, nên lần gán dưới gặp đúng nhóm đã ngừng dùng ở luồng MVP1.
         case "POST /categories":
           return {
@@ -713,7 +713,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB), body: { lineNo: 1, description: "Hang muc quet", quantity: "2.0000", unit: "cai" }, cookie: m };
         case "PUT /rfqs/:rfqId/budget":
           return { path: r.path.replace(":rfqId", hyB), body: { estimatedValue: "20000000.00", currency: "VND" }, cookie: m };
-        // [S1.9101 / S3.6a] Luồng S3: nhóm của kịch bản (còn dùng) — gói hy sinh B đi tiếp nộp duyệt như trước. Luồng MVP1: nhóm hy
+        // [S1.201 / S3.6a] Luồng S3: nhóm của kịch bản (còn dùng) — gói hy sinh B đi tiếp nộp duyệt như trước. Luồng MVP1: nhóm hy
         // sinh vừa ngừng dùng ⇒ 422 nghiệp vụ có tên, gói không đổi.
         case "PUT /rfqs/:rfqId/category":
           return { path: r.path.replace(":rfqId", hyB), body: { categoryId: trangThai.nhomHangId ?? hy.nhomId }, cookie: m };

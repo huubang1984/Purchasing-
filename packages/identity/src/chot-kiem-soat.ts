@@ -22,8 +22,8 @@
 // đúng khuôn ấy: trigger `rfq_invitations_kiem_danh_sach` đặt tên ràng buộc (`080_k4a_co_ten.sql`),
 // `packages/invitation` bắt lỗi của nó và từ chối theo mã. Chủ dự án chốt ngày 2026-09-29: cả hai vào sổ.
 //
-// [S1.9101 / S3.6a] `THIEU_NHOM_HANG` — gói của tổ chức đã bật rời DRAFT không nhóm hàng. Khuôn K1: hàm vị từ
-// `rfq_chot_nhom_hang` (`9501_nhom_hang.sql`), tầng gói hỏi trước câu ghi. Chủ dự án chốt ngày 2026-09-29: vào sổ.
+// [S1.201 / S3.6a] `THIEU_NHOM_HANG` — gói của tổ chức đã bật rời DRAFT không nhóm hàng. Khuôn K1: hàm vị từ
+// `rfq_chot_nhom_hang` (`085_nhom_hang.sql`), tầng gói hỏi trước câu ghi. Chủ dự án chốt ngày 2026-09-29: vào sổ.
 //
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG

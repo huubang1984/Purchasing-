@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_nhom_hang — [S1.9101 / S3.6a của spec S3] NHÓM HÀNG: DANH SÁCH CỦA TỔ CHỨC, BẮT BUỘC ĐỂ GÓI RỜI DRAFT Ở TỔ
+-- 085_nhom_hang — [S1.201 / S3.6a của spec S3] NHÓM HÀNG: DANH SÁCH CỦA TỔ CHỨC, BẮT BUỘC ĐỂ GÓI RỜI DRAFT Ở TỔ
 -- CHỨC ĐÃ BẬT, KHOÁ SAU DRAFT
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.3, §4.6, §9 (S3.6). ADR-080 (công tắc),

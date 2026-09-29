@@ -2728,7 +2728,7 @@ $ham$;
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_phien_khac', '040_dat_lai_totp_hai_nguoi', 'CHECK (((approved_by_session_id IS NULL) OR (approved_by_session_id <> requested_by_session_id)))'),
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_tieu_thu_sau_duyet', '040_dat_lai_totp_hai_nguoi', 'CHECK (((consumed_at IS NULL) OR (status = ''APPROVED''::text)))'),
          ('public', 'otp_rate_limits', 'otp_rate_limits_bucket_hash_check', '010_invitations', 'CHECK ((octet_length(bucket_hash) = 32))'),
-         ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '9501_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
+         ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '085_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
          ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
          ('public', 'rfq_awards', 'rfq_awards_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text])))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
@@ -3426,8 +3426,8 @@ $ham$;
          ('public', 'organizations', '002_organizations_and_users'),
          ('public', 'otp_rate_limits', '010_invitations'),
          ('public', 'outbox_jobs', '007_outbox'),
-         ('public', 'procurement_categories', '9501_nhom_hang'),
-         ('public', 'procurement_category_changes', '9501_nhom_hang'),
+         ('public', 'procurement_categories', '085_nhom_hang'),
+         ('public', 'procurement_category_changes', '085_nhom_hang'),
          ('public', 'rfq_approvals', '009_rfq'),
          ('public', 'rfq_award_approvals', '061_trao_thau'),
          ('public', 'rfq_awards', '061_trao_thau'),
@@ -9169,10 +9169,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Nguoi tao nhom hang giu category.manage (ADR-084). Than `RETURN NEW` cho vai tao goi dung nhom hang — tuc chinh khoa cua tin hieu soi minh.
+    -- [S1.201 / S3.6a] Nguoi tao nhom hang giu category.manage (ADR-084). Than `RETURN NEW` cho vai tao goi dung nhom hang — tuc chinh khoa cua tin hieu soi minh.
     ARRAY[
-      $q$hàm + trigger nhom_hang_kiem_nguoi_tao (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$hàm + trigger nhom_hang_kiem_nguoi_tao (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9238,10 +9238,10 @@ $ham$;
       $q$quyền sở hữu hàm public.nhom_hang_kiem_nguoi_tao() và bảng public.procurement_categories (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Luat nguoi, chieu doi va thu tu duoi khoa cua trang thai nhom hang. Than `RETURN NEW` de thu_tu NULL va cho nguoi khong giu category.manage ngung dung mot nhom.
+    -- [S1.201 / S3.6a] Luat nguoi, chieu doi va thu tu duoi khoa cua trang thai nhom hang. Than `RETURN NEW` de thu_tu NULL va cho nguoi khong giu category.manage ngung dung mot nhom.
     ARRAY[
-      $q$hàm + trigger nhom_hang_kiem_doi (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$hàm + trigger nhom_hang_kiem_doi (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9326,10 +9326,10 @@ $ham$;
       $q$quyền sở hữu hàm public.nhom_hang_kiem_doi() và bảng public.procurement_category_changes (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Cau hoi duy nhat ve trang thai nhom hang. Mot than `SELECT true` cho gan nhom da ngung dung.
+    -- [S1.201 / S3.6a] Cau hoi duy nhat ve trang thai nhom hang. Mot than `SELECT true` cho gan nhom da ngung dung.
     ARRAY[
-      $q$định nghĩa hàm nhom_hang_con_dung(uuid, uuid) (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$định nghĩa hàm nhom_hang_con_dung(uuid, uuid) (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.nhom_hang_con_dung(p_org uuid, p_nhom uuid) RETURNS boolean
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -9360,10 +9360,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm nhom_hang_con_dung(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Nhom hang cua goi chi doi o DRAFT va chi gan nhom con dung. Than `RETURN NEW` de doi nhom hang sau khi nop duyet — loi ne tin hieu chia nho spec §4.3 goi ten.
+    -- [S1.201 / S3.6a] Nhom hang cua goi chi doi o DRAFT va chi gan nhom con dung. Than `RETURN NEW` de doi nhom hang sau khi nop duyet — loi ne tin hieu chia nho spec §4.3 goi ten.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_nhom_hang (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$hàm + trigger rfq_kiem_nhom_hang (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -9438,10 +9438,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_nhom_hang() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Ham vi tu cua chot nhom hang — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat chot o CA HAI cho ma khong trigger nao doi.
+    -- [S1.201 / S3.6a] Ham vi tu cua chot nhom hang — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat chot o CA HAI cho ma khong trigger nao doi.
     ARRAY[
-      $q$định nghĩa hàm rfq_chot_nhom_hang(uuid, uuid) (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$định nghĩa hàm rfq_chot_nhom_hang(uuid, uuid) (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_chot_nhom_hang(p_org uuid, p_nhom uuid) RETURNS text
   LANGUAGE plpgsql
   STABLE
@@ -9473,10 +9473,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_chot_nhom_hang(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.6a] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: goi phai co nhom hang. Than `RETURN NEW` de mot cau nop tay bo qua nhom hang.
+    -- [S1.201 / S3.6a] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: goi phai co nhom hang. Than `RETURN NEW` de mot cau nop tay bo qua nhom hang.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_nhom_hang_khi_nop (9501_nhom_hang)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_nhom_hang.sql')$q$,
+      $q$hàm + trigger rfq_kiem_nhom_hang_khi_nop (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

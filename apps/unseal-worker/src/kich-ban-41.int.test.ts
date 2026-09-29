@@ -284,7 +284,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       const ky = await withTenant(apiPool, orgA, (c) => kyPhienBanChinhSach(c, orgA, { policyId: cs.id, actorSessionId: sTc2 }));
       expect(ky.daBat, "luồng S3: lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức").toBe(true);
     }
-    // [S1.9101 / S3.6a] Luồng S3: người tài chính dựng nhóm hàng, người mua chọn nó lúc tạo gói — tổ chức đã bật không nộp duyệt
+    // [S1.201 / S3.6a] Luồng S3: người tài chính dựng nhóm hàng, người mua chọn nó lúc tạo gói — tổ chức đã bật không nộp duyệt
     // được gói không nhóm hàng. Luồng MVP1: không nhóm hàng nào, và gói vẫn đi trọn đường.
     const nhomHang = batS3
       ? (await withTenant(apiPool, orgA, (c) => taoNhomHang(c, orgA, { ma: "THEP", ten: "Thep tam", actorSessionId: sTc1 }, apiPool))).id

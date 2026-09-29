@@ -130,7 +130,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Vị từ suy ra đã thấy nó; dòng này
   // là lời khai bắt kịp. Một chữ ký sửa được thì công tắc ADR-080 không còn một chiều.
   "org_policy_signatures",
-  // [S1.9101 / S3.6a] Nhóm hàng và lần đổi trạng thái của nó — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
+  // [S1.201 / S3.6a] Nhóm hàng và lần đổi trạng thái của nó — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
   // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Trạng thái nhóm là hàng đổi mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử
   // nhóm nào đã ngừng dùng lúc nào.
   "procurement_categories",
@@ -266,7 +266,7 @@ const HAM_KHONG_PHAI_CANH = [
   // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
   // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
   "public.kiem_thanh_phan_theo_chinh_sach",
-  // [S1.9101 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
+  // [S1.201 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",
   "public.nhom_hang_kiem_nguoi_tao",
@@ -339,7 +339,7 @@ const HAM_KHONG_PHAI_CANH = [
   // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
   "public.rfq_invitation_tokens_ghi_goi_da_mo",
   "public.rfq_kiem_tra_ve_nhap",
-  // [S1.9101 / S3.6a] HAI hàm của nhóm hàng trên `rfq_packages`, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_nhom_hang` (INSERT, và UPDATE cột
+  // [S1.201 / S3.6a] HAI hàm của nhóm hàng trên `rfq_packages`, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_nhom_hang` (INSERT, và UPDATE cột
   // nhóm hàng) chỉ khi gói đã rời DRAFT hay nhóm đã ngừng dùng; `rfq_kiem_nhom_hang_khi_nop` (cạnh nộp duyệt) chỉ ở tổ chức đã
   // bật mà gói không nhóm hàng. Mọi câu dựng gói, câu gán nhóm và câu nộp duyệt của `dungKichBan()` đi qua.
   "public.rfq_kiem_nhom_hang",
@@ -1773,7 +1773,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "rfq_packages",
   );
 
-  // ---- [S1.9101 / S3.6a / `9501_nhom_hang`] Nhóm hàng: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới, một nhánh UPDATE mới --------
+  // ---- [S1.201 / S3.6a / `085_nhom_hang`] Nhóm hàng: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới, một nhánh UPDATE mới --------
   // `tc` (FINANCE, giữ `category.manage`) tạo một nhóm rồi ngừng dùng nó — nhân chứng của `nhom_hang_kiem_nguoi_tao`,
   // `nhom_hang_kiem_doi` và `kiem_danh_tinh_theo_phien` (hai bảng MỚI). Gói `rfqVe` vừa về DRAFT nhận nhóm TRƯỚC lần ngừng dùng —
   // nhân chứng UPDATE của `rfq_kiem_nhom_hang`; nhánh INSERT của nó đã có nhân chứng ở mọi câu dựng gói, và cạnh nộp duyệt của

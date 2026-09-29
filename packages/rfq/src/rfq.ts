@@ -160,7 +160,7 @@ export interface CreateRfqInput {
    */
   readonly createdBySessionId: string;
   /**
-   * [S1.9101 / S3.6a] Nhóm hàng của gói — tuỳ chọn lúc tạo, đổi được ở DRAFT bằng `datNhomHangChoGoi`. Ở tổ chức đã bật S3, gói
+   * [S1.201 / S3.6a] Nhóm hàng của gói — tuỳ chọn lúc tạo, đổi được ở DRAFT bằng `datNhomHangChoGoi`. Ở tổ chức đã bật S3, gói
    * không nhóm hàng không rời DRAFT (`THIEU_NHOM_HANG`). Chỉ gán được nhóm còn dùng của chính tổ chức (trigger + khoá ngoại).
    */
   readonly categoryId?: string | null;
@@ -183,7 +183,7 @@ export interface RfqRecord {
    * (`GET /guest/rfq`), nên nó là một lời nói với bên ngoài, không phải ghi chú nội bộ.
    */
   readonly cancelReason: string | null;
-  /** [S1.9101 / S3.6a] Nhóm hàng — `null` cho gói chưa gán, kể cả mọi gói trước vòng ấy. Khoá sau DRAFT. */
+  /** [S1.201 / S3.6a] Nhóm hàng — `null` cho gói chưa gán, kể cả mọi gói trước vòng ấy. Khoá sau DRAFT. */
   readonly categoryId: string | null;
 }
 
@@ -328,7 +328,7 @@ export async function createRfq(
 }
 
 /**
- * [S1.9101 / S3.6a] Lời từ chối của CSDL về nhóm hàng của gói, đổi thành lời có tên: nhánh *nhóm đã ngừng dùng* của trigger
+ * [S1.201 / S3.6a] Lời từ chối của CSDL về nhóm hàng của gói, đổi thành lời có tên: nhánh *nhóm đã ngừng dùng* của trigger
  * `rfq_packages_nhom_hang` mang tên ràng buộc, khoá ngoại theo (tổ chức, nhóm) mang tên của nó — một nhóm của tổ chức khác là
  * KHÔNG TÌM THẤY, như mọi thứ ngoài RLS. Lỗi khác đi nguyên.
  */
@@ -344,8 +344,8 @@ function nemLoiNhomHang(loi: unknown): never {
 }
 
 /**
- * [S1.9101 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN. Lớp chặn cuối là trigger `rfq_packages_nhom_hang`
- * (`9501_nhom_hang`): cột chỉ đổi ở DRAFT, và chỉ nhận nhóm còn dùng — dưới khoá chia sẻ theo nhóm, nên một lần ngừng dùng chen
+ * [S1.201 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN. Lớp chặn cuối là trigger `rfq_packages_nhom_hang`
+ * (`085_nhom_hang`): cột chỉ đổi ở DRAFT, và chỉ nhận nhóm còn dùng — dưới khoá chia sẻ theo nhóm, nên một lần ngừng dùng chen
  * vào thì xếp hàng. Vế `AND status = 'DRAFT'` là khuôn [H-3]: gói đã rời DRAFT là lời từ chối trạng thái có tên, không phải
  * một lần ghi đè im lặng.
  */
@@ -456,7 +456,7 @@ export async function submitRfqForApproval(
   // (`072_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
   // còn trigger chỉ tự nói khi có tranh chấp thật (một lần ký chính sách chen vào giữa hai câu).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGAN_SACH, [orgId, input.rfqId]);
-  // [S1.9101 / S3.6a] Chốt nhóm hàng, cùng khuôn: hàm vị từ `rfq_chot_nhom_hang` hỏi trên hàng DRAFT, trigger ở cạnh hỏi lại
+  // [S1.201 / S3.6a] Chốt nhóm hàng, cùng khuôn: hàm vị từ `rfq_chot_nhom_hang` hỏi trên hàng DRAFT, trigger ở cạnh hỏi lại
   // trên giá trị MỚI của cột. Sau K1: gói thiếu cả hai nhận lời từ chối về ngân sách trước.
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NHOM_HANG, [orgId, input.rfqId]);
 

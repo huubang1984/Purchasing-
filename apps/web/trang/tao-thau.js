@@ -26,7 +26,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
-// [S1.9101 / S3.6a] Nhóm hàng của tổ chức (`GET /categories`) — chỉ nạp ở tổ chức đã bật, nơi gói không nhóm hàng không nộp
+// [S1.201 / S3.6a] Nhóm hàng của tổ chức (`GET /categories`) — chỉ nạp ở tổ chức đã bật, nơi gói không nhóm hàng không nộp
 // duyệt được.
 let nhomHang = [];
 
@@ -164,7 +164,7 @@ async function napLuong() {
 }
 
 /**
- * [S1.9101 / S3.6a] Nạp danh sách nhóm hàng rồi vẽ ô chọn, chọn sẵn `dangChon`. Đọc hỏng thì ô chọn chỉ còn dòng trống: máy
+ * [S1.201 / S3.6a] Nạp danh sách nhóm hàng rồi vẽ ô chọn, chọn sẵn `dangChon`. Đọc hỏng thì ô chọn chỉ còn dòng trống: máy
  * chủ vẫn từ chối lần nộp duyệt thiếu nhóm hàng, màn chỉ nói kém đi.
  */
 async function napNhomHang(dangChon) {
@@ -287,7 +287,7 @@ async function napRfq(rfqId) {
     ["Hạn nộp", g.deadlineAt === undefined ? null : new Date(g.deadlineAt).toLocaleString("vi-VN")],
     ["Cần hai người duyệt", g.requiresDualApproval === true ? "có" : "không"],
   ];
-  // [S1.9101 / S3.6a] Nhóm hàng của gói — chỉ ở tổ chức đã bật; ô chọn nhảy về đúng nhóm gói đang giữ.
+  // [S1.201 / S3.6a] Nhóm hàng của gói — chỉ ở tổ chức đã bật; ô chọn nhảy về đúng nhóm gói đang giữ.
   if (luong.daBat) {
     hang.push(["Nhóm hàng", nhanNhomHangCuaGoi(nhomHang, g.categoryId)]);
     veChonNhomHang(typeof g.categoryId === "string" ? g.categoryId : null);
@@ -303,7 +303,7 @@ $("nut-tao").addEventListener("click", async () => {
   const title = $("tieu-de").value.trim();
   const han = $("han").value;
   if (title === "" || han === "") { bao($("loi2"), "Cần cả tiêu đề và hạn nộp."); return; }
-  // [S1.9101 / S3.6a] Nhóm hàng đi cùng lần tạo khi đã chọn; chưa chọn thì gói vẫn tạo được — chốt ở lần nộp duyệt.
+  // [S1.201 / S3.6a] Nhóm hàng đi cùng lần tạo khi đã chọn; chưa chọn thì gói vẫn tạo được — chốt ở lần nộp duyệt.
   const categoryId = luong.daBat ? $("nhom-hang").value : "";
   const r = await goi("POST", "/rfqs", { title, deadlineAt: new Date(han).toISOString(), ...(categoryId !== "" ? { categoryId } : {}) });
   if (r.status !== 201) { bao($("loi2"), loiCua(r, "Không tạo được gói thầu")); return; }
@@ -320,7 +320,7 @@ $("nut-doc").addEventListener("click", async () => {
   await napRfq(id);
 });
 
-// [S1.9101 / S3.6a] Đặt hay đổi nhóm hàng của gói đang soạn — `PUT /rfqs/:rfqId/category`. Máy chủ từ chối nhóm đã ngừng dùng và
+// [S1.201 / S3.6a] Đặt hay đổi nhóm hàng của gói đang soạn — `PUT /rfqs/:rfqId/category`. Máy chủ từ chối nhóm đã ngừng dùng và
 // gói đã rời DRAFT bằng lời có tên; màn in đúng lời ấy.
 $("nut-nhom-hang").addEventListener("click", async () => {
   bao($("loi2"), ""); bao($("ok2"), "");

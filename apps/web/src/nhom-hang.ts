@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.6a] NHÓM HÀNG — PHÉP TÍNH CỦA HAI MÀN
+// [S1.201 / S3.6a] NHÓM HÀNG — PHÉP TÍNH CỦA HAI MÀN
 //
 // Spec S3 §4.3: nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10, S3.6b). Chủ dự án chốt ngày 2026-09-29: nhóm hàng bắt buộc để
 // rời DRAFT ở tổ chức đã bật; nhóm hàng chỉ tạo, ngừng dùng và dùng lại — mã và tên không sửa; người giữ `category.manage`
@@ -7,7 +7,7 @@
 //
 // Phép tính THUẦN trên dữ liệu máy chủ trả về — `tsc` gác, `nhom-hang.test.ts` đo, phục vụ cho trình duyệt ở
 // `/lib/nhom-hang.js` (khuôn `tao-thau.ts`). Không luật nào ở đây là chốt: mã hợp lệ, nhóm còn dùng và chốt nộp duyệt nằm ở
-// CSDL (`9501_nhom_hang`) và hàm gói; màn chỉ nói trước điều máy chủ sẽ nói.
+// CSDL (`085_nhom_hang`) và hàm gói; màn chỉ nói trước điều máy chủ sẽ nói.
 // ==============================================================================================
 
 /** Một nhóm hàng như `GET /categories` trả — chỉ bốn trường màn đọc. */
@@ -37,7 +37,7 @@ export function chuanMa(ma: string): string {
   return ma.trim().toUpperCase();
 }
 
-/** Khuôn của `CHECK` ở `9501_nhom_hang` — máy chủ vẫn là nơi phán, màn chỉ nói trước. */
+/** Khuôn của `CHECK` ở `085_nhom_hang` — máy chủ vẫn là nơi phán, màn chỉ nói trước. */
 const MA_HOP_LE = /^[A-Z0-9][A-Z0-9_.-]{0,31}$/u;
 
 /** `null` khi mã (đã chuẩn hoá) hợp lệ; câu nói vì sao khi không. */

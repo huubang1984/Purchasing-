@@ -211,7 +211,7 @@ async function chinh(): Promise<void> {
           [org, nguoiGieo, phienGieo],
         )).id;
 
-    // [S1.9101 / S3.6a] `--s3`: F1 (FINANCE, giữ `category.manage`) dựng nhóm hàng bằng hàm gói — tổ chức đã bật không nộp duyệt
+    // [S1.201 / S3.6a] `--s3`: F1 (FINANCE, giữ `category.manage`) dựng nhóm hàng bằng hàm gói — tổ chức đã bật không nộp duyệt
     // được gói không nhóm hàng. Không `--s3`: không nhóm hàng nào, luồng MVP1 giữ nguyên.
     const nhomHang = S3
       ? await (async (): Promise<string> => {
