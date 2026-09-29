@@ -16122,7 +16122,7 @@ các ca hành vi đỏ vì gói mở được.
 sách migration. `db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân
 sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 
-**Sổ đăng ký:** hàng K4b của `docs/TEST-PLAN.md`; `so-khai-nhan.ts` khai tệp test mới cho K4b và D2. Không mã mới — 68 bất biến.
+**Sổ đăng ký:** hàng K4b của `docs/TEST-PLAN.md`; `so-khai-nhan.ts` khai tệp test mới cho K4b và D2. Không mã mới — ~~68~~ 70 bất biến (L1, L4 vào ở S1.192, #201).
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -16203,6 +16203,9 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
   ở STATE và Handoff.
 - Bảy đột biến ở lược đồ, bảy lần đỏ (§5); hai đột biến tương đương ghi ra, không đo.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3228 khẳng định; K4b 8 → 23, D2 45 → 50. Không mã mới.
+- **Sau khi merge `master` tới #201 (S4.0 + S4.1 giữ S1.192 và `079`) và cấp lại số vòng, số migration:** toàn bộ T3 cục bộ
+  trên cây cuối: 193 tệp, 3264 khẳng định, 3254 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã
+  commit: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3264 khẳng định. `pnpm t0` sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
@@ -16350,6 +16353,10 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 23 → 40, K4a 16 → 20, D2 50 → 64. Không mã mới.
+- **Sau khi merge #199 — nay mang #201 (S4.0 + S4.1 giữ S1.192 và `079`) — và cấp lại số vòng, số migration:** toàn bộ unit + T3
+  cục bộ trên cây cuối: 194 tệp, 3292 khẳng định, 3282 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất
+  biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3292 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise`
+  sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
