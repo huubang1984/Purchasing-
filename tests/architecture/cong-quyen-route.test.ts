@@ -66,10 +66,14 @@ const HAM_DOI_TRANG_THAI = [
   "createProcurementPolicy",
   "createRfq",
   "createSupplier",
+  // [S1.201 / S3.6a] Gán nhóm hàng cho gói đang soạn — route đòi `rfq.create`, như ngân sách và hạng mục.
+  "datNhomHangChoGoi",
   // [S1.188 / S3.2b2 / ADR-113] Lời mời `UNSENT→SENT` sau lần gửi được — việc *xong* của lần gửi sau commit, dưới mã quyền của route
   // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
   "danhDauDaGui",
   "dispatchUnseal",
+  // [S1.201 / S3.6a] Ngừng dùng hay dùng lại một nhóm hàng — route đòi `category.manage`, hàm hỏi lại cùng mã.
+  "doiTrangThaiNhomHang",
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
@@ -96,6 +100,8 @@ const HAM_DOI_TRANG_THAI = [
   "setRfqBudget",
   "submitRfqForApproval",
   "taoHangChuan",
+  // [S1.201 / S3.6a] Tạo nhóm hàng — route đòi `category.manage`, hàm hỏi lại cùng mã.
+  "taoNhomHang",
   "taoPhienBanHangChuan",
 ] as const;
 
@@ -140,6 +146,9 @@ const HAM_CHI_DOC = [
   // [S1.169 / S3.1c] Mọi phiên bản chính sách cùng chữ ký — cùng hạng với `getActiveProcurementPolicy`: chính sách không
   // phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`), không ở đây.
   "lietKePhienBanChinhSach",
+  // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
+  // (`agent: false`).
+  "lietKeNhomHang",
   "listRfqItems",
   "listSupplierContacts",
   "listSuppliers",

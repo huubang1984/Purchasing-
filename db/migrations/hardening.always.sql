@@ -2728,6 +2728,7 @@ $ham$;
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_phien_khac', '040_dat_lai_totp_hai_nguoi', 'CHECK (((approved_by_session_id IS NULL) OR (approved_by_session_id <> requested_by_session_id)))'),
          ('public', 'mfa_reset_requests', 'mfa_reset_requests_tieu_thu_sau_duyet', '040_dat_lai_totp_hai_nguoi', 'CHECK (((consumed_at IS NULL) OR (status = ''APPROVED''::text)))'),
          ('public', 'otp_rate_limits', 'otp_rate_limits_bucket_hash_check', '010_invitations', 'CHECK ((octet_length(bucket_hash) = 32))'),
+         ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '085_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
          ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
          ('public', 'rfq_awards', 'rfq_awards_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text])))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
@@ -3425,6 +3426,8 @@ $ham$;
          ('public', 'organizations', '002_organizations_and_users'),
          ('public', 'otp_rate_limits', '010_invitations'),
          ('public', 'outbox_jobs', '007_outbox'),
+         ('public', 'procurement_categories', '085_nhom_hang'),
+         ('public', 'procurement_category_changes', '085_nhom_hang'),
          ('public', 'rfq_approvals', '009_rfq'),
          ('public', 'rfq_award_approvals', '061_trao_thau'),
          ('public', 'rfq_awards', '061_trao_thau'),
@@ -4639,6 +4642,28 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_kiem_danh_tinh BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.procurement_categories') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                                 AND t.tgname = 'procurement_categories_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_kiem_danh_tinh BEFORE INSERT ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_categories_kiem_danh_tinh ON public.procurement_categories;
+             CREATE TRIGGER procurement_categories_kiem_danh_tinh BEFORE INSERT ON procurement_categories FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
+             ALTER TABLE public.procurement_categories ENABLE ALWAYS TRIGGER procurement_categories_kiem_danh_tinh;
+           END IF;
+           IF to_regclass('public.procurement_category_changes') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                                 AND t.tgname = 'procurement_category_changes_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_kiem_danh_tinh BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_category_changes_kiem_danh_tinh ON public.procurement_category_changes;
+             CREATE TRIGGER procurement_category_changes_kiem_danh_tinh BEFORE INSERT ON procurement_category_changes FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
+             ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_kiem_danh_tinh;
+           END IF;
            IF to_regclass('public.rfq_tra_ve') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
@@ -4891,6 +4916,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_kiem_danh_tinh BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
+            AND (to_regclass('public.procurement_categories') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                               AND t.tgname = 'procurement_categories_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_kiem_danh_tinh BEFORE INSERT ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.procurement_category_changes') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                               AND t.tgname = 'procurement_category_changes_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_kiem_danh_tinh BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
             AND (to_regclass('public.rfq_tra_ve') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
@@ -5828,6 +5869,50 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_chan_truncate BEFORE TRUNCATE ON public.item_uom_conversions FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_chan_truncate;
            END IF;
+           IF to_regclass('public.procurement_categories') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                                 AND t.tgname = 'procurement_categories_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_chi_ghi_them BEFORE DELETE OR UPDATE ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_categories_chi_ghi_them ON public.procurement_categories;
+             CREATE TRIGGER procurement_categories_chi_ghi_them BEFORE UPDATE OR DELETE ON procurement_categories FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.procurement_categories ENABLE ALWAYS TRIGGER procurement_categories_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.procurement_categories') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                                 AND t.tgname = 'procurement_categories_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_chan_truncate BEFORE TRUNCATE ON public.procurement_categories FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_categories_chan_truncate ON public.procurement_categories;
+             CREATE TRIGGER procurement_categories_chan_truncate BEFORE TRUNCATE ON procurement_categories FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.procurement_categories ENABLE ALWAYS TRIGGER procurement_categories_chan_truncate;
+           END IF;
+           IF to_regclass('public.procurement_category_changes') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                                 AND t.tgname = 'procurement_category_changes_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_chi_ghi_them BEFORE DELETE OR UPDATE ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_category_changes_chi_ghi_them ON public.procurement_category_changes;
+             CREATE TRIGGER procurement_category_changes_chi_ghi_them BEFORE UPDATE OR DELETE ON procurement_category_changes FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.procurement_category_changes') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                                 AND t.tgname = 'procurement_category_changes_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_chan_truncate BEFORE TRUNCATE ON public.procurement_category_changes FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_category_changes_chan_truncate ON public.procurement_category_changes;
+             CREATE TRIGGER procurement_category_changes_chan_truncate BEFORE TRUNCATE ON procurement_category_changes FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -6039,6 +6124,38 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_chan_truncate BEFORE TRUNCATE ON public.item_uom_conversions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.procurement_categories') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                               AND t.tgname = 'procurement_categories_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_chi_ghi_them BEFORE DELETE OR UPDATE ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.procurement_categories') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                               AND t.tgname = 'procurement_categories_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_chan_truncate BEFORE TRUNCATE ON public.procurement_categories FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.procurement_category_changes') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                               AND t.tgname = 'procurement_category_changes_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_chi_ghi_them BEFORE DELETE OR UPDATE ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.procurement_category_changes') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                               AND t.tgname = 'procurement_category_changes_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_chan_truncate BEFORE TRUNCATE ON public.procurement_category_changes FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -6052,7 +6169,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.org_policy_signatures, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -9372,6 +9489,378 @@ $ham$$q$,
                     FROM pg_proc p WHERE p.oid = to_regprocedure('public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz)')),
                   'hàm public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz) không tồn tại')$q$,
       $q$quyền sở hữu hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Nguoi tao nhom hang giu category.manage (ADR-084). Than `RETURN NEW` cho vai tao goi dung nhom hang — tuc chinh khoa cua tin hieu soi minh.
+    ARRAY[
+      $q$hàm + trigger nhom_hang_kiem_nguoi_tao (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_nguoi_tao()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.nhom_hang_kiem_nguoi_tao();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.nhom_hang_kiem_nguoi_tao() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  IF NOT EXISTS (SELECT 1
+                   FROM public.user_roles ur
+                   JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                  WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by
+                    AND rp.permission_code = 'category.manage') THEN
+    RAISE EXCEPTION 'Nguoi tao nhom hang phai giu category.manage (ADR-084)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.procurement_categories') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                                 AND t.tgname = 'procurement_categories_kiem_nguoi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.nhom_hang_kiem_nguoi_tao()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_kiem_nguoi BEFORE INSERT ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION nhom_hang_kiem_nguoi_tao()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_categories_kiem_nguoi ON public.procurement_categories;
+             CREATE TRIGGER procurement_categories_kiem_nguoi BEFORE INSERT ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION public.nhom_hang_kiem_nguoi_tao();
+             ALTER TABLE public.procurement_categories ENABLE ALWAYS TRIGGER procurement_categories_kiem_nguoi;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'category.manage') THEN RAISE EXCEPTION 'Nguoi tao nhom hang phai giu category.manage (ADR-084)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.procurement_categories')
+                           AND t.tgname = 'procurement_categories_kiem_nguoi'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.nhom_hang_kiem_nguoi_tao()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_categories_kiem_nguoi BEFORE INSERT ON public.procurement_categories FOR EACH ROW EXECUTE FUNCTION nhom_hang_kiem_nguoi_tao()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_nguoi_tao()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_nguoi_tao()')),
+                  'hàm public.nhom_hang_kiem_nguoi_tao() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.nhom_hang_kiem_nguoi_tao() và bảng public.procurement_categories (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Luat nguoi, chieu doi va thu tu duoi khoa cua trang thai nhom hang. Than `RETURN NEW` de thu_tu NULL va cho nguoi khong giu category.manage ngung dung mot nhom.
+    ARRAY[
+      $q$hàm + trigger nhom_hang_kiem_doi (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_doi()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.nhom_hang_kiem_doi();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.nhom_hang_kiem_doi() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  loai_cuoi text;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8));
+  IF NOT EXISTS (SELECT 1
+                   FROM public.user_roles ur
+                   JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                  WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by
+                    AND rp.permission_code = 'category.manage') THEN
+    RAISE EXCEPTION 'Nguoi doi trang thai nhom hang phai giu category.manage (ADR-084)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT c.loai INTO loai_cuoi
+    FROM public.procurement_category_changes c
+   WHERE c.org_id = NEW.org_id AND c.category_id = NEW.category_id
+   ORDER BY c.thu_tu DESC
+   LIMIT 1;
+  IF NEW.loai = 'RETIRED' AND loai_cuoi IS NOT DISTINCT FROM 'RETIRED' THEN
+    RAISE EXCEPTION 'Nhom hang da ngung dung roi'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_ngung_dung_hai_lan';
+  END IF;
+  IF NEW.loai = 'REACTIVATED' AND loai_cuoi IS DISTINCT FROM 'RETIRED' THEN
+    RAISE EXCEPTION 'Nhom hang dang dung — khong co gi de dung lai'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_dung_lai_khi_dang_dung';
+  END IF;
+  NEW.thu_tu := coalesce((SELECT max(c.thu_tu) FROM public.procurement_category_changes c
+                           WHERE c.org_id = NEW.org_id AND c.category_id = NEW.category_id), 0) + 1;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.procurement_category_changes') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                                 AND t.tgname = 'procurement_category_changes_kiem_doi'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.nhom_hang_kiem_doi()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_kiem_doi BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION nhom_hang_kiem_doi()$def$) THEN
+             DROP TRIGGER IF EXISTS procurement_category_changes_kiem_doi ON public.procurement_category_changes;
+             CREATE TRIGGER procurement_category_changes_kiem_doi BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION public.nhom_hang_kiem_doi();
+             ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_kiem_doi;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE loai_cuoi text; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8)); IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'category.manage') THEN RAISE EXCEPTION 'Nguoi doi trang thai nhom hang phai giu category.manage (ADR-084)' USING ERRCODE = 'check_violation'; END IF; SELECT c.loai INTO loai_cuoi FROM public.procurement_category_changes c WHERE c.org_id = NEW.org_id AND c.category_id = NEW.category_id ORDER BY c.thu_tu DESC LIMIT 1; IF NEW.loai = 'RETIRED' AND loai_cuoi IS NOT DISTINCT FROM 'RETIRED' THEN RAISE EXCEPTION 'Nhom hang da ngung dung roi' USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_ngung_dung_hai_lan'; END IF; IF NEW.loai = 'REACTIVATED' AND loai_cuoi IS DISTINCT FROM 'RETIRED' THEN RAISE EXCEPTION 'Nhom hang dang dung — khong co gi de dung lai' USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_dung_lai_khi_dang_dung'; END IF; NEW.thu_tu := coalesce((SELECT max(c.thu_tu) FROM public.procurement_category_changes c WHERE c.org_id = NEW.org_id AND c.category_id = NEW.category_id), 0) + 1; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.procurement_category_changes')
+                           AND t.tgname = 'procurement_category_changes_kiem_doi'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.nhom_hang_kiem_doi()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_kiem_doi BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION nhom_hang_kiem_doi()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_doi()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.nhom_hang_kiem_doi()')),
+                  'hàm public.nhom_hang_kiem_doi() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.nhom_hang_kiem_doi() và bảng public.procurement_category_changes (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Cau hoi duy nhat ve trang thai nhom hang. Mot than `SELECT true` cho gan nhom da ngung dung.
+    ARRAY[
+      $q$định nghĩa hàm nhom_hang_con_dung(uuid, uuid) (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.nhom_hang_con_dung(p_org uuid, p_nhom uuid) RETURNS boolean
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT coalesce((
+    SELECT c.loai <> 'RETIRED'
+      FROM public.procurement_category_changes c
+     WHERE c.org_id = p_org AND c.category_id = p_nhom
+     ORDER BY c.thu_tu DESC
+     LIMIT 1), true)
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT coalesce(( SELECT c.loai <> 'RETIRED' FROM public.procurement_category_changes c WHERE c.org_id = p_org AND c.category_id = p_nhom ORDER BY c.thu_tu DESC LIMIT 1), true)$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.bool'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.nhom_hang_con_dung(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.nhom_hang_con_dung(uuid, uuid)')),
+                  'hàm public.nhom_hang_con_dung(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm nhom_hang_con_dung(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Nhom hang cua goi chi doi o DRAFT va chi gan nhom con dung. Than `RETURN NEW` de doi nhom hang sau khi nop duyet — loi ne tin hieu chia nho spec §4.3 goi ten.
+    ARRAY[
+      $q$hàm + trigger rfq_kiem_nhom_hang (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_kiem_nhom_hang();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_kiem_nhom_hang() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.category_id IS NOT DISTINCT FROM OLD.category_id THEN
+      RETURN NEW;
+    END IF;
+    IF OLD.status <> 'DRAFT' THEN
+      RAISE EXCEPTION 'Nhom hang cua goi thau chi doi duoc o DRAFT (S3.6a)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_chi_doi_o_draft';
+    END IF;
+  END IF;
+  IF NEW.category_id IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock_shared(
+              pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8));
+    IF NOT public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN
+      RAISE EXCEPTION 'Nhom hang da ngung dung — chon nhom khac (S3.6a)'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_da_ngung_dung';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_nhom_hang'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_kiem_nhom_hang()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_nhom_hang BEFORE INSERT OR UPDATE OF category_id ON public.rfq_packages FOR EACH ROW EXECUTE FUNCTION rfq_kiem_nhom_hang()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_nhom_hang ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_nhom_hang BEFORE INSERT OR UPDATE OF category_id ON public.rfq_packages FOR EACH ROW EXECUTE FUNCTION public.rfq_kiem_nhom_hang();
+             ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_nhom_hang;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF TG_OP = 'UPDATE' THEN IF NEW.category_id IS NOT DISTINCT FROM OLD.category_id THEN RETURN NEW; END IF; IF OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'Nhom hang cua goi thau chi doi duoc o DRAFT (S3.6a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_chi_doi_o_draft'; END IF; END IF; IF NEW.category_id IS NOT NULL THEN PERFORM pg_catalog.pg_advisory_xact_lock_shared( pg_catalog.hashtextextended(NEW.category_id::pg_catalog.text, 8)); IF NOT public.nhom_hang_con_dung(NEW.org_id, NEW.category_id) THEN RAISE EXCEPTION 'Nhom hang da ngung dung — chon nhom khac (S3.6a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'nhom_hang_da_ngung_dung'; END IF; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                           AND t.tgname = 'rfq_packages_nhom_hang'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_kiem_nhom_hang()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_nhom_hang BEFORE INSERT OR UPDATE OF category_id ON public.rfq_packages FOR EACH ROW EXECUTE FUNCTION rfq_kiem_nhom_hang()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang()')),
+                  'hàm public.rfq_kiem_nhom_hang() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_kiem_nhom_hang() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Ham vi tu cua chot nhom hang — tang goi va trigger o canh cung hoi no. Mot than `RETURN NULL` tat chot o CA HAI cho ma khong trigger nao doi.
+    ARRAY[
+      $q$định nghĩa hàm rfq_chot_nhom_hang(uuid, uuid) (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_chot_nhom_hang(p_org uuid, p_nhom uuid) RETURNS text
+  LANGUAGE plpgsql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+BEGIN
+  IF p_nhom IS NULL AND public.to_chuc_da_bat_s3(p_org) THEN
+    RETURN 'THIEU_NHOM_HANG';
+  END IF;
+  RETURN NULL;
+END
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN IF p_nhom IS NULL AND public.to_chuc_da_bat_s3(p_org) THEN RETURN 'THIEU_NHOM_HANG'; END IF; RETURN NULL; END$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_chot_nhom_hang(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_chot_nhom_hang(uuid, uuid)')),
+                  'hàm public.rfq_chot_nhom_hang(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_chot_nhom_hang(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.201 / S3.6a] Canh DRAFT->PENDING_APPROVAL cua to chuc da bat S3: goi phai co nhom hang. Than `RETURN NEW` de mot cau nop tay bo qua nhom hang.
+    ARRAY[
+      $q$hàm + trigger rfq_kiem_nhom_hang_khi_nop (085_nhom_hang)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '085_nhom_hang.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_kiem_nhom_hang_khi_nop();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_kiem_nhom_hang_khi_nop() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  ly_do text;
+BEGIN
+  ly_do := public.rfq_chot_nhom_hang(NEW.org_id, NEW.category_id);
+  IF ly_do IS NOT NULL THEN
+    RAISE EXCEPTION 'Goi thau chua roi DRAFT duoc (S3.6a): %', ly_do
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_kiem_nhom_hang_khi_nop'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_kiem_nhom_hang_khi_nop()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_kiem_nhom_hang_khi_nop ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION public.rfq_kiem_nhom_hang_khi_nop();
+             ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_nhom_hang_khi_nop;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE ly_do text; BEGIN ly_do := public.rfq_chot_nhom_hang(NEW.org_id, NEW.category_id); IF ly_do IS NOT NULL THEN RAISE EXCEPTION 'Goi thau chua roi DRAFT duoc (S3.6a): %', ly_do USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                           AND t.tgname = 'rfq_packages_kiem_nhom_hang_khi_nop'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_kiem_nhom_hang_khi_nop()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()')),
+                  'hàm public.rfq_kiem_nhom_hang_khi_nop() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_kiem_nhom_hang_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[

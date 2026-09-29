@@ -45,10 +45,18 @@
     <input id="tieu-de" autocomplete="off" placeholder="Mua thep tam quy IV">
     <label for="han">Hạn nộp</label>
     <input id="han" type="datetime-local">
+    <!-- [S1.201 / S3.6a] Nhóm hàng — chỉ ở tổ chức đã bật: gói không nhóm hàng không nộp duyệt được (spec S3 §4.3). -->
+    <div id="khoi-nhom-hang" hidden>
+      <label for="nhom-hang">Nhóm hàng</label>
+      <select id="nhom-hang"></select>
+      <p class="ghi">Tổ chức đã bật kiểm soát theo bậc: gói phải có nhóm hàng trước khi nộp duyệt, và nhóm hàng chỉ đổi được
+        khi gói còn đang soạn. Danh sách nhóm hàng do người tài chính quản lý ở màn <a href="/nhom-hang">Nhóm hàng</a>.</p>
+    </div>
     <button id="nut-tao">Tạo gói thầu</button>
     <label for="rfq">hoặc dán mã gói thầu đã có</label>
     <input id="rfq" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <button id="nut-doc" class="phu">Đọc</button>
+    <button id="nut-nhom-hang" class="phu" hidden>Đặt nhóm hàng cho gói này</button>
     <dl class="tt" id="tt-rfq"></dl>
     <div class="bao loi" id="loi2" hidden></div>
     <div class="bao ok" id="ok2" hidden></div>
