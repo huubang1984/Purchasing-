@@ -1082,6 +1082,9 @@ describe("[S1.200 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt 
     expect(rfq.status, rfq.text).toBe(201);
     const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
     expect((await goi("PUT", `/rfqs/${rfqId}/budget`, mua, { estimatedValue: "2000000.00", currency: "VND" })).status).toBe(200);
+    // [S1.200 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — gói nhận nhóm `goiDaNop` đã dựng cho tổ chức.
+    const nhomId = (await db.pool.query<{ id: string }>("SELECT id FROM procurement_categories WHERE org_id = $1", [org])).rows[0]?.id ?? "";
+    expect((await goi("PUT", `/rfqs/${rfqId}/category`, mua, { categoryId: nhomId })).status).toBe(200);
     const nop = await goi("POST", `/rfqs/${rfqId}/submit`, mua);
     expect(nop.status, nop.text).toBe(200);
     const kq = await goi("GET", `/rfqs/${rfqId}/budget`, mua);
