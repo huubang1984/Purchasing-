@@ -16307,10 +16307,10 @@ hardening — sửa một bên thì hardening dựng lại thân ghim và đột
 
 ---
 
-# §S1.194 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+# §S1.195 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
-lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`080_rang_ngan_sach`), một ADR (ADR-114),
+lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`081_rang_ngan_sach`), một ADR (ADR-115),
 không route mới.
 
 ## 1. Việc gì
@@ -16329,12 +16329,12 @@ Trên cây `master` `8f90bf2` (bản sao cục bộ), tổ chức đã bật, h�
 - gói 1 triệu, một chữ ký; trả về, nâng lên 99 triệu — cùng bậc —, nộp lại ⇒ gói **MỞ** bằng chữ ký trên con số 1 triệu, một hàng
   chữ ký.
 
-Tệp đo của vòng này chạy trên cùng cây — tạm rút `080_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
+Tệp đo của vòng này chạy trên cùng cây — tạm rút `081_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
 các ca hành vi đỏ vì gói mở được.
 
 ## 3. Thay đổi
 
-**Migration `080_rang_ngan_sach`:**
+**Migration `081_rang_ngan_sach`:**
 - `rfq_bam_ngan_sach(gói)` — hàm băm RIÊNG, khuôn `rfq_bam_danh_sach`: `NGAN_SACH|ước lượng|tiền tệ|phiên bản chính sách|bậc|cờ duyệt
   kép`, `LEFT JOIN` ngân sách để cờ duyệt kép luôn nằm trong băm. `STABLE`, không `SECURITY DEFINER`, `search_path` ghim.
 - Cột `rfq_approvals.approved_budget_hash`, ngoài `GRANT`; thân `rfq_approvals_dat_bam_danh_sach` (`076`) cộng một vế — cùng trigger
@@ -16342,10 +16342,10 @@ các ca hành vi đỏ vì gói mở được.
 - Hai UNIQUE `rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan` mang thêm cột ấy, giữ tên, giữ `NULLS NOT DISTINCT`.
 - Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`076`) cộng một phép đếm thứ hai — người ký khác nhau khớp nội dung, danh sách VÀ ngân sách
   hiện tại — với lời từ chối riêng *"RFQ nay can N chu ky TREN NGAN SACH HIEN TAI, moi co M (K4b)"*. Phép đếm đầu giữ nguyên văn.
-- Không điền hàng cũ (ADR-114 ⑸).
+- Không điền hàng cũ (ADR-115 ⑸).
 
 **Hardening:** mục ghim mới cho `rfq_bam_ngan_sach(uuid)` (khuôn `rfq_bam_danh_sach`); hai mục ghim của `076` trỏ sang thân và cổng
-`080_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
+`081_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
 sách migration. `db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân
 sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 
@@ -16354,7 +16354,7 @@ sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
 - **Cơ chế băm, không khoá ngân sách, không xoá chữ ký.** Spec §2.4 đã chọn *chữ ký cũ vô hiệu bằng băm* cho chính cạnh này, và S3.2b1
-  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-114.
+  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-115.
 - **Băm mang phiên bản chính sách, bậc và cờ duyệt kép**, không chỉ con số: số chữ ký ở cạnh mở gói đọc cờ duyệt kép, cờ ấy suy từ
   ngưỡng kép của phiên bản ghim — hay do người mua tự nâng —, và bậc suy từ bảng bậc của phiên bản ấy.
 - **Lời từ chối riêng cho vế ngân sách**, sau phép đếm cũ: người mua đọc được chữ ký lệch ở đâu.
@@ -16392,10 +16392,10 @@ từ phiên bản và ước lượng, nên không đường nào đổi riêng 
 
 Một lượt, trên cây của commit đầu vòng này; người kiểm đo trên Postgres 16 thật dưới `app_api`, hàm gói thật, dò bằng tệp test tạm
 xoá ngay sau mỗi lượt chạy. **Không đường nào lách được bản vá.** Người kiểm xác nhận: hai lỗ tái hiện trên `master` và đóng ở
-`080_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
+`081_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
 không phụ thuộc thiết đặt phiên; `PENDING_APPROVAL→OPEN` là cạnh DUY NHẤT vào `OPEN`; `app_api` không xoá được ngân sách hay chữ ký;
 lần sửa ngân sách đòi DRAFT dưới khoá `FOR NO KEY UPDATE` hàng gói; ca đua lời duyệt tính trên 1 triệu treo chưa commit trong lúc PM trả
-về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `080_rang_ngan_sach` với dữ liệu đang bay đúng như
+về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `081_rang_ngan_sach` với dữ liệu đang bay đúng như
 §3 nói; mục ghim hardening sửa được cả ba hàm bị làm lệch và hai trigger bị tắt.
 
 | # | Phát hiện | Mức | Xử lý |
@@ -16405,8 +16405,8 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 | S3 | Đột biến sống sót: băm bỏ cờ duyệt kép; phép đếm thứ hai chỉ xét ngân sách | Thấp | Sửa trong vòng: ca *cờ duyệt kép* và ca *bộ ba* cộng hai đột biến — cả hai nay đỏ |
 | S4 | Đầu mục khối đột biến nói *mỗi vế một lần đỏ* — sai khi hai đột biến trên còn sống | Thấp | Sửa: khối nay có đủ bảy vế; tiền tệ và bậc ghi là đột biến tương đương |
 | S5 | Lời của phép đếm đầu (`076`) nói *danh sách* dù danh sách không đổi | Thông tin | Ghi ở §7; ca *một người ký hai lần* khẳng định nguyên văn thay vì một biểu thức nới |
-| S6 | Số tạm trần `080` trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `080_rang_ngan_sach`. Chú thích *"Trước `080`"* có sẵn ở `packages/unseal/src/unseal.int.test.ts` (ý là `078`) đứng ngoài vòng này |
-| S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-114 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
+| S6 | Số tạm trần (dải `95NN`) trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `081_rang_ngan_sach`. Một chú thích số tạm trần như thế (ý là `078`) có sẵn ở `packages/unseal/src/unseal.int.test.ts`, đứng ngoài vòng này. [S1.195] Ô này từng viết chính số tạm ấy, và mỗi lần cấp số `cap-so` thay nó thành số migration của nhánh — nay viết bằng dải |
+| S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-115 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
 | S8 | Hai chú thích sai nhỏ: đột biến ràng buộc không toàn cục; số chữ ký đọc ngưỡng kép, không đọc bảng bậc | Thông tin | Sửa |
 
 ## 7. Giới hạn, nói ra
@@ -16422,7 +16422,7 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 ## 8. Số đo
 
 - `packages/rfq/src/rang-ngan-sach.int.test.ts` 17/17 — mười lăm ca có nhãn, hai ca giới hạn không nhãn. Trên cây `master` (tạm rút
-  `080_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
+  `081_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
 - Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 191 tệp, 3228 khẳng định, 3218 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo,
   không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).

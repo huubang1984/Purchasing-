@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 080_rang_ngan_sach — [S1.194] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — khoản 254 đóng
+-- 081_rang_ngan_sach — [S1.195] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — khoản 254 đóng
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4 (chữ ký cũ vô hiệu bằng băm), §3.3,
--- §5.1 (K4). ADR-114. Chủ dự án chốt ngày 2026-09-29: vá lỗ này trước S3.2c, bằng một PR riêng.
+-- §5.1 (K4). ADR-115. Chủ dự án chốt ngày 2026-09-29: vá lỗ này trước S3.2c, bằng một PR riêng.
 --
 -- VÌ SAO. Trước `077`, ngân sách khoá khi gói rời DRAFT (`rfq_budgets_chi_sua_khi_soan`, `014`) và không đường nào quay về,
 -- nên mọi chữ ký nằm trên ngân sách cuối cùng. Cạnh `PENDING_APPROVAL→DRAFT` của `077` mở lại ngân sách, mà băm nội dung
