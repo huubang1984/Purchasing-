@@ -7619,6 +7619,34 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.
 
+### Bổ sung 2026-09-29 — giữ số trên remote, chấm dứt cuộc đua giữa hai PR cùng cấp số
+
+Sau quyết định trên, số vẫn va mỗi khi hai PR chạy `pnpm cap-so` trên cùng một master rồi merge liền nhau. Tháng 9 có khoảng
+20 commit "cấp lại số" chỉ vì thế (`e5fa1d5`, `87f95b2`, `fa9b2a5`, …). Quy tắc "nhảy +10 khi trùng" bị loại: hai nhánh cùng
+thua một cuộc đua sẽ cùng nhảy +10 rồi lại trùng nhau, và nhánh thắng không biết dải bị nhảy. Chủ dự án chọn một khoá thật:
+
+1. **Mỗi số thật được GIỮ trên remote trước khi viết ra.** Khi base là nhánh theo dõi (`origin/master`), lệnh đẩy nhánh
+   `cap-so/<dãy>/<số>` (dãy: `vong`, `adr`, `khoan`, `migration`). Tạo nhánh là nguyên tử phía máy chủ, nên hai lần đẩy cùng
+   tên thì chỉ một lần thắng. Lần thua lấy số kế tiếp. Nhánh giữ trỏ vào một commit mồ côi TẤT ĐỊNH (cây rỗng, ngày cố định,
+   thông điệp nêu dãy, số và nhánh giữ). Vì vậy chạy lại lệnh không tốn thêm số, và `ls-remote` biết số nào của nhánh nào mà
+   không phải fetch. Dùng nhánh thường mà không dùng tag hay `refs/cap-so/*`, vì phiên đám mây chỉ được TẠO nhánh (đo
+   2026-09-29: tag và ref ngoài `refs/heads/` bị trả 403; xoá nhánh cũng bị 403).
+2. **Số đã giữ là của nhánh tới khi nó vào master.** PR khác merge trước không còn làm đổi số: merge master rồi chạy lại
+   `pnpm cap-so` sẽ cấp đúng số cũ và diff không đổi. **Riêng migration**, số giữ phải còn lớn hơn max(base). CSDL đang chạy
+   áp migration theo thứ tự merge, còn CSDL mới áp theo thứ tự tên, nên hai thứ tự ấy phải trùng nhau. Nhánh bị vượt ở dãy
+   migration giữ một số mới.
+3. **`pnpm cap-so --don`** xoá nhánh giữ của những số đã vào base. Lệnh này chạy ở máy có quyền xoá nhánh (chủ repo), vì
+   phiên đám mây không xoá được. **`--khong-giu`** cấp max(base)+1 như trước và có thể trùng. Base cục bộ (`--base master`)
+   thì không giữ số.
+
+Hệ quả, nói thẳng: số không còn đi đúng thứ tự merge và có thể có lỗ (PR bị bỏ, hoặc số giữ thừa sau khi bớt mục). Các lời
+khai đếm đếm số mục chứ không lấy số lớn nhất, nên lỗ số không làm đỏ `[INV-H20]`. Remote có thêm nhánh `cap-so/*` cho tới
+khi `--don` dọn. Mỗi phiên chạy lệnh sẽ tự tạo nhánh `cap-so/*` ngoài nhánh làm việc của nó. Thứ tự migration chỉ được
+bảo đảm tại lúc chạy lệnh. Nếu sau đó một PR có migration số lớn hơn vào master trước, phải merge master và chạy lại lệnh
+trước khi merge; chỉ "Require branches to be up to date" mới ép được việc ấy. Nhánh chưa có bản lệnh mới thì vẫn cấp
+không giữ số cho tới khi merge master. Test:
+`tools/cap-so/src/cap-so.test.ts`, khối "giữ số trên remote".
+
 ## ADR-091 — Ghi sổ lần đọc của agent cùng giao dịch đọc
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.154]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
