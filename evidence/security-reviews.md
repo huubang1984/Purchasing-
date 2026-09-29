@@ -16573,6 +16573,63 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
 
+# §S1.9111 — LÔ 11 HARDENING A: `NGOAI_LE_DOC_VONG` KHAI CÓ KHOÁ, SECURITY DEFINER THEO CHỮ KÝ, VAI CHỦ HÀM ĐƯỢC CANH — KHOẢN 112, 163, 164 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11. Đóng khoản **112, 163, 164** (rổ B); mở **9411, 9412**. Không migration, không ADR.
+
+## 1. Vòng này là gì
+Ba khoản cùng một cơ chế trong `db/migrations/hardening.always.sql`. Mục (C) "đọc vòng qua RLS" có một cửa ra viết tay, `NGOAI_LE_DOC_VONG`, mà từ S1.50 tới S1.82 vẫn là `(VALUES (''), ('public.outbox_danh_sach_to_chuc')) AS x(ten)` so bằng `NOT IN` ở cả nhánh view/matview lẫn nhánh SECURITY DEFINER. Ba lỗ đã ghi ở sổ nợ: một dòng NULL làm `NOT IN` ra NULL và tắt cả hai nhánh (112); khoá theo tên trần nên overload `outbox_danh_sach_to_chuc(text) SECURITY DEFINER` đi qua cả mục (C) lẫn hàng ghim thân hàm — vốn khoá chữ ký `()` (163); và vai chủ hàm `app_liet_ke_to_chuc` — toàn bộ đặc quyền của hàm SECURITY DEFINER duy nhất của kho — nằm ngoài `ROLE_CANH`, hàng ghim chỉ đọc `proowner`, nên `ALTER ROLE … BYPASSRLS` sau deploy sống qua mọi lần `migrate()` (164).
+
+## 2. Quyết định của chủ dự án
+Không có; vòng trả nợ theo phân công ngày 2026-09-29 (lô 11, đề bài `lo-spec/lo-11.md`).
+
+## 3. Đo trước
+- Hardening bản `33563ea` + sáu test mới (`-t S1.9111`): `db/rls-coverage.int.test.ts` 3/3 đỏ — HAI BẢN KHỚP: `expected '(VALUES (\'\'), (\'public.outbox_danh…' to be '(VALUES\n         (\'ham\', \'public\…'`; câu phán xét: `expected [ 'zz_s112.f', 'zz_s112.mv', 'zz_s112.v' ] to deeply equal [ …(4) ]` (overload `(text)` được miễn theo tên trần, tên in không chữ ký); lớp sản xuất: thông điệp `migrate()` không chứa `khai public.outbox_danh_sach_to_chuc(…`. `db/migrations.int.test.ts` 1/1 đỏ — `overload cùng tên phải bị mục (C) bắt … expected null not to be null` (migrate() đi qua với overload). `db/vai-neo.int.test.ts` 2/2 đỏ — hardening không có `$q$thuộc tính role app_liet_ke_to_chuc$q$`; `lượt SỬA đưa cả bảy cờ về chuẩn: expected { rolsuper: false, …(6) } to deeply equal …` (`rolbypassrls` vẫn `true` sau `migrate()`).
+- PostgreSQL 16.13, cụm tạm, vai `zz_khong_usage` không USAGE trên lược đồ `zz`: `to_regprocedure('zz.f(text, integer)')` ⇒ `ERROR: permission denied for schema zz`, SQLSTATE 42501; chữ ký dựng từ catalog (`proname || '(' || array_to_string(ARRAY(SELECT format_type(t.oid, NULL) FROM unnest(proargtypes) WITH ORDINALITY …), ',') || ')'`) dưới cùng vai ⇒ `f(text,integer)`; `oid::regprocedure::text` ⇒ `zz.f(text,integer)` khi `zz` ngoài `search_path`, `f(text,integer)` khi trong — phụ thuộc phiên, không dùng làm khoá.
+- Cổng kiến trúc trên `33563ea` (trước khi chạm gì): `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ đỏ sẵn (`test-baseline.log` của người tích hợp xanh vì đo trước 3d991a3) — `packages/test-support/src/postgres-cuc-bo.ts:113–114` dựng `new pg.Client` + `.connect()` chưa khai; ngoài lô, ghi khoản 9411.
+
+## 4. Thay đổi
+- `db/migrations/hardening.always.sql`:
+  - Hằng mới `MAU_CHU_KY_HAM` (chữ ký hàm như `regprocedure` in ra, dựng từ `proargtypes` + `format_type`, `%1$s` = bí danh `pg_proc`), dùng ở ba chỗ của `CAU_DOC_VONG`.
+  - `NGOAI_LE_DOC_VONG` thành khối `(VALUES …) AS x(loai, nspname, ten, mig, ly_do)` — một dòng `('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', <lý do>)`; hết hàng sentinel `('')`; chú thích cũ về tên trần và về `('')` gạch tại chỗ, chú thích mới nêu năm trục.
+  - `CAU_DOC_VONG`: nhánh view/matview so `NOT EXISTS … x.loai = CASE relkind …, x.nspname, x.ten`; nhánh SECDEF in tên kèm chữ ký và so `NOT EXISTS … x.loai = 'ham', x.nspname, x.ten = <chữ ký>`; nhánh thứ ba `UNION ALL` báo dòng khai thiu (đối tượng không tồn tại đúng hình dạng mục (C), kể cả `loai` lạ), chỉ khi `schema_migrations` có `x.mig || '.sql'`; thông điệp hai nhánh xuôi và ô "quyền cần" của hàng (C) chỉ cách khai năm cột kèm bản ở test.
+  - Hàng tự chữa mới `thuộc tính role app_liet_ke_to_chuc` ngay sau hàng `app_khoi_tao`: `ALTER ROLE app_liet_ke_to_chuc NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOLOGIN NOINHERIT`, hậu điều kiện bảy cờ `IS FALSE` (`rolinherit IS FALSE` — khác bốn vai ứng dụng), chẩn đoán nêu cờ sai, quyền cần như các hàng cùng khuôn. KHÔNG thêm vào `ROLE_CANH`.
+  - Chú thích đầu tệp (mục "CỬA cho MATVIEW và cho hàm SECURITY DEFINER") cập nhật, câu cũ gạch tại chỗ.
+- `db/rls-coverage.int.test.ts`: `COT_NGOAI_LE_DOC_VONG`, `NGOAI_LE_DOC_VONG_DA_KHAI` và khối `describe("[S1.9111 / khoản 112 + 163] …")` với ba test `[INV-F1]` (HAI BẢN KHỚP; câu phán xét chạy trong test với fixture trong giao dịch; lớp sản xuất qua `migrate()`).
+- `db/migrations.int.test.ts`: test `[S1.9111 / khoản 163]` — overload do superuser tạo làm `migrate()` gãy đúng chữ ký, hàm gốc không bị nêu, DROP ⇒ đi qua.
+- `db/vai-neo.int.test.ts`: khối `describe("[S1.9111 / khoản 164] …")` hai test — hàng có tên và `ROLE_CANH` không chứa tên; trôi năm cờ ⇒ `migrate()` chữa, hàm liệt kê vẫn chạy dưới `app_neo`, chạy lại là no-op.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Khoá hàm theo chữ ký DỰNG TỪ CATALOG thay vì `to_regprocedure`/`regprocedure` như đề xuất của thân khoản: `to_regprocedure` đòi USAGE trên lược đồ (đo 42501 — mục sẽ "không đánh giá được" thay vì phán, trái bài học S1.48 H3), và `oid::regprocedure::text` đổi theo `search_path`. Chuỗi ra bằng từng byte với `regprocedure` in ra không kèm lược đồ, nên người khai vẫn viết như `regprocedure`.
+- Cột `mig` (migration khai sinh, không đuôi `.sql`) để chiều khai thiu neo vào `schema_migrations` — cùng khuôn `BANG_TENANT_KHAI`, để tập migration rút gọn của `migrations.int.test.ts` đi qua; test HAI BẢN KHỚP đòi tệp ấy tồn tại và có `CREATE` đối tượng.
+- Cột `loai` ('ham' | 'view' | 'matview'): một dòng chỉ miễn đúng loại — đóng luôn vế "miễn cả view/matview trùng tên" của 163; `loai` lạ bị chiều thiu báo.
+- Hàng 164 là hàng riêng, không vào `ROLE_CANH` (hai mục dùng danh sách ấy chưa đo lại, đúng như thân khoản cảnh báo). Thứ tự cờ `NOBYPASSRLS` trước `NOSUPERUSER` để đứng ngoài phép quét tập ghim của `hardening-suy-tu-tinh-chat.int.test.ts` (đúng tám tên của cây bốn vai ứng dụng); lý do viết ngay trên hàng, và quy ước ngầm ấy ghi thành khoản 9412 thay vì sửa test của lô khác.
+- Không chạm `tests/architecture/hardening-co-ly-do.test.ts`: cổng ấy xanh 17/17 với cột `ly_do` mới.
+
+## 6. Đột biến
+Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của bản vá rồi khôi phục tệp (cmp sau cùng: nguyên vẹn):
+- M-a: khoá xuôi nhánh SECDEF so tên trần (`split_part(x.ten, '(', 1) = p.proname`) ⇒ `migrations.int` đỏ `expected null not to be null`; `rls-coverage` đỏ 2/3 (`chữ ký hàm ở thông điệp và ở khoá xuôi: expected 1 to be 2`; danh sách nêu thiếu overload).
+- M-b: nhánh view trở lại `NOT IN (SELECT …)` ⇒ `rls-coverage` đỏ 2/3 (`NOT IN đã hết — một dòng NULL không được tắt mục`; dòng NULL làm danh sách còn 3 thay vì 5).
+- M-c: chiều thiu bỏ `AND zp.prosecdef` ⇒ `rls-coverage` đỏ 2/3 (hàm đã `SECURITY INVOKER` không còn bị báo thiu: `expected [ Array(1) ] to deeply equal [ …(2) ]`; lớp sản xuất: thông điệp không chứa dòng thiu).
+- M-d: câu sửa bỏ `NOBYPASSRLS` ⇒ `vai-neo` đỏ 1/2 (hardening NÉM có tên thay vì tự chữa: `Hardening hardening.always.sql (phan_xet) thất bại: Hardening không sửa được 1 mục: - "thuộc tính role app_liet_ke_to_chuc": trạng thái hiện tại SAI (BYPASSRLS). Cần quyền: SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_liet_ke_to_chuc.` — `expect(await thuocTinh()).toEqual(CHUAN)` không tới được vì `migrate()` ném).
+
+## 7. Giới hạn, nói ra
+- Ca "DROP trần hàm gốc" không đo được ở lớp sản xuất: lượt SỬA của hàng ghim 052 dựng lại thân chuẩn TRƯỚC lượt phán xét (dưới superuser thì thành công) nên chiều thiu im, chỉ vế `proowner` đỏ. Ca đo là "dựng lại sai hình dạng" (đổi kiểu trả về — `CREATE OR REPLACE` bị từ chối), nơi lượt sửa bó tay.
+- Tạo overload trong `public` cần `CREATE` trên schema, không vai ứng dụng nào có (001): test 163 đi bằng superuser, đúng như thân khoản ghi "CHƯA TỚI ĐƯỢC" bằng vai ứng dụng.
+- Hàng 164 tự chữa dưới `db.pool` (superuser) trong test. Dưới vai deploy không superuser, `ALTER ROLE … NOSUPERUSER/NOBYPASSRLS/NOREPLICATION` là việc chỉ superuser làm được — hàng sẽ gãy có tên với ô "quyền cần", cùng giới hạn với bốn hàng `app_api`/`app_unseal`/`app_neo`/`app_khoi_tao`; chưa đo riêng ở vòng này.
+- `hardening-suy-tu-tinh-chat.int.test.ts:2214` đọc tập ghim `NOBYPASSRLS` bằng regex phụ thuộc thứ tự cờ; hàng mới cố ý đứng ngoài. Đó là một quy ước ngầm giữa hai tệp — khoản 9412.
+- Cổng kiến trúc `duong-sql-ngoai-with-tenant` đỏ sẵn ở base (khoản 9411) — không thuộc lô, không sửa được vì `packages/test-support/src/postgres*.ts` là tệp cấm.
+
+## 8. Số đo
+- `pnpm typecheck` ⇒ exit 0. `pnpm exec eslint db/rls-coverage.int.test.ts db/migrations.int.test.ts db/vai-neo.int.test.ts` ⇒ exit 0. `pnpm exec depcruise db --config .dependency-cruiser.cjs` ⇒ no dependency violations (52 modules, 158 dependencies).
+- Đo trước (hardening `33563ea`, `pnpm vitest run <tệp> -t S1.9111`): `rls-coverage` 3 failed | 51 skipped (54); `migrations.int` 1 failed | 119 skipped (120); `vai-neo` 2 failed | 9 skipped (11).
+- Sau vá, cùng lệnh: 3/3, 1/1, 2/2 xanh (nằm trong cổng cuối dưới đây).
+- Đột biến (`scratchpad/lo11/dot-bien.sh`, `dot-bien-md.sh`): M-a `migrations.int` 1 failed; M-a `rls-coverage` 2 failed | 1 passed; M-b 2 failed | 1 passed; M-c 2 failed | 1 passed; M-d `vai-neo` 1 failed | 1 passed. `cmp` sau mỗi ca: hardening nguyên vẹn; bản commit bằng từng byte với bản đã qua cổng cuối.
+- Cổng cuối `pnpm vitest run --maxWorkers=2 db/rls-coverage.int.test.ts db/migrations.int.test.ts db/vai-neo.int.test.ts db/hardening-suy-tu-tinh-chat.int.test.ts db/check-an-ninh.int.test.ts tests/architecture` (14:49:09 → 15:07:40): 39 tệp — 38 xanh, 1 đỏ; 587 xanh | 3 đỏ | 1 skipped (591); 1110,8 s. Theo tệp: `rls-coverage` 54/54 (183 s) · `migrations.int` 120/120 (1108 s) · `vai-neo` 11/11 (17,5 s) · `hardening-suy-tu-tinh-chat` 36/36 (327 s) · `check-an-ninh` 4/4 (15 s) · `hardening-co-ly-do` 17/17 · `so-no-tu-doi-chieu` 45/45 · `boundaries` 77/77 · `khoa-depcruise` 16/16 · các tệp `tests/architecture` còn lại xanh. Ba ca đỏ: `duong-sql-ngoai-with-tenant` ⒜⒞⒟, khoá dư trong cả ba phép so là `packages/test-support/src/postgres-cuc-bo.ts` — đỏ sẵn ở base (khoản 9411), không thuộc lô.
+- PostgreSQL 16.13 (cụm tạm): `to_regprocedure` dưới vai không USAGE ⇒ SQLSTATE 42501; chữ ký dựng từ catalog ⇒ `f(text,integer)`; `oid::regprocedure::text` ⇒ `zz.f(text,integer)` / `f(text,integer)` tuỳ `search_path`.
+
+**[Người tích hợp, 2026-09-29]** Khoản 9411 trong bàn giao lô này không vào sổ: cổng `duong-sql-ngoai-with-tenant` đã được khai tệp `postgres-cuc-bo.ts` ở commit tích hợp lô L7 (a4595fa) trước khi gộp lô này, nên khoảng trống ấy không còn ở HEAD.
+
 # §S1.9151 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không

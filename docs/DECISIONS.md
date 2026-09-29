@@ -4560,8 +4560,8 @@ Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), b
 | ⑵ | ~~**Mười chỗ trong BẢY migration đã áp**~~ ~~**[S1.83] MƯỜI HAI chỗ trong TÁM migration**~~ **[S1.87] MƯỜI BA chỗ trong TÁM migration** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
 | ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng `TO <vai>` | `db/migration-shape.test.ts` |
 | ⑷ | Dòng thứ hai của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (044 là dòng đầu) | hai tệp trên |
-| ⑸ | Một vai CSDL thứ ba, và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế | khoản 164 |
-| ⑹ | Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp | khoản 163 |
+| ⑸ | Một vai CSDL thứ ba, ~~và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế~~ **[S1.9111]** nằm ngoài `ROLE_CANH` (hai mục dùng danh sách ấy chưa đo lại) nhưng bảy thuộc tính của nó (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN NOINHERIT`) được một hàng riêng của hardening tự chữa — đo ở `db/vai-neo.int.test.ts` | khoản 164 (ĐÓNG S1.9111), `hardening.always.sql` |
+| ⑹ | ~~Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp~~ **[S1.9111]** Miễn trừ khoá theo CHỮ KÝ `outbox_danh_sach_to_chuc()` dựng từ catalog (`MAU_CHU_KY_HAM`), cùng `loai` và lược đồ, kèm chiều khai thiu; một overload `(text)` là chữ ký khác và mục (C) nêu nó — đo ở `db/migrations.int.test.ts` | khoản 163 (ĐÓNG S1.9111), `hardening.always.sql` |
 
 Và một quyền MƯỢN trong đúng giao dịch của `052`: `ALTER … OWNER TO` đòi người chạy đổi được vai sang vai đích **và** chủ mới
 phải có `CREATE` trên schema. Cả hai được cấp rồi trả lại trong cùng giao dịch — đo từng cái một, mỗi cái một thông điệp lỗi
