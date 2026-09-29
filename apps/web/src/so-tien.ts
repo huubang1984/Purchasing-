@@ -74,12 +74,24 @@ export function donGiaNguoiGo(chuoi: string): string | null {
   return null;
 }
 
-/** `sl` (tối đa 4 chữ số thập phân) × `dg` (số nguyên) → chuỗi tiền 2 chữ số thập phân. */
+/**
+ * `sl` (tối đa 4 chữ số thập phân) × `dg` (số nguyên) → chuỗi tiền 2 chữ số thập phân.
+ *
+ * [S1.9181 / khoản 218] Tích ở tỉ lệ 10^4 thu về xu bằng luật **nửa-ra-xa-0** — luật của
+ * `pg_catalog.round(x, 2)` và của `lamTron` ở `@trustprocure/danh-gia` (ADR-050 ⑴), tức con số
+ * đi vào phong bì là con số mà mọi phép tính phía máy chủ sẽ tính ra lại. ~~Bản trước chia
+ * `BigInt` thẳng, tức CẮT CỤT về 0~~ — lệch với luật của sản phẩm ở 50 trên 100 phần dư (mọi phần
+ * dư 50–99), đo ở `so-tien.test.ts`. Không import `lamTron` được: tệp này đi thẳng ra trình duyệt
+ * qua `/lib/so-tien.js`, nơi một bare specifier không giải được; nên luật được viết lại ở đây
+ * và test đối chiếu hai bản trên cả 100 phần dư cộng bảng ca nửa xu. Miền của hàm là KHÔNG ÂM
+ * (`sangNguyen` từ chối dấu trừ), nên `+ 50n` rồi chia đúng là nửa-ra-xa-0 trên miền ấy; ngày
+ * miền có dấu, phải cộng nửa trên trị tuyệt đối như `lamTron` — test ghim miền để nhắc.
+ */
 export function thanhTien(sl: string, dg: string): string | null {
   const a = sangNguyen(sl, 4);
   const b = sangNguyen(dg, 0);
   if (a === null || b === null) return null;
-  const scaled = (a * b * 100n) / 10000n;
+  const scaled = (a * b + 50n) / 100n;
   return `${scaled / 100n}.${String(scaled % 100n).padStart(2, "0")}`;
 }
 

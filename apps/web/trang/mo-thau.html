@@ -17,18 +17,25 @@
 
   <section class="buoc" id="b1">
     <h2><span class="so">1</span> Đăng nhập</h2>
-    <p class="ghi">Dán mã từ link đăng nhập, rồi nhập mã sáu số của ứng dụng xác thực. Cần hai
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa
+      <strong>bí mật ghi danh</strong> để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Cần hai
       người khác nhau để mở thầu, nên màn này đăng nhập lại được bằng người thứ hai.</p>
     <label for="org">Mã tổ chức</label>
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <label for="ma">Mã sáu số</label>
-    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
-    <button id="nut-vao">Vào</button>
+    <!-- [S1.9181 / khoản 193] Hai việc, hai nút. Tiếp gọi `/auth/redeem` — đúng một lần cho mỗi mã — và
+         nói tài khoản này cần ghi danh hay không; bí mật ghi danh (nếu có) hiện ở khối dưới với nhãn nói rõ
+         nó là gì. Ô mã sáu số chỉ mở SAU đó: bản cũ bắt mọi người mới bấm Vào trượt một lần mới thấy bí mật. -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
-    <div class="bao luu" id="ghi-danh" hidden></div>
     <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước: cookie phiên sống
          tới 8 giờ kể cả sau khi đóng trình duyệt, và trên máy dùng chung nó có thể của người khác. -->
     <div class="bao luu" id="hoi-phien" hidden></div>

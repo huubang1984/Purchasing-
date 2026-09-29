@@ -514,6 +514,130 @@ describe("bề mặt tệp", () => {
       expect(p.el("hoi-phien").hidden).toBe(false);
     });
 
+    // ==========================================================================================
+    // [S1.9181 / khoản 193] BƯỚC 1 CỦA `/login` TÁCH «LẤY BÍ MẬT GHI DANH» KHỎI «VÀO»
+    //
+    // Bản cũ gộp hai việc khác hẳn nhau vào một nút: bấm Vào là gọi `/auth/redeem`, và nếu tài
+    // khoản chưa ghi danh thì bí mật TOTP hiện ra CÙNG chỗ với câu lỗi — nên lần bấm đầu của mọi
+    // người mới là một lần trượt, và màn hình không nói nó đang xin thứ gì (chủ dự án đưa nhầm mã
+    // đăng nhập thay vì bí mật, đo ngày 2026-09-20). Nay: ô mã sáu số ẨN cho tới khi máy chủ đã
+    // nói tài khoản này cần ghi danh hay không; nút Tiếp gọi `/auth/redeem` đúng một lần cho mỗi
+    // mã đăng nhập và hiện bí mật kèm nhãn nói rõ nó KHÔNG phải mã đăng nhập; Vào chỉ còn là Vào.
+    // Ba trang người mua kia (`tao-thau`, `nhom-hang`, `chinh-sach`) chép cùng khối cũ — khoản 9481.
+    // ==========================================================================================
+    describe("[S1.9181 / khoản 193] mo-thau: bước 1 tách «lấy bí mật ghi danh» khỏi «vào»", () => {
+      const BI_MAT = "JBSWY3DPEHPK3PXP";
+      const CHUA_GHI_DANH = { status: 200, body: { needsEnrollment: true, totpSecretBase32: BI_MAT, issuer: "TrustProcure" } };
+      const ghiDanh = (l: string) => (l === "POST /auth/redeem" ? Promise.resolve(CHUA_GHI_DANH) : undefined);
+
+      it("lúc tải: ô mã sáu số ẨN, nút Tiếp hiện, không bí mật nào trên màn, không gọi máy chủ khi link mang mã", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maMoi`, cookie: null });
+        expect(p.el("khoi-ma").hidden, "ô mã sáu số phải ẩn cho tới khi biết needsEnrollment").toBe(true);
+        expect(p.el("nut-ghi-danh").hidden).toBe(false);
+        expect(p.el("ghi-danh").hidden).toBe(true);
+        expect(p.trangThai.goi).toEqual([]);
+      });
+
+      it("người mới: Tiếp ⇒ đúng MỘT POST /auth/redeem, KHÔNG /auth/totp, không câu lỗi; bí mật hiện kèm nhãn «không phải mã đăng nhập»; ô mã mở; Tiếp lần nữa không gọi lại; Vào ⇒ totp rồi /me", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maMoi`, cookie: null, thay: ghiDanh });
+        await p.bam("nut-ghi-danh");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem"]);
+        expect(p.trangThai.than[0]?.than).toEqual({ orgId: ORG, token: "maMoi" });
+        expect(p.el("loi1").hidden, "lấy bí mật không phải một lần trượt").toBe(true);
+        expect(p.el("ghi-danh").hidden).toBe(false);
+        expect(p.el("ghi-danh").textContent).toContain(BI_MAT);
+        expect(p.el("ghi-danh").textContent).toMatch(/ứng dụng xác thực/u);
+        expect(p.el("ghi-danh").textContent).toMatch(/KHÔNG phải mã đăng nhập/u);
+        expect(p.el("khoi-ma").hidden).toBe(false);
+        expect(p.buocMo()).toEqual([]);
+        // Bấm Tiếp lần nữa với cùng mã: KHÔNG gọi lại — mỗi lần `/auth/redeem` là một bí mật MỚI ở
+        // máy chủ — và bí mật đã hiện vẫn ở nguyên trên màn.
+        await p.bam("nut-ghi-danh");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem"]);
+        expect(p.el("ghi-danh").textContent).toContain(BI_MAT);
+        p.el("ma").value = "123456";
+        await p.bam("nut-vao");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me"]);
+        expect(p.trangThai.than[1]?.than).toEqual({ orgId: ORG, token: "maMoi", code: "123456" });
+        expect(p.buocMo()).toEqual(BUOC["mo-thau"]);
+        expect(p.el("ok1").textContent).toMatch(/Đã vào với người dùng bbbbbbbb…/u);
+      });
+
+      it("người đã ghi danh: Tiếp ⇒ một redeem, KHÔNG bí mật nào trên màn, ô mã mở kèm câu nói nhập mã sáu số", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maCu`, cookie: null });
+        await p.bam("nut-ghi-danh");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem"]);
+        expect(p.el("ghi-danh").hidden).toBe(true);
+        expect(p.el("khoi-ma").hidden).toBe(false);
+        expect(p.el("loi1").hidden).toBe(true);
+        expect(p.el("ok1").hidden).toBe(false);
+        expect(p.el("ok1").textContent).toMatch(/mã sáu số/u);
+      });
+
+      it("mã đăng nhập bị từ chối (401) hay mất mạng ⇒ câu ở loi1, ô mã sáu số VẪN ẨN, không totp; thiếu tổ chức ⇒ không gọi gì", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maHong`, cookie: null, thay: (l) => (l === "POST /auth/redeem" ? Promise.resolve({ status: 401, body: { error: "ma dang nhap khong dung duoc" } }) : undefined) });
+        await p.bam("nut-ghi-danh");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem"]);
+        expect(p.el("loi1").textContent).toBe("ma dang nhap khong dung duoc");
+        expect(p.el("khoi-ma").hidden).toBe(true);
+        expect(p.el("ghi-danh").hidden).toBe(true);
+        const q = await dungTrang("mo-thau", { hash: `#${ORG}:maHong`, cookie: null, thay: (l) => (l === "POST /auth/redeem" ? Promise.reject(new Error("mat mang")) : undefined) });
+        await q.bam("nut-ghi-danh");
+        expect(q.el("loi1").textContent).toMatch(/Không kết nối được máy chủ/u);
+        expect(q.el("khoi-ma").hidden).toBe(true);
+        expect(q.el("nut-ghi-danh").disabled, "nút phải bật lại sau khi lỗi").toBe(false);
+        const r = await dungTrang("mo-thau", { hash: "#chiCoMa", cookie: null });
+        await r.bam("nut-ghi-danh");
+        expect(r.trangThai.goi).toEqual([]);
+        expect(r.el("loi1").textContent).toMatch(/Cần cả mã tổ chức và mã đăng nhập/u);
+      });
+
+      it("Vào mà bỏ qua Tiếp, tài khoản chưa ghi danh ⇒ redeem, hiện bí mật, DỪNG — không /auth/totp với một mã không thể đúng", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maMoi`, cookie: null, thay: ghiDanh });
+        p.el("ma").value = "123456";
+        await p.bam("nut-vao");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem"]);
+        expect(p.el("ghi-danh").textContent).toContain(BI_MAT);
+        expect(p.el("khoi-ma").hidden).toBe(false);
+        expect(p.el("loi1").hidden).toBe(true);
+        expect(p.buocMo()).toEqual([]);
+      });
+
+      it("đổi mã đăng nhập (dán mã khác, hashchange, đăng xuất) ⇒ ô mã sáu số đóng và rỗng, bí mật cũ xoá; Tiếp ⇒ redeem cho mã MỚI", async () => {
+        let lan = 0;
+        const p = await dungTrang("mo-thau", {
+          hash: `#${ORG}:maMoi`, cookie: null,
+          // Lần redeem đầu: chưa ghi danh (bí mật hiện). Các lần sau: đã ghi danh.
+          thay: (l) => (l === "POST /auth/redeem" && ++lan === 1 ? Promise.resolve(CHUA_GHI_DANH) : undefined),
+        });
+        await p.bam("nut-ghi-danh");
+        expect(p.el("ghi-danh").textContent).toContain(BI_MAT);
+        p.el("ma").value = "111111";
+        // Người thứ hai dán mã của mình rồi bấm Tiếp.
+        p.el("token").value = "maKhac";
+        await p.bam("nut-ghi-danh");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/redeem"]);
+        expect(p.trangThai.than[1]?.than).toEqual({ orgId: ORG, token: "maKhac" });
+        expect(p.el("ghi-danh").hidden, "bí mật của người trước không được đứng lại").toBe(true);
+        expect(p.el("ma").value).toBe("");
+        expect(p.el("khoi-ma").hidden).toBe(false);
+        // Link của người thứ ba trong cùng thẻ.
+        await p.doiFragment(`#${ORG}:maBa`);
+        expect(p.el("khoi-ma").hidden).toBe(true);
+        expect(p.el("ghi-danh").hidden).toBe(true);
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/redeem"]);
+        // Đăng xuất từ một phiên đã mở cũng đóng ô mã.
+        const q = await dungTrang("mo-thau", { hash: `#${ORG}:maCu`, cookie: null });
+        await q.bam("nut-ghi-danh");
+        q.el("ma").value = "123456";
+        await q.bam("nut-vao");
+        expect(q.buocMo()).toEqual(BUOC["mo-thau"]);
+        await q.bam("nut-dang-xuat");
+        expect(q.buocMo()).toEqual([]);
+        expect(q.el("khoi-ma").hidden).toBe(true);
+      });
+    });
+
     it("nop-thau: xoá fragment đúng MỘT lần sau /guest/otp/verify thành công; mã sai thì fragment ở lại", async () => {
       let lanXac = 0;
       const p = await dungTrang("nop-thau", {
@@ -1470,7 +1594,7 @@ describe("bề mặt tệp", () => {
 });
 
 describe("bộ chuyển tiếp", () => {
-  it("chuyển tiếp đường dẫn, phương thức, thân, và ĐÚNG bốn header lên api", async () => {
+  it("chuyển tiếp đường dẫn, phương thức, thân, và ĐÚNG năm header lên api", async () => {
     daNhan.length = 0;
     const r = await goi("/api/guest/redeem", {
       method: "POST",
@@ -1480,6 +1604,8 @@ describe("bộ chuyển tiếp", () => {
         cookie: "__Host-tp_guest=xyz",
         origin: "http://127.0.0.1:8090",
         accept: "application/json",
+        // [S1.9181 / khoản 202] Vế thứ hai của cổng chống nguồn lạ ở api — cùng đi lên với `origin`.
+        "sec-fetch-site": "same-origin",
         "x-forwarded-for": "9.9.9.9",
         "x-thu-la": "khong-duoc-di-len",
       },
@@ -1492,10 +1618,51 @@ describe("bộ chuyển tiếp", () => {
     expect(n.than).toBe(JSON.stringify({ token: "t" }));
     expect(n.headers.cookie).toBe("__Host-tp_guest=xyz");
     expect(n.headers.origin).toBe("http://127.0.0.1:8090");
+    expect(n.headers["sec-fetch-site"]).toBe("same-origin");
     // Hai vế NGƯỢC, và chúng là phần đáng giá nhất của test này: khai hộ người gọi một địa chỉ
     // là đúng thứ `taoDocDiaChi` của api tồn tại để chặn, còn chuyển tiếp mù mọi header là cách
     // một bộ proxy trở thành một lỗ hổng mà không ai đọc ra từ mã của nó.
     expect(n.headers["x-forwarded-for"]).toBeUndefined();
+    expect(n.headers["x-thu-la"]).toBeUndefined();
+  });
+
+  // ============================================================================================
+  // [S1.9181 / khoản 202] `sec-fetch-site` PHẢI ĐI LÊN, VÌ NÓ LÀ VẾ THỨ HAI CỦA CỔNG CHỐNG NGUỒN LẠ
+  //
+  // `nguonKhac` của `apps/api/src/server.ts` phán xử bằng HAI tín hiệu: `origin`, và khi không có
+  // `origin` thì `sec-fetch-site` — với lời khai *"trình duyệt luôn gửi ít nhất MỘT trong hai"*.
+  // `HEADER_LEN` từng chuyển bốn header và `sec-fetch-site` không nằm trong đó, nên một yêu cầu
+  // ghi KHÔNG mang `origin` mà mang `sec-fetch-site: cross-site` bị 403 khi gọi thẳng api và đi
+  // lọt khi đi qua `/api/*` của trang: bộ chuyển tiếp làm rụng đúng tín hiệu duy nhất api còn
+  // để phán xử. Vế dưới đo header ĐẾN upstream, không đo phán quyết của api (đã có
+  // `apps/api/src/api.int.test.ts`, vế `sec-fetch-site`); đối chứng: header lạ vẫn rụng, tức danh sách trắng vẫn là
+  // danh sách trắng chứ không thành "mọi thứ".
+  // ============================================================================================
+  it("[khoản 202] không `origin` mà có `sec-fetch-site: cross-site` ⇒ api nhận NGUYÊN header ấy; header lạ vẫn rụng", async () => {
+    daNhan.length = 0;
+    const r = await goi("/api/guest/otp/verify", {
+      method: "POST",
+      body: "{}",
+      headers: {
+        "content-type": "application/json",
+        "sec-fetch-site": "cross-site",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-dest": "document",
+        "x-thu-la": "khong-duoc-di-len",
+      },
+    });
+    expect(r.status).toBe(201);
+    expect(daNhan).toHaveLength(1);
+    const n = daNhan[0]!;
+    expect(n.headers.origin).toBeUndefined();
+    expect(n.headers["sec-fetch-site"], "vế thứ hai của cổng chống nguồn lạ rụng ở bộ chuyển tiếp").toBe("cross-site");
+    // Chỉ `sec-fetch-site` — không phải cả họ `sec-fetch-*`: api chỉ đọc đúng một, và danh sách
+    // trắng không được mở theo tiền tố. `fetch` của Node tự đóng dấu `sec-fetch-mode: cors` lên
+    // yêu cầu đi lên (đo: upstream luôn thấy `cors`, kể cả khi khách không gửi gì), nên vế về
+    // `sec-fetch-mode` chỉ đòi giá trị CỦA KHÁCH không tới nơi; `sec-fetch-dest` thì Node không
+    // thêm, nên đòi vắng hẳn.
+    expect(n.headers["sec-fetch-mode"]).not.toBe("navigate");
+    expect(n.headers["sec-fetch-dest"]).toBeUndefined();
     expect(n.headers["x-thu-la"]).toBeUndefined();
   });
 
