@@ -30,9 +30,13 @@ export {
   OTP_TTL_SECONDS,
   clearOtpLockout,
   createInvitation,
+  // [S1.9101 / S3.2b2 / ADR-9201] Tổ chức đã bật S3: `UNSENT→SENT` sau lần gửi link thành công — phần *xong* của lần gửi sau commit.
+  danhDauDaGui,
   // [sổ nợ 55 / 042] Bộ dọn `caller_rate_limits` — việc NỀN của tiến trình `api`, nhận Pool.
   donBucketNguoiGoiCu,
   donOtpRateLimitsCu,
+  // [S1.9101 / S3.2b2 / ADR-9201] Tổ chức đã bật S3: đúc token cho mọi lời mời còn sống TRONG giao dịch mở gói, dưới phiên người mở.
+  ducTokenKhiMoGoi,
   issueMagicLinkToken,
   issueOtpChallenge,
   redeemMagicLink,
@@ -56,6 +60,7 @@ export {
   type InvitationRecord,
   type IssueOtpInput,
   type IssuedToken,
+  type LinkKhiMoGoi,
   type OtpDenialReason,
   type OtpIssueOutcome,
   type OtpVerifyResult,

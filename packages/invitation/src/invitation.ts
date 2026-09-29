@@ -172,7 +172,17 @@ export interface InvitationRecord {
   readonly supplierId: string;
   readonly contactId: string;
   readonly linkChannel: Channel;
-  readonly status: "SENT" | "ACCEPTED" | "DECLINED" | "REVOKED";
+  /**
+   * [S1.185 / S3.2a / K6] `UNSENT` — *chưa gửi* — chỉ có ở tổ chức đã bật S3: trigger `rfq_invitations_kiem_danh_sach` (`076`) đặt
+   * nó lúc chèn, và `danhDauDaGui` đổi nó thành `SENT` sau lần gửi link thành công (S3.2b2). Tổ chức chưa bật giữ mặc định
+   * `SENT` của `010`.
+   */
+  readonly status: "SENT" | "ACCEPTED" | "DECLINED" | "REVOKED" | "UNSENT";
+  /**
+   * [S1.185 / S3.2a / K6] Nhãn *mời sau khi ký*: trigger đặt `true` khi lời mời của tổ chức đã bật được chèn lúc gói đang
+   * `OPEN`. Tổ chức chưa bật: luôn `false`. Cột ngoài `GRANT` — bên gọi không khai được.
+   */
+  readonly moiSauKhiKy: boolean;
 }
 
 interface HangInvitation {
@@ -182,9 +192,10 @@ interface HangInvitation {
   contact_id: string;
   link_channel: Channel;
   status: InvitationRecord["status"];
+  moi_sau_khi_ky: boolean;
 }
 
-const COT_INVITATION = "id, rfq_id, supplier_id, contact_id, link_channel, status";
+const COT_INVITATION = "id, rfq_id, supplier_id, contact_id, link_channel, status, moi_sau_khi_ky";
 
 function doiInvitation(h: HangInvitation): InvitationRecord {
   return {
@@ -194,6 +205,7 @@ function doiInvitation(h: HangInvitation): InvitationRecord {
     contactId: h.contact_id,
     linkChannel: h.link_channel,
     status: h.status,
+    moiSauKhiKy: h.moi_sau_khi_ky,
   };
 }
 
@@ -1260,7 +1272,7 @@ export async function reissueInvitationLink(
   // `FOR KEY SHARE` mà vẫn xung đột với chính nó và với `UPDATE` của `revokeInvitation` — hai lần gửi lại, hay gửi lại và
   // thu hồi, vẫn xếp hàng. Cùng khuôn `rfq.ts`.
   const { rows } = await client.query<HangInvitation & { da_thu_hoi: boolean }>(
-    `SELECT id, rfq_id, supplier_id, contact_id, link_channel, status,
+    `SELECT ${COT_INVITATION},
             (revoked_at IS NOT NULL OR status OPERATOR(pg_catalog.=) 'REVOKED'::pg_catalog.text) AS da_thu_hoi
        FROM public.rfq_invitations
       WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
@@ -1343,6 +1355,92 @@ export async function revokeMagicLinkToken(
     payload: { invitationId: input.invitationId, reason: input.reason },
   });
   return true;
+}
+
+// ==============================================================================================
+// [S1.9101 / S3.2b2 / ADR-9201 · K6] LINK MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 ĐI LÚC MỞ GÓI, KHÔNG LÚC MỜI.
+//
+// Ở tổ chức đã bật, lời mời dựng ở DRAFT không có token: K6 (`076`) chặn lần đúc khi gói chưa từng mở. Link của chúng chỉ
+// đi được khi gói mở, và spec S3 §2.4 ⑼ chốt hình dạng: **phiên của người mở đúc token cho mọi lời mời còn sống, trong giao
+// dịch mở gói; gửi at-most-once SAU commit; gửi hỏng thì lời mời ở lại *chưa gửi*, KHÔNG bị thu hồi.** Hai hàm dưới là nửa
+// CSDL của hình dạng ấy; lần gửi và phần bù nằm ở `apps/api` (bộ điều phối, lô gửi sau commit).
+//
+// `ducTokenKhiMoGoi` CHỈ chạy trong chính giao dịch vừa mở gói, dưới chính phiên vừa mở: `opened_at` bằng `now()` — mốc BẮT
+// ĐẦU giao dịch, đúng giá trị `openRfq` ghi vào cột ấy — và `opened_by_session_id` là phiên gọi. Không có chốt ấy, hàm là
+// một lối gửi lại HÀNG LOẠT cho mọi lời mời của một gói đã mở từ lâu, ngoài trần 3 link một giờ của ADR-110.
+// ==============================================================================================
+
+/** Một link sẽ đi sau commit của lần mở gói: token dạng rõ cùng kênh và đích của CHÍNH lời mời. */
+export interface LinkKhiMoGoi {
+  readonly invitationId: string;
+  readonly channel: Channel;
+  /** Đọc từ `supplier_contacts` theo kênh của lời mời — không từ thân yêu cầu (ADR-015 [C1]); kênh số mà không số ⇒ `""`. */
+  readonly destination: string;
+  readonly token: IssuedToken;
+}
+
+export async function ducTokenKhiMoGoi(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly actorSessionId: string },
+): Promise<LinkKhiMoGoi[]> {
+  await assertTenantBound(client, orgId, "ducTokenKhiMoGoi");
+  const { rows: goi } = await client.query<{ da_bat: boolean; mo_o_day: boolean | null }>(
+    `SELECT public.to_chuc_da_bat_s3(p.org_id) AS da_bat,
+            (p.opened_at OPERATOR(pg_catalog.=) pg_catalog.now()
+             AND p.opened_by_session_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid) AS mo_o_day
+       FROM public.rfq_packages p
+      WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
+    [input.rfqId, input.actorSessionId],
+  );
+  const g = goi[0];
+  if (g === undefined) throw new InvitationError("Không tìm thấy gói thầu trong tổ chức đang gắn.");
+  // Tổ chức chưa bật: lời mời MVP1 đã có token và link từ lúc mời — lần mở gói không đúc gì.
+  if (!g.da_bat) return [];
+  if (g.mo_o_day !== true) {
+    throw new InvitationError("Chỉ đúc token cho lời mời trong chính giao dịch mở gói, dưới phiên người mở.");
+  }
+  const { rows } = await client.query<{ id: string; link_channel: Channel; email: string; phone: string | null }>(
+    `SELECT i.id, i.link_channel, c.email, c.phone
+       FROM public.rfq_invitations i
+       JOIN public.supplier_contacts c
+         ON c.id OPERATOR(pg_catalog.=) i.contact_id
+        AND c.org_id OPERATOR(pg_catalog.=) i.org_id
+      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND i.revoked_at IS NULL
+      ORDER BY i.created_at, i.id`,
+    [input.rfqId],
+  );
+  const links: LinkKhiMoGoi[] = [];
+  for (const h of rows) {
+    const token = await issueMagicLinkToken(client, orgId, { invitationId: h.id, actorSessionId: input.actorSessionId });
+    links.push({ invitationId: h.id, channel: h.link_channel, destination: h.link_channel === "EMAIL" ? h.email : (h.phone ?? ""), token });
+  }
+  return links;
+}
+
+/**
+ * [S1.9101 / S3.2b2 / ADR-9201 · K6] `UNSENT→SENT` sau lần gửi link THÀNH CÔNG, trong một giao dịch MỚI — lần gửi không nằm
+ * trong giao dịch nào (khoản 124). Chỉ lời mời còn sống, còn `UNSENT`, của gói đang `OPEN`: trigger K6 (`076`) chỉ cho
+ * `UNSENT→SENT` ở `OPEN`, nên một lần gửi lại ở `BAFO_OPEN` (ADR-110) để lời mời ở `UNSENT` thay vì làm hỏng giao dịch ghi.
+ * Trả `true` khi đã đổi. Không ghi sổ, cùng khuôn ADR-110: lần gửi được là lần mà token KHÔNG có hàng
+ * `MAGIC_LINK_TOKEN_REVOKED` lý do `LINK_SEND_FAILED`.
+ */
+export async function danhDauDaGui(client: pg.PoolClient, orgId: string, invitationId: string): Promise<boolean> {
+  await assertTenantBound(client, orgId, "danhDauDaGui");
+  const r = await client.query(
+    `UPDATE public.rfq_invitations i SET status = 'SENT'
+      WHERE i.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND i.status OPERATOR(pg_catalog.=) 'UNSENT'::pg_catalog.text
+        AND i.revoked_at IS NULL
+        AND EXISTS (SELECT 1
+                      FROM public.rfq_packages p
+                     WHERE p.id OPERATOR(pg_catalog.=) i.rfq_id
+                       AND p.org_id OPERATOR(pg_catalog.=) i.org_id
+                       AND p.status OPERATOR(pg_catalog.=) 'OPEN'::pg_catalog.text)`,
+    [invitationId],
+  );
+  return r.rowCount === 1;
 }
 
 // ==============================================================================================

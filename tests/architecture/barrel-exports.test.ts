@@ -590,11 +590,16 @@ const DANH_SACH_TRANG_INVITATION = [
   "PepperError",
   "PepperRing",
   "createInvitation",
+  // [S1.9101 / S3.2b2 / ADR-9201] `UNSENT→SENT` của MỘT lời mời sau lần gửi được; nhận id, trả boolean — không token, không phiên.
+  "danhDauDaGui",
   // [sổ nợ 55 / 042] Xoá hàng cũ của bucket toàn cục; nhận Pool, trả số hàng — không token, không phiên.
   "donBucketNguoiGoiCu",
   // [sổ nợ 57 / 044] Cùng hình dạng, bảng khác: nhận Pool, trả số hàng. Nó KHÔNG nhận mốc tuổi —
   // mốc ấy nằm trong policy `otp_rate_limits_don_cua_so_cu`, và câu DELETE của nó không có `WHERE`.
   "donOtpRateLimitsCu",
+  // [S1.9101 / S3.2b2 / ADR-9201] Đúc token cho mọi lời mời còn sống TRONG giao dịch mở gói, dưới phiên NGƯỜI MUA vừa mở —
+  // cùng hình dạng `issueMagicLinkToken`: token dạng rõ chỉ về tay người gọi để trao cho bộ gửi, không trả phiên.
+  "ducTokenKhiMoGoi",
   // [S1.91 / khoản 154] Kênh + địa chỉ của một lời mời CÒN SỐNG, không gì khác — mặt cắt hẹp
   // nhất cho một handler outbox chạy ngoài mọi phiên người dùng.
   "getInvitationNoticeTarget",

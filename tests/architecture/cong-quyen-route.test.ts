@@ -66,7 +66,12 @@ const HAM_DOI_TRANG_THAI = [
   "createProcurementPolicy",
   "createRfq",
   "createSupplier",
+  // [S1.9101 / S3.2b2 / ADR-9201] Lời mời `UNSENT→SENT` sau lần gửi được — việc *xong* của lần gửi sau commit, dưới mã quyền của route
+  // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
+  "danhDauDaGui",
   "dispatchUnseal",
+  // [S1.9101 / S3.2b2 / ADR-9201] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
+  "ducTokenKhiMoGoi",
   "extendRfqDeadline",
   "issueMagicLinkToken",
   // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi

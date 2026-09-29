@@ -15622,3 +15622,144 @@ phép kiểm có `077`; nhân chứng hành vi của hai hàm mới có mặt.
 - Năm đột biến ở mã TypeScript, năm lần đỏ (§5).
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3195 khẳng định; K4a 6 → 15, K4b 5 → 8, K6 4 → 12. Mốc
   `MOC_GHIM` không đổi — không mã mới.
+
+# §S1.9101 — S3.2b2: LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 — MỜI Ở DRAFT KHÔNG TOKEN, ĐÚC LÚC MỞ GÓI, GỬI SAU COMMIT, `SENT` SAU LẦN GỬI ĐƯỢC, GỬI HỎNG ĐỂ LỜI MỜI *CHƯA GỬI* (K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Không migration, không
+route mới, không khoản mới. Một ADR mới: ADR-9201.
+
+## 1. Vòng này là gì
+
+Phần sau của S3.2b (spec S3 §9). S3.2a (§S1.185) dựng lớp CSDL của danh sách mời, S3.2b1 (§S1.186) dựng cạnh về `DRAFT`; vòng này
+đưa route mời và route mở gói của tổ chức đã bật sang luồng spec S3 §3.3 và §2.4 ⑼: dựng danh sách ở `DRAFT` không đúc token,
+phiên người mở đúc token cho mọi lời mời còn sống trong giao dịch mở gói, mỗi link gửi một lần sau commit, `SENT` sau lần gửi được,
+gửi hỏng thì lời mời ở lại *chưa gửi* thay vì bị thu hồi. Màn `/tao-thau`, `gieo:demo` và kịch bản 41 theo thứ tự mới là S3.2c.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-28) Lần mở gói mà một phần link gửi hỏng trả `200` kèm danh sách lời mời chưa gửi — gói đã mở thật, không lùi được.
+- (2026-09-29) Làm S3.2b2 theo đề xuất sáu phần của vòng S1.186: mời ở `DRAFT` không token; đúc lúc mở gói; gửi sau commit, gửi
+  hỏng thì lời mời giữ `UNSENT` và token vừa đúc bị thu hồi như ADR-110; route gửi lại đặt `SENT`; mời thêm ở `OPEN` gửi hỏng thì
+  không thu hồi lời mời, thay nhánh `500` *bù hỏng*; bộ điều phối mở rộng cho N lần gửi sau commit, kèm một ADR thay [S1.70] cho tổ
+  chức đã bật.
+
+## 3. Thay đổi
+
+**Gói `invitation`:**
+- `ducTokenKhiMoGoi(client, orgId, {rfqId, actorSessionId})`: tổ chức chưa bật ⇒ `[]`. Tổ chức đã bật ⇒ chỉ chạy khi
+  `opened_at = now()` và `opened_by_session_id` là phiên gọi — tức trong chính giao dịch vừa mở gói, dưới chính phiên vừa mở —,
+  không thì ném có tên. Đúc MỘT token (`issueMagicLinkToken`, một hàng `MAGIC_LINK_TOKEN_ISSUED`) cho MỖI lời mời còn sống, trả token
+  dạng rõ cùng kênh và đích đọc từ `supplier_contacts` (ADR-015 [C1]), theo thứ tự lời mời.
+- `danhDauDaGui(client, orgId, invitationId)`: `UNSENT→SENT` cho lời mời còn sống, còn `UNSENT`, của gói đang `OPEN`; trả `true`
+  khi đã đổi. Không ghi sổ (khuôn ADR-110).
+- `InvitationRecord`: `status` có `UNSENT`, thêm `moiSauKhiKy` — cột trigger đặt, bên gọi không khai được.
+
+**Bộ điều phối (`apps/api`):** `LoGuiSauCommit` / `ctx.afterCommitLoGui` — N lần gửi mà mỗi lần hỏng riêng; trường `khiXong` của
+`ViecSauCommitCoBu`. Một yêu cầu đăng ký tối đa MỘT việc có bù — việc có bù HOẶC lô. Lô chạy khi phản hồi thành công: mọi lần gửi
+cùng lúc, mỗi lần một trần; rồi lần lượt mỗi lần gửi một giao dịch mới đã gắn tổ chức (trần lấy kết nối 5 s): `khiXong` hay `bu`;
+rồi `phanHoi(phản hồi, khoá gửi hỏng)`; rồi việc sau commit thường. Log `sau-commit i/n`, `ghi-sau-commit i/n`, `bu-sau-commit i/n`
+— không mang khoá.
+
+**Route (`apps/api/src/routes/buyer.ts`):**
+- `POST /rfqs/:rfqId/open`: `openRfq` rồi `ducTokenKhiMoGoi` trong cùng giao dịch; lô gửi: gửi được ⇒ `danhDauDaGui`, gửi hỏng ⇒
+  `revokeMagicLinkToken(…, reason: "LINK_SEND_FAILED")` dưới phiên người mở. Thân `200 {rfq, unsentInvitationIds}` — mọi tổ chức;
+  tổ chức chưa bật luôn rỗng.
+- `POST /rfqs/:rfqId/invitations`: nhánh đọc điều trigger `076` đã quyết lúc chèn. `UNSENT` không nhãn (`DRAFT`) ⇒ `201`, không
+  token. `UNSENT` có nhãn (`OPEN`) ⇒ đúc, gửi sau commit với `khiXong` = `danhDauDaGui`, phần bù thu hồi token vừa đúc; thân `201`
+  mang lời mời `SENT` khi gửi được, `UNSENT` khi gửi hỏng hay phần bù hỏng. `SENT` (tổ chức chưa bật) ⇒ hợp đồng [S1.70] nguyên văn.
+- `POST /invitations/:invitationId/reissue`: lời mời `UNSENT` ⇒ `khiXong` = `danhDauDaGui`. Lời mời `SENT` ⇒ như cũ.
+
+**Cổng kiến trúc:** hai hàm mới vào danh sách trắng của `barrel-exports.test.ts` và rổ `HAM_DOI_TRANG_THAI` của
+`cong-quyen-route.test.ts`.
+
+**Sổ đăng ký:** hàng K6 của `docs/TEST-PLAN.md` nói vế *chưa gửi khi gửi hỏng* đã đo và cưỡng chế ở đâu; hàng K4a nói route dựng danh
+sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Không mã mới — 68 bất biến.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Đúc ở route, không ở `openRfq`.** Chỗ duy nhất cần token dạng rõ là chỗ có bộ gửi; `openRfq` trả token cho mọi người gọi thì
+  công cụ gieo và kịch bản cũng cầm token, và `packages/rfq` phải phụ thuộc `packages/invitation`. Cái giá: mở gói bằng hàm gói — không
+  qua route — không đúc gì (§6).
+- **Chốt *trong chính giao dịch mở gói* là `opened_at = now()`**, không phải một cờ truyền vào. `now()` là mốc bắt đầu giao dịch và
+  `openRfq` ghi đúng giá trị ấy; giao dịch nào khác đều có `now()` khác. Không chốt, hàm là lối gửi lại hàng loạt ngoài trần ADR-110.
+- **Mỗi lần gửi một giao dịch ghi riêng**, không một giao dịch cho cả lô: một lần ghi hỏng — gói vừa đóng (trigger `076` 23514),
+  phiên người mở vừa thu hồi — không kéo theo lần khác.
+- **Các lần gửi chạy cùng lúc.** N bộ gửi treo trả về sau một trần, không N trần — trần của lần mở gói không lớn theo số lời mời.
+- **`danhDauDaGui` lọc gói `OPEN` ngay trong câu `UPDATE`**, không để trigger `076` từ chối: lần gửi lại ở `BAFO_OPEN` (ADR-110) và gói
+  đóng giữa lần gửi và lần ghi trả `false` thay vì làm hỏng giao dịch ghi.
+- **`SENT` không ghi sổ** — khuôn ADR-110: sổ đã nói điều ấy (token phát, không hàng thu hồi `LINK_SEND_FAILED`), và một hàng sổ bắt
+  lần ghi phụ thuộc phiên còn sống và khoá chuỗi sổ của tổ chức.
+- **Nhánh của route mời đọc điều trigger đã quyết**, không hỏi lại *đã bật* hay trạng thái gói: `status` `UNSENT` và nhãn *mời sau khi
+  ký* do `076` đặt lúc chèn, trong cùng câu.
+- **Thân `201` của lần mời ở `OPEN` mang trạng thái SAU lần gửi** — `SENT` hay `UNSENT` —, cùng lý do với `200` của lần mở gói. Lần
+  ghi `SENT` hỏng thì thân nói `SENT` còn hàng CSDL nói `UNSENT` — chiều lệch lành, có một dòng log.
+
+## 5. Đo
+
+**Nền, trên `master` `851d617`** — tệp test mới chạy trên mã cũ, tổ chức đã bật, qua HTTP:
+- mời ở `DRAFT` ⇒ `422` *"Khong duc token moi cho goi thau chua mo (K6)"* — danh sách không dựng được ở `DRAFT`;
+- thân của lần mở gói không có danh sách lời mời chưa gửi, và lần mở không đúc token nào;
+- mời ở `OPEN`, gửi được ⇒ `201` mang lời mời `UNSENT`; CSDL `UNSENT` dù link đã đi;
+- mời ở `OPEN`, gửi hỏng ⇒ `500` *"khong gui duoc link moi va chua thu hoi duoc loi moi"* kèm `invitationId`; log `sau-commit
+  LoiGuiGiaLap`, `bu-sau-commit error 23514` — phần bù *thu hồi lời mời* bị K4a chặn —; lời mời `UNSENT` còn sống, token CÒN SỐNG;
+  sổ `INVITATION_CREATED`, `MAGIC_LINK_TOKEN_ISSUED`.
+
+**Bản vá** — `apps/api/src/luong-moi-s3.int.test.ts`, 14 ca, Postgres thật, qua HTTP, bộ gửi do test điều khiển theo đích:
+- ⑴ mời ở `DRAFT` ⇒ `201`, `UNSENT`, không nhãn, không token, bộ gửi không được gọi, sổ chỉ `INVITATION_CREATED`.
+- ⑵ ba lời mời còn sống và một đã thu hồi ở `DRAFT`, mở gói qua route ⇒ `200`, danh sách rỗng; đúng ba link, không link cho lời
+  mời đã thu hồi; lúc bộ gửi được gọi, token và gói ĐÃ commit (đọc từ kết nối khác); mỗi lời mời `SENT`, một token của người mở dưới
+  phiên người mở, `duc_khi_goi_da_mo`, đích đúng, băm khớp token đã gửi, link đổi được, token không về client.
+- ⑶ lời mời giữa gửi hỏng ⇒ `200` và danh sách đúng lời mời ấy; nó `UNSENT`, còn sống, token thu hồi, hàng `MAGIC_LINK_TOKEN_REVOKED`
+  `{invitationId, reason: LINK_SEND_FAILED}` dưới người mở; đúng một dòng `sau-commit 2/3 LoiGuiGiaLap`; không dòng log nào mang
+  token hay đích; gửi lại qua route ⇒ `SENT`, link mới đổi được.
+- ⑷ ba bộ gửi treo, máy chủ trần 1 000 ms ⇒ `200` trong khoảng `[1 000, 2 000)` ms, cả ba chưa gửi theo đúng thứ tự, ba token thu
+  hồi, ba dòng `sau-commit i/3 SauCommitQuaHan`.
+- ⑸ mời ở `OPEN`: gửi được ⇒ `201` `SENT` có nhãn, CSDL `SENT`; gửi hỏng ⇒ `201` `UNSENT`, lời mời còn sống, token thu hồi có lý do,
+  không `INVITATION_REVOKED`, một dòng `sau-commit`; gửi lại ⇒ `SENT`.
+- ⑹ hai bộ gửi đang chờ ⇒ không kết nối nào của ứng dụng giữ khoá ghi sổ của tổ chức; một lần tạo nhà cung cấp của tổ chức ấy trả
+  `201` dưới 2 000 ms; thả ⇒ `200`, cả hai `SENT`.
+- ⑺ đối chứng MVP1: mời ở `DRAFT` ⇒ `201` `SENT`, một lần gửi; mở gói ⇒ `200`, danh sách rỗng, không gửi thêm, không đúc thêm.
+- ⑻ `ducTokenKhiMoGoi`: cùng giao dịch mở gói nhưng phiên khác người mở ⇒ ném, lần mở rollback; cùng giao dịch, cùng phiên ⇒ một link
+  đúng kênh và đích; giao dịch sau ⇒ ném, không token thêm; tổ chức chưa bật ⇒ `[]`, không token. `danhDauDaGui`: gói đã đóng ⇒
+  `false`, `UNSENT`; gói `OPEN` ⇒ `true`, `SENT`; lần hai ⇒ `false`.
+- ⑼ bộ điều phối, route giả: lô ba lần gửi, lần giữa hỏng ⇒ `khiXong` k1, `bu` k2, `khiXong` k3, rồi việc thường; ba giao dịch khác
+  nhau, khác giao dịch của handler, đã gắn tổ chức; `phanHoi` nhận `["k2"]`. `khiXong` hỏng và `bu` hỏng ⇒ đúng ba dòng log
+  `ghi-sau-commit 1/2`, `sau-commit 2/2`, `bu-sau-commit 2/2`, danh sách giữ `["k2"]`. Handler trả `422` ⇒ lô không chạy; hai lô,
+  hay việc có bù rồi lô ⇒ `500`, hai dòng `ViecCoBuThuHai`, không lần gửi nào. `khiXong` của việc có bù chạy sau `viec` xong, giao
+  dịch mới đã gắn tổ chức; hỏng ⇒ phản hồi giữ nguyên, một dòng `ghi-sau-commit`; `viec` hỏng ⇒ `bu` chạy, `khiXong` không.
+
+**Đột biến ở mã TypeScript, mười bảy, cả mười bảy đỏ:**
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| M01 | route mở gói không đúc token | ⑵ ⑶ ⑷ ⑹ |
+| M02 | lô của lần mở không đặt `SENT` | ⑵ ⑶ ⑹ |
+| M03 | lô của lần mở không thu hồi token khi gửi hỏng | ⑶ ⑷ |
+| M04 | route mời ở `DRAFT` vẫn đúc token (bỏ nhánh `DRAFT`) | ⑴ ⑵ ⑶ ⑷ ⑹ |
+| M05 | lần mời ở `OPEN` bù bằng thu hồi LỜI MỜI như MVP1 | ⑸ — K4a chặn phần bù, token còn sống |
+| M06 | thân `201` của lần mời ở `OPEN` mang trạng thái lúc chèn | ⑸ |
+| M07 | lần mời ở `OPEN` không đặt `SENT` | ⑸ |
+| M08 | route gửi lại không đặt `SENT` | ⑶ ⑸ |
+| M09 | bỏ chốt *chính giao dịch mở gói, chính phiên người mở* | ⑻ |
+| M10 | bỏ nhánh tổ chức chưa bật của `ducTokenKhiMoGoi` | ⑺ và đối chứng ⑻ — lần mở gói MVP1 đúc và gửi thêm |
+| M11 | `danhDauDaGui` bỏ vế gói `OPEN` | ⑻ — trigger `076` 23514 thay cho `false` |
+| M12 | `danhDauDaGui` bỏ vế `UNSENT` | ⑻ — lần hai trả `true` |
+| M13 | lô gửi NỐI TIẾP thay vì cùng lúc | ⑷ (≥ 3 000 ms) và ⑹ (bộ gửi thứ hai không được gọi khi bộ thứ nhất còn chờ) |
+| M14 | `phanHoi` không nhận khoá hỏng | ⑶ ⑷ và hai ca ⑼ của lô |
+| M15 | lô không chạy `bu` | ⑶ ⑷ và hai ca ⑼ của lô |
+| M16 | việc có bù không chạy `khiXong` | ⑶ ⑸ ⑼ |
+| M17 | bỏ loại trừ giữa việc có bù và lô | ⑼ |
+
+## 6. Giới hạn, nói ra
+
+- **`201` của route mời ở tổ chức đã bật không còn nghĩa *link đã đi*** — thân nói bằng `invitation.status`. Màn `/tao-thau` hôm nay
+  vẫn báo *"Đã mời"* cho mọi `201`: S3.2c đọc trạng thái. Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+- **Một link đã tới nơi có thể nằm lại `UNSENT`:** lần ghi `SENT` hỏng (một dòng `ghi-sau-commit`), hay lần gửi lại đi được khi gói
+  đang `BAFO_OPEN` — trigger `076` chỉ cho `UNSENT→SENT` ở `OPEN`. Chiều lệch lành: người mua gửi lại, lần gửi lại thu hồi mọi token
+  chưa dùng.
+- **Phần bù hỏng để token vừa đúc sống**, có thể chưa tới nơi; danh sách vẫn nói lời mời ấy chưa gửi.
+- **Các lần gửi của một lô không có trần đồng thời.** Chưa có bộ gửi thật (ADR-009); hộp thư dev ghi tệp nguyên tử.
+- **Mở gói bằng hàm gói không đúc gì.** `gieo:demo --s3` mời bằng hàm gói sau khi mở, nên lời mời của nó vẫn `UNSENT` (§S1.185);
+  kịch bản 41 bản HTTP mời ở `OPEN` qua route, nên nay lời mời của luồng S3 thành `SENT`. S3.2c đổi thứ tự của cả hai.
+- **Lời mời thời MVP1 của một gói còn ở `DRAFT` lúc tổ chức bật** mang `SENT`: lần mở gói đúc token mới cho nó, và nếu lần gửi ấy hỏng
+  thì nó vẫn `SENT` dù không link nào dùng được (khoản 253 giết link cũ). Danh sách của lần mở vẫn nói ra.

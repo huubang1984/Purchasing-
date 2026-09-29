@@ -178,7 +178,7 @@ class VuotTranTuChoiError extends Error {
 }
 
 import { THAN_429_MFA, agentGoiDuoc } from "./route-types.js";
-import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
+import type { ApiServices, LoGuiSauCommit, Route, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -497,9 +497,19 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     // cầu (lượt soi 64a-2): lần đăng ký thứ hai ném ngay trong handler, giao dịch rollback — thay vì trả `phanHoiKhiHong` của việc đầu trong
     // khi việc sau đã commit mà không ai bù.
     let viecCoBu: ViecSauCommitCoBu | undefined;
+    // [S1.9101 / S3.2b2 / ADR-9201] Lô gửi sau commit (`LoGuiSauCommit`) đếm chung trần MỘT việc có bù với `viecCoBu`: một yêu cầu
+    // đăng ký một việc có bù HOẶC một lô, không cả hai, không hai lần.
+    let loGui: LoGuiSauCommit | undefined;
+    const tuChoiViecCoBuThuHai = (): never => {
+      throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
+    };
     const afterCommitCoBu = (viec: ViecSauCommitCoBu): void => {
-      if (viecCoBu !== undefined) throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
+      if (viecCoBu !== undefined || loGui !== undefined) tuChoiViecCoBuThuHai();
       viecCoBu = viec;
+    };
+    const afterCommitLoGui = (lo: LoGuiSauCommit): void => {
+      if (viecCoBu !== undefined || loGui !== undefined) tuChoiViecCoBuThuHai();
+      loGui = lo;
     };
     const tranSauCommitMs = deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH;
     const chaySauCommit = async (r: ApiResponse, orgId: string): Promise<ApiResponse> => {
@@ -524,6 +534,42 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           }
           return v.phanHoiKhiHong;
         }
+        // [S1.9101 / S3.2b2 / ADR-9201] `viec` xong ⇒ việc ghi của lần xong, giao dịch MỚI; hỏng thì một dòng log và phản hồi giữ nguyên.
+        if (v.khiXong !== undefined) {
+          try {
+            await withTenant(deps.pool, orgId, v.khiXong, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+          } catch (loiGhi) {
+            console.error(`[api] ${requestId} ghi-sau-commit ${moTaLoiKhongGiaTri(loiGhi)}`);
+          }
+        }
+      }
+      // [S1.9101 / S3.2b2 / ADR-9201] Lô gửi: mọi lần gửi CÙNG LÚC, mỗi lần một trần; rồi lần lượt mỗi lần một giao dịch ghi MỚI.
+      // Dòng log mang số thứ tự `i/n` của lần gửi trong lô, không mang khoá — cùng kỷ luật A2 với dòng `sau-commit` của việc có bù.
+      const lo = loGui;
+      let ketThuc = r;
+      if (lo !== undefined) {
+        const ketQua = await Promise.allSettled(lo.lanGui.map((l) => coHan(l.gui, tranSauCommitMs, "SauCommitQuaHan")));
+        const khoaHong: string[] = [];
+        for (const [i, l] of lo.lanGui.entries()) {
+          const kq = ketQua[i];
+          const thuTu = `${String(i + 1)}/${String(lo.lanGui.length)}`;
+          if (kq?.status === "fulfilled") {
+            try {
+              await withTenant(deps.pool, orgId, l.khiXong, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+            } catch (loiGhi) {
+              console.error(`[api] ${requestId} ghi-sau-commit ${thuTu} ${moTaLoiKhongGiaTri(loiGhi)}`);
+            }
+            continue;
+          }
+          khoaHong.push(l.khoa);
+          console.error(`[api] ${requestId} sau-commit ${thuTu} ${moTaLoiKhongGiaTri(kq?.reason)}`);
+          try {
+            await withTenant(deps.pool, orgId, l.bu, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+          } catch (loiBu) {
+            console.error(`[api] ${requestId} bu-sau-commit ${thuTu} ${moTaLoiKhongGiaTri(loiBu)}`);
+          }
+        }
+        ketThuc = lo.phanHoi(r, khoaHong);
       }
       for (const viec of sauCommit) {
         try {
@@ -532,7 +578,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(e)}`);
         }
       }
-      return r;
+      return ketThuc;
     };
 
     try {
@@ -824,7 +870,18 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             try {
               phanHoiHandler = await handler.chay(() =>
                 chayVoiTranTuChoi({ dem: demTuChoiCuaHandler }, () =>
-                  route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, choKyChinhSach }),
+                  route.handler({
+                    req,
+                    orgId: cookie.orgId,
+                    client,
+                    actor,
+                    auditPool: deps.auditPool,
+                    services: deps.services,
+                    afterCommit,
+                    afterCommitCoBu,
+                    afterCommitLoGui,
+                    choKyChinhSach,
+                  }),
                 ),
               );
             } finally {
