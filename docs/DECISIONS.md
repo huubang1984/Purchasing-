@@ -7647,6 +7647,11 @@ trước khi merge; chỉ "Require branches to be up to date" mới ép được
 không giữ số cho tới khi merge master. Test:
 `tools/cap-so/src/cap-so.test.ts`, khối "giữ số trên remote".
 
+Sửa kèm (đo lúc chuyển các PR đang mở sang lời giữ, #203 và #204): số migration TRẦN trong mã (`` `081` `` trong một chú
+thích, `-- 081 —` ở đầu tệp migration) mà người viết đã thay tay trong commit cấp bị lần cấp lại trả về số tạm rồi bỏ nguyên,
+vì ngoài Markdown lệnh không thay số trần. Nay dòng vừa được trả về bản số tạm của một lần cấp cũ thì số tạm trần trên nó
+được cấp lại, trừ số trần vẫn còn trên dòng trước lúc thu hồi (một cổng `CONG = 92NN` chưa từng là số tạm).
+
 ## ADR-091 — Ghi sổ lần đọc của agent cùng giao dịch đọc
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.154]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
