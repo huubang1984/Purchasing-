@@ -450,7 +450,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     }
     const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
     expect(nop.status).toBe(200);
-    // [S1.195 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
+    // [S1.196 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
     // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
     const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
@@ -697,7 +697,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
               if (ph.status === 200) hy.lanNopB = (ph.body as { rfq: { lanNop: number } }).rfq.lanNop;
             },
           };
-        // [S1.195 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
+        // [S1.196 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":

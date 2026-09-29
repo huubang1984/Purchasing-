@@ -152,7 +152,7 @@ async function goiNhap(t: ToChuc): Promise<string> {
 async function moGoi(t: ToChuc, rfqId: string): Promise<void> {
   await withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
   await withTenant(apiPool, t.org, async (c) => {
-    // [S1.195 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
+    // [S1.196 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
     const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
     await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, lanNopDaXem: lan }, apiPool);
   });
@@ -172,7 +172,7 @@ async function loiMoi(t: ToChuc, rfqId: string): Promise<string> {
     [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), t.pm.u, t.pm.s],
   );
   return withTenant(apiPool, t.org, async (c) =>
-    (await createInvitation(c, t.org, { rfqId, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: t.pm.s })).id,
+    (await createInvitation(c, t.org, { rfqId, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: t.pm.s }, apiPool)).id,
   );
 }
 

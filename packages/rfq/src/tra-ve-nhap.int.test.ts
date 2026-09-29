@@ -176,7 +176,7 @@ async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG, ai: Nguoi = t.pm)
 
 const nop = (t: ToChuc, rfqId: string, ai: Nguoi = t.pm): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: ai.s }, apiPool));
-/** [S1.195 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
+/** [S1.196 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
 const duyet = (t: ToChuc, rfqId: string, ai: Nguoi): Promise<void> =>
   withTenant(apiPool, t.org, async (c) => {
     const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n;

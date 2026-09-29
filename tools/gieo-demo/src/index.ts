@@ -249,7 +249,7 @@ async function chinh(): Promise<void> {
           contactId: lh,
           linkChannel: "EMAIL",
           actorSessionId: phienGieo,
-        });
+        }, pool);
         daMoi.push({ ten, invitationId: lm.id });
       }
       return daMoi;
@@ -270,7 +270,7 @@ async function chinh(): Promise<void> {
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
     // [S1.190 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách năm lời mời vừa dựng ở DRAFT.
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
-    // [S1.195 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
+    // [S1.196 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
     // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
     for (const nm of nguoiDuyetGoi) {
       await pool.query(

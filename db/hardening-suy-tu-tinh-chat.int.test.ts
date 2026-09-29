@@ -308,7 +308,7 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
   // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
   // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
-  // đi qua cả bốn: năm nhân chứng. **[S1.194 / `080_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
+  // đi qua cả bốn: năm nhân chứng. **[S1.195 / `081_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
   // `rfq_kiem_chu_ky_danh_sach_khi_mo`) nay mang thêm băm ngân sách; vẫn chỉ ở tổ chức đã bật, nhân chứng không đổi.
   "public.rfq_approvals_dat_bam_danh_sach",
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
@@ -319,7 +319,7 @@ const HAM_KHONG_PHAI_CANH = [
   // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
   "public.rfq_invitation_tokens_ghi_goi_da_mo",
   "public.rfq_kiem_tra_ve_nhap",
-  // [S1.195 / khoản 256 · 257 / `081_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
+  // [S1.196 / khoản 256 · 257 / `082_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
   // `rfq_chot_lan_nop_da_xem` (BEFORE INSERT trên `rfq_approvals`) không từ chối hàng nào của `dungKichBan()` — cái đầu chỉ ĐẾM,
   // cái sau chỉ từ chối ở tổ chức đã bật hay khi lời duyệt tự mang mốc sai, mà lời duyệt của kịch bản đứng trước lần bật. Hàm
   // thứ ba (`rfq_tra_ve_dat_lan_nop`, BEFORE INSERT trên `rfq_tra_ve`) từ chối CÓ ĐIỀU KIỆN — tổ chức chưa bật hay gói không chờ
@@ -1745,7 +1745,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
-  // [S1.195 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
+  // [S1.196 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
   // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới.
   doiSoHang(
     await so.chung(

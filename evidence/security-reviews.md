@@ -16208,12 +16208,109 @@ Hai mươi mốt đột biến của #198 đo trên màn cũ; màn ấy đã tha
   sau §S1.192; `pnpm cap-so` cấp lại số vòng.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
 
+# §S1.194 — S3.2d: LẦN THÊM HAY THU HỒI LỜI MỜI SAI TRẠNG THÁI (K4a) VÀO SỔ `CONTROL_DENIED` MANG MÃ — KHOẢN 255 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — tổ chức chưa bật không đi vào trigger K4a, nên không có
+lần từ chối nào để ghi. Đóng khoản **255** (rổ B); không mở khoản mới. Migration `080_k4a_co_ten`, ADR-114.
+
+## 1. Vòng này là gì
+
+Khoản 255, ghi ở §S1.189 từ nhánh song song đã xoá và đo trên cụm thật ở lượt đi thử T4 của S3.2c2 (§S1.193): trigger
+`rfq_invitations_kiem_danh_sach` (`076`) ném `check_violation` KHÔNG tên ở hai nhánh K4a — thêm lời mời sai trạng thái, thu hồi lời mời
+ngoài `DRAFT` —, nên `CHOT_THEO_RANG_BUOC` (`packages/identity/src/chot-kiem-soat.ts`) không nhận ra: người gọi nhận lỗi, sổ không ghi
+gì. K12 (spec S3 §5.1) đòi mỗi chốt được đo theo từng hạng mục từ S3.1.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) *"Merge khi CI xanh, rồi làm S3.2d"* — lần từ chối K4a là `CONTROL_DENIED`, vào sổ; lời chốt mà nhánh song song đã ghi
+  nhưng `master` chưa có (khoản 255).
+- (2026-09-29) S3.2d chỉ làm khoản 255; khoản 254 (chữ ký duyệt gói không mang ngân sách) đi ở PR riêng, #199.
+
+## 3. Đo trước
+
+Test viết trước — `apps/api/src/luong-moi-s3.int.test.ts` khối S3.2d, sáu ca qua HTTP ở tổ chức đã bật —, chạy trên `master` sau #198
+với migration của vòng này tạm rút: ba ca từ chối đỏ, vì `422` mang câu không dấu của trigger (*"Goi thau o PENDING_APPROVAL khong
+them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)"*, *"Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o … (K4a)"*) và không có
+hàng `CONTROL_DENIED` nào: mời lúc gói chờ duyệt, thu hồi lúc chờ duyệt, thu hồi ở `OPEN`. Ca đột biến đỏ ngay ở tiền đề — thân hàm
+chưa mang tên nào. Hai ca đối chứng xanh: thu hồi ở `DRAFT`, và tổ chức chưa bật. Mười bốn ca có sẵn của tệp xanh.
+
+## 4. Thay đổi
+
+**Migration `080_k4a_co_ten`:** `rfq_invitations_kiem_danh_sach` định nghĩa lại — thân `076` (6) trích nguyên văn, thêm `CONSTRAINT = …`
+ở đúng hai nhánh: `k4a_them_sai_trang_thai`, `k4a_thu_hoi_sai_trang_thai`. Thông điệp của CSDL không đổi. Nhánh không tìm thấy gói và
+hai nhánh K6 không mang tên — không lời gọi nào của người dùng tới được chúng.
+
+**Hardening:** mục ghim của hàm và trigger ấy đổi thân và điều kiện phiên bản (`076` → `080`); con trỏ *migration cuối cùng* và ba danh
+sách migration của `db/migrations.int.test.ts` đổi theo.
+
+**Tầng gói:**
+- `packages/identity`: hai mã `K4A_THEM_SAI_TRANG_THAI`, `K4A_THU_HOI_SAI_TRANG_THAI` (`vaoSo: true`, chốt `K4a`) cùng hai dòng tên → mã;
+  kiểu `DongChot.chot` nhận vế có hậu tố.
+- `packages/invitation`: `createInvitation` và `revokeInvitation` nhận `auditPool` BẮT BUỘC, bắt chính lỗi của trigger, nhận ra nó bằng
+  tên và từ chối qua `tuChoiTheoChot` — một hàng `CONTROL_DENIED` payload `{ ma }` ở giao dịch độc lập, `resource` là GÓI, rồi
+  `ChotKiemSoatError` (`422` mang câu của bảng). `revokeInvitation` đọc gói của lời mời trước câu ghi.
+- Lời gọi đổi theo: `apps/api` (route mời, route thu hồi, phần bù MVP1 của lần mời), `gieo:demo`, và các lời gọi có sẵn trong test.
+
+**Test:**
+- `luong-moi-s3.int` khối S3.2d, sáu ca K4a qua HTTP: mời lúc chờ duyệt, thu hồi lúc chờ duyệt, thu hồi ở `OPEN` ⇒ `422` câu của bảng,
+  ĐÚNG MỘT hàng mang mã dưới người gọi, lời mời và token ở nguyên; thu hồi ở `DRAFT` ⇒ không hàng; đối chứng MVP1 ⇒ không hàng; đột biến
+  trigger mất tên ⇒ vẫn 23514, không hàng.
+- `rfq.int`: phép khớp tên hai chiều gom thêm thân K4a.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Khuôn ADR-108, không vị từ hỏi trước.** Trigger giữ thẩm quyền và khoá `FOR SHARE` hàng gói; bắt chính lời từ chối có tên ghi đúng lần
+  từ chối đã xảy ra, không đua với cạnh trạng thái (ADR-114).
+- **`auditPool` bắt buộc**, cùng khuôn `approveRfq`: một lời gọi quên pool là lỗi biên dịch, không phải một lần từ chối im lặng.
+- **Phần bù MVP1 của lần mời cũng truyền `auditPool`.** Nó chỉ chạy ở tổ chức chưa bật; nếu tổ chức bật giữa lần mời và phần bù, lần thu
+  hồi bị K4a chặn sẽ để lại một hàng dưới người mời — cùng quy ước `INVITATION_REVOKED` của lần thu hồi hệ thống làm thay người mời.
+- **Màn `/tao-thau` không đổi.** Nó in lỗi của máy chủ (`loiCua`), nên lần mời lúc gói chờ duyệt nay hiện câu có dấu của bảng, chỉ đường
+  trả về soạn thảo.
+
+## 6. Đột biến
+
+Tám đột biến, mỗi cái sửa đúng một chỗ, tệp trả về nguyên văn sau mỗi lượt. Đột biến ở SQL sửa CÙNG LÚC migration và bản ghim
+hardening — sửa một bên thì hardening dựng lại thân ghim và đột biến không bao giờ chạy. Cả tám đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| K1 | nhánh thêm của K4a mất tên | mời lúc chờ duyệt; khớp tên hai chiều |
+| K2 | nhánh thu hồi của K4a mất tên | hai ca thu hồi; khớp tên hai chiều |
+| K3 | tráo hai tên | ba ca: mã và câu sai |
+| K4 | bảng tên → mã thiếu `k4a_thu_hoi_sai_trang_thai` | hai ca thu hồi; khớp tên hai chiều |
+| K5 | `K4A_THEM_SAI_TRANG_THAI` không vào sổ | mời lúc chờ duyệt |
+| T1 | `createInvitation` không từ chối theo chốt | mời lúc chờ duyệt |
+| T2 | `revokeInvitation` không từ chối theo chốt | hai ca thu hồi |
+| T3 | `revokeInvitation` ghi toạ độ LỜI MỜI thay vì gói | hai ca thu hồi |
+
+## 7. Giới hạn, nói ra
+
+- **Lần từ chối K4a qua đường ghi sổ chung**, nên nó vào trần lần từ chối theo phiên của ADR-112 sẵn; vòng này không đo riêng trần ấy
+  cho hai mã mới.
+- **S3.2 còn khoản 254** (#199) — chữ ký duyệt gói không mang ngân sách, mà cạnh về `DRAFT` mở lại ngân sách.
+
+## 8. Số đo
+
+- `apps/api/src/luong-moi-s3.int.test.ts` **20/20** (14 → 20: khối S3.2d, sáu ca). `packages/rfq/src/rfq.int.test.ts` **60/60**,
+  `packages/invitation/src/invitation.int.test.ts` **72/72**, `db/migrations.int.test.ts` **119/119**,
+  `db/hardening-suy-tu-tinh-chat.int.test.ts` **36/36**.
+- Toàn bộ T3 cục bộ trên cây vòng này, trước lần cấp số: 192 tệp, 3258 ca — 3241 đạt, 1 bỏ qua, 16 đỏ. Chín là ca cũ của máy đo, không
+  liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Bảy là `[INV-H20]` của `tests/architecture/so-no-tu-doi-chieu.test.ts`:
+  migration mới chưa vào tập tệp git theo dõi, nên con trỏ của khoản 255 không giải được và lời khai số migration ở `Handoff.md` hơn kho
+  một. Sau `git add`: tệp ấy **45/45**; báo cáo T3 thay kết quả của đúng tệp ấy ⇒ 3258 ca, 3248 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ.
+- `pnpm t0` sạch (453 module, 1807 phụ thuộc). `pnpm test`: 122 tệp, 1732 đạt, 1 bỏ qua. `pnpm cap-so --kiem` sạch.
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3258 khẳng định, cổng evidence XANH; K4a 16 → 22.
+- **Sau khi cấp số** (`080_k4a_co_ten`, ADR-114): năm tệp tích hợp chạm migration chạy lại **307/307** — `db/migrations.int`,
+  `hardening-suy-tu-tinh-chat.int`, `luong-moi-s3.int`, `rfq.int`, `invitation.int`. Tám đột biến, tám lần đỏ (§6).
+- Số hiệu của vòng, ADR và migration do `pnpm cap-so` cấp lúc merge (ADR-090).
+
 ---
 
-# §S1.194 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+# §S1.195 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
-lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`080_rang_ngan_sach`), một ADR (ADR-114),
+lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`081_rang_ngan_sach`), một ADR (ADR-115),
 không route mới.
 
 ## 1. Việc gì
@@ -16232,12 +16329,12 @@ Trên cây `master` `8f90bf2` (bản sao cục bộ), tổ chức đã bật, h�
 - gói 1 triệu, một chữ ký; trả về, nâng lên 99 triệu — cùng bậc —, nộp lại ⇒ gói **MỞ** bằng chữ ký trên con số 1 triệu, một hàng
   chữ ký.
 
-Tệp đo của vòng này chạy trên cùng cây — tạm rút `080_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
+Tệp đo của vòng này chạy trên cùng cây — tạm rút `081_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
 các ca hành vi đỏ vì gói mở được.
 
 ## 3. Thay đổi
 
-**Migration `080_rang_ngan_sach`:**
+**Migration `081_rang_ngan_sach`:**
 - `rfq_bam_ngan_sach(gói)` — hàm băm RIÊNG, khuôn `rfq_bam_danh_sach`: `NGAN_SACH|ước lượng|tiền tệ|phiên bản chính sách|bậc|cờ duyệt
   kép`, `LEFT JOIN` ngân sách để cờ duyệt kép luôn nằm trong băm. `STABLE`, không `SECURITY DEFINER`, `search_path` ghim.
 - Cột `rfq_approvals.approved_budget_hash`, ngoài `GRANT`; thân `rfq_approvals_dat_bam_danh_sach` (`076`) cộng một vế — cùng trigger
@@ -16245,10 +16342,10 @@ các ca hành vi đỏ vì gói mở được.
 - Hai UNIQUE `rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan` mang thêm cột ấy, giữ tên, giữ `NULLS NOT DISTINCT`.
 - Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`076`) cộng một phép đếm thứ hai — người ký khác nhau khớp nội dung, danh sách VÀ ngân sách
   hiện tại — với lời từ chối riêng *"RFQ nay can N chu ky TREN NGAN SACH HIEN TAI, moi co M (K4b)"*. Phép đếm đầu giữ nguyên văn.
-- Không điền hàng cũ (ADR-114 ⑸).
+- Không điền hàng cũ (ADR-115 ⑸).
 
 **Hardening:** mục ghim mới cho `rfq_bam_ngan_sach(uuid)` (khuôn `rfq_bam_danh_sach`); hai mục ghim của `076` trỏ sang thân và cổng
-`080_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
+`081_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
 sách migration. `db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân
 sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 
@@ -16257,7 +16354,7 @@ sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
 - **Cơ chế băm, không khoá ngân sách, không xoá chữ ký.** Spec §2.4 đã chọn *chữ ký cũ vô hiệu bằng băm* cho chính cạnh này, và S3.2b1
-  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-114.
+  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-115.
 - **Băm mang phiên bản chính sách, bậc và cờ duyệt kép**, không chỉ con số: số chữ ký ở cạnh mở gói đọc cờ duyệt kép, cờ ấy suy từ
   ngưỡng kép của phiên bản ghim — hay do người mua tự nâng —, và bậc suy từ bảng bậc của phiên bản ấy.
 - **Lời từ chối riêng cho vế ngân sách**, sau phép đếm cũ: người mua đọc được chữ ký lệch ở đâu.
@@ -16295,10 +16392,10 @@ từ phiên bản và ước lượng, nên không đường nào đổi riêng 
 
 Một lượt, trên cây của commit đầu vòng này; người kiểm đo trên Postgres 16 thật dưới `app_api`, hàm gói thật, dò bằng tệp test tạm
 xoá ngay sau mỗi lượt chạy. **Không đường nào lách được bản vá.** Người kiểm xác nhận: hai lỗ tái hiện trên `master` và đóng ở
-`080_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
+`081_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
 không phụ thuộc thiết đặt phiên; `PENDING_APPROVAL→OPEN` là cạnh DUY NHẤT vào `OPEN`; `app_api` không xoá được ngân sách hay chữ ký;
 lần sửa ngân sách đòi DRAFT dưới khoá `FOR NO KEY UPDATE` hàng gói; ca đua lời duyệt tính trên 1 triệu treo chưa commit trong lúc PM trả
-về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `080_rang_ngan_sach` với dữ liệu đang bay đúng như
+về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `081_rang_ngan_sach` với dữ liệu đang bay đúng như
 §3 nói; mục ghim hardening sửa được cả ba hàm bị làm lệch và hai trigger bị tắt.
 
 | # | Phát hiện | Mức | Xử lý |
@@ -16308,8 +16405,8 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 | S3 | Đột biến sống sót: băm bỏ cờ duyệt kép; phép đếm thứ hai chỉ xét ngân sách | Thấp | Sửa trong vòng: ca *cờ duyệt kép* và ca *bộ ba* cộng hai đột biến — cả hai nay đỏ |
 | S4 | Đầu mục khối đột biến nói *mỗi vế một lần đỏ* — sai khi hai đột biến trên còn sống | Thấp | Sửa: khối nay có đủ bảy vế; tiền tệ và bậc ghi là đột biến tương đương |
 | S5 | Lời của phép đếm đầu (`076`) nói *danh sách* dù danh sách không đổi | Thông tin | Ghi ở §7; ca *một người ký hai lần* khẳng định nguyên văn thay vì một biểu thức nới |
-| S6 | Số tạm trần `080` trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `080_rang_ngan_sach`. Chú thích *"Trước `080`"* có sẵn ở `packages/unseal/src/unseal.int.test.ts` (ý là `078`) đứng ngoài vòng này |
-| S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-114 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
+| S6 | Số tạm trần (dải `95NN`) trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `081_rang_ngan_sach`. Một chú thích số tạm trần như thế (ý là `078`) có sẵn ở `packages/unseal/src/unseal.int.test.ts`, đứng ngoài vòng này. [S1.195] Ô này từng viết chính số tạm ấy, và mỗi lần cấp số `cap-so` thay nó thành số migration của nhánh — nay viết bằng dải |
+| S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-115 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
 | S8 | Hai chú thích sai nhỏ: đột biến ràng buộc không toàn cục; số chữ ký đọc ngưỡng kép, không đọc bảng bậc | Thông tin | Sửa |
 
 ## 7. Giới hạn, nói ra
@@ -16325,7 +16422,7 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 ## 8. Số đo
 
 - `packages/rfq/src/rang-ngan-sach.int.test.ts` 17/17 — mười lăm ca có nhãn, hai ca giới hạn không nhãn. Trên cây `master` (tạm rút
-  `080_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
+  `081_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
 - Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 191 tệp, 3228 khẳng định, 3218 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo,
   không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
@@ -16342,15 +16439,15 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.195 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
+# §S1.196 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-116; LƯỢT SOI MỞ KHOẢN 258–261
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
-chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.194) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
-migration (`081_lan_nop_da_xem`), một ADR (ADR-115), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
+chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.195) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
+migration (`082_lan_nop_da_xem`), một ADR (ADR-116), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
-Lượt soi S1.194 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
+Lượt soi S1.195 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
 PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem, và gói mở (256); người duyệt
 đã ký rồi tự trả gói về không rút được chữ ký của mình — nộp lại y nguyên, gói mở bằng chữ ký ấy (257). Chủ dự án chọn ngày
 2026-09-29: vá cả hai ở một vòng riêng trước S3.2c, theo hình dạng ghi ở hai hàng sổ nợ; mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật —
@@ -16358,15 +16455,15 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 
 ## 2. Đo trước
 
-Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `081_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
+Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `082_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
 28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
 *giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
-chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.194) ghim
+chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.195) ghim
 cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
 
-**Migration `081_lan_nop_da_xem`:**
+**Migration `082_lan_nop_da_xem`:**
 - `rfq_packages.lan_nop` — trigger `rfq_packages_dem_lan_nop` cộng một ở cạnh DRAFT→PENDING_APPROVAL; ngoài mọi `GRANT`. Hàng cũ giữ 0.
 - `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2: khoá hàng gói
   `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở mọi tổ chức; không tìm thấy gói thì từ
@@ -16376,7 +16473,7 @@ cùng hai kịch bản ở trạng thái MỞ.
   xoá; trigger danh tính theo phiên (`kiem_danh_tinh_theo_phien`) và trigger `rfq_tra_ve_dat_lan_nop` (lần nộp từ gói, đòi tổ chức đã
   bật và gói chờ duyệt, khoá `FOR NO KEY UPDATE`); `UNIQUE (org, gói, lần nộp)`.
 - Thân `rfq_kiem_tra_ve_nhap` (`077`) cộng một vế — cạnh về DRAFT đòi hàng `rfq_tra_ve` của `OLD.lan_nop`.
-- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`080`) cộng một phép đếm thứ ba — chữ ký CÒN HIỆU LỰC. Hai phép đếm trước giữ nguyên văn.
+- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`081`) cộng một phép đếm thứ ba — chữ ký CÒN HIỆU LỰC. Hai phép đếm trước giữ nguyên văn.
 
 **Tầng gói, route, màn:** `RfqRecord.lanNop`; `ApproveRfqInput.lanNopDaXem` — không tự điền; `returnRfqToDraft` khoá hàng gói, hỏi
 trạng thái rồi chèn hàng trả về trước câu đổi trạng thái — lời từ chối trạng thái vẫn là `RfqError` có tên như trước. Route duyệt đọc
@@ -16385,7 +16482,7 @@ trạng thái rồi chèn hàng trả về trước câu đổi trạng thái �
 `rang-ngan-sach.int.test.ts` bỏ — tệp mới lật chúng.
 
 **Hardening:** ba mục ghim mới (`rfq_dem_lan_nop`, `rfq_chot_lan_nop_da_xem`, `rfq_tra_ve_dat_lan_nop`, mỗi mục kèm trigger); hai mục
-ghim trỏ sang thân và cổng `081_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
+ghim trỏ sang thân và cổng `082_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
 `BANG_TENANT_KHAI` thêm `rfq_tra_ve`. Các sổ test đi kèm: `db/migrations.int.test.ts`, `db/rls-coverage.int.test.ts` (quyền, policy
 khách, và biểu thức đọc tên migration nhận số bốn chữ số của dải tạm), `db/migration-shape.test.ts`,
 `db/hardening-suy-tu-tinh-chat.int.test.ts` (ba hàm không phải cạnh, một nhân chứng chèn `rfq_tra_ve`).
@@ -16448,7 +16545,7 @@ Một lượt, trên cây `b011820`; người kiểm đo trên Postgres 16 thậ
 | F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 258 mở** (rổ B) cho vế ngân sách. Vế danh sách khép ở S3.2c2 (#200, merge trong lúc vòng này chạy): `napRfq` làm mới danh sách mời ở tổ chức đã bật |
 | F3 | Deadlock do `FOR SHARE`: giao dịch duyệt rồi mở gói gặp một lời duyệt song song ⇒ 40P01, lời duyệt kia thành 500. Không đường sản xuất nào duyệt rồi mở trong một giao dịch | Ghi chú | **Sửa trong vòng:** khoá `FOR NO KEY UPDATE` — lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`) |
 | F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 259 mở** (rổ B) — chung cho mọi mục ghim trigger |
-| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-115 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
+| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-116 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
 | F6 | Bật S3 giữa lúc gói chờ duyệt: MVP1 cho đổi danh sách khi gói chờ, lần nộp đứng yên | Ghi chú | **Khoản 261 mở** (rổ B); ca giới hạn ghim hành vi hôm nay |
 | F7 | Hàng `rfq_tra_ve` chèn tay không kèm cạnh chiếm UNIQUE và thoả vế *kèm hàng trả về*; xoá hàng làm chữ ký đã rút đếm lại. Lời khai (3) ở đầu migration chưa đủ | Ghi chú | **Khoản 260 mở** (rổ B); lời khai (3) sửa |
 | F8 | Test: đột biến bỏ `FOR SHARE` chỉ chứng minh khoá có mặt; hai nhánh phiên của D2 chưa đo trước phép so; thiếu ca HTTP tràn số và ca bật S3 thật; trợ thủ `duyet` của sáu tệp cũ đọc lần nộp từ CSDL ngay trước lời duyệt | Ghi chú | Sửa: đột biến bỏ khoá nay đo hậu quả; ca D2 phiên của người khác và phiên thu hồi kèm mốc sai; ca HTTP tràn; ca bật S3 giữa chừng (khoản 261). Trợ thủ của sáu tệp giữ nguyên: chúng đo việc khác, và tệp mới là nơi canh khoản 256 |
@@ -16476,12 +16573,12 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 ## 8. Số đo
 
 - `packages/rfq/src/lan-nop-da-xem.int.test.ts` 28/28 — 27 ca có nhãn, 1 ca giới hạn không nhãn. Trên cây #199 (`30a6801`, chưa có
-  `081_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
+  `082_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
 - `apps/api/src/buyer.int.test.ts` 20/20, trong đó hai ca HTTP của vòng này.
 - Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 192 tệp, 3256 khẳng định, 3246 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
   máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
-- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `081_lan_nop_da_xem`): 193 tệp, 3274 khẳng
+- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `082_lan_nop_da_xem`): 193 tệp, 3274 khẳng
   định, 3264 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca ấy. Ma trận sinh lại từ lượt này trùng bản đã commit.
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
@@ -16496,15 +16593,15 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 
 ---
 
-# §S1.196 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-116
+# §S1.9101 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-9201
 
 **Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; vòng này thêm một bảng đọc, không đổi luồng
-nào. Khoản 258 (rổ B, ghi ở §S1.195) đóng. Không migration; một route đọc mới; một ADR (ADR-116).
+nào. Khoản 258 (rổ B, ghi ở §S1.196) đóng. Không migration; một route đọc mới; một ADR (ADR-9201).
 
 ## 1. Việc gì
 
-Chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách (ADR-114) và rơi lên đúng lần nộp client đã đọc (ADR-115), nhưng không route
-nào trả ngân sách cho người mua — lượt soi S1.195 (F2). Chủ dự án chốt ngày 2026-09-29: route riêng, không mở cho agent; người tạo
+Chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách (ADR-115) và rơi lên đúng lần nộp client đã đọc (ADR-116), nhưng không route
+nào trả ngân sách cho người mua — lượt soi S1.196 (F2). Chủ dự án chốt ngày 2026-09-29: route riêng, không mở cho agent; người tạo
 gói và người duyệt đọc được, không ai khác. Bất biến chạm: K4b.
 
 ## 2. Đo trước
@@ -16524,12 +16621,12 @@ chỉ có `PUT`.
 - `apps/web`: `tuDocNganSach` và `hangNganSach` (thuần, `tao-thau.test.ts` đo). `napRfq` tự đọc ngân sách chỉ cho người tạo gói;
   người khác bấm «Xem ngân sách». Bảng ngân sách đi ngay sau lần đọc gói, chỉ vẽ câu trả của gói đang mở, và đi cùng lần đăng xuất
   hay đổi người; người tạo gói đặt ngân sách xong thì đọc lại đủ năm hàng. `userId` của phiên lấy từ `GET /me`.
-- ADR-116; STATE, TEST-PLAN.
+- ADR-9201; STATE, TEST-PLAN.
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
-- ~~**Lúc nào màn tự đọc** (ADR-116 ⑶): người tạo gói, hay gói đang chờ duyệt.~~ Lượt soi (§6 F3) bác điểm này; chủ dự án chốt
-  lại: tự đọc chỉ cho người tạo gói, người khác bấm nút (ADR-116 mục 3). Màn không biết quyền của người dùng, và dự án cố ý không
+- ~~**Lúc nào màn tự đọc** (ADR-9201 ⑶): người tạo gói, hay gói đang chờ duyệt.~~ Lượt soi (§6 F3) bác điểm này; chủ dự án chốt
+  lại: tự đọc chỉ cho người tạo gói, người khác bấm nút (ADR-9201 mục 3). Màn không biết quyền của người dùng, và dự án cố ý không
   có phép hỏi quyền im lặng.
 - **`null` trước phép kiểm quyền** cho gói không có — trong một tổ chức, gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời.
 
@@ -16562,16 +16659,16 @@ Một lượt, trên cây `99996a0`; người kiểm đo qua HTTP thật trên P
 |---|---|---|---|
 | F1 | Nhánh *người tạo* của cổng — ca chính của người mua — không có ca đo: người tạo ở hai ca HTTP là PROCUREMENT_MANAGER, giữ cả hai quyền; đột biến *luôn hỏi `rfq.approve`* sống | Nên sửa | **Sửa trong vòng:** ca BUYER tạo gói rồi đọc (§5) — đột biến ấy nay đỏ |
 | F2 | Hàng từ chối của lần đọc ngân sách giống hệt hàng của một lần định trả gói người khác về soạn thảo (`PERMISSION_DENIED`, `RFQ`, cùng mã gói, `rfq.approve`) | Nên sửa | **Sửa trong vòng:** loại tài nguyên `RFQ_BUDGET` (khuôn `RFQ_INVITATION`); ca HTTP khẳng định |
-| F3 | Màn tự đọc ở mỗi lần đọc gói đang chờ duyệt: mọi người không giữ `rfq.approve` — kể cả người mua vừa nộp giúp gói của đồng nghiệp — để lại một hàng từ chối mỗi lần đọc hay nộp; với trần 3, lần đọc thứ tư ra 429 và một lần duyệt sai quyền THẬT sau đó ra 429, không vào sổ | Nên sửa | **Chủ dự án chốt:** tự đọc chỉ cho người tạo gói, người khác bấm «Xem ngân sách» (ADR-116 mục 3) |
+| F3 | Màn tự đọc ở mỗi lần đọc gói đang chờ duyệt: mọi người không giữ `rfq.approve` — kể cả người mua vừa nộp giúp gói của đồng nghiệp — để lại một hàng từ chối mỗi lần đọc hay nộp; với trần 3, lần đọc thứ tư ra 429 và một lần duyệt sai quyền THẬT sau đó ra 429, không vào sổ | Nên sửa | **Chủ dự án chốt:** tự đọc chỉ cho người tạo gói, người khác bấm «Xem ngân sách» (ADR-9201 mục 3) |
 | F4 | Màn có thể để ngân sách của gói trước cạnh lần nộp của gói đang mở: bảng chỉ thay ở cuối `napRfq`; một lần đọc hỏng giữa chừng hay câu trả tới muộn để lại con số cũ | Nên sửa | **Sửa trong vòng:** xoá bảng ngay sau lần đọc gói; chỉ vẽ câu trả của gói đang mở (§5) |
-| F5 | ADR nói sai rằng các hàm đọc có cổng khác cũng không ghi lần đọc thành công — ba hàm có ghi (ADR-102) | Nên sửa | **Chủ dự án chốt:** không ghi; ADR-116 mục 4 nói đúng lý do |
+| F5 | ADR nói sai rằng các hàm đọc có cổng khác cũng không ghi lần đọc thành công — ba hàm có ghi (ADR-102) | Nên sửa | **Chủ dự án chốt:** không ghi; ADR-9201 mục 4 nói đúng lý do |
 | N1 | Bảng ngân sách còn trên trang sau đăng xuất hay đổi người | Ghi chú | **Sửa trong vòng** |
 | N2 | Chú thích sai: số dòng của `ROUTE_DOC_KHONG_PHOI`, câu *"ở mỗi lần đọc gói"* ở route, vai AUDITOR (chưa có), ký hiệu mục | Ghi chú | **Sửa trong vòng** |
 | N3 | Vế `h === undefined` sau cổng không bao giờ xảy ra — `app_api` không xoá được gói | Ghi chú | Giữ (vô hại) |
 | N4 | Người tạo đặt ngân sách xong chỉ thấy ba hàng tới lần đọc gói sau | Ghi chú | **Sửa trong vòng:** đọc lại cho người tạo; người mua khác không bị đọc thay |
 | N5 | Quyết định không phơi cho agent chỉ được khoá ở tầng tích hợp | Ghi chú | **Sửa trong vòng:** thêm vào `it.each` của `cong-cu.test.ts` |
 | N6 | Hai câu đọc chỉ dựa vào RLS để lọc tổ chức | Ghi chú | **Sửa trong vòng:** lọc cả `org_id` (khuôn `listInvitations`) |
-| N7 | FINANCE, DIRECTOR vẫn kẹp được ngân sách qua `belowBudget` của bảng so sánh sau mở niêm phong — có trước vòng này | Ghi chú | Ghi ở ADR-116 (hệ quả) |
+| N7 | FINANCE, DIRECTOR vẫn kẹp được ngân sách qua `belowBudget` của bảng so sánh sau mở niêm phong — có trước vòng này | Ghi chú | Ghi ở ADR-9201 (hệ quả) |
 
 **Người kiểm thử và không lách được:** tổ chức khác ⇒ 404 không hàng sổ, cookie trộn tổ chức ⇒ 401; phiên `AGENT_READONLY` ⇒ 403 và
 một hàng `AGENT_SCOPE_DENIED` trước handler, mã gói lạ cũng 403 — không oracle tồn tại; phiên khách không mang cookie người mua, cookie
@@ -16584,10 +16681,10 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
 - Người không giữ `rfq.approve` bấm «Xem ngân sách» thì để lại một hàng `PERMISSION_DENIED` (`RFQ_BUDGET`) và một lần trong trần từ
   chối — chỉ khi bấm. Người tạo gói mất `rfq.create` bị từ chối ở mỗi lần đọc gói của chính mình.
 - Người mua khác đặt được ngân sách của gói đồng nghiệp mà không đọc lại được nó nếu không giữ `rfq.approve`.
-- Người duyệt ký được mà không mở ngân sách; lần đọc thành công không vào sổ (ADR-116 mục 4).
+- Người duyệt ký được mà không mở ngân sách; lần đọc thành công không vào sổ (ADR-9201 mục 4).
 - FINANCE, DIRECTOR kẹp được ngân sách qua `belowBudget` sau mở niêm phong — có trước vòng này.
 - Gói, hạng mục, lời mời và ngân sách là bốn lần đọc tách nhau; lần nộp lại tăng `lanNop`, nên thứ đọc sau mà khác lần nộp đã đọc
-  làm lời duyệt mang mốc cũ bị từ chối (ADR-115).
+  làm lời duyệt mang mốc cũ bị từ chối (ADR-116).
 
 ## 8. Số đo
 

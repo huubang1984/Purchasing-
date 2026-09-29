@@ -279,7 +279,7 @@ const doc: readonly BuyerReadRoute[] = [
       return { status: 200, body: { rfq: r } };
     },
   },
-  // [S1.196 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-114) — người duyệt đọc được con số mình ký. Màn
+  // [S1.9101 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-115) — người duyệt đọc được con số mình ký. Màn
   // `/tao-thau` tự đọc nó ở lần đọc gói cho người tạo gói; người khác bấm «Xem ngân sách». Cổng nằm trong gói (`getRfqBudget`, rổ
   // `HAM_DOC_CO_QUYEN`): người tạo gói cần `rfq.create`, người khác cần `rfq.approve`; `auditPool` để lần từ chối có bản ghi.
   {
@@ -287,7 +287,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/budget",
     audience: "BUYER",
     mutates: false,
-    // [khoản 141] NGÂN SÁCH DỰ TÍNH — thứ neo giá nếu rò xuống bên bán; chủ dự án chốt ngày 2026-09-29: agent không đọc (ADR-116)
+    // [khoản 141] NGÂN SÁCH DỰ TÍNH — thứ neo giá nếu rò xuống bên bán; chủ dự án chốt ngày 2026-09-29: agent không đọc (ADR-9201)
     agent: false,
     handler: async (ctx) => {
       const budget = await getRfqBudget(
@@ -902,7 +902,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_APPROVE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    // [S1.195 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
+    // [S1.196 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
     // Route không hỏi tổ chức đã bật chưa — trigger `rfq_approvals_so_lan_nop` đòi nó ở tổ chức đã bật (422 có tên khi vắng hay
     // lệch), còn tổ chức chưa bật giữ hợp đồng MVP1: không thân vẫn duyệt được.
     handler: async (ctx) => {
@@ -1074,7 +1074,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         contactId,
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
       // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
       // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
@@ -1130,7 +1130,7 @@ const ghi: readonly BuyerWriteRoute[] = [
             token: t.token,
           }),
         bu: async (client) => {
-          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
+          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" }, ctx.auditPool);
         },
         phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, loi moi da thu hoi" } },
         phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc loi moi", invitationId: loi.id } },
@@ -1148,7 +1148,14 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: invitationIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: {
+        revoked: await revokeInvitation(
+          ctx.client,
+          ctx.orgId,
+          { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
     }),
   },
   {
