@@ -1491,7 +1491,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   const HAM_DON_VI_DO: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "chuoi_sach", chuKy: "text", migration: "079_don_vi_do.sql" },
     { ham: "don_vi_tai", chuKy: "uuid, text, timestamptz", migration: "079_don_vi_do.sql" },
-    // [S1.193 / S4.2a] Thân thêm vế ⑵ (quy đổi riêng, ADR-114) — con trỏ theo migration CUỐI CÙNG.
+    // [S1.194 / S4.2a] Thân thêm vế ⑵ (quy đổi riêng, ADR-114) — con trỏ theo migration CUỐI CÙNG.
     { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "080_hang_chuan.sql" },
   ];
 
@@ -1567,7 +1567,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "unseal_approvals_kiem_danh_tinh",
         // [S1.192 / S4.1] Bí danh đơn vị của tổ chức — người khai là DẪN XUẤT từ phiên (L1).
         "uom_aliases_kiem_danh_tinh",
-        // [S1.193 / S4.2a] Bốn bảng hàng chuẩn — cùng khuôn.
+        // [S1.194 / S4.2a] Bốn bảng hàng chuẩn — cùng khuôn.
         "canonical_item_versions_kiem_danh_tinh",
         "canonical_items_kiem_danh_tinh",
         "item_aliases_kiem_danh_tinh",
@@ -1700,7 +1700,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
-    // [S1.193 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
+    // [S1.194 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.
     {
       ham: "du_lieu_nen_dat_thu_tu",
       migration: "079_don_vi_do.sql",
@@ -1712,7 +1712,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "uom_aliases_dat_thu_tu",
       ],
     },
-    // [S1.193 / S4.2a / L3] Khuôn `033` cho người đặt thước dữ liệu mù giá, và cổng GHI của dữ liệu nền. Một thân `RETURN NULL`/
+    // [S1.194 / S4.2a / L3] Khuôn `033` cho người đặt thước dữ liệu mù giá, và cổng GHI của dữ liệu nền. Một thân `RETURN NULL`/
     // `RETURN NEW` sớm ở bất kỳ cái nào cho một vai, một người, hay một người không quyền ghi đặt thước trong lúc thấy giá.
     { ham: "kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro", migration: "080_hang_chuan.sql", trigger: ["role_permissions_quan_ly_du_lieu_mu_gia"] },
     { ham: "kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung", migration: "080_hang_chuan.sql", trigger: ["user_roles_quan_ly_du_lieu_mu_gia"] },

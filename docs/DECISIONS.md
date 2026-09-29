@@ -8958,10 +8958,10 @@ chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `da
 ## ADR-114 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm đề xuất của lượt bàn S4.2 ngày 2026-09-29 (tách S4.2a/S4.2b,
-luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.193]** ·
+luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.194]** ·
 **Liên quan:** spec S4 §4.2 (L4 ⑴⑵⑶), §4.3, §2.4 ⑺ (vai `DATA_STEWARD`), §5.1 L1 · L3 · L4; ADR-097 (bảy quyết định sau lượt soi);
 ADR-084 ⑶ (mã vào CSDL ở hạng mục dựng hành vi); ADR-016 (cổng quyền ở tầng ứng dụng); `033` (khuôn *thước không cùng tay*) ·
-**Biên bản:** `evidence/security-reviews.md` §S1.193
+**Biên bản:** `evidence/security-reviews.md` §S1.194
 
 ### Bối cảnh
 

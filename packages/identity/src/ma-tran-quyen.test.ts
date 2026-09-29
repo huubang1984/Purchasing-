@@ -61,7 +61,7 @@ function catValuesNeuCo(pSql: string, pBang: string): string {
   }
 }
 
-// [S1.193] `\d{3,4}`: số migration TẠM `95NN` của `pnpm cap-so` (ADR-090) có bốn chữ số — `\d{3}` làm ma trận tĩnh mù với
+// [S1.194] `\d{3,4}`: số migration TẠM `95NN` của `pnpm cap-so` (ADR-090) có bốn chữ số — `\d{3}` làm ma trận tĩnh mù với
 // chính migration của nhánh đang thêm vai, đúng lúc phép ghim cần đọc nó.
 const MOI_MIGRATION = readdirSync(THU_MUC)
   .filter((f) => /^\d{3,4}_.*\.sql$/.test(f))
@@ -235,7 +235,7 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     expect(maTran.get("PROCUREMENT_MANAGER")).not.toContain(PERMISSIONS.POLICY_MANAGE);
   });
 
-  it("chống rỗng ruột: ma trận đọc được và có đủ ~~sáu~~ [S1.193] bảy vai trò", () => {
+  it("chống rỗng ruột: ma trận đọc được và có đủ ~~sáu~~ [S1.194] bảy vai trò", () => {
     expect([...maTran.keys()].sort()).toEqual([
       "BUYER",
       "DATA_STEWARD",
@@ -248,7 +248,7 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
   });
 
   it("mọi vai trò trong role_permissions đều có trong bảng `roles`", () => {
-    // [S1.193] Đọc `roles` ở MỌI migration — `DATA_STEWARD` vào ở S4.2a, không ở `005`.
+    // [S1.194] Đọc `roles` ở MỌI migration — `DATA_STEWARD` vào ở S4.2a, không ở `005`.
     const maVaiTro = new Set(
       MOI_MIGRATION.flatMap(({ sql }) => cacChuoi(catValuesNeuCo(sql, "roles")).filter((_v, i) => i % 2 === 0)),
     );
@@ -481,7 +481,7 @@ describe("[INV-D2] [033] thước đo không cùng tay: policy.manage tách kh�
   });
 });
 
-describe("[INV-L3] [S1.193 / S4.2a] người đặt thước dữ liệu mù giá: item.manage tách khỏi năm mã thấy giá hay cầm thứ bị đo", () => {
+describe("[INV-L3] [S1.194 / S4.2a] người đặt thước dữ liệu mù giá: item.manage tách khỏi năm mã thấy giá hay cầm thứ bị đo", () => {
   const TEP_S42A = MOI_MIGRATION.filter(({ sql }) => sql.includes("$tqv$"));
   const maTran = (() => {
     const ketQua = new Map<string, Set<string>>();

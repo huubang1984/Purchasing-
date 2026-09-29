@@ -7,7 +7,7 @@ export {
   type KetQuaQuyDoi,
   type QuyDoiDonViInput,
 } from "./don-vi.js";
-// [S1.193 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng.
+// [S1.194 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng.
 export {
   DuLieuNenError,
   docHangChuan,

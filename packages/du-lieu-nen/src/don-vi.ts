@@ -10,7 +10,7 @@ import { assertTenantBound } from "@trustprocure/audit";
 export const KHONG_QUY_DOI_DUOC = "KHONG_QUY_DOI_DUOC" as const;
 
 /**
- * `CUNG_DON_VI` là hệ số `1` CÓ NGUỒN — cùng một mã; mọi ca không nguồn là `KHONG_QUY_DOI_DUOC` (L4). **[S1.193 / S4.2a]**
+ * `CUNG_DON_VI` là hệ số `1` CÓ NGUỒN — cùng một mã; mọi ca không nguồn là `KHONG_QUY_DOI_DUOC` (L4). **[S1.194 / S4.2a]**
  * `QUY_DOI_RIENG`: đúng một quy đổi riêng của hàng chuẩn, ghép với quy đổi chung ở hai đầu (ADR-114).
  */
 export type KetQuaQuyDoi =
@@ -24,7 +24,7 @@ export interface QuyDoiDonViInput {
   readonly sang: string;
   /** Mốc: chỉ bí danh của tổ chức có `ghi_luc` TRƯỚC mốc được dùng (L1). */
   readonly moc: Date;
-  /** Hàng chuẩn — **[S1.193 / S4.2a]** quy đổi riêng của ĐÚNG hàng này, ghi trước mốc, vào cuộc khi quy đổi chung không có. */
+  /** Hàng chuẩn — **[S1.194 / S4.2a]** quy đổi riêng của ĐÚNG hàng này, ghi trước mốc, vào cuộc khi quy đổi chung không có. */
   readonly hangChuanId?: string | null;
 }
 

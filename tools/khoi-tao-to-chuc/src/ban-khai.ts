@@ -30,7 +30,7 @@ export class BanKhaiError extends Error {
 
 /**
  * Danh mục vai của `005` (`INSERT INTO roles`). `khoi-tao.int.test.ts` đòi danh sách này khớp bảng `roles` thật.
- * **[S1.193 / S4.2a]** Cộng `DATA_STEWARD` — vai quản lý dữ liệu mù giá; trigger mức người chỉ cho nó ghép với `TECHNICAL`.
+ * **[S1.194 / S4.2a]** Cộng `DATA_STEWARD` — vai quản lý dữ liệu mù giá; trigger mức người chỉ cho nó ghép với `TECHNICAL`.
  */
 export const MA_VAI = ["REQUESTER", "BUYER", "TECHNICAL", "PROCUREMENT_MANAGER", "FINANCE", "DIRECTOR", "DATA_STEWARD"] as const;
 export type MaVai = (typeof MA_VAI)[number];

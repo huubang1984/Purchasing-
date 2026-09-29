@@ -16208,7 +16208,7 @@ Hai mươi mốt đột biến của #198 đo trên màn cũ; màn ấy đã tha
   sau §S1.192; `pnpm cap-so` cấp lại số vòng.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
 
-# §S1.193 — S4.2a: HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-114
+# §S1.194 — S4.2a: HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-114
 
 ## 1. Vòng này là gì
 
