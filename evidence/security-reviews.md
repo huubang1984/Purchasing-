@@ -15977,12 +15977,113 @@ TOTP lần đầu.
 
 Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).
 
+# §S1.192 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
+
+## 1. Vòng này là gì
+
+Hạng mục mã đầu tiên của S4a (spec S4 §9: S4.0 nền, S4.1 đơn vị đo + khuôn nền). Không chạm `org_procurement_policies`, không
+chạm đường mở thầu, không route, không màn hình. Bất biến vào sổ: **L1** (vế khuôn ghi, bảng đầu tiên mang nó) và **L4** (vế chung).
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-29, theo ba đề xuất của lượt bàn hướng làm:
+
+1. Danh mục gieo sẵn `kg, g, t · m, cm, mm, km · m2 · m3, l, ml · cai`; bí danh chung `kilogram, kgs, kilo, tan, met, lit, cai,
+   chiec`; KHÔNG bí danh chung cho `MT`, `T`, `M` — tổ chức tự khai.
+2. Chưa dựng `packages/tri-tue`; dựng khi S4b bắt đầu.
+3. `chuoi_sach` bản 1: dấu câu thành khoảng trắng — *"D10-HP"* → `d10 hp` —, ghim là phiên bản 1.
+
+## 3. Thay đổi
+
+- **S4.0.** Khuôn mã bất biến `[A-HJK]` → `[A-HJ-L]` ở mười chỗ ghim (`parse.ts` hai, `so-no-tu-doi-chieu` bốn, `danh-gia.test` hai,
+  `nhan-bat-bien-cho-dat`, `packages/outbox`); `parse.test.ts` lật ca *"không nhóm L"* thành ca biên `M` trong cùng commit (spec S4
+  §8.9). Gói `@trustprocure/du-lieu-nen`; hai luật depcruise `g19-du-lieu-nen-chi-index-la-cua-cong-khai` và
+  `g19-du-lieu-nen-khong-cham-duong-mo-thau` (không với tới `sealed-envelope`, `unseal`, `crypto-keys`, kể cả gián tiếp); ba mũi
+  `[INV-H16]` ở `boundaries.test.ts`; cửa công khai ghim ở `barrel-exports.test.ts`.
+- **S4.1 — `079_don_vi_do`.** `chuoi_sach(text)` `IMMUTABLE STRICT PARALLEL SAFE`; `uom_units` (12 đơn vị, 5 thứ nguyên,
+  `he_so_ve_goc`) và `uom_aliases_chung` (18 bí danh), không `org_id`, `app_api` chỉ `SELECT`, chỉ-ghi-thêm kể cả `TRUNCATE`
+  (`bid_chi_ghi_them`, khuôn `047`); `uom_aliases` của tổ chức — RLS `FORCE`, policy khách đóng hẳn, `GRANT INSERT` sáu cột (ngoài
+  `id`, `seq`, `ghi_luc`), hàng rút (`rut`, `code IS NULL`), tác giả dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); trigger khuôn
+  `du_lieu_nen_dat_thu_tu` — khoá tư vấn hạt giống `3` theo (bảng, tổ chức) → `seq` = max + 1 → `ghi_luc = clock_timestamp()`;
+  `don_vi_tai` (bí danh của tổ chức ghi TRƯỚC mốc, mới nhất theo `seq`, rồi bí danh chung) và `quy_doi_don_vi` — hàm quy đổi SQL
+  duy nhất: cùng mã ⇒ `CUNG_DON_VI` hệ số 1; cùng thứ nguyên ⇒ `QUY_DOI_CHUNG`; mọi ca khác ⇒ `KHONG_QUY_DOI_DUOC`, hệ số NULL.
+  Tham số `p_hang_chuan` có mặt từ bây giờ để S4.2 không đổi chữ ký một hàm đã ghim.
+- **Hardening.** Bốn mục ghim hàm (`du_lieu_nen_dat_thu_tu` kèm trigger, `chuoi_sach`, `don_vi_tai`, `quy_doi_don_vi` — thân, độ
+  biến động, `search_path`, số tham số, kiểu trả); sáu trigger chỉ-ghi-thêm vào nhóm `bid_chi_ghi_them`, trigger danh tính vào nhóm
+  `kiem_danh_tinh_theo_phien`; `uom_aliases` vào `BANG_TENANT_KHAI`.
+- **Tầng gói.** `quyDoiDonVi` và `chuoiSach` chỉ gọi hai hàm SQL, ép kiểu ghim `pg_catalog` (QT3); hệ số trả về là CHUỖI thập phân;
+  một cặp (mã, hệ số) ngoài ba dạng hợp lệ thì NÉM.
+- **Cổng census khai theo.** `hardening-suy-tu-tinh-chat` (ba bảng chỉ-ghi-thêm, hàm mới là KHÔNG-CANH kèm nhân chứng hành vi dưới
+  `app_api`), `migrations.int` (trigger mới vào `HAM_GHIM`, phép so thân của ba hàm đơn vị đo, ba danh sách migration),
+  `rls-coverage`, `check-an-ninh`, `migration-shape`; `Handoff.md` 79 migration, 15 gói.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **NFKD, không NFD.** Spec §4.1 ghi NFD. Đo: NFD giữ nguyên *"m²"*, bước thay ký tự lạ cho `m` — mã của MÉT. NFKD cho `m2`
+  (và *"ｋｇ"* → `kg`); với chữ Việt hai dạng cho cùng kết quả. Spec §4.1 mang ghi chú.
+- **Mã đơn vị không bao giờ khớp trực tiếp từ chuỗi tự do — chỉ qua bí danh.** `chuoi_sach` hạ chữ, nên *"T"*, *"M"* thành `t`, `m`
+  — đúng hai mã của tấn và mét, trong khi quyết định ⑴ đặt chúng là dạng mơ hồ. Hệ quả: dạng mã KHÔNG mơ hồ có bí danh chung của
+  chính nó — `kg, g, gram, cm, mm, km, m2, m3, l, ml` — ngoài tám bí danh đã chốt. `t` và `m` thì không. Đây là mười bí danh chủ dự
+  án chưa duyệt từng cái; bỏ chúng thì *"kg"* không quy đổi được.
+- **Hai phía cùng một chuỗi LẠ** (*"hộp"* → *"hộp"*) cho `KHONG_QUY_DOI_DUOC`, không hệ số 1: không nguồn nào nói chuỗi ấy là một
+  đơn vị đã biết.
+- **L1 đo cho MỌI bảng nền bằng một tổng điều tra**, không bằng từng test: `BANG_DU_LIEU_NEN` trong `don-vi.int.test.ts` phải bằng
+  đúng tập bảng mang trigger khuôn, `ENABLE ALWAYS`, ba cột ngoài `GRANT`. Mỗi bảng nền sau thêm một dòng.
+- **Bộ đọc `BANG_TENANT_KHAI` của `rls-coverage` nhận số migration bốn chữ số.** Khuôn cũ `\d{3}_` bỏ qua dòng khai `95NN_…` (số tạm) của
+  một bảng tenant mới trong nhánh, và phép so đỏ với con số lệch thay vì nói tên dòng bị mù. Phép quét literal GUC cùng tệp nới theo.
+- **Lệch đo được, không sửa:** spec S4 gọi hàm ghim phiên bản chính sách là `chinh_sach_tai` (*mới nhất TẠO trước `opened_at`*);
+  thứ S3.1 dựng là `chinh_sach_hieu_luc` của `069` (*`version` cao nhất đã hiệu lực và — khi có bậc — đã ký, tại `created_at`*).
+  Ghi ở spec S4 §4.1; S4.5 chốt mốc và luật.
+
+## 5. Đo
+
+Mỗi đột biến chạy trên cây vòng này rồi khôi phục; mọi lần đỏ ở đúng ca mong:
+
+| # | Đột biến | Đỏ ở |
+|---|---|---|
+| M1 | Tầng gói: bỏ nhánh NÉM cho cặp lạ, trả `KHONG_QUY_DOI_DUOC` cho mọi ca còn lại | `[INV-L4]` ca cặp lạ (1/12) |
+| M2a | `KHUON_MA` thu về `[A-HJK]` | 14 khẳng định ở `tools/inv-matrix` + `tests/architecture` |
+| M2b | `KHUON_MA` nới quá tay `[A-HJ-M]` | 4 khẳng định, trong đó ca biên `M` |
+| M3 | `du_lieu_nen_dat_thu_tu` bỏ khoá tư vấn (thay lúc chạy) | `[INV-L1]` ghi đồng thời: `23505` trên `uom_aliases_org_id_seq_key` |
+| M4 | `chuoi_sach` dùng NFD (thay lúc chạy) | bảng ca làm sạch (*"m²"*, *"m³"*, *"ｋｇ"*) và bảng ca L4 (*"m³"* → *"lít"*) |
+| M5 | Thân `quy_doi_don_vi` có nhánh `ELSE 1` (trong test) | `[INV-L4]` bảng ca lệch, gồm *"hộp"* → *"hộp"* |
+| M6 | Bí danh chung `t` → `t` (trong test) | `[INV-L4]`: *"T"* → *"kg"* thành `QUY_DOI_CHUNG` |
+| M7 | Gỡ trigger khuôn (trong test) | `[INV-L1]`: `23502` — `seq` NULL |
+
+Đo trước khi khai (lượt đầu của các cổng census trên migration mới): `rls-coverage` 1 đỏ (`BANG_TENANT_KHAI` 36 vs 37 — số tạm
+bốn chữ số), `hardening-suy-tu-tinh-chat` 6 đỏ, `migrations.int` 5 đỏ (trong đó 1 do chính tôi sửa chú thích migration giữa lượt
+chạy — tổng kiểm đổi; chạy lại sạch), `migration-shape` 1 đỏ, `qt3-ghim-schema` 1 đỏ (ép kiểu không ghim), `so-no-tu-doi-chieu` 5 đỏ
+(lời khai 68 bất biến, 78 migration, 14 gói). Mọi ca ấy xanh sau khi khai.
+
+## 6. Giới hạn, nói ra
+
+- **L1 mới có vế GHI trên một bảng.** Vế ĐỌC tại mốc (`quan_sat_gia`) là S4.4; các bảng nền khác vào ở hạng mục dựng chúng.
+- **L4 mới có vế chung.** Đơn vị đóng gói (*"cây"*, *"cuộn"*) hôm nay luôn `KHONG_QUY_DOI_DUOC`; vế ⑵ ở S4.2.
+- **Không đường gọi từ `apps/`.** Chưa route khai bí danh, chưa màn `/du-lieu`; `uom_aliases` hôm nay chỉ ghi được bằng câu SQL dưới
+  `app_api` có phiên hợp lệ. Ai khai bí danh (vai `DATA_STEWARD`) là S4.2.
+- **`he_so_ve_goc` là `numeric` không giới hạn độ chính xác.** Phép chia `ml` → `t` cho số thập phân dài; tầng gói trả chuỗi, không làm
+  tròn. Làm tròn ở đâu là việc của bộ đọc đầu tiên nhân hệ số với lượng tiền (S4.4).
+- **`gieo:demo` chưa gieo bí danh nào của tổ chức.**
+
+## 7. Số đo
+
+- `packages/du-lieu-nen/src/don-vi.int.test.ts` 12/12 (L1 sáu ca, L4 năm ca, một ca làm sạch). Cổng census chạm vòng này, trên cây
+  cuối: `migrations.int` 119/119, `hardening-suy-tu-tinh-chat.int` 36/36, `rls-coverage.int` 51/51, `check-an-ninh.int` 4/4,
+  `ghim-trigger-tu-chua.int` 4/4, `migration-shape` 20/20, `qt3-ghim-schema` 12/12, `boundaries` 77/77, `barrel-exports` 32/32,
+  `parse.test` 30/30, `danh-gia.test` 44/44, `so-no-tu-doi-chieu` 45/45.
+- Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số (sau khi merge `master` tới #196): 191 tệp, 3229 khẳng định, 3228 đạt, 1 bỏ qua,
+  0 đỏ.
+- `pnpm t0` sạch. `pnpm test`: 121 tệp, 1709 đạt, 1 bỏ qua.
+- Tám đột biến, tám lần đỏ (§5).
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3229 khẳng định; L1 6, L4 5; H16 51 → 55. Mốc `MOC_GHIM`
+  68 → 70 — cổng CHẶN đúng một lượt trước khi dòng ấy được sửa.
+
 ---
 
-# §S1.192 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+# §S1.193 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
-lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`079_rang_ngan_sach`), một ADR (ADR-114),
+lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`080_rang_ngan_sach`), một ADR (ADR-114),
 không route mới.
 
 ## 1. Việc gì
@@ -16001,12 +16102,12 @@ Trên cây `master` `8f90bf2` (bản sao cục bộ), tổ chức đã bật, h�
 - gói 1 triệu, một chữ ký; trả về, nâng lên 99 triệu — cùng bậc —, nộp lại ⇒ gói **MỞ** bằng chữ ký trên con số 1 triệu, một hàng
   chữ ký.
 
-Tệp đo của vòng này chạy trên cùng cây — tạm rút `079_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
+Tệp đo của vòng này chạy trên cùng cây — tạm rút `080_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
 các ca hành vi đỏ vì gói mở được.
 
 ## 3. Thay đổi
 
-**Migration `079_rang_ngan_sach`:**
+**Migration `080_rang_ngan_sach`:**
 - `rfq_bam_ngan_sach(gói)` — hàm băm RIÊNG, khuôn `rfq_bam_danh_sach`: `NGAN_SACH|ước lượng|tiền tệ|phiên bản chính sách|bậc|cờ duyệt
   kép`, `LEFT JOIN` ngân sách để cờ duyệt kép luôn nằm trong băm. `STABLE`, không `SECURITY DEFINER`, `search_path` ghim.
 - Cột `rfq_approvals.approved_budget_hash`, ngoài `GRANT`; thân `rfq_approvals_dat_bam_danh_sach` (`076`) cộng một vế — cùng trigger
@@ -16017,7 +16118,7 @@ các ca hành vi đỏ vì gói mở được.
 - Không điền hàng cũ (ADR-114 ⑸).
 
 **Hardening:** mục ghim mới cho `rfq_bam_ngan_sach(uuid)` (khuôn `rfq_bam_danh_sach`); hai mục ghim của `076` trỏ sang thân và cổng
-`079_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
+`080_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
 sách migration. `db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân
 sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
 
@@ -16064,10 +16165,10 @@ từ phiên bản và ước lượng, nên không đường nào đổi riêng 
 
 Một lượt, trên cây của commit đầu vòng này; người kiểm đo trên Postgres 16 thật dưới `app_api`, hàm gói thật, dò bằng tệp test tạm
 xoá ngay sau mỗi lượt chạy. **Không đường nào lách được bản vá.** Người kiểm xác nhận: hai lỗ tái hiện trên `master` và đóng ở
-`079_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
+`080_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
 không phụ thuộc thiết đặt phiên; `PENDING_APPROVAL→OPEN` là cạnh DUY NHẤT vào `OPEN`; `app_api` không xoá được ngân sách hay chữ ký;
 lần sửa ngân sách đòi DRAFT dưới khoá `FOR NO KEY UPDATE` hàng gói; ca đua lời duyệt tính trên 1 triệu treo chưa commit trong lúc PM trả
-về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `079_rang_ngan_sach` với dữ liệu đang bay đúng như
+về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `080_rang_ngan_sach` với dữ liệu đang bay đúng như
 §3 nói; mục ghim hardening sửa được cả ba hàm bị làm lệch và hai trigger bị tắt.
 
 | # | Phát hiện | Mức | Xử lý |
@@ -16077,7 +16178,7 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 | S3 | Đột biến sống sót: băm bỏ cờ duyệt kép; phép đếm thứ hai chỉ xét ngân sách | Thấp | Sửa trong vòng: ca *cờ duyệt kép* và ca *bộ ba* cộng hai đột biến — cả hai nay đỏ |
 | S4 | Đầu mục khối đột biến nói *mỗi vế một lần đỏ* — sai khi hai đột biến trên còn sống | Thấp | Sửa: khối nay có đủ bảy vế; tiền tệ và bậc ghi là đột biến tương đương |
 | S5 | Lời của phép đếm đầu (`076`) nói *danh sách* dù danh sách không đổi | Thông tin | Ghi ở §7; ca *một người ký hai lần* khẳng định nguyên văn thay vì một biểu thức nới |
-| S6 | Số tạm trần `079` trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `079_rang_ngan_sach`. Chú thích *"Trước `079`"* có sẵn ở `packages/unseal/src/unseal.int.test.ts` (ý là `078`) đứng ngoài vòng này |
+| S6 | Số tạm trần `080` trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `080_rang_ngan_sach`. Chú thích *"Trước `080`"* có sẵn ở `packages/unseal/src/unseal.int.test.ts` (ý là `078`) đứng ngoài vòng này |
 | S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-114 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
 | S8 | Hai chú thích sai nhỏ: đột biến ràng buộc không toàn cục; số chữ ký đọc ngưỡng kép, không đọc bảng bậc | Thông tin | Sửa |
 
@@ -16094,7 +16195,7 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 ## 8. Số đo
 
 - `packages/rfq/src/rang-ngan-sach.int.test.ts` 17/17 — mười lăm ca có nhãn, hai ca giới hạn không nhãn. Trên cây `master` (tạm rút
-  `079_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
+  `080_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
 - Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 191 tệp, 3228 khẳng định, 3218 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo,
   không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).

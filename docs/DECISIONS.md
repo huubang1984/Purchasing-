@@ -8956,9 +8956,9 @@ chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `da
 ## ADR-114 — Tổ chức đã bật S3: chữ ký mở gói ràng vào NGÂN SÁCH của gói — băm riêng, và cạnh mở gói đếm trên ngân sách hiện tại
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá lỗ này TRƯỚC S3.2c, bằng một PR riêng.
-Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.192]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
+Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.193]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
 hiệu bằng băm), ADR-084 ⑵ (cạnh về DRAFT), ADR-080 (công tắc một chiều), `011` C-1, `014` §(4), `076`, `077` · **Biên bản:**
-`evidence/security-reviews.md` §S1.192 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
+`evidence/security-reviews.md` §S1.193 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
 
 ### Bối cảnh
 
@@ -9018,7 +9018,7 @@ sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ
 ### Đo
 
 `packages/rfq/src/rang-ngan-sach.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật. Đo TRƯỚC trên cây `master` (tạm rút
-`079_rang_ngan_sach`): mười lăm ca có nhãn, mười lăm ca đỏ — các ca hành vi đỏ vì gói MỞ ĐƯỢC. Sau bản vá, mười lăm ca xanh: hạ bậc,
+`080_rang_ngan_sach`): mười lăm ca có nhãn, mười lăm ca đỏ — các ca hành vi đỏ vì gói MỞ ĐƯỢC. Sau bản vá, mười lăm ca xanh: hạ bậc,
 nâng cùng bậc rồi đặt lại con số cũ, một người ký hai lần vẫn là một người, cờ duyệt kép, bộ ba không ghép được từ hai chữ ký, ghim
 phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; bảy đột biến đều đỏ — bỏ phép đếm trên ngân sách, phép đếm
 thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ

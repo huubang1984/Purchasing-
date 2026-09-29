@@ -502,6 +502,9 @@ describe("hình dạng file migration", () => {
       // ngoại hợp thành tới `unseal_requests` và `rfq_packages`, policy khách ĐÓNG HẲN.
       "unseal_dispatch_history",
       "unseal_requests",
+      // [S1.192 / S4.1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức — bảng dữ liệu nền đầu tiên (L1): chỉ-ghi-thêm có hàng
+      // rút, `seq`/`ghi_luc` do trigger đặt, policy khách ĐÓNG HẲN. Hai danh mục `uom_units`, `uom_aliases_chung` không `org_id`.
+      "uom_aliases",
       // [S1.10.4 / 029] token đăng nhập người mua — bảng tenant thứ 28.
       "user_login_tokens",
       "user_roles",

@@ -852,6 +852,11 @@ describe("phủ RLS", () => {
       // [S1.129 / khoản 233 / 064] Trigger J3 đọc lịch sử điều phối dưới quyền người đề xuất.
       { grantee: "app_api", bang: "unseal_dispatch_history", quyen: "SELECT" },
       { grantee: "app_api", bang: "unseal_requests", quyen: "SELECT" },
+      // [S1.192 / S4.1] Đơn vị đo: hai danh mục toàn cục CHỈ ĐỌC (gieo bằng migration); bí danh của tổ chức
+      // chỉ đọc ở mức bảng, ghi thêm bằng quyền theo cột — không UPDATE, không DELETE (L1).
+      { grantee: "app_api", bang: "uom_aliases", quyen: "SELECT" },
+      { grantee: "app_api", bang: "uom_aliases_chung", quyen: "SELECT" },
+      { grantee: "app_api", bang: "uom_units", quyen: "SELECT" },
       // [S1.10.4 / 029] token đăng nhập người mua: SELECT mức bảng; INSERT/UPDATE theo cột (xem dưới).
       { grantee: "app_api", bang: "user_login_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "user_roles", quyen: "DELETE,SELECT" },
@@ -1475,6 +1480,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "unseal_requests", cot: "rfq_id", quyen: "INSERT" },
       // `status` co UPDATE nhung KHONG co INSERT: mot yeu cau khong duoc RA DOI da o APPROVED.
       { grantee: "app_api", bang: "unseal_requests", cot: "status", quyen: "UPDATE" },
+      // [S1.192 / S4.1] Bí danh đơn vị: CHỈ INSERT. `id`, `seq`, `ghi_luc` ngoài GRANT — trigger khuôn L1 đặt
+      // chúng; tác giả là dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`).
+      { grantee: "app_api", bang: "uom_aliases", cot: "bi_danh_sach", quyen: "INSERT" },
+      { grantee: "app_api", bang: "uom_aliases", cot: "code", quyen: "INSERT" },
+      { grantee: "app_api", bang: "uom_aliases", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "uom_aliases", cot: "rut", quyen: "INSERT" },
+      { grantee: "app_api", bang: "uom_aliases", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "uom_aliases", cot: "tac_gia", quyen: "INSERT" },
       // [S1.10.4 / 029] user_login_tokens: cùng khuôn rfq_invitation_tokens — token_hash chỉ INSERT,
       // consumed_at chỉ UPDATE (đơn điệu bởi trigger), không có revoked_at.
       { grantee: "app_api", bang: "user_login_tokens", cot: "consumed_at", quyen: "UPDATE" },
@@ -1933,6 +1946,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.
       "unseal_dispatch_history", "unseal_requests",
+      // [S1.192 / S4.1] L6: không phiên khách nào đọc dữ liệu nền.
+      "uom_aliases",
       "user_login_tokens", "user_roles", "users",
     ].map(chiKhach),
     khachNoi("bid_receipts", khachHoac("(bid_version_id IN ( SELECT v.id\n   FROM vendor_bid_versions v))")),
@@ -2873,7 +2888,8 @@ describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có kho
 describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () => {
   it("[INV-F1] HAI BẢN KHỚP: BANG_TENANT_KHAI của hardening bằng tập VI_TU_BANG_TENANT trên lược đồ thật, mỗi dòng trỏ đúng migration đã CREATE TABLE bảng ấy; câu phán xét chạy trong test — rỗng hôm nay, thấy đúng bảng đổi tên cột", async () => {
     const khai = docHangHardening("BANG_TENANT_KHAI");
-    // [S1.193] `\d{3,4}`: migration còn mang số tạm của `cap-so` (`95NN_ten`, dạng khai của hardening) cũng là một dòng khai.
+    // [S1.192] `\d{3,4}`: số migration TẠM `95NN` của `pnpm cap-so` (ADR-090) có bốn chữ số — `\d{3}` bỏ qua dòng khai của một
+    // bảng tenant mới trong nhánh, và phép so dưới đỏ với một con số lệch chứ không nói tên dòng bị mù.
     const dong = [...khai.matchAll(/\('(\w+)', '(\w+)', '(\d{3,4}_\w+)'\)/gu)].map((m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }));
     expect(dong.length, "bản khai đang rỗng — bộ đọc mù").toBeGreaterThan(20);
     const { rows } = await db.pool.query<{ t: string }>(
@@ -3688,6 +3704,7 @@ describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
 
   it("[INV-F1] CENSUS: mọi literal current_setting('x.y' trong db/migrations/*.sql thuộc tập trên lược đồ thật; regex nhận hoa/thường, khoảng trắng, chữ số; BEGIN ATOMIC, DEFAULT cột và CHECK cũng vào tập", async () => {
     const trongTep = new Set<string>();
+    // [S1.192] `\d{3,4}` — cùng lý do số tạm `95NN` ở phép so BANG_TENANT_KHAI: một migration trong nhánh không được rơi khỏi phép quét.
     for (const f of readdirSync(MIGRATIONS_DIR).filter((x) => /^\d{3,4}_.*\.sql$/u.test(x))) {
       for (const m of readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8").matchAll(RX_LITERAL)) trongTep.add(m[1]!.toLowerCase());
     }
