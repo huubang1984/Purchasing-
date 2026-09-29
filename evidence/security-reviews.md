@@ -16539,6 +16539,11 @@ bản vá: 9/9.
 - T3 các tệp chạm vòng này: `man-du-lieu.int` 10/10, `du-lieu.int` 9/9, `buyer.int` 18/18 (sau khi lượt quét H17 nêu tên), `khoi-tao.int`
   17/17, `hang-chuan.int` 15/15, `don-vi.int` 12/12, `qt3-cu-phap.int` 1/1 (mọi câu SQL mới được PostgreSQL phân tích). Bốn tệp
   khác quét trọn `ROUTES`: `api.int` 15/15, `auth.int` 56/56 (phạm vi agent), `loi-giao-thuc.int` 20/20, `loi-moi-sau-commit.int` 19/19.
+- **CI lượt đầu của PR đỏ ở tệp thứ năm quét trọn `ROUTES`**, tệp tôi không chạy cục bộ trước khi đẩy: bộ quét rò rỉ của
+  `kich-ban-41-http.int` (sổ nợ 49) đòi MỌI route ghi có một thân hợp lệ khai sẵn, và tám route mới chưa có (`route ghi POST /items
+  chưa có thân hợp lệ`, cả hai luồng MVP1 và S3). Bản vá: một người `DATA_STEWARD` hy sinh và tám thân trên một hàng chuẩn hy sinh —
+  theo đúng thứ tự bảng route, nên mỗi lần rút có hàng đang hiệu lực để rút và cả tám đi tới 201; không thân nào chạm gói của kịch bản.
+  `kich-ban-41-http.int` 58/58 cục bộ.
 - Mười đột biến: chín đỏ, một tương đương (§6).
 - Ma trận: L3 8 → 9 (ca `[INV-L3]` của `du-lieu.int`). Hàng L3 lấy từ bộ sinh trên báo cáo T3 đầy đủ cục bộ ghép kết quả của
   `du-lieu.int`; báo cáo ấy cũ hơn #206, nên chỉ hàng L3 được lấy — các hàng khác giữ bản đã commit. CI sinh lại cả ma trận và so từng

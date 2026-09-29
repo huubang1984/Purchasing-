@@ -619,7 +619,15 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string } = { unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0 };
+    // [S1.199 / S4.2b] Người quản lý dữ liệu HY SINH: tám route ghi dữ liệu nền đòi `item.manage`, và chỉ `DATA_STEWARD` giữ
+    // mã ấy — gọi bằng `m` thì dừng ở 403 của cổng, tức route không đi tới nghiệp vụ.
+    const quanLyHy = await dangNhap("quan-ly-hy@vidu.vn", "DATA_STEWARD");
+    const hy: { unsealId: string; mfaResetId: string; policyId: string; itemId: string } = {
+      unsealId: UUID0,
+      mfaResetId: UUID0,
+      policyId: UUID0,
+      itemId: UUID0,
+    };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
     const thanHopLe = (r: (typeof ROUTES)[number]): { path: string; body: unknown; cookie: string; sau?: (ph: PhanHoi) => void } | null => {
@@ -760,6 +768,32 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // tên — vẫn là "qua bộ đọc thân", đúng thứ bộ quét cần.
         case "POST /mfa-resets/:requestId/cancel":
           return { path: r.path.replace(":requestId", hy.mfaResetId), body: {}, cookie: m };
+        // [S1.199 / S4.2b] Tám route dữ liệu nền, trên một hàng chuẩn HY SINH do ca đầu tạo — không hàng nào dính tới gói của
+        // kịch bản. Bảng route đặt tạo → phiên bản → khai/rút bí danh → khai/rút quy đổi → khai/rút bí danh đơn vị, nên mỗi lần
+        // rút có đúng hàng đang hiệu lực để rút: cả tám đi trọn tới 201.
+        case "POST /items":
+          return {
+            path: r.path,
+            body: { ma: "QUET-HY-SINH", donViGoc: "kg", ten: "Hang chuan quet" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.itemId = (ph.body as { hangChuan: { id: string } }).hangChuan.id;
+            },
+          };
+        case "POST /items/:itemId/versions":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { ten: "Hang chuan quet ban 2" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/aliases":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { biDanh: "hang quet hy sinh" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/aliases/withdraw":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { biDanh: "hang quet hy sinh" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/conversions":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { tuDonVi: "bao", sangDonVi: "kg", heSo: "50" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/conversions/withdraw":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { tuDonVi: "bao", sangDonVi: "kg" }, cookie: quanLyHy.cookie };
+        case "POST /uom/aliases":
+          return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
+        case "POST /uom/aliases/withdraw":
+          return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
         default:
           return null;
       }
