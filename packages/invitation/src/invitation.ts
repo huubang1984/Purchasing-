@@ -1077,7 +1077,7 @@ export interface InvitationSummary {
   readonly linkChannel: string;
   readonly status: string;
   /**
-   * [S1.190 / S3.2c / K6] Nhãn *mời sau khi ký* — trigger `076` đặt lúc chèn, ở tổ chức đã bật, khi gói đang `OPEN`. Màn
+   * [S1.191 / S3.2c / K6] Nhãn *mời sau khi ký* — trigger `076` đặt lúc chèn, ở tổ chức đã bật, khi gói đang `OPEN`. Màn
    * `/tao-thau` nói ra nó; tổ chức chưa bật luôn `false`.
    */
   readonly moiSauKhiKy: boolean;

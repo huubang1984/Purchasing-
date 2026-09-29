@@ -15853,11 +15853,68 @@ sau commit này.
 
 Mở khoản 254, 255. Còn mở **84**; rổ B **60**.
 
-# §S1.190 — S3.2c: `/tao-thau` THEO THỨ TỰ MỚI Ở TỔ CHỨC ĐÃ BẬT S3, `gieo:demo --s3` VÀ KỊCH BẢN 41 MỜI Ở DRAFT, LƯỢT ĐI THỬ T4 TRÊN TRÌNH DUYỆT THẬT — ĐO ĐƯỢC KHOẢN 255
+# §S1.190 — S3.2c1: `gieo:demo --s3` VÀ KỊCH BẢN 41 CHẠY THEO THỨ TỰ MỜI MỚI (K4a, K4b, K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Không
+migration, không mã sản xuất — một công cụ dev và hai tệp test.
+
+## 1. Việc gì
+
+Phần đầu của S3.2c (spec S3 §9). Sau S3.2b2, tổ chức đã bật S3 mời ở DRAFT và link đi lúc mở gói, nhưng công cụ gieo và kịch bản 41
+vẫn dựng luồng S3 theo thứ tự MVP1: mở gói trước, mời sau. Chủ dự án chốt ngày 2026-09-29: S3.2c chia hai PR — S3.2c1 là công cụ gieo
+và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ chức đã bật, nút *Trả về soạn thảo*) cùng lượt đi thử T4.
+
+## 2. Đo trước
+
+`pnpm gieo:demo --s3` của `master` (`8f90bf2`) chạy trên Postgres 16 cục bộ: năm lời mời `UNSENT`, `moi_sau_khi_ky = true`, token
+`duc_khi_goi_da_mo = true`. Tức là chữ ký duyệt gói được ký khi danh sách còn RỖNG, và năm lời mời vào sau với nhãn *mời sau khi ký* —
+đúng lối K4a gắn nhãn chứ không phải luồng mà S3 dựng cho người dùng. `pnpm gieo:demo` (MVP1) cùng máy: ba lời mời `SENT`, không nhãn.
+
+## 3. Thay đổi
+
+- `tools/gieo-demo/src/index.ts`: `--s3` dựng nhà cung cấp, người liên hệ và lời mời ở DRAFT, TRƯỚC lần nộp duyệt, nên chữ ký mang băm
+  của danh sách bảy lời mời (K4b). Lần mở gói gọi `ducTokenKhiMoGoi` trong chính giao dịch mở — đúng đường của route mở gói — rồi
+  `danhDauDaGui`, vì công cụ in link thay cho bộ gửi. Chế độ mặc định giữ nguyên thứ tự và hàm cũ.
+- `apps/unseal-worker/src/kich-ban-41.int.test.ts` (gói) và `kich-ban-41-http.int.test.ts` (HTTP): luồng S3 mời ở bước 2, trước lần
+  nộp duyệt — lời mời `UNSENT`, không nhãn, không token (gói), bộ gửi không được gọi (HTTP). Lần mở gói: bản gói đúc đúng năm token
+  bằng `ducTokenKhiMoGoi`; bản HTTP nhận `unsentInvitationIds` rỗng, bộ gửi nhận đúng năm link cho năm lời mời, danh sách lời mời đọc
+  qua HTTP toàn `SENT`. Bước 3 mở phiên khách bằng đúng link của từng lời mời. Luồng MVP1 giữ nguyên thứ tự cũ; một hàm dựng nhà cung
+  cấp và lời mời dùng chung cho hai luồng.
+
+## 4. Đo sau
+
+- `gieo:demo --s3`: bảy lời mời `SENT`, `moi_sau_khi_ky = false`, mỗi lời mời một token `duc_khi_goi_da_mo = true`; `gieo:demo` (MVP1):
+  như trước.
+- `kich-ban-41.int.test.ts` 30/30; `kich-ban-41-http.int.test.ts` 58/58 (Postgres 16 qua Testcontainers).
+- Đột biến, mỗi cái trên đúng một dòng mã sản xuất, rồi khôi phục:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | 1 | `ducTokenKhiMoGoi` trả mảng rỗng cả ở tổ chức đã bật | ĐỎ — gói 13/30, HTTP 23/58 |
+  | 2 | `danhDauDaGui` không bao giờ khớp hàng | ĐỎ — HTTP 1/58 (danh sách lời mời không `SENT`) |
+  | 3 | route mở gói không đăng ký lô gửi | ĐỎ — HTTP 23/58 |
+
+- `pnpm t0` sạch; `pnpm test` 121 tệp, 1704 đạt, 1 bỏ qua.
+
+## 5. Giới hạn
+
+- `gieo:demo --s3` đặt `SENT` trong chính giao dịch mở gói, vì nó in link thay cho bộ gửi; route thật đặt `SENT` sau lần gửi được.
+- Màn `/tao-thau` vẫn dựng theo thứ tự MVP1 cho mọi tổ chức — S3.2c2.
+
+## 6. Số
+
+Không khoản nào mở hay đóng.
+
+# §S1.191 — S3.2c2: `/tao-thau` THEO THỨ TỰ MỚI Ở TỔ CHỨC ĐÃ BẬT S3, BƯỚC 15 CỦA KỊCH BẢN 41 ĐO THỨ TỰ MỜI, LƯỢT ĐI THỬ T4 TRÊN TRÌNH DUYỆT THẬT — ĐO ĐƯỢC KHOẢN 255
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — luồng MVP1 của màn, của `gieo:demo` không cờ và của
 kịch bản 41 giữ nguyên thứ tự; một nhãn đổi ở cả hai luồng (*Mở gói*). Không migration, không route mới, không ADR. Không mở khoản
 nào: phát hiện của lượt đi thử là khoản **255** (rổ B), mà §S1.189 ghi bằng đọc mã trong lúc vòng này chạy — vòng này ĐO nó.
+
+**[Lúc hợp `master` lần hai] Vòng này là S3.2c2.** #197 (§S1.190, S3.2c1) merge trong lúc PR của vòng này chờ CI: chủ dự án chia
+S3.2c thành hai PR ở phiên kia, và #197 làm đúng phần `gieo:demo --s3` và bước 2–3 của kịch bản 41 — cùng thứ tự, cùng hai lời gọi
+với bản của vòng này. Lúc hợp, hai phần ấy lấy bản của #197; vòng này giữ màn `/tao-thau`, `listInvitations`, bước 15 của kịch bản
+41 và lượt đi thử T4. Đoạn dưới giữ nguyên văn phần đã viết trước lần hợp, kèm chú thích ở chỗ đổi.
 
 ## 1. Vòng này là gì
 
@@ -15894,11 +15951,13 @@ S3.2b2 (§S1.188) dựng lớp CSDL, cạnh về `DRAFT` và hai route. Tới v�
 
 **Gói `invitation`:** `listInvitations` — và thân `GET /rfqs/:rfqId/invitations` — trả thêm `moiSauKhiKy`.
 
-**`gieo:demo --s3`:** năm lời mời dựng ở `DRAFT` bằng `createInvitation`, TRƯỚC câu nộp duyệt; hai chữ ký P2, P3 vì thế ghim băm của
+**`gieo:demo --s3`:** **[lúc hợp #197: bản này bỏ, `master` giữ bản của #197 — cùng thứ tự; khác một chỗ: `danhDauDaGui` chạy trong
+chính giao dịch mở gói, trước lần in]** năm lời mời dựng ở `DRAFT` bằng `createInvitation`, TRƯỚC câu nộp duyệt; hai chữ ký P2, P3 vì thế ghim băm của
 danh sách ấy; giao dịch mở gói gọi `ducTokenKhiMoGoi` dưới phiên người soạn; link in ra rồi mới `danhDauDaGui` — *SENT sau lần gửi
 được*, và lần gửi của công cụ này là dòng in. Link in theo thứ tự đã mời. Không cờ: không đổi gì.
 
-**Kịch bản 41** (`apps/unseal-worker/src/kich-ban-41.int.test.ts`, `kich-ban-41-http.int.test.ts`), luồng S3:
+**Kịch bản 41** (`apps/unseal-worker/src/kich-ban-41.int.test.ts`, `kich-ban-41-http.int.test.ts`), luồng S3 — **[lúc hợp #197:
+bước 2 và 3 lấy bản của #197; bước 15 là phần của vòng này, giữ nguyên văn]**:
 - bước 2 mời năm nhà cung cấp ở `DRAFT` — bản gói bằng hàm gói; bản HTTP qua route, `201` với lời mời *chưa gửi*, không nhãn, không
   link nào tới bộ gửi — rồi nộp duyệt, hai chữ ký, mở gói. Bản gói gọi `ducTokenKhiMoGoi` trong chính giao dịch mở và `danhDauDaGui`
   sau commit; bản HTTP đo lần mở gửi ĐÚNG năm link, `200` với danh sách chưa gửi rỗng, token không về client, năm lời mời `SENT`
@@ -15935,6 +15994,10 @@ Cụm: PostgreSQL 16 dựng bằng `initdb`; `pnpm gieo:demo --s3` rồi `pnpm g
 `app_api_login`, bộ gửi hộp thư dev; `apps/web`; Chromium 1194 qua Playwright, khung 1280×900. Script nằm ngoài kho. Giữa các bước,
 CSDL đọc bằng kết nối đặc quyền. Chạy hai lượt trên hai lần gieo, cả hai đạt đủ 36 khẳng định.
 
+- **[lúc hợp #197]** Lượt đi thử chạy trên `gieo:demo` của nhánh, TRƯỚC khi hợp. Sau khi hợp, `gieo:demo --s3` rồi `gieo:demo` chạy lại
+  trên một cụm Postgres 16 mới: tổ chức đã bật có năm lời mời `SENT` không nhãn, mỗi lời mời một token đúc lúc gói đã mở; tổ chức chưa
+  bật có ba lời mời `SENT`. §S1.190 ghi *bảy lời mời* — `--s3` dựng năm (ba nhà cung cấp chung cộng hai của S3); chú thích cùng lời ở
+  `tools/gieo-demo` sửa lúc hợp.
 - **Gieo `--s3`:** gói `OPEN`; năm lời mời `SENT` không nhãn; năm token, mỗi lời mời một, đúc dưới phiên người mở, chưa thu hồi; hai
   chữ ký, băm danh sách của cả hai bằng `rfq_bam_danh_sach` hiện tại. Sổ: năm `INVITATION_CREATED` trước `RFQ_KEY_MATERIAL_ISSUED`, năm
   `MAGIC_LINK_TOKEN_ISSUED` sau. Công cụ in *"Đã đánh dấu SENT 5/5 lời mời, sau khi link đã in."*
@@ -16017,7 +16080,7 @@ M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại m�
 - Toàn bộ T3 cục bộ trên cây vòng này, TRƯỚC khi biên bản này và lời khai đếm có mặt: 190 tệp, 3218 khẳng định — 3201 đạt, 1 bỏ qua,
   16 đỏ. Chín là ca cũ của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container
   runtime) và 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Bảy là `[INV-H20]` của
-  `tests/architecture/so-no-tu-doi-chieu.test.ts` — con trỏ `§S1.190` của khoản mà bản đầu của vòng này mở chưa có đầu mục (P11), và lời khai đếm ở
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` — con trỏ `§S1.191` của khoản mà bản đầu của vòng này mở chưa có đầu mục (P11), và lời khai đếm ở
   `Handoff.md` và dưới dòng tổng kết chưa tính khoản ấy (P9, P12). Sau khi mục này có mặt và `pnpm cap-so --dem` viết lại lời khai:
   tệp ấy chạy lại **45/45**; báo cáo T3 thay kết quả của đúng tệp ấy ⇒ 3218 khẳng định, 3208 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ.
 - `pnpm t0` sạch (447 module, 1792 phụ thuộc). `pnpm test`: 121 tệp, 1711 đạt, 1 bỏ qua. Hai mươi mốt đột biến, hai mươi mốt lần
@@ -16030,4 +16093,7 @@ M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại m�
 - **Hợp `master`.** #196 — vòng **S1.189**, khoản 254 và 255, chỉ tài liệu — merge trong lúc vòng này chạy. Xung đột ở cột mốc
   `docs/STATE.md`, khối sổ nợ, rổ B, lời khai đếm ở `Handoff.md` và cuối biên bản; gỡ tay: giữ phần của `master`, mục của vòng này
   đứng sau §S1.189, khoản mang số tạm bỏ. `pnpm cap-so --dem` viết lại lời khai đếm. #196 không chạm mã hay test.
+- **Hợp `master` lần hai.** #197 — vòng **S1.190**, S3.2c1 — merge trong lúc PR của vòng này chờ CI; `pnpm cap-so` cấp lại số vòng.
+  Xung đột ở `tools/gieo-demo`, hai tệp kịch bản 41, cột mốc `docs/STATE.md`, hàng S3.2 của spec §9 và cuối biên bản; gỡ tay: mã lấy
+  bản của `master` (#197), bước 15 của vòng này gắn lại nguyên văn; tài liệu giữ cả hai mục, mục của vòng này đứng sau §S1.190.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).

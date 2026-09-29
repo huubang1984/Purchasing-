@@ -29,11 +29,6 @@
 // chung; mỗi luồng một tổ chức mới trên cùng CSDL. Luồng MVP1 là tổ chức CHƯA bật — mọi bước y như trước vòng này. Luồng
 // S3 khác đúng một chỗ, ở bước 1: hai người FINANCE khai và ký phiên bản chính sách CÓ BẬC (mặc định §4.1), nên tổ chức
 // BẬT S3 và mọi bước sau chạy dưới K1 — ngân sách đặt trước khi nộp duyệt, ghim đúng bản hiệu lực.
-//
-// [S1.190 / S3.2c / ADR-113] Và nay ở chỗ thứ hai — thứ tự mời. Luồng S3 dựng năm lời mời ở DRAFT, TRƯỚC khi nộp duyệt
-// (bước 2): hai chữ ký ghim băm của chính danh sách ấy (K4a, K4b), và lần mở gói đúc MỘT token cho MỖI lời mời trong CHÍNH
-// giao dịch mở, dưới phiên người mở (K6) — cùng hai lời gọi mà `POST /rfqs/:rfqId/open` ghép. Bước 3 của luồng S3 chỉ còn
-// phần của nhà cung cấp: link → OTP → phiên khách. Luồng MVP1 giữ nguyên: mở gói rồi mời, đúc token ngay lúc mời.
 // =============================================================================================
 
 import { createPublicKey, generateKeyPairSync, randomBytes } from "node:crypto";
@@ -58,7 +53,6 @@ import {
 import {
   PepperRing,
   createInvitation,
-  danhDauDaGui,
   ducTokenKhiMoGoi,
   issueMagicLinkToken,
   issueOtpChallenge,
@@ -225,16 +219,20 @@ afterAll(async () => {
 interface TrangThaiKichBan {
   rfqId: string;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string }[];
-  /** [S1.190 / S3.2c] Luồng S3: token của từng lời mời, đúc lúc mở gói (bước 2) — theo id lời mời. */
-  tokenMoi: Map<string, string>;
+  /** [S1.190 / S3.2c1] Luồng S3: token mà phiên người mở đúc cho mỗi lời mời TRONG giao dịch mở gói — theo id lời mời. */
+  tokenKhiMo: Map<string, string>;
   phienKhach: string[];
   bienNhan: { canonicalText: string; signature: Uint8Array; ten: string }[];
   unsealRequestId: string;
 }
-const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], tokenMoi: new Map(), phienKhach: [], bienNhan: [], unsealRequestId: "" });
+const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], tokenKhiMo: new Map(), phienKhach: [], bienNhan: [], unsealRequestId: "" });
+const trangThai: TrangThaiKichBan = trangThaiMoi();
 
-/** [S1.190 / S3.2c] Một nhà cung cấp, một người liên hệ và MỘT lời mời của nó, trong giao dịch của người gọi. */
-async function moiMot(c: pg.PoolClient, ncc: (typeof NHA_CUNG_CAP)[number]): Promise<{ invitationId: string; supplierId: string }> {
+/**
+ * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3 gọi ở
+ * DRAFT, trước khi nộp duyệt (K4b: chữ ký mang danh sách mời lúc ký); luồng MVP1 gọi sau khi mở, như trước.
+ */
+async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readonly gia: string }): Promise<{ invitationId: string; supplierId: string; status: string; moiSauKhiKy: boolean }> {
   const s = await createSupplier(c, orgA, {
     legalName: ncc.ten,
     actorSessionId: sMua,
@@ -253,15 +251,9 @@ async function moiMot(c: pg.PoolClient, ncc: (typeof NHA_CUNG_CAP)[number]): Pro
     linkChannel: "EMAIL",
     actorSessionId: sMua,
   });
-  trangThai.loiMoi.push({
-    invitationId: lm.id,
-    supplierId: s.id,
-    ten: ncc.ten,
-    gia: ncc.gia,
-  });
-  return { invitationId: lm.id, supplierId: s.id };
+  trangThai.loiMoi.push({ invitationId: lm.id, supplierId: s.id, ten: ncc.ten, gia: ncc.gia });
+  return { invitationId: lm.id, supplierId: s.id, status: lm.status, moiSauKhiKy: lm.moiSauKhiKy };
 }
-const trangThai: TrangThaiKichBan = trangThaiMoi();
 
 /** [S1.174 / S3.1d] Hai luồng của spec S3 §8.11 — xem khối đầu tệp. */
 const LUONG = [
@@ -338,19 +330,20 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
   });
 
   it("bước 2 — hai giám đốc KHÁC NHAU duyệt, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
-    // [S1.190 / S3.2c / ADR-113] Luồng S3: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp duyệt — không token nào (K6).
     if (batS3) {
+      // [S1.190 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt: năm lời mời `UNSENT`,
+      // không nhãn *mời sau khi ký*, và không một token nào — K6 chặn lần đúc khi gói chưa từng mở.
       await withTenant(apiPool, orgA, async (c) => {
-        for (const ncc of NHA_CUNG_CAP) await moiMot(c, ncc);
+        for (const ncc of NHA_CUNG_CAP) {
+          const lm = await taoNccVaMoi(c, ncc);
+          expect({ status: lm.status, moiSauKhiKy: lm.moiSauKhiKy }).toEqual({ status: "UNSENT", moiSauKhiKy: false });
+        }
       });
-      const { rows: nhap } = await db.pool.query<{ status: string; moi_sau_khi_ky: boolean; so_token: string }>(
-        "SELECT i.status, i.moi_sau_khi_ky, (SELECT count(*) FROM rfq_invitation_tokens t WHERE t.invitation_id = i.id)::text AS so_token " +
-          "FROM rfq_invitations i WHERE i.rfq_id = $1",
+      const { rows: token } = await db.pool.query(
+        "SELECT 1 FROM rfq_invitation_tokens t JOIN rfq_invitations i ON i.id = t.invitation_id WHERE i.rfq_id = $1",
         [trangThai.rfqId],
       );
-      expect(nhap, "năm lời mời ở DRAFT: chưa gửi, không nhãn, không token").toEqual(
-        NHA_CUNG_CAP.map(() => ({ status: "UNSENT", moi_sau_khi_ky: false, so_token: "0" })),
-      );
+      expect(token, "luồng S3: không token nào trước lần mở gói").toHaveLength(0);
     }
     await withTenant(apiPool, orgA, async (c) => {
       await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
@@ -362,23 +355,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         orgKeys: boBoc,
       }, apiPool);
       expect(mo.status).toBe("OPEN");
-      // [S1.190 / S3.2c / ADR-113] Cùng giao dịch, cùng phiên người mở — hai lời gọi mà route mở gói ghép. Luồng MVP1: rỗng.
-      for (const l of await ducTokenKhiMoGoi(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua })) {
-        trangThai.tokenMoi.set(l.invitationId, l.token.token);
-      }
+      // [S1.190 / S3.2c1 · INV-K6] Đúng đường của route mở gói (S3.2b2): phiên người mở đúc MỘT token cho mỗi lời mời còn sống,
+      // trong CHÍNH giao dịch mở gói. Luồng MVP1: lời mời đến sau, không đúc gì ở đây.
+      const links = await ducTokenKhiMoGoi(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua });
+      expect(links.map((l) => l.invitationId).sort()).toEqual(trangThai.loiMoi.map((l) => l.invitationId).sort());
+      for (const l of links) trangThai.tokenKhiMo.set(l.invitationId, l.token.token);
     });
-    expect(
-      [...trangThai.tokenMoi.keys()].sort(),
-      batS3 ? "luồng S3: MỘT token cho MỖI lời mời của danh sách đã ký" : "luồng MVP1: lần mở gói không đúc gì",
-    ).toEqual(batS3 ? trangThai.loiMoi.map((l) => l.invitationId).sort() : []);
-    if (batS3) {
-      // Link "tới nơi" — phần `khiXong` mà route chạy SAU commit, mỗi lời mời một lần: `UNSENT → SENT`.
-      await withTenant(apiPool, orgA, async (c) => {
-        for (const l of trangThai.loiMoi) expect(await danhDauDaGui(c, orgA, l.invitationId)).toBe(true);
-      });
-      const { rows: daGui } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_invitations WHERE rfq_id = $1", [trangThai.rfqId]);
-      expect(daGui.map((r) => r.status)).toEqual(NHA_CUNG_CAP.map(() => "SENT"));
-    }
 
     // [C5] Cặp khoá ra đời ĐÚNG lúc mở, không sớm hơn — và khoá riêng nằm ở dạng ĐÃ BỌC.
     const khoa = await withTenant(apiPool, orgA, (c) =>
@@ -396,27 +378,28 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
   });
 
   it("bước 3 — mời năm nhà cung cấp; mỗi người đi trọn link → OTP → phiên khách", async () => {
-    for (const ncc of NHA_CUNG_CAP) {
+    // [S1.190 / S3.2c1] Luồng S3: năm lời mời đã có từ DRAFT, token từ lần mở gói. Luồng MVP1: mời bây giờ, token ngay lúc mời.
+    for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
       await withTenant(apiPool, orgA, async (c) => {
-        // [S1.190 / S3.2c] Luồng S3: lời mời có từ DRAFT, token từ lần mở gói (bước 2). Luồng MVP1: mời và đúc ngay đây.
-        const lm = batS3 ? trangThai.loiMoi.find((l) => l.ten === ncc.ten) : await moiMot(c, ncc);
-        if (lm === undefined) throw new Error(`luong S3: buoc 2 khong moi ${ncc.ten}`);
+        const lm = batS3 ? trangThai.loiMoi[i] : await taoNccVaMoi(c, ncc);
+        if (lm === undefined) throw new Error("luong S3: thieu loi moi dung o DRAFT");
+        const s = { id: lm.supplierId };
+
+        // §7 mục 4: nhận link -> OTP -> phiên. Magic link đi kênh EMAIL, OTP đi kênh SMS —
+        // ADR-015 mục 1 cấm hai thứ đi cùng kênh, và `issueOtpChallenge` cưỡng chế điều đó.
         const token = batS3
-          ? { token: trangThai.tokenMoi.get(lm.invitationId) ?? "" }
+          ? { token: trangThai.tokenKhiMo.get(lm.invitationId) ?? "" }
           : await issueMagicLinkToken(c, orgA, {
               invitationId: lm.invitationId,
               actorSessionId: sMua,
             });
-
-        // §7 mục 4: nhận link -> OTP -> phiên. Magic link đi kênh EMAIL, OTP đi kênh SMS —
-        // ADR-015 mục 1 cấm hai thứ đi cùng kênh, và `issueOtpChallenge` cưỡng chế điều đó.
         const daNhan = await redeemMagicLink(c, orgA, token.token);
         expect(daNhan.invitationId).toBe(lm.invitationId);
 
         const otp = await issueOtpChallenge(c, orgA, {
           token: token.token,
           channel: "SMS",
-          callerFingerprint: `ip-${lm.supplierId.slice(0, 8)}`,
+          callerFingerprint: `ip-${s.id.slice(0, 8)}`,
           pepper,
         });
         expect(otp.ok, "phát OTP bị từ chối ngay ở lần đầu").toBe(true);
@@ -746,7 +729,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     expect(cac.indexOf("RFQ_UNSEALED")).toBeGreaterThan(
       cac.indexOf("RFQ_KEY_MATERIAL_UNWRAPPED"),
     );
-    // [S1.190 / S3.2c / ADR-113] Thứ tự MỜI cũng là một phần của câu chuyện: luồng S3 mời TRƯỚC khi nộp duyệt và đúc token SAU
+    // [S1.191 / S3.2c / ADR-113] Thứ tự MỜI cũng là một phần của câu chuyện: luồng S3 mời TRƯỚC khi nộp duyệt và đúc token SAU
     // khi mở gói; luồng MVP1 mời và đúc sau khi mở. Đọc theo gói và năm lời mời của nó, không theo cả tổ chức.
     const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
     // Hàng token mang id của TOKEN; lời mời của nó nằm ở payload.
