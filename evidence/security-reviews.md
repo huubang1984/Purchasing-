@@ -17015,3 +17015,10 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
   3337 khẳng định, 3327 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 71/71 bất biến (49/49 nghiệp vụ + 22/22
   hàng rào; L3 vào ở #204), đọc từ 3337 khẳng định; K4b 42 như trên. `pnpm test`: 122 tệp, 1748 đạt, 1 bỏ qua. `tsc`, `eslint`,
   `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #202 — nay mang #199 sau `master` tới #210 (S3.6a: tổ chức đã bật không nộp duyệt được gói không nhóm hàng) — và
+  chạy lại `cap-so`:** S1.200, ADR-118 giữ nguyên. Xung đột với S3.6a gộp tay: màn `/tao-thau` hiện ngân sách (người tạo tự đọc, nút
+  «Xem ngân sách») cạnh ô nhóm hàng; khối test trang của vòng này đứng sau khối nhóm hàng. Ca *người tạo gói là BUYER* đỏ ở lần nộp —
+  *"gói thầu phải có nhóm hàng trước khi nộp duyệt"* —; gói nhận nhóm hàng tổ chức đã có: xanh lại. Toàn bộ unit + T3 cục bộ trên
+  cây cuối: 197 tệp, 3378 khẳng định, 3368 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit:
+  71/71 bất biến, đọc từ 3378 khẳng định; K4b 42 như trên. `pnpm test`: 123 tệp, 1767 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise`
+  sạch; `pnpm cap-so --kiem` sạch.
