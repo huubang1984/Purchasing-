@@ -56,10 +56,20 @@ export const TU_CHOI_CHU_BANG_FORCE =
  * [S1.66 / lượt soi ngang 59a-1] Tiền tố của phép TỪ CHỐI khi một tệp migration kết thúc với trạng thái phiên khác lúc mở vòng
  * đánh số — `session_replication_role`, `row_security`, search path hiệu lực, bốn GUC tenant/khách, [lượt soi 60a-5] số đối tượng tạm —
  * [S1.72 / lượt soi ngang 66b-7] quan hệ, KIỂU và HÀM trong `pg_temp`; [lượt soi 67a-5] cả toán tử, lớp và họ toán tử, collation, conversion
- * và bốn loại đối tượng tìm kiếm văn bản.
+ * và bốn loại đối tượng tìm kiếm văn bản; [S1.9121 / khoản 104] MỌI GUC phiên có giá trị khác giá trị nền (`pg_settings.source = 'session'`
+ * và `setting` khác `reset_val`; tên và giá trị, so theo hợp của hai tập khoá — RESET thứ `migrate()` đã đặt khác nền cũng lệch), số
+ * prepared statement và số con trỏ. Xem `CAU_TRANG_THAI_PHIEN`.
  */
 export const TU_CHOI_DOI_TRANG_THAI =
   "migrate() từ chối ghi migration: tệp kết thúc với trạng thái phiên khác lúc mở vòng migration đánh số";
+
+/**
+ * [S1.9121 / khoản 104] Tiền tố của phép DỪNG SAU COMMIT: tệp ĐÃ được áp và ghi checksum, nhưng để lại khoá tư vấn mức phiên hay kênh
+ * LISTEN — hai trạng thái chỉ thấy được SAU khi giao dịch của tệp kết thúc (xem `CAU_TRANG_THAI_PHIEN`). Xuất ra để test ghim MỘT bản,
+ * cùng lý do với `TU_CHOI_GUC_SOM`. Không nằm trong barrel `@trustprocure/db` — như `TU_CHOI_DOI_TRANG_THAI`.
+ */
+export const TU_CHOI_SAU_COMMIT =
+  "migrate() dừng sau khi áp một tệp: tệp ĐÃ được áp và ghi checksum, nhưng để lại trạng thái phiên chỉ thấy được sau khi giao dịch của tệp kết thúc";
 
 /**
  * [S1.51 / khoản nợ 92 — lượt soi 44 NẶNG-3] `search_path` được xét theo TÍNH CHẤT, không theo một chuỗi.
@@ -90,6 +100,125 @@ const searchPathDung = (giaTri: string): boolean => MAU_SEARCH_PATH_DUNG.test(gi
  * cuối và được gọi bằng chỉ số ở phép đọc trước lúc ghim — lý do ở ngay đó.
  */
 const TEN_GUC_VAN_HANH = ["row_security", "session_replication_role", "search_path"];
+
+/**
+ * [S1.66 / lượt soi ngang 59a-1] Câu chụp trạng thái phiên của `migrate()` — MỘT bản, vì [S1.9121 / khoản 104] nó chạy ở BA chỗ: lúc mở
+ * vòng đánh số (ngoài giao dịch), cuối mỗi tệp (TRONG giao dịch của tệp, trước khi ghi checksum) và ngay SAU COMMIT của tệp (cùng câu
+ * nhiều lệnh với COMMIT). Khoá của kết quả (`phanTichTrangThaiPhien`) là tên đi vào thông điệp — tên, không bao giờ giá trị.
+ * [S1.72 / tự bắt ⑼] Không chú thích nào được chen GIỮA các mảnh nối `+`: bộ đọc SQL của [INV-H21] (`tests/architecture/qt3-doc-sql.ts`)
+ * chỉ ghép hai hằng chuỗi cách nhau bởi `+` và khoảng trắng, nên một chú thích chen giữa cắt câu thành mảnh cụt — PREPARE của
+ * `qt3-cu-phap.int.test.ts` báo 42601 ở mảnh đầu. Các trục:
+ *   - `session_replication_role`, `row_security` — đổi cách mọi câu sau chạy (replica bỏ trigger ENABLE thường và khoá ngoại; tắt RLS
+ *     làm câu của vai thường báo lỗi); search path HIỆU LỰC — đọc qua hàm, cùng cách withTenant đọc; bốn GUC tenant/khách — thu hẹp câu
+ *     sau về một tổ chức;
+ *   - [S1.66 / lượt soi 60a-5] SỐ đối tượng trong lược đồ tạm: bảng tạm che tên bảng thật cho câu tên trần ở tệp sau, trong khi
+ *     `current_schemas(false)` cố ý bỏ pg_temp ngầm, và `migrate()` không `DISCARD TEMP` giữa các tệp. [S1.72 / lượt soi ngang 66b-7]
+ *     Đếm cả KIỂU và HÀM, không chỉ quan hệ — đo trước bản vá (§S1.72): `CREATE DOMAIN pg_temp.x` qua phép so chỉ-`pg_class` và được ghi;
+ *     tệp sau phân giải tên trần sang kiểu tạm, và hàm hay cột thật phụ thuộc nó biến mất khi phiên deploy đóng. ~~Ranh giới: toán tử,
+ *     collation, cấu hình tìm kiếm văn bản tạm vẫn không đếm.~~ [S1.72 / lượt soi 67a-5] Đếm cả toán tử, lớp và họ toán tử, collation,
+ *     conversion, cấu hình, từ điển, bộ phân tích và mẫu tìm kiếm văn bản — mỗi loại một ca ở `migrate.int.test.ts`. Ranh giới: thống kê
+ *     mở rộng tạm không đếm;
+ *   - [S1.9121 / khoản 104] MỌI GUC phiên có giá trị KHÁC giá trị nền của phiên (`pg_settings.source = 'session'` và `setting` khác
+ *     `reset_val`) — tên VÀ giá trị, gói JSON, so theo HỢP của hai tập khoá: một tệp RESET thứ `migrate()` đã đặt khác nền (ba timeout
+ *     về 0 dưới PGOPTIONS của `createPool`, `search_path`) cũng lệch; một tệp đặt rồi tự trả về đúng giá trị nền thì không — giá trị
+ *     không đổi là vô hại, và đó là ranh giới "tự trả lại" mà S1.66 ghim (bản đầu so theo có-mặt-trong-tập-session và làm test ấy đỏ:
+ *     `SET session_replication_role = origin` để lại `source = 'session'` với giá trị bằng nền); số prepared statement (đo: PREPARE sống
+ *     qua ROLLBACK — chỉ huỷ kết nối mới gỡ) và số con trỏ (`pg_cursor()` không kể portal của chính câu đang chạy — đo: 0 khi không có
+ *     con trỏ). Đo trước bản vá (§S1.9121): `SET statement_timeout`/`SET TimeZone` ở một tệp được ghi và đi theo sang tệp sau;
+ *     PREPARE/DECLARE ở cuối tệp được ghi và ở lại trên kết nối về pool;
+ *   - [S1.9121 / khoản 104] hai trục CHỈ THẤY ĐƯỢC SAU COMMIT, so ở chỗ thứ ba: số khoá tư vấn của chính backend (`pg_locks` không phân
+ *     biệt khoá phiên với khoá giao dịch — trong giao dịch, `pg_advisory_xact_lock` hợp lệ cũng đếm, và khoá của chính `migrate()` nằm
+ *     trong mốc mở vòng) và số kênh LISTEN (chỉ có hiệu lực lúc commit — trong giao dịch `pg_listening_channels()` chưa thấy; đo). Chỗ thứ
+ *     ba so lại CẢ các trục trên: một trigger hoãn hay trigger trên `schema_migrations` đổi được chúng lúc COMMIT, sau phép so trong giao
+ *     dịch (vế đối kháng của thân khoản 104 — đo).
+ */
+const CAU_TRANG_THAI_PHIEN =
+  "SELECT current_user AS vai, " +
+  "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
+  "pg_catalog.current_setting('row_security') AS rls, " +
+  "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do, " +
+  "NULLIF(pg_catalog.current_setting('app.org_id', true), '') AS to_chuc, " +
+  "NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') AS phien_khach, " +
+  "NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') AS loi_moi, " +
+  "NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau, " +
+  "((SELECT pg_catalog.count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_type t WHERE t.typnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc p WHERE p.pronamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_operator o WHERE o.oprnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opclass oc WHERE oc.opcnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opfamily ofa WHERE ofa.opfnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_collation co WHERE co.collnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_conversion cv WHERE cv.connamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_config tc WHERE tc.cfgnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_dict td WHERE td.dictnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_parser tp WHERE tp.prsnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
+  "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_template tt WHERE tt.tmplnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()))::pg_catalog.text AS doi_tuong_tam, " +
+  "(SELECT pg_catalog.jsonb_object_agg(st.name, st.setting) FROM pg_catalog.pg_settings st WHERE st.source OPERATOR(pg_catalog.=) 'session' AND st.setting IS DISTINCT FROM st.reset_val)::pg_catalog.text AS guc_phien, " +
+  "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_prepared_statement())::pg_catalog.text AS cau_chuan_bi, " +
+  "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_cursor())::pg_catalog.text AS con_tro, " +
+  "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_listening_channels())::pg_catalog.text AS kenh_nghe, " +
+  "(SELECT pg_catalog.count(*) FROM pg_catalog.pg_locks l WHERE l.locktype OPERATOR(pg_catalog.=) 'advisory' AND l.pid OPERATOR(pg_catalog.=) pg_catalog.pg_backend_pid())::pg_catalog.text AS khoa_tu_van";
+
+/** Hàng duy nhất của `CAU_TRANG_THAI_PHIEN`. Alias viết sẵn chữ thường — Postgres tự hạ thường định danh không có dấu ngoặc kép. */
+interface HangTrangThaiPhien {
+  vai: string;
+  vai_sao_chep: string;
+  rls: string;
+  luoc_do: string;
+  to_chuc: string | null;
+  phien_khach: string | null;
+  loi_moi: string | null;
+  goi_thau: string | null;
+  doi_tuong_tam: string;
+  guc_phien: string | null;
+  cau_chuan_bi: string;
+  con_tro: string;
+  kenh_nghe: string;
+  khoa_tu_van: string;
+}
+
+/** Trạng thái phiên đã phân tích — khoá của hai bản ghi là TÊN trục đi vào thông điệp. */
+interface TrangThaiPhien {
+  readonly vai: string | undefined;
+  /** Các trục so TRONG giao dịch của tệp, trước khi ghi checksum. */
+  readonly phien: Readonly<Record<string, string | null>>;
+  /** [S1.9121 / khoản 104] Hai trục chỉ thấy được SAU COMMIT — so ngay sau COMMIT của tệp với mốc mở vòng, cùng mọi trục của `phien`. */
+  readonly sauCommit: Readonly<Record<string, string | null>>;
+}
+
+/** [S1.9121 / khoản 104] Gói JSON `{tên: giá trị}` của các GUC có nguồn `session` — NULL khi không có GUC nào. Chỉ nhận chuỗi. */
+function docGucPhien(goi: string | null): Readonly<Record<string, string>> {
+  if (!goi) return {};
+  const tho: unknown = JSON.parse(goi);
+  const ra: Record<string, string> = {};
+  if (typeof tho === "object" && tho !== null) {
+    for (const [ten, giaTri] of Object.entries(tho as Record<string, unknown>)) {
+      ra[ten] = typeof giaTri === "string" ? giaTri : JSON.stringify(giaTri);
+    }
+  }
+  return ra;
+}
+
+function phanTichTrangThaiPhien(h: HangTrangThaiPhien | undefined): TrangThaiPhien {
+  const phien: Record<string, string | null> = {
+    session_replication_role: h?.vai_sao_chep ?? null,
+    row_security: h?.rls ?? null,
+    "search path hiệu lực": h?.luoc_do ?? null,
+    "app.org_id": h?.to_chuc ?? null,
+    "app.guest_session_id": h?.phien_khach ?? null,
+    "app.guest_invitation_id": h?.loi_moi ?? null,
+    "app.guest_rfq_id": h?.goi_thau ?? null,
+    "đối tượng tạm": h?.doi_tuong_tam ?? null,
+    "prepared statement": h?.cau_chuan_bi ?? null,
+    "con trỏ": h?.con_tro ?? null,
+  };
+  for (const [ten, giaTri] of Object.entries(docGucPhien(h?.guc_phien ?? null))) phien[`GUC phiên ${ten}`] = giaTri;
+  return {
+    vai: h?.vai,
+    phien,
+    sauCommit: { "khoá tư vấn mức phiên": h?.khoa_tu_van ?? null, "kênh LISTEN": h?.kenh_nghe ?? null },
+  };
+}
 
 // [fix I3] Tên file cưỡng chế chạy LẠI mỗi lần migrate() được gọi (vd. thuộc tính role),
 // không qua schema_migrations. Xem db/migrations/hardening.always.sql để biết lý do.
@@ -742,69 +871,14 @@ export async function migrate(
     let vaiMoVong: string | undefined;
     /** [S1.66 / lượt soi ngang 59a-1] Trạng thái phiên đã mở vòng — chụp cùng câu, so cùng chỗ với vai. */
     let phienMoVong: Readonly<Record<string, string | null>> | undefined;
+    /** [S1.9121 / khoản 104] Hai trục sau COMMIT lúc mở vòng — chụp NGOÀI giao dịch, nên khoá tư vấn là khoá phiên (của chính migrate()). */
+    let sauCommitMoVong: Readonly<Record<string, string | null>> | undefined;
     /**
-     * [S1.66 / lượt soi ngang 59a-1] Vai và trạng thái phiên trong MỘT round-trip. Khoá của `phien` là tên đi vào thông điệp — tên,
-     * không bao giờ giá trị. `session_replication_role` và `row_security` đổi cách mọi câu sau chạy (replica bỏ trigger ENABLE thường
-     * và khoá ngoại; tắt RLS làm câu của vai thường báo lỗi); bốn GUC tenant/khách thu hẹp câu sau về một tổ chức; search path hiệu lực
-     * đổi cách tên trần phân giải — đọc qua hàm, cùng cách withTenant đọc. [S1.66 / lượt soi 60a-5] Và SỐ quan hệ trong lược đồ tạm
-     * của phiên: bảng tạm che tên bảng thật cho câu tên trần ở tệp sau, trong khi `current_schemas(false)` cố ý bỏ pg_temp ngầm, và
-     * `migrate()` không `DISCARD TEMP` giữa các tệp.
+     * [S1.66 / lượt soi ngang 59a-1] Vai và trạng thái phiên trong MỘT round-trip — câu và các trục ở `CAU_TRANG_THAI_PHIEN`. Khoá của
+     * `phien` là tên đi vào thông điệp — tên, không bao giờ giá trị.
      */
-    const docTrangThaiPhien = async (): Promise<{ readonly vai: string | undefined; readonly phien: Readonly<Record<string, string | null>> }> => {
-      // [S1.72 / lượt soi ngang 66b-7] Trục đối tượng tạm (cột `doi_tuong_tam` của câu dưới) đếm cả KIỂU và HÀM trong `pg_temp`, không chỉ quan
-      // hệ. Đo trước bản vá (§S1.72): `CREATE DOMAIN pg_temp.x` qua phép so chỉ-`pg_class` và được ghi; tệp sau phân giải tên trần sang kiểu tạm,
-      // và hàm hay cột thật phụ thuộc nó biến mất khi phiên deploy đóng. ~~Ranh giới: toán tử, collation, cấu hình tìm kiếm văn bản tạm vẫn không đếm.~~
-      // [S1.72 / lượt soi 67a-5] Đếm cả toán tử, lớp và họ toán tử, collation, conversion, cấu hình, từ điển, bộ phân tích và mẫu tìm kiếm văn bản
-      // — mỗi loại một ca ở `migrate.int.test.ts`. Ranh giới: thống kê mở rộng tạm không đếm. [S1.72 / tự bắt ⑼] Chú thích này đứng NGOÀI chuỗi
-      // nối: bộ đọc SQL của [INV-H21] (`tests/architecture/qt3-doc-sql.ts`) chỉ ghép hai hằng chuỗi cách nhau bởi `+` và khoảng trắng, nên một
-      // chú thích chen giữa cắt câu thành mảnh cụt — PREPARE của `qt3-cu-phap.int.test.ts` báo 42601 ở mảnh đầu.
-      const { rows } = await lockClient.query<{
-        vai: string;
-        vai_sao_chep: string;
-        rls: string;
-        luoc_do: string;
-        to_chuc: string | null;
-        phien_khach: string | null;
-        loi_moi: string | null;
-        goi_thau: string | null;
-        doi_tuong_tam: string;
-      }>(
-        "SELECT current_user AS vai, " +
-          "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
-          "pg_catalog.current_setting('row_security') AS rls, " +
-          "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do, " +
-          "NULLIF(pg_catalog.current_setting('app.org_id', true), '') AS to_chuc, " +
-          "NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') AS phien_khach, " +
-          "NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') AS loi_moi, " +
-          "NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') AS goi_thau, " +
-          "((SELECT pg_catalog.count(*) FROM pg_catalog.pg_class c WHERE c.relnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_type t WHERE t.typnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_proc p WHERE p.pronamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_operator o WHERE o.oprnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opclass oc WHERE oc.opcnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_opfamily ofa WHERE ofa.opfnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_collation co WHERE co.collnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_conversion cv WHERE cv.connamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_config tc WHERE tc.cfgnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_dict td WHERE td.dictnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_parser tp WHERE tp.prsnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()) " +
-          "OPERATOR(pg_catalog.+) (SELECT pg_catalog.count(*) FROM pg_catalog.pg_ts_template tt WHERE tt.tmplnamespace OPERATOR(pg_catalog.=) pg_catalog.pg_my_temp_schema()))::pg_catalog.text AS doi_tuong_tam",
-      );
-      const h = rows[0];
-      return {
-        vai: h?.vai,
-        phien: {
-          session_replication_role: h?.vai_sao_chep ?? null,
-          row_security: h?.rls ?? null,
-          "search path hiệu lực": h?.luoc_do ?? null,
-          "app.org_id": h?.to_chuc ?? null,
-          "app.guest_session_id": h?.phien_khach ?? null,
-          "app.guest_invitation_id": h?.loi_moi ?? null,
-          "app.guest_rfq_id": h?.goi_thau ?? null,
-          "đối tượng tạm": h?.doi_tuong_tam ?? null,
-        },
-      };
-    };
+    const docTrangThaiPhien = async (): Promise<TrangThaiPhien> =>
+      phanTichTrangThaiPhien((await lockClient.query<HangTrangThaiPhien>(CAU_TRANG_THAI_PHIEN)).rows[0]);
     if (conTepChuaAp) {
       try {
         await chayFileLuonChay("truoc_vong");
@@ -830,6 +904,7 @@ export async function migrate(
       const moVong = await docTrangThaiPhien();
       vaiMoVong = moVong.vai;
       phienMoVong = moVong.phien;
+      sauCommitMoVong = moVong.sauCommit;
     }
 
     const applied: string[] = [];
@@ -856,6 +931,8 @@ export async function migrate(
         continue; // đã áp dụng, nội dung không đổi — bỏ qua
       }
 
+      /** [S1.9121 / khoản 104] Chụp ngay sau COMMIT của tệp — `undefined` khi tệp không tới được COMMIT hay câu chụp không trả về kết quả. */
+      let sauCommit: TrangThaiPhien | undefined;
       try {
         await lockClient.query("BEGIN");
         await lockClient.query(sql);
@@ -888,13 +965,19 @@ export async function migrate(
         // lần COMMIT ấy, và phần sau nó nếu tệp không mở lại BEGIN, đã commit (test ghim). Phép so chạy TRONG giao dịch nên bắt cả trạng thái
         // phạm vi giao dịch theo chiều chặt (test ghim). Trigger trên schema_migrations hay constraint trigger hoãn đổi được trạng thái SAU
         // phép so — đối kháng, chưa đo.
-        const lechPhien = Object.keys(cuoiTep.phien).filter((ten) => cuoiTep.phien[ten] !== phienMoVong?.[ten]);
+        // [S1.9121 / khoản 104] So theo HỢP của hai tập khoá: các GUC phiên là khoá động (`GUC phiên <tên>`, chỉ GUC có giá trị khác nền), nên
+        // một GUC có ở mốc mở vòng mà tệp RESET hay trả về nền (mất khoá) cũng lệch, không chỉ GUC tệp đặt thêm.
+        const tenTruc = new Set([...Object.keys(phienMoVong ?? {}), ...Object.keys(cuoiTep.phien)]);
+        const lechPhien = [...tenTruc].filter((ten) => cuoiTep.phien[ten] !== phienMoVong?.[ten]);
         if (lechPhien.length > 0) {
           throw new Error(
             `${TU_CHOI_DOI_TRANG_THAI} — ${file} kết thúc với ${lechPhien.join(", ")} khác lúc mở vòng. ` +
               "Trạng thái phạm vi phiên đi theo sang tệp sau và các lượt hardening sau vòng (replica: không trigger ENABLE thường, không " +
               "khoá ngoại; GUC tenant đặt sẵn: chỉ chạm hàng của một tổ chức; bảng tạm: che tên bảng thật; kiểu, hàm, toán tử hay đối tượng tạm " +
-              "khác: đối tượng bền của tệp sau phụ thuộc nó biến mất khi phiên deploy đóng). Phép so chạy TRONG giao dịch " +
+              "khác: đối tượng bền của tệp sau phụ thuộc nó biến mất khi phiên deploy đóng; GUC phiên bất kỳ có giá trị khác lúc mở vòng — kể cả " +
+              "RESET một GUC migrate() đã đặt như statement_timeout hay search_path: tệp sau và lượt hardening chạy dưới giá trị ấy, rồi kết nối " +
+              "về pool mang nó; " +
+              "prepared statement, con trỏ: sống qua ROLLBACK, người dùng kế của kết nối thấy chúng). Phép so chạy TRONG giao dịch " +
               "của tệp, nên nó bắt cả trạng thái phạm vi giao dịch (SET LOCAL, set_config(…, true)) — thứ chết lúc COMMIT — theo chiều chặt. " +
               "Tệp không tự COMMIT thì cả tệp đã ROLLBACK; tệp tự COMMIT thì phần trước lần COMMIT ấy — và phần sau nó, nếu tệp không mở " +
               "lại BEGIN — ĐÃ được commit, kiểm dữ liệu trước khi chạy lại. Tệp không được ghi checksum, không tệp sau nào chạy; kết nối bị " +
@@ -906,7 +989,13 @@ export async function migrate(
           "INSERT INTO public.schema_migrations (version, checksum) VALUES ($1, $2)",
           [file, checksum],
         );
-        await lockClient.query("COMMIT");
+        // [S1.9121 / khoản 104] COMMIT và câu chụp trong CÙNG câu nhiều lệnh (giao thức đơn giản, không tham số) — câu chụp chạy trong khối
+        // ngầm của riêng nó, SAU khi giao dịch của tệp đã kết thúc, nên nó thấy khoá tư vấn mức phiên và kênh LISTEN đúng như người kế của
+        // kết nối sẽ thấy. Hình dạng kết quả được ĐÒI ở phép so bên dưới: thiếu thì coi là không kiểm được — dừng, không tin.
+        const ketQuaCommit = (await lockClient.query("COMMIT; " + CAU_TRANG_THAI_PHIEN)) as unknown;
+        if (Array.isArray(ketQuaCommit) && ketQuaCommit.length === 2) {
+          sauCommit = phanTichTrangThaiPhien((ketQuaCommit[1] as pg.QueryResult<HangTrangThaiPhien>).rows[0]);
+        }
         applied.push(file);
       } catch (error) {
         try {
@@ -928,6 +1017,31 @@ export async function migrate(
           cause: error,
         });
       }
+      // [S1.9121 / khoản 104] PHÉP SO SAU COMMIT — MỌI trục, so với mốc mở vòng. Hai trục chỉ thấy được ở đây (`pg_locks` không phân biệt
+      // khoá phiên với khoá giao dịch; LISTEN chỉ có hiệu lực lúc commit), và các trục kia thì một trigger hoãn hay trigger trên
+      // `schema_migrations` do một tệp dựng đổi được LÚC COMMIT — SAU phép so trong giao dịch (vế đối kháng của thân khoản, đo ở
+      // `migrate.int.test.ts`: constraint trigger hoãn `set_config('TimeZone', …, false)` ⇒ trước bản vá cả hai tệp được ghi). Tệp ĐÃ được
+      // áp và ghi checksum, và không có chỗ nào sớm hơn để hỏi, nên đây là một lần DỪNG nói ra điều ấy, không phải một lần từ chối ghi: tệp
+      // sau không chạy, kết nối bị HUỶ để khoá, kênh và GUC được nhả cùng backend (đo trước bản vá: khoá ở lại trên kết nối về pool), lượt
+      // kế tiếp tục từ tệp sau. Không dương tính giả so với phép so trong giao dịch: phép ấy đã đòi mọi trục bằng mốc (chiều chặt), nên chỉ
+      // thứ đổi lúc COMMIT mới lệch ở đây. Đứng NGOÀI khối try ở trên: không có gì để ROLLBACK, và thông điệp không được là "thất bại" của
+      // một tệp đã áp.
+      const chupSauCommit = sauCommit === undefined ? undefined : { ...sauCommit.phien, ...sauCommit.sauCommit };
+      const mocSauCommit: Readonly<Record<string, string | null>> = { ...(phienMoVong ?? {}), ...(sauCommitMoVong ?? {}) };
+      const lechSauCommit =
+        chupSauCommit === undefined
+          ? ["mọi trục (câu chụp sau COMMIT không trả về kết quả)"]
+          : [...new Set([...Object.keys(mocSauCommit), ...Object.keys(chupSauCommit)])].filter((ten) => chupSauCommit[ten] !== mocSauCommit[ten]);
+      if (lechSauCommit.length > 0) {
+        throw await tuChoiVaHuyPhien(
+          `${TU_CHOI_SAU_COMMIT} — ${file} ĐÃ được áp và ghi checksum, và để lại ${lechSauCommit.join(", ")} khác lúc mở vòng. ` +
+            "Khoá tư vấn mức phiên và kênh LISTEN chỉ hiện sau khi giao dịch của tệp kết thúc; trục khác thì chỉ một trigger hoãn hay trigger " +
+            "trên schema_migrations đổi được lúc COMMIT — cả hai đứng sau phép so trong giao dịch, và checksum đã được ghi trước đó. Không " +
+            "tệp sau nào chạy; kết nối bị huỷ nên khoá, kênh và GUC được nhả cùng backend; lượt migrate() kế tiếp tục từ tệp sau. Nếu tệp " +
+            "cần khoá hay kênh ấy thì dùng pg_advisory_xact_lock (nhả lúc commit) hay tách việc ấy khỏi vòng migration; trigger đổi trạng " +
+            "thái phiên lúc commit thì gỡ.",
+        );
+      }
     }
 
     // [fix vòng 1 — I3] LƯỢT 2 (SỬA) rồi LƯỢT 3 (PHÁN XÉT), mỗi lượt một transaction RIÊNG.
@@ -940,8 +1054,17 @@ export async function migrate(
     //       số LUÔN chạy được hết và một migration vá lỗi tới được đích;
     //   (3) phán xét hỏng KHÔNG còn rollback các sửa chữa đã thành công: lượt 2 đã COMMIT
     //       xong trước khi lượt 3 bắt đầu, và lượt 3 không sửa gì nên transaction của nó rỗng.
-    await chayFileLuonChay("sua");
-    await chayFileLuonChay("phan_xet");
+    // [S1.9121 / khoản 104] Lượt hardening SAU vòng lỗi ⇒ HUỶ kết nối. Phiên này vừa chạy các tệp của lượt; hai phép so (cuối tệp, sau COMMIT)
+    // bắt trạng thái mà tệp để lại, nhưng một lượt hardening gãy là một deploy hỏng, và kết nối vừa chạy DDL của lượt ấy không có lý do gì
+    // để quay về pool nguyên trạng (đo trước bản vá: pid giữ nguyên qua lỗi `phan_xet`). Lượt `truoc_vong` lỗi thì GIỮ như S1.57 — không tệp
+    // nào chạy, phiên không mang gì — test ghim cả hai chiều.
+    try {
+      await chayFileLuonChay("sua");
+      await chayFileLuonChay("phan_xet");
+    } catch (loiSauVong) {
+      phaiHuyPhien ??= loiSauVong as Error;
+      throw loiSauVong;
+    }
 
     const loiKhiMoKhoa = await nhaKhoaVaTraClient();
     if (loiKhiMoKhoa !== null) {
