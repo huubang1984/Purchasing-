@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 081_lan_nop_da_xem — [S1.194] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM (khoản 256), LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA
+-- 081_lan_nop_da_xem — [S1.9101] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM (khoản 256), LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA
 -- CHÍNH NGƯỜI TRẢ (khoản 257) — K4b, D2
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4, §3.3, §5.1 (K4). ADR-115. Lượt soi
--- S1.193 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
+-- S1.194 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
 -- và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật.
 --
 -- KHOẢN 256. Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm của CSDL LÚC CHÈN, không của thứ người duyệt đã xem. Trước `077`,
@@ -28,7 +28,7 @@
 --     gói còn `PENDING_APPROVAL` ở đúng lần nộp người duyệt đã đọc thì nó chưa rời lần nộp ấy từ lúc đọc — rời nó chỉ có một đường
 --     (trả về) và lần nộp sau mang số mới —, mà ở tổ chức đã bật mọi lần sửa gói đòi DRAFT, nên mọi phép băm trước khoá tính trên
 --     chính lần nộp ấy. Không có vế trạng thái, một lần trả về cộng một lần sửa commit giữa phép kiểm trạng thái và phép băm nội
---     dung của D2 để lại chữ ký mang nội dung đã sửa trên lần nộp cũ, và gói nộp lại mở bằng nó (lượt soi S1.194, F1). Ở tổ chức
+--     dung của D2 để lại chữ ký mang nội dung đã sửa trên lần nộp cũ, và gói nộp lại mở bằng nó (lượt soi S1.9101, F1). Ở tổ chức
 --     chưa bật, vế ấy chặn lời duyệt rơi lên một gói vừa mở hay vừa huỷ. Khoá giữ tới hết giao dịch: một lần trả về hay nộp lại
 --     đang chạy phải chờ lời duyệt commit, và lời duyệt chờ một lần trả về đang chạy rồi thấy DRAFT. `FOR NO KEY UPDATE` chứ không
 --     `FOR SHARE`: lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`), và khoá chia sẻ để một giao dịch duyệt rồi

@@ -347,7 +347,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     }
     await withTenant(apiPool, orgA, async (c) => {
       const nop = await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
-      // [S1.194 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem. Luồng MVP1 giữ lời duyệt không mốc — hợp đồng cũ.
+      // [S1.9101 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem. Luồng MVP1 giữ lời duyệt không mốc — hợp đồng cũ.
       const moc = batS3 ? { lanNopDaXem: nop.lanNop } : {};
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd1, ...moc }, apiPool);
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd2, ...moc }, apiPool);
@@ -731,5 +731,25 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     expect(cac.indexOf("RFQ_UNSEALED")).toBeGreaterThan(
       cac.indexOf("RFQ_KEY_MATERIAL_UNWRAPPED"),
     );
+    // [S1.193 / S3.2c / ADR-113] Thứ tự MỜI cũng là một phần của câu chuyện: luồng S3 mời TRƯỚC khi nộp duyệt và đúc token SAU
+    // khi mở gói; luồng MVP1 mời và đúc sau khi mở. Đọc theo gói và năm lời mời của nó, không theo cả tổ chức.
+    const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
+    // Hàng token mang id của TOKEN; lời mời của nó nằm ở payload.
+    const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(
+      "SELECT action, CASE WHEN action = 'MAGIC_LINK_TOKEN_ISSUED' THEN payload->>'invitationId' ELSE resource_id::text END AS khoa " +
+        "FROM audit_events WHERE org_id = $1 ORDER BY seq",
+      [orgA],
+    );
+    const mocGoi = theoGoi.filter((r) => r.khoa !== null && cuaGoi.has(r.khoa)).map((r) => r.action);
+    const nop = mocGoi.indexOf("RFQ_SUBMITTED_FOR_APPROVAL");
+    const mo = mocGoi.indexOf("RFQ_OPENED");
+    expect(mocGoi.filter((a) => a === "INVITATION_CREATED")).toHaveLength(5);
+    expect(mocGoi.filter((a) => a === "MAGIC_LINK_TOKEN_ISSUED")).toHaveLength(5);
+    if (batS3) {
+      expect(mocGoi.lastIndexOf("INVITATION_CREATED"), "luồng S3: cả năm lời mời có TRƯỚC lần nộp duyệt").toBeLessThan(nop);
+    } else {
+      expect(mocGoi.indexOf("INVITATION_CREATED"), "luồng MVP1: mời SAU khi mở gói").toBeGreaterThan(mo);
+    }
+    expect(mocGoi.indexOf("MAGIC_LINK_TOKEN_ISSUED"), "không token mời nào trước lần mở gói (K6)").toBeGreaterThan(mo);
   });
 });
