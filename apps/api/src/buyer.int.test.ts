@@ -1007,9 +1007,11 @@ describe("[S1.194 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa
 });
 
 describe("[S1.9101 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
+  /** Hàng từ chối của một người, dạng `loại tài nguyên quyền` — lần đọc ngân sách mang loại riêng `RFQ_BUDGET` (lượt soi F2). */
   async function demTuChoiNganSach(org: string, ai: string): Promise<string[]> {
     const { rows } = await db.pool.query<{ q: string }>(
-      "SELECT payload->>'permission' AS q FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' ORDER BY seq",
+      "SELECT resource_type || ' ' || (payload->>'permission') AS q FROM audit_events " +
+        "WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' ORDER BY seq",
       [org, ai],
     );
     return rows.map((r) => r.q);
@@ -1028,9 +1030,26 @@ describe("[S1.9101 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt
     for (const ai of [mua, tc3]) {
       const kq = await goi("GET", duong, ai);
       expect(kq.status, kq.text).toBe(403);
-      expect(await demTuChoiNganSach(org, ai.id)).toEqual(["rfq.approve"]);
+      expect(await demTuChoiNganSach(org, ai.id)).toEqual(["RFQ_BUDGET rfq.approve"]);
     }
     expect((await goi("GET", `/rfqs/${UUID0}/budget`, pm2)).status).toBe(404);
+  });
+
+  it("[INV-K4b] người tạo gói là BUYER — chỉ giữ `rfq.create`, không giữ `rfq.approve`: đọc được ngân sách của gói mình đã nộp, không hàng từ chối (lượt soi F1)", async () => {
+    const { org, mua } = await goiDaNop("ns-doc-mua", true);
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", mua, { title: "Goi cua nguoi mua", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("PUT", `/rfqs/${rfqId}/budget`, mua, { estimatedValue: "2000000.00", currency: "VND" })).status).toBe(200);
+    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, mua);
+    expect(nop.status, nop.text).toBe(200);
+    const kq = await goi("GET", `/rfqs/${rfqId}/budget`, mua);
+    expect([kq.status, kq.body], kq.text).toEqual([
+      200,
+      { budget: { rfqId, estimatedValue: "2000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "0.00", requiresDualApproval: false } },
+    ]);
+    expect(await demTuChoiNganSach(org, mua.id)).toEqual([]);
   });
 
   it("gói chưa có ngân sách: bốn trường ngân sách `null`; tổ chức chưa bật đọc như tổ chức đã bật — route cho mọi tổ chức", async () => {

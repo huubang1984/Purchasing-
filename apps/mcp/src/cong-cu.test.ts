@@ -103,12 +103,13 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
     }
   });
 
-  // Ba đường chủ dự án nói KHÔNG — đây là các dòng chịu lực của ADR-038. `it.each` khoá TỪNG
-  // đường: một `it` duyệt mảng sẽ xanh khi hai trong ba còn đúng.
+  // ~~Ba~~ [S1.9101] Bốn đường chủ dự án nói KHÔNG — đây là các dòng chịu lực của ADR-038 (và của ADR-9201 cho ngân sách). `it.each`
+  // khoá TỪNG đường: một `it` duyệt mảng sẽ xanh khi ba trong bốn còn đúng.
   it.each([
     { ten: "bảng so sánh GIÁ", duong: "/rfqs/:rfqId/comparison" },
     { ten: "số hồ sơ thầu đã nhận", duong: "/rfqs/:rfqId/bid-count" },
     { ten: "liên hệ của nhà cung cấp", duong: "/suppliers/:supplierId/contacts" },
+    { ten: "ngân sách của gói", duong: "/rfqs/:rfqId/budget" },
   ])("KHÔNG phơi $ten ($duong)", ({ duong }) => {
     // Vế 1: nó vẫn là một route ĐỌC có thật của apps/api. Nếu câu này đỏ, đường dẫn đã đổi tên và
     // khẳng định dưới đây đang canh một cái tên chết — phải đọc lại ROUTES trước khi sửa.

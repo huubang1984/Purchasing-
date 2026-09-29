@@ -513,6 +513,10 @@ export interface RfqBudgetView {
  *
  * `null` khi gói không có trong tổ chức đang gắn — trả TRƯỚC phép kiểm quyền, cùng thứ tự `returnRfqToDraft`: trong một tổ chức,
  * gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời cho mọi phiên người mua.
+ *
+ * Hàng từ chối mang `resourceType` RIÊNG `RFQ_BUDGET` (khuôn `RFQ_INVITATION`): cùng `rfq.approve` trên cùng mã gói, một lần đọc
+ * ngân sách bị từ chối không lẫn trong sổ với một lần định trả gói của người khác về soạn thảo (lượt soi §S1.9101, F2). Hai câu đọc
+ * lọc cả `org_id` của tổ chức đang gắn, không chỉ dựa vào RLS (khuôn `listInvitations`).
  */
 export async function getRfqBudget(
   client: pg.PoolClient,
@@ -524,8 +528,9 @@ export async function getRfqBudget(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
   const { rows: goi } = await client.query<{ created_by: string }>(
-    `SELECT p.created_by FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
-    [input.rfqId],
+    `SELECT p.created_by FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
   );
   const g = goi[0];
   if (g === undefined) return null;
@@ -536,7 +541,7 @@ export async function getRfqBudget(
       userId: actor.id,
       orgId,
       permission: g.created_by === actor.id ? PERMISSIONS.RFQ_CREATE : PERMISSIONS.RFQ_APPROVE,
-      resourceType: "RFQ",
+      resourceType: "RFQ_BUDGET",
       resourceId: input.rfqId,
     },
     auditPool,
@@ -556,8 +561,8 @@ export async function getRfqBudget(
          ON b.rfq_id OPERATOR(pg_catalog.=) p.id AND b.org_id OPERATOR(pg_catalog.=) p.org_id
        LEFT JOIN public.org_procurement_policies pol
          ON pol.id OPERATOR(pg_catalog.=) b.policy_id AND pol.org_id OPERATOR(pg_catalog.=) b.org_id
-      WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
-    [input.rfqId],
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
   );
   const h = rows[0];
   if (h === undefined) return null;

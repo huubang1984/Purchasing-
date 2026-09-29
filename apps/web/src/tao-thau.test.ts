@@ -11,13 +11,13 @@ import {
   TRAN_LY_DO_BYTE,
   baoSauKhiMo,
   baoSauKhiMoi,
-  docNganSachKhiDocGoi,
   hangNganSach,
   hienTraVe,
   loiLyDo,
   nhanTrangThaiLoiMoi,
   nutLoiMoi,
   thuTuBuoc,
+  tuDocNganSach,
 } from "./tao-thau.js";
 
 const TRANG_THAI_GOI = ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED", "BAFO_OPEN", "AWARDED", "CANCELLED"] as const;
@@ -127,13 +127,12 @@ describe("[S1.191 / S3.2c2] nút trả về soạn thảo và lý do", () => {
 });
 
 describe("[S1.9101 / khoản 258] ngân sách ở lần đọc gói", () => {
-  it("màn tự đọc khi người dùng là người tạo gói (mọi trạng thái), hay khi gói đang chờ duyệt (người duyệt); ngoài ra không hỏi", () => {
-    for (const tt of TRANG_THAI_GOI) {
-      expect(docNganSachKhiDocGoi("u1", "u1", tt), `người tạo, ${tt}`).toBe(true);
-      expect(docNganSachKhiDocGoi("u2", "u1", tt), `người khác, ${tt}`).toBe(tt === "PENDING_APPROVAL");
-    }
-    expect(docNganSachKhiDocGoi("", undefined, "DRAFT"), "chưa biết người dùng: không coi là người tạo").toBe(false);
-    expect(docNganSachKhiDocGoi("", "", "OPEN")).toBe(false);
+  it("màn TỰ đọc chỉ khi người dùng là người tạo gói, ở mọi trạng thái; người khác đọc bằng nút — lần từ chối không thành nhịp đọc gói", () => {
+    expect(tuDocNganSach("u1", "u1"), "người tạo").toBe(true);
+    expect(tuDocNganSach("u2", "u1"), "người khác, kể cả người duyệt").toBe(false);
+    expect(tuDocNganSach("", undefined), "chưa biết người dùng: không coi là người tạo").toBe(false);
+    expect(tuDocNganSach("", ""), "userId rỗng khớp createdBy rỗng vẫn không phải người tạo").toBe(false);
+    expect(tuDocNganSach("u1", null)).toBe(false);
   });
 
   it("năm hàng đúng năm thứ chữ ký ràng vào; gói chưa có ngân sách hay thân lạ thì gạch", () => {

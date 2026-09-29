@@ -9136,7 +9136,8 @@ người duyệt đọc.
 ## ADR-9201 — Người duyệt đọc ngân sách mà chữ ký ràng vào: route riêng có cổng, đóng với agent
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 route riêng không mở cho agent, và quyền đọc
-của người tạo gói cộng người duyệt; lúc nào màn tự đọc là điểm tôi tự chốt (⑶ dưới) · **[S1.9101]** · **Liên quan:** ADR-114 (băm
+của người tạo gói cộng người duyệt; sau lượt soi, cũng ngày ấy, chọn thêm lúc nào màn đọc (mục 3) và việc không ghi sổ lần đọc
+thành công (mục 4) · **[S1.9101]** · **Liên quan:** ADR-114 (băm
 ngân sách), ADR-115 (lần nộp đã xem), ADR-038/039 và khoản 141 (bề mặt agent), ADR-092 (trần lần từ chối), khoản nợ 33 (hàm đọc có
 cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.9101 · **Khoản:** 258 (ghi ở S1.194; đóng ở đây)
 
@@ -9155,25 +9156,47 @@ ghi số tiền vào sổ kiểm toán.
    chính sách bằng SỐ thay cho mã; gói chưa có ngân sách thì bốn trường ngân sách `null`.
 2. **Hàm đọc có cổng `getRfqBudget`** (rổ `HAM_DOC_CO_QUYEN`, khoản nợ 33): người tạo gói đọc bằng `rfq.create`, người khác cần
    `rfq.approve` — đúng chuỗi *tạo → duyệt* mà ngân sách neo; khuôn `returnRfqToDraft`. Bị từ chối ⇒ 403 và một hàng
-   `PERMISSION_DENIED`. AUDITOR, FINANCE, DIRECTOR và người mua không phải người tạo thì không đọc.
-3. **Tự chốt — lúc nào màn tự đọc:** ở mỗi lần đọc gói, khi người dùng là người tạo gói, hay khi gói đang chờ duyệt (người mở là
-   người duyệt). Ngoài hai ca ấy màn không hỏi. `hasPermission` cố ý không ra khỏi gói identity — một phép hỏi quyền im lặng là
-   một cổng im lặng —, và lần từ chối phải là lỗi của máy khách, không phải nhịp làm việc (ADR-092).
+   `PERMISSION_DENIED` mang loại tài nguyên riêng `RFQ_BUDGET` — không lẫn với lần định trả gói về soạn thảo, cùng quyền, cùng
+   mã gói. Hôm nay chỉ PROCUREMENT_MANAGER giữ `rfq.approve`, nên FINANCE, DIRECTOR, TECHNICAL, REQUESTER và người mua không phải
+   người tạo thì không đọc; vai `AUDITOR` của spec S4b (ADR-100) chưa có, và không giữ quyền nào trong hai quyền ấy.
+3. **Lúc nào màn đọc — chủ dự án chốt sau lượt soi:** màn `/tao-thau` TỰ đọc ở lần đọc gói chỉ khi người dùng là người tạo gói;
+   người khác — người duyệt cũng vậy — bấm nút *Xem ngân sách*. Lần từ chối vào sổ và vào trần từ chối của phiên (ADR-092), nên nó
+   phải đến từ một thao tác cố ý, không từ nhịp đọc gói. `hasPermission` cố ý không ra khỏi gói identity — một phép hỏi quyền im
+   lặng là một cổng im lặng —, nên màn không biết trước ai giữ `rfq.approve`.
+4. **Lần đọc thành công không vào sổ — chủ dự án chốt.** Ba hàm đọc có cổng thì có ghi — `COMPARISON_VIEWED`, `RANKING_VIEWED`,
+   `EVIDENCE_BUNDLE_EXPORTED` (ADR-102) —, vì chúng trả GIÁ của bên bán sau mở thầu. Ngân sách là con số của chính bên mua, người
+   đọc đã qua cổng, và mỗi hàng sổ là một cái giá vĩnh viễn (ADR-060) cộng một lần lấy khoá chuỗi sổ của tổ chức.
 
 ### Phương án đã cân nhắc
 
 - **Gộp ngân sách vào `GET /rfqs/:rfqId`** — một lần đọc, một ảnh chụp cùng `lanNop`. Agent MCP đọc được ước lượng, nới bề mặt của
   khoản 141. Chủ dự án bác.
-- **Mọi phiên người mua đọc được.** AUDITOR, FINANCE đọc được con số mà sổ kiểm toán cố ý không ghi. Chủ dự án bác.
+- **Mọi phiên người mua đọc được.** FINANCE, DIRECTOR đọc được con số mà sổ kiểm toán cố ý không ghi. Chủ dự án bác.
 - **Màn tự đọc ở mọi lần đọc gói.** Người không giữ quyền để lại một hàng `PERMISSION_DENIED` mỗi lần đọc và chạm trần lần từ chối
   của phiên. Bác.
+- **Màn tự đọc khi người dùng là người tạo gói HAY gói đang chờ duyệt** — bản đầu của vòng này. Lượt soi (F3) đo: mọi người không giữ
+  `rfq.approve` — người mua nộp giúp gói của đồng nghiệp, FINANCE, DIRECTOR, TECHNICAL, REQUESTER — để lại một hàng từ chối mỗi lần
+  đọc hay nộp một gói đang chờ duyệt; hết trần 30 thì lần thử sai quyền THẬT sau đó của phiên ra 429 và không vào sổ. Chủ dự án bác.
+- **Gắn lần đọc vào nút Phê duyệt** — bấm một lần hiện ngân sách, bấm lần hai mới ký. Người duyệt trên màn này luôn thấy ngân sách
+  trước khi ký, đổi lại luồng duyệt thành hai bước. Chủ dự án không chọn.
+- **Ghi `RFQ_BUDGET_VIEWED` mỗi lần đọc thành công** — biết ai đã xem ngân sách trước khi ký, đổi lại chuỗi sổ dài thêm. Chủ dự án
+  bác (mục 4).
 - **Thêm quyền vào `GET /me` để màn biết trước.** Nới một route agent đọc được, cho một phép tính màn làm được bằng thứ nó đã có.
   Bác.
 
 ### Hệ quả, nói thẳng
 
-- **Một người không giữ `rfq.approve` mở một gói đang chờ duyệt trên `/tao-thau`** — không phải người tạo — để lại một hàng
-  `PERMISSION_DENIED` mỗi lần đọc gói; bảng ngân sách nói *không có quyền*. Người tạo và người duyệt không bao giờ gặp ca ấy.
+- **Người không giữ `rfq.approve` bấm *Xem ngân sách*** thì để lại một hàng `PERMISSION_DENIED` (`RFQ_BUDGET`) và một lần trong trần
+  từ chối — chỉ khi bấm; bảng ngân sách nói *không có quyền*. Người tạo gói mất `rfq.create` thì bị từ chối ở mỗi lần đọc gói của
+  chính mình.
+- **Cổng ghi rộng hơn cổng đọc.** Người mua khác đặt được ngân sách của gói đồng nghiệp (`rfq.create`) mà không đọc lại được nó nếu
+  không giữ `rfq.approve`; màn vẽ ba thứ lần đặt trả về và không đọc thay họ.
+- **Người duyệt ký được mà không mở ngân sách** — máy chủ không biết người duyệt đã xem gì (ADR-115); nút chỉ làm cho việc xem
+  làm được.
 - **Bốn lần đọc tách nhau** — gói (`lanNop`), hạng mục, lời mời, ngân sách. Không ảnh chụp chung, nhưng ở tổ chức đã bật mọi lần sửa
   đòi DRAFT và lần nộp lại tăng `lanNop`: thứ đọc SAU `lanNop` mà khác lần nộp ấy thì lời duyệt mang mốc cũ bị từ chối (ADR-115).
-- Đọc ngân sách thành công không vào sổ — cùng các hàm đọc có cổng khác.
+  Màn xoá bảng ngân sách ngay sau lần đọc gói và chỉ vẽ câu trả của gói đang mở, nên bảng không đứng cạnh lần nộp của gói khác.
+- **Sổ không nói ai đã XEM ngân sách** — chỉ nói ai bị từ chối (mục 4).
+- **FINANCE và DIRECTOR vẫn KẸP được ngân sách sau lúc mở niêm phong** — có trước vòng này: họ giữ `bid.view`, và bảng so sánh
+  nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
+  SỐ, không phải không biết KHOẢNG.

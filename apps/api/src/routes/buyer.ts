@@ -279,9 +279,9 @@ const doc: readonly BuyerReadRoute[] = [
       return { status: 200, body: { rfq: r } };
     },
   },
-  // [S1.9101 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-114) — màn `/tao-thau` đọc nó ở mỗi lần đọc gói, nên
-  // người duyệt thấy con số mình ký. Cổng nằm trong gói (`getRfqBudget`, rổ `HAM_DOC_CO_QUYEN`): người tạo gói cần `rfq.create`,
-  // người khác cần `rfq.approve`; `auditPool` để lần từ chối có bản ghi.
+  // [S1.9101 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-114) — người duyệt đọc được con số mình ký. Màn
+  // `/tao-thau` tự đọc nó ở lần đọc gói cho người tạo gói; người khác bấm «Xem ngân sách». Cổng nằm trong gói (`getRfqBudget`, rổ
+  // `HAM_DOC_CO_QUYEN`): người tạo gói cần `rfq.create`, người khác cần `rfq.approve`; `auditPool` để lần từ chối có bản ghi.
   {
     method: "GET",
     path: "/rfqs/:rfqId/budget",
