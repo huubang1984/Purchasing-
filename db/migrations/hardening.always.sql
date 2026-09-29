@@ -7612,10 +7612,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bam_danh_sach(uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / K4b] Bam ngan sach — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren ngan sach moi: goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
+    -- [S1.190 / K4b] Bam ngan sach — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren ngan sach moi: goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
     ARRAY[
-      $q$định nghĩa hàm rfq_bam_ngan_sach(uuid) (9501_rang_ngan_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_rang_ngan_sach.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_ngan_sach(uuid) (079_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_rang_ngan_sach.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_bam_ngan_sach(p_rfq uuid) RETURNS bytea
   LANGUAGE sql
   STABLE
@@ -7650,10 +7650,10 @@ $ham$$q$,
     ],
 
     -- [S1.185 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
-    -- [S1.9101 / K4b] Than tu 9501_rang_ngan_sach.sql: dat CA bam ngan sach — chu ky rang vao ngan sach sau khi canh ve DRAFT (077) mo lai no.
+    -- [S1.190 / K4b] Than tu 079_rang_ngan_sach.sql: dat CA bam ngan sach — chu ky rang vao ngan sach sau khi canh ve DRAFT (077) mo lai no.
     ARRAY[
-      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (076, thân từ 9501_rang_ngan_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_rang_ngan_sach.sql')$q$,
+      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (076, thân từ 079_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_rang_ngan_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7719,10 +7719,10 @@ $ham$;
     ],
 
     -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
-    -- [S1.9101 / K4b] Than tu 9501_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
+    -- [S1.190 / K4b] Than tu 079_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 9501_rang_ngan_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_rang_ngan_sach.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 079_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_rang_ngan_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
