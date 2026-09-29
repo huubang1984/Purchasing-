@@ -15818,3 +15818,81 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 - Mười bảy đột biến ở mã TypeScript, mười bảy lần đỏ (§5).
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3209 khẳng định; K4a 15 → 16, K6 12 → 20, K4b 8 không đổi. Không
   mã mới.
+
+---
+
+# §S1.9101 — KHOẢN 9401 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-9201
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 9401 (rổ B) mở và đóng
+cùng vòng. Một migration (`9501_rang_ngan_sach`), một ADR (ADR-9201), không route mới.
+
+## 1. Việc gì
+
+Cạnh `PENDING_APPROVAL→DRAFT` của S3.2b1 (`077`, §S1.186) mở lại ngân sách của gói — trước nó, ngân sách khoá khi gói rời DRAFT
+(`rfq_budgets_chi_sua_khi_soan`, `014`) và không đường nào quay về. Chữ ký mở gói mang băm nội dung (`011`) và băm danh sách mời
+(`076`), không mang ngân sách. Lỗ này được tìm ở lượt soi của một bản S3.2b song song trên nhánh này — bản ấy bỏ đi khi `master` nhận
+S3.2b từ #194 và #195 —, rồi đo lại trên `master`. Chủ dự án chọn ngày 2026-09-29: vá TRƯỚC S3.2c, bằng một PR riêng. Bất biến chạm:
+K4b, D2.
+
+## 2. Đo trước
+
+Trên cây `master` `8f90bf2` (bản sao cục bộ), tổ chức đã bật, hàm gói thật dưới `app_api`:
+- gói 150 triệu (ngưỡng kép 100 triệu), một chữ ký của PM2 — lần mở thứ nhất bị chặn *"can 2 phe duyet … moi co 1 (D2)"*; trả về,
+  hạ ước lượng xuống 1 triệu, nộp lại ⇒ gói **MỞ** bằng đúng chữ ký ấy;
+- gói 1 triệu, một chữ ký; trả về, nâng lên 99 triệu — cùng bậc —, nộp lại ⇒ gói **MỞ** bằng chữ ký trên con số 1 triệu, một hàng
+  chữ ký.
+
+Tệp đo của vòng này chạy trên cùng cây — tạm rút `9501` khỏi thư mục migration —: mọi ca đỏ; hai ca đầu đỏ vì gói mở được.
+
+## 3. Thay đổi
+
+**Migration `9501_rang_ngan_sach`:**
+- `rfq_bam_ngan_sach(gói)` — hàm băm RIÊNG, khuôn `rfq_bam_danh_sach`: `NGAN_SACH|ước lượng|tiền tệ|phiên bản chính sách|bậc|cờ duyệt
+  kép`, `LEFT JOIN` ngân sách để cờ duyệt kép luôn nằm trong băm. `STABLE`, không `SECURITY DEFINER`, `search_path` ghim.
+- Cột `rfq_approvals.approved_budget_hash`, ngoài `GRANT`; thân `rfq_approvals_dat_bam_danh_sach` (`076`) cộng một vế — cùng trigger
+  đặt cả hai băm. Tổ chức chưa bật: NULL.
+- Hai UNIQUE `rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan` mang thêm cột ấy, giữ tên, giữ `NULLS NOT DISTINCT`.
+- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`076`) cộng một phép đếm thứ hai — người ký khác nhau khớp nội dung, danh sách VÀ ngân sách
+  hiện tại — với lời từ chối riêng *"RFQ nay can N chu ky TREN NGAN SACH HIEN TAI, moi co M (K4b)"*. Phép đếm đầu giữ nguyên văn.
+- Không điền hàng cũ (ADR-9201 ⑸).
+
+**Hardening:** mục ghim mới cho `rfq_bam_ngan_sach(uuid)` (khuôn `rfq_bam_danh_sach`); hai mục ghim của `076` trỏ sang thân và cổng
+`9501`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh sách migration.
+`db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân sách — nhân chứng
+không đổi (hàm mới không phải hàm trigger).
+
+**Sổ đăng ký:** hàng K4b của `docs/TEST-PLAN.md`; `so-khai-nhan.ts` khai tệp test mới cho K4b và D2. Không mã mới — 68 bất biến.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Cơ chế băm, không khoá ngân sách, không xoá chữ ký.** Spec §2.4 đã chọn *chữ ký cũ vô hiệu bằng băm* cho chính cạnh này, và S3.2b1
+  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-9201.
+- **Băm mang phiên bản chính sách và bậc**, không chỉ con số: bậc và số chữ ký phụ thuộc bảng bậc của phiên bản ghim.
+- **Lời từ chối riêng cho vế ngân sách**, sau phép đếm cũ: người mua đọc được chữ ký lệch ở đâu.
+- **Không điền hàng cũ** — fail-closed; hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+
+## 5. Đo sau
+
+`packages/rfq/src/rang-ngan-sach.int.test.ts` — Postgres thật dưới `app_api`, hàm gói thật, mỗi ca một tổ chức riêng:
+- hạ bậc: chữ ký ở 150 triệu không mở gói 1 triệu (*"can 1 chu ky TREN NGAN SACH HIEN TAI, moi co 0 (K4b)"*), chính người ấy ký lại ⇒
+  mở, hai hàng chữ ký;
+- nâng cùng bậc lên 99 triệu ⇒ không mở; trả về lần nữa, đặt lại đúng 1 triệu ⇒ chữ ký cũ mở được, một hàng;
+- một người ký hai lần trên hai ngân sách của gói cấp kép ⇒ vẫn MỘT người: khối đếm `count(*)` của `071` thấy hai hàng, phép đếm
+  DISTINCT ở cạnh mở gói thì không; người thứ hai ký ⇒ mở;
+- cùng con số, ghim sang phiên bản chính sách 3 (y hệt 2) ⇒ không mở; ký lại ⇒ mở;
+- cột: băm lúc ký khớp `rfq_bam_ngan_sach`; `app_api` khai cột ⇒ 42501; tổ chức chưa bật ⇒ NULL, một người vẫn chỉ ký một lần;
+- hàng cũ: chữ ký đặt khi hàm chưa có vế ngân sách ⇒ không đếm; người ấy ký lại ⇒ mở.
+
+**Đột biến ở lược đồ, năm, cả năm đỏ:** bỏ phép đếm trên ngân sách ở cạnh mở gói (hai lỗ đo trước mở lại); băm bỏ ước lượng (nâng cùng
+bậc mở); băm bỏ phiên bản chính sách (ghim phiên bản mới mở); trigger bỏ vế ngân sách (chữ ký hợp lệ bị từ chối — vế ấy không trang trí);
+hai UNIQUE bỏ cột (người đã ký không ký lại được trên ngân sách mới — `23505`, trong một giao dịch ROLLBACK, giới hạn ở gói của ca).
+
+**Hồi quy:** `tra-ve-nhap` 15/15, `danh-sach-moi` 21/21, `rfq.int` 60/60, `luong-moi-s3` 14/14, `buyer.int` 18/18, `kich-ban-41` 30/30,
+`kich-ban-41-http` 58/58, `hardening-suy-tu-tinh-chat` 36/36, `db/migrations.int` 118/118.
+
+## 6. Giới hạn, nói ra
+
+- Đổi ngân sách sau khi ký — kể cả trong cùng bậc — đòi ký lại; phiên bản chính sách mới ghim lúc đặt lại ngân sách cũng vậy.
+- Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa: người duyệt ký lại.
+- Lời từ chối vế ngân sách không vào sổ `CONTROL_DENIED` — cùng lớp với lời từ chối K4b về danh sách ở cùng cạnh; K12 phân loại mọi
+  lời từ chối của S3 ở S3.9.
