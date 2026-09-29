@@ -671,7 +671,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { legalName: "Cong ty Quet", taxCode: "0388888888" }, cookie: m };
         case "POST /suppliers/:supplierId/contacts":
           return { path: r.path.replace(":supplierId", nccHyId), body: { fullName: "Lien he quet", email: "quet@ncc.vn", phone: "0908888888" }, cookie: m };
-        // [S1.9101 / S3.3a / K8a] Xác minh nhà cung cấp HY SINH bằng tài chính (giữ `supplier.qualify`, không dựng hồ sơ ấy): luồng
+        // [S1.195 / S3.3a / K8a] Xác minh nhà cung cấp HY SINH bằng tài chính (giữ `supplier.qualify`, không dựng hồ sơ ấy): luồng
         // S3 ghi một hàng xác minh của nhà cung cấp không ai mời trong kịch bản, luồng MVP1 dừng ở lời từ chối *tổ chức chưa bật*.
         case "POST /suppliers/:supplierId/verify":
           return { path: r.path.replace(":supplierId", nccHyId), body: {}, cookie: trangThai.taiChinh.cookie };

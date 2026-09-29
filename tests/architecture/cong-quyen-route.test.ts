@@ -70,9 +70,9 @@ const HAM_DOI_TRANG_THAI = [
   // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
   "danhDauDaGui",
   "dispatchUnseal",
-  // [S1.9101 / S3.3a / K8a] Thu hồi xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
+  // [S1.195 / S3.3a / K8a] Thu hồi xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
   "thuHoiXacMinhNhaCungCap",
-  // [S1.9101 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
+  // [S1.195 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
   "xacMinhNhaCungCap",
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
@@ -114,7 +114,7 @@ const HAM_CHI_DOC = [
   // cùng lập luận của `listSuppliers`. Đường của một CON NGƯỜI là `xuatBoBangChung` (rổ
   // `HAM_DOC_CO_QUYEN`), và test cuối tệp này đòi `apps/` không gọi thẳng hàm này.
   "dungBoBangChung",
-  // [S1.9101 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
+  // [S1.195 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docXacMinhNhaCungCap",
   "findSupplierByTaxCode",

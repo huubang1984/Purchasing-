@@ -108,7 +108,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   supplier_contacts_full_name_check: "DO_DAI",
   supplier_contacts_phone_check: "DINH_DANG",
   supplier_contacts_status_check: "MIEN",
-  // [S1.9101 / S3.3a] Độ dài lý do thu hồi xác minh — ba CHECK kia của bảng (loại, lý do theo loại, đủ cột) nằm ở tập an ninh.
+  // [S1.195 / S3.3a] Độ dài lý do thu hồi xác minh — ba CHECK kia của bảng (loại, lý do theo loại, đủ cột) nằm ở tập an ninh.
   supplier_verifications_ly_do_check: "DO_DAI",
   suppliers_legal_name_check: "DO_DAI",
   suppliers_level_check: "MIEN",
