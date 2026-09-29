@@ -16838,3 +16838,8 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
   cấp lại số theo lời giữ:** vòng 199 đã có lời giữ của #204, nên vòng này nay là S1.200, ADR-118. Toàn bộ unit + T3 cục bộ trên cây
   cuối: 194 tệp, 3316 khẳng định, 3306 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất biến, đọc từ
   3316 khẳng định; K4b 42 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #202 — nay mang #199 sau `master` tới #208 (#199 thành S1.202 và `086_rang_ngan_sach`; #202 thành
+  `087_lan_nop_da_xem`) — và chạy lại `cap-so`:** S1.200, ADR-118 giữ nguyên. Toàn bộ unit + T3 cục bộ trên cây cuối: 195 tệp,
+  3337 khẳng định, 3327 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 71/71 bất biến (49/49 nghiệp vụ + 22/22
+  hàng rào; L3 vào ở #204), đọc từ 3337 khẳng định; K4b 42 như trên. `pnpm test`: 122 tệp, 1748 đạt, 1 bỏ qua. `tsc`, `eslint`,
+  `depcruise` sạch; `pnpm cap-so --kiem` sạch.
