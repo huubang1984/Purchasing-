@@ -16720,6 +16720,12 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
   3289 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến (49/49 nghiệp vụ +
   22/22 hàng rào; L3 vào ở #204), đọc từ 3299 khẳng định; K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch;
   `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #210 (S3.6a — S1.201, `085_nhom_hang`; tổ chức đã bật không nộp duyệt được gói không nhóm hàng):**
+  số của vòng giữ nguyên (`086_rang_ngan_sach` vẫn lớn hơn `085`). Mười bảy ca của `rang-ngan-sach.int.test.ts` đỏ ở lần nộp duyệt —
+  *"gói thầu phải có nhóm hàng trước khi nộp duyệt"* —; tệp dựng nhóm hàng theo khuôn #210 dùng cho `tra-ve-nhap` (người FINANCE dựng
+  một nhóm cho mỗi tổ chức, gói nhận nhóm lúc tạo): 17/17 xanh lại. Toàn bộ T3 cục bộ trên cây cuối: 196 tệp, 3340 khẳng định, 3330
+  đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến, đọc từ 3340 khẳng định;
+  K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
