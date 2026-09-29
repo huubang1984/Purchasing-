@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { ganVaiTroChoPool, laVaiUngDung, VAI_UNG_DUNG, migrate } from "@trustprocure/db";
+import { cauHinhCumCucBo, khoiDongCumCucBo, type MayChuPostgres } from "./postgres-cuc-bo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -89,14 +90,28 @@ async function chuoBackendKhachThoat(connectionString: string): Promise<BackendC
   }
 }
 
-export async function startPostgres(): Promise<TestDatabase> {
-  const container: StartedPostgreSqlContainer = await new PostgreSqlContainer("postgres:16-alpine")
+/** Đường mặc định: một container Testcontainers cho mỗi lần gọi. */
+async function khoiDongContainer(): Promise<MayChuPostgres> {
+  const container = await new PostgreSqlContainer("postgres:16-alpine")
     .withDatabase("trustprocure_test")
     .withUsername("postgres")
     .withPassword("postgres")
     .start();
+  return {
+    connectionString: container.getConnectionUri(),
+    async dung(): Promise<void> {
+      await container.stop();
+    },
+  };
+}
 
-  const connectionString = container.getConnectionUri();
+export async function startPostgres(): Promise<TestDatabase> {
+  // Không có Docker thì đi đường cụm cục bộ (xem đầu `postgres-cuc-bo.ts`); có đủ hai biến môi
+  // trường mới rẽ, còn lại container như trước. Mọi thứ dưới đây không biết mình đang ở đường nào.
+  const cucBo = cauHinhCumCucBo();
+  const mayChu: MayChuPostgres = cucBo === undefined ? await khoiDongContainer() : await khoiDongCumCucBo(cucBo);
+
+  const connectionString = mayChu.connectionString;
   const pool = new pg.Pool({ connectionString, max: 5 });
   const rolePools: pg.Pool[] = [];
 
@@ -137,7 +152,7 @@ export async function startPostgres(): Promise<TestDatabase> {
         conSot = [];
       }
 
-      await container.stop();
+      await mayChu.dung();
 
       if (conSot.length > 0) {
         const moTa = conSot
