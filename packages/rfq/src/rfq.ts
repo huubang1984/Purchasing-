@@ -179,7 +179,7 @@ export interface RfqRecord {
    */
   readonly cancelReason: string | null;
   /**
-   * [S1.9101 / khoản 256] Số lần gói đã nộp duyệt — trigger `rfq_packages_dem_lan_nop` đếm ở cạnh DRAFT→PENDING_APPROVAL, bên
+   * [S1.195 / khoản 256] Số lần gói đã nộp duyệt — trigger `rfq_packages_dem_lan_nop` đếm ở cạnh DRAFT→PENDING_APPROVAL, bên
    * gọi không đặt được. Người duyệt gửi lại ĐÚNG con số đã thấy (`ApproveRfqInput.lanNopDaXem`): ở tổ chức đã bật, lời duyệt khác
    * lần nộp hiện tại bị từ chối — gói được trả về, sửa và nộp lại sau lúc người ấy xem thì chữ ký không rơi lên thứ họ chưa xem.
    */
@@ -437,7 +437,7 @@ export async function submitRfqForApproval(
  *
  * LÝ DO bắt buộc (chủ dự án chốt ngày 2026-09-28) và nằm trong sổ, không trong cột: cạnh này đi được nhiều lần, một cột chỉ giữ
  * lần cuối (`016` §(3)). Không xoá chữ ký nào — chữ ký cũ mất hiệu lực bằng băm khi nội dung hay danh sách đổi (K4b).
- * **[S1.9101 / khoản 257]** Người, phiên, lần nộp bị trả và lý do nay CŨNG nằm trong CSDL — một hàng `rfq_tra_ve` chèn trước câu đổi
+ * **[S1.195 / khoản 257]** Người, phiên, lần nộp bị trả và lý do nay CŨNG nằm trong CSDL — một hàng `rfq_tra_ve` chèn trước câu đổi
  * trạng thái, mà cạnh đòi (`081_lan_nop_da_xem`): K4b đọc nó để bỏ chữ ký của chính người trả về. Hàng sổ giữ nguyên.
  *
  * Tổ chức chưa bật: lời từ chối có tên và KHÔNG vào sổ — nó nói cấu hình chưa sẵn sàng, không nói người dùng đi sai (ADR-060).
@@ -477,7 +477,7 @@ export async function returnRfqToDraft(
   );
   const reason = batBuoc(input.reason, "reason", 2000);
 
-  // [S1.9101 / khoản 257] Khoá hàng gói rồi hỏi trạng thái TRƯỚC khi chèn hàng trả về: trigger của `rfq_tra_ve` từ chối gói không
+  // [S1.195 / khoản 257] Khoá hàng gói rồi hỏi trạng thái TRƯỚC khi chèn hàng trả về: trigger của `rfq_tra_ve` từ chối gói không
   // chờ duyệt bằng một lỗi CSDL, còn lời từ chối trạng thái của hàm này là một `RfqError` có tên — giữ nguyên hợp đồng ấy.
   const { rows: khoa } = await client.query<{ status: string }>(
     `SELECT p.status FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1 FOR NO KEY UPDATE`,
@@ -529,7 +529,7 @@ export interface ApproveRfqInput {
    */
   readonly sessionId: string;
   /**
-   * [S1.9101 / khoản 256] Lần nộp mà người duyệt đã XEM (`RfqRecord.lanNop` của lần đọc gói). Trigger `rfq_approvals_so_lan_nop`
+   * [S1.195 / khoản 256] Lần nộp mà người duyệt đã XEM (`RfqRecord.lanNop` của lần đọc gói). Trigger `rfq_approvals_so_lan_nop`
    * khoá hàng gói rồi so: tổ chức đã bật — bắt buộc, khác lần nộp hiện tại thì từ chối (gói đã được trả về và nộp lại sau lúc ấy);
    * tổ chức chưa bật — tuỳ chọn, gửi thì phải đúng, không gửi thì như MVP1. Hàm này KHÔNG tự điền: điền lần nộp hiện tại thay người
    * duyệt là đúng lỗ mà cột này đóng.

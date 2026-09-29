@@ -16339,7 +16339,7 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
+# §S1.195 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
 chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.194) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một

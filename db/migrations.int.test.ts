@@ -1545,7 +1545,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // XUẤT (ADR-016) chứ không phải một trường trong thân yêu cầu.
       // **[S1.156]** HAI MƯƠI TƯ: `org_policy_signatures` — chữ ký thứ hai của phiên bản chính sách, cùng
       // khuôn `rfq_award_approvals` (người ký là DẪN XUẤT từ phiên).
-      // **[S1.9101 / khoản 257]** HAI MƯƠI LĂM: `rfq_tra_ve` — người trả gói về là DẪN XUẤT từ phiên, nên một hàng chèn tay chỉ rút
+      // **[S1.195 / khoản 257]** HAI MƯƠI LĂM: `rfq_tra_ve` — người trả gói về là DẪN XUẤT từ phiên, nên một hàng chèn tay chỉ rút
       // được chữ ký của CHÍNH người chèn.
       trigger: [
         "org_policy_signatures_kiem_danh_tinh",
@@ -1698,14 +1698,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
     // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
     // hay để cột ở `false` cho mọi token, và lần đổi link của tổ chức đã bật từ chối cả token hợp lệ.
-    // [S1.9101 / khoản 257] `081_lan_nop_da_xem` định nghĩa lại thân hàm cạnh về DRAFT: cạnh đòi một hàng `rfq_tra_ve` của chính
+    // [S1.195 / khoản 257] `081_lan_nop_da_xem` định nghĩa lại thân hàm cạnh về DRAFT: cạnh đòi một hàng `rfq_tra_ve` của chính
     // lần nộp đang bị trả. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "rfq_kiem_tra_ve_nhap", migration: "081_lan_nop_da_xem.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     { ham: "du_lieu_nen_dat_thu_tu", migration: "079_don_vi_do.sql", trigger: ["uom_aliases_dat_thu_tu"] },
-    // [S1.9101 / khoản 256 · 257] Ba hàm mới: đếm lần nộp, chốt lời duyệt vào lần nộp đã xem, đặt lần nộp của hàng trả về. Thân
+    // [S1.195 / khoản 256 · 257] Ba hàm mới: đếm lần nộp, chốt lời duyệt vào lần nộp đã xem, đặt lần nộp của hàng trả về. Thân
     // `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: lần nộp đứng yên (lời duyệt trên lần xem cũ đi qua), lời duyệt không
     // bị so, hay hàng trả về mang lần nộp NULL.
     { ham: "rfq_dem_lan_nop", migration: "081_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
