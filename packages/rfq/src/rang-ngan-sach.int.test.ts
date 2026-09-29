@@ -9,9 +9,9 @@ import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfq
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.195 / khoản 254] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
+// [S1.202 / khoản 254] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `081_rang_ngan_sach`. Cạnh về DRAFT (`077`) mở lại ngân sách, mà băm nội dung (`011`) và băm danh sách (`076`)
+// Migration `086_rang_ngan_sach`. Cạnh về DRAFT (`077`) mở lại ngân sách, mà băm nội dung (`011`) và băm danh sách (`076`)
 // đều không mang nó. ĐO TRƯỚC trên `master` `8f90bf2`: hai ca đầu dưới đây MỞ ĐƯỢC gói — gói cấp kép hạ về một chữ ký mở
 // bằng chữ ký cũ, và gói 1 triệu nâng lên 99 triệu mở bằng chữ ký trên con số 1 triệu.
 //
@@ -298,7 +298,7 @@ afterAll(async () => {
 // =============================================================================================
 // (1) HAI LỖ ĐO TRƯỚC TRÊN MASTER
 // =============================================================================================
-describe("S1.195 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã bật (khoản 254)", () => {
+describe("S1.202 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã bật (khoản 254)", () => {
   it("[INV-K4b] [INV-D2] gói CẤP KÉP, một chữ ký: trả về, HẠ ngân sách xuống bậc một chữ ký, nộp lại ⇒ chữ ký cho lúc gói cần hai người KHÔNG mở được gói; chính người ấy ký lại trên ngân sách mới ⇒ mở", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t, GOI_CAP_KEP);
@@ -356,7 +356,7 @@ describe("S1.195 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã
     expect(await loi(mo(t, rfqId))).toBeNull();
   });
 
-  it("[INV-K4b] [INV-D2] băm mang CỜ DUYỆT KÉP: gói tự nâng lên hai chữ ký, một người ký; trả về, đặt lại ĐÚNG ngân sách cũ — cờ tính lại về `false` — ⇒ chữ ký cho lúc gói cần hai người không mở được gói một chữ ký (lượt soi S1.195)", async () => {
+  it("[INV-K4b] [INV-D2] băm mang CỜ DUYỆT KÉP: gói tự nâng lên hai chữ ký, một người ký; trả về, đặt lại ĐÚNG ngân sách cũ — cờ tính lại về `false` — ⇒ chữ ký cho lúc gói cần hai người không mở được gói một chữ ký (lượt soi S1.202)", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await tuNangCapKep(t, rfqId);
@@ -375,7 +375,7 @@ describe("S1.195 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã
     expect(await loi(mo(t, rfqId))).toBeNull();
   });
 
-  it("[INV-K4b] chữ ký ràng vào BỘ BA (nội dung, danh sách, ngân sách), không ghép được từ hai chữ ký: PM2 ký (L1, 1 triệu), PM3 ký (L2, 99 triệu); trả về, thu hồi lời mời vừa thêm ⇒ gói ở (L1, 99 triệu) — chưa ai ký — không mở (lượt soi S1.195)", async () => {
+  it("[INV-K4b] chữ ký ràng vào BỘ BA (nội dung, danh sách, ngân sách), không ghép được từ hai chữ ký: PM2 ký (L1, 1 triệu), PM3 ký (L2, 99 triệu); trả về, thu hồi lời mời vừa thêm ⇒ gói ở (L1, 99 triệu) — chưa ai ký — không mở (lượt soi S1.202)", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
@@ -415,7 +415,7 @@ describe("S1.195 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã
 // =============================================================================================
 // (2) CỘT, VẾ NULL VÀ HÀNG CŨ
 // =============================================================================================
-describe("S1.195 — cột `approved_budget_hash`: trigger đặt lúc ký, ngoài GRANT, NULL ở tổ chức chưa bật, không điền hàng cũ", () => {
+describe("S1.202 — cột `approved_budget_hash`: trigger đặt lúc ký, ngoài GRANT, NULL ở tổ chức chưa bật, không điền hàng cũ", () => {
   it("[INV-K4b] tổ chức đã bật: chữ ký mang băm ngân sách LÚC KÝ; `app_api` không khai được cột. Tổ chức chưa bật: NULL, và một người vẫn chỉ ký được một lần", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -452,7 +452,7 @@ describe("S1.195 — cột `approved_budget_hash`: trigger đặt lúc ký, ngo�
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    // Chữ ký dạng trước `081_rang_ngan_sach`: hàm đặt băm chưa có vế ngân sách.
+    // Chữ ký dạng trước `086_rang_ngan_sach`: hàm đặt băm chưa có vế ngân sách.
     await voiHamDotBien(
       "public.rfq_approvals_dat_bam_danh_sach()",
       "NEW.approved_budget_hash := public.rfq_bam_ngan_sach(NEW.rfq_id);",
@@ -472,9 +472,9 @@ describe("S1.195 — cột `approved_budget_hash`: trigger đặt lúc ký, ngo�
 // (3) ĐỘT BIẾN — MỖI VẾ CỦA BẢN VÁ MỘT LẦN ĐỎ
 //
 // Tiền tệ và bậc trong băm là đột biến TƯƠNG ĐƯƠNG ở tổ chức đã bật: tiền tệ phải khớp phiên bản có bậc (`ngan_sach_xep_bac`),
-// bậc suy từ phiên bản ghim và ước lượng — không đường nào đổi riêng chúng khi hai thứ kia đứng yên (lượt soi S1.195).
+// bậc suy từ phiên bản ghim và ước lượng — không đường nào đổi riêng chúng khi hai thứ kia đứng yên (lượt soi S1.202).
 // =============================================================================================
-describe("S1.195 — đột biến: gỡ từng vế thì lỗ mở lại", () => {
+describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () => {
   /** Gói 1 triệu đã ký, trả về, nâng lên 99 triệu cùng bậc, nộp lại, thử mở — trả trạng thái cuối. */
   const nangCungBac = async (): Promise<string> => {
     const t = await toChucDaBat();
@@ -551,13 +551,13 @@ describe("S1.195 — đột biến: gỡ từng vế thì lỗ mở lại", () =
     expect(await ghepBoBa()).toBe("PENDING_APPROVAL");
   });
 
-  it("[INV-K4b] [INV-D2] băm ngân sách bỏ cờ duyệt kép ⇒ gói tự nâng lên hai chữ ký mở bằng một chữ ký (lượt soi S1.195, M1)", async () => {
+  it("[INV-K4b] [INV-D2] băm ngân sách bỏ cờ duyệt kép ⇒ gói tự nâng lên hai chữ ký mở bằng một chữ ký (lượt soi S1.202, M1)", async () => {
     expect(
       await voiHamDotBien("public.rfq_bam_ngan_sach(uuid)", "|| '|' || p.requires_dual_approval::text", "", coKepTuNang),
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.195, M2)", async () => {
+  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",

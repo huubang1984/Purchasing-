@@ -31,6 +31,7 @@ import {
   kiem,
   laCapThaySo,
   laTepThuong,
+  thaySoTranDaCap,
   thaySoTam,
   thuHoiTheoToken,
   vietSoTiengViet,
@@ -49,6 +50,11 @@ function bang(cap: Partial<Record<keyof BangCap, ReadonlyArray<readonly [number,
 const BANG_A = bang({ vong: [[9101, 141]], adr: [[9201, 83], [9203, 85]], khoan: [[9401, 243]], migration: [[9501, 68]] });
 
 describe("thay số tạm", () => {
+  it("[#203, #204] dòng vừa thu hồi: số tạm trần ngoài Markdown được thay chỉ khi dòng trước thu hồi không còn nó", () => {
+    expect(thaySoTranDaCap("-- 9501 — bảng; cổng 9201", "-- 068 — bảng; cổng 9201", BANG_A)).toBe("-- 068 — bảng; cổng 9201");
+    expect(thaySoTranDaCap("CONG = 9501", "CONG = 9501", BANG_A)).toBe("CONG = 9501");
+  });
+
   it("Markdown: mọi dạng — có tiền tố, trong dải `…`, tên tệp, số trần trong đấu huyền", () => {
     expect(thaySoTam("S1.9101 · ADR-9201…9203 · khoản 9401 · `9501_moi.sql` · `9501`:12 · | 9401 |", BANG_A, true)).toBe(
       "S1.141 · ADR-083…085 · khoản 243 · `068_moi.sql` · `068`:12 · | 243 |",
@@ -572,6 +578,27 @@ describe("kho thật — hai nhánh cùng cấp số, một nhánh merge trướ
     git(goc, "checkout", "-q", "master");
     git(goc, "merge", "-q", "--ff-only", "b");
     expect(kiem(goc)).toEqual([]);
+  });
+
+  it("[#203, #204] số migration trần trong mã, sửa tay ngay trong commit cấp, theo số mới khi cấp lại", () => {
+    const goc = dungKho();
+    lamViec(goc, "a", 1);
+    capVaCommit(goc, "a");
+    lamViec(goc, "b", 1);
+    ghi(goc, "apps/b.ts", "// bảng khai ở `9501`\nexport const CONG = 9501;\n");
+    commit(goc, "b: mã");
+    const kq = capSo(goc, { base: "master" });
+    // Ngoài Markdown lệnh không thay số trần: người viết thay tay, trong cùng commit cấp.
+    expect(doc(goc, "apps/b.ts")).toBe("// bảng khai ở `9501`\nexport const CONG = 9501;\n");
+    ghi(goc, "apps/b.ts", "// bảng khai ở `002`\nexport const CONG = 9501;\n");
+    commit(goc, `b: cấp số\n\n${kq.trailer!}`);
+
+    git(goc, "checkout", "-q", "master");
+    git(goc, "merge", "-q", "--ff-only", "a");
+    git(goc, "checkout", "-q", "b");
+    expect(() => git(goc, "merge", "-q", "master")).toThrow();
+    expect(vietTrailer(capSo(goc, { base: "master" }).bang)).toContain("migration 9501=003");
+    expect(doc(goc, "apps/b.ts")).toBe("// bảng khai ở `003`\nexport const CONG = 9501;\n");
   });
 
   /** `b` cấp số, sửa thêm một dòng nhắc ADR-003/S1.3, rồi thua cuộc đua: master (từ `a`) nay cũng có ADR-003/S1.3. */

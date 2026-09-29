@@ -438,7 +438,7 @@ export async function submitRfqForApproval(
  * LÝ DO bắt buộc (chủ dự án chốt ngày 2026-09-28) và nằm trong sổ, không trong cột: cạnh này đi được nhiều lần, một cột chỉ giữ
  * lần cuối (`016` §(3)). Không xoá chữ ký nào — chữ ký cũ mất hiệu lực bằng băm khi nội dung hay danh sách đổi (K4b).
  * **[S1.198 / khoản 257]** Người, phiên, lần nộp bị trả và lý do nay CŨNG nằm trong CSDL — một hàng `rfq_tra_ve` chèn trước câu đổi
- * trạng thái, mà cạnh đòi (`084_lan_nop_da_xem`): K4b đọc nó để bỏ chữ ký của chính người trả về. Hàng sổ giữ nguyên.
+ * trạng thái, mà cạnh đòi (`087_lan_nop_da_xem`): K4b đọc nó để bỏ chữ ký của chính người trả về. Hàng sổ giữ nguyên.
  *
  * Tổ chức chưa bật: lời từ chối có tên và KHÔNG vào sổ — nó nói cấu hình chưa sẵn sàng, không nói người dùng đi sai (ADR-060).
  */

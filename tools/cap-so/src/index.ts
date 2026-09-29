@@ -182,6 +182,22 @@ export function thaySoTam(dong: string, bang: BangCap, markdown: boolean): strin
   });
 }
 
+/**
+ * Số tạm TRẦN ngoài Markdown trên một dòng mà lệnh vừa trả về bản số tạm của một lần cấp cũ. Ngoài
+ * Markdown lệnh không tự thay số trần, nên người viết đã thay tay ngay trong commit cấp ấy (`` `9501` ``
+ * → `` `081` `` trong một chú thích) — và bản số tạm mang lại đúng số trần ấy. Thiếu bước này, lần cấp
+ * lại để `9501` trong mã mà `--kiem` không thấy (đo 2026-09-29 ở #203, #204). Chỉ thay số tạm trần
+ * KHÔNG còn trên dòng trước lúc thu hồi: số trần còn nguyên ở đó (`PORT = 9201`) chưa từng là số tạm.
+ */
+export function thaySoTranDaCap(tam: string, truocThuHoi: string, bang: BangCap): string {
+  const conTruoc = new Set([...truocThuHoi.matchAll(RE_TAM_TRAN_MD)].map((m) => m[1]!));
+  return tam.replace(RE_TAM_TRAN_MD, (toan: string, so: string) => {
+    const d = dayCuaSoTam(Number(so));
+    const moi = d === null || conTruoc.has(so) ? undefined : bang[d].get(Number(so));
+    return moi === undefined ? toan : dinhDang(d!, moi);
+  });
+}
+
 function dao(bang: ReadonlyMap<number, number>): Map<number, number> {
   return new Map([...bang].map(([tam, that]) => [that, tam]));
 }
@@ -1348,6 +1364,8 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
 
   // Bước 1 — thu hồi: trả mọi dòng của nhánh về bản số tạm.
   const cay = new CayLamViec(goc);
+  /** `đường\0chỉ số dòng` → dòng trước khi trả về bản số tạm của một lần cấp cũ (xem `thaySoTranDaCap`). */
+  const truocThuHoi = new Map<string, string>();
   for (const [p, cacDong] of dongNhanh) {
     const dong = cay.dong(p);
     for (const so of cacDong) {
@@ -1358,6 +1376,7 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
       const van = dong[i]!;
       const tam = lich.map((lan) => lan.banTam.get(p)?.get(van)).find((x) => x !== undefined);
       if (tam !== undefined || lanMoi === undefined) {
+        if (tam !== undefined && tam !== van) truocThuHoi.set(`${p}\0${i}`, van);
         dong[i] = tam ?? van;
         continue;
       }
@@ -1446,7 +1465,9 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
       const i = so - 1;
       if (i < 0 || i >= dong.length) continue;
       const tam = dong[i]!;
-      const moi = thaySoTam(tam, bang, laMarkdown(p));
+      const truoc = laMarkdown(p) ? undefined : truocThuHoi.get(`${p}\0${i}`);
+      const daThay = thaySoTam(tam, bang, laMarkdown(p));
+      const moi = truoc === undefined ? daThay : thaySoTranDaCap(daThay, truoc, bang);
       dong[i] = moi;
       if (moi !== tam) daViet.set(p, [...(daViet.get(p) ?? []), [moi, tam]]);
       for (const m of moi.matchAll(/(?<!\d)(9[1245]\d\d)(?!\d)/g)) {

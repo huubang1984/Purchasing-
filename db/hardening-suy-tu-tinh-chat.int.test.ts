@@ -121,6 +121,11 @@ const BANG_CHI_GHI_THEM_THAT = [
   "audit_chain_anchors",
   "audit_events",
   "bid_receipts",
+  // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
+  "canonical_item_versions",
+  "canonical_items",
+  "item_aliases",
+  "item_uom_conversions",
   // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
   // `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Vị từ suy ra đã thấy nó; dòng này
   // là lời khai bắt kịp. Một chữ ký sửa được thì công tắc ADR-080 không còn một chiều.
@@ -274,6 +279,13 @@ const HAM_KHONG_PHAI_CANH = [
   "public.kiem_tra_ma_tran_quyen",
   "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
   "public.kiem_tra_nguong_khong_cung_tay_vai_tro",
+  // [S1.197 / S4.2a / L3 / `083_hang_chuan`] Khuôn `033` cho người đặt thước dữ liệu: AFTER ROW, từ chối CÓ ĐIỀU KIỆN — chỉ khi một
+  // vai/một người giữ `item.manage` cùng một mã thấy giá. Nhân chứng: mọi câu ghi `user_roles`/`role_permissions` của kịch bản.
+  "public.kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung",
+  "public.kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro",
+  // [S1.197 / S4.2a / L3] Cổng GHI của dữ liệu nền — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN (người ghi không giữ `item.manage`).
+  // Nhân chứng: năm câu chèn dữ liệu nền cuối `dungKichBan()`, dưới một `DATA_STEWARD`.
+  "public.du_lieu_nen_kiem_quyen_ghi",
   "public.kiem_tra_phan_tach_nhiem_vu",
   "public.loi_moi_khong_song_lai",
   "public.mfa_credentials_khoa_ho_so_da_xac_nhan",
@@ -308,7 +320,7 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
   // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
   // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
-  // đi qua cả bốn: năm nhân chứng. **[S1.195 / `081_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
+  // đi qua cả bốn: năm nhân chứng. **[S1.202 / `086_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
   // `rfq_kiem_chu_ky_danh_sach_khi_mo`) nay mang thêm băm ngân sách; vẫn chỉ ở tổ chức đã bật, nhân chứng không đổi.
   "public.rfq_approvals_dat_bam_danh_sach",
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
@@ -319,7 +331,7 @@ const HAM_KHONG_PHAI_CANH = [
   // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
   "public.rfq_invitation_tokens_ghi_goi_da_mo",
   "public.rfq_kiem_tra_ve_nhap",
-  // [S1.198 / khoản 256 · 257 / `084_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
+  // [S1.198 / khoản 256 · 257 / `087_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
   // `rfq_chot_lan_nop_da_xem` (BEFORE INSERT trên `rfq_approvals`) không từ chối hàng nào của `dungKichBan()` — cái đầu chỉ ĐẾM,
   // cái sau chỉ từ chối ở tổ chức đã bật hay khi lời duyệt tự mang mốc sai, mà lời duyệt của kịch bản đứng trước lần bật. Hàm
   // thứ ba (`rfq_tra_ve_dat_lan_nop`, BEFORE INSERT trên `rfq_tra_ve`) từ chối CÓ ĐIỀU KIỆN — tổ chức chưa bật hay gói không chờ
@@ -1775,6 +1787,9 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // ---- [S1.192 / S4.1 / L1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------
   // Hai bộ ba mới trên `uom_aliases`/INSERT: `du_lieu_nen_dat_thu_tu` (hàm MỚI — ĐẶT `seq`, `ghi_luc`, không bao giờ từ chối) và
   // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai cột trigger đặt không khai ở vế ⒠ — thứ được so là cột câu ĐẶT.
+  // [S1.197 / S4.2a / L3] Người ghi dữ liệu nền phải giữ `item.manage` (`du_lieu_nen_kiem_quyen_ghi`) — nên người ghi là một
+  // `DATA_STEWARD`, không còn là `pm`. Vai ấy của người ấy là thêm một nhân chứng của hai trigger mức người trên `user_roles`.
+  const ql = await nguoi("DATA_STEWARD");
   doiSoHang(
     await so.chung(
       "public.uom_aliases",
@@ -1782,12 +1797,53 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
       api(
         "INSERT INTO uom_aliases (org_id, bi_danh_sach, code, tac_gia, session_id) VALUES ($1, 'mt', 't', $2, $3) " +
           "RETURNING org_id, bi_danh_sach, code, tac_gia, session_id",
-        [org, pm.u, pm.s],
-        { org_id: org, bi_danh_sach: "mt", code: "t", tac_gia: pm.u, session_id: pm.s },
+        [org, ql.u, ql.s],
+        { org_id: org, bi_danh_sach: "mt", code: "t", tac_gia: ql.u, session_id: ql.s },
       ),
     ),
     1,
     "uom_aliases",
+  );
+
+  // ---- [S1.197 / S4.2a / L1 · L3 / `083_hang_chuan`] Bốn bảng hàng chuẩn ------------------------------------------------------
+  // Mỗi bảng ba bộ ba mới trên INSERT: `du_lieu_nen_dat_thu_tu`, `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI) và
+  // `du_lieu_nen_kiem_quyen_ghi` (hàm MỚI — từ chối CÓ ĐIỀU KIỆN: chỉ người không giữ `item.manage`). Cộng bộ ba thứ tư của
+  // `du_lieu_nen_kiem_quyen_ghi` trên `uom_aliases` — câu ngay trên.
+  const hc = await chenNC(
+    "public.canonical_items",
+    api(
+      "INSERT INTO canonical_items (org_id, ma, don_vi_goc, tac_gia, session_id) VALUES ($1, 'THEP-D10', 'kg', $2, $3) " +
+        "RETURNING id, org_id, ma, don_vi_goc, tac_gia, session_id",
+      [org, ql.u, ql.s],
+      { org_id: org, ma: "THEP-D10", don_vi_goc: "kg", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+  await chenNC(
+    "public.canonical_item_versions",
+    api(
+      "INSERT INTO canonical_item_versions (org_id, canonical_item_id, ten, tac_gia, session_id) VALUES ($1, $2, 'Thep D10', $3, $4) " +
+        "RETURNING id, org_id, canonical_item_id, ten, tac_gia, session_id",
+      [org, hc, ql.u, ql.s],
+      { org_id: org, canonical_item_id: hc, ten: "Thep D10", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+  await chenNC(
+    "public.item_aliases",
+    api(
+      "INSERT INTO item_aliases (org_id, bi_danh_sach, canonical_item_id, tac_gia, session_id) VALUES ($1, 'thep d10', $2, $3, $4) " +
+        "RETURNING id, org_id, bi_danh_sach, canonical_item_id, tac_gia, session_id",
+      [org, hc, ql.u, ql.s],
+      { org_id: org, bi_danh_sach: "thep d10", canonical_item_id: hc, tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+  await chenNC(
+    "public.item_uom_conversions",
+    api(
+      "INSERT INTO item_uom_conversions (org_id, canonical_item_id, tu_don_vi, sang_don_vi, he_so, tac_gia, session_id) " +
+        "VALUES ($1, $2, 'cay', 'kg', '7.22', $3, $4) RETURNING id, org_id, canonical_item_id, tu_don_vi, sang_don_vi, tac_gia, session_id",
+      [org, hc, ql.u, ql.s],
+      { org_id: org, canonical_item_id: hc, tu_don_vi: "cay", sang_don_vi: "kg", tac_gia: ql.u, session_id: ql.s },
+    ),
   );
 
   return { orgId: org };
