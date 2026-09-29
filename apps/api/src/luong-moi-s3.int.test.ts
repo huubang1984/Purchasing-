@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.2b2 / ADR-9201] LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 — MỜI Ở DRAFT, ĐÚC TOKEN LÚC MỞ GÓI, GỬI SAU COMMIT, `SENT`
+// [S1.187 / S3.2b2 / ADR-113] LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 — MỜI Ở DRAFT, ĐÚC TOKEN LÚC MỞ GÓI, GỬI SAU COMMIT, `SENT`
 // SAU LẦN GỬI ĐƯỢC, GỬI HỎNG THÌ *CHƯA GỬI* CHỨ KHÔNG THU HỒI LỜI MỜI
 //
 // Spec S3 §3.3, §2.4 ⑼, §5.1 K6. Trước vòng này, ở tổ chức đã bật, route mời còn ba khe (biên bản §S1.186, *Giới hạn tới

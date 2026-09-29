@@ -13,8 +13,8 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
-**[2026-09-29 / S1.9101] S3.2b2 — LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3: MỜI Ở DRAFT KHÔNG TOKEN, ĐÚC LÚC MỞ GÓI, GỬI SAU COMMIT,
-`SENT` SAU LẦN GỬI ĐƯỢC, GỬI HỎNG ĐỂ LỜI MỜI *CHƯA GỬI* (K6) — ADR-9201.** Phần sau của S3.2b. Chủ dự án bảo làm ngày 2026-09-29
+**[2026-09-29 / S1.187] S3.2b2 — LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3: MỜI Ở DRAFT KHÔNG TOKEN, ĐÚC LÚC MỞ GÓI, GỬI SAU COMMIT,
+`SENT` SAU LẦN GỬI ĐƯỢC, GỬI HỎNG ĐỂ LỜI MỜI *CHƯA GỬI* (K6) — ADR-113.** Phần sau của S3.2b. Chủ dự án bảo làm ngày 2026-09-29
 theo đề xuất sáu phần của S1.186; lần mở gói mà một phần link gửi hỏng trả `200` kèm danh sách lời mời chưa gửi (chốt 2026-09-28).
 Không migration. Route mời: tổ chức đã bật dựng danh sách ở `DRAFT` — lời mời `UNSENT`, không token, không gửi; mời thêm ở `OPEN`
 đúc và gửi sau commit, gửi hỏng thì thu hồi token vừa đúc chứ không thu hồi lời mời, thân `201` mang trạng thái thật. Route mở gói:
@@ -23,7 +23,7 @@ mỗi link đi một lần sau commit; gửi được ⇒ `danhDauDaGui` (`SENT`
 unsentInvitationIds}`. Route gửi lại (ADR-110) đổi lời mời chưa gửi thành `SENT`. Bộ điều phối có LÔ gửi sau commit
 (`afterCommitLoGui`): các lần gửi chạy cùng lúc, mỗi lần một giao dịch ghi riêng; và `khiXong` cho việc có bù. Tổ chức chưa bật giữ
 nguyên hợp đồng [S1.70]. Đo trên `master` trước bản vá: mời ở `DRAFT` ⇒ 422 (K6); mời ở `OPEN` gửi hỏng ⇒ 500, phần bù bị K4a chặn,
-token còn sống. Mười bảy đột biến TypeScript, mười bảy lần đỏ. Biên bản: `evidence/security-reviews.md` §S1.9101.
+token còn sống. Mười bảy đột biến TypeScript, mười bảy lần đỏ. Biên bản: `evidence/security-reviews.md` §S1.187.
 
 **[2026-09-28 / S1.186] S3.2b1 — CẠNH `PENDING_APPROVAL→DRAFT` CHỈ Ở TỔ CHỨC ĐÃ BẬT, CÓ NGƯỜI VÀ CÓ LÝ DO (K4a); KHOẢN 253
 ĐÓNG Ở PHÍA DÙNG (K6).** Phần đầu trong hai phần của S3.2b. Chủ dự án chốt ngày 2026-09-28: S3.2b chia hai PR — S3.2b1 là cạnh

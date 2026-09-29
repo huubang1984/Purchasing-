@@ -1979,7 +1979,7 @@ chính nó như `PermissionAuditFailedError` — khoản 119. **[S1.68] Đóng �
 
 ### [S1.70 / khoản 124] Link mời gửi SAU commit; gửi hỏng thì lời mời bị thu hồi và phản hồi nói ra bằng `502`
 
-**[S1.9101 / ADR-9201] Tổ chức đã bật S3 không đi hợp đồng dưới đây nữa** (spec S3 §2.4 ⑼): link đi lúc MỞ GÓI, gửi hỏng thì lời mời ở lại *chưa gửi* thay vì bị thu hồi — K4a cấm thu hồi ở `OPEN` —, và phản hồi thành công nói lời mời nào chưa gửi. Tổ chức chưa bật: nguyên văn.
+**[S1.187 / ADR-113] Tổ chức đã bật S3 không đi hợp đồng dưới đây nữa** (spec S3 §2.4 ⑼): link đi lúc MỞ GÓI, gửi hỏng thì lời mời ở lại *chưa gửi* thay vì bị thu hồi — K4a cấm thu hồi ở `OPEN` —, và phản hồi thành công nói lời mời nào chưa gửi. Tổ chức chưa bật: nguyên văn.
 
 **Bối cảnh.** `POST /rfqs/:rfqId/invitations` ghi sổ hai lần — `createInvitation`, `issueMagicLinkToken` — rồi `await` bộ gửi link mời
 TRONG giao dịch của bộ điều phối, nên khoá tư vấn ghi sổ của tổ chức (`noi_chuoi_kiem_toan()`) bị giữ suốt lần gửi. Câu [S1.11] ở mục
@@ -8566,7 +8566,7 @@ sau mỗi lần nộp trên máy dùng chung.
    con số chỉ nằm trong sổ.
 4. **Không chạm** phiên khách đang sống, thách thức OTP hay khoá OTP của lời mời — gửi lại không phải thu hồi; gỡ khoá có đường
    riêng (`POST /invitations/:invitationId/unlock`).
-   **[S1.9101 / ADR-9201]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
+   **[S1.187 / ADR-113]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
    lần gửi lại đi được; lời mời đã `SENT` không đổi.
 5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; câu báo sau khi thu hồi nói thẳng báo giá đã
    nộp theo lời mời ấy vẫn nằm trong gói thầu, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
@@ -8858,13 +8858,13 @@ chính sách trên máy chủ thật (ADR-105 ⑷(a)).
   ⒧ (cùng lúc), ⒨ (lần ghi hỏng vẫn tiêu ngân sách); `packages/identity/src/rbac.int.test.ts` khối khoản 248 (đếm một lần, ở giao dịch
   đã commit trước lần ghi; lỗi ra nguyên dạng; không đếm hai lần; ngoài bối cảnh không đếm).
 
-## ADR-9201 — Tổ chức đã bật S3: link mời đi lúc MỞ GÓI bằng phiên người mở, gửi at-most-once SAU commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* thay vì thu hồi; bộ điều phối có LÔ gửi sau commit
+## ADR-113 — Tổ chức đã bật S3: link mời đi lúc MỞ GÓI bằng phiên người mở, gửi at-most-once SAU commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* thay vì thu hồi; bộ điều phối có LÔ gửi sau commit
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-28: S3.2b chia hai PR, và lần mở gói mà một
 phần link gửi hỏng trả `200` kèm danh sách lời mời chưa gửi; ngày 2026-09-29 bảo làm S3.2b2 theo đề xuất sáu phần của vòng
-S1.186 · **[S1.9101]** · **Liên quan:** ADR-082 ⑼ (spec S3 §2.4 ⑼ — hình dạng gửi của S3), ADR-020 tiểu mục [S1.70 / khoản 124]
+S1.186 · **[S1.187]** · **Liên quan:** ADR-082 ⑼ (spec S3 §2.4 ⑼ — hình dạng gửi của S3), ADR-020 tiểu mục [S1.70 / khoản 124]
 (link đi SAU commit — ADR này THAY nó cho tổ chức đã bật, như §2.4 ⑼ nói), ADR-110 (gửi lại link), ADR-023 (tác dụng phụ sau commit),
-ADR-080 (công tắc một chiều theo tổ chức) · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+ADR-080 (công tắc một chiều theo tổ chức) · **Biên bản:** `evidence/security-reviews.md` §S1.187
 
 ### Bối cảnh
 
@@ -8949,4 +8949,4 @@ lời mời còn sống và một đã thu hồi (token đúc dưới phiên ng�
 do dưới người mở, một dòng `sau-commit 2/3`, log không mang token hay đích, gửi lại ⇒ `SENT`); ba bộ gửi treo trên máy chủ trần
 1 500 ms ⇒ phản hồi dưới 3 000 ms; mời ở `OPEN` gửi được và gửi hỏng; không khoá ghi sổ nào bị giữ trong lúc gửi; đối chứng MVP1;
 chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `danhDauDaGui`; bốn ca của bộ điều phối trên route giả. Đột biến:
-§S1.9101.
+§S1.187.

@@ -369,7 +369,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // của lời mời đổi ở S3.2b.
   // [S1.186 / S3.2b1] `tra-ve-nhap` đo cạnh về DRAFT ở tầng gói và tầng CSDL (K4a), chữ ký cũ sau lần trả về (K4b) và cột
   // `duc_khi_goi_da_mo` (K6); tệp HTTP đo route của cạnh; `token-goi-da-mo` đo K6 ở PHÍA DÙNG — đổi link, xin và xác minh OTP.
-  // [S1.9101 / S3.2b2] `luong-moi-s3` đo luồng mời mới qua HTTP: mời ở DRAFT không token (K4a, K6), đúc lúc mở gói, gửi sau
+  // [S1.187 / S3.2b2] `luong-moi-s3` đo luồng mời mới qua HTTP: mời ở DRAFT không token (K4a, K6), đúc lúc mở gói, gửi sau
   // commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* (K6).
   K4a: [
     "apps/api/src/buyer.int.test.ts",

@@ -15623,10 +15623,10 @@ phép kiểm có `077`; nhân chứng hành vi của hai hàm mới có mặt.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3195 khẳng định; K4a 6 → 15, K4b 5 → 8, K6 4 → 12. Mốc
   `MOC_GHIM` không đổi — không mã mới.
 
-# §S1.9101 — S3.2b2: LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 — MỜI Ở DRAFT KHÔNG TOKEN, ĐÚC LÚC MỞ GÓI, GỬI SAU COMMIT, `SENT` SAU LẦN GỬI ĐƯỢC, GỬI HỎNG ĐỂ LỜI MỜI *CHƯA GỬI* (K6)
+# §S1.187 — S3.2b2: LUỒNG MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 — MỜI Ở DRAFT KHÔNG TOKEN, ĐÚC LÚC MỞ GÓI, GỬI SAU COMMIT, `SENT` SAU LẦN GỬI ĐƯỢC, GỬI HỎNG ĐỂ LỜI MỜI *CHƯA GỬI* (K6)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Không migration, không
-route mới, không khoản mới. Một ADR mới: ADR-9201.
+route mới, không khoản mới. Một ADR mới: ADR-113.
 
 ## 1. Vòng này là gì
 

@@ -497,7 +497,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     // cầu (lượt soi 64a-2): lần đăng ký thứ hai ném ngay trong handler, giao dịch rollback — thay vì trả `phanHoiKhiHong` của việc đầu trong
     // khi việc sau đã commit mà không ai bù.
     let viecCoBu: ViecSauCommitCoBu | undefined;
-    // [S1.9101 / S3.2b2 / ADR-9201] Lô gửi sau commit (`LoGuiSauCommit`) đếm chung trần MỘT việc có bù với `viecCoBu`: một yêu cầu
+    // [S1.187 / S3.2b2 / ADR-113] Lô gửi sau commit (`LoGuiSauCommit`) đếm chung trần MỘT việc có bù với `viecCoBu`: một yêu cầu
     // đăng ký một việc có bù HOẶC một lô, không cả hai, không hai lần.
     let loGui: LoGuiSauCommit | undefined;
     const tuChoiViecCoBuThuHai = (): never => {
@@ -534,7 +534,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           }
           return v.phanHoiKhiHong;
         }
-        // [S1.9101 / S3.2b2 / ADR-9201] `viec` xong ⇒ việc ghi của lần xong, giao dịch MỚI; hỏng thì một dòng log và phản hồi giữ nguyên.
+        // [S1.187 / S3.2b2 / ADR-113] `viec` xong ⇒ việc ghi của lần xong, giao dịch MỚI; hỏng thì một dòng log và phản hồi giữ nguyên.
         if (v.khiXong !== undefined) {
           try {
             await withTenant(deps.pool, orgId, v.khiXong, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
@@ -543,7 +543,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           }
         }
       }
-      // [S1.9101 / S3.2b2 / ADR-9201] Lô gửi: mọi lần gửi CÙNG LÚC, mỗi lần một trần; rồi lần lượt mỗi lần một giao dịch ghi MỚI.
+      // [S1.187 / S3.2b2 / ADR-113] Lô gửi: mọi lần gửi CÙNG LÚC, mỗi lần một trần; rồi lần lượt mỗi lần một giao dịch ghi MỚI.
       // Dòng log mang số thứ tự `i/n` của lần gửi trong lô, không mang khoá — cùng kỷ luật A2 với dòng `sau-commit` của việc có bù.
       const lo = loGui;
       let ketThuc = r;
