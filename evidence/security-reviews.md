@@ -16353,3 +16353,7 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 23 → 40, K4a 16 → 20, D2 50 → 64. Không mã mới.
+- **Sau khi merge #199 — nay mang #201 (S4.0 + S4.1 giữ S1.192 và `079`) — và cấp lại số vòng, số migration:** toàn bộ unit + T3
+  cục bộ trên cây cuối: 194 tệp, 3292 khẳng định, 3282 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất
+  biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3292 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise`
+  sạch; `pnpm cap-so --kiem` sạch.
