@@ -102,7 +102,7 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
 ];
 
 /**
- * [S1.9101 / S4.2b] Ba hàng chuẩn cho ba dòng của `HANG_MUC`, ghi bằng hàm gói dưới phiên người quản lý dữ liệu — đúng đường
+ * [S1.199 / S4.2b] Ba hàng chuẩn cho ba dòng của `HANG_MUC`, ghi bằng hàm gói dưới phiên người quản lý dữ liệu — đúng đường
  * màn `/du-lieu` đi. Mỗi hàng: một bí danh là NGUYÊN mô tả của dòng (để S4.3 ánh xạ được), một quy đổi riêng từ đơn vị đóng gói
  * của dòng về đơn vị gốc.
  *
@@ -211,7 +211,7 @@ async function chinh(): Promise<void> {
     // Hai người DUYỆT mang vai DIRECTOR vẫn cần thiết và không thay được: `rfq.unseal.approve`
     // chỉ của DIRECTOR. Nên bối cảnh này có NĂM người, hai vai, hai loại phê duyệt khác nhau —
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
-    // [S1.9101 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
+    // [S1.199 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
     // §8.10): `DATA_STEWARD` không ghép được với vai nào ở đây.
     for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
       const email = `${ten}.${duoi}@vidu.vn`;
@@ -240,7 +240,7 @@ async function chinh(): Promise<void> {
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
 
-    // [S1.9101 / S4.2b] Ba hàng chuẩn, dưới phiên người quản lý dữ liệu — một giao dịch: trigger `du_lieu_nen_kiem_quyen_ghi`
+    // [S1.199 / S4.2b] Ba hàng chuẩn, dưới phiên người quản lý dữ liệu — một giao dịch: trigger `du_lieu_nen_kiem_quyen_ghi`
     // phán người ghi như ở màn.
     const phienDuLieu = nguoiMua.find((n) => n.email.startsWith("dulieu."))?.sessionId;
     if (phienDuLieu === undefined) throw new GieoError("thiếu người quản lý dữ liệu");

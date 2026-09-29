@@ -30,7 +30,7 @@ export {
   type TaoHangChuanInput,
   type TaoPhienBanInput,
 } from "./hang-chuan.js";
-// [S1.9101 / S4.2b] Danh mục đơn vị và bí danh đơn vị của tổ chức — đường ghi của màn `/du-lieu`.
+// [S1.199 / S4.2b] Danh mục đơn vị và bí danh đơn vị của tổ chức — đường ghi của màn `/du-lieu`.
 export {
   docDanhMucDonVi,
   khaiBiDanhDonVi,

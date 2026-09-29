@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.2b] MÀN DỮ LIỆU NỀN — PHÉP TÍNH THUẦN CỦA `/du-lieu`
+// [S1.199 / S4.2b] MÀN DỮ LIỆU NỀN — PHÉP TÍNH THUẦN CỦA `/du-lieu`
 //
 // Bốn việc, không việc nào là chốt — mọi luật nằm ở CSDL (`083`) và gói `du-lieu-nen`; màn chỉ nói trước điều máy chủ sẽ nói:
 //   ⑴ đọc và viết ô thuộc tính (*"khoá: giá trị"*, mỗi dòng một cặp) và ô thuộc tính trọng yếu (phân cách bằng dấu phẩy);

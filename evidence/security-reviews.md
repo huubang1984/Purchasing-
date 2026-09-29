@@ -16414,7 +16414,7 @@ bất biến, 79 migration, rồi số ADR). Mọi ca ấy xanh sau khi khai.
   sách tên migration ở `db/migrations.int.test.ts` (giữ cả hai tên, migration của vòng này đứng sau). `hardening.always.sql` hợp tự
   động: hai bên ghim hai hàm khác nhau. `pnpm cap-so` cấp lại cả ba số.
 
-# §S1.9101 — S4.2b: ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ NGƯỜI QUẢN LÝ DỮ LIỆU
+# §S1.199 — S4.2b: ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ NGƯỜI QUẢN LÝ DỮ LIỆU
 
 ## 1. Vòng này là gì
 

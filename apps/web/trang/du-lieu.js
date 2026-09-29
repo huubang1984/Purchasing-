@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.2b] MÀN DỮ LIỆU NỀN — spec S4 §3.5 (`/du-lieu`), §4.2, §4.3, §8.10
+// [S1.199 / S4.2b] MÀN DỮ LIỆU NỀN — spec S4 §3.5 (`/du-lieu`), §4.2, §4.3, §8.10
 //
 // Bốn việc: ⑴ danh sách hàng chuẩn, lọc trên màn; ⑵ tạo hàng chuẩn; ⑶ chi tiết một hàng — phiên bản, bí danh, quy đổi riêng —
 // và ghi thêm vào từng thứ; ⑷ danh mục đơn vị cùng bí danh đơn vị của tổ chức. Mọi luật nằm ở máy chủ và CSDL (`083`): màn

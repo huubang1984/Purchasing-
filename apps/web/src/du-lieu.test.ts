@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.2b] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN DỮ LIỆU NỀN
+// [S1.199 / S4.2b] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN DỮ LIỆU NỀN
 //
 // Ba biểu thức của màn (khoá thuộc tính, mã hàng chuẩn, hệ số) chép từ CSDL và gói: ca đầu đối chiếu chúng với NGUỒN — đọc
 // `083_hang_chuan.sql` và `hang-chuan.ts` —, nên một lần sửa luật ở máy chủ mà quên màn làm test này đỏ thay vì làm màn nói sai.
@@ -11,7 +11,7 @@ import { cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, maHop
 
 const nguon = (duong: string): string => readFileSync(new URL(`../../../${duong}`, import.meta.url), "utf8");
 
-describe("[S1.9101 / S4.2b] ba biểu thức của màn khớp nguồn của chúng", () => {
+describe("[S1.199 / S4.2b] ba biểu thức của màn khớp nguồn của chúng", () => {
   it("khoá thuộc tính và mã hàng chuẩn là đúng biểu thức của `CHECK` trong `083`; hệ số là đúng `HE_SO` của gói", () => {
     const mig = nguon("db/migrations/083_hang_chuan.sql");
     const man = nguon("apps/web/src/du-lieu.ts");
@@ -26,7 +26,7 @@ describe("[S1.9101 / S4.2b] ba biểu thức của màn khớp nguồn của ch�
   });
 });
 
-describe("[S1.9101 / S4.2b] ô thuộc tính", () => {
+describe("[S1.199 / S4.2b] ô thuộc tính", () => {
   it("đọc mỗi dòng một cặp, bỏ dòng trống, giữ nguyên giá trị có dấu hai chấm", () => {
     expect(docThuocTinh("mac: CB300\n\n nha_san_xuat :  Hòa Phát \nkich_thuoc: 1500x6000: tấm")).toEqual({
       ok: true,
@@ -65,7 +65,7 @@ describe("[S1.9101 / S4.2b] ô thuộc tính", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] mã và hệ số", () => {
+describe("[S1.199 / S4.2b] mã và hệ số", () => {
   it("mã: viết hoa, chữ số chấm gạch; không chữ thường, không dấu, không quá 40 ký tự", () => {
     for (const ma of ["THEP-D10", "BU-LONG-NEO-M24-8.8", "X", "A_B"]) expect(maHopLe(ma), ma).toBe(true);
     for (const ma of ["thep-d10", "-THEP", "THÉP", "THEP D10", "", "A".repeat(41)]) expect(maHopLe(ma), ma).toBe(false);
@@ -84,7 +84,7 @@ describe("[S1.9101 / S4.2b] mã và hệ số", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] lọc hiển thị", () => {
+describe("[S1.199 / S4.2b] lọc hiển thị", () => {
   const DS = [
     { ma: "THEP-D10", ten: "Thép cây D10 Hòa Phát" },
     { ma: "XI-MANG-PCB40", ten: "Xi măng Nghi Sơn" },
@@ -100,7 +100,7 @@ describe("[S1.9101 / S4.2b] lọc hiển thị", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] câu §8.10 của spec S4", () => {
+describe("[S1.199 / S4.2b] câu §8.10 của spec S4", () => {
   it("người giữ vai ⇒ không câu nào; chưa ai giữ ⇒ đòi một NGƯỜI MỚI; đã có người ⇒ nói chỉ xem được", () => {
     expect(cauVaiQuanLy(true, 1)).toBeNull();
     const chuaAi = cauVaiQuanLy(false, 0) ?? "";

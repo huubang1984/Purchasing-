@@ -76,7 +76,7 @@ const HAM_DOI_TRANG_THAI = [
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
-  // [S1.9101 / S4.2b] Bí danh đơn vị của tổ chức — cùng rổ, cùng mã quyền ở route, cùng cổng CSDL.
+  // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức — cùng rổ, cùng mã quyền ở route, cùng cổng CSDL.
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
@@ -124,7 +124,7 @@ const HAM_CHI_DOC = [
   // [S1.197 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
   // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
   "chuoiSach",
-  // [S1.9101 / S4.2b] Chi tiết, danh sách hàng chuẩn và danh mục đơn vị — cùng hạng với `docHangChuan`: không mang giá.
+  // [S1.199 / S4.2b] Chi tiết, danh sách hàng chuẩn và danh mục đơn vị — cùng hạng với `docHangChuan`: không mang giá.
   // Tác giả đi kèm là họ tên người trong CÙNG tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docChiTietHangChuan",
   "docDanhMucDonVi",

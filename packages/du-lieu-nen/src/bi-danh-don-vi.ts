@@ -1,4 +1,4 @@
-// [S1.9101 / S4.2b] Danh mục đơn vị và bí danh đơn vị của TỔ CHỨC (spec S4 §4.2). Bảng `uom_aliases` có từ S4.1 (`079`),
+// [S1.199 / S4.2b] Danh mục đơn vị và bí danh đơn vị của TỔ CHỨC (spec S4 §4.2). Bảng `uom_aliases` có từ S4.1 (`079`),
 // cổng `item.manage` ở CSDL có từ S4.2a (`083`); vòng này thêm đường GHI của gói — cùng ba bước với `hang-chuan.ts`: phiên
 // dẫn xuất tác giả, một câu INSERT chỉ-ghi-thêm (`seq`, `ghi_luc` do trigger khuôn L1 đặt), một hàng sổ trong cùng giao dịch.
 //

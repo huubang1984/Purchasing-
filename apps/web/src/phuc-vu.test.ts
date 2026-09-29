@@ -149,7 +149,7 @@ describe("bề mặt tệp", () => {
     expect(tron.map((l) => `${l.tep}${l.duong}`)).toEqual(["gui-ses.ts/login"]);
   });
 
-  it("[ADR-107] docLink() của ~~bốn~~ [S1.9101] năm trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
+  it("[ADR-107] docLink() của ~~bốn~~ [S1.199] năm trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
     const ORG = "11111111-1111-4111-8111-111111111111";
     const chay = (trang: string, hash: string, truoc: { org: string; token: string }) => {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
@@ -207,7 +207,7 @@ describe("bề mặt tệp", () => {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
-      // [S1.9101 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
+      // [S1.199 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
       "du-lieu": ["b2", "b3", "b5"],
     };
     const ORG = "11111111-2222-4333-8444-555555555555";
@@ -259,7 +259,7 @@ describe("bề mặt tệp", () => {
       ...chinhSach,
       // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
       ...taoThau,
-      // [S1.9101 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
+      // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
       ...duLieu,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
       sealBid: () => Promise.resolve(new Uint8Array(0)),
@@ -1262,7 +1262,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ly-do-tra-ve").value).toBe("");
     });
 
-    // [S1.9101 / S4.2b] Màn dữ liệu nền — spec S4 §8.10: vai mới là một NGƯỜI MỚI, và màn nói ra điều ấy trước khi tổ chức dùng.
+    // [S1.199 / S4.2b] Màn dữ liệu nền — spec S4 §8.10: vai mới là một NGƯỜI MỚI, và màn nói ra điều ấy trước khi tổ chức dùng.
     const moDuLieu = async (danhSach: Record<string, unknown>, thay?: (l: string) => Promise<{ status: number; body: unknown }> | undefined) => {
       const p = await dungTrang("du-lieu", {
         hash: "", cookie: A,
@@ -1273,7 +1273,7 @@ describe("bề mặt tệp", () => {
     };
     const PHAN_GHI = ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv"];
 
-    it("[S1.9101 / S4.2b · §8.10] du-lieu: tổ chức chưa ai giữ vai quản lý dữ liệu ⇒ câu đòi một NGƯỜI MỚI, không bước tạo, không khối ghi nào", async () => {
+    it("[S1.199 / S4.2b · §8.10] du-lieu: tổ chức chưa ai giữ vai quản lý dữ liệu ⇒ câu đòi một NGƯỜI MỚI, không bước tạo, không khối ghi nào", async () => {
       const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 });
       expect(p.el("vai-quan-ly").hidden).toBe(false);
       expect(p.el("vai-quan-ly").textContent).toMatch(/NGƯỜI MỚI/u);
@@ -1288,7 +1288,7 @@ describe("bề mặt tệp", () => {
       for (const id of PHAN_GHI) expect(r.el(id).hidden, id).toBe(false);
     });
 
-    it("[S1.9101 / S4.2b] du-lieu: `conNua` ⇒ màn nói nó chỉ hiện phần đầu; mã sai hình dạng hay thuộc tính sai ⇒ báo, KHÔNG gọi máy chủ", async () => {
+    it("[S1.199 / S4.2b] du-lieu: `conNua` ⇒ màn nói nó chỉ hiện phần đầu; mã sai hình dạng hay thuộc tính sai ⇒ báo, KHÔNG gọi máy chủ", async () => {
       const p = await moDuLieu({ hangChuan: [{ id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", trangThai: "DANG_DUNG" }], conNua: true, choGhi: true, soNguoiQuanLy: 1 });
       expect(p.el("con-nua").textContent).toMatch(/1 hàng chuẩn đầu tiên/u);
       p.el("tao-ma").value = "thep-d12";
@@ -1305,7 +1305,7 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).toContain("POST /items");
     });
 
-    it("[S1.9101 / S4.2b · lượt đi thử T4] du-lieu: bấm đúp một nút ghi ⇒ ĐÚNG một lời gọi; nhập sai sau một lần thành công ⇒ câu thành công cũ biến mất", async () => {
+    it("[S1.199 / S4.2b · lượt đi thử T4] du-lieu: bấm đúp một nút ghi ⇒ ĐÚNG một lời gọi; nhập sai sau một lần thành công ⇒ câu thành công cũ biến mất", async () => {
       let tha: () => void = () => undefined;
       const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) =>
         l === "POST /uom/aliases" ? new Promise((r) => { tha = () => { r({ status: 201, body: { biDanh: { biDanhSach: "mt", code: "t" } } }); }; }) : undefined);
@@ -1327,7 +1327,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok5").hidden, "câu thành công của lần trước không nằm cạnh câu lỗi").toBe(true);
     });
 
-    it("[S1.9101 / S4.2b · lượt đi thử T4] du-lieu: mở chi tiết hỏng ⇒ bước 4 không giữ hàng trước, nút ghi không ghi vào hàng trước", async () => {
+    it("[S1.199 / S4.2b · lượt đi thử T4] du-lieu: mở chi tiết hỏng ⇒ bước 4 không giữ hàng trước, nút ghi không ghi vào hàng trước", async () => {
       const CHI_TIET = { hangChuan: { id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", thuocTinh: {}, thuocTinhTrongYeu: [], trangThai: "DANG_DUNG" }, phienBan: [], biDanh: [], quyDoi: [] };
       let lanTao = 0;
       const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) => {

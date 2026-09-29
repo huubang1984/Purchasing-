@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.2b] ROUTE DỮ LIỆU NỀN QUA HTTP — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị.
+// [S1.199 / S4.2b] ROUTE DỮ LIỆU NỀN QUA HTTP — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị.
 //
 //   ⑴ [INV-L3] cổng ghi ở tầng ứng dụng: người giữ vai KHÁC (FINANCE — mang `policy.manage`, `po.approve`…) gọi tám route ghi ⇒ 403,
 //      mỗi lần một hàng PERMISSION_DENIED mang `resource_type` của route, không hàng dữ liệu nào ra đời. Lượt quét [INV-H17] của
@@ -103,7 +103,7 @@ afterAll(async () => {
 
 const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
-describe("[S1.9101 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng", () => {
+describe("[S1.199 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng", () => {
   it("mười một route, đúng tám route ghi khai `item.manage`, ba route đọc khai `agent: false`", () => {
     const cuaDuLieu = ROUTES.filter((r) => /^\/(?:items|uom)(?:\/|$)/u.test(r.path));
     expect(cuaDuLieu).toHaveLength(11);
@@ -151,7 +151,7 @@ describe("[S1.9101 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑵ trọn đường của người quản lý dữ liệu", () => {
+describe("[S1.199 / S4.2b] ⑵ trọn đường của người quản lý dữ liệu", () => {
   it("tạo → phiên bản → bí danh → quy đổi riêng → rút; mỗi bước đọc lại qua route, và `quy_doi_don_vi` thấy đúng thứ vừa khai", async () => {
     const tao = await goi("POST", "/items", quanLy, {
       ma: "THEP-D10", donViGoc: "kg", ten: "Thép cây D10", thuocTinh: { mac: "CB300", nha_san_xuat: "Hòa Phát" }, thuocTinhTrongYeu: ["mac"],
@@ -213,7 +213,7 @@ describe("[S1.9101 / S4.2b] ⑵ trọn đường của người quản lý dữ 
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑶ đọc", () => {
+describe("[S1.199 / S4.2b] ⑶ đọc", () => {
   it("người FINANCE đọc được danh sách, chi tiết và danh mục đơn vị — `choGhi` false; tổ chức B không thấy hàng của A", async () => {
     const ds = await goi("GET", "/items", taiChinh);
     expect(ds.status, ds.text).toBe(200);
@@ -229,7 +229,7 @@ describe("[S1.9101 / S4.2b] ⑶ đọc", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑷ từ chối có tên", () => {
+describe("[S1.199 / S4.2b] ⑷ từ chối có tên", () => {
   it("mã sai hình dạng, mã trùng, đơn vị đóng gói làm đơn vị gốc, thuộc tính sai kiểu ⇒ 422, không 500", async () => {
     const ca: [unknown, string][] = [
       [{ ma: "thep-thuong", donViGoc: "kg", ten: "X" }, "MA_SAI_HINH_DANG"],

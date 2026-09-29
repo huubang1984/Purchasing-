@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.2b] Route DỮ LIỆU NỀN — hàng chuẩn, bí danh hàng, quy đổi riêng, bí danh đơn vị (spec S4 §3.5, §4.2, §4.3).
+// [S1.199 / S4.2b] Route DỮ LIỆU NỀN — hàng chuẩn, bí danh hàng, quy đổi riêng, bí danh đơn vị (spec S4 §3.5, §4.2, §4.3).
 //
 // GHI: mọi route khai `item.manage` — bộ điều phối gọi `requirePermission` TRƯỚC handler (ADR-016), và trigger
 // `du_lieu_nen_kiem_quyen_ghi` đứng dưới nó ở CSDL (ADR-116 ⑹). Hai cổng, hai tầng; handler không kiểm lần thứ ba.

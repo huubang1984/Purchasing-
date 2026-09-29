@@ -1,4 +1,4 @@
-// [S1.9101 / S4.2b] Đường đọc và ghi của màn `/du-lieu` ở tầng gói — trên Postgres thật.
+// [S1.199 / S4.2b] Đường đọc và ghi của màn `/du-lieu` ở tầng gói — trên Postgres thật.
 //
 //   ⑴ `lietKeHangChuan` — phiên bản MỚI NHẤT của từng hàng, tìm trên dạng sạch, xếp theo mã, có trần, hàng ngừng dùng vẫn hiện;
 //   ⑵ `docChiTietHangChuan` — mọi phiên bản, và CHỈ bí danh / quy đổi riêng đang hiệu lực của đúng hàng ấy, kèm tác giả;
@@ -91,7 +91,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9101 / S4.2b] ⑴ liệt kê hàng chuẩn", () => {
+describe("[S1.199 / S4.2b] ⑴ liệt kê hàng chuẩn", () => {
   it("phiên bản MỚI NHẤT của từng hàng, xếp theo mã; hàng ngừng dùng vẫn có mặt; tổ chức khác không thấy", async () => {
     const d12 = await taoHang(orgA, quanLyA.phien, "LK-THEP-D12", "Thép cây D12");
     await taoHang(orgA, quanLyA.phien, "LK-BU-LONG-M24", "Bu lông neo M24", "cai");
@@ -138,7 +138,7 @@ describe("[S1.9101 / S4.2b] ⑴ liệt kê hàng chuẩn", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑵ chi tiết hàng chuẩn", () => {
+describe("[S1.199 / S4.2b] ⑵ chi tiết hàng chuẩn", () => {
   it("mọi phiên bản mới nhất trước; chỉ bí danh và quy đổi ĐANG hiệu lực của đúng hàng này; tác giả là họ tên", async () => {
     const d10 = await taoHang(orgA, quanLyA.phien, "CT-THEP-D10", "Thép cây D10");
     const d32 = await taoHang(orgA, quanLyA.phien, "CT-THEP-D32", "Thép cây D32");
@@ -176,7 +176,7 @@ describe("[S1.9101 / S4.2b] ⑵ chi tiết hàng chuẩn", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑶ bí danh đơn vị của tổ chức", () => {
+describe("[S1.199 / S4.2b] ⑶ bí danh đơn vị của tổ chức", () => {
   it("dạng mơ hồ do tổ chức tự khai: *\"MT\"* chưa khai thì không quy đổi; khai → `t`; khai lại → `m` thắng; rút ⇒ không quy đổi", async () => {
     const moc = (): Date => new Date(Date.now() + 60_000);
     const quyDoi = (tu: string, sang: string): Promise<string> =>
@@ -238,7 +238,7 @@ describe("[S1.9101 / S4.2b] ⑶ bí danh đơn vị của tổ chức", () => {
   });
 });
 
-describe("[S1.9101 / S4.2b] ⑷ rút bí danh hàng từ trang của một hàng chuẩn", () => {
+describe("[S1.199 / S4.2b] ⑷ rút bí danh hàng từ trang của một hàng chuẩn", () => {
   it("bí danh đang trỏ sang hàng khác ⇒ `KHONG_CO_BI_DANH`, không hàng nào được ghi; đúng hàng ⇒ rút được", async () => {
     const a = await taoHang(orgA, quanLyA.phien, "RUT-A", "Hàng A");
     const b = await taoHang(orgA, quanLyA.phien, "RUT-B", "Hàng B");

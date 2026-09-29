@@ -1072,7 +1072,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "rutQuyDoiRieng",
   "taoHangChuan",
   "taoPhienBanHangChuan",
-  // [S1.9101 / S4.2b] Hai hàm đọc cho màn `/du-lieu`, và đường ghi bí danh đơn vị của tổ chức.
+  // [S1.199 / S4.2b] Hai hàm đọc cho màn `/du-lieu`, và đường ghi bí danh đơn vị của tổ chức.
   "docChiTietHangChuan",
   "lietKeHangChuan",
   "docDanhMucDonVi",

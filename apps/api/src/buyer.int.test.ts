@@ -161,7 +161,7 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     // dẫn) để lại `resource_id = UUID0`; số bản ghi có toạ độ bằng đúng số route khai nó.
     const coToaDo = routeGhi.filter((r) => "resourceId" in r && r.resourceId !== undefined).length;
     expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
-    // ~~Đếm `3`~~ [S1.9101 / S4.2b] Nêu TÊN thay vì đếm: ba route tạo mới cũ, cộng `POST /items` (tạo mới) và hai route bí danh
+    // ~~Đếm `3`~~ [S1.199 / S4.2b] Nêu TÊN thay vì đếm: ba route tạo mới cũ, cộng `POST /items` (tạo mới) và hai route bí danh
     // đơn vị — thứ chúng ghi là một CHUỖI của tổ chức, không phải một tài nguyên có UUID trên đường dẫn.
     expect(
       routeGhi.filter((r) => !("resourceId" in r && r.resourceId !== undefined)).map((r) => `${r.method} ${r.path}`).sort(),

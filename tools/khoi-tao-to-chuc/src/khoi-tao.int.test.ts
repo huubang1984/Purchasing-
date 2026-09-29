@@ -171,7 +171,7 @@ describe("[S1.182 / ADR-111] ⑶ mọi lỗi rollback TRỌN, thông điệp nê
     ["tổ hợp vai D3 ở người thứ 2", [nguoi("a@d3.vn", ["BUYER"]), nguoi("bimat.d3@d3.vn", ["PROCUREMENT_MANAGER", "DIRECTOR"], "Tên Bí Mật D3")], /người thứ 2: bị từ chối \(mã 42501/u],
     ["tổ hợp vai 033", [nguoi("bimat.033@d3.vn", ["FINANCE", "BUYER"], "Tên Bí Mật 033")], /người thứ 1: bị từ chối \(mã 42501/u],
     ["email trùng khác hoa thường trong CÙNG bản khai", [nguoi("bimat.trung@d3.vn", ["BUYER"]), nguoi("Bimat.Trung@D3.vn", ["BUYER"])], /người thứ 2: trùng email với người thứ 1/u],
-    // [S1.9101 / S4.2b] Spec S4 §8.10: tổ chức nhỏ sẽ muốn gán vai quản lý dữ liệu cho người Tài chính sẵn có — hai trigger L3 của
+    // [S1.199 / S4.2b] Spec S4 §8.10: tổ chức nhỏ sẽ muốn gán vai quản lý dữ liệu cho người Tài chính sẵn có — hai trigger L3 của
     // `083` từ chối, và công cụ nói ra vị trí như mọi tổ hợp vai trái luật khác, không kiểm lại luật ấy ở bản khai.
     ["tổ hợp vai L3: DATA_STEWARD cùng FINANCE", [nguoi("a@l3.vn", ["BUYER"]), nguoi("bimat.l3@l3.vn", ["FINANCE", "DATA_STEWARD"], "Tên Bí Mật L3")], /người thứ 2: bị từ chối \(mã 42501/u],
   ])("%s ⇒ KhoiTaoError/BanKhaiError, không hàng nào của tổ chức mới nằm lại", async (ten, ds, mau) => {

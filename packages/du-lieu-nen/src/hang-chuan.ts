@@ -49,12 +49,12 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   canonical_item_versions_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   item_aliases_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   item_uom_conversions_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
-  // [S1.9101 / S4.2b] `CHECK` không tên của `079` trên bí danh đơn vị của tổ chức — tên Postgres tự đặt.
+  // [S1.199 / S4.2b] `CHECK` không tên của `079` trên bí danh đơn vị của tổ chức — tên Postgres tự đặt.
   uom_aliases_bi_danh_sach_check: "CHUOI_RONG",
 };
 
 /**
- * **[S1.9101 / S4.2b]** Câu cho người đọc của từng mã đến từ ràng buộc — màn `/du-lieu` in thẳng thông điệp của 422, và lượt đi thử
+ * **[S1.199 / S4.2b]** Câu cho người đọc của từng mã đến từ ràng buộc — màn `/du-lieu` in thẳng thông điệp của 422, và lượt đi thử
  * T4 thấy người quản lý dữ liệu nhận *"dữ liệu nền từ chối: MA_DA_CO"* trong khi mọi lần từ chối khác có câu. Mã vẫn đi kèm, trong
  * ngoặc: người gọi đọc `ma`, không so câu.
  */
@@ -243,7 +243,7 @@ export async function khaiBiDanhHang(
 
 /**
  * Rút một bí danh đang hiệu lực. Không có bí danh nào đang hiệu lực cho chuỗi ấy thì từ chối — hàng rút không để làm nhiễu.
- * **[S1.9101 / S4.2b]** `hangChuanId`: người gọi đang đứng ở ĐÚNG hàng chuẩn ấy (route `/items/:itemId/aliases/withdraw`) —
+ * **[S1.199 / S4.2b]** `hangChuanId`: người gọi đang đứng ở ĐÚNG hàng chuẩn ấy (route `/items/:itemId/aliases/withdraw`) —
  * bí danh đang trỏ sang hàng khác thì cũng là *"không có"*: một nút rút trên trang của D10 không được rút bí danh của D32.
  */
 export async function rutBiDanhHang(
@@ -465,7 +465,7 @@ function hangChuanTuHang(h: HangHangChuan): HangChuan {
 export const TRAN_LIET_KE_HANG_CHUAN = 500;
 
 /**
- * [S1.9101 / S4.2b] Danh sách hàng chuẩn, mỗi hàng với phiên bản MỚI NHẤT, xếp theo mã, tối đa `TRAN_LIET_KE_HANG_CHUAN`.
+ * [S1.199 / S4.2b] Danh sách hàng chuẩn, mỗi hàng với phiên bản MỚI NHẤT, xếp theo mã, tối đa `TRAN_LIET_KE_HANG_CHUAN`.
  * `q` so trên dạng SẠCH (`chuoi_sach` bản 1 — một luật, ở SQL) của *"mã tên"*: *"thép d10"* tìm được *"THEP-D10"*. Hàng đã
  * `NGUNG_DUNG` vẫn có mặt, mang trạng thái của nó — ẩn đi là giấu một thước đã từng được dùng.
  */
@@ -532,7 +532,7 @@ export interface ChiTietHangChuan {
 }
 
 /**
- * [S1.9101 / S4.2b] Một hàng chuẩn cùng lịch sử phiên bản, bí danh và quy đổi riêng đang hiệu lực — trang chi tiết của màn
+ * [S1.199 / S4.2b] Một hàng chuẩn cùng lịch sử phiên bản, bí danh và quy đổi riêng đang hiệu lực — trang chi tiết của màn
  * `/du-lieu`. `tacGia` là họ tên người ghi (spec S4 §8.2: *"ánh xạ nào cũng có chủ thể và thời điểm"* — và thước nào cũng vậy).
  * Hiệu lực tính theo `seq` NGAY BÂY GIỜ; hiệu lực tại một mốc là việc của `quy_doi_don_vi(p_moc)`, không phải của màn này.
  */
