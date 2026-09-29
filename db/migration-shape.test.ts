@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { HAM_CANH_CHI_GHI_THEM, HAM_KHONG_PHAI_CANH } from "./danh-sach-ham-canh.js";
+import { docHangHardening } from "./hardening-hang.js";
 
 // ============================================================================================
 // [S7b-T3] TÍNH NGUYÊN TỬ CỦA MỘT BẢNG CÓ RLS — CƯỠNG CHẾ TĨNH, KHÔNG CẦN DATABASE
@@ -942,5 +944,349 @@ describe("[S1.57 / khoản nợ 100] migration của kho không viết thẳng m
 
   it("RANH GIỚI ghim: tên ghép lúc chạy thì bộ dò KHÔNG thấy — phần ấy còn lại phép so vai cuối tệp của migrate()", () => {
     expect(timDoiVai("SELECT set_config('ro' || 'le', 'x', true); DO $d$ BEGIN EXECUTE format('SET %s x', 'ROLE'); END $d$")).toEqual([]);
+  });
+});
+
+// ============================================================================================
+// [S1.9191 / khoản 221] BỐN VẾ TĨNH CỦA MỘT BẢNG TENANT MỚI — QUYẾT ĐỊNH ĐƯỢC TỪ VĂN BẢN, KHÔNG CẦN CSDL
+//
+// Đo ở S1.105 trên chính `057`: một bảng tenant mới mang trigger bỏ sót policy `_khach` và cấp
+// `GRANT INSERT` mức BẢNG, và `pnpm t0` + `pnpm test` XANH TRỌN — năm cổng đỏ đều ở `test:int`
+// (138 s cho năm tệp). Bốn trong bảy lời khai mà bảng ấy đòi quyết định được từ VĂN BẢN migration:
+//   ⑴ migration số lớn hơn `027` mà `CREATE TABLE` có `org_id` thì phải `CREATE POLICY <bảng>_khach …
+//      AS RESTRICTIVE` trong CÙNG tệp — `027` lấp MỘT LẦN cho lược đồ của ngày ấy, hardening chỉ PHÁN
+//      XÉT chứ không DỰNG; `rls-coverage` [S1.48] đếm từ catalog "RESTRICTIVE = MỘT cho MỖI bảng tenant".
+//   ⑵ không migration nào cấp `INSERT` mà cấp được cột `id` trên bảng tenant: `GRANT INSERT`/`ALL` mức
+//      BẢNG, `GRANT INSERT (… id …)` theo cột, hay `ALTER DEFAULT PRIVILEGES … GRANT INSERT ON TABLES`
+//      (cấp trước cho bảng chưa có tên) — cấp `id` biến `<bảng>_pkey` thành oracle xuyên tổ chức mà
+//      ADR-013 từ chối. Bảng gốc `organizations` được miễn vế cột: `id` của nó LÀ tổ chức và vai khởi
+//      tạo (`075`) phải đặt nó.
+//   ⑶ tên bảng tenant phải có trong `BANG_TENANT_KHAI` của `hardening.always.sql`, dòng khai trỏ đúng
+//      tệp đã `CREATE TABLE`, và không dòng khai nào thiu — bản tĩnh của phép so `[INV-F1] HAI BẢN KHỚP`
+//      ở `rls-coverage`, đọc qua `docHangHardening` (chỉ ĐỌC hardening).
+//   ⑷ mỗi hàm `CREATE FUNCTION … RETURNS trigger` gắn vào INSERT/UPDATE/DELETE phải có tên trong
+//      `HAM_CANH_CHI_GHI_THEM` hoặc `HAM_KHONG_PHAI_CANH` (`db/danh-sach-ham-canh.ts` — cùng nguồn với
+//      tổng điều tra của `hardening-suy-tu-tinh-chat.int.test.ts`). Tập rộng ở đó là bit 4/8/16 của
+//      `tgtype`, nên một hàm CHỈ gắn `TRUNCATE` (`rfq_items_cam_truncate`, 011) nằm ngoài cả hai danh
+//      sách ở đó và ở đây; một hàm không `CREATE TRIGGER` nào gắn thì VẪN phải khai (fail-closed).
+// Vế thứ năm — nhân chứng hành vi của khoản 74 — KHÔNG quyết định được từ văn bản và ở lại `test:int`.
+// Lớp này là lưới bắt sớm đọc CÁCH VIẾT (cùng ranh giới với `kiemTraFailOpen`); lớp có thẩm quyền vẫn
+// là hardening + `rls-coverage` + tổng điều tra. Mỗi vế có một lượt đỏ thật trên văn bản mẫu bên dưới.
+// ============================================================================================
+
+/** Số của một migration đánh số (`027_…` → 27, `95NN_…` → số tạm bốn chữ số); `null` cho `.always.sql` hay tên lạ. */
+function soMigration(pTenFile: string): number | null {
+  if (pTenFile.endsWith(".always.sql")) return null;
+  const m = /^(\d{3,4})_/u.exec(pTenFile);
+  return m === null ? null : Number(m[1]);
+}
+
+const laMigrationDanhSo = (pTenFile: string): boolean => soMigration(pTenFile) !== null;
+
+/** Tách theo dấu phẩy NGOÀI ngoặc: `INSERT (a, b), UPDATE (c)` → hai phần tử, không bốn. */
+function tachTheoPhayNgoaiNgoac(pVan: string): string[] {
+  const ra: string[] = [];
+  let sau = 0;
+  let hienTai = "";
+  for (const c of pVan) {
+    if (c === "(") sau += 1;
+    else if (c === ")") sau -= 1;
+    if (c === "," && sau === 0) {
+      ra.push(hienTai.trim());
+      hienTai = "";
+    } else {
+      hienTai += c;
+    }
+  }
+  if (hienTai.trim() !== "") ra.push(hienTai.trim());
+  return ra;
+}
+
+/** ⑴ Bảng tenant sinh sau `027` (không phải lá phân mảnh) phải có `CREATE POLICY <bảng>_khach … AS RESTRICTIVE` cùng tệp. */
+function kiemPolicyKhach(pFile: Map<string, string>): { viPham: string[]; daXet: number } {
+  const viPham: string[] = [];
+  let daXet = 0;
+  for (const bang of timCacBang(pFile)) {
+    const so = soMigration(bang.tenFile);
+    if (!bang.chiuRangBuocTenant || bang.chaPhanManh !== null || so === null || so <= 27) continue;
+    daXet += 1;
+    const sql = boChuThich(pFile.get(bang.tenFile)!);
+    const tenPolicy = `${bang.tenBang}_khach`;
+    const re = new RegExp(
+      String.raw`CREATE\s+POLICY\s+(?:"${neo(tenPolicy)}"|${neo(tenPolicy)})\s+ON\s+${mauTenBang(bang.tenBang)}(?![A-Za-z0-9_$"])\s+AS\s+RESTRICTIVE\b`,
+      "iu",
+    );
+    if (!re.test(sql)) {
+      viPham.push(
+        `${bang.tenFile} tạo bảng tenant "${bang.tenBang}" (sau 027) nhưng không có CREATE POLICY ${tenPolicy} ON ${bang.tenBang} AS RESTRICTIVE ` +
+          "trong CÙNG tệp — 027 chỉ lấp một lần cho lược đồ của ngày ấy; hardening phán xét chứ không dựng.",
+      );
+    }
+  }
+  return { viPham, daXet };
+}
+
+/** ⑵ Không `GRANT` nào cấp được cột `id` của một bảng tenant qua INSERT: mức BẢNG (`INSERT`, `ALL`) hay theo cột có `id`. */
+function kiemGrantInsertCapId(pFile: Map<string, string>): { viPham: string[]; daXet: number } {
+  const bangTenant = new Set(timCacBang(pFile).filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang));
+  const viPham: string[] = [];
+  let daXet = 0;
+  const reTen = new RegExp(`^${TEN_CO_SCHEMA}$`, "u");
+  for (const [tenFile, sqlTho] of pFile) {
+    if (!laMigrationDanhSo(tenFile)) continue;
+    const sql = boChuThich(sqlTho);
+    // Đường vòng qua phép đọc `GRANT`: quyền MẶC ĐỊNH cho bảng sinh sau (`001` giải thích vì sao kho không dùng nó; hôm nay chỉ
+    // xuất hiện trong chú thích). Cấm hẳn cho mọi câu cấp INSERT/ALL ON TABLES — không xét bảng nào, vì nó áp cho bảng CHƯA có tên.
+    for (const khop of sql.matchAll(/\bALTER\s+DEFAULT\s+PRIVILEGES\b[^;]*?\bGRANT\s+([^;]+?)\s+ON\s+TABLES\b[^;]*;/giu)) {
+      if (tachTheoPhayNgoaiNgoac(khop[1]!).some((q) => /^(?:INSERT|ALL(?:\s+PRIVILEGES)?)$/iu.test(q))) {
+        viPham.push(`${tenFile}: ALTER DEFAULT PRIVILEGES … GRANT INSERT/ALL ON TABLES — cấp trước cho mọi bảng sinh sau, kể cả bảng tenant, mức BẢNG.`);
+      }
+    }
+    // `[^;]` giữ phép đọc trong MỘT câu: `GRANT vai TO vai;` (không `ON`) không được nuốt sang câu GRANT kế.
+    for (const khop of sql.matchAll(/\bGRANT\s+([^;]+?)\s+ON\s+(?:TABLE\s+)?([^;]+?)\s+TO\s+[^;]*;/giu)) {
+      const dich = khop[2]!.trim();
+      if (
+        /^(?:SEQUENCE|FUNCTION|PROCEDURE|ROUTINE|SCHEMA|DATABASE|TYPE|DOMAIN|LANGUAGE|TABLESPACE|FOREIGN|LARGE|PARAMETER|ALL\s+(?:SEQUENCES|FUNCTIONS|PROCEDURES|ROUTINES))\b/iu.test(dich)
+      ) {
+        continue;
+      }
+      const quyen = tachTheoPhayNgoaiNgoac(khop[1]!);
+      const mucBang = quyen.filter((q) => /^(?:INSERT|ALL(?:\s+PRIVILEGES)?)$/iu.test(q));
+      const cotId = quyen
+        .filter((q) => /^INSERT\s*\(/iu.test(q))
+        .flatMap((q) => tachTheoPhayNgoaiNgoac(q.replace(/^INSERT\s*\(/iu, "").replace(/\)\s*$/u, "")))
+        .map(chuanHoaTen)
+        .filter((c) => c === "id");
+      const toanSchema = /^ALL\s+TABLES\b/iu.test(dich);
+      const cacBang = toanSchema
+        ? ["<ALL TABLES IN SCHEMA>"]
+        : tachTheoPhayNgoaiNgoac(dich).map((t) => {
+            const m = reTen.exec(t);
+            return chuanHoaTen(m === null ? t : m[1]!);
+          });
+      for (const bang of cacBang) {
+        if (!toanSchema && !bangTenant.has(bang)) continue;
+        daXet += 1;
+        if (mucBang.length > 0) {
+          viPham.push(
+            `${tenFile}: GRANT ${mucBang.join(", ")} ON ${bang} — quyền INSERT mức BẢNG cấp cả \`id\`, biến ${bang}_pkey thành oracle ` +
+              "xuyên tổ chức (ADR-013). Cấp theo CỘT, không có `id` (khuôn 002).",
+          );
+        }
+        if (cotId.length > 0 && !BANG_GOC_TENANT.includes(bang)) {
+          viPham.push(`${tenFile}: GRANT INSERT (… id …) ON ${bang} — cột \`id\` của bảng tenant không được cấp INSERT (ADR-013).`);
+        }
+      }
+    }
+  }
+  return { viPham, daXet };
+}
+
+interface HangKhaiTenant {
+  readonly nsp: string;
+  readonly ten: string;
+  readonly mig: string;
+}
+
+/** Hàng của `BANG_TENANT_KHAI` — cùng bộ đọc với `rls-coverage` (`\d{3,4}`: số tạm `95NN` bốn chữ số). */
+function docBangTenantKhai(pHardeningSql: string): HangKhaiTenant[] {
+  return [...docHangHardening(pHardeningSql, "BANG_TENANT_KHAI").matchAll(/\('(\w+)', '(\w+)', '(\d{3,4}_\w+)'\)/gu)].map(
+    (m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }),
+  );
+}
+
+/** ⑶ Hai chiều: mọi bảng tenant của migration đánh số có dòng khai trỏ đúng tệp; mọi dòng khai ứng với một bảng có thật. */
+function kiemKhaiBangTenant(pFile: Map<string, string>, pKhai: readonly HangKhaiTenant[]): string[] {
+  const viPham: string[] = [];
+  const bang = timCacBang(pFile).filter((b) => b.chiuRangBuocTenant && laMigrationDanhSo(b.tenFile));
+  const khaiTheoTen = new Map(pKhai.map((h) => [h.ten, h] as const));
+  for (const b of bang) {
+    const h = khaiTheoTen.get(b.tenBang);
+    if (h === undefined) {
+      viPham.push(`${b.tenFile}: bảng tenant "${b.tenBang}" chưa có trong BANG_TENANT_KHAI của hardening.always.sql (ADR-037).`);
+    } else if (h.nsp !== "public" || `${h.mig}.sql` !== b.tenFile) {
+      viPham.push(`BANG_TENANT_KHAI khai ('${h.nsp}', '${h.ten}', '${h.mig}') nhưng CREATE TABLE của bảng ấy ở ${b.tenFile}.`);
+    }
+  }
+  const daTao = new Set(bang.map((b) => b.tenBang));
+  for (const h of pKhai) {
+    if (!daTao.has(h.ten)) {
+      viPham.push(`BANG_TENANT_KHAI khai '${h.ten}' (${h.mig}) mà không migration đánh số nào CREATE TABLE bảng tenant ấy — dòng khai thiu.`);
+    }
+  }
+  return viPham;
+}
+
+const SU_KIEN_TAP_RONG: readonly string[] = ["INSERT", "UPDATE", "DELETE"];
+
+/** `lược_đồ.tên` của một hàm/trigger đọc từ văn bản; không lược đồ thì `public`, đúng cách tổng điều tra định danh. */
+function tenDayDu(pSchema: string | undefined, pTen: string): string {
+  return `${pSchema === undefined ? "public" : chuanHoaTen(pSchema)}.${chuanHoaTen(pTen)}`;
+}
+
+/** ⑷ Mỗi hàm `RETURNS trigger` trong migration đánh số phải nằm trong một trong hai danh sách khai — trừ hàm CHỈ gắn `TRUNCATE`. */
+function kiemHamTriggerDaKhai(
+  pFile: Map<string, string>,
+  pCanh: readonly string[],
+  pKhong: readonly string[],
+): { viPham: string[]; daXet: number } {
+  const ham = new Map<string, string[]>();
+  const suKien = new Map<string, Set<string>>();
+  const reHam = new RegExp(
+    String.raw`CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:(${DINH_DANH})\s*\.\s*)?(${DINH_DANH})\s*\([^)]*\)\s*RETURNS\s+(?:pg_catalog\s*\.\s*)?trigger\b`,
+    "giu",
+  );
+  const reTrigger = new RegExp(
+    String.raw`CREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\s+${DINH_DANH}\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\s+([^;]+?)\s+ON\s+[^;]+?EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?:(${DINH_DANH})\s*\.\s*)?(${DINH_DANH})\s*\(`,
+    "giu",
+  );
+  for (const [tenFile, sqlTho] of pFile) {
+    if (!laMigrationDanhSo(tenFile)) continue;
+    const sql = boChuThich(sqlTho);
+    for (const m of sql.matchAll(reHam)) {
+      const ten = tenDayDu(m[1], m[2]!);
+      ham.set(ten, [...(ham.get(ten) ?? []), tenFile]);
+    }
+    for (const m of sql.matchAll(reTrigger)) {
+      const ten = tenDayDu(m[2], m[3]!);
+      const tap = suKien.get(ten) ?? new Set<string>();
+      for (const ve of m[1]!.split(/\s+OR\s+/iu)) tap.add(ve.trim().split(/\s+/u)[0]!.toUpperCase());
+      suKien.set(ten, tap);
+    }
+  }
+  const daKhai = new Set([...pCanh.map((h) => `public.${h}`), ...pKhong]);
+  const viPham: string[] = [];
+  for (const [ten, tep] of ham) {
+    const gan = suKien.get(ten);
+    const chiTruncate = gan !== undefined && gan.size > 0 && [...gan].every((e) => !SU_KIEN_TAP_RONG.includes(e));
+    if (chiTruncate || daKhai.has(ten)) continue;
+    viPham.push(
+      `${[...new Set(tep)].join(", ")}: hàm trigger ${ten} ` +
+        (gan === undefined ? "không CREATE TRIGGER nào gắn (hàm chết, hay gắn bằng SQL động) và " : `gắn ${[...gan].join("/")} mà `) +
+        "không có tên trong HAM_CANH_CHI_GHI_THEM hay HAM_KHONG_PHAI_CANH (db/danh-sach-ham-canh.ts). Khai nó vào ĐÚNG MỘT danh " +
+        "sách — tổng điều tra ở hardening-suy-tu-tinh-chat.int.test.ts sẽ phán xét lời khai ấy.",
+    );
+  }
+  return { viPham, daXet: ham.size };
+}
+
+describe("[S1.9191 / khoản 221] bốn vế tĩnh của một bảng tenant mới — đỏ ở T1, không đợi test:int", () => {
+  const cacFile = docCacFile();
+  const HARDENING = cacFile.get("hardening.always.sql");
+  if (HARDENING === undefined) throw new Error("không đọc được db/migrations/hardening.always.sql");
+
+  it("[INV-F1] ⑴ mọi bảng tenant sinh sau 027 có CREATE POLICY <bảng>_khach … AS RESTRICTIVE trong cùng tệp", () => {
+    const { viPham, daXet } = kiemPolicyKhach(cacFile);
+    expect(daXet, "chống rỗng ruột: phải thấy các bảng tenant sinh sau 027").toBeGreaterThanOrEqual(15);
+    expect(viPham).toEqual([]);
+  });
+
+  it("[INV-F1] ⑵ không GRANT nào cấp được cột `id` của bảng tenant qua INSERT — mức bảng, ALL, hay theo cột", () => {
+    const { viPham, daXet } = kiemGrantInsertCapId(cacFile);
+    expect(daXet, "chống rỗng ruột: phải thấy các câu GRANT trên bảng tenant").toBeGreaterThanOrEqual(100);
+    expect(viPham).toEqual([]);
+  });
+
+  it("[INV-F1] ⑶ tên bảng tenant có trong BANG_TENANT_KHAI, dòng khai trỏ đúng tệp CREATE TABLE, không dòng khai thiu", () => {
+    const khai = docBangTenantKhai(HARDENING);
+    expect(khai.length, "bản khai đang rỗng — bộ đọc mù").toBeGreaterThanOrEqual(40);
+    expect(kiemKhaiBangTenant(cacFile, khai)).toEqual([]);
+  });
+
+  it("[INV-F1] ⑷ mọi hàm RETURNS trigger gắn INSERT/UPDATE/DELETE có tên trong HAM_CANH_CHI_GHI_THEM hoặc HAM_KHONG_PHAI_CANH", () => {
+    const { viPham, daXet } = kiemHamTriggerDaKhai(cacFile, HAM_CANH_CHI_GHI_THEM, HAM_KHONG_PHAI_CANH);
+    expect(daXet, "chống rỗng ruột: phải thấy các hàm trigger của kho").toBeGreaterThanOrEqual(70);
+    expect(viPham).toEqual([]);
+  });
+
+  // Bốn lượt đỏ thật trên văn bản mẫu — mỗi vế một đột biến nhỏ nhất, kèm đối chứng xanh để chắc cửa hẹp đúng chỗ.
+  const BANG_DU = (pSo: string, pKhach: string): [string, string] => [
+    `${pSo}_bang_moi.sql`,
+    "CREATE TABLE bang_moi (id uuid PRIMARY KEY, org_id uuid NOT NULL);\n" +
+      "ALTER TABLE bang_moi ENABLE ROW LEVEL SECURITY;\nALTER TABLE bang_moi FORCE ROW LEVEL SECURITY;\n" +
+      "CREATE POLICY bang_moi_tenant ON bang_moi USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());\n" +
+      pKhach +
+      "GRANT SELECT, INSERT (org_id) ON bang_moi TO app_api;",
+  ];
+  const KHACH = "CREATE POLICY bang_moi_khach ON bang_moi AS RESTRICTIVE USING (app_current_guest_session_id() IS NULL) WITH CHECK (app_current_guest_session_id() IS NULL);\n";
+
+  it("⑴ đỏ: bảng tenant ở migration sau 027 thiếu policy _khach; policy _khach PERMISSIVE cũng đỏ; trước 027 không đòi; có đủ thì xanh", () => {
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", "")])).viPham).toEqual([
+      '091_bang_moi.sql tạo bảng tenant "bang_moi" (sau 027) nhưng không có CREATE POLICY bang_moi_khach ON bang_moi AS RESTRICTIVE ' +
+        "trong CÙNG tệp — 027 chỉ lấp một lần cho lược đồ của ngày ấy; hardening phán xét chứ không dựng.",
+    ]);
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", KHACH.replace(" AS RESTRICTIVE", ""))])).viPham).toHaveLength(1);
+    expect(kiemPolicyKhach(new Map([BANG_DU("012", "")]))).toEqual({ viPham: [], daXet: 0 });
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", KHACH)]))).toEqual({ viPham: [], daXet: 1 });
+    // Số tạm bốn chữ số của `pnpm cap-so` (ADR-090) cũng là "sau 027".
+    expect(kiemPolicyKhach(new Map([BANG_DU("9591", "")])).viPham).toHaveLength(1);
+  });
+
+  it("⑵ đỏ: GRANT INSERT mức bảng, GRANT ALL, GRANT INSERT (id, …) theo cột, và ALL TABLES IN SCHEMA; theo cột không có id thì xanh; organizations được miễn vế cột", () => {
+    const [tenFile, sql] = BANG_DU("091", KHACH);
+    const thay = (pGrant: string): string[] => kiemGrantInsertCapId(new Map([[tenFile, sql.replace("GRANT SELECT, INSERT (org_id) ON bang_moi TO app_api;", pGrant)]])).viPham;
+    expect(thay("GRANT SELECT, INSERT ON bang_moi TO app_api;")).toEqual([
+      "091_bang_moi.sql: GRANT INSERT ON bang_moi — quyền INSERT mức BẢNG cấp cả `id`, biến bang_moi_pkey thành oracle xuyên tổ chức (ADR-013). Cấp theo CỘT, không có `id` (khuôn 002).",
+    ]);
+    expect(thay("GRANT ALL PRIVILEGES ON TABLE public.bang_moi TO app_api;")).toHaveLength(1);
+    expect(thay("GRANT INSERT (org_id, id) ON bang_moi TO app_api;")).toEqual([
+      "091_bang_moi.sql: GRANT INSERT (… id …) ON bang_moi — cột `id` của bảng tenant không được cấp INSERT (ADR-013).",
+    ]);
+    expect(thay("GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_api;")).toHaveLength(1);
+    expect(thay("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT ON TABLES TO app_api;")).toEqual([
+      "091_bang_moi.sql: ALTER DEFAULT PRIVILEGES … GRANT INSERT/ALL ON TABLES — cấp trước cho mọi bảng sinh sau, kể cả bảng tenant, mức BẢNG.",
+    ]);
+    expect(thay("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_api;")).toEqual([]);
+    // Xanh: theo cột không có `id`; INSERT mức bảng trên bảng KHÔNG tenant; `GRANT vai TO vai` không bị nuốt sang câu sau.
+    expect(thay("GRANT INSERT (org_id), UPDATE (org_id) ON bang_moi TO app_api;")).toEqual([]);
+    expect(thay("CREATE TABLE danh_muc (id int); GRANT INSERT ON danh_muc TO app_api;")).toEqual([]);
+    expect(thay("GRANT app_api TO app_unseal; GRANT SELECT ON bang_moi TO app_api;")).toEqual([]);
+    expect(
+      kiemGrantInsertCapId(new Map([["091_goc.sql", "CREATE TABLE organizations (id uuid PRIMARY KEY); GRANT INSERT (id, name) ON organizations TO app_khoi_tao;"]])).viPham,
+    ).toEqual([]);
+  });
+
+  it("⑶ đỏ: bảng tenant chưa khai; dòng khai trỏ sai tệp; dòng khai thiu — khai đúng thì xanh", () => {
+    const tep = new Map([BANG_DU("091", KHACH)]);
+    expect(kiemKhaiBangTenant(tep, [])).toEqual([
+      '091_bang_moi.sql: bảng tenant "bang_moi" chưa có trong BANG_TENANT_KHAI của hardening.always.sql (ADR-037).',
+    ]);
+    expect(kiemKhaiBangTenant(tep, [{ nsp: "public", ten: "bang_moi", mig: "090_khac" }])).toEqual([
+      "BANG_TENANT_KHAI khai ('public', 'bang_moi', '090_khac') nhưng CREATE TABLE của bảng ấy ở 091_bang_moi.sql.",
+    ]);
+    expect(
+      kiemKhaiBangTenant(tep, [
+        { nsp: "public", ten: "bang_moi", mig: "091_bang_moi" },
+        { nsp: "public", ten: "bang_cu", mig: "050_bang_cu" },
+      ]),
+    ).toEqual(["BANG_TENANT_KHAI khai 'bang_cu' (050_bang_cu) mà không migration đánh số nào CREATE TABLE bảng tenant ấy — dòng khai thiu."]);
+    expect(kiemKhaiBangTenant(tep, [{ nsp: "public", ten: "bang_moi", mig: "091_bang_moi" }])).toEqual([]);
+    // Bộ đọc hàng khai: đúng khuôn của hardening, kể cả số tạm bốn chữ số.
+    expect(
+      docBangTenantKhai(
+        "\n  BANG_TENANT_KHAI constant text :=\n    $q$(VALUES\n         ('public', 'a', '002_a'),\n         ('public', 'b', '9591_b')\n       ) AS bt(nspname, relname, mig)$q$;\n",
+      ),
+    ).toEqual([
+      { nsp: "public", ten: "a", mig: "002_a" },
+      { nsp: "public", ten: "b", mig: "9591_b" },
+    ]);
+  });
+
+  it("⑷ đỏ: hàm RETURNS trigger gắn INSERT mà không ở danh sách nào; không gắn gì cũng đỏ; chỉ gắn TRUNCATE thì miễn; đã khai thì xanh", () => {
+    const HAM = "CREATE OR REPLACE FUNCTION public.ham_moi() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$;\n";
+    const GAN = (pSuKien: string): string => `CREATE TRIGGER t BEFORE ${pSuKien} ON bang_moi FOR EACH ROW EXECUTE FUNCTION ham_moi();\n`;
+    const kiem = (pSql: string, pKhong: readonly string[] = []): string[] => kiemHamTriggerDaKhai(new Map([["091_x.sql", pSql]]), ["chan_sua_xoa"], pKhong).viPham;
+    expect(kiem(HAM + GAN("INSERT OR UPDATE OF ghi_chu"))).toEqual([
+      "091_x.sql: hàm trigger public.ham_moi gắn INSERT/UPDATE mà không có tên trong HAM_CANH_CHI_GHI_THEM hay HAM_KHONG_PHAI_CANH " +
+        "(db/danh-sach-ham-canh.ts). Khai nó vào ĐÚNG MỘT danh sách — tổng điều tra ở hardening-suy-tu-tinh-chat.int.test.ts sẽ phán xét lời khai ấy.",
+    ]);
+    expect(kiem(HAM)).toHaveLength(1);
+    expect(kiem(HAM + GAN("TRUNCATE"))).toEqual([]);
+    expect(kiem(HAM + GAN("INSERT"), ["public.ham_moi"])).toEqual([]);
+    // Danh sách canh khai KHÔNG lược đồ; tổng điều tra định danh `public.<tên>` — hai cách viết phải gặp nhau ở đây.
+    expect(kiem(HAM.replace("ham_moi", "chan_sua_xoa") + GAN("UPDATE OR DELETE").replace("ham_moi", "chan_sua_xoa"))).toEqual([]);
+    // Hàm thường (không RETURNS trigger) không bị đòi; `.always.sql` không bị đọc.
+    expect(kiem("CREATE FUNCTION f() RETURNS void LANGUAGE sql AS $f$ SELECT 1 $f$;")).toEqual([]);
+    expect(kiemHamTriggerDaKhai(new Map([["hardening.always.sql", HAM]]), [], []).viPham).toEqual([]);
   });
 });
