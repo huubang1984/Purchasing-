@@ -450,7 +450,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     }
     const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
     expect(nop.status).toBe(200);
-    // [S1.194 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
+    // [S1.195 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
     // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
     const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
@@ -697,7 +697,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
               if (ph.status === 200) hy.lanNopB = (ph.body as { rfq: { lanNop: number } }).rfq.lanNop;
             },
           };
-        // [S1.194 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
+        // [S1.195 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":
@@ -1619,6 +1619,22 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
+    // [S1.193 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
+    // không token mời nào trước lần mở gói (K6). Hàng token mang id của TOKEN — lời mời của nó nằm ở payload.
+    const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
+    const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(
+      "SELECT action, CASE WHEN action = 'MAGIC_LINK_TOKEN_ISSUED' THEN payload->>'invitationId' ELSE resource_id::text END AS khoa " +
+        "FROM audit_events WHERE org_id = $1 ORDER BY seq",
+      [orgA],
+    );
+    const mocGoi = theoGoi.filter((r) => r.khoa !== null && cuaGoi.has(r.khoa)).map((r) => r.action);
+    expect(mocGoi.filter((a) => a === "INVITATION_CREATED")).toHaveLength(5);
+    if (batS3) {
+      expect(mocGoi.lastIndexOf("INVITATION_CREATED"), "luồng S3: cả năm lời mời có TRƯỚC lần nộp duyệt").toBeLessThan(mocGoi.indexOf("RFQ_SUBMITTED_FOR_APPROVAL"));
+    } else {
+      expect(mocGoi.indexOf("INVITATION_CREATED"), "luồng MVP1: mời SAU khi mở gói").toBeGreaterThan(mocGoi.indexOf("RFQ_OPENED"));
+    }
+    expect(mocGoi.indexOf("MAGIC_LINK_TOKEN_ISSUED"), "không token mời nào trước lần mở gói (K6)").toBeGreaterThan(mocGoi.indexOf("RFQ_OPENED"));
     // Không một dòng sổ nào mang giá — sổ là bằng chứng, không phải nơi rò.
     const { rows: so } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text LIKE '%' || $2 || '%'", [orgA, GIA_SUA_LAI]);
     expect(so[0]?.n).toBe("0");

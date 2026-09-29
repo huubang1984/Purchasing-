@@ -522,7 +522,7 @@ const DANH_SACH_TRANG_RFQ = [
   "extendRfqDeadline",
   "getActiveProcurementPolicy",
   "getRfq",
-  // [S1.195 / khoản 258] Đọc ngân sách cho người duyệt — hàm đọc có cổng (`rfq.create` cho người tạo gói, `rfq.approve` cho người
+  // [S1.9101 / khoản 258] Đọc ngân sách cho người duyệt — hàm đọc có cổng (`rfq.create` cho người tạo gói, `rfq.approve` cho người
   // khác), rổ `HAM_DOC_CO_QUYEN` của `cong-quyen-route.test.ts`.
   "getRfqBudget",
   // [S1.169 / S3.1c] Ký phiên bản chính sách (luật ở trigger `chinh_sach_kiem_nguoi_ky`) và liệt kê mọi phiên bản cho màn

@@ -17,7 +17,7 @@
 // ==============================================================================================
 
 import {
-  baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, loiLyDo, nhanTrangThaiLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
+  baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, loiLyDo, nhanLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
 } from "/lib/tao-thau.js";
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +27,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
-// [S1.195 / khoản 258] `userId` của phiên đang dùng màn (`GET /me`), rỗng trước khi đăng nhập.
+// [S1.9101 / khoản 258] `userId` của phiên đang dùng màn (`GET /me`), rỗng trước khi đăng nhập.
 let nguoiDung = "";
 
 async function goi(method, duong, than) {
@@ -139,7 +139,7 @@ const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5"];
  */
 function moSauDangNhap(me, dungLai) {
   const u = me?.userId;
-  // [S1.195 / khoản 258] Người đang dùng màn — để biết họ có phải người tạo gói đang đọc không (ngân sách, `napRfq`).
+  // [S1.9101 / khoản 258] Người đang dùng màn — để biết họ có phải người tạo gói đang đọc không (ngân sách, `napRfq`).
   nguoiDung = typeof u === "string" ? u : "";
   const ai = typeof u === "string" ? `người dùng ${u.slice(0, 8)}…` : "";
   bao($("ok1"), ai === ""
@@ -168,9 +168,16 @@ async function napLuong() {
 
 /** [S1.191 / S3.2c2] Đặt luồng rồi vẽ lại: thứ tự bước, số bước, hai đoạn ghi, khối trả về soạn thảo. */
 function datLuong(moi) {
+  const doiLuong = moi.daBat !== luong.daBat;
   luong = moi;
   const thuTu = thuTuBuoc(luong.daBat);
-  if (luong.daBat) $("khung").classList.add("moi-truoc"); else $("khung").classList.remove("moi-truoc");
+  // [S1.193 / S3.2c2] Dời THẬT trong DOM theo `thuTuBuoc`, không bằng CSS `order`: phím Tab và trình đọc màn hình đi theo thứ
+  // tự DOM, không theo thứ tự vẽ. Chỉ dời khi luồng đổi — `datLuong` chạy lại mỗi lần nạp gói, và dời một phần tử đang giữ
+  // tiêu điểm làm mất tiêu điểm. HTML khai thứ tự MVP1, và `luong` khởi đầu ở MVP1.
+  if (doiLuong) {
+    if (thuTu.indexOf("b5") < thuTu.indexOf("b4")) $("b4").before($("b5"));
+    else $("b5").before($("b4"));
+  }
   $("so-b4").textContent = String(thuTu.indexOf("b4") + 2);
   $("so-b5").textContent = String(thuTu.indexOf("b5") + 2);
   hien($("ghi-s3-b4"), luong.daBat);
@@ -252,11 +259,11 @@ async function napRfq(rfqId) {
   const r = await goi("GET", `/rfqs/${rfqId}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return false; }
   const g = r.body?.rfq ?? {};
-  // [S1.194 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
+  // [S1.195 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
   // đang thấy trên màn. Gói được trả về và nộp lại sau lần đọc thì máy chủ từ chối, và người duyệt đọc lại.
   phien = { ...phien, rfqId, lanNop: typeof g.lanNop === "number" ? g.lanNop : undefined };
   datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
-  // [S1.195 / khoản 258 — lượt soi F4] Bảng ngân sách của gói TRƯỚC đi ngay, trước lần chờ đầu tiên: một lần đọc sau đó hỏng
+  // [S1.9101 / khoản 258 — lượt soi F4] Bảng ngân sách của gói TRƯỚC đi ngay, trước lần chờ đầu tiên: một lần đọc sau đó hỏng
   // giữa chừng không được để lại ngân sách của gói khác cạnh lần nộp mà nút Phê duyệt sẽ gửi.
   const toiTao = tuDocNganSach(nguoiDung, g.createdBy);
   phien = { ...phien, toiTao };
@@ -272,14 +279,14 @@ async function napRfq(rfqId) {
   ]);
   await napHangMuc();
   if (luong.daBat) await napLoiMoi();
-  // [S1.195 / khoản 258] Người tạo gói thấy ngân sách ở CÙNG lần đọc; người khác bấm «Xem ngân sách» (chủ dự án chốt sau lượt
+  // [S1.9101 / khoản 258] Người tạo gói thấy ngân sách ở CÙNG lần đọc; người khác bấm «Xem ngân sách» (chủ dự án chốt sau lượt
   // soi F3: lần từ chối phải đến từ một thao tác cố ý, không từ nhịp đọc gói).
   if (toiTao) await napNganSach();
   return true;
 }
 
 /**
- * [S1.195 / khoản 258] Bảng ngân sách từ `GET /rfqs/:rfqId/budget` — năm thứ chữ ký duyệt gói ràng vào. Câu trả chỉ được vẽ khi
+ * [S1.9101 / khoản 258] Bảng ngân sách từ `GET /rfqs/:rfqId/budget` — năm thứ chữ ký duyệt gói ràng vào. Câu trả chỉ được vẽ khi
  * nó là của gói ĐANG mở trên màn (lượt soi F4): người dùng đọc gói khác trong lúc chờ, hay thân mang mã gói khác, thì bỏ.
  */
 async function napNganSach() {
@@ -296,13 +303,13 @@ async function napNganSach() {
   dienDl($("tt-ns"), hangNganSach(b));
 }
 
-/** [S1.195 / khoản 258] Đổi người hay đăng xuất: bảng ngân sách của người trước đi cùng các bước (lượt soi N1). */
+/** [S1.9101 / khoản 258] Đổi người hay đăng xuất: bảng ngân sách của người trước đi cùng các bước (lượt soi N1). */
 function xoaNganSach() {
   dienDl($("tt-ns"), []);
   hien($("nut-xem-ns"), false);
 }
 
-// [S1.195 / khoản 258] Người không tạo gói đọc ngân sách bằng một thao tác cố ý — cổng đòi `rfq.approve`, lần từ chối vào sổ.
+// [S1.9101 / khoản 258] Người không tạo gói đọc ngân sách bằng một thao tác cố ý — cổng đòi `rfq.approve`, lần từ chối vào sổ.
 $("nut-xem-ns").addEventListener("click", async () => {
   bao($("loi4"), ""); bao($("ok4"), "");
   if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
@@ -378,7 +385,7 @@ $("nut-ns").addEventListener("click", async () => {
   if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
   const r = await goi("PUT", `/rfqs/${phien.rfqId}/budget`, { estimatedValue: $("ns").value.trim(), currency: $("tien-te").value.trim() });
   if (r.status !== 200) { bao($("loi4"), loiCua(r, "Không đặt được ngân sách")); return; }
-  // [S1.195 / khoản 258 — lượt soi N4] Người tạo gói đọc lại bảng đủ năm hàng. Người mua khác cũng đặt được ngân sách (`rfq.create`)
+  // [S1.9101 / khoản 258 — lượt soi N4] Người tạo gói đọc lại bảng đủ năm hàng. Người mua khác cũng đặt được ngân sách (`rfq.create`)
   // nhưng không đọc được nó nếu không giữ `rfq.approve` — màn không hỏi thay họ, và vẽ ba thứ lần đặt trả về.
   if (phien.toiTao === true) { await napNganSach(); return; }
   const b = r.body?.budget ?? {};
@@ -397,7 +404,7 @@ for (const [nut, duong, xong] of [
   $(nut).addEventListener("click", async () => {
     bao($("loi4"), ""); bao($("ok4"), "");
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
-    // [S1.194 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
+    // [S1.195 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
     const than = duong === "approve" && typeof phien.lanNop === "number" ? { lanNop: phien.lanNop } : undefined;
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`, than);
     if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }
@@ -481,7 +488,8 @@ async function napLoiMoi() {
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");
-    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanTrangThaiLoiMoi(m.status)]) {
+    // [S1.193 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
+    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
       tr.append(td);

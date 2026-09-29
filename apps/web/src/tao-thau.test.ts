@@ -14,6 +14,7 @@ import {
   hangNganSach,
   hienTraVe,
   loiLyDo,
+  nhanLoiMoi,
   nhanTrangThaiLoiMoi,
   nutLoiMoi,
   thuTuBuoc,
@@ -35,6 +36,12 @@ describe("[S1.191 / S3.2c2] nhãn trạng thái lời mời", () => {
     expect(nhanTrangThaiLoiMoi("LA")).toBe("LA");
     expect(nhanTrangThaiLoiMoi("")).toBe("—");
     expect(nhanTrangThaiLoiMoi(undefined)).toBe("—");
+  });
+
+  it("[S1.193 / K6] nhãn «mời sau khi ký» chỉ khi cờ là `true` — cờ lạ, thiếu hay `false` thì chỉ trạng thái", () => {
+    expect(nhanLoiMoi("SENT", true)).toBe("đã gửi · mời sau khi ký");
+    expect(nhanLoiMoi("UNSENT", true)).toBe("chưa gửi · mời sau khi ký");
+    for (const co of [false, undefined, null, "true", 1]) expect(nhanLoiMoi("UNSENT", co), String(co)).toBe("chưa gửi");
   });
 });
 
@@ -91,6 +98,13 @@ describe("[S1.191 / S3.2c2] câu báo sau lần mở gói", () => {
     expect(baoSauKhiMo(false, []).chu).not.toMatch(/Link mời/u);
   });
 
+  it("[S1.193] cả hai luồng nói «Đã mở gói» — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", () => {
+    for (const [daBat, ds] of [[false, []], [true, []], [true, ["a"]]] as const) {
+      expect(baoSauKhiMo(daBat, ds).chu, `${String(daBat)} ${String(ds.length)}`).toMatch(/^Đã mở gói\. /u);
+      expect(baoSauKhiMo(daBat, ds).chu).not.toMatch(/mở thầu/iu);
+    }
+  });
+
   it("tổ chức đã bật: rỗng ⇒ mọi link đã đi; không rỗng ⇒ LỖI, nói ĐÚNG số link chưa gửi", () => {
     const du = baoSauKhiMo(true, []);
     expect(du.loi).toBe(false);
@@ -126,7 +140,7 @@ describe("[S1.191 / S3.2c2] nút trả về soạn thảo và lý do", () => {
   });
 });
 
-describe("[S1.195 / khoản 258] ngân sách ở lần đọc gói", () => {
+describe("[S1.9101 / khoản 258] ngân sách ở lần đọc gói", () => {
   it("màn TỰ đọc chỉ khi người dùng là người tạo gói, ở mọi trạng thái; người khác đọc bằng nút — lần từ chối không thành nhịp đọc gói", () => {
     expect(tuDocNganSach("u1", "u1"), "người tạo").toBe(true);
     expect(tuDocNganSach("u2", "u1"), "người khác, kể cả người duyệt").toBe(false);

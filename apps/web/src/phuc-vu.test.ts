@@ -222,8 +222,16 @@ describe("bề mặt tệp", () => {
       replaceChildren: () => void; append: (...c: PhanTu[]) => void; appendChild: () => void; setAttribute: () => void;
       querySelector: (sel: string) => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
       scrollIntoView: () => void;
+      /**
+       * [S1.193 / S3.2c2] `Element.before` — `/tao-thau` dời bước lời mời lên trước bước duyệt ở tổ chức đã bật, THẬT trong DOM.
+       * Chỉ các `<section>` của trang có bản thật (dời id trong thứ tự của trang); gọi trên phần tử khác là trang làm điều test
+       * không đo — ném.
+       */
+      before: (...c: PhanTu[]) => void;
+      /** Id đọc từ HTML (rỗng với phần tử `createElement`) — để `before` biết nó dời gì. */
+      id: string;
     }
-    const taoPhanTu = (hidden: boolean): PhanTu => {
+    const taoPhanTu = (hidden: boolean, id = ""): PhanTu => {
       const lop = new Set<string>();
       const nghe: Nghe = {};
       // [S1.181 / lượt soi] Cùng bộ chọn thì cùng phần tử — như trình duyệt. Bản trước trả một phần tử MỚI mỗi lần gọi, nên
@@ -237,6 +245,8 @@ describe("bề mặt tệp", () => {
         appendChild: () => undefined, setAttribute: () => undefined,
         querySelector: (sel) => (qs[sel] ??= taoPhanTu(false)), querySelectorAll: () => [], focus: () => undefined, remove: () => undefined,
         scrollIntoView: () => undefined,
+        before: () => { throw new Error(`before() gọi trên phần tử không phải section: "${id}"`); },
+        id,
       };
       return e;
     };
@@ -278,9 +288,26 @@ describe("bề mặt tệp", () => {
       );
       const el: Record<string, PhanTu> = {};
       for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
-        el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `));
+        el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `), m[2] ?? "");
       }
-      const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false));
+      // [S1.193 / S3.2c2] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này và
+      // đếm một lần dời.
+      const thuTuSection = [...html.matchAll(/<section\b[^>]*\sid="([^"]+)"/gu)].map((m) => m[1] ?? "");
+      let soLanDoi = 0;
+      for (const id of thuTuSection) {
+        const sec = el[id];
+        if (sec === undefined) continue;
+        sec.before = (...c) => {
+          for (const x of c) {
+            const tu = thuTuSection.indexOf(x.id);
+            if (tu < 0) throw new Error(`before(): "${x.id}" không phải section`);
+            thuTuSection.splice(tu, 1);
+            thuTuSection.splice(thuTuSection.indexOf(id), 0, x.id);
+            soLanDoi += 1;
+          }
+        };
+      }
+      const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false, id));
       const trangThai = { cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[] };
       const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
       const ngheCuaSo: Nghe = {};
@@ -335,6 +362,9 @@ describe("bề mặt tệp", () => {
         trangThai,
         loc,
         buocMo: () => (BUOC[trang] ?? []).filter((b) => lay(b).hidden === false),
+        /** [S1.193 / S3.2c2] Thứ tự THẬT của các `<section>` trong DOM, và số lần trang đã dời một section. */
+        thuTuSection: () => [...thuTuSection],
+        soLanDoi: () => soLanDoi,
         bam: async (id: string) => {
           for (const f of lay(id).nghe["click"] ?? []) await f();
           await cho();
@@ -1105,18 +1135,60 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
-    it("[S1.191 / S3.2c2] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt (lớp `moi-truoc`, số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
+    // ~~lớp `moi-truoc`~~ [S1.193 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
+    // hình đi theo thứ tự DOM.
+    const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];
+    const THU_TU_S3 = ["b1", "b2", "b3", "b5", "b4"];
+    it("[S1.191 / S3.2c2 · S1.193] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt TRONG DOM (số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
       const bat = await moTaoThau(true, "DRAFT");
-      expect(bat.p.el("khung").lop.has("moi-truoc")).toBe(true);
+      expect(bat.p.thuTuSection(), "thứ tự THẬT trong DOM — Tab và trình đọc màn hình đi theo nó").toEqual(THU_TU_S3);
       expect([bat.p.el("so-b5").textContent, bat.p.el("so-b4").textContent]).toEqual(["4", "5"]);
       expect([bat.p.el("ghi-s3-b4").hidden, bat.p.el("ghi-s3-b5").hidden]).toEqual([false, false]);
       const chua = await moTaoThau(false, "DRAFT");
-      expect(chua.p.el("khung").lop.has("moi-truoc")).toBe(false);
+      expect(chua.p.thuTuSection()).toEqual(THU_TU_MVP1);
+      expect(chua.p.soLanDoi(), "tổ chức chưa bật: không dời gì").toBe(0);
       expect([chua.p.el("so-b4").textContent, chua.p.el("so-b5").textContent]).toEqual(["4", "5"]);
       expect([chua.p.el("ghi-s3-b4").hidden, chua.p.el("ghi-s3-b5").hidden]).toEqual([true, true]);
       // Đổi người (hashchange) đưa màn về luồng MVP1 tới khi người mới đăng nhập và màn hỏi lại.
       await bat.p.doiFragment(`#${ORG}:maCuaB`);
-      expect(bat.p.el("khung").lop.has("moi-truoc")).toBe(false);
+      expect(bat.p.thuTuSection()).toEqual(THU_TU_MVP1);
+    });
+
+    it("[S1.193 / S3.2c2] tao-thau: màn chỉ dời bước khi luồng đổi — nạp lại gói không dời lần nữa (dời một phần tử đang giữ tiêu điểm làm mất tiêu điểm)", async () => {
+      const { p } = await moTaoThau(true, "DRAFT");
+      expect(p.soLanDoi()).toBe(1);
+      await p.bam("nut-doc");
+      await p.bam("nut-doc");
+      expect(p.thuTuSection()).toEqual(THU_TU_S3);
+      expect(p.soLanDoi(), "hai lần nạp gói, không lần dời nào").toBe(1);
+      // Đăng xuất đưa màn về MVP1: dời lại đúng một lần.
+      await p.bam("nut-dang-xuat");
+      expect(p.thuTuSection()).toEqual(THU_TU_MVP1);
+      expect(p.soLanDoi()).toBe(2);
+    });
+
+    it("[S1.193 / S3.2c2 · K6] tao-thau: dòng lời mời mang nhãn «mời sau khi ký» khi `GET …/invitations` trả `moiSauKhiKy: true`; không thì chỉ trạng thái", async () => {
+      const dong = (o: Record<string, unknown>) => ({ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", revokedAt: null, ...o });
+      const { p, dongMoi } = await moTaoThau(true, "OPEN", (l) =>
+        l === "GET /rfqs/r-1/invitations"
+          ? Promise.resolve({ status: 200, body: { invitations: [dong({ status: "SENT", moiSauKhiKy: true }), dong({ id: "i-2", status: "UNSENT", moiSauKhiKy: true }), dong({ id: "i-3", status: "SENT", moiSauKhiKy: false })] } })
+          : undefined);
+      const bang = p.el("bang-moi").querySelector("tbody").con;
+      expect(dongMoi()?.con[3]?.textContent).toBe("đã gửi · mời sau khi ký");
+      expect(bang.map((tr) => tr.con[3]?.textContent)).toEqual(["đã gửi · mời sau khi ký", "chưa gửi · mời sau khi ký", "đã gửi"]);
+    });
+
+    it("[S1.193 / S3.2c2] tao-thau: nút và câu báo nói «Mở gói» ở cả hai luồng — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", async () => {
+      const html = readFileSync(new URL("../trang/tao-thau.html", import.meta.url), "utf8");
+      expect(html).toContain('<button id="nut-mo">Mở gói</button>');
+      expect(html).not.toMatch(/<button id="nut-mo">Mở thầu/u);
+      const mo = (l: string) => (l === "POST /rfqs/r-1/open" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "OPEN" }, unsentInvitationIds: [] } }) : undefined);
+      for (const daBat of [false, true]) {
+        const { p } = await moTaoThau(daBat, "PENDING_APPROVAL", mo);
+        await p.bam("nut-mo");
+        expect(p.el("ok4").textContent, String(daBat)).toMatch(/^Đã mở gói\. /u);
+        expect(p.el("ok4").textContent, String(daBat)).not.toMatch(/mở thầu/iu);
+      }
     });
 
     it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
@@ -1180,7 +1252,7 @@ describe("bề mặt tệp", () => {
     });
 
     // ==========================================================================================
-    // [S1.195 / khoản 258] NGÂN SÁCH CHỮ KÝ RÀNG VÀO. Người tạo gói thấy nó ở lần đọc gói; người khác bấm «Xem ngân sách» — cổng
+    // [S1.9101 / khoản 258] NGÂN SÁCH CHỮ KÝ RÀNG VÀO. Người tạo gói thấy nó ở lần đọc gói; người khác bấm «Xem ngân sách» — cổng
     // `rfq.approve` từ chối thì vào sổ và vào trần từ chối của phiên, nên lần từ chối phải đến từ một thao tác cố ý (lượt soi F3,
     // chủ dự án chốt ngày 2026-09-29).
     // ==========================================================================================
@@ -1195,7 +1267,7 @@ describe("bề mặt tệp", () => {
       l === "GET /rfqs/r-1/budget" ? Promise.resolve(status === 200 ? { status, body: { budget } } : { status, body: { error: "x" } }) : undefined;
     const soLanDocNganSach = (goi: readonly string[]) => goi.filter((g) => g === "GET /rfqs/r-1/budget").length;
 
-    it("[S1.195 / khoản 258] tao-thau: người tạo gói ⇒ màn TỰ đọc ngân sách (năm hàng), nút «Xem ngân sách» ẩn; người khác ⇒ không tự đọc, nút hiện; bấm ⇒ đọc; 403 ⇒ nói không có quyền", async () => {
+    it("[S1.9101 / khoản 258] tao-thau: người tạo gói ⇒ màn TỰ đọc ngân sách (năm hàng), nút «Xem ngân sách» ẩn; người khác ⇒ không tự đọc, nút hiện; bấm ⇒ đọc; 403 ⇒ nói không có quyền", async () => {
       const tao = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", A.userId)(l) ?? docNganSach(200)(l));
       expect(soLanDocNganSach(tao.p.trangThai.goi)).toBe(1);
       expect(tao.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(NAM_HANG);
@@ -1214,7 +1286,7 @@ describe("bề mặt tệp", () => {
       expect(duyet.p.el("tt-ns").con.map((x) => x.textContent), "người giữ `rfq.approve` bấm nút thì thấy đủ năm hàng").toEqual(NAM_HANG);
     });
 
-    it("[S1.195 / khoản 258 — lượt soi F4] tao-thau: câu trả ngân sách của gói TRƯỚC tới muộn không được vẽ khi màn đã mở gói khác; thân mang mã gói khác cũng bỏ", async () => {
+    it("[S1.9101 / khoản 258 — lượt soi F4] tao-thau: câu trả ngân sách của gói TRƯỚC tới muộn không được vẽ khi màn đã mở gói khác; thân mang mã gói khác cũng bỏ", async () => {
       let tha: () => void = () => undefined;
       const cham = new Promise<void>((r) => { tha = r; });
       const p = await dungTrang("tao-thau", {
@@ -1251,7 +1323,7 @@ describe("bề mặt tệp", () => {
       expect(dut.p.el("tt-ns").con, "lần đọc r-2 hỏng giữa chừng: ngân sách của r-1 không còn trên màn").toEqual([]);
     });
 
-    it("[S1.195 / khoản 258 — lượt soi N1] tao-thau: đăng xuất hay đổi người ⇒ bảng ngân sách của người trước đi, nút «Xem ngân sách» ẩn", async () => {
+    it("[S1.9101 / khoản 258 — lượt soi N1] tao-thau: đăng xuất hay đổi người ⇒ bảng ngân sách của người trước đi, nút «Xem ngân sách» ẩn", async () => {
       for (const cach of ["dang-xuat", "doi-nguoi"] as const) {
         const { p } = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", B.userId)(l) ?? docNganSach(200)(l));
         await p.bam("nut-xem-ns");
@@ -1263,7 +1335,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.195 / khoản 258 — lượt soi N4] tao-thau: đặt ngân sách xong, người tạo gói thấy lại đủ năm hàng (đọc lại); người mua khác thấy ba thứ lần đặt trả về, màn không đọc thay họ", async () => {
+    it("[S1.9101 / khoản 258 — lượt soi N4] tao-thau: đặt ngân sách xong, người tạo gói thấy lại đủ năm hàng (đọc lại); người mua khác thấy ba thứ lần đặt trả về, màn không đọc thay họ", async () => {
       const dat = (l: string) =>
         l === "PUT /rfqs/r-1/budget"
           ? Promise.resolve({ status: 200, body: { budget: { rfqId: "r-1", estimatedValue: "150000000.00", currency: "VND", policyId: "p-2", requiresDualApproval: true } } })

@@ -976,7 +976,7 @@ describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ
   });
 });
 
-describe("[S1.194 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa đọc — bắt buộc ở tổ chức đã bật, MVP1 giữ hợp đồng không thân", () => {
+describe("[S1.195 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa đọc — bắt buộc ở tổ chức đã bật, MVP1 giữ hợp đồng không thân", () => {
   it("[INV-K4b] tổ chức đã bật: `GET` trả `lanNop` 1; duyệt không thân, thân rỗng, mốc 0 hay `null` ⇒ 422 có tên; mốc không phải số nguyên hay tràn `integer` ⇒ 422; mốc 1 ⇒ 200", async () => {
     const { org, rfqId } = await goiDaNop("lan-nop-bat", true);
     const pm2 = await nguoi("pm2-lan-nop-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
@@ -1006,7 +1006,7 @@ describe("[S1.194 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa
   });
 });
 
-describe("[S1.195 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
+describe("[S1.9101 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
   /** Hàng từ chối của một người, dạng `loại tài nguyên quyền` — lần đọc ngân sách mang loại riêng `RFQ_BUDGET` (lượt soi F2). */
   async function demTuChoiNganSach(org: string, ai: string): Promise<string[]> {
     const { rows } = await db.pool.query<{ q: string }>(

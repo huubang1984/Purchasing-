@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/chung.css">
 </head>
 <body>
-<main id="khung">
+<main>
   <header class="dau">
     <h1>Tạo gói thầu và mời nhà cung cấp</h1>
     <span class="vai">Người mua</span>
@@ -85,14 +85,15 @@
     <label for="tien-te">Tiền tệ</label>
     <input id="tien-te" autocomplete="off" value="VND">
     <button id="nut-ns" class="phu">Đặt ngân sách</button>
-    <!-- [S1.195 / khoản 258] Người tạo gói thấy ngân sách ở lần đọc gói; người khác đọc bằng nút này (cổng `rfq.approve`). -->
+    <!-- [S1.9101 / khoản 258] Người tạo gói thấy ngân sách ở lần đọc gói; người khác đọc bằng nút này (cổng `rfq.approve`). -->
     <button id="nut-xem-ns" class="phu" hidden>Xem ngân sách</button>
     <dl class="tt" id="tt-ns"></dl>
     <div class="doi">
       <button id="nut-nop-duyet" class="phu">Nộp duyệt</button>
       <button id="nut-duyet" class="phu">Phê duyệt</button>
     </div>
-    <button id="nut-mo">Mở thầu</button>
+    <!-- ~~Mở thầu~~ [S1.193 / S3.2c2] Mở GÓI là PENDING_APPROVAL→OPEN; mở THẦU là CLOSED→UNSEALED (spec S3 §3.3). -->
+    <button id="nut-mo">Mở gói</button>
     <!-- [S1.191 / S3.2c2] Cạnh PENDING_APPROVAL→DRAFT (`077`): chỉ tổ chức đã bật, lý do bắt buộc và vào sổ. -->
     <div id="khoi-tra-ve" hidden>
       <label for="ly-do-tra-ve">Lý do trả gói về soạn thảo</label>
