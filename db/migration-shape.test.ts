@@ -491,7 +491,7 @@ describe("hình dạng file migration", () => {
       "rfq_items",
       "rfq_key_material",
       "rfq_packages",
-      // [S1.195 / khoản 257] Sổ trả về — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới `rfq_packages`, policy khách ĐÓNG HẲN.
+      // [S1.9101 / khoản 257] Sổ trả về — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới `rfq_packages`, policy khách ĐÓNG HẲN.
       "rfq_tra_ve",
       "rfq_unsealed_bids",
       "sessions",

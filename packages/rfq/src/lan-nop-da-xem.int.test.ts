@@ -18,10 +18,10 @@ import {
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.195 / khoản 256 · khoản 257] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM; LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ —
+// [S1.9101 / khoản 256 · khoản 257] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM; LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ —
 // ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `081_lan_nop_da_xem`. Lượt soi S1.194 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
+// Migration `9501_lan_nop_da_xem`. Lượt soi S1.195 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
 // `rang-ngan-sach.int.test.ts` ghim chúng tới vòng này: PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký ⇒ chữ ký
 // rơi lên thứ người ấy chưa xem, và gói mở; người duyệt đã ký rồi tự trả về ⇒ nộp lại y nguyên, gói mở bằng chữ ký ấy. Hai ca đầu
 // của khối (2) và (3) dưới đây là hai ca ấy, LẬT.
@@ -363,7 +363,7 @@ afterAll(async () => {
 // =============================================================================================
 // (1) LẦN NỘP
 // =============================================================================================
-describe("S1.195 — lần nộp: trigger đếm ở mỗi lần nộp duyệt, bên gọi không đặt được", () => {
+describe("S1.9101 — lần nộp: trigger đếm ở mỗi lần nộp duyệt, bên gọi không đặt được", () => {
   it("[INV-K4b] `lanNop` 0 ở DRAFT, 1 sau lần nộp đầu, đứng yên khi trả về, 2 sau lần nộp lại; `app_api` không khai, không sửa được cột", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -393,7 +393,7 @@ describe("S1.195 — lần nộp: trigger đếm ở mỗi lần nộp duyệt, 
 // =============================================================================================
 // (2) KHOẢN 256 — LỜI DUYỆT RÀNG VÀO LẦN NỘP ĐÃ XEM
 // =============================================================================================
-describe("S1.195 — khoản 256: lời duyệt mang lần nộp người duyệt đã xem", () => {
+describe("S1.9101 — khoản 256: lời duyệt mang lần nộp người duyệt đã xem", () => {
   it("[INV-K4b] [INV-D2] người duyệt xem gói ở 1 triệu (lần nộp 1); PM trả về, đặt 99 triệu, nộp lại (lần 2): lời duyệt mang lần 1 bị từ chối, không hàng chữ ký nào; đọc lại rồi duyệt ⇒ chữ ký nằm trên 99 triệu, gói mở", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -517,7 +517,7 @@ describe("S1.195 — khoản 256: lời duyệt mang lần nộp người duyệ
     expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
   });
 
-  it("[INV-D2] tổ chức CHƯA bật: lời duyệt gặp một lần mở gói đang chạy ⇒ chờ khoá, đọc lại thấy OPEN, từ chối có tên — trước `081_lan_nop_da_xem` chữ ký ấy rơi lên gói đã mở", async () => {
+  it("[INV-D2] tổ chức CHƯA bật: lời duyệt gặp một lần mở gói đang chạy ⇒ chờ khoá, đọc lại thấy OPEN, từ chối có tên — trước `9501_lan_nop_da_xem` chữ ký ấy rơi lên gói đã mở", async () => {
     const a = await taoToChuc();
     const rfqId = await goiNhap(a);
     await nop(a, rfqId);
@@ -548,7 +548,7 @@ describe("S1.195 — khoản 256: lời duyệt mang lần nộp người duyệ
 // =============================================================================================
 // (3) KHOẢN 257 — LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ
 // =============================================================================================
-describe("S1.195 — khoản 257: lần trả về rút chữ ký của chính người trả, không của ai khác", () => {
+describe("S1.9101 — khoản 257: lần trả về rút chữ ký của chính người trả, không của ai khác", () => {
   it("[INV-K4b] [INV-D2] PM2 ký, rồi chính PM2 trả gói về; PM nộp lại y nguyên ⇒ gói KHÔNG mở bằng chữ ký cũ; PM2 ký lại trên lần nộp mới ⇒ mở, hai hàng chữ ký", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -592,7 +592,7 @@ describe("S1.195 — khoản 257: lần trả về rút chữ ký của chính n
 // =============================================================================================
 // (4) SỔ TRẢ VỀ VÀ CẠNH VỀ DRAFT
 // =============================================================================================
-describe("S1.195 — `rfq_tra_ve`: cạnh về DRAFT kèm hàng của chính lần nộp; người, lần nộp, lý do nằm trong CSDL", () => {
+describe("S1.9101 — `rfq_tra_ve`: cạnh về DRAFT kèm hàng của chính lần nộp; người, lần nộp, lý do nằm trong CSDL", () => {
   it("[INV-K4a] `returnRfqToDraft` ghi đúng một hàng — người, phiên, lần nộp của gói, lý do —, hàng sổ `RFQ_RETURNED_TO_DRAFT` giữ nguyên", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -663,7 +663,7 @@ describe("S1.195 — `rfq_tra_ve`: cạnh về DRAFT kèm hàng của chính l�
 // =============================================================================================
 // (5) ĐỘT BIẾN — MỖI VẾ CỦA BẢN VÁ MỘT LẦN ĐỎ
 // =============================================================================================
-describe("S1.195 — đột biến: gỡ từng vế thì khoảng trống mở lại", () => {
+describe("S1.9101 — đột biến: gỡ từng vế thì khoảng trống mở lại", () => {
   /** Kịch bản khoản 256: lời duyệt trên lần xem trước khi PM trả về, đặt 99 triệu, nộp lại — trả trạng thái cuối. */
   const duaXemKy = async (): Promise<string> => {
     const t = await toChucDaBat();
@@ -729,7 +729,7 @@ describe("S1.195 — đột biến: gỡ từng vế thì khoảng trống mở 
     expect([await soChuKy(rfqId), await trangThaiGoi(rfqId)]).toEqual([1, "DRAFT"]);
   });
 
-  // [lượt soi S1.195, F1] Khe thật của thứ tự trigger: D2 đọc trạng thái rồi, mấy câu sau, mới băm NỘI DUNG — mỗi câu một ảnh
+  // [lượt soi S1.9101, F1] Khe thật của thứ tự trigger: D2 đọc trạng thái rồi, mấy câu sau, mới băm NỘI DUNG — mỗi câu một ảnh
   // chụp. Ca này nới khe ấy bằng một `pg_sleep` chèn vào D2 (thay cho một tiến trình bị hoãn), rồi trả về và thêm hạng mục trong
   // lúc lời duyệt đang ngủ. Bản thật: vế trạng thái dưới khoá từ chối. Bỏ vế ấy: chữ ký mang băm của hạng mục người duyệt chưa đọc,
   // trên lần nộp cũ, và gói nộp lại mở bằng nó.
@@ -816,11 +816,11 @@ describe("S1.195 — đột biến: gỡ từng vế thì khoảng trống mở 
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] cạnh mở gói bỏ vế *mang lần nộp* ⇒ chữ ký không mang lần nộp (dạng trước `081_lan_nop_da_xem`) mở được gói", async () => {
+  it("[INV-K4b] cạnh mở gói bỏ vế *mang lần nộp* ⇒ chữ ký không mang lần nộp (dạng trước `9501_lan_nop_da_xem`) mở được gói", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    // Chữ ký dạng trước `081_lan_nop_da_xem`: trigger so lần nộp tạm bỏ phép so, lời duyệt không mốc.
+    // Chữ ký dạng trước `9501_lan_nop_da_xem`: trigger so lần nộp tạm bỏ phép so, lời duyệt không mốc.
     await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN", "IF false THEN", () =>
       duyetVoi(t, rfqId, t.pm2, undefined),
     );
@@ -850,12 +850,12 @@ describe("S1.195 — đột biến: gỡ từng vế thì khoảng trống mở 
 });
 
 // =============================================================================================
-// (6) GIỚI HẠN, ĐO — LẦN BẬT S3 GIỮA LÚC GÓI ĐANG CHỜ DUYỆT (lượt soi S1.195, F6; khoản 261)
+// (6) GIỚI HẠN, ĐO — LẦN BẬT S3 GIỮA LÚC GÓI ĐANG CHỜ DUYỆT (lượt soi S1.9101, F6; khoản 261)
 //
 // Ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và lần nộp không đổi. Ca dưới
 // ghim hành vi HÔM NAY; không mang nhãn bất biến: nó đo một khoảng trống, không đo một chốt.
 // =============================================================================================
-describe("S1.195 — giới hạn, đo: tổ chức bật S3 khi gói đang chờ duyệt", () => {
+describe("S1.9101 — giới hạn, đo: tổ chức bật S3 khi gói đang chờ duyệt", () => {
   it("khoản 261 — người duyệt đọc gói (lần nộp 1, một lời mời); PM mời thêm khi gói đang chờ — MVP1 cho —, rồi tổ chức BẬT S3: lời duyệt mốc 1 đi qua với danh sách HAI lời mời, và gói MỞ", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
