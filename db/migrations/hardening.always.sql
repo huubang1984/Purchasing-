@@ -379,8 +379,11 @@
 --       CỬA cho MATVIEW và cho hàm SECURITY DEFINER: không có cửa kỹ thuật nào (matview không
 --       có RLS, SECURITY DEFINER là leo quyền theo định nghĩa), nên cửa là DANH SÁCH NGOẠI LỆ
 --       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ [S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng:
---       `public.outbox_danh_sach_to_chuc` (ADR-040). Thêm một tên vào đó là một quyết định phải
---       nhìn thấy, y như NGOAI_LE_HINH_DANG. Tên viết ĐỦ SCHEMA nên nó đã sẵn sàng cho việc
+--       ~~`public.outbox_danh_sach_to_chuc`~~ [S1.9111 / khoản 112 + 163] `('ham', 'public',
+--       'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', lý do)` — khoá năm cột, hàm theo
+--       CHỮ KÝ, có chiều khai thiu và bản đối chiếu ở db/rls-coverage.int.test.ts (ADR-040). Thêm một
+--       dòng vào đó là một quyết định phải
+--       nhìn thấy, y như NGOAI_LE_HINH_DANG. ~~Tên viết ĐỦ SCHEMA~~ Lược đồ là một cột riêng nên nó đã sẵn sàng cho việc
 --       bỏ giới hạn schema ở vòng fix 2.
 --       Hàm thuộc EXTENSION (pg_depend deptype='e') được loại trừ: chúng không do dự án viết
 --       và danh sách ngoại lệ không nên phình theo extension. Đã đo trên PG16.15: pgcrypto
@@ -598,9 +601,19 @@ DECLARE
            LEFT JOIN pg_roles r ON r.oid = o.oid
           ORDER BY (CASE WHEN o.oid = 0 THEN 'PUBLIC' ELSE pg_catalog.quote_ident(r.rolname) END) COLLATE "C"), ',')$q$;
 
+  -- [S1.9111 / khoản 163] CHỮ KÝ của một hàm đúng như `regprocedure` in ra, KHÔNG kèm lược đồ: tên, ngoặc, các
+  -- kiểu đối số vào theo `format_type`, nối bằng dấu phẩy không khoảng trắng (`f(text,integer)`). Dựng TỪ CATALOG
+  -- (`proargtypes`), KHÔNG qua `to_regprocedure`: phân giải tên đòi USAGE trên lược đồ — đo (S1.9111): dưới một vai
+  -- không có USAGE, `to_regprocedure('zz.f(text, integer)')` ném 42501 và cả mục thành "KHÔNG ĐÁNH GIÁ ĐƯỢC" — đúng
+  -- bài học S1.48 H3 đã đưa các chiều khai thiu về JOIN catalog; và không phụ thuộc search_path như
+  -- `oid::regprocedure::text` (chỉ ghi lược đồ khi lược đồ không nằm trong search_path). Ba chỗ dùng (thông điệp và
+  -- khoá xuôi của nhánh SECDEF ở CAU_DOC_VONG, khoá của chiều khai thiu) — một hằng, không chép tay. %1$s = bí danh pg_proc.
+  MAU_CHU_KY_HAM constant text :=
+    $q$%1$s.proname || '(' || pg_catalog.array_to_string(ARRAY(SELECT pg_catalog.format_type(t.oid, NULL) FROM pg_catalog.unnest(%1$s.proargtypes) WITH ORDINALITY AS t(oid, k) ORDER BY t.k), ',') || ')'$q$;
+
   -- [vòng fix 1 — I2] Ngoại lệ viết tay cho hai thứ KHÔNG có cửa kỹ thuật: MATERIALIZED VIEW
-  -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. Tên viết đủ schema
-  -- ('public.ten_doi_tuong'). ~~RỖNG là trạng thái đúng ở S0~~ — mỗi dòng thêm vào phải kèm lý do.
+  -- chạm dữ liệu tenant, và hàm SECURITY DEFINER trong public/app_private. ~~Tên viết đủ schema
+  -- ('public.ten_doi_tuong').~~ [S1.9111] Khoá năm cột, xem dưới. ~~RỖNG là trạng thái đúng ở S0~~ — mỗi dòng thêm vào phải kèm lý do.
   --
   -- [S1.82 / khoản 116, ADR-040] DÒNG ĐẦU TIÊN, và nó là một TIỀN LỆ chứ không phải một bản vá.
   -- `public.outbox_danh_sach_to_chuc()` (052) là nguồn danh sách tổ chức cho `JobRunner` của
@@ -615,15 +628,34 @@ DECLARE
   --     vẫn thấy 0 hàng (đo, cảnh ❹);
   --   * `EXECUTE` bị thu hồi khỏi PUBLIC và khỏi `app_api` (đo cảnh ❺: 42501).
   --
-  -- KHOÁ THEO TÊN TRẦN — nói ra vì nó là bậc tự do thật: dòng này miễn trừ MỌI overload cùng tên
+  -- ~~KHOÁ THEO TÊN TRẦN — nói ra vì nó là bậc tự do thật: dòng này miễn trừ MỌI overload cùng tên
   -- và cả một view/matview trùng tên. Hàng ghim thân hàm ở dưới KHÔNG phải lớp chặn overload
   -- (nó ghim `public.outbox_danh_sach_to_chuc()` — chữ ký KHÔNG tham số). Một overload
-  -- `outbox_danh_sach_to_chuc(text)` sẽ đi qua cả hai. Ghi vào khoản 163.
+  -- `outbox_danh_sach_to_chuc(text)` sẽ đi qua cả hai. Ghi vào khoản 163.~~
   --
-  -- Hàng `('')` được GIỮ: chuỗi rỗng, non-NULL. Một dòng NULL làm `NOT IN` ra NULL và tắt CẢ HAI
-  -- nhánh của mục (C) — đó là khoản 112, vẫn MỞ, và vòng này gánh nó.
+  -- ~~Hàng `('')` được GIỮ: chuỗi rỗng, non-NULL. Một dòng NULL làm `NOT IN` ra NULL và tắt CẢ HAI
+  -- nhánh của mục (C) — đó là khoản 112, vẫn MỞ, và vòng này gánh nó.~~
+  --
+  -- [S1.9111 / khoản 112 + 163] DANH SÁCH KHAI CÓ KHOÁ, như bốn danh sách khai kia (lượt soi 42 NHẸ-2 gọi bản cũ là
+  -- cửa ra yếu nhất tệp: một trục tên, chung không gian tên quan hệ/hàm, `NOT IN` gặp NULL làm cả mục im). Năm cột,
+  -- mỗi cột một trục thu hẹp:
+  --   loai     'ham' | 'view' | 'matview' — một dòng chỉ miễn ĐÚNG loại ấy (dòng cũ miễn cả view/matview trùng tên);
+  --   nspname  lược đồ;
+  --   ten      với view/matview: tên quan hệ; với hàm: CHỮ KÝ như `regprocedure` in ra, không kèm lược đồ —
+  --            `outbox_danh_sach_to_chuc()`, `f(text,integer)` — dựng từ catalog bằng MAU_CHU_KY_HAM ở trên, nên
+  --            overload `(text)` là một chữ ký KHÁC và mục (C) bắt nó (khoản 163; đo: migrations.int.test.ts);
+  --   mig      migration khai sinh, KHÔNG đuôi `.sql` — chiều khai thiu chỉ phán khi tệp ấy đã áp (cùng khuôn
+  --            BANG_TENANT_KHAI: tập migration rút gọn của migrations.int.test.ts đi qua; đối tượng bị DROP hay đổi
+  --            hình dạng sau deploy thì ĐỎ có tên);
+  --   ly_do    đọc được — một dòng ở đây là một đường đọc vòng RLS có chủ ý, cùng hạng NGOAI_LE_HINH_DANG.
+  -- So bằng NOT EXISTS ở cả hai nhánh: một dòng NULL không tắt gì nữa (khoản 112 — đo ở db/rls-coverage.int.test.ts,
+  -- cùng chỗ với bản HAI BẢN KHỚP của danh sách này). Không còn hàng sentinel `('')`: danh sách có dòng thật; ngày nó
+  -- rỗng trở lại thì theo khuôn sentinel `('', '', '', '', '')` — chiều khai thiu đã chắn `x.ten <> ''`.
+  -- Cột ly_do là MỘT DÒNG (khối này phải bằng từng byte với bộ sinh `khoiValues` của db/hardening-hang.ts).
   NGOAI_LE_DOC_VONG constant text :=
-    $q$(VALUES (''), ('public.outbox_danh_sach_to_chuc')) AS x(ten)$q$;
+    $q$(VALUES
+         ('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', 'nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (id) trên organizations, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)')
+       ) AS x(loai, nspname, ten, mig, ly_do)$q$;
 
   -- Vị từ "bảng này là CON của một bảng tenant" — lá phân mảnh HOẶC con cháu INHERITS. Con
   -- thừa hưởng policy của cha khi truy vấn đi qua cha, và PostgreSQL KHÔNG cho tạo policy riêng
@@ -846,8 +878,8 @@ DECLARE
     $q$SELECT n.nspname || '.' || c.relname || ': ' ||
               CASE WHEN c.relkind = 'm'
                    THEN 'MATERIALIZED VIEW trong lược đồ dự án — matview KHÔNG chịu RLS ở bất kỳ cấu hình nào, '
-                        'nên nó là một bản sao dữ liệu đứng ngoài mọi policy (khoản 91). Bỏ nó đi, hoặc thêm tên '
-                        'này vào NGOAI_LE_DOC_VONG kèm lý do.'
+                        'nên nó là một bản sao dữ liệu đứng ngoài mọi policy (khoản 91). Bỏ nó đi, hoặc khai '
+                        '(''matview'', lược đồ, tên, migration, lý do) vào NGOAI_LE_DOC_VONG và bản ở db/rls-coverage.int.test.ts.'
                    ELSE 'VIEW trong lược đồ dự án mà thiếu "WITH (security_invoker = true)" — RLS và quyền được '
                         'kiểm theo CHỦ SỞ HỮU view, không theo người gọi; nếu view chạm dữ liệu có RLS (trực tiếp, '
                         'qua một view khác, hay qua một hàm) thì người gọi mượn trọn quyền của chủ (khoản 91). Sửa '
@@ -856,7 +888,10 @@ DECLARE
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relkind IN ('v', 'm')
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
-          AND n.nspname || '.' || c.relname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
+          -- [S1.9111 / khoản 112] NOT EXISTS theo khoá (loai, nspname, ten) — bản `NOT IN` cũ tắt cả nhánh khi gặp một dòng NULL.
+          AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
+                           WHERE x.loai = CASE c.relkind WHEN 'm' THEN 'matview' ELSE 'view' END
+                             AND x.nspname = n.nspname AND x.ten = c.relname)
           AND NOT EXISTS (SELECT 1 FROM pg_depend dx
                            WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
                              AND dx.deptype = 'e')
@@ -880,16 +915,53 @@ DECLARE
                OR coalesce(array_to_string(c.reloptions, ','), '')
                     !~* '\msecurity_invoker\s*=\s*(t|tr|tru|true|y|ye|yes|on|1)\M')
        UNION ALL
-       SELECT n.nspname || '.' || p.proname || ': hàm SECURITY DEFINER — nó chạy dưới quyền '
+       -- [S1.9111 / khoản 163] Tên in kèm CHỮ KÝ (MAU_CHU_KY_HAM): `public.outbox_danh_sach_to_chuc(text)` — hai overload
+       -- không còn cùng một dòng thông điệp, và khoá miễn trừ so đúng chuỗi ấy.
+       SELECT n.nspname || '.' || $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$ || ': hàm SECURITY DEFINER — nó chạy dưới quyền '
               'CHỦ SỞ HỮU nên mọi RLS bên trong được kiểm theo chủ sở hữu, không theo người '
-              'gọi. Bỏ SECURITY DEFINER, hoặc thêm tên này vào NGOAI_LE_DOC_VONG kèm lý do.'
+              'gọi. Bỏ SECURITY DEFINER, hoặc khai (''ham'', lược đồ, chữ ký, migration, lý do) vào NGOAI_LE_DOC_VONG '
+              'và bản ở db/rls-coverage.int.test.ts.' AS mo_ta
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE p.prosecdef
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
-          AND n.nspname || '.' || p.proname NOT IN (SELECT ten FROM $q$ || NGOAI_LE_DOC_VONG || $q$)
+          -- [S1.9111 / khoản 163] Khoá theo CHỮ KÝ: một overload cùng tên là một chữ ký khác, không được miễn.
+          AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
+                           WHERE x.loai = 'ham' AND x.nspname = n.nspname
+                             AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$)
           AND NOT EXISTS (SELECT 1 FROM pg_depend d
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
-                             AND d.deptype = 'e')$q$;
+                             AND d.deptype = 'e')
+       UNION ALL
+       -- [S1.9111 / khoản 112] CHIỀU KHAI THIU: một dòng khai mà CSDL không có đối tượng ĐÚNG HÌNH DẠNG mục (C) sẽ bắt
+       -- (hàm SECURITY DEFINER với chữ ký ấy; VIEW thiếu security_invoker; MATERIALIZED VIEW — trong lược đồ dự án, ngoài
+       -- extension) là dòng thiu — kể cả `loai` ngoài ba giá trị. Chỉ phán khi migration khai sinh đã áp (cùng khuôn
+       -- BANG_TENANT_KHAI); hình dạng đối tượng chép ĐÚNG vị từ của hai nhánh xuôi ở trên, bí danh zp/zc/zn.
+       SELECT 'khai ' || x.nspname || '.' || x.ten || ' (' || x.loai || ', migration ' || x.mig || ') được miễn mục (C) mà CSDL không có '
+              || CASE x.loai WHEN 'ham' THEN 'hàm SECURITY DEFINER với chữ ký ấy'
+                             WHEN 'view' THEN 'VIEW thiếu security_invoker như thế'
+                             WHEN 'matview' THEN 'MATERIALIZED VIEW như thế'
+                             ELSE 'đối tượng loại ấy (loai phải là ham, view hay matview)' END
+              || ' trong lược đồ dự án — dòng khai thiu (đối tượng đã DROP, đã đổi chữ ký, đã bỏ SECURITY DEFINER hay đã đặt '
+                 'security_invoker); gỡ dòng khai, hoặc khai lại đúng khoá.' AS mo_ta
+         FROM $q$ || NGOAI_LE_DOC_VONG || $q$
+        WHERE x.ten <> ''
+          AND EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = x.mig || '.sql')
+          AND NOT EXISTS (SELECT 1 FROM pg_proc zp JOIN pg_namespace zn ON zn.oid = zp.pronamespace
+                           WHERE x.loai = 'ham' AND zn.nspname = x.nspname
+                             AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'zp') || $q$
+                             AND zp.prosecdef
+                             AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'zn') || $q$
+                             AND NOT EXISTS (SELECT 1 FROM pg_depend d
+                                              WHERE d.classid = 'pg_proc'::regclass AND d.objid = zp.oid AND d.deptype = 'e'))
+          AND NOT EXISTS (SELECT 1 FROM pg_class zc JOIN pg_namespace zn ON zn.oid = zc.relnamespace
+                           WHERE x.loai IN ('view', 'matview') AND zn.nspname = x.nspname AND zc.relname = x.ten
+                             AND zc.relkind = CASE x.loai WHEN 'matview' THEN 'm' ELSE 'v' END
+                             AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'zn') || $q$
+                             AND NOT EXISTS (SELECT 1 FROM pg_depend dx
+                                              WHERE dx.classid = 'pg_class'::regclass AND dx.objid = zc.oid AND dx.deptype = 'e')
+                             AND (zc.relkind = 'm'
+                                  OR coalesce(array_to_string(zc.reloptions, ','), '')
+                                       !~* '\msecurity_invoker\s*=\s*(t|tr|tru|true|y|ye|yes|on|1)\M'))$q$;
 
   -- ---- [T5] (D) SỔ KIỂM TOÁN CHỈ-GHI-THÊM — bất biến B4, nền cho B3 -------------------
   -- Task 5 dựng hai bảng sổ mà bảo đảm "không đường code nào xoá/sửa audit" nằm ở BA thứ chỉ
@@ -12611,6 +12683,37 @@ $ham$;
           FROM pg_roles WHERE rolname = 'app_khoi_tao'), 'role app_khoi_tao không tồn tại')$q$,
       $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_khoi_tao$q$
     ],
+    -- [S1.9111 / khoản 164 / ADR-040 ⑸] Vai CHỦ HÀM `app_liet_ke_to_chuc` (052): với một hàm SECURITY DEFINER thì chủ hàm
+    -- là toàn bộ đặc quyền của thân hàm — BYPASSRLS trên vai này là `outbox_danh_sach_to_chuc()` đọc `organizations` bỏ
+    -- qua mọi policy, SUPERUSER là thân hàm chạy như superuser. Tới S1.82 hàng ghim 052 chỉ đọc `proowner`, không đọc
+    -- thuộc tính của vai ấy: `ALTER ROLE app_liet_ke_to_chuc BYPASSRLS` sau deploy sống qua mọi lần migrate() (đo:
+    -- db/vai-neo.int.test.ts, đỏ trước hàng này). KHÔNG qua `ROLE_CANH`: tám tên ấy còn được dùng ở VI_TU_HANG_CAU_HINH_UNG_DUNG
+    -- và ở mục CREATE/TEMP trên database, nơi một tên thêm vào có thể thu hồi quyền của chính chủ database (S1.44) — chưa
+    -- đo lại, nên là một hàng riêng. KHÁC khuôn bốn vai ứng dụng ở đúng một cờ: NOINHERIT (BƯỚC 0 tạo nó NOLOGIN NOINHERIT;
+    -- mọi quyền nó kế thừa là quyền của thân hàm) — hậu điều kiện đòi `rolinherit IS FALSE`, chẩn đoán nêu `INHERIT` là cờ sai.
+    -- THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — `NOBYPASSRLS` đứng TRƯỚC `NOSUPERUSER`: bộ đọc ở db/hardening-suy-tu-tinh-chat.int.test.ts
+    -- quét `ALTER ROLE <tên> NOSUPERUSER … NOBYPASSRLS` làm "tập ghim của CÂY thành viên bốn vai ứng dụng" và ghim đúng tám
+    -- tên; vai này KHÔNG thuộc cây ấy (không là thành viên của vai nào), nên cố ý đứng ngoài phép quét ấy. Ngày phép quét mở
+    -- cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách của test trong CÙNG commit.
+    ARRAY[
+      $q$thuộc tính role app_liet_ke_to_chuc$q$,
+      $q$true$q$,
+      $q$ALTER ROLE app_liet_ke_to_chuc NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOLOGIN NOINHERIT$q$,
+      $q$(SELECT rolsuper IS FALSE AND rolcreatedb IS FALSE AND rolcreaterole IS FALSE
+            AND rolbypassrls IS FALSE AND rolreplication IS FALSE AND rolcanlogin IS FALSE
+            AND rolinherit IS FALSE
+          FROM pg_roles WHERE rolname = 'app_liet_ke_to_chuc')$q$,
+      $q$coalesce((SELECT nullif(concat_ws(', ',
+            CASE WHEN rolsuper THEN 'SUPERUSER' END,
+            CASE WHEN rolcreatedb THEN 'CREATEDB' END,
+            CASE WHEN rolcreaterole THEN 'CREATEROLE' END,
+            CASE WHEN rolbypassrls THEN 'BYPASSRLS' END,
+            CASE WHEN rolreplication THEN 'REPLICATION' END,
+            CASE WHEN rolcanlogin THEN 'LOGIN' END,
+            CASE WHEN rolinherit THEN 'INHERIT' END), '')
+          FROM pg_roles WHERE rolname = 'app_liet_ke_to_chuc'), 'role app_liet_ke_to_chuc không tồn tại')$q$,
+      $q$SUPERUSER, hoặc CREATEROLE kèm ADMIN OPTION trên app_liet_ke_to_chuc$q$
+    ],
 
     -- [CR2-T3] Hai role ĐĂNG NHẬP được danh sách trắng cho phép làm thành viên của app_api/
     -- app_unseal. Chúng là chủ thể tin cậy nên phải bị canh y hệt — nhưng KHÁC một điểm quan
@@ -13533,7 +13636,7 @@ $ham$;
       $q$SELECT 1$q$,
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_DOC_VONG || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_DOC_VONG || $q$) t)$q$,
-      $q$viết một migration mới (ALTER VIEW ... SET (security_invoker = true), DROP MATERIALIZED VIEW, hoặc bỏ SECURITY DEFINER), HOẶC thêm tên đối tượng vào NGOAI_LE_DOC_VONG kèm lý do$q$
+      $q$viết một migration mới (ALTER VIEW ... SET (security_invoker = true), DROP MATERIALIZED VIEW, hoặc bỏ SECURITY DEFINER), HOẶC khai (loai, lược đồ, tên hay chữ ký, migration, lý do) vào NGOAI_LE_DOC_VONG kèm bản ở db/rls-coverage.int.test.ts$q$
     ],
 
     -- ---- [T5] (D) Sổ kiểm toán chỉ-ghi-thêm: thân hàm + trigger + vật lý + quyền ---------
