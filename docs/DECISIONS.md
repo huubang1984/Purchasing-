@@ -9138,7 +9138,7 @@ người duyệt đọc.
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 route riêng không mở cho agent, và quyền đọc
 của người tạo gói cộng người duyệt; lúc nào màn tự đọc là điểm tôi tự chốt (⑶ dưới) · **[S1.9101]** · **Liên quan:** ADR-114 (băm
 ngân sách), ADR-115 (lần nộp đã xem), ADR-038/039 và khoản 141 (bề mặt agent), ADR-092 (trần lần từ chối), khoản nợ 33 (hàm đọc có
-cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.9101 · **Khoản:** 258 (ghi ở S1.193; đóng ở đây)
+cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.9101 · **Khoản:** 258 (ghi ở S1.194; đóng ở đây)
 
 ### Bối cảnh
 

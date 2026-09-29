@@ -122,7 +122,7 @@ export function docNganSachKhiDocGoi(userId: string, createdBy: unknown, trangTh
   return (userId !== "" && createdBy === userId) || trangThaiGoi === "PENDING_APPROVAL";
 }
 
-/** [S1.9101 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `079`). */
+/** [S1.9101 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `080`). */
 export function hangNganSach(budget: unknown): readonly (readonly [string, string | null])[] {
   const b = (budget !== null && typeof budget === "object" ? budget : {}) as Record<string, unknown>;
   const chu = (v: unknown): string | null => (typeof v === "string" || typeof v === "number" ? String(v) : null);

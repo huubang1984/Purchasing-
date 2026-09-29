@@ -489,7 +489,7 @@ export async function setRfqBudget(
 }
 
 /**
- * [S1.9101 / khoản 258] Ngân sách của một gói ĐÚNG như chữ ký duyệt gói ràng vào — năm thứ `rfq_bam_ngan_sach` (`079`) băm: ước
+ * [S1.9101 / khoản 258] Ngân sách của một gói ĐÚNG như chữ ký duyệt gói ràng vào — năm thứ `rfq_bam_ngan_sach` (`080`) băm: ước
  * lượng, tiền tệ, phiên bản chính sách ghim, bậc, cờ duyệt kép. Gói chưa có ngân sách: bốn trường đầu `null`.
  */
 export interface RfqBudgetView {

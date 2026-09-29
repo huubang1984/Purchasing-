@@ -16356,12 +16356,12 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 # §S1.9101 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-9201
 
 **Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; vòng này thêm một bảng đọc, không đổi luồng
-nào. Khoản 258 (rổ B, ghi ở §S1.193) đóng. Không migration; một route đọc mới; một ADR (ADR-9201).
+nào. Khoản 258 (rổ B, ghi ở §S1.194) đóng. Không migration; một route đọc mới; một ADR (ADR-9201).
 
 ## 1. Việc gì
 
 Chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách (ADR-114) và rơi lên đúng lần nộp client đã đọc (ADR-115), nhưng không route
-nào trả ngân sách cho người mua — lượt soi S1.193 (F2). Chủ dự án chốt ngày 2026-09-29: route riêng, không mở cho agent; người tạo
+nào trả ngân sách cho người mua — lượt soi S1.194 (F2). Chủ dự án chốt ngày 2026-09-29: route riêng, không mở cho agent; người tạo
 gói và người duyệt đọc được, không ai khác. Bất biến chạm: K4b.
 
 ## 2. Đo trước
