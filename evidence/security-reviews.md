@@ -15975,7 +15975,8 @@ TOTP lần đầu.
 
 ## 6. Số
 
-Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).
+Không khoản nào mở hay đóng. ~~S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).~~ **[S1.193]** S3.2 chưa khép:
+khoản 254 và 255 còn mở (§S1.193 mục 7).
 
 # §S1.192 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
 
@@ -16078,7 +16079,136 @@ chạy — tổng kiểm đổi; chạy lại sạch), `migration-shape` 1 đỏ
 - Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3229 khẳng định; L1 6, L4 5; H16 51 → 55. Mốc `MOC_GHIM`
   68 → 70 — cổng CHẶN đúng một lượt trước khi dòng ấy được sửa.
 
-# §S1.193 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+# §S1.193 — S3.2c2, PHẦN BÙ TRÊN NỀN #200: BƯỚC MỜI DỜI THẬT TRONG DOM, NHÃN *MỜI SAU KHI KÝ*, *MỞ GÓI*, BƯỚC 15 CỦA KỊCH BẢN 41 ĐO THỨ TỰ MỜI — LƯỢT ĐI THỬ T4 ĐO ĐƯỢC KHOẢN 255
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — luồng MVP1 của màn và của kịch bản 41 giữ nguyên thứ tự;
+một nhãn đổi ở cả hai luồng (*Mở gói*). Không migration, không route mới, không ADR. Không mở khoản nào: phát hiện của lượt đi thử là
+khoản **255** (rổ B), mà §S1.189 ghi bằng đọc mã — vòng này ĐO nó.
+
+## 1. Vòng này là gì
+
+Hai PR dựng cùng S3.2c2. #198 — vòng này — dựng trọn S3.2c trên nhánh; lúc hợp #197 (§S1.190, S3.2c1), `gieo:demo --s3` và bước 2–3 của
+kịch bản 41 lấy bản của #197, #198 giữ màn `/tao-thau`, `listInvitations`, bước 15 của kịch bản 41 và lượt đi thử T4. #200 (§S1.191),
+của phiên làm #197, dựng cùng màn theo cách khác: phép tính gom vào `apps/web/src/tao-thau.ts` có unit test, bước mời dời bằng CSS
+`order`. #200 merge vào `master` trước. Vòng này thu #198 thành phần bù: màn, module và test của #200 giữ nguyên, vòng này thêm đúng
+bốn thứ #200 thiếu.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) *"Sau khi merge thì làm tiếp S3.2c"*.
+- (2026-09-29) Hai PR cho S3.2c2: giữ #198, đóng #200. Trước khi #200 được đóng, nó đã merge.
+- (2026-09-29) Sau khi #200 merge: thu #198 thành PR bù trên nền #200 — ⑴ dời bước trong DOM thay CSS `order`; ⑵ `listInvitations`
+  trả `moiSauKhiKy` và bảng lời mời nói *mời sau khi ký*; ⑶ *Mở thầu* → *Mở gói*; ⑷ bước 15 của kịch bản 41 đo thứ tự mời.
+
+## 3. Thay đổi
+
+- **⑴ Bước mời dời THẬT trong DOM.** `datLuong` (`apps/web/trang/tao-thau.js`) dời section theo `thuTuBuoc` bằng `Element.before`, thay
+  lớp `moi-truoc` — `chung.css` bỏ bốn luật `order`, `tao-thau.html` bỏ `id="khung"`. CSS `order` chỉ đổi thứ tự VẼ: phím Tab và trình
+  đọc màn hình vẫn đi theo DOM, nên ở tổ chức đã bật người dùng bàn phím gặp bước duyệt trước bước mời. Màn chỉ dời khi luồng đổi —
+  `datLuong` chạy lại mỗi lần nạp gói, và dời một phần tử đang giữ tiêu điểm làm mất tiêu điểm. HTML khai thứ tự MVP1, và `luong` khởi
+  đầu ở MVP1.
+- **⑵ Nhãn *mời sau khi ký*.** `listInvitations` — và thân `GET /rfqs/:rfqId/invitations` — trả thêm `moiSauKhiKy` (cột
+  `moi_sau_khi_ky` của `076`). `nhanLoiMoi` (`apps/web/src/tao-thau.ts`) nói trạng thái cộng `· mời sau khi ký` khi cờ là `true`; cột
+  trạng thái của bảng lời mời dùng nó. Trước vòng này, màn của #200 đọc `moiSauKhiKy` ở thân `201` của lần mời, nhưng bảng không có cờ
+  ấy để đọc.
+- **⑶ *Mở gói*.** Nút `nut-mo` và câu báo của `baoSauKhiMo` nói *Mở gói* / *"Đã mở gói."* ở cả hai luồng: *mở gói* là
+  `PENDING_APPROVAL→OPEN`, *mở thầu* là `CLOSED→UNSEALED` (PRODUCT §4 ⑶, spec S3 §3.3).
+- **⑷ Bước 15 của kịch bản 41**, hai bản (`apps/unseal-worker/src/kich-ban-41.int.test.ts`, `kich-ban-41-http.int.test.ts`): đọc sổ
+  theo gói và năm lời mời của nó — hàng token mang id của TOKEN, lời mời ở payload. Luồng S3: cả năm `INVITATION_CREATED` trước
+  `RFQ_SUBMITTED_FOR_APPROVAL`; luồng MVP1: sau `RFQ_OPENED`; cả hai: `MAGIC_LINK_TOKEN_ISSUED` đầu tiên sau `RFQ_OPENED` (K6). Bản gói
+  đếm thêm năm token.
+- **Test.** `apps/web/src/phuc-vu.test.ts`: bộ dựng trang giả có `Element.before` cho các `<section>` — dời id trong một mảng thứ tự và
+  đếm số lần dời; gọi trên phần tử khác thì ném. Ca thứ tự của #200 nay đọc thứ tự DOM thay lớp; ba ca mới — chỉ dời khi luồng đổi,
+  nhãn *mời sau khi ký* ở bảng, *Mở gói* ở cả hai luồng. `apps/web/src/tao-thau.test.ts`: hai ca mới — `nhanLoiMoi`, *"Đã mở gói"*.
+  `apps/api/src/luong-moi-s3.int.test.ts` ⑴ ⑸ ⑺ đọc danh sách lời mời qua route — trạng thái và nhãn.
+- **`tools/gieo-demo`:** một chú thích sai số sửa lúc hợp #197 (*bảy lời mời* → năm).
+- **Phép kiểm lý do theo trần 2000 byte** mà #198 lấy từ #200 bỏ lúc hợp: `loiLyDo` của #200 là bản duy nhất.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Dời theo `thuTuBuoc`:** thứ tự DOM và số bước đọc cùng một nguồn, module của #200.
+- **Chỉ bốn thứ.** Phần khác của màn #198 không đưa vào (mục 7).
+
+## 5. Lượt đi thử T4 — trình duyệt thật
+
+**Lượt của #198, trên màn của #198, TRƯỚC khi hợp #197 và #200.** Cụm: PostgreSQL 16 dựng bằng `initdb`; `pnpm gieo:demo --s3` rồi `pnpm
+gieo:demo` trên cùng CSDL; `apps/api` đăng nhập bằng `app_api_login`, bộ gửi hộp thư dev; `apps/web`; Chromium 1194 qua Playwright.
+Script nằm ngoài kho. Hai lượt trên hai lần gieo, cả hai đạt đủ 36 khẳng định: section theo DOM `b1, b2, b3, b5, b4`; mời ở `DRAFT`, bỏ
+một lời mời; nộp duyệt; trả về nháp có lý do, mời thêm, nộp lại; người thứ hai duyệt; mở gói, ba link đi; mời thêm ở `OPEN` —
+`SENT · mời sau khi ký`; mời khi bộ gửi hỏng — `UNSENT — chưa gửi · mời sau khi ký` — rồi gửi lại; nhà cung cấp mở link đúc lúc mở
+gói; đối chứng MVP1. Màn ấy nay đã thay bằng màn của #200, nên lượt này còn giá trị ở phía máy chủ — và ở đúng một phát hiện:
+
+- **Đo được khoản 255.** Người soạn mời lúc gói chờ duyệt ⇒ `422` mang câu của trigger; sổ của tổ chức không có `PERMISSION_DENIED`,
+  `RFQ_STATE_DENIED` hay `CONTROL_DENIED` cho lần ấy. `createInvitation` không hỏi trạng thái gói trước câu `INSERT` — chỉ trigger `076`
+  nói "không", và giao dịch huỷ. K12 đòi tầng gói hỏi vị từ trước mọi tác dụng phụ, *"đo theo từng hạng mục từ S3.1"* — K1 làm đủ,
+  K4a chưa. **Rổ B:** hôm nay không tổ chức thật nào bật được S3 (ADR-105). Màn của #200 hiện nút mời ở mọi trạng thái gói, nên người
+  bấm vẫn tới được lời từ chối.
+
+**Lượt ngắn trên màn sau khi hợp** (màn của #200 cộng phần bù). Cùng cách dựng cụm, gieo mới; 20/20 khẳng định.
+
+- **Đo trước, trên màn của #200** (ba tệp màn của `master`, cùng cụm): `main` mang lớp `moi-truoc`; DOM `b1, b2, b3, b4, b5`; bước mời VẼ
+  trên bước duyệt; phím Tab thật từ nút *Thêm hạng mục* tới `#ns` của bước duyệt — bỏ qua bước mời vẽ ngay dưới nó.
+- **Tổ chức đã bật:** DOM `b1, b2, b3, b5, b4`, vẽ cùng thứ tự; Tab từ *Thêm hạng mục* tới `#ncc-ten` của bước mời; `main` không còn
+  flex; số bước mời 4, duyệt 5; nút *Mở gói*. Tạo gói, thêm hạng mục — nạp gói nhiều lần — thứ tự giữ nguyên.
+- **Mời ở `DRAFT`:** *"…Link CHƯA đi…"*; dòng `chưa gửi`, chỉ nút *Thu hồi*.
+- **Nộp duyệt; soan2 vào trên cùng trang** — thứ tự giữ nguyên —, duyệt, mở gói ⇒ *"Đã mở gói. Từ giờ nhà cung cấp nộp được, và khoá
+  của gói đã sinh ở máy chủ. Link mời đã đi tới mọi nhà cung cấp trong danh sách."*; hộp thư dev: một link.
+- **Mời thêm ở `OPEN`:** bảng `đã gửi | đã gửi · mời sau khi ký`.
+- **Đối chứng MVP1:** DOM `b1…b5`; Tab từ *Thêm hạng mục* tới `#ns`; số bước cũ; nút *Mở gói*; ba lời mời `đã gửi`, mỗi dòng *Gửi lại link*
+  và *Thu hồi*.
+- **Lỗi trình duyệt:** không lỗi trang. Hai `401` `GET /api/me` — trang hỏi phiên lúc tải, chưa có cookie — và một `404` `/favicon.ico`,
+  có từ trước.
+
+## 6. Đột biến
+
+Chín đột biến, mỗi đột biến sửa đúng một chỗ, tệp trả về đúng byte sau mỗi lượt (so sha256). Cả chín đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| W1 | không dời bước trong DOM | thứ tự DOM; chỉ dời khi luồng đổi |
+| W2 | dời ở MỌI lần `datLuong` | thứ tự DOM (MVP1 dời); chỉ dời khi luồng đổi |
+| W3 | dời ngược chiều | thứ tự DOM; chỉ dời khi luồng đổi |
+| W4 | bảng bỏ nhãn *mời sau khi ký* | nhãn ở bảng |
+| W5 | nhãn theo giá trị truthy thay vì `true` | `nhanLoiMoi` — `"true"`, `1` ra nhãn |
+| W6 | nút về *Mở thầu* | *Mở gói* ở cả hai luồng |
+| W7 | câu báo về *"Đã mở thầu."* | *Mở gói* ở cả hai luồng; `baoSauKhiMo` |
+| I1 | `listInvitations` mất nhãn | `luong-moi-s3.int` ⑸ |
+| I2 | `ducTokenKhiMoGoi` trả rỗng ở tổ chức đã bật | kịch bản 41 bản gói, luồng S3: 13 ca từ bước 2, gồm bước 15; luồng MVP1 xanh |
+
+Hai mươi mốt đột biến của #198 đo trên màn cũ; màn ấy đã thay, nên chỉ đột biến trên phần còn giữ được chạy lại.
+
+## 7. Giới hạn, nói ra
+
+- **S3.2 còn hai khoản mở, cả hai rổ B:** 254 (§S1.189, #199) — chữ ký duyệt gói không mang ngân sách, mà cạnh về `DRAFT` mở lại ngân
+  sách; và 255 (mục 5) — lớp K12 cho K4a, việc của S3.2d.
+- **Phần của màn #198 không đưa vào:** câu báo khi mời lúc gói chờ duyệt chỉ đường *Trả về nháp*; màn hỏi lại `/policy/versions` lúc
+  nạp gói khi tổ chức bật trong lúc trang mở, và bỏ lời đáp về muộn của lượt trước; câu báo khi hỏi hỏng.
+- **Test màn dựng DOM giả:** `Element.before` thật và thứ tự phím Tab chỉ được đo ở lượt đi thử. Lượt đi thử là một lần, không phải một
+  cổng; script nằm ngoài kho.
+
+## 8. Số đo
+
+- `apps/web/src/phuc-vu.test.ts` **86/86** (83 → 86), `apps/web/src/tao-thau.test.ts` **15/15** (13 → 15),
+  `apps/api/src/luong-moi-s3.int.test.ts` **14/14**, kịch bản 41 bản gói **30/30**, bản HTTP **58/58**.
+- Toàn bộ T3 cục bộ trên cây vòng này, trước khi hợp #201: 191 tệp, 3234 ca — 3223 đạt, 1 bỏ qua, 10 đỏ. Chín là ca cũ của máy đo,
+  không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Ca thứ mười là một ca `[T5]` của `db/migrations.int.test.ts`: cụm
+  Postgres mà bộ dựng cục bộ khởi động cho ca ấy không lên được — cổng ngẫu nhiên đã có tiến trình khác giữ (`Address already in
+  use`). Chạy lại riêng tệp ấy: **118/118**.
+- **Sau khi hợp #201**, toàn bộ T3 cục bộ trên cây merge: 192 tệp, 3252 ca — 3242 đạt, 1 bỏ qua, 9 đỏ, đúng chín ca cũ nói trên;
+  `db/migrations.int` **119/119**. `pnpm t0` sạch (453 module, 1807 phụ thuộc). `pnpm test`: 122 tệp, 1732 đạt, 1 bỏ qua. `pnpm cap-so
+  --kiem` sạch.
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3252 khẳng định, cổng evidence XANH; `evidence/INV-matrix.md`
+  giống hệt bản của `master` — vòng này không thêm ca mang nhãn bất biến nào, và không ca mang nhãn nào đổi kết quả.
+- **Hợp `master` bốn lần.** #196 (§S1.189, khoản 254 và 255, chỉ tài liệu); #197 (§S1.190, S3.2c1) — mã của `gieo:demo --s3` và bước
+  2–3 của kịch bản 41 lấy bản của #197, bước 15 gắn lại nguyên văn; #200 (§S1.191, S3.2c2) — ba tệp màn lấy bản của #200 rồi gắn lại
+  bốn thứ ở mục 3; cột mốc `docs/STATE.md`, hàng S3.2 của spec §9 và cuối biên bản giữ cả hai mục. Ba câu *"S3.2 khép"* của #200 —
+  cột mốc, hàng S3.2 của spec §9, mục 6 của §S1.191 — gạch tại chỗ: 254 và 255 còn mở. #201 (§S1.192, S4.0 + S4.1) merge trong lúc
+  vòng này chạy cổng: không chạm màn hay luồng mời; xung đột chỉ ở cột mốc và cuối biên bản, giữ cả hai mục, mục của vòng này đứng
+  sau §S1.192; `pnpm cap-so` cấp lại số vòng.
+- Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
+
+# §S1.9101 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
 mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, một lớp từ chối vào sổ.
@@ -16137,7 +16267,7 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 - Lượt T3 toàn bộ đầu tiên đỏ ba tệp, cả ba là sổ đăng ký chưa khai: bộ quét rò rỉ của kịch bản 41 qua HTTP (hai route ghi mới
   chưa có thân hợp lệ — nay xác minh và thu hồi trên nhà cung cấp HY SINH bằng tài chính), lớp đọc `org_procurement_policies`
   (`ncc_kiem_xac_minh` khai `QUA_HAM`), và phép khớp tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (nay đọc cả thân trigger K8a). Sau khai: xanh.
-- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành S1.193 và `080`; mốc `MOC_GHIM` 70 → 71.
+- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành S1.9101 và `080`; mốc `MOC_GHIM` 70 → 71.
 - `pnpm evidence` (T3 toàn bộ): XANH — 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3257 khẳng định.
 - `pnpm t0` sạch; `pnpm test` sạch.
 

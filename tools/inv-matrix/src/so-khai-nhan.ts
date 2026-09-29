@@ -389,7 +389,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
   L1: ["packages/du-lieu-nen/src/don-vi.int.test.ts"],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts"],
-  // K8a — [S1.193 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
+  // K8a — [S1.9101 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],
 };

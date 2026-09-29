@@ -4,7 +4,7 @@ import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuCho
 import { SupplierError } from "./suppliers.js";
 
 // =============================================================================================
-// [S1.193 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP
+// [S1.9101 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP
 //
 // Cấp đầu của hai cấp ở ADR-081 ⑵: bên mua xác nhận MST, tên pháp lý và đích liên hệ của một hồ sơ; nhà cung cấp không làm
 // gì. K2 (S3.3c) chỉ đếm nhà cung cấp có xác minh CÒN HIỆU LỰC — câu hỏi ấy là hàm SQL `ncc_xac_minh_con_hieu_luc` (`080`),

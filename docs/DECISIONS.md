@@ -8924,7 +8924,8 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
 ### Hệ quả, nói thẳng
 
 - **`201` của route mời ở tổ chức đã bật không còn nghĩa *link đã đi*.** Thân nói: `invitation.status`. Màn `/tao-thau` phải đọc
-  nó — việc của S3.2c. Tổ chức chưa bật: nghĩa cũ nguyên văn.
+  nó — việc của S3.2c. Tổ chức chưa bật: nghĩa cũ nguyên văn. **[S1.191]** S3.2c2 đã làm (#200): màn đọc `status` và `moiSauKhiKy`
+  của thân `201`, và `unsentInvitationIds` của lần mở gói (§S1.191).
 - **Một link đã tới nơi có thể nằm lại `UNSENT`:** lần ghi `SENT` hỏng (một dòng `ghi-sau-commit`), hay lần gửi lại đi được khi gói
   đang `BAFO_OPEN` — trigger `076` chỉ cho `UNSENT→SENT` ở `OPEN`, và nhà cung cấp chưa từng nhận link lúc `OPEN` thì không ở top-N
   của vòng BAFO. Chiều lệch ấy lành: người mua gửi lại, và lần gửi lại thu hồi mọi token chưa dùng.
@@ -8937,6 +8938,7 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
 - **Mở gói bằng hàm gói — không qua route — thì không đúc gì**: lời mời ở lại `UNSENT` không token tới lần gửi lại. `gieo:demo --s3`
   hôm nay mở gói rồi mới mời bằng hàm gói (`createInvitation`, `issueMagicLinkToken`), nên lời mời của nó vẫn `UNSENT` dù link đã in
   ra (§S1.185); kịch bản 41 bản HTTP mời ở `OPEN` qua route, nên nay lời mời của luồng S3 thành `SENT`. S3.2c đổi thứ tự của cả hai.
+  **[S1.190 / S3.2c1]** Đã đổi: cả hai mời ở `DRAFT`, và `gieo:demo --s3` gọi `ducTokenKhiMoGoi` trong giao dịch mở gói của nó (§S1.190).
 - **Lời mời thời MVP1 của một gói còn ở `DRAFT` lúc tổ chức bật** mang `SENT` từ `010`: lần mở gói đúc token mới cho nó, và lần gửi
   hỏng để lại `SENT` cho một lời mời mà không link nào dùng được (khoản 253 giết link cũ). Danh sách `unsentInvitationIds` vẫn nói ra.
   Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
