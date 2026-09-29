@@ -152,7 +152,7 @@ async function goiNhap(t: ToChuc): Promise<string> {
 async function moGoi(t: ToChuc, rfqId: string): Promise<void> {
   await withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
   await withTenant(apiPool, t.org, async (c) => {
-    // [S1.196 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
+    // [S1.198 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
     const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
     await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, lanNopDaXem: lan }, apiPool);
   });

@@ -7619,6 +7619,34 @@ gạch nối dài trên cùng một dòng) xung đột ở MỌI lần merge, k�
   `package.json`/`pnpm-lock.yaml` vẫn phải gỡ tay. Các lỗi những lần ấy và một lượt review lộ ra đều có test trong
   `tools/cap-so/src/cap-so.test.ts`.
 
+### Bổ sung 2026-09-29 — giữ số trên remote, chấm dứt cuộc đua giữa hai PR cùng cấp số
+
+Sau quyết định trên, số vẫn va mỗi khi hai PR chạy `pnpm cap-so` trên cùng một master rồi merge liền nhau. Tháng 9 có khoảng
+20 commit "cấp lại số" chỉ vì thế (`e5fa1d5`, `87f95b2`, `fa9b2a5`, …). Quy tắc "nhảy +10 khi trùng" bị loại: hai nhánh cùng
+thua một cuộc đua sẽ cùng nhảy +10 rồi lại trùng nhau, và nhánh thắng không biết dải bị nhảy. Chủ dự án chọn một khoá thật:
+
+1. **Mỗi số thật được GIỮ trên remote trước khi viết ra.** Khi base là nhánh theo dõi (`origin/master`), lệnh đẩy nhánh
+   `cap-so/<dãy>/<số>` (dãy: `vong`, `adr`, `khoan`, `migration`). Tạo nhánh là nguyên tử phía máy chủ, nên hai lần đẩy cùng
+   tên thì chỉ một lần thắng. Lần thua lấy số kế tiếp. Nhánh giữ trỏ vào một commit mồ côi TẤT ĐỊNH (cây rỗng, ngày cố định,
+   thông điệp nêu dãy, số và nhánh giữ). Vì vậy chạy lại lệnh không tốn thêm số, và `ls-remote` biết số nào của nhánh nào mà
+   không phải fetch. Dùng nhánh thường mà không dùng tag hay `refs/cap-so/*`, vì phiên đám mây chỉ được TẠO nhánh (đo
+   2026-09-29: tag và ref ngoài `refs/heads/` bị trả 403; xoá nhánh cũng bị 403).
+2. **Số đã giữ là của nhánh tới khi nó vào master.** PR khác merge trước không còn làm đổi số: merge master rồi chạy lại
+   `pnpm cap-so` sẽ cấp đúng số cũ và diff không đổi. **Riêng migration**, số giữ phải còn lớn hơn max(base). CSDL đang chạy
+   áp migration theo thứ tự merge, còn CSDL mới áp theo thứ tự tên, nên hai thứ tự ấy phải trùng nhau. Nhánh bị vượt ở dãy
+   migration giữ một số mới.
+3. **`pnpm cap-so --don`** xoá nhánh giữ của những số đã vào base. Lệnh này chạy ở máy có quyền xoá nhánh (chủ repo), vì
+   phiên đám mây không xoá được. **`--khong-giu`** cấp max(base)+1 như trước và có thể trùng. Base cục bộ (`--base master`)
+   thì không giữ số.
+
+Hệ quả, nói thẳng: số không còn đi đúng thứ tự merge và có thể có lỗ (PR bị bỏ, hoặc số giữ thừa sau khi bớt mục). Các lời
+khai đếm đếm số mục chứ không lấy số lớn nhất, nên lỗ số không làm đỏ `[INV-H20]`. Remote có thêm nhánh `cap-so/*` cho tới
+khi `--don` dọn. Mỗi phiên chạy lệnh sẽ tự tạo nhánh `cap-so/*` ngoài nhánh làm việc của nó. Thứ tự migration chỉ được
+bảo đảm tại lúc chạy lệnh. Nếu sau đó một PR có migration số lớn hơn vào master trước, phải merge master và chạy lại lệnh
+trước khi merge; chỉ "Require branches to be up to date" mới ép được việc ấy. Nhánh chưa có bản lệnh mới thì vẫn cấp
+không giữ số cho tới khi merge master. Test:
+`tools/cap-so/src/cap-so.test.ts`, khối "giữ số trên remote".
+
 ## ADR-091 — Ghi sổ lần đọc của agent cùng giao dịch đọc
 
 **Ngày:** 2026-09-27 · **Trạng thái:** **Đã chấp nhận** · **[S1.154]** · **Khoản nợ liên quan:** 142 (đóng), 144 (thu hẹp, còn
@@ -9061,7 +9089,7 @@ sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ
 - Chữ ký cũ ở lại trong bảng làm dấu vết — cùng khuôn `011` và `076`.
 - **Hai khoảng trống cùng lớp, lượt soi đo, CHƯA đóng ở ADR này** — chủ dự án chọn vá ở một vòng riêng, trước S3.2c: lời duyệt chỉ
   mang mã gói, nên PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem (khoản 256
-  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257). **[S1.196]** Cả hai đóng ở ADR-116.
+  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257). **[S1.198]** Cả hai đóng ở ADR-117.
 - `approved_budget_hash` là SHA-256 không muối trên một chuỗi đoán được (con số, tiền tệ, phiên bản, bậc, cờ): biết phiên bản chính
   sách thì dò lại được ước lượng. Hôm nay không route nào đọc `rfq_approvals`, và RLS chặn phiên khách. Ngày băm ấy đi ra ngoài (bộ
   bằng chứng S3.9, thân sổ) thì nó ngang ngân sách.
@@ -9075,14 +9103,14 @@ phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ kh�
 thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
 cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 256, 257).
 
-## ADR-116 — Tổ chức đã bật S3: lời duyệt gói mang LẦN NỘP người duyệt đã xem, và lần trả về rút chữ ký của CHÍNH người trả — bộ đếm lần nộp, sổ `rfq_tra_ve`, cạnh mở gói đếm chữ ký còn hiệu lực
+## ADR-117 — Tổ chức đã bật S3: lời duyệt gói mang LẦN NỘP người duyệt đã xem, và lần trả về rút chữ ký của CHÍNH người trả — bộ đếm lần nộp, sổ `rfq_tra_ve`, cạnh mở gói đếm chữ ký còn hiệu lực
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá cả hai khoản ở một vòng riêng trước S3.2c,
 hình dạng của mỗi khoản (hàng sổ 256, 257), và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật: route MVP1 giữ hợp đồng không thân, gửi
 thì phải đúng. Bộ đếm thay cho mốc thời gian, cột về NULL ở MVP1 và thứ tự trigger là điểm tôi tự chốt (⑴ ⑵ dưới); chủ dự án bác
-được · **[S1.196]** · **Liên quan:** ADR-115 (băm ngân sách), ADR-084 ⑵ (cạnh về DRAFT, *"trả về thay vì không ký"*), ADR-108 ⑴
+được · **[S1.198]** · **Liên quan:** ADR-115 (băm ngân sách), ADR-084 ⑵ (cạnh về DRAFT, *"trả về thay vì không ký"*), ADR-108 ⑴
 (không bớt nhánh ghi nào của D2), ADR-080 (công tắc một chiều), `011` C-1, `071`, `076`, `077`, `081` · **Biên bản:**
-`evidence/security-reviews.md` §S1.196 · **Khoản:** 256, 257 (ghi ở S1.195; đóng ở đây)
+`evidence/security-reviews.md` §S1.198 · **Khoản:** 256, 257 (ghi ở S1.195; đóng ở đây)
 
 ### Bối cảnh
 
@@ -9117,7 +9145,7 @@ Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy t�
    `PENDING_APPROVAL` ở đúng lần nộp người duyệt đã đọc thì nó chưa rời lần nộp ấy — rời chỉ có một đường, và lần nộp sau mang số
    mới —, mà ở tổ chức đã bật mọi lần sửa gói đòi DRAFT, nên mọi phép băm trước khoá tính trên chính lần nộp ấy. Không có vế này, một
    lần trả về cộng một lần sửa commit giữa phép kiểm trạng thái và phép băm nội dung của D2 để lại chữ ký trên nội dung người duyệt
-   chưa đọc, và gói nộp lại mở bằng nó — lượt soi đo được (§S1.196 F1). Khoá giữ tới hết giao dịch: lần trả về, nộp lại hay mở gói
+   chưa đọc, và gói nộp lại mở bằng nó — lượt soi đo được (§S1.198 F1). Khoá giữ tới hết giao dịch: lần trả về, nộp lại hay mở gói
    chạy cùng lúc phải chờ lời duyệt commit, và lời duyệt gặp một lần như thế đang chạy thì chờ nó, rồi thấy gói đã rời
    `PENDING_APPROVAL`. **`FOR NO KEY UPDATE`, không `FOR SHARE`:** lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán
    (`004`), và khoá chia sẻ để một giao dịch duyệt rồi mở gói deadlock với một lời duyệt song song.
@@ -9131,7 +9159,7 @@ Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy t�
 5. **Cạnh mở gói đếm lần ba — chữ ký CÒN HIỆU LỰC:** khớp ba băm hiện tại, mang lần nộp, và người ký không có hàng trả về ở một lần
    nộp không sớm hơn lần họ đã ký — *"K4b bỏ qua chữ ký của một người cũ hơn lần trả về gần nhất của chính người ấy"*. Hai phép đếm
    trước giữ nguyên văn và nguyên thông điệp; lần ba nói *"RFQ nay can N chu ky CON HIEU LUC — …, moi co M (K4b)"*. Chữ ký không mang
-   lần nộp — mọi chữ ký đặt trước `082_lan_nop_da_xem` — không đếm: không biết người ấy đã xem gì (fail-closed, khuôn ADR-115 ⑸).
+   lần nộp — mọi chữ ký đặt trước `084_lan_nop_da_xem` — không đếm: không biết người ấy đã xem gì (fail-closed, khuôn ADR-115 ⑸).
 
 ### Phương án đã cân nhắc
 
