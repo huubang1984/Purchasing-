@@ -1044,7 +1044,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         contactId,
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
       // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
       // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
@@ -1100,7 +1100,7 @@ const ghi: readonly BuyerWriteRoute[] = [
             token: t.token,
           }),
         bu: async (client) => {
-          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
+          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" }, ctx.auditPool);
         },
         phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, loi moi da thu hoi" } },
         phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc loi moi", invitationId: loi.id } },
@@ -1118,7 +1118,14 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: invitationIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: {
+        revoked: await revokeInvitation(
+          ctx.client,
+          ctx.orgId,
+          { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
     }),
   },
   {

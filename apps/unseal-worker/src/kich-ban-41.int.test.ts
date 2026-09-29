@@ -250,7 +250,7 @@ async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readon
     contactId: lh.id,
     linkChannel: "EMAIL",
     actorSessionId: sMua,
-  });
+  }, apiPool);
   trangThai.loiMoi.push({ invitationId: lm.id, supplierId: s.id, ten: ncc.ten, gia: ncc.gia });
   return { invitationId: lm.id, supplierId: s.id, status: lm.status, moiSauKhiKy: lm.moiSauKhiKy };
 }

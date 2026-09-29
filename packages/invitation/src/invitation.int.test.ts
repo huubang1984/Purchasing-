@@ -90,7 +90,7 @@ async function moiMoi(linkChannel: Channel = "EMAIL"): Promise<LoiMoiDaPhat> {
       contactId,
       linkChannel,
       actorSessionId: sBuyerA,
-    });
+    }, apiPool);
     const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sBuyerA });
     return { invitationId: loi.id, token: t.token, contactId };
   });
@@ -292,7 +292,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
     expect(phien.ok).toBe(true);
 
     const daThuHoi = await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     expect(daThuHoi).toBe(true);
 
@@ -319,10 +319,10 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[C3] thu hồi hai lần: lần sau trả `false` và KHÔNG ghi thêm sự kiện kiểm toán", async () => {
     const { invitationId } = await moiMoi();
     const lan1 = await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     const lan2 = await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     expect([lan1, lan2]).toEqual([true, false]);
 
@@ -386,7 +386,7 @@ describe("chuỗi tấn công của review an ninh, nay bị chặn ở từng b
   it("[H5] thu hồi ĐƠN ĐIỆU — cờ đã bật không tắt lại được, kể cả bằng SQL", async () => {
     const { invitationId, token } = await moiMoi();
     await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     const bam = createHash("sha256").update(token, "utf8").digest();
 
@@ -471,7 +471,7 @@ describe("[INV-E1] token của magic link", () => {
     expect(truoc.invitationId).toBe(invitationId);
 
     await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     await expect(
       withTenant(apiPool, orgA, (c) => redeemMagicLink(c, orgA, token)),
@@ -560,7 +560,7 @@ describe("[INV-E2] token một mình KHÔNG đủ, và OTP phải trên kênh Đ
         supplierId: supplierKhac,
         contactId: lh.rows[0]?.id ?? "",
         actorSessionId: sBuyerA,
-      });
+      }, apiPool);
       return issueMagicLinkToken(c, orgA, { invitationId: l.id, actorSessionId: sBuyerA });
     });
 
@@ -863,7 +863,7 @@ describe("danh tính là dẫn xuất — hai hình dạng", () => {
           supplierId: supplierKhac,
           contactId: lienHeKhac,
           actorSessionId: phienB.rows[0]?.id ?? "",
-        }),
+        }, apiPool),
       ),
     ).rejects.toThrow(/phiên không hợp lệ/);
   });
@@ -887,7 +887,7 @@ describe("danh tính là dẫn xuất — hai hình dạng", () => {
     const { invitationId } = await moiMoi();
 
     const xong = await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool),
     );
     expect(xong).toBe(true);
 
@@ -1187,7 +1187,7 @@ describe("[khoản nợ 35] hạn mức OTP theo đích không xuyên qua lời 
         contactId: a.contactId,
         linkChannel: "EMAIL",
         actorSessionId: sBuyerA,
-      });
+      }, apiPool);
       const t = await issueMagicLinkToken(c, orgA, {
         invitationId: loi.id,
         actorSessionId: sBuyerA,
@@ -1243,7 +1243,7 @@ describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đ
       [lm.invitationId],
     );
     await withTenant(apiPool, orgA, (c) =>
-      revokeInvitation(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }),
+      revokeInvitation(c, orgA, { invitationId: lm.invitationId, actorSessionId: sBuyerA }, apiPool),
     );
 
     const moiLai = await withTenant(apiPool, orgA, (c) =>
@@ -1253,7 +1253,7 @@ describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đ
         contactId: lm.contactId,
         linkChannel: "EMAIL",
         actorSessionId: sBuyerA,
-      }),
+      }, apiPool),
     );
     expect(moiLai.id).not.toBe(lm.invitationId);
 
@@ -1287,7 +1287,7 @@ describe("[khoản nợ 37] thu hồi không còn vĩnh viễn, và khoá có đ
           contactId: lm.contactId,
           linkChannel: "EMAIL",
           actorSessionId: sBuyerA,
-        }),
+        }, apiPool),
       ),
     ).rejects.toThrow();
   });
@@ -1395,7 +1395,7 @@ describe("[INV-E5] [036] contact của nhà cung cấp KHÁC không mời đư�
     ).rows[0]!.id;
   const moiLech = (supplierId: string) =>
     withTenant(apiPool, orgA, (c) =>
-      createInvitation(c, orgA, { rfqId: rfqA, supplierId, contactId: lienHeKhac, linkChannel: "EMAIL", actorSessionId: sBuyerA }),
+      createInvitation(c, orgA, { rfqId: rfqA, supplierId, contactId: lienHeKhac, linkChannel: "EMAIL", actorSessionId: sBuyerA }, apiPool),
     );
 
   it("supplierId = X, contactId của Y ⇒ 23503 từ `rfq_invitations_contact_thuoc_supplier`; cặp đúng vẫn đi qua", async () => {
