@@ -16490,7 +16490,7 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 
 ---
 
-# §S1.9101 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-116
+# §S1.196 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-116
 
 **Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; vòng này thêm một bảng đọc, không đổi luồng
 nào. Khoản 258 (rổ B, ghi ở §S1.195) đóng. Không migration; một route đọc mới; một ADR (ADR-116).

@@ -489,7 +489,7 @@ export async function setRfqBudget(
 }
 
 /**
- * [S1.9101 / khoản 258] Ngân sách của một gói ĐÚNG như chữ ký duyệt gói ràng vào — năm thứ `rfq_bam_ngan_sach` (`080`) băm: ước
+ * [S1.196 / khoản 258] Ngân sách của một gói ĐÚNG như chữ ký duyệt gói ràng vào — năm thứ `rfq_bam_ngan_sach` (`080`) băm: ước
  * lượng, tiền tệ, phiên bản chính sách ghim, bậc, cờ duyệt kép. Gói chưa có ngân sách: bốn trường đầu `null`.
  */
 export interface RfqBudgetView {
@@ -504,7 +504,7 @@ export interface RfqBudgetView {
 }
 
 /**
- * [S1.9101 / khoản 258] Đọc ngân sách cho người duyệt — lời duyệt ràng vào nó (ADR-114), nên người ký phải ĐỌC được nó.
+ * [S1.196 / khoản 258] Đọc ngân sách cho người duyệt — lời duyệt ràng vào nó (ADR-114), nên người ký phải ĐỌC được nó.
  *
  * Hàm đọc CÓ CỔNG (rổ `HAM_DOC_CO_QUYEN`, khoản nợ 33): ngân sách dự tính là thứ neo giá nếu rò xuống bên bán — `setRfqBudget`
  * cố ý không ghi số tiền vào sổ kiểm toán. Chủ dự án chốt ngày 2026-09-29 (ADR-116): người tạo gói đọc bằng `rfq.create`, người khác cần
@@ -515,7 +515,7 @@ export interface RfqBudgetView {
  * gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời cho mọi phiên người mua.
  *
  * Hàng từ chối mang `resourceType` RIÊNG `RFQ_BUDGET` (khuôn `RFQ_INVITATION`): cùng `rfq.approve` trên cùng mã gói, một lần đọc
- * ngân sách bị từ chối không lẫn trong sổ với một lần định trả gói của người khác về soạn thảo (lượt soi §S1.9101, F2). Hai câu đọc
+ * ngân sách bị từ chối không lẫn trong sổ với một lần định trả gói của người khác về soạn thảo (lượt soi §S1.196, F2). Hai câu đọc
  * lọc cả `org_id` của tổ chức đang gắn, không chỉ dựa vào RLS (khuôn `listInvitations`).
  */
 export async function getRfqBudget(

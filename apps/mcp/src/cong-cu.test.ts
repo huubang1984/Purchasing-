@@ -103,7 +103,7 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
     }
   });
 
-  // ~~Ba~~ [S1.9101] Bốn đường chủ dự án nói KHÔNG — đây là các dòng chịu lực của ADR-038 (và của ADR-116 cho ngân sách). `it.each`
+  // ~~Ba~~ [S1.196] Bốn đường chủ dự án nói KHÔNG — đây là các dòng chịu lực của ADR-038 (và của ADR-116 cho ngân sách). `it.each`
   // khoá TỪNG đường: một `it` duyệt mảng sẽ xanh khi ba trong bốn còn đúng.
   it.each([
     { ten: "bảng so sánh GIÁ", duong: "/rfqs/:rfqId/comparison" },
