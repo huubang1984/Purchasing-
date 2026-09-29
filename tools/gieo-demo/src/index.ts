@@ -28,7 +28,8 @@
 // miễn: một chỗ mới dựng pool là một quyết định, và cổng bắt người viết nói ra nó.
 //
 // Phần CÓ tenant thì vẫn đi đúng đường sản phẩm: `withTenant` đặt GUC, còn `createInvitation`,
-// `issueMagicLinkToken`, `issueRfqKeyPair`, `issueLoginToken` là hàm thật của các gói.
+// `issueMagicLinkToken`, `issueRfqKeyPair`, `issueLoginToken` là hàm thật của các gói — và với `--s3`, `ducTokenKhiMoGoi`,
+// `danhDauDaGui` của luồng mời S3 (S3.2b2).
 //
 // ----------------------------------------------------------------------------------------------
 // CÔNG CỤ NÀY KHÔNG PHẢI MỘT ĐƯỜNG SẢN XUẤT, và nó tự chặn mình bằng ba điều:
@@ -54,7 +55,7 @@ import pg from "pg";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
 import { issueLoginToken } from "@trustprocure/identity";
-import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import { createProcurementPolicy, kyPhienBanChinhSach } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
@@ -227,6 +228,34 @@ async function chinh(): Promise<void> {
         "VALUES ($1, $2, '9000000000.00', 'VND', $3, $4, $5)",
       [org, rfq, chinhSach, nguoiGieo, phienGieo],
     );
+    // [S1.190 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
+    // duyệt —, vì chữ ký duyệt gói mang băm của danh sách mời lúc ký (K4b) và gói chỉ mở khi người ký ký đúng danh sách ấy; lời mời
+    // là `UNSENT`, KHÔNG token (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời sau khi mở, token ngay lúc mời.
+    const taoNccVaMoi = async (c: pg.PoolClient): Promise<{ readonly ten: string; readonly invitationId: string }[]> => {
+      const daMoi: { readonly ten: string; readonly invitationId: string }[] = [];
+      for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
+        const ncc = (await c.query<{ id: string }>(
+          "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+          [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
+        )).rows[0]?.id ?? "";
+        const lh = (await c.query<{ id: string }>(
+          "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+            "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+          [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiGieo, phienGieo],
+        )).rows[0]?.id ?? "";
+        const lm = await createInvitation(c, org, {
+          rfqId: rfq,
+          supplierId: ncc,
+          contactId: lh,
+          linkChannel: "EMAIL",
+          actorSessionId: phienGieo,
+        });
+        daMoi.push({ ten, invitationId: lm.id });
+      }
+      return daMoi;
+    };
+    const moiTruocKhiKy = S3 ? await withTenant(pool, org, taoNccVaMoi) : [];
+
     await pool.query(
       "UPDATE public.rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 " +
         "WHERE id OPERATOR(pg_catalog.=) $1",
@@ -239,6 +268,7 @@ async function chinh(): Promise<void> {
     // [S1.174 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
     // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
+    // [S1.190 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách bảy lời mời vừa dựng ở DRAFT.
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
     // [S1.9101 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
     // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
@@ -261,25 +291,25 @@ async function chinh(): Promise<void> {
         [rfq, nguoiGieo, phienGieo],
       );
 
-      for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
-        const ncc = (await c.query<{ id: string }>(
-          "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
-          [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
-        )).rows[0]?.id ?? "";
-        const lh = (await c.query<{ id: string }>(
-          "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-            "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-          [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiGieo, phienGieo],
-        )).rows[0]?.id ?? "";
-        const lm = await createInvitation(c, org, {
-          rfqId: rfq,
-          supplierId: ncc,
-          contactId: lh,
-          linkChannel: "EMAIL",
-          actorSessionId: phienGieo,
-        });
-        const t = await issueMagicLinkToken(c, org, { invitationId: lm.id, actorSessionId: phienGieo });
-        loiMoi.push({ ten, token: t.token });
+      if (S3) {
+        // [S1.190 / S3.2c1 / K6] Đúng đường của route mở gói (S3.2b2, ADR-113): phiên người mở đúc MỘT token cho mỗi lời mời
+        // còn sống, trong CHÍNH giao dịch mở gói. Công cụ không có bộ gửi — nó in link ra; lời mời thành `SENT` như sau một lần
+        // gửi được, cũng trong giao dịch này (gói đã `OPEN` trong giao dịch, và trigger `076` chỉ đòi điều ấy).
+        const links = await ducTokenKhiMoGoi(c, org, { rfqId: rfq, actorSessionId: phienGieo });
+        if (links.length !== moiTruocKhiKy.length) {
+          throw new GieoError(`--s3: đúc ${String(links.length)} token cho ${String(moiTruocKhiKy.length)} lời mời`);
+        }
+        for (const lm of moiTruocKhiKy) {
+          const link = links.find((l) => l.invitationId === lm.invitationId);
+          if (link === undefined) throw new GieoError(`--s3: lời mời ${lm.ten} không có token lúc mở gói`);
+          if (!(await danhDauDaGui(c, org, lm.invitationId))) throw new GieoError(`--s3: lời mời ${lm.ten} không thành SENT`);
+          loiMoi.push({ ten: lm.ten, token: link.token.token });
+        }
+        return;
+      }
+      for (const lm of await taoNccVaMoi(c)) {
+        const t = await issueMagicLinkToken(c, org, { invitationId: lm.invitationId, actorSessionId: phienGieo });
+        loiMoi.push({ ten: lm.ten, token: t.token });
       }
     });
 
