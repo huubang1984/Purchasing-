@@ -73,6 +73,10 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   outbox_jobs_dedupe_key_check: "DO_DAI",
   outbox_jobs_kind_check: "DINH_DANG",
   outbox_jobs_last_failure_reason_check: "MIEN",
+  // [S1.9101 / S3.6a] Mã và tên nhóm hàng — hình dạng dữ liệu. `loai` của lần đổi trạng thái nằm ở tập an ninh: bỏ nó thì một
+  // hàng lạ làm `nhom_hang_con_dung` coi nhóm đã ngừng dùng là còn dùng.
+  procurement_categories_ma_check: "DINH_DANG",
+  procurement_categories_ten_check: "DO_DAI",
   outbox_jobs_status_check: "MIEN",
   rfq_bafo_rounds_dong_sau_khi_mo: "MOC",
   rfq_bafo_rounds_round_no_check: "SO",

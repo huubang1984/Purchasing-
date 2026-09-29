@@ -48,16 +48,20 @@ import {
   closeRfq,
   createProcurementPolicy,
   createRfq,
+  datNhomHangChoGoi,
+  doiTrangThaiNhomHang,
   extendRfqDeadline,
   getActiveProcurementPolicy,
   getRfq,
   kyPhienBanChinhSach,
+  lietKeNhomHang,
   lietKePhienBanChinhSach,
   listRfqItems,
   openRfq,
   returnRfqToDraft,
   setRfqBudget,
   submitRfqForApproval,
+  taoNhomHang,
   type Currency,
   type ThanhPhanTrongSoVao,
 } from "@trustprocure/rfq";
@@ -98,6 +102,18 @@ function chuoiBatBuoc(body: unknown, ten: string): string {
 function uuidBody(body: unknown, ten: string): string {
   const v = chuoiBatBuoc(body, ten);
   if (!UUID_RE.test(v)) throw new HttpError(422, `trường "${ten}" phải là UUID`);
+  return v;
+}
+/** [S1.9101 / S3.6a] Định danh TUỲ CHỌN trong thân — vắng hay `null` là không có; có mặt thì phải đúng dạng UUID. */
+function uuidTuyChon(body: unknown, ten: string): string | null {
+  const v = truong(body, ten);
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, `trường "${ten}" phải là UUID`);
+  return v;
+}
+function booleanBatBuoc(body: unknown, ten: string): boolean {
+  const v = truong(body, ten);
+  if (typeof v !== "boolean") throw new HttpError(422, `trường "${ten}" phải là boolean`);
   return v;
 }
 function chuoiTuyChon(body: unknown, ten: string): string | null {
@@ -185,6 +201,7 @@ const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
 const policyIdParam = (req: ApiRequest): string => uuidParam(req, "policyId");
+const categoryIdParam = (req: ApiRequest): string => uuidParam(req, "categoryId");
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -264,6 +281,17 @@ const doc: readonly BuyerReadRoute[] = [
       // `choKy` để màn biết nút ký có mở không — chính cửa vẫn là route ký, đọc cùng cờ ấy.
       return { status: 200, body: { phienBan: ds.phienBan, daBat: ds.daBat, choKy: ctx.choKyChinhSach } };
     },
+  },
+  {
+    method: "GET",
+    path: "/categories",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.9101 / S3.6a] Danh sách nhóm hàng của tổ chức — người soạn gói chọn từ đây, người giữ `category.manage` quản lý ở
+    // `/nhom-hang`. KHÔNG cho agent: nhóm hàng là khoá của tín hiệu chia nhỏ (K10), dữ liệu kiểm soát của bên mua; mở sau là
+    // một quyết định có tên.
+    agent: false,
+    handler: async (ctx) => ({ status: 200, body: { nhomHang: await lietKeNhomHang(ctx.client, ctx.orgId) } }),
   },
   {
     method: "GET",
@@ -765,6 +793,43 @@ const ghi: readonly BuyerWriteRoute[] = [
   },
   {
     method: "POST",
+    path: "/categories",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.CATEGORY_MANAGE,
+    resourceType: "PROCUREMENT_CATEGORY",
+    handler: async (ctx) => {
+      const nhomHang = await taoNhomHang(
+        ctx.client,
+        ctx.orgId,
+        { ma: chuoiBatBuoc(ctx.req.body, "ma"), ten: chuoiBatBuoc(ctx.req.body, "ten"), actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      return { status: 201, body: { nhomHang } };
+    },
+  },
+  {
+    method: "PUT",
+    path: "/categories/:categoryId/status",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.CATEGORY_MANAGE,
+    resourceType: "PROCUREMENT_CATEGORY",
+    resourceId: categoryIdParam,
+    handler: async (ctx) => {
+      // [S1.9101 / S3.6a] `conDung: false` là ngừng dùng, `true` là dùng lại — một hàng đổi MỚI, không sửa hàng nào. Gói đang
+      // giữ nhóm ấy không đổi; ngừng dùng chỉ chặn lần gán mới.
+      const nhomHang = await doiTrangThaiNhomHang(
+        ctx.client,
+        ctx.orgId,
+        { categoryId: categoryIdParam(ctx.req), conDung: booleanBatBuoc(ctx.req.body, "conDung"), actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      return { status: 200, body: { nhomHang } };
+    },
+  },
+  {
+    method: "POST",
     path: "/suppliers",
     audience: "BUYER",
     mutates: true,
@@ -810,6 +875,8 @@ const ghi: readonly BuyerWriteRoute[] = [
         title: chuoiBatBuoc(ctx.req.body, "title"),
         deadlineAt: ngayTuyChon(ctx.req.body, "deadlineAt"),
         createdBySessionId: ctx.actor.sessionId,
+        // [S1.9101 / S3.6a] Nhóm hàng — tuỳ chọn lúc tạo; tổ chức đã bật đòi nó trước lần nộp duyệt.
+        categoryId: uuidTuyChon(ctx.req.body, "categoryId"),
       });
       return { status: 201, body: { rfq } };
     },
@@ -850,6 +917,24 @@ const ghi: readonly BuyerWriteRoute[] = [
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 200, body: { budget } };
+    },
+  },
+  {
+    method: "PUT",
+    path: "/rfqs/:rfqId/category",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.6a] Cùng cổng với ngân sách và hạng mục: nhóm hàng là một phần của gói đang soạn, người soạn đặt nó.
+    permission: PERMISSIONS.RFQ_CREATE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => {
+      const rfq = await datNhomHangChoGoi(ctx.client, ctx.orgId, {
+        rfqId: rfqIdParam(ctx.req),
+        categoryId: uuidBody(ctx.req.body, "categoryId"),
+        actorSessionId: ctx.actor.sessionId,
+      });
+      return { status: 200, body: { rfq } };
     },
   },
   {

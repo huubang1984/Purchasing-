@@ -49,6 +49,7 @@ import {
   openRfq,
   setRfqBudget,
   submitRfqForApproval,
+  taoNhomHang,
 } from "@trustprocure/rfq";
 import {
   PepperRing,
@@ -283,6 +284,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       const ky = await withTenant(apiPool, orgA, (c) => kyPhienBanChinhSach(c, orgA, { policyId: cs.id, actorSessionId: sTc2 }));
       expect(ky.daBat, "luồng S3: lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức").toBe(true);
     }
+    // [S1.9101 / S3.6a] Luồng S3: người tài chính dựng nhóm hàng, người mua chọn nó lúc tạo gói — tổ chức đã bật không nộp duyệt
+    // được gói không nhóm hàng. Luồng MVP1: không nhóm hàng nào, và gói vẫn đi trọn đường.
+    const nhomHang = batS3
+      ? (await withTenant(apiPool, orgA, (c) => taoNhomHang(c, orgA, { ma: "THEP", ten: "Thep tam", actorSessionId: sTc1 }, apiPool))).id
+      : null;
     await withTenant(apiPool, orgA, async (c) => {
       // Ngưỡng 500 triệu, ngân sách 1 tỷ -> VƯỢT ngưỡng -> `requires_dual_approval` GIỮ `true`.
       // Đây là chỗ con số "1 tỷ" của kịch bản có tác dụng THẬT chứ không phải một nhãn trang trí.
@@ -298,7 +304,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         title: "Mua thep tam cho nha may Q4",
         deadlineAt: HAN_NOP,
         createdBySessionId: sMua,
+        categoryId: nhomHang,
       });
+      expect(rfq.categoryId).toBe(nhomHang);
       trangThai.rfqId = rfq.id;
       await addRfqItem(c, orgA, {
         rfqId: rfq.id,

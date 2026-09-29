@@ -56,7 +56,7 @@ import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/cr
 import { migrate } from "@trustprocure/db";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
-import { createProcurementPolicy, kyPhienBanChinhSach } from "@trustprocure/rfq";
+import { createProcurementPolicy, kyPhienBanChinhSach, taoNhomHang } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
@@ -211,10 +211,22 @@ async function chinh(): Promise<void> {
           [org, nguoiGieo, phienGieo],
         )).id;
 
+    // [S1.9101 / S3.6a] `--s3`: F1 (FINANCE, giữ `category.manage`) dựng nhóm hàng bằng hàm gói — tổ chức đã bật không nộp duyệt
+    // được gói không nhóm hàng. Không `--s3`: không nhóm hàng nào, luồng MVP1 giữ nguyên.
+    const nhomHang = S3
+      ? await (async (): Promise<string> => {
+          const f1 = nguoiMua.find((n) => n.email.startsWith("taichinh1."));
+          if (f1 === undefined) throw new GieoError("--s3: thiếu người tài chính");
+          return (await withTenant(pool, org, (c) =>
+            taoNhomHang(c, org, { ma: "KET-CAU", ten: "Vat tu ket cau", actorSessionId: f1.sessionId }, pool),
+          )).id;
+        })()
+      : null;
+
     const rfq = (await q<{ id: string }>(
-      "INSERT INTO public.rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
-        "VALUES ($1, $2, pg_catalog.now() OPERATOR(pg_catalog.+) '2 hours'::pg_catalog.interval, true, $3, $4) RETURNING id",
-      [org, `Goi thau vat tu ket cau ${duoi}`, nguoiGieo, phienGieo],
+      "INSERT INTO public.rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id) " +
+        "VALUES ($1, $2, pg_catalog.now() OPERATOR(pg_catalog.+) '2 hours'::pg_catalog.interval, true, $3, $4, $5) RETURNING id",
+      [org, `Goi thau vat tu ket cau ${duoi}`, nguoiGieo, phienGieo, nhomHang],
     )).id;
     for (const [i, hm] of HANG_MUC.entries()) {
       await pool.query(

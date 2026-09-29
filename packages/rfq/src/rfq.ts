@@ -7,7 +7,7 @@ import {
   revokeRfqKeyMaterial,
   type OrgKeyProvisioner,
 } from "@trustprocure/sealed-envelope";
-import { CAU_CHOT_NGAN_SACH, kiemChot } from "./chot-kiem-soat.js";
+import { CAU_CHOT_NGAN_SACH, CAU_CHOT_NHOM_HANG, kiemChot } from "./chot-kiem-soat.js";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -159,6 +159,11 @@ export interface CreateRfqInput {
    * nay là DẪN XUẤT chứ không phải lời khai.
    */
   readonly createdBySessionId: string;
+  /**
+   * [S1.9101 / S3.6a] Nhóm hàng của gói — tuỳ chọn lúc tạo, đổi được ở DRAFT bằng `datNhomHangChoGoi`. Ở tổ chức đã bật S3, gói
+   * không nhóm hàng không rời DRAFT (`THIEU_NHOM_HANG`). Chỉ gán được nhóm còn dùng của chính tổ chức (trigger + khoá ngoại).
+   */
+  readonly categoryId?: string | null;
 }
 
 export interface RfqRecord {
@@ -178,6 +183,8 @@ export interface RfqRecord {
    * (`GET /guest/rfq`), nên nó là một lời nói với bên ngoài, không phải ghi chú nội bộ.
    */
   readonly cancelReason: string | null;
+  /** [S1.9101 / S3.6a] Nhóm hàng — `null` cho gói chưa gán, kể cả mọi gói trước vòng ấy. Khoá sau DRAFT. */
+  readonly categoryId: string | null;
 }
 
 export interface AddRfqItemInput {
@@ -211,6 +218,7 @@ interface HangRfq {
   closed_at: Date | null;
   cancelled_at: Date | null;
   cancel_reason: string | null;
+  category_id: string | null;
 }
 
 interface HangItem {
@@ -224,7 +232,7 @@ interface HangItem {
 
 const COT_RFQ =
   "id, title, status, deadline_at, requires_dual_approval, created_by, created_at, " +
-  "opened_at, closed_at, cancelled_at, cancel_reason";
+  "opened_at, closed_at, cancelled_at, cancel_reason, category_id";
 const COT_ITEM = "id, rfq_id, line_no, description, quantity, unit";
 
 function doiRfq(h: HangRfq): RfqRecord {
@@ -240,6 +248,7 @@ function doiRfq(h: HangRfq): RfqRecord {
     closedAt: h.closed_at,
     cancelledAt: h.cancelled_at,
     cancelReason: h.cancel_reason,
+    categoryId: h.category_id,
   };
 }
 
@@ -292,12 +301,14 @@ export async function createRfq(
   // [ADR-017] Cột `requires_dual_approval` cố ý KHÔNG có trong danh sách: `DEFAULT true` của 009
   // là mặc định ĐÓNG, và không viết nó ra ở đây làm cho "chỉ `setRfqBudget` hạ được nó" thành một
   // câu đúng theo hình dạng của mã, không phải theo trí nhớ của người đọc.
-  const { rows } = await client.query<HangRfq>(
-    `INSERT INTO public.rfq_packages
-       (org_id, title, deadline_at, created_by, created_by_session_id)
-     VALUES ($1, $2, $3, $4, $5) RETURNING ${COT_RFQ}`,
-    [orgId, title, input.deadlineAt ?? null, actor.id, actor.sessionId],
-  );
+  const { rows } = await client
+    .query<HangRfq>(
+      `INSERT INTO public.rfq_packages
+         (org_id, title, deadline_at, created_by, created_by_session_id, category_id)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COT_RFQ}`,
+      [orgId, title, input.deadlineAt ?? null, actor.id, actor.sessionId, input.categoryId ?? null],
+    )
+    .catch(nemLoiNhomHang);
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("Câu INSERT rfq_packages không trả về hàng nào");
 
@@ -307,9 +318,63 @@ export async function createRfq(
     action: "RFQ_CREATED",
     resourceType: "rfq_package",
     resourceId: hang.id,
-    payload: { requiresDualApproval: hang.requires_dual_approval },
+    payload:
+      hang.category_id === null
+        ? { requiresDualApproval: hang.requires_dual_approval }
+        : { requiresDualApproval: hang.requires_dual_approval, categoryId: hang.category_id },
   });
 
+  return doiRfq(hang);
+}
+
+/**
+ * [S1.9101 / S3.6a] Lời từ chối của CSDL về nhóm hàng của gói, đổi thành lời có tên: nhánh *nhóm đã ngừng dùng* của trigger
+ * `rfq_packages_nhom_hang` mang tên ràng buộc, khoá ngoại theo (tổ chức, nhóm) mang tên của nó — một nhóm của tổ chức khác là
+ * KHÔNG TÌM THẤY, như mọi thứ ngoài RLS. Lỗi khác đi nguyên.
+ */
+function nemLoiNhomHang(loi: unknown): never {
+  const { code, constraint } = (loi ?? {}) as { code?: unknown; constraint?: unknown };
+  if (code === "23514" && constraint === "nhom_hang_da_ngung_dung") {
+    throw new RfqError("Nhóm hàng này đã ngừng dùng — chọn một nhóm hàng khác.");
+  }
+  if (code === "23503" && constraint === "rfq_packages_category_fkey") {
+    throw new RfqError("Không tìm thấy nhóm hàng trong tổ chức đang gắn.");
+  }
+  throw loi;
+}
+
+/**
+ * [S1.9101 / S3.6a] Gán hay đổi nhóm hàng của một gói ĐANG SOẠN. Lớp chặn cuối là trigger `rfq_packages_nhom_hang`
+ * (`9501_nhom_hang`): cột chỉ đổi ở DRAFT, và chỉ nhận nhóm còn dùng — dưới khoá chia sẻ theo nhóm, nên một lần ngừng dùng chen
+ * vào thì xếp hàng. Vế `AND status = 'DRAFT'` là khuôn [H-3]: gói đã rời DRAFT là lời từ chối trạng thái có tên, không phải
+ * một lần ghi đè im lặng.
+ */
+export async function datNhomHangChoGoi(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly categoryId: string; readonly actorSessionId: string },
+): Promise<RfqRecord> {
+  await assertTenantBound(client, orgId, "datNhomHangChoGoi");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  const { rows } = await client
+    .query<HangRfq>(
+      `UPDATE public.rfq_packages SET category_id = $2
+        WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'DRAFT' RETURNING ${COT_RFQ}`,
+      [input.rfqId, input.categoryId],
+    )
+    .catch(nemLoiNhomHang);
+  const hang = rows[0];
+  if (hang === undefined) {
+    throw new RfqError("không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không còn ở trạng thái soạn thảo");
+  }
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "RFQ_CATEGORY_SET",
+    resourceType: "rfq_package",
+    resourceId: hang.id,
+    payload: { categoryId: input.categoryId },
+  });
   return doiRfq(hang);
 }
 
@@ -391,6 +456,9 @@ export async function submitRfqForApproval(
   // (`072_bac_cua_goi`) gọi lại, nên đường thuận ném một lời từ chối CÓ TÊN — và vào sổ khi bảng nói thế —
   // còn trigger chỉ tự nói khi có tranh chấp thật (một lần ký chính sách chen vào giữa hai câu).
   await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NGAN_SACH, [orgId, input.rfqId]);
+  // [S1.9101 / S3.6a] Chốt nhóm hàng, cùng khuôn: hàm vị từ `rfq_chot_nhom_hang` hỏi trên hàng DRAFT, trigger ở cạnh hỏi lại
+  // trên giá trị MỚI của cột. Sau K1: gói thiếu cả hai nhận lời từ chối về ngân sách trước.
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_NHOM_HANG, [orgId, input.rfqId]);
 
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'DRAFT'`: không có vế này, gọi lại hàm trên một RFQ đã ở trạng thái

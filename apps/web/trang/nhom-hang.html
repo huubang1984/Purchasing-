@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Nhóm hàng — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Nhóm hàng của tổ chức</h1>
+    <span class="vai">Tài chính</span>
+    <nav><a href="/chinh-sach">Màn chính sách</a> · <a href="/tao-thau">Màn tạo gói</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Chỉ người giữ quyền quản lý nhóm hàng — mặc định là vai tài chính — tạo, ngừng dùng và dùng lại được một
+      nhóm. Người tạo gói không quản lý được nhóm hàng: nhóm hàng là khoá của tín hiệu chia nhỏ gói.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-vao">Vào</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước. -->
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
+    <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Danh sách nhóm hàng</h2>
+    <p class="ghi">Mã và tên không sửa được. Ngừng dùng một nhóm chỉ chặn lần gán MỚI: gói đang giữ nhóm ấy không đổi và vẫn
+      nộp duyệt được. Mỗi lần tạo, ngừng dùng và dùng lại đều vào sổ kiểm toán.</p>
+    <table id="bang-nhom">
+      <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <button id="nut-doc-nhom" class="phu">Đọc lại</button>
+    <div class="bao loi" id="loi2" hidden></div>
+    <div class="bao ok" id="ok2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Tạo nhóm hàng</h2>
+    <label for="ma-nhom">Mã (chữ không dấu, số và _ . -; tối đa 32 ký tự)</label>
+    <input id="ma-nhom" autocomplete="off" spellcheck="false" placeholder="THEP">
+    <label for="ten-nhom">Tên</label>
+    <input id="ten-nhom" autocomplete="off" placeholder="Thép xây dựng">
+    <button id="nut-tao-nhom">Tạo nhóm hàng</button>
+    <div class="bao loi" id="loi3" hidden></div>
+    <div class="bao ok" id="ok3" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — nhóm hàng là khoá của tín hiệu chia nhỏ gói; mọi thay đổi đều để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/nhom-hang.js"></script>
+</body>
+</html>

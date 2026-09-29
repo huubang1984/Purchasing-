@@ -471,6 +471,10 @@ describe("hình dạng file migration", () => {
       "organizations",
       "otp_rate_limits",
       "outbox_jobs",
+      // [S1.9101 / S3.6a / migration nhóm hàng] Nhóm hàng và lần đổi trạng thái — chỉ-ghi-thêm, khoá ngoại hợp thành
+      // `(org_id, category_id)`, policy khách ĐÓNG HẲN.
+      "procurement_categories",
+      "procurement_category_changes",
       "rfq_approvals",
       // [S1.110 / S2.6 / 061] Hai bảng CHỈ-GHI-THÊM của trao thầu. Cả hai mang `org_id` nên
       // chúng chịu ĐÚNG cùng bộ ràng buộc tenant; `rfq_award_approvals` còn có khoá ngoại hợp

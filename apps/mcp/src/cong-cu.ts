@@ -128,6 +128,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "trị nào thì đòi bao nhiêu nhà cung cấp, bao nhiêu chữ ký — tức đúng thứ một người muốn xếp gói ngay dưới mốc cần " +
     "biết, cộng danh tính những người giữ `policy.manage`. Route khai `agent: false` và dòng này khai vì sao; ngày nào " +
     "có việc cần thì đổi một dòng và viết một ADR. [S1.169 / S3.1c]",
+  // [S1.9101 / S3.6a]
+  "/categories":
+    "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
+    "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
+    "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

@@ -792,6 +792,9 @@ describe("phủ RLS", () => {
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
+      // [S1.9101 / S3.6a] Nhóm hàng và lần đổi trạng thái: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "procurement_categories", quyen: "SELECT" },
+      { grantee: "app_api", bang: "procurement_category_changes", quyen: "SELECT" },
       // [S1.2] Ba bang moi cua 009. `rfq_items` co DELETE o MUC BANG va do la lech co chu dinh
       // so voi hai bang kia: sua danh sach hang muc luc con DRAFT la viec binh thuong va no chi
       // bieu dien duoc bang DELETE. Thu gioi han NO theo trang thai cua RFQ cha la trigger
@@ -1208,6 +1211,18 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
       // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
+      // [S1.9101 / S3.6a] Nhóm hàng: CHỈ INSERT — không cột nào sửa tại chỗ; ngừng dùng và dùng lại là một hàng đổi mới, `thu_tu`
+      // do CSDL đặt dưới khoá, người tạo và người đổi là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
+      { grantee: "app_api", bang: "procurement_categories", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_categories", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_categories", cot: "ma", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_categories", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_categories", cot: "ten", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_category_changes", cot: "category_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_category_changes", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_category_changes", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_category_changes", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "procurement_category_changes", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
@@ -1351,6 +1366,10 @@ describe("phủ RLS", () => {
       // hoi nay, va truoc 016 khong cau nao tra loi duoc TU DU LIEU.
       { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "cancelled_by_session_id", quyen: "UPDATE" },
+      // [S1.9101 / S3.6a] Nhóm hàng của gói: đặt lúc tạo hay đổi ở DRAFT — trigger `rfq_packages_nhom_hang` giữ vế *chỉ ở DRAFT*
+      // và vế *chỉ nhóm còn dùng*; quyền cột không nói được hai vế ấy.
+      { grantee: "app_api", bang: "rfq_packages", cot: "category_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_packages", cot: "category_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "closed_at", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "closed_by", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "closed_by_session_id", quyen: "UPDATE" },
@@ -1921,7 +1940,11 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
-      "outbox_jobs", "rfq_approvals",
+      "outbox_jobs",
+      // [S1.9101 / S3.6a] Nhóm hàng là việc nội bộ bên mua — nhà cung cấp không đọc được gói mình dự thuộc nhóm nào, hay nhóm nào
+      // đã ngừng dùng.
+      "procurement_categories", "procurement_category_changes",
+      "rfq_approvals",
       // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
       // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có
       // giá; biết AI thắng khi mình thua thì càng. Ngày nào sản phẩm có màn *kết quả* cho

@@ -22,6 +22,9 @@
 // đúng khuôn ấy: trigger `rfq_invitations_kiem_danh_sach` đặt tên ràng buộc (`080_k4a_co_ten.sql`),
 // `packages/invitation` bắt lỗi của nó và từ chối theo mã. Chủ dự án chốt ngày 2026-09-29: cả hai vào sổ.
 //
+// [S1.9101 / S3.6a] `THIEU_NHOM_HANG` — gói của tổ chức đã bật rời DRAFT không nhóm hàng. Khuôn K1: hàm vị từ
+// `rfq_chot_nhom_hang` (`9501_nhom_hang.sql`), tầng gói hỏi trước câu ghi. Chủ dự án chốt ngày 2026-09-29: vào sổ.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -48,7 +51,8 @@ export type MaChotKiemSoat =
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "NGAN_SACH_GHIM_BAN_CU"
-  | "THIEU_NGAN_SACH";
+  | "THIEU_NGAN_SACH"
+  | "THIEU_NHOM_HANG";
 
 export interface DongChot {
   /**
@@ -96,6 +100,14 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "bậc đã lưu khác kết quả của hàm phân bậc hiện hành — chỉ tới được khi hàm phân bậc đổi sau lúc đặt ngân sách, hay " +
       "khi chủ CSDL sửa tay; người dùng không gây ra nó, và sửa bằng cách đặt lại ngân sách",
     thongDiep: "Bậc của gói thầu cần tính lại: đặt lại ngân sách dự tính rồi nộp duyệt.",
+  },
+  THIEU_NHOM_HANG: {
+    chot: "K10",
+    vaoSo: true,
+    lyDo:
+      "một người nộp duyệt một gói KHÔNG nhóm hàng ở tổ chức đã bật S3 — nhóm hàng là khoá của tín hiệu chia nhỏ (K10, spec §4.3), " +
+      "nên bỏ bước này là né tín hiệu soi chính mình; cùng lý do `THIEU_NGAN_SACH` vào sổ. Kiểm toán viên hỏi tới đúng lần cố ấy",
+    thongDiep: "Tổ chức đã bật kiểm soát theo bậc: gói thầu phải có nhóm hàng trước khi nộp duyệt.",
   },
   D2_NGUOI_TAO_TU_DUYET: {
     chot: "D2",

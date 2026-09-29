@@ -39,6 +39,16 @@ export const CAU_CHOT_NGAN_SACH =
   "SELECT public.rfq_chot_ngan_sach($1::pg_catalog.uuid, $2::pg_catalog.uuid, pg_catalog.clock_timestamp()) AS ly_do";
 
 /**
+ * [S1.9101 / S3.6a] Câu hỏi chốt nhóm hàng (`9501_nhom_hang`): `$1` tổ chức, `$2` gói. Hàm vị từ nhận GIÁ TRỊ cột nhóm hàng — trigger
+ * ở cạnh đưa giá trị MỚI —, còn câu này đưa giá trị của hàng DRAFT; gói không ở DRAFT thì không hàng nào, tức cho qua, và câu
+ * ghi của thao tác nói lời từ chối trạng thái — tầng gói không ghi sổ cho một lời gọi sai gói, như K1.
+ */
+export const CAU_CHOT_NHOM_HANG =
+  "SELECT public.rfq_chot_nhom_hang(r.org_id, r.category_id) AS ly_do FROM public.rfq_packages r " +
+  "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
+  "AND r.status OPERATOR(pg_catalog.=) 'DRAFT'";
+
+/**
  * Hỏi một hàm vị từ của chốt rồi ném theo bảng. Gọi TRƯỚC mọi tác dụng phụ của thao tác.
  *
  * `cau` là một câu SQL trả đúng một cột `ly_do` — NULL khi cho qua. Mã lạ ⇒ lỗi KHÔNG tên: hàm SQL và
