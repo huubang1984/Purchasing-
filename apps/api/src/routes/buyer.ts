@@ -68,9 +68,12 @@ import {
 import {
   addSupplierContact,
   createSupplier,
+  docXacMinhNhaCungCap,
   getSupplier,
   listSupplierContacts,
   listSuppliers,
+  thuHoiXacMinhNhaCungCap,
+  xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
 import {
   approveUnseal,
@@ -257,6 +260,19 @@ const doc: readonly BuyerReadRoute[] = [
     handler: async (ctx) => ({
       status: 200,
       body: { contacts: await listSupplierContacts(ctx.client, ctx.orgId, supplierIdParam(ctx.req)) },
+    }),
+  },
+  {
+    method: "GET",
+    path: "/suppliers/:supplierId/verification",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.196 / S3.3a / K8a] Trạng thái xác minh nội bộ — hàng mới nhất cộng `ncc_xac_minh_con_hieu_luc`. KHÔNG cho agent:
+    // bề mặt mới, không công cụ đọc nào của agent cần nó; mở sau là một quyết định có tên (khuôn `/policy/versions`).
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { verification: await docXacMinhNhaCungCap(ctx.client, ctx.orgId, supplierIdParam(ctx.req)) },
     }),
   },
   {
@@ -862,6 +878,49 @@ const ghi: readonly BuyerWriteRoute[] = [
       });
       return { status: 201, body: { contact } };
     },
+  },
+  {
+    method: "POST",
+    path: "/suppliers/:supplierId/verify",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.196 / S3.3a / K8a · ADR-084 ⑵] Xác minh nội bộ nhà cung cấp. Cổng của bộ điều phối là `supplier.qualify`; trigger
+    // `ncc_kiem_xac_minh` đòi thêm luật người, và hai nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        verification: await xacMinhNhaCungCap(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/suppliers/:supplierId/verification/revoke",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.196 / S3.3a / K8a] Thu hồi xác minh — lý do bắt buộc và vào sổ.
+    permission: PERMISSIONS.SUPPLIER_QUALIFY,
+    resourceType: "SUPPLIER",
+    resourceId: supplierIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        verification: await thuHoiXacMinhNhaCungCap(
+          ctx.client,
+          ctx.orgId,
+          { supplierId: supplierIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "POST",

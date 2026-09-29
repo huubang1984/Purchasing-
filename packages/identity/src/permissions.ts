@@ -129,6 +129,12 @@ export const PERMISSIONS = {
    * `PROCUREMENT_MANAGER` và `DIRECTOR` — không thuộc chuỗi D3.
    */
   USER_MFA_RESET: "user.mfa_reset",
+  /**
+   * [S1.196 / S3.3a / ADR-084 ⑵ · ADR-081 ⑵] Xác minh (K8a) — và ở S3.7, thẩm định (K8b) — nhà cung cấp. Cấp cho `FINANCE`.
+   * Không đứng cùng `rfq.invite`: người chọn người dự thi không tự xác minh người mình chọn. Vế ấy canh ở trigger
+   * `ncc_kiem_xac_minh` (`082`) theo NGƯỜI lúc ghi, không ở bảng vai: hôm nay không vai nào giữ cả hai mã.
+   */
+  SUPPLIER_QUALIFY: "supplier.qualify",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
