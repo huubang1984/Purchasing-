@@ -242,7 +242,7 @@ async function napRfq(rfqId) {
   const r = await goi("GET", `/rfqs/${rfqId}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return false; }
   const g = r.body?.rfq ?? {};
-  // [S1.193 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
+  // [S1.194 / khoản 256] Lần nộp của CHÍNH lần đọc này — nút Phê duyệt gửi lại đúng con số ấy, nên chữ ký rơi lên thứ người duyệt
   // đang thấy trên màn. Gói được trả về và nộp lại sau lần đọc thì máy chủ từ chối, và người duyệt đọc lại.
   phien = { ...phien, rfqId, lanNop: typeof g.lanNop === "number" ? g.lanNop : undefined };
   datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
@@ -339,7 +339,7 @@ for (const [nut, duong, xong] of [
   $(nut).addEventListener("click", async () => {
     bao($("loi4"), ""); bao($("ok4"), "");
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
-    // [S1.193 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
+    // [S1.194 / khoản 256] Lời duyệt mang lần nộp đã đọc; tổ chức chưa bật không đòi nó, gửi thì phải đúng.
     const than = duong === "approve" && typeof phien.lanNop === "number" ? { lanNop: phien.lanNop } : undefined;
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`, than);
     if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }

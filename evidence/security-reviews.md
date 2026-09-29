@@ -16206,15 +16206,15 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.193 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
+# §S1.194 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
-chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.192) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
-migration (`080_lan_nop_da_xem`), một ADR (ADR-115), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
+chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.193) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
+migration (`081_lan_nop_da_xem`), một ADR (ADR-115), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
-Lượt soi S1.192 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
+Lượt soi S1.193 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
 PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem, và gói mở (256); người duyệt
 đã ký rồi tự trả gói về không rút được chữ ký của mình — nộp lại y nguyên, gói mở bằng chữ ký ấy (257). Chủ dự án chọn ngày
 2026-09-29: vá cả hai ở một vòng riêng trước S3.2c, theo hình dạng ghi ở hai hàng sổ nợ; mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật —
@@ -16222,15 +16222,15 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 
 ## 2. Đo trước
 
-Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `080_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
+Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `081_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
 28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
 *giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
-chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.192) ghim
+chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.193) ghim
 cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
 
-**Migration `080_lan_nop_da_xem`:**
+**Migration `081_lan_nop_da_xem`:**
 - `rfq_packages.lan_nop` — trigger `rfq_packages_dem_lan_nop` cộng một ở cạnh DRAFT→PENDING_APPROVAL; ngoài mọi `GRANT`. Hàng cũ giữ 0.
 - `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2: khoá hàng gói
   `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở mọi tổ chức; không tìm thấy gói thì từ
@@ -16240,7 +16240,7 @@ cùng hai kịch bản ở trạng thái MỞ.
   xoá; trigger danh tính theo phiên (`kiem_danh_tinh_theo_phien`) và trigger `rfq_tra_ve_dat_lan_nop` (lần nộp từ gói, đòi tổ chức đã
   bật và gói chờ duyệt, khoá `FOR NO KEY UPDATE`); `UNIQUE (org, gói, lần nộp)`.
 - Thân `rfq_kiem_tra_ve_nhap` (`077`) cộng một vế — cạnh về DRAFT đòi hàng `rfq_tra_ve` của `OLD.lan_nop`.
-- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`079`) cộng một phép đếm thứ ba — chữ ký CÒN HIỆU LỰC. Hai phép đếm trước giữ nguyên văn.
+- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`080`) cộng một phép đếm thứ ba — chữ ký CÒN HIỆU LỰC. Hai phép đếm trước giữ nguyên văn.
 
 **Tầng gói, route, màn:** `RfqRecord.lanNop`; `ApproveRfqInput.lanNopDaXem` — không tự điền; `returnRfqToDraft` khoá hàng gói, hỏi
 trạng thái rồi chèn hàng trả về trước câu đổi trạng thái — lời từ chối trạng thái vẫn là `RfqError` có tên như trước. Route duyệt đọc
@@ -16249,7 +16249,7 @@ trạng thái rồi chèn hàng trả về trước câu đổi trạng thái �
 `rang-ngan-sach.int.test.ts` bỏ — tệp mới lật chúng.
 
 **Hardening:** ba mục ghim mới (`rfq_dem_lan_nop`, `rfq_chot_lan_nop_da_xem`, `rfq_tra_ve_dat_lan_nop`, mỗi mục kèm trigger); hai mục
-ghim trỏ sang thân và cổng `080_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
+ghim trỏ sang thân và cổng `081_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
 `BANG_TENANT_KHAI` thêm `rfq_tra_ve`. Các sổ test đi kèm: `db/migrations.int.test.ts`, `db/rls-coverage.int.test.ts` (quyền, policy
 khách, và biểu thức đọc tên migration nhận số bốn chữ số của dải tạm), `db/migration-shape.test.ts`,
 `db/hardening-suy-tu-tinh-chat.int.test.ts` (ba hàm không phải cạnh, một nhân chứng chèn `rfq_tra_ve`).
@@ -16340,12 +16340,12 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 ## 8. Số đo
 
 - `packages/rfq/src/lan-nop-da-xem.int.test.ts` 28/28 — 27 ca có nhãn, 1 ca giới hạn không nhãn. Trên cây #199 (`30a6801`, chưa có
-  `080_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
+  `081_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
 - `apps/api/src/buyer.int.test.ts` 20/20, trong đó hai ca HTTP của vòng này.
 - Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 192 tệp, 3256 khẳng định, 3246 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
   máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
-- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `080_lan_nop_da_xem`): 193 tệp, 3274 khẳng
+- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `081_lan_nop_da_xem`): 193 tệp, 3274 khẳng
   định, 3264 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca ấy. Ma trận sinh lại từ lượt này trùng bản đã commit.
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.

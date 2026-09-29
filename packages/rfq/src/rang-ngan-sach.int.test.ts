@@ -185,7 +185,7 @@ const datNganSach = (t: ToChuc, rfqId: string, giaTri: string): Promise<unknown>
   withTenant(apiPool, t.org, (c) => setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s }));
 const nop = (t: ToChuc, rfqId: string): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
-/** [S1.193 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
+/** [S1.194 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
 const duyet = (t: ToChuc, rfqId: string, ai: Nguoi): Promise<void> =>
   withTenant(apiPool, t.org, async (c) => {
     const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n;
@@ -557,7 +557,7 @@ describe("S1.193 — đột biến: gỡ từng vế thì lỗ mở lại", () =
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.192, M2)", async () => {
+  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.193, M2)", async () => {
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
@@ -570,7 +570,7 @@ describe("S1.193 — đột biến: gỡ từng vế thì lỗ mở lại", () =
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ phép đếm trên ngân sách ⇒ cả hai lỗ đo trên master mở lại", async () => {
-    // [S1.193] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
+    // [S1.194] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
     const boDem = <T>(viec: () => Promise<T>): Promise<T> =>
       voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
