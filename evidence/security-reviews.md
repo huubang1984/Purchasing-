@@ -16592,9 +16592,9 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
 ## 8. Số đo
 
 - Ba ca HTTP ở `apps/api/src/buyer.int.test.ts` xanh; trên cây #202 hai ca đầu đỏ (405).
-- Toàn bộ unit + T3 cục bộ trên cây cuối, sau lần merge #202 và lần cấp số: 194 tệp, 3302 khẳng định, 3292 đạt, 1 bỏ qua, 9 đỏ —
-  đúng chín ca cũ của máy đo (8 của `packages/test-support/src/postgres.int.test.ts`, 1 của
+- Toàn bộ unit + T3 cục bộ trên cây cuối, sau lần merge #202 — nay mang #198 — và lần cấp lại số: 194 tệp, 3307 khẳng định, 3297 đạt,
+  1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo (8 của `packages/test-support/src/postgres.int.test.ts`, 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`).
-- `pnpm test`: 122 tệp, 1734 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- `pnpm test`: 122 tệp, 1739 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Bốn đột biến ở tầng gói, bốn lần đỏ; sáu đột biến ở trang, sáu lần đỏ (§5).
-- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3302 khẳng định; K4b 40 → 42. Không mã mới.
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3307 khẳng định; K4b 40 → 42. Không mã mới.
