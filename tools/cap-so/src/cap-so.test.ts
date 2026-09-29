@@ -23,6 +23,7 @@ import {
   CapSoError,
   demLai,
   docDiff,
+  donGiu,
   docTrailer,
   giaiXungDotKhai,
   HO_KHAI_HANDOFF,
@@ -655,6 +656,89 @@ describe("kho thật — master còn viết lời khai lối cũ, mang số vòn
     const state = doc(goc, "docs/STATE.md");
     expect(capSo(goc, { base: "master" }).tepDaGhi).toEqual([]);
     expect(doc(goc, "docs/STATE.md")).toBe(state);
+  });
+});
+
+describe("kho thật — giữ số trên remote: hai nhánh cấp trên CÙNG một master", () => {
+  /** Kho có remote trần `origin`; master đã đẩy lên và đã fetch. */
+  function dungKhoCoRemote(): { readonly goc: string; readonly xa: string } {
+    const xa = mkdtempSync(join(tmpdir(), "cap-so-xa-"));
+    khoDaDung.push(xa);
+    const goc = dungKho();
+    git(xa, "init", "-q", "--bare", "-b", "master");
+    git(goc, "remote", "add", "origin", xa);
+    git(goc, "push", "-q", "origin", "master");
+    git(goc, "fetch", "-q", "origin");
+    return { goc, xa };
+  }
+
+  function loiGiu(xa: string): string[] {
+    return git(xa, "for-each-ref", "--format=%(refname:strip=3)", "refs/heads/cap-so")
+      .split("\n")
+      .filter((l) => l !== "")
+      .sort();
+  }
+
+  function datLenMaster(goc: string, nhanh: string): void {
+    git(goc, "checkout", "-q", "master");
+    git(goc, "merge", "-q", "--ff-only", nhanh);
+    git(goc, "push", "-q", "origin", "master");
+    git(goc, "fetch", "-q", "origin");
+  }
+
+  it("không trùng dù cùng đo một master; nhánh thua cuộc đua merge giữ nguyên số, chỉ migration giữ số mới", () => {
+    const { goc, xa } = dungKhoCoRemote();
+    lamViec(goc, "a", 1);
+    const kqA = capSo(goc, { base: "origin/master" });
+    expect(kqA.trailer).toBe("Cap-So: vong 9101=3; adr 9201=003; khoan 9401=3; migration 9501=002");
+    commit(goc, `a: cấp số\n\n${kqA.trailer!}`);
+
+    // `b` đo CÙNG master với `a` — max(base)+1 sẽ cho lại 3/003/3/002; lời giữ của `a` đẩy nó lên.
+    lamViec(goc, "b", 2);
+    const kqB = capSo(goc, { base: "origin/master" });
+    expect(kqB.trailer).toBe("Cap-So: vong 9101=4; adr 9201=004 9202=005; khoan 9401=4; migration 9501=003");
+    // Chạy lại trước khi commit: cùng số, không giữ thêm.
+    expect(capSo(goc, { base: "origin/master" }).trailer).toBe(kqB.trailer);
+    commit(goc, `b: cấp số\n\n${kqB.trailer!}`);
+    expect(loiGiu(xa)).toEqual(["adr/3", "adr/4", "adr/5", "khoan/3", "khoan/4", "migration/2", "migration/3", "vong/3", "vong/4"]);
+
+    // `b` vào master TRƯỚC `a`.
+    datLenMaster(goc, "b");
+    expect(kiem(goc)).toEqual([]);
+
+    // `a` merge master: vòng, ADR, khoản giữ nguyên số đã giữ; migration 002 nay nhỏ hơn max(base) = 003 nên giữ 004.
+    git(goc, "checkout", "-q", "a");
+    expect(() => git(goc, "merge", "-q", "origin/master")).toThrow();
+    const kq = capSo(goc, { base: "origin/master" });
+    expect(vietTrailer(kq.bang)).toBe("Cap-So: vong 9101=3; adr 9201=003; khoan 9401=3; migration 9501=004");
+    commit(goc, `a: merge master, cấp lại\n\n${vietTrailer(kq.bang)}`);
+    expect(doc(goc, "docs/DECISIONS.md")).toContain("## ADR-003 — a 1");
+    expect(doc(goc, "evidence/security-reviews.md")).toContain("# §S1.3 — a\n\nADR-003; khoản 3; migration `004` (`004_a.sql`).");
+    expect(existsSync(join(goc, "db/migrations/004_a.sql"))).toBe(true);
+    expect(kiem(goc)).toEqual([]);
+    datLenMaster(goc, "a");
+    expect(kiem(goc)).toEqual([]);
+
+    // `--don`: xoá lời giữ của số đã vào master; lỗ `migration/2` là lời giữ không ai dùng, ở lại.
+    expect(donGiu(goc, "origin/master").daXoa.length).toBe(9);
+    expect(loiGiu(xa)).toEqual(["migration/2"]);
+  });
+
+  it("`--khong-giu`: cấp như cũ, không đẩy gì lên remote", () => {
+    const { goc, xa } = dungKhoCoRemote();
+    lamViec(goc, "a", 1);
+    const kq = capSo(goc, { base: "origin/master", khongGiu: true });
+    expect(kq.trailer).toBe("Cap-So: vong 9101=3; adr 9201=003; khoan 9401=3; migration 9501=002");
+    expect(kq.bao.some((b) => b.startsWith("--khong-giu"))).toBe(true);
+    expect(loiGiu(xa)).toEqual([]);
+  });
+
+  it("HEAD tách rời: từ chối, không ghi gì", () => {
+    const { goc } = dungKhoCoRemote();
+    lamViec(goc, "a", 1);
+    git(goc, "checkout", "-q", "--detach");
+    expect(() => capSo(goc, { base: "origin/master" })).toThrow(/HEAD tách rời/);
+    expect(git(goc, "status", "--porcelain")).toBe("");
   });
 });
 
