@@ -163,7 +163,7 @@ function datLuong(moi) {
   const doiLuong = moi.daBat !== luong.daBat;
   luong = moi;
   const thuTu = thuTuBuoc(luong.daBat);
-  // [S1.192 / S3.2c2] Dời THẬT trong DOM theo `thuTuBuoc`, không bằng CSS `order`: phím Tab và trình đọc màn hình đi theo thứ
+  // [S1.193 / S3.2c2] Dời THẬT trong DOM theo `thuTuBuoc`, không bằng CSS `order`: phím Tab và trình đọc màn hình đi theo thứ
   // tự DOM, không theo thứ tự vẽ. Chỉ dời khi luồng đổi — `datLuong` chạy lại mỗi lần nạp gói, và dời một phần tử đang giữ
   // tiêu điểm làm mất tiêu điểm. HTML khai thứ tự MVP1, và `luong` khởi đầu ở MVP1.
   if (doiLuong) {
@@ -425,7 +425,7 @@ async function napLoiMoi() {
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");
-    // [S1.192 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
+    // [S1.193 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
     for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);

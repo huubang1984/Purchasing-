@@ -36,7 +36,7 @@ describe("[S1.191 / S3.2c2] nhãn trạng thái lời mời", () => {
     expect(nhanTrangThaiLoiMoi(undefined)).toBe("—");
   });
 
-  it("[S1.192 / K6] nhãn «mời sau khi ký» chỉ khi cờ là `true` — cờ lạ, thiếu hay `false` thì chỉ trạng thái", () => {
+  it("[S1.193 / K6] nhãn «mời sau khi ký» chỉ khi cờ là `true` — cờ lạ, thiếu hay `false` thì chỉ trạng thái", () => {
     expect(nhanLoiMoi("SENT", true)).toBe("đã gửi · mời sau khi ký");
     expect(nhanLoiMoi("UNSENT", true)).toBe("chưa gửi · mời sau khi ký");
     for (const co of [false, undefined, null, "true", 1]) expect(nhanLoiMoi("UNSENT", co), String(co)).toBe("chưa gửi");
@@ -96,7 +96,7 @@ describe("[S1.191 / S3.2c2] câu báo sau lần mở gói", () => {
     expect(baoSauKhiMo(false, []).chu).not.toMatch(/Link mời/u);
   });
 
-  it("[S1.192] cả hai luồng nói «Đã mở gói» — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", () => {
+  it("[S1.193] cả hai luồng nói «Đã mở gói» — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", () => {
     for (const [daBat, ds] of [[false, []], [true, []], [true, ["a"]]] as const) {
       expect(baoSauKhiMo(daBat, ds).chu, `${String(daBat)} ${String(ds.length)}`).toMatch(/^Đã mở gói\. /u);
       expect(baoSauKhiMo(daBat, ds).chu).not.toMatch(/mở thầu/iu);

@@ -223,7 +223,7 @@ describe("bề mặt tệp", () => {
       querySelector: (sel: string) => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
       scrollIntoView: () => void;
       /**
-       * [S1.192 / S3.2c2] `Element.before` — `/tao-thau` dời bước lời mời lên trước bước duyệt ở tổ chức đã bật, THẬT trong DOM.
+       * [S1.193 / S3.2c2] `Element.before` — `/tao-thau` dời bước lời mời lên trước bước duyệt ở tổ chức đã bật, THẬT trong DOM.
        * Chỉ các `<section>` của trang có bản thật (dời id trong thứ tự của trang); gọi trên phần tử khác là trang làm điều test
        * không đo — ném.
        */
@@ -290,7 +290,7 @@ describe("bề mặt tệp", () => {
       for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
         el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `), m[2] ?? "");
       }
-      // [S1.192 / S3.2c2] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này và
+      // [S1.193 / S3.2c2] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này và
       // đếm một lần dời.
       const thuTuSection = [...html.matchAll(/<section\b[^>]*\sid="([^"]+)"/gu)].map((m) => m[1] ?? "");
       let soLanDoi = 0;
@@ -362,7 +362,7 @@ describe("bề mặt tệp", () => {
         trangThai,
         loc,
         buocMo: () => (BUOC[trang] ?? []).filter((b) => lay(b).hidden === false),
-        /** [S1.192 / S3.2c2] Thứ tự THẬT của các `<section>` trong DOM, và số lần trang đã dời một section. */
+        /** [S1.193 / S3.2c2] Thứ tự THẬT của các `<section>` trong DOM, và số lần trang đã dời một section. */
         thuTuSection: () => [...thuTuSection],
         soLanDoi: () => soLanDoi,
         bam: async (id: string) => {
@@ -1135,11 +1135,11 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
-    // ~~lớp `moi-truoc`~~ [S1.192 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
+    // ~~lớp `moi-truoc`~~ [S1.193 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
     // hình đi theo thứ tự DOM.
     const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];
     const THU_TU_S3 = ["b1", "b2", "b3", "b5", "b4"];
-    it("[S1.191 / S3.2c2 · S1.192] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt TRONG DOM (số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
+    it("[S1.191 / S3.2c2 · S1.193] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt TRONG DOM (số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
       const bat = await moTaoThau(true, "DRAFT");
       expect(bat.p.thuTuSection(), "thứ tự THẬT trong DOM — Tab và trình đọc màn hình đi theo nó").toEqual(THU_TU_S3);
       expect([bat.p.el("so-b5").textContent, bat.p.el("so-b4").textContent]).toEqual(["4", "5"]);
@@ -1154,7 +1154,7 @@ describe("bề mặt tệp", () => {
       expect(bat.p.thuTuSection()).toEqual(THU_TU_MVP1);
     });
 
-    it("[S1.192 / S3.2c2] tao-thau: màn chỉ dời bước khi luồng đổi — nạp lại gói không dời lần nữa (dời một phần tử đang giữ tiêu điểm làm mất tiêu điểm)", async () => {
+    it("[S1.193 / S3.2c2] tao-thau: màn chỉ dời bước khi luồng đổi — nạp lại gói không dời lần nữa (dời một phần tử đang giữ tiêu điểm làm mất tiêu điểm)", async () => {
       const { p } = await moTaoThau(true, "DRAFT");
       expect(p.soLanDoi()).toBe(1);
       await p.bam("nut-doc");
@@ -1167,7 +1167,7 @@ describe("bề mặt tệp", () => {
       expect(p.soLanDoi()).toBe(2);
     });
 
-    it("[S1.192 / S3.2c2 · K6] tao-thau: dòng lời mời mang nhãn «mời sau khi ký» khi `GET …/invitations` trả `moiSauKhiKy: true`; không thì chỉ trạng thái", async () => {
+    it("[S1.193 / S3.2c2 · K6] tao-thau: dòng lời mời mang nhãn «mời sau khi ký» khi `GET …/invitations` trả `moiSauKhiKy: true`; không thì chỉ trạng thái", async () => {
       const dong = (o: Record<string, unknown>) => ({ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", revokedAt: null, ...o });
       const { p, dongMoi } = await moTaoThau(true, "OPEN", (l) =>
         l === "GET /rfqs/r-1/invitations"
@@ -1178,7 +1178,7 @@ describe("bề mặt tệp", () => {
       expect(bang.map((tr) => tr.con[3]?.textContent)).toEqual(["đã gửi · mời sau khi ký", "chưa gửi · mời sau khi ký", "đã gửi"]);
     });
 
-    it("[S1.192 / S3.2c2] tao-thau: nút và câu báo nói «Mở gói» ở cả hai luồng — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", async () => {
+    it("[S1.193 / S3.2c2] tao-thau: nút và câu báo nói «Mở gói» ở cả hai luồng — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", async () => {
       const html = readFileSync(new URL("../trang/tao-thau.html", import.meta.url), "utf8");
       expect(html).toContain('<button id="nut-mo">Mở gói</button>');
       expect(html).not.toMatch(/<button id="nut-mo">Mở thầu/u);

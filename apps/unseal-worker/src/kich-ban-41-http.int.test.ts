@@ -1017,6 +1017,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   //
   // **[S1.153 / S3.0]** Cả mười nay là `[A-HJK]`: dải có chỗ cho nhóm K TRƯỚC khi K1 vào sổ (spec S3
   // §9), để K1 không lặp lại chuyện của J4. Đo lại trên `master` `fa8d4ea` vẫn đúng mười chỗ.
+  //
+  // **[S1.192 / S4.0]** Cả mười nay là `[A-HJ-L]`: nhóm L của spec S4 vào sổ từ L1, L4 (S4.1).
   // ==============================================================================================
 
   it("bước 12c — MỞ VÒNG BAFO qua HTTP: top-N suy từ bảng xếp hạng, và nhà cung cấp thấy hạn CỦA VÒNG", async () => {
@@ -1598,7 +1600,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
-    // [S1.192 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
+    // [S1.193 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
     // không token mời nào trước lần mở gói (K6). Hàng token mang id của TOKEN — lời mời của nó nằm ở payload.
     const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
     const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(

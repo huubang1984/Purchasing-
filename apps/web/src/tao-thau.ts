@@ -35,7 +35,7 @@ export function nhanTrangThaiLoiMoi(status: unknown): string {
 }
 
 /**
- * [S1.192 / S3.2c2 · K6] Cột trạng thái của một dòng lời mời: trạng thái nói bằng lời, cộng nhãn *mời sau khi ký* khi trigger
+ * [S1.193 / S3.2c2 · K6] Cột trạng thái của một dòng lời mời: trạng thái nói bằng lời, cộng nhãn *mời sau khi ký* khi trigger
  * `076` đã đặt nó — lời mời thêm lúc gói đã `OPEN`, ở tổ chức đã bật (spec S3 §5.1 K6). `GET /rfqs/:rfqId/invitations` trả
  * cờ ấy (`listInvitations`, `moiSauKhiKy`); chỉ `true` mới là có nhãn.
  */
@@ -92,7 +92,7 @@ export function baoSauKhiMoi(loiMoi: LoiMoiVua): { readonly loi: boolean; readon
  * danh sách rỗng là mọi link đã đi; không rỗng là gói ĐÃ mở mà một phần link chưa đi (chủ dự án chọn `200`, không mã lỗi).
  */
 export function baoSauKhiMo(daBat: boolean, unsentInvitationIds: unknown): { readonly loi: boolean; readonly chu: string } {
-  // ~~"Đã mở thầu."~~ [S1.192 / S3.2c2] *Mở gói* là `PENDING_APPROVAL→OPEN`, *mở thầu* là `CLOSED→UNSEALED` (PRODUCT §4 ⑶,
+  // ~~"Đã mở thầu."~~ [S1.193 / S3.2c2] *Mở gói* là `PENDING_APPROVAL→OPEN`, *mở thầu* là `CLOSED→UNSEALED` (PRODUCT §4 ⑶,
   // spec S3 §3.3) — ở cả hai luồng.
   const coBan = "Đã mở gói. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ.";
   if (!daBat) return { loi: false, chu: coBan };
