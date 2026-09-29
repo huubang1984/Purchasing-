@@ -207,7 +207,7 @@ describe("bề mặt tệp", () => {
       "chinh-sach": ["b2", "b3"],
     };
     /**
-     * Trang hỏi `GET /policy/versions` ngay sau khi mở các bước: `/chinh-sach` để vẽ bảng phiên bản, và **[S1.9101 / S3.2c]**
+     * Trang hỏi `GET /policy/versions` ngay sau khi mở các bước: `/chinh-sach` để vẽ bảng phiên bản, và **[S1.190 / S3.2c]**
      * `/tao-thau` để biết tổ chức đã bật kiểm soát theo bậc chưa — thứ tự bước mời và bước duyệt theo đó.
      */
     const HOI_CHINH_SACH: ReadonlySet<string> = new Set(["chinh-sach", "tao-thau"]);
@@ -227,7 +227,7 @@ describe("bề mặt tệp", () => {
       querySelector: (sel: string) => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
       scrollIntoView: () => void;
       /**
-       * [S1.9101 / S3.2c] `Element.before` — `/tao-thau` chuyển bước lời mời lên trước bước duyệt ở tổ chức đã bật. Chỉ các
+       * [S1.190 / S3.2c] `Element.before` — `/tao-thau` chuyển bước lời mời lên trước bước duyệt ở tổ chức đã bật. Chỉ các
        * `<section>` của trang có bản thật (dời id trong `thuTuBuoc`); gọi trên phần tử khác là trang làm điều test không đo — ném.
        */
       before: (...c: PhanTu[]) => void;
@@ -290,7 +290,7 @@ describe("bề mặt tệp", () => {
       for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
         el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `), m[2] ?? "");
       }
-      // [S1.9101 / S3.2c] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này.
+      // [S1.190 / S3.2c] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này.
       const thuTuBuoc = [...html.matchAll(/<section\b[^>]*\sid="([^"]+)"/gu)].map((m) => m[1] ?? "");
       for (const id of thuTuBuoc) {
         const sec = el[id];
@@ -307,7 +307,7 @@ describe("bề mặt tệp", () => {
       const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false, id));
       const trangThai = {
         cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[],
-        /** [S1.9101 / S3.2c] Thân của mỗi lời gọi, cùng chỉ số với `goi`. */
+        /** [S1.190 / S3.2c] Thân của mỗi lời gọi, cùng chỉ số với `goi`. */
         than: [] as unknown[],
       };
       const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
@@ -1113,7 +1113,7 @@ describe("bề mặt tệp", () => {
     });
 
     // ------------------------------------------------------------------------------------------
-    // [S1.9101 / S3.2c / ADR-113] `/tao-thau` ở tổ chức ĐÃ BẬT kiểm soát theo bậc: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp
+    // [S1.190 / S3.2c / ADR-113] `/tao-thau` ở tổ chức ĐÃ BẬT kiểm soát theo bậc: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp
     // duyệt; link đi lúc mở gói. Tổ chức chưa bật giữ thứ tự MVP1 — các ca trên là đối chứng của nhánh ấy.
     // ------------------------------------------------------------------------------------------
     const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];

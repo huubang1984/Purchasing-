@@ -2,7 +2,7 @@
 // tools/gieo-demo — GIEO MỘT VÒNG THẦU ĐỦ ĐỂ DEMO, RỒI IN RA SÁU ĐƯỜNG LINK
 //
 //   pnpm gieo:demo          tổ chức CHƯA bật S3 — luồng MVP1, hình dạng mà pilot chạy
-//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3; [S1.9101 / S3.2c] theo thứ tự
+//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3; [S1.190 / S3.2c] theo thứ tự
 //                           mới của ADR-113 — mời ở DRAFT, hai chữ ký lên cả danh sách, token đúc lúc mở gói
 //
 // [ADR-044] Vì sao có công cụ này thay vì làm mọi thứ qua giao diện: tạo một RFQ đầy đủ là bảy
@@ -242,7 +242,7 @@ async function chinh(): Promise<void> {
         "VALUES ($1, $2, '9000000000.00', 'VND', $3, $4, $5)",
       [org, rfq, chinhSach, nguoiGieo, phienGieo],
     );
-    // [S1.9101 / S3.2c / ADR-113] `--s3`: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp duyệt — hai chữ ký phía dưới ghim băm của
+    // [S1.190 / S3.2c / ADR-113] `--s3`: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp duyệt — hai chữ ký phía dưới ghim băm của
     // chính danh sách này (K4a, K4b), và lời mời không mang token nào tới lúc mở gói (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời
     // SAU khi mở, đúc token ngay lúc mời — khối cuối của giao dịch mở gói.
     const loiMoiNhap: { readonly ten: string; readonly id: string }[] = [];
@@ -277,7 +277,7 @@ async function chinh(): Promise<void> {
     }
 
     const loiMoi: { readonly ten: string; readonly token: string }[] = [];
-    /** [S1.9101 / S3.2c] `--s3`: lời mời vừa có token lúc mở gói — đánh dấu `SENT` SAU khi link đã in ra. */
+    /** [S1.190 / S3.2c] `--s3`: lời mời vừa có token lúc mở gói — đánh dấu `SENT` SAU khi link đã in ra. */
     const daDuc: string[] = [];
     await withTenant(pool, org, async (c) => {
       // Cặp khoá RFQ ra đời ở đây và khoá riêng được BỌC ngay — `issueRfqKeyPair` trả về mọi thứ
@@ -290,7 +290,7 @@ async function chinh(): Promise<void> {
       );
 
       if (S3) {
-        // [S1.9101 / S3.2c / ADR-113] Cùng đường của `POST /rfqs/:rfqId/open`: MỘT token cho MỖI lời mời còn sống, trong CHÍNH
+        // [S1.190 / S3.2c / ADR-113] Cùng đường của `POST /rfqs/:rfqId/open`: MỘT token cho MỖI lời mời còn sống, trong CHÍNH
         // giao dịch mở gói, dưới CHÍNH phiên người mở — hàm tự từ chối mọi lời gọi khác.
         for (const l of await ducTokenKhiMoGoi(c, org, { rfqId: rfq, actorSessionId: phienGieo })) {
           const ten = loiMoiNhap.find((x) => x.id === l.invitationId)?.ten;
@@ -360,7 +360,7 @@ async function chinh(): Promise<void> {
     // `console.error` là dòng ra DUY NHẤT dự án cho phép (eslint `no-console`), và ở một công cụ
     // dev thì stderr cũng đúng chỗ: nó không lẫn vào thứ ai đó đem đi pipe.
     console.error(ra.join("\n"));
-    // [S1.9101 / S3.2c / ADR-113] `SENT` sau lần gửi được — và lần gửi của công cụ này là dòng vừa in. Đánh dấu TRƯỚC khi in thì một
+    // [S1.190 / S3.2c / ADR-113] `SENT` sau lần gửi được — và lần gửi của công cụ này là dòng vừa in. Đánh dấu TRƯỚC khi in thì một
     // lần chết giữa hai bước để lời mời `SENT` mà link chưa tới ai; thứ tự này để lại ca ngược, đúng ca mà ADR-113 chấp nhận.
     if (S3) {
       let n = 0;

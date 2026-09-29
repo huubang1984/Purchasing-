@@ -15819,11 +15819,45 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3209 khẳng định; K4a 15 → 16, K6 12 → 20, K4b 8 không đổi. Không
   mã mới.
 
-# §S1.9101 — S3.2c: `/tao-thau` THEO THỨ TỰ MỚI Ở TỔ CHỨC ĐÃ BẬT S3, `gieo:demo --s3` VÀ KỊCH BẢN 41 MỜI Ở DRAFT, LƯỢT ĐI THỬ T4 TRÊN TRÌNH DUYỆT THẬT — ĐO RA KHOẢN 9401
+# §S1.189 — NHÁNH S3.2b SONG SONG XOÁ; HAI PHẦN KHÔNG TRÙNG VÀO SỔ NỢ (KHOẢN 254, 255)
+
+## 1. Việc gì
+
+Nhánh `claude/adr-105-condition-4b-enforcement-5wiyv0` (hai commit, head `6d47f8c`, dựng trên `d9eb1fb` — thời S3.2a, không PR) là một
+bản S3.2b làm song song với S3.2b1 (`077`, §S1.186) và S3.2b2 (PR #195, §S1.188). Chủ dự án bảo xoá; trước khi xoá, đọc nhánh để tìm phần
+`master` chưa có.
+
+## 2. Đọc
+
+- Trùng hoặc đã làm khác trên `master`: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chức đã bật (`077`); khoản 253 (nhánh dùng
+  `clock_timestamp()` cho `created_at`, `master` dùng cột `duc_khi_goi_da_mo` — §S1.186 đo vì sao phép so thời gian sai); link mời đi
+  lúc mở gói (§S1.188).
+- **Không có trên `master`:** ⑴ chữ ký duyệt gói ràng vào ngân sách — `rfq_bam_noi_dung` (`011`) chỉ băm tiêu đề, hạn và dòng hàng,
+  `rfq_bam_danh_sach` (`076`) chỉ băm danh sách, và `rfq_budgets_chi_sua_khi_soan` (`014`) cho sửa ngân sách ở DRAFT; ⑵ hai lời từ
+  chối K4a mang tên ràng buộc và vào sổ `CONTROL_DENIED` — trên `master` hai `RAISE` K4a của `rfq_invitations_kiem_danh_sach` không
+  mang `CONSTRAINT`, và `CHOT_THEO_RANG_BUOC` không có dòng K4a.
+- Phần ⑴ đọc trên `master`, chưa đo ở vòng này; nhánh ghi đã đo được ở lượt soi của nó (D2: gói cấp kép trả về DRAFT, hạ ước lượng dưới
+  ngưỡng, nộp lại, mở bằng một chữ ký cũ).
+
+## 3. Thay đổi
+
+Không mã. `docs/STATE.md`: khoản 254 (⑴) và 255 (⑵), rổ B, kèm hình dạng đề xuất lấy từ nhánh và SHA `6d47f8c` để tra lại. Nhánh xoá
+sau commit này.
+
+## 4. Giới hạn
+
+- Commit `6d47f8c` không còn ref nào trỏ tới sau khi xoá nhánh; GitHub có thể thu gom nó. Hình dạng đề xuất đã chép vào hai hàng sổ nợ.
+- Lời *"chủ dự án chốt ngày 2026-09-29"* về K4a chỉ nằm trên nhánh; khoản 255 ghi nó là chưa xác nhận.
+
+## 5. Số
+
+Mở khoản 254, 255. Còn mở **84**; rổ B **60**.
+
+# §S1.190 — S3.2c: `/tao-thau` THEO THỨ TỰ MỚI Ở TỔ CHỨC ĐÃ BẬT S3, `gieo:demo --s3` VÀ KỊCH BẢN 41 MỜI Ở DRAFT, LƯỢT ĐI THỬ T4 TRÊN TRÌNH DUYỆT THẬT — ĐO ĐƯỢC KHOẢN 255
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — luồng MVP1 của màn, của `gieo:demo` không cờ và của
-kịch bản 41 giữ nguyên thứ tự; một nhãn đổi ở cả hai luồng (*Mở gói*). Không migration, không route mới, không ADR. Mở khoản
-**9401**, rổ B.
+kịch bản 41 giữ nguyên thứ tự; một nhãn đổi ở cả hai luồng (*Mở gói*). Không migration, không route mới, không ADR. Không mở khoản
+nào: phát hiện của lượt đi thử là khoản **255** (rổ B), mà §S1.189 ghi bằng đọc mã trong lúc vòng này chạy — vòng này ĐO nó.
 
 ## 1. Vòng này là gì
 
@@ -15928,7 +15962,7 @@ CSDL đọc bằng kết nối đặc quyền. Chạy hai lượt trên hai lầ
 - **Lỗi trình duyệt:** không lỗi trang. Console: hai `401` `GET /api/me` — trang hỏi phiên lúc tải, chưa có cookie —, một `422` — lần
   mời lúc chờ duyệt ở trên —, một `404` không có sự kiện phản hồi nào của trang tương ứng: `/favicon.ico` (trang không khai icon; có từ
   trước vòng này).
-- **Đo ra khoản 9401.** Lần mời bị K4a chặn lúc gói chờ duyệt không để hàng sổ nào: sổ của tổ chức không có `PERMISSION_DENIED`,
+- **Đo được khoản 255.** Lần mời bị K4a chặn lúc gói chờ duyệt không để hàng sổ nào: sổ của tổ chức không có `PERMISSION_DENIED`,
   `RFQ_STATE_DENIED` hay `CONTROL_DENIED` cho lần ấy. `createInvitation` không hỏi trạng thái gói trước câu `INSERT` — chỉ trigger `076`
   nói "không", và giao dịch huỷ. ADR-060 đòi ghi lời từ chối nói người dùng đi sai thứ tự; K12 đòi tầng gói hỏi vị từ trước mọi tác dụng
   phụ, *"đo theo từng hạng mục từ S3.1"* — K1 làm đủ, K4a chưa. Chọn lớp nào là quyết định của chủ dự án. **Rổ B:** hôm nay không tổ
@@ -15967,7 +16001,8 @@ M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại m�
 
 ## 7. Giới hạn, nói ra
 
-- **Khoản 9401** (mục 5): S3.2 còn lớp K12 cho K4a — và, cùng hình dạng nhưng chưa đo, thu hồi ở `OPEN` và K4b ở cạnh mở gói.
+- **S3.2 còn hai khoản mở, cả hai rổ B:** 255 (mục 5) — lớp K12 cho K4a; cùng hình dạng nhưng chưa đo: thu hồi ở `OPEN`, và K4b ở
+  cạnh mở gói —; và 254 (§S1.189) — chữ ký duyệt gói không mang ngân sách, mà cạnh về `DRAFT` mở lại ngân sách.
 - **Lượt đi thử T4 là một lần, không phải một cổng**; script nằm ngoài kho. Test màn dựng DOM giả: `Element.before` thật chỉ được đo ở
   lượt đi thử.
 - **`gieo:demo` không có test tự động** — nó chạy trên một CSDL thật và in token; đo bằng lượt đi thử và câu đọc lại CSDL.
@@ -15982,11 +16017,17 @@ M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại m�
 - Toàn bộ T3 cục bộ trên cây vòng này, TRƯỚC khi biên bản này và lời khai đếm có mặt: 190 tệp, 3218 khẳng định — 3201 đạt, 1 bỏ qua,
   16 đỏ. Chín là ca cũ của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container
   runtime) và 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Bảy là `[INV-H20]` của
-  `tests/architecture/so-no-tu-doi-chieu.test.ts` — con trỏ `§S1.9101` của khoản 9401 chưa có đầu mục (P11), và lời khai đếm ở
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` — con trỏ `§S1.190` của khoản mà bản đầu của vòng này mở chưa có đầu mục (P11), và lời khai đếm ở
   `Handoff.md` và dưới dòng tổng kết chưa tính khoản ấy (P9, P12). Sau khi mục này có mặt và `pnpm cap-so --dem` viết lại lời khai:
   tệp ấy chạy lại **45/45**; báo cáo T3 thay kết quả của đúng tệp ấy ⇒ 3218 khẳng định, 3208 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ.
 - `pnpm t0` sạch (447 module, 1792 phụ thuộc). `pnpm test`: 121 tệp, 1711 đạt, 1 bỏ qua. Hai mươi mốt đột biến, hai mươi mốt lần
   đỏ (§6).
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3218 khẳng định, cổng evidence XANH; `evidence/INV-matrix.md`
   giống hệt bản của `master` — vòng này không thêm ca mang nhãn bất biến nào, và không ca mang nhãn nào đổi kết quả.
-- Số hiệu của vòng và của khoản nợ do `pnpm cap-so` cấp lúc merge (ADR-090).
+- **Khoản của bản đầu rời sổ trước khi được cấp số.** Bản đầu của vòng này mở phát hiện ở mục 5 thành một khoản mới mang số tạm —
+  con trỏ và lời khai của nó là bảy ca `[INV-H20]` ở trên. Lúc hợp `master`, #196 (§S1.189) đã ghi CÙNG phát hiện ấy thành khoản 255, bằng đọc mã:
+  vòng này bỏ khoản ấy, ghi phép đo vào khoản 255 — ADR-043: sửa ở đúng chỗ, không mở khoản mới.
+- **Hợp `master`.** #196 — vòng **S1.189**, khoản 254 và 255, chỉ tài liệu — merge trong lúc vòng này chạy. Xung đột ở cột mốc
+  `docs/STATE.md`, khối sổ nợ, rổ B, lời khai đếm ở `Handoff.md` và cuối biên bản; gỡ tay: giữ phần của `master`, mục của vòng này
+  đứng sau §S1.189, khoản mang số tạm bỏ. `pnpm cap-so --dem` viết lại lời khai đếm. #196 không chạm mã hay test.
+- Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).

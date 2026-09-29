@@ -23,7 +23,7 @@
 // S3 khác ở bước 1 — người tài chính khai phiên bản CÓ BẬC, người tài chính thứ hai ký nó QUA ROUTE ký — và ở thân mà bộ
 // quét gửi cho `POST /policy`: tổ chức đã bật từ chối phiên bản không bậc.
 //
-// [S1.9101 / S3.2c / ADR-113] Và ở thứ tự mời: luồng S3 mời năm nhà cung cấp qua route ở DRAFT, TRƯỚC khi nộp duyệt (bước 2) —
+// [S1.190 / S3.2c / ADR-113] Và ở thứ tự mời: luồng S3 mời năm nhà cung cấp qua route ở DRAFT, TRƯỚC khi nộp duyệt (bước 2) —
 // `201` với lời mời *chưa gửi*, không link nào đi —, và `POST /rfqs/:rfqId/open` gửi năm link SAU commit, `200` với danh sách
 // chưa gửi rỗng. Bước 3 của luồng S3 chỉ còn phần của nhà cung cấp. RFQ hy sinh của bộ quét giữ thứ tự mở-rồi-mời ở cả hai
 // luồng: ở tổ chức đã bật đó là lời mời *mời sau khi ký*, cũng là một đường của route.
@@ -183,7 +183,7 @@ async function moPhienKhach(tokenLink: string): Promise<string> {
 }
 
 /**
- * [S1.9101 / S3.2c] Một nhà cung cấp, một người liên hệ và MỘT lời mời cho gói chính — ba yêu cầu HTTP dưới cookie người mua.
+ * [S1.190 / S3.2c] Một nhà cung cấp, một người liên hệ và MỘT lời mời cho gói chính — ba yêu cầu HTTP dưới cookie người mua.
  * Trả thân lời mời của `201`.
  */
 async function moiQuaHttp(m: string, i: number, ncc: (typeof NHA_CUNG_CAP)[number]): Promise<{ supplierId: string; loi: { id: string; status: string; moiSauKhiKy: boolean } }> {
@@ -440,7 +440,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     const m = trangThai.mua.cookie;
-    // [S1.9101 / S3.2c / ADR-113] Luồng S3: danh sách mời dựng qua route ở DRAFT, TRƯỚC khi nộp duyệt — `201` với lời mời chưa
+    // [S1.190 / S3.2c / ADR-113] Luồng S3: danh sách mời dựng qua route ở DRAFT, TRƯỚC khi nộp duyệt — `201` với lời mời chưa
     // gửi, không nhãn, và không link nào tới bộ gửi. Hai chữ ký phía dưới ghim băm của chính danh sách này.
     if (batS3) {
       const truoc = dv.loiMoiDaGui.length;
@@ -471,7 +471,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
     const { rows } = await db.pool.query("SELECT algorithm FROM rfq_key_material WHERE rfq_id = $1", [trangThai.rfqId]);
     expect(rows.length).toBeGreaterThan(0);
-    // [S1.9101 / S3.2c / ADR-113] Lần mở gói gửi MỘT link cho MỖI lời mời của danh sách đã ký — luồng S3 —, hay không gửi gì — luồng
+    // [S1.190 / S3.2c / ADR-113] Lần mở gói gửi MỘT link cho MỖI lời mời của danh sách đã ký — luồng S3 —, hay không gửi gì — luồng
     // MVP1 —; cả hai trả danh sách chưa gửi rỗng, và token không về client.
     expect((mo.body as { unsentInvitationIds: string[] }).unsentInvitationIds).toEqual([]);
     const lucMo = dv.loiMoiDaGui.slice(truocMo);
@@ -489,7 +489,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   it("bước 3 — mời năm nhà cung cấp qua HTTP; mỗi người đi trọn link → OTP → phiên khách qua HTTP", async () => {
     const m = trangThai.mua.cookie;
     for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
-      // [S1.9101 / S3.2c] Luồng S3: lời mời có từ DRAFT, link đi lúc mở gói (bước 2) — nhà cung cấp dùng đúng link ấy.
+      // [S1.190 / S3.2c] Luồng S3: lời mời có từ DRAFT, link đi lúc mở gói (bước 2) — nhà cung cấp dùng đúng link ấy.
       if (batS3) {
         const lm = trangThai.loiMoi.find((x) => x.ten === ncc.ten);
         const link = dv.loiMoiDaGui.find((g) => g.invitationId === lm?.invitationId);
@@ -1607,7 +1607,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
-    // [S1.9101 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
+    // [S1.190 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
     // không token mời nào trước lần mở gói (K6). Hàng token mang id của TOKEN — lời mời của nó nằm ở payload.
     const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
     const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(
