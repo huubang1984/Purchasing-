@@ -16490,6 +16490,9 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
   cục bộ trên cây cuối: 194 tệp, 3292 khẳng định, 3282 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất
   biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3292 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise`
   sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #198 (phần bù S3.2c2, giữ S1.193) — và cấp lại số vòng:** toàn bộ unit + T3 cục bộ trên cây
+  cuối: 194 tệp, 3297 khẳng định, 3287 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất biến, đọc từ
+  3297 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
