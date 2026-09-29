@@ -62,6 +62,9 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/du-lieu-nen':
+        specifier: workspace:*
+        version: link:../../packages/du-lieu-nen
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity
@@ -391,6 +394,9 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/du-lieu-nen':
+        specifier: workspace:*
+        version: link:../../packages/du-lieu-nen
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity

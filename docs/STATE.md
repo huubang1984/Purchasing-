@@ -13,6 +13,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-29 / S1.9101] S4.2b — ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ
+NGƯỜI QUẢN LÝ DỮ LIỆU.** Nửa sau của S4.2 (spec S4 §9). Chủ dự án chốt năm điểm ngày 2026-09-29: một PR; đọc mở cho mọi người mua
+của tổ chức, `agent: false`; hình dạng route; §8.10 nói ở màn và ở công cụ khởi tạo, không kiểm trước ở bản khai; `gieo:demo` gieo
+người và ba hàng chuẩn. `routes/du-lieu.ts`: tám route ghi khai `item.manage` (cổng tầng ứng dụng, trên cổng CSDL của S4.2a), ba
+route đọc; `DuLieuNenError` ra 422 có mã. Gói `du-lieu-nen` thêm `lietKeHangChuan` (trần 500, `conNua`), `docChiTietHangChuan`,
+`docDanhMucDonVi`, `khaiBiDanhDonVi`, `rutBiDanhDonVi`; `rutBiDanhHang` nhận `hangChuanId`. `GET /items` không tìm ở máy chủ —
+router không đọc query (E6); màn lọc trên danh sách. Màn `/du-lieu` (ADR-044): danh sách, tạo, chi tiết (phiên bản, bí danh, quy đổi
+riêng), đơn vị đo; người không giữ `item.manage` chỉ xem và màn nói câu §8.10. `gieo:demo`: người `dulieu` và ba hàng chuẩn, mỗi hàng
+một bí danh là nguyên mô tả dòng demo và một quy đổi riêng tính từ kích thước. L3 thêm phép đo tầng HTTP. Không migration, không ADR.
+Biên bản: `evidence/security-reviews.md` §S1.9101.
+
 **[2026-09-29 / S1.197] S4.2a — HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-116.** Chủ dự án
 chốt năm đề xuất ngày 2026-09-29: tách S4.2 thành S4.2a (CSDL + gói) và S4.2b (API + màn `/du-lieu`); quy đổi riêng dùng đúng MỘT
 cạnh, ghép quy đổi chung ở hai đầu, được chiều ngược, không ghép hai cạnh riêng; `don_vi_goc` là mã của danh mục; chưa có

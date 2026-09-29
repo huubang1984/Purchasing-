@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import * as chinhSach from "./chinh-sach.js";
+import * as duLieu from "./du-lieu.js";
 import * as taoThau from "./tao-thau.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
@@ -148,7 +149,7 @@ describe("bề mặt tệp", () => {
     expect(tron.map((l) => `${l.tep}${l.duong}`)).toEqual(["gui-ses.ts/login"]);
   });
 
-  it("[ADR-107] docLink() của bốn trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
+  it("[ADR-107] docLink() của ~~bốn~~ [S1.9101] năm trang đọc `<orgId>:<token>`; trang /login đọc thêm `<orgId>` trơn và xoá ô mã", () => {
     const ORG = "11111111-1111-4111-8111-111111111111";
     const chay = (trang: string, hash: string, truoc: { org: string; token: string }) => {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
@@ -160,7 +161,7 @@ describe("bề mặt tệp", () => {
       runInNewContext(`${hang}\n${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent });
       return { org: o.org.value, token: o.token.value };
     };
-    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau"]) {
+    for (const trang of ["mo-thau", "tao-thau", "chinh-sach", "nop-thau", "du-lieu"]) {
       expect(chay(trang, `#${ORG}:tokTokTokTokTokTok_-1`, { org: "", token: "" }), trang).toEqual({ org: ORG, token: "tokTokTokTokTokTok_-1" });
     }
     expect(chay("mo-thau", `#${ORG}`, { org: "", token: "ma-cu-cua-nguoi-truoc" })).toEqual({ org: ORG, token: "" });
@@ -206,6 +207,8 @@ describe("bề mặt tệp", () => {
       "mo-thau": ["b2", "b3", "b4", "b5", "b6", "b7", "b8"],
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
+      // [S1.9101 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
+      "du-lieu": ["b2", "b3", "b5"],
     };
     const ORG = "11111111-2222-4333-8444-555555555555";
     const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
@@ -256,6 +259,8 @@ describe("bề mặt tệp", () => {
       ...chinhSach,
       // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
       ...taoThau,
+      // [S1.9101 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
+      ...duLieu,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
       sealBid: () => Promise.resolve(new Uint8Array(0)),
       chooseKeyAgreementAlgorithm: () => "ECDH_P256",
@@ -324,6 +329,8 @@ describe("bề mặt tệp", () => {
             return co ? { status: 200, body: { ok: true } } : { status: 401, body: { error: "x" } };
           }
           if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
+          if (lenh === "GET /items" && trangThai.cookie !== null) return { status: 200, body: { hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 } };
+          if (lenh === "GET /uom" && trangThai.cookie !== null) return { status: 200, body: { donVi: [], biDanhChung: [], biDanhToChuc: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
           if (lenh === "POST /guest/logout") {
             const co = trangThai.khach;
@@ -376,6 +383,10 @@ describe("bề mặt tệp", () => {
         },
       };
     };
+
+    /** Lời gọi mà mỗi trang tự làm ngay sau khi mở các bước — trước lượt bấm nào của người dùng. */
+    const NAP_SAU_DANG_NHAP = (trang: string): readonly string[] =>
+      trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : trang === "du-lieu" ? ["GET /items", "GET /uom"] : [];
 
     for (const trang of Object.keys(BUOC)) {
       const tatCa = BUOC[trang] ?? [];
@@ -453,7 +464,7 @@ describe("bề mặt tệp", () => {
         expect(p.buocMo()).toEqual([]);
         await p.bam("nut-vao");
         const sauTotp = p.trangThai.goi.lastIndexOf("POST /auth/totp");
-        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...NAP_SAU_DANG_NHAP(trang)]);
         expect(p.trangThai.thayUrl).toEqual([p.loc.pathname]);
         expect(p.loc.hash).toBe("");
         expect(p.buocMo()).toEqual(tatCa);
@@ -470,7 +481,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("b1").lop.has("xong")).toBe(false);
         expect(p.el("nut-dang-xuat").hidden).toBe(true);
         expect(p.el("hoi-phien").hidden).toBe(true);
-        expect(p.trangThai.goi).toEqual(["GET /me", ...(trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.goi).toEqual(["GET /me", ...NAP_SAU_DANG_NHAP(trang)]);
       });
 
       it(`${trang}: /me của lượt cũ về SAU khi fragment đã đổi sang link của B ⇒ bị bỏ, không mở khối hỏi`, async () => {
@@ -1249,6 +1260,94 @@ describe("bề mặt tệp", () => {
       expect(p.trangThai.goi).toContain("POST /rfqs/r-1/return-to-draft");
       expect(p.el("ok4").textContent).toMatch(/Đã trả gói về soạn thảo/u);
       expect(p.el("ly-do-tra-ve").value).toBe("");
+    });
+
+    // [S1.9101 / S4.2b] Màn dữ liệu nền — spec S4 §8.10: vai mới là một NGƯỜI MỚI, và màn nói ra điều ấy trước khi tổ chức dùng.
+    const moDuLieu = async (danhSach: Record<string, unknown>, thay?: (l: string) => Promise<{ status: number; body: unknown }> | undefined) => {
+      const p = await dungTrang("du-lieu", {
+        hash: "", cookie: A,
+        thay: (l) => thay?.(l) ?? (l === "GET /items" ? Promise.resolve({ status: 200, body: danhSach }) : undefined),
+      });
+      await p.bam("nut-dung-phien");
+      return p;
+    };
+    const PHAN_GHI = ["khoi-phien-ban", "khoi-bi-danh", "khoi-quy-doi", "khoi-bi-danh-dv"];
+
+    it("[S1.9101 / S4.2b · §8.10] du-lieu: tổ chức chưa ai giữ vai quản lý dữ liệu ⇒ câu đòi một NGƯỜI MỚI, không bước tạo, không khối ghi nào", async () => {
+      const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 });
+      expect(p.el("vai-quan-ly").hidden).toBe(false);
+      expect(p.el("vai-quan-ly").textContent).toMatch(/NGƯỜI MỚI/u);
+      expect(p.el("vai-quan-ly").textContent).toMatch(/Tài chính/u);
+      expect(p.el("b3").hidden).toBe(true);
+      for (const id of PHAN_GHI) expect(p.el(id).hidden, id).toBe(true);
+      const q = await moDuLieu({ hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 2 });
+      expect(q.el("vai-quan-ly").textContent).toMatch(/2 người giữ vai này; bạn chỉ xem được/u);
+      const r = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 });
+      expect(r.el("vai-quan-ly").hidden).toBe(true);
+      expect(r.el("b3").hidden).toBe(false);
+      for (const id of PHAN_GHI) expect(r.el(id).hidden, id).toBe(false);
+    });
+
+    it("[S1.9101 / S4.2b] du-lieu: `conNua` ⇒ màn nói nó chỉ hiện phần đầu; mã sai hình dạng hay thuộc tính sai ⇒ báo, KHÔNG gọi máy chủ", async () => {
+      const p = await moDuLieu({ hangChuan: [{ id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", trangThai: "DANG_DUNG" }], conNua: true, choGhi: true, soNguoiQuanLy: 1 });
+      expect(p.el("con-nua").textContent).toMatch(/1 hàng chuẩn đầu tiên/u);
+      p.el("tao-ma").value = "thep-d12";
+      await p.bam("nut-tao");
+      expect(p.el("loi3").textContent).toMatch(/Mã viết hoa/u);
+      p.el("tao-ma").value = "THEP-D12";
+      p.el("tao-thuoc-tinh").value = "Mac: CB300";
+      await p.bam("nut-tao");
+      expect(p.el("loi3").textContent).toMatch(/dòng 1/u);
+      expect(p.trangThai.goi).not.toContain("POST /items");
+      p.el("tao-thuoc-tinh").value = "mac: CB300";
+      p.el("tao-trong-yeu").value = "mac";
+      await p.bam("nut-tao");
+      expect(p.trangThai.goi).toContain("POST /items");
+    });
+
+    it("[S1.9101 / S4.2b · lượt đi thử T4] du-lieu: bấm đúp một nút ghi ⇒ ĐÚNG một lời gọi; nhập sai sau một lần thành công ⇒ câu thành công cũ biến mất", async () => {
+      let tha: () => void = () => undefined;
+      const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) =>
+        l === "POST /uom/aliases" ? new Promise((r) => { tha = () => { r({ status: 201, body: { biDanh: { biDanhSach: "mt", code: "t" } } }); }; }) : undefined);
+      p.el("bdv-moi").value = "MT";
+      p.el("bdv-don-vi").value = "tấn";
+      const bam = p.el("nut-bi-danh-dv").nghe["click"]?.[0];
+      const lan1 = bam?.();
+      const lan2 = bam?.();
+      expect(p.el("nut-bi-danh-dv").disabled, "nút khoá trong lúc lời gọi còn bay").toBe(true);
+      tha();
+      await Promise.all([lan1, lan2]);
+      await cho();
+      expect(p.trangThai.goi.filter((g) => g === "POST /uom/aliases")).toHaveLength(1);
+      expect(p.el("nut-bi-danh-dv").disabled).toBe(false);
+      expect(p.el("ok5").textContent).toMatch(/Đã khai "MT" là tấn/u);
+      p.el("bdv-moi").value = "";
+      await p.bam("nut-bi-danh-dv");
+      expect(p.el("loi5").textContent).toMatch(/Nhập cả bí danh và đơn vị/u);
+      expect(p.el("ok5").hidden, "câu thành công của lần trước không nằm cạnh câu lỗi").toBe(true);
+    });
+
+    it("[S1.9101 / S4.2b · lượt đi thử T4] du-lieu: mở chi tiết hỏng ⇒ bước 4 không giữ hàng trước, nút ghi không ghi vào hàng trước", async () => {
+      const CHI_TIET = { hangChuan: { id: "h-1", ma: "THEP-D10", ten: "Thép D10", donViGoc: "kg", thuocTinh: {}, thuocTinhTrongYeu: [], trangThai: "DANG_DUNG" }, phienBan: [], biDanh: [], quyDoi: [] };
+      let lanTao = 0;
+      const p = await moDuLieu({ hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 }, (l) => {
+        if (l === "POST /items") { lanTao += 1; return Promise.resolve({ status: 201, body: { hangChuan: { id: `h-${String(lanTao)}`, ma: "X", donViGoc: "kg" } } }); }
+        if (l === "GET /items/h-1") return Promise.resolve({ status: 200, body: CHI_TIET });
+        if (l === "GET /items/h-2") return Promise.resolve({ status: 500, body: { error: "loi noi bo" } });
+        return undefined;
+      });
+      p.el("tao-ma").value = "THEP-D10";
+      await p.bam("nut-tao");
+      expect(p.el("b4").hidden).toBe(false);
+      expect(p.el("tt-hang").con.length).toBeGreaterThan(0);
+      p.el("tao-ma").value = "THEP-D12";
+      await p.bam("nut-tao");
+      expect(p.el("loi4").textContent).toMatch(/loi noi bo/u);
+      expect(p.el("tt-hang").con).toHaveLength(0);
+      p.el("bd-moi").value = "thep d10 hp";
+      await p.bam("nut-bi-danh");
+      expect(p.trangThai.goi).not.toContain("POST /items/h-1/aliases");
+      expect(p.el("loi4").textContent).toMatch(/Chưa mở hàng chuẩn nào/u);
     });
   });
 

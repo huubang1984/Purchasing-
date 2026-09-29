@@ -305,6 +305,12 @@ dưới đúng luật ADR-044.
 
 Mỗi route mới khai trường `agent` (ADR-039). Route đọc lịch sử, benchmark và mốc ngoài là `agent: false`.
 
+> **[S1.9101 / S4.2b] Dựng.** `/du-lieu` vào bản đồ `TRANG` (khuôn S1.98), module thuần `apps/web/src/du-lieu.ts` phục vụ ở
+> `/lib/du-lieu.js`. Ba route đọc của S4.2b — `GET /items`, `GET /items/:itemId`, `GET /uom` — cũng `agent: false`, khai lý do ở
+> `ROUTE_DOC_KHONG_PHOI` của `apps/mcp`. `GET /items` không tìm ở máy chủ: `router.ts` cắt bỏ query và không đọc nó (⑵, E6), nên
+> route trả tối đa 500 hàng xếp theo mã cùng cờ `conNua`, và màn lọc trên danh sách ấy. Mở một đường đọc query là quyết định về E6,
+> để cho S4.3 — nơi gợi ý hàng chuẩn ở `/tao-thau` cần tìm thật.
+
 ---
 
 ## 4. Mô hình dữ liệu
@@ -412,7 +418,8 @@ Hàng chuẩn KHÔNG dùng chung giữa các tổ chức (§2.2 ⑷, ADR-013). H
 
 **Mã quyền `item.manage`** (§9 S4.0) giữ mọi thao tác ghi ở mục này, ở §4.2, ở ánh xạ duyệt tay (§4.4) và ở mốc ngoài
 (§4.7). Người đọc: mọi vai giữ `rfq.create`, vì người tạo gói cần thấy gợi ý. Hàng chuẩn không mang giá, nên đọc nó không
-phải là đọc giá. **[S1.159]** `item.manage` chỉ ở vai mới `DATA_STEWARD`, và vai ấy không giữ `bid.view`, `po.approve`,
+phải là đọc giá. **[S1.9101 / S4.2b — chủ dự án chốt 2026-09-29]** Người đọc là MỌI người mua của tổ chức, không riêng người giữ
+`rfq.create`: route đọc không có chỗ khai mã quyền, và hàng chuẩn không mang giá, nên dựng một cổng đọc mới không canh gì. **[S1.159]** `item.manage` chỉ ở vai mới `DATA_STEWARD`, và vai ấy không giữ `bid.view`, `po.approve`,
 `award.recommend`, `rfq.create`, `rfq.invite` — ở vai và ở người (§2.4 ⑺). Câu *"người đọc"* chỉ nói về hàng chuẩn: mốc
 ngoài và lịch sử ngoài hệ thống mang giá, đọc bằng `bid.view` (§2.5 ㉑).
 
@@ -1035,6 +1042,11 @@ va nhau; S4.0 đo lại điều ấy thay vì tin nó.
 sẽ muốn gán `DATA_STEWARD` cho người `FINANCE` sẵn có — và hai trigger khuôn `033` sẽ từ chối đúng việc ấy. Lối thoát dễ nhất
 là không dùng S4a, không phải nới luật. Màn quản trị vai phải nói ra điều ấy trước khi tổ chức bật tính năng.
 
+**[S1.9101 / S4.2b]** Chưa có màn quản trị vai: vai được gán bằng `tools/khoi-tao-to-chuc` (`docs/DE-XUAT-TAO-TO-CHUC.md`). Nên câu
+ấy được nói ở ba chỗ: màn `/du-lieu` — người không giữ `item.manage` chỉ xem, và màn nói tổ chức cần một NGƯỜI MỚI khi chưa ai giữ vai
+(`GET /items` trả `soNguoiQuanLy`); bảng vai của đề xuất tạo tổ chức; và `khoi-tao.int.test.ts` đo bản khai FINANCE + DATA_STEWARD hỏng
+ở đúng người ấy, không hàng nào nằm lại. Công cụ không kiểm lại luật ở bản khai — trigger phán, như mọi tổ hợp vai trái luật khác.
+
 ### 8.11. [S1.159] Ghim chính sách đảo một lựa chọn của S2
 
 `luot-danh-gia.ts:124-128` giải thích vì sao S2 đọc phiên bản MỚI NHẤT: ghim thì mọi gói ra đời trước S2 không bao giờ chấm
@@ -1097,7 +1109,7 @@ migration một mình là no-op.
 | **S4.1** | Đơn vị đo + khuôn nền | `uom_units` chỉ-ghi-thêm, bí danh toàn cục ở bảng riêng, `uom_aliases` của tổ chức, trigger khoá → `seq` → `ghi_luc`, hàm `chuoi_sach` và hàm quy đổi SQL; **L1** (khuôn), **L4** vế chung | — |
 | **S4.2** | Hàng chuẩn + vai | Vai `DATA_STEWARD`, mã `item.manage` vào CSDL (ADR-084 ⑶), hai trigger khuôn `033`; danh tính bất biến, phiên bản, bí danh, quy đổi riêng; màn `/du-lieu`; **L3** vế vai, **L4** vế riêng | — |
 | ↳ **S4.2a** [S1.197] | CSDL + gói | Vai, mã, hai trigger khuôn `033`, cổng ghi CSDL; bốn bảng hàng chuẩn; vế ⑵ của `quy_doi_don_vi`; hàm gói ghi/đọc — `083_hang_chuan`, ADR-116 | — |
-| ↳ **S4.2b** | API + màn | Route cho hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị; màn `/du-lieu`; `gieo:demo` và `khoi-tao-to-chuc` gán `DATA_STEWARD`; màn nói ra §8.10 | S4.2a |
+| ↳ **S4.2b** | API + màn | Route cho hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị; màn `/du-lieu`; `gieo:demo` và `khoi-tao-to-chuc` gán `DATA_STEWARD`; màn nói ra §8.10. **[S1.9101]** Xong: 11 route (`routes/du-lieu.ts`), bốn hàm gói (liệt kê, chi tiết, danh mục đơn vị, khai/rút bí danh đơn vị), màn `/du-lieu`; `gieo:demo` gieo người `dulieu` và ba hàng chuẩn cho ba dòng demo. Không migration, không ADR | S4.2a |
 | **S4.3** | Chuẩn hoá & ánh xạ | `TU_DONG` theo bí danh, `rfq_item_goi_y`, hàng đợi năm thao tác, chuẩn hoá hồi tố; **L2**, **L3** vế hành vi, **L13**; dòng PRODUCT §5 (§8.2) | — |
 | **S4.4** | Lịch sử giá | `bid_dong_tho`, hàm *"giá đã lộ"*, `quan_sat_gia(p_moc)`; kịch bản 41 có `lines` và kim đơn giá, năm bộ quét; test kiến trúc liệt kê mọi tệp đọc `rfq_unsealed_bids`; đo hiệu năng có biên bản; gieo lại `gieo:demo`; **L5**, **L6** vế lịch sử | S3.2 (kịch bản 41) |
 | **S4.5** | Ghim chính sách + benchmark | Gọi `chinh_sach_tai` của S3.1; nhóm khoá `benchmark`; bảng kết quả và bảng con; bảng so sánh theo dòng ở `/mo-thau`; lớp dữ liệu nền trong bộ xuất ADR-059, định danh băm; **L14**, **L7**, **L6** vế benchmark; kê tên mọi ca chấm bị lật | S3.1 |

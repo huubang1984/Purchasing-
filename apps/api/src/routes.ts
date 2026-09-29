@@ -3,13 +3,14 @@
 //
 // Route là DỮ LIỆU: một mảng đọc được bằng `import { ROUTES }`, không cần khởi động máy chủ. Hình
 // dạng từng route và lớp canh thuần (`timViPhamBangRoute`) nằm ở `route-types.ts`; file này chỉ
-// LẮP ~~ba~~ [S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi
-// cặp (method, path) là duy nhất — lớp canh đòi thế.
+// LẮP ~~ba~~ ~~[S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai)~~ [S1.9101] BẢY nhóm (từ SÁU module — `auth.ts`
+// xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
 // ==============================================================================================
 import type { Route } from "./route-types.js";
 import { ROUTES_ANON } from "./routes/anon.js";
 import { ROUTES_AUTH, ROUTES_AUTH_SELF } from "./routes/auth.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
+import { ROUTES_DU_LIEU } from "./routes/du-lieu.js";
 import { ROUTES_GUEST } from "./routes/guest.js";
 import { ROUTES_PUBLIC } from "./routes/public.js";
 
@@ -19,5 +20,7 @@ export const ROUTES: readonly Route[] = [
   ...ROUTES_AUTH,
   ...ROUTES_GUEST,
   ...ROUTES_BUYER,
+  // [S1.9101 / S4.2b] Dữ liệu nền: hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
+  ...ROUTES_DU_LIEU,
   ...ROUTES_AUTH_SELF,
 ];
