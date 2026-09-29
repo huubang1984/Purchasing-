@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.2c2] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN TẠO GÓI THẦU
+// [S1.191 / S3.2c2] PHÉP ĐO CHO CÁC PHÉP TÍNH CỦA MÀN TẠO GÓI THẦU
 //
 // Mỗi hàm một bảng ca: hai luồng (tổ chức chưa bật, đã bật) × các trạng thái gói mà máy chủ phân biệt. Ca âm của từng
 // nút neo vào CHÍNH luật của máy chủ — K4a chỉ cho thu hồi ở DRAFT, lối gửi lại chỉ chạy khi gói nhận báo giá, cạnh về
@@ -20,14 +20,14 @@ import {
 
 const TRANG_THAI_GOI = ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED", "BAFO_OPEN", "AWARDED", "CANCELLED"] as const;
 
-describe("[S1.9101 / S3.2c2] thứ tự bước", () => {
+describe("[S1.191 / S3.2c2] thứ tự bước", () => {
   it("tổ chức đã bật: mời (b5) TRƯỚC ngân sách và phê duyệt (b4); chưa bật: thứ tự MVP1", () => {
     expect(thuTuBuoc(true)).toEqual(["b2", "b3", "b5", "b4"]);
     expect(thuTuBuoc(false)).toEqual(["b2", "b3", "b4", "b5"]);
   });
 });
 
-describe("[S1.9101 / S3.2c2] nhãn trạng thái lời mời", () => {
+describe("[S1.191 / S3.2c2] nhãn trạng thái lời mời", () => {
   it("năm trạng thái của CHECK `076` nói bằng lời; lạ thì nguyên văn; rỗng hay không phải chuỗi thì gạch", () => {
     expect(["UNSENT", "SENT", "REVOKED", "ACCEPTED", "DECLINED"].map(nhanTrangThaiLoiMoi)).toEqual(["chưa gửi", "đã gửi", "đã thu hồi", "đã nhận", "đã từ chối"]);
     expect(nhanTrangThaiLoiMoi("LA")).toBe("LA");
@@ -36,7 +36,7 @@ describe("[S1.9101 / S3.2c2] nhãn trạng thái lời mời", () => {
   });
 });
 
-describe("[S1.9101 / S3.2c2] hai nút của một dòng lời mời", () => {
+describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
   it("tổ chức chưa bật: cả hai nút ở mọi trạng thái gói — hợp đồng MVP1, máy chủ tự từ chối", () => {
     for (const g of TRANG_THAI_GOI) expect(nutLoiMoi(false, g, false), g).toEqual({ guiLai: true, thuHoi: true });
   });
@@ -61,7 +61,7 @@ describe("[S1.9101 / S3.2c2] hai nút của một dòng lời mời", () => {
   });
 });
 
-describe("[S1.9101 / S3.2c2] câu báo sau một lần mời", () => {
+describe("[S1.191 / S3.2c2] câu báo sau một lần mời", () => {
   it("UNSENT không nhãn (mời ở DRAFT): không lỗi, nói link CHƯA đi và đi lúc mở gói", () => {
     const b = baoSauKhiMoi({ status: "UNSENT", moiSauKhiKy: false });
     expect(b.loi).toBe(false);
@@ -83,7 +83,7 @@ describe("[S1.9101 / S3.2c2] câu báo sau một lần mời", () => {
   });
 });
 
-describe("[S1.9101 / S3.2c2] câu báo sau lần mở gói", () => {
+describe("[S1.191 / S3.2c2] câu báo sau lần mở gói", () => {
   it("tổ chức chưa bật: câu cũ, bất kể thân", () => {
     for (const ds of [[], ["x"], undefined]) expect(baoSauKhiMo(false, ds).loi).toBe(false);
     expect(baoSauKhiMo(false, []).chu).not.toMatch(/Link mời/u);
@@ -103,7 +103,7 @@ describe("[S1.9101 / S3.2c2] câu báo sau lần mở gói", () => {
   });
 });
 
-describe("[S1.9101 / S3.2c2] nút trả về soạn thảo và lý do", () => {
+describe("[S1.191 / S3.2c2] nút trả về soạn thảo và lý do", () => {
   it("ĐÚNG khi tổ chức đã bật và gói đang PENDING_APPROVAL (`077`)", () => {
     for (const g of TRANG_THAI_GOI) {
       expect(hienTraVe(true, g), g).toBe(g === "PENDING_APPROVAL");

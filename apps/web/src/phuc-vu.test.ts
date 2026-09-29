@@ -244,7 +244,7 @@ describe("bề mặt tệp", () => {
     // hàm trả chuỗi rỗng.
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
-      // [S1.9101 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
+      // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
       ...taoThau,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
       sealBid: () => Promise.resolve(new Uint8Array(0)),
@@ -1083,7 +1083,7 @@ describe("bề mặt tệp", () => {
     });
 
     // ==========================================================================================
-    // [S1.9101 / S3.2c2] MÀN TẠO GÓI Ở TỔ CHỨC ĐÃ BẬT: bước mời lên trước, lời mời «chưa gửi», lần mở gói nói link nào chưa
+    // [S1.191 / S3.2c2] MÀN TẠO GÓI Ở TỔ CHỨC ĐÃ BẬT: bước mời lên trước, lời mời «chưa gửi», lần mở gói nói link nào chưa
     // đi, nút theo trạng thái gói, và trả về soạn thảo có lý do. Luồng lấy từ `GET /policy/versions` (`daBat`).
     // ==========================================================================================
     const moTaoThau = async (daBat: boolean, trangThaiGoi: string, thay: (l: string) => Promise<{ status: number; body: unknown }> | undefined = () => undefined) => {
@@ -1105,7 +1105,7 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
-    it("[S1.9101 / S3.2c2] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt (lớp `moi-truoc`, số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
+    it("[S1.191 / S3.2c2] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt (lớp `moi-truoc`, số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
       const bat = await moTaoThau(true, "DRAFT");
       expect(bat.p.el("khung").lop.has("moi-truoc")).toBe(true);
       expect([bat.p.el("so-b5").textContent, bat.p.el("so-b4").textContent]).toEqual(["4", "5"]);
@@ -1119,7 +1119,7 @@ describe("bề mặt tệp", () => {
       expect(bat.p.el("khung").lop.has("moi-truoc")).toBe(false);
     });
 
-    it("[S1.9101 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
+    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
       const draft = await moTaoThau(true, "DRAFT");
       expect(draft.dongMoi()?.con[3]?.textContent).toBe("chưa gửi");
       expect((draft.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Thu hồi"]);
@@ -1132,7 +1132,7 @@ describe("bề mặt tệp", () => {
       expect((mvp1.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
     });
 
-    it("[S1.9101 / S3.2c2 · ADR-113] tao-thau: mời ở DRAFT (UNSENT) ⇒ câu nói link CHƯA đi; mời thêm ở OPEN gửi hỏng ⇒ lỗi chỉ đường Gửi lại link", async () => {
+    it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mời ở DRAFT (UNSENT) ⇒ câu nói link CHƯA đi; mời thêm ở OPEN gửi hỏng ⇒ lỗi chỉ đường Gửi lại link", async () => {
       const moi = (loi: unknown) => (l: string) =>
         l === "POST /rfqs/r-1/invitations" ? Promise.resolve({ status: 201, body: { invitation: loi } })
           : l === "POST /suppliers" ? Promise.resolve({ status: 201, body: { supplier: { id: "s-1" } } })
@@ -1153,7 +1153,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.9101 / S3.2c2 · ADR-113] tao-thau: mở gói trả `unsentInvitationIds` không rỗng ⇒ LỖI nói đúng số link chưa đi; rỗng ⇒ ok nói mọi link đã đi", async () => {
+    it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mở gói trả `unsentInvitationIds` không rỗng ⇒ LỖI nói đúng số link chưa đi; rỗng ⇒ ok nói mọi link đã đi", async () => {
       const mo = (ds: string[]) => (l: string) => (l === "POST /rfqs/r-1/open" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "OPEN" }, unsentInvitationIds: ds } }) : undefined);
       const hong = await moTaoThau(true, "PENDING_APPROVAL", mo(["i-1"]));
       await hong.p.bam("nut-mo");
@@ -1163,7 +1163,7 @@ describe("bề mặt tệp", () => {
       expect(du.p.el("ok4").textContent).toMatch(/mọi nhà cung cấp trong danh sách/u);
     });
 
-    it("[S1.9101 / S3.2c2 · 077] tao-thau: «Trả về soạn thảo» chỉ hiện ở PENDING_APPROVAL của tổ chức đã bật; lý do rỗng ⇒ không gọi máy chủ; có lý do ⇒ POST return-to-draft", async () => {
+    it("[S1.191 / S3.2c2 · 077] tao-thau: «Trả về soạn thảo» chỉ hiện ở PENDING_APPROVAL của tổ chức đã bật; lý do rỗng ⇒ không gọi máy chủ; có lý do ⇒ POST return-to-draft", async () => {
       expect((await moTaoThau(true, "DRAFT")).p.el("khoi-tra-ve").hidden).toBe(true);
       expect((await moTaoThau(false, "PENDING_APPROVAL")).p.el("khoi-tra-ve").hidden).toBe(true);
       const { p } = await moTaoThau(true, "PENDING_APPROVAL", (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "DRAFT" } } }) : undefined));

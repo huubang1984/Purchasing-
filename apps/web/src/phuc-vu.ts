@@ -88,7 +88,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.169 / S3.1c] `chinh-sach` — cảnh báo cấu hình rỗng ruột và số người tối thiểu của màn khai chính sách.
  *
- * [S1.9101 / S3.2c2] `tao-thau` — thứ tự bước, nút của dòng lời mời và câu báo của màn tạo gói theo luồng mời của tổ chức.
+ * [S1.191 / S3.2c2] `tao-thau` — thứ tự bước, nút của dòng lời mời và câu báo của màn tạo gói theo luồng mời của tổ chức.
  */
 export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau"] as const;
 

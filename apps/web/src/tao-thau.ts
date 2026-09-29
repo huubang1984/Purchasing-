@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S3.2c2] MÀN TẠO GÓI THẦU — THỨ TỰ BƯỚC VÀ LỜI NÓI THEO LUỒNG MỜI CỦA TỔ CHỨC
+// [S1.191 / S3.2c2] MÀN TẠO GÓI THẦU — THỨ TỰ BƯỚC VÀ LỜI NÓI THEO LUỒNG MỜI CỦA TỔ CHỨC
 //
 // Spec S3 §3.3 và §9 (S3.2c): ở tổ chức ĐÃ BẬT S3, danh sách mời dựng ở DRAFT, TRƯỚC khi nộp duyệt — chữ ký duyệt gói mang
 // băm của danh sách lúc ký (K4b) —, lời mời nằm *chưa gửi* (K6) cho tới lần mở gói, và lần mở gói gửi mọi link một lượt,

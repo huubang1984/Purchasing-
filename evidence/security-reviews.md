@@ -15905,7 +15905,7 @@ và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ c
 
 Không khoản nào mở hay đóng.
 
-# §S1.9101 — S3.2c2: MÀN `/tao-thau` THEO LUỒNG MỜI CỦA TỔ CHỨC, NÚT TRẢ VỀ SOẠN THẢO, LƯỢT ĐI THỬ T4 (K4a, K6)
+# §S1.191 — S3.2c2: MÀN `/tao-thau` THEO LUỒNG MỜI CỦA TỔ CHỨC, NÚT TRẢ VỀ SOẠN THẢO, LƯỢT ĐI THỬ T4 (K4a, K6)
 
 **Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; ở tổ chức chưa bật, màn giữ nguyên hình dạng MVP1
 (đối chứng ở §4). Không migration, không mã máy chủ.

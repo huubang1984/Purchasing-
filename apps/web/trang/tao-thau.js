@@ -10,7 +10,7 @@
 // Trang này KHÔNG import một mảnh mật mã nào: khoá của gói thầu sinh ở máy chủ lúc `open`, và
 // người mua không giữ nó. Màn này chỉ ra lệnh và đọc lại trạng thái.
 //
-// [S1.9101 / S3.2c2] Hai luồng mời dưới công tắc ADR-080. Tổ chức CHƯA bật: nguyên MVP1 — mời sau khi mở, link đi lúc mời.
+// [S1.191 / S3.2c2] Hai luồng mời dưới công tắc ADR-080. Tổ chức CHƯA bật: nguyên MVP1 — mời sau khi mở, link đi lúc mời.
 // Tổ chức ĐÃ bật: bước mời đứng TRƯỚC bước ngân sách và phê duyệt (người duyệt ký lên danh sách — K4b), lời mời nằm «chưa
 // gửi» tới lần mở gói (K6), lần mở gói nói link nào chưa đi, và gói đang chờ duyệt trả về soạn thảo được, có lý do (`077`).
 // Màn hỏi `GET /policy/versions` MỘT lần sau đăng nhập để biết luồng nào; mọi phép tính ở `/lib/tao-thau.js`.
@@ -23,7 +23,7 @@ const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
-// [S1.9101 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
+// [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
 
 async function goi(method, duong, than) {
@@ -148,7 +148,7 @@ function moSauDangNhap(me, dungLai) {
 }
 
 /**
- * [S1.9101 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc chưa — `daBat` của `GET /policy/versions`, đúng hàm công tắc mà
+ * [S1.191 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc chưa — `daBat` của `GET /policy/versions`, đúng hàm công tắc mà
  * máy chủ hỏi (ADR-080). Đọc hỏng thì màn ở luồng MVP1: máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ nói kém đi.
  */
 async function napLuong() {
@@ -158,7 +158,7 @@ async function napLuong() {
   } catch { /* mất mạng: giữ luồng MVP1 */ }
 }
 
-/** [S1.9101 / S3.2c2] Đặt luồng rồi vẽ lại: thứ tự bước, số bước, hai đoạn ghi, khối trả về soạn thảo. */
+/** [S1.191 / S3.2c2] Đặt luồng rồi vẽ lại: thứ tự bước, số bước, hai đoạn ghi, khối trả về soạn thảo. */
 function datLuong(moi) {
   luong = moi;
   const thuTu = thuTuBuoc(luong.daBat);
@@ -339,7 +339,7 @@ for (const [nut, duong, xong] of [
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`);
     if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }
     if (duong === "open") {
-      // [S1.9101 / S3.2c2 · ADR-113] Gói ĐÃ mở dù một phần link chưa đi — câu báo nói số link ấy, bảng lời mời chỉ dòng.
+      // [S1.191 / S3.2c2 · ADR-113] Gói ĐÃ mở dù một phần link chưa đi — câu báo nói số link ấy, bảng lời mời chỉ dòng.
       const b = baoSauKhiMo(luong.daBat, r.body?.unsentInvitationIds);
       bao($(b.loi ? "loi4" : "ok4"), b.chu);
     } else {
@@ -349,7 +349,7 @@ for (const [nut, duong, xong] of [
   });
 }
 
-// [S1.9101 / S3.2c2] Trả gói đang chờ duyệt về soạn thảo (`POST /rfqs/:rfqId/return-to-draft`, `077`): lý do bắt buộc và
+// [S1.191 / S3.2c2] Trả gói đang chờ duyệt về soạn thảo (`POST /rfqs/:rfqId/return-to-draft`, `077`): lý do bắt buộc và
 // vào sổ; chữ ký cũ không bị xoá — chúng thôi đếm khi nội dung hay danh sách đổi (K4b).
 $("nut-tra-ve").addEventListener("click", async () => {
   bao($("loi4"), ""); bao($("ok4"), "");
@@ -399,7 +399,7 @@ $("nut-moi").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/invitations`, { supplierId: phien.supplierId, contactId: phien.contactId });
   if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không mời được")); return; }
   // Mã mời KHÔNG về màn này: nó đi thẳng tới bộ gửi, và thân `201` chỉ mang id lời mời.
-  // [S1.9101 / S3.2c2 · ADR-113] Ở tổ chức đã bật, `201` không còn nghĩa là link đã đi — câu báo đọc trạng thái thật.
+  // [S1.191 / S3.2c2 · ADR-113] Ở tổ chức đã bật, `201` không còn nghĩa là link đã đi — câu báo đọc trạng thái thật.
   const b = baoSauKhiMoi(r.body?.invitation ?? {});
   bao($(b.loi ? "loi5" : "ok5"), b.chu);
   await napLoiMoi();
@@ -424,7 +424,7 @@ async function napLoiMoi() {
       tr.append(td);
     }
     const td = document.createElement("td");
-    // [S1.9101 / S3.2c2] Nút theo luồng và trạng thái gói: ở tổ chức đã bật, thu hồi chỉ ở DRAFT (K4a) và gửi lại chỉ khi
+    // [S1.191 / S3.2c2] Nút theo luồng và trạng thái gói: ở tổ chức đã bật, thu hồi chỉ ở DRAFT (K4a) và gửi lại chỉ khi
     // gói nhận báo giá (K6 — trước lần mở chưa có token nào).
     const nutDong = nutLoiMoi(luong.daBat, luong.trangThaiGoi, m.revokedAt !== null);
     if (nutDong.guiLai || nutDong.thuHoi) {
@@ -457,7 +457,7 @@ async function napLoiMoi() {
         if (gl.status !== 200) { bao($("loi5"), loiCua(gl, "Không gửi lại được link")); return; }
         bao($("ok5"), `Đã gửi link mới tới ${m.contactName} qua ${m.linkChannel}. Link cũ chưa dùng (nếu có) đã hết hiệu lực; ` +
           "nhà cung cấp vào lại đúng báo giá đã nộp.");
-        // [S1.9101 / S3.2c2] Lời mời «chưa gửi» của tổ chức đã bật thành «đã gửi» sau lần gửi lại được — vẽ lại bảng.
+        // [S1.191 / S3.2c2] Lời mời «chưa gửi» của tổ chức đã bật thành «đã gửi» sau lần gửi lại được — vẽ lại bảng.
         if (luong.daBat) await napLoiMoi();
       });
       const nut = document.createElement("button");
