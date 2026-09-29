@@ -32,6 +32,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // `log-tu-choi-mat` qua HTTP trên tiến trình thật (dòng không mang id tổ chức, id người dùng hay thân yêu cầu).
     "apps/api/src/log-tu-choi-mat.int.test.ts",
     "packages/identity/src/mo-ta-hang-dong.test.ts",
+    // [S1.9151 / khoản 166] `moTaLoiKhongGiaTri` nay MỘT bản ở identity: `mo-ta-loi.test.ts` của gói đo luật A2 ở mức hàm trên lớp lỗi
+    // thật (`DenialAuditFailedError` mang cause 55P03, `TenantError` — không message, không giá trị), và vế khoản 166 của
+    // `composition.int.test.ts` đo dòng log của worker dựng từ cấu hình (không id yêu cầu, id tổ chức, id job, không thông điệp Postgres).
+    "apps/unseal-worker/src/composition.int.test.ts",
+    "packages/identity/src/mo-ta-loi.test.ts",
   ],
   A3: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",

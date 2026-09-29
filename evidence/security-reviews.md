@@ -16573,6 +16573,116 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
 
+# §S1.9151 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không
+route, không màn, không migration, không ADR. Đóng 168, 166; đóng chỉ lời 156; mở 9451.
+
+## 1. Vòng này là gì
+
+Lô L5 của đợt trả nợ lô B: ba khoản cùng chạm `apps/unseal-worker/src/tien-trinh.ts`. Khoản 168 — sổ `kind` mồ côi
+(`KIND_KHONG_NGUOI_NHAN`) khai ở runner của `api`, tiến trình có danh sách tổ chức HẸP NHẤT (tập đã thấy enqueue, rỗng lại sau mỗi
+lần khởi động), nên bảo đảm *"vẫn chết ồn ào"* không đứng với job của tổ chức chưa ai xếp việc qua `api`. Khoản 166 — worker giữ
+một bản rút gọn của `moTaLoiKhongGiaTri` (không tầng `cause`, không nhận `TenantError` theo lớp) vì `g1-` cấm import `apps/api`,
+nên tiến trình duy nhất giải mã được có chẩn đoán nghèo hơn. Khoản 156 — thân khoản đã được ADR-083/ADR-077 làm; còn một chú thích
+lỗi thời và một hàng sổ chưa đóng.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Các điểm tự chốt trong phạm vi đã duyệt ở mục 5.
+
+## 3. Đo trước
+
+- **168** (`apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹, viết trước khi vá, chạy trên mã cũ): tổ chức mới `Cong ty F` (chưa một
+  `enqueueJob` nào đi qua `api`), sổ mượn một dòng thử `THU_MO_COI_168`, chèn hai job (`THU_MO_COI_168`, `THU_KHONG_KHAI_168`), dựng
+  worker từ `docCauHinh` (`TRUSTPROCURE_OUTBOX_POLL_MS=200`) ⇒ sau 10 s job mồ côi vẫn `{ status: 'PENDING', attempts: 0 }`, không
+  dòng log — đúng như §S1.83 tả. Đo lại ở vòng này bằng đột biến M1 (mục 6): cùng thông điệp đỏ.
+- **168, nửa `api`** (`apps/api/src/composition.int.test.ts` vế khoản 168, thêm ở `81afbc2`): trên dây nối cũ (đột biến M5 = thêm lại
+  `kindKhongNguoiNhan` vào runner của `api`) job mồ côi của tổ chức đã vào `toChucDaThay` bị `api` claim ⇒
+  `{ status: 'FAILED', attempts: 1, last_failure_reason: 'NO_HANDLER' }` — tức trước vòng này `api` là tiến trình duy nhất đưa
+  job mồ côi tới trạng thái cuối, và chỉ cho tổ chức nó đã thấy.
+- **166** (`apps/unseal-worker/src/composition.int.test.ts` vế khoản 166, chạy trên mã cũ): worker dựng từ `docCauHinh`, một giao
+  dịch `app_api` giữ khoá tư vấn ghi sổ của tổ chức (đợi tới khi `pg_locks` thấy khoá THẬT SỰ được cầm), job `UNSEAL_RFQ` trên yêu
+  cầu không tồn tại ⇒ handler ném `DenialAuditFailedError` mang lỗi 55P03 ở `cause` ⇒ dòng cũ
+  `[unseal-worker] outbox UNSEAL_RFQ HANDLER_ERROR DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST` (không SQLSTATE), trong
+  khi `moTaLoiKhongGiaTri` của `api` cho lỗi cùng hình dạng ra `… <- error 55P03`. Đo lại ở vòng này bằng đột biến M2: cùng chuỗi.
+- **156**: không phép đo mới — chỉ đối chiếu lời khai với ADR-083 §Quyết định 2–3 và `canh-ton-dong.ts`.
+
+## 4. Thay đổi
+
+- `apps/api/src/composition.ts`: bỏ import `KIND_KHONG_NGUOI_NHAN` và dòng `kindKhongNguoiNhan` khỏi runner; đoạn lý do S1.81 gạch tại
+  chỗ, câu đúng viết cạnh; chú thích "CÒN MỞ … đúng bài toán của khoản 116" (khoản 156) gạch tại chỗ, câu đúng ghi ADR-083/ADR-077 và
+  giới hạn. `apps/api/src/test-services.ts`: bản gương, cùng một dòng bỏ.
+- `apps/unseal-worker/src/composition.ts`: option `kindKhongNguoiNhan?: readonly string[]` ở `TuyChonRunnerWorker`, docstring ghi vì sao
+  tuỳ chọn ở tầng này (dây nối thật đo ở ⑹). `apps/unseal-worker/src/tien-trinh.ts`: truyền `Object.keys(KIND_KHONG_NGUOI_NHAN)` lúc
+  dựng runner (không hoist); bỏ `moTaLoi` cục bộ, chín chỗ gọi đổi sang `moTaLoiKhongGiaTri` của identity; hai khối chú thích khoản 166
+  gạch tại chỗ.
+- `packages/identity/src/mo-ta-loi.ts` (mới): thân hàm dời nguyên từ `apps/api/src/mo-ta-loi.ts` cùng khối lý do; `index.ts` export;
+  `packages/identity/src/mo-ta-loi.test.ts` (mới, `[INV-A2]`): bốn vế trên lớp lỗi thật. `apps/api/src/mo-ta-loi.ts`: xuất lại, giữ hai
+  bộ nghe pool; `mo-ta-loi.test.ts` thêm vế `toBe`.
+- `packages/outbox/src/runner.ts`, `so-kind-mo-coi.ts`, `index.ts`: docstring — tiến trình khai nay là worker, lý do S1.81 gạch, "hôm nay:
+  `RFQ_DEADLINE_EXTENDED_NOTICE`" gạch (sổ rỗng từ S1.91).
+- `tests/architecture/barrel-exports.test.ts`: một dòng khai `moTaLoiKhongGiaTri` ở danh sách trắng identity.
+- Test: `tien-trinh.int.test.ts` vế ⑸ (api không truyền sổ, worker truyền) và ⑹ mới; `apps/unseal-worker/src/composition.int.test.ts` vế
+  khoản 166 mới (`[INV-A2]`); `apps/api/src/composition.int.test.ts` vế khoản 168 mới.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Chuyển, không khai ở cả hai.** §S1.83 nêu hai hình dạng; khai ở cả hai làm `attempts` của job mồ côi thôi đọc được (hai runner
+  tranh nhau) — `runner.ts` đã nói thế từ S1.81. Chọn chuyển.
+- **Option ở worker là TUỲ CHỌN, không bắt buộc.** Bắt buộc ở kiểu chỉ thêm một lớp cho cùng lỗi (dây nối thật đã đo ở ⑹) và bắt mọi
+  runner dựng trong test khai một sổ chúng không dùng.
+- **Phép đo mượn một dòng thử trên `KIND_KHONG_NGUOI_NHAN` thật** thay vì mở một cửa tiêm: cửa tiêm đo được cửa ấy, không đo được dây
+  nối mặc định. Đối tượng không `Object.freeze`; ai đóng băng thì vế NÉM chứ không xanh giả, và khối lý do ghi bước kế tiếp.
+- **Vế `api` ở `81afbc2` dùng tổ chức và người dùng ACTIVE riêng.** Lần đầu viết với email lạ thì đối chứng dương không ra tin (handler
+  `LOGIN_LINK_SEND` không gửi gì cho email không có người dùng — chống dò tài khoản) — sửa cảnh, không sửa handler.
+- **Đặt hàm chung ở identity** (đề bài đã chốt), và **xuất lại từ `apps/api/src/mo-ta-loi.ts`** thay vì đổi mọi chỗ gọi trong `api`:
+  giữ nguyên bề mặt của `api`, và vế `toBe` bảo đảm không mọc lại một bản bọc.
+- **156 chỉ lời, không thêm phép đo**: ADR-083 đã có test riêng; viết thêm một test "cho khoản 156" là gắn nhãn lên phép đo của khoản khác.
+- **Review commit của agent trước** (`e7a8f3f`): đúng ba khoản, đúng tệp, đúng quy ước; thiếu MỘT phép đo — nửa "api KHÔNG khai" —
+  và thiếu bàn giao. Bổ sung ở `81afbc2`; không amend.
+
+## 6. Đột biến
+
+Kịch bản `lo51-dot-bien-2.py` (ngoài kho): sửa tệp, chạy test của lô, khôi phục nguyên văn (kiểm bằng so sánh nội dung). Năm ca, mỗi ca ĐỎ:
+- M1 [168] bỏ `kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN)` ở `tien-trinh.ts` ⇒ ⑹ đỏ: `expected { status: 'PENDING', attempts: 0 }
+  to deeply equal { status: 'FAILED', attempts: 1, last_failure_reason: 'NO_HANDLER' }` (12 vế còn lại của tệp bỏ qua bởi `-t`).
+- M5 [168] thêm lại import `KIND_KHONG_NGUOI_NHAN` và dòng `kindKhongNguoiNhan` vào runner của `apps/api/src/composition.ts` ⇒ vế `api` đỏ:
+  `expected { status: 'FAILED', attempts: 1, … } to deeply equal { status: 'PENDING', attempts: 0, … }`.
+- M2 [166] bản chung bỏ tầng `cause` (`return dong;`) ⇒ 4 vế đỏ ở 3 tệp: identity unit (`DenialAuditFailedError` và
+  `PermissionAuditFailedError` mất `<- error 55P03`), api unit (khoản 119), worker int (dòng của tiến trình thật mất `<- error 55P03`).
+- M3 [166] `apps/api/src/mo-ta-loi.ts` xuất một hàm BỌC thay vì hàm của identity ⇒ vế `toBe` đỏ.
+- M4 [166] bản chung bỏ `if (loi instanceof TenantError)` ⇒ 3 vế đỏ (identity unit; api unit khoản 118 và 119): `expected 'TenantError' to be
+  'TenantError SESSION_STATE_LEFT'`.
+- 156: không đột biến — chỉ lời.
+
+## 7. Giới hạn, nói ra
+
+- Sổ mồ côi hôm nay RỖNG: hai mảng lọc của hai tiến trình chưa đổi; phép đo chỉ chứng minh đường sẽ chạy khi có dòng thật.
+- "ĐÚNG MỘT tiến trình khai" đo bằng hành vi của hai tiến trình dựng từ cấu hình, không bằng một cổng tĩnh; một tiến trình THỨ BA khai
+  sổ (chưa có) sẽ không bị cổng nào bắt.
+- Vế `api` là phép đo VẮNG MẶT có đối chứng dương (tin của lời `/auth/link` thứ hai): nó chứng minh runner đã chạy trọn một lượt claim
+  cho tổ chức ấy sau khi job mồ côi tồn tại, không chứng minh mọi lượt sau đó.
+- ADR-083 chỉ phát hiện (≥ 15 phút), không tự phục hồi; mẫu lọc chưa chạy thật trên CloudWatch; tự phục hồi của `api` là khoản 9451.
+- `tools/` vẫn giữ bốn bản mô tả lỗi cục bộ (§S1.9171) — nay có đường trả qua `@trustprocure/identity`, chưa làm.
+- Cổng `tests/architecture` có 3 vế đỏ TIỀN TỒN ở `duong-sql-ngoai-with-tenant` (⒜ ⒞ ⒟): census chưa khai
+  `packages/test-support/src/postgres-cuc-bo.ts` (commit nền `3d991a3`, tệp cấm, ngoài lô) — không do lô này, không sửa ở lô này.
+- Hai tệp test mang nhãn `[INV-A2]` mới chưa khai ở `so-khai-nhan.ts` (tệp cấm) — dòng khai ở bàn giao mục 6; tới khi khai, `pnpm evidence`
+  sẽ báo nhãn đặt sai chỗ.
+
+## 8. Số đo
+
+- `pnpm typecheck` (ở `e7a8f3f` và ở `81afbc2`): 0 lỗi, ~20 s.
+- `pnpm exec eslint <15 tệp của e7a8f3f>`: 0 lỗi; `pnpm exec eslint apps/api/src/composition.int.test.ts` (81afbc2): 0 lỗi.
+- `pnpm exec depcruise apps packages tests --config .dependency-cruiser.cjs`: ở `e7a8f3f` 364 module / 1474 cạnh, 0 vi phạm; ở `81afbc2`
+  364 module / 1475 cạnh, 0 vi phạm.
+- Cổng vitest của lô ở `e7a8f3f` (`apps/api/src/composition.int.test.ts apps/api/src/mo-ta-loi.test.ts packages/identity/src/mo-ta-loi.test.ts
+  apps/unseal-worker/src/tien-trinh.int.test.ts apps/unseal-worker/src/composition.int.test.ts packages/outbox tests/architecture`):
+  44 tệp — 43 đạt, 1 đỏ; 483 test — 479 đạt, 3 đỏ (tiền tồn, mục 7), 1 bỏ qua; 172 s. Trong đó: `tien-trinh.int` 13/13,
+  worker `composition.int` 6/6, api `composition.int` 19/19, api `mo-ta-loi` 5/5, identity `mo-ta-loi` 4/4, `packages/outbox` 70/70.
+- Ở `81afbc2`: `apps/api/src/composition.int.test.ts` 20/20 (tệp duy nhất đổi so với lượt cổng trên).
+- Đột biến: 5 ca / 5 đỏ (mục 6).
+
 # §S1.9171 — CỔNG `pool-nghe-du-tin-hieu`: QUÉT CẢ `tools/`, NHẬN DIỆN THEO IMPORT ĐÃ PHÂN GIẢI, `NGOAI_LE` CÓ RĂNG — KHOẢN 176, 180, 182 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một cổng kiến trúc và lớp chẩn đoán của bốn
