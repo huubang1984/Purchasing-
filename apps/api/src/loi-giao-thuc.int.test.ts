@@ -161,7 +161,7 @@ beforeAll(async () => {
     )
   ).rows[0]!.id;
   const tokKhach = await withTenant(apiPool, orgA, async (c) => {
-    const loi = await createInvitation(c, orgA, { rfqId: rfqA, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: sPM });
+    const loi = await createInvitation(c, orgA, { rfqId: rfqA, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: sPM }, apiPool);
     const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sPM });
     const otp = await issueOtpChallenge(c, orgA, { token: t.token, channel: "SMS", callerFingerprint: `ip-${duoi}`, pepper: PEPPER });
     if (!otp.ok) throw new Error(`khong phat duoc OTP: ${otp.reason}`);

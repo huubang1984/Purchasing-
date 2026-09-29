@@ -8952,3 +8952,52 @@ do dưới người mở, một dòng `sau-commit 2/3`, log không mang token ha
 1 500 ms ⇒ phản hồi dưới 3 000 ms; mời ở `OPEN` gửi được và gửi hỏng; không khoá ghi sổ nào bị giữ trong lúc gửi; đối chứng MVP1;
 chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `danhDauDaGui`; bốn ca của bộ điều phối trên route giả. Đột biến:
 §S1.188.
+
+## ADR-114 — S3.2d: lần thêm hay thu hồi lời mời sai trạng thái (K4a) là `CONTROL_DENIED` mang mã
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29: lần từ chối K4a là `CONTROL_DENIED`, vào sổ;
+S3.2d chỉ làm khoản 255, khoản 254 đi ở PR riêng (#199) · **[S1.194]** · **Khoản nợ liên quan:** 255 (đóng ở vòng này) · **Liên quan:**
+ADR-108 (khuôn tên ràng buộc → mã), ADR-084 ⑷ ⑸ (ba lớp từ chối), ADR-060 (luật chọn lọc), ADR-112 (trần lần từ chối theo phiên),
+ADR-113 · **Biên bản:** `evidence/security-reviews.md` §S1.194
+
+### Bối cảnh
+
+Khoản 255 (rổ B) ghi từ nhánh song song đã xoá (§S1.189), và lượt đi thử T4 của S3.2c2 đo nó trên cụm thật (§S1.193): trigger
+`rfq_invitations_kiem_danh_sach` (`076`) chặn lần thêm lời mời ở trạng thái khác `DRAFT`/`OPEN` và lần thu hồi ngoài `DRAFT` bằng
+một `check_violation` KHÔNG tên. `CHOT_THEO_RANG_BUOC` không nhận ra, nên người gọi nhận `422` mang câu không dấu của trigger và sổ
+không ghi gì. Đo lại qua HTTP ở nền của vòng này: mời lúc gói chờ duyệt, thu hồi lúc chờ duyệt, thu hồi ở `OPEN` — không hàng
+`CONTROL_DENIED` nào. K12 (spec S3 §5.1) đòi mỗi chốt được đo theo từng hạng mục từ S3.1.
+
+### Quyết định
+
+1. **Hai nhánh K4a mang tên ràng buộc, khuôn ADR-108.** Migration `080_k4a_co_ten.sql` định nghĩa lại
+   `rfq_invitations_kiem_danh_sach` — thân `076` trích nguyên văn, thêm `CONSTRAINT = …` ở đúng hai nhánh: `k4a_them_sai_trang_thai`,
+   `k4a_thu_hoi_sai_trang_thai`. Thông điệp của CSDL không đổi.
+2. **Hai mã ở `CHOT_VAO_SO`:** `K4A_THEM_SAI_TRANG_THAI`, `K4A_THU_HOI_SAI_TRANG_THAI` — `vaoSo: true`, chốt `K4a` (kiểu `DongChot.chot`
+   nhận vế có hậu tố).
+3. **Tầng gói từ chối theo chốt.** `createInvitation` và `revokeInvitation` nhận `auditPool` BẮT BUỘC, bắt chính lỗi của trigger,
+   nhận ra nó bằng tên, và từ chối qua `tuChoiTheoChot`: một hàng ở giao dịch độc lập, payload `{ ma }`, `resource` là GÓI;
+   `ChotKiemSoatError` ⇒ `422` mang câu của bảng. `revokeInvitation` đọc gói của lời mời TRƯỚC câu ghi, vì lỗi của trigger làm hỏng
+   giao dịch. Nhánh không tên — không thấy gói, hai nhánh K6 — không ghi: không lời gọi nào của người dùng tới được chúng.
+
+### Phương án đã cân nhắc
+
+- **K4a là `RFQ_STATE_DENIED`** (lời mời đi sai thứ tự của gói). Loại: người thêm lời mời lúc gói chờ duyệt có quyền `rfq.invite`
+  và gói ở một trạng thái hợp lệ — thứ chặn họ là chốt *danh sách được ký là danh sách được mời*, đúng định nghĩa `CONTROL_DENIED`
+  của ADR-084 ⑸. Chủ dự án chốt `CONTROL_DENIED`.
+- **Vị từ hỏi trước câu ghi, như K1 (`kiemChot`).** Loại: trigger giữ thẩm quyền và khoá `FOR SHARE` hàng gói, nên thứ tự thật giữa
+  lần mời và một cạnh trạng thái đang chạy chỉ trigger biết; một câu hỏi trước câu ghi đua với cạnh ấy và có thể ghi một lời từ
+  chối cho lần ghi mà trigger cho qua, hay ngược lại. Bắt chính lời từ chối có tên ghi đúng lần từ chối đã xảy ra — khuôn J3/D2.
+
+### Hệ quả, nói thẳng
+
+- **`createInvitation` và `revokeInvitation` đổi chữ ký** (tham số thứ tư bắt buộc); mọi lời gọi đổi theo — route mời, route thu hồi,
+  phần bù MVP1 của lần mời, `gieo:demo`, test. Lần thu hồi thêm một câu đọc trước câu ghi.
+- **Lần từ chối K4a vào trần lần từ chối theo phiên** (ADR-112) sẵn: `tuChoiTheoChot` ghi qua `throwAuditedDenial`.
+- **Thông điệp người dùng thấy đổi** từ câu không dấu của trigger sang câu của bảng; `422` giữ nguyên. Màn `/tao-thau` in lỗi của
+  máy chủ (`loiCua`), nên người soạn mời lúc gói chờ duyệt nay đọc câu có dấu chỉ đường *trả về soạn thảo*.
+
+### Đo
+
+`apps/api/src/luong-moi-s3.int.test.ts` khối S3.2d — sáu ca K4a qua HTTP, gồm đối chứng MVP1; phép khớp tên hai chiều ở
+`packages/rfq/src/rfq.int.test.ts` gom thêm thân K4a. Đột biến: §S1.194.

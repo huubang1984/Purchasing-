@@ -168,7 +168,7 @@ async function loiMoi(t: ToChuc, rfqId: string): Promise<string> {
     [t.org, ncc, `lh${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "1"), t.pm.u, t.pm.s],
   );
   return withTenant(apiPool, t.org, async (c) =>
-    (await createInvitation(c, t.org, { rfqId, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: t.pm.s })).id,
+    (await createInvitation(c, t.org, { rfqId, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: t.pm.s }, apiPool)).id,
   );
 }
 
