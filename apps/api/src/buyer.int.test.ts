@@ -161,7 +161,8 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     // dẫn) để lại `resource_id = UUID0`; số bản ghi có toạ độ bằng đúng số route khai nó.
     const coToaDo = routeGhi.filter((r) => "resourceId" in r && r.resourceId !== undefined).length;
     expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
-    expect(routeGhi.length - coToaDo, "route ghi KHÔNG có toạ độ: chỉ POST /policy, /suppliers, /rfqs (tạo mới)").toBe(3);
+    // [S1.201 / S3.6a] Thêm `POST /categories` — tạo mới, chưa có toạ độ.
+    expect(routeGhi.length - coToaDo, "route ghi KHÔNG có toạ độ: chỉ POST /policy, /suppliers, /rfqs, /categories (tạo mới)").toBe(4);
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' AND resource_id = $3",
       [orgA, khongQuyen.id, UUID0],
@@ -888,8 +889,40 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
 
     const ns = await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "150000000.00", currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
+    // [S1.201 / S3.6a] Có ngân sách mà chưa có nhóm hàng ⇒ chốt thứ hai của cạnh nói, cùng khuôn: 422 có tên và MỘT hàng sổ.
+    const thieuNhom = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
+    expect(thieuNhom.status, thieuNhom.text).toBe(422);
+    expect(thieuNhom.text).toContain("phải có nhóm hàng trước khi nộp duyệt");
+    const nhom = await goi("POST", "/categories", tc, { ma: "thep", ten: "Thep xay dung" });
+    expect(nhom.status, nhom.text).toBe(201);
+    const nhomId = (nhom.body as { nhomHang: { id: string; ma: string } }).nhomHang.id;
+    expect((nhom.body as { nhomHang: { ma: string } }).nhomHang.ma).toBe("THEP");
+    // Thân thiếu `categoryId` là 422, không phải một lần XOÁ nhóm hàng của gói đang soạn.
+    expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, {})).status).toBe(422);
+    const dat = await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId });
+    expect(dat.status, dat.text).toBe(200);
+    expect((dat.body as { rfq: { categoryId: string } }).rfq.categoryId).toBe(nhomId);
     const lai = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(lai.status, lai.text).toBe(200);
+    const { rows: chot } = await db.pool.query<{ ma: string }>(
+      "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgB, rfqId],
+    );
+    expect(chot.map((r) => r.ma)).toEqual(["THIEU_NGAN_SACH", "THIEU_NHOM_HANG"]);
+    // Nhóm hàng khoá sau DRAFT: đổi lúc gói chờ duyệt là lời từ chối trạng thái có tên, không 500.
+    const doiMuon = await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId });
+    expect(doiMuon.status, doiMuon.text).toBe(422);
+    // Danh sách và đổi trạng thái: người tạo gói (PM) đọc được nhưng không quản lý được; FINANCE ngừng dùng được.
+    const ds = await goi("GET", "/categories", pm);
+    expect(ds.status, ds.text).toBe(200);
+    expect((ds.body as { nhomHang: { id: string; conDung: boolean }[] }).nhomHang).toEqual([expect.objectContaining({ id: nhomId, conDung: true })]);
+    expect((await goi("POST", "/categories", pm, { ma: "VPP", ten: "Van phong pham" })).status).toBe(403);
+    expect((await goi("PUT", `/categories/${nhomId}/status`, pm, { conDung: false })).status).toBe(403);
+    const ngung = await goi("PUT", `/categories/${nhomId}/status`, tc, { conDung: false });
+    expect(ngung.status, ngung.text).toBe(200);
+    expect((ngung.body as { nhomHang: { conDung: boolean } }).nhomHang.conDung).toBe(false);
+    expect((await goi("PUT", `/categories/${nhomId}/status`, tc, { conDung: "khong" })).status).toBe(422);
+    expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: "khong-phai-uuid" })).status).toBe(422);
   });
 });
 
@@ -937,6 +970,13 @@ describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ
     expect(rfq.status, rfq.text).toBe(201);
     const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
     expect((await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
+    // [S1.201 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — người tài chính dựng nhóm, người tạo gói gán nó.
+    if (bat) {
+      const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
+      expect(nhom.status, nhom.text).toBe(201);
+      const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+      expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId })).status).toBe(200);
+    }
     const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(nop.status, nop.text).toBe(200);
     return { org, pm, mua, rfqId };
