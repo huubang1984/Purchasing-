@@ -1456,9 +1456,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "to_chuc_da_bat_s3", chuKy: "uuid", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "chinh_sach_hieu_luc", chuKy: "uuid, timestamptz", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "076_danh_sach_moi.sql" },
+    // [S1.9101 / S3.2b] Hàm thứ sáu, `rfq_bam_ngan_sach`: chữ ký ràng vào ngân sách sau khi cạnh về DRAFT mở lại nó.
+    { ham: "rfq_bam_ngan_sach", chuKy: "uuid", migration: "9501_canh_ve_soan.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ [S1.185] năm hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ [S1.9101] sáu hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1645,10 +1647,16 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.185 / S3.2a / K4a · K4b · K6] Bốn hàm trigger của danh sách mời. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại
     // đúng lỗ nó đóng: chữ ký không mang băm danh sách (UNIQUE mới thành trang trí), cạnh mở gói không đếm trên danh sách
     // hiện tại, lời mời đổi ở PENDING_APPROVAL, hay token đúc cho gói chưa mở.
-    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
-    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
-    { ham: "rfq_invitations_kiem_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
+    // [S1.9101 / S3.2b] Hai thân dưới định nghĩa lại ở `9501_canh_ve_soan`: chữ ký mang cả băm ngân sách, cạnh mở gói đếm trên nó.
+    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "9501_canh_ve_soan.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
+    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "9501_canh_ve_soan.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
+    // [S1.9101 / S3.2b] `9501_canh_ve_soan` định nghĩa lại thân K4a: hai nhánh mang tên ràng buộc để tầng gói ghi `CONTROL_DENIED`
+    // (khuôn `074`, ADR-108). Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "rfq_invitations_kiem_danh_sach", migration: "9501_canh_ve_soan.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
     { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
+    // [S1.9101 / S3.2b] Cạnh PENDING_APPROVAL→DRAFT chỉ ở tổ chức đã bật. Một thân `RETURN NEW` đưa được gói MVP1 về DRAFT — trái
+    // ADR-080 ⑶ — mà không lớp nào kêu.
+    { ham: "rfq_kiem_canh_ve_soan", migration: "9501_canh_ve_soan.sql", trigger: ["rfq_packages_kiem_canh_ve_soan"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3289,6 +3297,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "9501_canh_ve_soan.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7708,6 +7717,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "9501_canh_ve_soan.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8004,6 +8014,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "074_tu_choi_co_ten.sql",
         "075_vai_khoi_tao.sql",
         "076_danh_sach_moi.sql",
+        "9501_canh_ve_soan.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

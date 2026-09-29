@@ -24,6 +24,8 @@ export {
   getRfq,
   listRfqItems,
   openRfq,
+  // [S1.9101 / S3.2b] Cạnh PENDING_APPROVAL→DRAFT — chỉ tổ chức đã bật S3; người tạo hoặc người giữ `rfq.approve` (ADR-084 ⑵).
+  returnRfqToDraft,
   submitRfqForApproval,
   type AddRfqItemInput,
   type ApproveRfqInput,
@@ -31,6 +33,7 @@ export {
   type CreateRfqInput,
   type ExtendDeadlineInput,
   type OpenRfqInput,
+  type ReturnRfqToDraftInput,
   type RfqItemRecord,
   type RfqRecord,
   type RfqStatus,

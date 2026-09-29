@@ -303,6 +303,9 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
   "public.rfq_invitations_kiem_danh_sach",
   "public.rfq_kiem_chu_ky_danh_sach_khi_mo",
+  // [S1.9101 / S3.2b / `9501_canh_ve_soan`] BEFORE UPDATE `WHEN` cạnh PENDING_APPROVAL→DRAFT: từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
+  // chức CHƯA bật. `dungKichBan()` đưa một gói về DRAFT sau lần ký bật S3: một nhân chứng.
+  "public.rfq_kiem_canh_ve_soan",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
@@ -1707,6 +1710,56 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "org_policy_signatures",
+  );
+
+  // ---- [S1.9101 / S3.2b / `9501_canh_ve_soan`] Cạnh PENDING_APPROVAL→DRAFT chỉ đi được ở tổ chức ĐÃ BẬT, nên đứng SAU lần ký.
+  // Gói mới ghim phiên bản 2 — phiên bản hiệu lực từ lần ký, K1 đòi thế ở cạnh nộp —, nộp duyệt, rồi câu trả về soạn thảo là
+  // nhân chứng của `rfq_kiem_canh_ve_soan`.
+  const rfq3 = await chenNC(
+    "public.rfq_packages",
+    api(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Mua thep hinh', $2, $3, $4) RETURNING id, org_id, title, deadline_at, created_by, created_by_session_id",
+      [org, MAI_SAU, pm.u, pm.s],
+      { org_id: org, title: "Mua thep hinh", deadline_at: MAI_SAU, created_by: pm.u, created_by_session_id: pm.s },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_budgets",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5) RETURNING org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id",
+        [org, rfq3, cs2, pm.u, pm.s],
+        { org_id: org, rfq_id: rfq3, estimated_value: "1000000.00", currency: "VND", policy_id: cs2, created_by: pm.u, created_by_session_id: pm.s },
+      ),
+    ),
+    1,
+    "rfq_budgets",
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api(
+        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+          "RETURNING status, submitted_by, submitted_by_session_id",
+        [rfq3, pm.u, pm.s],
+        { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+      ),
+    ),
+    1,
+    "rfq_packages",
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfq3], { status: "DRAFT" }),
+    ),
+    1,
+    "rfq_packages",
   );
 
   return { orgId: org };

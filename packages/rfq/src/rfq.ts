@@ -467,6 +467,84 @@ export async function approveRfq(
   });
 }
 
+export interface ReturnRfqToDraftInput {
+  readonly rfqId: string;
+  /** Vì sao trả về — bắt buộc, đi vào sổ. Người tạo rút về để sửa; người duyệt trả về thay vì không ký (ADR-084 ⑵). */
+  readonly reason: string;
+  /** [ADR-016] Phiên của CHÍNH người trả về. */
+  readonly actorSessionId: string;
+}
+
+/**
+ * [S1.9101 / S3.2b] PENDING_APPROVAL → DRAFT — đường ứng dụng ĐẦU TIÊN của cạnh C-1 (`011`), và là lối DUY NHẤT để sửa danh sách
+ * mời sau khi nộp duyệt ở tổ chức đã bật S3: ở `PENDING_APPROVAL`, K4a cấm thêm hay thu hồi lời mời (`076`).
+ *
+ * Ai được đi (ADR-084 ⑵): NGƯỜI TẠO gói, giữ `rfq.create` — rút về để sửa; hoặc người giữ `rfq.approve` — trả về thay vì không
+ * ký. Hàm chọn mã quyền theo chính hàng gói, rồi hỏi `requirePermission` như mọi cổng của gói: lần thiếu quyền để lại
+ * `PERMISSION_DENIED` (K12).
+ *
+ * Chỉ tổ chức ĐÃ BẬT S3 đi được cạnh này (chủ dự án chốt 2026-09-27, S1.185). Tầng gói hỏi CHÍNH hàm công tắc mà trigger
+ * `rfq_packages_kiem_canh_ve_soan` (`9501`) hỏi lại — một phép so, hai người dùng —, và lời từ chối KHÔNG vào sổ: nó nói cấu hình
+ * chưa sẵn sàng, không nói ai cố đi tắt (ADR-060, ADR-084 ⑸).
+ *
+ * Cạnh KHÔNG xoá chữ ký nào (`011` C-1): chữ ký cũ vô hiệu bằng băm khi nội dung hay danh sách đổi, và vẫn đếm được nếu gói được nộp
+ * lại nguyên như cũ.
+ */
+export async function returnRfqToDraft(
+  client: pg.PoolClient,
+  orgId: string,
+  input: ReturnRfqToDraftInput,
+  auditPool: pg.Pool,
+): Promise<RfqRecord> {
+  await assertTenantBound(client, orgId, "returnRfqToDraft");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  const reason = batBuoc(input.reason, "reason", 2000);
+
+  const goi = await docRfq(client, input.rfqId);
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: goi.created_by === actor.id ? PERMISSIONS.RFQ_CREATE : PERMISSIONS.RFQ_APPROVE,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  const { rows: bat } = await client.query<{ da_bat: boolean }>(
+    "SELECT public.to_chuc_da_bat_s3($1::pg_catalog.uuid) AS da_bat",
+    [orgId],
+  );
+  if (bat[0]?.da_bat !== true) {
+    throw new RfqError("Tổ chức chưa bật kiểm soát theo bậc: trả gói thầu về soạn thảo chưa mở (ADR-080).");
+  }
+
+  const { rows } = await client.query<HangRfq>(
+    // `AND status = 'PENDING_APPROVAL'`: cùng lý do [H-3] của `submitRfqForApproval` — gói đã ở DRAFT thì câu ghi không đổi gì.
+    `UPDATE public.rfq_packages SET status = 'DRAFT'
+      WHERE id OPERATOR(pg_catalog.=) $1 AND status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL' RETURNING ${COT_RFQ}`,
+    [input.rfqId],
+  );
+  const hang = rows[0];
+  if (hang === undefined) {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
+
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "RFQ_RETURNED_TO_DRAFT",
+    resourceType: "rfq_package",
+    resourceId: hang.id,
+    payload: { reason },
+  });
+  return doiRfq(hang);
+}
+
 /**
  * PENDING_APPROVAL → OPEN.
  *

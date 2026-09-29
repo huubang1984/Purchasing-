@@ -121,6 +121,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [S1.185 / S3.2a] Điểm chịu lực của băm danh sách NULL ở MVP1: thêm lời mời ở PENDING_APPROVAL rồi cùng người ký lại vẫn bị
     // UNIQUE chặn, và hai đột biến (băm cho mọi tổ chức, UNIQUE mất `NULLS NOT DISTINCT`) mở gói cấp kép với MỘT người.
     "packages/rfq/src/danh-sach-moi.int.test.ts",
+    // [S1.9101 / S3.2b / lượt soi] Cạnh về DRAFT mở lại ngân sách: gói cấp kép hạ ước lượng rồi nộp lại KHÔNG mở được bằng chữ ký
+    // ký lúc nó cần hai người — chữ ký ràng vào ngân sách; đột biến bỏ phép đếm trên ngân sách thì mở được.
+    "packages/rfq/src/ve-soan.int.test.ts",
     "packages/unseal/src/unseal.int.test.ts",
   ],
   D3: [
@@ -367,7 +370,14 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // K4a · K4b · K6 — [S1.185 / S3.2a] danh sách mời. `danh-sach-moi` đo ba chốt CSDL dưới `app_api`: mỗi trạng thái của gói
   // một ca, đua `FOR SHARE` với cạnh nộp duyệt, đổi danh sách GIỮA hai chữ ký, và mỗi trigger một đột biến. Tầng gói và route
   // của lời mời đổi ở S3.2b.
-  K4a: ["packages/rfq/src/danh-sach-moi.int.test.ts"],
-  K4b: ["packages/rfq/src/danh-sach-moi.int.test.ts"],
-  K6: ["packages/rfq/src/danh-sach-moi.int.test.ts"],
+  // [S1.9101 / S3.2b] Tầng gói và route. `ve-soan` đo cạnh PENDING_APPROVAL→DRAFT — lối duy nhất sửa danh sách sau khi nộp —
+  // và chữ ký trên danh sách đổi sau khi trả về (K4b). `link-moi-mo-goi` đo qua HTTP thật: lời mời ở DRAFT không token, link đi lúc
+  // mở gói sau commit, `UNSENT`/`SENT` và lối gửi lại (K6), lời từ chối K4a vào sổ `CONTROL_DENIED`, tên ràng buộc hai chiều.
+  K4a: [
+    "apps/api/src/link-moi-mo-goi.int.test.ts",
+    "packages/rfq/src/danh-sach-moi.int.test.ts",
+    "packages/rfq/src/ve-soan.int.test.ts",
+  ],
+  K4b: ["packages/rfq/src/danh-sach-moi.int.test.ts", "packages/rfq/src/ve-soan.int.test.ts"],
+  K6: ["apps/api/src/link-moi-mo-goi.int.test.ts", "packages/rfq/src/danh-sach-moi.int.test.ts"],
 };

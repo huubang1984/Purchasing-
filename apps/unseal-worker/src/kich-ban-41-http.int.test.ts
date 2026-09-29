@@ -641,6 +641,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: trangThai.pm2.cookie };
+        // [S1.9101 / S3.2b] Trả gói HY SINH về soạn thảo — tới nghiệp vụ: luồng MVP1 dừng ở 422 có tên (*"chưa bật"*), luồng S3
+        // đưa `hyB` về DRAFT (200) và lần mở ngay sau đó dừng ở 422 trạng thái có tên. Không chạm gói của kịch bản.
+        case "POST /rfqs/:rfqId/return-to-draft":
+          return { path: r.path.replace(":rfqId", hyB), body: { reason: "tra ve de quet" }, cookie: m };
         case "POST /rfqs/:rfqId/open":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/extend":

@@ -528,6 +528,8 @@ const DANH_SACH_TRANG_RFQ = [
   "lietKePhienBanChinhSach",
   "listRfqItems",
   "openRfq",
+  // [S1.9101 / S3.2b] Cạnh PENDING_APPROVAL→DRAFT: đổi trạng thái và ghi sổ, trả hàng gói — không token, không phiên.
+  "returnRfqToDraft",
   "setRfqBudget",
   "submitRfqForApproval",
 ];
@@ -588,6 +590,8 @@ const DANH_SACH_TRANG_INVITATION = [
   "PepperError",
   "PepperRing",
   "createInvitation",
+  // [S1.9101 / S3.2b / K6] Đặt `SENT` cho lời mời mà link đã gửi được: nhận id lời mời, trả số hàng — không token, không phiên.
+  "danhDauDaGuiLink",
   // [sổ nợ 55 / 042] Xoá hàng cũ của bucket toàn cục; nhận Pool, trả số hàng — không token, không phiên.
   "donBucketNguoiGoiCu",
   // [sổ nợ 57 / 044] Cùng hình dạng, bảng khác: nhận Pool, trả số hàng. Nó KHÔNG nhận mốc tuổi —
@@ -603,6 +607,9 @@ const DANH_SACH_TRANG_INVITATION = [
   // rfq_invitation_tokens va ham nay khong cham toi. Cong quyen rfq.invite nam THANG trong
   // than ham, va no o ro HAM_DOC_CO_QUYEN cua cong-quyen-route.test.ts.
   "listInvitations",
+  // [S1.9101 / S3.2b / ADR-082 ⑼] Đúc token cho MỌI lời mời còn sống trong giao dịch mở gói, dưới phiên NGƯỜI MỞ — cùng hình dạng
+  // `issueMagicLinkToken`: token dạng rõ chỉ về tay người gọi để trao cho bộ gửi sau commit, không trả phiên.
+  "phatLinkMoiKhiMoGoi",
   "redeemMagicLink",
   // [S1.181 / ADR-110] Phát token MỚI cho một lời mời còn sống, dưới phiên NGƯỜI MUA — cùng hình dạng
   // `issueMagicLinkToken`: token dạng rõ chỉ về tay người gọi để trao cho bộ gửi, không trả phiên.

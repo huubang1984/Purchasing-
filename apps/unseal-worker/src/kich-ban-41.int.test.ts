@@ -347,7 +347,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
           contactId: lh.id,
           linkChannel: "EMAIL",
           actorSessionId: sMua,
-        });
+        }, apiPool);
         trangThai.loiMoi.push({
           invitationId: lm.id,
           supplierId: s.id,

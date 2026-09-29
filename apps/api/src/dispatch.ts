@@ -178,7 +178,7 @@ class VuotTranTuChoiError extends Error {
 }
 
 import { THAN_429_MFA, agentGoiDuoc } from "./route-types.js";
-import type { ApiServices, Route, ViecSauCommitCoBu } from "./route-types.js";
+import type { ApiServices, Route, ViecGuiNhieuSauCommit, ViecSauCommitCoBu } from "./route-types.js";
 import { COOKIE_PHIEN_KHACH } from "./routes/anon.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
@@ -497,15 +497,63 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     // cầu (lượt soi 64a-2): lần đăng ký thứ hai ném ngay trong handler, giao dịch rollback — thay vì trả `phanHoiKhiHong` của việc đầu trong
     // khi việc sau đã commit mà không ai bù.
     let viecCoBu: ViecSauCommitCoBu | undefined;
+    // [S1.9101 / S3.2b] Loạt gửi sau commit của tổ chức đã bật S3 dùng CHUNG chỗ với việc có bù: mỗi yêu cầu tối đa MỘT việc quyết
+    // phản hồi, nên hai kiểu đăng ký cùng hỏi cả hai biến — đăng ký thứ hai, dù khác kiểu, ném trong handler và giao dịch rollback.
+    let viecGuiNhieu: ViecGuiNhieuSauCommit | undefined;
+    const daCoViecQuyetPhanHoi = (): boolean => viecCoBu !== undefined || viecGuiNhieu !== undefined;
     const afterCommitCoBu = (viec: ViecSauCommitCoBu): void => {
-      if (viecCoBu !== undefined) throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
+      if (daCoViecQuyetPhanHoi()) throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
       viecCoBu = viec;
+    };
+    const afterCommitGuiNhieu = (viec: ViecGuiNhieuSauCommit): void => {
+      if (daCoViecQuyetPhanHoi()) throw Object.assign(new Error("mot yeu cau chi dang ky duoc mot viec sau commit co bu"), { name: "ViecCoBuThuHai" });
+      viecGuiNhieu = viec;
     };
     const tranSauCommitMs = deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH;
     const chaySauCommit = async (r: ApiResponse, orgId: string): Promise<ApiResponse> => {
       // [review H2-7] Chỉ chạy khi phản hồi là thành công: một handler xếp việc rồi trả 4xx (sau
       // này) không được gửi gì đi. Và mỗi việc có TRẦN thời gian — xem `afterCommitTimeoutMs`.
       if (r.status >= 400) return r;
+      // [S1.9101 / S3.2b / ADR-082 ⑼] Loạt gửi: mỗi lần gửi một trần, song song; lần hỏng hay quá trần ⇒ một dòng `sau-commit` mỗi
+      // lần. Rồi MỘT giao dịch mới ghi kết quả; ném hay chưa ghi trọn ⇒ dòng `ghi-ket-qua-gui` và `ghiDuoc = false`. Phản hồi là của `phanHoi` —
+      // không lần gửi hỏng nào đổi mã trạng thái (chủ dự án chốt 2026-09-29). Việc thường chạy sau, chỉ khi phản hồi ấy dưới 400.
+      const g = viecGuiNhieu;
+      if (g !== undefined) {
+        const lanGui = await Promise.allSettled(g.viec.map((v) => coHan(v.gui, tranSauCommitMs, "SauCommitQuaHan")));
+        const daGui: string[] = [];
+        const chuaGui: string[] = [];
+        lanGui.forEach((k, i) => {
+          const khoa = g.viec[i]?.khoa ?? "";
+          if (k.status === "fulfilled") {
+            daGui.push(khoa);
+          } else {
+            chuaGui.push(khoa);
+            console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(k.reason)}`);
+          }
+        });
+        let ghiDuoc: boolean;
+        try {
+          ghiDuoc = await withTenant(deps.pool, orgId, (c) => g.ghiKetQua(c, { daGui, chuaGui }), { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+          if (!ghiDuoc) console.error(`[api] ${requestId} ghi-ket-qua-gui GhiChuaTron`);
+        } catch (loiGhi) {
+          ghiDuoc = false;
+          console.error(`[api] ${requestId} ghi-ket-qua-gui ${moTaLoiKhongGiaTri(loiGhi)}`);
+        }
+        const phanHoi = g.phanHoi({ daGui, chuaGui }, ghiDuoc);
+        // Việc thường chỉ chạy cho một phản hồi THÀNH CÔNG — cùng luật với việc có bù hỏng bên dưới và với `outboxNudge`: phản hồi lỗi
+        // (lần gửi lại hỏng ⇒ 502) nói thao tác đã bị bù, và một việc thường không được chạy cho nó. Mọi lần gửi hỏng mà phản hồi vẫn
+        // 2xx (mở gói, mời thêm) thì thao tác chính đứng, và việc thường chạy.
+        if (phanHoi.status < 400) {
+          for (const viec of sauCommit) {
+            try {
+              await coHan(viec, tranSauCommitMs, "SauCommitQuaHan");
+            } catch (e) {
+              console.error(`[api] ${requestId} sau-commit ${moTaLoiKhongGiaTri(e)}`);
+            }
+          }
+        }
+        return phanHoi;
+      }
       // [S1.70 / khoản 124] Việc có bù chạy TRƯỚC việc thường — kết quả của nó có thể thay phản hồi, và một việc thường không được chạy cho
       // một phản hồi sắp bị thay. Việc có bù hỏng hay quá trần ⇒ một dòng `sau-commit`, bù trong giao dịch MỚI của cùng tổ chức (lần lấy kết
       // nối có trần `TRAN_CHO_KET_NOI_BU_MS`), rồi `phanHoiKhiHong`; việc thường bị bỏ. Bù cũng hỏng ⇒ `phanHoiKhiBuHong` — mặc định 500 thân
@@ -824,7 +872,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             try {
               phanHoiHandler = await handler.chay(() =>
                 chayVoiTranTuChoi({ dem: demTuChoiCuaHandler }, () =>
-                  route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, choKyChinhSach }),
+                  route.handler({ req, orgId: cookie.orgId, client, actor, auditPool: deps.auditPool, services: deps.services, afterCommit, afterCommitCoBu, afterCommitGuiNhieu, choKyChinhSach }),
                 ),
               );
             } finally {

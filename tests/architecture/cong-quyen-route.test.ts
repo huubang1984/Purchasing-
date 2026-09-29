@@ -66,6 +66,9 @@ const HAM_DOI_TRANG_THAI = [
   "createProcurementPolicy",
   "createRfq",
   "createSupplier",
+  // [S1.9101 / S3.2b / K6] Đặt `SENT` cho lời mời mà link đã gửi được — gọi trong phần ghi kết quả sau commit của ba route gửi
+  // link (mở gói, mời, gửi lại), dưới mã quyền route đã kiểm; cùng hợp đồng phần bù của khoản 124.
+  "danhDauDaGuiLink",
   "dispatchUnseal",
   "extendRfqDeadline",
   "issueMagicLinkToken",
@@ -73,10 +76,15 @@ const HAM_DOI_TRANG_THAI = [
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
   "openRfq",
+  // [S1.9101 / S3.2b / ADR-082 ⑼] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
+  "phatLinkMoiKhiMoGoi",
   // [S1.181 / ADR-110] Gửi lại link cho một lời mời còn sống: thu hồi token chưa dùng, phát token mới — route đòi
   // `rfq.invite` như hai route mời và thu hồi; phần bù thu hồi đúng token vừa phát, dưới cùng mã quyền.
   "reissueInvitationLink",
   "requestUnseal",
+  // [S1.9101 / S3.2b] Cạnh PENDING_APPROVAL→DRAFT — route khai `rfq.create`, và hàm tự gọi `requirePermission` với mã theo người
+  // (ADR-084 ⑵).
+  "returnRfqToDraft",
   "revokeInvitation",
   "revokeMagicLinkToken",
   "setRfqBudget",

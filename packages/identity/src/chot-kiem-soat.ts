@@ -41,12 +41,17 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_DIEU_PHOI_DE_XUAT"
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
+  | "K4A_THEM_SAI_TRANG_THAI"
+  | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "THIEU_NGAN_SACH";
 
 export interface DongChot {
-  /** Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). */
-  readonly chot: `${"D" | "J" | "K"}${number}`;
+  /**
+   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.9101] Mã tách đôi của spec
+   * §5.1 mang MỘT chữ thường (`K4a`), cùng khuôn mã của sổ bất biến (`KHUON_MA`, khoản 246).
+   */
+  readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
   readonly vaoSo: boolean;
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
@@ -135,6 +140,29 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
     thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
+  // [S1.9101 / S3.2b] Hai lời từ chối K4a — chủ dự án chốt ngày 2026-09-29: lớp `CONTROL_DENIED`, vào sổ. Trigger
+  // `rfq_invitations_kiem_danh_sach` (`076`, thân `9501`) là lớp có thẩm quyền; `createInvitation` và `revokeInvitation` bắt
+  // CHÍNH lỗi của nó theo tên ràng buộc.
+  K4A_THEM_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thêm lời mời vào danh sách đã nộp duyệt hay đã đóng — ở tổ chức đã bật S3, danh sách được ký là danh sách " +
+      "được mời (spec §5.1 K4a), nên lần cố ấy là lần cố sửa một danh sách mà người khác đã hay sắp ký lên",
+    thongDiep:
+      "Danh sách mời chỉ đổi được khi gói thầu còn soạn thảo, và chỉ thêm được khi gói đã mở; gói đang chờ duyệt thì trả về " +
+      "soạn thảo trước (K4a).",
+  },
+  K4A_THU_HOI_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thu hồi lời mời khỏi danh sách đã nộp duyệt hay đã mở — thu hẹp danh sách sau khi ký là đúng đường chiếm pool " +
+      "(ADR-058 ⒜) mà S3 chặn; thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (S1.185)",
+    thongDiep:
+      "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
+      "thu hồi được (K4a).",
+  },
   J3_PHIEN_DE_XUAT_DUYET: {
     chot: "J3",
     vaoSo: true,
@@ -158,6 +186,9 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
+  // [S1.9101 / S3.2b] Hai nhánh K4a của `rfq_invitations_kiem_danh_sach` (`9501_canh_ve_soan`).
+  k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
+  k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
 };
 
 /** Mã chốt của một lỗi `pg` do trigger ném — `check_violation` (23514) mang một tên có trong `CHOT_THEO_RANG_BUOC` — hay `null`. */

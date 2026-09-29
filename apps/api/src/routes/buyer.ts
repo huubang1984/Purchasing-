@@ -30,14 +30,17 @@ import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@
 import {
   clearOtpLockout,
   createInvitation,
+  danhDauDaGuiLink,
   issueMagicLinkToken,
   listInvitations,
+  phatLinkMoiKhiMoGoi,
   reissueInvitationLink,
   revokeInvitation,
   revokeMagicLinkToken,
   CHANNELS,
   CUA_SO_LINK_MOI_GIAY,
   type Channel,
+  type LinkChoGui,
 } from "@trustprocure/invitation";
 import {
   addRfqItem,
@@ -53,6 +56,7 @@ import {
   lietKePhienBanChinhSach,
   listRfqItems,
   openRfq,
+  returnRfqToDraft,
   setRfqBudget,
   submitRfqForApproval,
   type Currency,
@@ -75,8 +79,8 @@ import {
   getUnsealRequest,
   requestUnseal,
 } from "@trustprocure/unseal";
-import { HttpError, type ApiRequest } from "../http.js";
-import type { BuyerReadRoute, BuyerWriteRoute } from "../route-types.js";
+import { HttpError, type ApiRequest, type ApiResponse } from "../http.js";
+import type { BuyerContext, BuyerReadRoute, BuyerWriteRoute, KetQuaGuiSauCommit } from "../route-types.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -182,6 +186,66 @@ const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
 const policyIdParam = (req: ApiRequest): string => uuidParam(req, "policyId");
+
+// ----------------------------------------------------------------------------------------------
+// [S1.9101 / S3.2b / ADR-082 ⑼] GỬI LINK MỜI SAU COMMIT — tổ chức đã bật S3
+// ----------------------------------------------------------------------------------------------
+/**
+ * Giao các link vừa đúc cho loạt gửi sau commit của bộ điều phối (`afterCommitGuiNhieu`): mỗi link đúng một lần; gửi được ⇒ lời mời
+ * `SENT` (`danhDauDaGuiLink`), hỏng hay quá trần ⇒ token VỪA ĐÚC bị thu hồi (`revokeMagicLinkToken`, `LINK_SEND_FAILED`) và lời mời ở
+ * lại `UNSENT` — không thu hồi lời mời: thu hồi sẽ thu hẹp một danh sách đã ký. Chủ dự án chốt ngày 2026-09-29: *chưa gửi* luôn nghĩa
+ * là không còn link sống, và phản hồi nói lời mời nào chưa gửi thay vì đổi mã trạng thái.
+ *
+ * Đích RỖNG — người liên hệ không có số cho kênh SMS hay ZNS — không đi tới bộ gửi: lần gửi ấy hỏng có tên, cùng đường với một lần
+ * gửi hỏng. Phần ghi kết quả chạy dưới phiên của người gọi route, không qua cổng quyền lần nữa — cùng hợp đồng phần bù của khoản 124
+ * (lượt soi 64a-7): nó chỉ đặt trạng thái của chính các lời mời và thu hồi chính các token mà lời gọi này vừa đúc.
+ */
+function guiLinkMoiSauCommit(
+  ctx: BuyerContext,
+  links: readonly LinkChoGui[],
+  phanHoi: (ketQua: KetQuaGuiSauCommit, ghiDuoc: boolean) => ApiResponse,
+): void {
+  const theoLoiMoi = new Map(links.map((l) => [l.invitationId, l]));
+  ctx.afterCommitGuiNhieu({
+    viec: links.map((l) => ({
+      khoa: l.invitationId,
+      gui: () =>
+        l.destination === ""
+          ? Promise.reject(Object.assign(new Error("nguoi lien he khong co dich cho kenh cua loi moi"), { name: "KhongCoDichGuiLink" }))
+          : ctx.services.invitationLinkSender.send({
+              orgId: ctx.orgId,
+              invitationId: l.invitationId,
+              channel: l.channel,
+              destination: l.destination,
+              token: l.token,
+            }),
+    })),
+    // [lượt soi S1.9101] Đặt `SENT` trước — chỉ cho lời mời của gói còn `OPEN`, câu không ném —, rồi thu hồi token của MỌI lời mời
+    // của loạt còn `UNSENT`: lần gửi hỏng hay quá trần (`LINK_SEND_FAILED`), và lần gửi được mà gói đã rời `OPEN` (huỷ, đóng) trước
+    // câu đặt `SENT` (`RFQ_LEFT_OPEN` — sổ không được nói một lần gửi thành công là hỏng). Ghi
+    // xong thì *chưa gửi* nghĩa là không còn link sống. Có lời mời gửi được mà không đặt được `SENT` ⇒ `false`: phản hồi nói trạng
+    // thái chưa ghi trọn.
+    ghiKetQua: async (client, ketQua) => {
+      const khongDatDuoc = await danhDauDaGuiLink(client, ctx.orgId, ketQua.daGui);
+      const thuHoi = [
+        ...ketQua.chuaGui.map((id) => [id, "LINK_SEND_FAILED"] as const),
+        ...khongDatDuoc.map((id) => [id, "RFQ_LEFT_OPEN"] as const),
+      ];
+      for (const [id, reason] of thuHoi) {
+        const l = theoLoiMoi.get(id);
+        if (l === undefined) continue;
+        await revokeMagicLinkToken(client, ctx.orgId, { tokenId: l.tokenId, invitationId: id, actorSessionId: ctx.actor.sessionId, reason });
+      }
+      return khongDatDuoc.length === 0;
+    },
+    phanHoi,
+  });
+}
+
+/** Thân `linkMoi` của phản hồi: id lời mời đã gửi và chưa gửi; `trangThaiChuaGhi` khi lần ghi kết quả sau khi gửi hỏng. */
+function thanLinkMoi(ketQua: KetQuaGuiSauCommit, ghiDuoc: boolean): Record<string, unknown> {
+  return { daGui: ketQua.daGui, chuaGui: ketQua.chuaGui, ...(ghiDuoc ? {} : { trangThaiChuaGhi: true }) };
+}
 
 // ----------------------------------------------------------------------------------------------
 // ĐỌC
@@ -884,23 +948,52 @@ const ghi: readonly BuyerWriteRoute[] = [
   },
   {
     method: "POST",
+    path: "/rfqs/:rfqId/return-to-draft",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.9101 / S3.2b / ADR-084 ⑵] Người TẠO gói (giữ `rfq.create`) hoặc người giữ `rfq.approve`. Cổng của bộ điều phối là
+    // `rfq.create` vì mọi vai giữ `rfq.approve` hôm nay cũng giữ `rfq.create` — phép đo ở `packages/identity/src/ma-tran-quyen.test.ts`
+    // đỏ ngày ma trận đổi điều ấy; `returnRfqToDraft` hỏi đúng mã theo người: `rfq.create` cho người tạo, `rfq.approve` cho người khác.
+    permission: PERMISSIONS.RFQ_CREATE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        rfq: await returnRfqToDraft(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), reason: chuoiBatBuoc(ctx.req.body, "reason"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
     path: "/rfqs/:rfqId/open",
     audience: "BUYER",
     mutates: true,
     permission: PERMISSIONS.RFQ_OPEN,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: {
-        rfq: await openRfq(
-          ctx.client,
-          ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, orgKeys: ctx.services.orgKeyProvisioner },
-          ctx.auditPool,
-        ),
-      },
-    }),
+    handler: async (ctx) => {
+      const rfq = await openRfq(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, orgKeys: ctx.services.orgKeyProvisioner },
+        ctx.auditPool,
+      );
+      // [S1.9101 / S3.2b / ADR-082 ⑼] Tổ chức đã bật: phiên người mở đúc token cho MỌI lời mời còn sống trong CHÍNH giao dịch này —
+      // sau `openRfq`, vì K6 đòi gói đã mở —, rồi link đi sau commit. Tổ chức chưa bật: `null`, link đã đi lúc mời, và thân phản hồi
+      // là thân của MVP1 (spec §8.11).
+      const links = await phatLinkMoiKhiMoGoi(ctx.client, ctx.orgId, { rfqId: rfq.id, actorSessionId: ctx.actor.sessionId });
+      if (links === null) return { status: 200, body: { rfq } };
+      if (links.length > 0) {
+        guiLinkMoiSauCommit(ctx, links, (ketQua, ghiDuoc) => ({ status: 200, body: { rfq, linkMoi: thanLinkMoi(ketQua, ghiDuoc) } }));
+      }
+      return { status: 200, body: { rfq, linkMoi: { daGui: [], chuaGui: [] } } };
+    },
   },
   {
     method: "POST",
@@ -979,13 +1072,45 @@ const ghi: readonly BuyerWriteRoute[] = [
       // `supplier_contacts` — không từ thân yêu cầu (cùng kỷ luật với OTP, ADR-015 [C1]).
       const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, supplierId)).find((c) => c.id === contactId);
       if (lienHe === undefined) throw new HttpError(422, "nguoi lien he khong thuoc nha cung cap");
-      const loi = await createInvitation(ctx.client, ctx.orgId, {
-        rfqId: rfqIdParam(ctx.req),
-        supplierId,
-        contactId,
-        linkChannel: kenhTuyChon(ctx.req.body),
-        actorSessionId: ctx.actor.sessionId,
-      });
+      const loi = await createInvitation(
+        ctx.client,
+        ctx.orgId,
+        {
+          rfqId: rfqIdParam(ctx.req),
+          supplierId,
+          contactId,
+          linkChannel: kenhTuyChon(ctx.req.body),
+          actorSessionId: ctx.actor.sessionId,
+        },
+        ctx.auditPool,
+      );
+      // [S1.9101 / S3.2b / ADR-082 ⑼] Trạng thái lúc chèn nói lời mời thuộc luồng nào — trigger `076` quyết, route không tự hỏi
+      // công tắc: `UNSENT` là tổ chức đã bật. Ở DRAFT (không nhãn *mời sau khi ký*) chưa có link nào — token đúc lúc mở gói (K6).
+      // Ở OPEN, link đi ngay sau commit; gửi hỏng thì lời mời ở lại `UNSENT` và phản hồi vẫn là `201` kèm danh sách chưa gửi.
+      if (loi.status === "UNSENT") {
+        // [lượt soi S1.9101] Kênh không có đích (SMS hay ZNS cho người liên hệ không có số) ⇒ 422, giao dịch rollback. Không chặn ở
+        // đây thì lời mời vào danh sách được ký, mọi lần gửi đều hỏng, và K4a cấm thu hồi nó ở OPEN — kẹt vĩnh viễn. MVP1 giữ
+        // [S1.70]: gửi hỏng ⇒ 502 và lời mời bị thu hồi.
+        const dich = loi.linkChannel === "EMAIL" ? lienHe.email : (lienHe.phone ?? "");
+        if (dich === "") throw new HttpError(422, "nguoi lien he khong co so dien thoai cho kenh cua loi moi");
+        if (!loi.moiSauKhiKy) return { status: 201, body: { invitation: loi } };
+        const tMoi = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
+        const link: LinkChoGui = {
+          invitationId: loi.id,
+          tokenId: tMoi.tokenId,
+          token: tMoi.token,
+          channel: loi.linkChannel,
+          destination: dich,
+        };
+        guiLinkMoiSauCommit(ctx, [link], (ketQua, ghiDuoc) => ({
+          status: 201,
+          body: {
+            invitation: { ...loi, status: ketQua.daGui.length > 0 && ghiDuoc ? "SENT" : "UNSENT" },
+            linkMoi: thanLinkMoi(ketQua, ghiDuoc),
+          },
+        }));
+        return { status: 201, body: { invitation: loi } };
+      }
       const t = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
       // Token đi tới bộ gửi TIÊM vào và KHÔNG về client.
       // [S1.70 / khoản 124] Trước khoản này bộ gửi được `await` ngay tại đây, TRONG giao dịch — hai lần `appendAuditEvent` ở trên giữ khoá tư
@@ -1006,7 +1131,12 @@ const ghi: readonly BuyerWriteRoute[] = [
             token: t.token,
           }),
         bu: async (client) => {
-          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
+          await revokeInvitation(
+            client,
+            ctx.orgId,
+            { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" },
+            ctx.auditPool,
+          );
         },
         phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, loi moi da thu hoi" } },
         phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc loi moi", invitationId: loi.id } },
@@ -1024,7 +1154,14 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: invitationIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: {
+        revoked: await revokeInvitation(
+          ctx.client,
+          ctx.orgId,
+          { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
     }),
   },
   {
@@ -1051,6 +1188,25 @@ const ghi: readonly BuyerWriteRoute[] = [
       const lienHe = (await listSupplierContacts(ctx.client, ctx.orgId, loi.supplierId)).find((c) => c.id === loi.contactId);
       if (lienHe === undefined) throw new HttpError(409, "nguoi lien he cua loi moi khong con");
       const t = kq.token;
+      // [S1.9101 / S3.2b / ADR-084 ⑵] Lời mời CHƯA GỬI của tổ chức đã bật: gửi được thì nó thành `SENT`. Hợp đồng lỗi giữ nguyên
+      // ADR-110 — gửi hỏng ⇒ token vừa phát bị thu hồi, `502`; thu hồi cũng hỏng ⇒ `500`. Lời mời đã `SENT` đi đường cũ bên dưới.
+      if (loi.status === "UNSENT") {
+        const link: LinkChoGui = {
+          invitationId: loi.id,
+          tokenId: t.tokenId,
+          token: t.token,
+          channel: loi.linkChannel,
+          destination: loi.linkChannel === "EMAIL" ? lienHe.email : (lienHe.phone ?? ""),
+        };
+        guiLinkMoiSauCommit(ctx, [link], (ketQua, ghiDuoc) => {
+          if (ketQua.daGui.length > 0) return { status: 200, body: { reissued: true, ...(ghiDuoc ? {} : { trangThaiChuaGhi: true }) } };
+          if (ghiDuoc) {
+            return { status: 502, body: { error: "khong gui duoc link moi; link moi da thu hoi, link cu chua dung da het hieu luc" } };
+          }
+          return { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc link moi" } };
+        });
+        return { status: 200, body: { reissued: true } };
+      }
       ctx.afterCommitCoBu({
         viec: () =>
           ctx.services.invitationLinkSender.send({

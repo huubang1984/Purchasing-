@@ -7184,6 +7184,7 @@ là S3.1b; các vế về người tạo là S3.3, S3.5, S3.6, S3.7.
 - Quyết định này thay tiểu mục ADR-020 [S1.70] cho tổ chức đã bật S3; tổ chức chưa bật giữ [S1.70].
 - Phương án bị loại: job outbox tự đúc token. Nó cần một danh tính người phát mới (trigger `013` đòi một phiên người dùng
   còn sống), và gửi hỏng không hiện ra trong phản hồi — đúng lý do [S1.70] đã bác nó.
+- **[S1.9101]** Cài ở S3.2b — ADR-9201: gửi hỏng trả 2xx kèm `linkMoi { daGui, chuaGui }`, token của lần gửi hỏng bị thu hồi ngay.
 
 ### Chốt từ tiền lệ — lượt soi tự chốt và ghi lý do
 
@@ -7341,7 +7342,7 @@ gỡ ra nữa (`005` §1). Hôm nay không migration nào thêm hai mã ấy.
 (K2), luân phiên (K3), người ký bị loại (K5), xung đột lợi ích (K9), tín hiệu chưa ghi nhận (K10) — để lại một hàng
 `CONTROL_DENIED`. Payload chỉ mang **mã chốt**, không mang thông điệp: cùng khuôn `RFQ_STATE_DENIED`
 (`packages/danh-gia/src/tu-choi-vao-so.ts`). Hàng ấy ghi ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`, từ tầng gói, TRƯỚC
-mọi tác dụng phụ (§2.5 ⒂). Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
+mọi tác dụng phụ (§2.5 ⒂). **[S1.9101 / ADR-9201]** K4a vào lớp này: lần thêm hay thu hồi lời mời sai trạng thái ở tổ chức đã bật. Từ vựng là một bảng kiểu `VAO_SO`: một mã chốt mới không có dòng trong bảng thì không biên
 dịch được. **[S1.166]** Bảng ấy là `CHOT_VAO_SO` (`packages/rfq/src/chot-kiem-soat.ts`), và K1 là chốt đầu tiên. Chủ dự án chốt
 hai vế: `THIEU_NGAN_SACH` vào sổ — bỏ bước ngân sách là thoát mọi chốt của S3 —, `NGAN_SACH_GHIM_BAN_CU` thì không —
 chính sách đổi dưới chân người dùng. `BAC_LECH_HAM_PHAN_BAC` không vào sổ theo cùng luật.
@@ -8249,7 +8250,8 @@ hành vi của tổ chức; màn soạn — cảnh báo và số người tối 
 - (a) khoản 248 đóng — lần từ chối `CONTROL_DENIED` có trần theo phiên như ADR-092; **[S1.184] ĐẠT** — khoản 248 đóng bằng ADR-112,
   với phạm vi rộng hơn: mọi lần từ chối do handler ghi;
 - (b) S3 cưỡng chế đủ các chốt mà màn khai chính sách hiện ra — K2–K12 theo spec §9 — HOẶC chủ dự án quyết bằng một ADR mới
-  rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế.
+  rằng một tập con là đủ, và màn nói rõ chốt nào chưa cưỡng chế. **[S1.9101] Tiến độ, CHƯA ĐẠT** — chủ dự án chọn cưỡng chế đủ,
+  làm tuần tự theo §9: K4a, K4b, K6 cưỡng chế ở CSDL (S3.2a) và ở tầng gói, route (S3.2b); còn K2, K3, K5, K7–K12, và màn của S3.2c.
 
 Test và demo bật cờ tuỳ ý. Không đổi hạ tầng nào: mặc định đã là TẮT.
 
@@ -8853,3 +8855,107 @@ chính sách trên máy chủ thật (ADR-105 ⑷(a)).
 - Đo ở `apps/api/src/auth.int.test.ts` vế ⒤ (quyền ở handler), ⒥ (A4 qua `throwAuditedDenial`), ⒦ (một ngân sách cho hai tầng),
   ⒧ (cùng lúc), ⒨ (lần ghi hỏng vẫn tiêu ngân sách); `packages/identity/src/rbac.int.test.ts` khối khoản 248 (đếm một lần, ở giao dịch
   đã commit trước lần ghi; lỗi ra nguyên dạng; không đếm hai lần; ngoài bối cảnh không đếm).
+
+## ADR-9201 — S3.2b: link mời đi lúc mở gói; gửi hỏng trả 2xx kèm danh sách chưa gửi và thu hồi token hỏng; lần từ chối K4a vào `CONTROL_DENIED`; chữ ký ràng vào ngân sách
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chọn 2026-09-29, vòng S1.9101) · **Khoản nợ liên quan:** 253 (đóng) ·
+**Liên quan:** ADR-082 ⑼ ⑾ (cài đặt), ADR-084 ⑵ ⑷ (thêm K4a vào lớp `CONTROL_DENIED`), ADR-020 tiểu mục [S1.70] (thay cho tổ chức đã
+bật), ADR-108 (nhận diện bằng tên ràng buộc), ADR-110 (lối gửi lại) · Spec: S3 §3.3, §5.1 (K4, K6, K12), §9 S3.2 · Biên bản:
+`evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+S3.2a (`076_danh_sach_moi`) dựng K4a, K4b, K6 ở CSDL: lời mời của tổ chức đã bật chèn luôn `UNSENT`, token không đúc được cho gói
+chưa mở, danh sách chỉ đổi ở DRAFT. Tầng gói và route vẫn đi luồng MVP1: route mời đúc token và gửi link ngay lúc mời, nên ở DRAFT nó
+gãy ở K6; ở OPEN link đi mà lời mời ở lại `UNSENT`; gửi hỏng thì phần bù thu hồi LỜI MỜI — bị K4a chặn ⇒ 500. ADR-082 ⑼ đã chốt hình
+dạng: phiên người mở đúc N token trong giao dịch mở gói, gửi at-most-once sau commit, gửi hỏng thì lời mời *chưa gửi*, phản hồi nói
+rõ, có lối gửi lại — nhưng không chốt mã trạng thái, không chốt số phận của token hỏng. Và lần thêm hay thu hồi lời mời sai trạng
+thái chỉ để lại một 422 mang câu của trigger, không dấu vết nào.
+
+### Quyết định của chủ dự án, ngày 2026-09-29
+
+⑴ **Gửi hỏng không đổi mã trạng thái.** Mở gói trả `200`, mời thêm ở OPEN trả `201` — thao tác chính đã commit —, kèm
+`linkMoi { daGui, chuaGui }` nêu id lời mời. Phần ghi kết quả hỏng (giao dịch sau commit) ⇒ thêm `trangThaiChuaGhi: true`. Lối gửi lại
+giữ hợp đồng ADR-110: gửi hỏng ⇒ `502`, phần ghi cũng hỏng ⇒ `500`.
+
+⑵ **Token của lần gửi hỏng hay quá trần chết ngay** (`revokeMagicLinkToken`, lý do `LINK_SEND_FAILED`), trong cùng giao dịch ghi kết
+quả. `UNSENT` luôn nghĩa là không còn link sống; một link quá trần mà vẫn tới tay người nhận cũng chết — bên mua bấm gửi lại. Không
+thu hồi LỜI MỜI: thu hồi thu hẹp một danh sách đã ký (ADR-082 ⑼).
+
+⑶ **Lần thêm hay thu hồi lời mời sai trạng thái (K4a) là một lần từ chối `CONTROL_DENIED`, vào sổ.** Hai nhánh K4a của trigger
+mang tên ràng buộc (`k4a_them_sai_trang_thai`, `k4a_thu_hoi_sai_trang_thai`); `createInvitation` và `revokeInvitation` bắt CHÍNH lỗi
+của trigger theo tên (khuôn ADR-108) và ghi hàng sổ ở giao dịch độc lập. Phương án bị loại: `RFQ_STATE_DENIED` — phải dời bảng
+`VAO_SO` xuống `identity`, và người cố sửa một danh sách đã nộp duyệt là thứ một CHỐT chặn, không phải một bước sai thứ tự chuỗi;
+không vào sổ — lần cố sửa danh sách đã ký không để lại dấu vết.
+
+### Cài đặt — những chỗ vòng này tự chốt trong phạm vi đã duyệt
+
+- **Loạt gửi sau commit của bộ điều phối (`afterCommitGuiNhieu`).** Mỗi lần gửi một trần (`afterCommitTimeoutMs`), chạy song song,
+  gọi đúng một lần; rồi MỘT giao dịch mới ghi kết quả (đặt `SENT`, thu hồi token hỏng), lần lấy kết nối có trần 5 s; phản hồi dựng từ
+  kết quả, giữ thứ tự đăng ký. Dùng chung chỗ với việc có bù của khoản 124: mỗi yêu cầu tối đa một việc quyết phản hồi. Việc sau commit
+  thường chạy sau lần ghi, và chỉ khi phản hồi cuối dưới 400 — cùng luật với việc có bù hỏng (lượt soi).
+- **Lần ghi kết quả (lượt soi).** Đặt `SENT` chỉ cho lời mời của gói còn `OPEN`, bằng câu lọc theo gói — không để trigger K6 ném —,
+  rồi thu hồi token của MỌI lời mời của loạt còn `UNSENT`: lần gửi hỏng hay quá trần (`LINK_SEND_FAILED`), và lần gửi được mà gói đã rời
+  `OPEN` (huỷ, đóng) trước câu đặt — lý do riêng `RFQ_LEFT_OPEN`: sổ không nói một lần gửi thành công là hỏng. Có lời mời gửi được mà không đặt được `SENT` ⇒ phản hồi mang `trangThaiChuaGhi`. Bản đầu đặt `SENT` bằng một câu để
+  trigger ném: gói bị huỷ giữa loạt gửi làm cả giao dịch rollback, và token của lần quá-trần-mà-vẫn-tới-tay còn sống (đo ở lượt soi).
+- **Lời mời chưa gửi chỉ nhận link khi gói `OPEN` (lượt soi).** Lối gửi lại (ADR-110) nhận cả `BAFO_OPEN`; ở đó K6 không cho
+  `UNSENT→SENT`, nên link đi mà trạng thái không bao giờ ghi được. Nay lời mời `UNSENT` ở `BAFO_OPEN` ⇒ `409` như gói không nhận báo
+  giá — vòng BAFO dành cho người đã báo giá.
+- **Kênh không có đích ⇒ `422` lúc mời, ở tổ chức đã bật (lượt soi).** Lời mời SMS hay ZNS cho người liên hệ không có số vào danh sách
+  được ký, mọi lần gửi đều hỏng, và K4a cấm thu hồi nó ở `OPEN` — kẹt vĩnh viễn. MVP1 giữ [S1.70]. Bộ gửi vẫn chặn đích rỗng — lớp
+  thứ hai.
+- **Thân phản hồi mở gói của MVP1 giữ nguyên (lượt soi, spec §8.11).** `linkMoi` chỉ có ở tổ chức đã bật: một `linkMoi` rỗng ở MVP1
+  nói sai rằng không link nào đã đi.
+- **Route đọc trạng thái lúc chèn, không tự hỏi công tắc.** `UNSENT` là tổ chức đã bật; ở DRAFT không token, ở OPEN (nhãn *mời sau khi
+  ký*) đúc và gửi. Tổ chức chưa bật giữ nguyên [S1.70].
+- **Lần mở gói thu hồi token cũ chưa dùng của từng lời mời** trước khi đúc: một lời mời, một link còn dùng được. Hôm nay token cũ chỉ
+  tồn tại ở gói đang bay lúc tổ chức bật (khoản 253). Mỗi token bị thay để lại `MAGIC_LINK_TOKEN_REVOKED` lý do `SUPERSEDED_AT_OPEN`
+  dưới người mở — không thu hồi im lặng.
+- **Khoản 253 đóng ở phía dùng:** `docToken` của tổ chức đã bật đòi `created_at >= opened_at` của gói — cùng điều kiện với K6, đọc lúc
+  đổi magic link, xin OTP và xác minh. **[lượt soi]** Mốc đúc là đồng hồ của câu chèn: `9501` đổi mặc định `created_at` của token sang
+  `clock_timestamp()` (cột ngoài `GRANT INSERT`). Với `now()` — giờ bắt đầu giao dịch —, lần mời thêm mà giao dịch bắt đầu trước lần
+  mở gói rồi chờ khoá hàng gói đúc một token chết ngay khi ra đời, trong khi lời mời thành `SENT`. `issueMagicLinkToken` tính hạn từ
+  cùng đồng hồ, để trần `expires_at > created_at` không phụ thuộc giao dịch đã chạy bao lâu.
+- **Cạnh `PENDING_APPROVAL→DRAFT`** (ADR-082 ⑾, ADR-084 ⑵): `returnRfqToDraft`, route `POST /rfqs/:rfqId/return-to-draft`, lý do bắt
+  buộc vào sổ (`RFQ_RETURNED_TO_DRAFT`). Cổng bộ điều phối `rfq.create`; hàm gói hỏi `rfq.create` cho người tạo, `rfq.approve` cho
+  người khác — đúng vì mọi vai giữ `rfq.approve` cũng giữ `rfq.create` (phép đo ở `ma-tran-quyen.test.ts`). Chỉ tổ chức đã bật
+  (S1.185): tầng gói hỏi `to_chuc_da_bat_s3` trước mọi câu ghi — lời từ chối không vào sổ —, trigger `rfq_packages_kiem_canh_ve_soan`
+  chặn câu viết tay.
+
+### Chốt từ tiền lệ — lượt soi tự chốt và ghi lý do
+
+**Chữ ký ràng vào ngân sách** (phát hiện NẶNG của lượt soi an ninh, đo qua HTTP). Trước cạnh về DRAFT, ngân sách khoá khi gói rời
+DRAFT và mọi chữ ký nằm trên ngân sách cuối cùng. Cạnh ấy mở lại ngân sách, mà băm nội dung (`011`) và băm danh sách (`076`) đều không
+mang nó: gói cấp kép (500 triệu, ngưỡng 100 triệu) được một người ký, bị trả về, hạ ước lượng xuống 1 triệu, nộp lại — và MỞ bằng chữ
+ký ký lúc nó cần hai người. Spec §2.4 đã chọn cơ chế cho cạnh này: *chữ ký cũ vô hiệu bằng băm*, không xoá chữ ký, người đã ký ký lại
+được. Tiền lệ trả lời: mở rộng CHÍNH cơ chế ấy sang ngân sách — hàm băm riêng `rfq_bam_ngan_sach` (ước lượng, tiền tệ, phiên bản chính
+sách, bậc, cờ duyệt kép), cột `approved_budget_hash` do trigger đặt lúc ký (NULL ở tổ chức chưa bật, cùng lý do vế NULL của `076`),
+hai `UNIQUE` mang thêm cột ấy, cạnh mở gói của tổ chức đã bật đếm người ký khớp cả ngân sách hiện tại. Hai phương án bị loại vì trái
+spec: khoá ngân sách khi gói đã có chữ ký (bỏ đi lý do chính để trả gói về), và chữ ký chỉ sống trong lần nộp của nó (vô hiệu cả chữ ký
+trên một gói nộp lại nguyên như cũ). Câu *"sau cạnh này nó không lật lại được"* của `014` §(4) về `requires_dual_approval` nay sai với
+tổ chức đã bật; `9501` nói ra điều ấy, `014` không sửa được (migration đã áp).
+
+### Hệ quả, nói thẳng
+
+- **Hai hợp đồng cho cùng một route mời,** theo công tắc: tổ chức chưa bật gửi hỏng ⇒ `502` và lời mời bị thu hồi; tổ chức đã bật ⇒
+  `201` và lời mời ở lại `UNSENT`. Máy khách phải đọc `linkMoi`, không đọc mã trạng thái, ở luồng S3.
+- **Màn `/tao-thau` chưa biết `linkMoi`** tới S3.2c: ở tổ chức đã bật, một lần gửi hỏng lúc mời thêm hiện như mời thành công. Hôm nay
+  không tổ chức thật nào bật được S3 (ADR-105).
+- **Gửi song song không có trần đồng thời:** một danh sách dài gửi cùng lúc N yêu cầu tới SES hay nhà mạng; lần bị giới hạn tốc độ
+  thành *chưa gửi* và bên mua gửi lại.
+- **Lời mời thời MVP1 đang `SENT` của gói đang bay lúc bật:** lần mở gói gửi lại link cho nó; gửi hỏng thì token mới bị thu hồi mà
+  trạng thái vẫn `SENT` (K6 cấm `SENT→UNSENT`) — phản hồi vẫn liệt kê nó ở `chuaGui`.
+- **`submitted_by` chỉ giữ lần nộp cuối** từ khi gói nộp được nhiều lần; tập loại trừ K5 (S3.3) phải đọc mọi lần nộp — lịch sử hôm nay
+  nằm ở sổ (`RFQ_SUBMITTED_FOR_APPROVAL`).
+- **Người giữ `rfq.approve` không phải người tạo trả gói về, tự sửa, tự nộp, tự ký, tự mở** (lượt soi, đo). D2 chỉ loại người tạo; khe
+  ấy có sẵn ở DRAFT từ MVP1, cạnh về DRAFT mở nó cho gói đã nộp. Thuộc K5 của S3.3 — tập loại trừ gồm người nộp duyệt và người đặt
+  ngân sách (spec §2.5 ⑿); chủ dự án chốt K5 áp ở mọi bậc hay chỉ bậc bật `ky_danh_sach_moi`. Spec §9 hàng S3.3 ghi vế này.
+- **Lần cố trả một gói sai trạng thái về DRAFT không vào sổ** — `RfqError` như mọi cạnh khác của `rfq.ts`; `RFQ_STATE_DENIED` cho các cạnh
+  của gói là quyết định của K12, chưa có.
+- **Khoản 253 chỉ đóng ở tầng ứng dụng** (`docToken`); trigger `otp_kiem_kenh_khac_link` (`022`) không mang vế ấy. Phiên khách mở trước
+  lần bật cho một gói còn DRAFT sống tới hết hạn (tối đa 12 giờ).
+- **Gói đã `OPEN` lúc tổ chức bật mà lời mời được tạo ở DRAFT qua API** có token đúc trước `opened_at`: các token ấy chết ngay khi bật,
+  không đúc lại tự động — bên mua gửi lại từng lời mời. Màn MVP1 mời sau khi mở gói nên không vấp.
+- **Gửi lại đua với lần mở gói:** lần gửi lại chạy ngay sau commit của lần mở thu hồi token vừa đúc lúc mở, mà lần gửi lúc mở vẫn tính
+  `daGui` và đặt `SENT` cho một link đã chết; lần gửi lại mang link sống.
+- **Giao dịch mở gói đúc N token kèm N hàng sổ** trong lúc giữ khoá chuỗi sổ của tổ chức — tuyến tính theo độ dài danh sách.

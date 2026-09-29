@@ -194,26 +194,28 @@ describe("§R3 — danh mục quyền", () => {
   });
 });
 
-describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ", () => {
-  /**
-   * (vai trò -> tập mã quyền), đọc THẲNG từ văn bản migration, theo THỨ TỰ ÁP: trong mỗi file, DELETE
-   * áp trước INSERT ([033] xoá hàng của 030 rồi mới chèn hàng mới của chính nó).
-   */
-  function docMaTran(pDocDelete: boolean): Map<string, Set<string>> {
-    // [khoản nợ 31] Đọc MỌI migration, không riêng `005` — xem khối `MOI_MIGRATION`.
-    const ketQua = new Map<string, Set<string>>();
-    for (const { sql } of MOI_MIGRATION) {
-      if (pDocDelete) {
-        for (const [vaiTro, quyen] of catDeletes(sql)) ketQua.get(vaiTro)?.delete(quyen);
-      }
-      for (const [, vaiTro, quyen] of catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)) {
-        const tap = ketQua.get(vaiTro!) ?? new Set<string>();
-        tap.add(quyen!);
-        ketQua.set(vaiTro!, tap);
-      }
+/**
+ * (vai trò -> tập mã quyền), đọc THẲNG từ văn bản migration, theo THỨ TỰ ÁP: trong mỗi file, DELETE
+ * áp trước INSERT ([033] xoá hàng của 030 rồi mới chèn hàng mới của chính nó). [S1.9101] Dời ra mức tệp để khối cạnh về DRAFT
+ * dưới cùng đọc chung một ma trận — không một bản đọc thứ hai.
+ */
+function docMaTran(pDocDelete: boolean): Map<string, Set<string>> {
+  // [khoản nợ 31] Đọc MỌI migration, không riêng `005` — xem khối `MOI_MIGRATION`.
+  const ketQua = new Map<string, Set<string>>();
+  for (const { sql } of MOI_MIGRATION) {
+    if (pDocDelete) {
+      for (const [vaiTro, quyen] of catDeletes(sql)) ketQua.get(vaiTro)?.delete(quyen);
     }
-    return ketQua;
+    for (const [, vaiTro, quyen] of catValuesNeuCo(sql, "role_permissions").matchAll(/\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g)) {
+      const tap = ketQua.get(vaiTro!) ?? new Set<string>();
+      tap.add(quyen!);
+      ketQua.set(vaiTro!, tap);
+    }
   }
+  return ketQua;
+}
+
+describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ", () => {
   const maTran = docMaTran(true);
 
   it("[033] mọi câu DELETE trên role_permissions trong migration đều được bộ đọc HIỂU — không có DELETE nào rộng hơn khuôn (X, Y)", () => {
@@ -471,5 +473,23 @@ describe("[INV-D2] [033] thước đo không cùng tay: policy.manage tách kh�
       .filter(([, tap]) => tap.has(PERMISSIONS.POLICY_MANAGE) && POLICY_MANAGE_EXCLUDES.some((ma) => tap.has(ma)))
       .map(([v]) => v);
     expect(viPham).toEqual(["PROCUREMENT_MANAGER"]);
+  });
+});
+
+// ============================================================================================
+// [S1.9101 / S3.2b / ADR-084 ⑵] CẠNH PENDING_APPROVAL→DRAFT: CỔNG CỦA BỘ ĐIỀU PHỐI LÀ `rfq.create`
+//
+// ADR-084 ⑵ cho người TẠO gói (giữ `rfq.create`) hoặc người giữ `rfq.approve` đi cạnh ấy. Bảng route chỉ khai MỘT mã cho bộ điều
+// phối, nên route khai `rfq.create` và `returnRfqToDraft` hỏi đúng mã theo người. Điều đó chỉ đúng khi MỌI vai giữ `rfq.approve`
+// cũng giữ `rfq.create` — nếu không, bộ điều phối từ chối một người duyệt hợp lệ trước khi hàm gói kịp hỏi. Hôm nay chỉ
+// PROCUREMENT_MANAGER giữ `rfq.approve` (spec S3 §8.8). Phép đo dưới đỏ ngày ma trận đổi điều ấy.
+// ============================================================================================
+describe("[S1.9101] cạnh về DRAFT: mọi vai giữ `rfq.approve` cũng giữ `rfq.create`", () => {
+  it("không vai nào giữ `rfq.approve` mà thiếu `rfq.create` — cổng `rfq.create` của route không chặn người duyệt", () => {
+    const maTran = docMaTran(true);
+    const giuDuyet = [...maTran.entries()].filter(([, tap]) => tap.has(PERMISSIONS.RFQ_APPROVE)).map(([v]) => v);
+    expect(giuDuyet, "chống rỗng ruột: phải có vai giữ rfq.approve").toEqual(["PROCUREMENT_MANAGER"]);
+    const thieu = giuDuyet.filter((v) => !(maTran.get(v)?.has(PERMISSIONS.RFQ_CREATE) ?? false));
+    expect(thieu).toEqual([]);
   });
 });

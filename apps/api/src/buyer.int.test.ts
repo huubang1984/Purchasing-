@@ -110,8 +110,17 @@ beforeAll(async () => {
   apiPool = db.poolAs("app_api");
   auditPool = db.poolAs("app_api");
   dv = dichVuTest();
+  // [S1.9101] Hai vòng quét [INV-H17] cho MỖI phiên một lần từ chối trên mỗi route ghi mà nó không giữ quyền — từ route ghi thứ 31
+  // (`return-to-draft`), số ấy vượt trần 30 lần từ chối mỗi cửa sổ của ADR-092 và route cuối nhận 429 thay vì 403. Tệp này đo CỔNG,
+  // không đo trần — trần đo ở `auth.int.test.ts` —, nên bộ điều phối của tệp nâng trần: lần từ chối vẫn đếm, vẫn vào sổ như cũ.
   server = createApiServer(
-    createDispatcher({ pool: apiPool, auditPool, services: dv.services, outboxNudge: (org) => daDanhThuc.push(org) }),
+    createDispatcher({
+      pool: apiPool,
+      auditPool,
+      services: dv.services,
+      outboxNudge: (org) => daDanhThuc.push(org),
+      tranTuChoi: 1_000,
+    }),
   );
   await new Promise<void>((xong) => server.listen(0, "127.0.0.1", xong));
   goc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

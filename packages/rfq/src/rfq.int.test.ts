@@ -1718,12 +1718,14 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
 
   // [S1.180 / ADR-108] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
   // CSDL: mọi tên ràng buộc mà ba trigger J3/D2 đặt đều có mã chốt, và mọi dòng của bảng tên → mã đều có một nhánh đặt nó.
-  it("tên ràng buộc ở ba trigger J3/D2 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.9101 / ADR-9201] Trigger K4a của `9501` cũng đặt tên ràng buộc — bảng có hai dòng `k4a_…`, nên phép so gom cả bốn thân.
+  it("tên ràng buộc ở ba trigger J3/D2 cộng trigger K4a và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
-        "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure)",
+        "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
+        "'public.rfq_invitations_kiem_danh_sach()'::regprocedure)",
     );
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });

@@ -274,7 +274,7 @@ async function chinh(): Promise<void> {
           contactId: lh,
           linkChannel: "EMAIL",
           actorSessionId: phienGieo,
-        });
+        }, pool);
         const t = await issueMagicLinkToken(c, org, { invitationId: lm.id, actorSessionId: phienGieo });
         loiMoi.push({ ten, token: t.token });
       }

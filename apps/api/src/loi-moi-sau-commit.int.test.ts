@@ -602,7 +602,7 @@ describe("[S1.70 / khoản 124] POST /rfqs/:rfqId/invitations — link mời đi
     const id = (JSON.parse(moi.body) as { invitation: { id: string } }).invitation.id;
     await expect(
       withTenant(apiPool, orgX, (c) =>
-        revokeInvitation(c, orgX, { invitationId: id, actorSessionId: nguoiMoi.sessionId, reason: "LY_DO_LA" as "LINK_SEND_FAILED" }),
+        revokeInvitation(c, orgX, { invitationId: id, actorSessionId: nguoiMoi.sessionId, reason: "LY_DO_LA" as "LINK_SEND_FAILED" }, auditPool),
       ),
     ).rejects.toBeInstanceOf(InvitationError);
     expect(await trangThaiLoiMoi(ncc.supplierId)).toEqual({ loiMoi: 1, song: 1, token: 1, tokenSong: 1 });
@@ -852,7 +852,7 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
       "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) VALUES ($1, 'RFQ Y', now() + interval '7 days', false, $2, $3) RETURNING id",
       [orgY, uY, sY],
     )).rows[0]!.id;
-    const loiY = await withTenant(apiPool, orgY, (c) => createInvitation(c, orgY, { rfqId: rfqY, supplierId: nccY, contactId: lhY, actorSessionId: sY }));
+    const loiY = await withTenant(apiPool, orgY, (c) => createInvitation(c, orgY, { rfqId: rfqY, supplierId: nccY, contactId: lhY, actorSessionId: sY }, auditPool));
     const xuyen = await goi(gocMacDinh, "POST", `/invitations/${loiY.id}/reissue`, nguoiMoi.cookie);
     expect(xuyen.status, xuyen.body).toBe(404);
 
@@ -863,7 +863,7 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
     )).rows[0]!.id;
     const nccNhap = await nhaCungCap();
     const loiNhap = await withTenant(apiPool, orgX, (c) =>
-      createInvitation(c, orgX, { rfqId: rfqDraftX, supplierId: nccNhap.supplierId, contactId: nccNhap.contactId, actorSessionId: pm.sessionId }),
+      createInvitation(c, orgX, { rfqId: rfqDraftX, supplierId: nccNhap.supplierId, contactId: nccNhap.contactId, actorSessionId: pm.sessionId }, auditPool),
     );
     const nhap = await goi(gocMacDinh, "POST", `/invitations/${loiNhap.id}/reissue`, nguoiMoi.cookie);
     expect(nhap.status, nhap.body).toBe(409);

@@ -61,6 +61,7 @@ describe("[S1.157 / khoản 243] thân của POST /rfqs/:rfqId/evaluate", () => 
       services: {},
       afterCommit: () => undefined,
       afterCommitCoBu: () => undefined,
+      afterCommitGuiNhieu: () => undefined,
     };
     const ph = await (route as unknown as { handler: (c: unknown) => Promise<ApiResponse> }).handler(ctx);
     expect(ph.status).toBe(201);

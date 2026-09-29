@@ -30,11 +30,15 @@ export {
   OTP_TTL_SECONDS,
   clearOtpLockout,
   createInvitation,
+  // [S1.9101 / S3.2b / K6] Đặt `SENT` cho lời mời mà link đã gửi được — sau commit, giao dịch mới.
+  danhDauDaGuiLink,
   // [sổ nợ 55 / 042] Bộ dọn `caller_rate_limits` — việc NỀN của tiến trình `api`, nhận Pool.
   donBucketNguoiGoiCu,
   donOtpRateLimitsCu,
   issueMagicLinkToken,
   issueOtpChallenge,
+  // [S1.9101 / S3.2b / ADR-082 ⑼] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — tổ chức đã bật S3.
+  phatLinkMoiKhiMoGoi,
   redeemMagicLink,
   // [S1.181 / ADR-110] Gửi lại link cho CÙNG lời mời còn sống, và phần bù của nó khi gửi hỏng sau commit.
   reissueInvitationLink,
@@ -56,6 +60,7 @@ export {
   type InvitationRecord,
   type IssueOtpInput,
   type IssuedToken,
+  type LinkChoGui,
   type OtpDenialReason,
   type OtpIssueOutcome,
   type OtpVerifyResult,

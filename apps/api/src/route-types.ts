@@ -151,6 +151,44 @@ export interface ViecSauCommitCoBu {
 export type AfterCommitCoBu = (viec: ViecSauCommitCoBu) => void;
 
 /**
+ * [S1.9101 / S3.2b / ADR-082 ⑼] MỘT lần gửi sau commit trong một loạt — `khoa` là id lời mời, `gui` gọi bộ gửi đúng một lần.
+ */
+export interface ViecGuiSauCommit {
+  readonly khoa: string;
+  readonly gui: () => Promise<void>;
+}
+
+/** Kết quả của một loạt gửi: khoá của lần gửi đã xong trong trần, và khoá của lần hỏng hay quá trần — theo thứ tự đăng ký. */
+export interface KetQuaGuiSauCommit {
+  readonly daGui: readonly string[];
+  readonly chuaGui: readonly string[];
+}
+
+/**
+ * [S1.9101 / S3.2b / ADR-082 ⑼] Một LOẠT việc gửi sau commit mà KẾT QUẢ dựng phản hồi — link mời của tổ chức đã bật S3: N link lúc mở
+ * gói, một link lúc mời thêm ở OPEN hay lúc gửi lại cho lời mời chưa gửi. Khác `ViecSauCommitCoBu` ở ba chỗ, và cả ba do chủ dự án
+ * chốt ngày 2026-09-29: ⑴ gửi hỏng KHÔNG thay phản hồi bằng một mã lỗi — thao tác chính (mở gói, mời) đã commit —, phản hồi nói lời mời
+ * nào chưa gửi; ⑵ mỗi lần gửi độc lập, chạy SONG SONG, mỗi lần một trần (`afterCommitTimeoutMs`), nên cả loạt xong trong khoảng một
+ * trần; ⑶ `ghiKetQua` chạy MỘT lần sau cả loạt, trong giao dịch MỚI đã gắn tổ chức (lần lấy kết nối có trần 5 s) — đặt `SENT` cho lần
+ * đã gửi, thu hồi token của lần hỏng; nó ném hay trả `false` thì `phanHoi` nhận `ghiDuoc = false` và phải nói trạng thái chưa ghi
+ * được.
+ *
+ * Mỗi `gui` được gọi ĐÚNG MỘT lần (at-most-once): lần quá trần không được thử lại — promise của nó bị bỏ, và link ấy có thể vẫn tới
+ * tay người nhận; token của nó bị thu hồi ở `ghiKetQua`, nên link ấy chết (chủ dự án chọn thế: *chưa gửi* luôn nghĩa là không còn link
+ * sống). Chung một CHỖ với `afterCommitCoBu`: mỗi yêu cầu tối đa MỘT việc quyết phản hồi — đăng ký lần hai ném trong handler. Chạy
+ * TRƯỚC việc sau commit thường, chỉ khi phản hồi của handler thành công; việc thường chạy sau `ghiKetQua`, và chỉ khi `phanHoi` trả
+ * mã dưới 400 — cùng luật với việc có bù hỏng. Kết quả giữ thứ tự đăng ký. Closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8).
+ */
+export interface ViecGuiNhieuSauCommit {
+  readonly viec: readonly ViecGuiSauCommit[];
+  /** `true` khi trạng thái của cả loạt đã ghi trọn; `false` ⇒ `phanHoi` nhận `ghiDuoc = false`, như khi nó ném. */
+  readonly ghiKetQua: (client: pg.PoolClient, ketQua: KetQuaGuiSauCommit) => Promise<boolean>;
+  readonly phanHoi: (ketQua: KetQuaGuiSauCommit, ghiDuoc: boolean) => ApiResponse;
+}
+
+export type AfterCommitGuiNhieu = (viec: ViecGuiNhieuSauCommit) => void;
+
+/**
  * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
  * link, OTP). `orgId` đọc từ thân, được kiểm hình dạng UUID rồi gắn bằng `withTenant` — nó không
  * phải bí mật, chỉ là toạ độ. Chỉ có ở `/guest/*` và `/auth/*` (lớp canh ở dưới).
@@ -206,6 +244,8 @@ export interface BuyerContext {
   readonly afterCommit: AfterCommit;
   /** [S1.70 / khoản 124] Việc sau commit mà kết quả quyết phản hồi — xem `ViecSauCommitCoBu`. */
   readonly afterCommitCoBu: AfterCommitCoBu;
+  /** [S1.9101 / S3.2b] Loạt việc gửi sau commit mà kết quả dựng phản hồi — xem `ViecGuiNhieuSauCommit`. */
+  readonly afterCommitGuiNhieu: AfterCommitGuiNhieu;
   /**
    * [S1.169 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
    * (`choKyChinhSach`), mặc định TẮT; route ký đọc nó TRƯỚC mọi câu ghi.
