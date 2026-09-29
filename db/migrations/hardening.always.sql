@@ -3411,12 +3411,12 @@ $ham$;
          ('public', 'audit_chain_anchors', '003_audit_events'),
          ('public', 'audit_events', '003_audit_events'),
          ('public', 'bid_receipts', '018_vendor_bids'),
-         ('public', 'canonical_item_versions', '080_hang_chuan'),
-         ('public', 'canonical_items', '080_hang_chuan'),
+         ('public', 'canonical_item_versions', '081_hang_chuan'),
+         ('public', 'canonical_items', '081_hang_chuan'),
          ('public', 'guest_sessions', '010_invitations'),
          ('public', 'invitation_otp_challenges', '010_invitations'),
-         ('public', 'item_aliases', '080_hang_chuan'),
-         ('public', 'item_uom_conversions', '080_hang_chuan'),
+         ('public', 'item_aliases', '081_hang_chuan'),
+         ('public', 'item_uom_conversions', '081_hang_chuan'),
          ('public', 'mfa_credentials', '006_sessions_and_mfa'),
          ('public', 'mfa_reset_requests', '040_dat_lai_totp_hai_nguoi'),
          ('public', 'org_key_pairs', '063_cap_khoa_to_chuc'),
@@ -8654,10 +8654,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm don_vi_tai(uuid, text, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S4.2a / L3] Cong GHI cua du lieu nen: nguoi ghi phai giu item.manage. Than `RETURN NEW` som la mo du lieu nen cho moi vai.
+    -- [S1.195 / S4.2a / L3] Cong GHI cua du lieu nen: nguoi ghi phai giu item.manage. Than `RETURN NEW` som la mo du lieu nen cho moi vai.
     ARRAY[
-      $q$hàm + trigger du_lieu_nen_kiem_quyen_ghi (080_hang_chuan)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_hang_chuan.sql')$q$,
+      $q$hàm + trigger du_lieu_nen_kiem_quyen_ghi (081_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_hang_chuan.sql')$q$,
       $q$DO $fn92$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8800,10 +8800,10 @@ $ham$;
       $q$quyền sở hữu hàm public.du_lieu_nen_kiem_quyen_ghi() và các bảng public.uom_aliases, public.canonical_items, public.canonical_item_versions, public.item_aliases, public.item_uom_conversions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S4.2a / L3] Nguoi dat thuoc du lieu mu gia — khuon 033. Than `RETURN NULL` som de mot vai/mot nguoi om ca item.manage lan bid.view.
+    -- [S1.195 / S4.2a / L3] Nguoi dat thuoc du lieu mu gia — khuon 033. Than `RETURN NULL` som de mot vai/mot nguoi om ca item.manage lan bid.view.
     ARRAY[
-      $q$hàm + trigger kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro (080_hang_chuan)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_hang_chuan.sql')$q$,
+      $q$hàm + trigger kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro (081_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_hang_chuan.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8883,10 +8883,10 @@ $ham$;
       $q$quyền sở hữu hàm public.kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro() và bảng public.role_permissions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S4.2a / L3] Nguoi dat thuoc du lieu mu gia — khuon 033. Than `RETURN NULL` som de mot vai/mot nguoi om ca item.manage lan bid.view.
+    -- [S1.195 / S4.2a / L3] Nguoi dat thuoc du lieu mu gia — khuon 033. Than `RETURN NULL` som de mot vai/mot nguoi om ca item.manage lan bid.view.
     ARRAY[
-      $q$hàm + trigger kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung (080_hang_chuan)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_hang_chuan.sql')$q$,
+      $q$hàm + trigger kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung (081_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_hang_chuan.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8973,10 +8973,10 @@ $ham$;
     ],
 
     -- [S1.192 / S4.1 / L4] Ham quy doi DUY NHAT. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
-    -- [S1.194 / S4.2a] Than doi sang ban co ve (2) (quy doi rieng, ADR-114): con tro theo migration CUOI CUNG.
+    -- [S1.195 / S4.2a] Than doi sang ban co ve (2) (quy doi rieng, ADR-115): con tro theo migration CUOI CUNG.
     ARRAY[
-      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (080_hang_chuan)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_hang_chuan.sql')$q$,
+      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (081_hang_chuan)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_hang_chuan.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
   p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
   RETURNS TABLE (he_so numeric, ma text)

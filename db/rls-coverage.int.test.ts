@@ -769,7 +769,7 @@ describe("phủ RLS", () => {
       // bộ đếm theo người gọi phải chung cho tổ chức thật lẫn tổ chức lạ, nếu không 429 là một
       // oracle tồn tại tổ chức. DELETE mức bảng cho bộ dọn — cùng đánh đổi đã ghi ở 010.
       { grantee: "app_api", bang: "caller_rate_limits", quyen: "DELETE,SELECT" },
-      // [S1.194 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
+      // [S1.195 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
       { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
@@ -1078,7 +1078,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "INSERT" },
       { grantee: "app_api", bang: "caller_rate_limits", cot: "hits", quyen: "UPDATE" },
       { grantee: "app_api", bang: "caller_rate_limits", cot: "window_start", quyen: "INSERT" },
-      // [S1.194 / S4.2a] Hàng chuẩn: ghi thêm theo cột; `id`, `seq`, `ghi_luc` ngoài GRANT (L1).
+      // [S1.195 / S4.2a] Hàng chuẩn: ghi thêm theo cột; `id`, `seq`, `ghi_luc` ngoài GRANT (L1).
       { grantee: "app_api", bang: "canonical_item_versions", cot: "canonical_item_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_item_versions", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_item_versions", cot: "session_id", quyen: "INSERT" },
@@ -1952,7 +1952,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
   return Object.fromEntries([
     ...[
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
-      // [S1.194 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
+      // [S1.195 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
       "canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",

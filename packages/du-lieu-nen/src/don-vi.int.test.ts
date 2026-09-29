@@ -20,7 +20,7 @@ import { KHONG_QUY_DOI_DUOC, chuoiSach, quyDoiDonVi, type KetQuaQuyDoi } from ".
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
 /** Mọi bảng dữ liệu nền mang khuôn L1. Mỗi hạng mục S4 dựng một bảng nền thì thêm tên ở đây — test cuối tệp đòi hai chiều. */
-// [S1.194 / S4.2a] Bốn bảng hàng chuẩn vào cùng khuôn.
+// [S1.195 / S4.2a] Bốn bảng hàng chuẩn vào cùng khuôn.
 const BANG_DU_LIEU_NEN = ["canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions", "uom_aliases"] as const;
 
 let db: TestDatabase;
@@ -46,7 +46,7 @@ async function taoNguoiVaPhien(orgId: string, email: string): Promise<{ nguoi: s
       [orgId, nguoi, randomBytes(32)],
     )
   ).rows[0]!.id;
-  // [S1.194 / S4.2a] Người ghi dữ liệu nền phải giữ `item.manage` — cổng `du_lieu_nen_kiem_quyen_ghi`.
+  // [S1.195 / S4.2a] Người ghi dữ liệu nền phải giữ `item.manage` — cổng `du_lieu_nen_kiem_quyen_ghi`.
   await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'DATA_STEWARD')", [orgId, nguoi]);
   return { nguoi, phien };
 }

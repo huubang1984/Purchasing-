@@ -91,7 +91,7 @@ export const PERMISSIONS = {
    */
   POLICY_MANAGE: "policy.manage",
   /**
-   * [S1.194 / S4.2a / spec S4 §2.4 ⑺] Quản lý dữ liệu nền — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị của tổ chức.
+   * [S1.195 / S4.2a / spec S4 §2.4 ⑺] Quản lý dữ liệu nền — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị của tổ chức.
    * Chỉ vai `DATA_STEWARD` giữ, và người giữ MÙ GIÁ: `ITEM_MANAGE_EXCLUDES` dưới đây. Cổng GHI đứng ở CSDL
    * (`du_lieu_nen_kiem_quyen_ghi`): người ghi hàng dữ liệu nền phải giữ mã này trong tổ chức của hàng.
    */
@@ -233,7 +233,7 @@ export const POLICY_MANAGE_CONFLICT_ROLE_PAIRS = [
 ] as const satisfies readonly (readonly [string, string])[];
 
 /**
- * [S1.194 / S4.2a] Bất biến **L3**, vế vai: người đặt thước dữ liệu nền không thấy giá và không cầm thứ bị đo —
+ * [S1.195 / S4.2a] Bất biến **L3**, vế vai: người đặt thước dữ liệu nền không thấy giá và không cầm thứ bị đo —
  * `item.manage` KHÔNG đứng cùng năm mã này, ở một vai và ở một người (spec S4 §2.4 ⑺, §5.1). Ba bản phải khớp nguyên
  * văn: đây, thân `kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro()` và `kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung()` —
  * `ma-tran-quyen.test.ts` khoá, khuôn `POLICY_MANAGE_EXCLUDES`.
@@ -247,7 +247,7 @@ export const ITEM_MANAGE_EXCLUDES = [
 ] as const satisfies readonly Permission[];
 
 /**
- * [S1.194 / S4.2a] Mốc GHIM (QT2): các cặp vai mà một người mang cả hai sẽ giữ `item.manage` cùng một mã loại trừ —
+ * [S1.195 / S4.2a] Mốc GHIM (QT2): các cặp vai mà một người mang cả hai sẽ giữ `item.manage` cùng một mã loại trừ —
  * trigger mức người chặn đúng các cặp này. Hôm nay `DATA_STEWARD` chỉ ghép được với `TECHNICAL` (§8.10 của spec S4:
  * một tổ chức nhỏ không gán được vai này cho người `FINANCE` sẵn có).
  */

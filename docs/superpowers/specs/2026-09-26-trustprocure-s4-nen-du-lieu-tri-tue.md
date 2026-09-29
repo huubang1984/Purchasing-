@@ -382,7 +382,7 @@ Luật quy đổi, L4:
 
 Quy đổi dùng cho gói X là hàng mới nhất theo `seq` trong số các hàng có `ghi_luc` trước mốc mở giá của X (§3.3).
 
-> **[S1.194 / S4.2a] Luật ghép của vế ⑵ — ADR-114.** ⑴ luôn đi trước. ⑵ dùng đúng MỘT cạnh riêng của đúng hàng chuẩn, ghép quy
+> **[S1.195 / S4.2a] Luật ghép của vế ⑵ — ADR-115.** ⑴ luôn đi trước. ⑵ dùng đúng MỘT cạnh riêng của đúng hàng chuẩn, ghép quy
 > đổi chung cùng thứ nguyên ở hai đầu (*cây → kg* cho *cây → g*) và dùng được chiều ngược (`1 / hệ số`); không ghép hai cạnh riêng;
 > hai cạnh cùng dùng được là mơ hồ ⇒ `KHONG_QUY_DOI_DUOC`. Mã trả về mới: `QUY_DOI_RIENG`. Đầu `tu` lưu là mã nếu chuỗi quy về một
 > mã, không thì chuỗi đã làm sạch; `sang_don_vi` luôn là mã.
@@ -404,11 +404,11 @@ hay mâu thuẫn thì bộ chuẩn hoá KHÔNG được gộp (§4.4 bước 5).
 
 Hàng chuẩn KHÔNG dùng chung giữa các tổ chức (§2.2 ⑷, ADR-013). Hai tổ chức cùng mua thép D10 có hai hàng chuẩn riêng.
 
-> **[S1.194 / S4.2a] Dựng — chủ dự án chốt 2026-09-29.** `don_vi_goc` là khoá ngoại tới `uom_units` — không đơn vị đóng gói.
+> **[S1.195 / S4.2a] Dựng — chủ dự án chốt 2026-09-29.** `don_vi_goc` là khoá ngoại tới `uom_units` — không đơn vị đóng gói.
 > `category_id` CHƯA có cột: nó vào cùng nhóm hàng của S3.6 (ADR-084 ⑶), không vào trước như một cột NULL. `ma` do người quản lý
 > dữ liệu nhập, viết hoa, duy nhất trong tổ chức. `trang_thai` ∈ {`DANG_DUNG`, `NGUNG_DUNG`} ở bảng phiên bản; `thuoc_tinh` là đối
 > tượng phẳng khoá viết thường → chuỗi không rỗng, `thuoc_tinh_trong_yeu` phải là khoá có mặt. Người GHI mọi bảng nền phải giữ
-> `item.manage` — kiểm ở CSDL (`du_lieu_nen_kiem_quyen_ghi`), dưới cổng của route (ADR-114 ⑹).
+> `item.manage` — kiểm ở CSDL (`du_lieu_nen_kiem_quyen_ghi`), dưới cổng của route (ADR-115 ⑹).
 
 **Mã quyền `item.manage`** (§9 S4.0) giữ mọi thao tác ghi ở mục này, ở §4.2, ở ánh xạ duyệt tay (§4.4) và ở mốc ngoài
 (§4.7). Người đọc: mọi vai giữ `rfq.create`, vì người tạo gói cần thấy gợi ý. Hàng chuẩn không mang giá, nên đọc nó không
@@ -1096,7 +1096,7 @@ migration một mình là no-op.
 | **S4.0** | Nền | ADR-093…097 đã chốt ở lượt soi. Nới dải `[A-HJK]`→`[A-HJ-L]` ở MỌI chỗ ghim — hôm nay 8 tệp, 18 dòng trong MÃ, 13 tệp, 27 dòng tính cả tài liệu, kể cả `docs/TEST-PLAN.md:522` —, lật ca biên `L` của `parse.test.ts`, thêm một hàng mẫu L vào `TEST_PLAN_MAU` (khuôn S1.153). Không chốt hậu tố: hàng tách mang số mới (khoản 246). Gói `du-lieu-nen`, `tri-tue` và ranh giới `depcruise` | S3.1 (cùng mười chỗ ghim) |
 | **S4.1** | Đơn vị đo + khuôn nền | `uom_units` chỉ-ghi-thêm, bí danh toàn cục ở bảng riêng, `uom_aliases` của tổ chức, trigger khoá → `seq` → `ghi_luc`, hàm `chuoi_sach` và hàm quy đổi SQL; **L1** (khuôn), **L4** vế chung | — |
 | **S4.2** | Hàng chuẩn + vai | Vai `DATA_STEWARD`, mã `item.manage` vào CSDL (ADR-084 ⑶), hai trigger khuôn `033`; danh tính bất biến, phiên bản, bí danh, quy đổi riêng; màn `/du-lieu`; **L3** vế vai, **L4** vế riêng | — |
-| ↳ **S4.2a** [S1.194] | CSDL + gói | Vai, mã, hai trigger khuôn `033`, cổng ghi CSDL; bốn bảng hàng chuẩn; vế ⑵ của `quy_doi_don_vi`; hàm gói ghi/đọc — `080_hang_chuan`, ADR-114 | — |
+| ↳ **S4.2a** [S1.195] | CSDL + gói | Vai, mã, hai trigger khuôn `033`, cổng ghi CSDL; bốn bảng hàng chuẩn; vế ⑵ của `quy_doi_don_vi`; hàm gói ghi/đọc — `081_hang_chuan`, ADR-115 | — |
 | ↳ **S4.2b** | API + màn | Route cho hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị; màn `/du-lieu`; `gieo:demo` và `khoi-tao-to-chuc` gán `DATA_STEWARD`; màn nói ra §8.10 | S4.2a |
 | **S4.3** | Chuẩn hoá & ánh xạ | `TU_DONG` theo bí danh, `rfq_item_goi_y`, hàng đợi năm thao tác, chuẩn hoá hồi tố; **L2**, **L3** vế hành vi, **L13**; dòng PRODUCT §5 (§8.2) | — |
 | **S4.4** | Lịch sử giá | `bid_dong_tho`, hàm *"giá đã lộ"*, `quan_sat_gia(p_moc)`; kịch bản 41 có `lines` và kim đơn giá, năm bộ quét; test kiến trúc liệt kê mọi tệp đọc `rfq_unsealed_bids`; đo hiệu năng có biên bản; gieo lại `gieo:demo`; **L5**, **L6** vế lịch sử | S3.2 (kịch bản 41) |

@@ -33,7 +33,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   bid_receipts_canonical_text_check: "DO_DAI",
   bid_receipts_signature_check: "DO_DAI",
   caller_rate_limits_hits_check: "SO",
-  // [S1.194 / S4.2a] Hàng chuẩn: hình dạng mã, tên, thuộc tính; miền trạng thái.
+  // [S1.195 / S4.2a] Hàng chuẩn: hình dạng mã, tên, thuộc tính; miền trạng thái.
   canonical_item_versions_ten_hinh_dang: "DINH_DANG",
   canonical_item_versions_thuoc_tinh_hinh_dang: "JSON",
   canonical_item_versions_trang_thai_mien: "MIEN",
@@ -44,7 +44,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   invitation_otp_challenges_destination_hash_check: "DO_DAI",
   invitation_otp_challenges_failed_attempts_check: "SO",
   invitation_otp_challenges_pepper_version_check: "DO_DAI",
-  // [S1.194 / S4.2a] Bí danh hàng, quy đổi riêng: dạng sạch, hàng rút, hệ số dương, hai đầu khác nhau.
+  // [S1.195 / S4.2a] Bí danh hàng, quy đổi riêng: dạng sạch, hàng rút, hệ số dương, hai đầu khác nhau.
   item_aliases_bi_danh_sach_da_lam_sach: "DINH_DANG",
   item_aliases_rut_khong_hang: "DINH_DANG",
   item_uom_conversions_hai_dau_khac: "DINH_DANG",

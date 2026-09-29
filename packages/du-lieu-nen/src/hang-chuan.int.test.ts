@@ -1,11 +1,11 @@
-// [S1.194 / S4.2a] Hàng chuẩn, vai quản lý dữ liệu mù giá, quy đổi riêng — trên Postgres thật.
+// [S1.195 / S4.2a] Hàng chuẩn, vai quản lý dữ liệu mù giá, quy đổi riêng — trên Postgres thật.
 //
 // Ba nhóm, mỗi nhóm một bất biến của spec S4 §5.1:
 //   L3 (vế vai)  — `item.manage` chỉ ở `DATA_STEWARD`, không đứng cùng năm mã thấy giá hay cầm thứ bị đo, ở vai và ở người;
 //                  và người ghi dữ liệu nền phải giữ nó (cổng CSDL `du_lieu_nen_kiem_quyen_ghi`).
 //   L1           — bốn bảng mới mang khuôn nền của `079`; tổng điều tra ở `don-vi.int.test.ts` đòi đủ năm bảng.
 //   L4 (vế ⑵)    — quy đổi riêng: một cạnh của ĐÚNG hàng chuẩn, ghi trước mốc, ghép quy đổi chung ở hai đầu, cả chiều ngược;
-//                  hai cạnh cùng dùng được là mơ hồ ⇒ `KHONG_QUY_DOI_DUOC` (ADR-114).
+//                  hai cạnh cùng dùng được là mơ hồ ⇒ `KHONG_QUY_DOI_DUOC` (ADR-115).
 // Mọi phép ghi đi qua ĐÚNG đường ứng dụng: `withTenant` trên pool `app_api` và hàm của gói; vai chủ bảng chỉ để dựng người, gán
 // vai, và đột biến.
 import { randomBytes } from "node:crypto";
@@ -90,7 +90,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.194 / S4.2a] vai quản lý dữ liệu mù giá — L3 vế vai", () => {
+describe("[S1.195 / S4.2a] vai quản lý dữ liệu mù giá — L3 vế vai", () => {
   const LOAI_TRU = ["bid.view", "po.approve", "award.recommend", "rfq.create", "rfq.invite"] as const;
 
   it("[INV-L3] mức VAI: DATA_STEWARD không nhận thêm mã loại trừ nào; vai đang giữ mã loại trừ không nhận item.manage", async () => {
@@ -169,7 +169,7 @@ describe("[S1.194 / S4.2a] vai quản lý dữ liệu mù giá — L3 vế vai",
   });
 });
 
-describe("[S1.194 / S4.2a] hàng chuẩn — danh tính bất biến, phiên bản, bí danh — L1", () => {
+describe("[S1.195 / S4.2a] hàng chuẩn — danh tính bất biến, phiên bản, bí danh — L1", () => {
   it("[INV-L1] tạo hàng chuẩn: danh tính + phiên bản đầu + hàng sổ trong CÙNG giao dịch; `seq` và `ghi_luc` do trigger đặt", async () => {
     const moi = await trong(orgA, (c) =>
       taoHangChuan(c, orgA, {
@@ -285,7 +285,7 @@ describe("[S1.194 / S4.2a] hàng chuẩn — danh tính bất biến, phiên b�
   });
 });
 
-describe("[S1.194 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
+describe("[S1.195 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
   let d10: string;
   let d12: string;
   let sauKhiKhai: Date;
