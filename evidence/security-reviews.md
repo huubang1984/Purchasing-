@@ -16208,7 +16208,7 @@ Hai mươi mốt đột biến của #198 đo trên màn cũ; màn ấy đã tha
   sau §S1.192; `pnpm cap-so` cấp lại số vòng.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
 
-# §S1.9101 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+# §S1.194 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
 mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, một lớp từ chối vào sổ.
@@ -16267,7 +16267,8 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 - Lượt T3 toàn bộ đầu tiên đỏ ba tệp, cả ba là sổ đăng ký chưa khai: bộ quét rò rỉ của kịch bản 41 qua HTTP (hai route ghi mới
   chưa có thân hợp lệ — nay xác minh và thu hồi trên nhà cung cấp HY SINH bằng tài chính), lớp đọc `org_procurement_policies`
   (`ncc_kiem_xac_minh` khai `QUA_HAM`), và phép khớp tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (nay đọc cả thân trigger K8a). Sau khai: xanh.
-- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành S1.9101 và `080`; mốc `MOC_GHIM` 70 → 71.
+- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành `080`; mốc `MOC_GHIM` 70 → 71. Hợp lần hai sau #198
+  (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194.
 - `pnpm evidence` (T3 toàn bộ): XANH — 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3257 khẳng định.
 - `pnpm t0` sạch; `pnpm test` sạch.
 

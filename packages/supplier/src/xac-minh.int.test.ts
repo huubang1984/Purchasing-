@@ -8,7 +8,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docXacMinhNhaCungCap, thuHoiXacMinhNhaCungCap, xacMinhNhaCungCap } from "./xac-minh.js";
 
 // =============================================================================================
-// [S1.9101 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16
+// [S1.194 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP — PHÉP ĐO TRÊN POSTGRES 16
 //
 // Mỗi luật một ca, và mỗi ca đọc CSDL chứ không đọc lời của hàm: hàng trong `supplier_verifications`, hàng sổ, và câu trả lời
 // của `ncc_xac_minh_con_hieu_luc` — hàm mà K2 (S3.3c) sẽ hỏi. Tổ chức đã bật S3 dựng theo khuôn `tra-ve-nhap.int.test.ts`.

@@ -48,7 +48,7 @@ export type MaChotKiemSoat =
 
 export interface DongChot {
   /**
-   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.9101] Mã tách đôi của
+   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Mã tách đôi của
    * spec §5.1 mang MỘT chữ thường (`K8a`), cùng khuôn mã của sổ bất biến (`KHUON_MA`, khoản 246).
    */
   readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
@@ -140,7 +140,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
     thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
-  // [S1.9101 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
+  // [S1.194 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
   // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
   // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
   K8A_NGUOI_TAO_TU_XAC_MINH: {
@@ -182,7 +182,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
-  // [S1.9101 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
+  // [S1.194 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
 };
@@ -235,7 +235,7 @@ export async function tuChoiTheoChot(
 }
 
 /**
- * [S1.9101 / S3.3a] `tuChoiTheoChot` cho một tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Cùng
+ * [S1.194 / S3.3a] `tuChoiTheoChot` cho một tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Cùng
  * luật: luôn ném; mã vào sổ ⇒ một hàng `CONTROL_DENIED` ở giao dịch độc lập, payload chỉ mang mã.
  */
 export async function tuChoiTheoChotTaiNguyen(

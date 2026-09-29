@@ -1642,7 +1642,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "chinh_sach_kiem_nguoi_ky", migration: "072_bac_cua_goi.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
-    // [S1.9101 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
+    // [S1.194 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "080_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },

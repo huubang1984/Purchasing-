@@ -30,7 +30,7 @@ export {
   type SupplierRecord,
   type SupplierStatus,
 } from "./suppliers.js";
-// [S1.9101 / S3.3a / K8a] Xác minh nội bộ nhà cung cấp — ghi dưới `supplier.qualify`, trigger `ncc_kiem_xac_minh` có thẩm quyền.
+// [S1.194 / S3.3a / K8a] Xác minh nội bộ nhà cung cấp — ghi dưới `supplier.qualify`, trigger `ncc_kiem_xac_minh` có thẩm quyền.
 export {
   docXacMinhNhaCungCap,
   thuHoiXacMinhNhaCungCap,

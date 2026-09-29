@@ -134,7 +134,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   "rfq_award_approvals",
   "rfq_awards",
   "rfq_unsealed_bids",
-  // [S1.9101 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
+  // [S1.194 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
   // nhận hồ sơ nào.
   "supplier_verifications",
@@ -260,7 +260,7 @@ const HAM_KHONG_PHAI_CANH = [
   // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
   // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
   "public.kiem_thanh_phan_theo_chinh_sach",
-  // [S1.9101 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
+  // [S1.194 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",
   "public.noi_chuoi_kiem_toan",
@@ -1753,7 +1753,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "rfq_packages",
   );
-  // [S1.9101 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
+  // [S1.194 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
   // `rfq.invite`, không dựng hồ sơ) xác minh — nhân chứng của `ncc_kiem_xac_minh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
   const nccXm = await chenNC(
     "public.suppliers",

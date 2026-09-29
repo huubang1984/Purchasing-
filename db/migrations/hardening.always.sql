@@ -8191,7 +8191,7 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
+    -- [S1.194 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
     ARRAY[
       $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (080_xac_minh_nha_cung_cap)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
@@ -8229,7 +8229,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_bam_xac_minh(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
+    -- [S1.194 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
     ARRAY[
       $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (080_xac_minh_nha_cung_cap)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
@@ -8265,7 +8265,7 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
+    -- [S1.194 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
     ARRAY[
       $q$hàm + trigger ncc_kiem_xac_minh (080_xac_minh_nha_cung_cap)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
