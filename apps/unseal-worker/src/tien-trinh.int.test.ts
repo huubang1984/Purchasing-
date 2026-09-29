@@ -165,58 +165,75 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     }
   }, 60_000);
 
-  it("⑵ hàm 052 trả ĐỦ tổ chức dưới vai app_unseal — và BA đột biến lúc chạy đều giết nó", async () => {
-    const dem = async (): Promise<number> => {
-      const { rows } = await unsealPool.query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM public.outbox_danh_sach_to_chuc()",
-      );
-      return Number(rows[0]!.n);
-    };
+  // ===============================================================================================
+  // [S1.9161 / khoản 185] BA ĐỘT BIẾN CỦA `052` — MỘT BẢNG CHO VẾ ⑵ (đo HÀM) VÀ VẾ ⑵b (đo `batDau()`), MỖI ĐỘT BIẾN MỘT `it`.
+  //
+  // Trước vòng này cả ba chạy trong một vòng `for` của MỘT `it` ở mỗi vế: ⒜ đỏ thì ⒝ và ⒞ không bao giờ chạy — mà ⑵b là lớp DUY NHẤT
+  // canh cảnh ❷ của ADR-040. Nay `it.each` khoá theo ca, và `finally` phục hồi nằm trong TỪNG ca, nên một ca đỏ không để lược đồ
+  // hỏng cho ca sau. Đối chứng dương của mỗi vế tách ra riêng.
+  // ===============================================================================================
+  const DOT_BIEN_052 = [
+    {
+      ten: "⒜ SECURITY INVOKER — hàm thôi chạy dưới quyền chủ",
+      dotBien: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
+      phucHoi: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
+    },
+    {
+      ten: "⒝ DROP POLICY — policy là thứ CHỊU LỰC, không phải SECURITY DEFINER",
+      dotBien: "DROP POLICY organizations_liet_ke_worker ON public.organizations",
+      phucHoi: "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
+    },
+    {
+      ten: "⒞ đổi CHỦ HÀM sang một vai thường — chủ hàm là thứ CHỊU LỰC",
+      dotBien: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
+      phucHoi: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
+    },
+  ] as const;
+
+  /**
+   * Phục hồi một đột biến, VÀ cấp lại EXECUTE. ĐỔI CHỦ VIẾT LẠI ACL — đo được ở lượt S1.82: sau ⒞ thì `app_unseal` MẤT EXECUTE và
+   * câu đếm ném 42501. Cùng cơ chế đã buộc `052` phải đặt khối ACL TRƯỚC `ALTER … OWNER TO`. Nên phục hồi phải cấp lại, không chỉ đổi
+   * chủ về — và cấp lại cho cả ba, vì `GRANT` lặp là no-op.
+   */
+  async function phucHoi052(cau: string): Promise<void> {
+    await db.pool.query(cau);
+    await db.pool.query("GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal");
+  }
+
+  const dem = async (): Promise<number> => {
+    const { rows } = await unsealPool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM public.outbox_danh_sach_to_chuc()",
+    );
+    return Number(rows[0]!.n);
+  };
+
+  it("⑵ đối chứng dương: hàm 052 trả ĐỦ tổ chức dưới vai app_unseal — và đọc THẲNG organizations vẫn 0 hàng", async () => {
     const demThang = async (): Promise<number> => {
       const { rows } = await unsealPool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM public.organizations",
       );
       return Number(rows[0]!.n);
     };
-
     expect(await dem(), "hàm phải thấy ĐÚNG mọi tổ chức, không phải > 0").toBe(cacOrg.length);
     // VẾ GIỮ BÁN KÍNH: policy mới mang `TO app_liet_ke_to_chuc`, nên đọc THẲNG vẫn 0 hàng.
     expect(await demThang(), "app_unseal KHÔNG được đọc thẳng organizations").toBe(0);
+  }, 60_000);
 
-    for (const [ten, dotBien, phucHoi] of [
-      [
-        "⒜ SECURITY INVOKER — hàm thôi chạy dưới quyền chủ",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
-      ],
-      [
-        "⒝ DROP POLICY — policy là thứ CHỊU LỰC, không phải SECURITY DEFINER",
-        "DROP POLICY organizations_liet_ke_worker ON public.organizations",
-        "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
-      ],
-      [
-        "⒞ đổi CHỦ HÀM sang một vai thường — chủ hàm là thứ CHỊU LỰC",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
-      ],
-    ] as const) {
+  it.each(DOT_BIEN_052)(
+    "⑵ $ten ⇒ hàm 052 trả 0 hàng; phục hồi ⇒ trở lại đủ",
+    async ({ ten, dotBien, phucHoi }) => {
       await db.pool.query(dotBien);
       try {
         // Khẳng định ĐỘT BIẾN ĐÃ ÁP trước khi đếm — một đột biến "chạy rồi" mà không áp cho một
         // con số xanh giả, đúng bài học của khoản 99.
         expect(await dem(), ten).toBe(0);
       } finally {
-        await db.pool.query(phucHoi);
-        // ĐỔI CHỦ VIẾT LẠI ACL — đo được ở chính lượt này: sau ⒞ thì `app_unseal` MẤT EXECUTE và
-        // câu đếm ném 42501. Cùng cơ chế đã buộc `052` phải đặt khối ACL TRƯỚC `ALTER … OWNER TO`.
-        // Nên phục hồi phải cấp lại, không chỉ đổi chủ về.
-        await db.pool.query(
-          "GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal",
-        );
+        await phucHoi052(phucHoi);
       }
-    }
-    expect(await dem(), "phục hồi cả ba ⇒ trở lại đủ").toBe(cacOrg.length);
-  }, 60_000);
+      expect(await dem(), "phục hồi ⇒ trở lại đủ").toBe(cacOrg.length);
+    },
+    60_000,
+  );
 
   // ===============================================================================================
   // ⑵b [S1.83 / lượt soi ngang 73] BA ĐỘT BIẾN CỦA VẾ ⑵ CHO **0 HÀNG, KHÔNG LỖI** — VÀ TRƯỚC VÒNG
@@ -229,26 +246,11 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   // động ghi `to chuc thay duoc: 0`. Tức chính cái hỏng mà `052` sinh ra để giết thì im lặng ở
   // tiến trình dùng `052`.
   //
-  // Vế này lấy ĐÚNG ba đột biến của ⑵ và hỏi câu của ⑶.
+  // Vế này lấy ĐÚNG ba đột biến của ⑵ (cùng bảng `DOT_BIEN_052`) và hỏi câu của ⑶.
   // ===============================================================================================
-  it("⑵b ba đột biến cho 0 hàng KHÔNG LỖI ⇒ `batDau()` NÉM — cảnh ❷ không được thành im lặng", async () => {
-    for (const [ten, dotBien, phucHoi] of [
-      [
-        "⒜ SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
-      ],
-      [
-        "⒝ DROP POLICY",
-        "DROP POLICY organizations_liet_ke_worker ON public.organizations",
-        "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
-      ],
-      [
-        "⒞ đổi CHỦ HÀM",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
-      ],
-    ] as const) {
+  it.each(DOT_BIEN_052)(
+    "⑵b $ten cho 0 hàng KHÔNG LỖI ⇒ `batDau()` NÉM — cảnh ❷ không được thành im lặng",
+    async ({ ten, dotBien, phucHoi }) => {
       await db.pool.query(dotBien);
       const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong()));
       try {
@@ -257,14 +259,13 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
         await expect(tt.batDau(), ten).rejects.toThrow(/tra 0 to chuc/u);
       } finally {
         await tt.dung();
-        await db.pool.query(phucHoi);
-        await db.pool.query(
-          "GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal",
-        );
+        await phucHoi052(phucHoi);
       }
-    }
-    // ĐỐI CHỨNG DƯƠNG: phục hồi xong thì tiến trình lên lại được — vế trên đỏ vì đột biến, không
-    // phải vì `batDau()` hỏng sẵn.
+    },
+    60_000,
+  );
+
+  it("⑵b ĐỐI CHỨNG DƯƠNG: sau ba đột biến đã phục hồi, tiến trình lên lại được — các ca trên đỏ vì đột biến, không phải vì `batDau()` hỏng sẵn", async () => {
     const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong()));
     try {
       await expect(tt.batDau()).resolves.toBeUndefined();

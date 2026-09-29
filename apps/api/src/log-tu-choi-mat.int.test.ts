@@ -18,8 +18,20 @@
 // PHÉP ĐO NÀY LÀ CẢ HAI CHIỀU. Vế chính đòi các hằng đóng CÓ MẶT; vế đối chứng đòi dòng ấy KHÔNG
 // mang một giá trị nào — id tổ chức, id người dùng, tên người gọi gửi lên. Thiếu vế sau thì
 // "dòng log nói nhiều hơn" là một lời khen mà A2 phải trả giá.
+//
+// [S1.9161 / khoản 179] VẾ THỨ HAI, QUA NHÁNH `DenialAuditFailedError`. Hai vế trên đều đi qua
+// `PermissionAuditFailedError` của cổng quyền; các lần từ chối NGOÀI cổng quyền (cổng mở thầu, A4,
+// worker lúc giải mã) bọc bằng lớp kia, và tới trước vòng này dòng log của chúng chỉ mang `action`
+// và `resourceType` — ba đường ghi cùng `UNSEAL_DENIED UNSEAL_REQUEST` nên khi mất sổ không nói
+// được VẾ nào của cổng đã từ chối, mà hàng sổ mang `clause` chính là hàng không ghi được. Đo trên mã
+// trước vòng này, cùng cảnh khoá ghi sổ bị giữ, `POST /unseal/:id/dispatch` với id không tồn tại:
+//
+//     [api] <requestId> POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 55P03
+//
+// Nay dòng ấy mang thêm vế `POLICY_GATE` — hằng thứ ba của `DenialAuditFailedError`, do chính chỗ
+// gọi `throwAuditedDenial` truyền vào và đi qua cùng phép thuộc-tập (`packages/identity/src/rbac.ts`).
 // ==============================================================================================
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -50,13 +62,17 @@ function sha256(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
 }
 
-/** Một phiên NGƯỜI MUA đã qua MFA nhưng KHÔNG có vai trò nào — mọi route ghi của nó là một lần từ chối. */
-async function phienKhongVaiTro(): Promise<{ id: string; cookie: string }> {
+/**
+ * Một phiên NGƯỜI MUA đã qua MFA, với các vai trò cho trước. Không vai trò nào ⇒ mọi route ghi của nó là một lần từ chối
+ * của cổng quyền; [S1.9161 / khoản 179] `DIRECTOR` ⇒ qua được cổng quyền `rfq.unseal` để tới cổng mở thầu.
+ */
+async function phienNguoiMua(vaiTro: readonly string[]): Promise<{ id: string; cookie: string }> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Khong vai tro') RETURNING id",
     [orgA, `k131-${randomBytes(4).toString("hex")}@vidu.vn`],
   );
   const id = rows[0]?.id ?? "";
+  for (const v of vaiTro) await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [orgA, id, v]);
   const token = randomBytes(32).toString("base64url");
   await db.pool.query(
     "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
@@ -74,6 +90,40 @@ async function demKhoaGiuDuoc(org: string): Promise<number> {
     [org],
   );
   return rows[0]?.n ?? -1;
+}
+
+/**
+ * Giữ khoá ghi sổ của tổ chức ở MỘT giao dịch khác, và chỉ trả về khi khoá THẬT SỰ đã được cầm — không thì phép đo có thể chạy
+ * trước người giữ và lời gọi đi qua bình thường, tức một test XANH không đo gì. Hàm trả về thả khoá, chờ giao dịch giữ khoá kết
+ * thúc và đóng pool; gọi lại lần nữa là no-op.
+ */
+async function giuKhoaGhiSo(org: string): Promise<() => Promise<void>> {
+  const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
+  let thaKhoa: () => void = () => {};
+  const choTha = new Promise<void>((xong) => {
+    thaKhoa = xong;
+  });
+  const giuKhoa = withTenant(poolGiuKhoa, org, async (c) => {
+    await c.query("SELECT * FROM public.audit_append($1,'USER',NULL,'K131_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)", [org]);
+    await choTha;
+  });
+  const tha = async (): Promise<void> => {
+    thaKhoa();
+    await giuKhoa.catch(() => undefined);
+    await poolGiuKhoa.end().catch(() => undefined);
+  };
+  try {
+    const han = Date.now() + 5000;
+    for (;;) {
+      if ((await demKhoaGiuDuoc(org)) >= 1) break;
+      if (Date.now() > han) throw new Error("het 5000ms ma khoa ghi so cua to chuc chua duoc cam");
+      await new Promise<void>((xong) => setTimeout(xong, 20));
+    }
+  } catch (loi) {
+    await tha();
+    throw loi;
+  }
+  return tha;
 }
 
 beforeAll(async () => {
@@ -102,26 +152,9 @@ afterAll(async () => {
 
 describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi sổ vì trần 2 s", { timeout: 120_000 }, () => {
   it("khoá ghi sổ của tổ chức bị giữ ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` và mã quyền — và KHÔNG một giá trị nào", async () => {
-    const ai = await phienKhongVaiTro();
-    const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
-    let thaKhoa: () => void = () => {};
-    const choTha = new Promise<void>((xong) => {
-      thaKhoa = xong;
-    });
+    const ai = await phienNguoiMua([]);
+    const thaKhoa = await giuKhoaGhiSo(orgA);
     try {
-      const giuKhoa = withTenant(poolGiuKhoa, orgA, async (c) => {
-        await c.query("SELECT * FROM public.audit_append($1,'USER',NULL,'K131_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)", [orgA]);
-        await choTha;
-      });
-      // Chờ tới khi khoá THẬT SỰ được cầm — không thì phép đo có thể chạy trước người giữ và
-      // `POST /suppliers` đi qua bình thường, tức một test XANH không đo gì.
-      const han = Date.now() + 5000;
-      for (;;) {
-        if ((await demKhoaGiuDuoc(orgA)) >= 1) break;
-        if (Date.now() > han) throw new Error("het 5000ms ma khoa ghi so cua to chuc chua duoc cam");
-        await new Promise<void>((xong) => setTimeout(xong, 20));
-      }
-
       const truoc = logLoi.length;
       const batDau = Date.now();
       const res = await fetch(`${goc}/suppliers`, {
@@ -131,8 +164,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       });
       const daCho = Date.now() - batDau;
       const than = await res.text();
-      thaKhoa();
-      await giuKhoa;
+      await thaKhoa();
       const moi = logLoi.slice(truoc);
 
       expect([res.status, JSON.parse(than)], than).toEqual([500, { error: "loi noi bo" }]);
@@ -164,13 +196,58 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       );
       expect(ncc[0]?.n).toBe("0");
     } finally {
-      thaKhoa();
-      await poolGiuKhoa.end().catch(() => undefined);
+      await thaKhoa();
     }
   });
 
+  it("[S1.9161 / khoản 179] khoá ghi sổ bị giữ, cổng mở thầu từ chối một yêu cầu KHÔNG TÌM THẤY ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` VÀ VẾ `POLICY_GATE` — qua nhánh `DenialAuditFailedError`, không một giá trị nào", async () => {
+    const gd = await phienNguoiMua(["DIRECTOR"]);
+    const idLa = randomUUID();
+    const thaKhoa = await giuKhoaGhiSo(orgA);
+    try {
+      const truoc = logLoi.length;
+      const batDau = Date.now();
+      const res = await fetch(`${goc}/unseal/${idLa}/dispatch`, { method: "POST", headers: { cookie: gd.cookie } });
+      const daCho = Date.now() - batDau;
+      const than = await res.text();
+      await thaKhoa();
+      const moi = logLoi.slice(truoc);
+
+      expect([res.status, JSON.parse(than)], than).toEqual([500, { error: "loi noi bo" }]);
+      expect(daCho, "phải chờ tới trần 2 s của `050` rồi mới gãy 55P03").toBeGreaterThanOrEqual(1800);
+      expect(moi, "một sự cố, một dòng").toHaveLength(1);
+      // Neo HAI ĐẦU: ngoài 36 ký tự `requestId`, chuỗi bị xác định hoàn toàn — nên id yêu cầu, id tổ chức, id người gọi không
+      // có chỗ trong dòng (cùng lập luận với vế trên).
+      expect(moi[0]).toMatch(
+        /^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 55P03$/u,
+      );
+      // D5 thật: lần từ chối không vào sổ.
+      const { rows: so } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_DENIED' AND resource_id = $2",
+        [orgA, idLa],
+      );
+      expect(so[0]?.n).toBe("0");
+    } finally {
+      await thaKhoa();
+    }
+  });
+
+  it("ĐỐI CHỨNG [S1.9161 / khoản 179]: không ai giữ khoá ⇒ cùng lời gọi ra 422 và MỘT hàng sổ `UNSEAL_DENIED` mang vế `POLICY_GATE`, không dòng log", async () => {
+    const gd = await phienNguoiMua(["DIRECTOR"]);
+    const idLa = randomUUID();
+    const truoc = logLoi.length;
+    const res = await fetch(`${goc}/unseal/${idLa}/dispatch`, { method: "POST", headers: { cookie: gd.cookie } });
+    expect(res.status, await res.text()).toBe(422);
+    expect(logLoi.slice(truoc)).toEqual([]);
+    const { rows } = await db.pool.query<{ clause: string }>(
+      "SELECT payload->>'clause' AS clause FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_DENIED' AND resource_id = $2",
+      [orgA, idLa],
+    );
+    expect(rows).toEqual([{ clause: "POLICY_GATE" }]);
+  });
+
   it("ĐỐI CHỨNG: không ai giữ khoá ⇒ cùng lời gọi ra 403 và MỘT hàng sổ, không dòng log — phép đo trên đo đúng ca `55P03`, không phải mọi lần từ chối", async () => {
-    const ai = await phienKhongVaiTro();
+    const ai = await phienNguoiMua([]);
     const truoc = logLoi.length;
     const res = await fetch(`${goc}/suppliers`, {
       method: "POST",

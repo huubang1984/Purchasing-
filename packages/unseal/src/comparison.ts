@@ -316,6 +316,8 @@ export async function buildComparisonTable(
         payload: { rfqStatus: trangThai },
       },
       new ComparisonDeniedError(trangThai, `Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở ${trangThai} (A4).`),
+      // [S1.9161 / khoản 179] Trạng thái RFQ là "vế" của lần từ chối này, cho dòng log của lần MẤT SỔ.
+      trangThai,
     );
   }
 
