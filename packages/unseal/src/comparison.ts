@@ -319,27 +319,63 @@ export async function buildComparisonTable(
     );
   }
 
+  // ==============================================================================================
+  // [S1.9131 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG MỖI CÂU, VÀ CHỈ KHI `totalAmount`
+  // LÀ SỐ HAY CHUỖI.
+  //
+  // Đo trước khi sửa (§S1.9131): hai câu dưới gọi `bid_so_tien(payload->>'totalAmount')` BẢY lần cho
+  // mỗi báo giá đọc được (hai ở câu hàng: danh sách chọn và `ORDER BY`; năm ở câu tổng hợp: `min`,
+  // `max`, `avg`, vế ngân sách, `IS NOT NULL`) và BA lần cho một `totalAmount` là MẢNG — `->>` dựng
+  // CẢ CÂY thành văn bản rồi `bid_so_tien` mới ép kiểu hỏng và trả NULL. Với 20 000 phần tử `1e324`
+  // (vài KB jsonb lưu), mỗi lần là 6 540 000 ký tự; `jsonb_typeof` thì trả `array` mà không dựng gì.
+  //
+  // HÌNH DẠNG: `so_tien` là MỘT biểu thức `CASE` — `jsonb_typeof` phải là `number` hay `string`
+  // rồi mới tới `->>` và `bid_so_tien` —, tính trong một lớp mà bộ lập kế hoạch KHÔNG kéo lên
+  // (`pull_up_simple_subquery`): câu hàng đặt nó cạnh hàm cửa sổ `row_number()`, câu tổng hợp đặt
+  // nó trong CTE `DISTINCT ON`. Một lớp `SELECT` đơn thuần thì bị kéo lên và mỗi chỗ tham chiếu
+  // lại thành một bản sao của biểu thức — tức lại bảy lần. Hai câu vẫn là hai câu: một hàng
+  // đọc được đi qua `bid_so_tien` đúng HAI lần, đo ở `comparison.int.test.ts` bằng cách đếm.
+  // `bid_so_tien` vẫn là luật duy nhất về "chuỗi nào là một số tiền" (020, 022); lớp này chỉ
+  // quyết nó có được HỎI hay không. JSON `null`, khoá thiếu, đối tượng, mảng, boolean ⇒ `NULL`,
+  // hàng vẫn ở trong bảng và được đếm là `unparsed` — cùng kết quả với trước, rẻ hơn.
+  // ==============================================================================================
   const { rows: dong } = await client.query<HangDong>(
-    `SELECT v.bid_id,
-            v.id                                         AS bid_version_id,
-            v.version,
-            v.submitted_at,
-            s.id                                         AS supplier_id,
-            s.legal_name,
-            u.payload,
-            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS total_amount,
-            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
-            r.round_no                                   AS bafo_round_no,
-            (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
-               OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
-       FROM public.rfq_unsealed_bids u
-       JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
-       JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
-       JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
-       JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
-       LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
-      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
-      ORDER BY public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) ASC NULLS LAST, s.legal_name ASC`,
+    `SELECT d.bid_id,
+            d.bid_version_id,
+            d.version,
+            d.submitted_at,
+            d.supplier_id,
+            d.legal_name,
+            d.payload,
+            d.so_tien::pg_catalog.text                   AS total_amount,
+            d.currency,
+            d.bafo_round_no,
+            d.la_moi_nhat
+       FROM (
+         SELECT v.bid_id,
+                v.id                                         AS bid_version_id,
+                v.version,
+                v.submitted_at,
+                s.id                                         AS supplier_id,
+                s.legal_name,
+                u.payload,
+                CASE WHEN pg_catalog.jsonb_typeof(u.payload OPERATOR(pg_catalog.->) 'totalAmount')
+                          OPERATOR(pg_catalog.=) ANY (ARRAY['number', 'string']::pg_catalog.text[])
+                     THEN public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))
+                END                                          AS so_tien,
+                public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
+                r.round_no                                   AS bafo_round_no,
+                (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
+                   OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
+           FROM public.rfq_unsealed_bids u
+           JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
+           JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+           JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+           JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
+           LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
+          WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+       ) d
+      ORDER BY d.so_tien ASC NULLS LAST, d.legal_name ASC`,
     [rfqId],
   );
 
@@ -355,9 +391,23 @@ export async function buildComparisonTable(
   // (`index.ts`) và `docBaoGia` của `packages/danh-gia` đã chọn: `DISTINCT ON (v.bid_id) …
   // ORDER BY v.version DESC` — lần nộp SAU thay lần nộp TRƯỚC. Ba bộ đọc, một luật, và không bộ
   // nào phụ thuộc một tiền đề ngầm của bộ kia nữa (đó đúng là lỗ mà mục 7d của §S1.108 ghi).
+  //
+  // [S1.9131 / khoản 114] `so_tien` tính MỘT lần trong `moi_nhat` — lớp `DISTINCT ON` không bị kéo
+  // lên —, và câu ngoài chỉ tham chiếu cột. Lưu ý nói ra: `DISTINCT ON` chọn SAU khi chiếu, nên biểu
+  // thức chạy cho mọi phiên bản của một luồng chứ không riêng bản mới nhất; rẻ, vì chỉ số hay chuỗi
+  // mới tới `bid_so_tien`, và câu hàng cũng tính cho mọi phiên bản. Bốn chỗ đọc tiền tệ giữ nguyên
+  // hình S1.165: `tien-te-mot-cho-doc.test.ts` ghim đúng NĂM lời gọi `bid_currency` trong mã sản
+  // xuất, và tiền tệ không phải thứ khoản 114 đo — một chuỗi tiền tệ không phình khi `->>`.
   const { rows: th } = await client.query<HangTongHop>(
     `WITH moi_nhat AS (
-       SELECT DISTINCT ON (v.bid_id) u.payload, i.rfq_id, i.org_id
+       SELECT DISTINCT ON (v.bid_id)
+              u.payload,
+              CASE WHEN pg_catalog.jsonb_typeof(u.payload OPERATOR(pg_catalog.->) 'totalAmount')
+                        OPERATOR(pg_catalog.=) ANY (ARRAY['number', 'string']::pg_catalog.text[])
+                   THEN public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))
+              END                                                                  AS so_tien,
+              i.rfq_id,
+              i.org_id
          FROM public.rfq_unsealed_bids u
          JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
          JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
@@ -365,19 +415,19 @@ export async function buildComparisonTable(
         WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
         ORDER BY v.bid_id, v.version DESC
      )
-     SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))                AS currency,
-            pg_catalog.count(*)::pg_catalog.int4                                              AS n,
-            pg_catalog.min(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_min,
-            pg_catalog.max(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_max,
-            pg_catalog.round(pg_catalog.avg(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))), 2)::pg_catalog.text AS gia_tb,
+     SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
+            pg_catalog.count(*)::pg_catalog.int4                                   AS n,
+            pg_catalog.min(u.so_tien)::pg_catalog.text                             AS gia_min,
+            pg_catalog.max(u.so_tien)::pg_catalog.text                             AS gia_max,
+            pg_catalog.round(pg_catalog.avg(u.so_tien), 2)::pg_catalog.text        AS gia_tb,
             pg_catalog.count(*) FILTER (
               WHERE ns.estimated_value IS NOT NULL
                 AND ns.currency OPERATOR(pg_catalog.=) public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))
-                AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) OPERATOR(pg_catalog.<=) ns.estimated_value
+                AND u.so_tien OPERATOR(pg_catalog.<=) ns.estimated_value
             )::pg_catalog.int4                                                     AS duoi_ngan_sach
        FROM moi_nhat u
        LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) u.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) u.org_id
-      WHERE public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
+      WHERE u.so_tien IS NOT NULL
       GROUP BY public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))`,
     [rfqId],
   );
