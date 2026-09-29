@@ -16436,6 +16436,10 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 - **Sau khi merge `master` tới #198 (S3.2c2 phần bù, giữ S1.193) và cấp lại số vòng:** toàn bộ T3 cục bộ trên cây cuối: 193 tệp,
   3269 khẳng định, 3259 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 70/70 bất biến,
   đọc từ 3269 khẳng định. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #206 (S3.2d, giữ S1.194, ADR-114, `080`) và cấp lại số vòng, số ADR, số migration:** toàn bộ T3
+  cục bộ trên cây cuối: 193 tệp, 3275 khẳng định, 3265 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70
+  bất biến, đọc từ 3275 khẳng định; K4b 8 → 23 như trên, K4a 22 (của #206). `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem`
+  sạch.
 
 ---
 
@@ -16590,6 +16594,10 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 - **Sau khi merge #199 — nay mang #198 (phần bù S3.2c2, giữ S1.193) — và cấp lại số vòng:** toàn bộ unit + T3 cục bộ trên cây
   cuối: 194 tệp, 3297 khẳng định, 3287 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất biến, đọc từ
   3297 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #206 (S3.2d, giữ S1.194, ADR-114, `080`) — và cấp lại số vòng, số ADR, số migration:** toàn
+  bộ unit + T3 cục bộ trên cây cuối: 194 tệp, 3303 khẳng định, 3293 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh
+  lại: 70/70 bất biến, đọc từ 3303 khẳng định; K4b 40, D2 64, K4a 26 (22 của #206 cộng 4 của vòng này). `tsc`, `eslint`,
+  `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
