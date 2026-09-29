@@ -7,3 +7,20 @@ export {
   type KetQuaQuyDoi,
   type QuyDoiDonViInput,
 } from "./don-vi.js";
+// [S1.197 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng.
+export {
+  DuLieuNenError,
+  docHangChuan,
+  khaiBiDanhHang,
+  khaiQuyDoiRieng,
+  rutBiDanhHang,
+  rutQuyDoiRieng,
+  taoHangChuan,
+  taoPhienBanHangChuan,
+  type HangChuan,
+  type HangChuanMoi,
+  type KhaiBiDanhHangInput,
+  type KhaiQuyDoiRiengInput,
+  type TaoHangChuanInput,
+  type TaoPhienBanInput,
+} from "./hang-chuan.js";
