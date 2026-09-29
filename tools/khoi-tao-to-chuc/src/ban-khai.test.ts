@@ -28,7 +28,7 @@ describe("[S1.182] docBanKhai — hai chế độ", () => {
   });
 
   it("danh mục vai là đúng sáu mã của 005", () => {
-    expect([...MA_VAI]).toEqual(["REQUESTER", "BUYER", "TECHNICAL", "PROCUREMENT_MANAGER", "FINANCE", "DIRECTOR"]);
+    expect([...MA_VAI]).toEqual(["REQUESTER", "BUYER", "TECHNICAL", "PROCUREMENT_MANAGER", "FINANCE", "DIRECTOR", "DATA_STEWARD"]);
   });
 
   it.each([
