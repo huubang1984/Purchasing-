@@ -126,6 +126,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "ĐƯỢC GIÁ THÌ XEM ĐƯỢC KẾT QUẢ — không rộng hơn, và một chứng chỉ `AGENT_READONLY` không " +
     "phải một con người có MFA. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.110 / S2.6]",
+  // [S1.196 / S3.3a / K8a]
+  "/suppliers/:supplierId/verification":
+    "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +
+    "kiểm soát của bên mua (K8a), và câu hỏi *nhà cung cấp này có được đếm vào K2 không* là của máy chủ lúc nộp duyệt, " +
+    "không phải của một tác tử chỉ-đọc. Mở sau là một quyết định có tên.",
   "/policy/versions":
     "LỊCH SỬ PHIÊN BẢN CHÍNH SÁCH — trọn ma trận bậc của MỌI phiên bản, ai khai, ai ký, lúc nào, và tổ chức đã bật S3 " +
     "chưa. Nó là dữ liệu QUẢN TRỊ của màn `/chinh-sach`, không phải thứ một tác tử chỉ-đọc cần để làm việc: chính sách " +
