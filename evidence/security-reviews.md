@@ -15753,3 +15753,23 @@ thích bộ điều phối về mã trạng thái; chú thích nhân chứng c�
 bản 41; lời khai về mốc đúc của `9501`; tên ca *"không hàng sổ nào"* của `ve-soan` nay đếm mọi action. Lượt này cũng đo đúng lời
 khai ở bốn ca biên chưa có test — ba ca vào bộ test (gói cấp kép nộp lại nguyên; lời mời MVP1 `SENT` gửi hỏng lúc mở; token đã tiêu
 thụ), ca thứ tư là câu hỏi cho chủ dự án (§6).
+
+## 8. Số đo
+
+- `apps/api/src/link-moi-mo-goi.int.test.ts`: 31/31 trên Postgres 16 thật. `packages/rfq/src/ve-soan.int.test.ts`: 14/14, gồm một ca
+  mang hai đột biến nằm hẳn trong bộ test.
+- Tệp đổi theo vòng này: `packages/rfq/src/rfq.int.test.ts` 60/60 — phép so tên ràng buộc hai chiều gom thêm trigger K4a;
+  `apps/api/src/buyer.int.test.ts` 16/16 — bộ điều phối của tệp nâng trần từ chối, vì route ghi thứ 31 (`return-to-draft`) làm hai
+  vòng quét [INV-H17] vượt trần 30 lần từ chối mỗi cửa sổ của ADR-092 và route cuối nhận 429 (trần đo ở `auth.int.test.ts`);
+  `packages/invitation/src/invitation.int.test.ts` 72/72; `apps/api/src/loi-moi-sau-commit.int.test.ts` 19/19;
+  `packages/rfq/src/danh-sach-moi.int.test.ts` 21/21; kịch bản 41 qua HTTP 58/58 và trực tiếp 30/30.
+- `db/migrations.int.test.ts` 118/118, `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36.
+- Đột biến: của tôi trước lượt soi, mười bốn, mười bốn lần đỏ; lượt soi test để lại hai mươi bốn đột biến sống sót, nay hai mươi bốn
+  lần đỏ, và hai đột biến tương đương; của tôi cho các sửa sau lượt soi, mười ba, mười ba lần đỏ.
+- Toàn bộ hai tầng cục bộ trên cây cuối, trong MỘT lượt — cũng là lượt sinh ma trận: 189 tệp, 3220 khẳng định, 3210 đạt, 1 bỏ qua.
+  9 ca đỏ đều do môi trường: 8 của `packages/test-support/src/postgres.int.test.ts` — máy đo không có container runtime cho
+  `testcontainers`; 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` — tiền đề của ca ấy đòi `lower()` của CSDL hạ chữ khoanh
+  tròn KHÁC JS, đúng trên `postgres:16-alpine` (musl) của CI, sai trên cụm cục bộ glibc `C.UTF-8`; chính ca ấy nói ra tiền đề không
+  đứng. Tầng đơn vị trong lượt ấy: 121 tệp, 1706 khẳng định, 1705 đạt, 1 bỏ qua.
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3220 khẳng định; cổng evidence xanh. Số ca: K4a 6 → 10, K4b 5 →
+  11, K6 4 → 17, D2 45 → 47. Mốc `MOC_GHIM.soPhuToiThieu` giữ 68 — vòng này không thêm bất biến.
