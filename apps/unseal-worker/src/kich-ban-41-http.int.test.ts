@@ -375,7 +375,7 @@ afterAll(async () => {
 });
 
 /**
- * [S1.9101 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3
+ * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3
  * gọi ở DRAFT, trước khi nộp duyệt (K4b); luồng MVP1 gọi sau khi mở, như trước. Trả thân `201` của lời mời.
  */
 async function taoNccVaMoi(i: number): Promise<{ supplierId: string; invitation: { id: string; status: string; moiSauKhiKy: boolean } }> {
@@ -438,7 +438,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     const m = trangThai.mua.cookie;
     if (batS3) {
-      // [S1.9101 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt, vì chữ ký mang danh sách
+      // [S1.190 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt, vì chữ ký mang danh sách
       // lúc ký (K4b): mỗi lần mời trả `201` với lời mời `UNSENT`, không nhãn *mời sau khi ký*, và bộ gửi KHÔNG được gọi.
       const truoc = dv.loiMoiDaGui.length;
       for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
@@ -466,7 +466,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
     expect(mo.status, mo.text).toBe(200);
     expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
-    // [S1.9101 / S3.2c1 · INV-K6] Luồng S3: lần mở gói gửi ĐÚNG một link cho mỗi lời mời dựng ở DRAFT, không link nào hỏng, và mọi
+    // [S1.190 / S3.2c1 · INV-K6] Luồng S3: lần mở gói gửi ĐÚNG một link cho mỗi lời mời dựng ở DRAFT, không link nào hỏng, và mọi
     // lời mời thành `SENT`. Luồng MVP1: chưa có lời mời nào — không gửi gì, danh sách rỗng.
     expect((mo.body as { unsentInvitationIds: string[] }).unsentInvitationIds).toEqual([]);
     expect(dv.loiMoiDaGui.slice(guiTruocMo).map((l) => l.invitationId).sort()).toEqual(trangThai.loiMoi.map((l) => l.invitationId).sort());
@@ -480,7 +480,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   });
 
   it("bước 3 — mời năm nhà cung cấp qua HTTP; mỗi người đi trọn link → OTP → phiên khách qua HTTP", async () => {
-    // [S1.9101 / S3.2c1] Luồng S3: năm lời mời có từ DRAFT, link đi lúc mở gói — mỗi nhà cung cấp mở phiên bằng ĐÚNG link bộ gửi
+    // [S1.190 / S3.2c1] Luồng S3: năm lời mời có từ DRAFT, link đi lúc mở gói — mỗi nhà cung cấp mở phiên bằng ĐÚNG link bộ gửi
     // nhận cho lời mời của mình. Luồng MVP1: mời bây giờ, link đi ngay lúc mời.
     for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
       if (batS3) {

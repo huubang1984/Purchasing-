@@ -15853,7 +15853,7 @@ sau commit này.
 
 Mở khoản 254, 255. Còn mở **84**; rổ B **60**.
 
-# §S1.9101 — S3.2c1: `gieo:demo --s3` VÀ KỊCH BẢN 41 CHẠY THEO THỨ TỰ MỜI MỚI (K4a, K4b, K6)
+# §S1.190 — S3.2c1: `gieo:demo --s3` VÀ KỊCH BẢN 41 CHẠY THEO THỨ TỰ MỜI MỚI (K4a, K4b, K6)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Không
 migration, không mã sản xuất — một công cụ dev và hai tệp test.

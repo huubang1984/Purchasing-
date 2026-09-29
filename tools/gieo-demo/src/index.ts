@@ -228,7 +228,7 @@ async function chinh(): Promise<void> {
         "VALUES ($1, $2, '9000000000.00', 'VND', $3, $4, $5)",
       [org, rfq, chinhSach, nguoiGieo, phienGieo],
     );
-    // [S1.9101 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
+    // [S1.190 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
     // duyệt —, vì chữ ký duyệt gói mang băm của danh sách mời lúc ký (K4b) và gói chỉ mở khi người ký ký đúng danh sách ấy; lời mời
     // là `UNSENT`, KHÔNG token (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời sau khi mở, token ngay lúc mời.
     const taoNccVaMoi = async (c: pg.PoolClient): Promise<{ readonly ten: string; readonly invitationId: string }[]> => {
@@ -268,7 +268,7 @@ async function chinh(): Promise<void> {
     // [S1.174 / S3.1d] `--s3`: đúng hai người §7 xếp cho bước này — P2, P3, hai PROCUREMENT_MANAGER khác người soạn. Lượt đi
     // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
-    // [S1.9101 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách bảy lời mời vừa dựng ở DRAFT.
+    // [S1.190 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách bảy lời mời vừa dựng ở DRAFT.
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
     for (const nm of nguoiDuyetGoi) {
       await pool.query(
@@ -289,7 +289,7 @@ async function chinh(): Promise<void> {
       );
 
       if (S3) {
-        // [S1.9101 / S3.2c1 / K6] Đúng đường của route mở gói (S3.2b2, ADR-113): phiên người mở đúc MỘT token cho mỗi lời mời
+        // [S1.190 / S3.2c1 / K6] Đúng đường của route mở gói (S3.2b2, ADR-113): phiên người mở đúc MỘT token cho mỗi lời mời
         // còn sống, trong CHÍNH giao dịch mở gói. Công cụ không có bộ gửi — nó in link ra; lời mời thành `SENT` như sau một lần
         // gửi được, cũng trong giao dịch này (gói đã `OPEN` trong giao dịch, và trigger `076` chỉ đòi điều ấy).
         const links = await ducTokenKhiMoGoi(c, org, { rfqId: rfq, actorSessionId: phienGieo });

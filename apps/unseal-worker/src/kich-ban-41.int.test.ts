@@ -219,7 +219,7 @@ afterAll(async () => {
 interface TrangThaiKichBan {
   rfqId: string;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string }[];
-  /** [S1.9101 / S3.2c1] Luồng S3: token mà phiên người mở đúc cho mỗi lời mời TRONG giao dịch mở gói — theo id lời mời. */
+  /** [S1.190 / S3.2c1] Luồng S3: token mà phiên người mở đúc cho mỗi lời mời TRONG giao dịch mở gói — theo id lời mời. */
   tokenKhiMo: Map<string, string>;
   phienKhach: string[];
   bienNhan: { canonicalText: string; signature: Uint8Array; ten: string }[];
@@ -229,7 +229,7 @@ const trangThaiMoi = (): TrangThaiKichBan => ({ rfqId: "", loiMoi: [], tokenKhiM
 const trangThai: TrangThaiKichBan = trangThaiMoi();
 
 /**
- * [S1.9101 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3 gọi ở
+ * [S1.190 / S3.2c1] Một nhà cung cấp, một người liên hệ, một lời mời — CHUNG cho hai luồng, chỉ khác LÚC gọi: luồng S3 gọi ở
  * DRAFT, trước khi nộp duyệt (K4b: chữ ký mang danh sách mời lúc ký); luồng MVP1 gọi sau khi mở, như trước.
  */
 async function taoNccVaMoi(c: pg.PoolClient, ncc: { readonly ten: string; readonly gia: string }): Promise<{ invitationId: string; supplierId: string; status: string; moiSauKhiKy: boolean }> {
@@ -331,7 +331,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
 
   it("bước 2 — hai giám đốc KHÁC NHAU duyệt, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     if (batS3) {
-      // [S1.9101 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt: năm lời mời `UNSENT`,
+      // [S1.190 / S3.2c1 · INV-K4a · INV-K6] Luồng S3 dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt: năm lời mời `UNSENT`,
       // không nhãn *mời sau khi ký*, và không một token nào — K6 chặn lần đúc khi gói chưa từng mở.
       await withTenant(apiPool, orgA, async (c) => {
         for (const ncc of NHA_CUNG_CAP) {
@@ -355,7 +355,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         orgKeys: boBoc,
       }, apiPool);
       expect(mo.status).toBe("OPEN");
-      // [S1.9101 / S3.2c1 · INV-K6] Đúng đường của route mở gói (S3.2b2): phiên người mở đúc MỘT token cho mỗi lời mời còn sống,
+      // [S1.190 / S3.2c1 · INV-K6] Đúng đường của route mở gói (S3.2b2): phiên người mở đúc MỘT token cho mỗi lời mời còn sống,
       // trong CHÍNH giao dịch mở gói. Luồng MVP1: lời mời đến sau, không đúc gì ở đây.
       const links = await ducTokenKhiMoGoi(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua });
       expect(links.map((l) => l.invitationId).sort()).toEqual(trangThai.loiMoi.map((l) => l.invitationId).sort());
@@ -378,7 +378,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
   });
 
   it("bước 3 — mời năm nhà cung cấp; mỗi người đi trọn link → OTP → phiên khách", async () => {
-    // [S1.9101 / S3.2c1] Luồng S3: năm lời mời đã có từ DRAFT, token từ lần mở gói. Luồng MVP1: mời bây giờ, token ngay lúc mời.
+    // [S1.190 / S3.2c1] Luồng S3: năm lời mời đã có từ DRAFT, token từ lần mở gói. Luồng MVP1: mời bây giờ, token ngay lúc mời.
     for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
       await withTenant(apiPool, orgA, async (c) => {
         const lm = batS3 ? trangThai.loiMoi[i] : await taoNccVaMoi(c, ncc);
