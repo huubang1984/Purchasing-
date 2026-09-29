@@ -37,10 +37,15 @@
 // [S1.72 / khoản 121] VẾ ⑷: gói workspace mà mã SẢN XUẤT import lúc chạy phải nằm ở `dependencies` của chính gói. Quy tắc depcruise
 // `khong-phu-thuoc-devdep-trong-src` chỉ bắn trên cạnh `npm-dev`, mà gói workspace đi qua `paths` của tsconfig: `apps/unseal-worker`
 // import `@trustprocure/identity` lúc chạy (`assertFreshMfa`, từ S1.6) trong khi khai nó ở `devDependencies`, và t0 trên master 298cd4e
-// xanh. Gói mà mọi nơi import đều là test (vế ⑵) được miễn — "mã sản xuất" của nó là hạ tầng kiểm thử; [lượt soi 67a-2] trừ gói dưới
+// xanh. ~~Gói mà mọi nơi import đều là test (vế ⑵) được miễn — "mã sản xuất" của nó là hạ tầng kiểm thử; [lượt soi 67a-2] trừ gói dưới
 // `apps/`: app là lá, không mã sản xuất nào import nó, nên một lần nhắc tên app trong một tệp test đủ đưa cả app vào rổ miễn — và mỗi app có
 // mã sản xuất phải có tệp được đọc. [lượt soi 67c-5] Tool cũng là lá, và chạy lúc vận hành (`pnpm neo`): rổ miễn chỉ nhận gói dưới `packages/`,
-// và mỗi tool có mã sản xuất cũng phải có tệp được đọc. `import type`/`export type` không tính: TypeScript xoá chúng. [lượt soi 67a-1] Ngoặc chỉ mang kiểu nội
+// và mỗi tool có mã sản xuất cũng phải có tệp được đọc.~~ [S1.9191 / khoản 223] Rổ miễn của vế ⑷ là LỜI KHAI, không phải phép suy: phép đếm của
+// vế ⑵ xếp một gói KHÔNG AI IMPORT Ở MÃ SẢN XUẤT vào cùng rổ với gói chỉ test dùng, nên `packages/danh-gia` sống hai vòng với hai phụ thuộc lúc
+// chạy không khai mà bốn cổng xanh trọn (§S1.106). Nay MỌI gói dưới `packages/`, `apps/`, `tools/` đều được đọc; chỉ gói tự khai
+// `"trustprocure": { "testOnly": true }` trong `package.json` của nó — hôm nay `packages/test-support` — được miễn; lời khai chỉ có nghĩa dưới
+// `packages/` (app và tool là lá chạy lúc vận hành — lượt soi 67a-2, 67c-5) và phải được phép đếm của vế ⑵ xác nhận. Mỗi lá có mã sản xuất
+// phải có tệp được đọc. `import type`/`export type` không tính: TypeScript xoá chúng. [lượt soi 67a-1] Ngoặc chỉ mang kiểu nội
 // tuyến (`import { type A } from …`) VẪN tính: câu import còn lại và gói vẫn được nạp — đo (§S1.72): dưới `node --experimental-transform-types`,
 // cách `apps/api` chạy, `import { type A } from "./x.ts"` chạy `x.ts`. PHÁT BIỂU ĐÚNG MỨC: ~~phép đọc theo dòng bắt đầu bằng `import`/`export` và theo `import("…")` có đối số là~~
 // ~~chuỗi;~~ [lượt soi 67c-7] phép đọc cây cú pháp: câu `import`/`export` có nguồn, `import x = require(…)` và `import("…")` có đối số là chuỗi;
@@ -91,28 +96,35 @@ interface Manifest {
   readonly ten: string;
   readonly dependencies: Record<string, string>;
   readonly devDependencies: Record<string, string>;
+  /** [S1.9191 / khoản 223] Gói TỰ KHAI mình chỉ dùng cho test: `"trustprocure": { "testOnly": true }` trong `package.json`. */
+  readonly chiDungChoTest: boolean;
 }
 
-function docManifest(): Manifest[] {
-  return execFileSync("git", ["ls-files", "--deduplicate", "package.json", "*/*/package.json"], {
-    cwd: GOC,
-    encoding: "utf8",
-  })
+/** Tệp git theo dõi khớp các mẫu — cùng phép đọc cho manifest, cho phép đếm của vế ⑵ và cho vế ⑷. */
+function tepGit(...pMau: string[]): string[] {
+  return execFileSync("git", ["ls-files", "--deduplicate", ...pMau], { cwd: GOC, encoding: "utf8" })
     .split(/\r?\n/)
-    .filter((t) => t.length > 0)
-    .map((t) => {
-      const noiDung = JSON.parse(readFileSync(join(GOC, t), "utf8")) as {
-        name?: string;
-        dependencies?: Record<string, string>;
-        devDependencies?: Record<string, string>;
-      };
-      return {
-        duongDan: t,
-        ten: noiDung.name ?? t,
-        dependencies: noiDung.dependencies ?? {},
-        devDependencies: noiDung.devDependencies ?? {},
-      };
-    });
+    .filter((t) => t.length > 0);
+}
+
+const docTepGoc = (t: string): string => readFileSync(join(GOC, t), "utf8");
+
+function docManifest(): Manifest[] {
+  return tepGit("package.json", "*/*/package.json").map((t) => {
+    const noiDung = JSON.parse(docTepGoc(t)) as {
+      name?: string;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      trustprocure?: { testOnly?: unknown };
+    };
+    return {
+      duongDan: t,
+      ten: noiDung.name ?? t,
+      dependencies: noiDung.dependencies ?? {},
+      devDependencies: noiDung.devDependencies ?? {},
+      chiDungChoTest: noiDung.trustprocure?.testOnly === true,
+    };
+  });
 }
 
 const laTepTest = (t: string): boolean => /\.test\.[cm]?ts$/u.test(t);
@@ -123,19 +135,16 @@ const laTepTest = (t: string): boolean => /\.test\.[cm]?ts$/u.test(t);
  * Một gói không ai import thì KHÔNG rơi vào rổ này: "không có người dùng nào" và "chỉ có người
  * dùng là test" là hai điều khác nhau, và gộp chúng lại sẽ tố cáo nhầm một gói mới chưa nối dây.
  */
-function goiChiDungChoTest(tenGoiWorkspace: readonly string[]): string[] {
+function goiChiDungChoTest(
+  tenGoiWorkspace: readonly string[],
+  cacTep: readonly string[] = tepGit("*.ts", "*.mts", "*.mjs"),
+  doc: (t: string) => string = docTepGoc,
+): string[] {
   const nguoiDung = new Map<string, { test: number; sanXuat: number }>();
   for (const ten of tenGoiWorkspace) nguoiDung.set(ten, { test: 0, sanXuat: 0 });
 
-  const cacTep = execFileSync("git", ["ls-files", "--deduplicate", "*.ts", "*.mts", "*.mjs"], {
-    cwd: GOC,
-    encoding: "utf8",
-  })
-    .split(/\r?\n/)
-    .filter((t) => t.length > 0);
-
   for (const t of cacTep) {
-    const noiDung = readFileSync(join(GOC, t), "utf8");
+    const noiDung = doc(t);
     for (const ten of tenGoiWorkspace) {
       // Chỉ tính lời gọi import THẬT, không tính một lần nhắc tên trong chú thích: specifier
       // luôn nằm giữa cặp nháy và bắt đầu bằng đúng tên gói.
@@ -185,13 +194,72 @@ function importLucChay(vanBan: string): string[] {
 }
 
 /**
- * [S1.72 / lượt soi 67a-2] Rổ miễn của vế ⑷: gói chỉ dùng cho test (vế ⑵), TRỪ gói dưới `apps/`. App là lá — không mã sản xuất nào import nó —,
+ * ~~[S1.72 / lượt soi 67a-2] Rổ miễn của vế ⑷: gói chỉ dùng cho test (vế ⑵), TRỪ gói dưới `apps/`.~~ App là lá — không mã sản xuất nào import nó —,
  * nên với phép đếm của vế ⑵ một lần nhắc tên app trong một tệp test đủ đưa cả app vào rổ, và vế ⑷ bỏ qua toàn bộ mã của app ấy.
  * [lượt soi 67c-5] CHỈ gói dưới `packages/`: tool cũng là lá, và chạy lúc vận hành — `pnpm neo` chạy `tools/neo-so-kiem-toan/src/index.ts`.
+ *
+ * [S1.9191 / khoản 223] Rổ miễn nay là LỜI KHAI: gói có `"trustprocure": { "testOnly": true }` trong `package.json` của nó, và chỉ dưới
+ * `packages/`. Phép đếm của vế ⑵ không còn là nguồn của rổ miễn — nó xếp một gói KHÔNG AI IMPORT Ở MÃ SẢN XUẤT (một gói lá mới chưa nối
+ * dây, như `packages/danh-gia` ở S1.104–S1.105) vào cùng rổ với gói chỉ test dùng, và vế ⑷ bỏ qua toàn bộ mã của gói ấy cho tới ngày có
+ * người import — đúng lúc bốn vi phạm lộ ra cùng nhau. Lời khai được đo đối chiếu ở hai chiều: `khaiKhongKhop` đòi mỗi gói khai test-only
+ * phải nằm trong rổ đo của vế ⑵ (khai để trốn vế ⑷ thì đỏ), `khaiSaiCho` đòi không app/tool nào mang lời khai ấy.
  */
-function mienTruVe4(chiTest: readonly string[], manifest: readonly Manifest[]): string[] {
-  const duongDanTheoTen = new Map(manifest.map((m) => [m.ten, m.duongDan] as const));
-  return chiTest.filter((ten) => (duongDanTheoTen.get(ten) ?? "").startsWith("packages/"));
+function mienTruVe4(manifest: readonly Manifest[]): string[] {
+  return manifest
+    .filter((m) => m.chiDungChoTest && m.duongDan.startsWith("packages/"))
+    .map((m) => m.ten)
+    .sort();
+}
+
+/** App hay tool khai test-only: lá chạy lúc vận hành không thể chỉ dùng cho test — lời khai sai chỗ, không được tha im lặng. */
+function khaiSaiCho(manifest: readonly Manifest[]): string[] {
+  return manifest
+    .filter((m) => m.chiDungChoTest && !m.duongDan.startsWith("packages/"))
+    .map((m) => m.duongDan)
+    .sort();
+}
+
+/** Gói khai test-only mà phép đếm của vế ⑵ KHÔNG xác nhận (có mã sản xuất import, hay không ai import). */
+function khaiKhongKhop(daKhai: readonly string[], chiTestDo: readonly string[]): string[] {
+  return daKhai.filter((ten) => !chiTestDo.includes(ten));
+}
+
+interface KetQuaVe4 {
+  readonly daDoc: number;
+  readonly soImport: number;
+  /** Lá (`packages/x`, `apps/x`, `tools/x`) có ít nhất một tệp được đọc. */
+  readonly laDaDoc: ReadonlySet<string>;
+  readonly viPham: readonly string[];
+}
+
+/**
+ * Lõi của vế ⑷, nhận đầu vào để đo được trên gói giả: mỗi tệp mã sản xuất của một gói KHÔNG trong rổ miễn được đọc, và mỗi import
+ * `@trustprocure/*` lúc chạy của nó phải có ở `dependencies` của chính gói.
+ */
+function kiemVe4(manifest: readonly Manifest[], mien: readonly string[], cacTep: readonly string[], doc: (t: string) => string): KetQuaVe4 {
+  const theoThuMuc = new Map(
+    manifest.filter((m) => m.duongDan !== "package.json").map((m) => [m.duongDan.replace(/\/package\.json$/u, ""), m]),
+  );
+  let daDoc = 0;
+  let soImport = 0;
+  const viPham: string[] = [];
+  const laDaDoc = new Set<string>();
+  for (const t of cacTep) {
+    const la = t.split("/").slice(0, 2).join("/");
+    const m = theoThuMuc.get(la);
+    if (m === undefined || mien.includes(m.ten)) continue;
+    daDoc += 1;
+    laDaDoc.add(la);
+    for (const ten of importLucChay(doc(t))) {
+      soImport += 1;
+      if (ten === m.ten || Object.hasOwn(m.dependencies, ten)) continue;
+      viPham.push(
+        `${t}: import "${ten}" lúc chạy mà ${m.duongDan} không khai nó ở \`dependencies\`` +
+          (Object.hasOwn(m.devDependencies, ten) ? " (đang ở devDependencies)" : ""),
+      );
+    }
+  }
+  return { daDoc, soImport, laDaDoc, viPham };
 }
 
 describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯỢC ĐO, không phải một sự may mắn", () => {
@@ -284,51 +352,74 @@ describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯ�
     expect(importLucChay('import type u = require("@trustprocure/u");\nexport type * from "@trustprocure/v";')).toEqual([]);
   });
 
-  it("[S1.72 / lượt soi 67a-2, 67c-5] rổ miễn của vế ⑷ không bao giờ chứa một gói dưới `apps/` hay `tools/` — kể cả khi phép đếm của vế ⑵ xếp nó là chỉ dùng cho test", () => {
-    const tenApp = manifest.filter((m) => m.duongDan.startsWith("apps/")).map((m) => m.ten);
-    expect(tenApp.length, "chống rỗng ruột: không đọc được manifest nào dưới apps/").toBeGreaterThanOrEqual(3);
-    // [lượt soi 67c-5] Tool cũng là lá, và chạy lúc vận hành: `pnpm neo` chạy `tools/neo-so-kiem-toan/src/index.ts`.
-    const tenTool = manifest.filter((m) => m.duongDan.startsWith("tools/")).map((m) => m.ten);
-    expect(tenTool.length, "chống rỗng ruột: không đọc được manifest nào dưới tools/").toBeGreaterThanOrEqual(3);
-    expect(mienTruVe4(["@trustprocure/test-support", ...tenApp, ...tenTool], manifest)).toEqual(["@trustprocure/test-support"]);
+  it("[S1.72 / lượt soi 67a-2, 67c-5] [S1.9191 / khoản 223] rổ miễn của vế ⑷ chỉ nhận lời khai của gói dưới `packages/`: app hay tool khai test-only là khai sai chỗ; kho hôm nay chỉ `test-support` khai", () => {
+    const gia = (duongDan: string): Manifest => ({
+      duongDan,
+      ten: `@trustprocure/${duongDan.split("/")[1]!}`,
+      dependencies: {},
+      devDependencies: {},
+      chiDungChoTest: true,
+    });
+    const manifestGia = [gia("packages/ho-tro-gia/package.json"), gia("apps/app-gia/package.json"), gia("tools/tool-gia/package.json")];
+    expect(mienTruVe4(manifestGia)).toEqual(["@trustprocure/ho-tro-gia"]);
+    expect(khaiSaiCho(manifestGia)).toEqual(["apps/app-gia/package.json", "tools/tool-gia/package.json"]);
+    expect(manifest.filter((m) => m.duongDan.startsWith("apps/")).length, "chống rỗng ruột: không đọc được manifest nào dưới apps/").toBeGreaterThanOrEqual(3);
+    expect(manifest.filter((m) => m.duongDan.startsWith("tools/")).length, "chống rỗng ruột: không đọc được manifest nào dưới tools/").toBeGreaterThanOrEqual(3);
+    expect(khaiSaiCho(manifest)).toEqual([]);
+    expect(mienTruVe4(manifest)).toEqual(["@trustprocure/test-support"]);
   });
 
-  it("[S1.72 / khoản 121] gói workspace mà mã sản xuất import LÚC CHẠY phải nằm ở `dependencies` của chính gói — gói chỉ dùng cho test được miễn, [lượt soi 67a-2, 67c-5] chỉ gói dưới `packages/`; mỗi app và tool có mã sản xuất phải có tệp được đọc", () => {
-    const chiTest = mienTruVe4(goiChiDungChoTest(tenWorkspace), manifest);
-    const cacTep = execFileSync("git", ["ls-files", "--deduplicate", "*.ts"], { cwd: GOC, encoding: "utf8" })
-      .split(/\r?\n/)
-      .filter((t) => /^(?:packages|apps|tools)\/[^/]+\/src\/.+\.ts$/u.test(t) && !laTepTest(t));
-    const theoThuMuc = new Map(
-      manifest.filter((m) => m.duongDan !== "package.json").map((m) => [m.duongDan.replace(/\/package\.json$/u, ""), m]),
-    );
-    let daDoc = 0;
-    let soImport = 0;
-    const viPham: string[] = [];
-    const laDaDoc = new Set<string>();
-    for (const t of cacTep) {
-      const m = theoThuMuc.get(t.split("/").slice(0, 2).join("/"));
-      if (m === undefined || chiTest.includes(m.ten)) continue;
-      daDoc += 1;
-      if (!t.startsWith("packages/")) laDaDoc.add(t.split("/").slice(0, 2).join("/"));
-      for (const ten of importLucChay(readFileSync(join(GOC, t), "utf8"))) {
-        soImport += 1;
-        if (ten === m.ten || Object.hasOwn(m.dependencies, ten)) continue;
-        viPham.push(
-          `${t}: import "${ten}" lúc chạy mà ${m.duongDan} không khai nó ở \`dependencies\`` +
-            (Object.hasOwn(m.devDependencies, ten) ? " (đang ở devDependencies)" : ""),
-        );
-      }
-    }
+  it("[S1.9191 / khoản 223] gói khai test-only phải được phép đếm của vế ⑵ xác nhận — khai để trốn vế ⑷ thì đỏ", () => {
+    const chiTest = goiChiDungChoTest(tenWorkspace);
+    expect(khaiKhongKhop(mienTruVe4(manifest), chiTest)).toEqual([]);
+    // Gói có mã sản xuất import nó, hay không ai import: khai test-only đều không đứng được.
+    expect(khaiKhongKhop(["@trustprocure/db", "@trustprocure/goi-la-gia"], chiTest)).toEqual(["@trustprocure/db", "@trustprocure/goi-la-gia"]);
+  });
+
+  it("[S1.72 / khoản 121] gói workspace mà mã sản xuất import LÚC CHẠY phải nằm ở `dependencies` của chính gói — [S1.9191 / khoản 223] MỌI gói được đọc, chỉ gói tự khai test-only dưới `packages/` được miễn; mỗi lá có mã sản xuất phải có tệp được đọc", () => {
+    const mien = mienTruVe4(manifest);
+    expect(mien, "chống rỗng ruột: rổ miễn phải có gói tự khai (test-support)").not.toEqual([]);
+    const cacTep = tepGit("*.ts").filter((t) => /^(?:packages|apps|tools)\/[^/]+\/src\/.+\.ts$/u.test(t) && !laTepTest(t));
+    const { daDoc, soImport, laDaDoc, viPham } = kiemVe4(manifest, mien, cacTep, docTepGoc);
     expect(daDoc, "chống rỗng ruột: không đọc được tệp mã sản xuất nào").toBeGreaterThan(50);
     expect(soImport, "chống rỗng ruột: không thấy import @trustprocure/* lúc chạy nào").toBeGreaterThan(20);
-    // [S1.72 / lượt soi 67a-2, 67c-5] Chống rỗng ruột theo từng lá — app và tool: mất cả một lá khỏi phép đọc không làm hai chốt trên đỏ.
-    const laCoMa = [...new Set(cacTep.filter((t) => !t.startsWith("packages/")).map((t) => t.split("/").slice(0, 2).join("/")))].sort();
+    // [S1.72 / lượt soi 67a-2, 67c-5] Chống rỗng ruột theo từng lá — [S1.9191] nay cả gói: mất cả một lá khỏi phép đọc không làm hai chốt trên đỏ.
+    const laCoMa = [...new Set(cacTep.map((t) => t.split("/").slice(0, 2).join("/")))].sort();
+    expect(laCoMa.filter((a) => a.startsWith("packages/")).length, "chống rỗng ruột: không thấy mã sản xuất nào dưới packages/").toBeGreaterThanOrEqual(10);
     expect(laCoMa.filter((a) => a.startsWith("apps/")).length, "chống rỗng ruột: không thấy mã sản xuất nào dưới apps/").toBeGreaterThanOrEqual(3);
     expect(laCoMa.filter((a) => a.startsWith("tools/")).length, "chống rỗng ruột: không thấy mã sản xuất nào dưới tools/").toBeGreaterThanOrEqual(3);
+    const duongDanMien = new Set(manifest.filter((m) => mien.includes(m.ten)).map((m) => m.duongDan.replace(/\/package\.json$/u, "")));
     expect(
-      laCoMa.filter((a) => !laDaDoc.has(a)),
-      "một app hay tool có mã sản xuất mà vế ⑷ không đọc tệp nào của nó",
+      laCoMa.filter((a) => !laDaDoc.has(a) && !duongDanMien.has(a)),
+      "một gói, app hay tool có mã sản xuất mà vế ⑷ không đọc tệp nào của nó",
     ).toEqual([]);
     expect(viPham).toEqual([]);
+  });
+
+  it("[S1.9191 / khoản 223] đỏ: gói lá KHÔNG AI IMPORT ở mã sản xuất mà thiếu khai phụ thuộc lúc chạy — phép đếm của vế ⑵ (rổ miễn cũ) tha nó, rổ miễn theo lời khai thì không", () => {
+    const la: Manifest = {
+      duongDan: "packages/goi-la-gia/package.json",
+      ten: "@trustprocure/goi-la-gia",
+      dependencies: {},
+      devDependencies: {},
+      chiDungChoTest: false,
+    };
+    const tep = ["packages/goi-la-gia/src/index.ts", "tests/goi-la-gia.test.ts"];
+    const doc = (t: string): string =>
+      t.endsWith(".test.ts") ? 'import { x } from "@trustprocure/goi-la-gia";\nx();\n' : 'import { ghiSo } from "@trustprocure/audit";\nexport const x = ghiSo;\n';
+    // Đo trước: với phép đếm của vế ⑵, gói này là "chỉ dùng cho test" (một tệp test nhắc tên, không mã sản xuất nào import) — rổ miễn
+    // cũ tha nó, và vế ⑷ đọc 0 tệp.
+    const roMienCu = goiChiDungChoTest([la.ten], tep, doc);
+    expect(roMienCu).toEqual([la.ten]);
+    expect(kiemVe4([la], roMienCu, tep, doc)).toMatchObject({ daDoc: 0, viPham: [] });
+    // Sau: rổ miễn theo lời khai — gói không khai gì thì bị đọc, và import không khai đỏ.
+    expect(kiemVe4([la], mienTruVe4([la]), tep, doc)).toMatchObject({
+      daDoc: 1,
+      soImport: 1,
+      viPham: ['packages/goi-la-gia/src/index.ts: import "@trustprocure/audit" lúc chạy mà packages/goi-la-gia/package.json không khai nó ở `dependencies`'],
+    });
+    // Khai đúng thì xanh; khai ở devDependencies thì đỏ và nói rõ.
+    expect(kiemVe4([{ ...la, dependencies: { "@trustprocure/audit": "workspace:*" } }], [], tep, doc).viPham).toEqual([]);
+    expect(kiemVe4([{ ...la, devDependencies: { "@trustprocure/audit": "workspace:*" } }], [], tep, doc).viPham[0]).toMatch(/\(đang ở devDependencies\)$/u);
   });
 });
