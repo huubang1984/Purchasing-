@@ -21,7 +21,7 @@ import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 // [S1.198 / khoản 256 · khoản 257] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM; LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ —
 // ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `084_lan_nop_da_xem`. Lượt soi S1.195 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
+// Migration `087_lan_nop_da_xem`. Lượt soi S1.202 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
 // `rang-ngan-sach.int.test.ts` ghim chúng tới vòng này: PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký ⇒ chữ ký
 // rơi lên thứ người ấy chưa xem, và gói mở; người duyệt đã ký rồi tự trả về ⇒ nộp lại y nguyên, gói mở bằng chữ ký ấy. Hai ca đầu
 // của khối (2) và (3) dưới đây là hai ca ấy, LẬT.
@@ -517,7 +517,7 @@ describe("S1.198 — khoản 256: lời duyệt mang lần nộp người duyệ
     expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
   });
 
-  it("[INV-D2] tổ chức CHƯA bật: lời duyệt gặp một lần mở gói đang chạy ⇒ chờ khoá, đọc lại thấy OPEN, từ chối có tên — trước `084_lan_nop_da_xem` chữ ký ấy rơi lên gói đã mở", async () => {
+  it("[INV-D2] tổ chức CHƯA bật: lời duyệt gặp một lần mở gói đang chạy ⇒ chờ khoá, đọc lại thấy OPEN, từ chối có tên — trước `087_lan_nop_da_xem` chữ ký ấy rơi lên gói đã mở", async () => {
     const a = await taoToChuc();
     const rfqId = await goiNhap(a);
     await nop(a, rfqId);
@@ -816,11 +816,11 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] cạnh mở gói bỏ vế *mang lần nộp* ⇒ chữ ký không mang lần nộp (dạng trước `084_lan_nop_da_xem`) mở được gói", async () => {
+  it("[INV-K4b] cạnh mở gói bỏ vế *mang lần nộp* ⇒ chữ ký không mang lần nộp (dạng trước `087_lan_nop_da_xem`) mở được gói", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    // Chữ ký dạng trước `084_lan_nop_da_xem`: trigger so lần nộp tạm bỏ phép so, lời duyệt không mốc.
+    // Chữ ký dạng trước `087_lan_nop_da_xem`: trigger so lần nộp tạm bỏ phép so, lời duyệt không mốc.
     await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN", "IF false THEN", () =>
       duyetVoi(t, rfqId, t.pm2, undefined),
     );

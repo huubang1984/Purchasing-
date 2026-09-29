@@ -557,7 +557,7 @@ describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () =
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.195, M2)", async () => {
+  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
