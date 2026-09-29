@@ -250,7 +250,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId/verification",
     audience: "BUYER",
     mutates: false,
-    // [S1.194 / S3.3a / K8a] Trạng thái xác minh nội bộ — hàng mới nhất cộng `ncc_xac_minh_con_hieu_luc`. KHÔNG cho agent:
+    // [S1.9101 / S3.3a / K8a] Trạng thái xác minh nội bộ — hàng mới nhất cộng `ncc_xac_minh_con_hieu_luc`. KHÔNG cho agent:
     // bề mặt mới, không công cụ đọc nào của agent cần nó; mở sau là một quyết định có tên (khuôn `/policy/versions`).
     agent: false,
     handler: async (ctx) => ({
@@ -819,7 +819,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/verify",
     audience: "BUYER",
     mutates: true,
-    // [S1.194 / S3.3a / K8a · ADR-084 ⑵] Xác minh nội bộ nhà cung cấp. Cổng của bộ điều phối là `supplier.qualify`; trigger
+    // [S1.9101 / S3.3a / K8a · ADR-084 ⑵] Xác minh nội bộ nhà cung cấp. Cổng của bộ điều phối là `supplier.qualify`; trigger
     // `ncc_kiem_xac_minh` đòi thêm luật người, và hai nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
     resourceType: "SUPPLIER",
@@ -841,7 +841,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/verification/revoke",
     audience: "BUYER",
     mutates: true,
-    // [S1.194 / S3.3a / K8a] Thu hồi xác minh — lý do bắt buộc và vào sổ.
+    // [S1.9101 / S3.3a / K8a] Thu hồi xác minh — lý do bắt buộc và vào sổ.
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
     resourceType: "SUPPLIER",
     resourceId: supplierIdParam,
@@ -1103,7 +1103,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         contactId,
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
       // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
       // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
@@ -1159,7 +1159,7 @@ const ghi: readonly BuyerWriteRoute[] = [
             token: t.token,
           }),
         bu: async (client) => {
-          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
+          await revokeInvitation(client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" }, ctx.auditPool);
         },
         phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi, loi moi da thu hoi" } },
         phanHoiKhiBuHong: { status: 500, body: { error: "khong gui duoc link moi va chua thu hoi duoc loi moi", invitationId: loi.id } },
@@ -1177,7 +1177,14 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: invitationIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: {
+        revoked: await revokeInvitation(
+          ctx.client,
+          ctx.orgId,
+          { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
     }),
   },
   {

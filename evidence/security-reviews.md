@@ -16208,7 +16208,104 @@ Hai mươi mốt đột biến của #198 đo trên màn cũ; màn ấy đã tha
   sau §S1.192; `pnpm cap-so` cấp lại số vòng.
 - Số hiệu của vòng do `pnpm cap-so` cấp lúc merge (ADR-090).
 
-# §S1.194 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+# §S1.194 — S3.2d: LẦN THÊM HAY THU HỒI LỜI MỜI SAI TRẠNG THÁI (K4a) VÀO SỔ `CONTROL_DENIED` MANG MÃ — KHOẢN 255 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — tổ chức chưa bật không đi vào trigger K4a, nên không có
+lần từ chối nào để ghi. Đóng khoản **255** (rổ B); không mở khoản mới. Migration `080_k4a_co_ten`, ADR-114.
+
+## 1. Vòng này là gì
+
+Khoản 255, ghi ở §S1.189 từ nhánh song song đã xoá và đo trên cụm thật ở lượt đi thử T4 của S3.2c2 (§S1.193): trigger
+`rfq_invitations_kiem_danh_sach` (`076`) ném `check_violation` KHÔNG tên ở hai nhánh K4a — thêm lời mời sai trạng thái, thu hồi lời mời
+ngoài `DRAFT` —, nên `CHOT_THEO_RANG_BUOC` (`packages/identity/src/chot-kiem-soat.ts`) không nhận ra: người gọi nhận lỗi, sổ không ghi
+gì. K12 (spec S3 §5.1) đòi mỗi chốt được đo theo từng hạng mục từ S3.1.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) *"Merge khi CI xanh, rồi làm S3.2d"* — lần từ chối K4a là `CONTROL_DENIED`, vào sổ; lời chốt mà nhánh song song đã ghi
+  nhưng `master` chưa có (khoản 255).
+- (2026-09-29) S3.2d chỉ làm khoản 255; khoản 254 (chữ ký duyệt gói không mang ngân sách) đi ở PR riêng, #199.
+
+## 3. Đo trước
+
+Test viết trước — `apps/api/src/luong-moi-s3.int.test.ts` khối S3.2d, sáu ca qua HTTP ở tổ chức đã bật —, chạy trên `master` sau #198
+với migration của vòng này tạm rút: ba ca từ chối đỏ, vì `422` mang câu không dấu của trigger (*"Goi thau o PENDING_APPROVAL khong
+them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)"*, *"Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o … (K4a)"*) và không có
+hàng `CONTROL_DENIED` nào: mời lúc gói chờ duyệt, thu hồi lúc chờ duyệt, thu hồi ở `OPEN`. Ca đột biến đỏ ngay ở tiền đề — thân hàm
+chưa mang tên nào. Hai ca đối chứng xanh: thu hồi ở `DRAFT`, và tổ chức chưa bật. Mười bốn ca có sẵn của tệp xanh.
+
+## 4. Thay đổi
+
+**Migration `080_k4a_co_ten`:** `rfq_invitations_kiem_danh_sach` định nghĩa lại — thân `076` (6) trích nguyên văn, thêm `CONSTRAINT = …`
+ở đúng hai nhánh: `k4a_them_sai_trang_thai`, `k4a_thu_hoi_sai_trang_thai`. Thông điệp của CSDL không đổi. Nhánh không tìm thấy gói và
+hai nhánh K6 không mang tên — không lời gọi nào của người dùng tới được chúng.
+
+**Hardening:** mục ghim của hàm và trigger ấy đổi thân và điều kiện phiên bản (`076` → `080`); con trỏ *migration cuối cùng* và ba danh
+sách migration của `db/migrations.int.test.ts` đổi theo.
+
+**Tầng gói:**
+- `packages/identity`: hai mã `K4A_THEM_SAI_TRANG_THAI`, `K4A_THU_HOI_SAI_TRANG_THAI` (`vaoSo: true`, chốt `K4a`) cùng hai dòng tên → mã;
+  kiểu `DongChot.chot` nhận vế có hậu tố.
+- `packages/invitation`: `createInvitation` và `revokeInvitation` nhận `auditPool` BẮT BUỘC, bắt chính lỗi của trigger, nhận ra nó bằng
+  tên và từ chối qua `tuChoiTheoChot` — một hàng `CONTROL_DENIED` payload `{ ma }` ở giao dịch độc lập, `resource` là GÓI, rồi
+  `ChotKiemSoatError` (`422` mang câu của bảng). `revokeInvitation` đọc gói của lời mời trước câu ghi.
+- Lời gọi đổi theo: `apps/api` (route mời, route thu hồi, phần bù MVP1 của lần mời), `gieo:demo`, và các lời gọi có sẵn trong test.
+
+**Test:**
+- `luong-moi-s3.int` khối S3.2d, sáu ca K4a qua HTTP: mời lúc chờ duyệt, thu hồi lúc chờ duyệt, thu hồi ở `OPEN` ⇒ `422` câu của bảng,
+  ĐÚNG MỘT hàng mang mã dưới người gọi, lời mời và token ở nguyên; thu hồi ở `DRAFT` ⇒ không hàng; đối chứng MVP1 ⇒ không hàng; đột biến
+  trigger mất tên ⇒ vẫn 23514, không hàng.
+- `rfq.int`: phép khớp tên hai chiều gom thêm thân K4a.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Khuôn ADR-108, không vị từ hỏi trước.** Trigger giữ thẩm quyền và khoá `FOR SHARE` hàng gói; bắt chính lời từ chối có tên ghi đúng lần
+  từ chối đã xảy ra, không đua với cạnh trạng thái (ADR-114).
+- **`auditPool` bắt buộc**, cùng khuôn `approveRfq`: một lời gọi quên pool là lỗi biên dịch, không phải một lần từ chối im lặng.
+- **Phần bù MVP1 của lần mời cũng truyền `auditPool`.** Nó chỉ chạy ở tổ chức chưa bật; nếu tổ chức bật giữa lần mời và phần bù, lần thu
+  hồi bị K4a chặn sẽ để lại một hàng dưới người mời — cùng quy ước `INVITATION_REVOKED` của lần thu hồi hệ thống làm thay người mời.
+- **Màn `/tao-thau` không đổi.** Nó in lỗi của máy chủ (`loiCua`), nên lần mời lúc gói chờ duyệt nay hiện câu có dấu của bảng, chỉ đường
+  trả về soạn thảo.
+
+## 6. Đột biến
+
+Tám đột biến, mỗi cái sửa đúng một chỗ, tệp trả về nguyên văn sau mỗi lượt. Đột biến ở SQL sửa CÙNG LÚC migration và bản ghim
+hardening — sửa một bên thì hardening dựng lại thân ghim và đột biến không bao giờ chạy. Cả tám đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| K1 | nhánh thêm của K4a mất tên | mời lúc chờ duyệt; khớp tên hai chiều |
+| K2 | nhánh thu hồi của K4a mất tên | hai ca thu hồi; khớp tên hai chiều |
+| K3 | tráo hai tên | ba ca: mã và câu sai |
+| K4 | bảng tên → mã thiếu `k4a_thu_hoi_sai_trang_thai` | hai ca thu hồi; khớp tên hai chiều |
+| K5 | `K4A_THEM_SAI_TRANG_THAI` không vào sổ | mời lúc chờ duyệt |
+| T1 | `createInvitation` không từ chối theo chốt | mời lúc chờ duyệt |
+| T2 | `revokeInvitation` không từ chối theo chốt | hai ca thu hồi |
+| T3 | `revokeInvitation` ghi toạ độ LỜI MỜI thay vì gói | hai ca thu hồi |
+
+## 7. Giới hạn, nói ra
+
+- **Lần từ chối K4a qua đường ghi sổ chung**, nên nó vào trần lần từ chối theo phiên của ADR-112 sẵn; vòng này không đo riêng trần ấy
+  cho hai mã mới.
+- **S3.2 còn khoản 254** (#199) — chữ ký duyệt gói không mang ngân sách, mà cạnh về `DRAFT` mở lại ngân sách.
+
+## 8. Số đo
+
+- `apps/api/src/luong-moi-s3.int.test.ts` **20/20** (14 → 20: khối S3.2d, sáu ca). `packages/rfq/src/rfq.int.test.ts` **60/60**,
+  `packages/invitation/src/invitation.int.test.ts` **72/72**, `db/migrations.int.test.ts` **119/119**,
+  `db/hardening-suy-tu-tinh-chat.int.test.ts` **36/36**.
+- Toàn bộ T3 cục bộ trên cây vòng này, trước lần cấp số: 192 tệp, 3258 ca — 3241 đạt, 1 bỏ qua, 16 đỏ. Chín là ca cũ của máy đo, không
+  liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Bảy là `[INV-H20]` của `tests/architecture/so-no-tu-doi-chieu.test.ts`:
+  migration mới chưa vào tập tệp git theo dõi, nên con trỏ của khoản 255 không giải được và lời khai số migration ở `Handoff.md` hơn kho
+  một. Sau `git add`: tệp ấy **45/45**; báo cáo T3 thay kết quả của đúng tệp ấy ⇒ 3258 ca, 3248 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ.
+- `pnpm t0` sạch (453 module, 1807 phụ thuộc). `pnpm test`: 122 tệp, 1732 đạt, 1 bỏ qua. `pnpm cap-so --kiem` sạch.
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3258 khẳng định, cổng evidence XANH; K4a 16 → 22.
+- **Sau khi cấp số** (`080_k4a_co_ten`, ADR-114): năm tệp tích hợp chạm migration chạy lại **307/307** — `db/migrations.int`,
+  `hardening-suy-tu-tinh-chat.int`, `luong-moi-s3.int`, `rfq.int`, `invitation.int`. Tám đột biến, tám lần đỏ (§6).
+- Số hiệu của vòng, ADR và migration do `pnpm cap-so` cấp lúc merge (ADR-090).
+
+# §S1.9101 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
 mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, một lớp từ chối vào sổ.
@@ -16217,11 +16314,11 @@ mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, m�
 
 Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: S3.3 chia năm PR; hạn hiệu lực của xác minh dùng CHUNG cột
 `tham_dinh_hieu_luc_thang` của phiên bản chính sách hiệu lực; sàn giải trình mã `OTHER` là 100 byte (S3.3b); lần từ chối K4a vào sổ
-(khoản 255, S3.3b). XÁC MINH là cấp đầu của ADR-081 ⑵ — nội bộ bên mua — và là thứ K2 (S3.3c) sẽ đếm.
+(khoản 255 — đóng ở S3.2d, #206). XÁC MINH là cấp đầu của ADR-081 ⑵ — nội bộ bên mua — và là thứ K2 (S3.3c) sẽ đếm.
 
 ## 2. Hình dạng
 
-- `080_xac_minh_nha_cung_cap`: `supplier.qualify` cho `FINANCE` (ADR-084 ⑵ ⑶). Bảng `supplier_verifications` chỉ ghi thêm (không
+- `9501_xac_minh_nha_cung_cap`: `supplier.qualify` cho `FINANCE` (ADR-084 ⑵ ⑶). Bảng `supplier_verifications` chỉ ghi thêm (không
   `UPDATE`/`DELETE` cho vai nào, `bid_chi_ghi_them` ở UPDATE/DELETE/TRUNCATE, `ENABLE ALWAYS`), RLS + FORCE, policy khách ĐÓNG HẲN,
   `INSERT` theo cột; `thu_tu`, `bam_ho_so`, `het_han_at` ngoài `GRANT`.
 - Trigger `ncc_kiem_xac_minh`: khoá tư vấn theo nhà cung cấp (hạt giống 7) rồi mới đọc thứ tự lớn nhất, nên thứ tự cấp số là thứ tự
@@ -16268,7 +16365,8 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
   chưa có thân hợp lệ — nay xác minh và thu hồi trên nhà cung cấp HY SINH bằng tài chính), lớp đọc `org_procurement_policies`
   (`ncc_kiem_xac_minh` khai `QUA_HAM`), và phép khớp tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (nay đọc cả thân trigger K8a). Sau khai: xanh.
 - Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành `080`; mốc `MOC_GHIM` 70 → 71. Hợp lần hai sau #198
-  (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194.
+  (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194. Hợp lần ba sau #206
+  (S3.2d lấy S1.194 và `080`): vòng thành S1.9101, migration thành `9501_xac_minh_nha_cung_cap`.
 - `pnpm evidence` (T3 toàn bộ): XANH — 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3262 khẳng định sau lần hợp thứ hai.
 - `pnpm t0` sạch; `pnpm test` sạch.
 
@@ -16280,4 +16378,4 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 
 ## 5. Số
 
-K8a vào sổ đăng ký — 71 bất biến. Không khoản nào mở hay đóng; khoản 255 mang xác nhận của chủ dự án, đóng ở S3.3b.
+K8a vào sổ đăng ký — 71 bất biến. Không khoản nào mở hay đóng.

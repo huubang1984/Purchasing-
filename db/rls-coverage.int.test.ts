@@ -835,7 +835,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
-      // [S1.194 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      // [S1.9101 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
       // [S1.1] Hai bảng mới của 008 cũng chỉ hiện SELECT ở MỨC BẢNG — INSERT/UPDATE của chúng
@@ -1412,7 +1412,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
-      // [S1.194 / S3.3a / K8a] Xác minh: CHỈ INSERT — `thu_tu`, `bam_ho_so`, `het_han_at`, `created_at` do CSDL đặt, người xác
+      // [S1.9101 / S3.3a / K8a] Xác minh: CHỈ INSERT — `thu_tu`, `bam_ho_so`, `het_han_at`, `created_at` do CSDL đặt, người xác
       // minh là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
       { grantee: "app_api", bang: "supplier_verifications", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_verifications", cot: "created_by_session_id", quyen: "INSERT" },
@@ -1942,7 +1942,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
       "sessions", "supplier_contacts",
-      // [S1.194 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
+      // [S1.9101 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
       "supplier_verifications",
       "suppliers", "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.

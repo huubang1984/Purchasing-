@@ -18,6 +18,10 @@
 // một chốt. Trigger nay đặt TÊN RÀNG BUỘC cho mỗi nhánh (`074_tu_choi_co_ten.sql`), và `CHOT_THEO_RANG_BUOC` dưới đây
 // là bảng tên → mã. Hàm vị từ SQL của K1 và câu hỏi nó (`kiemChot`) ở lại `packages/rfq`.
 //
+// [S1.194 / S3.2d / khoản 255 / ADR-114] Hai dòng K4a — thêm và thu hồi lời mời sai trạng thái ở tổ chức đã bật S3 —, theo
+// đúng khuôn ấy: trigger `rfq_invitations_kiem_danh_sach` đặt tên ràng buộc (`080_k4a_co_ten.sql`),
+// `packages/invitation` bắt lỗi của nó và từ chối theo mã. Chủ dự án chốt ngày 2026-09-29: cả hai vào sổ.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -41,6 +45,8 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_DIEU_PHOI_DE_XUAT"
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
+  | "K4A_THEM_SAI_TRANG_THAI"
+  | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
   | "NGAN_SACH_GHIM_BAN_CU"
@@ -48,8 +54,9 @@ export type MaChotKiemSoat =
 
 export interface DongChot {
   /**
-   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Mã tách đôi của
-   * spec §5.1 mang MỘT chữ thường (`K8a`), cùng khuôn mã của sổ bất biến (`KHUON_MA`, khoản 246).
+   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Vế có hậu tố
+   * (`K4a`, `K8a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b) — cùng khuôn mã của sổ bất biến
+   * (`KHUON_MA`, khoản 246).
    */
   readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
@@ -65,7 +72,8 @@ export interface DongChot {
 
 /**
  * Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166); bảy dòng J3/D2
- * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi").
+ * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi"); hai dòng K4a cũng vậy
+ * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ").
  */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
@@ -140,7 +148,28 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
     thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
-  // [S1.194 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
+  K4A_THEM_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thêm lời mời vào gói không ở DRAFT hay OPEN — thường là gói đang chờ duyệt. Ở tổ chức đã bật S3, danh sách " +
+      "được ký là danh sách được mời (spec §5.1 K4a), nên lần cố ấy là lần cố đổi một danh sách mà người khác đã hay sắp ký " +
+      "lên. Người dùng làm việc ấy, không phải dữ liệu đổi dưới chân họ (ADR-060)",
+    thongDiep:
+      "Danh sách mời chỉ đổi được khi gói thầu còn soạn thảo, và chỉ thêm được khi gói đã mở; gói đang chờ duyệt thì trả về " +
+      "soạn thảo trước (K4a).",
+  },
+  K4A_THU_HOI_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thu hồi lời mời khỏi gói đã nộp duyệt hay đã mở — thu hẹp danh sách sau khi ký là đúng đường chiếm pool " +
+      "(ADR-058 ⒜) mà S3 chặn; thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (chủ dự án chốt 2026-09-27)",
+    thongDiep:
+      "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
+      "thu hồi được (K4a).",
+  },
+  // [S1.9101 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
   // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
   // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
   K8A_NGUOI_TAO_TU_XAC_MINH: {
@@ -182,7 +211,9 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
-  // [S1.194 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
+  k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
+  k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
+  // [S1.9101 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
 };
@@ -235,7 +266,7 @@ export async function tuChoiTheoChot(
 }
 
 /**
- * [S1.194 / S3.3a] `tuChoiTheoChot` cho một tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Cùng
+ * [S1.9101 / S3.3a] `tuChoiTheoChot` cho một tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Cùng
  * luật: luôn ném; mã vào sổ ⇒ một hàng `CONTROL_DENIED` ở giao dịch độc lập, payload chỉ mang mã.
  */
 export async function tuChoiTheoChotTaiNguyen(

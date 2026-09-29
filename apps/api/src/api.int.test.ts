@@ -86,7 +86,7 @@ async function moiVaMoPhien(ten: string): Promise<{ token: string; invitationId:
       contactId: lh.rows[0]?.id ?? "",
       linkChannel: "EMAIL",
       actorSessionId: sPM,
-    });
+    }, apiPool);
     const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sPM });
     const otp = await issueOtpChallenge(c, orgA, {
       token: t.token,

@@ -2747,9 +2747,9 @@ $ham$;
          ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '080_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '080_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '080_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '9501_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '9501_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '9501_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_nhan_chung_chi_break_glass', '078_nhan_chung_chi_break_glass', 'CHECK ((break_glass OR ((break_glass_witness_user_id IS NULL) AND (break_glass_witness_session_id IS NULL))))'),
@@ -3439,7 +3439,7 @@ $ham$;
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
-         ('public', 'supplier_verifications', '080_xac_minh_nha_cung_cap'),
+         ('public', 'supplier_verifications', '9501_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
          ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
@@ -7952,8 +7952,8 @@ $ham$;
 
     -- [S1.185 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
     ARRAY[
-      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076, thân từ 080_k4a_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_k4a_co_ten.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7984,14 +7984,14 @@ BEGIN
       NEW.moi_sau_khi_ky := true;
     ELSE
       RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai
-        USING ERRCODE = 'check_violation';
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai';
     END IF;
     NEW.status := 'UNSENT';
     RETURN NEW;
   END IF;
   IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN
     RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
-      USING ERRCODE = 'check_violation';
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai';
   END IF;
   IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN
     RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai
@@ -8019,7 +8019,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -8191,10 +8191,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
+    -- [S1.9101 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
     ARRAY[
-      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (080_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_bam_xac_minh(p_org uuid, p_ncc uuid) RETURNS bytea
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8229,10 +8229,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_bam_xac_minh(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
+    -- [S1.9101 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
     ARRAY[
-      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (080_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_xac_minh_con_hieu_luc(p_org uuid, p_ncc uuid) RETURNS boolean
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8265,10 +8265,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.194 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
+    -- [S1.9101 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
     ARRAY[
-      $q$hàm + trigger ncc_kiem_xac_minh (080_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_xac_minh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger ncc_kiem_xac_minh (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

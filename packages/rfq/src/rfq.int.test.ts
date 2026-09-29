@@ -1718,14 +1718,15 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
 
   // [S1.180 / ADR-108] Nhận diện bằng TÊN chỉ đứng được khi tên ở hai phía khớp nhau. Đo cả hai chiều trên thân hàm THẬT trong
   // CSDL: mọi tên ràng buộc mà ba trigger J3/D2 đặt đều có mã chốt, và mọi dòng của bảng tên → mã đều có một nhánh đặt nó.
-  // [S1.194 / S3.3a] Trigger thứ tư: `ncc_kiem_xac_minh` (`080`) đặt hai tên K8a.
-  it("tên ràng buộc ở ba trigger J3/D2, trigger K8a và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.194 / S3.2d / khoản 255] Trigger K4a (`rfq_invitations_kiem_danh_sach`) cũng đặt tên ràng buộc — bảng có hai dòng `k4a_…`.
+  // [S1.9101 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`9501`) đặt hai tên K8a — phép so gom cả năm thân.
+  it("tên ràng buộc ở ba trigger J3/D2, trigger K4a, trigger K8a và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
-        "'public.ncc_kiem_xac_minh()'::regprocedure)",
+        "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure)",
     );
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(5);
     const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
