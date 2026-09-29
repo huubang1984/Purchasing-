@@ -16310,4 +16310,9 @@ chỉ có `PUT`.
 
 ## 8. Số đo
 
-(điền sau lượt T3 toàn bộ)
+- Hai ca HTTP ở `apps/api/src/buyer.int.test.ts` xanh; trên cây #202 cả hai đỏ (405).
+- Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 193 tệp, 3278 khẳng định, 3268 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
+  máy đo (8 của `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`).
+- `pnpm test`: 122 tệp, 1724 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch.
+- Hai đột biến ở tầng gói, hai lần đỏ (§5).
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 40 → 41. Không mã mới.
