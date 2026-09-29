@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ [S1.169] MƯỜI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.203] MƯỜI HAI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -133,6 +133,12 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
     "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
     "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
+  // [S1.203 / S3.6b1]
+  "/rfqs/:rfqId/signals":
+    "TÍN HIỆU CHIA NHỎ của một gói thầu — những gói nào bị gộp với nó, dưới cận bậc nào của phiên bản chính sách nào, ai đã " +
+    "ghi nhận và vì sao. Nó là dữ liệu KIỂM SOÁT của bên mua: biết tín hiệu gộp những gói nào, với cửa sổ bao nhiêu ngày, là " +
+    "biết cách xếp gói để lần sau nó không gộp. Người duyệt đọc nó trên giao diện người mua trước khi ghi nhận; một tác tử " +
+    "chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

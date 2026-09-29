@@ -721,6 +721,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: trangThai.pm2.cookie };
+        // [S1.203 / S3.6b1 · K10a] Người duyệt thứ hai ghi nhận tín hiệu của gói hy sinh B — gói nhỏ, không tín hiệu nào ở cả hai
+        // luồng, nên lời gọi qua cổng `rfq.approve`, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên của `KiemSoatError`.
+        case "POST /rfqs/:rfqId/signals/acknowledge":
+          return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan de quet" }, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/extend":

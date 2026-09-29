@@ -16572,3 +16572,121 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
   `docs/DECISIONS.md` (ADR-116 rồi ADR-119) và lời khai đếm (lấy bản `master`, `cap-so --dem` viết lại).
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
+
+# §S1.203 — S3.6b1: TÍN HIỆU CHIA NHỎ (`PURCHASE_SPLITTING`) VÀ CHỐT K10a Ở CẠNH MỞ GÓI
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — tổ chức chưa bật không bị đòi gì (ca đối chứng MVP1 đo điều
+ấy). Không đóng, không mở khoản nợ nào. Migration `088_tin_hieu_chia_nho`, ADR-120, gói mới `@trustprocure/kiem-soat`.
+
+## 1. Vòng này là gì
+
+Phần đầu của S3.6b (spec S3 §9): tín hiệu chia nhỏ gói `PURCHASE_SPLITTING` (§4.6) và vế cạnh mở gói của K10 (§5.1, §2.5 ⒁), vào sổ
+đăng ký là **K10a**. Màn ghi nhận, `gieo:demo`, kịch bản 41 và lượt đi thử T4 là S3.6b2.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) S3.6b chia hai PR: b1 CSDL, tầng gói, route, K10a; b2 màn, `gieo:demo`, kịch bản 41, T4.
+- (2026-09-29) *Người gây ra* tín hiệu là người tạo và người nộp của MỌI gói trong bằng chứng, kể cả gói anh em.
+- (2026-09-29) Tín hiệu chỉ xét cận bậc (`tu_so_tien`), không xét `dual_approval_threshold`.
+- (2026-09-29) Mã ở gói mới `packages/kiem-soat` (spec §3.2).
+- (2026-09-29) Gói đã HUỶ không vào tập.
+- (2026-09-29) Bằng chứng đổi sau lần nộp thì tín hiệu mới được lưu lúc GHI NHẬN; cạnh mở gói chỉ đọc và từ chối.
+- (2026-09-29) Người gây ra tự ghi nhận là `CONTROL_DENIED`, vào sổ.
+- (2026-09-29) Cho `pnpm cap-so` giữ số trên origin (nhánh `cap-so/*`).
+
+## 3. Đo trước
+
+Trên `master` `151cbd1`, qua một tệp đo cục bộ không commit, fixture của spec §7 (bậc 0 / 100 triệu / 1 tỷ / 10 tỷ, cửa sổ 30 ngày) ở một
+tổ chức đã bật: ba gói 480, 470, 490 triệu cùng nhóm hàng, mỗi gói hai chữ ký rồi mở — cả ba `OPEN`; không bảng `governance_signals`;
+0 hàng `CONTROL_DENIED`. Cùng tệp chạy lại trên cây của vòng này: gói thứ ba dừng ở `ChotKiemSoatError` *"Gói thầu có tín hiệu chia nhỏ
+chưa được ghi nhận…"* — tệp đo không đổi một dòng, và nó ĐỎ đúng chỗ ấy.
+
+## 4. Thay đổi
+
+**Migration `088_tin_hieu_chia_nho`:**
+- `tin_hieu_chia_nho(org, gói)` — hàm DUY NHẤT tính tín hiệu. Tập: chính gói và mọi gói cùng tổ chức, cùng nhóm hàng, cùng đơn vị tiền, đã
+  rời DRAFT và chưa huỷ, `submitted_at` trong `[submitted_at của gói − cửa sổ, submitted_at của gói]`. Bắn ở cận `T` cao nhất (mọi
+  `tu_so_tien` > 0 của phiên bản ngân sách ghim) mà tập con dưới `T` chứa gói và có tổng ≥ `T`. Bằng chứng: loại, nhóm hàng, phiên bản,
+  cửa sổ, cận, id gói đã sắp — không ước lượng.
+- `governance_signals` và `governance_signal_acks` — CHỈ GHI THÊM, khuôn `procurement_categories`: RLS `FORCE`, policy tổ chức, policy
+  khách đóng hẳn, `SELECT` và `INSERT` theo cột, `kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them` ở `UPDATE OR DELETE`, chặn `TRUNCATE`.
+  Trigger `governance_signals_tinh` đặt bằng chứng, độ tin cậy, giải thích, mốc tính (ngoài `GRANT`) và chỉ cho ghi ở gói đang chờ duyệt
+  có tín hiệu (`tin_hieu_goi_khong_cho_duyet`, `tin_hieu_khong_co`).
+- Luật người `tin_hieu_chot_nguoi_ghi_nhan(org, bằng chứng, người)` ⇒ `K10A_TU_GHI_NHAN` / `K10A_TAC_GIA_CHINH_SACH`; trigger
+  `governance_signal_acks_kiem_nguoi` hỏi lại trạng thái (`k10_ghi_nhan_sai_trang_thai`), `rfq.approve`, luật người
+  (`k10_nguoi_gay_ra_tu_ghi_nhan`, `k10_tac_gia_chinh_sach_ghi_nhan`) và bằng chứng hiện tại (`k10_bang_chung_da_doi`).
+- Chốt `rfq_chot_tin_hieu(org, gói)` ⇒ `TIN_HIEU_CHUA_GHI_NHAN`; trigger `rfq_packages_kiem_tin_hieu_khi_mo`, `WHEN` đúng cạnh
+  `PENDING_APPROVAL→OPEN` (`k10_tin_hieu_chua_ghi_nhan`).
+
+**Hardening:** sáu mục ghim mới (ba hàm trigger, ba hàm thường); hai bảng vào `BANG_TENANT_KHAI`; khối `kiem_danh_tinh_theo_phien` và
+`bid_chi_ghi_them` phủ hai bảng. Sổ đăng ký của `migrations.int` (mười hàm trợ giúp K1 và K10a), `hardening-suy-tu-tinh-chat.int` (nhân
+chứng: một tín hiệu và một lần ghi nhận THẬT dưới `app_api`), `migration-shape`, `rls-coverage.int`, `check-an-ninh.int` và census của
+`bac-chinh-sach.int` đổi theo.
+
+**Gói `@trustprocure/kiem-soat`:** `ghiTinHieuKhiNop` (ảnh chụp lúc nộp, `GOVERNANCE_SIGNAL_RECORDED`), `ghiNhanTinHieu` (quyền → lý do →
+trạng thái và tín hiệu hiện tại → luật người qua hàm vị từ, `CONTROL_DENIED` → tín hiệu khớp hay lưu mới → lần ghi nhận → sổ
+`GOVERNANCE_SIGNAL_ACKNOWLEDGED`), `lietKeTinHieu`, `KiemSoatError`. Ranh giới `g20-`: cửa chỉ `index.ts`; không với tới
+`sealed-envelope`, `unseal`, `crypto-keys` kể cả qua `@trustprocure/rfq`.
+
+**`packages/rfq`, `packages/identity`:** `submitRfqForApproval` gọi `ghiTinHieuKhiNop` sau câu nộp; `openRfq` hỏi `CAU_CHOT_TIN_HIEU`
+sau cổng `rfq.open`, trước `issueRfqKeyPair`. Ba mã mới ở `CHOT_VAO_SO`, chốt `K10a`, vào sổ.
+
+**Route:** `GET /rfqs/:rfqId/signals` (không cho agent — `ROUTE_DOC_KHONG_PHOI` của MCP khai vì sao), `POST
+/rfqs/:rfqId/signals/acknowledge` (`rfq.approve`, `201`); `KiemSoatError` ⇒ `422`.
+
+**Sổ đăng ký:** K10a vào `docs/TEST-PLAN.md`, `SO_KHAI_NHAN` và mốc ma trận 71 → 72; `CUA_GOI`, `HAM_DOI_TRANG_THAI`, `HAM_CHI_DOC` của
+cổng quyền route; danh sách trắng cửa `@trustprocure/kiem-soat`; ba probe `g20-`; bộ quét kịch bản 41 HTTP có thân hợp lệ cho route ghi
+nhận; lời khai gói và bất biến ở `Handoff.md`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Tập neo `submitted_at` của CHÍNH gói ở cả hai đầu** — nên tập chỉ co lại sau lần nộp và không cần khoá tư vấn (ADR-120 ⑹). Gói nộp
+  SAU không vào cửa sổ của gói trước — ca cửa sổ đo điều ấy.
+- **Tiền tệ phải trùng.** Spec không nói; cộng ước lượng khác đơn vị là vô nghĩa. Không đường sản xuất nào tạo được anh em khác tiền tệ
+  của phiên bản ghim (`rfq_bac_cua` từ chối), nên ca đo dựng dữ liệu bằng tay và đột biến bỏ vế ấy.
+- **Lần ghi nhận của người không giữ `rfq.approve` là `PERMISSION_DENIED`**, không `CONTROL_DENIED` — lớp quyền của ADR-084 ⑸.
+- **Ba tên ràng buộc K10a không vào `CHOT_THEO_RANG_BUOC`** (ADR-120, phương án đã cân nhắc).
+- **`hoiChot` là bản thứ hai của `kiemChot`** — QT3 rút câu theo tệp.
+- **Test tích hợp ở `packages/rfq`**: `g20-kiem-soat-khong-cham-duong-mo-thau` phủ cả tệp test dưới `packages/kiem-soat/src/`.
+- **Người ghi nhận ĐỘC LẬP ở phép đo HTTP giữ đúng một mã, `rfq.approve`** — một người giữ cả `rfq.create` không phân biệt được route
+  khai sai mã, vì hàm gói hỏi lại `rfq.approve` (đột biến M07).
+
+## 6. Đột biến
+
+Hai lớp. **Trong giao dịch**, ở chính `tin-hieu-chia-nho.int` (tám, mỗi cái rollback): tắt trigger ở cạnh mở gói ⇒ câu mở viết tay đi
+qua; `rfq_chot_tin_hieu` trả NULL ⇒ `openRfq` mở được gói chưa ai ghi nhận; `tin_hieu_chot_nguoi_ghi_nhan` trả NULL ⇒ người tạo tự ghi
+nhận được; bỏ vế huỷ ⇒ gói đã huỷ vào tập; `<=` thay `<` ⇒ gói 1 tỷ vào tập của cận 1 tỷ; thứ tự cận tăng dần ⇒ bằng chứng rơi về cận 100
+triệu; bỏ `bool_or` ⇒ gói nhận tín hiệu của một tập không chứa nó; bỏ vế tiền tệ ⇒ anh em khác tiền tệ được cộng. **Ở mã nguồn**, mười
+ba, mỗi cái sửa đúng một chỗ, tệp trả về nguyên văn sau mỗi lượt (so với bản sao lưu). Cả mười ba đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| M01 | `openRfq` không hỏi chốt K10a | ĐO 480/470/490: lời từ chối là lỗi `pg` của trigger, không `ChotKiemSoatError`, không hàng sổ |
+| M02 | nộp duyệt không ghi ảnh chụp tín hiệu | như trên: không hàng `NOP_DUYET` |
+| M03 | ghi nhận không hỏi luật người trước | luật người (hai ca): lỗi `pg` thay lời có tên, không hàng sổ |
+| M04 | ghi nhận luôn lưu tín hiệu mới | ĐO: `tinHieuMoi` phải `false`, trỏ tín hiệu lúc nộp |
+| M05 | `canGhiNhan` bỏ vế tín hiệu chưa ghi nhận | ĐO: sau lần ghi nhận `canGhiNhan` phải `false` |
+| M06 | `KiemSoatError` rời lớp `422` | `buyer.int`: lần ghi nhận thứ hai ⇒ `500` |
+| M07 | route ghi nhận khai `rfq.create` | `buyer.int`: người chỉ giữ `rfq.approve` ⇒ `403` |
+| M08 | route đọc tín hiệu cho agent | `cong-cu.test` (hai ca): bảng MCP và `agentGoiDuoc` lệch nhau |
+| M09 | ghi nhận không hỏi quyền | luật người: FINANCE nhận lỗi `pg` của trigger, không `PermissionDeniedError` |
+| M10 | sổ ảnh chụp lúc nộp mang sai nguồn | ĐO: payload `GOVERNANCE_SIGNAL_RECORDED` |
+| M11 | lần ghi nhận vào sổ dưới `GOVERNANCE_SIGNAL_RECORDED` | ĐO: không hàng `GOVERNANCE_SIGNAL_ACKNOWLEDGED` |
+| M12 | bỏ lời từ chối lý do rỗng | bằng chứng do CSDL: lý do rỗng nói *"không có tín hiệu"* thay *"Ghi lý do"* |
+| M13 | trùng lần ghi nhận không thành lời có tên | luật người: lần thứ hai là lỗi `pg` |
+
+Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đột biến) — sửa bảng rồi chạy lại riêng nó.
+
+## 7. Giới hạn, nói ra
+
+- **Vế `to_chuc_da_bat_s3` đầu hàm tín hiệu không quan sát được qua đường sản xuất:** gói của tổ chức chưa bật ghim phiên bản không bậc,
+  và vế `tiers IS NULL` trả NULL trước. Nó ở đó để hàm không phụ thuộc chuyện ấy; không đột biến nào của nó làm một ca đỏ.
+- **`K10A_TAC_GIA_CHINH_SACH` hiếm khi bắn ở cạnh mở gói** — `033` cấm một người giữ `policy.manage` cùng `rfq.approve`. Ca đo dựng người
+  khai phiên bản bằng câu dựng dưới vai PROCUREMENT_MANAGER, đúng hình dạng *vai đổi sau lần khai*.
+- **Lần chặn của trigger không vào sổ** — chỉ tới từ câu viết tay hay một cuộc đua (ADR-060, J6).
+- **Nhóm hàng chỉ mạnh bằng người chọn nó** (ADR-119).
+- **Không màn, không `gieo:demo`, không lượt đi thử T4 ở vòng này** — S3.6b2. Người dùng thật chỉ ghi nhận được qua route.
+
+## 8. Số đo
+
+‹điền sau lượt T3›

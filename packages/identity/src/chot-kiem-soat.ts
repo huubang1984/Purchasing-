@@ -25,6 +25,11 @@
 // [S1.201 / S3.6a] `THIEU_NHOM_HANG` — gói của tổ chức đã bật rời DRAFT không nhóm hàng. Khuôn K1: hàm vị từ
 // `rfq_chot_nhom_hang` (`085_nhom_hang.sql`), tầng gói hỏi trước câu ghi. Chủ dự án chốt ngày 2026-09-29: vào sổ.
 //
+// [S1.203 / S3.6b1] Ba dòng K10a — tín hiệu chia nhỏ chưa ghi nhận ở cạnh mở gói, và hai người bị loại khỏi lần ghi nhận (người
+// gây ra, tác giả phiên bản chính sách). Khuôn K1: hàm vị từ `rfq_chot_tin_hieu` và `tin_hieu_chot_nguoi_ghi_nhan`
+// (`088_tin_hieu_chia_nho.sql`), tầng gói hỏi trước câu ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Chủ dự
+// án chốt ngày 2026-09-29: người gây ra tự ghi nhận thì vào sổ.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -51,8 +56,11 @@ export type MaChotKiemSoat =
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "NGAN_SACH_GHIM_BAN_CU"
+  | "K10A_TAC_GIA_CHINH_SACH"
+  | "K10A_TU_GHI_NHAN"
   | "THIEU_NGAN_SACH"
-  | "THIEU_NHOM_HANG";
+  | "THIEU_NHOM_HANG"
+  | "TIN_HIEU_CHUA_GHI_NHAN";
 
 export interface DongChot {
   /**
@@ -108,6 +116,31 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "một người nộp duyệt một gói KHÔNG nhóm hàng ở tổ chức đã bật S3 — nhóm hàng là khoá của tín hiệu chia nhỏ (K10, spec §4.3), " +
       "nên bỏ bước này là né tín hiệu soi chính mình; cùng lý do `THIEU_NGAN_SACH` vào sổ. Kiểm toán viên hỏi tới đúng lần cố ấy",
     thongDiep: "Tổ chức đã bật kiểm soát theo bậc: gói thầu phải có nhóm hàng trước khi nộp duyệt.",
+  },
+  TIN_HIEU_CHUA_GHI_NHAN: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "một người mở một gói mà tín hiệu chia nhỏ tính NGAY LÚC ẤY chưa được ai ghi nhận (spec §4.6, §2.5 ⒁): tín hiệu không chặn " +
+      "cạnh nào, nó chặn việc không ai đọc nó — và lần mở bỏ qua bước đọc ấy là đúng thứ kiểm toán viên hỏi tới",
+    thongDiep:
+      "Gói thầu có tín hiệu chia nhỏ chưa được ghi nhận: một người duyệt không tạo, không nộp gói nào trong tín hiệu phải ghi nhận nó trước khi mở gói.",
+  },
+  K10A_TU_GHI_NHAN: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "người tạo hay người nộp một gói nằm trong bằng chứng cố ghi nhận chính tín hiệu soi mình — mũi dò T5 mà spec §6 gọi tên. " +
+      "Chủ dự án chốt ngày 2026-09-29: vào sổ, cùng khuôn người tạo tự duyệt gói (D2)",
+    thongDiep: "Người tạo hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy.",
+  },
+  K10A_TAC_GIA_CHINH_SACH: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "người khai phiên bản chính sách mà gói ghim cố ghi nhận tín hiệu của gói ấy (spec §2.4 ⑺): người đặt cận bậc không tự xác " +
+      "nhận một tập gói nằm ngay dưới cận của chính mình",
+    thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu của gói.",
   },
   D2_NGUOI_TAO_TU_DUYET: {
     chot: "D2",

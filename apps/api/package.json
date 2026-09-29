@@ -20,6 +20,7 @@
     "@trustprocure/db": "workspace:*",
     "@trustprocure/identity": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/kiem-soat": "workspace:*",
     "@trustprocure/outbox": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
