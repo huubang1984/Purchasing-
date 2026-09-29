@@ -177,6 +177,18 @@ export function buildUnsealWorkerHandlers(
 export interface TuyChonRunnerWorker {
   readonly listOrganizations: () => Promise<readonly string[]> | readonly string[];
   readonly onPollError: (error: unknown) => void;
+  /**
+   * [S1.9151 / khoản 168] Sổ `kind` mồ côi mà runner này nhặt DÙ không có handler — để chúng tới
+   * trạng thái cuối ỒN ÀO (`NO_HANDLER`) thay vì nằm `PENDING`. Từ vòng này tiến trình worker là
+   * tiến trình DUY NHẤT khai nó (`tien-trinh.ts` truyền `Object.keys(KIND_KHONG_NGUOI_NHAN)`), vì
+   * nó là tiến trình duy nhất thấy MỌI tổ chức; `api` không khai.
+   *
+   * TUỲ CHỌN ở tầng này, không bắt buộc như hai vế trên, và lý do nói ra: dây nối THẬT của tiến
+   * trình được đo ở `tien-trinh.int.test.ts` vế ⑹ (quên truyền ⇒ job mồ côi nằm `PENDING` ⇒ đỏ),
+   * nên ép bắt buộc ở kiểu chỉ thêm một lớp cho cùng một lỗi; còn giá của nó là mọi runner dựng
+   * trong test phải khai một sổ chúng không dùng tới.
+   */
+  readonly kindKhongNguoiNhan?: readonly string[];
   readonly pollIntervalMs?: number;
   readonly maxAttempts?: number;
   readonly retryDelaySeconds?: number;

@@ -37,7 +37,7 @@ import {
   type DongHo,
 } from "@trustprocure/db";
 import { PepperRing, donBucketNguoiGoiCu, donOtpRateLimitsCu } from "@trustprocure/invitation";
-import { JobRunner, KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
+import { JobRunner } from "@trustprocure/outbox";
 import { taoBoGuiSes } from "./adapters/gui-ses.js";
 import { taoBoGuiSms } from "./adapters/gui-sms.js";
 import { taoBoGuiZalo } from "./adapters/gui-zalo.js";
@@ -239,20 +239,37 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   // đăng nhập cho cùng tổ chức (đo ở §S1.92: 5 việc, rồi 5/5 xong trong 8 giây sau MỘT lời gọi
   // `/auth/link`). Nay điều kiện đánh thức là dấu của chính `enqueueJob`.
   //
-  // CÒN MỞ, và khoản 156 giữ nguyên nửa ấy: tiến trình KHỞI ĐỘNG LẠI thì tập này rỗng, nên việc
+  // ~~CÒN MỞ, và khoản 156 giữ nguyên nửa ấy: tiến trình KHỞI ĐỘNG LẠI thì tập này rỗng, nên việc
   // `PENDING` của một tổ chức chỉ được nhặt khi tổ chức ấy có yêu cầu GHI tiếp theo. Một lớp phát
   // hiện theo TUỔI (không phụ thuộc tiến trình nào đang chạy) cần một nguồn tổ chức — đúng bài toán
-  // của khoản 116.
+  // của khoản 116.~~
+  // [S1.9151 / khoản 156] Hai câu sau của đoạn vừa gạch đã thiu: khoản 116 đóng ở S1.82 (hàm `052`,
+  // ADR-040 — một nguồn tổ chức KHÔNG phụ thuộc tiến trình nào đang chạy), và lớp phát hiện theo
+  // TUỔI có từ ADR-083: worker đo tuổi job `PENDING` quá hạn lâu nhất qua MỌI tổ chức mỗi 5 phút
+  // (`apps/unseal-worker/src/canh-ton-dong.ts`, `doTonDong` — trung tính với `kind`, nên việc của
+  // tiến trình này cũng được đếm), CloudWatch báo động khi quá 15 phút hai kỳ liền; tiến trình chết
+  // là việc của báo động thiếu task (ADR-077). Câu đầu VẪN ĐÚNG, và là giới hạn nói ra: sau khi tiến
+  // trình này khởi động lại, việc `PENDING` của một tổ chức chờ tới yêu cầu GHI CÓ XẾP VIỆC kế tiếp
+  // của chính tổ chức ấy — ADR-083 chỉ PHÁT HIỆN (sau ít nhất 15 phút), không tự phục hồi, và mẫu
+  // lọc của nó chưa chạy thật trên CloudWatch. Tự phục hồi sau khởi động lại (nạp một danh sách tổ
+  // chức cho `api`) là một khoản riêng, đụng ADR-040.
   const toChucDaThay = new Set<string>();
   const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
     pollIntervalMs: OUTBOX_POLL_MS,
     listOrganizations: () => [...toChucDaThay],
-    // [S1.81 / khoản 154] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và đó là tiến trình
+    // ~~[S1.81 / khoản 154] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và đó là tiến trình
     // này. Vì sao `api` chứ không phải worker: `api` là tiến trình chạy thường trực trong mọi
     // triển khai (worker có thể chưa được dựng — khoản 116), nên đặt ở đây thì một `kind` không
-    // người nhận vẫn tới trạng thái cuối ỒN ÀO ở đúng một chỗ. Hai tiến trình cùng khai thì cả
+    // người nhận vẫn tới trạng thái cuối ỒN ÀO ở đúng một chỗ.~~ Hai tiến trình cùng khai thì cả
     // hai cùng tranh nhau ghi kết cục và `attempts` của job ấy thôi đọc được.
-    kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
+    // [S1.9151 / khoản 168] Sổ mồ côi KHÔNG khai ở đây nữa — `kindKhongNguoiNhan` bỏ khỏi runner
+    // này. Lý do S1.81 sai theo hai chiều: khoản 116 đã đóng (S1.82) nên worker là một tiến trình
+    // thật, có báo động thiếu task (ADR-077); và *"ỒN ÀO ở đúng một chỗ"* chỉ đúng ở tiến trình CLAIM
+    // được job, mà `listOrganizations` của runner này là `toChucDaThay` — tập hẹp nhất trong hệ, rỗng
+    // lại sau mỗi lần khởi động. Một job mồ côi của tổ chức chưa ai xếp việc qua đây nằm `PENDING`
+    // im lặng (đo: `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹). Tiến trình khai nay là worker
+    // (`tien-trinh.ts`), tiến trình thấy MỌI tổ chức qua hàm `052`. Mảng lọc của runner này là đúng
+    // `Object.keys(handlers)`.
     onJobFailure: (bao) => {
       // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — ~~chỉ tên lý do và kind~~ [S1.67 / khoản 118] tên lý do, kind, và TÊN cùng MÃ
       // cố định của lỗi gốc (`moTaLoiKhongGiaTri`) — không message. Trước vòng này dòng này không nói lỗi gì: job hỏng vì kết nối nhiễm

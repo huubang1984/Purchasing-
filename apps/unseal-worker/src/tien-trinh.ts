@@ -42,8 +42,8 @@ import {
   moTaLech,
   type DongHo,
 } from "@trustprocure/db";
-import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
-import { doTonDong } from "@trustprocure/outbox";
+import { moTaLoiKhongGiaTri } from "@trustprocure/identity";
+import { KIND_KHONG_NGUOI_NHAN, doTonDong } from "@trustprocure/outbox";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { canhTonDongDinhKy } from "./canh-ton-dong.js";
 import { taoCanhBaoDev } from "./adapters/canh-bao-dev.js";
@@ -61,25 +61,21 @@ const CAU_LIET_KE_TO_CHUC =
 /** [ADR-083] Trễ của lần đo tồn đọng ĐẦU TIÊN sau khi lên, ms — đủ để vòng poll đầu chạy trước. */
 const TRE_DAU_TON_DONG_MS = 5_000;
 
-/**
- * Mô tả một lỗi cho dòng log mà KHÔNG mang giá trị — bản rút gọn của `apps/api/src/mo-ta-loi.ts`.
- *
- * Bản chép có chủ đích: `apps/unseal-worker` là thư mục DUY NHẤT được giữ khả năng giải mã, và
- * `.dependency-cruiser.cjs` mở đúng một miễn trừ cho nó — cho mã CHẠY của nó import một tệp của
- * `apps/api` là tạo đúng cạnh mà họ quy tắc `g1-` dựng ra để chặn. Đây là một BỘ ĐỊNH DẠNG LOG,
- * không phải một hàng rào, nên bản chép không mang rủi ro *"một bản sẽ trôi"* của
- * `crypto-keys/moi-truong.ts`. Nâng nó lên một gói dùng chung là khoản 166.
- */
-function moTaLoi(loi: unknown): string {
-  if (!(loi instanceof Error)) return "loi khong ro";
-  // [S1.85 / khoản 131] Phần HẰNG ĐÓNG của một lần từ chối không ghi được sổ dùng CHUNG hàm với `apps/api` — `moTaHangDongCuaLanTuChoi`
-  // của `@trustprocure/identity`, nơi phép kiểm hình dạng "tên thì được, giá trị thì không" sống. Phần còn lại vẫn là bản CỤC BỘ của
-  // tiến trình này, có chủ đích (xem khối dưới): tiến trình mở thầu không đi qua mã CHẠY của `api`.
-  const hang = moTaHangDongCuaLanTuChoi(loi);
-  const duoi = hang === "" ? "" : ` ${hang}`;
-  const ma = (loi as { code?: unknown }).code;
-  return typeof ma === "string" && /^[0-9A-Z]{5}$/u.test(ma) ? `${loi.name} ${ma}${duoi}` : `${loi.name}${duoi}`;
-}
+// ==============================================================================================
+// [S1.9151 / khoản 166] BỘ MÔ TẢ LỖI CHO DÒNG LOG: MỘT HÀM, HAI TIẾN TRÌNH.
+//
+// ~~Tới trước vòng này tệp này giữ một `moTaLoi` CỤC BỘ ~5 dòng — "bản rút gọn của
+// `apps/api/src/mo-ta-loi.ts`", chép có chủ đích vì mã CHẠY của worker không import được `apps/api`
+// (`g1-`), và được khai là "một bộ định dạng log, không phải một hàng rào, nên không mang rủi ro
+// một bản sẽ trôi".~~ Nó ĐÃ trôi ngay từ lúc chép (§S1.82, khoản 166): bản của `api` nêu thêm MỘT
+// tầng `cause` cho lỗi không có trường `code` (khoản 119) và nhận `TenantError` theo lớp; bản ở đây
+// thì không — nên một `DenialAuditFailedError`, đúng lớp lỗi khoản 121 dựng cho tiến trình NÀY, ra
+// dòng log không có SQLSTATE của lần ghi sổ đã hỏng. Đo ở `composition.int.test.ts` (vế khoản 166)
+// trên mã trước vòng này: `… DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST` ở worker,
+// trong khi `api` cho cùng lỗi ấy `… <- error 55P03`. Nay hàm sống ở
+// `packages/identity/src/mo-ta-loi.ts` — gói cả hai tiến trình đã phụ thuộc, và là nơi
+// `moTaHangDongCuaLanTuChoi` sống — và cả hai tiến trình gọi ĐÚNG MỘT bản; `g1-` giữ nguyên.
+// ==============================================================================================
 
 export interface TienTrinhWorker {
   batDau(): Promise<void>;
@@ -100,11 +96,11 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
   // tiến trình duy nhất giải mã được phong bì, nên một lần chết im lặng ở đây đắt hơn ở `api`.
   const pool = createPool(ch.databaseUrl, ch.dbPoolMax, {
     role: "app_unseal",
-    onPoolError: (e) => console.error(`[unseal-worker] pool loi ${moTaLoi(e)}`),
+    onPoolError: (e) => console.error(`[unseal-worker] pool loi ${moTaLoiKhongGiaTri(e)}`),
   });
   const auditPool = createPool(ch.databaseUrl, ch.dbPoolMax, {
     role: "app_unseal",
-    onPoolError: (e) => console.error(`[unseal-worker] pool kiem toan loi ${moTaLoi(e)}`),
+    onPoolError: (e) => console.error(`[unseal-worker] pool kiem toan loi ${moTaLoiKhongGiaTri(e)}`),
   });
 
   // ============================================================================================
@@ -119,8 +115,10 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
   // ở tiến trình DUY NHẤT giải mã được phong bì. Cổng `tests/architecture/pool-nghe-du-tin-hieu.test.ts`
   // nay đòi cả hai ở mọi pool dựng trong `apps/`, nên nó không quên lại được.
   //
-  // Bộ mô tả là `moTaLoi` CỤC BỘ của tiến trình này, không phải bản của `apps/api`: mã CHẠY của
-  // worker không được import từ `apps/api` (quy tắc `g1-`). Bản cục bộ hẹp hơn — khoản 166.
+  // ~~Bộ mô tả là `moTaLoi` CỤC BỘ của tiến trình này, không phải bản của `apps/api`: mã CHẠY của
+  // worker không được import từ `apps/api` (quy tắc `g1-`). Bản cục bộ hẹp hơn — khoản 166.~~
+  // [S1.9151 / khoản 166] Bộ mô tả là `moTaLoiKhongGiaTri` của `@trustprocure/identity` — cùng bản
+  // với `apps/api`, không đi qua `apps/api` (quy tắc `g1-` giữ nguyên).
   // ============================================================================================
   // GẮN TỪNG POOL MỘT, không qua một vòng lặp: cổng `pool-nghe-du-tin-hieu.test.ts` đọc TÊN BIẾN
   // trên cây cú pháp, và một vòng lặp biến hai cái tên ấy thành một biến vòng lặp mà cổng không
@@ -131,13 +129,13 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
     (ten: string) =>
     (loi: unknown): void => {
       if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
-        console.error(`[unseal-worker] ket noi huy ${ten} ${moTaLoi(loi)}`);
+        console.error(`[unseal-worker] ket noi huy ${ten} ${moTaLoiKhongGiaTri(loi)}`);
       }
     };
   const ghiLoiToiMuon =
     (ten: string) =>
     (loi: unknown): void => {
-      console.error(`[unseal-worker] loi ket noi toi muon ${ten} ${moTaLoi(loi)}`);
+      console.error(`[unseal-worker] loi ket noi toi muon ${ten} ${moTaLoiKhongGiaTri(loi)}`);
     };
   pool.on("release", ghiKetNoiHuy("pool"));
   ngheLoiKetNoiToiMuon(pool, ghiLoiToiMuon("pool"));
@@ -183,7 +181,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
       // [CẤM LOG] `report.cause` là lỗi GỐC do handler ném và nó CÓ THỂ mang giá hoặc bản rõ —
       // `runner.ts` ghi rõ điều đó. Ở đây chỉ TÊN lý do, kind, và tên cùng mã cố định của lỗi gốc.
       onJobFailure: (bao) => {
-        const loi = bao.cause === undefined ? "" : ` ${moTaLoi(bao.cause)}`;
+        const loi = bao.cause === undefined ? "" : ` ${moTaLoiKhongGiaTri(bao.cause)}`;
         console.error(
           `[unseal-worker] outbox ${bao.kind} ${bao.reason}${bao.gaveUp ? " (bo cuoc)" : ""}${loi}`,
         );
@@ -192,9 +190,23 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
     {
       pollIntervalMs: ch.pollIntervalMs,
       listOrganizations: lietKeToChuc,
+      // [S1.9151 / khoản 168] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và từ vòng này đó
+      // là tiến trình NÀY — không còn là `api`. Vì sao: bảo đảm của sổ là *"một `kind` không người
+      // nhận vẫn tới trạng thái cuối ỒN ÀO"*, và nó chỉ đứng ở tiến trình CLAIM được job ấy. `api`
+      // chỉ claim cho tập tổ chức nó ĐÃ THẤY enqueue (`toChucDaThay`, rỗng lại sau mỗi lần khởi
+      // động), nên một job mồ côi của tổ chức chưa ai xếp việc qua `api` nằm `PENDING` im lặng — đo
+      // ở `tien-trinh.int.test.ts` vế ⑹ trên mã trước vòng này (`PENDING`, `attempts` 0 sau 10 s).
+      // Tiến trình này liệt kê MỌI tổ chức (hàm `052`), nên nó là chỗ duy nhất bảo đảm ấy đứng được.
+      // Lý do S1.81 chọn `api` — *"chạy thường trực trong mọi triển khai, worker có thể chưa được
+      // dựng"* — hết hiệu lực từ S1.82 (khoản 116 đóng: worker có điểm vào tiến trình, service ECS
+      // riêng, và ADR-077 báo động khi thiếu task). Hai tiến trình cùng khai thì cả hai tranh nhau
+      // ghi kết cục và `attempts` thôi đọc được, nên `apps/api/src/composition.ts` KHÔNG khai.
+      // Đọc `Object.keys(...)` Ở ĐÂY, lúc dựng, không hoist lên mức module: sổ thật hôm nay rỗng
+      // (S1.91), nên vế ⑹ cho sổ mượn một dòng thử TRƯỚC khi dựng tiến trình.
+      kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
       // Lỗi của CHÍNH lister ném ra khỏi `runOnce()` và tới đây. Không nối nó thì hàm `052` bị
       // DROP là một tiến trình chạy mãi mà phục vụ 0 tổ chức, không một dòng log.
-      onPollError: (e) => console.error(`[unseal-worker] outbox poll ${moTaLoi(e)}`),
+      onPollError: (e) => console.error(`[unseal-worker] outbox poll ${moTaLoiKhongGiaTri(e)}`),
     },
   );
 
@@ -236,7 +248,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
       } catch (e) {
         throw new Error(
           "khong goi duoc public.outbox_danh_sach_to_chuc() — migration 052 chua ap, hay ham da bi " +
-            `DROP, hay app_unseal mat EXECUTE tren no (${moTaLoi(e)}). Khong co nguon danh sach to ` +
+            `DROP, hay app_unseal mat EXECUTE tren no (${moTaLoiKhongGiaTri(e)}). Khong co nguon danh sach to ` +
             "chuc thi runner phuc vu 0 to chuc trong im lang.",
           { cause: e },
         );
@@ -284,7 +296,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
             `[unseal-worker] canh bao LechDongHo: dong ho CSDL lech ${moTaLech(p.lechMs)} so voi tien trinh ` +
               `(khu hoi ${Math.round(p.khuHoiMs)} ms, nguong ${ch.lechDongHoToiDaMs} ms)`,
           ),
-        baoLoi: (e) => console.error(`[unseal-worker] canh LechDongHo khong do duoc ${moTaLoi(e)}`),
+        baoLoi: (e) => console.error(`[unseal-worker] canh LechDongHo khong do duoc ${moTaLoiKhongGiaTri(e)}`),
       });
       // ⑷ [ADR-083] Dòng tồn đọng outbox cho cảnh báo lỗi nghiệp vụ — xem `canh-ton-dong.ts`. Đo
       //    MỘT LẦN ngay sau khi lên (trễ ngắn để vòng poll đầu chạy trước), rồi mỗi nhịp. Mỗi tổ
@@ -297,7 +309,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
         lietKeToChuc,
         doMotToChuc: (orgId) => withTenant(pool, orgId, (c) => doTonDong(c, orgId)),
         ghi: (dong) => console.error(dong),
-        baoLoi: (e) => console.error(`[unseal-worker] outbox ton dong khong do duoc ${moTaLoi(e)}`),
+        baoLoi: (e) => console.error(`[unseal-worker] outbox ton dong khong do duoc ${moTaLoiKhongGiaTri(e)}`),
       });
       console.error(
         `[unseal-worker] dang chay — khoa: ${ch.keyAdapter}, canh bao: ${ch.alertAdapter}, ` +

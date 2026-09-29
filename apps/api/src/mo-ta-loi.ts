@@ -1,6 +1,9 @@
 // ==============================================================================================
 // apps/api/src/mo-ta-loi.ts — MÔ TẢ MỘT LỖI CHO DÒNG LOG, KHÔNG MANG GIÁ TRỊ
 //
+// [S1.9151 / khoản 166] Thân `moTaLoiKhongGiaTri` nay ở `packages/identity/src/mo-ta-loi.ts` — MỘT bản cho cả `api` lẫn worker mở thầu;
+// tệp này xuất lại nó (xem khối cạnh import) và giữ hai bộ nghe pool của `api`. Hai khối dưới vẫn là lời khai đúng về luật của hàm.
+//
 // [S1.67 / khoản 118] Mọi chỗ ghi log lỗi của bộ điều phối và composition root mô tả lỗi bằng MỘT hàm: dòng 500, dòng 42501 và dòng
 // `sau-commit` của `dispatch`; dòng outbox và bộ dọn; dòng của bộ nghe `release`. Trước khoản này mỗi chỗ tự viết `e.name`: một lỗi
 // Postgres ra dòng log "error" không SQLSTATE, và dòng lỗi job outbox không nói lỗi gì. Ngoại lệ có chủ đích: `main.ts` in `tên:
@@ -20,29 +23,16 @@
 // ra mã" thay vì "không có trường" và làm đỏ test ấy). Đúng một tầng — không đi theo chuỗi.
 // ==============================================================================================
 import type pg from "pg";
-import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
+import { moTaLoiKhongGiaTri } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 
-/** Hình dạng của SQLSTATE: đúng năm ký tự chữ số và chữ hoa. */
-const MA_NAM_KY_TU = /^[0-9A-Z]{5}$/u;
-
-export function moTaLoiKhongGiaTri(loi: unknown): string {
-  if (!(loi instanceof Error)) return "loi khong ro";
-  const dong = moTaMotTang(loi);
-  return !("code" in loi) && loi.cause instanceof Error ? `${dong} <- ${moTaMotTang(loi.cause)}` : dong;
-}
-
-function moTaMotTang(loi: Error): string {
-  // [S1.85 / khoản 131] Và các HẰNG ĐÓNG của một lần từ chối không ghi được sổ, nếu lỗi này là một trong hai lớp bọc ấy. Phép kiểm
-  // hình dạng nằm trong `moTaHangDongCuaLanTuChoi` (packages/identity) — MỘT chỗ ở cho cả `api` lẫn worker mở thầu — và nó trả chuỗi
-  // RỖNG cho mọi lỗi khác, kể cả một lỗi chỉ mang TÊN của hai lớp ấy. Luật A2 của tệp này không đổi: thứ đi qua đây vẫn chỉ là tên
-  // lớp, mã cố định và mã định danh viết hoa; `message` và `cause` nguyên vẫn không vào dòng.
-  const hang = moTaHangDongCuaLanTuChoi(loi);
-  const duoi = hang === "" ? "" : ` ${hang}`;
-  if (loi instanceof TenantError) return `${loi.name} ${loi.code}${duoi}`;
-  const ma = (loi as { code?: unknown }).code;
-  return typeof ma === "string" && MA_NAM_KY_TU.test(ma) ? `${loi.name} ${ma}${duoi}` : `${loi.name}${duoi}`;
-}
+// [S1.9151 / khoản 166] THÂN HÀM ĐÃ DỜI: `moTaLoiKhongGiaTri` (cùng `MA_NAM_KY_TU` và `moTaMotTang`) nay sống ở
+// `packages/identity/src/mo-ta-loi.ts`, MỘT bản cho cả `api` lẫn worker mở thầu — worker không import được `apps/api` (`g1-`), và bản
+// rút gọn nó giữ tới trước vòng này thiếu tầng `cause` (đo ở `apps/unseal-worker/src/composition.int.test.ts`). Hai luật ở đầu tệp —
+// không `message`, không `cause` nguyên, đúng một tầng — không đổi và vẫn được `mo-ta-loi.test.ts` đo qua chính cửa này. Xuất lại để
+// các chỗ gọi trong `apps/api` (bộ điều phối, composition root, hai bộ nghe dưới) không đổi; `mo-ta-loi.test.ts` ghim rằng thứ xuất lại
+// là ĐÚNG hàm của identity, không một bản bọc.
+export { moTaLoiKhongGiaTri };
 
 /**
  * [S1.67 / khoản 118] Ghi MỘT dòng khi pool huỷ một kết nối vì `SESSION_STATE_LEFT`.

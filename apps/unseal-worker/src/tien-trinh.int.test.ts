@@ -298,7 +298,12 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     // runner trong test là `["LOGIN_LINK_SEND"]` — MỘT phần tử — trong khi tiến trình `api` thật
     // dựng nó từ `Object.keys(handlers)` HỢP `Object.keys(KIND_KHONG_NGUOI_NHAN)`, tức HAI. Mốc
     // chết đo trên một mảng lọc mà sản xuất không dùng thì nó canh một tiến trình không tồn tại.
-    // Nay cả hai vế lấy đúng thứ `apps/api/src/composition.ts` lấy.
+    // ~~Nay cả hai vế lấy đúng thứ `apps/api/src/composition.ts` lấy.~~
+    // **[S1.9151 / khoản 168] SỔ MỒ CÔI ĐỔI CHỦ: `apps/api/src/composition.ts` THÔI khai, `tien-trinh.ts`
+    // của tiến trình này khai.** Nên vế `api` dưới đây KHÔNG truyền `kindKhongNguoiNhan` — mảng lọc của
+    // nó là đúng `Object.keys(handlers)` như sản xuất từ vòng này — còn vế `worker` truyền
+    // `Object.keys(KIND_KHONG_NGUOI_NHAN)` như `tien-trinh.ts`. Sổ hôm nay RỖNG (S1.91), nên ở vòng này
+    // hai mảng lọc không đổi kích thước; vế ⑹ dưới là chỗ đo đường ấy với một dòng thử.
     const org = cacOrg[0]!;
     const apiPool = db.poolAs("app_api");
     try {
@@ -329,8 +334,9 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
         {
           listOrganizations: () => [org],
           onJobFailure: () => undefined,
-          // Đúng mảng lọc mà `apps/api/src/composition.ts` truyền — không phải một tập con tiện tay.
-          kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
+          // ~~Đúng mảng lọc mà `apps/api/src/composition.ts` truyền — không phải một tập con tiện tay.~~
+          // [S1.9151 / khoản 168] KHÔNG `kindKhongNguoiNhan`: `apps/api/src/composition.ts` thôi khai sổ
+          // mồ côi từ vòng này, và mảng lọc của `api` là đúng `Object.keys(handlers)`.
         },
       );
       expect(await runnerApi.runOnce(), "api chỉ được nhặt job của CHÍNH nó").toBe(1);
@@ -350,7 +356,14 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
           auditPool: db.poolAs("app_unseal"),
           onJobFailure: () => undefined,
         },
-        { listOrganizations: () => [org], onPollError: () => undefined, maxAttempts: 1 },
+        {
+          listOrganizations: () => [org],
+          onPollError: () => undefined,
+          maxAttempts: 1,
+          // [S1.9151 / khoản 168] Đúng sổ mà `tien-trinh.ts` khai — tiến trình này là tiến trình DUY NHẤT
+          // khai sổ mồ côi từ vòng này.
+          kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
+        },
       );
       await runnerWorker.runOnce();
       expect(
@@ -365,6 +378,88 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       await apiPool.end().catch(() => undefined);
     }
   }, 90_000);
+
+  // ===============================================================================================
+  // ⑹ [S1.9151 / khoản 168] SỔ `kind` MỒ CÔI KHAI Ở TIẾN TRÌNH THẤY MỌI TỔ CHỨC — ĐO TRÊN ĐƯỜNG SẼ CHẠY.
+  //
+  // Khoản 168 (§S1.83): tới trước vòng này sổ khai ở `api`, mà `listOrganizations` của `api` là tập
+  // tổ chức tiến trình ấy ĐÃ THẤY enqueue (`toChucDaThay`, rỗng lại sau mỗi lần khởi động). Một job
+  // mang `kind` mồ côi của một tổ chức chưa ai xếp việc qua `api` thì KHÔNG tiến trình nào claim —
+  // nó nằm `PENDING` im lặng, đúng thứ sổ mồ côi sinh ra để chặn. Tiến trình này thấy MỌI tổ chức
+  // (hàm `052`), nên bảo đảm *"vẫn chết ồn ào"* đặt ở đây mới đúng chỗ.
+  //
+  // SỔ THẬT HÔM NAY RỖNG (S1.91, khoản 154 đóng), nên phép đo phải cho nó MỘT dòng thử — và cho
+  // TRÊN ĐÚNG ĐỐI TƯỢNG tiến trình đọc (`KIND_KHONG_NGUOI_NHAN`, đọc lúc `taoTienTrinhUnsealWorker`
+  // dựng runner), không qua một cửa tiêm riêng: một cửa tiêm đo được cửa ấy chứ không đo được dây
+  // nối mặc định, và dây nối mặc định là thứ khoản này nói tới. Dòng thử được gỡ trong `finally`;
+  // tệp này có sổ riêng của nó (vitest cô lập module theo tệp), nên cổng ở
+  // `composition.int.test.ts` — vế ⑶ đòi mỗi dòng trỏ một khoản CÒN MỞ — không thấy dòng này.
+  // Ai đóng băng đối tượng ấy (`Object.freeze`) thì vế này NÉM chứ không xanh giả: khi ấy mở một
+  // cửa tiêm trong `PhuThuocTienTrinhWorker` là bước kế tiếp, và câu này ở đây để bước ấy có lý do.
+  //
+  // Đối chứng: một `kind` KHÔNG khai của cùng tổ chức phải còn nguyên `PENDING` — chứng minh thứ
+  // đưa job tới `FAILED` là dòng khai, không phải một vị từ nhặt việc quá rộng (§S1.81 mục 1).
+  // ===============================================================================================
+  it("⑹ [khoản 168] job mang `kind` mồ côi của một tổ chức CHƯA TỪNG xếp việc qua api ⇒ tiến trình này đưa nó tới FAILED/NO_HANDLER và ghi MỘT dòng; `kind` không khai của cùng tổ chức không bị chạm", async () => {
+    const KIND_MO_COI = "THU_MO_COI_168";
+    const KIND_KHONG_KHAI = "THU_KHONG_KHAI_168";
+    // Tổ chức MỚI: chưa ai xin link đăng nhập, chưa một lời `enqueueJob` nào đi qua `api` — tức
+    // không nằm trong `toChucDaThay` của một tiến trình `api` nào.
+    const { rows: tc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+      ["Cong ty F", "cong-ty-f-k168"],
+    );
+    const orgF = tc[0]!.id;
+    const gieo = async (kind: string): Promise<string> => {
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind) VALUES ($1::uuid, $2) RETURNING id",
+        [orgF, kind],
+      );
+      return rows[0]!.id;
+    };
+    const idMoCoi = await gieo(KIND_MO_COI);
+    const idKhongKhai = await gieo(KIND_KHONG_KHAI);
+    const doc = async (id: string): Promise<{ status: string; attempts: number; last_failure_reason: string | null }> => {
+      const { rows } = await db.pool.query<{ status: string; attempts: number; last_failure_reason: string | null }>(
+        "SELECT status, attempts, last_failure_reason FROM outbox_jobs WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    };
+
+    Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế ⑹ — không phải một khai thật, gỡ trong finally" });
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_OUTBOX_POLL_MS: "200" })));
+    try {
+      await tt.batDau();
+      const het = Date.now() + 10_000;
+      while ((await doc(idMoCoi)).status !== "FAILED" && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+      }
+      expect(await doc(idMoCoi), "job mồ côi phải tới trạng thái cuối ỒN ÀO — nếu còn PENDING thì không tiến trình nào khai sổ").toEqual({
+        status: "FAILED",
+        attempts: 1,
+        last_failure_reason: "NO_HANDLER",
+      });
+      expect(log.filter((d) => d.startsWith(`[unseal-worker] outbox ${KIND_MO_COI}`)), JSON.stringify(log)).toEqual([
+        `[unseal-worker] outbox ${KIND_MO_COI} NO_HANDLER (bo cuoc)`,
+      ]);
+      expect(await doc(idKhongKhai), "`kind` KHÔNG khai không được bị claim — vị từ lọc của S1.81 vẫn đứng").toEqual({
+        status: "PENDING",
+        attempts: 0,
+        last_failure_reason: null,
+      });
+      expect(log.join("\n")).not.toContain(orgF);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+      Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+    }
+  }, 60_000);
 
   it("⑷ hai pool TRÙNG NHAU bị chặn ở lời gọi, không phải ở một docstring (khoản 121)", () => {
     expect(() =>

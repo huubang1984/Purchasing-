@@ -212,6 +212,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   // [S1.85 / khoản 131] Hàm THUẦN trả các hằng đóng của một lần từ chối không ghi được sổ, cho dòng log — không đọc CSDL, không
   // trả lời câu hỏi quyền nào.
   "moTaHangDongCuaLanTuChoi",
+  // [S1.9151 / khoản 166] Bộ mô tả lỗi cho dòng log — hàm THUẦN bọc ngoài hàm trên, MỘT bản cho `api` và worker mở thầu; không đọc
+  // CSDL, không trả lời câu hỏi quyền nào.
+  "moTaLoiKhongGiaTri",
   "SEPARATION_OF_DUTIES_CHAIN",
   "SessionInvalidError",
   "assertFreshMfa",
