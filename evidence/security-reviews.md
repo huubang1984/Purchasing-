@@ -16078,7 +16078,7 @@ chạy — tổng kiểm đổi; chạy lại sạch), `migration-shape` 1 đỏ
 - Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3229 khẳng định; L1 6, L4 5; H16 51 → 55. Mốc `MOC_GHIM`
   68 → 70 — cổng CHẶN đúng một lượt trước khi dòng ấy được sửa.
 
-# §S1.9101 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+# §S1.193 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
 mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, một lớp từ chối vào sổ.
@@ -16091,7 +16091,7 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 
 ## 2. Hình dạng
 
-- `9501_xac_minh_nha_cung_cap`: `supplier.qualify` cho `FINANCE` (ADR-084 ⑵ ⑶). Bảng `supplier_verifications` chỉ ghi thêm (không
+- `080_xac_minh_nha_cung_cap`: `supplier.qualify` cho `FINANCE` (ADR-084 ⑵ ⑶). Bảng `supplier_verifications` chỉ ghi thêm (không
   `UPDATE`/`DELETE` cho vai nào, `bid_chi_ghi_them` ở UPDATE/DELETE/TRUNCATE, `ENABLE ALWAYS`), RLS + FORCE, policy khách ĐÓNG HẲN,
   `INSERT` theo cột; `thu_tu`, `bam_ho_so`, `het_han_at` ngoài `GRANT`.
 - Trigger `ncc_kiem_xac_minh`: khoá tư vấn theo nhà cung cấp (hạt giống 7) rồi mới đọc thứ tự lớn nhất, nên thứ tự cấp số là thứ tự

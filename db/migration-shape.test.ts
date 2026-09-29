@@ -494,7 +494,7 @@ describe("hình dạng file migration", () => {
       "rfq_unsealed_bids",
       "sessions",
       "supplier_contacts",
-      // [S1.9101 / S3.3a / migration xác minh] Xác minh nhà cung cấp (K8a) — chỉ-ghi-thêm, khoá ngoại hợp thành `(org_id, supplier_id)` tới
+      // [S1.193 / S3.3a / migration xác minh] Xác minh nhà cung cấp (K8a) — chỉ-ghi-thêm, khoá ngoại hợp thành `(org_id, supplier_id)` tới
       // `suppliers`, policy khách ĐÓNG HẲN.
       "supplier_verifications",
       "suppliers",

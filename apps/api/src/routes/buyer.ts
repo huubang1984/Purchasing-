@@ -250,7 +250,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/suppliers/:supplierId/verification",
     audience: "BUYER",
     mutates: false,
-    // [S1.9101 / S3.3a / K8a] Trạng thái xác minh nội bộ — hàng mới nhất cộng `ncc_xac_minh_con_hieu_luc`. KHÔNG cho agent:
+    // [S1.193 / S3.3a / K8a] Trạng thái xác minh nội bộ — hàng mới nhất cộng `ncc_xac_minh_con_hieu_luc`. KHÔNG cho agent:
     // bề mặt mới, không công cụ đọc nào của agent cần nó; mở sau là một quyết định có tên (khuôn `/policy/versions`).
     agent: false,
     handler: async (ctx) => ({
@@ -819,7 +819,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/verify",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.3a / K8a · ADR-084 ⑵] Xác minh nội bộ nhà cung cấp. Cổng của bộ điều phối là `supplier.qualify`; trigger
+    // [S1.193 / S3.3a / K8a · ADR-084 ⑵] Xác minh nội bộ nhà cung cấp. Cổng của bộ điều phối là `supplier.qualify`; trigger
     // `ncc_kiem_xac_minh` đòi thêm luật người, và hai nhánh ấy vào sổ `CONTROL_DENIED` (422 kèm thông điệp của bảng chốt).
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
     resourceType: "SUPPLIER",
@@ -841,7 +841,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     path: "/suppliers/:supplierId/verification/revoke",
     audience: "BUYER",
     mutates: true,
-    // [S1.9101 / S3.3a / K8a] Thu hồi xác minh — lý do bắt buộc và vào sổ.
+    // [S1.193 / S3.3a / K8a] Thu hồi xác minh — lý do bắt buộc và vào sổ.
     permission: PERMISSIONS.SUPPLIER_QUALIFY,
     resourceType: "SUPPLIER",
     resourceId: supplierIdParam,

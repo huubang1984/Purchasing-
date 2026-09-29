@@ -270,7 +270,7 @@ const DANH_SACH_TRANG_IDENTITY = [
   "laMaChot",
   "maChotTuLoi",
   "tuChoiTheoChot",
-  // [S1.9101 / S3.3a] Cùng hàm, cho tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Luôn ném.
+  // [S1.193 / S3.3a] Cùng hàm, cho tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Luôn ném.
   "tuChoiTheoChotTaiNguyen",
   // [S1.184 / khoản 248 / ADR-112] Đặt trần theo phiên cho lần từ chối do handler ghi — chỉ làm lần từ chối thứ N+1 ném 429 thay vì
   // ghi sổ, không cho qua gì. Một người gọi: `apps/api/src/dispatch.ts` (`ghi-so-tu-choi-mot-duong.test.ts` giam).
@@ -463,7 +463,7 @@ const DANH_SACH_TRANG_SUPPLIER = [
   "getSupplier",
   "listSupplierContacts",
   "listSuppliers",
-  // [S1.9101 / S3.3a / K8a] Xác minh nội bộ: hai hàm ghi dưới `supplier.qualify` (cổng ở hàm), một hàm đọc trạng thái — không
+  // [S1.193 / S3.3a / K8a] Xác minh nội bộ: hai hàm ghi dưới `supplier.qualify` (cổng ở hàm), một hàm đọc trạng thái — không
   // token, không phiên, không MST trong thân trả về.
   "docXacMinhNhaCungCap",
   "thuHoiXacMinhNhaCungCap",
