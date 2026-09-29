@@ -15712,7 +15712,7 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 - ⑶ lời mời giữa gửi hỏng ⇒ `200` và danh sách đúng lời mời ấy; nó `UNSENT`, còn sống, token thu hồi, hàng `MAGIC_LINK_TOKEN_REVOKED`
   `{invitationId, reason: LINK_SEND_FAILED}` dưới người mở; đúng một dòng `sau-commit 2/3 LoiGuiGiaLap`; không dòng log nào mang
   token hay đích; gửi lại qua route ⇒ `SENT`, link mới đổi được.
-- ⑷ ba bộ gửi treo, máy chủ trần 1 000 ms ⇒ `200` trong khoảng `[1 000, 2 000)` ms, cả ba chưa gửi theo đúng thứ tự, ba token thu
+- ⑷ ba bộ gửi treo, máy chủ trần 1 500 ms ⇒ `200` trong khoảng `[1 400, 3 000)` ms, cả ba chưa gửi theo đúng thứ tự, ba token thu
   hồi, ba dòng `sau-commit i/3 SauCommitQuaHan`.
 - ⑸ mời ở `OPEN`: gửi được ⇒ `201` `SENT` có nhãn, CSDL `SENT`; gửi hỏng ⇒ `201` `UNSENT`, lời mời còn sống, token thu hồi có lý do,
   không `INVITATION_REVOKED`, một dòng `sau-commit`; gửi lại ⇒ `SENT`.
@@ -15744,7 +15744,7 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 | M10 | bỏ nhánh tổ chức chưa bật của `ducTokenKhiMoGoi` | ⑺ và đối chứng ⑻ — lần mở gói MVP1 đúc và gửi thêm |
 | M11 | `danhDauDaGui` bỏ vế gói `OPEN` | ⑻ — trigger `076` 23514 thay cho `false` |
 | M12 | `danhDauDaGui` bỏ vế `UNSENT` | ⑻ — lần hai trả `true` |
-| M13 | lô gửi NỐI TIẾP thay vì cùng lúc | ⑷ (≥ 3 000 ms) và ⑹ (bộ gửi thứ hai không được gọi khi bộ thứ nhất còn chờ) |
+| M13 | lô gửi NỐI TIẾP thay vì cùng lúc | ⑷ (≥ 4 500 ms) và ⑹ (bộ gửi thứ hai không được gọi khi bộ thứ nhất còn chờ) |
 | M14 | `phanHoi` không nhận khoá hỏng | ⑶ ⑷ và hai ca ⑼ của lô |
 | M15 | lô không chạy `bu` | ⑶ ⑷ và hai ca ⑼ của lô |
 | M16 | việc có bù không chạy `khiXong` | ⑶ ⑸ ⑼ |
@@ -15763,3 +15763,20 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
   kịch bản 41 bản HTTP mời ở `OPEN` qua route, nên nay lời mời của luồng S3 thành `SENT`. S3.2c đổi thứ tự của cả hai.
 - **Lời mời thời MVP1 của một gói còn ở `DRAFT` lúc tổ chức bật** mang `SENT`: lần mở gói đúc token mới cho nó, và nếu lần gửi ấy hỏng
   thì nó vẫn `SENT` dù không link nào dùng được (khoản 253 giết link cũ). Danh sách của lần mở vẫn nói ra.
+
+## 7. Số đo
+
+- `apps/api/src/luong-moi-s3.int.test.ts` 14/14. Tệp test hiện có chạm luồng mời, chạy lại trên cây vòng này: `loi-moi-sau-commit.int`
+  19/19 (hợp đồng [S1.70] của MVP1, không đổi một dòng), `buyer.int` 18/18, `guest.int` 22/22, `api.int` 15/15, `loi-giao-thuc.int`
+  20/20, `composition.int` 19/19, `token-goi-da-mo.int` 4/4, `invitation.int` 72/72, `danh-sach-moi` 21/21, `tra-ve-nhap` 15/15,
+  `kich-ban-41` 30/30, `kich-ban-41-http` 58/58 — 313/313.
+- Toàn bộ T3 cục bộ trên cây vòng này: 190 tệp, 3209 khẳng định, 3199 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo, không liên
+  quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
+- Sau lượt ấy, ca ⑷ nới trần của máy chủ thứ hai từ 1 000 lên 1 500 ms và ngưỡng từ 2 000 lên 3 000 ms — để 1 500 ms cho máy CI chậm ở
+  cả hai phía; ba lần gửi nối tiếp là ≥ 4 500 ms. Tệp chạy lại 14/14, và đột biến M13 chạy lại vẫn đỏ ở ⑷ và ⑹. Số khẳng định không đổi.
+- `pnpm t0` sạch. `pnpm test`: 121 tệp, 1704 đạt, 1 bỏ qua — sau khi `cap-so --dem` viết lại lời khai số ADR ở STATE và Handoff
+  ([INV-H20] P5, P7 đỏ trước đó vì ADR mới).
+- Mười bảy đột biến ở mã TypeScript, mười bảy lần đỏ (§5).
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3209 khẳng định; K4a 15 → 16, K6 12 → 20, K4b 8 không đổi. Không
+  mã mới.

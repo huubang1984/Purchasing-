@@ -46,8 +46,11 @@ import { dichVuTest } from "./test-services.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
-/** Trần `afterCommitTimeoutMs` của máy chủ thứ hai — đo ⑷. Ba lần gửi nối tiếp ⇒ ≥ 3 000 ms; cùng lúc ⇒ khoảng 1 000 ms. */
-const TRAN_NGAN_MS = 1000;
+/**
+ * Trần `afterCommitTimeoutMs` của máy chủ thứ hai — đo ⑷. Ba lần gửi nối tiếp ⇒ ≥ 4 500 ms; cùng lúc ⇒ khoảng 1 500 ms. Ngưỡng
+ * 3 000 ms của phép đo để 1 500 ms cho máy CI chậm ở cả hai phía.
+ */
+const TRAN_NGAN_MS = 1500;
 const LOI_CHOT_MO_GOI = "Chỉ đúc token cho lời mời trong chính giao dịch mở gói, dưới phiên người mở.";
 
 // Bộ sinh cặp khoá tổ chức GIẢ, khuôn `token-goi-da-mo.int.test.ts`. *** KHÔNG PHẢI MÃ HOÁ. ***
@@ -616,7 +619,7 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
     const tre = Date.now() - batDau;
     expect(r.status, r.text).toBe(200);
     expect(r.body.unsentInvitationIds, "đúng thứ tự lời mời").toEqual(ds.map((d) => d.id));
-    expect(tre).toBeGreaterThanOrEqual(TRAN_NGAN_MS);
+    expect(tre).toBeGreaterThanOrEqual(TRAN_NGAN_MS - 100);
     expect(tre, `ba lần gửi nối tiếp là ≥ ${String(3 * TRAN_NGAN_MS)} ms`).toBeLessThan(2 * TRAN_NGAN_MS);
     for (const d of ds) {
       const h = await trangThai(d.id);

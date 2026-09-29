@@ -8914,7 +8914,7 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
   MỌI người gọi (công cụ gieo, kịch bản 41). Bác: chỗ duy nhất cần token dạng rõ là route, vì bộ gửi ở đó.
 - **Job outbox gửi link** — §2.4 ⑼ đã bác: payload không được mang token (`007`, E1), ADR-023 §1 loại hình dạng *phát token rồi xếp
   job gửi*, và ADR-020 [S1.70] bác outbox vì gửi hỏng không đổi được phản hồi.
-- **Gửi nối tiếp** — N bộ gửi treo làm lần mở gói treo N trần. Đo bằng đột biến: ba lời mời, trần 1 000 ms ⇒ ca đo ⑷ đỏ.
+- **Gửi nối tiếp** — N bộ gửi treo làm lần mở gói treo N trần. Đo bằng đột biến: ba lời mời, trần 1 500 ms ⇒ ca đo ⑷ đỏ (≥ 4 500 ms).
 - **Một giao dịch ghi cho cả lô** — một lần ghi hỏng (gói vừa đóng ⇒ trigger `076` 23514; phiên người mở vừa thu hồi) kéo theo MỌI
   lần ghi khác của lô.
 - **Hàng sổ cho mỗi lần `SENT`** — lần ghi phụ thuộc phiên còn sống và khoá chuỗi sổ của tổ chức; và điều nó nói đã đọc được từ sổ
@@ -8929,6 +8929,9 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
   đang `BAFO_OPEN` — trigger `076` chỉ cho `UNSENT→SENT` ở `OPEN`, và nhà cung cấp chưa từng nhận link lúc `OPEN` thì không ở top-N
   của vòng BAFO. Chiều lệch ấy lành: người mua gửi lại, và lần gửi lại thu hồi mọi token chưa dùng.
 - **Phần bù hỏng để token vừa đúc sống**, có thể chưa tới nơi; danh sách vẫn nói lời mời ấy chưa gửi.
+- **Các lần ghi sau lần gửi chạy LẦN LƯỢT**, mỗi lần một kết nối: pool đầy thì mỗi lần chờ tối đa 5 s trước khi gãy có tên, nên
+  lần mở một gói N lời mời, dưới pool đầy, trả về sau tối đa khoảng N × 5 s. Ghi cùng lúc thì lần mở chiếm N kết nối một lúc — đúng
+  lúc pool đang đầy.
 - **Các lần gửi của một lô chạy cùng lúc, không trần đồng thời.** Hôm nay chưa có bộ gửi thật (ADR-009, sổ nợ 38) — hộp thư dev ghi
   tệp nguyên tử. Ngày có bộ gửi thật, trần đồng thời là một câu hỏi của bộ gửi ấy.
 - **Mở gói bằng hàm gói — không qua route — thì không đúc gì**: lời mời ở lại `UNSENT` không token tới lần gửi lại. `gieo:demo --s3`
@@ -8944,6 +8947,6 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
 lời mời còn sống và một đã thu hồi (token đúc dưới phiên người mở, bộ gửi được gọi khi token VÀ gói đã commit — đọc từ kết nối khác —,
 `SENT`, link đổi được, token không về client); một phần gửi hỏng (danh sách đúng lời mời ấy, `UNSENT`, còn sống, token thu hồi có lý
 do dưới người mở, một dòng `sau-commit 2/3`, log không mang token hay đích, gửi lại ⇒ `SENT`); ba bộ gửi treo trên máy chủ trần
-1 000 ms ⇒ phản hồi dưới 2 000 ms; mời ở `OPEN` gửi được và gửi hỏng; không khoá ghi sổ nào bị giữ trong lúc gửi; đối chứng MVP1;
+1 500 ms ⇒ phản hồi dưới 3 000 ms; mời ở `OPEN` gửi được và gửi hỏng; không khoá ghi sổ nào bị giữ trong lúc gửi; đối chứng MVP1;
 chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `danhDauDaGui`; bốn ca của bộ điều phối trên route giả. Đột biến:
 §S1.9101.
