@@ -1691,7 +1691,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // hiện tại, lời mời đổi ở PENDING_APPROVAL, hay token đúc cho gói chưa mở.
     { ham: "rfq_approvals_dat_bam_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
     { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
-    { ham: "rfq_invitations_kiem_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
+    // [S1.194 / S3.2d / khoản 255] `080_k4a_co_ten.sql` định nghĩa lại thân K4a — hai nhánh mang tên ràng buộc —, nên con trỏ dời
+    // theo quy tắc *migration CUỐI CÙNG*. Thân TRÍCH NGUYÊN VĂN từ `076` rồi đổi đúng hai vế `CONSTRAINT = …`.
+    { ham: "rfq_invitations_kiem_danh_sach", migration: "080_k4a_co_ten.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
     { ham: "rfq_invitation_tokens_kiem_goi_da_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_invitation_tokens_kiem_goi_da_mo"] },
     // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
     // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
@@ -3370,6 +3372,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "077_tra_ve_nhap.sql",
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
+        "080_k4a_co_ten.sql",
         "080_hang_chuan.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
@@ -7793,6 +7796,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "077_tra_ve_nhap.sql",
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
+        "080_k4a_co_ten.sql",
         "080_hang_chuan.sql",
       ]);
 
@@ -8093,6 +8097,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "077_tra_ve_nhap.sql",
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
+        "080_k4a_co_ten.sql",
         "080_hang_chuan.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);

@@ -249,7 +249,7 @@ async function chinh(): Promise<void> {
           contactId: lh,
           linkChannel: "EMAIL",
           actorSessionId: phienGieo,
-        });
+        }, pool);
         daMoi.push({ ten, invitationId: lm.id });
       }
       return daMoi;
