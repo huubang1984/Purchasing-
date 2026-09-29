@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.9101] MƯỜI MỘT route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.197] MƯỜI MỘT route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -61,7 +61,7 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
   "/rfqs/:rfqId/budget":
     "NGÂN SÁCH DỰ TÍNH của gói — thứ neo giá nếu rò xuống bên bán: `setRfqBudget` cố ý không ghi số " +
     "tiền vào sổ kiểm toán, và hàm đọc `getRfqBudget` có cổng (người tạo gói, người duyệt). Route " +
-    "ra đời ở S1.9101 cho người duyệt đọc con số mình ký (khoản 258); chủ dự án chọn KHÔNG phơi cho " +
+    "ra đời ở S1.197 cho người duyệt đọc con số mình ký (khoản 258); chủ dự án chọn KHÔNG phơi cho " +
     "agent ngày 2026-09-29 — khuôn bảng so sánh giá (ADR-038).",
   "/rfqs/:rfqId/comparison":
     "BẢNG SO SÁNH GIÁ sau mở thầu — thứ toàn bộ sản phẩm sinh ra để bảo vệ. Một công cụ MCP đưa " +

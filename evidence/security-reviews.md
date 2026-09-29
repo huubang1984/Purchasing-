@@ -16593,10 +16593,10 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 
 ---
 
-# §S1.9101 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-9201
+# §S1.197 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-117
 
 **Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; vòng này thêm một bảng đọc, không đổi luồng
-nào. Khoản 258 (rổ B, ghi ở §S1.196) đóng. Không migration; một route đọc mới; một ADR (ADR-9201).
+nào. Khoản 258 (rổ B, ghi ở §S1.196) đóng. Không migration; một route đọc mới; một ADR (ADR-117).
 
 ## 1. Việc gì
 
@@ -16621,12 +16621,12 @@ chỉ có `PUT`.
 - `apps/web`: `tuDocNganSach` và `hangNganSach` (thuần, `tao-thau.test.ts` đo). `napRfq` tự đọc ngân sách chỉ cho người tạo gói;
   người khác bấm «Xem ngân sách». Bảng ngân sách đi ngay sau lần đọc gói, chỉ vẽ câu trả của gói đang mở, và đi cùng lần đăng xuất
   hay đổi người; người tạo gói đặt ngân sách xong thì đọc lại đủ năm hàng. `userId` của phiên lấy từ `GET /me`.
-- ADR-9201; STATE, TEST-PLAN.
+- ADR-117; STATE, TEST-PLAN.
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
-- ~~**Lúc nào màn tự đọc** (ADR-9201 ⑶): người tạo gói, hay gói đang chờ duyệt.~~ Lượt soi (§6 F3) bác điểm này; chủ dự án chốt
-  lại: tự đọc chỉ cho người tạo gói, người khác bấm nút (ADR-9201 mục 3). Màn không biết quyền của người dùng, và dự án cố ý không
+- ~~**Lúc nào màn tự đọc** (ADR-117 ⑶): người tạo gói, hay gói đang chờ duyệt.~~ Lượt soi (§6 F3) bác điểm này; chủ dự án chốt
+  lại: tự đọc chỉ cho người tạo gói, người khác bấm nút (ADR-117 mục 3). Màn không biết quyền của người dùng, và dự án cố ý không
   có phép hỏi quyền im lặng.
 - **`null` trước phép kiểm quyền** cho gói không có — trong một tổ chức, gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời.
 
@@ -16659,16 +16659,16 @@ Một lượt, trên cây `99996a0`; người kiểm đo qua HTTP thật trên P
 |---|---|---|---|
 | F1 | Nhánh *người tạo* của cổng — ca chính của người mua — không có ca đo: người tạo ở hai ca HTTP là PROCUREMENT_MANAGER, giữ cả hai quyền; đột biến *luôn hỏi `rfq.approve`* sống | Nên sửa | **Sửa trong vòng:** ca BUYER tạo gói rồi đọc (§5) — đột biến ấy nay đỏ |
 | F2 | Hàng từ chối của lần đọc ngân sách giống hệt hàng của một lần định trả gói người khác về soạn thảo (`PERMISSION_DENIED`, `RFQ`, cùng mã gói, `rfq.approve`) | Nên sửa | **Sửa trong vòng:** loại tài nguyên `RFQ_BUDGET` (khuôn `RFQ_INVITATION`); ca HTTP khẳng định |
-| F3 | Màn tự đọc ở mỗi lần đọc gói đang chờ duyệt: mọi người không giữ `rfq.approve` — kể cả người mua vừa nộp giúp gói của đồng nghiệp — để lại một hàng từ chối mỗi lần đọc hay nộp; với trần 3, lần đọc thứ tư ra 429 và một lần duyệt sai quyền THẬT sau đó ra 429, không vào sổ | Nên sửa | **Chủ dự án chốt:** tự đọc chỉ cho người tạo gói, người khác bấm «Xem ngân sách» (ADR-9201 mục 3) |
+| F3 | Màn tự đọc ở mỗi lần đọc gói đang chờ duyệt: mọi người không giữ `rfq.approve` — kể cả người mua vừa nộp giúp gói của đồng nghiệp — để lại một hàng từ chối mỗi lần đọc hay nộp; với trần 3, lần đọc thứ tư ra 429 và một lần duyệt sai quyền THẬT sau đó ra 429, không vào sổ | Nên sửa | **Chủ dự án chốt:** tự đọc chỉ cho người tạo gói, người khác bấm «Xem ngân sách» (ADR-117 mục 3) |
 | F4 | Màn có thể để ngân sách của gói trước cạnh lần nộp của gói đang mở: bảng chỉ thay ở cuối `napRfq`; một lần đọc hỏng giữa chừng hay câu trả tới muộn để lại con số cũ | Nên sửa | **Sửa trong vòng:** xoá bảng ngay sau lần đọc gói; chỉ vẽ câu trả của gói đang mở (§5) |
-| F5 | ADR nói sai rằng các hàm đọc có cổng khác cũng không ghi lần đọc thành công — ba hàm có ghi (ADR-102) | Nên sửa | **Chủ dự án chốt:** không ghi; ADR-9201 mục 4 nói đúng lý do |
+| F5 | ADR nói sai rằng các hàm đọc có cổng khác cũng không ghi lần đọc thành công — ba hàm có ghi (ADR-102) | Nên sửa | **Chủ dự án chốt:** không ghi; ADR-117 mục 4 nói đúng lý do |
 | N1 | Bảng ngân sách còn trên trang sau đăng xuất hay đổi người | Ghi chú | **Sửa trong vòng** |
 | N2 | Chú thích sai: số dòng của `ROUTE_DOC_KHONG_PHOI`, câu *"ở mỗi lần đọc gói"* ở route, vai AUDITOR (chưa có), ký hiệu mục | Ghi chú | **Sửa trong vòng** |
 | N3 | Vế `h === undefined` sau cổng không bao giờ xảy ra — `app_api` không xoá được gói | Ghi chú | Giữ (vô hại) |
 | N4 | Người tạo đặt ngân sách xong chỉ thấy ba hàng tới lần đọc gói sau | Ghi chú | **Sửa trong vòng:** đọc lại cho người tạo; người mua khác không bị đọc thay |
 | N5 | Quyết định không phơi cho agent chỉ được khoá ở tầng tích hợp | Ghi chú | **Sửa trong vòng:** thêm vào `it.each` của `cong-cu.test.ts` |
 | N6 | Hai câu đọc chỉ dựa vào RLS để lọc tổ chức | Ghi chú | **Sửa trong vòng:** lọc cả `org_id` (khuôn `listInvitations`) |
-| N7 | FINANCE, DIRECTOR vẫn kẹp được ngân sách qua `belowBudget` của bảng so sánh sau mở niêm phong — có trước vòng này | Ghi chú | Ghi ở ADR-9201 (hệ quả) |
+| N7 | FINANCE, DIRECTOR vẫn kẹp được ngân sách qua `belowBudget` của bảng so sánh sau mở niêm phong — có trước vòng này | Ghi chú | Ghi ở ADR-117 (hệ quả) |
 
 **Người kiểm thử và không lách được:** tổ chức khác ⇒ 404 không hàng sổ, cookie trộn tổ chức ⇒ 401; phiên `AGENT_READONLY` ⇒ 403 và
 một hàng `AGENT_SCOPE_DENIED` trước handler, mã gói lạ cũng 403 — không oracle tồn tại; phiên khách không mang cookie người mua, cookie
@@ -16681,7 +16681,7 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
 - Người không giữ `rfq.approve` bấm «Xem ngân sách» thì để lại một hàng `PERMISSION_DENIED` (`RFQ_BUDGET`) và một lần trong trần từ
   chối — chỉ khi bấm. Người tạo gói mất `rfq.create` bị từ chối ở mỗi lần đọc gói của chính mình.
 - Người mua khác đặt được ngân sách của gói đồng nghiệp mà không đọc lại được nó nếu không giữ `rfq.approve`.
-- Người duyệt ký được mà không mở ngân sách; lần đọc thành công không vào sổ (ADR-9201 mục 4).
+- Người duyệt ký được mà không mở ngân sách; lần đọc thành công không vào sổ (ADR-117 mục 4).
 - FINANCE, DIRECTOR kẹp được ngân sách qua `belowBudget` sau mở niêm phong — có trước vòng này.
 - Gói, hạng mục, lời mời và ngân sách là bốn lần đọc tách nhau; lần nộp lại tăng `lanNop`, nên thứ đọc sau mà khác lần nộp đã đọc
   làm lời duyệt mang mốc cũ bị từ chối (ADR-116).
