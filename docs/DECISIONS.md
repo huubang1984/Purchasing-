@@ -8958,7 +8958,7 @@ chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `da
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá lỗ này TRƯỚC S3.2c, bằng một PR riêng.
 Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.9101]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
 hiệu bằng băm), ADR-084 ⑵ (cạnh về DRAFT), ADR-080 (công tắc một chiều), `011` C-1, `014` §(4), `076`, `077` · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101 · **Khoản:** 9401 (mở và đóng cùng vòng)
+`evidence/security-reviews.md` §S1.9101 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
 
 ### Bối cảnh
 

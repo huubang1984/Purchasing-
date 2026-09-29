@@ -15819,12 +15819,46 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3209 khẳng định; K4a 15 → 16, K6 12 → 20, K4b 8 không đổi. Không
   mã mới.
 
+# §S1.189 — NHÁNH S3.2b SONG SONG XOÁ; HAI PHẦN KHÔNG TRÙNG VÀO SỔ NỢ (KHOẢN 254, 255)
+
+## 1. Việc gì
+
+Nhánh `claude/adr-105-condition-4b-enforcement-5wiyv0` (hai commit, head `6d47f8c`, dựng trên `d9eb1fb` — thời S3.2a, không PR) là một
+bản S3.2b làm song song với S3.2b1 (`077`, §S1.186) và S3.2b2 (PR #195, §S1.188). Chủ dự án bảo xoá; trước khi xoá, đọc nhánh để tìm phần
+`master` chưa có.
+
+## 2. Đọc
+
+- Trùng hoặc đã làm khác trên `master`: cạnh `PENDING_APPROVAL→DRAFT` chỉ ở tổ chức đã bật (`077`); khoản 253 (nhánh dùng
+  `clock_timestamp()` cho `created_at`, `master` dùng cột `duc_khi_goi_da_mo` — §S1.186 đo vì sao phép so thời gian sai); link mời đi
+  lúc mở gói (§S1.188).
+- **Không có trên `master`:** ⑴ chữ ký duyệt gói ràng vào ngân sách — `rfq_bam_noi_dung` (`011`) chỉ băm tiêu đề, hạn và dòng hàng,
+  `rfq_bam_danh_sach` (`076`) chỉ băm danh sách, và `rfq_budgets_chi_sua_khi_soan` (`014`) cho sửa ngân sách ở DRAFT; ⑵ hai lời từ
+  chối K4a mang tên ràng buộc và vào sổ `CONTROL_DENIED` — trên `master` hai `RAISE` K4a của `rfq_invitations_kiem_danh_sach` không
+  mang `CONSTRAINT`, và `CHOT_THEO_RANG_BUOC` không có dòng K4a.
+- Phần ⑴ đọc trên `master`, chưa đo ở vòng này; nhánh ghi đã đo được ở lượt soi của nó (D2: gói cấp kép trả về DRAFT, hạ ước lượng dưới
+  ngưỡng, nộp lại, mở bằng một chữ ký cũ).
+
+## 3. Thay đổi
+
+Không mã. `docs/STATE.md`: khoản 254 (⑴) và 255 (⑵), rổ B, kèm hình dạng đề xuất lấy từ nhánh và SHA `6d47f8c` để tra lại. Nhánh xoá
+sau commit này.
+
+## 4. Giới hạn
+
+- Commit `6d47f8c` không còn ref nào trỏ tới sau khi xoá nhánh; GitHub có thể thu gom nó. Hình dạng đề xuất đã chép vào hai hàng sổ nợ.
+- Lời *"chủ dự án chốt ngày 2026-09-29"* về K4a chỉ nằm trên nhánh; khoản 255 ghi nó là chưa xác nhận.
+
+## 5. Số
+
+Mở khoản 254, 255. Còn mở **84**; rổ B **60**.
+
 ---
 
-# §S1.9101 — KHOẢN 9401 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9402, KHOẢN 9403
+# §S1.9101 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9402, KHOẢN 9403
 
-**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 9401 (rổ B) mở và đóng
-cùng vòng; lượt soi mở khoản 9402 và khoản 9403 (rổ B), vá ở vòng sau. Một migration (`9501_rang_ngan_sach`), một ADR (ADR-9201),
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
+lượt soi mở khoản 9402 và khoản 9403 (rổ B), vá ở vòng sau. Một migration (`9501_rang_ngan_sach`), một ADR (ADR-9201),
 không route mới.
 
 ## 1. Việc gì
@@ -15832,7 +15866,7 @@ không route mới.
 Cạnh `PENDING_APPROVAL→DRAFT` của S3.2b1 (`077`, §S1.186) mở lại ngân sách của gói — trước nó, ngân sách khoá khi gói rời DRAFT
 (`rfq_budgets_chi_sua_khi_soan`, `014`) và không đường nào quay về. Chữ ký mở gói mang băm nội dung (`011`) và băm danh sách mời
 (`076`), không mang ngân sách. Lỗ này được tìm ở lượt soi của một bản S3.2b song song — bản ấy bỏ đi khi `master` nhận S3.2b từ #194 và
-#195 —, rồi đo lại trên `master`. Chủ dự án chọn ngày 2026-09-29: vá TRƯỚC S3.2c, bằng một PR riêng; hai khoảng trống lượt soi của vòng
+#195, và §S1.189 ghi lỗ ấy thành khoản 254 —, rồi đo lại trên `master`. Chủ dự án chọn ngày 2026-09-29: vá TRƯỚC S3.2c, bằng một PR riêng; hai khoảng trống lượt soi của vòng
 này đo thêm cũng vá ở một vòng riêng trước S3.2c. Bất biến chạm: K4b, D2.
 
 ## 2. Đo trước

@@ -9,7 +9,7 @@ import { addRfqItem, approveRfq, createRfq, openRfq, returnRfqToDraft, submitRfq
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 
 // =============================================================================================
-// [S1.9101 / khoản 9401] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
+// [S1.9101 / khoản 254] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
 // Migration `9501_rang_ngan_sach`. Cạnh về DRAFT (`077`) mở lại ngân sách, mà băm nội dung (`011`) và băm danh sách (`076`)
 // đều không mang nó. ĐO TRƯỚC trên `master` `8f90bf2`: hai ca đầu dưới đây MỞ ĐƯỢC gói — gói cấp kép hạ về một chữ ký mở
@@ -292,7 +292,7 @@ afterAll(async () => {
 // =============================================================================================
 // (1) HAI LỖ ĐO TRƯỚC TRÊN MASTER
 // =============================================================================================
-describe("S1.9101 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã bật (khoản 9401)", () => {
+describe("S1.9101 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đã bật (khoản 254)", () => {
   it("[INV-K4b] [INV-D2] gói CẤP KÉP, một chữ ký: trả về, HẠ ngân sách xuống bậc một chữ ký, nộp lại ⇒ chữ ký cho lúc gói cần hai người KHÔNG mở được gói; chính người ấy ký lại trên ngân sách mới ⇒ mở", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t, GOI_CAP_KEP);
