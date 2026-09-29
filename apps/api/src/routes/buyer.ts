@@ -893,7 +893,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_OPEN,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    // [S1.187 / S3.2b2 / ADR-113 · K6] Tổ chức đã bật S3: lời mời dựng ở DRAFT chưa có token, nên phiên người mở đúc một token cho
+    // [S1.188 / S3.2b2 / ADR-113 · K6] Tổ chức đã bật S3: lời mời dựng ở DRAFT chưa có token, nên phiên người mở đúc một token cho
     // MỖI lời mời còn sống ngay trong giao dịch mở gói, và link đi SAU commit — mỗi link một lần gửi (at-most-once). Gửi được ⇒
     // lời mời `SENT`; gửi hỏng hay quá trần ⇒ token vừa đúc bị thu hồi, lời mời ở lại `UNSENT` và còn sống — người mua gửi lại
     // bằng route của ADR-110. Gói ĐÃ mở và không lùi được, nên phản hồi vẫn `200`, kèm id các lời mời chưa gửi (chủ dự án chọn
@@ -1045,7 +1045,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
-      // [S1.187 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
+      // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
       // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
       // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
       if (loi.status === "UNSENT") {
@@ -1157,7 +1157,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         bu: async (client) => {
           await revokeMagicLinkToken(client, ctx.orgId, { tokenId: t.tokenId, invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
         },
-        // [S1.187 / S3.2b2 / ADR-113 · K6] Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành
+        // [S1.188 / S3.2b2 / ADR-113 · K6] Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành
         // `SENT` khi lần gửi lại đi được. Lời mời MVP1 đã `SENT` từ lúc mời: không đăng ký gì, hợp đồng của route giữ nguyên.
         khiXong:
           loi.status === "UNSENT"

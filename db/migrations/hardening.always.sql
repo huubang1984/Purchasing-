@@ -2749,6 +2749,7 @@ $ham$;
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
          ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
+         ('public', 'unseal_requests', 'unseal_requests_nhan_chung_chi_break_glass', '078_nhan_chung_chi_break_glass', 'CHECK ((break_glass OR ((break_glass_witness_user_id IS NULL) AND (break_glass_witness_session_id IS NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_duyet_thi_co_moc', '019_unseal', 'CHECK (((status = ''PENDING''::text) OR (status = ''CANCELLED''::text) OR (approved_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_status_check', '019_unseal', 'CHECK ((status = ANY (ARRAY[''PENDING''::text, ''APPROVED''::text, ''EXECUTED''::text, ''CANCELLED''::text])))'),
          ('public', 'user_login_tokens', 'user_login_tokens_han_sau_tao', '029_dang_nhap_nguoi_mua', 'CHECK ((expires_at > created_at))'),

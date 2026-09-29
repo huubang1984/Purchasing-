@@ -1358,7 +1358,7 @@ export async function revokeMagicLinkToken(
 }
 
 // ==============================================================================================
-// [S1.187 / S3.2b2 / ADR-113 · K6] LINK MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 ĐI LÚC MỞ GÓI, KHÔNG LÚC MỜI.
+// [S1.188 / S3.2b2 / ADR-113 · K6] LINK MỜI CỦA TỔ CHỨC ĐÃ BẬT S3 ĐI LÚC MỞ GÓI, KHÔNG LÚC MỜI.
 //
 // Ở tổ chức đã bật, lời mời dựng ở DRAFT không có token: K6 (`076`) chặn lần đúc khi gói chưa từng mở. Link của chúng chỉ
 // đi được khi gói mở, và spec S3 §2.4 ⑼ chốt hình dạng: **phiên của người mở đúc token cho mọi lời mời còn sống, trong giao
@@ -1420,7 +1420,7 @@ export async function ducTokenKhiMoGoi(
 }
 
 /**
- * [S1.187 / S3.2b2 / ADR-113 · K6] `UNSENT→SENT` sau lần gửi link THÀNH CÔNG, trong một giao dịch MỚI — lần gửi không nằm
+ * [S1.188 / S3.2b2 / ADR-113 · K6] `UNSENT→SENT` sau lần gửi link THÀNH CÔNG, trong một giao dịch MỚI — lần gửi không nằm
  * trong giao dịch nào (khoản 124). Chỉ lời mời còn sống, còn `UNSENT`, của gói đang `OPEN`: trigger K6 (`076`) chỉ cho
  * `UNSENT→SENT` ở `OPEN`, nên một lần gửi lại ở `BAFO_OPEN` (ADR-110) để lời mời ở `UNSENT` thay vì làm hỏng giao dịch ghi.
  * Trả `true` khi đã đổi. Không ghi sổ, cùng khuôn ADR-110: lần gửi được là lần mà token KHÔNG có hàng

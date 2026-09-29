@@ -147,7 +147,7 @@ export interface ViecSauCommitCoBu {
   /** Phản hồi khi `bu` cũng hỏng. Không khai ⇒ `500` thân cố định của bộ điều phối. */
   readonly phanHoiKhiBuHong?: ApiResponse;
   /**
-   * [S1.187 / S3.2b2 / ADR-113] Việc GHI sau khi `viec` xong trong trần — hôm nay: lời mời `UNSENT→SENT` (`danhDauDaGui`). Chạy trong
+   * [S1.188 / S3.2b2 / ADR-113] Việc GHI sau khi `viec` xong trong trần — hôm nay: lời mời `UNSENT→SENT` (`danhDauDaGui`). Chạy trong
    * một giao dịch MỚI đã gắn tổ chức, cùng trần lấy kết nối với `bu`. Hỏng ⇒ MỘT dòng log `ghi-sau-commit`, phản hồi giữ nguyên:
    * `viec` đã xong — link đã đi —, nên phản hồi thành công vẫn là sự thật về lần gửi; chỉ hàng CSDL chậm một bước.
    */
@@ -157,7 +157,7 @@ export interface ViecSauCommitCoBu {
 export type AfterCommitCoBu = (viec: ViecSauCommitCoBu) => void;
 
 /**
- * [S1.187 / S3.2b2 / ADR-113] Một lần gửi trong LÔ gửi sau commit — xem `LoGuiSauCommit`.
+ * [S1.188 / S3.2b2 / ADR-113] Một lần gửi trong LÔ gửi sau commit — xem `LoGuiSauCommit`.
  */
 export interface LanGuiSauCommit {
   /** Khoá của lần gửi trong danh sách gửi hỏng mà `phanHoi` nhận — hôm nay: id lời mời. */
@@ -170,7 +170,7 @@ export interface LanGuiSauCommit {
 }
 
 /**
- * [S1.187 / S3.2b2 / ADR-113] LÔ gửi sau commit — N lần gửi mà mỗi lần hỏng KHÔNG làm hỏng cả yêu cầu. Người dùng đầu tiên là lần
+ * [S1.188 / S3.2b2 / ADR-113] LÔ gửi sau commit — N lần gửi mà mỗi lần hỏng KHÔNG làm hỏng cả yêu cầu. Người dùng đầu tiên là lần
  * mở gói của tổ chức đã bật S3: một link cho mỗi lời mời còn sống, và gói ĐÃ mở thật, không lùi được — nên chủ dự án chọn
  * `200` kèm danh sách lời mời chưa gửi, thay vì một mã lỗi cho cả lần mở (2026-09-28).
  *
@@ -248,7 +248,7 @@ export interface BuyerContext {
   readonly afterCommit: AfterCommit;
   /** [S1.70 / khoản 124] Việc sau commit mà kết quả quyết phản hồi — xem `ViecSauCommitCoBu`. */
   readonly afterCommitCoBu: AfterCommitCoBu;
-  /** [S1.187 / S3.2b2 / ADR-113] Lô N lần gửi sau commit, mỗi lần hỏng riêng — xem `LoGuiSauCommit`. */
+  /** [S1.188 / S3.2b2 / ADR-113] Lô N lần gửi sau commit, mỗi lần hỏng riêng — xem `LoGuiSauCommit`. */
   readonly afterCommitLoGui: AfterCommitLoGui;
   /**
    * [S1.169 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
