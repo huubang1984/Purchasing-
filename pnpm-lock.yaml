@@ -210,6 +210,15 @@ importers:
         specifier: ^2.14.0
         version: 2.14.0
 
+  packages/du-lieu-nen:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/identity:
     dependencies:
       '@trustprocure/audit':

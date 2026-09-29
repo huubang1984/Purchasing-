@@ -450,7 +450,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     }
     const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
     expect(nop.status).toBe(200);
-    // [S1.193 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
+    // [S1.194 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
     // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
     const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
@@ -697,7 +697,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
               if (ph.status === 200) hy.lanNopB = (ph.body as { rfq: { lanNop: number } }).rfq.lanNop;
             },
           };
-        // [S1.193 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
+        // [S1.194 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":
@@ -1036,6 +1036,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   //
   // **[S1.153 / S3.0]** Cả mười nay là `[A-HJK]`: dải có chỗ cho nhóm K TRƯỚC khi K1 vào sổ (spec S3
   // §9), để K1 không lặp lại chuyện của J4. Đo lại trên `master` `fa8d4ea` vẫn đúng mười chỗ.
+  //
+  // **[S1.192 / S4.0]** Cả mười nay là `[A-HJ-L]`: nhóm L của spec S4 vào sổ từ L1, L4 (S4.1).
   // ==============================================================================================
 
   it("bước 12c — MỞ VÒNG BAFO qua HTTP: top-N suy từ bảng xếp hạng, và nhà cung cấp thấy hạn CỦA VÒNG", async () => {

@@ -902,7 +902,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_APPROVE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    // [S1.193 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
+    // [S1.194 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
     // Route không hỏi tổ chức đã bật chưa — trigger `rfq_approvals_so_lan_nop` đòi nó ở tổ chức đã bật (422 có tên khi vắng hay
     // lệch), còn tổ chức chưa bật giữ hợp đồng MVP1: không thân vẫn duyệt được.
     handler: async (ctx) => {

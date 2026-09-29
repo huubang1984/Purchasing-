@@ -121,10 +121,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [S1.185 / S3.2a] Điểm chịu lực của băm danh sách NULL ở MVP1: thêm lời mời ở PENDING_APPROVAL rồi cùng người ký lại vẫn bị
     // UNIQUE chặn, và hai đột biến (băm cho mọi tổ chức, UNIQUE mất `NULLS NOT DISTINCT`) mở gói cấp kép với MỘT người.
     "packages/rfq/src/danh-sach-moi.int.test.ts",
-    // [S1.192 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
+    // [S1.193 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
     // không mở được gói — và đột biến bỏ phép đếm trên ngân sách mở lại đúng lỗ ấy.
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
-    // [S1.193 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
+    // [S1.194 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
     // kép, một người duyệt không mốc rồi mốc đúng bị UNIQUE chặn — và đột biến bỏ vế NULL mở gói bằng một người. Lời tự duyệt
     // thiếu mốc vẫn là lời từ chối D2 có sổ (trigger so lần nộp chạy sau chốt D2), và đột biến đổi thứ tự làm nó rơi khỏi sổ.
     "packages/rfq/src/lan-nop-da-xem.int.test.ts",
@@ -378,9 +378,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // `duc_khi_goi_da_mo` (K6); tệp HTTP đo route của cạnh; `token-goi-da-mo` đo K6 ở PHÍA DÙNG — đổi link, xin và xác minh OTP.
   // [S1.188 / S3.2b2] `luong-moi-s3` đo luồng mời mới qua HTTP: mời ở DRAFT không token (K4a, K6), đúc lúc mở gói, gửi sau
   // commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* (K6).
-  // [S1.192 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
+  // [S1.193 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
   // mới, cột ngoài `GRANT`, vế NULL của MVP1, hàng cũ không điền, và mỗi vế của bản vá một đột biến.
-  // [S1.193 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
+  // [S1.194 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
   // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt
   // ở tổ chức đã bật (K4b).
   K4a: [
@@ -403,4 +403,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
+  // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
+  // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
+  // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
+  L1: ["packages/du-lieu-nen/src/don-vi.int.test.ts"],
+  L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts"],
 };

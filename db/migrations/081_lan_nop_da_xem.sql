@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 080_lan_nop_da_xem — [S1.193] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM (khoản 256), LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA
+-- 081_lan_nop_da_xem — [S1.194] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM (khoản 256), LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA
 -- CHÍNH NGƯỜI TRẢ (khoản 257) — K4b, D2
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4, §3.3, §5.1 (K4). ADR-115. Lượt soi
--- S1.192 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
+-- S1.193 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
 -- và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật.
 --
 -- KHOẢN 256. Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm của CSDL LÚC CHÈN, không của thứ người duyệt đã xem. Trước `077`,
@@ -28,11 +28,11 @@
 --     gói còn `PENDING_APPROVAL` ở đúng lần nộp người duyệt đã đọc thì nó chưa rời lần nộp ấy từ lúc đọc — rời nó chỉ có một đường
 --     (trả về) và lần nộp sau mang số mới —, mà ở tổ chức đã bật mọi lần sửa gói đòi DRAFT, nên mọi phép băm trước khoá tính trên
 --     chính lần nộp ấy. Không có vế trạng thái, một lần trả về cộng một lần sửa commit giữa phép kiểm trạng thái và phép băm nội
---     dung của D2 để lại chữ ký mang nội dung đã sửa trên lần nộp cũ, và gói nộp lại mở bằng nó (lượt soi S1.193, F1). Ở tổ chức
+--     dung của D2 để lại chữ ký mang nội dung đã sửa trên lần nộp cũ, và gói nộp lại mở bằng nó (lượt soi S1.194, F1). Ở tổ chức
 --     chưa bật, vế ấy chặn lời duyệt rơi lên một gói vừa mở hay vừa huỷ. Khoá giữ tới hết giao dịch: một lần trả về hay nộp lại
 --     đang chạy phải chờ lời duyệt commit, và lời duyệt chờ một lần trả về đang chạy rồi thấy DRAFT. `FOR NO KEY UPDATE` chứ không
 --     `FOR SHARE`: lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`), và khoá chia sẻ để một giao dịch duyệt rồi
---     mở gói deadlock với một lời duyệt song song (F3). Trước `080` không trigger nào của `rfq_approvals` khoá hàng gói.
+--     mở gói deadlock với một lời duyệt song song (F3). Trước `081` không trigger nào của `rfq_approvals` khoá hàng gói.
 -- (2b) Hai UNIQUE của `rfq_approvals` mang thêm `lan_nop_da_xem`: người đã rút chữ ký bằng lần trả về (5) ký lại được trên lần nộp
 --     MỚI dù nội dung, danh sách và ngân sách y nguyên. Một người vẫn đếm MỘT ở cạnh mở gói — ba phép đếm của K4b là
 --     `count(DISTINCT người)`.
@@ -45,9 +45,9 @@
 --     về DRAFT sau đó; và hàng bị chủ bảng xoá làm chữ ký đã rút đếm lại. Chưa đóng: khoản 260.
 -- (4) Cạnh PENDING_APPROVAL→DRAFT (`077`) đòi thêm một hàng `rfq_tra_ve` của CHÍNH lần nộp đang bị trả: người và lý do nằm trong
 --     CSDL, không chỉ ở sổ. Thân `077` cộng một vế.
--- (5) Cạnh mở gói (`079`) đếm thêm lần ba — chữ ký CÒN HIỆU LỰC: mang lần nộp đã xem, và người ký không trả gói về ở một lần nộp
+-- (5) Cạnh mở gói (`080`) đếm thêm lần ba — chữ ký CÒN HIỆU LỰC: mang lần nộp đã xem, và người ký không trả gói về ở một lần nộp
 --     không sớm hơn lần họ đã ký. Hai phép đếm trước giữ nguyên văn và nguyên thông điệp. Chữ ký không mang lần nộp — mọi chữ ký
---     đặt trước `080` — không đếm ở tổ chức đã bật: không biết người ấy đã xem gì (fail-closed, khuôn `079`); người ấy ký lại được.
+--     đặt trước `081` — không đếm ở tổ chức đã bật: không biết người ấy đã xem gì (fail-closed, khuôn `080`); người ấy ký lại được.
 --
 -- Tổ chức chưa bật chạy nguyên MVP1: `lan_nop` vẫn đếm — không phép kiểm nào đọc nó ở đó, trừ lời duyệt TỰ gửi mốc —; không có
 -- cạnh về DRAFT nên không có hàng `rfq_tra_ve`; cạnh mở gói không đếm lần ba.
@@ -236,7 +236,7 @@ $ham$;
 -- ============================================================================================
 -- (5) CẠNH MỞ GÓI ĐẾM CHỮ KÝ CÒN HIỆU LỰC
 -- ============================================================================================
--- Thân `079` (4) cộng MỘT phép đếm thứ ba. Trigger `rfq_packages_kiem_danh_sach_khi_mo` của `076` giữ nguyên.
+-- Thân `080` (4) cộng MỘT phép đếm thứ ba. Trigger `rfq_packages_kiem_danh_sach_khi_mo` của `076` giữ nguyên.
 CREATE OR REPLACE FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo() RETURNS trigger
   LANGUAGE plpgsql
   SET search_path = pg_catalog, public
