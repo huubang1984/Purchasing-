@@ -17,13 +17,14 @@
 //                               một thư mục con `tp-<pid>-<ngẫu nhiên>` và bị xoá ở `dung()`
 //
 // Cụm tắt `fsync`/`synchronous_commit`/`full_page_writes`: dữ liệu test không cần sống sót một
-// lần mất điện, và ba cờ ấy là khác biệt DUY NHẤT về cấu hình so với container. Người dùng
-// `postgres` không mật khẩu (`--auth=trust`) — chuỗi kết nối vẫn mang `postgres:postgres` để
-// cùng dạng với chuỗi của container, và vì `pg` bỏ qua mật khẩu khi máy chủ không hỏi.
+// lần mất điện, và ba cờ ấy là khác biệt DUY NHẤT về cấu hình so với container. Kết nối TCP xác
+// thực bằng `scram-sha-256` như container (`--auth-host`), vì có test đo rằng mật khẩu CŨ của một
+// vai thôi đăng nhập được sau khi đổi — dưới `trust` phép đo ấy xanh giả. Mật khẩu của `postgres`
+// đi qua `--pwfile` (tệp tạm trong thư mục cha, xoá ngay sau `initdb`), không qua dòng lệnh.
 // ==============================================================================================
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { chmod, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -33,6 +34,8 @@ const chay = promisify(execFile);
 
 /** Tên CSDL mà đường container cũng dùng (`withDatabase("trustprocure_test")`). */
 const TEN_CSDL = "trustprocure_test";
+/** Mật khẩu của `postgres` — cùng giá trị đường container dùng (`withPassword("postgres")`). */
+const MAT_KHAU = "postgres";
 
 export interface MayChuPostgres {
   readonly connectionString: string;
@@ -77,7 +80,19 @@ export async function khoiDongCumCucBo(cauHinh: CauHinhCumCucBo): Promise<MayChu
   const pgCtl = join(cauHinh.bin, "pg_ctl");
 
   // `initdb` tự tạo thư mục dữ liệu (và là tiến trình duy nhất đủ quyền để tạo nó khi chạy qua shim).
-  await chay(initdb, ["-D", thuMucDuLieu, "--auth=trust", "-U", "postgres", "--no-sync", "-E", "UTF8", "--locale=C.UTF-8"]);
+  // Tệp mật khẩu phải đọc được bởi người dùng chạy `initdb`, có thể khác người dùng chạy test.
+  const tepMatKhau = `${thuMucDuLieu}.pw`;
+  await writeFile(tepMatKhau, `${MAT_KHAU}\n`, { mode: 0o644 });
+  await chmod(tepMatKhau, 0o644);
+  try {
+    await chay(initdb, [
+      "-D", thuMucDuLieu,
+      "--auth-host=scram-sha-256", "--auth-local=trust", `--pwfile=${tepMatKhau}`,
+      "-U", "postgres", "--no-sync", "-E", "UTF8", "--locale=C.UTF-8",
+    ]);
+  } finally {
+    await rm(tepMatKhau, { force: true });
+  }
 
   const cong = await congRanh();
   const tuyChon = [
@@ -95,7 +110,7 @@ export async function khoiDongCumCucBo(cauHinh: CauHinhCumCucBo): Promise<MayChu
 
   try {
     await chay(pgCtl, ["-D", thuMucDuLieu, "-w", "-t", "60", "-l", join(thuMucDuLieu, "postgres.log"), "-o", tuyChon, "start"]);
-    const client = new pg.Client({ host: "127.0.0.1", port: cong, user: "postgres", database: "postgres" });
+    const client = new pg.Client({ host: "127.0.0.1", port: cong, user: "postgres", password: MAT_KHAU, database: "postgres" });
     await client.connect();
     try {
       await client.query(`CREATE DATABASE ${TEN_CSDL}`);
@@ -108,7 +123,7 @@ export async function khoiDongCumCucBo(cauHinh: CauHinhCumCucBo): Promise<MayChu
   }
 
   return {
-    connectionString: `postgresql://postgres:postgres@127.0.0.1:${cong}/${TEN_CSDL}`,
+    connectionString: `postgresql://postgres:${MAT_KHAU}@127.0.0.1:${cong}/${TEN_CSDL}`,
     dung: dungMayChu,
   };
 }
