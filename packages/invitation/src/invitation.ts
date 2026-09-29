@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChotTaiNguyen } from "@trustprocure/identity";
 import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
@@ -209,21 +209,36 @@ function doiInvitation(h: HangInvitation): InvitationRecord {
   };
 }
 
+/**
+ * [S1.9101 / S3.3b / khoản 255] `auditPool` cho lời từ chối K4a có tên của trigger (`rfq_invitations_kiem_danh_sach`): có pool thì
+ * lần mời bị K4a chặn để lại một hàng `CONTROL_DENIED` ở giao dịch độc lập rồi ném `ChotKiemSoatError` (K12) — khuôn `approveRfq`.
+ * Route của người mua luôn truyền nó; lời gọi dựng dữ liệu (test, `gieo:demo`) không truyền thì lỗi gốc của trigger đi thẳng.
+ */
 export async function createInvitation(
   client: pg.PoolClient,
   orgId: string,
   input: CreateInvitationInput,
+  auditPool?: pg.Pool,
 ): Promise<InvitationRecord> {
   await assertTenantBound(client, orgId, "createInvitation");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
-  const { rows } = await client.query<HangInvitation>(
-    `INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
-                                  invited_by, invited_by_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
-    [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
-     actor.id, actor.sessionId],
-  );
+  let rows: HangInvitation[];
+  try {
+    ({ rows } = await client.query<HangInvitation>(
+      `INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
+                                    invited_by, invited_by_session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
+      [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
+       actor.id, actor.sessionId],
+    ));
+  } catch (loi) {
+    const ma = maChotTuLoi(loi);
+    if (ma !== null && auditPool !== undefined) {
+      await tuChoiTheoChotTaiNguyen(auditPool, orgId, actor, { resourceType: "RFQ", resourceId: input.rfqId }, ma, loi);
+    }
+    throw loi;
+  }
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("Câu INSERT rfq_invitations không trả về hàng nào");
 
@@ -1183,6 +1198,8 @@ export async function revokeInvitation(
      */
     readonly reason?: "LINK_SEND_FAILED";
   },
+  /** [S1.9101 / S3.3b / khoản 255] Như `createInvitation`: lời từ chối K4a có tên vào sổ khi có pool. */
+  auditPool?: pg.Pool,
 ): Promise<boolean> {
   await assertTenantBound(client, orgId, "revokeInvitation");
   // [S1.70 / lượt soi 64a-9] `reason` là danh sách đóng ở KIỂU, nhưng một lời gọi từ JS hay một lần ép kiểu vẫn đưa được chuỗi tuỳ ý vào
@@ -1195,12 +1212,22 @@ export async function revokeInvitation(
   // [ADR-016] Hai cột người thu hồi đi TRONG CÙNG câu lệnh đặt `revoked_at`, không phải một
   // câu UPDATE thứ hai: trigger `rfq_invitations_kiem_nguoi_thu_hoi` (013) chạy đúng ở lượt
   // chuyển sang đã-thu-hồi, nên tách ra là để lại một hàng đã thu hồi mà chưa ai ký tên.
-  const loiMoi = await client.query(
-    "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
-      " revoked_by = $2, revoked_by_session_id = $3" +
-      " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
-    [input.invitationId, actor.id, actor.sessionId],
-  );
+  let loiMoi: pg.QueryResult;
+  try {
+    loiMoi = await client.query(
+      "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
+        " revoked_by = $2, revoked_by_session_id = $3" +
+        " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
+      [input.invitationId, actor.id, actor.sessionId],
+    );
+  } catch (loi) {
+    const ma = maChotTuLoi(loi);
+    // Tài nguyên là chính lời mời: giao dịch đã huỷ, không đọc được gói của nó nữa — hàng sổ trỏ về đúng thứ người dùng bấm.
+    if (ma !== null && auditPool !== undefined) {
+      await tuChoiTheoChotTaiNguyen(auditPool, orgId, actor, { resourceType: "RFQ_INVITATION", resourceId: input.invitationId }, ma, loi);
+    }
+    throw loi;
+  }
   if (loiMoi.rowCount !== 1) return false;
 
   await client.query(

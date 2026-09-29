@@ -699,6 +699,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // lời từ chối trạng thái có tên, luồng MVP1 ở lời từ chối *tổ chức chưa bật* — cả hai là 422 NGHIỆP VỤ, không đổi gói nào.
         case "POST /rfqs/:rfqId/return-to-draft":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "tra ve de quet" }, cookie: m };
+        // [S1.9101 / S3.3b / K4a] Ngoại lệ trên gói hy sinh B — bảng route đặt hai route này trước route mời; tới đây gói B đã
+        // HUỶ, nên luồng S3 dừng ở lời từ chối K4a có tên (422, vào sổ), luồng MVP1 ở lời từ chối *tổ chức chưa bật*. Rút một id
+        // không có: 422 của trigger. Không đổi gói nào của kịch bản.
+        case "POST /rfqs/:rfqId/exceptions":
+          return { path: r.path.replace(":rfqId", hyB), body: { loai: "SINGLE_SOURCE", maLyDo: "EMERGENCY", giaiTrinh: "khan cap de quet" }, cookie: m };
+        case "POST /rfqs/:rfqId/exceptions/:exceptionId/withdraw":
+          return { path: r.path.replace(":rfqId", hyB).replace(":exceptionId", UUID0), body: { reason: "rut de quet" }, cookie: m };
         case "POST /rfqs/:rfqId/invitations":
           return { path: r.path.replace(":rfqId", hyA), body: { supplierId: nccHyId, contactId: lhHyId }, cookie: m };
         case "POST /invitations/:invitationId/revoke":

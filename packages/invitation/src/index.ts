@@ -69,6 +69,19 @@ export {
   type ResolvedGuestSession,
   type VerifyOtpInput,
 } from "./invitation.js";
+// [S1.9101 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh — lập, rút, đọc; và hai tập đóng mà màn và route dùng lại.
+export {
+  LOAI_NGOAI_LE,
+  MA_LY_DO_NGOAI_LE,
+  SAN_GIAI_TRINH_OTHER_BYTE,
+  TRAN_GIAI_TRINH_BYTE,
+  docNgoaiLe,
+  lapNgoaiLe,
+  rutNgoaiLe,
+  type LoaiNgoaiLe,
+  type MaLyDoNgoaiLe,
+  type NgoaiLeCanhTranh,
+} from "./ngoai-le.js";
 // ============================================================================================
 // [ADR-018] Vong pepper. `PepperRing` phai ra cua vi composition root la noi TIEM no — cung
 // khuon `TotpSecretUnsealer` cua identity. No la mot KIEU RIENG du hinh dang giong het

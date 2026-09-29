@@ -70,6 +70,9 @@ const HAM_DOI_TRANG_THAI = [
   // đã đăng ký nó (`rfq.open` ở lần mở gói, `rfq.invite` ở lần mời và lần gửi lại).
   "danhDauDaGui",
   "dispatchUnseal",
+  // [S1.9101 / S3.3b / K4a] Lập và rút ngoại lệ cạnh tranh — route đòi `rfq.invite`, hàm hỏi lại cùng mã.
+  "lapNgoaiLe",
+  "rutNgoaiLe",
   // [S1.194 / S3.3a / K8a] Thu hồi xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
   "thuHoiXacMinhNhaCungCap",
   // [S1.194 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
@@ -117,6 +120,9 @@ const HAM_CHI_DOC = [
   // [S1.194 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
   "docXacMinhNhaCungCap",
+  // [S1.9101 / S3.3b] Ngoại lệ của một gói — người duyệt đọc thứ mình sẽ ký, nên KHÔNG cổng `rfq.invite`; giải trình không nói ai
+  // được mời. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docNgoaiLe",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",

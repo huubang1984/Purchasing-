@@ -491,6 +491,9 @@ describe("hình dạng file migration", () => {
       "rfq_items",
       "rfq_key_material",
       "rfq_packages",
+      // [S1.9101 / S3.3b / migration ngoại lệ] Ngoại lệ cạnh tranh — chỉ-ghi-thêm kèm hàng rút, khoá ngoại hợp thành `(org_id, rfq_id)`
+      // tới `rfq_packages` và tự trỏ `(org_id, ngoai_le_id)`, policy khách ĐÓNG HẲN.
+      "rfq_sourcing_exceptions",
       "rfq_unsealed_bids",
       "sessions",
       "supplier_contacts",

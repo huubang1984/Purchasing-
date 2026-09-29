@@ -121,6 +121,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "ĐƯỢC GIÁ THÌ XEM ĐƯỢC KẾT QUẢ — không rộng hơn, và một chứng chỉ `AGENT_READONLY` không " +
     "phải một con người có MFA. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.110 / S2.6]",
+  // [S1.9101 / S3.3b · spec S3 §4.4]
+  "/rfqs/:rfqId/exceptions":
+    "NGOẠI LỆ CẠNH TRANH của một gói — vì sao danh sách mời không đủ cạnh tranh, ai lập, ai rút. Nó là một phần của danh " +
+    "sách mời mà người duyệt ký (K4), cùng hạng với danh sách lời mời vốn cũng không phơi cho tác tử chỉ-đọc. Mở sau là " +
+    "một quyết định có tên.",
   // [S1.194 / S3.3a / K8a]
   "/suppliers/:supplierId/verification":
     "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +

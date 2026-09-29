@@ -594,9 +594,19 @@ const DANH_SACH_TRANG_INVITATION = [
   "OTP_MAX_PER_INVITATION",
   "OTP_RATE_WINDOW_SECONDS",
   "OTP_TTL_SECONDS",
+  // [S1.9101 / S3.3b · spec S3 §4.4] Hai tập đóng và hai trần của ngoại lệ cạnh tranh — hằng số, màn và route dùng lại.
+  "LOAI_NGOAI_LE",
+  "MA_LY_DO_NGOAI_LE",
+  "SAN_GIAI_TRINH_OTHER_BYTE",
+  "TRAN_GIAI_TRINH_BYTE",
   "PepperError",
   "PepperRing",
   "createInvitation",
+  // [S1.9101 / S3.3b · K4a] Ngoại lệ cạnh tranh: hai hàm ghi dưới `rfq.invite` (cổng ở hàm), một hàm đọc — không token, không
+  // phiên, không đích liên hệ trong thân trả về.
+  "docNgoaiLe",
+  "lapNgoaiLe",
+  "rutNgoaiLe",
   // [S1.188 / S3.2b2 / ADR-113] `UNSENT→SENT` của MỘT lời mời sau lần gửi được; nhận id, trả boolean — không token, không phiên.
   "danhDauDaGui",
   // [sổ nợ 55 / 042] Xoá hàng cũ của bucket toàn cục; nhận Pool, trả số hàng — không token, không phiên.

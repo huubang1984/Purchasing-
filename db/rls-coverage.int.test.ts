@@ -830,6 +830,8 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      // [S1.9101 / S3.3b] Ngoại lệ cạnh tranh: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
@@ -1304,6 +1306,16 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
+      // [S1.9101 / S3.3b] Ngoại lệ: CHỈ INSERT — `id`, `created_at` do CSDL đặt, tác giả là dẫn xuất từ phiên.
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "giai_trinh", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "hanh_dong", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "ma_ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "ngoai_le_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_sourcing_exceptions", cot: "rfq_id", quyen: "INSERT" },
       // [ADR-016 / 016] Hang muc RFQ mang chu ky nguoi them.
       { grantee: "app_api", bang: "rfq_items", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "created_by_session_id", quyen: "INSERT" },
@@ -1940,7 +1952,10 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_award_approvals", "rfq_awards",
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
-      "rfq_invitation_tokens", "rfq_unsealed_bids",
+      "rfq_invitation_tokens",
+      // [S1.9101 / S3.3b] Vì sao người mua không mời đủ nhà cung cấp là việc nội bộ — nhà cung cấp không đọc ngoại lệ.
+      "rfq_sourcing_exceptions",
+      "rfq_unsealed_bids",
       "sessions", "supplier_contacts",
       // [S1.194 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
       "supplier_verifications",

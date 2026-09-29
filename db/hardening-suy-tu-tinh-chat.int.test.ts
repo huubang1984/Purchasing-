@@ -133,6 +133,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
   "rfq_awards",
+  // [S1.9101 / S3.3b] Ngoại lệ cạnh tranh — khuôn `061`: chỉ ghi thêm kèm hàng rút; sửa được một hàng là đổi lời giải trình mà
+  // người duyệt đã ký.
+  "rfq_sourcing_exceptions",
   "rfq_unsealed_bids",
   // [S1.194 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
@@ -263,6 +266,9 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.194 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",
+  // [S1.9101 / S3.3b / K4a] Luật ghi ngoại lệ cạnh tranh. Chỉ gắn INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua nó —
+  // `dungKichBan()` lập một ngoại lệ trên gói vừa trả về DRAFT.
+  "public.ngoai_le_kiem",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",
@@ -1752,6 +1758,32 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_packages",
+  );
+  // [S1.9101 / S3.3b / K4a] Tổ chức đã bật, gói vừa về DRAFT: `pm` (giữ `rfq.invite`) lập một ngoại lệ — nhân chứng của
+  // `ngoai_le_kiem` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
+  doiSoHang(
+    await so.chung(
+      "public.rfq_sourcing_exceptions",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_sourcing_exceptions (org_id, rfq_id, hanh_dong, loai, ma_ly_do, giai_trinh, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, 'LAP', 'SINGLE_SOURCE', 'EMERGENCY', 'khan cap', $3, $4) " +
+          "RETURNING org_id, rfq_id, hanh_dong, loai, ma_ly_do, giai_trinh, created_by, created_by_session_id",
+        [org, rfqVe, pm.u, pm.s],
+        {
+          org_id: org,
+          rfq_id: rfqVe,
+          hanh_dong: "LAP",
+          loai: "SINGLE_SOURCE",
+          ma_ly_do: "EMERGENCY",
+          giai_trinh: "khan cap",
+          created_by: pm.u,
+          created_by_session_id: pm.s,
+        },
+      ),
+    ),
+    1,
+    "rfq_sourcing_exceptions",
   );
   // [S1.194 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
   // `rfq.invite`, không dựng hồ sơ) xác minh — nhân chứng của `ncc_kiem_xac_minh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).

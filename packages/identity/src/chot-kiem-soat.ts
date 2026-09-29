@@ -41,6 +41,9 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_DIEU_PHOI_DE_XUAT"
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
+  | "K4A_NGOAI_LE_SAI_TRANG_THAI"
+  | "K4A_THEM_SAI_TRANG_THAI"
+  | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
   | "NGAN_SACH_GHIM_BAN_CU"
@@ -140,6 +143,34 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
     thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
+  // [S1.9101 / S3.3b / khoản 255] Ba lời từ chối K4a — danh sách được ký là danh sách được mời. Trigger là lớp có thẩm quyền
+  // (`rfq_invitations_kiem_danh_sach`, `ngoai_le_kiem`); tầng gói bắt CHÍNH lỗi của nó theo tên. Chủ dự án xác nhận ngày
+  // 2026-09-29: cả ba vào sổ. Màn `/tao-thau` hiện nút mời ở mọi trạng thái gói, nên người bấm tới được lời từ chối — và đổi danh
+  // sách sau khi người duyệt đã ký là đúng lối K4 đóng.
+  K4A_THEM_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "mời thêm nhà cung cấp khi gói đang chờ duyệt hay đã qua giai đoạn nhận báo giá — danh sách người duyệt đã ký là danh sách " +
+      "được mời (spec §2.5 ⑾); thêm vào sau chữ ký mà không quay về soạn thảo là đúng lối K4 đóng",
+    thongDiep: "Gói thầu đang ở trạng thái không thêm lời mời được — chỉ thêm ở DRAFT, hoặc ở OPEN (K4a).",
+  },
+  K4A_THU_HOI_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "thu hồi lời mời khi gói đã rời DRAFT — bớt người dự thi sau chữ ký duyệt. Ở OPEN, thu hồi có lý do kèm tín hiệu là việc " +
+      "của S3.6; tới đó mọi lần thu hồi ngoài DRAFT đều bị chặn, và lần cố là thứ kiểm toán viên cần thấy",
+    thongDiep: "Lời mời chỉ thu hồi được khi gói thầu còn ở DRAFT — trả gói về soạn thảo trước (K4a).",
+  },
+  K4A_NGOAI_LE_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "lập hay rút một ngoại lệ cạnh tranh khi gói đã rời DRAFT — ngoại lệ nằm trong băm danh sách mà người duyệt ký (spec §4.4), " +
+      "nên đổi nó sau chữ ký là đổi thứ đã được duyệt",
+    thongDiep: "Ngoại lệ cạnh tranh chỉ lập hay rút được khi gói thầu còn ở DRAFT — trả gói về soạn thảo trước (K4a).",
+  },
   // [S1.194 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
   // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
   // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
@@ -182,6 +213,10 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
+  // [S1.9101 / S3.3b / khoản 255] Hai nhánh K4a của `rfq_invitations_kiem_danh_sach`, một của `ngoai_le_kiem`.
+  k4a_ngoai_le_sai_trang_thai: "K4A_NGOAI_LE_SAI_TRANG_THAI",
+  k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
+  k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
   // [S1.194 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",

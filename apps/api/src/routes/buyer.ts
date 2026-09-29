@@ -33,9 +33,12 @@ import {
   danhDauDaGui,
   ducTokenKhiMoGoi,
   issueMagicLinkToken,
+  docNgoaiLe,
+  lapNgoaiLe,
   listInvitations,
   reissueInvitationLink,
   revokeInvitation,
+  rutNgoaiLe,
   revokeMagicLinkToken,
   CHANNELS,
   CUA_SO_LINK_MOI_GIAY,
@@ -184,6 +187,7 @@ const rfqIdParam = (req: ApiRequest): string => uuidParam(req, "rfqId");
 const unsealIdParam = (req: ApiRequest): string => uuidParam(req, "unsealRequestId");
 const invitationIdParam = (req: ApiRequest): string => uuidParam(req, "invitationId");
 const supplierIdParam = (req: ApiRequest): string => uuidParam(req, "supplierId");
+const exceptionIdParam = (req: ApiRequest): string => uuidParam(req, "exceptionId");
 const userIdParam = (req: ApiRequest): string => uuidParam(req, "userId");
 const mfaResetIdParam = (req: ApiRequest): string => uuidParam(req, "requestId");
 const awardIdParam = (req: ApiRequest): string => uuidParam(req, "awardId");
@@ -320,6 +324,19 @@ const doc: readonly BuyerReadRoute[] = [
           ctx.auditPool,
         ),
       },
+    }),
+  },
+  // [S1.9101 / S3.3b] Ngoại lệ của gói — người duyệt đọc được thứ mình sẽ ký, nên KHÔNG cổng `rfq.invite` như danh sách lời mời:
+  // giải trình không nói ai được mời. Tổ chức đang gắn, người mua; KHÔNG `agent: true` — cùng lý do với danh sách lời mời.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/exceptions",
+    audience: "BUYER",
+    mutates: false,
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: { exceptions: await docNgoaiLe(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) },
     }),
   },
   {
@@ -1079,6 +1096,59 @@ const ghi: readonly BuyerWriteRoute[] = [
       },
     }),
   },
+  // [S1.9101 / S3.3b · spec S3 §4.4 · K4a] Ngoại lệ cạnh tranh. Cổng của bộ điều phối là `rfq.invite` (ADR-084 ⑵); trigger
+  // `ngoai_le_kiem` chặn ngoài DRAFT, và lần chặn ấy vào sổ `CONTROL_DENIED`. Chỉ tổ chức đã bật S3.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/exceptions",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_INVITE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        exception: await lapNgoaiLe(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            loai: chuoiBatBuoc(ctx.req.body, "loai"),
+            maLyDo: chuoiBatBuoc(ctx.req.body, "maLyDo"),
+            giaiTrinh: chuoiBatBuoc(ctx.req.body, "giaiTrinh"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/exceptions/:exceptionId/withdraw",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_INVITE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        exception: await rutNgoaiLe(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            exceptionId: exceptionIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
   {
     method: "POST",
     path: "/rfqs/:rfqId/invitations",
@@ -1103,7 +1173,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         contactId,
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
-      });
+      }, ctx.auditPool);
       // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
       // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
       // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
@@ -1177,7 +1247,7 @@ const ghi: readonly BuyerWriteRoute[] = [
     resourceId: invitationIdParam,
     handler: async (ctx) => ({
       status: 200,
-      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }) },
+      body: { revoked: await revokeInvitation(ctx.client, ctx.orgId, { invitationId: invitationIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
     }),
   },
   {
