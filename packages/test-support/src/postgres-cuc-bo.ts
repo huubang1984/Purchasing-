@@ -15,6 +15,12 @@
 //                               người dùng không phải root — Postgres từ chối chạy dưới root)
 //   TRUSTPROCURE_PG_LOCAL_DATA  thư mục cha, ghi được bởi người dùng chạy `initdb`; mỗi cụm là
 //                               một thư mục con `tp-<pid>-<ngẫu nhiên>` và bị xoá ở `dung()`
+//   TRUSTPROCURE_PG_LOCAL_LOCALE (tuỳ chọn) locale của `initdb`, mặc định `C.UTF-8`. Ảnh
+//                               `postgres:16-alpine` dùng musl, mà `lower()` của musl và của glibc
+//                               hạ KHÁC nhau ở vài điểm mã (đo: `Ⓐ` — musl giữ, glibc `C.UTF-8`
+//                               hạ thành `ⓐ`); một test lấy khác biệt ấy làm tiền đề thì chạy
+//                               với `C` (glibc `C` không hạ gì ngoài ASCII). Không locale nào của
+//                               glibc trùng musl, nên đây là ranh giới nói ra, không phải một lỗi.
 //
 // Cụm tắt `fsync`/`synchronous_commit`/`full_page_writes`: dữ liệu test không cần sống sót một
 // lần mất điện, và ba cờ ấy là khác biệt DUY NHẤT về cấu hình so với container. Kết nối TCP xác
@@ -46,14 +52,18 @@ export interface MayChuPostgres {
 export interface CauHinhCumCucBo {
   readonly bin: string;
   readonly thuMucCha: string;
+  readonly locale: string;
 }
+
+const LOCALE_MAC_DINH = "C.UTF-8";
 
 /** Đọc hai biến môi trường; thiếu một là `undefined` — người gọi đi đường container. */
 export function cauHinhCumCucBo(): CauHinhCumCucBo | undefined {
   const bin = process.env["TRUSTPROCURE_PG_LOCAL_BIN"];
   const thuMucCha = process.env["TRUSTPROCURE_PG_LOCAL_DATA"];
   if (bin === undefined || bin === "" || thuMucCha === undefined || thuMucCha === "") return undefined;
-  return { bin, thuMucCha };
+  const locale = process.env["TRUSTPROCURE_PG_LOCAL_LOCALE"];
+  return { bin, thuMucCha, locale: locale === undefined || locale === "" ? LOCALE_MAC_DINH : locale };
 }
 
 /** Hỏi hệ điều hành một cổng TCP đang rảnh trên loopback. */
@@ -88,7 +98,7 @@ export async function khoiDongCumCucBo(cauHinh: CauHinhCumCucBo): Promise<MayChu
     await chay(initdb, [
       "-D", thuMucDuLieu,
       "--auth-host=scram-sha-256", "--auth-local=trust", `--pwfile=${tepMatKhau}`,
-      "-U", "postgres", "--no-sync", "-E", "UTF8", "--locale=C.UTF-8",
+      "-U", "postgres", "--no-sync", "-E", "UTF8", `--locale=${cauHinh.locale}`,
     ]);
   } finally {
     await rm(tepMatKhau, { force: true });
