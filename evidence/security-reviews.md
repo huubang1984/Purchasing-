@@ -16105,11 +16105,11 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401–9404
+# §S1.193 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 258–261
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
-chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.192) đóng; lượt soi mở khoản 9401, 9402, 9403, 9404 (rổ B). Một
-migration (`9501_lan_nop_da_xem`), một ADR (ADR-9201), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
+chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.192) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
+migration (`080_lan_nop_da_xem`), một ADR (ADR-115), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
@@ -16121,15 +16121,15 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 
 ## 2. Đo trước
 
-Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `9501_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
+Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `080_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
 28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
 *giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
-chữ ký của ai — và ca giới hạn của khoản 9404, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.192) ghim
+chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.192) ghim
 cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
 
-**Migration `9501_lan_nop_da_xem`:**
+**Migration `080_lan_nop_da_xem`:**
 - `rfq_packages.lan_nop` — trigger `rfq_packages_dem_lan_nop` cộng một ở cạnh DRAFT→PENDING_APPROVAL; ngoài mọi `GRANT`. Hàng cũ giữ 0.
 - `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2: khoá hàng gói
   `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở mọi tổ chức; không tìm thấy gói thì từ
@@ -16148,7 +16148,7 @@ trạng thái rồi chèn hàng trả về trước câu đổi trạng thái �
 `rang-ngan-sach.int.test.ts` bỏ — tệp mới lật chúng.
 
 **Hardening:** ba mục ghim mới (`rfq_dem_lan_nop`, `rfq_chot_lan_nop_da_xem`, `rfq_tra_ve_dat_lan_nop`, mỗi mục kèm trigger); hai mục
-ghim trỏ sang thân và cổng `9501_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
+ghim trỏ sang thân và cổng `080_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
 `BANG_TENANT_KHAI` thêm `rfq_tra_ve`. Các sổ test đi kèm: `db/migrations.int.test.ts`, `db/rls-coverage.int.test.ts` (quyền, policy
 khách, và biểu thức đọc tên migration nhận số bốn chữ số của dải tạm), `db/migration-shape.test.ts`,
 `db/hardening-suy-tu-tinh-chat.int.test.ts` (ba hàm không phải cạnh, một nhân chứng chèn `rfq_tra_ve`).
@@ -16186,7 +16186,7 @@ mã mới.
   tính lệch phiên ⇒ từ chối;
 - khe của D2 (F1): một `pg_sleep` chèn giữa phép kiểm trạng thái và phép băm nội dung của D2; trả về và thêm hạng mục trong lúc lời
   duyệt đang ngủ ⇒ bản thật từ chối lời duyệt, gói nộp lại không mở;
-- giới hạn, đo (không nhãn): khoản 9404 — bật S3 giữa lúc gói chờ duyệt, lời duyệt mốc 1 đi qua với danh sách đã đổi, gói MỞ.
+- giới hạn, đo (không nhãn): khoản 261 — bật S3 giữa lúc gói chờ duyệt, lời duyệt mốc 1 đi qua với danh sách đã đổi, gói MỞ.
 
 `apps/api/src/buyer.int.test.ts` hai ca HTTP: tổ chức đã bật — `GET` trả `lanNop` 1; không thân, thân rỗng, mốc 0, mốc `null` ⇒ 422
 có tên; mốc `"1"` ⇒ 422 kiểu; mốc tràn `integer` ⇒ 422 thân cố định; mốc 1 ⇒ 200. Tổ chức chưa bật: không thân ⇒ 200.
@@ -16208,13 +16208,13 @@ Một lượt, trên cây `b011820`; người kiểm đo trên Postgres 16 thậ
 | # | Phát hiện | Mức | Xử lý |
 |---|---|---|---|
 | F1 | Trigger so chỉ so lần nộp, không đọc lại trạng thái; D2 đọc trạng thái rồi mấy câu sau mới băm NỘI DUNG, mỗi câu một ảnh chụp. Một lần trả về cộng một lần sửa commit vào khe ấy để lại chữ ký trên nội dung người duyệt chưa đọc, ở lần nộp cũ; nộp lại ⇒ gói MỞ. Ca tất định: lời duyệt qua D2 khi lần trả về chưa commit, chờ khoá, rồi ghi lên gói đã về DRAFT. Lời khai ở đầu migration và ADR sai | Nên sửa | **Sửa trong vòng:** trigger so đọc lại trạng thái dưới khoá, ở mọi tổ chức; không tìm thấy gói thì từ chối. Ca chiều ngược, ca MVP1 gặp lần mở gói đang chạy, ca khe của D2, hai đột biến |
-| F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 9401 mở** (rổ B) cho vế ngân sách. Vế danh sách khép ở S3.2c2 (#200, merge trong lúc vòng này chạy): `napRfq` làm mới danh sách mời ở tổ chức đã bật |
+| F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 258 mở** (rổ B) cho vế ngân sách. Vế danh sách khép ở S3.2c2 (#200, merge trong lúc vòng này chạy): `napRfq` làm mới danh sách mời ở tổ chức đã bật |
 | F3 | Deadlock do `FOR SHARE`: giao dịch duyệt rồi mở gói gặp một lời duyệt song song ⇒ 40P01, lời duyệt kia thành 500. Không đường sản xuất nào duyệt rồi mở trong một giao dịch | Ghi chú | **Sửa trong vòng:** khoá `FOR NO KEY UPDATE` — lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`) |
-| F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 9402 mở** (rổ B) — chung cho mọi mục ghim trigger |
-| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-9201 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
-| F6 | Bật S3 giữa lúc gói chờ duyệt: MVP1 cho đổi danh sách khi gói chờ, lần nộp đứng yên | Ghi chú | **Khoản 9404 mở** (rổ B); ca giới hạn ghim hành vi hôm nay |
-| F7 | Hàng `rfq_tra_ve` chèn tay không kèm cạnh chiếm UNIQUE và thoả vế *kèm hàng trả về*; xoá hàng làm chữ ký đã rút đếm lại. Lời khai (3) ở đầu migration chưa đủ | Ghi chú | **Khoản 9403 mở** (rổ B); lời khai (3) sửa |
-| F8 | Test: đột biến bỏ `FOR SHARE` chỉ chứng minh khoá có mặt; hai nhánh phiên của D2 chưa đo trước phép so; thiếu ca HTTP tràn số và ca bật S3 thật; trợ thủ `duyet` của sáu tệp cũ đọc lần nộp từ CSDL ngay trước lời duyệt | Ghi chú | Sửa: đột biến bỏ khoá nay đo hậu quả; ca D2 phiên của người khác và phiên thu hồi kèm mốc sai; ca HTTP tràn; ca bật S3 giữa chừng (khoản 9404). Trợ thủ của sáu tệp giữ nguyên: chúng đo việc khác, và tệp mới là nơi canh khoản 256 |
+| F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 259 mở** (rổ B) — chung cho mọi mục ghim trigger |
+| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-115 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
+| F6 | Bật S3 giữa lúc gói chờ duyệt: MVP1 cho đổi danh sách khi gói chờ, lần nộp đứng yên | Ghi chú | **Khoản 261 mở** (rổ B); ca giới hạn ghim hành vi hôm nay |
+| F7 | Hàng `rfq_tra_ve` chèn tay không kèm cạnh chiếm UNIQUE và thoả vế *kèm hàng trả về*; xoá hàng làm chữ ký đã rút đếm lại. Lời khai (3) ở đầu migration chưa đủ | Ghi chú | **Khoản 260 mở** (rổ B); lời khai (3) sửa |
+| F8 | Test: đột biến bỏ `FOR SHARE` chỉ chứng minh khoá có mặt; hai nhánh phiên của D2 chưa đo trước phép so; thiếu ca HTTP tràn số và ca bật S3 thật; trợ thủ `duyet` của sáu tệp cũ đọc lần nộp từ CSDL ngay trước lời duyệt | Ghi chú | Sửa: đột biến bỏ khoá nay đo hậu quả; ca D2 phiên của người khác và phiên thu hồi kèm mốc sai; ca HTTP tràn; ca bật S3 giữa chừng (khoản 261). Trợ thủ của sáu tệp giữ nguyên: chúng đo việc khác, và tệp mới là nơi canh khoản 256 |
 
 **Người kiểm thử và không lách được:** `app_api` không đặt được `lan_nop`, không chọn được lần nộp của hàng trả về, không sửa hay xoá
 `rfq_tra_ve` hay `rfq_approvals`; `rfq_tra_ve` có RLS FORCE và policy khách; `/guest/rfq` không lộ `lanNop`; `returned_by` không giả
@@ -16228,13 +16228,13 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 
 - Client của tổ chức đã bật PHẢI gửi `lanNop`; lời gọi không gửi ⇒ 422 có tên.
 - Máy chủ biết client đã ĐỌC lần nộp nào, không biết người duyệt đã XEM gì — và hôm nay màn không hiện ngân sách ở lần đọc gói
-  (khoản 9401); danh sách mời thì S3.2c2 làm mới ở lần đọc.
+  (khoản 258); danh sách mời thì S3.2c2 làm mới ở lần đọc.
 - Lời duyệt khoá hàng gói `FOR NO KEY UPDATE` tới hết giao dịch ở MỌI tổ chức — trigger chạy cả ở MVP1; lời duyệt của một tổ chức
   nối tiếp nhau.
 - Người duyệt đã ký rồi trả về thì chữ ký ấy không đếm ở mọi lần nộp sau, dù gói y nguyên.
 - Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa — hôm nay không tổ chức thật nào bật được S3 (ADR-105).
 - Lần từ chối vì mốc không vào sổ `CONTROL_DENIED`; thân sai kiểu hay tràn số bị từ chối trước chốt D2.
-- Khoản 9402, 9403, 9404 còn mở (§6).
+- Khoản 259, 260, 261 còn mở (§6).
 
 ## 8. Số đo
 

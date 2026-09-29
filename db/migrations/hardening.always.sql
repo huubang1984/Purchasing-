@@ -3433,7 +3433,7 @@ $ham$;
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
-         ('public', 'rfq_tra_ve', '9501_lan_nop_da_xem'),
+         ('public', 'rfq_tra_ve', '080_lan_nop_da_xem'),
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
@@ -7740,10 +7740,10 @@ $ham$;
 
     -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
     -- [S1.192 / K4b] Than tu 079_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
-    -- [S1.9101 / khoản 257] Than tu 9501_lan_nop_da_xem.sql: them phep dem CHU KY CON HIEU LUC — bo no thi chu ky cua nguoi da tra goi ve van dem.
+    -- [S1.193 / khoản 257] Than tu 080_lan_nop_da_xem.sql: them phep dem CHU KY CON HIEU LUC — bo no thi chu ky cua nguoi da tra goi ve van dem.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 9501_lan_nop_da_xem)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 080_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8018,10 +8018,10 @@ $ham$;
     ],
 
     -- [S1.186 / S3.2b1 / K4a] Canh PENDING_APPROVAL->DRAFT chi mo o to chuc da bat. Than `RETURN NEW` mo lai duong ve DRAFT cho MVP1, ma rang buoc chu ky cua 076 (3) dua vao viec MVP1 khong co duong ay.
-    -- [S1.9101 / khoản 257] Than tu 9501_lan_nop_da_xem.sql: canh doi mot hang rfq_tra_ve cua chinh lan nop dang bi tra — nguoi va ly do nam trong CSDL.
+    -- [S1.193 / khoản 257] Than tu 080_lan_nop_da_xem.sql: canh doi mot hang rfq_tra_ve cua chinh lan nop dang bi tra — nguoi va ly do nam trong CSDL.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_tra_ve_nhap (077, thân từ 9501_lan_nop_da_xem)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$hàm + trigger rfq_kiem_tra_ve_nhap (077, thân từ 080_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8088,10 +8088,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 256] Dem lan nop o canh DRAFT->PENDING_APPROVAL. Than `RETURN NEW` giu lan nop dung yen: nop lai sau khi tra ve mang lai moc cu, va loi duyet tren lan xem truoc di qua.
+    -- [S1.193 / khoan 256] Dem lan nop o canh DRAFT->PENDING_APPROVAL. Than `RETURN NEW` giu lan nop dung yen: nop lai sau khi tra ve mang lai moc cu, va loi duyet tren lan xem truoc di qua.
     ARRAY[
-      $q$hàm + trigger rfq_dem_lan_nop (9501_lan_nop_da_xem)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$hàm + trigger rfq_dem_lan_nop (080_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8150,10 +8150,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_dem_lan_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 256] Loi duyet mang lan nop nguoi duyet da xem; duoi khoa FOR NO KEY UPDATE hang goi, doc lai trang thai roi so. Than `RETURN NEW` mo lai dua giua lan xem va lan bam ky; bo ve trang thai thi mot lan tra ve cong mot lan sua chen giua phep kiem trang thai va phep bam noi dung cua D2 de lai chu ky tren noi dung da sua.
+    -- [S1.193 / khoan 256] Loi duyet mang lan nop nguoi duyet da xem; duoi khoa FOR NO KEY UPDATE hang goi, doc lai trang thai roi so. Than `RETURN NEW` mo lai dua giua lan xem va lan bam ky; bo ve trang thai thi mot lan tra ve cong mot lan sua chen giua phep kiem trang thai va phep bam noi dung cua D2 de lai chu ky tren noi dung da sua.
     ARRAY[
-      $q$hàm + trigger rfq_chot_lan_nop_da_xem (9501_lan_nop_da_xem)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$hàm + trigger rfq_chot_lan_nop_da_xem (080_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8237,10 +8237,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_chot_lan_nop_da_xem() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 257] Hang tra ve mang lan nop CUA GOI, chi o to chuc da bat va goi dang cho duyet. Than `RETURN NEW` de lan nop NULL (chen hong) hay tra ve goi khong cho duyet.
+    -- [S1.193 / khoan 257] Hang tra ve mang lan nop CUA GOI, chi o to chuc da bat va goi dang cho duyet. Than `RETURN NEW` de lan nop NULL (chen hong) hay tra ve goi khong cho duyet.
     ARRAY[
-      $q$hàm + trigger rfq_tra_ve_dat_lan_nop (9501_lan_nop_da_xem)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$hàm + trigger rfq_tra_ve_dat_lan_nop (080_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
