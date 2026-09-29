@@ -34,6 +34,16 @@ export function nhanTrangThaiLoiMoi(status: unknown): string {
   }
 }
 
+/**
+ * [S1.193 / S3.2c2 · K6] Cột trạng thái của một dòng lời mời: trạng thái nói bằng lời, cộng nhãn *mời sau khi ký* khi trigger
+ * `076` đã đặt nó — lời mời thêm lúc gói đã `OPEN`, ở tổ chức đã bật (spec S3 §5.1 K6). `GET /rfqs/:rfqId/invitations` trả
+ * cờ ấy (`listInvitations`, `moiSauKhiKy`); chỉ `true` mới là có nhãn.
+ */
+export function nhanLoiMoi(status: unknown, moiSauKhiKy: unknown): string {
+  const nhan = nhanTrangThaiLoiMoi(status);
+  return moiSauKhiKy === true ? `${nhan} · mời sau khi ký` : nhan;
+}
+
 /** Trạng thái gói mà ở đó nhà cung cấp còn dùng link — lối gửi lại (ADR-110) chỉ chạy khi gói nhận báo giá. */
 const GOI_NHAN_BAO_GIA: ReadonlySet<string> = new Set(["OPEN", "BAFO_OPEN"]);
 
@@ -82,7 +92,9 @@ export function baoSauKhiMoi(loiMoi: LoiMoiVua): { readonly loi: boolean; readon
  * danh sách rỗng là mọi link đã đi; không rỗng là gói ĐÃ mở mà một phần link chưa đi (chủ dự án chọn `200`, không mã lỗi).
  */
 export function baoSauKhiMo(daBat: boolean, unsentInvitationIds: unknown): { readonly loi: boolean; readonly chu: string } {
-  const coBan = "Đã mở thầu. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ.";
+  // ~~"Đã mở thầu."~~ [S1.193 / S3.2c2] *Mở gói* là `PENDING_APPROVAL→OPEN`, *mở thầu* là `CLOSED→UNSEALED` (PRODUCT §4 ⑶,
+  // spec S3 §3.3) — ở cả hai luồng.
+  const coBan = "Đã mở gói. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ.";
   if (!daBat) return { loi: false, chu: coBan };
   const chuaGui = Array.isArray(unsentInvitationIds) ? unsentInvitationIds.length : 0;
   if (chuaGui === 0) return { loi: false, chu: `${coBan} Link mời đã đi tới mọi nhà cung cấp trong danh sách.` };
