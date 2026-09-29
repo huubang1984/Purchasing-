@@ -15977,7 +15977,7 @@ TOTP lần đầu.
 
 Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).
 
-# §S1.191 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
+# §S1.192 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
 
 ## 1. Vòng này là gì
 

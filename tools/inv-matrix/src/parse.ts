@@ -67,7 +67,7 @@ export interface LabelUse {
  * sổ, bộ gom độ phủ và vế *nhãn chưa khai* — ba bộ từng giữ ba bản chép của cùng một khuôn, và nới một bản mà quên
  * hai bản kia là cách một hàng có ô mà không có độ phủ.
  *
- * [S1.191 / S4.0] Dải `[A-HJK]` → `[A-HJ-L]`: nhóm L (spec S4 §5) vào sổ từ L1, L4. Vẫn KHÔNG có `I`, vẫn không có `M`.
+ * [S1.192 / S4.0] Dải `[A-HJK]` → `[A-HJ-L]`: nhóm L (spec S4 §5) vào sổ từ L1, L4. Vẫn KHÔNG có `I`, vẫn không có `M`.
  */
 const KHUON_MA = String.raw`[A-HJ-L]\d+[a-z]?`;
 

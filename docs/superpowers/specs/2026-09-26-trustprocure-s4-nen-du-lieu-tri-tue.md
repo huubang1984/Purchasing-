@@ -332,7 +332,7 @@ không phải tiền, nên so bằng số thực chấp nhận được, và đi
 **[S1.159] Phiên bản nào áp cho gói X** — thứ bản nháp không nói, và là CAO ①: phiên bản mới nhất TẠO trước `opened_at`
 của X, đọc qua `chinh_sach_tai(org_id, thoi_diem)` (§2.4 ⑸, §2.5 ⒆). Phiên bản tạo sau đó không đổi được gì của X.
 
-> **[S1.191 / S4.0 — ĐO, CHƯA CHỐT] Hàm `chinh_sach_tai` không tồn tại; thứ S3.1 dựng mang tên KHÁC và nghĩa KHÁC.**
+> **[S1.192 / S4.0 — ĐO, CHƯA CHỐT] Hàm `chinh_sach_tai` không tồn tại; thứ S3.1 dựng mang tên KHÁC và nghĩa KHÁC.**
 > `069_bac_va_chu_ky_chinh_sach` dựng `chinh_sach_hieu_luc(p_org, p_luc)`: phiên bản có `version` CAO NHẤT mà
 > `effective_from <= p_luc` và — khi có `tiers` — đã có chữ ký thứ hai trước `p_luc`; `rfq_che_do_nghiem` gọi nó tại
 > `created_at` của gói, không tại `opened_at`. Câu trên nói *"mới nhất TẠO trước `opened_at`"* — hai luật cho hai phiên bản
@@ -426,7 +426,7 @@ không I/O, không ngẫu nhiên, không đồng hồ. Sáu bước theo đúng 
 
 **[S1.159] Hai bước đổi chỗ ở và đổi nghĩa** (§2.4 ⑹, §2.5 ⒄):
 - Bước 1 (làm sạch) và bước 2 (đơn vị) là HÀM SQL `chuoi_sach(text)` — `normalize(…, NFD)`, `regexp_replace`, `translate` cho
-  `đ`→`d`, không extension. Lõi TypeScript nhận chuỗi đã làm sạch, không cài lại. **[S1.191 / S4.1] Bản 1 dùng NFKD, không NFD**
+  `đ`→`d`, không extension. Lõi TypeScript nhận chuỗi đã làm sạch, không cài lại. **[S1.192 / S4.1] Bản 1 dùng NFKD, không NFD**
   — đo: NFD giữ nguyên *"m²"*, bước thay ký tự lạ biến nó thành `m`, tức mã của MÉT; NFKD cho `m2`. Với chữ Việt hai dạng cho
   cùng kết quả. Mọi ký tự ngoài `[a-z0-9]` thành một khoảng trắng: *"D10-HP"* → `d10 hp` (chủ dự án chốt 2026-09-29).
 - `TU_DONG` chỉ khi `chuoi_sach(description)` bằng CHÍNH XÁC một `item_aliases` còn hiệu lực. Trigger tính lại cả hai vế nên

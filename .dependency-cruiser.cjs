@@ -80,7 +80,7 @@ const TEST_SUPPORT_INDEX_TS = ciFile("packages/test-support/src/index.ts");
 // [S1.104 / S2.2] Ho "g16-": goi thu 14, va la goi dau tien cua S2.
 const DANH_GIA_SRC_PREFIX = ciPrefix("packages/danh-gia/src/");
 const DANH_GIA_INDEX_TS = ciFile("packages/danh-gia/src/index.ts");
-// [S1.191 / S4.0] Ho "g19-": nen du lieu cua S4a (spec S4 §3.2).
+// [S1.192 / S4.0] Ho "g19-": nen du lieu cua S4a (spec S4 §3.2).
 const DU_LIEU_NEN_SRC_PREFIX = ciPrefix("packages/du-lieu-nen/src/");
 const DU_LIEU_NEN_INDEX_TS = ciFile("packages/du-lieu-nen/src/index.ts");
 // [S1.114 / S2.7 / ADR-059] Ho "g17-": lop tinh lai DOC LAP cua bo bang chung.
@@ -325,7 +325,7 @@ module.exports = {
       to: { path: DANH_GIA_SRC_PREFIX, pathNot: [DANH_GIA_INDEX_TS] },
     },
     // ------------------------------------------------------------------------------------------
-    // [S1.191 / S4.0] Ho "g19-" — NEN DU LIEU CUA S4a. Hai quy tac, cung khuon g16-/g17-:
+    // [S1.192 / S4.0] Ho "g19-" — NEN DU LIEU CUA S4a. Hai quy tac, cung khuon g16-/g17-:
     //   ⑴ chi index.ts la cua cong khai;
     //   ⑵ spec S4 §3.1: "S4 khong cham duong mo thau" thanh mot phep do MAY — goi nay khong VOI TOI
     //      sealed-envelope, unseal, crypto-keys qua bat ky duong nao (`reachable: true`, ke ca gian tiep).
