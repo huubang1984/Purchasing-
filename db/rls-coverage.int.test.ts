@@ -760,9 +760,6 @@ describe("phủ RLS", () => {
       // chua chinh ciphertext. `app_api` phai doc lai duoc bien nhan cho nha cung cap; no khong
       // co viec gi voi phong bi.
       { grantee: "app_api", bang: "bid_receipts", quyen: "SELECT" },
-      // [S1.9101 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
-      { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
-      { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
       // [S1.3] Nam bang moi cua 010. `otp_rate_limits` la bang DUY NHAT co DELETE o muc bang,
       // va do la mot quyen THAT SU nguy hiem duoc cap CO Y THUC: mot api BI CHIEM xoa sach bang
       // nay la tat duoc E3(2). Khong tranh duoc neu giu E3 o tang ung dung - bo GRANT la bo luon
@@ -772,6 +769,9 @@ describe("phủ RLS", () => {
       // bộ đếm theo người gọi phải chung cho tổ chức thật lẫn tổ chức lạ, nếu không 429 là một
       // oracle tồn tại tổ chức. DELETE mức bảng cho bộ dọn — cùng đánh đổi đã ghi ở 010.
       { grantee: "app_api", bang: "caller_rate_limits", quyen: "DELETE,SELECT" },
+      // [S1.9101 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
+      { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
+      { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "item_aliases", quyen: "SELECT" },

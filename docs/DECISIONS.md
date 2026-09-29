@@ -8950,3 +8950,52 @@ do dưới người mở, một dòng `sau-commit 2/3`, log không mang token ha
 1 500 ms ⇒ phản hồi dưới 3 000 ms; mời ở `OPEN` gửi được và gửi hỏng; không khoá ghi sổ nào bị giữ trong lúc gửi; đối chứng MVP1;
 chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `danhDauDaGui`; bốn ca của bộ điều phối trên route giả. Đột biến:
 §S1.188.
+
+---
+
+## ADR-9201 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm đề xuất của lượt bàn S4.2 ngày 2026-09-29 (tách S4.2a/S4.2b,
+luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.9101]** ·
+**Liên quan:** spec S4 §4.2 (L4 ⑴⑵⑶), §4.3, §2.4 ⑺ (vai `DATA_STEWARD`), §5.1 L1 · L3 · L4; ADR-097 (bảy quyết định sau lượt soi);
+ADR-084 ⑶ (mã vào CSDL ở hạng mục dựng hành vi); ADR-016 (cổng quyền ở tầng ứng dụng); `033` (khuôn *thước không cùng tay*) ·
+**Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Spec S4 §4.2 nói L4 ⑵: *"đơn vị đóng gói, hay khác thứ nguyên: chỉ qua `item_uom_conversions` của ĐÚNG hàng chuẩn ấy"*. Câu ấy
+không nói hàng quy đổi riêng có được ghép với quy đổi chung không (*"1 cây = 7,22 kg"* có cho *cây → g* không), có dùng được chiều
+ngược không (*kg → cây*), và khi hai hàng riêng cùng trả lời được một câu hỏi thì chọn hàng nào. Không luật thì hàm quy đổi hoặc
+đoán, hoặc đòi người quản lý dữ liệu khai mọi cặp — cả hai đều là lỗ: cái đầu là đúng thứ L4 cấm, cái sau đẩy người ta khai bừa.
+
+Song song: S4.2a có hàm GHI dữ liệu nền mà chưa có route. ADR-016 đặt `requirePermission` ở tầng ứng dụng, nên trong khoảng S4.2a →
+S4.2b không lớp nào đòi `item.manage` cho một câu ghi viết tay dưới `app_api`.
+
+### Quyết định
+
+1. **⑴ đi trước.** Hai đơn vị cùng thứ nguyên của `uom_units` luôn dùng quy đổi chung — một hàng riêng ở đó không bao giờ được đọc,
+   nên tầng gói từ chối khai nó (`QUY_DOI_CHUNG_DA_CO`).
+2. **⑵ đúng MỘT cạnh riêng** — hàng mới nhất theo `seq` của cặp (`tu_don_vi`, `sang_don_vi`) trong những hàng ghi TRƯỚC mốc, không
+   phải hàng rút — của ĐÚNG hàng chuẩn và tổ chức. Cạnh ghép với quy đổi chung CÙNG thứ nguyên ở hai đầu (*cây → kg* cho *cây → g*;
+   *m → kg* cho *mm → kg*), và dùng được chiều ngược với hệ số `1 / hệ số` (*kg → cây*). Không ghép hai cạnh riêng nối nhau: *cây →
+   kg → m* cần hai cạnh nên ra `KHONG_QUY_DOI_DUOC` — người quản lý dữ liệu khai thẳng *cây → m* nếu cần.
+3. **Hai cạnh cùng dùng được là mơ hồ ⇒ `KHONG_QUY_DOI_DUOC`**, kể cả khi hai hệ số khớp nhau. Chọn một trong hai là đoán; so hai số
+   thập phân *"gần bằng"* là một ngưỡng không ai khai.
+4. **Khoá của đầu `tu`**: mã của danh mục nếu chuỗi quy về một mã, không thì chuỗi đã làm sạch (`cay`, `cuon`). `sang_don_vi` luôn là
+   mã. Khi NHẬP dữ liệu gốc, dạng sạch trùng một mã (*"m"*, *"T"*) là chính mã ấy — người quản lý dữ liệu đang chọn một đơn vị của
+   danh mục; chuỗi tự do của dòng RFQ thì vẫn không bao giờ khớp mã trực tiếp (§S1.192).
+5. **Mã mới `QUY_DOI_RIENG`** — tầng gói nhận nó như `CUNG_DON_VI`/`QUY_DOI_CHUNG`, cặp (mã, hệ số) lạ vẫn NÉM.
+6. **Cổng ghi ở CSDL.** Trigger `du_lieu_nen_kiem_quyen_ghi` (BEFORE INSERT, `ENABLE ALWAYS`) trên năm bảng nền đòi người ghi —
+   `tac_gia`, đã bị `kiem_danh_tinh_theo_phien` buộc bằng người của phiên — giữ `item.manage` trong tổ chức của hàng; từ chối mang
+   ràng buộc `du_lieu_nen_can_item_manage`. Nó không thay cổng tầng ứng dụng của ADR-016: route của S4.2b vẫn khai `item.manage`.
+7. **Vai.** `item.manage` và `DATA_STEWARD` vào CSDL ở S4.2a (ADR-084 ⑶: hạng mục dựng hành vi của mã). Hai trigger khuôn `033`
+   chặn `item.manage` đứng cùng `bid.view`, `po.approve`, `award.recommend`, `rfq.create`, `rfq.invite` ở một vai và ở một người;
+   hằng `ITEM_MANAGE_EXCLUDES` khớp nguyên văn hai thân (meta-test). Hệ quả đo được: `DATA_STEWARD` chỉ ghép được với `TECHNICAL`.
+
+### Hệ quả
+
+- Người quản lý dữ liệu khai MỘT cạnh cho mỗi đơn vị đóng gói của một hàng — về đơn vị gốc hay bất kỳ đơn vị nào cùng thứ nguyên —,
+  không khai mọi cặp. Khai hai cạnh chồng nhau thì mọi phép quy đổi qua chúng thành `KHONG_QUY_DOI_DUOC` cho tới khi rút một cạnh.
+- `quy_doi_don_vi` đổi thân ở `9501_hang_chuan`; bản ghim của hardening dời theo (quy tắc *migration CUỐI CÙNG*).
+- Khe hở `005` §(3) áp nguyên cho hai trigger mới: sửa `role_permissions` sau khi người đã mang vai thì trigger mức người không chạy.
+  Ma trận quyền chỉ đổi bằng migration, và meta-test tĩnh đọc mọi migration.

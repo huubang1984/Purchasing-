@@ -13,6 +13,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-29 / S1.9101] S4.2a — HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-9201.** Chủ dự án
+chốt năm đề xuất ngày 2026-09-29: tách S4.2 thành S4.2a (CSDL + gói) và S4.2b (API + màn `/du-lieu`); quy đổi riêng dùng đúng MỘT
+cạnh, ghép quy đổi chung ở hai đầu, được chiều ngược, không ghép hai cạnh riêng; `don_vi_goc` là mã của danh mục; chưa có
+`category_id` (đợi S3.6); `ma` do người quản lý dữ liệu nhập. `9501_hang_chuan`: mã `item.manage`, vai `DATA_STEWARD` và hai trigger
+khuôn `033` — `item.manage` không đứng cùng `bid.view`, `po.approve`, `award.recommend`, `rfq.create`, `rfq.invite` ở vai và ở người,
+nên `DATA_STEWARD` chỉ ghép được với `TECHNICAL`; cổng GHI ở CSDL `du_lieu_nen_kiem_quyen_ghi` trên năm bảng nền (cả `uom_aliases`
+của S4.1) — người ghi phải giữ `item.manage`, dưới cổng tầng ứng dụng của route S4.2b (ADR-016); bốn bảng `canonical_items` (danh
+tính bất biến), `canonical_item_versions`, `item_aliases`, `item_uom_conversions`, cùng khuôn nền L1; `quy_doi_don_vi` thêm vế ⑵ (mã
+`QUY_DOI_RIENG`). Gói `du-lieu-nen` có sáu hàm ghi (sổ kiểm toán cùng giao dịch) và `docHangChuan`, vào lớp canh cổng quyền
+(`CUA_GOI`). L3 vào sổ đăng ký — 71 bất biến. Không route, không màn hình. Biên bản: `evidence/security-reviews.md` §S1.9101.
+
 **[2026-09-29 / S1.192] S4.0 + S4.1 — DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN
 (L1, L4).** Hạng mục mã đầu tiên của S4a; chủ dự án chốt ba điểm ngày 2026-09-29: danh mục đơn vị gieo sẵn và bí danh chung
 (không bí danh chung cho `MT`, `T`, `M`), chưa dựng `packages/tri-tue` (tới S4b), luật làm sạch bản 1 *"D10-HP"* → `d10 hp`.
