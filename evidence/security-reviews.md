@@ -16238,4 +16238,14 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 
 ## 8. Số đo
 
-(điền sau lượt T3 toàn bộ)
+- `packages/rfq/src/lan-nop-da-xem.int.test.ts` 28/28 — 27 ca có nhãn, 1 ca giới hạn không nhãn. Trên cây #199 (`30a6801`, chưa có
+  `080_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
+- `apps/api/src/buyer.int.test.ts` 20/20, trong đó hai ca HTTP của vòng này.
+- Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 192 tệp, 3256 khẳng định, 3246 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
+  máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
+- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `080_lan_nop_da_xem`): 193 tệp, 3274 khẳng
+  định, 3264 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca ấy. Ma trận sinh lại từ lượt này trùng bản đã commit.
+- `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 23 → 40, K4a 16 → 20, D2 50 → 64. Không mã mới.
