@@ -1063,7 +1063,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "KHONG_QUY_DOI_DUOC",
   "chuoiSach",
   "quyDoiDonVi",
-  // [S1.9101 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng — và lớp lỗi mang mã của chúng.
+  // [S1.193 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng — và lớp lỗi mang mã của chúng.
   "DuLieuNenError",
   "docHangChuan",
   "khaiBiDanhHang",

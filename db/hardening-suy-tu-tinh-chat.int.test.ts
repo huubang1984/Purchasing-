@@ -121,7 +121,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   "audit_chain_anchors",
   "audit_events",
   "bid_receipts",
-  // [S1.9101 / S4.2a / `9501_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
+  // [S1.193 / S4.2a / `080_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
   "item_aliases",
@@ -279,11 +279,11 @@ const HAM_KHONG_PHAI_CANH = [
   "public.kiem_tra_ma_tran_quyen",
   "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
   "public.kiem_tra_nguong_khong_cung_tay_vai_tro",
-  // [S1.9101 / S4.2a / L3 / `9501_hang_chuan`] Khuôn `033` cho người đặt thước dữ liệu: AFTER ROW, từ chối CÓ ĐIỀU KIỆN — chỉ khi một
+  // [S1.193 / S4.2a / L3 / `080_hang_chuan`] Khuôn `033` cho người đặt thước dữ liệu: AFTER ROW, từ chối CÓ ĐIỀU KIỆN — chỉ khi một
   // vai/một người giữ `item.manage` cùng một mã thấy giá. Nhân chứng: mọi câu ghi `user_roles`/`role_permissions` của kịch bản.
   "public.kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung",
   "public.kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro",
-  // [S1.9101 / S4.2a / L3] Cổng GHI của dữ liệu nền — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN (người ghi không giữ `item.manage`).
+  // [S1.193 / S4.2a / L3] Cổng GHI của dữ liệu nền — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN (người ghi không giữ `item.manage`).
   // Nhân chứng: năm câu chèn dữ liệu nền cuối `dungKichBan()`, dưới một `DATA_STEWARD`.
   "public.du_lieu_nen_kiem_quyen_ghi",
   "public.kiem_tra_phan_tach_nhiem_vu",
@@ -1762,7 +1762,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // ---- [S1.192 / S4.1 / L1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------
   // Hai bộ ba mới trên `uom_aliases`/INSERT: `du_lieu_nen_dat_thu_tu` (hàm MỚI — ĐẶT `seq`, `ghi_luc`, không bao giờ từ chối) và
   // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai cột trigger đặt không khai ở vế ⒠ — thứ được so là cột câu ĐẶT.
-  // [S1.9101 / S4.2a / L3] Người ghi dữ liệu nền phải giữ `item.manage` (`du_lieu_nen_kiem_quyen_ghi`) — nên người ghi là một
+  // [S1.193 / S4.2a / L3] Người ghi dữ liệu nền phải giữ `item.manage` (`du_lieu_nen_kiem_quyen_ghi`) — nên người ghi là một
   // `DATA_STEWARD`, không còn là `pm`. Vai ấy của người ấy là thêm một nhân chứng của hai trigger mức người trên `user_roles`.
   const ql = await nguoi("DATA_STEWARD");
   doiSoHang(
@@ -1780,7 +1780,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "uom_aliases",
   );
 
-  // ---- [S1.9101 / S4.2a / L1 · L3 / `9501_hang_chuan`] Bốn bảng hàng chuẩn ------------------------------------------------------
+  // ---- [S1.193 / S4.2a / L1 · L3 / `080_hang_chuan`] Bốn bảng hàng chuẩn ------------------------------------------------------
   // Mỗi bảng ba bộ ba mới trên INSERT: `du_lieu_nen_dat_thu_tu`, `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI) và
   // `du_lieu_nen_kiem_quyen_ghi` (hàm MỚI — từ chối CÓ ĐIỀU KIỆN: chỉ người không giữ `item.manage`). Cộng bộ ba thứ tư của
   // `du_lieu_nen_kiem_quyen_ghi` trên `uom_aliases` — câu ngay trên.

@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 9501 — [S1.9101 / S4.2a] HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (spec S4 §4.2, §4.3, §5.1 L1 · L3 · L4)
+-- 080 — [S1.193 / S4.2a] HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (spec S4 §4.2, §4.3, §5.1 L1 · L3 · L4)
 -- =============================================================================================
 -- Năm thứ, theo đúng thứ tự tệp:
 --
@@ -25,7 +25,7 @@
 --         `item_uom_conversions`     — quy đổi RIÊNG của một hàng chuẩn: `1 tu_don_vi = he_so sang_don_vi`.
 --                                       `sang_don_vi` là mã của danh mục; `tu_don_vi` là mã (khác thứ nguyên)
 --                                       hoặc chuỗi đóng gói đã làm sạch (`cay`, `cuon`).
---   (4) `quy_doi_don_vi` thêm vế ⑵ của L4 — luật ghép ở ADR-9201: ⑴ cùng thứ nguyên vẫn đi trước; ⑵ đúng MỘT
+--   (4) `quy_doi_don_vi` thêm vế ⑵ của L4 — luật ghép ở ADR-114: ⑴ cùng thứ nguyên vẫn đi trước; ⑵ đúng MỘT
 --       cạnh riêng còn hiệu lực TẠI MỐC của đúng hàng chuẩn, ghép với quy đổi chung cùng thứ nguyên ở hai đầu,
 --       dùng được cả chiều ngược (1/hệ số); không ghép hai cạnh riêng; nhiều hơn một cạnh dùng được ⇒ mơ hồ
 --       ⇒ `KHONG_QUY_DOI_DUOC`. Mã mới `QUY_DOI_RIENG`.
@@ -372,7 +372,7 @@ CREATE TRIGGER item_uom_conversions_chan_truncate
 ALTER TABLE item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_chan_truncate;
 
 -- ---------------------------------------------------------------------------------------------
--- (4) QUY ĐỔI — THÊM VẾ ⑵ (ADR-9201)
+-- (4) QUY ĐỔI — THÊM VẾ ⑵ (ADR-114)
 -- ---------------------------------------------------------------------------------------------
 -- `canh`: cạnh riêng mới nhất theo `seq` của mỗi cặp (tu, sang) trong những hàng ghi TRƯỚC mốc; hàng rút
 -- làm cặp ấy hết hiệu lực. `khoa_*`: mã nếu chuỗi quy về một mã của danh mục, không thì chuỗi đã làm sạch —
