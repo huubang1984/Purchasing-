@@ -16572,3 +16572,79 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
   `docs/DECISIONS.md` (ADR-116 rồi ADR-119) và lời khai đếm (lấy bản `master`, `cap-so --dem` viết lại).
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
+
+# §S1.196 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
+mới: một mã quyền, một bảng, ba hàm SQL, bốn trigger, ba route, một lớp từ chối vào sổ.
+
+## 1. Việc gì
+
+Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: S3.3 chia năm PR; hạn hiệu lực của xác minh dùng CHUNG cột
+`tham_dinh_hieu_luc_thang` của phiên bản chính sách hiệu lực; sàn giải trình mã `OTHER` là 100 byte (S3.3b); lần từ chối K4a vào sổ
+(khoản 255 — đóng ở S3.2d, #206). XÁC MINH là cấp đầu của ADR-081 ⑵ — nội bộ bên mua — và là thứ K2 (S3.3c) sẽ đếm.
+
+## 2. Hình dạng
+
+- `082_xac_minh_nha_cung_cap`: `supplier.qualify` cho `FINANCE` (ADR-084 ⑵ ⑶). Bảng `supplier_verifications` chỉ ghi thêm (không
+  `UPDATE`/`DELETE` cho vai nào, `bid_chi_ghi_them` ở UPDATE/DELETE/TRUNCATE, `ENABLE ALWAYS`), RLS + FORCE, policy khách ĐÓNG HẲN,
+  `INSERT` theo cột; `thu_tu`, `bam_ho_so`, `het_han_at` ngoài `GRANT`.
+- Trigger `ncc_kiem_xac_minh`: khoá tư vấn theo nhà cung cấp (hạt giống 7) rồi mới đọc thứ tự lớn nhất, nên thứ tự cấp số là thứ tự
+  commit (ADR-081 ⑵ — không xếp theo `now()`). Luật người đọc dữ liệu THẬT lúc chèn: giữ `supplier.qualify`; không giữ `rfq.invite`
+  (`k8a_nguoi_moi_xac_minh`); không dựng hồ sơ hay bất kỳ người liên hệ nào (`k8a_nguoi_tao_tu_xac_minh`). Hồ sơ có MST và ACTIVE; tổ
+  chức đã bật S3. Thu hồi chỉ khi hàng mới nhất là `VERIFIED`, lý do bắt buộc.
+- `ncc_bam_xac_minh`: băm MST, tên pháp lý, trạng thái và mọi người liên hệ (id, email, điện thoại, trạng thái) — khuôn C-1 của `011`.
+  `app_api` không `UPDATE` được hai bảng ấy (`011`), nhưng THÊM được người liên hệ: một đích liên hệ chưa ai xác nhận làm xác minh thôi
+  hiệu lực mà không ai phải nhớ thu hồi.
+- `ncc_xac_minh_con_hieu_luc`: hàng mới nhất `VERIFIED`, chưa hết hạn, băm lúc xác minh bằng băm hiện tại. Không SECURITY DEFINER.
+- Tầng gói (`packages/supplier/src/xac-minh.ts`): `requirePermission(supplier.qualify)` trước mọi câu ghi (D5); hai nhánh có tên
+  ⇒ `tuChoiTheoChotTaiNguyen` (mới — `tuChoiTheoChot` cho tài nguyên `SUPPLIER`) ghi `CONTROL_DENIED` ở giao dịch độc lập; sổ
+  `SUPPLIER_VERIFIED` / `SUPPLIER_VERIFICATION_REVOKED` mang thứ tự (và lý do thu hồi), không MST, không đích liên hệ. Bảng chốt thêm
+  `K8A_NGUOI_TAO_TU_XAC_MINH`, `K8A_NGUOI_MOI_XAC_MINH`, cả hai vào sổ; kiểu `DongChot.chot` nhận mã hậu tố.
+- Ba route người mua: `POST /suppliers/:supplierId/verify`, `POST /suppliers/:supplierId/verification/revoke` (mã quyền
+  `supplier.qualify`), `GET /suppliers/:supplierId/verification` (`agent: false`, khai lý do ở `ROUTE_DOC_KHONG_PHOI`).
+- Hardening: hàm + trigger `ncc_kiem_xac_minh`, định nghĩa `ncc_bam_xac_minh` và `ncc_xac_minh_con_hieu_luc`; ba trigger của bảng
+  vào hai mục ghim có sẵn (`kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them`); bảng vào `BANG_TENANT_KHAI`; ba CHECK vào
+  `CHECK_AN_NINH_KHAI` (loại, lý do theo loại, đủ cột khi xác minh), CHECK độ dài lý do miễn (`DO_DAI`).
+
+## 3. Đo
+
+- `packages/supplier/src/xac-minh.int.test.ts` — 10 ca trên Postgres 16: xác minh hợp lệ (hạn đúng `created_at + 12 tháng`, sổ không
+  mang MST); người dựng hồ sơ và người dựng người liên hệ — hai nhánh đo RIÊNG — bị từ chối kèm một hàng `CONTROL_DENIED`, đối chứng
+  FINANCE khác qua; người giữ `rfq.invite` (FINANCE kèm TECHNICAL được cấp `rfq.invite` trong test) bị từ chối kèm hàng sổ; PM thiếu
+  quyền ⇒ `PERMISSION_DENIED`; không MST và tổ chức chưa bật bị từ chối KHÔNG vào sổ; năm lần đổi hồ sơ (thêm người liên hệ qua
+  `app_api`; MST, email, trạng thái người liên hệ, tên pháp lý bằng chủ CSDL) mỗi lần làm xác minh thôi hiệu lực, xác minh lại thì
+  hiệu lực; hết hạn (hàng dựng thẳng khi trigger quy tắc tắt tạm); thu hồi; ba lần ghi đồng thời ra thứ tự 1, 2, 3; chỉ ghi thêm.
+- Sáu đột biến SQL, mỗi cái sửa CÙNG LÚC migration và bản ghim (hardening tự khôi phục thân chuẩn), rồi khôi phục:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | 1 | bỏ nhánh người dựng hồ sơ | ĐỎ — sau khi tách hai nhánh trong test: bản đầu của ca dựng cả hồ sơ lẫn người liên hệ bằng cùng một
+  người, nên nhánh kia chặn thay và đột biến SỐNG; ca nay đo riêng từng nhánh |
+  | 2 | bỏ nhánh `rfq.invite` | ĐỎ |
+  | 3 | hàm hiệu lực bỏ vế băm | ĐỎ |
+  | 4 | hàm hiệu lực bỏ vế hạn | ĐỎ |
+  | 5 | bỏ vế MST | ĐỎ |
+  | 6 | bỏ nhánh người dựng người liên hệ | ĐỎ |
+
+- Bốn tệp sổ đăng ký CSDL (`check-an-ninh`, `hardening-suy-tu-tinh-chat` — kể cả nhân chứng hành vi của `ncc_kiem_xac_minh` —,
+  `migrations`, `rls-coverage`): đỏ 16 ca trước khi khai, xanh sau. `migrate()` hai lượt liên tiếp trên CSDL mới: sạch.
+- Lượt T3 toàn bộ đầu tiên đỏ ba tệp, cả ba là sổ đăng ký chưa khai: bộ quét rò rỉ của kịch bản 41 qua HTTP (hai route ghi mới
+  chưa có thân hợp lệ — nay xác minh và thu hồi trên nhà cung cấp HY SINH bằng tài chính), lớp đọc `org_procurement_policies`
+  (`ncc_kiem_xac_minh` khai `QUA_HAM`), và phép khớp tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (nay đọc cả thân trigger K8a). Sau khai: xanh.
+- Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành `080`; mốc `MOC_GHIM` 70 → 71. Hợp lần hai sau #198
+  (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194. Hợp lần ba sau #206
+  (S3.2d lấy S1.194 và `080`) và #207 (giữ số trên remote): vòng thành S1.196, migration thành `082_xac_minh_nha_cung_cap`. Hợp
+  lần năm sau #204 (S4.2a, L3): sổ đăng ký 72, mốc `MOC_GHIM` 71 → 72. Hợp lần sáu sau #210 (S3.6a): không đổi số.
+- `pnpm evidence` (T3 toàn bộ): XANH — 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào), đọc từ 3290 khẳng định sau lần hợp thứ năm.
+- `pnpm t0` sạch; `pnpm test` sạch.
+
+## 4. Giới hạn
+
+- Chưa ai ĐỌC xác minh: K2 dùng nó ở S3.3c. Hôm nay xác minh chỉ ghi và hiển thị qua route.
+- Luật `rfq.invite` đọc vai lúc ghi; người được cấp `rfq.invite` SAU khi xác minh không làm xác minh cũ thôi hiệu lực.
+- Không có màn: S3.3e.
+
+## 5. Số
+
+K8a vào sổ đăng ký — 72 bất biến sau khi hợp #204 (L3). Không khoản nào mở hay đóng.

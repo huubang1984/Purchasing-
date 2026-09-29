@@ -74,6 +74,10 @@ const HAM_DOI_TRANG_THAI = [
   "dispatchUnseal",
   // [S1.201 / S3.6a] Ngừng dùng hay dùng lại một nhóm hàng — route đòi `category.manage`, hàm hỏi lại cùng mã.
   "doiTrangThaiNhomHang",
+  // [S1.196 / S3.3a / K8a] Thu hồi xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
+  "thuHoiXacMinhNhaCungCap",
+  // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — route đòi `supplier.qualify`, hàm hỏi lại cùng mã.
+  "xacMinhNhaCungCap",
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
@@ -128,6 +132,9 @@ const HAM_CHI_DOC = [
   // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
   "chuoiSach",
   "docHangChuan",
+  // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
+  // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docXacMinhNhaCungCap",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",
