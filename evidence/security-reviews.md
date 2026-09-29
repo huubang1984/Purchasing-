@@ -16367,7 +16367,7 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 - Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành `080`; mốc `MOC_GHIM` 70 → 71. Hợp lần hai sau #198
   (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194. Hợp lần ba sau #206
   (S3.2d lấy S1.194 và `080`): vòng thành S1.195, migration thành `081_xac_minh_nha_cung_cap`.
-- `pnpm evidence` (T3 toàn bộ): XANH — 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3262 khẳng định sau lần hợp thứ hai.
+- `pnpm evidence` (T3 toàn bộ): XANH — 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3268 khẳng định sau lần hợp thứ ba.
 - `pnpm t0` sạch; `pnpm test` sạch.
 
 ## 4. Giới hạn
