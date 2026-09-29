@@ -15932,3 +15932,15 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 - Lời từ chối vế ngân sách không vào sổ `CONTROL_DENIED` — cùng lớp với lời từ chối K4b về danh sách ở cùng cạnh; K12 phân loại mọi
   lời từ chối của S3 ở S3.9. Lời của phép đếm đầu (`076`) nói *danh sách* cả khi chỗ lệch là một người ký hai lần.
 - `approved_budget_hash` không muối: biết phiên bản chính sách thì dò lại được ước lượng. Hôm nay không lộ ra đâu (§6 S7).
+
+## 8. Số đo
+
+- `packages/rfq/src/rang-ngan-sach.int.test.ts` 17/17 — mười lăm ca có nhãn, hai ca giới hạn không nhãn. Trên cây `master` (tạm rút
+  `9501_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
+- Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 191 tệp, 3228 khẳng định, 3218 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo,
+  không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
+- `pnpm t0` sạch. `pnpm test`: 121 tệp, 1704 đạt, 1 bỏ qua — sau khi `cap-so --dem` viết lại lời khai số ADR, số migration và số khoản
+  ở STATE và Handoff.
+- Bảy đột biến ở lược đồ, bảy lần đỏ (§5); hai đột biến tương đương ghi ra, không đo.
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3228 khẳng định; K4b 8 → 23, D2 45 → 50. Không mã mới.
