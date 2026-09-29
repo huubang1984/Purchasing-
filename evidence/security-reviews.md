@@ -15979,7 +15979,7 @@ Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, 
 
 ---
 
-# §S1.191 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+# §S1.192 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
 lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`079_rang_ngan_sach`), một ADR (ADR-114),
