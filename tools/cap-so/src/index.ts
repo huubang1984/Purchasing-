@@ -45,8 +45,11 @@
 //     SỐNG tại chỗ theo sổ, kể cả khi lời khai nằm trên dòng của master, và không gạch-rồi-nối — lời
 //     khai đếm ra khỏi quy ước "gạch bỏ tại chỗ" (ADR trên, quyết định ⑷).
 //   - Vòng không có chỗ khai duy nhất như đầu mục ADR hay hàng sổ nợ, nên `--kiem` không bắt được
-//     hai PR cùng dùng một số vòng thật. Chỉ bật "Require branches to be up to date" trên GitHub mới
-//     đóng hẳn cuộc đua giữa hai PR cùng cấp số trên một master.
+//     hai PR cùng dùng một số vòng thật. Cuộc đua ấy nay đóng bằng LỜI GIỮ SỐ: base là nhánh theo dõi
+//     thì mỗi số thật được giữ bằng một nhánh `cap-so/<dãy>/<số>` trên remote trước khi viết ra (xem
+//     "Giữ số trên remote"). Số đã giữ không đổi khi PR khác merge trước; đổi lại số có thể có lỗ và
+//     không còn theo đúng thứ tự merge (trừ migration). `--khong-giu` bỏ lời giữ; `--don` dọn nhánh
+//     giữ của số đã vào base.
 //   - `tools/cap-so/` đứng ngoài mọi phép thay và phép quét: chính nó chứa số tạm làm dữ liệu test.
 // ==============================================================================================
 
@@ -813,10 +816,9 @@ const DIFF = ["diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-p
  * số master đã lấy mà không báo gì (review PR #155, mục 3). Không hỏi được remote thì chỉ cảnh báo.
  */
 function kiemBaseMoi(goc: string, base: string, bao: string[]): void {
-  const ten = gitThu(goc, ["rev-parse", "--symbolic-full-name", base]).ra.trim();
-  const m = /^refs\/remotes\/([^/]+)\/(.+)$/.exec(ten);
-  if (m === null) return;
-  const [remote, nhanh] = [m[1]!, m[2]!];
+  const noi = remoteCuaBase(goc, base);
+  if (noi === null) return;
+  const { remote, nhanh } = noi;
   const xa = gitThu(goc, ["ls-remote", remote, `refs/heads/${nhanh}`], 30_000);
   const shaXa = xa.ra.split(/\s/)[0] ?? "";
   if (xa.ma !== 0 || !/^[0-9a-f]{40}$/.test(shaXa)) {
@@ -830,6 +832,139 @@ function kiemBaseMoi(goc: string, base: string, bao: string[]): void {
         `Chạy \`git fetch ${remote} ${nhanh} && git merge ${base}\` rồi chạy lại.`,
     );
   }
+}
+
+/** Base là nhánh theo dõi (`origin/master`) thì trả remote và tên nhánh của nó; base cục bộ thì `null`. */
+function remoteCuaBase(goc: string, base: string): { readonly remote: string; readonly nhanh: string } | null {
+  const ten = gitThu(goc, ["rev-parse", "--symbolic-full-name", base]).ra.trim();
+  const m = /^refs\/remotes\/([^/]+)\/(.+)$/.exec(ten);
+  return m === null ? null : { remote: m[1]!, nhanh: m[2]! };
+}
+
+// ---- Giữ số trên remote ----------------------------------------------------------------------
+//
+// Số cấp bằng max(base)+1 vẫn va khi hai nhánh chạy lệnh trên CÙNG một master rồi merge liền nhau:
+// phép đo không có khoá. Khoá là một NHÁNH trên remote, `cap-so/<dãy>/<số>`: tạo nhánh là nguyên tử
+// phía máy chủ, nên hai lần đẩy cùng tên thì đúng một lần thắng. Nhánh ấy trỏ vào một commit mồ côi
+// TẤT ĐỊNH (cây rỗng, tác giả và ngày cố định, thông điệp nêu dãy, số và nhánh giữ), nên:
+//   - nhánh đã giữ số đẩy lại thì "đã có, cùng commit" — lệnh chạy lại không tốn số;
+//   - `ls-remote` cho biết số nào của ai mà không phải fetch — so sha với commit nhánh này sẽ tạo.
+// Vì sao nhánh thường mà không phải tag hay `refs/cap-so/*`: phiên đám mây chỉ được TẠO nhánh
+// (đo 2026-09-29: tag và ref ngoài `refs/heads/` bị proxy trả 403; xoá nhánh cũng 403).
+//
+// Số đã giữ là của nhánh tới khi nó vào master: thua cuộc đua merge không còn làm đổi số. Ngoại lệ là
+// migration: số giữ phải còn lớn hơn max(base), vì CSDL đang chạy áp theo thứ tự merge còn CSDL mới áp
+// theo thứ tự tên — hai thứ tự ấy phải trùng nhau. Nhánh thua ở dãy migration giữ số mới và bỏ lại lỗ.
+
+const REF_GIU = "refs/heads/cap-so";
+const NGAY_GIU = "2026-09-29T00:00:00+0000";
+
+function refGiu(day: Day, n: number): string {
+  return `${REF_GIU}/${day}/${n}`;
+}
+
+/** Commit mồ côi tất định của lời giữ `day`/`n` thuộc `nhanh` — cùng đầu vào, cùng sha, trên mọi bản sao. */
+function commitGiu(goc: string, day: Day, n: number, nhanh: string): string {
+  const cay = spawnSync("git", ["hash-object", "-t", "tree", "-w", "--stdin"], { cwd: goc, input: "", encoding: "utf8" });
+  const kq = spawnSync(
+    "git",
+    [
+      "-c", "commit.gpgSign=false", "-c", "i18n.commitEncoding=UTF-8",
+      "commit-tree", "--no-gpg-sign", "-m", `cap-so giữ ${day} ${dinhDang(day, n)} cho ${nhanh}`, cay.stdout.trim(),
+    ],
+    {
+      cwd: goc,
+      encoding: "utf8",
+      env: {
+        ...env,
+        GIT_AUTHOR_NAME: "cap-so", GIT_AUTHOR_EMAIL: "cap-so@invalid", GIT_AUTHOR_DATE: NGAY_GIU,
+        GIT_COMMITTER_NAME: "cap-so", GIT_COMMITTER_EMAIL: "cap-so@invalid", GIT_COMMITTER_DATE: NGAY_GIU,
+      },
+    },
+  );
+  const sha = kq.stdout.trim();
+  if (kq.status !== 0 || !/^[0-9a-f]{40,64}$/.test(sha)) throw new CapSoError(`không tạo được commit giữ số: ${kq.stderr.trim()}`);
+  return sha;
+}
+
+/** Mọi lời giữ đang có trên remote: dãy → (số → sha). Không hỏi được remote thì NÉM — đoán là cấp trùng. */
+function docGiu(goc: string, remote: string): Record<Day, Map<number, string>> {
+  const kq = gitThu(goc, ["ls-remote", remote, `${REF_GIU}/*`], 60_000);
+  if (kq.ma !== 0) {
+    throw new CapSoError(`không hỏi được ${remote} để giữ số. Chạy lại khi có mạng, hoặc \`--khong-giu\` để cấp như cũ (có thể trùng).`);
+  }
+  const giu: Record<Day, Map<number, string>> = { vong: new Map(), adr: new Map(), khoan: new Map(), migration: new Map() };
+  for (const l of kq.ra.split("\n")) {
+    const m = /^([0-9a-f]+)\trefs\/heads\/cap-so\/(vong|adr|khoan|migration)\/(\d+)$/.exec(l.trim());
+    if (m !== null) giu[m[2] as Day].set(Number(m[3]), m[1]!);
+  }
+  return giu;
+}
+
+/** Đẩy lời giữ; `true` khi số nay là của nhánh (mới giữ, hay đã giữ từ trước), `false` khi nhánh khác đã giữ. */
+function dayGiu(goc: string, remote: string, day: Day, n: number, sha: string): boolean {
+  const ref = refGiu(day, n);
+  if (gitThu(goc, ["push", "--quiet", "--no-verify", remote, `${sha}:${ref}`], 120_000).ma === 0) return true;
+  const xem = gitThu(goc, ["ls-remote", remote, ref], 60_000);
+  const shaXa = xem.ra.split(/\s/)[0] ?? "";
+  if (xem.ma !== 0 || shaXa === "") {
+    throw new CapSoError(`không đẩy được ${ref} lên ${remote}, và remote cũng chưa có nó — lỗi mạng hay quyền, không phải cuộc đua.`);
+  }
+  return shaXa === sha;
+}
+
+export interface NguCanhGiu {
+  readonly goc: string;
+  readonly remote: string;
+  readonly nhanh: string;
+  readonly dangGiu: Record<Day, Map<number, string>>;
+}
+
+/**
+ * `can` số thật cho dãy `day`: trước hết các số nhánh đã giữ (nhỏ trước) mà base chưa khai, rồi giữ thêm
+ * từ max(base)+1 trở lên, bỏ qua số base đã khai và số đã có người giữ. Số đã giữ mà nay thừa thì báo — lỗ.
+ */
+function giuSo(
+  ng: NguCanhGiu,
+  day: Day,
+  can: number,
+  max: number,
+  daKhai: ReadonlySet<number>,
+  bao: string[],
+): number[] {
+  const cuaTa = [...ng.dangGiu[day]]
+    .filter(([n, sha]) => !daKhai.has(n) && (day !== "migration" || n > max) && sha === commitGiu(ng.goc, day, n, ng.nhanh))
+    .map(([n]) => n)
+    .sort((a, b) => a - b);
+  const ra = cuaTa.slice(0, can);
+  if (cuaTa.length > can) bao.push(`${day}: nhánh đã giữ ${cuaTa.slice(can).join(", ")} mà nay không dùng — để lại lỗ số`);
+  for (let n = max + 1; ra.length < can; n += 1) {
+    if (n >= MOC_SO_TAM) throw new CapSoError(`${day}: không còn số thật trống dưới ${MOC_SO_TAM} để giữ`);
+    if (daKhai.has(n) || ng.dangGiu[day].has(n)) continue;
+    const sha = commitGiu(ng.goc, day, n, ng.nhanh);
+    if (dayGiu(ng.goc, ng.remote, day, n, sha)) {
+      ng.dangGiu[day].set(n, sha);
+      ra.push(n);
+    } else {
+      ng.dangGiu[day].set(n, "");
+    }
+  }
+  return ra.sort((a, b) => a - b);
+}
+
+/** `--don`: xoá lời giữ của những số base đã khai — chúng đã vào master, khoá không còn việc gì. */
+export function donGiu(goc: string, base: string): { readonly daXoa: readonly string[]; readonly bao: readonly string[] } {
+  const noi = remoteCuaBase(goc, base);
+  if (noi === null) throw new CapSoError(`${base} không phải nhánh theo dõi của một remote — không có lời giữ nào để dọn`);
+  const bao: string[] = [];
+  kiemBaseMoi(goc, base, bao);
+  const { daKhai } = soTrenBase(goc, base);
+  const dangGiu = docGiu(goc, noi.remote);
+  const xoa = CAC_DAY.flatMap((d) => [...dangGiu[d].keys()].filter((n) => daKhai[d].has(n)).map((n) => refGiu(d, n)));
+  if (xoa.length > 0 && gitThu(goc, ["push", "--quiet", "--no-verify", noi.remote, ...xoa.map((r) => `:${r}`)], 120_000).ma !== 0) {
+    throw new CapSoError(`không xoá được lời giữ trên ${noi.remote} (phiên đám mây không có quyền xoá nhánh — chạy ở máy chủ repo)`);
+  }
+  return { daXoa: xoa, bao };
 }
 
 function laDuongCongCu(p: string): boolean {
@@ -1166,6 +1301,8 @@ export interface TuyChonCapSo {
    * cấp lại. Không nói thì lệnh từ chối và liệt kê.
    */
   readonly moHo?: "master" | "nhanh";
+  /** Không giữ số trên remote — cấp max(base)+1 như trước khi có lời giữ, và có thể trùng. */
+  readonly khongGiu?: boolean;
 }
 
 export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
@@ -1282,9 +1419,25 @@ export function capSo(goc: string, tuyChon: TuyChonCapSo): KetQuaCapSo {
   for (const n of hangKhoan) khai.khoan.add(n);
   for (const x of tamCuaMigration) if (dayCuaSoTam(x.tam) === "migration") khai.migration.add(x.tam);
 
-  // Bước 3 — cấp: số tạm theo thứ tự → max(base)+1, +2, …
+  if (loi.length > 0) throw new CapSoError(`không ghi gì, vì:\n  - ${loi.join("\n  - ")}`);
+
+  // Bước 3 — cấp: số tạm theo thứ tự → số nhánh giữ được trên remote (xem "Giữ số trên remote"); base
+  // cục bộ hay `--khong-giu` thì max(base)+1, +2, … như trước.
+  const noiGiu = tuyChon.khongGiu === true ? null : remoteCuaBase(goc, base);
+  let ngGiu: NguCanhGiu | null = null;
+  if (noiGiu !== null) {
+    const nhanh = gitThu(goc, ["symbolic-ref", "--short", "-q", "HEAD"]).ra.trim();
+    if (nhanh === "") throw new CapSoError("HEAD tách rời: lời giữ số mang tên nhánh — checkout nhánh, hoặc chạy với `--khong-giu`");
+    ngGiu = { goc, remote: noiGiu.remote, nhanh, dangGiu: docGiu(goc, noiGiu.remote) };
+  } else if (tuyChon.khongGiu === true) {
+    bao.push("--khong-giu: cấp max(base)+1 mà không giữ số — một PR khác cấp cùng lúc có thể lấy trùng");
+  }
   const bang = bangRong();
-  for (const d of CAC_DAY) [...khai[d]].sort((a, b) => a - b).forEach((tam, k) => bang[d].set(tam, max[d] + k + 1));
+  for (const d of CAC_DAY) {
+    const tam = [...khai[d]].sort((a, b) => a - b);
+    const that = ngGiu === null ? tam.map((_, k) => max[d] + k + 1) : giuSo(ngGiu, d, tam.length, max[d], daKhai[d], bao);
+    tam.forEach((t, k) => bang[d].set(t, that[k]!));
+  }
 
   const daViet = new Map<string, Array<readonly [string, string]>>();
   for (const [p, cacDong] of dongNhanh) {
@@ -1351,10 +1504,11 @@ export function demLai(goc: string): { readonly tepDaGhi: readonly string[]; rea
 
 // ---- Dòng lệnh -----------------------------------------------------------------------------
 
-const HUONG_DAN = `pnpm cap-so [--base <ref>] [--cu "<bảng>"] [--mo-ho master|nhanh]
-                                            cấp số cho mọi số tạm của nhánh
+const HUONG_DAN = `pnpm cap-so [--base <ref>] [--cu "<bảng>"] [--mo-ho master|nhanh] [--khong-giu]
+                                            cấp số cho mọi số tạm của nhánh, giữ số trên remote
 pnpm cap-so --dem                           chỉ viết lại lời khai đếm (còn số tạm)
 pnpm cap-so --kiem                          cho CI: đỏ nếu còn số tạm hay số trùng
+pnpm cap-so --don [--base <ref>]            xoá nhánh giữ số (cap-so/*) của những số đã vào base
 
 Số tạm: vòng S1.91NN · ADR-92NN · khoản 94NN · migration 95NN_ten.sql (NN = 01, 02, …).
 Trình tự trước khi merge: git fetch origin master && git merge origin/master && pnpm cap-so,
@@ -1383,12 +1537,18 @@ export function main(thamSo: readonly string[], goc: string): number {
       stdout.write(kq.tepDaGhi.length === 0 ? "lời khai đếm đã khớp\n" : `đã viết lại: ${kq.tepDaGhi.join(", ")}\n`);
       return 0;
     }
+    if (coCo("--don")) {
+      const kq = donGiu(goc, giaTri("--base") ?? "origin/master");
+      for (const b of kq.bao) stdout.write(`${b}\n`);
+      stdout.write(kq.daXoa.length === 0 ? "không lời giữ nào để dọn\n" : `đã xoá: ${kq.daXoa.join(", ")}\n`);
+      return 0;
+    }
     const moHo = giaTri("--mo-ho");
     if (moHo !== undefined && moHo !== "master" && moHo !== "nhanh") {
       stderr.write("cap-so: --mo-ho chỉ nhận `master` hoặc `nhanh`\n");
       return 2;
     }
-    const kq = capSo(goc, { base: giaTri("--base") ?? "origin/master", cu: giaTri("--cu"), moHo });
+    const kq = capSo(goc, { base: giaTri("--base") ?? "origin/master", cu: giaTri("--cu"), moHo, khongGiu: coCo("--khong-giu") });
     for (const b of kq.bao) stdout.write(`${b}\n`);
     for (const d of CAC_DAY) {
       for (const [tam, that] of [...kq.bang[d]].sort((a, b) => a[0] - b[0])) stdout.write(`${d.padEnd(9)} ${tam} → ${dinhDang(d, that)}\n`);

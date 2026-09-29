@@ -520,6 +520,11 @@ pnpm evidence    # sinh lại ma trận + cổng evidence
   Không đo max rồi +1. Trước khi merge: `git fetch origin master && git merge origin/master && pnpm cap-so`,
   rồi commit kèm dòng trailer `Cap-So:` lệnh in ra. PR khác merge trước thì lặp lại đúng ba lệnh ấy.
   Lời khai đếm (số ADR, số khoản, số migration, dòng `CÒN MỞ`) không sửa tay — dùng `pnpm cap-so --dem`.
+  **Giữ số (bổ sung ADR-090, 2026-09-29):** lệnh giữ mỗi số thật bằng một nhánh `cap-so/<dãy>/<số>` trên origin
+  trước khi ghi. Việc tạo nhánh ấy là của lệnh, không phải push ngoài phạm vi của phiên. Số đã giữ là của nhánh: PR
+  khác merge trước thì vẫn merge master rồi chạy lại `pnpm cap-so`, nhưng số không đổi (trừ migration bị vượt thì lấy
+  số mới). Không tự đổi số tay, không nhảy số. Lệnh báo không hỏi được origin thì chạy lại khi có mạng; `--khong-giu`
+  chỉ dùng khi chấp nhận có thể trùng. Nhánh `cap-so/*` do chủ repo dọn bằng `pnpm cap-so --don`.
 
 ---
 
