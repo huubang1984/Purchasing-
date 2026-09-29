@@ -384,4 +384,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
+  // K8a — [S1.9101 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
+  // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
+  K8a: ["packages/supplier/src/xac-minh.int.test.ts"],
 };

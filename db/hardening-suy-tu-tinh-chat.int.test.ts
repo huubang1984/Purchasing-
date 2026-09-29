@@ -134,6 +134,10 @@ const BANG_CHI_GHI_THEM_THAT = [
   "rfq_award_approvals",
   "rfq_awards",
   "rfq_unsealed_bids",
+  // [S1.9101 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
+  // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
+  // nhận hồ sơ nào.
+  "supplier_verifications",
   "vendor_bid_versions",
 ];
 
@@ -246,6 +250,9 @@ const HAM_KHONG_PHAI_CANH = [
   // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
   // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
   "public.kiem_thanh_phan_theo_chinh_sach",
+  // [S1.9101 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
+  // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
+  "public.ncc_kiem_xac_minh",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",
@@ -1735,6 +1742,31 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_packages",
+  );
+  // [S1.9101 / S3.3a / K8a] Tổ chức đã bật: một nhà cung cấp CÓ MST do `pm` dựng, `tc` (FINANCE, giữ `supplier.qualify`, không giữ
+  // `rfq.invite`, không dựng hồ sơ) xác minh — nhân chứng của `ncc_kiem_xac_minh` (hàm MỚI) và `kiem_danh_tinh_theo_phien` (bảng MỚI).
+  const nccXm = await chenNC(
+    "public.suppliers",
+    api(
+      "INSERT INTO suppliers (org_id, legal_name, tax_code, created_by, created_by_session_id) VALUES ($1, $2, '0312345678', $3, $4) " +
+        "RETURNING id, org_id, legal_name, tax_code, created_by, created_by_session_id",
+      [org, `NCC XM ${hex}`, pm.u, pm.s],
+      { org_id: org, legal_name: `NCC XM ${hex}`, tax_code: "0312345678", created_by: pm.u, created_by_session_id: pm.s },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.supplier_verifications",
+      "INSERT",
+      api(
+        "INSERT INTO supplier_verifications (org_id, supplier_id, loai, created_by, created_by_session_id) VALUES ($1, $2, 'VERIFIED', $3, $4) " +
+          "RETURNING org_id, supplier_id, loai, created_by, created_by_session_id",
+        [org, nccXm, tc.u, tc.s],
+        { org_id: org, supplier_id: nccXm, loai: "VERIFIED", created_by: tc.u, created_by_session_id: tc.s },
+      ),
+    ),
+    1,
+    "supplier_verifications",
   );
 
   return { orgId: org };
