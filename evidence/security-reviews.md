@@ -16932,6 +16932,142 @@ Kịch bản `lo51-dot-bien-2.py` (ngoài kho): sửa tệp, chạy test của l
 - Ở `81afbc2`: `apps/api/src/composition.int.test.ts` 20/20 (tệp duy nhất đổi so với lượt cổng trên).
 - Đột biến: 5 ca / 5 đỏ (mục 6).
 
+# §S1.9161 — DÒNG LOG TỪ CHỐI CANH THEO TẬP ĐÓNG, MANG VẾ ĐÃ TỪ CHỐI; `it.each` — KHOẢN 189, 179, 185 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một hàm thuần và một lớp lỗi của gói `identity`, ba
+dòng gọi ở `unseal` và worker, test; không route, không màn, không migration, không ADR, không export mới ở `index.ts`, không phụ thuộc
+mới. Đóng 189, 179, 185; mở 9461.
+
+## 1. Vòng này là gì
+
+Lô L6 của đợt trả nợ lô B: ba khoản cùng chạm `packages/identity/src/rbac.ts` và `mo-ta-hang-dong.test.ts`. Khoản 189 — phép "tên thì
+được, giá trị thì không" của dòng log từ chối canh theo HÌNH DẠNG chuỗi (`^[A-Z][A-Z0-9_]{0,63}$`, khuôn chấm chữ thường cho mã quyền),
+nên lớp bí mật kho tự sinh (TOTP base32 bắt đầu bằng chữ cái, UUID viết hoa bỏ gạch nối, hex viết hoa) và một mã quyền không tồn tại vẫn
+đi lọt. Khoản 179 — nhánh `DenialAuditFailedError` của `moTaHangDongCuaLanTuChoi` chỉ in `action`/`resourceType`, mà ba đường từ chối
+của cổng mở thầu ghi cùng `UNSEAL_DENIED UNSEAL_REQUEST`; khi mất sổ (55P03) không nguồn nào nói vế nào đã từ chối. Khoản 185 — một `it`
+lặp `for` qua 8 giá trị ở `mo-ta-hang-dong`, và một `it` gom ba đột biến lược đồ ở mỗi vế ⑵/⑵b của `tien-trinh.int` (⑵b là lớp duy nhất
+canh cảnh ❷ của ADR-040): ca đầu đỏ thì ca sau không chạy.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Các điểm tự chốt trong phạm vi đã duyệt ở mục 5.
+
+## 3. Đo trước
+
+- **189** (`packages/identity/src/mo-ta-hang-dong.test.ts`, viết trước khi vá, chạy trên mã cũ — `lo61-do-truoc-unit.log`): 14 đỏ / 3
+  xanh (17). Trong đó năm giá trị mới đi lọt nguyên văn: `JBSWY3DPEHPK3PXP` ⇒ `PERMISSION_DENIED JBSWY3DPEHPK3PXP supplier.manage`;
+  `DEADBEEFCAFEBABE` và `RFQ_CREATED` tương tự ở `resourceType`; `supplier.delete` ⇒ `PERMISSION_DENIED SUPPLIER supplier.delete`. Giá trị
+  UUID ở lượt đo đầu (`3F2504E0…`, bắt đầu bằng chữ số) bị hình dạng cũ chặn sẵn — đổi sang `C9BF9E5716854C89BAFBFF5AF830BE8A` (bắt đầu
+  bằng chữ cái, 6/16 số lần) và đo lại bằng đột biến M1 (mục 6): đi lọt. Chín giá trị còn lại đỏ ở trường VẾ (khoản 179 — mã cũ không
+  có vế nên không ra `HANG_LA`).
+- **179** (`apps/api/src/log-tu-choi-mat.int.test.ts`, vế mới, chạy trên mã cũ — `lo61-do-truoc-int.log`): phiên `DIRECTOR` (có
+  `rfq.unseal`, qua cổng quyền), một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (đợi tới khi `pg_locks` thấy khoá THẬT SỰ được cầm),
+  `POST /unseal/<uuid ngẫu nhiên>/dispatch` ⇒ cổng mở thầu từ chối vế `POLICY_GATE` ("không tìm thấy"), lần ghi `UNSEAL_DENIED` gãy 55P03
+  sau 2 081 ms, dòng để lại: `[api] 070f7bbf-… POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST
+  <- error 55P03` — không vế. Mức hàm: `new DenialAuditFailedError("UNSEAL_DENIED","UNSEAL_REQUEST",GOC,GOC,"POLICY_GATE")` trên mã cũ ra
+  `UNSEAL_DENIED UNSEAL_REQUEST`.
+- **185**: khoản về cấu trúc test, nên phép đo là một cặp lỗi tiêm chạy trên cấu trúc cũ (`git show HEAD:<tệp>`) và mới — mục 6, M5 và
+  M6: cấu trúc cũ báo MỘT trong hai lỗi ở cả hai tệp.
+
+## 4. Thay đổi
+
+- `packages/identity/src/rbac.ts`: `DenialAuditFailedError` thêm tham số thứ năm `readonly clause: string | null = null`; ba danh mục
+  đóng `DANH_MUC_HANH_DONG_TU_CHOI` (10), `DANH_MUC_LOAI_TAI_NGUYEN` (10), `DANH_MUC_VE_CONG` (15) export từ module (không qua `index.ts`),
+  `MA_QUYEN = new Set(Object.values(PERMISSIONS))`; `hangMaHoa(v, danhMuc)` thuộc-tập, `hangMaQuyen` qua `MA_QUYEN`, `HINH_DANG_MA_QUYEN`
+  gỡ (docstring gạch tại chỗ); `moTaHangDongCuaLanTuChoi` nhánh `DenialAuditFailedError` nối thêm vế khi `clause !== null`;
+  `throwAuditedDenial(…, denial, clause?)` đưa `clause ?? null` vào lớp lỗi. `HINH_DANG_LOAI_TAI_NGUYEN` GIỮ cho đường vào sổ (F7 ở
+  `requirePermission`, ⑴ ở `throwAuditedDenial`), docstring ghi ranh giới mới.
+- `packages/unseal/src/gate.ts` (`tuChoi`), `packages/unseal/src/comparison.ts` (A4), `apps/unseal-worker/src/index.ts`
+  (`tuChoiLucGiaiMa`): mỗi chỗ một đối số thêm — `clause` / `trangThai` / `clause` — kèm một dòng lý do.
+- `packages/identity/src/danh-muc-tu-choi.test.ts` (MỚI, không nhãn INV): bộ đọc cây cú pháp `docTep(tệp, văn bản)` (export để đối chứng
+  trên văn bản mẫu) — `action`/`resourceType` ở đối số viết tại chỗ của `throwAuditedDenial`/`requirePermission` (chuỗi trực tiếp, `const`
+  chuỗi cấp tệp; `route.resourceType` chỉ được ở `apps/api/src/dispatch.ts`; dạng khác ⇒ `khongGiai` kèm tệp:dòng), route (`path` +
+  `resourceType`) trong `apps/api/src/routes/`, ba từ vựng vế theo tên ở nguồn; bảy vế: đối chứng văn bản mẫu (kể cả chú thích và chuỗi
+  không được đọc), không chỗ nào không giải được + ba tệp ⑸ và `dispatch.ts` có mặt, chỉ bộ điều phối dùng `route.resourceType`, ⑴ ⑴⑵⑶
+  ⑷ bằng nhau hai chiều, ⑸ đúng ba tệp truyền vế.
+- `packages/identity/src/mo-ta-hang-dong.test.ts`: `GIA_TRI` 8 → 13; `it.each(GIA_TRI)` bốn trường; vế 179 (ba nguồn vế, không vế); vế
+  "không rỗng ruột" cho ba danh mục; khối đầu gạch tại chỗ câu "hình dạng một GIÁ TRỊ".
+- `apps/api/src/log-tu-choi-mat.int.test.ts`: helper `giuKhoaGhiSo(org)` (một chỗ cho hai vế, trả hàm thả idempotent), `phienNguoiMua(vaiTro)`
+  thay `phienKhongVaiTro`; vế 179 qua HTTP + đối chứng 422 mang `payload.clause`.
+- `apps/unseal-worker/src/tien-trinh.int.test.ts` (chỉ ⑵/⑵b): bảng `DOT_BIEN_052`, `phucHoi052`, `dem` hoist; `it.each` ×2, hai đối chứng
+  dương riêng.
+- Ngoài danh sách lô, sửa đúng dòng vì dòng log ĐỔI theo thiết kế: `apps/api/src/loi-giao-thuc.int.test.ts` ⒫ (regex và tiêu đề: thêm
+  `POLICY_GATE`, câu cũ gạch); `apps/unseal-worker/src/composition.int.test.ts` vế khoản 166 (lỗi mẫu dựng thêm `"POLICY_GATE"`, chuỗi mong
+  đợi và tiêu đề).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Vế qua THAM SỐ, không qua `event.payload` theo danh sách khoá.** Đề bài cho hai đường. Chọn tham số: `rbac.ts` đã cấm đọc theo tên
+  trường (docstring `moTaHangDongCuaLanTuChoi`), và người gọi là người biết trường nào của payload là vế (`clause` ở hai chỗ, `rfqStatus`
+  ở A4); cái giá là ba dòng gọi đổi — đúng ba dòng đề bài cho phép.
+- **Không siết đường vào sổ** (`requirePermission` F7 và ⑴ của `throwAuditedDenial` vẫn canh hình dạng). Lý do: từ vựng của sổ là MỞ
+  theo thiết kế — mỗi gói khai `action` của nó (hơn 80 mã), và docstring F7 đã tiên đoán một union đóng ở đây *"sẽ bị nới ra bằng phản
+  xạ"*; S1.87 đo bán kính ở sổ bằng 0 (`action`/`resourceType` hằng viết cứng, `permission` union); dòng log là nơi duy nhất một chuỗi
+  của ba trường ấy đi ra NGOÀI CSDL; và siết thì 34 chỗ test dùng `TEST`/`T`/`X`/`A` ở 7 tệp ngoài lô phải đổi. Ranh giới ghi ở docstring
+  ba danh mục.
+- **Danh mục BẰNG tập ở chỗ gọi (hai chiều), không chỉ chứa.** Chiều "thừa" không nguy hiểm nhưng làm danh mục phát biểu rộng hơn thứ đo
+  được; vì thế `PURCHASE_ORDER`, `ORGANIZATION`, `AUDIT_LOG` (đề bài và docstring F7 nêu làm ví dụ) KHÔNG có trong danh mục — không
+  đường từ chối nào hôm nay dùng chúng (`ORGANIZATION` chỉ ở `appendAuditEvent` của `tools/khoi-tao-to-chuc`).
+- **Ba danh mục export từ `rbac.ts` nhưng KHÔNG qua `index.ts`** (đề bài cấm export mới ở barrel): tệp quét cùng gói import `./rbac.js`
+  thẳng, như `rbac.int.test.ts` với `hasPermission`.
+- **Từ vựng vế là bản CHÉP** (`identity` không import được `unseal`/`rfq`/worker): vế ⑷ của phép quét đòi bản chép bằng nguồn theo tên
+  (`UNSEAL_CLAUSES`, `UnsealExecutionClause`, `RFQ_STATUSES`); đổi tên nguồn ⇒ NÉM có tên, không xanh giả. Lấy cả 11 `RFQ_STATUSES`
+  chứ không chỉ 8 trạng thái A4 từ chối: nguồn là một tập, đo nó nguyên vẹn rẻ hơn đo một hiệu.
+- **Phép quét theo cây cú pháp**, không regex trên văn bản — theo tiền lệ `ghi-so-tu-choi-mot-duong` (lượt soi 67a-3). `typescript` import
+  từ devDependency gốc như `tests/architecture` (gói `identity` không khai — thêm vào `package.json` của gói sẽ đổi `pnpm-lock.yaml`, tệp
+  cấm; depcruise 0 vi phạm).
+- **Tệp quét không mang nhãn `[INV-…]`**: nó đo tính đủ của một danh mục, không đo một bất biến của `TEST-PLAN`; không cần khai ở
+  `so-khai-nhan.ts`.
+- **Đối chứng chống rỗng ruột của phép quét bằng TÊN tệp** (ba tệp ⑸ + `dispatch.ts` phải có lời gọi) và bằng văn bản mẫu, không bằng
+  sàn số — theo bài học khoản 182.
+- **`log-tu-choi-mat`: helper giữ khoá dùng chung cho cả vế cũ**, thay vì chép 20 dòng; khẳng định của vế cũ giữ nguyên văn.
+
+## 6. Đột biến
+
+Kịch bản `lo61-dot-bien-unit.py` và `lo61-int-gate.sh` (ngoài kho): sửa tệp, chạy, khôi phục nguyên văn (so nội dung). Tám ca, mỗi ca ĐỎ:
+- M1 [189] `hangMaHoa`/`hangMaQuyen` về canh hình dạng (mã cũ) ⇒ 5 `it` đỏ: `JBSWY3DPEHPK3PXP`, `C9BF9E57…`, `DEADBEEFCAFEBABE`,
+  `supplier.delete`, `RFQ_CREATED` (`expected 'PERMISSION_DENIED JBSWY3DPEHPK3PXP su…' to be 'PERMISSION_DENIED HANG_LA supplier.ma…'`).
+- M2 [189] danh mục thiếu `UNSEAL_CANCEL_DENIED`, thừa `AUDIT_LOG`, thiếu vế `AWARDED` ⇒ ba vế ⑴, ⑴⑵⑶, ⑷ của `danh-muc-tu-choi` đỏ.
+- M3 [179] `moTaHangDongCuaLanTuChoi` bỏ vế (`return haiHang`) ⇒ 15 đỏ: vế 179, "không rỗng ruột", 13 giá trị (trường vế).
+- M4 [179] `gate.ts` thôi truyền vế ⇒ đơn vị: ⑸ đỏ (`["apps/unseal-worker/src/index.ts","packages/unseal/src/comparison.ts"]` ≠ ba tệp);
+  hành vi: vế 179 của `log-tu-choi-mat` đỏ — dòng `… UNSEAL_DENIED UNSEAL_REQUEST <- error 55P03` thiếu `POLICY_GATE` (`lo61-dot-bien-M4-int.log`).
+- M5 [185] `hangMaHoa` cho lọt `1250000` và `SUPPLIER SUPPLIER` ⇒ cấu trúc mới 2 đỏ / 16 xanh (đúng hai giá trị); cấu trúc cũ (`HEAD`) 1 đỏ
+  / 3 xanh, thông điệp chỉ `resourceType=1250000`.
+- M6 [185] `tien-trinh` ⒜ và ⒝ thành `SELECT 1`, `-t "⑵"` ⇒ cấu trúc mới 4 đỏ (⑵⒜ `expected 3 to be +0`, ⑵⒝, ⑵b⒜ `promise resolved
+  "undefined" instead of rejecting`, ⑵b⒝) / 4 xanh (⑵⒞, ⑵b⒞, hai đối chứng); cấu trúc cũ (`HEAD`) 2 đỏ — mỗi vế một, chỉ ⒜ được nêu.
+
+## 7. Giới hạn, nói ra
+
+- Đường vào SỔ vẫn canh hình dạng: một bí mật base32 bắt đầu bằng chữ cái đặt vào `resourceType` của `requirePermission` vẫn vào được
+  cột `resource_type` — bán kính 0 hôm nay (S1.87), và là quyết định mục 5, không phải một lỗ mới.
+- Phép quét theo TÊN hàm và đối tượng viết tại chỗ: hàm bọc tên khác, sự kiện dựng ở nơi khác rồi truyền qua biến thì không thấy (đỏ
+  "không giải được" chỉ khi đối tượng viết tại chỗ mà thuộc tính không phải chuỗi/`const`). Hai cổng kiến trúc khác giữ phần còn lại
+  (`ghi-so-tu-choi-mot-duong`, `cong-quyen-route`).
+- Vế 179 phủ ba nguồn có VẾ; sáu chỗ gọi còn lại không truyền — hai chỗ mang mã đóng trong payload là khoản 9461.
+- Số test A2 tăng (mo-ta-hang-dong 1 → 13, log-tu-choi-mat +2) ⇒ `evidence/INV-matrix.md` phải sinh lại (`pnpm evidence`), không làm ở lô.
+- Vế HTTP của 179 chờ đúng trần 2 s của `050` (như vế cũ); mỗi lượt ~2,1 s.
+- Cổng `tests/architecture` — xem mục 8 (vế đỏ tiền tồn nếu có, không do lô).
+
+## 8. Số đo
+
+Mọi lệnh chạy trong worktree, với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test` cho vitest; các tệp int chạy TUẦN TỰ (một tệp một lượt; `packages/identity` với `--no-file-parallelism`). Log ở `scratchpad/lo61-*.log`.
+
+- `pnpm typecheck`: 0 lỗi.
+- `pnpm exec eslint packages/identity/src/rbac.ts packages/identity/src/mo-ta-hang-dong.test.ts packages/identity/src/danh-muc-tu-choi.test.ts apps/api/src/log-tu-choi-mat.int.test.ts packages/unseal/src/gate.ts packages/unseal/src/comparison.ts apps/unseal-worker/src/index.ts apps/unseal-worker/src/tien-trinh.int.test.ts apps/unseal-worker/src/composition.int.test.ts apps/api/src/loi-giao-thuc.int.test.ts`: 0 lỗi.
+- `pnpm exec depcruise packages/identity packages/unseal apps --config .dependency-cruiser.cjs`: 254 module / 965 cạnh, 0 vi phạm.
+- Đo trước (mã cũ): `packages/identity/src/mo-ta-hang-dong.test.ts` 14 đỏ / 3 xanh (17); `apps/api/src/log-tu-choi-mat.int.test.ts` 1 đỏ / 3 xanh (4) — vế 179, dòng thiếu `POLICY_GATE`.
+- Cổng cuối (sau vá), theo thứ tự:
+  - `pnpm vitest run packages/identity --no-file-parallelism`: 10 tệp / 190 test đạt, 0 đỏ, 105,7 s (gồm `rbac.int`, `mfa-reset.int`, `mfa.int`, `dinh-chi.int`, `phien-can-totp.int`, `mo-ta-hang-dong` 18/18, `danh-muc-tu-choi` 7/7, `mo-ta-loi` 4/4, `ma-tran-quyen`, `totp`).
+  - `pnpm vitest run apps/api/src/log-tu-choi-mat.int.test.ts`: 4/4 (vế 131 cũ, vế 179 mới, hai đối chứng).
+  - `pnpm vitest run apps/unseal-worker/src/tien-trinh.int.test.ts`: 19/19 (trước: 13 — ⑵ 1 → 4, ⑵b 1 → 4).
+  - `pnpm vitest run apps/unseal-worker/src/composition.int.test.ts`: 6/6.
+  - `pnpm vitest run packages/unseal/src/comparison.int.test.ts`: 21/21.
+  - `pnpm vitest run apps/api/src/loi-giao-thuc.int.test.ts`: 20/20.
+  - `pnpm vitest run tests/architecture`: 35 tệp / 381 đạt, 1 bỏ qua (tiền tồn), 0 đỏ.
+  - Thêm ngoài đề bài vì `gate.ts`/`index.ts` của worker đổi: `packages/unseal/src/unseal.int.test.ts` 61/61; `apps/unseal-worker/src/unseal-worker.int.test.ts` 42/42.
+- Đột biến: 8 ca / 8 đỏ (mục 6 biên bản), tệp khôi phục nguyên văn sau mỗi ca (so nội dung).
+- CHƯA chạy: `pnpm test:int` toàn bộ, `pnpm evidence` (tệp cấm, người tích hợp sinh lại INV-matrix) — theo sổ tay.
+
 # §S1.9171 — CỔNG `pool-nghe-du-tin-hieu`: QUÉT CẢ `tools/`, NHẬN DIỆN THEO IMPORT ĐÃ PHÂN GIẢI, `NGOAI_LE` CÓ RĂNG — KHOẢN 176, 180, 182 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một cổng kiến trúc và lớp chẩn đoán của bốn
