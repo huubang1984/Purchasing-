@@ -843,6 +843,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
       { grantee: "app_api", bang: "sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "supplier_contacts", quyen: "SELECT" },
+      // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "supplier_verifications", quyen: "SELECT" },
       { grantee: "app_api", bang: "suppliers", quyen: "SELECT" },
       // [S1.1] Hai bảng mới của 008 cũng chỉ hiện SELECT ở MỨC BẢNG — INSERT/UPDATE của chúng
       // đều là quyền CỘT. Và app_unseal KHÔNG có dòng nào ở đây, cũng không có dòng nào ở test
@@ -1462,6 +1464,14 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "supplier_contacts", cot: "phone", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "status", quyen: "INSERT" },
       { grantee: "app_api", bang: "supplier_contacts", cot: "supplier_id", quyen: "INSERT" },
+      // [S1.196 / S3.3a / K8a] Xác minh: CHỈ INSERT — `thu_tu`, `bam_ho_so`, `het_han_at`, `created_at` do CSDL đặt, người xác
+      // minh là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
+      { grantee: "app_api", bang: "supplier_verifications", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_verifications", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_verifications", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_verifications", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_verifications", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "supplier_verifications", cot: "supplier_id", quyen: "INSERT" },
       // [ADR-016 / 013] Ban S1.1 KHONG co mot cot nao ghi ai tao hang. Cau hoi "ai da them nha
       // cung cap nay" vi vay khong tra loi duoc TU DU LIEU — chi tra loi duoc tu mot so kiem
       // toan ma chinh no nhan dau vao la loi khai.
@@ -1989,7 +1999,10 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
-      "sessions", "supplier_contacts", "suppliers", "unseal_approvals",
+      "sessions", "supplier_contacts",
+      // [S1.196 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
+      "supplier_verifications",
+      "suppliers", "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.
       "unseal_dispatch_history", "unseal_requests",
       // [S1.192 / S4.1] L6: không phiên khách nào đọc dữ liệu nền.

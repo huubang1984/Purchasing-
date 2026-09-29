@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.201] MƯỜI MỘT, [S1.199] MƯỜI BỐN route đọc ở
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ [S1.196] MƯỜI HAI, [S1.199] MƯỜI LĂM route đọc ở
 //      `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
@@ -122,6 +122,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "ĐƯỢC GIÁ THÌ XEM ĐƯỢC KẾT QUẢ — không rộng hơn, và một chứng chỉ `AGENT_READONLY` không " +
     "phải một con người có MFA. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.110 / S2.6]",
+  // [S1.196 / S3.3a / K8a]
+  "/suppliers/:supplierId/verification":
+    "TRẠNG THÁI XÁC MINH NỘI BỘ của một nhà cung cấp — ai xác minh, lúc nào, hạn tới đâu, lý do thu hồi. Nó là dữ liệu " +
+    "kiểm soát của bên mua (K8a), và câu hỏi *nhà cung cấp này có được đếm vào K2 không* là của máy chủ lúc nộp duyệt, " +
+    "không phải của một tác tử chỉ-đọc. Mở sau là một quyết định có tên.",
   "/policy/versions":
     "LỊCH SỬ PHIÊN BẢN CHÍNH SÁCH — trọn ma trận bậc của MỌI phiên bản, ai khai, ai ký, lúc nào, và tổ chức đã bật S3 " +
     "chưa. Nó là dữ liệu QUẢN TRỊ của màn `/chinh-sach`, không phải thứ một tác tử chỉ-đọc cần để làm việc: chính sách " +

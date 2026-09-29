@@ -73,6 +73,7 @@ export {
   laMaChot,
   maChotTuLoi,
   tuChoiTheoChot,
+  tuChoiTheoChotTaiNguyen,
   type DongChot,
   type MaChotKiemSoat,
 } from "./chot-kiem-soat.js";
