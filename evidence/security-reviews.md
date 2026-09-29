@@ -17183,6 +17183,95 @@ Kịch bản `dot-bien.sh` (ngoài kho): sửa một dòng, chạy cổng, khôi
 - `pnpm exec depcruise tools tests --config .dependency-cruiser.cjs`: 0 vi phạm (251 module, 782 cạnh).
 - `pnpm vitest run tests/architecture tools`: 56 tệp: 54 xanh, 2 đỏ; 824 test: 819 xanh, 4 đỏ, 1 bỏ qua (`xuong-dong-ts` vế ⑷ chỉ chạy trên CI); 252 s. Bốn ca đỏ không do lô này (xem dưới). Cổng `pool-nghe-du-tin-hieu` 9/9 xanh trong lượt này; bốn test tích hợp của tool đã chạm (`cong-cu.int` 19/19, `bo-xuat.int` 9/9, `chay-migrate.int` 4/4, `khoi-tao.int` 15/16) xanh trừ ca tiền đề locale
 
+# §S1.9181 — WEB: `sec-fetch-site` QUA BỘ CHUYỂN TIẾP, TIỀN LÀM TRÒN MỘT LUẬT Ở BA BẢN, `/login` TÁCH GHI DANH KHỎI VÀO — KHOẢN 202, 218, 193 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; chạm mảnh 1 của `docs/PRODUCT.md` §11 ở lớp giao diện (màn `/login` của người mua; con số `amount` mà
+`/nop-thau` niêm phong) — không route mới, không migration, không ADR, không phụ thuộc mới. Đóng 202, 218, 193; mở 9481.
+
+## 1. Vòng này là gì
+
+Lô L8 của đợt trả nợ: ba khoản của `apps/web`, không cần Postgres. Khoản 202 — bộ chuyển tiếp `/api/*` chuyển bốn header lên api và làm
+rụng `sec-fetch-site`, tức vế thứ hai của cổng chống nguồn lạ (`nguonKhac`, `apps/api/src/server.ts`) không bao giờ tới api khi đi qua
+trang. Khoản 218 — `thanhTien` của trang nộp thầu cắt cụt về xu, còn CSDL (`round(x, 2)`) và `lamTron` của `@trustprocure/danh-gia` làm
+tròn nửa-ra-xa-0: hai luật lệch ở 50 trên 100 phần dư, và S1.104 đã viết một khối test ĐÒI chúng lệch để ngày hợp nhất thì đỏ. Khoản 193 —
+bước 1 của `/login` gộp «lấy bí mật ghi danh TOTP» với «vào» vào một nút, nên người mới không biết màn hình đang xin gì.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Bốn điểm trong phạm vi đã duyệt tôi tự chốt ở mục 5.
+
+## 3. Đo trước
+
+Test viết trước, chạy trên mã cũ của `f3f63ab`, rồi mới vá.
+- 202: `phuc-vu.test.ts` khối *bộ chuyển tiếp* — 2 đỏ / 4 xanh: ca *ĐÚNG năm header* (`expected undefined to be 'same-origin'`) và ca mới
+  `[khoản 202]` (`expected undefined to be 'cross-site'`). Đúng như hàng 202 tả: header không tới upstream.
+- 218: `so-tien.test.ts` khối lật — 14 đỏ / 45 xanh: 11 hàng bảng ca nửa xu (`expected '2.46' to be '2.47'`, `'0.00' to be '0.01'`…), vế 100
+  phần dư liệt kê đúng `[50 … 99]` (50 phần tử), vế 199×99 đỏ ở `0.0050 × 1`, đối chứng đỏ ở phần dư 50. `tien.test.ts` của pilot — 16/16
+  XANH trên mã cũ: bản pilot đã trùng luật trên miền của nó; cái sai ở đó là lời khai *nửa lên*, không phải thân hàm.
+- 193: sáu ca DOM trên trang cũ — 5 đỏ (`nut-ghi-danh` không có trình nghe ⇒ `expected [] to deeply equal ['POST /auth/redeem']`;
+  `khoi-ma` không tồn tại ⇒ `expected false to be true`) / 1 xanh: ca «Vào bỏ qua Tiếp ở tài khoản mới ⇒ dừng, không totp, `loi1` ẩn» — trang
+  cũ ĐÃ dừng và ĐÃ không in câu lỗi, nên câu *«kèm thông báo lỗi»* của hàng 193 bị gạch tại chỗ.
+
+## 4. Thay đổi
+
+**`apps/web/src/phuc-vu.ts`**: `HEADER_LEN` thêm `"sec-fetch-site"` (năm header), khối lý do nói vì sao đúng một header chứ không cả họ.
+**`apps/web/src/phuc-vu.test.ts`**: ca *bốn header* thành *năm header*; ca mới `[khoản 202]` (không `origin`, `sec-fetch-site: cross-site`
+tới nơi; `sec-fetch-dest`, `x-thu-la` rụng; `sec-fetch-mode` của khách không tới — Node `fetch` tự gắn `sec-fetch-mode: cors`, ghi trong
+test); khối `[S1.9181 / khoản 193]` sáu ca DOM trong `describe` `[S1.177]` (dùng `dungTrang` sẵn có).
+**`apps/web/src/so-tien.ts`**: `thanhTien`: `(a * b + 50n) / 100n`; docblock gạch *cắt cụt*, khai nửa-ra-xa-0, vì sao không import
+`lamTron`, và miền không âm. **`apps/web/src/so-tien.test.ts`**: khối `[S1.104 / khoản 218 — ĐO, KHÔNG VÁ]` lật thành `[S1.9181 / khoản
+218]` — bảng ca nửa xu 15 hàng, 100 phần dư, 199×99, đối chứng cắt cụt (lệch đúng 50–99), ghim miền không âm; đầu khối gạch tại chỗ lời
+khai cũ. **`tools/pilot-gia-lap/src/tien.ts`**: chỉ docblock của `thanhTien` (gạch *nửa lên*, khai nửa-ra-xa-0 và lý do giữ bản riêng); thân
+hàm không đổi. **`tools/pilot-gia-lap/src/tien.test.ts`**: import `@trustprocure/danh-gia` (cùng cách `so-tien.test.ts` đã làm; vitest alias,
+không đổi manifest), khối `[S1.9181 / khoản 218]` ba ca.
+**`apps/web/trang/mo-thau.html`**: bước 1 — nút `nut-ghi-danh`, khối `ghi-danh` lên trước, `khoi-ma` (`hidden`) bọc nhãn + `ma` + `nut-vao`;
+đoạn `ghi` mới. **`apps/web/trang/mo-thau.js`**: `doiMaDangNhap`, `doiMa`, `dongKhoiMa`, trình nghe `nut-ghi-danh`; `nut-vao` gọi
+`doiMaDangNhap` rồi dừng nếu không `"san-sang"`; `dongKhoiMa()` ở đăng xuất và `hashchange`. Nhãn bí mật nói cả hai chiều.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Chỉ `sec-fetch-site`, không cả họ `sec-fetch-*`.** Api chỉ đọc một; mở danh sách trắng theo tiền tố là đổi bản chất của nó. Test có đối
+  chứng `sec-fetch-dest` rụng, và đột biến «thêm `sec-fetch-dest`» đỏ.
+- **`thanhTien` viết `+ 50n` trên miền không âm thay vì chép nguyên `lamTron` có nhánh dấu.** `sangNguyen` từ chối dấu trừ nên nhánh dấu
+  là mã chết; thay vì mang mã chết, test ghim miền (`thanhTien("-1.0000","1")` là `null`) và docblock nói ngày miền có dấu phải làm gì.
+- **Bản pilot giữ riêng, sửa lời khai, thêm phép đo** — không import `@trustprocure/danh-gia` vào mã sản xuất của gói (manifest không khai,
+  lockfile là tệp cấm). Test thì import được như `so-tien.test.ts` đã làm từ S1.104.
+- **Nút Vào vẫn đổi mã nếu chưa đổi** (cùng đường «đúng một lần» với Tiếp) thay vì báo «bấm Tiếp trước»: giữ chín ca `[S1.177]` chung của
+  bốn trang chạy nguyên, và người dán mã rồi gõ mã sáu số ngay vẫn vào được. Khi vừa nhận bí mật thì DỪNG. Mã sáu số xoá khi đổi mã từ
+  Tiếp (của người trước), giữ khi đổi từ Vào (vừa gõ cùng mã mới) — chỗ này phép đo đầu tiên bắt được (`doiMa` xoá ô ngay trong lượt bấm
+  mang mã ấy làm ca `[S1.177]` «TOTP sai rồi đúng» đỏ), và sửa là ngữ nghĩa chứ không phải test.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/lo81-dot-bien-{202,218,193}.py`: sửa một chỗ, chạy đúng tệp/khối test, khôi phục. Mười một ca, mỗi ca ĐỎ đúng vế:
+- 202 (a) bỏ `sec-fetch-site` ⇒ 2 đỏ; (b) thêm `sec-fetch-dest` ⇒ 1 đỏ (đối chứng họ).
+- 218 web (a) cắt cụt ⇒ 14 đỏ; (b) nửa-về-chẵn ⇒ 7 đỏ. Pilot (c) cắt cụt ⇒ 9 đỏ (kể cả ca cũ `1.2350 × 1 = 1.24`); (d) nửa-về-chẵn ⇒ 3 đỏ.
+- 193 (a) `khoi-ma` không `hidden` ⇒ 1 đỏ (lúc tải); (b) bỏ cổng «đúng một lần» ⇒ 1 đỏ (Tiếp lần nữa gọi lại); (c) trả `"san-sang"` khi vừa
+  nhận bí mật ⇒ 1 đỏ (Vào không dừng); (d) cắt vế «KHÔNG phải mã đăng nhập» ⇒ 1 đỏ; (e) `hashchange` không đóng ô mã ⇒ 1 đỏ. Mỗi ca 14 xanh
+  còn lại của `mo-thau`.
+
+## 7. Giới hạn, nói ra
+
+- 202: đo với upstream GIẢ; phán quyết 403 của api không dựng ở đây (đã có `apps/api/src/api.int.test.ts`). Node `fetch` gắn
+  `sec-fetch-mode: cors` lên mọi yêu cầu đi lên — api không đọc, nhưng đó là dấu vết của tiến trình đứng giữa; ADR-044 vẫn đúng.
+- 218: phong bì đã niêm phong trước vòng này mang `amount` cắt cụt — không sửa được, và không đường nào của sản phẩm tính lại `amount` từ
+  `quantity × unitPrice` (`bid_dong_tho` chỉ kiểm Σ `amount` = `totalAmount`). Hai bản `thanhTien` (web, pilot) vẫn là hai bản; lớp giữ là
+  hai phép đo đơn vị đứng trên vai `nua-xu.int.test.ts` (không chạy lại ở lô này — không chạm `packages/danh-gia`).
+- 193: chỉ `/login`; `tao-thau.js`, `nhom-hang.js`, `chinh-sach.js` còn khối cũ nguyên văn — khoản 9481. DOM giả không đo CSS, thứ tự tiêu
+  điểm hay QR; bí mật vẫn hiện nguyên văn base32 như trước.
+- Cổng cuối chạy `tests/architecture` trọn (kể cả `boundaries.test.ts` ~190 s) trên máy 4 lõi dùng chung; không chạy `test:int` hay
+  `evidence` (không tệp int nào chạm).
+
+## 8. Số đo
+
+- `pnpm vitest run apps/web/src/phuc-vu.test.ts -t "bộ chuyển tiếp"`: trước 2 đỏ / 4 xanh; sau 6/6.
+- `pnpm vitest run apps/web/src/so-tien.test.ts tools/pilot-gia-lap/src/tien.test.ts`: trước 14 đỏ / 61 xanh (75); sau 75/75.
+- `pnpm vitest run apps/web/src/phuc-vu.test.ts -t "khoản 193"`: trước 5 đỏ / 1 xanh; `-t mo-thau` sau 15/15; cả tệp 106/106 (từ 99).
+- Đột biến: 11 ca, đỏ 2·1·14·7·9·3·1·1·1·1·1.
+- `pnpm typecheck`: 0. `pnpm exec eslint <7 tệp>`: 0. `pnpm exec depcruise apps/web tools/pilot-gia-lap --config .dependency-cruiser.cjs`:
+  0 vi phạm (125 module, 301 cạnh).
+- `pnpm vitest run apps/web tools/pilot-gia-lap/src/tien.test.ts tests/architecture`: 44 tệp: lượt một (không biến Postgres) 42 tệp xanh / 610 test xanh, 2 tệp đỏ là `qt3-cu-phap.int.test.ts` và `qt3-ngu-phap.int.test.ts` (`Could not find a working container runtime strategy` — cần Postgres, không liên quan bản vá; 224,9 s); lượt hai chạy đúng hai tệp ấy với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test` ⇒ 2/2 tệp, 8/8 test xanh (6,6 s). Cộng lại: 44/44 tệp, 618 test xanh, 1 skipped (`xuong-dong-ts.test.ts`, sẵn có), 0 đỏ. Log: `scratchpad/lo81-cong-cuoi.log`, `scratchpad/lo81-cong-cuoi-qt3.log`.
+
 # §S1.9191 — CỔNG TĨNH: HÌNH DẠNG GITLEAKS, BỐN VẾ VĂN BẢN CỦA BẢNG TENANT, VẾ ⑷ PHẠM VI SẢN XUẤT ĐỌC MỌI GÓI — KHOẢN 132, 221, 223 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — ba cổng kiến trúc/T1, không route, không màn, không

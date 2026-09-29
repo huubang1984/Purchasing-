@@ -5302,9 +5302,9 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
 
 ### Cái giá — nói thẳng
 
-- **Trình duyệt VẪN cắt cụt.** Quyết định ⑴ ghim luật cho `effective_cost`; nó KHÔNG sửa `so-tien.ts`. Nên cho
-  tới khi ai đó hợp nhất, hai tầng của cùng một sản phẩm hiển thị hai con số khác nhau ở đúng nửa xu. Ghi thành
-  **khoản 218** chứ không hứa suông.
+- ~~**Trình duyệt VẪN cắt cụt.**~~ **[S1.9181] Trình duyệt nay làm tròn cùng luật.** Quyết định ⑴ ghim luật cho `effective_cost`; nó KHÔNG sửa `so-tien.ts`. ~~Nên cho
+  tới khi ai đó hợp nhất, hai tầng của cùng một sản phẩm hiển thị hai con số khác nhau ở đúng nửa xu.~~ Ghi thành
+  **khoản 218** chứ không hứa suông — **[S1.9181]** và khoản 218 đóng ở vòng ấy: `thanhTien` của `apps/web/src/so-tien.ts` thu về xu bằng nửa-ra-xa-0, `so-tien.test.ts` đối chiếu với `lamTron` trên cả 100 phần dư cộng bảng ca nửa xu, bản thứ ba ở `tools/pilot-gia-lap/src/tien.ts` đo cùng cách. Ba bản vẫn là ba bản (`so-tien.ts` đi thẳng ra trình duyệt, không import được); lớp giữ là phép đo cạnh nhau, không phải một hằng số dùng chung.
 - **Một trigger đắt hơn một chỉ mục, và nó cần đột biến riêng.** Một chỉ mục UNIQUE sai thì CSDL vẫn chặn; một
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
@@ -5439,7 +5439,7 @@ Lý do là **J2**, không phải số học:
 
 ⑴ **J2 nói kiểm toán viên cầm dữ liệu, chạy hàm, ra đúng con số.** Với cách này, phép kiểm là một phép CỘNG —
 công cụ yếu nhất có thể, và ai cũng có. Với cách kia, họ còn phải tái lập ĐÚNG luật làm tròn; mà luật ấy chính
-là thứ hai tầng của sản phẩm đang bất đồng (**khoản 218**, vẫn mở). Một bất biến mà muốn kiểm phải trước hết
+là thứ hai tầng của sản phẩm đang bất đồng (**khoản 218**, ~~vẫn mở~~ **[S1.9181] đóng — ba bản một luật, đo ở `so-tien.test.ts` và `tien.test.ts`**). Một bất biến mà muốn kiểm phải trước hết
 đồng ý về một luật đang tranh chấp thì không phải một bất biến, nó là một lời mời tranh luận.
 
 ⑵ **S2.4 hiện bảng thành phần lên màn.** Nếu các dòng hiển thị không cộng ra con số cuối, người mua đọc một
