@@ -124,7 +124,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [S1.195 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
     // không mở được gói — và đột biến bỏ phép đếm trên ngân sách mở lại đúng lỗ ấy.
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
-    // [S1.9101 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
+    // [S1.196 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
     // kép, một người duyệt không mốc rồi mốc đúng bị UNIQUE chặn — và đột biến bỏ vế NULL mở gói bằng một người. Lời tự duyệt
     // thiếu mốc vẫn là lời từ chối D2 có sổ (trigger so lần nộp chạy sau chốt D2), và đột biến đổi thứ tự làm nó rơi khỏi sổ.
     "packages/rfq/src/lan-nop-da-xem.int.test.ts",
@@ -380,7 +380,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* (K6).
   // [S1.195 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
   // mới, cột ngoài `GRANT`, vế NULL của MVP1, hàng cũ không điền, và mỗi vế của bản vá một đột biến.
-  // [S1.9101 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
+  // [S1.196 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
   // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt
   // ở tổ chức đã bật (K4b).
   K4a: [

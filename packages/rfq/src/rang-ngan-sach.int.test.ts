@@ -185,7 +185,7 @@ const datNganSach = (t: ToChuc, rfqId: string, giaTri: string): Promise<unknown>
   withTenant(apiPool, t.org, (c) => setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s }));
 const nop = (t: ToChuc, rfqId: string): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
-/** [S1.9101 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
+/** [S1.196 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
 const duyet = (t: ToChuc, rfqId: string, ai: Nguoi): Promise<void> =>
   withTenant(apiPool, t.org, async (c) => {
     const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n;
@@ -570,7 +570,7 @@ describe("S1.195 — đột biến: gỡ từng vế thì lỗ mở lại", () =
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ phép đếm trên ngân sách ⇒ cả hai lỗ đo trên master mở lại", async () => {
-    // [S1.9101] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
+    // [S1.196] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
     const boDem = <T>(viec: () => Promise<T>): Promise<T> =>
       voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",

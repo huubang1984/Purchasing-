@@ -830,7 +830,7 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
-      // [S1.9101 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
+      // [S1.196 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
       { grantee: "app_api", bang: "rfq_tra_ve", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
@@ -1211,7 +1211,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
       // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
       { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
-      // [S1.9101 / khoản 256] Lời duyệt mang lần nộp người duyệt đã xem — trigger `rfq_approvals_so_lan_nop` so nó.
+      // [S1.196 / khoản 256] Lời duyệt mang lần nộp người duyệt đã xem — trigger `rfq_approvals_so_lan_nop` so nó.
       { grantee: "app_api", bang: "rfq_approvals", cot: "lan_nop_da_xem", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
@@ -1374,7 +1374,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
-      // [S1.9101 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
+      // [S1.196 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
       { grantee: "app_api", bang: "rfq_tra_ve", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_tra_ve", cot: "reason", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by", quyen: "INSERT" },
@@ -1941,7 +1941,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
-      // [S1.9101 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
+      // [S1.196 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
       "rfq_tra_ve",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.

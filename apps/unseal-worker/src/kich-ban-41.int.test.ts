@@ -347,7 +347,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     }
     await withTenant(apiPool, orgA, async (c) => {
       const nop = await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
-      // [S1.9101 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem. Luồng MVP1 giữ lời duyệt không mốc — hợp đồng cũ.
+      // [S1.196 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem. Luồng MVP1 giữ lời duyệt không mốc — hợp đồng cũ.
       const moc = batS3 ? { lanNopDaXem: nop.lanNop } : {};
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd1, ...moc }, apiPool);
       await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd2, ...moc }, apiPool);

@@ -1545,7 +1545,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // XUẤT (ADR-016) chứ không phải một trường trong thân yêu cầu.
       // **[S1.156]** HAI MƯƠI TƯ: `org_policy_signatures` — chữ ký thứ hai của phiên bản chính sách, cùng
       // khuôn `rfq_award_approvals` (người ký là DẪN XUẤT từ phiên).
-      // **[S1.9101 / khoản 257]** HAI MƯƠI LĂM: `rfq_tra_ve` — người trả gói về là DẪN XUẤT từ phiên, nên một hàng chèn tay chỉ rút
+      // **[S1.196 / khoản 257]** HAI MƯƠI LĂM: `rfq_tra_ve` — người trả gói về là DẪN XUẤT từ phiên, nên một hàng chèn tay chỉ rút
       // được chữ ký của CHÍNH người chèn.
       trigger: [
         "org_policy_signatures_kiem_danh_tinh",
@@ -1692,7 +1692,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.195 / khoản 254] `081_rang_ngan_sach` định nghĩa lại thân hai hàm đầu — chữ ký mang cả băm ngân sách, cạnh mở gói
     // đếm trên ngân sách hiện tại. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "rfq_approvals_dat_bam_danh_sach", migration: "081_rang_ngan_sach.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
-    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "9501_lan_nop_da_xem.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
+    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "082_lan_nop_da_xem.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
     // [S1.194 / S3.2d / khoản 255] `080_k4a_co_ten.sql` định nghĩa lại thân K4a — hai nhánh mang tên ràng buộc —, nên con trỏ dời
     // theo quy tắc *migration CUỐI CÙNG*. Thân TRÍCH NGUYÊN VĂN từ `076` rồi đổi đúng hai vế `CONSTRAINT = …`.
     { ham: "rfq_invitations_kiem_danh_sach", migration: "080_k4a_co_ten.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
@@ -1700,19 +1700,19 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
     // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
     // hay để cột ở `false` cho mọi token, và lần đổi link của tổ chức đã bật từ chối cả token hợp lệ.
-    // [S1.9101 / khoản 257] `9501_lan_nop_da_xem` định nghĩa lại thân hàm cạnh về DRAFT: cạnh đòi một hàng `rfq_tra_ve` của chính
+    // [S1.196 / khoản 257] `082_lan_nop_da_xem` định nghĩa lại thân hàm cạnh về DRAFT: cạnh đòi một hàng `rfq_tra_ve` của chính
     // lần nộp đang bị trả. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    { ham: "rfq_kiem_tra_ve_nhap", migration: "9501_lan_nop_da_xem.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
+    { ham: "rfq_kiem_tra_ve_nhap", migration: "082_lan_nop_da_xem.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     { ham: "du_lieu_nen_dat_thu_tu", migration: "079_don_vi_do.sql", trigger: ["uom_aliases_dat_thu_tu"] },
-    // [S1.9101 / khoản 256 · 257] Ba hàm mới: đếm lần nộp, chốt lời duyệt vào lần nộp đã xem, đặt lần nộp của hàng trả về. Thân
+    // [S1.196 / khoản 256 · 257] Ba hàm mới: đếm lần nộp, chốt lời duyệt vào lần nộp đã xem, đặt lần nộp của hàng trả về. Thân
     // `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: lần nộp đứng yên (lời duyệt trên lần xem cũ đi qua), lời duyệt không
     // bị so, hay hàng trả về mang lần nộp NULL.
-    { ham: "rfq_dem_lan_nop", migration: "9501_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
-    { ham: "rfq_chot_lan_nop_da_xem", migration: "9501_lan_nop_da_xem.sql", trigger: ["rfq_approvals_so_lan_nop"] },
-    { ham: "rfq_tra_ve_dat_lan_nop", migration: "9501_lan_nop_da_xem.sql", trigger: ["rfq_tra_ve_dat_lan_nop"] },
+    { ham: "rfq_dem_lan_nop", migration: "082_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
+    { ham: "rfq_chot_lan_nop_da_xem", migration: "082_lan_nop_da_xem.sql", trigger: ["rfq_approvals_so_lan_nop"] },
+    { ham: "rfq_tra_ve_dat_lan_nop", migration: "082_lan_nop_da_xem.sql", trigger: ["rfq_tra_ve_dat_lan_nop"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3358,7 +3358,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
         "081_rang_ngan_sach.sql",
-        "9501_lan_nop_da_xem.sql",
+        "082_lan_nop_da_xem.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7783,7 +7783,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
         "081_rang_ngan_sach.sql",
-        "9501_lan_nop_da_xem.sql",
+        "082_lan_nop_da_xem.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8085,7 +8085,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
         "081_rang_ngan_sach.sql",
-        "9501_lan_nop_da_xem.sql",
+        "082_lan_nop_da_xem.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

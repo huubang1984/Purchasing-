@@ -16439,11 +16439,11 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 258–261
+# §S1.196 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-116; LƯỢT SOI MỞ KHOẢN 258–261
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
 chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.195) đóng; lượt soi mở khoản 258, 259, 260, 261 (rổ B). Một
-migration (`9501_lan_nop_da_xem`), một ADR (ADR-9201), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
+migration (`082_lan_nop_da_xem`), một ADR (ADR-116), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
@@ -16455,7 +16455,7 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 
 ## 2. Đo trước
 
-Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `9501_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
+Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `082_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
 28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
 *giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
 chữ ký của ai — và ca giới hạn của khoản 261, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.195) ghim
@@ -16463,7 +16463,7 @@ cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
 
-**Migration `9501_lan_nop_da_xem`:**
+**Migration `082_lan_nop_da_xem`:**
 - `rfq_packages.lan_nop` — trigger `rfq_packages_dem_lan_nop` cộng một ở cạnh DRAFT→PENDING_APPROVAL; ngoài mọi `GRANT`. Hàng cũ giữ 0.
 - `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2: khoá hàng gói
   `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở mọi tổ chức; không tìm thấy gói thì từ
@@ -16482,7 +16482,7 @@ trạng thái rồi chèn hàng trả về trước câu đổi trạng thái �
 `rang-ngan-sach.int.test.ts` bỏ — tệp mới lật chúng.
 
 **Hardening:** ba mục ghim mới (`rfq_dem_lan_nop`, `rfq_chot_lan_nop_da_xem`, `rfq_tra_ve_dat_lan_nop`, mỗi mục kèm trigger); hai mục
-ghim trỏ sang thân và cổng `9501_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
+ghim trỏ sang thân và cổng `082_lan_nop_da_xem`; mục `kiem_danh_tinh_theo_phien` phủ trigger mới của `rfq_tra_ve`;
 `BANG_TENANT_KHAI` thêm `rfq_tra_ve`. Các sổ test đi kèm: `db/migrations.int.test.ts`, `db/rls-coverage.int.test.ts` (quyền, policy
 khách, và biểu thức đọc tên migration nhận số bốn chữ số của dải tạm), `db/migration-shape.test.ts`,
 `db/hardening-suy-tu-tinh-chat.int.test.ts` (ba hàm không phải cạnh, một nhân chứng chèn `rfq_tra_ve`).
@@ -16545,7 +16545,7 @@ Một lượt, trên cây `b011820`; người kiểm đo trên Postgres 16 thậ
 | F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 258 mở** (rổ B) cho vế ngân sách. Vế danh sách khép ở S3.2c2 (#200, merge trong lúc vòng này chạy): `napRfq` làm mới danh sách mời ở tổ chức đã bật |
 | F3 | Deadlock do `FOR SHARE`: giao dịch duyệt rồi mở gói gặp một lời duyệt song song ⇒ 40P01, lời duyệt kia thành 500. Không đường sản xuất nào duyệt rồi mở trong một giao dịch | Ghi chú | **Sửa trong vòng:** khoá `FOR NO KEY UPDATE` — lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`) |
 | F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 259 mở** (rổ B) — chung cho mọi mục ghim trigger |
-| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-9201 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
+| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-116 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
 | F6 | Bật S3 giữa lúc gói chờ duyệt: MVP1 cho đổi danh sách khi gói chờ, lần nộp đứng yên | Ghi chú | **Khoản 261 mở** (rổ B); ca giới hạn ghim hành vi hôm nay |
 | F7 | Hàng `rfq_tra_ve` chèn tay không kèm cạnh chiếm UNIQUE và thoả vế *kèm hàng trả về*; xoá hàng làm chữ ký đã rút đếm lại. Lời khai (3) ở đầu migration chưa đủ | Ghi chú | **Khoản 260 mở** (rổ B); lời khai (3) sửa |
 | F8 | Test: đột biến bỏ `FOR SHARE` chỉ chứng minh khoá có mặt; hai nhánh phiên của D2 chưa đo trước phép so; thiếu ca HTTP tràn số và ca bật S3 thật; trợ thủ `duyet` của sáu tệp cũ đọc lần nộp từ CSDL ngay trước lời duyệt | Ghi chú | Sửa: đột biến bỏ khoá nay đo hậu quả; ca D2 phiên của người khác và phiên thu hồi kèm mốc sai; ca HTTP tràn; ca bật S3 giữa chừng (khoản 261). Trợ thủ của sáu tệp giữ nguyên: chúng đo việc khác, và tệp mới là nơi canh khoản 256 |
@@ -16573,12 +16573,12 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 ## 8. Số đo
 
 - `packages/rfq/src/lan-nop-da-xem.int.test.ts` 28/28 — 27 ca có nhãn, 1 ca giới hạn không nhãn. Trên cây #199 (`30a6801`, chưa có
-  `9501_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
+  `082_lan_nop_da_xem`): 24 đỏ, 4 xanh — ba ca *giữ nguyên* và ca giới hạn (§2).
 - `apps/api/src/buyer.int.test.ts` 20/20, trong đó hai ca HTTP của vòng này.
 - Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 192 tệp, 3256 khẳng định, 3246 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
   máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
   `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
-- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `9501_lan_nop_da_xem`): 193 tệp, 3274 khẳng
+- Sau lần merge #199 — nay mang S3.2c2 (#200) — và lần cấp số (migration đổi tên thành `082_lan_nop_da_xem`): 193 tệp, 3274 khẳng
   định, 3264 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca ấy. Ma trận sinh lại từ lượt này trùng bản đã commit.
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
