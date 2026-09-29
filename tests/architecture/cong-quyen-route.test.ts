@@ -204,7 +204,7 @@ const HAM_DOC_CO_QUYEN = [
   // [mảnh 1 / màn xuất bằng chứng] Bộ bằng chứng mang MỌI hàng của MỌI lượt chấm — rộng hơn cả
   // bảng xếp hạng. Hai cổng `audit.read` + `bid.view` đứng THẲNG trong thân `xuatBoBangChung`.
   "xuatBoBangChung",
-  // [S1.9101 / khoản 258] Ngân sách dự tính neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không ghi số tiền vào sổ. Cổng
+  // [S1.195 / khoản 258] Ngân sách dự tính neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không ghi số tiền vào sổ. Cổng
   // đứng THẲNG trong thân `getRfqBudget`: người tạo gói `rfq.create`, người khác `rfq.approve`.
   "getRfqBudget",
 ] as const;
