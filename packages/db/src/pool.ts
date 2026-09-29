@@ -100,12 +100,19 @@ function laKetNoiCucBo(host: string | null | undefined): boolean {
  *
  * Đây là GIẢM NHẸ, không phải bản vá: nó bó cửa sổ lại chứ không lấy khoá đi.
  *
- * Giá trị mặc định và lý do:
+ * Giá trị mặc định và lý do ~~(hai GUC)~~ [S1.9121 / khoản 4: BA GUC — dòng `options:` của `createPool` đặt ba từ
+ * khi `statement_timeout` (sổ nợ 38) vào, khối này kể hai suốt từ đó; sửa cho khớp, không đổi giá trị nào]:
  *   - lock_timeout 15s: dài hơn mọi lần ghi audit hợp lệ (đo: ghi 20 sự kiện song song cùng tổ
  *     chức xong dưới 1s) nhưng đủ ngắn để một transaction bị treo không kéo theo cả tổ chức.
  *   - idle_in_transaction_session_timeout 60s: giết chính transaction ĐANG GIỮ khoá, tức đóng
  *     nguyên nhân chứ không chỉ nạn nhân.
- * `migrate()` CỐ Ý vô hiệu hoá cả hai trên kết nối của nó — xem packages/db/src/migrate.ts.
+ *   - statement_timeout 15s [sổ nợ 38]: một câu treo (khoá, truy vấn nặng) bị Postgres huỷ và kết
+ *     nối được trả lại — nửa CSDL của hàng rào thời gian; nửa JS (`coHan`) ở apps/api. Cùng hạng với
+ *     hai GUC trên: giảm nhẹ, không phải bản vá.
+ * `migrate()` CỐ Ý vô hiệu hoá ~~cả hai~~ [S1.9121] cả ba trên kết nối của nó — xem packages/db/src/migrate.ts.
+ * [S1.9121 / khoản 104] Và lớp lấy client của pool có vai (`ganVaiTroChoPool`) `RESET ALL` sau khi đọc — ba giá trị
+ * này đi trong gói khởi tạo (nguồn `client`), RESET ALL không chạm tới, nên một `SET … = 0` ở phạm vi phiên của người
+ * dùng trước không còn gỡ chúng cho người kế (đo S1.59 trước bản vá: `0/0/0`).
  */
 export interface TuyChonPool {
   /** ms; 0 = không giới hạn. */

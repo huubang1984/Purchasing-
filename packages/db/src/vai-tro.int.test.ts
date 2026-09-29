@@ -313,7 +313,9 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
     }
     const sau = await trangThai(p);
     expect(sau.pid, "kết nối sạch theo tính chất không bị huỷ").toBe(truoc.pid);
-    expect(sau.vai).toBe("local");
+    // ~~expect(sau.vai).toBe("local")~~ [S1.9121 / khoản 104] lớp lấy client nay RESET ALL SAU khi đọc: `local` không bị phán (đọc thấy
+    // trước khi dọn — khẳng định pid ở trên là vế chịu lực) nhưng người kế tiếp nhận lại mặc định phiên `origin`.
+    expect(sau.vai).toBe("origin");
     expect(sau.rls).toBe("on");
     expect(sau.luoc_do).toBe(truoc.luoc_do);
   });
@@ -408,6 +410,158 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
     } finally {
       await db.pool.query("DROP SCHEMA app_api CASCADE");
     }
+  });
+});
+
+// ==============================================================================================
+// [S1.9121 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH KHÔNG ĐI THEO KẾT NỐI POOL SANG NGƯỜI DÙNG KẾ TIẾP
+//
+// Khoản 99 đọc ba GUC ở mỗi lần lấy client; mọi GUC phiên khác (ba GUC IM7 về 0 — đo S1.59; `TimeZone`, …) và trạng thái phiên ngoài
+// GUC mà `DISCARD TEMP` không dọn (prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá tư vấn mức phiên) thì không. Hai hướng đo
+// trên cụm cục bộ (PostgreSQL 16.13, đăng nhập `app_api_login`, trung vị của 2 000 lần, máy bốn lõi dùng chung — số ở §S1.9121): PHÁN
+// bằng một lần quét `pg_settings` (`source = 'session'` hay `setting <> reset_val`) ghép vào câu đọc giá thêm ~930 µs mỗi lần lấy — hơn
+// ba lần CẢ lần lấy hiện hành (275 µs); đếm `pg_locks` thêm ~215 µs; ba bộ đếm prepared/con trỏ/LISTEN thêm ~65 µs. DỌN thì `RESET ALL`
+// 37 µs một vòng đi-về, và bộ `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` ghép vào câu `SET ROLE` thêm ~10 µs.
+// Nên lớp lấy client DỌN, không phán, thứ dọn được: bốn thứ ngoài GUC dọn vô điều kiện ngay trong câu `SET ROLE; DISCARD TEMP`; GUC phiên
+// thì ĐỌC TRƯỚC (ba GUC vận hành, search path, TÊN bốn GUC tenant/khách — cùng câu) rồi `RESET ALL` SAU, và CHỈ khi bốn GUC tenant/khách
+// RỖNG — giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant` (khoản 87, S1.48), lớp
+// này không được xoá. Ba GUC vận hành vẫn bị PHÁN như khoản 99 vì được đọc trước khi dọn. Vai ứng dụng không gọi được `pg_advisory_lock`
+// (khoản 128 — đo 42501): đường còn lại là một hàm SECURITY DEFINER do migration dựng, dựng ở đây để đo; khoá thuộc về BACKEND nên nó ở
+// lại trên kết nối sau khi hàm trả về.
+// ==============================================================================================
+describe("[S1.9121 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành được DỌN ở mỗi lần lấy client — GUC phiên lạ, prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá tư vấn mức phiên; tín hiệu rò GUC tenant của withTenant giữ nguyên", () => {
+  interface TrucNgoai {
+    pid: number;
+    st: string;
+    lt: string;
+    itx: string;
+    tz: string;
+    vai: string;
+    con_tro: number;
+    cau_chuan_bi: number;
+    kenh_nghe: number;
+    khoa: number;
+    org: string | null;
+  }
+  const CAU_TRUC =
+    "SELECT pg_backend_pid()::int AS pid, current_setting('statement_timeout') AS st, current_setting('lock_timeout') AS lt, " +
+    "current_setting('idle_in_transaction_session_timeout') AS itx, current_setting('TimeZone') AS tz, " +
+    "current_setting('session_replication_role') AS vai, " +
+    "(SELECT count(*) FROM pg_cursors)::int AS con_tro, (SELECT count(*) FROM pg_prepared_statements)::int AS cau_chuan_bi, " +
+    "(SELECT count(*) FROM pg_listening_channels())::int AS kenh_nghe, " +
+    "(SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid())::int AS khoa, " +
+    "NULLIF(current_setting('app.org_id', true), '') AS org";
+  const poolMot = (): pg.Pool => {
+    const p = createPool(urlLogin, 1, { role: "app_api" });
+    poolMo.push(p);
+    return p;
+  };
+  /** Trạng thái mà NGƯỜI KẾ TIẾP thấy — đọc qua chính đường lấy client của pool. */
+  const docTruc = async (p: pg.Pool): Promise<TrucNgoai> => (await p.query<TrucNgoai>(CAU_TRUC)).rows[0]!;
+  /** Lấy client, làm nhiễm, đọc trạng thái NGAY SAU khi nhiễm (tiền đề), trả về pool — hình dạng của một đường ngoài withTenant. */
+  const nhiemRoiTra = async (p: pg.Pool, cau: string): Promise<TrucNgoai> => {
+    const c = await p.connect();
+    try {
+      await c.query(cau);
+      return (await c.query<TrucNgoai>(CAU_TRUC)).rows[0]!;
+    } finally {
+      c.release();
+    }
+  };
+  const loiKhiLay = (lan: Promise<unknown>): Promise<Error | null> =>
+    lan.then(
+      (kq) => {
+        (kq as { release?: () => void }).release?.();
+        return null;
+      },
+      (e: Error) => e,
+    );
+
+  beforeAll(async () => {
+    // Cùng khuôn `zz99.dat_vai_sao_chep` của khoản 99 (schema ấy đã bị describe trên DROP ở afterAll của nó — dựng lại).
+    await db.pool.query(`
+      CREATE SCHEMA IF NOT EXISTS zz99;
+      GRANT USAGE ON SCHEMA zz99 TO app_api;
+      CREATE FUNCTION zz99.khoa_phien(k bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+        AS $$BEGIN PERFORM pg_advisory_lock(k); END$$;
+      REVOKE EXECUTE ON FUNCTION zz99.khoa_phien(bigint) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION zz99.khoa_phien(bigint) TO app_api;
+      CREATE FUNCTION zz99.dat_vai_sao_chep(gia_tri text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog
+        AS $$BEGIN PERFORM set_config('session_replication_role', gia_tri, false); END$$;
+      REVOKE EXECUTE ON FUNCTION zz99.dat_vai_sao_chep(text) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION zz99.dat_vai_sao_chep(text) TO app_api;
+    `);
+  });
+
+  afterAll(async () => {
+    await db.pool.query("DROP SCHEMA IF EXISTS zz99 CASCADE");
+  });
+
+  it("ba GUC IM7 về 0 và TimeZone lạ ở phạm vi phiên ⇒ người kế tiếp thấy lại giá trị PGOPTIONS và TimeZone cũ trên CÙNG kết nối (RESET ALL sau khi đọc — dọn, không huỷ)", async () => {
+    const p = poolMot();
+    const truoc = await docTruc(p);
+    expect([truoc.st, truoc.lt, truoc.itx], "tiền đề: PGOPTIONS của createPool có hiệu lực").toEqual(["15s", "15s", "1min"]);
+    const nhiem = await nhiemRoiTra(
+      p,
+      "SET statement_timeout = 0; SET lock_timeout = 0; SET idle_in_transaction_session_timeout = 0; SET TimeZone = 'Asia/Ho_Chi_Minh'",
+    );
+    expect(nhiem.pid, "tiền đề: cùng kết nối vật lý").toBe(truoc.pid);
+    expect([nhiem.st, nhiem.lt, nhiem.itx, nhiem.tz], "tiền đề: nhiễm thật ở phạm vi phiên").toEqual(["0", "0", "0", "Asia/Ho_Chi_Minh"]);
+    const sau = await docTruc(p);
+    expect([sau.st, sau.lt, sau.itx], "bản trước bản vá: người kế tiếp đọc 0/0/0 — biện pháp IM7 bị gỡ (đo S1.59)").toEqual(["15s", "15s", "1min"]);
+    expect(sau.tz).toBe(truoc.tz);
+    expect(sau.pid, "GUC phiên được DỌN, không phán — kết nối được giữ").toBe(truoc.pid);
+  });
+
+  it("khoá tư vấn MỨC PHIÊN do hàm SECURITY DEFINER lấy ⇒ người kế tiếp thấy 0 khoá trên CÙNG kết nối (pg_advisory_unlock_all trong câu SET ROLE)", async () => {
+    const p = poolMot();
+    const truoc = await docTruc(p);
+    const nhiem = await nhiemRoiTra(p, "SELECT zz99.khoa_phien(104104)");
+    expect(nhiem.khoa, "tiền đề: khoá phiên thật sự được giữ trên backend sau khi hàm trả về").toBe(1);
+    const sau = await docTruc(p);
+    expect(sau.khoa, "bản trước bản vá: khoá phiên của người trước đi theo kết nối sang người kế tiếp").toBe(0);
+    expect(sau.pid).toBe(truoc.pid);
+  });
+
+  it.each([
+    ["prepared statement", "PREPARE zz_104_p AS SELECT 1", "cau_chuan_bi"],
+    ["con trỏ WITH HOLD", "BEGIN; DECLARE zz_104_c CURSOR WITH HOLD FOR SELECT 1; COMMIT", "con_tro"],
+    ["kênh LISTEN", "LISTEN zz_104_kenh", "kenh_nghe"],
+  ] as const)("%s để lại trên kết nối ⇒ người kế tiếp thấy 0 trên CÙNG kết nối (CLOSE ALL; DEALLOCATE ALL; UNLISTEN * trong câu SET ROLE — dọn, không huỷ)", async (ten, cau, cot) => {
+    const p = poolMot();
+    const nhiem = await nhiemRoiTra(p, cau);
+    expect(nhiem[cot], `tiền đề: ${ten} ở lại trên kết nối sau khi trả về pool`).toBe(1);
+    const sau = await docTruc(p);
+    expect(sau[cot], `bản trước bản vá: ${ten} của người trước đi theo kết nối sang người kế tiếp`).toBe(0);
+    expect(sau.pid, "dọn, không huỷ").toBe(nhiem.pid);
+  });
+
+  it("ĐỌC TRƯỚC, DỌN SAU: replica do hàm SECURITY DEFINER để lại cùng TimeZone lạ ⇒ lần lấy kế vẫn NÉM KetNoiNhiemError nêu session_replication_role (phán trước khi RESET ALL kịp gỡ), kết nối bị huỷ; kết nối mới sạch", async () => {
+    const p = poolMot();
+    const nhiem = await nhiemRoiTra(p, "SELECT zz99.dat_vai_sao_chep('replica'); SET TimeZone = 'Asia/Ho_Chi_Minh'");
+    expect(nhiem.vai).toBe("replica");
+    const loi = await loiKhiLay(p.connect());
+    expect(loi, "đột biến 'RESET ALL trước khi đọc' làm replica biến mất trước phép phán của khoản 99").toBeInstanceOf(KetNoiNhiemError);
+    expect(loi!.message).toContain(TU_CHOI_KET_NOI_NHIEM);
+    expect(loi!.message).toContain("session_replication_role");
+    const sau = await docTruc(p);
+    expect(sau.pid).not.toBe(nhiem.pid);
+    expect([sau.vai, sau.tz]).toEqual(["origin", "Etc/UTC"]);
+  });
+
+  it("RANH GIỚI ghim (khoản 87): GUC tenant rò ở phạm vi phiên ⇒ KHÔNG RESET ALL, KHÔNG phán — GUC phiên khác trên cùng kết nối còn nguyên, tín hiệu rò còn nguyên cho withTenant phân biệt bằng RESET; bốn thứ ngoài GUC vẫn được dọn", async () => {
+    const p = poolMot();
+    const truoc = await docTruc(p);
+    const nhiem = await nhiemRoiTra(
+      p,
+      "SELECT set_config('app.org_id', '00000000-0000-4000-8000-000000000104', false); SET statement_timeout = 0; LISTEN zz_104_ranh_gioi",
+    );
+    expect([nhiem.org, nhiem.st, nhiem.kenh_nghe]).toEqual(["00000000-0000-4000-8000-000000000104", "0", 1]);
+    const sau = await docTruc(p);
+    expect(sau.pid, "không phán: kết nối được giao ra").toBe(truoc.pid);
+    expect(sau.org, "không dọn GUC: tín hiệu rò phiên còn nguyên cho withTenant (S1.48 / 40a NẶNG-1)").toBe("00000000-0000-4000-8000-000000000104");
+    expect(sau.st, "nói ra: khi có GUC tenant thì GUC phiên khác cũng chưa được dọn ở lần lấy này").toBe("0");
+    expect(sau.kenh_nghe, "chỉ RESET ALL là có điều kiện — kênh LISTEN vẫn được dọn trong câu SET ROLE").toBe(0);
   });
 });
 
