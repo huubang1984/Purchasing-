@@ -1076,6 +1076,11 @@ export interface InvitationSummary {
   readonly contactName: string;
   readonly linkChannel: string;
   readonly status: string;
+  /**
+   * [S1.9101 / S3.2c / K6] Nhãn *mời sau khi ký* — trigger `076` đặt lúc chèn, ở tổ chức đã bật, khi gói đang `OPEN`. Màn
+   * `/tao-thau` nói ra nó; tổ chức chưa bật luôn `false`.
+   */
+  readonly moiSauKhiKy: boolean;
   readonly createdAt: string;
   readonly revokedAt: string | null;
 }
@@ -1132,11 +1137,12 @@ export async function listInvitations(
     contact_name: string;
     link_channel: string;
     status: string;
+    moi_sau_khi_ky: boolean;
     created_at: Date;
     revoked_at: Date | null;
   }>(
     `SELECT m.id, m.supplier_id, ncc.legal_name AS supplier_name, m.contact_id,
-            lh.full_name AS contact_name, m.link_channel, m.status, m.created_at, m.revoked_at
+            lh.full_name AS contact_name, m.link_channel, m.status, m.moi_sau_khi_ky, m.created_at, m.revoked_at
        FROM public.rfq_invitations m
        JOIN public.suppliers ncc
          ON ncc.id OPERATOR(pg_catalog.=) m.supplier_id
@@ -1158,6 +1164,7 @@ export async function listInvitations(
     contactName: r.contact_name,
     linkChannel: r.link_channel,
     status: r.status,
+    moiSauKhiKy: r.moi_sau_khi_ky,
     createdAt: r.created_at.toISOString(),
     revokedAt: r.revoked_at === null ? null : r.revoked_at.toISOString(),
   }));

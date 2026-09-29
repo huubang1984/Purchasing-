@@ -15,7 +15,14 @@ const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+/**
+ * Trạng thái phiên của trang, dựng lại TRỌN VẸN mỗi lần đổi người (khoản 205). [S1.9101 / S3.2c] Thêm `s3` — tổ chức đã bật
+ * kiểm soát theo bậc (`GET /policy/versions`) — và `trangThaiGoi`, trạng thái gói vừa đọc: nút của từng lời mời theo nó.
+ */
+function phienMoi(token) {
+  return { orgId: "", token, daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0, s3: false, trangThaiGoi: "" };
+}
+let phien = phienMoi("");
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -73,7 +80,7 @@ function docLink() {
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+  phien = phienMoi($("token").value.trim());
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
@@ -110,6 +117,7 @@ $("nut-vao").addEventListener("click", async () => {
     xoaManhLink();
     const me = await goi("GET", "/me");
     moSauDangNhap(me.body, false);
+    await docLuong();
   } finally {
     $("nut-vao").disabled = false;
   }
@@ -143,6 +151,48 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  // [S1.9101 / S3.2c] Người sau có thể thuộc tổ chức chưa bật: về thứ tự cũ, và lời đáp `/policy/versions` của lượt trước bị bỏ.
+  luotLuong += 1;
+  datLuong(false);
+}
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / S3.2c / ADR-113] HAI THỨ TỰ BƯỚC — theo tổ chức, không theo gói.
+//
+// Tổ chức đã bật kiểm soát theo bậc (ADR-080, một chiều) dựng danh sách mời ở DRAFT, TRƯỚC khi nộp duyệt: người duyệt ký lên
+// cả nội dung lẫn danh sách (K4a, K4b), và link chỉ đi lúc mở gói (K6). Nên ở tổ chức ấy bước "Nhà cung cấp và lời mời" đứng
+// TRƯỚC bước "Ngân sách và phê duyệt" — chuyển THẬT trong DOM, không bằng CSS `order`: thứ tự Tab và trình đọc màn hình đi
+// theo DOM. Tổ chức chưa bật giữ nguyên thứ tự MVP1: mở gói rồi mới mời, link đi ngay lúc mời.
+//
+// Màn hỏi `GET /policy/versions` (`daBat`) sau mỗi lần đăng nhập, và lúc nạp gói khi còn ở thứ tự cũ — người tài chính có thể
+// bật tổ chức trong lúc trang đang mở. Hỏi hỏng thì giữ thứ tự cũ và nói ra; lớp chặn thật vẫn là trigger `076`.
+// ---------------------------------------------------------------------------------------------
+
+let luotLuong = 0;
+
+function datLuong(s3) {
+  phien = { ...phien, s3 };
+  if (s3) $("b4").before($("b5"));
+  else $("b5").before($("b4"));
+  $("so4").textContent = s3 ? "5" : "4";
+  $("so5").textContent = s3 ? "4" : "5";
+  hien($("ghi4"), !s3);
+  hien($("ghi4-s3"), s3);
+  hien($("ghi5"), !s3);
+  hien($("ghi5-s3"), s3);
+  hien($("khoi-tra-ve"), s3);
+}
+
+async function docLuong() {
+  const luot = ++luotLuong;
+  let r = null;
+  try { r = await goi("GET", "/policy/versions"); } catch { r = null; }
+  if (luot !== luotLuong) return;
+  if (r === null || r.status !== 200 || typeof r.body?.daBat !== "boolean") {
+    bao($("loi1"), "Không đọc được tổ chức đã bật kiểm soát theo bậc hay chưa — màn giữ thứ tự cũ: mở gói rồi mới mời.");
+    return;
+  }
+  if (r.body.daBat !== phien.s3) datLuong(r.body.daBat);
 }
 
 /**
@@ -169,11 +219,12 @@ async function thuPhienCo() {
   } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
 }
 
-$("nut-dung-phien").addEventListener("click", () => {
+$("nut-dung-phien").addEventListener("click", async () => {
   if (phienCho === null) return;
   const me = phienCho;
   phienCho = null;
   moSauDangNhap(me, true);
+  await docLuong();
 });
 
 // [S1.177] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
@@ -184,7 +235,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+    phien = phienMoi($("token").value.trim());
     dongCacBuoc();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
@@ -207,7 +258,9 @@ async function napRfq(rfqId) {
   const r = await goi("GET", `/rfqs/${rfqId}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return false; }
   const g = r.body?.rfq ?? {};
-  phien = { ...phien, rfqId };
+  phien = { ...phien, rfqId, trangThaiGoi: typeof g.status === "string" ? g.status : "" };
+  // [S1.9101 / S3.2c] Công tắc ADR-080 một chiều: đã thấy bật thì không hỏi lại.
+  if (!phien.s3) await docLuong();
   dienDl($("tt-rfq"), [
     ["Mã gói thầu", rfqId],
     ["Tên", g.title],
@@ -291,20 +344,55 @@ $("nut-ns").addEventListener("click", async () => {
   ]);
 });
 
+// ~~"Đã mở thầu"~~ [S1.9101 / S3.2c] *Mở gói* là `PENDING_APPROVAL→OPEN`, *mở thầu* là `CLOSED→UNSEALED` (PRODUCT §4 ⑶,
+// spec S3 §3.3): nút và câu báo của bước này nói "mở gói" ở cả hai luồng.
 for (const [nut, duong, xong] of [
-  ["nut-nop-duyet", "submit", "Đã nộp duyệt. Người KHÁC phải phê duyệt — người tạo không tự duyệt được."],
-  ["nut-duyet", "approve", "Đã ghi một phê duyệt."],
-  ["nut-mo", "open", "Đã mở thầu. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ."],
+  ["nut-nop-duyet", "submit", () => (phien.s3
+    ? "Đã nộp duyệt. Danh sách mời đã khoá: người duyệt ký lên nó cùng nội dung. Người KHÁC phải phê duyệt — người tạo không tự duyệt được."
+    : "Đã nộp duyệt. Người KHÁC phải phê duyệt — người tạo không tự duyệt được.")],
+  ["nut-duyet", "approve", () => "Đã ghi một phê duyệt."],
+  ["nut-mo", "open", () => (phien.s3
+    ? "Đã mở gói. Link mời đã đi tới mọi lời mời còn sống, và khoá của gói đã sinh ở máy chủ."
+    : "Đã mở gói. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ.")],
 ]) {
   $(nut).addEventListener("click", async () => {
     bao($("loi4"), ""); bao($("ok4"), "");
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`);
     if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }
-    bao($("ok4"), xong);
+    // [S1.9101 / S3.2c / ADR-113] Mở gói ở tổ chức đã bật: link gửi SAU commit, và gửi hỏng không lùi được lần mở — `200` mang
+    // id các lời mời chưa gửi. Nói ra số ấy và chỉ đường gửi lại; không nói "link đã đi" khi có link chưa đi.
+    const chuaGui = duong === "open" && Array.isArray(r.body?.unsentInvitationIds) ? r.body.unsentInvitationIds.length : 0;
+    if (chuaGui > 0) {
+      bao($("ok4"), "Đã mở gói. Khoá của gói đã sinh ở máy chủ.");
+      bao($("loi4"), `${chuaGui} link mời CHƯA gửi được. Gói đã mở và không lùi được; các lời mời ấy mang trạng thái UNSENT ở ` +
+        "bảng lời mời — bấm «Gửi lại link» ở dòng của chúng.");
+    } else {
+      bao($("ok4"), xong());
+    }
     await napRfq(phien.rfqId);
+    // Tổ chức đã bật: nút của từng lời mời đi theo trạng thái gói, và lần mở gói đổi UNSENT → SENT — đọc lại bảng.
+    if (phien.s3) await napLoiMoi();
   });
 }
+
+// [S1.9101 / S3.2c / S3.2b1 · K4a] Trả gói đang chờ duyệt về nháp — đường DUY NHẤT để đổi danh sách mời hay nội dung sau khi
+// nộp duyệt, chỉ ở tổ chức đã bật. Lý do bắt buộc (chủ dự án chốt ngày 2026-09-28) và vào sổ; trang kiểm ô trống trước để
+// không tiêu một lần gọi, còn cửa thật là route. Không chữ ký nào bị xoá: chữ ký cũ chỉ còn tính khi nội dung và danh sách
+// không đổi (K4b).
+$("nut-tra-ve").addEventListener("click", async () => {
+  bao($("loi4"), ""); bao($("ok4"), "");
+  if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const reason = $("ly-do-tra-ve").value.trim();
+  if (reason === "") { bao($("loi4"), "Cần lý do trả gói về nháp — lý do vào sổ kiểm toán."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/return-to-draft`, { reason });
+  if (r.status !== 200) { bao($("loi4"), loiCua(r, "Không trả gói về nháp được")); return; }
+  $("ly-do-tra-ve").value = "";
+  bao($("ok4"), "Đã trả gói về nháp. Sửa danh sách mời hay nội dung rồi nộp duyệt lại; chữ ký cũ chỉ còn tính khi nội dung " +
+    "và danh sách không đổi.");
+  await napRfq(phien.rfqId);
+  if (phien.s3) await napLoiMoi();
+});
 
 // ---------------------------------------------------------------------------------------------
 // Bước 5 — nhà cung cấp và lời mời
@@ -338,9 +426,31 @@ $("nut-moi").addEventListener("click", async () => {
     return;
   }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/invitations`, { supplierId: phien.supplierId, contactId: phien.contactId });
-  if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không mời được")); return; }
+  if (r.status !== 201) {
+    // [S1.9101 / S3.2c · K4a] Tổ chức đã bật: danh sách khoá từ lúc nộp duyệt tới lúc mở gói. Câu của trigger đúng nhưng không
+    // chỉ đường; màn chỉ đường khi nó biết gói đang chờ duyệt.
+    if (phien.s3 && r.status === 422 && phien.trangThaiGoi === "PENDING_APPROVAL") {
+      bao($("loi5"), "Gói đang chờ duyệt: danh sách mời đã khoá — người duyệt ký lên chính danh sách này. Cần thêm nhà cung cấp " +
+        "thì «Trả về nháp» (kèm lý do), sửa danh sách, rồi nộp duyệt lại.");
+      return;
+    }
+    bao($("loi5"), loiCua(r, "Không mời được"));
+    return;
+  }
   // Mã mời KHÔNG về màn này: nó đi thẳng tới bộ gửi, và thân `201` chỉ mang id lời mời.
-  bao($("ok5"), "Đã mời. Link đi thẳng tới bộ gửi — màn này không bao giờ thấy mã mời.");
+  // [S1.9101 / S3.2c / ADR-113] Ở tổ chức đã bật, `201` không còn nghĩa là link đã đi: thân mang trạng thái THẬT của lời mời.
+  // `UNSENT` không nhãn — mời ở DRAFT, link đi lúc mở gói; có nhãn *mời sau khi ký* — mời ở OPEN, `SENT` là link đã tới bộ gửi,
+  // `UNSENT` là gửi hỏng, lời mời vẫn sống. Tổ chức chưa bật luôn `SENT` không nhãn: câu cũ.
+  const lm = r.body?.invitation ?? {};
+  if (lm.status === "UNSENT" && lm.moiSauKhiKy !== true) {
+    bao($("ok5"), "Đã thêm vào danh sách mời. Link CHƯA đi: nó đi lúc mở gói, sau khi người duyệt ký lên danh sách này.");
+  } else if (lm.status === "UNSENT") {
+    bao($("loi5"), "Đã mời thêm sau khi ký, nhưng link CHƯA gửi được. Lời mời vẫn còn sống — bấm «Gửi lại link» ở dòng của nó.");
+  } else if (lm.moiSauKhiKy === true) {
+    bao($("ok5"), "Đã mời thêm sau khi ký — lời mời mang nhãn ấy. Link đi thẳng tới bộ gửi — màn này không bao giờ thấy mã mời.");
+  } else {
+    bao($("ok5"), "Đã mời. Link đi thẳng tới bộ gửi — màn này không bao giờ thấy mã mời.");
+  }
   await napLoiMoi();
 });
 
@@ -355,9 +465,16 @@ async function napLoiMoi() {
   const tb = $("bang-moi").querySelector("tbody");
   tb.replaceChildren();
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
+  // [S1.9101 / S3.2c · K4a] Tổ chức đã bật: danh sách chỉ đổi ở DRAFT, và thu hồi ở OPEN bị chặn tới S3.6 — nên "Bỏ khỏi danh
+  // sách" chỉ hiện ở DRAFT; "Gửi lại link" chỉ hiện khi gói nhận báo giá (ADR-110). Chờ duyệt hay đã đóng: không nút nào. Tổ chức
+  // chưa bật: hai nút như cũ, ở mọi trạng thái.
+  const s3 = phien.s3;
+  const guiLaiDuoc = !s3 || phien.trangThaiGoi === "OPEN" || phien.trangThaiGoi === "BAFO_OPEN";
+  const boDuoc = !s3 || phien.trangThaiGoi === "DRAFT";
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");
-    for (const v of [m.supplierName, m.contactName, m.linkChannel, m.status]) {
+    const nhan = m.status === "UNSENT" ? "UNSENT — chưa gửi" : m.status;
+    for (const v of [m.supplierName, m.contactName, m.linkChannel, m.moiSauKhiKy === true ? `${nhan} · mời sau khi ký` : nhan]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
       tr.append(td);
@@ -396,18 +513,22 @@ async function napLoiMoi() {
       });
       const nut = document.createElement("button");
       nut.className = "phu";
-      nut.textContent = "Thu hồi";
+      nut.textContent = s3 ? "Bỏ khỏi danh sách" : "Thu hồi";
       nut.addEventListener("click", async () => {
         bao($("loi5"), ""); bao($("ok5"), "");
         const th = await goi("POST", `/invitations/${m.id}/revoke`);
         if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
         // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.181 / ADR-110] Mời lại sau thu hồi là một hồ sơ báo giá
         // MỚI, và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ) — nói ra, và chỉ đường gửi lại link.
-        bao($("ok5"), "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) vẫn nằm trong gói thầu. Nhà cung cấp chỉ cần link " +
-          "mới thì dùng «Gửi lại link», đừng thu hồi.");
+        // [S1.9101 / S3.2c] Tổ chức đã bật: nút chỉ có ở DRAFT, khi chưa link nào đi và chưa báo giá nào có thể có.
+        bao($("ok5"), s3
+          ? "Đã bỏ khỏi danh sách mời. Chưa link nào đi, nên nhà cung cấp ấy không nhận được gì."
+          : "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) vẫn nằm trong gói thầu. Nhà cung cấp chỉ cần link " +
+            "mới thì dùng «Gửi lại link», đừng thu hồi.");
         await napLoiMoi();
       });
-      td.append(guiLai, nut);
+      if (guiLaiDuoc) td.append(guiLai);
+      if (boDuoc) td.append(nut);
     }
     tr.append(td);
     tb.append(tr);

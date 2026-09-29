@@ -22,6 +22,11 @@
 // phối cấu hình MẶC ĐỊNH — cờ ký tắt, đúng máy chủ thật hôm nay) rồi cho tổ chức ĐÃ BẬT (trên bộ điều phối cờ ký BẬT). Luồng
 // S3 khác ở bước 1 — người tài chính khai phiên bản CÓ BẬC, người tài chính thứ hai ký nó QUA ROUTE ký — và ở thân mà bộ
 // quét gửi cho `POST /policy`: tổ chức đã bật từ chối phiên bản không bậc.
+//
+// [S1.9101 / S3.2c / ADR-113] Và ở thứ tự mời: luồng S3 mời năm nhà cung cấp qua route ở DRAFT, TRƯỚC khi nộp duyệt (bước 2) —
+// `201` với lời mời *chưa gửi*, không link nào đi —, và `POST /rfqs/:rfqId/open` gửi năm link SAU commit, `200` với danh sách
+// chưa gửi rỗng. Bước 3 của luồng S3 chỉ còn phần của nhà cung cấp. RFQ hy sinh của bộ quét giữ thứ tự mở-rồi-mời ở cả hai
+// luồng: ở tổ chức đã bật đó là lời mời *mời sau khi ký*, cũng là một đường của route.
 // ==============================================================================================
 import { spawnSync } from "node:child_process";
 import { createHash, createPublicKey } from "node:crypto";
@@ -175,6 +180,22 @@ async function moPhienKhach(tokenLink: string): Promise<string> {
   const gt = /tp_guest=([^;]+)/u.exec(r.headers.get("set-cookie") ?? "")?.[1] ?? "";
   expect(gt).not.toBe("");
   return `${COOKIE_PHIEN_KHACH}=${gt}`;
+}
+
+/**
+ * [S1.9101 / S3.2c] Một nhà cung cấp, một người liên hệ và MỘT lời mời cho gói chính — ba yêu cầu HTTP dưới cookie người mua.
+ * Trả thân lời mời của `201`.
+ */
+async function moiQuaHttp(m: string, i: number, ncc: (typeof NHA_CUNG_CAP)[number]): Promise<{ supplierId: string; loi: { id: string; status: string; moiSauKhiKy: boolean } }> {
+  const s = await goi("POST", "/suppliers", m, { legalName: ncc.ten, taxCode: `03000000${i}${i}` });
+  expect(s.status, s.text).toBe(201);
+  const supplierId = (s.body as { supplier: { id: string } }).supplier.id;
+  const c = await goi("POST", `/suppliers/${supplierId}/contacts`, m, { fullName: `Kinh doanh ${i}`, email: `kd${i}@ncc.vn`, phone: `090000000${i}` });
+  expect(c.status, c.text).toBe(201);
+  const contactId = (c.body as { contact: { id: string } }).contact.id;
+  const lm = await goi("POST", `/rfqs/${trangThai.rfqId}/invitations`, m, { supplierId, contactId });
+  expect(lm.status, lm.text).toBe(201);
+  return { supplierId, loi: (lm.body as { invitation: { id: string; status: string; moiSauKhiKy: boolean } }).invitation };
 }
 
 /** Giá dưới dạng SỐ NGUYÊN đồng (không phần thập phân) — thứ bộ dò so sánh, thay vì một cách viết. */
@@ -419,6 +440,17 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     const m = trangThai.mua.cookie;
+    // [S1.9101 / S3.2c / ADR-113] Luồng S3: danh sách mời dựng qua route ở DRAFT, TRƯỚC khi nộp duyệt — `201` với lời mời chưa
+    // gửi, không nhãn, và không link nào tới bộ gửi. Hai chữ ký phía dưới ghim băm của chính danh sách này.
+    if (batS3) {
+      const truoc = dv.loiMoiDaGui.length;
+      for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
+        const { supplierId, loi } = await moiQuaHttp(m, i, ncc);
+        expect(loi, "mời ở DRAFT: chưa gửi, không nhãn mời sau khi ký").toMatchObject({ status: "UNSENT", moiSauKhiKy: false });
+        trangThai.loiMoi.push({ invitationId: loi.id, supplierId, ten: ncc.ten, gia: ncc.gia, cookie: "" });
+      }
+      expect(dv.loiMoiDaGui, "không link nào đi lúc mời ở DRAFT (K6)").toHaveLength(truoc);
+    }
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
     // [S1.180 / khoản 247 / ADR-108] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
@@ -433,30 +465,47 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
+    const truocMo = dv.loiMoiDaGui.length;
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
     expect(mo.status, mo.text).toBe(200);
     expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
     const { rows } = await db.pool.query("SELECT algorithm FROM rfq_key_material WHERE rfq_id = $1", [trangThai.rfqId]);
     expect(rows.length).toBeGreaterThan(0);
+    // [S1.9101 / S3.2c / ADR-113] Lần mở gói gửi MỘT link cho MỖI lời mời của danh sách đã ký — luồng S3 —, hay không gửi gì — luồng
+    // MVP1 —; cả hai trả danh sách chưa gửi rỗng, và token không về client.
+    expect((mo.body as { unsentInvitationIds: string[] }).unsentInvitationIds).toEqual([]);
+    const lucMo = dv.loiMoiDaGui.slice(truocMo);
+    expect(lucMo.map((g) => g.invitationId).sort()).toEqual(batS3 ? trangThai.loiMoi.map((l) => l.invitationId).sort() : []);
+    for (const g of lucMo) expect(mo.text, "token không về client").not.toContain(g.token);
+    if (batS3) {
+      const { rows: tt } = await db.pool.query<{ status: string; moi_sau_khi_ky: boolean }>(
+        "SELECT status, moi_sau_khi_ky FROM rfq_invitations WHERE rfq_id = $1",
+        [trangThai.rfqId],
+      );
+      expect(tt, "gửi được ⇒ SENT; danh sách đã ký không mang nhãn mời sau khi ký").toEqual(NHA_CUNG_CAP.map(() => ({ status: "SENT", moi_sau_khi_ky: false })));
+    }
   });
 
   it("bước 3 — mời năm nhà cung cấp qua HTTP; mỗi người đi trọn link → OTP → phiên khách qua HTTP", async () => {
     const m = trangThai.mua.cookie;
     for (const [i, ncc] of NHA_CUNG_CAP.entries()) {
-      const s = await goi("POST", "/suppliers", m, { legalName: ncc.ten, taxCode: `03000000${i}${i}` });
-      expect(s.status, s.text).toBe(201);
-      const supplierId = (s.body as { supplier: { id: string } }).supplier.id;
-      const c = await goi("POST", `/suppliers/${supplierId}/contacts`, m, { fullName: `Kinh doanh ${i}`, email: `kd${i}@ncc.vn`, phone: `090000000${i}` });
-      expect(c.status, c.text).toBe(201);
-      const contactId = (c.body as { contact: { id: string } }).contact.id;
+      // [S1.9101 / S3.2c] Luồng S3: lời mời có từ DRAFT, link đi lúc mở gói (bước 2) — nhà cung cấp dùng đúng link ấy.
+      if (batS3) {
+        const lm = trangThai.loiMoi.find((x) => x.ten === ncc.ten);
+        const link = dv.loiMoiDaGui.find((g) => g.invitationId === lm?.invitationId);
+        if (lm === undefined || link === undefined) throw new Error(`luong S3: buoc 2 khong moi hay khong gui link cho ${ncc.ten}`);
+        lm.cookie = await moPhienKhach(link.token);
+        continue;
+      }
       const truoc = dv.loiMoiDaGui.length;
-      const lm = await goi("POST", `/rfqs/${trangThai.rfqId}/invitations`, m, { supplierId, contactId });
-      expect(lm.status, lm.text).toBe(201);
+      const { supplierId, loi } = await moiQuaHttp(m, i, ncc);
+      expect(loi).toMatchObject({ status: "SENT", moiSauKhiKy: false });
       expect(dv.loiMoiDaGui).toHaveLength(truoc + 1);
       const cookie = await moPhienKhach(dv.loiMoiDaGui.at(-1)!.token);
-      trangThai.loiMoi.push({ invitationId: (lm.body as { invitation: { id: string } }).invitation.id, supplierId, ten: ncc.ten, gia: ncc.gia, cookie });
+      trangThai.loiMoi.push({ invitationId: loi.id, supplierId, ten: ncc.ten, gia: ncc.gia, cookie });
     }
     expect(trangThai.loiMoi).toHaveLength(5);
+    expect(new Set(trangThai.loiMoi.map((l) => l.cookie)).size, "năm phiên khách khác nhau").toBe(5);
   });
 
   it("bước 4 — năm báo giá niêm phong ở phía nhà cung cấp, nộp qua HTTP, mỗi lần một biên nhận đã ký", async () => {
@@ -1558,6 +1607,22 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
+    // [S1.9101 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
+    // không token mời nào trước lần mở gói (K6). Hàng token mang id của TOKEN — lời mời của nó nằm ở payload.
+    const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
+    const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(
+      "SELECT action, CASE WHEN action = 'MAGIC_LINK_TOKEN_ISSUED' THEN payload->>'invitationId' ELSE resource_id::text END AS khoa " +
+        "FROM audit_events WHERE org_id = $1 ORDER BY seq",
+      [orgA],
+    );
+    const mocGoi = theoGoi.filter((r) => r.khoa !== null && cuaGoi.has(r.khoa)).map((r) => r.action);
+    expect(mocGoi.filter((a) => a === "INVITATION_CREATED")).toHaveLength(5);
+    if (batS3) {
+      expect(mocGoi.lastIndexOf("INVITATION_CREATED"), "luồng S3: cả năm lời mời có TRƯỚC lần nộp duyệt").toBeLessThan(mocGoi.indexOf("RFQ_SUBMITTED_FOR_APPROVAL"));
+    } else {
+      expect(mocGoi.indexOf("INVITATION_CREATED"), "luồng MVP1: mời SAU khi mở gói").toBeGreaterThan(mocGoi.indexOf("RFQ_OPENED"));
+    }
+    expect(mocGoi.indexOf("MAGIC_LINK_TOKEN_ISSUED"), "không token mời nào trước lần mở gói (K6)").toBeGreaterThan(mocGoi.indexOf("RFQ_OPENED"));
     // Không một dòng sổ nào mang giá — sổ là bằng chứng, không phải nơi rò.
     const { rows: so } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text LIKE '%' || $2 || '%'", [orgA, GIA_SUA_LAI]);
     expect(so[0]?.n).toBe("0");

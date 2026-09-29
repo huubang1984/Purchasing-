@@ -15818,3 +15818,175 @@ sách ở `DRAFT`. `so-khai-nhan.ts` khai tệp test mới cho K4a và K6. Khôn
 - Mười bảy đột biến ở mã TypeScript, mười bảy lần đỏ (§5).
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3209 khẳng định; K4a 15 → 16, K6 12 → 20, K4b 8 không đổi. Không
   mã mới.
+
+# §S1.9101 — S3.2c: `/tao-thau` THEO THỨ TỰ MỚI Ở TỔ CHỨC ĐÃ BẬT S3, `gieo:demo --s3` VÀ KỊCH BẢN 41 MỜI Ở DRAFT, LƯỢT ĐI THỬ T4 TRÊN TRÌNH DUYỆT THẬT — ĐO RA KHOẢN 9401
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — luồng MVP1 của màn, của `gieo:demo` không cờ và của
+kịch bản 41 giữ nguyên thứ tự; một nhãn đổi ở cả hai luồng (*Mở gói*). Không migration, không route mới, không ADR. Mở khoản
+**9401**, rổ B.
+
+## 1. Vòng này là gì
+
+Phần cuối của S3.2 (spec S3 §9): màn `/tao-thau`, `gieo:demo` và kịch bản 41 theo thứ tự của §3.3, cộng lượt đi thử T4 mà §8.5 đòi
+— *"sau S3.2 phải chạy lại lượt đi thử kiểu S1.97 trên trình duyệt thật, không chỉ cụm test"*. S3.2a (§S1.185), S3.2b1 (§S1.186) và
+S3.2b2 (§S1.188) dựng lớp CSDL, cạnh về `DRAFT` và hai route. Tới vòng này:
+- màn mời ở bước 5, SAU bước mở gói; báo *"Đã mời"* cho mọi `201`; gọi bước mở gói là *"Mở thầu"*; không có đường trả gói về nháp;
+- `gieo:demo --s3` mở gói rồi mới mời, nên năm lời mời của nó mang nhãn *mời sau khi ký* và nằm `UNSENT` dù link đã in (§S1.185);
+- kịch bản 41 luồng S3 mời ở `OPEN`.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) *"Sau khi merge thì làm tiếp S3.2c"* — màn `/tao-thau` theo thứ tự mới ở tổ chức đã bật (mời ở `DRAFT`, trước khi nộp
+  duyệt), tổ chức chưa bật giữ thứ tự cũ; `gieo:demo --s3` và kịch bản 41, hai bản, theo thứ tự mới; lượt đi thử T4 trên trình duyệt
+  thật, có biên bản.
+
+## 3. Thay đổi
+
+**Màn `/tao-thau`** (`apps/web/trang/tao-thau.html`, `tao-thau.js`):
+- **Hai thứ tự bước, theo tổ chức.** Sau mỗi lần đăng nhập — và lúc nạp gói khi còn ở thứ tự cũ — màn hỏi `GET /policy/versions`
+  (`daBat`). Tổ chức đã bật: section *Nhà cung cấp và lời mời* dời lên TRƯỚC *Ngân sách và phê duyệt* trong DOM (`Element.before`),
+  số bước đổi 4 ↔ 5, hai đoạn ghi chú của luồng S3 thay hai đoạn cũ, khối *Trả về nháp* hiện. Đổi người — đăng xuất, đổi link trong
+  cùng thẻ — về thứ tự MVP1; lời đáp `/policy/versions` của lượt trước về muộn bị bỏ. Hỏi hỏng: giữ thứ tự MVP1 và nói ra ở bước 1.
+- **Câu báo của lần mời đọc thân `201`** (`invitation.status`, `moiSauKhiKy`): ở `DRAFT` *"Đã thêm vào danh sách mời. Link CHƯA đi:
+  nó đi lúc mở gói…"*; ở `OPEN` *"Đã mời thêm sau khi ký…"* khi gửi được, và câu LỖI *"…link CHƯA gửi được. Lời mời vẫn còn sống —
+  bấm «Gửi lại link»…"* khi gửi hỏng. Mời lúc gói chờ duyệt (`422` của K4a): màn nói danh sách đã khoá và chỉ đường *Trả về nháp*.
+- **Bảng lời mời:** `UNSENT — chưa gửi`, và `· mời sau khi ký` theo nhãn. Tổ chức đã bật: *Bỏ khỏi danh sách* (thu hồi) chỉ ở `DRAFT`;
+  *Gửi lại link* chỉ ở `OPEN`, `BAFO_OPEN`; chờ duyệt hay đã đóng thì không nút nào. Tổ chức chưa bật: hai nút như cũ, mọi trạng thái.
+- **Bước mở gói:** nút *Mở thầu* → *Mở gói*, câu báo *"Đã mở gói…"*, ở cả hai luồng. Tổ chức đã bật: câu báo nói link đã đi — hay,
+  khi `unsentInvitationIds` không rỗng, chỉ nói khoá đã sinh, còn khung lỗi nói số link chưa gửi và chỉ đường gửi lại —; rồi đọc lại
+  bảng lời mời. Nộp duyệt ở tổ chức đã bật nói danh sách đã khoá.
+- **Khối *Trả về nháp*:** ô lý do — màn kiểm ô trống trước, cửa thật là route — và nút gọi `POST /rfqs/:rfqId/return-to-draft`.
+- Trạng thái phiên của trang dựng lại bằng MỘT hàm (`phienMoi`) ở cả hai chỗ đổi người, thêm `s3` và `trangThaiGoi`.
+
+**Gói `invitation`:** `listInvitations` — và thân `GET /rfqs/:rfqId/invitations` — trả thêm `moiSauKhiKy`.
+
+**`gieo:demo --s3`:** năm lời mời dựng ở `DRAFT` bằng `createInvitation`, TRƯỚC câu nộp duyệt; hai chữ ký P2, P3 vì thế ghim băm của
+danh sách ấy; giao dịch mở gói gọi `ducTokenKhiMoGoi` dưới phiên người soạn; link in ra rồi mới `danhDauDaGui` — *SENT sau lần gửi
+được*, và lần gửi của công cụ này là dòng in. Link in theo thứ tự đã mời. Không cờ: không đổi gì.
+
+**Kịch bản 41** (`apps/unseal-worker/src/kich-ban-41.int.test.ts`, `kich-ban-41-http.int.test.ts`), luồng S3:
+- bước 2 mời năm nhà cung cấp ở `DRAFT` — bản gói bằng hàm gói; bản HTTP qua route, `201` với lời mời *chưa gửi*, không nhãn, không
+  link nào tới bộ gửi — rồi nộp duyệt, hai chữ ký, mở gói. Bản gói gọi `ducTokenKhiMoGoi` trong chính giao dịch mở và `danhDauDaGui`
+  sau commit; bản HTTP đo lần mở gửi ĐÚNG năm link, `200` với danh sách chưa gửi rỗng, token không về client, năm lời mời `SENT`
+  không nhãn;
+- bước 3 chỉ còn phần của nhà cung cấp: link → OTP → phiên khách;
+- bước 15 đo thứ tự mời trên sổ, theo gói và năm lời mời của nó: luồng S3 cả năm `INVITATION_CREATED` trước
+  `RFQ_SUBMITTED_FOR_APPROVAL`, luồng MVP1 sau `RFQ_OPENED`; cả hai: `MAGIC_LINK_TOKEN_ISSUED` đầu tiên sau `RFQ_OPENED` (K6).
+
+Luồng MVP1 của cả hai tệp không đổi một bước.
+
+**Test màn** (`apps/web/src/phuc-vu.test.ts`): bộ dựng trang giả có `Element.before` cho các `<section>` — dời id trong một mảng thứ
+tự; gọi trên phần tử khác thì ném — và ghi thân của mỗi lời gọi. Bảy ca `[S3.2c]` mới. Hai ca S1.177 nay chờ `GET /policy/versions`
+sau khi mở các bước ở `/tao-thau`, như ở `/chinh-sach`.
+
+**Test tích hợp S3.2b2** (`apps/api/src/luong-moi-s3.int.test.ts`): ⑴ ⑸ ⑺ đọc danh sách lời mời qua route — trạng thái và nhãn.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Biết tổ chức đã bật bằng `GET /policy/versions`**, không thêm trường vào `/me` hay route mới: route đã có, không cổng quyền — mọi
+  người mua đọc được —, trả đúng `to_chuc_da_bat_s3`. Công tắc ADR-080 một chiều, nên đã thấy bật thì không hỏi lại; chưa bật thì hỏi
+  lại lúc nạp gói — người tài chính có thể bật trong lúc trang mở.
+- **Dời trong DOM, không bằng CSS `order`:** thứ tự Tab và trình đọc màn hình đi theo DOM.
+- **Nhãn *Mở gói* đổi ở cả hai luồng:** sửa thuật ngữ, không đổi thứ tự — spec §3.3 giao S3.2 sửa nhãn ấy.
+- **Màn giấu nút mà trigger sẽ từ chối** — thu hồi ở `OPEN`, thêm hay thu hồi lúc chờ duyệt, gửi lại ở `DRAFT` — theo trạng thái gói
+  vừa đọc. Cửa thật vẫn là trigger `076` và route.
+- **`gieo:demo --s3` đánh dấu `SENT` SAU khi in:** chết giữa hai bước để lại lời mời *chưa gửi* mà link đã in — chiều lệch ADR-113 chấp
+  nhận; thứ tự ngược để lại `SENT` mà link chưa tới ai.
+- **Kịch bản 41 giữ tên bước;** thân bước 2 và 3 rẽ theo luồng, không bỏ qua `it` nào. RFQ hy sinh của bộ quét giữ thứ tự mở-rồi-mời ở
+  cả hai luồng: ở tổ chức đã bật đó là đường *mời sau khi ký* của route, cũng là một đường phải chạy.
+
+## 5. Lượt đi thử T4 — trình duyệt thật
+
+Cụm: PostgreSQL 16 dựng bằng `initdb`; `pnpm gieo:demo --s3` rồi `pnpm gieo:demo` trên cùng CSDL; `apps/api` đăng nhập bằng
+`app_api_login`, bộ gửi hộp thư dev; `apps/web`; Chromium 1194 qua Playwright, khung 1280×900. Script nằm ngoài kho. Giữa các bước,
+CSDL đọc bằng kết nối đặc quyền. Chạy hai lượt trên hai lần gieo, cả hai đạt đủ 36 khẳng định.
+
+- **Gieo `--s3`:** gói `OPEN`; năm lời mời `SENT` không nhãn; năm token, mỗi lời mời một, đúc dưới phiên người mở, chưa thu hồi; hai
+  chữ ký, băm danh sách của cả hai bằng `rfq_bam_danh_sach` hiện tại. Sổ: năm `INVITATION_CREATED` trước `RFQ_KEY_MATERIAL_ISSUED`, năm
+  `MAGIC_LINK_TOKEN_ISSUED` sau. Công cụ in *"Đã đánh dấu SENT 5/5 lời mời, sau khi link đã in."*
+- **Người soạn vào `/tao-thau`** bằng link gieo, ghi danh TOTP lần đầu. Section theo DOM: `b1, b2, b3, b5, b4`; bước lời mời số 4, bước
+  duyệt số 5; ghi chú S3 hiện, ghi chú cũ ẩn; khối *Trả về nháp* hiện; nút *Mở gói*.
+- **Tạo gói, một hạng mục, mời ở `DRAFT`:** *"Đã thêm vào danh sách mời. Link CHƯA đi…"*. Hai dòng `UNSENT — chưa gửi`, mỗi dòng một nút
+  *Bỏ khỏi danh sách*; bỏ dòng thứ hai ⇒ *"Đã bỏ khỏi danh sách mời. Chưa link nào đi…"*, dòng ấy `REVOKED`, không nút; mời nhà cung cấp
+  thứ ba. Hộp thư dev: không link mời nào.
+- **Ngân sách 150 triệu, nộp duyệt:** câu báo nói danh sách mời đã khoá; bảng không còn nút. Mời nhà cung cấp thứ tư ⇒ `422` của K4a, màn
+  nói danh sách đã khoá và chỉ «Trả về nháp».
+- **Trả về nháp:** lý do rỗng ⇒ màn chặn, không lời gọi nào; có lý do ⇒ `200`, gói `DRAFT`, nút *Bỏ khỏi danh sách* trở lại ở hai dòng
+  còn sống; mời nhà cung cấp thứ tư; nộp duyệt lại. Sổ: `RFQ_RETURNED_TO_DRAFT` mang đúng lý do đã gõ.
+- **soan2 vào bằng form trên cùng trang:** thứ tự S3 giữ nguyên. Phê duyệt; mở gói ⇒ *"Đã mở gói. Link mời đã đi tới mọi lời mời còn
+  sống…"*, không khung lỗi. Bảng: ba dòng `SENT` với *Gửi lại link*, dòng `REVOKED` không nút. Hộp thư dev: đúng ba link mời mới.
+- **Mời thêm ở `OPEN`:** *"Đã mời thêm sau khi ký…"*; dòng `SENT · mời sau khi ký`.
+- **Mời thêm ở `OPEN` khi bộ gửi hỏng** — thư mục hộp thư dev thay bằng một tệp thường: khung lỗi *"…link CHƯA gửi được. Lời mời vẫn còn
+  sống…"*, không câu *"đã mời"*; dòng `UNSENT — chưa gửi · mời sau khi ký` với *Gửi lại link*. Log `api` đúng một dòng `sau-commit Error`
+  — không token, không đích. Trả hộp thư, gửi lại ⇒ *"Đã gửi link mới tới…"*, dòng thành `SENT · mời sau khi ký`.
+- **Nhà cung cấp thứ nhất mở link đúc lúc mở gói:** mở lời mời, xin mã OTP (hộp thư dev), xác minh ⇒ bước 3 hiện đúng tên gói.
+- **Đối chứng MVP1** (tổ chức gieo không cờ): thứ tự `b1…b5`, số bước cũ, không khối trả về, ghi chú cũ; gói gieo `OPEN`, ba lời mời
+  `SENT`, mỗi dòng hai nút *Gửi lại link* và *Thu hồi*.
+- **CSDL sau lượt:** gói `OPEN`. Bốn lời mời dựng ở `DRAFT`: một thu hồi, không token; ba còn sống, mỗi lời mời một token. Hai lời mời
+  sau khi ký: lời mời gửi hỏng hai token, một đã thu hồi. Một chữ ký — băm danh sách của nó khác băm hiện tại vì hai lời mời thêm sau
+  khi ký, đúng nghĩa của nhãn.
+- **Lỗi trình duyệt:** không lỗi trang. Console: hai `401` `GET /api/me` — trang hỏi phiên lúc tải, chưa có cookie —, một `422` — lần
+  mời lúc chờ duyệt ở trên —, một `404` không có sự kiện phản hồi nào của trang tương ứng: `/favicon.ico` (trang không khai icon; có từ
+  trước vòng này).
+- **Đo ra khoản 9401.** Lần mời bị K4a chặn lúc gói chờ duyệt không để hàng sổ nào: sổ của tổ chức không có `PERMISSION_DENIED`,
+  `RFQ_STATE_DENIED` hay `CONTROL_DENIED` cho lần ấy. `createInvitation` không hỏi trạng thái gói trước câu `INSERT` — chỉ trigger `076`
+  nói "không", và giao dịch huỷ. ADR-060 đòi ghi lời từ chối nói người dùng đi sai thứ tự; K12 đòi tầng gói hỏi vị từ trước mọi tác dụng
+  phụ, *"đo theo từng hạng mục từ S3.1"* — K1 làm đủ, K4a chưa. Chọn lớp nào là quyết định của chủ dự án. **Rổ B:** hôm nay không tổ
+  chức thật nào bật được S3 (ADR-105), và màn giấu nút thêm, thu hồi theo trạng thái gói.
+
+## 6. Đột biến
+
+Hai mươi mốt đột biến, mỗi đột biến sửa đúng một chỗ, tệp trả về đúng byte sau mỗi lượt (so sha256). Cả hai mươi mốt đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| M01 | màn không dời bước lời mời lên trước bước duyệt | ba ca `[S3.2c]` về thứ tự: đã bật, bật trong lúc trang mở, đổi người |
+| M02 | nạp gói không hỏi lại tổ chức đã bật | bật trong lúc trang mở |
+| M03 | đổi người không trả thứ tự MVP1 | đổi người |
+| M04 | lời đáp `/policy/versions` của lượt cũ không bị bỏ | đổi người — lời đáp về muộn dựng thứ tự S3 cho người sau |
+| M05 | nút *Bỏ khỏi danh sách* hiện ở mọi trạng thái | bảng lời mời |
+| M06 | *Gửi lại link* ẩn ở `BAFO_OPEN` | bảng lời mời |
+| M07 | lần mở gói bỏ qua `unsentInvitationIds` | mở gói — câu báo nói link đã đi khi có link chưa đi |
+| M08 | trả về nháp không kiểm lý do rỗng | trả về nháp |
+| M09 | mời ở `DRAFT` nói câu cũ | câu báo của lần mời |
+| M10 | mời ở `OPEN` gửi hỏng nói *"đã mời"* | câu báo của lần mời |
+| M11 | bảng không nói *chưa gửi* | bảng lời mời |
+| M12 | bảng không nói *mời sau khi ký* | bảng lời mời |
+| M13 | nhãn nút về *Mở thầu* | mở gói |
+| M14 | hỏi `/policy/versions` hỏng mà không nói ra | bật trong lúc trang mở, hỏi hỏng |
+| M15 | lý do không cắt khoảng trắng | trả về nháp |
+| M16 | mời lúc chờ duyệt không chỉ đường | câu báo của lần mời |
+| M17 | khối *Trả về nháp* không hiện | đã bật; bật trong lúc trang mở |
+| M18 | sau mở gói không đọc lại bảng | mở gói |
+| M19 | `listInvitations` mất nhãn | `luong-moi-s3.int` ⑸ |
+| M20 | route mở gói không gửi link | kịch bản 41 bản HTTP, luồng S3: 23 ca từ bước 2; luồng MVP1 xanh |
+| M21 | `ducTokenKhiMoGoi` trả rỗng ở tổ chức đã bật | kịch bản 41 bản gói, luồng S3: 10 ca từ bước 2; luồng MVP1 xanh |
+
+M01 chạy hai lần. Lần đầu bỏ cả dòng `if (s3) …`, để lại một `else` treo — lỗi cú pháp, 18 ca đỏ vì trang không nạp được, không đo
+được gì. Lần hai thay thân nhánh bằng một khối rỗng: ba ca đỏ, đúng ba ca về thứ tự.
+
+## 7. Giới hạn, nói ra
+
+- **Khoản 9401** (mục 5): S3.2 còn lớp K12 cho K4a — và, cùng hình dạng nhưng chưa đo, thu hồi ở `OPEN` và K4b ở cạnh mở gói.
+- **Lượt đi thử T4 là một lần, không phải một cổng**; script nằm ngoài kho. Test màn dựng DOM giả: `Element.before` thật chỉ được đo ở
+  lượt đi thử.
+- **`gieo:demo` không có test tự động** — nó chạy trên một CSDL thật và in token; đo bằng lượt đi thử và câu đọc lại CSDL.
+- **Màn biết tổ chức đã bật qua một lời hỏi**: hỏi hỏng thì màn giữ thứ tự MVP1 và nói ra. Người soạn đi tiếp theo thứ tự ấy ở một tổ
+  chức đã bật sẽ mở gói không lời mời rồi mời sau khi ký — trigger vẫn giữ luật, chỉ thứ tự trên màn sai.
+- **Nút theo trạng thái gói VỪA ĐỌC:** gói đổi trạng thái dưới tay người khác thì nút có thể lệch tới lần nạp kế; cửa thật vẫn từ chối.
+
+## 8. Số đo
+
+- `apps/web/src/phuc-vu.test.ts` **85/85** (78 → 85: bảy ca `[S3.2c]`). `apps/api/src/luong-moi-s3.int.test.ts` **14/14**. Kịch bản 41
+  bản gói **30/30**, bản HTTP **58/58**.
+- Toàn bộ T3 cục bộ trên cây vòng này, TRƯỚC khi biên bản này và lời khai đếm có mặt: 190 tệp, 3218 khẳng định — 3201 đạt, 1 bỏ qua,
+  16 đỏ. Chín là ca cũ của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container
+  runtime) và 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Bảy là `[INV-H20]` của
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` — con trỏ `§S1.9101` của khoản 9401 chưa có đầu mục (P11), và lời khai đếm ở
+  `Handoff.md` và dưới dòng tổng kết chưa tính khoản ấy (P9, P12). Sau khi mục này có mặt và `pnpm cap-so --dem` viết lại lời khai:
+  tệp ấy chạy lại **45/45**; báo cáo T3 thay kết quả của đúng tệp ấy ⇒ 3218 khẳng định, 3208 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ.
+- `pnpm t0` sạch (447 module, 1792 phụ thuộc). `pnpm test`: 121 tệp, 1711 đạt, 1 bỏ qua. Hai mươi mốt đột biến, hai mươi mốt lần
+  đỏ (§6).
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3218 khẳng định, cổng evidence XANH; `evidence/INV-matrix.md`
+  giống hệt bản của `master` — vòng này không thêm ca mang nhãn bất biến nào, và không ca mang nhãn nào đổi kết quả.
+- Số hiệu của vòng và của khoản nợ do `pnpm cap-so` cấp lúc merge (ADR-090).

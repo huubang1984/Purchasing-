@@ -2,7 +2,8 @@
 // tools/gieo-demo — GIEO MỘT VÒNG THẦU ĐỦ ĐỂ DEMO, RỒI IN RA SÁU ĐƯỜNG LINK
 //
 //   pnpm gieo:demo          tổ chức CHƯA bật S3 — luồng MVP1, hình dạng mà pilot chạy
-//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3
+//   pnpm gieo:demo --s3     [S1.174 / S3.1d] tổ chức ĐÃ BẬT S3, đủ bảng vai §7 của spec S3; [S1.9101 / S3.2c] theo thứ tự
+//                           mới của ADR-113 — mời ở DRAFT, hai chữ ký lên cả danh sách, token đúc lúc mở gói
 //
 // [ADR-044] Vì sao có công cụ này thay vì làm mọi thứ qua giao diện: tạo một RFQ đầy đủ là bảy
 // màn hình (tổ chức, chính sách, người dùng, nhà cung cấp, người liên hệ, gói thầu, hạng mục,
@@ -54,7 +55,7 @@ import pg from "pg";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
 import { issueLoginToken } from "@trustprocure/identity";
-import { createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import { createProcurementPolicy, kyPhienBanChinhSach } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
@@ -181,6 +182,20 @@ async function chinh(): Promise<void> {
     }
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
+    const danhSachNcc = [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])];
+    /** Một nhà cung cấp và MỘT người liên hệ của nó, trong giao dịch đã gắn tổ chức của người gọi. */
+    const taoNhaCungCap = async (c: pg.PoolClient, i: number, ten: string): Promise<{ readonly ncc: string; readonly lh: string }> => {
+      const ncc = (await c.query<{ id: string }>(
+        "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
+      )).rows[0]?.id ?? "";
+      const lh = (await c.query<{ id: string }>(
+        "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+        [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiGieo, phienGieo],
+      )).rows[0]?.id ?? "";
+      return { ncc, lh };
+    };
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
@@ -227,6 +242,20 @@ async function chinh(): Promise<void> {
         "VALUES ($1, $2, '9000000000.00', 'VND', $3, $4, $5)",
       [org, rfq, chinhSach, nguoiGieo, phienGieo],
     );
+    // [S1.9101 / S3.2c / ADR-113] `--s3`: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp duyệt — hai chữ ký phía dưới ghim băm của
+    // chính danh sách này (K4a, K4b), và lời mời không mang token nào tới lúc mở gói (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời
+    // SAU khi mở, đúc token ngay lúc mời — khối cuối của giao dịch mở gói.
+    const loiMoiNhap: { readonly ten: string; readonly id: string }[] = [];
+    if (S3) {
+      await withTenant(pool, org, async (c) => {
+        for (const [i, ten] of danhSachNcc.entries()) {
+          const { ncc, lh } = await taoNhaCungCap(c, i, ten);
+          const lm = await createInvitation(c, org, { rfqId: rfq, supplierId: ncc, contactId: lh, linkChannel: "EMAIL", actorSessionId: phienGieo });
+          if (lm.status !== "UNSENT" || lm.moiSauKhiKy) throw new GieoError("--s3: lời mời ở DRAFT phải UNSENT và không nhãn mời sau khi ký");
+          loiMoiNhap.push({ ten, id: lm.id });
+        }
+      });
+    }
     await pool.query(
       "UPDATE public.rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 " +
         "WHERE id OPERATOR(pg_catalog.=) $1",
@@ -248,6 +277,8 @@ async function chinh(): Promise<void> {
     }
 
     const loiMoi: { readonly ten: string; readonly token: string }[] = [];
+    /** [S1.9101 / S3.2c] `--s3`: lời mời vừa có token lúc mở gói — đánh dấu `SENT` SAU khi link đã in ra. */
+    const daDuc: string[] = [];
     await withTenant(pool, org, async (c) => {
       // Cặp khoá RFQ ra đời ở đây và khoá riêng được BỌC ngay — `issueRfqKeyPair` trả về mọi thứ
       // trừ nó (ADR-019). Script này không bao giờ cầm một khoá riêng dạng rõ.
@@ -258,16 +289,22 @@ async function chinh(): Promise<void> {
         [rfq, nguoiGieo, phienGieo],
       );
 
-      for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
-        const ncc = (await c.query<{ id: string }>(
-          "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
-          [org, `${ten} ${duoi}`, nguoiGieo, phienGieo],
-        )).rows[0]?.id ?? "";
-        const lh = (await c.query<{ id: string }>(
-          "INSERT INTO public.supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-            "VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-          [org, ncc, `Nguoi bao gia ${i + 1}`, `ncc${i + 1}.${duoi}@vidu.vn`, `09${soDienThoai}${i}`.slice(0, 10), nguoiGieo, phienGieo],
-        )).rows[0]?.id ?? "";
+      if (S3) {
+        // [S1.9101 / S3.2c / ADR-113] Cùng đường của `POST /rfqs/:rfqId/open`: MỘT token cho MỖI lời mời còn sống, trong CHÍNH
+        // giao dịch mở gói, dưới CHÍNH phiên người mở — hàm tự từ chối mọi lời gọi khác.
+        for (const l of await ducTokenKhiMoGoi(c, org, { rfqId: rfq, actorSessionId: phienGieo })) {
+          const ten = loiMoiNhap.find((x) => x.id === l.invitationId)?.ten;
+          if (ten === undefined) throw new GieoError("--s3: token đúc cho một lời mời không có trong danh sách");
+          loiMoi.push({ ten, token: l.token.token });
+          daDuc.push(l.invitationId);
+        }
+        if (daDuc.length !== loiMoiNhap.length) throw new GieoError(`--s3: đúc ${daDuc.length} token cho ${loiMoiNhap.length} lời mời`);
+        // Năm lời mời chèn trong một giao dịch mang cùng `created_at`, nên hàm trả chúng theo id — in lại theo thứ tự đã mời.
+        loiMoi.sort((a, b) => danhSachNcc.indexOf(a.ten) - danhSachNcc.indexOf(b.ten));
+        return;
+      }
+      for (const [i, ten] of danhSachNcc.entries()) {
+        const { ncc, lh } = await taoNhaCungCap(c, i, ten);
         const lm = await createInvitation(c, org, {
           rfqId: rfq,
           supplierId: ncc,
@@ -294,6 +331,10 @@ async function chinh(): Promise<void> {
     ra.push(`gói thầu: ${rfq}   (hạn nộp sau 2 giờ, cần HAI người duyệt để mở)`);
     ra.push("");
     ra.push("NHÀ CUNG CẤP — mở trên điện thoại, mỗi link một người:");
+    if (S3) {
+      ra.push("  (S3) Năm lời mời dựng ở DRAFT, soan2 + soan3 ký lên CẢ nội dung LẪN danh sách; token đúc lúc mở gói dưới phiên");
+      ra.push("  người soạn. Công cụ này là bộ gửi: dòng in dưới là lần gửi, và lời mời thành SENT SAU khi in (ADR-113).");
+    }
     for (const lm of loiMoi) ra.push(`  ${lm.ten.padEnd(24)} ${gocWeb}/nop-thau#${org}:${lm.token}`);
     ra.push("");
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
@@ -319,6 +360,16 @@ async function chinh(): Promise<void> {
     // `console.error` là dòng ra DUY NHẤT dự án cho phép (eslint `no-console`), và ở một công cụ
     // dev thì stderr cũng đúng chỗ: nó không lẫn vào thứ ai đó đem đi pipe.
     console.error(ra.join("\n"));
+    // [S1.9101 / S3.2c / ADR-113] `SENT` sau lần gửi được — và lần gửi của công cụ này là dòng vừa in. Đánh dấu TRƯỚC khi in thì một
+    // lần chết giữa hai bước để lời mời `SENT` mà link chưa tới ai; thứ tự này để lại ca ngược, đúng ca mà ADR-113 chấp nhận.
+    if (S3) {
+      let n = 0;
+      await withTenant(pool, org, async (c) => {
+        for (const id of daDuc) if (await danhDauDaGui(c, org, id)) n += 1;
+      });
+      if (n !== daDuc.length) throw new GieoError(`--s3: chỉ đánh dấu SENT được ${n}/${daDuc.length} lời mời`);
+      console.error(`Đã đánh dấu SENT ${n}/${daDuc.length} lời mời, sau khi link đã in.`);
+    }
   } finally {
     await pool.end().catch(() => undefined);
   }
