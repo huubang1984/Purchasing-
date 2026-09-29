@@ -16630,6 +16630,148 @@ Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của 
 
 **[Người tích hợp, 2026-09-29]** Khoản 9411 trong bàn giao lô này không vào sổ: cổng `duong-sql-ngoai-with-tenant` đã được khai tệp `postgres-cuc-bo.ts` ở commit tích hợp lô L7 (a4595fa) trước khi gộp lô này, nên khoảng trống ấy không còn ở HEAD.
 
+# §S1.9121 — KHOẢN 104: TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH ĐƯỢC DỌN Ở MỖI LẦN LẤY CLIENT; `migrate()` SO GUC PHIÊN, PREPARED STATEMENT, CON TRỎ VÀ MỌI TRỤC SAU COMMIT — KHOẢN 4 SỬA CHÚ THÍCH
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — lớp nền của kết nối pool và của `migrate()`, không đổi hành vi
+nào của kịch bản. Đóng khoản 104 (rổ B); khoản 4 chỉ sửa chú thích, vẫn rổ C. Không migration, không ADR, không khoản mới.
+
+## 1. Vòng này là gì
+
+Khoản 104: khoản 99 đọc ba GUC vận hành ở mỗi lần lấy client của pool có vai; mọi GUC phiên khác (ba GUC IM7 của `createPool` bị SET về 0 —
+đo S1.59; `TimeZone`, …) và trạng thái phiên ngoài GUC mà `DISCARD TEMP` không dọn (prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá
+tư vấn mức phiên) đi theo kết nối sang người dùng kế tiếp. Cùng lớp ở `migrate()`: phép chụp cuối tệp (S1.66/S1.72) có tám trục, GUC phiên
+khác mà một tệp đặt đi theo sang tệp sau và các lượt hardening sau vòng; hai vế đọc chưa đo — trigger hoãn đổi trạng thái SAU phép so, và lỗi
+của lượt hardening sau vòng không huỷ kết nối. Thân khoản nêu hai hướng, PHÁN (quét `pg_settings` ở mỗi lần lấy) hay DỌN, và bảo chọn bằng
+phép đo, giữ phép phân biệt RESET của khoản 87. Khoản 4: chỉ phần chú thích của `pool.ts` (khối *Giá trị mặc định và lý do* kể hai GUC trong
+khi `options:` đặt ba).
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Lựa chọn DỌN/PHÁN là lựa chọn kỹ thuật chọn bằng phép đo (mục 8), như đề bài cho phép.
+
+## 3. Đo trước
+
+Test viết trước, chạy trên mã cũ (`33563ea`, `migrate.ts` chỉ thêm một hằng stub để tệp test nạp được), PostgreSQL 16.13 cụm cục bộ:
+
+- `vai-tro.int.test.ts` describe S1.9121 — 6 đỏ / 1 xanh: người kế tiếp trên CÙNG pid đọc `0/0/0` thay vì `15s/15s/1min` (đúng phép đo S1.59);
+  khoá tư vấn mức phiên do hàm SECURITY DEFINER lấy còn 1 trên backend; prepared statement, con trỏ WITH HOLD, kênh LISTEN mỗi thứ còn 1;
+  ranh giới khoản 87 đỏ ở vế "kênh LISTEN vẫn được dọn". Xanh: "ĐỌC TRƯỚC, DỌN SAU" — mã cũ cũng phán replica (chốt thứ tự cho đột biến M5).
+- `migrate.int.test.ts` describe S1.9121 — 9 đỏ / 1 xanh: `SET statement_timeout = '30s'`, `SET TimeZone`, `RESET statement_timeout` ở tệp giữa
+  ⇒ tệp được ghi và tệp sau chạy (`expected null not to be null`); `PREPARE`/`DECLARE … WITH HOLD` cuối tệp ⇒ được ghi; `pg_advisory_lock`
+  phiên và `LISTEN` ở tệp giữa ⇒ cả hai tệp được ghi; constraint trigger hoãn trên `schema_migrations` đặt `TimeZone` lúc COMMIT ⇒ cả hai tệp
+  được ghi; lượt `phan_xet` lỗi ⇒ pid giữ nguyên (`expected 936 not to be 936`). Xanh: ĐỐI CHỨNG (SET rồi RESET, proconfig).
+- Trong lúc đo, hai test nháp của agent trước bị bác bằng chính phép đo: ca `SET statement_timeout = 0` (đúng giá trị `migrate()` đã đặt)
+  KHÔNG phân biệt được với không đặt ở mọi cột của `pg_settings` — đổi thành `'30s'`; ĐỐI CHỨNG `RESET statement_timeout` sau khi SET là
+  RESET thứ `migrate()` đã đặt — đổi sang `TimeZone`.
+
+## 4. Thay đổi
+
+- `packages/db/src/vai-tro.ts`: hằng `CAU_DOC_TRANG_THAI` (đứng riêng, mở đầu bằng SELECT, để [INV-H21] PREPARE được; nội suy vào cuối câu
+  nhiều lệnh) đọc `current_user`, ba GUC vận hành, search path hiệu lực và TÊN bốn GUC tenant/khách; câu lấy client nay là
+  `SET ROLE …; DISCARD TEMP; CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; SELECT pg_advisory_unlock_all(); <câu đọc>` — bảy kết quả được ĐÒI
+  (`SO_KET_QUA_LAY_CLIENT`), thiếu thì không giao client; sau phép phán ba GUC (không đổi), `RESET ALL` một vòng đi-về CHỈ khi
+  `guc_tenant` rỗng. Docstring nói ra giá đo và ranh giới.
+- `packages/db/src/migrate.ts`: `TU_CHOI_SAU_COMMIT` (export mức module, không vào barrel); `CAU_TRANG_THAI_PHIEN` mức module (một bản, ba
+  chỗ) thêm `guc_phien` (`jsonb_object_agg` của GUC `source = 'session'` và `setting IS DISTINCT FROM reset_val`), `cau_chuan_bi`
+  (`pg_prepared_statement()`), `con_tro` (`pg_cursor()`), `kenh_nghe` (`pg_listening_channels()`), `khoa_tu_van` (`pg_locks` advisory của
+  chính pid); `phanTichTrangThaiPhien` tách `phien` (so trong giao dịch, khoá động `GUC phiên <tên>`) và `sauCommit`; phép so cuối tệp so theo
+  HỢP hai tập khoá; `COMMIT; <câu chụp>` cùng câu, rồi NGOÀI khối try so lại mọi trục ∪ hai trục sau COMMIT với mốc mở vòng ⇒
+  `tuChoiVaHuyPhien(TU_CHOI_SAU_COMMIT …)`; hai lượt hardening sau vòng bọc `phaiHuyPhien ??= …`.
+- `packages/db/src/pool.ts`: chỉ chú thích (khoản 4) — khối *Giá trị mặc định và lý do* gạch `(hai GUC)`, thêm `statement_timeout 15s`,
+  gạch `cả hai` → `cả ba`, thêm một câu về `RESET ALL` của lớp lấy client.
+- `packages/db/src/vai-tro.int.test.ts`: describe S1.9121 (7 `it`); test ĐỐI CHỨNG S1.59 đổi khẳng định `local` → `origin` (gạch tại chỗ:
+  RESET ALL sau khi đọc — `local` không bị phán, pid giữ là vế chịu lực).
+- `packages/db/src/migrate.int.test.ts`: describe S1.9121 (10 `it`, kể cả vế đối kháng trigger hoãn và ĐỐI CHỨNG); import `TU_CHOI_SAU_COMMIT`.
+- Không chạm `packages/tenancy/**`, `db/migrations/**`, `packages/test-support/**`, barrel `packages/db/src/index.ts`, `tests/architecture/**`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- DỌN cho MỌI trạng thái dọn được, kể cả ba thứ ngoài GUC mà bản nháp của agent trước định PHÁN: đọc ba bộ đếm thêm ~65 µs mỗi lần lấy, dọn
+  thêm ~10 µs, và hậu quả an ninh như nhau (người kế không thấy); mã sản xuất không dùng prepared statement có tên, con trỏ hay LISTEN
+  (grep), nên `DEALLOCATE ALL` không đụng bộ nhớ `parsedStatements` của driver. Ba GUC vận hành vẫn PHÁN — đọc trước khi dọn.
+- `RESET ALL` có điều kiện (bốn GUC tenant/khách rỗng) thay vì dọn chọn lọc: dọn chọn lọc đòi quét `pg_settings` (~930 µs). Giá: khi có GUC
+  tenant rò, lần lấy ấy không dọn GUC phiên nào khác — nói ra, test ghim.
+- Trục GUC phiên của `migrate()` so theo GIÁ TRỊ khác nền (`setting IS DISTINCT FROM reset_val`), không theo có-mặt-trong-tập-session: bản
+  đầu so theo có mặt làm test S1.66 "tự trả lại" đỏ (`SET LOCAL … = origin` để lại `source = 'session'` với giá trị bằng nền). Hệ quả: một tệp
+  đặt lại đúng giá trị nền không bị nêu (vô hại); ba ca GUC phiên chạy trên pool `createPool` (PGOPTIONS) vì trên pool trần `RESET
+  statement_timeout` không đổi giá trị.
+- Phép so sau COMMIT so lại MỌI trục (không chỉ khoá/LISTEN) vì nó miễn phí và đóng vế đối kháng trigger hoãn của thân khoản; không dương tính
+  giả vì phép so trong giao dịch đã đòi mọi trục bằng mốc.
+- `COMMIT; <câu chụp>` trong một câu nhiều lệnh (không thêm vòng đi-về) và phép so đứng NGOÀI khối try của tệp — thông điệp không được là
+  "thất bại" của một tệp đã áp (test ghim `not.toContain("thất bại")`).
+- Câu lấy client gộp câu đọc vào cùng vòng đi-về với `SET ROLE` (bản S1.59 là hai vòng): tổng vẫn hai vòng khi có `RESET ALL`.
+
+## 6. Đột biến
+
+Mười một mũi, mỗi mũi cô lập (hoàn tác đúng một phần rồi chạy `-t "S1.9121|khoản nợ 99"` hay `-t "S1.9121"`; kịch bản
+`scratchpad/dot-bien-104.py`):
+
+| mũi | hoàn tác | đỏ |
+|---|---|---|
+| M1 | bỏ `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *` khỏi câu SET ROLE | 4: prepared, con trỏ, LISTEN, ranh giới 87 (vế LISTEN) |
+| M2 | bỏ `RESET ALL` sau khi đọc | 2: ba GUC IM7/TimeZone; ĐỐI CHỨNG S1.59 (`local` → `origin`) |
+| M3 | bỏ `pg_advisory_unlock_all()` khỏi câu SET ROLE | 1: khoá tư vấn mức phiên |
+| M4 | `RESET ALL` vô điều kiện | 1: ranh giới 87 (tín hiệu rò bị xoá) |
+| M5 | `RESET ALL` TRƯỚC câu đọc | 5: ba phép phán S1.59 (row_security, replica, search path), ĐỌC TRƯỚC, ranh giới 87 |
+| M6 | bỏ trục GUC phiên khỏi bản ghi so của migrate() | 3: 180, 181, 182 |
+| M7 | bỏ hai trục prepared statement / con trỏ | 2: 184, 185 |
+| M8 | bỏ phép so sau COMMIT | 3: 186 (khoá), 187 (LISTEN), đối kháng trigger hoãn |
+| M9 | lượt hardening sau vòng lỗi không đặt `phaiHuyPhien` | 1: test hardening |
+| M10 | so theo khoá của cuối tệp thay vì hợp hai tập khoá | 1: 182 (`RESET statement_timeout`) |
+| M8′ | M8 chạy lại sau khi phép so sau COMMIT mở rộng ra mọi trục | 3 (như trên, có thêm ca đối kháng) |
+
+Mọi test khác của hai tệp xanh dưới từng mũi.
+
+## 7. Giới hạn, nói ra
+
+- Khi một GUC tenant/khách rò ở phạm vi phiên, lần lấy ấy không `RESET ALL`: GUC phiên khác trên kết nối ấy chưa được dọn; `withTenant` ở
+  BEGIN kế phân biệt (RESET rồi đọc lại) và huỷ kết nối; đường không qua `withTenant` nhận kết nối ấy như trước — cùng ranh giới khoản 87/99.
+- `DISCARD SEQUENCES` (giá trị `currval`) và `DISCARD PLANS` không dọn — không đường nào của dự án đọc chúng qua kết nối pool.
+- Lớp lấy client vẫn không ĐỌC GUC phiên lạ: nó RESET, nên một GUC phiên lạ không bao giờ thành một dòng log. Đó là cái giá của DỌN.
+- `migrate()`: `pg_settings` không thấy placeholder (đo S1.47 — bốn GUC `app.*` vẫn đọc thẳng như trước) và với vai deploy không có
+  `pg_read_all_settings` thì giá trị GUC chỉ-superuser ẩn (NULL ở cả hai mốc ⇒ không so được). Các lượt hardening không đi qua phép so
+  (mã của chính dự án; S1.95 đo không câu `SET` mức phiên nào). Một tệp đặt lại GUC đúng bằng giá trị nền không phân biệt được với không đặt
+  (vô hại, nói ra ở chú thích).
+- Phép so sau COMMIT dừng SAU khi checksum đã ghi — đó là bản chất của hai trục chỉ thấy được lúc commit, và thông điệp nói ra điều ấy.
+- Giá mỗi lần lấy client tăng ≈ 75 µs (đọc tên bốn GUC tenant/khách và một vòng `RESET ALL`) — xem mục 8; máy đo dùng chung bốn agent,
+  số là trung vị và dao động ±20 % giữa hai lượt (275 và 335 µs cho cùng câu A).
+- Hai lời khai thiu nhỏ chưa gạch (ngoài phạm vi khoản 4 như đề bài giới hạn): heading `[vòng fix 1 — IM7] HAI GUC …` ở `pool.ts` và tên
+  describe *hai GUC giảm nhẹ* ở `pool.test.ts` — lịch sử của IM7, không phải giá trị hiện hành.
+
+## 8. Số đo
+
+Lệnh đo: `scratchpad/do-104.int.test.ts` (tệp tạm, không commit) chạy `pnpm vitest run packages/db/src/do-104.int.test.ts` với hai biến cụm
+cục bộ; PostgreSQL 16.13 (Ubuntu), pool `createPool(urlLogin, 1, { role: "app_api" })` và một `pg.Pool` trần cùng đăng nhập
+`app_api_login`; trung vị (p90 trong ngoặc) của 2 000 lần sau 200 lần làm nóng, máy bốn lõi dùng chung:
+
+| mục | µs trước vá |
+|---|---|
+| A. một lần lấy client qua `ganVaiTroChoPool` (mã S1.59) | 275 (380) — lượt đầu 335 (777) |
+| B. `SELECT 1` — một vòng đi-về trần | 76 (192) |
+| C. `SET ROLE app_api; DISCARD TEMP` | 43 (73) |
+| D. câu đọc hiện hành (current_user + 3 GUC) | 104 (201) |
+| E1. D + tên bốn GUC tenant/khách | 176 (282) |
+| E2–E6. D + một bộ đếm (view/hàm pg_cursors, pg_prepared_statements, pg_listening_channels) | 160–178 |
+| E7. D + bốn GUC + ba `count` trên hàm | 294 (440) |
+| E8. D + bốn GUC + ba `EXISTS` trên hàm | 240 (393) |
+| F. PHÁN: E + quét `pg_settings` `source = 'session'` | 1 197 (2 724) |
+| G. PHÁN: E + quét `pg_settings` `setting <> reset_val` | 1 221 (4 169) |
+| H. E + đếm `pg_locks` advisory của pid | 484 (675) |
+| I. DỌN: `RESET ALL` | 37 (56) |
+| J. `RESET ALL; SELECT pg_advisory_unlock_all()` | 74 (112) |
+| J2. `RESET ALL; CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; SELECT pg_advisory_unlock_all()` | 84 (127) |
+| K. `SET ROLE; DISCARD TEMP; SELECT pg_advisory_unlock_all()` | 84 (134) |
+| L. K + E8 + `RESET ALL` — ba vòng, đọc ba bộ đếm rồi dọn | 414 (553) |
+| L2. C + E1 + J2 — ba vòng, dọn cả ba trạng thái | 350 (599) |
+| M. C + F — hình dạng PHÁN, hai vòng | 1 327 (3 481) |
+| sau `RESET ALL`: `current_user = app_api`, `statement_timeout` về nền, `TimeZone` về `Etc/UTC`; `pg_cursors` không kể portal đang chạy (0) | — |
+
+Sau vá: A sau vá: 467 µs (p90 742), nhưng cùng lượt ấy `SELECT 1` trần đo 131 µs (lượt trước vá: 76) và `RESET ALL` 94 (trước: 37) — máy dùng chung tải nặng hơn, số tuyệt đối không so được giữa hai lượt; tỉ số A/`SELECT 1` là 3,6 ở cả hai lượt. Ước lượng theo thành phần đo cùng lượt trước vá: +~70 µs đọc tên bốn GUC tenant/khách (cùng vòng đi-về với SET ROLE) và một vòng `RESET ALL` (37 µs) ≈ +25 % so với 275 µs; bốn thứ ngoài GUC ≈ +10 µs.
+
+Kết luận đo: PHÁN đắt gấp 3–4 lần cả lần lấy hiện hành và đọc `pg_locks` đắt gần bằng một lần lấy; DỌN gần miễn phí — chọn DỌN.
+
+Kết quả kiểm: xem mục 8 của tệp bàn giao.
+
 # §S1.9131 — TRẢ NỢ LÔ L3: BẢNG SO SÁNH TÍNH SỐ TIỀN MỘT LẦN MỖI HÀNG, CHỈ KHI VÔ HƯỚNG (114); KHOẢN 160 ĐÓNG BẰNG PHÉP ĐỌC LẠI `055`
 
 **Rổ và mảnh (ADR-043 ⒞):** hai khoản rổ B. Mảnh §11 chạm: bước *"bảng so sánh hiện ra với giá đúng tới từng chữ số"* — kết quả không đổi, chỉ rẻ hơn; 160 nằm ngoài §11 (S1.95). Không migration, không ADR. Mở khoản 9431.
