@@ -161,6 +161,13 @@ async function goi(g: string, method: string, duong: string, cookie: string, tha
   return { status: res.status, body, text };
 }
 
+/** [S1.193 / S3.2c] `GET /rfqs/:rfqId/invitations` — ba trường màn `/tao-thau` đọc để vẽ bảng và chọn nút. */
+async function danhSach(t: ToChuc, rfqId: string): Promise<{ id: string; status: string; moiSauKhiKy: boolean }[]> {
+  const r = await goi(goc, "GET", `/rfqs/${rfqId}/invitations`, t.pm.cookie);
+  expect(r.status, r.text).toBe(200);
+  return (r.body.invitations as { id: string; status: string; moiSauKhiKy: boolean }[]).map(({ id, status, moiSauKhiKy }) => ({ id, status, moiSauKhiKy }));
+}
+
 /** Gom MỌI dòng `console.error` từ lúc gọi tới lúc `tra()`. */
 function batLog(): { readonly log: string[]; readonly tra: () => void } {
   const log: string[] = [];
@@ -511,6 +518,8 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
     expect(h.tokens, "không token nào cho gói chưa từng mở (K6)").toHaveLength(0);
     expect(bg.khiGui.length, "bộ gửi không được gọi").toBe(truoc);
     expect((await suKien(t.org, loiMoi.id)).map((e) => e.action)).toEqual(["INVITATION_CREATED"]);
+    // [S1.193 / S3.2c] Danh sách mà màn đọc nói đúng điều ấy: chưa gửi, không nhãn.
+    expect(await danhSach(t, rfqId)).toEqual([{ id: loiMoi.id, status: "UNSENT", moiSauKhiKy: false }]);
   });
 
   it("[INV-K6] ⑵ mở gói: MỘT token cho MỖI lời mời còn sống, dưới phiên người mở, trong giao dịch mở; link đi khi token và gói ĐÃ commit; lời mời thành SENT; 200 với danh sách chưa gửi rỗng", async () => {
@@ -664,6 +673,11 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
     expect(sk.map((e) => e.action)).toEqual(["INVITATION_CREATED", "MAGIC_LINK_TOKEN_ISSUED", "MAGIC_LINK_TOKEN_REVOKED"]);
     expect(sk[2]?.payload).toEqual({ invitationId: hong.loiMoi.id, reason: "LINK_SEND_FAILED" });
     expect(log.log.filter((l) => l.includes("sau-commit"))).toHaveLength(1);
+    // [S1.193 / S3.2c] Danh sách mà màn đọc mang nhãn *mời sau khi ký* của CẢ HAI, và trạng thái thật của từng lời mời.
+    expect(await danhSach(t, rfqId)).toEqual([
+      { id: duoc.loiMoi.id, status: "SENT", moiSauKhiKy: true },
+      { id: hong.loiMoi.id, status: "UNSENT", moiSauKhiKy: true },
+    ]);
 
     const gl = await goi(goc, "POST", `/invitations/${hong.loiMoi.id}/reissue`, t.pm.cookie);
     expect(gl.status, gl.text).toBe(200);
@@ -710,6 +724,7 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
     const h = await trangThai(loiMoi.id);
     expect(h.status).toBe("SENT");
     expect(h.tokens, "lần mở không đúc thêm").toHaveLength(1);
+    expect(await danhSach(t, rfqId), "[S1.193 / S3.2c] tổ chức chưa bật: không nhãn").toEqual([{ id: loiMoi.id, status: "SENT", moiSauKhiKy: false }]);
   });
 });
 

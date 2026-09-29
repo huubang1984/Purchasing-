@@ -16,7 +16,7 @@
 // Màn hỏi `GET /policy/versions` MỘT lần sau đăng nhập để biết luồng nào; mọi phép tính ở `/lib/tao-thau.js`.
 // ==============================================================================================
 
-import { baoSauKhiMo, baoSauKhiMoi, hienTraVe, loiLyDo, nhanTrangThaiLoiMoi, nutLoiMoi, thuTuBuoc } from "/lib/tao-thau.js";
+import { baoSauKhiMo, baoSauKhiMoi, hienTraVe, loiLyDo, nhanLoiMoi, nutLoiMoi, thuTuBuoc } from "/lib/tao-thau.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -160,9 +160,16 @@ async function napLuong() {
 
 /** [S1.191 / S3.2c2] Đặt luồng rồi vẽ lại: thứ tự bước, số bước, hai đoạn ghi, khối trả về soạn thảo. */
 function datLuong(moi) {
+  const doiLuong = moi.daBat !== luong.daBat;
   luong = moi;
   const thuTu = thuTuBuoc(luong.daBat);
-  if (luong.daBat) $("khung").classList.add("moi-truoc"); else $("khung").classList.remove("moi-truoc");
+  // [S1.193 / S3.2c2] Dời THẬT trong DOM theo `thuTuBuoc`, không bằng CSS `order`: phím Tab và trình đọc màn hình đi theo thứ
+  // tự DOM, không theo thứ tự vẽ. Chỉ dời khi luồng đổi — `datLuong` chạy lại mỗi lần nạp gói, và dời một phần tử đang giữ
+  // tiêu điểm làm mất tiêu điểm. HTML khai thứ tự MVP1, và `luong` khởi đầu ở MVP1.
+  if (doiLuong) {
+    if (thuTu.indexOf("b5") < thuTu.indexOf("b4")) $("b4").before($("b5"));
+    else $("b5").before($("b4"));
+  }
   $("so-b4").textContent = String(thuTu.indexOf("b4") + 2);
   $("so-b5").textContent = String(thuTu.indexOf("b5") + 2);
   hien($("ghi-s3-b4"), luong.daBat);
@@ -418,7 +425,8 @@ async function napLoiMoi() {
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");
-    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanTrangThaiLoiMoi(m.status)]) {
+    // [S1.193 / S3.2c2 · K6] Lời mời thêm lúc gói đã mở mang nhãn *mời sau khi ký* — `listInvitations` trả cờ ấy.
+    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanLoiMoi(m.status, m.moiSauKhiKy)]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
       tr.append(td);
