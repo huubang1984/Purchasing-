@@ -111,7 +111,7 @@ export async function taoHangChuan(client: pg.PoolClient, orgId: string, input: 
         [orgId, input.ma, donViGoc, actor.id, actor.sessionId],
       )
     ).rows[0];
-    if (hang === undefined) throw new Error("INSERT canonical_items không trả hàng nào");
+    if (hang === undefined) throw new Error("câu chèn canonical_items không trả hàng nào");
     const phienBanSeq = await chenPhienBan(client, orgId, hang.id, input, "DANG_DUNG", actor);
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
@@ -150,7 +150,7 @@ async function chenPhienBan(
     ],
   );
   const seq = rows[0]?.seq;
-  if (seq === undefined) throw new Error("INSERT canonical_item_versions không trả hàng nào");
+  if (seq === undefined) throw new Error("câu chèn canonical_item_versions không trả hàng nào");
   return seq;
 }
 
@@ -209,7 +209,7 @@ export async function khaiBiDanhHang(
         [orgId, input.biDanh, input.hangChuanId, actor.id, actor.sessionId],
       )
     ).rows[0];
-    if (hang === undefined) throw new Error("INSERT item_aliases không trả hàng nào");
+    if (hang === undefined) throw new Error("câu chèn item_aliases không trả hàng nào");
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
       actorId: actor.id,
@@ -250,7 +250,7 @@ export async function rutBiDanhHang(
         [orgId, input.biDanh, actor.id, actor.sessionId],
       )
     ).rows[0];
-    if (hang === undefined) throw new Error("INSERT item_aliases không trả hàng nào");
+    if (hang === undefined) throw new Error("câu chèn item_aliases không trả hàng nào");
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
       actorId: actor.id,
@@ -299,7 +299,7 @@ export async function khaiQuyDoiRieng(
         [orgId, input.hangChuanId, tu, sang, input.heSo, actor.id, actor.sessionId],
       )
     ).rows[0];
-    if (hang === undefined) throw new Error("INSERT item_uom_conversions không trả hàng nào");
+    if (hang === undefined) throw new Error("câu chèn item_uom_conversions không trả hàng nào");
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
       actorId: actor.id,
@@ -342,7 +342,7 @@ export async function rutQuyDoiRieng(
         [orgId, input.hangChuanId, tu, sang, actor.id, actor.sessionId],
       )
     ).rows[0];
-    if (hang === undefined) throw new Error("INSERT item_uom_conversions không trả hàng nào");
+    if (hang === undefined) throw new Error("câu chèn item_uom_conversions không trả hàng nào");
     await appendAuditEvent(client, orgId, {
       actorType: actor.type,
       actorId: actor.id,
