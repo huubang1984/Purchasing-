@@ -16572,3 +16572,118 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
   `docs/DECISIONS.md` (ADR-116 rồi ADR-119) và lời khai đếm (lấy bản `master`, `cap-so --dem` viết lại).
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
+
+# §S1.9171 — CỔNG `pool-nghe-du-tin-hieu`: QUÉT CẢ `tools/`, NHẬN DIỆN THEO IMPORT ĐÃ PHÂN GIẢI, `NGOAI_LE` CÓ RĂNG — KHOẢN 176, 180, 182 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một cổng kiến trúc và lớp chẩn đoán của bốn
+tool; không route, không màn, không migration, không ADR. Đóng 176, 180, 182; mở 9471.
+
+## 1. Vòng này là gì
+
+Lô L7 của đợt trả nợ lô B: ba khoản cùng một tệp cổng. Khoản 182 — cổng chỉ nhận diện `createPool` gọi bằng tên trần gán vào biến
+(fail-open với `new pg.Pool`, bí danh, thuộc tính lớp) và hai vế của nó không có răng (`NGOAI_LE` rỗng, sàn `≥ 2` đặt đúng bằng
+con số hôm nay). Khoản 180 — pool trong `tools/` đi qua `withTenant` không nghe tín hiệu nào và cổng không quét `tools/`. Khoản
+176 — khối lý do đầu tệp cổng phải viết đủ ba ranh giới đúng với cổng sau khi vá.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Hai điểm trong phạm vi đã duyệt tôi tự chốt ở mục 5.
+
+## 3. Đo trước
+
+- Cổng cũ trên `33563ea`: 4/4 xanh, 5 ms — đúng như khoản 182 tả: `NGOAI_LE = []` nên vế "mỗi dòng ứng với một pool có thật" không đo gì;
+  `HO_SO` có đúng hai tệp (`apps/api/src/composition.ts`, `apps/unseal-worker/src/tien-trinh.ts`) nên sàn `≥ 2` không còn biên độ.
+- Cổng MỚI (binder, quét `apps/` ∪ `tools/`, ba dòng `NGOAI_LE` đã khai) chạy trên tools CHƯA vá: 7/9 xanh, 2 đỏ — vế `release` và
+  vế lỗi-tới-muộn, cùng danh sách năm pool:
+  `tools/bo-xuat-danh-gia/src/index.ts: xuat.pool` · `tools/gieo-demo/src/index.ts: chinh.pool` · `tools/khoi-tao-to-chuc/src/index.ts:
+  chay.pool` · `tools/neo-so-kiem-toan/src/index.ts: xuat.pool` · `tools/neo-so-kiem-toan/src/index.ts: kiem.pool`. Tám pool trong
+  `tools/` tất cả (ba pool còn lại — neo `lietKeToChuc.pool`, chay-migrate `chay.pool`, pilot-gia-lap `CsdlDacQuyen.mo.pool` — không đi
+  qua `withTenant`). Khoản 180 dự kiến "hai hàng"; con số thật là năm vì cổng mới thấy `new pg.Pool` (gieo-demo) và hai tool sinh sau
+  S1.87 (bo-xuat S1.114, khoi-tao S1.182).
+- Thí nghiệm binder (tệp tạm ngoài kho): chương trình một tệp `noResolve`+`noLib` dựng trong 64 ms lần đầu; 94 tệp `apps/`+`tools/`
+  đọc và phân giải mọi identifier trong 1 999 ms, 0 lỗi cú pháp; `this.q` phân giải về `PropertyDeclaration`, `import pg from` về
+  `ImportClause`, `import * as ns` về `NamespaceImport`, `import { Pool as Ho }` về `ImportSpecifier` mang `propertyName`.
+
+## 4. Thay đổi
+
+**`tests/architecture/pool-nghe-du-tin-hieu.test.ts`** (viết lại, giữ khối lý do cũ và gạch tại chỗ câu sai):
+- `TEP_QUET = git ls-files -- "apps/**/*.ts" "tools/**/*.ts"`, bỏ test và `.d.ts`.
+- `docVanBan(tep, vanBan)`: chương trình TypeScript một tệp; lượt 1 tìm chỗ dựng pool — `laDungPool`: callee phân giải về
+  `createPool` của `@trustprocure/db` (tên, bí danh, `ns.createPool`) hay `Pool` của `pg` (`pg.Pool`, `ns.Pool`, `Ho`) — rồi ký hiệu
+  được gán (`VariableDeclaration`, `PropertyDeclaration`, `x = …`, `this.x = …`, xuyên `as`/`satisfies`/`!`/ngoặc); không gán ⇒ pool
+  không tên `<khong-ten:dòng>`. Lượt 2 tìm người nghe và `withTenant` theo ký hiệu của đối số đầu: `.on("release")` viết thẳng;
+  `ngheLoiKetNoiToiMuon`/`withTenant` import từ tenancy; `ghiLogKetNoiHuy`/`ghiLogLoiKetNoiToiMuon` CHỈ khi import từ `./mo-ta-loi.js`.
+- Tên pool theo phạm vi (`duongPhamVi`): `xuat.pool`, `taoTienTrinhApi.auditPool`, `CsdlDacQuyen.mo.pool`, `B.q`; tham số constructor
+  lấy tên lớp.
+- Hàm thuần: `duocMien(ngoaiLe, tep, pool)`, `timThieu(hoSo, ngoaiLe, "release" | "toiMuon")`, `kiemNgoaiLe(ngoaiLe, hoSo)` (pool có thật,
+  lý do không rỗng, KHÔNG đi qua `withTenant`), `tenTrung(hoSo)`.
+- Chín vế: bốn đối chứng trong bộ nhớ (tệp không nghe; hình dạng — sáu tên; hai hàm cùng tên `pool`; lớp `this.q` và hàm bọc tin theo
+  import), một đối chứng `NGOAI_LE` giả, một vế phép quét thật (0 lỗi cú pháp, có pool ở cả `apps/` lẫn `tools/` — chỉ bắt `ls-files`
+  rỗng, không phải sàn —, tên duy nhất), hai vế tín hiệu, một vế `NGOAI_LE` thật.
+- `NGOAI_LE` ba dòng: `neo-so-kiem-toan lietKeToChuc.pool`, `chay-migrate chay.pool`, `pilot-gia-lap CsdlDacQuyen.mo.pool`, lý do ghi
+  ADR và lý do kỹ thuật (không `withTenant` ⇒ không nguồn phát).
+
+**Bốn tool** — gắn hai listener ngay chỗ dựng pool, bộ mô tả cục bộ chỉ tên lỗi và mã hằng (không `message`, không `cause`):
+- `tools/neo-so-kiem-toan/src/index.ts`: `moTaLoiKhongGiaTri`, hai hàm dựng bộ nghe `ghiKetNoiHuy(ten)`/`ghiLoiToiMuon(ten)` (khuôn
+  worker); `xuat` và `kiem` gọi `pool.on("release", …)` + `ngheLoiKetNoiToiMuon(pool, …)`; `lietKeToChuc` ghi lý do miễn; hai chú thích
+  *"đứng NGOÀI tầm cổng"* gạch tại chỗ.
+- `tools/bo-xuat-danh-gia/src/index.ts`: cùng khuôn cho pool của `xuat`; chú thích gạch tại chỗ.
+- `tools/khoi-tao-to-chuc/src/index.ts`: import `TenantError`, `ngheLoiKetNoiToiMuon` (gói đã có `tenancy` trong `dependencies`); hai
+  listener ở `chay` — pool đi qua `withTenant` ở `khoi-tao.ts`, listener gắn ở tệp dựng pool; mô tả bằng `maLoi` sẵn có.
+- `tools/gieo-demo/src/index.ts`: hai listener cho `new pg.Pool` (pool superuser, nửa CÓ tenant đi qua `withTenant`).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Binder một tệp thay cho TypeChecker toàn kho.** Phân loại đề nghị "nhận diện theo KIỂU (TypeChecker) hoặc vế cấm `new pg.Pool`".
+  TypeChecker toàn kho phải đi theo import qua `paths` của tsconfig (kéo cả `packages/`), đắt (tsc toàn kho ~20 s) và có ca fail-open
+  mới: module không phân giải được ⇒ kiểu `any` ⇒ pool vô hình. Binder một tệp phân giải bí danh về (gói, tên xuất) và phân giải biến
+  về đúng khai báo trong phạm vi — đủ cho cả ba hình dạng khoản 182 nêu, ~2 s cho 94 tệp, và không phụ thuộc cấu hình phân giải module.
+  Giá phải trả ghi ở ranh giới ⑶: pool lấy từ một hàm tự viết ở tệp khác không được nhìn ở phía người gọi (nó bị bắt ở tệp dựng, là
+  pool không tên).
+- **`NGOAI_LE` chỉ nhận pool không đi qua `withTenant`.** Phân loại nói "pool không đi qua `withTenant` thì khai `NGOAI_LE` kèm lý do";
+  tôi cho cổng KIỂM điều ấy thay vì tin lời khai — vì đó là lý do miễn duy nhất kiểm được bằng cú pháp. Hệ quả nói ra: ca "pool dựng
+  ở đây, nghe ở tệp khác" mà bản S1.84 bảo "khai NGOAI_LE" nay KHÔNG miễn được nếu pool ấy đi qua `withTenant` trong tệp — lời giải là
+  gắn ở tệp dựng pool (khoi-tao làm đúng thế).
+- **Ba pool không đi qua `withTenant` miễn thay vì gắn listener chết.** Gắn `.on("release")` cho một pool không bao giờ nhận
+  SESSION_STATE_LEFT là một dòng nói dối về thứ nó đo. Miễn có răng đáng hơn.
+- **Tool không có hàm mô tả lỗi dùng chung** (khoản 166 chưa làm, và lô này không được thêm export): mỗi tool một `moTaLoiKhongGiaTri`
+  cục bộ ~4 dòng (neo, bo-xuat), khoi-tao dùng `maLoi` sẵn có, gieo-demo in thẳng `name`/`code`. Bốn bản là cái giá của khoản 166,
+  không phải một khoản mới.
+
+## 6. Đột biến
+
+Kịch bản `dot-bien.sh` (ngoài kho): sửa một dòng, chạy cổng, khôi phục. Mười ca, mỗi ca ĐỎ:
+- M1 neo `xuat`: gỡ `pool.on("release", …)` ⇒ 1 vế đỏ, `tools/neo-so-kiem-toan/src/index.ts: xuat.pool`.
+- M2 neo `kiem`: gỡ `ngheLoiKetNoiToiMuon(pool, …)` ⇒ 1 vế đỏ, `kiem.pool` (hàm `xuat` cùng tệp nghe đủ KHÔNG che được — đây là ca
+  phép đọc theo tên của bản cũ sẽ xanh giả).
+- M3 gieo-demo: gỡ khối `ngheLoiKetNoiToiMuon` ⇒ 1 vế đỏ, `chinh.pool`.
+- M4 khoi-tao: gỡ khối `pool.on("release")` ⇒ 1 vế đỏ, `chay.pool`.
+- M5 bo-xuat: đổi `"release"` thành `"error"` ⇒ 1 vế đỏ, `xuat.pool`.
+- M6 cổng: `NGOAI_LE` trỏ `xuat.pool` (đi qua `withTenant`) thay `lietKeToChuc.pool` ⇒ 3 vế đỏ (`lietKeToChuc.pool` thiếu ×2; "xuat.pool —
+  đi qua withTenant trong tệp, không được miễn").
+- M7 cổng: dòng miễn chết `chay.pool2` ⇒ 4 vế đỏ (kể cả đối chứng trong bộ nhớ, vì nó dùng chính `NGOAI_LE` thật để đòi "không miễn tệp
+  không tồn tại").
+- M8 cổng: `duocMien` luôn `true` ⇒ 5 vế đỏ.
+- M9 cổng: `laDungPool` bỏ nhánh `new Pool` ⇒ đối chứng hình dạng đỏ.
+- M10 cổng: quét chỉ `apps/` như cũ ⇒ 2 vế đỏ (không thấy pool ở `tools/`; ba dòng `NGOAI_LE` thành dòng chết).
+
+## 7. Giới hạn, nói ra
+
+- Tín hiệu ⑵ ở tool vẫn KHÔNG phát: không lời gọi `withTenant` nào trong `tools/` đặt `maxConnectWaitMs`. Listener gắn để cổng đòi đủ
+  hai và để một lần đặt trần sau không phải nhớ; không có test hành vi nào ghim dòng log của tool (khoản 183 mang việc ấy cho api/worker).
+- Không test tích hợp nào của tool dựng cảnh SESSION_STATE_LEFT; phép đo của vòng này là cổng tĩnh + đột biến, không phải dòng log thật.
+- `packages/` vẫn ngoài tầm cổng: khoản 9471 (mục 7 bàn giao).
+- Cổng tin hai hàm bọc của `api` theo đường import `./mo-ta-loi.js`, không đọc thân — ranh giới ⑴.
+- Hai điều ĐỎ trong `pnpm vitest run tests/architecture tools` KHÔNG do lô này (mục 8): `duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ đỏ vì
+  `packages/test-support/src/postgres-cuc-bo.ts` (commit `3d991a3`/`33563ea` của người tích hợp) dựng `pg.Client` và `.connect()` chưa khai;
+  `khoi-tao.int.test.ts` ca "email mang một điểm mã mà JS và CSDL hạ KHÁC nhau" đỏ ở TIỀN ĐỀ (`pg_catalog.lower('Ⓐ')` trên cụm cục bộ
+  trùng `toLowerCase()`) — tính chất locale của cụm `tp-test`, không chạm mã lô này (ca ấy dựng pool riêng, không đi qua `index.ts`).
+
+## 8. Số đo
+
+- `pnpm vitest run tests/architecture/pool-nghe-du-tin-hieu.test.ts` — trước vá: 2 đỏ / 9 (năm pool ×2); sau vá: 9/9 xanh, ~2,5 s (collect 2,0 s).
+- Mười đột biến: 10/10 đỏ (chi tiết mục 6).
+- `pnpm typecheck`: sạch, 19,5 s.
+- `pnpm exec eslint` năm tệp đã chạm: sạch.
+- `pnpm exec depcruise tools tests --config .dependency-cruiser.cjs`: 0 vi phạm (251 module, 782 cạnh).
+- `pnpm vitest run tests/architecture tools`: 56 tệp: 54 xanh, 2 đỏ; 824 test: 819 xanh, 4 đỏ, 1 bỏ qua (`xuong-dong-ts` vế ⑷ chỉ chạy trên CI); 252 s. Bốn ca đỏ không do lô này (xem dưới). Cổng `pool-nghe-du-tin-hieu` 9/9 xanh trong lượt này; bốn test tích hợp của tool đã chạm (`cong-cu.int` 19/19, `bo-xuat.int` 9/9, `chay-migrate.int` 4/4, `khoi-tao.int` 15/16) xanh trừ ca tiền đề locale

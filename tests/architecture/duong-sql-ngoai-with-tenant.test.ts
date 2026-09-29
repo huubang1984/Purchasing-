@@ -251,6 +251,12 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     so: 3,
     lyDo: "hạ tầng test: pg.Client dựng CSDL của cụm thử, pool superuser của cụm là cố ý, poolAs bọc ganVaiTroChoPool",
   },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    so: 1,
+    lyDo:
+      "[S1.9110] hạ tầng test — đường cụm Postgres CỤC BỘ khi không có Docker: một pg.Client superuser nối vào CSDL `postgres` " +
+      "của cụm vừa initdb chỉ để CREATE DATABASE trustprocure_test, rồi end(); cùng vai với pg.Client của postgres.ts",
+  },
 };
 
 /** Vế ⒞: số chỗ lấy client và chạy câu thẳng trên pool của từng tệp, kèm lý do. */
@@ -333,6 +339,13 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     cau: 0,
     lyDo: "hạ tầng test — pg.Client dựng CSDL của cụm thử",
   },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    lay: 1,
+    cau: 0,
+    lyDo:
+      "[S1.9110] hạ tầng test — cụm cục bộ: một connect() của pg.Client superuser để CREATE DATABASE (câu chạy trên client, " +
+      "không trên pool), trước khi có bất kỳ pool nào; không có tenant để đi qua withTenant",
+  },
 };
 
 const RE_GOI_CREATE_POOL = /\bcreatePool\s*\(/gu;
@@ -379,6 +392,12 @@ const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     lyDo:
       "hạ tầng test — pg.Client một lần của phép đo backend còn sót ngay trước khi dừng container; kết nối đứt ở đó làm bộ test đỏ, " +
       "không có tiến trình sản xuất nào để chết",
+  },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    so: 1,
+    lyDo:
+      "[S1.9110] hạ tầng test — pg.Client một lần để CREATE DATABASE trên cụm cục bộ vừa khởi động; kết nối đứt ở đó làm " +
+      "startPostgres() ném và bộ test đỏ, không có tiến trình sản xuất nào để chết",
   },
 };
 

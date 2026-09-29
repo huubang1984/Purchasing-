@@ -4622,7 +4622,7 @@ phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai 
   tới TRONG trần vẫn đi ra qua `Promise.race` cho người gọi và MỘT sự cố không bao giờ thành HAI dòng. Có đối chứng đo vế này.
 - Tên sự kiện KHÔNG phải `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe, nên một pool chưa gắn listener sẽ giết
   tiến trình thay vì mất tín hiệu. Tên riêng làm hỏng-êm, và cái giá ấy được trả bằng cổng.
-- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` nghe đủ hai tín hiệu mất-không-ai-biết:
+- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` ~~nghe đủ~~ **[S1.9171 / khoản 180]** và `tools/` nghe đủ hai tín hiệu mất-không-ai-biết:
   `release` mang `SESSION_STATE_LEFT` (khoản 118) và lỗi-tới-muộn (khoản 129). Cổng đọc CÂY CÚ PHÁP, không phải biểu thức
   chính quy.
 
