@@ -1383,7 +1383,7 @@ và "chỉ cổng"). Bản cài:
 5. `apps/unseal-worker` khai `@trustprocure/identity` ở `dependencies`: mã chạy import gói ấy từ S1.6 mà khai ở `devDependencies`, và t0 không
    thấy vì quy tắc depcruise chỉ xét cạnh `npm-dev`, không thấy gói workspace. Cổng phạm vi sản xuất thêm vế import lúc chạy. [S1.72 / lượt soi
    67a-1, 67a-2] Ngoặc chỉ mang kiểu nội tuyến (`import { type A } from …`) vẫn tính — đo: dưới `node --experimental-transform-types` câu import
-   còn lại và gói vẫn được nạp —, và rổ miễn của vế ấy không chứa gói dưới `apps/` — [lượt soi 67c-5, 67c-7] hay `tools/`; phép đọc import cũng
+   còn lại và gói vẫn được nạp —, và rổ miễn của vế ấy không chứa gói dưới `apps/` — [lượt soi 67c-5, 67c-7] hay `tools/` — [S1.9191 / khoản 223] và chỉ nhận gói TỰ KHAI `trustprocure.testOnly` dưới `packages/`; phép đọc import cũng
    đọc cây cú pháp. `packages/unseal` chuyển `@trustprocure/tenancy`, chỉ test
    dùng, sang `devDependencies` (lượt soi 62a-6 mang sang).
 
@@ -4137,7 +4137,7 @@ chạy trong kho (không phải suy đoán).
   sách khai, bản test giữ cùng danh sách và một cổng đòi hai bản khớp: ~~ba~~ bốn có hàng (`POLICY_RESTRICTIVE_KHAI`
   tám biến thể của 027, `POLICY_KHAC_KHAI` một, `BANG_RLS_NGOAI_TENANT_KHAI`, `BANG_TENANT_KHAI` 29 tên [S1.43]), ~~năm~~ bảy rỗng có meta-test sentinel
   (`QUAN_HE_KHAC_KHAI`, `TRIGGER_NGOAI_PLPGSQL_KHAI`, `RULE_KHAI`, `KE_THUA_KHAI`, `BANG_ORG_ID_NGOAI_PUBLIC_KHAI`, `BANG_KHOA_NGOAI_TENANT_KHAI` [S1.46], `GUC_TUY_BIEN_KHAI` [S1.47]);
-  cộng ở test: `HAM_KHONG_PHAI_CANH`, `RULE_DA_KHAI`, `LOAI_DA_KHAI`. Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
+  cộng ở test: ~~`HAM_KHONG_PHAI_CANH`~~ **[S1.9191 / khoản 221]** `HAM_KHONG_PHAI_CANH` (nay ở `db/danh-sach-ham-canh.ts`, hai tệp test đọc chung — tổng điều tra và `migration-shape` vế ⑷), `RULE_DA_KHAI`, `LOAI_DA_KHAI`. Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
   và một dòng khai — cố ý, như ADR-035 §4 đã nói cho nhãn test.
 - **Biểu thức policy khai NGUYÊN VĂN `pg_get_expr`.** Đổi phiên bản PostgreSQL có thể đổi cách
   deparse (khoảng trắng, ngoặc) ⇒ đỏ ồn ào chứ không xanh im lặng; sửa bằng cách chép lại biểu thức

@@ -16687,3 +16687,114 @@ Kịch bản `dot-bien.sh` (ngoài kho): sửa một dòng, chạy cổng, khôi
 - `pnpm exec eslint` năm tệp đã chạm: sạch.
 - `pnpm exec depcruise tools tests --config .dependency-cruiser.cjs`: 0 vi phạm (251 module, 782 cạnh).
 - `pnpm vitest run tests/architecture tools`: 56 tệp: 54 xanh, 2 đỏ; 824 test: 819 xanh, 4 đỏ, 1 bỏ qua (`xuong-dong-ts` vế ⑷ chỉ chạy trên CI); 252 s. Bốn ca đỏ không do lô này (xem dưới). Cổng `pool-nghe-du-tin-hieu` 9/9 xanh trong lượt này; bốn test tích hợp của tool đã chạm (`cong-cu.int` 19/19, `bo-xuat.int` 9/9, `chay-migrate.int` 4/4, `khoi-tao.int` 15/16) xanh trừ ca tiền đề locale
+
+# §S1.9191 — CỔNG TĨNH: HÌNH DẠNG GITLEAKS, BỐN VẾ VĂN BẢN CỦA BẢNG TENANT, VẾ ⑷ PHẠM VI SẢN XUẤT ĐỌC MỌI GÓI — KHOẢN 132, 221, 223 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — ba cổng kiến trúc/T1, không route, không màn, không
+migration, không ADR, không phụ thuộc mới. Đóng 132, 221, 223; mở 9491.
+
+## 1. Vòng này là gì
+
+Lô L9 của đợt trả nợ: ba khoản cùng một hình dạng — một bảo đảm có thật (cấu hình quét bí mật; bảy lời khai của một bảng tenant; phụ thuộc
+lúc chạy của một gói) mà lớp canh không nhìn tới, hoặc nhìn tới quá muộn (`test:int`), hoặc miễn oan (gói chưa ai import). Khoản 132 —
+`.gitleaks.toml` và `.gitleaksignore` không có cổng. Khoản 221 — bốn trong bảy lời khai của một bảng tenant mới quyết định được từ văn bản
+migration mà chỉ `test:int` thấy. Khoản 223 — vế ⑷ của `pham-vi-san-xuat` miễn mọi gói không ai import, nên gói lá mới không được đo.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Ba điểm trong phạm vi đã duyệt tôi tự chốt ở mục 5.
+
+## 3. Đo trước
+
+Mọi phép đo dưới đây là đột biến TẠM trên văn bản thật của kho, khôi phục trong `finally` (`scratchpad/lo91-do-truoc.mjs`); `git status` sau
+đó chỉ còn sáu tệp của lô.
+- 132: `.gitleaks.toml` thêm `paths = ['''apps/''']` vào `[allowlist]` ⇒ `hinh-dang-ci.test.ts` 10/10, `tep-van-ban-git.test.ts` 7/7 XANH
+  (cổng mới: 5/9 đỏ). Tạo `.gitleaksignore` một dấu vân tay ⇒ hai cổng cũ xanh (cổng mới: 1 đỏ). Đúng như hàng 132 tả.
+- 221: trên `33563ea`, `db/migration-shape.test.ts` 24/24 xanh và không vế nào đọc policy `_khach`, `GRANT INSERT`, `BANG_TENANT_KHAI` hay
+  hàm trigger. Cổng mới trên `057`/hardening bị đột biến: đổi tên policy `rfq_evaluations_khach` ⇒ ⑴ đỏ; `GRANT INSERT ON rfq_evaluations`
+  mức BẢNG (đúng khiếm khuyết S1.105) ⇒ ⑵ đỏ; dòng khai thiu `('public', 'bang_ma_9191', '057_luot_danh_gia')` ⇒ ⑶ đỏ;
+  `CREATE FUNCTION public.ham_la_9191() RETURNS trigger` không khai ⇒ ⑷ đỏ — mỗi ca đúng một test đỏ trong 28, còn lại xanh.
+- 223: gói lá giả `packages/goi-la-gia` (`git add -N`; một tệp test nhắc tên; `src/index.ts` import `@trustprocure/audit` lúc chạy; manifest
+  không khai) ⇒ cổng CŨ (bản `33563ea` chép ra `pham-vi-san-xuat-cu.test.ts` chạy cạnh) 7/7 XANH; cổng MỚI đỏ vế ⑷ với đúng dòng
+  `packages/goi-la-gia/src/index.ts: import "@trustprocure/audit" …`. Rổ vế ⑵ trên kho hôm nay in ra: `["@trustprocure/du-lieu-nen",
+  "@trustprocure/test-support"]` — `du-lieu-nen` (S4.2a) đã nằm trong rổ miễn cũ.
+
+## 4. Thay đổi
+
+**`tests/architecture/hinh-dang-gitleaks.test.ts`** (mới; không sửa `hinh-dang-ci.test.ts`): bộ đọc TOML đóng (`docToml`: `[a]`/`[[a]]`,
+`khoá = giá trị`, mảng nhiều dòng cân bằng ngoặc ngoài chuỗi, `#`; dòng khác NÉM; khoá lặp NÉM); `kiemHinhDangGitleaks(chuỗi)`: mức gốc chỉ
+`title`; đúng hai khối `[extend]` (`useDefault = true`, không khoá khác) và `[allowlist]` (`description`, `regexTarget = "secret"`, `regexes`
+đúng một, neo `^…$`, khớp `017_rfq_key_material`, không khớp năm mẫu hình khoá dựng bằng `repeat`), không `paths`/`commits`/`stopwords`/
+`[[rules]]`/khối lạ; regex Go thử bằng `RegExp` JS nên cú pháp JS không có cũng NÉM. `kiemGitleaksignore` hai chiều với
+`GITLEAKSIGNORE_DA_KHAI` (rỗng; lý do phải > 40 ký tự). `kiemJobQuetBiMat(ci.yml)`: job `t0c-bi-mat` có `uses: gitleaks/gitleaks-action@`,
+không đâu đặt `GITLEAKS_CONFIG`. Ba vế thật + sáu test đối chứng (24 đột biến trên chính văn bản kho, `datBien` ném nếu đột biến không chạm).
+
+**`db/migration-shape.test.ts`** (thêm khối `[S1.9191 / khoản 221]`, không sửa vế cũ): `kiemPolicyKhach`, `kiemGrantInsertCapId`,
+`docBangTenantKhai` + `kiemKhaiBangTenant`, `kiemHamTriggerDaKhai` — bốn hàm thuần trên `Map<tệp, SQL>`; bốn test `[INV-F1]` trên kho với sàn
+chống rỗng ruột (≥ 15 bảng, ≥ 100 câu GRANT, ≥ 40 dòng khai, ≥ 70 hàm) và bốn test đỏ trên văn bản mẫu. `soMigration` nhận `\d{3,4}_` nên số
+tạm `95NN` của ADR-090 cũng là "sau 027".
+
+**`db/danh-sach-ham-canh.ts`** (mới): `HAM_CANH_CHI_GHI_THEM`, `HAM_KHONG_PHAI_CANH` chuyển nguyên văn từ tệp int (kể cả chú thích từng
+dòng), `export const … : readonly string[]`; khối đầu nói vì sao một nguồn hai lớp đọc. **`db/hardening-suy-tu-tinh-chat.int.test.ts`**: chỉ
+hai hằng → một dòng import (1 +, 140 −).
+
+**`tests/architecture/pham-vi-san-xuat.test.ts`**: `Manifest.chiDungChoTest` đọc `trustprocure.testOnly === true`; `tepGit`/`docTepGoc` dùng
+chung; `goiChiDungChoTest` nhận danh sách tệp và hàm đọc (đo được trên gói giả); `mienTruVe4(manifest)` là lời khai dưới `packages/`;
+`khaiSaiCho`, `khaiKhongKhop`; `kiemVe4` là lõi nhận đầu vào; chống rỗng ruột theo lá gồm cả `packages/`. Hai test mới (lời khai được vế ⑵
+xác nhận; gói lá giả đỏ), hai test cũ viết lại, khối đầu tệp gạch tại chỗ câu về rổ miễn cũ.
+
+**`packages/test-support/package.json`**: `"trustprocure": { "testOnly": true }` + dòng `"//"` nói lời khai ấy được đo đối chiếu. Không đổi
+phụ thuộc; `pnpm-lock.yaml` không đổi.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Bộ đọc TOML tự viết, đóng, thay vì thêm một phụ thuộc.** Dự án không có thư viện TOML; thêm một cái để đọc mười dòng là đổi phạm vi
+  phụ thuộc để mua sự tiện, và cổng phạm vi sản xuất/`NGOAI_DUOC_PHEP` sẽ phải đổi theo. Giá: dòng nào bộ đọc không hiểu thì đỏ ồn ào —
+  kể cả một khoá mới hợp lệ của gitleaks — và đó là hướng đúng cho một cấu hình bảo đảm.
+- **Vế ⑵ của 221 rộng hơn đề bài.** Đề bài nói *"không `GRANT INSERT` mức BẢNG"*; tôi ghim thứ hàng 221 thật sự sợ — *cấp được cột `id`* — nên
+  `GRANT ALL`, `GRANT INSERT (… id …)` theo cột, `ON ALL TABLES IN SCHEMA` và `ALTER DEFAULT PRIVILEGES … ON TABLES` đều đỏ; `organizations`
+  miễn vế cột vì `id` của nó là tổ chức và vai khởi tạo (`075`) phải đặt. Hôm nay 169 câu xét, 0 vi phạm — vị từ vẫn là bất biến thật.
+- **Hàm chỉ gắn `TRUNCATE` miễn ở ⑷, hàm không gắn gì thì KHÔNG miễn.** Tập rộng của tổng điều tra là bit 4/8/16 của `tgtype` nên
+  `rfq_items_cam_truncate` (011) đứng ngoài cả hai danh sách ở đó — bắt nó khai ở đây là bắt khai một thứ tổng điều tra không phán xét. Hàm
+  không `CREATE TRIGGER` nào gắn (hàm chết, hay gắn bằng SQL động) thì vẫn phải khai: fail-closed.
+- **Cách khai chỉ-dùng-cho-test là một khoá trong `package.json` của gói**, không phải một danh sách tên trong tệp cổng: lời khai đứng cạnh
+  thứ nó nói về, `git blame` một chỗ, và cổng đo được nó hai chiều (`khaiKhongKhop`, `khaiSaiCho`).
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/lo91-dot-bien.mjs`: sửa một dòng, chạy đúng tệp cổng, khôi phục. Mười ca, mỗi ca ĐỎ đúng vế:
+- 221⑴ gỡ `AS RESTRICTIVE` khỏi `kiemPolicyKhach` ⇒ đối chứng ⑴ đỏ (PERMISSIVE đi lọt).
+- 221⑵ gỡ vế cột `id` khỏi `kiemGrantInsertCapId` ⇒ đối chứng ⑵ đỏ.
+- 221⑶ gỡ chiều "dòng khai thiu" khỏi `kiemKhaiBangTenant` ⇒ đối chứng ⑶ đỏ.
+- 221⑷ xoá `public.nhom_hang_kiem_doi` (085) khỏi `HAM_KHONG_PHAI_CANH` ⇒ cổng THẬT `[INV-F1] ⑷` đỏ.
+- 132 gỡ vế `paths` ⇒ 1 đỏ; gỡ vế `[[rules]]` ⇒ 1 đỏ; gỡ vế `GITLEAKS_CONFIG` ⇒ 1 đỏ.
+- 223 rổ miễn quay về "mọi gói dưới `packages/`" (bỏ lời khai) ⇒ 3 đỏ; `kiemVe4` bỏ qua mọi gói dưới `packages/` (hành vi cũ) ⇒ 2 đỏ.
+Ca số đo (không đột biến logic) in `daXet`: ⑴ 17 · ⑵ 169 · ⑶ 44 · ⑷ 75.
+
+## 7. Giới hạn, nói ra
+
+- `pnpm t0` cục bộ vẫn không chạy gitleaks; lượt CI trên nhánh thử có khoá mẫu dưới `apps/` (vế ngoài kho của hàng 132) chưa chạy. Cổng
+  ghim CẤU HÌNH, không đo hành vi của gitleaks.
+- Regex miễn `^\d{3}_[a-z0-9_]{1,60}$` không nhận số tạm bốn chữ số của ADR-090 — khoản 9491; sửa là ở `.gitleaks.toml` (tệp không chạm
+  của lô) và cổng nhận `^\d{3,4}_…` mà không đổi gì.
+- Bốn vế 221 đọc CÁCH VIẾT (regex trên SQL đã bỏ chú thích): bảng hay policy dựng bằng SQL động không thấy; lớp có thẩm quyền vẫn là
+  hardening + `rls-coverage` + tổng điều tra. Vế thứ năm (nhân chứng hành vi, khoản 74) ở lại `test:int`, đúng chỗ.
+- `kiemHamTriggerDaKhai` không đọc `DROP FUNCTION`: hàm tạo rồi xoá ở migration sau vẫn bị đòi khai — hôm nay không ca nào; nếu có thì
+  đỏ ồn ào, không xanh mù.
+- 223: lớp che ⑴ (alias `@trustprocure` → `./packages` của `vitest.config.ts`) vẫn nguyên — vitest vẫn giải mọi tên workspace bất kể
+  manifest; nay không còn lớp ⑵ che cùng.
+- Trong ca đo trước 223, test "gói khai test-only phải được phép đếm của vế ⑵ xác nhận" cũng đỏ vì gói giả trùng tên `goi-la-gia` với ví
+  dụ âm trong tệp — tác dụng phụ của phép đo, không phải khiếm khuyết.
+
+## 8. Số đo
+
+- `pnpm vitest run` bốn tệp của lô: 50/50 xanh, 2,6 s (`hinh-dang-gitleaks` 9, `pham-vi-san-xuat` 9, `migration-shape` 28, `hardening-hang` 4).
+- Đo trước (`scratchpad/lo91-do-truoc.mjs`, 7 ca + 1 ca số đo): cổng cũ xanh / cổng mới đỏ đúng như mục 3; `git status` sau đó chỉ còn sáu tệp của lô.
+- Đột biến (`scratchpad/lo91-dot-bien.mjs`): 10/10 đỏ đúng vế; daXet ⑴ 17 · ⑵ 169 · ⑶ 44 · ⑷ 75.
+- `pnpm typecheck`: sạch, 15,9 s. `pnpm exec eslint` sáu tệp đã chạm: sạch. `pnpm exec depcruise db tests --config .dependency-cruiser.cjs`: 0 vi phạm (181 module, 582 cạnh).
+- `pnpm install --frozen-lockfile --offline` sau khi sửa manifest: "Lockfile is up to date", `pnpm-lock.yaml` không đổi.
+- Cổng cuối `pnpm vitest run tests/architecture db/migration-shape.test.ts db/hardening-hang.test.ts db/hardening-suy-tu-tinh-chat.int.test.ts` (hai biến
+  cụm cục bộ): 38 tệp — 37 xanh, 1 đỏ; 445 test — 441 xanh, 3 đỏ, 1 bỏ qua (`xuong-dong-ts` vế chỉ chạy trên CI); 357 s. Tệp int `[INV-H19]` 36/36 xanh
+  (353 s) — không hồi quy sau khi tách hai danh sách. Ba ca đỏ đều ở `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ và KHÔNG do lô này:
+  `packages/test-support/src/postgres-cuc-bo.ts` (commit `3d991a3`/`33563ea` của người tích hợp) dựng một `pg.Client` và một `.connect()` chưa khai ở
+  tệp cổng ấy — cùng chẩn đoán với bàn giao lô 71; `git diff 33563ea..HEAD` của lô này không chạm tệp cổng ấy hay `packages/test-support/src/**`.
