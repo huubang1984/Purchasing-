@@ -15905,7 +15905,79 @@ và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ c
 
 Không khoản nào mở hay đóng.
 
-# §S1.191 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
+# §S1.191 — S3.2c2: MÀN `/tao-thau` THEO LUỒNG MỜI CỦA TỔ CHỨC, NÚT TRẢ VỀ SOẠN THẢO, LƯỢT ĐI THỬ T4 (K4a, K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; ở tổ chức chưa bật, màn giữ nguyên hình dạng MVP1
+(đối chứng ở §4). Không migration, không mã máy chủ.
+
+## 1. Việc gì
+
+Phần sau của S3.2c. Chủ dự án chốt ngày 2026-09-29: màn đổi thứ tự bước theo tổ chức đã bật hay chưa, và có nút *Trả về soạn thảo*.
+Sau S3.2b2 và S3.2c1, máy chủ và công cụ gieo đã chạy luồng mời mới, nhưng màn vẫn dựng theo MVP1: bước mời đứng sau *Mở thầu*,
+câu báo sau lần mời nói *"link đi thẳng tới bộ gửi"* dù lời mời còn `UNSENT`, lần mở gói bỏ qua `unsentInvitationIds`, nút *Thu hồi*
+hiện ở trạng thái K4a cấm, và cạnh về DRAFT (`077`) không có nút.
+
+## 2. Thay đổi
+
+- `apps/web/src/tao-thau.ts` (phục vụ ở `/lib/tao-thau.js`, khai trong `MODULE_WEB`): thứ tự bước, nhãn trạng thái lời mời, hai nút
+  của một dòng lời mời theo luồng và trạng thái gói, câu báo sau lần mời và lần mở gói, điều kiện hiện nút trả về, và kiểm lý do —
+  trần 2000 BYTE UTF-8, cùng số và đơn vị với `batBuoc` của `returnRfqToDraft`.
+- `apps/web/trang/tao-thau.js`: hỏi `GET /policy/versions` một lần sau đăng nhập; tổ chức đã bật ⇒ lớp `moi-truoc` trên `main`
+  (`chung.css`: `flex` cột, `#b5` trước `#b4`), số bước đổi, hai đoạn ghi hiện; đổi người hay đăng xuất đưa màn về luồng MVP1. Câu báo
+  sau lần mời và lần mở gói đọc thân phản hồi; bảng lời mời vẽ nhãn và nút theo luồng; đọc gói ở tổ chức đã bật thì đọc luôn danh sách
+  mời; gửi lại được thì vẽ lại bảng. Nút *Trả về soạn thảo* gọi `POST /rfqs/:rfqId/return-to-draft`, lý do rỗng không gọi máy chủ.
+- `apps/web/trang/tao-thau.html`: id cho `main` và hai số bước, hai đoạn ghi, khối lý do và nút trả về.
+
+## 3. Đo
+
+- `tao-thau.test.ts`: 13 ca — mỗi hàm một bảng ca theo hai luồng và bảy trạng thái gói; lý do 700 chữ "ế" (700 ký tự, 2100 byte)
+  bị từ chối như ở máy chủ.
+- `phuc-vu.test.ts` (bộ giả lập trang trong `node:vm`, nay nạp `/lib/tao-thau.js` thật): năm ca mới — thứ tự bước và đoạn ghi ở hai
+  luồng, về MVP1 khi đổi người; nhãn và nút của dòng lời mời ở DRAFT, PENDING_APPROVAL, OPEN và MVP1; câu báo sau lần mời ở DRAFT và sau
+  lần mời thêm ở OPEN gửi hỏng; câu báo sau lần mở gói với danh sách chưa gửi rỗng và không rỗng; nút trả về — ẩn ở DRAFT và ở MVP1,
+  lý do rỗng không gọi máy chủ, có lý do thì gọi. Ba ca cũ của lối gửi lại (ADR-110) đỏ khi bộ giả lập còn thay `/lib/tao-thau.js`
+  bằng hàm rỗng — nút không vẽ ra —, xanh khi nạp bản thật. `apps/web`: 177/177.
+- Bốn đột biến trên `tao-thau.js`, mỗi cái một dòng, rồi khôi phục:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | 1 | không bao giờ gắn lớp `moi-truoc` | ĐỎ |
+  | 2 | bảng in trạng thái thô thay nhãn | ĐỎ |
+  | 3 | câu báo mở gói bỏ qua `unsentInvitationIds` | ĐỎ |
+  | 4 | nút dòng lời mời luôn theo luồng MVP1 | ĐỎ |
+
+- `pnpm t0` sạch; `pnpm test` sạch.
+
+## 4. Lượt đi thử T4 — cụm cục bộ
+
+Cụm: PostgreSQL 16 (container); `pnpm gieo:demo --s3` rồi `pnpm gieo:demo` trên cùng CSDL; `apps/api` (`local-dev`, `dev-mailbox`,
+cờ ký chính sách bật); `apps/web` chuyển tiếp; Chromium qua Playwright. Script nằm ngoài kho. Đăng nhập bằng link gieo in ra, ghi danh
+TOTP lần đầu.
+
+- **MVP1 (đối chứng):** thứ tự hiển thị b1 b2 b3 b4 b5, số 4/5, hai đoạn ghi ẩn.
+- **S3, người soạn:** thứ tự hiển thị b1 b2 b3 b5 b4, số b4/b5 là 5/4, hai đoạn ghi hiện. Tạo gói, một hạng mục, ngân sách 150 triệu.
+  Mời hai nhà cung cấp ⇒ *"Đã thêm vào danh sách mời. Link CHƯA đi …"*; bảng: hai dòng *chưa gửi*, mỗi dòng chỉ nút *Thu hồi*.
+- Nộp duyệt ⇒ khối trả về hiện. Bấm trả về không lý do ⇒ *"Cần ghi lý do …"*, không lời gọi. Có lý do ⇒ *"Đã trả gói về soạn thảo …"*,
+  khối ẩn. Nộp lại ⇒ bảng: hai dòng *chưa gửi*, không nút (PENDING_APPROVAL).
+- **Người duyệt thứ hai** (trình duyệt khác, cùng gói) ⇒ *"Đã ghi một phê duyệt."*
+- **Mở gói** ⇒ *"Đã mở thầu … Link mời đã đi tới mọi nhà cung cấp trong danh sách."*; bảng: hai dòng *đã gửi*, chỉ nút *Gửi lại link*;
+  hộp thư dev nhận đúng hai thư.
+- Không lỗi trang, không lỗi console.
+- CSDL: một `RFQ_RETURNED_TO_DRAFT` mang đúng lý do đã gõ; hai lời mời `SENT`, `moi_sau_khi_ky = false`, token `duc_khi_goi_da_mo =
+  true`; một chữ ký.
+
+## 5. Giới hạn
+
+- Luồng của màn đọc từ `GET /policy/versions`. Đọc hỏng thì màn ở luồng MVP1 — máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ
+  nói kém đi.
+- Màn không vẽ lại khi tổ chức bật S3 trong lúc trang đang mở; tải lại trang là thấy.
+- Lượt đi thử T4 là một lần, không phải một cổng; script nằm ngoài kho.
+
+## 6. Số
+
+Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).
+
+# §S1.192 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
 
 ## 1. Vòng này là gì
 

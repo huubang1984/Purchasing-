@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.191 / S4.1] ĐƠN VỊ ĐO VÀ KHUÔN NỀN — L1 (vế ghi) và L4 (vế quy đổi chung), trên PostgreSQL thật, dưới `app_api`
+// [S1.192 / S4.1] ĐƠN VỊ ĐO VÀ KHUÔN NỀN — L1 (vế ghi) và L4 (vế quy đổi chung), trên PostgreSQL thật, dưới `app_api`
 //
 // Mọi phép đo ở đây đi qua ĐÚNG đường ứng dụng đi: `withTenant` trên pool `app_api`, và tầng gói `quyDoiDonVi`. Vai chủ
 // (superuser của container) chỉ dùng để dựng tổ chức, người, phiên — và để chứng minh rằng trigger là lớp giữ khi quyền
@@ -142,7 +142,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.191 / S4.1] làm sạch chuỗi bản 1", () => {
+describe("[S1.192 / S4.1] làm sạch chuỗi bản 1", () => {
   it("chuoi_sach: bỏ dấu, `đ`→`d`, chữ thường, ký tự lạ thành một khoảng trắng — một hàm SQL, tầng gói chỉ gọi nó", async () => {
     const ca: ReadonlyArray<readonly [string, string]> = [
       ["Thép Hòa Phát D10", "thep hoa phat d10"],
@@ -167,7 +167,7 @@ describe("[S1.191 / S4.1] làm sạch chuỗi bản 1", () => {
   });
 });
 
-describe("[S1.191 / S4.1] quy đổi đơn vị — L4", () => {
+describe("[S1.192 / S4.1] quy đổi đơn vị — L4", () => {
   it("[INV-L4] bảng ca: cùng thứ nguyên thì có hệ số; khác thứ nguyên, đóng gói, mơ hồ, lạ thì KHONG_QUY_DOI_DUOC — không bao giờ hệ số 1 không nguồn", async () => {
     expect(await caLech((tu, sang) => quyDoi(orgA, tu, sang))).toEqual([]);
     const cung = await quyDoi(orgA, "kg", "Kg");
@@ -276,7 +276,7 @@ describe("[S1.191 / S4.1] quy đổi đơn vị — L4", () => {
   });
 });
 
-describe("[S1.191 / S4.1] khuôn ghi của dữ liệu nền — L1", () => {
+describe("[S1.192 / S4.1] khuôn ghi của dữ liệu nền — L1", () => {
   it("[INV-L1] `seq` và `ghi_luc` do trigger đặt; `id`, `seq`, `ghi_luc` ngoài GRANT — ứng dụng khai là bị từ chối", async () => {
     const hai = [await khaiBiDanh(orgB, nguoiB, phienB, "cay", "cai"), await khaiBiDanh(orgB, nguoiB, phienB, "bo", "cai")];
     expect(hai.map((h) => h.seq)).toEqual(["1", "2"]);

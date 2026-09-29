@@ -1195,7 +1195,7 @@ describe("biên giới module của packages/rfq", () => {
 });
 
 // ==============================================================================================
-// [INV-H16] [S1.191 / S4.0] BIÊN GIỚI CỦA packages/du-lieu-nen — HỌ QUY TẮC `g19-`
+// [INV-H16] [S1.192 / S4.0] BIÊN GIỚI CỦA packages/du-lieu-nen — HỌ QUY TẮC `g19-`
 //
 // Hai quy tắc: cửa chỉ là index.ts, và gói không VỚI TỚI đường mở thầu (spec S4 §3.1) — phát biểu *"S4 không
 // chạm đường mở thầu"* thành một phép đo máy, cùng lối `g17-` làm cho lớp tính lại độc lập.

@@ -1,4 +1,4 @@
-// [S1.191 / S4.1] Tầng gói của đơn vị đo (spec S4 §4.2). Làm sạch chuỗi và quy đổi CHỈ ở SQL (§2.5 ⒄):
+// [S1.192 / S4.1] Tầng gói của đơn vị đo (spec S4 §4.2). Làm sạch chuỗi và quy đổi CHỈ ở SQL (§2.5 ⒄):
 // hai hàm dưới đây gọi `public.chuoi_sach` và `public.quy_doi_don_vi` chứ không cài lại luật — hai bản
 // cài (TS và SQL) là đúng hình dạng khoản 218, hai tầng cho hai con số bằng hai luật.
 //

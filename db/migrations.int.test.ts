@@ -1485,7 +1485,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
-  // [S1.191 / S4.1 / L4] Ba hàm của đơn vị đo — không `RETURNS trigger`, nên cùng khuôn với năm hàm trợ giúp ở trên. Một thân
+  // [S1.192 / S4.1 / L4] Ba hàm của đơn vị đo — không `RETURNS trigger`, nên cùng khuôn với năm hàm trợ giúp ở trên. Một thân
   // `chuoi_sach` khác làm bí danh đã lưu thôi khớp; một thân `quy_doi_don_vi` có nhánh `ELSE 1` là đúng lỗ L4 cấm. Khuôn đọc
   // `RETURNS TABLE (…)` vì `quy_doi_don_vi` trả hai cột.
   const HAM_DON_VI_DO: readonly { ham: string; chuKy: string; migration: string }[] = [
@@ -1494,7 +1494,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "079_don_vi_do.sql" },
   ];
 
-  it("[S1.191] ba hàm của đơn vị đo: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.192] ba hàm của đơn vị đo: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1564,7 +1564,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "supplier_contacts_kiem_danh_tinh",
         "suppliers_kiem_danh_tinh",
         "unseal_approvals_kiem_danh_tinh",
-        // [S1.191 / S4.1] Bí danh đơn vị của tổ chức — người khai là DẪN XUẤT từ phiên (L1).
+        // [S1.192 / S4.1] Bí danh đơn vị của tổ chức — người khai là DẪN XUẤT từ phiên (L1).
         "uom_aliases_kiem_danh_tinh",
         "unseal_requests_kiem_danh_tinh",
         "unseal_requests_kiem_nguoi_dieu_phoi",
@@ -1692,7 +1692,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // hay để cột ở `false` cho mọi token, và lần đổi link của tổ chức đã bật từ chối cả token hợp lệ.
     { ham: "rfq_kiem_tra_ve_nhap", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
-    // [S1.191 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
+    // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     { ham: "du_lieu_nen_dat_thu_tu", migration: "079_don_vi_do.sql", trigger: ["uom_aliases_dat_thu_tu"] },
   ];
