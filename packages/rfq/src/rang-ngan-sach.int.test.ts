@@ -15,8 +15,9 @@ import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 // đều không mang nó. ĐO TRƯỚC trên `master` `8f90bf2`: hai ca đầu dưới đây MỞ ĐƯỢC gói — gói cấp kép hạ về một chữ ký mở
 // bằng chữ ký cũ, và gói 1 triệu nâng lên 99 triệu mở bằng chữ ký trên con số 1 triệu.
 //
-// Mỗi phép đo dựng TỔ CHỨC RIÊNG: công tắc ADR-080 một chiều. Đột biến ở đây sửa hàm hay ràng buộc TOÀN CỤC rồi trả lại
-// trong `finally`, vì kịch bản đi qua nhiều giao dịch của tầng gói — các ca trong một tệp chạy nối tiếp.
+// Mỗi phép đo dựng TỔ CHỨC RIÊNG: công tắc ADR-080 một chiều. Đột biến ở HÀM sửa toàn cục rồi trả lại trong `finally`, vì
+// kịch bản đi qua nhiều giao dịch của tầng gói — các ca trong một tệp chạy nối tiếp; đột biến ở RÀNG BUỘC chạy trong MỘT giao
+// dịch rồi ROLLBACK.
 // =============================================================================================
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -191,6 +192,36 @@ const mo = (t: ToChuc, rfqId: string): Promise<unknown> =>
 const traVe = (t: ToChuc, rfqId: string, reason: string = LY_DO): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => returnRfqToDraft(c, t.org, { rfqId, reason, actorSessionId: t.pm.s }, apiPool));
 
+/** Câu chèn lời mời của `createInvitation`, nguyên cột — ở DRAFT, K4a cho qua. */
+async function themLoiMoi(t: ToChuc, rfqId: string): Promise<string> {
+  const n = await nhaCungCap(t);
+  return (
+    await withTenant(apiPool, t.org, (c) =>
+      c.query<{ id: string }>(
+        "INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+          "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+        [t.org, rfqId, n.ncc, n.lh, t.pm.u, t.pm.s],
+      ),
+    )
+  ).rows[0]!.id;
+}
+
+/** Câu thu hồi lời mời của `revokeInvitation`, nguyên cột — ở DRAFT, K4a cho qua. */
+async function thuHoiLoiMoi(t: ToChuc, invId: string): Promise<void> {
+  await withTenant(apiPool, t.org, (c) =>
+    c.query(
+      "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 " +
+        "WHERE id = $1 AND revoked_at IS NULL",
+      [invId, t.pm.u, t.pm.s],
+    ),
+  );
+}
+
+/** Gói tự nâng lên hai chữ ký ở DRAFT — `true` luôn hợp lệ, nghiêm hơn chính sách là quyền của người mua (`014` §(4)). */
+async function tuNangCapKep(t: ToChuc, rfqId: string): Promise<void> {
+  await withTenant(apiPool, t.org, (c) => c.query("UPDATE public.rfq_packages SET requires_dual_approval = true WHERE id = $1", [rfqId]));
+}
+
 interface LoiBat {
   readonly ten: string;
   readonly message: string;
@@ -312,10 +343,48 @@ describe("S1.9101 — K4b: chữ ký ràng vào ngân sách, ở tổ chức đ�
     await nop(t, rfqId);
     await duyet(t, rfqId, t.pm2);
     expect(await soChuKy(rfqId), "UNIQUE mới cho người ấy ký lại trên ngân sách mới").toBe(2);
-    expect((await loi(mo(t, rfqId)))?.message).toMatch(/^RFQ nay can 2 chu ky TREN .* HIEN TAI, moi co 1 \(K4b\)$/);
+    // Lời của phép đếm ĐẦU (`076`) nói *danh sách* dù danh sách không đổi: phép đếm DISTINCT ấy là phép chặn ở đây.
+    expect((await loi(mo(t, rfqId)))?.message).toBe("RFQ nay can 2 chu ky TREN DANH SACH MOI HIEN TAI, moi co 1 (K4b)");
     expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
     await duyet(t, rfqId, t.pm3);
     expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-K4b] [INV-D2] băm mang CỜ DUYỆT KÉP: gói tự nâng lên hai chữ ký, một người ký; trả về, đặt lại ĐÚNG ngân sách cũ — cờ tính lại về `false` — ⇒ chữ ký cho lúc gói cần hai người không mở được gói một chữ ký (lượt soi S1.9101)", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await tuNangCapKep(t, rfqId);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    expect((await loi(mo(t, rfqId)))?.message, "gói tự nâng: một chữ ký chưa đủ").toMatch(
+      /can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1 \(D2\)/,
+    );
+    await traVe(t, rfqId);
+    await datNganSach(t, rfqId, GOI_THUONG);
+    const { rows } = await db.pool.query<{ k: boolean }>("SELECT requires_dual_approval AS k FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(rows[0]?.k, "đặt lại ngân sách tính lại cờ từ chính sách").toBe(false);
+    await nop(t, rfqId);
+    expect((await loi(mo(t, rfqId)))?.message, "cùng con số, cùng phiên bản, cùng bậc — chỉ cờ khác").toBe(LOI_NGAN_SACH_1);
+    await duyet(t, rfqId, t.pm2);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+
+  it("[INV-K4b] chữ ký ràng vào BỘ BA (nội dung, danh sách, ngân sách), không ghép được từ hai chữ ký: PM2 ký (L1, 1 triệu), PM3 ký (L2, 99 triệu); trả về, thu hồi lời mời vừa thêm ⇒ gói ở (L1, 99 triệu) — chưa ai ký — không mở (lượt soi S1.9101)", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId);
+    const them = await themLoiMoi(t, rfqId);
+    await datNganSach(t, rfqId, GOI_THUONG_LON);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm3);
+    await traVe(t, rfqId);
+    await thuHoiLoiMoi(t, them);
+    await nop(t, rfqId);
+    // Phép đếm đầu (nội dung, danh sách) thấy PM2; phép đếm thứ hai (cả ngân sách) không thấy ai.
+    expect((await loi(mo(t, rfqId)))?.message).toBe(LOI_NGAN_SACH_1);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
   });
 
   it("[INV-K4b] băm ngân sách mang PHIÊN BẢN CHÍNH SÁCH: cùng con số, cùng bậc, cùng ngưỡng mà ghim sang phiên bản mới ⇒ chữ ký cũ không mở được; ký lại ⇒ mở", async () => {
@@ -377,7 +446,7 @@ describe("S1.9101 — cột `approved_budget_hash`: trigger đặt lúc ký, ngo
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    // Chữ ký dạng trước `9501`: hàm đặt băm chưa có vế ngân sách.
+    // Chữ ký dạng trước `9501_rang_ngan_sach`: hàm đặt băm chưa có vế ngân sách.
     await voiHamDotBien(
       "public.rfq_approvals_dat_bam_danh_sach()",
       "NEW.approved_budget_hash := public.rfq_bam_ngan_sach(NEW.rfq_id);",
@@ -395,6 +464,9 @@ describe("S1.9101 — cột `approved_budget_hash`: trigger đặt lúc ký, ngo
 
 // =============================================================================================
 // (3) ĐỘT BIẾN — MỖI VẾ CỦA BẢN VÁ MỘT LẦN ĐỎ
+//
+// Tiền tệ và bậc trong băm là đột biến TƯƠNG ĐƯƠNG ở tổ chức đã bật: tiền tệ phải khớp phiên bản có bậc (`ngan_sach_xep_bac`),
+// bậc suy từ phiên bản ghim và ước lượng — không đường nào đổi riêng chúng khi hai thứ kia đứng yên (lượt soi S1.9101).
 // =============================================================================================
 describe("S1.9101 — đột biến: gỡ từng vế thì lỗ mở lại", () => {
   /** Gói 1 triệu đã ký, trả về, nâng lên 99 triệu cùng bậc, nộp lại, thử mở — trả trạng thái cuối. */
@@ -421,6 +493,36 @@ describe("S1.9101 — đột biến: gỡ từng vế thì lỗ mở lại", () 
     await loi(mo(t, rfqId));
     return trangThaiGoi(rfqId);
   };
+  /** Gói tự nâng lên hai chữ ký, một chữ ký, trả về, đặt lại ngân sách cũ (cờ về `false`), nộp lại, thử mở. */
+  const coKepTuNang = async (): Promise<string> => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await tuNangCapKep(t, rfqId);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId);
+    await datNganSach(t, rfqId, GOI_THUONG);
+    await nop(t, rfqId);
+    await loi(mo(t, rfqId));
+    return trangThaiGoi(rfqId);
+  };
+  /** Hai chữ ký trên hai bộ ba khác nhau, gói về một bộ ba thứ ba chưa ai ký, thử mở. */
+  const ghepBoBa = async (): Promise<string> => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId);
+    const them = await themLoiMoi(t, rfqId);
+    await datNganSach(t, rfqId, GOI_THUONG_LON);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm3);
+    await traVe(t, rfqId);
+    await thuHoiLoiMoi(t, them);
+    await nop(t, rfqId);
+    await loi(mo(t, rfqId));
+    return trangThaiGoi(rfqId);
+  };
   /** Cùng con số, ghim sang phiên bản chính sách mới — trả trạng thái cuối. */
   const doiPhienBan = async (): Promise<string> => {
     const t = await toChucDaBat();
@@ -435,10 +537,29 @@ describe("S1.9101 — đột biến: gỡ từng vế thì lỗ mở lại", () 
     return trangThaiGoi(rfqId);
   };
 
-  it("[INV-K4b] đối chứng: bản thật chặn cả ba kịch bản", async () => {
+  it("[INV-K4b] đối chứng: bản thật chặn cả năm kịch bản", async () => {
     expect(await nangCungBac()).toBe("PENDING_APPROVAL");
     expect(await haBac()).toBe("PENDING_APPROVAL");
     expect(await doiPhienBan()).toBe("PENDING_APPROVAL");
+    expect(await coKepTuNang()).toBe("PENDING_APPROVAL");
+    expect(await ghepBoBa()).toBe("PENDING_APPROVAL");
+  });
+
+  it("[INV-K4b] [INV-D2] băm ngân sách bỏ cờ duyệt kép ⇒ gói tự nâng lên hai chữ ký mở bằng một chữ ký (lượt soi S1.9101, M1)", async () => {
+    expect(
+      await voiHamDotBien("public.rfq_bam_ngan_sach(uuid)", "|| '|' || p.requires_dual_approval::text", "", coKepTuNang),
+    ).toBe("OPEN");
+  });
+
+  it("[INV-K4b] phép đếm thứ hai chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.9101, M2)", async () => {
+    expect(
+      await voiHamDotBien(
+        "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
+        "     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)\n     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)\n     AND a.approved_budget_hash",
+        "     AND a.approved_budget_hash",
+        ghepBoBa,
+      ),
+    ).toBe("OPEN");
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ phép đếm trên ngân sách ⇒ cả hai lỗ đo trên master mở lại", async () => {
@@ -504,5 +625,44 @@ describe("S1.9101 — đột biến: gỡ từng vế thì lỗ mở lại", () 
     expect(await soChuKy(rfqId), "hai giao dịch đều ROLLBACK").toBe(1);
     await duyet(t, rfqId, t.pm2);
     expect(await loi(mo(t, rfqId))).toBeNull();
+  });
+});
+
+// =============================================================================================
+// (4) GIỚI HẠN, ĐO — HAI KHOẢN MỞ TỪ LƯỢT SOI S1.9101 (khoản 9402, khoản 9403)
+//
+// Hai ca dưới ghim hành vi HÔM NAY; chủ dự án chọn vá cả hai ở một vòng riêng trước S3.2c, và vòng ấy lật hai ca này. Không
+// mang nhãn bất biến: chúng đo một khoảng trống, không đo một chốt.
+// =============================================================================================
+describe("S1.9101 — giới hạn, đo: chữ ký dưới cạnh về DRAFT (khoản 9402, khoản 9403)", () => {
+  it("khoản 9402 — người duyệt xem gói ở 1 triệu; trước lần bấm ký, PM trả về, đặt 99 triệu, nộp lại: lời duyệt ghi lên 99 triệu mà người duyệt chưa từng xem, và gói MỞ — lời duyệt chỉ mang mã gói", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const daXem = (await db.pool.query<{ b: Buffer }>("SELECT public.rfq_bam_ngan_sach($1) AS b", [rfqId])).rows[0]!.b;
+    await traVe(t, rfqId);
+    await datNganSach(t, rfqId, GOI_THUONG_LON);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    const { rows } = await db.pool.query<{ b: Buffer }>("SELECT approved_budget_hash AS b FROM rfq_approvals WHERE rfq_id = $1", [rfqId]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.b.equals(daXem), "chữ ký KHÔNG mang ngân sách người duyệt đã xem").toBe(false);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+  });
+
+  it("khoản 9403 — PM2 ký, rồi chính PM2 (giữ `rfq.approve`) trả gói về; PM nộp lại y nguyên ⇒ gói MỞ bằng chữ ký cũ của PM2 — lần trả về không rút chữ ký của người trả", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await withTenant(apiPool, t.org, (c) =>
+      returnRfqToDraft(c, t.org, { rfqId, reason: "nguoi duyet rut chu ky", actorSessionId: t.pm2.s }, apiPool),
+    );
+    expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
+    await nop(t, rfqId);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+    expect(await soChuKy(rfqId), "không ai ký lại").toBe(1);
   });
 });

@@ -9008,10 +9008,18 @@ sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ
 - **Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa.** Hôm nay không tổ chức thật nào bật được S3 (ADR-105); CSDL demo
   hay dev có gói `PENDING_APPROVAL` ở tổ chức đã bật thì người duyệt ký lại.
 - Chữ ký cũ ở lại trong bảng làm dấu vết — cùng khuôn `011` và `076`.
+- **Hai khoảng trống cùng lớp, lượt soi đo, CHƯA đóng ở ADR này** — chủ dự án chọn vá ở một vòng riêng, trước S3.2c: lời duyệt chỉ
+  mang mã gói, nên PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem (khoản 9402
+  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 9403).
+- `approved_budget_hash` là SHA-256 không muối trên một chuỗi đoán được (con số, tiền tệ, phiên bản, bậc, cờ): biết phiên bản chính
+  sách thì dò lại được ước lượng. Hôm nay không route nào đọc `rfq_approvals`, và RLS chặn phiên khách. Ngày băm ấy đi ra ngoài (bộ
+  bằng chứng S3.9, thân sổ) thì nó ngang ngân sách.
 
 ### Đo
 
 `packages/rfq/src/rang-ngan-sach.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật. Đo TRƯỚC trên cây `master` (tạm rút
-`9501`): mười ca, mười ca đỏ — hai ca đầu đỏ vì gói MỞ ĐƯỢC. Sau bản vá: mười ca xanh — hạ bậc, nâng cùng bậc rồi đặt lại con số
-cũ, ghim phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; đột biến: bỏ phép đếm trên ngân sách (hai lỗ mở lại),
-băm bỏ ước lượng, băm bỏ phiên bản chính sách, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ cột (người đã ký không ký lại được).
+`9501_rang_ngan_sach`): mười lăm ca có nhãn, mười lăm ca đỏ — các ca hành vi đỏ vì gói MỞ ĐƯỢC. Sau bản vá, mười lăm ca xanh: hạ bậc,
+nâng cùng bậc rồi đặt lại con số cũ, một người ký hai lần vẫn là một người, cờ duyệt kép, bộ ba không ghép được từ hai chữ ký, ghim
+phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; bảy đột biến đều đỏ — bỏ phép đếm trên ngân sách, phép đếm
+thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
+cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 9402, 9403).
