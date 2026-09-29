@@ -1017,6 +1017,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   //
   // **[S1.153 / S3.0]** Cả mười nay là `[A-HJK]`: dải có chỗ cho nhóm K TRƯỚC khi K1 vào sổ (spec S3
   // §9), để K1 không lặp lại chuyện của J4. Đo lại trên `master` `fa8d4ea` vẫn đúng mười chỗ.
+  //
+  // **[S1.192 / S4.0]** Cả mười nay là `[A-HJ-L]`: nhóm L của spec S4 vào sổ từ L1, L4 (S4.1).
   // ==============================================================================================
 
   it("bước 12c — MỞ VÒNG BAFO qua HTTP: top-N suy từ bảng xếp hạng, và nhà cung cấp thấy hạn CỦA VÒNG", async () => {

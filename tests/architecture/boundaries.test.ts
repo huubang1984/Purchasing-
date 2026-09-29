@@ -1195,6 +1195,65 @@ describe("biên giới module của packages/rfq", () => {
 });
 
 // ==============================================================================================
+// [INV-H16] [S1.192 / S4.0] BIÊN GIỚI CỦA packages/du-lieu-nen — HỌ QUY TẮC `g19-`
+//
+// Hai quy tắc: cửa chỉ là index.ts, và gói không VỚI TỚI đường mở thầu (spec S4 §3.1) — phát biểu *"S4 không
+// chạm đường mở thầu"* thành một phép đo máy, cùng lối `g17-` làm cho lớp tính lại độc lập.
+// ==============================================================================================
+describe("biên giới module của packages/du-lieu-nen", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/du-lieu-nen/src", () => {
+    const probe = "packages/audit/src/zzprobe-du-lieu-nen-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      ['import { quyDoiDonVi } from "../../du-lieu-nen/src/don-vi.js";', "export { quyDoiDonVi };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/du-lieu-nen"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-du-lieu-nen-tuong-doi.ts");
+      expect(output).toContain("g19-du-lieu-nen-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] packages/du-lieu-nen không với tới sealed-envelope, unseal hay crypto-keys", () => {
+    const probe = "packages/du-lieu-nen/src/zzprobe-mo-thau.ts";
+    writeFileSync(
+      probe,
+      ['import { sealBid } from "../../sealed-envelope/src/index.js";', "export { sealBid };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/du-lieu-nen", "packages/sealed-envelope"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-mo-thau.ts");
+      expect(output).toContain("g19-du-lieu-nen-khong-cham-duong-mo-thau");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được, và gói hôm nay không với tới đường mở thầu — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-du-lieu-nen-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-du-lieu-nen-cua/src/dung.ts",
+      [
+        'import { quyDoiDonVi } from "../../../packages/du-lieu-nen/src/index.js";',
+        "export { quyDoiDonVi };",
+        "",
+      ].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-du-lieu-nen-cua", "packages/du-lieu-nen", "packages/audit"]);
+      expect(output).not.toContain("g19-");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-du-lieu-nen-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+// ==============================================================================================
 // [INV-H16] BIÊN GIỚI MODULE CỦA packages/invitation — HỌ QUY TẮC `g7-`
 // ==============================================================================================
 describe("biên giới module của packages/invitation", () => {
