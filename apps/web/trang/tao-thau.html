@@ -73,14 +73,13 @@
   </section>
 
   <section class="buoc" id="b4" hidden>
-    <h2><span class="so" id="so4">4</span> Ngân sách và phê duyệt</h2>
-    <p class="ghi" id="ghi4">Giá trị ước lượng quyết định gói này có cần hai người duyệt hay không — ngưỡng
+    <h2><span class="so" id="so-b4">4</span> Ngân sách và phê duyệt</h2>
+    <p class="ghi">Giá trị ước lượng quyết định gói này có cần hai người duyệt hay không — ngưỡng
       nằm ở chính sách của tổ chức, không nằm ở màn này. Người tạo KHÔNG tự duyệt được.</p>
-    <!-- [S1.191 / S3.2c / ADR-113] Tổ chức đã bật S3: bước này đứng SAU danh sách mời, và người duyệt ký lên cả hai. -->
-    <p class="ghi" id="ghi4-s3" hidden>Tổ chức đã bật kiểm soát theo bậc. Ngân sách phải có trước khi nộp
-      duyệt; người duyệt ký lên CẢ nội dung LẪN danh sách mời ở bước 4, và người tạo KHÔNG tự duyệt được.
-      «Mở gói» gửi link tới mọi lời mời còn sống. Cần đổi danh sách hay nội dung sau khi đã nộp duyệt thì
-      trả gói về nháp, kèm lý do.</p>
+    <!-- [S1.191 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc: người duyệt ký lên danh sách mời, nên bước mời đứng trước. -->
+    <p class="ghi" id="ghi-s3-b4" hidden>Tổ chức này đã bật kiểm soát theo bậc: người duyệt ký lên CHÍNH danh sách
+      mời ở bước trên, và link mời chỉ đi khi gói được mở. Mời đủ rồi mới nộp duyệt; muốn đổi danh sách sau khi đã nộp
+      thì trả gói về soạn thảo.</p>
     <label for="ns">Giá trị ước lượng</label>
     <input id="ns" inputmode="decimal" autocomplete="off" placeholder="1000000000.00">
     <label for="tien-te">Tiền tệ</label>
@@ -91,23 +90,24 @@
       <button id="nut-nop-duyet" class="phu">Nộp duyệt</button>
       <button id="nut-duyet" class="phu">Phê duyệt</button>
     </div>
+    <!-- ~~Mở thầu~~ [S1.192 / S3.2c2] Mở GÓI là PENDING_APPROVAL→OPEN; mở THẦU là CLOSED→UNSEALED (spec S3 §3.3). -->
     <button id="nut-mo">Mở gói</button>
+    <!-- [S1.191 / S3.2c2] Cạnh PENDING_APPROVAL→DRAFT (`077`): chỉ tổ chức đã bật, lý do bắt buộc và vào sổ. -->
     <div id="khoi-tra-ve" hidden>
-      <label for="ly-do-tra-ve">Lý do trả gói về nháp (bắt buộc, vào sổ kiểm toán)</label>
-      <input id="ly-do-tra-ve" autocomplete="off" placeholder="Them mot nha cung cap vao danh sach">
-      <button id="nut-tra-ve" class="phu">Trả về nháp</button>
+      <label for="ly-do-tra-ve">Lý do trả gói về soạn thảo</label>
+      <input id="ly-do-tra-ve" autocomplete="off" placeholder="Thêm nhà cung cấp thứ năm vào danh sách mời">
+      <button id="nut-tra-ve" class="phu">Trả về soạn thảo</button>
     </div>
     <div class="bao loi" id="loi4" hidden></div>
     <div class="bao ok" id="ok4" hidden></div>
   </section>
 
   <section class="buoc" id="b5" hidden>
-    <h2><span class="so" id="so5">5</span> Nhà cung cấp và lời mời</h2>
-    <p class="ghi" id="ghi5">Mỗi lời mời đi tới MỘT người liên hệ, và mã mời không bao giờ quay về màn này —
+    <h2><span class="so" id="so-b5">5</span> Nhà cung cấp và lời mời</h2>
+    <p class="ghi">Mỗi lời mời đi tới MỘT người liên hệ, và mã mời không bao giờ quay về màn này —
       nó đi thẳng tới bộ gửi. Danh sách dưới trả id để thu hồi được lời mời gửi nhầm.</p>
-    <p class="ghi" id="ghi5-s3" hidden>Dựng danh sách mời TRƯỚC khi nộp duyệt. Link CHƯA đi lúc mời: nó đi
-      lúc mở gói, bằng phiên của người mở, và mã mời không bao giờ về màn này. Từ lúc nộp duyệt danh sách
-      bị khoá; sau khi mở gói vẫn mời THÊM được, và lời mời ấy mang nhãn «mời sau khi ký».</p>
+    <p class="ghi" id="ghi-s3-b5" hidden>Tổ chức này đã bật kiểm soát theo bậc: lời mời dựng ở đây nằm «chưa gửi» cho
+      tới khi gói được mở — lúc ấy mọi link đi một lượt. Thu hồi chỉ được khi gói còn soạn thảo.</p>
     <label for="ncc-ten">Tên pháp nhân nhà cung cấp</label>
     <input id="ncc-ten" autocomplete="off" placeholder="Thep Dong Anh">
     <label for="ncc-mst">Mã số thuế</label>

@@ -8924,8 +8924,8 @@ error 23514`) ⇒ `500` kèm `invitationId`, lời mời `UNSENT` còn sống v�
 ### Hệ quả, nói thẳng
 
 - **`201` của route mời ở tổ chức đã bật không còn nghĩa *link đã đi*.** Thân nói: `invitation.status`. Màn `/tao-thau` phải đọc
-  nó — việc của S3.2c. Tổ chức chưa bật: nghĩa cũ nguyên văn. **[S1.191]** S3.2c2 đã làm: màn đọc `status` và `moiSauKhiKy` của thân
-  `201`, và `unsentInvitationIds` của lần mở gói (§S1.191).
+  nó — việc của S3.2c. Tổ chức chưa bật: nghĩa cũ nguyên văn. **[S1.191]** S3.2c2 đã làm (#200): màn đọc `status` và `moiSauKhiKy`
+  của thân `201`, và `unsentInvitationIds` của lần mở gói (§S1.191).
 - **Một link đã tới nơi có thể nằm lại `UNSENT`:** lần ghi `SENT` hỏng (một dòng `ghi-sau-commit`), hay lần gửi lại đi được khi gói
   đang `BAFO_OPEN` — trigger `076` chỉ cho `UNSENT→SENT` ở `OPEN`, và nhà cung cấp chưa từng nhận link lúc `OPEN` thì không ở top-N
   của vòng BAFO. Chiều lệch ấy lành: người mua gửi lại, và lần gửi lại thu hồi mọi token chưa dùng.

@@ -1598,7 +1598,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(cac.indexOf("RFQ_AWARD_PROPOSED")).toBeGreaterThan(cac.lastIndexOf("RFQ_EVALUATED"));
     // Năm phiên khách của kịch bản + MỘT của RFQ hy sinh mà bộ quét (sổ nợ 49) mở để nộp một phong bì thật.
     expect(cac.filter((a) => a === "GUEST_SESSION_STARTED")).toHaveLength(6);
-    // [S1.191 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
+    // [S1.192 / S3.2c / ADR-113] Thứ tự MỜI của gói chính: luồng S3 mời TRƯỚC khi nộp duyệt, luồng MVP1 SAU khi mở; ở cả hai,
     // không token mời nào trước lần mở gói (K6). Hàng token mang id của TOKEN — lời mời của nó nằm ở payload.
     const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
     const { rows: theoGoi } = await db.pool.query<{ action: string; khoa: string | null }>(

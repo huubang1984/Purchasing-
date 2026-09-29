@@ -729,7 +729,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
     expect(cac.indexOf("RFQ_UNSEALED")).toBeGreaterThan(
       cac.indexOf("RFQ_KEY_MATERIAL_UNWRAPPED"),
     );
-    // [S1.191 / S3.2c / ADR-113] Thứ tự MỜI cũng là một phần của câu chuyện: luồng S3 mời TRƯỚC khi nộp duyệt và đúc token SAU
+    // [S1.192 / S3.2c / ADR-113] Thứ tự MỜI cũng là một phần của câu chuyện: luồng S3 mời TRƯỚC khi nộp duyệt và đúc token SAU
     // khi mở gói; luồng MVP1 mời và đúc sau khi mở. Đọc theo gói và năm lời mời của nó, không theo cả tổ chức.
     const cuaGoi = new Set([trangThai.rfqId, ...trangThai.loiMoi.map((l) => l.invitationId)]);
     // Hàng token mang id của TOKEN; lời mời của nó nằm ở payload.

@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import * as chinhSach from "./chinh-sach.js";
+import * as taoThau from "./tao-thau.js";
 import { MODULE_TRINH_DUYET, MODULE_WEB, TRANG, napTep, taoWebServer } from "./phuc-vu.js";
 
 interface LanNhan {
@@ -206,11 +207,6 @@ describe("bề mặt tệp", () => {
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
     };
-    /**
-     * Trang hỏi `GET /policy/versions` ngay sau khi mở các bước: `/chinh-sach` để vẽ bảng phiên bản, và **[S1.191 / S3.2c]**
-     * `/tao-thau` để biết tổ chức đã bật kiểm soát theo bậc chưa — thứ tự bước mời và bước duyệt theo đó.
-     */
-    const HOI_CHINH_SACH: ReadonlySet<string> = new Set(["chinh-sach", "tao-thau"]);
     const ORG = "11111111-2222-4333-8444-555555555555";
     const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
     const B = { userId: "bbbbbbbb-0000-4000-8000-000000000000", sessionId: "s-b", orgId: ORG, kind: "USER" };
@@ -227,8 +223,9 @@ describe("bề mặt tệp", () => {
       querySelector: (sel: string) => PhanTu; querySelectorAll: () => PhanTu[]; focus: () => void; remove: () => void;
       scrollIntoView: () => void;
       /**
-       * [S1.191 / S3.2c] `Element.before` — `/tao-thau` chuyển bước lời mời lên trước bước duyệt ở tổ chức đã bật. Chỉ các
-       * `<section>` của trang có bản thật (dời id trong `thuTuBuoc`); gọi trên phần tử khác là trang làm điều test không đo — ném.
+       * [S1.192 / S3.2c2] `Element.before` — `/tao-thau` dời bước lời mời lên trước bước duyệt ở tổ chức đã bật, THẬT trong DOM.
+       * Chỉ các `<section>` của trang có bản thật (dời id trong thứ tự của trang); gọi trên phần tử khác là trang làm điều test
+       * không đo — ném.
        */
       before: (...c: PhanTu[]) => void;
       /** Id đọc từ HTML (rỗng với phần tử `createElement`) — để `before` biết nó dời gì. */
@@ -253,9 +250,12 @@ describe("bề mặt tệp", () => {
       };
       return e;
     };
-    // `/lib/chinh-sach.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một hàm trả chuỗi rỗng.
+    // `/lib/chinh-sach.js` và `/lib/tao-thau.js` là bản thật (`dienMau` vẽ bảng bậc mặc định); mọi tên import khác là một
+    // hàm trả chuỗi rỗng.
     const THU_VIEN: Record<string, unknown> = {
       ...chinhSach,
+      // [S1.191 / S3.2c2] `/lib/tao-thau.js` cũng là bản thật: nút của dòng lời mời và câu báo đọc từ nó.
+      ...taoThau,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
       sealBid: () => Promise.resolve(new Uint8Array(0)),
       chooseKeyAgreementAlgorithm: () => "ECDH_P256",
@@ -290,32 +290,30 @@ describe("bề mặt tệp", () => {
       for (const m of html.matchAll(/<\w+([^>]*?)\sid="([^"]+)"([^>]*)>/gu)) {
         el[m[2] ?? ""] = taoPhanTu(/\shidden(?:\s|$)/u.test(`${m[1] ?? ""} ${m[3] ?? ""} `), m[2] ?? "");
       }
-      // [S1.191 / S3.2c] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này.
-      const thuTuBuoc = [...html.matchAll(/<section\b[^>]*\sid="([^"]+)"/gu)].map((m) => m[1] ?? "");
-      for (const id of thuTuBuoc) {
+      // [S1.192 / S3.2c2] Thứ tự các `<section>` trong DOM, như HTML khai; `before` của mỗi section dời id trong mảng này và
+      // đếm một lần dời.
+      const thuTuSection = [...html.matchAll(/<section\b[^>]*\sid="([^"]+)"/gu)].map((m) => m[1] ?? "");
+      let soLanDoi = 0;
+      for (const id of thuTuSection) {
         const sec = el[id];
         if (sec === undefined) continue;
         sec.before = (...c) => {
           for (const x of c) {
-            const tu = thuTuBuoc.indexOf(x.id);
+            const tu = thuTuSection.indexOf(x.id);
             if (tu < 0) throw new Error(`before(): "${x.id}" không phải section`);
-            thuTuBuoc.splice(tu, 1);
-            thuTuBuoc.splice(thuTuBuoc.indexOf(id), 0, x.id);
+            thuTuSection.splice(tu, 1);
+            thuTuSection.splice(thuTuSection.indexOf(id), 0, x.id);
+            soLanDoi += 1;
           }
         };
       }
       const lay = (id: string): PhanTu => (el[id] ??= taoPhanTu(false, id));
-      const trangThai = {
-        cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[],
-        /** [S1.191 / S3.2c] Thân của mỗi lời gọi, cùng chỉ số với `goi`. */
-        than: [] as unknown[],
-      };
+      const trangThai = { cookie: tuyChon.cookie, khach: tuyChon.khach === true, goi: [] as string[], thayUrl: [] as string[], xoaHen: [] as unknown[] };
       const loc = { pathname: trang === "mo-thau" ? "/login" : `/${trang}`, search: "", hash: tuyChon.hash };
       const ngheCuaSo: Nghe = {};
-      const fetch = async (url: string, init: { method: string; body?: string }) => {
+      const fetch = async (url: string, init: { method: string }) => {
         const lenh = `${init.method} ${url.replace(/^\/api/u, "")}`;
         trangThai.goi.push(lenh);
-        trangThai.than.push(init.body === undefined ? undefined : JSON.parse(init.body));
         const r = (await tuyChon.thay?.(lenh)) ?? (() => {
           if (lenh === "GET /me") return trangThai.cookie === null ? { status: 401, body: { error: "x" } } : { status: 200, body: trangThai.cookie };
           if (lenh === "POST /auth/redeem") return { status: 200, body: { needsEnrollment: false } };
@@ -364,7 +362,9 @@ describe("bề mặt tệp", () => {
         trangThai,
         loc,
         buocMo: () => (BUOC[trang] ?? []).filter((b) => lay(b).hidden === false),
-        thuTuBuoc: () => [...thuTuBuoc],
+        /** [S1.192 / S3.2c2] Thứ tự THẬT của các `<section>` trong DOM, và số lần trang đã dời một section. */
+        thuTuSection: () => [...thuTuSection],
+        soLanDoi: () => soLanDoi,
         bam: async (id: string) => {
           for (const f of lay(id).nghe["click"] ?? []) await f();
           await cho();
@@ -453,7 +453,7 @@ describe("bề mặt tệp", () => {
         expect(p.buocMo()).toEqual([]);
         await p.bam("nut-vao");
         const sauTotp = p.trangThai.goi.lastIndexOf("POST /auth/totp");
-        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(HOI_CHINH_SACH.has(trang) ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.goi.slice(sauTotp)).toEqual(["POST /auth/totp", "GET /me", ...(trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : [])]);
         expect(p.trangThai.thayUrl).toEqual([p.loc.pathname]);
         expect(p.loc.hash).toBe("");
         expect(p.buocMo()).toEqual(tatCa);
@@ -470,7 +470,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("b1").lop.has("xong")).toBe(false);
         expect(p.el("nut-dang-xuat").hidden).toBe(true);
         expect(p.el("hoi-phien").hidden).toBe(true);
-        expect(p.trangThai.goi).toEqual(["GET /me", ...(HOI_CHINH_SACH.has(trang) ? ["GET /policy/versions"] : [])]);
+        expect(p.trangThai.goi).toEqual(["GET /me", ...(trang === "chinh-sach" || trang === "tao-thau" ? ["GET /policy/versions"] : [])]);
       });
 
       it(`${trang}: /me của lượt cũ về SAU khi fragment đã đổi sang link của B ⇒ bị bỏ, không mở khối hỏi`, async () => {
@@ -1112,236 +1112,143 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok5").textContent).not.toMatch(/Mời lại/u);
     });
 
-    // ------------------------------------------------------------------------------------------
-    // [S1.191 / S3.2c / ADR-113] `/tao-thau` ở tổ chức ĐÃ BẬT kiểm soát theo bậc: danh sách mời dựng ở DRAFT, TRƯỚC khi nộp
-    // duyệt; link đi lúc mở gói. Tổ chức chưa bật giữ thứ tự MVP1 — các ca trên là đối chứng của nhánh ấy.
-    // ------------------------------------------------------------------------------------------
-    const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];
-    const THU_TU_S3 = ["b1", "b2", "b3", "b5", "b4"];
-    type LoiMoiGia = { id: string; supplierName: string; contactName: string; linkChannel: string; status: string; moiSauKhiKy: boolean; revokedAt: string | null };
-    const loiMoiGia = (id: string, status: string, moiSauKhiKy = false): LoiMoiGia => ({
-      id, supplierName: `Công ty ${id}`, contactName: `Người ${id}`, linkChannel: "EMAIL", status, moiSauKhiKy, revokedAt: null,
-    });
-    /** Trang `/tao-thau` đã "Tiếp tục" phiên A và đã đọc gói `r-1` ở trạng thái `trangThaiGoi`; `daBat` là lời đáp của `/policy/versions`. */
-    const moTaoThau = async (tuy: {
-      daBat: boolean;
-      trangThaiGoi: string;
-      loiMoi?: readonly LoiMoiGia[];
-      thay?: (l: string) => Promise<{ status: number; body: unknown }> | undefined;
-    }) => {
+    // ==========================================================================================
+    // [S1.191 / S3.2c2] MÀN TẠO GÓI Ở TỔ CHỨC ĐÃ BẬT: bước mời lên trước, lời mời «chưa gửi», lần mở gói nói link nào chưa
+    // đi, nút theo trạng thái gói, và trả về soạn thảo có lý do. Luồng lấy từ `GET /policy/versions` (`daBat`).
+    // ==========================================================================================
+    const moTaoThau = async (daBat: boolean, trangThaiGoi: string, thay: (l: string) => Promise<{ status: number; body: unknown }> | undefined = () => undefined) => {
       const p = await dungTrang("tao-thau", {
         hash: "", cookie: A,
         thay: (l) =>
-          tuy.thay?.(l) ??
-          (l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: tuy.daBat, choKy: false } })
-            : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: tuy.trangThaiGoi } } })
+          thay(l) ??
+          (l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat, choKy: false } })
+            : l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status: trangThaiGoi } } })
             : l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [] } })
-            : l === "GET /rfqs/r-1/invitations" ? Promise.resolve({ status: 200, body: { invitations: tuy.loiMoi ?? [] } })
-            : undefined),
+            : l === "GET /rfqs/r-1/invitations"
+              ? Promise.resolve({ status: 200, body: { invitations: [{ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", status: "UNSENT", revokedAt: null }] } })
+              : undefined),
       });
       await p.bam("nut-dung-phien");
       p.el("rfq").value = "r-1";
       await p.bam("nut-doc");
-      return p;
+      const dongMoi = () => p.el("bang-moi").querySelector("tbody").con[0];
+      return { p, dongMoi };
     };
-    const dongLoiMoi = (p: Awaited<ReturnType<typeof moTaoThau>>) =>
-      p.el("bang-moi").querySelector("tbody").con.map((tr) => ({
-        trangThai: tr.con[3]?.textContent ?? "",
-        nut: (tr.con[4]?.con ?? []).map((n) => n.textContent),
-        tr,
-      }));
 
-    it("[S3.2c] tao-thau: tổ chức ĐÃ BẬT ⇒ bước mời đứng TRƯỚC bước duyệt trong DOM, số bước đổi, ghi chú S3 và khối Trả về nháp hiện; CHƯA bật ⇒ thứ tự MVP1, không khối trả về", async () => {
-      const s3 = await moTaoThau({ daBat: true, trangThaiGoi: "DRAFT" });
-      expect(s3.trangThai.goi.slice(0, 3)).toEqual(["GET /me", "GET /policy/versions", "GET /rfqs/r-1"]);
-      expect(s3.thuTuBuoc(), "thứ tự THẬT trong DOM — Tab và trình đọc màn hình đi theo nó").toEqual(THU_TU_S3);
-      expect([s3.el("so5").textContent, s3.el("so4").textContent]).toEqual(["4", "5"]);
-      expect([s3.el("ghi5").hidden, s3.el("ghi5-s3").hidden, s3.el("ghi4").hidden, s3.el("ghi4-s3").hidden]).toEqual([true, false, true, false]);
-      expect(s3.el("khoi-tra-ve").hidden).toBe(false);
-      expect(s3.trangThai.goi.filter((g) => g === "GET /policy/versions"), "đã bật (một chiều) thì nạp gói không hỏi lại").toHaveLength(1);
-
-      const mvp1 = await moTaoThau({ daBat: false, trangThaiGoi: "DRAFT" });
-      expect(mvp1.thuTuBuoc()).toEqual(THU_TU_MVP1);
-      expect([mvp1.el("ghi5").hidden, mvp1.el("ghi5-s3").hidden, mvp1.el("ghi4").hidden, mvp1.el("ghi4-s3").hidden]).toEqual([false, true, false, true]);
-      expect(mvp1.el("khoi-tra-ve").hidden).toBe(true);
-      expect(mvp1.el("loi1").hidden).toBe(true);
+    // ~~lớp `moi-truoc`~~ [S1.192 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
+    // hình đi theo thứ tự DOM.
+    const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];
+    const THU_TU_S3 = ["b1", "b2", "b3", "b5", "b4"];
+    it("[S1.191 / S3.2c2 · S1.192] tao-thau: tổ chức đã bật ⇒ bước mời đứng TRƯỚC bước phê duyệt TRONG DOM (số 4 và 5 đổi chỗ), hai đoạn ghi hiện; chưa bật ⇒ nguyên MVP1", async () => {
+      const bat = await moTaoThau(true, "DRAFT");
+      expect(bat.p.thuTuSection(), "thứ tự THẬT trong DOM — Tab và trình đọc màn hình đi theo nó").toEqual(THU_TU_S3);
+      expect([bat.p.el("so-b5").textContent, bat.p.el("so-b4").textContent]).toEqual(["4", "5"]);
+      expect([bat.p.el("ghi-s3-b4").hidden, bat.p.el("ghi-s3-b5").hidden]).toEqual([false, false]);
+      const chua = await moTaoThau(false, "DRAFT");
+      expect(chua.p.thuTuSection()).toEqual(THU_TU_MVP1);
+      expect(chua.p.soLanDoi(), "tổ chức chưa bật: không dời gì").toBe(0);
+      expect([chua.p.el("so-b4").textContent, chua.p.el("so-b5").textContent]).toEqual(["4", "5"]);
+      expect([chua.p.el("ghi-s3-b4").hidden, chua.p.el("ghi-s3-b5").hidden]).toEqual([true, true]);
+      // Đổi người (hashchange) đưa màn về luồng MVP1 tới khi người mới đăng nhập và màn hỏi lại.
+      await bat.p.doiFragment(`#${ORG}:maCuaB`);
+      expect(bat.p.thuTuSection()).toEqual(THU_TU_MVP1);
     });
 
-    it("[S3.2c] tao-thau: tổ chức bật TRONG LÚC trang mở ⇒ lần nạp gói kế hỏi lại và đổi thứ tự; /policy/versions hỏng ⇒ giữ thứ tự MVP1 và nói ra ở bước 1", async () => {
-      const bat = { luc: false };
-      const p = await moTaoThau({
-        daBat: false, trangThaiGoi: "DRAFT",
-        thay: (l) => (l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: bat.luc, choKy: false } }) : undefined),
-      });
-      expect(p.thuTuBuoc()).toEqual(THU_TU_MVP1);
-      bat.luc = true;
+    it("[S1.192 / S3.2c2] tao-thau: màn chỉ dời bước khi luồng đổi — nạp lại gói không dời lần nữa (dời một phần tử đang giữ tiêu điểm làm mất tiêu điểm)", async () => {
+      const { p } = await moTaoThau(true, "DRAFT");
+      expect(p.soLanDoi()).toBe(1);
       await p.bam("nut-doc");
-      expect(p.thuTuBuoc()).toEqual(THU_TU_S3);
-      expect(p.el("khoi-tra-ve").hidden).toBe(false);
+      await p.bam("nut-doc");
+      expect(p.thuTuSection()).toEqual(THU_TU_S3);
+      expect(p.soLanDoi(), "hai lần nạp gói, không lần dời nào").toBe(1);
+      // Đăng xuất đưa màn về MVP1: dời lại đúng một lần.
+      await p.bam("nut-dang-xuat");
+      expect(p.thuTuSection()).toEqual(THU_TU_MVP1);
+      expect(p.soLanDoi()).toBe(2);
+    });
 
-      for (const hong of [
-        () => Promise.resolve({ status: 500, body: { error: "x" } }),
-        () => Promise.resolve({ status: 200, body: { phienBan: [] } }),
-        () => Promise.reject(new Error("mat mang")),
-      ]) {
-        const q = await moTaoThau({ daBat: true, trangThaiGoi: "DRAFT", thay: (l) => (l === "GET /policy/versions" ? hong() : undefined) });
-        expect(q.thuTuBuoc()).toEqual(THU_TU_MVP1);
-        expect(q.el("khoi-tra-ve").hidden).toBe(true);
-        expect(q.el("loi1").textContent).toMatch(/Không đọc được tổ chức đã bật kiểm soát theo bậc hay chưa/u);
+    it("[S1.192 / S3.2c2 · K6] tao-thau: dòng lời mời mang nhãn «mời sau khi ký» khi `GET …/invitations` trả `moiSauKhiKy: true`; không thì chỉ trạng thái", async () => {
+      const dong = (o: Record<string, unknown>) => ({ id: "i-1", supplierName: "Công ty Thép", contactName: "Chị Lan", linkChannel: "EMAIL", revokedAt: null, ...o });
+      const { p, dongMoi } = await moTaoThau(true, "OPEN", (l) =>
+        l === "GET /rfqs/r-1/invitations"
+          ? Promise.resolve({ status: 200, body: { invitations: [dong({ status: "SENT", moiSauKhiKy: true }), dong({ id: "i-2", status: "UNSENT", moiSauKhiKy: true }), dong({ id: "i-3", status: "SENT", moiSauKhiKy: false })] } })
+          : undefined);
+      const bang = p.el("bang-moi").querySelector("tbody").con;
+      expect(dongMoi()?.con[3]?.textContent).toBe("đã gửi · mời sau khi ký");
+      expect(bang.map((tr) => tr.con[3]?.textContent)).toEqual(["đã gửi · mời sau khi ký", "chưa gửi · mời sau khi ký", "đã gửi"]);
+    });
+
+    it("[S1.192 / S3.2c2] tao-thau: nút và câu báo nói «Mở gói» ở cả hai luồng — mở THẦU là CLOSED→UNSEALED (spec S3 §3.3)", async () => {
+      const html = readFileSync(new URL("../trang/tao-thau.html", import.meta.url), "utf8");
+      expect(html).toContain('<button id="nut-mo">Mở gói</button>');
+      expect(html).not.toMatch(/<button id="nut-mo">Mở thầu/u);
+      const mo = (l: string) => (l === "POST /rfqs/r-1/open" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "OPEN" }, unsentInvitationIds: [] } }) : undefined);
+      for (const daBat of [false, true]) {
+        const { p } = await moTaoThau(daBat, "PENDING_APPROVAL", mo);
+        await p.bam("nut-mo");
+        expect(p.el("ok4").textContent, String(daBat)).toMatch(/^Đã mở gói\. /u);
+        expect(p.el("ok4").textContent, String(daBat)).not.toMatch(/mở thầu/iu);
       }
     });
 
-    it("[S3.2c] tao-thau: đăng xuất hay đổi link sau khi đã ở thứ tự S3 ⇒ về thứ tự MVP1; lời đáp /policy/versions của lượt cũ về muộn bị bỏ", async () => {
-      const p = await moTaoThau({ daBat: true, trangThaiGoi: "DRAFT" });
-      expect(p.thuTuBuoc()).toEqual(THU_TU_S3);
-      await p.bam("nut-dang-xuat");
-      expect(p.thuTuBuoc()).toEqual(THU_TU_MVP1);
-      expect([p.el("so4").textContent, p.el("so5").textContent]).toEqual(["4", "5"]);
-      expect(p.el("khoi-tra-ve").hidden).toBe(true);
-
-      const g = { tha: () => undefined as void };
-      const q = await dungTrang("tao-thau", {
-        hash: "", cookie: A,
-        thay: (l) => (l === "GET /policy/versions"
-          ? new Promise((r) => { g.tha = () => { r({ status: 200, body: { phienBan: [], daBat: true, choKy: false } }); }; })
-          : undefined),
-      });
-      const tiepTuc = q.bam("nut-dung-phien");
-      await cho();
-      await q.doiFragment(`#${ORG}:maCuaB`);
-      g.tha();
-      await tiepTuc;
-      expect(q.thuTuBuoc(), "lời đáp của người trước không được dựng thứ tự cho người sau").toEqual(THU_TU_MVP1);
-      expect(q.el("khoi-tra-ve").hidden).toBe(true);
+    it("[S1.191 / S3.2c2 · K4a · K6] tao-thau: tổ chức đã bật, gói DRAFT ⇒ dòng lời mời «chưa gửi», chỉ nút Thu hồi; gói OPEN ⇒ chỉ Gửi lại link; MVP1 ⇒ cả hai", async () => {
+      const draft = await moTaoThau(true, "DRAFT");
+      expect(draft.dongMoi()?.con[3]?.textContent).toBe("chưa gửi");
+      expect((draft.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Thu hồi"]);
+      const mo = await moTaoThau(true, "OPEN");
+      expect((mo.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link"]);
+      const choDuyet = await moTaoThau(true, "PENDING_APPROVAL");
+      expect(choDuyet.dongMoi()?.con[4]?.con ?? []).toEqual([]);
+      const mvp1 = await moTaoThau(false, "OPEN");
+      await mvp1.p.bam("nut-doc-moi");
+      expect((mvp1.dongMoi()?.con[4]?.con ?? []).map((x) => x.textContent)).toEqual(["Gửi lại link", "Thu hồi"]);
     });
 
-    it("[S3.2c] tao-thau: mời ở DRAFT ⇒ 'link CHƯA đi'; mời ở OPEN ⇒ 'mời thêm sau khi ký', SENT hay UNSENT; lúc chờ duyệt ⇒ chỉ đường Trả về nháp; MVP1 ⇒ câu cũ", async () => {
-      const moi = async (daBat: boolean, trangThaiGoi: string, dap: { status: number; body: unknown }) => {
-        const p = await moTaoThau({
-          daBat, trangThaiGoi,
-          thay: (l) => (l === "POST /suppliers" ? Promise.resolve({ status: 201, body: { supplier: { id: "s-1" } } })
-            : l === "POST /suppliers/s-1/contacts" ? Promise.resolve({ status: 201, body: { contact: { id: "c-1" } } })
-            : l === "POST /rfqs/r-1/invitations" ? Promise.resolve(dap)
-            : undefined),
-        });
+    it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mời ở DRAFT (UNSENT) ⇒ câu nói link CHƯA đi; mời thêm ở OPEN gửi hỏng ⇒ lỗi chỉ đường Gửi lại link", async () => {
+      const moi = (loi: unknown) => (l: string) =>
+        l === "POST /rfqs/r-1/invitations" ? Promise.resolve({ status: 201, body: { invitation: loi } })
+          : l === "POST /suppliers" ? Promise.resolve({ status: 201, body: { supplier: { id: "s-1" } } })
+          : l === "POST /suppliers/s-1/contacts" ? Promise.resolve({ status: 201, body: { contact: { id: "c-1" } } })
+          : undefined;
+      for (const [trangThai, loiMoi, o, mau] of [
+        ["DRAFT", { id: "i-2", status: "UNSENT", moiSauKhiKy: false }, "ok5", /Link CHƯA đi/u],
+        ["OPEN", { id: "i-2", status: "UNSENT", moiSauKhiKy: true }, "loi5", /Gửi lại link/u],
+      ] as const) {
+        const { p } = await moTaoThau(true, trangThai, moi(loiMoi));
+        p.el("ncc-ten").value = "x";
+        // Màn giữ id nhà cung cấp và liên hệ trong phiên — dựng qua hai route giả ở trên.
         await p.bam("nut-tao-ncc");
         await p.bam("nut-them-lh");
         await p.bam("nut-moi");
-        return p;
-      };
-      const nhap = await moi(true, "DRAFT", { status: 201, body: { invitation: { id: "i-1", status: "UNSENT", moiSauKhiKy: false } } });
-      expect(nhap.el("ok5").textContent).toMatch(/Đã thêm vào danh sách mời\. Link CHƯA đi: nó đi lúc mở gói/u);
-      expect(nhap.el("loi5").hidden).toBe(true);
-      const sauKy = await moi(true, "OPEN", { status: 201, body: { invitation: { id: "i-1", status: "SENT", moiSauKhiKy: true } } });
-      expect(sauKy.el("ok5").textContent).toMatch(/Đã mời thêm sau khi ký/u);
-      const hong = await moi(true, "OPEN", { status: 201, body: { invitation: { id: "i-1", status: "UNSENT", moiSauKhiKy: true } } });
-      expect(hong.el("ok5").hidden, "không nói 'đã mời' khi link chưa đi").toBe(true);
-      expect(hong.el("loi5").textContent).toMatch(/link CHƯA gửi được\. Lời mời vẫn còn sống — bấm «Gửi lại link»/u);
-      const khoa = await moi(true, "PENDING_APPROVAL", { status: 422, body: { error: "Goi thau o PENDING_APPROVAL khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)" } });
-      expect(khoa.el("loi5").textContent).toMatch(/danh sách mời đã khoá.*«Trả về nháp»/u);
-      const mvp1 = await moi(false, "OPEN", { status: 201, body: { invitation: { id: "i-1", status: "SENT", moiSauKhiKy: false } } });
-      expect(mvp1.el("ok5").textContent).toBe("Đã mời. Link đi thẳng tới bộ gửi — màn này không bao giờ thấy mã mời.");
-      const mvp1Loi = await moi(false, "PENDING_APPROVAL", { status: 422, body: { error: "loi cua may chu" } });
-      expect(mvp1Loi.el("loi5").textContent, "tổ chức chưa bật: câu của máy chủ, không câu S3").toBe("loi cua may chu");
+        expect(p.trangThai.goi, trangThai).toContain("POST /rfqs/r-1/invitations");
+        expect(p.el(o).textContent, trangThai).toMatch(mau);
+      }
     });
 
-    it("[S3.2c] tao-thau: bảng lời mời ở tổ chức đã bật — DRAFT chỉ 'Bỏ khỏi danh sách', chờ duyệt không nút, OPEN chỉ 'Gửi lại link'; nhãn UNSENT và 'mời sau khi ký'", async () => {
-      const ds = [loiMoiGia("i-1", "UNSENT"), loiMoiGia("i-2", "UNSENT", true), { ...loiMoiGia("i-3", "REVOKED"), revokedAt: "2026-09-29T00:00:00Z" }];
-      const cot = async (trangThaiGoi: string, daBat = true) => {
-        const p = await moTaoThau({ daBat, trangThaiGoi, loiMoi: ds });
-        await p.bam("nut-doc-moi");
-        return { p, d: dongLoiMoi(p) };
-      };
-      const nhap = await cot("DRAFT");
-      expect(nhap.d.map((x) => x.trangThai)).toEqual(["UNSENT — chưa gửi", "UNSENT — chưa gửi · mời sau khi ký", "REVOKED"]);
-      expect(nhap.d.map((x) => x.nut)).toEqual([["Bỏ khỏi danh sách"], ["Bỏ khỏi danh sách"], []]);
-      expect((await cot("PENDING_APPROVAL")).d.map((x) => x.nut)).toEqual([[], [], []]);
-      for (const mo of ["OPEN", "BAFO_OPEN"]) expect((await cot(mo)).d.map((x) => x.nut)).toEqual([["Gửi lại link"], ["Gửi lại link"], []]);
-      expect((await cot("CLOSED")).d.map((x) => x.nut)).toEqual([[], [], []]);
-      // Đối chứng MVP1: hai nút ở mọi trạng thái, như trước vòng này.
-      expect((await cot("PENDING_APPROVAL", false)).d.map((x) => x.nut)).toEqual([["Gửi lại link", "Thu hồi"], ["Gửi lại link", "Thu hồi"], []]);
-
-      const { p, d } = await moTaoThau({
-        daBat: true, trangThaiGoi: "DRAFT", loiMoi: ds,
-        thay: (l) => (l === "POST /invitations/i-1/revoke" ? Promise.resolve({ status: 200, body: { revoked: true } }) : undefined),
-      }).then(async (q) => { await q.bam("nut-doc-moi"); return { p: q, d: dongLoiMoi(q) }; });
-      for (const f of d[0]?.tr.con[4]?.con[0]?.nghe["click"] ?? []) await f();
-      expect(p.trangThai.goi).toContain("POST /invitations/i-1/revoke");
-      expect(p.el("ok5").textContent).toBe("Đã bỏ khỏi danh sách mời. Chưa link nào đi, nên nhà cung cấp ấy không nhận được gì.");
+    it("[S1.191 / S3.2c2 · ADR-113] tao-thau: mở gói trả `unsentInvitationIds` không rỗng ⇒ LỖI nói đúng số link chưa đi; rỗng ⇒ ok nói mọi link đã đi", async () => {
+      const mo = (ds: string[]) => (l: string) => (l === "POST /rfqs/r-1/open" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "OPEN" }, unsentInvitationIds: ds } }) : undefined);
+      const hong = await moTaoThau(true, "PENDING_APPROVAL", mo(["i-1"]));
+      await hong.p.bam("nut-mo");
+      expect(hong.p.el("loi4").textContent).toMatch(/Nhưng 1 link mời CHƯA gửi được/u);
+      const du = await moTaoThau(true, "PENDING_APPROVAL", mo([]));
+      await du.p.bam("nut-mo");
+      expect(du.p.el("ok4").textContent).toMatch(/mọi nhà cung cấp trong danh sách/u);
     });
 
-    it("[S3.2c] tao-thau: Mở gói — 200 kèm lời mời chưa gửi ⇒ không nói 'link đã đi', nói số link chưa gửi và chỉ đường; rỗng ⇒ 'Link mời đã đi'; MVP1 ⇒ 'Đã mở gói'; sau khi mở, bảng lời mời đọc lại", async () => {
-      const html = readFileSync(new URL("../trang/tao-thau.html", import.meta.url), "utf8");
-      expect(html).toContain('<button id="nut-mo">Mở gói</button>');
-      expect(html, "*mở thầu* là CLOSED→UNSEALED — không phải nút này").not.toContain(">Mở thầu</button>");
-
-      const mo = async (daBat: boolean, chuaGui: readonly string[]) => {
-        const p = await moTaoThau({
-          daBat, trangThaiGoi: "PENDING_APPROVAL",
-          thay: (l) => (l === "POST /rfqs/r-1/open" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "OPEN" }, unsentInvitationIds: chuaGui } }) : undefined),
-        });
-        await p.bam("nut-mo");
-        return p;
-      };
-      const hong = await mo(true, ["i-2", "i-3"]);
-      expect(hong.el("ok4").textContent).toBe("Đã mở gói. Khoá của gói đã sinh ở máy chủ.");
-      expect(hong.el("loi4").textContent).toMatch(/^2 link mời CHƯA gửi được\. Gói đã mở và không lùi được; .*«Gửi lại link»/u);
-      expect(hong.trangThai.goi.slice(-4), "sau khi mở: đọc lại gói, rồi bảng lời mời").toEqual(["POST /rfqs/r-1/open", "GET /rfqs/r-1", "GET /rfqs/r-1/items", "GET /rfqs/r-1/invitations"]);
-      const du = await mo(true, []);
-      expect(du.el("ok4").textContent).toMatch(/^Đã mở gói\. Link mời đã đi tới mọi lời mời còn sống/u);
-      expect(du.el("loi4").hidden).toBe(true);
-      const mvp1 = await mo(false, []);
-      expect(mvp1.el("ok4").textContent).toBe("Đã mở gói. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ.");
-      expect(mvp1.trangThai.goi, "MVP1: không tự đọc bảng lời mời").not.toContain("GET /rfqs/r-1/invitations");
-    });
-
-    it("[S3.2c] tao-thau: Trả về nháp — lý do rỗng ⇒ không gọi route; có lý do ⇒ POST /rfqs/r-1/return-to-draft mang đúng lý do, ô lý do xoá, câu báo nói chữ ký cũ tính khi nào; lỗi route ⇒ câu của máy chủ", async () => {
-      const p = await moTaoThau({
-        daBat: true, trangThaiGoi: "PENDING_APPROVAL",
-        thay: (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "DRAFT" } } }) : undefined),
-      });
+    it("[S1.191 / S3.2c2 · 077] tao-thau: «Trả về soạn thảo» chỉ hiện ở PENDING_APPROVAL của tổ chức đã bật; lý do rỗng ⇒ không gọi máy chủ; có lý do ⇒ POST return-to-draft", async () => {
+      expect((await moTaoThau(true, "DRAFT")).p.el("khoi-tra-ve").hidden).toBe(true);
+      expect((await moTaoThau(false, "PENDING_APPROVAL")).p.el("khoi-tra-ve").hidden).toBe(true);
+      const { p } = await moTaoThau(true, "PENDING_APPROVAL", (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "DRAFT" } } }) : undefined));
+      expect(p.el("khoi-tra-ve").hidden).toBe(false);
       p.el("ly-do-tra-ve").value = "   ";
       await p.bam("nut-tra-ve");
-      expect(p.el("loi4").textContent).toMatch(/Cần lý do trả gói về nháp/u);
       expect(p.trangThai.goi).not.toContain("POST /rfqs/r-1/return-to-draft");
-
-      p.el("ly-do-tra-ve").value = "  Them nha cung cap thu tu  ";
+      expect(p.el("loi4").textContent).toMatch(/Cần ghi lý do/u);
+      p.el("ly-do-tra-ve").value = "Them nha cung cap thu nam";
       await p.bam("nut-tra-ve");
-      const i = p.trangThai.goi.indexOf("POST /rfqs/r-1/return-to-draft");
-      expect(i).toBeGreaterThan(-1);
-      expect(p.trangThai.than[i]).toEqual({ reason: "Them nha cung cap thu tu" });
+      expect(p.trangThai.goi).toContain("POST /rfqs/r-1/return-to-draft");
+      expect(p.el("ok4").textContent).toMatch(/Đã trả gói về soạn thảo/u);
       expect(p.el("ly-do-tra-ve").value).toBe("");
-      expect(p.el("ok4").textContent).toMatch(/^Đã trả gói về nháp\..*chữ ký cũ chỉ còn tính khi nội dung và danh sách không đổi/u);
-      expect(p.trangThai.goi.slice(i + 1)).toEqual(["GET /rfqs/r-1", "GET /rfqs/r-1/items", "GET /rfqs/r-1/invitations"]);
-
-      const q = await moTaoThau({
-        daBat: true, trangThaiGoi: "DRAFT",
-        thay: (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 422, body: { error: "khong o PENDING_APPROVAL" } }) : undefined),
-      });
-      q.el("ly-do-tra-ve").value = "x";
-      await q.bam("nut-tra-ve");
-      expect(q.el("loi4").textContent).toBe("khong o PENDING_APPROVAL");
-      expect(q.el("ly-do-tra-ve").value, "hỏng thì giữ lý do đã gõ").toBe("x");
-    });
-
-    // Trần của máy chủ là 2000 BYTE UTF-8 (`returnRfqToDraft`), không phải 2000 ký tự: "ế" là ba byte.
-    it("[S3.2c] tao-thau: Trả về nháp — lý do quá 2000 byte UTF-8 (700 chữ «ế», 2100 byte) ⇒ không gọi route; đúng 2000 byte ⇒ gọi", async () => {
-      const p = await moTaoThau({
-        daBat: true, trangThaiGoi: "PENDING_APPROVAL",
-        thay: (l) => (l === "POST /rfqs/r-1/return-to-draft" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", status: "DRAFT" } } }) : undefined),
-      });
-      p.el("ly-do-tra-ve").value = "ế".repeat(700);
-      await p.bam("nut-tra-ve");
-      expect(p.el("loi4").textContent).toMatch(/^Lý do dài quá — tối đa 2000 byte/u);
-      expect(p.trangThai.goi).not.toContain("POST /rfqs/r-1/return-to-draft");
-      expect(p.el("ly-do-tra-ve").value, "giữ lý do đã gõ để người dùng sửa").toBe("ế".repeat(700));
-
-      const vuaDu = `${"ế".repeat(666)}ab`;
-      p.el("ly-do-tra-ve").value = vuaDu;
-      await p.bam("nut-tra-ve");
-      const i = p.trangThai.goi.indexOf("POST /rfqs/r-1/return-to-draft");
-      expect(i, "đúng 2000 byte thì qua").toBeGreaterThan(-1);
-      expect(p.trangThai.than[i]).toEqual({ reason: vuaDu });
     });
   });
 
