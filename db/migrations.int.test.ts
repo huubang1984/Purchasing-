@@ -1450,7 +1450,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // NULL, công tắc trả `false`, phiên bản hiệu lực bỏ vế chữ ký, hay phân bậc lệch biên.
   // [S1.185 / S3.2a] Thêm hàm thứ năm, `rfq_bam_danh_sach` của K4b: một thân trả một hằng làm mọi danh sách cùng một băm,
   // và cạnh mở gói đếm chữ ký cũ như thể danh sách chưa đổi.
-  // [S1.193 / khoản 254] Thêm hàm thứ sáu, `rfq_bam_ngan_sach`: một thân trả một hằng làm mọi ngân sách cùng một băm, và
+  // [S1.194 / khoản 254] Thêm hàm thứ sáu, `rfq_bam_ngan_sach`: một thân trả một hằng làm mọi ngân sách cùng một băm, và
   // gói cấp kép hạ ngân sách về một chữ ký lại mở được bằng chữ ký cũ.
   const HAM_TRO_GIUP_K1: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "rfq_chot_ngan_sach", chuKy: "uuid, uuid, timestamptz", migration: "072_bac_cua_goi.sql" },
@@ -1461,7 +1461,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_bam_ngan_sach", chuKy: "uuid", migration: "080_rang_ngan_sach.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ [S1.193] sáu hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ [S1.194] sáu hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1686,7 +1686,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.185 / S3.2a / K4a · K4b · K6] Bốn hàm trigger của danh sách mời. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại
     // đúng lỗ nó đóng: chữ ký không mang băm danh sách (UNIQUE mới thành trang trí), cạnh mở gói không đếm trên danh sách
     // hiện tại, lời mời đổi ở PENDING_APPROVAL, hay token đúc cho gói chưa mở.
-    // [S1.193 / khoản 254] `080_rang_ngan_sach` định nghĩa lại thân hai hàm đầu — chữ ký mang cả băm ngân sách, cạnh mở gói
+    // [S1.194 / khoản 254] `080_rang_ngan_sach` định nghĩa lại thân hai hàm đầu — chữ ký mang cả băm ngân sách, cạnh mở gói
     // đếm trên ngân sách hiện tại. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "rfq_approvals_dat_bam_danh_sach", migration: "080_rang_ngan_sach.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
     { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "080_rang_ngan_sach.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
