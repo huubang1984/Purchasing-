@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
 import { counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docCauHinh, type MoiTruong } from "./cau-hinh.js";
 import { taoTienTrinhApi, type TienTrinhApi } from "./composition.js";
@@ -778,5 +779,79 @@ describe("[S1.169 / ADR-105] cờ ký chính sách đi từ MÔI TRƯỜNG tới
     }
     const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM org_policy_signatures WHERE org_id = $1", [org]);
     expect(rows0(rows)).toBe("0");
+  });
+});
+
+// ==============================================================================================
+// [S1.9151 / khoản 168] TIẾN TRÌNH `api` KHÔNG KHAI SỔ `kind` MỒ CÔI — ĐO TRÊN `taoTienTrinhApi` THẬT.
+//
+// Nửa thứ hai của khoản 168: sổ mồ côi (`KIND_KHONG_NGUOI_NHAN`) từ vòng này do worker mở thầu khai
+// (`apps/unseal-worker/src/tien-trinh.ts`, đo ở `tien-trinh.int.test.ts` vế ⑹), và ĐÚNG MỘT tiến trình
+// được khai — hai tiến trình cùng khai thì cả hai tranh nhau ghi kết cục và `attempts` của job mồ côi
+// thôi đọc được (`packages/outbox/src/runner.ts`). Vế này ghim nửa *"api KHÔNG khai"* trên dây nối
+// thật: bỏ `kindKhongNguoiNhan` khỏi `composition.ts` là một dòng XOÁ, và không phép đo nào khác đỏ
+// nếu ai đó thêm nó lại — vế này đỏ (đột biến §S1.9151 M5: thêm lại dòng ấy ⇒ job mồ côi FAILED).
+//
+// Cảnh: sổ thật hôm nay RỖNG (S1.91), nên vế này cho nó mượn MỘT dòng thử trước khi dựng tiến trình
+// (cùng cách với vế ⑹ của worker; gỡ trong `finally`; tệp này có bản sổ riêng theo cô lập module của
+// vitest, nên cổng vế ⑶ ở `apps/unseal-worker/src/composition.int.test.ts` không thấy dòng này). Tổ
+// chức phải là tổ chức tiến trình này ĐÃ THẤY xếp việc — không thì `listOrganizations` (`toChucDaThay`)
+// không có nó và vế xanh mà không đo gì — nên một lời `/auth/link` đi trước. Đối chứng dương: một lời
+// `/auth/link` THỨ HAI, xếp việc SAU khi job mồ côi đã nằm đó, phải ra tin — tức runner đã chạy trọn
+// một lượt claim (lô 10 job) cho tổ chức ấy sau khi job mồ côi tồn tại — mà job mồ côi vẫn `PENDING`,
+// `attempts` 0, và không dòng log `outbox` nào của tiến trình mang `kind` ấy.
+// ==============================================================================================
+describe("[S1.9151 / khoản 168] tiến trình `api` dựng từ môi trường KHÔNG khai sổ `kind` mồ côi", () => {
+  it("job mang `kind` trong sổ mồ côi của tổ chức tiến trình này ĐÃ THẤY xếp việc vẫn PENDING, attempts 0, sau khi runner chạy trọn một lượt cho tổ chức ấy (job LOGIN_LINK_SEND xếp SAU nó đã ra tin); không dòng log nào mang `kind` ấy — sổ nay là việc của worker", async () => {
+    const KIND_MO_COI = "THU_MO_COI_168_API";
+    Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế khoản 168 — không phải một khai thật, gỡ trong finally" });
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    // Tổ chức và người dùng RIÊNG cho vế này: không job sót của các vế trước, và `toChucDaThay` của tiến trình dựng dưới đây
+    // chỉ có nó. Email phải là của một người dùng ACTIVE — handler `LOGIN_LINK_SEND` không gửi gì cho email lạ (chống dò tài
+    // khoản, `outbox-api.ts`), mà tin trong hộp thư là đối chứng dương của vế này.
+    const orgK = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty K168', 'cong-ty-k168') RETURNING id")
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, 'k168@vidu.vn', 'Nguoi mua K168', 'ACTIVE')", [orgK]);
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong()));
+    try {
+      const dc = await tt.batDau();
+      goc = `http://${dc.host}:${dc.port}`;
+      const truoc = docHopThu().length;
+      // ⑴ Tổ chức vào `toChucDaThay` của tiến trình này bằng đúng đường sản xuất: một lời xếp việc qua `api`.
+      const r1 = await goi("POST", "/auth/link", { body: { orgId: orgK, email: "k168@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.68" } });
+      expect(r1.status, r1.text).toBe(200);
+      await doiHopThu(truoc + 1);
+      // ⑵ Job mồ côi của CÙNG tổ chức ấy — chèn thẳng, vì không đường sản xuất nào xếp một `kind` không người nhận.
+      const { rows: gieo } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind) VALUES ($1::uuid, $2) RETURNING id",
+        [orgK, KIND_MO_COI],
+      );
+      const idMoCoi = gieo[0]!.id;
+      // ⑶ Đối chứng dương: runner chạy trọn một lượt claim cho tổ chức ấy SAU khi job mồ côi đã nằm đó.
+      const r2 = await goi("POST", "/auth/link", { body: { orgId: orgK, email: "k168@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.69" } });
+      expect(r2.status, r2.text).toBe(200);
+      await doiHopThu(truoc + 2);
+      // ⑷ Job mồ côi không bị chạm — mảng lọc của runner này là đúng `Object.keys(handlers)`.
+      const { rows: job } = await db.pool.query<{ status: string; attempts: number; last_failure_reason: string | null }>(
+        "SELECT status, attempts, last_failure_reason FROM outbox_jobs WHERE id = $1",
+        [idMoCoi],
+      );
+      expect(job[0], "api KHÔNG được claim job mồ côi — sổ nay do worker khai, và ĐÚNG MỘT tiến trình khai").toEqual({
+        status: "PENDING",
+        attempts: 0,
+        last_failure_reason: null,
+      });
+      expect(log.filter((d) => d.includes(KIND_MO_COI)), JSON.stringify(log)).toEqual([]);
+      expect(log.join("\n")).not.toContain(orgK);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+      Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+    }
   });
 });
