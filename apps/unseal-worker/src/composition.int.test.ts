@@ -439,7 +439,7 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
 // Vế đối chiếu: bộ mô tả của `api` cho một lỗi CÙNG HÌNH DẠNG phải cho đúng phần đuôi của dòng ấy.
 // ===============================================================================================
 describe("[INV-A2] [S1.9151 / khoản 166] dòng log của worker mô tả lỗi bằng CÙNG một hàm với api", () => {
-  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, hai hằng đóng và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
+  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, ~~hai~~ [S1.9161 / khoản 179] ba hằng đóng (cộng vế `POLICY_GATE`) và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
     const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
     let thaKhoa: () => void = () => {};
     const choTha = new Promise<void>((xong) => {
@@ -483,15 +483,17 @@ describe("[INV-A2] [S1.9151 / khoản 166] dòng log của worker mô tả lỗi
       await giuKhoa;
       expect(dong, JSON.stringify(log)).toBeDefined();
 
-      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, hai hằng đóng, `cause` là lỗi
-      // Postgres mang `55P03`. Thông điệp cố ý mang giá trị để vế A2 dưới có thứ để bắt.
+      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, ~~hai~~ [S1.9161 / khoản 179] BA hằng đóng — vế
+      // `POLICY_GATE` là vế "không tìm thấy" của `tuChoiLucGiaiMa` —, `cause` là lỗi Postgres mang `55P03`. Thông điệp cố ý
+      // mang giá trị để vế A2 dưới có thứ để bắt.
       const cungLoi = new DenialAuditFailedError(
         "UNSEAL_EXECUTION_DENIED",
         "UNSEAL_REQUEST",
         new Error(`tu choi mang ${id}`),
         Object.assign(new Error(`canceling statement due to lock timeout ${orgA}`), { name: "error", code: "55P03" }),
+        "POLICY_GATE",
       );
-      expect(moTaLoiCuaApi(cungLoi)).toBe("DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST <- error 55P03");
+      expect(moTaLoiCuaApi(cungLoi)).toBe("DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST POLICY_GATE <- error 55P03");
       expect(dong, "worker phải mô tả lỗi ĐÚNG như api mô tả cùng lỗi ấy — kể cả tầng `cause`").toBe(
         `[unseal-worker] outbox UNSEAL_RFQ HANDLER_ERROR ${moTaLoiCuaApi(cungLoi)}`,
       );

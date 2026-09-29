@@ -643,7 +643,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     ).rows[0]!.id;
   });
 
-  it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log ~~`DenialAuditFailedError <- error 23514`~~ [S1.85 / khoản 131] `POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514`, không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
+  it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log ~~`DenialAuditFailedError <- error 23514`~~ [S1.85 / khoản 131] ~~`POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514`~~ [S1.9161 / khoản 179] `POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514` (cộng VẾ đã từ chối), không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
     const doiChung = await yeuCauMoThauK119();
     const dc = await goi(gocK119, `/unseal/${doiChung}/dispatch`, gdK119.cookie, { method: "POST" });
     expect([dc.status, dc.log]).toEqual([422, []]);
@@ -654,7 +654,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     expect(r.status).toBe(500);
     expect(JSON.parse(r.body)).toEqual({ error: "loi noi bo" });
     expect(r.log).toHaveLength(1);
-    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514$/u);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514$/u);
     expect(await demSoK119("UNSEAL_DENIED", id)).toBe(0);
     expect((await db.pool.query("SELECT 1 FROM outbox_jobs WHERE dedupe_key = $1", [`unseal:${id}`])).rows).toHaveLength(0);
   });

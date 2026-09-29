@@ -400,6 +400,8 @@ function tuChoiLucGiaiMa(
       payload: { clause },
     },
     new UnsealExecutionDeniedError(clause, message, cause === undefined ? undefined : { cause }),
+    // [S1.9161 / khoản 179] Vế đã từ chối cho dòng log của lần MẤT SỔ — cùng lý do với `tuChoi` của cổng mở thầu.
+    clause,
   );
 }
 
