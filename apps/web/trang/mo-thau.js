@@ -114,33 +114,97 @@ function docLink() {
   if (h !== "") $("token").value = h;
 }
 
+// ---------------------------------------------------------------------------------------------
+// [S1.9181 / khoản 193] HAI VIỆC, HAI NÚT: «Tiếp» đổi mã đăng nhập (và ghi danh nếu cần), «Vào» vào.
+//
+// Bản cũ gộp cả hai vào nút Vào: người mới bấm Vào với ô mã sáu số trống, trang gọi `/auth/redeem`,
+// máy chủ trả bí mật TOTP, và bí mật ấy hiện ra CÙNG CHỖ với câu lỗi của lần bấm trượt — nên màn
+// hình không nói nó đang xin thứ gì, và chủ dự án đã đưa nhầm mã đăng nhập thay vì bí mật (đo ngày
+// 2026-09-20). Nay ô mã sáu số ẩn cho tới khi máy chủ đã nói tài khoản này cần ghi danh hay không;
+// bí mật hiện ở khối riêng, với nhãn nói rõ nó là gì và KHÔNG phải gì.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Đổi mã đăng nhập ở máy chủ, ĐÚNG MỘT LẦN cho mỗi mã — một phép sửa do lượt chạy thử đầu tiên ép ra:
+ * mỗi lần gọi lại, máy chủ sinh một bí mật TOTP MỚI cho tài khoản chưa ghi danh. Bản đầu của trang này
+ * gọi lại ở mỗi lần bấm, nên người dùng vừa gõ bí mật A vào ứng dụng xác thực xong, bấm Vào, thì máy
+ * chủ đã đổi sang bí mật B — mã sáu số của họ không bao giờ đúng, và không có gì giải thích vì sao.
+ *
+ * Trả `"ghi-danh"` khi vừa nhận bí mật (người dùng phải nhập nó vào ứng dụng trước), `"san-sang"` khi ô
+ * mã sáu số dùng được, `null` khi máy chủ từ chối (câu đã in ở `loi1`). Ném khi mất mạng.
+ */
+async function doiMaDangNhap(orgId, token) {
+  if (phien.daRedeem) { hien($("khoi-ma"), true); return "san-sang"; }
+  const r1 = await goi("POST", "/auth/redeem", { orgId, token });
+  if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return null; }
+  phien = { ...phien, daRedeem: true };
+  hien($("khoi-ma"), true);
+  if (r1.body?.needsEnrollment === true) {
+    // Lần đầu của một người mua: máy chủ trả bí mật TOTP đúng một lần. Hiện nguyên văn thay vì giấu
+    // sau một mã QR — người đang demo cần gõ nó vào ứng dụng xác thực ngay tại chỗ. Nhãn phải nói cả
+    // hai chiều: nó là gì (bí mật ghi danh, nhập vào ứng dụng xác thực) và nó KHÔNG phải gì (mã đăng
+    // nhập, mã sáu số) — vì đó đúng là hai thứ người mới đã lẫn.
+    bao($("ghi-danh"),
+      `Tài khoản này chưa có ứng dụng xác thực. BÍ MẬT GHI DANH: ${r1.body.totpSecretBase32} — nhập nó vào ` +
+      "ứng dụng xác thực (Google Authenticator, Microsoft Authenticator…). Đây KHÔNG phải mã đăng nhập và " +
+      "không phải mã sáu số. Xong thì nhập mã sáu số ứng dụng hiện ra vào ô dưới và bấm Vào.");
+    return "ghi-danh";
+  }
+  bao($("ok1"), "Mã đăng nhập hợp lệ; tài khoản đã có ứng dụng xác thực. Nhập mã sáu số rồi bấm Vào.");
+  return "san-sang";
+}
+
+/**
+ * Mã đăng nhập vừa đổi (người thứ hai dán mã của mình): phiên ghi nhớ mã mới và phải đổi lại ở máy chủ;
+ * ô mã sáu số đóng, bí mật của người trước không được đứng lại trên màn. `giuMaSauSo`: từ nút Vào, mã sáu
+ * số vừa gõ đi cùng mã đăng nhập vừa dán nên được giữ; từ nút Tiếp, nó là của người trước nên bị xoá.
+ */
+function doiMa(token, giuMaSauSo) {
+  phien = { ...phien, token, daRedeem: false };
+  dongKhoiMa(giuMaSauSo);
+}
+
+/** Ô mã sáu số chỉ có nghĩa sau khi máy chủ đã nói tài khoản này cần ghi danh hay không — đóng nó cùng lúc `daRedeem` về false. */
+function dongKhoiMa(giuMaSauSo = false) {
+  hien($("khoi-ma"), false);
+  if (!giuMaSauSo) $("ma").value = "";
+  bao($("ghi-danh"), "");
+}
+
+$("nut-ghi-danh").addEventListener("click", async () => {
+  bao($("loi1"), "");
+  const orgId = docToChuc();
+  const token = $("token").value.trim();
+  if (token !== phien.token) doiMa(token, false);
+  if (orgId === null) { bao($("loi1"), SAI_TO_CHUC); return; }
+  if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
+  $("nut-ghi-danh").disabled = true;
+  try {
+    await doiMaDangNhap(orgId, token);
+  } catch {
+    bao($("loi1"), MAT_KET_NOI);
+  } finally {
+    $("nut-ghi-danh").disabled = false;
+  }
+});
+
 $("nut-vao").addEventListener("click", async () => {
-  bao($("loi1"), ""); bao($("ghi-danh"), "");
+  bao($("loi1"), "");
   const orgId = docToChuc();
   const token = $("token").value.trim();
   const code = $("ma").value.trim();
-  // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải redeem lại cho token mới.
-  if (token !== phien.token) phien = { ...phien, token, daRedeem: false };
+  // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải redeem lại cho token mới. Mã sáu số vừa gõ
+  // đi cùng mã đăng nhập vừa dán, nên giữ.
+  if (token !== phien.token) doiMa(token, true);
   if (orgId === null) { bao($("loi1"), SAI_TO_CHUC); return; }
   if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
   $("nut-vao").disabled = true;
   try {
-    // GỌI `/auth/redeem` ĐÚNG MỘT LẦN cho mỗi mã đăng nhập, và đó là một phép sửa do lượt chạy
-    // thử đầu tiên ép ra: mỗi lần gọi lại, máy chủ sinh một bí mật TOTP MỚI cho tài khoản chưa
-    // ghi danh. Bản đầu của trang này gọi lại ở mỗi lần bấm, nên người dùng vừa gõ bí mật A vào
-    // ứng dụng xác thực xong, bấm Vào, thì máy chủ đã đổi sang bí mật B — mã sáu số của họ không
-    // bao giờ đúng, và không có gì trên màn hình giải thích vì sao.
-    if (!phien.daRedeem) {
-      const r1 = await goi("POST", "/auth/redeem", { orgId, token });
-      if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return; }
-      phien = { ...phien, daRedeem: true };
-      if (r1.body?.needsEnrollment === true) {
-        // Lần đầu của một người mua: máy chủ trả bí mật TOTP đúng một lần. Hiện nguyên văn thay
-        // vì giấu sau một mã QR — người đang demo cần gõ nó vào ứng dụng xác thực ngay tại chỗ.
-        bao($("ghi-danh"), `Tài khoản này chưa có MFA. Bí mật TOTP (nhập vào ứng dụng xác thực, rồi nhập mã sáu số và bấm Vào lần nữa): ${r1.body.totpSecretBase32}`);
-        return;
-      }
-    }
+    // Vào mà chưa đổi mã (mã vừa dán, hay bước Tiếp bị bỏ qua): đổi ở đây, cùng đường và cùng "đúng một
+    // lần" với nút Tiếp. Vừa nhận bí mật thì DỪNG — mã sáu số lúc này không thể đúng, vì ứng dụng xác
+    // thực chưa có bí mật.
+    const trangThai = await doiMaDangNhap(orgId, token);
+    if (trangThai !== "san-sang") return;
     if (!/^\d{6}$/.test(code)) { bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực."); return; }
     const r2 = await goi("POST", "/auth/totp", { orgId, token, code });
     if (r2.status !== 200) {
@@ -245,6 +309,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     phienCho = null;
     phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
     dongCacBuoc();
+    dongKhoiMa();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
     bao($("loi1"), MAT_KET_NOI);
@@ -741,6 +806,8 @@ window.addEventListener("hashchange", () => {
     if (el !== null) bao(el, "");
   }
   dongCacBuoc();
+  // [S1.9181 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`.
+  dongKhoiMa();
   thuPhienCo();
 });
 

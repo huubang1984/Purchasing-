@@ -25,11 +25,18 @@ function inTien(xu: bigint): string {
   return `${am ? "-" : ""}${nguyen.toString()}.${le}`;
 }
 
-/** Thành tiền của một dòng: `soLuong` (≤ 4 chữ số lẻ) × `donGia` (số nguyên đồng), làm tròn nửa lên tới xu. */
+/**
+ * Thành tiền của một dòng: `soLuong` (≤ 4 chữ số lẻ) × `donGia` (số nguyên đồng), ~~làm tròn nửa lên tới xu~~
+ * **[S1.9181 / khoản 218]** làm tròn **nửa-ra-xa-0** tới xu — MỘT luật với `lamTron` của `@trustprocure/danh-gia`
+ * và `thanhTien` của `apps/web/src/so-tien.ts` (ADR-050 ⑴). Trên miền không âm mà `SO_LUONG`/`DON_GIA` cưỡng chế,
+ * nửa-lên và nửa-ra-xa-0 là cùng một hàm, nên thân hàm không đổi; đổi là LỜI KHAI, và `tien.test.ts` đối chiếu
+ * với `lamTron` ở cả 100 phần dư cộng bảng ca nửa xu. Giữ bản riêng thay vì import: gói này không khai
+ * `@trustprocure/danh-gia` và bộ giả lập là công cụ dev đứng ngoài sản phẩm — phép đo cạnh nhau là lớp giữ.
+ */
 export function thanhTien(soLuong: string, donGia: string): string {
   const sl = doiSoNguyen(soLuong, 4, SO_LUONG, "số lượng");
   const dg = doiSoNguyen(donGia, 0, DON_GIA, "đơn giá");
-  // sl mang 4 chữ số lẻ ⇒ tích mang 4; đưa về 2 chữ số lẻ, làm tròn nửa lên.
+  // sl mang 4 chữ số lẻ ⇒ tích mang 4; đưa về 2 chữ số lẻ. `tich` ≥ 0 nên cộng nửa rồi chia là nửa-ra-xa-0.
   const tich = sl * dg;
   return inTien((tich + 50n) / 100n);
 }
