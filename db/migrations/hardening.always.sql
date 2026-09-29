@@ -2747,9 +2747,9 @@ $ham$;
          ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '081_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '081_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '081_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_nhan_chung_chi_break_glass', '078_nhan_chung_chi_break_glass', 'CHECK ((break_glass OR ((break_glass_witness_user_id IS NULL) AND (break_glass_witness_session_id IS NULL))))'),
@@ -3439,7 +3439,7 @@ $ham$;
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
-         ('public', 'supplier_verifications', '081_xac_minh_nha_cung_cap'),
+         ('public', 'supplier_verifications', '082_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
          ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
@@ -8191,10 +8191,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.195 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
+    -- [S1.196 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
     ARRAY[
-      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (081_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_bam_xac_minh(p_org uuid, p_ncc uuid) RETURNS bytea
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8229,10 +8229,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_bam_xac_minh(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.195 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
+    -- [S1.196 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
     ARRAY[
-      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (081_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_xac_minh_con_hieu_luc(p_org uuid, p_ncc uuid) RETURNS boolean
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8265,10 +8265,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.195 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
+    -- [S1.196 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
     ARRAY[
-      $q$hàm + trigger ncc_kiem_xac_minh (081_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '081_xac_minh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger ncc_kiem_xac_minh (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

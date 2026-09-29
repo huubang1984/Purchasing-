@@ -347,7 +347,7 @@ export interface MocGhim {
 // nho bo doc so noi hau to chu thuong (khoan 246). Cong CHAN dung mot luot truoc khi dong nay duoc viet.
 // [S1.192 / S4.1] 68 -> 70: L1, L4 — hai hang dau cua nhom L — vao so dang ky cung luot voi khuon nen va ham quy doi;
 // dai ma noi [A-HJK] -> [A-HJ-L] o S4.0. Cong CHAN dung mot luot truoc khi dong nay duoc viet.
-// [S1.195 / S3.3a] 70 -> 71: K8a vao so dang ky cung luot voi chot CSDL cua no (xac minh noi bo nha cung cap).
+// [S1.196 / S3.3a] 70 -> 71: K8a vao so dang ky cung luot voi chot CSDL cua no (xac minh noi bo nha cung cap).
 export const MOC_GHIM: MocGhim = { soPhuToiThieu: 71, coDanhSachToiDa: 0 };
 
 /**

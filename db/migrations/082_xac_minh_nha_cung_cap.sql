@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 081_xac_minh_nha_cung_cap — [S1.195 / S3.3a của spec S3] XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
+-- 082_xac_minh_nha_cung_cap — [S1.196 / S3.3a của spec S3] XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §4.8, §5.1 (K8), §9 (S3.3). ADR-081 ⑵,
 -- ADR-084 ⑵ ⑶ ⑷. Chủ dự án chốt ngày 2026-09-29: S3.3 chia năm PR, S3.3a là xác minh; hạn hiệu lực của xác minh dùng CHUNG
