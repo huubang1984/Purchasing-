@@ -16436,6 +16436,10 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 - **Sau khi merge `master` tới #198 (S3.2c2 phần bù, giữ S1.193) và cấp lại số vòng:** toàn bộ T3 cục bộ trên cây cuối: 193 tệp,
   3269 khẳng định, 3259 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 70/70 bất biến,
   đọc từ 3269 khẳng định. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #206 (S3.2d, giữ S1.194, ADR-114, `080`) và cấp lại số vòng, số ADR, số migration:** toàn bộ T3
+  cục bộ trên cây cuối: 193 tệp, 3275 khẳng định, 3265 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70
+  bất biến, đọc từ 3275 khẳng định; K4b 8 → 23 như trên, K4a 22 (của #206). `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem`
+  sạch.
 
 ---
 
