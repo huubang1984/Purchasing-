@@ -16553,3 +16553,11 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
   số migration và hai số khoản của nhánh này đã có sẵn trên origin, và `pnpm cap-so` bản mới cấp lại đúng những số ấy. Toàn bộ T3
   cục bộ trên cây cuối: 193 tệp, 3278 khẳng định, 3268 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản
   đã commit: 70/70 bất biến, đọc từ 3278 khẳng định. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #208 (#204 — S4.2a giữ S1.197, ADR-116, `083_hang_chuan`; #208 — `cap-so`) và cấp lại số vòng, số
+  migration:** dòng lời khai số migration của `Handoff.md` trên `master` còn mang thẻ vòng cũ của #204 từ trước lần nó chuyển sang
+  lời giữ, nên `cap-so` coi số vòng của nhánh là số `master` đã khai và cấp số mới — các số ở giữa đã có lời giữ —: S1.202. Thẻ ấy
+  sửa về số của #204 trên chính dòng mà nhánh viết lại (lời khai đếm). Migration phải lớn hơn `083`, và hai số kế đã có lời giữ, nên
+  thành `086_rang_ngan_sach`. ADR-115, khoản 256 và khoản 257 giữ nguyên. Toàn bộ T3 cục bộ trên cây cuối: 194 tệp, 3299 khẳng định,
+  3289 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến (49/49 nghiệp vụ +
+  22/22 hàng rào; L3 vào ở #204), đọc từ 3299 khẳng định; K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch;
+  `pnpm cap-so --kiem` sạch.
