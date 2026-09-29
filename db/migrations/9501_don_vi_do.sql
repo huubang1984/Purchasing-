@@ -5,7 +5,7 @@
 --
 --   (1) `chuoi_sach(text)` — bước LÀM SẠCH chuỗi bản 1, chỉ ở SQL (§2.5 ⒄): NFKD, bỏ dấu, `đ`→`d`, chữ
 --       thường, mọi ký tự ngoài `[a-z0-9]` thành khoảng trắng, gộp khoảng trắng, cắt hai đầu. Không
---       extension. Bản 1 là luật chủ dự án chốt ngày 2026-09-28: *"D10-HP"* thành `d10 hp`. Mọi thay đổi
+--       extension. Bản 1 là luật chủ dự án chốt ngày 2026-09-29: *"D10-HP"* thành `d10 hp`. Mọi thay đổi
 --       luật là một PHIÊN BẢN mới, không sửa thân này — bí danh đã lưu mang dạng sạch của bản 1.
 --   (2) `uom_units`, `uom_aliases_chung` — hai danh mục TOÀN CỤC, khuôn `roles` của `005`: không `org_id`,
 --       `app_api` chỉ `SELECT`, gieo bằng chính tệp này, chỉ-ghi-thêm kể cả `TRUNCATE` (khuôn `047`).

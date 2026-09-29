@@ -426,7 +426,9 @@ không I/O, không ngẫu nhiên, không đồng hồ. Sáu bước theo đúng 
 
 **[S1.159] Hai bước đổi chỗ ở và đổi nghĩa** (§2.4 ⑹, §2.5 ⒄):
 - Bước 1 (làm sạch) và bước 2 (đơn vị) là HÀM SQL `chuoi_sach(text)` — `normalize(…, NFD)`, `regexp_replace`, `translate` cho
-  `đ`→`d`, không extension. Lõi TypeScript nhận chuỗi đã làm sạch, không cài lại.
+  `đ`→`d`, không extension. Lõi TypeScript nhận chuỗi đã làm sạch, không cài lại. **[S1.9101 / S4.1] Bản 1 dùng NFKD, không NFD**
+  — đo: NFD giữ nguyên *"m²"*, bước thay ký tự lạ biến nó thành `m`, tức mã của MÉT; NFKD cho `m2`. Với chữ Việt hai dạng cho
+  cùng kết quả. Mọi ký tự ngoài `[a-z0-9]` thành một khoảng trắng: *"D10-HP"* → `d10 hp` (chủ dự án chốt 2026-09-29).
 - `TU_DONG` chỉ khi `chuoi_sach(description)` bằng CHÍNH XÁC một `item_aliases` còn hiệu lực. Trigger tính lại cả hai vế nên
   CSDL phán được, không tin một con số do ứng dụng khai. Mọi khớp mờ ≥ `nguong_goi_y` là `GOI_Y`, kể cả ≥ 95%.
 - Ngưỡng 95/80 là hằng GIẢ ĐỊNH của bộ luật gợi ý, không nằm trên chính sách.

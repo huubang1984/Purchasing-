@@ -28,7 +28,7 @@ export interface QuyDoiDonViInput {
 export async function quyDoiDonVi(client: pg.PoolClient, input: QuyDoiDonViInput): Promise<KetQuaQuyDoi> {
   await assertTenantBound(client, input.orgId, "quyDoiDonVi");
   const { rows } = await client.query<{ he_so: string | null; ma: string }>(
-    "SELECT he_so::text AS he_so, ma FROM public.quy_doi_don_vi($1::uuid, $2::uuid, $3::text, $4::text, $5::timestamptz)",
+    "SELECT he_so::pg_catalog.text AS he_so, ma FROM public.quy_doi_don_vi($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.text, $4::pg_catalog.text, $5::pg_catalog.timestamptz)",
     [input.orgId, input.hangChuanId ?? null, input.tu, input.sang, input.moc],
   );
   const hang = rows[0];
@@ -43,7 +43,7 @@ export async function quyDoiDonVi(client: pg.PoolClient, input: QuyDoiDonViInput
 
 /** Dạng sạch bản 1 của một chuỗi — đúng thứ bí danh được lưu và được so. */
 export async function chuoiSach(client: pg.PoolClient, s: string): Promise<string> {
-  const { rows } = await client.query<{ sach: string }>("SELECT public.chuoi_sach($1::text) AS sach", [s]);
+  const { rows } = await client.query<{ sach: string }>("SELECT public.chuoi_sach($1::pg_catalog.text) AS sach", [s]);
   const sach = rows[0]?.sach;
   if (sach === undefined) throw new Error("chuoi_sach không trả hàng nào");
   return sach;

@@ -108,7 +108,7 @@ const BANG_CA_QUY_DOI: ReadonlyArray<readonly [string, string, number | null]> =
   ["", "kg", null],
 ];
 
-async function caLech(orgId: string, chay: (tu: string, sang: string) => Promise<KetQuaQuyDoi>): Promise<string[]> {
+async function caLech(chay: (tu: string, sang: string) => Promise<KetQuaQuyDoi>): Promise<string[]> {
   const lech: string[] = [];
   for (const [tu, sang, mong] of BANG_CA_QUY_DOI) {
     const kq = await chay(tu, sang);
@@ -118,7 +118,6 @@ async function caLech(orgId: string, chay: (tu: string, sang: string) => Promise
         : kq.quyDoiDuoc && Number(kq.heSo) === mong;
     if (!dung) lech.push(`${tu}→${sang}: ${JSON.stringify(kq)}`);
   }
-  void orgId;
   return lech;
 }
 
@@ -167,9 +166,9 @@ describe("[S1.9101 / S4.1] làm sạch chuỗi bản 1", () => {
 
 describe("[S1.9101 / S4.1] quy đổi đơn vị — L4", () => {
   it("[INV-L4] bảng ca: cùng thứ nguyên thì có hệ số; khác thứ nguyên, đóng gói, mơ hồ, lạ thì KHONG_QUY_DOI_DUOC — không bao giờ hệ số 1 không nguồn", async () => {
-    expect(await caLech(orgA, (tu, sang) => quyDoi(orgA, tu, sang))).toEqual([]);
+    expect(await caLech((tu, sang) => quyDoi(orgA, tu, sang))).toEqual([]);
     const cung = await quyDoi(orgA, "kg", "Kg");
-    expect(cung).toEqual({ quyDoiDuoc: true, heSo: expect.any(String) as unknown as string, ma: "CUNG_DON_VI" });
+    expect(cung).toEqual({ quyDoiDuoc: true, heSo: "1", ma: "CUNG_DON_VI" });
     expect(await quyDoi(orgA, "tấn", "kg")).toMatchObject({ quyDoiDuoc: true, ma: "QUY_DOI_CHUNG" });
   });
 
@@ -235,7 +234,7 @@ describe("[S1.9101 / S4.1] quy đổi đơn vị — L4", () => {
         const h = rows[0]!;
         return h.he_so === null ? { quyDoiDuoc: false, ma: KHONG_QUY_DOI_DUOC } : { quyDoiDuoc: true, heSo: h.he_so, ma: "QUY_DOI_CHUNG" };
       };
-      const lech = await caLech(orgA, chay);
+      const lech = await caLech(chay);
       expect(lech.length, "đột biến ELSE 1 phải làm bảng ca đỏ").toBeGreaterThan(0);
       expect(lech.some((l) => l.startsWith("hộp→hộp"))).toBe(true);
       await c.query("ROLLBACK");
@@ -247,6 +246,27 @@ describe("[S1.9101 / S4.1] quy đổi đơn vị — L4", () => {
       const t = (await c.query<{ ma: string }>("SELECT ma FROM public.quy_doi_don_vi($1, NULL, 'T', 'kg', now())", [orgA])).rows[0]!.ma;
       expect(t, "một bí danh chung cho `t` đưa dạng mơ hồ vào quy đổi").toBe("QUY_DOI_CHUNG");
       await c.query("ROLLBACK");
+    } finally {
+      c.release();
+    }
+  });
+
+  it("[INV-L4] ĐỘT BIẾN — hàm SQL trả một cặp (hệ số, mã) lạ: tầng gói NÉM thay vì đoán `quyDoiDuoc`", async () => {
+    const c = await db.pool.connect();
+    try {
+      for (const [heSo, ma] of [
+        ["1::numeric", "'KHONG_QUY_DOI_DUOC'"],
+        ["NULL::numeric", "'QUY_DOI_CHUNG'"],
+        ["1::numeric", "'DOAN'"],
+      ] as const) {
+        await c.query("BEGIN");
+        await c.query(`CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
+            p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
+            RETURNS TABLE (he_so numeric, ma text) LANGUAGE sql STABLE AS $ham$ SELECT ${heSo}, ${ma} $ham$`);
+        await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+        await expect(quyDoiDonVi(c, { orgId: orgA, tu: "kg", sang: "g", moc: new Date() }), `${heSo}, ${ma}`).rejects.toThrow(/cặp lạ/);
+        await c.query("ROLLBACK");
+      }
     } finally {
       c.release();
     }
