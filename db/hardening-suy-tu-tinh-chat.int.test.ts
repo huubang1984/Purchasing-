@@ -308,7 +308,7 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
   // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
   // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
-  // đi qua cả bốn: năm nhân chứng. **[S1.192 / `079_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
+  // đi qua cả bốn: năm nhân chứng. **[S1.193 / `080_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
   // `rfq_kiem_chu_ky_danh_sach_khi_mo`) nay mang thêm băm ngân sách; vẫn chỉ ở tổ chức đã bật, nhân chứng không đổi.
   "public.rfq_approvals_dat_bam_danh_sach",
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
