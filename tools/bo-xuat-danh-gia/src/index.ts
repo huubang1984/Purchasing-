@@ -22,7 +22,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { argv, env, exit, stderr, stdout } from "node:process";
 import { createPool } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 // [mảnh 1] Nửa XUẤT nay ở gói, để CLI và route `GET /rfqs/:rfqId/evidence-bundle` ghi ra CÙNG byte.
 // Nửa KIỂM (`docBo`, `kiemBo`) ở lại đây — người kiểm không mượn định nghĩa của người bị kiểm.
 import { dungBoBangChung } from "@trustprocure/danh-gia";
@@ -75,6 +75,18 @@ function bam(vanBan: string): string {
   return createHash("sha256").update(Buffer.from(vanBan, "utf8")).digest("hex");
 }
 
+/**
+ * [S1.9171 / khoản 180] Hai tín hiệu mất-không-ai-biết của pool đi qua `withTenant` — ⑴ `release` mang `TenantError`
+ * SESSION_STATE_LEFT (kết nối bị huỷ vì trạng thái phiên còn sót, không ném cho ai), ⑵ lỗi tới muộn sau trần
+ * `maxConnectWaitMs` (ở đây không đặt trần; gắn để cổng `pool-nghe-du-tin-hieu`, nay quét cả `tools/`, đòi đủ hai). Cùng khuôn
+ * `pnpm neo`. Chỉ TÊN lỗi và MÃ hằng, không `message` (A2); tool không import được `apps/api/src/mo-ta-loi.ts`.
+ */
+function moTaLoiKhongGiaTri(loi: unknown): string {
+  if (!(loi instanceof Error)) return "loi la";
+  const ma = (loi as { code?: unknown }).code;
+  return typeof ma === "string" && /^[0-9A-Z_]{2,64}$/u.test(ma) ? `${loi.name} ${ma}` : loi.name;
+}
+
 async function xuat(thamSo: readonly string[]): Promise<number> {
   const co = docCo(thamSo, ["org", "rfq", "ra"]);
   const orgId = co.get("org") ?? "";
@@ -83,9 +95,18 @@ async function xuat(thamSo: readonly string[]): Promise<number> {
 
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
     role: "app_api",
-    // Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc `apps/`); lớp
-    // `'error'` nằm trong `createPool`, dòng dưới chỉ thêm phần chẩn đoán. Cùng khuôn `pnpm neo`.
+    // ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc `apps/`)~~ [S1.9171 / khoản 180] cổng
+    // ấy nay quét cả `tools/`; lớp `'error'` vẫn nằm trong `createPool` (hợp đồng của `pg`), dòng dưới chỉ thêm phần chẩn
+    // đoán, hai tín hiệu riêng của kho gắn ngay dưới. Cùng khuôn `pnpm neo`.
     onPoolError: (e) => console.error(`[bang-chung] pool loi ${e instanceof Error ? e.name : "loi la"}`),
+  });
+  pool.on("release", (loi: unknown) => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+      console.error(`[bang-chung] ket noi huy pool ${moTaLoiKhongGiaTri(loi)}`);
+    }
+  });
+  ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {
+    console.error(`[bang-chung] loi ket noi toi muon pool ${moTaLoiKhongGiaTri(loi)}`);
   });
   try {
     const daXuat = await withTenant(pool, orgId, (client) => dungBoBangChung(client, orgId, rfqId, new Date()));

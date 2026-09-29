@@ -58,7 +58,7 @@ import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import { createProcurementPolicy, kyPhienBanChinhSach, taoNhomHang } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
-import { withTenant } from "@trustprocure/tenancy";
+import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -125,6 +125,18 @@ async function chinh(): Promise<void> {
   const soDienThoai = String(randomBytes(4).readUInt32BE(0) % 10000000).padStart(7, "0");
 
   const pool = new pg.Pool({ connectionString: url, max: 4 });
+  // [S1.9171 / khoản 180] Pool này đi qua `withTenant` (nửa CÓ tenant của script), nên hai tín hiệu mất-không-ai-biết mà
+  // cổng `pool-nghe-du-tin-hieu` — nay quét cả `tools/` và thấy cả `new pg.Pool` — đòi phải có người nghe: ⑴ `release`
+  // mang `TenantError` SESSION_STATE_LEFT (kết nối bị huỷ vì trạng thái phiên còn sót, không ném cho ai); ⑵ lỗi tới muộn
+  // sau trần `maxConnectWaitMs` (ở đây không đặt trần; gắn để không phải nhớ). Chỉ TÊN và MÃ lỗi, không `message`.
+  pool.on("release", (loi: unknown) => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+      console.error(`[gieo-demo] ket noi huy pool ${loi.name} ${loi.code}`);
+    }
+  });
+  ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {
+    console.error(`[gieo-demo] loi ket noi toi muon pool ${loi instanceof Error ? loi.name : "loi la"}`);
+  });
   try {
     await migrate(pool, MIGRATIONS_DIR);
 
