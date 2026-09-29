@@ -16414,6 +16414,165 @@ bất biến, 79 migration, rồi số ADR). Mọi ca ấy xanh sau khi khai.
   sách tên migration ở `db/migrations.int.test.ts` (giữ cả hai tên, migration của vòng này đứng sau). `hardening.always.sql` hợp tự
   động: hai bên ghim hai hàm khác nhau. `pnpm cap-so` cấp lại cả ba số.
 
+# §S1.201 — S3.6a: NHÓM HÀNG — DANH SÁCH CỦA TỔ CHỨC, BẮT BUỘC ĐỂ GÓI RỜI DRAFT Ở TỔ CHỨC ĐÃ BẬT, `THIEU_NHOM_HANG` VÀO SỔ
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — tổ chức chưa bật không bị đòi nhóm hàng (ca đối chứng MVP1
+và ca §8.11 đo điều ấy). Không đóng, không mở khoản nợ nào. Migration `085_nhom_hang`, ADR-119.
+
+## 1. Vòng này là gì
+
+Phần đầu của S3.6 (spec S3 §9): nhóm hàng — khoá của tín hiệu chia nhỏ (K10, §4.6), dựng trước tín hiệu. Spec §4.3 viết danh sách phẳng
+theo tổ chức, `category_id` NULL cho gói cũ và bắt buộc để rời DRAFT, khoá sau DRAFT bằng trigger riêng; ADR-084 ⑵ chốt mã
+`category.manage` cho `FINANCE` nhưng CSDL chưa có mã ấy.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-29) S3.6 chia bốn PR: S3.6a nhóm hàng; S3.6b tín hiệu chia nhỏ; S3.6c `INVITE_LIST_NARROWED` và `EARLY_CLOSE`; S3.6d
+  `ESTIMATE_UNDERSTATED` — làm riêng hay gộp vào S3.5 chốt sau.
+- (2026-09-29) Nhóm hàng bắt buộc để rời DRAFT ở tổ chức đã bật ngay S3.6a, không đợi tín hiệu.
+- (2026-09-29) Lần nộp duyệt thiếu nhóm hàng là `CONTROL_DENIED`, vào sổ.
+- (2026-09-29) Nhóm hàng chỉ tạo, ngừng dùng và dùng lại — mã và tên không sửa; ngừng dùng chỉ chặn lần GÁN mới, gói đang giữ nhóm ấy
+  vẫn nộp duyệt được.
+- (2026-09-29) Màn riêng `/nhom-hang` cho người giữ `category.manage`; `/tao-thau` có ô chọn ở bước gói thầu, chỉ ở tổ chức đã bật.
+- (2026-09-29) Khoản 255 ở lại #206 (đã merge); S3.3b (#203) bỏ khoản ấy — lời nhắn trên #203.
+- (2026-09-29) Cho `pnpm cap-so` giữ số trên origin (nhánh `cap-so/*`, bổ sung ADR-090 ở #207).
+- (2026-09-29, cho vòng sau) S3.6b chia hai PR — b1 CSDL, tầng gói, route, K10a; b2 màn, `gieo:demo`, kịch bản 41, T4 —; *người gây ra*
+  tín hiệu chia nhỏ là người tạo và người nộp của MỌI gói trong bằng chứng; chỉ xét cận bậc; mã ở `packages/kiem-soat`.
+
+## 3. Đo trước
+
+Lược đồ `master` `ef3cd4f` với migration của vòng này tạm rút, dựng qua một tệp đo cục bộ không commit, ở một tổ chức đã bật (phiên bản
+có bậc, `FINANCE` ký): không bảng `procurement_categories`, không cột `rfq_packages.category_id`, không mã `category.manage`; một gói có
+ngân sách và hạng mục nộp duyệt bằng câu viết tay ⇒ `PENDING_APPROVAL`, có `submitted_at`, và không hàng `CONTROL_DENIED` nào. Tức một
+gói của tổ chức đã bật rời DRAFT mà không mang thứ tín hiệu chia nhỏ sẽ dùng làm khoá.
+
+## 4. Thay đổi
+
+**Migration `085_nhom_hang`:**
+- Mã `category.manage`, cấp cho `FINANCE`.
+- `procurement_categories` (mã chữ HOA theo `CHECK`, tên 1–200 byte, duy nhất theo tổ chức) và `procurement_category_changes`
+  (`RETIRED`/`REACTIVATED`, `thu_tu` do trigger đặt) — CHỈ GHI THÊM, khuôn `supplier_verifications` của S3.3a: RLS `FORCE`, policy tổ
+  chức, policy khách đóng hẳn, chỉ `SELECT` và `INSERT` theo cột, `kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them` ở `UPDATE OR DELETE`,
+  chặn `TRUNCATE`.
+- Luật người ở trigger: người tạo nhóm và người đổi trạng thái giữ `category.manage`. Lần đổi đi đúng chiều — hai nhánh sai chiều mang tên
+  ràng buộc (`nhom_hang_ngung_dung_hai_lan`, `nhom_hang_dung_lai_khi_dang_dung`) — và `thu_tu` cấp dưới khoá tư vấn ĐỘC QUYỀN theo nhóm
+  (hạt giống 8). Câu hỏi duy nhất về trạng thái là `nhom_hang_con_dung(org, nhóm)`.
+- `rfq_packages.category_id`, khoá ngoại theo (tổ chức, nhóm). Trigger riêng `rfq_packages_nhom_hang`: cột chỉ đổi ở DRAFT
+  (`nhom_hang_chi_doi_o_draft`), chỉ gán nhóm còn dùng (`nhom_hang_da_ngung_dung`) dưới khoá tư vấn CHIA SẺ theo nhóm.
+- Chốt `THIEU_NHOM_HANG`: hàm vị từ `rfq_chot_nhom_hang(org, nhóm)` nhận GIÁ TRỊ cột; trigger `rfq_packages_kiem_nhom_hang_khi_nop` ở
+  cạnh `DRAFT→PENDING_APPROVAL` hỏi lại trên giá trị MỚI. Điều kiện là `to_chuc_da_bat_s3`.
+
+**Hardening:** sáu mục ghim mới (bốn hàm trigger, hai hàm thường); hai bảng vào `BANG_TENANT_KHAI`, `CHECK` của `loai` vào
+`CHECK_AN_NINH_KHAI`; khối `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` phủ hai bảng mới. Sổ đăng ký của `migrations.int`,
+`hardening-suy-tu-tinh-chat.int`, `migration-shape`, `rls-coverage.int` và `check-an-ninh.int` đổi theo.
+
+**Tầng gói (`packages/rfq`, `packages/identity`):**
+- `taoNhomHang`, `lietKeNhomHang`, `doiTrangThaiNhomHang` — hỏi `category.manage` trước câu ghi (`PERMISSION_DENIED` vào sổ), đổi hai
+  nhánh có tên và mã trùng thành lời có tên, vào sổ `CATEGORY_CREATED`, `CATEGORY_RETIRED`, `CATEGORY_REACTIVATED`.
+- `createRfq` nhận `categoryId`; `datNhomHangChoGoi` đặt hay đổi nhóm của gói ĐANG SOẠN (khuôn [H-3], vào sổ `RFQ_CATEGORY_SET`).
+- `submitRfqForApproval` hỏi `CAU_CHOT_NHOM_HANG` SAU K1 và từ chối theo `CHOT_VAO_SO`: dòng `THIEU_NHOM_HANG` (chốt `K10`, `vaoSo: true`).
+
+**Route:** `GET /categories` (không cho agent — dữ liệu kiểm soát của bên mua), `POST /categories` và
+`PUT /categories/:categoryId/status` (`category.manage`), `PUT /rfqs/:rfqId/category` (`rfq.create`); `POST /rfqs` nhận `categoryId`.
+
+**Màn:** `/nhom-hang` — đăng nhập cùng khuôn `/chinh-sach`, bảng nhóm có nút ngừng dùng / dùng lại mỗi dòng, ô tạo nhóm; phép tính thuần
+ở `/lib/nhom-hang.js`. `/tao-thau` ở tổ chức đã bật: ô chọn nhóm hàng ở bước gói thầu (nhóm đã ngừng dùng chỉ hiện khi gói đang giữ nó),
+nhóm đi cùng lần tạo gói, nút *Đặt nhóm hàng* chỉ ở DRAFT, và dòng *Nhóm hàng* trong bảng thông tin gói.
+
+**`gieo:demo --s3` và kịch bản 41:** tổ chức S3 của `gieo:demo` dựng nhóm `KET-CAU` và gói mang nó. Kịch bản 41 hai bản (gói và HTTP) dựng
+nhóm hàng ở luồng S3 — bản HTTP đo thêm người tạo gói bị `403` ở `POST /categories` —, và bộ quét rò rỉ phủ ba route ghi mới.
+
+**Bộ dựng test của luồng S3:** năm tệp tích hợp dựng gói ở tổ chức đã bật (`danh-sach-moi`, `tra-ve-nhap`, `bac-chinh-sach`,
+`luong-moi-s3`, `token-goi-da-mo`) gán nhóm hàng cho gói của mình; `buyer.int` đo chốt mới qua HTTP.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Hai bảng chỉ ghi thêm, không một cột `con_dung` sửa tại chỗ.** Mỗi lần đổi là một hàng mang đúng phiên của nó; một cột *người đổi*
+  sửa tại chỗ còn mang người của lần trước khi một câu UPDATE quên đặt nó (ADR-119).
+- **Hàm vị từ nhận giá trị cột, không đọc hàng gói.** Trigger BEFORE thấy hàng CŨ trong bảng: đọc hàng thì một câu viết tay vừa nộp duyệt
+  vừa xoá nhóm hàng đi lọt. Test đo đúng câu ấy.
+- **Trigger ở cạnh KHÔNG giữ khoá tư vấn theo tổ chức.** Bản đầu giữ cùng khoá chia sẻ với K1 (`072`). Loạt S3 đo ra ba ca treo ở
+  `bac-chinh-sach.int`: ca đột biến gỡ khoá K1 mà lần nộp vẫn đứng chờ ở khoá thứ hai. Câu trả lời của chốt chỉ đổi theo trạng thái bật
+  khi gói không nhóm hàng, trạng thái ấy chỉ đổi một chiều ở lần ký bật tổ chức, và lần ký ấy đổi luôn phiên bản hiệu lực — nên K1, xếp
+  trước và giữ khoá, chặn trước mọi gói soạn trước lần bật. Ca ĐUA mới ở `nhom-hang.int` đo điều ấy: lần nộp đứng chờ lần ký rồi bị K1
+  chặn; gỡ khoá K1 thì gói rời DRAFT không nhóm hàng.
+- **Khoá tư vấn theo NHÓM, hạt giống 8:** chia sẻ ở lần gán, độc quyền ở lần đổi trạng thái — lần gán và lần ngừng dùng chen nhau thì xếp
+  hàng. Hạt giống 8 chưa ai dùng: 0–3 đã có chủ ở `master`, 7 thuộc #203 đang mở.
+- **`THIEU_NHOM_HANG` mang chốt `K10`** — nhóm hàng là tiền đề của K10. Hàng K10 vào sổ đăng ký TEST-PLAN ở S3.6b, cùng tín hiệu nó canh.
+- **Không đưa nhóm hàng vào băm nội dung chữ ký duyệt gói**, không dựng `packages/kiem-soat` ở vòng này (ADR-119, phương án đã cân nhắc).
+- **`GET /categories` không cho agent** — mở sau là một quyết định có tên.
+- **Không lượt đi thử T4 ở vòng này.** Hai màn đo ở `phuc-vu.test.ts` (mã trang chạy trong DOM giả) và `nhom-hang.test.ts`; `gieo:demo`
+  hai luồng chạy trên Postgres thật: tổ chức S3 có nhóm `KET-CAU` gắn vào gói đã mở, tổ chức MVP1 giữ gói không nhóm.
+
+## 6. Đột biến
+
+Hai lớp. **Trong giao dịch**, ở chính `nhom-hang.int` (sáu): tắt trigger người tạo, thân `RETURN NEW` của trigger đổi trạng thái,
+`nhom_hang_con_dung` trả hằng, tắt trigger nhóm hàng của gói, tắt trigger ở cạnh, hàm vị từ trả NULL — mỗi cái làm đúng câu vừa bị chặn
+đi lọt. **Ở mã nguồn**, hai mươi mốt, mỗi cái sửa đúng một chỗ, tệp trả về nguyên văn sau mỗi lượt; M09 sửa CÙNG LÚC migration và hai
+chỗ của bản ghim hardening. Cả hai mươi mốt đỏ:
+
+| # | Đột biến | Ca đỏ |
+|---|---|---|
+| M01 | nộp duyệt không hỏi chốt nhóm hàng | `THIEU_NHOM_HANG` có tên, đúng một hàng sổ |
+| M02 | `THIEU_NHOM_HANG` không vào sổ | như trên; mã của hàm vị từ đều có dòng K10 và vào sổ |
+| M03 | câu chốt bỏ vế DRAFT | gói nộp trước lần bật, gọi nộp lại ⇒ lời từ chối trạng thái, không hàng sổ; như trên |
+| M04 | bỏ lời có tên cho nhóm đã ngừng dùng | nhóm đã ngừng không gán được; ca đua gán / ngừng dùng |
+| M05 | đặt nhóm hàng bỏ vế DRAFT | gói đã rời DRAFT: tầng gói từ chối trạng thái |
+| M06 | mã không viết hoa | tạo nhóm; mã sai hình dạng và mã trùng |
+| M07 | tạo nhóm không hỏi quyền | PROCUREMENT_MANAGER bị từ chối ở tầng gói, `PERMISSION_DENIED` vào sổ |
+| M08 | tráo chiều ngừng dùng / dùng lại | bốn ca trạng thái và gán |
+| M09 | vị từ hỏi cột cửa sổ thay vì công tắc | [§8.11] tổ chức chưa bật có phiên bản không bậc khai cửa sổ |
+| M10 | đổi trạng thái không hỏi quyền | người không giữ `category.manage`: tầng gói từ chối |
+| M11 | tạo gói không đổi lỗi nhóm hàng thành lời | nhóm đã ngừng và nhóm của tổ chức khác, lúc tạo |
+| M12 | đặt nhóm hàng không vào sổ | tạo gói kèm nhóm rồi đổi nhóm — hai lần vào sổ |
+| M13 | sổ tạo gói không mang nhóm | như trên |
+| M14 | mã trùng không thành lời có tên | mã sai hình dạng và mã trùng |
+| M15 | `POST /rfqs` bỏ `categoryId` | kịch bản 41 HTTP, luồng S3: 28 ca |
+| M16 | `PUT /rfqs/:rfqId/category` nhận thân thiếu | `buyer.int`: thân thiếu `categoryId` ⇒ `422` |
+| M17 | ô chọn hiện cả nhóm đã ngừng | `nhom-hang.test`: ô chọn |
+| M18 | *Tạo gói thầu* không mang nhóm đã chọn | `phuc-vu.test`: tạo gói ở tổ chức đã bật |
+| M19 | nút *Đặt nhóm hàng* không xét trạng thái gói | `nhom-hang.test`; `phuc-vu.test`: gói đã nộp ẩn nút |
+| M20 | màn nhóm hàng gửi mã chưa chuẩn | `phuc-vu.test`: mã viết thường ⇒ gửi mã viết hoa |
+| M21 | tổ chức chưa bật vẫn hỏi `/categories` | `phuc-vu.test`: ba ca thứ tự lời gọi sau đăng nhập |
+
+Ca M16 cần một khẳng định mới: trước vòng đột biến, `buyer.int` chỉ gửi `categoryId` sai dạng — `uuidTuyChon` vẫn trả `422` —, nên một
+route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang soạn) sống sót. Khẳng định ấy vào `buyer.int` trước lượt chạy.
+
+## 7. Giới hạn, nói ra
+
+- **Nhóm hàng chỉ mạnh bằng người chọn nó.** Người soạn gói chọn nhóm; xếp hai gói anh em vào hai nhóm khác nhau là né tín hiệu chia nhỏ.
+  Tách người quản lý danh sách khỏi người tạo gói giữ danh sách không bị chỉnh theo gói, không làm lần chọn trung thực.
+- **Không hàng K10 nào trong sổ đăng ký** ở vòng này, nên ma trận không đổi nhãn; S3.6b đưa K10a vào.
+- **`THIEU_NHOM_HANG` đi qua đường ghi sổ chung** (`tuChoiTheoChot`), nên nó vào trần lần từ chối theo phiên của ADR-112 sẵn; vòng này
+  không đo riêng trần ấy cho mã mới.
+- **Gói đã rời DRAFT trước lần bật giữ NULL** và không bị đòi gì tới lần nộp duyệt kế — ca *gói nộp trước lần bật* đo điều ấy.
+
+## 8. Số đo
+
+- Tệp mới `packages/rfq/src/nhom-hang.int.test.ts` **22/22** — năm khối, gồm sáu đột biến trong giao dịch và hai ca đua (lần gán chen
+  lần ngừng dùng; lần ký bật tổ chức chen lần nộp). Luồng S3 và các sổ đăng ký, trên cây cuối: `apps/api/src/buyer.int.test.ts`
+  **18/18**, `kich-ban-41-http.int` **58/58**, `kich-ban-41.int` **30/30**, `bac-chinh-sach.int` **42/42**, `danh-sach-moi.int`
+  **21/21**, `tra-ve-nhap.int` **15/15**, `luong-moi-s3.int` **20/20**, `token-goi-da-mo.int` **4/4**, `db/migrations.int`
+  **119/119**, `hardening-suy-tu-tinh-chat.int` **36/36**, `rls-coverage.int` **51/51**, `check-an-ninh.int` **4/4**,
+  `migration-shape` **20/20**; hai màn: `apps/web/src/phuc-vu.test.ts` **99/99**, `apps/web/src/nhom-hang.test.ts` **6/6**.
+- Lần chạy đầu của loạt S3, với trigger ở cạnh còn giữ khoá theo tổ chức: `bac-chinh-sach.int` treo ba ca (hai ca đua K1 và ca hardening
+  sau chúng) — §5. Bỏ khoá ấy: 42/42, và tệp chạy 11,6 giây thay vì 431.
+- Toàn bộ T3 cục bộ trên cây đã hợp `master` (#207, #204) và đã cấp số: 195 tệp, 3321 ca — 3311 đạt, 1 bỏ qua, 9 đỏ. Cả chín là ca cũ
+  của máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
+- `pnpm t0` sạch (461 module, 1840 phụ thuộc). `pnpm test`: 123 tệp, 1758 đạt, 1 bỏ qua. Trước lần cấp số, `pnpm test` đỏ đúng hai ca
+  của `packages/identity/src/ma-tran-quyen.test.ts`: bộ đọc migration chỉ nhận tên ba chữ số nên chưa thấy tệp số tạm; sau lần cấp số
+  tệp ấy 22/22. `pnpm cap-so --kiem` sạch.
+- Ma trận: 71/71 bất biến (49/49 nghiệp vụ + 22/22 hàng rào), đọc từ 3321 khẳng định, cổng evidence XANH; không nhãn nào đổi.
+- `gieo:demo` và `gieo:demo --s3` trên Postgres thật: cả hai thoát 0; tổ chức S3 có nhóm `KET-CAU` gắn vào gói đã mở, tổ chức MVP1 giữ
+  gói không nhóm.
+- **Hợp `master`** sau #207 (giữ số của `cap-so`) và #204 (S4.2a): xung đột ở mã quyền (`ITEM_MANAGE` và `CATEGORY_MANAGE` cùng ở lại),
+  danh sách hàm đổi trạng thái của cổng quyền route, sổ đăng ký trigger và ba danh sách migration của `db/migrations.int`, bốn khối
+  hardening của `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` (giữ cả bảng hàng chuẩn lẫn bảng nhóm hàng), cuối
+  `docs/DECISIONS.md` (ADR-116 rồi ADR-119) và lời khai đếm (lấy bản `master`, `cap-so --dem` viết lại).
+- **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
+  chưa vào `master` đã có PR khác giữ.
+
 # §S1.196 — S3.3a: XÁC MINH NỘI BỘ NHÀ CUNG CẤP (K8a)
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Bề mặt
@@ -16476,7 +16635,7 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 - Hợp `origin/master` sau #201 (S4.0 + S4.1 lấy S1.192 và `079`): cấp lại thành `080`; mốc `MOC_GHIM` 70 → 71. Hợp lần hai sau #198
   (phần bù S3.2c2 lấy S1.193): vòng này thành S1.194. Hợp lần ba sau #206
   (S3.2d lấy S1.194 và `080`) và #207 (giữ số trên remote): vòng thành S1.196, migration thành `082_xac_minh_nha_cung_cap`. Hợp
-  lần năm sau #204 (S4.2a, L3): sổ đăng ký 72, mốc `MOC_GHIM` 71 → 72.
+  lần năm sau #204 (S4.2a, L3): sổ đăng ký 72, mốc `MOC_GHIM` 71 → 72. Hợp lần sáu sau #210 (S3.6a): không đổi số.
 - `pnpm evidence` (T3 toàn bộ): XANH — 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào), đọc từ 3290 khẳng định sau lần hợp thứ năm.
 - `pnpm t0` sạch; `pnpm test` sạch.
 

@@ -130,6 +130,11 @@ const BANG_CHI_GHI_THEM_THAT = [
   // `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Vị từ suy ra đã thấy nó; dòng này
   // là lời khai bắt kịp. Một chữ ký sửa được thì công tắc ADR-080 không còn một chiều.
   "org_policy_signatures",
+  // [S1.201 / S3.6a] Nhóm hàng và lần đổi trạng thái của nó — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt
+  // `TRUNCATE`, cả hai `ENABLE ALWAYS`. Trạng thái nhóm là hàng đổi mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử
+  // nhóm nào đã ngừng dùng lúc nào.
+  "procurement_categories",
+  "procurement_category_changes",
   // [S1.110 / S2.6 / 061] Hai bảng trao thầu. Chúng vào đây vì vị từ SUY TỪ TÍNH CHẤT đã
   // thấy chúng — `061` cho mỗi bảng một trigger `bid_chi_ghi_them` ở `UPDATE OR DELETE`
   // CỘNG một chốt `TRUNCATE` cấp câu lệnh, cả hai `ENABLE ALWAYS`. Dòng này chỉ là lời
@@ -268,6 +273,10 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.196 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",
+  // [S1.201 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
+  // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
+  "public.nhom_hang_kiem_doi",
+  "public.nhom_hang_kiem_nguoi_tao",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",
@@ -337,6 +346,11 @@ const HAM_KHONG_PHAI_CANH = [
   // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
   "public.rfq_invitation_tokens_ghi_goi_da_mo",
   "public.rfq_kiem_tra_ve_nhap",
+  // [S1.201 / S3.6a] HAI hàm của nhóm hàng trên `rfq_packages`, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_nhom_hang` (INSERT, và UPDATE cột
+  // nhóm hàng) chỉ khi gói đã rời DRAFT hay nhóm đã ngừng dùng; `rfq_kiem_nhom_hang_khi_nop` (cạnh nộp duyệt) chỉ ở tổ chức đã
+  // bật mà gói không nhóm hàng. Mọi câu dựng gói, câu gán nhóm và câu nộp duyệt của `dungKichBan()` đi qua.
+  "public.rfq_kiem_nhom_hang",
+  "public.rfq_kiem_nhom_hang_khi_nop",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
@@ -1789,6 +1803,39 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "supplier_verifications",
+  );
+
+  // ---- [S1.201 / S3.6a / `085_nhom_hang`] Nhóm hàng: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới, một nhánh UPDATE mới --------
+  // `tc` (FINANCE, giữ `category.manage`) tạo một nhóm rồi ngừng dùng nó — nhân chứng của `nhom_hang_kiem_nguoi_tao`,
+  // `nhom_hang_kiem_doi` và `kiem_danh_tinh_theo_phien` (hai bảng MỚI). Gói `rfqVe` vừa về DRAFT nhận nhóm TRƯỚC lần ngừng dùng —
+  // nhân chứng UPDATE của `rfq_kiem_nhom_hang`; nhánh INSERT của nó đã có nhân chứng ở mọi câu dựng gói, và cạnh nộp duyệt của
+  // `rfq_kiem_nhom_hang_khi_nop` ở mọi câu nộp duyệt phía trên (tổ chức chưa bật lúc ấy).
+  const nhom = await chenNC(
+    "public.procurement_categories",
+    api(
+      "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP', 'Thep xay dung', $2, $3) " +
+        "RETURNING id, org_id, ma, ten, created_by, created_by_session_id",
+      [org, tc.u, tc.s],
+      { org_id: org, ma: "THEP", ten: "Thep xay dung", created_by: tc.u, created_by_session_id: tc.s },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET category_id = $2 WHERE id = $1 RETURNING category_id", [rfqVe, nhom], { category_id: nhom }),
+    ),
+    1,
+    "rfq_packages",
+  );
+  await chenNC(
+    "public.procurement_category_changes",
+    api(
+      "INSERT INTO procurement_category_changes (org_id, category_id, loai, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'RETIRED', $3, $4) RETURNING id, org_id, category_id, loai, created_by, created_by_session_id",
+      [org, nhom, tc.u, tc.s],
+      { org_id: org, category_id: nhom, loai: "RETIRED", created_by: tc.u, created_by_session_id: tc.s },
+    ),
   );
 
   // ---- [S1.192 / S4.1 / L1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------

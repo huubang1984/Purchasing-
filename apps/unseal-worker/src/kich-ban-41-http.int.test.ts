@@ -280,6 +280,8 @@ async function soHangDoc(action: string): Promise<{ n: number; nguoiMoiNhat: str
 
 const trangThai: {
   rfqId: string;
+  /** [S1.201 / S3.6a] Luồng S3: nhóm hàng người tài chính dựng ở bước 1 — gói chính và hai gói hy sinh mang nó. */
+  nhomHangId: string | null;
   loiMoi: { invitationId: string; supplierId: string; ten: string; gia: string; cookie: string }[];
   bienNhan: { canonicalText: string; signature: string; ten: string; bidVersionId: string }[];
   unsealRequestId: string;
@@ -303,6 +305,7 @@ const trangThai: {
 function trangThaiMoi(): typeof trangThai {
   return {
   rfqId: "",
+  nhomHangId: null,
   loiMoi: [],
   bienNhan: [],
   unsealRequestId: "",
@@ -419,8 +422,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       expect(ky.status, ky.text).toBe(201);
       expect((ky.body as { chuKy: { daBat: boolean } }).chuKy.daBat).toBe(true);
     }
-    const rfq = await goi("POST", "/rfqs", m, { title: "Mua thep tam SS400 quy IV", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
+    if (batS3) {
+      // [S1.201 / S3.6a] Người tài chính dựng nhóm hàng qua route (`category.manage`); người mua không dựng được — và gói của
+      // tổ chức đã bật không nộp duyệt được khi thiếu nhóm hàng. Luồng MVP1: không nhóm hàng nào.
+      expect((await goi("POST", "/categories", m, { ma: "THEP", ten: "Thep tam" })).status).toBe(403);
+      const nhom = await goi("POST", "/categories", trangThai.taiChinh.cookie, { ma: "thep", ten: "Thep tam" });
+      expect(nhom.status, nhom.text).toBe(201);
+      trangThai.nhomHangId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    }
+    const rfq = await goi("POST", "/rfqs", m, {
+      title: "Mua thep tam SS400 quy IV",
+      deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+      ...(trangThai.nhomHangId === null ? {} : { categoryId: trangThai.nhomHangId }),
+    });
     expect(rfq.status, rfq.text).toBe(201);
+    expect((rfq.body as { rfq: { categoryId: string | null } }).rfq.categoryId).toBe(trangThai.nhomHangId);
     trangThai.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/items`, m, { lineNo: 1, description: "Thep tam SS400 12mm", quantity: "100.0000", unit: "tam" })).status).toBe(201);
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
@@ -589,7 +605,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // Không chạm RFQ chính: bộ quét không được làm hỏng kịch bản nó đang bảo vệ.
     const GIA_MOI = "777000000.00";
     const taoRfqHy = async (ten: string): Promise<string> => {
-      const r = await goi("POST", "/rfqs", m, { title: ten, deadlineAt: new Date(Date.now() + 5 * 86400_000).toISOString() });
+      // [S1.201 / S3.6a] Luồng S3: gói hy sinh cũng mang nhóm hàng — nếu không, lần nộp duyệt của nó dừng ở chốt nhóm hàng.
+      const r = await goi("POST", "/rfqs", m, {
+        title: ten,
+        deadlineAt: new Date(Date.now() + 5 * 86400_000).toISOString(),
+        ...(trangThai.nhomHangId === null ? {} : { categoryId: trangThai.nhomHangId }),
+      });
       expect(r.status, r.text).toBe(201);
       return (r.body as { rfq: { id: string } }).rfq.id;
     };
@@ -619,7 +640,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string } = { unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0 };
+    const hy: { unsealId: string; mfaResetId: string; policyId: string; nhomId: string } = {
+      unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0, nhomId: UUID0,
+    };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
     const thanHopLe = (r: (typeof ROUTES)[number]): { path: string; body: unknown; cookie: string; sau?: (ph: PhanHoi) => void } | null => {
@@ -667,6 +690,19 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // ⇒ 422 *"khong duoc tu ky"* có tên — bản v2 không thành hiệu lực, kịch bản không đổi chính sách giữa chừng.
         case "POST /policy/:policyId/sign":
           return { path: r.path.replace(":policyId", hy.policyId), body: {}, cookie: trangThai.taiChinh.cookie };
+        // [S1.201 / S3.6a] Nhóm hàng HY SINH: người tài chính dựng, rồi ngừng dùng — không chạm nhóm của kịch bản. Bảng route đặt
+        // hai route ấy trước `PUT /rfqs/:rfqId/category`, nên lần gán dưới gặp đúng nhóm đã ngừng dùng ở luồng MVP1.
+        case "POST /categories":
+          return {
+            path: r.path,
+            body: { ma: "QUET", ten: "Nhom quet" },
+            cookie: trangThai.taiChinh.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.nhomId = (ph.body as { nhomHang: { id: string } }).nhomHang.id;
+            },
+          };
+        case "PUT /categories/:categoryId/status":
+          return { path: r.path.replace(":categoryId", hy.nhomId), body: { conDung: false }, cookie: trangThai.taiChinh.cookie };
         case "POST /suppliers":
           return { path: r.path, body: { legalName: "Cong ty Quet", taxCode: "0388888888" }, cookie: m };
         case "POST /suppliers/:supplierId/contacts":
@@ -683,6 +719,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB), body: { lineNo: 1, description: "Hang muc quet", quantity: "2.0000", unit: "cai" }, cookie: m };
         case "PUT /rfqs/:rfqId/budget":
           return { path: r.path.replace(":rfqId", hyB), body: { estimatedValue: "20000000.00", currency: "VND" }, cookie: m };
+        // [S1.201 / S3.6a] Luồng S3: nhóm của kịch bản (còn dùng) — gói hy sinh B đi tiếp nộp duyệt như trước. Luồng MVP1: nhóm hy
+        // sinh vừa ngừng dùng ⇒ 422 nghiệp vụ có tên, gói không đổi.
+        case "PUT /rfqs/:rfqId/category":
+          return { path: r.path.replace(":rfqId", hyB), body: { categoryId: trangThai.nhomHangId ?? hy.nhomId }, cookie: m };
         case "POST /rfqs/:rfqId/submit":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/approve":

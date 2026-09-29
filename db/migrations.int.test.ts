@@ -1456,9 +1456,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "to_chuc_da_bat_s3", chuKy: "uuid", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "chinh_sach_hieu_luc", chuKy: "uuid, timestamptz", migration: "069_bac_va_chu_ky_chinh_sach.sql" },
     { ham: "rfq_bam_danh_sach", chuKy: "uuid", migration: "076_danh_sach_moi.sql" },
+    // [S1.201 / S3.6a] Hai hàm của nhóm hàng: vị từ của chốt — một thân `RETURN NULL` tắt chốt ở cả tầng gói lẫn cạnh —, và
+    // câu hỏi trạng thái — một thân `SELECT true` cho gán nhóm đã ngừng dùng.
+    { ham: "rfq_chot_nhom_hang", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
+    { ham: "nhom_hang_con_dung", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ [S1.185] năm hàm trợ giúp của K1 và K4b: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ [S1.201] bảy hàm trợ giúp của K1, K4b và nhóm hàng: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1546,6 +1550,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       trigger: [
         "org_policy_signatures_kiem_danh_tinh",
         "org_procurement_policies_kiem_danh_tinh",
+        // [S1.201 / S3.6a] Nhóm hàng và lần đổi trạng thái của nó — người tạo và người đổi là DẪN XUẤT từ phiên.
+        "procurement_categories_kiem_danh_tinh",
+        "procurement_category_changes_kiem_danh_tinh",
         "rfq_award_approvals_kiem_danh_tinh",
         "rfq_awards_kiem_danh_tinh",
         "rfq_bafo_rounds_kiem_danh_tinh",
@@ -1597,7 +1604,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -1733,6 +1740,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "uom_aliases_kiem_quyen_ghi",
       ],
     },
+    // [S1.201 / S3.6a] Bốn hàm trigger của nhóm hàng. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: vai tạo gói
+    // tự dựng nhóm hàng, lần đổi trạng thái không thứ tự và không người, nhóm hàng của gói đổi sau DRAFT hay gán nhóm đã ngừng
+    // dùng, và gói của tổ chức đã bật rời DRAFT không nhóm hàng qua một câu UPDATE viết tay.
+    { ham: "nhom_hang_kiem_nguoi_tao", migration: "085_nhom_hang.sql", trigger: ["procurement_categories_kiem_nguoi"] },
+    { ham: "nhom_hang_kiem_doi", migration: "085_nhom_hang.sql", trigger: ["procurement_category_changes_kiem_doi"] },
+    { ham: "rfq_kiem_nhom_hang", migration: "085_nhom_hang.sql", trigger: ["rfq_packages_nhom_hang"] },
+    { ham: "rfq_kiem_nhom_hang_khi_nop", migration: "085_nhom_hang.sql", trigger: ["rfq_packages_kiem_nhom_hang_khi_nop"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3379,6 +3393,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "080_k4a_co_ten.sql",
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
+        "085_nhom_hang.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7804,6 +7819,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "080_k4a_co_ten.sql",
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
+        "085_nhom_hang.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8106,6 +8122,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "080_k4a_co_ten.sql",
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
+        "085_nhom_hang.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
