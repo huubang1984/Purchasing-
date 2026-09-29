@@ -1576,6 +1576,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_nop",
         "rfq_tra_ve_kiem_danh_tinh",
         "supplier_contacts_kiem_danh_tinh",
+        "supplier_verifications_kiem_danh_tinh",
         "suppliers_kiem_danh_tinh",
         "unseal_approvals_kiem_danh_tinh",
         // [S1.192 / S4.1] Bí danh đơn vị của tổ chức — người khai là DẪN XUẤT từ phiên (L1).
@@ -1609,7 +1610,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -1660,6 +1661,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "chinh_sach_kiem_nguoi_ky", migration: "072_bac_cua_goi.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
+    // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
+    // sơ tự xác minh và để `thu_tu` NULL.
+    { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
     { ham: "ngan_sach_khong_ghim_ban_chua_ky", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["rfq_budgets_khong_ghim_ban_chua_ky"] },
     // [S1.166 / S3.1b / K1] Hai hàm trigger của K1. Một thân `RETURN NEW` ở `ngan_sach_xep_bac` để cột bậc NULL; ở
     // `rfq_kiem_ngan_sach_khi_nop` thì cạnh nộp duyệt chỉ còn tầng gói canh — một câu UPDATE viết tay tắt được S3.
@@ -3403,6 +3407,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
@@ -7830,6 +7835,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
@@ -8134,6 +8140,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "078_nhan_chung_chi_break_glass.sql",
         "079_don_vi_do.sql",
         "080_k4a_co_ten.sql",
+        "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
