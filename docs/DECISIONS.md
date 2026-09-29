@@ -9212,18 +9212,18 @@ trả về*, bỏ vế *mang lần nộp*, cạnh về DRAFT bỏ vế *kèm hà
 thái và phép băm nội dung: bản thật từ chối lời duyệt; bỏ vế trạng thái thì gói nộp lại MỞ bằng chữ ký trên hạng mục thêm sau lúc
 người duyệt đọc.
 
-## ADR-117 — Người duyệt đọc ngân sách mà chữ ký ràng vào: route riêng có cổng, đóng với agent
+## ADR-118 — Người duyệt đọc ngân sách mà chữ ký ràng vào: route riêng có cổng, đóng với agent
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 route riêng không mở cho agent, và quyền đọc
 của người tạo gói cộng người duyệt; sau lượt soi, cũng ngày ấy, chọn thêm lúc nào màn đọc (mục 3) và việc không ghi sổ lần đọc
-thành công (mục 4) · **[S1.197]** · **Liên quan:** ADR-115 (băm
-ngân sách), ADR-116 (lần nộp đã xem), ADR-038/039 và khoản 141 (bề mặt agent), ADR-092 (trần lần từ chối), khoản nợ 33 (hàm đọc có
-cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.197 · **Khoản:** 258 (ghi ở S1.196; đóng ở đây)
+thành công (mục 4) · **[S1.200]** · **Liên quan:** ADR-115 (băm
+ngân sách), ADR-117 (lần nộp đã xem), ADR-038/039 và khoản 141 (bề mặt agent), ADR-092 (trần lần từ chối), khoản nợ 33 (hàm đọc có
+cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.200 · **Khoản:** 258 (ghi ở S1.198; đóng ở đây)
 
 ### Bối cảnh
 
 Từ ADR-115, chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách — ước lượng, tiền tệ, phiên bản chính sách ghim, bậc, cờ duyệt
-kép —, và từ ADR-116 nó rơi lên đúng lần nộp client đã đọc. Nhưng không route nào trả ngân sách cho người mua: chỉ có
+kép —, và từ ADR-117 nó rơi lên đúng lần nộp client đã đọc. Nhưng không route nào trả ngân sách cho người mua: chỉ có
 `PUT /rfqs/:rfqId/budget`, và màn `/tao-thau` hiện ngân sách từ câu trả của lần đặt. Người duyệt ký lên một con số không đọc được ở
 đâu (khoản 258; vế danh sách mời đã khép ở S3.2c2). Ngân sách lại là thứ neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không
 ghi số tiền vào sổ kiểm toán.
@@ -9270,10 +9270,10 @@ ghi số tiền vào sổ kiểm toán.
   chính mình.
 - **Cổng ghi rộng hơn cổng đọc.** Người mua khác đặt được ngân sách của gói đồng nghiệp (`rfq.create`) mà không đọc lại được nó nếu
   không giữ `rfq.approve`; màn vẽ ba thứ lần đặt trả về và không đọc thay họ.
-- **Người duyệt ký được mà không mở ngân sách** — máy chủ không biết người duyệt đã xem gì (ADR-116); nút chỉ làm cho việc xem
+- **Người duyệt ký được mà không mở ngân sách** — máy chủ không biết người duyệt đã xem gì (ADR-117); nút chỉ làm cho việc xem
   làm được.
 - **Bốn lần đọc tách nhau** — gói (`lanNop`), hạng mục, lời mời, ngân sách. Không ảnh chụp chung, nhưng ở tổ chức đã bật mọi lần sửa
-  đòi DRAFT và lần nộp lại tăng `lanNop`: thứ đọc SAU `lanNop` mà khác lần nộp ấy thì lời duyệt mang mốc cũ bị từ chối (ADR-116).
+  đòi DRAFT và lần nộp lại tăng `lanNop`: thứ đọc SAU `lanNop` mà khác lần nộp ấy thì lời duyệt mang mốc cũ bị từ chối (ADR-117).
   Màn xoá bảng ngân sách ngay sau lần đọc gói và chỉ vẽ câu trả của gói đang mở, nên bảng không đứng cạnh lần nộp của gói khác.
 - **Sổ không nói ai đã XEM ngân sách** — chỉ nói ai bị từ chối (mục 4).
 - **FINANCE và DIRECTOR vẫn KẸP được ngân sách sau lúc mở niêm phong** — có trước vòng này: họ giữ `bid.view`, và bảng so sánh

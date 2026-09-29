@@ -1006,7 +1006,7 @@ describe("[S1.198 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa
   });
 });
 
-describe("[S1.197 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
+describe("[S1.200 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
   /** Hàng từ chối của một người, dạng `loại tài nguyên quyền` — lần đọc ngân sách mang loại riêng `RFQ_BUDGET` (lượt soi F2). */
   async function demTuChoiNganSach(org: string, ai: string): Promise<string[]> {
     const { rows } = await db.pool.query<{ q: string }>(

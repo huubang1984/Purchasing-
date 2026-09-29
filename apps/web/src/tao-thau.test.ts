@@ -140,7 +140,7 @@ describe("[S1.191 / S3.2c2] nút trả về soạn thảo và lý do", () => {
   });
 });
 
-describe("[S1.197 / khoản 258] ngân sách ở lần đọc gói", () => {
+describe("[S1.200 / khoản 258] ngân sách ở lần đọc gói", () => {
   it("màn TỰ đọc chỉ khi người dùng là người tạo gói, ở mọi trạng thái; người khác đọc bằng nút — lần từ chối không thành nhịp đọc gói", () => {
     expect(tuDocNganSach("u1", "u1"), "người tạo").toBe(true);
     expect(tuDocNganSach("u2", "u1"), "người khác, kể cả người duyệt").toBe(false);

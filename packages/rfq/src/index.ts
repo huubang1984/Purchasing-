@@ -50,7 +50,7 @@ export {
   kyPhienBanChinhSach,
   lietKePhienBanChinhSach,
   setRfqBudget,
-  // [S1.197 / khoản 258] Đọc ngân sách cho người duyệt — hàm đọc có cổng (người tạo: `rfq.create`; người khác: `rfq.approve`).
+  // [S1.200 / khoản 258] Đọc ngân sách cho người duyệt — hàm đọc có cổng (người tạo: `rfq.create`; người khác: `rfq.approve`).
   getRfqBudget,
   type RfqBudgetView,
   type ChuKyChinhSach,
