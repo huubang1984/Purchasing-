@@ -16712,3 +16712,7 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
 - `pnpm test`: 122 tệp, 1739 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Bốn đột biến ở tầng gói, bốn lần đỏ; sáu đột biến ở trang, sáu lần đỏ (§5).
 - Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3313 khẳng định; K4b 40 → 42. Không mã mới.
+- **Sau khi merge #202 — nay mang #207 (`cap-so` giữ số trên origin; #202 cấp lại thành S1.198, ADR-117, `084_lan_nop_da_xem`) — và
+  cấp lại số theo lời giữ:** vòng 199 đã có lời giữ của #204, nên vòng này nay là S1.200, ADR-118. Toàn bộ unit + T3 cục bộ trên cây
+  cuối: 194 tệp, 3316 khẳng định, 3306 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất biến, đọc từ
+  3316 khẳng định; K4b 42 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
