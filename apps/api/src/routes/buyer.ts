@@ -30,6 +30,8 @@ import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@
 import {
   clearOtpLockout,
   createInvitation,
+  danhDauDaGui,
+  ducTokenKhiMoGoi,
   issueMagicLinkToken,
   listInvitations,
   reissueInvitationLink,
@@ -76,7 +78,7 @@ import {
   getUnsealRequest,
   requestUnseal,
 } from "@trustprocure/unseal";
-import { HttpError, type ApiRequest } from "../http.js";
+import { HttpError, type ApiRequest, type ApiResponse } from "../http.js";
 import type { BuyerReadRoute, BuyerWriteRoute } from "../route-types.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -891,17 +893,50 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_OPEN,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: {
-        rfq: await openRfq(
-          ctx.client,
-          ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, orgKeys: ctx.services.orgKeyProvisioner },
-          ctx.auditPool,
-        ),
-      },
-    }),
+    // [S1.188 / S3.2b2 / ADR-113 · K6] Tổ chức đã bật S3: lời mời dựng ở DRAFT chưa có token, nên phiên người mở đúc một token cho
+    // MỖI lời mời còn sống ngay trong giao dịch mở gói, và link đi SAU commit — mỗi link một lần gửi (at-most-once). Gửi được ⇒
+    // lời mời `SENT`; gửi hỏng hay quá trần ⇒ token vừa đúc bị thu hồi, lời mời ở lại `UNSENT` và còn sống — người mua gửi lại
+    // bằng route của ADR-110. Gói ĐÃ mở và không lùi được, nên phản hồi vẫn `200`, kèm id các lời mời chưa gửi (chủ dự án chọn
+    // ngày 2026-09-28). Tổ chức chưa bật: không đúc, không gửi gì — lời mời MVP1 có link từ lúc mời — và danh sách rỗng.
+    handler: async (ctx) => {
+      const rfq = await openRfq(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId, orgKeys: ctx.services.orgKeyProvisioner },
+        ctx.auditPool,
+      );
+      const links = await ducTokenKhiMoGoi(ctx.client, ctx.orgId, { rfqId: rfq.id, actorSessionId: ctx.actor.sessionId });
+      if (links.length > 0) {
+        const { orgId } = ctx;
+        const phienNguoiMo = ctx.actor.sessionId;
+        ctx.afterCommitLoGui({
+          lanGui: links.map((l) => ({
+            khoa: l.invitationId,
+            gui: () =>
+              ctx.services.invitationLinkSender.send({
+                orgId,
+                invitationId: l.invitationId,
+                channel: l.channel,
+                destination: l.destination,
+                token: l.token.token,
+              }),
+            khiXong: async (client) => {
+              await danhDauDaGui(client, orgId, l.invitationId);
+            },
+            bu: async (client) => {
+              await revokeMagicLinkToken(client, orgId, {
+                tokenId: l.token.tokenId,
+                invitationId: l.invitationId,
+                actorSessionId: phienNguoiMo,
+                reason: "LINK_SEND_FAILED",
+              });
+            },
+          })),
+          phanHoi: (r, khoaHong) => ({ ...r, body: { rfq, unsentInvitationIds: khoaHong } }),
+        });
+      }
+      return { status: 200, body: { rfq, unsentInvitationIds: [] } };
+    },
   },
   {
     method: "POST",
@@ -1010,6 +1045,41 @@ const ghi: readonly BuyerWriteRoute[] = [
         linkChannel: kenhTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
+      // [S1.188 / S3.2b2 / ADR-113 · K4a · K6] Tổ chức đã bật S3. Nhánh đọc điều TRIGGER đã quyết lúc chèn (`076`), không đọc một
+      // lời khai: lời mời của tổ chức đã bật luôn chèn là `UNSENT`, và nhãn *mời sau khi ký* là `true` đúng khi gói đang `OPEN` —
+      // hai trạng thái duy nhất nhận lời mời ở đó. Tổ chức chưa bật giữ `SENT` của `010` và đi nguyên hợp đồng [S1.70] bên dưới.
+      if (loi.status === "UNSENT") {
+        // DRAFT: dựng danh sách, không đúc token, không gửi — link đi lúc mở gói (`POST /rfqs/:rfqId/open`).
+        if (!loi.moiSauKhiKy) return { status: 201, body: { invitation: loi } };
+        // OPEN — mời sau khi ký: đúc và gửi ngay, SAU commit. Gửi hỏng thì KHÔNG thu hồi lời mời — K4a cấm thu hồi ở `OPEN`, và
+        // thu hồi là thu hẹp một danh sách đã ký — mà thu hồi token vừa đúc, như phần bù của ADR-110; lời mời ở lại `UNSENT`, còn
+        // sống, và người mua gửi lại được ngay. Lời mời đã có thật, không lùi được, nên phản hồi vẫn `201` — trạng thái trong thân
+        // nói link đã đi chưa (cùng lý do với `200` của lần mở gói).
+        const tMoi = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
+        const { orgId } = ctx;
+        const phienNguoiMoi = ctx.actor.sessionId;
+        const chuaGui: ApiResponse = { status: 201, body: { invitation: loi } };
+        ctx.afterCommitCoBu({
+          viec: () =>
+            ctx.services.invitationLinkSender.send({
+              orgId,
+              invitationId: loi.id,
+              channel: loi.linkChannel,
+              destination: loi.linkChannel === "EMAIL" ? lienHe.email : (lienHe.phone ?? ""),
+              token: tMoi.token,
+            }),
+          khiXong: async (client) => {
+            await danhDauDaGui(client, orgId, loi.id);
+          },
+          bu: async (client) => {
+            await revokeMagicLinkToken(client, orgId, { tokenId: tMoi.tokenId, invitationId: loi.id, actorSessionId: phienNguoiMoi, reason: "LINK_SEND_FAILED" });
+          },
+          phanHoiKhiHong: chuaGui,
+          // Phần bù hỏng: token vừa đúc còn sống, có thể chưa tới nơi. Lối của người mua không đổi — gửi lại thu hồi mọi token chưa dùng.
+          phanHoiKhiBuHong: chuaGui,
+        });
+        return { status: 201, body: { invitation: { ...loi, status: "SENT" } } };
+      }
       const t = await issueMagicLinkToken(ctx.client, ctx.orgId, { invitationId: loi.id, actorSessionId: ctx.actor.sessionId });
       // Token đi tới bộ gửi TIÊM vào và KHÔNG về client.
       // [S1.70 / khoản 124] Trước khoản này bộ gửi được `await` ngay tại đây, TRONG giao dịch — hai lần `appendAuditEvent` ở trên giữ khoá tư
@@ -1087,6 +1157,14 @@ const ghi: readonly BuyerWriteRoute[] = [
         bu: async (client) => {
           await revokeMagicLinkToken(client, ctx.orgId, { tokenId: t.tokenId, invitationId: loi.id, actorSessionId: ctx.actor.sessionId, reason: "LINK_SEND_FAILED" });
         },
+        // [S1.188 / S3.2b2 / ADR-113 · K6] Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành
+        // `SENT` khi lần gửi lại đi được. Lời mời MVP1 đã `SENT` từ lúc mời: không đăng ký gì, hợp đồng của route giữ nguyên.
+        khiXong:
+          loi.status === "UNSENT"
+            ? async (client) => {
+                await danhDauDaGui(client, ctx.orgId, loi.id);
+              }
+            : undefined,
         // [lượt soi] Thân 502 nói cả điều bên mua không tự thấy: link CŨ chưa dùng đã hết hiệu lực ở giao dịch vừa commit, và
         // lần gửi hỏng vẫn tính vào trần — nên sau lần hỏng, nhà cung cấp không còn link nào cho tới lần gửi được.
         phanHoiKhiHong: { status: 502, body: { error: "khong gui duoc link moi; link moi da thu hoi, link cu chua dung da het hieu luc" } },
