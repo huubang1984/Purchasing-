@@ -16405,7 +16405,9 @@ chỉ có `PUT`.
 - Hai đột biến ở tầng gói, cả hai đỏ: bỏ cổng quyền (BUYER đọc được); luôn hỏi `rfq.create` (BUYER — giữ `rfq.create` — đọc được gói
   của người khác).
 - `apps/api/src/buyer.int.test.ts`, ca thứ ba (sau lượt soi, F1): BUYER — chỉ giữ `rfq.create` — tạo, đặt ngân sách, nộp, rồi đọc
-  ngân sách gói mình ⇒ 200, không hàng từ chối. Hàng từ chối của hai ca đầu nay khẳng định loại `RFQ_BUDGET` (F2).
+  ngân sách gói mình ⇒ 200, không hàng từ chối. Hàng từ chối của hai ca đầu nay khẳng định loại `RFQ_BUDGET` (F2). Hai đột biến
+  mới ở tầng gói, cả hai đỏ: luôn hỏi `rfq.approve` — bỏ nhánh người tạo, đột biến sống sót của lượt soi — (ca BUYER tạo gói bị
+  403); hàng từ chối mang loại `RFQ` (ca đầu đỏ ở hàng sổ).
 - `apps/web/src/tao-thau.test.ts`: luật tự đọc — người tạo, người khác, người dùng chưa biết; năm hàng của bảng, gói chưa có ngân
   sách, thân lạ.
 - `apps/web/src/phuc-vu.test.ts`, bốn ca trên trang thật nạp vào `node:vm`: người tạo ⇒ tự đọc, nút ẩn; người khác ⇒ không tự đọc,
@@ -16453,9 +16455,10 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
 
 ## 8. Số đo
 
-- Hai ca HTTP ở `apps/api/src/buyer.int.test.ts` xanh; trên cây #202 cả hai đỏ (405).
-- Toàn bộ unit + T3 cục bộ trên cây cuối, trước lần cấp số: 193 tệp, 3278 khẳng định, 3268 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của
-  máy đo (8 của `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`).
-- `pnpm test`: 122 tệp, 1724 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch.
-- Hai đột biến ở tầng gói, hai lần đỏ (§5).
-- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 40 → 41. Không mã mới.
+- Ba ca HTTP ở `apps/api/src/buyer.int.test.ts` xanh; trên cây #202 hai ca đầu đỏ (405).
+- Toàn bộ unit + T3 cục bộ trên cây cuối, sau lần merge #202 và lần cấp số: 194 tệp, 3302 khẳng định, 3292 đạt, 1 bỏ qua, 9 đỏ —
+  đúng chín ca cũ của máy đo (8 của `packages/test-support/src/postgres.int.test.ts`, 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`).
+- `pnpm test`: 122 tệp, 1734 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- Bốn đột biến ở tầng gói, bốn lần đỏ; sáu đột biến ở trang, sáu lần đỏ (§5).
+- Ma trận: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3302 khẳng định; K4b 40 → 42. Không mã mới.
