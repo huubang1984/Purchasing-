@@ -16594,3 +16594,7 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 - **Sau khi merge #199 — nay mang #198 (phần bù S3.2c2, giữ S1.193) — và cấp lại số vòng:** toàn bộ unit + T3 cục bộ trên cây
   cuối: 194 tệp, 3297 khẳng định, 3287 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70 bất biến, đọc từ
   3297 khẳng định; K4b 40, K4a 20, D2 64 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #206 (S3.2d, giữ S1.194, ADR-114, `080`) — và cấp lại số vòng, số ADR, số migration:** toàn
+  bộ unit + T3 cục bộ trên cây cuối: 194 tệp, 3303 khẳng định, 3293 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh
+  lại: 70/70 bất biến, đọc từ 3303 khẳng định; K4b 40, D2 64, K4a 26 (22 của #206 cộng 4 của vòng này). `tsc`, `eslint`,
+  `depcruise` sạch; `pnpm cap-so --kiem` sạch.
