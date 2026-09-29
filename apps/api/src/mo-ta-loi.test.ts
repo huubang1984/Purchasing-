@@ -6,6 +6,7 @@
 // SQLSTATE — mã hệ thống dài hơn năm ký tự, chữ thường, một chuỗi có giá trị — thì KHÔNG được ghi. Tệp này đo nửa ấy ở mức hàm.
 // ==============================================================================================
 import { describe, expect, it } from "vitest";
+import { moTaLoiKhongGiaTri as moTaLoiCuaIdentity } from "@trustprocure/identity";
 import { TenantError } from "@trustprocure/tenancy";
 import { moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 
@@ -62,5 +63,11 @@ describe("[S1.68 / khoản 119] moTaLoiKhongGiaTri nêu thêm MỘT tầng `caus
       "error",
     ]);
     for (const dong of ra) expect(dong).not.toContain(GIA_TRI);
+  });
+});
+
+describe("[S1.9151 / khoản 166] bản của api LÀ bản của identity", () => {
+  it("`moTaLoiKhongGiaTri` mà apps/api xuất là ĐÚNG hàm của @trustprocure/identity — không một bản bọc, không một bản chép; hai mô tả trên vẫn đo luật của bản chung", () => {
+    expect(moTaLoiKhongGiaTri).toBe(moTaLoiCuaIdentity);
   });
 });
