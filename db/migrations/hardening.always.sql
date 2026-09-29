@@ -7942,8 +7942,8 @@ $ham$;
 
     -- [S1.185 / S3.2a / K4a] Loi moi cua to chuc da bat chi doi o DRAFT, o OPEN chi them; chen luon UNSENT. Than `RETURN NEW` mo lai danh sach sau khi ky.
     ARRAY[
-      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_invitations_kiem_danh_sach (076, thân từ 080_k4a_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '080_k4a_co_ten.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7974,14 +7974,14 @@ BEGIN
       NEW.moi_sau_khi_ky := true;
     ELSE
       RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai
-        USING ERRCODE = 'check_violation';
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai';
     END IF;
     NEW.status := 'UNSENT';
     RETURN NEW;
   END IF;
   IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN
     RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai
-      USING ERRCODE = 'check_violation';
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai';
   END IF;
   IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN
     RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai
@@ -8009,7 +8009,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua loi moi (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF TG_OP = 'INSERT' THEN IF trang_thai = 'DRAFT' THEN NEW.moi_sau_khi_ky := false; ELSIF trang_thai = 'OPEN' THEN NEW.moi_sau_khi_ky := true; ELSE RAISE EXCEPTION 'Goi thau o % khong them loi moi duoc — chi o DRAFT, hoac OPEN (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_them_sai_trang_thai'; END IF; NEW.status := 'UNSENT'; RETURN NEW; END IF; IF NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL AND trang_thai <> 'DRAFT' THEN RAISE EXCEPTION 'Loi moi chi thu hoi duoc khi goi con o DRAFT; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation', CONSTRAINT = 'k4a_thu_hoi_sai_trang_thai'; END IF; IF OLD.status = 'UNSENT' AND NEW.status = 'SENT' AND trang_thai <> 'OPEN' THEN RAISE EXCEPTION 'Loi moi chi thanh SENT khi goi da OPEN; goi dang o % (K6)', trang_thai USING ERRCODE = 'check_violation'; END IF; IF OLD.status = 'SENT' AND NEW.status = 'UNSENT' THEN RAISE EXCEPTION 'Loi moi da gui khong quay ve chua gui (K6)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

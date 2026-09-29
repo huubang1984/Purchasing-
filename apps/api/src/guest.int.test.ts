@@ -81,7 +81,7 @@ async function moi(ten: string, rfqId?: string): Promise<LoiMoi> {
       contactId: lh.rows[0]?.id ?? "",
       linkChannel: "EMAIL",
       actorSessionId: sA,
-    });
+    }, apiPool);
     const t = await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sA });
     return { invitationId: loi.id, token: t.token };
   });
@@ -794,7 +794,7 @@ describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /gues
     const a = await moi("NCC thu hoi giua chung");
     await moPhienKhach(a);
     const gs = await guestSessionIdCua(a.invitationId);
-    await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }, apiPool));
     const kq = await withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgA, gs));
     expect(kq).toBe(false);
     const { rows } = await db.pool.query<{ n: string }>(

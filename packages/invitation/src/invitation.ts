@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
@@ -213,17 +213,29 @@ export async function createInvitation(
   client: pg.PoolClient,
   orgId: string,
   input: CreateInvitationInput,
+  /** [S1.194 / S3.2d / khoản 255] Pool ĐỘC LẬP của sổ — lần thêm lời mời sai trạng thái (K4a) để lại `CONTROL_DENIED`. */
+  auditPool: pg.Pool,
 ): Promise<InvitationRecord> {
   await assertTenantBound(client, orgId, "createInvitation");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
 
-  const { rows } = await client.query<HangInvitation>(
-    `INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
-                                  invited_by, invited_by_session_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
-    [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
-     actor.id, actor.sessionId],
-  );
+  let rows: HangInvitation[];
+  try {
+    ({ rows } = await client.query<HangInvitation>(
+      `INSERT INTO public.rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel,
+                                    invited_by, invited_by_session_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COT_INVITATION}`,
+      [orgId, input.rfqId, input.supplierId, input.contactId, input.linkChannel ?? "EMAIL",
+       actor.id, actor.sessionId],
+    ));
+  } catch (loi) {
+    // [S1.194 / S3.2d / khoản 255 / ADR-108] K4a sống ở trigger `rfq_invitations_kiem_danh_sach` — trigger vẫn là lớp có thẩm
+    // quyền. Tầng gói nhận ra lời từ chối của nó bằng TÊN RÀNG BUỘC, không bằng thông điệp, và từ chối theo chốt: một hàng
+    // `CONTROL_DENIED` mang mã ở giao dịch độc lập rồi `ChotKiemSoatError` (422) mang lỗi `pg` ở `cause`. Lỗi khác đi thẳng.
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
+    throw loi;
+  }
   const hang = rows[0];
   if (hang === undefined) throw new InvitationError("Câu INSERT rfq_invitations không trả về hàng nào");
 
@@ -1183,6 +1195,8 @@ export async function revokeInvitation(
      */
     readonly reason?: "LINK_SEND_FAILED";
   },
+  /** [S1.194 / S3.2d / khoản 255] Pool ĐỘC LẬP của sổ — lần thu hồi sai trạng thái (K4a) để lại `CONTROL_DENIED`. */
+  auditPool: pg.Pool,
 ): Promise<boolean> {
   await assertTenantBound(client, orgId, "revokeInvitation");
   // [S1.70 / lượt soi 64a-9] `reason` là danh sách đóng ở KIỂU, nhưng một lời gọi từ JS hay một lần ép kiểu vẫn đưa được chuỗi tuỳ ý vào
@@ -1195,12 +1209,27 @@ export async function revokeInvitation(
   // [ADR-016] Hai cột người thu hồi đi TRONG CÙNG câu lệnh đặt `revoked_at`, không phải một
   // câu UPDATE thứ hai: trigger `rfq_invitations_kiem_nguoi_thu_hoi` (013) chạy đúng ở lượt
   // chuyển sang đã-thu-hồi, nên tách ra là để lại một hàng đã thu hồi mà chưa ai ký tên.
-  const loiMoi = await client.query(
-    "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
-      " revoked_by = $2, revoked_by_session_id = $3" +
-      " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
-    [input.invitationId, actor.id, actor.sessionId],
+  //
+  // [S1.194 / S3.2d / khoản 255] Gói của lời mời đọc TRƯỚC câu ghi: lời từ chối K4a của trigger làm hỏng giao dịch, mà hàng
+  // `CONTROL_DENIED` mang toạ độ GÓI (`tuChoiTheoChot`). Không thấy lời mời thì câu ghi dưới cũng chạm 0 hàng — trả `false` như trước.
+  const { rows: goiCuaLoiMoi } = await client.query<{ rfq_id: string }>(
+    "SELECT rfq_id FROM public.rfq_invitations WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid",
+    [input.invitationId],
   );
+  let loiMoi: pg.QueryResult;
+  try {
+    loiMoi = await client.query(
+      "UPDATE public.rfq_invitations SET status = 'REVOKED', revoked_at = pg_catalog.now(), " +
+        " revoked_by = $2, revoked_by_session_id = $3" +
+        " WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
+      [input.invitationId, actor.id, actor.sessionId],
+    );
+  } catch (loi) {
+    const ma = maChotTuLoi(loi);
+    const rfqId = goiCuaLoiMoi[0]?.rfq_id;
+    if (ma !== null && rfqId !== undefined) await tuChoiTheoChot(auditPool, orgId, actor, rfqId, ma, loi);
+    throw loi;
+  }
   if (loiMoi.rowCount !== 1) return false;
 
   await client.query(

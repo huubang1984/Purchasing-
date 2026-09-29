@@ -728,13 +728,136 @@ describe("S3.2b2 — luồng mời của tổ chức đã bật S3 qua HTTP", ()
   });
 });
 
+// =============================================================================================
+// [S1.194 / S3.2d / khoản 255 / ADR-114] K4a VÀO SỔ. Lần thêm hay thu hồi lời mời sai trạng thái để lại MỘT hàng
+// `CONTROL_DENIED` mang mã, ghi ở giao dịch ĐỘC LẬP. Trigger `rfq_invitations_kiem_danh_sach` vẫn là lớp có thẩm quyền; tầng gói
+// nhận ra lời từ chối của nó bằng TÊN ràng buộc (khuôn ADR-108). Trước vòng này: `422` mang câu của trigger, không hàng sổ nào
+// (lượt đi thử T4 của S3.2c2, §S1.193).
+// =============================================================================================
+const THONG_DIEP_THEM =
+  "Danh sách mời chỉ đổi được khi gói thầu còn soạn thảo, và chỉ thêm được khi gói đã mở; gói đang chờ duyệt thì trả về soạn " +
+  "thảo trước (K4a).";
+const THONG_DIEP_THU_HOI =
+  "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa thu hồi " +
+  "được (K4a).";
+
+/** Hàng `CONTROL_DENIED` trên một gói, theo thứ tự ghi. */
+async function tuChoiChot(org: string, rfqId: string): Promise<{ ma: unknown; actorId: string | null }[]> {
+  const { rows } = await db.pool.query<{ payload: Record<string, unknown> | null; actor_id: string | null }>(
+    "SELECT payload, actor_id FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+    [org, rfqId],
+  );
+  return rows.map((h) => ({ ma: h.payload?.ma, actorId: h.actor_id }));
+}
+
+describe("S3.2d — K4a vào sổ: thêm hay thu hồi lời mời sai trạng thái để lại MỘT hàng CONTROL_DENIED (khoản 255)", () => {
+  it("[INV-K4a] mời lúc gói CHỜ DUYỆT ⇒ 422 mang thông điệp của chốt; MỘT hàng CONTROL_DENIED {K4A_THEM_SAI_TRANG_THAI} dưới người mời; không lời mời nào chèn thêm", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await moi(t, rfqId);
+    await nopVaDuyet(t, rfqId);
+    const { r } = await moiQuaRoute(t, rfqId);
+    expect(r.status, r.text).toBe(422);
+    expect(r.body.error).toBe(THONG_DIEP_THEM);
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([{ ma: "K4A_THEM_SAI_TRANG_THAI", actorId: t.pm.u }]);
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_invitations WHERE rfq_id = $1", [rfqId]);
+    expect(rows[0]?.n, "lời mời lúc DRAFT còn, lần chèn lúc chờ duyệt rollback").toBe(1);
+  });
+
+  it("[INV-K4a] thu hồi ở OPEN ⇒ 422 mang thông điệp của chốt; MỘT hàng CONTROL_DENIED {K4A_THU_HOI_SAI_TRANG_THAI}; lời mời và token còn sống", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    const lm = await moi(t, rfqId);
+    await nopVaDuyet(t, rfqId);
+    const mo = await goi(goc, "POST", `/rfqs/${rfqId}/open`, t.pm.cookie);
+    expect(mo.status, mo.text).toBe(200);
+    const r = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
+    expect(r.status, r.text).toBe(422);
+    expect(r.body.error).toBe(THONG_DIEP_THU_HOI);
+    expect(await tuChoiChot(t.org, rfqId), "mời ở DRAFT và mở gói không để hàng nào; lần thu hồi để đúng một").toEqual([
+      { ma: "K4A_THU_HOI_SAI_TRANG_THAI", actorId: t.pm.u },
+    ]);
+    const h = await trangThai(lm.id);
+    expect(h).toMatchObject({ status: "SENT", revokedAt: null });
+    expect(h.tokens.map((x) => x.revokedAt)).toEqual([null]);
+  });
+
+  it("[INV-K4a] thu hồi lúc gói CHỜ DUYỆT ⇒ 422 mang thông điệp của chốt; MỘT hàng CONTROL_DENIED {K4A_THU_HOI_SAI_TRANG_THAI}; lời mời còn sống, gói ở nguyên", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    const lm = await moi(t, rfqId);
+    await nopVaDuyet(t, rfqId);
+    const r = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
+    expect(r.status, r.text).toBe(422);
+    expect(r.body.error).toBe(THONG_DIEP_THU_HOI);
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([{ ma: "K4A_THU_HOI_SAI_TRANG_THAI", actorId: t.pm.u }]);
+    expect(await trangThai(lm.id)).toMatchObject({ status: "UNSENT", revokedAt: null });
+    const { rows } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(rows[0]?.status).toBe("PENDING_APPROVAL");
+  });
+
+  it("[INV-K4a] thu hồi ở DRAFT — lần K4a cho phép — đi qua, không hàng CONTROL_DENIED", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    const lm = await moi(t, rfqId);
+    const r = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
+    expect(r.status, r.text).toBe(200);
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([]);
+  });
+
+  it("[INV-K4a] ĐỐI CHỨNG MVP1: tổ chức CHƯA bật — mời lúc chờ duyệt và thu hồi ở OPEN đi qua, không hàng CONTROL_DENIED nào", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    const lm = await moi(t, rfqId);
+    await nopVaDuyet(t, rfqId);
+    const { r } = await moiQuaRoute(t, rfqId);
+    expect(r.status, r.text).toBe(201);
+    const mo = await goi(goc, "POST", `/rfqs/${rfqId}/open`, t.pm.cookie);
+    expect(mo.status, mo.text).toBe(200);
+    const th = await goi(goc, "POST", `/invitations/${lm.id}/revoke`, t.pm.cookie);
+    expect(th.status, th.text).toBe(200);
+    expect(await tuChoiChot(t.org, rfqId)).toEqual([]);
+  });
+
+  it("[INV-K4a] ĐỘT BIẾN: trigger mất TÊN ràng buộc ⇒ lần mời vẫn bị chặn (23514) nhưng KHÔNG hàng sổ nào — tầng gói nhận ra lời từ chối bằng tên, không bằng câu", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nopVaDuyet(t, rfqId);
+    const n = await nhaCungCap(t);
+    const { rows } = await db.pool.query<{ d: string }>(
+      "SELECT pg_get_functiondef('public.rfq_invitations_kiem_danh_sach()'::regprocedure) AS d",
+    );
+    const than = rows[0]!.d;
+    const khongTen = than.replace(/,\s*CONSTRAINT = 'k4a_[a-z_]+'/g, "");
+    expect(khongTen, "tiền đề: thân hàm mang tên ràng buộc ở hai nhánh K4a").not.toBe(than);
+    const c = await db.pool.connect();
+    let bat: unknown = null;
+    try {
+      await c.query("BEGIN");
+      await c.query(khongTen);
+      await c.query("SET LOCAL ROLE app_api");
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [t.org]);
+      try {
+        await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s }, auditPool);
+      } catch (e) {
+        bat = e;
+      }
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+    expect((bat as { code?: string } | null)?.code, "trigger vẫn là lớp chặn").toBe("23514");
+    expect(await tuChoiChot(t.org, rfqId), "không tên ⇒ tầng gói không nhận ra ⇒ không hàng sổ").toEqual([]);
+  });
+});
+
 describe("S3.2b2 — hai hàm gói của luồng mới", () => {
   it("[INV-K6] ⑻ `ducTokenKhiMoGoi` chỉ đúc trong CHÍNH giao dịch mở gói, dưới CHÍNH phiên người mở — không phải một lối gửi lại hàng loạt", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     const n = await nhaCungCap(t);
     const inv = await withTenant(apiPool, t.org, async (c) =>
-      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s })).id,
+      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s }, apiPool)).id,
     );
     await nopVaDuyet(t, rfqId);
     // Cùng giao dịch, phiên KHÁC người mở ⇒ từ chối, và cả lần mở rollback.
@@ -766,7 +889,7 @@ describe("S3.2b2 — hai hàm gói của luồng mới", () => {
     const rfqId = await goiNhap(t);
     const n = await nhaCungCap(t);
     const inv = await withTenant(apiPool, t.org, async (c) =>
-      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s })).id,
+      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s }, apiPool)).id,
     );
     await nopVaDuyet(t, rfqId);
     const links = await withTenant(apiPool, t.org, async (c) => {
@@ -782,7 +905,7 @@ describe("S3.2b2 — hai hàm gói của luồng mới", () => {
     const rfqId = await goiNhap(t);
     const n = await nhaCungCap(t);
     const inv = await withTenant(apiPool, t.org, async (c) =>
-      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s })).id,
+      (await createInvitation(c, t.org, { rfqId, supplierId: n.supplierId, contactId: n.contactId, actorSessionId: t.pm.s }, apiPool)).id,
     );
     await nopVaDuyet(t, rfqId);
     await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
@@ -793,7 +916,7 @@ describe("S3.2b2 — hai hàm gói của luồng mới", () => {
     const rfq2 = await goiNhap(t);
     const n2 = await nhaCungCap(t);
     const inv2 = await withTenant(apiPool, t.org, async (c) =>
-      (await createInvitation(c, t.org, { rfqId: rfq2, supplierId: n2.supplierId, contactId: n2.contactId, actorSessionId: t.pm.s })).id,
+      (await createInvitation(c, t.org, { rfqId: rfq2, supplierId: n2.supplierId, contactId: n2.contactId, actorSessionId: t.pm.s }, apiPool)).id,
     );
     await nopVaDuyet(t, rfq2);
     await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId: rfq2, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));

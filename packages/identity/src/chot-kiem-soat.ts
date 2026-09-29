@@ -18,6 +18,10 @@
 // một chốt. Trigger nay đặt TÊN RÀNG BUỘC cho mỗi nhánh (`074_tu_choi_co_ten.sql`), và `CHOT_THEO_RANG_BUOC` dưới đây
 // là bảng tên → mã. Hàm vị từ SQL của K1 và câu hỏi nó (`kiemChot`) ở lại `packages/rfq`.
 //
+// [S1.194 / S3.2d / khoản 255 / ADR-114] Hai dòng K4a — thêm và thu hồi lời mời sai trạng thái ở tổ chức đã bật S3 —, theo
+// đúng khuôn ấy: trigger `rfq_invitations_kiem_danh_sach` đặt tên ràng buộc (`080_k4a_co_ten.sql`),
+// `packages/invitation` bắt lỗi của nó và từ chối theo mã. Chủ dự án chốt ngày 2026-09-29: cả hai vào sổ.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -41,12 +45,17 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_DIEU_PHOI_DE_XUAT"
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
+  | "K4A_THEM_SAI_TRANG_THAI"
+  | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "THIEU_NGAN_SACH";
 
 export interface DongChot {
-  /** Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). */
-  readonly chot: `${"D" | "J" | "K"}${number}`;
+  /**
+   * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Vế có hậu tố
+   * (`K4a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b).
+   */
+  readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
   readonly vaoSo: boolean;
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
@@ -60,7 +69,8 @@ export interface DongChot {
 
 /**
  * Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166); bảy dòng J3/D2
- * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi").
+ * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi"); hai dòng K4a cũng vậy
+ * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ").
  */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
@@ -135,6 +145,27 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "`po.approve`, nên lớp vai trò không chặn được; lần cố tự duyệt là tín hiệu rõ nhất của một người ôm trọn quyết định",
     thongDiep: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình — cần một người khác duyệt (J3).",
   },
+  K4A_THEM_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thêm lời mời vào gói không ở DRAFT hay OPEN — thường là gói đang chờ duyệt. Ở tổ chức đã bật S3, danh sách " +
+      "được ký là danh sách được mời (spec §5.1 K4a), nên lần cố ấy là lần cố đổi một danh sách mà người khác đã hay sắp ký " +
+      "lên. Người dùng làm việc ấy, không phải dữ liệu đổi dưới chân họ (ADR-060)",
+    thongDiep:
+      "Danh sách mời chỉ đổi được khi gói thầu còn soạn thảo, và chỉ thêm được khi gói đã mở; gói đang chờ duyệt thì trả về " +
+      "soạn thảo trước (K4a).",
+  },
+  K4A_THU_HOI_SAI_TRANG_THAI: {
+    chot: "K4a",
+    vaoSo: true,
+    lyDo:
+      "một người thu hồi lời mời khỏi gói đã nộp duyệt hay đã mở — thu hẹp danh sách sau khi ký là đúng đường chiếm pool " +
+      "(ADR-058 ⒜) mà S3 chặn; thu hồi ở gói đã mở chờ tín hiệu `INVITE_LIST_NARROWED` của S3.6 (chủ dự án chốt 2026-09-27)",
+    thongDiep:
+      "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
+      "thu hồi được (K4a).",
+  },
   J3_PHIEN_DE_XUAT_DUYET: {
     chot: "J3",
     vaoSo: true,
@@ -158,6 +189,8 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
+  k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
+  k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
 };
 
 /** Mã chốt của một lỗi `pg` do trigger ném — `check_violation` (23514) mang một tên có trong `CHOT_THEO_RANG_BUOC` — hay `null`. */
