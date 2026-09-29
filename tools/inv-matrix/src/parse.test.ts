@@ -157,6 +157,22 @@ describe("phân tích ma trận bất biến", () => {
     expect(demHangUngVien(md), "phép đếm độc lập cũng KHÔNG được thấy `I1`").toEqual(["A1"]);
   });
 
+  it("[S1.185 / khoản 246] hàng mang MỘT chữ thường sau số (K4a, K4b) đọc được cạnh hàng trần cùng số — mũi gỡ hậu tố ở bộ đọc phải chết", () => {
+    // Đo của khoản 246 trước bản vá: bảng này cho đúng `["A1"]`, không ném. `K4` đứng cạnh để một bộ đọc gộp `K4a` về
+    // `K4` — hay coi chữ thường là vế — cũng đỏ: ba hàng, ba mã, không mã nào nuốt mã nào.
+    const md = [
+      "| ID | Bất biến | Cưỡng chế | Tầng test |",
+      "|---|---|---|---|",
+      "| **A1** | một bất biến THẬT | Kiến trúc | T1 |",
+      "| **K4** | mã trần cùng số | Trigger | T3 |",
+      "| **K4a** | lời mời chỉ đổi ở DRAFT | Trigger | T3 |",
+      "| **K4b** | chữ ký đếm trên danh sách hiện tại | Trigger | T3 |",
+    ].join("\n");
+    expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "K4", "K4a", "K4b"]);
+    expect(parseInvariants(md)[2]?.statement).toBe("lời mời chỉ đổi ở DRAFT");
+    expect(demHangUngVien(md)).toEqual(["A1", "K4", "K4a", "K4b"]);
+  });
+
   it("bỏ dấu ** khi đọc cột cưỡng chế in đậm", () => {
     const invariants = parseInvariants(TEST_PLAN_MAU);
     expect(invariants[1]?.enforcement).toBe("Bộ quét rò rỉ");
@@ -230,6 +246,23 @@ describe("ranh giới của nhãn được tính là độ phủ", () => {
     expect([...coverage.keys()].sort()).toEqual(["J1", "K1"]);
   });
 
+  it("[S1.185 / khoản 246] nhãn TRẦN mang một chữ thường được tính cho ĐÚNG mã ấy; chữ hoa, hai chữ, hay vế thì không", () => {
+    // Hai bộ đọc sổ và gom độ phủ nay chung một khuôn mã; ca này đỏ nếu khuôn chung mất hậu tố (K4a không có độ phủ),
+    // nhận chữ hoa (`K4A` đổ vào một ô không tồn tại), nhận nhiều chữ (`K4ab`), hay coi `K4a` là vế của `K4`.
+    const coverage = collectCoverage(
+      baoCao([
+        { fullName: "danh sách mời > [INV-K4a] chỉ đổi ở DRAFT", status: "passed" },
+        { fullName: "danh sách mời > [INV-K4b] đếm trên danh sách hiện tại", status: "passed" },
+        { fullName: "danh sách mời > [INV-K4b(2)] một vế", status: "passed" },
+        { fullName: "danh sách mời > [INV-K4A] chữ hoa", status: "passed" },
+        { fullName: "danh sách mời > [INV-K4ab] hai chữ", status: "passed" },
+      ]),
+    );
+    expect([...coverage.keys()].sort()).toEqual(["K4a", "K4b"]);
+    expect(coverage.get("K4b")).toHaveLength(1);
+    expect(coverage.has("K4"), "`K4a` bị coi là vế của `K4`").toBe(false);
+  });
+
   it("nhãn quy ước ngoài họ INV không bao giờ đi vào độ phủ", () => {
     const coverage = collectCoverage(
       baoCao([
@@ -277,6 +310,22 @@ describe("điểm danh nhãn và đối chiếu với sổ đăng ký", () => {
     const uses = collectLabelUses(baoCao([{ fullName: "[INV-E3(3)] b", status: "passed" }]));
     expect(findUnregisteredLabels(uses, ["E3"])).toEqual([]);
   });
+
+  it("[S1.185 / khoản 246] điểm danh tách `K4a(2)` thành mã `K4a` và vế `2`; `K4A` là một mã LẠ, phải ồn ào", () => {
+    const uses = collectLabelUses(
+      baoCao([
+        { fullName: "[INV-K4a(2)] một vế", status: "passed" },
+        { fullName: "[INV-K4a] trần", status: "passed" },
+        { fullName: "[INV-K4A] chữ hoa", status: "passed" },
+      ]),
+    );
+    expect(uses.map((u) => [u.base, u.clause])).toEqual([
+      ["K4a", "2"],
+      ["K4a", null],
+      ["K4A", null],
+    ]);
+    expect(findUnregisteredLabels(uses, ["K4a", "K4b"]).map((u) => u.base)).toEqual(["K4A"]);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -304,6 +353,22 @@ describe("sổ đăng ký lệch khuôn phải NÉM chứ không được đọc
     ].join("\n");
     expect(demHangUngVien(md)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
     expect(parseInvariants(md).map((i) => i.id)).toEqual(["A1", "A4", "G1", "H1", "J1", "K1"]);
+  });
+
+  it("[S1.185 / khoản 246] mã LỆCH KHUÔN (chữ hoa, hai chữ, gạch, vế) NÉM kèm tên — không biến mất khỏi cả hai bộ đếm", () => {
+    // Trước bản vá, hai bộ dùng chung khuôn `[A-HJK]\d+` nên `K4a` biến mất khỏi CẢ HAI và phép so thấy hai con số bằng
+    // nhau. Nay phép đếm độc lập nhận mọi ô đầu mở bằng chữ nhóm và một chữ số, nên mỗi dạng dưới đây được ĐẾM mà không
+    // được ĐỌC. Ca này đỏ nếu phép đếm thu về khuôn của bộ đọc — dù có hay không có hậu tố.
+    for (const ma of ["K4A", "K4ab", "K4-a", "E3(3)"]) {
+      const md = [
+        "| ID | Bất biến | Cưỡng chế | Tầng test |",
+        "|---|---|---|---|",
+        "| **A1** | một bất biến THẬT | Kiến trúc | T1 |",
+        `| **${ma}** | mã lệch khuôn | Trigger | T3 |`,
+      ].join("\n");
+      expect(() => parseInvariants(md), ma).toThrow(/lệch khuôn/);
+      expect(() => parseInvariants(md), ma).toThrow(`Mã không đọc được: ${ma}.`);
+    }
   });
 
   it("sổ đăng ký rỗng NÉM chứ không trả về mảng rỗng", () => {

@@ -14,14 +14,14 @@ bí mật, biến GitHub, các đối chứng dương và những thư cảnh b�
 | `00-bootstrap` | management | `tp-mgmt` | Bucket S3 lưu state (state local) | **ngay bây giờ** |
 | `10-audit` | audit | `tp-audit` | Bucket CloudTrail, bucket neo (Object Lock COMPLIANCE 365 ngày), role `tp-anchor-writer` | audit được mở lại |
 | `20-management` | management | `tp-mgmt` | Permission set `KeyAdmin` (gán `tp-key-admins` cho audit + prod), CloudTrail tổ chức | sau 10 |
-| `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
+| `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`, **[S1.183]** `tp-khoi-tao`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` | prod được mở lại |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
 | `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-088); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-086); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-089) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
-| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069; DNS Firewall chỉ phân giải một danh sách tên đóng — ADR-076), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-075), alarm vận hành `tp-van-hanh-*` (ADR-077), service `tp-unseal-worker`, task `tp-migrate` | sau 30, 50, 80 |
+| `90-ecs` | prod | `tp-prod` | Chạy thật (ADR-066): VPC riêng + VPC endpoint (NAT một AZ CHỈ cho subnet api — ADR-069; DNS Firewall chỉ phân giải một danh sách tên đóng — ADR-076), RDS PostgreSQL 16, ECR, cluster `tp-prod`, một tên miền trên ALB HTTPS — `/api/*` tới service `tp-api`, còn lại tới service `tp-web` (ADR-068) —, header bảo mật (HSTS…) do ALB đặt (ADR-075), alarm vận hành `tp-van-hanh-*` (ADR-077), service `tp-unseal-worker`, task `tp-migrate`, **[S1.183]** task `tp-khoi-tao` (ADR-111) | sau 30, 50, 80 |
 
 Vì sao 40/50 chạy bằng **KeyAdmin** chứ không bằng AdministratorAccess: key policy chỉ cho
 KeyAdmin quản trị khoá, và KMS từ chối tạo một khoá mà chính người tạo không quản trị được nữa
@@ -210,6 +210,9 @@ aws secretsmanager create-secret --profile tp-prod --name tp/worker/database-url
   --secret-string "postgres://app_unseal_login:<mat-khau-worker>@<rds-host>:5432/trustprocure"
 aws secretsmanager create-secret --profile tp-prod --name tp/neo/database-url `
   --secret-string "postgres://app_neo_login:<mat-khau-neo>@<rds-host>:5432/trustprocure"
+# [S1.182 / ADR-111] Task khởi tạo tổ chức — vai app_khoi_tao_login, mật khẩu riêng.
+aws secretsmanager create-secret --profile tp-prod --name tp/khoi-tao/database-url `
+  --secret-string "postgres://app_khoi_tao_login:<mat-khau-khoi-tao>@<rds-host>:5432/trustprocure"
 ```
 
 **2. Apply hai bước** — HTTPS cần chứng chỉ ACM đã xác minh, mà DNS nằm ngoài AWS:
@@ -224,7 +227,7 @@ terraform apply plan.tfplan                                             # chờ 
 ```
 
 `prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
-và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys, neo }` (URI **@sha256:**), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
+và `TRUSTPROCURE_ALLOWED_ORIGINS` của api suy ra từ nó), `anh = { api, worker, migrate, web, public_keys, neo, khoi_tao }` (URI **@sha256:**; **[S1.183]** `khoi_tao` — task khởi tạo tổ chức, ADR-111), `ses = { tu_api, tu_canh_bao, nhan_canh_bao, configuration_set = "tp-thu" }`.
 Lần đầu chưa có image trong ECR: apply `-target` các `aws_ecr_repository` trước, đẩy image (bước 4), rồi
 mới apply phần còn lại.
 
@@ -232,14 +235,14 @@ mới apply phần còn lại.
 hiệu lực qua `terraform console`, rồi hỏi tài khoản prod (chỉ đọc): giá trị giữ chỗ, image có trong ECR, secret có giá
 trị, domain SES đã xác minh. Có `[DO]` ⇒ thoát 1, không plan (ADR-087; `docs/APPLY-LAN-DAU.md` 6.4).
 
-**3.** Cập nhật hai secret database-url bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
+**3.** Cập nhật ~~hai~~ **[S1.182]** bốn secret `*/database-url` (api, worker, neo, khoi-tao) bằng `terraform output rds_endpoint`; thêm CNAME `cong_khai` (output `ban_ghi_dns`) → ALB.
 
 **4. Build và đẩy image** (từ gốc kho):
 
 ```powershell
 aws ecr get-login-password --profile tp-prod | docker login --username AWS --password-stdin <ecr>
-foreach ($t in "api","worker","migrate","web","public-keys","neo") {
-  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys"; neo = "tp-neo" }[$t]
+foreach ($t in "api","worker","migrate","web","public-keys","neo","khoi-tao") {
+  $repo = @{ api = "tp-api"; worker = "tp-unseal-worker"; migrate = "tp-migrate"; web = "tp-web"; "public-keys" = "tp-public-keys"; neo = "tp-neo"; "khoi-tao" = "tp-khoi-tao" }[$t]
   docker build -f deploy/Dockerfile --target $t -t "<ecr>/${repo}:<git-sha>" .
   docker push "<ecr>/${repo}:<git-sha>"      # ghi lại digest cho prod.tfvars
 }
@@ -322,13 +325,14 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 |---|---|---|---|
 | `prod` | bật, ít nhất một người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_MIGRATE`, `TP_SG_NEO` — lấy từ `terraform output bien_github` (stack 90) |
 | `prod-worker` | bật, người duyệt nên khác người bấm | chỉ `master` | không |
+| `prod-khoi-tao` **[S1.183]** | bật, **và *Prevent self-review***, **[lượt soi] TẮT admin bypass** (*Allow administrators to bypass configured protection rules*); ít nhất hai người | chỉ `master` | `TP_SUBNETS_UNG_DUNG`, `TP_SG_KHOI_TAO` — `terraform output bien_github_khoi_tao` (stack 90) |
 
 **[ADR-078] Biến cấp repository** (Settings → Secrets and variables → Actions → *Variables*, KHÔNG gắn environment — job
 `kiem` không có environment): `TP_TEN_MIEN`, `TP_RECEIPT_ACTIVE_KID` lấy từ `terraform output bien_github_repo` (stack 90);
 `TP_RECEIPT_FINGERPRINT` = dấu vân tay tính độc lập của kid đang dùng (mục "Khoá công khai biên nhận"). Xoay khoá thì cập
 nhật hai biến khoá cùng lúc với apply stack 90 — không thì lần deploy kế đỏ ở `kiem`, đúng như mong đợi.
 
-Tên environment phải đúng hai chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
+Tên environment phải đúng ~~hai~~ **[S1.183]** ba chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
 ghim `sub = repo:huubang1984/Purchasing-:environment:<tên>`. Không có secret nào — pipeline lấy quyền
 AWS bằng OIDC.
 
@@ -347,6 +351,26 @@ job đỏ và in kiểm nào hỏng; **không tự quay lui** — quyết địn
 
 **Quay lui:** `aws ecs update-service --profile tp-prod --cluster tp-prod --service tp-api --task-definition
 tp-api:<bản cũ>` — chỉ lùi image; migration đã chạy KHÔNG lùi theo, nên bản cũ phải chạy được trên schema mới.
+
+## Khởi tạo tổ chức — `.github/workflows/khoi-tao.yml` (ADR-111, S1.183)
+
+Tạo tổ chức, người dùng và vai (hay thêm người vào tổ chức đã có) bằng task một lần `tp-khoi-tao` dưới vai CSDL hẹp
+`app_khoi_tao`. Bản khai (JSON, email và họ tên) sống ở Secrets Manager dưới `tp/khoi-tao/ban-khai/<slug>`; lệnh chỉ mang TÊN,
+PHIÊN BẢN (`VersionId`) và BĂM SHA-256 của nó. Các bước người vận hành: `docs/APPLY-LAN-DAU.md` 8.1.
+
+- **Chạy:** Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master` với bảy đầu vào. Job `build` (không
+  quyền AWS) kiểm đầu vào và người bấm (bot thì dừng), chọn mã tổ chức khi tạo, in bảng *điều người duyệt duyệt* vào tóm tắt,
+  build đích `khoi-tao`. Job `chay` chờ duyệt ở `prod-khoi-tao`; bước đầu, TRƯỚC khi lấy quyền AWS, đòi lịch sử duyệt của run
+  có một NGƯỜI khác người bấm; rồi đẩy image, đăng ký `tp-khoi-tao` (bản mới nhất lệch hình dạng stack 90 thì dừng), chạy task
+  (`deploy/trien-khai.sh khoi-tao`).
+- **Task đọc ĐÚNG phiên bản đã duyệt, so băm**, và dừng TRƯỚC khi chạm CSDL nếu bản khai lệch tổ chức, số người hay số người
+  theo từng mã vai của bảng.
+- **Thoát 0 ⇒ bí mật bị XOÁ ngay** (`--force-delete-without-recovery`); tóm tắt in kết quả suy từ đầu vào đã duyệt (mã tổ
+  chức, số người, vai) — không đọc log. **Không xanh ⇒ bí mật CÒN**: job `nhac` nói điều ấy; chạy lại (an toàn), hay sửa bằng
+  `put-secret-value` (VersionId và băm mới), hay xoá tay.
+- Nhóm `concurrency` RIÊNG (`khoi-tao-prod`): một lần khởi tạo chờ duyệt không chặn deploy. Chạy trùng migrate vẫn an toàn —
+  hardening thu hồi rồi cấp lại quyền của `app_khoi_tao` trong MỘT giao dịch.
+- Kho CÔNG KHAI: đầu vào và tóm tắt của run ai cũng đọc được — slug, mã tổ chức, số người theo vai.
 
 ## Nguồn thời gian (ADR-074, khoản 196)
 

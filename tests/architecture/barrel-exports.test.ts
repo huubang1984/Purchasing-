@@ -261,6 +261,18 @@ const DANH_SACH_TRANG_IDENTITY = [
   "startUserSession",
   "verifyTotpForLogin",
   "verifyTotpAttempt",
+  // [S1.180 / khoản 247 / ADR-108] Từ vựng chốt kiểm soát dời xuống đây từ `packages/rfq`. `tuChoiTheoChot` NÉM ở mọi
+  // nhánh (cùng tiêu chí `throwAuditedDenial`); `laMaChot` và `maChotTuLoi` chỉ tra bảng — không câu hỏi quyền nào.
+  "ACTION_CHOT_KIEM_SOAT",
+  "CHOT_THEO_RANG_BUOC",
+  "CHOT_VAO_SO",
+  "ChotKiemSoatError",
+  "laMaChot",
+  "maChotTuLoi",
+  "tuChoiTheoChot",
+  // [S1.184 / khoản 248 / ADR-112] Đặt trần theo phiên cho lần từ chối do handler ghi — chỉ làm lần từ chối thứ N+1 ném 429 thay vì
+  // ghi sổ, không cho qua gì. Một người gọi: `apps/api/src/dispatch.ts` (`ghi-so-tu-choi-mot-duong.test.ts` giam).
+  "chayVoiTranTuChoi",
 ];
 
 const IDENTITY_PACKAGE_JSON_URL = new URL("../../packages/identity/package.json", import.meta.url);
@@ -516,6 +528,8 @@ const DANH_SACH_TRANG_RFQ = [
   "lietKePhienBanChinhSach",
   "listRfqItems",
   "openRfq",
+  // [S1.186 / S3.2b1 / K4a] Cạnh `PENDING_APPROVAL→DRAFT` — chỉ ở tổ chức đã bật S3; lớp chặn cuối là trigger của `077_tra_ve_nhap`.
+  "returnRfqToDraft",
   "setRfqBudget",
   "submitRfqForApproval",
 ];
@@ -558,9 +572,12 @@ const DANH_SACH_TRANG_INVITATION = [
   // [khoản nợ 37] Đường RA của khoá cấp-lời-mời. Xem khối chú thích của chính hàm.
   "clearOtpLockout",
   "CHANNELS",
+  // [S1.181 / ADR-110] Cửa sổ và trần của lần gửi lại link mời — hai hằng số, route người mua đọc cho `Retry-After`.
+  "CUA_SO_LINK_MOI_GIAY",
   "GUEST_SESSION_MAX_TTL_SECONDS",
   "GUEST_SESSION_TOKEN_BYTES",
   "InvitationError",
+  "LINK_MOI_TOI_DA_MOI_GIO",
   "MAGIC_LINK_MAX_TTL_SECONDS",
   "MAGIC_LINK_TOKEN_BYTES",
   "OTP_LOCKOUT_SECONDS",
@@ -589,11 +606,19 @@ const DANH_SACH_TRANG_INVITATION = [
   // than ham, va no o ro HAM_DOC_CO_QUYEN cua cong-quyen-route.test.ts.
   "listInvitations",
   "redeemMagicLink",
+  // [S1.181 / ADR-110] Phát token MỚI cho một lời mời còn sống, dưới phiên NGƯỜI MUA — cùng hình dạng
+  // `issueMagicLinkToken`: token dạng rõ chỉ về tay người gọi để trao cho bộ gửi, không trả phiên.
+  "reissueInvitationLink",
+  // [S1.181 / ADR-110] Phần bù khi gửi lại hỏng: thu hồi đúng một token theo id; trả boolean.
+  "revokeMagicLinkToken",
   // [ADR-020 / S1.10.2] Nhận TOKEN PHIÊN KHÁCH (thứ chỉ tồn tại SAU khi OTP đã đối chiếu) và trả
   // `guest_sessions.id` cho `withGuestSession`. Nó KHÔNG nhận magic link và KHÔNG mở phiên — tức
   // không phải ca "nhận token, trả phiên" mà khối chú thích trên cảnh báo; nó chỉ tra một phiên
   // đã có. Đường vào duy nhất của apps/api/src/dispatch.ts.
   "resolveGuestSessionByToken",
+  // [S1.181 / ADR-109] Thu hồi ĐÚNG một phiên khách theo id mà dispatcher dẫn xuất từ cookie; trả boolean, không
+  // nhận token, không trả phiên — không phải ca "nhận token, trả phiên" của khối chú thích trên.
+  "revokeGuestSession",
   "revokeInvitation",
   // [sổ nợ 39] Đếm-và-tăng một bucket LOGIN_CALLER; trả số, không trả phiên, không nhận token.
   "tangBucketHanMuc",

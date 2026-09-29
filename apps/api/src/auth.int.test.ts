@@ -1795,6 +1795,130 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
         expect(await demHanh("PERMISSION_DENIED")).toBe(truoc);
       });
     }, 30_000);
+
+    // ============================================================================================
+    // [S1.184 / khoản 248 / ADR-112] LẦN TỪ CHỐI DO HANDLER CŨNG TIÊU CÙNG NGÂN SÁCH
+    //
+    // ADR-092 để ngoài phạm vi mọi lần từ chối mà HANDLER tự ghi — `requirePermission` gọi từ gói, `throwAuditedDenial` của cổng mở
+    // thầu, bảng so sánh, và (khoản 247) mọi `CONTROL_DENIED`. Bảng so sánh có đủ hai lối: người không giữ `bid.view` bị
+    // `buildComparisonTable` từ chối QUYỀN (403, `PERMISSION_DENIED`); người giữ nó mà gói chưa mở thầu bị từ chối A4 (422,
+    // `COMPARISON_DENIED`). Route ấy là route ĐỌC nên bộ điều phối không hỏi quyền — cả hai lần từ chối là của handler.
+    // ============================================================================================
+    async function goiRfq(cookie: string, goc2: string): Promise<string> {
+      const tao = await goi("POST", "/rfqs", { cookie, body: { title: "k248 bang so sanh" }, goc: goc2 });
+      expect(tao.status, tao.text).toBe(201);
+      return (JSON.parse(tao.text) as { rfq: { id: string } }).rfq.id;
+    }
+
+    it("⒤ [INV-D5] [khoản 248] lần từ chối QUYỀN do HANDLER tự hỏi: N lần 403 mỗi lần một hàng `PERMISSION_DENIED`, rồi 429 KHÔNG hàng", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("k248-quyen@vd.test");
+        const a = await dangNhap("k248-quyen@vd.test");
+        const rfqId = await goiRfq(a.cookie, goc2);
+        const truoc = await demHanh("PERMISSION_DENIED");
+        for (let i = 0; i < TRAN; i += 1) {
+          const r = await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${i + 1}: ${r.text}`).toBe(403);
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "N lần đầu VẪN vào sổ").toBe(truoc + TRAN);
+        for (let i = 0; i < 3; i += 1) {
+          const r = await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${TRAN + i + 1}: ${r.text}`).toBe(429);
+          expect(r.text).toBe(THAN_429);
+          expect(r.headers.get("retry-after")).toBe(String(OTP_RATE_WINDOW_SECONDS));
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "429 KHÔNG ghi hàng sổ").toBe(truoc + TRAN);
+      });
+    });
+
+    it("⒥ [INV-D5] [khoản 248] lần từ chối qua `throwAuditedDenial` của HANDLER (A4 của bảng so sánh): N lần 422 mỗi lần một hàng, rồi 429 KHÔNG hàng", async () => {
+      await voiMayChu(async (goc2) => {
+        // Người giữ `bid.view` là FINANCE THUẦN: BUYER kèm FINANCE vi phạm D2 của trigger `033`. Gói do một người mua khác tạo.
+        await taoNguoi("k248-a4-tao@vd.test");
+        const rfqId = await goiRfq((await dangNhap("k248-a4-tao@vd.test")).cookie, goc2);
+        const { rows: nd } = await db.pool.query<{ id: string }>(
+          "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, 'k248-a4@vd.test', 'Ke toan', 'ACTIVE') RETURNING id",
+          [orgA],
+        );
+        await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'FINANCE')", [orgA, nd[0]?.id]);
+        const a = await dangNhap("k248-a4@vd.test");
+        const truoc = await demHanh("COMPARISON_DENIED");
+        for (let i = 0; i < TRAN; i += 1) {
+          const r = await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${i + 1}: ${r.text}`).toBe(422);
+        }
+        expect(await demHanh("COMPARISON_DENIED"), "N lần đầu VẪN vào sổ").toBe(truoc + TRAN);
+        for (let i = 0; i < 3; i += 1) {
+          const r = await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 });
+          expect(r.status, `lần ${TRAN + i + 1}: ${r.text}`).toBe(429);
+          expect(r.text).toBe(THAN_429);
+        }
+        expect(await demHanh("COMPARISON_DENIED"), "429 KHÔNG ghi hàng sổ").toBe(truoc + TRAN);
+      });
+    });
+
+    it("⒦ [khoản 248] MỘT ngân sách cho cả hai tầng: lần từ chối của bộ điều phối và của handler cùng tiêu bucket `tu-choi|<phiên>`", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("k248-chung@vd.test");
+        const a = await dangNhap("k248-chung@vd.test");
+        const rfqId = await goiRfq(a.cookie, goc2);
+        const truoc = await demHanh("PERMISSION_DENIED");
+        // Hai lần ở bộ điều phối (POST /suppliers), một lần ở handler (bảng so sánh) — đủ TRAN = 3.
+        expect((await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 })).status).toBe(403);
+        expect((await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 })).status).toBe(403);
+        expect((await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 })).status).toBe(403);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc + TRAN);
+        // Hết ngân sách ở CẢ HAI tầng.
+        expect((await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 })).status).toBe(429);
+        expect((await goi("POST", "/suppliers", { cookie: a.cookie, body: NCC, goc: goc2 })).status).toBe(429);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc + TRAN);
+      });
+    });
+
+    it("⒧ [INV-D5] [khoản 248] tám lần từ chối CÙNG LÚC ở handler ⇒ đúng N lần 403 và đúng N hàng sổ", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("k248-cung-luc@vd.test");
+        const a = await dangNhap("k248-cung-luc@vd.test");
+        const rfqId = await goiRfq(a.cookie, goc2);
+        const truoc = await demHanh("PERMISSION_DENIED");
+        const kq = await Promise.all(Array.from({ length: 8 }, () => goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 })));
+        expect(kq.map((r) => r.status).sort(), kq.map((r) => r.text).join("\n")).toEqual([403, 403, 403, 429, 429, 429, 429, 429]);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc + TRAN);
+      });
+    });
+
+    it("⒨ [khoản 248] lần ghi sổ từ chối của HANDLER hỏng (khoá chuỗi sổ bị giữ) vẫn tiêu ngân sách: 500, và lần đếm KHÔNG cuộn theo", async () => {
+      await voiMayChu(async (goc2) => {
+        await taoNguoi("k248-so-hong@vd.test");
+        const a = await dangNhap("k248-so-hong@vd.test");
+        const rfqId = await goiRfq(a.cookie, goc2);
+        const truoc = await demHanh("PERMISSION_DENIED");
+        const giu = await apiPool.connect();
+        const ketQua: PhanHoi[] = [];
+        try {
+          await giu.query("BEGIN");
+          await giu.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
+          // Cùng khuôn ⒣: một hàng sổ chưa commit giữ khoá tư vấn nối tiếp của tổ chức.
+          await giu.query(
+            "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, 'K248_GIU_KHOA', 'K248', NULL, '{}'::jsonb, NULL, NULL, NULL)",
+            [orgA],
+          );
+          for (let i = 0; i < TRAN; i += 1) ketQua.push(await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 }));
+        } finally {
+          await giu.query("ROLLBACK").catch(() => undefined);
+          giu.release();
+        }
+        for (const r of ketQua) {
+          expect(r.status, r.text).toBe(500);
+          expect(r.text).toBe(JSON.stringify({ error: "loi noi bo" }));
+        }
+        expect(await demHanh("PERMISSION_DENIED"), "lần ghi hỏng không để hàng nào").toBe(truoc);
+        // Lần đếm ở giao dịch RIÊNG đã commit trước lần ghi hỏng — nên đây là lần thứ N+1, không phải lần đầu.
+        const r = await goi("GET", `/rfqs/${rfqId}/comparison`, { cookie: a.cookie, goc: goc2 });
+        expect(r.status, r.text).toBe(429);
+        expect(await demHanh("PERMISSION_DENIED")).toBe(truoc);
+      });
+    }, 30_000);
   });
 });
 

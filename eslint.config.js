@@ -85,6 +85,9 @@ export default tseslint.config(
       // `tools/kiem-truoc-apply/*.mjs` — bản sao có chủ ý thứ MƯỜI MỘT, cho `pnpm kiem-truoc-apply` (kiểm trước apply stack 90).
       // Vẫn liệt kê đúng một thư mục.
       "tools/kiem-truoc-apply/*.mjs",
+      // [S1.182 / ADR-111] `tools/khoi-tao-to-chuc/*.mjs` — bản sao có chủ ý của cùng hook resolve (trùng từng byte với
+      // `tools/chay-migrate/`), cho entry point của task ECS `tp-khoi-tao`. Vẫn liệt kê đúng một thư mục.
+      "tools/khoi-tao-to-chuc/*.mjs",
       ".claude/**",
       "eslint.config.js",
       "vitest.config.ts",
@@ -137,7 +140,11 @@ export default tseslint.config(
         crypto: "readonly",
         document: "readonly",
         fetch: "readonly",
+        // [S1.177] Bốn trang (ba trang người mua và trang nộp thầu) xoá fragment sau khi mã đã tiêu thụ (ADR-020 mục 3).
+        history: "readonly",
         location: "readonly",
+        // [S1.176 / ADR-107] Trang `/login` nhớ mã tổ chức (không phải bí mật) sau lần vào đầu tiên.
+        localStorage: "readonly",
         setTimeout: "readonly",
         TextEncoder: "readonly",
         URL: "readonly",

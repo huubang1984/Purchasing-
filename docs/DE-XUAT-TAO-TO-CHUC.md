@@ -1,7 +1,9 @@
 # Đề xuất — tạo tổ chức đầu tiên, người dùng và vai trên prod
 
-> **Ngày:** 2026-09-27 · **Vòng:** S1.173 · **Trạng thái:** **ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
-> thành một ADR, bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về ADR ấy, và tệp này giữ lại làm hồ sơ cân nhắc.
+> **Ngày:** 2026-09-27 · **Vòng:** S1.173 · **Trạng thái:** ~~**ĐỀ XUẤT, chờ chủ dự án chọn.** Chọn xong thì quyết định
+> thành một ADR, bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về ADR ấy, và tệp này giữ lại làm hồ sơ cân nhắc.~~
+> **[S1.182] ĐÃ CHỐT — `docs/DECISIONS.md` ADR-111** (câu trả lời ở mục 6). Bước 8.1 của `docs/APPLY-LAN-DAU.md` trỏ về
+> ADR ấy; tệp này giữ lại làm hồ sơ cân nhắc.
 >
 > Tệp này trả lời một câu: **ngày đầu tiên trên prod, ai tạo tổ chức của khách, những người dùng của họ và vai của từng người,
 > bằng đường nào?** Hôm nay không có đường nào. Mục 1 là phép đo, mục 3 là ba phương án, mục 4 là khuyến nghị, mục 6 là
@@ -28,11 +30,14 @@ tới khi có tổ chức đầu tiên. Không tạo được tổ chức thì b
 
 **Hệ quả thứ hai, đo thêm ở vòng này — người dùng đầu tiên không có đường đăng nhập qua giao diện.**
 - Đăng nhập của người mua là link một lần cộng TOTP. Link được xin qua `POST /auth/link` với `{orgId, email}`
-  (`apps/api/src/routes/auth.ts`). **Không trang nào trong `apps/web` gọi route này** — hôm nay chỉ công cụ giả lập gọi.
-- Thư đăng nhập qua SES chứa `…/login#<token>`, **không kèm mã tổ chức** (`apps/api/src/adapters/gui-ses.ts`), dù bộ gửi
-  nhận `orgId` trong thông điệp.
-- Trang `/login` đòi cả hai: *"Cần cả mã tổ chức và mã đăng nhập."* (`apps/web/trang/mo-thau.js`). Người dùng phải tự gõ
-  một UUID tổ chức.
+  (`apps/api/src/routes/auth.ts`). ~~**Không trang nào trong `apps/web` gọi route này** — hôm nay chỉ công cụ giả lập gọi.~~
+  **[S1.176 / ADR-107]** `/login` nay có ô *Gửi link đăng nhập* gọi route này.
+- ~~Thư đăng nhập qua SES chứa `…/login#<token>`, **không kèm mã tổ chức** (`apps/api/src/adapters/gui-ses.ts`), dù bộ gửi
+  nhận `orgId` trong thông điệp.~~ **[S1.176 / ADR-107]** Thư đăng nhập mang `…/login#<orgId>:<token>`; SMS và Zalo cũng vậy.
+- Trang `/login` đòi cả hai: *"Cần cả mã tổ chức và mã đăng nhập."* (`apps/web/trang/mo-thau.js`). ~~Người dùng phải tự gõ
+  một UUID tổ chức.~~ **[S1.176 / ADR-107]** Link điền sẵn cả hai; người tới `/login` không kèm link thì dán một link cũ vào ô
+  tổ chức, hoặc trang nhớ mã sau lần vào đầu tiên trên máy. Người chưa từng vào và không còn link nào vẫn phải được ai đó cho
+  mã tổ chức — với người dùng đầu tiên của một tổ chức mới, đó là người tạo tổ chức.
 - `POST /users/:userId/mfa-reset` không cứu được ngày đầu: nó đòi hai người quản lý đã đăng nhập, khác người và khác
   phiên.
 
@@ -74,7 +79,8 @@ Một công cụ mới, `tools/khoi-tao-to-chuc`, đọc một bản khai — t�
    của những tổ chức mà chính nó đã thấy xếp việc (`apps/api/src/composition.ts`, khoản 156 — khoản 197 chỉ đóng ca
    xếp việc bên trong `api`), còn worker không nhận loại job này. Nó chỉ được nhặt khi chính tổ chức ấy có một yêu cầu
    xếp việc qua `api` — với một tổ chức mới mà chưa ai đăng nhập được, tức là không bao giờ. Link đầu tiên đi bằng một lời gọi `POST /api/auth/link` `{orgId, email}` cho mỗi người, qua ALB, sau
-   khi task xong — lời gọi ấy xếp việc và đánh thức bộ chạy ngay trong `api`. Cần sửa thư đăng nhập trước (mục 4, việc 2).
+   khi task xong — lời gọi ấy xếp việc và đánh thức bộ chạy ngay trong `api`. ~~Cần sửa thư đăng nhập trước (mục 4, việc 2).~~
+   **[S1.176 / ADR-107]** Thư đã mang mã tổ chức (mục 4, việc 2 đã làm).
 
 Công cụ đóng gói thành đích `khoi-tao` của `deploy/Dockerfile` và task definition `tp-khoi-tao` trong stack `90-ecs`,
 chạy bằng `aws ecs run-task` như `tp-migrate` và `tp-neo`, dưới vai deploy và environment `prod` có người duyệt
@@ -124,7 +130,7 @@ Người vận hành nối vào RDS bằng vai master rồi chạy một tệp S
 1. **Vai CSDL hẹp riêng cho task** (mục 5, lựa chọn ⒝), không dùng vai master.
 2. **Sửa thư đăng nhập để kèm mã tổ chức** — `/login#<tổ chức>:<token>` thay cho `/login#<token>`. Việc này nhỏ, đứng
    riêng được, và nên làm dù chọn phương án nào: không có nó thì người dùng nào cũng phải tự gõ UUID tổ chức, ở mọi lần
-   xin link về sau chứ không riêng ngày đầu.
+   xin link về sau chứ không riêng ngày đầu. **[S1.176 / ADR-107]** Đã làm, gộp cả SMS và Zalo, kèm ô xin link trên `/login`.
 3. **Ghi chỗ hở vào sổ nợ, rổ A theo vế ⒞** (không triển khai được), tới khi task chạy được trên prod.
 4. **Một ADR** chốt bốn câu ở mục 6.
 
@@ -148,14 +154,16 @@ phép đo cụ thể là việc của vòng làm.
 
 ## 6. Câu chỉ chủ dự án chốt được
 
-1. **Chọn phương án** — A, B hay C — và vai CSDL ⒜ hay ⒝.
+1. **Chọn phương án** — A, B hay C — và vai CSDL ⒜ hay ⒝. **[S1.182] Chủ dự án chốt: A, vai ⒝** (`app_khoi_tao`,
+   migration `075`).
 2. **Bản khai sống ở đâu.** Truyền bản khai trong `containerOverrides` thì email của nhân viên khách nằm trong CloudTrail
    của tài khoản prod. Để nó trong Secrets Manager (`tp/khoi-tao/<slug>`, task role đọc) thì CloudTrail chỉ thấy tên
-   bí mật. Khuyến nghị: Secrets Manager, và xoá bí mật sau khi task xong.
+   bí mật. Khuyến nghị: Secrets Manager, và xoá bí mật sau khi task xong. **[S1.182] Chủ dự án chốt theo khuyến nghị**;
+   tên bí mật nằm dưới `tp/khoi-tao/ban-khai/`, và công cụ từ chối mọi tên ngoài tiền tố ấy (ADR-111 mục 5).
 3. **Ai được chạy task.** Khuyến nghị: cùng vai deploy và cùng environment `prod` có người duyệt như lần deploy
-   (ADR-067) — người chạy khác người duyệt.
+   (ADR-067) — người chạy khác người duyệt. **[S1.182] Chủ dự án chốt theo khuyến nghị**; workflow thuộc vòng hạ tầng kế.
 4. **Thêm người về sau.** Khuyến nghị: dùng chính task này, chế độ thêm người, cho tới khi có màn quản trị vai. Câu *"ai
-   giữ `role.grant`"* để lại cho màn ấy.
+   giữ `role.grant`"* để lại cho màn ấy. **[S1.182] Chủ dự án chốt theo khuyến nghị** — chế độ `them-nguoi`.
 
 ## 7. Không thuộc tệp này
 

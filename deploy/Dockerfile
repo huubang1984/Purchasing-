@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # ==============================================================================================
-# deploy/Dockerfile — MỘT tệp, SÁU đích: api, worker, migrate (ADR-066), web (ADR-068), public-keys (ADR-070), neo (ADR-071)
+# deploy/Dockerfile — MỘT tệp, BẢY đích: api, worker, migrate (ADR-066), web (ADR-068), public-keys (ADR-070), neo (ADR-071),
+# khoi-tao (ADR-111)
 #
 #   docker build -f deploy/Dockerfile --target api     -t tp-api .
 #   docker build -f deploy/Dockerfile --target worker  -t tp-unseal-worker .
@@ -8,6 +9,7 @@
 #   docker build -f deploy/Dockerfile --target web     -t tp-web .
 #   docker build -f deploy/Dockerfile --target public-keys -t tp-public-keys .
 #   docker build -f deploy/Dockerfile --target neo     -t tp-neo .
+#   docker build -f deploy/Dockerfile --target khoi-tao -t tp-khoi-tao .
 #
 # Không có bước biên dịch: ứng dụng chạy thẳng mã TypeScript bằng `node --experimental-transform-types`
 # (cùng cách `pnpm api:dev`). Vì Node từ chối bóc kiểu cho tệp NẰM TRONG node_modules, image giữ đúng
@@ -30,6 +32,7 @@ COPY packages packages
 COPY apps apps
 COPY tools/chay-migrate tools/chay-migrate
 COPY tools/neo-so-kiem-toan tools/neo-so-kiem-toan
+COPY tools/khoi-tao-to-chuc tools/khoi-tao-to-chuc
 COPY db db
 # Bó CA của RDS (toàn cầu). Đổi bó ⇒ đổi checksum ở đây, có chủ đích.
 ADD --chmod=0644 --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
@@ -49,6 +52,9 @@ RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/neo-so-kiem-to
 
 FROM nguon AS cai-migrate
 RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/chay-migrate..." && rm -rf /pnpm/store
+
+FROM nguon AS cai-khoi-tao
+RUN pnpm install --frozen-lockfile --prod --filter "@trustprocure/khoi-tao-to-chuc..." && rm -rf /pnpm/store
 
 FROM ${NODE_IMAGE} AS api
 # `createPool` bắt TLS với rejectUnauthorized theo kho CA của Node; CA của RDS không nằm trong kho ấy.
@@ -104,3 +110,14 @@ COPY --from=cai-neo --chown=root:root /app /app
 USER node
 ENTRYPOINT ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/neo-so-kiem-toan/register-ts-resolve.mjs", "tools/neo-so-kiem-toan/src/index.ts"]
 CMD ["khoa-bien-nhan"]
+
+# [ADR-111] `khoi-tao` — task một lần tạo tổ chức, người dùng và vai dưới vai CSDL hẹp `app_khoi_tao` (CSDL qua TLS ⇒ bó CA
+# của RDS), đọc bản khai ở Secrets Manager theo TÊN và PHIÊN BẢN. KHÔNG có CMD mặc định: không lần chạy "mặc định" nào đúng —
+# lệnh (chế độ, bí mật, phiên bản, ba kỳ vọng) đến từ containerOverrides.command mà `deploy/trien-khai.sh khoi-tao` dựng từ
+# đầu vào đã duyệt; thiếu lệnh thì công cụ in cách dùng và thoát 1.
+FROM ${NODE_IMAGE} AS khoi-tao
+ENV NODE_ENV=production NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
+WORKDIR /app
+COPY --from=cai-khoi-tao --chown=root:root /app /app
+USER node
+ENTRYPOINT ["node", "--experimental-transform-types", "--disable-warning=ExperimentalWarning", "--import", "./tools/khoi-tao-to-chuc/register-ts-resolve.mjs", "tools/khoi-tao-to-chuc/src/index.ts"]

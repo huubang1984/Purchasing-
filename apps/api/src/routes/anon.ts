@@ -51,6 +51,12 @@ export function cookiePhienKhach(orgId: string, sessionToken: string): string {
 }
 
 /**
+ * [S1.181 / ADR-109] Dòng `Set-Cookie` xoá cookie khách — `POST /guest/logout`. Cùng tên, cùng `Path`, cùng bộ
+ * thuộc tính với dòng đặt: trình duyệt chỉ ghi đè cookie trùng cả tên lẫn `Path`, và `__Host-` đòi `Secure`, `Path=/`.
+ */
+export const XOA_COOKIE_PHIEN_KHACH = `${COOKIE_PHIEN_KHACH}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict`;
+
+/**
  * [sổ nợ 52] Trần theo NGƯỜI GỌI cho hai route khách mang credential trong thân (token magic link, mã
  * OTP). `/guest/otp` đã có bucket theo ĐÍCH (`issueOtpChallenge`, ADR-018) — đếm thành công, không
  * đếm thử; hai route này trước nợ 52 không có gì: token sai 10⁶ lần là 10⁶ lần 422 không trần.

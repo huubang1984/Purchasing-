@@ -122,6 +122,13 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
     expect(findMisplacedLabels(collectLabelUses(coK), { A1: ["apps/x/a.test.ts"] }, GOC).chuaKhai).toEqual([
       "[INV-K1] xuất hiện trong tên test ở apps/x/a.test.ts — cặp này CHƯA CÓ trong sổ khai",
     ]);
+    // [S1.185 / khoản 246] …và mã mang một chữ thường: `collectCoverage` đếm `[INV-K4a]` nên H22 phải xét nó, còn vế
+    // `[INV-K4a(2)]` thì không. Mũi đưa vế *nhãn chưa khai* về khuôn không hậu tố chỉ chết ở đây.
+    const coK4a = baoCao([{ name: "apps/x/a.test.ts", tests: ["[INV-A1] a", "[INV-K4a] danh sách", "[INV-K4a(2)] vế"] }]);
+    expect([...collectCoverage(coK4a).keys()]).toEqual(["A1", "K4a"]);
+    expect(findMisplacedLabels(collectLabelUses(coK4a), { A1: ["apps/x/a.test.ts"] }, GOC).chuaKhai).toEqual([
+      "[INV-K4a] xuất hiện trong tên test ở apps/x/a.test.ts — cặp này CHƯA CÓ trong sổ khai",
+    ]);
   });
 
   it("đường dẫn: tuyệt đối Windows/POSIX đều về tương đối trong kho; ngoài kho thì giữ nguyên", () => {
@@ -132,7 +139,7 @@ describe("[INV-H22] nhãn bất biến phải đặt ở chỗ đã khai", () =>
 
   it("sổ khai đóng băng có HÌNH DẠNG hợp lệ: mã theo mẫu, tệp tương đối kiểu `/`, không trùng", () => {
     for (const [ma, ds] of Object.entries(SO_KHAI_NHAN)) {
-      expect(ma).toMatch(/^[A-HJK]\d+$/);
+      expect(ma).toMatch(/^[A-HJK]\d+[a-z]?$/);
       expect(new Set(ds).size).toBe(ds.length);
       for (const tep of ds) {
         expect(tep).toMatch(/^[a-z0-9./_-]+\.test\.ts$/i);

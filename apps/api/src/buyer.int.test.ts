@@ -125,6 +125,25 @@ afterAll(async () => {
 });
 
 describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên không có vai trò nào", () => {
+  // [S1.186] Hai lượt quét dồn MỌI lần từ chối vào một phiên — tới một lần mỗi route ghi. Trần từ chối theo phiên
+  // (`TU_CHOI_TRAN_MOI_CUA_SO` = 30, khoản 144 · 248) là một phép đo KHÁC, ở `auth.int.test.ts`; khi số route ghi vượt 30
+  // (S3.2b1 thêm route thứ 31), route cuối của lượt quét nhận 429 của trần chứ không nhận 403 của cổng quyền. Nên hai lượt
+  // quét chạy trên máy chủ THỨ HAI có trần rộng hơn số route, suy từ chính bảng; máy chủ chung giữ trần mặc định.
+  let gocQuet = "";
+  let serverQuet: ReturnType<typeof createApiServer> | undefined;
+
+  beforeAll(async () => {
+    const tran = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self !== true).length + 1;
+    const s = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, tranTuChoi: tran }));
+    serverQuet = s;
+    await new Promise<void>((xong) => s.listen(0, "127.0.0.1", xong));
+    gocQuet = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((xong) => (serverQuet === undefined ? xong() : serverQuet.close(() => xong())));
+  });
+
   it("[INV-H17] [INV-D5] mỗi route ghi ⇒ 403, và số bản ghi PERMISSION_DENIED tăng đúng bằng số route", async () => {
     const khongQuyen = await nguoi("khongquyen@vidu.vn", []);
     const routeGhi = ROUTES.filter((r) => r.audience === "BUYER" && r.mutates && r.self !== true);
@@ -133,7 +152,7 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     const lot: string[] = [];
     for (const r of routeGhi) {
       const path = r.path.replace(/:[A-Za-z]+/gu, UUID0);
-      const kq = await goi(r.method, path, khongQuyen, {});
+      const kq = await goi(r.method, path, khongQuyen, {}, gocQuet);
       if (kq.status !== 403) lot.push(`${r.method} ${r.path} -> ${kq.status}`);
     }
     expect(lot, "route ghi cho một phiên KHÔNG có quyền nào đi qua mà không 403").toEqual([]);
@@ -175,7 +194,7 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
       // TS suy ra vị từ từ `filter` ở trên: `r` là BuyerWriteRoute, `permission` chắc chắn có.
       const path = r.path.replace(/:[A-Za-z]+/gu, UUID0);
       for (const [ma, ng] of nguoiTheoQuyen) {
-        const kq = await goi(r.method, path, ng, {});
+        const kq = await goi(r.method, path, ng, {}, gocQuet);
         const quaCong = kq.status !== 403;
         if (ma === (r.permission as string) && !quaCong) sai.push(`${r.method} ${r.path}: ĐÚNG mã ${ma} mà vẫn 403`);
         if (ma !== (r.permission as string) && quaCong) sai.push(`${r.method} ${r.path}: mã ${ma} (không phải ${r.permission}) đi qua với ${kq.status}`);
@@ -871,6 +890,89 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
     expect(ns.status, ns.text).toBe(200);
     const lai = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
     expect(lai.status, lai.text).toBe(200);
+  });
+});
+
+describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
+  /** Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên. */
+  async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; rfqId: string }> {
+    const org = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug])
+    ).rows[0]?.id ?? "";
+    const pm = await nguoi(`pm-${slug}@vidu.vn`, ["PROCUREMENT_MANAGER"], org);
+    const mua = await nguoi(`mua-${slug}@vidu.vn`, ["BUYER"], org);
+    const tc = await nguoi(`tc-${slug}@vidu.vn`, ["FINANCE"], org);
+    const tc2 = await nguoi(`tc2-${slug}@vidu.vn`, ["FINANCE"], org);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+    if (bat) {
+      const bac = [
+        {
+          tu_so_tien: 0,
+          so_ncc_toi_thieu: 1,
+          award_vai_khac_nhau: false,
+          ky_danh_sach_moi: false,
+          xoay_vong_n: 0,
+          award_so_chu_ky: 1,
+          award_vai: ["DIRECTOR"],
+          tham_dinh_truoc_trao: false,
+          khai_xung_dot: false,
+          dau_thau_chinh_thuc: false,
+        },
+        { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true },
+      ];
+      const v2 = (
+        await db.pool.query<{ id: string }>(
+          "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+            "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
+          [org, JSON.stringify(bac), tc.id, tc.sessionId],
+        )
+      ).rows[0]?.id;
+      await db.pool.query(
+        "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
+        [org, v2, tc2.id, tc2.sessionId],
+      );
+    }
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Mua thep tra ve", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
+    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
+    expect(nop.status, nop.text).toBe(200);
+    return { org, pm, mua, rfqId };
+  }
+
+  it("[INV-K4a] tổ chức đã bật: BUYER không phải người tạo ⇒ 403 và một hàng `PERMISSION_DENIED` trên `rfq.approve`; thiếu lý do ⇒ 422; người tạo có lý do ⇒ 200 và gói ở DRAFT; lần hai ⇒ 422 trạng thái", async () => {
+    const { org, pm, mua, rfqId } = await goiDaNop("tra-ve-bat", true);
+    const duong = `/rfqs/${rfqId}/return-to-draft`;
+
+    const bi = await goi("POST", duong, mua, { reason: "buyer khong phai nguoi tao" });
+    expect(bi.status, bi.text).toBe(403);
+    const { rows } = await db.pool.query<{ q: string }>(
+      "SELECT payload->>'permission' AS q FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [org, mua.id],
+    );
+    expect(rows.map((r) => r.q)).toEqual(["rfq.approve"]);
+
+    const thieu = await goi("POST", duong, pm, {});
+    expect([thieu.status, thieu.text]).toEqual([422, JSON.stringify({ error: 'thiếu trường "reason"' })]);
+
+    const ve = await goi("POST", duong, pm, { reason: "bo sung nha cung cap truoc khi duyet" });
+    expect(ve.status, ve.text).toBe(200);
+    expect((ve.body as { rfq: { status: string } }).rfq.status).toBe("DRAFT");
+
+    const lan2 = await goi("POST", duong, pm, { reason: "lan hai" });
+    expect([lan2.status, (lan2.body as { error: string }).error]).toEqual([
+      422,
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    ]);
+  });
+
+  it("[INV-K4a] tổ chức CHƯA bật: người tạo có lý do ⇒ 422 có tên, gói ở nguyên PENDING_APPROVAL", async () => {
+    const { pm, rfqId } = await goiDaNop("tra-ve-chua-bat", false);
+    const kq = await goi("POST", `/rfqs/${rfqId}/return-to-draft`, pm, { reason: "muon sua danh sach" });
+    expect([kq.status, (kq.body as { error: string }).error]).toEqual([422, "chỉ tổ chức đã bật S3 mới trả gói về nháp được"]);
+    expect((await goi("GET", `/rfqs/${rfqId}`, pm)).body).toMatchObject({ rfq: { status: "PENDING_APPROVAL" } });
   });
 });
 

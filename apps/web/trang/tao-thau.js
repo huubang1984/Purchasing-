@@ -68,13 +68,18 @@ function docLink() {
 // trang này *"mang sẵn listener ấy, nên nó không lặp lại khiếm khuyết"* — lời khai ấy sai: một
 // nửa trạng thái phiên sống sót qua lần đổi người, và bốn con trỏ ấy được đọc dưới quyền của
 // người TRƯỚC. Dựng lại trọn vẹn là câu duy nhất không cần ai nhớ trường nào phải xoá.
+// [S1.177] Và đóng các bước về bước 1 — trước đây chúng ĐỂ NGUYÊN, dưới cookie của người trước — rồi hỏi lại
+// phiên (khuôn `mo-thau.js`).
 window.addEventListener("hashchange", () => {
   docLink();
+  phienCho = null;
   phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
+  dongCacBuoc();
+  thuPhienCo();
 });
 
 $("nut-vao").addEventListener("click", async () => {
@@ -102,17 +107,97 @@ $("nut-vao").addEventListener("click", async () => {
       return;
     }
     phien = { ...phien, orgId, token };
+    xoaManhLink();
     const me = await goi("GET", "/me");
-    const u = me.body?.userId;
-    bao($("ok1"), u === undefined
-      ? "Đã vào. Phiên nằm trong cookie HttpOnly."
-      : `Đã vào với người dùng ${String(u).slice(0, 8)}… (vai: ${me.body?.kind ?? "?"}). Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
-    $("b1").classList.add("xong");
-    for (const b of ["b2", "b3", "b4", "b5"]) hien($(b), true);
+    moSauDangNhap(me.body, false);
   } finally {
     $("nut-vao").disabled = false;
   }
 });
+
+const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5"];
+
+/**
+ * [S1.177] Mở các bước sau đăng nhập — vừa đăng nhập xong, hoặc người dùng bấm "Tiếp tục với phiên này".
+ * Cùng khuôn `mo-thau.js`: câu báo không in `kind` (loại phiên, không phải vai).
+ */
+function moSauDangNhap(me, dungLai) {
+  const u = me?.userId;
+  const ai = typeof u === "string" ? `người dùng ${u.slice(0, 8)}…` : "";
+  bao($("ok1"), ai === ""
+    ? "Đã vào. Phiên nằm trong cookie HttpOnly."
+    : dungLai
+      ? `Đang dùng phiên còn hạn của ${ai}. Cần đổi người thì đăng nhập ở trên bằng link của người ấy.`
+      : `Đã vào với ${ai}. Phiên nằm trong cookie HttpOnly, JavaScript không đọc được nó.`);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), true);
+  $("b1").classList.add("xong");
+  for (const b of CAC_BUOC_SAU) hien($(b), true);
+}
+
+/** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
+function dongCacBuoc() {
+  $("b1").classList.remove("xong");
+  for (const b of CAC_BUOC_SAU) hien($(b), false);
+  bao($("hoi-phien"), "");
+  hien($("nut-dung-phien"), false);
+  hien($("nut-dang-xuat"), false);
+}
+
+/**
+ * [S1.177] Cùng khuôn `mo-thau.js`: phiên người mua là cookie `Path=/` sống tới 8 giờ kể cả sau khi đóng trình
+ * duyệt, dùng chung ba trang, còn mã đăng nhập chỉ dùng được một lần — nên lúc tải trang hỏi `/me`. Có phiên
+ * còn hạn thì HỎI "Tiếp tục với phiên này" hay "Đăng xuất", không tự mở: trên máy dùng chung phiên ấy có thể
+ * của người khác, và bước 4 có nút Phê duyệt. Không hỏi khi ô mã đã có mã; `docLink()` phải chạy trước hàm
+ * này, và ô mã được kiểm lại sau `await`. Sau `/auth/totp` — mã đã tiêu thụ — xoá fragment khỏi
+ * thanh địa chỉ (ADR-020 mục 3).
+ */
+let phienCho = null;
+async function thuPhienCo() {
+  if ($("token").value.trim() !== "") return;
+  try {
+    const me = await goi("GET", "/me");
+    if ($("token").value.trim() !== "") return;
+    if (me.status !== 200 || typeof me.body?.userId !== "string") return;
+    phienCho = me.body;
+    const toChuc = typeof me.body.orgId === "string" ? `, tổ chức ${me.body.orgId.slice(0, 8)}…` : "";
+    bao($("hoi-phien"), `Trình duyệt này đang giữ một phiên còn hạn: người dùng ${me.body.userId.slice(0, 8)}…${toChuc}. ` +
+      "Trang không biết tên người ấy. Không chắc đó là bạn thì bấm Đăng xuất, rồi đăng nhập bằng link của bạn.");
+    hien($("nut-dung-phien"), true);
+    hien($("nut-dang-xuat"), true);
+  } catch { /* mất mạng: trang ở lại bước đăng nhập */ }
+}
+
+$("nut-dung-phien").addEventListener("click", () => {
+  if (phienCho === null) return;
+  const me = phienCho;
+  phienCho = null;
+  moSauDangNhap(me, true);
+});
+
+// [S1.177] Cùng khuôn `mo-thau.js`: 401 là phiên đã hết hay đã bị thu hồi — trang cũng về bước 1.
+$("nut-dang-xuat").addEventListener("click", async () => {
+  bao($("loi1"), ""); bao($("ok1"), "");
+  $("nut-dang-xuat").disabled = true;
+  try {
+    const r = await goi("POST", "/auth/logout");
+    if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
+    phienCho = null;
+    phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+    dongCacBuoc();
+    bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
+  } catch {
+    bao($("loi1"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    $("nut-dang-xuat").disabled = false;
+  }
+});
+
+function xoaManhLink() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
+}
+
 
 // ---------------------------------------------------------------------------------------------
 // Bước 2 — gói thầu
@@ -279,6 +364,36 @@ async function napLoiMoi() {
     }
     const td = document.createElement("td");
     if (m.revokedAt === null) {
+      // [S1.181 / ADR-110] Nhà cung cấp mất phiên (thoát, hết 4 giờ, đổi máy) thì bên mua GỬI LẠI link cho chính lời mời
+      // này — cùng người liên hệ, cùng kênh, về đúng hồ sơ báo giá đã nộp. Thu hồi rồi mời lại là một lời mời và một luồng
+      // báo giá MỚI, nên không phải đường cho việc này.
+      const guiLai = document.createElement("button");
+      guiLai.className = "phu";
+      guiLai.textContent = "Gửi lại link";
+      guiLai.addEventListener("click", async () => {
+        bao($("loi5"), ""); bao($("ok5"), "");
+        guiLai.disabled = true;
+        // [lượt soi] Mất mạng giữa chừng thì `goi` NÉM: không có `finally` thì nút kẹt ở trạng thái tắt, không một câu báo.
+        let gl;
+        try {
+          gl = await goi("POST", `/invitations/${m.id}/reissue`);
+        } catch {
+          bao($("loi5"), "Không gửi lại được link — mất kết nối tới máy chủ. Kiểm tra mạng rồi bấm lại.");
+          return;
+        } finally {
+          guiLai.disabled = false;
+        }
+        if (gl.status === 429) { bao($("loi5"), "Lời mời này đã được gửi đủ số link cho phép trong một giờ — thử lại sau."); return; }
+        // [lượt soi] 502: link cũ chưa dùng đã hết hiệu lực TRƯỚC lần gửi, và lần hỏng vẫn tính vào trần 3 link một giờ.
+        if (gl.status === 502) {
+          bao($("loi5"), "Không gửi được link mới. Link cũ chưa dùng của lời mời này đã hết hiệu lực, nên nhà cung cấp hiện " +
+            "không có link nào — bấm lại sau ít phút. Mỗi lời mời gửi được tối đa 3 link mỗi giờ, kể cả lần gửi hỏng.");
+          return;
+        }
+        if (gl.status !== 200) { bao($("loi5"), loiCua(gl, "Không gửi lại được link")); return; }
+        bao($("ok5"), `Đã gửi link mới tới ${m.contactName} qua ${m.linkChannel}. Link cũ chưa dùng (nếu có) đã hết hiệu lực; ` +
+          "nhà cung cấp vào lại đúng báo giá đã nộp.");
+      });
       const nut = document.createElement("button");
       nut.className = "phu";
       nut.textContent = "Thu hồi";
@@ -286,10 +401,13 @@ async function napLoiMoi() {
         bao($("loi5"), ""); bao($("ok5"), "");
         const th = await goi("POST", `/invitations/${m.id}/revoke`);
         if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
-        bao($("ok5"), "Đã thu hồi. Mời lại nhà cung cấp ấy được rồi.");
+        // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.181 / ADR-110] Mời lại sau thu hồi là một hồ sơ báo giá
+        // MỚI, và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ) — nói ra, và chỉ đường gửi lại link.
+        bao($("ok5"), "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) vẫn nằm trong gói thầu. Nhà cung cấp chỉ cần link " +
+          "mới thì dùng «Gửi lại link», đừng thu hồi.");
         await napLoiMoi();
       });
-      td.append(nut);
+      td.append(guiLai, nut);
     }
     tr.append(td);
     tb.append(tr);
@@ -297,3 +415,4 @@ async function napLoiMoi() {
 }
 
 docLink();
+thuPhienCo();

@@ -13,11 +13,11 @@
 Dự án có **hai cách đếm bất biến**, cả hai đều đúng trong phạm vi của mình, và việc lẫn lộn
 chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này chốt cách đếm:
 
-- **43 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
+- **46 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
 - **22 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 65 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 68 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,9 +27,9 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **43** | 43 |
+| Nghiệp vụ (A–G) | **46** | 46 |
 | Hàng rào (H) | **22** | 22 |
-| **Cộng** | **65** | **65** |
+| **Cộng** | **68** | **68** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -38,7 +38,7 @@ G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **43/43** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **46/46** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -61,10 +61,10 @@ Hôm nay: **43/43** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | C4 | Không rút ngắn deadline sau khi đã có báo giá; gia hạn chỉ khi đang OPEN, có lý do, có audit, có thông báo toàn bộ nhà cung cấp đã mời | Ứng dụng + audit | T1, T3 | 13 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | C5 | Cặp khóa RFQ chỉ sinh đúng lúc chuyển sang OPEN | Máy trạng thái | T1, T3 | 15 | ✅ ĐẠT |  |
 | D1 | Mở thầu cần đồng thời: quyền hợp lệ **và** MFA còn hiệu lực trong cửa sổ ngắn **và** RFQ đã CLOSED **và** cổng chính sách thông qua | Cổng chính sách | T1, T5 | 35 | ✅ ĐẠT | **mệnh đề HỘI 4 vế — phạm vi hẹp hơn, xem §4** |
-| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai. **[S1.142 / ADR-085]** RFQ dưới ngưỡng cần 1 phê duyệt của người khác người tạo; mọi phê duyệt đếm trên nội dung hiện tại | Cổng chính sách + ràng buộc DB | **T3**, T5 | 42 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D2 | RFQ vượt ngưỡng cần 2 phê duyệt từ 2 người khác nhau, 2 phiên khác nhau; người tạo yêu cầu không được là một trong hai. **[S1.142 / ADR-085]** RFQ dưới ngưỡng cần 1 phê duyệt của người khác người tạo; mọi phê duyệt đếm trên nội dung hiện tại | Cổng chính sách + ràng buộc DB | **T3**, T5 | 45 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | D3 | Chuỗi tạo RFQ → chọn nhà cung cấp → mở thầu → award → duyệt không nằm trọn trong tay một người (ma trận mục 25) | Policy engine | T1, T5 | 47 | ✅ ĐẠT |  |
 | D4 | Break-glass đi đường riêng, bắt buộc lý do, sinh cảnh báo mức cao tức thì, không bao giờ im lặng | Ứng dụng + audit + thông báo | T1, T4 | 16 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
-| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 129 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
+| D5 | Lần từ chối vì thiếu quyền cũng phải audit — không chỉ audit lần thành công | Ứng dụng | T3, T5 | 140 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E1 | Token ≥ 128 bit entropy từ CSPRNG, lưu dạng hash, đơn mục đích, có hạn, thu hồi được | Ứng dụng + lược đồ | **T1**, T3 | 11 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E2 | Token một mình không đủ vào phiên báo giá — luôn phải qua OTP trên kênh đã đăng ký | Ứng dụng | T4, T5 | 6 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
 | E3 | OTP: giới hạn số lần thử, giới hạn tần suất, hết hạn, dùng một lần, so sánh chống tấn công thời gian | Ứng dụng | T1, T5 | 26 | ✅ ĐẠT | **phạm vi hẹp hơn mệnh đề — xem §4** |
@@ -87,6 +87,9 @@ Hôm nay: **43/43** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | J7 | Một RFQ có **tối đa MỘT** award còn sống | Trigger `award_kiem_mot_award_song` đọc hàng trạng thái MỚI NHẤT dưới khoá tư vấn (`061`) — không phải chỉ mục UNIQUE bộ phận, vì bảng chỉ-ghi-thêm giữ hàng cũ | T3 | 3 | ✅ ĐẠT |  |
 | J8 | [S1.165 / khoản 244] Tiền tệ của một báo giá đã mở được đọc qua **MỘT** hàm — `public.bid_currency`, tập bí danh đóng về `VND`/`USD`, còn lại `NULL` — ở MỌI câu SQL sản xuất; nên lượt chấm và bảng so sánh ra cùng một phán quyết về đơn vị, cách viết khác của cùng một đơn vị không chặn lượt chấm, và chuỗi ngoài tập bị từ chối bằng mã có tên (`LECH_TIEN_TE`) chứ không bằng một `CHECK` vỡ | Hàm `IMMUTABLE STRICT` của `070`, năm chỗ gọi (`luot-danh-gia.ts` một, `comparison.ts` bốn), cổng kiến trúc cấm đọc `'currency'` trần; đột biến thay thân hàm lúc chạy làm ca `VND` + `VNĐ` đỏ lại | T1, T3 | 24 | ✅ ĐẠT |  |
 | K1 | Mọi gói rời `DRAFT` ở tổ chức đã bật S3 có ngân sách và mang `tier_tu_so_tien` bằng kết quả `rfq_bac_cua` trên `rfq_budgets.policy_id`; phiên bản ấy đã có chữ ký thứ hai và là phiên bản đang hiệu lực lúc nộp duyệt. Tổ chức chưa bật chạy như MVP1 | Trigger `rfq_budgets_xep_bac` đặt bậc (cột ngoài `GRANT`); hàm vị từ `rfq_chot_ngan_sach` gọi ở tầng gói TRƯỚC mọi tác dụng phụ và ở trigger `rfq_packages_kiem_ngan_sach_khi_nop` — khoá tư vấn chia sẻ với lần ký, `submitted_at` đóng dấu sau khoá; lần từ chối `THIEU_NGAN_SACH` để lại `CONTROL_DENIED` (ADR-084 ⑷) — `072_bac_cua_goi` | T3 | 11 | ✅ ĐẠT |  |
+| K4a | Ở tổ chức đã bật S3, danh sách mời chỉ đổi ở `DRAFT`: lời mời THÊM được ở `DRAFT` và ở `OPEN` — thêm ở `OPEN` mang nhãn `moi_sau_khi_ky` —, THU HỒI chỉ ở `DRAFT`; ở mọi trạng thái khác không thêm, không thu hồi. **[S1.186]** Muốn đổi danh sách hay nội dung sau khi nộp duyệt thì trả gói về `DRAFT` — cạnh `PENDING_APPROVAL→DRAFT` chỉ mở ở tổ chức đã bật, cho người tạo gói (giữ `rfq.create`) hoặc người giữ `rfq.approve`, và lần trả về mang lý do vào sổ; chữ ký cũ ở lại và mất hiệu lực bằng băm (K4b). Thu hồi ở `OPEN` bị chặn tới S3.6 (tín hiệu `INVITE_LIST_NARROWED`); vế *ngoại lệ* vào hàng này ở S3.3, cùng bảng ngoại lệ. Tổ chức chưa bật chạy như MVP1 | Trigger `rfq_invitations_kiem_danh_sach` khoá `FOR SHARE` hàng gói — một câu thêm hay thu hồi không lọt qua một cạnh trạng thái đang chạy dở — và đặt nhãn (cột ngoài `GRANT`) — `076_danh_sach_moi`; trigger `rfq_packages_tra_ve_nhap_chi_khi_bat_s3` ở đúng cạnh về DRAFT, hàm gói `returnRfqToDraft` hỏi người và lý do, mỗi lần từ chối quyền vào sổ — `077_tra_ve_nhap` | T3 | 15 | ✅ ĐẠT |  |
+| K4b | Chữ ký duyệt gói của tổ chức đã bật mang băm danh sách mời còn sống LÚC KÝ (`rfq_bam_danh_sach`, hàm riêng; `rfq_bam_noi_dung` không đổi); cạnh `PENDING_APPROVAL→OPEN` đếm người ký khác nhau trên CẢ nội dung LẪN danh sách hiện tại — hai nếu gói cấp kép, một nếu không —, nên chữ ký trên danh sách cũ không được đếm và người ấy ký lại được; một người, một phiên chỉ ký một lần trên mỗi cặp (nội dung, danh sách). Tổ chức chưa bật: băm NULL, nên vẫn một người một lần trên mỗi gói (D2) | Trigger `rfq_approvals_dat_bam_danh_sach` (cột ngoài `GRANT`); hai `UNIQUE NULLS NOT DISTINCT` giữ tên cũ; trigger `rfq_packages_kiem_danh_sach_khi_mo` ở đúng cạnh (khuôn `014` §(4)) — `076_danh_sach_moi` | T3 | 8 | ✅ ĐẠT |  |
+| K6 | Ở tổ chức đã bật S3, không token mời nào được đúc cho một gói chưa từng mở (`opened_at IS NULL`); lời mời chèn luôn là `UNSENT` (*chưa gửi*), chỉ thành `SENT` khi gói `OPEN`, và không quay về `UNSENT`. Lối *gửi lại* (đúc token mới, thu hồi token cũ, không thu hồi lời mời) có từ S1.181 (ADR-110) và chỉ chạy khi gói đang nhận báo giá, nên không chạm K6. **[S1.186]** Và K6 đọc cả ở phía DÙNG: ở tổ chức đã bật, token đúc khi gói chưa mở — thời MVP1, trước lần bật — không đổi link, không xin, không xác minh OTP được (khoản 253). Vế *chưa gửi khi gửi hỏng* — `SENT` đặt sau lần gửi thành công — là của tầng gói, vào hàng này ở S3.2b2; vế *nhãn vào bộ bằng chứng* ở S3.9 | Trigger `rfq_invitation_tokens_kiem_goi_da_mo`; trạng thái đặt ở trigger `rfq_invitations_kiem_danh_sach` (`status` ngoài `GRANT INSERT` từ `010`) — `076_danh_sach_moi`; cột `duc_khi_goi_da_mo` do trigger `rfq_invitation_tokens_ghi_goi_da_mo` đặt lúc đúc (ngoài `GRANT`) và `docToken` đọc ở cả ba đường dùng token — `077_tra_ve_nhap` | T3 | 12 | ✅ ĐẠT |  |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
 | H3 | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 | 5 | ✅ ĐẠT |  |
@@ -129,7 +132,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 65` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 68` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 

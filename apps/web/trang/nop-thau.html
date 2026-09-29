@@ -26,6 +26,13 @@
     <button id="nut-mo">Mở lời mời</button>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
+    <!-- [S1.178] Trình duyệt đang giữ một phiên nộp thầu còn hạn thì trang HỎI: mã lời mời đã bị tiêu thụ ở lần
+         xác minh, nên tải lại trang từng là mất đường vào tới khi bên mua mời lại. -->
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục nộp báo giá</button>
+    <!-- [S1.181 / ADR-109] Thoát phiên nộp thầu: thu hồi phiên trên máy chủ và xoá cookie khách. Hiện cùng khối hỏi và
+         suốt lúc phiên đang dùng; bước 4 có nút thứ hai cùng việc. -->
+    <button id="nut-thoat-khach" class="phu" hidden>Thoát phiên nộp thầu</button>
   </section>
 
   <section class="buoc" id="b2" hidden>
@@ -76,6 +83,12 @@
     <div class="ma" id="van-ban"></div>
     <div class="ma" id="chu-ky"></div>
     <button id="nut-lai" class="phu">Nộp bản sửa đổi</button>
+    <!-- [S1.181 / ADR-110] Đường quay lại sau khi thoát là link bên mua GỬI LẠI cho chính lời mời này — về đúng hồ sơ
+         báo giá đã nộp, lần nộp kế là bản sửa đổi của nó. -->
+    <p class="ghi">Nộp xong trên một máy dùng chung thì thoát phiên. Thoát rồi, muốn sửa báo giá thì xin bên mua gửi lại
+      link mời — link gửi lại đưa về đúng báo giá này; link cũ đã dùng khi xác minh.</p>
+    <button id="nut-thoat-bn" class="phu">Thoát phiên nộp thầu</button>
+    <div class="bao loi" id="loi4" hidden></div>
   </section>
 
   <footer class="chan">Lát cắt demo — giá được mã hoá trong trình duyệt, máy chủ không đọc được.</footer>

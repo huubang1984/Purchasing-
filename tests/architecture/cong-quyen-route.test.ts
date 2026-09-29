@@ -73,8 +73,15 @@ const HAM_DOI_TRANG_THAI = [
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
   "openRfq",
+  // [S1.181 / ADR-110] Gửi lại link cho một lời mời còn sống: thu hồi token chưa dùng, phát token mới — route đòi
+  // `rfq.invite` như hai route mời và thu hồi; phần bù thu hồi đúng token vừa phát, dưới cùng mã quyền.
+  "reissueInvitationLink",
   "requestUnseal",
+  // [S1.186 / S3.2b1 / K4a] Cạnh `PENDING_APPROVAL→DRAFT` — chỉ ở tổ chức đã bật. Route của nó đòi `rfq.create`; hàm gói hỏi
+  // tiếp `rfq.approve` khi người gọi không phải người tạo gói.
+  "returnRfqToDraft",
   "revokeInvitation",
+  "revokeMagicLinkToken",
   "setRfqBudget",
   "submitRfqForApproval",
 ] as const;
@@ -140,6 +147,10 @@ const HAM_DUONG_KHACH = [
   "redeemMagicLink",
   // [ADR-020 / S1.10.2] cookie khách → phiên khách: tự chứng minh bằng token, không có mã quyền.
   "resolveGuestSessionByToken",
+  // [S1.181 / ADR-109] GHI (một `revoked_at` và một hàng sổ) nhưng người ghi là chính NHÀ CUNG CẤP, thu hồi
+  // PHIÊN CỦA MÌNH: `guestSessionId` do dispatcher dẫn xuất từ cookie khách đã qua `resolveGuestSessionByToken`.
+  // Cùng lập luận với `submitBid` dưới đây — một cổng quyền ở đây đòi một tài khoản người mua.
+  "revokeGuestSession",
   "verifyOtpAndStartSession",
   // [khoản nợ 33] `submitBid` ở đây chứ không ở `HAM_DOI_TRANG_THAI`, và đó là một QUYẾT ĐỊNH:
   // nó ghi thật (một phiên bản báo giá cộng một biên nhận), nhưng người ghi là NHÀ CUNG CẤP, và

@@ -78,11 +78,11 @@ describe("[ADR-069] bộ gửi Zalo ZNS", () => {
     const kho = new KhoGia(tokenCu({ accessToken: "at-kho", hetHanLuc: BAY_GIO + 3_600_000 }));
     const f = fetchGia(() => json({ error: 0 }));
     const g = taoBoGuiZalo({ kho, mau: MAU, fetch: f.goi, bayGio: () => BAY_GIO });
-    await g.guiLoiMoi(SO, "https://app.vidu.vn/i#t");
+    await g.guiLoiMoi(SO, "https://app.vidu.vn/i#11111111-1111-4111-8111-111111111111:t");
     await g.guiGiaHan(SO, "2026-10-01T10:00:00Z");
     expect(f.lan.map((l) => l.url)).toEqual([URL_GUI_ZNS, URL_GUI_ZNS]);
     expect(f.lan.map((l) => (JSON.parse(l.body) as { template_id: string }).template_id)).toEqual(["1002", "1003"]);
-    expect(JSON.parse(f.lan[0]!.body)).toMatchObject({ template_data: { duong_dan: "https://app.vidu.vn/i#t" } });
+    expect(JSON.parse(f.lan[0]!.body)).toMatchObject({ template_data: { duong_dan: "https://app.vidu.vn/i#11111111-1111-4111-8111-111111111111:t" } });
     expect(kho.soLanGhi).toBe(0);
   });
 

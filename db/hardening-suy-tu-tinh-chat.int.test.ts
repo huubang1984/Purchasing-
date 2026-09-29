@@ -295,6 +295,19 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.166 / S3.1b / K1] BEFORE UPDATE `WHEN` cạnh DRAFT→PENDING_APPROVAL: từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức đã
   // bật S3 mà ngân sách thiếu, ghim bản cũ hay lệch bậc. Câu nộp duyệt của `dungKichBan()` đi qua: một nhân chứng.
   "public.rfq_kiem_ngan_sach_khi_nop",
+  // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
+  // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
+  // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
+  // đi qua cả bốn: năm nhân chứng.
+  "public.rfq_approvals_dat_bam_danh_sach",
+  "public.rfq_invitation_tokens_kiem_goi_da_mo",
+  "public.rfq_invitations_kiem_danh_sach",
+  "public.rfq_kiem_chu_ky_danh_sach_khi_mo",
+  // [S1.186 / S3.2b1 / K4a · K6 / `077_tra_ve_nhap`] HAI hàm: cạnh về DRAFT từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức chưa bật —, và
+  // `rfq_invitation_tokens_ghi_goi_da_mo` không bao giờ từ chối (nó GHI cột). `dungKichBan()` nộp một gói trước lần bật rồi
+  // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
+  "public.rfq_invitation_tokens_ghi_goi_da_mo",
+  "public.rfq_kiem_tra_ve_nhap",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
@@ -1672,6 +1685,19 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
   // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
   // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
+  // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
+  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
+  const rfqVe = await rfqSoan();
+  await so.chung(
+    "public.rfq_packages",
+    "UPDATE",
+    api(
+      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+        "RETURNING status, submitted_by, submitted_by_session_id",
+      [rfqVe, pm.u, pm.s],
+      { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+    ),
+  );
   const tc = await nguoi("FINANCE");
   const cs2 = await chenNC(
     "public.org_procurement_policies",
@@ -1699,6 +1725,16 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "org_policy_signatures",
+  );
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" }),
+    ),
+    1,
+    "rfq_packages",
   );
 
   return { orgId: org };
@@ -2035,7 +2071,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       const { rows } = await db.pool.query<{ rolname: string }>(
         `SELECT vai.rolname FROM pg_roles vai
           WHERE NOT vai.rolsuper
-            AND EXISTS (SELECT 1 FROM unnest(ARRAY['app_api', 'app_unseal', 'app_neo']) AS g(ten)
+            AND EXISTS (SELECT 1 FROM unnest(ARRAY['app_api', 'app_unseal', 'app_neo', 'app_khoi_tao']) AS g(ten)
                          WHERE to_regrole(g.ten) IS NOT NULL
                            AND pg_has_role(vai.oid, to_regrole(g.ten)::oid, 'MEMBER'))
           ORDER BY 1`,
@@ -2049,9 +2085,12 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       .sort();
     // [ADR-072 phần 1] SÁU tên, không còn bốn — đúng ca mà khối trên dự báo: danh sách trắng mở cho cặp thứ ba
     // (app_neo, app_neo_login) và người mở GHIM nó (hai khối thuộc tính role của hardening), không viết lý do né.
-    expect(daGhim, "sáu tên được ghim NOBYPASSRLS").toEqual([
+    // [S1.182 / ADR-111] TÁM tên: cặp thứ tư (app_khoi_tao, app_khoi_tao_login) của task khởi tạo, cùng khuôn.
+    expect(daGhim, "tám tên được ghim NOBYPASSRLS").toEqual([
       "app_api",
       "app_api_login",
+      "app_khoi_tao",
+      "app_khoi_tao_login",
       "app_neo",
       "app_neo_login",
       "app_unseal",

@@ -364,6 +364,14 @@ async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise
   }
 }
 
+/*
+ * [S1.186 / S3.2b1 / K6 · khoản 253] Vế CUỐI của câu dưới là K6 đọc ở phía DÙNG. K6 (`076`) chặn lần ĐÚC token cho gói chưa
+ * mở ở tổ chức đã bật; token đúc thời MVP1 khi gói còn DRAFT hay PENDING_APPROVAL thì sống qua lần bật S3. Cột
+ * `duc_khi_goi_da_mo` ghi, LÚC ĐÚC, đúng điều K6 hỏi (`077_tra_ve_nhap`), nên ở tổ chức đã bật một token như thế thôi đổi được —
+ * ở cả ba đường dùng token (đổi link, xin OTP, xác minh OTP), vì cả ba đi qua hàm này. Cùng MỘT thông báo với bốn ca hỏng kia:
+ * phân biệt được là một oracle. Tổ chức chưa bật giữ nguyên MVP1. Phiên khách đã mở trước lần bật không đi qua đây — nó sống
+ * tới hết hạn của nó.
+ */
 async function docToken(client: pg.PoolClient, orgId: string, token: string): Promise<HangToken> {
   const { rows } = await client.query<HangToken>(
     `SELECT t.id AS token_id, i.id AS invitation_id, i.contact_id, i.supplier_id, i.link_channel
@@ -377,7 +385,8 @@ async function docToken(client: pg.PoolClient, orgId: string, token: string): Pr
         AND t.revoked_at IS NULL
         AND t.consumed_at IS NULL
         AND i.status OPERATOR(pg_catalog.<>) 'REVOKED'::pg_catalog.text
-        AND i.revoked_at IS NULL`,
+        AND i.revoked_at IS NULL
+        AND (t.duc_khi_goi_da_mo OR NOT public.to_chuc_da_bat_s3(t.org_id))`,
     [bam(token)],
   );
   const hang = rows[0];
@@ -1203,6 +1212,140 @@ export async function revokeInvitation(
 }
 
 // ==============================================================================================
+// [S1.181 / ADR-110] GỬI LẠI LINK CHO CÙNG LỜI MỜI — đường quay lại của nhà cung cấp mất phiên.
+//
+// Mã trong link mời bị tiêu thụ ở lần xác minh OTP, phiên khách sống tối đa 4 giờ, và từ ADR-109 nhà cung cấp tự thoát
+// được. Tới trước hàm này, hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (024: MỘT lời mời còn sống), nên
+// bên mua chỉ còn thu hồi rồi mời lại — tức một lời mời MỚI, một luồng báo giá MỚI (`vendor_bids` duy nhất theo lời
+// mời), và báo giá cũ vẫn đi vào lượt mở thầu (sổ nợ). Hàm này phát một token MỚI cho CHÍNH lời mời ấy: nhà cung cấp
+// quay về đúng hồ sơ báo giá của mình, và lần nộp kế là phiên bản kế của cùng luồng.
+//
+// Bốn điều kiện, xét dưới khoá hàng của lời mời (hai lần gửi lại cùng lúc xếp hàng ở đây, nên phép đếm trần không đua):
+//   ⑴ lời mời tồn tại trong tổ chức đang gắn — không thì NOT_FOUND (RLS lọc tổ chức khác thành "không tồn tại");
+//   ⑵ lời mời chưa thu hồi — thu hồi là quyết định loại nhà cung cấp, không phải chỗ để gửi link;
+//   ⑶ gói thầu đang nhận báo giá (`OPEN`, `BAFO_OPEN`) — link cho một gói đã đóng là một tin nhắn vô ích;
+//      **[lượt soi]** và CÒN HẠN: hạn của gói ở `OPEN`, hạn của vòng đang mở ở `BAFO_OPEN` — cùng hai hạn mà trigger
+//      `bid_kiem_han_nop` (074) so. Đóng gói là thao tác tay, nên một gói quá hạn còn nằm ở `OPEN` là trạng thái thường;
+//   ⑷ lời mời chưa có quá `LINK_MOI_TOI_DA_MOI_GIO` token trong một giờ, KỂ CẢ token của lần mời và token đã thu hồi —
+//      mỗi lần gửi là một thư hay một tin SMS tới người ngoài tổ chức. **[lượt soi]** Kể cả token mà phần bù thu hồi sau
+//      một lần gửi HỎNG: trần đếm lần THỬ gửi, không đếm lần tới nơi (hàng token không mang lý do thu hồi).
+// Rồi: thu hồi mọi token CHƯA dùng của lời mời (một lời mời, một link còn dùng được), ghi `INVITATION_LINK_REISSUED`, và
+// phát token mới qua `issueMagicLinkToken` (ghi `MAGIC_LINK_TOKEN_ISSUED`). KHÔNG chạm phiên khách đang sống, thách thức
+// OTP hay khoá OTP — gửi lại link không phải thu hồi, và gỡ khoá có đường riêng (`clearOtpLockout`).
+// **[lượt soi]** Hai hệ quả nói ra: link cũ chết ở CHÍNH giao dịch này, trước lần gửi — gửi hỏng thì nhà cung cấp không còn
+// link nào tới lần gửi kế đi được (thân 502 nói vậy); và trần xin OTP tính theo (lời mời, đích), không theo token — ba lần
+// xin OTP bằng link cũ thì link mới cũng chờ hết cửa sổ của trần ấy.
+// ==============================================================================================
+
+/** [S1.181 / ADR-110] Trần số token của MỘT lời mời trong `CUA_SO_LINK_MOI_GIAY`, tính cả token của lần mời. */
+export const LINK_MOI_TOI_DA_MOI_GIO = 3;
+export const CUA_SO_LINK_MOI_GIAY = 3600;
+
+export type ReissueLinkOutcome =
+  | { readonly ok: true; readonly invitation: InvitationRecord; readonly token: IssuedToken; readonly revokedTokens: number }
+  | { readonly ok: false; readonly reason: "NOT_FOUND" | "REVOKED" | "RFQ_NOT_ACCEPTING" | "RATE_LIMITED" };
+
+export async function reissueInvitationLink(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly invitationId: string; readonly actorSessionId: string },
+): Promise<ReissueLinkOutcome> {
+  await assertTenantBound(client, orgId, "reissueInvitationLink");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  // Khoá CHỈ hàng lời mời — không khoá hàng gói thầu (mọi thao tác khác của gói sẽ xếp hàng sau một lần gửi thư).
+  // [lượt soi] ~~`FOR UPDATE`~~ `FOR NO KEY UPDATE`: xác minh OTP bằng link cũ khoá hàng token rồi chèn `guest_sessions`, và
+  // phép kiểm khoá ngoại của câu chèn ấy lấy `FOR KEY SHARE` trên CHÍNH hàng lời mời — `FOR UPDATE` chặn nó, còn hàm này thì
+  // chờ hàng token mà lần xác minh đang giữ: hai thứ tự ngược nhau, 40P01 (đo: 3/3 lần). `FOR NO KEY UPDATE` không chặn
+  // `FOR KEY SHARE` mà vẫn xung đột với chính nó và với `UPDATE` của `revokeInvitation` — hai lần gửi lại, hay gửi lại và
+  // thu hồi, vẫn xếp hàng. Cùng khuôn `rfq.ts`.
+  const { rows } = await client.query<HangInvitation & { da_thu_hoi: boolean }>(
+    `SELECT id, rfq_id, supplier_id, contact_id, link_channel, status,
+            (revoked_at IS NOT NULL OR status OPERATOR(pg_catalog.=) 'REVOKED'::pg_catalog.text) AS da_thu_hoi
+       FROM public.rfq_invitations
+      WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        FOR NO KEY UPDATE`,
+    [input.invitationId],
+  );
+  const hang = rows[0];
+  if (hang === undefined) return { ok: false, reason: "NOT_FOUND" };
+  if (hang.da_thu_hoi) return { ok: false, reason: "REVOKED" };
+  // [lượt soi] Nhận báo giá = trạng thái VÀ hạn, đúng hai vế của `bid_kiem_han_nop`: `OPEN` so hạn của gói, `BAFO_OPEN` so
+  // hạn của vòng đang mở (074; 059 giữ nhiều nhất một vòng mở mỗi gói). Hạn NULL hay trạng thái khác ⇒ `con_han` NULL.
+  const { rows: goi } = await client.query<{ con_han: boolean | null }>(
+    `SELECT CASE
+              WHEN p.status OPERATOR(pg_catalog.=) 'OPEN'::pg_catalog.text THEN p.deadline_at
+              WHEN p.status OPERATOR(pg_catalog.=) 'BAFO_OPEN'::pg_catalog.text THEN
+                (SELECT r.deadline_at
+                   FROM public.rfq_bafo_rounds r
+                  WHERE r.rfq_id OPERATOR(pg_catalog.=) p.id
+                    AND r.org_id OPERATOR(pg_catalog.=) p.org_id
+                    AND r.closed_at IS NULL)
+            END OPERATOR(pg_catalog.>) pg_catalog.now() AS con_han
+       FROM public.rfq_packages p
+      WHERE p.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
+    [hang.rfq_id],
+  );
+  if (goi[0]?.con_han !== true) return { ok: false, reason: "RFQ_NOT_ACCEPTING" };
+
+  const { rows: dem } = await client.query<{ n: number }>(
+    `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
+       FROM public.rfq_invitation_tokens
+      WHERE invitation_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND created_at OPERATOR(pg_catalog.>) (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(secs => $2::pg_catalog.float8))`,
+    [hang.id, CUA_SO_LINK_MOI_GIAY],
+  );
+  if ((dem[0]?.n ?? LINK_MOI_TOI_DA_MOI_GIO) >= LINK_MOI_TOI_DA_MOI_GIO) return { ok: false, reason: "RATE_LIMITED" };
+
+  const thuHoi = await client.query(
+    "UPDATE public.rfq_invitation_tokens SET revoked_at = pg_catalog.now() " +
+      " WHERE invitation_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND revoked_at IS NULL AND consumed_at IS NULL",
+    [hang.id],
+  );
+  const revokedTokens = thuHoi.rowCount ?? 0;
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "INVITATION_LINK_REISSUED",
+    resourceType: "RFQ_INVITATION",
+    resourceId: hang.id,
+    payload: { revokedTokens },
+  });
+  const token = await issueMagicLinkToken(client, orgId, { invitationId: hang.id, actorSessionId: input.actorSessionId });
+  return { ok: true, invitation: doiInvitation(hang), token, revokedTokens };
+}
+
+/**
+ * [S1.181 / ADR-110] Phần BÙ của lần gửi lại hỏng sau commit: thu hồi ĐÚNG token vừa phát (của đúng lời mời ấy), ghi
+ * `MAGIC_LINK_TOKEN_REVOKED` với lý do. Lời mời KHÔNG bị thu hồi — khác phần bù của lần mời: ở đây lời mời đã có hồ sơ
+ * báo giá, và người mua bấm gửi lại được ngay. Trả `false` (không ghi sổ) khi token đã thu hồi hay không tồn tại.
+ */
+export async function revokeMagicLinkToken(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly tokenId: string; readonly invitationId: string; readonly actorSessionId: string; readonly reason: "LINK_SEND_FAILED" },
+): Promise<boolean> {
+  await assertTenantBound(client, orgId, "revokeMagicLinkToken");
+  if (!LY_DO_THU_HOI.has(input.reason)) throw new InvitationError("Lý do thu hồi không nằm trong danh sách cho phép.");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+  const r = await client.query(
+    "UPDATE public.rfq_invitation_tokens SET revoked_at = pg_catalog.now() " +
+      " WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND invitation_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid AND revoked_at IS NULL",
+    [input.tokenId, input.invitationId],
+  );
+  if (r.rowCount !== 1) return false;
+  await appendAuditEvent(client, orgId, {
+    actorType: actor.type,
+    actorId: actor.id,
+    action: "MAGIC_LINK_TOKEN_REVOKED",
+    resourceType: "rfq_invitation_token",
+    resourceId: input.tokenId,
+    payload: { invitationId: input.invitationId, reason: input.reason },
+  });
+  return true;
+}
+
+// ==============================================================================================
 // [ADR-020 mục 4 — S1.10.2] COOKIE KHÁCH → PHIÊN KHÁCH, bằng BĂM. Đường vào của `withGuestSession`.
 //
 // `verifyOtpAndStartSession` trả `sessionToken` dạng rõ và ghi `bam(sessionToken)` xuống
@@ -1212,6 +1355,14 @@ export async function revokeInvitation(
 // Nó CHỈ tra, KHÔNG gắn GUC: gắn là việc của `withGuestSession`, và nó phải chạy ở một giao dịch
 // KHÁC (đọc lại hàng phiên, từ chối thu hồi/hết hạn, đặt cả ba GUC, đọc lại cả ba). Một hàm vừa
 // tra vừa gắn là một chỗ để hai phép kiểm lệch nhau. Mọi ca hỏng ném CÙNG MỘT thông điệp.
+//
+// [S1.181 / ADR-109] Câu tra đọc thêm TÊN PHÁP LÝ của nhà cung cấp được mời — để trang nộp thầu nói phiên đang
+// giữ là của doanh nghiệp nào. Đọc Ở ĐÂY, dưới kết nối chỉ gắn tổ chức, chứ không trong handler: handler đọc của
+// khách chạy dưới ba GUC, và `suppliers` ĐÓNG với phiên khách (027 mục 6). Mở một policy `suppliers_khach` là mở
+// CẢ HÀNG (MST, trạng thái, người tạo) cho mọi câu dưới phiên khách, vì `app_api` chung cho người mua và khách nên
+// không GRANT theo cột nào tách được hai đường; câu ở đây ra ĐÚNG một trường, của ĐÚNG nhà cung cấp của lời mời
+// mà token này đã chứng minh. Khoá ngoại hợp thành `(org_id, supplier_id)` của `010` bảo đảm hàng ấy tồn tại
+// trong cùng tổ chức, nên phép nối không bớt phiên hợp lệ nào.
 // ==============================================================================================
 
 export interface ResolvedGuestSession {
@@ -1220,6 +1371,8 @@ export interface ResolvedGuestSession {
   /** DẪN XUẤT qua `rfq_invitations` — cùng cách `withGuestSession` dẫn xuất GUC thứ ba. */
   readonly rfqId: string;
   readonly verifiedChannel: Channel;
+  /** [S1.181 / ADR-109] `suppliers.legal_name` của nhà cung cấp được mời — DẪN XUẤT qua lời mời, như `rfqId`. */
+  readonly supplierLegalName: string;
 }
 
 export async function resolveGuestSessionByToken(
@@ -1231,10 +1384,17 @@ export async function resolveGuestSessionByToken(
   if (!/^[A-Za-z0-9_-]{32,128}$/u.test(token)) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  const { rows } = await client.query<{ id: string; invitation_id: string; rfq_id: string; verified_channel: Channel }>(
-    `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel
+  const { rows } = await client.query<{
+    id: string;
+    invitation_id: string;
+    rfq_id: string;
+    verified_channel: Channel;
+    legal_name: string;
+  }>(
+    `SELECT g.id, g.invitation_id, i.rfq_id, g.verified_channel, s.legal_name
        FROM public.guest_sessions g
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) g.invitation_id
+       JOIN public.suppliers s ON s.id OPERATOR(pg_catalog.=) i.supplier_id
       WHERE g.token_hash OPERATOR(pg_catalog.=) $1::pg_catalog.bytea
         AND g.revoked_at IS NULL
         AND g.expires_at OPERATOR(pg_catalog.>) pg_catalog.clock_timestamp()`,
@@ -1244,5 +1404,55 @@ export async function resolveGuestSessionByToken(
   if (hang === undefined) {
     throw new InvitationError("phiên khách không hợp lệ, đã hết hạn, hoặc đã bị thu hồi");
   }
-  return { guestSessionId: hang.id, invitationId: hang.invitation_id, rfqId: hang.rfq_id, verifiedChannel: hang.verified_channel };
+  return {
+    guestSessionId: hang.id,
+    invitationId: hang.invitation_id,
+    rfqId: hang.rfq_id,
+    verifiedChannel: hang.verified_channel,
+    supplierLegalName: hang.legal_name,
+  };
+}
+
+// ==============================================================================================
+// [S1.181 / ADR-109] NHÀ CUNG CẤP TỰ THOÁT PHIÊN KHÁCH CỦA MÌNH.
+//
+// Trước vòng này không đường nào thu hồi một phiên khách theo yêu cầu của chính nhà cung cấp — chỉ
+// `revokeInvitation` phía bên mua, và nó thu hồi CẢ lời mời. Trên một máy dùng chung, cookie
+// `__Host-tp_guest` sống tới 4 giờ sau khi người nộp đã rời đi.
+//
+// Hàm chạm ĐÚNG một hàng: phiên có `id` do tầng HTTP dẫn xuất từ cookie (không từ thân yêu cầu). Nó
+// KHÔNG đụng lời mời, token hay thách thức OTP — lời mời vẫn sống ~~, bên mua mời lại hay gửi link mới
+// được như thường~~. **[S1.181 / lượt soi, NẶNG]** Vế vừa gạch sai: mời lại cùng nhà cung cấp trả 409 (`024`), và tới
+// ADR-110 không route nào phát link cho một lời mời đã có. Mã lời mời đã bị tiêu thụ ở lần xác minh (`[H5]`), nên
+// thoát xong thì chỉ link bên mua GỬI LẠI cho chính lời mời (`reissueInvitationLink`, ADR-110) đưa nhà cung cấp trở
+// lại — về đúng hồ sơ báo giá của mình; trang nộp thầu nói điều ấy trước khi họ bấm.
+//
+// Hàng sổ `GUEST_SESSION_REVOKED` chỉ ghi khi câu UPDATE THẬT SỰ đổi một hàng — cùng bài học `[M4]` của
+// `revokeInvitation`: phiên đã bị thu hồi từ trước (bên mua thu hồi lời mời giữa lúc tầng HTTP xác thực
+// cookie và lúc hàm này chạy) thì hàm trả `false` và không ghi gì. `actorId` là người liên hệ ĐÃ XÁC
+// MINH của chính hàng phiên (`verified_contact_id`), cùng người mà `GUEST_SESSION_STARTED` đã ghi.
+//
+// Chạy dưới kết nối CHỈ gắn tổ chức — đường ghi của khách (`apps/api/src/dispatch.ts` khối [S1.10.3]): kết
+// nối gắn phiên khách không ghi được sổ.
+// ==============================================================================================
+
+export async function revokeGuestSession(client: pg.PoolClient, orgId: string, guestSessionId: string): Promise<boolean> {
+  await assertTenantBound(client, orgId, "revokeGuestSession");
+  const { rows } = await client.query<{ invitation_id: string; verified_contact_id: string }>(
+    "UPDATE public.guest_sessions SET revoked_at = pg_catalog.now() " +
+      " WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND revoked_at IS NULL " +
+      " RETURNING invitation_id, verified_contact_id",
+    [guestSessionId],
+  );
+  const hang = rows[0];
+  if (hang === undefined) return false;
+  await appendAuditEvent(client, orgId, {
+    actorType: "SUPPLIER",
+    actorId: hang.verified_contact_id,
+    action: "GUEST_SESSION_REVOKED",
+    resourceType: "guest_session",
+    resourceId: guestSessionId,
+    payload: { invitationId: hang.invitation_id },
+  });
+  return true;
 }

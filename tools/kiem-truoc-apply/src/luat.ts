@@ -19,7 +19,7 @@ export interface KetQua {
   readonly noiDung: string;
 }
 
-export const TEN_ANH = ["api", "worker", "migrate", "web", "public_keys", "neo"] as const;
+export const TEN_ANH = ["api", "worker", "migrate", "web", "public_keys", "neo", "khoi_tao"] as const;
 export type TenAnh = (typeof TEN_ANH)[number];
 
 /** Khoá của `var.anh` ⇒ kho ECR (`aws_ecr_repository.tp` của stack 90). `hinh-dang-kiem-truoc-apply.test.ts` so hai phía. */
@@ -30,10 +30,19 @@ export const KHO_ECR: Readonly<Record<TenAnh, string>> = {
   web: "tp-web",
   public_keys: "tp-public-keys",
   neo: "tp-neo",
+  // [S1.183 / ADR-111] Task khởi tạo tổ chức.
+  khoi_tao: "tp-khoi-tao",
 };
 
 /** Secret stack 90 đọc bằng `data "aws_secretsmanager_secret"` — thiếu một cái thì plan đỏ, có mà rỗng thì task chết lúc chạy. */
-export const SECRET_LUON_CAN = ["tp/api/database-url", "tp/api/otp-peppers", "tp/worker/database-url", "tp/neo/database-url"] as const;
+export const SECRET_LUON_CAN = [
+  "tp/api/database-url",
+  "tp/api/otp-peppers",
+  "tp/worker/database-url",
+  "tp/neo/database-url",
+  // [S1.182 / ADR-111] Task migrate đọc nó để dựng `app_khoi_tao_login` — thiếu thì migrate chết lúc chạy.
+  "tp/khoi-tao/database-url",
+] as const;
 /** Secret token Zalo OA (stack 85) — chỉ cần khi `zalo != null`. */
 export const SECRET_ZALO = "tp/api/zalo-oa";
 

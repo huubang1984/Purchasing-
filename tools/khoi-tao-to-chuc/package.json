@@ -1,0 +1,18 @@
+{
+  "name": "@trustprocure/khoi-tao-to-chuc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "[ADR-111] Entry point cua task ECS `tp-khoi-tao`: tao to chuc, nguoi dung va vai tren prod trong MOT giao dich, duoi vai CSDL hep app_khoi_tao. Ban khai doc tu Secrets Manager (tp/khoi-tao/ban-khai/*) hoac tu tep (cuc bo). Chay LUC VAN HANH, khong chay trong tien trinh ung dung.",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1140.0",
+    "@trustprocure/audit": "workspace:*",
+    "@trustprocure/db": "workspace:*",
+    "@trustprocure/tenancy": "workspace:*",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@trustprocure/identity": "workspace:*",
+    "@trustprocure/test-support": "workspace:*"
+  }
+}

@@ -11,20 +11,20 @@
 //   [ADR-017] đường khách KHÔNG chạm `rfq_budgets`: đo bằng phản hồi VÀ bằng SQL dưới phiên khách.
 //   [028]     đối chứng: policy đóng của 027 làm `publicKeys` về rỗng; 028 là thứ mở nó.
 // ==============================================================================================
-import {generateKeyPairSync, randomBytes} from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
-import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken } from "@trustprocure/invitation";
+import { OTP_RATE_WINDOW_SECONDS, createInvitation, issueMagicLinkToken, revokeGuestSession, revokeInvitation } from "@trustprocure/invitation";
 import { cancelRfq } from "@trustprocure/rfq";
 import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed-envelope";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
-import { createDispatcher } from "./dispatch.js";
+import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_KHACH, GUEST_OTP_VERIFY_MAX_PER_CALLER, GUEST_REDEEM_MAX_PER_CALLER } from "./routes/anon.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest, type DichVuTest } from "./test-services.js";
@@ -568,5 +568,256 @@ describe("gói thầu và báo giá của khách", () => {
     expect(rcB.text).toBe(khongCo.text);
     // Đối chứng dương: A đọc được của A.
     expect((await goi("GET", `/guest/bids/${idA}/receipt`, { cookie: ckA })).status).toBe(200);
+  });
+});
+
+// ==============================================================================================
+// [S1.181 / ADR-109] Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên của mình.
+// ==============================================================================================
+describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /guest/logout", () => {
+  it("GET /guest/rfq mang tên pháp lý của CHÍNH nhà cung cấp được mời — hai nhà cung cấp cùng một gói thấy hai tên, không thấy tên nhau", async () => {
+    const a = await moi("Cong ty Thep Hoa Phat Mien Bac");
+    const b = await moi("Cong ty Co khi Tan Binh");
+    const ckA = await moPhienKhach(a);
+    const ckB = await moPhienKhach(b);
+    const rA = await goi("GET", "/guest/rfq", { cookie: ckA });
+    const rB = await goi("GET", "/guest/rfq", { cookie: ckB });
+    expect(rA.status, rA.text).toBe(200);
+    expect(rB.status, rB.text).toBe(200);
+    expect((rA.body as { supplier: unknown }).supplier).toEqual({ legalName: "Cong ty Thep Hoa Phat Mien Bac" });
+    expect((rB.body as { supplier: unknown }).supplier).toEqual({ legalName: "Cong ty Co khi Tan Binh" });
+    // Cùng một gói: tên gói không phân biệt được hai phiên, tên doanh nghiệp thì có.
+    expect((rA.body as { rfq: { title: string } }).rfq.title).toBe((rB.body as { rfq: { title: string } }).rfq.title);
+    expect(rA.text).not.toContain("Tan Binh");
+    expect(rB.text).not.toContain("Hoa Phat");
+    // `supplier` mang ĐÚNG một trường: không mã nhà cung cấp, không MST, không người liên hệ.
+    const { rows } = await db.pool.query<{ supplier_id: string; contact_id: string }>(
+      "SELECT supplier_id, contact_id FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    expect(rA.text).not.toContain(rows[0]?.supplier_id ?? "(thieu)");
+    expect(rA.text).not.toContain(rows[0]?.contact_id ?? "(thieu)");
+    expect(rA.text).not.toContain("Nguoi bao gia");
+  });
+
+  it("GET /guest/rfq đọc tên LÚC GỌI: bên mua sửa tên nhà cung cấp thì phiên đang sống thấy tên mới", async () => {
+    const a = await moi("Ten cu cua nha cung cap");
+    const ck = await moPhienKhach(a);
+    const { rows } = await db.pool.query<{ supplier_id: string }>("SELECT supplier_id FROM rfq_invitations WHERE id = $1", [a.invitationId]);
+    await db.pool.query("UPDATE suppliers SET legal_name = 'Ten moi cua nha cung cap' WHERE id = $1", [rows[0]?.supplier_id]);
+    const r = await goi("GET", "/guest/rfq", { cookie: ck });
+    expect((r.body as { supplier: unknown }).supplier).toEqual({ legalName: "Ten moi cua nha cung cap" });
+  });
+
+  it("POST /guest/logout: 200, xoá cookie cùng bộ thuộc tính, phiên chết ngay; lời mời KHÔNG bị thu hồi; một hàng sổ mang người liên hệ đã xác minh", async () => {
+    const a = await moi("NCC thoat");
+    const ck = await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
+
+    const r = await goi("POST", "/guest/logout", { cookie: ck });
+    expect(r.status, r.text).toBe(200);
+    expect(r.body).toEqual({ ok: true });
+    const sc = r.headers.get("set-cookie") ?? "";
+    expect(sc).toMatch(/^__Host-tp_guest=;/u);
+    for (const thuocTinh of ["Max-Age=0", "HttpOnly", "Secure", "SameSite=Strict", "Path=/;"]) expect(sc).toContain(thuocTinh);
+    expect(sc).not.toMatch(/domain=/iu);
+
+    // Cookie cũ không mở được gì nữa — cả đường đọc lẫn đường ghi.
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(401);
+    expect((await goi("GET", "/guest/bids", { cookie: ck })).status).toBe(401);
+    expect((await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: "AAAA" } })).status).toBe(401);
+
+    const { rows: phien } = await db.pool.query<{ revoked_at: Date | null; verified_contact_id: string }>(
+      "SELECT revoked_at, verified_contact_id FROM guest_sessions WHERE id = $1",
+      [gs],
+    );
+    expect(phien[0]?.revoked_at).not.toBeNull();
+    const { rows: loiMoi } = await db.pool.query<{ status: string; revoked_at: Date | null }>(
+      "SELECT status, revoked_at FROM rfq_invitations WHERE id = $1",
+      [a.invitationId],
+    );
+    expect(loiMoi[0]?.status, "thoát phiên không phải thu hồi lời mời").not.toBe("REVOKED");
+    expect(loiMoi[0]?.revoked_at).toBeNull();
+
+    const { rows: so } = await db.pool.query<{ actor_type: string; actor_id: string; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(so).toEqual([
+      { actor_type: "SUPPLIER", actor_id: phien[0]?.verified_contact_id, resource_type: "guest_session", payload: { invitationId: a.invitationId } },
+    ]);
+
+    // Lần thoát thứ hai với cookie đã chết: 401 ở bước xác thực, KHÔNG thêm hàng sổ.
+    expect((await goi("POST", "/guest/logout", { cookie: ck })).status).toBe(401);
+    const { rows: dem } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(dem[0]?.n).toBe("1");
+  });
+
+  it("[ADR-110] thoát rồi quay lại bằng link bên mua GỬI LẠI qua HTTP: đúng lời mời, thấy lại báo giá đã nộp, lần nộp kế là phiên bản 2 của CÙNG luồng", async () => {
+    const a = await moi("NCC quay lai");
+    const ck1 = await moPhienKhach(a);
+    const khoa = await withTenant(apiPool, orgA, (c) => getRfqPublicKeys(c, orgA, rfqA));
+    const p256 = khoa.find((k) => k.algorithm === "ECDH_P256")!;
+    const niemPhong = async (banRo: string) =>
+      Buffer.from(
+        await sealBid({ rfqId: rfqA, algorithm: "ECDH_P256", recipientPublicKey: p256.publicKey, plaintext: new TextEncoder().encode(banRo) }),
+      ).toString("base64");
+    const r1 = await goi("POST", "/guest/bids", { cookie: ck1, body: { envelope: await niemPhong(GIA_THAT) } });
+    expect(r1.status, r1.text).toBe(201);
+    const v1 = (r1.body as { receipt: { bidVersionId: string; version: number } }).receipt;
+    expect(v1.version).toBe(1);
+    expect((await goi("POST", "/guest/logout", { cookie: ck1 })).status).toBe(200);
+
+    // Bên mua gửi lại link qua HTTP, bằng một phiên đăng nhập thật của người mua (PROCUREMENT_MANAGER giữ rfq.invite).
+    const tokenMua = randomBytes(32).toString("base64url");
+    await db.pool.query(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now())",
+      [orgA, uA, createHash("sha256").update(tokenMua, "utf8").digest()],
+    );
+    const truoc = dv.loiMoiDaGui.length;
+    const gl = await goi("POST", `/invitations/${a.invitationId}/reissue`, { cookie: `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${tokenMua}` });
+    expect(gl.status, gl.text).toBe(200);
+    expect(dv.loiMoiDaGui).toHaveLength(truoc + 1);
+    const lai = dv.loiMoiDaGui.at(-1)!;
+    expect(lai.invitationId).toBe(a.invitationId);
+
+    const ck2 = await moPhienKhach({ invitationId: a.invitationId, token: lai.token });
+    const ds = await goi("GET", "/guest/bids", { cookie: ck2 });
+    expect(ds.status).toBe(200);
+    const bids = (ds.body as { bids: { versions: { version: number; bidVersionId: string }[] }[] }).bids;
+    expect(bids, "phiên mới thấy lại ĐÚNG hồ sơ báo giá đã nộp").toHaveLength(1);
+    expect(bids[0]?.versions.map((v) => v.bidVersionId)).toEqual([v1.bidVersionId]);
+    const r2 = await goi("POST", "/guest/bids", { cookie: ck2, body: { envelope: await niemPhong(JSON.stringify({ unitPrice: 1100000000 })) } });
+    expect(r2.status, r2.text).toBe(201);
+    expect((r2.body as { receipt: { version: number } }).receipt.version).toBe(2);
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM vendor_bids WHERE invitation_id = $1", [a.invitationId]);
+    expect(rows[0]!.n, "một lời mời, một luồng báo giá").toBe(1);
+  });
+
+  it("POST /guest/logout chạm ĐÚNG phiên đang gọi: phiên khác của CÙNG lời mời và phiên của nhà cung cấp khác vẫn sống", async () => {
+    const a = await moi("NCC hai phien");
+    const b = await moi("NCC ben canh");
+    const ckA1 = await moPhienKhach(a);
+    // Bên mua gửi lại link cho CÙNG lời mời (mã đầu đã tiêu thụ) ⇒ phiên thứ hai của lời mời ấy.
+    const t2 = await withTenant(apiPool, orgA, (c) => issueMagicLinkToken(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    const ckA2 = await moPhienKhach({ invitationId: a.invitationId, token: t2.token });
+    const ckB = await moPhienKhach(b);
+    expect(ckA1).not.toBe(ckA2);
+
+    expect((await goi("POST", "/guest/logout", { cookie: ckA1 })).status).toBe(200);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckA1 })).status).toBe(401);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckA2 })).status, "phiên thứ hai của cùng lời mời không bị thoát theo").toBe(200);
+    expect((await goi("GET", "/guest/rfq", { cookie: ckB })).status, "phiên của nhà cung cấp khác không bị thoát theo").toBe(200);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM guest_sessions WHERE invitation_id = $1 AND revoked_at IS NOT NULL",
+      [a.invitationId],
+    );
+    expect(rows[0]?.n).toBe("1");
+  });
+
+  it("POST /guest/logout không cookie, cookie sai hình dạng hay magic link nhét vào cookie ⇒ 401, không Set-Cookie, không hàng sổ", async () => {
+    const a = await moi("NCC thoat 401");
+    const truoc = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED'");
+    for (const cookie of [undefined, `${COOKIE_PHIEN_KHACH}=rac`, `${COOKIE_PHIEN_KHACH}=${orgA}.${a.token}`]) {
+      const r = await goi("POST", "/guest/logout", cookie === undefined ? {} : { cookie });
+      expect(r.status, String(cookie)).toBe(401);
+      expect(r.headers.get("set-cookie"), String(cookie)).toBeNull();
+    }
+    const sau = await db.pool.query<{ n: string }>("SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED'");
+    expect(sau.rows[0]?.n).toBe(truoc.rows[0]?.n);
+  });
+
+  it("[lượt soi] POST /guest/logout KHÔNG chạm lời mời, link khác đang chờ hay thách thức OTP đang mở: ba bảng y như trước, link thứ hai vẫn xác minh được", async () => {
+    const a = await moi("NCC thoat khong cham");
+    const ck = await moPhienKhach(a);
+    // Link thứ hai của CÙNG lời mời đang chờ: đã đổi và đã xin OTP, chưa xác minh.
+    const t2 = await withTenant(apiPool, orgA, (c) => issueMagicLinkToken(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    expect((await goi("POST", "/guest/redeem", { body: { orgId: orgA, token: t2.token } })).status).toBe(200);
+    expect((await goi("POST", "/guest/otp", { body: { orgId: orgA, token: t2.token, channel: "SMS" } })).status).toBe(200);
+    const ma = dv.otpDaGui.at(-1)?.code ?? "";
+    const chup = async () => ({
+      loiMoi: (await db.pool.query("SELECT status, revoked_at, revoked_by FROM rfq_invitations WHERE id = $1", [a.invitationId])).rows,
+      token: (await db.pool.query("SELECT id, revoked_at, consumed_at FROM rfq_invitation_tokens WHERE invitation_id = $1 ORDER BY created_at", [a.invitationId])).rows,
+      otp: (await db.pool.query(
+        "SELECT id, consumed_at, failed_attempts, locked_until FROM invitation_otp_challenges WHERE invitation_id = $1 ORDER BY created_at",
+        [a.invitationId],
+      )).rows,
+    });
+    const truoc = await chup();
+    expect(truoc.token.filter((t: { consumed_at: Date | null; revoked_at: Date | null }) => t.consumed_at === null && t.revoked_at === null)).toHaveLength(1);
+    expect((await goi("POST", "/guest/logout", { cookie: ck })).status).toBe(200);
+    expect(await chup()).toEqual(truoc);
+    const r3 = await goi("POST", "/guest/otp/verify", { body: { orgId: orgA, token: t2.token, code: ma } });
+    expect(r3.status, "link thứ hai vẫn xác minh được sau khi phiên đầu thoát").toBe(200);
+  });
+
+  it("[lượt soi] QUA HTTP: phiên bị thu hồi GIỮA bước xác thực và câu UPDATE của handler ⇒ vẫn 200 kèm Set-Cookie xoá, KHÔNG hàng sổ", async () => {
+    const a = await moi("NCC dua thoat");
+    const ck = await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    const giu = await db.pool.connect();
+    let r: PhanHoi;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT 1 FROM guest_sessions WHERE id = $1 FOR UPDATE", [gs]);
+      const hua = goi("POST", "/guest/logout", { cookie: ck });
+      // Bước xác thực (một SELECT) đi qua; câu UPDATE của handler chờ khoá hàng — đợi tới khi thấy nó chờ.
+      const het = Date.now() + 5000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE public.guest_sessions%'",
+        );
+        if (rows[0]!.n > 0) break;
+        if (Date.now() > het) throw new Error("câu UPDATE của handler không chờ khoá hàng");
+        await new Promise((xong) => setTimeout(xong, 20));
+      }
+      await giu.query("UPDATE guest_sessions SET revoked_at = now() WHERE id = $1", [gs]);
+      await giu.query("COMMIT");
+      r = await hua;
+    } finally {
+      giu.release();
+    }
+    expect(r.status, r.text).toBe(200);
+    expect(r.headers.get("set-cookie") ?? "").toMatch(/^__Host-tp_guest=;/u);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("phiên bị bên mua thu hồi giữa bước xác thực và handler (gọi THẲNG hàm): `revokeGuestSession` trả false, KHÔNG ghi sổ", async () => {
+    const a = await moi("NCC thu hoi giua chung");
+    await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: a.invitationId, actorSessionId: sA }));
+    const kq = await withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgA, gs));
+    expect(kq).toBe(false);
+    const { rows } = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE action = 'GUEST_SESSION_REVOKED' AND resource_id = $1",
+      [gs],
+    );
+    expect(rows[0]?.n).toBe("0");
+  });
+
+  it("`revokeGuestSession` của tổ chức khác không chạm phiên này (RLS lọc) — trả false", async () => {
+    const a = await moi("NCC to chuc khac");
+    const ck = await moPhienKhach(a);
+    const gs = await guestSessionIdCua(a.invitationId);
+    const orgKhac = (await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ('Cong ty khac', $1) RETURNING id",
+      [`cong-ty-khac-${randomBytes(4).toString("hex")}`],
+    )).rows[0]?.id ?? "";
+    const kq = await withTenant(apiPool, orgKhac, (c) => revokeGuestSession(c, orgKhac, gs));
+    expect(kq).toBe(false);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
+    // Kết nối gắn tổ chức A mà người gọi khai tổ chức khác ⇒ ném ở câu ĐẦU (`assertTenantBound`), trước câu UPDATE —
+    // không phải ở lần ghi sổ sau đó.
+    await expect(withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgKhac, gs))).rejects.toThrow(/^revokeGuestSession: /u);
+    expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
   });
 });

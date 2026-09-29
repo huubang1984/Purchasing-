@@ -1750,13 +1750,13 @@ describe("[khoản 190] yêu cầu mở thầu ĐANG MỞ của một gói thầ
 });
 
 // ===============================================================================================
-// [S1.176 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS — Ở TẦNG CSDL
+// [S1.187 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS — Ở TẦNG CSDL
 //
 // `requestUnseal` đã chặn ở tầng ứng dụng; ca này đo tầng có thẩm quyền, bằng một câu `INSERT` viết tay dưới chính vai `app_api`
 // (vai có `GRANT INSERT` trên hai cột nhân chứng, `022`). Trước `9501` câu ấy đi qua: nhân chứng hợp lệ (người khác, phiên của chính
 // họ) nên trigger `unseal_requests_kiem_nhan_chung` không từ chối, và `unseal_kiem_du_phe_duyet` chỉ đọc hai cột ấy khi `break_glass`.
 // ===============================================================================================
-describe("[S1.176 / khoản 215] yêu cầu không break-glass không mang được cặp nhân chứng", () => {
+describe("[S1.187 / khoản 215] yêu cầu không break-glass không mang được cặp nhân chứng", () => {
   const CHEN =
     "INSERT INTO unseal_requests (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id, " +
     "break_glass_witness_user_id, break_glass_witness_session_id) VALUES ($1, $2, 'viet tay', false, $3, $4, $5, $6) RETURNING id";

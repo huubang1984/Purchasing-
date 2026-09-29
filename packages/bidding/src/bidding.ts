@@ -73,15 +73,41 @@ export class NopQuaHanError extends BiddingError {
 }
 
 /**
+ * [S1.180 / khoản 247 / ADR-108] Tên ràng buộc mà trigger của câu nộp đặt vào lần chặn không vì hạn (`074_tu_choi_co_ten.sql`)
+ * → mã đi vào `payload` của hàng `BID_STATE_DENIED`. Mã là tên viết hoa. Đọc ở trường `constraint` của lỗi `pg`, không đọc
+ * chuỗi thông điệp — ADR-104 bắt MỌI 23514 không vì hạn; nay đúng các nhánh trigger ấy, mỗi nhánh một tên.
+ */
+export const MA_THEO_RANG_BUOC = {
+  c1_goi_khong_nhan_bao_gia: "C1_GOI_KHONG_NHAN_BAO_GIA",
+  c1_khong_vong_bafo_dang_mo: "C1_KHONG_VONG_BAFO_DANG_MO",
+  c1_khong_han_nop: "C1_KHONG_HAN_NOP",
+  phien_khach_khong_hop_le: "PHIEN_KHACH_KHONG_HOP_LE",
+  phien_khach_khac_loi_moi: "PHIEN_KHACH_KHAC_LOI_MOI",
+  bafo_ngoai_top_n: "BAFO_NGOAI_TOP_N",
+} as const;
+
+export type MaNopBiTuChoi = (typeof MA_THEO_RANG_BUOC)[keyof typeof MA_THEO_RANG_BUOC];
+
+function docMaNopBiTuChoi(loi: unknown): MaNopBiTuChoi | null {
+  const ten = (loi as { constraint?: unknown }).constraint;
+  return typeof ten === "string" && Object.hasOwn(MA_THEO_RANG_BUOC, ten)
+    ? MA_THEO_RANG_BUOC[ten as keyof typeof MA_THEO_RANG_BUOC]
+    : null;
+}
+
+/**
  * [S1.167 / khoản 247 / ADR-104] Lần nộp bị chặn KHÔNG vì hạn — gói thầu không ở trạng thái nhận báo giá (đã huỷ, đã đóng…),
  * luồng báo giá nằm ngoài top-N của vòng BAFO, hay phiên khách hỏng giữa lần kiểm và câu ghi.
  *
  * CÙNG HỢP ĐỒNG VỚI `NopQuaHanError`, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** — `submitBid` đã lùi về
- * savepoint của chính nó — và nó đã MANG một hàng sổ `BID_SUBMIT_DENIED`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
+ * savepoint của chính nó — và nó đã MANG một hàng sổ ~~`BID_SUBMIT_DENIED`~~ **[S1.180]** `BID_STATE_DENIED` mang `ma`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
  * hàng ấy sống. Thông điệp giữ NGUYÊN câu chung của bản trước: phân biệt ba lý do trước người nộp là một quyết định khác.
  */
 export class NopBiTuChoiError extends BiddingError {
-  constructor(options?: { cause?: unknown }) {
+  constructor(
+    readonly ma: MaNopBiTuChoi,
+    options?: { cause?: unknown },
+  ) {
     super(
       "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
         "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
@@ -274,23 +300,32 @@ export async function submitBid(
       // top-N — trước vòng này đi ra dưới một `BiddingError` NÉM, tức giao dịch rollback và không hàng sổ nào (`pnpm
       // pilot:gia-lap`: hai lần 422, 0 hàng). Chúng là vế GHI của ADR-060 theo đúng cách ADR-074 đọc nó cho bước nộp: một người
       // đi bước nộp khi chuỗi không còn cho phép. Cùng lối của nhánh VÌ HẠN: lùi về savepoint, ghi sổ trong giao dịch còn lành,
-      // rồi ném lỗi mà route trả bằng đường TRẢ VỀ. Payload là trạng thái gói ĐỌC SAU khi lùi — thứ phân biệt *đã huỷ* với *đang
-      // ở vòng BAFO* mà không đọc chuỗi lỗi của trigger; không `bid_id`, không `bafo_round_id`.
-      await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NOP}`);
-      await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
-      const { rows: tt } = await client.query<{ status: string }>(
-        "SELECT status FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid",
-        [p.rfq_id],
+      // rồi ném lỗi mà route trả bằng đường TRẢ VỀ. ~~Payload là trạng thái gói ĐỌC SAU khi lùi — thứ phân biệt *đã huỷ* với *đang
+      // ở vòng BAFO* mà không đọc chuỗi lỗi của trigger; không `bid_id`, không `bafo_round_id`.~~
+      //
+      // **[S1.180 / ADR-108]** Action là `BID_STATE_DENIED`, payload là MÃ của nhánh — tên ràng buộc trigger đặt, viết hoa — nên
+      // sổ phân biệt *gói đã đổi trạng thái* với *ngoài top-N* với *phiên khách hỏng* mà không đọc lại gói. Một 23514 KHÔNG tên
+      // (hôm nay chỉ còn `CHECK` cỡ phong bì của bảng) đi lối trước ADR-104: ném, không sổ — nó nói về hình dạng dữ liệu, không về
+      // một bước đi khi chuỗi không cho phép.
+      const ma = docMaNopBiTuChoi(loi);
+      if (ma !== null) {
+        await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT_NOP}`);
+        await client.query(`RELEASE SAVEPOINT ${SAVEPOINT_NOP}`);
+        await appendAuditEvent(client, orgId, {
+          actorType: "SUPPLIER",
+          actorId: p.verified_contact_id,
+          action: "BID_STATE_DENIED",
+          resourceType: "rfq_package",
+          resourceId: p.rfq_id,
+          payload: { ma },
+        });
+        throw new NopBiTuChoiError(ma, { cause: loi });
+      }
+      throw new BiddingError(
+        "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, " +
+          "và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.",
+        { cause: loi },
       );
-      await appendAuditEvent(client, orgId, {
-        actorType: "SUPPLIER",
-        actorId: p.verified_contact_id,
-        action: "BID_SUBMIT_DENIED",
-        resourceType: "rfq_package",
-        resourceId: p.rfq_id,
-        payload: { rfqStatus: tt[0]?.status ?? null },
-      });
-      throw new NopBiTuChoiError({ cause: loi });
     }
     throw loi;
   }
