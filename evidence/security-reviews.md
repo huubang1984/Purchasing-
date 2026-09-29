@@ -15505,7 +15505,8 @@ thứ tự mới là S3.2c.
 ## 2. Hai quyết định của chủ dự án (S1.9101)
 
 - Gửi hỏng không đổi mã trạng thái: mở gói `200`, mời thêm ở `OPEN` `201`, kèm `linkMoi { daGui, chuaGui }`; token của lần gửi
-  hỏng hay quá trần bị thu hồi ngay — `UNSENT` luôn nghĩa là không còn link sống. Không thu hồi lời mời.
+  hỏng hay quá trần bị thu hồi ngay — `UNSENT` nghĩa là không còn link sống (khi chính lần ghi kết quả thành công; lần ghi hỏng thì
+  phản hồi nói ra). Không thu hồi lời mời.
 - Lần thêm hay thu hồi lời mời sai trạng thái là `CONTROL_DENIED`, vào sổ, bắt theo tên ràng buộc (khuôn ADR-108). Hai phương án
   bị loại: `RFQ_STATE_DENIED`, và không vào sổ.
 
@@ -15620,8 +15621,8 @@ commit chưa lúc được gọi), mỗi phép đo một tổ chức riêng:
   loạt ⇒ cả hai lời mời `UNSENT`, cả hai token chết — lý do `RFQ_LEFT_OPEN` cho lần gửi được, `LINK_SEND_FAILED` cho lần quá trần —,
   và token của lần quá trần đổi không được.
 - **K6 — đích theo kênh:** SMS và ZNS đi tới SỐ của người liên hệ lúc mở, lúc gửi lại, lúc mời thêm ở `OPEN`; người liên hệ không có
-  số ⇒ lời mời S3 bị từ chối `422` ở cả hai kênh, rollback trọn (không lời mời, không `INVITATION_CREATED`); lời mời không đích dựng ở
-  tầng gói ⇒ bộ gửi không được gọi, lời mời vào `chuaGui`, token chết.
+  số ⇒ lời mời S3 bị từ chối `422` ở cả hai kênh, ở DRAFT và ở OPEN, rollback trọn (không lời mời, không `INVITATION_CREATED`); lời
+  mời không đích dựng ở tầng gói ⇒ bộ gửi không được gọi, lời mời vào `chuaGui`, token chết.
 - **Bộ điều phối:** hai lần gửi treo BẮT ĐẦU cùng lúc (đo khoảng cách giờ bắt đầu) và cùng thành `chuaGui` sau MỘT trần — cả loạt
   xong trong khoảng một trần —, lần kia vẫn `daGui`; mỗi lời mời đúng một lần gọi. Handler trả 4xx ⇒ không lần gửi nào; hai việc
   quyết phản hồi trong một yêu cầu — loạt rồi có bù, có bù rồi loạt, hai loạt — ⇒ `500`, không gì được gửi. Kết quả giữ thứ tự đăng
@@ -15635,9 +15636,13 @@ commit chưa lúc được gọi), mỗi phép đo một tổ chức riêng:
   và ngược lại; đột biến gỡ tên khỏi trigger ⇒ `422` mang câu của trigger, KHÔNG hàng sổ nào — phép đo thấy nó.
 - **Cạnh về soạn thảo qua route:** người tạo ⇒ `200 DRAFT`; BUYER không phải người tạo ⇒ `403`, `PERMISSION_DENIED` mang
   `rfq.approve`; FINANCE ⇒ `403` ở bộ điều phối; thiếu lý do ⇒ `422`; tổ chức chưa bật ⇒ `422` có tên, không hàng sổ nào.
-- **Khoản 253:** token đúc thời MVP1 cho một gói còn ở `DRAFT` dùng được trước lần bật (đối chứng), bị từ chối sau lần bật;
-  token đúc lúc mở gói dùng được; lần mở thu hồi token cũ và để lại đúng một hàng sổ mang nó, dưới người mở. Giao dịch mời bắt đầu
-  TRƯỚC lần mở gói, đúc sau khi lần mở commit ⇒ token dùng được (lượt soi).
+- **Khoản 253:** token đúc thời MVP1 cho một gói còn ở `DRAFT` — và cho một gói đã nộp duyệt (`PENDING_APPROVAL`) — dùng được
+  trước lần bật (đối chứng), bị từ chối sau lần bật; token đúc lúc mở gói dùng được; lần mở thu hồi token cũ và để lại đúng một hàng
+  sổ mang nó, dưới người mở, còn token đã tiêu thụ thì không bị thu hồi lại, không hàng sổ nào. Biên: token mang ĐÚNG giờ `opened_at`
+  dùng được (`>=`). Giao dịch mời bắt đầu TRƯỚC lần mở gói, đúc sau khi lần mở commit ⇒ token dùng được. Gói ĐÃ mở lúc bật mà token
+  đúc ở DRAFT qua API ⇒ token ấy chết khi bật, lối gửi lại đưa link sống về — hệ quả của đúng hình dạng hàng 253, đo và nói ra.
+  Lời mời thời MVP1 đang `SENT` của gói đang bay: lần mở gửi lại; gửi hỏng ⇒ vẫn `SENT`, `chuaGui` nêu nó, hai token chết, sổ mang
+  `SUPERSEDED_AT_OPEN` rồi `LINK_SEND_FAILED`.
 - **MVP1:** mở gói trả đúng thân `{ rfq }`; lời mời `SENT` từ lúc chèn; thu hồi ở `OPEN` như cũ, không hàng `CONTROL_DENIED` nào.
 
 `packages/rfq/src/ve-soan.int.test.ts`, tầng gói dưới `app_api`: người tạo trả về ⇒ một hàng `RFQ_RETURNED_TO_DRAFT` mang lý do,
@@ -15648,19 +15653,28 @@ trước mọi câu ghi, câu viết tay bị trigger chặn, đột biến tắ
 (đối chứng); sai trạng thái và lý do rỗng ⇒ `RfqError`, không hàng sổ nào; người TẠO đã bị gỡ vai ⇒ `PERMISSION_DENIED` mang
 `rfq.create`, gói đứng yên. **Ngân sách (lượt soi):** gói cấp kép 500 triệu một người ký, trả về, hạ xuống 1 triệu, nộp lại ⇒ chữ ký
 cũ KHÔNG mở được (*"TREN NGAN SACH HIEN TAI"*), người ấy ký lại thì mở; chiều ngược cùng bậc — 1 triệu lên 99 triệu — cũng không mở,
-và đặt lại đúng con số cũ thì chữ ký cũ mở được: chữ ký ràng vào ngân sách, không vào lần nộp. Đột biến bỏ phép đếm trên ngân sách,
-hay băm ngân sách bỏ ước lượng ⇒ chữ ký trên con số cũ mở được gói.
+và đặt lại đúng con số cũ thì chữ ký cũ mở được: chữ ký ràng vào ngân sách, không vào lần nộp; cùng con số, cùng bậc, cùng ngưỡng
+mà ngân sách ghim sang phiên bản chính sách mới ⇒ chữ ký cũ cũng không mở. Đột biến bỏ phép đếm trên ngân sách, hay băm ngân sách
+bỏ ước lượng ⇒ chữ ký trên con số cũ mở được gói. **Thứ tự:** ở tổ chức CHƯA bật, BUYER không phải người tạo để lại `PERMISSION_DENIED`
+mang `rfq.approve` — cổng quyền đứng trước câu hỏi công tắc. Lời từ chối sai trạng thái và lý do rỗng: không hàng sổ nào, của BẤT
+KỲ action nào mang toạ độ gói.
 
 `packages/identity/src/ma-tran-quyen.test.ts`: mọi vai giữ `rfq.approve` cũng giữ `rfq.create` — điều cổng bộ điều phối của cạnh
 về soạn thảo đứng trên. `packages/rfq/src/rfq.int.test.ts`: tên ràng buộc của ba trigger J3/D2 cộng trigger K4a khớp bảng hai
 chiều. `db/migrations.int.test.ts`, `db/hardening-suy-tu-tinh-chat.int.test.ts`: thân bốn hàm trigger và hàm trợ giúp băm ngân sách mà
 `9501` định nghĩa ở migration và ở hardening khớp nhau, định nghĩa trigger có mặt, kịch bản nhân chứng đi cạnh về soạn thảo.
 
-**Đột biến của tôi — mười bốn, mười bốn lần đỏ:** `docToken` bỏ vế khoản 253; route mở gói không đúc token; phần ghi kết quả không
+**Đột biến — mọi đột biến chạy trên cây thật và trả nguyên văn; mọi lần đều đỏ trừ khi ghi khác.** Của tôi, trước lượt soi — mười
+bốn: `docToken` bỏ vế khoản 253; route mở gói không đúc token; phần ghi kết quả không
 thu hồi token hỏng; `createInvitation` không ghi `CONTROL_DENIED`; `revokeInvitation` không ghi; cạnh về soạn thảo cho người khác
 người tạo chỉ cần `rfq.create`; bỏ câu hỏi công tắc ở tầng gói; bộ điều phối gửi tuần tự; route mời bỏ nhánh tổ chức đã bật; gửi
 lại bỏ nhánh lời mời chưa gửi; lúc mở không thu hồi token cũ; lúc mở thu hồi token cũ mà không ghi sổ; lúc mở đúc cả cho lời mời
-đã thu hồi; lần đặt `SENT` không chạy.
+đã thu hồi; lần đặt `SENT` không chạy. Hai mươi bốn đột biến lượt soi test để lại sống sót (§7) — mỗi cái một phép đo mới, chạy lại
+trên cây thật, đỏ. Mười ba đột biến của tôi cho chính các sửa sau lượt soi: việc thường chạy cả khi phản hồi lỗi; mở gói gửi SMS tới
+email; mốc token về `now()`; gửi lại lời mời chưa gửi được ở `BAFO_OPEN`; thân mở gói MVP1 mang `linkMoi` rỗng; bỏ `422` kênh không
+đích; đặt `SENT` không lọc gói `OPEN`; không thu hồi token của lời mời không đặt được `SENT`; lần ghi luôn trả `true`; bộ điều phối
+bỏ qua `false`; câu đọc của lối gửi lại thiếu nhãn; và hai đột biến nằm HẲN trong bộ test (`ve-soan`: cạnh mở gói bỏ phép đếm trên
+ngân sách; băm ngân sách bỏ ước lượng).
 
 ## 6. Giới hạn, nói ra
 
@@ -15687,6 +15701,10 @@ lại bỏ nhánh lời mời chưa gửi; lúc mở không thu hồi token cũ;
 - **Gửi lại đua với lần mở gói:** lần gửi lại ngay sau commit của lần mở thu hồi token vừa đúc lúc mở; lần gửi lúc mở vẫn tính `daGui`
   và đặt `SENT` cho link đã chết, lần gửi lại mang link sống.
 - **Giao dịch mở gói đúc N token kèm N hàng sổ** trong lúc giữ khoá chuỗi sổ của tổ chức — tuyến tính theo độ dài danh sách.
+- **Mặc định `created_at` của token không có mục ghim ở hardening** — phép đo đua của khoản 253 giữ nó (đột biến về `now()` đỏ ở đó).
+- **Câu hỏi cho chủ dự án (lượt soi test, đo):** người duyệt đã KÝ rồi tự trả gói về; người tạo nộp lại nguyên như cũ ⇒ gói mở được
+  bằng chính chữ ký của người đã trả về. ADR-084 ⑵ không nói lần trả về có rút chữ ký của chính người ấy hay không; vòng này giữ cơ
+  chế spec §2.4 và không tự chốt. Ghi ở ADR-9201.
 - **`submitted_by` chỉ giữ lần nộp cuối** từ khi gói nộp được nhiều lần; tập loại trừ K5 (S3.3) phải đọc mọi lần nộp — lịch sử
   hôm nay nằm ở sổ (`RFQ_SUBMITTED_FOR_APPROVAL`). Đã ghi ở spec §9 hàng S3.3.
 - `gieo:demo --s3` vẫn mở gói rồi mới mời; S3.2c đổi thứ tự.
@@ -15717,3 +15735,21 @@ test tạm, đã xoá), một lượt độ đủ của test (dựng đột bi�
 Lượt an ninh đã soi và không thấy lỗi ở: token dạng rõ không vào log, thân phản hồi hay sổ; at-most-once; không gửi trước commit
 hay khi handler trả 4xx; không gửi cho lời mời đã thu hồi; hai lần mở gói; mời hay thu hồi đồng thời với lần mở; khoá chết; nhận ra
 K4a bằng tên ràng buộc; cổng quyền của cạnh về DRAFT; ghim hardening; `WHEN` của trigger mới; tổ chức chưa bật.
+
+**Lượt độ đủ của test — hai ảnh chụp của cây (00:57, 01:24), mười ba tệp test, mỗi đột biến chạy trên bản sao rồi trả nguyên văn:**
+
+| Nhóm | Đột biến sống sót | Kết cục |
+|---|---|---|
+| Bộ điều phối (00:57) | A1, A2 — phép hỏi *một việc quyết phản hồi* chỉ thấy một kiểu, hay bị bỏ; A3 — kết quả đảo thứ tự; A4 — việc thường chạy trước lần ghi; A5 — lần ghi bỏ trần kết nối 5 s; A6 — việc thường hỏng không bị nuốt; A7 — việc thường bị bỏ khi mọi lần gửi hỏng; A9 — trần mỗi lần gửi gấp ba | Route giả cho ba thứ tự đăng ký, thứ tự kết quả và việc thường, luật dưới 400, pool bị giữ hết; phép đo thời gian cả loạt. Đỏ |
+| Route (00:57) | B1 — mời ở `OPEN` báo `SENT` khi lần ghi hỏng; B2 — đích rỗng tới bộ gửi; B3, B6, C5 — SMS/ZNS lấy email làm đích (mời ở `OPEN`, gửi lại, mở gói); B4 — `500` thành `502`; B5 — bỏ `trangThaiChuaGhi` | Ca huỷ gói giữa lần gửi ở cả ba route, ca đích theo kênh, ca phiên bị thu hồi giữa chừng. Đỏ |
+| Tầng gói (00:57) | C8 — người tạo không qua cổng quyền; C14 — lúc mở đúc token bằng phiên người mời | Người tạo bị gỡ vai; BUYER mời, PM mở. Đỏ |
+| Khoản 253 và biên (01:24) | C2 — so với `submitted_at`; C2b — chỉ đòi gói đã mở; C1 — `>` thay `>=`; C3 — lúc mở thu hồi cả token đã tiêu thụ | Nửa `PENDING_APPROVAL`; gói đã mở lúc bật; token mang đúng giờ `opened_at`; token đã tiêu thụ. Đỏ |
+| Sửa sau lượt soi an ninh (01:24) | N1a — băm ngân sách bỏ phiên bản chính sách; N4b — `422` chỉ ở DRAFT; C9 — hỏi công tắc trước cổng quyền | Ghim ngân sách sang phiên bản mới; mời thêm ở `OPEN` không đích; BUYER không phải người tạo ở tổ chức chưa bật. Đỏ |
+
+Hai đột biến tương đương, không đo được và không cần đo: bỏ vế `status = 'UNSENT'` khỏi câu đặt `SENT` (không trạng thái nào tới
+được mà khác kết quả), và ngưỡng việc thường `< 500` thay `< 400` (không `phanHoi` nào trả 4xx). Lời khai sai mà lượt này chỉ ra, đã
+sửa: chú thích `>=` của `docToken`; câu *"`UNSENT` luôn là không link sống"* (nay có điều kiện: khi chính lần ghi thành công); chú
+thích bộ điều phối về mã trạng thái; chú thích nhân chứng của `db/hardening-suy-tu-tinh-chat.int.test.ts`; chú thích bộ quét của kịch
+bản 41; lời khai về mốc đúc của `9501`; tên ca *"không hàng sổ nào"* của `ve-soan` nay đếm mọi action. Lượt này cũng đo đúng lời
+khai ở bốn ca biên chưa có test — ba ca vào bộ test (gói cấp kép nộp lại nguyên; lời mời MVP1 `SENT` gửi hỏng lúc mở; token đã tiêu
+thụ), ca thứ tư là câu hỏi cho chủ dự án (§6).

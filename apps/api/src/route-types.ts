@@ -174,8 +174,8 @@ export interface KetQuaGuiSauCommit {
  * được.
  *
  * Mỗi `gui` được gọi ĐÚNG MỘT lần (at-most-once): lần quá trần không được thử lại — promise của nó bị bỏ, và link ấy có thể vẫn tới
- * tay người nhận; token của nó bị thu hồi ở `ghiKetQua`, nên link ấy chết (chủ dự án chọn thế: *chưa gửi* luôn nghĩa là không còn link
- * sống). Chung một CHỖ với `afterCommitCoBu`: mỗi yêu cầu tối đa MỘT việc quyết phản hồi — đăng ký lần hai ném trong handler. Chạy
+ * tay người nhận; token của nó bị thu hồi ở `ghiKetQua`, nên link ấy chết (chủ dự án chọn thế: ghi xong thì *chưa gửi* nghĩa là không
+ * còn link sống; chính lần ghi hỏng thì phản hồi nói ra). Chung một CHỖ với `afterCommitCoBu`: mỗi yêu cầu tối đa MỘT việc quyết phản hồi — đăng ký lần hai ném trong handler. Chạy
  * TRƯỚC việc sau commit thường, chỉ khi phản hồi của handler thành công; việc thường chạy sau `ghiKetQua`, và chỉ khi `phanHoi` trả
  * mã dưới 400 — cùng luật với việc có bù hỏng. Kết quả giữ thứ tự đăng ký. Closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8).
  */

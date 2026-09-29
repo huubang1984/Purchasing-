@@ -393,9 +393,11 @@ async function batBuocTrongGiaoDich(client: pg.PoolClient, ten: string): Promise
 /*
  * [S1.9101 / S3.2b / khoản 253] Ở tổ chức ĐÃ BẬT S3, token chỉ dùng được khi nó được đúc TỪ lúc gói mở (`created_at >=
  * opened_at`) — cùng điều kiện với K6 (`076`: không token cho gói chưa từng mở), đọc ở phía DÙNG. K6 chặn lần ĐÚC; nó không thu
- * hồi token đúc thời MVP1 cho một gói còn ở DRAFT hay PENDING_APPROVAL lúc tổ chức bật (khoản 253). Token đúc trong CHÍNH giao dịch
- * mở gói mang `created_at` bằng `opened_at` — cùng `now()` của giao dịch —, nên `>=` chứ không `>`. Gói chưa mở ⇒ `opened_at` NULL ⇒
- * vế so ra NULL ⇒ hàng bị loại. Cùng MỘT thông điệp với bốn ca hỏng kia: phân biệt được là một oracle.
+ * hồi token đúc thời MVP1 cho một gói còn ở DRAFT hay PENDING_APPROVAL lúc tổ chức bật (khoản 253). Mốc đúc là đồng hồ của câu chèn
+ * (`clock_timestamp()`, `9501`), nên token đúc trong CHÍNH giao dịch mở gói mang giờ không sớm hơn `opened_at` — giờ bắt đầu giao
+ * dịch ấy; `>=` giữ đúng cả token mang đúng giờ ấy (đo). Hệ quả, nói ra: gói ĐÃ mở lúc tổ chức bật mà token đúc ở DRAFT (thời MVP1,
+ * qua API) cũng chết khi bật — bên mua gửi lại. Gói chưa mở ⇒ `opened_at` NULL ⇒ vế so ra NULL ⇒ hàng bị loại. Cùng MỘT thông điệp
+ * với bốn ca hỏng kia: phân biệt được là một oracle.
  */
 async function docToken(client: pg.PoolClient, orgId: string, token: string): Promise<HangToken> {
   const { rows } = await client.query<HangToken>(
@@ -1417,7 +1419,8 @@ export async function revokeMagicLinkToken(
 // đặt. Link gửi SAU commit, mỗi link đúng một lần (at-most-once); gửi được thì lời mời thành `SENT` (`danhDauDaGuiLink`), hỏng thì
 // token vừa đúc bị thu hồi (`revokeMagicLinkToken`, lý do `LINK_SEND_FAILED`) và lời mời ở lại `UNSENT` — KHÔNG thu hồi lời mời:
 // thu hồi sẽ thu hẹp một danh sách đã ký (ADR-082 ⑼). Chủ dự án chốt ngày 2026-09-29: phản hồi 2xx kèm danh sách lời mời chưa gửi,
-// và token của lần gửi hỏng chết ngay — `UNSENT` luôn nghĩa là không còn link sống; bên mua gửi lại bằng route của ADR-110.
+// và token của lần gửi hỏng chết ngay — ghi xong thì `UNSENT` nghĩa là không còn link sống (chính lần ghi hỏng thì phản hồi nói ra);
+// bên mua gửi lại bằng route của ADR-110.
 //
 // Token CŨ chưa dùng của từng lời mời bị thu hồi TRƯỚC lần đúc: một lời mời, một link còn dùng được — cùng luật với
 // `reissueInvitationLink`. Hôm nay token cũ chỉ tồn tại ở gói đang bay lúc tổ chức bật (khoản 253); `docToken` đã không nhận

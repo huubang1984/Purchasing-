@@ -516,7 +516,8 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (r.status >= 400) return r;
       // [S1.9101 / S3.2b / ADR-082 ⑼] Loạt gửi: mỗi lần gửi một trần, song song; lần hỏng hay quá trần ⇒ một dòng `sau-commit` mỗi
       // lần. Rồi MỘT giao dịch mới ghi kết quả; ném hay chưa ghi trọn ⇒ dòng `ghi-ket-qua-gui` và `ghiDuoc = false`. Phản hồi là của `phanHoi` —
-      // không lần gửi hỏng nào đổi mã trạng thái (chủ dự án chốt 2026-09-29). Việc thường chạy sau, chỉ khi phản hồi ấy dưới 400.
+      // mã trạng thái là của `phanHoi`: mở gói và mời thêm giữ 2xx dù gửi hỏng (chủ dự án chốt 2026-09-29), lối gửi lại giữ hợp đồng
+      // ADR-110 (502, 500). Việc thường chạy sau, chỉ khi phản hồi ấy dưới 400.
       const g = viecGuiNhieu;
       if (g !== undefined) {
         const lanGui = await Promise.allSettled(g.viec.map((v) => coHan(v.gui, tranSauCommitMs, "SauCommitQuaHan")));

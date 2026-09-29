@@ -36,8 +36,10 @@
 --     gói mở mang giờ sau lần mở. `created_at` ngoài `GRANT INSERT` (`010`), nên mặc định là người duy nhất đặt nó.
 --
 -- MỌI THỨ Ở ĐÂY CHỈ ĐỔI HÀNH VI CỦA TỔ CHỨC ĐÃ BẬT, trừ hai vế: cạnh (1) nay bị CHẶN ở tổ chức chưa bật — cạnh mà trước đây
--- chỉ một câu SQL tay đi được —, và mốc (4) đổi cho mọi tổ chức, sớm nhất vài mili giây: không phép so nào của MVP1 phân
--- biệt được hai mốc ấy.
+-- chỉ một câu SQL tay đi được —, và mốc (4) đổi cho mọi tổ chức. `issueMagicLinkToken` tính hạn từ CÙNG đồng hồ, nên trần
+-- `expires_at > created_at` (`010`) không phụ thuộc giao dịch đã chạy bao lâu (lượt soi: với hạn tính từ `now()`, TTL một giây
+-- trong một giao dịch đã chạy quá một giây vi phạm trần ấy); phép đếm trần gửi lại so `created_at` với `now()` trừ một giờ — mốc
+-- muộn hơn vài mili giây không đổi kết quả. Mặc định cột không có mục ghim ở hardening; phép đo đua của khoản 253 giữ nó.
 -- ==============================================================================================
 
 -- ============================================================================================

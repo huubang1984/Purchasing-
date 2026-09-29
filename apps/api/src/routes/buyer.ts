@@ -193,8 +193,9 @@ const policyIdParam = (req: ApiRequest): string => uuidParam(req, "policyId");
 /**
  * Giao các link vừa đúc cho loạt gửi sau commit của bộ điều phối (`afterCommitGuiNhieu`): mỗi link đúng một lần; gửi được ⇒ lời mời
  * `SENT` (`danhDauDaGuiLink`), hỏng hay quá trần ⇒ token VỪA ĐÚC bị thu hồi (`revokeMagicLinkToken`, `LINK_SEND_FAILED`) và lời mời ở
- * lại `UNSENT` — không thu hồi lời mời: thu hồi sẽ thu hẹp một danh sách đã ký. Chủ dự án chốt ngày 2026-09-29: *chưa gửi* luôn nghĩa
- * là không còn link sống, và phản hồi nói lời mời nào chưa gửi thay vì đổi mã trạng thái.
+ * lại `UNSENT` — không thu hồi lời mời: thu hồi sẽ thu hẹp một danh sách đã ký. Chủ dự án chốt ngày 2026-09-29: ghi xong thì *chưa gửi*
+ * nghĩa là không còn link sống — chính lần ghi hỏng thì phản hồi nói ra —, và phản hồi nói lời mời nào chưa gửi thay vì đổi mã trạng
+ * thái.
  *
  * Đích RỖNG — người liên hệ không có số cho kênh SMS hay ZNS — không đi tới bộ gửi: lần gửi ấy hỏng có tên, cùng đường với một lần
  * gửi hỏng. Phần ghi kết quả chạy dưới phiên của người gọi route, không qua cổng quyền lần nữa — cùng hợp đồng phần bù của khoản 124

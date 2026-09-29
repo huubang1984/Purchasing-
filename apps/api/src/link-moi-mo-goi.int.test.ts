@@ -841,6 +841,15 @@ describe("[S1.9101 / S3.2b] tổ chức đã bật: link mời đi lúc MỞ GÓ
     expect(rows[0]?.n).toBe(0);
     expect(await soDong(t.org, "INVITATION_CREATED"), "giao dịch rollback trọn").toEqual([]);
     expect((await moi(t, rfqId, b)).status, "cùng người liên hệ, kênh EMAIL ⇒ mời được").toBe(201);
+
+    // Ca OPEN — chính ca mà lời mời kẹt vĩnh viễn nếu lọt: mời THÊM qua SMS cho người liên hệ không có số ⇒ cũng 422.
+    await nopDuyet(t, rfqId);
+    expect((await mo(t, rfqId)).status).toBe(200);
+    const c = await nhaCungCap(t, null);
+    const rc = await moi(t, rfqId, c, goc, "SMS");
+    expect(rc.status, JSON.stringify(rc.body)).toBe(422);
+    const { rows: sau } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_invitations WHERE supplier_id = $1", [c.supplierId]);
+    expect(sau[0]?.n, "ở OPEN cũng không lời mời nào").toBe(0);
   });
 
   it("[INV-K6] đích theo kênh: link SMS/ZNS đi tới SỐ của người liên hệ — lúc mở gói, lúc gửi lại, lúc mời thêm ở OPEN; người liên hệ không có số ⇒ bộ gửi KHÔNG được gọi, lời mời vào `chuaGui`, token thu hồi", async () => {
@@ -1110,6 +1119,109 @@ async function toChucVaGoiChoDuyet(daBat: boolean): Promise<ToChuc & { readonly 
 // ⑹ — KHOẢN 253
 // =============================================================================================
 describe("[S1.9101 / S3.2b / khoản 253] token đúc trước lúc gói mở không dùng được ở tổ chức đã bật", () => {
+  const doiToken = (org: string, token: string): Promise<unknown> =>
+    withTenant(apiPool, org, (c) => redeemMagicLink(c, org, token)).catch((e: unknown) => e);
+
+  it("nửa PENDING_APPROVAL: token đúc thời MVP1 khi gói đã nộp duyệt dùng được trước lần bật, bị từ chối sau lần bật (lượt soi S1.9101)", async () => {
+    datLaiBoGui();
+    const t = await taoToChuc(false);
+    const rfqId = await goiNhap(t);
+    const nop = await goi(goc, "POST", `/rfqs/${rfqId}/submit`, t.pm.cookie);
+    expect(nop.status, JSON.stringify(nop.body)).toBe(200);
+    const r = await moi(t, rfqId, await nhaCungCap(t));
+    expect(r.status, "MVP1 mời được ở PENDING_APPROVAL").toBe(201);
+    const id = (r.body.invitation as { id: string }).id;
+    const t0 = bg.da.find((x) => x.invitationId === id)!.token;
+    expect(await doiToken(t.org, t0), "đối chứng trước lần bật").toMatchObject({ invitationId: id });
+    await batS3(t);
+    expect(await doiToken(t.org, t0), "gói chưa mở: token thời MVP1 chết").toBeInstanceOf(InvitationError);
+  });
+
+  it("gói ĐÃ mở lúc tổ chức bật mà token đúc ở DRAFT (trước lần mở, qua API): token ấy chết khi bật — đúng hình dạng hàng 253 —, và lối gửi lại đưa link sống về (lượt soi S1.9101)", async () => {
+    datLaiBoGui();
+    const t = await taoToChuc(false);
+    const rfqId = await goiNhap(t);
+    const r = await moi(t, rfqId, await nhaCungCap(t));
+    const id = (r.body.invitation as { id: string }).id;
+    const t0 = bg.da.find((x) => x.invitationId === id)!.token;
+    await nopDuyet(t, rfqId);
+    expect((await mo(t, rfqId)).status).toBe(200);
+    expect(await doiToken(t.org, t0), "đối chứng: MVP1, gói đã mở, token dùng được").toMatchObject({ invitationId: id });
+    await batS3(t);
+    expect(await doiToken(t.org, t0), "token đúc trước opened_at chết khi bật").toBeInstanceOf(InvitationError);
+    datLaiBoGui();
+    const lai = await goi(goc, "POST", `/invitations/${id}/reissue`, t.pm.cookie);
+    expect(lai.status, JSON.stringify(lai.body)).toBe(200);
+    const t1 = bg.da.find((x) => x.invitationId === id)!.token;
+    expect(await doiToken(t.org, t1), "link gửi lại dùng được").toMatchObject({ invitationId: id });
+  });
+
+  it("biên: token mang ĐÚNG giờ `opened_at` dùng được — phép so là `>=`, không `>`", async () => {
+    datLaiBoGui();
+    const t = await taoToChuc(true);
+    const rfqId = await goiNhap(t);
+    const id = ((await moi(t, rfqId, await nhaCungCap(t))).body.invitation as { id: string }).id;
+    await nopDuyet(t, rfqId);
+    expect((await mo(t, rfqId)).status).toBe(200);
+    const tho = randomBytes(32).toString("base64url");
+    await db.pool.query(
+      "INSERT INTO rfq_invitation_tokens (org_id, invitation_id, token_hash, purpose, expires_at, created_at, issued_by, issued_by_session_id) " +
+        "SELECT $1, $2, $3, 'BID_SUBMISSION', now() + interval '1 day', p.opened_at, $4, $5 FROM rfq_packages p WHERE p.id = $6",
+      [t.org, id, createHash("sha256").update(tho, "utf8").digest(), t.pm.u, t.pm.s, rfqId],
+    );
+    expect(await doiToken(t.org, tho)).toMatchObject({ invitationId: id });
+  });
+
+  it("lần mở chỉ thay token CHƯA dùng: token thời MVP1 đã tiêu thụ (qua OTP) không bị thu hồi lại, không có hàng `SUPERSEDED_AT_OPEN` nào cho nó", async () => {
+    datLaiBoGui();
+    const t = await taoToChuc(false);
+    const rfqId = await goiNhap(t);
+    const [a, b] = [await nhaCungCap(t), await nhaCungCap(t)];
+    const idA = ((await moi(t, rfqId, a)).body.invitation as { id: string }).id;
+    const idB = ((await moi(t, rfqId, b)).body.invitation as { id: string }).id;
+    await db.pool.query("UPDATE rfq_invitation_tokens SET consumed_at = now() WHERE invitation_id = $1", [idB]);
+    await batS3(t);
+    expect((await goi(goc, "PUT", `/rfqs/${rfqId}/budget`, t.pm.cookie, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
+    await nopDuyet(t, rfqId);
+    expect((await mo(t, rfqId)).status).toBe(200);
+    const { rows } = await db.pool.query<{ inv: string; thu_hoi: boolean; tieu_thu: boolean }>(
+      "SELECT invitation_id AS inv, revoked_at IS NOT NULL AS thu_hoi, consumed_at IS NOT NULL AS tieu_thu FROM rfq_invitation_tokens " +
+        "WHERE invitation_id = ANY ($1::uuid[]) ORDER BY created_at",
+      [[idA, idB]],
+    );
+    expect(rows.filter((h) => h.inv === idB && h.tieu_thu), "token đã tiêu thụ không bị thu hồi lại").toEqual([
+      { inv: idB, thu_hoi: false, tieu_thu: true },
+    ]);
+    expect((await soDong(t.org, "MAGIC_LINK_TOKEN_REVOKED")).map((x) => (x.payload as { invitationId: string }).invitationId)).toEqual([idA]);
+  });
+
+  it("lời mời thời MVP1 đang `SENT` của gói đang bay lúc bật: lần mở gửi lại link; gửi hỏng ⇒ vẫn `SENT` (K6 cấm lùi về `UNSENT`), `chuaGui` nêu nó, cả hai token chết — sổ nói đúng hai lý do", async () => {
+    datLaiBoGui();
+    const t = await taoToChuc(false);
+    const rfqId = await goiNhap(t);
+    const a = await nhaCungCap(t);
+    const id = ((await moi(t, rfqId, a)).body.invitation as { id: string }).id;
+    await batS3(t);
+    expect((await goi(goc, "PUT", `/rfqs/${rfqId}/budget`, t.pm.cookie, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
+    await nopDuyet(t, rfqId);
+    bg.hong.add(a.email);
+    const log = batLog();
+    let r: PhanHoi;
+    try {
+      r = await mo(t, rfqId);
+    } finally {
+      log.tra();
+    }
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.linkMoi).toEqual({ daGui: [], chuaGui: [id] });
+    expect(await trangThaiLoiMoi(id)).toEqual({ status: "SENT", nhan: false });
+    expect((await tokenCua(id)).map((x) => x.song)).toEqual([false, false]);
+    expect((await soDong(t.org, "MAGIC_LINK_TOKEN_REVOKED")).map((x) => (x.payload as { reason: string }).reason)).toEqual([
+      "SUPERSEDED_AT_OPEN",
+      "LINK_SEND_FAILED",
+    ]);
+  });
+
   it("token đúc thời MVP1 cho một gói còn ở DRAFT: dùng được trước lần bật (đối chứng), bị từ chối sau lần bật; token đúc lúc mở gói dùng được", async () => {
     datLaiBoGui();
     const t = await taoToChuc(false);

@@ -641,8 +641,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/approve":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: trangThai.pm2.cookie };
-        // [S1.9101 / S3.2b] Trả gói HY SINH về soạn thảo — tới nghiệp vụ: luồng MVP1 dừng ở 422 có tên (*"chưa bật"*), luồng S3
-        // đưa `hyB` về DRAFT (200) và lần mở ngay sau đó dừng ở 422 trạng thái có tên. Không chạm gói của kịch bản.
+        // [S1.9101 / S3.2b] Trả gói HY SINH về soạn thảo, không chạm gói của kịch bản. Bộ quét không khẳng định mã của từng route —
+        // nó đòi thân qua bộ đọc thân (không 422 hình dạng) và không rò rỉ; theo mã, luồng MVP1 dừng ở 422 *"chưa bật"*, luồng S3
+        // đưa `hyB` về DRAFT và lần mở ngay sau dừng ở 422 trạng thái. Thân 2xx mang `linkMoi` của lần mở vì thế không đi qua bộ
+        // quét rò rỉ ở đây: `apps/api/src/link-moi-mo-goi.int.test.ts` so NGUYÊN thân ấy — chỉ id lời mời.
         case "POST /rfqs/:rfqId/return-to-draft":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "tra ve de quet" }, cookie: m };
         case "POST /rfqs/:rfqId/open":

@@ -75,6 +75,8 @@ interface ToChuc {
   readonly pm: Nguoi;
   /** PROCUREMENT_MANAGER khác người tạo — ký, và trả về được bằng `rfq.approve`. */
   readonly pm2: Nguoi;
+  /** PROCUREMENT_MANAGER thứ ba — chữ ký thứ hai của gói cấp kép. */
+  readonly pm3: Nguoi;
   /** BUYER — giữ `rfq.create` mà KHÔNG giữ `rfq.approve`. */
   readonly nm: Nguoi;
   /** FINANCE — ký phiên bản chính sách; không giữ `rfq.create`, không giữ `rfq.approve`. */
@@ -102,7 +104,14 @@ async function taoToChuc(): Promise<ToChuc> {
     );
     return { u, s };
   };
-  const t = { org, pm: await nguoi("PROCUREMENT_MANAGER"), pm2: await nguoi("PROCUREMENT_MANAGER"), nm: await nguoi("BUYER"), tc: await nguoi("FINANCE") };
+  const t = {
+    org,
+    pm: await nguoi("PROCUREMENT_MANAGER"),
+    pm2: await nguoi("PROCUREMENT_MANAGER"),
+    pm3: await nguoi("PROCUREMENT_MANAGER"),
+    nm: await nguoi("BUYER"),
+    tc: await nguoi("FINANCE"),
+  };
   await withTenant(apiPool, org, (c) =>
     createProcurementPolicy(c, org, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND", actorSessionId: t.pm.s }),
   );
@@ -195,6 +204,13 @@ async function trangThaiGoi(rfqId: string): Promise<string> {
 
 async function soChuKy(rfqId: string): Promise<number> {
   return (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_approvals WHERE rfq_id = $1", [rfqId])).rows[0]!.n;
+}
+
+/** Số hàng sổ mang toạ độ gói, MỌI `action` — lời từ chối không được để lại hàng nào, kể cả hàng của một lớp khác. */
+async function soHangCuaGoi(org: string, rfqId: string): Promise<number> {
+  return (
+    await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND resource_id = $2", [org, rfqId])
+  ).rows[0]!.n;
 }
 
 /** Hàng sổ của gói theo `action`, thứ tự nối chuỗi. */
@@ -350,6 +366,86 @@ describe("[S1.9101 / S3.2b] cạnh PENDING_APPROVAL→DRAFT", () => {
     ).toBe("OPEN");
   });
 
+  it("[INV-K4b] [INV-D2] gói CẤP KÉP trả về rồi nộp lại NGUYÊN ⇒ hai chữ ký cũ mở được gói; đổi danh sách ⇒ 0 trên 2, một người ký lại ⇒ 1 trên 2, người thứ hai ký lại ⇒ mở", async () => {
+    const hai = async (): Promise<[ToChuc, string]> => {
+      const t = await toChucDaBat();
+      const rfqId = await goiNhap(t);
+      await withTenant(apiPool, t.org, (c) =>
+        setRfqBudget(c, t.org, { rfqId, estimatedValue: "500000000.00", currency: "VND", actorSessionId: t.pm.s }),
+      );
+      await moi(t, rfqId);
+      await nop(t, rfqId);
+      await duyet(t, rfqId, t.pm2);
+      await duyet(t, rfqId, t.pm3);
+      await veSoan(t, rfqId, t.pm, "xem lai");
+      return [t, rfqId];
+    };
+    const [t1, nguyen] = await hai();
+    await nop(t1, nguyen);
+    await mo(t1, nguyen);
+    expect(await trangThaiGoi(nguyen), "nộp lại nguyên như cũ: hai chữ ký cũ vẫn đếm").toBe("OPEN");
+
+    const [t2, doi] = await hai();
+    await moi(t2, doi);
+    await nop(t2, doi);
+    expect(((await thu(mo(t2, doi))) as Error).message).toBe("RFQ nay can 2 chu ky TREN DANH SACH MOI HIEN TAI, moi co 0 (K4b)");
+    await duyet(t2, doi, t2.pm2);
+    expect(((await thu(mo(t2, doi))) as Error).message).toBe("RFQ nay can 2 chu ky TREN DANH SACH MOI HIEN TAI, moi co 1 (K4b)");
+    await duyet(t2, doi, t2.pm3);
+    await mo(t2, doi);
+    expect(await trangThaiGoi(doi)).toBe("OPEN");
+  });
+
+  it("[INV-K4b] băm ngân sách mang PHIÊN BẢN CHÍNH SÁCH: cùng con số, cùng bậc, cùng ngưỡng mà ghim sang phiên bản mới ⇒ chữ ký cũ không mở được gói (lượt soi S1.9101)", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await moi(t, rfqId);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await veSoan(t, rfqId, t.pm, "ghim phien ban moi");
+    // Phiên bản 3: y hệt phiên bản 2 (bậc, ngưỡng kép), FINANCE ký — nay là phiên bản hiệu lực.
+    const v3 = (
+      await withTenant(apiPool, t.org, (c) =>
+        c.query<{ id: string }>(
+          "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, " +
+            "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id) " +
+            "VALUES ($1, 3, '100000000.00', 'VND', $2::jsonb, 30, 12, true, now(), $3, $4) RETURNING id",
+          [t.org, JSON.stringify(BAC), t.pm.u, t.pm.s],
+        ),
+      )
+    ).rows[0]!.id;
+    await withTenant(apiPool, t.org, (c) =>
+      c.query("INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)", [
+        t.org,
+        v3,
+        t.tc.u,
+        t.tc.s,
+      ]),
+    );
+    await withTenant(apiPool, t.org, (c) =>
+      setRfqBudget(c, t.org, { rfqId, estimatedValue: "1000000.00", currency: "VND", actorSessionId: t.pm.s }),
+    );
+    const { rows: ghim } = await db.pool.query<{ p: string }>("SELECT policy_id AS p FROM rfq_budgets WHERE rfq_id = $1", [rfqId]);
+    expect(ghim[0]?.p, "ngân sách ghim phiên bản 3").toBe(v3);
+    await nop(t, rfqId);
+    expect(((await thu(mo(t, rfqId))) as Error).message).toBe("RFQ nay can 1 chu ky TREN NGAN SACH HIEN TAI, moi co 0 (K4b)");
+    await duyet(t, rfqId, t.pm2);
+    await mo(t, rfqId);
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+  });
+
+  it("thứ tự: cổng quyền TRƯỚC câu hỏi công tắc — ở tổ chức CHƯA bật, BUYER không phải người tạo vẫn để lại `PERMISSION_DENIED` mang `rfq.approve`, không phải một `RfqError` im lặng", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const e = await thu(veSoan(t, rfqId, t.nm));
+    expect(e).toBeInstanceOf(PermissionDeniedError);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect((await hangSo(t.org, rfqId, "PERMISSION_DENIED")).map((h) => [h.actor, (h.payload as { permission: string }).permission])).toEqual([
+      [t.nm.u, "rfq.approve"],
+    ]);
+  });
+
   it("ai được đi: người duyệt khác người tạo thì được (`rfq.approve`); BUYER không phải người tạo và FINANCE ⇒ `PERMISSION_DENIED` mang `rfq.approve`, gói đứng yên", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -446,21 +542,26 @@ describe("[S1.9101 / S3.2b] cạnh PENDING_APPROVAL→DRAFT", () => {
   it("sai trạng thái: gói DRAFT hay OPEN ⇒ `RfqError`, không hàng sổ nào; lý do rỗng ⇒ `RfqError` trước mọi câu ghi", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
+    let truoc = await soHangCuaGoi(t.org, rfqId);
     const draft = await thu(veSoan(t, rfqId, t.pm));
     expect(draft).toBeInstanceOf(RfqError);
     expect((draft as Error).message).toBe("không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ");
+    expect(await soHangCuaGoi(t.org, rfqId), "DRAFT: không hàng sổ nào, của bất kỳ action nào").toBe(truoc);
 
     await nop(t, rfqId);
+    truoc = await soHangCuaGoi(t.org, rfqId);
     const rong = await thu(veSoan(t, rfqId, t.pm, "   "));
     expect(rong).toBeInstanceOf(RfqError);
     expect((rong as Error).message).toBe("reason không được rỗng");
     expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect(await soHangCuaGoi(t.org, rfqId), "lý do rỗng: không hàng sổ nào").toBe(truoc);
 
     await duyet(t, rfqId, t.pm2);
     await mo(t, rfqId);
+    truoc = await soHangCuaGoi(t.org, rfqId);
     const open = await thu(veSoan(t, rfqId, t.pm));
     expect(open).toBeInstanceOf(RfqError);
     expect(await trangThaiGoi(rfqId)).toBe("OPEN");
-    expect(await hangSo(t.org, rfqId, "RFQ_RETURNED_TO_DRAFT")).toEqual([]);
+    expect(await soHangCuaGoi(t.org, rfqId), "OPEN: không hàng sổ nào").toBe(truoc);
   });
 });

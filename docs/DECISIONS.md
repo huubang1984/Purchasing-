@@ -8880,7 +8880,9 @@ giữ hợp đồng ADR-110: gửi hỏng ⇒ `502`, phần ghi cũng hỏng ⇒
 
 ⑵ **Token của lần gửi hỏng hay quá trần chết ngay** (`revokeMagicLinkToken`, lý do `LINK_SEND_FAILED`), trong cùng giao dịch ghi kết
 quả. `UNSENT` luôn nghĩa là không còn link sống; một link quá trần mà vẫn tới tay người nhận cũng chết — bên mua bấm gửi lại. Không
-thu hồi LỜI MỜI: thu hồi thu hẹp một danh sách đã ký (ADR-082 ⑼).
+thu hồi LỜI MỜI: thu hồi thu hẹp một danh sách đã ký (ADR-082 ⑼). **[lượt soi S1.9101]** Câu *"luôn"* đúng khi lần ghi kết quả thành
+công; chính lần ghi hỏng (phiên người gọi bị thu hồi giữa chừng, pool đầy quá 5 s) thì token còn sống và phản hồi nói ra —
+`trangThaiChuaGhi`, hay `500` ở lối gửi lại.
 
 ⑶ **Lần thêm hay thu hồi lời mời sai trạng thái (K4a) là một lần từ chối `CONTROL_DENIED`, vào sổ.** Hai nhánh K4a của trigger
 mang tên ràng buộc (`k4a_them_sai_trang_thai`, `k4a_thu_hoi_sai_trang_thai`); `createInvitation` và `revokeInvitation` bắt CHÍNH lỗi
@@ -8959,3 +8961,8 @@ tổ chức đã bật; `9501` nói ra điều ấy, `014` không sửa được
 - **Gửi lại đua với lần mở gói:** lần gửi lại chạy ngay sau commit của lần mở thu hồi token vừa đúc lúc mở, mà lần gửi lúc mở vẫn tính
   `daGui` và đặt `SENT` cho một link đã chết; lần gửi lại mang link sống.
 - **Giao dịch mở gói đúc N token kèm N hàng sổ** trong lúc giữ khoá chuỗi sổ của tổ chức — tuyến tính theo độ dài danh sách.
+- **Mặc định `created_at` của token không có mục ghim ở hardening** — phép đo đua của khoản 253 giữ nó.
+- **Câu hỏi cho chủ dự án (lượt soi test, đo):** người duyệt đã KÝ rồi tự trả gói về; người tạo nộp lại nguyên như cũ ⇒ gói mở được
+  bằng chính chữ ký của người đã trả về. ADR-084 ⑵ nói người duyệt *"trả về thay vì không ký"*, không nói lần trả về có rút chữ ký
+  của chính người ấy hay không. Vòng này giữ cơ chế spec §2.4 — chữ ký ràng vào nội dung, danh sách, ngân sách, không vào lần nộp —
+  và không tự chốt vế này.
