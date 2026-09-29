@@ -240,9 +240,12 @@ async function chinh(): Promise<void> {
     // thử T4 đo ra bản đầu của `--s3` ghi SÁU chữ ký: vòng dưới lấy mọi người trừ người soạn, kể cả hai người tài chính mới.
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
+    // [S1.9101 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
+    // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
     for (const nm of nguoiDuyetGoi) {
       await pool.query(
-        "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id, lan_nop_da_xem) " +
+          "SELECT $1, $2, $3, $4, p.lan_nop FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $2",
         [org, rfq, nm.id, nm.sessionId],
       );
     }

@@ -830,6 +830,8 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      // [S1.9101 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
+      { grantee: "app_api", bang: "rfq_tra_ve", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
@@ -1204,6 +1206,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
       // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
       { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      // [S1.9101 / khoản 256] Lời duyệt mang lần nộp người duyệt đã xem — trigger `rfq_approvals_so_lan_nop` so nó.
+      { grantee: "app_api", bang: "rfq_approvals", cot: "lan_nop_da_xem", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
@@ -1365,6 +1369,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
+      // [S1.9101 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "rfq_id", quyen: "INSERT" },
       // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
       // muc sang RFQ khac hay sang to chuc khac.
       // [S1.2] `rfq_packages` — `status` co UPDATE va no BUOC phai co de ung dung lam viec.
@@ -1918,6 +1928,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
+      // [S1.9101 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
+      "rfq_tra_ve",
       "sessions", "supplier_contacts", "suppliers", "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Nhà cung cấp không có việc gì với việc ai đã điều phối mở thầu.
       "unseal_dispatch_history", "unseal_requests",
@@ -2861,7 +2873,8 @@ describe("[S1.46 / khoản nợ 86 — nửa gốc] bảng không org_id có kho
 describe("[S1.43 / khoản nợ 89 + 86] danh tính đối tượng canh", () => {
   it("[INV-F1] HAI BẢN KHỚP: BANG_TENANT_KHAI của hardening bằng tập VI_TU_BANG_TENANT trên lược đồ thật, mỗi dòng trỏ đúng migration đã CREATE TABLE bảng ấy; câu phán xét chạy trong test — rỗng hôm nay, thấy đúng bảng đổi tên cột", async () => {
     const khai = docHangHardening("BANG_TENANT_KHAI");
-    const dong = [...khai.matchAll(/\('(\w+)', '(\w+)', '(\d{3}_\w+)'\)/gu)].map((m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }));
+    // [S1.9101] `\d{3,4}`: migration còn mang số tạm của `cap-so` (`95NN_ten`, dạng khai của hardening) cũng là một dòng khai.
+    const dong = [...khai.matchAll(/\('(\w+)', '(\w+)', '(\d{3,4}_\w+)'\)/gu)].map((m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }));
     expect(dong.length, "bản khai đang rỗng — bộ đọc mù").toBeGreaterThan(20);
     const { rows } = await db.pool.query<{ t: string }>(
       `SELECT n.nspname || '.' || c.relname AS t FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE ${docHangHardening("VI_TU_BANG_TENANT")} ORDER BY 1`,
@@ -3675,7 +3688,7 @@ describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
 
   it("[INV-F1] CENSUS: mọi literal current_setting('x.y' trong db/migrations/*.sql thuộc tập trên lược đồ thật; regex nhận hoa/thường, khoảng trắng, chữ số; BEGIN ATOMIC, DEFAULT cột và CHECK cũng vào tập", async () => {
     const trongTep = new Set<string>();
-    for (const f of readdirSync(MIGRATIONS_DIR).filter((x) => /^\d{3}_.*\.sql$/u.test(x))) {
+    for (const f of readdirSync(MIGRATIONS_DIR).filter((x) => /^\d{3,4}_.*\.sql$/u.test(x))) {
       for (const m of readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8").matchAll(RX_LITERAL)) trongTep.add(m[1]!.toLowerCase());
     }
     expect(trongTep.size, "câu quét đang mù").toBeGreaterThanOrEqual(4);

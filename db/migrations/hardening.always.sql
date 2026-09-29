@@ -3433,6 +3433,7 @@ $ham$;
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
+         ('public', 'rfq_tra_ve', '9501_lan_nop_da_xem'),
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
@@ -4578,6 +4579,17 @@ $ham$;
              CREATE TRIGGER org_policy_signatures_kiem_danh_tinh BEFORE INSERT ON org_policy_signatures FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'signed_by', 'signed_by_session_id');
              ALTER TABLE public.org_policy_signatures ENABLE ALWAYS TRIGGER org_policy_signatures_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.rfq_tra_ve') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                                 AND t.tgname = 'rfq_tra_ve_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_kiem_danh_tinh BEFORE INSERT ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('returned_by', 'returned_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_tra_ve_kiem_danh_tinh ON public.rfq_tra_ve;
+             CREATE TRIGGER rfq_tra_ve_kiem_danh_tinh BEFORE INSERT ON rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'returned_by', 'returned_by_session_id');
+             ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_kiem_danh_tinh;
+           END IF;
          END
          $fn51$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -4779,6 +4791,14 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER org_policy_signatures_kiem_danh_tinh BEFORE INSERT ON public.org_policy_signatures FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('signed_by', 'signed_by_session_id')$def$))
+            AND (to_regclass('public.rfq_tra_ve') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                               AND t.tgname = 'rfq_tra_ve_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_kiem_danh_tinh BEFORE INSERT ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('returned_by', 'returned_by_session_id')$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.kiem_danh_tinh_theo_phien()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -7720,9 +7740,10 @@ $ham$;
 
     -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
     -- [S1.190 / K4b] Than tu 079_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
+    -- [S1.9101 / khoản 257] Than tu 9501_lan_nop_da_xem.sql: them phep dem CHU KY CON HIEU LUC — bo no thi chu ky cua nguoi da tra goi ve van dem.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 079_rang_ngan_sach)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_rang_ngan_sach.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 9501_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7759,6 +7780,20 @@ BEGIN
     RAISE EXCEPTION 'RFQ nay can % chu ky TREN NGAN SACH HIEN TAI, moi co % (K4b)', can, co
       USING ERRCODE = 'check_violation';
   END IF;
+  SELECT count(DISTINCT a.approver_user_id) INTO co
+    FROM public.rfq_approvals a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id
+     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)
+     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)
+     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)
+     AND a.lan_nop_da_xem IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r
+                      WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id
+                        AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem);
+  IF co < can THEN
+    RAISE EXCEPTION 'RFQ nay can % chu ky CON HIEU LUC — ky tren lan nop da xem, nguoi ky chua tra goi ve tu lan ay —, moi co % (K4b)', can, co
+      USING ERRCODE = 'check_violation';
+  END IF;
   RETURN NEW;
 END
 $ham$;
@@ -7777,7 +7812,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE can integer; co integer; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN NGAN SACH HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE can integer; co integer; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN NGAN SACH HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id) AND a.lan_nop_da_xem IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r WHERE r.org_id = a.org_id AND r.rfq_id = a.rfq_id AND r.returned_by = a.approver_user_id AND r.lan_nop >= a.lan_nop_da_xem); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky CON HIEU LUC — ky tren lan nop da xem, nguoi ky chua tra goi ve tu lan ay —, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -7983,9 +8018,10 @@ $ham$;
     ],
 
     -- [S1.186 / S3.2b1 / K4a] Canh PENDING_APPROVAL->DRAFT chi mo o to chuc da bat. Than `RETURN NEW` mo lai duong ve DRAFT cho MVP1, ma rang buoc chu ky cua 076 (3) dua vao viec MVP1 khong co duong ay.
+    -- [S1.9101 / khoản 257] Than tu 9501_lan_nop_da_xem.sql: canh doi mot hang rfq_tra_ve cua chinh lan nop dang bi tra — nguoi va ly do nam trong CSDL.
     ARRAY[
-      $q$hàm + trigger rfq_kiem_tra_ve_nhap (077_tra_ve_nhap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '077_tra_ve_nhap.sql')$q$,
+      $q$hàm + trigger rfq_kiem_tra_ve_nhap (077, thân từ 9501_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7998,6 +8034,11 @@ $ham$;
 BEGIN
   IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
     RAISE EXCEPTION 'Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r
+                  WHERE r.org_id = NEW.org_id AND r.rfq_id = NEW.id AND r.lan_nop = OLD.lan_nop) THEN
+    RAISE EXCEPTION 'Tra goi ve DRAFT phai kem mot hang rfq_tra_ve cua lan nop % — ai tra va vi sao (K4b)', OLD.lan_nop
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
@@ -8018,7 +8059,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)' USING ERRCODE = 'check_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.rfq_tra_ve r WHERE r.org_id = NEW.org_id AND r.rfq_id = NEW.id AND r.lan_nop = OLD.lan_nop) THEN RAISE EXCEPTION 'Tra goi ve DRAFT phai kem mot hang rfq_tra_ve cua lan nop % — ai tra va vi sao (K4b)', OLD.lan_nop USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -8045,6 +8086,231 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_kiem_tra_ve_nhap()')),
                   'hàm public.rfq_kiem_tra_ve_nhap() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / khoan 256] Dem lan nop o canh DRAFT->PENDING_APPROVAL. Than `RETURN NEW` giu lan nop dung yen: nop lai sau khi tra ve mang lai moc cu, va loi duyet tren lan xem truoc di qua.
+    ARRAY[
+      $q$hàm + trigger rfq_dem_lan_nop (9501_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_dem_lan_nop()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_dem_lan_nop();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_dem_lan_nop() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  NEW.lan_nop := OLD.lan_nop + 1;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_dem_lan_nop'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_dem_lan_nop()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_dem_lan_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_dem_lan_nop()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_dem_lan_nop ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_dem_lan_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION public.rfq_dem_lan_nop();
+             ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_dem_lan_nop;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN NEW.lan_nop := OLD.lan_nop + 1; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                           AND t.tgname = 'rfq_packages_dem_lan_nop'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_dem_lan_nop()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_dem_lan_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_dem_lan_nop()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_dem_lan_nop()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_dem_lan_nop()')),
+                  'hàm public.rfq_dem_lan_nop() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_dem_lan_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / khoan 256] Loi duyet mang lan nop nguoi duyet da xem, so duoi khoa FOR SHARE hang goi. Than `RETURN NEW` mo lai dua giua lan xem va lan bam ky.
+    ARRAY[
+      $q$hàm + trigger rfq_chot_lan_nop_da_xem (9501_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_chot_lan_nop_da_xem()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_chot_lan_nop_da_xem();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_chot_lan_nop_da_xem() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  hien_tai integer;
+BEGIN
+  SELECT p.lan_nop INTO hien_tai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+   FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN NEW;
+  END IF;
+  IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN
+      RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSE
+    IF NEW.lan_nop_da_xem IS NOT NULL AND NEW.lan_nop_da_xem <> hien_tai THEN
+      RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai
+        USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.lan_nop_da_xem := NULL;
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_approvals') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_approvals')
+                                 AND t.tgname = 'rfq_approvals_so_lan_nop'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_chot_lan_nop_da_xem()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_approvals_so_lan_nop BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION rfq_chot_lan_nop_da_xem()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_approvals_so_lan_nop ON public.rfq_approvals;
+             CREATE TRIGGER rfq_approvals_so_lan_nop BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION public.rfq_chot_lan_nop_da_xem();
+             ALTER TABLE public.rfq_approvals ENABLE ALWAYS TRIGGER rfq_approvals_so_lan_nop;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE hien_tai integer; BEGIN SELECT p.lan_nop INTO hien_tai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RETURN NEW; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; ELSE IF NEW.lan_nop_da_xem IS NOT NULL AND NEW.lan_nop_da_xem <> hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; NEW.lan_nop_da_xem := NULL; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_approvals')
+                           AND t.tgname = 'rfq_approvals_so_lan_nop'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_chot_lan_nop_da_xem()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_approvals_so_lan_nop BEFORE INSERT ON public.rfq_approvals FOR EACH ROW EXECUTE FUNCTION rfq_chot_lan_nop_da_xem()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_chot_lan_nop_da_xem()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_chot_lan_nop_da_xem()')),
+                  'hàm public.rfq_chot_lan_nop_da_xem() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_chot_lan_nop_da_xem() và bảng public.rfq_approvals (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / khoan 257] Hang tra ve mang lan nop CUA GOI, chi o to chuc da bat va goi dang cho duyet. Than `RETURN NEW` de lan nop NULL (chen hong) hay tra ve goi khong cho duyet.
+    ARRAY[
+      $q$hàm + trigger rfq_tra_ve_dat_lan_nop (9501_lan_nop_da_xem)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_tra_ve_dat_lan_nop();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_tra_ve_dat_lan_nop() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+  hien_tai integer;
+BEGIN
+  SELECT p.status, p.lan_nop INTO trang_thai, hien_tai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+   FOR NO KEY UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay goi thau cua lan tra ve (K4a)'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RAISE EXCEPTION 'Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF trang_thai <> 'PENDING_APPROVAL' THEN
+    RAISE EXCEPTION 'Chi tra ve duoc goi dang cho duyet; goi dang o % (K4a)', trang_thai
+      USING ERRCODE = 'check_violation';
+  END IF;
+  NEW.lan_nop := hien_tai;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_tra_ve') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                                 AND t.tgname = 'rfq_tra_ve_dat_lan_nop'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_dat_lan_nop BEFORE INSERT ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION rfq_tra_ve_dat_lan_nop()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_tra_ve_dat_lan_nop ON public.rfq_tra_ve;
+             CREATE TRIGGER rfq_tra_ve_dat_lan_nop BEFORE INSERT ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION public.rfq_tra_ve_dat_lan_nop();
+             ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_dat_lan_nop;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; hien_tai integer; BEGIN SELECT p.status, p.lan_nop INTO trang_thai, hien_tai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay goi thau cua lan tra ve (K4a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi tra goi ve DRAFT duoc (K4a)' USING ERRCODE = 'check_violation'; END IF; IF trang_thai <> 'PENDING_APPROVAL' THEN RAISE EXCEPTION 'Chi tra ve duoc goi dang cho duyet; goi dang o % (K4a)', trang_thai USING ERRCODE = 'check_violation'; END IF; NEW.lan_nop := hien_tai; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                           AND t.tgname = 'rfq_tra_ve_dat_lan_nop'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_dat_lan_nop BEFORE INSERT ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION rfq_tra_ve_dat_lan_nop()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()')),
+                  'hàm public.rfq_tra_ve_dat_lan_nop() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_tra_ve_dat_lan_nop() và bảng public.rfq_tra_ve (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.186 / S3.2b1 / K6 / khoan 253] Token ghi lai, LUC DUC, goi da mo chua — cho moi to chuc. Than `RETURN NEW` de cot o gia tri mac dinh, va lan doi link cua to chuc da bat tu choi moi token.

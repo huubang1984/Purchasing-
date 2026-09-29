@@ -236,7 +236,11 @@ async function goiDaHuy(t: ToChuc): Promise<string> {
     });
     await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
   });
-  await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }, apiPool));
+  await withTenant(apiPool, t.org, async (c) => {
+    // [S1.9101 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
+    const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
+    await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, lanNopDaXem: lan }, apiPool);
+  });
   await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
   await withTenant(apiPool, t.org, (c) =>
     cancelRfq(c, t.org, { rfqId, reason: "Huy de do han xoa khoa", actorSessionId: t.pm.s }, apiPool),

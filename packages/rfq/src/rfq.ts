@@ -178,6 +178,12 @@ export interface RfqRecord {
    * (`GET /guest/rfq`), nên nó là một lời nói với bên ngoài, không phải ghi chú nội bộ.
    */
   readonly cancelReason: string | null;
+  /**
+   * [S1.9101 / khoản 256] Số lần gói đã nộp duyệt — trigger `rfq_packages_dem_lan_nop` đếm ở cạnh DRAFT→PENDING_APPROVAL, bên
+   * gọi không đặt được. Người duyệt gửi lại ĐÚNG con số đã thấy (`ApproveRfqInput.lanNopDaXem`): ở tổ chức đã bật, lời duyệt khác
+   * lần nộp hiện tại bị từ chối — gói được trả về, sửa và nộp lại sau lúc người ấy xem thì chữ ký không rơi lên thứ họ chưa xem.
+   */
+  readonly lanNop: number;
 }
 
 export interface AddRfqItemInput {
@@ -211,6 +217,7 @@ interface HangRfq {
   closed_at: Date | null;
   cancelled_at: Date | null;
   cancel_reason: string | null;
+  lan_nop: number;
 }
 
 interface HangItem {
@@ -224,7 +231,7 @@ interface HangItem {
 
 const COT_RFQ =
   "id, title, status, deadline_at, requires_dual_approval, created_by, created_at, " +
-  "opened_at, closed_at, cancelled_at, cancel_reason";
+  "opened_at, closed_at, cancelled_at, cancel_reason, lan_nop";
 const COT_ITEM = "id, rfq_id, line_no, description, quantity, unit";
 
 function doiRfq(h: HangRfq): RfqRecord {
@@ -240,6 +247,7 @@ function doiRfq(h: HangRfq): RfqRecord {
     closedAt: h.closed_at,
     cancelledAt: h.cancelled_at,
     cancelReason: h.cancel_reason,
+    lanNop: h.lan_nop,
   };
 }
 
@@ -429,6 +437,8 @@ export async function submitRfqForApproval(
  *
  * LÝ DO bắt buộc (chủ dự án chốt ngày 2026-09-28) và nằm trong sổ, không trong cột: cạnh này đi được nhiều lần, một cột chỉ giữ
  * lần cuối (`016` §(3)). Không xoá chữ ký nào — chữ ký cũ mất hiệu lực bằng băm khi nội dung hay danh sách đổi (K4b).
+ * **[S1.9101 / khoản 257]** Người, phiên, lần nộp bị trả và lý do nay CŨNG nằm trong CSDL — một hàng `rfq_tra_ve` chèn trước câu đổi
+ * trạng thái, mà cạnh đòi (`9501_lan_nop_da_xem`): K4b đọc nó để bỏ chữ ký của chính người trả về. Hàng sổ giữ nguyên.
  *
  * Tổ chức chưa bật: lời từ chối có tên và KHÔNG vào sổ — nó nói cấu hình chưa sẵn sàng, không nói người dùng đi sai (ADR-060).
  */
@@ -467,6 +477,23 @@ export async function returnRfqToDraft(
   );
   const reason = batBuoc(input.reason, "reason", 2000);
 
+  // [S1.9101 / khoản 257] Khoá hàng gói rồi hỏi trạng thái TRƯỚC khi chèn hàng trả về: trigger của `rfq_tra_ve` từ chối gói không
+  // chờ duyệt bằng một lỗi CSDL, còn lời từ chối trạng thái của hàm này là một `RfqError` có tên — giữ nguyên hợp đồng ấy.
+  const { rows: khoa } = await client.query<{ status: string }>(
+    `SELECT p.status FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1 FOR NO KEY UPDATE`,
+    [input.rfqId],
+  );
+  if (khoa[0]?.status !== "PENDING_APPROVAL") {
+    throw new RfqError(
+      "không tìm thấy RFQ trong tổ chức đang gắn, hoặc nó không ở trạng thái nguồn hợp lệ",
+    );
+  }
+  await client.query(
+    `INSERT INTO public.rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [orgId, input.rfqId, actor.id, actor.sessionId, reason],
+  );
+
   const { rows } = await client.query<HangRfq>(
     // [H-3] `AND status = 'PENDING_APPROVAL'`, cùng lý do với `submitRfqForApproval`: gọi lại trên một gói đã ở DRAFT là
     // một lần ghi IM LẶNG nếu thiếu vế này — trigger bỏ qua vì status không đổi — và sổ sẽ mang một lần trả về không có.
@@ -501,6 +528,13 @@ export interface ApproveRfqInput {
    * `UNIQUE (org_id, rfq_id, session_id)` giữ.
    */
   readonly sessionId: string;
+  /**
+   * [S1.9101 / khoản 256] Lần nộp mà người duyệt đã XEM (`RfqRecord.lanNop` của lần đọc gói). Trigger `rfq_approvals_so_lan_nop`
+   * khoá hàng gói rồi so: tổ chức đã bật — bắt buộc, khác lần nộp hiện tại thì từ chối (gói đã được trả về và nộp lại sau lúc ấy);
+   * tổ chức chưa bật — tuỳ chọn, gửi thì phải đúng, không gửi thì như MVP1. Hàm này KHÔNG tự điền: điền lần nộp hiện tại thay người
+   * duyệt là đúng lỗ mà cột này đóng.
+   */
+  readonly lanNopDaXem?: number;
 }
 
 export async function approveRfq(
@@ -514,9 +548,9 @@ export async function approveRfq(
 
   try {
     await client.query(
-      `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id)
-       VALUES ($1, $2, $3, $4)`,
-      [orgId, input.rfqId, actor.id, actor.sessionId],
+      `INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id, lan_nop_da_xem)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orgId, input.rfqId, actor.id, actor.sessionId, input.lanNopDaXem ?? null],
     );
   } catch (loi) {
     // [S1.167 / khoản 247 / ADR-104] D2 ở bước DUYỆT GÓI — người tạo tự duyệt, phiên không hợp lệ, phiên của người khác — sống

@@ -419,11 +419,15 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
   it("bước 2 — hai người KHÁC NHAU duyệt qua HTTP, rồi RFQ mở kèm cặp khoá của chính nó", async () => {
     const m = trangThai.mua.cookie;
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
+    const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
+    expect(nop.status).toBe(200);
+    // [S1.9101 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
+    // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
+    const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
     // [S1.180 / khoản 247 / ADR-108] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
     // `CHOT_VAO_SO`, vẫn gọi tên `(D2)` — và để lại một hàng `CONTROL_DENIED`.
-    const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
+    const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m, moc);
     expect(tuDuyet.status).toBe(422);
     expect(tuDuyet.text).toContain("Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).");
     const { rows: soD2 } = await db.pool.query(
@@ -431,8 +435,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       [trangThai.rfqId],
     );
     expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie, moc)).status).toBe(200);
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
     expect(mo.status, mo.text).toBe(200);
     expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
@@ -556,8 +560,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hyA = await taoRfqHy("RFQ hy sinh A (mo)");
     expect((await goi("POST", `/rfqs/${hyA}/items`, m, { lineNo: 1, description: "Vat tu hy sinh", quantity: "1.0000", unit: "cai" })).status).toBe(201);
     expect((await goi("PUT", `/rfqs/${hyA}/budget`, m, { estimatedValue: "10000000.00", currency: "VND" })).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${hyA}/submit`, m)).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${hyA}/approve`, trangThai.pm2.cookie)).status).toBe(200);
+    const nopHyA = await goi("POST", `/rfqs/${hyA}/submit`, m);
+    expect(nopHyA.status).toBe(200);
+    const mocHyA = batS3 ? { lanNop: (nopHyA.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+    expect((await goi("POST", `/rfqs/${hyA}/approve`, trangThai.pm2.cookie, mocHyA)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${hyA}/open`, m)).status).toBe(200);
     const nccHy = await goi("POST", "/suppliers", m, { legalName: "Cong ty Hy Sinh", taxCode: "0399999999" });
     expect(nccHy.status, nccHy.text).toBe(201);
@@ -579,7 +585,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string } = { unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0 };
+    const hy: { unsealId: string; mfaResetId: string; policyId: string; lanNopB: number } = {
+      unsealId: UUID0,
+      mfaResetId: UUID0,
+      policyId: UUID0,
+      lanNopB: 0,
+    };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
     const thanHopLe = (r: (typeof ROUTES)[number]): { path: string; body: unknown; cookie: string; sau?: (ph: PhanHoi) => void } | null => {
@@ -638,9 +649,17 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         case "PUT /rfqs/:rfqId/budget":
           return { path: r.path.replace(":rfqId", hyB), body: { estimatedValue: "20000000.00", currency: "VND" }, cookie: m };
         case "POST /rfqs/:rfqId/submit":
-          return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
+          return {
+            path: r.path.replace(":rfqId", hyB),
+            body: {},
+            cookie: m,
+            sau: (ph) => {
+              if (ph.status === 200) hy.lanNopB = (ph.body as { rfq: { lanNop: number } }).rfq.lanNop;
+            },
+          };
+        // [S1.9101 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
         case "POST /rfqs/:rfqId/approve":
-          return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: trangThai.pm2.cookie };
+          return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/extend":
