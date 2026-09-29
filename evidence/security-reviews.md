@@ -16305,7 +16305,7 @@ hardening — sửa một bên thì hardening dựng lại thân ghim và đột
   `hardening-suy-tu-tinh-chat.int`, `luong-moi-s3.int`, `rfq.int`, `invitation.int`. Tám đột biến, tám lần đỏ (§6).
 - Số hiệu của vòng, ADR và migration do `pnpm cap-so` cấp lúc merge (ADR-090).
 
-# §S1.195 — S4.2a: HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-115
+# §S1.197 — S4.2a: HÀNG CHUẨN, VAI QUẢN LÝ DỮ LIỆU MÙ GIÁ, QUY ĐỔI RIÊNG (L1, L3, L4 vế ⑵) — ADR-116
 
 ## 1. Vòng này là gì
 
@@ -16318,14 +16318,14 @@ Chốt ngày 2026-09-29, năm đề xuất của lượt bàn S4.2:
 
 1. Tách S4.2 thành S4.2a (CSDL + gói) và S4.2b (API + màn).
 2. Quy đổi riêng: tối đa một cạnh riêng, ghép quy đổi chung cùng thứ nguyên ở hai đầu, được chiều ngược; không ghép hai cạnh
-   riêng — ghi thành ADR-115.
+   riêng — ghi thành ADR-116.
 3. `don_vi_goc` là khoá ngoại tới `uom_units` — không đơn vị đóng gói.
 4. Chưa thêm `category_id` — đợi nhóm hàng của S3.6 (ADR-084 ⑶).
 5. `ma` hàng chuẩn do người quản lý dữ liệu nhập, `UNIQUE (org_id, ma)`, có `CHECK` hình dạng.
 
 ## 3. Thay đổi
 
-- **`081_hang_chuan` (1) — vai.** Mã `item.manage`, vai `DATA_STEWARD` giữ đúng mã ấy. Hai trigger khuôn `033`
+- **`083_hang_chuan` (1) — vai.** Mã `item.manage`, vai `DATA_STEWARD` giữ đúng mã ấy. Hai trigger khuôn `033`
   (`kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro` trên `role_permissions`, `…_nguoi_dung` trên `user_roles`, AFTER ROW, `ENABLE ALWAYS`)
   chặn `item.manage` đứng cùng `bid.view`, `po.approve`, `award.recommend`, `rfq.create`, `rfq.invite`. Trigger tạo trước câu seed.
 - **(2) — cổng ghi.** `du_lieu_nen_kiem_quyen_ghi` (BEFORE INSERT, `ENABLE ALWAYS`) trên `uom_aliases` và bốn bảng mới: người ghi
@@ -16339,7 +16339,7 @@ Chốt ngày 2026-09-29, năm đề xuất của lượt bàn S4.2:
   chức, xuôi hoặc ngược, ghép quy đổi chung ở hai đầu; đúng một ứng viên ⇒ `QUY_DOI_RIENG`, không hay nhiều hơn ⇒
   `KHONG_QUY_DOI_DUOC`.
 - **Hardening.** Mục ghim mới cho hai trigger khuôn `033` và cổng ghi (năm trigger); nhóm `bid_chi_ghi_them` thêm tám trigger, nhóm
-  `kiem_danh_tinh_theo_phien` bốn, `du_lieu_nen_dat_thu_tu` bốn; bản ghim `quy_doi_don_vi` dời sang thân của `081` (lượt chạy đầu cho
+  `kiem_danh_tinh_theo_phien` bốn, `du_lieu_nen_dat_thu_tu` bốn; bản ghim `quy_doi_don_vi` dời sang thân của `083` (lượt chạy đầu cho
   thấy lớp ghim làm đúng việc: nó đè thân mới bằng thân `079` cho tới khi bản ghim dời theo); bốn bảng vào `BANG_TENANT_KHAI`.
 - **TypeScript.** `PERMISSIONS.ITEM_MANAGE`; `ITEM_MANAGE_EXCLUDES` và mốc ghim `ITEM_MANAGE_CONFLICT_ROLE_PAIRS` (năm cặp:
   `DATA_STEWARD` chỉ ghép được với `TECHNICAL`). Gói `du-lieu-nen`: `taoHangChuan`, `taoPhienBanHangChuan`, `khaiBiDanhHang`,
@@ -16354,12 +16354,12 @@ Chốt ngày 2026-09-29, năm đề xuất của lượt bàn S4.2:
 
 - **Cổng `item.manage` ở CSDL thay vì trong hàm gói.** Tôi đã nói *"mỗi hàm kiểm `item.manage`"*. ADR-016 đặt `requirePermission` ở
   tầng ứng dụng (route của S4.2b sẽ khai mã), nên hàm gói không gọi nó; thứ thay vào là một trigger CSDL — chặt hơn: câu SQL viết
-  tay dưới `app_api` cũng bị chặn. ADR-115 ⑹.
+  tay dưới `app_api` cũng bị chặn. ADR-116 ⑹.
 - **Cổng ghi áp cả `uom_aliases` của S4.1** — spec §4.3: `item.manage` giữ mọi thao tác ghi ở §4.2.
 - **Nhập dữ liệu gốc nhận MÃ danh mục.** `donViGoc`, `sangDonVi`, `tuDonVi` do người quản lý dữ liệu nhập: dạng sạch trùng một mã
   (*"m"*, *"T"*) là chính mã ấy, rồi mới tới bí danh. Chuỗi tự do của dòng RFQ vẫn không khớp mã trực tiếp (§S1.192). Lý do: `m` và `t`
   không có bí danh chung, nên không luật này thì không tạo được hàng chuẩn gốc mét hay tấn bằng chính mã của nó.
-- **Hai cạnh cùng dùng được ⇒ mơ hồ** kể cả khi hai hệ số khớp nhau (ADR-115 ⑶).
+- **Hai cạnh cùng dùng được ⇒ mơ hồ** kể cả khi hai hệ số khớp nhau (ADR-116 ⑶).
 - **Tầng gói từ chối khai quy đổi riêng giữa hai đơn vị cùng thứ nguyên** (`QUY_DOI_CHUNG_DA_CO`): ⑴ luôn đi trước nên hàng ấy không
   bao giờ được đọc.
 - **Rút chỉ khi có hàng đang hiệu lực** (`KHONG_CO_BI_DANH`, `KHONG_CO_QUY_DOI`) — hàng rút không để làm nhiễu lịch sử.

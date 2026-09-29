@@ -9030,13 +9030,13 @@ không ghi gì. Đo lại qua HTTP ở nền của vòng này: mời lúc gói c
 `apps/api/src/luong-moi-s3.int.test.ts` khối S3.2d — sáu ca K4a qua HTTP, gồm đối chứng MVP1; phép khớp tên hai chiều ở
 `packages/rfq/src/rfq.int.test.ts` gom thêm thân K4a. Đột biến: §S1.194.
 
-## ADR-115 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
+## ADR-116 — Quy đổi riêng của hàng chuẩn: đúng MỘT cạnh, ghép quy đổi chung ở hai đầu, dùng được chiều ngược; hai cạnh cùng dùng được là mơ hồ. Người ghi dữ liệu nền phải giữ `item.manage`, kiểm ở CSDL
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm đề xuất của lượt bàn S4.2 ngày 2026-09-29 (tách S4.2a/S4.2b,
-luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.195]** ·
+luật ghép quy đổi riêng, `don_vi_goc` là mã của danh mục, chưa có `category_id`, `ma` do người quản lý dữ liệu nhập) · **[S1.197]** ·
 **Liên quan:** spec S4 §4.2 (L4 ⑴⑵⑶), §4.3, §2.4 ⑺ (vai `DATA_STEWARD`), §5.1 L1 · L3 · L4; ADR-097 (bảy quyết định sau lượt soi);
 ADR-084 ⑶ (mã vào CSDL ở hạng mục dựng hành vi); ADR-016 (cổng quyền ở tầng ứng dụng); `033` (khuôn *thước không cùng tay*) ·
-**Biên bản:** `evidence/security-reviews.md` §S1.195
+**Biên bản:** `evidence/security-reviews.md` §S1.197
 
 ### Bối cảnh
 
@@ -9073,6 +9073,6 @@ S4.2b không lớp nào đòi `item.manage` cho một câu ghi viết tay dướ
 
 - Người quản lý dữ liệu khai MỘT cạnh cho mỗi đơn vị đóng gói của một hàng — về đơn vị gốc hay bất kỳ đơn vị nào cùng thứ nguyên —,
   không khai mọi cặp. Khai hai cạnh chồng nhau thì mọi phép quy đổi qua chúng thành `KHONG_QUY_DOI_DUOC` cho tới khi rút một cạnh.
-- `quy_doi_don_vi` đổi thân ở `081_hang_chuan`; bản ghim của hardening dời theo (quy tắc *migration CUỐI CÙNG*).
+- `quy_doi_don_vi` đổi thân ở `083_hang_chuan`; bản ghim của hardening dời theo (quy tắc *migration CUỐI CÙNG*).
 - Khe hở `005` §(3) áp nguyên cho hai trigger mới: sửa `role_permissions` sau khi người đã mang vai thì trigger mức người không chạy.
   Ma trận quyền chỉ đổi bằng migration, và meta-test tĩnh đọc mọi migration.

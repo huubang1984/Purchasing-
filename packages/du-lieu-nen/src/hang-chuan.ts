@@ -1,4 +1,4 @@
-// [S1.195 / S4.2a] Hàng chuẩn, bí danh hàng và quy đổi riêng (spec S4 §4.2, §4.3). Mọi hàm GHI ở đây:
+// [S1.197 / S4.2a] Hàng chuẩn, bí danh hàng và quy đổi riêng (spec S4 §4.2, §4.3). Mọi hàm GHI ở đây:
 //   ⑴ `assertTenantBound` trước mọi thứ, rồi tác giả DẪN XUẤT từ phiên (`resolveSessionActor`, ADR-016);
 //   ⑵ một câu INSERT vào bảng chỉ-ghi-thêm — `seq`, `ghi_luc` do trigger khuôn L1 đặt, người ghi phải giữ
 //      `item.manage` (trigger `du_lieu_nen_kiem_quyen_ghi`, L3); tầng gói không kiểm quyền lần hai: cổng ở tầng

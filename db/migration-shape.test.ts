@@ -457,7 +457,7 @@ describe("hình dạng file migration", () => {
       "audit_chain_anchors",
       "audit_events",
       "bid_receipts",
-      // [S1.195 / S4.2a / `081_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
+      // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
       "canonical_item_versions",
       "canonical_items",
       "guest_sessions",

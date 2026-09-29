@@ -74,7 +74,7 @@ const HAM_DOI_TRANG_THAI = [
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
   "issueMagicLinkToken",
-  // [S1.195 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
+  // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
@@ -118,7 +118,7 @@ const HAM_CHI_DOC = [
   // cùng lập luận của `listSuppliers`. Đường của một CON NGƯỜI là `xuatBoBangChung` (rổ
   // `HAM_DOC_CO_QUYEN`), và test cuối tệp này đòi `apps/` không gọi thẳng hàm này.
   "dungBoBangChung",
-  // [S1.195 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
+  // [S1.197 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
   // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
   "chuoiSach",
   "docHangChuan",
@@ -303,7 +303,7 @@ const CUA_GOI = [
   "@trustprocure/unseal",
   "@trustprocure/bidding",
   "@trustprocure/danh-gia",
-  // [S1.195 / S4.2a] Gói dữ liệu nền có hàm GHI từ S4.2a — vào danh sách CÙNG lúc, không đợi route đầu tiên (khuôn khoản 33).
+  // [S1.197 / S4.2a] Gói dữ liệu nền có hàm GHI từ S4.2a — vào danh sách CÙNG lúc, không đợi route đầu tiên (khuôn khoản 33).
   "@trustprocure/du-lieu-nen",
 ] as const;
 

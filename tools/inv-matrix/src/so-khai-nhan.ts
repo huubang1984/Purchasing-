@@ -387,7 +387,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
-  // [S1.195 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
+  // [S1.197 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
   // ghi CSDL (L3); `ma-tran-quyen` khoá ba bản của danh sách loại trừ và cặp vai xung đột (L3, T1).
   L1: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
   L3: ["packages/du-lieu-nen/src/hang-chuan.int.test.ts", "packages/identity/src/ma-tran-quyen.test.ts"],
