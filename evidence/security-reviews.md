@@ -16802,6 +16802,10 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
   một nhóm cho mỗi tổ chức, gói nhận nhóm lúc tạo): 17/17 xanh lại. Toàn bộ T3 cục bộ trên cây cuối: 196 tệp, 3340 khẳng định, 3330
   đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến, đọc từ 3340 khẳng định;
   K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #203 (S3.3a — S1.196, `082_xac_minh_nha_cung_cap`; K8a vào sổ đăng ký):** số của vòng giữ nguyên.
+  Toàn bộ T3 cục bộ trên cây cuối: 197 tệp, 3350 khẳng định, 3340 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại
+  trùng bản đã commit: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào; K8a vào ở #203), đọc từ 3350 khẳng định; K4b 23, D2 50 như
+  trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 
 ---
 
