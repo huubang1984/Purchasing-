@@ -16981,3 +16981,8 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
   Toàn bộ unit + T3 cục bộ trên cây cuối: 197 tệp, 3368 khẳng định, 3358 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận
   sinh lại trùng bản đã commit: 71/71 bất biến, đọc từ 3368 khẳng định; K4b 40, D2 64, K4a 26 như trên. `tsc`, `eslint`, `depcruise`
   sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #203 (S3.3a, K8a) — và chạy lại `cap-so`:** số của vòng giữ nguyên. Mục ghim hardening của vòng
+  này và của S3.3a cùng nối một chỗ; gộp theo từng khối chèn (của #203 trước), hai phía giữ đủ dòng thêm và dòng bớt so với gốc
+  chung. Toàn bộ unit + T3 cục bộ trên cây cuối: 198 tệp, 3378 khẳng định, 3368 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma
+  trận sinh lại trùng bản đã commit: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào; K8a vào ở #203), đọc từ 3378 khẳng định; K4b
+  40, D2 64, K4a 26 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
