@@ -146,9 +146,51 @@ export interface ViecSauCommitCoBu {
   readonly phanHoiKhiHong: ApiResponse;
   /** Phản hồi khi `bu` cũng hỏng. Không khai ⇒ `500` thân cố định của bộ điều phối. */
   readonly phanHoiKhiBuHong?: ApiResponse;
+  /**
+   * [S1.188 / S3.2b2 / ADR-113] Việc GHI sau khi `viec` xong trong trần — hôm nay: lời mời `UNSENT→SENT` (`danhDauDaGui`). Chạy trong
+   * một giao dịch MỚI đã gắn tổ chức, cùng trần lấy kết nối với `bu`. Hỏng ⇒ MỘT dòng log `ghi-sau-commit`, phản hồi giữ nguyên:
+   * `viec` đã xong — link đã đi —, nên phản hồi thành công vẫn là sự thật về lần gửi; chỉ hàng CSDL chậm một bước.
+   */
+  readonly khiXong?: (client: pg.PoolClient) => Promise<void>;
 }
 
 export type AfterCommitCoBu = (viec: ViecSauCommitCoBu) => void;
+
+/**
+ * [S1.188 / S3.2b2 / ADR-113] Một lần gửi trong LÔ gửi sau commit — xem `LoGuiSauCommit`.
+ */
+export interface LanGuiSauCommit {
+  /** Khoá của lần gửi trong danh sách gửi hỏng mà `phanHoi` nhận — hôm nay: id lời mời. */
+  readonly khoa: string;
+  readonly gui: () => Promise<void>;
+  /** `gui` xong trong trần ⇒ chạy trong một giao dịch MỚI đã gắn tổ chức. Hỏng ⇒ MỘT dòng log `ghi-sau-commit`. */
+  readonly khiXong: (client: pg.PoolClient) => Promise<void>;
+  /** `gui` ném hay quá trần ⇒ chạy trong một giao dịch MỚI đã gắn tổ chức. Hỏng ⇒ MỘT dòng log `bu-sau-commit`. */
+  readonly bu: (client: pg.PoolClient) => Promise<void>;
+}
+
+/**
+ * [S1.188 / S3.2b2 / ADR-113] LÔ gửi sau commit — N lần gửi mà mỗi lần hỏng KHÔNG làm hỏng cả yêu cầu. Người dùng đầu tiên là lần
+ * mở gói của tổ chức đã bật S3: một link cho mỗi lời mời còn sống, và gói ĐÃ mở thật, không lùi được — nên chủ dự án chọn
+ * `200` kèm danh sách lời mời chưa gửi, thay vì một mã lỗi cho cả lần mở (2026-09-28).
+ *
+ * Chỉ route NGƯỜI MUA có, và mỗi yêu cầu tối đa MỘT việc có bù — một `ViecSauCommitCoBu` HOẶC một lô: đăng ký lần hai ném
+ * `ViecCoBuThuHai` ngay trong handler, giao dịch rollback (lượt soi 64a-2). Bộ điều phối chạy lô khi phản hồi của handler thành
+ * công: MỌI lần gửi cùng lúc, mỗi lần một trần `afterCommitTimeoutMs` — N lần gửi treo trả về sau MỘT trần, không N trần; rồi
+ * lần lượt, mỗi lần gửi một giao dịch MỚI của cùng tổ chức (lần lấy kết nối có trần 5 s): `khiXong` cho lần xong, `bu` cho lần
+ * hỏng — một lần ghi hỏng không kéo lần khác theo. Rồi `phanHoi(phản hồi của handler, khoá của mọi lần gửi hỏng theo thứ tự của
+ * `lanGui`)` thay phản hồi; việc sau commit thường chạy sau đó. `bu` hay `khiXong` hỏng KHÔNG đổi danh sách: danh sách nói
+ * link nào không đi, và điều ấy không đổi khi hàng CSDL chậm một bước.
+ *
+ * Cùng hai điều của `ViecSauCommitCoBu`: closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8), và phần bù không đi qua cổng
+ * quyền lần nữa (64a-7).
+ */
+export interface LoGuiSauCommit {
+  readonly lanGui: readonly LanGuiSauCommit[];
+  readonly phanHoi: (r: ApiResponse, khoaHong: readonly string[]) => ApiResponse;
+}
+
+export type AfterCommitLoGui = (lo: LoGuiSauCommit) => void;
 
 /**
  * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
@@ -206,6 +248,8 @@ export interface BuyerContext {
   readonly afterCommit: AfterCommit;
   /** [S1.70 / khoản 124] Việc sau commit mà kết quả quyết phản hồi — xem `ViecSauCommitCoBu`. */
   readonly afterCommitCoBu: AfterCommitCoBu;
+  /** [S1.188 / S3.2b2 / ADR-113] Lô N lần gửi sau commit, mỗi lần hỏng riêng — xem `LoGuiSauCommit`. */
+  readonly afterCommitLoGui: AfterCommitLoGui;
   /**
    * [S1.169 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
    * (`choKyChinhSach`), mặc định TẮT; route ký đọc nó TRƯỚC mọi câu ghi.
