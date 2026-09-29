@@ -457,8 +457,13 @@ describe("hình dạng file migration", () => {
       "audit_chain_anchors",
       "audit_events",
       "bid_receipts",
+      // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
+      "canonical_item_versions",
+      "canonical_items",
       "guest_sessions",
       "invitation_otp_challenges",
+      "item_aliases",
+      "item_uom_conversions",
       "mfa_credentials",
       // [S1.12 / 040] yêu cầu đặt lại TOTP — bảng tenant thứ 29.
       "mfa_reset_requests",

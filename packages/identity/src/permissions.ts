@@ -91,6 +91,12 @@ export const PERMISSIONS = {
    */
   POLICY_MANAGE: "policy.manage",
   /**
+   * [S1.197 / S4.2a / spec S4 §2.4 ⑺] Quản lý dữ liệu nền — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị của tổ chức.
+   * Chỉ vai `DATA_STEWARD` giữ, và người giữ MÙ GIÁ: `ITEM_MANAGE_EXCLUDES` dưới đây. Cổng GHI đứng ở CSDL
+   * (`du_lieu_nen_kiem_quyen_ghi`): người ghi hàng dữ liệu nền phải giữ mã này trong tổ chức của hàng.
+   */
+  ITEM_MANAGE: "item.manage",
+  /**
    * [S1.9101 / S3.6a / ADR-084 ⑵] Quản lý danh sách nhóm hàng — tạo, ngừng dùng, dùng lại. Cấp cho `FINANCE`. Nhóm hàng là khoá
    * của tín hiệu chia nhỏ (K10): một vai tạo gói mà chỉnh được nhóm hàng thì chỉnh được chính tín hiệu soi mình. `FINANCE` giữ
    * `policy.manage`, và `033` cấm một NGƯỜI giữ mã ấy cùng `rfq.create` — nên người quản lý nhóm hàng không tạo được gói. Trigger
@@ -231,6 +237,33 @@ export const POLICY_MANAGE_CONFLICT_ROLE_PAIRS = [
   ["BUYER", "FINANCE"],
   ["FINANCE", "PROCUREMENT_MANAGER"],
   ["FINANCE", "REQUESTER"],
+] as const satisfies readonly (readonly [string, string])[];
+
+/**
+ * [S1.197 / S4.2a] Bất biến **L3**, vế vai: người đặt thước dữ liệu nền không thấy giá và không cầm thứ bị đo —
+ * `item.manage` KHÔNG đứng cùng năm mã này, ở một vai và ở một người (spec S4 §2.4 ⑺, §5.1). Ba bản phải khớp nguyên
+ * văn: đây, thân `kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro()` và `kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung()` —
+ * `ma-tran-quyen.test.ts` khoá, khuôn `POLICY_MANAGE_EXCLUDES`.
+ */
+export const ITEM_MANAGE_EXCLUDES = [
+  "bid.view",
+  "po.approve",
+  "award.recommend",
+  "rfq.create",
+  "rfq.invite",
+] as const satisfies readonly Permission[];
+
+/**
+ * [S1.197 / S4.2a] Mốc GHIM (QT2): các cặp vai mà một người mang cả hai sẽ giữ `item.manage` cùng một mã loại trừ —
+ * trigger mức người chặn đúng các cặp này. Hôm nay `DATA_STEWARD` chỉ ghép được với `TECHNICAL` (§8.10 của spec S4:
+ * một tổ chức nhỏ không gán được vai này cho người `FINANCE` sẵn có).
+ */
+export const ITEM_MANAGE_CONFLICT_ROLE_PAIRS = [
+  ["BUYER", "DATA_STEWARD"],
+  ["DATA_STEWARD", "DIRECTOR"],
+  ["DATA_STEWARD", "FINANCE"],
+  ["DATA_STEWARD", "PROCUREMENT_MANAGER"],
+  ["DATA_STEWARD", "REQUESTER"],
 ] as const satisfies readonly (readonly [string, string])[];
 
 export const CHAIN_COVERING_ROLE_PAIRS = [
