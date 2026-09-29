@@ -1753,7 +1753,7 @@ describe("[khoản 190] yêu cầu mở thầu ĐANG MỞ của một gói thầ
 // [S1.187 / khoản 215] CẶP NHÂN CHỨNG CHỈ ĐI VỚI YÊU CẦU BREAK-GLASS — Ở TẦNG CSDL
 //
 // `requestUnseal` đã chặn ở tầng ứng dụng; ca này đo tầng có thẩm quyền, bằng một câu `INSERT` viết tay dưới chính vai `app_api`
-// (vai có `GRANT INSERT` trên hai cột nhân chứng, `022`). Trước `9501` câu ấy đi qua: nhân chứng hợp lệ (người khác, phiên của chính
+// (vai có `GRANT INSERT` trên hai cột nhân chứng, `022`). Trước `078` câu ấy đi qua: nhân chứng hợp lệ (người khác, phiên của chính
 // họ) nên trigger `unseal_requests_kiem_nhan_chung` không từ chối, và `unseal_kiem_du_phe_duyet` chỉ đọc hai cột ấy khi `break_glass`.
 // ===============================================================================================
 describe("[S1.187 / khoản 215] yêu cầu không break-glass không mang được cặp nhân chứng", () => {
