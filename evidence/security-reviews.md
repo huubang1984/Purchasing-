@@ -15852,3 +15852,55 @@ sau commit này.
 ## 5. Số
 
 Mở khoản 254, 255. Còn mở **84**; rổ B **60**.
+
+# §S1.190 — S3.2c1: `gieo:demo --s3` VÀ KỊCH BẢN 41 CHẠY THEO THỨ TỰ MỜI MỚI (K4a, K4b, K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 ở tổ chức chưa bật; chạy dưới công tắc ADR-080. Không
+migration, không mã sản xuất — một công cụ dev và hai tệp test.
+
+## 1. Việc gì
+
+Phần đầu của S3.2c (spec S3 §9). Sau S3.2b2, tổ chức đã bật S3 mời ở DRAFT và link đi lúc mở gói, nhưng công cụ gieo và kịch bản 41
+vẫn dựng luồng S3 theo thứ tự MVP1: mở gói trước, mời sau. Chủ dự án chốt ngày 2026-09-29: S3.2c chia hai PR — S3.2c1 là công cụ gieo
+và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ chức đã bật, nút *Trả về soạn thảo*) cùng lượt đi thử T4.
+
+## 2. Đo trước
+
+`pnpm gieo:demo --s3` của `master` (`8f90bf2`) chạy trên Postgres 16 cục bộ: năm lời mời `UNSENT`, `moi_sau_khi_ky = true`, token
+`duc_khi_goi_da_mo = true`. Tức là chữ ký duyệt gói được ký khi danh sách còn RỖNG, và năm lời mời vào sau với nhãn *mời sau khi ký* —
+đúng lối K4a gắn nhãn chứ không phải luồng mà S3 dựng cho người dùng. `pnpm gieo:demo` (MVP1) cùng máy: ba lời mời `SENT`, không nhãn.
+
+## 3. Thay đổi
+
+- `tools/gieo-demo/src/index.ts`: `--s3` dựng nhà cung cấp, người liên hệ và lời mời ở DRAFT, TRƯỚC lần nộp duyệt, nên chữ ký mang băm
+  của danh sách bảy lời mời (K4b). Lần mở gói gọi `ducTokenKhiMoGoi` trong chính giao dịch mở — đúng đường của route mở gói — rồi
+  `danhDauDaGui`, vì công cụ in link thay cho bộ gửi. Chế độ mặc định giữ nguyên thứ tự và hàm cũ.
+- `apps/unseal-worker/src/kich-ban-41.int.test.ts` (gói) và `kich-ban-41-http.int.test.ts` (HTTP): luồng S3 mời ở bước 2, trước lần
+  nộp duyệt — lời mời `UNSENT`, không nhãn, không token (gói), bộ gửi không được gọi (HTTP). Lần mở gói: bản gói đúc đúng năm token
+  bằng `ducTokenKhiMoGoi`; bản HTTP nhận `unsentInvitationIds` rỗng, bộ gửi nhận đúng năm link cho năm lời mời, danh sách lời mời đọc
+  qua HTTP toàn `SENT`. Bước 3 mở phiên khách bằng đúng link của từng lời mời. Luồng MVP1 giữ nguyên thứ tự cũ; một hàm dựng nhà cung
+  cấp và lời mời dùng chung cho hai luồng.
+
+## 4. Đo sau
+
+- `gieo:demo --s3`: bảy lời mời `SENT`, `moi_sau_khi_ky = false`, mỗi lời mời một token `duc_khi_goi_da_mo = true`; `gieo:demo` (MVP1):
+  như trước.
+- `kich-ban-41.int.test.ts` 30/30; `kich-ban-41-http.int.test.ts` 58/58 (Postgres 16 qua Testcontainers).
+- Đột biến, mỗi cái trên đúng một dòng mã sản xuất, rồi khôi phục:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | 1 | `ducTokenKhiMoGoi` trả mảng rỗng cả ở tổ chức đã bật | ĐỎ — gói 13/30, HTTP 23/58 |
+  | 2 | `danhDauDaGui` không bao giờ khớp hàng | ĐỎ — HTTP 1/58 (danh sách lời mời không `SENT`) |
+  | 3 | route mở gói không đăng ký lô gửi | ĐỎ — HTTP 23/58 |
+
+- `pnpm t0` sạch; `pnpm test` 121 tệp, 1704 đạt, 1 bỏ qua.
+
+## 5. Giới hạn
+
+- `gieo:demo --s3` đặt `SENT` trong chính giao dịch mở gói, vì nó in link thay cho bộ gửi; route thật đặt `SENT` sau lần gửi được.
+- Màn `/tao-thau` vẫn dựng theo thứ tự MVP1 cho mọi tổ chức — S3.2c2.
+
+## 6. Số
+
+Không khoản nào mở hay đóng.
