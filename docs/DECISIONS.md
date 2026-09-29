@@ -9082,6 +9082,83 @@ S4.2b không lớp nào đòi `item.manage` cho một câu ghi viết tay dướ
 - Khe hở `005` §(3) áp nguyên cho hai trigger mới: sửa `role_permissions` sau khi người đã mang vai thì trigger mức người không chạy.
   Ma trận quyền chỉ đổi bằng migration, và meta-test tĩnh đọc mọi migration.
 
+## ADR-119 — S3.6a: nhóm hàng — hai bảng chỉ ghi thêm, bắt buộc để gói rời DRAFT ở tổ chức đã bật, `THIEU_NHOM_HANG` vào sổ
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29: S3.6 chia bốn PR, S3.6a là nhóm hàng;
+nhóm hàng bắt buộc để rời DRAFT ở tổ chức đã bật ngay S3.6a; lần từ chối `THIEU_NHOM_HANG` vào sổ; nhóm hàng chỉ tạo, ngừng dùng và
+dùng lại — mã và tên không sửa; người quản lý ở màn riêng `/nhom-hang` · **[S1.201]** · **Liên quan:** ADR-084 ⑵ ⑶ ⑷ (mã
+`category.manage` cho `FINANCE`, mã vào CSDL ở đúng hạng mục, `CONTROL_DENIED`), ADR-080 (công tắc), ADR-051 (luật người đọc dữ liệu
+thật), ADR-108 (tên ràng buộc) · **Spec:** S3 §4.3, §4.6, §9 (S3.6) · **Biên bản:** `evidence/security-reviews.md` §S1.201
+
+### Bối cảnh
+
+Spec S3 §4.3 đặt nhóm hàng làm KHOÁ của tín hiệu chia nhỏ (`PURCHASE_SPLITTING`, K10, S3.6b): tín hiệu gộp các gói cùng nhóm hàng trong
+cửa sổ `chia_nho_cua_so_ngay`. Không có nhóm hàng thì tín hiệu phải gộp MỌI gói của tổ chức, và một người mua nhiều thứ khác nhau báo
+động giả liên tục. Spec viết danh sách phẳng theo tổ chức (mã, tên, còn dùng), `category_id` NULL cho gói cũ và bắt buộc để rời DRAFT
+*"khi chính sách có `chia_nho_cua_so_ngay`"*, khoá sau DRAFT bằng trigger riêng; ADR-084 ⑵ chốt mã `category.manage` cho `FINANCE`.
+Đo trước trên lược đồ chưa có migration của vòng này: một gói của tổ chức đã bật rời DRAFT không nhóm hàng nào, không hàng
+`CONTROL_DENIED` nào — không bảng, không cột, không mã quyền.
+
+### Quyết định
+
+1. **Mã `category.manage` cho `FINANCE`** vào CSDL ở vòng này (ADR-084 ⑶). `FINANCE` giữ `policy.manage`, và `033` cấm một NGƯỜI giữ
+   `policy.manage` cùng `rfq.create` — nên người quản lý nhóm hàng không tạo được gói. Test ghim rằng mọi vai giữ `category.manage`
+   đều giữ `policy.manage` và không giữ `rfq.create`.
+2. **Hai bảng CHỈ GHI THÊM, khuôn `supplier_verifications` của S3.3a.** `procurement_categories` giữ mã và tên — không sửa, không xoá;
+   mã duy nhất theo tổ chức, chữ HOA. `procurement_category_changes` giữ mỗi lần ngừng dùng (`RETIRED`) hay dùng lại (`REACTIVATED`):
+   trạng thái là hàng có `thu_tu` lớn nhất, `thu_tu` do trigger đặt dưới khoá tư vấn ĐỘC QUYỀN theo nhóm (hạt giống 8). Câu hỏi duy nhất
+   về trạng thái là `nhom_hang_con_dung(org, nhóm)`.
+3. **Luật người ở trigger** (khuôn ADR-051): người tạo nhóm và người đổi trạng thái giữ `category.manage`; lần đổi đi đúng chiều — hai
+   nhánh sai chiều mang tên ràng buộc để tầng gói nói câu của người dùng. Route và hàm gói hỏi quyền trước (`PERMISSION_DENIED`).
+4. **Nhóm hàng của gói:** `rfq_packages.category_id`, khoá ngoại theo (tổ chức, nhóm). Trigger riêng `rfq_packages_nhom_hang`: cột chỉ
+   đổi ở DRAFT, chỉ gán được nhóm còn dùng — dưới khoá tư vấn CHIA SẺ theo nhóm, nên lần gán và lần ngừng dùng chen nhau thì xếp hàng.
+   Ngừng dùng chỉ chặn lần GÁN mới: gói đang giữ nhóm ấy vẫn nộp duyệt được.
+5. **Chốt `THIEU_NHOM_HANG`, khuôn K1.** Hàm vị từ `rfq_chot_nhom_hang(org, nhóm)`; tầng gói hỏi nó trên hàng DRAFT TRƯỚC câu ghi và từ
+   chối theo `CHOT_VAO_SO` (chốt `K10`, `vaoSo: true`); trigger ở cạnh `DRAFT→PENDING_APPROVAL` hỏi lại trên GIÁ TRỊ MỚI của cột. K1 đứng
+   trước: gói thiếu cả ngân sách lẫn nhóm hàng nhận lời về ngân sách. Trigger ở cạnh KHÔNG giữ khoá riêng: câu trả lời chỉ đổi theo
+   trạng thái bật khi gói không có nhóm hàng, trạng thái ấy chỉ đổi một chiều ở lần ký bật tổ chức, và lần ký ấy đổi luôn phiên bản
+   hiệu lực — nên trigger K1, xếp trước và giữ khoá chia sẻ của `072`, chặn trước mọi gói soạn trước lần bật. Ca ĐUA đo điều ấy; một
+   khoá thứ hai ở đây không chặn thêm lối nào, còn che phép đo khoá của K1.
+6. **Điều kiện của chốt là `to_chuc_da_bat_s3(org)`, không phải cột `chia_nho_cua_so_ngay`.** `069` bắt mọi phiên bản CÓ BẬC khai cửa
+   sổ, nên ở tổ chức đã bật hai câu hỏi trùng nhau; nhưng `069` cũng cho một phiên bản KHÔNG bậc khai cửa sổ, và hỏi cột thì tổ chức
+   chưa bật ấy đổi hành vi trong im lặng — đúng rủi ro spec §8.11. Test đo đúng ca ấy.
+7. **Hai màn.** `/nhom-hang` cho người giữ `category.manage`: danh sách, ngừng dùng, dùng lại, tạo. `/tao-thau` có ô chọn nhóm hàng ở
+   bước gói thầu, chỉ ở tổ chức đã bật, và nút *Đặt nhóm hàng* chỉ ở DRAFT. Bốn route: `GET /categories` (không cho agent),
+   `POST /categories`, `PUT /categories/:categoryId/status` (cả hai `category.manage`), `PUT /rfqs/:rfqId/category` (`rfq.create`);
+   `POST /rfqs` nhận `categoryId` tuỳ chọn.
+
+### Phương án đã cân nhắc
+
+- **Một cột `con_dung` sửa tại chỗ.** Loại: lần đổi cần một người đổi có thật ở CSDL, và một cột *người đổi* sửa tại chỗ còn mang người
+  của lần đổi trước khi một câu UPDATE quên đặt nó — trigger `kiem_danh_tinh_theo_phien` sẽ ghi công sai người. Bảng đổi chỉ ghi thêm
+  thì mỗi lần đổi là một hàng mang đúng phiên của nó, và lịch sử có sẵn.
+- **Hỏi đúng cột `chia_nho_cua_so_ngay` như chữ của spec.** Loại, lý do ở quyết định 6.
+- **Hàm vị từ đọc hàng gói như K1.** Loại: trigger BEFORE thấy hàng CŨ trong bảng, nên một câu viết tay vừa nộp duyệt vừa xoá nhóm hàng
+  đi lọt. Hàm nhận giá trị cột; test đo đúng câu ấy.
+- **Đưa nhóm hàng vào băm nội dung mà chữ ký duyệt gói mang.** Chưa làm: nhóm hàng khoá sau DRAFT, nên nó chỉ đổi được sau một lần trả
+  về soạn thảo; tín hiệu chia nhỏ của S3.6b tính lại ở cạnh mở gói trên nhóm hiện tại, nên một lần đổi nhóm giữa hai chữ ký không thoát
+  được tín hiệu. Đổi thân `rfq_bam_noi_dung` còn chạm các nhánh K4b đang mở.
+- **Tạo gói mới trong `packages/kiem-soat`.** Chưa làm: spec §3.2 xếp tín hiệu và ngoại lệ vào gói ấy, không xếp nhóm hàng; dựng gói
+  ở vòng này dễ đụng S3.3b đang dựng ngoại lệ ở nhánh khác. Nhóm hàng ở `packages/rfq`, cạnh gói thầu nó thuộc về.
+
+### Hệ quả, nói thẳng
+
+- **Mọi gói của tổ chức đã bật phải có nhóm hàng trước lần nộp duyệt**, kể cả gói đang soạn từ trước vòng này; tổ chức đã bật cần
+  một người `FINANCE` dựng ít nhất một nhóm trước. Gói đã rời DRAFT từ trước giữ NULL và không bị đòi gì cho tới lần nộp duyệt kế.
+- **Nhóm hàng chỉ mạnh bằng người chọn nó.** Người soạn gói chọn nhóm; xếp hai gói anh em vào hai nhóm khác nhau là né tín hiệu chia
+  nhỏ. Tách người quản lý danh sách khỏi người tạo gói làm danh sách không bị chỉnh theo gói, không làm lần chọn trung thực.
+- **`category.manage` chỉ ở `FINANCE`** (ADR-084). Lần ký bật tổ chức đòi người ký giữ `policy.manage` — hôm nay chỉ `FINANCE` giữ —,
+  nên lúc bật, tổ chức có ít nhất một người dựng được nhóm hàng. Người ấy phải dựng nhóm TRƯỚC lần nộp duyệt đầu tiên sau khi bật.
+  Mất người ấy về sau thì không ai tạo được nhóm mới hay dùng lại nhóm đã ngừng, cho tới khi có người `FINANCE` khác; gói vẫn gán
+  được nhóm đang dùng.
+- **Thêm bốn route**, và một lần từ chối `CONTROL_DENIED` mới vào trần lần từ chối theo phiên (ADR-112) sẵn qua `tuChoiTheoChot`.
+
+### Đo
+
+`packages/rfq/src/nhom-hang.int.test.ts` — 22 ca trên Postgres thật, gồm sáu đột biến trong giao dịch (tắt hay viết lại từng trigger,
+hàm vị từ trả NULL, câu hỏi trạng thái trả hằng) và hai ca đua; `apps/api/src/buyer.int.test.ts` qua HTTP; kịch bản 41 hai bản ở luồng S3; hai màn ở
+`apps/web/src/phuc-vu.test.ts` và `nhom-hang.test.ts`. Đột biến ở mã nguồn: §S1.201.
+
 ---
 
 ## ADR-115 — Tổ chức đã bật S3: chữ ký mở gói ràng vào NGÂN SÁCH của gói — băm riêng, và cạnh mở gói đếm trên ngân sách hiện tại

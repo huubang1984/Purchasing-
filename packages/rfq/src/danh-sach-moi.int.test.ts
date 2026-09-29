@@ -172,10 +172,31 @@ async function nhaCungCap(t: ToChuc, ncc?: string): Promise<NhaCungCap> {
   return { ncc: id, lh };
 }
 
-/** Gói DRAFT có ngân sách và một hạng mục. */
+/**
+ * [S1.201 / S3.6a] Nhóm hàng của tổ chức, dựng MỘT lần bởi người FINANCE (giữ `category.manage`): tổ chức đã bật không nộp duyệt
+ * được gói không nhóm hàng. Tổ chức chưa bật nhận cùng nhóm — ở đó nó tuỳ chọn, và không phép đo nào ở tệp này đọc nó.
+ */
+const NHOM_CUA = new Map<string, string>();
+async function nhomCua(t: ToChuc): Promise<string> {
+  const co = NHOM_CUA.get(t.org);
+  if (co !== undefined) return co;
+  const id = (
+    await withTenant(apiPool, t.org, (c) =>
+      c.query<{ id: string }>(
+        "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP', 'Thep', $2, $3) RETURNING id",
+        [t.org, t.tc.u, t.tc.s],
+      ),
+    )
+  ).rows[0]!.id;
+  NHOM_CUA.set(t.org, id);
+  return id;
+}
+
+/** Gói DRAFT có ngân sách, một hạng mục và nhóm hàng. */
 async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG): Promise<string> {
+  const categoryId = await nhomCua(t);
   const rfqId = await withTenant(apiPool, t.org, async (c) =>
-    (await createRfq(c, t.org, { title: "Mua thep tam", deadlineAt: MAI_SAU, createdBySessionId: t.pm.s })).id,
+    (await createRfq(c, t.org, { title: "Mua thep tam", deadlineAt: MAI_SAU, createdBySessionId: t.pm.s, categoryId })).id,
   );
   await withTenant(apiPool, t.org, async (c) => {
     await setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s });
