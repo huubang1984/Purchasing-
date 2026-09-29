@@ -332,6 +332,15 @@ không phải tiền, nên so bằng số thực chấp nhận được, và đi
 **[S1.159] Phiên bản nào áp cho gói X** — thứ bản nháp không nói, và là CAO ①: phiên bản mới nhất TẠO trước `opened_at`
 của X, đọc qua `chinh_sach_tai(org_id, thoi_diem)` (§2.4 ⑸, §2.5 ⒆). Phiên bản tạo sau đó không đổi được gì của X.
 
+> **[S1.9101 / S4.0 — ĐO, CHƯA CHỐT] Hàm `chinh_sach_tai` không tồn tại; thứ S3.1 dựng mang tên KHÁC và nghĩa KHÁC.**
+> `069_bac_va_chu_ky_chinh_sach` dựng `chinh_sach_hieu_luc(p_org, p_luc)`: phiên bản có `version` CAO NHẤT mà
+> `effective_from <= p_luc` và — khi có `tiers` — đã có chữ ký thứ hai trước `p_luc`; `rfq_che_do_nghiem` gọi nó tại
+> `created_at` của gói, không tại `opened_at`. Câu trên nói *"mới nhất TẠO trước `opened_at`"* — hai luật cho hai phiên bản
+> khác nhau khi một phiên bản tạo trước mà hiệu lực sau, hay chưa ký. Tên `chinh_sach_tai` còn ở §2.5 ⒆, §3.4, L14 (§5.1),
+> §9 S4.5, spec S4b (hai chỗ) và ADR-093. S4.0 không đổi luật: chọn mốc (`opened_at` hay `created_at`) và luật (tạo hay
+> hiệu lực + ký) là việc của S4.5, nơi bộ đọc đầu tiên gọi hàm ấy. Đến lúc đó mọi chữ `chinh_sach_tai` trong tài liệu đọc
+> là *"hàm ghim phiên bản của S3.1, luật chờ S4.5"*.
+
 **Không migration nào tự tạo phiên bản chính sách** cho tổ chức — cùng nguyên tắc spec S3 §4.1 viện dẫn từ
 `hardening.always.sql`. Mặc định là mẫu điền sẵn trên màn khai chính sách và trong `gieo:demo`. Hiệu chỉnh sau pilot bằng
 ba tỷ lệ: tỷ lệ ánh xạ tự động bị người duyệt đảo lại, tỷ lệ nhãn lệch được ghi nhận là *có cơ sở*, và tỷ lệ hạng mục

@@ -1053,6 +1053,9 @@ const DANH_SACH_TRANG_DB = [
 // BẢY SYMBOL, và gói này đáng canh vì HẬU QUẢ của con số nó tính: `effective_cost` quyết định
 // THỨ HẠNG, thứ hạng quyết định award. Một symbol thứ tám tính tiền theo một luật khác là
 // khoản 218 mọc lại trong chính gói sinh ra để chấm dứt nó.
+// [S1.9101 / S4.1] Nền dữ liệu của S4a: làm sạch chuỗi và quy đổi đơn vị — cả hai chỉ gọi hàm SQL, không cài lại luật.
+const DANH_SACH_TRANG_DU_LIEU_NEN = ["KHONG_QUY_DOI_DUOC", "chuoiSach", "quyDoiDonVi"];
+
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
   // `chi-phi-hieu-dung.ts` vẫn thuần — spec §3.2 đòi đúng thế, vì J2 phải đo được bằng một lời
@@ -1157,6 +1160,15 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
       ".",
       DANH_SACH_TRANG_DANH_GIA,
       "effective_cost quyết định THỨ HẠNG, và thứ hạng quyết định ai được trao thầu.",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/du-lieu-nen chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "du-lieu-nen",
+      ".",
+      DANH_SACH_TRANG_DU_LIEU_NEN,
+      "Đơn vị đo là THƯỚC của benchmark: một bản quy đổi thứ hai đi vòng qua cửa là hai tầng cho hai con số (khoản 218).",
     );
   });
 
@@ -1271,6 +1283,7 @@ const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly
       ]),
     ],
     ["danh-gia", new Map([[".", DANH_SACH_TRANG_DANH_GIA]])],
+    ["du-lieu-nen", new Map([[".", DANH_SACH_TRANG_DU_LIEU_NEN]])],
     ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
     ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
     ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],

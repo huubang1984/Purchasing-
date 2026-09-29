@@ -134,6 +134,12 @@ const BANG_CHI_GHI_THEM_THAT = [
   "rfq_award_approvals",
   "rfq_awards",
   "rfq_unsealed_bids",
+  // [S1.9101 / S4.1 / `9501_don_vi_do`] Bí danh đơn vị của tổ chức (L1) và hai danh mục toàn cục — khuôn `047`/`061`:
+  // `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Danh mục toàn cục là THƯỚC:
+  // sửa `he_so_ve_goc` là đổi mọi quy đổi đã dùng.
+  "uom_aliases",
+  "uom_aliases_chung",
+  "uom_units",
   "vendor_bid_versions",
 ];
 
@@ -241,6 +247,10 @@ const HAM_KHONG_PHAI_CANH = [
   "public.chinh_sach_kiem_nguoi_ky",
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
+  // [S1.9101 / S4.1 / L1 / `9501_don_vi_do`] Hàm trigger khuôn của MỌI bảng dữ liệu nền: BEFORE INSERT, lấy khoá tư vấn rồi ĐẶT
+  // `seq` và `ghi_luc` — không bao giờ từ chối. Chỉ gắn INSERT ⇒ không thể là hàm canh; thứ giữ bảng chỉ-ghi-thêm là
+  // `bid_chi_ghi_them`. Nhân chứng: câu khai bí danh cuối `dungKichBan()`.
+  "public.du_lieu_nen_dat_thu_tu",
   "public.guest_session_kiem_danh_tinh",
   // [S1.105 / 057] Vế NỘI DUNG của J1: nó so tập `(ma, đơn vị)` của `components` với tập mà phiên bản
   // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
@@ -1735,6 +1745,24 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_packages",
+  );
+
+  // ---- [S1.9101 / S4.1 / L1 / `9501_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------
+  // Hai bộ ba mới trên `uom_aliases`/INSERT: `du_lieu_nen_dat_thu_tu` (hàm MỚI — ĐẶT `seq`, `ghi_luc`, không bao giờ từ chối) và
+  // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai cột trigger đặt không khai ở vế ⒠ — thứ được so là cột câu ĐẶT.
+  doiSoHang(
+    await so.chung(
+      "public.uom_aliases",
+      "INSERT",
+      api(
+        "INSERT INTO uom_aliases (org_id, bi_danh_sach, code, tac_gia, session_id) VALUES ($1, 'mt', 't', $2, $3) " +
+          "RETURNING org_id, bi_danh_sach, code, tac_gia, session_id",
+        [org, pm.u, pm.s],
+        { org_id: org, bi_danh_sach: "mt", code: "t", tac_gia: pm.u, session_id: pm.s },
+      ),
+    ),
+    1,
+    "uom_aliases",
   );
 
   return { orgId: org };

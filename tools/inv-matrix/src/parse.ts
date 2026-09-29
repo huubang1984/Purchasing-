@@ -66,8 +66,10 @@ export interface LabelUse {
  * [S1.185 / khoản 246] KHUÔN MÃ của một hàng sổ: chữ nhóm, số, tối đa MỘT chữ thường (`K4a`). Một nguồn cho bộ đọc
  * sổ, bộ gom độ phủ và vế *nhãn chưa khai* — ba bộ từng giữ ba bản chép của cùng một khuôn, và nới một bản mà quên
  * hai bản kia là cách một hàng có ô mà không có độ phủ.
+ *
+ * [S1.9101 / S4.0] Dải `[A-HJK]` → `[A-HJ-L]`: nhóm L (spec S4 §5) vào sổ từ L1, L4. Vẫn KHÔNG có `I`, vẫn không có `M`.
  */
-const KHUON_MA = String.raw`[A-HJK]\d+[a-z]?`;
+const KHUON_MA = String.raw`[A-HJ-L]\d+[a-z]?`;
 
 const MA_BAT_BIEN = new RegExp(`^${KHUON_MA}$`);
 
@@ -89,7 +91,7 @@ const MA_CO_VE = /^([A-Za-z]+\d+[a-z]?)(?:\((.+)\))?$/;
  * [S1.185 / khoản 246] Ô đầu TRÔNG NHƯ một mã sổ: chữ nhóm rồi một chữ số, đuôi gì cũng được. Rộng hơn `MA_BAT_BIEN`
  * có chủ ý — chênh lệch giữa hai khuôn là thứ làm một mã lệch khuôn NÉM thay vì biến mất.
  */
-const O_DAU_NHU_MA = /^[A-HJK]\d/;
+const O_DAU_NHU_MA = /^[A-HJ-L]\d/;
 
 /**
  * Bỏ dấu ** chỉ khi TOÀN BỘ ô in đậm. `[^*]+` là cố ý: một ô kiểu `**X** và **Y**` KHÔNG được

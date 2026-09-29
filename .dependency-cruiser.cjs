@@ -80,6 +80,9 @@ const TEST_SUPPORT_INDEX_TS = ciFile("packages/test-support/src/index.ts");
 // [S1.104 / S2.2] Ho "g16-": goi thu 14, va la goi dau tien cua S2.
 const DANH_GIA_SRC_PREFIX = ciPrefix("packages/danh-gia/src/");
 const DANH_GIA_INDEX_TS = ciFile("packages/danh-gia/src/index.ts");
+// [S1.9101 / S4.0] Ho "g19-": nen du lieu cua S4a (spec S4 §3.2).
+const DU_LIEU_NEN_SRC_PREFIX = ciPrefix("packages/du-lieu-nen/src/");
+const DU_LIEU_NEN_INDEX_TS = ciFile("packages/du-lieu-nen/src/index.ts");
 // [S1.114 / S2.7 / ADR-059] Ho "g17-": lop tinh lai DOC LAP cua bo bang chung.
 const DOC_LAP_SRC_PREFIX = ciPrefix("tools/bo-xuat-danh-gia/src/doc-lap/");
 
@@ -320,6 +323,34 @@ module.exports = {
       severity: "error",
       from: { pathNot: DANH_GIA_SRC_PREFIX },
       to: { path: DANH_GIA_SRC_PREFIX, pathNot: [DANH_GIA_INDEX_TS] },
+    },
+    // ------------------------------------------------------------------------------------------
+    // [S1.9101 / S4.0] Ho "g19-" — NEN DU LIEU CUA S4a. Hai quy tac, cung khuon g16-/g17-:
+    //   ⑴ chi index.ts la cua cong khai;
+    //   ⑵ spec S4 §3.1: "S4 khong cham duong mo thau" thanh mot phep do MAY — goi nay khong VOI TOI
+    //      sealed-envelope, unseal, crypto-keys qua bat ky duong nao (`reachable: true`, ke ca gian tiep).
+    // Doi chung DUONG va AM: `tests/architecture/boundaries.test.ts`, khoi "packages/du-lieu-nen".
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g19-du-lieu-nen-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/du-lieu-nen/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Goi nay giu THUOC cua benchmark — don vi do, hang chuan, anh xa — va " +
+        "doi mot thuoc sau khi thay gia la dung dieu L1 cam; mot module moi mac dinh khong voi toi " +
+        "duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: DU_LIEU_NEN_SRC_PREFIX },
+      to: { path: DU_LIEU_NEN_SRC_PREFIX, pathNot: [DU_LIEU_NEN_INDEX_TS] },
+    },
+    {
+      name: "g19-du-lieu-nen-khong-cham-duong-mo-thau",
+      comment:
+        "spec S4 §3.1/§3.2: nen du lieu khong them duong mat ma nao va khong cham duong mo thau. " +
+        "packages/du-lieu-nen/src/ khong duoc VOI TOI sealed-envelope, unseal hay crypto-keys, ke ca " +
+        "gian tiep qua mot goi trung gian.",
+      severity: "error",
+      from: { path: DU_LIEU_NEN_SRC_PREFIX },
+      to: { path: [SEALED_ENVELOPE_SRC_PREFIX, UNSEAL_SRC_PREFIX, CRYPTO_KEYS_SRC_PREFIX], reachable: true },
     },
     // ------------------------------------------------------------------------------------------
     // [S1.114 / S2.7 / ADR-059 ve 2] Ho "g17-" — LOP TINH LAI DOC LAP CUA BO BANG CHUNG.
