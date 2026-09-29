@@ -5328,6 +5328,37 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   }, 180_000);
 
   // ==========================================================================================
+  // [S1.9111 / khoản 163] MIỄN TRỪ SECURITY DEFINER KHOÁ THEO CHỮ KÝ, KHÔNG THEO TÊN TRẦN
+  // ==========================================================================================
+  // Bản S1.82: `NGOAI_LE_DOC_VONG` miễn `public.outbox_danh_sach_to_chuc` theo TÊN, còn hàng ghim thân hàm khoá chữ ký
+  // `()` — nên `outbox_danh_sach_to_chuc(text) SECURITY DEFINER` với thân tuỳ ý đi qua CẢ HAI lớp (đo: migrate() đi qua
+  // trước bản vá). Tạo hàm trong `public` cần CREATE trên schema — không vai ứng dụng nào có (001) — nên đường tới là
+  // superuser, đúng như khoản 163 ghi; test đi qua migrate() THẬT, và đối chứng "hàm gốc vẫn qua" đo ở cùng thông điệp.
+  it("[S1.9111 / khoản 163] overload public.outbox_danh_sach_to_chuc(text) SECURITY DEFINER do superuser tạo làm migrate() GÃY và nêu ĐÚNG CHỮ KÝ; hàm gốc () — khai theo chữ ký — không bị nêu; DROP overload ⇒ đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE FUNCTION public.outbox_danh_sach_to_chuc(text) RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER " +
+          "AS 'SELECT o.id FROM public.organizations o'",
+      );
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "overload cùng tên phải bị mục (C) bắt — miễn trừ theo tên trần từng cho nó đi qua").not.toBeNull();
+      expect(loi!.message).toContain("đọc vòng qua RLS");
+      expect(loi!.message).toContain("public.outbox_danh_sach_to_chuc(text): hàm SECURITY DEFINER");
+      expect(loi!.message, "hàm gốc đã khai theo chữ ký () nên KHÔNG bị nêu").not.toContain("public.outbox_danh_sach_to_chuc(): hàm SECURITY DEFINER");
+      expect(loi!.message, "dòng khai của hàm gốc không bị báo thiu — hàm gốc còn nguyên").not.toContain("dòng khai thiu");
+      await db.pool.query("DROP FUNCTION public.outbox_danh_sach_to_chuc(text)");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "gỡ overload ⇒ hardening im lặng trở lại").resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 180_000);
+
+  // ==========================================================================================
   // [vòng fix 2 — I4 / vòng fix 3 — I4] POLICY "AS RESTRICTIVE" LÀ PHÒNG THỦ CHẶT HƠN
   // ==========================================================================================
   // Vòng 1 chặn nó — cấm một lớp phòng thủ chặt hơn là phản tác dụng rõ ràng. Vòng 2 TUYÊN BỐ

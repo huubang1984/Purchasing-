@@ -3088,6 +3088,190 @@ describe("[S1.50 / khoản nợ 91] cửa ra 83⑶: FORCE và view không securi
 });
 
 // ===============================================================================================
+// [S1.9111 / khoản 112 + 163] NGOAI_LE_DOC_VONG — CỬA RA CỦA MỤC (C) — LÀ MỘT DANH SÁCH KHAI CÓ KHOÁ
+//
+// Bản S1.50–S1.82: `(VALUES (''), ('public.outbox_danh_sach_to_chuc')) AS x(ten)`, so bằng `NOT IN` theo TÊN TRẦN ở cả hai
+// nhánh của mục (C). Ba lỗ, cả ba đo ở đây: ⑴ một dòng NULL làm `NOT IN` ra NULL và tắt CẢ HAI nhánh — mọi view và mọi hàm
+// SECURITY DEFINER đi qua (khoản 112); ⑵ tên trần miễn trừ MỌI overload cùng tên — `outbox_danh_sach_to_chuc(text) SECURITY
+// DEFINER` đi qua cả mục (C) lẫn hàng ghim thân hàm, vốn khoá chữ ký `()` (khoản 163); ⑶ không chiều khai thiu, không bản
+// đối chiếu ở test — khác hẳn bốn danh sách khai kia (lượt soi 42 NHẸ-2). Nay: khoá `(loai, nspname, ten, mig, ly_do)`; hàm
+// khoá theo CHỮ KÝ như `regprocedure` in ra (dựng TỪ CATALOG — không `to_regprocedure`, vì phân giải tên đòi USAGE trên lược
+// đồ và ném 42501 dưới một vai không có nó, đo ở đây cùng bài học S1.48 H3); `NOT EXISTS` thay `NOT IN`; chiều khai thiu
+// neo vào migration nguồn (cùng khuôn BANG_TENANT_KHAI: tập migration rút gọn đi qua, đối tượng bị DROP thì ĐỎ có tên).
+// ===============================================================================================
+
+/** [S1.9111] Năm cột của NGOAI_LE_DOC_VONG — mỗi cột là một trục thu hẹp miễn trừ; bản hardening phải BẰNG bản này. */
+const COT_NGOAI_LE_DOC_VONG = ["loai", "nspname", "ten", "mig", "ly_do"] as const;
+/** `ten` là tên quan hệ (view/matview) hay CHỮ KÝ hàm như `regprocedure` in ra không kèm lược đồ (`f(text,integer)`). */
+type DongDocVong = readonly [loai: "ham" | "view" | "matview", nspname: string, ten: string, mig: string, lyDo: string];
+const NGOAI_LE_DOC_VONG_DA_KHAI: readonly DongDocVong[] = [
+  [
+    "ham",
+    "public",
+    "outbox_danh_sach_to_chuc()",
+    "052_worker_liet_ke_to_chuc",
+    "nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (id) trên organizations, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)",
+  ],
+];
+
+describe("[S1.9111 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có khoá; hàm khoá theo chữ ký", () => {
+  const COT: readonly string[] = COT_NGOAI_LE_DOC_VONG;
+  const khoiCua = (dong: readonly (readonly string[])[]): string => khoiValues(dong, "x", COT);
+  const MIG_THAT = "052_worker_liet_ke_to_chuc";
+  const ten = async (c: pg.PoolClient | pg.Pool, q: string): Promise<string[]> =>
+    (await c.query<{ mo_ta: string }>(q)).rows.map((r) => r.mo_ta.split(":")[0]!).sort();
+  /** Phần đầu của thông điệp — trước lời giải thích — để so được cả chiều thiu lẫn chiều xuôi trong một danh sách. */
+  const dau = async (c: pg.PoolClient | pg.Pool, q: string): Promise<string[]> =>
+    (await c.query<{ mo_ta: string }>(q)).rows.map((r) => r.mo_ta.split(/: | mà CSDL/u)[0]!).sort();
+
+  it("[INV-F1] HAI BẢN KHỚP: NGOAI_LE_DOC_VONG của hardening bằng bản ở test; mỗi dòng có loai hợp lệ, lý do đọc được, mig là tệp migration thật đã CREATE đối tượng ấy, hàm khai theo chữ ký; CAU_DOC_VONG không còn NOT IN, không phân giải tên, và dùng khối khai ở đúng BA chỗ (hai chiều xuôi, một chiều thiu)", () => {
+    expect(docHangHardening("NGOAI_LE_DOC_VONG")).toBe(khoiCua(NGOAI_LE_DOC_VONG_DA_KHAI));
+    expect(NGOAI_LE_DOC_VONG_DA_KHAI.length, "hôm nay đúng một dòng (ADR-040)").toBe(1);
+    const tep = readdirSync(MIGRATIONS_DIR);
+    for (const [loai, nsp, t, mig, lyDo] of NGOAI_LE_DOC_VONG_DA_KHAI) {
+      expect(["ham", "view", "matview"]).toContain(loai);
+      expect(lyDo.length, `${nsp}.${t}: lý do phải đọc được, không phải một chữ`).toBeGreaterThan(80);
+      if (loai === "ham") expect(t, "hàm khai theo CHỮ KÝ như regprocedure in ra, không theo tên trần").toMatch(/^[a-z_0-9]+\([^()\s]*\)$/u);
+      expect(tep, `${t}: tệp migration ${mig}.sql phải tồn tại — khai theo TÊN TỆP`).toContain(`${mig}.sql`);
+      const tenTran = t.replace(/\(.*\)$/u, "");
+      expect(readFileSync(`${MIGRATIONS_DIR}/${mig}.sql`, "utf8"), `${t}: migration ${mig} phải là nơi CREATE đối tượng`).toMatch(
+        new RegExp(`^CREATE (OR REPLACE )?(FUNCTION|VIEW|MATERIALIZED VIEW) (${nsp}\\.)?${tenTran}\\b`, "mu"),
+      );
+    }
+    const cau = docHangHardening("CAU_DOC_VONG");
+    expect(cau, "NOT IN đã hết — một dòng NULL không được tắt mục").not.toMatch(/NOT IN \(SELECT/u);
+    expect(cau, "không phân giải tên: to_regprocedure đòi USAGE trên lược đồ (42501 dưới vai không có)").not.toContain("to_regproc");
+    expect(cau.split(khoiCua(NGOAI_LE_DOC_VONG_DA_KHAI)).length - 1, "khối khai ở đúng ba chỗ").toBe(3);
+    // Chữ ký hàm là MỘT hằng, ba chỗ dùng (thông điệp, khoá xuôi, khoá thiu) — không chép tay.
+    const mauChuKy = docHangHardening("MAU_CHU_KY_HAM");
+    const chuKy = mauChuKy.split("%1$s").join("p");
+    expect(chuKy).toContain("proargtypes");
+    expect(cau.split(chuKy).length - 1, "chữ ký hàm ở thông điệp và ở khoá xuôi").toBe(2);
+    expect(cau.split(mauChuKy.split("%1$s").join("zp")).length - 1, "chữ ký hàm ở khoá thiu").toBe(1);
+  });
+
+  it("[INV-F1] CÂU PHÁN XÉT chạy trong test: rỗng hôm nay; overload (text) SECURITY DEFINER bị nêu ĐÚNG CHỮ KÝ còn hàm gốc () im; một dòng NULL KHÔNG tắt mục; khai đúng khoá thì im cả ba loại; dòng khai thiu nêu tên (hàm/view không có, view đã security_invoker, matview khai là view, loai lạ), im khi migration nguồn chưa áp, và đánh giá được dưới vai không USAGE trên lược đồ", async () => {
+    const cau = docHangHardening("CAU_DOC_VONG");
+    const khoi = khoiCua(NGOAI_LE_DOC_VONG_DA_KHAI);
+    const voiKhai = (dong: readonly (readonly string[])[]): string => cau.split(khoi).join(khoiCua(dong));
+    expect(await ten(db.pool, cau), "lược đồ thật: hàm gốc đã khai theo chữ ký, không view/matview nào").toEqual([]);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(`
+        CREATE FUNCTION public.outbox_danh_sach_to_chuc(text) RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER
+          AS 'SELECT o.id FROM public.organizations o';
+        CREATE SCHEMA zz_s112;
+        CREATE FUNCTION zz_s112.f(a text, b integer) RETURNS int LANGUAGE sql SECURITY DEFINER AS 'SELECT 1';
+        CREATE VIEW zz_s112.v AS SELECT 1 AS a;
+        CREATE MATERIALIZED VIEW zz_s112.mv AS SELECT 1 AS a;
+      `);
+      // ⑵ khoản 163: overload bị nêu theo chữ ký (như regprocedure: không khoảng trắng sau dấu phẩy); hàm gốc vẫn được miễn.
+      expect(await ten(c, cau)).toEqual(["public.outbox_danh_sach_to_chuc(text)", "zz_s112.f(text,integer)", "zz_s112.mv", "zz_s112.v"]);
+      // ⑴ khoản 112: dòng NULL không tắt mục. Bản `NOT IN` cũ: `'x' NOT IN (SELECT NULL)` là NULL ⇒ vị từ không bao giờ đúng
+      // ⇒ cả hai nhánh im (đo). Nay mọi thứ vẫn bị nêu — kể cả hàm gốc, vì không còn dòng khai nào.
+      const khoiNull = `(VALUES (NULL, NULL, NULL, NULL, NULL)) AS x(${COT.join(", ")})`;
+      expect(await ten(c, cau.split(khoi).join(khoiNull))).toEqual([
+        "public.outbox_danh_sach_to_chuc()", "public.outbox_danh_sach_to_chuc(text)", "zz_s112.f(text,integer)", "zz_s112.mv", "zz_s112.v",
+      ]);
+      // Khai đúng khoá thì im — cả ba loại — và không dòng nào bị báo thiu.
+      const daKhai: readonly (readonly string[])[] = [
+        ...NGOAI_LE_DOC_VONG_DA_KHAI,
+        ["ham", "public", "outbox_danh_sach_to_chuc(text)", MIG_THAT, "ly do"],
+        ["ham", "zz_s112", "f(text,integer)", MIG_THAT, "ly do"],
+        ["view", "zz_s112", "v", MIG_THAT, "ly do"],
+        ["matview", "zz_s112", "mv", MIG_THAT, "ly do"],
+      ];
+      expect(await ten(c, voiKhai(daKhai))).toEqual([]);
+      // Khai LỆCH một trục là hết miễn: sai lược đồ, sai chữ ký (tên trần / khoảng trắng), sai loai — chiều xuôi nêu lại đối
+      // tượng VÀ chiều thiu nêu dòng khai (migration nguồn đã áp).
+      const lech: readonly (readonly [string, string, string, string, string])[] = [
+        ["ham", "app_private", "outbox_danh_sach_to_chuc()", MIG_THAT, "sai lược đồ"],
+        ["ham", "zz_s112", "f", MIG_THAT, "tên trần, không chữ ký"],
+        ["ham", "zz_s112", "f(text, integer)", MIG_THAT, "khoảng trắng — regprocedure không in như thế"],
+        ["view", "zz_s112", "mv", MIG_THAT, "matview khai là view"],
+        ["hàm", "public", "outbox_danh_sach_to_chuc()", MIG_THAT, "loai lạ"],
+      ];
+      expect(await dau(c, voiKhai(lech))).toEqual([
+        "khai app_private.outbox_danh_sach_to_chuc() (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai public.outbox_danh_sach_to_chuc() (hàm, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.f (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.f(text, integer) (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.mv (view, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "public.outbox_danh_sach_to_chuc()",
+        "public.outbox_danh_sach_to_chuc(text)",
+        "zz_s112.f(text,integer)",
+        "zz_s112.mv",
+        "zz_s112.v",
+      ]);
+      // Chiều thiu neo vào migration nguồn: cùng năm dòng lệch, mig chưa áp ⇒ KHÔNG dòng thiu nào (tập migration rút gọn của
+      // migrations.int.test.ts đi qua) — chiều xuôi vẫn nêu đủ.
+      const chuaAp = lech.map(([l, n, t, , ly]): readonly string[] => [l, n, t, "9511_chua_ap", ly]);
+      expect(await dau(c, voiKhai(chuaAp))).toEqual([
+        "public.outbox_danh_sach_to_chuc()", "public.outbox_danh_sach_to_chuc(text)", "zz_s112.f(text,integer)", "zz_s112.mv", "zz_s112.v",
+      ]);
+      // Đối tượng đã khai đổi hình dạng ⇒ thiu: view đặt security_invoker, hàm bỏ SECURITY DEFINER — mỗi dòng nêu đúng tên.
+      await c.query("ALTER VIEW zz_s112.v SET (security_invoker = true); ALTER FUNCTION zz_s112.f(text, integer) SECURITY INVOKER");
+      expect(await dau(c, voiKhai(daKhai))).toEqual([
+        "khai zz_s112.f(text,integer) (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.v (view, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+      ]);
+      // [S1.48 / lượt soi ngang 40a H3] Cả hai chiều chạy được dưới vai KHÔNG có USAGE trên zz_s112: khoá đọc bằng catalog,
+      // không phân giải tên. Đo: `to_regprocedure('zz_s112.f(text, integer)')` dưới vai ấy ném 42501 — đột biến đổi khoá hàm
+      // sang to_regprocedure thì đỏ ở đây.
+      // Vai ấy vẫn đọc được schema_migrations — chiều thiu neo vào đó như CAU_NEO_SAI, và vai deploy luôn có quyền này (migrate.ts).
+      await c.query("CREATE ROLE zz_khong_usage; GRANT SELECT ON public.schema_migrations TO zz_khong_usage; SET ROLE zz_khong_usage");
+      expect(await dau(c, voiKhai(daKhai)), "vai không USAGE trên lược đồ vẫn đánh giá được cả hai chiều").toEqual([
+        "khai zz_s112.f(text,integer) (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.v (view, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+      ]);
+      await c.query("RESET ROLE");
+      // Đối tượng bị DROP ⇒ thiu có tên (khoản 112 "hàng khai mà đối tượng không còn tồn tại thì hardening gãy có tên").
+      await c.query("DROP FUNCTION public.outbox_danh_sach_to_chuc(text); DROP MATERIALIZED VIEW zz_s112.mv");
+      expect(await dau(c, voiKhai(daKhai))).toEqual([
+        "khai public.outbox_danh_sach_to_chuc(text) (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.f(text,integer) (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.mv (matview, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+        "khai zz_s112.v (view, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
+      ]);
+      // Thông điệp thiu nói ĐỦ vì sao: DROP / đổi chữ ký / bỏ SECURITY DEFINER / đặt security_invoker.
+      const [thongDiep] = (await c.query<{ mo_ta: string }>(voiKhai(daKhai))).rows.map((r) => r.mo_ta).sort();
+      expect(thongDiep).toContain("mà CSDL không có hàm SECURITY DEFINER với chữ ký ấy trong lược đồ dự án — dòng khai thiu");
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
+  }, 180000);
+
+  it("[INV-F1] ĐO lớp sản xuất: hàm gốc bị DROP rồi dựng lại SAI HÌNH DẠNG (SECURITY INVOKER, trả int) sau deploy — lượt sửa không chữa được (đổi kiểu trả về bị từ chối) ⇒ migrate() NÉM ở mục (C) nêu dòng khai thiu CÓ TÊN, bên cạnh hàng ghim 052; dựng lại đúng chữ ký dưới đúng chủ ⇒ đi qua", async () => {
+    const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
+    // Ca "DROP trần" không đo được ở lớp này: lượt SỬA của hàng ghim 052 dựng lại thân chuẩn TRƯỚC lượt phán xét (dưới
+    // superuser thì thành công), nên chiều thiu im và chỉ vế `proowner` đỏ. Ca dựng lại sai hình dạng là ca lượt sửa bó tay.
+    await db.pool.query(
+      "DROP FUNCTION public.outbox_danh_sach_to_chuc(); " +
+        "CREATE FUNCTION public.outbox_danh_sach_to_chuc() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+    );
+    try {
+      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+      expect(loi, "hàm đã khai mà không còn là SECURITY DEFINER ⇒ phải gãy").not.toBeNull();
+      expect(loi!.message).toContain(
+        "khai public.outbox_danh_sach_to_chuc() (ham, migration 052_worker_liet_ke_to_chuc) được miễn mục (C) mà CSDL không có hàm SECURITY DEFINER với chữ ký ấy trong lược đồ dự án — dòng khai thiu",
+      );
+      expect(loi!.message, "hàng ghim thân hàm (052) cũng đỏ — hai lớp, hai tên").toContain('"định nghĩa hàm outbox_danh_sach_to_chuc() (052)"');
+    } finally {
+      // Dựng lại như 052: thân chuẩn, rồi trao chủ (CREATE OR REPLACE không đổi được chủ; ACL do hàng 052 tự chữa ở lượt kế).
+      await db.pool.query(
+        "DROP FUNCTION public.outbox_danh_sach_to_chuc(); " +
+          "CREATE FUNCTION public.outbox_danh_sach_to_chuc() RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER " +
+          "SET search_path = pg_catalog AS $ham$ SELECT o.id FROM public.organizations o $ham$; " +
+          "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
+      );
+    }
+    expect(await loiCua(migrate(db.pool, MIGRATIONS_DIR)), "đối chứng: dựng lại đúng ⇒ đi qua").toBeNull();
+  }, 180000);
+});
+
+// ===============================================================================================
 // [S1.53 / khoản nợ 94] 83⑵ CHO CHỦ BẢNG — SAU FORCE, CHỦ BẢNG ĐỌC/GHI 0 HÀNG KHÔNG LỖI
 //
 // Khoản 91 FORCE mọi bảng bật RLS của lược đồ dự án, nên CHỦ BẢNG chịu RLS như mọi vai; 83⑵ chỉ soi tập vai ứng dụng.
