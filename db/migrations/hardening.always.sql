@@ -2747,9 +2747,9 @@ $ham$;
          ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '079_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '079_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
-         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '079_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '9501_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '9501_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '9501_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_nhan_chung_chi_break_glass', '078_nhan_chung_chi_break_glass', 'CHECK ((break_glass OR ((break_glass_witness_user_id IS NULL) AND (break_glass_witness_session_id IS NULL))))'),
@@ -3439,11 +3439,12 @@ $ham$;
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
-         ('public', 'supplier_verifications', '079_xac_minh_nha_cung_cap'),
+         ('public', 'supplier_verifications', '9501_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
          ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
          ('public', 'unseal_requests', '019_unseal'),
+         ('public', 'uom_aliases', '079_don_vi_do'),
          ('public', 'user_login_tokens', '029_dang_nhap_nguoi_mua'),
          ('public', 'user_roles', '005_identity'),
          ('public', 'users', '002_organizations_and_users'),
@@ -4582,6 +4583,17 @@ $ham$;
              CREATE TRIGGER org_policy_signatures_kiem_danh_tinh BEFORE INSERT ON org_policy_signatures FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'signed_by', 'signed_by_session_id');
              ALTER TABLE public.org_policy_signatures ENABLE ALWAYS TRIGGER org_policy_signatures_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.uom_aliases') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                                 AND t.tgname = 'uom_aliases_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_kiem_danh_tinh BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_kiem_danh_tinh ON public.uom_aliases;
+             CREATE TRIGGER uom_aliases_kiem_danh_tinh BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
+             ALTER TABLE public.uom_aliases ENABLE ALWAYS TRIGGER uom_aliases_kiem_danh_tinh;
+           END IF;
            IF to_regclass('public.supplier_verifications') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.supplier_verifications')
@@ -4794,6 +4806,14 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER org_policy_signatures_kiem_danh_tinh BEFORE INSERT ON public.org_policy_signatures FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('signed_by', 'signed_by_session_id')$def$))
+            AND (to_regclass('public.uom_aliases') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                               AND t.tgname = 'uom_aliases_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_kiem_danh_tinh BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
             AND (to_regclass('public.supplier_verifications') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.supplier_verifications')
@@ -5577,6 +5597,72 @@ $ham$;
              CREATE TRIGGER org_policy_signatures_chan_truncate BEFORE TRUNCATE ON org_policy_signatures FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.org_policy_signatures ENABLE ALWAYS TRIGGER org_policy_signatures_chan_truncate;
            END IF;
+           IF to_regclass('public.uom_units') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_units')
+                                 AND t.tgname = 'uom_units_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_units_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_units FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_units_chi_ghi_them ON public.uom_units;
+             CREATE TRIGGER uom_units_chi_ghi_them BEFORE UPDATE OR DELETE ON public.uom_units FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_units ENABLE ALWAYS TRIGGER uom_units_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.uom_units') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_units')
+                                 AND t.tgname = 'uom_units_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_units_chan_truncate BEFORE TRUNCATE ON public.uom_units FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_units_chan_truncate ON public.uom_units;
+             CREATE TRIGGER uom_units_chan_truncate BEFORE TRUNCATE ON public.uom_units FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_units ENABLE ALWAYS TRIGGER uom_units_chan_truncate;
+           END IF;
+           IF to_regclass('public.uom_aliases_chung') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases_chung')
+                                 AND t.tgname = 'uom_aliases_chung_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chung_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_aliases_chung FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_chung_chi_ghi_them ON public.uom_aliases_chung;
+             CREATE TRIGGER uom_aliases_chung_chi_ghi_them BEFORE UPDATE OR DELETE ON public.uom_aliases_chung FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_aliases_chung ENABLE ALWAYS TRIGGER uom_aliases_chung_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.uom_aliases_chung') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases_chung')
+                                 AND t.tgname = 'uom_aliases_chung_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chung_chan_truncate BEFORE TRUNCATE ON public.uom_aliases_chung FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_chung_chan_truncate ON public.uom_aliases_chung;
+             CREATE TRIGGER uom_aliases_chung_chan_truncate BEFORE TRUNCATE ON public.uom_aliases_chung FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_aliases_chung ENABLE ALWAYS TRIGGER uom_aliases_chung_chan_truncate;
+           END IF;
+           IF to_regclass('public.uom_aliases') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                                 AND t.tgname = 'uom_aliases_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_chi_ghi_them ON public.uom_aliases;
+             CREATE TRIGGER uom_aliases_chi_ghi_them BEFORE UPDATE OR DELETE ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_aliases ENABLE ALWAYS TRIGGER uom_aliases_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.uom_aliases') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                                 AND t.tgname = 'uom_aliases_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chan_truncate BEFORE TRUNCATE ON public.uom_aliases FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_chan_truncate ON public.uom_aliases;
+             CREATE TRIGGER uom_aliases_chan_truncate BEFORE TRUNCATE ON public.uom_aliases FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.uom_aliases ENABLE ALWAYS TRIGGER uom_aliases_chan_truncate;
+           END IF;
            IF to_regclass('public.supplier_verifications') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.supplier_verifications')
@@ -5698,6 +5784,54 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER org_policy_signatures_chan_truncate BEFORE TRUNCATE ON public.org_policy_signatures FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_units') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_units')
+                               AND t.tgname = 'uom_units_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_units_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_units FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_units') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_units')
+                               AND t.tgname = 'uom_units_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_units_chan_truncate BEFORE TRUNCATE ON public.uom_units FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_aliases_chung') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_aliases_chung')
+                               AND t.tgname = 'uom_aliases_chung_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chung_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_aliases_chung FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_aliases_chung') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_aliases_chung')
+                               AND t.tgname = 'uom_aliases_chung_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chung_chan_truncate BEFORE TRUNCATE ON public.uom_aliases_chung FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_aliases') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                               AND t.tgname = 'uom_aliases_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chi_ghi_them BEFORE DELETE OR UPDATE ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.uom_aliases') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                               AND t.tgname = 'uom_aliases_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_chan_truncate BEFORE TRUNCATE ON public.uom_aliases FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.supplier_verifications') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.supplier_verifications')
@@ -8059,8 +8193,8 @@ $ham$;
 
     -- [S1.9101 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
     ARRAY[
-      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (079_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_bam_xac_minh(p_org uuid, p_ncc uuid) RETURNS bytea
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8097,8 +8231,8 @@ $ham$$q$,
 
     -- [S1.9101 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
     ARRAY[
-      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (079_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_xac_minh_nha_cung_cap.sql')$q$,
+      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.ncc_xac_minh_con_hieu_luc(p_org uuid, p_ncc uuid) RETURNS boolean
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -8133,8 +8267,8 @@ $ham$$q$,
 
     -- [S1.9101 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
     ARRAY[
-      $q$hàm + trigger ncc_kiem_xac_minh (079_xac_minh_nha_cung_cap)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_xac_minh_nha_cung_cap.sql')$q$,
+      $q$hàm + trigger ncc_kiem_xac_minh (9501_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_xac_minh_nha_cung_cap.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8335,6 +8469,195 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_invitation_tokens_ghi_goi_da_mo()')),
                   'hàm public.rfq_invitation_tokens_ghi_goi_da_mo() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_invitation_tokens_ghi_goi_da_mo() và bảng public.rfq_invitation_tokens (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.192 / S4.1 / L1] Khuon nen cua moi bang du lieu nen: khoa tu van -> seq -> ghi_luc. Than `RETURN NEW` de ung dung tu khai seq va moc — L1 mat ca hai ve.
+    ARRAY[
+      $q$hàm + trigger du_lieu_nen_dat_thu_tu (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.du_lieu_nen_dat_thu_tu();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.du_lieu_nen_dat_thu_tu() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(TG_TABLE_NAME || '|' || NEW.org_id::pg_catalog.text, 3));
+  EXECUTE pg_catalog.format(
+            'SELECT coalesce(max(seq), 0) + 1 FROM public.%I WHERE org_id OPERATOR(pg_catalog.=) $1',
+            TG_TABLE_NAME)
+    INTO NEW.seq
+    USING NEW.org_id;
+  NEW.ghi_luc := pg_catalog.clock_timestamp();
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.uom_aliases') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                                 AND t.tgname = 'uom_aliases_dat_thu_tu'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_dat_thu_tu BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$) THEN
+             DROP TRIGGER IF EXISTS uom_aliases_dat_thu_tu ON public.uom_aliases;
+             CREATE TRIGGER uom_aliases_dat_thu_tu BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
+             ALTER TABLE public.uom_aliases ENABLE ALWAYS TRIGGER uom_aliases_dat_thu_tu;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(TG_TABLE_NAME || '|' || NEW.org_id::pg_catalog.text, 3)); EXECUTE pg_catalog.format( 'SELECT coalesce(max(seq), 0) + 1 FROM public.%I WHERE org_id OPERATOR(pg_catalog.=) $1', TG_TABLE_NAME) INTO NEW.seq USING NEW.org_id; NEW.ghi_luc := pg_catalog.clock_timestamp(); RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.uom_aliases')
+                           AND t.tgname = 'uom_aliases_dat_thu_tu'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER uom_aliases_dat_thu_tu BEFORE INSERT ON public.uom_aliases FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')),
+                  'hàm public.du_lieu_nen_dat_thu_tu() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.du_lieu_nen_dat_thu_tu() và bảng public.uom_aliases (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.192 / S4.1 / L2] Lam sach ban 1 — bi danh luu o dang nay, CHECK cua hai bang bi danh goi no. Mot than khac la mot phien ban khac: bi danh cu thoi khop ma khong ai biet.
+    ARRAY[
+      $q$định nghĩa hàm chuoi_sach(text) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.chuoi_sach(p text) RETURNS text
+  LANGUAGE sql
+  IMMUTABLE
+  STRICT
+  PARALLEL SAFE
+  SET search_path = pg_catalog
+AS $ham$
+  SELECT btrim(regexp_replace(
+           regexp_replace(
+             lower(translate(regexp_replace(normalize(p, NFKD), '[̀-ͯ]', '', 'g'), 'đĐ', 'dd')),
+             '[^a-z0-9]+', ' ', 'g'),
+           ' +', ' ', 'g'))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT btrim(regexp_replace( regexp_replace( lower(translate(regexp_replace(normalize(p, NFKD), '[̀-ͯ]', '', 'g'), 'đĐ', 'dd')), '[^a-z0-9]+', ' ', 'g'), ' +', ' ', 'g'))$than$
+            AND p.provolatile = 'i'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 1
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.proisstrict IS TRUE
+            AND p.proparallel = 's'
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.chuoi_sach(text)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.chuoi_sach(text)')),
+                  'hàm public.chuoi_sach(text) không tồn tại')$q$,
+      $q$quyền sở hữu hàm chuoi_sach(text) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.192 / S4.1 / L1 · L4] Chuoi don vi -> ma TAI MOC. Bo ve `ghi_luc < p_moc` la mot bi danh ghi sau khi thay gia doi duoc quy doi cua goi da mo.
+    ARRAY[
+      $q$định nghĩa hàm don_vi_tai(uuid, text, timestamptz) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.don_vi_tai(p_org uuid, p_chuoi text, p_moc timestamptz) RETURNS text
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT coalesce(
+           (SELECT CASE WHEN a.rut THEN NULL ELSE a.code END
+              FROM public.uom_aliases a
+             WHERE a.org_id = p_org
+               AND a.bi_danh_sach = public.chuoi_sach(p_chuoi)
+               AND a.ghi_luc < p_moc
+             ORDER BY a.seq DESC
+             LIMIT 1),
+           (SELECT c.code FROM public.uom_aliases_chung c WHERE c.bi_danh_sach = public.chuoi_sach(p_chuoi)))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT coalesce( (SELECT CASE WHEN a.rut THEN NULL ELSE a.code END FROM public.uom_aliases a WHERE a.org_id = p_org AND a.bi_danh_sach = public.chuoi_sach(p_chuoi) AND a.ghi_luc < p_moc ORDER BY a.seq DESC LIMIT 1), (SELECT c.code FROM public.uom_aliases_chung c WHERE c.bi_danh_sach = public.chuoi_sach(p_chuoi)))$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.text'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.don_vi_tai(uuid, text, timestamptz)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.don_vi_tai(uuid, text, timestamptz)')),
+                  'hàm public.don_vi_tai(uuid, text, timestamptz) không tồn tại')$q$,
+      $q$quyền sở hữu hàm don_vi_tai(uuid, text, timestamptz) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.192 / S4.1 / L4] Ham quy doi DUY NHAT. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
+    ARRAY[
+      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
+  p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
+  RETURNS TABLE (he_so numeric, ma text)
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT CASE WHEN a.code IS NULL OR b.code IS NULL THEN NULL
+              WHEN a.code = b.code THEN 1::numeric
+              WHEN a.thu_nguyen = b.thu_nguyen THEN a.he_so_ve_goc / b.he_so_ve_goc
+              ELSE NULL END,
+         CASE WHEN a.code IS NULL OR b.code IS NULL THEN 'KHONG_QUY_DOI_DUOC'
+              WHEN a.code = b.code THEN 'CUNG_DON_VI'
+              WHEN a.thu_nguyen = b.thu_nguyen THEN 'QUY_DOI_CHUNG'
+              ELSE 'KHONG_QUY_DOI_DUOC' END
+    FROM (SELECT public.don_vi_tai(p_org, p_tu, p_moc) AS tu,
+                 public.don_vi_tai(p_org, p_sang, p_moc) AS sang) d
+    LEFT JOIN public.uom_units a ON a.code = d.tu
+    LEFT JOIN public.uom_units b ON b.code = d.sang
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT CASE WHEN a.code IS NULL OR b.code IS NULL THEN NULL WHEN a.code = b.code THEN 1::numeric WHEN a.thu_nguyen = b.thu_nguyen THEN a.he_so_ve_goc / b.he_so_ve_goc ELSE NULL END, CASE WHEN a.code IS NULL OR b.code IS NULL THEN 'KHONG_QUY_DOI_DUOC' WHEN a.code = b.code THEN 'CUNG_DON_VI' WHEN a.thu_nguyen = b.thu_nguyen THEN 'QUY_DOI_CHUNG' ELSE 'KHONG_QUY_DOI_DUOC' END FROM (SELECT public.don_vi_tai(p_org, p_tu, p_moc) AS tu, public.don_vi_tai(p_org, p_sang, p_moc) AS sang) d LEFT JOIN public.uom_units a ON a.code = d.tu LEFT JOIN public.uom_units b ON b.code = d.sang$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 5
+            AND p.prorettype = 'pg_catalog.record'::regtype
+            AND p.proretset IS TRUE
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz)')),
+                  'hàm public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz) không tồn tại')$q$,
+      $q$quyền sở hữu hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) hoặc SUPERUSER$q$
     ],
 
     ARRAY[

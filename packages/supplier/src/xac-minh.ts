@@ -7,7 +7,7 @@ import { SupplierError } from "./suppliers.js";
 // [S1.9101 / S3.3a / K8a · ADR-081 ⑵] XÁC MINH NỘI BỘ NHÀ CUNG CẤP
 //
 // Cấp đầu của hai cấp ở ADR-081 ⑵: bên mua xác nhận MST, tên pháp lý và đích liên hệ của một hồ sơ; nhà cung cấp không làm
-// gì. K2 (S3.3c) chỉ đếm nhà cung cấp có xác minh CÒN HIỆU LỰC — câu hỏi ấy là hàm SQL `ncc_xac_minh_con_hieu_luc` (`079`),
+// gì. K2 (S3.3c) chỉ đếm nhà cung cấp có xác minh CÒN HIỆU LỰC — câu hỏi ấy là hàm SQL `ncc_xac_minh_con_hieu_luc` (`9501`),
 // một phép tính, một chỗ ở; gói này chỉ ghi và đọc.
 //
 // Ba lớp, thứ tự như mọi hàm ghi của kho:
@@ -103,7 +103,7 @@ export async function xacMinhNhaCungCap(
   return await docXacMinhNhaCungCap(client, orgId, input.supplierId);
 }
 
-/** Thu hồi xác minh — lý do bắt buộc, trần 2000 byte (CHECK ở `079`). Chỉ thu hồi được khi hàng mới nhất là `VERIFIED`. */
+/** Thu hồi xác minh — lý do bắt buộc, trần 2000 byte (CHECK ở `9501`). Chỉ thu hồi được khi hàng mới nhất là `VERIFIED`. */
 export async function thuHoiXacMinhNhaCungCap(
   client: pg.PoolClient,
   orgId: string,
