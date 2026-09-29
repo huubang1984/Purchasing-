@@ -74,6 +74,10 @@ const HAM_DOI_TRANG_THAI = [
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
   "issueMagicLinkToken",
+  // [S1.9101 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
+  // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
+  "khaiBiDanhHang",
+  "khaiQuyDoiRieng",
   // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
   // `policy.manage` và đứng sau cờ triển khai (ADR-105).
   "kyPhienBanChinhSach",
@@ -87,8 +91,12 @@ const HAM_DOI_TRANG_THAI = [
   "returnRfqToDraft",
   "revokeInvitation",
   "revokeMagicLinkToken",
+  "rutBiDanhHang",
+  "rutQuyDoiRieng",
   "setRfqBudget",
   "submitRfqForApproval",
+  "taoHangChuan",
+  "taoPhienBanHangChuan",
 ] as const;
 
 /**
@@ -110,6 +118,10 @@ const HAM_CHI_DOC = [
   // cùng lập luận của `listSuppliers`. Đường của một CON NGƯỜI là `xuatBoBangChung` (rổ
   // `HAM_DOC_CO_QUYEN`), và test cuối tệp này đòi `apps/` không gọi thẳng hàm này.
   "dungBoBangChung",
+  // [S1.9101 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
+  // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
+  "chuoiSach",
+  "docHangChuan",
   "findSupplierByTaxCode",
   "getActiveProcurementPolicy",
   "getBidReceipt",
@@ -134,6 +146,7 @@ const HAM_CHI_DOC = [
   // [S1.91 / khoản 194] Trả danh sách NGƯỜI NHẬN của một tin báo, không trả lời một câu hỏi
   // quyền nào. Người gọi là `requestUnseal`, đã qua cổng `RFQ_UNSEAL` của chính nó trước đó.
   "listUserIdsWithPermission",
+  "quyDoiDonVi",
 ] as const;
 
 /**
@@ -290,6 +303,8 @@ const CUA_GOI = [
   "@trustprocure/unseal",
   "@trustprocure/bidding",
   "@trustprocure/danh-gia",
+  // [S1.9101 / S4.2a] Gói dữ liệu nền có hàm GHI từ S4.2a — vào danh sách CÙNG lúc, không đợi route đầu tiên (khuôn khoản 33).
+  "@trustprocure/du-lieu-nen",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------

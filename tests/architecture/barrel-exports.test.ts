@@ -1059,7 +1059,20 @@ const DANH_SACH_TRANG_DB = [
 // THỨ HẠNG, thứ hạng quyết định award. Một symbol thứ tám tính tiền theo một luật khác là
 // khoản 218 mọc lại trong chính gói sinh ra để chấm dứt nó.
 // [S1.192 / S4.1] Nền dữ liệu của S4a: làm sạch chuỗi và quy đổi đơn vị — cả hai chỉ gọi hàm SQL, không cài lại luật.
-const DANH_SACH_TRANG_DU_LIEU_NEN = ["KHONG_QUY_DOI_DUOC", "chuoiSach", "quyDoiDonVi"];
+const DANH_SACH_TRANG_DU_LIEU_NEN = [
+  "KHONG_QUY_DOI_DUOC",
+  "chuoiSach",
+  "quyDoiDonVi",
+  // [S1.9101 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng — và lớp lỗi mang mã của chúng.
+  "DuLieuNenError",
+  "docHangChuan",
+  "khaiBiDanhHang",
+  "khaiQuyDoiRieng",
+  "rutBiDanhHang",
+  "rutQuyDoiRieng",
+  "taoHangChuan",
+  "taoPhienBanHangChuan",
+];
 
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
