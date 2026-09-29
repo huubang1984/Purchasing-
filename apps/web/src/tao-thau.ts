@@ -111,3 +111,26 @@ export function loiLyDo(lyDo: string): string | null {
   if (new TextEncoder().encode(t).length > TRAN_LY_DO_BYTE) return `Lý do dài quá — tối đa ${String(TRAN_LY_DO_BYTE)} byte, chữ có dấu tính hai hay ba byte.`;
   return null;
 }
+
+/**
+ * [S1.9101 / khoản 258] Màn tự đọc ngân sách (`GET /rfqs/:rfqId/budget`) ở lần đọc gói trong ĐÚNG hai ca: người dùng là người
+ * tạo gói — họ đặt nó —, hay gói đang chờ duyệt — người mở nó là người duyệt, và chữ ký ràng vào ngân sách (ADR-114). Route có
+ * cổng — người tạo gói cần `rfq.create`, người khác `rfq.approve` — và mỗi lần từ chối là một hàng sổ, nên ngoài hai ca ấy màn
+ * không hỏi: lần từ chối phải là một lỗi của máy khách, không phải nhịp làm việc (ADR-092).
+ */
+export function docNganSachKhiDocGoi(userId: string, createdBy: unknown, trangThaiGoi: string): boolean {
+  return (userId !== "" && createdBy === userId) || trangThaiGoi === "PENDING_APPROVAL";
+}
+
+/** [S1.9101 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `079`). */
+export function hangNganSach(budget: unknown): readonly (readonly [string, string | null])[] {
+  const b = (budget !== null && typeof budget === "object" ? budget : {}) as Record<string, unknown>;
+  const chu = (v: unknown): string | null => (typeof v === "string" || typeof v === "number" ? String(v) : null);
+  return [
+    ["Giá trị ước lượng", chu(b.estimatedValue)],
+    ["Tiền tệ", chu(b.currency)],
+    ["Phiên bản chính sách", chu(b.policyVersion)],
+    ["Bậc từ", chu(b.tierTuSoTien)],
+    ["Cần hai người duyệt", b.requiresDualApproval === true ? "có" : b.requiresDualApproval === false ? "không" : null],
+  ];
+}

@@ -1006,6 +1006,48 @@ describe("[S1.193 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa
   });
 });
 
+describe("[S1.9101 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
+  async function demTuChoiNganSach(org: string, ai: string): Promise<string[]> {
+    const { rows } = await db.pool.query<{ q: string }>(
+      "SELECT payload->>'permission' AS q FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' ORDER BY seq",
+      [org, ai],
+    );
+    return rows.map((r) => r.q);
+  }
+
+  it("[INV-K4b] tổ chức đã bật, gói chờ duyệt: người tạo và người duyệt đọc đủ năm thứ chữ ký ràng vào; BUYER khác và FINANCE ⇒ 403, một hàng `PERMISSION_DENIED` trên `rfq.approve`; mã gói lạ ⇒ 404", async () => {
+    const { org, pm, mua, rfqId } = await goiDaNop("ns-doc-bat", true);
+    const pm2 = await nguoi("pm2-ns-doc-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const tc3 = await nguoi("tc3-ns-doc-bat@vidu.vn", ["FINANCE"], org);
+    const duong = `/rfqs/${rfqId}/budget`;
+    const mong = { rfqId, estimatedValue: "1000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "0.00", requiresDualApproval: false };
+    for (const ai of [pm, pm2]) {
+      const kq = await goi("GET", duong, ai);
+      expect([kq.status, kq.body], kq.text).toEqual([200, { budget: mong }]);
+    }
+    for (const ai of [mua, tc3]) {
+      const kq = await goi("GET", duong, ai);
+      expect(kq.status, kq.text).toBe(403);
+      expect(await demTuChoiNganSach(org, ai.id)).toEqual(["rfq.approve"]);
+    }
+    expect((await goi("GET", `/rfqs/${UUID0}/budget`, pm2)).status).toBe(404);
+  });
+
+  it("gói chưa có ngân sách: bốn trường ngân sách `null`; tổ chức chưa bật đọc như tổ chức đã bật — route cho mọi tổ chức", async () => {
+    const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('ns-trong', 'ns-trong') RETURNING id")).rows[0]?.id ?? "";
+    const pm = await nguoi("pm-ns-trong@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Chua dat ngan sach", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    const kq = await goi("GET", `/rfqs/${rfqId}/budget`, pm);
+    expect([kq.status, kq.body]).toEqual([
+      200,
+      { budget: { rfqId, estimatedValue: null, currency: null, policyVersion: null, tierTuSoTien: null, requiresDualApproval: true } },
+    ]);
+  });
+});
+
 describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậc, đọc, và ký sau cờ triển khai (ADR-105)", () => {
   // Máy chủ THỨ HAI trên cùng CSDL, cờ BẬT. Máy chủ chung của tệp không khai cờ nên giữ mặc định TẮT của `createDispatcher`
   // — đúng cấu hình một máy chủ thật có khi không ai khai biến môi trường — và mọi ca khác của tệp, kể cả hai lượt quét

@@ -16,7 +16,9 @@
 // Màn hỏi `GET /policy/versions` MỘT lần sau đăng nhập để biết luồng nào; mọi phép tính ở `/lib/tao-thau.js`.
 // ==============================================================================================
 
-import { baoSauKhiMo, baoSauKhiMoi, hienTraVe, loiLyDo, nhanTrangThaiLoiMoi, nutLoiMoi, thuTuBuoc } from "/lib/tao-thau.js";
+import {
+  baoSauKhiMo, baoSauKhiMoi, docNganSachKhiDocGoi, hangNganSach, hienTraVe, loiLyDo, nhanTrangThaiLoiMoi, nutLoiMoi, thuTuBuoc,
+} from "/lib/tao-thau.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
@@ -25,6 +27,8 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
+// [S1.9101 / khoản 258] `userId` của phiên đang dùng màn (`GET /me`), rỗng trước khi đăng nhập.
+let nguoiDung = "";
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -84,6 +88,7 @@ window.addEventListener("hashchange", () => {
   phienCho = null;
   phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
   datLuong({ daBat: false, trangThaiGoi: "" });
+  nguoiDung = "";
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
@@ -133,6 +138,8 @@ const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5"];
  */
 function moSauDangNhap(me, dungLai) {
   const u = me?.userId;
+  // [S1.9101 / khoản 258] Người đang dùng màn — để biết họ có phải người tạo gói đang đọc không (ngân sách, `napRfq`).
+  nguoiDung = typeof u === "string" ? u : "";
   const ai = typeof u === "string" ? `người dùng ${u.slice(0, 8)}…` : "";
   bao($("ok1"), ai === ""
     ? "Đã vào. Phiên nằm trong cookie HttpOnly."
@@ -220,6 +227,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     phienCho = null;
     phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
     datLuong({ daBat: false, trangThaiGoi: "" });
+    nguoiDung = "";
     dongCacBuoc();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
@@ -256,7 +264,20 @@ async function napRfq(rfqId) {
   ]);
   await napHangMuc();
   if (luong.daBat) await napLoiMoi();
+  // [S1.9101 / khoản 258] Ngân sách chữ ký ràng vào, ở CÙNG lần đọc: người tạo gói, hay người duyệt gói đang chờ duyệt.
+  if (docNganSachKhiDocGoi(nguoiDung, g.createdBy, luong.trangThaiGoi)) await napNganSach();
+  else dienDl($("tt-ns"), []);
   return true;
+}
+
+/** [S1.9101 / khoản 258] Bảng ngân sách từ `GET /rfqs/:rfqId/budget` — năm thứ chữ ký duyệt gói ràng vào. */
+async function napNganSach() {
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/budget`);
+  if (r.status !== 200) {
+    dienDl($("tt-ns"), [["Ngân sách", r.status === 403 ? "không có quyền đọc ngân sách của gói này" : loiCua(r, "Không đọc được ngân sách")]]);
+    return;
+  }
+  dienDl($("tt-ns"), hangNganSach(r.body?.budget));
 }
 
 $("nut-tao").addEventListener("click", async () => {

@@ -11,6 +11,8 @@ import {
   TRAN_LY_DO_BYTE,
   baoSauKhiMo,
   baoSauKhiMoi,
+  docNganSachKhiDocGoi,
+  hangNganSach,
   hienTraVe,
   loiLyDo,
   nhanTrangThaiLoiMoi,
@@ -121,5 +123,36 @@ describe("[S1.191 / S3.2c2] nút trả về soạn thảo và lý do", () => {
     // 700 chữ "ế" là 700 ký tự nhưng 2100 byte: máy chủ từ chối, nên màn cũng phải từ chối.
     expect(loiLyDo("ế".repeat(700))).toMatch(/2000/u);
     expect(loiLyDo("ế".repeat(666))).toBeNull();
+  });
+});
+
+describe("[S1.9101 / khoản 258] ngân sách ở lần đọc gói", () => {
+  it("màn tự đọc khi người dùng là người tạo gói (mọi trạng thái), hay khi gói đang chờ duyệt (người duyệt); ngoài ra không hỏi", () => {
+    for (const tt of TRANG_THAI_GOI) {
+      expect(docNganSachKhiDocGoi("u1", "u1", tt), `người tạo, ${tt}`).toBe(true);
+      expect(docNganSachKhiDocGoi("u2", "u1", tt), `người khác, ${tt}`).toBe(tt === "PENDING_APPROVAL");
+    }
+    expect(docNganSachKhiDocGoi("", undefined, "DRAFT"), "chưa biết người dùng: không coi là người tạo").toBe(false);
+    expect(docNganSachKhiDocGoi("", "", "OPEN")).toBe(false);
+  });
+
+  it("năm hàng đúng năm thứ chữ ký ràng vào; gói chưa có ngân sách hay thân lạ thì gạch", () => {
+    expect(
+      hangNganSach({ estimatedValue: "150000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "100000000.00", requiresDualApproval: true }),
+    ).toEqual([
+      ["Giá trị ước lượng", "150000000.00"],
+      ["Tiền tệ", "VND"],
+      ["Phiên bản chính sách", "2"],
+      ["Bậc từ", "100000000.00"],
+      ["Cần hai người duyệt", "có"],
+    ]);
+    expect(hangNganSach({ estimatedValue: null, currency: null, policyVersion: null, tierTuSoTien: null, requiresDualApproval: false }).map((h) => h[1])).toEqual([
+      null,
+      null,
+      null,
+      null,
+      "không",
+    ]);
+    expect(hangNganSach(undefined).map((h) => h[1])).toEqual([null, null, null, null, null]);
   });
 });

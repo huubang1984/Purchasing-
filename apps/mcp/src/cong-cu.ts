@@ -58,6 +58,11 @@ export function thamSoCuaDuong(pDuong: string): string[] {
  * đã viết sẵn.
  */
 export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
+  "/rfqs/:rfqId/budget":
+    "NGÂN SÁCH DỰ TÍNH của gói — thứ neo giá nếu rò xuống bên bán: `setRfqBudget` cố ý không ghi số " +
+    "tiền vào sổ kiểm toán, và hàm đọc `getRfqBudget` có cổng (người tạo gói, người duyệt). Route " +
+    "ra đời ở S1.9101 cho người duyệt đọc con số mình ký (khoản 258); chủ dự án chọn KHÔNG phơi cho " +
+    "agent ngày 2026-09-29 — khuôn bảng so sánh giá (ADR-038).",
   "/rfqs/:rfqId/comparison":
     "BẢNG SO SÁNH GIÁ sau mở thầu — thứ toàn bộ sản phẩm sinh ra để bảo vệ. Một công cụ MCP đưa " +
     "nó vào ngữ cảnh của một agent là đưa giá của mọi nhà cung cấp ra một nơi chủ dự án không " +

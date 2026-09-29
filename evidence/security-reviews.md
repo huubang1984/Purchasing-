@@ -16249,3 +16249,65 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 - `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
 - Chín đột biến ở lược đồ, chín lần đỏ (§5); khe của D2 đo bằng `pg_sleep`.
 - Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào); K4b 23 → 40, K4a 16 → 20, D2 50 → 64. Không mã mới.
+
+---
+
+# §S1.9101 — KHOẢN 258 ĐÓNG: NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO — ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT (K4b) — ADR-9201
+
+**Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; vòng này thêm một bảng đọc, không đổi luồng
+nào. Khoản 258 (rổ B, ghi ở §S1.193) đóng. Không migration; một route đọc mới; một ADR (ADR-9201).
+
+## 1. Việc gì
+
+Chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách (ADR-114) và rơi lên đúng lần nộp client đã đọc (ADR-115), nhưng không route
+nào trả ngân sách cho người mua — lượt soi S1.193 (F2). Chủ dự án chốt ngày 2026-09-29: route riêng, không mở cho agent; người tạo
+gói và người duyệt đọc được, không ai khác. Bất biến chạm: K4b.
+
+## 2. Đo trước
+
+Trên cây #202 (`aaa1388`): hai ca HTTP của vòng này đỏ — `GET /rfqs/:rfqId/budget` trả 405 *"phuong thuc khong duoc ho tro"*: đường
+chỉ có `PUT`.
+
+## 3. Thay đổi
+
+- `packages/rfq`: `getRfqBudget` — hàm đọc có cổng (người tạo gói `rfq.create`, người khác `rfq.approve`; từ chối ⇒
+  `PermissionDeniedError`, một hàng `PERMISSION_DENIED` ở `auditPool`); trả năm thứ `rfq_bam_ngan_sach` băm, phiên bản chính sách bằng
+  số; gói không có trong tổ chức ⇒ `null` TRƯỚC phép kiểm quyền (khuôn `returnRfqToDraft`). Ra cửa gói: danh sách trắng
+  `barrel-exports`, rổ `HAM_DOC_CO_QUYEN`.
+- `apps/api`: route `GET /rfqs/:rfqId/budget`, `agent: false`; 404 khi không có gói.
+- `apps/mcp`: `ROUTE_DOC_KHONG_PHOI` mang lý do không phơi route ấy; bảng công cụ không đổi.
+- `apps/web`: `docNganSachKhiDocGoi` và `hangNganSach` (thuần, `tao-thau.test.ts` đo); `napRfq` đọc ngân sách khi người dùng là
+  người tạo gói hay gói đang chờ duyệt; `userId` của phiên lấy từ `GET /me`.
+- ADR-9201; STATE, TEST-PLAN.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Lúc nào màn tự đọc** (ADR-9201 ⑶): người tạo gói, hay gói đang chờ duyệt. Màn không biết quyền của người dùng, và dự án cố ý
+  không có phép hỏi quyền im lặng.
+- **`null` trước phép kiểm quyền** cho gói không có — trong một tổ chức, gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời.
+
+## 5. Đo sau
+
+- `apps/api/src/buyer.int.test.ts`, hai ca: tổ chức đã bật, gói chờ duyệt — người tạo và người duyệt nhận đủ năm thứ (1 triệu, VND,
+  phiên bản 2, bậc từ 0, không duyệt kép); BUYER khác và FINANCE ⇒ 403, mỗi người một hàng `PERMISSION_DENIED` trên `rfq.approve`;
+  mã gói lạ ⇒ 404. Gói chưa có ngân sách, tổ chức chưa bật ⇒ bốn trường `null`, cờ duyệt kép `true` (mặc định fail-closed).
+- Hai đột biến ở tầng gói, cả hai đỏ: bỏ cổng quyền (BUYER đọc được); luôn hỏi `rfq.create` (BUYER — giữ `rfq.create` — đọc được gói
+  của người khác).
+- `apps/web/src/tao-thau.test.ts`: luật tự đọc ở bảy trạng thái gói × người tạo / người khác; năm hàng của bảng, gói chưa có ngân
+  sách, thân lạ.
+- `cong-quyen-route.test.ts`, `barrel-exports.test.ts`, `apps/mcp/src/cong-cu.test.ts` xanh với sổ đăng ký mới.
+
+## 6. Lượt soi đối kháng
+
+(điền sau lượt soi)
+
+## 7. Giới hạn, nói ra
+
+- Người không giữ `rfq.approve` mở một gói đang chờ duyệt trên `/tao-thau` — không phải người tạo — để lại một hàng
+  `PERMISSION_DENIED` mỗi lần đọc gói.
+- Gói, hạng mục, lời mời và ngân sách là bốn lần đọc tách nhau; lần nộp lại tăng `lanNop`, nên thứ đọc sau mà khác lần nộp đã đọc
+  làm lời duyệt mang mốc cũ bị từ chối (ADR-115).
+
+## 8. Số đo
+
+(điền sau lượt T3 toàn bộ)
