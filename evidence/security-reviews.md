@@ -15905,7 +15905,7 @@ và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ c
 
 Không khoản nào mở hay đóng.
 
-# §S1.9101 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
+# §S1.191 — S4.0 + S4.1: DẢI NHÃN `[A-HJ-L]`, GÓI `du-lieu-nen`, ĐƠN VỊ ĐO VÀ KHUÔN NỀN CỦA DỮ LIỆU NỀN (L1, L4)
 
 ## 1. Vòng này là gì
 
@@ -15928,7 +15928,7 @@ Chốt ngày 2026-09-29, theo ba đề xuất của lượt bàn hướng làm:
   §8.9). Gói `@trustprocure/du-lieu-nen`; hai luật depcruise `g19-du-lieu-nen-chi-index-la-cua-cong-khai` và
   `g19-du-lieu-nen-khong-cham-duong-mo-thau` (không với tới `sealed-envelope`, `unseal`, `crypto-keys`, kể cả gián tiếp); ba mũi
   `[INV-H16]` ở `boundaries.test.ts`; cửa công khai ghim ở `barrel-exports.test.ts`.
-- **S4.1 — `9501_don_vi_do`.** `chuoi_sach(text)` `IMMUTABLE STRICT PARALLEL SAFE`; `uom_units` (12 đơn vị, 5 thứ nguyên,
+- **S4.1 — `079_don_vi_do`.** `chuoi_sach(text)` `IMMUTABLE STRICT PARALLEL SAFE`; `uom_units` (12 đơn vị, 5 thứ nguyên,
   `he_so_ve_goc`) và `uom_aliases_chung` (18 bí danh), không `org_id`, `app_api` chỉ `SELECT`, chỉ-ghi-thêm kể cả `TRUNCATE`
   (`bid_chi_ghi_them`, khuôn `047`); `uom_aliases` của tổ chức — RLS `FORCE`, policy khách đóng hẳn, `GRANT INSERT` sáu cột (ngoài
   `id`, `seq`, `ghi_luc`), hàng rút (`rut`, `code IS NULL`), tác giả dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); trigger khuôn
@@ -15957,7 +15957,7 @@ Chốt ngày 2026-09-29, theo ba đề xuất của lượt bàn hướng làm:
   đơn vị đã biết.
 - **L1 đo cho MỌI bảng nền bằng một tổng điều tra**, không bằng từng test: `BANG_DU_LIEU_NEN` trong `don-vi.int.test.ts` phải bằng
   đúng tập bảng mang trigger khuôn, `ENABLE ALWAYS`, ba cột ngoài `GRANT`. Mỗi bảng nền sau thêm một dòng.
-- **Bộ đọc `BANG_TENANT_KHAI` của `rls-coverage` nhận số migration bốn chữ số.** Khuôn cũ `\d{3}_` bỏ qua dòng khai `9501_…` của
+- **Bộ đọc `BANG_TENANT_KHAI` của `rls-coverage` nhận số migration bốn chữ số.** Khuôn cũ `\d{3}_` bỏ qua dòng khai `95NN_…` (số tạm) của
   một bảng tenant mới trong nhánh, và phép so đỏ với con số lệch thay vì nói tên dòng bị mù. Phép quét literal GUC cùng tệp nới theo.
 - **Lệch đo được, không sửa:** spec S4 gọi hàm ghim phiên bản chính sách là `chinh_sach_tai` (*mới nhất TẠO trước `opened_at`*);
   thứ S3.1 dựng là `chinh_sach_hieu_luc` của `069` (*`version` cao nhất đã hiệu lực và — khi có bậc — đã ký, tại `created_at`*).

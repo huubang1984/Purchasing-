@@ -3440,7 +3440,7 @@ $ham$;
          ('public', 'unseal_approvals', '019_unseal'),
          ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
          ('public', 'unseal_requests', '019_unseal'),
-         ('public', 'uom_aliases', '9501_don_vi_do'),
+         ('public', 'uom_aliases', '079_don_vi_do'),
          ('public', 'user_login_tokens', '029_dang_nhap_nguoi_mua'),
          ('public', 'user_roles', '005_identity'),
          ('public', 'users', '002_organizations_and_users'),
@@ -8197,10 +8197,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_invitation_tokens_ghi_goi_da_mo() và bảng public.rfq_invitation_tokens (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.1 / L1] Khuon nen cua moi bang du lieu nen: khoa tu van -> seq -> ghi_luc. Than `RETURN NEW` de ung dung tu khai seq va moc — L1 mat ca hai ve.
+    -- [S1.191 / S4.1 / L1] Khuon nen cua moi bang du lieu nen: khoa tu van -> seq -> ghi_luc. Than `RETURN NEW` de ung dung tu khai seq va moc — L1 mat ca hai ve.
     ARRAY[
-      $q$hàm + trigger du_lieu_nen_dat_thu_tu (9501_don_vi_do)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_don_vi_do.sql')$q$,
+      $q$hàm + trigger du_lieu_nen_dat_thu_tu (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8266,10 +8266,10 @@ $ham$;
       $q$quyền sở hữu hàm public.du_lieu_nen_dat_thu_tu() và bảng public.uom_aliases (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.1 / L2] Lam sach ban 1 — bi danh luu o dang nay, CHECK cua hai bang bi danh goi no. Mot than khac la mot phien ban khac: bi danh cu thoi khop ma khong ai biet.
+    -- [S1.191 / S4.1 / L2] Lam sach ban 1 — bi danh luu o dang nay, CHECK cua hai bang bi danh goi no. Mot than khac la mot phien ban khac: bi danh cu thoi khop ma khong ai biet.
     ARRAY[
-      $q$định nghĩa hàm chuoi_sach(text) (9501_don_vi_do)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_don_vi_do.sql')$q$,
+      $q$định nghĩa hàm chuoi_sach(text) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.chuoi_sach(p text) RETURNS text
   LANGUAGE sql
   IMMUTABLE
@@ -8304,10 +8304,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm chuoi_sach(text) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.1 / L1 · L4] Chuoi don vi -> ma TAI MOC. Bo ve `ghi_luc < p_moc` la mot bi danh ghi sau khi thay gia doi duoc quy doi cua goi da mo.
+    -- [S1.191 / S4.1 / L1 · L4] Chuoi don vi -> ma TAI MOC. Bo ve `ghi_luc < p_moc` la mot bi danh ghi sau khi thay gia doi duoc quy doi cua goi da mo.
     ARRAY[
-      $q$định nghĩa hàm don_vi_tai(uuid, text, timestamptz) (9501_don_vi_do)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_don_vi_do.sql')$q$,
+      $q$định nghĩa hàm don_vi_tai(uuid, text, timestamptz) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.don_vi_tai(p_org uuid, p_chuoi text, p_moc timestamptz) RETURNS text
   LANGUAGE sql
   STABLE
@@ -8342,10 +8342,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm don_vi_tai(uuid, text, timestamptz) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.1 / L4] Ham quy doi DUY NHAT. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
+    -- [S1.191 / S4.1 / L4] Ham quy doi DUY NHAT. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
     ARRAY[
-      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (9501_don_vi_do)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_don_vi_do.sql')$q$,
+      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (079_don_vi_do)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '079_don_vi_do.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
   p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
   RETURNS TABLE (he_so numeric, ma text)

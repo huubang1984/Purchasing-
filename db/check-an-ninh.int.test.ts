@@ -114,7 +114,7 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   suppliers_tax_code_check: "DINH_DANG",
   unseal_requests_huy_thi_co_moc: "MOC",
   unseal_requests_reason_check: "DO_DAI",
-  // [S1.9101 / S4.1] Đơn vị đo. Bí danh lưu ở dạng `chuoi_sach` của chính nó: gỡ ràng buộc thì một bí danh chưa làm sạch
+  // [S1.191 / S4.1] Đơn vị đo. Bí danh lưu ở dạng `chuoi_sach` của chính nó: gỡ ràng buộc thì một bí danh chưa làm sạch
   // KHÔNG BAO GIỜ khớp (thất bại đóng), không mở quyền nào. `he_so_ve_goc` chỉ migration ghi (danh mục toàn cục chỉ-ghi-thêm).
   uom_aliases_bi_danh_sach_check: "DINH_DANG",
   uom_aliases_chung_bi_danh_sach_check: "DINH_DANG",

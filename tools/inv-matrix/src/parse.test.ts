@@ -62,7 +62,7 @@ const TEST_PLAN_MAU = [
   "|---|---|---|---|",
   "| **K1** | Gói rời `DRAFT` mang khoá ngoại tới đúng hàng bậc của ước lượng | Khoá ngoại hợp thành + trigger | T3 |",
   "",
-  // [S1.9101 / S4.0] Hàng nhóm L vì ĐÚNG lập luận của hàng K ở trên: dải nay là `[A-HJ-L]` (spec S4 §9, S4.0), và một
+  // [S1.191 / S4.0] Hàng nhóm L vì ĐÚNG lập luận của hàng K ở trên: dải nay là `[A-HJ-L]` (spec S4 §9, S4.0), và một
   // mũi thu ngược về `[A-HJK]` phải có chỗ để chết ngay cả khi sổ thật đổi. `L` liền sau `K`, nên `[A-HJ-L]` và
   // `[A-HJKL]` là một tập; biên trên là `M` — ca riêng ở dưới.
   "### Nhóm L — Dữ liệu nền",
@@ -134,10 +134,10 @@ describe("phân tích ma trận bất biến", () => {
     expect(k1?.statement).toBe("Gói rời `DRAFT` mang khoá ngoại tới đúng hàng bậc của ước lượng");
     expect(k1?.enforcement).toBe("Khoá ngoại hợp thành + trigger");
     // ~~Biên trên: không nhóm nào mang chữ `L`. Một dải nới quá tay thành `[A-HJ-L]` sẽ đọc một hàng `L1` bịa thành bất
-    // biến thật.~~ **[S1.9101 / S4.0]** Nhóm L nay có thật (spec S4 §5); biên trên dời sang `M` — ca ngay dưới.
+    // biến thật.~~ **[S1.191 / S4.0]** Nhóm L nay có thật (spec S4 §5); biên trên dời sang `M` — ca ngay dưới.
   });
 
-  it("[S1.9101 / S4.0] dải [A-HJ-L]: hàng nhóm L đọc được, `M` thì không — mũi thu dải về [A-HJK] và mũi nới quá tay đều chết", () => {
+  it("[S1.191 / S4.0] dải [A-HJ-L]: hàng nhóm L đọc được, `M` thì không — mũi thu dải về [A-HJK] và mũi nới quá tay đều chết", () => {
     // Ca này ĐỎ nếu ai đó thu dải về `[A-HJK]` ở bộ đọc chính (L4 biến mất) hay ở bộ đếm độc lập (hai con số lệch,
     // `parseInvariants` NÉM ở mọi ca dùng mẫu).
     const l4 = parseInvariants(TEST_PLAN_MAU).find((i) => i.id === "L4");
@@ -260,7 +260,7 @@ describe("ranh giới của nhãn được tính là độ phủ", () => {
       baoCao([
         { fullName: "trao thầu > [INV-J1] chỉ khoản TIỀN", status: "passed" },
         { fullName: "bậc giá trị > [INV-K1] gói rời DRAFT mang đúng bậc", status: "passed" },
-        // [S1.9101 / S4.0] …và nhóm L: bộ gom độ phủ dùng chung `KHUON_MA`, nên mũi thu khuôn chung về `[A-HJK]` chết ở đây.
+        // [S1.191 / S4.0] …và nhóm L: bộ gom độ phủ dùng chung `KHUON_MA`, nên mũi thu khuôn chung về `[A-HJK]` chết ở đây.
         { fullName: "đơn vị đo > [INV-L4] khác thứ nguyên không quy đổi", status: "passed" },
         { fullName: "lạ > [INV-M1] không nhóm nào", status: "passed" },
       ]),

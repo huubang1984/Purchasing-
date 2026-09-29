@@ -1058,7 +1058,7 @@ const DANH_SACH_TRANG_DB = [
 // BẢY SYMBOL, và gói này đáng canh vì HẬU QUẢ của con số nó tính: `effective_cost` quyết định
 // THỨ HẠNG, thứ hạng quyết định award. Một symbol thứ tám tính tiền theo một luật khác là
 // khoản 218 mọc lại trong chính gói sinh ra để chấm dứt nó.
-// [S1.9101 / S4.1] Nền dữ liệu của S4a: làm sạch chuỗi và quy đổi đơn vị — cả hai chỉ gọi hàm SQL, không cài lại luật.
+// [S1.191 / S4.1] Nền dữ liệu của S4a: làm sạch chuỗi và quy đổi đơn vị — cả hai chỉ gọi hàm SQL, không cài lại luật.
 const DANH_SACH_TRANG_DU_LIEU_NEN = ["KHONG_QUY_DOI_DUOC", "chuoiSach", "quyDoiDonVi"];
 
 const DANH_SACH_TRANG_DANH_GIA = [

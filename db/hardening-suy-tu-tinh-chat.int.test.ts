@@ -134,7 +134,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   "rfq_award_approvals",
   "rfq_awards",
   "rfq_unsealed_bids",
-  // [S1.9101 / S4.1 / `9501_don_vi_do`] Bí danh đơn vị của tổ chức (L1) và hai danh mục toàn cục — khuôn `047`/`061`:
+  // [S1.191 / S4.1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức (L1) và hai danh mục toàn cục — khuôn `047`/`061`:
   // `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai `ENABLE ALWAYS`. Danh mục toàn cục là THƯỚC:
   // sửa `he_so_ve_goc` là đổi mọi quy đổi đã dùng.
   "uom_aliases",
@@ -247,7 +247,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.chinh_sach_kiem_nguoi_ky",
   "public.chinh_sach_phien_ban_tang_dan",
   "public.chot_moc_neo",
-  // [S1.9101 / S4.1 / L1 / `9501_don_vi_do`] Hàm trigger khuôn của MỌI bảng dữ liệu nền: BEFORE INSERT, lấy khoá tư vấn rồi ĐẶT
+  // [S1.191 / S4.1 / L1 / `079_don_vi_do`] Hàm trigger khuôn của MỌI bảng dữ liệu nền: BEFORE INSERT, lấy khoá tư vấn rồi ĐẶT
   // `seq` và `ghi_luc` — không bao giờ từ chối. Chỉ gắn INSERT ⇒ không thể là hàm canh; thứ giữ bảng chỉ-ghi-thêm là
   // `bid_chi_ghi_them`. Nhân chứng: câu khai bí danh cuối `dungKichBan()`.
   "public.du_lieu_nen_dat_thu_tu",
@@ -1747,7 +1747,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "rfq_packages",
   );
 
-  // ---- [S1.9101 / S4.1 / L1 / `9501_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------
+  // ---- [S1.191 / S4.1 / L1 / `079_don_vi_do`] Bí danh đơn vị của tổ chức: bảng dữ liệu nền đầu tiên ----------------------------
   // Hai bộ ba mới trên `uom_aliases`/INSERT: `du_lieu_nen_dat_thu_tu` (hàm MỚI — ĐẶT `seq`, `ghi_luc`, không bao giờ từ chối) và
   // `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Hai cột trigger đặt không khai ở vế ⒠ — thứ được so là cột câu ĐẶT.
   doiSoHang(

@@ -460,7 +460,7 @@ export function viPhamSoADR(van: string, quyetDinh: string, nhan: string): reado
  * ĐÚNG MỘT HÀNG BẢNG, và nó đang thiu ba đơn vị ở cả hai con số khi P5 được viết.
  *
  * Nguồn đếm được: số HÀNG của sổ đăng ký trong `docs/TEST-PLAN.md` — mỗi hàng mở đầu bằng một mã
- * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.153]** `J` và `K` cũng là nghiệp vụ. **[S1.9101]** `L` cũng vậy.
+ * `| **X9** |`. Nhóm `H` là hàng rào, `A`–`G` là nghiệp vụ. **[S1.153]** `J` và `K` cũng là nghiệp vụ. **[S1.191]** `L` cũng vậy.
  * **[S1.185 / khoản 246]** Một mã mang một chữ thường sau số (`K4a`) là MỘT hàng — cùng khuôn mã với bộ đọc sổ
  * (`tools/inv-matrix/src/parse.ts`, `MA_BAT_BIEN`); đếm thiếu nó thì lời khai lệch ma trận.
  */
