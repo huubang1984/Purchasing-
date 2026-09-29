@@ -16602,3 +16602,8 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
   bộ unit + T3 cục bộ trên cây cuối: 194 tệp, 3303 khẳng định, 3293 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh
   lại: 70/70 bất biến, đọc từ 3303 khẳng định; K4b 40, D2 64, K4a 26 (22 của #206 cộng 4 của vòng này). `tsc`, `eslint`,
   `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #199 — nay mang #207 (`cap-so` giữ số trên origin) — và cấp lại số theo lời giữ:** hai số vòng, một số ADR và hai
+  số migration kế tiếp đã có lời giữ của #203 và #204, nên vòng này nay là S1.198, ADR-117, `084_lan_nop_da_xem`; khoản 258–261 giữ
+  nguyên số và nay được giữ cho nhánh này. Toàn bộ unit + T3 cục bộ trên cây cuối: 194 tệp, 3306 khẳng định, 3296 đạt, 1 bỏ qua, 9 đỏ
+  — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 70/70 bất biến, đọc từ 3306 khẳng định; K4b 40, D2 64, K4a 26
+  như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
