@@ -9,13 +9,22 @@
 //
 // Trang này KHÔNG import một mảnh mật mã nào: khoá của gói thầu sinh ở máy chủ lúc `open`, và
 // người mua không giữ nó. Màn này chỉ ra lệnh và đọc lại trạng thái.
+//
+// [S1.9101 / S3.2c2] Hai luồng mời dưới công tắc ADR-080. Tổ chức CHƯA bật: nguyên MVP1 — mời sau khi mở, link đi lúc mời.
+// Tổ chức ĐÃ bật: bước mời đứng TRƯỚC bước ngân sách và phê duyệt (người duyệt ký lên danh sách — K4b), lời mời nằm «chưa
+// gửi» tới lần mở gói (K6), lần mở gói nói link nào chưa đi, và gói đang chờ duyệt trả về soạn thảo được, có lý do (`077`).
+// Màn hỏi `GET /policy/versions` MỘT lần sau đăng nhập để biết luồng nào; mọi phép tính ở `/lib/tao-thau.js`.
 // ==============================================================================================
+
+import { baoSauKhiMo, baoSauKhiMoi, hienTraVe, loiLyDo, nhanTrangThaiLoiMoi, nutLoiMoi, thuTuBuoc } from "/lib/tao-thau.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
 let phien = { orgId: "", token: "", daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+// [S1.9101 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
+let luong = { daBat: false, trangThaiGoi: "" };
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -74,6 +83,7 @@ window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
   phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+  datLuong({ daBat: false, trangThaiGoi: "" });
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
@@ -134,6 +144,30 @@ function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  void napLuong();
+}
+
+/**
+ * [S1.9101 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc chưa — `daBat` của `GET /policy/versions`, đúng hàm công tắc mà
+ * máy chủ hỏi (ADR-080). Đọc hỏng thì màn ở luồng MVP1: máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ nói kém đi.
+ */
+async function napLuong() {
+  try {
+    const r = await goi("GET", "/policy/versions");
+    datLuong({ ...luong, daBat: r.status === 200 && r.body?.daBat === true });
+  } catch { /* mất mạng: giữ luồng MVP1 */ }
+}
+
+/** [S1.9101 / S3.2c2] Đặt luồng rồi vẽ lại: thứ tự bước, số bước, hai đoạn ghi, khối trả về soạn thảo. */
+function datLuong(moi) {
+  luong = moi;
+  const thuTu = thuTuBuoc(luong.daBat);
+  if (luong.daBat) $("khung").classList.add("moi-truoc"); else $("khung").classList.remove("moi-truoc");
+  $("so-b4").textContent = String(thuTu.indexOf("b4") + 2);
+  $("so-b5").textContent = String(thuTu.indexOf("b5") + 2);
+  hien($("ghi-s3-b4"), luong.daBat);
+  hien($("ghi-s3-b5"), luong.daBat);
+  hien($("khoi-tra-ve"), hienTraVe(luong.daBat, luong.trangThaiGoi));
 }
 
 /** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
@@ -185,6 +219,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
     phien = { orgId: "", token: $("token").value.trim(), daRedeem: false, rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
+    datLuong({ daBat: false, trangThaiGoi: "" });
     dongCacBuoc();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
@@ -208,6 +243,7 @@ async function napRfq(rfqId) {
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return false; }
   const g = r.body?.rfq ?? {};
   phien = { ...phien, rfqId };
+  datLuong({ ...luong, trangThaiGoi: typeof g.status === "string" ? g.status : "" });
   dienDl($("tt-rfq"), [
     ["Mã gói thầu", rfqId],
     ["Tên", g.title],
@@ -216,6 +252,7 @@ async function napRfq(rfqId) {
     ["Cần hai người duyệt", g.requiresDualApproval === true ? "có" : "không"],
   ]);
   await napHangMuc();
+  if (luong.daBat) await napLoiMoi();
   return true;
 }
 
@@ -294,17 +331,39 @@ $("nut-ns").addEventListener("click", async () => {
 for (const [nut, duong, xong] of [
   ["nut-nop-duyet", "submit", "Đã nộp duyệt. Người KHÁC phải phê duyệt — người tạo không tự duyệt được."],
   ["nut-duyet", "approve", "Đã ghi một phê duyệt."],
-  ["nut-mo", "open", "Đã mở thầu. Từ giờ nhà cung cấp nộp được, và khoá của gói đã sinh ở máy chủ."],
+  ["nut-mo", "open", ""],
 ]) {
   $(nut).addEventListener("click", async () => {
     bao($("loi4"), ""); bao($("ok4"), "");
     if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
     const r = await goi("POST", `/rfqs/${phien.rfqId}/${duong}`);
     if (r.status !== 200) { bao($("loi4"), loiCua(r, "Bước này không đi được")); return; }
-    bao($("ok4"), xong);
+    if (duong === "open") {
+      // [S1.9101 / S3.2c2 · ADR-113] Gói ĐÃ mở dù một phần link chưa đi — câu báo nói số link ấy, bảng lời mời chỉ dòng.
+      const b = baoSauKhiMo(luong.daBat, r.body?.unsentInvitationIds);
+      bao($(b.loi ? "loi4" : "ok4"), b.chu);
+    } else {
+      bao($("ok4"), xong);
+    }
     await napRfq(phien.rfqId);
   });
 }
+
+// [S1.9101 / S3.2c2] Trả gói đang chờ duyệt về soạn thảo (`POST /rfqs/:rfqId/return-to-draft`, `077`): lý do bắt buộc và
+// vào sổ; chữ ký cũ không bị xoá — chúng thôi đếm khi nội dung hay danh sách đổi (K4b).
+$("nut-tra-ve").addEventListener("click", async () => {
+  bao($("loi4"), ""); bao($("ok4"), "");
+  if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const lyDo = $("ly-do-tra-ve").value;
+  const sai = loiLyDo(lyDo);
+  if (sai !== null) { bao($("loi4"), sai); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/return-to-draft`, { reason: lyDo.trim() });
+  if (r.status !== 200) { bao($("loi4"), loiCua(r, "Không trả gói về soạn thảo được")); return; }
+  $("ly-do-tra-ve").value = "";
+  bao($("ok4"), "Đã trả gói về soạn thảo. Sửa hạng mục hay danh sách mời rồi nộp duyệt lại — người duyệt phải ký lại " +
+    "nếu nội dung hay danh sách đã đổi.");
+  await napRfq(phien.rfqId);
+});
 
 // ---------------------------------------------------------------------------------------------
 // Bước 5 — nhà cung cấp và lời mời
@@ -340,7 +399,9 @@ $("nut-moi").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/invitations`, { supplierId: phien.supplierId, contactId: phien.contactId });
   if (r.status !== 201) { bao($("loi5"), loiCua(r, "Không mời được")); return; }
   // Mã mời KHÔNG về màn này: nó đi thẳng tới bộ gửi, và thân `201` chỉ mang id lời mời.
-  bao($("ok5"), "Đã mời. Link đi thẳng tới bộ gửi — màn này không bao giờ thấy mã mời.");
+  // [S1.9101 / S3.2c2 · ADR-113] Ở tổ chức đã bật, `201` không còn nghĩa là link đã đi — câu báo đọc trạng thái thật.
+  const b = baoSauKhiMoi(r.body?.invitation ?? {});
+  bao($(b.loi ? "loi5" : "ok5"), b.chu);
   await napLoiMoi();
 });
 
@@ -357,13 +418,16 @@ async function napLoiMoi() {
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Không đọc được danh sách lời mời")); return; }
   for (const m of Array.isArray(r.body?.invitations) ? r.body.invitations : []) {
     const tr = document.createElement("tr");
-    for (const v of [m.supplierName, m.contactName, m.linkChannel, m.status]) {
+    for (const v of [m.supplierName, m.contactName, m.linkChannel, nhanTrangThaiLoiMoi(m.status)]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
       tr.append(td);
     }
     const td = document.createElement("td");
-    if (m.revokedAt === null) {
+    // [S1.9101 / S3.2c2] Nút theo luồng và trạng thái gói: ở tổ chức đã bật, thu hồi chỉ ở DRAFT (K4a) và gửi lại chỉ khi
+    // gói nhận báo giá (K6 — trước lần mở chưa có token nào).
+    const nutDong = nutLoiMoi(luong.daBat, luong.trangThaiGoi, m.revokedAt !== null);
+    if (nutDong.guiLai || nutDong.thuHoi) {
       // [S1.181 / ADR-110] Nhà cung cấp mất phiên (thoát, hết 4 giờ, đổi máy) thì bên mua GỬI LẠI link cho chính lời mời
       // này — cùng người liên hệ, cùng kênh, về đúng hồ sơ báo giá đã nộp. Thu hồi rồi mời lại là một lời mời và một luồng
       // báo giá MỚI, nên không phải đường cho việc này.
@@ -393,6 +457,8 @@ async function napLoiMoi() {
         if (gl.status !== 200) { bao($("loi5"), loiCua(gl, "Không gửi lại được link")); return; }
         bao($("ok5"), `Đã gửi link mới tới ${m.contactName} qua ${m.linkChannel}. Link cũ chưa dùng (nếu có) đã hết hiệu lực; ` +
           "nhà cung cấp vào lại đúng báo giá đã nộp.");
+        // [S1.9101 / S3.2c2] Lời mời «chưa gửi» của tổ chức đã bật thành «đã gửi» sau lần gửi lại được — vẽ lại bảng.
+        if (luong.daBat) await napLoiMoi();
       });
       const nut = document.createElement("button");
       nut.className = "phu";
@@ -407,7 +473,8 @@ async function napLoiMoi() {
           "mới thì dùng «Gửi lại link», đừng thu hồi.");
         await napLoiMoi();
       });
-      td.append(guiLai, nut);
+      if (nutDong.guiLai) td.append(guiLai);
+      if (nutDong.thuHoi) td.append(nut);
     }
     tr.append(td);
     tb.append(tr);

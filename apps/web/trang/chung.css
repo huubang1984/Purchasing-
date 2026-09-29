@@ -83,6 +83,12 @@ section.buoc {
   margin-bottom: 14px;
 }
 section.buoc[hidden] { display: none; }
+/* [S1.9101 / S3.2c2] Màn tạo gói của tổ chức đã bật kiểm soát theo bậc: bước mời (#b5) đứng TRƯỚC bước ngân sách và
+   phê duyệt (#b4) — người duyệt ký lên danh sách mời. Mọi phần tử khác giữ thứ tự nguồn (order 0). */
+main.moi-truoc { display: flex; flex-direction: column; }
+main.moi-truoc > #b5 { order: 1; }
+main.moi-truoc > #b4 { order: 2; }
+main.moi-truoc > footer { order: 3; }
 section.buoc > h2 {
   font-size: 0.78rem;
   text-transform: uppercase;

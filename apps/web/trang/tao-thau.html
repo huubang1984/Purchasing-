@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/chung.css">
 </head>
 <body>
-<main>
+<main id="khung">
   <header class="dau">
     <h1>Tạo gói thầu và mời nhà cung cấp</h1>
     <span class="vai">Người mua</span>
@@ -73,9 +73,13 @@
   </section>
 
   <section class="buoc" id="b4" hidden>
-    <h2><span class="so">4</span> Ngân sách và phê duyệt</h2>
+    <h2><span class="so" id="so-b4">4</span> Ngân sách và phê duyệt</h2>
     <p class="ghi">Giá trị ước lượng quyết định gói này có cần hai người duyệt hay không — ngưỡng
       nằm ở chính sách của tổ chức, không nằm ở màn này. Người tạo KHÔNG tự duyệt được.</p>
+    <!-- [S1.9101 / S3.2c2] Tổ chức đã bật kiểm soát theo bậc: người duyệt ký lên danh sách mời, nên bước mời đứng trước. -->
+    <p class="ghi" id="ghi-s3-b4" hidden>Tổ chức này đã bật kiểm soát theo bậc: người duyệt ký lên CHÍNH danh sách
+      mời ở bước trên, và link mời chỉ đi khi gói được mở. Mời đủ rồi mới nộp duyệt; muốn đổi danh sách sau khi đã nộp
+      thì trả gói về soạn thảo.</p>
     <label for="ns">Giá trị ước lượng</label>
     <input id="ns" inputmode="decimal" autocomplete="off" placeholder="1000000000.00">
     <label for="tien-te">Tiền tệ</label>
@@ -87,14 +91,22 @@
       <button id="nut-duyet" class="phu">Phê duyệt</button>
     </div>
     <button id="nut-mo">Mở thầu</button>
+    <!-- [S1.9101 / S3.2c2] Cạnh PENDING_APPROVAL→DRAFT (`077`): chỉ tổ chức đã bật, lý do bắt buộc và vào sổ. -->
+    <div id="khoi-tra-ve" hidden>
+      <label for="ly-do-tra-ve">Lý do trả gói về soạn thảo</label>
+      <input id="ly-do-tra-ve" autocomplete="off" placeholder="Thêm nhà cung cấp thứ năm vào danh sách mời">
+      <button id="nut-tra-ve" class="phu">Trả về soạn thảo</button>
+    </div>
     <div class="bao loi" id="loi4" hidden></div>
     <div class="bao ok" id="ok4" hidden></div>
   </section>
 
   <section class="buoc" id="b5" hidden>
-    <h2><span class="so">5</span> Nhà cung cấp và lời mời</h2>
+    <h2><span class="so" id="so-b5">5</span> Nhà cung cấp và lời mời</h2>
     <p class="ghi">Mỗi lời mời đi tới MỘT người liên hệ, và mã mời không bao giờ quay về màn này —
       nó đi thẳng tới bộ gửi. Danh sách dưới trả id để thu hồi được lời mời gửi nhầm.</p>
+    <p class="ghi" id="ghi-s3-b5" hidden>Tổ chức này đã bật kiểm soát theo bậc: lời mời dựng ở đây nằm «chưa gửi» cho
+      tới khi gói được mở — lúc ấy mọi link đi một lượt. Thu hồi chỉ được khi gói còn soạn thảo.</p>
     <label for="ncc-ten">Tên pháp nhân nhà cung cấp</label>
     <input id="ncc-ten" autocomplete="off" placeholder="Thep Dong Anh">
     <label for="ncc-mst">Mã số thuế</label>
