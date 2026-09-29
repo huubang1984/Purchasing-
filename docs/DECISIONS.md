@@ -9010,7 +9010,7 @@ sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ
 - Chữ ký cũ ở lại trong bảng làm dấu vết — cùng khuôn `011` và `076`.
 - **Hai khoảng trống cùng lớp, lượt soi đo, CHƯA đóng ở ADR này** — chủ dự án chọn vá ở một vòng riêng, trước S3.2c: lời duyệt chỉ
   mang mã gói, nên PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem (khoản 256
-  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257).
+  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257). **[S1.9101]** Cả hai đóng ở ADR-9201.
 - `approved_budget_hash` là SHA-256 không muối trên một chuỗi đoán được (con số, tiền tệ, phiên bản, bậc, cờ): biết phiên bản chính
   sách thì dò lại được ước lượng. Hôm nay không route nào đọc `rfq_approvals`, và RLS chặn phiên khách. Ngày băm ấy đi ra ngoài (bộ
   bằng chứng S3.9, thân sổ) thì nó ngang ngân sách.
@@ -9023,3 +9023,92 @@ nâng cùng bậc rồi đặt lại con số cũ, một người ký hai lần 
 phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; bảy đột biến đều đỏ — bỏ phép đếm trên ngân sách, phép đếm
 thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
 cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 256, 257).
+
+## ADR-9201 — Tổ chức đã bật S3: lời duyệt gói mang LẦN NỘP người duyệt đã xem, và lần trả về rút chữ ký của CHÍNH người trả — bộ đếm lần nộp, sổ `rfq_tra_ve`, cạnh mở gói đếm chữ ký còn hiệu lực
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá cả hai khoản ở một vòng riêng trước S3.2c,
+hình dạng của mỗi khoản (hàng sổ 256, 257), và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật: route MVP1 giữ hợp đồng không thân, gửi
+thì phải đúng. Bộ đếm thay cho mốc thời gian, cột về NULL ở MVP1 và thứ tự trigger là điểm tôi tự chốt (⑴ ⑵ dưới); chủ dự án bác
+được · **[S1.9101]** · **Liên quan:** ADR-114 (băm ngân sách), ADR-084 ⑵ (cạnh về DRAFT, *"trả về thay vì không ký"*), ADR-108 ⑴
+(không bớt nhánh ghi nào của D2), ADR-080 (công tắc một chiều), `011` C-1, `071`, `076`, `077`, `079` · **Biên bản:**
+`evidence/security-reviews.md` §S1.9101 · **Khoản:** 256, 257 (ghi ở S1.191; đóng ở đây)
+
+### Bối cảnh
+
+Lượt soi của S1.191 (ADR-114) đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` của `077`, ở tổ chức đã bật:
+
+- **Khoản 256.** Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm (nội dung, danh sách, ngân sách) của CSDL LÚC CHÈN, không của
+  thứ người duyệt đã xem. Người duyệt xem gói ở 1 triệu; PM trả về, đặt 99 triệu, nộp lại; người duyệt bấm ký ⇒ chữ ký nằm trên 99
+  triệu, và gói MỞ.
+- **Khoản 257.** Cạnh về DRAFT không xoá chữ ký (`077` (1)), và người, lý do của lần trả về chỉ nằm ở sổ kiểm toán. PM2 ký, rồi chính
+  PM2 trả gói về; PM nộp lại y nguyên ⇒ gói MỞ bằng chữ ký PM2 vừa muốn rút.
+
+Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy tới vòng này.
+
+### Quyết định
+
+1. **Mốc là một BỘ ĐẾM: `rfq_packages.lan_nop`.** Trigger riêng ở cạnh DRAFT→PENDING_APPROVAL cộng một; cột ngoài mọi `GRANT`, bên gọi
+   không chọn được lần nộp của mình. Hàng cũ giữ 0. **Tự chốt, không dùng `submitted_at` (`072`):** mốc đi một vòng qua trình duyệt
+   (`GET` rồi lời duyệt), và `timestamptz` qua JSON sang JavaScript mất phần micro giây, nên phép so bằng gãy; vế ⑸ cần THỨ TỰ giữa
+   các lần nộp, mà đồng hồ tường có thể lùi.
+2. **Lời duyệt mang `lan_nop_da_xem`.** `GET /rfqs/:rfqId` trả `rfq.lanNop`; `POST /rfqs/:rfqId/approve` nhận thân `{lanNop}` tuỳ
+   chọn; màn `/tao-thau` gửi lần nộp của CHÍNH lần đọc gói; `approveRfq` không tự điền. Trigger `rfq_approvals_so_lan_nop` khoá hàng
+   gói `FOR SHARE` rồi so:
+   - tổ chức đã bật: bắt buộc; vắng hay lệch lần nộp hiện tại ⇒ 23514 *"Goi thau dang o lan nop N; loi duyet khong mang dung lan nop
+     nay — doc lai goi roi duyet (K4b)"* — 422 qua route, không hàng sổ: nó nói gói đã đổi sau lúc đọc, cùng lớp lời từ chối trạng
+     thái;
+   - tổ chức chưa bật: tuỳ chọn, gửi thì phải đúng; rồi cột ĐẶT VỀ NULL. **Tự chốt:** phép đếm D2 của `071` đếm HÀNG, và UNIQUE
+     `NULLS NOT DISTINCT` giữ mỗi người một hàng chỉ khi cột này cùng NULL — cùng lý do vế NULL của `076` (2).
+
+   **Tự chốt — thứ tự:** tên trigger xếp SAU `rfq_approvals_kiem_nguoi_duyet`, nên phép so chạy cuối. Lời tự duyệt hay phiên hỏng
+   vẫn bị chốt D2 từ chối và vào sổ `CONTROL_DENIED` dù mốc thiếu hay sai — ADR-108 ⑴. Băm (trigger đầu) và trạng thái (D2) đọc TRƯỚC
+   khoá, nhưng lần nộp chỉ tăng và mọi lần sửa gói đòi DRAFT: lời duyệt qua được phép so thì gói ở đúng lần nộp ấy từ lúc người duyệt
+   đọc, còn băm nào lệch gói lúc mở chỉ làm chữ ký không đếm. Khoá giữ tới hết giao dịch: một lần trả về hay nộp lại chạy cùng lúc phải
+   chờ lời duyệt commit.
+3. **Hai UNIQUE của `rfq_approvals` mang thêm `lan_nop_da_xem`**, giữ tên: người đã rút chữ ký bằng lần trả về ký lại được trên lần
+   nộp MỚI dù ba băm y nguyên. Một người vẫn đếm MỘT ở cạnh mở gói — ba phép đếm của K4b là `count(DISTINCT người)`.
+4. **Sổ `rfq_tra_ve`** — mỗi lần trả về một hàng: người, phiên, lần nộp bị trả, lý do. Chỉ-ghi-thêm BẰNG QUYỀN (khuôn `rfq_approvals`
+   và `064`); danh tính dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); lần nộp do trigger đặt từ gói, trigger ấy đòi tổ chức đã bật
+   và gói đang `PENDING_APPROVAL`, khoá hàng gói `FOR NO KEY UPDATE`; `UNIQUE (org, gói, lần nộp)`. `returnRfqToDraft` chèn hàng
+   trước câu đổi trạng thái, và cạnh về DRAFT (`077`) đòi một hàng của CHÍNH lần nộp đang bị trả: người và lý do nằm trong CSDL, không
+   chỉ ở sổ kiểm toán. Một hàng `app_api` chèn tay chỉ rút được chữ ký của chính người chèn — chỉ làm K4b chặt hơn.
+5. **Cạnh mở gói đếm lần ba — chữ ký CÒN HIỆU LỰC:** khớp ba băm hiện tại, mang lần nộp, và người ký không có hàng trả về ở một lần
+   nộp không sớm hơn lần họ đã ký — *"K4b bỏ qua chữ ký của một người cũ hơn lần trả về gần nhất của chính người ấy"*. Hai phép đếm
+   trước giữ nguyên văn và nguyên thông điệp; lần ba nói *"RFQ nay can N chu ky CON HIEU LUC — …, moi co M (K4b)"*. Chữ ký không mang
+   lần nộp — mọi chữ ký đặt trước `9501_lan_nop_da_xem` — không đếm: không biết người ấy đã xem gì (fail-closed, khuôn ADR-114 ⑸).
+
+### Phương án đã cân nhắc
+
+- **Mốc là `submitted_at`.** Như ⑴: phép so bằng gãy qua JSON, và không cho thứ tự đáng tin. Bác.
+- **Người duyệt gửi lại ba băm đã thấy.** `GET` phải lộ băm, và băm không phân biệt hai lần nộp y nguyên — vế ⑸ cần biết chữ ký
+  CŨ HƠN lần trả về. Bác.
+- **Trả về thì xoá hay đánh dấu chữ ký.** Trái `011` C-1 (chữ ký là dấu vết, bảng chỉ-ghi-thêm) và S3.2b1 (gói nộp lại y nguyên thì
+  chữ ký của người KHÁC vẫn đếm). Bác.
+- **Một thao tác *rút chữ ký* riêng.** Route và quyền mới; ADR-084 ⑵ đã coi trả về là cách người duyệt nói *không*. Chủ dự án chọn
+  ghi lần trả về. Bác.
+- **Trigger so xếp ĐẦU các trigger BEFORE INSERT** — bản đầu của vòng này: băm tính dưới khoá, nhưng lời tự duyệt thiếu mốc bị từ
+  chối vì lần nộp TRƯỚC chốt D2 và rơi khỏi sổ. Bác; một đột biến đổi tên đo đúng hệ quả ấy.
+- **Tầng gói điền lần nộp hiện tại khi người gọi không gửi.** Chính là lỗ của khoản 256. Bác.
+
+### Hệ quả, nói thẳng
+
+- **Client của tổ chức đã bật PHẢI gửi `lanNop`.** Màn cũ, script, lời gọi API tay không gửi ⇒ 422 có tên. Màn `/tao-thau` và kịch bản
+  41 gửi; `gieo:demo` đọc lần nộp từ CSDL — công cụ dev, không có người xem.
+- **Máy chủ không biết người duyệt đã XEM gì**, chỉ biết client đã ĐỌC lần nộp nào. Một client đọc rồi ký ngay mà không hiện gói cho
+  người dùng vẫn qua. Mốc dời phép so từ *"CSDL lúc bấm"* về *"thứ client đã đọc"*; phần còn lại là việc của màn.
+- **Lời duyệt khoá hàng gói `FOR SHARE` tới hết giao dịch, ở MỌI tổ chức** — trigger chạy cả ở MVP1. Lần mở gói, trả về hay nộp lại
+  chạy cùng lúc phải chờ lời duyệt commit; hai lời duyệt song song không chặn nhau.
+- **Người duyệt đã ký rồi trả về thì chữ ký ấy không đếm ở MỌI lần nộp sau**, dù gói y nguyên — người ấy ký lại. Người tạo trả về
+  không rút chữ ký của ai.
+- **Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa** — như ADR-114; hôm nay không tổ chức thật nào bật được S3
+  (ADR-105).
+- `lanNop` ra ở `GET /rfqs/:rfqId` của người mua; `GET /guest/rfq` là danh sách trắng và không mang nó.
+- Lần từ chối vì mốc sai không vào sổ — như lần từ chối vì trạng thái. Nếu chủ dự án muốn đếm những lần ấy, đó là việc của khoản 255.
+
+### Đo
+
+`packages/rfq/src/lan-nop-da-xem.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật — và hai ca HTTP ở `buyer.int.test.ts`.
+Đo TRƯỚC: hai ca giới hạn của `rang-ngan-sach.int.test.ts` (S1.191) xanh trên nhánh gốc — gói MỞ ở cả hai kịch bản; vòng này bỏ hai
+ca ấy, và ca đầu của khối khoản 256 và khối khoản 257 của tệp mới là hai kịch bản ấy, LẬT. Tám đột biến đều đỏ: bộ đếm đứng yên, phép
+so bỏ, bỏ `FOR SHARE`, trigger so xếp trước chốt D2, bỏ vế NULL ở MVP1, cạnh mở gói bỏ vế *người ký chưa trả về*, bỏ vế *mang lần
+nộp*, cạnh về DRAFT bỏ vế *kèm hàng trả về*.

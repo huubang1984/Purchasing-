@@ -21,7 +21,7 @@ import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 // [S1.9101 / khoản 256 · khoản 257] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM; LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ —
 // ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `9501_lan_nop_da_xem`. Lượt soi S1.190 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
+// Migration `9501_lan_nop_da_xem`. Lượt soi S1.191 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
 // `rang-ngan-sach.int.test.ts` ghim chúng tới vòng này: PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký ⇒ chữ ký
 // rơi lên thứ người ấy chưa xem, và gói mở; người duyệt đã ký rồi tự trả về ⇒ nộp lại y nguyên, gói mở bằng chữ ký ấy. Hai ca đầu
 // của khối (2) và (3) dưới đây là hai ca ấy, LẬT.
@@ -149,6 +149,16 @@ async function toChucDaBat(): Promise<ToChuc> {
   const { rows } = await withTenant(apiPool, t.org, (c) => c.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org]));
   expect(rows[0]?.b, "dàn cảnh: tổ chức phải ĐÃ BẬT").toBe(true);
   return t;
+}
+
+/** Phiên THỨ HAI của cùng một người — tách vế *một người một lần* khỏi vế *một phiên một lần*. */
+async function phienKhac(t: ToChuc, ai: Nguoi): Promise<Nguoi> {
+  const s = await motId(
+    "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+      "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+    [t.org, ai.u, randomBytes(32)],
+  );
+  return { u: ai.u, s };
 }
 
 /** Gói DRAFT có ngân sách, một hạng mục và một lời mời, do PM tạo. */
@@ -397,6 +407,17 @@ describe("S1.9101 — khoản 256: lời duyệt mang lần nộp người duy�
     expect(await soChuKy(goiB)).toBe(1);
   });
 
+  it("[INV-D2] tổ chức CHƯA bật, gói cấp kép: PM2 duyệt không mốc rồi duyệt LẠI mang mốc đúng, ở phiên khác ⇒ UNIQUE một người một lần chặn (cột đã về NULL), gói không mở bằng một người — phép đếm của `071` đếm HÀNG", async () => {
+    const a = await taoToChuc();
+    const rfqId = await goiNhap(a, GOI_CAP_KEP);
+    await nop(a, rfqId);
+    await duyetVoi(a, rfqId, a.pm2, undefined);
+    const e = await loi(duyetVoi(a, rfqId, await phienKhac(a, a.pm2), 1));
+    expect([e?.code, e?.constraint]).toEqual(["23505", "rfq_approvals_mot_nguoi_mot_lan"]);
+    expect(await soChuKy(rfqId)).toBe(1);
+    expect((await loi(mo(a, rfqId)))?.message).toBe("RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1 (D2)");
+  });
+
   it("[INV-K4b] khoá: lời duyệt chưa commit giữ khoá `FOR SHARE` hàng gói — một lần trả về chạy cùng lúc phải chờ; lời duyệt commit xong thì trả về đi được", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
@@ -612,6 +633,19 @@ describe("S1.9101 — đột biến: gỡ từng vế thì khoảng trống mở
       await db.pool.query("ALTER TRIGGER rfq_approvals_a_so_lan_nop ON public.rfq_approvals RENAME TO rfq_approvals_so_lan_nop");
     }
     expect(await maTuChoiTheoChot(t.org, rfqId), "lần vi phạm D2 rơi khỏi sổ").toEqual([]);
+  });
+
+  it("[INV-D2] tổ chức chưa bật, trigger so lần nộp KHÔNG đặt cột về NULL ⇒ PM2 duyệt hai lần (không mốc, rồi mốc đúng) và gói cấp kép MỞ bằng một người", async () => {
+    const a = await taoToChuc();
+    const rfqId = await goiNhap(a, GOI_CAP_KEP);
+    await nop(a, rfqId);
+    await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "\n    NEW.lan_nop_da_xem := NULL;", "", async () => {
+      await duyetVoi(a, rfqId, a.pm2, undefined);
+      await duyetVoi(a, rfqId, await phienKhac(a, a.pm2), 1);
+    });
+    expect(await soChuKy(rfqId)).toBe(2);
+    expect(await loi(mo(a, rfqId))).toBeNull();
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ vế *người ký chưa trả về* ⇒ chữ ký của chính người trả về vẫn mở gói", async () => {

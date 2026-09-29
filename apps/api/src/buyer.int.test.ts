@@ -995,7 +995,7 @@ describe("[S1.9101 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừ
     expect(ok.status, ok.text).toBe(200);
   });
 
-  it("[INV-D2] tổ chức CHƯA bật: duyệt không thân ⇒ 200 như MVP1", async () => {
+  it("tổ chức CHƯA bật: duyệt không thân ⇒ 200 như MVP1 — hợp đồng route không đổi", async () => {
     const { org, rfqId } = await goiDaNop("lan-nop-chua-bat", false);
     const pm2 = await nguoi("pm2-lan-nop-chua-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
     const kq = await goi("POST", `/rfqs/${rfqId}/approve`, pm2);
