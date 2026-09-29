@@ -977,7 +977,7 @@ describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ
 });
 
 describe("[S1.9101 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa đọc — bắt buộc ở tổ chức đã bật, MVP1 giữ hợp đồng không thân", () => {
-  it("[INV-K4b] tổ chức đã bật: `GET` trả `lanNop` 1; duyệt không thân, thân rỗng, mốc 0 hay `null` ⇒ 422 có tên; mốc không phải số nguyên ⇒ 422; mốc 1 ⇒ 200", async () => {
+  it("[INV-K4b] tổ chức đã bật: `GET` trả `lanNop` 1; duyệt không thân, thân rỗng, mốc 0 hay `null` ⇒ 422 có tên; mốc không phải số nguyên hay tràn `integer` ⇒ 422; mốc 1 ⇒ 200", async () => {
     const { org, rfqId } = await goiDaNop("lan-nop-bat", true);
     const pm2 = await nguoi("pm2-lan-nop-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
     expect((await goi("GET", `/rfqs/${rfqId}`, pm2)).body).toMatchObject({ rfq: { lanNop: 1 } });
@@ -990,6 +990,9 @@ describe("[S1.9101 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừ
     }
     const chuoi = await goi("POST", duong, pm2, { lanNop: "1" });
     expect([chuoi.status, chuoi.body]).toEqual([422, { error: 'trường "lanNop" phải là số nguyên' }]);
+    // Tràn `integer` của cột: Postgres từ chối lúc gắn tham số (22003), TRƯỚC mọi trigger — lớp 22 là lỗi đầu vào, 422 thân cố định.
+    const tran = await goi("POST", duong, pm2, { lanNop: 2147483648 });
+    expect([tran.status, tran.body]).toEqual([422, { error: "du lieu sai kieu" }]);
 
     const ok = await goi("POST", duong, pm2, { lanNop: 1 });
     expect(ok.status, ok.text).toBe(200);

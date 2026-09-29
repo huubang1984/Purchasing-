@@ -19,15 +19,20 @@
 --     JSON sang JavaScript mất phần micro giây, nên phép so bằng gãy; và vế (5) cần THỨ TỰ giữa các lần nộp, mà đồng hồ tường có
 --     thể lùi.
 -- (2) `rfq_approvals.lan_nop_da_xem` — lời duyệt mang lần nộp người duyệt đã xem; `app_api` được chèn cột này. Trigger RIÊNG
---     `rfq_approvals_so_lan_nop` khoá hàng gói `FOR SHARE` rồi so. Tổ chức đã bật: bắt buộc, khác lần nộp hiện tại thì từ chối.
---     Tổ chức chưa bật: tuỳ chọn, gửi thì phải đúng — lời duyệt không mang mốc đi qua như MVP1 —, và cột được ĐẶT VỀ NULL sau
---     khi so: cùng lý do vế NULL của `076` (2), UNIQUE (2b) giữ MVP1 đúng một người một lần.
+--     `rfq_approvals_so_lan_nop` khoá hàng gói `FOR NO KEY UPDATE`, đọc lại trạng thái và lần nộp, rồi so. Tổ chức đã bật: mốc bắt
+--     buộc, khác lần nộp hiện tại thì từ chối. Tổ chức chưa bật: tuỳ chọn, gửi thì phải đúng — lời duyệt không mang mốc đi qua như
+--     MVP1 —, và cột được ĐẶT VỀ NULL sau khi so: cùng lý do vế NULL của `076` (2), UNIQUE (2b) giữ MVP1 đúng một người một lần.
 --     Tên xếp SAU `rfq_approvals_kiem_nguoi_duyet` (D2), nên nó chạy CUỐI: lời tự duyệt hay phiên hỏng vẫn bị chốt D2 từ chối và
---     vào sổ `CONTROL_DENIED` dù mốc thiếu hay sai — ADR-108 ⑴, không bớt nhánh ghi nào. Băm (trigger đầu) và trạng thái (D2) đọc
---     TRƯỚC khoá, nhưng lần nộp chỉ tăng và mọi lần sửa gói đòi DRAFT: lời duyệt qua được phép so thì gói ở đúng lần nộp ấy suốt
---     từ lúc người duyệt đọc, còn băm nào lệch gói lúc mở chỉ làm chữ ký không đếm (fail-closed). Khoá giữ tới hết giao dịch:
---     một lần trả về hay nộp lại đang chạy phải chờ lời duyệt commit — trước `9501` không trigger nào của `rfq_approvals` khoá
---     hàng gói.
+--     vào sổ `CONTROL_DENIED` dù mốc thiếu hay sai — ADR-108 ⑴, không bớt nhánh ghi nào. Cái giá: hai băm (trigger đầu), trạng thái
+--     và băm nội dung (D2) đều đọc TRƯỚC khoá, mỗi câu một ảnh chụp. Nên trigger này đọc lại TRẠNG THÁI dưới khoá, ở MỌI tổ chức:
+--     gói còn `PENDING_APPROVAL` ở đúng lần nộp người duyệt đã đọc thì nó chưa rời lần nộp ấy từ lúc đọc — rời nó chỉ có một đường
+--     (trả về) và lần nộp sau mang số mới —, mà ở tổ chức đã bật mọi lần sửa gói đòi DRAFT, nên mọi phép băm trước khoá tính trên
+--     chính lần nộp ấy. Không có vế trạng thái, một lần trả về cộng một lần sửa commit giữa phép kiểm trạng thái và phép băm nội
+--     dung của D2 để lại chữ ký mang nội dung đã sửa trên lần nộp cũ, và gói nộp lại mở bằng nó (lượt soi S1.9101, F1). Ở tổ chức
+--     chưa bật, vế ấy chặn lời duyệt rơi lên một gói vừa mở hay vừa huỷ. Khoá giữ tới hết giao dịch: một lần trả về hay nộp lại
+--     đang chạy phải chờ lời duyệt commit, và lời duyệt chờ một lần trả về đang chạy rồi thấy DRAFT. `FOR NO KEY UPDATE` chứ không
+--     `FOR SHARE`: lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`), và khoá chia sẻ để một giao dịch duyệt rồi
+--     mở gói deadlock với một lời duyệt song song (F3). Trước `9501` không trigger nào của `rfq_approvals` khoá hàng gói.
 -- (2b) Hai UNIQUE của `rfq_approvals` mang thêm `lan_nop_da_xem`: người đã rút chữ ký bằng lần trả về (5) ký lại được trên lần nộp
 --     MỚI dù nội dung, danh sách và ngân sách y nguyên. Một người vẫn đếm MỘT ở cạnh mở gói — ba phép đếm của K4b là
 --     `count(DISTINCT người)`.
@@ -35,8 +40,9 @@
 --     `064`: không vai nào có UPDATE hay DELETE. Danh tính dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`, `013`). Trigger RIÊNG
 --     đặt `lan_nop` từ gói — không phải lời khai —, đòi tổ chức đã bật và gói đang `PENDING_APPROVAL`, khoá hàng gói
 --     `FOR NO KEY UPDATE` — cùng khoá với câu đổi trạng thái theo sau. `UNIQUE (org, gói, lần nộp)`: một lần nộp chỉ trả về
---     một lần. Một hàng do `app_api` chèn tay chỉ rút được chữ ký của CHÍNH người chèn — danh tính dẫn xuất —, tức chỉ làm K4b
---     chặt hơn.
+--     một lần. Một hàng do `app_api` chèn tay, không kèm cạnh, chỉ rút được chữ ký của CHÍNH người chèn — danh tính dẫn xuất —,
+--     nhưng nó chiếm UNIQUE của lần nộp ấy (lần trả về thật của lần nộp ấy về sau bị từ chối) và thoả vế (4) cho một câu UPDATE thô
+--     về DRAFT sau đó; và hàng bị chủ bảng xoá làm chữ ký đã rút đếm lại. Chưa đóng: khoản 9403.
 -- (4) Cạnh PENDING_APPROVAL→DRAFT (`077`) đòi thêm một hàng `rfq_tra_ve` của CHÍNH lần nộp đang bị trả: người và lý do nằm trong
 --     CSDL, không chỉ ở sổ. Thân `077` cộng một vế.
 -- (5) Cạnh mở gói (`079`) đếm thêm lần ba — chữ ký CÒN HIỆU LỰC: mang lần nộp đã xem, và người ký không trả gói về ở một lần nộp
@@ -83,14 +89,19 @@ CREATE OR REPLACE FUNCTION public.rfq_chot_lan_nop_da_xem() RETURNS trigger
   SET search_path = pg_catalog, public
 AS $ham$
 DECLARE
+  trang_thai text;
   hien_tai integer;
 BEGIN
-  SELECT p.lan_nop INTO hien_tai
+  SELECT p.status, p.lan_nop INTO trang_thai, hien_tai
     FROM public.rfq_packages p
    WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
-   FOR SHARE;
+   FOR NO KEY UPDATE;
   IF NOT FOUND THEN
-    RETURN NEW;
+    RAISE EXCEPTION 'Khong tim thay RFQ cho phe duyet nay' USING ERRCODE = 'check_violation';
+  END IF;
+  IF trang_thai <> 'PENDING_APPROVAL' THEN
+    RAISE EXCEPTION 'RFQ vua roi PENDING_APPROVAL (nay dang %) trong luc loi duyet dang ghi — doc lai goi roi duyet', trang_thai
+      USING ERRCODE = 'check_violation';
   END IF;
   IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
     IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN

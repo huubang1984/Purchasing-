@@ -16033,11 +16033,11 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 
 ---
 
-# §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-9201
+# §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401–9404
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
-chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.191) đóng. Một migration (`9501_lan_nop_da_xem`), một ADR (ADR-9201),
-không route mới — route duyệt nhận thêm một trường tuỳ chọn.
+chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.191) đóng; lượt soi mở khoản 9401, 9402, 9403, 9404 (rổ B). Một
+migration (`9501_lan_nop_da_xem`), một ADR (ADR-9201), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
@@ -16049,17 +16049,19 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 
 ## 2. Đo trước
 
-Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `9501_lan_nop_da_xem`), tệp đo của vòng này: 22 ca, 19
-đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Ba ca xanh là ba ca *giữ nguyên*, phải xanh ở cả hai cây: lời
-tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút chữ ký của ai. Hai
-ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.191) ghim cùng hai kịch bản ở trạng thái MỞ.
+Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `9501_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
+28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
+*giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
+chữ ký của ai — và ca giới hạn của khoản 9404, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.191) ghim
+cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
 
 **Migration `9501_lan_nop_da_xem`:**
 - `rfq_packages.lan_nop` — trigger `rfq_packages_dem_lan_nop` cộng một ở cạnh DRAFT→PENDING_APPROVAL; ngoài mọi `GRANT`. Hàng cũ giữ 0.
-- `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2, khoá hàng gói
-  `FOR SHARE` rồi so: bắt buộc ở tổ chức đã bật; ở tổ chức chưa bật gửi thì phải đúng, rồi cột về NULL.
+- `rfq_approvals.lan_nop_da_xem` (`app_api` chèn được) — trigger `rfq_approvals_so_lan_nop`, tên xếp SAU chốt D2: khoá hàng gói
+  `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở mọi tổ chức; không tìm thấy gói thì từ
+  chối —, rồi so: bắt buộc ở tổ chức đã bật; ở tổ chức chưa bật gửi thì phải đúng, rồi cột về NULL.
 - Hai UNIQUE `rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan` mang thêm cột ấy, giữ tên, giữ `NULLS NOT DISTINCT`.
 - Bảng `rfq_tra_ve` — RLS bật và FORCE, policy tenant và policy khách đóng hẳn; `app_api` đọc và chèn năm cột; không vai nào sửa hay
   xoá; trigger danh tính theo phiên (`kiem_danh_tinh_theo_phien`) và trigger `rfq_tra_ve_dat_lan_nop` (lần nộp từ gói, đòi tổ chức đã
@@ -16088,48 +16090,79 @@ mã mới.
 - **Cột về NULL ở tổ chức chưa bật:** phép đếm D2 của `071` đếm HÀNG; không có vế này, một người duyệt một lần không mốc rồi một lần
   mốc đúng (phiên khác) là hai hàng, và gói cấp kép mở bằng một người — đột biến đo đúng thế.
 - **Trigger so xếp SAU chốt D2.** Bản đầu của vòng này xếp nó ĐẦU (khoá trước lúc băm); đọc lại ADR-108 ⑴ thì lời tự duyệt thiếu mốc
-  sẽ bị từ chối vì lần nộp và rơi khỏi sổ `CONTROL_DENIED`. Đổi tên trong vòng; một ca đo thứ tự và một đột biến đổi tên ghim nó. Lý
-  do an toàn của việc đọc băm và trạng thái trước khoá: ADR-9201 ⑵.
+  sẽ bị từ chối vì lần nộp và rơi khỏi sổ `CONTROL_DENIED`. Đổi tên trong vòng; một ca đo thứ tự và một đột biến đổi tên ghim nó.
+- **Vế trạng thái dưới khoá, ở mọi tổ chức, và khoá `FOR NO KEY UPDATE`** — theo lượt soi (§6 F1, F3). Ở tổ chức chưa bật, vế ấy chỉ
+  đổi một ca đua: lời duyệt gặp lần mở gói đang chạy bị từ chối có tên thay vì ghi lên gói đã mở.
 - **Lần từ chối vì mốc không vào sổ** — cùng lớp lời từ chối trạng thái; việc đếm chúng thuộc khoản 255 nếu chủ dự án muốn.
 - **Tầng gói không tự điền mốc**, kể cả ở tổ chức chưa bật.
 
 ## 5. Đo sau
 
-`packages/rfq/src/lan-nop-da-xem.int.test.ts` 22/22 — Postgres thật dưới `app_api`, hàm gói thật, mỗi ca một tổ chức riêng:
+`packages/rfq/src/lan-nop-da-xem.int.test.ts` 28/28 — Postgres thật dưới `app_api`, hàm gói thật, mỗi ca một tổ chức riêng:
 - lần nộp: 0 ở DRAFT, 1, đứng yên khi trả về, 2; `app_api` không khai, không sửa được cột (42501);
 - khoản 256: kịch bản của lượt soi LẬT — lời duyệt mang lần 1 bị từ chối, không hàng chữ ký; đọc lại rồi duyệt ⇒ chữ ký trên 99 triệu,
   gói mở; tổ chức đã bật: không mốc hay mốc 0 ⇒ từ chối có tên; người tạo tự duyệt với mốc thiếu, sai hay đúng ⇒ vẫn lời từ chối D2,
-  mỗi lần một hàng `CONTROL_DENIED`; MVP1: không mốc đi qua, cột NULL, mốc sai bị từ chối; MVP1 gói cấp kép: một người duyệt không mốc
-  rồi mốc đúng ⇒ UNIQUE chặn, gói không mở; khoá: lần trả về chạy cùng lúc chờ lời duyệt chưa commit (55P03);
+  mỗi lần một hàng `CONTROL_DENIED`; phiên của người khác, phiên đã thu hồi kèm mốc sai ⇒ lời từ chối D2 có tên; MVP1: không mốc đi
+  qua, cột NULL, mốc sai bị từ chối; MVP1 gói cấp kép: một người duyệt không mốc rồi mốc đúng ⇒ UNIQUE chặn, gói không mở; khoá: lần
+  trả về chạy cùng lúc chờ lời duyệt chưa commit (55P03); chiều ngược: lời duyệt gặp lần trả về đang chạy chờ khoá rồi bị từ chối
+  (*"RFQ vua roi PENDING_APPROVAL (nay dang DRAFT) …"*), không hàng chữ ký; MVP1: lời duyệt gặp lần mở gói đang chạy ⇒ từ chối
+  (*"… nay dang OPEN …"*), một hàng chữ ký;
 - khoản 257: PM2 ký, PM2 trả về, nộp lại y nguyên ⇒ không mở (*"CON HIEU LUC … moi co 0"*); PM2 ký lại ⇒ mở, hai hàng; người tạo trả
   về không rút chữ ký ai; gói cấp kép, PM3 trả về ⇒ còn một trên hai; PM3 ký lại ⇒ mở;
 - `rfq_tra_ve`: đúng một hàng mỗi lần trả về, hàng sổ giữ nguyên; câu UPDATE thô về DRAFT không kèm hàng ⇒ 23514 có tên, kèm hàng ⇒
   đi qua; `app_api` không khai được lần nộp; gói không chờ duyệt, tổ chức chưa bật ⇒ từ chối; một lần nộp chỉ trả về một lần; danh
-  tính lệch phiên ⇒ từ chối.
+  tính lệch phiên ⇒ từ chối;
+- khe của D2 (F1): một `pg_sleep` chèn giữa phép kiểm trạng thái và phép băm nội dung của D2; trả về và thêm hạng mục trong lúc lời
+  duyệt đang ngủ ⇒ bản thật từ chối lời duyệt, gói nộp lại không mở;
+- giới hạn, đo (không nhãn): khoản 9404 — bật S3 giữa lúc gói chờ duyệt, lời duyệt mốc 1 đi qua với danh sách đã đổi, gói MỞ.
 
 `apps/api/src/buyer.int.test.ts` hai ca HTTP: tổ chức đã bật — `GET` trả `lanNop` 1; không thân, thân rỗng, mốc 0, mốc `null` ⇒ 422
-có tên; mốc `"1"` ⇒ 422 kiểu; mốc 1 ⇒ 200. Tổ chức chưa bật: không thân ⇒ 200.
+có tên; mốc `"1"` ⇒ 422 kiểu; mốc tràn `integer` ⇒ 422 thân cố định; mốc 1 ⇒ 200. Tổ chức chưa bật: không thân ⇒ 200.
 
-**Đột biến ở lược đồ, tám, cả tám đỏ:** bộ đếm đứng yên và phép so bỏ (kịch bản 256 mở lại); bỏ `FOR SHARE` (lần trả về không chờ);
-trigger so xếp trước chốt D2 (lời tự duyệt thiếu mốc rơi khỏi sổ); bỏ vế NULL ở MVP1 (gói cấp kép mở bằng một người); cạnh mở gói bỏ
-vế *người ký chưa trả về* (kịch bản 257 mở lại) và bỏ vế *mang lần nộp* (chữ ký dạng cũ mở gói); cạnh về DRAFT bỏ vế *kèm hàng trả về*
-(câu UPDATE thô không để lại người và lý do).
+**Đột biến ở lược đồ, chín, cả chín đỏ:** bộ đếm đứng yên và phép so bỏ (kịch bản 256 mở lại); bỏ khoá hàng gói (lời duyệt không chờ
+lần trả về đang chạy, rơi lên gói đã về DRAFT); bỏ vế trạng thái (lời duyệt chờ rồi vẫn rơi lên gói đã về DRAFT; và ở khe của D2, gói
+nộp lại MỞ bằng chữ ký trên hạng mục thêm sau lúc người duyệt đọc); trigger so xếp trước chốt D2 (lời tự duyệt thiếu mốc rơi khỏi
+sổ); bỏ vế NULL ở MVP1 (gói cấp kép mở bằng một người); cạnh mở gói bỏ vế *người ký chưa trả về* (kịch bản 257 mở lại) và bỏ vế
+*mang lần nộp* (chữ ký dạng cũ mở gói); cạnh về DRAFT bỏ vế *kèm hàng trả về* (câu UPDATE thô không để lại người và lý do).
 
 **`gieo:demo`** chạy cả hai chế độ trên một cụm Postgres 16 mới: `--s3` mở gói bằng hai chữ ký mang lần nộp 1; mặc định mở bằng bốn
 chữ ký, cột NULL.
 
 ## 6. Lượt soi đối kháng
 
-(điền sau lượt soi)
+Một lượt, trên cây `b011820`; người kiểm đo trên Postgres 16 thật dưới `app_api`, hàm gói thật, bằng một tệp test tạm ngoài kho.
+**Không đường nào lách được bản vá theo lối thường**, nhưng thứ tự trigger để hở một khe đua (F1) mà vòng này sửa.
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| F1 | Trigger so chỉ so lần nộp, không đọc lại trạng thái; D2 đọc trạng thái rồi mấy câu sau mới băm NỘI DUNG, mỗi câu một ảnh chụp. Một lần trả về cộng một lần sửa commit vào khe ấy để lại chữ ký trên nội dung người duyệt chưa đọc, ở lần nộp cũ; nộp lại ⇒ gói MỞ. Ca tất định: lời duyệt qua D2 khi lần trả về chưa commit, chờ khoá, rồi ghi lên gói đã về DRAFT. Lời khai ở đầu migration và ADR sai | Nên sửa | **Sửa trong vòng:** trigger so đọc lại trạng thái dưới khoá, ở mọi tổ chức; không tìm thấy gói thì từ chối. Ca chiều ngược, ca MVP1 gặp lần mở gói đang chạy, ca khe của D2, hai đột biến |
+| F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 9401 mở** (rổ B) — việc của S3.2c2, màn `/tao-thau` |
+| F3 | Deadlock do `FOR SHARE`: giao dịch duyệt rồi mở gói gặp một lời duyệt song song ⇒ 40P01, lời duyệt kia thành 500. Không đường sản xuất nào duyệt rồi mở trong một giao dịch | Ghi chú | **Sửa trong vòng:** khoá `FOR NO KEY UPDATE` — lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`) |
+| F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 9402 mở** (rổ B) — chung cho mọi mục ghim trigger |
+| F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-9201 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
+| F6 | Bật S3 giữa lúc gói chờ duyệt: MVP1 cho đổi danh sách khi gói chờ, lần nộp đứng yên | Ghi chú | **Khoản 9404 mở** (rổ B); ca giới hạn ghim hành vi hôm nay |
+| F7 | Hàng `rfq_tra_ve` chèn tay không kèm cạnh chiếm UNIQUE và thoả vế *kèm hàng trả về*; xoá hàng làm chữ ký đã rút đếm lại. Lời khai (3) ở đầu migration chưa đủ | Ghi chú | **Khoản 9403 mở** (rổ B); lời khai (3) sửa |
+| F8 | Test: đột biến bỏ `FOR SHARE` chỉ chứng minh khoá có mặt; hai nhánh phiên của D2 chưa đo trước phép so; thiếu ca HTTP tràn số và ca bật S3 thật; trợ thủ `duyet` của sáu tệp cũ đọc lần nộp từ CSDL ngay trước lời duyệt | Ghi chú | Sửa: đột biến bỏ khoá nay đo hậu quả; ca D2 phiên của người khác và phiên thu hồi kèm mốc sai; ca HTTP tràn; ca bật S3 giữa chừng (khoản 9404). Trợ thủ của sáu tệp giữ nguyên: chúng đo việc khác, và tệp mới là nơi canh khoản 256 |
+
+**Người kiểm thử và không lách được:** `app_api` không đặt được `lan_nop`, không chọn được lần nộp của hàng trả về, không sửa hay xoá
+`rfq_tra_ve` hay `rfq_approvals`; `rfq_tra_ve` có RLS FORCE và policy khách; `/guest/rfq` không lộ `lanNop`; `returned_by` không giả
+được, nên không ai rút được chữ ký của người khác; mốc tương lai hay NULL ở tổ chức đã bật bị từ chối; vế `r.lan_nop >= a.lan_nop_da_xem`
+đúng ở mọi thứ tự ký, trả về, ký lại; `count(DISTINCT)` đúng khi một người có nhiều hàng; ở tổ chức đã bật không lần sửa nào đi được
+khi gói chờ duyệt; lần bật S3 đua với trigger băm cho một hàng không bao giờ đếm; mọi đường ghi sản xuất khoá gói trước khi ghi sổ, nên
+không deadlock ở đường sản xuất; `returnRfqToDraft` giữ hợp đồng lỗi; tên ràng buộc UNIQUE không đổi nên `maChotTuLoi` không đổi; năm
+thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên, `-1` ⇒ lời từ chối mốc, thông điệp chỉ lộ lần nộp hiện tại.
 
 ## 7. Giới hạn, nói ra
 
 - Client của tổ chức đã bật PHẢI gửi `lanNop`; lời gọi không gửi ⇒ 422 có tên.
-- Máy chủ biết client đã ĐỌC lần nộp nào, không biết người duyệt đã XEM gì: một client đọc rồi ký ngay mà không hiện gói vẫn qua.
-- Lời duyệt khoá hàng gói `FOR SHARE` tới hết giao dịch ở MỌI tổ chức — trigger chạy cả ở MVP1.
+- Máy chủ biết client đã ĐỌC lần nộp nào, không biết người duyệt đã XEM gì — và hôm nay màn không hiện ngân sách, không làm mới danh
+  sách mời khi đọc lại gói (khoản 9401).
+- Lời duyệt khoá hàng gói `FOR NO KEY UPDATE` tới hết giao dịch ở MỌI tổ chức — trigger chạy cả ở MVP1; lời duyệt của một tổ chức
+  nối tiếp nhau.
 - Người duyệt đã ký rồi trả về thì chữ ký ấy không đếm ở mọi lần nộp sau, dù gói y nguyên.
 - Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa — hôm nay không tổ chức thật nào bật được S3 (ADR-105).
-- Lần từ chối vì mốc không vào sổ `CONTROL_DENIED`.
+- Lần từ chối vì mốc không vào sổ `CONTROL_DENIED`; thân sai kiểu hay tràn số bị từ chối trước chốt D2.
+- Khoản 9402, 9403, 9404 còn mở (§6).
 
 ## 8. Số đo
 

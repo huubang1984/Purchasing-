@@ -8150,7 +8150,7 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_dem_lan_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 256] Loi duyet mang lan nop nguoi duyet da xem, so duoi khoa FOR SHARE hang goi. Than `RETURN NEW` mo lai dua giua lan xem va lan bam ky.
+    -- [S1.9101 / khoan 256] Loi duyet mang lan nop nguoi duyet da xem; duoi khoa FOR NO KEY UPDATE hang goi, doc lai trang thai roi so. Than `RETURN NEW` mo lai dua giua lan xem va lan bam ky; bo ve trang thai thi mot lan tra ve cong mot lan sua chen giua phep kiem trang thai va phep bam noi dung cua D2 de lai chu ky tren noi dung da sua.
     ARRAY[
       $q$hàm + trigger rfq_chot_lan_nop_da_xem (9501_lan_nop_da_xem)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lan_nop_da_xem.sql')$q$,
@@ -8164,14 +8164,19 @@ $ham$;
            CREATE OR REPLACE FUNCTION public.rfq_chot_lan_nop_da_xem() RETURNS trigger
            LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
 DECLARE
+  trang_thai text;
   hien_tai integer;
 BEGIN
-  SELECT p.lan_nop INTO hien_tai
+  SELECT p.status, p.lan_nop INTO trang_thai, hien_tai
     FROM public.rfq_packages p
    WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
-   FOR SHARE;
+   FOR NO KEY UPDATE;
   IF NOT FOUND THEN
-    RETURN NEW;
+    RAISE EXCEPTION 'Khong tim thay RFQ cho phe duyet nay' USING ERRCODE = 'check_violation';
+  END IF;
+  IF trang_thai <> 'PENDING_APPROVAL' THEN
+    RAISE EXCEPTION 'RFQ vua roi PENDING_APPROVAL (nay dang %) trong luc loi duyet dang ghi — doc lai goi roi duyet', trang_thai
+      USING ERRCODE = 'check_violation';
   END IF;
   IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
     IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN
@@ -8203,7 +8208,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE hien_tai integer; BEGIN SELECT p.lan_nop INTO hien_tai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF NOT FOUND THEN RETURN NEW; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; ELSE IF NEW.lan_nop_da_xem IS NOT NULL AND NEW.lan_nop_da_xem <> hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; NEW.lan_nop_da_xem := NULL; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; hien_tai integer; BEGIN SELECT p.status, p.lan_nop INTO trang_thai, hien_tai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ cho phe duyet nay' USING ERRCODE = 'check_violation'; END IF; IF trang_thai <> 'PENDING_APPROVAL' THEN RAISE EXCEPTION 'RFQ vua roi PENDING_APPROVAL (nay dang %) trong luc loi duyet dang ghi — doc lai goi roi duyet', trang_thai USING ERRCODE = 'check_violation'; END IF; IF public.to_chuc_da_bat_s3(NEW.org_id) THEN IF NEW.lan_nop_da_xem IS DISTINCT FROM hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; ELSE IF NEW.lan_nop_da_xem IS NOT NULL AND NEW.lan_nop_da_xem <> hien_tai THEN RAISE EXCEPTION 'Goi thau dang o lan nop %; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)', hien_tai USING ERRCODE = 'check_violation'; END IF; NEW.lan_nop_da_xem := NULL; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

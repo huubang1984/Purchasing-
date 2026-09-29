@@ -70,6 +70,8 @@ const GOI_CAP_KEP = "150000000.00";
 const LY_DO = "nguoi duyet tra ve: xem lai";
 const loiLanNop = (n: number): string =>
   `Goi thau dang o lan nop ${n}; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)`;
+const loiRoiCho = (trangThai: string): string =>
+  `RFQ vua roi PENDING_APPROVAL (nay dang ${trangThai}) trong luc loi duyet dang ghi — doc lai goi roi duyet`;
 const loiConHieuLuc = (can: number, co: number): string =>
   `RFQ nay can ${can} chu ky CON HIEU LUC — ky tren lan nop da xem, nguoi ky chua tra goi ve tu lan ay —, moi co ${co} (K4b)`;
 
@@ -125,9 +127,8 @@ async function taoToChuc(): Promise<ToChuc> {
   return { org, pm, pm2, pm3, tc };
 }
 
-/** BẬT S3: phiên bản 2 có bậc, PM tạo, FINANCE ký — khuôn `rang-ngan-sach`. */
-async function toChucDaBat(): Promise<ToChuc> {
-  const t = await taoToChuc();
+/** BẬT S3 cho một tổ chức có sẵn: phiên bản 2 có bậc, PM tạo, FINANCE ký — khuôn `rang-ngan-sach`. */
+async function batS3(t: ToChuc): Promise<void> {
   const id = (
     await withTenant(apiPool, t.org, (c) =>
       c.query<{ id: string }>(
@@ -148,6 +149,11 @@ async function toChucDaBat(): Promise<ToChuc> {
   );
   const { rows } = await withTenant(apiPool, t.org, (c) => c.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [t.org]));
   expect(rows[0]?.b, "dàn cảnh: tổ chức phải ĐÃ BẬT").toBe(true);
+}
+
+async function toChucDaBat(): Promise<ToChuc> {
+  const t = await taoToChuc();
+  await batS3(t);
   return t;
 }
 
@@ -170,6 +176,12 @@ async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG): Promise<string> 
     await setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s });
     await addRfqItem(c, t.org, { rfqId, lineNo: 1, description: "Thep tam SS400 3mm", quantity: "100.0000", unit: "tam", actorSessionId: t.pm.s });
   });
+  await moi(t, rfqId);
+  return rfqId;
+}
+
+/** Một nhà cung cấp, một người liên hệ và một lời mời vào gói, do PM mời. */
+async function moi(t: ToChuc, rfqId: string): Promise<void> {
   const ncc = await motId(
     "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
     [t.org, `NCC ${randomBytes(3).toString("hex")}`, t.pm.u, t.pm.s],
@@ -187,7 +199,6 @@ async function goiNhap(t: ToChuc, giaTri: string = GOI_THUONG): Promise<string> 
       [t.org, rfqId, ncc, lh, t.pm.u, t.pm.s],
     ),
   );
-  return rfqId;
 }
 
 const datNganSach = (t: ToChuc, rfqId: string, giaTri: string): Promise<unknown> =>
@@ -293,6 +304,52 @@ async function dong(c: pg.PoolClient, cau: "COMMIT" | "ROLLBACK"): Promise<void>
   }
 }
 
+async function pidCua(c: pg.PoolClient): Promise<number> {
+  return (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+}
+
+/** Chờ tới khi tiến trình `pid` đứng ở một điểm chờ khớp `khop` (chờ khoá, `pg_sleep`…), hay tới khi `xong()`. */
+async function choTienTrinh(pid: number, khop: (loai: string | null, suKien: string | null) => boolean, xong: () => boolean): Promise<boolean> {
+  for (let lan = 0; lan < 400 && !xong(); lan++) {
+    const { rows } = await db.pool.query<{ loai: string | null; su_kien: string | null }>(
+      "SELECT wait_event_type AS loai, wait_event AS su_kien FROM pg_stat_activity WHERE pid = $1",
+      [pid],
+    );
+    if (khop(rows[0]?.loai ?? null, rows[0]?.su_kien ?? null)) return true;
+    await new Promise((ok) => setTimeout(ok, 25));
+  }
+  return false;
+}
+
+/**
+ * Lần trả về CHƯA commit (hàng trả về và câu đổi trạng thái), rồi lời duyệt mốc 1 của PM2 ở một giao dịch khác: nó qua phép kiểm
+ * trạng thái của D2 — lần trả về chưa commit thì vô hình —, rồi chờ khoá hàng gói nếu trigger so còn khoá. Lần trả về commit; lời
+ * duyệt chạy tiếp, và commit nếu qua. Trả lỗi của lời duyệt, `null` nếu nó qua.
+ */
+async function duyetTrongLucTraVe(t: ToChuc, rfqId: string): Promise<LoiBat | null> {
+  const r = await giaoDichApi(t.org);
+  const a = await giaoDichApi(t.org);
+  try {
+    await r.query(CAU_TRA_VE, [t.org, rfqId, t.pm.u, t.pm.s, LY_DO]);
+    await r.query(CAU_VE_NHAP, [rfqId]);
+    const pid = await pidCua(a);
+    let xong = false;
+    const kq = loi(a.query(CAU_KY, [t.org, rfqId, t.pm2.u, t.pm2.s, 1])).finally(() => {
+      xong = true;
+    });
+    await choTienTrinh(pid, (loai) => loai === "Lock", () => xong);
+    await r.query("COMMIT");
+    const e = await kq;
+    await a.query(e === null ? "COMMIT" : "ROLLBACK");
+    return e;
+  } finally {
+    await r.query("ROLLBACK").catch(() => undefined);
+    await a.query("ROLLBACK").catch(() => undefined);
+    r.release();
+    a.release();
+  }
+}
+
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS_DIR);
@@ -390,6 +447,19 @@ describe("S1.9101 — khoản 256: lời duyệt mang lần nộp người duy�
     expect(await soChuKy(rfqId)).toBe(0);
   });
 
+  it("[INV-D2] tổ chức đã bật: phiên của người khác hay phiên đã thu hồi, kèm mốc sai ⇒ vẫn lời từ chối D2 có tên — chốt D2 chạy trước phép so lần nộp", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const ky = (ai: string, phien: string): Promise<LoiBat | null> =>
+      loi(withTenant(apiPool, t.org, (c) => c.query(CAU_KY, [t.org, rfqId, ai, phien, 99])));
+    expect((await ky(t.pm2.u, t.pm3.s))?.constraint).toBe("d2_phien_nguoi_khac");
+    const thuHoi = await phienKhac(t, t.pm2);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [thuHoi.s]);
+    expect((await ky(t.pm2.u, thuHoi.s))?.constraint).toBe("d2_phien_khong_hop_le");
+    expect(await soChuKy(rfqId)).toBe(0);
+  });
+
   it("[INV-D2] tổ chức CHƯA bật (MVP1): lời duyệt không mốc đi qua như cũ; mốc sai bị từ chối; mốc đúng đi qua", async () => {
     const a = await taoToChuc();
     const goiA = await goiNhap(a);
@@ -418,7 +488,7 @@ describe("S1.9101 — khoản 256: lời duyệt mang lần nộp người duy�
     expect((await loi(mo(a, rfqId)))?.message).toBe("RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 1 (D2)");
   });
 
-  it("[INV-K4b] khoá: lời duyệt chưa commit giữ khoá `FOR SHARE` hàng gói — một lần trả về chạy cùng lúc phải chờ; lời duyệt commit xong thì trả về đi được", async () => {
+  it("[INV-K4b] khoá: lời duyệt chưa commit giữ khoá `FOR NO KEY UPDATE` hàng gói — một lần trả về chạy cùng lúc phải chờ; lời duyệt commit xong thì trả về đi được", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
@@ -436,6 +506,42 @@ describe("S1.9101 — khoản 256: lời duyệt mang lần nộp người duy�
     expect(await soChuKy(rfqId)).toBe(1);
     await traVe(t, rfqId, t.pm);
     expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
+  });
+
+  it("[INV-K4b] chiều ngược: lời duyệt gặp một lần trả về đang chạy — qua phép kiểm trạng thái của D2, chờ khoá hàng gói, rồi đọc lại thấy DRAFT ⇒ từ chối có tên, không hàng chữ ký", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    expect((await duyetTrongLucTraVe(t, rfqId))?.message).toBe(loiRoiCho("DRAFT"));
+    expect(await soChuKy(rfqId)).toBe(0);
+    expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
+  });
+
+  it("[INV-D2] tổ chức CHƯA bật: lời duyệt gặp một lần mở gói đang chạy ⇒ chờ khoá, đọc lại thấy OPEN, từ chối có tên — trước `9501_lan_nop_da_xem` chữ ký ấy rơi lên gói đã mở", async () => {
+    const a = await taoToChuc();
+    const rfqId = await goiNhap(a);
+    await nop(a, rfqId);
+    await duyetVoi(a, rfqId, a.pm2, undefined);
+    const o = await giaoDichApi(a.org);
+    const k = await giaoDichApi(a.org);
+    try {
+      await openRfq(o, a.org, { rfqId, actorSessionId: a.pm.s, orgKeys: boBocGia }, apiPool);
+      const pid = await pidCua(k);
+      let xong = false;
+      const kq = loi(k.query(CAU_KY, [a.org, rfqId, a.pm3.u, a.pm3.s, null])).finally(() => {
+        xong = true;
+      });
+      expect(await choTienTrinh(pid, (loai) => loai === "Lock", () => xong), "lời duyệt phải chờ khoá của lần mở gói").toBe(true);
+      await o.query("COMMIT");
+      expect((await kq)?.message).toBe(loiRoiCho("OPEN"));
+    } finally {
+      await o.query("ROLLBACK").catch(() => undefined);
+      await k.query("ROLLBACK").catch(() => undefined);
+      o.release();
+      k.release();
+    }
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+    expect(await soChuKy(rfqId)).toBe(1);
   });
 });
 
@@ -603,23 +709,74 @@ describe("S1.9101 — đột biến: gỡ từng vế thì khoảng trống mở
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] trigger so lần nộp bỏ `FOR SHARE` ⇒ lần trả về chạy cùng lúc KHÔNG chờ lời duyệt chưa commit", async () => {
+  it("[INV-K4b] trigger so lần nộp bỏ khoá hàng gói ⇒ lời duyệt không chờ lần trả về đang chạy: chữ ký rơi lên gói đã về DRAFT", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    const kq = await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "\n   FOR SHARE;", ";", async () => {
+    const e = await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "\n   FOR NO KEY UPDATE;", ";", () => duyetTrongLucTraVe(t, rfqId));
+    expect(e).toBeNull();
+    expect([await soChuKy(rfqId), await trangThaiGoi(rfqId)]).toEqual([1, "DRAFT"]);
+  });
+
+  it("[INV-K4b] trigger so lần nộp bỏ vế trạng thái ⇒ lời duyệt chờ lần trả về đang chạy rồi vẫn ghi: chữ ký rơi lên gói đã về DRAFT", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const e = await voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "IF trang_thai <> 'PENDING_APPROVAL' THEN", "IF false THEN", () =>
+      duyetTrongLucTraVe(t, rfqId),
+    );
+    expect(e).toBeNull();
+    expect([await soChuKy(rfqId), await trangThaiGoi(rfqId)]).toEqual([1, "DRAFT"]);
+  });
+
+  // [lượt soi S1.9101, F1] Khe thật của thứ tự trigger: D2 đọc trạng thái rồi, mấy câu sau, mới băm NỘI DUNG — mỗi câu một ảnh
+  // chụp. Ca này nới khe ấy bằng một `pg_sleep` chèn vào D2 (thay cho một tiến trình bị hoãn), rồi trả về và thêm hạng mục trong
+  // lúc lời duyệt đang ngủ. Bản thật: vế trạng thái dưới khoá từ chối. Bỏ vế ấy: chữ ký mang băm của hạng mục người duyệt chưa đọc,
+  // trên lần nộp cũ, và gói nộp lại mở bằng nó.
+  it("[INV-K4b] [INV-D2] khe giữa phép kiểm trạng thái và phép băm nội dung của D2: bản thật từ chối lời duyệt; bỏ vế trạng thái ⇒ chữ ký mang hạng mục thêm sau lúc người duyệt đọc, nộp lại, gói MỞ", async () => {
+    const khe = async (): Promise<{ loiDuyet: LoiBat | null; cuoi: string }> => {
+      const t = await toChucDaBat();
+      const rfqId = await goiNhap(t);
+      await nop(t, rfqId);
+      const daXem = (await doc(t, rfqId)).lanNop;
       const a = await giaoDichApi(t.org);
-      const b = await giaoDichApi(t.org);
+      let loiDuyet: LoiBat | null = null;
       try {
-        await a.query(CAU_KY, [t.org, rfqId, t.pm2.u, t.pm2.s, 1]);
-        await b.query("SET LOCAL lock_timeout = '300ms'");
-        return await loi(b.query(CAU_TRA_VE, [t.org, rfqId, t.pm.u, t.pm.s, LY_DO]));
+        const pid = await pidCua(a);
+        let xong = false;
+        const kq = loi(a.query(CAU_KY, [t.org, rfqId, t.pm2.u, t.pm2.s, daXem])).finally(() => {
+          xong = true;
+        });
+        expect(await choTienTrinh(pid, (_loai, suKien) => suKien === "PgSleep", () => xong), "lời duyệt phải ngủ trong D2").toBe(true);
+        await traVe(t, rfqId, t.pm);
+        await withTenant(apiPool, t.org, (c) =>
+          addRfqItem(c, t.org, { rfqId, lineNo: 2, description: "Thep tam SS400 10mm", quantity: "10000.0000", unit: "tam", actorSessionId: t.pm.s }),
+        );
+        loiDuyet = await kq;
+        await a.query(loiDuyet === null ? "COMMIT" : "ROLLBACK");
       } finally {
-        await dong(a, "ROLLBACK");
-        await dong(b, "ROLLBACK");
+        await a.query("ROLLBACK").catch(() => undefined);
+        a.release();
       }
-    });
-    expect(kq, "không khoá thì lần trả về đi qua ngay").toBeNull();
+      await nop(t, rfqId);
+      await loi(mo(t, rfqId));
+      return { loiDuyet, cuoi: await trangThaiGoi(rfqId) };
+    };
+    const nguTrongD2 = <T>(viec: () => Promise<T>): Promise<T> =>
+      voiHamDotBien(
+        "public.rfq_kiem_nguoi_duyet()",
+        "\n  NEW.approved_content_hash := public.rfq_bam_noi_dung(NEW.rfq_id);",
+        "\n  PERFORM pg_catalog.pg_sleep(1.5);\n  NEW.approved_content_hash := public.rfq_bam_noi_dung(NEW.rfq_id);",
+        viec,
+      );
+    const that = await nguTrongD2(khe);
+    expect(that.loiDuyet?.message).toBe(loiRoiCho("DRAFT"));
+    expect(that.cuoi).toBe("PENDING_APPROVAL");
+    const dotBien = await nguTrongD2(() =>
+      voiHamDotBien("public.rfq_chot_lan_nop_da_xem()", "IF trang_thai <> 'PENDING_APPROVAL' THEN", "IF false THEN", khe),
+    );
+    expect(dotBien.loiDuyet).toBeNull();
+    expect(dotBien.cuoi).toBe("OPEN");
   });
 
   it("[INV-D2] trigger so lần nộp xếp TRƯỚC chốt D2 (đổi tên) ⇒ lời tự duyệt không mốc bị từ chối vì lần nộp, KHÔNG hàng `CONTROL_DENIED` nào", async () => {
@@ -689,5 +846,27 @@ describe("S1.9101 — đột biến: gỡ từng vế thì khoảng trống mở
     );
     expect(kq.rows).toEqual([{ status: "DRAFT" }]);
     expect(await hangTraVe(rfqId)).toEqual([]);
+  });
+});
+
+// =============================================================================================
+// (6) GIỚI HẠN, ĐO — LẦN BẬT S3 GIỮA LÚC GÓI ĐANG CHỜ DUYỆT (lượt soi S1.9101, F6; khoản 9404)
+//
+// Ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và lần nộp không đổi. Ca dưới
+// ghim hành vi HÔM NAY; không mang nhãn bất biến: nó đo một khoảng trống, không đo một chốt.
+// =============================================================================================
+describe("S1.9101 — giới hạn, đo: tổ chức bật S3 khi gói đang chờ duyệt", () => {
+  it("khoản 9404 — người duyệt đọc gói (lần nộp 1, một lời mời); PM mời thêm khi gói đang chờ — MVP1 cho —, rồi tổ chức BẬT S3: lời duyệt mốc 1 đi qua với danh sách HAI lời mời, và gói MỞ", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const daXem = (await doc(t, rfqId)).lanNop;
+    await moi(t, rfqId);
+    await batS3(t);
+    await duyetVoi(t, rfqId, t.pm2, daXem);
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_invitations WHERE rfq_id = $1", [rfqId]);
+    expect(rows, "chữ ký mang danh sách hai lời mời").toEqual([{ n: 2 }]);
+    expect(await loi(mo(t, rfqId))).toBeNull();
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
   });
 });
