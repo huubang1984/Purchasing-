@@ -121,7 +121,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [S1.185 / S3.2a] Điểm chịu lực của băm danh sách NULL ở MVP1: thêm lời mời ở PENDING_APPROVAL rồi cùng người ký lại vẫn bị
     // UNIQUE chặn, và hai đột biến (băm cho mọi tổ chức, UNIQUE mất `NULLS NOT DISTINCT`) mở gói cấp kép với MỘT người.
     "packages/rfq/src/danh-sach-moi.int.test.ts",
-    // [S1.191 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
+    // [S1.192 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
     // không mở được gói — và đột biến bỏ phép đếm trên ngân sách mở lại đúng lỗ ấy.
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
     // [S1.9101 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
@@ -378,7 +378,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // `duc_khi_goi_da_mo` (K6); tệp HTTP đo route của cạnh; `token-goi-da-mo` đo K6 ở PHÍA DÙNG — đổi link, xin và xác minh OTP.
   // [S1.188 / S3.2b2] `luong-moi-s3` đo luồng mời mới qua HTTP: mời ở DRAFT không token (K4a, K6), đúc lúc mở gói, gửi sau
   // commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* (K6).
-  // [S1.191 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
+  // [S1.192 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
   // mới, cột ngoài `GRANT`, vế NULL của MVP1, hàng cũ không điền, và mỗi vế của bản vá một đột biến.
   // [S1.9101 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
   // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt

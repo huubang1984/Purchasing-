@@ -15905,9 +15905,81 @@ và kịch bản 41; S3.2c2 là màn `/tao-thau` (thứ tự bước theo tổ c
 
 Không khoản nào mở hay đóng.
 
+# §S1.191 — S3.2c2: MÀN `/tao-thau` THEO LUỒNG MỜI CỦA TỔ CHỨC, NÚT TRẢ VỀ SOẠN THẢO, LƯỢT ĐI THỬ T4 (K4a, K6)
+
+**Rổ và mảnh (ADR-043 ⒞):** màn `/tao-thau` là bước đầu của `docs/PRODUCT.md` §11; ở tổ chức chưa bật, màn giữ nguyên hình dạng MVP1
+(đối chứng ở §4). Không migration, không mã máy chủ.
+
+## 1. Việc gì
+
+Phần sau của S3.2c. Chủ dự án chốt ngày 2026-09-29: màn đổi thứ tự bước theo tổ chức đã bật hay chưa, và có nút *Trả về soạn thảo*.
+Sau S3.2b2 và S3.2c1, máy chủ và công cụ gieo đã chạy luồng mời mới, nhưng màn vẫn dựng theo MVP1: bước mời đứng sau *Mở thầu*,
+câu báo sau lần mời nói *"link đi thẳng tới bộ gửi"* dù lời mời còn `UNSENT`, lần mở gói bỏ qua `unsentInvitationIds`, nút *Thu hồi*
+hiện ở trạng thái K4a cấm, và cạnh về DRAFT (`077`) không có nút.
+
+## 2. Thay đổi
+
+- `apps/web/src/tao-thau.ts` (phục vụ ở `/lib/tao-thau.js`, khai trong `MODULE_WEB`): thứ tự bước, nhãn trạng thái lời mời, hai nút
+  của một dòng lời mời theo luồng và trạng thái gói, câu báo sau lần mời và lần mở gói, điều kiện hiện nút trả về, và kiểm lý do —
+  trần 2000 BYTE UTF-8, cùng số và đơn vị với `batBuoc` của `returnRfqToDraft`.
+- `apps/web/trang/tao-thau.js`: hỏi `GET /policy/versions` một lần sau đăng nhập; tổ chức đã bật ⇒ lớp `moi-truoc` trên `main`
+  (`chung.css`: `flex` cột, `#b5` trước `#b4`), số bước đổi, hai đoạn ghi hiện; đổi người hay đăng xuất đưa màn về luồng MVP1. Câu báo
+  sau lần mời và lần mở gói đọc thân phản hồi; bảng lời mời vẽ nhãn và nút theo luồng; đọc gói ở tổ chức đã bật thì đọc luôn danh sách
+  mời; gửi lại được thì vẽ lại bảng. Nút *Trả về soạn thảo* gọi `POST /rfqs/:rfqId/return-to-draft`, lý do rỗng không gọi máy chủ.
+- `apps/web/trang/tao-thau.html`: id cho `main` và hai số bước, hai đoạn ghi, khối lý do và nút trả về.
+
+## 3. Đo
+
+- `tao-thau.test.ts`: 13 ca — mỗi hàm một bảng ca theo hai luồng và bảy trạng thái gói; lý do 700 chữ "ế" (700 ký tự, 2100 byte)
+  bị từ chối như ở máy chủ.
+- `phuc-vu.test.ts` (bộ giả lập trang trong `node:vm`, nay nạp `/lib/tao-thau.js` thật): năm ca mới — thứ tự bước và đoạn ghi ở hai
+  luồng, về MVP1 khi đổi người; nhãn và nút của dòng lời mời ở DRAFT, PENDING_APPROVAL, OPEN và MVP1; câu báo sau lần mời ở DRAFT và sau
+  lần mời thêm ở OPEN gửi hỏng; câu báo sau lần mở gói với danh sách chưa gửi rỗng và không rỗng; nút trả về — ẩn ở DRAFT và ở MVP1,
+  lý do rỗng không gọi máy chủ, có lý do thì gọi. Ba ca cũ của lối gửi lại (ADR-110) đỏ khi bộ giả lập còn thay `/lib/tao-thau.js`
+  bằng hàm rỗng — nút không vẽ ra —, xanh khi nạp bản thật. `apps/web`: 177/177.
+- Bốn đột biến trên `tao-thau.js`, mỗi cái một dòng, rồi khôi phục:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | 1 | không bao giờ gắn lớp `moi-truoc` | ĐỎ |
+  | 2 | bảng in trạng thái thô thay nhãn | ĐỎ |
+  | 3 | câu báo mở gói bỏ qua `unsentInvitationIds` | ĐỎ |
+  | 4 | nút dòng lời mời luôn theo luồng MVP1 | ĐỎ |
+
+- `pnpm t0` sạch; `pnpm test` sạch.
+
+## 4. Lượt đi thử T4 — cụm cục bộ
+
+Cụm: PostgreSQL 16 (container); `pnpm gieo:demo --s3` rồi `pnpm gieo:demo` trên cùng CSDL; `apps/api` (`local-dev`, `dev-mailbox`,
+cờ ký chính sách bật); `apps/web` chuyển tiếp; Chromium qua Playwright. Script nằm ngoài kho. Đăng nhập bằng link gieo in ra, ghi danh
+TOTP lần đầu.
+
+- **MVP1 (đối chứng):** thứ tự hiển thị b1 b2 b3 b4 b5, số 4/5, hai đoạn ghi ẩn.
+- **S3, người soạn:** thứ tự hiển thị b1 b2 b3 b5 b4, số b4/b5 là 5/4, hai đoạn ghi hiện. Tạo gói, một hạng mục, ngân sách 150 triệu.
+  Mời hai nhà cung cấp ⇒ *"Đã thêm vào danh sách mời. Link CHƯA đi …"*; bảng: hai dòng *chưa gửi*, mỗi dòng chỉ nút *Thu hồi*.
+- Nộp duyệt ⇒ khối trả về hiện. Bấm trả về không lý do ⇒ *"Cần ghi lý do …"*, không lời gọi. Có lý do ⇒ *"Đã trả gói về soạn thảo …"*,
+  khối ẩn. Nộp lại ⇒ bảng: hai dòng *chưa gửi*, không nút (PENDING_APPROVAL).
+- **Người duyệt thứ hai** (trình duyệt khác, cùng gói) ⇒ *"Đã ghi một phê duyệt."*
+- **Mở gói** ⇒ *"Đã mở thầu … Link mời đã đi tới mọi nhà cung cấp trong danh sách."*; bảng: hai dòng *đã gửi*, chỉ nút *Gửi lại link*;
+  hộp thư dev nhận đúng hai thư.
+- Không lỗi trang, không lỗi console.
+- CSDL: một `RFQ_RETURNED_TO_DRAFT` mang đúng lý do đã gõ; hai lời mời `SENT`, `moi_sau_khi_ky = false`, token `duc_khi_goi_da_mo =
+  true`; một chữ ký.
+
+## 5. Giới hạn
+
+- Luồng của màn đọc từ `GET /policy/versions`. Đọc hỏng thì màn ở luồng MVP1 — máy chủ vẫn từ chối mọi thao tác sai luồng, màn chỉ
+  nói kém đi.
+- Màn không vẽ lại khi tổ chức bật S3 trong lúc trang đang mở; tải lại trang là thấy.
+- Lượt đi thử T4 là một lần, không phải một cổng; script nằm ngoài kho.
+
+## 6. Số
+
+Không khoản nào mở hay đóng. S3.2 khép (S3.2a, S3.2b1, S3.2b2, S3.2c1, S3.2c2).
+
 ---
 
-# §S1.191 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+# §S1.192 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-114; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
 lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`079_rang_ngan_sach`), một ADR (ADR-114),
@@ -16036,12 +16108,12 @@ về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng
 # §S1.9101 — KHOẢN 256 VÀ 257 ĐÓNG: LỜI DUYỆT MANG LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM, LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ (K4a, K4b, D2) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401–9404
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — ở tổ chức chưa bật, route duyệt giữ hợp đồng không thân;
-chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.191) đóng; lượt soi mở khoản 9401, 9402, 9403, 9404 (rổ B). Một
+chạy dưới công tắc ADR-080. Khoản 256 và 257 (rổ B, ghi ở §S1.192) đóng; lượt soi mở khoản 9401, 9402, 9403, 9404 (rổ B). Một
 migration (`9501_lan_nop_da_xem`), một ADR (ADR-9201), không route mới — route duyệt nhận thêm một trường tuỳ chọn.
 
 ## 1. Việc gì
 
-Lượt soi S1.191 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
+Lượt soi S1.192 đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` (`077`), ở tổ chức đã bật: lời duyệt chỉ mang mã gói, nên
 PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem, và gói mở (256); người duyệt
 đã ký rồi tự trả gói về không rút được chữ ký của mình — nộp lại y nguyên, gói mở bằng chữ ký ấy (257). Chủ dự án chọn ngày
 2026-09-29: vá cả hai ở một vòng riêng trước S3.2c, theo hình dạng ghi ở hai hàng sổ nợ; mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật —
@@ -16052,7 +16124,7 @@ route MVP1 giữ hợp đồng không thân, gửi thì phải đúng. Bất bi�
 Trên cây của #199 sau lần merge `master` và cấp lại số (`30a6801`, chưa có `9501_lan_nop_da_xem`), tệp đo của vòng này ở bản cuối:
 28 ca, 24 đỏ. Ca đối chứng của khối đột biến cho thấy cả hai kịch bản MỞ gói. Bốn ca xanh là bốn ca phải xanh ở cả hai cây: ba ca
 *giữ nguyên* — lời tự duyệt vẫn là lời từ chối D2 có sổ; ở tổ chức chưa bật một người chỉ duyệt một lần; người tạo trả về không rút
-chữ ký của ai — và ca giới hạn của khoản 9404, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.191) ghim
+chữ ký của ai — và ca giới hạn của khoản 9404, ghim hành vi hôm nay. Hai ca giới hạn của `rang-ngan-sach.int.test.ts` (§S1.192) ghim
 cùng hai kịch bản ở trạng thái MỞ.
 
 ## 3. Thay đổi
@@ -16136,7 +16208,7 @@ Một lượt, trên cây `b011820`; người kiểm đo trên Postgres 16 thậ
 | # | Phát hiện | Mức | Xử lý |
 |---|---|---|---|
 | F1 | Trigger so chỉ so lần nộp, không đọc lại trạng thái; D2 đọc trạng thái rồi mấy câu sau mới băm NỘI DUNG, mỗi câu một ảnh chụp. Một lần trả về cộng một lần sửa commit vào khe ấy để lại chữ ký trên nội dung người duyệt chưa đọc, ở lần nộp cũ; nộp lại ⇒ gói MỞ. Ca tất định: lời duyệt qua D2 khi lần trả về chưa commit, chờ khoá, rồi ghi lên gói đã về DRAFT. Lời khai ở đầu migration và ADR sai | Nên sửa | **Sửa trong vòng:** trigger so đọc lại trạng thái dưới khoá, ở mọi tổ chức; không tìm thấy gói thì từ chối. Ca chiều ngược, ca MVP1 gặp lần mở gói đang chạy, ca khe của D2, hai đột biến |
-| F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 9401 mở** (rổ B) — việc của S3.2c2, màn `/tao-thau` |
+| F2 | Người duyệt không đọc được ngân sách và danh sách sống: không route trả ngân sách cho người mua; `napRfq` không làm mới danh sách mời | Nên sửa (tầng sản phẩm) | **Khoản 9401 mở** (rổ B) cho vế ngân sách. Vế danh sách khép ở S3.2c2 (#200, merge trong lúc vòng này chạy): `napRfq` làm mới danh sách mời ở tổ chức đã bật |
 | F3 | Deadlock do `FOR SHARE`: giao dịch duyệt rồi mở gói gặp một lời duyệt song song ⇒ 40P01, lời duyệt kia thành 500. Không đường sản xuất nào duyệt rồi mở trong một giao dịch | Ghi chú | **Sửa trong vòng:** khoá `FOR NO KEY UPDATE` — lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán (`004`) |
 | F4 | Mục ghim trigger không bắt bản sao cùng hàm dưới tên khác: đổi tên trigger so ⇒ hardening dựng lại tên đúng và giữ bản đổi tên chạy trước D2 | Ghi chú | **Khoản 9402 mở** (rổ B) — chung cho mọi mục ghim trigger |
 | F5 | Thân lời duyệt sai kiểu hay tràn `integer` bị từ chối trước D2, nên lời tự duyệt mang thân ấy không vào sổ | Ghi chú | Ghi ở ADR-9201 (hệ quả); một ca HTTP khẳng định tràn ⇒ 422 thân cố định |
@@ -16155,8 +16227,8 @@ thân ghim khớp thân migration; HTTP: `"1"`, mảng, `true` ⇒ 422 có tên,
 ## 7. Giới hạn, nói ra
 
 - Client của tổ chức đã bật PHẢI gửi `lanNop`; lời gọi không gửi ⇒ 422 có tên.
-- Máy chủ biết client đã ĐỌC lần nộp nào, không biết người duyệt đã XEM gì — và hôm nay màn không hiện ngân sách, không làm mới danh
-  sách mời khi đọc lại gói (khoản 9401).
+- Máy chủ biết client đã ĐỌC lần nộp nào, không biết người duyệt đã XEM gì — và hôm nay màn không hiện ngân sách ở lần đọc gói
+  (khoản 9401); danh sách mời thì S3.2c2 làm mới ở lần đọc.
 - Lời duyệt khoá hàng gói `FOR NO KEY UPDATE` tới hết giao dịch ở MỌI tổ chức — trigger chạy cả ở MVP1; lời duyệt của một tổ chức
   nối tiếp nhau.
 - Người duyệt đã ký rồi trả về thì chữ ký ấy không đếm ở mọi lần nộp sau, dù gói y nguyên.

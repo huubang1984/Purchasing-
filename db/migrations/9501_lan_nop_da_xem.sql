@@ -3,7 +3,7 @@
 -- CHÍNH NGƯỜI TRẢ (khoản 257) — K4b, D2
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4, §3.3, §5.1 (K4). ADR-9201. Lượt soi
--- S1.191 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
+-- S1.192 đo hai khoảng trống dưới cạnh về DRAFT (`077`); chủ dự án chọn ngày 2026-09-29 vá cả hai ở một vòng riêng, trước S3.2c,
 -- và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật.
 --
 -- KHOẢN 256. Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm của CSDL LÚC CHÈN, không của thứ người duyệt đã xem. Trước `077`,

@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 079_rang_ngan_sach — [S1.191] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — khoản 254 đóng
+-- 079_rang_ngan_sach — [S1.192] CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — khoản 254 đóng
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s3-kiem-soat-mua-sam.md` §2.4 (chữ ký cũ vô hiệu bằng băm), §3.3,
 -- §5.1 (K4). ADR-114. Chủ dự án chốt ngày 2026-09-29: vá lỗ này trước S3.2c, bằng một PR riêng.

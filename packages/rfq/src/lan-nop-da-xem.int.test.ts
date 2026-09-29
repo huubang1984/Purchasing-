@@ -21,7 +21,7 @@ import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 // [S1.9101 / khoản 256 · khoản 257] LỜI DUYỆT RÀNG VÀO LẦN NỘP NGƯỜI DUYỆT ĐÃ XEM; LẦN TRẢ VỀ RÚT CHỮ KÝ CỦA CHÍNH NGƯỜI TRẢ —
 // ĐO TRÊN POSTGRES THẬT DƯỚI `app_api`
 //
-// Migration `9501_lan_nop_da_xem`. Lượt soi S1.191 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
+// Migration `9501_lan_nop_da_xem`. Lượt soi S1.192 đo hai khoảng trống dưới cạnh về DRAFT (`077`), và hai ca giới hạn của
 // `rang-ngan-sach.int.test.ts` ghim chúng tới vòng này: PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký ⇒ chữ ký
 // rơi lên thứ người ấy chưa xem, và gói mở; người duyệt đã ký rồi tự trả về ⇒ nộp lại y nguyên, gói mở bằng chữ ký ấy. Hai ca đầu
 // của khối (2) và (3) dưới đây là hai ca ấy, LẬT.

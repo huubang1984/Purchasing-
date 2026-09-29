@@ -8956,9 +8956,9 @@ chốt giao dịch và phiên của `ducTokenKhiMoGoi`; điều kiện của `da
 ## ADR-114 — Tổ chức đã bật S3: chữ ký mở gói ràng vào NGÂN SÁCH của gói — băm riêng, và cạnh mở gói đếm trên ngân sách hiện tại
 
 **Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá lỗ này TRƯỚC S3.2c, bằng một PR riêng.
-Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.191]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
+Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.192]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
 hiệu bằng băm), ADR-084 ⑵ (cạnh về DRAFT), ADR-080 (công tắc một chiều), `011` C-1, `014` §(4), `076`, `077` · **Biên bản:**
-`evidence/security-reviews.md` §S1.191 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
+`evidence/security-reviews.md` §S1.192 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
 
 ### Bối cảnh
 
@@ -9031,11 +9031,11 @@ hình dạng của mỗi khoản (hàng sổ 256, 257), và mốc lần nộp ch
 thì phải đúng. Bộ đếm thay cho mốc thời gian, cột về NULL ở MVP1 và thứ tự trigger là điểm tôi tự chốt (⑴ ⑵ dưới); chủ dự án bác
 được · **[S1.9101]** · **Liên quan:** ADR-114 (băm ngân sách), ADR-084 ⑵ (cạnh về DRAFT, *"trả về thay vì không ký"*), ADR-108 ⑴
 (không bớt nhánh ghi nào của D2), ADR-080 (công tắc một chiều), `011` C-1, `071`, `076`, `077`, `079` · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101 · **Khoản:** 256, 257 (ghi ở S1.191; đóng ở đây)
+`evidence/security-reviews.md` §S1.9101 · **Khoản:** 256, 257 (ghi ở S1.192; đóng ở đây)
 
 ### Bối cảnh
 
-Lượt soi của S1.191 (ADR-114) đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` của `077`, ở tổ chức đã bật:
+Lượt soi của S1.192 (ADR-114) đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` của `077`, ở tổ chức đã bật:
 
 - **Khoản 256.** Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm (nội dung, danh sách, ngân sách) của CSDL LÚC CHÈN, không của
   thứ người duyệt đã xem. Người duyệt xem gói ở 1 triệu; PM trả về, đặt 99 triệu, nộp lại; người duyệt bấm ký ⇒ chữ ký nằm trên 99
@@ -9117,8 +9117,8 @@ Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy t�
   (ADR-105).
 - `lanNop` ra ở `GET /rfqs/:rfqId` của người mua; `GET /guest/rfq` là danh sách trắng và không mang nó.
 - Lần từ chối vì mốc sai không vào sổ — như lần từ chối vì trạng thái. Nếu chủ dự án muốn đếm những lần ấy, đó là việc của khoản 255.
-- **Bốn khoảng trống lượt soi mở, rổ B:** người duyệt không đọc được ngân sách và danh sách sống mà chữ ký ràng vào — mốc chỉ bảo
-  đảm chữ ký rơi lên lần nộp client đã đọc, không bảo đảm màn đã HIỆN đủ lần nộp ấy (khoản 9401, việc của S3.2c2); mục ghim trigger
+- **Bốn khoảng trống lượt soi mở, rổ B:** người duyệt không đọc được ngân sách mà chữ ký ràng vào — mốc chỉ bảo đảm chữ ký rơi lên
+  lần nộp client đã đọc, không bảo đảm màn đã HIỆN đủ lần nộp ấy; danh sách mời thì S3.2c2 đã làm mới ở lần đọc gói (khoản 9401); mục ghim trigger
   không bắt bản sao cùng hàm dưới tên khác, nên thứ tự sau chốt D2 không được ghim (9402); hàng `rfq_tra_ve` không buộc đi kèm cạnh về
   DRAFT, và xoá nó làm chữ ký đã rút đếm lại (9403); bật S3 giữa lúc gói chờ duyệt — danh sách đổi ở MVP1 khi gói chờ không làm lần
   nộp tăng (9404).
@@ -9126,7 +9126,7 @@ Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy t�
 ### Đo
 
 `packages/rfq/src/lan-nop-da-xem.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật — và hai ca HTTP ở `buyer.int.test.ts`.
-Đo TRƯỚC: hai ca giới hạn của `rang-ngan-sach.int.test.ts` (S1.191) xanh trên nhánh gốc — gói MỞ ở cả hai kịch bản; vòng này bỏ hai
+Đo TRƯỚC: hai ca giới hạn của `rang-ngan-sach.int.test.ts` (S1.192) xanh trên nhánh gốc — gói MỞ ở cả hai kịch bản; vòng này bỏ hai
 ca ấy, và ca đầu của khối khoản 256 và khối khoản 257 của tệp mới là hai kịch bản ấy, LẬT. Chín đột biến đều đỏ: bộ đếm đứng yên,
 phép so bỏ, bỏ khoá hàng gói, bỏ vế trạng thái, trigger so xếp trước chốt D2, bỏ vế NULL ở MVP1, cạnh mở gói bỏ vế *người ký chưa
 trả về*, bỏ vế *mang lần nộp*, cạnh về DRAFT bỏ vế *kèm hàng trả về*. Khe của D2 đo bằng một `pg_sleep` chèn giữa phép kiểm trạng
