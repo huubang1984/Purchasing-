@@ -512,10 +512,16 @@ export interface DispatchUnsealInput {
 // đều để lại một hàng sổ, và ⑵ bảo đảm không quá một lượt sống cùng lúc — nên một người bấm liên
 // tục chỉ tự làm đầy sổ kiểm toán của chính mình chứ không giành được gì.
 //
-// RANH GIỚI NÓI RA: với yêu cầu BREAK-GLASS, câu `UPDATE` dưới đây chạm trigger
+// ~~RANH GIỚI NÓI RA: với yêu cầu BREAK-GLASS, câu `UPDATE` dưới đây chạm trigger
 // `unseal_requests_kiem_nhan_chung` (022) — trigger ấy fire ở MỌI update khi hàng có nhân chứng,
 // và nó đòi phiên nhân chứng còn sống. Phiên ấy hết hạn thì điều phối lại gãy. Đó là khoản 160,
-// và vòng này KHÔNG đóng nó; nó chỉ thêm một chỗ nữa mà khoản 160 cắn được.
+// và vòng này KHÔNG đóng nó; nó chỉ thêm một chỗ nữa mà khoản 160 cắn được.~~
+// **[S1.9131 / khoản 160]** Ranh giới ấy đã hết từ `055` mục (3) (khoản 210, S1.100): trigger
+// `unseal_requests_kiem_nhan_chung` nay chỉ fire `BEFORE INSERT`, nên câu `UPDATE` dưới đây KHÔNG
+// hỏi phiên nhân chứng nữa — một nhân chứng đã đăng xuất không làm gãy điều phối lại, cũng như
+// không làm gãy câu `EXECUTED` của worker. Đo ở `unseal.int.test.ts`, khối `[INV-D3] [khoản 209 +
+// 210]`: ca *"phiên nhân chứng bị THU HỒI: câu `EXECUTED` của worker VẪN đi được"* và hai ca
+// `[khoản 160]` (điều phối lại đi được; đột biến trả trigger về hình `022` thì gãy 23514).
 // ==============================================================================================
 async function dieuPhoiLaiSauKhiChet(
   client: pg.PoolClient,

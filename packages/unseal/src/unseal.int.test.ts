@@ -1012,6 +1012,83 @@ describe("[INV-D3] [khoản 209 + 210] cặp nhân chứng break-glass", () => {
     }
   });
 
+  // [S1.9131 / khoản 160] Khoản 160 khai "MỌI `UPDATE` về sau trên một hàng break-glass đã có nhân
+  // chứng đòi phiên nhân chứng còn sống", và S1.96 thêm lối điều phối lại (`dieuPhoiLaiSauKhiChet`)
+  // làm chỗ thứ hai nó cắn được. `055` mục (3) thu trigger về `BEFORE INSERT` nên cả hai chỗ đều
+  // hết cắn: ca ngay trên đo câu `EXECUTED`, hai ca dưới đo lối điều phối lại — đường mà chưa ca nào
+  // dựng đúng cảnh "nhân chứng chết GIỮA lần điều phối và lần bấm lại".
+  it("[INV-D3] [S1.9131 / khoản 160] phiên nhân chứng bị THU HỒI: ĐIỀU PHỐI LẠI sau khi job chết VẪN đi được — câu đổi cặp người-phiên không hỏi nhân chứng nữa", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await dotHetLuot(requestId);
+    // Nhân chứng đăng xuất SAU lần điều phối đầu và TRƯỚC lần bấm lại — đúng cảnh khoản 160 chưa đo.
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sD1]);
+    try {
+      const bangChung = await withTenant(apiPool, orgA, (c) =>
+        dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+      );
+      expect(bangChung.breakGlass, "tiền đề: đây là đường break-glass").toBe(true);
+      expect(await ketCucJob(requestId), "job cũ ở lại làm dấu vết, job mới đứng cạnh nó").toEqual(["FAILED", "PENDING"]);
+      expect((await docHangDieuPhoi(requestId)).dispatched_by_session_id).toBe(sYcB);
+      expect(await docNhanChung(requestId), "cặp nhân chứng gốc giữ nguyên — lối này không chạm nó").toEqual({ u: uD1, s: sD1 });
+      const { rows } = await db.pool.query<{ payload: { breakGlass?: unknown } }>(
+        "SELECT payload FROM audit_events WHERE action = 'UNSEAL_REDISPATCHED' AND resource_id = $1",
+        [requestId],
+      );
+      expect(rows.map((r) => r.payload.breakGlass), "D4: hàng sổ điều phối lại vẫn nói đây là break-glass").toEqual([true]);
+    } finally {
+      await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sD1]);
+    }
+  });
+
+  it("[INV-D3] [S1.9131 / khoản 160] ĐỘT BIẾN: trả trigger nhân chứng về hình `022` (`BEFORE INSERT OR UPDATE`) thì ĐÚNG lối điều phối lại ấy GÃY 23514 — rồi trả lại hình `055`", async () => {
+    const docDinhNghia = async (): Promise<readonly (readonly [string, string])[]> => {
+      const { rows } = await db.pool.query<{ e: string; d: string }>(
+        "SELECT tgenabled::text AS e, pg_get_triggerdef(oid) AS d FROM pg_trigger " +
+          " WHERE tgname = 'unseal_requests_kiem_nhan_chung' AND NOT tgisinternal",
+      );
+      return rows.map((r) => [r.e, r.d] as const);
+    };
+    const hinh055 = await docDinhNghia();
+    expect(hinh055, "tiền đề: trigger đang ở hình `055` — `BEFORE INSERT`, ENABLE ALWAYS").toHaveLength(1);
+    expect(hinh055[0]?.[0]).toBe("A");
+    expect(hinh055[0]?.[1]).toMatch(/ BEFORE INSERT ON public\.unseal_requests /u);
+
+    const { requestId } = await breakGlassDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await dotHetLuot(requestId);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sD1]);
+    await db.pool.query("DROP TRIGGER unseal_requests_kiem_nhan_chung ON unseal_requests");
+    try {
+      await db.pool.query(
+        "CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON unseal_requests " +
+          " FOR EACH ROW WHEN (NEW.break_glass_witness_user_id IS NOT NULL) " +
+          " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')",
+      );
+      await db.pool.query("ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung");
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+        ),
+      ).rejects.toMatchObject({ code: "23514", message: /Phien khong hop le/u });
+      expect(await ketCucJob(requestId), "không job nào được xếp — đúng cảnh khoản 160 mô tả").toEqual(["FAILED"]);
+    } finally {
+      await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sD1]);
+      await db.pool.query("DROP TRIGGER IF EXISTS unseal_requests_kiem_nhan_chung ON unseal_requests");
+      await db.pool.query(
+        "CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT ON unseal_requests " +
+          " FOR EACH ROW WHEN (NEW.break_glass_witness_user_id IS NOT NULL) " +
+          " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')",
+      );
+      await db.pool.query("ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung");
+      expect(await docDinhNghia(), "khôi phục phải trả lại ĐÚNG định nghĩa `055`, kể cả ENABLE ALWAYS").toEqual(hinh055);
+    }
+  });
+
   it("[INV-D3] [khoản 210] ĐỐI CHỨNG DƯƠNG: nhân chứng BỊA lúc CHÈN vẫn bị chặn — thu hẹp `WHEN` không tắt lớp", async () => {
     const rfqId = await taoRfqDaDong();
     await expect(

@@ -30,6 +30,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   COMPARISON_ALLOWED_STATUSES,
   ComparisonDeniedError,
+  type ComparisonTable,
   approveUnseal,
   buildComparisonTable,
   countReceivedBids,
@@ -230,7 +231,14 @@ async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
   });
 }
 
-/** Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ dưới `app_unseal`, rồi tuyên bố UNSEALED. */
+/**
+ * Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ dưới `app_unseal`, rồi tuyên bố UNSEALED.
+ *
+ * [S1.9131 / khoản 114] Một `payload` là CHUỖI được ghi NGUYÊN VĂN làm văn bản JSON, không qua
+ * `JSON.stringify`: ca `1e324` không viết ra được từ một giá trị JS (`Number("1e324")` là
+ * `Infinity`, và `JSON.stringify(Infinity)` là `null`) — Postgres thì đọc `1e324` thành một
+ * `numeric` 325 chữ số, và đó đúng là thứ khoản 114 đo.
+ */
 async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown])[]): Promise<void> {
   await db.pool.query(
     "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), " +
@@ -249,7 +257,7 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
       await c.query(
         "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) " +
           "VALUES ($1, $2, $3, $4)",
-        [orgA, yc.id, versionId, JSON.stringify(payload)],
+        [orgA, yc.id, versionId, typeof payload === "string" ? payload : JSON.stringify(payload)],
       );
     }
     await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
@@ -928,5 +936,162 @@ describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại mộ
     // Đối chứng: gỡ lớp chặn thì cùng lời gọi ấy đọc được và ghi đúng một hàng.
     await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
     expect(await demXem(rfqId)).toBe(1);
+  });
+});
+
+// ===============================================================================================
+// [S1.9131 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG BẢN RÕ MỖI CÂU, VÀ KHÔNG TÍNH TRÊN
+// MỘT `totalAmount` KHÔNG VÔ HƯỚNG
+//
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.9131): `comparison.ts` gọi
+// `bid_so_tien(payload->>'totalAmount')` BẢY lần cho mỗi báo giá đọc được (hai ở câu hàng, năm ở
+// câu tổng hợp) và BA lần cho một báo giá mà `totalAmount` là MẢNG — vì `->>` dựng CẢ CÂY thành văn
+// bản trước khi `bid_so_tien` kịp trả NULL. Với 20 000 phần tử `1e324` (120 KB văn bản vào, vài KB
+// jsonb lưu), mỗi lần gọi nhận 6 540 002 ký tự.
+//
+// Khối này đếm SỐ LẦN `bid_so_tien` được gọi và ĐỘ DÀI văn bản nó nhận — qua một hàm bọc phát NOTICE
+// đặt vào đúng tên `public.bid_so_tien` rồi gỡ ra — thay vì đòi một trần mili-giây: trên máy dùng
+// chung, một trần thời gian là một test lúc đỏ lúc xanh, còn số lần gọi thì không. Thời lượng của
+// ca ⒜ (không hàm bọc) là số đo mili-giây; nó được ghi ở biên bản, không được khẳng định ở đây.
+// ===============================================================================================
+describe("[S1.9131 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng bản rõ mỗi câu, và không chạy trên `totalAmount` không vô hướng", () => {
+  const SO_PHAN_TU = 20_000;
+  /** Văn bản JSON THÔ — xem chú thích của `moThau`. */
+  const MANG_1E324 = `{"totalAmount":[${Array.from({ length: SO_PHAN_TU }, () => "1e324").join(",")}],"currency":"VND"}`;
+  /** Độ dài mà `->>` dựng từ mảng ấy: 325 chữ số mỗi phần tử, `, ` giữa hai phần tử, hai dấu ngoặc. */
+  const DO_DAI_KHAI_TRIEN = SO_PHAN_TU * 325 + (SO_PHAN_TU - 1) * 2 + 2;
+  const GIA_HOP_LE = "2000000.00";
+
+  let rfqMang: string;
+
+  beforeAll(async () => {
+    rfqMang = await taoRfqMo(csNghiem);
+    const vHopLe = await nopBaoGia(rfqMang, "NCC Vo huong");
+    const vMang = await nopBaoGia(rfqMang, "NCC Mang");
+    await moThau(rfqMang, [
+      [vHopLe, { totalAmount: GIA_HOP_LE, currency: "VND" }],
+      [vMang, MANG_1E324],
+    ]);
+    // Tiền đề của phép đo: mảng nằm trong bảng ĐÚNG như mảng, và văn bản `->>` của nó dài đúng như tính.
+    const { rows } = await db.pool.query<{ loai: string; do_dai: number }>(
+      "SELECT jsonb_typeof(payload -> 'totalAmount') AS loai, length(payload ->> 'totalAmount') AS do_dai " +
+        "  FROM rfq_unsealed_bids WHERE bid_version_id = $1",
+      [vMang],
+    );
+    expect(rows[0]).toEqual({ loai: "array", do_dai: DO_DAI_KHAI_TRIEN });
+  }, 180_000);
+
+  async function docThanBidSoTien(): Promise<string> {
+    const { rows } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE proname = 'bid_so_tien' AND pronamespace = 'public'::regnamespace",
+    );
+    expect(rows.length, "đúng một `public.bid_so_tien`").toBe(1);
+    return rows[0]?.prosrc ?? "";
+  }
+
+  /**
+   * Chạy `viec` trong lúc `public.bid_so_tien` là một hàm bọc: IMMUTABLE STRICT như hàm gốc — để bộ
+   * lập kế hoạch đối xử y hệt —, phát một NOTICE mang ĐỘ DÀI đối số (không mang giá trị) rồi gọi hàm
+   * gốc dưới tên tạm. Gỡ trong `finally`, và thân hàm gốc phải trở lại nguyên vẹn.
+   */
+  async function voiBidSoTienDuocDem<T>(
+    viec: (c: pg.PoolClient) => Promise<T>,
+  ): Promise<{ ketQua: T; doDai: readonly number[] }> {
+    const thanGoc = await docThanBidSoTien();
+    await db.pool.query("ALTER FUNCTION public.bid_so_tien(text) RENAME TO bid_so_tien_goc");
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.bid_so_tien(p_van text) RETURNS numeric LANGUAGE plpgsql IMMUTABLE STRICT " +
+          "SET search_path = pg_catalog, public AS $$BEGIN RAISE NOTICE 'k114 do_dai=%', length(p_van); " +
+          "RETURN public.bid_so_tien_goc(p_van); END$$",
+      );
+      const doDai: number[] = [];
+      const nghe = (n: { message?: string | undefined }): void => {
+        const m = /^k114 do_dai=(\d+)$/u.exec(n.message ?? "");
+        if (m !== null) doDai.push(Number(m[1]));
+      };
+      const ketQua = await withTenant(apiPool, orgA, async (c) => {
+        c.on("notice", nghe);
+        try {
+          return await viec(c);
+        } finally {
+          c.off("notice", nghe);
+        }
+      });
+      return { ketQua, doDai };
+    } finally {
+      await db.pool.query("DROP FUNCTION IF EXISTS public.bid_so_tien(text)");
+      await db.pool.query("ALTER FUNCTION public.bid_so_tien_goc(text) RENAME TO bid_so_tien");
+      expect(await docThanBidSoTien(), "gỡ hàm bọc phải trả lại đúng thân hàm gốc").toBe(thanGoc);
+    }
+  }
+
+  function bangCua(rfqId: string, c: pg.PoolClient): Promise<ComparisonTable> {
+    return buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool);
+  }
+
+  it("⒜ hàng mảng vẫn có mặt với số tiền `null`, xuống cuối, và phép tổng hợp đúng như khi không có nó — thời lượng ca này là số đo mili-giây", async () => {
+    const bang = await withTenant(apiPool, orgA, (c) => bangCua(rfqMang, c));
+    expect(bang.rows.map((r) => [r.supplierLegalName, r.totalAmount])).toEqual([
+      ["NCC Vo huong", GIA_HOP_LE],
+      ["NCC Mang", null],
+    ]);
+    expect((bang.rows[1]?.payload as { totalAmount?: unknown }).totalAmount, "`payload` đi ra nguyên vẹn, mảng vẫn là mảng").toHaveLength(SO_PHAN_TU);
+    expect(bang.aggregates).toEqual({
+      parsed: 1,
+      unparsed: 1,
+      currency: "VND",
+      currencyMismatch: false,
+      min: GIA_HOP_LE,
+      max: GIA_HOP_LE,
+      average: GIA_HOP_LE,
+      belowBudget: 0,
+    });
+  });
+
+  it("⒝ `bid_so_tien` KHÔNG nhận văn bản khai triển của mảng, và chạy đúng một lần mỗi hàng mỗi câu cho báo giá đọc được", async () => {
+    const { ketQua: bang, doDai } = await voiBidSoTienDuocDem((c) => bangCua(rfqMang, c));
+    expect(bang.rows.map((r) => r.totalAmount), "hàm bọc không đổi kết quả").toEqual([GIA_HOP_LE, null]);
+    expect(
+      doDai.filter((d) => d >= DO_DAI_KHAI_TRIEN),
+      `bản trước: ba lần nhận ${DO_DAI_KHAI_TRIEN} ký tự — \`->>\` dựng cả mảng thành văn bản rồi mới hỏi nó có phải số không`,
+    ).toEqual([]);
+    // Một hàng đọc được, hai câu (hàng và tổng hợp) ⇒ đúng HAI lần, mỗi lần nhận đúng chuỗi giá.
+    expect(doDai, "bản trước: bảy lần cho báo giá đọc được, cộng ba lần cho mảng").toEqual([GIA_HOP_LE.length, GIA_HOP_LE.length]);
+  });
+
+  it("⒞ ĐỐI CHỨNG: số JSON và chuỗi số giữ nguyên giá trị; đối tượng, boolean, `null` JSON và thiếu khoá ⇒ `null` mà không gọi `bid_so_tien`", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const vSo = await nopBaoGia(rfqId, "NCC So JSON");
+    const vChuoi = await nopBaoGia(rfqId, "NCC Chuoi");
+    const vDoiTuong = await nopBaoGia(rfqId, "NCC Doi tuong");
+    const vBool = await nopBaoGia(rfqId, "NCC Boolean");
+    const vNull = await nopBaoGia(rfqId, "NCC Null");
+    const vThieu = await nopBaoGia(rfqId, "NCC Thieu");
+    await moThau(rfqId, [
+      [vSo, '{"totalAmount":1500000.5,"currency":"VND"}'],
+      [vChuoi, { totalAmount: "900000.00", currency: "VND" }],
+      [vDoiTuong, { totalAmount: { so: "900000.00" }, currency: "VND" }],
+      [vBool, { totalAmount: true, currency: "VND" }],
+      [vNull, { totalAmount: null, currency: "VND" }],
+      [vThieu, { currency: "VND" }],
+    ]);
+    const { ketQua: bang, doDai } = await voiBidSoTienDuocDem((c) => bangCua(rfqId, c));
+    expect(bang.rows.map((r) => [r.supplierLegalName, r.totalAmount])).toEqual([
+      ["NCC Chuoi", "900000.00"],
+      ["NCC So JSON", "1500000.5"],
+      ["NCC Boolean", null],
+      ["NCC Doi tuong", null],
+      ["NCC Null", null],
+      ["NCC Thieu", null],
+    ]);
+    expect(bang.aggregates.parsed).toBe(2);
+    expect(bang.aggregates.unparsed).toBe(4);
+    expect(bang.aggregates.min).toBe("900000.00");
+    expect(bang.aggregates.max).toBe("1500000.5");
+    expect(bang.aggregates.belowBudget, "ngân sách fixture 1.000.000 VND — một báo giá dưới").toBe(1);
+    // Hai báo giá vô hướng × hai câu = bốn lần; đối tượng và boolean KHÔNG tới `bid_so_tien` (bản
+    // trước: `->>` cho `{"so": "900000.00"}` và `true`, và hàm bị gọi trên cả hai).
+    expect([...doDai].sort((a, b) => a - b)).toEqual(["900000.00".length, "900000.00".length, "1500000.5".length, "1500000.5".length]);
   });
 });
