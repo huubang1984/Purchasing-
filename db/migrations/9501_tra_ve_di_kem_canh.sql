@@ -8,17 +8,21 @@
 --     về thật của lần nộp ấy về sau bị từ chối (23505) — và thoả vế (4) cho một câu UPDATE thô về DRAFT ở một giao dịch SAU, gán
 --     cho người chèn.
 --  ⑵ Chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại ở cạnh mở gói (`087` (5)) — fail-open; xoá một chữ ký thì
---     fail-closed.
+--     fail-closed. (SỬA một chữ ký — `rfq_approvals.lan_nop_da_xem` — thì cũng fail-open: đầu vào khác của cùng phép đếm, chỉ
+--     giữ bằng quyền; khoản 9401, không đóng ở đây.)
 --
 -- (1) CONSTRAINT TRIGGER HOÃN TỚI COMMIT, khuôn `017` (b). Lúc INSERT, gói theo định nghĩa còn `PENDING_APPROVAL` — trigger
 --     `rfq_tra_ve_dat_lan_nop` vừa đòi thế —, nên chỉ ở COMMIT mới trả lời được câu *giao dịch này CÓ trả gói về không*. Chủ dự
 --     án chốt ngày 2026-09-30: đòi gói đã ĐI QUA cửa DRAFT ở lần nộp của hàng, không chỉ đã rời `PENDING_APPROVAL` — MỘT TẬP,
---     như `017`: gói đứng ở DRAFT với ĐÚNG lần nộp ấy, hoặc lần nộp đã TĂNG (trả về rồi nộp lại trong cùng giao dịch; lần nộp chỉ
---     tăng ở cạnh DRAFT→PENDING_APPROVAL, nên gói đã đi qua DRAFT). Gói đứng ở `PENDING_APPROVAL`, `OPEN` hay `CANCELLED` với
---     đúng lần nộp ấy thì hàng không kèm lần trả về nào: từ chối, cả giao dịch lùi. Gói KHÔNG ĐỌC ĐƯỢC lúc COMMIT cũng bị từ
---     chối: hàm chạy dưới quyền người gọi và RLS áp, nên một câu đổi `app.org_id` giữa lần chèn và COMMIT làm gói biến mất khỏi
---     tầm nhìn — `017` trả `NULL` (bỏ qua) ở đó, hàm này thì không. Đánh đổi, nói ra: trả về rồi HUỶ trong CÙNG một giao dịch
---     bị từ chối — tầng gói không làm thế (huỷ là một lời gọi riêng).
+--     như `017`: gói đứng ở DRAFT với ĐÚNG lần nộp ấy, hoặc lần nộp đã TĂNG (trả về rồi nộp lại trong cùng giao dịch; dưới
+--     `app_api` lần nộp chỉ tăng ở cạnh DRAFT→PENDING_APPROVAL, nên gói đã đi qua DRAFT — chủ bảng `rfq_packages` thì sửa được
+--     cột ấy, khoản 9401). Gói đứng ở `PENDING_APPROVAL`, `OPEN` hay `CANCELLED` với đúng lần nộp ấy thì hàng không kèm lần
+--     trả về nào: từ chối, cả giao dịch lùi. Gói KHÔNG ĐỌC ĐƯỢC lúc COMMIT cũng bị từ chối: hàm chạy dưới quyền người gọi và RLS
+--     áp, nên một câu đổi `app.org_id` giữa lần chèn và COMMIT làm gói biến mất khỏi tầm nhìn — `017` trả `NULL` (bỏ qua) ở đó
+--     (khoản 9402), hàm này thì không. Đánh đổi, nói ra: trả về rồi HUỶ trong CÙNG một giao dịch bị từ chối — tầng gói không
+--     làm thế (huỷ là một lời gọi riêng) —, trừ khi `SET CONSTRAINTS … IMMEDIATE` chạy phép kiểm giữa hai câu, lúc gói còn ở
+--     DRAFT: khi ấy gói đã thật sự đi qua DRAFT, và hàng được nhận. Hàng có TRƯỚC tệp này không được kiểm lại: một hàng lẻ đã
+--     commit vẫn chiếm UNIQUE của lần nộp ấy và vẫn thoả vế (4).
 -- (2) CHỈ-GHI-THÊM BẰNG TRIGGER, khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE` cấp câu lệnh, cả hai
 --     `ENABLE ALWAYS` — chặn cả chủ bảng lẫn superuser, kể cả dưới `session_replication_role = replica`. Bảng vào tập chỉ-ghi-thêm
 --     suy ra của H19.

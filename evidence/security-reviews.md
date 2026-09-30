@@ -17570,3 +17570,119 @@ hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bả
   lời khai đếm; `pnpm cap-so --dem` viết lại lời khai số ADR (121), `cap-so --kiem` sạch, S1.205 và ADR-122 giữ. `tsc`, `eslint`,
   `depcruise` sạch (477 mô-đun). Toàn bộ unit + T3 cục bộ trên cây hợp: 203 tệp, 3464 khẳng định, 3454 đạt, 1 bỏ qua, 9 đỏ — đúng
   chín ca cũ của máy đo. Ma trận sinh lại trùng từng byte bản đã hợp: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào).
+
+---
+
+# §S1.9101 — KHOẢN 260 ĐÓNG: HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; SỔ TRẢ VỀ CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG (K4a, K4b, H19) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401, 9402
+
+**Rổ và mảnh (ADR-043 ⒞):** CSDL, luồng S3 trả gói về DRAFT; không đổi `docs/PRODUCT.md` §11. Khoản 260 (rổ B, ghi ở §S1.198)
+đóng. Một migration (`9501_tra_ve_di_kem_canh`), ghim hardening, một ADR (ADR-9201).
+
+## 1. Việc gì
+
+`087` (3) giữ `rfq_tra_ve` chỉ-ghi-thêm BẰNG QUYỀN và chỉ buộc một chiều: cạnh về DRAFT đòi hàng, hàng không đòi cạnh. Lượt soi
+S1.198 đọc ra hai lỗ: một hàng chèn tay commit được, chiếm `UNIQUE (org, gói, lần nộp)` và thoả vế (4) cho một câu UPDATE thô về
+sau; chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại. Chủ dự án chốt ngày 2026-09-30: phép kiểm lúc COMMIT đòi gói đã ĐI
+QUA DRAFT ở lần nộp của hàng — một tập, khuôn `017` —, không chỉ đã rời `PENDING_APPROVAL`. Bất biến chạm: K4a, K4b, H19.
+
+## 2. Đo trước
+
+Trên cây `master` (`f6a1c1d`: hardening và migration của `master`, tệp đo của vòng này), khối (8) của
+`packages/rfq/src/lan-nop-da-xem.int.test.ts`: bốn ca đỏ — hàng lẻ commit được; hàng kèm cạnh mở gói commit được và gói MỞ; hàng lẻ
+kèm câu đổi `app.org_id` commit được; chủ bảng xoá được hàng trả về. Ca thứ năm — trả về rồi nộp lại trong cùng giao dịch — xanh: nó
+là đối chứng giữ bản vá không chặn oan, và đỏ dưới đột biến M1 (§5). Một phép đo tạm (không vào commit) đo tiếp các hệ quả trên cùng
+cây: sau hàng lẻ của PM2, lần trả về thật của PM bị 23505 (`rfq_tra_ve_mot_lan_moi_lan_nop`) và câu UPDATE thô về DRAFT ở giao dịch
+sau đi qua; gói mà người duyệt đã tự trả về bị từ chối mở (*0 chữ ký còn hiệu lực*), chủ bảng xoá hàng trả về thì gói MỞ.
+
+## 3. Thay đổi
+
+- `db/migrations/9501_tra_ve_di_kem_canh.sql`:
+  - hàm `rfq_tra_ve_phai_di_kem_canh()` và `CONSTRAINT TRIGGER` cùng tên — `AFTER INSERT`, `DEFERRABLE INITIALLY DEFERRED`,
+    `ENABLE ALWAYS`: nhận hàng khi gói đứng ở `DRAFT` với đúng lần nộp của hàng hoặc lần nộp đã tăng; gói không đọc được lúc COMMIT
+    thì từ chối; còn lại từ chối 23514 nêu lần nộp và trạng thái;
+  - `rfq_tra_ve_chi_ghi_them` (`BEFORE UPDATE OR DELETE`) và `rfq_tra_ve_chan_truncate` (`BEFORE TRUNCATE`), cả hai gọi
+    `bid_chi_ghi_them()` và `ENABLE ALWAYS`; `DROP TRIGGER IF EXISTS` trước mỗi `CREATE`, khuôn `047`.
+- `db/migrations/hardening.always.sql`: mục ghim mới `hàm + trigger rfq_tra_ve_phai_di_kem_canh`; hai trigger chỉ-ghi-thêm vào mục
+  `hàm + trigger bid_chi_ghi_them (047)` (câu sửa, hậu điều kiện, quyền); ba tên mới trong `TRIGGER_DUOC_PHEP`.
+- Test: khối (8) — năm ca — của `packages/rfq/src/lan-nop-da-xem.int.test.ts`; nhân chứng H19 của `rfq_tra_ve` trong
+  `db/hardening-suy-tu-tinh-chat.int.test.ts` (gói thứ hai; câu chèn hàng trả về có `hoanTat` trả gói về DRAFT; cạnh về DRAFT của
+  gói kia chèn hàng ở bước chuẩn bị của cùng giao dịch), `rfq_tra_ve` vào tập chỉ-ghi-thêm đo được, hàm mới vào danh sách không-canh;
+  sổ ghim hàm và ba danh sách migration viết cứng của `db/migrations.int.test.ts`; dòng miễn trừ của bộ đọc `ENABLE ALWAYS` ở
+  `tests/architecture/hardening-co-ly-do.test.ts` (constraint trigger thứ ba, cùng lý do với hai cái của `017` và `018`).
+- ADR-9201; STATE (hàng 260, rổ B, danh sách còn mở, cột mốc); hàng K4a, K4b, H19 của TEST-PLAN.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Gói không đọc được lúc COMMIT ⇒ từ chối**, không `RETURN NULL` như `017`: hàm chạy dưới quyền người gọi, RLS áp, nên một câu đổi
+  `app.org_id` giữa lần chèn và COMMIT làm gói biến mất — đo được (ca ⑷), và đột biến M3 mở lại đúng đường ấy.
+- **Chốt chỉ-ghi-thêm bằng `bid_chi_ghi_them`, ghim trong mục `047`** chứ không một mục riêng: test sổ ghim của `migrations.int` đòi
+  mọi trigger của một hàm đã ghim nằm trong MỤC của hàm ấy.
+- **`DROP TRIGGER IF EXISTS` trước mỗi `CREATE` trong migration**: trên cụm đang chạy, lượt sửa đầu của hardening dựng hai trigger
+  chỉ-ghi-thêm theo mục `047` trước khi tệp đánh số chạy.
+- **Một ADR mới**, không sửa ADR-117: như 258 và 259, khoản đóng bằng ADR riêng.
+
+## 5. Đo sau
+
+- Khối (8), năm ca xanh: hàng lẻ bị từ chối lúc COMMIT, không hàng nào ở lại, câu UPDATE thô về sau bị cạnh về DRAFT từ chối, lần
+  trả về thật của lần nộp ấy đi qua; hàng kèm cạnh mở gói hay huỷ gói bị từ chối, gói ở lại chờ duyệt, không kèm hàng thì mở được;
+  trả về rồi nộp lại trong cùng giao dịch đi qua; đổi `app.org_id` trước COMMIT bị từ chối; chủ bảng xoá, sửa, TRUNCATE — kể cả dưới
+  `replica` — bị từ chối, và chữ ký đã rút vẫn không đếm.
+- **Chín đột biến, cả chín đỏ.** Sáu ở ca đo: M1 bỏ vế *lần nộp đã tăng* (ca trả về rồi nộp lại); M2 chỉ đòi hết `PENDING_APPROVAL`
+  (ca kèm mở/huỷ gói); M3 không thấy gói thì bỏ qua (ca đổi `app.org_id`); M4 thân `RETURN NULL` sớm (ba ca); M5 trigger không hoãn
+  (năm ca — lần trả về hợp lệ cũng gãy); M6 chốt bỏ `DELETE` (ca chủ bảng). Ba bị hardening chặn ngay ở `migrate()`: M7 thiếu chốt
+  `TRUNCATE` (phán xét trạng thái vật lý của bảng chỉ-ghi-thêm suy ra), M8 chốt không `ENABLE ALWAYS` (phán xét trigger của hàm
+  canh), M9 `TRIGGER_DUOC_PHEP` không khai ba tên mới (mục trigger lạ gỡ chúng, hai mục ghim không dựng lại được, deploy dừng).
+- Lượt đầu trên các tệp chạm tới: tổng điều tra H19 (`hardening-suy-tu-tinh-chat.int`) 36/36 với nhân chứng mới,
+  `trigger-la-mac-dinh-dong.int` 12/12, `rls-coverage.int` 51/51; bốn ca đỏ vì sổ khai chưa theo kịp — dòng miễn trừ của bộ đọc
+  `ENABLE ALWAYS` (constraint trigger thứ ba) và ba danh sách migration viết cứng của `migrations.int` —, thêm dòng rồi xanh. Số cuối
+  ở §8.
+
+## 6. Lượt soi đối kháng
+
+Một lượt, trên `49930f2` … `0fd09e2` (thân migration và hardening không đổi giữa hai mốc; ba commit sau chỉ chạm danh sách test và
+tài liệu). Người kiểm đo trên Postgres 16 thật — dưới `app_api`, dưới chủ bảng và superuser — bằng tệp test tạm trong kho (đã xoá),
+và dựng một cụm từ `master` rồi `migrate()` bằng cây của vòng này. **Không đường nào để một hàng `rfq_tra_ve` commit dưới `app_api`
+mà gói chưa đi qua DRAFT.** Hai lỗ kề, ngoài khoản 260, thành khoản mới.
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| 1 | Chủ bảng làm chữ ký đã rút đếm lại bằng một câu `UPDATE rfq_approvals SET lan_nop_da_xem = 2` — bảng chỉ có ba trigger `BEFORE INSERT`: gói MỞ, hàng trả về không bị đụng. Cùng hậu quả với lỗ ⑵, khác bảng; tên ca ⑸, lời ⑵ ở đầu migration và Bối cảnh của ADR nói quá | Vừa | **Khoản 9401 mở** (rổ B); tên ca, đầu migration, ADR, TEST-PLAN thu về *xoá hàng trả về* |
+| 2 | Khuôn `017`: `rfq_khoa_phai_di_kem_lan_mo` bỏ qua khi không thấy gói. Dưới `app_api`, chèn cặp khoá cho gói chờ duyệt rồi đổi `app.org_id` (uuid lạ, rỗng) hay đặt `app.guest_session_id` trước COMMIT ⇒ COMMIT đi qua, cặp khoá mồ côi; `openRfq` sau đó 23505 — gói chỉ còn huỷ. Đối chứng không đổi GUC: 23514 | Vừa (ngoài 260) | **Khoản 9402 mở** (rổ B) |
+| 3 | Hàng lẻ commit trước lần nâng cấp giữ tác dụng: cụm `master` có hàng lẻ, `migrate()` bằng cây này ⇒ lần trả về thật vẫn 23505, câu UPDATE thô về DRAFT ở giao dịch sau vẫn đi qua | Nhẹ | Ghi hệ quả ở ADR-9201, đầu migration, §7 |
+| 4 | *Trả về rồi huỷ trong cùng giao dịch bị từ chối* không tuyệt đối: `SET CONSTRAINTS ALL IMMEDIATE` giữa hai câu ⇒ đi qua (gói `CANCELLED`, hàng ở lại). Gói đã thật sự đi qua DRAFT — không phải lỗ | Nhẹ | Sửa lời ở đầu migration, ADR-9201, §7 |
+| 5 | *Lần nộp chỉ tăng ở cạnh DRAFT→PENDING_APPROVAL* chỉ đúng dưới `app_api`: superuser nâng `lan_nop` cùng giao dịch với một hàng lẻ ⇒ COMMIT đi qua, gói chờ duyệt ở lần 2 mà chưa từng qua DRAFT, hàng giả không xoá được | Nhẹ | Sửa lời (*dưới `app_api`*); vào khoản 9401 |
+| 6 | Nâng cấp sạch từ `master` phát một WARNING *mục "hàm + trigger bid_chi_ghi_them (047)" ở trạng thái SAI TRƯỚC khi sửa*; lần hai im lặng. Bỏ hai câu `DROP TRIGGER IF EXISTS` ⇒ `trigger … already exists` — đúng như chú thích của migration | Ghi chú | Ghi ở ADR-9201 (hệ quả) và §7, để người vận hành không đọc nhầm thành dấu trôi |
+| 7 | `DISABLE TRIGGER ALL` rồi `migrate()`: năm trigger của dự án dựng lại, sáu trigger khoá ngoại nội bộ (`RI_ConstraintTrigger_c_*`) vẫn tắt | Ghi chú | Chung cho hardening, ngoài 260; tắt trigger nội bộ đòi superuser. Không mở khoản ở vòng này |
+| 8 | Mọi lần hardening tự chữa chỉ để lại WARNING qua `onThongBao`, và không mã sản xuất nào nối kênh ấy | Ghi chú | Chung, ngoài 260; chú thích `onThongBao` ở `packages/db/src/migrate.ts` đã nói mặc định là im lặng |
+
+**Người kiểm thử và không lách được** (dưới `app_api` nếu không ghi khác; mỗi lần: hàng không ở lại, gói giữ `PENDING_APPROVAL` lần
+1): hàng lẻ; ba dạng savepoint — về DRAFT trong savepoint cộng `SET CONSTRAINTS … IMMEDIATE` rồi `ROLLBACK TO`, lồng
+`RELEASE`/`ROLLBACK TO`, hàng chèn trong savepoint đã `RELEASE` — đều 23514 ở COMMIT; khối `DO … EXCEPTION`; hai gói trong một giao
+dịch (hàng A cộng lần trả về của B; một `INSERT … SELECT` hai hàng) và hai tổ chức trên một kết nối; đổi `app.org_id` (rỗng, lạ,
+`RESET`), đặt ba GUC khách, `row_security = off` (42501); `RESET ROLE` (lên superuser ở cụm test, thấy đúng trạng thái — vẫn 23514),
+`SET ROLE app_unseal` và `session_replication_role` (42501); `PREPARE TRANSACTION` (phép kiểm chạy trước lời từ chối PREPARE; với
+`max_prepared_transactions = 10` hàng lẻ vẫn 23514, lần trả về hợp lệ qua `COMMIT PREPARED`); `app_api` sửa `lan_nop` (42501); `COPY
+FROM` (RLS); `app_api` xoá, TRUNCATE, `ALTER TABLE` (42501); superuser dưới `replica` chèn hàng lẻ (23514); `TRUNCATE rfq_packages
+CASCADE` với 21 chốt khác đã tắt, khoá ngoại đổi sang `ON DELETE CASCADE` — chốt của `rfq_tra_ve` vẫn chặn; mười kiểu làm hỏng
+trigger (tắt, `ENABLE` thường, `ENABLE REPLICA`, `DROP`, thân `RETURN NULL`, `NOT DEFERRABLE`, trigger lạ, đổi tên…) rồi `migrate()`
+— dựng lại hay gỡ, kèm WARNING. Luồng hợp lệ không bị chặn oan: trả về cộng sửa hạng mục cộng nộp lại trong một giao dịch rồi duyệt,
+mở; ba lần trả về, hai lần nộp trong một giao dịch; hàng lẻ chưa commit đua với lần trả về thật — hàng lẻ 23514, lần thật đi qua,
+không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nhận `RfqError`; tổ chức chưa bật S3 không đổi hành vi. Nâng cấp từ cụm
+`master` có ba hàng (một hàng lẻ): `migrate()` qua, năm trigger `'A'`, số hàng giữ nguyên, lần hai im lặng.
+
+## 7. Giới hạn, nói ra
+
+- Trả về rồi HUỶ trong CÙNG một giao dịch bị từ chối — tầng gói không làm thế —, trừ khi `SET CONSTRAINTS … IMMEDIATE` chạy phép
+  kiểm lúc gói còn ở DRAFT (§6 hàng 4).
+- Hàng đã có trước vòng này không được kiểm lại: constraint trigger chỉ chạy cho hàng mới. Một hàng lẻ commit trước lần nâng cấp
+  giữ tác dụng (§6 hàng 3).
+- Chủ bảng còn làm chữ ký đã rút đếm lại bằng cách sửa `rfq_approvals`, và nâng `lan_nop` của gói ngoài cạnh nộp để một hàng lẻ được
+  nhận — khoản 9401.
+- Lần deploy đầu trên một cụm đang chạy phát một WARNING của mục `bid_chi_ghi_them (047)`: lượt sửa đầu dựng hai trigger
+  chỉ-ghi-thêm trên bảng đã có; lần sau im lặng.
+- Vai giữ quyền DDL trên bảng gỡ hay tắt được trigger; hardening dựng lại ở lần deploy kế, và mục trigger lạ (khoản 259) canh tên.
+- Khoản 9401, 9402 còn mở (§6).
+
+## 8. Số đo
+
+(điền)

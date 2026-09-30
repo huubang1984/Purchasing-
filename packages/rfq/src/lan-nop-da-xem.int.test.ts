@@ -943,7 +943,8 @@ describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp
 // Lượt soi S1.198 đọc ra: `087` chỉ buộc một chiều — cạnh về DRAFT đòi hàng, hàng không đòi cạnh —, và bảng chỉ-ghi-thêm bằng
 // QUYỀN. Một hàng chèn tay commit được, chiếm `UNIQUE (org, gói, lần nộp)` và thoả vế (4) cho một câu UPDATE thô về sau; chủ bảng
 // xoá một hàng thì chữ ký người trả đã rút đếm lại. Nay một constraint trigger hoãn tới COMMIT đòi gói đã ĐI QUA DRAFT ở lần nộp
-// của hàng (chủ dự án chốt: một tập, khuôn `017`), và `bid_chi_ghi_them` chặn sửa, xoá, TRUNCATE cả với chủ bảng.
+// của hàng (chủ dự án chốt: một tập, khuôn `017`), và `bid_chi_ghi_them` chặn sửa, xoá, TRUNCATE cả với chủ bảng. Đầu vào khác
+// của cùng phép đếm — sửa `rfq_approvals`, nâng `lan_nop` của gói — chủ bảng còn chạm được (khoản 9401): khối này không canh chúng.
 // =============================================================================================
 const loiKhongDiKemCanh = (lanNop: number, trangThai: string): string =>
   `Hang rfq_tra_ve cua lan nop ${lanNop} phai di kem canh ve DRAFT cua chinh lan nop ay trong cung giao dich; goi dang o ${trangThai} (K4a)`;
@@ -1020,7 +1021,7 @@ describe("S1.9101 — khoản 260: hàng trả về đi kèm cạnh về DRAFT; 
     expect(await hangTraVe(rfqId)).toEqual([]);
   });
 
-  it("[INV-K4b] [INV-H19] chủ bảng không xoá, không sửa, không TRUNCATE được hàng trả về — kể cả dưới `session_replication_role = replica` —, nên chữ ký người trả đã rút KHÔNG đếm lại", async () => {
+  it("[INV-K4b] [INV-H19] chủ bảng không xoá, không sửa, không TRUNCATE được hàng trả về — kể cả dưới `session_replication_role = replica` —, nên xoá hàng trả về không còn làm chữ ký đã rút đếm lại", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
