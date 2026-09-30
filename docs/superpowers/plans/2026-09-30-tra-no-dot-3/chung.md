@@ -69,6 +69,17 @@ tích hợp). Chín mục, đúng thứ tự, mục không có gì thì ghi "Kh�
 8. **Số đo** — lệnh và kết quả (ca đo trước đỏ → sau xanh; đột biến; cổng; `pnpm t0`; `pnpm test`), kể cả ca đỏ vì bàn giao chưa áp.
 9. **Câu hỏi cho chủ dự án / người tích hợp** — điều lô không tự quyết (mục 2, mục 6 của đề bài riêng).
 
+## 5b. Luật mới từ lượt A (áp cho lượt B)
+
+- `stop()` của `startPostgres` ném khi số lần `release` mang `SESSION_STATE_LEFT` lệch số khai (mặc định 0 — §S1.9130): một test CỐ Ý
+  để sót trạng thái phiên khai `soLanSessionStateLeft`; không tắt vế.
+- Mã chốt `CONTROL_DENIED` hay mã lý do `RFQ_STATE_DENIED` MỚI phải có tên ở `DANH_MUC_VE_CONG` (`packages/identity/src/rbac.ts`) —
+  vế ⑷ của `danh-muc-tu-choi.test.ts` đọc tập khoá ở nguồn (§S1.9125).
+- `kind` outbox là union `KindOutbox` (`packages/outbox/src/enqueue.ts`), lời gọi `enqueueJob` sản xuất viết `kind` literal; đúng một
+  `new JobRunner(…)` mỗi tệp và gương `apps/api/src/test-services.ts` khớp `composition.ts` (§S1.9115).
+- Đổi hình dạng hằng `VAI_KET_NOI_UNG_DUNG` của hardening (mệnh đề `g.rolname IN (…)`) làm vế ⓷ của
+  `db/khoa-ghi-so-nguoi-giu.int.test.ts` ném có tên — sửa `cayTrongHardening` cùng commit (§S1.9130).
+
 ## 6. Khi bị cắt giữa lô
 
 Hạn mức API (HTTP 429) từng cắt năm agent ở đợt 2. Người tích hợp phóng lại TIẾP NỐI trên chính worktree: đọc `git status` /
