@@ -17,7 +17,7 @@
 // ==============================================================================================
 
 import {
-  baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, loiLyDo, nhanLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
+  baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, loiLyDo, nhanAnhXa, nhanLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
 } from "/lib/tao-thau.js";
 import { docNhomHang, hienDatNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 
@@ -396,14 +396,25 @@ $("nut-nhom-hang").addEventListener("click", async () => {
 // ---------------------------------------------------------------------------------------------
 
 async function napHangMuc() {
-  const r = await goi("GET", `/rfqs/${phien.rfqId}/items`);
+  const id = phien.rfqId;
+  const r = await goi("GET", `/rfqs/${id}/items`);
+  // [S1.9101 / S4.3b] Trạng thái ánh xạ từng dòng — chỉ khi gói đã rời DRAFT (trước đó chưa có lượt chuẩn hoá nào). Đọc hỏng thì
+  // cột ấy để `—`: bảng hạng mục không phụ thuộc nó.
+  let anhXa = new Map();
+  if (luong.trangThaiGoi !== "" && luong.trangThaiGoi !== "DRAFT") {
+    const m = await goi("GET", `/rfqs/${id}/mappings`);
+    if (m.status === 200 && Array.isArray(m.body?.dong)) anhXa = new Map(m.body.dong.map((d) => [d.lineNo, d]));
+  }
+  // Câu trả chỉ được vẽ khi nó là của gói ĐANG mở trên màn — khuôn `napNganSach` (lượt soi S1.200 F4).
+  if (id !== phien.rfqId) return;
   const tb = $("bang-hm").querySelector("tbody");
   tb.replaceChildren();
   const ds = Array.isArray(r.body?.items) ? r.body.items : [];
   phien = { ...phien, soHangMuc: ds.length };
   for (const hm of ds) {
     const tr = document.createElement("tr");
-    for (const [v, lop] of [[hm.lineNo, "so"], [hm.description, ""], [hm.quantity, "so"], [hm.unit, ""]]) {
+    const ax = anhXa.get(hm.lineNo);
+    for (const [v, lop] of [[hm.lineNo, "so"], [hm.description, ""], [hm.quantity, "so"], [hm.unit, ""], [ax === undefined ? null : nhanAnhXa(ax), ""]]) {
       const td = document.createElement("td");
       td.textContent = v === null || v === undefined ? "—" : String(v);
       if (lop !== "") td.className = lop;

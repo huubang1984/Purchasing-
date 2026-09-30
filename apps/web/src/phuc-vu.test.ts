@@ -209,7 +209,8 @@ describe("bề mặt tệp", () => {
       "tao-thau": ["b2", "b3", "b4", "b5"],
       "chinh-sach": ["b2", "b3"],
       // [S1.199 / S4.2b] Bước 3 (tạo hàng chuẩn) mở vì `GET /items` giả trả `choGhi`; bước 4 chỉ mở khi bấm Xem một hàng.
-      "du-lieu": ["b2", "b3", "b5"],
+      // [S1.9101 / S4.3b] Bước 6 (hàng đợi ánh xạ) mở cho mọi người mua đã vào.
+      "du-lieu": ["b2", "b3", "b5", "b6"],
       // [S1.201 / S3.6a] Màn nhóm hàng — cùng khuôn đăng nhập và phiên với ba trang người mua kia.
       "nhom-hang": ["b2", "b3"],
     };
@@ -219,7 +220,8 @@ describe("bề mặt tệp", () => {
       "tao-thau": ["GET /policy/versions"],
       "nhom-hang": ["GET /categories"],
       // [S1.199 / S4.2b] Màn dữ liệu nền nạp danh sách hàng chuẩn rồi danh mục đơn vị.
-      "du-lieu": ["GET /items", "GET /uom"],
+      // [S1.9101 / S4.3b] …rồi hàng đợi ánh xạ.
+      "du-lieu": ["GET /items", "GET /uom", "GET /mapping-queue"],
     };
     const ORG = "11111111-2222-4333-8444-555555555555";
     const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
@@ -349,6 +351,7 @@ describe("bề mặt tệp", () => {
           if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
           if (lenh === "GET /items" && trangThai.cookie !== null) return { status: 200, body: { hangChuan: [], conNua: false, choGhi: true, soNguoiQuanLy: 1 } };
           if (lenh === "GET /uom" && trangThai.cookie !== null) return { status: 200, body: { donVi: [], biDanhChung: [], biDanhToChuc: [] } };
+          if (lenh === "GET /mapping-queue" && trangThai.cookie !== null) return { status: 200, body: { dong: [], conNua: false } };
           if (lenh === "GET /categories" && trangThai.cookie !== null) return { status: 200, body: { nhomHang: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
           if (lenh === "POST /guest/logout") {
@@ -1161,6 +1164,19 @@ describe("bề mặt tệp", () => {
       return { p, dongMoi };
     };
 
+    it("[S1.9101 / S4.3b] tao-thau: gói đã nộp ⇒ đọc trạng thái ánh xạ và vẽ cột hàng chuẩn; gói còn soạn ⇒ không đọc", async () => {
+      const MOT_DONG = (l: string) =>
+        l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [{ lineNo: 1, description: "Thép D10", quantity: "10", unit: "kg" }] } })
+        : l === "GET /rfqs/r-1/mappings" ? Promise.resolve({ status: 200, body: { dong: [{ lineNo: 1, trangThai: "TU_DONG", hangChuan: { id: "h-10", ma: "THEP-D10" }, lyDo: null }] } })
+        : undefined;
+      const nop = await moTaoThau(false, "PENDING_APPROVAL", MOT_DONG);
+      expect(nop.p.trangThai.goi).toContain("GET /rfqs/r-1/mappings");
+      expect(nop.p.el("bang-hm").querySelector("tbody").con[0]?.con.map((o) => o.textContent)).toEqual(["1", "Thép D10", "10", "kg", "Tự động — THEP-D10"]);
+      const soan = await moTaoThau(false, "DRAFT", MOT_DONG);
+      expect(soan.p.trangThai.goi).not.toContain("GET /rfqs/r-1/mappings");
+      expect(soan.p.el("bang-hm").querySelector("tbody").con[0]?.con.at(-1)?.textContent).toBe("—");
+    });
+
     // ~~lớp `moi-truoc`~~ [S1.193 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
     // hình đi theo thứ tự DOM.
     const THU_TU_MVP1 = ["b1", "b2", "b3", "b4", "b5"];
@@ -1340,6 +1356,76 @@ describe("bề mặt tệp", () => {
       await p.bam("nut-bi-danh-dv");
       expect(p.el("loi5").textContent).toMatch(/Nhập cả bí danh và đơn vị/u);
       expect(p.el("ok5").hidden, "câu thành công của lần trước không nằm cạnh câu lỗi").toBe(true);
+    });
+
+    // [S1.9101 / S4.3b] Bước 6 — hàng đợi ánh xạ.
+    const HANG_DOI = {
+      dong: [
+        {
+          rfqId: "r-9", tieuDe: "Mua thep", lineNo: 2, moTa: "Thép vằn D12", donVi: "kg", soLuong: "10.0000",
+          goiY: { ketQua: "GOI_Y", doTinCay: "0.9400", phienBan: 1, ungVien: [{ hangChuanId: "h-12", ma: "THEP-D12", diem: 0.94 }], tacGia: "Tran Nguoi Mua" },
+        },
+      ],
+      conNua: false,
+    };
+    const HANG_D12 = { hangChuan: [{ id: "h-12", ma: "THEP-D12", ten: "Thép vằn D12", donViGoc: "kg", trangThai: "DANG_DUNG" }], conNua: false, choGhi: true, soNguoiQuanLy: 1 };
+    const nutXuLy = (p: Awaited<ReturnType<typeof moDuLieu>>) => p.el("bang-hang-doi").querySelector("tbody").con[0]?.con.at(-1)?.con[0];
+
+    it("[S1.9101 / S4.3b] du-lieu: hàng đợi — «Xử lý» chỉ khi ghi được; duyệt gửi ứng viên đầu, bí danh và lý do; bấm đúp một lời gọi; xong ⇒ khối đóng, hàng đợi đọc lại", async () => {
+      const chiXem = await moDuLieu({ ...HANG_D12, choGhi: false, soNguoiQuanLy: 1 }, (l) => (l === "GET /mapping-queue" ? Promise.resolve({ status: 200, body: HANG_DOI }) : undefined));
+      expect(chiXem.el("bang-hang-doi").querySelector("tbody").con).toHaveLength(1);
+      expect(nutXuLy(chiXem), "người chỉ xem không có nút xử lý").toBeUndefined();
+
+      let tha: () => void = () => undefined;
+      const p = await moDuLieu(HANG_D12, (l) => {
+        if (l === "GET /mapping-queue") return Promise.resolve({ status: 200, body: HANG_DOI });
+        if (l === "POST /rfqs/r-9/items/2/mapping") return new Promise((r) => { tha = () => { r({ status: 201, body: { seq: "7" } }); }; });
+        return undefined;
+      });
+      await nutXuLy(p)?.nghe["click"]?.[0]?.();
+      expect(p.el("khoi-xu-ly").hidden).toBe(false);
+      expect(p.el("xl-hang").con.map((x) => x.textContent)).toEqual(["THEP-D12 — Thép vằn D12 (94%)"]);
+      p.el("xl-hang").value = "h-12";
+      p.el("xl-ly-do").value = "  ";
+      const bam = p.el("nut-duyet").nghe["click"]?.[0];
+      const lan1 = bam?.();
+      const lan2 = bam?.();
+      tha();
+      await Promise.all([lan1, lan2]);
+      await cho();
+      const gui = p.trangThai.than.filter((t) => t.lenh === "POST /rfqs/r-9/items/2/mapping");
+      expect(gui).toEqual([{ lenh: "POST /rfqs/r-9/items/2/mapping", than: { hangChuanId: "h-12", lyDo: null, taoBiDanh: true } }]);
+      expect(p.el("khoi-xu-ly").hidden).toBe(true);
+      expect(p.el("ok6").textContent).toMatch(/Đã duyệt dòng 2/u);
+      expect(p.trangThai.goi.filter((g) => g === "GET /mapping-queue")).toHaveLength(2);
+    });
+
+    it("[S1.9101 / S4.3b] du-lieu: máy chủ từ chối ⇒ in câu của máy chủ, khối giữ dòng; bác gửi hàng chuẩn null kèm lý do; mã sai hình dạng ⇒ không gọi", async () => {
+      let lan = 0;
+      const p = await moDuLieu(HANG_D12, (l) => {
+        if (l === "GET /mapping-queue") return Promise.resolve({ status: 200, body: HANG_DOI });
+        if (l === "POST /rfqs/r-9/items/2/mapping") {
+          lan += 1;
+          return Promise.resolve(lan === 1 ? { status: 422, body: { error: "Bác một dòng đã từng có gợi ý cần lý do (CAN_LY_DO)" } } : { status: 201, body: { seq: "8" } });
+        }
+        return undefined;
+      });
+      await nutXuLy(p)?.nghe["click"]?.[0]?.();
+      await p.bam("nut-bac");
+      expect(p.el("loi6").textContent).toMatch(/CAN_LY_DO/u);
+      expect(p.el("khoi-xu-ly").hidden).toBe(false);
+      p.el("xl-ly-do").value = "hang nhap khau";
+      await p.bam("nut-bac");
+      expect(p.trangThai.than.filter((t) => t.lenh === "POST /rfqs/r-9/items/2/mapping").map((t) => t.than)).toEqual([
+        { hangChuanId: null, lyDo: null },
+        { hangChuanId: null, lyDo: "hang nhap khau" },
+      ]);
+      expect(p.el("ok6").textContent).toMatch(/không có hàng chuẩn tương ứng/u);
+      await nutXuLy(p)?.nghe["click"]?.[0]?.();
+      p.el("xl-ma").value = "gach-the";
+      await p.bam("nut-tao-duyet");
+      expect(p.el("loi6").textContent).toMatch(/Mã viết hoa/u);
+      expect(p.trangThai.goi).not.toContain("POST /rfqs/r-9/items/2/mapping/new-item");
     });
 
     it("[S1.199 / S4.2b · lượt đi thử T4] du-lieu: mở chi tiết hỏng ⇒ bước 4 không giữ hàng trước, nút ghi không ghi vào hàng trước", async () => {

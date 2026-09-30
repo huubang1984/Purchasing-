@@ -7,7 +7,20 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, maHopLe, moTaQuyDoi, vietThuocTinh } from "./du-lieu.js";
+import {
+  cauVaiQuanLy,
+  docThuocTinh,
+  docTrongYeu,
+  heSoHopLe,
+  locHangChuan,
+  locHangDoi,
+  luaChonHangChuan,
+  maHopLe,
+  moTaQuyDoi,
+  nhanGoiY,
+  phanTram,
+  vietThuocTinh,
+} from "./du-lieu.js";
 
 const nguon = (duong: string): string => readFileSync(new URL(`../../../${duong}`, import.meta.url), "utf8");
 
@@ -112,5 +125,54 @@ describe("[S1.199 / S4.2b] câu §8.10 của spec S4", () => {
     expect(daCo).toContain("2 người");
     expect(daCo).toContain("chỉ xem");
     expect(daCo).not.toContain("NGƯỜI MỚI");
+  });
+});
+
+describe("[S1.9101 / S4.3b] hàng đợi ánh xạ", () => {
+  const GOI_Y = {
+    ketQua: "GOI_Y",
+    doTinCay: "0.9400",
+    ungVien: [
+      { hangChuanId: "h-12", ma: "THEP-D12", diem: 0.94 },
+      { hangChuanId: "h-cu", ma: "THEP-CU", diem: 0.5 },
+    ],
+  };
+  const HANG = [
+    { id: "h-10", ma: "THEP-D10", ten: "Thép vằn D10", trangThai: "DANG_DUNG" },
+    { id: "h-12", ma: "THEP-D12", ten: "Thép vằn D12", trangThai: "DANG_DUNG" },
+    { id: "h-ngung", ma: "THEP-NGUNG", ten: "Thép ngừng", trangThai: "NGUNG_DUNG" },
+  ];
+
+  it("phần trăm: làm tròn; giá trị ngoài [0, 1] hay không phải số ⇒ —", () => {
+    expect(phanTram("0.9400")).toBe("94%");
+    expect(phanTram(0.795)).toBe("80%");
+    expect(phanTram("1")).toBe("100%");
+    expect(phanTram("abc")).toBe("—");
+    expect(phanTram(1.2)).toBe("—");
+  });
+
+  it("cột gợi ý: kết quả, độ tin cậy, ứng viên đầu; không ứng viên; chưa chuẩn hoá", () => {
+    expect(nhanGoiY(GOI_Y)).toBe("Gợi ý 94% — THEP-D12");
+    expect(nhanGoiY({ ketQua: "CAN_DUYET", doTinCay: "0", ungVien: [] })).toBe("Cần duyệt — không có ứng viên");
+    expect(nhanGoiY(null)).toContain("Chưa chuẩn hoá");
+  });
+
+  it("ô chọn: ứng viên trước theo thứ tự của lõi, rồi hàng đang dùng còn lại; hàng ngừng dùng không vào; ứng viên lạ vẫn liệt", () => {
+    expect(luaChonHangChuan(GOI_Y, HANG)).toEqual([
+      { id: "h-12", nhan: "THEP-D12 — Thép vằn D12 (94%)" },
+      { id: "h-cu", nhan: "THEP-CU —  (50%)" },
+      { id: "h-10", nhan: "THEP-D10 — Thép vằn D10" },
+    ]);
+    expect(luaChonHangChuan(null, HANG).map((x) => x.id)).toEqual(["h-10", "h-12"]);
+  });
+
+  it("lọc hàng đợi theo mô tả hoặc tên gói, bỏ dấu", () => {
+    const DS = [
+      { tieuDe: "Mua thep quy IV", moTa: "Thép vằn D12" },
+      { tieuDe: "Xay kho", moTa: "Gạch thẻ đỏ" },
+    ];
+    expect(locHangDoi(DS, "gach").map((d) => d.moTa)).toEqual(["Gạch thẻ đỏ"]);
+    expect(locHangDoi(DS, "QUY IV").map((d) => d.moTa)).toEqual(["Thép vằn D12"]);
+    expect(locHangDoi(DS, "")).toHaveLength(2);
   });
 });

@@ -147,3 +147,23 @@ export function hangNganSach(budget: unknown): readonly (readonly [string, strin
     ["Cần hai người duyệt", b.requiresDualApproval === true ? "có" : b.requiresDualApproval === false ? "không" : null],
   ];
 }
+
+/**
+ * [S1.9101 / S4.3b] Cột *Hàng chuẩn* của bảng hạng mục — trạng thái ánh xạ của dòng (`GET /rfqs/:rfqId/mappings`) nói bằng lời.
+ * Người tạo gói chỉ ĐỌC: người ghi ánh xạ là người quản lý dữ liệu ngoài tập loại trừ của gói (L3). Trạng thái lạ ⇒ `—`.
+ */
+export function nhanAnhXa(dong: { readonly trangThai: unknown; readonly hangChuan: { readonly ma: string } | null; readonly lyDo: string | null }): string {
+  switch (dong.trangThai) {
+    case "TU_DONG":
+      return dong.hangChuan === null ? "—" : `Tự động — ${dong.hangChuan.ma}${dong.lyDo === "CHUAN_HOA_HOI_TO" ? " (chuẩn hoá hồi tố)" : ""}`;
+    case "NGUOI_DUYET":
+      if (dong.hangChuan !== null) return `Đã duyệt — ${dong.hangChuan.ma}`;
+      return dong.lyDo === null ? "Không có hàng chuẩn tương ứng" : `Không có hàng chuẩn tương ứng — ${dong.lyDo}`;
+    case "CHO_DUYET":
+      return "Chờ người quản lý dữ liệu duyệt";
+    case "CHUA_CHUAN_HOA":
+      return "Chưa chuẩn hoá";
+    default:
+      return "—";
+  }
+}
