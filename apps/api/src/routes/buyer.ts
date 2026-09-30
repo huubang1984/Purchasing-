@@ -574,9 +574,15 @@ const ghi: readonly BuyerWriteRoute[] = [
   // [S1.106 / S2.4] CHẤM — cạnh `UNSEALED->EVALUATING` của `011`, và nó là route ghi DUY NHẤT mang
   // `evaluation.perform`.
   //
-  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên SÁU vai giữ
-  // (chỉ `DIRECTOR` không), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
+  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.9132]** BẢY vai giữ
+  // (chỉ `DIRECTOR` không — **[S1.9132]** và `DATA_STEWARD` của `083`), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
   // chặn được "ai trong tổ chức". Ghi ra ở đúng chỗ người đọc mã route sẽ tìm.
+  //
+  // [S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Cổng này ĐƯỢC GIỮ LÀ LỚP NÔNG, ma trận `005` KHÔNG thu hẹp. Lớp
+  // thật của phân tách nhiệm vụ trên đường chấm là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói (ADR-051, trigger
+  // `award_kiem_de_xuat`), không phải danh sách vai. Năm vai giữ mã này được GHIM ở
+  // `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»): ai đổi ma trận thì ca ấy đỏ và phải đọc lại đoạn này
+  // cùng chú thích cạnh `requirePermission` trong `taoLuotDanhGia` (`packages/danh-gia/src/luot-danh-gia.ts`).
   //
   // `taoLuotDanhGia` tự gọi `requirePermission` lần nữa với CÙNG mã — khoản nợ 31/33, lớp của gói
   // chứ không của route; xem khối đầu tệp.
