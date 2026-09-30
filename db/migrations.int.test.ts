@@ -1885,6 +1885,41 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
+  // [S1.204 / S4.3a] Hai hàm trợ giúp của ánh xạ hạng mục — không `RETURNS trigger`. Một thân băm hằng số làm ánh xạ cũ sống qua
+  // lần sửa dòng; một thân `rfq_tap_loai_tru` rỗng cho người tạo gói tự ghi ánh xạ `NGUOI_DUYET` (L3). Khuôn đọc thêm
+  // `RETURNS SETOF …` vì tập loại trừ trả nhiều hàng.
+  const HAM_ANH_XA: readonly { ham: string; chuKy: string; migration: string }[] = [
+    { ham: "rfq_hang_muc_bam", chuKy: "uuid, uuid, integer", migration: "089_anh_xa_hang_muc.sql" },
+    { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "089_anh_xa_hang_muc.sql" },
+  ];
+
+  it("[S1.204] hai hàm trợ giúp của ánh xạ hạng mục: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+    const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
+    const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
+    const hardening = docFile("hardening.always.sql");
+    const chuanHoa = (s: string): string => s.replace(/\s+/g, " ").trim();
+    const tenFile = readdirSync(thuMuc)
+      .filter((f) => /^\d{3,4}_.*\.sql$/u.test(f))
+      .sort();
+    for (const { ham, chuKy, migration } of HAM_ANH_XA) {
+      const re = new RegExp(
+        String.raw`CREATE OR REPLACE FUNCTION public\.${ham}\([^)]*\) RETURNS (?:SETOF \w+|\w+)\s+LANGUAGE sql[^$]*?AS \$ham\$([\s\S]*?)\$ham\$`,
+        "g",
+      );
+      const dinhNghiaO = tenFile.filter((f) => [...docFile(f).matchAll(re)].length > 0);
+      expect(dinhNghiaO.at(-1), `${ham}: hardening ghim ${migration} nhưng bản CUỐI ở ${dinhNghiaO.at(-1)}`).toBe(migration);
+      const thanMig = [...docFile(migration).matchAll(re)];
+      expect(thanMig, `${ham} trong ${migration}`).toHaveLength(1);
+      const thanHard = [...hardening.matchAll(re)];
+      expect(thanHard, `${ham} trong hardening`).toHaveLength(1);
+      const chuan = chuanHoa(thanMig[0]![1]!);
+      expect(chuanHoa(thanHard[0]![1]!), ham).toBe(chuan);
+      const viTri = hardening.indexOf(`$q$định nghĩa hàm ${ham}(${chuKy}) (`);
+      expect(viTri, `mục hardening cho ${ham}`).toBeGreaterThan(0);
+      expect(/\$than\$([\s\S]*?)\$than\$/.exec(hardening.slice(viTri))?.[1], ham).toBe(chuan);
+    }
+  });
+
   // [S1.192 / S4.1 / L4] Ba hàm của đơn vị đo — không `RETURNS trigger`, nên cùng khuôn với năm hàm trợ giúp ở trên. Một thân
   // `chuoi_sach` khác làm bí danh đã lưu thôi khớp; một thân `quy_doi_don_vi` có nhánh `ELSE 1` là đúng lỗ L4 cấm. Khuôn đọc
   // `RETURNS TABLE (…)` vì `quy_doi_don_vi` trả hai cột.
@@ -1962,6 +1997,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_invitation_tokens_kiem_danh_tinh",
         "rfq_invitations_kiem_danh_tinh",
         "rfq_invitations_kiem_nguoi_thu_hoi",
+        // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — người ghi dẫn xuất từ phiên.
+        "rfq_item_goi_y_kiem_danh_tinh",
+        "rfq_item_mappings_kiem_danh_tinh",
         "rfq_items_kiem_danh_tinh",
         "rfq_key_material_kiem_danh_tinh",
         "rfq_key_material_kiem_nguoi_thu_hoi",
@@ -2006,7 +2044,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_item_goi_y_chan_truncate", "rfq_item_goi_y_chi_ghi_them", "rfq_item_mappings_chan_truncate", "rfq_item_mappings_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -2132,6 +2170,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_dat_thu_tu",
         "item_aliases_dat_thu_tu",
         "item_uom_conversions_dat_thu_tu",
+        // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — cùng hàm khuôn, thân không đổi.
+        "rfq_item_goi_y_dat_thu_tu",
+        "rfq_item_mappings_dat_thu_tu",
         "uom_aliases_dat_thu_tu",
       ],
     },
@@ -2169,6 +2210,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "tin_hieu_kiem_ghi", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signals_tinh"] },
     { ham: "tin_hieu_kiem_ghi_nhan", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
     { ham: "rfq_kiem_tin_hieu_khi_mo", migration: "088_tin_hieu_chia_nho.sql", trigger: ["rfq_packages_kiem_tin_hieu_khi_mo"] },
+    // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ (L2, L3 vế hành vi, L13, §2.5 ⒁). Một thân `RETURN NEW` sớm cho gợi ý trên gói
+    // còn soạn và chuẩn hoá hồi tố không `item.manage`; cho `TU_DONG` không bí danh, `NGUOI_DUYET` của chính người tạo gói, và ánh
+    // xạ không lý do trên gói đã có bản rõ.
+    { ham: "goi_y_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_goi_y_bat_bien"] },
+    { ham: "anh_xa_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_mappings_bat_bien"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3819,6 +3865,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
+        "089_anh_xa_hang_muc.sql",
         "091_app_unseal_doc_thu_hoi_loi_moi.sql",
         "092_email_ascii.sql",
         "093_award_luot_cham_moi_nhat.sql",
@@ -8318,6 +8365,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
+        "089_anh_xa_hang_muc.sql",
         "091_app_unseal_doc_thu_hoi_loi_moi.sql",
         "092_email_ascii.sql",
         "093_award_luot_cham_moi_nhat.sql",
@@ -8629,6 +8677,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
+        "089_anh_xa_hang_muc.sql",
         "091_app_unseal_doc_thu_hoi_loi_moi.sql",
         "092_email_ascii.sql",
         "093_award_luot_cham_moi_nhat.sql",

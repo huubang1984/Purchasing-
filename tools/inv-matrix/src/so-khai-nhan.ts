@@ -434,14 +434,24 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
   // [S1.197 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
   // ghi CSDL (L3); `ma-tran-quyen` khoá ba bản của danh sách loại trừ và cặp vai xung đột (L3, T1).
-  L1: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
+  // [S1.204 / S4.3a] `anh-xa` đo khuôn nền của hai bảng mới (L1), luật `TU_DONG` (L2), vế hành vi của L3 và L13.
+  L1: [
+    "packages/du-lieu-nen/src/anh-xa.int.test.ts",
+    "packages/du-lieu-nen/src/don-vi.int.test.ts",
+    "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
+  ],
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
   L3: [
     "apps/api/src/du-lieu.int.test.ts",
+    "packages/du-lieu-nen/src/anh-xa.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
     "packages/identity/src/ma-tran-quyen.test.ts",
   ],
+  // L2, L13 — [S1.204 / S4.3a] ánh xạ hạng mục. L2: bảng ca của lõi chuẩn hoá (T1) và luật `TU_DONG` ở trigger (T3). L13: lý do
+  // trên gói đã có bản rõ, cả hai chiều đua với giao dịch mở thầu.
+  L2: ["packages/du-lieu-nen/src/anh-xa.int.test.ts", "packages/du-lieu-nen/src/chuan-hoa.test.ts"],
+  L13: ["packages/du-lieu-nen/src/anh-xa.int.test.ts"],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.

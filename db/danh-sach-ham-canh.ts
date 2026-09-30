@@ -74,6 +74,10 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",
   "public.nhom_hang_kiem_nguoi_tao",
+  // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ hạng mục — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN. Chỉ gắn INSERT ⇒ không thể là
+  // hàm canh; một hàng HỢP LỆ đi qua mỗi hàm — hai câu chèn cuối `dungKichBan()`.
+  "public.anh_xa_kiem_luat",
+  "public.goi_y_kiem_luat",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",

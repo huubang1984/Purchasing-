@@ -503,6 +503,9 @@ describe("hình dạng file migration", () => {
       "rfq_evaluations",
       "rfq_invitation_tokens",
       "rfq_invitations",
+      // [S1.204 / S4.3a / `089_anh_xa_hang_muc`] Gợi ý và ánh xạ hạng mục — khuôn nền L1, policy khách ĐÓNG HẲN.
+      "rfq_item_goi_y",
+      "rfq_item_mappings",
       "rfq_items",
       "rfq_key_material",
       "rfq_packages",

@@ -94,6 +94,21 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   // [S1.201 / S3.6a] Mã và tên nhóm hàng — hình dạng dữ liệu. `loai` của lần đổi trạng thái nằm ở tập an ninh: bỏ nó thì một
   // hàng lạ làm `nhom_hang_con_dung` coi nhóm đã ngừng dùng là còn dùng.
   procurement_categories_ma_check: "DINH_DANG",
+  // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục: hình dạng. Luật chịu lực (L2, L3, L13, §2.5 ⒁) nằm ở trigger `…_bat_bien`, không ở
+  // các ràng buộc này — `tu_dong_co_hang` gỡ đi thì trigger vẫn từ chối `TU_DONG` không hàng chuẩn (bí danh luôn trỏ một hàng), và
+  // `ket_qua`/`nguon` lạ rơi vào nhánh chặt hơn của trigger, không nhánh lỏng hơn.
+  rfq_item_goi_y_dau_vao_la_doi_tuong: "JSON",
+  rfq_item_goi_y_do_tin_cay_mien: "SO",
+  rfq_item_goi_y_ket_qua_mien: "MIEN",
+  rfq_item_goi_y_line_no_duong: "SO",
+  rfq_item_goi_y_phien_ban_duong: "SO",
+  rfq_item_mappings_dau_vao_la_doi_tuong: "JSON",
+  rfq_item_mappings_do_tin_cay_mien: "SO",
+  rfq_item_mappings_line_no_duong: "SO",
+  rfq_item_mappings_ly_do_hinh_dang: "DO_DAI",
+  rfq_item_mappings_nguon_mien: "MIEN",
+  rfq_item_mappings_phien_ban_duong: "SO",
+  rfq_item_mappings_tu_dong_co_hang: "MIEN",
   procurement_categories_ten_check: "DO_DAI",
   outbox_jobs_status_check: "MIEN",
   rfq_bafo_rounds_dong_sau_khi_mo: "MOC",
