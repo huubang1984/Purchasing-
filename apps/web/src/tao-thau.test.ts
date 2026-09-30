@@ -216,6 +216,8 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
     expect(khungTinHieu(than({ canGhiNhan: false }), "g3").choGhiNhan).toBe(false);
     // Thân lạ ở chỗ người xem ⇒ không mời bấm, không bịa câu.
     expect([khungTinHieu(than({ nguoiXem: null }), "g3").choGhiNhan, khungTinHieu(than({ nguoiXem: null }), "g3").khongDuoc]).toEqual([false, null]);
+    // Không gì cần ghi nhận ⇒ không câu «vì sao không», kể cả khi thân còn mang một lý do.
+    expect(khungTinHieu(than({ canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo } }), "g3").khongDuoc).toBeNull();
   });
 
   it("§8.10: không ai trong tổ chức ghi nhận được ⇒ tóm tắt nói tổ chức kẹt; một người thì không", () => {
@@ -239,6 +241,19 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
       "Chị Duyệt ghi nhận: «Ba cong trinh».",
     ]);
     expect([k.choGhiNhan, k.khongDuoc]).toEqual([false, null]);
+  });
+
+  it("gói không còn chờ mà tập gói đã đổi sau lần ghi nhận: lần ghi nhận trên tập CŨ không được nói là ghi nhận tập hiện tại", () => {
+    const k = khungTinHieu(
+      than({
+        canGhiNhan: false,
+        nguoiXem: { ghiNhanDuoc: false, lyDo: null },
+        soNguoiGhiNhanDuoc: null,
+        tinHieu: [{ ...hangLuuLucNop([{ id: "a1", lyDo: "cu", nguoi: "u", nguoiTen: "Chị Duyệt", luc: "2026-09-30T02:00:00.000Z" }]), bangChung: { ...BC, goi: ["g0", "g1", "g2", "g3"] } }],
+      }),
+      "g3",
+    );
+    expect(k.tomTat).toBe("Gói này nằm trong 3 gói cùng nhóm hàng nộp duyệt trong 30 ngày, mỗi gói dưới cận 1.000.000.000 mà tổng chạm cận ấy.");
   });
 
   it("bằng chứng TRÔI: ghi nhận cũ trên tập cũ không phải ghi nhận của tập hiện tại; hàng `GHI_NHAN` nói tập đã đổi", () => {

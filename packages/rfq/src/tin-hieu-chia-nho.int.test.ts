@@ -104,9 +104,12 @@ async function taoToChuc(daBat = true): Promise<ToChuc> {
     `tin-hieu-${randomBytes(4).toString("hex")}`,
   ]);
   const nguoi = async (vai: string): Promise<Nguoi> => {
-    const u = await motId("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $2) RETURNING id", [
+    // [S3.6b2] Họ tên KHÁC email: hàm đọc trả họ tên, và hai cột bằng nhau thì một lần đọc nhầm cột không đo được.
+    const email = `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}@vidu.vn`;
+    const u = await motId("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id", [
       org,
-      `${vai.toLowerCase()}-${randomBytes(3).toString("hex")}@vidu.vn`,
+      email,
+      `Ho ten ${email.split("@")[0]}`,
     ]);
     await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, u, vai]);
     const s = await motId(

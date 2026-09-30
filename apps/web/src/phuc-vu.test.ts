@@ -1705,6 +1705,30 @@ describe("bề mặt tệp", () => {
       expect(p.el("khoi-tin-hieu").hidden, "màn đang mở r-2 (không tín hiệu): tín hiệu của r-1 không được vẽ").toBe(true);
       expect(dongGoi(p)).toEqual([]);
 
+      // Đọc gói khác: khung của gói trước đi NGAY khi gói mới về, không đợi câu trả tín hiệu của gói mới — trong lúc chờ, màn không đặt
+      // tín hiệu của r-1 cạnh thông tin của r-2.
+      let tha2: () => void = () => undefined;
+      const cham2 = new Promise<void>((r) => { tha2 = r; });
+      const d = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: true, choKy: false } })
+            : l === "GET /rfqs/r-1/signals" ? Promise.resolve({ status: 200, body: thanTinHieu({ ghiNhanDuoc: true, lyDo: null }) })
+            : l === "GET /rfqs/r-2/signals" ? cham2.then(() => ({ status: 200, body: KHONG_TIN_HIEU }))
+            : goiCua("r-1", A.userId)(l) ?? goiCua("r-2", B.userId)(l),
+      });
+      await d.bam("nut-dung-phien");
+      d.el("rfq").value = "r-1";
+      await d.bam("nut-doc");
+      expect(d.el("khoi-tin-hieu").hidden, "r-1 có tín hiệu").toBe(false);
+      d.el("rfq").value = "r-2";
+      const docGoiHai = Promise.all((d.el("nut-doc").nghe["click"] ?? []).map((f) => f()));
+      await cho();
+      expect(soLanDocTinHieu(d.trangThai.goi, "r-2"), "lần đọc tín hiệu của r-2 đã đi và đang chờ").toBe(1);
+      expect([d.el("khoi-tin-hieu").hidden, dongGoi(d)], "đang chờ tín hiệu của r-2: khung của r-1 đã đi").toEqual([true, []]);
+      tha2();
+      await docGoiHai;
+
       for (const cach of ["dang-xuat", "doi-nguoi"] as const) {
         const { p: q } = await moTaoThau(true, "PENDING_APPROVAL", docTinHieu("r-1", thanTinHieu({ ghiNhanDuoc: true, lyDo: null })));
         expect(q.el("khoi-tin-hieu").hidden, cach).toBe(false);
