@@ -19,7 +19,9 @@ function docKhai(): { conname: string; mig: string }[] {
   const dau = sql.indexOf("CHECK_AN_NINH_KHAI constant text :=");
   const cuoi = sql.indexOf(") AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;", dau);
   if (dau < 0 || cuoi < 0) throw new Error("không tìm thấy CHECK_AN_NINH_KHAI");
-  return [...sql.slice(dau, cuoi).matchAll(/\('public', '[a-z_]+', '([a-z0-9_]+)', '([0-9]{3}_[a-z0-9_]+)', /gu)].map((m) => ({
+  // [S1.231] `{3,4}`: số tạm `95NN` (ADR-090) có BỐN chữ số — cùng bộ đọc `\d{3,4}` của `migration-shape`. Với `{3}` một dòng khai
+  // trỏ migration số tạm là vô hình với cổng này: xanh vì phạm vi.
+  return [...sql.slice(dau, cuoi).matchAll(/\('public', '[a-z_]+', '([a-z0-9_]+)', '([0-9]{3,4}_[a-z0-9_]+)', /gu)].map((m) => ({
     conname: m[1]!,
     mig: m[2]!,
   }));
@@ -27,7 +29,7 @@ function docKhai(): { conname: string; mig: string }[] {
 
 describe("[khoản 105] CHECK_AN_NINH_KHAI trỏ đúng migration", () => {
   const tep = readdirSync(THU_MUC)
-    .filter((t) => /^[0-9]{3}_.*\.sql$/u.test(t))
+    .filter((t) => /^[0-9]{3,4}_.*\.sql$/u.test(t))
     .sort();
   const khai = docKhai();
 

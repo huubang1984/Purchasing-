@@ -16,6 +16,12 @@ locals {
   }
 
   github_repo = "huubang1984/Purchasing-"
+  # [S1.223 / khoản 252 ⑶ / ADR-130] ID BẤT BIẾN của chủ kho và của kho (GitHub API `repos/<kho>`: `owner.id`, `id`). Kho tạo
+  # ngày 2026-08-28 — sau mốc 2026-07-15 mà GitHub chuyển kho mới sang "immutable subject claims" —, nên đoạn `repo:` của claim
+  # `sub` là `repo:<chủ kho>@<owner_id>/<kho>@<repo_id>`, KHÔNG phải `repo:<chủ kho>/<kho>` (đọc tài liệu, chưa đo trên token
+  # thật — README, "Tuỳ biến claim `sub`"). Stack 30 ghép chúng vào trust policy của hai role deploy.
+  github_owner_id = "234519700"
+  github_repo_id  = "1350087523"
 
   # Tên role trong tài khoản prod. ADR-062 ghim quyền KMS theo đúng các tên này.
   role = {
@@ -52,6 +58,8 @@ output "region" { value = local.region }
 output "org_id" { value = local.org_id }
 output "account" { value = local.account }
 output "github_repo" { value = local.github_repo }
+output "github_owner_id" { value = local.github_owner_id }
+output "github_repo_id" { value = local.github_repo_id }
 output "role" { value = local.role }
 output "anchor_writer_role" { value = local.anchor_writer_role }
 output "bucket" { value = local.bucket }

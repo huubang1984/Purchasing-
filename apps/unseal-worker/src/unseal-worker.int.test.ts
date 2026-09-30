@@ -15,13 +15,22 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
+import { verifyAuditChain } from "@trustprocure/audit";
 import { migrate } from "@trustprocure/db";
 import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
-import { executeUnsealRequest, UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS, UnsealWorkerError } from "./index.js";
+// [S1.217 / khoản 250] Hai gói cùng đọc phong bì/bản rõ với worker — kịch bản §S1.181 đo cả ba bộ đọc trên MỘT giàn cảnh thật.
+import { taoLuotDanhGia } from "@trustprocure/danh-gia";
+import { revokeInvitation } from "@trustprocure/invitation";
+import {
+  FAILED_BID_VERSION_IDS_AUDIT_CAP,
+  executeUnsealRequest,
+  UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS,
+  UnsealWorkerError,
+} from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -88,7 +97,11 @@ async function taoPhien(userId: string): Promise<string> {
 }
 
 /** Một RFQ đã OPEN kèm vật liệu khoá THẬT. */
-async function taoRfqMo(): Promise<string> {
+/**
+ * RFQ đã OPEN với cặp khoá thật. [S1.217 / khoản 250] Hai tham số tuỳ chọn cho kịch bản §S1.181: chính sách ghim vào ngân sách
+ * (mặc định `csA`) và ngân sách dự tính (mặc định 1 triệu) — mọi lời gọi cũ giữ nguyên hình dạng.
+ */
+async function taoRfqMo(policyId: string = csA, nganSach = "1000000.00"): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
       "created_by, created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
@@ -102,8 +115,8 @@ async function taoRfqMo(): Promise<string> {
   );
   await db.pool.query(
     "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, " +
-      "created_by, created_by_session_id) VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
-    [orgA, rfqId, csA, uYc, sYc],
+      "created_by, created_by_session_id) VALUES ($1, $2, $6, 'VND', $3, $4, $5)",
+    [orgA, rfqId, policyId, uYc, sYc, nganSach],
   );
   await db.pool.query(
     "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, " +
@@ -126,22 +139,47 @@ async function taoRfqMo(): Promise<string> {
   return rfqId;
 }
 
-/** Nộp một báo giá THẬT (phong bì niêm phong bằng khoá công khai của chính RFQ). */
-async function nopBaoGia(rfqId: string, banRo: string, phongBiRac = false): Promise<string> {
+/**
+ * [S1.217 / khoản 250] Lời mời, nhà cung cấp và người liên hệ của từng phiên bản `nopBaoGia` đã tạo — kịch bản §S1.181 cần thu
+ * hồi ĐÚNG lời mời của X rồi mời lại ĐÚNG nhà cung cấp ấy. Cùng khuôn `LUONG_CUA_PHIEN_BAN` của `packages/danh-gia`.
+ */
+const LOI_MOI_CUA_PHIEN_BAN = new Map<
+  string,
+  { readonly invitationId: string; readonly supplierId: string; readonly contactId: string }
+>();
+
+/**
+ * Nộp một báo giá THẬT (phong bì niêm phong bằng khoá công khai của chính RFQ).
+ *
+ * [S1.217 / khoản 250] `nccCoSan`: mời lại một nhà cung cấp ĐÃ CÓ (cùng người liên hệ) thay vì dựng nhà cung cấp mới — đường
+ * *thu hồi rồi mời lại* của ADR-110/khoản 250. Mọi lời gọi cũ không truyền nó và giữ nguyên hành vi.
+ */
+async function nopBaoGia(
+  rfqId: string,
+  banRo: string,
+  phongBiRac = false,
+  nccCoSan?: { readonly supplierId: string; readonly contactId: string },
+): Promise<string> {
   const hex = randomBytes(4).toString("hex");
-  const { rows: ncc } = await db.pool.query<{ id: string }>(
-    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, $3, $4) RETURNING id",
-    [orgA, `NCC ${hex}`, uYc, sYc],
-  );
-  const supplierId = ncc[0]?.id ?? "";
-  const { rows: lh } = await db.pool.query<{ id: string }>(
-    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
-      "created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) " +
-      "RETURNING id",
-    [orgA, supplierId, `${hex}@vidu.vn`, uYc, sYc],
-  );
-  const contactId = lh[0]?.id ?? "";
+  let supplierId: string;
+  let contactId: string;
+  if (nccCoSan === undefined) {
+    const { rows: ncc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id",
+      [orgA, `NCC ${hex}`, uYc, sYc],
+    );
+    supplierId = ncc[0]?.id ?? "";
+    const { rows: lh } = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
+        "created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) " +
+        "RETURNING id",
+      [orgA, supplierId, `${hex}@vidu.vn`, uYc, sYc],
+    );
+    contactId = lh[0]?.id ?? "";
+  } else {
+    ({ supplierId, contactId } = nccCoSan);
+  }
   const { rows: lm } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, " +
       "invited_by, invited_by_session_id) VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
@@ -213,6 +251,7 @@ async function nopBaoGia(rfqId: string, banRo: string, phongBiRac = false): Prom
         Buffer.alloc(70, 7),
       ],
     );
+    LOI_MOI_CUA_PHIEN_BAN.set(versionId, { invitationId, supplierId, contactId });
     return versionId;
   });
 }
@@ -878,6 +917,304 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
 });
 
 // ===============================================================================================
+// [S1.221 / khoản 137 / ADR-129] TRẦN PAYLOAD `failedBidVersionIds` CỦA HAI BẢN GHI SỔ MỞ THẦU
+//
+// Đo trước trên mã trước vòng này (biên bản §S1.221): payload của `RFQ_KEY_MATERIAL_UNWRAPPED` và
+// `RFQ_UNSEALED` mang TRỌN mảng id phong bì hỏng — ~40 byte một id, tuyến tính theo N: N = 50 ⇒
+// 2 147 byte, N = 500 ⇒ 20 147 byte MỖI bản ghi (hai bản ghi một lượt), trong một sổ chỉ ghi thêm và
+// nối băm; `003` chỉ CHECK hình dạng và khoá mang giá, không CHECK kích thước; không trần nào cho số
+// lời mời của một gói (`010`, `024`, `076`). Hình dạng ADR-129: `failedCount` (đủ),
+// `failedBidVersionIds` CẮT còn `FAILED_BID_VERSION_IDS_AUDIT_CAP` id ĐẦU theo thứ tự ổn định của câu
+// chọn phong bì (`ORDER BY v.bid_id`), cờ `failedBidVersionIdsTruncated`; phần còn lại KHÔNG vào sổ —
+// suy được bằng `CAU_SUY_PHONG_BI_HONG` dưới đây (nguyên văn ở ADR-129): phiên bản CUỐI của mỗi luồng
+// báo giá của gói, đúng vòng, không có hàng bản rõ dưới yêu cầu mở thầu ấy. Kết quả TRẢ VỀ trong tiến
+// trình (`UnsealOutcome.failedBidVersionIds`) vẫn đủ — nó không được lưu.
+// ===============================================================================================
+interface PayloadPhongBiHong {
+  readonly opened: number;
+  readonly failedCount: number;
+  readonly failedBidVersionIds: readonly string[];
+  readonly failedBidVersionIdsTruncated: boolean;
+}
+
+interface BanGhiMoThau {
+  readonly action: string;
+  readonly payload: PayloadPhongBiHong;
+  readonly byte_van_ban: number;
+}
+
+/** Hai bản ghi sổ của một lượt mở thầu, theo thứ tự ghi, kèm kích thước văn bản JSON của payload. */
+async function docHaiBanGhiMoThau(rfqId: string): Promise<readonly BanGhiMoThau[]> {
+  const { rows } = await db.pool.query<BanGhiMoThau>(
+    "SELECT action, payload, octet_length(payload::text) AS byte_van_ban FROM audit_events " +
+      " WHERE org_id = $1 AND resource_id = $2 AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') ORDER BY seq",
+    [orgA, rfqId],
+  );
+  return rows;
+}
+
+/** Id phong bì (bản cuối mỗi luồng) của gói theo ĐÚNG thứ tự câu chọn phong bì của worker: `ORDER BY v.bid_id`. */
+async function idTheoThuTuLuong(rfqId: string): Promise<readonly string[]> {
+  const { rows } = await db.pool.query<{ id: string }>(
+    "SELECT DISTINCT ON (v.bid_id) v.id FROM vendor_bid_versions v" +
+      " JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id" +
+      " JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id" +
+      " WHERE i.rfq_id = $1 AND v.org_id = $2 ORDER BY v.bid_id, v.version DESC",
+    [rfqId, orgA],
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * [ADR-129] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
+ * mở thầu `$1` KHÔNG để lại hàng bản rõ. Tập này là toàn bộ `failedBidVersionIds` — kể cả K id đã ghi —
+ * theo cùng thứ tự luồng; `$2` là tổ chức.
+ */
+const CAU_SUY_PHONG_BI_HONG =
+  "SELECT v.id FROM (" +
+  "  SELECT DISTINCT ON (v.bid_id) v.id, v.bid_id FROM vendor_bid_versions v" +
+  "    JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id" +
+  "    JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id" +
+  "    JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id" +
+  "   WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id" +
+  "   ORDER BY v.bid_id, v.version DESC) v" +
+  " WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u" +
+  "   WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)" +
+  " ORDER BY v.bid_id";
+
+/** Trần kích thước văn bản JSON của MỘT bản ghi sau khi cắt — đo ở vòng này ~1 050 byte với K = 20; không phụ thuộc N. */
+const TRAN_BYTE_MOT_BAN_GHI = 1_200;
+
+async function moThauVaDoc(
+  rfqId: string,
+): Promise<{ readonly ketQua: Awaited<ReturnType<typeof executeUnsealRequest>>; readonly so: readonly BanGhiMoThau[] }> {
+  const requestId = await dongVaXinMoThau(rfqId);
+  const ketQua = await withTenant(unsealPool, orgA, (c) =>
+    executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+  );
+  const so = await docHaiBanGhiMoThau(rfqId);
+  expect(so.map((b) => b.action)).toEqual(["RFQ_KEY_MATERIAL_UNWRAPPED", "RFQ_UNSEALED"]);
+  return { ketQua, so };
+}
+
+describe("[S1.221 / khoản 137] payload sổ của lượt mở thầu mang trần K id phong bì hỏng (ADR-129)", () => {
+  it("K là 20 — hằng của ADR-129, không phải một con số tình cờ trong test", () => {
+    expect(FAILED_BID_VERSION_IDS_AUDIT_CAP).toBe(20);
+  });
+
+  it("N = 50 phong bì hỏng ⇒ HAI bản ghi mang `failedCount` 50, ĐÚNG 20 id đầu theo thứ tự luồng, cờ cắt bật, mỗi bản ghi dưới trần byte; 30 id còn lại suy được bằng câu ADR-129; kết quả trả về đủ 50; chuỗi băm sổ nối", async () => {
+    const rfqId = await taoRfqMo();
+    for (let i = 0; i < 50; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 + i }), true);
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 7 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+
+    // Kết quả trong tiến trình: đủ, và theo đúng thứ tự câu chọn phong bì — thứ tự mà phép cắt dựa vào.
+    const thuTu = await idTheoThuTuLuong(rfqId);
+    const hongTheoThuTu = thuTu.filter((id) => ketQua.failedBidVersionIds.includes(id));
+    expect(ketQua.opened).toBe(1);
+    expect(hongTheoThuTu).toHaveLength(50);
+    expect(ketQua.failedBidVersionIds, "thứ tự ổn định = thứ tự luồng của câu chọn phong bì").toEqual(hongTheoThuTu);
+
+    for (const b of so) {
+      expect(b.payload.opened, b.action).toBe(1);
+      expect(b.payload.failedCount, b.action).toBe(50);
+      expect(b.payload.failedBidVersionIdsTruncated, b.action).toBe(true);
+      expect(b.payload.failedBidVersionIds, `${b.action}: đúng K id ĐẦU`).toEqual(hongTheoThuTu.slice(0, FAILED_BID_VERSION_IDS_AUDIT_CAP));
+      expect(b.byte_van_ban, `${b.action}: ${String(b.byte_van_ban)} byte`).toBeLessThanOrEqual(TRAN_BYTE_MOT_BAN_GHI);
+    }
+
+    // Phần KHÔNG vào sổ suy được: câu ADR-129 trả đủ 50 id theo cùng thứ tự — 20 id đã ghi là tiền tố của nó.
+    const { rows: suy } = await db.pool.query<{ id: string }>(CAU_SUY_PHONG_BI_HONG, [ketQua.unsealRequestId, orgA]);
+    expect(suy.map((r) => r.id)).toEqual(hongTheoThuTu);
+    expect(suy.map((r) => r.id).slice(FAILED_BID_VERSION_IDS_AUDIT_CAP), "30 id còn lại").toEqual(hongTheoThuTu.slice(20));
+
+    // Chuỗi băm của tổ chức vẫn nối qua hai bản ghi vừa ghi (không neo ngoài ⇒ chỉ `NOT_ANCHORED`, không lỗi mắt xích).
+    const kiem = await withTenant(apiPool, orgA, (c) => verifyAuditChain(c, orgA, { externalAnchors: [] }));
+    expect(kiem.checked).toBeGreaterThan(0);
+    expect(kiem.problems.filter((p) => p.kind !== "NOT_ANCHORED")).toEqual([]);
+  }, 120_000);
+
+  it("N = 20 phong bì hỏng (đúng biên K) ⇒ đủ 20 id, `failedCount` 20, cờ cắt TẮT; câu ADR-129 trả đúng 20 id ấy", async () => {
+    const rfqId = await taoRfqMo();
+    for (let i = 0; i < FAILED_BID_VERSION_IDS_AUDIT_CAP; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 200 + i }), true);
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+    expect(ketQua.opened).toBe(1);
+    expect(ketQua.failedBidVersionIds).toHaveLength(20);
+    for (const b of so) {
+      expect(b.payload.failedCount, b.action).toBe(20);
+      expect(b.payload.failedBidVersionIdsTruncated, b.action).toBe(false);
+      expect(b.payload.failedBidVersionIds, b.action).toEqual(ketQua.failedBidVersionIds);
+      expect(b.byte_van_ban, b.action).toBeLessThanOrEqual(TRAN_BYTE_MOT_BAN_GHI);
+    }
+    const { rows: suy } = await db.pool.query<{ id: string }>(CAU_SUY_PHONG_BI_HONG, [ketQua.unsealRequestId, orgA]);
+    expect(suy.map((r) => r.id)).toEqual([...ketQua.failedBidVersionIds]);
+  }, 120_000);
+
+  it("ĐỐI CHỨNG: không phong bì nào hỏng ⇒ `failedCount` 0, mảng rỗng, cờ tắt — ba trường luôn có mặt, không phải chỉ khi cắt", async () => {
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 5 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
+    for (const b of so) {
+      expect([b.payload.failedCount, b.payload.failedBidVersionIds, b.payload.failedBidVersionIdsTruncated], b.action).toEqual([0, [], false]);
+    }
+  });
+});
+
+// ===============================================================================================
+// [S1.217 / khoản 250 / ADR-128] THU HỒI LỜI MỜI LOẠI BÁO GIÁ CỦA LỜI MỜI ẤY KHỎI LƯỢT MỞ THẦU — VÀ SAU LẦN MỞ THÌ
+// KHÔNG THU HỒI ĐƯỢC NỮA
+//
+// Kịch bản của §S1.181 (lượt soi đối kháng), dựng lại trên worker THẬT với phong bì niêm phong thật và trên CÙNG một giàn
+// cảnh cho cả ba bộ đọc: X nộp 900 triệu, bên mua thu hồi lời mời của X rồi mời lại (một lời mời MỚI, một luồng báo giá MỚI —
+// `vendor_bids` duy nhất theo lời mời, `018`; `024` mở lại vế *sau khi thu hồi*), X nộp 1 tỷ ở luồng mới; Y 950 triệu, Z 1,1 tỷ;
+// ngân sách 1 tỷ. Đo trước bản vá trên `561158e` (§S1.217): `opened = 4`, bản rõ 900 triệu có mặt, bảng so sánh X HAI dòng và
+// `belowBudget` 3, lượt chấm bốn hàng với X hạng 1 bằng giá cũ. Sau bản vá: `opened = 3`, không bản rõ nào của lời mời đã thu
+// hồi, X MỘT dòng giá mới, `belowBudget` 2, xếp hạng Y · X(1 tỷ) · Z.
+//
+// Vế thứ hai của quyết định: sau lần mở thầu, thu hồi bị CHẶN — `revokeInvitation` từ chối có tên, một hàng `RFQ_STATE_DENIED`
+// (đi sai thứ tự chuỗi, ADR-060/ADR-084 ⑸), lời mời còn sống. Đo ở đây trên gói đã mở bằng CHÍNH worker, không ép trạng thái.
+// ===============================================================================================
+describe("[S1.217 / khoản 250] báo giá của lời mời đã thu hồi không dự thầu; thu hồi sau lần mở thầu bị chặn", () => {
+  /** Chính sách có trọng số đánh giá — lượt chấm đọc phiên bản HIỆN HÀNH (`luot-danh-gia.ts`), nên nó phải là bản mới nhất. */
+  let csCham = "";
+  const gia = (t: string): string => JSON.stringify({ totalAmount: t, currency: "VND" });
+
+  beforeAll(async () => {
+    const { rows } = await db.pool.query<{ id: string }>(
+      // `056`: `eval_components` và `bafo_top_n` cùng khai hoặc cùng chưa (`org_procurement_policies_danh_gia_du_bo`) — 0 là không BAFO.
+      // Ngưỡng cấp kép 10 tỷ: kịch bản §S1.181 có ngân sách 1 tỷ, mà `taoRfqMo` dựng gói KHÔNG cấp kép — dưới ngưỡng 100 triệu
+      // của `csA` trigger ngân sách (D2) từ chối *"Uoc luong dat hoac vuot nguong chinh sach"* (đo ở lần đo trước).
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
+        "created_by, created_by_session_id) " +
+        "SELECT $1, coalesce(max(version), 0) + 1, '10000000000.00', 'VND', $2::jsonb, 0, $3, $4 " +
+        "FROM org_procurement_policies WHERE org_id = $1 RETURNING id",
+      [orgA, '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]', uYc, sYc],
+    );
+    csCham = rows[0]?.id ?? "";
+    expect(csCham).not.toBe("");
+  });
+
+  /** Hàng `RFQ_STATE_DENIED` của một gói — hình dạng trọn, theo thứ tự ghi. */
+  async function hangTuChoiTrangThai(rfqId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  it("X nộp 900 triệu → thu hồi → mời lại → X nộp 1 tỷ ⇒ `opened` 3, không bản rõ nào của lời mời đã thu hồi, bảng so sánh X MỘT dòng giá mới và `belowBudget` 2, xếp hạng Y · X · Z", async () => {
+    const rfqId = await taoRfqMo(csCham, "1000000000.00");
+    const vXCu = await nopBaoGia(rfqId, gia("900000000.00"));
+    const X = LOI_MOI_CUA_PHIEN_BAN.get(vXCu);
+    if (X === undefined) throw new Error("fixture không ghi lời mời của X");
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const vZ = await nopBaoGia(rfqId, gia("1100000000.00"));
+
+    // Thu hồi ở OPEN qua đường THẬT của gói `invitation` — token, thách thức và phiên khách của X chết theo (C3).
+    const daThuHoi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: X.invitationId, actorSessionId: sYc }, apiPool),
+    );
+    expect(daThuHoi).toBe(true);
+    // Mời lại CÙNG nhà cung cấp, cùng người liên hệ: lời mời mới, luồng báo giá mới.
+    const vXMoi = await nopBaoGia(rfqId, gia("1000000000.00"), false, { supplierId: X.supplierId, contactId: X.contactId });
+    const XMoi = LOI_MOI_CUA_PHIEN_BAN.get(vXMoi);
+    expect(XMoi?.supplierId).toBe(X.supplierId);
+    expect(XMoi?.invitationId).not.toBe(X.invitationId);
+
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened, "ba luồng còn sống: Y, Z, X mới — luồng của lời mời đã thu hồi không được mở").toBe(3);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
+
+    // Bản rõ: đúng ba hàng, KHÔNG có phiên bản của lời mời đã thu hồi, và giá 900 triệu không thành bản rõ ở đâu cả.
+    const { rows: banRo } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ bid_version_id: string; tien: string | null }>(
+        "SELECT bid_version_id, payload ->> 'totalAmount' AS tien FROM rfq_unsealed_bids WHERE unseal_request_id = $1",
+        [requestId],
+      ),
+    );
+    expect(banRo.map((r) => r.bid_version_id).sort()).toEqual([vY, vZ, vXMoi].sort());
+    expect(banRo.map((r) => r.tien).sort()).toEqual(["1000000000.00", "1100000000.00", "950000000.00"]);
+
+    // Bảng so sánh: X MỘT dòng, giá mới, là bản mới nhất của luồng; phép tổng hợp trên ba luồng; `belowBudget` 2 (Y và X mới).
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.rows).toHaveLength(3);
+    const dongX = bang.rows.filter((r) => r.supplierId === X.supplierId);
+    expect(dongX.map((r) => [r.bidVersionId, r.totalAmount, r.isLatestForBid])).toEqual([[vXMoi, "1000000000.00", true]]);
+    expect(bang.aggregates).toMatchObject({ parsed: 3, unparsed: 0, min: "950000000.00", max: "1100000000.00", belowBudget: 2 });
+
+    // Xếp hạng: Y · X(1 tỷ) · Z — không hàng nào mang giá cũ.
+    const luot = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const theoHang = [...luot.lines].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+    expect(theoHang.map((l) => [l.bidVersionId, l.effectiveCost, l.rank])).toEqual([
+      [vY, "950000000.00", 1],
+      [vXMoi, "1000000000.00", 2],
+      [vZ, "1100000000.00", 3],
+    ]);
+    expect(luot.lines.some((l) => l.effectiveCost === "900000000.00"), "giá cũ không có mặt trong bảng xếp hạng").toBe(false);
+  }, 120_000);
+
+  it("SAU lần mở thầu, thu hồi lời mời của Y bị chặn: `InvitationError` câu cố định, ĐÚNG MỘT hàng `RFQ_STATE_DENIED` {LOI_MOI_THU_HOI_SAU_MO_THAU} mang người gọi và gói, lời mời và phiên khách còn sống; đối chứng: cùng lời mời ấy thu hồi được ở CLOSED", async () => {
+    const rfqId = await taoRfqMo();
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const Y = LOI_MOI_CUA_PHIEN_BAN.get(vY);
+    if (Y === undefined) throw new Error("fixture không ghi lời mời của Y");
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened).toBe(1);
+    expect(await hangTuChoiTrangThai(rfqId), "đối chứng: lượt mở thầu không để lại hàng từ chối trạng thái nào").toEqual([]);
+
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: Y.invitationId, actorSessionId: sYc }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi).toBeInstanceOf(Error);
+    expect((loi as Error).name).toBe("InvitationError");
+    expect((loi as Error).message).toBe("Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.");
+    expect(await hangTuChoiTrangThai(rfqId)).toEqual([["USER", uYc, "RFQ", { ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }]]);
+    const { rows: lm } = await db.pool.query<{ status: string; revoked_at: Date | null; phien_song: string }>(
+      "SELECT i.status, i.revoked_at, (SELECT count(*)::text FROM guest_sessions g WHERE g.invitation_id = i.id AND g.revoked_at IS NULL) AS phien_song " +
+        " FROM rfq_invitations i WHERE i.id = $1",
+      [Y.invitationId],
+    );
+    expect(lm[0]).toEqual({ status: "SENT", revoked_at: null, phien_song: "1" });
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+      [Y.invitationId],
+    );
+    expect(so[0]?.n, "không hàng INVITATION_REVOKED nào — lần thu hồi không xảy ra").toBe("0");
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: thu hồi ở CLOSED — TRƯỚC lần mở — vẫn đi qua và không để lại hàng `RFQ_STATE_DENIED`; lượt mở thầu sau đó không mở phong bì ấy (`opened` 0)", async () => {
+    const rfqId = await taoRfqMo();
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const Y = LOI_MOI_CUA_PHIEN_BAN.get(vY);
+    if (Y === undefined) throw new Error("fixture không ghi lời mời của Y");
+    const requestId = await dongVaXinMoThau(rfqId);
+    expect(
+      await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: Y.invitationId, actorSessionId: sYc }, apiPool)),
+    ).toBe(true);
+    expect(await hangTuChoiTrangThai(rfqId)).toEqual([]);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened, "phong bì duy nhất thuộc lời mời đã thu hồi ⇒ không mở gì; RFQ vẫn UNSEALED (xem khối `IS NOT DISTINCT FROM`)").toBe(0);
+    const { rows: tt } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(tt[0]?.status).toBe("UNSEALED");
+  });
+});
+
+// ===============================================================================================
 // [INV-A4] BỘ QUÉT RÒ RỈ TỰ ĐỘNG — PHIÊN BẢN CHẠY ĐƯỢC KHI CHƯA CÓ TẦNG HTTP
 //
 // §6 của đặc tả mô tả bộ quét này là một vòng lặp trên MỌI endpoint của OpenAPI. Không có
@@ -1179,6 +1516,13 @@ describe("[INV-D5] [S1.72 / khoản 121] worker từ chối lúc giải mã thì
 const GHI_SO_K126 =
   "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
 
+/**
+ * [S1.220 / khoản 149] Kết cục ĐO ĐƯỢC của yêu cầu mở thầu thứ hai: `23514`. Nó bị chặn ở `FOR SHARE` của trigger 019 bởi khoá
+ * hàng RFQ mà worker lấy TRƯỚC lần ghi sổ đầu; khi worker COMMIT, nó đọc lại hàng đã `UNSEALED` và trigger từ chối — tức đúng thứ tự
+ * khoá mà bản vá khoản 126 mua: hàng trước, khoá tư vấn ghi sổ sau. Ghim để một kết cục KHÁC (`xong`, `55P03`, `40P01`) làm đỏ.
+ */
+const KET_CUC_NGUOI_GIU = "23514";
+
 /** Số khoá tư vấn ghi sổ của `orgA` mà backend `pid` ĐANG GIỮ — đọc từ một kết nối khác. */
 async function demKhoaGhiSo(pid: number): Promise<number> {
   const { rows } = await db.pool.query<{ n: number }>(
@@ -1190,7 +1534,11 @@ async function demKhoaGhiSo(pid: number): Promise<number> {
   return rows[0]?.n ?? -1;
 }
 
-/** Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ, -1 nếu quá hạn hay `dungSom()` báo dừng. */
+/**
+ * Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ; `-1` nếu `dungSom()` báo dừng TRƯỚC khi thấy một lần chặn
+ * nào (tức việc đang theo dõi đã xong mà chưa từng bị chặn); `-2` nếu quá hạn `hanMs`.
+ * [S1.220 / khoản 149] Bản trước gộp hai ca ấy vào một `-1`, nên "worker xong mà không bị chặn" và "phép dò quá hạn" là một con số.
+ */
 async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: () => boolean): Promise<number> {
   const batDau = Date.now();
   for (;;) {
@@ -1202,9 +1550,16 @@ async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: ()
       );
       if ((rows[0]?.n ?? 0) > 0) return Date.now() - batDau;
     }
-    if (dungSom?.() === true || Date.now() - batDau > hanMs) return -1;
+    if (dungSom?.() === true) return -1;
+    if (Date.now() - batDau > hanMs) return -2;
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/** [S1.220 / khoản 149] Các pid đang chặn backend `pid` — rỗng nếu không ai chặn. */
+async function pidDangChan(pid: number): Promise<number[]> {
+  const { rows } = await db.pool.query<{ pids: number[] }>("SELECT pg_catalog.pg_blocking_pids($1)::int[] AS pids", [pid]);
+  return rows[0]?.pids ?? [];
 }
 
 /** Một lần ghi sổ của `orgA` trên một kết nối `app_api` riêng: mã lỗi PostgreSQL (null nếu xong) và số ms. */
@@ -1248,8 +1603,23 @@ function bocChanTruocCau(c: pg.PoolClient, moc: string, truoc: () => Promise<voi
 }
 
 interface KetQuaDoK126 {
+  /**
+   * [S1.220 / khoản 149] TIỀN ĐỀ ⑴: số ms tới khi yêu cầu mở thầu thứ hai bị CHẶN trong cửa sổ kt1–kt2; `-2` nếu nó không bao giờ
+   * bị chặn (đồ gá không dựng được cảnh — không có gì để đo).
+   */
+  readonly msNguoiGiuBiChan: number;
+  /** [S1.220 / khoản 149] TIỀN ĐỀ ⑵: các pid đang chặn yêu cầu thứ hai lúc ấy — phải là CHÍNH worker, không phải ai khác. */
+  readonly chanNguoiGiu: number[];
+  readonly pidWorker: number;
+  /**
+   * [S1.220 / khoản 149] ĐỐI CHỨNG DƯƠNG của phép dò, đo trong cùng cảnh: số khoá ghi sổ worker giữ TRONG cửa sổ — sau lần ghi sổ
+   * đầu, trước kt2 — phải là 1. Một phép dò hỏng (luôn ra 0) làm `khoaKhiCho` xanh rỗng; vế này bắt nó.
+   */
+  readonly khoaTrongCuaSo: number;
+  /** Số ms tới khi worker bị chặn; `-1` = worker xong mà chưa từng bị chặn; `-2` = phép dò quá hạn. */
   readonly msWorkerBiChan: number;
   readonly khoaKhiCho: number;
+  /** Lần ghi sổ đồng thời của tổ chức, PHÁT trong cửa sổ kt1–kt2 (khoản 149) — không phải sau khi worker đã xong. */
   readonly dongThoi: { ma: string | null; ms: number };
   readonly ketCucNguoiGiu: string[];
   readonly opened: number;
@@ -1260,6 +1630,12 @@ interface KetQuaDoK126 {
 /**
  * Chạy một lượt mở thầu thật, thả `soNguoiGiu` yêu cầu mở thầu thứ hai vào cửa sổ giữa kt1 và kt2 (cách nhau `cachNhauMs`), rồi đo từ
  * BÊN NGOÀI giao dịch: worker có bị chặn không, lúc ấy nó giữ mấy khoá ghi sổ, và một lần ghi sổ khác của cùng tổ chức đi tới đâu.
+ *
+ * [S1.220 / khoản 149] TIỀN ĐỀ ĐƯỢC ĐO, KHÔNG ĐƯỢC KỂ. Trên mã đã vá (khoá hàng RFQ lấy TRƯỚC lần ghi sổ đầu, `index.ts` khối cùng
+ * nhãn), worker không bao giờ bị chặn — nên ba vế cũ (`khoaKhiCho`, `dongThoi`, `opened`) đọc ở thời điểm worker ĐÃ XONG và xanh
+ * kể cả khi `truocKt2` không bao giờ chạy (đột biến: đổi mốc câu của `bocChanTruocCau` ⇒ 4/4 xanh, §S1.220). Bản này đo cảnh
+ * ngay TRONG cửa sổ: yêu cầu thứ hai đã bị chặn chưa, bởi ai, worker đang giữ mấy khoá ghi sổ lúc ấy — và PHÁT lần ghi sổ đồng
+ * thời ngay lúc ấy thay vì sau khi worker xong.
  */
 async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<KetQuaDoK126> {
   const rfqId = await taoRfqMo();
@@ -1269,6 +1645,10 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
   let pidWorker = -1;
   let pidGiuDau = -1;
   let daXong = false;
+  let msNguoiGiuBiChan = -2;
+  let chanNguoiGiu: number[] = [];
+  let khoaTrongCuaSo = -1;
+  let viecDongThoi: Promise<{ ma: string | null; ms: number }> | undefined;
   const ketCuc: string[] = [];
   const viecGiu: Promise<void>[] = [];
 
@@ -1285,7 +1665,12 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
   const truocKt2 = async (): Promise<void> => {
     viecGiu.push(motNguoiGiu(true));
-    await choToiKhiBiChan(() => pidGiuDau, 5_000);
+    msNguoiGiuBiChan = await choToiKhiBiChan(() => pidGiuDau, 5_000);
+    chanNguoiGiu = pidGiuDau > 0 ? await pidDangChan(pidGiuDau) : [];
+    khoaTrongCuaSo = await demKhoaGhiSo(pidWorker);
+    // PHÁT chứ không CHỜ: worker đang nghỉ trong JS ở đúng chỗ này và giữ khoá ghi sổ tới COMMIT; chờ lần ghi sổ ở đây là tự dựng
+    // một vòng chờ khép kín rồi đo cái vòng ấy. Nó được chờ ở ngoài, sau khi worker được thả.
+    viecDongThoi = ghiSoDongThoiCuaToChuc();
     for (let i = 1; i < soNguoiGiu; i++) {
       viecGiu.push(new Promise<void>((r) => setTimeout(r, i * cachNhauMs)).then(motNguoiGiu.bind(null, false)));
     }
@@ -1309,10 +1694,15 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
   const msWorkerBiChan = await choToiKhiBiChan(() => pidWorker, 8_000, () => daXong);
   const khoaKhiCho = await demKhoaGhiSo(pidWorker);
-  const dongThoi = await ghiSoDongThoiCuaToChuc();
   const kq = await chayWorker;
+  // `viecDongThoi` còn `undefined` là đồ gá chưa từng vào cửa sổ — nói ra bằng một mã không phải mã PostgreSQL, không giả vờ "xong".
+  const dongThoi = viecDongThoi === undefined ? { ma: "KHONG_PHAT", ms: -1 } : await viecDongThoi;
   await Promise.all(viecGiu);
   return {
+    msNguoiGiuBiChan,
+    chanNguoiGiu,
+    pidWorker,
+    khoaTrongCuaSo,
     msWorkerBiChan,
     khoaKhiCho,
     dongThoi,
@@ -1325,10 +1715,28 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
 function ke(d: KetQuaDoK126): string {
   return (
+    `yêu cầu thứ hai bị chặn sau ${d.msNguoiGiuBiChan} ms bởi [${d.chanNguoiGiu.join(",")}] (worker pid ${d.pidWorker}), ` +
+    `worker giữ ${d.khoaTrongCuaSo} khoá ghi sổ trong cửa sổ; ` +
     `worker bị chặn sau ${d.msWorkerBiChan} ms và giữ ${d.khoaKhiCho} khoá ghi sổ lúc ấy; ` +
     `lần ghi sổ đồng thời của tổ chức: ${d.dongThoi.ma ?? "xong"} sau ${d.dongThoi.ms} ms; ` +
     `người giữ: [${d.ketCucNguoiGiu.join(",")}]; worker mở ${d.opened} phong bì, lỗi "${d.loiWorker}"; cả lượt ${d.msTong} ms`
   );
+}
+
+/**
+ * [S1.220 / khoản 149] Bốn khẳng định TIỀN ĐỀ đứng TRƯỚC ba khẳng định kết luận, ở cả hai ca dưới. Đột biến đo được (§S1.220):
+ * đổi mốc câu của `bocChanTruocCau` để `truocKt2` không bao giờ chạy ⇒ ⒜ đỏ (`-2`), và làm `demKhoaGhiSo` luôn ra 0 ⇒ ⒞ đỏ —
+ * hai đột biến mà bản trước xanh 4/4.
+ */
+function khangDinhTienDeCuaSo(d: KetQuaDoK126, soNguoiGiu: number): void {
+  // ⒜ cảnh đã dựng: yêu cầu thứ hai THẬT SỰ bị chặn trong cửa sổ kt1–kt2.
+  expect(d.msNguoiGiuBiChan, `tiền đề: yêu cầu mở thầu thứ hai phải bị chặn trong cửa sổ kt1–kt2 — ${ke(d)}`).toBeGreaterThanOrEqual(0);
+  // ⒝ và kẻ chặn nó là CHÍNH worker — khoá hàng RFQ mà worker lấy trước lần ghi sổ đầu, không phải một backend nào khác.
+  expect(d.chanNguoiGiu, `tiền đề: kẻ chặn yêu cầu thứ hai phải là chính worker — ${ke(d)}`).toEqual([d.pidWorker]);
+  // ⒞ đối chứng dương của phép dò, trong cùng cảnh: worker đã ghi sổ nên đang giữ ĐÚNG một khoá ghi sổ của tổ chức.
+  expect(d.khoaTrongCuaSo, `đối chứng dương: trong cửa sổ, worker phải giữ đúng một khoá ghi sổ — ${ke(d)}`).toBe(1);
+  // ⒟ và đủ người giữ đã chạy tới kết cục — không ai treo, không ai bị bỏ quên.
+  expect(d.ketCucNguoiGiu, `tiền đề: đủ ${soNguoiGiu} người giữ phải có kết cục — ${ke(d)}`).toHaveLength(soNguoiGiu);
 }
 
 describe("[S1.73 / khoản 126] worker mở thầu chờ khoá hàng RFQ sau lần ghi sổ đầu", () => {
@@ -1414,15 +1822,26 @@ describe("[S1.73 / khoản 126] worker mở thầu chờ khoá hàng RFQ sau l�
 
   it("MỘT yêu cầu mở thầu thứ hai trong cửa sổ kt1–kt2: worker không được chờ khoá hàng trong lúc giữ khoá ghi sổ, và lần ghi sổ đồng thời của tổ chức phải xong", async () => {
     const d = await doCuaSoKt1Kt2(1, 0);
+    khangDinhTienDeCuaSo(d, 1);
+    // Worker XONG mà chưa từng bị chặn (`-1`), không phải "phép dò quá hạn" (`-2`): hai ca ấy nay là hai con số.
+    expect(d.msWorkerBiChan, `worker phải xong mà chưa từng bị chặn — ${ke(d)}`).toBe(-1);
     expect(d.khoaKhiCho, ke(d)).toBe(0);
+    // Lần ghi sổ phát TRONG cửa sổ phải xong, và xong dưới trần 2 s của 050 — worker giữ khoá ghi sổ tới COMMIT nhưng không chờ ai.
     expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.dongThoi.ms, `lần ghi sổ đồng thời phải xong dưới trần 2 s của 050 — ${ke(d)}`).toBeLessThan(2_000);
     expect(d.opened, ke(d)).toBe(1);
+    // Kết cục của người giữ: xem `KET_CUC_NGUOI_GIU`.
+    expect(d.ketCucNguoiGiu, ke(d)).toEqual([KET_CUC_NGUOI_GIU]);
   }, 90_000);
 
   it("BỐN yêu cầu mở thầu cách nhau 500 ms trong cùng cửa sổ: lần ghi sổ đồng thời của tổ chức vẫn phải xong", async () => {
     const d = await doCuaSoKt1Kt2(4, 500);
+    khangDinhTienDeCuaSo(d, 4);
+    expect(d.msWorkerBiChan, `worker phải xong mà chưa từng bị chặn — ${ke(d)}`).toBe(-1);
     expect(d.khoaKhiCho, ke(d)).toBe(0);
     expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.dongThoi.ms, `lần ghi sổ đồng thời phải xong dưới trần 2 s của 050 — ${ke(d)}`).toBeLessThan(2_000);
     expect(d.opened, ke(d)).toBe(1);
+    expect(d.ketCucNguoiGiu, ke(d)).toEqual(Array<string>(4).fill(KET_CUC_NGUOI_GIU));
   }, 120_000);
 });

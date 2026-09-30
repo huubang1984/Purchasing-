@@ -37,6 +37,20 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 /** Bốn tên hàm LẤY khoá tư vấn mức PHIÊN — khớp nguyên văn danh sách của mục hardening. */
 const TEN_HAM_LAY_KHOA_PHIEN = ["pg_advisory_lock", "pg_advisory_lock_shared", "pg_try_advisory_lock", "pg_try_advisory_lock_shared"];
 
+/**
+ * Mọi cặp (vai, dạng đối số) mà một vai KHÔNG superuser thuộc một vai ứng dụng còn `EXECUTE` được trên bốn hàm ấy. Vế ⓷ đòi tập
+ * rỗng; [S1.220 / khoản 186] và đòi thêm rằng chính câu này THẤY được một hàng khi có một hàng để thấy.
+ * Mệnh đề thành viên chỉ lọc `app_api` và `app_unseal` — `app_neo`, `app_khoi_tao` chưa nằm trong nó (nói ra, §S1.220).
+ */
+const CAU_VAI_UNG_DUNG_CON_EXECUTE =
+  "SELECT r.rolname || ' -> ' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS mo_ta " +
+  "FROM pg_catalog.pg_roles r CROSS JOIN pg_catalog.pg_proc p " +
+  "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace " +
+  "WHERE n.nspname = 'pg_catalog' AND p.proname = ANY($1::text[]) AND NOT r.rolsuper " +
+  "  AND EXISTS (SELECT 1 FROM pg_catalog.pg_roles g WHERE g.rolname IN ('app_api','app_unseal') " +
+  "                AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET'))) " +
+  "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta";
+
 let db: TestDatabase;
 let orgA: string;
 
@@ -156,16 +170,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
   });
 
   it("⓷ MỌI vai ứng dụng mất EXECUTE trên MỌI dạng đối số của bốn hàm lấy khoá mức phiên", async () => {
-    const { rows } = await db.pool.query<{ mo_ta: string }>(
-      "SELECT r.rolname || ' -> ' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS mo_ta " +
-        "FROM pg_catalog.pg_roles r CROSS JOIN pg_catalog.pg_proc p " +
-        "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace " +
-        "WHERE n.nspname = 'pg_catalog' AND p.proname = ANY($1::text[]) AND NOT r.rolsuper " +
-        "  AND EXISTS (SELECT 1 FROM pg_catalog.pg_roles g WHERE g.rolname IN ('app_api','app_unseal') " +
-        "                AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET'))) " +
-        "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta",
-      [TEN_HAM_LAY_KHOA_PHIEN],
-    );
+    const { rows } = await db.pool.query<{ mo_ta: string }>(CAU_VAI_UNG_DUNG_CON_EXECUTE, [TEN_HAM_LAY_KHOA_PHIEN]);
     // [S1.87 / lượt soi ngang 74 góc 3 — ĐO, và phép đo BÁC lời khai cũ của chính vế này.]
     // Lời cũ: ~~"một dạng đối số lọt lưới là một đường vòng nguyên vẹn — `pg_advisory_lock(integer,
     // integer)` lấy CÙNG khoá"~~. SAI. PostgreSQL giữ HAI không gian khoá tư vấn RỜI NHAU, phân
@@ -195,6 +200,27 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
       "SELECT count(*)::int AS n FROM pg_catalog.pg_roles WHERE rolname IN ('app_api','app_unseal')",
     );
     expect(vai[0]?.n).toBe(2);
+
+    // [S1.220 / khoản 186 — lượt soi ngang 74 góc 2] ĐỐI CHỨNG DƯƠNG CỦA CHÍNH MỆNH ĐỀ LỌC. Hai đối chứng trên chứng minh HÀM tồn
+    // tại và VAI tồn tại; không cái nào chứng minh mệnh đề `EXISTS (… pg_has_role …)` CHỌN ĐƯỢC AI. Đo: đổi hai tên vai trong nó
+    // thành hai tên không tồn tại ⇒ tập rỗng VĨNH VIỄN ⇒ vế trên xanh bất kể quyền (§S1.220). Nên: cấp `EXECUTE` cho đúng vai mà
+    // phần ⓷ độc quyền canh (`app_unseal`, vế ⓵ chỉ đo `app_api` dạng `bigint`), chạy lại ĐÚNG câu trên, đòi ĐÚNG một hàng, rồi thu
+    // hồi trong `finally` để vế này không để lại quyền cho các vế sau.
+    await db.pool.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO app_unseal");
+    let thayDuoc: string[];
+    try {
+      thayDuoc = (await db.pool.query<{ mo_ta: string }>(CAU_VAI_UNG_DUNG_CON_EXECUTE, [TEN_HAM_LAY_KHOA_PHIEN])).rows.map(
+        (x) => x.mo_ta,
+      );
+    } finally {
+      await db.pool.query("REVOKE EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) FROM app_unseal");
+    }
+    expect(thayDuoc, "đối chứng dương: mệnh đề lọc phải THẤY đúng quyền vừa cấp, không nhiều hơn, không ít hơn").toEqual([
+      "app_unseal -> pg_advisory_lock(bigint)",
+    ]);
+    // Và thu hồi xong thì về rỗng — quyền cấp tạm không sống qua vế này.
+    const { rows: sauThuHoi } = await db.pool.query<{ mo_ta: string }>(CAU_VAI_UNG_DUNG_CON_EXECUTE, [TEN_HAM_LAY_KHOA_PHIEN]);
+    expect(sauThuHoi.map((x) => x.mo_ta)).toEqual([]);
   });
 
   it("⓸ mục hardening và `migrate()` phải nói CÙNG một tập hàm khoá — đổi cơ chế khoá của migrate mà quên mục này thì ĐỎ ở đây", () => {

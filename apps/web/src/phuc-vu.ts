@@ -218,8 +218,16 @@ async function docThan(req: IncomingMessage): Promise<Buffer | null> {
  * đúng thứ `taoDocDiaChi` của api tồn tại để chặn, nên tiến trình này để api nhìn thấy socket
  * thật của nó. Hệ quả: mọi người dùng demo dùng CHUNG một ô đếm hạn mức theo người gọi — chấp
  * nhận được cho một buổi trình bày, và ADR-044 ghi nó ra thay vì để ai đó phát hiện lúc đang demo.
+ *
+ * [S1.230 / khoản 202] `sec-fetch-site` đi qua vì nó là VẾ THỨ HAI của cùng phòng vệ ấy:
+ * `nguonKhac` ở `apps/api/src/server.ts` đọc `origin`, và khi không có `origin` thì đọc
+ * `sec-fetch-site` — với lời khai *"trình duyệt luôn gửi ít nhất MỘT trong hai"*. Danh sách này
+ * từng chuyển `origin` mà bỏ `sec-fetch-site`, nên một yêu cầu ghi không mang `origin` bị 403
+ * khi gọi thẳng api và đi lọt khi đi qua đây: lời khai "hai tín hiệu" chỉ còn một sau proxy.
+ * Chỉ đúng header ấy, không cả họ `sec-fetch-*`: api chỉ đọc một, và danh sách trắng không mở
+ * theo tiền tố. `apps/web/src/phuc-vu.test.ts` đo header ĐẾN upstream ở cả hai chiều.
  */
-const HEADER_LEN = ["cookie", "content-type", "accept", "origin"] as const;
+const HEADER_LEN = ["cookie", "content-type", "accept", "origin", "sec-fetch-site"] as const;
 /** Header được chuyển tiếp XUỐNG trình duyệt. `set-cookie` đi riêng ngay dưới: nó là MẢNG, và nó là thứ làm phiên khách sống được. */
 const HEADER_XUONG = ["content-type"] as const;
 

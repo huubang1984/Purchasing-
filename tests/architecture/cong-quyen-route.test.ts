@@ -54,6 +54,9 @@ const HAM_DOI_TRANG_THAI = [
   "duyetTraoThau",
   "huyTraoThau",
   "moVongBafo",
+  // [S1.231 / khoản 232 / ADR-133] Hàm ghi THỨ BẢY của `@trustprocure/danh-gia`: rút đề xuất — route đòi `award.recommend`,
+  // cùng mã với lần đề xuất; hàm hỏi lại cùng mã.
+  "rutDeXuatTraoThau",
   "taoLuotDanhGia",
   "addSupplierContact",
   "approveRfq",

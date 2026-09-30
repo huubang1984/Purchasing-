@@ -1,7 +1,7 @@
 // ==============================================================================================
 // [ADR-020 mục 2 / S1.10.4] ĐĂNG NHẬP NGƯỜI MUA — nửa PHÁT của khoản nợ 6
 //
-// ~~Bốn bước, bốn hàm~~ [S1.79 / lượt soi ngang 72] BẢY hàm, mỗi hàm một giao dịch của người gọi.
+// ~~Bốn bước, bốn hàm~~ [S1.79 / lượt soi ngang 72] ~~BẢY~~ [S1.216 / khoản 195] TÁM hàm, mỗi hàm một giao dịch của người gọi.
 // Khối này khai "bốn" rồi liệt NĂM tên, còn hai hàm thêm sau thì không ai thêm vào danh sách:
 // `enrollOrReplaceTotpForLogin` (S1.10.7) và `startAgentSession` (S1.76 / khoản 141). Một khối mở
 // đầu liệt kê thiếu không làm test nào đỏ — nó chỉ làm người đọc tin rằng tệp này nhỏ hơn thật.
@@ -17,6 +17,10 @@
 //   startAgentSession   [S1.76 / khoản 141] chứng chỉ `AGENT_READONLY` có phạm vi trên hàng phiên,
 //                       TTL trần MỘT GIỜ; vẫn đòi một mã TOTP TƯƠI vì trigger 039 bắt buộc thế
 //   revokeSession       đăng xuất
+//   listRecentLoginTokens
+//                       [S1.216 / khoản 195] link đăng nhập gần đây CỦA CHÍNH người gọi — tạo lúc, hết hạn,
+//                       dùng lúc, trạng thái; KHÔNG BAO GIỜ `token_hash`. Cho người ĐÃ đăng nhập; thông điệp
+//                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên
 //
 // Ba kỷ luật kế thừa nguyên vẹn từ `packages/invitation`:
 //   • mọi ca hỏng của một bước ném CÙNG MỘT thông điệp (không oracle trên tập người dùng/token);
@@ -155,6 +159,12 @@ export async function issueLoginToken(
   // Cộng với `CHECK (email = lower(email))` của `048`, vị từ này tương đương `email = lower($1)`,
   // và `UNIQUE (org_id, email)` bảo đảm **nhiều nhất MỘT hàng khớp**: `rows[0]` tất định. Đó mới
   // đúng là điều khoản nợ 63 đòi.
+  //
+  // **[S1.229 / khoản 71 / ADR-132]** Miền `users.email` nay là ASCII IN ĐƯỢC (`092_email_ascii`,
+  // `CHECK (email ~ '^[!-~]+@[!-~]+$')`), nên trên mọi giá trị CẤT ĐƯỢC `lower()` của máy chủ và
+  // `.toLowerCase()` của JS đồng ý: điểm mã phân kỳ (Ⓐ, Ᲊ) không còn cất được, và test `[sổ nợ 63]`
+  // lật theo — nó đo địa chỉ ấy bị 092 từ chối và `/auth/link` vẫn 200 không link. Câu dưới GIỮ
+  // hai vế cùng hàm: bản vá S1.27 đúng không nhờ miền, và nó là thứ còn đứng nếu miền có ngày mở lại.
   //
   // ~~Cái giá là câu này không dùng được tiền tố `(org_id, ...)` của chỉ mục duy nhất.~~ **[đã đo
   // lại — gọi sai thứ bị mất]** Tiền tố ấy VẪN được dùng: kế hoạch là Bitmap Index Scan trên
@@ -467,6 +477,13 @@ export async function startUserSession(
 // được. Tức "phát chứng chỉ máy một lần rồi để đó" là BẤT KHẢ hôm nay mà không nới thân một
 // trigger đang bị ghim; vòng này KHÔNG nới nó. Phát biểu đúng mức: đường này đổi "magic link CỘNG
 // TOTP mỗi giờ" thành "MỘT mã TOTP mỗi giờ" — rẻ hơn hẳn, và vẫn là một con người mỗi giờ.
+//
+// [S1.209 / khoản 174] VÀ "MỘT MÃ TOTP MỖI GIỜ" CÓ MỘT ĐIỀU KIỆN VẬN HÀNH, nói ra: route gọi hàm này
+// (`POST /auth/agent-session`, `apps/api`) đứng sau trần `MFA_TRAN_SAI_DUONG_PHU` (= 2) đọc thẳng
+// `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng. Người đã gõ sai TOTP 2 lần trên
+// `/auth/totp` thì KHÔNG xoay được chứng chỉ agent, kể cả với mã đúng, cho tới khi đăng nhập đúng
+// một lần (bộ đếm về 0); tiến trình MCP đang chạy dừng ở giờ kế tiếp. Fail-closed có chủ ý — xem
+// khối cạnh `MFA_TRAN_SAI_DUONG_PHU` (mfa-credentials.ts). Đo: `apps/api/src/auth.int.test.ts` vế ⑽.
 // ==============================================================================================
 
 export interface StartedAgentSession {
@@ -548,4 +565,67 @@ export async function revokeSession(client: pg.PoolClient, orgId: string, sessio
     "UPDATE public.sessions SET revoked_at = pg_catalog.now() WHERE id OPERATOR(pg_catalog.=) $1 AND revoked_at IS NULL",
     [sessionId],
   );
+}
+
+// ==============================================================================================
+// [S1.216 / khoản 195 / ADR-126] LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI
+//
+// `LoginTokenError` gộp ba trạng thái — không hợp lệ, hết hạn, đã dùng — làm MỘT câu, và đó là chống dò
+// tìm CÓ LÝ ở một đường vô danh: phân biệt được chúng là một oracle trên tập token. Vòng này KHÔNG nới câu
+// ấy. Nhưng vế "đã dùng" đáng lẽ dẫn tới *báo ngay, có kẻ đã dùng link của tôi*, và tới trước vòng này phải
+// mở cơ sở dữ liệu mới biết — người mua thật thì không có cơ sở dữ liệu. Nên đường đúng là một đường KHÁC,
+// cho người đã chứng minh được danh tính: phiên đã MFA, `userId` DẪN XUẤT từ cookie ở bộ điều phối (như
+// `startAgentSession`), và câu đọc chỉ trả hàng của chính người ấy, dưới RLS của tổ chức.
+//
+// KHÔNG BAO GIỜ `token_hash`: băm của một token còn hiệu lực là thứ đối chiếu được với một token bị rò, và
+// bảng không có gì khác đáng đưa ra. Trạng thái suy Ở CSDL bằng cùng đồng hồ với `redeemLoginToken`
+// (`clock_timestamp()`), để "còn hiệu lực" ở đây và "đổi được" ở kia không lệch nhau; đã dùng thắng hết hạn
+// (một link đã dùng rồi hết hạn vẫn là "đã dùng" — đó là vế người mua cần thấy). Tối đa `SO_LINK_GAN_DAY`
+// hàng, mới nhất trước: trần tự phục vụ là 5 mã / 15 phút, nên hai mươi hàng là hơn một giờ dùng dày; chỉ
+// mục `(org_id, user_id, created_at)` của 029 phục vụ đúng câu này.
+// ==============================================================================================
+
+export type LoginTokenStatus = "PENDING" | "EXPIRED" | "CONSUMED";
+
+export interface RecentLoginToken {
+  readonly createdAt: Date;
+  readonly expiresAt: Date;
+  readonly consumedAt: Date | null;
+  readonly purpose: string;
+  readonly status: LoginTokenStatus;
+}
+
+const SO_LINK_GAN_DAY = 20;
+
+/**
+ * Link đăng nhập gần đây của CHÍNH `userId` — người gọi là bộ điều phối với `actor.id` của phiên; đây không phải một lời khai danh
+ * tính từ thân yêu cầu. Trả mảng (có thể rỗng), không ném ở ca "không có link": khác các hàm trên, đây là một phép đọc của chính chủ,
+ * không có gì để che. `userId` sai hình dạng thì ném như mọi hàm của tệp — một lỗi lập trình, không phải một ca của người dùng.
+ */
+export async function listRecentLoginTokens(
+  client: pg.PoolClient,
+  orgId: string,
+  userId: string,
+): Promise<readonly RecentLoginToken[]> {
+  await assertTenantBound(client, orgId, "listRecentLoginTokens");
+  if (!UUID_RE.test(userId)) throw new LoginTokenError();
+  // Không `token_hash` trong danh sách cột — và không `SELECT *`: một cột thêm ngày mai không tự đi ra.
+  const { rows } = await client.query<{
+    created_at: Date;
+    expires_at: Date;
+    consumed_at: Date | null;
+    purpose: string;
+    status: LoginTokenStatus;
+  }>(
+    `SELECT created_at, expires_at, consumed_at, purpose,
+            CASE WHEN consumed_at IS NOT NULL THEN 'CONSUMED'
+                 WHEN expires_at OPERATOR(pg_catalog.<=) pg_catalog.clock_timestamp() THEN 'EXPIRED'
+                 ELSE 'PENDING' END AS status
+       FROM public.user_login_tokens
+      WHERE user_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+      ORDER BY created_at DESC, id DESC
+      LIMIT $2::pg_catalog.int4`,
+    [userId, SO_LINK_GAN_DAY],
+  );
+  return rows.map((h) => ({ createdAt: h.created_at, expiresAt: h.expires_at, consumedAt: h.consumed_at, purpose: h.purpose, status: h.status }));
 }

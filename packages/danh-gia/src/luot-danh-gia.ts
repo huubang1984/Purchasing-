@@ -190,6 +190,12 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
  * Nó cũng là luật đúng cho nhà cung cấp NGOÀI top-N — họ không được mời nộp lại, nên phiên bản mới
  * nhất của họ vẫn là báo giá vòng một, và họ vẫn đứng trong bảng. BAFO cải thiện giá của top-N; nó
  * không loại ai khỏi cuộc thi.
+ *
+ * [S1.217 / khoản 250 / ADR-128] Luật THỨ HAI, cũng chép nguyên văn từ worker và bảng so sánh:
+ * **chỉ luồng của lời mời CÒN SỐNG** — `i.revoked_at IS NULL`. Thu hồi lời mời loại doanh nghiệp ấy
+ * khỏi cuộc thi; mời lại sau thu hồi là một luồng mới (`018`), nên thiếu vế này một doanh nghiệp đứng
+ * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
+ * `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba bộ đọc mang đúng một vế ấy.
  */
 async function docBaoGia(
   client: pg.PoolClient,
@@ -210,6 +216,7 @@ async function docBaoGia(
                                        AND i.org_id OPERATOR(pg_catalog.=) b.org_id
       WHERE u.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND i.revoked_at IS NULL
       ORDER BY v.bid_id, v.version DESC`,
     [orgId, rfqId],
   );
@@ -259,6 +266,13 @@ export async function taoLuotDanhGia(
     {
       userId: actor.id,
       orgId,
+      // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] CỔNG NÀY LÀ MỘT LỚP NÔNG, nói ra tại chỗ.
+      // `evaluation.perform` do NĂM vai giữ — REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER · FINANCE — đo trên
+      // ma trận `005` (+`083`) và GHIM ở `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»); trong tổ chức nó chỉ
+      // chặn `DIRECTOR` và `DATA_STEWARD`. Nó chặn khách và tác tử, KHÔNG chặn «ai trong tổ chức» — người đọc mã đừng đọc nó
+      // như một lớp phân tách nhiệm vụ. Lớp THẬT là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói thầu (ADR-051: trigger
+      // `award_kiem_de_xuat` so người đề xuất với `created_by`/`dispatched_by` của chính gói). Ma trận `005` giữ nguyên —
+      // phương án thu hẹp bị loại vì đổi một mốc ghim của S0 (ADR-051 ⑵). Ai đổi ma trận làm ca ghim đỏ, và phải đọc lại đoạn này.
       permission: PERMISSIONS.EVALUATION_PERFORM,
       // [S1.107 / lượt soi ngang 77 — ②] `RFQ`, KHÔNG `RFQ_EVALUATION`. Cặp này đi NGUYÊN
       // VĂN vào hàng sổ `PERMISSION_DENIED` (`rbac.ts` truyền thẳng cho `appendAuditEvent`),

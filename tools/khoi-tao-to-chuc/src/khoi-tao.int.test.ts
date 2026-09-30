@@ -140,14 +140,29 @@ describe("[S1.182 / ADR-111] ⑴ tạo tổ chức", () => {
     expect(rows.map((r) => r.code)).toEqual([...MA_VAI].sort());
   });
 
-  it("[lượt soi] email mang một điểm mã mà JS và CSDL hạ KHÁC nhau: cất bằng hàm CSDL, người ấy xin được link bằng đúng chuỗi đã khai", async () => {
+  // ~~[lượt soi] email mang một điểm mã mà JS và CSDL hạ KHÁC nhau: cất bằng hàm CSDL, người ấy xin được link bằng đúng chuỗi đã khai~~
+  // **[S1.229 / khoản 71 / ADR-132] LẬT CÓ CHỦ ĐÍCH.** Ca cũ đứng trên tiền đề `pg_catalog.lower('Ⓐ') ≠ 'Ⓐ'.toLowerCase()` — đúng trên
+  // musl và ctype C, SAI trên glibc `C.UTF-8` (đo trên máy chạy test: máy chủ cũng hạ Ⓐ → ⓐ, ca cũ ĐỎ ở tiền đề), tức ca ấy xanh hay đỏ
+  // theo libc của máy — đúng cái ranh giới mà khoản 71 gọi tên. Nay miền `users.email` là ASCII in được (`092_email_ascii`): địa chỉ
+  // ấy bị từ chối TRƯỚC khi tới `lower()` của CSDL, ở đúng vị trí trong bản khai, không in email, không tổ chức nào nằm lại — và kết quả
+  // KHÔNG phụ thuộc locale (chạy cả dưới `TRUSTPROCURE_PG_LOCAL_LOCALE=C`).
+  it("[S1.229 / khoản 71] email mang điểm mã ngoài ASCII (Ⓐ) ⇒ KhoiTaoError nêu vị trí, bị từ chối TRƯỚC khi tới lower() của CSDL, rollback trọn — không phụ thuộc locale", async () => {
     const email = "\u24B6.Test@Khach-Unicode.vn"; // Ⓐ — CIRCLED LATIN CAPITAL LETTER A
-    const { rows: ha } = await db.pool.query<{ pg: string }>("SELECT pg_catalog.lower($1::text) AS pg", [email]);
-    // Tiền đề của phép đo: nếu hai hàm hạ GIỐNG nhau trên máy chủ này thì ca này không đo gì — nói ra, không xanh giả.
-    expect(ha[0]!.pg, "tiền đề: pg_catalog.lower() và toLowerCase() phải lệch nhau trên điểm mã này").not.toBe(email.toLowerCase());
-    const kq = await khoiTao(pool, docBanKhai(banKhaiTao("unicode-email", [nguoi(email, ["BUYER"])]), "tao"));
+    const loi = await khoiTao(pool, docBanKhai(banKhaiTao("unicode-email", [nguoi("dau@khach-unicode.vn", ["BUYER"]), nguoi(email, ["FINANCE"])]), "tao")).catch(
+      (e: unknown) => e,
+    );
+    expect(loi).toBeInstanceOf(KhoiTaoError);
+    expect((loi as Error).message).toBe("người thứ 2: email chứa ký tự ngoài ASCII in được");
+    expect((loi as { cause?: unknown }).cause, "từ chối ở tầng công cụ, không phải 23514 của CSDL").toBeUndefined();
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM organizations WHERE slug = 'unicode-email'");
+    expect(rows[0]!.n, "rollback trọn: người thứ nhất và tổ chức không nằm lại").toBe(0);
+  });
+
+  it("[S1.229 / khoản 71] email ASCII có chữ hoa và ký tự đặc biệt in được ⇒ cất ở chữ thường bằng hàm CSDL, xin được link bằng đúng chuỗi đã khai", async () => {
+    const email = "Ke.Toan+71@Khach-ASCII.vn";
+    const kq = await khoiTao(pool, docBanKhai(banKhaiTao("ascii-email", [nguoi(email, ["BUYER"])]), "tao"));
     const { rows } = await db.pool.query<{ email: string }>("SELECT email FROM users WHERE org_id = $1", [kq.orgId]);
-    expect(rows).toEqual([{ email: ha[0]!.pg }]);
+    expect(rows).toEqual([{ email: "ke.toan+71@khach-ascii.vn" }]);
     const t = await withTenant(db.poolAs("app_api"), kq.orgId, (c) => issueLoginToken(c, kq.orgId, { email }));
     expect(t.ok, "người ấy xin được link đăng nhập bằng email như đã khai").toBe(true);
   });
