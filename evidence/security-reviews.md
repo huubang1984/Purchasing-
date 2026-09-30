@@ -17886,6 +17886,185 @@ bản sao, so băm. 14/14 ĐỎ đúng vế:
   .dependency-cruiser.cjs` 0 vi phạm (255 module, 800 cạnh).
 - Cổng cuối `pnpm vitest run tests/architecture tools/kiem-truoc-apply tests/deploy` (hai biến Postgres cục bộ): 40 tệp xanh / 40; 432 test xanh, 1 bỏ qua (`xuong-dong-ts` vế chỉ chạy trên CI), 0 đỏ; 173,5 s; rc=0 — gồm `hinh-dang-khoi-tao` 20/20, `tools/kiem-truoc-apply` (luat, khop-stack-90, nguon), `tests/deploy/khoi-tao-sh` (bash thật, `aws` giả), hai tệp qt3 int trên cụm Postgres cục bộ
 
+# §S1.9160 — KIỂM KÊ ĐÓNG MÃ CHÉP `api` → WORKER, CỔNG GIỮ BẢNG — KHOẢN 187 ĐÓNG, 9470 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một cổng kiến trúc mới, một token cùng nghĩa ở
+`bat` của worker, chú thích trỏ cổng ở sáu tệp; không route, không màn, không migration, không ADR, không phụ thuộc mới. Đóng 187; mở 9470.
+
+## 1. Vòng này là gì
+
+Lô B6 của đợt trả nợ 2, một khoản. Khoản 187 (§S1.87, tách khỏi phần dư của 173): worker mở thầu ra đời bằng cách CHÉP từng mảnh của
+`api` — `g1-` cấm import ngược và worker không import `apps/api` — và ba bản chép đã trôi thật trước khi ai đo (khoản 166, nâng ở
+S1.9151). Câu hỏi còn lại: *còn gì nữa đã chép mà chưa ai đối chiếu*. Đề bài đòi ⑴ bảng kiểm kê có kết quả ghi ra, ⑵ mỗi cặp một
+cách xử lý có lý do (nâng, hay giữ hai bản CÓ phép đo chống trôi), ⑶ một cổng tĩnh đỏ khi một hàm cùng tên xuất hiện ở cả hai app mà
+không có trong bảng.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-29. Các điểm tự chốt trong phạm vi đã duyệt ở mục 5.
+
+## 3. Đo trước
+
+- **Bảng rỗng, mã trước vòng** (`tests/architecture/ma-chep-api-worker.test.ts` với ba bảng `[]`, log `lo60-do-truoc-bang-rong`): vế ⑴
+  đỏ với 20 dòng `CHƯA KHAI` — `EMAIL`, `CauHinhError`, `VongBiMat`, `MoiTruong`, `TEN_PHIEN_BAN`, `BASE64`, `bat`, `docVong`,
+  `docAdapter`, `ROLE_DANG_NHAP`, `docDatabaseUrl`, `docThuMucTuyetDoi`, `BIEN_KHOA_LOCAL_DEV`, `BIEN_KHOA_KMS`,
+  `tuChoiBienCuaAdapterKhac`, `EMAIL_DON`, `docCauHinh`, `moTaLoi`, `chinh`, `docChuoi`; vế ⑵ đỏ với 7 literal regex có ở cả hai app.
+  Đó là toàn bộ thứ "chưa ai liệt kê" mà thân khoản hỏi — ba lệch đã biết không còn trong danh sách vì S1.9151 đã nâng.
+- **Bảng đầy, mã trước vòng** (log `lo60-do-truoc-bat`): 77/79 xanh; đỏ đúng vế `bat` (VĂN BẢN):
+  `- if (v === undefined || v === "")` / `+ if (v === undefined || v.length === 0)` — hai bản lệch một token cùng nghĩa. (Vế đỏ thứ hai là
+  một sàn `≥ 10` hàng tự đặt sai, bỏ — xem mục 5.)
+- **Bộ quét mù ở bản đầu, tự bắt được**: glob `apps/api/src/**/*.ts` cho `git ls-files` chỉ khớp tệp trong THƯ MỤC CON (13/28 tệp của
+  `api`, 0 tệp ngay trong `src/`) — pathspec của git khớp `*` qua `/` nên `**/` đòi thêm một `/`. Vế "bộ quét không mù" đòi thấy
+  `cau-hinh.ts` VÀ `adapters/gui-ses.ts` — hai tầng — sau khi sửa (mẫu `<tiền tố>*.ts`); ghi lý do tại chỗ.
+
+## 4. Thay đổi
+
+- `tests/architecture/ma-chep-api-worker.test.ts` (MỚI, 83 vế, không nhãn `[INV-…]`): I — ba bảng kiểm kê ĐÓNG (`BANG_TEN` 23 hàng,
+  `BANG_MAU` 7, `BANG_KHAC_TEN` 3; bảng in ở bàn giao mục 2 và dưới đây) + bộ quét cây cú pháp (khai báo mức module: function,
+  const/let, class, interface, type, enum; literal regex; tệp theo `git ls-files`, bỏ test/`.d.ts`) + ba phép đối chiếu là hàm THUẦN
+  (chưa khai ⇒ đỏ; hàng thiu — tệp, loại, một bên xoá — ⇒ đỏ; `NANG` mọc lại ở app hay vắng ở gói chung ⇒ đỏ; `GIU` không phép đo ⇒
+  đỏ; `RIENG` có phép đo ⇒ đỏ; hàng khai `HANH_VI` mà mục III không chạy qua ⇒ đỏ) + đối chứng trong bộ nhớ (lần quét giả có
+  `laDiaChiEmail`, một literal của `api`, `MA_NAM_KY_TU` chép sang worker; hàng thiu; hàng GIU không đo; cặp khác tên trỏ tên không
+  có) + bộ quét tự kiểm trên văn bản mẫu (sáu loại thấy; khai báo trong thân hàm, tên trong chú thích/chuỗi không thấy). II — phép đo
+  VĂN BẢN: 9 hàng so `getText()` bỏ `export`; hai cặp bộ nghe pool so điều kiện `if` và khuôn template của `console.error` (đoạn chữ
+  + hình dạng từng biểu thức, tiền tố `[api]`/`[unseal-worker]` chuẩn hoá), ghim luôn khuôn mong đợi; đối chứng bộ đọc khuôn. III —
+  phép đo HÀNH VI: nạp hai `docCauHinh` bằng dynamic import theo URL (không cạnh depcruise, không import gì từ `apps/`), ba cảnh nền
+  (`local-dev`, `aws-kms`, `ses`) cho mỗi bên, 61 ca `{biến, giá trị, cảnh, mong đợi}` — cả hai cùng NHẬN và đọc ra cùng giá trị, hay
+  cùng TỪ CHỐI bằng lỗi `name === "CauHinhError"` có tên biến, không có 12 ký tự đầu của bất kỳ khoá nào; vế "bảng ca phủ mọi tên khai
+  HANH_VI"; vế LỆCH ĐÃ KHAI (khoá 16 byte: `api` ném `CauHinhError` nêu `TRUSTPROCURE_MASTER_KEYS`; worker `docCauHinh` nhận, rồi
+  `new MasterKeyRing(active, keys)` ném `/32 byte/`).
+- `apps/unseal-worker/src/cau-hinh.ts`: `bat` — `v.length === 0` → `v === ""` (cùng nghĩa; đồng văn bản với `api`); khối đầu thêm đoạn
+  `[S1.9160 / khoản 187]` khai đây là bản chép có chủ đích và có kiểm kê, chỉ tới cổng và lệch đã khai.
+- `apps/api/src/cau-hinh.ts`: khối đầu thêm đoạn cùng nhãn (đổi ngữ pháp một biến hai tiến trình cùng đọc thì đổi cả hai bên).
+- `apps/api/src/main.ts`, `apps/unseal-worker/src/main.ts`: hai dòng chú thích trên `moTaLoi` (bản song sinh, cổng so từng ký tự).
+- `apps/api/src/mo-ta-loi.ts`, `apps/unseal-worker/src/tien-trinh.ts`: docstring của hai cặp bộ nghe pool nêu bản song sinh và phép đo.
+- Không đổi `composition.ts` nào, không đổi gói nào, không đổi `barrel-exports.test.ts` (không xuất thêm symbol).
+
+Bảng kiểm kê (⑴ 23 cặp cùng tên · ⑵ 7 regex chung · ⑶ 3 cặp khác tên) — chép nguyên văn từ ba hằng của cổng:
+
+⑴ Cùng tên ở hai app (`BANG_TEN`, 23 hàng)
+
+| Tên | Loại | `apps/api/src/` | `apps/unseal-worker/src/` | Xử lý | Phép đo | Lý do (rút gọn; nguyên văn ở cổng) |
+|---|---|---|---|---|---|---|
+| `moTaLoiKhongGiaTri` | function | ~~`mo-ta-loi.ts`~~ (xuất lại) | ~~`tien-trinh.ts`~~ (tên cục bộ `moTaLoi`) | NÂNG → `packages/identity/src/mo-ta-loi.ts` | tên KHÔNG còn ở app, CÓ ở gói | S1.9151 / khoản 166: bản worker thiếu `cause`, không nhận `TenantError` theo lớp — lệch thật |
+| `moTaMotTang` | function | ~~`mo-ta-loi.ts`~~ | — | NÂNG → identity | như trên | hàm phụ đi theo; giữ hàng để không mọc lại ở `api` |
+| `MA_NAM_KY_TU` | const | ~~`mo-ta-loi.ts`~~ | ~~`tien-trinh.ts`~~ (literal không tên) | NÂNG → identity | tên VÀ literal `/^[0-9A-Z]{5}$/u` không còn ở app | S1.9151 |
+| `moTaLoi` | function | `main.ts` | `main.ts` | GIỮ | VĂN BẢN (từng ký tự) | mỗi bản `instanceof` lớp `CauHinhError` của chính app; điểm vào cố ý không phụ thuộc gói |
+| `CauHinhError` | class | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | hai `docCauHinh` là hai hợp đồng; thân lớp trùng |
+| `VongBiMat` | interface | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | kiểu, không năng lực |
+| `MoiTruong` | type | `cau-hinh.ts` (export) | `cau-hinh.ts` | GIỮ | VĂN BẢN (bỏ `export`) | |
+| `BASE64` | const | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | literal còn ở `routes/guest.ts` (BANG_MAU) |
+| `TEN_PHIEN_BAN` | const | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | cùng `TRUSTPROCURE_MASTER_KEYS` đi vào cả hai |
+| `EMAIL_DON` | const | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | cùng `TRUSTPROCURE_SES_FROM` |
+| `EMAIL` | const | `adapters/gui-ses.ts` | `adapters/canh-bao-ses.ts` | GIỮ | VĂN BẢN | hai cửa ra SES riêng (IAM riêng) |
+| `bat` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | VĂN BẢN | **[S1.9160] đồng văn bản** (`v.length === 0` → `v === ""`) |
+| `docAdapter` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | HÀNH VI | thông điệp khác chữ ("CHƯA CÓ trong kho" / "CHƯA TỒN TẠI"), mỗi unit test ghim chữ của mình |
+| `docVong` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | HÀNH VI + lệch ĐÃ KHAI ghim riêng | `api` kiểm 32 byte ở cấu hình; worker để `MasterKeyRing` ném lúc dựng |
+| `docDatabaseUrl` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | HÀNH VI | cùng ngữ pháp, KHÁC role có chủ đích |
+| `docThuMucTuyetDoi` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | HÀNH VI (hai tên biến) | thông điệp nêu lý do riêng mỗi bên |
+| `tuChoiBienCuaAdapterKhac` | function | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ | HÀNH VI | ADR-064 |
+| `chinh` | function | `main.ts` | `main.ts` | RIÊNG | — | thân điểm vào hai tiến trình |
+| `docCauHinh` | function | `cau-hinh.ts` | `cau-hinh.ts` | RIÊNG | — (phần chung đo ở mục III) | worker không đọc ba vòng bí mật (ADR-006, vế ⑼) |
+| `ROLE_DANG_NHAP` | const | `cau-hinh.ts` | `cau-hinh.ts` | RIÊNG | — | `app_api_login` / `app_unseal_login` (`CAP_HOP_LE`) |
+| `BIEN_KHOA_LOCAL_DEV` | const | `cau-hinh.ts` | `cau-hinh.ts` | RIÊNG | — | 6 biến / 2 biến — một vòng ở worker |
+| `BIEN_KHOA_KMS` | const | `cau-hinh.ts` | `cau-hinh.ts` | RIÊNG | — | 7 biến / 2 biến — một CMK ở worker |
+| `docChuoi` | function | `outbox-api.ts` | `composition.ts` | RIÊNG | — | `api` có trần `EMAIL_MAX_BYTES` (chuỗi là email đi gửi); worker đọc id uuid |
+
+⑵ Cùng biểu thức chính quy (`BANG_MAU`, 7 hàng — tập tệp mỗi bên)
+
+| Literal | Tên | api | worker | Xử lý / phép đo |
+|---|---|---|---|---|
+| `/^[A-Za-z0-9+/]+={0,2}$/u` | BASE64 | `cau-hinh.ts`, `routes/guest.ts` | `cau-hinh.ts` | GIỮ — văn bản hàng `BASE64` |
+| `/^[A-Za-z0-9._:-]{1,32}$/u` | TEN_PHIEN_BAN | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ — văn bản + hành vi `MASTER_KEYS` |
+| `/^[A-Za-z0-9/:_.-]{1,2048}$/u` | định danh CMK (`docKeyIdKms` / không tên) | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ — hành vi `KMS_ORG_WRAP_KEY_ID` |
+| `/^[A-Za-z0-9_-]{1,64}$/u` | configuration set (`TEN_CAU_HINH_AWS` / không tên) | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ — hành vi `SES_CONFIGURATION_SET` |
+| `/^[^\s@,;<>"]{1,64}@[^\s@,;<>"]{1,253}\.[^\s@,;<>"]{2,63}$/u` | EMAIL_DON / EMAIL | `adapters/gui-ses.ts`, `cau-hinh.ts` | `adapters/canh-bao-ses.ts`, `cau-hinh.ts` | GIỮ — văn bản + hành vi `SES_FROM` |
+| `/^[a-z]{2}(?:-[a-z]+)+-\d$/u` | vùng AWS (`VUNG_AWS` / không tên ×2) | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ — hành vi `AWS_REGION`, `SES_REGION` |
+| `/^\d{1,9}$/u` | số nguyên (`soNguyen` / `docSoNguyen`) | `cau-hinh.ts` | `cau-hinh.ts` | GIỮ — hành vi, kể cả hai biên miền |
+
+⑶ Khác tên, cùng việc (`BANG_KHAC_TEN`, 3 hàng)
+
+| api | worker | Xử lý | Phép đo |
+|---|---|---|---|
+| `soNguyen` (`cau-hinh.ts`) | `docSoNguyen` (`cau-hinh.ts`) | GIỮ | hành vi (mục III) |
+| `ghiLogKetNoiHuy` (`mo-ta-loi.ts`) | `ghiKetNoiHuy` (`tien-trinh.ts`) | GIỮ — khác hình dạng có chủ đích (cổng `pool-nghe-du-tin-hieu`) | văn bản: điều kiện lọc + khuôn dòng log bỏ tiền tố; hành vi: hai `loi-ket-noi-toi-muon.int.test.ts` (S1.9143) |
+| `ghiLogLoiKetNoiToiMuon` (`mo-ta-loi.ts`) | `ghiLoiToiMuon` (`tien-trinh.ts`) | GIỮ | như trên |
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Không nâng thêm cặp nào ở vòng này.** Đề bài: *"ưu tiên nâng khi hai bản đã lệch thật"*. Ba lệch thật đã nâng ở S1.9151. Phần còn
+  lại: bộ hàm đọc cấu hình là HAI hợp đồng có chủ đích (worker không được đọc ba vòng bí mật — ADR-006 — khối đầu `cau-hinh.ts` của
+  worker nói vì sao không dùng lại `docCauHinh`/`docVong` của `api`); `moTaLoi` của hai `main.ts` `instanceof` hai lớp `CauHinhError`
+  riêng và điểm vào cố ý không phụ thuộc gói; hai bộ nghe pool khác hình dạng vì cổng `pool-nghe-du-tin-hieu` đọc lời gọi gắn theo hai
+  cách (nâng thân vào identity thì hai chỗ gắn vẫn phải ở hai app). Nâng chúng là thêm mặt tiền cho identity/tenancy để đổi lấy một
+  phép đo mà văn bản/hành vi đã cho. Gói chung nếu vòng sau nâng: identity (tiền lệ S1.9151; cả hai app đã phụ thuộc).
+- **Kiểm kê ba chiều, không chỉ "hàm cùng tên".** Đề bài nói *"và bằng `grep` các hằng giống nhau"*: worker chép BA regex KHÔNG TÊN
+  (vùng AWS ×2, định danh CMK, tên configuration set) — một cổng chỉ so tên không thấy chúng; chiều ⑵ so literal regex bắt được, và
+  đột biến M9 chứng minh. Chiều ⑶ là danh sách tay để hai cặp bộ nghe và `soNguyen`/`docSoNguyen` không rơi ngoài bảng.
+- **Đồng văn bản `bat` thay vì khai "khác chữ, đo hành vi".** Một token cùng nghĩa; đổi worker cho khớp `api` mua được phép đo mạnh hơn
+  (từng ký tự) với chi phí bằng không. `docAdapter` thì KHÔNG đồng: hai `cau-hinh.test.ts` ghim hai chữ khác nhau (`/CHƯA CÓ/`,
+  `/CHƯA TỒN TẠI/`) — đổi là chạm test của khoản khác; đo hành vi đủ.
+- **Phép đo hành vi nạp `apps/*/src/cau-hinh.ts` bằng dynamic import** (cùng cách `barrel-exports.test.ts`): tệp cổng không tạo cạnh
+  `tests → apps/unseal-worker` (g1-) hay `tests → apps/api`; depcruise 0 vi phạm, đồ thị không đổi.
+- **Bỏ sàn `≥ 10 hàng VĂN BẢN`** ở bản đầu: đặt đúng bằng con số hôm nay thì không bao giờ kêu (bài học ghi ở `pool-nghe-du-tin-hieu`);
+  thay bằng `> 0` + một `it.each` cho MỖI hàng + vế "hàng thiu" ở mục I.
+- **Ca `KEY_ADAPTER=kms` thêm dưới cảnh `aws-kms`** sau khi đột biến M8 (bỏ phép kiểm thuộc-tập của `docAdapter`) XANH GIẢ ở bản đầu:
+  dưới cảnh `local-dev` tên adapter lạ vẫn bị ném vì `tuChoiBienCuaAdapterKhac` thấy `TRUSTPROCURE_MASTER_KEYS` còn sót — phép kiểm
+  khác che hộ. Dưới `aws-kms` không còn biến local-dev nào, phép thuộc-tập là lớp duy nhất; M8 chạy lại đỏ 2 vế. Ghi tại chỗ ở bảng ca.
+- **`docChuoi` xếp RIÊNG, không GIỮ**: `api` thêm trần `EMAIL_MAX_BYTES` vì chuỗi là email đi gửi; worker đọc id rồi truyền làm tham số
+  uuid. Là hai hợp đồng, không phải một bản trôi — nhưng ghi ra để người sau không phải đoán.
+- **`apps/api/src/main.ts` chạm hai dòng chú thích** dù không có tên trong danh sách chữ của đề bài: nó là nửa kia của cặp `moTaLoi`
+  mà đề bài nêu đích danh; không đổi mã.
+
+## 6. Đột biến
+
+Kịch bản `lo60-dot-bien.py` (ngoài kho): sửa tệp, chạy `pnpm vitest run tests/architecture/ma-chep-api-worker.test.ts`, khôi phục nguyên
+văn (kiểm bằng so sánh nội dung). Mười ca, mỗi ca ĐỎ (số vế đỏ trong ngoặc):
+- M1 chép `laDiaChiEmail` của `api/adapters/gui-ses.ts` sang `worker/adapters/canh-bao-ses.ts` ⇒ ⑴ đỏ (1): `CHƯA KHAI: \`laDiaChiEmail\``
+  — đúng đột biến đề bài đòi.
+- M2 `moTaLoi` của worker bỏ nhánh `CauHinhError` ⇒ vế VĂN BẢN `moTaLoi` đỏ (1).
+- M3 `ghiLoiToiMuon` đổi `loi ket noi toi muon` → `loi ket noi tre` ⇒ vế khuôn bộ nghe lỗi-tới-muộn đỏ (1).
+- M4 `docSoNguyen` regex `\d{1,9}` → `\d{1,10}` ⇒ ⑵ đỏ (hàng mẫu số nguyên: worker không còn literal) (2).
+- M5 `docSoNguyen` biên dưới `<` → `<=` ⇒ ba ca biên dưới đỏ (`DB_POOL_MAX=1`, `CLOCK_SKEW_MAX_MS=100`, `CLOCK_SKEW_CHECK_MS=1000`) (3).
+- M6 xoá hàng `docVong` khỏi `BANG_TEN` ⇒ ⑴ đỏ `CHƯA KHAI: \`docVong\`` (1).
+- M7 khai lại `const MA_NAM_KY_TU = /^[0-9A-Z]{5}$/u` ở `tien-trinh.ts` ⇒ ⑴ đỏ: NANG mọc lại + literal còn ở app (1 vế, 2 dòng).
+- M8 `docAdapter` của worker bỏ phép kiểm thuộc-tập ⇒ bản đầu XANH GIẢ (0); sau khi thêm hai ca dưới cảnh `aws-kms` ⇒ đỏ (2).
+- M9 regex vùng AWS ở `docKhoa` của worker `\d$` → `\d+$` (chỗ thứ hai giữ) ⇒ ca `AWS_REGION hai chữ số cuối` đỏ (1) — ⑵ vẫn xanh vì
+  literal còn ở chỗ thứ hai: đúng giới hạn ⒝ đã ghi, hành vi bắt.
+- M10 `ghiLogKetNoiHuy` của `api` bỏ vế `loi.code === "SESSION_STATE_LEFT"` ⇒ vế khuôn bộ nghe `release` đỏ (1) — cổng bắt trôi ở
+  phía `api`, không chỉ phía worker.
+
+## 7. Giới hạn, nói ra
+
+- Chiều ⑴ chỉ khai báo MỨC MODULE theo TÊN; chiều ⑵ chỉ literal regex. Một hàm chép rồi ĐỔI TÊN một bên, không mang regex, hay chép
+  vào TRONG thân một hàm khác — mù (trừ khi khai tay ở ⑶). Chuỗi/số chung không so.
+- Phép đo HÀNH VI chỉ phủ biến HAI tiến trình cùng đọc; phần riêng mỗi bên đo ở `cau-hinh.test.ts` của app. Cùng một đột biến bỏ phép
+  kiểm ở một hàm có thể bị phép kiểm KHÁC che (M8 bản đầu) — bảng ca phải có ca mà phép kiểm bị đột biến là lớp duy nhất.
+- Lệch độ dài khoá giữa hai `docVong` GIỮ nguyên, chỉ ghim: cả hai tiến trình không lên; worker nổ muộn hơn một bước và bằng lớp lỗi
+  khác (`KeyError`, `main.ts` in `tên: message`). Đồng nhất là đổi hợp đồng `docCauHinh` của worker — ngoài lô.
+- `apps/mcp`, `apps/web`, `apps/public-keys` mang `moTaLoi` cùng khuôn ở `main.ts` (mcp ba bản), `apps/mcp`/`apps/web`/`apps/public-keys`
+  có `cau-hinh.ts` cùng khuôn; `tools/` giữ bốn bản mô tả lỗi cục bộ (§S1.9171) — ngoài tầm cổng này: khoản 9470.
+- Cổng đọc tệp bằng `git ls-files`: tệp chưa `git add` không được quét (chủ đích, như `pool-nghe-du-tin-hieu`).
+- Không phép đo nào chạy tiến trình thật ở vòng này — lô chỉ đổi một token cùng nghĩa và chú thích; sáu tệp int của cổng cuối chạy lại
+  để chứng minh không đổi hành vi.
+
+## 8. Số đo
+
+- `pnpm typecheck` (ba lần: sau khi viết cổng, sau vá, sau khi thêm ca `aws-kms`): 0 lỗi.
+- `pnpm exec eslint` bảy tệp đã chạm (cổng mới + sáu tệp sản xuất): 0 lỗi.
+- `pnpm exec depcruise packages apps tests --config .dependency-cruiser.cjs`: 375 module, 1558 cạnh, 0 vi phạm (`g1-` giữ; cổng mới
+  không thêm cạnh nào tới `apps/`).
+- Cổng mới `tests/architecture/ma-chep-api-worker.test.ts`: đo trước bảng rỗng ⇒ ⑴ đỏ 20 dòng, ⑵ đỏ 7 dòng; bảng đầy trên mã cũ ⇒ 77/79
+  (đỏ `bat` + một sàn tự đặt sai, bỏ); sau vá 79/79; sau khi thêm hai ca `KEY_ADAPTER` dưới cảnh `aws-kms` và hai ca vùng AWS: 83/83, ~2,4 s.
+- `pnpm vitest run apps/api/src/mo-ta-loi.test.ts tests/architecture --no-file-parallelism`: 39 tệp / 496 đạt, 1 bỏ qua (có sẵn), 0 đỏ; 265 s
+  (chạy chung CPU với agent khác).
+- `pnpm vitest run packages/identity packages/tenancy --no-file-parallelism`: 12 tệp / 242 đạt; 122 s.
+- Tuần tự, mỗi tệp một lượt: `apps/unseal-worker/src/composition.int.test.ts` 6/6 (11 s); `apps/unseal-worker/src/tien-trinh.int.test.ts`
+  19/19 (14 s); `apps/api/src/composition.int.test.ts` 20/20 (16 s); `apps/api/src/loi-giao-thuc.int.test.ts` 20/20 (16 s);
+  `apps/api/src/loi-ket-noi-toi-muon.int.test.ts` 4/4 (12 s); `apps/unseal-worker/src/loi-ket-noi-toi-muon.int.test.ts` 5/5 (14 s).
+- Bốn test đơn vị liên quan (`cau-hinh.test.ts` hai app, `mo-ta-loi.test.ts` hai bên): 4 tệp / 69 đạt.
+- Đột biến: 10 ca / 10 đỏ (M8 đỏ sau khi thêm ca; bản đầu xanh giả — mục 6).
+
 # §S1.9161 — DÒNG LOG TỪ CHỐI CANH THEO TẬP ĐÓNG, MANG VẾ ĐÃ TỪ CHỐI; `it.each` — KHOẢN 189, 179, 185 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một hàm thuần và một lớp lỗi của gói `identity`, ba
