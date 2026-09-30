@@ -75,12 +75,12 @@ async function docTapUngVien(client: pg.PoolClient, orgId: string): Promise<UngV
   }>(
     "WITH v AS (SELECT DISTINCT ON (v.canonical_item_id) v.canonical_item_id, v.ten, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, v.trang_thai " +
       "FROM public.canonical_item_versions v WHERE v.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-      "ORDER BY v.canonical_item_id, v.seq DESC), " +
-      "a AS (SELECT DISTINCT ON (a.bi_danh_sach) a.bi_danh_sach, a.canonical_item_id, a.rut " +
-      "FROM public.item_aliases a WHERE a.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid ORDER BY a.bi_danh_sach, a.seq DESC) " +
+      "ORDER BY v.canonical_item_id, v.seq DESC) " +
       "SELECT i.id, i.ma, public.chuoi_sach(v.ten) AS ten_sach, v.thuoc_tinh, v.thuoc_tinh_trong_yeu, " +
-      "coalesce((SELECT pg_catalog.array_agg(a.bi_danh_sach ORDER BY a.bi_danh_sach) FROM a " +
-      "WHERE a.canonical_item_id OPERATOR(pg_catalog.=) i.id AND NOT a.rut), '{}') AS bi_danh " +
+      "coalesce((SELECT pg_catalog.array_agg(x.bi_danh_sach ORDER BY x.bi_danh_sach) FROM (" +
+      "SELECT DISTINCT ON (a.bi_danh_sach) a.bi_danh_sach, a.canonical_item_id, a.rut FROM public.item_aliases a " +
+      "WHERE a.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid ORDER BY a.bi_danh_sach, a.seq DESC) x " +
+      "WHERE x.canonical_item_id OPERATOR(pg_catalog.=) i.id AND NOT x.rut), '{}') AS bi_danh " +
       "FROM public.canonical_items i JOIN v ON v.canonical_item_id OPERATOR(pg_catalog.=) i.id " +
       "WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND v.trang_thai OPERATOR(pg_catalog.=) 'DANG_DUNG' " +
       "ORDER BY i.ma",
