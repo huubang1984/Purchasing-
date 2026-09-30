@@ -260,6 +260,27 @@ export async function chuanHoaGoi(
   return ketQua;
 }
 
+/**
+ * [S1.9101 / S4.3b / ADR-9201] Lượt chuẩn hoá SAU lần nộp duyệt (spec §4.4) — route nộp duyệt đăng ký nó chạy sau commit, trong một
+ * giao dịch riêng, dưới phiên người nộp. Chỉ chạy ở tổ chức có ít nhất MỘT hàng chuẩn đang dùng: tổ chức chưa khai gì chạy đúng hành vi
+ * hôm nay (spec §2.3) — không hàng gợi ý, không hàng sổ, và cụm test MVP1 xanh nguyên văn. Trả `null` khi không chạy.
+ */
+export async function chuanHoaSauNop(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly actorSessionId: string },
+): Promise<KetQuaLuotChuanHoa | null> {
+  await assertTenantBound(client, orgId, "chuanHoaSauNop");
+  const { rows } = await client.query<{ co: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM public.canonical_items i WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+      "AND (SELECT v.trang_thai FROM public.canonical_item_versions v WHERE v.org_id OPERATOR(pg_catalog.=) i.org_id " +
+      "AND v.canonical_item_id OPERATOR(pg_catalog.=) i.id ORDER BY v.seq DESC LIMIT 1) OPERATOR(pg_catalog.=) 'DANG_DUNG') AS co",
+    [orgId],
+  );
+  if (rows[0]?.co !== true) return null;
+  return chuanHoaGoi(client, orgId, input);
+}
+
 export interface GhiAnhXaInput {
   readonly rfqId: string;
   readonly lineNo: number;

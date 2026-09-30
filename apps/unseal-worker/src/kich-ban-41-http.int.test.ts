@@ -854,6 +854,22 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
         case "POST /uom/aliases/withdraw":
           return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
+        // [S1.9101 / S4.3b] Ba route ghi ánh xạ, trên gói HY SINH A (đã nộp, đã đóng) và hàng chuẩn hy sinh ở trên — người quản lý
+        // dữ liệu hy sinh không chạm gói nào nên nằm ngoài tập loại trừ. Lý do khai sẵn: nếu gói A đã có bản rõ, L13 đòi nó.
+        case "POST /rfqs/:rfqId/normalize":
+          return { path: r.path.replace(":rfqId", hyA), body: {}, cookie: quanLyHy.cookie };
+        case "POST /rfqs/:rfqId/items/:lineNo/mapping":
+          return {
+            path: r.path.replace(":rfqId", hyA).replace(":lineNo", "1"),
+            body: { hangChuanId: hy.itemId, lyDo: "anh xa de quet" },
+            cookie: quanLyHy.cookie,
+          };
+        case "POST /rfqs/:rfqId/items/:lineNo/mapping/new-item":
+          return {
+            path: r.path.replace(":rfqId", hyA).replace(":lineNo", "1"),
+            body: { ma: "QUET-HY-SINH-2", ten: "Hang chuan quet moi", donViGoc: "kg", lyDo: "tao moi de quet" },
+            cookie: quanLyHy.cookie,
+          };
         default:
           return null;
       }

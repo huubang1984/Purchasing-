@@ -514,6 +514,12 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (viecCoBu !== undefined || loGui !== undefined) tuChoiViecCoBuThuHai();
       loGui = lo;
     };
+    // [S1.9101 / S4.3b / ADR-9201] Việc sau commit trong giao dịch MỚI (`AfterCommitGiaoDich`) — không đổi phản hồi, không đếm vào trần
+    // một việc có bù.
+    const sauCommitGiaoDich: ((client: pg.PoolClient) => Promise<void>)[] = [];
+    const afterCommitGiaoDich = (viec: (client: pg.PoolClient) => Promise<void>): void => {
+      sauCommitGiaoDich.push(viec);
+    };
     const tranSauCommitMs = deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH;
     const chaySauCommit = async (r: ApiResponse, orgId: string): Promise<ApiResponse> => {
       // [review H2-7] Chỉ chạy khi phản hồi là thành công: một handler xếp việc rồi trả 4xx (sau
@@ -573,6 +579,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
           }
         }
         ketThuc = lo.phanHoi(r, khoaHong);
+      }
+      // [S1.9101 / S4.3b / ADR-9201] Việc trong giao dịch MỚI: lần lượt, mỗi việc một `withTenant`; hỏng ⇒ một dòng log, phản hồi giữ nguyên.
+      for (const viec of sauCommitGiaoDich) {
+        try {
+          await withTenant(deps.pool, orgId, viec, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
+        } catch (e) {
+          console.error(`[api] ${requestId} giao-dich-sau-commit ${moTaLoiKhongGiaTri(e)}`);
+        }
       }
       for (const viec of sauCommit) {
         try {
@@ -883,6 +897,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                     afterCommit,
                     afterCommitCoBu,
                     afterCommitLoGui,
+                    afterCommitGiaoDich,
                     choKyChinhSach,
                   }),
                 ),

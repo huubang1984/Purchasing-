@@ -1101,6 +1101,8 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "chuanHoa",
   "LY_DO_CHUAN_HOA_HOI_TO",
   "chuanHoaGoi",
+  // [S1.9101 / S4.3b] Lượt chuẩn hoá sau lần nộp duyệt — chỉ ở tổ chức có hàng chuẩn đang dùng.
+  "chuanHoaSauNop",
   "docAnhXaGoi",
   "docHangDoi",
   "ghiAnhXa",

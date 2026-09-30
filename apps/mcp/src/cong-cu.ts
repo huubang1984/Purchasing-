@@ -10,7 +10,7 @@
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
 //   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
-//      [S1.199] MƯỜI SÁU route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      ~~[S1.199] MƯỜI SÁU~~ [S1.9101] MƯỜI TÁM route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -158,6 +158,16 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH MỤC ĐƠN VỊ và bí danh đơn vị của tổ chức, kèm họ tên người khai — cùng lý do với `/items/:itemId`. Danh mục toàn " +
     "cục thì vô hại, nhưng bí danh của tổ chức là thước quy đổi của mọi gói (*\"MT\"* là tấn hay mét), và màn của người " +
     "quản lý dữ liệu là nơi duy nhất cần đọc nó hôm nay. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  "/mapping-queue":
+    "HÀNG ĐỢI ÁNH XẠ của tổ chức — mọi dòng chưa ánh xạ của MỌI gói đã nộp, kèm năm ứng viên hàng chuẩn và họ tên người ghi gợi " +
+    "ý. Ánh xạ là khoá để đọc lịch sử giá ở S4.4: dòng nào nối với hàng nào quyết định giá của gói nào đứng cạnh nhau. Chủ dự " +
+    "án chốt ngày 2026-09-30 chưa mở mặt ấy cho một tác tử trước khi quyết mặt tiền của lịch sử giá. Route khai `agent: false` " +
+    "và dòng này khai vì sao. [S1.9101 / S4.3b]",
+  "/rfqs/:rfqId/mappings":
+    "TRẠNG THÁI ÁNH XẠ từng dòng của một gói — tự động, đã duyệt, không có hàng tương ứng, chờ duyệt, chưa chuẩn hoá — kèm mã " +
+    "hàng chuẩn và lý do. Cùng lý do với `/mapping-queue`: ánh xạ là khoá của lịch sử giá, và chủ dự án chốt ngày 2026-09-30 " +
+    "chưa mở nó cho một tác tử. Người soạn gói đọc nó trên màn `/tao-thau`. Route khai `agent: false` và dòng này khai vì sao. " +
+    "[S1.9101 / S4.3b]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

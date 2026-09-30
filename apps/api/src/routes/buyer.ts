@@ -26,6 +26,7 @@ import {
   type LuotDanhGia,
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
+import { chuanHoaSauNop } from "@trustprocure/du-lieu-nen";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
@@ -1026,17 +1027,16 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_CREATE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: {
-        rfq: await submitRfqForApproval(
-          ctx.client,
-          ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
-          ctx.auditPool,
-        ),
-      },
-    }),
+    handler: async (ctx) => {
+      const rfqId = rfqIdParam(ctx.req);
+      const rfq = await submitRfqForApproval(ctx.client, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId }, ctx.auditPool);
+      // [S1.9101 / S4.3b / ADR-9201] Lượt chuẩn hoá chạy SAU commit, giao dịch riêng, dưới phiên người nộp (spec S4 §4.4): hỏng thì
+      // lần nộp vẫn đứng, người quản lý dữ liệu bấm *chuẩn hoá lại*. Tổ chức chưa có hàng chuẩn đang dùng thì nó không ghi gì.
+      ctx.afterCommitGiaoDich(async (c) => {
+        await chuanHoaSauNop(c, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId });
+      });
+      return { status: 200, body: { rfq } };
+    },
   },
   {
     method: "POST",
