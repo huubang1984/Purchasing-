@@ -945,6 +945,8 @@ describe("S1.9101 — khoản 261: chữ ký bật S3 bị từ chối khi tổ 
     const v2 = await banCoBac(t, 2);
 
     expect((await loi(kyBan(t, v2)))?.message).toBe(loiConGoiCho(2));
+    // Dưới một vai BỎ QUA RLS (chủ sở hữu ở cụm test) câu đếm vẫn chỉ đếm gói của tổ chức ký: bộ lọc `org_id` không dựa vào RLS.
+    expect((await loi(db.pool.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiConGoiCho(2));
     await duyet(t, a, t.pm2);
     expect(await loi(mo(t, a))).toBeNull();
     expect(await trangThaiGoi(a)).toBe("OPEN");

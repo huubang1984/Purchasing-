@@ -9739,3 +9739,60 @@ rồi `migrate()` — không lách được; nó mở khoản 262 và 263 (rổ 
   sửa*: lượt sửa đầu dựng hai trigger chỉ-ghi-thêm trên bảng đã có — không phải dấu trôi; lần sau im lặng.
 - Như mọi bảng chỉ-ghi-thêm: vai giữ quyền DDL trên bảng gỡ hay tắt được trigger; hardening dựng lại ở lần deploy kế, và mục trigger
   lạ (khoản 259) canh tên.
+
+## ADR-9201 — Chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt: gói nộp dưới luật MVP1 không đi qua lần bật
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn LẦN BẬT, không chặn lời duyệt ·
+**[S1.9101]** · Migration `9501_chan_bat_s3_khi_con_goi_cho` · Biên bản: `evidence/security-reviews.md` §S1.9101 · **Khoản:** 261
+(ghi ở S1.198; đóng ở đây)
+
+### Bối cảnh
+
+ADR-080 làm S3 thành công tắc một chiều theo tổ chức: chữ ký đầu tiên trên một phiên bản chính sách có bậc (`to_chuc_da_bat_s3`).
+Luật của S3 cho danh sách mời (K4a — chỉ đổi ở DRAFT) và cho lời duyệt (K4b — lời duyệt mang lần nộp đã xem, chữ ký mang băm danh
+sách lúc ký) chỉ áp ở tổ chức đã bật. Ở tổ chức chưa bật, danh sách đổi được khi gói đang chờ duyệt (`076`) và lần nộp đứng yên
+(`087` chỉ tăng nó ở cạnh nộp). Lượt soi S1.198 (F6) đo một gói đi qua lần bật: người duyệt đọc gói ở lần nộp 1 với một lời mời;
+PM mời thêm — MVP1 cho —; tổ chức bật; lời duyệt mang mốc 1 đi qua, chữ ký mang băm của danh sách HAI lời mời, và gói MỞ trên một
+danh sách người duyệt chưa đọc. Khoản 261, rổ B.
+
+### Quyết định
+
+1. **Chữ ký bật S3 bị từ chối khi tổ chức còn gói `PENDING_APPROVAL`.** `chinh_sach_kiem_nguoi_ky` (thân từ `9501`) thêm một vế:
+   tổ chức CHƯA bật — nên chữ ký này là chữ ký bật — mà còn gói chờ duyệt ⇒ 23514 nêu số gói. Tổ chức duyệt rồi mở, hay huỷ, các
+   gói ấy — ở tổ chức chưa bật không có cạnh về DRAFT (`077`) —, rồi ký. Lời từ chối đi ra `POST /policy/:id/sign` dưới 422 mang
+   nguyên lời của trigger, như mọi luật khác của lần ký; route và tầng gói không đổi.
+2. **Chỉ lần bật bị hỏi.** Chữ ký trên phiên bản có bậc sau lần bật không bị hỏi: gói chờ duyệt lúc ấy đã nộp dưới luật S3, và từ
+   lần bật danh sách của gói chờ duyệt không đổi được (`076`).
+3. **Không đua, nhờ khoá sẵn có.** Phép kiểm đứng sau khoá tư vấn theo tổ chức mà lần ký giữ ĐỘC QUYỀN và cạnh nộp duyệt giữ CHIA
+   SẺ (`072` (4)(5)): một lần nộp đang dở làm lần ký chờ, và câu đếm — một câu mới, một ảnh chụp mới của READ COMMITTED lấy sau khoá —
+   thấy gói nó vừa nộp; một lần nộp tới sau chờ lần ký, rồi đi dưới luật S3. Đúng dưới READ COMMITTED, mức của mọi đường ứng
+   dụng — cùng giới hạn của khoá tư vấn đã nói ở §S1.156.
+4. **Vế đứng cuối, đếm theo tổ chức của chữ ký.** Một chữ ký sai vì lý do khác vẫn nhận đúng lời từ chối của nó; gói của tổ chức
+   khác không đếm (câu đếm lọc theo `org_id` của chữ ký, dưới quyền người gọi).
+
+### Phương án đã cân nhắc
+
+- **Từ chối lời duyệt của một lần nộp bắt đầu trước lúc bật** (đòi trả về, nộp lại) — bật không bị ràng buộc, xử lý từng gói, lần
+  nộp mới đi qua đủ cổng S3, và hai mốc (`submitted_at`, `signed_at`) so được vì cùng đóng dấu sau một khoá; nhưng chạm trigger
+  duyệt (`087`), cần lời từ chối có tên ở tầng gói và HTTP, và mọi gói chờ lúc bật phải đi thêm một vòng. Chủ dự án không chọn.
+- **Nâng lần nộp của mọi gói chờ ở lần bật** — đổi nghĩa của lần nộp (chỉ tăng ở cạnh nộp), và lần nộp mới không đi qua cổng S3 lúc
+  nộp. Bác.
+
+### Đo
+
+Khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — ca giới hạn cũ của khoản 261, LẬT; câu đếm theo tổ chức (hai gói chờ,
+một gói nháp, gói của tổ chức khác); hai chiều đua qua khoá tư vấn; chữ ký sau lần bật — và một ca HTTP ở
+`apps/api/src/buyer.int.test.ts`. Trên cây `master` ba ca đỏ, ca đối chứng xanh. Bảy đột biến ghi ở biên bản §S1.9101.
+
+### Hệ quả, nói thẳng
+
+- Tổ chức đông gói phải chọn lúc không còn gói chờ duyệt để bật S3 — một lần, công tắc một chiều. Hôm nay không tổ chức thật nào bật
+  được S3 (ADR-105).
+- Lần bật bị từ chối không vào sổ `CONTROL_DENIED`: nó là một luật của lần ký, không phải một chốt ở cạnh gói (ADR-084).
+- Một giao dịch REPEATABLE READ dưới câu SQL thô giữ ảnh chụp từ câu đầu của nó: lần ký như thế không thấy một lần nộp commit sau
+  ảnh chụp, và một lần nộp như thế không thấy một lần bật commit sau ảnh chụp. Giới hạn chung của khoá tư vấn (§S1.156); mọi đường
+  của ứng dụng chạy READ COMMITTED.
+- Chữ ký thời MVP1 của một gói đang chờ duyệt không còn đi qua lần bật — ca giới hạn khoản 253 ở `danh-sach-moi.int.test.ts` nay đo
+  lời từ chối; vế *K4b đếm người chứ không đếm hàng* đo lại trong S3. Ba phép đo khác từng nộp gói TRƯỚC lần bật để có một gói chờ
+  duyệt ở tổ chức đã bật — tổng điều tra H19, `bac-chinh-sach`, `nhom-hang` — nay nộp SAU lần ký dưới luật S3, hay huỷ gói trước lần
+  ký.
