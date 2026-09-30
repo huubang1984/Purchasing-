@@ -12,7 +12,9 @@ export {
   ghiTinHieuKhiNop,
   lietKeTinHieu,
   type GhiNhanTinHieu,
+  type GoiTrongBangChung,
   type KetQuaGhiNhan,
+  type NguoiXemTinHieu,
   type TinHieu,
   type TinHieuCuaGoi,
 } from "./tin-hieu.js";

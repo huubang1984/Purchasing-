@@ -77,6 +77,8 @@ import {
   dispatchUnseal,
   requestUnseal,
 } from "@trustprocure/unseal";
+import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
+import { CHOT_VAO_SO, ChotKiemSoatError } from "@trustprocure/identity";
 import { executeUnsealRequest } from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 // [S1.174 / S3.1d] Mẫu bậc của màn `/chinh-sach` — import TƯƠNG ĐỐI xuyên app, có chủ đích: test là nơi duy nhất nối
@@ -131,6 +133,11 @@ let uMua: string, uGd1: string, uGd2: string;
 let sMua: string, sGd1: string, sGd2: string;
 /** [S1.174 / S3.1d] Luồng S3: hai người FINANCE — một khai phiên bản chính sách có bậc, một ký. */
 let sTc1: string, sTc2: string;
+/**
+ * [S3.6b2 / K10a] Luồng S3: một PROCUREMENT_MANAGER thứ hai — giữ `rfq.approve`, không tạo, không nộp gói nào, không khai phiên bản
+ * chính sách: người ghi nhận tín hiệu chia nhỏ ĐỘC LẬP của bước 16. Hai giám đốc không giữ `rfq.approve`, người mua là người gây ra.
+ */
+let uPmDl: string, sPmDl: string;
 let boKy: ReceiptSigner;
 let khoaKyCongKhai: Uint8Array;
 const pepper = new PepperRing("pepper-2026-09", { "pepper-2026-09": randomBytes(32) });
@@ -198,6 +205,8 @@ async function dungToChuc(batS3: boolean): Promise<void> {
   sGd2 = await taoPhien(uGd2);
   sTc1 = batS3 ? await taoPhien(await taoNguoi("tc1@vidu.vn", "FINANCE")) : "";
   sTc2 = batS3 ? await taoPhien(await taoNguoi("tc2@vidu.vn", "FINANCE")) : "";
+  uPmDl = batS3 ? await taoNguoi("pm-doc-lap@vidu.vn", "PROCUREMENT_MANAGER") : "";
+  sPmDl = batS3 ? await taoPhien(uPmDl) : "";
   Object.assign(trangThai, trangThaiMoi());
 
   expect([orgA, uMua, uGd1, uGd2, sMua, sGd1, sGd2].filter((x) => x === "")).toEqual([]);
@@ -759,5 +768,139 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       expect(mocGoi.indexOf("INVITATION_CREATED"), "luồng MVP1: mời SAU khi mở gói").toBeGreaterThan(mo);
     }
     expect(mocGoi.indexOf("MAGIC_LINK_TOKEN_ISSUED"), "không token mời nào trước lần mở gói (K6)").toBeGreaterThan(mo);
+  });
+
+  it("bước 16 — [S3.6b2 / K10a] ba gói 480/470/490 triệu cùng nhóm hàng: gói nộp sau cùng mang tín hiệu chia nhỏ và KHÔNG mở được tới khi một người độc lập ghi nhận; người tạo tự ghi nhận bị từ chối và vào sổ — luồng MVP1 mở cả ba như trước", async () => {
+    // Fixture spec S3 §7: mỗi gói dưới cận 1 tỷ của bậc 2 (§4.1), tổng 1,44 tỷ chạm cận ấy. Nhóm hàng RIÊNG, không phải `THEP` của
+    // gói 1 tỷ ở bước 1: tập anh em của tín hiệu là mọi gói cùng nhóm trong tổ chức, và bước này kể câu chuyện của riêng nó. Luồng
+    // MVP1: không nhóm hàng, không bậc — K10a không sống ở tổ chức chưa bật, và cả ba gói đi đúng đường cũ.
+    const nhomHang = batS3
+      ? (await withTenant(apiPool, orgA, (c) => taoNhomHang(c, orgA, { ma: "THEP-CT", ten: "Thep tam cho cong trinh", actorSessionId: sTc1 }, apiPool))).id
+      : null;
+    const moGoi = (rfqId: string): Promise<unknown> =>
+      withTenant(apiPool, orgA, (c) => openRfq(c, orgA, { rfqId, actorSessionId: sMua, orgKeys: boBoc }, apiPool)).then(
+        () => null,
+        (e: unknown) => e,
+      );
+    const goi: string[] = [];
+    for (const [i, giaTri] of ["480000000.00", "470000000.00", "490000000.00"].entries()) {
+      const id = await withTenant(apiPool, orgA, async (c) => {
+        const r = await createRfq(c, orgA, {
+          title: `Thep tam cong trinh ${i + 1}`,
+          deadlineAt: HAN_NOP,
+          createdBySessionId: sMua,
+          categoryId: nhomHang,
+        });
+        await addRfqItem(c, orgA, {
+          rfqId: r.id,
+          lineNo: 1,
+          description: "Thep tam SS400 day 10mm",
+          quantity: "150.0000",
+          unit: "tan",
+          actorSessionId: sMua,
+        });
+        const ns = await setRfqBudget(c, orgA, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: sMua });
+        expect(ns.requiresDualApproval, "dưới ngưỡng kép 500 triệu — một chữ ký").toBe(false);
+        return r.id;
+      });
+      const nop = await withTenant(apiPool, orgA, (c) => submitRfqForApproval(c, orgA, { rfqId: id, actorSessionId: sMua }, apiPool));
+      await withTenant(apiPool, orgA, (c) =>
+        approveRfq(c, orgA, { rfqId: id, sessionId: sGd1, ...(batS3 ? { lanNopDaXem: nop.lanNop } : {}) }, apiPool),
+      );
+      goi.push(id);
+      // Hai gói đầu: tổng 950 triệu chưa chạm cận — mở như mọi gói, ở cả hai luồng.
+      if (i < 2) expect(await moGoi(id), `gói ${giaTri} mở không cần ghi nhận`).toBeNull();
+    }
+    const [g1, g2, g3] = goi;
+    if (g1 === undefined || g2 === undefined || g3 === undefined) throw new Error("thieu goi cua buoc 16");
+    const { rows: tinHieuGhi } = await db.pool.query<{ rfq_id: string; nguon: string }>(
+      "SELECT rfq_id, nguon FROM governance_signals WHERE rfq_id = ANY($1::uuid[]) ORDER BY tinh_luc",
+      [goi],
+    );
+    const hangChot = async (): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = ANY($2::uuid[]) ORDER BY seq",
+          [orgA, goi],
+        )
+      ).rows.map((r) => r.ma);
+
+    if (!batS3) {
+      expect(tinHieuGhi, "luồng MVP1: không một hàng tín hiệu nào").toEqual([]);
+      expect(await moGoi(g3), "luồng MVP1: gói thứ ba mở như hai gói đầu").toBeNull();
+      expect(await hangChot(), "luồng MVP1: không một lần từ chối nào vào sổ").toEqual([]);
+      return;
+    }
+
+    // Tín hiệu ghi LÚC NỘP, chỉ ở gói nộp sau cùng — cửa sổ neo vào `submitted_at` của chính gói.
+    expect(tinHieuGhi).toEqual([{ rfq_id: g3, nguon: "NOP_DUYET" }]);
+
+    // Màn `/tao-thau` đọc trước khi mời bấm: người tạo đọc được lý do KHÔNG, người độc lập đọc được mình ghi nhận được, và trong tổ
+    // chức đúng MỘT người ghi nhận được — hai giám đốc không giữ `rfq.approve`, hai người tài chính cũng không, người mua gây ra tín hiệu.
+    const docMua = await withTenant(apiPool, orgA, (c) => lietKeTinHieu(c, orgA, { rfqId: g3, actorSessionId: sMua }));
+    expect(docMua.canGhiNhan).toBe(true);
+    expect(docMua.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep });
+    const docDl = await withTenant(apiPool, orgA, (c) => lietKeTinHieu(c, orgA, { rfqId: g3, actorSessionId: sPmDl }));
+    expect(docDl.nguoiXem).toEqual({ ghiNhanDuoc: true, lyDo: null });
+    expect(docDl.soNguoiGhiNhanDuoc).toBe(1);
+    expect(docDl.hienTai).toMatchObject({ loai: "PURCHASE_SPLITTING", nhom_hang: nhomHang, cua_so_ngay: 30, can: 1_000_000_000 });
+    expect(docDl.goi).toEqual({
+      [g1]: { tieuDe: "Thep tam cong trinh 1", trangThai: "OPEN" },
+      [g2]: { tieuDe: "Thep tam cong trinh 2", trangThai: "OPEN" },
+      [g3]: { tieuDe: "Thep tam cong trinh 3", trangThai: "PENDING_APPROVAL" },
+    });
+
+    // Đủ chữ ký mà vẫn không mở: chốt K10a hỏi TRƯỚC lần đúc khoá, và lần từ chối vào sổ.
+    const chan = await moGoi(g3);
+    expect(chan).toBeInstanceOf(ChotKiemSoatError);
+    expect((chan as ChotKiemSoatError).lyDo).toBe("TIN_HIEU_CHUA_GHI_NHAN");
+    const { rows: khoaG3 } = await db.pool.query("SELECT 1 FROM rfq_key_material WHERE rfq_id = $1", [g3]);
+    expect(khoaG3, "không khoá nào được đúc cho gói bị chặn").toHaveLength(0);
+
+    // Người tạo tự ghi nhận — màn đã nói trước là không; tầng gói từ chối theo chốt và lần ấy cũng vào sổ.
+    const tuGhi = await withTenant(apiPool, orgA, (c) =>
+      ghiNhanTinHieu(c, orgA, { rfqId: g3, lyDo: "Toi tao ca ba goi, toi xac nhan", actorSessionId: sMua }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(tuGhi).toBeInstanceOf(ChotKiemSoatError);
+    expect((tuGhi as Error).message).toBe(CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep);
+
+    const LY_DO = "Ba cong trinh khac nhau, ba hop dong khung rieng";
+    const kq = await withTenant(apiPool, orgA, (c) => ghiNhanTinHieu(c, orgA, { rfqId: g3, lyDo: LY_DO, actorSessionId: sPmDl }, apiPool));
+    expect(kq.tinHieuMoi, "tập gói không đổi từ lúc nộp — ghi nhận đúng tín hiệu đã ghi").toBe(false);
+    expect(await moGoi(g3), "ghi nhận độc lập xong thì gói mở").toBeNull();
+
+    // Sổ kể lại câu chuyện của gói thứ ba theo đúng thứ tự: nộp và tín hiệu, duyệt, bị chặn, tự ghi nhận bị từ chối, ghi nhận độc
+    // lập, rồi mới đúc khoá và mở.
+    const { rows: soG3 } = await db.pool.query<{ action: string; ma: string | null; nguoi: string | null }>(
+      "SELECT action, payload->>'ma' AS ma, actor_id::text AS nguoi FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+      [orgA, g3],
+    );
+    const QUAN_TAM = new Set([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    const cauChuyen = soG3.filter((r) => QUAN_TAM.has(r.action)).map((r) => (r.ma === null ? r.action : `${r.action}:${r.ma}`));
+    expect(cauChuyen).toEqual([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED:TIN_HIEU_CHUA_GHI_NHAN",
+      "CONTROL_DENIED:K10A_TU_GHI_NHAN",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    expect(soG3.find((r) => r.action === "GOVERNANCE_SIGNAL_ACKNOWLEDGED")?.nguoi, "người ghi nhận là người độc lập").toBe(uPmDl);
+    const hanhDong = soG3.map((r) => r.action);
+    expect(hanhDong.indexOf("RFQ_KEY_MATERIAL_ISSUED"), "khoá chỉ được đúc SAU lần ghi nhận").toBeGreaterThan(
+      hanhDong.indexOf("GOVERNANCE_SIGNAL_ACKNOWLEDGED"),
+    );
+    expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
   });
 });
