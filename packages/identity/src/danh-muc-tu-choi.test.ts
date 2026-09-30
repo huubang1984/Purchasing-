@@ -32,8 +32,9 @@
 // mọi `…DeniedError` được tạo NGAY trong đối số của `throwAuditedDenial`, và `cong-quyen-route` đòi thân hàm gọi `requirePermission`
 // trực tiếp.
 // ==============================================================================================
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -192,25 +193,20 @@ export function docTep(tep: string, vanBan: string): KetQuaDoc {
   return { hanhDong, loaiTaiNguyen, route, soGoiTuChoi, soGoiCongQuyen, truyenVe, dungRoute, dungBoc, soGoiBoc, khongGiai };
 }
 
-/** Mọi `.ts` sản xuất dưới `<thư mục>/src` của từng gói/app/tool — không test, không `.d.ts`, không `node_modules`/`dist`. */
+/**
+ * Mọi `.ts` sản xuất dưới `<thư mục>/src` của từng gói/app/tool — không test, không `.d.ts`, không `node_modules`/`dist`.
+ * `git ls-files` chứ không `readdirSync`, cùng khuôn `tests/architecture/cong-quyen-route.test.ts`: `boundaries.test.ts` dựng
+ * rồi xoá tệp dò tạm (`apps/tmp-probe-<tên>/src/…`) trong lúc bộ test chạy song song, và bản quét thư mục thật từng liệt kê một tệp
+ * như thế rồi đọc nó sau khi nó đã bị xoá (T1+T2 ubuntu của PR #216: ENOENT `apps/tmp-probe-wrapper-door/src/leak.ts`). Tệp dò
+ * tạm không bao giờ được git theo dõi; đổi lại, một tệp VỪA VIẾT mà chưa `git add` thì bộ quét chưa thấy.
+ */
 function tepSanXuat(): string[] {
-  const ra: string[] = [];
-  const duyet = (thuMuc: string): void => {
-    for (const e of readdirSync(thuMuc, { withFileTypes: true })) {
-      const duong = join(thuMuc, e.name);
-      if (e.isDirectory()) {
-        if (e.name !== "node_modules" && e.name !== "dist") duyet(duong);
-      } else if (e.name.endsWith(".ts") && !e.name.endsWith(".test.ts") && !e.name.endsWith(".d.ts")) {
-        ra.push(relative(GOC, duong).split(sep).join("/"));
-      }
-    }
-  };
-  for (const nhom of ["packages", "apps", "tools"]) {
-    for (const e of readdirSync(join(GOC, nhom), { withFileTypes: true })) {
-      if (e.isDirectory() && existsSync(join(GOC, nhom, e.name, "src"))) duyet(join(GOC, nhom, e.name, "src"));
-    }
-  }
-  return ra.sort();
+  return execFileSync("git", ["ls-files", "-z", "--", "packages", "apps", "tools"], { cwd: GOC, encoding: "utf8" })
+    .split("\0")
+    .filter((d) => /^(?:packages|apps|tools)\/[^/]+\/src\//u.test(d))
+    .filter((d) => d.endsWith(".ts") && !d.endsWith(".test.ts") && !d.endsWith(".d.ts"))
+    .filter((d) => !d.split("/").some((phan) => phan === "node_modules" || phan === "dist"))
+    .sort();
 }
 
 /** ⑷ Một từ vựng vế ở nguồn: mảng chuỗi `as const` hay kiểu hợp của chuỗi trực tiếp, tìm theo tên ở cấp tệp. */
