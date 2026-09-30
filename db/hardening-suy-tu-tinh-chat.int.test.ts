@@ -1784,24 +1784,6 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
   // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
   // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
-  // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
-  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
-  const rfqVe = await rfqSoan();
-  // [S1.207 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy nay phải đi kèm cạnh về DRAFT trong CÙNG giao dịch
-  // (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT của `rfqVe` không còn tách được thành hai nhân chứng trên
-  // một gói — mỗi nhân chứng một gói, cả hai nộp duyệt TRƯỚC lần bật.
-  const rfqVe2 = await rfqSoan();
-  for (const goi of [rfqVe, rfqVe2])
-    await so.chung(
-      "public.rfq_packages",
-      "UPDATE",
-      api(
-        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
-          "RETURNING status, submitted_by, submitted_by_session_id",
-        [goi, pm.u, pm.s],
-        { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
-      ),
-    );
   const tc = await nguoi("FINANCE");
   const cs2 = await chenNC(
     "public.org_procurement_policies",
@@ -1830,6 +1812,45 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
+  // [S1.186 / S3.2b1 / K4a] Hai gói chờ duyệt ở tổ chức ĐÃ bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
+  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký phía trên. [S1.207 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy
+  // phải đi kèm cạnh về DRAFT trong CÙNG giao dịch (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT không tách
+  // được thành hai nhân chứng trên một gói — mỗi nhân chứng một gói. [S1.9101 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói
+  // chờ duyệt, nên hai gói nộp SAU lần ký, dưới luật S3: ngân sách ghim lại phiên bản 2 (K1) và nhóm hàng `nhomDau` (S3.6a) — một
+  // nhóm KHÁC `nhom` của mục nhóm hàng phía dưới, để lần gán `nhom` cho `rfqVe` ở đó vẫn là một lần ĐỔI nhóm.
+  const nhomDau = await chenNC(
+    "public.procurement_categories",
+    api(
+      "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP-DAU', 'Thep dau', $2, $3) " +
+        "RETURNING id, org_id, ma, ten, created_by, created_by_session_id",
+      [org, tc.u, tc.s],
+      { org_id: org, ma: "THEP-DAU", ten: "Thep dau", created_by: tc.u, created_by_session_id: tc.s },
+    ),
+  );
+  const rfqVe = await rfqSoan();
+  const rfqVe2 = await rfqSoan();
+  for (const goi of [rfqVe, rfqVe2]) {
+    await so.chung(
+      "public.rfq_budgets",
+      "UPDATE",
+      api("UPDATE rfq_budgets SET policy_id = $2 WHERE rfq_id = $1 RETURNING policy_id", [goi, cs2], { policy_id: cs2 }),
+    );
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET category_id = $2 WHERE id = $1 RETURNING category_id", [goi, nhomDau], { category_id: nhomDau }),
+    );
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api(
+        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+          "RETURNING status, submitted_by, submitted_by_session_id",
+        [goi, pm.u, pm.s],
+        { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+      ),
+    );
+  }
   // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
   // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới. **[S1.207 / khoản 260]** và của
   // `rfq_tra_ve_phai_di_kem_canh` (DEFERRED): `hoanTat` trả gói về DRAFT trong cùng giao dịch — thiếu nó, hàng lẻ bị từ chối ở

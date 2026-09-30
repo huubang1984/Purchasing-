@@ -919,6 +919,9 @@ describe("S1.9101 — khoản 261: chữ ký bật S3 bị từ chối khi tổ 
     await moi(t, rfqId);
     const v2 = await banCoBac(t, 2);
 
+    // Vế mới đứng CUỐI: một chữ ký sai vì lý do khác nhận đúng lời từ chối của nó — người tạo phiên bản tự ký.
+    const tuKy = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_KY_BAN, [t.org, v2, t.pm.u, t.pm.s])));
+    expect(tuKy?.message).toBe("Nguoi tao phien ban chinh sach khong duoc tu ky (ADR-082)");
     const e = await loi(kyBan(t, v2));
     expect([e?.code, e?.message]).toEqual(["23514", loiConGoiCho(1)]);
     expect(await daBat(t.org)).toBe(false);
