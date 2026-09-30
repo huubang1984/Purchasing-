@@ -18100,4 +18100,14 @@ và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nà
 
 ## 9. Số đo
 
-{{SO_DO}}
+- Cây cuối — nhánh dựng lại trên `master` sau #213 (`2af75b2`), số đã cấp S1.234 / ADR-135: `pnpm cap-so` giữ số trên remote, và
+  S1.207–S1.233, ADR-123–ADR-134 đã có nhánh khác giữ (S1.208 là của chính nhánh này, do một lần `cap-so --mo-ho master` chạy nhầm lúc
+  hợp #214 vào #213 — §S1.204 §9; không dùng). `pnpm t0` sạch; `pnpm test` 125 tệp, 1837 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
+- `pnpm evidence` — toàn bộ T1–T3 cục bộ trên cây cuối: 206 tệp, 3550 khẳng định, 3549 đạt, 1 bỏ qua; 75/75 bất biến (53/53 nghiệp
+  vụ + 22/22 hàng rào). Ma trận: L3 19 → 21.
+- Vòng này viết trên cây S4.3a trước #211; tới lúc mở PR, `master` đã nhận #211 (S3.6b1), #212 (khoản 259), #214 (S3.6b2) và #213.
+  Hợp ba lần. Xung đột: `apps/mcp` (§S1.203 thêm `/rfqs/:rfqId/signals` — mười chín dòng), `/tao-thau` (khung tín hiệu chia nhỏ của
+  S3.6b2 và cột *Hàng chuẩn* cùng sống: dòng import, hàm thuần, test), lời khai đếm, mốc STATE, cuối DECISIONS và biên bản. T3 các
+  tệp bị chạm, trên cây đã hợp S3.6b2: `apps/api/src/anh-xa.int` 16/16, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24,
+  `du-lieu.int` 9/9; `phuc-vu.test` và `tao-thau.test` (30/30) xanh trong `pnpm test`.
+- Hai mươi bảy đột biến, cả hai mươi bảy đỏ (§6); lượt đi thử T4 hai lần (§6).
