@@ -9750,3 +9750,100 @@ hiện có là đối chứng.
 lô gửi đổi phản hồi và route đọc —, route nộp duyệt thật với khoá bí danh bị giữ, năm route, [INV-L3] vế vai ⇒ 403 và vế hành vi ⇒
 422 `TRONG_TAP_LOAI_TRU`, hàng ngừng dùng, băm mong đợi); `apps/web` (module thuần, bộ giả lập trang); `kich-ban-41-http.int` (bộ quét rò
 rỉ đi qua ba route ghi); lượt đi thử T4 trên Chromium. Đột biến và lượt soi đối kháng: §S1.234.
+
+---
+
+## ADR-9201 — S4.4a: lịch sử giá là ba hàm SQL — bộ đọc dòng, vị từ *"giá đã lộ"* tại mốc, hàm as-of có nhánh lọc theo hàng chuẩn; lõi quy đổi tách theo mã
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bảy điểm ngày 2026-09-30: S4.4 chia hai PR, S4.4a là CSDL
+(không route, không màn); tiền tệ chỉ so trong CHÍNH gói của quan sát, so với gói X là việc của S4.5; `SAU_MOC` là số hàng nền mới
+hơn bị bỏ qua vì ghi từ `p_moc` trở đi, `HOI_TO` là hàng nền ghi sau mốc của chính gói chứa quan sát; route đọc
+`GET /items/:itemId/price-history` (`bid.view`, `agent: false`, mỗi lần đọc một hàng sổ) ở S4.4b; đo hiệu năng bằng một công cụ trong
+kho, vượt ngưỡng thì dừng và báo; `gieo:demo` ba gói đã mở qua đường thật ở S4.4b. Trong lúc đo trước, chủ dự án chọn *"tách lõi
+theo mã"* cho quy đổi (mục ②) · **[S1.9101]** · **Liên quan:** ADR-095 (hàm as-of, không bảng thứ ba), ADR-054, ADR-050 ⑴ (một
+luật làm tròn), ADR-103 (tiền tệ đọc qua `bid_currency`), ADR-116 (quy đổi riêng), ADR-121 (ánh xạ hiệu lực theo băm), ADR-017
+(nhãn suy ra, không lưu) · **Spec:** S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁ ㉓, §5.1 L5 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+ADR-095 chốt hình dạng: hàm `quan_sat_gia(p_moc)`, bộ đọc `bid_dong_tho`, vị từ *"giá đã lộ"* theo dữ liệu. Đo trước trên cây của
+S4.3b: không hàm nào trong ba hàm ấy tồn tại; `quy_doi_don_vi` (`083`) và `don_vi_tai` (`079`) ĐÃ nhận mốc nên không cần bản *"tại
+mốc"*; phong bì của trình duyệt là `{totalAmount, currency, lines: [{lineNo (số JSON), unitPrice, amount}]}` với `amount` và
+`totalAmount` là chuỗi hai chữ số lẻ; sáu ca của `bid_so_tien` đo lại trên Postgres 16 (`1e131071`, `10000000000000000`, `1.001`,
+`-1`, `NaN`, `Infinity` — cùng chuỗi không phải số — đều ra NULL); worker mở niêm phong phiên bản MỚI NHẤT của mỗi báo giá TRONG MỖI
+VÒNG, và một phong bì giải mã hỏng không vào `rfq_unsealed_bids`. Một phát hiện đổi thiết kế: đích của một quan sát là MÃ
+`canonical_items.don_vi_goc`, còn `quy_doi_don_vi` nhận CHUỖI và giải qua bí danh — mã `t` (tấn) và `m` (mét) mơ hồ, không có bí danh
+chung, nên quy đổi về gốc `t` luôn ra `KHONG_QUY_DOI_DUOC` (đo: `quy_doi_don_vi(org, NULL, 'kg', 't', now())`), và một bí danh của tổ
+chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chuẩn.
+
+### Quyết định
+
+1. **`bid_dong_tho(payload) RETURNS TABLE (line_no, thanh_tien, ly_do)`, `IMMUTABLE`, không bao giờ ném.** Mỗi `lineNo` hợp lệ ra
+   đúng một hàng; phần tử có `lineNo` hỏng gộp thành một hàng `line_no` NULL; `lines` không phải mảng ra đúng một hàng NULL. `ly_do`
+   NULL là đọc được và tổng khớp; `KHONG_DOC_DUOC` là sáu ca của `bid_so_tien` trên `amount` (dòng ấy) hay `totalAmount` (cả báo
+   giá), phần tử không phải đối tượng, `lineNo` không phải số nguyên dương kiểu SỐ JSON, hai phần tử cùng `lineNo`; `LECH_TONG` là
+   dòng đọc được mà Σ `amount` KHÁC `totalAmount` CHÍNH XÁC, hay có phần tử anh em không đọc được (tổng khi ấy không kiểm được).
+   `unitPrice` không được đọc. Không luật làm tròn nào thêm vào SQL.
+2. **Lõi quy đổi theo mã `quy_doi_da_giai(org, hàng chuẩn, mã từ, khoá từ, mã sang, khoá sang, mốc)`** — thân của `quy_doi_don_vi`
+   tách ra, nhận hai đầu đã giải; `quy_doi_don_vi` chỉ giải hai chuỗi qua `don_vi_tai` rồi gọi lõi, hành vi y nguyên (test S4.1/S4.2a
+   canh; đột biến *"bỏ vế ghi trước mốc của cạnh riêng"* của S4.2a dời sang lõi). `quan_sat_gia` gọi lõi với đích là MÃ gốc, không
+   qua bí danh. Một luật quy đổi, một chỗ (§2.5 ⒄).
+3. **`gia_da_lo(org, gói, mốc)` theo DỮ LIỆU tại mốc:** gói chưa huỷ tại mốc; vòng một có `unseal_requests` `EXECUTED` trước mốc; mọi
+   vòng BAFO mở trước mốc cũng vậy. Không đọc `status`: `EVALUATING`, `AWARDED` được tính; `BAFO_OPEN`, `BAFO_CLOSED` thì không. Huỷ
+   loại gói TỪ LÚC huỷ, không hồi tố: lần đọc tại một mốc trước lúc huỷ vẫn thấy gói — cùng nghĩa *"tại mốc"* với mọi vế khác, và là
+   điều một kết quả benchmark đã lưu ở S4.5 cần để tái lập.
+4. **`quan_sat_gia(p_moc, p_hang_chuan DEFAULT NULL)`, `SECURITY INVOKER STABLE`.** Mỗi hàng một (gói, nhà cung cấp, dòng của gói)
+   cho gói mà `gia_da_lo` tại mốc. Báo giá là phiên bản mới nhất ĐÃ MỞ NIÊM PHONG trước mốc — đúng luật `DISTINCT ON (v.bid_id) …
+   ORDER BY v.version DESC` của bảng so sánh, lượt chấm và worker. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi trước mốc:
+   ánh xạ hiệu lực (băm bằng băm hiện tại, ADR-121 ①), bí danh đơn vị (qua `don_vi_tai`), quy đổi riêng (qua lõi ②). Ngày quan sát
+   là mốc mở giá của gói. Tiền tệ đọc qua `bid_currency` và so với tiền tệ của chính sách của CHÍNH gói — ngân sách ghim, không có thì
+   phiên bản hiệu lực lúc gói ra đời (hai nhánh của `rfq_che_do_nghiem`). Sáu trạng thái theo thứ tự ưu tiên `KHONG_DOC_DUOC` ·
+   `LECH_TONG` · `LECH_TIEN_TE` · `CHUA_ANH_XA` · `KHONG_QUY_DOI_DUOC` · `HOP_LE`; dòng báo giá bỏ trống và mọi dòng của báo giá mang
+   một `lineNo` ngoài gói là `KHONG_DOC_DUOC`; ánh xạ tường minh sang NULL là `CHUA_ANH_XA` với `anh_xa_id` khác NULL.
+   `don_gia_quy_doi` chỉ có ở `HOP_LE`.
+5. **Hai nhãn suy ra trên bốn loại hàng nền** (`ANH_XA`, `BI_DANH_DON_VI`, `QUY_DOI` — chỉ khi kết quả không phải `CUNG_DON_VI`/
+   `QUY_DOI_CHUNG`, `PHIEN_BAN_HANG_CHUAN`): `hoi_to text[]` là loại có hàng ghi trong [mốc của gói, `p_moc`); `sau_moc jsonb` là số hàng
+   mỗi loại ghi từ `p_moc` trở đi. Nhãn đếm theo khoảng `ghi_luc` trên CÙNG không gian khoá mà lần đọc dùng, không chép luật *"hàng nào
+   được chọn"*: `seq` và `ghi_luc` đặt dưới cùng một khoá (`079`), nên *"có hàng trong khoảng"* bao trọn *"hàng được chọn nằm trong
+   khoảng"* — thận trọng, không sót.
+6. **`p_hang_chuan`** — nhánh thứ hai, gác bằng điều kiện CHỈ trên tham số, đọc những dòng từng có hàng ánh xạ sang hàng chuẩn ấy ghi
+   trước mốc, rồi giữ dòng mà ánh xạ hiệu lực trỏ đúng hàng ấy. Lý do: hàm SQL có `SET search_path` không nội tuyến được, nên một
+   `WHERE canonical_item_id = …` bên ngoài không đẩy vào thân — mỗi lần đọc lịch sử một hàng chuẩn sẽ phân tích mọi phong bì của tổ
+   chức. Test đo hai nhánh trùng khít nhau ở hai mốc, trên mọi hàng chuẩn của tệp.
+7. **Ranh giới là danh sách có tên, không phải hàm.** `tests/architecture/ban-ro-liet-ke.test.ts` liệt kê năm tệp TypeScript sản
+   xuất và ba hàm SQL chạm `rfq_unsealed_bids`, mỗi dòng một lý do; tệp hay hàm thứ N làm cổng đỏ. `anh-xa.ts` chỉ được hỏi SỰ TỒN TẠI.
+   Tầng CSDL đo cùng tập bằng `pg_proc`. Bảy chỉ mục cho các đường tra (lời mời và yêu cầu mở thầu theo gói — chỉ mục có sẵn là RIÊNG
+   PHẦN —, bản rõ theo yêu cầu, ánh xạ/quy đổi/phiên bản theo hàng chuẩn, bí danh đơn vị theo chuỗi).
+
+### Phương án đã cân nhắc
+
+- **Giữ nguyên `quy_doi_don_vi`, gọi với chuỗi `don_vi_goc`.** Loại: hàng chuẩn gốc `t`/`m` không bao giờ quy đổi được, và bí danh của
+  tổ chức cho chuỗi `"t"` giải sai gốc. Chủ dự án chọn tách lõi.
+- **Hàm quy đổi thứ hai `quy_doi_ve_goc`.** Loại: hai bản cài của một luật — hình dạng khoản 218 mà §2.5 ⒄ cấm.
+- **Biến thể *"tại mốc"* của các hàm nền** (điểm ③ của đề xuất ban đầu). Không cần: đo trước cho thấy `don_vi_tai`, `quy_doi_don_vi` đã
+  nhận mốc. Phiên bản hàng chuẩn và ánh xạ đọc tại mốc ngay trong thân.
+- **Vị thế cuối = phiên bản mới nhất ĐÃ NỘP trong các vòng đã mở** (không phải mới nhất đã MỞ). Chặt hơn ở ca phong bì BAFO giải mã
+  hỏng. Loại ở vòng này: ba bộ đọc đang chạy dùng luật *"mới nhất đã mở"*, và một luật thứ hai làm lịch sử giá và bảng xếp hạng nói hai
+  giá khác nhau cho cùng một nhà cung cấp. Nói ra ở hệ quả.
+- **Chỉ `quan_sat_gia(p_moc)`, lọc ở bên gọi.** Loại: đo ở biên bản — mỗi lần đọc phân tích mọi phong bì.
+
+### Hệ quả, nói thẳng
+
+- **Phong bì BAFO giải mã hỏng** thì vị thế cuối rơi về giá vòng một của nhà cung cấp ấy — cùng hành vi của bảng so sánh và lượt chấm.
+  Worker ghi `failedBidVersionIds` vào hàng sổ của lượt mở; lịch sử giá không đọc sổ ấy.
+- **Hai bản cài của *"chính sách của gói"***: `rfq_che_do_nghiem` và `quan_sat_gia` cùng hai nhánh (ngân sách ghim, không có thì phiên
+  bản hiệu lực lúc gói ra đời), viết hai lần. Gộp thành một hàm là sửa một hàm đã ghim ngoài phạm vi S4.4a.
+- **Hai bản cài của *"ánh xạ hiệu lực"***: luật *"mới nhất theo `seq` có băm bằng băm hiện tại"* sống ở tầng gói S4.3a và ở thân
+  `quan_sat_gia`. Test ca băm của cả hai canh; đột biến bỏ vế băm ở thân làm ca đỏ.
+- **Đơn giá 0 là `HOP_LE`**: `bid_so_tien` nhận `0`, và một dòng tặng kèm là dữ liệu thật. Benchmark (S4.5) quyết có đọc nó không.
+- **Mỗi lần đọc giữ mọi hàm ở kế hoạch chung**: thân được lập kế hoạch lại ở mỗi câu gọi. Số đo ở biên bản.
+- **Vị từ trong thân không phải ranh giới** (ADR-095): mã chạy dưới `app_api` vẫn `SELECT` được `rfq_unsealed_bids`. Ranh giới là mục ⑦.
+
+### Đo
+
+`packages/du-lieu-nen/src/lich-su-gia.int.test.ts` (bộ đọc dòng: sáu ca trên `amount` và `totalAmount`, bốn dạng `lines`, sáu dạng
+`lineNo`, phép so tổng chính xác, `unitPrice`, không bao giờ ném; `gia_da_lo`: chưa mở, `EVALUATING`, `BAFO_OPEN`, `BAFO_CLOSED`,
+`BAFO_UNSEALED`, tại mốc trước vòng BAFO kể cả sau khi vòng ấy mở, huỷ tại mốc trước và sau; `quan_sat_gia`: sáu trạng thái, gốc mã
+`t`, tiền tệ của gói không ngân sách, phiên khách và tổ chức khác, gói X không thấy chính nó, ánh xạ/bí danh/quy đổi/phiên bản tại mốc
+với hai nhãn, băm hiện tại, hai nhánh trùng khít, tập hàm chạm bản rõ); `tests/architecture/ban-ro-liet-ke.test.ts`; hiệu năng:
+`tools/do-lich-su-gia`. Đột biến và lượt soi đối kháng: §S1.9101.

@@ -18111,3 +18111,142 @@ và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nà
   tệp bị chạm, trên cây đã hợp S3.6b2: `apps/api/src/anh-xa.int` 16/16, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24,
   `du-lieu.int` 9/9; `phuc-vu.test` và `tao-thau.test` (30/30) xanh trong `pnpm test`.
 - Hai mươi bảy đột biến, cả hai mươi bảy đỏ (§6); lượt đi thử T4 hai lần (§6).
+
+---
+
+# §S1.9101 — S4.4a: LỊCH SỬ GIÁ Ở TẦNG CSDL — BỘ ĐỌC DÒNG, VỊ TỪ *"GIÁ ĐÃ LỘ"* TẠI MỐC, HÀM AS-OF (L5); LÕI QUY ĐỔI THEO MÃ — ADR-9201
+
+## 1. Vòng này là gì
+
+Nửa đầu của S4.4 (spec S4 §9): ba hàm SQL của lịch sử giá và ranh giới liệt kê mọi chỗ chạm bảng bản rõ. Không route, không màn,
+không đường gọi từ `apps/` — route đọc, kịch bản 41 và `gieo:demo` là S4.4b. Migration `9501_lich_su_gia`, ADR-9201. **L5** vào sổ
+đăng ký (76 bất biến).
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-30, bảy đề xuất của lượt bàn S4.4:
+
+1. Hai PR: S4.4a là CSDL (ba hàm, ghim, test L5, đột biến, test kiến trúc, đo hiệu năng); S4.4b là L6, kịch bản 41, `gieo:demo`.
+2. Tiền tệ: hàm chỉ đánh dấu lệch trong CHÍNH gói của quan sát (so với chính sách của gói ấy), trả cột `tien_te`; so với gói X là S4.5.
+3. ~~Biến thể *"tại mốc"* của các hàm nền~~ — đo trước cho thấy không cần (§5); thay bằng quyết định ở mục 8.
+4. `SAU_MOC` = số hàng nền mới hơn bị bỏ qua vì ghi từ `p_moc` trở đi, đếm theo loại; `HOI_TO` = hàng nền đã dùng mà ghi sau mốc của
+   chính gói chứa quan sát. Sửa một câu tự mâu thuẫn của spec §2.5 ⑿.
+5. Route `GET /items/:itemId/price-history` (`bid.view`, `agent: false`, không màn, không đọc query, mỗi lần đọc một hàng sổ) ở S4.4b.
+6. Đo hiệu năng bằng `tools/do-lich-su-gia` ở 5.000 gói × 20 dòng × 3 nhà cung cấp; p95 ≥ 500 ms thì dừng và báo (lối thoát duy nhất
+   là một bảng lưu — một dòng khai mới ở ADR-054, chủ dự án quyết).
+7. `gieo:demo` ba gói đã mở qua đường thật (S4.4b).
+8. Trong lúc đo trước: **tách lõi quy đổi theo mã** — migration tách thân `quy_doi_don_vi` thành lõi nhận hai đầu đã giải,
+   `quy_doi_don_vi` gọi lõi với hành vi y nguyên, `quan_sat_gia` gọi lõi với đích là MÃ gốc.
+
+## 3. Thay đổi
+
+- **`9501_lich_su_gia`.** `quy_doi_da_giai` (lõi), `quy_doi_don_vi` (giải hai chuỗi rồi gọi lõi), `bid_dong_tho` (`IMMUTABLE`),
+  `gia_da_lo`, `quan_sat_gia` (`SECURITY INVOKER STABLE`, tham số `p_hang_chuan` mặc định NULL); bảy chỉ mục; `EXECUTE` cho `app_api`,
+  thu hồi của `PUBLIC`. Năm mục ghim `hardening.always.sql` (thân, `provolatile`, `prosecdef`, `proconfig`, số đối số, kiểu trả).
+- **Ranh giới.** `tests/architecture/ban-ro-liet-ke.test.ts`: năm tệp TypeScript sản xuất, ba hàm SQL chạm `rfq_unsealed_bids`, mỗi
+  dòng một lý do; `anh-xa.ts` không câu nào đọc `payload`; bộ đọc thân hàm tự kiểm (thân cuối cùng thắng, dấu `$tbm$`).
+- **Cổng khai theo.** `migrations.int` (bảy hàm, con trỏ `quy_doi_don_vi` dời sang `9501`), `hang-chuan.int` (đột biến *"bỏ vế ghi
+  trước mốc"* dời sang lõi), sổ khai nhãn (L5 — hai tệp), `MOC_GHIM` 75 → 76, TEST-PLAN hàng L5 và dòng tổng (trôi hai nhịp, sửa cùng
+  lượt), spec S4 §2.5 ⑿, §4.5, §5.1, §9, PRODUCT, STATE.
+- **Đo hiệu năng.** `tools/do-lich-su-gia/gieo.sql`, `do.sql` — chạy bằng `psql` trên một CSDL thử đã qua `migrate()`.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Vị thế cuối = mới nhất ĐÃ MỞ trước mốc**, đúng luật ba bộ đọc đang chạy. Ca phong bì BAFO giải mã hỏng rơi về giá vòng một — cùng
+  hành vi bảng so sánh; nói ra ở ADR.
+- **Huỷ loại gói TỪ LÚC huỷ**, không hồi tố — cùng nghĩa *"tại mốc"* với mọi vế khác.
+- **Chính sách của gói** = ngân sách ghim, không có thì phiên bản hiệu lực lúc gói ra đời — hai nhánh của `rfq_che_do_nghiem`, viết
+  lại trong thân (bản cài thứ hai, nói ra ở ADR).
+- **Thứ tự trạng thái**: đọc được → tổng → tiền tệ → ánh xạ → quy đổi. Lỗi của phong bì đứng trước lỗi của thước.
+- **Một `lineNo` ngoài gói làm cả báo giá `KHONG_DOC_DUOC`**: Σ khớp tổng khi ấy nghĩa là tổng gồm một dòng không có trong gói.
+- **Nhãn đếm theo khoảng `ghi_luc`** trên không gian khoá của lần đọc, không chép luật chọn hàng của `don_vi_tai` và lõi — thận trọng
+  (bao trọn), và không thêm bản cài thứ hai của hai luật ấy. Nhãn `QUY_DOI` chỉ khi kết quả phụ thuộc cạnh riêng.
+- **`don_gia_quy_doi` chỉ ở `HOP_LE`**: một bộ đọc quên lọc trạng thái không lấy được đơn giá không đo được.
+- **Tham số `p_hang_chuan`** — lệch khỏi chữ ký `quan_sat_gia(p_moc)` của spec, vì phép đo (§6).
+
+## 5. Đo trước
+
+Trên Postgres 16 thật (cụm cục bộ, mọi migration tới `089`):
+
+- `bid_so_tien`: `1e131071`, `10000000000000000`, `1.001`, `-1`, `NaN`, `Infinity`, `abc` → NULL; `1.00`, ` 12.5 `, `1e2`, `0`,
+  `9999999999999999.99` → đọc được. Sáu ca của spec (M1) đứng.
+- `don_vi_tai(org, 't' | 'm', now())` → NULL; `'tấn'` → `t`, `'kg'` → `kg`. `quy_doi_don_vi(org, NULL, 'kg', 't', now())` →
+  `KHONG_QUY_DOI_DUOC`; `('kg', 'tấn')` → `QUY_DOI_CHUNG` 0,001. Đích là mã thì hàm hiện có không đọc được — dẫn tới mục 8 của §2.
+- `quy_doi_don_vi`, `don_vi_tai` đã nhận mốc — không cần biến thể *"tại mốc"* (điểm ③ của đề xuất rơi).
+- Phong bì của trình duyệt (`nop-thau.js`): `lineNo` là số JSON, `amount`/`totalAmount` chuỗi hai chữ số lẻ, Σ `amount` = tổng theo
+  cách dựng. Worker mở phiên bản mới nhất MỖI VÒNG; phong bì giải mã hỏng không vào `rfq_unsealed_bids`.
+- `app_api` có `SELECT` mức bảng trên `unseal_requests` (cột `bafo_round_id` thêm sau vẫn đọc được), `SELECT` theo cột trên
+  `vendor_bid_versions` gồm `bafo_round_id`, không gồm `envelope`.
+- Chỉ mục (org, gói) của `rfq_invitations` và `unseal_requests` là RIÊNG PHẦN (lời mời còn sống, yêu cầu đang mở) — lần tra theo gói
+  của hàm mới cần mọi hàng.
+- Sáu tệp TypeScript nhắc `rfq_unsealed_bids`; `tools/inv-matrix/src/danh-gia.ts` chỉ nhắc trong văn bản ma trận, không trong câu SQL.
+
+## 6. Đo
+
+- `packages/du-lieu-nen/src/lich-su-gia.int.test.ts` SỐ_ĐO_T3 — Postgres 16 thật, dưới `app_api`; gói đã mở niêm phong và vòng BAFO
+  dựng bằng SQL thô dưới vai chủ cụm theo đúng thứ tự cạnh của đường thật:
+  - **⑴ `bid_dong_tho`** — phong bì trình duyệt; sáu ca trên `amount` (dòng ấy `KHONG_DOC_DUOC`, anh em `LECH_TONG`) và trên
+    `totalAmount` (mọi dòng `KHONG_DOC_DUOC`); chuỗi không phải số; bốn dạng `lines` không phải mảng; `lineNo` trùng; sáu dạng
+    `lineNo` sai kiểu; phần tử không phải đối tượng; lệch một xu, `30` = `30.00`; `unitPrice` khai thấp không đổi `thanh_tien`;
+    tám phong bì lạ không ném.
+  - **⑵ `gia_da_lo`** — gói chưa mở; `EVALUATING` (không đọc `status`); `BAFO_OPEN`, `BAFO_CLOSED` không lộ, tại mốc trước vòng
+    BAFO vẫn lộ với giá vòng một — kể cả đọc lại SAU khi vòng hai đã mở; `BAFO_UNSEALED` lộ, vị thế cuối là bản BAFO của người nộp lại
+    và bản vòng một của người không; huỷ — không lộ từ lúc huỷ, lộ tại mốc trước lúc huỷ.
+  - **⑶ `quan_sat_gia`** — đơn giá = `amount / quantity` và quy đổi về gốc `kg` (`tấn` ⇒ 1000) và gốc MÃ `t` (hệ số 1, bản cũ ra
+    `KHONG_QUY_DOI_DUOC`); sáu trạng thái đúng thứ tự ưu tiên trên năm báo giá; `anh_xa_id` phân biệt chưa ánh xạ với ánh xạ sang
+    NULL; khai quy đổi riêng thì dòng thành `HOP_LE`; gói không ngân sách đọc chính sách hiệu lực lúc ra đời; tổ chức khác và phiên
+    khách ra 0 hàng; gói X không thấy chính nó; ánh xạ lại sau `p_moc` — bản tại mốc không đổi, `SAU_MOC {ANH_XA: 1}`, đọc bây giờ mang
+    `HOI_TO [ANH_XA]`; cạnh riêng, bí danh của tổ chức đè bí danh chung (`tấn` → `kg`, thước lệch 1000 lần), phiên bản mới — ba lần ghi
+    sau mốc bị bỏ qua và đếm, đọc bây giờ mang nhãn; băm hiện tại; hai nhánh `p_hang_chuan` trùng khít ở hai mốc trên mọi hàng chuẩn
+    của tệp; tập hàm chạm bản rõ trên `pg_proc` bằng danh sách tĩnh, không view nào đọc bản rõ, `quan_sat_gia` không `SECURITY DEFINER`.
+- `tests/architecture/ban-ro-liet-ke.test.ts` 4/4.
+- `hang-chuan.int` 23/23 (đột biến S4.2a nay trên lõi), `don-vi.int`, `anh-xa.int` 23/23 — hành vi `quy_doi_don_vi` y nguyên.
+- **Hai mươi bốn đột biến**, mỗi lần một chỗ trên thân migration; mục ghim hardening SINH LẠI từ thân đã đột biến (bản áp lại và
+  `$than$`) — sửa riêng migration thì `migrate()` chữa về bản ghim và đột biến biến mất trong im lặng (S1.96):
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | M1 | `bid_dong_tho` bỏ phép so tổng | đỏ — 2 ca. Lượt đầu: `beforeAll` hỏng khi dựng cụm dưới tải (44 ca bỏ qua, không ca nào đo); chạy lại riêng |
+  | M2 | không bắt `lineNo` trùng | đỏ — 1 ca |
+  | M3 | đọc `unitPrice` thay `amount` | đỏ — 24 ca |
+  | M4 | bỏ vế tổng không đọc được | đỏ — 6 ca |
+  | M5 | nhận `lineNo` không phải số JSON | đỏ — 1 ca |
+  | M6 | bỏ hàng *"`lines` không phải mảng"* | đỏ — 4 ca |
+  | M7 | `gia_da_lo` bỏ vế vòng BAFO | đỏ — 1 ca |
+  | M8 | `gia_da_lo` bỏ vế huỷ | đỏ — 1 ca |
+  | M9 | `gia_da_lo` đọc `status` | đỏ — 2 ca |
+  | M10 | báo giá bỏ as-of của bản rõ | đỏ — 1 ca (ca đọc lại tại mốc trước vòng BAFO sau khi vòng hai mở) |
+  | M11 | ánh xạ bỏ as-of | đỏ — 1 ca |
+  | M12 | ánh xạ bỏ vế băm hiện tại | đỏ — 1 ca |
+  | M13 | bỏ so tiền tệ với chính sách của gói | đỏ — 2 ca |
+  | M14 | vị thế ĐẦU thay vì cuối | đỏ — 1 ca |
+  | M15 | bỏ vế `lineNo` ngoài gói | đỏ — 1 ca |
+  | M16 | đơn giá quy đổi cho mọi trạng thái | đỏ — 1 ca |
+  | M17 | `HOI_TO` ánh xạ không bao giờ | đỏ — 1 ca |
+  | M18 | `SAU_MOC` bỏ bí danh | đỏ — 1 ca |
+  | M19 | nhãn `QUY_DOI` bỏ cổng kết quả | đỏ — 1 ca |
+  | M20 | nhánh lọc bỏ vế hàng chuẩn cuối | đỏ — 1 ca |
+  | M21 | đích quy đổi đi qua bí danh (bản cũ) | đỏ — 1 ca |
+  | M22 | tiền tệ gói không ngân sách bỏ nhánh ⑵ | đỏ — 1 ca |
+  | M23 | `SAU_MOC` phiên bản không bao giờ | đỏ — 1 ca |
+  | M24 | lõi bỏ vế `ghi_luc < p_moc` của cạnh riêng | đỏ — 1 ca |
+
+- **Hiệu năng** (`tools/do-lich-su-gia`): SỐ_ĐO_HIEU_NANG
+
+## 7. Lượt soi đối kháng
+
+SỐ_ĐO_LUOT_SOI
+
+## 8. Giới hạn, nói ra
+
+- Vị từ trong thân không phải ranh giới: mã chạy dưới `app_api` vẫn `SELECT` được `rfq_unsealed_bids`. Ranh giới là danh sách có tên —
+  một tệp mới viết tên bảng trong SQL động ghép chuỗi hay qua một hàm ngoài `public.` thì lớp tĩnh không thấy; lớp `pg_proc` thấy mọi
+  hàm `public` còn tồn tại trên cụm.
+- Phong bì BAFO giải mã hỏng: vị thế cuối rơi về vòng một (cùng bảng so sánh, lượt chấm).
+- Hai bản cài nói ra ở ADR: *"chính sách của gói"* (`rfq_che_do_nghiem` và thân mới), *"ánh xạ hiệu lực"* (tầng gói S4.3a và thân mới).
+- Đơn giá 0 là `HOP_LE`; benchmark (S4.5) quyết có đọc nó không.
+- Chưa có route: vế HTTP của ranh giới (phiên khách, Passport, agent, hàng sổ mỗi lần đọc, đối chứng dương của bộ quét) là L6, S4.4b.
+
+## 9. Số đo
+
+SỐ_ĐO_CUOI
