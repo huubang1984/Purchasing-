@@ -9,9 +9,11 @@
 --
 -- SỬA: thêm vào `award_kiem_de_xuat` một vế `EXISTS (lượt chấm nào của RFQ này mới hơn)`, chép nguyên khuôn `060` mục (A),
 -- ngay sau vế *lượt chấm thuộc đúng RFQ*. Nhánh mới mang TÊN RÀNG BUỘC (`j5_luot_cham_khong_moi_nhat`, khuôn `074`) để một lớp
--- trên nhận ra nó bằng tên chứ không bằng thông điệp; nó KHÔNG có dòng ở `CHOT_VAO_SO` — hai vế J5 vốn ngoài tập ADR-104,
--- và đường sản xuất không tới được nhánh này (lớp gói tự suy lượt mới nhất), nên lần từ chối ở đây là dấu hiệu của một
--- đường ghi LẠ, không của một người dùng đi tắt.
+-- trên nhận ra nó bằng tên chứ không bằng thông điệp; ~~nó KHÔNG có dòng ở `CHOT_VAO_SO` — hai vế J5 vốn ngoài tập ADR-104~~
+-- **[S1.9182, lượt gộp]** nó CÓ dòng `J5_LUOT_CHAM_KHONG_MOI_NHAT` ở `CHOT_THEO_RANG_BUOC`/`CHOT_VAO_SO` (`packages/identity`):
+-- ADR-108 đòi tên hai phía khớp nhau, và cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts` đọc cả thân này. Đường sản xuất
+-- không tới được nhánh này (lớp gói tự suy lượt mới nhất), nên lần từ chối ở đây là dấu hiệu của một đường ghi LẠ, không của
+-- một người dùng đi tắt — và đúng vì thế nó vào sổ `CONTROL_DENIED`.
 --
 -- Thân TRÍCH NGUYÊN VĂN từ `074_tu_choi_co_ten.sql` bằng script rồi đổi đúng HAI chỗ: một biến `moc_cua_luot` ở DECLARE và
 -- một khối vế mới trước `RETURN NEW`. Bản ghim ở `hardening.always.sql` đổi cùng commit (S1.96: migration một mình là no-op

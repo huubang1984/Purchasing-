@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { PermissionDeniedError, maChotTuLoi } from "@trustprocure/identity";
+import { CHOT_VAO_SO, PermissionDeniedError, maChotTuLoi } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { cancelRfq } from "@trustprocure/rfq";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
@@ -3027,6 +3027,66 @@ describe("[S1.9182 / khoản 231 / 9582] award trỏ vào lượt chấm CŨ b�
     });
     expect(id).not.toBe("");
     expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+  });
+
+  async function hangSoChot(rfqId: string): Promise<readonly (readonly unknown[])[]> {
+    const { rows } = await db.pool.query<{ actor_id: string; resource_type: string; payload: unknown }>(
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
+  }
+
+  // [S1.9182, lượt gộp / ADR-108] Chiều ỨNG DỤNG của tên `j5_luot_cham_khong_moi_nhat`: `deXuatTraoThau` tự suy lượt mới nhất
+  // và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở `EVALUATING`, tạo lượt đòi `UNSEALED`/`BAFO_UNSEALED`), nên nhánh
+  // này chỉ tới được bằng một ĐƯỜNG GHI THỨ HAI — đúng cái giá khoản 231 ghi. Dựng nó bằng một `client` bọc: ngay trước câu
+  // `INSERT INTO public.rfq_awards`, một kết nối KHÁC (cùng vai `app_api`) chèn và commit một bản sao lượt chấm với `created_at`
+  // mới; câu INSERT (READ COMMITTED) thấy hàng ấy, trigger `9582` từ chối bằng TÊN, và tầng gói phải đổi tên ấy thành mã chốt cộng
+  // một hàng sổ ở giao dịch độc lập — cùng khuôn J3 của khoản 247.
+  it("[INV-J5] đường ứng dụng: lượt chấm MỚI HƠN sinh ra giữa câu chọn lượt và câu INSERT của `deXuatTraoThau` ⇒ `ChotKiemSoatError` J5_LUOT_CHAM_KHONG_MOI_NHAT mang lỗi trigger ở `cause`, ĐÚNG MỘT hàng CONTROL_DENIED {ma}, không hàng award, RFQ đứng yên", async () => {
+    const { rfqId, banRo, luotId } = await sanSangTraoThau();
+    let soLanChen = 0;
+    const chenLuotMoiHon = async (): Promise<void> => {
+      await withTenant(apiPool, orgA, (c2) =>
+        c2.query(
+          "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+            "SELECT org_id, rfq_id, policy_id, currency, created_by, created_by_session_id FROM rfq_evaluations WHERE id = $1",
+          [luotId],
+        ),
+      );
+      soLanChen += 1;
+    };
+    type CauHoi = (...doiSo: unknown[]) => Promise<unknown>;
+    const boc = (c: pg.PoolClient): pg.PoolClient => {
+      const goc = c.query.bind(c) as unknown as CauHoi;
+      const hoi: CauHoi = async (...doiSo) => {
+        const cau = doiSo[0];
+        const van = typeof cau === "string" ? cau : typeof cau === "object" && cau !== null && "text" in cau ? cau.text : undefined;
+        if (typeof van === "string" && van.includes("INSERT INTO public.rfq_awards")) await chenLuotMoiHon();
+        return await goc(...doiSo);
+      };
+      const b = Object.create(c) as pg.PoolClient;
+      Object.defineProperty(b, "query", { value: hoi });
+      return b;
+    };
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        deXuatTraoThau(
+          boc(c), orgA,
+          { rfqId, bidVersionId: banRo[1] ?? "", reason: "gia thap nhat", actorSessionId: sDeXuat },
+          apiPool,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      name: "ChotKiemSoatError",
+      lyDo: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
+      message: CHOT_VAO_SO.J5_LUOT_CHAM_KHONG_MOI_NHAT.thongDiep,
+      cause: { code: "23514", constraint: "j5_luot_cham_khong_moi_nhat" },
+    });
+    expect(soLanChen, "tiền đề: đường ghi thứ hai đã chạy đúng một lần").toBe(1);
+    expect(await hangSoChot(rfqId)).toEqual([[uDeXuat, "RFQ", { ma: "J5_LUOT_CHAM_KHONG_MOI_NHAT" }]]);
+    expect(await hangAward(rfqId), "giao dịch đề xuất đã rollback").toEqual([]);
+    expect(await trangThaiRfq(rfqId), "không cạnh nào đi").toBe("EVALUATING");
   });
 });
 

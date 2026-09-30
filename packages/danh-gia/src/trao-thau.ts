@@ -335,6 +335,9 @@ export async function deXuatTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
     // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.180] theo chốt).
+    // [S1.9182 / khoản 231] Vế J5 *lượt chấm mới nhất* của `9582` đi cùng đường: tên `j5_luot_cham_khong_moi_nhat` có dòng ở
+    // `CHOT_THEO_RANG_BUOC` (ADR-108), nên một lượt chấm sinh dưới chân câu chọn ở trên — chỉ tới được bằng một đường ghi thứ hai
+    // — thành `ChotKiemSoatError` mang `J5_LUOT_CHAM_KHONG_MOI_NHAT` và một hàng `CONTROL_DENIED`.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
