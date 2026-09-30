@@ -83,6 +83,9 @@ const DANH_GIA_INDEX_TS = ciFile("packages/danh-gia/src/index.ts");
 // [S1.192 / S4.0] Ho "g19-": nen du lieu cua S4a (spec S4 §3.2).
 const DU_LIEU_NEN_SRC_PREFIX = ciPrefix("packages/du-lieu-nen/src/");
 const DU_LIEU_NEN_INDEX_TS = ciFile("packages/du-lieu-nen/src/index.ts");
+// [S1.203 / S3.6b1] Ho "g20-": lop co trang thai cua cac chot kiem soat S3 (spec S3 §3.2).
+const KIEM_SOAT_SRC_PREFIX = ciPrefix("packages/kiem-soat/src/");
+const KIEM_SOAT_INDEX_TS = ciFile("packages/kiem-soat/src/index.ts");
 // [S1.114 / S2.7 / ADR-059] Ho "g17-": lop tinh lai DOC LAP cua bo bang chung.
 const DOC_LAP_SRC_PREFIX = ciPrefix("tools/bo-xuat-danh-gia/src/doc-lap/");
 
@@ -350,6 +353,34 @@ module.exports = {
         "gian tiep qua mot goi trung gian.",
       severity: "error",
       from: { path: DU_LIEU_NEN_SRC_PREFIX },
+      to: { path: [SEALED_ENVELOPE_SRC_PREFIX, UNSEAL_SRC_PREFIX, CRYPTO_KEYS_SRC_PREFIX], reachable: true },
+    },
+    // ------------------------------------------------------------------------------------------
+    // [S1.203 / S3.6b1] Ho "g20-" — LOP CO TRANG THAI CUA CAC CHOT KIEM SOAT S3. Hai quy tac, cung khuon g19-:
+    //   ⑴ chi index.ts la cua cong khai;
+    //   ⑵ spec S3 §3.2: kiem soat khong cham duong mo thau — goi nay khong VOI TOI sealed-envelope, unseal,
+    //      crypto-keys qua bat ky duong nao (`reachable: true`, ke ca gian tiep). Vi `@trustprocure/rfq` voi toi
+    //      sealed-envelope, quy tac nay cung la ly do goi khong phu thuoc rfq; chieu `rfq` → `kiem-soat` thi duoc.
+    // Doi chung DUONG va AM: `tests/architecture/boundaries.test.ts`, khoi "packages/kiem-soat".
+    // ------------------------------------------------------------------------------------------
+    {
+      name: "g20-kiem-soat-chi-index-la-cua-cong-khai",
+      comment:
+        "Toan bo packages/kiem-soat/src/ la vung han che doi voi module ben ngoai package. Chi " +
+        "index.ts duoc mo. Goi nay ghi tin hieu chia nho va lan ghi nhan cua no — lop dung giua mot " +
+        "goi thau va lan mo goi ay (K10a); mot module moi mac dinh khong voi toi duoc tu ben ngoai.",
+      severity: "error",
+      from: { pathNot: KIEM_SOAT_SRC_PREFIX },
+      to: { path: KIEM_SOAT_SRC_PREFIX, pathNot: [KIEM_SOAT_INDEX_TS] },
+    },
+    {
+      name: "g20-kiem-soat-khong-cham-duong-mo-thau",
+      comment:
+        "spec S3 §3.2: lop kiem soat khong them duong mat ma nao va khong cham duong mo thau. " +
+        "packages/kiem-soat/src/ khong duoc VOI TOI sealed-envelope, unseal hay crypto-keys, ke ca " +
+        "gian tiep qua mot goi trung gian (vd. @trustprocure/rfq).",
+      severity: "error",
+      from: { path: KIEM_SOAT_SRC_PREFIX },
       to: { path: [SEALED_ENVELOPE_SRC_PREFIX, UNSEAL_SRC_PREFIX, CRYPTO_KEYS_SRC_PREFIX], reachable: true },
     },
     // ------------------------------------------------------------------------------------------

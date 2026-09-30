@@ -1,5 +1,5 @@
 {
-  "name": "@trustprocure/rfq",
+  "name": "@trustprocure/kiem-soat",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,6 @@
   "dependencies": {
     "@trustprocure/audit": "workspace:*",
     "@trustprocure/identity": "workspace:*",
-    "@trustprocure/kiem-soat": "workspace:*",
-    "@trustprocure/outbox": "workspace:*",
-    "@trustprocure/sealed-envelope": "workspace:*",
     "pg": "^8.13.0"
   }
 }

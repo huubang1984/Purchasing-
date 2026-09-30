@@ -81,6 +81,11 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
+  // [S1.203 / S3.6b1 · K10a] Ghi nhận tín hiệu chia nhỏ — route đòi `rfq.approve`, hàm hỏi lại cùng mã rồi luật người.
+  "ghiNhanTinHieu",
+  // [S1.203 / S3.6b1] Ảnh chụp tín hiệu lúc nộp duyệt — người gọi duy nhất là `submitRfqForApproval`, sau cổng `rfq.create`
+  // của route nộp; một module `apps/` gọi thẳng nó mà không nhắc quyền là đúng thứ lớp này bắt.
+  "ghiTinHieuKhiNop",
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
@@ -164,6 +169,10 @@ const HAM_CHI_DOC = [
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",
+  // [S1.203 / S3.6b1] Tín hiệu chia nhỏ của một gói — không giá: bằng chứng mang id gói, nhóm hàng, phiên bản chính sách, cận
+  // bậc và cửa sổ, tức những thứ người trong tổ chức đã đọc được ở `GET /policy` và `GET /rfqs/:id`. Vế *ai gọi được* đóng ở
+  // route (`agent: false`).
+  "lietKeTinHieu",
   "listRfqItems",
   "listSupplierContacts",
   "listSuppliers",
@@ -332,6 +341,8 @@ const CUA_GOI = [
   "@trustprocure/danh-gia",
   // [S1.197 / S4.2a] Gói dữ liệu nền có hàm GHI từ S4.2a — vào danh sách CÙNG lúc, không đợi route đầu tiên (khuôn khoản 33).
   "@trustprocure/du-lieu-nen",
+  // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 — vào danh sách CÙNG lúc gói ra đời (khuôn khoản 33).
+  "@trustprocure/kiem-soat",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------

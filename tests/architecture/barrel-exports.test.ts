@@ -1096,6 +1096,11 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "rutBiDanhDonVi",
 ];
 
+// [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
+// Không symbol nào tính tín hiệu — phép tính là MỘT hàm SQL (`tin_hieu_chia_nho`); một bản tính thứ hai đi vòng qua cửa là hai
+// tầng cho hai câu trả lời về cùng một gói.
+const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "ghiNhanTinHieu", "ghiTinHieuKhiNop", "lietKeTinHieu"];
+
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
   // `chi-phi-hieu-dung.ts` vẫn thuần — spec §3.2 đòi đúng thế, vì J2 phải đo được bằng một lời
@@ -1209,6 +1214,15 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
       ".",
       DANH_SACH_TRANG_DU_LIEU_NEN,
       "Đơn vị đo là THƯỚC của benchmark: một bản quy đổi thứ hai đi vòng qua cửa là hai tầng cho hai con số (khoản 218).",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/kiem-soat chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "kiem-soat",
+      ".",
+      DANH_SACH_TRANG_KIEM_SOAT,
+      "Tín hiệu chia nhỏ đứng giữa một gói thầu và lần mở nó (K10a): một bản tính thứ hai đi vòng qua cửa là hai câu trả lời.",
     );
   });
 
@@ -1327,6 +1341,7 @@ const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly
     ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
     ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
     ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],
+    ["kiem-soat", new Map([[".", DANH_SACH_TRANG_KIEM_SOAT]])],
     ["outbox", new Map([[".", DANH_SACH_TRANG_OUTBOX]])],
     ["rfq", new Map([[".", DANH_SACH_TRANG_RFQ]])],
     [

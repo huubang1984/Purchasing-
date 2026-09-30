@@ -9411,6 +9411,95 @@ ghi số tiền vào sổ kiểm toán.
   nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
   SỐ, không phải không biết KHOẢNG.
 
+## ADR-120 — S3.6b1: tín hiệu chia nhỏ — một hàm SQL, hai bảng chỉ ghi thêm, ghi nhận bởi người độc lập, chốt K10a ở cạnh mở gói
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29: S3.6b chia hai PR, b1 là CSDL, tầng gói,
+route và K10 ở cạnh mở gói (vào sổ đăng ký là K10a); *người gây ra* tín hiệu là người tạo và người nộp của MỌI gói trong bằng chứng;
+tín hiệu chỉ xét cận bậc; mã ở gói mới `packages/kiem-soat`; gói đã huỷ không tính; bằng chứng đổi sau lần nộp thì tín hiệu mới được
+lưu lúc GHI NHẬN — cạnh mở gói chỉ đọc và từ chối; người gây ra tự ghi nhận là `CONTROL_DENIED`, vào sổ · **[S1.203]** ·
+**Liên quan:** ADR-084 ⑵ ⑷ (quyền của cạnh bị chặn, `CONTROL_DENIED`), ADR-080 (công tắc), ADR-119 (nhóm hàng), ADR-054 (không giá
+dạng rõ ngoài phong bì), ADR-060 (luật ghi sổ chọn lọc) · **Spec:** S3 §2.4 ⑺, §2.5 ⒁, §4.6, §5.1 (K10), §9 (S3.6) · **Biên bản:**
+`evidence/security-reviews.md` §S1.203
+
+### Bối cảnh
+
+Spec S3 §4.6 đặt tín hiệu `PURCHASE_SPLITTING` ở cạnh `DRAFT→PENDING_APPROVAL` và đòi cạnh `PENDING_APPROVAL→OPEN` có một lần ghi
+nhận; §2.5 ⒁ chốt một điều kiện fail-closed, cửa sổ neo `submitted_at`, khoá (tổ chức, nhóm hàng), người ghi nhận ngoài {người tạo,
+người gây ra} và giữ quyền của cạnh bị chặn. Đo trước trên `master` `151cbd1`, fixture của spec §7 (bậc 0 / 100 triệu / 1 tỷ / 10 tỷ,
+cửa sổ 30 ngày): ba gói 480, 470, 490 triệu cùng nhóm hàng ở một tổ chức đã bật đều mở được, không bảng tín hiệu, không hàng
+`CONTROL_DENIED` nào — tổng 1,44 tỷ đi qua ba lần duyệt bậc 100 triệu mà không ai được hỏi.
+
+### Quyết định
+
+1. **Một hàm tính tín hiệu, `tin_hieu_chia_nho(org, gói)`** — TypeScript không giữ bản sao (spec §2 hàng 6). Tập xét: chính gói ấy và
+   mọi gói cùng tổ chức, cùng nhóm hàng, cùng đơn vị tiền, đã rời DRAFT và chưa huỷ, nộp duyệt trong `chia_nho_cua_so_ngay` ngày tính
+   NGƯỢC từ `submitted_at` của chính gói. Tín hiệu bắn ở cận `T` cao nhất — mọi `tu_so_tien` > 0 của phiên bản mà ngân sách của gói
+   ghim, không `dual_approval_threshold` — mà tập con {gói có ước lượng dưới `T`} chứa chính gói ấy và có tổng ≥ `T` (`≥` như
+   `rfq_bac_cua`). Bằng chứng: loại, nhóm hàng, phiên bản chính sách, cửa sổ, cận, danh sách id gói đã sắp — không một ước lượng nào.
+   Tổ chức chưa bật: `NULL`.
+2. **Hai bảng CHỈ GHI THÊM.** `governance_signals` mang năm thứ V2.1 §19 đòi; bằng chứng, độ tin cậy (`XAC_DINH`), giải thích và mốc
+   tính do trigger `governance_signals_tinh` đặt, ngoài `GRANT` — mọi hàng là một ảnh chụp THẬT của hàm, chỉ ghi cho gói đang chờ duyệt
+   có tín hiệu. Cột `nguon`: `NOP_DUYET` hay `GHI_NHAN`. `governance_signal_acks` — một người ghi nhận một tín hiệu một lần, kèm lý do.
+   RLS `FORCE`, policy khách đóng hẳn, `kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them` ở `UPDATE OR DELETE` và `TRUNCATE`.
+3. **Ảnh chụp lúc nộp.** `submitRfqForApproval` gọi `ghiTinHieuKhiNop` sau câu nộp, trong cùng giao dịch: gói có tín hiệu thì một hàng
+   `NOP_DUYET` và một hàng sổ `GOVERNANCE_SIGNAL_RECORDED`. Không chặn gì.
+4. **Ghi nhận** (`ghiNhanTinHieu`, route `POST /rfqs/:rfqId/signals/acknowledge`): người giữ `rfq.approve` — quyền của cạnh bị chặn
+   (ADR-084 ⑵) —, kèm lý do, khi gói đang chờ duyệt. Luật người là MỘT hàm, `tin_hieu_chot_nguoi_ghi_nhan`: người tạo hay người nộp của
+   BẤT KỲ gói nào trong bằng chứng ⇒ `K10A_TU_GHI_NHAN`; người khai phiên bản chính sách mà gói ghim (§2.4 ⑺) ⇒
+   `K10A_TAC_GIA_CHINH_SACH`. Tầng gói hỏi nó TRƯỚC câu ghi và từ chối theo `CHOT_VAO_SO` — hàng `CONTROL_DENIED` ở giao dịch độc lập;
+   trigger `governance_signal_acks_kiem_nguoi` hỏi lại trạng thái, quyền, luật người và bằng chứng trên câu ghi. Lần ghi nhận trỏ tới
+   tín hiệu có bằng chứng BẰNG kết quả hiện tại; không có thì lần ghi nhận LƯU một tín hiệu `GHI_NHAN` trước — trong giao dịch thành
+   công của chính nó.
+5. **Chốt K10a ở cạnh `PENDING_APPROVAL→OPEN`, một điều kiện, fail-closed.** Hàm vị từ `rfq_chot_tin_hieu(org, gói)`: tín hiệu tính NGAY
+   LÚC ẤY mà không có lần ghi nhận nào trên một tín hiệu có bằng chứng bằng nó ⇒ `TIN_HIEU_CHUA_GHI_NHAN`. `openRfq` hỏi nó sau cổng
+   `rfq.open` và TRƯỚC `issueRfqKeyPair` (khoản 31); trigger riêng `rfq_packages_kiem_tin_hieu_khi_mo`, `WHEN` đúng cạnh, hỏi lại — lớp
+   chặn cuối cho câu viết tay (tên ràng buộc `k10_tin_hieu_chua_ghi_nhan`).
+6. **Không khoá tư vấn mới.** Tập của một gói chỉ CO lại sau lần nộp: gói nộp sau nằm ngoài cửa sổ (neo vào `submitted_at` của gói này),
+   gói trả về DRAFT hay bị huỷ rời tập, và `submitted_at` đóng dấu lại ở mỗi lần nộp. Một lần đọc cũ chỉ có thể thấy NHIỀU gói hơn —
+   tức một lần ghi nhận trên tập rộng hơn tập lúc mở.
+7. **Gói mới `@trustprocure/kiem-soat`** (spec §3.2) giữ ba hàm có trạng thái; ranh giới `depcruise` họ `g20-`: chỉ `index.ts` là cửa, và
+   gói không VỚI TỚI `sealed-envelope`, `unseal` hay `crypto-keys` — kể cả qua `@trustprocure/rfq`, nên gói không phụ thuộc `rfq`, và
+   test tích hợp của nó ở `packages/rfq`. Chiều `rfq` → `kiem-soat` được phép.
+8. **Hai route:** `GET /rfqs/:rfqId/signals` (không cho agent — dữ liệu kiểm soát của bên mua, cùng lý do `/categories`) và route ghi
+   nhận (`rfq.approve`, `201`). `KiemSoatError` vào lớp `422`.
+9. **K10 tách như K4.** K10a — vế cạnh mở gói — vào sổ đăng ký ở vòng này; vế chữ ký trao thầu vào sổ ở hạng mục dựng tín hiệu của nó.
+
+### Phương án đã cân nhắc
+
+- **Tầng gói tính lại và LƯU tín hiệu mới ở cạnh mở gói, trong một giao dịch riêng** — đúng chữ §4.6. Chủ dự án chọn lưu lúc ghi nhận:
+  cạnh mở gói thành một người ghi thứ hai của bảng tín hiệu, ghi từ một lần mở ĐANG BỊ TỪ CHỐI và bởi chính người bị chặn; lưu lúc ghi
+  nhận thì mọi hàng tín hiệu ra đời ở lần nộp hay ở tay người độc lập, trong một giao dịch thành công.
+- **Chỉ loại người tạo GÓI NÀY** — chữ gốc của §4.6. Loại (§2.5 ⒁, chủ dự án chốt): người tạo một gói anh em hay người nộp nó là người
+  gây ra tín hiệu như người tạo gói cuối.
+- **Xét cả `dual_approval_threshold` làm cận.** Chủ dự án chọn chỉ cận bậc: tín hiệu nói về việc né một BẬC; ngưỡng duyệt kép là quy tắc
+  của MVP1, có đường đo riêng (D2).
+- **Tính cả gói đã huỷ.** Chủ dự án chọn không: gói đã huỷ không mua gì, và giữ nó trong tập làm một lần huỷ đúng thủ tục kéo theo một
+  tín hiệu không tắt được.
+- **Đưa ba tên ràng buộc K10a vào `CHOT_THEO_RANG_BUOC`** để lần từ chối của trigger cũng vào sổ. Không làm: bảng ấy khoá hai chiều với
+  thân bốn hàm của `074`/`080`, và đường thuận đã vào sổ qua hàm vị từ hỏi trước; lần chặn của trigger chỉ tới từ câu viết tay hay một
+  cuộc đua — cùng giới hạn J6/ADR-060.
+- **Dời `kiemChot` về `@trustprocure/identity`** để hai gói dùng chung. Không làm: bộ đọc QT3 rút câu SQL theo TỆP, nên hàm gọi
+  `.query(` phải đứng cạnh các câu nó chạy — khuôn đã ghi ở `packages/rfq/src/chot-kiem-soat.ts`. `hoiChot` của gói mới là bản thứ hai
+  cùng mười dòng.
+- **Khoá tư vấn theo (tổ chức, nhóm hàng)** giữa nộp, ghi nhận và mở. Không cần — quyết định 6.
+
+### Hệ quả, nói thẳng
+
+- **Một tổ chức nhỏ có thể kẹt.** Gói có tín hiệu cần một người giữ `rfq.approve` không tạo, không nộp gói nào trong bằng chứng và không
+  khai phiên bản chính sách. Ba PROCUREMENT_MANAGER mà mỗi người tạo một gói anh em thì không ai ghi nhận được — đúng ý §8.10 (số người
+  tối thiểu), và thông điệp từ chối nói điều ấy.
+- **`K10A_TAC_GIA_CHINH_SACH` hiếm khi bắn ở cạnh mở gói:** `033` cấm một người giữ `policy.manage` cùng `rfq.approve`, nên người khai
+  phiên bản chỉ tới được khi vai của họ đổi sau lần khai. Luật vẫn ở đó vì vai đổi, và vì §2.4 ⑺ đòi nó cho mọi lần ghi nhận.
+- **Nhóm hàng chỉ mạnh bằng người chọn nó** (ADR-119): xếp gói anh em vào hai nhóm là né tín hiệu.
+- **Bằng chứng mang id gói anh em.** Người đọc route tín hiệu thấy những gói nào bị gộp; route không cho agent.
+- **Mỗi lần nộp duyệt thêm một câu hỏi** (hàm trả `NULL` ngay ở tổ chức chưa bật); mỗi lần mở và mỗi lần đọc tính lại tập.
+
+### Đo
+
+`packages/rfq/src/tin-hieu-chia-nho.int.test.ts` trên Postgres thật dưới `app_api`, gồm tám đột biến trong giao dịch (tắt trigger ở cạnh,
+hàm vị từ trả NULL, luật người trả NULL, bỏ vế huỷ, `<=` thay `<`, thứ tự cận, bỏ `bool_or`, bỏ vế tiền tệ); `apps/api/src/buyer.int.test.ts`
+qua HTTP; bộ quét của kịch bản 41 HTTP; ba probe `g20-`. Đột biến ở mã nguồn: §S1.203.
+
 ## ADR-122 — Mặc định-đóng với trigger trên bảng của dự án: chỉ trigger đã ghim được tồn tại; hardening tự gỡ trigger lạ trên bảng có tên, phán xét ở mọi bảng khác
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn MỌI trigger lạ, không chỉ bản sao cùng
@@ -9430,15 +9519,15 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
 
 ### Quyết định
 
-1. **Danh sách `TRIGGER_DUOC_PHEP`** trong hardening: mọi cặp (bảng, tên) có văn bản ghim `pg_get_triggerdef` — 152, kể cả hai
+1. **Danh sách `TRIGGER_DUOC_PHEP`** trong hardening: mọi cặp (bảng, tên) có văn bản ghim `pg_get_triggerdef` — 161, kể cả hai
    `CREATE CONSTRAINT TRIGGER` — cộng hai trigger ghim bằng thuộc tính (`user_roles_phan_tach_nhiem_vu`,
-   `role_permissions_ma_tran_quyen`): 154 cặp trên 42 bảng. Cổng tĩnh (`tests/architecture/hardening-co-ly-do.test.ts`) giữ danh
+   `role_permissions_ma_tran_quyen`): 163 cặp trên 44 bảng. Cổng tĩnh (`tests/architecture/hardening-co-ly-do.test.ts`) giữ danh
    sách trùng khít tập đã ghim bằng hai bộ đọc khác họ — văn bản ghim, và câu `ENABLE ALWAYS TRIGGER` viết thẳng.
 2. **Mục `không trigger lạ trên bảng của dự án`** (`CAU_TRIGGER_LA_DU_AN`): trigger không nội bộ, không phải bản sao phân mảnh, trên
    một bảng thuộc lược đồ dự án, mà không có trong danh sách là TRIGGER LẠ. Thứ tự trigger cùng thời điểm là thứ tự tên, nên tập tên
    cố định thì thứ tự cố định theo.
 3. **Tự gỡ chỉ trên bảng có tên; phán xét ở mọi bảng — chủ dự án chốt.** Gỡ trigger KHÔNG đơn điệu (ADR-028 §2⑵: nó đổi được hành
-   vi một đường ghi hợp lệ), nên bị cấm trên tập suy ra. Trên 42 bảng mà danh sách khai TÊN — tập trigger của chúng đã ghim trọn —,
+   vi một đường ghi hợp lệ), nên bị cấm trên tập suy ra. Trên 44 bảng mà danh sách khai TÊN — tập trigger của chúng đã ghim trọn —,
    lượt sửa gỡ trigger lạ, mỗi lần gỡ một WARNING, đúng khuôn [CR1] của bảng sổ. Trên mọi bảng khác của dự án, mục chỉ phán xét:
    chặn deploy, thông điệp nêu bảng, tên, định nghĩa và lối ra — gỡ tay, một migration mới, hay ghim nó và khai bảng vào danh sách.
    Gỡ không được thì lượt phán xét cũng chặn deploy.

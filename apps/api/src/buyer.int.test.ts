@@ -12,6 +12,8 @@
 //   [INV-K1]  [S1.166] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
 //   [S1.169] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
 //             thứ hai ký bản mới nhất ⇒ bật S3; phiên bản kế tiếp tính theo bản MỚI NHẤT, không theo bản hiệu lực.
+//   [INV-K10a] [S1.203] gói thứ ba của ba gói 480/470/490 triệu cùng nhóm ⇒ mở 422 có tên và một hàng CONTROL_DENIED; người
+//             gây ra ghi nhận ⇒ 422 có tên; không `rfq.approve` ⇒ 403; người độc lập ghi nhận ⇒ 201, rồi mở 200.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -19,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
+import { CHOT_VAO_SO, HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createDispatcher } from "./dispatch.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
@@ -1304,5 +1306,121 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     const khongObject = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: [1] }, gocKy);
     expect([khongObject.status, khongObject.text]).toEqual([422, expect.stringContaining("phải là mảng các object")]);
     expect((await goi("GET", "/policy/versions", tcA, undefined, gocKy)).text).not.toContain('"version":4');
+  });
+});
+
+describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ qua HTTP — đọc, ghi nhận, và chốt K10a ở cạnh mở gói", () => {
+  it("[INV-K10a] ba gói 480/470/490 triệu cùng nhóm: mở gói thứ ba ⇒ 422 có tên + một hàng sổ; người gây ra ghi nhận ⇒ 422 có tên; BUYER ⇒ 403; thiếu lý do ⇒ 422; người độc lập ⇒ 201; lần hai ⇒ 422; rồi mở ⇒ 200", async () => {
+    const org = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty K10a', 'cong-ty-k10a') RETURNING id")
+    ).rows[0]?.id ?? "";
+    const pm = await nguoi("pm-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const pm2 = await nguoi("pm2-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const pm3 = await nguoi("pm3-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const mua = await nguoi("mua-k10a@vidu.vn", ["BUYER"], org);
+    // Người ghi nhận ĐỘC LẬP giữ ĐÚNG MỘT mã, `rfq.approve`: route khai sai mã (vd. `rfq.create`) thì người này 403 ở cổng —
+    // hàm gói hỏi lại `rfq.approve` nên một người giữ cả hai mã không phân biệt được hai bản.
+    await db.pool.query("INSERT INTO roles (code, name) VALUES ('KIEM_K10A_DUYET', 'Chi duyet goi')");
+    await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('KIEM_K10A_DUYET', 'rfq.approve')");
+    const docLap = await nguoi("doclap-k10a@vidu.vn", ["KIEM_K10A_DUYET"], org);
+    const tc = await nguoi("tc-k10a@vidu.vn", ["FINANCE"], org);
+    const tc2 = await nguoi("tc2-k10a@vidu.vn", ["FINANCE"], org);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+    // Phiên bản có bậc 0 / 1 tỷ / 10 tỷ, cửa sổ 30 ngày — câu DỰNG dưới chủ sở hữu, khuôn ca K1 ở trên. Mọi trigger vẫn chạy.
+    const bac = (tu: number): Record<string, unknown> => ({
+      tu_so_tien: tu,
+      so_ncc_toi_thieu: 1,
+      award_vai_khac_nhau: false,
+      ky_danh_sach_moi: false,
+      xoay_vong_n: 0,
+      award_so_chu_ky: 1,
+      award_vai: ["DIRECTOR"],
+      tham_dinh_truoc_trao: false,
+      khai_xung_dot: false,
+      dau_thau_chinh_thuc: false,
+    });
+    const v2 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+          "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
+        [org, JSON.stringify([bac(0), bac(1_000_000_000), { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true }]), tc.id, tc.sessionId],
+      )
+    ).rows[0]?.id;
+    await db.pool.query(
+      "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
+      [org, v2, tc2.id, tc2.sessionId],
+    );
+    const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
+    expect(nhom.status, nhom.text).toBe(201);
+    const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+    const goiDaDuyet = async (giaTri: string): Promise<string> => {
+      const rfq = await goi("POST", "/rfqs", pm, { title: `Thep ${giaTri}`, deadlineAt: han });
+      expect(rfq.status, rfq.text).toBe(201);
+      const id = (rfq.body as { rfq: { id: string } }).rfq.id;
+      expect((await goi("PUT", `/rfqs/${id}/budget`, pm, { estimatedValue: giaTri, currency: "VND" })).status).toBe(200);
+      expect((await goi("PUT", `/rfqs/${id}/category`, pm, { categoryId: nhomId })).status).toBe(200);
+      expect((await goi("POST", `/rfqs/${id}/items`, pm, { lineNo: 1, description: "Thep tam", quantity: "10", unit: "tam" })).status).toBe(201);
+      const nop = await goi("POST", `/rfqs/${id}/submit`, pm);
+      expect(nop.status, nop.text).toBe(200);
+      for (const ai of [pm2, pm3]) {
+        // [S1.198 / khoản 256] Người duyệt gửi lại lần nộp vừa đọc — ở tổ chức đã bật, route duyệt đòi nó.
+        const lanNop = ((await goi("GET", `/rfqs/${id}`, ai)).body as { rfq: { lanNop: number } }).rfq.lanNop;
+        const d = await goi("POST", `/rfqs/${id}/approve`, ai, { lanNop });
+        expect(d.status, d.text).toBe(200);
+      }
+      return id;
+    };
+    const hangSo = async (rfqId: string): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+          [org, rfqId],
+        )
+      ).rows.map((r) => r.ma);
+
+    for (const v of ["480000000.00", "470000000.00"]) {
+      const id = await goiDaDuyet(v);
+      const mo = await goi("POST", `/rfqs/${id}/open`, pm);
+      expect(mo.status, mo.text).toBe(200);
+    }
+    const g3 = await goiDaDuyet("490000000.00");
+    const duongGhiNhan = `/rfqs/${g3}/signals/acknowledge`;
+
+    const doc = await goi("GET", `/rfqs/${g3}/signals`, pm);
+    expect(doc.status, doc.text).toBe(200);
+    const tinHieu = (doc.body as { tinHieu: { canGhiNhan: boolean; hienTai: { can: number; goi: string[] }; tinHieu: unknown[] } }).tinHieu;
+    expect([tinHieu.canGhiNhan, tinHieu.hienTai.can, tinHieu.hienTai.goi.length, tinHieu.tinHieu.length]).toEqual([true, 1_000_000_000, 3, 1]);
+
+    const chan = await goi("POST", `/rfqs/${g3}/open`, pm);
+    expect([chan.status, (chan.body as { error: string }).error]).toEqual([422, CHOT_VAO_SO.TIN_HIEU_CHUA_GHI_NHAN.thongDiep]);
+    expect(await hangSo(g3)).toEqual(["TIN_HIEU_CHUA_GHI_NHAN"]);
+
+    const tuGhi = await goi("POST", duongGhiNhan, pm, { lyDo: "toi tao ca ba goi" });
+    expect([tuGhi.status, (tuGhi.body as { error: string }).error]).toEqual([422, CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep]);
+    expect(await hangSo(g3)).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
+
+    const bi = await goi("POST", duongGhiNhan, mua, { lyDo: "buyer khong duyet" });
+    expect(bi.status, bi.text).toBe(403);
+    const { rows: tuChoi } = await db.pool.query<{ q: string; r: string }>(
+      "SELECT payload->>'permission' AS q, resource_id::text AS r FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [org, mua.id],
+    );
+    expect(tuChoi).toEqual([{ q: "rfq.approve", r: g3 }]);
+
+    const thieu = await goi("POST", duongGhiNhan, docLap, {});
+    expect([thieu.status, thieu.text]).toEqual([422, JSON.stringify({ error: 'thiếu trường "lyDo"' })]);
+
+    const ghi = await goi("POST", duongGhiNhan, docLap, { lyDo: "Ba cong trinh, ba hop dong khung khac nhau" });
+    expect(ghi.status, ghi.text).toBe(201);
+    expect((ghi.body as { ghiNhan: { tinHieuMoi: boolean } }).ghiNhan.tinHieuMoi).toBe(false);
+    const lan2 = await goi("POST", duongGhiNhan, docLap, { lyDo: "lan hai" });
+    expect([lan2.status, (lan2.body as { error: string }).error]).toEqual([422, "Bạn đã ghi nhận tín hiệu này rồi."]);
+
+    const sau = await goi("GET", `/rfqs/${g3}/signals`, pm);
+    expect((sau.body as { tinHieu: { canGhiNhan: boolean } }).tinHieu.canGhiNhan).toBe(false);
+    const mo = await goi("POST", `/rfqs/${g3}/open`, pm);
+    expect(mo.status, mo.text).toBe(200);
   });
 });
