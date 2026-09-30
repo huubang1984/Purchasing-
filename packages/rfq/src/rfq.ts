@@ -1,13 +1,14 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import { ghiTinHieuKhiNop } from "@trustprocure/kiem-soat";
 import { enqueueJob } from "@trustprocure/outbox";
 import {
   issueRfqKeyPair,
   revokeRfqKeyMaterial,
   type OrgKeyProvisioner,
 } from "@trustprocure/sealed-envelope";
-import { CAU_CHOT_NGAN_SACH, CAU_CHOT_NHOM_HANG, kiemChot } from "./chot-kiem-soat.js";
+import { CAU_CHOT_NGAN_SACH, CAU_CHOT_NHOM_HANG, CAU_CHOT_TIN_HIEU, kiemChot } from "./chot-kiem-soat.js";
 
 // =============================================================================================
 // RFQ VÀ MÁY TRẠNG THÁI (S1.2) — VÀ RANH GIỚI VỚI TẦNG CSDL, GHIM TƯỜNG MINH
@@ -490,6 +491,9 @@ export async function submitRfqForApproval(
     resourceType: "rfq_package",
     resourceId: hang.id,
   });
+  // [S1.203 / S3.6b1] Ảnh chụp tín hiệu chia nhỏ lúc gói vừa rời DRAFT, cùng giao dịch (spec §4.6: *"tính ở
+  // DRAFT→PENDING_APPROVAL"*). Không chặn gì; tổ chức chưa bật hay gói không có tín hiệu thì không ghi gì.
+  await ghiTinHieuKhiNop(client, orgId, hang.id, actor);
   return doiRfq(hang);
 }
 
@@ -699,6 +703,9 @@ export async function openRfq(
     },
     auditPool,
   );
+  // [S1.203 / S3.6b1] K10a, cùng khuôn K1: hỏi hàm vị từ `rfq_chot_tin_hieu` TRƯỚC `issueRfqKeyPair` (khoản 31) — lần từ chối ghi
+  // sổ ở giao dịch độc lập, và câu ghi sổ của lần đúc khoá giữ khoá chuỗi của tổ chức tới COMMIT. Trigger ở cạnh hỏi lại.
+  await kiemChot(client, auditPool, orgId, actor, input.rfqId, CAU_CHOT_TIN_HIEU, [orgId, input.rfqId]);
 
   // Sinh khoá TRƯỚC lần UPDATE. Xem khối chú thích trên.
   await issueRfqKeyPair(client, orgId, {

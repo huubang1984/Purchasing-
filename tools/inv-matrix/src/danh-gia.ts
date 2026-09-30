@@ -350,8 +350,9 @@ export interface MocGhim {
 // [S1.197 / S4.2a] 70 -> 71: L3 vào sổ đăng ký cùng hai trigger khuôn `033` của vai quản lý dữ liệu và cổng ghi CSDL. Cổng
 // CHẶN đúng một lượt trước khi dòng này được viết.
 // [S1.196 / S3.3a] 71 -> 72: K8a vao so dang ky cung luot voi chot CSDL cua no (xac minh noi bo nha cung cap).
-// [S1.204 / S4.3a] 72 -> 74: L2 và L13 vào sổ đăng ký cùng bảng ánh xạ hạng mục và luật ghi của nó.
-export const MOC_GHIM: MocGhim = { soPhuToiThieu: 74, coDanhSachToiDa: 0 };
+// [S1.203 / S3.6b1] 72 -> 73: K10a — vế cạnh mở gói của K10 — vào sổ đăng ký cùng tín hiệu chia nhỏ và chốt của nó.
+// [S1.204 / S4.3a] 73 -> 75: L2 và L13 vào sổ đăng ký cùng bảng ánh xạ hạng mục và luật ghi của nó.
+export const MOC_GHIM: MocGhim = { soPhuToiThieu: 75, coDanhSachToiDa: 0 };
 
 /**
  * Đếm số VẾ của một mệnh đề trong sổ đăng ký. Sổ đăng ký viết phép hội bằng `**và**` đậm —

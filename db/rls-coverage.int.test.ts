@@ -772,6 +772,9 @@ describe("phủ RLS", () => {
       // [S1.197 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
       { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
+      // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "governance_signal_acks", quyen: "SELECT" },
+      { grantee: "app_api", bang: "governance_signals", quyen: "SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "item_aliases", quyen: "SELECT" },
@@ -1102,6 +1105,19 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "canonical_items", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "tac_gia", quyen: "INSERT" },
+      // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ INSERT. Bằng chứng, độ tin cậy, giải thích và mốc tính KHÔNG cấp — trigger
+      // `governance_signals_tinh` đặt chúng, nên người gọi không khai được bằng chứng.
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "signal_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "nguon", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "challenge_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },
@@ -2018,6 +2034,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       // [S1.197 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
       "canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions",
+      // [S1.203 / S3.6b1] Tín hiệu là việc nội bộ bên mua — nhà cung cấp không đọc được gói nào bị soi là chia nhỏ.
+      "governance_signal_acks", "governance_signals",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",

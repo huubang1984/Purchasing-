@@ -403,6 +403,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
+  // K10a — [S1.203 / S3.6b1] tín hiệu chia nhỏ ở cạnh mở gói. `tin-hieu-chia-nho` đo dưới `app_api`: fixture 480/470/490 của
+  // spec §7, luật người ở tầng gói và ở trigger, bằng chứng trôi, tập anh em (huỷ, khác nhóm, tiền tệ, cửa sổ, cận), đối chứng
+  // MVP1, lớp chặn cuối, và mỗi vế của hàm tín hiệu một đột biến. Tệp HTTP đo hai route và lời từ chối có tên.
+  K10a: ["apps/api/src/buyer.int.test.ts", "packages/rfq/src/tin-hieu-chia-nho.int.test.ts"],
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.

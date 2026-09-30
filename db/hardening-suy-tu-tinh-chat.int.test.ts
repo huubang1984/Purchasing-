@@ -124,6 +124,10 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
+  // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả
+  // hai `ENABLE ALWAYS`. Sửa được một hàng tín hiệu là đổi bằng chứng mà một lần ghi nhận đã trỏ tới.
+  "governance_signal_acks",
+  "governance_signals",
   "item_aliases",
   "item_uom_conversions",
   // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
@@ -367,6 +371,13 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_dem_lan_nop",
   "public.rfq_chot_lan_nop_da_xem",
   "public.rfq_tra_ve_dat_lan_nop",
+  // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
+  // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
+  // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
+  // ghi nhận nó, và mọi câu mở gói phía trên đi qua cạnh.
+  "public.rfq_kiem_tin_hieu_khi_mo",
+  "public.tin_hieu_kiem_ghi",
+  "public.tin_hieu_kiem_ghi_nhan",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",
@@ -1859,6 +1870,99 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_packages",
+  );
+  // ---- [S1.203 / S3.6b1 / `088_tin_hieu_chia_nho`] Tín hiệu chia nhỏ và lần ghi nhận: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới
+  // Hai gói cùng nhóm `THEP` ghim phiên bản 2 — bậc của kịch bản có đúng một cận dương, 10 tỷ của đấu thầu chính thức: 6 tỷ + 5 tỷ
+  // ≥ 10 tỷ, mỗi gói dưới 10 tỷ ⇒ một tín hiệu. Gói anh em do `pm2` tạo và nộp; `rfqVe` (của `pm`) nộp lại SAU nó. `pm3` — không
+  // tạo, không nộp gói nào, không khai phiên bản — ghi nhận. Nhân chứng của `tin_hieu_kiem_ghi`, `tin_hieu_kiem_ghi_nhan` và
+  // `kiem_danh_tinh_theo_phien` (hai bảng MỚI). Đứng TRƯỚC lần ngừng dùng nhóm dưới: nhóm đã ngừng thì không gán được cho gói mới.
+  const anhEm = await chenNC(
+    "public.rfq_packages",
+    api(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id) " +
+        "VALUES ($1, 'Mua thep cuon', $2, true, $3, $4, $5) " +
+        "RETURNING id, org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id",
+      [org, MAI_SAU, pm2.u, pm2.s, nhom],
+      {
+        org_id: org, title: "Mua thep cuon", deadline_at: MAI_SAU, requires_dual_approval: true,
+        created_by: pm2.u, created_by_session_id: pm2.s, category_id: nhom,
+      },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_budgets",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, '6000000000.00', 'VND', $3, $4, $5) RETURNING org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id",
+        [org, anhEm, cs2, pm2.u, pm2.s],
+        { org_id: org, rfq_id: anhEm, estimated_value: "6000000000.00", currency: "VND", policy_id: cs2, created_by: pm2.u, created_by_session_id: pm2.s },
+      ),
+    ),
+    1,
+    "rfq_budgets",
+  );
+  const nopDuyet = async (r: string, ai: { readonly u: string; readonly s: string }): Promise<void> => {
+    doiSoHang(
+      await so.chung(
+        "public.rfq_packages",
+        "UPDATE",
+        api(
+          "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+            "RETURNING status, submitted_by, submitted_by_session_id",
+          [r, ai.u, ai.s],
+          { status: "PENDING_APPROVAL", submitted_by: ai.u, submitted_by_session_id: ai.s },
+        ),
+      ),
+      1,
+      "rfq_packages",
+    );
+  };
+  await nopDuyet(anhEm, pm2);
+  doiSoHang(
+    await so.chung(
+      "public.rfq_budgets",
+      "UPDATE",
+      api(
+        "UPDATE rfq_budgets SET estimated_value = '5000000000.00', policy_id = $2 WHERE rfq_id = $1 RETURNING estimated_value, policy_id",
+        [rfqVe, cs2],
+        { estimated_value: "5000000000.00", policy_id: cs2 },
+      ),
+    ),
+    1,
+    "rfq_budgets",
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET requires_dual_approval = true WHERE id = $1 RETURNING requires_dual_approval", [rfqVe], {
+        requires_dual_approval: true,
+      }),
+    ),
+    1,
+    "rfq_packages",
+  );
+  await nopDuyet(rfqVe, pm);
+  const tinHieu = await chenNC(
+    "public.governance_signals",
+    api(
+      "INSERT INTO governance_signals (org_id, rfq_id, loai, nguon, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'PURCHASE_SPLITTING', 'NOP_DUYET', $3, $4) RETURNING id, org_id, rfq_id, loai, nguon, created_by, created_by_session_id",
+      [org, rfqVe, pm.u, pm.s],
+      { org_id: org, rfq_id: rfqVe, loai: "PURCHASE_SPLITTING", nguon: "NOP_DUYET", created_by: pm.u, created_by_session_id: pm.s },
+    ),
+  );
+  const pm3 = await nguoi("PROCUREMENT_MANAGER");
+  await chenNC(
+    "public.governance_signal_acks",
+    api(
+      "INSERT INTO governance_signal_acks (org_id, signal_id, ly_do, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Hai goi cho hai cong trinh khac nhau', $3, $4) RETURNING id, org_id, signal_id, ly_do, created_by, created_by_session_id",
+      [org, tinHieu, pm3.u, pm3.s],
+      { org_id: org, signal_id: tinHieu, ly_do: "Hai goi cho hai cong trinh khac nhau", created_by: pm3.u, created_by_session_id: pm3.s },
+    ),
   );
   await chenNC(
     "public.procurement_category_changes",

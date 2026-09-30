@@ -27,6 +27,7 @@ import {
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
+import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import {
   clearOtpLockout,
   createInvitation,
@@ -380,6 +381,17 @@ const doc: readonly BuyerReadRoute[] = [
     // [khoản 141] hạng mục mua — cái gì, bao nhiêu
     agent: true,
     handler: async (ctx) => ({ status: 200, body: { items: await listRfqItems(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } }),
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/signals",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.203 / S3.6b1] Tín hiệu chia nhỏ của một gói: tín hiệu hiện tại, việc nó còn chờ ghi nhận không, các hàng đã ghi cùng
+    // lần ghi nhận. Không giá nào — bằng chứng chỉ mang id gói, nhóm hàng, phiên bản chính sách, cận bậc, cửa sổ. KHÔNG cho
+    // agent: tín hiệu là dữ liệu kiểm soát của bên mua, cùng lý do `/categories`; mở sau là một quyết định có tên.
+    agent: false,
+    handler: async (ctx) => ({ status: 200, body: { tinHieu: await lietKeTinHieu(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } }),
   },
   {
     method: "GET",
@@ -1058,6 +1070,29 @@ const ghi: readonly BuyerWriteRoute[] = [
       );
       return { status: 200, body: { rfq: await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } };
     },
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/signals/acknowledge",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.203 / S3.6b1 · K10a] Ghi nhận tín hiệu chia nhỏ HIỆN TẠI của gói đang chờ duyệt, kèm lý do — cùng cổng với duyệt gói.
+    // Hàm gói hỏi lại cùng mã, rồi luật người (không tạo, không nộp gói nào trong bằng chứng, không khai phiên bản chính sách
+    // mà gói ghim) — lời từ chối vào sổ `CONTROL_DENIED`. Bằng chứng đã đổi sau lần nộp thì tín hiệu mới được lưu ở đây.
+    permission: PERMISSIONS.RFQ_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        ghiNhan: await ghiNhanTinHieu(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "POST",
