@@ -15,13 +15,19 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
+import { verifyAuditChain } from "@trustprocure/audit";
 import { migrate } from "@trustprocure/db";
 import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
-import { executeUnsealRequest, UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS, UnsealWorkerError } from "./index.js";
+import {
+  FAILED_BID_VERSION_IDS_AUDIT_CAP,
+  executeUnsealRequest,
+  UNSEAL_DECRYPT_MFA_MAX_AGE_SECONDS,
+  UnsealWorkerError,
+} from "./index.js";
 import { createOrgKeyUnwrapper } from "@trustprocure/crypto-keys/unwrap";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -874,6 +880,152 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
       ),
     );
     expect(rows[0]?.payload.donGia, "phải là bản CUỐI, không phải bản đầu").toBe(999);
+  });
+});
+
+// ===============================================================================================
+// [S1.9143 / khoản 137 / ADR-9243] TRẦN PAYLOAD `failedBidVersionIds` CỦA HAI BẢN GHI SỔ MỞ THẦU
+//
+// Đo trước trên mã trước vòng này (biên bản §S1.9143): payload của `RFQ_KEY_MATERIAL_UNWRAPPED` và
+// `RFQ_UNSEALED` mang TRỌN mảng id phong bì hỏng — ~40 byte một id, tuyến tính theo N: N = 50 ⇒
+// 2 147 byte, N = 500 ⇒ 20 147 byte MỖI bản ghi (hai bản ghi một lượt), trong một sổ chỉ ghi thêm và
+// nối băm; `003` chỉ CHECK hình dạng và khoá mang giá, không CHECK kích thước; không trần nào cho số
+// lời mời của một gói (`010`, `024`, `076`). Hình dạng ADR-9243: `failedCount` (đủ),
+// `failedBidVersionIds` CẮT còn `FAILED_BID_VERSION_IDS_AUDIT_CAP` id ĐẦU theo thứ tự ổn định của câu
+// chọn phong bì (`ORDER BY v.bid_id`), cờ `failedBidVersionIdsTruncated`; phần còn lại KHÔNG vào sổ —
+// suy được bằng `CAU_SUY_PHONG_BI_HONG` dưới đây (nguyên văn ở ADR-9243): phiên bản CUỐI của mỗi luồng
+// báo giá của gói, đúng vòng, không có hàng bản rõ dưới yêu cầu mở thầu ấy. Kết quả TRẢ VỀ trong tiến
+// trình (`UnsealOutcome.failedBidVersionIds`) vẫn đủ — nó không được lưu.
+// ===============================================================================================
+interface PayloadPhongBiHong {
+  readonly opened: number;
+  readonly failedCount: number;
+  readonly failedBidVersionIds: readonly string[];
+  readonly failedBidVersionIdsTruncated: boolean;
+}
+
+interface BanGhiMoThau {
+  readonly action: string;
+  readonly payload: PayloadPhongBiHong;
+  readonly byte_van_ban: number;
+}
+
+/** Hai bản ghi sổ của một lượt mở thầu, theo thứ tự ghi, kèm kích thước văn bản JSON của payload. */
+async function docHaiBanGhiMoThau(rfqId: string): Promise<readonly BanGhiMoThau[]> {
+  const { rows } = await db.pool.query<BanGhiMoThau>(
+    "SELECT action, payload, octet_length(payload::text) AS byte_van_ban FROM audit_events " +
+      " WHERE org_id = $1 AND resource_id = $2 AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') ORDER BY seq",
+    [orgA, rfqId],
+  );
+  return rows;
+}
+
+/** Id phong bì (bản cuối mỗi luồng) của gói theo ĐÚNG thứ tự câu chọn phong bì của worker: `ORDER BY v.bid_id`. */
+async function idTheoThuTuLuong(rfqId: string): Promise<readonly string[]> {
+  const { rows } = await db.pool.query<{ id: string }>(
+    "SELECT DISTINCT ON (v.bid_id) v.id FROM vendor_bid_versions v" +
+      " JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id" +
+      " JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id" +
+      " WHERE i.rfq_id = $1 AND v.org_id = $2 ORDER BY v.bid_id, v.version DESC",
+    [rfqId, orgA],
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * [ADR-9243] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
+ * mở thầu `$1` KHÔNG để lại hàng bản rõ. Tập này là toàn bộ `failedBidVersionIds` — kể cả K id đã ghi —
+ * theo cùng thứ tự luồng; `$2` là tổ chức.
+ */
+const CAU_SUY_PHONG_BI_HONG =
+  "SELECT v.id FROM (" +
+  "  SELECT DISTINCT ON (v.bid_id) v.id, v.bid_id FROM vendor_bid_versions v" +
+  "    JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id" +
+  "    JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id" +
+  "    JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id" +
+  "   WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id" +
+  "   ORDER BY v.bid_id, v.version DESC) v" +
+  " WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u" +
+  "   WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)" +
+  " ORDER BY v.bid_id";
+
+/** Trần kích thước văn bản JSON của MỘT bản ghi sau khi cắt — đo ở vòng này ~1 050 byte với K = 20; không phụ thuộc N. */
+const TRAN_BYTE_MOT_BAN_GHI = 1_200;
+
+async function moThauVaDoc(
+  rfqId: string,
+): Promise<{ readonly ketQua: Awaited<ReturnType<typeof executeUnsealRequest>>; readonly so: readonly BanGhiMoThau[] }> {
+  const requestId = await dongVaXinMoThau(rfqId);
+  const ketQua = await withTenant(unsealPool, orgA, (c) =>
+    executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+  );
+  const so = await docHaiBanGhiMoThau(rfqId);
+  expect(so.map((b) => b.action)).toEqual(["RFQ_KEY_MATERIAL_UNWRAPPED", "RFQ_UNSEALED"]);
+  return { ketQua, so };
+}
+
+describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang trần K id phong bì hỏng (ADR-9243)", () => {
+  it("K là 20 — hằng của ADR-9243, không phải một con số tình cờ trong test", () => {
+    expect(FAILED_BID_VERSION_IDS_AUDIT_CAP).toBe(20);
+  });
+
+  it("N = 50 phong bì hỏng ⇒ HAI bản ghi mang `failedCount` 50, ĐÚNG 20 id đầu theo thứ tự luồng, cờ cắt bật, mỗi bản ghi dưới trần byte; 30 id còn lại suy được bằng câu ADR-9243; kết quả trả về đủ 50; chuỗi băm sổ nối", async () => {
+    const rfqId = await taoRfqMo();
+    for (let i = 0; i < 50; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 + i }), true);
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 7 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+
+    // Kết quả trong tiến trình: đủ, và theo đúng thứ tự câu chọn phong bì — thứ tự mà phép cắt dựa vào.
+    const thuTu = await idTheoThuTuLuong(rfqId);
+    const hongTheoThuTu = thuTu.filter((id) => ketQua.failedBidVersionIds.includes(id));
+    expect(ketQua.opened).toBe(1);
+    expect(hongTheoThuTu).toHaveLength(50);
+    expect(ketQua.failedBidVersionIds, "thứ tự ổn định = thứ tự luồng của câu chọn phong bì").toEqual(hongTheoThuTu);
+
+    for (const b of so) {
+      expect(b.payload.opened, b.action).toBe(1);
+      expect(b.payload.failedCount, b.action).toBe(50);
+      expect(b.payload.failedBidVersionIdsTruncated, b.action).toBe(true);
+      expect(b.payload.failedBidVersionIds, `${b.action}: đúng K id ĐẦU`).toEqual(hongTheoThuTu.slice(0, FAILED_BID_VERSION_IDS_AUDIT_CAP));
+      expect(b.byte_van_ban, `${b.action}: ${String(b.byte_van_ban)} byte`).toBeLessThanOrEqual(TRAN_BYTE_MOT_BAN_GHI);
+    }
+
+    // Phần KHÔNG vào sổ suy được: câu ADR-9243 trả đủ 50 id theo cùng thứ tự — 20 id đã ghi là tiền tố của nó.
+    const { rows: suy } = await db.pool.query<{ id: string }>(CAU_SUY_PHONG_BI_HONG, [ketQua.unsealRequestId, orgA]);
+    expect(suy.map((r) => r.id)).toEqual(hongTheoThuTu);
+    expect(suy.map((r) => r.id).slice(FAILED_BID_VERSION_IDS_AUDIT_CAP), "30 id còn lại").toEqual(hongTheoThuTu.slice(20));
+
+    // Chuỗi băm của tổ chức vẫn nối qua hai bản ghi vừa ghi (không neo ngoài ⇒ chỉ `NOT_ANCHORED`, không lỗi mắt xích).
+    const kiem = await withTenant(apiPool, orgA, (c) => verifyAuditChain(c, orgA, { externalAnchors: [] }));
+    expect(kiem.checked).toBeGreaterThan(0);
+    expect(kiem.problems.filter((p) => p.kind !== "NOT_ANCHORED")).toEqual([]);
+  }, 120_000);
+
+  it("N = 20 phong bì hỏng (đúng biên K) ⇒ đủ 20 id, `failedCount` 20, cờ cắt TẮT; câu ADR-9243 trả đúng 20 id ấy", async () => {
+    const rfqId = await taoRfqMo();
+    for (let i = 0; i < FAILED_BID_VERSION_IDS_AUDIT_CAP; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 200 + i }), true);
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+    expect(ketQua.opened).toBe(1);
+    expect(ketQua.failedBidVersionIds).toHaveLength(20);
+    for (const b of so) {
+      expect(b.payload.failedCount, b.action).toBe(20);
+      expect(b.payload.failedBidVersionIdsTruncated, b.action).toBe(false);
+      expect(b.payload.failedBidVersionIds, b.action).toEqual(ketQua.failedBidVersionIds);
+      expect(b.byte_van_ban, b.action).toBeLessThanOrEqual(TRAN_BYTE_MOT_BAN_GHI);
+    }
+    const { rows: suy } = await db.pool.query<{ id: string }>(CAU_SUY_PHONG_BI_HONG, [ketQua.unsealRequestId, orgA]);
+    expect(suy.map((r) => r.id)).toEqual([...ketQua.failedBidVersionIds]);
+  }, 120_000);
+
+  it("ĐỐI CHỨNG: không phong bì nào hỏng ⇒ `failedCount` 0, mảng rỗng, cờ tắt — ba trường luôn có mặt, không phải chỉ khi cắt", async () => {
+    const rfqId = await taoRfqMo();
+    await nopBaoGia(rfqId, JSON.stringify({ donGia: 5 }));
+    const { ketQua, so } = await moThauVaDoc(rfqId);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
+    for (const b of so) {
+      expect([b.payload.failedCount, b.payload.failedBidVersionIds, b.payload.failedBidVersionIdsTruncated], b.action).toEqual([0, [], false]);
+    }
   });
 });
 

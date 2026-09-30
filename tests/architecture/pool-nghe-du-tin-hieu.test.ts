@@ -30,7 +30,10 @@
 //   ⑴ PHÉP ĐỌC GÓI TRONG MỘT TỆP. Pool và người nghe phải cùng tệp. Người nghe được tính: `<pool>.on("release", …)`
 //      viết thẳng; `ngheLoiKetNoiToiMuon(<pool>, …)` import từ `@trustprocure/tenancy` (bí danh vẫn thấy); hai hàm bọc
 //      `ghiLogKetNoiHuy` / `ghiLogLoiKetNoiToiMuon` CHỈ khi import từ `./mo-ta-loi.js` (composition root của `api`) —
-//      thân hai hàm ấy không được đọc, cổng TIN chúng theo đường import. Một pool dựng ở tệp này rồi truyền sang tệp khác
+//      thân hai hàm ấy không được đọc, cổng TIN chúng theo đường import. [S1.9143 / khoản 183] Cổng này chỉ đo SỰ CÓ MẶT của
+//      lời gọi gắn; THÂN của bốn bộ nghe (hai hàm bọc của `api`, `ghiKetNoiHuy`/`ghiLoiToiMuon` của worker) đo bằng hành vi trên
+//      pool thật ở `apps/api/src/loi-ket-noi-toi-muon.int.test.ts` và `apps/unseal-worker/src/loi-ket-noi-toi-muon.int.test.ts` —
+//      không thì một thân no-op vẫn qua cổng. Một pool dựng ở tệp này rồi truyền sang tệp khác
 //      để gắn listener bị tính là THIẾU — và lời giải đúng là gắn ở tệp dựng pool (`tools/khoi-tao-to-chuc/src/index.ts`
 //      làm thế: pool đi qua `withTenant` ở `khoi-tao.ts`, listener gắn ở `index.ts`), không phải nới phép đọc. Bản đầu của
 //      khối gắn listener ở worker viết bằng một vòng lặp và cổng ĐỎ vì phép đọc theo TÊN không thấy biến vòng lặp; với

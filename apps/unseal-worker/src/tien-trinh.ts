@@ -77,6 +77,33 @@ const TRE_DAU_TON_DONG_MS = 5_000;
 // `moTaHangDongCuaLanTuChoi` sống — và cả hai tiến trình gọi ĐÚNG MỘT bản; `g1-` giữ nguyên.
 // ==============================================================================================
 
+/**
+ * [S1.84 / khoản 129 và khoản 173] Bộ nghe `release` của một pool: ghi MỘT dòng khi `withTenant` huỷ
+ * một kết nối vì `SESSION_STATE_LEFT` — lỗi ấy không được ném cho ai (cùng luật với `ghiLogKetNoiHuy`
+ * của `apps/api/src/mo-ta-loi.ts`); mọi lỗi khác đi vào `release()` đã có người nhận, không ghi.
+ * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export để
+ * `loi-ket-noi-toi-muon.int.test.ts` đo hành vi trên pool thật. Dây nối thật ở `taoTienTrinhUnsealWorker`.
+ */
+export const ghiKetNoiHuy =
+  (ten: string) =>
+  (loi: unknown): void => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+      console.error(`[unseal-worker] ket noi huy ${ten} ${moTaLoiKhongGiaTri(loi)}`);
+    }
+  };
+
+/**
+ * [S1.84 / khoản 129] Bộ nghe lỗi-tới-muộn của một pool: lần lấy kết nối tới SAU trần `maxConnectWaitMs`,
+ * người gọi đã nhận `CONNECT_WAIT_EXCEEDED` và đi; `withTenant` chỉ phát khi trần ĐÃ nổ nên một sự cố
+ * không thành hai dòng (cùng luật với `ghiLogLoiKetNoiToiMuon` của `apps/api/src/mo-ta-loi.ts`).
+ * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export — xem `ghiKetNoiHuy`.
+ */
+export const ghiLoiToiMuon =
+  (ten: string) =>
+  (loi: unknown): void => {
+    console.error(`[unseal-worker] loi ket noi toi muon ${ten} ${moTaLoiKhongGiaTri(loi)}`);
+  };
+
 export interface TienTrinhWorker {
   batDau(): Promise<void>;
   dung(): Promise<void>;
@@ -124,19 +151,9 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
   // trên cây cú pháp, và một vòng lặp biến hai cái tên ấy thành một biến vòng lặp mà cổng không
   // thấy. Bản đầu của khối này viết bằng vòng lặp và cổng ĐỎ — giữ lại lý do ở đây để lần sau
   // không ai "dọn gọn" nó về vòng lặp rồi làm cổng mù. Chỉ CÁI GỌI được trải ra; phần thân dùng
-  // chung qua hai hàm dựng bộ nghe ngay dưới, nên không có logic nào bị chép hai lần.
-  const ghiKetNoiHuy =
-    (ten: string) =>
-    (loi: unknown): void => {
-      if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
-        console.error(`[unseal-worker] ket noi huy ${ten} ${moTaLoiKhongGiaTri(loi)}`);
-      }
-    };
-  const ghiLoiToiMuon =
-    (ten: string) =>
-    (loi: unknown): void => {
-      console.error(`[unseal-worker] loi ket noi toi muon ${ten} ${moTaLoiKhongGiaTri(loi)}`);
-    };
+  // chung qua hai hàm dựng bộ nghe ~~ngay dưới~~ [S1.9143 / khoản 183] ở mức module (`ghiKetNoiHuy`,
+  // `ghiLoiToiMuon`, export để `loi-ket-noi-toi-muon.int.test.ts` đo HÀNH VI của chúng — cổng kiến
+  // trúc chỉ thấy lời gọi), nên không có logic nào bị chép hai lần.
   pool.on("release", ghiKetNoiHuy("pool"));
   ngheLoiKetNoiToiMuon(pool, ghiLoiToiMuon("pool"));
   auditPool.on("release", ghiKetNoiHuy("auditPool"));

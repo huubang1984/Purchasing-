@@ -101,6 +101,19 @@ export interface ExecuteUnsealInput {
   readonly maxMfaAgeSeconds?: number;
 }
 
+/**
+ * [S1.9143 / khoản 137 / ADR-9243] TRẦN số id phong bì hỏng đi vào payload của HAI bản ghi sổ của một
+ * lượt mở thầu (`RFQ_KEY_MATERIAL_UNWRAPPED`, `RFQ_UNSEALED`).
+ *
+ * Đo trước vòng này: mỗi id ~40 byte, tuyến tính theo N — N = 50 ⇒ 2 147 byte, N = 500 ⇒ 20 147 byte MỖI
+ * bản ghi, trong một sổ chỉ ghi thêm và nối băm; `003` không CHECK kích thước, và không trần nào cho số
+ * lời mời của một gói. Payload nay mang `failedCount` (đủ), `failedBidVersionIds` cắt còn K id ĐẦU theo
+ * thứ tự ổn định của câu chọn phong bì (`ORDER BY v.bid_id`), và cờ `failedBidVersionIdsTruncated`; phần
+ * còn lại KHÔNG vào sổ — suy được bằng câu truy vấn ghi ở ADR-9243 (bản cuối mỗi luồng báo giá của gói,
+ * đúng vòng, không có hàng `rfq_unsealed_bids` dưới yêu cầu ấy). Đo ở `unseal-worker.int.test.ts`.
+ */
+export const FAILED_BID_VERSION_IDS_AUDIT_CAP = 20;
+
 export interface UnsealOutcome {
   readonly unsealRequestId: string;
   readonly rfqId: string;
@@ -116,6 +129,11 @@ export interface UnsealOutcome {
    * LÝ DO thất bại CỐ Ý không được ghi: ba nguyên nhân (sai khoá, sai RFQ, bị sửa) cho cùng một
    * câu, và phân biệt được chúng là một oracle. Danh tính hàng thì không phải oracle — nhà cung
    * cấp đã biết mình nộp gì.
+   *
+   * [S1.9143 / khoản 137 / ADR-9243] Trường này — giá trị TRẢ VỀ trong tiến trình, không lưu — vẫn
+   * mang ĐỦ mọi id, theo thứ tự luồng của câu chọn phong bì. Thứ có TRẦN là hai bản ghi SỔ: chúng
+   * mang `failedCount`, tối đa `FAILED_BID_VERSION_IDS_AUDIT_CAP` id đầu của chính mảng này, và cờ
+   * `failedBidVersionIdsTruncated` — xem hằng ấy.
    */
   readonly failedBidVersionIds: readonly string[];
 }
@@ -632,6 +650,17 @@ export async function executeUnsealRequest(
     for (const h of khoaToChuc.values()) h.dispose();
   }
 
+  // [S1.9143 / khoản 137 / ADR-9243] PHẦN PHONG BÌ HỎNG ĐI VÀO SỔ, dựng MỘT lần cho cả hai bản ghi:
+  // số đủ, K id ĐẦU của mảng (thứ tự = thứ tự luồng của câu chọn phong bì, `ORDER BY v.bid_id`, nên
+  // ổn định giữa hai lần đọc), và cờ nói rằng có phần không vào sổ. ~~Ghi trọn mảng~~ — trước vòng
+  // này hai bản ghi mang trọn `failedBidVersionIds`, ~40 byte một id, không trần, trong một sổ chỉ
+  // ghi thêm (đo: N = 500 ⇒ 20 147 byte mỗi bản ghi). Phần cắt đi suy được từ dữ liệu — câu ở ADR-9243.
+  const phongBiHongVaoSo = {
+    failedCount: failedBidVersionIds.length,
+    failedBidVersionIds: failedBidVersionIds.slice(0, FAILED_BID_VERSION_IDS_AUDIT_CAP),
+    failedBidVersionIdsTruncated: failedBidVersionIds.length > FAILED_BID_VERSION_IDS_AUDIT_CAP,
+  };
+
   // [G4] Vế "MỞ BỌC" của mệnh đề *"mọi thao tác khoá — sinh, bọc, mở bọc, huỷ — đều sinh audit"*.
   // Ở S1.4 vế này không có một dòng mã nào, và ghi chú §4 của G4 nói đúng thế. Dòng dưới đây là
   // vế ấy — và nó ghi được vì `app_unseal` có quyền INSERT theo cột trên `audit_events` (003/004).
@@ -648,7 +677,7 @@ export async function executeUnsealRequest(
       bafoRoundId: r.bafo_round_id,
       algorithms: [...khoaRieng.keys()].sort(),
       opened,
-      failedBidVersionIds,
+      ...phongBiHongVaoSo,
     },
   });
 
@@ -686,7 +715,7 @@ export async function executeUnsealRequest(
     action: "RFQ_UNSEALED",
     resourceType: "rfq_package",
     resourceId: r.rfq_id,
-    payload: { unsealRequestId: input.unsealRequestId, bafoRoundId: r.bafo_round_id, opened, failedBidVersionIds },
+    payload: { unsealRequestId: input.unsealRequestId, bafoRoundId: r.bafo_round_id, opened, ...phongBiHongVaoSo },
   });
 
   return {
