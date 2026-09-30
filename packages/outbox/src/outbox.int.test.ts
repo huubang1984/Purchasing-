@@ -6,11 +6,23 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   JobRunner,
-  enqueueJob,
+  enqueueJob as enqueueJobCongKhai,
   type JobFailureReport,
   type JobHandler,
+  type JobInput,
   type OutboxJob,
 } from "./index.js";
+
+// [S1.9115 / khoản 161] `JobInput.kind` nay là union `KindOutbox` — năm kind thật của kho. Tệp này đo CƠ CHẾ của gói (hạn thuê,
+// SKIP LOCKED, lượt thử, chống trùng, QT3…) với ~40 `kind` THỬ (`VIEC_A`, `LUON_LOI`, …) mà không tiến trình nào nhận, nên nó gọi
+// CÙNG hàm `enqueueJob` qua một kiểu nới `kind` về `string`: thân hàm, câu SQL và dấu xếp việc là của hàm công khai, chỉ kiểu của
+// tham số khác. Mã sản xuất không có đường này — `tests/architecture/kind-outbox-mot-cho.test.ts` đòi `kind` literal thuộc union ở
+// mọi lời gọi ngoài tệp test.
+const enqueueJob = enqueueJobCongKhai as (
+  client: pg.PoolClient,
+  orgId: string,
+  job: Omit<JobInput, "kind"> & { readonly kind: string },
+) => Promise<string>;
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
