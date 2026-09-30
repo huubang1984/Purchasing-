@@ -2781,6 +2781,8 @@ $ham$;
   -- GIÁ, nói ra (cùng giá của biểu thức policy khai nguyên văn): đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi
   -- chép lại. Và một migration MỚI đổi một ràng buộc ở đây phải sửa dòng khai trong CÙNG commit — `tests/architecture/
   -- check-an-ninh-khai.test.ts` đòi `mig` là migration CUỐI CÙNG nhắc tên ràng buộc.
+  -- [S1.9180 / khoản 71 / ADR-9280] Hai dòng `users_email_ascii`/`supplier_contacts_email_ascii` (`9580_email_ascii`): miền email là ASCII in được
+  -- — vế "danh tính email chuẩn hoá" ở tiêu chí trên; gỡ một trong hai là mở lại cặp confusable Unicode và sự phụ thuộc libc của tập cất được.
   CHECK_AN_NINH_KHAI constant text :=
     $q$(VALUES
          ('public', 'audit_chain_anchors', 'audit_chain_anchors_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
@@ -2818,6 +2820,7 @@ $ham$;
          ('public', 'sessions', 'sessions_check', '006_sessions_and_mfa', 'CHECK ((expires_at > created_at))'),
          ('public', 'sessions', 'sessions_kind_hop_le', '051_phien_co_pham_vi', 'CHECK ((kind = ANY (ARRAY[''USER''::text, ''AGENT_READONLY''::text])))'),
          ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'supplier_contacts', 'supplier_contacts_email_ascii', '9580_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
          ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
@@ -2831,6 +2834,7 @@ $ham$;
          ('public', 'user_login_tokens', 'user_login_tokens_han_sau_tao', '029_dang_nhap_nguoi_mua', 'CHECK ((expires_at > created_at))'),
          ('public', 'user_login_tokens', 'user_login_tokens_purpose_check', '029_dang_nhap_nguoi_mua', 'CHECK ((purpose = ''LOGIN''::text))'),
          ('public', 'user_login_tokens', 'user_login_tokens_token_hash_check', '029_dang_nhap_nguoi_mua', 'CHECK ((octet_length(token_hash) = 32))'),
+         ('public', 'users', 'users_email_ascii', '9580_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
          ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))')
        ) AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;
 
