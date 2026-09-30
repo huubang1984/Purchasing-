@@ -387,3 +387,26 @@ describe("[S1.9101 / khoản 188] ngưỡng đường phụ: bộ điều phối
     expect(soKhai, "không route nào khai `mfaTranDuongPhu: MFA_TRAN_SAI_DUONG_PHU` — phép đọc rỗng ruột").toBeGreaterThanOrEqual(1);
   });
 });
+
+// ==============================================================================================
+// [S1.9122 / khoản 195 / ADR-9222] ĐƯỜNG TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — HÌNH DẠNG TRÊN BẢNG ROUTE
+//
+// Thông điệp gộp ba trạng thái ở route VÔ DANH (`LoginTokenError`) giữ nguyên: nó là chống dò tìm. Đường
+// mới mở cho người ĐÃ chứng minh danh tính: một route ĐỌC của người mua dưới `/auth/*`, không mã quyền
+// (nó chỉ đọc hàng của CHÍNH người gọi — `userId` dẫn xuất từ cookie ở bộ điều phối, như `/me`), và
+// ĐÓNG với tác tử chỉ-đọc: một chứng chỉ agent rò không được đọc lịch sử link đăng nhập của chủ nó.
+// Ghim vì đây là một QUYẾT ĐỊNH, không phải một mặc định — cùng lý do với khoản 190 ở trên.
+// ==============================================================================================
+describe("[S1.9122 / khoản 195] đường tự xem link đăng nhập gần đây", () => {
+  it("GET /auth/login-links là route ĐỌC của người mua dưới /auth/*, không mã quyền, và đóng cửa với tác tử chỉ-đọc", () => {
+    const r = ROUTES.find((x) => x.method === "GET" && x.path === "/auth/login-links");
+    expect(r, "bảng ROUTES không có đường GET /auth/login-links").toBeDefined();
+    if (r === undefined) return;
+    expect(r.audience).toBe("BUYER");
+    expect(r.audience === "BUYER" && r.mutates).toBe(false);
+    expect("permission" in r, "route đọc của chính mình không khai mã quyền — cùng khuôn `/me`").toBe(false);
+    expect(agentGoiDuoc(r)).toBe(false);
+    // Bảng route thật vẫn không vi phạm nào — vế E6 (không tham số credential trong URL) và hai lời khai `agent` áp cho nó.
+    expect(timViPhamBangRoute(ROUTES)).toEqual([]);
+  });
+});

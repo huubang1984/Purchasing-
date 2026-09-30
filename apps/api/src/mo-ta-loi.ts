@@ -14,6 +14,13 @@
 // hằng). KHÔNG được ghi: `message` — thông điệp của lỗi Postgres mang tên bảng, tên ràng buộc, và DETAIL của nó có thể mang giá trị hàng;
 // ~~`cause` — lỗi lồng mang câu lệnh và tham số~~ [S1.68 / khoản 119] `cause` nguyên — lỗi lồng mang câu lệnh và tham số; `stack` (A2).
 //
+// [S1.9122 / khoản 177 / ADR-9223] MỘT NGOẠI LỆ CÓ HÌNH DẠNG, và chỉ một: đúng dòng của lần từ chối MẤT SỔ (hai lớp bọc dưới) mang
+// thêm `nguoi=<12 hex>` — băm rút gọn sha256 của `userId`, do `moTaHangDongCuaLanTuChoi` (identity) in và ghim bằng `^[0-9a-f]{12}$`.
+// Nó là một TOKEN hình dạng cố định, không phải một giá trị người dùng: không lần ngược ra tên hay email, một UUID thô hay băm đầy đủ
+// đặt nhầm vào khe ấy ra `HANG_LA`, và không trường nào khác đi qua khe ấy. Vì sao ở đúng dòng này mà không ở dòng khác: ở mọi ca
+// khác danh tính lấy từ sổ; ca này là ca hàng sổ không ghi được (§S1.85 mục 7, khoản 177). Luật "tên và mã cố định" ở trên giữ
+// nguyên cho mọi thứ còn lại — ADR-9223 ghi ngoại lệ, và ranh giới của nó là chính biểu thức hình dạng.
+//
 // [S1.68 / khoản 119] Một lỗi KHÔNG có trường `code` mà có `cause` là Error được nêu thêm MỘT tầng: `tên <- tên và mã của cause`, cùng luật
 // trên. Hôm nay chủ yếu là hai lớp bọc của lần ghi sổ từ chối (`DenialAuditFailedError`, `PermissionAuditFailedError`) — trước khoản này
 // dòng log của chúng chỉ có tên, nên người vận hành không phân biệt được lần ghi hỏng vì mất quyền (42501) với kết nối đứt hay trigger chặn

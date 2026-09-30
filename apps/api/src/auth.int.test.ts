@@ -9,7 +9,7 @@
 //   [029]     app_api KHÔNG chèn được phiên thiếu MFA; đột biến gỡ trigger ⇒ chèn được (RED thật).
 //   Không liệt kê được email: email lạ, email bị đình chỉ, và email đúng cho CÙNG một 200.
 // ==============================================================================================
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -2180,4 +2180,145 @@ describe("[S1.175 / khoản 145] sổ không nhận lần phát chứng chỉ ag
     expect(lai.status, `mã đã tiêu thụ không phát lại được — ${lai.text}`).toBe(401);
     expect(await dem(), "lần thử lại bị từ chối cũng không phát gì").toEqual(truoc);
   }, 60_000);
+});
+
+// ==============================================================================================
+// [S1.9122 / khoản 195 / ADR-9222] NGƯỜI ĐÃ ĐĂNG NHẬP TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH MÌNH
+//
+// `LoginTokenError` gộp ba trạng thái — không hợp lệ, hết hạn, đã dùng — làm MỘT câu ở route vô danh, và
+// đó là chống dò tìm có lý: vòng này KHÔNG nới câu ấy. Nhưng vế "đã dùng" đáng lẽ dẫn tới *báo ngay, có
+// kẻ đã dùng link của tôi*, và tới trước vòng này phải mở cơ sở dữ liệu mới biết. Nay `GET /auth/login-links`
+// trả cho CHÍNH người gọi (userId dẫn xuất từ cookie, không từ thân) các link gần đây của họ: tạo lúc, hết
+// hạn, dùng lúc, mục đích, và trạng thái suy ở CSDL bằng cùng đồng hồ với `redeemLoginToken`
+// (`clock_timestamp()`). KHÔNG BAO GIỜ `token_hash` — băm của một token còn hiệu lực là thứ đối chiếu được
+// với một token bị rò. Ba vế: ⑴ chủ nhân thấy ba trạng thái ra ba kết quả, thân không mang băm hay một chuỗi
+// bí mật nào; ⑵ người khác cùng tổ chức chỉ thấy của mình; ⑶ không cookie ⇒ 401, chứng chỉ agent ⇒ 403 kèm
+// một hàng `AGENT_SCOPE_DENIED` nêu mẫu route (`agent: false` là một quyết định — `routes.test.ts` ghim).
+// Đo trước trên mã trước vòng này: đường không tồn tại ⇒ 404 ở cả ba vế.
+// ==============================================================================================
+describe("[INV-E1] [S1.9122 / khoản 195] GET /auth/login-links — link đăng nhập gần đây của chính người gọi", () => {
+  interface LinkGanDay {
+    readonly createdAt: string;
+    readonly expiresAt: string;
+    readonly consumedAt: string | null;
+    readonly purpose: string;
+    readonly status: string;
+  }
+
+  /** Phát thêm một mã cho chính chủ, như handler tin báo hay `/auth/link` làm — dạng rõ bị bỏ, chỉ hàng băm ở lại. */
+  async function phatThem(email: string): Promise<void> {
+    const kq = await withTenant(apiPool, orgA, (c) => issueLoginToken(c, orgA, { email }));
+    expect(kq.ok, "phát thêm một mã cho chính chủ").toBe(true);
+  }
+
+  function docThan(r: PhanHoi): readonly LinkGanDay[] {
+    const b = r.body as { loginLinks?: readonly LinkGanDay[] } | undefined;
+    expect(Array.isArray(b?.loginLinks), r.text).toBe(true);
+    return b?.loginLinks ?? [];
+  }
+
+  it("⑴ chủ nhân thấy ba trạng thái — đã dùng, hết hạn, còn hiệu lực — mỗi link một hàng, mới nhất trước; KHÔNG `token_hash`, không một chuỗi bí mật nào trong thân", async () => {
+    const email = "k195-chu@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ mã ĐÃ DÙNG (startUserSession tiêu thụ nó)
+    await phatThem(email); // ⇒ mã CÒN HIỆU LỰC
+    await phatThem(email); // ⇒ mã sẽ bị đẩy về quá khứ ⇒ HẾT HẠN
+    // `app_api` không có `UPDATE (expires_at)` (029) — đúng thiết kế —, nên đẩy về quá khứ bằng pool superuser của test-support.
+    // Đẩy cả `created_at` để hàng ấy là hàng CŨ NHẤT: vế thứ tự đo được.
+    const day = await db.pool.query(
+      `UPDATE user_login_tokens SET created_at = now() - interval '20 minutes', expires_at = now() - interval '5 minutes'
+        WHERE id = (SELECT t.id FROM user_login_tokens t JOIN users u ON u.id = t.user_id
+                     WHERE u.org_id = $1 AND u.email = $2 AND t.consumed_at IS NULL ORDER BY t.created_at DESC LIMIT 1)`,
+      [orgA, email],
+    );
+    expect(day.rowCount).toBe(1);
+
+    const r = await goi("GET", "/auth/login-links", { cookie: chu.cookie });
+    expect(r.status, r.text).toBe(200);
+    const ds = docThan(r);
+    expect(ds.map((l) => l.status), "mới nhất trước: còn hiệu lực (vừa phát), đã dùng (lúc đăng nhập), hết hạn (đẩy về 20 phút trước)").toEqual([
+      "PENDING",
+      "CONSUMED",
+      "EXPIRED",
+    ]);
+    for (const l of ds) {
+      expect(Object.keys(l).sort(), "đúng năm trường, không hơn").toEqual(["consumedAt", "createdAt", "expiresAt", "purpose", "status"]);
+      expect(l.purpose).toBe("LOGIN");
+      expect(Number.isNaN(Date.parse(l.createdAt))).toBe(false);
+      expect(Number.isNaN(Date.parse(l.expiresAt))).toBe(false);
+    }
+    const [conHan, daDung, hetHan] = ds;
+    expect(conHan?.consumedAt).toBeNull();
+    expect(Date.parse(conHan?.expiresAt ?? "")).toBeGreaterThan(Date.now());
+    expect(typeof daDung?.consumedAt).toBe("string");
+    expect(hetHan?.consumedAt).toBeNull();
+    expect(Date.parse(hetHan?.expiresAt ?? "")).toBeLessThan(Date.now());
+    expect(Date.parse(ds[0]?.createdAt ?? "")).toBeGreaterThanOrEqual(Date.parse(ds[1]?.createdAt ?? ""));
+    expect(Date.parse(ds[1]?.createdAt ?? "")).toBeGreaterThanOrEqual(Date.parse(ds[2]?.createdAt ?? ""));
+    // Không băm, không token: thân không có chữ "hash", không mang token dạng rõ đã dùng, không mang băm hex/base64 của nó,
+    // và không một chuỗi base64url dài nào — hình dạng của mọi token kho này phát.
+    expect(r.text).not.toMatch(/hash/iu);
+    expect(r.text).not.toContain(chu.token);
+    const bamToken = createHash("sha256").update(chu.token, "utf8").digest();
+    expect(r.text).not.toContain(bamToken.toString("hex"));
+    expect(r.text).not.toContain(bamToken.toString("base64"));
+    expect(r.text).not.toMatch(/[A-Za-z0-9_-]{32,}/u);
+  });
+
+  it("⑵ người khác CÙNG tổ chức chỉ thấy link của mình — không hàng nào của chủ nhân ở vế ⑴", async () => {
+    const email = "k195-nguoi-khac@vd.test";
+    await taoNguoi(email);
+    const khac = await dangNhap(email);
+    const r = await goi("GET", "/auth/login-links", { cookie: khac.cookie });
+    expect(r.status, r.text).toBe(200);
+    const ds = docThan(r);
+    expect(ds.map((l) => l.status)).toEqual(["CONSUMED"]);
+    // Đối chứng, đọc thẳng CSDL bằng pool superuser: chủ nhân của vế ⑴ vẫn có ba hàng — tức ba hàng ấy có thật, cùng tổ chức,
+    // và người này không thấy chúng; hàng duy nhất người này thấy là hàng của CHÍNH họ (cùng mốc tạo).
+    const cuaChu = await db.pool.query<{ created_at: Date }>(
+      "SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id WHERE u.org_id = $1 AND u.email = $2",
+      [orgA, "k195-chu@vd.test"],
+    );
+    expect(cuaChu.rows.length).toBeGreaterThanOrEqual(3);
+    const mocCuaChu = new Set(cuaChu.rows.map((h) => h.created_at.toISOString()));
+    for (const l of ds) expect(mocCuaChu.has(new Date(l.createdAt).toISOString()), "một hàng của chủ nhân lọt sang người khác").toBe(false);
+    const cuaKhac = await db.pool.query<{ created_at: Date }>(
+      "SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id WHERE u.org_id = $1 AND u.email = $2",
+      [orgA, email],
+    );
+    expect(cuaKhac.rows.map((h) => h.created_at.toISOString())).toEqual(ds.map((l) => new Date(l.createdAt).toISOString()));
+  });
+
+  it("⑶ không cookie ⇒ 401 không thân dữ liệu; chứng chỉ agent ⇒ 403 và ĐÚNG MỘT hàng `AGENT_SCOPE_DENIED` nêu mẫu route", async () => {
+    const khong = await goi("GET", "/auth/login-links");
+    expect(khong.status, khong.text).toBe(401);
+    expect(khong.text).not.toContain("loginLinks");
+
+    const email = "k195-agent@vd.test";
+    await taoNguoi(email);
+    const nguoi = await dangNhap(email);
+    const phat = await goi("POST", "/auth/agent-session", {
+      cookie: nguoi.cookie,
+      body: { code: deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1) },
+    });
+    expect(phat.status, phat.text).toBe(200);
+    const agent = `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${(phat.body as { token: string }).token}`;
+    const truoc = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED'",
+      [orgA],
+    );
+    const r = await goi("GET", "/auth/login-links", { cookie: agent });
+    expect(r.status, r.text).toBe(403);
+    expect(r.text).not.toContain("loginLinks");
+    const sau = await db.pool.query<{ n: string; payload: { routePath?: string } | null }>(
+      `SELECT count(*) OVER () AS n, payload FROM audit_events
+        WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED' ORDER BY seq DESC LIMIT 1`,
+      [orgA],
+    );
+    expect(Number(sau.rows[0]?.n ?? 0)).toBe(Number(truoc.rows[0]?.n ?? 0) + 1);
+    expect(sau.rows[0]?.payload?.routePath).toBe("/auth/login-links");
+    // Đối chứng: cùng đường dưới phiên NGƯỜI của chính người ấy thì mở.
+    const mo = await goi("GET", "/auth/login-links", { cookie: nguoi.cookie });
+    expect(mo.status, mo.text).toBe(200);
+  });
 });

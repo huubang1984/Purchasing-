@@ -215,6 +215,8 @@ describe("bề mặt tệp", () => {
       "chinh-sach": ["GET /policy/versions"],
       "tao-thau": ["GET /policy/versions"],
       "nhom-hang": ["GET /categories"],
+      // [S1.9122 / khoản 195] `/login` hỏi link đăng nhập gần đây của chính mình sau khi các bước mở.
+      "mo-thau": ["GET /auth/login-links"],
     };
     const ORG = "11111111-2222-4333-8444-555555555555";
     const A = { userId: "aaaaaaaa-0000-4000-8000-000000000000", sessionId: "s-a", orgId: ORG, kind: "USER" };
@@ -341,6 +343,7 @@ describe("bề mặt tệp", () => {
           }
           if (lenh === "GET /policy/versions" && trangThai.cookie !== null) return { status: 200, body: { phienBan: [], daBat: false, choKy: false } };
           if (lenh === "GET /categories" && trangThai.cookie !== null) return { status: 200, body: { nhomHang: [] } };
+          if (lenh === "GET /auth/login-links" && trangThai.cookie !== null) return { status: 200, body: { loginLinks: [] } };
           if (lenh === "GET /guest/rfq" && trangThai.khach) return { status: 200, body: GOI_THAU_KHACH };
           if (lenh === "POST /guest/logout") {
             const co = trangThai.khach;
@@ -557,7 +560,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("ghi-danh").textContent).toContain(BI_MAT);
         p.el("ma").value = "123456";
         await p.bam("nut-vao");
-        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me"]);
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me", "GET /auth/login-links"]);
         expect(p.trangThai.than[1]?.than).toEqual({ orgId: ORG, token: "maMoi", code: "123456" });
         expect(p.buocMo()).toEqual(BUOC["mo-thau"]);
         expect(p.el("ok1").textContent).toMatch(/Đã vào với người dùng bbbbbbbb…/u);
@@ -635,6 +638,109 @@ describe("bề mặt tệp", () => {
         await q.bam("nut-dang-xuat");
         expect(q.buocMo()).toEqual([]);
         expect(q.el("khoi-ma").hidden).toBe(true);
+      });
+    });
+
+    // ==========================================================================================
+    // [S1.9122 / khoản 195 / ADR-9222] LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH MÌNH
+    //
+    // Thông điệp gộp ba trạng thái ở route vô danh giữ nguyên; người ĐÃ đăng nhập thì được xem: sau khi
+    // các bước mở (vừa đăng nhập, hay «Tiếp tục với phiên này»), `/login` hỏi `GET /auth/login-links` và
+    // vẽ mỗi link một dòng — «Link lúc X» → «đã dùng lúc Y» / «hết hạn lúc Y, chưa dùng» / «còn hiệu lực
+    // tới Y, chưa dùng» — kèm câu nói việc phải làm khi một link «đã dùng» không phải do mình. Lỗi hay
+    // 401 ⇒ khối ẩn, các bước vẫn mở (khối là một trợ giúp, không phải một cổng). Về bước 1 (đăng xuất,
+    // hashchange) ⇒ khối ẩn và rỗng; một phản hồi về MUỘN sau đó bị bỏ. Cùng ranh giới với khoản 193:
+    // CHỈ `mo-thau`; ba trang người mua kia — khoản 9481.
+    // ==========================================================================================
+    describe("[S1.9122 / khoản 195] mo-thau: link đăng nhập gần đây của chính mình", () => {
+      const BA_LINK = {
+        status: 200,
+        body: {
+          loginLinks: [
+            { createdAt: "2026-09-30T08:00:00Z", expiresAt: "2026-09-30T08:15:00Z", consumedAt: null, purpose: "LOGIN", status: "PENDING" },
+            { createdAt: "2026-09-30T07:00:00Z", expiresAt: "2026-09-30T07:15:00Z", consumedAt: "2026-09-30T07:03:00Z", purpose: "LOGIN", status: "CONSUMED" },
+            { createdAt: "2026-09-29T07:00:00Z", expiresAt: "2026-09-29T07:15:00Z", consumedAt: null, purpose: "LOGIN", status: "EXPIRED" },
+          ],
+        },
+      };
+      const coLink = (l: string) => (l === "GET /auth/login-links" ? Promise.resolve(BA_LINK) : undefined);
+      /** Các cặp dt/dd đã vẽ vào `link-gan-day`. */
+      const cap = (p: { el: (id: string) => PhanTu }): [string, string][] => {
+        const con = p.el("link-gan-day").con;
+        const ra: [string, string][] = [];
+        for (let i = 0; i + 1 < con.length; i += 2) ra.push([con[i]?.textContent ?? "", con[i + 1]?.textContent ?? ""]);
+        return ra;
+      };
+
+      it("đăng nhập bằng link ⇒ sau /me trang hỏi /auth/login-links; ba link ra ba dòng nói đúng trạng thái; khối mở kèm câu «không phải bạn thì báo»", async () => {
+        const p = await dungTrang("mo-thau", { hash: `#${ORG}:maCu`, cookie: null, thay: coLink });
+        await p.bam("nut-ghi-danh");
+        p.el("ma").value = "123456";
+        await p.bam("nut-vao");
+        expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me", "GET /auth/login-links"]);
+        expect(p.buocMo()).toEqual(BUOC["mo-thau"]);
+        expect(p.el("khoi-link-gan-day").hidden).toBe(false);
+        const hang = cap(p);
+        expect(hang).toHaveLength(3);
+        for (const [k] of hang) expect(k).toMatch(/^Link lúc /u);
+        expect(hang[0]?.[1]).toMatch(/còn hiệu lực/u);
+        expect(hang[0]?.[1]).toMatch(/chưa dùng/u);
+        expect(hang[1]?.[1]).toMatch(/^đã dùng lúc /u);
+        expect(hang[2]?.[1]).toMatch(/hết hạn/u);
+        expect(hang[2]?.[1]).toMatch(/chưa dùng/u);
+        // Không dòng nào mang một chuỗi ISO thô: giờ hiện cho người đọc, không phải cho máy.
+        for (const [k, v] of hang) expect(`${k} ${v}`).not.toMatch(/T\d\d:\d\d:\d\dZ/u);
+        expect(p.el("ghi-link-gan-day").textContent).toMatch(/không phải bạn/u);
+        expect(p.el("ghi-link-gan-day").textContent).toMatch(/đã dùng/u);
+        expect(p.el("ghi-link-gan-day").textContent).toMatch(/báo/u);
+      });
+
+      it("«Tiếp tục với phiên này» cũng hỏi; danh sách rỗng ⇒ khối mở nói «chưa có»; 401 hay mất mạng ⇒ khối ẩn, các bước VẪN mở", async () => {
+        const p = await dungTrang("mo-thau", { hash: "", cookie: A });
+        await p.bam("nut-dung-phien");
+        expect(p.trangThai.goi).toEqual(["GET /me", "GET /auth/login-links"]);
+        expect(p.el("khoi-link-gan-day").hidden).toBe(false);
+        expect(cap(p)).toEqual([["Link đăng nhập gần đây", "chưa có"]]);
+
+        const q = await dungTrang("mo-thau", { hash: "", cookie: A, thay: (l) => (l === "GET /auth/login-links" ? Promise.resolve({ status: 401, body: { error: "x" } }) : undefined) });
+        await q.bam("nut-dung-phien");
+        expect(q.buocMo(), "khối là một trợ giúp, không phải một cổng").toEqual(BUOC["mo-thau"]);
+        expect(q.el("khoi-link-gan-day").hidden).toBe(true);
+        expect(q.el("loi1").hidden).toBe(true);
+
+        const r = await dungTrang("mo-thau", { hash: "", cookie: A, thay: (l) => (l === "GET /auth/login-links" ? Promise.reject(new Error("mat mang")) : undefined) });
+        await r.bam("nut-dung-phien");
+        expect(r.buocMo()).toEqual(BUOC["mo-thau"]);
+        expect(r.el("khoi-link-gan-day").hidden).toBe(true);
+      });
+
+      it("đăng xuất hay hashchange ⇒ khối ẩn và RỖNG; /auth/login-links về MUỘN sau hashchange thì bị bỏ", async () => {
+        const p = await dungTrang("mo-thau", { hash: "", cookie: A, thay: coLink });
+        await p.bam("nut-dung-phien");
+        expect(cap(p)).toHaveLength(3);
+        await p.bam("nut-dang-xuat");
+        expect(p.el("khoi-link-gan-day").hidden).toBe(true);
+        expect(cap(p)).toEqual([]);
+
+        const q = await dungTrang("mo-thau", { hash: "", cookie: A, thay: coLink });
+        await q.bam("nut-dung-phien");
+        expect(cap(q)).toHaveLength(3);
+        await q.doiFragment(`#${ORG}:maCuaB`);
+        expect(q.el("khoi-link-gan-day").hidden).toBe(true);
+        expect(cap(q)).toEqual([]);
+
+        let tha: () => void = () => undefined;
+        const m = await dungTrang("mo-thau", {
+          hash: "", cookie: A,
+          thay: (l) => (l === "GET /auth/login-links" ? new Promise((r) => { tha = () => { r(BA_LINK); }; }) : undefined),
+        });
+        await m.bam("nut-dung-phien");
+        expect(m.el("khoi-link-gan-day").hidden).toBe(true);
+        await m.doiFragment(`#${ORG}:maCuaB`);
+        tha();
+        await cho();
+        expect(m.el("khoi-link-gan-day").hidden, "phản hồi về muộn sau khi đã về bước 1 không được mở khối").toBe(true);
+        expect(cap(m)).toEqual([]);
       });
     });
 

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound, type AuditEventInput } from "@trustprocure/audit";
 import { withTenant } from "@trustprocure/tenancy";
@@ -41,6 +42,15 @@ export class PermissionAuditFailedError extends Error {
      */
     readonly resourceType: string,
     cause: Error,
+    /**
+     * [S1.9122 / khoản 177 / ADR-9223] BĂM RÚT GỌN của người bị từ chối — 12 hex đầu của sha256(`denial.userId`), tính ở
+     * `requirePermission` bằng `bamNguoiRutGon`. Có mặt để dòng log của lần MẤT SỔ nói được lần từ chối của AI: ở đúng ca này
+     * hàng sổ — nơi `actor_id` sống — là hàng không ghi được, nên lập luận "danh tính lấy từ sổ" không đứng (§S1.85 mục 7). Là
+     * BĂM chứ không phải `userId`: các dòng của cùng một người nối được với nhau mà không nêu ai; đi vào dòng log qua phép canh
+     * hình dạng `^[0-9a-f]{12}$` ở `moTaHangDongCuaLanTuChoi` — một chuỗi khác (kể cả chính UUID) ra `HANG_LA`. `null` ở chỗ
+     * dựng cũ/test ⇒ dòng không có `nguoi=`.
+     */
+    readonly nguoiBam: string | null = null,
   ) {
     super(
       `Từ chối vì thiếu quyền "${denial.permission}" nhưng KHÔNG ghi được bản ghi kiểm toán ` +
@@ -78,6 +88,11 @@ export class DenialAuditFailedError extends Error {
      * cổng đã chặn. Đi vào dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG`, không nguyên văn.
      */
     readonly clause: string | null = null,
+    /**
+     * [S1.9122 / khoản 177 / ADR-9223] Băm rút gọn của `event.actorId` mà `throwAuditedDenial` tính — cùng lý do và cùng phép
+     * canh với `PermissionAuditFailedError.nguoiBam`. Lần từ chối của SERVICE (worker lúc giải mã, `actorId` null) không có ⇒ `null`.
+     */
+    readonly nguoiBam: string | null = null,
   ) {
     super("Một lần từ chối KHÔNG ghi được bản ghi kiểm toán (bất biến D5).", { cause });
     this.name = "DenialAuditFailedError";
@@ -384,6 +399,34 @@ function hangMaQuyen(v: string): string {
 }
 
 /**
+ * [S1.9122 / khoản 177 / ADR-9223] Băm rút gọn của một `userId` cho dòng log của lần từ chối MẤT SỔ: 12 ký tự hex đầu của
+ * sha256(userId), không khoá, không muối — ADR-9223 khai đúng phép này để người điều tra tính lại được từ id trong `users` (đó
+ * là toàn bộ giá trị của nó: NỐI các dòng của cùng một người, và đối chiếu được khi cần), trong khi một dòng đơn lẻ không nêu ai.
+ * 48 bit: đủ để ba người trong một sự cố không trùng nhau, không đủ để ai coi nó là một định danh. Tính ở chỗ đã có `userId`
+ * trong tay — `requirePermission` (`requirement.userId`) và `throwAuditedDenial` (`event.actorId`) — không ở lớp lỗi, để một
+ * lớp lỗi dựng từ nơi khác không tự băm một thứ không phải `userId`.
+ */
+function bamNguoiRutGon(userId: string): string {
+  return createHash("sha256").update(userId, "utf8").digest("hex").slice(0, 12);
+}
+
+/**
+ * Hình dạng của khe `nguoi=` — đúng 12 hex thường. Đây là ranh giới của ngoại lệ ADR-9223 với A2: một UUID thô (36 ký tự, có
+ * gạch nối), một băm đầy đủ (64 hex), một băm viết hoa, một email, một bí mật base32 — không thứ nào khớp, và ra `HANG_LA` như
+ * mọi trường khác. Không có khe thứ hai.
+ */
+const HINH_DANG_BAM_NGUOI = /^[0-9a-f]{12}$/u;
+
+function hangBamNguoi(v: string): string {
+  return HINH_DANG_BAM_NGUOI.test(v) ? v : HANG_LA;
+}
+
+/** Nối khe `nguoi=` vào phần hằng — chỉ khi lớp lỗi mang băm; không băm thì dòng y như trước vòng này. */
+function noiNguoi(hang: string, nguoiBam: string | null): string {
+  return nguoiBam === null ? hang : `${hang} nguoi=${hangBamNguoi(nguoiBam)}`;
+}
+
+/**
  * [S1.85 / khoản 131] CÁC HẰNG ĐÓNG CỦA MỘT LẦN TỪ CHỐI KHÔNG GHI ĐƯỢC SỔ — cho dòng log, và CHỈ hằng.
  *
  * VÌ SAO NÓ TỒN TẠI, đo được (§S1.85): khoá ghi sổ của một tổ chức bị giữ quá trần 2 s của `050` ⇒ mọi lần từ chối của tổ chức ấy
@@ -414,6 +457,16 @@ function hangMaQuyen(v: string): string {
  * `… UNSEAL_DENIED UNSEAL_REQUEST <- error 55P03`, không nói vế nào), và hàng sổ mang `clause` chính là hàng không ghi được. Nay in
  * thêm `clause` khi người gọi `throwAuditedDenial` truyền nó — qua `DANH_MUC_VE_CONG`; không truyền thì hai hằng như trước.
  *
+ * [S1.9122 / khoản 177 / ADR-9223] KHE THỨ NĂM, CÓ HÌNH DẠNG — AI BỊ TỪ CHỐI. §S1.85 để ngỏ (*"ghi id người dùng hay không là một
+ * quyết định A2 riêng"*), và chủ dự án chọn ⒞ ngày 2026-09-30: dòng của lần MẤT SỔ mang `nguoi=<băm rút gọn của userId>` — không
+ * phải mọi dòng, và không phải `userId`. Vì sao ở đúng dòng này: mọi ca khác lấy danh tính từ sổ, còn ca này được định nghĩa bởi
+ * việc hàng sổ ấy không ghi được; sau một sự cố khoá ghi sổ kéo dài, không có nó người vận hành biết route nào bị từ chối mà không
+ * biết bao nhiêu người, và không nguồn nào bù. Vì sao băm chứ không id: các dòng của cùng một người NỐI được với nhau (đo:
+ * `apps/api/src/log-tu-choi-mat.int.test.ts` — ba người, ba băm khác nhau, dựng lại từ stderr một mình), còn một dòng đơn lẻ
+ * không nêu ai; và khe chỉ nhận `^[0-9a-f]{12}$` (`hangBamNguoi`), nên đây là một TOKEN hình dạng cố định như mọi hằng khác trên
+ * dòng, không phải một giá trị người dùng — đó là ranh giới mà `apps/api/src/mo-ta-loi.ts` ghi và ADR-9223 khai. Không băm
+ * (`null`) ⇒ dòng như trước; lần từ chối của SERVICE (worker) không có `actorId` nên không có khe này.
+ *
  * Cùng kỷ luật A2 với `moTaLoiKhongGiaTri` ở
  * `apps/api/src/mo-ta-loi.ts`, và hàm này là nguồn DUY NHẤT của phần hằng ấy: `apps/api` và `apps/unseal-worker` đều gọi nó, nên hai
  * tiến trình không lệch nhau được.
@@ -423,11 +476,14 @@ function hangMaQuyen(v: string): string {
  */
 export function moTaHangDongCuaLanTuChoi(loi: unknown): string {
   if (loi instanceof PermissionAuditFailedError) {
-    return `${ACTION_TU_CHOI_QUYEN} ${hangMaHoa(loi.resourceType, DANH_MUC_LOAI_TAI_NGUYEN)} ${hangMaQuyen(loi.denial.permission)}`;
+    return noiNguoi(
+      `${ACTION_TU_CHOI_QUYEN} ${hangMaHoa(loi.resourceType, DANH_MUC_LOAI_TAI_NGUYEN)} ${hangMaQuyen(loi.denial.permission)}`,
+      loi.nguoiBam,
+    );
   }
   if (loi instanceof DenialAuditFailedError) {
     const haiHang = `${hangMaHoa(loi.action, DANH_MUC_HANH_DONG_TU_CHOI)} ${hangMaHoa(loi.resourceType, DANH_MUC_LOAI_TAI_NGUYEN)}`;
-    return loi.clause === null ? haiHang : `${haiHang} ${hangMaHoa(loi.clause, DANH_MUC_VE_CONG)}`;
+    return noiNguoi(loi.clause === null ? haiHang : `${haiHang} ${hangMaHoa(loi.clause, DANH_MUC_VE_CONG)}`, loi.nguoiBam);
   }
   return "";
 }
@@ -744,6 +800,8 @@ export async function requirePermission(
         : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, {
             cause: loi,
           }),
+      // [S1.9122 / khoản 177] Băm rút gọn của người bị từ chối — cho dòng log của lần MẤT SỔ; xem `bamNguoiRutGon`.
+      bamNguoiRutGon(requirement.userId),
     );
   }
 
@@ -773,6 +831,10 @@ export async function requirePermission(
  * mở thầu, lần từ chối A4 của `buildComparisonTable`, `tuChoiLucGiaiMa` của worker — `danh-muc-tu-choi.test.ts` ghim đúng ba chỗ ấy.
  * Các chỗ gọi khác (D2 của phê duyệt mở thầu và đặt lại TOTP, huỷ yêu cầu mở thầu, chốt kiểm soát, từ chối trạng thái, phạm vi agent)
  * không có vế cổng theo nghĩa ấy — `action` của chúng đã là một hằng riêng cho mỗi đường — nên không truyền.
+ *
+ * [S1.9122 / khoản 177] `DenialAuditFailedError.nguoiBam` — băm rút gọn của `event.actorId` (`bamNguoiRutGon`), tính ở đây vì đây là chỗ
+ * duy nhất của đường này có id trong tay. Ở mọi chỗ gọi hôm nay `actorId` là id NGƯỜI bị từ chối (`actor.id`, `nguoiXem.id`, `userId`);
+ * lần từ chối của SERVICE (worker lúc giải mã) không có ⇒ `null`, dòng log của worker không đổi.
  *
  * KHÔNG kiểm "pool còn chỗ" tức thì như ~~`khangDinhGhiDuocDocLap`~~ `requirePermission` trước khoản 120 (lượt soi 62a-1, 63a-6). Bản đầu của vòng này có kiểm ấy, và nó đổi hành vi cả
  * khi lần ghi lẽ ra thành công: `auditPool` sản xuất khi ấy (S1.68) có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ
@@ -824,6 +886,8 @@ export async function throwAuditedDenial(
         ? loi
         : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, { cause: loi }),
       clause ?? null,
+      // [S1.9122 / khoản 177] Băm rút gọn của `actorId` — id người bị từ chối ở mọi chỗ gọi hôm nay; SERVICE (worker) không có ⇒ null.
+      typeof event.actorId === "string" ? bamNguoiRutGon(event.actorId) : null,
     );
   }
   throw denial;
