@@ -259,6 +259,13 @@ export async function taoLuotDanhGia(
     {
       userId: actor.id,
       orgId,
+      // [S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] CỔNG NÀY LÀ MỘT LỚP NÔNG, nói ra tại chỗ.
+      // `evaluation.perform` do NĂM vai giữ — REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER · FINANCE — đo trên
+      // ma trận `005` (+`083`) và GHIM ở `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»); trong tổ chức nó chỉ
+      // chặn `DIRECTOR` và `DATA_STEWARD`. Nó chặn khách và tác tử, KHÔNG chặn «ai trong tổ chức» — người đọc mã đừng đọc nó
+      // như một lớp phân tách nhiệm vụ. Lớp THẬT là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói thầu (ADR-051: trigger
+      // `award_kiem_de_xuat` so người đề xuất với `created_by`/`dispatched_by` của chính gói). Ma trận `005` giữ nguyên —
+      // phương án thu hẹp bị loại vì đổi một mốc ghim của S0 (ADR-051 ⑵). Ai đổi ma trận làm ca ghim đỏ, và phải đọc lại đoạn này.
       permission: PERMISSIONS.EVALUATION_PERFORM,
       // [S1.107 / lượt soi ngang 77 — ②] `RFQ`, KHÔNG `RFQ_EVALUATION`. Cặp này đi NGUYÊN
       // VĂN vào hàng sổ `PERMISSION_DENIED` (`rbac.ts` truyền thẳng cho `appendAuditEvent`),

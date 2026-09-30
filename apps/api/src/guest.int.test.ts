@@ -11,7 +11,7 @@
 //   [ADR-017] đường khách KHÔNG chạm `rfq_budgets`: đo bằng phản hồi VÀ bằng SQL dưới phiên khách.
 //   [028]     đối chứng: policy đóng của 027 làm `publicKeys` về rỗng; 028 là thứ mở nó.
 // ==============================================================================================
-import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -819,5 +819,208 @@ describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /gues
     // không phải ở lần ghi sổ sau đó.
     await expect(withTenant(apiPool, orgA, (c) => revokeGuestSession(c, orgKhac, gs))).rejects.toThrow(/^revokeGuestSession: /u);
     expect((await goi("GET", "/guest/rfq", { cookie: ck })).status).toBe(200);
+  });
+});
+
+// ==============================================================================================
+// [S1.9132 / khoản 230] LẦN NỘP BỊ TỪ CHỐI MANG MÃ LÝ DO TRONG THÂN 422 — QUA HTTP
+//
+// Phần CSDL đã xong ở `074`/ADR-108: mỗi nhánh trigger của câu nộp đặt một TÊN RÀNG BUỘC, `submitBid` đọc nó ở trường
+// `constraint` (không đọc chuỗi) thành `NopBiTuChoiError.ma` (tập ĐÓNG `MA_THEO_RANG_BUOC`) hay `NopQuaHanError`. Phần còn
+// lại của khoản nằm ở ĐÂY: route `POST /guest/bids` trả `ma` cho người nộp, và trang nộp thầu nói câu riêng cho từng mã
+// (`apps/web/src/phuc-vu.test.ts`). Mỗi ca dưới đây dựng MỘT lý do từ chối THẬT — trigger thật phán xử — rồi đòi:
+//   ⑴ 422, `ma` ĐÚNG mã của nhánh, thân là một tập trường ĐÓNG (`error`, `ma`; hai giờ chỉ ở nhánh VÌ HẠN);
+//   ⑵ thân KHÔNG chép câu của CSDL — hai trong các câu ấy nội suy `bid_id`/`bafo_round_id`, và câu chữ của trigger không
+//      phải hợp đồng với trình duyệt;
+//   ⑶ hàng sổ của nhánh (`BID_STATE_DENIED` mang cùng `ma`) nằm lại — route vẫn đi đường TRẢ VỀ, giao dịch commit.
+// ==============================================================================================
+describe("[S1.9132 / khoản 230] lần nộp bị từ chối mang MÃ lý do trong thân 422", () => {
+  /** Cùng công thức RFQ OPEN có khoá của `beforeAll`, trên một gói RIÊNG cho từng ca — gói chung `rfqA` phải còn hạn. */
+  async function dungGoiMo(tieuDe: string): Promise<string> {
+    const rfq = (await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, now() + interval '7 days', false, $3, $4) RETURNING id",
+      [orgA, tieuDe, uA, sA],
+    )).rows[0]?.id ?? "";
+    expect(rfq).not.toBe("");
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Thep tam SS400', '100.0000', 'tam', $3, $4)",
+      [orgA, rfq, uA, sA],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+        "SELECT $1, $2, $3, 'VND', id, $4, $5 FROM org_procurement_policies WHERE org_id = $1 AND version = 1",
+      [orgA, rfq, NGAN_SACH, uA, sA],
+    );
+    await db.pool.query("UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1", [rfq, uA, sA]);
+    await kyMotChuKy(orgA, rfq);
+    await withTenant(apiPool, orgA, async (c) => {
+      await issueRfqKeyPair(c, orgA, { rfqId: rfq, actorSessionId: sA, orgKeys: boBocTest });
+      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfq, uA, sA]);
+    });
+    return rfq;
+  }
+
+  /** Phong bì niêm cho gói `rfqId` bằng khoá P-256 của chính gói ấy, ở dạng base64 mà route nhận. */
+  async function phongBiCho(rfqId: string, banRo: string): Promise<string> {
+    const khoa = await withTenant(apiPool, orgA, (c) => getRfqPublicKeys(c, orgA, rfqId));
+    const p256 = khoa.find((k) => k.algorithm === "ECDH_P256")!;
+    return Buffer.from(
+      await sealBid({ rfqId, algorithm: "ECDH_P256", recipientPublicKey: p256.publicKey, plaintext: new TextEncoder().encode(banRo) }),
+    ).toString("base64");
+  }
+
+  /**
+   * Chép từ `loi-moi-sau-commit.int.test.ts`: chạy vài câu SQL với trigger của các bảng TẮT — dựng một trạng thái mà máy
+   * trạng thái `011`/`059` không cho đi tới bằng một câu UPDATE — rồi trả trigger về ĐÚNG trạng thái cũ, kể cả `ENABLE
+   * ALWAYS` mà hardening đặt. Các ca sau trong tệp dùng chung `rfq_packages`, nên «đúng trạng thái cũ» được đòi trước COMMIT.
+   */
+  async function dungTrangThai(bang: readonly string[], cau: readonly (readonly [string, readonly unknown[]])[]): Promise<void> {
+    const c = await db.pool.connect();
+    const trangThai = async (): Promise<string[]> =>
+      (
+        await c.query<{ d: string }>(
+          "SELECT tgrelid::regclass::text || '.' || tgname || '=' || tgenabled::text AS d FROM pg_catalog.pg_trigger WHERE tgrelid = ANY ($1::regclass[]) ORDER BY 1",
+          [[...bang]],
+        )
+      ).rows.map((r) => r.d);
+    try {
+      await c.query("BEGIN");
+      const truoc = await trangThai();
+      const { rows: khacGoc } = await c.query<{ bang: string; ten: string; bat: string }>(
+        "SELECT tgrelid::regclass::text AS bang, tgname AS ten, tgenabled::text AS bat FROM pg_catalog.pg_trigger " +
+          "WHERE tgrelid = ANY ($1::regclass[]) AND tgenabled <> 'O'",
+        [[...bang]],
+      );
+      for (const b of bang) await c.query(`ALTER TABLE ${b} DISABLE TRIGGER ALL`);
+      for (const [sql, thamSo] of cau) await c.query(sql, [...thamSo]);
+      for (const b of bang) await c.query(`ALTER TABLE ${b} ENABLE TRIGGER ALL`);
+      for (const t of khacGoc) {
+        const lenh = t.bat === "A" ? "ENABLE ALWAYS TRIGGER" : t.bat === "R" ? "ENABLE REPLICA TRIGGER" : "DISABLE TRIGGER";
+        await c.query(`ALTER TABLE ${t.bang} ${lenh} "${t.ten}"`);
+      }
+      expect(await trangThai(), "trigger phải về ĐÚNG trạng thái cũ trước COMMIT").toEqual(truoc);
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+
+  /** Thân 422 của một lần từ chối: hình dạng chung của mọi nhánh, trả về để ca đọc `ma`. */
+  function docTuChoi(r: PhanHoi, truong: readonly string[]): Record<string, unknown> {
+    expect(r.status, r.text).toBe(422);
+    const b = r.body as Record<string, unknown>;
+    expect(typeof b.ma, `mã lý do máy đọc được — thân: ${r.text}`).toBe("string");
+    expect(typeof b.error, "câu chung cho người đọc").toBe("string");
+    expect(Object.keys(b).sort(), "thân là một tập trường ĐÓNG").toEqual([...truong].sort());
+    // Không chép câu CSDL: tên cột nội suy, hậu tố `(C1)`/`(J4)`, và chính câu không dấu của từng trigger.
+    expect(r.text).not.toMatch(/bid_id|bafo_round_id|\(C1\)|\(J4\)|Da qua han|khong nhan bao gia khi|khong nam trong top-N|Phien khach khong hop le/u);
+    return b;
+  }
+
+  /** Số hàng `BID_STATE_DENIED` của gói mang đúng mã — bằng chứng route đi đường TRẢ VỀ và giao dịch commit. */
+  async function hangSoTuChoi(rfqId: string, ma: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM audit_events WHERE action = 'BID_STATE_DENIED' AND resource_id = $1 AND payload->>'ma' = $2",
+      [rfqId, ma],
+    );
+    return rows[0]?.n ?? 0;
+  }
+
+  it("quá hạn của vòng đang mở ⇒ 422 { error, ma: C1_QUA_HAN_NOP, gioPhanXu, hanNop } — không chép câu CSDL", async () => {
+    const rfq = await dungGoiMo("Goi qua han [230]");
+    const lm = await moi("NCC qua han [230]", rfq);
+    const ck = await moPhienKhach(lm);
+    const pb = await phongBiCho(rfq, "gia tre");
+    await dungTrangThai(["public.rfq_packages"], [["UPDATE rfq_packages SET deadline_at = now() - interval '1 minute' WHERE id = $1", [rfq]]]);
+    const r = await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: pb } });
+    const b = docTuChoi(r, ["error", "ma", "gioPhanXu", "hanNop"]);
+    expect(b.ma).toBe("C1_QUA_HAN_NOP");
+    expect(typeof b.gioPhanXu).toBe("string");
+    expect(typeof b.hanNop).toBe("string");
+  });
+
+  it("ngoài top-N của vòng BAFO đang mở ⇒ 422 { error, ma: BAFO_NGOAI_TOP_N } — không giờ, không id luồng; hàng BID_STATE_DENIED cùng mã nằm lại", async () => {
+    const rfq = await dungGoiMo("Goi BAFO [230]");
+    const lm = await moi("NCC ngoai top-N [230]", rfq);
+    const ck = await moPhienKhach(lm);
+    const pb = await phongBiCho(rfq, "gia vong hai");
+    // Vòng hai đang mở, còn hạn, trỏ tới một lượt chấm mà luồng của nhà cung cấp này KHÔNG có hàng xếp hạng nào — với
+    // `bid_kiem_vong_bafo` đó chính là «ngoài top-N»: vế duy nhất của nó là `rank <= top_n` trên lượt mà vòng trỏ tới.
+    const luot = randomUUID();
+    await dungTrangThai(["public.rfq_packages", "public.rfq_evaluations", "public.rfq_bafo_rounds"], [
+      ["UPDATE rfq_packages SET status = 'BAFO_OPEN', closed_at = now() WHERE id = $1", [rfq]],
+      [
+        "INSERT INTO rfq_evaluations (id, org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "SELECT $2, $1, $3, id, 'VND', $4, $5 FROM org_procurement_policies WHERE org_id = $1 AND version = 1",
+        [orgA, luot, rfq, uA, sA],
+      ],
+      [
+        "INSERT INTO rfq_bafo_rounds (org_id, rfq_id, evaluation_id, policy_id, top_n, round_no, deadline_at, opened_by, opened_by_session_id) " +
+          "SELECT $1, $2, $3, id, 1, 1, now() + interval '1 day', $4, $5 FROM org_procurement_policies WHERE org_id = $1 AND version = 1",
+        [orgA, rfq, luot, uA, sA],
+      ],
+    ]);
+    const r = await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: pb } });
+    const b = docTuChoi(r, ["error", "ma"]);
+    expect(b.ma).toBe("BAFO_NGOAI_TOP_N");
+    expect(await hangSoTuChoi(rfq, "BAFO_NGOAI_TOP_N")).toBe(1);
+  });
+
+  it("gói đã đóng ⇒ 422 { error, ma: C1_GOI_KHONG_NHAN_BAO_GIA }; hàng sổ cùng mã", async () => {
+    const rfq = await dungGoiMo("Goi dong som [230]");
+    const lm = await moi("NCC goi dong [230]", rfq);
+    const ck = await moPhienKhach(lm);
+    const pb = await phongBiCho(rfq, "gia muon");
+    await withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+        [rfq, uA, sA],
+      ),
+    );
+    const r = await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: pb } });
+    const b = docTuChoi(r, ["error", "ma"]);
+    expect(b.ma).toBe("C1_GOI_KHONG_NHAN_BAO_GIA");
+    expect(await hangSoTuChoi(rfq, "C1_GOI_KHONG_NHAN_BAO_GIA")).toBe(1);
+  });
+
+  it("phiên khách bị thu hồi GIỮA bước xác thực và câu ghi ⇒ 422 { error, ma: PHIEN_KHACH_KHONG_HOP_LE }; hàng sổ cùng mã", async () => {
+    // Trigger `bid_kiem_phien_khach` là lớp có thẩm quyền cho đúng khe này: bước xác thực của bộ điều phối và câu SELECT của
+    // `submitBid` đều đã thấy phiên còn sống. Dựng khe bằng khoá hàng: `bid_kiem_han_nop` (chạy TRƯỚC, theo thứ tự tên) lấy
+    // `FOR SHARE` trên hàng gói thầu, nên một `FOR UPDATE` giữ ở đây làm câu INSERT chờ — đúng lúc ấy thu hồi phiên rồi nhả
+    // khoá. Nộp lần một thành công trước để luồng đã có: câu đứng chờ là câu ghi PHIÊN BẢN, không phải câu tạo luồng.
+    const lm = await moi("NCC thu hoi giua cau nop [230]");
+    const ck = await moPhienKhach(lm);
+    const gs = await guestSessionIdCua(lm.invitationId);
+    expect((await goi("POST", "/guest/bids", { cookie: ck, body: { envelope: await phongBiCho(rfqA, "gia lan mot") } })).status).toBe(201);
+    const pb = await phongBiCho(rfqA, "gia lan hai");
+    const giu = await db.pool.connect();
+    let r: PhanHoi;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT 1 FROM rfq_packages WHERE id = $1 FOR UPDATE", [rfqA]);
+      const hua = goi("POST", "/guest/bids", { cookie: ck, body: { envelope: pb } });
+      const het = Date.now() + 5000;
+      for (;;) {
+        const { rows } = await db.pool.query<{ n: number }>(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'INSERT INTO public.vendor_bid_versions%'",
+        );
+        if (rows[0]!.n > 0) break;
+        if (Date.now() > het) throw new Error("câu INSERT phiên bản báo giá không chờ khoá hàng gói thầu");
+        await new Promise((xong) => setTimeout(xong, 20));
+      }
+      await giu.query("UPDATE guest_sessions SET revoked_at = now() WHERE id = $1", [gs]);
+      await giu.query("COMMIT");
+      r = await hua;
+    } finally {
+      giu.release();
+    }
+    const b = docTuChoi(r, ["error", "ma"]);
+    expect(b.ma).toBe("PHIEN_KHACH_KHONG_HOP_LE");
+    expect(await hangSoTuChoi(rfqA, "PHIEN_KHACH_KHONG_HOP_LE")).toBe(1);
   });
 });

@@ -1519,6 +1519,94 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok3").textContent).toBe("Đã tạo nhóm THEP-01.");
       expect(p.el("ma-nhom").value).toBe("");
     });
+
+    // ==========================================================================================
+    // [S1.9132 / khoản 230] MỖI MÃ LÝ DO TỪ CHỐI MỘT CÂU — trang đọc `ma` của thân 422, không đọc câu chữ của api.
+    //
+    // Api vẫn trả câu chung ở `error` (hợp đồng cũ, cho máy khách không biết `ma`); trang nói câu RIÊNG khi biết mã, và rơi
+    // về `error` nguyên văn với mã lạ hay thân không mang mã — đúng «mã lạ ⇒ câu chung cũ» mà khoản 230 đòi.
+    // ==========================================================================================
+    describe("[S1.9132 / khoản 230] nop-thau: lần nộp bị từ chối — mỗi mã một câu riêng, mã lạ ra câu chung", () => {
+      /** Câu chung api vẫn trả ở `error` — trang KHÔNG được lặp lại nó khi đã biết mã. */
+      const CAU_CHUNG =
+        "Gói thầu không nhận báo giá này: kiểm lại trạng thái gói thầu, hạn nộp của vòng đang mở, và việc luồng báo giá của bạn có được mời nộp lại ở vòng này hay không.";
+      /** Bấm «Niêm phong và nộp» với api trả thân `than` ở mã `status`; trả câu ở `loi3` sau khi đòi nút bật lại và bước 4 đóng. */
+      const nopVoi = async (status: number, than: unknown): Promise<string> => {
+        const p = await dungTrang("nop-thau", {
+          hash: "", cookie: null, khach: true,
+          thay: (l) => (l === "GET /guest/rfq" ? Promise.resolve({ status: 200, body: GOI_NOP }) : l === "POST /guest/bids" ? Promise.resolve({ status, body: than }) : undefined),
+        });
+        await p.bam("nut-dung-phien");
+        await p.bam("nut-nop");
+        expect(p.trangThai.goi).toContain("POST /guest/bids");
+        expect(p.el("b4").hidden, "bước 4 không mở khi bị từ chối").toBe(true);
+        expect(p.el("nut-nop").disabled, "nút nộp bấm lại được").toBe(false);
+        expect(p.el("loi3").hidden).toBe(false);
+        return p.el("loi3").textContent;
+      };
+      /** Sáu mã của `MA_THEO_RANG_BUOC` (`packages/bidding`) cộng mã của nhánh VÌ HẠN — mỗi mã một vế câu phải có. */
+      const CAU_THEO_MA: readonly (readonly [string, RegExp])[] = [
+        ["C1_QUA_HAN_NOP", /^Đã quá hạn nộp báo giá theo giờ của hệ thống/u],
+        ["C1_GOI_KHONG_NHAN_BAO_GIA", /^Gói thầu này không còn nhận báo giá — đã đóng, đã huỷ hay chưa mở/u],
+        ["BAFO_NGOAI_TOP_N", /không nằm trong vòng BAFO đang mở/u],
+        ["C1_KHONG_VONG_BAFO_DANG_MO", /không thấy vòng nào đang mở — dữ liệu gói thầu không nhất quán/u],
+        ["C1_KHONG_HAN_NOP", /không có hạn nộp — dữ liệu gói thầu không nhất quán/u],
+        ["PHIEN_KHACH_KHONG_HOP_LE", /^Phiên nộp thầu đã hết hạn hoặc đã bị thu hồi/u],
+        ["PHIEN_KHACH_KHAC_LOI_MOI", /thuộc một lời mời khác/u],
+      ];
+
+      it("bảy mã (sáu của MA_THEO_RANG_BUOC + mã vì hạn) — mỗi mã một câu tiếng Việt riêng, không câu nào lặp câu chung, bảy câu đôi một khác nhau", async () => {
+        const cau: string[] = [];
+        for (const [ma, mau] of CAU_THEO_MA) {
+          const c = await nopVoi(422, { error: CAU_CHUNG, ma });
+          expect(c, ma).toMatch(mau);
+          expect(c, `${ma}: lặp câu chung của api`).not.toContain("kiểm lại trạng thái gói thầu");
+          expect(c, `${ma}: nói rõ báo giá chưa đi`).toMatch(/CHƯA được gửi/u);
+          cau.push(c);
+        }
+        expect(new Set(cau).size, "bảy câu đôi một khác nhau").toBe(CAU_THEO_MA.length);
+      });
+
+      it("vì hạn: câu riêng của C1_QUA_HAN_NOP ĐI CÙNG hai giờ (phán xử, hạn) và câu «đã ghi lại» — không lặp câu của api", async () => {
+        const c = await nopVoi(422, {
+          error: "Đã quá hạn nộp báo giá theo giờ của hệ thống — giờ hệ thống lúc phán xử và hạn nộp đã so đi kèm lời từ chối này.",
+          ma: "C1_QUA_HAN_NOP",
+          gioPhanXu: "2026-09-27T00:00:05.000000Z",
+          hanNop: "2026-09-27T00:00:00.000000Z",
+        });
+        expect(c).toMatch(/^Đã quá hạn nộp báo giá theo giờ của hệ thống — báo giá CHƯA được gửi\./u);
+        expect(c).toMatch(/Giờ hệ thống lúc phán xử: .*\(2026-09-27T00:00:05\.000000Z\)\. Hạn nộp: .*\(2026-09-27T00:00:00\.000000Z\)\. Hệ thống đã ghi lại lần nộp bị chặn này\.$/u);
+        expect(c).not.toContain("đi kèm lời từ chối này");
+      });
+
+      it("mã LẠ, `ma` không phải chuỗi, thân không `ma` (api cũ), 500 hay 503 không JSON ⇒ câu chung cũ: `error` nguyên văn, hai giờ vẫn kèm khi có", async () => {
+        expect(await nopVoi(422, { error: CAU_CHUNG, ma: "MA_LA_9999" })).toBe(CAU_CHUNG);
+        expect(await nopVoi(422, { error: CAU_CHUNG, ma: 7 })).toBe(CAU_CHUNG);
+        expect(await nopVoi(422, { error: CAU_CHUNG })).toBe(CAU_CHUNG);
+        const cu = await nopVoi(422, { error: "Đã quá hạn (câu api cũ).", gioPhanXu: "2026-09-27T00:00:05.000000Z", hanNop: "2026-09-27T00:00:00.000000Z" });
+        expect(cu).toMatch(/^Đã quá hạn \(câu api cũ\)\. Giờ hệ thống lúc phán xử: .*Hệ thống đã ghi lại lần nộp bị chặn này\.$/u);
+        expect(await nopVoi(500, { error: "loi may chu" })).toBe("loi may chu");
+        expect(await nopVoi(503, null)).toBe("Không nộp được (mã 503)");
+      });
+      it("bảng mã của trang ĐỐI CHIẾU với `MA_THEO_RANG_BUOC` của `packages/bidding` (đọc văn bản, như ma-tran-quyen đọc SQL): đúng sáu mã ấy cộng C1_QUA_HAN_NOP, không thừa, không thiếu — và bảy ca trên phủ trọn bảng", () => {
+        // Hai bản của cùng một tập mã — bảng tên → mã ở `bidding.ts` (trigger ↔ mã đã được `bidding.int.test.ts` đo hai chiều)
+        // và bảng mã → câu ở `nop-thau.js` — không có lớp nào giữ chúng khớp nhau. Một mã mới thêm ở CSDL mà quên trang ⇒ người
+        // nộp nhận câu chung; một mã gõ sai ở trang ⇒ câu riêng không bao giờ hiện. Ca này là lớp ấy.
+        const bidding = readFileSync(new URL("../../../packages/bidding/src/bidding.ts", import.meta.url), "utf8");
+        const bang = /export const MA_THEO_RANG_BUOC = \{([\s\S]*?)\} as const;/u.exec(bidding);
+        expect(bang, "không tìm thấy MA_THEO_RANG_BUOC trong bidding.ts").not.toBeNull();
+        const maCsdl = [...(bang?.[1] ?? "").matchAll(/:\s*"([A-Z0-9_]+)"/gu)].map((m) => m[1] ?? "").sort();
+        expect(maCsdl.length, "chống rỗng ruột").toBeGreaterThanOrEqual(6);
+        const maQuaHan = /readonly ma = "([A-Z0-9_]+)" as const;/u.exec(bidding)?.[1] ?? "";
+        expect(maQuaHan).toBe("C1_QUA_HAN_NOP");
+        const js = readFileSync(new URL("../trang/nop-thau.js", import.meta.url), "utf8");
+        const khoi = /const CAU_THEO_MA = \{([\s\S]*?)\n\};/u.exec(js);
+        expect(khoi, "không tìm thấy CAU_THEO_MA trong nop-thau.js").not.toBeNull();
+        const maTrang = [...(khoi?.[1] ?? "").matchAll(/^\s{2}([A-Z0-9_]+):/gmu)].map((m) => m[1] ?? "").sort();
+        expect(maTrang).toEqual([...maCsdl, maQuaHan].sort());
+        expect(CAU_THEO_MA.map(([ma]) => ma).sort(), "bảy ca DOM ở trên phủ trọn bảng").toEqual(maTrang);
+      });
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {
