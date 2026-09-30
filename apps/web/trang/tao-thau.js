@@ -17,7 +17,8 @@
 // ==============================================================================================
 
 import {
-  baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, loiLyDo, nhanLoiMoi, nutLoiMoi, thuTuBuoc, tuDocNganSach,
+  KHUNG_TIN_HIEU_RONG, baoSauKhiMo, baoSauKhiMoi, hangNganSach, hienTraVe, khungTinHieu, loiLyDo, loiLyDoGhiNhan, nhanLoiMoi,
+  nutLoiMoi, thuTuBuoc, tuDocNganSach,
 } from "/lib/tao-thau.js";
 import { docNhomHang, hienDatNhomHang, luaChonNhomHang, nhanNhomHangCuaGoi } from "/lib/nhom-hang.js";
 
@@ -94,6 +95,7 @@ window.addEventListener("hashchange", () => {
   datLuong({ daBat: false, trangThaiGoi: "" });
   nguoiDung = "";
   xoaNganSach();
+  veTinHieu(KHUNG_TIN_HIEU_RONG);
   for (const id of ["loi1", "loi2", "loi3", "loi4", "ok1", "ghi-danh"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
@@ -266,6 +268,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     datLuong({ daBat: false, trangThaiGoi: "" });
     nguoiDung = "";
     xoaNganSach();
+    veTinHieu(KHUNG_TIN_HIEU_RONG);
     dongCacBuoc();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
@@ -298,6 +301,8 @@ async function napRfq(rfqId) {
   phien = { ...phien, toiTao };
   dienDl($("tt-ns"), []);
   hien($("nut-xem-ns"), !toiTao);
+  // [S3.6b2 / K10a] Khung tín hiệu của gói trước cũng đi ngay, cùng lý do với bảng ngân sách.
+  veTinHieu(KHUNG_TIN_HIEU_RONG);
   const hang = [
     ["Mã gói thầu", rfqId],
     ["Tên", g.title],
@@ -317,8 +322,73 @@ async function napRfq(rfqId) {
   // [S1.200 / khoản 258] Người tạo gói thấy ngân sách ở CÙNG lần đọc; người khác bấm «Xem ngân sách» (chủ dự án chốt sau lượt
   // soi F3: lần từ chối phải đến từ một thao tác cố ý, không từ nhịp đọc gói).
   if (toiTao) await napNganSach();
+  if (luong.daBat) await napTinHieu();
   return true;
 }
+
+/**
+ * [S3.6b2 / K10a] Tín hiệu chia nhỏ của gói đang mở — `GET /rfqs/:rfqId/signals` không có cổng quyền, nên đọc ở mỗi lần đọc gói
+ * không sinh lời từ chối nào. Chỉ ở tổ chức đã bật: tổ chức chưa bật không có tín hiệu. Câu trả của gói trước tới muộn thì bỏ,
+ * khuôn `napNganSach`.
+ */
+async function napTinHieu() {
+  const id = phien.rfqId;
+  if (id === "") return;
+  const r = await goi("GET", `/rfqs/${id}/signals`);
+  if (phien.rfqId !== id) return;
+  veTinHieu(r.status === 200 ? khungTinHieu(r.body, id) : KHUNG_TIN_HIEU_RONG);
+}
+
+function veTinHieu(k) {
+  hien($("khoi-tin-hieu"), k.hien);
+  $("tin-hieu-tom-tat").textContent = k.tomTat;
+  const tb = $("bang-tin-hieu").querySelector("tbody");
+  tb.replaceChildren();
+  for (const g of k.goi) {
+    const tr = document.createElement("tr");
+    for (const v of [g.laGoiNay ? `${g.tieuDe} (gói này)` : g.tieuDe, g.trangThai]) {
+      const td = document.createElement("td");
+      td.textContent = v;
+      tr.append(td);
+    }
+    tb.append(tr);
+  }
+  const ls = $("lich-su-tin-hieu");
+  ls.replaceChildren();
+  for (const d of k.lichSu) {
+    const li = document.createElement("li");
+    li.textContent = d.luc === null ? d.noiDung : `${new Date(d.luc).toLocaleString("vi-VN")} — ${d.noiDung}`;
+    ls.append(li);
+  }
+  hien($("khoi-ghi-nhan"), k.choGhiNhan);
+  bao($("tin-hieu-khong-duoc"), k.khongDuoc ?? "");
+}
+
+// [S3.6b2 / K10a] Ghi nhận tín hiệu HIỆN TẠI của gói — `POST /rfqs/:rfqId/signals/acknowledge`, cổng `rfq.approve`, lý do vào sổ.
+// Máy chủ kiểm lại mọi luật (quyền, luật người, bằng chứng hiện tại); màn in đúng câu từ chối của nó rồi đọc lại khung.
+$("nut-ghi-nhan").addEventListener("click", async () => {
+  bao($("loi4"), ""); bao($("ok4"), "");
+  if (phien.rfqId === "") { bao($("loi4"), "Tạo hoặc đọc một gói thầu trước."); return; }
+  const lyDo = $("ly-do-ghi-nhan").value;
+  const sai = loiLyDoGhiNhan(lyDo);
+  if (sai !== null) { bao($("loi4"), sai); return; }
+  const id = phien.rfqId;
+  $("nut-ghi-nhan").disabled = true;
+  try {
+    const r = await goi("POST", `/rfqs/${id}/signals/acknowledge`, { lyDo: lyDo.trim() });
+    if (phien.rfqId !== id) return;
+    if (r.status !== 201) { bao($("loi4"), loiCua(r, "Không ghi nhận được tín hiệu")); await napTinHieu(); return; }
+    $("ly-do-ghi-nhan").value = "";
+    bao($("ok4"), r.body?.ghiNhan?.tinHieuMoi === true
+      ? "Đã ghi nhận. Tập gói đã đổi từ lần nộp, nên tín hiệu được ghi lại theo tập hiện tại trước khi ghi nhận. Gói mở được khi đủ chữ ký."
+      : "Đã ghi nhận tín hiệu. Gói mở được khi đủ chữ ký.");
+    await napRfq(id);
+  } catch {
+    bao($("loi4"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
+  } finally {
+    $("nut-ghi-nhan").disabled = false;
+  }
+});
 
 /**
  * [S1.200 / khoản 258] Bảng ngân sách từ `GET /rfqs/:rfqId/budget` — năm thứ chữ ký duyệt gói ràng vào. Câu trả chỉ được vẽ khi

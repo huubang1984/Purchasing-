@@ -1393,6 +1393,23 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ qua HTTP — đọc, ghi nh�
     const tinHieu = (doc.body as { tinHieu: { canGhiNhan: boolean; hienTai: { can: number; goi: string[] }; tinHieu: unknown[] } }).tinHieu;
     expect([tinHieu.canGhiNhan, tinHieu.hienTai.can, tinHieu.hienTai.goi.length, tinHieu.tinHieu.length]).toEqual([true, 1_000_000_000, 3, 1]);
 
+    // [S3.6b2] Thứ màn cần: người đang xem — dẫn xuất từ PHIÊN, không từ thân hay query — ghi nhận được không, và vì sao không.
+    type DocMan = { tinHieu: { nguoiXem: unknown; soNguoiGhiNhanDuoc: number | null; goi: Record<string, { tieuDe: string }> } };
+    const xem = async (ai: typeof pm): Promise<DocMan["tinHieu"]> => {
+      const r = await goi("GET", `/rfqs/${g3}/signals`, ai);
+      expect(r.status, r.text).toBe(200);
+      return (r.body as DocMan).tinHieu;
+    };
+    expect((await xem(pm)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep });
+    expect((await xem(mua)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: "Ghi nhận tín hiệu cần quyền duyệt gói thầu." });
+    const tuDocLap = await xem(docLap);
+    expect(tuDocLap.nguoiXem).toEqual({ ghiNhanDuoc: true, lyDo: null });
+    // Người giữ `rfq.approve`: ba PROCUREMENT_MANAGER và người độc lập; chỉ `pm` — người tạo và nộp cả ba gói — bị loại.
+    expect(tuDocLap.soNguoiGhiNhanDuoc).toBe(3);
+    expect(Object.values(tuDocLap.goi).map((g) => g.tieuDe).sort()).toEqual(["Thep 470000000.00", "Thep 480000000.00", "Thep 490000000.00"]);
+    // Bốn lần đọc không để hàng sổ nào — kể cả của người không giữ quyền (hàng PERMISSION_DENIED duy nhất của `mua` ở dưới).
+    expect(await hangSo(g3)).toEqual([]);
+
     const chan = await goi("POST", `/rfqs/${g3}/open`, pm);
     expect([chan.status, (chan.body as { error: string }).error]).toEqual([422, CHOT_VAO_SO.TIN_HIEU_CHUA_GHI_NHAN.thongDiep]);
     expect(await hangSo(g3)).toEqual(["TIN_HIEU_CHUA_GHI_NHAN"]);
