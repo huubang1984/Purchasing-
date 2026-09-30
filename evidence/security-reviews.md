@@ -17107,3 +17107,8 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
   cây cuối: 197 tệp, 3378 khẳng định, 3368 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit:
   71/71 bất biến, đọc từ 3378 khẳng định; K4b 42 như trên. `pnpm test`: 123 tệp, 1767 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise`
   sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge #202 — nay mang #199 sau `master` tới #203 (S3.3a, K8a), và trần 600 s cho ca RULE trên bảng chỉ-ghi-thêm — và
+  chạy lại `cap-so`:** S1.200, ADR-118 giữ nguyên. Toàn bộ unit + T3 cục bộ trên cây cuối (trước lần merge trần mới, thứ chỉ đổi trần
+  thời gian của một ca): 198 tệp, 3388 khẳng định, 3378 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản
+  đã commit: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào; K8a vào ở #203), đọc từ 3388 khẳng định; K4b 42 như trên.
+  `pnpm test`: 123 tệp, 1767 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
