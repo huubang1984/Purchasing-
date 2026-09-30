@@ -78,6 +78,10 @@ function loiCua(loi: unknown, noi: string): KhoiTaoError {
 
 async function chenNguoi(c: pg.PoolClient, orgId: string, n: NguoiKhai, i: number): Promise<number> {
   const noi = `người thứ ${String(i + 1)}`;
+  // [S1.229 / khoản 71 / ADR-132] Miền `users.email` là ASCII in được (`092_email_ascii`): từ chối TRƯỚC khi tới CSDL — nêu vị trí,
+  // không in email; ném trong giao dịch nên rollback trọn như mọi lỗi khác của bản khai. Nhờ đó `pg_catalog.lower()` dưới đây và
+  // `.toLowerCase()` của phép dò trùng ở `ban-khai.ts` đồng ý trên mọi giá trị cất được — không còn phụ thuộc libc của máy chủ.
+  if (!/^[!-~]+$/u.test(n.email)) throw new KhoiTaoError(`${noi}: email chứa ký tự ngoài ASCII in được`);
   let userId: string;
   try {
     // `pg_catalog.lower()` của CSDL, không `toLowerCase()` của JS: CHECK của `048` và đường đăng nhập (`login.ts`) cùng dùng

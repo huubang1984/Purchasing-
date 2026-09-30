@@ -212,6 +212,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   // [S1.85 / khoản 131] Hàm THUẦN trả các hằng đóng của một lần từ chối không ghi được sổ, cho dòng log — không đọc CSDL, không
   // trả lời câu hỏi quyền nào.
   "moTaHangDongCuaLanTuChoi",
+  // [S1.222 / khoản 166] Bộ mô tả lỗi cho dòng log — hàm THUẦN bọc ngoài hàm trên, MỘT bản cho `api` và worker mở thầu; không đọc
+  // CSDL, không trả lời câu hỏi quyền nào.
+  "moTaLoiKhongGiaTri",
   "SEPARATION_OF_DUTIES_CHAIN",
   "SessionInvalidError",
   "assertFreshMfa",
@@ -244,6 +247,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   "USER_SESSION_DEFAULT_TTL_SECONDS",
   "enrollOrReplaceTotpForLogin",
   "issueLoginToken",
+  // [S1.216 / khoản 195 / ADR-126] Phép ĐỌC của chính chủ: link đăng nhập gần đây của `userId` mà bộ điều phối lấy từ phiên.
+  // Không trả lời câu hỏi quyền nào, không mở đường ghi nào; thứ nó KHÔNG trả — `token_hash` — là vế đo ở `auth.int.test.ts`.
+  "listRecentLoginTokens",
   // [S1.91 / khoản 194] Trả DANH SÁCH NGƯỜI NHẬN cho đường xếp việc thông báo — không trả lời
   // câu hỏi "được hay không" cho ai, nên nó không mang chỗ mù mà `hasPermission` mang (khối đầu
   // `packages/identity/src/index.ts`). Trả `userId`, không trả email.
@@ -1149,6 +1155,9 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "docTraoThau",
   "duyetTraoThau",
   "huyTraoThau",
+  // [S1.231 / khoản 232 / ADR-133] Symbol THỨ SÁU của lớp trao thầu: rút một đề xuất chưa chữ ký — cổng `award.recommend`,
+  // `apps/api/src/routes/buyer.ts` gọi nó ở route `…/award/withdraw`. Vẫn không hàm nào cho phiên KHÁCH.
+  "rutDeXuatTraoThau",
   // [mảnh 1 / màn xuất bằng chứng] Nửa XUẤT của bộ bằng chứng S2.7 xuống gói để CLI và `apps/api`
   // ghi ra cùng byte. `xuatBoBangChung` là đường có cổng; `dungBoBangChung` không cổng, chỉ công
   // cụ vận hành gọi. Năm hằng số là hình dạng của bundle mà nửa KIỂM ở `tools/` đối chiếu.

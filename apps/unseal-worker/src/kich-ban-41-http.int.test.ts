@@ -817,6 +817,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB).replace(":awardId", UUID0), body: {}, cookie: trangThai.gd1.cookie };
         case "POST /rfqs/:rfqId/award/cancel":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "huy de quet" }, cookie: trangThai.gd1.cookie };
+        // [S1.231 / khoản 232] Route RÚT đi bằng `m` (PROCUREMENT_MANAGER giữ `award.recommend`) tới `hyB` ở DRAFT ⇒ dừng ở
+        // `TraoThauTuChoiError` 422 có tên, sau bộ đọc thân — cùng lý do ba route trên.
+        case "POST /rfqs/:rfqId/award/withdraw":
+          return { path: r.path.replace(":rfqId", hyB), body: { reason: "rut de quet" }, cookie: m };
         case "POST /users/:userId/mfa-reset":
           return {
             path: r.path.replace(":userId", nanHy.id),
@@ -1733,9 +1737,14 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // Không một dòng sổ nào mang giá — sổ là bằng chứng, không phải nơi rò.
     const { rows: so } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text LIKE '%' || $2 || '%'", [orgA, GIA_SUA_LAI]);
     expect(so[0]?.n).toBe("0");
-    // Và token, mã OTP, bí mật TOTP không ở đâu trong sổ.
+    // Và token, mã OTP, bí mật TOTP không ở đâu trong sổ. [bước 0 đợt 2] So theo RANH GIỚI token, không `LIKE '%…%'` trần: một mã OTP
+    // sáu chữ số trùng ngẫu nhiên với sáu ký tự liền của một UUID hay một chuỗi hex trong payload (đo: một lượt `pnpm evidence` đỏ
+    // "expected '2' to be '0'", chạy riêng xanh) — một bí mật LỌT thật thì đứng nguyên vẹn giữa hai ký tự không phải chữ-số hex.
     for (const t of [...dv.linkDaGui.map((l) => l.token), ...dv.otpDaGui.map((o) => o.code), ...dv.loiMoiDaGui.map((l) => l.token)]) {
-      const { rows: r2 } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text LIKE '%' || $2 || '%'", [orgA, t]);
+      const { rows: r2 } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND payload::text ~ ('(^|[^0-9A-Za-z])' || $2 || '($|[^0-9A-Za-z])')",
+        [orgA, t],
+      );
       expect(r2[0]?.n, "bí mật lọt vào sổ kiểm toán").toBe("0");
     }
     // Không log lỗi nào của tiến trình mang bất kỳ bí mật nào. [review H2-4 ⑵] Bản trước "chống rỗng

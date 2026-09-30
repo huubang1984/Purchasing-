@@ -21,13 +21,15 @@
 
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { migrate } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { createPool, migrate } from "@trustprocure/db";
+import { DenialAuditFailedError, moTaLoiKhongGiaTri } from "@trustprocure/identity";
+import { TenantError, withTenant } from "@trustprocure/tenancy";
 import { KIND_KHONG_NGUOI_NHAN, enqueueJob, type JobFailureReport } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // [S1.81 / khoản 154] Import TƯƠNG ĐỐI xuyên app, cùng lý do và cùng tiền lệ với
@@ -37,6 +39,12 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // app; `@trustprocure/api` KHÔNG được thành dependency của worker (đường chạy worker không chạm api).
 import { buildApiOutboxHandlers } from "../../api/src/outbox-api.js";
 import { dichVuTest } from "../../api/src/test-services.js";
+// [S1.222 / khoản 166] Bộ mô tả lỗi của TIẾN TRÌNH `api`, để vế cuối tệp đối chiếu dòng log của
+// worker với chuỗi mà `api` cho CÙNG một lỗi. Cùng lý do và cùng tiền lệ với hai dòng trên: test
+// là nơi duy nhất nối hai app.
+import { moTaLoiKhongGiaTri as moTaLoiCuaApi } from "../../api/src/mo-ta-loi.js";
+import { docCauHinh } from "./cau-hinh.js";
+import { taoTienTrinhUnsealWorker } from "./tien-trinh.js";
 import {
   BREAK_GLASS_ALERT_KIND,
   KIND_KHONG_NHAN,
@@ -57,6 +65,42 @@ let apiPool: pg.Pool;
 let unsealPool: pg.Pool;
 let auditUnsealPool: pg.Pool;
 let orgA: string;
+/** [khoản 166] Chuỗi kết nối của vai ĐĂNG NHẬP thật của worker, cho vế dựng tiến trình từ cấu hình. */
+let urlLogin: string;
+let thuMucCanhBao: string;
+const KHOA_32 = Buffer.alloc(32, 3).toString("base64");
+
+function doiNguoiDung(chuoi: string, nguoi: string, matKhau: string): string {
+  const u = new URL(chuoi);
+  u.username = nguoi;
+  u.password = matKhau;
+  return u.toString();
+}
+
+/** Cùng khuôn `tien-trinh.int.test.ts`: cấu hình tối thiểu để `docCauHinh` dựng được tiến trình. */
+function moiTruong(ghiDe: Record<string, string> = {}): Record<string, string> {
+  return {
+    TRUSTPROCURE_DATABASE_URL: urlLogin,
+    TRUSTPROCURE_DB_POOL_MAX: "2",
+    TRUSTPROCURE_KEY_ADAPTER: "local-dev",
+    TRUSTPROCURE_MASTER_KEYS: `v1=${KHOA_32}`,
+    TRUSTPROCURE_MASTER_KEY_ACTIVE: "v1",
+    TRUSTPROCURE_ALERT_ADAPTER: "dev-file",
+    TRUSTPROCURE_ALERT_DIR: thuMucCanhBao,
+    ...ghiDe,
+  };
+}
+
+/** Cùng câu với `apps/api/src/log-tu-choi-mat.int.test.ts`: khoá tư vấn ghi sổ của tổ chức đang được cầm chưa. */
+async function demKhoaGiuDuoc(org: string): Promise<number> {
+  const { rows } = await db.pool.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND granted " +
+      "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+      "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+    [org],
+  );
+  return rows[0]?.n ?? -1;
+}
 
 /** Bộ mở bọc giả — không lượt nào của file này chạy tới đường mở thầu thật. */
 const boMoBocGia = {
@@ -75,6 +119,10 @@ beforeAll(async () => {
   unsealPool = db.poolAs("app_unseal");
   auditUnsealPool = db.poolAs("app_unseal");
   expect(orgA).not.toBe("");
+  // [khoản 166] Vai đăng nhập thật của worker — `docCauHinh` từ chối URL superuser theo TÊN.
+  await db.pool.query("CREATE ROLE app_unseal_login LOGIN PASSWORD 'mk-unseal' IN ROLE app_unseal");
+  urlLogin = doiNguoiDung(db.connectionString, "app_unseal_login", "mk-unseal");
+  thuMucCanhBao = mkdtempSync(join(tmpdir(), "tp-canh-bao-166-"));
 }, 180000);
 
 afterAll(async () => {
@@ -371,5 +419,181 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
       [jobId],
     );
     expect(rows[0]).toEqual({ status: "FAILED", attempts: 2 });
+  });
+});
+
+// ===============================================================================================
+// [S1.222 / khoản 166] MỘT BỘ MÔ TẢ LỖI CHO CẢ HAI TIẾN TRÌNH — ĐO TRÊN TIẾN TRÌNH WORKER DỰNG TỪ CẤU HÌNH
+//
+// Khoản 166 (§S1.82): `moTaLoiKhongGiaTri` có HAI bản. Bản đầy đủ ở `apps/api/src/mo-ta-loi.ts` nêu
+// thêm MỘT tầng `cause` cho lỗi không có trường `code` (khoản 119) và nhận `TenantError` theo lớp;
+// bản rút gọn ~5 dòng ở `tien-trinh.ts` của tiến trình này — vì mã CHẠY của worker không import được
+// `apps/api` (`g1-`) — thì không. Hệ quả: một `DenialAuditFailedError`, đúng lớp lỗi khoản 121 dựng
+// cho tiến trình NÀY, ra dòng log không có SQLSTATE của lần ghi sổ đã hỏng ở worker, trong khi ở `api`
+// cùng lỗi ấy ra `… <- error 55P03`. Tức tiến trình DUY NHẤT giải mã được lại có chẩn đoán nghèo hơn.
+//
+// Cảnh dựng cùng khuôn `apps/api/src/log-tu-choi-mat.int.test.ts` (§S1.85): một giao dịch khác giữ
+// khoá ghi sổ của tổ chức quá trần 2 s của `050`; job `UNSEAL_RFQ` trên một yêu cầu không tìm thấy bị
+// từ chối, lần ghi `UNSEAL_EXECUTION_DENIED` ở `auditPool` gãy `55P03`, handler ném
+// `DenialAuditFailedError` mang lỗi ấy ở `cause`, và `onJobFailure` của `tien-trinh.ts` ghi dòng.
+// Vế đối chiếu: bộ mô tả của `api` cho một lỗi CÙNG HÌNH DẠNG phải cho đúng phần đuôi của dòng ấy.
+// ===============================================================================================
+describe("[INV-A2] [S1.222 / khoản 166] dòng log của worker mô tả lỗi bằng CÙNG một hàm với api", () => {
+  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, ~~hai~~ [S1.225 / khoản 179] ba hằng đóng (cộng vế `POLICY_GATE`) và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
+    const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
+    let thaKhoa: () => void = () => {};
+    const choTha = new Promise<void>((xong) => {
+      thaKhoa = xong;
+    });
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_OUTBOX_POLL_MS: "200" })));
+    let giuKhoa: Promise<void> | undefined;
+    const id = randomUUID();
+    let jobId = "";
+    try {
+      giuKhoa = withTenant(poolGiuKhoa, orgA, async (c) => {
+        await c.query(
+          "SELECT * FROM public.audit_append($1,'USER',NULL,'K166_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)",
+          [orgA],
+        );
+        await choTha;
+      });
+      // Chờ tới khi khoá THẬT SỰ được cầm — không thì lần ghi sổ đi qua và test xanh mà không đo gì.
+      const han = Date.now() + 5000;
+      for (;;) {
+        if ((await demKhoaGiuDuoc(orgA)) >= 1) break;
+        if (Date.now() > han) throw new Error("het 5000ms ma khoa ghi so cua to chuc chua duoc cam");
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+      jobId = await withTenant(apiPool, orgA, (c) =>
+        enqueueJob(c, orgA, { kind: UNSEAL_JOB_KIND, payload: { unsealRequestId: id }, dedupeKey: `unseal:${id}` }),
+      );
+      await tt.batDau();
+      const het = Date.now() + 20_000;
+      let dong: string | undefined;
+      while (dong === undefined && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+        dong = log.find((d) => d.startsWith("[unseal-worker] outbox UNSEAL_RFQ "));
+      }
+      thaKhoa();
+      await giuKhoa;
+      expect(dong, JSON.stringify(log)).toBeDefined();
+
+      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, ~~hai~~ [S1.225 / khoản 179] BA hằng đóng — vế
+      // `POLICY_GATE` là vế "không tìm thấy" của `tuChoiLucGiaiMa` —, `cause` là lỗi Postgres mang `55P03`. Thông điệp cố ý
+      // mang giá trị để vế A2 dưới có thứ để bắt.
+      const cungLoi = new DenialAuditFailedError(
+        "UNSEAL_EXECUTION_DENIED",
+        "UNSEAL_REQUEST",
+        new Error(`tu choi mang ${id}`),
+        Object.assign(new Error(`canceling statement due to lock timeout ${orgA}`), { name: "error", code: "55P03" }),
+        "POLICY_GATE",
+      );
+      expect(moTaLoiCuaApi(cungLoi)).toBe("DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST POLICY_GATE <- error 55P03");
+      expect(dong, "worker phải mô tả lỗi ĐÚNG như api mô tả cùng lỗi ấy — kể cả tầng `cause`").toBe(
+        `[unseal-worker] outbox UNSEAL_RFQ HANDLER_ERROR ${moTaLoiCuaApi(cungLoi)}`,
+      );
+      // A2: không id yêu cầu, không id tổ chức, không id job, không thông điệp của lỗi Postgres.
+      for (const giaTri of [id, orgA, jobId, "lock timeout"]) expect(dong).not.toContain(giaTri);
+      // Và `TenantError` — lớp mà bản rút gọn của worker không nhận theo lớp — đi qua cùng luật.
+      expect(moTaLoiCuaApi(new TenantError("SESSION_STATE_LEFT", `thong diep mang ${orgA}`))).toBe("TenantError SESSION_STATE_LEFT");
+      // Và bản của `api` LÀ bản dùng chung của identity mà `tien-trinh.ts` gọi — không phải hai hàm tình cờ cho cùng chuỗi.
+      expect(moTaLoiCuaApi).toBe(moTaLoiKhongGiaTri);
+      // Job về PENDING chờ lượt thử lại (maxAttempts mặc định 5) — đúng hệ quả đã ghi ở khoản 121.
+      const { rows } = await db.pool.query<{ status: string; attempts: number }>(
+        "SELECT status, attempts FROM outbox_jobs WHERE id = $1",
+        [jobId],
+      );
+      expect(rows[0]).toEqual({ status: "PENDING", attempts: 1 });
+    } finally {
+      thaKhoa();
+      await giuKhoa?.catch(() => undefined);
+      await tt.dung();
+      console.error = cu;
+      await poolGiuKhoa.end().catch(() => undefined);
+    }
+  }, 60_000);
+});
+
+// ===============================================================================================
+// [S1.233 / khoản 158] TẬP `kind` MÀ CSDL CHO MỖI VAI GHI KẾT CỤC PHẢI BẰNG TẬP `kind` CỦA TIẾN TRÌNH ẤY
+//
+// Migration `095_outbox_policy_theo_kind` (ADR-134): hai policy `AS RESTRICTIVE FOR UPDATE` trên `outbox_jobs`, mỗi cái một
+// vai, mang NGUYÊN VĂN tập `kind` của tiến trình chạy dưới vai ấy — lớp QUYỀN dưới lớp vệ sinh vận hành của S1.81 (vị từ lọc
+// `kind` ở runner). Cái giá chủ dự án đã chấp nhận: thêm một `kind` là thêm một migration. Cổng này là chỗ cái giá ấy được ĐÒI:
+// một handler mới — hay một dòng sổ mồ côi mới, vì worker là tiến trình khai sổ (S1.222) — mà không có migration thì job của
+// kind ấy KHÔNG vai nào claim được: nó nằm `PENDING` im lặng, đúng lớp lỗi §S1.81 mô tả, và vế dưới đỏ TRƯỚC khi tới đó.
+// Đọc `pg_policy` qua `pg_get_expr`, không đọc tệp migration: thứ ràng là policy ĐANG CÓ trong CSDL, không phải văn bản.
+// Hành vi (0 hàng dưới vai kia, runner đúng vai vẫn chạy) đo ở `packages/outbox/src/outbox.int.test.ts`, vế khoản 158.
+// ===============================================================================================
+interface TapKindCuaPolicy {
+  readonly vai: string;
+  readonly kind: readonly string[];
+}
+
+/**
+ * Tập `kind` của một policy theo vai trên `outbox_jobs`: phải là RESTRICTIVE, FOR UPDATE, USING = WITH CHECK, và ĐÚNG hình dạng
+ * `(kind = ANY (ARRAY['…'::text, …]))` — bộ đọc này cố ý không hiểu hình dạng nào khác; một hình dạng khác là một quyết định mới.
+ */
+async function docTapKindCuaPolicy(polname: string): Promise<TapKindCuaPolicy> {
+  const { rows } = await db.pool.query<{ vai: string; permissive: boolean; lenh: string; u: string | null; wc: string | null }>(
+    "SELECT array_to_string(ARRAY(SELECT r.rolname FROM unnest(p.polroles) AS o(oid) JOIN pg_roles r ON r.oid = o.oid ORDER BY r.rolname), ',') AS vai, " +
+      "       p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+      "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = $1",
+    [polname],
+  );
+  const p = rows[0];
+  expect(p, `CSDL không có policy ${polname} trên outbox_jobs — migration 095 chưa áp, hay policy đã bị đổi tên/xoá`).toBeDefined();
+  expect({ permissive: p!.permissive, lenh: p!.lenh }, `${polname} phải là RESTRICTIVE FOR UPDATE`).toEqual({ permissive: false, lenh: "w" });
+  expect(p!.wc, `${polname}: WITH CHECK phải bằng USING — hai vế khai cùng một tập`).toBe(p!.u);
+  expect(p!.u ?? "", `${polname}: USING không đúng hình dạng \`(kind = ANY (ARRAY['…'::text, …]))\``).toMatch(
+    /^\(kind = ANY \(ARRAY\[(?:'[A-Z][A-Z0-9_]{0,63}'::text(?:, )?)+\]\)\)$/u,
+  );
+  return { vai: p!.vai, kind: [...(p!.u ?? "").matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!) };
+}
+
+const LOI_THEM_KIND =
+  "Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm migration (ADR-134): một tệp " +
+  "`db/migrations/<số>_….sql` mang `ALTER POLICY <policy> ON public.outbox_jobs USING (…) WITH CHECK (…)` với tập mới, " +
+  "cộng sửa dòng ở POLICY_RESTRICTIVE_KHAI (hardening.always.sql) và POLICY_RESTRICTIVE_DA_KHAI (db/rls-coverage.int.test.ts). " +
+  "Không có migration thì job của kind ấy không vai nào claim được — nằm PENDING im lặng.";
+
+describe("[INV-F1] [S1.233 / khoản 158] tập `kind` trong policy của mỗi vai BẰNG tập `kind` của tiến trình ấy", () => {
+  it("`outbox_jobs_kind_app_unseal` (TO app_unseal) = Object.keys(buildUnsealWorkerHandlers) ∪ Object.keys(KIND_KHONG_NGUOI_NHAN) — thêm handler hay dòng sổ mồ côi mà quên migration thì đỏ ở đây", async () => {
+    const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_unseal");
+    expect(policy.vai, "policy của worker phải áp cho ĐÚNG một vai: app_unseal").toBe("app_unseal");
+    const handler = Object.keys(
+      buildUnsealWorkerHandlers({
+        unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
+        alertSink: { name: "x", deliver: () => Promise.resolve() },
+        onJobFailure: () => undefined,
+      }),
+    );
+    expect(handler.length, "bảng handler của worker rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    // Sổ mồ côi HÔM NAY rỗng (S1.91) — hợp ở đây vì worker là tiến trình khai nó (S1.222): một dòng khai mà không có
+    // migration thì worker claim 0 hàng, tức "vẫn chết ồn ào" của khoản 154/168 thôi đúng.
+    const tienTrinh = [...new Set([...handler, ...Object.keys(KIND_KHONG_NGUOI_NHAN)])].sort();
+    expect([...policy.kind].sort(), LOI_THEM_KIND).toEqual(tienTrinh);
+  });
+
+  it("`outbox_jobs_kind_app_api` (TO app_api) = Object.keys(buildApiOutboxHandlers) — `api` KHÔNG khai sổ mồ côi (S1.222), nên không cộng gì", async () => {
+    const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_api");
+    expect(policy.vai, "policy của api phải áp cho ĐÚNG một vai: app_api").toBe("app_api");
+    const handler = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
+    expect(handler.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    expect([...policy.kind].sort(), LOI_THEM_KIND).toEqual([...handler].sort());
+  });
+
+  it("hai tập không giao nhau — một `kind` không thể thuộc hai vai (vế ⑵ của khoản 34, nay đo trên chính policy)", async () => {
+    const worker = await docTapKindCuaPolicy("outbox_jobs_kind_app_unseal");
+    const api = await docTapKindCuaPolicy("outbox_jobs_kind_app_api");
+    expect(worker.kind.filter((k) => api.kind.includes(k)), "kind thuộc cả hai policy: hai vai cùng ghi được kết cục cho một job").toEqual([]);
   });
 });

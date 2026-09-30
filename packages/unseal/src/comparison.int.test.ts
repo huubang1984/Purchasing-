@@ -19,7 +19,7 @@
 // riêng ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, nơi bộ quét rò rỉ của A4 sống.
 // =============================================================================================
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -30,6 +30,8 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   COMPARISON_ALLOWED_STATUSES,
   ComparisonDeniedError,
+  ComparisonError,
+  type ComparisonTable,
   approveUnseal,
   buildComparisonTable,
   countReceivedBids,
@@ -230,7 +232,14 @@ async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
   });
 }
 
-/** Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ dưới `app_unseal`, rồi tuyên bố UNSEALED. */
+/**
+ * Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ dưới `app_unseal`, rồi tuyên bố UNSEALED.
+ *
+ * [S1.218 / khoản 114] Một `payload` là CHUỖI được ghi NGUYÊN VĂN làm văn bản JSON, không qua
+ * `JSON.stringify`: ca `1e324` không viết ra được từ một giá trị JS (`Number("1e324")` là
+ * `Infinity`, và `JSON.stringify(Infinity)` là `null`) — Postgres thì đọc `1e324` thành một
+ * `numeric` 325 chữ số, và đó đúng là thứ khoản 114 đo.
+ */
 async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown])[]): Promise<void> {
   await db.pool.query(
     "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), " +
@@ -249,7 +258,7 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
       await c.query(
         "INSERT INTO rfq_unsealed_bids (org_id, unseal_request_id, bid_version_id, payload) " +
           "VALUES ($1, $2, $3, $4)",
-        [orgA, yc.id, versionId, JSON.stringify(payload)],
+        [orgA, yc.id, versionId, typeof payload === "string" ? payload : JSON.stringify(payload)],
       );
     }
     await c.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
@@ -928,5 +937,419 @@ describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại mộ
     // Đối chứng: gỡ lớp chặn thì cùng lời gọi ấy đọc được và ghi đúng một hàng.
     await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
     expect(await demXem(rfqId)).toBe(1);
+  });
+});
+
+// ===============================================================================================
+// [S1.218 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG BẢN RÕ MỖI CÂU, VÀ KHÔNG TÍNH TRÊN
+// MỘT `totalAmount` KHÔNG VÔ HƯỚNG
+//
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.218): `comparison.ts` gọi
+// `bid_so_tien(payload->>'totalAmount')` BẢY lần cho mỗi báo giá đọc được (hai ở câu hàng, năm ở
+// câu tổng hợp) và BA lần cho một báo giá mà `totalAmount` là MẢNG — vì `->>` dựng CẢ CÂY thành văn
+// bản trước khi `bid_so_tien` kịp trả NULL. Với 20 000 phần tử `1e324` (120 KB văn bản vào, vài KB
+// jsonb lưu), mỗi lần gọi nhận 6 540 002 ký tự.
+//
+// Khối này đếm SỐ LẦN `bid_so_tien` được gọi và ĐỘ DÀI văn bản nó nhận — qua một hàm bọc phát NOTICE
+// đặt vào đúng tên `public.bid_so_tien` rồi gỡ ra — thay vì đòi một trần mili-giây: trên máy dùng
+// chung, một trần thời gian là một test lúc đỏ lúc xanh, còn số lần gọi thì không. Thời lượng của
+// ca ⒜ (không hàm bọc) là số đo mili-giây; nó được ghi ở biên bản, không được khẳng định ở đây.
+// ===============================================================================================
+describe("[S1.218 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng bản rõ mỗi câu, và không chạy trên `totalAmount` không vô hướng", () => {
+  const SO_PHAN_TU = 20_000;
+  /** Văn bản JSON THÔ — xem chú thích của `moThau`. */
+  const MANG_1E324 = `{"totalAmount":[${Array.from({ length: SO_PHAN_TU }, () => "1e324").join(",")}],"currency":"VND"}`;
+  /** Độ dài mà `->>` dựng từ mảng ấy: 325 chữ số mỗi phần tử, `, ` giữa hai phần tử, hai dấu ngoặc. */
+  const DO_DAI_KHAI_TRIEN = SO_PHAN_TU * 325 + (SO_PHAN_TU - 1) * 2 + 2;
+  const GIA_HOP_LE = "2000000.00";
+
+  let rfqMang: string;
+
+  beforeAll(async () => {
+    rfqMang = await taoRfqMo(csNghiem);
+    const vHopLe = await nopBaoGia(rfqMang, "NCC Vo huong");
+    const vMang = await nopBaoGia(rfqMang, "NCC Mang");
+    await moThau(rfqMang, [
+      [vHopLe, { totalAmount: GIA_HOP_LE, currency: "VND" }],
+      [vMang, MANG_1E324],
+    ]);
+    // Tiền đề của phép đo: mảng nằm trong bảng ĐÚNG như mảng, và văn bản `->>` của nó dài đúng như tính.
+    const { rows } = await db.pool.query<{ loai: string; do_dai: number }>(
+      "SELECT jsonb_typeof(payload -> 'totalAmount') AS loai, length(payload ->> 'totalAmount') AS do_dai " +
+        "  FROM rfq_unsealed_bids WHERE bid_version_id = $1",
+      [vMang],
+    );
+    expect(rows[0]).toEqual({ loai: "array", do_dai: DO_DAI_KHAI_TRIEN });
+  }, 180_000);
+
+  async function docThanBidSoTien(): Promise<string> {
+    const { rows } = await db.pool.query<{ prosrc: string }>(
+      "SELECT prosrc FROM pg_proc WHERE proname = 'bid_so_tien' AND pronamespace = 'public'::regnamespace",
+    );
+    expect(rows.length, "đúng một `public.bid_so_tien`").toBe(1);
+    return rows[0]?.prosrc ?? "";
+  }
+
+  /**
+   * Chạy `viec` trong lúc `public.bid_so_tien` là một hàm bọc: IMMUTABLE STRICT như hàm gốc — để bộ
+   * lập kế hoạch đối xử y hệt —, phát một NOTICE mang ĐỘ DÀI đối số (không mang giá trị) rồi gọi hàm
+   * gốc dưới tên tạm. Gỡ trong `finally`, và thân hàm gốc phải trở lại nguyên vẹn.
+   */
+  async function voiBidSoTienDuocDem<T>(
+    viec: (c: pg.PoolClient) => Promise<T>,
+  ): Promise<{ ketQua: T; doDai: readonly number[] }> {
+    const thanGoc = await docThanBidSoTien();
+    await db.pool.query("ALTER FUNCTION public.bid_so_tien(text) RENAME TO bid_so_tien_goc");
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.bid_so_tien(p_van text) RETURNS numeric LANGUAGE plpgsql IMMUTABLE STRICT " +
+          "SET search_path = pg_catalog, public AS $$BEGIN RAISE NOTICE 'k114 do_dai=%', length(p_van); " +
+          "RETURN public.bid_so_tien_goc(p_van); END$$",
+      );
+      const doDai: number[] = [];
+      const nghe = (n: { message?: string | undefined }): void => {
+        const m = /^k114 do_dai=(\d+)$/u.exec(n.message ?? "");
+        if (m !== null) doDai.push(Number(m[1]));
+      };
+      const ketQua = await withTenant(apiPool, orgA, async (c) => {
+        c.on("notice", nghe);
+        try {
+          return await viec(c);
+        } finally {
+          c.off("notice", nghe);
+        }
+      });
+      return { ketQua, doDai };
+    } finally {
+      await db.pool.query("DROP FUNCTION IF EXISTS public.bid_so_tien(text)");
+      await db.pool.query("ALTER FUNCTION public.bid_so_tien_goc(text) RENAME TO bid_so_tien");
+      expect(await docThanBidSoTien(), "gỡ hàm bọc phải trả lại đúng thân hàm gốc").toBe(thanGoc);
+    }
+  }
+
+  function bangCua(rfqId: string, c: pg.PoolClient): Promise<ComparisonTable> {
+    return buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool);
+  }
+
+  it("⒜ hàng mảng vẫn có mặt với số tiền `null`, xuống cuối, và phép tổng hợp đúng như khi không có nó — thời lượng ca này là số đo mili-giây", async () => {
+    const bang = await withTenant(apiPool, orgA, (c) => bangCua(rfqMang, c));
+    expect(bang.rows.map((r) => [r.supplierLegalName, r.totalAmount])).toEqual([
+      ["NCC Vo huong", GIA_HOP_LE],
+      ["NCC Mang", null],
+    ]);
+    expect((bang.rows[1]?.payload as { totalAmount?: unknown }).totalAmount, "`payload` đi ra nguyên vẹn, mảng vẫn là mảng").toHaveLength(SO_PHAN_TU);
+    expect(bang.aggregates).toEqual({
+      parsed: 1,
+      unparsed: 1,
+      currency: "VND",
+      currencyMismatch: false,
+      min: GIA_HOP_LE,
+      max: GIA_HOP_LE,
+      average: GIA_HOP_LE,
+      belowBudget: 0,
+    });
+  });
+
+  it("⒝ `bid_so_tien` KHÔNG nhận văn bản khai triển của mảng, và chạy đúng một lần mỗi hàng mỗi câu cho báo giá đọc được", async () => {
+    const { ketQua: bang, doDai } = await voiBidSoTienDuocDem((c) => bangCua(rfqMang, c));
+    expect(bang.rows.map((r) => r.totalAmount), "hàm bọc không đổi kết quả").toEqual([GIA_HOP_LE, null]);
+    expect(
+      doDai.filter((d) => d >= DO_DAI_KHAI_TRIEN),
+      `bản trước: ba lần nhận ${DO_DAI_KHAI_TRIEN} ký tự — \`->>\` dựng cả mảng thành văn bản rồi mới hỏi nó có phải số không`,
+    ).toEqual([]);
+    // Một hàng đọc được, hai câu (hàng và tổng hợp) ⇒ đúng HAI lần, mỗi lần nhận đúng chuỗi giá.
+    expect(doDai, "bản trước: bảy lần cho báo giá đọc được, cộng ba lần cho mảng").toEqual([GIA_HOP_LE.length, GIA_HOP_LE.length]);
+  });
+
+  it("⒞ ĐỐI CHỨNG: số JSON và chuỗi số giữ nguyên giá trị; đối tượng, boolean, `null` JSON và thiếu khoá ⇒ `null` mà không gọi `bid_so_tien`", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const vSo = await nopBaoGia(rfqId, "NCC So JSON");
+    const vChuoi = await nopBaoGia(rfqId, "NCC Chuoi");
+    const vDoiTuong = await nopBaoGia(rfqId, "NCC Doi tuong");
+    const vBool = await nopBaoGia(rfqId, "NCC Boolean");
+    const vNull = await nopBaoGia(rfqId, "NCC Null");
+    const vThieu = await nopBaoGia(rfqId, "NCC Thieu");
+    await moThau(rfqId, [
+      [vSo, '{"totalAmount":1500000.5,"currency":"VND"}'],
+      [vChuoi, { totalAmount: "900000.00", currency: "VND" }],
+      [vDoiTuong, { totalAmount: { so: "900000.00" }, currency: "VND" }],
+      [vBool, { totalAmount: true, currency: "VND" }],
+      [vNull, { totalAmount: null, currency: "VND" }],
+      [vThieu, { currency: "VND" }],
+    ]);
+    const { ketQua: bang, doDai } = await voiBidSoTienDuocDem((c) => bangCua(rfqId, c));
+    expect(bang.rows.map((r) => [r.supplierLegalName, r.totalAmount])).toEqual([
+      ["NCC Chuoi", "900000.00"],
+      ["NCC So JSON", "1500000.5"],
+      ["NCC Boolean", null],
+      ["NCC Doi tuong", null],
+      ["NCC Null", null],
+      ["NCC Thieu", null],
+    ]);
+    expect(bang.aggregates.parsed).toBe(2);
+    expect(bang.aggregates.unparsed).toBe(4);
+    expect(bang.aggregates.min).toBe("900000.00");
+    expect(bang.aggregates.max).toBe("1500000.5");
+    expect(bang.aggregates.belowBudget, "ngân sách fixture 1.000.000 VND — một báo giá dưới").toBe(1);
+    // Hai báo giá vô hướng × hai câu = bốn lần; đối tượng và boolean KHÔNG tới `bid_so_tien` (bản
+    // trước: `->>` cho `{"so": "900000.00"}` và `true`, và hàm bị gọi trên cả hai).
+    expect([...doDai].sort((a, b) => a - b)).toEqual(["900000.00".length, "900000.00".length, "1500000.5".length, "1500000.5".length]);
+  });
+});
+
+// ===============================================================================================
+// [S1.213 / khoản 133] LẦN TỪ CHỐI "KHÔNG TÌM THẤY RFQ" CỦA HAI ĐƯỜNG ĐỌC CÓ CỔNG VÀO SỔ
+//
+// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.213): `buildComparisonTable` và `countReceivedBids` với một id RFQ không có
+// trong tổ chức — UUID ngẫu nhiên, hay id CÓ THẬT của tổ chức khác mà RLS giấu — ném `ComparisonError` mà 0 hàng sổ; qua HTTP là 422
+// cùng câu, cũng 0 hàng. Một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt (tiểu mục ADR-016 [S1.213]): D5 PHỦ lần
+// "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh không tìm thấy của cổng mở thầu
+// (khoản 121): `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên, `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI.
+// ===============================================================================================
+describe("[INV-D5] [S1.213 / khoản 133] hai đường đọc có cổng từ chối vì KHÔNG TÌM THẤY RFQ thì ghi sổ — lớp lỗi và thông điệp giữ nguyên", () => {
+  let auditPool: pg.Pool;
+  const THONG_DIEP = "Không tìm thấy RFQ trong tổ chức đang gắn.";
+
+  beforeAll(() => {
+    auditPool = db.poolAs("app_api");
+  });
+
+  afterAll(async () => {
+    await auditPool?.end().catch(() => undefined);
+  });
+
+  /** Mọi hàng `COMPARISON_NOT_FOUND_DENIED` của một tổ chức cho một id — HÌNH DẠNG trọn, theo thứ tự ghi. */
+  async function hangKhongTimThay(orgId: string, rfqId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'COMPARISON_NOT_FOUND_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgId, rfqId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ — cùng khuôn `voiGhiSoBiChan` của khối khoản 121. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k133_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k133 thong diep noi bo' USING ERRCODE = 'TP133'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k133_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k133_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k133_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k133_chan_ghi_so()");
+    }
+  }
+
+  it("[INV-D5] UUID ngẫu nhiên ⇒ `ComparisonError` cùng câu ở cả hai hàm, và mỗi hàm đúng một `COMPARISON_NOT_FOUND_DENIED` mang người xem, `RFQ`, id đã gửi và tên đường", async () => {
+    const id = randomUUID();
+    const loiBang = await loiCua(
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool)),
+    );
+    expect(loiBang).toBeInstanceOf(ComparisonError);
+    expect((loiBang as Error).message).toBe(THONG_DIEP);
+    expect(await hangKhongTimThay(orgA, id)).toEqual([["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }]]);
+
+    const loiDem = await loiCua(
+      withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool)),
+    );
+    expect(loiDem).toBeInstanceOf(ComparisonError);
+    expect((loiDem as Error).message).toBe(THONG_DIEP);
+    expect(await hangKhongTimThay(orgA, id)).toEqual([
+      ["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }],
+      ["USER", uYc, "RFQ", { operation: "COUNT_RECEIVED_BIDS" }],
+    ]);
+  });
+
+  it("[INV-D5] id CÓ THẬT của tổ chức khác — RLS giấu ⇒ cùng lần từ chối; hàng vào sổ của TỔ CHỨC NGƯỜI GỌI, sổ của tổ chức kia 0 hàng", async () => {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Goi cua B', $2, false, $3, $4) RETURNING id",
+      [orgB, MAI_SAU, uB, sB],
+    );
+    const rfqB = rows[0]?.id ?? "";
+    expect(rfqB).not.toBe("");
+    const loiBang = await loiCua(
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqB, actorSessionId: sYc }, auditPool)),
+    );
+    const loiDem = await loiCua(
+      withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqB, actorSessionId: sYc }, auditPool)),
+    );
+    expect([loiBang, loiDem].map((l) => [(l as Error).name, (l as Error).message])).toEqual([
+      ["ComparisonError", THONG_DIEP],
+      ["ComparisonError", THONG_DIEP],
+    ]);
+    expect(await hangKhongTimThay(orgA, rfqB)).toEqual([
+      ["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }],
+      ["USER", uYc, "RFQ", { operation: "COUNT_RECEIVED_BIDS" }],
+    ]);
+    expect(await hangKhongTimThay(orgB, rfqB), "lần dò của A không được ghi vào sổ của B").toEqual([]);
+  });
+
+  it("[INV-D5] bản ghi `COMPARISON_NOT_FOUND_DENIED` sống qua rollback của người gọi", async () => {
+    const id = randomUUID();
+    const CHAN = new Error("chan-lai-de-do-rollback");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await buildComparisonTable(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool).catch(() => undefined);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+    expect((await hangKhongTimThay(orgA, id)).length, "bản ghi từ chối biến mất cùng rollback — nó phải ở một giao dịch ĐỘC LẬP").toBe(1);
+  });
+
+  it("[INV-D5] ĐỐI CHỨNG DƯƠNG: id có thật ⇒ cả hai hàm đi qua và 0 hàng `COMPARISON_NOT_FOUND_DENIED`", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    await epTrangThai(rfqId, "UNSEALED");
+    await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool));
+    await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, auditPool));
+    expect(await hangKhongTimThay(orgA, rfqId)).toEqual([]);
+  });
+
+  it("[INV-D5] lần ghi `COMPARISON_NOT_FOUND_DENIED` ném TP133 ⇒ `DenialAuditFailedError` giữ `ComparisonError` trong `denial`, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const id = randomUUID();
+    const loi = await voiGhiSoBiChan("COMPARISON_NOT_FOUND_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(ComparisonError);
+    expect(x.denial.message).toBe(THONG_DIEP);
+    expect((x.cause as { code?: unknown }).code).toBe("TP133");
+    expect(await hangKhongTimThay(orgA, id)).toEqual([]);
+  });
+});
+
+// ===============================================================================================
+// [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG API CỦA BẢNG SO SÁNH: `totalAmount` (CHUỖI) LÀ SỐ CHUẨN, `payload` LÀ BẢN HIỂN THỊ
+//
+// `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON quá 15 chữ số có nghĩa trong `payload` đi qua `double` ở PHÍA ĐỌC —
+// đo ở khoản 108: `'{"a":99999999999999.99}'::jsonb` đọc qua `pg` ra `99999999999999.98`. `totalAmount` của hàng thì tính bằng SQL
+// (`bid_so_tien`, 020) và trả về dạng CHUỖI, nên đúng tới từng chữ số. Chủ dự án chốt GIỮ hình dạng JSON và GHI HỢP ĐỒNG (ADR-125);
+// khối dưới đây ghim ĐÚNG hành vi ấy — không "sửa" nó — để một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản
+// thì cổng này đỏ và hợp đồng phải viết lại. Cột `jsonb` trong CSDL vẫn giữ đủ chữ số: phép mất xảy ra ở phía đọc, và ca đo nói rõ chỗ.
+// ===============================================================================================
+describe("[S1.213 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng tới từng chữ số, `payload` là bản hiển thị và có thể mất chính xác từ 16 chữ số có nghĩa", () => {
+  it("số tiền 18 chữ số có nghĩa (16 nguyên + 2 thập phân): `totalAmount` và phép tổng hợp giữ nguyên; `payload` đọc qua `pg` đã làm tròn — cả trường đơn giá lẫn khi chính `totalAmount` trong phong bì là số JSON; CSDL vẫn giữ đủ chữ số", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const vChuoi = await nopBaoGia(rfqId, "NCC Chuoi");
+    const vSo = await nopBaoGia(rfqId, "NCC So");
+    // 18 chữ số có nghĩa — đúng miền `numeric(18, 2)` mà `bid_so_tien` (022 mục 8) nhận; `double` chỉ giữ 15–17 chữ số, nên hai con số này
+    // KHÔNG sống sót qua `Number(…)`. (Bản đầu của ca này dùng 17 chữ số PHẦN NGUYÊN và đỏ vì `bid_so_tien` trả NULL từ 10^16 — đúng
+    // luật của 022, ghi lại ở docstring `buildComparisonTable`.)
+    const DON_GIA = "1234567890123456.78";
+    const TONG_SO = "2234567890123456.78";
+    expect(String(Number(DON_GIA)), "tiền đề: con số này KHÔNG sống sót qua double").not.toBe(DON_GIA);
+    expect(String(Number(TONG_SO)), "tiền đề: con số này KHÔNG sống sót qua double").not.toBe(TONG_SO);
+    // Văn bản JSON THÔ (xem chú thích của `moThau`): `JSON.stringify` của một giá trị JS đã làm tròn TRƯỚC khi vào CSDL.
+    await moThau(rfqId, [
+      [vChuoi, `{"totalAmount":"${DON_GIA}","currency":"VND","lines":[{"description":"Thep tam","quantity":1,"unitPrice":${DON_GIA}}]}`],
+      [vSo, `{"totalAmount":${TONG_SO},"currency":"VND"}`],
+    ]);
+    // Tiền đề: CSDL giữ ĐỦ chữ số ở cả hai phong bì — phép mất không nằm ở chỗ lưu.
+    const { rows: trongCsdl } = await db.pool.query<{ bid_version_id: string; tong: string; don_gia: string | null }>(
+      "SELECT bid_version_id, payload ->> 'totalAmount' AS tong, payload -> 'lines' -> 0 ->> 'unitPrice' AS don_gia " +
+        "  FROM rfq_unsealed_bids WHERE bid_version_id = ANY($1::uuid[]) ORDER BY bid_version_id = $2 DESC",
+      [[vChuoi, vSo], vChuoi],
+    );
+    expect(trongCsdl.map((r) => [r.tong, r.don_gia])).toEqual([
+      [DON_GIA, DON_GIA],
+      [TONG_SO, null],
+    ]);
+
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const theoPhienBan = new Map(bang.rows.map((r) => [r.bidVersionId, r]));
+    const hChuoi = theoPhienBan.get(vChuoi);
+    const hSo = theoPhienBan.get(vSo);
+    expect(hChuoi !== undefined && hSo !== undefined, "cả hai hàng có mặt").toBe(true);
+    if (hChuoi === undefined || hSo === undefined) return;
+
+    // HỢP ĐỒNG ⑴: `totalAmount` (chuỗi, tính bằng SQL) đúng tới từng chữ số — kể cả khi phong bì viết nó là số JSON.
+    expect(hChuoi.totalAmount).toBe(DON_GIA);
+    expect(hSo.totalAmount).toBe(TONG_SO);
+    expect(bang.aggregates.min).toBe(DON_GIA);
+    expect(bang.aggregates.max).toBe(TONG_SO);
+
+    // HỢP ĐỒNG ⑵: `payload` là bản HIỂN THỊ — chuỗi đi nguyên, số JSON quá 15 chữ số có nghĩa đã qua double của `JSON.parse` trong `pg`.
+    const pChuoi = hChuoi.payload as { totalAmount: unknown; lines: readonly { unitPrice: unknown }[] };
+    expect(pChuoi.totalAmount, "chuỗi thì không đi qua double").toBe(DON_GIA);
+    expect(pChuoi.lines[0]?.unitPrice, "đơn giá là số JSON: đã làm tròn về double gần nhất").toBe(Number(DON_GIA));
+    expect(String(pChuoi.lines[0]?.unitPrice)).not.toBe(DON_GIA);
+    const pSo = hSo.payload as { totalAmount: unknown };
+    expect(pSo.totalAmount, "`payload.totalAmount` số JSON: đã làm tròn — người đọc PHẢI lấy `row.totalAmount`").toBe(Number(TONG_SO));
+    expect(String(pSo.totalAmount)).not.toBe(hSo.totalAmount);
+  });
+});
+
+// ===============================================================================================
+// [S1.217 / khoản 250 / ADR-128] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO BẢNG SO SÁNH
+//
+// Từ S1.217 worker không mở phong bì của lời mời đã thu hồi (đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts`), nên trên
+// đường thuận hàng bản rõ ấy KHÔNG tồn tại. Ca này dựng đúng thế giới mà vế lọc của bảng so sánh còn phải đứng một mình: bản rõ
+// ĐÃ CÓ (ghi thẳng dưới `app_unseal`, như mọi ca của tệp — hàng của những lượt mở thầu trước S1.217, hay của một chỗ ghi khác),
+// rồi lời mời bị thu hồi. Hai câu của `buildComparisonTable` — câu hàng và câu tổng hợp — cùng lọc `i.revoked_at IS NULL`, và
+// cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba chỗ đọc mang đúng MỘT vế ấy.
+// ===============================================================================================
+describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi không vào bảng so sánh", () => {
+  /** Lời mời của một phiên bản báo giá — đọc dưới superuser, không đi qua hàm nào của gói. */
+  async function loiMoiCuaPhienBan(versionId: string): Promise<string> {
+    const { rows } = await db.pool.query<{ invitation_id: string }>(
+      "SELECT b.invitation_id FROM vendor_bid_versions v JOIN vendor_bids b ON b.id = v.bid_id WHERE v.id = $1",
+      [versionId],
+    );
+    return rows[0]?.invitation_id ?? "";
+  }
+
+  it("hai bản rõ, thu hồi lời mời của một ⇒ câu hàng và câu tổng hợp cùng bỏ nó: một dòng, `parsed` 1, min = max = giá còn lại, `belowBudget` 0 — bản rõ vẫn nằm trong CSDL; ĐỐI CHỨNG trước khi thu hồi: hai dòng", async () => {
+    const rfqId = await taoRfqMo(csLong);
+    const vThuHoi = await nopBaoGia(rfqId, "NCC bi thu hoi");
+    const vConLai = await nopBaoGia(rfqId, "NCC con lai");
+    await moThau(rfqId, [
+      [vThuHoi, { totalAmount: "900000.00", currency: "VND" }],
+      [vConLai, { totalAmount: "1200000.00", currency: "VND" }],
+    ]);
+    const doc = (): Promise<ComparisonTable> =>
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+
+    // Đối chứng dương: chưa thu hồi thì cả hai dự thầu — 900 nghìn dưới ngân sách 1 triệu.
+    const truoc = await doc();
+    expect(truoc.rows.map((r) => r.bidVersionId).sort()).toEqual([vThuHoi, vConLai].sort());
+    expect(truoc.aggregates).toMatchObject({ parsed: 2, min: "900000.00", max: "1200000.00", belowBudget: 1 });
+
+    // Thu hồi bằng SQL dưới superuser, ký tên theo trigger 013 — gói không đi qua `revokeInvitation` (nó chặn sau lần mở, đúng
+    // quyết định): thứ đo ở đây là VẾ LỌC, không phải đường thu hồi.
+    const loiMoi = await loiMoiCuaPhienBan(vThuHoi);
+    await db.pool.query(
+      "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1",
+      [loiMoi, uYc, sYc],
+    );
+    const sau = await doc();
+    expect(sau.rows.map((r) => [r.bidVersionId, r.totalAmount, r.isLatestForBid])).toEqual([[vConLai, "1200000.00", true]]);
+    expect(sau.aggregates).toMatchObject({ parsed: 1, unparsed: 0, min: "1200000.00", max: "1200000.00", average: "1200000.00", belowBudget: 0 });
+
+    // Bản rõ KHÔNG bị xoá: bảng chỉ-ghi-thêm, và lịch sử ấy là một câu hỏi kiểm toán thật. Lọc ở lần ĐỌC, không ở dữ liệu.
+    const { rows: banRo } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_unsealed_bids u JOIN vendor_bid_versions v ON v.id = u.bid_version_id " +
+        " JOIN vendor_bids b ON b.id = v.bid_id JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [rfqId],
+    );
+    expect(banRo[0]?.n).toBe("2");
+
+    // GIỚI HẠN ĐÃ ĐO, nói ra (khoản 271): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
+    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 271 đỏ đúng đây.
+    const dem = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(dem).toEqual({ disclosed: true, count: 2 });
   });
 });

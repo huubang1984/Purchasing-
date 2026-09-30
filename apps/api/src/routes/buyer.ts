@@ -22,6 +22,7 @@ import {
   duyetTraoThau,
   huyTraoThau,
   moVongBafo,
+  rutDeXuatTraoThau,
   taoLuotDanhGia,
   type LuotDanhGia,
   xuatBoBangChung,
@@ -444,6 +445,13 @@ const doc: readonly BuyerReadRoute[] = [
     audience: "BUYER",
     mutates: false,
     // [khoản 141] BẢNG SO SÁNH GIÁ — thứ toàn bộ sản phẩm sinh ra để bảo vệ
+    //
+    // [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG SỐ của thân trả về: `comparison.rows[].totalAmount` (CHUỖI thập phân, hay
+    // `null`) và `comparison.aggregates.min/max/average` là SỐ CHUẨN — tính bằng SQL, đúng tới từng chữ số trong miền
+    // `numeric(18, 2)`. `comparison.rows[].payload` là BẢN HIỂN THỊ của phong bì: một số JSON quá 15 chữ số có nghĩa trong đó đã
+    // qua `double` khi `pg` phân tích `jsonb`, và qua `JSON.parse` của client thêm lần nữa — client đọc số tiền PHẢI lấy
+    // `totalAmount`, không lấy `payload.totalAmount` (`apps/web/trang/mo-thau.js` làm đúng thế). Toàn văn và phép đo ở docstring
+    // `buildComparisonTable` (`packages/unseal/src/comparison.ts`); ghim ở `comparison.int.test.ts` khối `[S1.213 / khoản 108]`.
     agent: false,
     handler: async (ctx) => ({
       status: 200,
@@ -609,9 +617,15 @@ const ghi: readonly BuyerWriteRoute[] = [
   // [S1.106 / S2.4] CHẤM — cạnh `UNSEALED->EVALUATING` của `011`, và nó là route ghi DUY NHẤT mang
   // `evaluation.perform`.
   //
-  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên SÁU vai giữ
-  // (chỉ `DIRECTOR` không), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
+  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.219]** BẢY vai giữ
+  // (chỉ `DIRECTOR` không — **[S1.219]** và `DATA_STEWARD` của `083`), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
   // chặn được "ai trong tổ chức". Ghi ra ở đúng chỗ người đọc mã route sẽ tìm.
+  //
+  // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Cổng này ĐƯỢC GIỮ LÀ LỚP NÔNG, ma trận `005` KHÔNG thu hẹp. Lớp
+  // thật của phân tách nhiệm vụ trên đường chấm là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói (ADR-051, trigger
+  // `award_kiem_de_xuat`), không phải danh sách vai. Năm vai giữ mã này được GHIM ở
+  // `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»): ai đổi ma trận thì ca ấy đỏ và phải đọc lại đoạn này
+  // cùng chú thích cạnh `requirePermission` trong `taoLuotDanhGia` (`packages/danh-gia/src/luot-danh-gia.ts`).
   //
   // `taoLuotDanhGia` tự gọi `requirePermission` lần nữa với CÙNG mã — khoản nợ 31/33, lớp của gói
   // chứ không của route; xem khối đầu tệp.
@@ -705,13 +719,16 @@ const ghi: readonly BuyerWriteRoute[] = [
   // hai con người: `award.recommend` để ĐỀ XUẤT, `po.approve` để DUYỆT.
   //
   // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
-  // tự suy lượt chấm MỚI NHẤT. Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
-  // thuộc đúng RFQ, không đòi nó mới nhất — nên một ca đo khoá riêng vế ấy.
+  // tự suy lượt chấm MỚI NHẤT. ~~Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
+  // thuộc đúng RFQ, không đòi nó mới nhất~~ **[S1.231 / khoản 231]** từ `093` tầng CSDL cũng đòi lượt
+  // mới nhất (`j5_luot_cham_khong_moi_nhat`) — hai lớp, như vòng BAFO; ca đo ở `luot-danh-gia.int`.
   //
   // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
   // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
-  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. Cái giá: người đề xuất không tự rút lại
-  // được (khoản **232**).
+  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. ~~Cái giá: người đề xuất không tự rút lại
+  // được (khoản **232**).~~ **[S1.231 / khoản 232 / ADR-133]** Route THỨ TƯ `…/award/withdraw` dưới
+  // `award.recommend`: người đề xuất RÚT đề xuất CHƯA chữ ký của mình — ba vế ràng ở CSDL (`094`), không
+  // một cổng quyền đọc dữ liệu nào ở đây, và cổng huỷ không đổi.
   // --------------------------------------------------------------------------------------------
   {
     method: "POST",
@@ -778,6 +795,32 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 201,
       body: {
         award: await huyTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // [S1.231 / khoản 232 / ADR-133] RÚT đề xuất — cổng `award.recommend`, cùng cổng với lần đề xuất. Không `awardId`: hàng
+  // mới nhất là đích, và `094` từ chối nếu nó không phải `PROPOSED` của chính người gọi với 0 chữ ký.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/withdraw",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.AWARD_RECOMMEND,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await rutDeXuatTraoThau(
           ctx.client,
           ctx.orgId,
           {

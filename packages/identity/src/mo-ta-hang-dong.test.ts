@@ -10,12 +10,40 @@
 //   ⑴ KHÔNG RỖNG RUỘT — mọi mã trong `PERMISSIONS` phải đi qua được. Một hình dạng quá hẹp biến
 //      mọi dòng log thật thành `HANG_LA` mà không cổng nào kêu; bản đầu của vòng này có đúng lỗi
 //      ấy (`user.mfa_reset` có dấu gạch dưới, hình dạng đầu tiên không cho).
-//   ⑵ KHÔNG RÒ — thứ mang hình dạng một GIÁ TRỊ phải ra `HANG_LA`, kể cả khi nó được đặt đúng vào
-//      trường mà hàm này đọc.
+//      [S1.225 / khoản 189] Và mọi mã trong BA danh mục đóng của `rbac.ts` — hành động từ chối,
+//      loại tài nguyên, vế cổng — cũng phải đi qua được: một danh mục thiếu một mã biến dòng log
+//      của đúng lần từ chối ấy thành `HANG_LA`. Vế "danh mục phủ MỌI chỗ gọi" đo ở
+//      `danh-muc-tu-choi.test.ts`.
+//   ⑵ KHÔNG RÒ — ~~thứ mang hình dạng một GIÁ TRỊ phải ra `HANG_LA`~~ [S1.225 / khoản 189] thứ
+//      KHÔNG THUỘC danh mục đóng phải ra `HANG_LA`, kể cả khi nó được đặt đúng vào trường mà hàm
+//      này đọc, và kể cả khi nó mang ĐÚNG hình dạng mã định danh viết hoa (bí mật TOTP base32,
+//      UUID viết hoa bỏ gạch nối, hex viết hoa) hay đúng khuôn chấm chữ thường của một mã quyền
+//      (`supplier.delete` — không có trong `PERMISSIONS`). Đo trên mã trước vòng này (phép canh
+//      theo HÌNH DẠNG): ba chuỗi viết hoa ĐI LỌT vào dòng log ở cả ba trường viết hoa, và
+//      `supplier.delete` đi lọt ở trường mã quyền.
+//
+// [S1.225 / khoản 179] `DenialAuditFailedError` nay mang thêm hằng thứ ba — VẾ cổng đã từ chối
+// (`clause` của cổng mở thầu và của worker lúc giải mã, trạng thái RFQ của A4) — và nó đi qua cùng
+// phép thuộc-tập; không mang vế thì dòng vẫn là hai hằng như trước.
+//
+// [S1.225 / khoản 185] Mỗi giá trị của `GIA_TRI` là MỘT `it` (`it.each`): trước vòng này tám giá
+// trị chạy trong một vòng `for` của một `it`, nên giá trị đầu đỏ thì bảy giá trị sau không bao giờ
+// được chạy.
+//
+// [S1.216 / khoản 177 / ADR-127] KHE THỨ NĂM — BĂM RÚT GỌN CỦA NGƯỜI BỊ TỪ CHỐI. Chủ dự án chọn ⒞
+// (2026-09-30): đúng dòng của lần từ chối MẤT SỔ mang `nguoi=<12 hex đầu của sha256(userId)>`, vì
+// ở đúng ca ấy sổ không có hàng nào để tra lại AI bị từ chối. Đây là một ngoại lệ CÓ HÌNH DẠNG của
+// A2: khe ấy chỉ cho qua một chuỗi khớp `^[0-9a-f]{12}$` — UUID thô, băm viết hoa, băm đầy đủ 64
+// hex, chuỗi rỗng, bí mật base32 đều ra `nguoi=HANG_LA`; không băm (`null`) thì dòng y như trước.
+// Hai lớp bọc nhận băm qua tham số cuối; `requirePermission`/`throwAuditedDenial` là chỗ tính.
 // ==============================================================================================
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { PERMISSIONS } from "./permissions.js";
 import {
+  DANH_MUC_HANH_DONG_TU_CHOI,
+  DANH_MUC_LOAI_TAI_NGUYEN,
+  DANH_MUC_VE_CONG,
   DenialAuditFailedError,
   PermissionAuditFailedError,
   PermissionDeniedError,
@@ -32,10 +60,27 @@ const GIA_TRI = [
   "supplier.manage; DROP TABLE audit_events",
   "",
   "SUPPLIER SUPPLIER",
+  // [S1.225 / khoản 189] Ba chuỗi mang ĐÚNG hình dạng `^[A-Z][A-Z0-9_]{0,63}$` — lớp bí mật mà
+  // kho này tự sinh ra (`base32()` ở `apps/api/src/routes/auth.ts` phát bí mật TOTP theo RFC 4648,
+  // bắt đầu bằng chữ cái 26/32 số lần), một UUID viết hoa bỏ gạch nối (bắt đầu bằng chữ cái — 6/16
+  // số lần; bắt đầu bằng chữ số thì hình dạng cũ đã chặn), một chuỗi hex viết hoa — và một chuỗi
+  // đúng khuôn mã quyền nhưng không có trong `PERMISSIONS`.
+  "JBSWY3DPEHPK3PXP",
+  "C9BF9E5716854C89BAFBFF5AF830BE8A",
+  "DEADBEEFCAFEBABE",
+  "supplier.delete",
+  // Một MÃ có thật trong sổ nhưng ở SAI trường: hành động ghi thành công không phải hành động từ
+  // chối, và không phải loại tài nguyên hay vế cổng.
+  "RFQ_CREATED",
 ];
 
-function boc(resourceType: string, permission: string): PermissionAuditFailedError {
-  return new PermissionAuditFailedError(new PermissionDeniedError("u1", permission), resourceType, GOC);
+function boc(resourceType: string, permission: string, nguoiBam: string | null = null): PermissionAuditFailedError {
+  return new PermissionAuditFailedError(new PermissionDeniedError("u1", permission), resourceType, GOC, nguoiBam);
+}
+
+/** [S1.216 / khoản 177] Phép băm mà ADR-127 khai: sha256 của `userId`, 12 ký tự hex đầu, không khoá, không muối. */
+function bamRutGon(userId: string): string {
+  return createHash("sha256").update(userId, "utf8").digest("hex").slice(0, 12);
 }
 
 describe("[S1.85 / khoản 131] moTaHangDongCuaLanTuChoi", () => {
@@ -46,6 +91,24 @@ describe("[S1.85 / khoản 131] moTaHangDongCuaLanTuChoi", () => {
     expect(hong, "một hình dạng quá hẹp biến dòng log thật thành HANG_LA mà không cổng nào kêu").toEqual([]);
   });
 
+  it("[S1.225 / khoản 189] ĐỐI CHỨNG KHÔNG RỖNG RUỘT: MỌI mã trong ba danh mục đóng đi qua nguyên vẹn ở đúng trường của nó", () => {
+    expect(DANH_MUC_HANH_DONG_TU_CHOI.size).toBeGreaterThanOrEqual(2);
+    expect(DANH_MUC_LOAI_TAI_NGUYEN.size).toBeGreaterThanOrEqual(2);
+    expect(DANH_MUC_VE_CONG.size).toBeGreaterThanOrEqual(2);
+    const hong: string[] = [];
+    for (const a of DANH_MUC_HANH_DONG_TU_CHOI) {
+      if (moTaHangDongCuaLanTuChoi(new DenialAuditFailedError(a, "RFQ", GOC, GOC)) !== `${a} RFQ`) hong.push(`action=${a}`);
+    }
+    for (const r of DANH_MUC_LOAI_TAI_NGUYEN) {
+      if (moTaHangDongCuaLanTuChoi(boc(r, PERMISSIONS.SUPPLIER_MANAGE)) !== `PERMISSION_DENIED ${r} supplier.manage`) hong.push(`resourceType=${r}`);
+      if (moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", r, GOC, GOC)) !== `UNSEAL_DENIED ${r}`) hong.push(`resourceType(denial)=${r}`);
+    }
+    for (const v of DANH_MUC_VE_CONG) {
+      if (moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "RFQ", GOC, GOC, v)) !== `UNSEAL_DENIED RFQ ${v}`) hong.push(`clause=${v}`);
+    }
+    expect(hong, "một danh mục thiếu một mã biến dòng log của đúng lần từ chối ấy thành HANG_LA").toEqual([]);
+  });
+
   it("`DenialAuditFailedError` ⇒ `action` và `resourceType`; `PermissionAuditFailedError` ⇒ thêm mã quyền", () => {
     expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_APPROVAL_DENIED", "UNSEAL_REQUEST", GOC, GOC))).toBe(
       "UNSEAL_APPROVAL_DENIED UNSEAL_REQUEST",
@@ -53,17 +116,44 @@ describe("[S1.85 / khoản 131] moTaHangDongCuaLanTuChoi", () => {
     expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", PERMISSIONS.SUPPLIER_MANAGE))).toBe("PERMISSION_DENIED SUPPLIER supplier.manage");
   });
 
-  it("[INV-A2] giá trị đặt ĐÚNG vào trường hàm này đọc vẫn không ra được dòng log — ra HANG_LA", () => {
-    for (const v of GIA_TRI) {
-      expect(moTaHangDongCuaLanTuChoi(boc(v, PERMISSIONS.SUPPLIER_MANAGE)), `resourceType=${v}`).toBe(
+  it("[S1.225 / khoản 179] `DenialAuditFailedError` mang VẾ cổng ⇒ dòng in thêm hằng thứ ba; không mang vế ⇒ hai hằng như trước", () => {
+    // Bốn vế của cổng mở thầu (`UNSEAL_CLAUSES`), hai vế của worker lúc giải mã, trạng thái RFQ của A4 — mỗi nguồn một ca.
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, "POLICY_GATE"))).toBe(
+      "UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, "RFQ_CLOSED"))).toBe(
+      "UNSEAL_DENIED UNSEAL_REQUEST RFQ_CLOSED",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_EXECUTION_DENIED", "UNSEAL_REQUEST", GOC, GOC, "MFA_FRESH"))).toBe(
+      "UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST MFA_FRESH",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("COMPARISON_DENIED", "RFQ", GOC, GOC, "OPEN"))).toBe(
+      "COMPARISON_DENIED RFQ OPEN",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("MFA_RESET_APPROVAL_DENIED", "MFA_RESET_REQUEST", GOC, GOC))).toBe(
+      "MFA_RESET_APPROVAL_DENIED MFA_RESET_REQUEST",
+    );
+  });
+
+  it.each(GIA_TRI)(
+    "[INV-A2] giá trị %j đặt ĐÚNG vào trường hàm này đọc vẫn không ra được dòng log — ra HANG_LA ở cả ~~bốn~~ [S1.216 / khoản 177] NĂM trường",
+    (v) => {
+      expect(moTaHangDongCuaLanTuChoi(boc(v, PERMISSIONS.SUPPLIER_MANAGE)), "resourceType").toBe(
         "PERMISSION_DENIED HANG_LA supplier.manage",
       );
-      expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", v)), `permission=${v}`).toBe("PERMISSION_DENIED SUPPLIER HANG_LA");
-      expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError(v, "UNSEAL_REQUEST", GOC, GOC)), `action=${v}`).toBe(
+      expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", v)), "permission").toBe("PERMISSION_DENIED SUPPLIER HANG_LA");
+      expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError(v, "UNSEAL_REQUEST", GOC, GOC)), "action").toBe(
         "HANG_LA UNSEAL_REQUEST",
       );
-    }
-  });
+      expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, v)), "clause").toBe(
+        "UNSEAL_DENIED UNSEAL_REQUEST HANG_LA",
+      );
+      // [S1.216 / khoản 177] Khe băm: một giá trị KHÔNG mang hình dạng 12 hex thì ra `nguoi=HANG_LA` — không nguyên văn.
+      expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", PERMISSIONS.SUPPLIER_MANAGE, v)), "nguoiBam").toBe(
+        "PERMISSION_DENIED SUPPLIER supplier.manage nguoi=HANG_LA",
+      );
+    },
+  );
 
   it("đọc theo LỚP chứ không theo tên trường: một lỗi chỉ MANG TÊN của hai lớp ấy không mua được chỗ trong dòng log", () => {
     const giaMao = Object.assign(new Error("x"), {
@@ -71,10 +161,75 @@ describe("[S1.85 / khoản 131] moTaHangDongCuaLanTuChoi", () => {
       resourceType: "SUPPLIER",
       action: "PERMISSION_DENIED",
       denial: { permission: "supplier.manage" },
+      nguoiBam: "3f2504e04f89",
     });
     expect(moTaHangDongCuaLanTuChoi(giaMao)).toBe("");
     for (const v of [new Error("x"), "chuoi", 42, null, undefined, { action: "X" }]) {
       expect(moTaHangDongCuaLanTuChoi(v), JSON.stringify(v)).toBe("");
     }
+  });
+});
+
+// ==============================================================================================
+// [S1.216 / khoản 177 / ADR-127] BĂM RÚT GỌN CỦA NGƯỜI BỊ TỪ CHỐI — ĐO Ở MỨC HÀM.
+//
+// Đo trước trên mã trước vòng này (constructor ba/năm tham số bỏ qua đối số thêm): mọi ca mang băm đỏ vì dòng KHÔNG có
+// `nguoi=`; ca "không băm" và ca hình dạng sai xanh sẵn (ghim để đột biến "in nguyên văn" có chỗ đỏ). Đường HTTP — băm là của
+// ĐÚNG người bị từ chối, ba người ba băm, không UUID thô — đo ở `apps/api/src/log-tu-choi-mat.int.test.ts`.
+// ==============================================================================================
+describe("[INV-A2] [S1.216 / khoản 177] băm rút gọn của người bị từ chối trên đúng dòng của lần mất sổ", () => {
+  const NGUOI = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+  const NGUOI_KHAC = "c9bf9e57-1685-4c89-bafb-ff5af830be8a";
+
+  it("băm là 12 hex đầu của sha256(userId): hai người khác nhau ⇒ hai băm khác nhau, cùng hình dạng", () => {
+    expect(bamRutGon(NGUOI)).toMatch(/^[0-9a-f]{12}$/u);
+    expect(bamRutGon(NGUOI_KHAC)).toMatch(/^[0-9a-f]{12}$/u);
+    expect(bamRutGon(NGUOI)).not.toBe(bamRutGon(NGUOI_KHAC));
+  });
+
+  it("`PermissionAuditFailedError` mang băm ⇒ dòng nối ` nguoi=<12 hex>` sau mã quyền; `userId` thô mà `denial` vẫn cầm KHÔNG ra dòng", () => {
+    const loi = new PermissionAuditFailedError(new PermissionDeniedError(NGUOI, PERMISSIONS.SUPPLIER_MANAGE), "SUPPLIER", GOC, bamRutGon(NGUOI));
+    const dong = moTaHangDongCuaLanTuChoi(loi);
+    expect(dong).toBe(`PERMISSION_DENIED SUPPLIER supplier.manage nguoi=${bamRutGon(NGUOI)}`);
+    expect(dong).not.toContain(NGUOI);
+    expect(dong).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/u);
+  });
+
+  it("`DenialAuditFailedError` mang băm ⇒ nối sau VẾ khi có vế, sau `resourceType` khi không", () => {
+    expect(
+      moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, "POLICY_GATE", bamRutGon(NGUOI))),
+    ).toBe(`UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE nguoi=${bamRutGon(NGUOI)}`);
+    expect(
+      moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_APPROVAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, null, bamRutGon(NGUOI))),
+    ).toBe(`UNSEAL_APPROVAL_DENIED UNSEAL_REQUEST nguoi=${bamRutGon(NGUOI)}`);
+  });
+
+  it("không băm (`null` — lần từ chối của SERVICE ở worker, hay chỗ dựng cũ) ⇒ dòng KHÔNG có `nguoi=`, y như trước vòng này", () => {
+    expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", PERMISSIONS.SUPPLIER_MANAGE))).toBe("PERMISSION_DENIED SUPPLIER supplier.manage");
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_EXECUTION_DENIED", "UNSEAL_REQUEST", GOC, GOC, "POLICY_GATE"))).toBe(
+      "UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST POLICY_GATE",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_EXECUTION_DENIED", "UNSEAL_REQUEST", GOC, GOC))).not.toContain("nguoi=");
+  });
+
+  it.each([
+    // UUID thô — đúng phương án ⒝ của khoản 177 mà chủ dự án KHÔNG chọn; cũng là thứ một vòng sau đưa nhầm dễ nhất.
+    NGUOI,
+    "3F2504E04F89", // 12 hex viết HOA
+    "3f2504e04f8", // 11 hex
+    "3f2504e04f891", // 13 hex
+    createHash("sha256").update(NGUOI, "utf8").digest("hex"), // 64 hex — băm ĐẦY ĐỦ, không phải rút gọn
+    "", // rỗng
+    "nguoi=3f2504e04f89", // mang cả nhãn
+    "JBSWY3DPEHPK3PXP", // bí mật TOTP base32
+    "ke-toan@vidu.vn",
+    "u1",
+  ])("[INV-A2] chuỗi %j đặt vào khe băm không ra được dòng log nguyên văn — `nguoi=HANG_LA` ở cả hai lớp", (v) => {
+    expect(moTaHangDongCuaLanTuChoi(boc("SUPPLIER", PERMISSIONS.SUPPLIER_MANAGE, v))).toBe(
+      "PERMISSION_DENIED SUPPLIER supplier.manage nguoi=HANG_LA",
+    );
+    expect(moTaHangDongCuaLanTuChoi(new DenialAuditFailedError("UNSEAL_DENIED", "UNSEAL_REQUEST", GOC, GOC, "POLICY_GATE", v))).toBe(
+      "UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE nguoi=HANG_LA",
+    );
   });
 });

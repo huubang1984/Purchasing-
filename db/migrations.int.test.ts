@@ -151,6 +151,57 @@ async function truoc049(
   return { ten049, nccA, nccB, lienHe, daGhi049, emailCua };
 }
 
+/**
+ * [khoản nợ 71] Dựng một CSDL đã áp mọi migration TRỪ `092_email_ascii`, với chuỗi danh tính (tổ chức, người mua có vai và phiên) và một
+ * nhà cung cấp — để đo `092` trên dữ liệu có từ trước. Hai hàm chèn chạy dưới superuser (vai của `db.pool`), nên chèn được địa chỉ ngoài
+ * ASCII — ở CHỮ THƯỜNG, để đi qua ràng buộc chữ thường của 048/049 và ràng buộc hình dạng của 011: đúng lỗ khoản 71 gọi tên.
+ */
+async function truoc092(
+  db: TestDatabase,
+  tmp: string,
+): Promise<{
+  readonly ten092: string;
+  readonly nguoiDung: (email: string) => Promise<string>;
+  readonly lienHe: (email: string) => Promise<string>;
+  readonly daGhi092: () => Promise<number>;
+  readonly emailCua: (bang: "users" | "supplier_contacts", id: string) => Promise<string | undefined>;
+}> {
+  const tep = (await readdir(MIGRATIONS_DIR)).filter((f) => f.startsWith("092_email_ascii"));
+  expect(tep, "chưa có migration 092_email_ascii trong kho").toHaveLength(1);
+  const ten092 = tep[0]!;
+  for (const f of await readdir(MIGRATIONS_DIR)) if (f !== ten092) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+  await migrate(db.pool, tmp);
+  const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz71', 'zz71') RETURNING id")).rows[0]!.id;
+  const nguoiDung = async (email: string): Promise<string> =>
+    (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi 71') RETURNING id", [org, email])).rows[0]!.id;
+  const pm = await nguoiDung("pm71@vidu.vn");
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, pm]);
+  const phien = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [org, pm, Buffer.alloc(32, 71)],
+    )
+  ).rows[0]!.id;
+  const ncc = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC 71', $2, $3) RETURNING id",
+      [org, pm, phien],
+    )
+  ).rows[0]!.id;
+  const lienHe = async (email: string): Promise<string> =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi lien he 71', $3, $4, $5) RETURNING id",
+        [org, ncc, email, pm, phien],
+      )
+    ).rows[0]!.id;
+  const daGhi092 = async (): Promise<number> =>
+    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [ten092])).rowCount ?? 0;
+  const emailCua = async (bang: "users" | "supplier_contacts", id: string): Promise<string | undefined> =>
+    (await db.pool.query<{ email: string }>(`SELECT email FROM ${bang} WHERE id = $1`, [id])).rows[0]?.email;
+  return { ten092, nguoiDung, lienHe, daGhi092, emailCua };
+}
+
 /** Đổi user/password của một connection string, giữ nguyên host/port/database. */
 function doiNguoiDung(pChuoiKetNoi: string, pTenRole: string, pMatKhau: string): string {
   const url = new URL(pChuoiKetNoi);
@@ -656,8 +707,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // ~~Mọi lối ra của chủ thể này nằm ngoài tầm của chính vai ấy (REVOKE do người cấp, chủ bảng hay SUPERUSER; chạy dưới chủ bảng; policy
   // do chủ bảng thêm), nên chặn sớm không lấy mất lối ra nào mà một migration chạy dưới vai ấy làm được — trừ migration tự SET ROLE
   // sang chủ, ranh giới nói ra.~~ [S1.66 / lượt soi ngang 59c NẶNG-3, lượt soi 60b] Lượt hỏi trước vòng bỏ qua dòng mà `tu_sua_duoc`
-  // nhận ra là tự sửa được (S1.57; lượt soi 50 INFO-8 thay vế SET ROLE); `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều — chiều CHẶN chưa đo,
-  // khoản 113.
+  // nhận ra là tự sửa được (S1.57; lượt soi 50 INFO-8 thay vế SET ROLE); `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều — ~~chiều CHẶN chưa đo,
+  // khoản 113.~~ [S1.228] chiều CHẶN đã đo và đóng ở ca `[khoản nợ 113]` ngay dưới: đường cấp thẳng bởi một vai mà vai deploy có ADMIN
+  // OPTION trên nó nay được đọc là tự sửa được; xấp xỉ còn lại chỉ về phía bỏ qua.
   it("[INV-F1] [khoản nợ 100] hồ sơ N2 với một backfill đang chờ: trien_khai có SELECT, UPDATE trên suppliers mà policy chỉ TO app_api ⇒ migrate() dưới trien_khai TỪ CHỐI TRƯỚC vòng đánh số — backfill không chạy, không dòng schema_migrations, hàng giữ nguyên, thông điệp nêu bảng/vai/lệnh; chạy dưới chủ bảng ⇒ backfill áp đủ hàng", async () => {
     const db = await startPostgres();
     const tmp = await mkdtemp(join(tmpdir(), "tp-k100-"));
@@ -728,6 +780,193 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await expect(migrate(db.pool, tmp)).resolves.toEqual(["999_zz_backfill100.sql"]);
       expect(await tenNcc(), "backfill áp đủ hàng").toEqual(["NCC 100 (da sua 100)"]);
     } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [S1.228 / khoản nợ 113] CHIỀU CHẶN CỦA `tu_sua_duoc` — ĐO, KHÔNG ĐỌC. S1.66 ghi rằng `tu_sua_duoc` không đọc `grantor` của mục
+  // ACL, nên một vai R giữ GRANT OPTION đã cấp quyền THẲNG cho vai deploy, trong khi vai deploy có ADMIN OPTION trên R, là một đường
+  // tự cắt được mà lượt hỏi trước vòng vẫn chặn — đúng loại ngõ cụt ADR-028 §3 mà điều kiện của ngoại lệ S1.57 cấm. Đo (PostgreSQL 16,
+  // thăm dò S1.228) dưới chính trien_khai, trong MỘT tệp migration: `GRANT R TO trien_khai WITH INHERIT TRUE` (ADMIN trực tiếp ⇒
+  // người cấp là chính trien_khai, PG16 giữ hai cạnh membership theo hai người cấp), rồi `REVOKE … FROM trien_khai` — PostgreSQL chọn R
+  // làm người thu hồi vì trien_khai nay thừa kế GRANT OPTION của R — rồi `REVOKE R FROM trien_khai` gỡ đúng cạnh thừa kế vừa tự cấp:
+  // quyền mất hẳn, cạnh ADMIN do superuser cấp còn nguyên. Hai ĐỐI CHỨNG thiếu một vế thì vẫn bị chặn: không ADMIN trên R (không tự
+  // cấp thừa kế được, tự REVOKE là no-op); ADMIN KÈM INHERIT do superuser cấp (sau khi cắt đường cấp thẳng, trien_khai còn quyền QUA R
+  // mà cạnh do superuser cấp thì không tự gỡ được — S1.57 ⒞). Cùng hình dạng trên EXECUTE của app_current_org_id() (khoản 101).
+  it("[INV-F1] [khoản nợ 113] vai R giữ GRANT OPTION cấp SELECT, UPDATE thẳng cho trien_khai; trien_khai có ADMIN OPTION (không INHERIT, không SET) trên R ⇒ tự cắt được: không tệp chờ thì NÉM ở mục 94 và nói 'cố ý KHÔNG chặn nó', migration vá lỗi dưới chính trien_khai (tự cấp thừa kế R, REVOKE khỏi chính mình, gỡ thừa kế) tới đích, lượt sau đi qua; ĐỐI CHỨNG không ADMIN ⇒ chặn trước vòng; ADMIN kèm INHERIT do superuser cấp ⇒ chặn trước vòng; cùng hình dạng trên EXECUTE của app_current_org_id(); người cấp là CHÍNH CHỦ BẢNG (OWNER TO viết lại grantor) cũng tự cắt được và trạng thái cuối sạch", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k113-"));
+    let poolTrienKhai: pg.Pool | undefined;
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      for (const f of await readdir(MIGRATIONS_DIR)) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+      const p = createPool(await dungRoleTrienKhaiThuong(db), 2);
+      poolTrienKhai = p;
+      const loiCua = (lan: Promise<unknown>): Promise<Error | null> =>
+        lan.then(
+          () => null,
+          (e: Error) => e,
+        );
+      const daGhi = async (tep: string): Promise<number> =>
+        (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0;
+      const conSelect = async (): Promise<boolean> =>
+        (await db.pool.query<{ co: boolean }>("SELECT pg_catalog.has_table_privilege('trien_khai', 'public.suppliers', 'SELECT') AS co")).rows[0]!.co;
+      const conExecute = async (): Promise<boolean> =>
+        (
+          await db.pool.query<{ co: boolean }>(
+            "SELECT pg_catalog.has_function_privilege('trien_khai', 'public.app_current_org_id()', 'EXECUTE') AS co",
+          )
+        ).rows[0]!.co;
+      /** Mọi cạnh membership trien_khai → <vai>, theo (ADMIN, INHERIT, người cấp là chính trien_khai?). */
+      const canhCua = async (vai: string): Promise<readonly { admin: boolean; inherit: boolean; tu_cap: boolean }[]> =>
+        (
+          await db.pool.query<{ admin: boolean; inherit: boolean; tu_cap: boolean }>(
+            "SELECT am.admin_option AS admin, am.inherit_option AS inherit, am.grantor = 'trien_khai'::regrole AS tu_cap" +
+              "  FROM pg_auth_members am WHERE am.roleid = $1::regrole AND am.member = 'trien_khai'::regrole ORDER BY 1, 2, 3",
+            [vai],
+          )
+        ).rows;
+      const canhR = (): Promise<readonly { admin: boolean; inherit: boolean; tu_cap: boolean }[]> => canhCua("zz_r113");
+      /** Dạng dòng của chủ thể thứ hai trong thông điệp SAU vòng — cùng khuôn với test khoản 100 ở dưới. */
+      const dongSauVong = (lenh: string, duong: string): string =>
+        `public.suppliers/trien_khai (vai chạy migration)/${lenh}: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (${duong})`;
+
+      // Fixture: R giữ GRANT OPTION và tự tay cấp thẳng cho trien_khai (người cấp của mục ACL là R — khẳng định, không giả định);
+      // policy tenant thu về TO app_api theo khuôn hồ sơ N2 (khoản 97/100) để dòng thuộc chủ thể "vai chạy migration".
+      await db.pool.query(
+        "CREATE ROLE zz_r113 NOLOGIN; GRANT SELECT, UPDATE ON public.suppliers TO zz_r113 WITH GRANT OPTION; " +
+          "SET ROLE zz_r113; GRANT SELECT, UPDATE ON public.suppliers TO trien_khai; RESET ROLE; " +
+          "ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO app_api",
+      );
+      expect(
+        (
+          await db.pool.query<{ nguoi_cap: string }>(
+            "SELECT a.grantor::regrole::text AS nguoi_cap FROM pg_class c, pg_catalog.aclexplode(c.relacl) a" +
+              " WHERE c.oid = 'public.suppliers'::regclass AND a.grantee = 'trien_khai'::regrole AND a.privilege_type = 'SELECT'",
+          )
+        ).rows.map((r) => r.nguoi_cap),
+        "fixture: người cấp của mục ACL phải là R",
+      ).toEqual(["zz_r113"]);
+      const VA1 = "991_zz_va_loi113.sql";
+      const THAN_VA1 =
+        "GRANT zz_r113 TO trien_khai WITH INHERIT TRUE;\nREVOKE SELECT, UPDATE ON public.suppliers FROM trien_khai;\nREVOKE zz_r113 FROM trien_khai;\n";
+
+      // ⒜ ĐỐI CHỨNG 1 — không ADMIN trên R: trien_khai không tự cấp thừa kế được, tự REVOKE là no-op ⇒ chặn trước vòng, tệp vá không chạy.
+      await writeFile(join(tmp, VA1), THAN_VA1, "utf8");
+      const loiA = await loiCua(migrate(p, tmp));
+      expect(loiA, "⒜ đường cấp thẳng bởi R mà không ADMIN trên R: ngoài tầm vai deploy ⇒ phải chặn").not.toBeNull();
+      expect(await daGhi(VA1), "⒜ tệp vá không được chạy").toBe(0);
+      expect(loiA!.message, `⒜ ${loiA!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiA!.message).toContain("public.suppliers/trien_khai (vai chạy migration)/SELECT (cấp thẳng cho vai này)");
+      expect(await conSelect(), "⒜ quyền còn nguyên").toBe(true);
+
+      // ⒝ ĐỐI CHỨNG 2 — ADMIN KÈM INHERIT do superuser cấp: cắt đường cấp thẳng xong, trien_khai còn quyền QUA R, mà cạnh do superuser
+      // cấp thì không tự gỡ được (S1.57 ⒞) ⇒ vẫn chặn; thông điệp nêu cả hai đường.
+      await db.pool.query("GRANT zz_r113 TO trien_khai WITH ADMIN TRUE, INHERIT TRUE");
+      const loiB = await loiCua(migrate(p, tmp));
+      expect(loiB, "⒝ ADMIN kèm INHERIT do superuser cấp: đường qua R không tự cắt được ⇒ phải chặn").not.toBeNull();
+      expect(await daGhi(VA1), "⒝ tệp vá không được chạy").toBe(0);
+      expect(loiB!.message, `⒝ ${loiB!.message.slice(0, 300)}`).toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiB!.message).toContain("cấp thẳng cho vai này");
+      expect(loiB!.message).toContain("qua nhóm zz_r113");
+      await db.pool.query("REVOKE zz_r113 FROM trien_khai");
+      expect(await canhR(), "⒝ gỡ sạch cạnh trước pha chính").toEqual([]);
+
+      // ⒞ CẤU HÌNH CỦA KHOẢN — ADMIN, KHÔNG INHERIT, KHÔNG SET trên R.
+      await db.pool.query("GRANT zz_r113 TO trien_khai WITH ADMIN TRUE, INHERIT FALSE, SET FALSE");
+      // ⒞⑴ không tệp chờ ⇒ không hỏi trước vòng; mục 94 sau vòng nêu dòng và nói rõ nó cố ý không bị chặn.
+      await rm(join(tmp, VA1));
+      const loiC = await loiCua(migrate(p, tmp));
+      expect(loiC, "⒞⑴ đối chứng — cấu hình này đỏ ở mục 94").not.toBeNull();
+      expect(loiC!.message, "⒞⑴ không tệp chờ ⇒ không hỏi trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiC!.message, `⒞⑴ ${loiC!.message.slice(0, 400)}`).toContain(dongSauVong("SELECT", "cấp thẳng cho vai này"));
+      expect(loiC!.message).toContain(dongSauVong("UPDATE", "cấp thẳng cho vai này"));
+      expect(
+        loiC!.message,
+        "⒞⑴ chiều CHẶN của tu_sua_duoc: đường cấp thẳng bởi R mà vai deploy có ADMIN trên R phải được nhận ra là tự sửa được",
+      ).toContain("cố ý KHÔNG chặn nó");
+      expect(loiC!.message, "⒞⑴ thông điệp nêu lối tự sửa qua ADMIN trên người cấp (khoản 113)").toContain("khoản 113");
+      // ⒞⑵ có tệp vá lỗi chờ ⇒ không chặn trước vòng; tệp chạy dưới chính trien_khai tới đích và cắt hẳn đường.
+      await writeFile(join(tmp, VA1), THAN_VA1, "utf8");
+      await expect(migrate(p, tmp), "⒞⑵ migration vá lỗi dưới chính trien_khai phải tới được đích").resolves.toEqual([VA1]);
+      expect(await conSelect(), "⒞⑵ quyền cấp thẳng bởi R đã mất").toBe(false);
+      expect(await canhR(), "⒞⑵ chỉ còn đúng cạnh ADMIN do superuser cấp; cạnh thừa kế tự cấp đã gỡ").toEqual([
+        { admin: true, inherit: false, tu_cap: false },
+      ]);
+      // ⒞⑶ lượt sau: không dòng nào — đi qua.
+      await expect(migrate(p, tmp), "⒞⑶ sau khi tự cắt, deploy xanh").resolves.toEqual([]);
+
+      // ⒟ CÙNG HÌNH DẠNG TRÊN EXECUTE (khoản 101): quyền bảng do superuser cấp thẳng (không tự cắt được), policy chuẩn TO PUBLIC
+      // phụ thuộc hàm ngữ cảnh, EXECUTE cấp thẳng bởi R giữ GRANT OPTION — dòng chỉ có vì policy lọc hết, tự sửa được bằng cách tự
+      // cắt EXECUTE qua cùng ba bước.
+      await db.pool.query(
+        "ALTER POLICY suppliers_tenant_isolation ON public.suppliers TO PUBLIC; GRANT SELECT, UPDATE ON public.suppliers TO trien_khai; " +
+          "GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO zz_r113 WITH GRANT OPTION; " +
+          "SET ROLE zz_r113; GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai; RESET ROLE",
+      );
+      const loiD = await loiCua(migrate(p, tmp));
+      expect(loiD, "⒟ đối chứng — cấu hình này đỏ ở mục 94").not.toBeNull();
+      expect(loiD!.message, "⒟ không tệp chờ ⇒ không hỏi trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiD!.message, `⒟ ${loiD!.message.slice(0, 400)}`).toContain(
+        dongSauVong("SELECT", "cấp thẳng cho vai này") + " mà policy PERMISSIVE phủ nó theo danh sách vai phụ thuộc app_current_org_id()",
+      );
+      expect(loiD!.message).toContain("có EXECUTE trên hàm ấy (cấp thẳng cho vai này)");
+      expect(
+        loiD!.message,
+        "⒟ chiều CHẶN của tu_cat_execute: EXECUTE cấp thẳng bởi R mà vai deploy có ADMIN trên R phải được nhận ra là tự cắt được",
+      ).toContain("Vai này tự cắt được đường tới EXECUTE");
+      const VA2 = "992_zz_va_loi113_execute.sql";
+      await writeFile(
+        join(tmp, VA2),
+        "GRANT zz_r113 TO trien_khai WITH INHERIT TRUE;\nREVOKE EXECUTE ON FUNCTION public.app_current_org_id() FROM trien_khai;\nREVOKE zz_r113 FROM trien_khai;\n",
+        "utf8",
+      );
+      await expect(migrate(p, tmp), "⒟ migration vá lỗi dưới chính trien_khai phải tới được đích").resolves.toEqual([VA2]);
+      expect(await conExecute(), "⒟ EXECUTE cấp thẳng bởi R đã mất").toBe(false);
+      expect(await canhR()).toEqual([{ admin: true, inherit: false, tu_cap: false }]);
+      // Không EXECUTE ⇒ policy chuẩn lại tính là phủ (câu chạm bảng ném 42501, ồn — khoản 101 ⒝): lượt sau đi qua.
+      await expect(migrate(p, tmp), "⒟ sau khi tự cắt EXECUTE, deploy xanh").resolves.toEqual([]);
+
+      // ⒠ [S1.228 / lượt gộp — rls-coverage ⒦ (lượt soi 51 NẶNG-1)] NGƯỜI CẤP LÀ CHÍNH CHỦ BẢNG: bảng do superuser tạo và cấp SELECT, UPDATE cho
+      // trien_khai rồi `OWNER TO zz_chu113k` (PostgreSQL viết lại grantor của mục ACL thành chủ mới), trien_khai có ADMIN (không INHERIT,
+      // không SET) trên chủ mới; EXECUTE trên hàm ngữ cảnh do superuser cấp thẳng (không tự cắt được) để dòng thuộc nhánh `vi_tu_loc_het`.
+      // ⒦ của rls-coverage từng ghim dòng này BỊ CHẶN với lý do "lối vá là thêm policy hay tự lấy quyền chủ — chỉ dời dòng sang chủ thể giống
+      // chủ (khoản 102)". Đo: chủ bảng là người cấp giữ MỌI quyền kèm GRANT OPTION, nên cùng ba bước cắt được đường cấp thẳng; trạng thái cuối
+      // SẠCH — không còn thừa kế chủ (chỉ cạnh ADMIN do superuser cấp), không dòng khoản 102, lượt sau đi qua `[]`. Vế `tu_sua_nguoi_cap` đúng
+      // cả khi người cấp là chủ bảng; ⒦ đã lật theo phép đo này.
+      await db.pool.query(
+        "GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai; CREATE ROLE zz_chu113k NOLOGIN; " +
+          "ALTER TABLE public.suppliers OWNER TO zz_chu113k; GRANT zz_chu113k TO trien_khai WITH ADMIN TRUE, INHERIT FALSE, SET FALSE",
+      );
+      expect(
+        (
+          await db.pool.query<{ nguoi_cap: string }>(
+            "SELECT DISTINCT a.grantor::regrole::text AS nguoi_cap FROM pg_class c, pg_catalog.aclexplode(c.relacl) a" +
+              " WHERE c.oid = 'public.suppliers'::regclass AND a.grantee = 'trien_khai'::regrole AND a.privilege_type IN ('SELECT', 'UPDATE')",
+          )
+        ).rows.map((r) => r.nguoi_cap),
+        "⒠ fixture: OWNER TO viết lại người cấp của mục ACL thành chủ mới",
+      ).toEqual(["zz_chu113k"]);
+      const loiE = await loiCua(migrate(p, tmp));
+      expect(loiE, "⒠ đối chứng — cấu hình này đỏ ở mục 94").not.toBeNull();
+      expect(loiE!.message, "⒠ không tệp chờ ⇒ không hỏi trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiE!.message, `⒠ ${loiE!.message.slice(0, 400)}`).toContain(dongSauVong("SELECT", "cấp thẳng cho vai này"));
+      expect(loiE!.message, "⒠ người cấp là chủ bảng, ADMIN không INHERIT trên chủ: vẫn là đường tự cắt được").toContain("cố ý KHÔNG chặn nó");
+      const VA3 = "993_zz_va_loi113_chu_bang.sql";
+      await writeFile(
+        join(tmp, VA3),
+        "GRANT zz_chu113k TO trien_khai WITH INHERIT TRUE;\nREVOKE SELECT, UPDATE ON public.suppliers FROM trien_khai;\nREVOKE zz_chu113k FROM trien_khai;\n",
+        "utf8",
+      );
+      await expect(migrate(p, tmp), "⒠ migration vá lỗi dưới chính trien_khai — người cấp là chủ bảng — phải tới được đích").resolves.toEqual([VA3]);
+      expect(await conSelect(), "⒠ quyền cấp thẳng bởi chủ bảng đã mất").toBe(false);
+      expect(await canhCua("zz_chu113k"), "⒠ trạng thái cuối sạch: không còn thừa kế chủ, chỉ cạnh ADMIN do superuser cấp").toEqual([
+        { admin: true, inherit: false, tu_cap: false },
+      ]);
+      await expect(migrate(p, tmp), "⒠ lượt sau đi qua: không dòng khoản 102 (trien_khai không thừa kế chủ), không dòng nào khác").resolves.toEqual([]);
+    } finally {
+      await poolTrienKhai?.end();
       await rm(tmp, { recursive: true, force: true });
       await db.stop();
     }
@@ -848,6 +1087,79 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       expect(loiSu?.message ?? "").toContain(`supplier_contacts: 1 hang co email chua o chu thuong — id (toi da 20): ${idHoa};`);
     } finally {
       await p?.end();
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [khoản nợ 71 / ADR-132] `092_email_ascii` thu hẹp miền của `users.email` và `supplier_contacts.email` về ASCII in được — hai bảng CÓ
+  // đường ghi (`tools/khoi-tao-to-chuc`, `addSupplierContact`) nên có thể đã có dữ liệu. Cùng khuôn 049: đối chiếu TRƯỚC `ALTER`, dừng deploy
+  // với ĐỊNH DANH (tối đa 20 id mỗi bảng), KHÔNG in email, KHÔNG tự sửa (đổi một địa chỉ đã lưu là đổi đích magic link); sửa tay ⇒ đi qua,
+  // hai ràng buộc tồn tại và đã kiểm; hai dòng khai ở `CHECK_AN_NINH_KHAI` mang đúng `pg_get_constraintdef` (khoản 105); INSERT thẳng
+  // Unicode dưới superuser — không qua tầng ứng dụng — ⇒ 23514 đúng tên, kể cả những địa chỉ mà 048/049/011 đều cho qua.
+  it("[khoản nợ 71] hàng email ngoài ASCII có từ trước ⇒ migrate() NÉM với thông báo NGUYÊN VĂN (số hàng và id từng bảng, không email), 092 không được ghi, hàng nguyên văn; sửa tay ⇒ đi qua, hai CHECK tồn tại, đã kiểm, có trong khai của hardening; INSERT thẳng Unicode dưới superuser ⇒ 23514", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k71-"));
+    try {
+      const { ten092, nguoiDung, lienHe, daGhi092, emailCua } = await truoc092(db, tmp);
+      const tenMig = ten092.replace(/\.sql$/u, "");
+      const uA = await nguoiDung("\u24D0lice-71@vidu.vn"); // ⓐ — điểm bất động của lower() trên musl, 048 cho qua
+      const uB = await nguoiDung("\u03B1\u03C2-71@vidu.vn"); // ας — sigma cuối từ, confusable với ασ (ví dụ của khoản 71)
+      const cA = await lienHe("\u0111ai-71@vidu.vn"); // đ — 049 và 011 đều cho qua
+
+      await copyFile(join(MIGRATIONS_DIR, ten092), join(tmp, ten092));
+      const loi = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "dữ liệu ngoài ASCII mà 092 vẫn đi qua").not.toBeNull();
+      expect(await daGhi092(), "092 NÉM thì không được ghi checksum").toBe(0);
+      expect(await emailCua("users", uB), "hàng giữ nguyên — migration không tự sửa").toBe("\u03B1\u03C2-71@vidu.vn");
+      expect(await emailCua("supplier_contacts", cA)).toBe("\u0111ai-71@vidu.vn");
+      // Thứ tự uuid của PostgreSQL là thứ tự byte, trùng thứ tự chuỗi hex chữ thường của JS.
+      expect(loi!.message).toBe(
+        `Migration ${ten092} thất bại: email ngoai ASCII in duoc: users 2 hang — id (toi da 20): ${[uA, uB].sort().join(", ")}; ` +
+          `supplier_contacts 1 hang — id (toi da 20): ${cA} — sua tay duoi mot vai ma RLS khong ap (doi mot dia chi da luu la doi dich ` +
+          `magic link: co nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenMig}, khoan no 71, ADR-132)`,
+      );
+      expect(loi!.message, "không in email").not.toMatch(/vidu\.vn/u);
+
+      // Sửa tay như thông báo chỉ, dưới vai mà RLS không áp (superuser): ba địa chỉ về ASCII.
+      await db.pool.query("UPDATE users SET email = 'alice-71@vidu.vn' WHERE id = $1", [uA]);
+      await db.pool.query("UPDATE users SET email = 'as-71@vidu.vn' WHERE id = $1", [uB]);
+      await db.pool.query("UPDATE supplier_contacts SET email = 'dai-71@vidu.vn' WHERE id = $1", [cA]);
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([ten092]);
+      const { rows: rb } = await db.pool.query<{ bang: string; conname: string; convalidated: boolean; dinh_nghia: string }>(
+        "SELECT conrelid::regclass::text AS bang, conname, convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
+          "WHERE conname IN ('users_email_ascii', 'supplier_contacts_email_ascii') ORDER BY conname",
+      );
+      const dinhNghia = "CHECK ((email ~ '^[!-~]+@[!-~]+$'::text))";
+      expect(rb).toEqual([
+        { bang: "supplier_contacts", conname: "supplier_contacts_email_ascii", convalidated: true, dinh_nghia: dinhNghia },
+        { bang: "users", conname: "users_email_ascii", convalidated: true, dinh_nghia: dinhNghia },
+      ]);
+      // Hai dòng khai ở hardening (khoản 105): đúng tên, đúng migration, đúng định nghĩa nguyên văn — đọc từ CHÍNH tệp, không từ bản chép.
+      const hardening = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const dau = hardening.indexOf("CHECK_AN_NINH_KHAI constant text :=");
+      const khai = hardening.slice(dau, hardening.indexOf(") AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;", dau));
+      for (const r of rb) {
+        expect(khai, `dòng khai của ${r.conname}`).toContain(`('public', '${r.bang}', '${r.conname}', '${tenMig}', '${r.dinh_nghia.replaceAll("'", "''")}')`);
+      }
+      // INSERT thẳng dưới superuser — không qua tầng ứng dụng — vẫn bị lược đồ chặn, đúng tên; ASCII thì vào.
+      const chen = (bang: "users" | "supplier_contacts", email: string): Promise<string | null> =>
+        (bang === "users" ? nguoiDung(email) : lienHe(email)).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+      expect(await chen("users", "\u24D0-sau-71@vidu.vn"), "ⓐ").toBe("23514 users_email_ascii");
+      expect(await chen("users", "i\u0307-71@vidu.vn"), "i + U+0307 — confusable với i, ví dụ của khoản 71").toBe("23514 users_email_ascii");
+      expect(await chen("supplier_contacts", "\u0111ai-sau-71@vidu.vn"), "đ").toBe("23514 supplier_contacts_email_ascii");
+      expect(await chen("supplier_contacts", "a\u200B-71@vidu.vn"), "zero-width space — 011 để lọt").toBe("23514 supplier_contacts_email_ascii");
+      expect(await chen("users", "ascii-sau-71@vidu.vn")).toBeNull();
+      expect(await chen("supplier_contacts", "ascii-sau-71@vidu.vn")).toBeNull();
+      // Lược đồ đã ở trạng thái cuối: migrate() kế không áp gì và mục phán xét khoản 105 im.
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([]);
+    } finally {
       await rm(tmp, { recursive: true, force: true });
       await db.stop();
     }
@@ -1149,6 +1461,60 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "SELECT app_current_org_id() AS org",
       );
       expect(ketQua.rows[0]?.org).toBeNull();
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [S1.233 / khoản 158] `095` là policy RESTRICTIVE đầu tiên mang `TO <một vai>`: `DROP OWNED BY app_api` của kịch bản N3
+  // ở trên XOÁ `outbox_jobs_kind_app_api` (vai là chủ thể duy nhất), và trước mục tự chữa của hardening N3 đỏ ở 83⑴ — *"khai
+  // public.outbox_jobs.outbox_jobs_kind_app_api … mà CSDL không có policy đúng bảy cột"*. Vế này đo thẳng đường DROP POLICY
+  // (cùng khuôn ca 044 ở dưới), và đối chứng: policy bị ĐỔI biểu thức thì hardening KHÔNG "sửa đè" — không có migration nào
+  // để so — mà NÉM ở lượt phán xét, nêu tên, không in biểu thức (T1).
+  it("[S1.233 / khoản 158] DROP POLICY một trong hai policy kind theo vai (095) ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai; ĐỔI biểu thức tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const docHai = async (): Promise<{ polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null }[]> =>
+        (
+          await db.pool.query<{ polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null }>(
+            `SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh,
+                    (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai,
+                    pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc
+               FROM pg_policy p
+              WHERE p.polrelid = to_regclass('public.outbox_jobs')
+                AND p.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')
+              ORDER BY p.polname`,
+          )
+        ).rows;
+      const truoc = await docHai();
+      expect(truoc.map((r) => [r.polname, r.permissive, r.lenh, r.vai])).toEqual([
+        ["outbox_jobs_kind_app_api", false, "w", "app_api"],
+        ["outbox_jobs_kind_app_unseal", false, "w", "app_unseal"],
+      ]);
+      expect(truoc.every((r) => r.u !== null && r.u === r.wc), "hai vế bằng nhau, không NULL").toBe(true);
+      // Dòng khai ở hardening là NGUỒN của câu sửa: bản trong CSDL bằng bản khai (literal nhân đôi nháy).
+      const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+      const khai = docHangHardeningTu(hardening, "POLICY_RESTRICTIVE_KHAI");
+      for (const r of truoc) expect(khai, `dòng khai của ${r.polname}`).toContain(`'${r.polname}', 'w', '${r.vai}', '${r.u!.replaceAll("'", "''")}'`);
+
+      await db.pool.query("DROP POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs");
+      expect((await docHai()).map((r) => r.polname), "tiền đề: policy đã mất").toEqual(["outbox_jobs_kind_app_api"]);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await docHai(), "hardening dựng lại ĐÚNG bảy cột, không chỉ MỘT policy cùng tên").toEqual(truoc);
+
+      // Đối chứng: nới USING/WITH CHECK bằng tay ⇒ NÉM, nêu tên policy, không in biểu thức; bản đã nới CÒN NGUYÊN.
+      await db.pool.query("ALTER POLICY outbox_jobs_kind_app_api ON public.outbox_jobs USING (true) WITH CHECK (true)");
+      const loi: unknown = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(loi, "migrate() phải NÉM khi policy đã khai bị đổi").toBeInstanceOf(Error);
+      const thongDiep = (loi as Error).message;
+      expect(thongDiep).toContain("outbox_jobs_kind_app_api");
+      expect(thongDiep).not.toContain("kind = ANY");
+      expect(thongDiep).not.toContain("LOGIN_LINK_SEND");
+      expect((await docHai()).find((r) => r.polname === "outbox_jobs_kind_app_api")?.u, "không sửa đè một policy ĐANG CÓ").toBe("true");
     } finally {
       await db.stop();
     }
@@ -1690,11 +2056,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_de_xuat", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    // [S1.231 / khoản 231] `093` định nghĩa lại thân: vế *không lượt chấm nào mới hơn* (khuôn `060` (A)), nhánh có tên
+    // `j5_luot_cham_khong_moi_nhat`. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH từ `074` bằng script.
+    { ham: "award_kiem_de_xuat", migration: "093_award_luot_cham_moi_nhat.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
     // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
     // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_mot_award_song", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    // [S1.231 / khoản 232 / ADR-133] `094` định nghĩa lại thân: nhánh `WITHDRAWN` ba vế có tên, J7 mở lại sau hàng rút.
+    // Con trỏ dời sang `094`; thân TRÍCH từ `068` bằng script rồi đổi năm chỗ.
+    { ham: "award_kiem_mot_award_song", migration: "094_award_withdrawn.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
@@ -3502,6 +3872,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
@@ -4423,8 +4798,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await migrate(db.pool, MIGRATIONS_DIR);
       const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
       const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
-      const setconfigDb = async (): Promise<string[] | null> =>
-        (await db.pool.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
+      const setconfigDb = async (q: pg.Pool | pg.PoolClient = db.pool): Promise<string[] | null> =>
+        (await q.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
       const guc = "00000000-0000-4000-8000-000000000087";
       const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
       const CAU87 = docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN");
@@ -4445,12 +4820,23 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       };
 
       // (a) mức database — phán xét, không tự RESET, không in giá trị.
-      await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
-      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      bat87(loi, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "GUC tuỳ biến gắn sẵn ở mức database phải bị bắt");
-      await nhanhA(db.pool, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ (câu phán xét chạy trực tiếp)");
-      expect(await setconfigDb(), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
-      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      // [S1.211] Mọi câu của cửa sổ SET … RESET đi qua MỘT kết nối giữ sẵn, mở TRƯỚC `ALTER DATABASE … SET` (không thừa kế
+      // GUC); `migrate(db.pool)` trong cửa sổ lấy kết nối KHÁC — kết nối ấy thừa kế, bị từ chối sớm rồi HUỶ. Bản trước để
+      // `setconfigDb()` và câu RESET tự lấy kết nối từ pool: sau [S1.215 / khoản 104] (lượt hardening sau vòng lỗi cũng huỷ kết nối)
+      // pool không còn kết nối rảnh nào mở trước SET, nên hai câu ấy mở kết nối MỚI trong cửa sổ — thừa kế `app.org_id`, về pool —
+      // và đối chứng "RESET ⇒ đi qua" nhận đúng nó: từ chối sớm là ĐÚNG (phiên mang GUC), vế đối chứng thì đo sai thứ. Nay đối
+      // chứng lấy hoặc kết nối giữ sẵn (mở trước SET) hoặc một kết nối mở SAU RESET — cả hai sạch, không tuỳ thứ tự pool.
+      const knTruocSet = await db.pool.connect();
+      try {
+        await knTruocSet.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+        const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+        bat87(loi, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "GUC tuỳ biến gắn sẵn ở mức database phải bị bắt");
+        await nhanhA(knTruocSet, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ (câu phán xét chạy trực tiếp)");
+        expect(await setconfigDb(knTruocSet), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
+        await knTruocSet.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      } finally {
+        knTruocSet.release();
+      }
       await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: RESET ⇒ đi qua").resolves.toEqual([]);
 
       // (b) vai có tên: bốn mục RESET ALL đứng TRƯỚC và tự chữa — mục 87 im (kề nhau, không chồng).
@@ -4471,11 +4857,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
 
       // (a′) [lượt soi 39 NHẸ-1] `ALTER ROLE ALL SET` — hàng (setrole 0, setdatabase 0): bị bắt VÀ có tên riêng (bản đầu: mo_ta NULL,
       //      thông điệp "SAI ()"); ba mục kề (row_security/…) không thấy hàng ấy — khoản 92.
-      await db.pool.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
-      const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      bat87(loiAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "ALTER ROLE ALL phải bị bắt");
-      await nhanhA(db.pool, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "nhánh ⒜′ (câu phán xét chạy trực tiếp)");
-      await db.pool.query("ALTER ROLE ALL RESET app.org_id");
+      // [S1.211] Cùng kỷ luật cửa sổ như (a): `ALTER ROLE ALL SET` cũng áp cho mọi phiên mở SAU nó.
+      const knTruocSetAll = await db.pool.connect();
+      try {
+        await knTruocSetAll.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
+        const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+        bat87(loiAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "ALTER ROLE ALL phải bị bắt");
+        await nhanhA(knTruocSetAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "nhánh ⒜′ (câu phán xét chạy trực tiếp)");
+        await knTruocSetAll.query("ALTER ROLE ALL RESET app.org_id");
+      } finally {
+        knTruocSetAll.release();
+      }
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       // (e) [lượt soi 39 NHẸ-5] proconfig của hàm trong lược đồ dự án.
@@ -4502,7 +4894,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "SELECT current_setting('app.org_id', true) AS v, (SELECT count(*)::int FROM pg_settings WHERE name = 'app.org_id') AS ps",
         );
         expect(nguon[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới, và placeholder vắng ở pg_settings (đo)").toEqual({ v: guc, ps: 0 });
-        expect(await setconfigDb(), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
+        // [S1.211] Đọc qua `poolSys`, không qua `db.pool`: một kết nối `db.pool` mở trong cửa sổ ALTER SYSTEM thừa kế `app.org_id`
+        // và về pool — cùng kỷ luật cửa sổ như (a).
+        expect(await setconfigDb(poolSys), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
         // [S1.48 / 40a H1] migrate() nay TỪ CHỐI SỚM (trước lượt sửa) cho bốn GUC lõi; nhánh ⒞ ở BƯỚC 3 vẫn đứng cho tập tên
         // rộng hơn — đo bằng câu phán xét chạy trực tiếp trên chính phiên ấy.
         const loiSys = await loiCua(migrate(poolSys, MIGRATIONS_DIR));
@@ -5438,6 +5832,37 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       } finally {
         await db.stop();
       }
+    }
+  }, 180_000);
+
+  // ==========================================================================================
+  // [S1.212 / khoản 163] MIỄN TRỪ SECURITY DEFINER KHOÁ THEO CHỮ KÝ, KHÔNG THEO TÊN TRẦN
+  // ==========================================================================================
+  // Bản S1.82: `NGOAI_LE_DOC_VONG` miễn `public.outbox_danh_sach_to_chuc` theo TÊN, còn hàng ghim thân hàm khoá chữ ký
+  // `()` — nên `outbox_danh_sach_to_chuc(text) SECURITY DEFINER` với thân tuỳ ý đi qua CẢ HAI lớp (đo: migrate() đi qua
+  // trước bản vá). Tạo hàm trong `public` cần CREATE trên schema — không vai ứng dụng nào có (001) — nên đường tới là
+  // superuser, đúng như khoản 163 ghi; test đi qua migrate() THẬT, và đối chứng "hàm gốc vẫn qua" đo ở cùng thông điệp.
+  it("[S1.212 / khoản 163] overload public.outbox_danh_sach_to_chuc(text) SECURITY DEFINER do superuser tạo làm migrate() GÃY và nêu ĐÚNG CHỮ KÝ; hàm gốc () — khai theo chữ ký — không bị nêu; DROP overload ⇒ đi qua", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      await db.pool.query(
+        "CREATE FUNCTION public.outbox_danh_sach_to_chuc(text) RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER " +
+          "AS 'SELECT o.id FROM public.organizations o'",
+      );
+      const loi = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "overload cùng tên phải bị mục (C) bắt — miễn trừ theo tên trần từng cho nó đi qua").not.toBeNull();
+      expect(loi!.message).toContain("đọc vòng qua RLS");
+      expect(loi!.message).toContain("public.outbox_danh_sach_to_chuc(text): hàm SECURITY DEFINER");
+      expect(loi!.message, "hàm gốc đã khai theo chữ ký () nên KHÔNG bị nêu").not.toContain("public.outbox_danh_sach_to_chuc(): hàm SECURITY DEFINER");
+      expect(loi!.message, "dòng khai của hàm gốc không bị báo thiu — hàm gốc còn nguyên").not.toContain("dòng khai thiu");
+      await db.pool.query("DROP FUNCTION public.outbox_danh_sach_to_chuc(text)");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "gỡ overload ⇒ hardening im lặng trở lại").resolves.toEqual([]);
+    } finally {
+      await db.stop();
     }
   }, 180_000);
 
@@ -6979,7 +7404,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         'mục "định nghĩa hàm public.audit_compute_hash(...)" ở trạng thái SAI TRƯỚC khi sửa',
       );
       // Và thông báo mang CHẨN ĐOÁN thật, không chỉ tên mục — đó là thứ người vận hành cần.
-      expect(gop).toContain("prosrc hiện tại");
+      // ~~expect(gop).toContain("prosrc hiện tại");~~ [S1.210 / khoản 117] Chẩn đoán là VÂN TAY của prosrc HIỆN TẠI —
+      // left(encode(sha256(convert_to(<thân đã chuẩn hoá khoảng trắng>, 'UTF8')), 'hex'), 16), tra lại bằng công thức ở
+      // ADR-124 — không phải thân hàm: thân hàm có thể mang hằng (UUID, email) và WARNING này đi thẳng vào log deploy
+      // (chuẩn S1.51 ⑷). Đòi đúng vân tay của thân VỪA THAY, để phép đo không xanh với một chuỗi hex bất kỳ.
+      const thanHienTai = "SELECT sha256(''::bytea)";
+      const k = gop.indexOf(thanHienTai);
+      expect(k < 0 ? "" : gop.slice(Math.max(0, k - 200), k + 60), "thân hàm hiện tại bị in ra trong WARNING").toBe("");
+      const { rows: vt } = await db.pool.query<{ vt: string }>(
+        "SELECT left(encode(sha256(convert_to($1, 'UTF8')), 'hex'), 16) AS vt",
+        [thanHienTai],
+      );
+      expect(gop).toContain(`vân tay prosrc hiện tại: ${vt[0]!.vt}`);
       // Vế chống rỗng ruột: một mục KHÔNG trôi thì KHÔNG được có warning (nếu không, tín hiệu
       // này chìm trong nhiễu và trở thành vô dụng — đúng chế độ hỏng mà nó sinh ra để đóng).
       expect(gop).not.toContain('mục "định nghĩa hàm public.chot_moc_neo()" ở trạng thái SAI');
@@ -7938,6 +8374,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
       ]);
 
@@ -8247,6 +8688,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
@@ -8754,4 +9200,49 @@ describe("[S1.110 / khoản 226] thêm một trạng thái RFQ phải phân lo�
     const thieu = tapDong.filter((t) => !phanLoai.has(t));
     expect(thieu, "một trạng thái chưa phân loại phải lộ ra").toEqual(["AWARDED"]);
   });
+});
+
+// ==============================================================================================
+// [S1.231 / khoản 231 · 232 / 093 · 094] HAI MIGRATION MỚI VÀ BẢN GHIM CỦA CHÚNG NÓI CÙNG MỘT CÂU TRÊN CỤM THẬT
+//
+// Bẫy S1.96, gặp lại ở S1.110: hardening chạy bước SỬA trước vòng migration đánh số và PHÁN XÉT sau, nên một hàm đã ghim mà
+// chỉ đổi trong migration bị dựng lại về bản ghim ở lượt `migrate()` KẾ — migration thành no-op trong im lặng và không cổng nào
+// đỏ. Hai ca `HAM_56` ở trên so VĂN BẢN (thân migration = thân hardening, con trỏ là migration cuối); ca này đọc CATALOG sau
+// HAI lượt `migrate()`: thân đang sống phải mang vế mới sau cả lượt hardening thứ hai, và CHECK phải nhận `WITHDRAWN`.
+// ==============================================================================================
+describe("[S1.231 / khoản 231 · 232] thân award đang sống sau migrate() mang vế mới, và CHECK trạng thái award nhận WITHDRAWN", { timeout: 180_000 }, () => {
+  it("prosrc của hai hàm mang tên ràng buộc mới SAU CẢ lượt migrate() thứ hai; rfq_awards_status_check liệt kê BỐN trạng thái", async () => {
+    const db = await startPostgres();
+    try {
+      const lan1 = await migrate(db.pool, MIGRATIONS_DIR);
+      // Hai migration của lô nằm trong lượt 1 theo thứ tự; sau chúng còn migration của lô khác cùng đợt (095), nên không so đuôi.
+      expect(lan1).toEqual(expect.arrayContaining(["093_award_luot_cham_moi_nhat.sql", "094_award_withdrawn.sql"]));
+      expect(lan1.indexOf("093_award_luot_cham_moi_nhat.sql")).toBeLessThan(lan1.indexOf("094_award_withdrawn.sql"));
+      const docThan = async (): Promise<Record<string, string>> => {
+        const { rows } = await db.pool.query<{ proname: string; prosrc: string }>(
+          "SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace " +
+            "AND proname IN ('award_kiem_de_xuat', 'award_kiem_mot_award_song') ORDER BY proname",
+        );
+        expect(rows.map((r) => r.proname)).toEqual(["award_kiem_de_xuat", "award_kiem_mot_award_song"]);
+        return Object.fromEntries(rows.map((r) => [r.proname, r.prosrc]));
+      };
+      const kiem = (than: Record<string, string>, luc: string): void => {
+        expect(than["award_kiem_de_xuat"], `${luc}: vế lượt chấm mới nhất`).toContain("CONSTRAINT = 'j5_luot_cham_khong_moi_nhat'");
+        for (const t of ["j7_rut_khong_o_proposed", "j7_rut_khong_phai_nguoi_de_xuat", "j7_rut_da_co_chu_ky"]) {
+          expect(than["award_kiem_mot_award_song"], `${luc}: vế ${t}`).toContain(`CONSTRAINT = '${t}'`);
+        }
+      };
+      kiem(await docThan(), "sau lượt 1");
+      const { rows: ck } = await db.pool.query<{ def: string }>(
+        "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint " +
+          " WHERE conrelid = 'public.rfq_awards'::regclass AND conname = 'rfq_awards_status_check'",
+      );
+      expect(ck[0]?.def).toBe("CHECK ((status = ANY (ARRAY['PROPOSED'::text, 'APPROVED'::text, 'CANCELLED'::text, 'WITHDRAWN'::text])))");
+      // Lượt hai: không áp gì, và — đây là vế bắt bẫy S1.96 — hardening KHÔNG trả hai thân về bản cũ.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      kiem(await docThan(), "sau lượt 2 (hardening chạy lại)");
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
 });

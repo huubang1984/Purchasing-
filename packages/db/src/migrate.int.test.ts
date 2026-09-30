@@ -4,7 +4,7 @@ import { join } from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { TU_CHOI_DOI_TRANG_THAI, TU_CHOI_DOI_VAI, TU_CHOI_GUC_SOM, TU_CHOI_TRUOC_VONG, migrate } from "./migrate.js";
+import { TU_CHOI_DOI_TRANG_THAI, TU_CHOI_DOI_VAI, TU_CHOI_GUC_SOM, TU_CHOI_SAU_COMMIT, TU_CHOI_TRUOC_VONG, migrate } from "./migrate.js";
 import { createPool } from "./pool.js";
 
 let db: TestDatabase;
@@ -941,6 +941,192 @@ describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với tr
 // lỗi, không bị một lỗi 42501 che mất.
 // Ranh giới ghim bằng test: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc thì phép so không thấy (chỉ so trạng thái cuối tệp).
 // =====================================================================================
+// ==============================================================================================
+// [S1.215 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI TÁM TRỤC ĐÃ CHỤP: GUC PHIÊN BẤT KỲ, PREPARED STATEMENT, CON TRỎ, KHOÁ TƯ VẤN MỨC PHIÊN, KÊNH LISTEN
+//
+// S1.66 chụp tám trục cuối mỗi tệp (ba GUC vận hành, bốn GUC tenant/khách, đối tượng tạm); GUC phiên KHÁC mà một tệp đặt (`statement_timeout`,
+// `TimeZone`, …) vẫn đi theo sang tệp sau và các lượt hardening sau vòng (khoản 104, đọc chưa đo). Nay `CAU_TRANG_THAI_PHIEN` chụp thêm
+// MỌI GUC phiên có giá trị khác nền (`pg_settings.source = 'session'` và `setting` khác `reset_val`; tên VÀ giá trị, so theo hợp của hai
+// tập khoá — một tệp RESET thứ migrate() đã đặt khác nền cũng lệch; đặt rồi tự trả về đúng nền thì không: vô hại, và là ranh giới S1.66
+// "tự trả lại" — bản đầu so theo có-mặt-trong-tập-session làm test ấy đỏ), số prepared statement (đo: PREPARE sống qua ROLLBACK) và số
+// con trỏ. Ba ca GUC phiên chạy trên pool của `createPool` (PGOPTIONS 15 s, như deploy thật qua `tools/chay-migrate`): migrate() đặt ba
+// timeout về 0 KHÁC nền, nên một tệp RESET chúng đổi giá trị thật — trên pool trần (nền 0) RESET không đổi gì và không bị nêu. Hai thứ
+// chỉ thấy được SAU COMMIT — khoá tư vấn mức phiên (`pg_locks` không phân biệt khoá phiên với khoá giao dịch) và kênh LISTEN (chỉ có hiệu
+// lực lúc commit) — được hỏi ngay sau COMMIT của tệp, cùng câu, và phép hỏi ấy so lại MỌI trục (vế đối kháng của thân khoản: trigger hoãn
+// trên `schema_migrations` đổi GUC phiên lúc COMMIT, sau phép so trong giao dịch — đo dưới): tệp ĐÃ áp và ghi checksum, migrate() dừng, nói
+// ra điều ấy, HUỶ kết nối để nhả chúng. Và lỗi của lượt hardening SAU vòng nay đặt `phaiHuyPhien`; lượt `truoc_vong` lỗi thì kết nối được
+// giữ như S1.57.
+// ==============================================================================================
+describe("[S1.215 / khoản 104] tệp migration để lại GUC phiên bất kỳ, prepared statement, con trỏ, khoá tư vấn mức phiên hay kênh LISTEN; lượt hardening sau vòng lỗi", () => {
+  const daGhi = async (tep: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0) > 0;
+  const coBang = async (ten: string): Promise<boolean> =>
+    ((await db.pool.query("SELECT 1 FROM pg_class WHERE relname = $1", [ten])).rowCount ?? 0) > 0;
+  const loiCua = (p: Promise<unknown>): Promise<Error | null> =>
+    p.then(
+      () => null,
+      (e: Error) => e,
+    );
+  const pidCua = async (p: pg.Pool): Promise<number> => (await p.query<{ pid: number }>("SELECT pg_backend_pid()::int AS pid")).rows[0]!.pid;
+
+  beforeAll(async () => {
+    await migrate(db.pool, migrationDir({}));
+  });
+
+  it.each([
+    ["180_zz_st_104.sql", "SET statement_timeout = '30s';", "GUC phiên statement_timeout", "30s"],
+    ["181_zz_tz_104.sql", "SET TimeZone = 'Asia/Ho_Chi_Minh';", "GUC phiên TimeZone", "Asia/Ho_Chi_Minh"],
+    ["182_zz_reset_104.sql", "RESET statement_timeout;", "GUC phiên statement_timeout", null],
+  ] as const)(
+    "GUC phiên đặt khác giá trị (hay RESET thứ migrate() đã đặt khác nền) ở tệp giữa ⇒ TỪ CHỐI ở tệp ấy nêu đúng TÊN GUC không nêu giá trị, không dòng schema_migrations, tệp sau không chạy — %s",
+    async (tep, cau, ten, giaTri) => {
+      const pool1 = createPool(db.connectionString, 1);
+      try {
+        const loi = await loiCua(migrate(pool1, migrationDir({ [tep]: cau, "189_zz_sau_104.sql": "CREATE TABLE mig_104_sau (x int);" })));
+        expect(loi, `bản trước bản vá: ${tep} được ghi và GUC đi theo sang tệp sau`).not.toBeNull();
+        expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+        expect(loi!.message).toContain(`${tep} kết thúc với ${ten} khác lúc mở vòng`);
+        if (giaTri !== null) expect(loi!.message, "chỉ tên, không giá trị").not.toContain(giaTri);
+        expect(await daGhi(tep), tep).toBe(false);
+        expect(await coBang("mig_104_sau"), "tệp sau không được chạy").toBe(false);
+      } finally {
+        await pool1.end();
+      }
+    },
+  );
+
+  it("ĐỐI CHỨNG: tệp SET rồi RESET một GUC migrate() không đặt, đặt lại CÙNG giá trị một GUC migrate() đã đặt, hay đặt GUC ở phạm vi hàm (proconfig), thì đi qua", async () => {
+    const dir = migrationDir({
+      "183_zz_tra_lai_104.sql":
+        "SET TimeZone = 'Asia/Ho_Chi_Minh'; CREATE TABLE mig_104_tra (x int); RESET TimeZone; SET statement_timeout = 0; " +
+        "CREATE FUNCTION mig_104_f() RETURNS int LANGUAGE sql SET TimeZone = 'UTC' AS 'SELECT 1'; SELECT mig_104_f();",
+    });
+    expect(await migrate(db.pool, dir)).toEqual(["183_zz_tra_lai_104.sql"]);
+    expect(await coBang("mig_104_tra")).toBe(true);
+  });
+
+  it.each([
+    ["184_zz_prepare_104.sql", "PREPARE zz_m104 AS SELECT 1;", "prepared statement", "SELECT count(*)::int AS n FROM pg_prepared_statements"],
+    ["185_zz_con_tro_104.sql", "DECLARE zz_m104_c CURSOR WITH HOLD FOR SELECT 1;", "con trỏ", "SELECT count(*)::int AS n FROM pg_cursors"],
+  ] as const)("%s ở cuối tệp ⇒ TỪ CHỐI nêu trục, không dòng schema_migrations; kết nối bị HUỶ nên kết nối kế của pool max 1 không mang nó", async (tep, cau, ten, cauDem) => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const loi = await loiCua(migrate(pool1, migrationDir({ [tep]: cau })));
+      expect(loi, `bản trước bản vá: ${tep} được ghi`).not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_DOI_TRANG_THAI);
+      expect(loi!.message).toContain(`${tep} kết thúc với ${ten} khác lúc mở vòng`);
+      expect(await daGhi(tep)).toBe(false);
+      const { rows } = await pool1.query<{ n: number }>(cauDem);
+      expect(rows[0]!.n, `${ten} sống qua ROLLBACK (đo) — chỉ huỷ kết nối mới gỡ được`).toBe(0);
+    } finally {
+      await pool1.end();
+    }
+  });
+
+  it.each([
+    [
+      "186_zz_khoa_phien_104.sql",
+      "SELECT pg_catalog.pg_advisory_lock(104186);",
+      "khoá tư vấn mức phiên",
+      "SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND objid = 104186",
+      "188_zz_sau_khoa_104.sql",
+    ],
+    ["187_zz_listen_104.sql", "LISTEN zz_m104_kenh;", "kênh LISTEN", null, "191_zz_sau_listen_104.sql"],
+  ] as const)(
+    "%s ở tệp giữa ⇒ tệp ĐÃ áp và ghi checksum (chỉ thấy được sau COMMIT), migrate() dừng nêu trục và nói ra điều ấy, HUỶ kết nối, tệp sau không chạy; lượt kế tiếp tục từ tệp sau",
+    async (tep, cau, ten, cauDem, tepSau) => {
+      const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+      try {
+        const bangSau = `mig_104_sau_${tep.slice(0, 3)}`;
+        const dir = migrationDir({ [tep]: cau, [tepSau]: `CREATE TABLE ${bangSau} (x int);` });
+        const pidTruoc = await pidCua(pool1);
+        const loi = await loiCua(migrate(pool1, dir));
+        expect(loi, `bản trước bản vá: cả hai tệp được ghi và ${ten} ở lại trên kết nối`).not.toBeNull();
+        expect(loi!.message).toContain(TU_CHOI_SAU_COMMIT);
+        expect(loi!.message).toContain(tep);
+        expect(loi!.message).toContain(ten);
+        expect(loi!.message, "thông điệp phải nói tệp ĐÃ được áp").toContain("ĐÃ được áp");
+        expect(loi!.message, "không phải một lần thất bại của tệp").not.toContain("thất bại");
+        expect(await daGhi(tep), "tệp đã commit và ghi checksum trước khi phép hỏi sau COMMIT chạy").toBe(true);
+        expect(await daGhi(tepSau), "tệp sau không chạy").toBe(false);
+        expect(await coBang(bangSau)).toBe(false);
+        // Kết nối bị huỷ (pool max 1 ⇒ pid đổi) ⇒ khoá được nhả cùng backend. Backend thoát bất đồng bộ — chờ có hạn, không nới.
+        expect(await pidCua(pool1), "kết nối deploy mang trạng thái ấy phải bị huỷ, không quay về pool").not.toBe(pidTruoc);
+        if (cauDem !== null) {
+          const het = Date.now() + 5_000;
+          let n = -1;
+          while (Date.now() < het) {
+            n = (await db.pool.query<{ n: number }>(cauDem)).rows[0]!.n;
+            if (n === 0) break;
+            await new Promise((x) => setTimeout(x, 25));
+          }
+          expect(n, `${ten} phải được nhả cùng kết nối bị huỷ`).toBe(0);
+        }
+        expect(await migrate(pool1, dir), "lượt kế tiếp tục từ tệp sau, không chạy lại tệp đã áp").toEqual([tepSau]);
+        expect(await coBang(bangSau)).toBe(true);
+      } finally {
+        await pool1.end();
+      }
+    },
+  );
+
+  it("ĐỐI KHÁNG (thân khoản 104, chưa đo tới nay): constraint trigger hoãn trên schema_migrations do chính tệp dựng đổi GUC phiên LÚC COMMIT — sau phép so trong giao dịch ⇒ phép so sau COMMIT thấy, nêu GUC phiên TimeZone không nêu giá trị, tệp ĐÃ áp, tệp sau không chạy, kết nối bị huỷ", async () => {
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const dir = migrationDir({
+        "193_zz_trigger_hoan_104.sql":
+          "CREATE FUNCTION zz_m104_doi_tz() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN PERFORM set_config('TimeZone', 'Asia/Ho_Chi_Minh', false); RETURN NULL; END$$; " +
+          "CREATE CONSTRAINT TRIGGER zz_m104_ct AFTER INSERT ON public.schema_migrations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION zz_m104_doi_tz();",
+        "194_zz_sau_trigger_104.sql": "CREATE TABLE mig_104_sau_193 (x int);",
+      });
+      const pidTruoc = await pidCua(pool1);
+      const loi = await loiCua(migrate(pool1, dir));
+      expect(loi, "bản trước bản vá: cả hai tệp được ghi, TimeZone đi theo kết nối về pool").not.toBeNull();
+      expect(loi!.message).toContain(TU_CHOI_SAU_COMMIT);
+      expect(loi!.message).toContain("193_zz_trigger_hoan_104.sql");
+      expect(loi!.message).toContain("GUC phiên TimeZone");
+      expect(loi!.message, "chỉ tên, không giá trị").not.toContain("Asia/Ho_Chi_Minh");
+      expect(await daGhi("193_zz_trigger_hoan_104.sql"), "trigger hoãn chạy lúc COMMIT — sau phép so trong giao dịch và sau INSERT checksum").toBe(true);
+      expect(await daGhi("194_zz_sau_trigger_104.sql")).toBe(false);
+      expect(await coBang("mig_104_sau_193")).toBe(false);
+      expect(await pidCua(pool1), "kết nối mang GUC ấy bị huỷ").not.toBe(pidTruoc);
+    } finally {
+      // Trigger là đối tượng BỀN trên bảng sổ của migrate() — gỡ để các test sau trong tệp không bị nó đổi phiên lúc ghi checksum.
+      await db.pool.query("DROP TRIGGER IF EXISTS zz_m104_ct ON public.schema_migrations; DROP FUNCTION IF EXISTS zz_m104_doi_tz()");
+      await pool1.end();
+    }
+  });
+
+  it("lượt hardening SAU vòng lỗi ⇒ kết nối bị HUỶ (pid của pool max 1 đổi); ĐỐI CHỨNG: lượt truoc_vong lỗi thì kết nối được GIỮ như S1.57", async () => {
+    const dungDir = (cheDo: string, tepOk: string): string =>
+      migrationDir({
+        [tepOk]: "SELECT 1;",
+        "loi_theo_luot.always.sql":
+          `DO $$ BEGIN IF current_setting('app.hardening_che_do', true) = '${cheDo}' THEN ` +
+          "RAISE EXCEPTION USING ERRCODE = 'TP998', MESSAGE = 'loi gia o luot hardening'; END IF; END $$;",
+      });
+    const pool1 = new pg.Pool({ connectionString: db.connectionString, max: 1 });
+    try {
+      const pidTruoc = await pidCua(pool1);
+      const loi = await loiCua(migrate(pool1, dungDir("phan_xet", "190_zz_ok_104.sql")));
+      expect(loi).not.toBeNull();
+      expect(loi!.message).toContain("(phan_xet) thất bại");
+      expect(await daGhi("190_zz_ok_104.sql"), "tệp của lượt đã áp trước khi lượt phán xét chạy").toBe(true);
+      expect(await pidCua(pool1), "bản trước bản vá: phiên deploy sau lượt hardening lỗi quay về pool nguyên trạng").not.toBe(pidTruoc);
+
+      // Lượt `truoc_vong` chỉ chạy khi còn tệp chưa áp — tệp mới, tên khác.
+      const pidTruoc2 = await pidCua(pool1);
+      const loi2 = await loiCua(migrate(pool1, dungDir("truoc_vong", "192_zz_ok_104b.sql")));
+      expect(loi2).not.toBeNull();
+      expect(loi2!.message).toContain("(truoc_vong) thất bại");
+      expect(await daGhi("192_zz_ok_104b.sql"), "không tệp nào chạy").toBe(false);
+      expect(await pidCua(pool1), "lượt hỏi trước vòng lỗi: không tệp nào chạy, phiên không mang gì — giữ (quyết định S1.57)").toBe(pidTruoc2);
+    } finally {
+      await pool1.end();
+    }
+  });
+});
+
 describe("[S1.57 / khoản nợ 100] tệp migration kết thúc dưới vai khác vai đã mở vòng đánh số", () => {
   const VAI_LA = "zz_x100";
   let vaiGoc = "";

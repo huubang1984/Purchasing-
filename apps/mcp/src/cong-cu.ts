@@ -10,7 +10,7 @@
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
 //   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
-//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ [S1.234] MƯỜI CHÍN route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ ~~[S1.216] MƯỜI TÁM~~ ~~[S1.234] MƯỜI CHÍN~~ [S1.214 — gộp #217] HAI MƯƠI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -174,6 +174,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "hàng chuẩn và lý do. Cùng lý do với `/mapping-queue`: ánh xạ là khoá của lịch sử giá, và chủ dự án chốt ngày 2026-09-30 " +
     "chưa mở nó cho một tác tử. Người soạn gói đọc nó trên màn `/tao-thau`. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.234 / S4.3b]",
+  "/auth/login-links":
+    "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
+    "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +
+    "cảnh một agent là cho một chứng chỉ agent rò biết chủ nó vào lúc nào và link nào còn sống. Route " +
+    "khai `agent: false` (`apps/api/src/routes.test.ts` ghim) và dòng này khai vì sao. [S1.216]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */
