@@ -258,16 +258,48 @@ function batBuocUuid(gia: string, ten: string): void {
   }
 }
 
-async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<string> {
+/** Trạng thái RFQ trong tổ chức đang gắn, hay `undefined` khi không có hàng nào (UUID lạ, hay hàng của tổ chức khác mà RLS giấu). */
+async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<string | undefined> {
   const { rows } = await client.query<HangTrangThai>(
     "SELECT status FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1",
     [rfqId],
   );
-  const r = rows[0];
-  if (r === undefined) {
-    throw new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn.");
-  }
-  return r.status;
+  return rows[0]?.status;
+}
+
+/**
+ * [S1.9113 / khoản 133] Lần từ chối "không tìm thấy RFQ trong tổ chức" của HAI đường đọc có cổng vào sổ rồi mới ném.
+ *
+ * Đo trước bản vá (§S1.72, đo lại ở §S1.9113): `buildComparisonTable` và `countReceivedBids` ném `ComparisonError` mà 0 hàng sổ — với
+ * UUID ngẫu nhiên lẫn id CÓ THẬT của tổ chức khác mà RLS giấu — nên một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt
+ * (tiểu mục ADR-016 [S1.9113]): D5 phủ lần "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh
+ * không tìm thấy của cổng mở thầu (khoản 121): `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI ở giao dịch độc lập,
+ * lớp lỗi và thông điệp giữ nguyên. Payload chỉ mang TÊN ĐƯỜNG (một hằng): hai hàm chung một mã, và kiểm toán viên cần biết lần dò đi qua
+ * bảng so sánh hay qua số báo giá. `ComparisonError` không mang hậu tố `DeniedError`, nên cổng `ghi-so-tu-choi-mot-duong` không thấy chỗ
+ * này; `danh-muc-tu-choi` thì thấy — mã phải có trong `DANH_MUC_HANH_DONG_TU_CHOI` —, và khối `[INV-D5] [S1.9113 / khoản 133]` của
+ * `comparison.int.test.ts` đếm hàng ở cả sổ của tổ chức người gọi lẫn sổ của tổ chức bị dò. `return` là chịu lực, cùng lý do với
+ * `tuChoi` của cổng mở thầu: bỏ nó thì lời hứa trôi đi và hàm đi tiếp như đã tìm thấy.
+ */
+async function tuChoiKhongTimThay(
+  auditPool: pg.Pool,
+  orgId: string,
+  nguoiGoiId: string,
+  rfqId: string,
+  operation: "BUILD_COMPARISON_TABLE" | "COUNT_RECEIVED_BIDS",
+): Promise<never> {
+  return throwAuditedDenial(
+    auditPool,
+    orgId,
+    {
+      actorType: "USER",
+      actorId: nguoiGoiId,
+      action: "COMPARISON_NOT_FOUND_DENIED",
+      resourceType: "RFQ",
+      resourceId: rfqId,
+      payload: { operation },
+    },
+    new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn."),
+  );
 }
 
 /**
@@ -276,6 +308,19 @@ async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<strin
  * Mọi trường phái sinh mà mệnh đề A4 gọi tên đều nằm ở đây và KHÔNG có đường nào khác tới chúng
  * trong toàn dự án. Với RFQ chưa mở thầu, hàm này NÉM chứ không trả về một bảng rỗng: một bảng
  * rỗng là một câu trả lời, và "có bao nhiêu báo giá dưới ngân sách" trả lời bằng 0 vẫn là trả lời.
+ *
+ * [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG SỐ CỦA BẢNG TRẢ VỀ — cho mọi người gọi, kể cả `GET /rfqs/:rfqId/comparison`:
+ *   ⑴ `rows[].totalAmount` (CHUỖI thập phân, hay `null`) và `aggregates.min/max/average` là SỐ CHUẨN: tính bằng SQL (`bid_so_tien`,
+ *      020/022) và trả về dạng văn bản, nên đúng tới từng chữ số trong miền `numeric(18, 2)`. Ngoài miền ấy — từ 10^16, hơn hai chữ số
+ *      thập phân, âm, không phải số — là `null` và đếm vào `unparsed`, KHÔNG PHẢI một con số đã làm tròn (022 mục 8; đo ở §S1.9113: một
+ *      chuỗi 17 chữ số phần nguyên ra `null`).
+ *   ⑵ `rows[].payload` là BẢN HIỂN THỊ của phong bì: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một SỐ JSON quá 15 chữ số có nghĩa
+ *      trong đó — đơn giá, số lượng, hay chính `totalAmount` nếu nhà cung cấp viết nó là số — đã đi qua `double` (đo ở khoản 108:
+ *      `99999999999999.99` ra `99999999999999.98`); chuỗi thì đi nguyên. Người đọc số tiền PHẢI lấy ⑴, không lấy `payload.totalAmount`.
+ *      Cột `jsonb` trong CSDL vẫn giữ đủ chữ số (khoản 107); phép mất nằm ở phía ĐỌC, và một client `JSON.parse` thân HTTP làm tròn thêm
+ *      lần nữa — nên sửa riêng phía máy chủ là chưa đủ, và đó là lý do hợp đồng được GHI ở đây thay vì "sửa" `payload` (ba lựa chọn và lý
+ *      do chọn ở ADR-9213). Ghim ở `comparison.int.test.ts` khối `[S1.9113 / khoản 108]`; `apps/web/trang/mo-thau.js` và
+ *      `tools/pilot-gia-lap` đọc ⑴ (grep `totalAmount`, §S1.9113).
  */
 export async function buildComparisonTable(
   client: pg.PoolClient,
@@ -300,6 +345,9 @@ export async function buildComparisonTable(
   );
 
   const trangThai = await docTrangThai(client, rfqId);
+  if (trangThai === undefined) {
+    return tuChoiKhongTimThay(auditPool, orgId, nguoiXem.id, rfqId, "BUILD_COMPARISON_TABLE");
+  }
   if (!(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(trangThai)) {
     // [S1.72 / khoản 121, lượt soi 62a-9] Lần từ chối A4 vào sổ ở giao dịch độc lập rồi mới ném. Đo trên master 298cd4e (§S1.72): trước bản
     // vá, CLOSED và OPEN đều ném mà 0 hàng sổ, và `GET /rfqs/:rfqId/comparison` là 422 — nên một người giữ `bid.view` dò "RFQ đã mở thầu
@@ -538,7 +586,7 @@ export async function countReceivedBids(
   );
   const r = rows[0];
   if (r === undefined) {
-    throw new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn.");
+    return tuChoiKhongTimThay(auditPool, orgId, nguoiDem.id, rfqId, "COUNT_RECEIVED_BIDS");
   }
   if (r.nghiem && !TRANG_THAI_DA_DONG.has(r.status)) {
     return { disclosed: false, reason: "STRICT_BLIND_BEFORE_CLOSE", rfqStatus: r.status };
