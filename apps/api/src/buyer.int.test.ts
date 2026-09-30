@@ -13,7 +13,7 @@
 //   [S1.169] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
 //             thứ hai ký bản mới nhất ⇒ bật S3; phiên bản kế tiếp tính theo bản MỚI NHẤT, không theo bản hiệu lực.
 // ==============================================================================================
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -371,6 +371,22 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     expect(dp.status, dp.text).toBe(200);
     const trangThai = await goi("GET", `/unseal/${unsealId}`, pm1);
     expect(trangThai.status).toBe(200);
+    // [S1.9113 / khoản 133] Bấm điều phối LẦN HAI khi lượt đầu còn PENDING: 422 cùng câu như trước, và — mới — đúng một hàng
+    // `UNSEAL_DISPATCH_DENIED`. Đo trước bản vá: 422, 0 hàng. Đối chứng ngay trước đó: lần điều phối ĐẦU (200) không để lại hàng
+    // từ chối nào, và hai lần phê duyệt THẬT ở trên không để lại `UNSEAL_NOT_FOUND_DENIED` nào.
+    const demHangTuChoi = async (action: string): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3",
+        [orgA, action, unsealId],
+      );
+      return Number(rows[0]?.n ?? "-1");
+    };
+    expect(await demHangTuChoi("UNSEAL_DISPATCH_DENIED"), "đối chứng: lần điều phối ĐẦU không phải một lần từ chối").toBe(0);
+    expect(await demHangTuChoi("UNSEAL_NOT_FOUND_DENIED"), "đối chứng: hai lần phê duyệt một id CÓ THẬT không phải 'không tìm thấy'").toBe(0);
+    const lanHai = await goi("POST", `/unseal/${unsealId}/dispatch`, gd1);
+    expect(lanHai.status, lanHai.text).toBe(422);
+    expect(lanHai.text).toContain("vẫn còn một lượt đang chờ chạy");
+    expect(await demHangTuChoi("UNSEAL_DISPATCH_DENIED"), "[INV-D5] lần bấm thứ hai để lại ĐÚNG một hàng").toBe(1);
     // Điều phối chỉ ĐẶT MỘT JOB — RFQ chưa UNSEALED, bảng so sánh vẫn bị từ chối (A4).
     expect((await goi("GET", `/rfqs/${rfqId}/comparison`, pm1)).status).toBe(422);
     const job = await db.pool.query("SELECT 1 FROM outbox_jobs WHERE org_id = $1 AND kind = 'UNSEAL_RFQ'", [orgA]);
@@ -1197,5 +1213,68 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     const khongObject = await goi("POST", "/policy", tcA, { ...moi, ...MUC, tiers: [1] }, gocKy);
     expect([khongObject.status, khongObject.text]).toEqual([422, expect.stringContaining("phải là mảng các object")]);
     expect((await goi("GET", "/policy/versions", tcA, undefined, gocKy)).text).not.toContain('"version":4');
+  });
+});
+
+// ==============================================================================================
+// [S1.9113 / khoản 133] "KHÔNG TÌM THẤY" QUA HTTP TRÊN BỀ MẶT MỞ THẦU VÀ BẢNG SO SÁNH
+//
+// Đo trước bản vá trên `69e743e`: bốn đường dưới đây trả 422 mà 0 hàng sổ — bảng so sánh và số báo giá cùng câu "Không tìm thấy RFQ
+// trong tổ chức đang gắn.", huỷ mở thầu câu cũ của `cancelUnseal`, còn phê duyệt là 422 "tham chieu khong hop le" của bảng ánh xạ
+// SQLSTATE (23503 trần). Lần bấm điều phối THỨ HAI đo ở ca vòng đời phía trên. Chủ dự án chốt: D5 phủ chúng (tiểu mục ADR-016 [S1.9113]).
+// ==============================================================================================
+describe("[INV-D5] [S1.9113 / khoản 133] \"không tìm thấy\" qua HTTP: bảng so sánh, số báo giá, huỷ và phê duyệt mở thầu — 422 giữ câu, mỗi lần đúng một hàng sổ", () => {
+  async function hangTuChoi(action: string, resourceId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq",
+      [orgA, action, resourceId],
+    );
+    return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
+  }
+
+  it("[INV-D5] id lạ: comparison và bid-count ⇒ 422 cùng câu, mỗi đường một `COMPARISON_NOT_FOUND_DENIED`; cancel ⇒ 422 câu cũ và một `UNSEAL_NOT_FOUND_DENIED`; approve ⇒ 422 CÓ TÊN thay `tham chieu khong hop le` và một `UNSEAL_NOT_FOUND_DENIED`", async () => {
+    const pm = await nguoi("k133-pm@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const gd = await nguoi("k133-gd@vidu.vn", ["DIRECTOR"]);
+    const idRfq = randomUUID();
+    const idYc = randomUUID();
+
+    const ss = await goi("GET", `/rfqs/${idRfq}/comparison`, pm);
+    expect([ss.status, ss.body]).toEqual([422, { error: "Không tìm thấy RFQ trong tổ chức đang gắn." }]);
+    expect(await hangTuChoi("COMPARISON_NOT_FOUND_DENIED", idRfq)).toEqual([[pm.id, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }]]);
+
+    const dem = await goi("GET", `/rfqs/${idRfq}/bid-count`, pm);
+    expect([dem.status, dem.body]).toEqual([422, { error: "Không tìm thấy RFQ trong tổ chức đang gắn." }]);
+    expect(await hangTuChoi("COMPARISON_NOT_FOUND_DENIED", idRfq)).toEqual([
+      [pm.id, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }],
+      [pm.id, "RFQ", { operation: "COUNT_RECEIVED_BIDS" }],
+    ]);
+
+    const huy = await goi("POST", `/unseal/${idYc}/cancel`, pm);
+    expect([huy.status, huy.body]).toEqual([
+      422,
+      { error: "không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn, hoặc nó không ở trạng thái huỷ được" },
+    ]);
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", idYc)).toEqual([[pm.id, "UNSEAL_REQUEST", { operation: "CANCEL_UNSEAL" }]]);
+
+    const duyet = await goi("POST", `/unseal/${idYc}/approve`, gd);
+    expect([duyet.status, duyet.body], "trước bản vá: 422 `tham chieu khong hop le` — 23503 trần qua bảng ánh xạ SQLSTATE").toEqual([
+      422,
+      { error: "Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn." },
+    ]);
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", idYc)).toEqual([
+      [pm.id, "UNSEAL_REQUEST", { operation: "CANCEL_UNSEAL" }],
+      [gd.id, "UNSEAL_REQUEST", { operation: "APPROVE_UNSEAL" }],
+    ]);
+  });
+
+  it("[INV-D5] ĐỐI CHỨNG: RFQ có thật ⇒ comparison bị từ chối vì A4 (`COMPARISON_DENIED`), bid-count 200 — 0 hàng `COMPARISON_NOT_FOUND_DENIED`", async () => {
+    const pm = await nguoi("k133-pm-dc@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Doi chung khoan 133" });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("GET", `/rfqs/${rfqId}/comparison`, pm)).status).toBe(422);
+    expect((await goi("GET", `/rfqs/${rfqId}/bid-count`, pm)).status).toBe(200);
+    expect((await hangTuChoi("COMPARISON_DENIED", rfqId)).length, "lần từ chối A4 vẫn vào sổ như khoản 121").toBe(1);
+    expect(await hangTuChoi("COMPARISON_NOT_FOUND_DENIED", rfqId)).toEqual([]);
   });
 });

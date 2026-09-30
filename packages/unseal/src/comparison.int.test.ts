@@ -19,7 +19,7 @@
 // riêng ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, nơi bộ quét rò rỉ của A4 sống.
 // =============================================================================================
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -30,6 +30,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   COMPARISON_ALLOWED_STATUSES,
   ComparisonDeniedError,
+  ComparisonError,
   type ComparisonTable,
   approveUnseal,
   buildComparisonTable,
@@ -1093,5 +1094,201 @@ describe("[S1.9131 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng b
     // Hai báo giá vô hướng × hai câu = bốn lần; đối tượng và boolean KHÔNG tới `bid_so_tien` (bản
     // trước: `->>` cho `{"so": "900000.00"}` và `true`, và hàm bị gọi trên cả hai).
     expect([...doDai].sort((a, b) => a - b)).toEqual(["900000.00".length, "900000.00".length, "1500000.5".length, "1500000.5".length]);
+  });
+});
+
+// ===============================================================================================
+// [S1.9113 / khoản 133] LẦN TỪ CHỐI "KHÔNG TÌM THẤY RFQ" CỦA HAI ĐƯỜNG ĐỌC CÓ CỔNG VÀO SỔ
+//
+// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.9113): `buildComparisonTable` và `countReceivedBids` với một id RFQ không có
+// trong tổ chức — UUID ngẫu nhiên, hay id CÓ THẬT của tổ chức khác mà RLS giấu — ném `ComparisonError` mà 0 hàng sổ; qua HTTP là 422
+// cùng câu, cũng 0 hàng. Một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt (tiểu mục ADR-016 [S1.9113]): D5 PHỦ lần
+// "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh không tìm thấy của cổng mở thầu
+// (khoản 121): `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên, `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI.
+// ===============================================================================================
+describe("[INV-D5] [S1.9113 / khoản 133] hai đường đọc có cổng từ chối vì KHÔNG TÌM THẤY RFQ thì ghi sổ — lớp lỗi và thông điệp giữ nguyên", () => {
+  let auditPool: pg.Pool;
+  const THONG_DIEP = "Không tìm thấy RFQ trong tổ chức đang gắn.";
+
+  beforeAll(() => {
+    auditPool = db.poolAs("app_api");
+  });
+
+  afterAll(async () => {
+    await auditPool?.end().catch(() => undefined);
+  });
+
+  /** Mọi hàng `COMPARISON_NOT_FOUND_DENIED` của một tổ chức cho một id — HÌNH DẠNG trọn, theo thứ tự ghi. */
+  async function hangKhongTimThay(orgId: string, rfqId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'COMPARISON_NOT_FOUND_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgId, rfqId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ — cùng khuôn `voiGhiSoBiChan` của khối khoản 121. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k133_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k133 thong diep noi bo' USING ERRCODE = 'TP133'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k133_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k133_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k133_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k133_chan_ghi_so()");
+    }
+  }
+
+  it("[INV-D5] UUID ngẫu nhiên ⇒ `ComparisonError` cùng câu ở cả hai hàm, và mỗi hàm đúng một `COMPARISON_NOT_FOUND_DENIED` mang người xem, `RFQ`, id đã gửi và tên đường", async () => {
+    const id = randomUUID();
+    const loiBang = await loiCua(
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool)),
+    );
+    expect(loiBang).toBeInstanceOf(ComparisonError);
+    expect((loiBang as Error).message).toBe(THONG_DIEP);
+    expect(await hangKhongTimThay(orgA, id)).toEqual([["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }]]);
+
+    const loiDem = await loiCua(
+      withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool)),
+    );
+    expect(loiDem).toBeInstanceOf(ComparisonError);
+    expect((loiDem as Error).message).toBe(THONG_DIEP);
+    expect(await hangKhongTimThay(orgA, id)).toEqual([
+      ["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }],
+      ["USER", uYc, "RFQ", { operation: "COUNT_RECEIVED_BIDS" }],
+    ]);
+  });
+
+  it("[INV-D5] id CÓ THẬT của tổ chức khác — RLS giấu ⇒ cùng lần từ chối; hàng vào sổ của TỔ CHỨC NGƯỜI GỌI, sổ của tổ chức kia 0 hàng", async () => {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Goi cua B', $2, false, $3, $4) RETURNING id",
+      [orgB, MAI_SAU, uB, sB],
+    );
+    const rfqB = rows[0]?.id ?? "";
+    expect(rfqB).not.toBe("");
+    const loiBang = await loiCua(
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId: rfqB, actorSessionId: sYc }, auditPool)),
+    );
+    const loiDem = await loiCua(
+      withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: rfqB, actorSessionId: sYc }, auditPool)),
+    );
+    expect([loiBang, loiDem].map((l) => [(l as Error).name, (l as Error).message])).toEqual([
+      ["ComparisonError", THONG_DIEP],
+      ["ComparisonError", THONG_DIEP],
+    ]);
+    expect(await hangKhongTimThay(orgA, rfqB)).toEqual([
+      ["USER", uYc, "RFQ", { operation: "BUILD_COMPARISON_TABLE" }],
+      ["USER", uYc, "RFQ", { operation: "COUNT_RECEIVED_BIDS" }],
+    ]);
+    expect(await hangKhongTimThay(orgB, rfqB), "lần dò của A không được ghi vào sổ của B").toEqual([]);
+  });
+
+  it("[INV-D5] bản ghi `COMPARISON_NOT_FOUND_DENIED` sống qua rollback của người gọi", async () => {
+    const id = randomUUID();
+    const CHAN = new Error("chan-lai-de-do-rollback");
+    await expect(
+      withTenant(apiPool, orgA, async (c) => {
+        await buildComparisonTable(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool).catch(() => undefined);
+        throw CHAN;
+      }),
+    ).rejects.toBe(CHAN);
+    expect((await hangKhongTimThay(orgA, id)).length, "bản ghi từ chối biến mất cùng rollback — nó phải ở một giao dịch ĐỘC LẬP").toBe(1);
+  });
+
+  it("[INV-D5] ĐỐI CHỨNG DƯƠNG: id có thật ⇒ cả hai hàm đi qua và 0 hàng `COMPARISON_NOT_FOUND_DENIED`", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    await epTrangThai(rfqId, "UNSEALED");
+    await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, auditPool));
+    await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, auditPool));
+    expect(await hangKhongTimThay(orgA, rfqId)).toEqual([]);
+  });
+
+  it("[INV-D5] lần ghi `COMPARISON_NOT_FOUND_DENIED` ném TP133 ⇒ `DenialAuditFailedError` giữ `ComparisonError` trong `denial`, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const id = randomUUID();
+    const loi = await voiGhiSoBiChan("COMPARISON_NOT_FOUND_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId: id, actorSessionId: sYc }, auditPool))),
+    );
+    expect((loi as Error).name).toBe("DenialAuditFailedError");
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(ComparisonError);
+    expect(x.denial.message).toBe(THONG_DIEP);
+    expect((x.cause as { code?: unknown }).code).toBe("TP133");
+    expect(await hangKhongTimThay(orgA, id)).toEqual([]);
+  });
+});
+
+// ===============================================================================================
+// [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG API CỦA BẢNG SO SÁNH: `totalAmount` (CHUỖI) LÀ SỐ CHUẨN, `payload` LÀ BẢN HIỂN THỊ
+//
+// `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON quá 15 chữ số có nghĩa trong `payload` đi qua `double` ở PHÍA ĐỌC —
+// đo ở khoản 108: `'{"a":99999999999999.99}'::jsonb` đọc qua `pg` ra `99999999999999.98`. `totalAmount` của hàng thì tính bằng SQL
+// (`bid_so_tien`, 020) và trả về dạng CHUỖI, nên đúng tới từng chữ số. Chủ dự án chốt GIỮ hình dạng JSON và GHI HỢP ĐỒNG (ADR-9213);
+// khối dưới đây ghim ĐÚNG hành vi ấy — không "sửa" nó — để một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản
+// thì cổng này đỏ và hợp đồng phải viết lại. Cột `jsonb` trong CSDL vẫn giữ đủ chữ số: phép mất xảy ra ở phía đọc, và ca đo nói rõ chỗ.
+// ===============================================================================================
+describe("[S1.9113 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng tới từng chữ số, `payload` là bản hiển thị và có thể mất chính xác từ 16 chữ số có nghĩa", () => {
+  it("số tiền 18 chữ số có nghĩa (16 nguyên + 2 thập phân): `totalAmount` và phép tổng hợp giữ nguyên; `payload` đọc qua `pg` đã làm tròn — cả trường đơn giá lẫn khi chính `totalAmount` trong phong bì là số JSON; CSDL vẫn giữ đủ chữ số", async () => {
+    const rfqId = await taoRfqMo(csNghiem);
+    const vChuoi = await nopBaoGia(rfqId, "NCC Chuoi");
+    const vSo = await nopBaoGia(rfqId, "NCC So");
+    // 18 chữ số có nghĩa — đúng miền `numeric(18, 2)` mà `bid_so_tien` (022 mục 8) nhận; `double` chỉ giữ 15–17 chữ số, nên hai con số này
+    // KHÔNG sống sót qua `Number(…)`. (Bản đầu của ca này dùng 17 chữ số PHẦN NGUYÊN và đỏ vì `bid_so_tien` trả NULL từ 10^16 — đúng
+    // luật của 022, ghi lại ở docstring `buildComparisonTable`.)
+    const DON_GIA = "1234567890123456.78";
+    const TONG_SO = "2234567890123456.78";
+    expect(String(Number(DON_GIA)), "tiền đề: con số này KHÔNG sống sót qua double").not.toBe(DON_GIA);
+    expect(String(Number(TONG_SO)), "tiền đề: con số này KHÔNG sống sót qua double").not.toBe(TONG_SO);
+    // Văn bản JSON THÔ (xem chú thích của `moThau`): `JSON.stringify` của một giá trị JS đã làm tròn TRƯỚC khi vào CSDL.
+    await moThau(rfqId, [
+      [vChuoi, `{"totalAmount":"${DON_GIA}","currency":"VND","lines":[{"description":"Thep tam","quantity":1,"unitPrice":${DON_GIA}}]}`],
+      [vSo, `{"totalAmount":${TONG_SO},"currency":"VND"}`],
+    ]);
+    // Tiền đề: CSDL giữ ĐỦ chữ số ở cả hai phong bì — phép mất không nằm ở chỗ lưu.
+    const { rows: trongCsdl } = await db.pool.query<{ bid_version_id: string; tong: string; don_gia: string | null }>(
+      "SELECT bid_version_id, payload ->> 'totalAmount' AS tong, payload -> 'lines' -> 0 ->> 'unitPrice' AS don_gia " +
+        "  FROM rfq_unsealed_bids WHERE bid_version_id = ANY($1::uuid[]) ORDER BY bid_version_id = $2 DESC",
+      [[vChuoi, vSo], vChuoi],
+    );
+    expect(trongCsdl.map((r) => [r.tong, r.don_gia])).toEqual([
+      [DON_GIA, DON_GIA],
+      [TONG_SO, null],
+    ]);
+
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const theoPhienBan = new Map(bang.rows.map((r) => [r.bidVersionId, r]));
+    const hChuoi = theoPhienBan.get(vChuoi);
+    const hSo = theoPhienBan.get(vSo);
+    expect(hChuoi !== undefined && hSo !== undefined, "cả hai hàng có mặt").toBe(true);
+    if (hChuoi === undefined || hSo === undefined) return;
+
+    // HỢP ĐỒNG ⑴: `totalAmount` (chuỗi, tính bằng SQL) đúng tới từng chữ số — kể cả khi phong bì viết nó là số JSON.
+    expect(hChuoi.totalAmount).toBe(DON_GIA);
+    expect(hSo.totalAmount).toBe(TONG_SO);
+    expect(bang.aggregates.min).toBe(DON_GIA);
+    expect(bang.aggregates.max).toBe(TONG_SO);
+
+    // HỢP ĐỒNG ⑵: `payload` là bản HIỂN THỊ — chuỗi đi nguyên, số JSON quá 15 chữ số có nghĩa đã qua double của `JSON.parse` trong `pg`.
+    const pChuoi = hChuoi.payload as { totalAmount: unknown; lines: readonly { unitPrice: unknown }[] };
+    expect(pChuoi.totalAmount, "chuỗi thì không đi qua double").toBe(DON_GIA);
+    expect(pChuoi.lines[0]?.unitPrice, "đơn giá là số JSON: đã làm tròn về double gần nhất").toBe(Number(DON_GIA));
+    expect(String(pChuoi.lines[0]?.unitPrice)).not.toBe(DON_GIA);
+    const pSo = hSo.payload as { totalAmount: unknown };
+    expect(pSo.totalAmount, "`payload.totalAmount` số JSON: đã làm tròn — người đọc PHẢI lấy `row.totalAmount`").toBe(Number(TONG_SO));
+    expect(String(pSo.totalAmount)).not.toBe(hSo.totalAmount);
   });
 });

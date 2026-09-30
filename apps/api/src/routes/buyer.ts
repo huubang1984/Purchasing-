@@ -402,6 +402,13 @@ const doc: readonly BuyerReadRoute[] = [
     audience: "BUYER",
     mutates: false,
     // [khoản 141] BẢNG SO SÁNH GIÁ — thứ toàn bộ sản phẩm sinh ra để bảo vệ
+    //
+    // [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG SỐ của thân trả về: `comparison.rows[].totalAmount` (CHUỖI thập phân, hay
+    // `null`) và `comparison.aggregates.min/max/average` là SỐ CHUẨN — tính bằng SQL, đúng tới từng chữ số trong miền
+    // `numeric(18, 2)`. `comparison.rows[].payload` là BẢN HIỂN THỊ của phong bì: một số JSON quá 15 chữ số có nghĩa trong đó đã
+    // qua `double` khi `pg` phân tích `jsonb`, và qua `JSON.parse` của client thêm lần nữa — client đọc số tiền PHẢI lấy
+    // `totalAmount`, không lấy `payload.totalAmount` (`apps/web/trang/mo-thau.js` làm đúng thế). Toàn văn và phép đo ở docstring
+    // `buildComparisonTable` (`packages/unseal/src/comparison.ts`); ghim ở `comparison.int.test.ts` khối `[S1.9113 / khoản 108]`.
     agent: false,
     handler: async (ctx) => ({
       status: 200,

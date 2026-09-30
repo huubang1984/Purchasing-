@@ -327,13 +327,19 @@ export const DANH_MUC_HANH_DONG_TU_CHOI: ReadonlySet<string> = new Set([
   ACTION_TU_CHOI_QUYEN,
   "AGENT_SCOPE_DENIED",
   "COMPARISON_DENIED",
+  // [S1.9113 / khoản 133] "Không tìm thấy RFQ" ở hai đường đọc có cổng của bảng so sánh (`packages/unseal/src/comparison.ts`).
+  "COMPARISON_NOT_FOUND_DENIED",
   "CONTROL_DENIED",
   "MFA_RESET_APPROVAL_DENIED",
   "RFQ_STATE_DENIED",
   "UNSEAL_APPROVAL_DENIED",
   "UNSEAL_CANCEL_DENIED",
   "UNSEAL_DENIED",
+  // [S1.9113 / khoản 133] Điều phối LẦN HAI khi lượt trước còn sống (`dieuPhoiLaiSauKhiChet`, `packages/unseal/src/requests.ts`).
+  "UNSEAL_DISPATCH_DENIED",
   "UNSEAL_EXECUTION_DENIED",
+  // [S1.9113 / khoản 133] "Không tìm thấy yêu cầu mở thầu" ở huỷ và phê duyệt (`packages/unseal/src/requests.ts`).
+  "UNSEAL_NOT_FOUND_DENIED",
 ]);
 /** `resourceType` ở mọi lời gọi `requirePermission`/`throwAuditedDenial` và ở bảng route của `apps/api`. */
 export const DANH_MUC_LOAI_TAI_NGUYEN: ReadonlySet<string> = new Set([
