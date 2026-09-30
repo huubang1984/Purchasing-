@@ -2629,6 +2629,11 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
+  // [S1.203] HẠN TỈ LỆ VỚI SỐ BẢNG. Thân test chạy một `migrateLai` cho MỖI bảng chỉ-ghi-thêm, cộng một lần đối chứng dương.
+  // Đo ở T3 CI của master sau S1.202: 18 bảng, 19 lần migrate(), **178 687 ms** trên hạn cố định 180 000 ms (≈ 9,4 s mỗi lần).
+  // S1.203 thêm `governance_signals` và `governance_signal_acks` ⇒ 21 lần ⇒ T3 hết hạn ở 180 009 ms. Hạn cố định thì bảng
+  // chỉ-ghi-thêm kế tiếp lại chạm nó; 20 s mỗi lần giữ khoảng hai lần dư khi danh sách dài ra. `BANG_CHI_GHI_THEM_THAT` đếm
+  // đúng vòng lặp vì test "vị từ chỉ-ghi-thêm suy từ tính chất…" đòi nó BẰNG tập suy ra.
   it("[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm: bảng có TÊN thì hardening TỰ GỠ, bảng SUY RA thì hardening NÉM", async () => {
     // Đo trước khi viết mục hardening: rule trên bid_receipts SỐNG QUA migrate() — [CR1] chỉ với tới
     // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
@@ -2656,7 +2661,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 180000);
+  }, 20_000 * (BANG_CHI_GHI_THEM_THAT.length + 1));
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";

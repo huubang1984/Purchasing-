@@ -16957,5 +16957,10 @@ Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đ�
   thứ hai, nên em chạy sáu tệp chịu lần hợp nhiều nhất — `hardening-suy-tu-tinh-chat.int` (nhân chứng hai bên cùng sửa),
   `tin-hieu-chia-nho.int`, `rang-ngan-sach.int` mới của #199, `buyer.int`, `bac-chinh-sach.int`, `kich-ban-41-http.int` — **184/184**,
   rồi ghép vào báo cáo T3 toàn bộ sau lần hợp #203: 198 tệp, 3367 khẳng định. `db/migrations.int` sau lần hợp này để CI chạy.
+- **T3 ở CI lượt đầu đỏ một ca, vì hạn cố định:** `[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm…` của `hardening-suy-tu-tinh-chat.int` chạy
+  một `migrate()` cho mỗi bảng chỉ-ghi-thêm, cộng một lần đối chứng dương. Ở T3 CI của `master` sau #199: 18 bảng, 19 lần, **178 687
+  ms** trên hạn 180 000 ms (≈ 9,4 s mỗi lần). Hai bảng `governance_*` của vòng này ⇒ 21 lần ⇒ hết hạn ở 180 009 ms; 1604/1605 ca còn
+  lại xanh. Hạn của test ấy nay là 20 s × (số bảng trong `BANG_CHI_GHI_THEM_THAT` + 1) — 420 000 ms ở 20 bảng, khoảng hai lần dư, và tự
+  lớn theo danh sách thay vì để bảng kế tiếp chạm lại. Không đổi khẳng định nào. Cục bộ sau khi sửa: tệp **36/36**, ca ấy 100 071 ms.
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.203, ADR-120, migration `088_tin_hieu_chia_nho`; các số nhỏ
   hơn chưa vào `master` đã có PR khác giữ.
