@@ -512,10 +512,11 @@ describe("phủ RLS", () => {
     // [S1.82 / khoản 116] Nay có BA giá trị: `052` thêm `TO app_liet_ke_to_chuc`. Khẳng định vì
     // thế mạnh hơn một bậc nữa — nó đo cả nhánh PUBLIC (OID 0, không có hàng trong pg_roles)
     // lẫn HAI role thật khác nhau.
+    // [S1.9192 / khoản 158] BỐN giá trị: `9592` là policy đầu tiên viết `TO app_unseal` (RESTRICTIVE FOR UPDATE theo `kind`).
     expect(
       [...new Set(rows.map((r) => r.vai_tro))].sort(),
       "vai_tro không kết xuất được PUBLIC — khoá sáu cột đang so bằng chuỗi rỗng",
-    ).toEqual(["PUBLIC", "app_api", "app_liet_ke_to_chuc"]);
+    ).toEqual(["PUBLIC", "app_api", "app_liet_ke_to_chuc", "app_unseal"]);
 
     // Không có policy nào thì mọi khẳng định dưới đây rỗng ruột — chốt trước.
     const bangCoPolicy = new Set(rows.map((r) => r.ten_bang));
@@ -1965,6 +1966,15 @@ interface PolicyRestrictiveKhai {
 }
 
 /**
+ * [S1.9192 / khoản 158 / `9592_outbox_policy_theo_kind`] Ranh giới `kind` theo vai trên `outbox_jobs`: mỗi vai ứng dụng chỉ UPDATE
+ * được job mang `kind` của tiến trình chạy dưới vai ấy — RESTRICTIVE FOR UPDATE, một policy một vai, nguyên văn `pg_get_expr`.
+ * Thêm một `kind` là một migration `ALTER POLICY` MỚI cộng dòng này và dòng ở hardening (ADR-9292); cổng đối chiếu tập kind với
+ * `Object.keys(handlers)` ∪ sổ mồ côi ở `apps/{api,unseal-worker}/src/composition.int.test.ts`.
+ */
+const KIND_APP_API = "(kind = ANY (ARRAY['LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text]))";
+const KIND_APP_UNSEAL = "(kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'UNSEAL_RFQ'::text]))";
+
+/**
  * MỌI policy RESTRICTIVE của dự án, khoá theo `lược đồ.bảng.policy` [lượt soi 22] và bốn cột (lệnh, vai, USING, WITH CHECK)
  * nguyên văn `pg_get_expr`. 23 bảng chỉ mang vế "không phải phiên khách"; 8 bảng khách được đọc
  * thêm nới theo một cột. Một RESTRICTIVE mới — kể cả `USING (false)` — không có ở đây là ĐỎ.
@@ -2018,6 +2028,9 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     khachNoi("rfq_packages", khachHoac(veGuest("id", "app.guest_rfq_id"))),
     khachNoi("vendor_bid_versions", khachHoac("(bid_id IN ( SELECT b.id\n   FROM vendor_bids b))")),
     khachNoi("vendor_bids", khachHoac(veGuest("invitation_id", "app.guest_invitation_id"))),
+    // [S1.9192 / khoản 158] Hai policy theo `kind` của 9592 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.
+    ["public.outbox_jobs.outbox_jobs_kind_app_api", { lenh: "w", vai_tro: "app_api", using: KIND_APP_API, with_check: KIND_APP_API }],
+    ["public.outbox_jobs.outbox_jobs_kind_app_unseal", { lenh: "w", vai_tro: "app_unseal", using: KIND_APP_UNSEAL, with_check: KIND_APP_UNSEAL }],
   ]);
 })();
 
