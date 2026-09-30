@@ -389,6 +389,8 @@
 --       dòng vào đó là một quyết định phải
 --       nhìn thấy, y như NGOAI_LE_HINH_DANG. ~~Tên viết ĐỦ SCHEMA~~ Lược đồ là một cột riêng nên nó đã sẵn sàng cho việc
 --       bỏ giới hạn schema ở vòng fix 2.
+--       [S1.9140 / khoản 171] Một dòng chỉ MIỄN khi migration khai sinh của nó đã ghi trong schema_migrations — cùng tiền điều
+--       kiện với các hàng ghim thay chỗ phép cấm; không thoả mà đối tượng có mặt thì (C) nêu nó (xem NGOAI_LE_DOC_VONG).
 --       Hàm thuộc EXTENSION (pg_depend deptype='e') được loại trừ: chúng không do dự án viết
 --       và danh sách ngoại lệ không nên phình theo extension. Đã đo trên PG16.15: pgcrypto
 --       KHÔNG cài hàm prosecdef nào vào public, nên loại trừ này hiện chưa che giấu gì.
@@ -650,7 +652,11 @@ DECLARE
   --            overload `(text)` là một chữ ký KHÁC và mục (C) bắt nó (khoản 163; đo: migrations.int.test.ts);
   --   mig      migration khai sinh, KHÔNG đuôi `.sql` — chiều khai thiu chỉ phán khi tệp ấy đã áp (cùng khuôn
   --            BANG_TENANT_KHAI: tập migration rút gọn của migrations.int.test.ts đi qua; đối tượng bị DROP hay đổi
-  --            hình dạng sau deploy thì ĐỎ có tên);
+  --            hình dạng sau deploy thì ĐỎ có tên); [S1.9140 / khoản 171] và dòng chỉ MIỄN khi tệp ấy đã áp — cùng tiền
+  --            điều kiện với các hàng ghim thay chỗ phép cấm (với hàm: hàng ghim thân + chủ hàm và hàng ghim ACL, tiền
+  --            điều kiện `version = '<mig>.sql'`). Tiền điều kiện không thoả mà đối tượng có mặt thì các hàng ấy IM, nên miễn
+  --            trừ rơi theo và mục (C) nêu đối tượng — với hàm, kèm lý do; `db/migration-shape.test.ts` giữ hai tiền điều
+  --            kiện trùng nhau;
   --   ly_do    đọc được — một dòng ở đây là một đường đọc vòng RLS có chủ ý, cùng hạng NGOAI_LE_HINH_DANG.
   -- So bằng NOT EXISTS ở cả hai nhánh: một dòng NULL không tắt gì nữa (khoản 112 — đo ở db/rls-coverage.int.test.ts,
   -- cùng chỗ với bản HAI BẢN KHỚP của danh sách này). Không còn hàng sentinel `('')`: danh sách có dòng thật; ngày nó
@@ -908,9 +914,12 @@ DECLARE
         WHERE c.relkind IN ('v', 'm')
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           -- [S1.212 / khoản 112] NOT EXISTS theo khoá (loai, nspname, ten) — bản `NOT IN` cũ tắt cả nhánh khi gặp một dòng NULL.
+          -- [S1.9140 / khoản 171] Và chỉ khi migration khai sinh của dòng (cột mig) đã ghi trong schema_migrations — cùng luật với
+          -- nhánh hàm ngay dưới: một dòng khai chỉ có hiệu lực khi đối tượng nó miễn đã ra đời bằng đúng migration ấy.
           AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
                            WHERE x.loai = CASE c.relkind WHEN 'm' THEN 'matview' ELSE 'view' END
-                             AND x.nspname = n.nspname AND x.ten = c.relname)
+                             AND x.nspname = n.nspname AND x.ten = c.relname
+                             AND EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = x.mig || '.sql'))
           AND NOT EXISTS (SELECT 1 FROM pg_depend dx
                            WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
                              AND dx.deptype = 'e')
@@ -936,17 +945,33 @@ DECLARE
        UNION ALL
        -- [S1.212 / khoản 163] Tên in kèm CHỮ KÝ (MAU_CHU_KY_HAM): `public.outbox_danh_sach_to_chuc(text)` — hai overload
        -- không còn cùng một dòng thông điệp, và khoá miễn trừ so đúng chuỗi ấy.
+       -- [S1.9140 / khoản 171] MIỄN TRỪ CÓ ĐIỀU KIỆN, cùng điều kiện với hai hàng ghim thay chỗ nó. Một hàm khai ở NGOAI_LE_DOC_VONG
+       -- được miễn vì hàng ghim thân + chủ hàm và hàng ghim ACL canh nó thay phép cấm — và cả hai chỉ chạy khi migration khai sinh
+       -- có trong schema_migrations. Tới vòng này miễn trừ thì VÔ ĐIỀU KIỆN: dòng ấy vắng mà hàm có mặt thì hai hàng IM, miễn trừ
+       -- vẫn đứng, và một thân tuỳ ý chạy dưới quyền chủ hàm mà không mục nào kêu (đo: db/trigger-la-mac-dinh-dong.int.test.ts,
+       -- khối khoản 171). Nay khoá xuôi đọc qua `kh` — phép gộp trên các dòng khai khớp khoá: `mig` là migration khai sinh, `da_ap` đúng
+       -- khi nó đã ghi; không dòng khai ⇒ cả hai NULL — và chỉ miễn khi `da_ap`. Đã khai mà chưa ghi thì hàm bị nêu, kèm lý do.
        SELECT n.nspname || '.' || $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$ || ': hàm SECURITY DEFINER — nó chạy dưới quyền '
               'CHỦ SỞ HỮU nên mọi RLS bên trong được kiểm theo chủ sở hữu, không theo người '
               'gọi. Bỏ SECURITY DEFINER, hoặc khai (''ham'', lược đồ, chữ ký, migration, lý do) vào NGOAI_LE_DOC_VONG '
-              'và bản ở db/rls-coverage.int.test.ts.' AS mo_ta
+              'và bản ở db/rls-coverage.int.test.ts.'
+              || CASE WHEN kh.mig IS NULL THEN ''
+                      ELSE ' Hàm ĐÃ khai ở NGOAI_LE_DOC_VONG (migration ' || kh.mig || ') nhưng migration ấy KHÔNG có trong '
+                           'schema_migrations: miễn trừ chỉ đứng cùng hai hàng ghim thay chỗ nó (thân + chủ hàm, ACL), mà tiền điều '
+                           'kiện của chúng là chính dòng ấy — chúng đang IM (khoản 171). Ghi lại dòng schema_migrations nếu migration '
+                           'ấy đã áp thật rồi deploy lại để hai hàng ghim chạy, hoặc gỡ hàm.'
+                 END AS mo_ta
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         CROSS JOIN LATERAL (
+               SELECT pg_catalog.string_agg(x.mig, ', ') AS mig, pg_catalog.bool_or(sm.version IS NOT NULL) AS da_ap
+                 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
+                 LEFT JOIN public.schema_migrations sm ON sm.version = x.mig || '.sql'
+                WHERE x.loai = 'ham' AND x.nspname = n.nspname
+                  AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$) kh
         WHERE p.prosecdef
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           -- [S1.212 / khoản 163] Khoá theo CHỮ KÝ: một overload cùng tên là một chữ ký khác, không được miễn.
-          AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
-                           WHERE x.loai = 'ham' AND x.nspname = n.nspname
-                             AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$)
+          AND kh.da_ap IS NOT TRUE
           AND NOT EXISTS (SELECT 1 FROM pg_depend d
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
                              AND d.deptype = 'e')
@@ -1796,9 +1821,16 @@ $ham$;
        ('public.vendor_bid_versions', ARRAY['a_vendor_bid_versions_dat_so_phien_ban', 'vendor_bid_versions_chan_truncate', 'vendor_bid_versions_chi_ghi_them', 'vendor_bid_versions_kiem_han_nop', 'vendor_bid_versions_kiem_phien_khach', 'vendor_bid_versions_kiem_vong_bafo', 'vendor_bid_versions_phai_co_bien_nhan'])
      ) AS tg(bang, ten)$q$;
 
+  -- [S1.9140 / khoản 9402 / ADR-124] Cột ~~`dinh_nghia` (nguyên `pg_get_triggerdef`)~~ `van_tay_dinh_nghia`: VÂN TAY định nghĩa,
+  -- cùng khuôn các hàng ghim trigger (`vân tay def=`). Trigger lạ là mã người khác viết, và mệnh đề WHEN của nó mang được hằng —
+  -- đo trên cây trước vòng: bản gom phán xét, WARNING «đã GỠ» và WARNING «SAI TRƯỚC khi sửa» (IM5, in ô mô tả) đều in nguyên
+  -- `… WHEN ((new.org_id = '<uuid>'::uuid)) …`. Định nghĩa KHÔNG rời câu này: người vận hành tra nó bằng TÊN (bảng, tên trigger)
+  -- trong một phiên psql — câu tra ở chú thích đầu khối `bang` và ADR-124 mục 6. Cổng T1 (`hardening-khong-in-gia-tri`, vế ⑸)
+  -- nay đọc cả bí danh: một cột mang `pg_get_triggerdef` trần đi vào ô mô tả hay RAISE qua tên cột cũng đỏ.
   CAU_TRIGGER_LA_DU_AN constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT c.oid AS bang_oid, t.tgname::text AS ten, pg_catalog.pg_get_triggerdef(t.oid) AS dinh_nghia,
+     SELECT c.oid AS bang_oid, t.tgname::text AS ten,
+            left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16) AS van_tay_dinh_nghia,
             EXISTS (SELECT 1 FROM $q$ || TRIGGER_DUOC_PHEP || $q$ WHERE pg_catalog.to_regclass(tg.bang) = c.oid) AS bang_co_ten
        FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
@@ -4257,6 +4289,9 @@ $ham$;
   --     FROM pg_trigger t WHERE t.tgrelid = 'public.<bảng>'::regclass AND NOT t.tgisinternal;
   -- Cổng T1 `tests/architecture/hardening-khong-in-gia-tri.test.ts` cấm nối `prosrc`, `proconfig` trần, `pg_get_*def`,
   -- `pg_get_expr` và `SQLERRM` vào ô mô tả, cột `mo_ta`, RAISE hay bản gom — chỉ đúng ba khuôn trên đi qua, so nguyên văn.
+  -- [S1.9140 / khoản 9402] Kể cả đi qua BÍ DANH: một cột mà CTE / truy vấn con / VALUES phơi ra với giá trị mang một tên cấm
+  -- (`pg_get_triggerdef(t.oid) AS dinh_nghia` của mục khoản 259 trước vòng này) rồi được nối vào các bề mặt ấy cũng đỏ (vế ⑸).
+  -- Trigger lạ của mục khoản 259 cũng theo luật vân tay: bảng, tên, `vân tay def=`; định nghĩa tra bằng câu thứ hai ở trên.
   bang text[][] := ARRAY[
 
     -- ---- Đối tượng phải TỒN TẠI (R3/R4: phục hồi được, không chỉ phát hiện) -------------
@@ -4338,6 +4373,10 @@ $ham$$q$,
     -- `to_regprocedure(...) IS NOT NULL` thì một `DROP FUNCTION` sau deploy làm CẢ lượt sửa lẫn
     -- lượt phán xét im lặng bỏ qua — đúng chế độ hỏng mà hàng này tồn tại để chặn. Neo vào
     -- `schema_migrations` thì hàm bị DROP là một hàng ĐỎ, có lối ra in trong chẩn đoán.
+    -- [S1.9140 / khoản 171] Chiều ngược của cùng neo: dòng `052_…` vắng mà hàm CÒN thì hàng này (và hàng ACL ngay dưới) IM.
+    -- Mục (C) miễn trừ hàm này CÙNG điều kiện ấy (cột `mig` của NGOAI_LE_DOC_VONG), nên khi hai hàng im thì miễn trừ rơi theo và
+    -- (C) nêu hàm, kèm lý do — không còn một hàm được miễn vĩnh viễn trong khi lớp thay thế vắng mặt. Hai tiền điều kiện trùng
+    -- nhau do `db/migration-shape.test.ts` giữ.
     --
     -- CÂU SỬA KHÔNG ĐỔI ĐƯỢC CHỦ HÀM (`CREATE OR REPLACE` giữ nguyên owner), nên ca "hàm bị DROP
     -- rồi ai đó dựng lại dưới vai deploy" tự chữa được THÂN nhưng ĐỎ ở vế `proowner` — ồn ào, và
@@ -14789,10 +14828,14 @@ $ham$;
     -- và ở mục CREATE/TEMP trên database, nơi một tên thêm vào có thể thu hồi quyền của chính chủ database (S1.44) — chưa
     -- đo lại, nên là một hàng riêng. KHÁC khuôn bốn vai ứng dụng ở đúng một cờ: NOINHERIT (BƯỚC 0 tạo nó NOLOGIN NOINHERIT;
     -- mọi quyền nó kế thừa là quyền của thân hàm) — hậu điều kiện đòi `rolinherit IS FALSE`, chẩn đoán nêu `INHERIT` là cờ sai.
-    -- THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — `NOBYPASSRLS` đứng TRƯỚC `NOSUPERUSER`: bộ đọc ở db/hardening-suy-tu-tinh-chat.int.test.ts
+    -- ~~THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — `NOBYPASSRLS` đứng TRƯỚC `NOSUPERUSER`: bộ đọc ở db/hardening-suy-tu-tinh-chat.int.test.ts
     -- quét `ALTER ROLE <tên> NOSUPERUSER … NOBYPASSRLS` làm "tập ghim của CÂY thành viên bốn vai ứng dụng" và ghim đúng tám
     -- tên; vai này KHÔNG thuộc cây ấy (không là thành viên của vai nào), nên cố ý đứng ngoài phép quét ấy. Ngày phép quét mở
-    -- cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách của test trong CÙNG commit.
+    -- cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách của test trong CÙNG commit.~~
+    -- [S1.9140 / khoản 265] Thứ tự cờ ở câu sửa dưới đây không còn nghĩa gì: phép quét của db/hardening-suy-tu-tinh-chat.int.test.ts
+    -- (`tapGhimNobypassrls`, §S1.9130) đọc mọi `ALTER ROLE <tên> …` mang `NOBYPASSRLS` BẤT KỂ THỨ TỰ CỜ, và vai này đứng ngoài tập
+    -- "cây thành viên bốn vai ứng dụng" bằng lời khai `VAI_NGOAI_CAY` — lý do (NOINHERIT, không là thành viên của vai nào) đo trên
+    -- cụm ở chính vế ấy. Câu SQL giữ nguyên.
     ARRAY[
       $q$thuộc tính role app_liet_ke_to_chuc$q$,
       $q$true$q$,
@@ -16389,6 +16432,10 @@ $ham$;
     -- một giá trị `'khong'` đặt sẵn ở mức vai (`ALTER ROLE <vai deploy> SET`) hay trong phiên không tắt được phán xét, và
     -- `migrate()` đặt GUC tường minh ở MỌI lượt nên nó cũng không tắt được lần gỡ; đặt ở mức database hay `ALTER ROLE ALL`
     -- thì mục khoản 87 còn chặn deploy.
+    -- ~~Thông điệp phán xét nêu bảng, tên, định nghĩa (ADR-122 mục 3).~~ [S1.9140 / khoản 9402] Thông điệp phán xét và WARNING
+    -- «đã GỠ» nêu bảng, tên và VÂN TAY định nghĩa (ADR-124 — chủ dự án chốt ở kế hoạch đợt 3 câu 3): người vận hành tra định nghĩa
+    -- bằng TÊN. Trigger đã gỡ thì không còn để tra — trigger hợp lệ thì tìm theo tên trong migration đã tạo nó, vân tay so được
+    -- với bản dựng lại.
     ARRAY[
       $q$không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)$q$,
       $q$pg_catalog.current_setting('app.hardening_che_do', true) IS DISTINCT FROM 'sua'
@@ -16400,11 +16447,11 @@ $ham$;
            LOOP
              BEGIN
                EXECUTE pg_catalog.format('DROP TRIGGER %I ON %s', r.ten, r.bang_oid::regclass);
-               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (%). Chỉ trigger trong TRIGGER_DUOC_PHEP được '
+               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (vân tay def=%). Chỉ trigger trong TRIGGER_DUOC_PHEP được '
                              'phép tồn tại trên bảng của dự án (khoản 259). Nếu đây là trigger HỢP LỆ của một migration '
                              'mới thì migration đó vừa bị vô hiệu hoá: ghim nó trong hardening.always.sql và thêm nó '
                              'vào TRIGGER_DUOC_PHEP.',
-                             r.ten, r.bang_oid::regclass, r.dinh_nghia;
+                             r.ten, r.bang_oid::regclass, r.van_tay_dinh_nghia;
              EXCEPTION WHEN OTHERS THEN
                RAISE WARNING 'Hardening: không gỡ được trigger lạ % trên %: SQLSTATE %',
                              r.ten, r.bang_oid::regclass, SQLSTATE;
@@ -16418,7 +16465,7 @@ $ham$;
                                      ELSE ' trên bảng KHÔNG có trong TRIGGER_DUOC_PHEP — hardening CHỈ PHÁN XÉT (ADR-028 §2⑵): '
                                           'gỡ nó bằng DROP TRIGGER hay một migration mới, hoặc ghim nó và khai bảng vào TRIGGER_DUOC_PHEP'
                                 END
-                             || ' — ' || t.dinh_nghia, '; '
+                             || ' — vân tay def=' || t.van_tay_dinh_nghia, '; '
                              ORDER BY t.bang_oid::regclass::text, t.ten)
            FROM ($q$ || CAU_TRIGGER_LA_DU_AN || $q$) t)$q$,
       $q$quyền sở hữu bảng mang trigger lạ (để DROP TRIGGER) hoặc SUPERUSER$q$
