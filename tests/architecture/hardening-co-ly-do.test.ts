@@ -563,3 +563,98 @@ describe("[INV-H19] [S1.100 / khoản 211] ba chỗ ghim của một trigger", (
     expect(boVungGhim(MAU_DU_BA_CHO)).toContain("NEW.a IS NOT NULL");
   });
 });
+
+// ==============================================================================================
+// [INV-H19] [S1.9101 / khoản 259] `TRIGGER_DUOC_PHEP` TRÙNG KHÍT TẬP TRIGGER ĐÃ GHIM, TỪNG CẶP (BẢNG, TÊN)
+//
+// Mục "không trigger lạ trên bảng của dự án" của hardening gỡ mọi trigger ngoài `TRIGGER_DUOC_PHEP`. Danh sách ấy là một bản
+// chép của tập đã ghim, nên hai lối trôi không đối xứng: THIẾU một dòng thì hardening gỡ chính trigger đã ghim rồi mục ghim dựng
+// lại nó, mỗi lần `migrate()` — một vòng lặp gỡ/dựng ồn ào; THỪA một dòng thì một trigger lạ mang đúng tên ấy sống qua mọi lần
+// deploy. Cổng này giữ danh sách bằng HAI bộ đọc khác họ: văn bản ghim `$def$CREATE [CONSTRAINT] TRIGGER … ON <bảng> …$def$` và
+// câu `ALTER TABLE <bảng> ENABLE ALWAYS TRIGGER <tên>` viết thẳng — hợp của hai tập phải bằng danh sách, và tập thứ nhất phải
+// nằm trong tập thứ hai (hai trigger ghim bằng thuộc tính chỉ có ở tập thứ hai — xem ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM).
+// ==============================================================================================
+
+/** `TRIGGER_DUOC_PHEP` của hardening: tập `bảng|tên`. Không tìm thấy khối ⇒ NÉM. */
+export function docTriggerDuocPhep(hardening: string): ReadonlySet<string> {
+  const khoi = /\n {2}TRIGGER_DUOC_PHEP constant text :=\n {4}\$q\$\(VALUES\n([\s\S]*?)\n {5}\) AS tg\(bang, ten\)\$q\$;/u.exec(hardening);
+  if (khoi === null) throw new Error("không đọc được khối `TRIGGER_DUOC_PHEP` — khuôn đã đổi, cổng đang MÙ");
+  const ra = new Set<string>();
+  for (const m of khoi[1]!.matchAll(/\('([a-z_0-9.]+)', ARRAY\[([^\]]*)\]\)/gu)) {
+    for (const t of m[2]!.matchAll(/'([A-Za-z_0-9]+)'/gu)) ra.add(`${m[1]!}|${t[1]!}`);
+  }
+  return ra;
+}
+
+/** Văn bản ghim `$def$`, kể cả `CREATE CONSTRAINT TRIGGER`: tập `bảng|tên`, bảng lấy từ mệnh đề `ON`. */
+export function tapGhimTheoBang(hardening: string): ReadonlySet<string> {
+  const ra = new Set<string>();
+  for (const m of hardening.matchAll(/\$def\$(CREATE (?:CONSTRAINT )?TRIGGER ([A-Za-z_0-9]+)[\s\S]*?)\$def\$/gu)) {
+    const bang = / ON ([a-z_0-9.]+) /u.exec(m[1]!);
+    if (bang === null) throw new Error(`văn bản ghim của \`${m[2]!}\` không có mệnh đề ON — bộ đọc đang MÙ`);
+    ra.add(`${bang[1]!}|${m[2]!}`);
+  }
+  return ra;
+}
+
+/** Câu `ALTER TABLE <bảng> ENABLE ALWAYS TRIGGER <tên>` viết thẳng ngoài vùng ghim và chú thích: tập `bảng|tên`. */
+export function tapEnableAlwaysTheoBang(hardening: string): ReadonlySet<string> {
+  const sach = boVungGhim(hardening).replaceAll(/--[^\n]*/gu, "");
+  const ra = new Set<string>();
+  for (const m of sach.matchAll(/\bALTER TABLE\s+([a-z_0-9.]+)\s+ENABLE ALWAYS TRIGGER\s+([A-Za-z_0-9]+)/gu)) ra.add(`${m[1]!}|${m[2]!}`);
+  return ra;
+}
+
+/** Mọi chỗ lệch giữa `TRIGGER_DUOC_PHEP` và tập đã ghim, gọi tên. */
+export function lechDuocPhep(hardening: string): readonly string[] {
+  const duocPhep = docTriggerDuocPhep(hardening);
+  const ghim = tapGhimTheoBang(hardening);
+  const enableAlways = tapEnableAlwaysTheoBang(hardening);
+  if (ghim.size < 150 || enableAlways.size < 150) {
+    throw new Error(`chỉ đọc được ${ghim.size} văn bản ghim và ${enableAlways.size} câu ENABLE ALWAYS, phải ≥ 150 — cổng đang MÙ`);
+  }
+  const canCo = new Set([...ghim, ...enableAlways]);
+  const loi: string[] = [];
+  for (const k of [...canCo].sort()) {
+    if (!duocPhep.has(k)) loi.push(`${k}: đã ghim mà THIẾU trong TRIGGER_DUOC_PHEP — hardening gỡ rồi dựng lại nó ở mọi lần migrate()`);
+  }
+  for (const k of [...duocPhep].sort()) {
+    if (!canCo.has(k)) loi.push(`${k}: có trong TRIGGER_DUOC_PHEP mà không mục nào ghim — một trigger lạ mang tên ấy sống qua mọi deploy`);
+  }
+  for (const k of [...ghim].sort()) {
+    if (!enableAlways.has(k)) loi.push(`${k}: có văn bản ghim mà không câu ENABLE ALWAYS viết thẳng nào — hai bộ đọc lệch nhau`);
+  }
+  return loi;
+}
+
+describe("[INV-H19] [S1.9101 / khoản 259] TRIGGER_DUOC_PHEP trùng khít tập trigger đã ghim", () => {
+  it("[INV-H19] danh sách trigger được phép = văn bản ghim ∪ câu ENABLE ALWAYS, từng cặp (bảng, tên)", () => {
+    expect(lechDuocPhep(HARDENING)).toEqual([]);
+    expect(docTriggerDuocPhep(HARDENING).size, "số đo S1.9101: 152 văn bản ghim + 2 trigger ghim bằng thuộc tính").toBeGreaterThanOrEqual(154);
+  });
+
+  it("[INV-H19] MẪU ÂM: danh sách THIẾU một tên đã ghim thì ĐỎ và gọi tên", () => {
+    const doi = HARDENING.replace("'rfq_approvals_kiem_nguoi_duyet', 'rfq_approvals_so_lan_nop']", "'rfq_approvals_kiem_nguoi_duyet']");
+    expect(doi, "neo của mẫu âm phải khớp").not.toBe(HARDENING);
+    expect(lechDuocPhep(doi)).toEqual([
+      "public.rfq_approvals|rfq_approvals_so_lan_nop: đã ghim mà THIẾU trong TRIGGER_DUOC_PHEP — hardening gỡ rồi dựng lại nó ở mọi lần migrate()",
+    ]);
+  });
+
+  it("[INV-H19] MẪU ÂM: danh sách THỪA một tên, hay đặt một tên đã ghim sang bảng khác, thì ĐỎ", () => {
+    const thua = HARDENING.replace("'rfq_approvals_so_lan_nop']", "'rfq_approvals_so_lan_nop', 'rfq_approvals_a_so_lan_nop']");
+    expect(thua).not.toBe(HARDENING);
+    expect(lechDuocPhep(thua)).toEqual([
+      "public.rfq_approvals|rfq_approvals_a_so_lan_nop: có trong TRIGGER_DUOC_PHEP mà không mục nào ghim — một trigger lạ mang tên ấy sống qua mọi deploy",
+    ]);
+    const sai = HARDENING.replace("('public.rfq_approvals', ARRAY[", "('public.rfq_items', ARRAY[");
+    expect(sai).not.toBe(HARDENING);
+    expect(lechDuocPhep(sai).length, "ba trigger của rfq_approvals thiếu ở đúng bảng, thừa ở bảng khác").toBeGreaterThanOrEqual(6);
+  });
+
+  it("[INV-H19] MẪU ÂM chống MÙ: khối danh sách đổi khuôn thì NÉM, không xanh trên tập rỗng", () => {
+    expect(() => lechDuocPhep(HARDENING.replace("  TRIGGER_DUOC_PHEP constant text :=", "  TRIGGER_DUOC_PHEP_CU constant text :="))).toThrow(
+      /cổng đang MÙ/u,
+    );
+  });
+});

@@ -3234,6 +3234,8 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 
 **[S1.182 / ADR-111 / 075] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — năng lực mà `app_api` cố ý không có (002) — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 075; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 075 — thứ 075 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
 
+**[S1.9101 / khoản 259 — ADR-9201] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_TRIGGER_LA_DU_AN`** — *không trigger lạ trên bảng của dự án*. Lý do nó CHẶN ĐƯỢC DEPLOY: một trigger ngoài tập đã ghim đứng được TRƯỚC một chốt — bản đổi tên của `rfq_approvals_so_lan_nop` xếp trước `rfq_approvals_kiem_nguoi_duyet` làm lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng `CONTROL_DENIED` (ADR-108 ⑴), và bản chép thân hàm sang một tên hàm khác cũng vậy — mà mục ghim hỏi trigger theo TÊN không thấy nó (khoản 259). Chủ thể là mọi trigger không nội bộ, không phải bản sao phân mảnh, trên mọi bảng của lược đồ dự án, trừ bảng sổ ([CR1]) và trigger gọi `chan_sua_xoa()` ([CR4]); tập được phép là `TRIGGER_DUOC_PHEP`, cổng tĩnh giữ nó trùng khít tập đã ghim. Câu sửa là `DROP TRIGGER` — **KHÔNG đơn điệu** —, nên theo §2⑵ nó chỉ chạy trên bảng mà danh sách khai TÊN (tập trigger của bảng ấy đã ghim trọn, đúng khuôn [CR1] của bảng sổ); trên phần còn lại — tập SUY RA — mục chỉ phán xét (chủ dự án chốt ở S1.9101). Chỉ ở lượt sửa SAU vòng đánh số: `migrate()` đặt `app.hardening_sau_vong = 'khong'` ở lượt đầu, vì một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (`059`). Đo ở `db/trigger-la-mac-dinh-dong.int.test.ts`.
+
 ### 7. Đo bằng gì
 
 **[S1.49 / khoản 93] Bảy mục canh sổ kiểm toán, gọi đúng tên loại của chúng theo §2 — lượt soi 41 NẶNG-2 bác bản đầu vì nó gọi cả bảy là "phán xét" rồi lại khai `REVOKE` là *không* đơn điệu, ngược chính §2⑵ và ngược mã:** BỐN mục PHÁN XÉT (câu sửa no-op) — `CAU_CHI_GHI_THEM_QUYEN` và `CAU_CHI_GHI_THEM_VAT_LY` (quyền GHI và trạng thái vật lý của bảng chỉ-ghi-thêm SUY TỪ TÍNH CHẤT, không ghim tên bảng), `CAU_HINH_DANG_CHINH_TAC` và `CAU_COT_NGOAI_CHUOI` (hình dạng cột của bảng sổ chính tắc: một cột thêm vào sổ là một chỗ dữ liệu đi ra ngoài chuỗi hash, và một cột bị đổi tên làm `audit_events` rớt khỏi tập `can_co` ⇒ lớp C mất khả năng tự chữa trigger nối chuỗi, trong im lặng). BA mục TỰ CHỮA rồi mới phán xét ở hậu điều kiện — `CAU_TRIGGER_CHAN_SAI` (dựng lại bốn trigger chặn: ĐƠN ĐIỆU), `CAU_BANG_SO_VAT_LY` (`SET LOGGED` + thêm `UNIQUE (org_id, seq)`: đơn điệu), `CAU_QUYEN_BANG_SO_MO_TA` (`REVOKE … CASCADE`: đơn điệu — §2⑵ đã xếp `REVOKE` vào nhóm tự chữa được, và lượt sửa chạy đúng thế). Cùng nhóm, mục *không có overload lạ của bốn hàm chuỗi kiểm toán* (`audit_compute_hash`, `noi_chuoi_kiem_toan`, `audit_append`, `chot_moc_neo` — đúng BỐN, không hơn) viết THẲNG SQL ở hậu điều kiện thay vì qua một hằng, nên khoá tra cứu của nó là chính TÊN MỤC: một overload cùng tên khác chữ ký là một hàm thứ năm mà một lời gọi không đủ điều kiện có thể rơi vào. Hai phán xét sống NGOÀI mảng `bang` — BƯỚC 3 chạy `CAU_MEMBERSHIP_LA` (tư cách thành viên LẠ của `app_api`/`app_unseal`: BƯỚC 1 gỡ được thì tự chữa, gỡ không được thì chặn) và `CAU_ADMIN_LA` (quyền ADMIN OPTION lạ trên hai vai ấy) thẳng vào `loi_gom` trước vòng lặp — cùng hạng phán xét, chỉ khác chỗ đứng (lượt soi 41 CAO-2). Cổng `tests/architecture/hardening-co-ly-do.test.ts` ([INV-H19]) đòi mọi phán xét của hardening — nhận diện theo TÍNH CHẤT *ô câu sửa là no-op*, không theo tên hằng — có một khoá tra cứu trong ADR-028, ADR-036 hay ADR-037, và không nằm trong vùng đã gạch.
@@ -9408,3 +9410,68 @@ ghi số tiền vào sổ kiểm toán.
 - **FINANCE và DIRECTOR vẫn KẸP được ngân sách sau lúc mở niêm phong** — có trước vòng này: họ giữ `bid.view`, và bảng so sánh
   nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
   SỐ, không phải không biết KHOẢNG.
+
+## ADR-9201 — Mặc định-đóng với trigger trên bảng của dự án: chỉ trigger đã ghim được tồn tại; hardening tự gỡ trigger lạ trên bảng có tên, phán xét ở mọi bảng khác
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn MỌI trigger lạ, không chỉ bản sao cùng
+hàm; khi vòng này đo ra rằng tự gỡ trên mọi bảng vi phạm ADR-028 §2⑵, cũng ngày ấy chọn chỉ tự gỡ trên bảng có tên và phán xét ở
+mọi bảng khác (mục 3) · **[S1.9101]** · **Liên quan:** ADR-028 §2⑵ (tự chữa chỉ thứ đơn điệu trên tập suy ra), [CR1] và [CR4] của
+bảng sổ, khoản 211 (ba chỗ ghim của một trigger), ADR-108 ⑴ (lời từ chối D2 vào sổ), ADR-117 (trigger so lần nộp) · **Biên bản:**
+`evidence/security-reviews.md` §S1.9101 · **Khoản:** 259 (ghi ở S1.198; đóng ở đây)
+
+### Bối cảnh
+
+Mỗi mục ghim trigger của `hardening.always.sql` hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi thiếu; nó không hỏi bảng còn
+mang trigger nào khác. Lượt soi S1.198 (F4) đo: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước
+`rfq_approvals_kiem_nguoi_duyet` ⇒ `migrate()` xanh, mục ghim dựng lại trigger đúng tên và GIỮ bản đổi tên. Phép so lần nộp chạy
+trước chốt D2, nên lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng `CONTROL_DENIED` (ADR-108 ⑴). Chung cho mọi
+mục ghim trigger. Hướng ghi ở khoản 259 — *mục ghim đòi đúng MỘT trigger trỏ vào hàm* — không đủ: một bản CHÉP THÂN hàm sang tên
+hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả mà không trỏ vào hàm đã ghim. Cả hai lối cần quyền DDL trên bảng (rổ B).
+
+### Quyết định
+
+1. **Danh sách `TRIGGER_DUOC_PHEP`** trong hardening: mọi cặp (bảng, tên) có văn bản ghim `pg_get_triggerdef` — 152, kể cả hai
+   `CREATE CONSTRAINT TRIGGER` — cộng hai trigger ghim bằng thuộc tính (`user_roles_phan_tach_nhiem_vu`,
+   `role_permissions_ma_tran_quyen`): 154 cặp trên 42 bảng. Cổng tĩnh (`tests/architecture/hardening-co-ly-do.test.ts`) giữ danh
+   sách trùng khít tập đã ghim bằng hai bộ đọc khác họ — văn bản ghim, và câu `ENABLE ALWAYS TRIGGER` viết thẳng.
+2. **Mục `không trigger lạ trên bảng của dự án`** (`CAU_TRIGGER_LA_DU_AN`): trigger không nội bộ, không phải bản sao phân mảnh, trên
+   một bảng thuộc lược đồ dự án, mà không có trong danh sách là TRIGGER LẠ. Thứ tự trigger cùng thời điểm là thứ tự tên, nên tập tên
+   cố định thì thứ tự cố định theo.
+3. **Tự gỡ chỉ trên bảng có tên; phán xét ở mọi bảng — chủ dự án chốt.** Gỡ trigger KHÔNG đơn điệu (ADR-028 §2⑵: nó đổi được hành
+   vi một đường ghi hợp lệ), nên bị cấm trên tập suy ra. Trên 42 bảng mà danh sách khai TÊN — tập trigger của chúng đã ghim trọn —,
+   lượt sửa gỡ trigger lạ, mỗi lần gỡ một WARNING, đúng khuôn [CR1] của bảng sổ. Trên mọi bảng khác của dự án, mục chỉ phán xét:
+   chặn deploy, thông điệp nêu bảng, tên, định nghĩa và lối ra — gỡ tay, một migration mới, hay ghim nó và khai bảng vào danh sách.
+   Gỡ không được thì lượt phán xét cũng chặn deploy.
+4. **Lượt sửa đầu đứng yên.** `migrate()` đặt GUC `app.hardening_sau_vong` ở MỌI lượt — `'khong'` ở lượt sửa trước vòng đánh
+   số, `'co'` ở các lượt sau —; mục chỉ bỏ qua đúng lượt sửa mang `'khong'`, và lượt phán xét không đọc GUC ấy. Một migration đang
+   chờ có thể còn cần trigger mà HEAD đã bỏ ghim — `059` gỡ `rfq_packages_kiem_yeu_cau_mo_thau` bằng `DROP TRIGGER` không
+   `IF EXISTS`, nên gỡ nó sớm là làm gãy vòng đánh số của một cụm còn ở trước `059`. Đặt ở mọi lượt, và phán xét bất kể GUC, để một
+   `'khong'` đặt sẵn ở mức vai (`ALTER ROLE … SET`) không tắt được mục. Chạy hardening ngoài `migrate()` không đặt GUC thì coi như
+   sau vòng.
+5. **Bốn phần loại trừ.** Bảng sổ `bang_so` — [CR1] đã mặc định-đóng với `can_co`, và D2 dựng trigger sổ lên bảng sổ ở MỌI schema,
+   thứ danh sách này không liệt kê được. Trigger gọi `chan_sua_xoa()` ở bảng khác — [CR4] phán xét chúng, gỡ ở đây là đổi ngữ nghĩa
+   [CR4] trong im lặng. Bản sao trigger trên phân mảnh (`tgparentid <> 0`) — mang tên trigger cha, PostgreSQL từ chối DROP nó; trigger
+   cha vẫn bị hỏi. Trigger nội bộ (khoá ngoại).
+
+### Phương án đã cân nhắc
+
+- **Hẹp, đúng lời khoản:** mục ghim đòi đúng MỘT trigger trỏ vào hàm, gỡ bản thừa. Bản chép thân hàm sang tên hàm khác đi lọt —
+  cùng người, cùng hậu quả. Chủ dự án bác.
+- **Tự gỡ trên mọi bảng của dự án** — bản đầu của vòng. Vi phạm ADR-028 §2⑵: trigger hợp lệ của một migration quên ghim trên một
+  bảng mới bị gỡ chỉ kèm một WARNING, và deploy xanh. Chủ dự án chọn giữ ADR-028.
+- **Chỉ phán xét, không gỡ ở đâu.** Khớp ADR-028 nhất, nhưng kịch bản 259 — trên một bảng mà mọi trigger đều do migration sở hữu
+  theo tên — cũng phải gỡ tay. Chủ dự án không chọn.
+- **Chạy cả ở lượt sửa đầu.** Làm gãy vòng đánh số theo khuôn `059` (mục 4). Bác.
+- **Tập được phép suy lúc deploy từ văn bản ghim của chính `bang`.** Không cần danh sách chép, nhưng mục phải đọc chuỗi SQL của các
+  mục khác bằng regex lúc deploy. Bác: danh sách tường minh đọc được trong diff, và cổng tĩnh bắt trôi.
+
+### Hệ quả, nói thẳng
+
+- **Migration thêm trigger mà quên ghim** trên một bảng có tên: lượt sửa sau vòng gỡ nó kèm WARNING, và deploy xanh. Nó đỏ ở CI:
+  `db/trigger-la-mac-dinh-dong.int.test.ts` đòi `migrate()` trên cụm trống không gỡ trigger nào và tập trigger trong cụm trùng khít
+  danh sách. Trên bảng chưa có trong danh sách: deploy bị chặn tới khi ghim trigger và khai bảng.
+- **Mọi trigger mới cần ba chỗ ghim (khoản 211) và một chỗ trong `TRIGGER_DUOC_PHEP`.**
+- **Trigger chẩn đoán tạm** mà người vận hành cắm lên một bảng có tên bị lần deploy kế gỡ; trên bảng khác, nó chặn lần deploy kế.
+- **Hàm chép vẫn nằm lại** — mục gỡ trigger, không gỡ hàm; hàm không gắn trigger nào thì không chạy.
+- **Không phủ:** trigger trên bảng ngoài lược đồ dự án; event trigger (cần SUPERUSER); một vai giữ quyền DDL cắm lại trigger ngay
+  sau deploy — hardening chỉ chữa ở lần deploy kế, như mọi mục khác.
