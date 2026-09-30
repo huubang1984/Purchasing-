@@ -872,25 +872,197 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
 });
 
 // =============================================================================================
-// (6) GIỚI HẠN, ĐO — LẦN BẬT S3 GIỮA LÚC GÓI ĐANG CHỜ DUYỆT (lượt soi S1.198, F6; khoản 261)
+// (6) [S1.236 / khoản 261] CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT
 //
-// Ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và lần nộp không đổi. Ca dưới
-// ghim hành vi HÔM NAY; không mang nhãn bất biến: nó đo một khoảng trống, không đo một chốt.
+// Lượt soi S1.198 (F6) đo: ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và
+// lần nộp đứng yên; tổ chức bật S3 giữa chừng thì lời duyệt mốc 1 đi qua với danh sách người duyệt chưa đọc, và gói MỞ. Chủ dự án
+// chốt chặn LẦN BẬT: chữ ký đầu tiên trên một phiên bản có bậc bị từ chối khi tổ chức còn gói ở `PENDING_APPROVAL`
+// (`097_chan_bat_s3_khi_con_goi_cho`). Ca đầu là ca giới hạn cũ của khối này, LẬT.
 // =============================================================================================
-describe("S1.198 — giới hạn, đo: tổ chức bật S3 khi gói đang chờ duyệt", () => {
-  it("khoản 261 — người duyệt đọc gói (lần nộp 1, một lời mời); PM mời thêm khi gói đang chờ — MVP1 cho —, rồi tổ chức BẬT S3: lời duyệt mốc 1 đi qua với danh sách HAI lời mời, và gói MỞ", async () => {
+const loiConGoiCho = (n: number): string =>
+  `To chuc con ${n} goi cho duyet: duyet roi mo, hoac huy, cac goi ay truoc khi bat S3 (ADR-080)`;
+/** Câu nộp duyệt thô — thứ trigger ở cạnh `DRAFT→PENDING_APPROVAL` thấy, không qua tầng gói. */
+const CAU_NOP = "UPDATE public.rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1";
+/** Câu ký phiên bản chính sách, nguyên cột — `signed_by` phải là người của phiên. */
+const CAU_KY_BAN = "INSERT INTO public.org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)";
+
+/** Phiên bản chính sách CÓ BẬC, do PM tạo, CHƯA ký. */
+async function banCoBac(t: ToChuc, version: number): Promise<string> {
+  const { rows } = await withTenant(apiPool, t.org, (c) =>
+    c.query<{ id: string }>(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, " +
+        "chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, strict_blind_mode, effective_from, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, 30, 12, true, now(), $4, $5) RETURNING id",
+      [t.org, version, JSON.stringify(BAC), t.pm.u, t.pm.s],
+    ),
+  );
+  return rows[0]!.id;
+}
+/** FINANCE ký một phiên bản — trả lời hứa, để đo cả lời từ chối. */
+const kyBan = (t: ToChuc, policyId: string): Promise<unknown> =>
+  withTenant(apiPool, t.org, (c) => c.query(CAU_KY_BAN, [t.org, policyId, t.tc.u, t.tc.s]));
+async function daBat(org: string): Promise<boolean> {
+  return (await db.pool.query<{ b: boolean }>("SELECT public.to_chuc_da_bat_s3($1) AS b", [org])).rows[0]!.b;
+}
+async function soChuKyChinhSach(org: string): Promise<number> {
+  return (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM org_policy_signatures WHERE org_id = $1", [org])).rows[0]!.n;
+}
+const huy = (t: ToChuc, rfqId: string): Promise<unknown> =>
+  withTenant(apiPool, t.org, (c) => cancelRfq(c, t.org, { rfqId, reason: "huy goi truoc khi bat S3", actorSessionId: t.pm.s }, apiPool));
+
+describe("S1.236 — khoản 261: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt", () => {
+  it("[INV-K4a] [INV-K4b] khoản 261 — người duyệt đọc gói (lần nộp 1, một lời mời); PM mời thêm khi gói đang chờ — MVP1 cho —; chữ ký BẬT S3 bị từ chối, tổ chức không bật và không một chữ ký; huỷ gói ấy rồi ký thì bật", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);
     await nop(t, rfqId);
-    const daXem = (await doc(t, rfqId)).lanNop;
+    expect((await doc(t, rfqId)).lanNop).toBe(1);
     await moi(t, rfqId);
-    await batS3(t);
-    await duyetVoi(t, rfqId, t.pm2, daXem);
-    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM rfq_invitations WHERE rfq_id = $1", [rfqId]);
-    expect(rows, "chữ ký mang danh sách hai lời mời").toEqual([{ n: 2 }]);
-    expect(await loi(mo(t, rfqId))).toBeNull();
-    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+    const v2 = await banCoBac(t, 2);
+
+    // Vế mới đứng CUỐI: một chữ ký sai vì lý do khác nhận đúng lời từ chối của nó — người tạo phiên bản tự ký.
+    const tuKy = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_KY_BAN, [t.org, v2, t.pm.u, t.pm.s])));
+    expect(tuKy?.message).toBe("Nguoi tao phien ban chinh sach khong duoc tu ky (ADR-082)");
+    const e = await loi(kyBan(t, v2));
+    expect([e?.code, e?.message]).toEqual(["23514", loiConGoiCho(1)]);
+    expect(await daBat(t.org)).toBe(false);
+    expect(await soChuKyChinhSach(t.org)).toBe(0);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+
+    await huy(t, rfqId);
+    expect(await loi(kyBan(t, v2))).toBeNull();
+    expect(await daBat(t.org)).toBe(true);
   });
+
+  it("[INV-K4b] câu đếm đếm đúng gói chờ duyệt của CHÍNH tổ chức ký: hai gói chờ ⇒ «2»; gói nháp và gói của tổ chức khác không đếm; mở một gói theo đường MVP1 ⇒ «1»; huỷ gói kia ⇒ bật", async () => {
+    const t = await taoToChuc();
+    const khac = await taoToChuc();
+    const a = await goiNhap(t);
+    const b = await goiNhap(t);
+    await goiNhap(t);
+    await nop(t, a);
+    await nop(t, b);
+    await nop(khac, await goiNhap(khac));
+    const v2 = await banCoBac(t, 2);
+
+    expect((await loi(kyBan(t, v2)))?.message).toBe(loiConGoiCho(2));
+    // Dưới một vai BỎ QUA RLS (chủ sở hữu ở cụm test) câu đếm vẫn chỉ đếm gói của tổ chức ký: bộ lọc `org_id` không dựa vào RLS.
+    expect((await loi(db.pool.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiConGoiCho(2));
+    await duyet(t, a, t.pm2);
+    expect(await loi(mo(t, a))).toBeNull();
+    expect(await trangThaiGoi(a)).toBe("OPEN");
+    expect((await loi(kyBan(t, v2)))?.message).toBe(loiConGoiCho(1));
+    await huy(t, b);
+    expect(await loi(kyBan(t, v2))).toBeNull();
+    expect([await daBat(t.org), await daBat(khac.org)]).toEqual([true, false]);
+  });
+
+  it("[INV-K4b] không đua qua khoá tư vấn: lần nộp đang dở làm lần ký CHỜ, nộp commit ⇒ lần ký thấy gói ấy và bị từ chối; lần ký đang dở làm lần nộp CHỜ, ký commit ⇒ lần nộp đọc tổ chức ĐÃ bật và bị chốt ngân sách chặn", async () => {
+    // Chiều ⑴ — nộp trước, ký sau.
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    const v2 = await banCoBac(t, 2);
+    const n = await giaoDichApi(t.org);
+    const k = await giaoDichApi(t.org);
+    try {
+      await n.query(CAU_NOP, [rfqId, t.pm.u, t.pm.s]);
+      const pid = await pidCua(k);
+      let xong = false;
+      const kq = loi(k.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])).finally(() => {
+        xong = true;
+      });
+      expect(await choTienTrinh(pid, (loai, suKien) => loai === "Lock" && suKien === "advisory", () => xong), "lần ký phải chờ khoá tư vấn").toBe(true);
+      await n.query("COMMIT");
+      expect((await kq)?.message).toBe(loiConGoiCho(1));
+    } finally {
+      await dong(n, "ROLLBACK").catch(() => undefined);
+      await dong(k, "ROLLBACK");
+    }
+    expect([await daBat(t.org), await trangThaiGoi(rfqId)]).toEqual([false, "PENDING_APPROVAL"]);
+
+    // Chiều ⑵ — ký trước, nộp sau: lần nộp chờ, rồi đi dưới luật S3 — ngân sách ghim phiên bản 1 không bậc, không còn hiệu lực.
+    const t2 = await taoToChuc();
+    const rfq2 = await goiNhap(t2);
+    const v2b = await banCoBac(t2, 2);
+    const k2 = await giaoDichApi(t2.org);
+    const n2 = await giaoDichApi(t2.org);
+    try {
+      await k2.query(CAU_KY_BAN, [t2.org, v2b, t2.tc.u, t2.tc.s]);
+      const pid = await pidCua(n2);
+      let xong = false;
+      const kq = loi(n2.query(CAU_NOP, [rfq2, t2.pm.u, t2.pm.s])).finally(() => {
+        xong = true;
+      });
+      expect(await choTienTrinh(pid, (loai, suKien) => loai === "Lock" && suKien === "advisory", () => xong), "lần nộp phải chờ khoá tư vấn").toBe(true);
+      await k2.query("COMMIT");
+      const e = await kq;
+      expect(e?.code).toBe("23514");
+      expect(e?.message).toContain("NGAN_SACH_GHIM_BAN_CU");
+    } finally {
+      await dong(k2, "ROLLBACK").catch(() => undefined);
+      await dong(n2, "ROLLBACK");
+    }
+    expect([await daBat(t2.org), await trangThaiGoi(rfq2)]).toEqual([true, "DRAFT"]);
+  });
+
+  it("[INV-K4b] SAU lần bật, chữ ký lên một phiên bản có bậc mới không bị hỏi: gói chờ duyệt lúc ấy đã nộp dưới luật S3", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect(await loi(kyBan(t, await banCoBac(t, 3)))).toBeNull();
+    expect(await soChuKyChinhSach(t.org)).toBe(2);
+  });
+
+  it("[INV-K4b] lần ký bật dưới REPEATABLE READ hay SERIALIZABLE bị từ chối — ảnh chụp lấy TRƯỚC lần nộp không thấy gói chờ, và lượt soi dựng lại trọn lỗ gốc bằng đúng đường ấy", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    const v2 = await banCoBac(t, 2);
+    const loiMuc = (muc: string): string =>
+      `Chu ky bat S3 chi nhan duoi READ COMMITTED (giao dich dang o ${muc}): anh chup cu khong thay goi vua nop (ADR-080)`;
+    const moMuc = async (muc: string): Promise<pg.PoolClient> => {
+      const c = await db.pool.connect();
+      await c.query(`BEGIN ISOLATION LEVEL ${muc}`);
+      await c.query("SET LOCAL ROLE app_api");
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [t.org]);
+      return c;
+    };
+    // REPEATABLE READ: ảnh chụp lấy ở câu đầu; gói nộp và commit SAU đó, ở kết nối khác; rồi mới ký.
+    const rr = await moMuc("REPEATABLE READ");
+    try {
+      await rr.query("SELECT 1");
+      await nop(t, rfqId);
+      expect((await loi(rr.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiMuc("repeatable read"));
+    } finally {
+      await dong(rr, "ROLLBACK");
+    }
+    // SERIALIZABLE, câu ký là câu đầu — ảnh chụp lấy lúc câu bắt đầu, TRƯỚC khoá tư vấn.
+    const sr = await moMuc("SERIALIZABLE");
+    try {
+      expect((await loi(sr.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiMuc("serializable"));
+    } finally {
+      await dong(sr, "ROLLBACK");
+    }
+    expect([await daBat(t.org), await soChuKyChinhSach(t.org), await trangThaiGoi(rfqId)]).toEqual([false, 0, "PENDING_APPROVAL"]);
+    // Đối chứng READ COMMITTED: lời của câu đếm, rồi huỷ gói thì bật.
+    expect((await loi(kyBan(t, v2)))?.message).toBe(loiConGoiCho(1));
+    await huy(t, rfqId);
+    expect(await loi(kyBan(t, v2))).toBeNull();
+  });
+
+  it("hardening phán xét `provolatile` của hàm ký: đổi thành STABLE — câu đếm dùng ảnh chụp lấy TRƯỚC khoá — thì `migrate()` báo trạng thái SAI trước khi sửa và dựng lại VOLATILE", async () => {
+    const volatile = async (): Promise<string> =>
+      (await db.pool.query<{ v: string }>("SELECT provolatile AS v FROM pg_proc WHERE oid = 'public.chinh_sach_kiem_nguoi_ky()'::regprocedure")).rows[0]!.v;
+    await db.pool.query("ALTER FUNCTION public.chinh_sach_kiem_nguoi_ky() STABLE");
+    try {
+      expect(await volatile()).toBe("s");
+      const thongBao: string[] = [];
+      await migrate(db.pool, MIGRATIONS_DIR, { onThongBao: (tb) => thongBao.push(tb.message) });
+      expect(thongBao.some((m) => m.includes("chinh_sach_kiem_nguoi_ky") && m.includes("SAI TRƯỚC khi sửa") && m.includes("volatile=s"))).toBe(true);
+      expect(await volatile()).toBe("v");
+    } finally {
+      await db.pool.query("ALTER FUNCTION public.chinh_sach_kiem_nguoi_ky() VOLATILE");
+    }
+  }, 300000);
 });
 
 // =============================================================================================

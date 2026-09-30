@@ -18250,3 +18250,137 @@ và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nà
   tệp bị chạm, trên cây đã hợp S3.6b2: `apps/api/src/anh-xa.int` 16/16, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24,
   `du-lieu.int` 9/9; `phuc-vu.test` và `tao-thau.test` (30/30) xanh trong `pnpm test`.
 - Hai mươi bảy đột biến, cả hai mươi bảy đỏ (§6); lượt đi thử T4 hai lần (§6).
+
+---
+
+# §S1.236 — KHOẢN 261 ĐÓNG: CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT — GÓI NỘP DƯỚI LUẬT MVP1 KHÔNG ĐI QUA LẦN BẬT (K4a, K4b) — ADR-137; LƯỢT SOI MỞ KHOẢN 286
+
+**Rổ và mảnh (ADR-043 ⒞):** CSDL, luồng S3 bật công tắc ADR-080; không đổi `docs/PRODUCT.md` §11. Khoản 261 (rổ B, ghi ở
+§S1.198) đóng. Một migration (`097_chan_bat_s3_khi_con_goi_cho`), ghim hardening, một ADR (ADR-137).
+
+## 1. Việc gì
+
+Ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và lần nộp đứng yên (`087`
+chỉ tăng nó ở cạnh nộp). Lượt soi S1.198 (F6) đo một gói đi qua lần bật: người duyệt đọc gói ở lần nộp 1 với một lời mời; PM mời
+thêm — MVP1 cho —; tổ chức bật; lời duyệt mang mốc 1 đi qua, chữ ký mang băm của danh sách HAI lời mời, và gói MỞ trên một danh
+sách người duyệt chưa đọc. Khoản ghi hai hướng; chủ dự án chốt ngày 2026-09-30 hướng chặn LẦN BẬT — chữ ký bật S3 bị từ chối khi
+tổ chức còn gói chờ duyệt —, không hướng từ chối lời duyệt của một lần nộp bắt đầu trước lúc bật. Bất biến chạm: K4a, K4b.
+
+## 2. Đo trước
+
+Trên cây `master` (`ab66402`: hardening và migration của `master`, tệp đo của vòng này), khối (6) của
+`packages/rfq/src/lan-nop-da-xem.int.test.ts`: ba ca đỏ — chữ ký bật đi qua khi tổ chức còn gói chờ duyệt (ca giới hạn cũ của
+khoản 261); câu đếm không có (hai gói chờ, ký vẫn bật); lần nộp đang dở làm lần ký chờ khoá tư vấn — khoá đã có từ `072` —, nhưng
+nộp commit thì lần ký vẫn đi qua. Ca thứ tư — chữ ký lên phiên bản có bậc mới SAU lần bật, khi tổ chức có gói chờ duyệt nộp dưới
+luật S3 — xanh: đối chứng giữ bản vá không chặn oan, và đỏ dưới đột biến M2 (§5). Ca HTTP đỏ trên `master` (201 thay 422 — người kiểm
+đo).
+
+## 3. Thay đổi
+
+- `db/migrations/097_chan_bat_s3_khi_con_goi_cho.sql`: định nghĩa lại `chinh_sach_kiem_nguoi_ky` — thân `072` nguyên văn, cộng một
+  vế CUỐI: tổ chức chưa bật (chữ ký này là chữ ký bật) ⇒ giao dịch phải ở READ COMMITTED, và tổ chức không còn gói `PENDING_APPROVAL`
+  của CHÍNH tổ chức ký — không thì 23514 nêu mức cô lập hay số gói. Trigger không đổi.
+- `db/migrations/hardening.always.sql`: mục ghim `hàm + trigger chinh_sach_kiem_nguoi_ky` theo thân mới — nhãn, điều kiện (`097` đã
+  áp), câu sửa, hậu điều kiện —, và hậu điều kiện phán xét thêm `provolatile = 'v'` (chuỗi chẩn đoán nêu `volatile=`).
+- Test: khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — sáu ca; một ca HTTP ở `apps/api/src/buyer.int.test.ts`; sổ ghim
+  hàm và ba danh sách migration viết cứng của `db/migrations.int.test.ts`.
+- Bốn phép đo từng nộp gói TRƯỚC lần bật để có một gói chờ duyệt ở tổ chức đã bật, sắp lại theo luật mới: tổng điều tra H19
+  (`db/hardening-suy-tu-tinh-chat.int.test.ts` — hai gói nộp SAU lần ký, dưới luật S3: ngân sách ghim lại phiên bản 2, nhóm hàng
+  riêng); ca giới hạn khoản 253 của `packages/rfq/src/danh-sach-moi.int.test.ts` (nay đo lời từ chối, cộng một ca lớp hai cho dữ
+  liệu có từ trước `097`; vế *K4b đếm người chứ không đếm hàng* dời ra khối riêng, đo trong S3, khẳng định nguyên văn);
+  `packages/rfq/src/bac-chinh-sach.int.test.ts` và `packages/rfq/src/nhom-hang.int.test.ts` (gói rời DRAFT theo đường MVP1 rồi huỷ
+  trước lần ký — ý đo giữ nguyên).
+- Docstring `kyPhienBanChinhSach` (`packages/rfq/src/procurement-policy.ts`) theo thân mới.
+- ADR-137; STATE (hàng 261 ĐÓNG, hàng 286 MỞ, rổ B, cột mốc); hàng K4a, K4b của TEST-PLAN.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Chỉ lần bật bị hỏi**, không mọi chữ ký trên phiên bản có bậc: sau lần bật gói chờ duyệt đã nộp dưới luật S3, và hỏi mọi chữ ký
+  sẽ chặn một lần đổi chính sách thường chỉ vì có gói đang chờ — đo ở ca chữ ký sau lần bật, và đột biến M2 đỏ ở đó.
+- **Vế đứng CUỐI, sau khoá**: sau khoá để không đua (M5 đỏ); cuối để một chữ ký sai vì lý do khác nhận đúng lời từ chối của nó (M7
+  đỏ ở ca người tạo tự ký).
+- **Vế bật chỉ nhận dưới READ COMMITTED** — thêm sau lượt soi (§6 hàng 1): lời *giới hạn đã nói* của bản đầu nói nhẹ hơn hậu quả
+  đo được. Chặn mọi mức khác ở lần bật là fail-closed; đường ứng dụng chạy READ COMMITTED.
+- **Ghim `provolatile = 'v'`** cho hàm ký — thêm sau lượt soi (§6 hàng 5): hàm STABLE đọc ảnh chụp lấy trước khoá.
+- **Lọc `org_id` của chính chữ ký**, dù RLS đã lọc dưới `app_api`: một vai bỏ qua RLS vẫn chỉ đếm gói của tổ chức ký (đo; M4 đỏ).
+- **Không route, không tầng gói mới**: lời của trigger đi ra `POST /policy/:id/sign` dưới 422 như mọi luật khác của lần ký (đo ở ca
+  HTTP).
+- **Một ADR mới**, không sửa ADR-080: như 258–260, khoản đóng bằng ADR riêng.
+
+## 5. Đo sau
+
+- Khối (6), sáu ca xanh: ca giới hạn cũ LẬT — người tạo tự ký nhận lời *tự ký*, FINANCE ký nhận 23514 *còn 1 gói chờ duyệt*, không
+  chữ ký, tổ chức không bật; huỷ gói ấy rồi ký thì bật; câu đếm — hai gói chờ ⇒ «2», cả dưới vai bỏ qua RLS; gói nháp và gói của tổ
+  chức khác không đếm; mở một gói theo đường MVP1 ⇒ «1»; huỷ gói kia ⇒ bật; hai chiều đua — nộp đang dở làm lần ký chờ khoá tư vấn,
+  nộp commit ⇒ lần ký bị từ chối; ký đang dở làm lần nộp chờ, ký commit ⇒ lần nộp đọc tổ chức đã bật và bị K1 chặn
+  (`NGAN_SACH_GHIM_BAN_CU`); chữ ký sau lần bật đi qua; lần ký REPEATABLE READ (ảnh chụp lấy trước lần nộp) và SERIALIZABLE (câu ký là
+  câu đầu) bị từ chối nêu mức cô lập, đối chứng READ COMMITTED ra lời của câu đếm; `ALTER FUNCTION … STABLE` ⇒ `migrate()` báo mục ở
+  trạng thái SAI trước khi sửa (`volatile=s`) và dựng lại VOLATILE. Ca HTTP: 422 mang lời của trigger, không chữ ký; PM huỷ gói ⇒ ký
+  ⇒ 201, bật.
+- **Chín đột biến, cả chín đỏ** (mỗi đột biến sửa migration VÀ mục ghim hardening cho nhất quán; ca chạy: mọi ca mang «khoản 261» ở
+  ba tệp — chín ca): M1 bỏ cả vế (bảy ca); M2 hỏi mọi chữ ký (hai ca — chữ ký sau lần bật, và ca lớp hai: mẫu mô phỏng không còn
+  khớp); M3 đếm gói DRAFT (sáu ca); M4 bỏ lọc tổ chức (ca câu đếm — dưới vai bỏ qua RLS; lần chạy đầu, trước khẳng định ấy, M4 SỐNG
+  vì dưới `app_api` RLS đã lọc); M5 phép kiểm trước khoá (ca đua và ca đầu); M6 ngưỡng `> 1` (năm ca); M7 vế đứng đầu các luật (ca đầu
+  — lời *tự ký*); M8 bỏ gác READ COMMITTED (ca REPEATABLE READ/SERIALIZABLE); M9 hàm STABLE ở cả migration lẫn mục ghim (ca đua và ca
+  `provolatile`).
+- Lượt đầu trên toàn bộ T3: tám ca đỏ ngoài chín ca cũ của máy đo — ba ca sổ nợ tự đối chiếu (lời khai số migration, `cap-so` viết
+  lại) và năm ca của bốn phép đo nộp gói TRƯỚC lần bật (§3). Sắp lại xong: năm tệp ấy 147/147. Số cuối ở §8.
+
+## 6. Lượt soi đối kháng
+
+Một lượt, trên `7eb1813`, trong worktree riêng; người kiểm đo trên Postgres 16 thật — dưới `app_api`, chủ bảng, superuser — bằng tệp
+test tạm (đã xoá), dựng một cụm từ `master` rồi `migrate()` bằng cây của vòng này, và chạy `gieo:demo` (MVP1 và `--s3`). **Dưới READ
+COMMITTED không lách được, không chặn oan; dưới REPEATABLE READ hay SERIALIZABLE, lần ký bằng câu SQL thô dựng lại trọn lỗ gốc** —
+sửa trong vòng.
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| 1 | Lần ký REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô dưới `app_api`: ảnh chụp lấy trước lần nộp (hay trước khoá, nếu câu ký là câu đầu) nên câu đếm không thấy gói chờ — nộp, người duyệt đọc lần 1, PM mời thêm, ký, rồi lời duyệt mốc 1 và mở: gói `OPEN` với hai lời mời. Chỉ khi CẢ HAI phía SERIALIZABLE mới ra 40001. Lời *giới hạn đã nói* ở đầu migration và ADR nói nhẹ hơn hậu quả, và dẫn §S1.156 — nơi viết SERIALIZABLE bắt ca ấy, sai khi chỉ một phía SERIALIZABLE | Vừa | **Sửa trong vòng:** vế bật chỉ nhận dưới READ COMMITTED; ca đo REPEATABLE READ và SERIALIZABLE; lời văn viết lại |
+| 2 | Phía nộp duyệt REPEATABLE READ/SERIALIZABLE, ảnh chụp lấy trước lần bật: đọc tổ chức CHƯA bật, qua K1 với ngân sách ghim phiên bản cũ, rồi duyệt và mở — K1 lọt ở tổ chức đã bật | Vừa (ngoài 261) | **Khoản 286 mở** (rổ B) |
+| 3 | Ca *K4b đếm người* đo cả chuỗi ba vế `count(DISTINCT)`, không từng vế: đột biến một hay hai vế vẫn khớp regex của ca. Ca cũ cũng không đo DISTINCT — chữ ký thời MVP1 bị loại vì băm NULL | Nhẹ | **Sửa trong vòng:** khẳng định nguyên văn lời vế danh sách; dời ca ra khối riêng; một ca lớp hai giữ phép đo *K4b không đếm chữ ký băm NULL* cho dữ liệu có từ trước `097` |
+| 4 | Nâng cấp không soát dữ liệu đã đi qua lần bật: trên cụm `master`, tổ chức bật khi còn gói chờ, mời thêm; `migrate()` lên cây này im lặng; lời duyệt mốc 1 và mở vẫn qua | Nhẹ | Ghi ở ADR-137 (hệ quả) và §7; hôm nay không tổ chức thật nào bật được S3 (ADR-105) |
+| 5 | Mục ghim không phán xét `provolatile`: `ALTER FUNCTION … STABLE` làm chiều đua ⑴ đi lọt dưới READ COMMITTED; `migrate()` dựng lại VOLATILE mà không báo | Nhẹ | **Sửa trong vòng** cho hàm ký: hậu điều kiện đòi `provolatile = 'v'`, ca đo. Các hàm khác dựa vào khoá: khoản 286 |
+| 6 | Mức READ COMMITTED của đường ứng dụng không được ghim: `ALTER DATABASE … SET default_transaction_isolation = 'repeatable read'` ⇒ `migrate()` im lặng, `withTenant` chạy REPEATABLE READ; trong đua, `kyPhienBanChinhSach` chỉ gãy vì sổ kiểm toán — lớp chặn tình cờ | Nhẹ | Lần bật nay tự gác (hàng 1, fail-closed); phần chung vào khoản 286 |
+| 7 | Lời văn: dòng K4b của TEST-PLAN chèn sai chỗ; docstring `kyPhienBanChinhSach` còn *thân từ `072`*; ADR và STATE dẫn §S1.236 khi biên bản chưa vào kho; ca HTTP cũng đỏ trên `master`; câu tuyệt đối *không đi qua lần bật* chỉ đúng dưới READ COMMITTED với dữ liệu mới | Nhẹ | **Sửa trong vòng** |
+| 8 | Một người giữ quyền nộp giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả nguyên tử | Ghi chú | Ghi ở ADR-137 (hệ quả): khả dụng, không phải an ninh |
+
+**Người kiểm thử và không lách được** (dưới READ COMMITTED, `app_api` nếu không ghi khác): đua nộp/ký hai chiều, `MERGE` làm cạnh
+nộp; `DO … EXCEPTION` nuốt lời từ chối (tổ chức không bật); savepoint, `ROLLBACK TO`; CTE ghi một câu cả hai chiều (K1 hay câu đếm
+chặn); hai tổ chức trên một kết nối, đổi `app.org_id` giữa các câu (23514 *phiên không hợp lệ*, hay câu đếm thấy gói chờ của chính
+giao dịch); GUC khách; chèn gói kèm cột `status`, `app_unseal` đẩy DRAFT→PENDING (42501); ký phiên bản cũ (*MỚI NHẤT*), phiên bản
+mới hơn (câu đếm); hai chữ ký song song (còn gói: cả hai bị từ chối; hết gói: một qua, một 23505); thứ tự trigger ở cạnh nộp — không
+trigger nào đọc *đã bật* trước trigger giữ khoá; làm hỏng thân (rỗng, đổi trạng thái đếm, SECURITY DEFINER) hay trigger (gỡ, tắt,
+đổi thành AFTER) rồi `migrate()` — dựng lại cả, lần bật vẫn bị chặn; `migrate()` lần hai im lặng. Không chặn oan: mười sáu tệp int
+chạm S3 xanh, `gieo:demo` MVP1 và `--s3` hai lần trên cùng cụm. Bốn phép đo sắp lại giữ ý cũ: tập bộ ba nhân chứng H19 144 = 144 so
+với `master`; `bac-chinh-sach` và `nhom-hang` đỏ khi bỏ vế DRAFT của chốt; ca *K4b đếm người* — hàng 3.
+
+## 7. Giới hạn, nói ra
+
+- Tổ chức đông gói phải chọn lúc không còn gói chờ duyệt để bật S3 — một lần, công tắc một chiều; một người giữ quyền nộp giữ được
+  tổ chức ở trạng thái không bật. Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+- Lần bật bị từ chối không vào sổ `CONTROL_DENIED` — một luật của lần ký, không phải chốt ở cạnh gói.
+- Lần bật chỉ nhận dưới READ COMMITTED. Phía nộp duyệt không có gác ấy: một lần nộp REPEATABLE READ bằng câu SQL thô, ảnh chụp lấy
+  trước lần bật, lọt K1 ở tổ chức đã bật — khoản 286.
+- Hàng có trước `097`: một tổ chức đã bật khi còn gói chờ giữ nguyên gói ấy; lớp hai còn đó — chữ ký thời MVP1 không mang băm nên K4b
+  không đếm nó.
+- Phép kiểm dựa vào khoá tư vấn mà cạnh nộp giữ chia sẻ (`072` (4)); một đường ghi đưa gói sang `PENDING_APPROVAL` mà không qua
+  trigger ấy — vai giữ quyền DDL tắt trigger — đi vòng qua, như mọi luật khác của cạnh nộp; hardening dựng lại ở lần deploy kế.
+- Khoản 286 còn mở.
+
+## 8. Số đo
+
+- Cây cuối, sau lần hợp `master` (#217) và lần cấp số (`9edffee`): `tsc`, `eslint` sạch; `depcruise` 483 mô-đun, không vi phạm phụ
+  thuộc (chạy riêng — lần đầu chạy cùng lúc với T3 và vấp thư mục thăm dò tạm của test kiến trúc); `pnpm cap-so --kiem` sạch.
+- Toàn bộ unit + T3 cục bộ trên cây cuối: 206 tệp, 3563 khẳng định, 3553 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo (8 của
+  `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`). Không ca đỏ nào mang
+  nhãn `[INV-…]`.
+- T3 các tệp chạm vòng này: `lan-nop-da-xem.int` 39/39 (34 → 39: khối (6) một ca → sáu ca), `danh-sach-moi.int` 23/23,
+  `bac-chinh-sach.int` 42/42, `nhom-hang.int` 22/22, `buyer.int` 25/25, `hardening-suy-tu-tinh-chat.int` 36/36, `migrations.int`
+  120/120, `trigger-la-mac-dinh-dong.int` 12/12; `so-no-tu-doi-chieu` 45/45.
+- Chín đột biến, chín đỏ (§5).
+- Ma trận sinh lại từ báo cáo ấy: 75/75 bất biến (53/53 nghiệp vụ + 22/22 hàng rào). Hai hàng đổi, cả hai do vòng này: K4a 30 → 31
+  (ca đầu của khối (6)), K4b 43 → 50 (năm ca của khối (6), ca HTTP, ca *K4b đếm người* của `danh-sach-moi`).
+- **Hợp `master` sau #217** (S4.3b, S1.234 — không migration, không bất biến mới, ADR-135): xung đột chỉ ở tài liệu — cuối
+  DECISIONS (ADR-135 rồi ADR-137), cột mốc STATE (S1.236 trên S1.234), cuối biên bản (§S1.234 rồi §S1.236) — giữ cả hai phía. Số
+  của vòng cấp sau lần hợp ấy: S1.236, ADR-137, khoản 286, migration 097 — S1.235, ADR-136, khoản 264–285 và migration 091–096 đã
+  có lời giữ trên remote (nhánh `cap-so/…`). Các số trên đo trên cây đã hợp.
