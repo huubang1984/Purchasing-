@@ -706,6 +706,15 @@ DECLARE
   -- [S1.44 / khoản 88 ⑴ — lượt soi 33a #3] Mục (C) (view/matview và SECURITY DEFINER) và VI_TU_BANG_CHI_GHI_THEM từng
   -- CHÉP bộ lọc này inline — chú thích trên nói "dùng lại" mà (C) không dùng hằng; nay cả ba chỗ khai triển từ đây qua
   -- format(). Đột biến đo ở biên bản S1.44.
+  -- [S1.9162 / khoản 110 — ADR-9262] PHẠM VI CỦA BỘ LỌC NÀY LÀ CẢ DATABASE — và đó là phạm vi ĐÃ CHỌN, không phải một lỗ.
+  -- Hồ sơ hạ tầng (ADR-9262, chủ dự án chốt 2026-09-30): DATABASE RIÊNG cho TrustProcure ở mỗi môi trường — một database, một
+  -- vai deploy, hai vai kết nối `app_api`/`app_unseal`, không tenant lạ, không dự án khác ghép chung. Mọi lược đồ không hệ thống
+  -- của database vì thế LÀ lược đồ của dự án theo cấu tạo; "bảng láng giềng" của lượt soi ngang 59a-3 (fixture `zz_bt` ở
+  -- rls-coverage, khối khoản 110) không có hồ sơ nào để tồn tại — một lược đồ như thế xuất hiện là một đối tượng của dự án chưa
+  -- khai, và 83⑶/83⑴/94 nêu đúng tên nó. Không thu hẹp về "bảng tenant ∪ bảng đã khai ∪ bảng của vai deploy" (vế cuối không
+  -- loại được gì khi deploy chạy dưới superuser sở hữu chúng — lượt soi 67d-6, khoản 134) và không danh sách miễn (một dòng khai
+  -- là một cửa ra thô cho một thứ không có hồ sơ). Lối ra đúng, như 049 và TP100 khuyên: chạy `migrate()` dưới một vai mà RLS
+  -- không áp (superuser hay BYPASSRLS) trên database riêng ấy.
   -- %1$s = bí danh pg_namespace. "%%" là dấu % thật sau khi qua format().
   MAU_SCHEMA_DU_AN constant text :=
     $q$%1$s.nspname NOT IN ('pg_catalog', 'information_schema')
@@ -745,6 +754,12 @@ DECLARE
 
   -- [S1.50 / khoản nợ 91] Bảng đang BẬT RLS mà thiếu FORCE, trong lược đồ dự án, không thuộc extension. MỘT hằng, ba chỗ
   -- dùng (câu sửa, hậu điều kiện, mô tả) — bài học lượt 30 NHẸ-2: chép vị từ là trôi ngầm.
+  -- [S1.9162 / khoản 110 — ADR-9262] Chủ thể FORCE = MỌI bảng bật RLS của MỌI lược đồ không hệ thống trong database — đúng
+  -- bằng cấu tạo, vì database là RIÊNG (chú thích trên MAU_SCHEMA_DU_AN). Hệ quả đo được (lượt soi ngang 59a-3, ghim ở
+  -- rls-coverage khối khoản 110): bảng RLS chỉ ENABLE ở lược đồ `zz_bt` của một vai thường bị FORCE ngay ở lượt SỬA ĐẦU, TRƯỚC
+  -- khi lượt phán xét ném (83⑶ nêu tên bảng, 94 nêu "chủ bảng 0 hàng"), và chủ bảng ấy đọc 0 hàng không lỗi — là hệ quả CHẤP
+  -- NHẬN: không có láng giềng nào để bảo vệ, FORCE là đơn điệu (chỉ thu hẹp — ADR-028 §2⑵), và không dòng nào im: hai mục phán
+  -- xét nêu tên. Vị từ KHÔNG đổi; đột biến thu hẹp nó về `public` ⇒ ca ghim đỏ ở ngay phép đo chủ thể.
   VI_TU_FORCE_THIEU constant text :=
     $q$c.relkind IN ('r', 'p') AND c.relrowsecurity AND NOT c.relforcerowsecurity
        AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
@@ -2216,39 +2231,96 @@ $ham$;
             OR r.rolname IN ($q$ || VAI_KET_NOI_UNG_DUNG || $q$))$q$;
 
   -- (coalesce viết TRẦN cố ý: COALESCE là cú pháp, `pg_catalog.coalesce(...)` ném 42883 — đo, cùng bài học NULLIF ở 001/027.)
+  -- [S1.9162 / khoản 111] ĐỊNH NGHĨA TOKEN DÙNG CHUNG cho khuôn ĐỌC (CAU_TEN_GUC_DU_AN_DOC, ngay dưới) và khuôn GHI
+  -- (CAU_MA_GHI_GUC_VAN_HANH — khoản 96, lượt soi 47 CAO-1 + NẶNG-1). Lượt soi ngang 59a-5 đo: khuôn đọc bản S1.48 chỉ nhận
+  -- KHOẢNG TRẮNG giữa token và tên viết `'…'` — `current_setting/**/('app.zz_a', true)` và `current_setting($d$app.zz_b$d$,
+  -- true)` KHÔNG vào tập trong khi PostgreSQL đọc cả hai — còn khuôn ghi đã nhận chú thích và bốn cách viết từ S1.54. Hai khuôn
+  -- chép nhau là trôi ngầm (bài học lượt 30 NHẸ-2), nên MỘT hằng, hai chỗ dùng. Ba mảnh SQL ghép vào câu bằng `||`, đứng sau
+  -- một `ds` đã cho `ds.ten_re` (khuôn của CHÍNH TÊN: danh sách tên ở khuôn ghi, lớp ký tự ở khuôn đọc):
+  --   MAU_CACH_TOKEN     — khoảng cách giữa hai token = khoảng trắng HOẶC chú thích (khối, kể cả lồng — `.*` tham; dòng). Không
+  --                        lột chú thích khỏi văn bản trước khi so (lý do ở chú thích khuôn ghi): chuỗi/chú thích trùng khuôn thì
+  --                        ĐỎ ồn ào, có cửa ra.
+  --   MAU_TEN_NGUYEN_VAN — tên nguyên văn viết '…', E'…', U&'…' (nhóm 1) hay dollar-quote $x$…$x$ (nhóm 2); đọc bằng
+  --                        coalesce(m[1], m[2]).
+  --   MAU_LOP_TEN_GUC    — lớp ký tự của một tên GUC tuỳ biến, đúng valid_custom_variable_name (guc.c): mỗi thành phần bắt đầu
+  --                        bằng chữ, `_` hay byte ≥ 0x80, tiếp theo thêm chữ số và `$`; ít nhất một dấu chấm (đo PG16: `SET
+  --                        "app.zz_d$1"`, `SET "app.zz_ê"` được nhận; `app.1x` bị từ chối). Viết cho ARE (`\u`/`\U` trong lớp
+  --                        ký tự — đo). Bản S1.48 bỏ `$` và byte ≥ 0x80.
+  MAU_CACH_TOKEN constant text :=
+    $q$'(?:\s|/\*.*\*/|--[^\n]*\n)'$q$;
+  MAU_TEN_NGUYEN_VAN constant text :=
+    $q$'(?:(?:U&|E)?''(' || ds.ten_re || ')''|\$\w*\$(' || ds.ten_re || ')\$\w*\$)'$q$;
+  MAU_LOP_TEN_GUC constant text :=
+    $q$'[A-Za-z_\u0080-\U0010FFFF][A-Za-z0-9_$\u0080-\U0010FFFF]*(?:\.[A-Za-z_\u0080-\U0010FFFF][A-Za-z0-9_$\u0080-\U0010FFFF]*)+'$q$;
+
   -- Tập tên GUC mà mã của dự án ĐỌC VÀO — suy từ văn bản: `current_setting('x.y'…)` trong prosrc/prosqlbody của hàm trong
   -- lược đồ dự án (KHÔNG thuộc extension — pg_depend deptype 'e', như (C); lượt soi ngang 40a I3: PostGIS trong public không
   -- được nạp tên vào tập), trong biểu thức USING/WITH CHECK của mọi policy (pg_get_expr in ra `current_setting('app.x'::text,
   -- true)`), DEFAULT cột và CHECK. [S1.48 / 40a H4] Regex không phân biệt hoa/thường, nhận chữ số và khoảng trắng — bản
-  -- S1.47 bỏ sót `app.rfq_v2`, `CURRENT_SETTING (`; tên gộp về chữ thường (PostgreSQL gấp tên GUC). Census ở rls-coverage:
+  -- S1.47 bỏ sót `app.rfq_v2`, `CURRENT_SETTING (`; ~~tên gộp về chữ thường (PostgreSQL gấp tên GUC)~~ [S1.9162] tên gấp CHỈ
+  -- A–Z (`translate`, không `lower()`): PostgreSQL so tên GUC bằng guc_name_compare — chỉ gấp ASCII — nên `app.zz_Ê` và
+  -- `app.zz_ê` là HAI placeholder (đo: SET cả hai, đọc ra hai giá trị), và tập này phải giữ cả hai để nhánh ⒞ hỏi từng tên.
+  -- `lower()` ở CHÍNH câu này cũng chỉ gấp ASCII — `van_ban` mang collation "C" của `pg_proc.prosrc` (collation ẩn không mặc
+  -- định thắng collation mặc định của `pg_get_expr` trong UNION — đo: `pg_collation_for` trên khối UNION ra "C"; đột biến
+  -- `translate` → `lower()` SỐNG, là đột biến tương đương), trong khi `lower()` trên một literal của database C.UTF-8 thì gấp
+  -- `Ê` (đo). `translate` nói thẳng "chỉ ASCII" thay vì tựa vào suy diễn collation của một cột catalog. Census ở rls-coverage:
   -- mọi literal `current_setting('x.y'` trong db/migrations/*.sql phải thuộc tập này trên lược đồ thật — tập không thiu im.
+  -- [S1.9162 / khoản 111 — lượt soi ngang 59a-5] Dựng lại trên ba hằng ở trên, CÙNG khuôn ghi: ⑴ khoảng cách giữa
+  -- `current_setting` và `(`, giữa `(` và tên là khoảng trắng HOẶC chú thích; ⑵ tên viết `'…'`, `E'…'`, `U&'…'` hay dollar-quote;
+  -- ⑶ tên hàm có nháy kép (`"current_setting"`) và tiền tố `pg_catalog.` (cũng cách bằng token); ⑷ lớp ký tự MAU_LOP_TEN_GUC;
+  -- ⑸ thêm hai bề mặt của khuôn ghi: rule/view (`pg_rewrite`, `pg_get_ruledef`) và mệnh đề WHEN của trigger (`pg_get_triggerdef`,
+  -- chỉ trigger có `tgqual`) — deparse in `current_setting('app.x'::text, true)` (đo); ⑹ mọi bề mặt qua MỘT bộ lọc: lược đồ dự
+  -- án và không thuộc extension (bản cũ chỉ lọc hàm; policy/DEFAULT/CHECK của một quan hệ extension nay cũng đứng ngoài, cùng
+  -- lý do 40a I3). Vì sao tập này phải đủ: nhánh ⒞ của mục khoản 87 hỏi `current_setting(tên, true)` cho TỪNG tên ở đây — lớp
+  -- duy nhất cho conf / `ALTER SYSTEM` / `options=` — nên một tên không vào tập là một tên đặt được ở tầng ấy mà không mục nào
+  -- nêu (đo S1.9162: `ALTER SYSTEM SET app.zz_sys` với thân `current_setting/**/('app.zz_sys')` ⇒ bản cũ IM, bản này NÊU).
+  -- Đo từng vế ở rls-coverage khối `[S1.9162 / khoản 111]`: đột biến hoàn tác một vế ⇒ đúng ca ấy đỏ. RANH GIỚI, nói ra (cùng
+  -- khuôn ghi): tên dựng lúc chạy (`current_setting('app.' || x)`), thoát ký tự trong `E'…'`/`U&'…'`, tên qua biến — không quét
+  -- được bằng văn bản.
   CAU_TEN_GUC_DU_AN_DOC constant text :=
-    $q$SELECT DISTINCT pg_catalog.lower(m[1]) AS ten
-         FROM (SELECT pg_catalog.regexp_matches(pp.prosrc, 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi') AS m
+    $q$SELECT DISTINCT pg_catalog.translate(coalesce(m[1], m[2]), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') AS ten
+         FROM (SELECT pn.nspname, 'pg_catalog.pg_proc'::pg_catalog.regclass AS lop, pp.oid AS chu, pp.prosrc AS van_ban
                  FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
-                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$ AND pp.prosrc IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND dp.objid = pp.oid AND dp.deptype = 'e')
+                WHERE pp.prosrc IS NOT NULL
                UNION ALL
                -- [S1.48 / 40a H4] thân `BEGIN ATOMIC` (PG14+) nằm ở prosqlbody, prosrc rỗng
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_function_sqlbody(pp.oid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+               SELECT pn.nspname, 'pg_catalog.pg_proc'::pg_catalog.regclass, pp.oid, pg_catalog.pg_get_function_sqlbody(pp.oid)
                  FROM pg_proc pp JOIN pg_namespace pn ON pn.oid = pp.pronamespace
-                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'pn') || $q$ AND pp.prosqlbody IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM pg_depend dp WHERE dp.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND dp.objid = pp.oid AND dp.deptype = 'e')
+                WHERE pp.prosqlbody IS NOT NULL
                UNION ALL
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polqual, pol.polrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
-                 FROM pg_policy pol WHERE pol.polqual IS NOT NULL
+               SELECT pn.nspname, 'pg_catalog.pg_class'::pg_catalog.regclass, pc.oid, pg_catalog.pg_get_expr(pol.polqual, pol.polrelid)
+                 FROM pg_policy pol JOIN pg_class pc ON pc.oid = pol.polrelid JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+                WHERE pol.polqual IS NOT NULL
                UNION ALL
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
-                 FROM pg_policy pol WHERE pol.polwithcheck IS NOT NULL
+               SELECT pn.nspname, 'pg_catalog.pg_class'::pg_catalog.regclass, pc.oid, pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid)
+                 FROM pg_policy pol JOIN pg_class pc ON pc.oid = pol.polrelid JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+                WHERE pol.polwithcheck IS NOT NULL
                UNION ALL
-               -- [S1.48 / 40a H4] DEFAULT cột và CHECK trong lược đồ dự án
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_expr(ad.adbin, ad.adrelid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
-                 FROM pg_attrdef ad JOIN pg_class ac ON ac.oid = ad.adrelid JOIN pg_namespace an ON an.oid = ac.relnamespace
-                WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'an') || $q$
+               -- [S1.48 / 40a H4] DEFAULT cột và CHECK (của bảng và của domain)
+               SELECT pn.nspname, 'pg_catalog.pg_class'::pg_catalog.regclass, pc.oid, pg_catalog.pg_get_expr(ad.adbin, ad.adrelid)
+                 FROM pg_attrdef ad JOIN pg_class pc ON pc.oid = ad.adrelid JOIN pg_namespace pn ON pn.oid = pc.relnamespace
                UNION ALL
-               SELECT pg_catalog.regexp_matches(pg_catalog.pg_get_constraintdef(con.oid), 'current_setting\s*\(\s*''([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)''', 'gi')
+               SELECT cn.nspname,
+                      CASE WHEN con.conrelid <> 0 THEN 'pg_catalog.pg_class'::pg_catalog.regclass ELSE 'pg_catalog.pg_type'::pg_catalog.regclass END,
+                      CASE WHEN con.conrelid <> 0 THEN con.conrelid ELSE con.contypid END,
+                      pg_catalog.pg_get_constraintdef(con.oid)
                  FROM pg_constraint con JOIN pg_namespace cn ON cn.oid = con.connamespace
-                WHERE con.contype = 'c' AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'cn') || $q$) x$q$;
+                WHERE con.contype = 'c'
+               UNION ALL
+               -- [S1.9162 / khoản 111] rule/view và WHEN của trigger — hai bề mặt của khuôn ghi mà khuôn đọc từng thiếu
+               SELECT pn.nspname, 'pg_catalog.pg_class'::pg_catalog.regclass, pc.oid, pg_catalog.pg_get_ruledef(r.oid)
+                 FROM pg_rewrite r JOIN pg_class pc ON pc.oid = r.ev_class JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+               UNION ALL
+               SELECT pn.nspname, 'pg_catalog.pg_class'::pg_catalog.regclass, pc.oid, pg_catalog.pg_get_triggerdef(tg.oid)
+                 FROM pg_trigger tg JOIN pg_class pc ON pc.oid = tg.tgrelid JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+                WHERE NOT tg.tgisinternal AND tg.tgqual IS NOT NULL) x
+         CROSS JOIN (SELECT $q$ || MAU_LOP_TEN_GUC || $q$ AS ten_re, $q$ || MAU_CACH_TOKEN || $q$ AS cach) ds
+         CROSS JOIN LATERAL (SELECT $q$ || MAU_TEN_NGUYEN_VAN || $q$ AS ten_lit) dl
+         CROSS JOIN LATERAL pg_catalog.regexp_matches(x.van_ban,
+                '\m(?:pg_catalog' || ds.cach || '*\.' || ds.cach || '*)?"?current_setting"?' || ds.cach || '*\(' || ds.cach || '*' || dl.ten_lit,
+                'gi') m
+        WHERE $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'x') || $q$
+          AND NOT EXISTS (SELECT 1 FROM pg_depend de WHERE de.classid = x.lop AND de.objid = x.chu AND de.deptype = 'e')$q$;
 
   -- ---- [S1.51 / khoản nợ 92] BA GUC VẬN HÀNH GẮN SẴN CHO PHIÊN, TỪ MỌI NGUỒN NGOÀI MỨC DATABASE — PHÁN XÉT ------------
   -- Ba mục "… đặt ở mức database" ở dưới lọc `setrole = 0 AND setdatabase = <db hiện tại>` nên chỉ thấy `ALTER DATABASE …
@@ -2385,7 +2457,9 @@ $ham$;
   --    WHERE name = 'search_path'` dưới `app_api`. Tên GUC không phân biệt hoa/thường, kể cả khi có nháy kép (đo:
   --    `SET "SEARCH_PATH" = …`, `set_config('SESSION_REPLICATION_ROLE', …)`).
   --    BỀ MẶT = bề mặt của CAU_TEN_GUC_DU_AN_DOC (thân hàm, BEGIN ATOMIC, policy, DEFAULT, CHECK — kể cả CHECK của domain)
-  --    cộng rule/view (`pg_rewrite`) và WHEN của trigger (đo: nhận `set_config`). Biểu thức chỉ mục và cột sinh đòi IMMUTABLE
+  --    ~~cộng rule/view (`pg_rewrite`) và WHEN của trigger~~ [S1.9162 / khoản 111] kể cả rule/view (`pg_rewrite`) và WHEN của
+  --    trigger — khuôn đọc từng thiếu hai bề mặt ấy, nay hai khuôn CÙNG bề mặt và CÙNG định nghĩa token (MAU_CACH_TOKEN,
+  --    MAU_TEN_NGUYEN_VAN — khai ngay trên khuôn đọc) (đo: nhận `set_config`). Biểu thức chỉ mục và cột sinh đòi IMMUTABLE
   --    nên không mang được `set_config` (đo: 42P17); `set_config` không có tên tham số (đo: đối số có tên ném 42883).
   --    BA KHUÔN, tên lấy từ `GUC_VAN_HANH_DOI` (một danh sách): `set_config(` với tên NGUYÊN VĂN là đối số đầu — viết `'…'`,
   --    `E'…'`, `U&'…'` hay dollar-quote, cả dạng deparse `'search_path'::text`; `SET [SESSION|LOCAL] <tên> =|TO …` và
@@ -2460,11 +2534,12 @@ $ham$;
                  FROM pg_trigger tg JOIN pg_class pc ON pc.oid = tg.tgrelid JOIN pg_namespace pn ON pn.oid = pc.relnamespace
                 WHERE NOT tg.tgisinternal AND tg.tgqual IS NOT NULL) x
          -- [lượt soi 47 CAO-1] `cach`: khoảng cách giữa hai token — khoảng trắng HOẶC chú thích, kể cả lồng. [NẶNG-1] `ten_lit`:
-         -- tên nguyên văn viết '…', E'…', U&'…' hay dollar-quote — hai nhóm bắt, đọc bằng coalesce.
+         -- tên nguyên văn viết '…', E'…', U&'…' hay dollar-quote — hai nhóm bắt, đọc bằng coalesce. [S1.9162 / khoản 111] Hai
+         -- định nghĩa ấy nay là MAU_CACH_TOKEN và MAU_TEN_NGUYEN_VAN — dùng chung với khuôn đọc CAU_TEN_GUC_DU_AN_DOC.
          CROSS JOIN (SELECT pg_catalog.string_agg(gd.ten, '|') AS ten_re,
-                            '(?:\s|/\*.*\*/|--[^\n]*\n)' AS cach
+                            $q$ || MAU_CACH_TOKEN || $q$ AS cach
                        FROM $q$ || GUC_VAN_HANH_DOI || $q$) ds
-         CROSS JOIN LATERAL (SELECT '(?:(?:U&|E)?''(' || ds.ten_re || ')''|\$\w*\$(' || ds.ten_re || ')\$\w*\$)' AS ten_lit) dl
+         CROSS JOIN LATERAL (SELECT $q$ || MAU_TEN_NGUYEN_VAN || $q$ AS ten_lit) dl
          CROSS JOIN LATERAL (
                SELECT 'set_config' AS dang, coalesce(m[1], m[2]) AS ten
                  FROM pg_catalog.regexp_matches(x.van_ban,
