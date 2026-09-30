@@ -15,12 +15,14 @@
 import {
   cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, locHangDoi, luaChonHangChuan, maHopLe, moTaQuyDoi, nhanGoiY, vietThuocTinh,
 } from "/lib/du-lieu.js";
+import { ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-let phien = { token: "", daRedeem: false };
+// [S1.9101 / khoản 291] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// `/lib/dang-nhap.js`, như ở bốn trang người mua kia (khoản 282).
 let trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
 let danhMuc = { donVi: [], biDanhChung: [], biDanhToChuc: [] };
 /** Chi tiết hàng chuẩn đang mở ở bước 4 — `null` khi bước 4 đóng. */
@@ -91,6 +93,9 @@ const TRANG_THAI = { DANG_DUNG: "đang dùng", NGUNG_DUNG: "ngừng dùng" };
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP, cùng khuôn `chinh-sach.js` (gọi `/auth/redeem` ĐÚNG một lần cho mỗi mã).
+// [S1.9101 / khoản 291] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login` và ba trang người mua kia: nút Tiếp, nút Vào và khối link đăng nhập
+// gần đây là `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về
+// bước 1.
 // ---------------------------------------------------------------------------------------------
 
 function docLink() {
@@ -104,43 +109,18 @@ docLink();
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { token: $("token").value.trim(), daRedeem: false };
+  // [S1.9101 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ — `dangNhap.datLai()` dưới, sau khi các bước đã đóng.
   for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5", "loi6", "ok6"]) bao($(id), "");
   dongCacBuoc();
+  dangNhap.datLai();
   thuPhienCo();
 });
 
-$("nut-vao").addEventListener("click", async () => {
-  bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = $("org").value.trim();
-  const token = $("token").value.trim();
-  const code = $("ma").value.trim();
-  if (token !== phien.token) phien = { token, daRedeem: false };
-  if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
-  $("nut-vao").disabled = true;
-  try {
-    if (!phien.daRedeem) {
-      const r1 = await goi("POST", "/auth/redeem", { orgId, token });
-      if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return; }
-      phien = { ...phien, daRedeem: true };
-      if (r1.body?.needsEnrollment === true) {
-        bao($("ghi-danh"), `Tài khoản này chưa có MFA. Bí mật TOTP (nhập vào ứng dụng xác thực, rồi nhập mã sáu số và bấm Vào lần nữa): ${r1.body.totpSecretBase32}`);
-        return;
-      }
-    }
-    if (!/^\d{6}$/.test(code)) { bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực."); return; }
-    const r2 = await goi("POST", "/auth/totp", { orgId, token, code });
-    if (r2.status !== 200) {
-      bao($("loi1"), r2.body?.reason === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng");
-      return;
-    }
-    xoaManhLink();
-    const me = await goi("GET", "/me");
-    await moSauDangNhap(me.body, false);
-  } finally {
-    $("nut-vao").disabled = false;
-  }
-});
+// [S1.9101 / khoản 291] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// cùng chỗ câu lỗi, ô mã sáu số hiện sẵn, mất mạng thì không câu nào~~ — khoản 193 ở trang thứ năm, mà phép đếm của khoản 282 bỏ sót.
+// Nay bước 1 là module chung: ô tổ chức đọc qua `docMaToChuc` (ADR-107), bí mật ghi danh ở khối riêng; trang trao cho module việc của
+// riêng mình sau khi vào — mở các bước và nạp dữ liệu nền.
+const dangNhap = ganDangNhap({ taiLieu: document, goi, lichSu: history, viTri: location, daVao: (me) => moSauDangNhap(me, false) });
 
 /** Bước 3 chỉ mở cho người ghi được; bước 4 mở khi bấm Xem một hàng. */
 const CAC_BUOC_SAU = ["b2", "b5", "b6"];
@@ -157,6 +137,8 @@ async function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  // [S1.9101 / khoản 291] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  void dangNhap.veLinkGanDay();
   await napHangChuan();
   await napDonVi();
   await napHangDoi();
@@ -173,6 +155,8 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  // [S1.9101 / khoản 291] Về bước 1: danh sách link của người trước đi, và phản hồi về muộn của nó bị bỏ.
+  dangNhap.anLinkGanDay();
 }
 
 /**
@@ -210,8 +194,10 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { token: $("token").value.trim(), daRedeem: false };
     dongCacBuoc();
+    // [S1.9101 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã
+    // sáu số đóng (khoản 193).
+    dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
     bao($("loi1"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
@@ -220,9 +206,8 @@ $("nut-dang-xuat").addEventListener("click", async () => {
   }
 });
 
-function xoaManhLink() {
-  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
-}
+// [S1.9101 / khoản 291] ~~`xoaManhLink()` của trang~~ — ADR-020 mục 3 (xoá mảnh link SAU `/auth/totp`) nay là việc của nút Vào trong
+// `/lib/dang-nhap.js`, qua `history` và `location` mà trang trao vào.
 
 // ---------------------------------------------------------------------------------------------
 // Bước 2 — danh sách hàng chuẩn, và câu §8.10
