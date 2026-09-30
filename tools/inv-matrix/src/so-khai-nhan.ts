@@ -199,6 +199,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/routes.test.ts",
   ],
   F1: [
+    // [S1.9192 / khoản 158] Tập `kind` của hai policy RESTRICTIVE FOR UPDATE trên `outbox_jobs` (9592) BẰNG bảng handler ∪ sổ mồ côi
+    // của tiến trình chạy dưới vai ấy — đọc `pg_policy`, đối chiếu với `Object.keys(handlers)` thật; thêm `kind` mà quên migration
+    // thì đỏ ở tệp của tiến trình thêm, trước khi job của nó nằm PENDING im lặng (F1: RLS không là đường làm câu ghi trả 0 hàng im lặng).
+    "apps/api/src/composition.int.test.ts",
+    "apps/unseal-worker/src/composition.int.test.ts",
     "db/migration-shape.test.ts",
     "db/migrations.int.test.ts",
     "db/rls-coverage.int.test.ts",

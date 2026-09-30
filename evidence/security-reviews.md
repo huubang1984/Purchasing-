@@ -18265,3 +18265,136 @@ Ca số đo (không đột biến logic) in `daXet`: ⑴ 17 · ⑵ 169 · ⑶ 44
   (353 s) — không hồi quy sau khi tách hai danh sách. Ba ca đỏ đều ở `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ và KHÔNG do lô này:
   `packages/test-support/src/postgres-cuc-bo.ts` (commit `3d991a3`/`33563ea` của người tích hợp) dựng một `pg.Client` và một `.connect()` chưa khai ở
   tệp cổng ấy — cùng chẩn đoán với bàn giao lô 71; `git diff 33563ea..HEAD` của lô này không chạm tệp cổng ấy hay `packages/test-support/src/**`.
+
+# §S1.9192 — RANH GIỚI `kind` THEO VAI CỦA `outbox_jobs` XUỐNG TẦNG CSDL — KHOẢN 158 ĐÓNG, ADR-9292
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một migration trên `outbox_jobs`, không route,
+không màn, không đổi mã sản xuất. Đóng 158; mở 9492.
+
+## 1. Vòng này là gì
+
+Lô B4 của đợt trả nợ đợt 2 (lượt B): một khoản. §S1.81 dựng vị từ lọc `kind` trong `CAU_CLAIM` để runner của tiến trình này thôi
+nhặt (và giết) job của tiến trình kia — và ghi ngay rằng đó là VỆ SINH VẬN HÀNH, không phải QUYỀN: `007` cấp `app_api` và `025` cấp
+`app_unseal` cùng một bộ `GRANT UPDATE` trên sáu cột vòng đời, không theo `kind`, nên một câu viết tay dưới vai nào cũng ghi được
+kết cục cho job của vai kia. Hai lớp, hai mô hình đe doạ; lớp CSDL chưa có. Khoản 158 đề xuất hai policy `AS RESTRICTIVE` đối xứng
+theo vai và tập `kind`, và nói trước cái giá: tập `kind` khi ấy sống ở CSDL. Chủ dự án chốt 2026-09-30: làm, chấp nhận giá.
+
+## 2. Quyết định của chủ dự án
+
+Một: làm khoản 158 và chấp nhận giá "thêm `kind` = thêm migration" (2026-09-30). Còn lại theo phân công ngày 2026-09-29; điểm
+tự chốt ở mục 5.
+
+## 3. Đo trước
+
+- `packages/outbox/src/outbox.int.test.ts` khối 12 (viết trước, chạy trên cây KHÔNG có `9592` — tạm dời tệp migration và lấy
+  `hardening.always.sql` của HEAD để `migrate()` không gãy ở cổng khai; log `lo92-11`): 4 đỏ / 1 xanh —
+  ⑴ tiền đề: *"CSDL không có policy outbox_jobs_kind_app_api/_app_unseal — migration 9592 chưa áp: expected undefined to be defined"*;
+  ⑵ `UPDATE … SET status = 'DONE', finished_at = clock_timestamp()` dưới `app_api` (`withTenant`, chính tổ chức) nhắm job `UNSEAL_RFQ`
+  ⇒ *"app_api ghi được kết cục cho job của worker: expected 1 to be +0"*; ⑶ gương dưới `app_unseal` nhắm `LOGIN_LINK_SEND` ⇒
+  *"expected 1 to be +0"*; ⑷ `JobRunner(apiPool, { UNSEAL_RFQ })` ⇒ `runOnce()` = 1 (*"expected 1 to be +0"*) — runner của `api` mang
+  nhầm handler của worker claim và chạy được job ấy; đối chứng dương phía api (⑸) xanh cả hai bên, đúng vai trò của nó.
+- `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹ trên cây CÓ `9592` nhưng CHƯA nới policy cho `kind` thử (log `lo92-10`): đỏ —
+  job mồ côi thử `THU_MO_COI_168` nằm `{ status: 'PENDING', attempts: 0 }` sau 10 s. Đây là đúng cơ chế fail-closed của 9592 áp lên
+  một `kind` thử không có migration, không phải lỗi của vế ấy; cách xử lý ở mục 4/5.
+
+## 4. Thay đổi
+
+- `db/migrations/9592_outbox_policy_theo_kind.sql` (mới): hai `CREATE POLICY … AS RESTRICTIVE FOR UPDATE TO <vai> USING (kind = ANY
+  (ARRAY[…])) WITH CHECK (…)`; phần tử theo bảng chữ cái để dòng khai nguyên văn có một dạng duy nhất; khối lý do nêu vì sao chỉ
+  FOR UPDATE, vì sao `WITH CHECK` = `USING` (kind không có GRANT UPDATE cho vai nào — chỉ để khai đủ bảy cột), và cái giá.
+  Lớp tĩnh `db/migration-shape.test.ts` nhận `CREATE POLICY … AS RESTRICTIVE` ở tệp khác tệp tạo bảng theo TÍNH CHẤT (khoản nợ 29) —
+  không cần ngoại lệ.
+- `db/migrations/hardening.always.sql` — CHỈ vùng `POLICY_RESTRICTIVE_KHAI`: hai dòng bảy cột nguyên văn `pg_get_expr` (`'w'`, vai đích
+  danh), thứ tự (lược đồ, bảng, policy) như cổng HAI BẢN KHỚP đòi; chú thích (b2) và chú thích trên hằng ghi hai dòng mới và luật
+  "thêm `kind` = migration `ALTER POLICY` mới + sửa dòng khai". Không có "danh sách migration" nào khác trong hardening cần khai.
+- `db/rls-coverage.int.test.ts` (tệp lô B1 — sửa TỐI THIỂU, xem mục 6 bàn giao): hai hằng `KIND_APP_API`/`KIND_APP_UNSEAL` với docblock,
+  hai dòng khai trong `POLICY_RESTRICTIVE_DA_KHAI`. Docblock cũ của hằng KHÔNG chạm.
+- `packages/outbox/src/outbox.int.test.ts`: khối 12 (`[INV-F1] [S1.9192 / khoản 158]`, 5 vế) đo trên policy NGUYÊN VĂN; đồ gá đầu
+  tệp — `beforeAll` đọc hai policy từ `pg_policy`, NỚI policy của `app_api` cho ĐÚNG những `kind` không thuộc tiến trình nào
+  (`(<gốc>) OR NOT (kind = ANY (<hợp hai tập thật>))`) vì mọi khối 1–11 chạy runner dưới `apiPool` với ~40 `kind` thử tổng hợp; khối 12
+  khôi phục nguyên văn trước khi đo (vế tiền đề kiểm bản đang có = bản `migrate()` dựng) và nới lại sau; `migrateLai()` bọc hai lời
+  gọi `migrate()` giữa tệp ([T10-D] role lạ, [T10-I] trigger lạ) — khôi phục → `migrate()` → nới lại — vì cổng khai 83⑴ đòi policy
+  nguyên văn (đo: gọi `migrate()` trên bản đã nới thì hardening NÉM, log `lo92-04` lượt 1).
+- `apps/unseal-worker/src/composition.int.test.ts`: `describe("[INV-F1] [S1.9192 / khoản 158] …")` ba vế — tập của
+  `outbox_jobs_kind_app_unseal` = `Object.keys(buildUnsealWorkerHandlers) ∪ Object.keys(KIND_KHONG_NGUOI_NHAN)`; tập của
+  `outbox_jobs_kind_app_api` = `Object.keys(buildApiOutboxHandlers)`; hai tập không giao nhau. Bộ đọc đòi RESTRICTIVE, `w`, đúng một
+  vai, `USING` = `WITH CHECK`, đúng hình dạng — hình dạng khác là một quyết định mới.
+- `apps/api/src/composition.int.test.ts`: cổng đối chiếu vai api (`[INV-F1]`, một vế) — đỏ ở tệp của tiến trình thêm handler; vế
+  khoản 168 nới policy `app_api` cho `THU_MO_COI_168_API` (`noiPolicyKindTam`, khôi phục trong `finally`) — nếu không, vế ấy xanh CẢ
+  KHI `api` khai lại sổ (đột biến M5 của §S1.9151 chết vì lớp CSDL chặn trước). Thêm hai import thiếu.
+- `apps/unseal-worker/src/tien-trinh.int.test.ts` (NGOÀI danh sách tệp của lô — chạm vì không thể tránh, tối thiểu): vế ⑹ nới policy
+  `app_unseal` cho `THU_MO_COI_168`, khôi phục trong `finally`; `THU_KHONG_KHAI_168` cố ý KHÔNG nới — đối chứng đứng ở cả hai lớp.
+- Không chạm: `packages/outbox/src/runner.ts`, `db/migrations.int.test.ts`, vùng hardening của B1/B2/B3/B7, mọi tệp cấm.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Chỉ `FOR UPDATE`.** `SELECT` của worker đếm tồn đọng qua MỌI `kind` (ADR-083), `INSERT` của `api` xếp việc cho worker
+  (`dispatchUnseal`, trigger `019`) — ràng thêm hai lệnh ấy là đổi hai quyết định đã ghi; nửa INSERT ghi thành khoản 9492.
+- **Tập `kind` = `Object.keys(handlers)` thật, đọc lúc chạy**, không phải hằng chép tay ở test: cổng đối chiếu đỏ khi bảng handler
+  đổi, không khi ai đó nhớ sửa test. Sổ mồ côi cộng vào tập của WORKER (tiến trình khai nó từ S1.9151); `api` không cộng gì.
+- **Nới có kiểm soát cho `kind` thử, khôi phục nguyên văn, đo trên bản gốc.** Ba tệp test dùng `kind` thử tổng hợp dưới vai thật
+  (outbox: ~40; tien-trinh ⑹ và api khoản 168: một dòng sổ mồ côi thử). Đổi các `kind` ấy sang `kind` thật thì test cơ chế thôi
+  đọc được và các vế mồ côi mất đối tượng đo; chạy runner dưới siêu người dùng thì mất [T10-D]. Nới bằng `ALTER POLICY` dưới siêu
+  người dùng, HẸP nhất có thể (outbox: `OR NOT (kind = ANY (<hợp hai tập thật>))` — ranh giới trên `kind` THẬT vẫn đứng ở mọi khối;
+  hai tệp kia: đúng một `kind`), luôn khôi phục; khối đo khoản 158 kiểm bản đang có bằng bản `migrate()` dựng trước khi đo.
+- **Cây không có 9592 ⇒ đồ gá không nới gì và khối 12 đỏ ở tiền đề** — không xanh giả, và tệp vẫn chạy được trên cây cũ để đo trước.
+- **Hai bản của `noiPolicyKindTam`** (api composition, tien-trinh) thay vì một module dùng chung: chỗ chung duy nhất là
+  `packages/test-support` (tệp `postgres*.ts` cấm; thêm module mới đụng cổng barrel) — hai bản ≤ 15 dòng, ghi chéo; xem mục 7.
+- **Review phần của agent trước:** migration, hai dòng khai, hai cổng đối chiếu đúng đề bài; hai lỗi sửa (import; `*/` trong
+  docblock); thu sửa ở rls-coverage về tối thiểu (bỏ sửa docblock cũ). Không làm lại từ đầu.
+
+## 6. Đột biến
+
+Kịch bản `lo92-dot-bien.sh` (ngoài kho): sửa bằng `sed`, chạy test có lọc `-t "khoản 158"`, khôi phục bằng `cp` từ bản chụp ngay
+trước, kiểm bằng `diff`. Ba ca, mỗi ca ĐỎ đúng vế:
+- M1 [158] bỏ `'UNSEAL_RFQ'::text` khỏi tập `app_unseal` ở CẢ BA chỗ (migration `9592`, dòng khai hardening, hằng `KIND_APP_UNSEAL` ở
+  rls-coverage — để `migrate()` đi qua và chỉ lớp test phán) ⇒ `apps/unseal-worker/src/composition.int.test.ts -t "khoản 158"`:
+  1 đỏ / 2 xanh — vế `outbox_jobs_kind_app_unseal` đỏ: *"Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind =
+  thêm migration (ADR-9292) …"*; hai vế api và "không giao nhau" vẫn xanh (đúng — chúng không đo tập worker). VÀ
+  `packages/outbox/src/outbox.int.test.ts -t "khoản 158"`: 3 đỏ / 2 xanh — tiền đề *"tập của worker: expected [ false, false ] to
+  deeply equal [ true, false ]"*, gương *"đối chứng: job của chính worker: expected +0 to be 1"*, runner *"đối chứng dương: đúng vai
+  thì claim được: expected +0 to be 1"* — runner THẬT của worker không ghi được kết cục cho `UNSEAL_RFQ`: fail-closed như ADR-9292
+  tả. (log `lo92-20`, `lo92-21`)
+- M2 [158] bỏ `''UNSEAL_RFQ''::text` CHỈ ở dòng khai `POLICY_RESTRICTIVE_KHAI` (migration nguyên) ⇒ `migrate()` ở `beforeAll` NÉM:
+  *"Hardening hardening.always.sql (phan_xet) thất bại: Hardening không sửa được 1 mục: — "mọi policy trên bảng RLS thuộc đúng một
+  lớp — RESTRICTIVE và policy ngoài tenant phải khai (khoản 83⑴)": trạng thái hiện tại SAI (public.outbox_jobs.outbox_jobs_kind_app_unseal:
+  policy RESTRICTIVE không thuộc lớp nào …"* — 56 vế của tệp bỏ qua; cụm đã deploy bị chặn ở đúng mục, đúng tên policy. (log `lo92-22`)
+- M3 [158] bỏ `'RFQ_DEADLINE_EXTENDED_NOTICE'::text` khỏi tập `app_api` ở cả ba chỗ ⇒ `apps/api/src/composition.int.test.ts -t
+  "khoản 158"`: 1 đỏ — *"Tập `kind` trong policy của CSDL KHÁC bảng handler của api. Thêm kind = thêm migration (ADR-9292): `ALTER
+  POLICY outbox_jobs_kind_app_api …`"*. (log `lo92-23`)
+- Âm bản của đồ gá nới (không chạy lại — chính là đo trước của `tien-trinh` ⑹, log `lo92-10`): bỏ `noiPolicyKindTam` thì vế ấy đỏ
+  *"expected { status: 'PENDING', attempts: 0 } to deeply equal { status: 'FAILED', attempts: 1, last_failure_reason: 'NO_HANDLER' }"*.
+Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status` chỉ còn các sửa của lô.
+
+## 7. Giới hạn, nói ra
+
+- Policy chỉ ràng UPDATE. `app_api` vẫn INSERT được job mang `kind` của worker — cần cho `UNSEAL_RFQ` (dispatch) và
+  `BREAK_GLASS_UNSEAL_ALERT` (trigger `019` chạy dưới vai gọi); hệ quả và hình dạng ở khoản 9492.
+- Cổng đối chiếu ở hai composition test đọc `pg_policy` của cụm test — nó canh CÂY MÃ (migration + handler) khớp nhau, không canh
+  cụm đã deploy; cụm deploy do cổng khai 83⑴ của hardening canh (đo M2).
+- Bộ đọc tập `kind` hiểu ĐÚNG MỘT hình dạng deparse `(kind = ANY (ARRAY['…'::text, …]))` (PostgreSQL 16); đổi phiên bản đổi deparse
+  thì cả hai cổng và hai dòng khai đỏ cùng lúc — cùng giá đã chấp nhận ở ADR-036 §4.
+- Test cơ chế của `packages/outbox` chạy với policy `app_api` đã nới cho `kind` không thuộc tiến trình nào; chỉ khối 12 và cổng
+  khai lúc `migrate()` đo bản nguyên văn.
+- `noiPolicyKindTam` có hai bản (api composition, tien-trinh); hợp nhất vào `packages/test-support` là việc của một vòng có quyền
+  chạm gói ấy.
+- Nhãn `[INV-F1]` mới ở hai composition test chưa khai ở `so-khai-nhan.ts` (tệp cấm) — dòng khai ở bàn giao mục 6; tới khi khai,
+  `pnpm evidence` báo nhãn đặt sai chỗ.
+- Sổ mồ côi hôm nay rỗng: nửa "dòng sổ mồ côi mới mà quên migration ⇒ cổng worker đỏ" chứng minh bằng phép hợp trong cổng, chưa
+  có dòng thật để đỏ.
+
+## 8. Số đo
+
+- `pnpm typecheck`: 0 lỗi (lượt 1 gãy ở `db/rls-coverage.int.test.ts` vì docblock của agent trước chứa `apps/*/src/…` — `*/` đóng sớm
+  khối chú thích; sửa thành `apps/{api,unseal-worker}/src/…` ở mọi tệp). `pnpm exec eslint` năm tệp `.ts` đã chạm: 0 lỗi.
+  `pnpm exec depcruise apps packages db tests --config .dependency-cruiser.cjs`: 393 module, 1663 cạnh, 0 vi phạm.
+- Đo trước: `packages/outbox/src/outbox.int.test.ts -t "khoản 158"` trên cây không có `9592` (hardening = HEAD): 4 đỏ / 1 xanh
+  (`lo92-11`); `apps/unseal-worker/src/tien-trinh.int.test.ts -t "khoản 168"` trên cây có `9592` chưa nới: 1 đỏ (`lo92-10`).
+- Sau vá, từng tệp tuần tự trên nội dung của `bc88648`: `packages/outbox/src/outbox.int.test.ts` 56/56, 17,7 s (lượt 1 trước `migrateLai`
+  54/56 — hai vế gọi `migrate()` giữa tệp đỏ vì hardening NÉM trên policy đã nới, `lo92-04`); `apps/unseal-worker/src/composition.int.test.ts`
+  9/9; `apps/api/src/composition.int.test.ts` 21/21; `apps/unseal-worker/src/tien-trinh.int.test.ts` 19/19; `db/rls-coverage.int.test.ts`
+  54/54, 166 s (lượt 1 53/54 — cổng "tập vai xuất hiện trong policy" ghim ba tên; `9592` là policy đầu tiên `TO app_unseal`, thêm
+  một tên, một dòng chú thích); `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36, 373 s; `db/migration-shape.test.ts tests/architecture`
+  38 tệp, 436 đạt, 1 bỏ qua, 312 s (bằng baseline `lo92-00` của agent trước trên `561158e`).
+- Đột biến: 3 ca / 3 đỏ đúng vế (mục 6).
+- Số test mang nhãn `[INV-F1]` thêm: outbox +5, worker composition +3, api composition +1.

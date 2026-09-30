@@ -9594,3 +9594,59 @@ cho kho này, chỉ chưa ai chạy (khoản 15).
   target/topic policy, điều kiện `sub`, bản đồ environment = tập environment của mọi job có `id-token`, ID ở `chung` = ví dụ ở README, mẫu
   tuỳ biến đúng thứ tự ở README và 2.0b.
 ```
+
+## ADR-9292 — Ranh giới `kind` theo vai của `outbox_jobs` sống ở CSDL: hai policy `AS RESTRICTIVE FOR UPDATE`, thêm `kind` là thêm migration
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-09-30 (làm khoản 158, chấp nhận giá) · **[S1.9192]** ·
+**Liên quan:** khoản 158 (§S1.81); ADR-006 (hai vai ứng dụng); ADR-036 §4 (biểu thức policy khai nguyên văn); ADR-040 (nguồn tổ chức
+của worker); ADR-083 (tồn đọng đếm qua mọi `kind`); §S1.9151 (sổ `kind` mồ côi do worker khai); `007`, `025`, `9592` ·
+**Biên bản:** `evidence/security-reviews.md` §S1.9192
+
+### Bối cảnh
+
+`007` cấp `app_api` và `025` cấp `app_unseal` CÙNG một bộ `GRANT UPDATE` trên sáu cột vòng đời của `outbox_jobs`, không giới hạn
+theo `kind`. Vị từ lọc `kind` của `CAU_CLAIM` (S1.81) chỉ ngăn RUNNER làm điều ấy TÌNH CỜ: một câu viết tay dưới vai nào cũng ghi
+được kết cục cho job của loại việc thuộc tiến trình kia — đo trước bản vá: `UPDATE` dưới `app_api` nhắm job `UNSEAL_RFQ` của chính
+tổ chức ⇒ 1 hàng; runner của `api` mang nhầm handler `UNSEAL_RFQ` claim được. Hai lớp, hai mô hình đe doạ: lớp runner là vệ sinh vận
+hành (bảng handler quá rộng, `kind` đi lạc); lớp CSDL là QUYỀN (mã dưới một vai — kể cả mã ngoài runner — ghi vào việc của vai
+kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
+
+### Quyết định
+
+1. Hai policy `AS RESTRICTIVE FOR UPDATE` trên `public.outbox_jobs` (migration `9592`), đối xứng theo vai và theo tập `kind`:
+   `outbox_jobs_kind_app_api` (`TO app_api`) mang ĐÚNG tập khoá của `buildApiOutboxHandlers`; `outbox_jobs_kind_app_unseal`
+   (`TO app_unseal`) mang ĐÚNG tập khoá của `buildUnsealWorkerHandlers` ∪ sổ `KIND_KHONG_NGUOI_NHAN` (worker là tiến trình khai sổ
+   từ S1.9151). `USING` = `WITH CHECK`; phần tử theo bảng chữ cái.
+2. Chỉ `FOR UPDATE`. `SELECT` của hai vai không đổi (worker đếm tồn đọng qua mọi `kind` — ADR-083; `api` đọc hàng đợi của mình);
+   `INSERT` của `app_api` không đổi (nó xếp việc cho worker). `SELECT … FOR UPDATE SKIP LOCKED` của `CAU_CLAIM` chịu vế `USING`
+   của policy `FOR UPDATE`, nên runner mang nhầm handler của vai kia claim 0 hàng — không lỗi, đúng cơ chế "0 hàng im lặng" mà
+   khoản 83⑴ đòi KHAI: hai dòng bảy cột nguyên văn ở `POLICY_RESTRICTIVE_KHAI` (hardening) và bản gương `POLICY_RESTRICTIVE_DA_KHAI`.
+3. **Tập `kind` mỗi vai từ nay SỐNG Ở CSDL.** Thêm một `kind` — handler mới ở `api` hay worker, hay một dòng sổ mồ côi — là thêm
+   MỘT MIGRATION `ALTER POLICY outbox_jobs_kind_<vai> ON public.outbox_jobs USING (…) WITH CHECK (…)` cộng sửa hai dòng khai.
+   Migration đã áp không sửa: kind mới ⇒ migration mới, không sửa `9592`.
+4. Cái giá được ĐÒI ở cổng, không ở trí nhớ: hai composition test đối chiếu tập `kind` của policy ĐANG CÓ (đọc `pg_policy`) với
+   `Object.keys(handlers)` ∪ sổ mồ côi của chính tiến trình, đỏ ở tệp của tiến trình thêm `kind`, TRƯỚC khi job của nó nằm `PENDING`
+   im lặng. Quên migration ⇒ fail-CLOSED (kind mới không vai nào ghi được kết cục), đúng hướng.
+5. Test dùng `kind` thử dưới vai thật nới policy bằng `ALTER POLICY` dưới siêu người dùng, hẹp nhất có thể, khôi phục nguyên văn;
+   phép đo của chính khoản 158 chạy trên bản `migrate()` dựng. Hardening không bị qua mặt: cổng khai 83⑴ vẫn đòi bản nguyên văn ở
+   mỗi lần `migrate()`.
+
+### Phương án bị loại
+
+- **Giữ nguyên — chỉ có vị từ lọc ở runner.** Không đo được mô hình đe doạ thứ hai (mã ngoài runner, mã dưới vai này ghi việc của
+  vai kia); §S1.81 đã nói thẳng đây là lỗ.
+- **`GRANT UPDATE` theo `kind`.** Quyền cột của PostgreSQL không có chiều hàng; chỉ policy làm được.
+- **Policy đọc tập `kind` từ một bảng cấu hình / GUC** thay vì literal: đưa tập ra khỏi tầm của cổng khai nguyên văn (83⑴) và mở
+  một đường ghi tập ấy lúc chạy — đúng thứ lớp QUYỀN không được có. Literal + migration là cái giá rẻ hơn.
+- **Ràng cả `INSERT` (và `SELECT`) theo `kind` trong cùng migration.** Đụng ADR-083 và đường xếp việc của `api` (dispatch, trigger
+  `019` chạy dưới vai gọi) — một quyết định riêng, mở ở khoản 9492.
+- **Đổi mọi `kind` thử trong test sang `kind` thật** để khỏi nới policy: test cơ chế của outbox thôi đọc được, hai vế sổ mồ côi
+  mất đối tượng đo; chạy runner dưới siêu người dùng thì mất [T10-D].
+
+### Hệ quả
+
+- Một `kind` chỉ có thể thuộc ĐÚNG MỘT vai (cổng "hai tập không giao nhau" đo trên chính policy).
+- Thêm `kind` chậm hơn một migration; đổi lại, danh sách `kind` mỗi vai là một sự thật có ở CSDL, kiểm toán được bằng `pg_policy`.
+- Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại hai dòng khai (cùng giá ADR-036 §4).
+- Mọi test chạy runner dưới vai thật với `kind` không thuộc tiến trình nào phải nới policy có khôi phục — ba tệp đã làm; tệp mới
+  phải làm theo, nếu không job của nó nằm `PENDING` và test đỏ ở đúng lớp CSDL.
