@@ -1301,6 +1301,10 @@ describe("[S1.213 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng t�
 // ĐÃ CÓ (ghi thẳng dưới `app_unseal`, như mọi ca của tệp — hàng của những lượt mở thầu trước S1.217, hay của một chỗ ghi khác),
 // rồi lời mời bị thu hồi. Hai câu của `buildComparisonTable` — câu hàng và câu tổng hợp — cùng lọc `i.revoked_at IS NULL`, và
 // cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba chỗ đọc mang đúng MỘT vế ấy.
+//
+// [S1.243 / khoản 271] Cùng giàn cảnh đo luôn câu ĐẾM: chủ dự án chốt (kế hoạch đợt 3, câu 7) số của `countReceivedBids` là số báo
+// giá SẼ DỰ THẦU — luồng của lời mời còn sống —, nên câu đếm mang cùng vế và cổng tĩnh trên đòi cả nó (tiêu chí hình dạng thứ hai:
+// câu ấy không có `v.bid_id`). Đối chứng TRƯỚC khi thu hồi: 2; sau: 1.
 // ===============================================================================================
 describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi không vào bảng so sánh", () => {
   /** Lời mời của một phiên bản báo giá — đọc dưới superuser, không đi qua hàm nào của gói. */
@@ -1312,7 +1316,7 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
     return rows[0]?.invitation_id ?? "";
   }
 
-  it("hai bản rõ, thu hồi lời mời của một ⇒ câu hàng và câu tổng hợp cùng bỏ nó: một dòng, `parsed` 1, min = max = giá còn lại, `belowBudget` 0 — bản rõ vẫn nằm trong CSDL; ĐỐI CHỨNG trước khi thu hồi: hai dòng", async () => {
+  it("hai bản rõ, thu hồi lời mời của một ⇒ câu hàng và câu tổng hợp cùng bỏ nó: một dòng, `parsed` 1, min = max = giá còn lại, `belowBudget` 0 — bản rõ vẫn nằm trong CSDL; ĐỐI CHỨNG trước khi thu hồi: hai dòng; [S1.243 / khoản 271] số báo giá sẽ dự thầu 2 → 1", async () => {
     const rfqId = await taoRfqMo(csLong);
     const vThuHoi = await nopBaoGia(rfqId, "NCC bi thu hoi");
     const vConLai = await nopBaoGia(rfqId, "NCC con lai");
@@ -1327,6 +1331,9 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
     const truoc = await doc();
     expect(truoc.rows.map((r) => r.bidVersionId).sort()).toEqual([vThuHoi, vConLai].sort());
     expect(truoc.aggregates).toMatchObject({ parsed: 2, min: "900000.00", max: "1200000.00", belowBudget: 1 });
+    // [S1.243 / khoản 271] ĐỐI CHỨNG của câu đếm: chưa thu hồi thì cả hai luồng sẽ dự thầu — vế lọc không bớt ai khi không ai bị loại.
+    const demTruoc = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(demTruoc, "trước thu hồi: hai luồng, hai báo giá sẽ dự thầu").toEqual({ disclosed: true, count: 2 });
 
     // Thu hồi bằng SQL dưới superuser, ký tên theo trigger 013 — gói không đi qua `revokeInvitation` (nó chặn sau lần mở, đúng
     // quyết định): thứ đo ở đây là VẾ LỌC, không phải đường thu hồi.
@@ -1347,9 +1354,13 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
     );
     expect(banRo[0]?.n).toBe("2");
 
-    // GIỚI HẠN ĐÃ ĐO, nói ra (khoản 271): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
-    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 271 đỏ đúng đây.
+    // ~~GIỚI HẠN ĐÃ ĐO, nói ra (khoản 271): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
+    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 271 đỏ đúng đây.~~
+    // **[S1.243 / khoản 271]** Ca ghim đã đỏ đúng đây và lật: con số là số báo giá SẼ DỰ THẦU (câu 7 của kế hoạch đợt 3; ADR-128 —
+    // thu hồi là loại), nên luồng của lời mời vừa thu hồi thôi được đếm: 1. Đo trước bản vá (câu đếm chưa mang vế): `expected
+    // { disclosed: true, count: 2 } to deeply equal { disclosed: true, count: 1 }`. Bản rõ và `vendor_bids` vẫn nguyên (dòng trên):
+    // số đổi vì lần ĐỌC lọc, không vì dữ liệu mất.
     const dem = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
-    expect(dem).toEqual({ disclosed: true, count: 2 });
+    expect(dem, "sau thu hồi: luồng của lời mời đã thu hồi không còn được đếm").toEqual({ disclosed: true, count: 1 });
   });
 });

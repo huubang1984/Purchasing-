@@ -7,7 +7,9 @@
 //
 // Luật chọn lọc của ADR-060 giữ nguyên: lời từ chối nói NGƯỜI DÙNG cố đi tắt một chốt thì vào sổ;
 // lời từ chối nói dữ liệu hay cấu hình vừa đổi dưới chân họ thì không. Hàng sổ ở giao dịch ĐỘC LẬP
-// qua `throwAuditedDenial`, và payload chỉ mang MÃ.
+// qua `throwAuditedDenial`, và payload chỉ mang MÃ. [S1.241 / khoản 279] Mã ấy cũng đi làm VẾ của lời gọi (đối số thứ năm), nên
+// khi lần ghi sổ gãy, dòng log của lần MẤT SỔ nói được chốt nào — `DANH_MUC_VE_CONG` ở `rbac.ts` chép từ vựng của bảng dưới đây,
+// và `danh-muc-tu-choi.test.ts` đòi bản chép bằng tập khoá của `CHOT_VAO_SO`.
 //
 // [S1.180 / khoản 247 / ADR-108] BẢNG DỜI XUỐNG GÓI NÀY từ `packages/rfq/src/chot-kiem-soat.ts`, đúng như
 // chú thích ở đó đã hẹn: khi một gói khác cần, bảng dời xuống một gói cả hai cùng phụ thuộc — không mọc
@@ -47,7 +49,10 @@ import type pg from "pg";
 import type { ActorType } from "@trustprocure/audit";
 import { throwAuditedDenial } from "./rbac.js";
 
-/** Toàn bộ từ vựng chốt kiểm soát. Thêm một mã là thêm một dòng ở `CHOT_VAO_SO`. */
+/**
+ * Toàn bộ từ vựng chốt kiểm soát. Thêm một mã là thêm một dòng ở `CHOT_VAO_SO` — [S1.241 / khoản 279] và một tên ở `DANH_MUC_VE_CONG`
+ * (`rbac.ts`), không thì dòng log mất sổ của mã ấy ra `HANG_LA` (vế ⑷ của `danh-muc-tu-choi.test.ts` đỏ cho tới khi thêm).
+ */
 export type MaChotKiemSoat =
   | "BAC_LECH_HAM_PHAN_BAC"
   | "D2_NGUOI_TAO_TU_DUYET"
@@ -360,5 +365,9 @@ export async function tuChoiTheoChotTaiNguyen(
       payload: { ma },
     },
     loi,
+    // [S1.241 / khoản 279] CÙNG mã làm VẾ (đối số thứ năm) — `DenialAuditFailedError.clause`: khi lần ghi này gãy (55P03), hàng
+    // sổ mang mã là hàng không ghi được, và dòng log của bộ điều phối là `… CONTROL_DENIED RFQ <- error 55P03` cho mọi chốt. Mã ra
+    // dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG` (`rbac.ts`), nơi từ vựng `CHOT_VAO_SO` được chép và đối chiếu với bảng này.
+    ma,
   );
 }

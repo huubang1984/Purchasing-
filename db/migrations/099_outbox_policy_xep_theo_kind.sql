@@ -1,0 +1,36 @@
+-- ==============================================================================================
+-- 099_outbox_policy_xep_theo_kind — [S1.246 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC XUỐNG TẦNG CSDL — ADR-138
+--
+-- VÌ SAO (khoản 285, lượt soi của §S1.233). `095` (khoản 158, ADR-134) cố ý chỉ ràng `UPDATE`: mỗi vai ứng dụng chỉ ghi kết cục cho
+-- job mang `kind` của tiến trình chạy dưới vai ấy. `INSERT` thì `007` cấp `app_api` trên năm cột `(org_id, kind, payload, dedupe_key,
+-- run_after)` KHÔNG theo `kind`. Đo trước bản vá (`packages/outbox/src/outbox.int.test.ts`, khối khoản 285, chạy trên cây không có tệp
+-- này): `INSERT` viết tay dưới `app_api` một `kind` không tiến trình nào nhận (`THU_KIND_LA_285`) ⇒ VÀO, không lỗi — và nằm `PENDING`
+-- mãi, vì không runner nào có nó trong mảng lọc (S1.81). Union `KindOutbox` (§S1.239) ràng đường TypeScript; câu SQL viết tay (mã
+-- ngoài `enqueueJob`, một lỗi, một script) thì không lớp nào ràng.
+--
+-- HÌNH DẠNG (câu 13 của kế hoạch đợt 3, chủ dự án chốt 2026-09-30 — khuôn `095`): MỘT policy `AS RESTRICTIVE FOR INSERT TO app_api`,
+-- AND vào `outbox_jobs_tenant_isolation` của `007` (RESTRICTIVE chỉ SIẾT, nên đặt ở tệp khác tệp tạo bảng không mở cửa sổ nào —
+-- khoản nợ 29). Tập = ĐÚNG những `kind` mà `api` XẾP: ba khoá của `buildApiOutboxHandlers` (`LOGIN_LINK_SEND`,
+-- `RFQ_DEADLINE_EXTENDED_NOTICE`, `UNSEAL_APPROVAL_NOTICE`), `UNSEAL_RFQ` (`dispatchUnseal` xếp việc cho worker) và
+-- `BREAK_GLASS_UNSEAL_ALERT` (trigger `unseal_canh_bao_break_glass` của `019` — SECURITY INVOKER, nên câu INSERT của nó chạy dưới vai
+-- gọi, tức `app_api`, trong chính giao dịch tạo yêu cầu break-glass). Tập ấy bằng union `KindOutbox` và bằng hợp hai tập ghi kết
+-- cục của `095`: chỉ `app_api` có GRANT INSERT trên `outbox_jobs`, nên mọi `kind` của kho được xếp dưới vai này. Chỉ vế `WITH CHECK`
+-- (PostgreSQL không nhận `USING` cho `FOR INSERT`). Dòng khai bảy cột ở `POLICY_RESTRICTIVE_KHAI` của `hardening.always.sql` (vế
+-- `USING` là NULL), bản gương ở `db/rls-coverage.int.test.ts`; hardening dựng lại policy THIẾU từ chính dòng khai (đường "ops xoá rồi
+-- tạo lại vai" — `DROP OWNED BY app_api` xoá policy đơn vai này như xoá `outbox_jobs_kind_app_api`). Vi phạm thì câu INSERT NÉM 42501
+-- nêu tên policy — không có "0 hàng im lặng" như `FOR UPDATE`. Toán tử không ghim: cùng khuôn `095`; bản deparse ở dòng khai là
+-- `(kind = ANY (ARRAY['…'::text, …]))`, phần tử theo bảng chữ cái để dòng khai nguyên văn có một dạng duy nhất.
+--
+-- GIỚI HẠN, NÓI RA (chủ dự án chốt — khoản 305): `BREAK_GLASS_UNSEAL_ALERT` PHẢI ở trong tập vì trigger `019` cần nó (đo: bỏ nó khỏi
+-- tập thì CHÍNH yêu cầu break-glass NÉM 42501 ở câu INSERT của trigger), nên một cảnh báo break-glass GIẢ viết tay dưới `app_api` VẪN
+-- xếp được, cùng một `UNSEAL_RFQ` trỏ yêu cầu bất kỳ (handler kiểm lại trạng thái yêu cầu — không mở được gói). Đổi trigger sang
+-- SECURITY DEFINER với chủ hẹp để kind ấy ra khỏi tập là phương án khác (cỡ L), KHÔNG làm ở đây.
+--
+-- CÁI GIÁ (cùng giá ADR-134): thêm một `kind` xếp được là thêm MỘT MIGRATION `ALTER POLICY outbox_jobs_kind_xep_app_api ON
+-- public.outbox_jobs WITH CHECK (…)` cộng sửa dòng khai và bản gương. Quên thì lời xếp kind mới NÉM 42501 ngay ở giao dịch nghiệp vụ
+-- — fail-CLOSED và ỒN ÀO — và vế tiền đề của khối khoản 285 (tập = union `KindOutbox`) đỏ trước khi tới đó.
+-- Migration đã áp không sửa: kind mới ⇒ migration MỚI, không sửa tệp này.
+-- ==============================================================================================
+
+CREATE POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs AS RESTRICTIVE FOR INSERT TO app_api
+  WITH CHECK (kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text, 'UNSEAL_RFQ'::text]));

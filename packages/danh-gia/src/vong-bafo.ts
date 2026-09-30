@@ -116,7 +116,8 @@ function doiVong(h: HangVong): VongBafo {
  *
  * Cổng quyền là `rfq.bafo.open` — mã RIÊNG, chỉ `PROCUREMENT_MANAGER` (ADR-055). Mở vòng BAFO là
  * hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT giá của mọi người, nên nó không đi chung
- * với `evaluation.perform` (năm trên sáu vai giữ mã ấy — khoản 220).
+ * với `evaluation.perform` (năm trên ~~sáu~~ **[S1.241 / khoản 270]** bảy vai giữ mã ấy — khoản 220; vai thứ bảy `DATA_STEWARD` của
+ * `083` không giữ, con số ghim ở `ma-tran-quyen.test.ts` ca «khoản 220 ⒝»).
  */
 export async function moVongBafo(
   client: pg.PoolClient,

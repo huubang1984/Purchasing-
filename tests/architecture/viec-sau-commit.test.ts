@@ -23,16 +23,29 @@
 //      chính `permission: PERMISSIONS.X` của route bao quanh. Route không có mã quyền (tự thân, vô danh) thì không hàm gói nào được
 //      gọi ở đó. Và: không SQL tay (`.query(`), không gọi hàm cục bộ (cổng không đọc xuyên qua nó). Cả hai là fail-closed: thứ không
 //      đọc được thì đỏ, không im.
+//      [S1.238 / khoản 264] Và mọi lời gọi QUA THUỘC TÍNH (`x.f(…)`, `x["f"](…)`, kể cả `new x.F(…)`): vật chủ là namespace import
+//      từ `@trustprocure/*` (`import * as inv`) ⇒ đọc NHƯ TÊN GÓI, `inv.f` đi qua đúng bảng trên; vật chủ thuộc TẬP TRẮNG nhỏ, có tên —
+//      `Promise`, `JSON`, `Array`, `Object` (tên toàn cục, không khai trong tệp) và tham số kết nối của CHÍNH hàm bù (`bu: async
+//      (client) => …`; `.query` trên nó vẫn là SQL tay) ⇒ sạch; MỌI vật chủ khác — một biến, `ctx.services.x`, kết quả một lời gọi,
+//      một thuộc tính tính toán — và mọi hình dạng lời gọi khác (`(0, f)(…)`, `import(…)`) ⇒ ĐỎ. Tên phân giải theo KÝ HIỆU (chương
+//      trình TypeScript một tệp có binder, cùng khuôn `pool-nghe-du-tin-hieu.test.ts`), không theo chữ: `const Promise = …` hay
+//      `const client = …` che tập trắng thì không còn là tập trắng, và một biến cục bộ che tên import (`const revokeInvitation =
+//      createSupplier`) là hàm cục bộ.
 //   ⑶ VIẾT TẠI CHỖ: đối số của lời gọi đăng ký phải là một hàm hay một object literal, và `viec`/`gui`/`bu`/`khiXong` phải là hàm viết
 //      ngay tại thuộc tính (cho phép `undefined`, và biểu thức ba ngôi mà mỗi nhánh là hàm/`undefined` — hình dạng `khiXong` của
 //      `POST /invitations/:invitationId/reissue`). Một closure tạo ở NGOÀI rồi truyền vào (`const v = () => …; ctx.afterCommit(v)`,
 //      `bu: thuHoi`, `{ bu }`) là thứ hai vế trên không đọc xuyên qua được, nên đỏ — không im.
 //
-// PHÁT BIỂU ĐÚNG MỨC: cổng đọc theo TÊN và theo HÌNH DẠNG cú pháp. Nó mù với `ctx` đi qua `this`, `arguments`, `eval`, và với một hàm
+// PHÁT BIỂU ĐÚNG MỨC: cổng đọc theo TÊN và theo HÌNH DẠNG cú pháp. Nó mù với `ctx` đi qua `this`, `arguments`, `eval`~~, và với một hàm
 // gói gọi qua thuộc tính của vật chủ (`goi.revokeInvitation(…)`, `import * as goi` — không import tên trần thì không nhận ra là hàm
-// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 264). Vế ⑵ KHÔNG kiểm `viec`/`gui`
-// (phần gửi) theo mã quyền: chúng gọi bộ gửi tiêm vào, không cầm `client` nào. Mỗi lỗ nói ra ở đây là một lỗ, không phải một lời
-// khai đã đóng.
+// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 264)~~ **[S1.238 / khoản 264]** (lời
+// gọi qua thuộc tính nay fail-closed ở ⑵ — xem trên). Vế ⑵ KHÔNG kiểm `viec`/`gui`
+// (phần gửi) theo mã quyền: chúng gọi bộ gửi tiêm vào, không cầm `client` nào. [S1.238 / khoản 264] Vế ⑵ chỉ thấy lời gọi VIẾT RA
+// (`f(…)`, `new F(…)`, `` f`…` ``): lời gọi NGẦM — getter, `await` trên một thenable, bộ lặp của `for…of`/spread, ép kiểu gọi
+// `toString`, và một hàm cục bộ khai NGOÀI hàm bù truyền làm callback cho phương thức của tập trắng (`Array.from([client], f)`,
+// `JSON.parse(s, f)`) — không phải một lời gọi hàm ghi viết ra, nên không được đọc (lượt soi đối kháng đo bốn hình dạng ấy: 0 vi
+// phạm — khoản 289); hôm nay không `bu`/`khiXong` thật nào có vòng lặp, getter, spread hay callback.
+// Mỗi lỗ nói ra ở đây là một lỗ, không phải một lời khai đã đóng.
 // ==============================================================================================
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -70,6 +83,11 @@ const GOI_CUA_HAM_BU: Readonly<Record<string, string>> = {
 };
 /** Hàm toàn cục được gọi trần trong `bu`/`khiXong` mà không phải hàm cục bộ của tệp. */
 const HAM_TOAN_CUC = new Set(["String", "Number", "Boolean", "Array", "Object", "Promise", "Symbol", "BigInt", "Date", "Error"]);
+/**
+ * [S1.238 / khoản 264] TẬP TRẮNG vật chủ của lời gọi qua thuộc tính trong `bu`/`khiXong` — tên toàn cục (không khai trong tệp) không
+ * mang năng lực ghi nào của kho. Cộng MỘT vật chủ không nằm ở đây vì nó không có tên cố định: tham số kết nối của chính hàm bù.
+ */
+const VAT_CHU_TOAN_CUC = new Set(["Promise", "JSON", "Array", "Object"]);
 
 export interface ChoDangKy {
   readonly tep: string;
@@ -88,8 +106,30 @@ export interface KetQuaDoc {
   readonly viPham: readonly string[];
 }
 
-function cayCuPhap(vanBan: string, ten: string): ts.SourceFile {
-  return ts.createSourceFile(ten, vanBan, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+/**
+ * ~~`cayCuPhap` — chỉ cây cú pháp.~~ [S1.238 / khoản 264] Chương trình TypeScript MỘT TỆP (`noResolve`, `noLib`), cùng khuôn
+ * `pool-nghe-du-tin-hieu.test.ts`: binder phân giải mỗi tên về đúng khai báo của nó trong tệp (import ⇒ gói và tên xuất, kể cả
+ * `import * as`), nên vế ⑵ đọc theo KÝ HIỆU — một biến cục bộ che một tên import hay một tên của tập trắng không lừa được nó. Không
+ * đi theo import ra ngoài tệp; tên toàn cục (`Promise`, `JSON`…) không có khai báo nào trong tệp vì không nạp lib.
+ */
+function docChuongTrinh(vanBan: string, ten: string): { readonly sf: ts.SourceFile; readonly ch: ts.TypeChecker } {
+  const tuyChon: ts.CompilerOptions = {
+    noResolve: true,
+    noLib: true,
+    types: [],
+    skipLibCheck: true,
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+  };
+  const host = ts.createCompilerHost(tuyChon, true);
+  host.getSourceFile = (f, l) => (f === ten ? ts.createSourceFile(ten, vanBan, l, true, ts.ScriptKind.TS) : undefined);
+  host.fileExists = (f) => f === ten;
+  host.readFile = (f) => (f === ten ? vanBan : undefined);
+  host.writeFile = () => undefined;
+  const chuongTrinh = ts.createProgram({ rootNames: [ten], options: tuyChon, host });
+  const sf = chuongTrinh.getSourceFile(ten);
+  if (sf === undefined) throw new Error(`không dựng được cây cú pháp của ${ten}`);
+  return { sf, ch: chuongTrinh.getTypeChecker() };
 }
 
 /** Bỏ các lớp bọc không đổi giá trị: ngoặc, `!`, `as`, `satisfies`, `<T>x`. */
@@ -101,17 +141,34 @@ function boBoc(e: ts.Expression): ts.Expression {
   return x;
 }
 
-/** Tên cục bộ của mọi thứ import từ `@trustprocure/*` (kể cả bí danh `import { goc as x }`) ⇒ tên gốc. */
-function tenImportGoi(sf: ts.SourceFile): ReadonlyMap<string, string> {
-  const ra = new Map<string, string>();
-  for (const cau of sf.statements) {
-    if (!ts.isImportDeclaration(cau) || !ts.isStringLiteral(cau.moduleSpecifier)) continue;
-    if (!cau.moduleSpecifier.text.startsWith("@trustprocure/")) continue;
-    const rang = cau.importClause?.namedBindings;
-    if (rang === undefined || !ts.isNamedImports(rang)) continue;
-    for (const pt of rang.elements) ra.set(pt.name.text, (pt.propertyName ?? pt.name).text);
+/**
+ * ~~`tenImportGoi(sf)` — bản đồ TÊN cục bộ ⇒ tên gốc, chỉ `import { a as b }`.~~ [S1.238 / khoản 264] Nguồn của MỘT ký hiệu: gói và
+ * tên xuất nếu khai báo của nó là một import giá trị (bí danh đã bỏ; `*` cho `import * as`, `default` cho import mặc định); `null`
+ * cho mọi khai báo khác (biến, tham số, hàm cục bộ) và cho tên không khai trong tệp.
+ */
+interface NguonImport {
+  readonly goi: string;
+  readonly ten: string;
+}
+
+function nguonImportCua(kyHieu: ts.Symbol | undefined): NguonImport | null {
+  const d = kyHieu?.declarations?.[0];
+  if (d === undefined) return null;
+  const tuGoi = (e: ts.Expression): string => (ts.isStringLiteralLike(e) ? e.text : "");
+  if (ts.isImportSpecifier(d)) {
+    const menhDe = d.parent.parent;
+    return d.isTypeOnly || menhDe.isTypeOnly ? null : { goi: tuGoi(menhDe.parent.moduleSpecifier), ten: (d.propertyName ?? d.name).text };
   }
-  return ra;
+  if (ts.isNamespaceImport(d)) return d.parent.isTypeOnly ? null : { goi: tuGoi(d.parent.parent.moduleSpecifier), ten: "*" };
+  if (ts.isImportClause(d)) return d.isTypeOnly ? null : { goi: tuGoi(d.parent.moduleSpecifier), ten: "default" };
+  return null;
+}
+
+const laGoiKho = (ng: NguonImport | null): ng is NguonImport => ng !== null && ng.goi.startsWith("@trustprocure/");
+
+/** Tên KHÔNG khai trong tệp — toàn cục (không nạp lib nên không có khai báo nào), không bị một khai báo cục bộ che. */
+function laToanCuc(kyHieu: ts.Symbol | undefined, sf: ts.SourceFile): boolean {
+  return !(kyHieu?.declarations ?? []).some((d) => d.getSourceFile() === sf);
 }
 
 function tenThuocTinh(n: ts.PropertyName): string | null {
@@ -253,31 +310,124 @@ function timChamClient(goc: ts.Node, tenCtx: string, biDanh: ReadonlySet<string>
   duyet(goc, biDanh);
 }
 
-/** Vế ⑵ trên thân MỘT hàm bù: mọi lời gọi hàm gói phải nằm trong danh sách của mã quyền; không SQL tay; không hàm cục bộ. */
+/**
+ * Vế ⑵ trên MỘT hàm bù (`than`: hàm viết tại chỗ, ba ngôi của hai hàm, hay một phương thức): mọi lời gọi hàm gói phải nằm trong danh
+ * sách của mã quyền; không SQL tay; không hàm cục bộ; và [S1.238 / khoản 264] mọi lời gọi qua thuộc tính phải có vật chủ là namespace
+ * import của kho (đọc như tên gói) hay nằm trong tập trắng — còn lại, và mọi hình dạng lời gọi khác, ĐỎ. Mỗi tên đọc theo KÝ HIỆU (`ch`).
+ */
 function timHamGhiNgoaiQuyen(
   than: ts.Node,
   tenHam: string,
   maQuyen: string | null,
-  importGoi: ReadonlyMap<string, string>,
+  ch: ts.TypeChecker,
+  sf: ts.SourceFile,
   ke: (loi: string) => void,
 ): void {
   const duocPhep = maQuyen === null ? [] : (HAM_BU_THEO_MA_QUYEN[maQuyen] ?? []);
-  const duyet = (n: ts.Node): void => {
-    if (ts.isCallExpression(n)) {
-      const goi = boBoc(n.expression);
-      if (ts.isIdentifier(goi)) {
-        const goc = importGoi.get(goi.text);
-        if (goc !== undefined) {
-          if (maQuyen === null) ke(`\`${tenHam}\` gọi hàm gói \`${goc}\` trong route KHÔNG có mã quyền`);
-          else if (maQuyen === "?") ke(`\`${tenHam}\` gọi hàm gói \`${goc}\` mà mã quyền của route không đọc được (không phải \`PERMISSIONS.X\`)`);
-          else if (!duocPhep.includes(goc)) ke(`\`${tenHam}\` gọi hàm gói \`${goc}\` ngoài danh sách của mã quyền \`${maQuyen}\``);
-        } else if (!HAM_TOAN_CUC.has(goi.text)) {
-          ke(`\`${tenHam}\` gọi hàm cục bộ \`${goi.text}\` — cổng không đọc xuyên qua nó`);
-        }
-      } else if (ts.isPropertyAccessExpression(goi) && goi.name.text === "query") {
-        ke(`\`${tenHam}\` chạy SQL tay (\`.query(\`) — không mã quyền nào phủ một câu lệnh viết tay`);
-      }
+  const kiemHamGoi = (goc: string, qua: string): void => {
+    if (maQuyen === null) ke(`\`${tenHam}\` gọi hàm gói \`${goc}\`${qua} trong route KHÔNG có mã quyền`);
+    else if (maQuyen === "?") ke(`\`${tenHam}\` gọi hàm gói \`${goc}\`${qua} mà mã quyền của route không đọc được (không phải \`PERMISSIONS.X\`)`);
+    else if (!duocPhep.includes(goc)) ke(`\`${tenHam}\` gọi hàm gói \`${goc}\`${qua} ngoài danh sách của mã quyền \`${maQuyen}\``);
+  };
+  // [S1.238 / khoản 264] Tham số kết nối: tham số ĐẦU của chính hàm bù (mỗi nhánh của ba ngôi là một hàm) — bộ chạy trao kết nối của
+  // giao dịch mới ở đó. Theo KÝ HIỆU: một `const client` khai trong thân che nó thì là một ký hiệu khác.
+  const thamSoKetNoi = new Set<ts.Symbol>();
+  const gomHamGoc = (n: ts.Node): void => {
+    const x = ts.isExpression(n) ? boBoc(n) : n;
+    if (ts.isFunctionLike(x)) {
+      const dau = x.parameters[0];
+      const kh = dau !== undefined && ts.isIdentifier(dau.name) ? ch.getSymbolAtLocation(dau.name) : undefined;
+      if (kh !== undefined) thamSoKetNoi.add(kh);
+    } else if (ts.isConditionalExpression(x)) {
+      gomHamGoc(x.whenTrue);
+      gomHamGoc(x.whenFalse);
     }
+  };
+  gomHamGoc(than);
+  const ngan = (n: ts.Node): string => {
+    const t = n.getText(sf).replace(/\s+/gu, " ");
+    return t.length > 60 ? `${t.slice(0, 57)}…` : t;
+  };
+  const docLoiGoi = (bieuThuc: ts.Expression, dau: string): void => {
+    const goi = boBoc(bieuThuc);
+    if (ts.isIdentifier(goi)) {
+      const kh = ch.getSymbolAtLocation(goi);
+      const ng = nguonImportCua(kh);
+      if (laGoiKho(ng) && ng.ten !== "*" && ng.ten !== "default") kiemHamGoi(ng.ten, "");
+      else if (!(laToanCuc(kh, sf) && HAM_TOAN_CUC.has(goi.text))) ke(`\`${tenHam}\` gọi hàm cục bộ \`${goi.text}\` — cổng không đọc xuyên qua nó`);
+      return;
+    }
+    if (ts.isPropertyAccessExpression(goi) || ts.isElementAccessExpression(goi)) {
+      const thuocTinh = ts.isPropertyAccessExpression(goi)
+        ? goi.name.text
+        : ts.isStringLiteralLike(goi.argumentExpression)
+          ? goi.argumentExpression.text
+          : null;
+      if (thuocTinh === "query") {
+        ke(`\`${tenHam}\` chạy SQL tay (\`.query(\`) — không mã quyền nào phủ một câu lệnh viết tay`);
+        return;
+      }
+      if (thuocTinh === null) {
+        ke(`\`${tenHam}\` gọi qua thuộc tính tính toán \`${ngan(goi)}\` — cổng không đọc được tên hàm`);
+        return;
+      }
+      const vatChu = boBoc(goi.expression);
+      if (!ts.isIdentifier(vatChu)) {
+        ke(`\`${tenHam}\` gọi \`${dau}${ngan(goi)}(…)\` qua thuộc tính của một biểu thức (vật chủ không phải tên trần) — cổng không đọc xuyên qua được`);
+        return;
+      }
+      const kh = ch.getSymbolAtLocation(vatChu);
+      const ng = nguonImportCua(kh);
+      if (laGoiKho(ng) && ng.ten === "*") kiemHamGoi(thuocTinh, ` (qua namespace \`${vatChu.text}\`)`);
+      else if (!((kh !== undefined && thamSoKetNoi.has(kh)) || (laToanCuc(kh, sf) && VAT_CHU_TOAN_CUC.has(vatChu.text)))) {
+        ke(
+          `\`${tenHam}\` gọi \`${dau}${ngan(goi)}(…)\` qua thuộc tính của vật chủ \`${vatChu.text}\` ngoài tập trắng ` +
+            "(Promise, JSON, Array, Object, tham số kết nối của chính nó) — cổng không đọc xuyên qua được",
+        );
+      }
+      return;
+    }
+    // Hàm gọi ngay tại chỗ: thân nó là con của nút này và được duyệt như mọi nút con.
+    if (ts.isFunctionLike(goi)) return;
+    ke(`\`${tenHam}\` gọi một biểu thức \`${ngan(goi)}\` — cổng không đọc được hàm nào được gọi`);
+  };
+  /** `x` đứng ở vị trí BỊ GỌI của một lời gọi (`x(…)`, `new x(…)`, `` x`…` ``), xuyên qua ngoặc, `!`, `as`, `satisfies`. */
+  const laBiGoi = (x: ts.Node): boolean => {
+    let y = x;
+    while (
+      ts.isParenthesizedExpression(y.parent) ||
+      ts.isNonNullExpression(y.parent) ||
+      ts.isAsExpression(y.parent) ||
+      ts.isSatisfiesExpression(y.parent) ||
+      ts.isTypeAssertionExpression(y.parent)
+    ) {
+      y = y.parent;
+    }
+    const cha = y.parent;
+    return ((ts.isCallExpression(cha) || ts.isNewExpression(cha)) && cha.expression === y) || (ts.isTaggedTemplateExpression(cha) && cha.tag === y);
+  };
+  /**
+   * [S1.238 / khoản 264] Một import giá trị của kho chỉ được xuất hiện trong hàm bù ở vị trí BỊ GỌI trực tiếp — tên trần `f(…)`, hay
+   * vật chủ namespace của `ns.f(…)`. Mọi chỗ khác (đối số, gán, trả về, viết tắt `{ f }`) là một tham chiếu mà một hàm khác gọi hộ —
+   * `Array.from([client], ncc.createSupplier)` đi qua tập trắng (`Array`) và không để lại lời gọi nào của `createSupplier` cho vế ⑵ đọc.
+   */
+  const kiemThamChieuGoi = (n: ts.Identifier): void => {
+    const cha = n.parent;
+    const kh = ts.isShorthandPropertyAssignment(cha) && cha.name === n ? ch.getShorthandAssignmentValueSymbol(cha) : ch.getSymbolAtLocation(n);
+    const ng = nguonImportCua(kh);
+    if (!laGoiKho(ng)) return;
+    let y: ts.Node = n;
+    while (ts.isParenthesizedExpression(y.parent) || ts.isNonNullExpression(y.parent) || ts.isAsExpression(y.parent)) y = y.parent;
+    const laVatChuBiGoi = ng.ten === "*" && (ts.isPropertyAccessExpression(y.parent) || ts.isElementAccessExpression(y.parent)) && y.parent.expression === y && laBiGoi(y.parent);
+    if (!(laBiGoi(n) && ng.ten !== "*") && !laVatChuBiGoi) {
+      ke(`\`${tenHam}\` dùng \`${n.text}\` (import từ ${ng.goi}) không ở vị trí bị gọi trực tiếp — một hàm khác gọi nó thì cổng không thấy`);
+    }
+  };
+  const duyet = (n: ts.Node): void => {
+    if (ts.isCallExpression(n)) docLoiGoi(n.expression, "");
+    else if (ts.isNewExpression(n)) docLoiGoi(n.expression, "new ");
+    else if (ts.isTaggedTemplateExpression(n)) docLoiGoi(n.tag, "");
+    else if (ts.isIdentifier(n)) kiemThamChieuGoi(n);
     ts.forEachChild(n, duyet);
   };
   duyet(than);
@@ -285,8 +435,7 @@ function timHamGhiNgoaiQuyen(
 
 /** Đọc MỘT văn bản mã: mọi lời gọi `<ctx>.afterCommit*(…)`, route bao quanh, và vi phạm của hai vế. Thuần — đo được bằng văn bản mẫu. */
 export function docViecSauCommit(vanBan: string, tep = "mau.ts"): KetQuaDoc {
-  const sf = cayCuPhap(vanBan, tep);
-  const importGoi = tenImportGoi(sf);
+  const { sf, ch } = docChuongTrinh(vanBan, tep);
   const choDangKy: ChoDangKy[] = [];
   const viPham: string[] = [];
   const duyet = (n: ts.Node): void => {
@@ -321,9 +470,10 @@ export function docViecSauCommit(vanBan: string, tep = "mau.ts"): KetQuaDoc {
             if (laBu) hamBu.push(tenM);
             if (ts.isPropertyAssignment(m) && laTaiCho) {
               if (!laVietTaiCho(m.initializer)) ke(`\`${tenM}\` tham chiếu qua biến — phải viết TẠI CHỖ để cổng đọc được`);
-              if (laBu) timHamGhiNgoaiQuyen(m.initializer, tenM, maQuyen, importGoi, ke);
+              if (laBu) timHamGhiNgoaiQuyen(m.initializer, tenM, maQuyen, ch, sf, ke);
             } else if (ts.isMethodDeclaration(m) && laBu) {
-              if (m.body !== undefined) timHamGhiNgoaiQuyen(m.body, tenM, maQuyen, importGoi, ke);
+              // ~~`m.body`~~ [S1.238 / khoản 264] Cả phương thức: tham số đầu của nó là tham số kết nối (tập trắng của vế ⑵).
+              if (m.body !== undefined) timHamGhiNgoaiQuyen(m, tenM, maQuyen, ch, sf, ke);
             } else if (ts.isShorthandPropertyAssignment(m) && laTaiCho) {
               ke(`\`${tenM}\` tham chiếu qua biến — phải viết TẠI CHỖ để cổng đọc được`);
             }
@@ -535,6 +685,80 @@ describe("[S1.209 / khoản 135] việc sau commit: closure không chạm `ctx.c
       expect(sach.viPham).toEqual([]);
       expect(sach.choDangKy[0]?.hamBu).toEqual(["bu", "khiXong"]);
       expect(docViecSauCommit(mauRoute("ctx", baNgoi("createSupplier"))).viPham.join("\n")).toContain("`khiXong` gọi hàm gói `createSupplier` ngoài danh sách");
+    });
+  });
+
+  describe("[S1.238 / khoản 264] vế ⑵ fail-closed với lời gọi qua thuộc tính: namespace import là tên gói, vật chủ ngoài tập trắng thì ĐỎ", () => {
+    const vp = (vanBan: string): string => docViecSauCommit(vanBan).viPham.join("\n");
+    /** Một việc có bù dưới `RFQ_INVITE`, thân `bu` là tham số; `dauHandler` là các câu đứng trước lời đăng ký. */
+    const viecCoBu = (thanBu: string, dauHandler = ""): string =>
+      `${dauHandler}    ctx.afterCommitCoBu({ viec: () => Promise.resolve(), bu: async (client) => { ${thanBu} }, phanHoiKhiHong: { status: 502, body: {} } });`;
+    const themImport = (vanBan: string, dong: string): string => `${dong}\n${vanBan}`;
+
+    it("ba hình dạng của hàng sổ — namespace import gọi hàm ngoài mã quyền, vật chủ bất kỳ, `ctx.services…` — đều ĐỎ, nêu vật chủ", () => {
+      const ns = themImport(mauRoute("ctx", viecCoBu("await ncc.createSupplier(client, ctx.orgId, {});")), 'import * as ncc from "@trustprocure/supplier";');
+      expect(vp(ns)).toContain("`bu` gọi hàm gói `createSupplier` (qua namespace `ncc`) ngoài danh sách của mã quyền `RFQ_INVITE`");
+      const vatChu = mauRoute("ctx", viecCoBu("await goi.revokeInvitation(client, ctx.orgId, {});", "    const goi = { revokeInvitation };\n"));
+      expect(vp(vatChu)).toContain("`bu` gọi `goi.revokeInvitation(…)` qua thuộc tính của vật chủ `goi` ngoài tập trắng");
+      const dichVu = mauRoute("ctx", viecCoBu("await ctx.services.loiMoi.thuHoi(client, ctx.orgId);"));
+      expect(vp(dichVu)).toContain("`bu` gọi `ctx.services.loiMoi.thuHoi(…)` qua thuộc tính của một biểu thức");
+    });
+
+    it("namespace import từ `@trustprocure/*` được nhận NHƯ TÊN GÓI: trong danh sách của mã quyền ⇒ sạch; route không mã quyền ⇒ đỏ; `import *` từ gói ngoài `@trustprocure/*` ⇒ vật chủ lạ", () => {
+      const sach = themImport(mauRoute("ctx", viecCoBu("await inv.revokeInvitation(client, ctx.orgId, {});")), 'import * as inv from "@trustprocure/invitation";');
+      expect(docViecSauCommit(sach).viPham).toEqual([]);
+      const tuThan = themImport(
+        mauRoute("ctx", viecCoBu("await inv.revokeInvitation(client, ctx.orgId, {});"), "self: true, agent: false, mfaTranDuongPhu: null,"),
+        'import * as inv from "@trustprocure/invitation";',
+      );
+      expect(vp(tuThan)).toContain("`bu` gọi hàm gói `revokeInvitation` (qua namespace `inv`) trong route KHÔNG có mã quyền");
+      const ngoai = themImport(mauRoute("ctx", viecCoBu("await pgx.revokeInvitation(client);")), 'import * as pgx from "pg";');
+      expect(vp(ngoai)).toContain("qua thuộc tính của vật chủ `pgx` ngoài tập trắng");
+    });
+
+    it("ĐỐI CHỨNG ÂM — tập trắng: `Promise.*`, `JSON.*`, `Array.*`, `Object.*` và tham số kết nối của chính `bu` (không `.query`) ⇒ sạch", () => {
+      const sach = mauRoute(
+        "ctx",
+        viecCoBu(
+          "await Promise.all([revokeInvitation(client, ctx.orgId, {})]); void JSON.stringify(Object.keys(Array.from([1]))); void client.escapeIdentifier('x');",
+        ),
+      );
+      expect(docViecSauCommit(sach).viPham).toEqual([]);
+    });
+
+    it("tập trắng đọc theo KÝ HIỆU, không theo chữ: `Promise` hay `client` bị che bằng một biến cục bộ ⇒ ĐỎ; tên import bị che trong `bu` ⇒ hàm cục bộ", () => {
+      const cheToanCuc = mauRoute("ctx", viecCoBu("const Promise = { revokeInvitation: createSupplier }; await Promise.revokeInvitation(client, ctx.orgId, {});"));
+      expect(vp(cheToanCuc)).toContain("qua thuộc tính của vật chủ `Promise` ngoài tập trắng");
+      const cheThamSo = mauRoute("ctx", viecCoBu("{ const client = { revokeInvitation: createSupplier }; await client.revokeInvitation(ctx.orgId); }"));
+      expect(vp(cheThamSo)).toContain("qua thuộc tính của vật chủ `client` ngoài tập trắng");
+      // `client` của HANDLER (bí danh `ctx.client`) không phải tham số kết nối của `bu`: vế ⑴ đỏ, và vế ⑵ cũng không coi nó là tập trắng.
+      const khongPhaiThamSo = mauRoute("ctx", "    const { client } = ctx;\n    ctx.afterCommitCoBu({ viec: () => Promise.resolve(), bu: async () => { client.escapeIdentifier('x'); }, phanHoiKhiHong: { status: 502, body: {} } });");
+      expect(vp(khongPhaiThamSo)).toContain("qua thuộc tính của vật chủ `client` ngoài tập trắng");
+      const cheImport = mauRoute("ctx", viecCoBu("const revokeInvitation = createSupplier; await revokeInvitation(client, ctx.orgId, {});"));
+      expect(vp(cheImport)).toContain("`bu` gọi hàm cục bộ `revokeInvitation`");
+    });
+
+    it("hình dạng lời gọi khác mà cổng không đọc được tên hàm — thuộc tính tính toán, `client[\"query\"]`, dấu phẩy, `new` qua namespace, import động — đều ĐỎ", () => {
+      const nsDong = 'import * as inv from "@trustprocure/invitation";';
+      expect(vp(themImport(mauRoute("ctx", viecCoBu("const k = 'revokeInvitation'; await inv[k](client, ctx.orgId, {});")), nsDong))).toContain("thuộc tính tính toán");
+      expect(vp(mauRoute("ctx", viecCoBu("await client['query']('DELETE FROM x');")))).toContain("`bu` chạy SQL tay");
+      expect(vp(themImport(mauRoute("ctx", viecCoBu("await (0, inv.revokeInvitation)(client, ctx.orgId, {});")), nsDong))).toContain("`bu` gọi một biểu thức");
+      expect(vp(themImport(mauRoute("ctx", viecCoBu("new ncc.GhiNhaCungCap(client);")), 'import * as ncc from "@trustprocure/supplier";'))).toContain(
+        "`bu` gọi hàm gói `GhiNhaCungCap` (qua namespace `ncc`) ngoài danh sách",
+      );
+      expect(vp(mauRoute("ctx", viecCoBu("const m = await import('@trustprocure/supplier'); await m.createSupplier(client, ctx.orgId, {});")))).toContain("`bu` gọi một biểu thức");
+    });
+
+    it("lách QUA tập trắng: hàm gói TRUYỀN cho một phương thức của tập trắng (`Array.from([client], f)`) hay viết tắt `{ f }` — không lời gọi nào để đọc — ĐỎ", () => {
+      const nsDong = 'import * as ncc from "@trustprocure/supplier";';
+      expect(vp(themImport(mauRoute("ctx", viecCoBu("await Promise.all(Array.from([client], ncc.createSupplier));")), nsDong))).toContain(
+        "`bu` dùng `ncc` (import từ @trustprocure/supplier) không ở vị trí bị gọi trực tiếp",
+      );
+      expect(vp(mauRoute("ctx", viecCoBu("await Promise.all(Array.from([client], createSupplier));")))).toContain("`bu` dùng `createSupplier` (import từ @trustprocure/supplier)");
+      expect(vp(mauRoute("ctx", viecCoBu("void JSON.stringify({ revokeInvitation });")))).toContain("`bu` dùng `revokeInvitation` (import từ @trustprocure/invitation)");
+      // Đối chứng: cùng hàm gói, GỌI trực tiếp (tên trần hay qua namespace) trong đối số của tập trắng ⇒ sạch dưới mã quyền phủ nó.
+      const sach = themImport(mauRoute("ctx", viecCoBu("await Promise.all([revokeInvitation(client, ctx.orgId, {}), inv.danhDauDaGui(client, ctx.orgId, 'a')]);")), 'import * as inv from "@trustprocure/invitation";');
+      expect(docViecSauCommit(sach).viPham).toEqual([]);
     });
   });
 

@@ -1,5 +1,6 @@
 import pg from "pg";
 import { describe, expect, it } from "vitest";
+import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, withMigratedDatabase } from "./postgres.js";
 
 // Bản sửa của [fix C1]: poolAs() từng "bắn rồi quên" SET ROLE (`void client.query(...)`),
@@ -191,4 +192,107 @@ describe("[khoản nợ 28] stop() ĐO được kết nối còn sống, và v�
       await poolRoRi?.end().catch(() => undefined);
     }
   }, 120_000);
+});
+
+// ==============================================================================================
+// [S1.242 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL CỤM THỬ — `release` MANG `TenantError SESSION_STATE_LEFT` ĐƯỢC ĐẾM, `stop()` ĐÒI
+// SỐ ĐẾM BẰNG LỜI KHAI
+//
+// `withTenant` thấy trạng thái phiên còn sót sau một giao dịch ĐÃ commit thì huỷ kết nối bằng `release(TenantError
+// SESSION_STATE_LEFT)` và KHÔNG ném (khoản 118): chỗ duy nhất thấy lỗi ấy là sự kiện `release` của pool. Tới vòng này không pool
+// nào của `startPostgres` nghe sự kiện ấy — một mã để sót GUC tenant phạm vi PHIÊN dưới test chỉ làm MỘT kết nối biến khỏi pool, và
+// hai ca đầu dưới đây XANH trên cây cũ ở phần "không ai đếm" (đo trước, §S1.242). Nay `stop()` đòi mỗi pool đếm BẰNG số đã khai
+// qua `soLanSessionStateLeft` (mặc định 0) và ném SAU khi dừng cụm, nêu pool, nơi dựng, số đếm, số khai và tệp gọi `startPostgres`.
+// ==============================================================================================
+const ORG_281 = "00000000-0000-4000-8000-000000000281";
+/** Câu làm sót GUC tenant ở phạm vi PHIÊN bên trong giao dịch của `withTenant` — cùng khuôn ⒥ của `loi-giao-thuc.int.test.ts`. */
+const DE_LAI_GUC_PHIEN = "SELECT pg_catalog.set_config('app.org_id', $1, false)";
+
+/** Cụm đã dừng thật: một kết nối mới tới đúng chuỗi kết nối phải thất bại (luật ⑵ của khoản 28 — ném là ném SAU khi dừng). */
+async function cumDaDung(connectionString: string): Promise<void> {
+  const thu = new pg.Pool({ connectionString, max: 1, connectionTimeoutMillis: 2000 });
+  thu.on("error", () => undefined);
+  try {
+    await expect(thu.query("SELECT 1")).rejects.toThrow();
+  } finally {
+    await thu.end().catch(() => undefined);
+  }
+}
+
+describe("[S1.242 / khoản 281] stop() đòi số lần withTenant huỷ kết nối vì SESSION_STATE_LEFT bằng số đã khai", { timeout: 120_000 }, () => {
+  it("withTenant trên pool superuser để sót GUC tenant phạm vi PHIÊN, không khai ⇒ stop() NÉM sau khi dừng cụm, nêu pool, số đếm, số khai và tệp — không nêu giá trị", async () => {
+    const db = await startPostgres();
+    const kq = await withTenant(db.pool, ORG_281, async (c) => {
+      await c.query(DE_LAI_GUC_PHIEN, [ORG_281]);
+      return "da commit";
+    });
+    expect(kq, "tiền đề: giao dịch commit, withTenant không ném — lỗi chỉ đi vào release()").toBe("da commit");
+    const loi = await db.stop().then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(loi, "bản trước khoản 281: stop() đi qua — kết nối bị huỷ mà không ai đếm").toBeInstanceOf(Error);
+    expect(loi?.message).toContain("[khoản 281]");
+    expect(loi?.message, "phải nêu TỆP gọi startPostgres").toContain("packages/test-support/src/postgres.int.test.ts:");
+    expect(loi?.message).toMatch(/pool superuser \(dựng ở packages\/test-support\/src\/postgres\.int\.test\.ts:\d+\) đếm 1, khai 0/u);
+    expect(loi?.message, "chỉ số lần và tên, không giá trị GUC").not.toContain(ORG_281);
+    await cumDaDung(db.connectionString);
+  });
+
+  it("cùng cảnh trên pool của poolAs(\"app_api\") qua withMigratedDatabase ⇒ NÉM, nêu poolAs(\"app_api\") và nơi dựng", async () => {
+    const loi = await withMigratedDatabase(async (db) => {
+      const pool = db.poolAs("app_api");
+      await withTenant(pool, ORG_281, (c) => c.query(DE_LAI_GUC_PHIEN, [ORG_281]));
+    }).then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(loi, "bản trước khoản 281: withMigratedDatabase đi qua").toBeInstanceOf(Error);
+    expect(loi?.message).toMatch(/poolAs\("app_api"\) \(dựng ở packages\/test-support\/src\/postgres\.int\.test\.ts:\d+\) đếm 1, khai 0/u);
+    expect(loi?.message).not.toContain(ORG_281);
+  });
+
+  it("KHAI đúng số lần — `poolAs(vai, { soLanSessionStateLeft: 2 })` và `startPostgres({ soLanSessionStateLeft: 1 })` — ⇒ stop() đi qua; lần lấy client gặp kết nối nhiễm (KetNoiNhiemError) và `destroyConnectionWhenDone` KHÔNG được đếm", async () => {
+    await withMigratedDatabase(
+      async (db) => {
+        const pool = db.poolAs("app_api", { soLanSessionStateLeft: 2 });
+        await withTenant(pool, ORG_281, (c) => c.query(DE_LAI_GUC_PHIEN, [ORG_281]));
+        await withTenant(pool, ORG_281, (c) => c.query("SET row_security = off"));
+        // Hai đường huỷ kết nối KHÁC, có người nghe khác — không thuộc tín hiệu ⑴:
+        await withTenant(pool, ORG_281, () => Promise.resolve(), { destroyConnectionWhenDone: true });
+        const c = await pool.connect();
+        await c.query("SET row_security = off");
+        c.release();
+        await expect(pool.query("SELECT 1"), "tiền đề: lần lấy kế gặp kết nối nhiễm và NÉM KetNoiNhiemError").rejects.toThrow(
+          /không sạch/u,
+        );
+        await withTenant(db.pool, ORG_281, (k) => k.query(DE_LAI_GUC_PHIEN, [ORG_281]));
+      },
+      { soLanSessionStateLeft: 1 },
+    );
+  });
+
+  it("KHAI mà không xảy ra (khai 1, đếm 0) ⇒ stop() NÉM — lời khai thiu là tiền đề của test đã mất", async () => {
+    const loi = await withMigratedDatabase(async (db) => {
+      const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
+      await withTenant(pool, ORG_281, (c) => c.query("SELECT 1"));
+    }).then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(loi, "khai mà không đếm được thì phải đỏ").toBeInstanceOf(Error);
+    expect(loi?.message).toMatch(/poolAs\("app_api"\) \(dựng ở [^)]+\) đếm 0, khai 1/u);
+  });
+
+  it("số khai sai hình dạng (âm, không nguyên, NaN) ⇒ NÉM ngay lúc gọi, trước khi chạm cụm", async () => {
+    for (const sai of [-1, 1.5, Number.NaN]) {
+      await expect(startPostgres({ soLanSessionStateLeft: sai }), String(sai)).rejects.toThrow(/soLanSessionStateLeft/u);
+    }
+    const db = await startPostgres();
+    try {
+      expect(() => db.poolAs("app_api", { soLanSessionStateLeft: -1 })).toThrow(/soLanSessionStateLeft/u);
+    } finally {
+      await db.stop();
+    }
+  });
 });

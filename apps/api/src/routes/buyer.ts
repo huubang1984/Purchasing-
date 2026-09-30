@@ -80,6 +80,7 @@ import {
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
 import {
+  UnsealError,
   approveUnseal,
   buildComparisonTable,
   cancelUnseal,
@@ -590,7 +591,7 @@ const doc: readonly BuyerReadRoute[] = [
 //
 // `taoLuotDanhGia` trả cả `lines` — `effectiveCost`, `rank` và `components` của TỪNG báo giá, tức
 // GIÁ và THỨ HẠNG. Bản trước trả nguyên kết quả ấy, nên mọi vai giữ `evaluation.perform` — năm
-// trên sáu vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
+// trên ~~sáu~~ **[S1.241 / khoản 270]** bảy vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
 // và hạng của mọi nhà cung cấp ngay trong thân phản hồi của lần bấm chấm. ADR-054 khai `bid.view`
 // là cổng ĐỌC duy nhất của `rfq_evaluation_lines`: đường ấy là `GET /rfqs/:rfqId/ranking`
 // (`docBangXepHang`), và thân route này là một đường đọc thứ hai không đi qua cổng.
@@ -662,7 +663,7 @@ const ghi: readonly BuyerWriteRoute[] = [
   //
   // Mã quyền RIÊNG `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` (ADR-055) — KHÔNG dùng lại
   // `evaluation.perform`: mở vòng BAFO là hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT
-  // giá của mọi người, và `evaluation.perform` do NĂM trên SÁU vai giữ (khoản 220).
+  // giá của mọi người, và `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.241 / khoản 270]** BẢY vai giữ (khoản 220).
   //
   // Thân KHÔNG mang `evaluationId`, và đó là vế đóng của một lỗ mà lượt soi hình dạng của vòng
   // này tìm ra: `059` cho người gọi khai lượt chấm nào cũng được, nên vòng BAFO thứ hai mời được
@@ -1522,10 +1523,21 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_UNSEAL,
     resourceType: "UNSEAL_REQUEST",
     resourceId: unsealIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
-    }),
+    handler: async (ctx) => {
+      try {
+        return {
+          status: 200,
+          body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
+        };
+      } catch (loi) {
+        // [S1.245 / khoản 267] Lần từ chối vì TRẠNG THÁI (yêu cầu đã `EXECUTED`/`CANCELLED`) mang `ma` ở thân 422 — khuôn khoản 230:
+        // `error` là câu riêng, `ma` là thứ máy khách đọc. Đường TRẢ VỀ chứ không ném vì bảng 422 chung của bộ điều phối chỉ in `error`;
+        // giao dịch của route không ghi gì trước lần từ chối (hàng `UNSEAL_CANCEL_DENIED` đã ghi ở giao dịch độc lập), nên COMMIT ở đây
+        // không mang theo câu ghi nào. Lỗi không mang `ma` (không tìm thấy, người không được huỷ, mất sổ) đi đường cũ.
+        if (loi instanceof UnsealError && loi.ma !== null) return { status: 422, body: { error: loi.message, ma: loi.ma } };
+        throw loi;
+      }
+    },
   },
   // --------------------------------------------------------------------------------------------
   // [sổ nợ 40 / review M-5] Đặt lại TOTP — hai người. Yêu cầu và phê duyệt cùng một mã quyền; CSDL

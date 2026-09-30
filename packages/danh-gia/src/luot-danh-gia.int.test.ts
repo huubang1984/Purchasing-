@@ -396,10 +396,12 @@ beforeAll(async () => {
   unsealPool = db.poolAs("app_unseal");
   uYc = await taoNguoi("yc@vidu.vn", "PROCUREMENT_MANAGER");
   uD1 = await taoNguoi("d1@vidu.vn", "DIRECTOR");
-  // [S1.105 — ĐO, không đoán] `DIRECTOR` là vai DUY NHẤT trong sáu vai của `005` KHÔNG giữ
+  // [S1.105 — ĐO, không đoán] `DIRECTOR` là vai ~~DUY NHẤT trong sáu vai của `005`~~ **[S1.241 / khoản 270]** một trong HAI trên
+  // bảy vai (sáu của `005` cộng `DATA_STEWARD` của `083`, cũng không giữ — ghim ở `ma-tran-quyen.test.ts` ca «khoản 220 ⒝») KHÔNG giữ
   // `evaluation.perform`: năm vai kia (REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER ·
   // FINANCE) đều có. Nên cổng quyền của route chấm gần như không phân tách được vai nào — cùng
   // hình dạng mà ADR-051 đã tìm ra cho J3, và nó là lý do J3 cần một lớp theo HÀNH VI.
+  // [S1.241 / khoản 270] Ca thiếu quyền của tệp này vẫn đúng: nó dùng `DIRECTOR` (`uKhong`).
   uKhong = await taoNguoi("khong@vidu.vn", "DIRECTOR");
   // [S1.106 / S2.4] Cổng của đường ĐỌC là `bid.view`, và `005` cấp nó cho PROCUREMENT_MANAGER,
   // FINANCE, DIRECTOR — nên một phiên KHÔNG xem được phải là một vai khác `uKhong` ở trên.
@@ -836,7 +838,8 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
       ),
     );
     // `REQUESTER` là một vai THẬT của `005` không giữ `bid.view` — khác `uKhong` (DIRECTOR), vai
-    // duy nhất KHÔNG giữ `evaluation.perform`. Hai cổng, hai mã quyền, hai vai khác nhau.
+    // ~~duy nhất~~ **[S1.241 / khoản 270]** một trong hai vai (cùng `DATA_STEWARD` của `083`) KHÔNG giữ `evaluation.perform`. Hai
+    // cổng, hai mã quyền, hai vai khác nhau.
     expect(loi).toBeInstanceOf(PermissionDeniedError);
     const { rows: sau } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'PERMISSION_DENIED'",

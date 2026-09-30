@@ -17665,7 +17665,8 @@ hai ca GUC). Ba ca xanh trên `master` là ba ca giữ hành vi có sẵn — ha
     `bang_so` và ngoài trigger gọi `chan_sua_xoa()`, mà không có trong danh sách; cột `bang_co_ten`.
   - Mục `không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)`: câu sửa gỡ trigger lạ trên bảng có tên, mỗi lần gỡ một
     khối con và một WARNING (khuôn [CR1]); hậu điều kiện phán xét mọi bảng, thông điệp nêu bảng, tên, định nghĩa, và với bảng không
-    có tên thì lối ra. Điều kiện chỉ sai ở lượt `sua` mang `app.hardening_sau_vong = 'khong'`.
+    có tên thì lối ra. Điều kiện chỉ sai ở lượt `sua` mang `app.hardening_sau_vong = 'khong'`. **[S1.244 / khoản 288]** Thông điệp nay
+    nêu VÂN TAY định nghĩa thay định nghĩa (ADR-124) — §S1.244.
 - `packages/db/src/migrate.ts`: đặt `app.hardening_sau_vong` ở mọi lượt hardening — `'khong'` ở lượt sửa đầu, `'co'` ở các lượt sau.
 - Bốn test cũ cắm trigger lên bảng thử ngoài danh sách để đo phán xét khác (`hardening-suy-tu-tinh-chat.int` — bảng chỉ-ghi-thêm
   phân mảnh và hai ca khoản nợ 79 —, `migrations.int` — fixture `kho.*` —, `outbox.int`): hàm `boMucTriggerLa` khẳng định dòng của mục
@@ -17688,7 +17689,8 @@ hai ca GUC). Ba ca xanh trên `master` là ba ca giữ hành vi có sẵn — ha
   trùng khít danh sách; ⑵ bản đổi tên, bản chép thân hàm, constraint trigger lạ, tên được phép ở bảng khác — trên bảng có tên — bị
   gỡ, mỗi cái đúng một WARNING; ⑶ trigger lạ trên `organizations` và trên một bảng ở schema khác chỉ bị phán xét, thông điệp nêu cả
   hai kèm lối ra, không gì bị gỡ; ⑷ bảng sổ do [CR1] gỡ, `chan_sua_xoa()` ở bảng khác do [CR4] chặn, trigger trên phân mảnh cha bị
-  phán xét đúng một lần; ⑸ gỡ không được (event trigger chặn `DROP TRIGGER`) ⇒ lượt phán xét chặn deploy, nêu bảng, tên, định nghĩa;
+  phán xét đúng một lần; ⑸ gỡ không được (event trigger chặn `DROP TRIGGER`) ⇒ lượt phán xét chặn deploy, nêu bảng, tên, định nghĩa
+  **[S1.244: nay vân tay định nghĩa — §S1.244]**;
   ⑹ migration đang chờ gỡ một trigger lạ bằng `DROP TRIGGER` không `IF EXISTS` (khuôn `059`) vẫn chạy được; ⑺ `'khong'` đặt sẵn ở
   mức vai không tắt được lần gỡ, và đặt ngay trong phiên không tắt được lượt phán xét.
 - `packages/rfq/src/lan-nop-da-xem.int.test.ts`, một ca: đổi tên trigger so lần nộp thành tên xếp trước chốt D2 ⇒ trước `migrate()`
@@ -18429,7 +18431,7 @@ Bảy đột biến ĐỎ, mọi đột biến đã hoàn tác (`anon.ts`, `buye
 Cộng 14 hình dạng đỏ bằng văn bản mẫu trong chính tệp cổng (client thẳng/`?.`/`["client"]` ở ba loại việc; ba kiểu bí danh; tên ctx khác; truyền nguyên ctx; `createSupplier` ở `bu` và `khiXong`; bí danh import; route không mã quyền; mã quyền dạng chuỗi; SQL tay; hàm cục bộ; `{ bu }`; `bu:`/`viec:`/`gui:` qua biến; đối số qua biến) và 4 đối chứng âm (closure chỉ đọc `ctx.orgId`/`ctx.services`/`ctx.auditPool`; tham số `client` che bí danh; `revokeInvitation`+`danhDauDaGui` dưới `RFQ_INVITE`; `khiXong` ba ngôi).
 
 ## 7. Giới hạn, nói ra
-- Cổng 135 đọc theo tên và hình dạng: mù với `ctx` qua `this`/`arguments`/`eval`, và với hàm gói gọi qua thuộc tính vật chủ hay namespace import (`import * as inv`, `inv.revokeInvitation(…)`) — vế ⑵ chỉ bắt thuộc tính tên `query`. Hôm nay `routes/**` không có namespace import từ `@trustprocure/*` (grep = 0) và năm chỗ thật gọi tên trần ⇒ khoản 264. Vế ⑵ không kiểm `viec`/`gui` theo mã quyền (phần gửi gọi bộ gửi tiêm vào, không cầm `client`).
+- Cổng 135 đọc theo tên và hình dạng: mù với `ctx` qua `this`/`arguments`/`eval`, và với hàm gói gọi qua thuộc tính vật chủ hay namespace import (`import * as inv`, `inv.revokeInvitation(…)`) — vế ⑵ chỉ bắt thuộc tính tên `query`. Hôm nay `routes/**` không có namespace import từ `@trustprocure/*` (grep = 0) và năm chỗ thật gọi tên trần ⇒ khoản 264. **[S1.238] Khoản 264 đóng (§S1.238): vế ⑵ fail-closed với lời gọi qua thuộc tính, tên phân giải theo ký hiệu; lời gọi ngầm còn mở — khoản 289.** Vế ⑵ không kiểm `viec`/`gui` theo mã quyền (phần gửi gọi bộ gửi tiêm vào, không cầm `client`).
 - Cổng chỉ đọc `apps/api/src/routes/**` — chỗ đăng ký ở tệp khác của `apps/api` (hôm nay không có) không được đọc; phép đếm "ít nhất năm" là chống rỗng ruột, không phải bằng chứng đủ.
 - 188: `routes.test.ts` ⑴ đòi route khai ngưỡng thì thử mã QUA `verifyTotpForLogin` — một handler thử mã bằng đường khác sẽ đỏ, có chủ ý. ⑼ đo tuần tự; chiều cùng lúc của chính ngưỡng là vế ⑻ (khoản 184, S1.220), không lặp ở đây.
 - 174: ⑽ mồi `failed_attempts` bằng `UPDATE` trực tiếp thay vì hai lần sai thật trên `/auth/totp` (rẻ và tất định; hai lần sai thật đã có ở ⑹–⑻); mã đúng lấy ở bước +1 vì `dangNhap` vừa tiêu bước hiện tại — vẫn trong cửa sổ ±1 của `verifyTotpCode`.
@@ -18609,7 +18611,7 @@ Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của 
 - Ca "DROP trần hàm gốc" không đo được ở lớp sản xuất: lượt SỬA của hàng ghim 052 dựng lại thân chuẩn TRƯỚC lượt phán xét (dưới superuser thì thành công) nên chiều thiu im, chỉ vế `proowner` đỏ. Ca đo là "dựng lại sai hình dạng" (đổi kiểu trả về — `CREATE OR REPLACE` bị từ chối), nơi lượt sửa bó tay.
 - Tạo overload trong `public` cần `CREATE` trên schema, không vai ứng dụng nào có (001): test 163 đi bằng superuser, đúng như thân khoản ghi "CHƯA TỚI ĐƯỢC" bằng vai ứng dụng.
 - Hàng 164 tự chữa dưới `db.pool` (superuser) trong test. Dưới vai deploy không superuser, `ALTER ROLE … NOSUPERUSER/NOBYPASSRLS/NOREPLICATION` là việc chỉ superuser làm được — hàng sẽ gãy có tên với ô "quyền cần", cùng giới hạn với bốn hàng `app_api`/`app_unseal`/`app_neo`/`app_khoi_tao`; chưa đo riêng ở vòng này.
-- `hardening-suy-tu-tinh-chat.int.test.ts:2214` đọc tập ghim `NOBYPASSRLS` bằng regex phụ thuộc thứ tự cờ; hàng mới cố ý đứng ngoài. Đó là một quy ước ngầm giữa hai tệp — khoản 265.
+- `hardening-suy-tu-tinh-chat.int.test.ts:2214` đọc tập ghim `NOBYPASSRLS` bằng regex phụ thuộc thứ tự cờ; hàng mới cố ý đứng ngoài. Đó là một quy ước ngầm giữa hai tệp — khoản 265. **[S1.242]** 265 ĐÓNG: phép quét đọc bất kể thứ tự cờ, vai ngoài cây đứng ngoài bằng khai có lý do đo trên cụm — §S1.242.
 - Cổng kiến trúc `duong-sql-ngoai-with-tenant` đỏ sẵn ở base (khoản lô đề xuất, không vào sổ) — không thuộc lô, không sửa được vì `packages/test-support/src/postgres*.ts` là tệp cấm.
 
 ## 8. Số đo
@@ -18665,8 +18667,8 @@ Script `scratchpad/lo13-dot-bien.py` (mỗi đột biến: sửa, chạy, khôi 
 - **M5** — `totalAmount: String(Number(r.total_amount))` ở chỗ dựng hàng: ca 108 đỏ `expected '1234567890123456.8' to be '1234567890123456.78'`.
 
 ## 7. Giới hạn, nói ra
-- ⑴ `laKhongTimThayYeuCau` đọc mỗi `code`: một 23503 khác trên câu INSERT ấy (người duyệt bị xoá cứng giữa `resolveSessionActor` và INSERT — hôm nay không có đường xoá `users`) cũng thành "không tìm thấy yêu cầu". Khoản 266.
-- ⑵ `cancelUnseal` trên một hàng CÓ THẬT đã `EXECUTED`/`CANCELLED` vẫn 422 cùng câu gộp và 0 hàng sổ — từ chối TRẠNG THÁI ngoài đề bài 133. Khoản 267.
+- ⑴ `laKhongTimThayYeuCau` đọc mỗi `code`: một 23503 khác trên câu INSERT ấy (người duyệt bị xoá cứng giữa `resolveSessionActor` và INSERT — hôm nay không có đường xoá `users`) cũng thành "không tìm thấy yêu cầu". Khoản 266. **[S1.245]** 266 ĐÓNG: nhánh không thấy yêu cầu của trigger mang tên `unseal_approvals_yeu_cau_phai_ton_tai` (`098_khong_tim_thay_yeu_cau_co_ten.sql`), bộ lọc đọc `code` VÀ `constraint` — §S1.245.
+- ⑵ `cancelUnseal` trên một hàng CÓ THẬT đã `EXECUTED`/`CANCELLED` vẫn 422 cùng câu gộp và 0 hàng sổ — từ chối TRẠNG THÁI ngoài đề bài 133. Khoản 267. **[S1.245]** 267 ĐÓNG: `UNSEAL_CANCEL_DENIED { lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }`, câu 422 riêng mang `ma`, lý do là vế — §S1.245.
 - ⑶ Hai vế đua của `dieuPhoiLaiSauKhiChet` không vào sổ (lý do ở mục 5); không ca nào dựng được cuộc đua ấy.
 - ⑷ Sổ của tổ chức KHÁC chỉ được đếm ở ca gọi thẳng gói của bảng so sánh (`comparison.int.test.ts` có `orgB`); `unseal.int.test.ts` và các ca HTTP chỉ có một tổ chức — cùng giới hạn §S1.72.
 - ⑸ Đột biến qua HTTP chỉ chạy cho M1 và M3; M2/M4 đo ở gói (đường HTTP đi thẳng vào cùng hàm, ca HTTP đã đo chiều thuận).
@@ -18762,10 +18764,10 @@ Kèm: chạy đợt A (6 lô) rồi đợt B (7 lô), làn hardening gộp tuầ
 - **Gộp (`98fbff7`).** Mười hai tệp xung đột, số của nhánh để nguyên tới lúc cấp: `chot-kiem-soat.ts` (chú thích hai phía), `apps/mcp/src/cong-cu.ts` (mười tám route ở `ROUTE_DOC_KHONG_PHOI`, đếm lại trên mã), `phuc-vu.test.ts` và `buyer.int.test.ts` (khối của `master` trước, khối của nhánh sau — cùng hình dạng B3 × B5 ở mục 4), `outbox.int.test.ts` (kỳ vọng khoản 259 của `master` — hardening CHẶN vì trigger — chạy qua `migrateLai()` của nhánh, vì policy 095 đang nới trong tệp), `migrations.int.test.ts` (087, 088 rồi năm migration của nhánh), `hardening-suy-tu-tinh-chat.int.test.ts` (nhánh đã dời danh sách sang `db/danh-sach-ham-canh.ts` ở khoản 221 — sáu hàm mới của 087/088 chuyển theo, cùng chú thích); `DECISIONS.md` và biên bản (`pnpm cap-so` nối cuối, của `master` trước); `Handoff.md` (lời khai đếm; dòng TEST-PLAN lấy 73 bất biến của `master`); `docs/STATE.md` (cột mốc của nhánh trên cột mốc của `master`; sổ nợ lấy 256/257 ĐÓNG và 258–261 của `master`, rồi các khoản mới của nhánh xếp theo số; dòng RỔ B gộp gạch hai phía, trả lại một dấu cách nhánh làm rơi; dòng ADR và TEST-PLAN lấy của `master`; một dòng trống trước `CÒN MỞ TÍNH TỚI HEAD` mà nhánh làm mất — thiếu nó, dòng ấy thành một hàng của bảng); `evidence/INV-matrix.md` sinh lại ở dưới.
 - **Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `98fbff7`).** Vòng S1.209–S1.233 (người tích hợp đợt 1 → S1.211, đợt 2 → S1.214), ADR-124–134, khoản 264–285, migration 091–095 (089, 090 đã có nhánh khác giữ trên remote). Lần chạy đầu từ chối trước khi ghi: năm số tạm có tiền tố không có chỗ khai — một khoản lô 11 đề xuất mà người tích hợp đợt 1 không đưa vào sổ (nay viết thành lời, không số, ở §S1.212 và cột mốc S1.212), hai tên migration dải `95NN` làm fixture (`migration-shape.test.ts` → `'1234_b'`, `rls-coverage.int.test.ts` → `"999_chua_ap"`), tên tệp đột biến tạm của lô A4 (→ `95NN_…`), một ví dụ regex dải `95NN` ở hàng khoản 284 (→ `"1234_bang_key"`, đo lại: vẫn `false`). Một câu tạo cũ đi qua được vì không mang `_tên` sau số — `BANG_DU("9591", "")` của `migration-shape.test.ts` — giữ nguyên: nó là phép đo dải số tạm, như dữ liệu test của `tools/cap-so`, và `--kiem` không đọc nó là số tạm. Số tạm TRẦN ngoài Markdown mà lệnh để nguyên (chú thích, thông điệp, tên biến và thẻ dollar-quote mang số của `092`) — 85 dòng — thay tay theo đúng bảng trailer; giữ nguyên bốn định danh test chỉ trùng chữ số (một đường route thử của lô L10, một giá trị thử của B1, hai tên fixture của L9, một tên tệp log của B7).
 - **Hệ quả liên nhánh (`2b78fb2`).** `pnpm test` trên `98fbff7`: 2041 xanh, 1 bỏ qua, 3 đỏ — ba cổng của nhánh đọc mã `master` thêm sau điểm rẽ: ⑴ `hardening-khong-in-gia-tri` (khoản 117, ADR-124) — chín hàng `bang` của 087/088 còn nối `prosrc`, giá trị `proconfig`, `pg_get_triggerdef` vào ô mô tả, và RAISE "không gỡ được trigger lạ" của khoản 259 nối `SQLERRM`: đổi đúng sáu khuôn nhánh đã đổi cho 94 hàng cũ; ⑵ `ghim-trigger-nguon` (khoản 214) — chỗ ghim ⑵ của `rfq_packages_dem_lan_nop` và `rfq_packages_kiem_tin_hieu_khi_mo` viết bằng đầu ra `pg_get_triggerdef`: viết lại bằng chính tả nguồn, ⑴/⑶ không đổi; ⑶ `danh-muc-tu-choi` (khoản 189) — `CANONICAL_ITEM`, `UOM_ALIAS` (S4.2b), `RFQ_BUDGET` (khoản 258) vào `DANH_MUC_LOAI_TAI_NGUYEN`.
-- **Hai quyết định cùng ngày chạm nhau — không gỡ ở vòng gộp.** ADR-122 (khoản 259) đòi thông điệp phán xét nêu "bảng, tên, định nghĩa" của trigger lạ (`db/trigger-la-mac-dinh-dong.int.test.ts` ⑸ ghim nguyên `CREATE TRIGGER …`); ADR-124 (khoản 117) đòi định nghĩa trigger in VÂN TAY. Mục khoản 259 đọc định nghĩa qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 (đọc TÊN, không đọc luồng dữ liệu — chỗ thu hẹp đã khai ở đầu cổng) không bắt. Trigger lạ là của người khác viết, và mệnh đề `WHEN` của nó mang được hằng — đúng lớp ADR-124 mô tả. Chọn bên nào là việc của chủ dự án.
+- **Hai quyết định cùng ngày chạm nhau — không gỡ ở vòng gộp.** ADR-122 (khoản 259) đòi thông điệp phán xét nêu "bảng, tên, định nghĩa" của trigger lạ (`db/trigger-la-mac-dinh-dong.int.test.ts` ⑸ ghim nguyên `CREATE TRIGGER …`); ADR-124 (khoản 117) đòi định nghĩa trigger in VÂN TAY. Mục khoản 259 đọc định nghĩa qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 (đọc TÊN, không đọc luồng dữ liệu — chỗ thu hẹp đã khai ở đầu cổng) không bắt. Trigger lạ là của người khác viết, và mệnh đề `WHEN` của nó mang được hằng — đúng lớp ADR-124 mô tả. Chọn bên nào là việc của chủ dự án. **[S1.244]** Chủ dự án chọn ADR-124 (kế hoạch đợt 3 câu 3); khoản 288 ĐÓNG — mục khoản 259 nêu bảng, tên và vân tay định nghĩa, cổng T1 đọc bí danh — §S1.244.
 - **Rổ sau gộp.** Rổ B còn bốn: ~~**138 · 234 · 260 · 261**~~ **[gộp #215] năm: 138 · 234 · 261 · 262 · 263** (gạch cuối mục này) — mục 7 viết "208, 234, 256, 257": 208 đóng từ S1.103 (khoản còn mở là 138, việc của chủ dự án), 256 và 257 đóng ở `master` (S1.198), 260 và 261 mở ở `master` (lượt soi đối kháng S1.198; 260 đang có nhánh riêng `claude/k260-tra-ve-di-kem-canh-5wiyv0`). Hai mươi hai khoản mới của hai đợt (264–285) còn MỞ nhưng chưa đứng ở dòng RỔ nào của `docs/STATE.md` §*Nợ kỹ thuật* — vài hàng tự ghi "Rổ B" trong thân; xếp rổ là việc của vòng kế, không tự xếp ở vòng gộp.
 - **Số đo.** `pnpm cap-so --kiem`: không còn số tạm, không số trùng; `pnpm cap-so --dem`: lời khai đếm khớp; `pnpm t0` xanh (491 module, 2042 phụ thuộc, 0 vi phạm). Năm tệp gác của `2b78fb2` 77/77. `pnpm evidence` trên `2b78fb2` (đơn vị + tích hợp, cụm Postgres 16 cục bộ `C.UTF-8`, 214 tệp, 959 s): 3882 khẳng định — 3881 xanh, 1 bỏ qua có sẵn (`xuong-dong-ts` ⑷, chỉ chạy trên CI), 0 đỏ; ma trận 73/73 ✅ (51 nghiệp vụ + 22 hàng rào). So với ma trận của nhánh (72/72): thêm K10a 15 (S1.203); D2 50 → 65, K4a 22 → 26, K4b 23 → 42, L3 8 → 9, H16 55 → 59, H19 70 → 103 — đúng các test `master` mang vào. So với bản của `master` lấy tạm ở `98fbff7`, bản sinh lại chỉ đổi một hàng: D3 47 → 52; các hàng A2 53, D5 167, E1 14, F1 104, J5 5, J7 8 là số của nhánh.
-- **CI của PR #216 trên `630122f`.** T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh; T3 đỏ 1/1840 — `packages/db/src/vai-tro.int.test.ts` (khoản 104, S1.215) viết cứng TimeZone mặc định `Etc/UTC`, mà `initdb` lấy TimeZone theo máy: cụm cục bộ trên Ubuntu là `Etc/UTC`, `postgres:16-alpine` của CI là `UTC` — nên ca ấy xanh ở mọi lượt đo cục bộ của hai đợt và chỉ đỏ ở lần đầu nhánh chạy CI. Tái hiện cục bộ bằng cụm `initdb` dưới `TZ=UTC` (đỏ đúng câu của CI); sửa: so với TimeZone đọc trên kết nối sạch trước khi làm nhiễm, cộng tiền đề nó khác giá trị làm nhiễm; tệp 25/25 xanh dưới cả hai cụm. Lời khai đầu `packages/test-support/src/postgres-cuc-bo.ts` (ba cờ tắt ghi đĩa là khác biệt DUY NHẤT về cấu hình so với container) thiếu TimeZone mặc định — ghi ra, không sửa ở vòng gộp.
+- **CI của PR #216 trên `630122f`.** T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh; T3 đỏ 1/1840 — `packages/db/src/vai-tro.int.test.ts` (khoản 104, S1.215) viết cứng TimeZone mặc định `Etc/UTC`, mà `initdb` lấy TimeZone theo máy: cụm cục bộ trên Ubuntu là `Etc/UTC`, `postgres:16-alpine` của CI là `UTC` — nên ca ấy xanh ở mọi lượt đo cục bộ của hai đợt và chỉ đỏ ở lần đầu nhánh chạy CI. Tái hiện cục bộ bằng cụm `initdb` dưới `TZ=UTC` (đỏ đúng câu của CI); sửa: so với TimeZone đọc trên kết nối sạch trước khi làm nhiễm, cộng tiền đề nó khác giá trị làm nhiễm; tệp 25/25 xanh dưới cả hai cụm. Lời khai đầu `packages/test-support/src/postgres-cuc-bo.ts` (ba cờ tắt ghi đĩa là khác biệt DUY NHẤT về cấu hình so với container) thiếu TimeZone mặc định — ghi ra, không sửa ở vòng gộp. **[S1.242]** Khoản 287 ĐÓNG: `initdb` của cụm cục bộ chạy dưới `TZ=UTC`, lời khai gạch tại chỗ — §S1.242.
 - **Gộp #213 sau khi PR mở (`5d0b1d9`, `7cb60fe`).** `master` nhận #213 (S1.204 — S4.3a, `089_anh_xa_hang_muc`, ADR-121, sổ đăng ký 75 bất biến với L2, L13). Bốn tệp xung đột: ba danh sách migration mong đợi (089 rồi 091–095); danh sách hàm không phải hàm canh (hai hàm của 089 sang `db/danh-sach-ham-canh.ts`); lời khai đếm và dòng TEST-PLAN (lấy 75 bất biến của `master`). `pnpm cap-so` chạy lại giữ nguyên bảng — migration 091–095 vẫn lớn hơn 089 — nhưng trả mười bảy dòng mang tên có số dính chữ (tên biến và thẻ dollar-quote mang số của `092`) về dạng số tạm: bước cấp lại số trần sau thu hồi chỉ đọc số KHÔNG dính chữ. Các dòng ấy thay tay lại; mỗi lần gộp `master` kế tiếp trước khi PR vào sẽ lặp lại bước này. Cổng khoản 117 gặp bốn hàng hardening của 089 (hai định nghĩa, hai hàm + trigger): đổi sang khuôn vân tay. `pnpm t0` xanh (495 module, 2061 phụ thuộc); `pnpm evidence` trên `7cb60fe` (216 tệp, 966 s): 3921 khẳng định — 3920 xanh, 1 bỏ qua có sẵn, 0 đỏ; ma trận 75/75 ✅ (53 nghiệp vụ + 22 hàng rào), bản sinh lại trùng từng byte với bản git tự gộp.
 - **CI trên `168af96`: T1+T2 ubuntu đỏ — một cuộc đua, không phải ca đỏ của mã.** `packages/identity/src/danh-muc-tu-choi.test.ts` (khoản 189, S1.225) nạp danh sách tệp sản xuất bằng `readdirSync` lúc nạp module, trong khi `tests/architecture/boundaries.test.ts` chạy song song dựng rồi xoá tệp dò tạm dưới `apps/tmp-probe-<tên>/src/` — liệt kê thấy `apps/tmp-probe-wrapper-door/src/leak.ts`, tới lúc đọc thì tệp đã bị xoá (ENOENT). Đây là đúng lớp mà `tests/architecture/cong-quyen-route.test.ts` đã ghi và chữa bằng `git ls-files`; bộ quét của khoản 189 nay dùng cùng khuôn. Đo: dựng một tệp dò chưa theo dõi — bản cũ liệt kê nó, bản mới không; ngoài tệp ấy hai tập trùng nhau (191 tệp). Tệp 9/9; `pnpm test` 2059 xanh, 1 bỏ qua.
 - **Gộp #215 sau khi PR mở (`9dcac0b`).** `master` nhận #215 (S1.207 — khoản 260 ĐÓNG, `090_tra_ve_di_kem_canh`, ADR-123; lượt soi đối kháng mở 262, 263 — rổ B) lúc PR chờ CI. Sáu tệp xung đột: `pnpm cap-so --dem` gỡ ba (`Handoff.md`, `docs/DECISIONS.md` — ADR-123 nối trước phần của nhánh —, biên bản — §S1.207 trước §S1.209); gỡ tay ba: `db/hardening-suy-tu-tinh-chat.int.test.ts` (hàm `rfq_tra_ve_phai_di_kem_canh` của 090 sang `db/danh-sach-ham-canh.ts`, nơi nhánh đã dời danh sách ở khoản 221; nhân chứng H19 và tập chỉ-ghi-thêm của #215 tự hợp), `db/migrations.int.test.ts` (ba danh sách mong đợi: 090 rồi 091–095), `docs/STATE.md` (cột mốc của nhánh trên S1.207; dòng RỔ B lấy bản nhánh cộng phần của #215 — 260 gạch, 262 · 263 thêm, đếm 4 → 5). Số của `master` (S1.207, ADR-123, khoản 262–263, 090) không chạm dải của nhánh nên không cấp lại, và 090 nhỏ hơn 091 nên thứ tự áp giữ; lời khai đếm viết lại: 285 khoản (56 mở), 134 ADR, 93 migration. Hệ quả liên nhánh: hàng hardening «hàm + trigger rfq_tra_ve_phai_di_kem_canh» của #215 nối `prosrc`, giá trị `proconfig` và `pg_get_triggerdef` vào ô mô tả — cổng khoản 117 đỏ (`pnpm test` 2058 xanh, 1 đỏ); đổi đúng ba khuôn vân tay như các hàng 087/088/089. Sau sửa: `pnpm t0` xanh (495 module, 2062 phụ thuộc, 0 vi phạm); `pnpm evidence` trên `9dcac0b` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, ~16 phút): 3926 khẳng định — 3925 xanh, 1 bỏ qua có sẵn, 0 đỏ; ma trận 75/75 ✅, bản sinh lại trùng từng byte với bản git tự gộp (K4a, K4b, H19 của #215 cộng số của nhánh).
@@ -19047,7 +19049,7 @@ Script `scratchpad/lo30-dot-bien.py` (mỗi mũi: sửa MỘT chỗ, chạy các
 
 ## 7. Giới hạn, nói ra
 - ⑴ **Một GRANT mới cho `app_unseal`** (`revoked_at` của `rfq_invitations`). Không đường nào khác: trong các cột vai ấy đọc được (`sessions`, `rfq_key_material`, `rfq_bafo_rounds`, `unseal_requests`, `users`, `vendor_bid_versions`, `vendor_bids`, `bid_receipts`, `org_key_pairs`, `rfq_packages (id, org_id, status)`) không cột nào mang dấu thu hồi lời mời; `status` của lời mời cố ý không cấp.
-- ⑵ **`countReceivedBids` vẫn đếm luồng của lời mời đã thu hồi** — ngoài ba câu chọn phong bì của đề bài; ghim ở ca so sánh (`count: 2` sau thu hồi) để lần đóng đỏ đúng chỗ. Khoản 271.
+- ⑵ ~~**`countReceivedBids` vẫn đếm luồng của lời mời đã thu hồi** — ngoài ba câu chọn phong bì của đề bài; ghim ở ca so sánh (`count: 2` sau thu hồi) để lần đóng đỏ đúng chỗ. Khoản 271.~~ **[S1.243]** Ca ghim đã đỏ đúng chỗ (`expected { disclosed: true, count: 2 } to deeply equal { disclosed: true, count: 1 }`) và lật: câu đếm mang vế, số là số SẼ DỰ THẦU — khoản 271 ĐÓNG (§S1.243).
 - ⑶ **`/tao-thau` chưa theo ngữ nghĩa mới**: câu báo sau thu hồi vẫn nói *"báo giá đã nộp … vẫn nằm trong gói thầu"*, nút *Thu hồi* ở tổ chức chưa bật S3 hiện ở mọi trạng thái (`nutLoiMoi`) — bấm sau mở thầu nay nhận 422 câu cố định (trang in `loiCua`). ADR-110 ⑸ và một dòng Hệ quả của ADR-110 khai ngữ nghĩa cũ. `apps/web` và `docs/DECISIONS.md` ngoài lô: khoản 276 và mục 6.
 - ⑷ **Đường bù `reason: "LINK_SEND_FAILED"`** (route mời thu hồi thay người mời khi link không gửi được) đi qua cùng cửa chặn. Ở tổ chức bật S3, K4a đã chặn lời mời mới ở gói đã mở nên không tới được; ở tổ chức chưa bật, nếu một lời mời được tạo ở gói đã mở và link gửi hỏng thì phần bù nhận `InvitationError` ⇒ phản hồi 500 kèm `invitationId` (hợp đồng có sẵn của khoản 124) — lời mời ấy còn sống, và thu hồi tay cũng bị chặn. Không dựng ca: không đường HTTP nào tạo lời mời ở gói đã mở trong lô này (`createInvitation` ở `UNSEALED` là việc của K4a).
 - ⑸ **Vòng BAFO**: thu hồi ở `BAFO_OPEN` bị chặn theo quyết định; ca của lô đo trạng thái bằng ép (`epTrangThai`), không đo một lượt BAFO thật. Kịch bản 41 (có BAFO) vẫn xanh.
@@ -19265,10 +19267,10 @@ Bảy đột biến, tất cả ĐỎ trên vế mới (số trong ngoặc là k
 Mọi đột biến đã hoàn tác; `git status` chỉ còn năm tệp của lô.
 
 ## 7. Giới hạn, nói ra
-- 167 đo trên cụm Postgres cục bộ (glibc, `fsync=off`) trong một phiên 4 lõi dùng chung: con số là CẬN cho máy này, không phải SLA; `msHandler` là RUNNING→DONE theo đồng hồ test (±10 ms thăm dò). Trần 60 s là trần MỖI JOB — 14 phong bì 8 MiB tốn 10,6 s, tức ~0,75 s/phong bì; ngoại suy (chưa đo) ~80 phong bì 8 MiB trong một RFQ vượt trần ⇒ khoản 272.
+- 167 đo trên cụm Postgres cục bộ (glibc, `fsync=off`) trong một phiên 4 lõi dùng chung: con số là CẬN cho máy này, không phải SLA; `msHandler` là RUNNING→DONE theo đồng hồ test (±10 ms thăm dò). Trần 60 s là trần MỖI JOB — 14 phong bì 8 MiB tốn 10,6 s, tức ~0,75 s/phong bì; ~~ngoại suy (chưa đo) ~80 phong bì 8 MiB trong một RFQ vượt trần ⇒ khoản 272.~~ **[S1.243]** ngoại suy ~80 phong bì 8 MiB vượt trần ⇒ khoản 272; §S1.243 ĐO thay ngoại suy: ba lượt ở 60–200 phong bì 8 MiB — tới 125 xong dưới trần (0,37–0,66 s mỗi phong bì theo tải), 150 và 200 `HANDLER_TIMEOUT`, và lượt vượt trần không để lại gì.
 - 167 không đo qua HTTP: phong bì vào `vendor_bid_versions` bằng fixture SQL (như 106/107); `TRAN_THAN_BYTE` chỉ là cỡ, không phải đường HTTP.
 - 184: chồng lấn được ÉP bằng khoá ngoài, tức vế đo "ba câu tăng được thả nối tiếp trên một hàng sau khi cùng đứng chờ" — đúng cảnh mà vị từ `$3` tồn tại để đỡ; nó không đo cảnh ba yêu cầu tự nhiên tới cùng lúc (cảnh ấy phụ thuộc lịch chạy và là chính khoản 184).
-- 186: vế ⓷ vẫn chỉ lọc hai vai ⇒ khoản 273; không mở rộng trong lô vì đổi mệnh đề là đổi thứ vế đo, ngoài đề bài.
+- 186: vế ⓷ vẫn chỉ lọc hai vai ⇒ khoản 273; không mở rộng trong lô vì đổi mệnh đề là đổi thứ vế đo, ngoài đề bài. **[S1.242]** 273 ĐÓNG — §S1.242.
 - 149 ⑵: đối chứng dương đo ở giao dịch A (người giữ), không ở B — B chờ khoá hàng nên không giữ khoá ghi sổ nào để làm đối chứng.
 
 ## 8. Số đo
@@ -19303,6 +19305,8 @@ mới). Điểm tự chốt trong phạm vi ấy ở mục 5.
   KHÔNG dòng log nào ra khi kết nối nhiễm tới sau trần. Trên mã không đột biến, cả hai tệp xanh: dòng có sẵn từ S1.84, thứ thiếu là phép đo.
 - **137** — `executeUnsealRequest` thật (`unseal-worker.int.test.ts` fixture: N phong bì niêm phong cho một RFQ KHÁC — đúng ca `unsealBid` từ
   chối — cộng 1 phong bì tốt), đọc lại hai bản ghi bằng `octet_length(payload::text)` / `pg_column_size(payload)`:
+
+**[S1.237 — ghi chú của người tích hợp đợt 3] MỤC NÀY CỤT TỪ LẦN TÍCH HỢP ĐỢT 2.** Commit `e70b56a2` (tích hợp lô A5 đợt 2) chỉ đưa vào kho 26 dòng đầu của biên bản lô: phần còn lại của mục 3 và các mục 4–8 không vào, và bàn giao gốc nằm ở scratchpad của phiên ấy — không còn (`git log --all -S` không thấy đoạn tiếp theo ở commit nào). Lô A1 đợt 3 phát hiện khi đọc biên bản. Thay đổi và số đo của vòng vẫn đọc được ở cột mốc `[2026-09-30 / S1.221]` và hai hàng sổ 183, 137 của `docs/STATE.md`, ở ADR-129 và ở các tệp test mà hai hàng trỏ tới; biên bản không được viết lại từ trí nhớ. Nguyên nhân khả dĩ, cùng lớp với lỗi người tích hợp đợt 3 gặp ở bàn giao A1: một khối rào lồng trong biên bản làm bộ áp bàn giao dừng sớm — bộ áp của đợt 3 nhận rào dài bất kỳ, đóng bằng đúng chuỗi mở.
 
 # §S1.222 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
@@ -19705,7 +19709,8 @@ văn (kiểm bằng so sánh nội dung). Mười ca, mỗi ca ĐỎ (số vế 
 - Lệch độ dài khoá giữa hai `docVong` GIỮ nguyên, chỉ ghim: cả hai tiến trình không lên; worker nổ muộn hơn một bước và bằng lớp lỗi
   khác (`KeyError`, `main.ts` in `tên: message`). Đồng nhất là đổi hợp đồng `docCauHinh` của worker — ngoài lô.
 - `apps/mcp`, `apps/web`, `apps/public-keys` mang `moTaLoi` cùng khuôn ở `main.ts` (mcp ba bản), `apps/mcp`/`apps/web`/`apps/public-keys`
-  có `cau-hinh.ts` cùng khuôn; `tools/` giữ bốn bản mô tả lỗi cục bộ (§S1.227) — ngoài tầm cổng này: khoản 280.
+  có `cau-hinh.ts` cùng khuôn; `tools/` giữ bốn bản mô tả lỗi cục bộ (§S1.227) — ~~ngoài tầm cổng này~~ **[S1.238]** trong tầm từ
+  §S1.238 (bộ quét mọi `apps/*/src`, `tools/*/src`; "mcp ba bản" là ba bản CÙNG tên, hai khác thân): khoản 280.
 - Cổng đọc tệp bằng `git ls-files`: tệp chưa `git add` không được quét (chủ đích, như `pool-nghe-du-tin-hieu`).
 - Không phép đo nào chạy tiến trình thật ở vòng này — lô chỉ đổi một token cùng nghĩa và chú thích; sáu tệp int của cổng cuối chạy lại
   để chứng minh không đổi hành vi.
@@ -20028,7 +20033,7 @@ Kịch bản `dot-bien.sh` (ngoài kho): sửa một dòng, chạy cổng, khôi
 - Tín hiệu ⑵ ở tool vẫn KHÔNG phát: không lời gọi `withTenant` nào trong `tools/` đặt `maxConnectWaitMs`. Listener gắn để cổng đòi đủ
   hai và để một lần đặt trần sau không phải nhớ; không có test hành vi nào ghim dòng log của tool (khoản 183 mang việc ấy cho api/worker).
 - Không test tích hợp nào của tool dựng cảnh SESSION_STATE_LEFT; phép đo của vòng này là cổng tĩnh + đột biến, không phải dòng log thật.
-- `packages/` vẫn ngoài tầm cổng: khoản 281 (mục 7 bàn giao).
+- `packages/` vẫn ngoài tầm cổng: khoản 281 (mục 7 bàn giao). **[S1.242]** 281 ĐÓNG bằng bộ đếm ở `startPostgres`, không nới cổng — §S1.242.
 - Cổng tin hai hàm bọc của `api` theo đường import `./mo-ta-loi.js`, không đọc thân — ranh giới ⑴.
 - Hai điều ĐỎ trong `pnpm vitest run tests/architecture tools` KHÔNG do lô này (mục 8): `duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ đỏ vì
   `packages/test-support/src/postgres-cuc-bo.ts` (commit `3d991a3`/`33563ea` của người tích hợp) dựng `pg.Client` và `.connect()` chưa khai;
@@ -20222,7 +20227,8 @@ Khôi phục bằng `cp` từ `scratchpad/lo80-bak/`, so `sha256sum -c`; log `lo
   ở S1.192 cho cùng lý do; tôi không chạm `tests/architecture` (ngoài danh sách lô) — người tích hợp cân nhắc nới cùng khuôn. Lớp DB-level
   (`check-an-ninh.int`, mục phán xét khoản 105 trong mọi `migrate()`) đã canh hai dòng ấy — đo ở M1/M4/M5.
 - `users` vẫn không có CHECK hình dạng (`a@b@c` vào — như trước); dấu chấm cuối tên miền `dot@x.vn.` qua mọi lớp ở cả hai bảng (đo,
-  `lo80-tham-do-9490.log`) — khoản 283.
+  `lo80-tham-do-9490.log`) — khoản 283. **[S1.247]** 283 ĐÓNG: từ chối có tên ở `addSupplierContact` và `tools/khoi-tao-to-chuc`,
+  `CHECK (email !~ '\.$')` trên hai bảng (`100_email_khong_dau_cham_cuoi.sql`, khai ở `CHECK_AN_NINH_KHAI`), không chuẩn hoá — §S1.247, ADR-139.
 - Địa chỉ quốc tế hoá bị từ chối ở tầng ứng dụng bằng thông điệp cố định; chưa có mã lỗi riêng (`SupplierError` chỉ có `message`).
 - Hồ sơ N3 của 092 không đo (không tới được, ADR-061); `ACCESS EXCLUSIVE` trên `users` và `supplier_contacts` trong lúc kiểm — tính chất
   chung của mọi `ADD CONSTRAINT`, chưa đo thời gian trên dữ liệu lớn.
@@ -20482,7 +20488,7 @@ Ca số đo (không đột biến logic) in `daXet`: ⑴ 17 · ⑵ 169 · ⑶ 44
 - `pnpm t0` cục bộ vẫn không chạy gitleaks; lượt CI trên nhánh thử có khoá mẫu dưới `apps/` (vế ngoài kho của hàng 132) chưa chạy. Cổng
   ghim CẤU HÌNH, không đo hành vi của gitleaks.
 - Regex miễn `^\d{3}_[a-z0-9_]{1,60}$` không nhận số tạm bốn chữ số của ADR-090 — khoản 284; sửa là ở `.gitleaks.toml` (tệp không chạm
-  của lô) và cổng nhận `^\d{3,4}_…` mà không đổi gì.
+  của lô) và cổng nhận `^\d{3,4}_…` mà không đổi gì. **[S1.238] Khoản 284 đóng: regex `^\d{3,4}_…`, cổng ghim thêm `1234_bang_key`.**
 - Bốn vế 221 đọc CÁCH VIẾT (regex trên SQL đã bỏ chú thích): bảng hay policy dựng bằng SQL động không thấy; lớp có thẩm quyền vẫn là
   hardening + `rls-coverage` + tổng điều tra. Vế thứ năm (nhân chứng hành vi, khoản 74) ở lại `test:int`, đúng chỗ.
 - `kiemHamTriggerDaKhai` không đọc `DROP FUNCTION`: hàm tạo rồi xoá ở migration sau vẫn bị đòi khai — hôm nay không ca nào; nếu có thì
@@ -20629,7 +20635,7 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
 ## 7. Giới hạn, nói ra
 
 - Policy chỉ ràng UPDATE. `app_api` vẫn INSERT được job mang `kind` của worker — cần cho `UNSEAL_RFQ` (dispatch) và
-  `BREAK_GLASS_UNSEAL_ALERT` (trigger `019` chạy dưới vai gọi); hệ quả và hình dạng ở khoản 285.
+  `BREAK_GLASS_UNSEAL_ALERT` (trigger `019` chạy dưới vai gọi); hệ quả và hình dạng ở khoản 285. **[S1.246]** Khoản 285 đóng (ADR-138): `INSERT` của `app_api` nay ràng theo tập nó xếp — kind lạ NÉM 42501; hai kind ấy ở lại trong tập, cảnh báo break-glass giả còn — khoản 305.
 - Cổng đối chiếu ở hai composition test đọc `pg_policy` của cụm test — nó canh CÂY MÃ (migration + handler) khớp nhau, không canh
   cụm đã deploy; cụm deploy do cổng khai 83⑴ của hardening canh (đo M2).
 - Bộ đọc tập `kind` hiểu ĐÚNG MỘT hình dạng deparse `(kind = ANY (ARRAY['…'::text, …]))` (PostgreSQL 16); đổi phiên bản đổi deparse
@@ -20671,3 +20677,1822 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   ~7944, `[Task 8 — (E1)/(E2)]…` ~8248): hệ quả của mọi lô thêm migration, người tích hợp gỡ lúc `cap-so` (cây gộp đã có, theo báo
   "122/123 chỉ N3 đỏ"); cố ý KHÔNG chạm ba danh sách ấy để không xung đột gộp. Đột biến M4: 2/2 đỏ.
 
+# §S1.237 — TRẢ NỢ SONG SONG ĐỢT 3: HAI MƯƠI QUYẾT ĐỊNH, HAI LƯỢT MƯỜI MỘT LÔ GỘP (26 KHOẢN ĐÓNG, 22 MỚI — 20 CÒN MỞ, 2 ADR, 4 MIGRATION); B4 HUỶ VÌ #219, B7 SANG PHIÊN KHÁC
+
+**Rổ và mảnh (ADR-043 ⒞):** vòng của người tích hợp — không chạm mảnh nào của `docs/PRODUCT.md` §11 ngoài những gì các lô đã khai ở biên bản riêng. Không migration, không ADR của riêng vòng này. Biên bản của từng lô: lượt A §S1.238 (A1), §S1.239 (A2), §S1.240 (A3), §S1.241 (A4), §S1.242 (A5), §S1.243 (A6); lượt B §S1.244 (B6), §S1.245 (B1), §S1.246 (B2), §S1.247 (B3), §S1.248 (B5). Kế hoạch và đề bài từng lô: `docs/superpowers/plans/2026-09-30-tra-no-dot-3.md` và thư mục cùng tên.
+
+## 1. Vòng này là gì
+Đợt 3 của trả nợ theo lô song song (đợt 1: §S1.211; đợt 2: §S1.214). Người tích hợp: (1) bước 0 — kế hoạch, `chung.md` và đề bài 12 lô vào kho (lần này trong kho: kế hoạch đợt 2 ở scratchpad đã mất), 22 khoản 264–285 vào dòng RỔ B, hai khoản mới bằng số tạm — 287 (TimeZone của cụm cục bộ khác container) và 288 (ADR-122 × ADR-124); (2) gộp đầu PR #216 hai lần giữa lượt A (số đo sau #215; #217 — S4.3b) và `master` một lần giữa lượt B (#216 đã merge, #219); (3) gộp 11 nhánh lô — lượt A rồi làn hardening B —, áp 11 tệp bàn giao vào tệp dùng chung; (4) chạy lại cổng của mỗi lô trên cây gộp, `pnpm evidence` sau lượt A và sau B3; (5) kết đợt: ghi hai quyết định sau chót, `pnpm cap-so`, `pnpm t0`, `pnpm evidence`, PR.
+
+## 2. Quyết định của chủ dự án (2026-09-30)
+Mục 0 của kế hoạch, chốt nguyên văn đề xuất (câu 1–16): phạm vi 29 khoản, 12 lô, hai lượt; 22 khoản 264–285 vào rổ B; ADR-124 áp cho mục khoản 259 (288); 261 — từ chối chữ ký bật S3 khi tổ chức còn gói chờ duyệt; 267 — tách câu 422, vào sổ `UNSEAL_CANCEL_DENIED {lyDo}` (ADR-060); 268 — cắt 7 ngày, trần 100, `truncated`; 271 — nghĩa "sẽ dự thầu"; 272 — chỉ đo; 275 — chỉ phép đo BAFO; 277 — một hàm hẹp riêng; 282 — một module `apps/web/src/dang-nhap.ts`; 283 — từ chối có tên + `CHECK`; 285 — policy `AS RESTRICTIVE FOR INSERT TO app_api`, break-glass giả còn và nói ra; 269 — hoãn, hàng ghi "mở lại khi nâng trần" (ghi ở vòng này); 234 — để S3.3c/S3.3d đóng; 4 agent một lượt. Sau khi chốt: câu 17 — 262 · 263 vào lượt B (lô B7); câu 18 — S3.3e chưa vào, A3 chạy, 282 không dời; câu 19 — B7 giao phiên đã làm #219 (lúc lượt B đã gộp tới B5); câu 20 — rổ của 20 khoản mới còn mở theo đề xuất của lô: rổ C 290, 295, 301, rổ B phần còn lại (thân hàng gạch "đề xuất", ghi "chủ dự án chốt").
+
+## 3. Đo trước
+- Bước 0: 22 khoản 264–285 không đứng ở dòng RỔ nào; TimeZone mặc định của cụm Postgres cục bộ (`Etc/UTC`) khác `postgres:16-alpine` của CI (`UTC`) — §S1.214 mục 9; mục khoản 259 in nguyên định nghĩa trigger lạ, trái ADR-124.
+- Giữa lượt A: #217 vào đầu PR #216 ⇒ cổng `ma-chep-api-worker` (bộ quét N đơn vị của A1, khoản 280) đỏ 4 ca trên mã của #217 — `doc` ở `apps/api/src/routes/anh-xa.ts`, `phanTram` ở `apps/web/src/du-lieu.ts`, literal băm 64 hex; gộp A3 sau A1 ⇒ cùng cổng đỏ 4 ca — `loiCua`, `truong`, literal UUID ở tám tệp api + web (A3 dựng trên nền chưa có bộ quét); `[INV-H20]` đỏ ở hàng 270 (`|` trần), 295 (con trỏ migration viết tắt), 282 (con trỏ dạng `{a,b}.html`).
+- Giữa lượt B: PR #219 của một phiên khác merge khoản 261 với đúng hình dạng câu 4 (`097`, ADR-137, khoản 286 mở) lúc lô B4 đang chạy.
+- §S1.221 cụt giữa mục 3 từ lần tích hợp đợt 2 (`e70b56a2`) — lô A1 và A6 cùng thấy.
+
+## 4. Thay đổi
+- Bước 0 (`ba269ae1`): kế hoạch, đề bài; hàng 287, 288; dòng RỔ B 5 → 29.
+- 11 lô gộp `--no-ff`: lượt A theo thứ tự xong A4, A2, A5, A1, A3, A6; lượt B tuần tự B6, B1, B2, B3, B5. Mỗi lô: `tich-hop.py` (scratchpad) áp hàng sổ (thay theo số, thêm 94NN), cột mốc, biên bản (theo số vòng), ADR mới nối cuối, cặp sửa tại chỗ (đúng một chỗ khớp); rổ áp tay; lời khai đếm bằng `pnpm cap-so --dem`; tệp bàn giao xoá; cổng của lô chạy lại trên cây gộp.
+- Hệ quả liên nhánh sửa ở tích hợp (mỗi cái nêu ở commit tích hợp): ⑴ `tests/architecture/ma-chep-api-worker.test.ts` — `anh-xa.ts` vào hàng `doc` const và hàng mẫu "hex của SHA-256"; hàng `phanTram`, `loiCua`, `truong` RIENG; literal UUID GIU (`982df9a2`, `58dee904`); ⑵ `[INV-H20]` — `|` thoát ở hàng 270, con trỏ đầy đủ ở 295 và 282; ⑶ câu hỏi ⑴ ⑵ của B1 (thuộc câu 5): câu "không tìm thấy" của huỷ bỏ vế thừa (`packages/unseal/src/requests.ts`, `unseal.int` hai chỗ, `buyer.int`), ca HTTP thường trực — huỷ lần nữa một yêu cầu đã huỷ ⇒ 422 câu riêng + `ma`, đúng một hàng `UNSEAL_CANCEL_DENIED` mang `lyDo`; ⑷ câu 2 của A5: chú thích TimeZone thiu ở `packages/db/src/vai-tro.int.test.ts` gạch tại chỗ; ⑸ câu ⑴ ⑵ ⑶ của B5 (thuộc câu 10): dòng `NGOAI_LE_LAC_CHO` cho policy `outbox_jobs_liet_ke_viec_api` và lời khai «ĐÚNG MỘT hàm SECURITY DEFINER» gạch ở `db/migration-shape.test.ts`, `cau` 0 → 1 cho `apps/api/src/composition.ts` ở `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`, ba chú thích thiu (`db/vai-neo.int.test.ts`, `db/vai-khoi-tao.int.test.ts`, `packages/outbox/src/runner.ts`); câu ⑷ của B5 (vế "đúng hai hàng ghim" của B6 với hàng policy cùng tiền điều kiện) xanh trên cây gộp; ⑹ §S1.221: ghi chú của người tích hợp cuối mục (`782c5eb0`); ⑺ thứ tự số của nhóm khoản mới ở dòng RỔ B (302 về sau 300); ⑻ các cặp bàn giao tính trên nền cũ (lời khai đếm, dòng CÒN MỞ, dòng RỔ B — A6 ⑹, B2 6.1–6.4) thay bằng `pnpm cap-so --dem` và áp tay trên nền mới.
+- Gộp đầu PR #216 và `master`: `fcda7033`, `982df9a2` (git tự gộp; hệ quả ⑴), `20b87df4` — xung đột `Handoff.md` (`pnpm cap-so --dem`), ba danh sách migration mong đợi (097 của #219 trước 098, 099, 100), `docs/STATE.md` (hàng 264–268 lấy bản ĐÓNG của đợt 3; hàng 286 của #219 đặt sau 285; dòng RỔ B lấy bản đợt 3 cộng phần #219); hàng 261 ĐÓNG của `master` tự gộp.
+- Vòng này: hàng 269 ghi quyết định câu 14; thân hàng các khoản mới ghi rổ đã chốt (câu 20); kế hoạch ghi câu 19, 20.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Lượt A gộp theo thứ tự xong, không theo mã lô: lượt A không chạm tệp chung ngoài tệp của người tích hợp, và cổng liên lô chạy lại sau mỗi lô.
+- Hệ quả liên nhánh ở tệp cổng (`ma-chep-api-worker`, `[INV-H20]`) sửa ở tích hợp, không trả về lô: đó là KHAI BÁO thiếu khi hai nhánh gặp nhau, không phải hành vi sai của mã lô — lô nào cũng xanh trên nền của nó.
+- Câu hỏi người tích hợp của B1 (⑴ ⑵) và B5 (⑴ ⑵ ⑶) áp ở tích hợp: hệ quả bắt buộc của quyết định đã chốt (câu 5, câu 10), ở tệp ngoài danh sách của lô.
+- Câu 3 của A5 KHÔNG áp: khai `@trustprocure/tenancy` ở devDependencies của `packages/test-support` đòi viết lại `pnpm-lock.yaml`, mà pnpm cục bộ (v10) giải lại 123 dòng khác bản của CI (pnpm 9) — để như tám gói khác import `tenancy` trong test mà không khai.
+- B4 dừng khi #219 vào: nhánh `dot3/B4` bỏ, không gộp phần nào — hình dạng của #219 là đúng câu 4.
+- Không sửa hàng 262, 263, 234 — hàng của `master` mà phiên khác đang hay sẽ sửa; câu 15, 19 ghi ở kế hoạch và ở đây, tránh xung đột dòng giữa hai phiên.
+- `pnpm t0` và `pnpm evidence` của kết đợt chạy SAU `pnpm cap-so`: cây cấp số thật là cây vào PR (tên migration, số vòng trong tên ca đều đổi).
+
+## 6. Đột biến
+- Không có đột biến riêng của vòng tích hợp; đột biến của từng lô ở biên bản lô.
+
+## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
+- Phạm vi 31 khoản (29 + 262 · 263): đóng 26 — 24 khoản cũ (161, 169, 170, 171, 172, 181, 264, 265, 266, 267, 268, 270, 271, 273, 274, 276, 277, 279, 280, 281, 282, 283, 284, 285) và hai khoản mới của bước 0 (287, 288); 261 đóng ở #219; 272, 275 ĐO, giữ MỞ phần còn lại (câu 8, 9); 262, 263 sang phiên khác (câu 19). Lượt soi đối kháng của các lô mở 20 khoản (rổ B 17, rổ C 3 — câu 20).
+- Câu hỏi các lô nêu mà chưa có câu trả lời — chi tiết ở thân hàng và biên bản lô; tệp bàn giao đã xoá, nhánh lô chỉ ở máy tích hợp, nên danh sách này là bản còn lại:
+  1. **272** (A6, §S1.243) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
+  2. **298** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
+  3. **299** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
+  4. **291, 292** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
+  5. **293** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
+  6. Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
+  7. **304** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
+  8. **285 / 305** (B2) — cách tách: đóng 285, mở 305 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 305 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
+  9. **306** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
+  10. **307** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 300 (trần lượt claim).
+  11. Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
+  12. **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
+- `tests/architecture/khoa-depcruise.test.ts` (đo thời gian) đỏ dưới tải ~10 ở lượt đo của lô B3, xanh khi chạy riêng 16/16 — không phải ca đỏ của mã; CI chạy nó không tải chung.
+
+## 8. Số đo
+- Bước 0 (`ba269ae1`): `so-no-tu-doi-chieu` 45/45, `check-an-ninh-khai` 2/2; lời khai 287 khoản, 58 mở.
+- Hết lượt A (`ae58c294`): `pnpm evidence` (cụm Postgres 16 cục bộ): 4162 khẳng định, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo 272 sau cờ `TRUSTPROCURE_DO_TRAN_MO_THAU`); ma trận 75/75 (`d7378e98`).
+- Sau B6, B1, B2, B3 và gộp `master` (`20b87df4`): `pnpm evidence` 4212 khẳng định, 0 đỏ, 10 bỏ qua; 75/75 (`5c8dd6b3`). `db/migrations.int.test.ts` trọn tệp: 126/126 sau B2, 127/127 sau B3, 128/128 sau B5.
+- Sau B5 (`8f27e4ae`): `composition.int` + `rls-coverage` + `hardening-suy` + `vai-neo` + `vai-khoi-tao` 143/143; cổng tĩnh 198/198; `pnpm test` 138 tệp, 2262 xanh, 1 bỏ qua.
+- Sổ: 26 khoản ĐÓNG, 22 khoản mới (20 mở), 2 ADR mới (ADR-138, ADR-139) cùng tiểu mục hay sửa tại chỗ ở ADR-016, 040, 041, 047, 053, 060, 108, 110, 122, 124, 126, 128, 129, 132, 134; 4 migration (098, 099, 100, 101); trước cấp số `pnpm cap-so --dem`: 308 khoản, 52 mở, 98 migration; rổ A 1, rổ B 26, rổ C 25.
+
+## 9. Cấp số và kết đợt (2026-09-30)
+- **Gộp `master`.** `master` không đi thêm sau `20b87df4`: đầu của nó lúc cấp là `b682fd9d` (#216), `git ls-remote` khớp. PR #220 (S4.4a — S1.235, ADR-136) còn mở; số của nó đã giữ trên remote, nên đợt 3 không đụng.
+- **Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `9293d553`).** Vòng S1.237–S1.248: người tích hợp → S1.237; A1 → S1.238, A2 → S1.239, A3 → S1.240, A4 → S1.241, A5 → S1.242, A6 → S1.243, B6 → S1.244, B1 → S1.245, B2 → S1.246, B3 → S1.247, B5 → S1.248. ADR-138 (B2), ADR-139 (B3). Khoản 287–308. Migration theo thứ tự áp: `098_khong_tim_thay_yeu_cau_co_ten`, `099_outbox_policy_xep_theo_kind`, `100_email_khong_dau_cham_cuoi`, `101_api_to_chuc_co_viec`. 40 lời giữ số trên remote (`cap-so/<dãy>/<số>`); 90 tệp, chỉ dòng nhánh thêm. Lượt `git grep` sau cấp tìm tên dính số tạm (rủi ro mục 4 của kế hoạch): phần của nhánh không còn chỗ nào — mọi chỗ khớp còn lại là nội dung của `master`.
+- **Số đo trên `9293d553`.** `pnpm cap-so --kiem`: không còn số tạm, không số trùng; `--dem`: lời khai khớp (308 khoản, 52 mở; 138 ADR; 98 migration). `pnpm t0` xanh (505 module, 2126 phụ thuộc, 0 vi phạm). `pnpm evidence` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, gồm `db/migrations.int.test.ts` trọn tệp): 4216 khẳng định — 4206 xanh, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo 272 sau cờ); ma trận 75/75 (53 nghiệp vụ + 22 hàng rào), trùng từng byte với bản đã commit ở `5c8dd6b3` — B5 và lượt cấp số không đổi nhãn `[INV-…]` nào.
+
+# §S1.238 — LÔ A1 ĐỢT 3 — CỔNG TĨNH: VẾ ⑵ VIỆC SAU COMMIT FAIL-CLOSED VỚI LỜI GỌI QUA THUỘC TÍNH, LỜI GỌI GẮN LISTENER CÙNG KHỐI VỚI DÒNG DỰNG POOL, KIỂM KÊ MÃ CHÉP N ĐƠN VỊ, REGEX MIỄN GITLEAKS BỐN CHỮ SỐ — KHOẢN 264, 274, 280, 284 ĐÓNG; 289 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — bốn cổng kiến trúc (`tests/architecture/`) và
+`.gitleaks.toml`; không mã sản xuất, không route, không màn, không migration, không ADR, không phụ thuộc mới. Đóng 264, 274, 280, 284;
+mở 289.
+
+## 1. Vòng này là gì
+
+Lô A1 của đợt 3 (kế hoạch `docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/A1.md`), bốn khoản
+cùng một hình dạng: một cổng tĩnh có lời khai rộng hơn thứ nó đọc. **264** — vế ⑵ của `viec-sau-commit.test.ts` nhận hàm gói theo
+TÊN import trần; lời gọi qua thuộc tính vật chủ hay namespace import đi qua im lặng. **274** — `pool-nghe-du-tin-hieu.test.ts` nhận lời
+gọi gắn listener ở bất kỳ đâu trong tệp, kể cả nhánh chết. **280** — `ma-chep-api-worker.test.ts` quét đúng hai app; bản chép thứ ba trôi
+thì không ai kêu. **284** — regex miễn của `.gitleaks.toml` không nhận số tạm bốn chữ số của ADR-090.
+
+## 2. Quyết định của chủ dự án
+
+Không quyết định mới. Kế hoạch đợt 3 mục 0 (chốt 2026-09-30) xếp 264, 274, 280, 284 vào nhóm "khoản không cần quyết định mới — hình
+dạng đã nằm trong thân hàng"; đề bài lô A1 chốt: 264 fail-closed với tập trắng nhỏ có tên, namespace import như tên gói; 274 chọn ⒜
+(cùng khối câu lệnh, đo bằng cây cú pháp có binder); 280 N app theo `git ls-files`, không gộp mã chép (chỉ đề xuất nếu năm bản
+`moTaLoi` đã lệch — đo bằng so văn bản); 284 `\d{3,4}_` và một mẫu bốn chữ số. Điểm tự chốt trong phạm vi ấy ở mục 5.
+
+## 3. Đo trước
+
+Mọi phép đo trên `ba269ae` (bước 0 đợt 3), trước khi đổi logic của cổng; log ở scratchpad của lô (`a1/log/`).
+- **264** — bản HEAD của cổng chạy qua một tệp test tạm (không vào kho), in `viPham` cho từng văn bản mẫu route `RFQ_INVITE`:
+  namespace import gọi hàm ngoài mã quyền (`ncc.createSupplier`), vật chủ bất kỳ (`goi.revokeInvitation`), `ctx.services.loiMoi.thuHoi`,
+  `client['query']`, `(0, inv.revokeInvitation)(…)`, `new ncc.GhiNhaCungCap(client)`, `const revokeInvitation = createSupplier` trong `bu`
+  ⇒ `[]` cả bảy; đối chứng tên trần `createSupplier(client, …)` ⇒ 1 vi phạm. Khối `[S1.238 / khoản 264]` viết trước khi vá (5 `it`)
+  chạy trên cổng cũ: 4 đỏ (`expected '' to contain '`bu` gọi hàm gói `createSupplier` (qu…'`, `… 'thuộc tính tính toán'`…), 1 xanh —
+  đối chứng âm tập trắng.
+- **274** — khối `[S1.238 / khoản 274]` viết trước khi vá (6 `it`) trên cổng cũ: 5 đỏ, cổng cũ báo ĐỦ (`expected [ [], [] ] to deeply
+  equal [ [ 'mau.ts: chay.pool' ], …(1) ]`) cho: `if (false) {}`; sau `return`; lồng `try`/vòng lặp/hàm con/khối trần/`else`; trong
+  biểu thức `c && …`; `if (c) return;` ở giữa; `break` trong vòng lặp; gán lại sau khi gắn; hai nhánh `if` dựng rồi gắn ở ngoài;
+  thuộc tính lớp gắn trong phương thức (`expected [] to deeply equal [ 'mau.ts: C.q' ]`). Đối chứng dương (gắn ngay sau dòng dựng) xanh.
+- **280** — ⒜ `apps/web/src/main.ts`: `moTaLoi` bỏ nhánh `CauHinhError` (bản chép thứ ba trôi) ⇒ cổng cũ **83/83 xanh**; khôi phục, `cmp`
+  nguyên vẹn. ⒝ bộ quét N đơn vị với ba bảng CŨ (đổi cột sang `tep`, không thêm hàng): ⑴ 48 dòng, ⑵ 10 dòng `CHƯA KHAI`, 0 hàng thiu —
+  tên: `EMAIL` `TRAN_MAC_DINH_MS` `maLoi` `chuoi` `UUID` `CauHinhError` `MoiTruong` `BASE64` `bat` `tuyChon` `soNguyen` `docCauHinh`
+  `HttpError` `moTaLoi` `chinh` `docChuoi` `docCookie` `TRAN_THAN_BYTE` `chuoiTuyChon` `doc` `docThan` `batBuoc` `ThamSoError` `ketQua`
+  `KID` `traLoi` `CAU_LIET_KE_TO_CHUC` `ghiKetNoiHuy` `ghiLoiToiMuon` `CONG_MAC_DINH` `thanhTien` `cong` `laDoiTuong` `main` `doiTuong`
+  `CACH_DUNG` `Lenh` `moTaLoiKhongGiaTri` `xuat` `kiem` `laLenh` `dongLog` `handler` `MIGRATIONS_DIR` `chay` `ThamSo` `docThamSo` `khoiTao`;
+  literal: `/^[A-Za-z0-9+/]+={0,2}$/u` `/^[A-Za-z0-9._:-]{1,64}$/u` `/^[A-Za-z0-9_-]{1,64}$/u` `/^\d{1,5}$/u` `/\r?\n/u` `/^\d+$/`
+  `/\B(?=(\d{3})+(?!\d))/gu` `/^[0-9A-Z_]{2,64}$/u` `/^[0-9a-f]{40}$/` `/^[0-9a-f]{64}$/u`. Văn bản của mỗi tên gom theo băm (kịch bản
+  `a1/gom-van-ban.mjs`): năm `moTaLoi` của điểm vào MỘT văn bản; hai bản trong `apps/mcp` một văn bản khác.
+- **284** — cổng mới (danh sách hai mẫu) trên `.gitleaks.toml` cũ: vế kho `expected [ Array(1) ] to deeply equal []` với đúng dòng
+  *regex miễn không khớp tên tệp migration 1234_bang_key — thứ nó sinh ra để miễn*; `it` mới *1234_bang_key: expected false to be true*;
+  ba đối chứng `doOMot` đỏ dây chuyền (nền đã có một vi phạm) — 5 đỏ / 5 xanh. `which gitleaks` rỗng: không đo được trên gitleaks thật.
+
+## 4. Thay đổi
+
+- `tests/architecture/viec-sau-commit.test.ts` (khoản 264): `docChuongTrinh` (chương trình TypeScript một tệp, `noResolve`/`noLib`) thay
+  `cayCuPhap`; `nguonImportCua` + `laGoiKho` + `laToanCuc` (theo ký hiệu) thay `tenImportGoi` (theo chữ); `VAT_CHU_TOAN_CUC` =
+  `Promise`, `JSON`, `Array`, `Object`; `timHamGhiNgoaiQuyen` viết lại — nhận `ch`, `sf`, gom tham số kết nối (tham số đầu của mỗi hàm
+  gốc: hàm, hai nhánh ba ngôi, phương thức), đọc `CallExpression`/`NewExpression`/`TaggedTemplateExpression` (`docLoiGoi`), luật tham chiếu
+  (`kiemThamChieuGoi`, `laBiGoi`); phương thức `bu(client) {…}` truyền cả nút để thấy tham số. Khối đầu tệp: ⑵ thêm đoạn `[S1.238 /
+  khoản 264]`, câu "PHÁT BIỂU ĐÚNG MỨC" gạch vế khoản 264 tại chỗ và nói lời gọi ngầm (khoản 289). Khối `describe` mới 6 `it`: ba hình
+  dạng của hàng sổ; namespace như tên gói (sạch trong danh sách, đỏ khi route không mã quyền, `import * as pgx from "pg"` là vật chủ lạ);
+  đối chứng âm tập trắng; che theo ký hiệu (`Promise`, `client` khối trong, `client` của handler, tên import); hình dạng lời gọi khác
+  (thuộc tính tính toán, `client['query']`, dấu phẩy, `new` qua namespace, import động); lách qua tập trắng (namespace, tên trần, viết tắt
+  `{ f }`) và đối chứng gọi trực tiếp trong `Promise.all`.
+- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` (khoản 274): `HoSoTep.ganSaiCho`; `ChoDung` (dòng, câu lệnh); `danhSachCauLenh`,
+  `cauLenhDung`, `loiRaTrong` (return/throw; break/continue thoát; vòng lặp, switch, nhãn khai trong câu; không vào hàm con, lớp);
+  `docVanBan` lượt 1 ghi mọi dòng dựng của mỗi ký hiệu, lượt 2 qua `laLoiGoiGan` (một chỗ nhận diện lời gọi gắn) và `tinhGan` (dòng dựng
+  gần nhất phía trước trong cùng danh sách; lối ra hay lần dùng pool ở giữa — `laCauGanCua`, `dungKyHieu` — thì không tính); cờ nghe của
+  pool = mọi dòng dựng đã được tính. `MAU_LOP_NGHE_DU` nay THIẾU (chú thích gạch tại chỗ), `MAU_LOP_GAN_TRONG_CONSTRUCTOR` là hình dạng đủ;
+  `ganSaiChoCua` in kèm thông điệp đỏ; vế kho đòi `ganSaiCho` rỗng. Khối đầu tệp: ~~BA RANH GIỚI~~ BỐN, ranh giới ⑷ mới, câu S1.221 bổ
+  sung. Khối `describe` mới 7 `it` (đối chứng dương; văn bản mẫu của hàng sổ; lồng — `try`, vòng lặp, hàm con, khối trần, nhãn, `else`,
+  sau `throw`, biểu thức; lối ra ở giữa; dùng pool ở giữa; mỗi dòng dựng; thuộc tính lớp).
+- `tests/architecture/ma-chep-api-worker.test.ts` (khoản 280): khối đầu tệp — đoạn `[S1.238 / khoản 280]`, ⑴⑵⑶ đọc "≥ 2 đơn vị",
+  `NANG`/`GIU`/`RIENG` bổ sung, ⒟ gạch và nói phạm vi còn ngoài tầm. Kiểu: `HangTen.tep`/`tepCu`/`tepTest`, `HangMau.tep` + `xuLy: "GIU" |
+  "RIENG"`, `HangKhacTen.ban[]` + `doLuong: "KHUON" | "HANH_VI"`, `DoLuong` thêm `KHUON`, `TEP_TEST`. Bộ quét: `donViCua`,
+  `tepSanXuatMoiDonVi`, MỘT `QUET` (thay `QUET_API`, `QUET_WORKER`), `docTepTestKho`. Đối chiếu: `nhomHo` (họ cùng khoá rời nhau);
+  `doiChieuTen`/`doiChieuMau` — CHƯA KHAI theo ĐƠN VỊ (≥ 2) và theo TỆP, hàng thiu theo tệp, NANG theo đơn vị của `tepCu`, GIU một tệp đỏ,
+  KHUON phải có cặp ở `BANG_KHAC_TEN`, TEP_TEST phải trỏ tệp đã vào kho và nhắc tên; `doiChieuKhacTen` N bản. Bảng: 71 / 16 / 3 hàng (mục
+  8). Mục II: so MỌI tệp của họ với tệp đầu; khuôn bộ nghe cho mọi bản của họ, tiền tố `[neo-so]` vào danh sách đóng. Test mới: bộ quét
+  không mù ở N đơn vị; đối chứng N đơn vị (đơn vị mới, hai tệp một đơn vị, literal sang đơn vị mới, bỏ một tệp khỏi họ); đối chứng hình
+  dạng bảng (hai họ chung tệp, GIU một tệp, KHUON, TEP_TEST, NANG ghi tệp hiện tại).
+- `tests/architecture/hinh-dang-gitleaks.test.ts` (khoản 284): `TEN_TEP_MIGRATION_MAU` thành danh sách hai mẫu, một vi phạm cho mỗi mẫu;
+  ca `^zz$` đòi đúng hai dòng; `it` mới trên regex thật (mục 3).
+- `.gitleaks.toml` (khoản 284): `^\d{3,4}_[a-z0-9_]{1,60}$`; `description`; khối đầu gạch "ba chữ số" và thêm lý do.
+- Không đổi tệp nào khác: `apps/api/src/composition.ts`, `apps/unseal-worker/src/tien-trinh.ts`, bốn tool và mọi `apps/*/src` giữ nguyên
+  từng byte — cổng mới không bắt vi phạm thật nào.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **264 — phân giải theo KÝ HIỆU cho cả đường tên trần.** Tập trắng "có tên" chỉ đúng khi tên ấy là tên toàn cục hay tham số kết nối
+  thật: đo — `const Promise = { revokeInvitation: createSupplier }` và `{ const client = … }` trong `bu` đi qua một phép so theo chữ. Một
+  phép phân giải cho cả hai đường (tên trần và vật chủ) nên che tên import (`const revokeInvitation = createSupplier` — trên cổng cũ `[]`,
+  đo) cũng đỏ như hàm cục bộ. Binder một tệp như `pool-nghe-du-tin-hieu` (S1.227): không phụ thuộc cấu hình phân giải module.
+- **264 — "tham số `client`" là tham số ĐẦU của chính hàm bù, bất kể tên.** Bộ chạy trao kết nối ở vị trí ấy (`bu: async (client) =>`,
+  văn bản mẫu cũ dùng cả `c`); theo ký hiệu nên `client` của handler (bí danh `ctx.client`) không phải tập trắng — đo ở ca "không phải
+  tham số". `.query` trên nó vẫn là SQL tay, kể cả `["query"]` (trên cổng cũ `[]`, đo).
+- **264 — `new` và mẫu có thẻ đọc như lời gọi.** `new ncc.GhiNhaCungCap(client)` gọi mã của gói như một lời gọi (trên cổng cũ `[]`, đo);
+  cùng bảng, cùng thông điệp.
+- **264 — luật "hàm gói chỉ ở vị trí bị gọi" (lượt soi đối kháng).** Tập trắng `Array` mở đường `Array.from([client], ncc.createSupplier)`:
+  gỡ luật ⇒ ca ấy 0 vi phạm (đo). Giá: một hằng import của kho dùng làm GIÁ TRỊ trong hàm bù cũng đỏ — năm chỗ thật không có (0 vi phạm).
+- **274 — đo theo DÒNG DỰNG, không theo biến.** Cờ nghe theo ký hiệu từng coi `let pool = createPool(a); pool.on(…); pool = createPool(b)`
+  là đủ — đo: ca "gán lại sau khi gắn" cổng cũ báo đủ; nay mỗi dòng dựng cần lời gọi gắn gần nhất sau nó.
+- **274 — lời gọi gắn phải là một câu lệnh biểu thức riêng.** `c && pool.on(…)`, `void (c ? nghe(pool, …) : 0)` là điều kiện nằm trong biểu
+  thức — cùng lớp với `if`; đo: cổng cũ báo đủ.
+- **274 — lối ra là `return`/`throw` ở mọi độ sâu (trừ hàm con, lớp) và `break`/`continue` thoát khỏi câu ở giữa.** `if (c) return;` giữa
+  dòng dựng và lời gọi gắn cho một đường tiến trình đi tiếp mà pool chưa nghe — cổng cũ báo đủ (đo); `break` của một vòng lặp con thì
+  không phải lối ra (ca đối chứng xanh). `throw` trong một `try` có `catch` ngay trong câu ấy vẫn bị tính — fail-closed.
+- **274 — không lần DÙNG pool nào ở giữa (lượt soi đối kháng).** `for (;;) { await withTenant(pool, …) }` không có lối ra cú pháp, lời
+  gọi gắn sau nó là mã chết; gỡ vế ⇒ ca ấy "đủ" (đo). Lời gọi gắn khác của chính pool được phép ở giữa — hình dạng của mọi dây nối thật
+  (`pool.on("release", …)` rồi `ngheLoiKetNoiToiMuon(pool, …)`); hàm con ở giữa đóng lên pool là một lần dùng (fail-closed).
+- **274 — thuộc tính lớp khai bằng khởi tạo trường là THIẾU.** Không có khối câu lệnh để lời gọi gắn đứng cùng, và phương thức gắn chỉ chạy
+  khi có người gọi — đúng hình dạng "gắn mà có thể không chạy" của hàng 274; kho thật không có pool nào như thế (0 thiếu), ca mẫu cũ
+  `MAU_LOP_NGHE_DU` lật sang thiếu có chú thích, hình dạng đủ là gán trong constructor.
+- **274 — kho thật đòi `ganSaiCho` rỗng.** Một lời gọi gắn chết cạnh lời gọi đúng là mã nói dối về thứ nó làm; đột biến M1 đỏ cả vế ấy lẫn
+  vế thiếu.
+- **280 — "nơi" là ĐƠN VỊ, không là tệp.** Hàng sổ viết "tên trùng ở ≥ 2 app"; trùng trong một app là việc của review app ấy — đếm tệp
+  thì 30+ tên trùng trong riêng `apps/api` (route) vào bảng mà không có bản chép nào giữa tiến trình. Nhưng khi một tên đã ở ≥ 2 đơn vị,
+  MỌI tệp khai nó phải thuộc một hàng (kể cả hai tệp cùng đơn vị: `chuoi` của `routes/anon.ts`/`routes/auth.ts` thành họ GIU VAN_BAN).
+- **280 — hàng là một HỌ bản chép; một tên nhiều họ.** Một hàng một tên không nói được `moTaLoi` năm điểm vào (trùng) cạnh hai bản MCP
+  (thân khác, có chủ đích), hay `moTaLoiKhongGiaTri` đã nâng (NANG) cạnh hai bản cục bộ của tool — đo: 7 bản, 2 văn bản; 2 bản, 1 văn bản.
+- **280 — `KHUON` và `TEP_TEST`.** Bộ nghe của neo khác worker đúng ở tiền tố tiến trình — mục II đã có bộ so khuôn, nới danh sách tiền tố
+  đóng thay vì khai RIENG một bản chép thật. `thanhTien` (web, pilot) văn bản khác nhau mà cùng MỘT luật, đã đo hành vi ở tệp test của
+  từng bản so với `lamTron` (S1.230) — khai RIENG là nói sai, GIU không phép đo thì đỏ; `TEP_TEST` ghi con trỏ và cổng giữ nó không chết.
+- **280 — bản cùng việc đã khác chữ theo lớp lỗi của chính điểm vào là RIENG, kèm lý do nêu chỗ khác.** `bat`/`batBuoc` ngoài api/worker
+  ném `CauHinhError` của app, `ChayMigrateError`, `GieoError`, `ThamSoError`, `Error` — đồng văn bản là đổi hợp đồng điểm vào (đề bài: không
+  gộp, không sửa nguồn); luật chung "nêu TÊN biến" đo ở `cau-hinh.test.ts` của từng app.
+- **284 — mẫu `1234_bang_key`, không `95NN_…`.** `pnpm cap-so` thay số tạm dạng migration không đuôi ở mọi tệp (`RE_TAM_MIGRATION_KHONG_DUOI`);
+  thứ cần ghim là hình dạng bốn chữ số. Biên của phần số (2 và 5 chữ số không khớp) ghim ở `it` mới trên regex thật, không vào phép kiểm
+  hình dạng (khuôn S1.232 giữ nguyên).
+
+## 6. Đột biến
+
+Kịch bản `a1/dot-bien.py` (ngoài kho): sửa một tệp thật, chạy đúng tệp cổng, khôi phục từ bản sao, so byte. Mười ca, mỗi ca ĐỎ đúng vế,
+cả mười khôi phục nguyên vẹn (M1–M3 chạy lại trên cổng pool cuối cùng sau lượt soi đối kháng: vẫn đỏ):
+- M1 (274) `apps/api/src/composition.ts`: `ghiLogLoiKetNoiToiMuon(pool, "pool")` vào `if (false) {}` ⇒ 2 đỏ: thiếu lỗi-tới-muộn và vế
+  `ganSaiCho` — *taoTienTrinhApi.pool: toiMuon — không cùng khối câu lệnh với dòng dựng pool (dòng 132)*.
+- M2 (274) `apps/unseal-worker/src/tien-trinh.ts`: `if (ch.dbPoolMax < 0) return …;` trước bốn lời gọi gắn ⇒ 3 đỏ: thiếu `release`, thiếu
+  lỗi-tới-muộn, `ganSaiCho` bốn dòng *sau một lối ra (ReturnStatement ở dòng 160)*.
+- M3 (274) `tools/neo-so-kiem-toan/src/index.ts`: `ngheLoiKetNoiToiMuon(pool, …)` của `xuat` dời vào `try {` ⇒ 2 đỏ, *xuat.pool: toiMuon*.
+- M4 (264) `apps/api/src/routes/buyer.ts`: `import * as nccNs from "@trustprocure/supplier"` và `await nccNs.createSupplier(client, …)` trong
+  `bu` của lần mời MVP1 ⇒ vế kho đỏ *`bu` gọi hàm gói `createSupplier` (qua namespace `nccNs`) ngoài danh sách của mã quyền `RFQ_INVITE`*.
+- M5 (264) cùng tệp: `await ctx.services.invitationLinkSender.send(…)` trong `khiXong` của lần mời ở `OPEN` ⇒ *`khiXong` gọi
+  `ctx.services.invitationLinkSender.send(…)` qua thuộc tính của một biểu thức*.
+- M6 (264) cùng tệp: `await Promise.all(Array.from([client], revokeInvitation))` trong `khiXong` của lô mở gói ⇒ *`khiXong` dùng
+  `revokeInvitation` (import từ @trustprocure/invitation) không ở vị trí bị gọi trực tiếp*.
+- M7 (280) `apps/web/src/main.ts`: `moTaLoi` bỏ nhánh `CauHinhError` ⇒ mục II đỏ *apps/web/src/main.ts lệch apps/api/src/main.ts* — đúng
+  đột biến mà cổng cũ để xanh (mục 3).
+- M8 (280) `tools/neo-so-kiem-toan/src/index.ts`: dòng log `ket noi huy` → `ket noi bi huy` ⇒ khuôn bộ nghe `release` đỏ ở bản neo.
+- M9 (280) `apps/web/src/cau-hinh.ts`: `/^\d{1,5}$/u` → `/^\d{1,6}$/u` ⇒ ⑵ đỏ *hàng mẫu `số cổng máy chủ (`public-keys`, `web`)`:
+  apps/web/src/cau-hinh.ts không còn mang literal*.
+- M10 (284) `.gitleaks.toml`: regex về `^\d{3}_…` ⇒ 5 đỏ, vế kho đúng dòng *không khớp tên tệp migration 1234_bang_key*.
+
+Lượt soi đối kháng, hai đường lách tìm ra trên bản vá trung gian và đo bằng cách gỡ tạm vế đóng nó: gỡ vế "dùng pool ở giữa" (274) ⇒ ca
+`for (;;) { withTenant(pool, …) }` báo đủ (`expected [ [], [] ] …`); gỡ luật tham chiếu (264) ⇒ ca `Array.from([client],
+ncc.createSupplier)` 0 vi phạm (`expected '' to contain '`bu` dùng `ncc`…'`). Cả hai khôi phục nguyên vẹn. Lỗ kề ngoài phạm vi: khoản 289
+(mục 7).
+
+## 7. Giới hạn, nói ra
+
+- **264** — vế ⑵ chỉ thấy lời gọi VIẾT RA. Lời gọi NGẦM đi qua: hàm cục bộ khai ngoài `bu` truyền làm callback cho phương thức của tập
+  trắng (`Array.from([client], f)`, `JSON.parse(s, f)`), getter trên đối số, thenable qua `Promise.resolve`, bộ lặp, `toString` — đo bốn
+  hình dạng đầu trên cổng đã vá: 0 vi phạm ⇒ **khoản 289** (rổ B đề xuất). Mọi phương thức của tham số kết nối trừ `query` được phép —
+  `pg` không có đường ghi nào khác ngoài `query`. Vẫn mù với `ctx` qua `this`/`arguments`/`eval` (vế ⑴, không đổi).
+- **274** — lối ra là lối ra CÚ PHÁP: `process.exit()`, một hàm trả `never`, hay một câu lệnh ở giữa NÉM ngầm không được tính — khi ấy
+  lời gọi gắn không chạy, nhưng vế "không dùng pool ở giữa" giữ cho pool không chạy bước nào trước khi được nghe. Vẫn không có phép đo
+  hành vi trên tiến trình thật (phương án ⒝ không chọn); thân bộ nghe đo ở hai `loi-ket-noi-toi-muon.int.test.ts` (S1.221).
+- **280** — ngoài tầm: `packages/` (gói chung là chỗ nâng tới), tệp ngoài `src/` (`apps/web/trang/*.js`), `.mjs`, mã không khai tên
+  (`tools/gieo-demo` viết bộ mô tả lỗi thẳng trong thân — bộ mô tả thứ tư của `tools/`). Tên trùng trong MỘT đơn vị không đòi hàng.
+  Họ `RIENG` không có phép đo: một bản cùng việc đã khác chữ (`bat` của public-keys) có thể trôi tiếp mà không đỏ — chỉ tập tệp của họ
+  được giữ. `TEP_TEST` chỉ đòi tệp test còn và nhắc tên, không đọc phép đo trong đó. Quan sát khi kiểm kê (ghi ở hàng `KID` RIENG):
+  kid biên nhận cho `:` (`assertReceiptKid`, `public-keys`), còn job neo bỏ `:` vì kid là tên đối tượng S3 — một kid hợp lệ mang `:` thì
+  lệnh neo tài liệu khoá NÉM (không im); câu hỏi ở bàn giao mục 9. `UUID` của hai adapter TOTP nhận chữ hoa, của job neo chỉ chữ thường
+  (khoá S3) — hai họ, lý do ghi tại hàng.
+- **284** — chưa đo trên gitleaks thật: máy lô không có gitleaks, `pnpm t0` không chạy nó; lượt CI của nhánh là phép đo đầu tiên. Regex
+  miễn nay tha thêm mọi phần-bị-coi-là-bí-mật có hình dạng bốn chữ số + `_` + chữ thường/số (≤ 60 ký tự) — hình dạng không có ở khoá
+  API thật, năm mẫu hình khoá vẫn không khớp; năm chữ số trở lên không khớp.
+- Không chạy `pnpm evidence` hay `pnpm test:int` trọn (máy dùng chung); `tests/architecture` trọn chạy với biến cụm PG cục bộ.
+
+## 8. Số đo
+
+- Đo trước (mục 3): 264 — bảy hình dạng `[]` trên cổng cũ, khối mới 4 đỏ / 1 xanh (19 test tệp: 4 failed | 15 passed); 274 — 5 failed |
+  10 passed (15); 280 — ⒜ 83/83 xanh với bản thứ ba trôi, ⒝ 4 failed | 82 passed (86), ⑴ 48 + ⑵ 10 dòng CHƯA KHAI; 284 — 5 failed |
+  5 passed (10).
+- Sau vá, bốn tệp cùng lượt: `viec-sau-commit` 20/20, `pool-nghe-du-tin-hieu` 16/16, `ma-chep-api-worker` 95/95, `hinh-dang-gitleaks`
+  10/10 — 141/141, 3,2 s.
+- Kiểm kê 280: `BANG_TEN` 71 hàng / 61 tên / 171 tệp-lượt (NANG 3 · GIU VAN_BAN 18 · GIU HANH_VI 5 · GIU KHUON 2 · GIU TEP_TEST 1 ·
+  RIENG 42); `BANG_MAU` 16 (GIU 10 · RIENG 6); `BANG_KHAC_TEN` 3 hàng / 8 bản; bộ quét 96 tệp, 16 đơn vị.
+- Đột biến (mục 6): 10/10 đỏ đúng vế, 10/10 khôi phục nguyên vẹn; hai đường lách của lượt soi đối kháng đo thật rồi đóng; khoản 289 đo
+  bốn hình dạng 0 vi phạm.
+- `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test pnpm vitest run
+  tests/architecture` — 39/39 tệp, 528 đạt, 1 bỏ qua (có sẵn, `xuong-dong-ts`), 289,8 s.
+- `pnpm t0` — exit 0: `tsc` sạch, `eslint .` sạch, depcruise 495 module / 2062 cạnh / 0 vi phạm (16:07:36 → 16:10:42).
+- `pnpm test` — 133/133 tệp, 2085 đạt, 1 bỏ qua (2086), 309,3 s.
+- `pnpm typecheck` riêng: 22,9 s, sạch. Không nhãn `[INV-…]` nào ở bốn tệp đã chạm — ma trận bằng chứng không đổi.
+
+# §S1.239 — LÔ A2 `kind` CỦA OUTBOX: UNION `KindOutbox` KHAI MỘT CHỖ, LITERAL Ở MỌI LỜI GỌI `enqueueJob`, HAI BẢNG HANDLER RỜI NHAU, GƯƠNG TEST CỦA RUNNER `api` CÓ CỔNG — KHOẢN 161 · 169 · 170 ĐÓNG, 290 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ C — ba khoản mà câu 1 của kế hoạch đợt 3 kích hoạt lại vì có răng với mã sản xuất; không chạm mảnh nào
+của `docs/PRODUCT.md` §11 — không route, không màn, không migration, không đổi hành vi. Đóng 161, 169, 170; mở 290.
+
+## 1. Vòng này là gì
+
+Lô A2 của đợt trả nợ 3 (lượt A). Ba khoản cùng quanh cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`), lớp canh
+*"mọi `kind` được xếp đều có tiến trình nhận"* — vế chống lỗi §S1.81: một kind ngoài mảng lọc của mọi runner nằm `PENDING` im lặng.
+**161** (§S1.81): cổng tìm tập kind bằng ba mẫu văn bản, nên một kind viết khác ba mẫu ấy vô hình; hình dạng đã chốt — `JobInput.kind`
+thành union khai ở MỘT chỗ, cộng một cổng cây cú pháp cấm `kind` không literal tại lời gọi `enqueueJob`. **169** (§S1.83): cổng KHAI
+*"hai bảng handler không trùng nhau"* mà không khẳng định, và chống rỗng ruột không phân biệt mẫu ⑶ đang chạy với mẫu ⑶ khớp 0 tệp.
+**170** (§S1.83): lời *"phải giống bản thật"* của runner test `api` (`test-services.ts`) không có lớp nào đối chiếu với runner thật
+(`composition.ts`).
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Phạm vi: câu 1 của kế hoạch đợt 3 (chốt 2026-09-30) — sáu khoản rổ C có răng, gồm ba khoản này; hình dạng
+nằm sẵn trong thân hàng (mục 0 của kế hoạch: *"hình dạng đã nằm trong thân hàng"*) và ở đề bài lô `A2.md`. Điểm tự chốt ở mục 5.
+
+## 3. Đo trước
+
+Trên `ba269ae`, cụm Postgres 16 cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Nền: worker `composition.int` 9/9, api `composition.int` 21/21,
+`packages/outbox` 5 tệp 76/76. Ba khoản đều là khoản ĐỌC/PHÒNG — hôm nay không kind nào lọt, không kind nào có hai người nhận, gương
+đang khớp —, nên ca đỏ dựng bằng đột biến tạm trên cây hiện tại và bằng cổng mới chạy trên cây cũ:
+
+- **Phép quét ba mẫu, đếm theo từng mẫu** (bản sao nguyên văn ba biểu thức, 250 tệp): ⑴ `enqueueJob(… kind: "X")` **0** lần khớp;
+  ⑵ `…_KIND = "X"` 6 lần (bốn kind TypeScript, `UNSEAL_RFQ` hai lần); ⑶ `INSERT` viết tay 3 lần (`019`, hai lần ở hardening). Mẫu ⑴
+  chạy trên 0 lời gọi: sáu lời gọi sản xuất đều truyền hằng.
+- **161:** thêm vào `packages/rfq/src/rfq.ts` (tệp đã track) một hàm với ba lời gọi `kind: loaiViec` (`const loaiViec = "THU_LOT_161"`) ·
+  `` kind: `THU_TEMPLATE_${so}` `` · `kind: ["THU", "JOIN", "161"].join("_")` ⇒ `-t "khoản nợ 34"` **2/2 xanh**, `tsc` thoát 0 — ba kind
+  không người nhận vô hình với cả cổng lẫn trình biên dịch. Biến thể `kind: "THU_" + "GHEP_161"` ⇒ đỏ NHẦM: `expected [ 'THU_' ] to deeply
+  equal []` — mẫu ⑴ bắc cầu 400 ký tự từ lời gọi trước và đọc mảnh đầu phép ghép như một kind.
+- **161, cổng mới trên cây cũ** (`tests/architecture/kind-outbox-mot-cho.test.ts` viết trước, chưa vá gì): 2 đỏ / 4 xanh — ⑴ `` `type KindOutbox`
+  phải khai ĐÚNG MỘT lần ở cấp tệp — thấy 0 `` và `` `JobInput.kind` phải mang kiểu `KindOutbox`, bắt buộc — thấy `readonly kind: string;` ``;
+  ⑵ đúng sáu dòng: `apps/api/src/routes/auth.ts › handler › kind không phải literal (tên (biến hay hằng)): LOGIN_LINK_SEND_KIND`,
+  `packages/rfq/src/rfq.ts › extendRfqDeadline › … RFQ_DEADLINE_NOTICE_KIND` ×2, `packages/unseal/src/requests.ts › xepTin › … UNSEAL_NOTICE_KIND`,
+  `› dieuPhoiLaiSauKhiChet › … UNSEAL_JOB_KIND`, `› dispatchUnseal › … UNSEAL_JOB_KIND`.
+- **169a:** thêm `UNSEAL_RFQ: () => Promise.resolve()` vào `buildApiOutboxHandlers` ⇒ worker `composition.int` 8/9: hai vế khoản 34 **xanh**;
+  đỏ duy nhất là vế policy `095` của `api` (S1.233) — *"Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm
+  migration …"*. Đi theo lời khuyên ấy (thêm `UNSEAL_RFQ` vào policy `api`) thì vế *"hai tập không giao nhau"* của policy đỏ (suy, không
+  chạy). Tức từ ADR-134 lớp CSDL bắt được một nửa, bằng một thông điệp dẫn sai hướng sửa; cổng khai tính chất ấy vẫn mù.
+- **169b:** đổi `outbox_jobs` thành `outbox_jobz` trong mẫu ⑶ ⇒ `-t "khoản nợ 34"` **2/2 xanh** — hai kind mốc vẫn thấy qua ⑵.
+- **170:** hai câu đầu của hàng 170 thiu từ S1.222: dòng `kindKhongNguoiNhan` đã rời CẢ HAI tệp (sổ mồ côi sang worker), nên phép đo
+  *"gỡ dòng ở `composition.ts`"* không dựng được. Đo hai chiều còn lại: **170a** thêm `kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN)`
+  (cùng import) CHỈ ở `test-services.ts` ⇒ `tsc` 0, api `composition.int` **21/21 xanh**; sổ rỗng từ S1.91 nên mảng lọc hai runner bằng
+  nhau (`packages/outbox/src/runner.ts:448–450`, ĐỌC) — không test nào phân biệt được; khối khoản 170 của cổng mới trên đột biến ấy ⇒ đỏ.
+  **170b** thêm cùng dòng ở `composition.ts` ⇒ vế khoản 168 đỏ `expected { status: 'FAILED', attempts: 1, … } to deeply equal { … 'PENDING' … }`
+  — chiều ấy có răng từ S1.222 (M5 của §S1.222, đo lại).
+
+## 4. Thay đổi
+
+- `packages/outbox/src/enqueue.ts`: `export type KindOutbox` — union năm literal theo bảng chữ cái (`BREAK_GLASS_UNSEAL_ALERT`,
+  `LOGIN_LINK_SEND`, `RFQ_DEADLINE_EXTENDED_NOTICE`, `UNSEAL_APPROVAL_NOTICE`, `UNSEAL_RFQ` — đúng hợp hai tập của `095`), khối lý do
+  (vì sao, theo vai, "thêm kind = union + handler + migration"); `JobInput.kind: KindOutbox` (docstring gạch `string`). Không ra cửa
+  `index.ts` — người gọi đọc qua `JobInput["kind"]`.
+- Sáu lời gọi sản xuất viết literal, không đổi hành vi: `apps/api/src/routes/auth.ts` (`"LOGIN_LINK_SEND"`, bỏ import `LOGIN_LINK_SEND_KIND`
+  thừa), `packages/rfq/src/rfq.ts` ×2 (`"RFQ_DEADLINE_EXTENDED_NOTICE"`), `packages/unseal/src/requests.ts` ×3 (`"UNSEAL_APPROVAL_NOTICE"`,
+  `"UNSEAL_RFQ"` ×2). Docstring hai hằng `RFQ_DEADLINE_NOTICE_KIND`, `UNSEAL_JOB_KIND` gạch *"Một hằng, một chỗ ở"*; câu *"CHƯA có handler
+  nào … `apps/` chưa có"* cùng docstring gạch (thiu từ S1.91).
+- `tests/architecture/kind-outbox-mot-cho.test.ts` (mới, 6 test, không nhãn `[INV-…]`): khuôn cây cú pháp của S1.72. `docUnionKind` (⑴: union
+  literal, CHECK của `007`, bảng chữ cái, không trùng, `JobInput.kind` bắt buộc mang kiểu ấy); `docLoiGoi` (⑵: mọi tham chiếu `enqueueJob`
+  trong `packages|apps|tools/*/src` không test — tên trần, bí danh import, thuộc tính vật chủ bất kỳ — phải là lời gọi trực tiếp; không tham số
+  kiểu; đúng ba đối số không trải; object literal không trải; đúng một `kind: "<LITERAL>"`, chỉ bỏ ngoặc; literal thuộc union; re-export đổi
+  tên là vi phạm); văn bản mẫu cho mọi hình dạng (kể cả ba hình dạng của đo trước, hằng `_KIND`, `as`, `<T>x`, `satisfies`, ba ngôi, viết tắt,
+  tên tính toán, trải, `@ts-expect-error`, `.call`/`.apply`/`.bind`, `Reflect.apply`, `(0, f)(…)`, phá cấu trúc, gọi bằng chuỗi, hàm bọc) và
+  đối chứng (chú thích, JSDoc, chuỗi, import/export giữ tên, vị trí kiểu, khai báo hàm); chống rỗng ruột: > 50 tệp và lời gọi
+  `packages/unseal/src/requests.ts › dispatchUnseal › UNSEAL_RFQ` phải đọc ra. Khối khoản 170: `docDayNoiLoc` (số runner, bảng handler, nguồn
+  import, mọi lần `kindKhongNguoiNhan` trong mã) của `composition.ts` bằng của `test-services.ts`, đúng một runner mỗi tệp, cộng văn bản mẫu.
+- `apps/unseal-worker/src/composition.int.test.ts`: `docUnionKindCuaKho` (đọc union từ cây cú pháp của `enqueue.ts`), `quetInsertOutbox`
+  (mẫu ⑶ giữ nguyên biểu thức), `doiChieuKind` (hàm thuần của ⑴ ⑴′ ⑵ ⑷). Vế khoản 34: tập kind = union; ⑴ ⑵ văn bản gạch tại chỗ; chống rỗng
+  ruột theo từng nguồn (union mang hai kind worker; mẫu ⑶ đọc ra `BREAK_GLASS_UNSEAL_ALERT` từ `019`); kind của `INSERT` viết tay ⊆ union; ⑴′
+  và ⑷ mới; câu *"và không trùng nhau"* gạch. Hai vế văn bản mẫu mới (⑷ và bộ đọc `INSERT`) trong `describe("[INV-D4] …")` có sẵn.
+- Test gọi `enqueueJob`, chỉ để khớp union: `packages/outbox/src/outbox.int.test.ts` gọi CÙNG hàm qua bí danh kiểu nới `kind` về `string`
+  (~40 kind thử của test cơ chế); `packages/outbox/src/dau-xep-viec.test.ts` đổi `"TEST_KIND"` sang một kind thật (client giả) và thêm một vế
+  hai `@ts-expect-error` (kind lạ, chuỗi ghép) làm mốc chết ở tầng biên dịch; `apps/unseal-worker/src/tien-trinh.int.test.ts` tham số `kind`
+  của `xep` mang `JobInput["kind"]`.
+- `apps/api/src/composition.ts`, `apps/api/src/test-services.ts`: mỗi tệp hai–ba dòng chú thích trỏ tới cổng khoản 170. Không đổi mã.
+- Không chạm: `packages/outbox/src/index.ts` (danh sách trắng barrel), `packages/outbox/src/runner.ts`, `so-kind-mo-coi.ts`,
+  `apps/api/src/outbox-api.ts`, `apps/unseal-worker/src/composition.ts`, mọi tệp cấm.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Thay hai mẫu văn bản TypeScript bằng union, giữ mẫu `INSERT`.** Đo: mẫu ⑴ khớp 0 lời gọi trên `ba269ae`; mẫu ⑵ theo TÊN hằng; trên cây nền
+  union = ⑴ ∪ ⑵ ∪ ⑶ = năm kind, nên thay không mất gì, còn giữ thì giữ một nguồn thứ hai yếu hơn. Mẫu ⑶ giữ vì SQL không qua kiểu.
+- **"Literal" là literal CÚ PHÁP, không phải kiểu literal.** Một cổng cú pháp không phân biệt `const X = "…"` với `const X = y as KindOutbox`;
+  đo (M2): trả một lời gọi về hằng ⇒ `tsc` XANH, chỉ cổng ⑵ đỏ. Giá: sáu lời gọi viết lại, kiểm máy móc literal = giá trị hằng 6/6.
+- **Union là KIỂU, không ra cửa barrel.** `index.ts` và `tests/architecture/barrel-exports.test.ts` ngoài danh sách tệp của lô; người gọi đọc
+  `JobInput["kind"]`; hai cổng đọc khai báo bằng cây cú pháp của tệp (`g4-` chỉ mở `index.ts`; union không có giá trị lúc chạy).
+- **Test cơ chế dùng bí danh kiểu nới, không mở đường `string` trong mã sản xuất.** Đo: union trần ⇒ 69 lỗi kiểu (64 ở `outbox.int.test.ts`,
+  4 `dau-xep-viec`, 1 `tien-trinh`); `enqueueJob<K extends string = KindOutbox>` + `NoInfer` ⇒ 79 lỗi, `Parameters<typeof enqueueJob>` thành
+  `never` ở hai trình bọc `vi.mock`; bí danh `enqueueJobCongKhai as (…kind: string…)` ⇒ 0 lỗi, 0 bề mặt sản xuất.
+- **Union gồm cả `BREAK_GLASS_UNSEAL_ALERT`** (chỉ SQL xếp): đề bài chốt tập kind THẬT của kho, đối chiếu `095` và hai bảng handler.
+- **Cổng khoản 34 đòi union = hợp hai bảng handler ∪ sổ mồ côi (thêm ⑴′), và kind của `INSERT` viết tay ⊆ union** — union là sổ đăng ký
+  duy nhất; đo M4 (kind mới trong union không người nhận ⇒ ⑴ đỏ) và M5 (`INSERT` viết tay kind ngoài union ⇒ đỏ).
+- **169: bốn mệnh đề thành hàm thuần `doiChieuKind`**, để mỗi mệnh đề đỏ được trên văn bản mẫu thay vì chỉ xanh trên cây hôm nay; ⑶ (dòng
+  sổ → khoản MỞ) đọc `docs/STATE.md`, ở lại vế thật. Chống rỗng ruột của mẫu ⑶ neo vào ĐÚNG tệp `019`, không vào hợp các nguồn.
+- **170: cổng đối chiếu, không hằng dùng chung.** Dòng ấy đã không còn ở cả hai tệp (S1.222); hằng dùng chung nghĩa là thêm lại một dòng
+  `kindKhongNguoiNhan` vào composition root thật (chính dòng S1.222 gỡ), hay một export mới ở `outbox-api.ts`/`composition.ts` — cái sau kéo
+  AWS SDK vào mọi test `api` qua `test-services.ts`. Cổng: 0 dòng mã sản xuất đổi. Nó so bảng handler + nguồn import + mọi lần tên
+  `kindKhongNguoiNhan` trong MÃ (bắt cả sổ đi qua một object trải trong tệp) và đòi đúng một runner mỗi tệp.
+- **Một tệp cổng mới cho cả 161 và 170** (đề bài cho một tệp); phạm vi `packages|apps|tools/*/src` — thêm `tools` so với khuôn S1.72 (hôm nay
+  không lời gọi nào ở đó). `tenHamBao` nhận cả hàm gán cho thuộc tính (`handler`).
+- **Re-export đổi tên là vi phạm** — tìm ở lượt tự soi (mục 7): lỗ trong chính cổng của lô, không phải lỗ kề, nên đóng tại chỗ.
+- **Không nhãn `[INV-…]` ở cổng mới** (khuôn S1.210); hai vế mẫu ở worker `composition.int` nằm trong `describe("[INV-D4] …")` có sẵn —
+  cặp (D4, tệp) đã khai, `so-khai-nhan.ts` không đổi.
+
+## 6. Đột biến
+
+Kịch bản `dot-bien.py` (scratchpad, ngoài kho): mỗi ca thay chuỗi chính xác (đếm đúng số lần), chạy đúng lệnh, khôi phục từ bản chụp byte
+ngay trước ca và so byte. Mười ca, mười ĐỎ đúng vế, 0 sống:
+
+| Ca | Khoản | Đổi | Đỏ ở |
+|---|---|---|---|
+| M1 | 161 | `JobInput.kind: KindOutbox` → `string` | `tsc` 2 × TS2578 *"Unused '@ts-expect-error' directive"* (`dau-xep-viec.test.ts`); cổng ⑴ |
+| M2 | 161 | lời gọi của `dispatchUnseal` trả về `kind: UNSEAL_JOB_KIND` | `tsc` XANH; cổng ⑵ đỏ — chỉ cổng bắt |
+| M3 | 161 | union mất `UNSEAL_RFQ` | `tsc` 7 lỗi (mọi chỗ gọi); cổng ⑴ (mốc) + ⑵; khoản 34 (union thiếu kind worker) |
+| M4 | 161 | union thêm `THU_MOI_161` | `tsc` và cổng xanh; khoản 34 ⑴ đỏ — thêm kind là phải quyết người nhận |
+| M5 | 161 | một hằng `INSERT … VALUES ($1, 'THU_SQL_161')` trong `rfq.ts` | khoản 34: kind của `INSERT` viết tay ngoài union |
+| M6 | 169 | handler `UNSEAL_RFQ` thêm vào bảng `api` | khoản 34 ⑷ (mới) + vế policy `095` (có sẵn) — đo trước: chỉ vế policy |
+| M7 | 169 | mẫu ⑶ → `outbox_jobz` (khớp 0 tệp) | khoản 34: *"… không đọc ra BREAK_GLASS_UNSEAL_ALERT từ 019 — nó đang khớp 0 tệp"* + vế mẫu bộ đọc |
+| M8 | 169 | `haiBangTrung: sap([])` (⑷ rỗng ruột) | vế văn bản mẫu ⑷ |
+| M9 | 170 | `kindKhongNguoiNhan` chỉ ở `test-services.ts` | cổng 170; api `composition.int` vẫn 21/21 |
+| M10 | 170 | bảng handler của gương `{ ...buildApiOutboxHandlers(services), THU_GUONG_170: … }` | cổng 170 |
+
+Sau mỗi ca `git status` chỉ còn các sửa của lô; so byte nguyên vẹn. Văn bản mẫu trong hai tệp cổng chạy mọi lần và đỏ nếu bộ đọc mất một
+hình dạng (M7 đỏ cả vế mẫu của bộ đọc `INSERT`).
+
+## 7. Giới hạn, nói ra
+
+- **`INSERT INTO outbox_jobs` viết tay không qua union** (SQL, hay câu lệnh TS ngoài `enqueueJob`) và mẫu ⑶ chỉ đọc một dạng — lượt tự soi đo
+  bằng chính biểu thức: đảo cột, tham số `$2`, hàm, cột `NEW.…`, `INSERT … SELECT`, không danh sách cột ⇒ `[]`; `'THU_' || …` ⇒ `["THU_"]`.
+  Ngoài hình dạng đã chốt (mẫu ⑶ chỉ phải *"vẫn bị phủ"*) ⇒ khoản **290**, không vá.
+- Cổng đọc theo TÊN và HÌNH DẠNG cú pháp: mù với `eval`/`Function`, tên tính lúc chạy (`outbox["enqueue" + "Job"]`, `Reflect.get`), mã ngoài
+  `packages|apps|tools/*/src`; tệp test không đọc (cố ý). Tên `enqueueJob` bị che bởi một biến cục bộ cùng tên thì cổng coi là hàm — đỏ ồn, không im.
+- Cổng khoản 34 đọc BẢNG HANDLER từ hai hàm dựng (`buildApiOutboxHandlers`, `buildUnsealWorkerHandlers`), không từ runner đang chạy. Phía `api`
+  cổng 170 đòi composition root dựng đúng một runner từ `buildApiOutboxHandlers(services)`; phía worker không có vế tương ứng (runner dựng qua
+  `createUnsealWorkerRunner`, đọc). Một runner thứ hai ở mô-đun khác của một tiến trình vô hình với cả hai cổng; policy `095` vẫn chặn nó ghi kết
+  cục cho kind của vai kia.
+- Cổng 170 không đọc xuyên một phần trải mà tên `kindKhongNguoiNhan` không xuất hiện trong tệp (trải một hằng import); `tuyChon` của `outboxTest`
+  nhận object không literal thì kiểm tra thừa thuộc tính của tsc không chạy.
+- Union mở cho mã TypeScript xếp `BREAK_GLASS_UNSEAL_ALERT` bằng một literal (trước vòng này `string` mở cho mọi kind) — cùng bề mặt khoản 285.
+- Bộ đọc union có hai bản (~15 dòng ở worker `composition.int`, bản đủ vế ở cổng kiến trúc): `g1-khong-import-nguoc-tu-apps-unseal-worker` cấm cổng
+  kiến trúc import bảng handler của worker, và test không import được test.
+- Không chạy `pnpm evidence`, `pnpm test:int` trọn, `unseal.int`/`rfq.int`/`auth.int` (máy dùng chung); hành vi của sáu lời gọi viết lại kiểm bằng
+  literal = giá trị hằng (6/6) và bằng api `composition.int` (đi qua `/auth/link`).
+
+## 8. Số đo
+
+- Nền `ba269ae`: worker `composition.int` 9/9 (7,8 s); api `composition.int` 21/21 (10,8 s); `packages/outbox` 5 tệp 76/76 (13,5 s).
+- Đo trước: mục 3.
+- Sau vá: ba lời gọi của đo trước ⇒ `tsc` thoát 2 (3 × TS2322: `"THU_LOT_161"`, `` `THU_TEMPLATE_${string}` ``, `string` → `KindOutbox`), cổng ⑵ đỏ
+  đúng ba dòng; M6 ⇒ ⑷ đỏ; M7 ⇒ chống rỗng ruột ⑶ đỏ; M9 ⇒ cổng 170 đỏ.
+- Đột biến: 10/10 đỏ đúng vế, 0 sống (mục 6). Literal = giá trị hằng bị thay: 6/6.
+- `pnpm exec eslint` 11 tệp đã chạm: 0 lỗi.
+- Cổng của lô (tuần tự, cụm cục bộ): `pnpm vitest run packages/outbox` 5 tệp 77/77 (17,7 s); `apps/unseal-worker/src/composition.int.test.ts`
+  11/11 (9,6 s); `apps/api/src/composition.int.test.ts` 21/21 (11,8 s); `apps/unseal-worker/src/tien-trinh.int.test.ts` 19/19 (10,9 s);
+  `tests/architecture/kind-outbox-mot-cho.test.ts` 6/6 (2,7 s).
+- `pnpm t0`: thoát 0 — typecheck, eslint toàn kho, depcruise 496 module / 2069 phụ thuộc, 0 vi phạm (1 m 14 s).
+- `pnpm test`: 134/134 tệp, 2066 đạt | 1 bỏ qua (7 m 33 s); lô thêm 1 tệp và 7 test đơn vị (cổng mới 6, `dau-xep-viec` 1).
+- Áp thử bàn giao (hàng sổ, cột mốc, biên bản, tiểu mục ADR-134, dòng tổng kết, đoạn đếm, lời khai đếm ở `Handoff.md`, dòng RỔ C) lên bản tạm
+  của bốn tệp người tích hợp: `tests/architecture/so-no-tu-doi-chieu.test.ts` 45/45, `tep-van-ban-git.test.ts` 7/7; khôi phục byte, không commit.
+
+# §S1.240 — LÔ A3 ĐỢT 3, WEB VÀ ĐĂNG NHẬP: BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA LÀ MỘT MODULE; LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO 7 NGÀY, TRẦN 100, NÓI «CÒN NỮA»; `/tao-thau` NÓI ĐÚNG NGỮ NGHĨA THU HỒI — KHOẢN 282, 268, 276 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B cả ba — 282 (bước 1 của ba trang người mua), 268 (một hàm đọc của `identity`, một route đọc, một câu
+trên màn), 276 (một câu và một nút của `/tao-thau`). Mảnh §11 của `docs/PRODUCT.md`: chạm mảnh 1 (giao diện) ở bước 1 của bốn trang
+người mua và ở dòng lời mời của `/tao-thau`; không chạm mảnh 2/3/4. Không migration, không phụ thuộc mới, không ADR mới — ADR-126,
+ADR-110 ⑸, ADR-128 sửa tại chỗ. Đóng 282, 268, 276; mở 291, 292, 293.
+
+## 1. Vòng này là gì
+
+Lô A3 của đợt trả nợ 3, ba khoản cùng vùng — bước 1 đăng nhập của các trang người mua, và một màn của S3:
+
+- **282** (§S1.230): `tao-thau.js`, `nhom-hang.js`, `chinh-sach.js` chép nguyên khối đăng nhập cũ của `mo-thau.js` — nút Vào gọi
+  `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật ghi danh hiện cùng chỗ câu lỗi, ô mã sáu số hiện sẵn —, nên bốn trang có
+  hai hình dạng cho cùng một bước 1, và người mở thẳng ba trang ấy với link còn hạn gặp lại khiếm khuyết 193. Khối «link đăng nhập
+  gần đây» của 195 cũng chỉ ở `/login`.
+- **268** (§S1.216): `listRecentLoginTokens` trả `LIMIT 20` mới nhất trước; ở nhịp phát dày nhất (5 mã tự phục vụ + 2 mã hệ thống mỗi
+  15 phút) 20 hàng phủ chừng 43 phút, một link «đã dùng» cũ hơn thế rơi khỏi danh sách, và thân không nói mình bị cắt.
+- **276** (§S1.217): sau ADR-128 (thu hồi LOẠI báo giá của lời mời khỏi mở thầu, so sánh và xếp hạng; bị chặn sau lần mở thầu), câu
+  báo sau thu hồi của `/tao-thau` còn nói *"báo giá đã nộp … vẫn nằm trong gói thầu"*, và nút *Thu hồi* ở tổ chức chưa bật S3 hiện
+  ở mọi trạng thái — sau lần mở thầu nó là một nút không bao giờ đi được (422 câu cố định, một hàng `RFQ_STATE_DENIED`).
+
+## 2. Quyết định của chủ dự án
+
+Có, ngày 2026-09-30 (kế hoạch đợt 3, mục 0): (a) câu 11 — 282 đóng bằng cách ⒝: MỘT module `apps/web/src/dang-nhap.ts` phục vụ ở
+`/lib/dang-nhap.js` (`MODULE_WEB`), bốn trang import và gắn vào cùng bộ id; module mang bước 1 đã tách của 193, khối link gần đây của
+195 và câu «còn nữa» của 268; cách ⒜ (chép cách tách sang ba trang) bị loại. Câu 18: S3.3e chưa vào, nên 282 không dời. (b) câu 6 —
+268 cắt theo THỜI GIAN 7 ngày, trần cứng 100 hàng, thân thêm `truncated: boolean`, trang nói «còn nữa»; «giữ 20 hàng, chỉ thêm
+`truncated`» và «ưu tiên hàng `CONSUMED` không thuộc phiên hiện tại» bị loại. (c) 276 không cần quyết định mới — hình dạng của hàng
+sổ: câu báo nói thẳng *báo giá đã nộp theo lời mời này không dự thầu nữa*, `nutLoiMoi` ẩn *Thu hồi* khi gói ∈
+`RFQ_STATUSES_AFTER_UNSEAL` ở cả hai luồng, ADR-110 ⑸ gạch. Điểm tự chốt trong phạm vi ấy ở mục 5.
+
+## 3. Đo trước
+
+Test mới viết trước, chạy trên mã của `deed792` (log ở scratchpad của lô, không commit):
+
+- **268** — HTTP (`apps/api/src/auth.int.test.ts -t "khoản 268"`, trước khi vá): 3 đỏ / 61 bỏ qua — ① `25 mã trong cửa sổ ⇒ 25
+  hàng: expected 20 to be 25`, ② `trần cứng 100 hàng: expected 20 to be 100`, ③ `100 mã trong cửa sổ ⇒ 100 hàng: expected 20 to be
+  100`. Đơn vị (`packages/identity/src/login.test.ts`, `login.ts` lấy lại bản `HEAD` rồi khôi phục, `cmp` khớp): 3 đỏ / 1 xanh —
+  tham số `[userId, 20]` thay vì `[userId, 7, 101]`; hàm trả mảng trơn, không `{ links, truncated }` (`Target cannot be null or
+  undefined`); ca `userId` sai hình dạng xanh như trước. DOM: 4 đỏ (khối `[S1.240 / khoản 268]`, bốn trang).
+- **276** — `apps/web/src/tao-thau.test.ts`: 2 đỏ / 27 xanh — bảng MVP1 và bảng đủ trạng thái (`chưa bật · UNSEALED: expected {
+  guiLai: true, thuHoi: true } to deeply equal { guiLai: true, thuHoi: false }`); DOM: 2 đỏ (câu báo; dòng lời mời sau mở thầu).
+- **282** — `apps/web/src/phuc-vu.test.ts` (bản chép tạm, dòng import module thay bằng `{}` vì `dang-nhap.ts` chưa có; xoá ngay sau
+  lượt): 39 đỏ / 131 xanh (170) — ba trang kia đỏ 15 ca 193 (ca «Vào mà bỏ qua Tiếp» xanh như ở §S1.230), 9 ca 195, 6 ca `[S1.177]`
+  có `SAU_MO`; cộng 2 ca ADR-107 (hàm của module chưa có), 1 ca tĩnh 282, 4 ca 268, 2 ca 276. Nền `apps/web` trên `deed792`: 9 tệp,
+  274/274.
+
+## 4. Thay đổi
+
+- `apps/web/src/dang-nhap.ts` (mới): `LA_UUID`, `SAI_TO_CHUC`, `docMaToChuc` (từ `mo-thau.js`); `CUA_SO_NGAY_LINK_GAN_DAY = 7`,
+  `moTaLinkDangNhap`, `hangLinkGanDay`, `cauLinkGanDay(conNua, soDong)`; `ID_BUOC_MOT` (mười hai id), `ID_AN_LUC_TAI`;
+  `ganDangNhap({ taiLieu, goi, lichSu, viTri, daVao })` → `{ datLai, veLinkGanDay, anLinkGanDay }` — kiểm đủ mười hai id lúc gắn
+  (thiếu ⇒ ném), trình nghe `nut-ghi-danh` và `nut-vao` (đổi mã ĐÚNG một lần cho mỗi mã; bí mật ở `ghi-danh` với nhãn «KHÔNG phải
+  mã đăng nhập»; ô mã ẩn tới khi máy chủ đã nói; Vào dừng khi vừa nhận bí mật; mất mạng ⇒ câu mất kết nối), xoá mảnh link sau
+  `/auth/totp` (ADR-020 mục 3), `/me` rồi `await daVao(me, orgId)`; khối link gần đây với bộ đếm lượt; câu «còn nữa» khi thân mang
+  `truncated === true`. Không tên DOM toàn cục; chữ ra màn chỉ qua `textContent`.
+- `apps/web/src/phuc-vu.ts`: `"dang-nhap"` vào `MODULE_WEB`, kèm chú thích.
+- `apps/web/trang/mo-thau.js`: import `LA_UUID`, `SAI_TO_CHUC`, `docMaToChuc`, `ganDangNhap`; gỡ `docToChuc`, `doiMaDangNhap`,
+  `doiMa`, `dongKhoiMa`, hai trình nghe, `GIO`, `moTaLink`, `luotLinkGanDay`, `anLinkGanDay`, `veLinkGanDay`, `xoaManhLink`; `phien`
+  còn `rfqId`, `unsealRequestId`; `daVao` nhớ mã tổ chức (ADR-107) rồi `moSauDangNhap`; ô xin link đọc `docMaToChuc($("org").value)`.
+  `mo-thau.html`: một chú thích.
+- `apps/web/trang/{tao-thau,nhom-hang,chinh-sach}.js`: import `ganDangNhap`; gỡ trình nghe `nut-vao` chép, `phien.token`/`daRedeem`
+  (và `orgId` ở `tao-thau.js`), `xoaManhLink`; `moSauDangNhap` gọi `void dangNhap.veLinkGanDay()` trước lời gọi riêng của trang, `dongCacBuoc` gọi
+  `anLinkGanDay()`, `hashchange` và đăng xuất gọi `datLai()` sau `dongCacBuoc()`. Ba HTML: `nut-ghi-danh`, `ghi-danh` dời lên ngay
+  sau nó, `khoi-ma` (ẩn) bọc ô mã và nút Vào, `khoi-link-gan-day`; câu giới thiệu bước 1 nói Tiếp. Ở `tao-thau.*` chỉ các dòng ấy
+  và câu báo 276.
+- `packages/identity/src/login.ts`: `SO_LINK_GAN_DAY = 20` gạch; `CUA_SO_LINK_GAN_DAY_NGAY = 7`, `TRAN_LINK_GAN_DAY = 100`;
+  `RecentLoginTokens { links, truncated }`; câu đọc thêm `created_at > (now() - make_interval(days => $2))`, `LIMIT $3`, tham số
+  `[userId, 7, 101]`; trả 100 hàng đầu và `rows.length > 100`. `apps/api/src/routes/auth.ts`: thân `{ loginLinks, truncated }`,
+  dòng đầu tệp.
+- `apps/web/trang/tao-thau.js` (276): câu báo sau thu hồi *"Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) không dự thầu nữa —
+  nó không được mở thầu, so sánh hay xếp hạng. Nhà cung cấp chỉ cần link mới thì dùng «Gửi lại link», đừng thu hồi."*.
+  `apps/web/src/tao-thau.ts`: `GOI_SAU_MO_THAU` (bản sao để đọc của `RFQ_STATUSES_AFTER_UNSEAL`), `nutLoiMoi(false, …)` trả
+  `thuHoi: !GOI_SAU_MO_THAU.has(trạng thái)`.
+- Test: `apps/web/src/dang-nhap.test.ts` (mới, 8 ca: phép tính thuần; bốn HTML khai đủ bộ id, trạng thái ẩn, `ma` và `nut-vao` trong
+  `khoi-ma` sau `nut-ghi-danh`; hằng 7 ngày khớp `login.ts` bằng văn bản nguồn); `packages/identity/src/login.test.ts` (mới, 4 ca, client
+  giả); `apps/api/src/auth.int.test.ts` (khối `[S1.240 / khoản 268]` ba ca ở CUỐI tệp); `apps/web/src/tao-thau.test.ts` (import
+  `RFQ_STATUSES`, `RFQ_TRANSITIONS`; bảng MVP1 sửa; bảng đủ mười một trạng thái × hai luồng); `apps/web/src/phuc-vu.test.ts` (`...dangNhap`
+  vào `THU_VIEN`; `SAU_MO` ba trang thêm `GET /auth/login-links`; hai ca ADR-107 đọc hàm của module; khối 193 và khối 195 tham số hoá
+  `BON_TRANG`; khối 268; hai ca 276; hai ca tĩnh 282 — module được phục vụ, bốn trang import và không tự gọi `/auth/redeem`/`/auth/totp`,
+  tập trang còn tự đổi mã ghim `["du-lieu.js"]`; quét sink HTML trên mọi module `MODULE_WEB`) — 136 → 170 ca.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Module mang đúng ba thứ; `docLink`, hỏi lại phiên, đăng xuất, `hashchange` ở lại mỗi trang.** Mỗi trang dọn trạng thái RIÊNG khi về
+  bước 1 (gói, luồng, ngân sách, tín hiệu ở `/tao-thau`; `rfqId`, `unsealRequestId` ở `/login`), và `docLink` của `/login` còn đọc
+  `#<orgId>` trơn và nhớ tổ chức (ADR-107). Đo: chín ca `[S1.177]` chung chạy nguyên; chỉ `SAU_MO` của ba trang thêm một lời gọi.
+- **Trang TRAO `document`, `goi`, `history`, `location`, `daVao` vào module.** `tsconfig.base.json` chỉ `lib: ["ES2023"]` — một tên
+  DOM trong `apps/web/src/*.ts` là lỗi `tsc` —, và khuôn `node:vm` của `phuc-vu.test.ts` chạy hàm module ở realm của test, nên module
+  phải nhận DOM giả từ trang. Đo: `pnpm typecheck` 0 lỗi; 170/170 ca DOM.
+- **`docMaToChuc` một bản, cho bốn trang và ô xin link.** Ba trang kia từng gửi `.trim()` trơn; nay nhận nguyên một link cũ dán vào
+  và nói `SAI_TO_CHUC` khi sai hình dạng (ADR-107). Đo: ca ADR-107 bốn trang (đỏ trước: `doc is not a function`).
+- **Xoá mảnh link trong module**, ngay sau `/auth/totp` thành công và trước `/me` — cùng chỗ cho bốn trang; ca `[S1.177]` «xoá
+  fragment đúng MỘT lần» đo cả bốn.
+- **Kiểm đủ mười hai id lúc gắn (thiếu ⇒ ném) và `dang-nhap.test.ts` đọc bốn HTML.** Khuôn DOM giả tạo phần tử thiếu theo yêu cầu, nên
+  một HTML thiếu id vẫn xanh ở ca DOM; ca đọc HTML là lớp bắt điều ấy. Đo: M6 đỏ ở CẢ ca DOM và ca đọc HTML.
+- **`veLinkGanDay()` ngay khi các bước mở, TRƯỚC lời gọi riêng của trang, không chờ**: khối là trợ giúp, không phải cổng, và thứ tự
+  lời gọi xác định để `SAU_MO` đo được (`GET /me`, `GET /auth/login-links`, rồi lời gọi của trang).
+- **`datLai()` gọi SAU `docLink()`/`dongCacBuoc()`**: nó đọc mã mới đã ở ô. Đo: M7 đỏ.
+- **Trần + 1 trong MỘT câu đọc** (`LIMIT 101`), không câu `count(*)` thứ hai: một ảnh chụp, một vòng khứ hồi. Đo: tham số
+  `[userId, 7, 101]` ở `login.test.ts`; ca ② đối chiếu CSDL.
+- **Mốc cửa sổ `now()`, không `clock_timestamp()`**: đây là ranh giới HIỂN THỊ, cùng đồng hồ với cửa sổ phát của `issueLoginToken`,
+  và hàm STABLE dùng được làm cận của chỉ mục `(org_id, user_id, created_at)` (029); `status` vẫn suy bằng `clock_timestamp()` như
+  `redeemLoginToken`. Đo: QT3 8/8 (ngữ pháp và PREPARE từng câu sản xuất).
+- **`RecentLoginTokens` không ra cửa `index.ts`**: `index.ts` ngoài danh sách tệp của lô, và nơi dùng duy nhất (route) tách hai trường.
+  Danh sách trắng barrel không đổi; `pnpm test` xanh.
+- **Trang chỉ nhận `truncated === true`**: thân thiếu trường (API cũ hơn trang trong lúc triển khai), `false`, `"true"`, `1` ⇒ không
+  «còn nữa». Đo: M4 đỏ bốn ca.
+- **Hằng 7 ngày của trang đối chiếu với `login.ts` bằng văn bản nguồn** (regex `^const CUA_SO_LINK_GAN_DAY_NGAY = (\d+);$`), không mở
+  thêm một export của `login.ts` chỉ để test đọc. Đo: M2 đỏ ở phép đối chiếu.
+- **Không nhãn `[INV-…]` cho ca mới**: ca 268 đo nội dung và trần của một route trợ giúp, không một bất biến mới; nhãn E1 đã ở ba ca
+  195 (quyền đọc). Thêm nhãn là đổi số đếm của `evidence/INV-matrix.md`. Đo: diff không thêm hay bớt dòng `[INV-` nào; `pnpm test`
+  (cả cổng `tools/inv-matrix`) xanh.
+- **Mã của ca int chèn bằng pool superuser, `created_at` tường minh**: `app_api` không có `UPDATE (created_at)` (029), và trần phát 5
+  mã / 15 phút không cho dựng 101 mã qua đường thật trong một test.
+- **276: bản sao tập trong module, test suy tập từ `RFQ_TRANSITIONS`** — cùng phép suy mà `invitation.int.test.ts` ghim hằng của máy
+  chủ. Module chạy trong trình duyệt, không import gói máy chủ; hằng `RFQ_STATUSES_AFTER_UNSEAL` cũng không đi qua cửa `index.ts` của
+  `invitation`. Đo: M9 đỏ ở cả bảng đơn vị và ca DOM.
+- **Câu báo 276 ở lại inline trong `tao-thau.js`**, không thành hằng ở `tao-thau.ts`: thêm một tên vào khối import `/lib/tao-thau.js`
+  là đụng hunk của PR #217. Ca DOM đo nguyên câu (M10 đỏ).
+- **`tao-thau.*` chạm tối thiểu**: `tao-thau.js` chỉ các dòng bước 1 và câu báo (61 dòng ±), `tao-thau.html` chỉ `#b1` (22), 
+  `tao-thau.ts` một hằng, một dòng, chú thích (14); không dời, không định dạng lại khối nào.
+- **Quét sink HTML ở mức test** trên mã đã gỡ kiểu của mọi module `MODULE_WEB` (`innerHTML`, `outerHTML`, `insertAdjacentHTML`,
+  `document.write`): luật eslint của [S1.107] chỉ đọc `apps/web/trang/*.js`, cấu hình eslint ngoài danh sách tệp của lô, và
+  `dang-nhap` là module `MODULE_WEB` ĐẦU TIÊN chạm DOM. Đo: M8 đỏ.
+- **Lượt đi thử trên cụm thật**: Postgres 16 cục bộ (shim), `pnpm pilot:gia-lap cum` (api, web, khoá công khai), `pnpm gieo:demo`
+  (`NODE_ENV=development TRUSTPROCURE_KEY_ADAPTER=local-dev`); Chromium 1194 qua Playwright, khung 390×844; mã sáu số tính trong kịch
+  bản từ bí mật hiện trên màn; «còn nữa» bằng 100 mã chèn thẳng (superuser) cho `duyet2` — cộng mã của bộ gieo là 101; `UNSEALED` của
+  276 bằng cách đổi thân `GET /api/rfqs/<id>` qua `page.route` — đo MÀN, không đo máy chủ (lớp chặn của máy chủ đo ở §S1.217).
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/a3/dot-bien.py`: sửa MỘT chỗ, chạy đúng tệp/khối test, khôi phục từ bản đã vá và so byte (mọi tệp khớp). Mười
+ca, mười ĐỎ đúng vế:
+
+- M1 [268] `truncated: rows.length > 100` → `>=` ⇒ `login.test.ts` 1 đỏ (`100 hàng: expected true to be false`); int ③ đỏ (`mã cũ
+  hơn 7 ngày không được làm cờ «còn nữa» đúng`).
+- M2 [268] cửa sổ 7 → 1 ngày ⇒ `login.test.ts` ca tham số đỏ, `dang-nhap.test.ts` phép đối chiếu đỏ (`expected 1 to be 7`); int ①
+  (`expected 24 to be 25`) và ③ (`expected 99 to be 100`) đỏ.
+- M3 [268] route bỏ `truncated` khỏi thân ⇒ int ① ② ③ đỏ (`expected undefined to be false/true`); ba ca 195 vẫn xanh.
+- M4 [268] trang đọc `truncated` theo truthy ⇒ 4 ca DOM đỏ (`"truncated":"true"` ⇒ «Còn nữa»).
+- M5 [282] bỏ cổng «đúng một lần» của `doiMaDangNhap` ⇒ 4 ca DOM đỏ, mỗi trang một (`[ 'POST /auth/redeem', …(1) ]` ≠
+  `[ 'POST /auth/redeem' ]`).
+- M6 [282] `chinh-sach.html`: `khoi-ma` hiện sẵn ⇒ ca DOM «lúc tải» đỏ VÀ ca đọc HTML đỏ (`#khoi-ma phải ẩn lúc tải`).
+- M7 [282] `nhom-hang.js`: `hashchange` không gọi `datLai()` ⇒ 1 ca DOM đỏ (đổi mã ⇒ redeem cho mã MỚI).
+- M8 [282] một sink `innerHTML` trong module ⇒ ca quét đỏ (`dang-nhap.js mang một sink HTML`).
+- M9 [276] `nutLoiMoi` MVP1 trả lại `thuHoi: true` ⇒ `tao-thau.test.ts` 2 đỏ (`chưa bật · UNSEALED`), 1 ca DOM đỏ (`UNSEALED:
+  [ 'Gửi lại link', 'Thu hồi' ]`).
+- M10 [276] câu báo trở lại *"vẫn nằm trong gói thầu"* ⇒ 1 ca DOM đỏ.
+
+## 7. Giới hạn, nói ra
+
+- 268: danh sách không phân trang — `truncated` nói có phần bị cắt nhưng không đường nào xem phần ấy. Một người bị phát ≥ 100 link
+  trong 7 ngày (tự phục vụ 5 / 15 phút ⇒ chừng 5 giờ phát dày; `/auth/link` là route vô danh, ai biết email cùng mã tổ chức đều kích
+  được) thấy «còn nữa» mà không thấy hàng «đã dùng» cũ hơn 100 hàng mới nhất — phương án «ưu tiên `CONSUMED`» bị loại ở câu 6; câu
+  «còn nữa» tự nói chừng ấy link là bất thường. Link «đã dùng» cũ hơn 7 ngày không hiện, có chủ đích.
+- 282: `/du-lieu` còn bước 1 cũ (291). Phản hồi `/auth/redeem` về muộn sau khi thẻ đổi mã vẫn gắn cho mã mới (292) — có từ S1.230,
+  nay ở một chỗ. Phép quét sink là regex trên mã đã gỡ kiểu, không phải cây cú pháp — một sink qua tên thuộc tính tính động lọt được;
+  luật eslint của [S1.107] cũng không đọc `MODULE_WEB`.
+- 276: `GOI_SAU_MO_THAU` là bản sao, có ca suy tập giữ nó khớp; trang đọc trạng thái gói lúc nạp — gói bị người khác mở thầu trong lúc
+  trang đang mở vẫn hiện *Thu hồi* tới lần nạp sau (máy chủ vẫn từ chối, 422 và một hàng `RFQ_STATE_DENIED`). *Gửi lại link* ở tổ chức
+  chưa bật hiện ở mọi trạng thái (293).
+- DOM giả không đo CSS, tiêu điểm hay múi giờ (`toLocaleString("vi-VN")`); lượt đi thử chỉ Chromium, một khung; `UNSEALED` của 276
+  dựng ở phía màn.
+- Không chạy `pnpm test:int` trọn hay `pnpm evidence` (đề bài chung mục 1); tệp int chạy: `auth.int`, `mfa.int` của `identity`, hai
+  tệp QT3.
+
+## 8. Số đo
+
+Mọi lệnh ở `/home/user/dot3-wt/A3`; tệp int với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`, từng tệp một lượt, không hai tiến trình Postgres chồng nhau.
+
+- Đo trước (mục 3): HTTP 3 đỏ; đơn vị 268 3 đỏ / 1 xanh; `tao-thau.test.ts` 2 đỏ / 27 xanh; DOM 39 đỏ / 131 xanh. Nền `pnpm vitest run
+  apps/web` trên `deed792`: 9 tệp, 274/274.
+- `pnpm vitest run apps/web`: 10 tệp, 317/317 (16 s) — `phuc-vu` 170, `tao-thau` 29, `dang-nhap` 8, còn lại không đổi.
+- `pnpm vitest run apps/api/src/auth.int.test.ts`: 64/64 (53 s); `-t "khoản 268|khoản 195"`: 6/6.
+- `pnpm vitest run packages/identity --exclude "**/*.int.test.ts"`: 6 tệp, 95/95 (`login.test.ts` 4/4).
+- `pnpm vitest run packages/identity/src/mfa.int.test.ts`: 54/54 (24 s).
+- `pnpm vitest run tests/architecture/qt3-cu-phap.int.test.ts tests/architecture/qt3-ngu-phap.int.test.ts`: 2 tệp, 8/8.
+- `pnpm typecheck`: 0 lỗi. `pnpm exec eslint` trên 14 tệp của lô: 0 lỗi. `pnpm exec depcruise apps/web packages/identity apps/api
+  --config .dependency-cruiser.cjs`: 218 module / 800 cạnh, 0 vi phạm.
+- Đột biến: 10/10 đỏ đúng vế (mục 6).
+- Lượt đi thử Chromium bốn trang: 25/25 khẳng định, 0 lỗi JavaScript.
+- `pnpm t0`: xanh (typecheck, lint, depcruise 499 module / 2074 cạnh, 0 vi phạm; 75 s).
+- `pnpm test`: 135 tệp, 2106 đạt, 1 bỏ qua (tiền tồn), 0 đỏ (196 s).
+
+# §S1.241 — LÔ A4 ĐỢT 3: DÒNG LOG MẤT SỔ MANG MÃ CHỐT VÀ MÃ LÝ DO; CẤU HÌNH WORKER NÊU TÊN KHÔNG NÊU GIÁ TRỊ, LỜI HỨA KHÔNG ĐỌC BA VÒNG ĐO BẰNG HÀNH VI; «NĂM TRÊN SÁU VAI» GẠCH TẠI CHỖ — KHOẢN 279, 270, 172 ĐÓNG, 294, 295 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (279, 270) và rổ C kích hoạt lại (172); không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai lời gọi
+và một danh mục ở `identity`/`danh-gia`, một thông điệp lỗi khởi động của worker, chú thích, test; không route, không màn, không
+migration, không ADR, không export mới ở `index.ts`, không phụ thuộc mới. Đóng 279, 270, 172; mở 294, 295.
+
+## 1. Vòng này là gì
+
+Lô A4 của đợt trả nợ 3, lượt A. Khoản 279 — hai đường từ chối mang MÃ của một tập đóng trong payload (chốt kiểm soát `CONTROL_DENIED`,
+từ chối trạng thái `RFQ_STATE_DENIED`) không đưa mã ấy vào `DenialAuditFailedError.clause`, nên khi lần ghi sổ gãy (khoá ghi sổ bị giữ
+quá trần 2 s của `050` ⇒ 55P03) dòng log của bộ điều phối là `… CONTROL_DENIED RFQ <- error 55P03` cho mười bảy mã, `… RFQ_STATE_DENIED
+RFQ <- error 55P03` cho chín mã — đúng lớp của khoản 179, và cơ chế đã có từ §S1.225. Khoản 270 — lời khai «`evaluation.perform` do năm
+trên sáu vai giữ» thiu từ `083`. Khoản 172 (rổ C, kích hoạt lại) — `cau-hinh.ts` của worker bác quy tắc ⑵ của chính nó ở `docAdapter`, và
+ca ⑼ *"không đọc ba vòng bí mật"* đo bằng đầu ra, xanh cả khi cấu hình đọc rồi vứt.
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Kế hoạch đợt 3 mục 0 (chốt 2026-09-30) xếp 279 và 270 vào "khoản không cần quyết định mới" và 172 vào sáu
+khoản rổ C kích hoạt lại, hình dạng nằm trong thân hàng; đề bài `2026-09-30-tra-no-dot-3/A4.md` chốt hình dạng của cả ba. Các điểm
+tự chốt trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `ba269ae` (mã chưa vá) rồi mới vá. Log ở `scratchpad/a4/`.
+- **279 + 172, mức đơn vị** (`chot-kiem-soat.test.ts`, `tu-choi-vao-so.test.ts` mới; `danh-muc-tu-choi.test.ts` vế ⑷ ⑸ sửa; khối
+  `[S1.241 / khoản 172]` của `cau-hinh.test.ts`) — `do-truoc-unit.log`: **35 đỏ / 95 xanh (130)**. 279: 17 mã chốt vào sổ + ca K8a trên
+  `SUPPLIER` đỏ `expected null to be 'THIEU_NGAN_SACH'` (clause rỗng); 9 mã lý do đỏ `expected null to be 'RFQ_KHONG_CHAM_DUOC'`; ⑷ đỏ
+  `expected [ 'AWARDED', …(47) ] to deeply equal [ 'AWARDED', 'BAFO_CLOSED', …(13) ]`; ⑸ đỏ `expected [ …(3) ] to deeply equal [ …(5) ]`.
+  Đối chứng `vaoSo: false` (2 + 5) và ca A2 xanh sẵn — chúng ghim hành vi cũ đúng. Dòng log của mã cũ in ra (`do-truoc-dong-log.log`):
+  `DenialAuditFailedError CONTROL_DENIED RFQ nguoi=5c663498cd41 <- error 55P03`, `DenialAuditFailedError RFQ_STATE_DENIED RFQ
+  nguoi=5c663498cd41 <- error 55P03`. 172 ⑵: đúng 6 đỏ — hai biến adapter × ba cảnh, `expected 'TRUSTPROCURE_KEY_ADAPTER = "GIA-TRI-L…'
+  not to contain 'GIA-TRI-LA-5b1f9c'`; 45 biến-cảnh còn lại xanh.
+- **279, đường thật** (tệp tạm `packages/danh-gia/src/zz-tam-do-279.int.test.ts`, chạy với cụm PostgreSQL 16 cục bộ rồi xoá —
+  `do-truoc-pg-that.log`): một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (đợi tới khi `pg_locks` thấy khoá được cầm), rồi
+  `tuChoiTheoChot(…, "THIEU_NGAN_SACH")` và `nemTuChoi(…, RFQ_KHONG_CHAM_DUOC)` trên `auditPool` `app_api`: `… CONTROL_DENIED RFQ
+  nguoi=78a2bd679e94 <- error 55P03` sau 2017 ms, `… RFQ_STATE_DENIED RFQ nguoi=78a2bd679e94 <- error 55P03` sau 2005 ms — không mã.
+- **172 ⑼** — khoản ghi "ĐỌC": trên mã thật, cấu hình KHÔNG đọc ba vòng, nên ca mới xanh; phép đo đỏ là một đột biến đọc-rồi-vứt
+  (`void [env["TRUSTPROCURE_TOTP_MASTER_KEYS"], env["TRUSTPROCURE_OTP_PEPPERS"], env["TRUSTPROCURE_RECEIPT_SIGNING_KEYS"]]` đầu
+  `docCauHinh`, `do-truoc-172-dot-bien-doc-vut.log`): ca ⑼ cũ **XANH**, ⑼ mới **ĐỎ ở cả ba cảnh** (`expected [ …(3) ] to deeply equal []`).
+- **270** — khoản về chú thích: phép đo là phép đếm, trên `ba269ae`, năm tệp, bỏ mọi đoạn `~~…~~`, hai mẫu (`sáu|SÁU` + ` vai`; `duy
+  nhất KHÔNG giữ \`evaluation.perform\``) — `khoan-270-dem-lan2.log`: **7 chỗ**: `rfq.ts:120`, `vong-bafo.ts:119`,
+  `doc-bang-xep-hang.ts:18`, `luot-danh-gia.int.test.ts:399` và `:839`, `buyer.ts:592` và `:664`. Hàng sổ đếm năm: nó sót
+  `buyer.ts:591–592` (khối thân `POST /evaluate` của khoản 243 — khớp chính mẫu `sáu vai` của hàng) và `luot-danh-gia.int.test.ts:838–839`
+  (mẫu khác). Quét cả kho (`khoan-270-quet-kho.log`): thêm ADR-053 ở `docs/DECISIONS.md` (sửa tại chỗ cùng vòng) và chín chỗ trong bảy migration
+  đánh số + hai chỗ hardening (khoản 295).
+
+## 4. Thay đổi
+
+- `packages/identity/src/chot-kiem-soat.ts`: `tuChoiTheoChotTaiNguyen` truyền `ma` làm đối số thứ năm của `throwAuditedDenial`; khối đầu và
+  docstring `MaChotKiemSoat` nói thêm một mã là thêm một tên ở `DANH_MUC_VE_CONG`.
+- `packages/danh-gia/src/tu-choi-vao-so.ts`: `nemTuChoi` truyền `loi.lyDo` (cùng nguồn với `payload.ma`) làm đối số thứ năm; docstring
+  `MaTuChoiTrangThai` như trên.
+- `packages/identity/src/rbac.ts`: `DANH_MUC_VE_CONG` thêm 19 mã chốt và 14 mã lý do (15 → 48); docstring của danh mục (hai từ vựng,
+  vì sao chép, tập phẳng), của `DenialAuditFailedError.clause`, của `moTaHangDongCuaLanTuChoi` và của `throwAuditedDenial` gạch tại chỗ
+  "ba chỗ gọi" và "chốt kiểm soát, từ chối trạng thái" khỏi danh sách không truyền; danh sách các chỗ không truyền kể lại đủ chín (mười
+  bốn lời gọi, đếm trên cây cú pháp).
+- `packages/identity/src/danh-muc-tu-choi.test.ts`: `TEP_TRUYEN_VE` năm tệp; `NGUON_VE` thêm `CHOT_VAO_SO`, `VAO_SO`; bộ đọc từ vựng đọc
+  thêm tập KHOÁ của một bảng viết tại chỗ (`tuVungTrongVanBan` tách ra để đối chứng); một ca đối chứng văn bản mẫu (mảng, kiểu hợp,
+  bảng; khoá tính / trải / viết tắt / phương thức / tên vắng ⇒ NÉM); tiêu đề ⑷ ⑸ và khối đầu gạch "ba" tại chỗ.
+- `packages/identity/src/chot-kiem-soat.test.ts` (MỚI, 22 ca) và `packages/danh-gia/src/tu-choi-vao-so.test.ts` (MỚI, 16 ca): pool giả mà
+  lần lấy kết nối gãy `pg.DatabaseError` 55P03; `it.each` mọi mã vào sổ ⇒ `clause` đúng mã, `denial` đúng lời từ chối, dòng
+  `moTaLoiKhongGiaTri` đúng từng ký tự; đối chứng `vaoSo: false` ném thẳng, pool không bị chạm; ca A2 (không id, không thông điệp).
+- `apps/unseal-worker/src/cau-hinh.ts`: `docAdapter` nêu tên biến và tập adapter; quy tắc ⑵ ở khối đầu kể ba thứ là "tên".
+- `apps/unseal-worker/src/cau-hinh.test.ts`: khối `[S1.241 / khoản 172]` (58 ca: đối chứng sáu lối đọc; đối chứng tám tên bí mật với
+  nguồn `api`; ⑼ ×3 cảnh qua tham số và `process.env`; đối chứng tập ⑵ không co; ⑵ 51 cặp cảnh × biến; ranh giới vòng khoá); ca ⑼ cũ gạch
+  câu *"nếu đọc bất kỳ cái nào, nó sẽ ném"*, giữ vế đầu ra; ca ADR-064 một dòng trỏ vế đọc; khối đầu tệp một đoạn.
+- Chú thích khoản 270 (không đổi mã): `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/vong-bafo.ts`, `packages/danh-gia/src/doc-bang-xep-hang.ts`,
+  `packages/danh-gia/src/luot-danh-gia.int.test.ts` (hai chỗ), `apps/api/src/routes/buyer.ts` (hai dòng, số dòng tệp giữ nguyên).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Phép đo giữ lại là test ĐƠN VỊ với pool giả; đường thật đo một lần bằng tệp tạm.** Đề bài cho "test đơn vị cạnh hai tệp của 279" và
+  cổng của lô chạy `packages/identity packages/danh-gia` loại `*.int.test.ts`. Pool giả gãy ở lần lấy kết nối, không ở câu ghi như đời
+  thật — nhưng dòng log so từng ký tự trùng với dòng đo trên PostgreSQL 16 thật (trừ băm của người, khác vì id khác): cùng lớp
+  `DatabaseError`, cùng `error 55P03`, cùng một tầng `cause`.
+- **Danh mục lấy CẢ từ vựng, kể cả mã `vaoSo: false`** (2 mã chốt, 5 mã lý do không bao giờ tới dòng mất sổ): nguồn là một tập, đo nó
+  nguyên vẹn rẻ hơn đo một hiệu — cùng lý do §S1.225 lấy đủ 11 `RFQ_STATUSES`.
+- **Vế ⑷ đọc tập KHOÁ của `CHOT_VAO_SO`/`VAO_SO`, không đọc union `MaChotKiemSoat`/`MaTuChoiTrangThai`**: theo chữ đề bài; hai tập bằng
+  nhau ở biên dịch (`Record` đầy đủ). Bộ đọc mới NÉM với mọi khoá không phải tên/chuỗi trực tiếp — đo bằng ca đối chứng văn bản mẫu.
+- **`rbac.ts` chép, không import `CHOT_VAO_SO`** dù cùng gói: `chot-kiem-soat.ts` import `throwAuditedDenial` từ `rbac.ts`, và một danh
+  mục dựng lúc nạp mô-đun trên một vòng import thì tuỳ thứ tự nạp mà gặp TDZ; ⑷ canh bản chép.
+- **Không đổi tên `DANH_MUC_VE_CONG`** dù nay chứa mã, không chỉ "vế cổng": đổi tên chạm `mo-ta-hang-dong.test.ts` (ngoài danh sách);
+  docstring nói rõ nội dung và tính chất tập phẳng.
+- **Không nhãn `[INV-…]` cho hai tệp test mới** — cùng lý do §S1.225 mục 5: đo nội dung chẩn đoán của dòng log, không một bất biến
+  của `TEST-PLAN`; không cần sửa `so-khai-nhan.ts`, `INV-matrix` không đổi.
+- **Sửa luôn danh sách "các chỗ gọi khác" ở docstring `throwAuditedDenial`** (thiếu năm chỗ): cùng đoạn đang gạch, và đếm trên cây cú
+  pháp (14 lời gọi, 5 có vế) cho con số đo được thay câu cũ.
+- **172 — tên phiên bản của vòng khoá là TÊN, giữ trong thông điệp của `docVong`.** Đo được: nhãn đi vào `org_key_pairs.key_version`
+  (`createLocalDevOrgKeyProvisioner` → `packages/sealed-envelope/src/key-material.ts`), tức một định danh nằm sẵn trong CSDL; khoá 32 byte ở
+  base64 (44 ký tự) hay hex (64) dài hơn trần 32 ký tự của `TEN_PHIEN_BAN`. Ca "ranh giới" ghim phía còn lại: vật liệu khoá sau `=` không
+  ra thông điệp nào, kể cả khoá dán thiếu tên hay dán ngược `<khoá>=v1`.
+- **172 — thông điệp mới giữ chữ `CHƯA TỒN TẠI`** (ca cũ "adapter CHƯA TỒN TẠI" ghim nó) và câu "Hôm nay chỉ có: …" (tập đóng — hằng
+  của tệp).
+- **172 — bẫy GHI chứ không NÉM**, và bẫy cả `getOwnPropertyDescriptor`: một cấu hình bọc lượt đọc trong `try` nuốt được lỗi ném từ
+  bẫy, không nuốt được tên đã ghi; bộ mô tả mang giá trị. Cái giá: `Object.keys` cũng đi qua bẫy ấy nên liệt kê tên bị tính là đọc — nghiêng
+  về phía an toàn, và `docCauHinh` hôm nay không liệt kê. Đo bằng ca đối chứng sáu lối đọc.
+- **172 — tám tên bí mật** (sáu biến ba vòng + hai CMK của ADR-064): lời hứa ⑼ và lời hứa ADR-064 là cùng một lớp ("tiến trình mở phong
+  bì không cầm lối vào bí mật nào khác"), cùng tệp test; ca ADR-064 cũ đo đầu ra y như ca ⑼ cũ. Ca đối chiếu tên với nguồn `api` đọc văn
+  bản, không import (không cạnh depcruise).
+- **172 — tập biến của ⑵ lấy từ bẫy, không từ danh sách viết tay**, để biến mới tự vào phép đo; sau đột biến M6 (cấu hình chép cả môi
+  trường làm tập co về đúng các khoá có mặt mà đối chứng cũ vẫn xanh), đối chứng đòi thêm bốn biến VẮNG mặt trong môi trường nền.
+- **172 — ⑼ bẫy cả `process.env` trong lúc gọi** (đồng bộ, `finally` trả lại): thêm sau lượt soi đối kháng — một cấu hình đọc thẳng
+  `process.env` đi vòng qua bẫy trên tham số (đột biến M9).
+- **270 — gạch cả hai chỗ ngoài năm chỗ hàng sổ kể** (`buyer.ts:591–592`, `luot-danh-gia.int.test.ts:838–839`): cùng lời khai, trong tệp
+  được chạm, chỉ chú thích. `buyer.ts`: hai dòng đổi tại chỗ, không thêm dòng, không dời khối (PR #217). Câu lịch sử của `rfq.ts`
+  («S1.106 vừa mở cửa … cho năm trên sáu vai») gạch thành «bảy vai hôm nay (sáu lúc S1.106 …)» — đúng ở cả hai thời điểm.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/a4/dot-bien.py`: áp một chỗ sửa (đòi chuỗi cũ xuất hiện đúng một lần), chạy đúng tệp test (`--reporter=verbose`),
+khôi phục từ bản sao, so byte (`filecmp`); lượt cuối trên bản cuối, sha256 bốn tệp mã trước/sau trùng. Chín ca, chín ĐỎ, không ca sống
+(`dot-bien-lan-cuoi.log`):
+- M1 [279] `chot-kiem-soat.ts` thôi truyền `ma` ⇒ 19 đỏ / 61: 17 mã (`expected null to be 'THIEU_NGAN_SACH'`), ca K8a, ⑸.
+- M2 [279] `tu-choi-vao-so.ts` truyền mã HẰNG `"RFQ_KHONG_CHAM_DUOC"` ⇒ 8 đỏ / 72 (`expected 'RFQ_KHONG_CHAM_DUOC' to be
+  'RFQ_KHONG_DE_XUAT_DUOC'`, …); ca `RFQ_KHONG_CHAM_DUOC` và ⑸ xanh — ⑸ chỉ đo CÓ đối số, giá trị đo ở ca đơn vị.
+- M3 [279] `DANH_MUC_VE_CONG` thiếu `J5_LUOT_CHAM_KHONG_MOI_NHAT` ⇒ 2 đỏ: ⑷ (`[ 'AWARDED', …(47) ]` ≠ `…(46)`) và ca J5 (`Received:
+  "DenialAuditFailedError CONTROL_DENIED RFQ HANG_LA nguoi=5c663498cd41 <- error 55P03"`); `mo-ta-hang-dong.test.ts` xanh — nó lặp trên
+  chính danh mục, nên phép canh "phủ chỗ gọi" là ⑷.
+- M4 [279] một mã chốt MỚI (`K99_THU_DOT_BIEN`, vào sổ) ở `MaChotKiemSoat`/`CHOT_VAO_SO` mà không thêm vào danh mục ⇒ 2 đỏ: ⑷ và ca của
+  mã ấy — đúng lời hứa "cái giá của tập đóng, trả lúc viết mã".
+- M5 [172] `docAdapter` nêu lại giá trị ⇒ 6 đỏ (⑵, hai biến adapter × ba cảnh).
+- M6 [172] `docCauHinh` chép cả môi trường (`const env = { ...envGoc }`) rồi đọc bản chép ⇒ 4 đỏ: ⑼ ×3 và đối chứng chống co của ⑵.
+- M7 [172] `docThuMucTuyetDoi` nêu giá trị ⇒ 2 đỏ (⑵ `TRUSTPROCURE_ALERT_DIR` ở hai cảnh dev-file; cảnh `ses` đọc biến ấy ở phép loại trừ,
+  không qua hàm này).
+- M8 [172] `docVong` nêu vật liệu khoá khi base64 sai ⇒ 1 đỏ (ca ranh giới vòng khoá); ⑵ xanh — giá trị lạ không có dấu `=`.
+- M9 [172] `docCauHinh` đọc thẳng `process.env["TRUSTPROCURE_OTP_PEPPERS"]` ⇒ 3 đỏ (⑼, "đọc thẳng process.env"). Trước lượt soi đối kháng
+  ca này sống — lý do bẫy `process.env` có mặt.
+Khoản 270 không có đột biến mã (chỉ chú thích); phép đếm ở mục 3 là phép đo của nó.
+
+## 7. Giới hạn, nói ra
+
+- 279: pool giả gãy ở lần lấy kết nối, không ở câu `noi_chuoi_kiem_toan()`; đường thật đo một lần (tệp tạm, không vào kho) — kho không
+  giữ ca int nào cho hai đường này (vế HTTP của khoản 179 ở `apps/api/src/log-tu-choi-mat.int.test.ts` phủ cùng cơ chế cho cổng mở thầu).
+- `DANH_MUC_VE_CONG` là MỘT tập phẳng: nó canh "tên thì được, giá trị thì không", không canh "vế thuộc đúng từ vựng của `action`" — một
+  trạng thái RFQ đặt dưới `CONTROL_DENIED` vẫn ra nguyên văn. Không phải lỗ A2 (một tên đã khai), là giới hạn chẩn đoán.
+- ⑸ chỉ đo SỰ CÓ MẶT của đối số thứ năm (M2); giá trị đo ở hai tệp đơn vị, cho đúng hai đường ấy. Một đường thứ sáu truyền sai vế thì
+  ⑸ đỏ (tệp lạ) nhưng giá trị của nó không ai đo cho tới khi có ca riêng.
+- Chín lời gọi không truyền vế nhận ra được từ `action` hay mẫu route; đường thu hồi lời mời sau mở thầu (`RFQ_STATE_DENIED {ma}`) dựa
+  vào việc nó là lời gọi `RFQ_STATE_DENIED` DUY NHẤT trên route thu hồi — một lời gọi thứ hai cùng `action` trên route ấy làm dòng mơ hồ.
+- Liên lô, đã nêu cho người tích hợp: B4 thêm một mã chốt ⇒ ⑷ đỏ cho tới khi tên vào `DANH_MUC_VE_CONG`; B1 thêm `lyDo` thứ hai cho `UNSEAL_CANCEL_DENIED`
+  trên cùng route ⇒ dòng mất sổ của huỷ yêu cầu mở thầu mơ hồ (lớp 279).
+- 172 ⑼ đo `docCauHinh` (tham số + `process.env` trong lúc gọi). Phần còn lại của tiến trình worker đo bằng ĐỌC: trong các gói worker
+  dùng, chỉ `packages/crypto-keys/src/moi-truong.ts` đọc `process.env` — `TRUSTPROCURE_KEY_ADAPTER`, `NODE_ENV`,
+  `TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS`, `TRUSTPROCURE_ALLOW_DEV_SINKS`; tám tên bí mật không xuất hiện trong mã nào ngoài `apps/api` và tệp
+  test này.
+- 172 ⑵ quét mỗi biến bằng MỘT hình dạng giá trị lạ (có khoảng trắng, không `=`, không `,`); nhánh chỉ nêu giá trị ở hình dạng khác (tên
+  phiên bản của `docVong`) nằm ngoài phép quét — theo quyết định mục 5, và ca ranh giới ghim vật liệu khoá.
+- `main.ts` của worker in `name: message` cho lỗi khởi động không phải `CauHinhError` — ví dụ `KeyError` của `assertLocalDevAllowed` nêu giá
+  trị `NODE_ENV`; không phải bí mật, ngoài phạm vi, không mở khoản.
+- `apps/api/src/cau-hinh.ts` còn nêu giá trị ở ba biến và cổng `ma-chep-api-worker` khai rộng hơn phép đo — khoản 294, không vá (ngoài
+  danh sách tệp). Lời khai «năm trên sáu vai» trong migration/hardening và «Sáu vai trò mặc định» — khoản 295.
+- Khối đầu `packages/identity/src/mo-ta-hang-dong.test.ts` (ngoài danh sách) kể nguồn vế của §S1.225 — đúng như một lời kể lịch sử, không
+  sửa; ca "không rỗng ruột" của nó lặp trên danh mục nên tự phủ 33 tên mới.
+- Không chạy `pnpm test:int` trọn, `pnpm evidence` (tệp cấm; không nhãn INV mới nên `INV-matrix` không cần sinh lại vì lô này).
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/A4`; vitest int với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`. Log ở `scratchpad/a4/`.
+- Đo trước (`ba269ae` + ca mới): bốn tệp 35 đỏ / 95 xanh (130); đường thật `CONTROL_DENIED RFQ nguoi=…` 2017 ms, `RFQ_STATE_DENIED RFQ
+  nguoi=…` 2005 ms (1 đỏ); đột biến đọc-rồi-vứt: ca ⑼ cũ xanh, ⑼ mới 3 đỏ; khoản 270: 7 chỗ.
+- Sau vá: bốn tệp 130/130; đường thật `… CONTROL_DENIED RFQ THIEU_NGAN_SACH nguoi=5f2fcf34793c <- error 55P03` 2015 ms, `…
+  RFQ_STATE_DENIED RFQ RFQ_KHONG_CHAM_DUOC nguoi=5f2fcf34793c <- error 55P03` 2005 ms (1/1); khoản 270: 0 chỗ.
+- Đột biến: 9 ca / 9 đỏ, 0 sống; khôi phục nguyên văn (so byte, sha256).
+- Cổng của lô: `pnpm vitest run packages/identity packages/danh-gia --exclude "**/*.int.test.ts"` — 8 tệp / 163 ca xanh (3,6 s);
+  `pnpm vitest run packages/danh-gia/src/luot-danh-gia.int.test.ts` — 101/101 (12,3 s); `pnpm vitest run apps/unseal-worker/src/cau-hinh.test.ts`
+  — 82/82 (từ 24).
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 497 module / 2074 cạnh, 0 vi phạm (69,7 s).
+- `pnpm test`: 135 tệp, 2156 xanh | 1 bỏ qua (tiền tồn) (2157), 201,3 s — gồm `tests/architecture` (`ma-chep-api-worker` mục III xanh với
+  thông điệp mới của worker). Không ca đỏ nào chờ bàn giao được áp.
+- Sau khi viết tệp bàn giao (đã `git add`, để các cổng quét tệp git theo dõi thấy nó): `pnpm vitest run tests/architecture` — 37 tệp đơn
+  vị xanh (494 ca xanh, 8 bỏ qua); hai tệp `qt3-cu-phap.int.test.ts`, `qt3-ngu-phap.int.test.ts` lọt vào lượt chạy (thiếu `--exclude`, không
+  đặt biến cụm cục bộ) và đỏ ở bước dựng Postgres — `Could not find a working container runtime strategy`: môi trường, không phải cổng
+  của lô (lô không đổi câu SQL nào), không chạy lại.
+- Lỗ kề (mục 7): `api` `docCauHinh` đọc 40 biến, 3 nêu giá trị (`do-api-cau-hinh.log`, tệp tạm đã xoá); 14 lời gọi `throwAuditedDenial`,
+  5 có vế (`dem-goi.log`).
+
+# §S1.242 — LÔ A5 ĐỢT 3 — POOL CỤM THỬ ĐẾM `SESSION_STATE_LEFT`, CỤM CỤC BỘ `TimeZone = UTC` NHƯ CONTAINER, BA VẾ TEST ĐỌC ĐÚNG NGUỒN — KHOẢN 281, 287, 273, 265, 181 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — hạ tầng test (`packages/test-support`) và bốn tệp test;
+không route, không màn, không migration, không ADR. Đóng 281, 287, 273, 265 (rổ B) và 181 (rổ C, kích hoạt lại theo kế hoạch đợt 3
+câu 1); mở 296, 297 (rổ B đề xuất).
+
+## 1. Vòng này là gì
+
+Lô A5 của lượt A đợt 3 (`docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/A5.md`). Năm khoản cùng
+một lớp: một phép đo của bộ test đứng sai chỗ hay đọc sai nguồn, nên nó im đúng lúc nó phải kêu. **281** — hai pool của cụm thử
+không nghe tín hiệu ⑴ của `withTenant` (`release` mang `SESSION_STATE_LEFT`), nên một giao dịch để sót trạng thái phiên dưới test chỉ
+làm một kết nối biến khỏi pool. **287** — cụm cục bộ khác `postgres:16-alpine` ở `TimeZone` mặc định trong khi đầu
+`postgres-cuc-bo.ts` khai ba cờ là khác biệt DUY NHẤT (T3 của PR #216 đỏ vì thế). **273** — vế ⓷ của
+`khoa-ghi-so-nguoi-giu.int.test.ts` lọc hai vai trong khi mục hardening nó bảo chứng lọc bốn. **265** — tập ghim `NOBYPASSRLS` của
+`hardening-suy-tu-tinh-chat.int.test.ts` loại vai ngoài cây bằng THỨ TỰ CỜ. **181** — bộ lọc D2 đối chiếu với `019` (migration đã áp,
+không thể trôi) thay vì thân mà hardening áp lại.
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Hình dạng của cả năm khoản nằm trong thân hàng và đề bài lô; kế hoạch đợt 3 mục 0 chốt 2026-09-30: câu 1
+(phạm vi, 181 kích hoạt lại từ rổ C), câu 2 (264–285 vào rổ B), và dòng «khoản không cần quyết định mới: … 265, … 273, … 281, TZ …».
+
+## 3. Đo trước
+
+Trên `ba269ae`, PostgreSQL 16 cụm cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`), mỗi khoản một ca đỏ, viết TRƯỚC khi vá mã:
+
+- **281** — năm ca mới ở `packages/test-support/src/postgres.int.test.ts`; ba ca không cần API mới chạy trên `postgres.ts` cũ (`-t`),
+  cả ba ĐỎ `expected undefined to be an instance of Error`: `withTenant(db.pool, …, set_config('app.org_id', …, false))` — tiền đề
+  xanh (giao dịch commit, `withTenant` không ném) — rồi `stop()` ĐI QUA; cùng cảnh trên `poolAs("app_api")` qua `withMigratedDatabase`
+  ⇒ đi qua; khai một lần mà không dựng cảnh ⇒ đi qua. Tức hôm nay một kết nối bị huỷ và bộ test xanh.
+- **287** — ca mới `packages/test-support/src/postgres-cuc-bo.int.test.ts`: `SHOW TimeZone` trên cụm của `startPostgres()` ⇒ ĐỎ
+  `expected 'Etc/UTC' to be 'UTC'`. Đo thẳng qua shim `runuser` (`/etc/localtime` → `Etc/UTC`): `initdb` không `TZ` ghi
+  `timezone = 'Etc/UTC'`, `log_timezone = 'Etc/UTC'`; dưới `TZ=UTC` ghi `UTC` cả hai; các dòng khác `initdb` ghi (`max_connections`,
+  `shared_buffers`, `datestyle`, `default_text_search_config`, bốn `lc_*`) không đổi theo `TZ`.
+- **273** — vế ⓷ viết lại đối chứng dương thành vòng qua bốn vai của `VAI_UNG_DUNG`, mệnh đề hai tên CŨ giữ nguyên (`-t "⓷"`) ⇒ ĐỎ:
+  `{ app_api: […], app_unseal: […], app_neo: [], app_khoi_tao: [] }` — mệnh đề cũ mù ở hai cây của ADR-072/ADR-111.
+- **265** — hai đột biến văn bản hardening (khôi phục bằng `cp` rồi `cmp`), vế «[sổ nợ 3]» cũ (`-t`): «sửa cho đều» cờ của hàng
+  `app_liet_ke_to_chuc` (`NOSUPERUSER NOBYPASSRLS …`) ⇒ ĐỎ `tám tên được ghim NOBYPASSRLS: expected […(9)]` — thông điệp nói về cây,
+  không về thứ tự; hàng `app_api` viết `NOBYPASSRLS NOSUPERUSER …` ⇒ ĐỎ `[…(7)]` — một tên ĐANG ghim mà phép quét không thấy.
+- **181** (hàng ghi «ĐỌC»; ca đỏ dựng bằng đột biến văn bản hardening, khôi phục bằng `cp` rồi `cmp`): sửa câu D2
+  `phai den tu mot PHIEN KHAC` thành `phai tu mot PHIEN KHAC` ở thân câu sửa của hàng `hàm + trigger unseal_kiem_nguoi_duyet (019)`, bộ
+  lọc không đổi ⇒ tệp cũ `loc-vi-pham-d2.test.ts` XANH 5/5 — `$than$` của hậu điều kiện còn giữ câu cũ nên `includes` của §R3 thoả.
+  Đổi hẳn câu ở cả thân câu sửa lẫn `$than$` ⇒ tệp cũ đỏ 1/5, chỉ ở §R3 (bộ lọc vẫn được đo với `019`).
+
+## 4. Thay đổi
+
+- **`packages/test-support/src/postgres.ts`** (khoản 281): `import { TenantError } from "@trustprocure/tenancy"`; kiểu
+  `TuyChonDemTrangThaiPhien { soLanSessionStateLeft?: number }`; `startPostgres(tuyChon)`, `poolAs(role, tuyChon)`,
+  `withMigratedDatabase(fn, tuyChon)`; khối lý do `[S1.242 / khoản 281]` (bốn điểm đã cân); `ganBoDem` (`pool.on("release", …)`
+  đếm đúng `TenantError` mã `SESSION_STATE_LEFT`), `noiGoi` (`tệp:dòng` của người gọi đọc từ ngăn xếp, tương đối với gốc kho),
+  `soLanKhai` (số nguyên không âm, sai hình dạng NÉM trước khi dựng cụm), `moTaLech` (tên, nơi dựng, số — không giá trị). `stop()`:
+  chốt số đếm sau khi mọi pool đóng, dừng máy chủ, rồi ném MỘT lỗi gộp lời phán khoản 28 và khoản 281. Không thêm chỗ dựng pool,
+  `.connect()` hay `pool.query(` nào (ba danh sách khai của `duong-sql-ngoai-with-tenant` không đổi).
+- **`packages/test-support/src/postgres.int.test.ts`**: describe `[S1.242 / khoản 281]` năm ca — pool superuser không khai ⇒ ném sau
+  khi dừng cụm (`cumDaDung`), nêu tệp và `pool superuser (dựng ở …:N) đếm 1, khai 0`, không mang UUID; `poolAs("app_api")` qua
+  `withMigratedDatabase` ⇒ nêu pool và nơi dựng; khai đúng (hai lần trên `poolAs` — GUC tenant và `row_security` phạm vi phiên —, một
+  trên superuser) ⇒ đi qua, còn `destroyConnectionWhenDone` và `KetNoiNhiemError` của lần lấy client KHÔNG được đếm; khai 1 đếm 0 ⇒
+  ném; khai −1, 1,5, NaN ⇒ ném trước khi chạm cụm.
+- **`packages/outbox/src/outbox.int.test.ts`** `[T10-L]`: hai `db.poolAs("app_api")` của «bật `destroyConnectionWhenDone`» (lần thứ
+  ba `SET search_path` phạm vi phiên) và «ĐƯỜNG SẢN PHẨM» (handler `GAY_O_NHIEM`) khai `{ soLanSessionStateLeft: 1 }`, chú thích lý do.
+- **`packages/test-support/src/postgres-cuc-bo.ts`** (khoản 287): `initdb` chạy với `env: { ...process.env, TZ: "UTC" }`; lời khai
+  «ba cờ là khác biệt DUY NHẤT» gạch tại chỗ, thay bằng «cấu hình máy chủ duy nhất tệp này CHỌN khác container» cùng danh sách khác
+  biệt ĐÃ BIẾT (locale và libc, bản vá nhỏ PostgreSQL 16, phần ống nối) — ĐÃ BIẾT, không phải ĐỦ; khối mới kể TimeZone, phép đo, lý
+  do chọn `initdb` thay cờ `-c`.
+- **`packages/test-support/src/postgres-cuc-bo.int.test.ts`** (mới): `SHOW TimeZone` = `UTC` trên cụm của `startPostgres()` — chạy
+  cả hai đường, trên CI là giá trị của container; đường cục bộ đòi thêm nguồn `configuration file`.
+- **`db/khoa-ghi-so-nguoi-giu.int.test.ts`** (khoản 273): `CAU_VAI_UNG_DUNG_CON_EXECUTE` lọc `g.rolname = ANY($2::text[])`,
+  `vaiConExecute()` truyền `VAI_UNG_DUNG`; `cayTrongHardening()` đọc nguyên văn mệnh đề `g.rolname IN (…)` của hằng
+  `VAI_KET_NOI_UNG_DUNG` (không thấy ⇒ NÉM); vế ⓷ mở bằng phép đối chiếu hai tập, đếm đủ vai trên cụm, đối chứng dương cấp/thu hồi cho
+  TỪNG vai. Chú thích cũ gạch tại chỗ.
+- **`db/hardening-suy-tu-tinh-chat.int.test.ts`** (khoản 265): khối lý do, `VAI_NGOAI_CAY` (một dòng: `app_liet_ke_to_chuc`, lý do
+  khoản 164), `tapGhimNobypassrls(sql)`; describe mới `[S1.242 / khoản 265]` (hai `it`, không cụm: tám mẫu; phép đảo ngược danh sách
+  cờ của mọi câu `ALTER ROLE … $q$` trên hardening thật cho cùng tập, ≥ 9 câu ghim đổi thứ tự); vế «[sổ nợ 3]» đọc tập ghim qua hàm
+  mới, trừ `VAI_NGOAI_CAY`, cộng chiều dòng khai thiu và phép đo lý do trên cụm (`rolinherit = false`, không thành viên của vai nào
+  trong `VAI_UNG_DUNG`, không có trong cây). Tám tên của cây không đổi. Hardening không đổi.
+- **`packages/unseal/src/loc-vi-pham-d2.test.ts`** (khoản 181): `thanCauSua()` (thân `CREATE OR REPLACE FUNCTION … AS $ham$…$ham$`
+  của hàng có nhãn `$q$hàm + trigger unseal_kiem_nguoi_duyet (019)$q$`, nhãn đúng một lần, hàng cắt tới dòng đóng), `thanChuan()`
+  (`$than$…$than$` cùng hàng), `thanTrong019()` (tên cũ `thanKiemNguoiDuyet`); ba vế bộ lọc chạy trên thân câu sửa; §R3 thành «thân
+  câu sửa và thân chuẩn cùng câu `RAISE`»; vế LỊCH SỬ mới «câu `RAISE` của `019` = của thân hardening, từng chữ, đúng thứ tự»; vế chuỗi
+  cũ giữ nguyên. Tên describe và đầu tệp gạch tại chỗ. 5 → 6 `it`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **281 — đòi BẰNG, không «không quá».** Khai 1 mà đếm 0 là tiền đề của test đã mất; đo: đột biến `!==` → `>` làm đúng ca «khai 1,
+  đếm 0» đỏ, không ca nào khác.
+- **281 — khai theo POOL, không theo tệp.** Pool dựng trong `it` mang lời khai của chính nó, nên `-t` bỏ `it` thì bỏ cả lời khai; hai
+  pool cố ý của `outbox.int` đều dựng trong `it`. Cái giá, nói ra: một test cố ý dựng cảnh trên pool DÙNG CHUNG của tệp phải dựng pool
+  riêng để khai.
+- **281 — `instanceof TenantError` qua `@trustprocure/tenancy`, không so tên.** Cùng điều kiện các bộ nghe của api, worker và bốn tool
+  dùng (`ma-chep-api-worker` ghim nguyên văn ấy); đo: hai ca đếm đúng qua `withTenant` import từ cùng gói. `test-support` không khai
+  `@trustprocure/tenancy` trong `package.json` (tệp ngoài danh sách của lô; không cổng nào đòi — vế ⑷ của `pham-vi-san-xuat` miễn gói
+  `testOnly`) — mục 9.
+- **281 — «tệp» trong lời phán là tệp gọi `startPostgres`, đọc từ ngăn xếp.** Vitest ánh xạ ngăn xếp về mã nguồn (đo: dòng in ra khớp
+  dòng thật); không đọc được thì in «(không đọc được nơi gọi)», không ném — phép đo không được làm hỏng việc dọn.
+- **287 — `initdb` dưới `TZ=UTC`, không cờ `-c timezone=UTC`.** Đo trên hai cụm tạm: `ALTER SYSTEM SET timezone` + nạp lại đổi được
+  giá trị đến từ `postgresql.conf` và KHÔNG đổi được giá trị đến từ dòng lệnh. Container lấy từ `postgresql.conf`, nên chỉ đường
+  `initdb` giữ cùng thứ bậc ưu tiên.
+- **287 — ca đo chạy qua `startPostgres()`, không gọi thẳng `khoiDongCumCucBo`.** Không bị bỏ qua trên CI (ở đó nó ghim giá trị của
+  container, đã thấy ở T3 của #216); vế nguồn chỉ chạy ở đường cục bộ, vì nguồn của container không đo được ở máy không Docker.
+- **273 — `VAI_UNG_DUNG` thay vì chuỗi của hardening, cộng phép đối chiếu hai tập.** Lý do ở hàng 273; đo: hardening bỏ `app_khoi_tao`
+  khỏi `VAI_KET_NOI_UNG_DUNG` ⇒ vế đối chiếu đỏ — một vế đọc chính chuỗi ấy sẽ hẹp theo, im lặng.
+- **273 — đối chứng dương cấp cho TỪNG vai một, không cấp cả bốn một lần.** Cấp một lần thì một mệnh đề chỉ thấy vài vai vẫn ra một tập
+  không rỗng; từng vai một đòi đúng một hàng mỗi lần.
+- **265 — bỏ chú thích `--` trước khi quét.** Đọc cả chú thích thì gỡ hàng ghim thật của một vai mà một chú thích còn nhắc câu ấy vẫn xanh;
+  bỏ chú thích chỉ có thể làm MẤT tên (đỏ), không thêm tên. Đo: bỏ bước lột ⇒ mẫu «chú thích không tính» đỏ.
+- **265 — lý do của `VAI_NGOAI_CAY` đo trên cụm.** Lời khai có răng: ai đó cấp một vai ứng dụng cho `app_liet_ke_to_chuc` hay bật
+  INHERIT thì vế đỏ ngay, không lặng lẽ loại một thành viên của cây khỏi phép so.
+- **265 — phép đảo ngược thứ tự cờ trên hardening THẬT trong bộ nhớ**, dạng thường trực của hai đột biến đo trước: không buộc test vào
+  văn bản của một hàng (chú thích hardening dặn ngày mở phép quét thì đưa `NOSUPERUSER` lên đầu — việc ấy nay không đổi kết quả).
+- **181 — nguồn là thân CÂU SỬA, và thân chuẩn `$than$` cùng hàng phải cùng câu.** Câu sửa là văn bản hardening dựng lại; `$than$` là
+  văn bản mà thân đang chạy phải khớp. Đo: đột biến chỉ ở `$than$` ⇒ §R3 mới đỏ 1/6 (tệp cũ 5/5 xanh); chỉ ở câu sửa ⇒ ba vế đỏ.
+- **181 — vế LỊCH SỬ so câu `RAISE`, không so cả thân.** Lô B1 (khoản 266) định nghĩa lại hàm này bằng migration mới và `USING
+  CONSTRAINT`; so cả thân sẽ đỏ vì một thay đổi hợp lệ không chạm thông điệp.
+
+## 6. Đột biến
+
+Mỗi ca thay đúng một chuỗi (xuất hiện đúng một lần) trên bản đã vá, chạy đúng tệp test, khôi phục bằng `cp` từ bản đã lưu, `cmp`
+nguyên vẹn sau mọi ca. Ca làm hỏng `stop()` chạy dưới một thư mục cụm riêng (`tp-test/a5-dotbien`) để dọn cụm bị bỏ lại mà không
+chạm cụm của lô khác.
+
+- D1 (281) — `poolAs` không gắn bộ đếm ⇒ 2 đỏ: ca `poolAs("app_api")` và ca «khai 1, đếm 0» (`expected undefined …`).
+- D2 (281) — `b.dem !== b.khai` → `b.dem > b.khai` ⇒ 1 đỏ: «khai 1, đếm 0».
+- D3 (281) — đếm mọi lỗi của `release` (`if (loi)`) ⇒ 1 đỏ: ca đối chứng «khai đúng số lần», `poolAs("app_api") … đếm 4, khai 2`.
+- D4 (281) — ném trước `mayChu.dung()` ⇒ 1 đỏ: ca pool superuser, `cumDaDung` — cụm còn nhận kết nối (`promise resolved … instead of
+  rejecting`). Ba cụm bị bỏ lại, đã dừng và xoá.
+- D5 (287) — bỏ `TZ=UTC` ⇒ đỏ `expected 'Etc/UTC' to be 'UTC'`.
+- D6 (273) — mệnh đề về `IN ('app_api','app_unseal')` (giữ `$2` vô hại) ⇒ đỏ ở đối chứng dương từng vai.
+- D7 (273) — hardening bỏ `app_khoi_tao` khỏi `VAI_KET_NOI_UNG_DUNG` ⇒ đỏ ở phép đối chiếu hai tập (`['app_api','app_neo','app_unseal']`).
+- D8 (265) — `tapGhimNobypassrls` về biểu thức chính quy cũ ⇒ 3 đỏ: mẫu (`['a']` thay `['a','b']`), phép đảo («chống rỗng ruột: … 8 ≥ 9»),
+  dòng khai thiu `app_liet_ke_to_chuc` ở «[sổ nợ 3]».
+- D9 (265) — bỏ bước lột chú thích ⇒ mẫu đỏ (`['d','e']`).
+- D10 (181) — bộ lọc `requests.ts` về chuỗi chết cũ `phai o mot PHIEN khac` ⇒ đỏ «một câu `RAISE` D2 mà bộ lọc KHÔNG khớp là một vế chết».
+- Ca SỐNG của lượt soi đối kháng (287): thay `TZ=UTC` bằng cờ `-c timezone=UTC` ⇒ vế giá trị XANH (giá trị như nhau). Vế nguồn thêm
+  vào vì thế; chạy lại cùng đột biến ⇒ đỏ `expected 'command line' to be 'configuration file'`.
+- Đột biến văn bản hardening của 181 và 265 ở mục 3, chạy lại trên bản mới: 181 (`phai tu` ở câu sửa) ⇒ 3/6 đỏ; 181 (đổi hẳn câu ở hai
+  chỗ) ⇒ 2/6 đỏ; 181 (`phai tu` CHỈ ở `$than$`) ⇒ 1/6 đỏ, đúng §R3 — tệp cũ 5/5 xanh; 265 (hai đột biến thứ tự cờ cùng lúc) ⇒ 3/3
+  xanh — đúng điều khoản 265 đòi.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá.** 296: bộ đếm của 281 chỉ ở `startPostgres`; 96 chỗ dựng pool từ `db.connectionString` ở 18 tệp
+  int và pool của composition root ở sáu tệp dựng tiến trình không đếm. 297: mười ba chỗ mã ở sáu tệp test còn lọc vai ứng dụng bằng
+  hai tên.
+- **Chú thích thiu ngoài tầm lô.** (a) `db/migrations/hardening.always.sql`, chú thích trên hàng `thuộc tính role app_liet_ke_to_chuc`
+  («THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — … Ngày phép quét mở cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách
+  của test trong CÙNG commit») — phép quét nay đọc bất kể thứ tự và vai ấy đã khai; lượt A không sửa hardening. (b)
+  `packages/db/src/vai-tro.int.test.ts` 541–542 («`initdb` lấy theo máy — `Etc/UTC` ở cụm cục bộ trên Ubuntu») — cụm cục bộ nay `UTC`;
+  tệp ngoài danh sách của lô. Đề nghị gạch tại chỗ, gửi người tích hợp cùng bàn giao lô: (a) gạch cả bốn dòng ấy, ghi «[S1.242 /
+  khoản 265] thứ tự cờ ở đây không còn nghĩa gì — phép quét đọc bất kể thứ tự, vai này đứng ngoài bằng lời khai `VAI_NGOAI_CAY`»;
+  (b) gạch «`Etc/UTC` ở cụm cục bộ trên Ubuntu», ghi «[S1.242 / khoản 287] cụm cục bộ nay khởi tạo dưới `TZ=UTC`».
+- **Container không đo được ở máy này.** `TimeZone = 'UTC'` của `postgres:16-alpine` là giá trị T3 của #216 thấy; `log_timezone` và
+  nguồn `configuration file` của container là suy từ cách `initdb` chọn múi giờ, nên ca đo chỉ đòi nguồn ở đường cục bộ.
+- **181 — vế LỊCH SỬ so câu, không so thân**, và đọc `RAISE EXCEPTION '…'` (như bản cũ): một thông điệp viết bằng `USING MESSAGE`
+  hay nối chuỗi đứng ngoài phép đọc. Lô B1 (khoản 266) sửa hàng hardening của hàm này; đổi nhãn hàng hay cách viết `RAISE` thì tệp đỏ
+  ồn ào (NÉM có tên), không xanh im.
+- **281 — `noiGoi` đọc chuỗi ngăn xếp dạng POSIX**; đường dẫn Windows không đọc ra (in «(không đọc được nơi gọi)»). Test tích hợp chỉ
+  chạy trên Linux (T3); lời phán vẫn đúng, chỉ thiếu nơi dựng.
+- **Lượt `pnpm test:int` trọn chạy dưới tải của ba lô khác** (tải trung bình 7–15 trên bốn lõi): thời gian đo không đại diện.
+
+## 8. Số đo
+
+- Đo trước trên `ba269ae` (cụm cục bộ PostgreSQL 16, hai biến môi trường của chung.md): `postgres-cuc-bo.int` + `postgres.int -t …` 4
+  failed | 10 skipped (287: `'Etc/UTC'`; 281: ba ca `stop()` đi qua); `khoa-ghi-so-nguoi-giu.int -t "⓷"` 1 failed (`app_neo`,
+  `app_khoi_tao` rỗng); `hardening-suy-tu-tinh-chat.int -t "sổ nợ 3\]"` dưới hai đột biến thứ tự cờ: 1 failed mỗi ca (9 tên / 7
+  tên); `loc-vi-pham-d2` dưới đột biến `phai tu`: 5 passed (mù), dưới đột biến đổi hẳn câu ở hai chỗ: 1 failed | 4 passed.
+- Sau vá: `postgres-cuc-bo.int` + `postgres.int` 14/14 (38,5 s); `vai-tro.int` 25/25; `khoa-ghi-so-nguoi-giu.int` 6/6;
+  `hardening-suy-tu-tinh-chat.int` 38/38 (293,8 s); `loc-vi-pham-d2` 6/6; `outbox.int` 56/56 (trước lời khai: 56/56 nhưng tệp đỏ ở
+  `afterAll` với hai pool `[T10-L]`, đếm 1, khai 0).
+- Đột biến: D1–D10 đỏ đúng vế (chi tiết mục 6); ca sống `-c timezone=UTC` bị vế nguồn giết; `cmp` nguyên vẹn sau mọi ca.
+- `pnpm t0` exit 0 (496 module, 2067 phụ thuộc, 0 vi phạm); `pnpm test` 133 tệp, 2060 passed | 1 skipped (166 s).
+- `pnpm test:int` TRỌN một lần trên cây cuối: 85 tệp, 1877/1877, 1193 s (ba lô khác chạy cùng lúc, tải trung bình 7–15 trên bốn lõi) — không `stop()` nào lệch ngoài hai pool đã khai của `outbox.int`.
+
+# §S1.243 — LÔ A6 MỞ THẦU, ĐO: SỐ BÁO GIÁ LÀ SỐ SẼ DỰ THẦU (KHOẢN 271 ĐÓNG); MỐC VƯỢT TRẦN 60 s CỦA MỘT JOB MỞ THẦU ĐO THAY NGOẠI SUY (272 MỞ, CHỈ ĐO); CÂU SUY PHONG BÌ HỎNG CỦA ADR-129 ĐÚNG TRÊN VÒNG BAFO (275 MỞ PHẦN CÔNG CỤ) — KHOẢN 298, 299, 300 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một vế SQL và chú thích ở `packages/unseal/src/comparison.ts`, một cổng tĩnh, ba tệp test tích hợp; không route, không màn, không migration, không ADR mới. Đóng 271; 272 và 275 giữ MỞ phần chưa làm; mở 298, 299, 300 (lượt soi đối kháng).
+
+## 1. Vòng này là gì
+Lô A6 của đợt trả nợ thứ ba (lượt A, không migration), ba khoản quanh lượt mở thầu, cả ba đã có hình dạng chủ dự án chốt: 271 — con số của `countReceivedBids` đếm cả luồng của lời mời đã thu hồi (ghim ở §S1.217); 272 — trần 60 s của handler mở thầu là trần MỖI JOB, và mốc vượt trần chỉ là NGOẠI SUY (~80 phong bì 8 MiB, §S1.220); 275 — câu suy phần phong bì hỏng không vào sổ (ADR-129 §3) chưa đo trên vòng BAFO (§S1.221).
+
+## 2. Quyết định của chủ dự án
+Chốt 2026-09-30, kế hoạch đợt 3 mục 0: **câu 7** — 271 đổi nghĩa thành "sẽ dự thầu": thêm vế `i.revoked_at IS NULL`, nới cổng tĩnh `phong-bi-loi-moi-con-song` cho câu đếm (khớp ADR-128: thu hồi là loại); phương án bị loại: giữ nghĩa "đã nhận", đổi nhãn. **Câu 8** — 272 CHỈ ĐO ở đợt 3 (60–100 phong bì 8 MiB trên đường điểm vào); kết quả quyết định hướng sửa ở một ADR sau; phương án bị loại: chốt luôn trần số phong bì mỗi RFQ. **Câu 9** — 275 chỉ phép đo BAFO (≥ 21 phong bì hỏng ở `kich-ban-41-http`); công cụ/route đọc hoãn. Đề bài lô: không đổi API; ca nặng của 272 sau một cờ môi trường có tên.
+
+## 3. Đo trước
+- **271** — trên `deed792a`, mã sản xuất chưa đổi, test đã viết: cổng tĩnh (khối `[S1.243 / khoản 271]`) `1 failed | 5 passed` — `expected [ Array(1) ] to deeply equal []`, vi phạm `packages/unseal/src/comparison.ts:606 (0 vế)`; đối chứng dương (hai câu, một câu ngoài tiêu chí khử trùng) và văn bản mẫu xanh. `comparison.int.test.ts -t "khoản 250"` (ca ghim đã lật): `1 failed` — `sau thu hồi: … expected { disclosed: true, count: 2 } to deeply equal { disclosed: true, count: 1 }`; đối chứng trước thu hồi (`count: 2`) xanh ngay trước đó.
+- **272** — "NGOẠI SUY, chưa đo": không ca nào đưa hơn 15 phong bì 8 MiB vào một job. Khoản CHỈ ĐO nên không có cặp đỏ→xanh; phép đo là bậc thang ở mục 8, và "đỏ" của khoản là kết cục ở mốc vượt: `HANDLER_TIMEOUT`, không một hàng bản rõ, RFQ vẫn `CLOSED` — lượt mở thầu hợp lệ không có kết cục. Đối chiếu nhịp: ca GOM 14 × 8 MiB của §S1.220 chạy lại hai lần hôm nay (không cờ) — 7 569 ms và 6 146 ms (§S1.220: 10 578 ms), tức cùng hỗn hợp đi ~0,44–0,54 s mỗi phong bì trên máy này hôm nay thay vì 0,75.
+- **275** — "ĐỌC": kịch bản 41 có đúng một lượt BAFO và nó có 0 phong bì hỏng (bước 12e đòi `failedBidVersionIds` rỗng); không ca nào chạy câu §3 với `bafo_round_id` khác NULL. Khối mới chạy XANH trên cây hiện tại ngay lần đầu (6/6 ở bản đầu, 7,3 s): câu §3 đúng trên vòng BAFO — tức khoản này là một phép đo xác nhận, không có mã để vá. Đỏ đúng vế đo bằng đối chứng trong chính khối (câu §3 gỡ vế vòng ⇒ lọt phiên bản vòng một) và đột biến M4–M6 (mục 6).
+
+## 4. Thay đổi
+- `packages/unseal/src/comparison.ts`: câu đếm của `countReceivedBids` thêm `AND i.revoked_at IS NULL`; khối chú thích `[S1.243 / khoản 271]` trên câu (vì sao, không đổi API, số chỉ giảm tới lần mở đầu); docstring của `countReceivedBids`, lời khai đầu tệp và docstring `TRANG_THAI_DA_DONG` gạch "đã nhận" tại chỗ; một dòng ở khối `[S1.217 / khoản 250]`.
+- `tests/architecture/phong-bi-loi-moi-con-song.test.ts`: chú thích đầu tệp gạch tại chỗ câu "`countReceivedBids` … đứng ngoài"; khối mới `[S1.243 / khoản 271]` — `laCauDemLuong` (đọc `public.vendor_bids b` và `public.rfq_invitations i` sau `FROM` hay `JOIN`, gọi `count(`), `viPhamMotVe` (dùng chung cho mã sản xuất và văn bản mẫu), ba ca: luật một vế, đối chứng dương, văn bản mẫu. Ba ca cũ không đổi.
+- `packages/unseal/src/comparison.int.test.ts` (chỉ khối `[S1.217 / khoản 250]`): chú thích đầu khối thêm một đoạn; tên ca thêm "số báo giá sẽ dự thầu 2 → 1"; đối chứng `countReceivedBids` TRƯỚC thu hồi (`count: 2`); ca ghim cuối lật `count: 2` → `count: 1`, lời ghim cũ gạch tại chỗ.
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: một khối MỚI ở CUỐI tệp (khối có sẵn không đổi — PR #217), `[S1.243 / khoản 275]`, bảy ca: dựng qua HTTP (chính sách `bafoTopN` 22, ngưỡng kép 5 tỷ, 24 nhà cung cấp, phiên khách, phong bì tốt); vòng một (thu hồi luồng thứ 24 ở `CLOSED`, mở 23, chấm, mở BAFO top-22 suy từ bảng xếp hạng); vòng BAFO (21 phong bì hỏng + 1 tốt qua `POST /guest/bids`, đóng vòng, mở thầu lần hai); ⑴ hai bản ghi sổ; ⑵ câu §3 đọc từ `docs/DECISIONS.md` dưới superuser và `app_api`; ⑶ đối chứng vế vòng; ca ghim lỗ kề `[S1.243 / khoản 298]`.
+- `apps/unseal-worker/src/mo-thau-co-lon.int.test.ts`: import `availableParallelism`, `loadavg`; một dòng ở chú thích đầu tệp; một khối MỚI ở cuối, `describe.skipIf(!BAT_DO_TRAN_MO_THAU)` — cờ `TRUSTPROCURE_DO_TRAN_MO_THAU=1`, cách chạy ở đầu khối —, tám mốc N ∈ {60, 70, 80, 90, 100, 125, 150, 200} (`it.each`) và một ca tổng kết (mốc vượt đầu tiên, ước lượng tuyến tính). Khối `[S1.220 / khoản 167]` không đổi.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **271 — tiêu chí thứ hai theo TÍNH CHẤT:** câu đọc `public.vendor_bids b` và `public.rfq_invitations i` (sau `FROM` hay `JOIN`, thứ tự nào cũng được) và gọi `count(`. Câu đếm không có `v.bid_id` nên tiêu chí khử trùng không thấy nó (chính văn bản `ngoai` của ca tự kiểm cũ là câu ấy); `FROM` hay `JOIN` để một lần viết lại bắt đầu từ `rfq_invitations i` vẫn bị thấy (đột biến M3). Đo: tiêu chí thấy ĐÚNG hai câu, cả hai ở `comparison.ts` — câu đếm, và câu tổng hợp (`count(*)` trên CTE `moi_nhat`) vốn thuộc tiêu chí khử trùng; một câu thuộc cả hai vẫn phải mang MỘT vế. Đối chứng dương ghim cả tập theo tệp lẫn "đúng một câu ngoài tiêu chí khử trùng, bắt đầu bằng `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n FROM public.vendor_bids b`".
+- **271 — `viPhamMotVe` dùng chung** cho câu sản xuất và văn bản mẫu, để "văn bản mẫu thiếu vế ⇒ đỏ" đo đúng hàm cổng dùng; ba ca cũ không đổi (đối chứng "bốn câu ở ba tệp" của tiêu chí khử trùng vẫn đúng).
+- **271 — không đổi tên hàm, trường `bidCount`, route hay hình dạng trả về** (đề bài); chỉ lời khai trong `comparison.ts` gạch tại chỗ. Đối chứng TRƯỚC thu hồi đặt trong chính ca ghim — cùng RFQ, cùng hai luồng, chỉ khác thu hồi —, nên một bản vá đếm sai theo cách khác (trừ một vô điều kiện) cũng đỏ.
+- **272 — cờ `TRUSTPROCURE_DO_TRAN_MO_THAU=1` với `describe.skipIf`:** không cờ thì cả khối bỏ qua (đo: 31 đạt, 9 bỏ qua) — `pnpm test:int` và `pnpm evidence` không trả giá ~15 phút và ~9 GiB đĩa; không nhãn INV nên ma trận không thấy ca bị bỏ qua.
+- **272 — nội dung: 14 ca của `CAC_CA` lặp vòng**, cùng hỗn hợp ca GOM của §S1.220 — giả thuyết "~0,75 s/phong bì ⇒ ~80" đo trên chính hỗn hợp sinh ra nó. Đường điểm vào như §S1.220 (tiến trình worker thật, job nhặt từ `outbox_jobs`); phong bì vào CSDL bằng fixture SQL vì trần thân HTTP 64 KiB không cho 8 MiB qua `POST /guest/bids`.
+- **272 — ba mốc dò 125, 150, 200 ngoài 60–100 của câu 8.** Lượt một (tải ~8,5) không thấy mốc nào tới 100 vượt trần; lượt hai (tải ~2) đi ~0,4 s/phong bì. Không mốc dò thì `HANDLER_TIMEOUT` — thứ hàng 272 khai — chỉ là suy từ mã; 200 × 0,37 s (nhịp NHANH nhất đã đo) vẫn ≥ 60 s. Năm mốc của câu 8 giữ nguyên.
+- **272 — `msTuClaim` theo đồng hồ CSDL** (claim = `lease_expires_at − 60 s`; kết cục = `finished_at`, hay `run_after − 30 s` của lần hẹn lại): đồng hồ test bị chính worker chặn (cùng vòng sự kiện) tới ~3 s mỗi phong bì nặng, nên "hết giờ đúng ở trần" (`msTuClaim ≥ 60 000`) chỉ khẳng định được trên đồng hồ không phụ thuộc nhịp thăm dò.
+- **272 — sau `HANDLER_TIMEOUT`, `run_after` đẩy đi một ngày (superuser):** lần thử lại (30 s sau, làm lại trọn) sẽ tranh CPU với mốc kế tiếp. Chỉ đổi lịch, không đổi kết cục đã ghi. Khối không khẳng định mốc vượt nằm ở đâu (thuộc về máy và tải); khẳng định mỗi mốc có đúng một trong hai kết cục và in mốc vượt đầu tiên cùng ước lượng tuyến tính.
+- **275 — một tổ chức, một gói RIÊNG trong cùng tệp:** 21 phong bì hỏng ở vòng BAFO cần ≥ 22 luồng trong top-N (`bafoTopN` 22); lượt BAFO của kịch bản chính là top-2, 0 hỏng. Người thứ 23 (ngoài top-N, không nộp lại) là thứ làm vế vòng ĐO ĐƯỢC.
+- **275 — phong bì hỏng = niêm phong cho một RFQ khác** (cùng giá trị fixture `unseal-worker.int.test.ts`): hình dạng đúng nên `POST /guest/bids` nhận và ký biên nhận, `unsealBid` từ chối.
+- **275 — câu §3 đọc NGUYÊN VĂN từ `docs/DECISIONS.md`** (khối `sql` duy nhất của mục ADR-129, bỏ thụt lề), không chép: thứ người vận hành chạy là văn bản ADR; ca đọc đòi đúng một khối và đòi vế vòng. Chạy ở HAI chỗ ADR-129 §3 nêu — superuser và phiên `app_api` gắn tổ chức. K = 20 viết số trong test (đột biến M5 đỏ).
+- **275 — đồ gá:** ⒜ xoá bucket `CALLER` của `otp_rate_limits` (chính tổ chức) ngay trước mỗi lần xin OTP — cụm test có một địa chỉ người gọi, `OTP_MAX_PER_CALLER` = 10 mỗi 15 phút mỗi tổ chức; tiền lệ: `apps/api/src/auth.int.test.ts` xoá `caller_rate_limits` giữa chừng; ⒝ ngưỡng kép 5 tỷ > ngân sách 1 tỷ — thứ đo là câu suy, không phải D2.
+- **275 — lượt soi đối kháng thành một luồng thứ 24** bị thu hồi ở `CLOSED` qua HTTP, giá RẺ NHẤT (một bộ đọc quên vế thu hồi sẽ đưa nó lên hạng 1); lỗ kề đo được ghim bằng một ca riêng mang nhãn khoản 298, theo khuôn §S1.217 ghim 271.
+
+## 6. Đột biến
+Một kịch bản cục bộ, ngoài kho: mỗi mũi sửa MỘT chỗ ở mã SẢN XUẤT, chạy đúng ca, khôi phục từ bản sao, `cmp` nguyên vẹn.
+- **M1 (271)** — `countReceivedBids` bỏ `AND i.revoked_at IS NULL`: cổng `1 failed | 5 passed` — `packages/unseal/src/comparison.ts:624 (0 vế)`; `comparison.int.test.ts -t "khoản 250"` `1 failed` — `expected { disclosed: true, count: 2 } to deeply equal { disclosed: true, count: 1 }` (đối chứng trước thu hồi vẫn xanh).
+- **M2 (271)** — lặp vế (`AND i.revoked_at IS NULL AND i.revoked_at IS NULL`): cổng `1 failed` — `comparison.ts:624 (2 vế)`; ca ghim XANH (`1 passed`) — đúng thiết kế: hành vi không đổi, luật "đúng MỘT vế" là của cổng.
+- **M3 (271)** — viết lại câu đếm từ `FROM public.rfq_invitations i JOIN public.vendor_bids b`, bỏ vế: cổng `2 failed | 4 passed` — luật một vế (`(0 vế)`: tiêu chí thứ hai vẫn thấy câu dù đảo thứ tự) VÀ đối chứng dương (câu ngoài tiêu chí khử trùng thôi bắt đầu bằng `… FROM public.vendor_bids b`); ca ghim `1 failed` (`count: 2`).
+- **M4 (275)** — worker ghi K id CUỐI (`failedBidVersionIds.slice(-FAILED_BID_VERSION_IDS_AUDIT_CAP)`): `2 failed | 5 passed` — ⑴ `RFQ_KEY_MATERIAL_UNWRAPPED: K = 20 id ĐẦU của mảng đủ: expected [ …(20) ] to deeply equal [ …(20) ]`; ⑵ `20 id đầu của câu suy BẰNG K id đã ghi sổ` đỏ.
+- **M5 (275)** — `FAILED_BID_VERSION_IDS_AUDIT_CAP = 21`: `2 failed | 5 passed` — ⑴ cờ cắt `expected false to be true`; ⑵ `expected [ …(20) ] to deeply equal [ …(21) ]`.
+- **M6 (275)** — worker bỏ vế vòng (`AND v.bafo_round_id IS NOT DISTINCT FROM $3` → luôn đúng): `4 failed | 3 passed` — lượt mở thầu vòng hai NÉM `Ban ro phai thuoc cung goi thau va cung vong voi yeu cau mo thau … (A1)` (`073` chặn bản rõ vòng một dưới yêu cầu vòng hai — phong bì vòng một của người thứ 23 bị chọn lại), ⑴ ⑵ ⑶ đỏ theo; hai ca vòng một xanh (đúng: vòng một không có phiên bản BAFO để lẫn).
+- **M7 (272)** — runner `options.handlerTimeoutMs ?? 1000` (thay `leaseSeconds * 1000`), có cờ, `-t "N = 60 phong bì"`: `1 failed | 39 skipped` — `HANDLER_TIMEOUT phải ở ĐÚNG trần 60 s, không sớm hơn — N=60: PENDING/1 lý do "HANDLER_TIMEOUT", từ claim tới kết cục 1073 ms …, lease 59.988 s …, bản rõ 0, RFQ CLOSED, yêu cầu APPROVED`. Đối chứng lease vẫn xanh (hạn thuê không đổi) — vế đỏ là đúng vế "hết giờ ở trần", đo trên đồng hồ CSDL.
+- Sau mỗi mũi: tệp sản xuất khôi phục từ bản sao, `cmp` NGUYÊN VẸN (bảy lần); `git status` cuối lượt chỉ còn năm tệp của lô và tệp bàn giao.
+
+## 7. Giới hạn, nói ra
+- **272 — số đo là CẬN cho máy này ở tải ấy, không phải SLA.** Cụm Postgres cục bộ (glibc, `fsync=off`), một phiên 4 lõi DÙNG CHUNG với ba lô khác: tải 1 phút 1,6–8,9 qua ba lượt, nhịp 0,37–0,66 s mỗi phong bì 8 MiB. Task `tp-unseal-worker` sản xuất khai 0,25 vCPU và 512 MiB (`infra/terraform/90-ecs/main.tf`): không đo; SUY rằng CPU ấy kéo mốc vượt trần xuống nhiều lần, và bộ nhớ ấy chạm trước (~50–60 phong bì 8 MiB) — khoản 300 cho hệ quả khi tiến trình chết.
+- **272 — phong bì vào CSDL bằng fixture SQL** (như §S1.220): đường đo là đường điểm vào của WORKER, không phải đường nộp; trần thân HTTP 64 KiB giữ mọi phong bì nộp qua sản phẩm dưới ~48 KiB, nên cỡ 8 MiB hôm nay chỉ đạt được ở trần CỘT (`018`). Phong bì 64 KiB ở số lượng lớn (hàng nghìn) KHÔNG đo — suy từ §S1.220 (~15 ms/phong bì).
+- **272 — mốc vượt nằm GIỮA hai mốc liền kề** (một DONE, một `HANDLER_TIMEOUT`); các N ở giữa không đo; ước lượng tuyến tính chỉ in, không khẳng định.
+- **272 — RSS và `arrayBuffers` là của TIẾN TRÌNH TEST** (worker, test, các pool) ở các nhịp thăm dò — cận dưới của đỉnh, không phải bộ nhớ của một task worker riêng. Độ dốc ~8,3 MiB mỗi phong bì là của các `Buffer` phong bì mà câu chọn giữ.
+- **272 — lần thử lại không chạy** (hoãn một ngày): "làm lại từ đầu" suy từ "không gì được ghi" (0 bản rõ, RFQ `CLOSED`, yêu cầu `APPROVED`, 0 hàng `RFQ_UNSEALED`), không đo bằng một lần thử lại thật; phần việc handler còn chạy sau hết giờ (tới lời gọi CSDL kế tiếp trên kết nối đã huỷ) không đo.
+- **275 — một mốc N = 21 (K + 1), một vòng BAFO**; không đo N lớn ở vòng BAFO, không đo vòng BAFO thứ hai. Hai đồ gá (bucket `CALLER`, ngưỡng kép) nói ở mục 5. Khối đọc câu §3 từ `docs/DECISIONS.md` lúc chạy: sửa ADR-129 phải giữ đúng một khối `sql` mang vế vòng.
+- **275 — công cụ/route đọc cho người vận hành: HOÃN** (câu 9) — khoản giữ MỞ phần ấy.
+- **271 — cổng mù với bí danh khác `b`/`i`** (cùng điểm mù tiêu chí cũ đã nói); một câu đếm luồng mai sau CỐ Ý kể cả luồng đã thu hồi sẽ đỏ — hệ quả có chủ đích. Nhãn "Đã nhận N báo giá" ở `/mo-thau` và ba lời khai "đã nhận" (route, MCP, `docs/TEST-PLAN.md` A6) — khoản 299; `mo-thau.js` là tệp của lô A3 đợt này, câu hỏi cho người tích hợp: gộp một câu chữ vào A3 hay để lô sau.
+- **Câu hỏi còn mở cho chủ dự án:** hướng ADR của 272 (đề xuất: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất — 64 KiB —, ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch, ⒞ chỉ khi sản phẩm cần phong bì lớn mới cân nhắc tách lượt mở thầu có tiến độ, `handlerTimeoutMs` theo N hay trần số lời mời); sửa câu §3 của ADR-129 (khoản 298).
+- Không chạy `pnpm test:int` trọn, `pnpm evidence`, `pnpm cap-so` (việc người tích hợp; máy dùng chung). Không push.
+
+## 8. Số đo
+- Máy 4 lõi (`nproc`), 16 GiB, dùng chung với ba lô; cụm Postgres 16 cục bộ (`TRUSTPROCURE_PG_LOCAL_*`), mỗi tệp một cụm.
+- **271** — đo trước trên `deed792a` (mã sản xuất chưa đổi): cổng tĩnh `1 failed | 5 passed`, vi phạm `packages/unseal/src/comparison.ts:606 (0 vế)`; `comparison.int.test.ts -t "khoản 250"` `1 failed | 30 skipped`, `expected { disclosed: true, count: 2 } to deeply equal { disclosed: true, count: 1 }`. Sau vá: cổng 6/6; `comparison.int.test.ts` 31/31.
+- **272** — ba lượt bậc thang (có cờ, `-t "khoản 272"`), 8 MiB × N, 14 ca lặp vòng, từ claim tới kết cục (đồng hồ CSDL): lượt 1 (tải 1 phút 8,4–8,9) N = 60/70/80/90/100 ⇒ DONE 37 037 / 44 511 / 53 039 / 50 108 / 43 411 ms, không mốc nào vượt; lượt 2 (tải 1,7–7,1) N = 60/70/80/90/100/125 ⇒ DONE 24 247 / 26 173 / 31 327 / 41 344 / 40 586 / 55 735 ms, N = 150 ⇒ `PENDING/1 HANDLER_TIMEOUT` ở 61 524 ms — 0 bản rõ, RFQ `CLOSED`, yêu cầu `APPROVED`, 0 `RFQ_UNSEALED`; lượt 3 (tải 1,3–3,3, cấu hình cuối, 536 s) N = 60/70/80/90/100/125 ⇒ DONE 23 548 / 26 317 / 30 612 / 34 076 / 39 089 / 48 082 ms (0,376–0,392 s mỗi phong bì), N = 150 và 200 ⇒ `HANDLER_TIMEOUT` ở 60 636 và 60 758 ms, không để lại gì; tổng kết: mốc vượt đầu tiên N = 150, ước lượng tuyến tính N ≈ 156 (lạc quan — 150 đã vượt). Nhịp 0,37–0,66 s mỗi phong bì theo tải; `arrayBuffers` đỉnh 544 MiB (N = 60) → 1 288 MiB (N = 150), ~8,3 MiB mỗi phong bì; lease lúc RUNNING 59,988–59,999 s ở mọi mốc. Không cờ: `mo-thau-co-lon.int.test.ts` `31 passed | 9 skipped (40)` — khối 272 bỏ qua, khối 167 xanh.
+- **275** — khối `[S1.243 / khoản 275]` 7/7 (bảy ca, 5,8 s; bản đầu sáu ca 6/6, xanh ngay lần đầu): hai bản ghi sổ vòng BAFO `failedCount` 21, cờ cắt, 20 id đầu; câu §3 đọc từ ADR-129 trả đúng 21 id theo thứ tự luồng, 20 đầu bằng payload, dưới superuser và `app_api`; gỡ vế vòng ⇒ 23 id; ca ghim 298: vòng một `failedCount` 0 mà câu §3 trả 1 id (luồng đã thu hồi).
+- Đột biến M1–M7: mục 6; bảy mũi đỏ đúng vế, tệp sản xuất khôi phục và `cmp` nguyên vẹn sau mỗi mũi.
+- Cổng của lô (tuần tự, cuối lượt, sau đột biến, 17:18:44 → 17:24:05, tải 1 phút 1,8 → 2,8): cổng tĩnh `phong-bi-loi-moi-con-song`
+  6/6; `comparison.int.test.ts` 31/31; `kich-ban-41-http.int.test.ts` 67/67 (60 ca có sẵn + 7 của khối 275); `mo-thau-co-lon.int.test.ts`
+  không cờ `31 passed | 9 skipped (40)`, có cờ là lượt 3 ở trên (`9 passed | 31 skipped (40)`; sau lượt ấy tệp chỉ đổi hai dòng chú
+  thích); `pnpm t0` mã 0 (typecheck, eslint, depcruise: 495 mô-đun, không vi phạm); `pnpm test` 133 tệp, `2062 passed | 1 skipped
+  (2063)` — ca bỏ qua là ca chỉ-CI có sẵn của `tests/architecture/xuong-dong-ts.test.ts`.
+
+# §S1.244 — LÔ B6 ĐỢT 3: MỤC KHOẢN 259 NÊU BẢNG, TÊN VÀ VÂN TAY ĐỊNH NGHĨA TRIGGER LẠ; CỔNG T1 ĐỌC BÍ DANH; META-TEST `USING (true)` ĐỌC LỆNH VÀ VAI ĐÍCH DANH; MIỄN TRỪ MỤC (C) CÓ ĐIỀU KIỆN CÙNG HAI HÀNG GHIM THAY CHỖ — KHOẢN 288, 171 ĐÓNG, 301, 302 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — văn bản thông điệp và một điều kiện miễn trừ của
+`hardening.always.sql`, ba tệp test; không route, không màn, không migration, không ADR mới (ADR-122 gạch tại chỗ; ADR-124 thêm một
+tiểu mục; ADR-040 sửa hai hàng). Đóng 288 (rổ B) và 171 (rổ C, kích hoạt lại theo kế hoạch đợt 3 câu 1); mở 301 (rổ C đề xuất),
+302 (rổ B đề xuất).
+
+## 1. Vòng này là gì
+
+Lô B6 của lượt B đợt 3 (`docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/B6.md`) — lô đầu của
+làn hardening. Hai khoản cùng một lớp: một lời khai an ninh đứng trên một phép kiểm HẸP hơn chính nó. **288** — ADR-122 (khoản 259)
+đòi thông điệp phán xét trigger lạ nêu «bảng, tên, định nghĩa», ADR-124 (khoản 117) đòi định nghĩa trigger in vân tay; mục khoản 259
+in nguyên `pg_get_triggerdef` qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 — đọc tên, không đọc
+luồng — xanh (§S1.214 mục 9). **171** — ⑴ meta-test của cửa `USING (true)` ở `db/migration-shape.test.ts` nhận `TO` cộng một tên bất
+kỳ khác `PUBLIC` và không đọc lệnh; ⑵ cửa miễn trừ mục (C) cho hàm `outbox_danh_sach_to_chuc()` vô điều kiện trong khi hai hàng ghim
+thay chỗ nó có điều kiện (§S1.83). Kèm một việc giao từ lô A5 (§S1.242, khoản 265): gạch chú thích «THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý»
+đã thiu trên hàng `thuộc tính role app_liet_ke_to_chuc`.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, chốt 2026-09-30: **câu 3** — áp ADR-124 cho mục khoản 259: nêu bảng, tên và vân tay định nghĩa, người vận hành
+tra định nghĩa bằng tên, sửa kỳ vọng ở `db/trigger-la-mac-dinh-dong.int.test.ts` (phương án khác — giữ ADR-122, ghi ngoại lệ có lý do
+vào ADR-124 — không chọn); **câu 1** — 171 kích hoạt lại từ rổ C. Hình dạng của 171 nằm trong thân hàng và đề bài lô.
+
+## 3. Đo trước
+
+Trên `a97dd48`, PostgreSQL 16 cụm cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`), mỗi khoản một ca đỏ, viết TRƯỚC khi vá mã:
+
+- **288 — cổng.** `tests/architecture/hardening-khong-in-gia-tri.test.ts` 7/7 XANH trên hardening đang in nguyên định nghĩa trigger lạ
+  — đúng câu của thân khoản. Cổng MỚI (vế ⑸) chạy trên chính bản hardening ấy (tệp đo tạm, đã xoá): ba dòng —
+  `hàng "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ô mô tả nối dinh_nghia — bí danh mang pg_get_triggerdef`,
+  `RAISE WARNING (câu 416) nối dinh_nghia — bí danh mang pg_get_triggerdef`, và một dòng kêu nhầm ở hàng `ràng buộc CHECK an ninh …
+  (khoản 105)`, vốn so `ck.dinh_nghia` — cột VALUES mang định nghĩa ràng buộc CHUẨN — trùng tên với bí danh mang giá trị (tên bí danh
+  là toàn cục trong tệp; mục 7). Sau vá không bí danh mang giá trị nào còn tên `dinh_nghia`, cả ba dòng hết.
+- **288 — hành vi.** Năm kỳ vọng sửa và hai ca mới ở `db/trigger-la-mac-dinh-dong.int.test.ts` (`-t`) trên hardening cũ: 6 đỏ, mỗi ca
+  in đúng đoạn rò (`doanRo`) —
+  ⑵ `Hardening: đã GỠ trigger lạ rfq_approvals_a_so_lan_nop trên rfq_approvals (CREATE TRIGGER rfq_approvals_a_so_lan_nop BEFORE INSERT ON public.rfq_approvals …`;
+  ⑶ `… vào TRIGGER_DUOC_PHEP — CREATE TRIGGER zz_org_sau_chen AFTER INSERT ON public.organizations FOR EA…`;
+  ⑸ `… (rfq_items.zz_khong_go_duoc: TRIGGER LẠ — CREATE TRIGGER zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH …`;
+  ⑺ `… (rfq_items.zz_phan_xet_guc: TRIGGER LẠ — CREATE TRIGGER zz_phan_xet_guc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()). Cần quyền: …`;
+  ⑻ phán xét `… vào TRIGGER_DUOC_PHEP — CREATE TRIGGER zz_org_bi_mat AFTER INSERT ON public.organizations FOR EACH ROW WHEN ((new.id = '5f0c2d8e-7a14-4b36-9c21-e8d4a6b0f3c9'::uuid)) EXECUTE FUNCTION zz_khong_lam_gi()). Cần quyền: …`;
+  ⑻ gỡ — hằng rò ở WARNING «SAI TRƯỚC khi sửa» (IM5 in nguyên ô mô tả) trước cả WARNING «đã GỠ»:
+  `…bi_mat: TRIGGER LẠ — CREATE TRIGGER zz_items_bi_mat BEFORE INSERT ON public.rfq_items FOR EACH ROW WHEN ((new.org_id = '5f0c2d8e-…'::uuid)) EXECUTE FUNCTION zz_khong_lam_gi()). Đang tự chữa`.
+- **171 ⑴.** Meta-test tách thành hàm thuần `kiemTraNgoaiLeUsingTrue` giữ NGUYÊN biểu thức cũ, năm ca mẫu mới (`pnpm vitest run
+  db/migration-shape.test.ts`) ⇒ 5 đỏ, 28 xanh: bản cũ trả `[]` cho `FOR ALL TO app_liet_ke_to_chuc`, `FOR SELECT TO app_api`, dòng khai
+  `vai: ["app_api"]` khớp policy `TO app_api`, và một `ALTER POLICY … TO app_api` cùng tên trong tệp; nó còn KÊU NHẦM
+  `TO "app_liet_ke_to_chuc"` (tên trong nháy kép không khớp `[A-Za-z_]`). `FOR ALL TO app_api` của thân khoản đi qua cùng biểu thức.
+- **171 ⑵.** Khối `[S1.244 / khoản 171]` của `db/trigger-la-mac-dinh-dong.int.test.ts` trên hardening cũ (hardening chạy `phan_xet` trong
+  một giao dịch rồi ROLLBACK): 2 đỏ, 1 xanh — dòng `052_worker_liet_ke_to_chuc.sql` xoá và thân `outbox_danh_sach_to_chuc()` thay bằng
+  `… UNION ALL SELECT '00000000-…'::uuid` ⇒ phán xét ĐI QUA (`expected null not to be null`): một thân tuỳ ý chạy dưới quyền chủ hàm, hai
+  hàng ghim IM, miễn trừ đứng; dòng xoá, thân chuẩn ⇒ đi qua. Đối chứng (dòng có mặt, thân lạ ⇒ hàng ghim «định nghĩa hàm
+  outbox_danh_sach_to_chuc() (052)» đỏ, mục (C) im) xanh cả trước lẫn sau — tiền đề `phanXetSau([])` là `null` trên cụm sạch.
+
+## 4. Thay đổi
+
+- **`db/migrations/hardening.always.sql`** (+59 −12, chỉ văn bản thông điệp, một điều kiện miễn trừ và chú thích):
+  - khoản 288: `CAU_TRIGGER_LA_DU_AN` phơi `left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')),
+    'hex'), 16) AS van_tay_dinh_nghia` thay `pg_catalog.pg_get_triggerdef(t.oid) AS dinh_nghia` — viết đúng khuôn `VAN_TAY_TRIGGER` để cổng
+    gỡ nó như mọi hàng ghim; `RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (vân tay def=%)…', …, r.van_tay_dinh_nghia`; ô mô tả
+    nối `' — vân tay def='` và cột vân tay; chú thích trên hằng, trên mục (`~~Thông điệp phán xét nêu bảng, tên, định nghĩa (ADR-122 mục
+    3).~~ [S1.244 / khoản 288] …`) và ở khối S1.210 đầu `bang` ghi luật mới. Điều kiện, câu sửa, hậu điều kiện của mục: không đổi.
+  - khoản 171 ⑵: nhánh hàm của `CAU_DOC_VONG` — khoá xuôi đọc qua `CROSS JOIN LATERAL (SELECT pg_catalog.string_agg(x.mig, ', ') AS mig,
+    pg_catalog.bool_or(sm.version IS NOT NULL) AS da_ap FROM <NGOAI_LE_DOC_VONG> LEFT JOIN public.schema_migrations sm ON sm.version =
+    x.mig || '.sql' WHERE <khoá chữ ký>) kh`, miễn khi `kh.da_ap IS TRUE`; thông điệp thêm câu «Hàm ĐÃ khai … nhưng migration ấy KHÔNG
+    có trong schema_migrations … chúng đang IM (khoản 171) …» khi `kh.mig` có mà chưa ghi; nhánh view/matview: `EXISTS` trên
+    `schema_migrations` trong khoá miễn. Khối khai giữ từng byte (bộ sinh `khoiValues`), khối xuất hiện ở đúng ba chỗ, chữ ký hàm ở
+    thông điệp + khoá xuôi (2) và khoá thiu (1) — đúng các phép đếm của `db/rls-coverage.int.test.ts`. Chú thích cột `mig`, đầu mục (C)
+    và hàng ghim `052` ghi luật.
+  - ghi chú liên lô của A5 (khoản 265): bốn dòng «THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý …» gạch tại chỗ (một cặp `~~` như các đoạn gạch
+    nhiều dòng khác của tệp), thêm bốn dòng `[S1.244 / khoản 265]`; câu SQL giữ nguyên.
+- **`tests/architecture/hardening-khong-in-gia-tri.test.ts`** (7 → 11 `it`): khối đầu tệp thêm vế ⑸ và chỗ thu hẹp của nó; `TEN_CAM`,
+  `beMatMaBiDanh` (thẻ sau `DO` là mã, mở/đóng theo tên; `$q$` là mã; mọi thẻ khác là literal), `tachToken` (token kèm mức ngoặc),
+  `danhSachChon`, `cacNhanh` (đi qua FROM/WHERE của nhánh tới UNION/INTERSECT/EXCEPT cùng mức; `;`, LOOP, THEN kết thúc), `tenCotCua`
+  (AS, ngầm — trừ kiểu nhiều chữ sau `::` —, tham chiếu cột trần), `rangBuocBiDanh` (select-list; `(…) [AS] t(c…)` sau truy vấn con hay
+  VALUES; `WITH [RECURSIVE] t(c…) AS (…)`; bỏ `SELECT` sau GRANT/REVOKE/FOR/phẩy), `laThamChieuCot` (không là tên bảng, tên hàm, bí danh
+  vừa khai, tên kiểu), `biDanhMangGiaTri`, `biDanhTrong` (tên cấm trần không nêu hai lần); `quetHardening` nối ⑸ vào bốn bề mặt;
+  `thongKe` thêm `rangBuoc`, `biDanhMang`; vế chống rỗng ruột đòi ≥ `SAN_RANG_BUOC` (1000; tệp thật 1261) và `van_ban` ← `prosrc`; bốn
+  `it` văn bản mẫu `[S1.244 / khoản 288]`.
+- **`db/migration-shape.test.ts`** (28 → 35 `it`): `NgoaiLeUsingTrue` (`lenh: "SELECT"`, `vai`), dòng `052` khai `FOR SELECT` và
+  `["app_liet_ke_to_chuc"]`; `VAI_DUOC_MIEN_USING_TRUE`; `tenVaiTrongTo`; `docChuThePolicy`; `kiemTraNgoaiLeUsingTrue` (dòng khai ↔ câu
+  CREATE; lệnh; tập vai; danh sách vai có tên; `ALTER POLICY` cùng tên); meta-test `[S1.82]` gọi nó (bộ lọc tại chỗ gạch trong chú
+  thích); khối `[S1.244 / khoản 171 ⑴]` năm `it` mẫu; khối `[S1.244 / khoản 171 ⑵]` — `tienDeHangGhim`, `kiemHangGhimThayCho`, hai `it`
+  (hardening thật; mẫu gõ nhầm migration và thiếu hàng ACL).
+- **`db/trigger-la-mac-dinh-dong.int.test.ts`** (12 → 17 `it`): khối đầu tệp thêm hai đoạn; `import { createHash } from "node:crypto"`;
+  `vanTayNode`, `traTheoTen` (vân tay trong CSDL tra theo bảng + tên, đòi bằng vân tay `node:crypto` trên văn bản), `doanRo`; ⑵ đòi WARNING
+  «đã GỠ» mang vân tay tra TRƯỚC khi gỡ và không mang `CREATE TRIGGER`; ⑶ ⑸ ⑺ — kỳ vọng cũ gạch trong chú thích, kỳ vọng mới ghim trọn
+  dòng với `vân tay def=<vân tay>` cộng tiền đề «văn bản mà bản gom CŨ in ra»; tên ⑸ gạch «định nghĩa» → «VÂN TAY định nghĩa»; describe
+  `[S1.244 / khoản 288]` hai ca ⑻ (hằng UUID trong `WHEN`: phán xét trên `organizations`, gỡ trên `rfq_items`); describe
+  `[S1.244 / khoản 171]` ba ca (đối chứng, dòng vắng + thân lạ, dòng vắng + thân chuẩn). Không nhãn `[INV-…]` mới.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **288 — vân tay tính TRONG hằng, định nghĩa không rời câu.** Không giữ cột định nghĩa rồi băm ở hai chỗ in: một cột mang giá trị
+  không có ai cần là một lời mời in lại nó; và cột vân tay viết đúng khuôn `VAN_TAY_TRIGGER` nên cổng gỡ nó như mọi hàng ghim — không
+  khuôn được phép thứ tư. Đo: đột biến M1 (cột mang lại định nghĩa dưới nhãn vân tay) đỏ ở cổng và ở sáu ca int.
+- **288 — cột vân tay chép NGUYÊN khuôn của hàng ghim, kể cả chỗ không tiền tố.** Quanh nó hằng gọi `pg_catalog.to_regclass`,
+  `pg_catalog.format`…; khuôn vân tay trigger (80 chỗ ở các hàng ghim trên `a97dd48`) viết `left`, `encode`, `pg_get_triggerdef` không
+  tiền tố, và cổng so NGUYÊN VĂN. Hardening ghim `search_path = 'pg_catalog, public'` ở đầu thân DO, nên hàm được gọi là của
+  `pg_catalog`.
+- **288 — không thêm lời dẫn cách tra vào từng dòng thông điệp.** Bảng và tên đã ở cùng dòng; câu psql tra theo tên có sẵn ở khối S1.210
+  đầu `bang` và ADR-124 mục 6 (tiểu mục mới trỏ tới). Một dòng thông điệp mỗi trigger giữ ngắn như các hàng ghim khác.
+- **288 — vế ⑸ đọc tham chiếu, không cấm bí danh.** Bí danh mang giá trị mà không tới bề mặt nào vẫn hợp lệ (`van_ban` ← `prosrc`, chỉ
+  để rút TÊN GUC; `bieu_thuc` ← `pg_get_expr`, chỉ để so) — cấm bí danh là cấm phép so, đúng lý do §S1.210 không cấm `pg_get_constraintdef`.
+  Không danh sách miễn nào để nuôi.
+- **288 — tên bí danh là toàn cục trong tệp, không phân giải phạm vi.** Phân giải phạm vi SQL qua mảnh `$q$` ghép chuỗi là một bộ phân
+  tích SQL; chiều hỏng của bản toàn cục là KÊU NHẦM (đo: hàng khoản 105 trên bản cũ), cửa ra là đổi tên. Tham chiếu chỉ tính khi token
+  không là tên bảng/lược đồ (`x.`), tên hàm (`x(`), bí danh vừa khai (`AS x`) hay tên kiểu (`::x`) — mẫu đối chứng đo.
+- **288 — bề mặt dò bí danh là mã CỦA HARDENING.** Chỉ `$q$` và khối `DO $…$` là mã; thân hàm ghim, bản chuẩn `$than$`/`$def$` là
+  literal — đo: không vậy thì thân hàm `DECLARE can integer …` sinh bí danh ngầm `integer`, `text`, `uuid`… (lần khảo sát đầu). Đột biến
+  M6 (khối DO thành literal) làm số ràng buộc về 0 và vế chống mù đỏ.
+- **288 — hai ca ⑻ trong describe riêng không nhãn `[INV-H19]`.** Chúng đo vệ sinh log (ADR-124), không đo H19; bảng đếm nhãn và
+  `so-khai-nhan.ts` không đổi. Ca đổi kỳ vọng (⑵ ⑶ ⑸ ⑺) giữ nhãn cũ — số đếm không đổi.
+- **171 ⑴ — lệnh khai là kiểu `"SELECT"`, không chuỗi tự do.** Vị từ `true` ở lệnh GHI là mở ghi; một ngoại lệ lệnh khác là đổi kiểu —
+  một quyết định nhìn thấy trong diff. Không viết `FOR` là ALL (mặc định PostgreSQL) và đỏ có chữ «(không viết FOR)».
+- **171 ⑴ — danh sách vai có tên là một hằng riêng (`VAI_DUOC_MIEN_USING_TRUE`), ngoài dòng khai.** Dòng khai buộc policy vào ĐÚNG tập vai;
+  danh sách có tên giới hạn vai nào được làm chủ thể hẹp — thêm `app_api` vào dòng khai vẫn đỏ (mẫu đo). Không đọc `VAI_UNG_DUNG` của
+  `@trustprocure/db`: danh sách được phép là tập ĐÓNG (một tên), không phải «mọi tên trừ bốn vai».
+- **171 ⑴ — `ALTER POLICY` cùng tên trong tệp làm dòng khai đỏ.** Chủ thể của policy sau tệp phải là chủ thể của câu CREATE mà meta-test
+  đọc; `kiemTraFailOpen` tha mọi câu cùng (tệp, tên), nên đây là chỗ duy nhất đọc được lần nới ấy. Trong phạm vi «vai ĐÍCH DANH»; mẫu đo.
+- **171 ⑵ — tiếng KÊU đặt ở mục (C), không ở hai hàng ghim.** Miễn trừ rơi đúng khi hai hàng im, nên (C) nêu hàm — kèm câu nói rõ vì sao —
+  và deploy dừng. Nới tiền điều kiện hai hàng ghim sang «hoặc hàm có mặt» sẽ chạy câu sửa của chúng trên một trạng thái mà nguồn gốc của
+  hàm đã mất dấu, và nhân ba tiếng kêu cho một nguyên nhân. Đo: dòng vắng + thân chuẩn vẫn kêu (điều kiện là lớp thay thế có mặt, không
+  phải thân đang đúng).
+- **171 ⑵ — `CROSS JOIN LATERAL` gộp thay `NOT EXISTS`.** Thông điệp cần biết «đã khai mà chưa ghi»; thêm một tham chiếu khối khai hay
+  chữ ký hàm sẽ làm đỏ các phép đếm cấu trúc của `rls-coverage` (khối ba chỗ, chữ ký hai chỗ — tệp ngoài danh sách). Phép gộp trả đúng một
+  hàng mỗi hàm; `bool_or` qua `LEFT JOIN` thay `EXISTS` trong hàm gộp.
+- **171 ⑵ — nhánh view/matview cùng luật.** Cột `mig` một nghĩa cho cả danh sách; hôm nay không view/matview nào khai (đo ở rls-coverage),
+  nên luật mới không kêu ở đâu.
+- **171 ⑵ — ca đo đặt ở `db/trigger-la-mac-dinh-dong.int.test.ts`.** Tệp tích hợp duy nhất của lô chạy hardening trên cụm đã migrate
+  (nơi tự nhiên hơn là `migrations.int` hay `rls-coverage`, ngoài danh sách); chạy `phan_xet` trong giao dịch rồi ROLLBACK, cụm dùng chung
+  không đổi. Khối đầu tệp nói điều này.
+- **171 ⑵ — vế tĩnh giữ hai tiền điều kiện trùng nhau.** Miễn trừ đọc cột `mig`, hàng ghim đọc một literal — hai bản chép của một điều
+  kiện; hàng ghim gõ nhầm tên tệp thì IM MÃI trong khi miễn trừ đứng, đúng hình dạng 171. Đột biến M8 đỏ ở vế này. Vế chống rỗng ruột là
+  SÀN (≥ 1 hàm khai), để hàm khai thứ hai (khoản 277, lô B5) không đỏ vì con số — nó vẫn phải mang hai hàng ghim thay chỗ.
+- **A5 — gạch bằng một cặp `~~` qua bốn dòng**, như các đoạn gạch nhiều dòng khác của tệp; câu SQL giữ nguyên.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b6/dotbien/dot-bien.py`: mỗi ca thay ĐÚNG MỘT chuỗi (xuất hiện đúng một lần) trên bản đã vá, chạy tệp test đích,
+khôi phục bằng `cp` từ bản `.va` đã lưu, `cmp` nguyên vẹn sau mọi ca.
+
+- M1 (288, hardening) — cột `van_tay_dinh_nghia` ← `pg_catalog.pg_get_triggerdef(t.oid)` (nhãn đúng, giá trị sai) ⇒ T1 đỏ 1/11 với hai
+  dòng ⑸ (`ô mô tả nối van_tay_dinh_nghia — bí danh mang pg_get_triggerdef`, `RAISE WARNING (câu 416) nối van_tay_dinh_nghia — …`); int đỏ 6
+  (⑵ ⑶ ⑸ ⑺ ⑻ ⑻ — `vân tay def=CREATE TRIGGER …`).
+- M2 (288, hardening) — ô mô tả nối lại `pg_get_triggerdef((SELECT tg.oid …))` ⇒ T1 đỏ (`ô mô tả nối pg_get_triggerdef`, vế ⑴); int đỏ 5
+  (⑶ ⑸ ⑺ ⑻ ⑻); ⑵ xanh — đúng: lối gỡ không đi qua ô mô tả sau khi gỡ.
+- M3 (288, cổng) — `biDanhTrong` trả rỗng ⇒ 4 mẫu ⑸ đỏ.
+- M4 (288, cổng) — tắt bí danh ngầm ⇒ đúng mẫu «bí danh NGẦM» đỏ.
+- M5 (288, cổng) — tắt danh sách cột ⇒ mẫu danh sách cột đỏ VÀ chống mù đỏ (`expected 555 to be greater than or equal to 1000` — 706
+  ràng buộc đến từ danh sách cột VALUES).
+- M6 (288, cổng) — khối DO thành literal ⇒ chống mù đỏ (`expected 0 …`: cả tệp nằm trong `DO $khoi$`) và mẫu khối DO đỏ.
+- M7 (171 ⑵, hardening) — `kh.da_ap IS NOT TRUE` → `kh.mig IS NULL` (miễn khi đã khai, bất kể đã ghi) ⇒ hai ca int đỏ (`phán xét đi qua …
+  expected null not to be null`); đối chứng xanh.
+- M8 (171 ⑵, hardening) — tiền điều kiện hàng ghim ACL neo `'052_worker_liet_ke_to_chuc_x.sql'` ⇒ `migration-shape` đỏ hai vế: hardening
+  thật (`hàng ghim «EXECUTE trên outbox_danh_sach_to_chuc() …» có tiền điều kiện khác dòng khai …`) và dàn cảnh của mẫu.
+- M9 (171 ⑴, meta-test) — bỏ vế lệnh ⇒ mẫu LỆNH và mẫu thân khoản (`FOR ALL TO app_api` đòi hai vế) đỏ.
+- M10 (171 ⑴, meta-test) — bỏ danh sách vai có tên ⇒ đúng mẫu «vai không có tên trong VAI_DUOC_MIEN_USING_TRUE» đỏ.
+- Không ca sống. `cmp` sau mỗi ca: nguyên vẹn. Log: `scratchpad/b6/dotbien/M1.log` … `M10.log`.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá.** 301: vế ⑸ đọc bí danh, không đọc tên cột mặc định, biến PL/pgSQL, cột hàm trả bảng, ép cả hàng
+  hay cột catalog thô — sáu kênh đo bằng mẫu, cổng xanh; hardening hôm nay không in qua kênh nào. 302: 99 hàng ghim khác neo dòng
+  `schema_migrations` IM khi dòng vắng mà đối tượng còn — đo trên chốt K4b (`087`): phán xét đi qua với thân rỗng; `migrate()` đủ tệp
+  thì ồn ào vì `087` chạy lại và gãy.
+- **Tên bí danh toàn cục** — chiều kêu nhầm (đo trên bản cũ ở hàng khoản 105); cửa ra là đổi tên. Bộ đọc select-list là tối giản: lời
+  khai dài hơn một câu SQL (chữ Việt trong ô tên và ô quyền của `$q$`, `GRANT SELECT …`) có thể sinh bí danh ngầm giả — vô hại khi biểu
+  thức không mang tên cấm (khảo sát: không cái nào mang).
+- **Vân tay 16 hex là để TRA** (ADR-124): một người đọc được log và đoán được phần còn lại của định nghĩa có thể thử một tập hằng NHỎ
+  (vd. vài UUID tổ chức) để xác nhận hằng trong `WHEN` — cùng tính chất của vân tay thân hàm.
+- **Trigger đã GỠ không còn để tra theo tên**: trigger hợp lệ của một migration quên ghim thì tìm theo tên trong migration đã tạo nó
+  (`pg_get_triggerdef` in lại định nghĩa khác chính tả nguồn; vân tay so được với bản dựng lại trên một cụm thử).
+- **171 ⑴ — meta-test là lưới bắt sớm**: đọc câu CREATE trong tệp khai; không thấy tư cách thành viên (một `GRANT app_liet_ke_to_chuc TO
+  <vai>` mở rộng chủ thể — mục membership của hardening canh), không thấy `USING ((true))` viết khác (quy tắc `kiemTraFailOpen` đọc cách
+  viết, lớp thẩm quyền là `NGOAI_LE_HINH_DANG`). Khoá dòng khai không mang bảng: `052` đã áp và khoá checksum, nên một policy cùng tên
+  trên bảng khác trong tệp ấy không viết thêm được.
+- **171 ⑵ — hàm khai bị bỏ SECURITY DEFINER khi dòng `052` vắng**: (C) không nêu (không còn là SECURITY DEFINER), chiều khai thiu im
+  (migration chưa ghi), hai hàng ghim im — thân chạy dưới quyền NGƯỜI GỌI, không leo quyền; worker gặp 0 tổ chức thì NÉM (S1.83 ⑵).
+- **Không chạy `pnpm test:int` hay `pnpm evidence` trọn** (máy dùng chung); `db/migrations.int.test.ts` TRỌN một lần trên cây cuối
+  (đề bài cho phép).
+
+## 8. Số đo
+
+- `pnpm typecheck` exit 0; `pnpm exec eslint` bốn tệp đã chạm exit 0; `pnpm t0` exit 0 (typecheck, eslint toàn kho, depcruise 499 module / 2087 phụ thuộc, không vi phạm).
+- Đo trước trên `a97dd48` (mọi vitest tích hợp với hai biến môi trường của chung.md): T1 7/7 xanh; cổng mới trên hardening cũ 3 vi phạm;
+  `trigger-la-mac-dinh-dong.int -t "⑵ khoản 259|⑶ trên bảng|⑸ gỡ|⑺ lượt PHÁN XÉT|khoản 288|khoản 171"` 8 failed | 1 passed | 8 skipped (17);
+  `migration-shape` 5 failed | 28 passed (33).
+- Sau vá: T1 11/11; `migration-shape` 35/35; `hardening-co-ly-do` 21/21; `ghim-trigger-nguon` 8/8; `hardening-hang` 4/4;
+  `check-an-ninh-khai` 2/2; `trigger-la-mac-dinh-dong.int` 17/17 (58,4 s); `ghim-trigger-tu-chua.int` 4/4; `rls-coverage.int` 61/61
+  (162,9 s); `hardening-suy-tu-tinh-chat.int` 38/38 (296,4 s); `migrations.int` TRỌN 125/125 (966,1 s), một lần. Sau lần sửa cuối
+  (chỉ chú thích SQL) bốn tệp tích hợp ấy chạy lại một lệnh trên cây cuối: 120/120 (625,3 s, máy chung tải cao).
+- Đột biến M1–M10: mười đỏ đúng vế, không ca sống; `cmp` nguyên vẹn.
+- `pnpm test` 136 tệp: 2175 xanh, 1 bỏ qua (`tests/architecture/xuong-dong-ts.test.ts`, `it.runIf(process.env.CI === "true")`, có
+  sẵn), 173,2 s.
+
+# §S1.245 — LÔ B1 ĐỢT 3: NHÁNH "KHÔNG THẤY YÊU CẦU" CỦA TRIGGER PHÊ DUYỆT MỞ THẦU MANG TÊN, `approveUnseal` ĐỌC CODE VÀ CONSTRAINT; HUỶ MỘT YÊU CẦU KHÔNG CÒN HUỶ ĐƯỢC VÀO SỔ VỚI CÂU VÀ MÃ RIÊNG, LÝ DO LÀ VẾ — KHOẢN 266, 267 ĐÓNG, 303, 304 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (266, 267 — hai khoản §S1.213 mở, xếp rổ ở bước 0 đợt 3). Mảnh §11 chạm: *"hai người bên mua phê duyệt
+mở thầu"* — đường từ chối của phê duyệt và huỷ yêu cầu mở thầu; một thân 422 đổi (vế trạng thái của `POST /unseal/:unsealRequestId/cancel`,
+chủ dự án chốt). Một migration (`098_khong_tim_thay_yeu_cau_co_ten.sql`), một hàng hardening; không ADR mới (một dòng CÓ ở bảng của ADR-060,
+gạch tại chỗ ở tiểu mục [S1.213] của ADR-016); không export mới ở `index.ts`, không phụ thuộc mới. Đóng 266, 267; mở 303, 304.
+
+## 1. Vòng này là gì
+
+Lô B1 của đợt trả nợ 3, lượt B (làn hardening, gộp sau B6). Hai khoản §S1.213 để lại trên bề mặt mở thầu. **266** — nhánh không thấy
+yêu cầu của trigger `unseal_kiem_nguoi_duyet` (019) RAISE 23503 không tên và fire trước khoá ngoại, nên `approveUnseal` nhận "không tìm
+thấy" bằng `code` một mình: MỌI 23503 của câu INSERT vào `unseal_approvals` thành hàng `UNSEAL_NOT_FOUND_DENIED`, kể cả một 23503 vì nguyên
+nhân khác — một hàng sổ nói sai nguyên nhân. **267** — `cancelUnseal` trên một yêu cầu CÓ THẬT đã `EXECUTED`/`CANCELLED` trả 422 cùng câu
+gộp "không tìm thấy …, hoặc nó không ở trạng thái huỷ được" và 0 hàng sổ; theo luật ADR-060 đó là một bước sai thứ tự trên chuỗi mở thầu.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, chốt 2026-09-30: **câu 5** (khoản 267) — tách câu 422 và vào sổ `UNSEAL_CANCEL_DENIED {lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC"}`
+theo luật ADR-060 (đổi hợp đồng); phương án "giữ câu gộp, chỉ thêm hàng sổ" bị loại. Khoản 266 nằm ở dòng *"khoản không cần quyết định mới"*
+— hình dạng trong thân hàng. Người tích hợp chốt thêm cho 267 (đề bài lô, khuôn khoản 279 — §S1.241): `lyDo` là đối số thứ năm của
+`throwAuditedDenial`, hai tên vào `DANH_MUC_VE_CONG`, một nguồn vào `NGUON_VE`, `packages/unseal/src/requests.ts` vào `TEP_TRUYEN_VE`. Các điểm
+tự chốt trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `a97dd48b` (mã sản xuất chưa đổi), cụm cục bộ PostgreSQL 16 (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Log ở `scratchpad/b1/`.
+- `packages/unseal/src/unseal.int.test.ts -t "S1.245"` (khối mới, tám ca) — `do-truoc-unseal.log`: **7 đỏ / 1 xanh** (đối chứng dương
+  `PENDING`/`APPROVED` huỷ được, 0 hàng). 266: UUID lạ ⇒ `cause` mang `code` 23503 mà `constraint` rỗng (`expected { Object (code, constraint) }
+  to deeply equal { code: '23503', …(1) }`); đột biến lúc chạy trả thân về `019` ⇒ `expected 'UnsealError' to be 'error'` — bộ lọc `code` một
+  mình nhận cả 23503 không tên và ghi một hàng; tên hai chiều ⇒ `expected [] to deeply equal [ undefined ]` (thân thật không có
+  `CONSTRAINT`). 267: huỷ yêu cầu `EXECUTED` ⇒ `expected 'không tìm thấy yêu cầu mở thầu trong …' to be 'Yêu cầu mở thầu này không còn ở trạng…'`;
+  huỷ lần hai yêu cầu `CANCELLED` ⇒ câu gộp, `ma` `undefined`; đối chứng id lạ / vế người ⇒ đỏ chỉ vì chưa có trường `ma`; lần ghi bị chặn
+  ⇒ `expected UnsealError: không tìm thấy yêu cầu mở th… to be an instance of DenialAuditFailedError` — vế trạng thái không thử ghi gì.
+- `packages/identity/src/danh-muc-tu-choi.test.ts` — `do-truoc-danh-muc.log`: **2 đỏ / 8 xanh**: ⑷ NÉM `không thấy \`LyDoTuChoiHuy\` ở cấp tệp`,
+  ⑸ `expected [ …(5) ] to deeply equal [ …(6) ]`.
+- Qua HTTP (tệp tạm `apps/api/src/zz-tam-do-khoan-267.int.test.ts`, bộ điều phối + máy chủ thật, đã xoá) — `do-truoc-http.log`: huỷ yêu cầu
+  `EXECUTED` ⇒ `422 {"error":"không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn, hoặc nó không ở trạng thái huỷ được"}` — giống TỪNG KÝ TỰ
+  thân của id lạ; hàng `UNSEAL_CANCEL_DENIED` duy nhất là của vế người (PM khác), vế trạng thái 0 hàng.
+- `db/migrations.int.test.ts -t` hai ca tĩnh của hàm ghim — `do-truoc-migrations-tinh.log`: **2 đỏ** (`ENOENT … 098_khong_tim_thay_yeu_cau_co_ten.sql`;
+  `hardening ghim 098_khong_tim_thay_yeu_cau_co_ten.sql nhưng bản CUỐI ở 019_unseal.sql`) — danh sách mong đợi viết trước migration.
+
+## 4. Thay đổi
+
+- `db/migrations/098_khong_tim_thay_yeu_cau_co_ten.sql` (MỚI): khối đầu (vì sao, khuôn `074`, "tên là nhãn của nhánh, không phải ràng buộc
+  trong `pg_constraint`"); `CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet()` — thân trích nguyên văn từ `019` bằng script
+  (`scratchpad/b1/tao-migration.py`: đối chiếu thân `019` với câu sửa và `$than$` của hàng ghim cũ trước khi viết), đổi đúng một chỗ: câu
+  `RAISE` của nhánh `IF NOT FOUND` thêm `CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'`. Không đổi trigger nào.
+- `db/migrations/hardening.always.sql` (chỉ hàng của hàm này, script `va-hardening.py` — mỗi chỗ đúng một lần): nhãn
+  `hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 098_khong_tim_thay_yeu_cau_co_ten.sql)`; điều kiện `version =
+  '098_khong_tim_thay_yeu_cau_co_ten.sql'`; câu sửa mang thân mới; `$than$` mang thân chuẩn hoá mới; bốn dòng chú thích trên hàng.
+  Vân tay thân chuẩn (công thức ADR-124, tính bằng `node:crypto` trên `$than$`): `f54165e51d57c664` → `159bf1e49d9a8c6f`.
+- `packages/unseal/src/requests.ts`: kiểu `LyDoTuChoiHuy` (hai lý do, docstring); `UnsealError.ma: LyDoTuChoiHuy | null` (tham số `ma` ở
+  tuỳ chọn); hằng `RANG_BUOC_KHONG_TIM_THAY_YEU_CAU` (export khỏi tệp, không khỏi gói); `laKhongTimThayYeuCau` đọc `code` VÀ `constraint`,
+  docstring gạch tại chỗ; `CAU_KHONG_O_TRANG_THAI_HUY_DUOC`; `cancelUnseal` — vế người: `lyDo` một biến → `payload.lyDo` + đối số thứ năm;
+  vế trạng thái: `return throwAuditedDenial(… UNSEAL_CANCEL_DENIED …, payload { lyDo }, new UnsealError(câu riêng, { ma }), lyDo)`; chú thích
+  nhánh không tìm thấy và nhánh trạng thái gạch tại chỗ.
+- `apps/api/src/routes/buyer.ts`: import `UnsealError`; handler `POST /unseal/:unsealRequestId/cancel` bọc lời gọi — `UnsealError` mang
+  `ma` ⇒ `return { status: 422, body: { error, ma } }`; lỗi khác ném như cũ. Khối chú thích nêu vì sao TRẢ VỀ (commit không mang câu ghi nào).
+- `packages/identity/src/rbac.ts`: `DANH_MUC_VE_CONG` thêm `KHONG_O_TRANG_THAI_HUY_DUOC`, `KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC`
+  (48 → 50); docstring của danh mục, của `DenialAuditFailedError.clause`, của `moTaHangDongCuaLanTuChoi` và của `throwAuditedDenial` gạch tại
+  chỗ ("năm" → "sáu" tệp truyền vế; "huỷ yêu cầu mở thầu" rời danh sách không truyền; đếm 15 / 7 / 8; một dòng người gọi mới).
+- `packages/identity/src/danh-muc-tu-choi.test.ts`: `NGUON_VE` thêm `LyDoTuChoiHuy`; `TEP_TRUYEN_VE` thêm `packages/unseal/src/requests.ts`;
+  khối đầu, tiêu đề ⑷ ⑸ và chú thích chống rỗng ruột gạch "năm" → "sáu" tại chỗ.
+- `packages/unseal/src/unseal.int.test.ts`: import `createHash`, `readFileSync`, `moTaHangDongCuaLanTuChoi`, `RANG_BUOC_KHONG_TIM_THAY_YEU_CAU`;
+  khối `describe("[INV-D5] [S1.245 / khoản 266 · 267] …")` tám ca (ba của 266, năm của 267 — kể cả đối chứng và đối chứng dương); trigger
+  chặn sổ riêng `k267_chan_ghi_so` (TP267).
+- `db/migrations.int.test.ts`: `HAM_56` trỏ `unseal_kiem_nguoi_duyet` sang migration mới (ba dòng chú thích); ba danh sách mong đợi thêm
+  `098_khong_tim_thay_yeu_cau_co_ten.sql`.
+- `packages/unseal/src/loc-vi-pham-d2.test.ts`: hằng `NHAN_HANG` theo nhãn mới, docstring của hằng một đoạn.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **266 — tên là nhãn của NHÁNH, không đổi tên khoá ngoại thật.** Khuôn `074` (mười ba tên không có trong `pg_constraint`). Khoá ngoại
+  `(org_id, unseal_request_id)` không tới được: trigger khoá hàng yêu cầu `FOR NO KEY UPDATE` trước nó và không vai nào xoá được yêu cầu;
+  đổi tên nó là một DDL trên bảng ngoài hình dạng đã chốt. Hệ quả nói ra ở mục 7.
+- **266 — nhãn hàng ghim đổi theo khuôn "thân từ 074", điều kiện neo migration mới.** Một cụm chưa áp `098_khong_tim_thay_yeu_cau_co_ten.sql` giữ thân `019` và không bị
+  lượt sửa TRƯỚC vòng đánh số đẩy thân mới lên (không WARNING "SAI TRƯỚC khi sửa" ở lần nâng cấp đầu, không gãy dưới vai deploy không sở hữu
+  hàm); `NHAN_HANG` sửa cùng commit như đề bài cho phép.
+- **266 — ca "trả hàm về 019" là ca THƯỜNG TRỰC, đột biến LÚC CHẠY.** Sửa tệp thì hardening âm thầm dựng lại thân chuẩn (bài học khoản 140);
+  ca chạy nguyên văn câu `CREATE OR REPLACE` của `019`, trả lại bằng `pg_get_functiondef` đã chụp TRƯỚC, và đòi thân lẫn `proconfig` bằng
+  trước. Dạng dựng được duy nhất của "một 23503 khác trên câu INSERT" mà không sửa lược đồ.
+- **266 — ca tên hai chiều đọc `prosrc` THẬT** (khuôn ADR-108 ④): đổi tên ở migration mà quên `requests.ts`, hay ngược lại, đỏ ở đây — đột
+  biến M3 đo. Hằng export khỏi TỆP, không khỏi gói (khuôn `laViPhamD2TheoThongDiep`; `index.ts` và cổng barrel không đổi).
+- **267 — câu 422 mới là hằng**, không nội suy trạng thái hay id; máy khách phân biệt bằng `ma`. Câu nói cả hai nghĩa của trạng thái
+  (*đã được mở thầu hoặc đã bị huỷ*) vì câu `UPDATE` 0 hàng không nói trạng thái nào — đọc lại để nói thì thêm một câu cho một chữ.
+- **267 — `ma` chỉ ở vế trạng thái.** Đề bài: *"thân 422 mới có mã riêng"*; vế người và nhánh không tìm thấy giữ thân 422 cũ (đã có câu
+  riêng / ghim bằng HTTP). `UnsealError.ma` có kiểu `LyDoTuChoiHuy | null` để thêm `ma` cho vế người sau này là một dòng.
+- **267 — câu "không tìm thấy" giữ nguyên văn** dù vế "hoặc nó không ở trạng thái huỷ được" nay thừa: thân 422 ấy ghim ở
+  `apps/api/src/buyer.int.test.ts` (ngoài danh sách tệp của lô) — bàn giao mục 9 đề xuất đoạn sửa.
+- **267 — route TRẢ VỀ 422 thay vì ném.** Bảng 422 chung của bộ điều phối (`apps/api/src/dispatch.ts`, ngoài danh sách) chỉ in `error`. Trả
+  về nghĩa là COMMIT giao dịch của route — đọc: trước lần từ chối nó chỉ đọc (`resolveSessionActor`, `requirePermission` khi cho qua, câu
+  `SELECT`, `listUserIdsWithPermission`, câu `UPDATE` 0 hàng); hàng sổ ở giao dịch độc lập; lần đếm trần từ chối của handler ở kết nối
+  `auditPool` riêng (ADR-112). Khuôn khoản 230 cũng trả về.
+- **267 — nhận vế trạng thái bằng 0 hàng của câu `UPDATE`** (lớp có thẩm quyền) sau câu `SELECT` đã thấy hàng, không đọc lại trạng thái. Cuộc
+  đua hai lần huỷ cùng lúc cho đúng lý do: lần sau chờ khoá hàng, đọc lại `WHERE`, 0 hàng ⇒ "không còn huỷ được".
+- **267 — một biến `lyDo` mỗi lời gọi**, kiểu `LyDoTuChoiHuy`, đi tới `payload.lyDo`, vế và `ma` — một nguồn (khuôn `nemTuChoi` đọc `loi.lyDo`
+  cho cả `payload.ma` và vế). Nguồn ⑷ là kiểu hợp (bộ đọc của §S1.241 đã đọc kiểu hợp chuỗi trực tiếp).
+- **`rbac.ts` — ngoài `DANH_MUC_VE_CONG`, gạch tại chỗ bốn docstring kể vế.** Lời dặn ở `TEP_TRUYEN_VE`: *"thêm một chỗ … phải sửa cả đây
+  lẫn docstring của `throwAuditedDenial`"*; con số đếm lại trên cây cú pháp (15 lời gọi, 7 truyền vế, 8 không) thay con số cũ.
+- **Không ca HTTP thường trực** (`apps/api/src/buyer.int.test.ts` ngoài danh sách): thân 422 mới đo một lần bằng tệp tạm trên bộ điều phối
+  và máy chủ thật, trước và sau vá, và dưới đột biến M5, M9, M10 — bàn giao mục 9 đề xuất ca thường trực.
+- **Không nhãn INV mới:** tám ca mang `[INV-D5]` (năm) hay không nhãn; cặp (`D5`, `unseal.int.test.ts`) đã khai ở `so-khai-nhan.ts`.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b1/dot-bien.py`: mỗi ca thay đúng các chuỗi (mỗi chuỗi xuất hiện đúng một lần), chạy đúng tệp test, khôi phục từ bản
+sao, `filecmp` nguyên vẹn; sau cả mười ca `sha256sum -c` năm tệp mã khớp bản đã vá. Mười ca, mười ĐỎ, không ca sống (`dot-bien-lan{1,2,3}.log`):
+- M1 [266] `laKhongTimThayYeuCau` về `code === "23503"` một mình ⇒ 1 đỏ: ca đột biến lúc chạy (`expected 'UnsealError' to be 'error'`).
+- M2 [266] bỏ `CONSTRAINT` ở migration VÀ hardening (hai phía khớp — hàm về thân `019`) ⇒ `unseal.int` 4 đỏ: hai ca `approveUnseal` của khoản
+  133 (`expected 'error' to be 'UnsealError'`; ca TP133 nhận lỗi `pg` trần), ca mang tên, ca hai chiều (`expected [] to deeply equal [ Array(1) ]`);
+  hai ca tĩnh của `migrations.int` xanh — đúng: chúng đo hai phía khớp nhau, không đo tên.
+- M3 [266] hằng tên ở `requests.ts` lệch CSDL (`unseal_approvals_yeu_cau_ton_tai`) ⇒ cùng 4 đỏ, ca hai chiều `expected [ Array(1) ] to deeply
+  equal [ 'unseal_approvals_yeu_cau_ton_tai' ]`.
+- M4 [266] hardening giữ câu sửa và `$than$` cũ (không `CONSTRAINT`), migration có tên ⇒ ca tĩnh "thân migration = thân hardening" đỏ;
+  `loc-vi-pham-d2` 6/6 xanh — đúng: nó đo câu `RAISE`, không đo tên.
+- M5 [267] vế trạng thái về như trước (ném câu gộp, không ghi) ⇒ `unseal.int` 3 đỏ (`EXECUTED`, `CANCELLED`, lần ghi bị chặn); ca HTTP đỏ
+  (`expected [ 422, …(1) ] to deeply equal [ 422, { …(2) } ]`).
+- M6 [267] vế trạng thái không truyền vế ⇒ 1 đỏ: ca dòng log (`expected [ 'UNSEAL_CANCEL_DENIED', null, …(1) ] …`); `danh-muc-tu-choi` 10/10
+  xanh — ⑸ đo sự có mặt của đối số theo TỆP, vế người còn truyền.
+- M7 [267] vế người không truyền vế ⇒ 1 đỏ: ca dòng log (`expected [ 'UNSEAL_CANCEL_DENIED', null ] …`); ⑸ xanh, cùng lý do.
+- M8 [267] `DANH_MUC_VE_CONG` thiếu `KHONG_O_TRANG_THAI_HUY_DUOC` ⇒ ca dòng log đỏ (`… UNSEAL_REQUEST HANG_LA …` ≠ `… KHONG_O_TRANG_THAI_HUY_DUOC …`)
+  và ⑷ đỏ (`[ 'AWARDED', …(49) ]` ≠ `…(48)`).
+- M9 [267] route bỏ nhánh `ma` (bảng 422 chung) ⇒ ca HTTP đỏ.
+- M10 [267] vế trạng thái ghi sổ nhưng lời từ chối không mang `ma` ⇒ `unseal.int` 2 đỏ (`expected null to be 'KHONG_O_TRANG_THAI_HUY_DUOC'`, ca
+  `CANCELLED`) và ca HTTP đỏ.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá** (lượt soi đối kháng, đo bằng tệp tạm `packages/unseal/src/zz-tam-lo-ke.int.test.ts`, đã xoá —
+  `tam-lo-ke.log`): **303** — `requestUnseal` với `rfqId` lạ ⇒ lỗi `pg` trần 23503 không tên của `unseal_kiem_rfq_da_dong`, 0 hàng; cùng hình
+  dạng 266 ở trigger kia, và là một "không tìm thấy" trên đường CÓ CỔNG mà tiểu mục [S1.213] của ADR-016 nói D5 phủ. **304** — `requestUnseal`
+  trên gói chưa `CLOSED` (C3, 23514) và `approveUnseal` trên yêu cầu không còn `PENDING` (23514) ⇒ 0 hàng; ứng viên CÓ theo luật ADR-060, cần
+  chủ dự án như câu 5.
+- **Câu "không tìm thấy" của huỷ còn vế "hoặc nó không ở trạng thái huỷ được"**, nay không còn đi ra từ câu ấy cho ca trạng thái. Giữ vì
+  thân 422 ấy ghim ở `apps/api/src/buyer.int.test.ts` (ngoài danh sách) — bàn giao mục 9.
+- **Thân 422 mới chưa có ca HTTP thường trực** — đo bằng tệp tạm (mục 5); bàn giao mục 9.
+- **Một 23503 không tên của khoá ngoại thật `(org_id, unseal_request_id)` đi nguyên**, không hàng sổ — theo đúng hình dạng đã chốt ("23503
+  không tên ⇒ đi nguyên"). Hôm nay không tới được (mục 5); nếu một ngày trigger bị tắt (ALWAYS, ghim ở hardening), lần dò id lạ sẽ 422 `tham
+  chieu khong hop le` không sổ — ồn ở log vận hành, im ở sổ.
+- **`loc-vi-pham-d2.test.ts` không đo `CONSTRAINT`** (M4 xanh ở tệp ấy); phép đo tên là ca tĩnh "thân migration = thân hardening" và ca hai
+  chiều ở `unseal.int`. Câu lịch sử ở khối đầu tệp ấy (dòng 26, *"hàng `hàm + trigger unseal_kiem_nguoi_duyet (019)`"*) còn nhãn cũ — đề bài
+  chỉ cho sửa hằng `NHAN_HANG`.
+- **⑸ của `danh-muc-tu-choi` đo sự có mặt theo tệp** (M6, M7 xanh ở ⑸): giá trị vế của từng lời gọi đo ở ca dòng log của `unseal.int`.
+- **`DANH_MUC_VE_CONG` vẫn là MỘT tập phẳng** (§S1.241 mục 7): `KHONG_O_TRANG_THAI_HUY_DUOC` đặt dưới một `action` khác vẫn ra nguyên văn.
+- **Route trả về 422 = COMMIT**: đúng hôm nay vì giao dịch của route không ghi gì trước lần từ chối (mục 5); một câu ghi thêm vào
+  `cancelUnseal` TRƯỚC vế trạng thái về sau sẽ được commit trên đường từ chối — chú thích tại route nói điều ấy.
+- Không chạy `pnpm test:int` trọn, `db/migrations.int.test.ts` trọn (chỉ bảy khối liên quan), `pnpm evidence` (máy dùng chung; đề bài).
+  `INV-matrix` sẽ đếm thêm năm ca `[INV-D5]` khi người tích hợp sinh lại.
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/B1`; vitest int với hai biến cụm cục bộ. Log ở `scratchpad/b1/`.
+- Đo trước (`a97dd48b` + ca mới): `unseal.int -t "S1.245"` 7 đỏ / 1 xanh (76: 68 bỏ qua); `danh-muc-tu-choi` 2 đỏ / 8 xanh; HTTP tạm 1 đỏ
+  (422 câu gộp, 0 hàng vế trạng thái); `migrations.int` hai ca tĩnh 2 đỏ.
+- Sau vá: `unseal.int -t "S1.245"` 8/8; `danh-muc-tu-choi` + `loc-vi-pham-d2` + `mo-ta-hang-dong` 48/48 (10 + 6 + 32); HTTP tạm 1/1
+  (`422 {"error":"Yêu cầu mở thầu này …","ma":"KHONG_O_TRANG_THAI_HUY_DUOC"}`; id lạ và vế người: thân cũ từng ký tự; hai hàng, mỗi lý do một);
+  `migrations.int` hai ca tĩnh 2/2; `pnpm typecheck` exit 0.
+- Đột biến: 10 ca / 10 đỏ, 0 sống; `sha256sum -c` năm tệp mã khớp bản đã vá.
+- Đếm `throwAuditedDenial` trên cây cú pháp (`dem-goi.mjs`): trước 14 lời gọi / 5 truyền vế; sau 15 / 7.
+- Cổng của lô: `packages/unseal/src/unseal.int.test.ts` trọn 76/76 (7,8 s); `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38 (292,5 s);
+  `db/migrations.int.test.ts -t` bảy khối (ba danh sách mong đợi `[Minor] … search_path thù địch`, `[Task 6 … I1 · S1.20]`, `[Task 8 … chỉ có 001/002]`;
+  hai ca tĩnh ghim hàm; `[S1.14 / nợ 54]`; `[S1.13 / nợ 51] hardening khôi phục …`) 7/7 (33,5 s); tĩnh `db/migration-shape.test.ts` 28/28,
+  `tests/architecture/hardening-khong-in-gia-tri.test.ts` 7/7, `tests/architecture/hardening-co-ly-do.test.ts` 21/21.
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 499 module / 2088 phụ thuộc, 0 vi phạm (68 s).
+- `pnpm test`: 136 tệp: 2161 xanh, 1 bỏ qua (tiền tồn), 3 đỏ (195 s) — cả ba là P9b của `tests/architecture/so-no-tu-doi-chieu.test.ts`, cùng một gốc: `Handoff.md khai 93 migration đánh số, kho có 94` — lời khai đếm mà `pnpm cap-so --dem` của người tích hợp viết lại khi áp bàn giao (chung.md mục 2). Chạy lại tệp ấy với migration mới bỏ khỏi chỉ mục git (không chạm tệp nào của người tích hợp): 45/45.
+- Cây cuối (sau khi bỏ một dòng trống thừa ở `packages/unseal/src/requests.ts` — thay đổi duy nhất sau các phép đo trên): `pnpm exec eslint`
+  bảy tệp mã/test đã chạm 0 lỗi; `unseal.int.test.ts` + `loc-vi-pham-d2.test.ts` + `danh-muc-tu-choi.test.ts` 92/92 (76 + 6 + 10).
+
+# §S1.246 — LÔ B2 ĐỢT 3 — TẬP `kind` MÀ `app_api` XẾP ĐƯỢC XUỐNG TẦNG CSDL: POLICY `AS RESTRICTIVE FOR INSERT TO app_api`, MỤC TỰ CHỮA RIÊNG CHO ĐƯỜNG N3; CẢNH BÁO BREAK-GLASS GIẢ CÒN, NÓI RA — KHOẢN 285 ĐÓNG, 305 MỞ, ADR-138
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một migration trên `outbox_jobs`
+(`099_outbox_policy_xep_theo_kind`), một dòng khai và một mục tự chữa ở hardening, test; không route, không màn, không đổi mã sản
+xuất, không phụ thuộc mới. Đóng 285; mở 305. ADR-138.
+
+## 1. Vòng này là gì
+
+Lô B2 của đợt 3 (kế hoạch `docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/B2.md`), một khoản.
+§S1.233 (khoản 158, ADR-134) đưa ranh giới `kind` theo vai xuống CSDL cho nửa GHI KẾT CỤC (`095`, hai policy `AS RESTRICTIVE FOR
+UPDATE`) và cố ý để ngỏ nửa XẾP: `007` cấp `app_api` `INSERT (org_id, kind, payload, dedupe_key, run_after)` không theo `kind`, vì hai
+đường sản xuất xếp `kind` của worker — `dispatchUnseal` (`UNSEAL_RFQ`) và trigger `unseal_canh_bao_break_glass()` của `019`
+(`BREAK_GLASS_UNSEAL_ALERT`, SECURITY INVOKER, chạy dưới vai gọi). Khoản 285 ghi hệ quả: một câu viết tay dưới `app_api` xếp được job
+mang MỌI `kind`, kể cả cảnh báo break-glass giả. Union `KindOutbox` (§S1.239) ràng đường TypeScript; câu SQL viết tay thì không.
+
+## 2. Quyết định của chủ dự án
+
+Câu 13 của kế hoạch đợt 3 (chốt 2026-09-30): policy `AS RESTRICTIVE FOR INSERT TO app_api` với tập `kind` mà `api` được xếp, khuôn
+`095`/ADR-134 — đóng kind lạ; cảnh báo break-glass giả VẪN còn, ghi ra. Phương án khác — trigger `019` sang SECURITY DEFINER với chủ
+hẹp để `BREAK_GLASS_UNSEAL_ALERT` ra khỏi tập của `app_api` (cỡ L, đụng ADR-006) — KHÔNG làm. Đề bài lô để lô chọn: giữ phần
+break-glass giả ở hàng 285 bằng lời, hay mở khoản mới — lô mở 305 (mục 5).
+
+## 3. Đo trước
+
+- `packages/outbox/src/outbox.int.test.ts` khối 13 `[INV-F1] [S1.246 / khoản 285]` viết TRƯỚC, chạy trên `782c5eb0` KHÔNG có migration
+  của khoản này (lần đầu `-t "khoản 285"`: 3 đỏ / 2 xanh; lần cuối với bản test chốt — tạm dời tệp `099_…`, lấy `hardening.always.sql`
+  của HEAD, chạy trọn tệp, khôi phục, `cmp` sạch): **3 đỏ / 58 xanh** —
+  ⑴ tiền đề: *"CSDL không có policy outbox_jobs_kind_xep_app_api — migration của khoản 285 chưa áp: expected undefined to be defined"*;
+  ⑵ *"INSERT tay một kind lạ dưới app_api phải bị CSDL từ chối: expected 'VÀO (không lỗi)' to match /^42501: /u"* — `THU_KIND_LA_285`
+  VÀO hàng đợi dưới `app_api`, và vì không runner nào có nó trong mảng lọc (S1.81) nó nằm `PENDING` mãi;
+  ⑶ vế trigger `019`: đối chứng dương xanh (không policy thì không gì chặn), đối chứng âm đỏ vì không có policy để thu hẹp
+  (*"Cannot read properties of undefined (reading 'kind')"*).
+  Hai vế xanh trên cả hai cây, đúng vai trò: "mỗi `kind` của union xếp được" và "giới hạn đã chốt" (cảnh báo giả vào — trước và sau).
+  Khối 1–12 56/56: đồ gá không nới gì khi CSDL không có policy.
+- Phép đo ghi ở hàng 285 viết cho nhánh SECURITY DEFINER ("`BREAK_GLASS_UNSEAL_ALERT` hôm nay 1 hàng; sau vá 0 hàng không lỗi"). Hình
+  dạng đã chốt giữ kind ấy trong tập, nên phép đo đúng là kind LẠ; và INSERT vi phạm WITH CHECK của RLS thì NÉM (42501), không có
+  "0 hàng không lỗi" như `UPDATE`.
+
+## 4. Thay đổi
+
+- `db/migrations/099_outbox_policy_xep_theo_kind.sql` (mới): `CREATE POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs AS
+  RESTRICTIVE FOR INSERT TO app_api WITH CHECK (kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'LOGIN_LINK_SEND'::text,
+  'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text, 'UNSEAL_RFQ'::text]))` — phần tử theo bảng chữ cái; khối lý do nêu
+  vì sao đúng tập ấy (bằng union `KindOutbox` và hợp hai tập của `095`: chỉ `app_api` có GRANT INSERT), vì sao chỉ WITH CHECK, giới hạn
+  break-glass và cái giá. `db/migration-shape.test.ts` nhận `CREATE POLICY … AS RESTRICTIVE` ở tệp khác tệp tạo bảng (khoản nợ 29).
+- `db/migrations/hardening.always.sql`: ⑴ `POLICY_RESTRICTIVE_KHAI` thêm dòng `('public', 'outbox_jobs', 'outbox_jobs_kind_xep_app_api',
+  'a', 'app_api', NULL, '(kind = ANY (…))')` sau hai dòng của `095` (thứ tự (lược đồ, bảng, policy) như cổng HAI BẢN KHỚP đòi); chú thích
+  (b2) và chú thích trên hằng ghi dòng mới. ⑵ Một mục tự chữa RIÊNG `[S1.246 / khoản 285]` ngay sau mục khoản 158, cùng khuôn: điều kiện
+  `schema_migrations` có `099_outbox_policy_xep_theo_kind.sql`; câu sửa là `DO` lặp qua CHÍNH dòng khai (lọc `public.outbox_jobs`, tên,
+  `lenh = 'a'`, USING NULL, vai tồn tại, policy CHƯA có) rồi `EXECUTE format('CREATE POLICY %I ON %I.%I AS RESTRICTIVE FOR INSERT TO %I WITH
+  CHECK (%s)')`; phán xét LEFT JOIN `pg_policy` đủ bảy cột và `count(*) = 1`; mô tả nêu tên, lệnh, vai — không in biểu thức (T1). Policy
+  đang có mà lệch thì không sửa đè.
+- `db/rls-coverage.int.test.ts`: hằng `KIND_XEP_APP_API` (docblock) và một dòng ở `POLICY_RESTRICTIVE_DA_KHAI` (`lenh: "a"`,
+  `using: null`). Docblock cũ không chạm.
+- `packages/outbox/src/outbox.int.test.ts`: ⑴ đồ gá đầu tệp — `docPolicyXep`/`datPolicyXep`/`noiPolicyXepChoKindThu`: `beforeAll` đọc
+  policy INSERT trước mọi phép nới, `noiPolicyApiChoKindThu` nới cả nó cho ĐÚNG những `kind` ngoài mọi tập thật (`(<gốc>) OR NOT (kind =
+  ANY (<tập xếp ∪ hai tập 095>))`), `khoiPhucPolicyGoc` khôi phục nguyên văn — vì khối 1–11 xếp ~40 kind thử dưới `apiPool`; ⑵ khối 12:
+  chú thích "INSERT không bị ràng" gạch tại chỗ; ⑶ khối 13 mới, năm vế trên policy NGUYÊN VĂN: tiền đề (RESTRICTIVE, `a`, `app_api`, USING
+  NULL, bằng bản `migrate()` dựng; tập = union `KindOutbox` đọc từ `enqueue.ts` = hợp hai tập `095`); kind lạ NÉM 42501 nêu tên policy ở câu
+  viết tay và `enqueueJob`, không hàng nào vào, đối chứng `LOGIN_LINK_SEND` vào; mỗi kind của union xếp được qua `enqueueJob` (gồm
+  `UNSEAL_RFQ` với khoá `unseal:<id>` như `dispatchUnseal`); trigger `019` — tiền đề SECURITY INVOKER, ⑴ câu INSERT của `requestUnseal`
+  dưới `app_api` ⇒ yêu cầu VÀ cảnh báo đúng payload cùng giao dịch, ⑵ tập bỏ `BREAK_GLASS_UNSEAL_ALERT` ⇒ chính yêu cầu break-glass NÉM 42501
+  nêu tên policy và không yêu cầu nào còn lại (RFQ thứ hai ở tổ chức khác; khôi phục trong `finally`); giới hạn đã chốt — cảnh báo
+  break-glass giả và `UNSEAL_RFQ` trỏ id không tồn tại viết tay vẫn vào. RFQ đã CLOSED dựng bằng SQL dưới siêu người dùng theo khuôn
+  `taoRfqDaDong` của `packages/unseal/src/unseal.int.test.ts`.
+- `db/migrations.int.test.ts`: N3 thêm vế đòi hai policy đơn vai `TO app_api` trên `outbox_jobs` (`w` của `095`, `a` của `099`) có mặt và
+  bám vai MỚI sau `DROP OWNED BY`/`DROP ROLE`/`migrate()`; một `it` `[S1.246 / khoản 285]` ngay sau ca khoản 158: đọc policy, đối chiếu
+  với dòng khai, `DROP POLICY` → `migrate()` `[]` → bằng bản trước từng cột (USING vẫn NULL); `ALTER POLICY … WITH CHECK (true)` →
+  `migrate()` NÉM, thông điệp mang tên policy, không mang `kind = ANY`/`BREAK_GLASS_UNSEAL_ALERT`, bản đã nới còn nguyên; ba danh sách
+  migration mong đợi thêm `099_outbox_policy_xep_theo_kind.sql` sau `095`.
+- Không chạm: mã sản xuất (`packages/outbox/src/{enqueue,runner}.ts`, trigger `019`), hai vùng liên lô của `outbox.int.test.ts` (`[T10-L]`
+  của A5, bí danh `enqueueJob` của A2), mọi tệp cấm.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **285 ĐÓNG, phần còn lại thành 305** thay vì giữ 285 mở với lời hẹp lại: khuôn 252 → 278 (§S1.223) và 71 → 283 (§S1.229); phần đóng
+  có phép đo hai chiều (kind lạ VÀO → NÉM), phần còn lại có hình dạng khác (vai chủ hẹp, cỡ L, đụng ADR-006) và cần một quyết định khác
+  của chủ dự án — một khoản một quyết định.
+- **Tên `outbox_jobs_kind_xep_app_api`:** "xếp" là chữ của hàng 285 cho INSERT; tên nêu lệnh, và thứ tự (lược đồ, bảng, policy) đặt dòng
+  khai ngay sau hai dòng của `095` — ba dòng của một bảng đứng liền.
+- **Tập = union `KindOutbox` = hợp hai tập của `095`, và vế tiền đề đòi CẢ HAI:** chỉ `app_api` có GRANT INSERT (`007`), nên mọi `kind` của
+  kho — lời gọi `enqueueJob` lẫn trigger `019` — xếp dưới vai này; thiếu một kind thì đường sản xuất của nó NÉM (M1, M2), thừa thì kind
+  lạ lọt. Đọc union từ văn bản `enqueue.ts` (cùng gói) thay vì hằng chép tay; hai tập `095` đọc từ `pg_policy`.
+- **Mục tự chữa RIÊNG, không nới danh sách tên của mục khoản 158:** điều kiện áp dụng là migration khai sinh policy này (không phải `095`),
+  câu sửa là `FOR INSERT … WITH CHECK` (INSERT không có USING), phán xét đếm đúng một dòng — §S1.233 mục 7 đã ghi "một RESTRICTIVE đơn vai
+  khác trong tương lai phải có mục riêng". Đo: M4 (bỏ mục ⇒ N3 đỏ), M5 (dựng sai lệnh ⇒ phán xét nêu `lệnh=*`).
+- **Đồ gá nới policy INSERT cùng khuôn nới của §S1.233**, hẹp nhất: chỉ kind ngoài MỌI tập thật; kind thật ngoài tập xếp (nếu có) vẫn bị
+  chặn ở mọi khối. Đo: M7 (không nới ⇒ 43 vế đỏ).
+- **Đối chứng dương của `dispatchUnseal` và trigger `019` đo CÂU INSERT của chúng trong `packages/outbox`**, không gọi hàm của
+  `packages/unseal`: gói `outbox` không phụ thuộc `unseal` (ngược chiều thì thành vòng); `dispatchUnseal` xếp bằng `enqueueJob`
+  (`UNSEAL_RFQ`, khoá `unseal:<id>`) và `requestUnseal` chèn `unseal_requests` bằng đúng câu mà vế trigger chạy. RFQ đã CLOSED dựng bằng
+  khuôn fixture của `unseal.int`. Đường trọn vẹn đo ở `unseal.int`/`buyer.int` — ngoài cổng của lô (mục 7).
+- **Vế trigger chạy đối chứng DƯƠNG trước, âm sau trên RFQ thứ hai** (một yêu cầu đang mở mỗi RFQ — chỉ mục riêng phần của `019`): M2 đỏ
+  đúng ở đối chứng dương ("chính yêu cầu break-glass NÉM"), không bị che bởi tiền đề của đối chứng âm.
+- **Thông điệp 42501 phải nêu TÊN policy**: PostgreSQL nêu tên policy RESTRICTIVE vi phạm, còn thất bại của vế tổ chức (PERMISSIVE) không
+  nêu tên — vế đòi tên là bằng chứng câu bị chặn ở đúng policy này.
+- **Giới hạn đã chốt ghim bằng một vế test** thay vì chỉ lời: ngày 305 đóng, vế ấy lật có chủ ý; cách đóng ngây thơ (bỏ kind khỏi tập) lật
+  nó VÀ làm đỏ vế trigger (M2).
+- **N3 thêm vế catalog** (hai policy đơn vai `TO app_api` bám vai mới) thay vì một `it` mới dựng lại kịch bản: một cụm, một lần `migrate()`
+  ít hơn; `migrate()` của N3 đã chỉ đi qua khi mục tự chữa làm đúng việc (M4).
+- **Ba danh sách mong đợi của `db/migrations.int.test.ts` sửa trong lô** (đề bài B2 ghi "danh sách mong đợi"), khác §S1.233 để người tích
+  hợp gỡ.
+- **ADR mới (ADR-138) thay vì tiểu mục ADR-134:** ADR-134 §Phương án bị loại gọi nửa INSERT là "một quyết định riêng"; quyết định này có
+  phương án bị loại riêng (CHECK trên bảng, gộp vào `095`, `TO PUBLIC`, SECURITY DEFINER). ADR-134 nhận bốn tiểu mục trỏ sang.
+
+## 6. Đột biến
+
+Kịch bản `dot-bien-285.py` (ngoài kho, scratchpad): thay bằng Python — mỗi phép thay phải khớp ĐÚNG số lần khai, không khớp thì dừng
+(không ca no-op nào được tính); chạy test có lọc; khôi phục từ bản chụp; `cmp` byte sạch sau mỗi ca, `git status` chỉ còn các tệp của lô.
+- M1 bỏ `'UNSEAL_RFQ'::text` khỏi tập xếp ở cả ba chỗ (migration, dòng khai, gương) ⇒ khối 13: 3 đỏ / 2 xanh — tiền đề (*"tập xếp được =
+  union `KindOutbox`…: expected [ 'BREAK_GLASS_UNSEAL_ALERT', …(3) ] to deeply equal [ 'BREAK_GLASS_UNSEAL_ALERT', …(4) ]"*), "mỗi kind"
+  ở `UNSEAL_RFQ` (*"new row violates row-level security policy "outbox_jobs_kind_xep_app_api" for table "outbox_jobs""* — câu của
+  `dispatchUnseal` gãy), vế giới hạn (`UNSEAL_RFQ` giả thôi vào); kind lạ và trigger `019` xanh — đúng, chúng không đo `UNSEAL_RFQ`.
+- M2 bỏ `'BREAK_GLASS_UNSEAL_ALERT'::text` ở cả ba chỗ — cách "đóng cảnh báo giả" ngây thơ ⇒ 4 đỏ / 1 xanh: tiền đề, "mỗi kind" (cảnh báo),
+  trigger `019` ở đối chứng DƯƠNG (*yêu cầu break-glass THẬT NÉM 42501 nêu tên policy* — D4 gãy), vế giới hạn lật; chỉ kind lạ xanh.
+- M3 `WITH CHECK (true)` ở cả ba chỗ — policy rỗng ruột mà 83⑴ vẫn xanh vì ba bản khớp ⇒ 3 đỏ: tiền đề (*"expected [] to deeply equal
+  [ 'BREAK_GLASS_UNSEAL_ALERT', …(4) ]"*), kind lạ (*"expected 'VÀO (không lỗi)'…"*), tiền đề đối chứng âm (*"expected [] to include
+  'BREAK_GLASS_UNSEAL_ALERT'"*).
+- M4 bỏ mục tự chữa khoản 285 ⇒ `db/migrations.int.test.ts -t "fix round 4 — N3|khoản 285"` 2/2 đỏ ở `migrate()`: *"khai
+  public.outbox_jobs.outbox_jobs_kind_xep_app_api (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy đúng bảy cột như thế — dòng khai thiu,
+  hoặc policy đã bị đổi/xoá sau deploy"* — đường "ops xoá rồi tạo lại vai" gãy đúng như `095` trước mục của nó.
+- M5 mục tự chữa dựng SAI lệnh (`FOR INSERT` → `FOR ALL`) ⇒ 2/2 đỏ — phán xét của mục có răng: *"outbox_jobs_kind_xep_app_api lệch —
+  restrictive=true lệnh=* vai=app_api (chỉ nêu tên — biểu thức WITH CHECK không in ra; …)"*.
+- M6 bỏ dòng gương ở `rls-coverage` ⇒ `-t "TỔNG ĐIỀU TRA policy RESTRICTIVE|HAI BẢN KHỚP"` 2 đỏ / 4 xanh: *"public.outbox_jobs.
+  outbox_jobs_kind_xep_app_api: CHƯA KHAI"* và *"POLICY_RESTRICTIVE_KHAI phải BẰNG bản sinh từ test"*.
+- M7 đồ gá không nới policy INSERT (bỏ lời gọi `noiPolicyXepChoKindThu`) ⇒ trọn tệp 43 đỏ / 18 xanh: 41 vế *"new row violates row-level
+  security policy "outbox_jobs_kind_xep_app_api""*, vế "`kind` bị chặn CẤU TRÚC" nhận lỗi RLS thay vì 23514 (WITH CHECK của RLS đứng trước
+  CHECK của bảng), một vế nhận lỗi RLS thay lỗi handler — âm bản của đồ gá.
+- M8 chỉ dòng khai ở hardening bỏ `UNSEAL_RFQ` (migration nguyên) ⇒ `migrate()` ở `beforeAll` NÉM, 61 vế bỏ qua: *"Hardening không sửa được
+  2 mục: — "policy kind xếp được của app_api trên outbox_jobs (khoản 285)": trạng thái hiện tại SAI (outbox_jobs_kind_xep_app_api lệch —
+  restrictive=true lệnh=a vai=app_api …); — "mọi policy trên bảng RLS thuộc đúng một lớp — …(khoản 83⑴)": … lệnh=a vai=app_api (biểu thức
+  USING/WITH CHECK không in ra …)"* — cụm đã deploy bị chặn ở đúng mục, đúng tên, không in biểu thức.
+Tám ca / tám đỏ đúng vế, 0 sống.
+
+## 7. Giới hạn, nói ra
+
+- **Giới hạn đã chốt (câu 13):** `BREAK_GLASS_UNSEAL_ALERT` và `UNSEAL_RFQ` ở lại trong tập của `app_api` — cảnh báo break-glass giả và
+  `UNSEAL_RFQ` trỏ yêu cầu bất kỳ viết tay dưới `app_api` vẫn vào (vế giới hạn của khối 13). Cùng lớp: `pg_notify` trên kênh
+  `trustprocure_break_glass` gọi được dưới `app_api`; hôm nay không tiến trình nào trong kho `LISTEN` kênh ấy. Khoản 305.
+- **Policy ràng `app_api` và thành viên thừa kế của nó** (đo ở lượt tự soi: một vai `LOGIN INHERIT IN ROLE app_api` không `SET ROLE` ⇒
+  42501 nêu tên policy; kind thật ⇒ vào). Một vai KHÁC được cấp INSERT trực tiếp thì không bị ràng; trong cụm test chỉ `app_api` (mức cột) và
+  vai định sẵn `pg_write_all_data` (không thành viên nào) có INSERT trên `outbox_jobs`. Vai deploy/chủ bảng và migration xếp được mọi kind —
+  thiết kế (câu 13 chốt `TO app_api`, không `TO PUBLIC`).
+- **Đối chứng dương đo CÂU INSERT của hai đường sản xuất, không đo trọn hàm** — gói `outbox` không phụ thuộc `unseal`. Đường trọn vẹn
+  (`requestUnseal`, `dispatchUnseal` dưới `app_api`) đo ở `packages/unseal/src/unseal.int.test.ts` và `apps/api/src/buyer.int.test.ts`;
+  lô KHÔNG chạy hai tệp ấy (máy dùng chung — chỉ cổng của lô và tệp chạm); `pnpm evidence` của người tích hợp chạy.
+- **Tập `kind` sống ở CSDL ba nơi** (hai tập ghi kết cục của `095`, một tập xếp): thêm một kind = `ALTER POLICY` cho vai ghi kết cục VÀ cho
+  tập xếp, cộng hai dòng khai và hai dòng gương. Quên tập xếp ⇒ lời xếp NÉM 42501 ngay ở giao dịch nghiệp vụ (ồn ào, fail-closed) và tiền đề
+  khối 13 đỏ — không có cổng composition riêng cho tập xếp (tệp ấy ngoài danh sách của lô).
+- Bộ đọc tập `kind` của khối 13 hiểu đúng MỘT hình dạng deparse (`'X'::text`) và đọc union bằng regex văn bản; đổi hình dạng thì tiền đề đỏ
+  ồn ào (bộ đọc NÉM khi không thấy khai báo `KindOutbox`) — cùng giá ADR-036 §4.
+- Khối 1–11 chạy với policy INSERT đã nới cho kind thử; chỉ khối 12, 13 và cổng khai lúc `migrate()` đo bản nguyên văn.
+- Cổng `so-no-tu-doi-chieu` P9b đỏ trên nhánh tới khi `pnpm cap-so --dem` viết lại lời khai đếm migration ở `Handoff.md` (mục 8).
+
+## 8. Số đo
+
+- Đo trước: mục 3 — khối 13 trên `782c5eb0` không migration: 3 đỏ / 58 xanh (lần đầu `-t "khoản 285"` 3 đỏ / 2 xanh).
+- Sau vá, từng tệp tuần tự trên cây làm việc (máy 4 lõi dùng chung, tải 5–15): `packages/outbox/src/outbox.int.test.ts` 61/61, 16,3 s
+  (56 → 61: +5 `[INV-F1]`); `db/rls-coverage.int.test.ts` 61/61, 325,8 s; `db/migrations.int.test.ts -t "N3|khoản 158|khoản 285|search_path
+  thù địch vẫn đặt lược đồ|bảng neo cùng khuôn|hai mục MỚI nằm im"` 8/8 (ba vế N3, khoản 158, khoản 285, ba danh sách mong đợi), 87,4 s —
+  tệp 125 → 126 vế; `apps/api/src/composition.int.test.ts` 21/21 + `apps/unseal-worker/src/composition.int.test.ts` 11/11, 26,6 s;
+  `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38, 459 s.
+- Tĩnh: `db/migration-shape.test.ts tests/architecture/hardening-khong-in-gia-tri.test.ts tests/architecture/hardening-co-ly-do.test.ts
+  db/hardening-hang.test.ts tests/architecture/check-an-ninh-khai.test.ts` 5 tệp, 62/62.
+- `pnpm t0`: thoát 0 — tsc 0 lỗi, eslint 0, depcruise 499 module, 2088 phụ thuộc, 0 vi phạm.
+- `pnpm test` trên trạng thái commit: 135/136 tệp — 2187 xanh, 1 bỏ qua (có sẵn), 3 đỏ; cả ba là P9b của
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` (*"Handoff.md khai 93 migration đánh số, kho có 94"* và hai vế đột biến của P9b) — lời
+  khai đếm chờ `pnpm cap-so --dem`, không phải hành vi. Trước khi tệp migration vào `git ls-files`: 136/136, 2190 xanh, 1 bỏ qua.
+- Áp thử bàn giao (mục 1, 2, 3, 4, 6) lên bản tạm của `docs/STATE.md`, `docs/DECISIONS.md`, `evidence/security-reviews.md`, `Handoff.md`,
+  khôi phục byte: không mô phỏng lời khai đếm ⇒ `so-no-tu-doi-chieu` đỏ đúng sáu vế đếm (P5, P7, P9, P9b × 3 — ADR 134 → 135, khoản
+  293 → 294 / 49 mở, migration 93 → 94); mô phỏng `--dem` ⇒ chín tệp cổng đọc tài liệu 182 xanh, 1 bỏ qua.
+- Lượt tự soi đối kháng (tệp test tạm, đã xoá): dưới `app_api`, kind lạ qua `INSERT … SELECT`, CTE ghi, `ON CONFLICT … DO UPDATE` ⇒ 42501
+  nêu tên policy; `COPY outbox_jobs FROM STDIN` ⇒ 0A000 *"COPY FROM not supported with row-level security"*; `UPDATE … SET kind` ⇒ 42501
+  *permission denied* (không GRANT UPDATE cột `kind`); vai `LOGIN INHERIT IN ROLE app_api` không `SET ROLE` ⇒ 42501 nêu tên policy, kind
+  thật vào; `pg_notify('trustprocure_break_glass', …)` ⇒ vào (khoản 305); vai không superuser có INSERT: `app_api` (mức cột),
+  `pg_write_all_data` (không thành viên).
+- Đột biến: 8 ca / 8 đỏ đúng vế, 0 sống (mục 6).
+
+# §S1.247 — LÔ B3 ĐỢT 3 — EMAIL: DẤU CHẤM CUỐI TÊN MIỀN BỊ TỪ CHỐI CÓ TÊN Ở HAI TẦNG — `CHECK (email !~ '\.$')` TRÊN `users` VÀ `supplier_contacts` (`100_email_khong_dau_cham_cuoi.sql`, ĐỐI CHIẾU TRƯỚC, KHAI Ở HARDENING), `addSupplierContact` VÀ `tools/khoi-tao-to-chuc` TỪ CHỐI TRƯỚC KHI TỚI CSDL, KHÔNG CHUẨN HOÁ — KHOẢN 283 ĐÓNG, 306 MỞ (ADR-139)
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (283 — tách ra từ khoản 71 ở §S1.229, xếp rổ ở bước 0 đợt 3); chạm đường `POST /suppliers/:supplierId/contacts`
+(bước «mời nhà cung cấp» của kịch bản §11 — địa chỉ trần vẫn qua) và đường khởi tạo tổ chức (`tools/khoi-tao-to-chuc`); không chạm mảnh nào
+của bảng bốn mảnh `docs/PRODUCT.md` §11. Một migration (`100_email_khong_dau_cham_cuoi.sql`), hai dòng khai ở hardening; không route mới, không
+màn, không phụ thuộc mới, không export mới ở `index.ts`. Đóng 283; mở 306; ADR-139.
+
+## 1. Vòng này là gì
+
+Lô B3 của đợt trả nợ 3, lượt B (làn hardening, gộp sau B6 → B1 → B4 → B2). Khoản 283 tách ra từ lượt đo khoản 71 ở §S1.229: sau `092_email_ascii`
+miền email là ASCII in được, nhưng `dot@x.vn.` vẫn cất được cạnh `dot@x.vn` ở CẢ `users` lẫn `supplier_contacts` — `EMAIL_PATTERN` và ràng buộc
+hình dạng của 011 khớp vì đuôi `\.[^…@]+$` lùi được về `vn.`, 092 chỉ kiểm miền ký tự, hai `UNIQUE` so nguyên văn, `users` không có CHECK hình
+dạng. RFC 5321 coi tên miền có dấu chấm cuối là dạng tuyệt đối của cùng một tên và bộ gửi SES nhận cả hai ⇒ hai hàng cho MỘT hộp thư: hai người
+dùng và hai magic link ở `users`, hai người liên hệ và hai lời mời ở `supplier_contacts`. Cùng lớp khoản 70, nhưng không phải hoa-thường và
+không phải miền ký tự, nên ngoài ADR-132.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, câu 12, chốt 2026-09-30: **từ chối có tên** dấu chấm cuối ở tầng ứng dụng + `CHECK (email !~ '\.$')` trên `users` và
+`supplier_contacts` — một migration, đối chiếu trước (hàng đang có mang dấu chấm cuối ⇒ migration dừng, nêu số hàng, không sửa dữ liệu ngầm —
+khuôn `092`), khai ở `CHECK_AN_NINH_KHAI`; ADR nhỏ nối ADR-132. Phương án bị loại: chuẩn hoá bỏ dấu chấm cuối (sửa dữ liệu ngầm). Đề bài lô chỉ
+định hai đường ghi ở ứng dụng: `EMAIL_PATTERN` / `addSupplierContact` và đường tạo người dùng của `tools/khoi-tao-to-chuc`. Các điểm tự chốt
+trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `782c5eb0` (mã sản xuất chưa đổi), cụm cục bộ PostgreSQL 16 (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Log ở `scratchpad/b3/`. **13 đỏ ở năm tệp:**
+- `packages/supplier/src/tax-code.test.ts` — `do-truoc-tax-code.log`: **1 đỏ / 5 xanh** — `EMAIL_PATTERN.test("ncc@doitac.vn.")`: `expected true to be false`.
+- `packages/supplier/src/suppliers.int.test.ts -t "S1.247"` — `do-truoc-suppliers.log`: **6 đỏ / 2 xanh** (đối chứng `dot-283@x.vn` và dấu chấm
+  giữa chuỗi xanh). `dot-283@x.vn.` ngay sau `dot-283@x.vn`, `hai-283@x.vn..`, `mot-283@x.vn.` ĐƯỢC CẤT (`phải bị từ chối: expected null to be an
+  instance of SupplierError`); `DOT-283@X.VN.` và `  dot-283@x.vn.  ` — hạ chữ thường, cắt khoảng trắng — va `duplicate key value violates
+  unique…` vì trùng từng ký tự với `dot-283@x.vn.` vừa cất: `UNIQUE` chỉ bắt chuỗi giống hệt, không bắt `dot-283@x.vn`; INSERT dưới superuser
+  `dot-su-283@x.vn.` cạnh `dot-su-283@x.vn` VÀO (`expected null to be '23514 supplier_contacts_email_khong_d…'`).
+- `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts -t "S1.247"` — `do-truoc-khoi-tao.log`: **1 đỏ** — bản khai `[dot@khach-cham.vn, dot@khach-cham.vn.]`
+  tạo trọn tổ chức (`expected { cheDo: 'tao', …(3) } to be an instance of KhoiTaoError`); phép dò trùng của `ban-khai.ts` (`toLowerCase()`) không
+  gộp hai dạng.
+- `apps/api/src/auth.int.test.ts -t "khoản 283"` — `do-truoc-auth.log`: **1 đỏ**, phép so gộp in trọn trạng thái: `{ chenCham: null, chenHaiCham:
+  null, linkToi: ["dot-283@vidu.vn", "dot-283@vidu.vn."], soJob: 2, trangThai: [200, 200] }` — `users` nhận `dot-283@vidu.vn.` (và `hai-283@vidu.vn..`)
+  cạnh `dot-283@vidu.vn`, và hai lần `/auth/link` phát HAI magic link, một cho mỗi dạng: đúng tiêu đề khoản 283.
+- `db/migrations.int.test.ts -t "khoản 283|search_path thù địch vẫn đặt|Task 6 — vòng fix 2 — I1|Task 8 — \(E1\)/\(E2\)\] trên lược đồ chỉ có 001/002"` —
+  `do-truoc-migrations.log`: **4 đỏ** — `chưa có migration 100_email_khong_dau_cham_cuoi.sql trong kho`; ba danh sách mong đợi (`[ Array(93) ] to
+  deeply equal [ Array(94) ]` và hai ca `…(90)` / `…(91)`) — viết trước migration. Một ca xanh thứ năm là ca khác mà bộ lọc bắt trúng
+  (`[Task 6 — vòng fix 2 — I1] đổi tên cột…`), không liên quan.
+- Thăm dò (cụm PostgreSQL 16 tạm dựng bằng shim, `C.UTF-8`, đã dừng và xoá): `pg_get_constraintdef` của `CHECK (email OPERATOR(pg_catalog.!~) '\.$')`
+  = `CHECK ((email !~ '\.$'::text))`; mười chuỗi đối chứng qua `!~ '\.$'`: `dot@x.vn`, `a.@x.vn`, `a@x..vn` qua; `dot@x.vn.`, `a@x.vn..`, `.`,
+  `a@x.vn\.` bị chặn; `a@x.vn.` + LF qua (`$` là cuối chuỗi — LF thì 092 chặn); `a@x.vn。` (U+3002), `a@x.vn．` (U+FF0E) qua (092 chặn — ngoài ASCII).
+  Dưới `SET standard_conforming_strings = off`: `'\.$'` lưu thành `CHECK ((email !~ '.$'::text))` (WARNING *nonstandard use of escape*) — ràng buộc
+  chặn MỌI địa chỉ; `E'\\.$'` lưu `\.$` (deparse `'\.$'` khi `on`); `'[.]$'` lưu nguyên.
+
+## 4. Thay đổi
+
+- `db/migrations/100_email_khong_dau_cham_cuoi.sql` (MỚI, khuôn `092`): khối đầu (khoản 283, quyết định câu 12, vì sao không chuẩn hoá, vì sao
+  literal `E''`, đối chiếu trước, không nhắc tên ràng buộc nào đã khai — cổng `check-an-ninh-khai` đòi dòng khai trỏ migration CUỐI nhắc tên);
+  khối `DO $doi_chieu_cham_cuoi$` đếm `email OPERATOR(pg_catalog.~) E'\\.$'` ở `users` và `supplier_contacts`, có hàng ⇒ `RAISE … USING ERRCODE =
+  'check_violation'` với số hàng và tối đa 20 id MỖI bảng (`-` khi rỗng), lối sửa (bỏ dấu chấm cuối; hàng có dạng anh em là MỘT hộp thư — giữ
+  một), KHÔNG in email, KHÔNG tự sửa; rồi `ADD CONSTRAINT users_email_khong_dau_cham_cuoi` và `supplier_contacts_email_khong_dau_cham_cuoi`
+  `CHECK (email OPERATOR(pg_catalog.!~) E'\\.$')`, không `NOT VALID`.
+- `db/migrations/hardening.always.sql` — CHỈ hằng `CHECK_AN_NINH_KHAI` (+5 / −1): ba dòng chú thích `[S1.247 / khoản 283 / ADR-139]` và hai
+  dòng khai `('public', 'supplier_contacts', 'supplier_contacts_email_khong_dau_cham_cuoi', '100_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))')`,
+  `('public', 'users', 'users_email_khong_dau_cham_cuoi', '100_email_khong_dau_cham_cuoi', …)` theo thứ tự (bảng, tên).
+- `packages/supplier/src/suppliers.ts`: `EMAIL_PATTERN` đổi đuôi `\.[^\s\u0000-\u001f\u007f@]+$` thành `\.[^\s\u0000-\u001f\u007f@]*[^\s\u0000-\u001f\u007f@.]$`
+  (docstring gạch đuôi cũ tại chỗ); hằng riêng `MAU_DAU_CHAM_CUOI = /\.$/u` (không xuất — census `barrel-exports` không đổi); `addSupplierContact`:
+  `… → batBuoc(…, 320)` → dấu chấm cuối ⇒ `SupplierError("email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối")` → `EMAIL_PATTERN`;
+  chú thích thứ tự gạch tại chỗ.
+- `tools/khoi-tao-to-chuc/src/khoi-tao.ts` (`chenNguoi`, sau vế ASCII, trước câu INSERT): `n.email.endsWith(".")` ⇒ `KhoiTaoError("người thứ N: email
+  có dấu chấm cuối tên miền")`, không `cause`, trong giao dịch ⇒ rollback trọn. `ban-khai.ts` không chạm.
+- Test: `packages/supplier/src/suppliers.int.test.ts` khối `[S1.247 / khoản 283]` 8 `it` (đối chứng; 5 `it.each` — dấu chấm cuối cạnh dạng đã cất,
+  chữ hoa, khoảng trắng hai đầu, hai dấu chấm, đơn lẻ ⇒ `SupplierError` đúng câu, không `code`, không hàng ghi; dấu chấm giữa chuỗi qua; INSERT dưới
+  superuser ⇒ 23514 đúng tên). `packages/supplier/src/tax-code.test.ts` +1 `it` (`EMAIL_PATTERN` từ chối `ncc@doitac.vn.`, `ncc@doitac.vn..`, nhận
+  `ke.toan@doitac.com.vn`). `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` +1 `it` (chế độ tạo: người thứ 2 ⇒ `KhoiTaoError` nêu vị trí, không
+  `cause`, tổ chức không nằm lại; chế độ thêm người: `Dot@Khach-Cham.VN.` vào tổ chức đã có `dot@khach-cham.vn` ⇒ người thứ 1, số đếm không đổi).
+  `apps/api/src/auth.int.test.ts` +1 `it` `[khoản 283]` (23514 đúng tên cho `dot-283@vidu.vn.` và `hai-283@vidu.vn..`; `/auth/link` với hai dạng ⇒ hai
+  200, hai job, MỘT link — tới dạng trần; phép so gộp để lần đỏ in trọn trạng thái). `db/migrations.int.test.ts`: hằng `TEN_MIG_CHAM_CUOI`, helper
+  `truocChamCuoi` (khuôn `truoc092`), `it` `[khoản 283]` (dữ liệu có sẵn ⇒ NÉM nguyên văn; cùng tệp dưới `SET LOCAL standard_conforming_strings = off`
+  ⇒ cùng chẩn đoán; bỏ dấu chấm ở hàng có dạng anh em ⇒ 23505; sửa tay ⇒ đi qua; hai CHECK `convalidated`, định nghĩa nguyên văn, hai dòng khai đọc
+  từ CHÍNH hardening; INSERT thẳng ⇒ 23514 đúng tên, dấu chấm giữa chuỗi vào; `migrate()` kế `[]`); ba danh sách migration mong đợi
+  +`100_email_khong_dau_cham_cuoi.sql`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. **Lời từ chối có tên đứng riêng, VÀ `EMAIL_PATTERN` siết đuôi.** Câu cố định nói đúng lý do (câu chung "sai định dạng" không nói); siết để vị từ
+   xuất khẩu không gọi "đúng hình dạng" một địa chỉ lược đồ từ chối. Đột biến M2 và M3 đo hai vế độc lập.
+2. **Vị trí trong `addSupplierContact`: sau hạ chữ thường và 320 byte, trước `EMAIL_PATTERN`.** Hạ chữ thường không đổi dấu chấm (miền ASCII, ADR-132);
+   đứng trước vị từ hình dạng để câu có tên thắng câu chung (M2: bỏ vế có tên thì câu chung đi ra).
+3. **Kiểm ở `khoi-tao.ts` (trong giao dịch, sau vế ASCII), không ở `ban-khai.ts`** — đề bài chỉ định, cùng khuôn S1.229; thông điệp nêu vị trí, không
+   in email, không `cause`. Viết `endsWith(".")` chứ không literal `/\.$/u`: literal ấy đã có ở `apps/web/src/du-lieu.ts` với nghĩa khác (bỏ dấu chấm
+   cuối của hệ số), và cổng kiểm kê mã chép `tests/architecture/ma-chep-api-worker.test.ts` ⑵ (nay quét cả `tools/*/src`) đỏ «CHƯA KHAI: literal /\.$/u ở
+   2 đơn vị» — đo ở lượt `pnpm test` đầu; tệp cổng ngoài danh sách của lô, và hai chỗ không phải một bản chép.
+4. **Literal `E'\\.$'` ở migration thay `'\.$'`.** Cùng một chuỗi dưới `standard_conforming_strings = on` — định nghĩa lưu đúng hình dạng đã chốt
+   (`CHECK ((email !~ '\.$'::text))`); dưới `off` (đặt sẵn ở mức database/vai — lớp lex mà hardening chỉ ghim cho chính nó) dạng `'\.$'` lex thành `.$`:
+   khối đối chiếu đếm MỌI hàng rồi đổ lỗi "dấu chấm cuối" (đo ở thăm dò và ở M8: 4/3 hàng thay 2/2). Có phép đo thường trực trong `[khoản 283]`.
+5. **Thông điệp đối chiếu nói lối sửa cho hàng có dạng anh em** ("hai hàng là MỘT hộp thư — giữ một"): đo 23505 khi bỏ dấu chấm ở hàng ấy; lấy khuôn
+   `092` (số hàng + id) như đề bài, không thêm truy vấn nhóm kiểu `049`.
+6. **Tên ràng buộc `…_email_khong_dau_cham_cuoi`**, cùng họ `_email_ascii` / `_email_chu_thuong`; dòng khai theo thứ tự (bảng, tên) như S1.229.
+7. **Không chạm `login.ts`.** Đường đăng nhập đọc `users.email` qua `pg_catalog.lower()` hai vế; không chuẩn hoá nghĩa là `/auth/link` với `dot@x.vn.`
+   không tìm ra `dot@x.vn` — đo bằng một `it` mới ở `auth.int.test.ts` (đề bài: «nếu đường đăng nhập đọc email»).
+8. **`tax-code.test.ts` là "test" của `suppliers.ts`** (tệp đơn vị duy nhất import `EMAIL_PATTERN`; đề bài: `suppliers.ts` «và test») — một `it` mới.
+9. **Mẫu chỉ chạm ĐUÔI chuỗi.** `a..b@x.vn`, `a@x..vn`, `.a@x.vn`, `a.@x.vn` không phải "cùng hộp thư với một địa chỉ khác" mà là địa chỉ sai hình
+   dạng; hình dạng đầy đủ là quyết định ADR-132 §3 để ngỏ — ghi ở mục 7 và ở khoản 306.
+10. **Không nhãn INV mới**; ca mới mang `[S1.247 / khoản 283]` / `[khoản 283]`.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b3/dot-bien.py`: mỗi ca thay đúng các chuỗi (số lần khai trước, lệch là dừng), chạy đúng tệp test, ghi log, khôi phục từ bản
+sao, so sha256 (`khôi phục: NGUYÊN VẸN` sau mọi ca; băm bốn tệp mã sau cùng khớp bản sao). **Mười ca, mười ĐỎ đúng vế, không ca sống** (`dot-bien.log`,
+`dot-bien-M*.log`):
+- **M1** [lược đồ] migration bỏ hai `ADD CONSTRAINT` (giữ khối đối chiếu) ⇒ `migrations.int` `[khoản 283]` đỏ: `migrate()` sau sửa tay NÉM `Hardening …
+  (phan_xet) thất bại: … supplier_contacts.supplier_contacts_email_khong_dau_cham_cuoi: KHÔNG TỒN TẠI; users.users_email_khong_dau_cham_cuoi: KHÔNG TỒN
+  TẠI` (mục khoản 105); `suppliers.int` và `auth.int` đỏ ngay ở `beforeAll` — cùng mục ấy chặn mọi `migrate()` trên cụm mới, nên chúng không tới vế
+  của mình (xem M1b).
+- **M1b** [lược đồ] M1 + bỏ hai dòng khai (mục khoản 105 không chặn) ⇒ `suppliers.int` 1 đỏ đúng ca superuser (`expected null to be '23514
+  supplier_contacts_email_khong_d…'`; năm ca ứng dụng xanh — vế có tên còn); `auth.int` đỏ: `{ chenCham: null, chenHaiCham: null, linkToi: [dạng trần,
+  dạng có dấu chấm] }`; `migrations.int` đỏ: `expected [] to deeply equal [ { …(4) }, { bang: 'users', …(3) } ]`.
+- **M2** [ứng dụng] bỏ lời từ chối có tên ở `addSupplierContact`, GIỮ `EMAIL_PATTERN` đã siết ⇒ 5 ca `it.each` đỏ: `expected 'email sai định dạng, hoặc
+  chứa khoảng trắng / ký tự điều khiển' to be 'email có dấu chấm cuối tên miền — …'`.
+- **M3** [ứng dụng] `EMAIL_PATTERN` về đuôi cũ, GIỮ lời từ chối có tên ⇒ `tax-code` đỏ (`expected true to be false`); `suppliers.int` 8/8 xanh — đúng:
+  vế có tên chặn trước vị từ (M2 và M3 đo hai vế độc lập).
+- **M4** [ứng dụng] M2 + M3 (tầng ứng dụng về như trước) ⇒ 5 ca đỏ `expected error: new row for relation "supplier_con… to be an instance of
+  SupplierError` — lược đồ chặn (23514) nhưng không có tên ở tầng ứng dụng.
+- **M5** [công cụ] bỏ kiểm ở `khoi-tao.ts` ⇒ `khoi-tao.int` đỏ: `expected 'người thứ 2: thất bại (mã 23514, ràng buộc users_email_khong_dau_cham_cuoi)'
+  to be 'người thứ 2: email có dấu chấm cuối tên miền'` (lỗi có `cause`). Chạy lại trên bản `endsWith`: cùng kết quả.
+- **M6** [hardening] bỏ dòng khai `users_email_khong_dau_cham_cuoi` ⇒ `check-an-ninh.int` đỏ `CHECK chưa được phân loại — khai hay miễn kèm lý do:
+  expected [ 'users_email_khong_dau_cham_cuoi' ] to deeply equal []`; `migrations.int` đỏ `dòng khai của users_email_khong_dau_cham_cuoi: expected …
+  to contain …`.
+- **M7** [hardening] định nghĩa khai của `users` đổi thành `''\.+$''` ⇒ `migrations.int` đỏ: `migrate()` sau sửa tay NÉM `users.users_email_khong_dau_cham_cuoi:
+  định nghĩa khác bản khai (so pg_get_constraintdef với CHECK_AN_NINH_KHAI)`.
+- **M8** [migration] sáu literal `E'\\.$'` về `'\.$'` ⇒ `migrations.int` đỏ ở vế `standard_conforming_strings = off`: chẩn đoán `users 4 hang …;
+  supplier_contacts 3 hang …` (mọi hàng) thay `users 2 hang …; supplier_contacts 2 hang …`.
+- **M9** [migration] khối đối chiếu không bao giờ nêu (`IF false THEN`) ⇒ `migrations.int` đỏ: `Migration 100_email_khong_dau_cham_cuoi.sql thất bại:
+  check constraint "users_email_khong_dau_cham_cuoi" of relation "users" is violated by some row` — 23514 thô, không định danh, thay thông báo nguyên văn.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá** (lượt soi đối kháng, tệp tạm `apps/api/src/zz-tam-lo-ke-283.int.test.ts`, đã xoá — `tam-lo-ke.log`): **306** —
+  dạng tương đương RFC 5322 của cùng một địa chỉ (chú thích `dot(ghi-chu)@x.vn` và ba vị trí khác, quoted-string `"dot"@x.vn`) cất được cạnh dạng trần
+  ở `supplier_contacts` qua `addSupplierContact` và ở cả hai bảng dưới superuser; dạng chú thích qua `docBanKhai` và phép kiểm đích của bộ gửi SES, và
+  `issueLoginToken` phát link cho nó. Đóng nó là quyết định hình dạng (ADR-132 §3) — câu cho chủ dự án.
+- **"Cùng hộp thư" đứng trên RFC 5321 và phép kiểm đích của bộ gửi**, không trên một lần gửi thật: máy đo không có SES; `laDiaChiEmail` nhận cả
+  `dot@x.vn` lẫn `dot@x.vn.`.
+- **HTTP 422 không đo trực tiếp** ở vòng này (như §S1.229): ánh xạ `SupplierError` ⇒ 422 là lớp có sẵn của `apps/api/src/dispatch.ts`; route chuyền thẳng
+  `body.email`.
+- **`/auth/link` vẫn nhận `dot@x.vn.`** ở phép kiểm hình dạng tối thiểu và xếp một job — không người dùng nào mang địa chỉ ấy nên không link. Người gõ
+  thừa dấu chấm cuối không nhận link (không chuẩn hoá — cái giá nhìn thấy được, ADR-139 §Hệ quả; luôn 200, không liệt kê được email — không đổi).
+- **`ban-khai.ts` không đổi**: phép dò trùng của bản khai không gộp `dot@x.vn` với `dot@x.vn.`; `khoi-tao.ts` từ chối dạng có dấu chấm trước câu INSERT,
+  nhưng SAU khi giao dịch đã mở (bản khai sai đi tới CSDL rồi mới dừng).
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào — như trước); `a@x..vn`, `.a@x.vn`, `a.@x.vn` vẫn cất được (sai hình dạng, không phải "cùng hộp thư").
+- Đuôi `\.$` không bắt dấu chấm cuối Unicode (`。` U+3002, `．` U+FF0E) — 092 chặn trước vì ngoài ASCII in được (thăm dò).
+- Hồ sơ N3 của migration không đo (không tới được, ADR-061 — lý do của 092). `ACCESS EXCLUSIVE` trên hai bảng trong lúc kiểm — tính chất chung của
+  mọi `ADD CONSTRAINT`. Một hàng có dấu chấm cuối chèn GIỮA khối đối chiếu và `ADD CONSTRAINT` làm câu sau NÉM 23514 thô (vẫn dừng deploy; lần deploy kế
+  khối đối chiếu nêu định danh) — cùng tính chất 092, không đo.
+- M1 không đo `suppliers.int` / `auth.int` tới vế của chúng (mục khoản 105 chặn trước ở `beforeAll`) — M1b đo.
+- `so-no-tu-doi-chieu` P9b đỏ trên nhánh này sau commit (Handoff khai 93 migration đánh số, kho có 94) — tệp cấm; `pnpm cap-so --dem` viết lại.
+- Không chạy `pnpm test:int` trọn, `db/migrations.int.test.ts` trọn tệp (chỉ bốn khối liên quan), `pnpm evidence` (máy dùng chung; đề bài).
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/B3`; vitest int với hai biến cụm cục bộ; tuần tự một cụm Postgres một lúc. Log ở `scratchpad/b3/`.
+- Đo trước (`782c5eb0` + ca mới): `tax-code` 1 đỏ / 5 xanh; `suppliers.int -t S1.247` 6 đỏ / 2 xanh (35: 27 bỏ qua); `khoi-tao.int -t S1.247` 1 đỏ
+  (19: 18 bỏ qua); `auth.int -t "khoản 283"` 1 đỏ (62: 61 bỏ qua); `migrations.int` bốn khối 4 đỏ (126: 121 bỏ qua, 1 xanh ngoài phạm vi).
+- Sau vá: `db/migration-shape.test.ts` 28/28, `tests/architecture/check-an-ninh-khai.test.ts` 2/2, `tax-code` 6/6; `migrations.int` bốn khối 4/4 (67,3 s),
+  `[khoản 283]` với vế `standard_conforming_strings = off` 1/1 (15,0 s); bốn khối chạy lại trên cây cuối đã stage: 4/4 (30,5 s).
+- Cổng của lô: `packages/supplier/src/suppliers.int.test.ts` trọn 35/35 (10,6 s); `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` 19/19 ở `C.UTF-8`
+  (16,1 s) và 19/19 ở `TRUSTPROCURE_PG_LOCAL_LOCALE=C` (17,2 s); `apps/api/src/auth.int.test.ts` trọn 62/62 (54,4 s); `db/check-an-ninh.int.test.ts` 4/4
+  (28,8 s); `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38 (482,3 s — máy tải nặng); tĩnh `migration-shape` 28/28, `check-an-ninh-khai` 2/2;
+  `tests/architecture/ma-chep-api-worker.test.ts` 95/95.
+- Đột biến: 10 ca / 10 đỏ, 0 sống (mục 6); `khôi phục: NGUYÊN VẸN` sau mỗi ca.
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 499 module / 2086 phụ thuộc, 0 vi phạm (92 s, cây cuối; lượt đầu 74 s, cùng kết quả).
+- `pnpm test`: 136 tệp: 2187 xanh, 1 bỏ qua (tiền tồn), 4 đỏ (272 s, cây cuối, migration và tệp bàn giao đã `git add`) — ba ca P9b của
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` (`Handoff.md khai 93 migration đánh số, kho có 94` — lời khai `pnpm cap-so --dem` viết lại;
+  cùng tệp với migration mới tạm bỏ khỏi chỉ mục git: 45/45) và một ca đo thời gian của `tests/architecture/khoa-depcruise.test.ts` (đối
+  chứng dương «không khoá thì hai tiến trình chồng lấn» hụt dưới tải — máy dùng chung; chạy lại riêng hai lần: 16/16, 16/16; lượt
+  `pnpm test` đầu: xanh). Lượt đầu còn đỏ `tests/architecture/ma-chep-api-worker.test.ts` ⑵ vì literal `/\.$/u` ở `khoi-tao.ts` — đổi sang
+  `endsWith(".")` (mục 5 điểm 3), nay 95/95.
+- Thăm dò và lỗ kề: mục 3, mục 7 (`tam-lo-ke.log`).
+
+# §S1.248 — LÔ B5 ĐỢT 3: `api` TỰ PHỤC HỒI JOB `PENDING` SAU KHI KHỞI ĐỘNG LẠI — MỘT HÀM HẸP `SECURITY DEFINER` TRẢ TẬP TỔ CHỨC CÓ VIỆC CỦA `api`, NẠP LÚC LÊN VÀ MỖI KỲ POLL; `052` VẪN KHÔNG MỞ CHO `app_api` — KHOẢN 277 ĐÓNG; 307, 308 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một migration, `hardening.always.sql`, composition root của `api`, ba tệp test tích hợp và gương test `apps/api/src/test-services.ts` (một chú thích); không route, không màn. Nó đỡ đường mà kịch bản §11 đi qua trên hạ tầng thật (mảnh 3): tin báo người duyệt (bước "hai người của bên mua phê duyệt mở thầu") và link đăng nhập không còn kẹt sau một lần ECS thay task. Đóng 277; mở 307, 308 (lượt soi đối kháng). Không ADR mới — tiểu mục khoản 277 ở ADR-040.
+
+## 1. Vòng này là gì
+Lô B5 của đợt trả nợ thứ ba, lô cuối trước B7 của làn hardening. Khoản 277 (§S1.222, tách từ khoản 156): runner outbox trong tiến trình `api` lấy danh sách tổ chức từ `toChucDaThay` — tập tổ chức mà CHÍNH tiến trình đã thấy xếp việc (dấu ADR-047) — nên sau mỗi lần khởi động lại tập ấy rỗng và mọi job `PENDING` của `api` (link đăng nhập, tin báo người duyệt, tin gia hạn: job chờ thử lại, job xếp ngay trước khi chết, job mà một instance khác xếp rồi chết trước lời đánh thức) chờ tới yêu cầu GHI CÓ XẾP VIỆC kế tiếp của chính tổ chức ấy. ADR-083 chỉ PHÁT HIỆN (≥ 15 phút), không tự phục hồi. `app_api` không tự đọc được hàng đợi xuyên tổ chức: `outbox_jobs` bật FORCE RLS và policy cách ly áp cho mọi vai.
+
+## 2. Quyết định của chủ dự án
+Chốt 2026-09-30, kế hoạch đợt 3 mục 0 **câu 10**: **một hàm hẹp riêng** `SECURITY DEFINER` trả `org_id` có job `PENDING` thuộc tập `kind` của `api` — không phải danh sách tổ chức đầy đủ —, khai ngoại lệ mục (C) theo chữ ký; sửa ADR-040 bằng tiểu mục. Phương án bị loại: mở hàm `052` cho `app_api`; hoặc worker quét `PENDING` quá tuổi rồi đánh thức. Đề bài lô: `EXECUTE` chỉ cho `app_api`, chủ hẹp, `search_path` ghim, ghim ở hardening (vân tay — ADR-124); runner của `api` nạp tập tổ chức từ hàm ấy lúc lên và mỗi kỳ poll, hợp với `toChucDaThay`. Ghi chú liên lô: B6 (hàm SECURITY DEFINER mới có đúng hai hàng ghim — «định nghĩa hàm …», «EXECUTE trên …» — với tiền điều kiện neo nguyên văn tên migration; T1 đọc bí danh trong ô mô tả); B2 (`app_api` có thêm policy RESTRICTIVE FOR INSERT năm kind — "tập kind của api" đọc theo TÊN policy `095`, là tập CLAIM được).
+
+## 3. Đo trước
+- `apps/api/src/composition.int.test.ts` khối `[S1.248 / khoản 277]` viết TRƯỚC bản vá, chạy trên `ae58c294` (mã sản xuất chưa đổi): `Tests 1 failed | 21 skipped (22)`, 36,9 s (phần test 34,5 s). ① xanh — tiến trình thứ nhất dựng từ cấu hình, `/auth/link` cho tổ chức mới (người dùng ACTIVE) ⇒ 200, lời đánh thức gãy ở claim (trigger tạm `BEFORE UPDATE … WHEN (NEW.status = 'RUNNING')` ném TP277 — dòng `[api] outbox error TP277`), `dung()`; job `{ LOGIN_LINK_SEND, PENDING, attempts 0 }`, hộp thư chưa có tin. Tiến trình MỚI, không một yêu cầu HTTP nào: năm kỳ vọng đỏ — ② `job PENDING của tổ chức mà tiến trình mới CHƯA thấy xếp việc phải xong trong 15000 ms — không lời /auth/link nào: expected null not to be null`; ② `xong ngay kỳ poll LÚC LÊN — trước kỳ thứ hai (5 s): expected Infinity to be less than 5000`; ③ `job PENDING chèn thẳng phải được một kỳ poll nhặt trong 15000 ms: expected null not to be null`; hai hộp thư `expected +0 to be 1`. Dòng đo: `② job khôi phục sau khởi động lại: KHÔNG xong trong 15000 ms; ③ job chèn thẳng: KHÔNG xong trong 15000 ms`.
+- Hàm và policy trên cụm tạm PostgreSQL 16 (migrate() đủ bộ tới `095`, rồi migration mới áp tay): dưới `app_api`, năm tổ chức — A một job `PENDING` `LOGIN_LINK_SEND`, B một job `PENDING` `UNSEAL_RFQ`, C một job `DONE`, D không việc, E một job `RUNNING` hết hạn thuê — hàm trả đúng A; `app_api` đọc thẳng `outbox_jobs` chưa gắn tổ chức: 0. `app_unseal`, `app_neo`, `app_khoi_tao` gọi hàm: `permission denied for function outbox_to_chuc_co_viec_api`. Cảnh ❷ của ADR-040 trên hàm này: `DROP POLICY outbox_jobs_liet_ke_viec_api` ⇒ 0 hàng không lỗi; `ALTER FUNCTION … SECURITY INVOKER` ⇒ 0 hàng không lỗi; `REVOKE SELECT (kind) … FROM app_liet_ke_to_chuc` ⇒ `permission denied for table outbox_jobs` (ồn). Kế hoạch truy vấn của thân, 60 000 hàng `DONE` + 40 `PENDING` trên 200 tổ chức: `Bitmap Index Scan on outbox_jobs_claim_idx`, 3 buffer, 0,063 ms.
+
+## 4. Thay đổi
+- `db/migrations/101_api_to_chuc_co_viec.sql` (mới): ⑴ `GRANT SELECT (org_id, kind, status) ON public.outbox_jobs TO app_liet_ke_to_chuc` — không `payload` (email của link đăng nhập); ⑵ `CREATE POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs FOR SELECT TO app_liet_ke_to_chuc USING (status = 'PENDING')`; ⑶ `public.outbox_to_chuc_co_viec_api()` — `RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog`, thân `SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE'])`; ⑷ `REVOKE ALL … FROM PUBLIC`, `GRANT EXECUTE … TO app_api` TRƯỚC khi đổi chủ; ⑸ hai quyền mượn trong giao dịch (`GRANT app_liet_ke_to_chuc TO current_user WITH INHERIT FALSE, SET TRUE`, `GRANT CREATE ON SCHEMA public`), `ALTER FUNCTION … OWNER TO app_liet_ke_to_chuc`, trả lại ngay — nguyên khuôn `052` ⑸. Khối đầu tệp nêu bài toán, vì sao policy, vì sao chung vai chủ, cái giá.
+- `db/migrations/hardening.always.sql`: dòng thứ ba của `NGOAI_LE_HINH_DANG` (`outbox_jobs`, `outbox_jobs_liet_ke_viec_api`, `r`, `app_liet_ke_to_chuc`, `co_org_id`, `(status = 'PENDING'::text)`); dòng thứ hai của `NGOAI_LE_DOC_VONG` (`ham`, `public`, `outbox_to_chuc_co_viec_api()`, `101_api_to_chuc_co_viec`, lý do một dòng) và lý do của dòng `052` gạch tại chỗ (vai chủ nay có quyền thứ ba); hàng «định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)» — câu sửa `CREATE OR REPLACE` thân chuẩn, hậu điều kiện thân (chuẩn hoá khoảng trắng), `provolatile = 's'`, `prosecdef`, `proretset`, `proconfig = {search_path=pg_catalog}`, `pronargs = 0`, kiểu trả, ngôn ngữ, `proowner = app_liet_ke_to_chuc`, ô mô tả in vân tay (khuôn ADR-124), tên GUC, chủ; hàng «EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (101_api_to_chuc_co_viec)» tự chữa hai chiều; hàng «policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (101_api_to_chuc_co_viec)» — dựng policy khi VẮNG bằng `EXECUTE format(…)` (khuôn 042/044), phán xét lệnh `r`, `polwithcheck` NULL, vai đúng một, biểu thức nguyên văn; cả ba hàng tiền điều kiện neo `'101_api_to_chuc_co_viec.sql'` trong `schema_migrations`. Chú thích "hàm SECURITY DEFINER DUY NHẤT" (hai chỗ) và "ĐÚNG MỘT dòng" của khối đầu tệp gạch tại chỗ.
+- `apps/api/src/composition.ts`: hằng `CAU_TO_CHUC_CO_VIEC_API` (ghim đủ schema, khuôn [QT3]); `lietKeToChuc` = `pool.query` hàm hẹp ∪ `toChucDaThay`; runner nhận `listOrganizations: lietKeToChuc`; `batDau()` gọi `lietKeToChuc()` một lần sau phép kiểm vai, trước phép kiểm đồng hồ và trước khi mở cổng — ném thì tiến trình không lên (thông điệp nêu tên hàm và mã lỗi, không giá trị); hai đoạn chú thích cũ gạch tại chỗ.
+- `apps/api/src/composition.int.test.ts`: khối `[S1.248 / khoản 277]` ba ca — ①②③④ (khởi động lại, đo thời gian, vế hợp, ranh giới 307), lúc lên fail-closed (app_api mất `EXECUTE` ⇒ `batDau()` ném; GRANT lại ⇒ lên), đối chứng của hàm (vào tập khi và chỉ khi có job `PENDING` thuộc tập kind của api; tập kind = bảng handler = policy 095 theo tên; bán kính EXECUTE, đọc thẳng, hàng và cột của vai chủ).
+- `db/migrations.int.test.ts`: tên migration mới ở ba danh sách mong đợi; ca `[S1.248 / khoản 277]` năm cảnh trôi qua `migrate()` trên một cụm.
+- `db/rls-coverage.int.test.ts`: dòng thứ ba ở bản gương `NGOAI_LE_HINH_DANG`, dòng thứ hai ở `NGOAI_LE_DOC_VONG_DA_KHAI` (lý do `052` sửa cùng chữ), số dòng khai `1` → `2`, ba danh sách mong đợi của câu phán xét mục (C) thêm hàm thứ hai.
+- `apps/api/src/test-services.ts`: một chú thích — gương runner test không có `listOrganizations` (không poll), có chủ đích.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **Vai chủ là `app_liet_ke_to_chuc` — chung với `052` —, không một vai thứ năm.** "Chủ hẹp" đọc là: vai NOLOGIN NOINHERIT, không tiến trình nào mang nó làm `current_user`, quyền chỉ tới được qua thân các hàm nó sở hữu — và thân cả hai hàm đều ghim ở hardening, chỉ SUPERUSER thay được thân (ADR-040 "Điều CHƯA CHẮC"). Quyền thêm vào vai ấy (`SELECT (org_id, kind, status)` trên `outbox_jobs`, một policy thứ hai) không tới người gọi `052`: thân `052` là `SELECT o.id FROM public.organizations o`, ghim. Một vai mới đòi BƯỚC 0, một hàng thuộc tính khuôn S1.212, và dòng khai ở tập vai ngoài cây của `db/hardening-suy-tu-tinh-chat.int.test.ts` (khoản 265 — tệp ngoài danh sách của lô) cùng tập vai trong policy của `db/rls-coverage.int.test.ts` — nhiều bề mặt hơn cho cùng bán kính. Cái giá: bốn lời khai "ĐÚNG hai quyền" / "ĐÚNG MỘT hàm SECURITY DEFINER" thiu — ADR-040 (mục 6 ⑵), hai chú thích của `052` (không sửa được, checksum — đính chính ở tiểu mục ADR-040), hai `lyDo` của `db/migration-shape.test.ts` và một chú thích của `db/vai-neo.int.test.ts` (tệp ngoài danh sách — mục 9 ⑶).
+- **Policy đi kèm có vị từ `status = 'PENDING'`, không `USING (true)`.** Hàng hẹp: vai chủ thấy đúng hàng đang chờ, không hàng `DONE`/`FAILED`/`RUNNING` (đo: năm hàng `PENDING` trong tám hàng của vế đối chứng). Hai hệ quả phụ, cả hai có lợi: không cần dòng `NGOAI_LE_USING_TRUE` ở `db/migration-shape.test.ts` (chỉ còn một dòng `NGOAI_LE_LAC_CHO` — mục 9 ⑴), và vị từ này KHÔNG phải vị từ giả để lách cổng mà là đúng lát hàng hàm cần. Tập `kind` KHÔNG chép vào policy: thêm một kind cho `api` chỉ phải đổi thân hàm (cộng policy `095`), không đổi policy này.
+- **Thân hàm viết lại `status = 'PENDING'` dù policy đã cắt đúng lát ấy**: nghĩa của hàm không được dựa vào một policy nằm ở chỗ khác. Đo: đột biến bỏ vế `status` khỏi thân (nhất quán migration + ghim, M10) SỐNG ở lượt đầu — policy vẫn cắt, hai lớp chứ không phải một vế thừa — nên thêm vế ⑴′ vào đối chứng (nới policy thành `USING (true)` trong giao dịch rồi ROLLBACK: tập không đổi) và M10 đỏ.
+- **Tập `kind` viết CỨNG trong thân, không nhận tham số.** Một tham số cho `app_api` hỏi được tập tổ chức có việc `PENDING` của worker — `UNSEAL_RFQ` tức RFQ đang được mở thầu — rộng hơn câu 10. Vế đối chiếu (`apps/api/src/composition.int.test.ts`, đối chứng ⑵) đòi tập kind đưa tổ chức vào tập BẰNG `Object.keys(buildApiOutboxHandlers(…))` VÀ bằng tập của policy `outbox_jobs_kind_app_api` đọc theo TÊN (`docTapKindCuaPolicyApi`, sẵn có từ khoản 158) — đúng ghi chú liên lô của B2: sau B2 `app_api` có thêm policy RESTRICTIVE FOR INSERT năm kind (`outbox_jobs_kind_xep_app_api`); tập của hàm là tập `api` CLAIM được (ba kind có handler), không phải tập `api` XẾP được. Thứ tự phần tử trong mảng theo chữ cái, như `095`.
+- **Không lọc `run_after <= now()`**: "có job `PENDING`" theo nguyên văn câu 10, và hàm giữ `STABLE` (không `clock_timestamp()`). Job hẹn thử lại vẫn làm tổ chức vào tập, runner claim 0 tới khi tới hạn — một giao dịch claim thừa mỗi kỳ cho tổ chức ấy, chặn trên bởi số tổ chức có việc. Kế hoạch đo: chỉ mục riêng phần `outbox_jobs_claim_idx`, 3 buffer, 0,063 ms với 60 000 hàng `DONE`.
+- **`batDau()` NÉM khi hàm không gọi được** (khuôn vế ⑵ của worker và khuôn "chạm CSDL trước khi mở cổng" của chính composition root): hàm thiếu (migration khai sinh chưa áp, DROP), `app_api` mất `EXECUTE`, hay vai chủ mất quyền cột ⇒ tiến trình không lên, thông điệp nêu tên hàm và mã lỗi, không giá trị (đo: ca "lúc lên" — `error 42501`, không chuỗi kết nối). KHÔNG ném khi 0 tổ chức — với `api` đó là trạng thái bình thường (worker: 0 ⇒ cảnh ❷ ⇒ không lên). Cái giá: một lần trôi quyền chuyển `api` từ "mất tự phục hồi" thành "không lên được" ở lần khởi động kế — ồn ào, và hàng EXECUTE của hardening dựng lại quyền ở deploy kế; quyền CỘT của vai chủ thì không hàng nào dựng lại (cùng giới hạn với `SELECT (id)` của `052`).
+- **Lister NÉM khi hàm hỏng giữa chừng, không trả `toChucDaThay` một mình**: hợp đồng ĐẦY ĐỦ + SỐNG của `OrganizationLister` ("không được trả về danh sách cụt"). Cái giá: một kỳ lỗi không phục vụ tổ chức nào qua poll; lời đánh thức vẫn chạy (`runOnceForOrg` thẳng); dòng `[api] outbox poll …` mỗi 5 s (ADR-083 `poll-loi`).
+- **Một hàng tự chữa cho policy, ngoài hai hàng ghim hàm.** Cảnh ❷ đo được trên chính hàm này (policy vắng ⇒ 0 hàng không lỗi), `api` không phân biệt "0 tổ chức có việc" với "không việc", và `CAU_POLICY_SAI` nguồn (i) im vì bảng còn policy cách ly. Khuôn mục 044; câu dựng đi qua `EXECUTE format(… ON %s …)` như 042/044 — bản đầu viết nguyên câu trong một chuỗi hằng và `db/migration-shape.test.ts` bắt nó thành policy "lạc chỗ" của `hardening.always.sql` (đo ở vòng này), nên sửa theo idiom đã khai của tệp.
+- **Thứ tự và quyền mượn của migration là nguyên khuôn `052`** — ACL trước khi đổi chủ, hai quyền mượn trả lại trong cùng giao dịch, chỉ nuốt `insufficient_privilege`. Đo: hồ sơ N3 (`db/migrations.int.test.ts`, vai deploy CREATEROLE không superuser chạy `migrate()` đầu tiên) xanh — "Hardening không sửa được 2 mục" không đổi, vai deploy không giữ membership kế thừa nào vào `app_liet_ke_to_chuc`.
+- **Ca khởi động lại dựng job `PENDING` "đã xếp, chưa chạy" bằng đường sản xuất** (`/auth/link` ở tiến trình ①) và một trigger tạm chặn claim (TP277), không chèn thẳng — chèn thẳng là cảnh ③ riêng (instance khác chết sau commit). Kỳ vọng ② "xong trước kỳ poll thứ hai (5 s)" ghim vế "LÚC LÊN" chứ không chỉ "mỗi kỳ". `expect.soft` cho ② ③ để lần đỏ nói cả hai cảnh (đo trước in đủ năm kỳ vọng).
+- **④ đo cả vế HỢP lẫn ranh giới trong cùng tiến trình** — một tổ chức vừa xếp việc qua ② (∈ `toChucDaThay`) và một tổ chức chưa, mỗi bên một job `RUNNING` hết hạn thuê: bên đã thấy được nhặt, bên chưa thấy nằm yên. Nhờ vậy vế hợp không phải trang trí (M2 đỏ đúng ở đây) và khoản 307 mở bằng một phép đo, không bằng suy luận.
+- **Ghi chú liên lô B6 — "đúng HAI hàng ghim"**: hai hàng mang tên hàm là «định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)» và «EXECUTE trên outbox_to_chuc_co_viec_api(): …»; hàng thứ ba (policy) KHÔNG mang tên hàm ở tên hàng lẫn ô mô tả, nhưng dùng CÙNG tiền điều kiện neo `'101_api_to_chuc_co_viec.sql'` — xem mục 9 ⑷. Ô mô tả của cả ba hàng không có bí danh `van_ban`/`bieu_thuc` (T1 xanh 7/7).
+- **Không nhãn `[INV-…]` mới**: mọi ca mới mang `[S1.248 / khoản 277]`, nên `tools/inv-matrix/src/so-khai-nhan.ts` và `docs/TEST-PLAN.md` không đổi.
+- **Gương test không có lister**: `apps/api/src/test-services.ts` chỉ thêm một chú thích — runner của test không poll, và cổng `kind-outbox-mot-cho` đối chiếu đúng dây nối MẢNG LỌC (bảng handler, `kindKhongNguoiNhan`), không đổi (6/6).
+
+## 6. Đột biến
+Kịch bản `dot-bien.py` (ngoài kho, scratchpad của phiên): mỗi ca áp các phép thay — mỗi phép thay phải khớp ĐÚNG số chỗ khai, không thì kịch bản dừng —, chạy tệp test đích (`PGL`, `-t` theo khối), khôi phục nguyên văn, so sha256 bốn tệp trước/sau (`composition.ts`, `hardening.always.sql`, migration mới, `rls-coverage.int.test.ts`): nguyên vẹn sau mỗi ca và sau cả lượt. Mười ca:
+- **M1** [runner] `listOrganizations: () => [...toChucDaThay]` — hàm hẹp bỏ khỏi lister ⇒ `apps/api/src/composition.int.test.ts -t "khoản 277"` `1 failed | 2 passed`: ② `… phải xong trong 15000 ms — không lời /auth/link nào: expected null not to be null`, ② `… trước kỳ thứ hai (5 s): expected Infinity to be less than 5000`, ③ `expected null not to be null`, hai hộp thư `expected +0 to be 1` — đúng hình dạng đo trước.
+- **M2** [runner] lister chỉ trả tập hàm, bỏ vế hợp ⇒ `1 failed`: ④ `job RUNNING hết hạn thuê của tổ chức ĐÃ THẤY xếp việc được kỳ poll nhặt lại — vế hợp với toChucDaThay: expected null not to be null`.
+- **M3** [composition] `batDau()` bỏ lời gọi lister trước khi mở cổng ⇒ `1 failed`: `hàm hẹp không gọi được mà tiến trình vẫn lên: expected null not to be null`.
+- **M4** [migration + hai chỗ ghim, nhất quán] thân bỏ vế `kind` ⇒ `1 failed`: `job PENDING của worker không làm tổ chức vào tập: expected { UNSEAL_RFQ: true, …(1) } to deeply equal { UNSEAL_RFQ: false, …(1) }`.
+- **M5** [hardening] bỏ hàng tự chữa policy ⇒ `db/migrations.int.test.ts -t "S1.248 / khoản 277"` `1 failed | 125 skipped`: ⑶ WARNING của hàng policy `expected [] to have a length of 1 but got +0` — policy không được dựng lại.
+- **M6** [hardening] hàng định nghĩa bỏ vế `proowner` ⇒ `1 failed`: ⑷ `chủ hàm sai ⇒ migrate() phải GÃY: expected null not to be null`.
+- **M7** [hardening] `NGOAI_LE_DOC_VONG` mất dòng của hàm hẹp ⇒ `db/rls-coverage.int.test.ts -t "HAI BẢN KHỚP"`: `migrate()` của `beforeAll` NÉM — `"view/matview/hàm SECURITY DEFINER đọc vòng qua RLS": trạng thái hiện tại SAI (public.outbox_to_chuc_co_viec_api(): hàm SECURITY DEFINER — …)`, `61 skipped`.
+- **M8** [migration + `NGOAI_LE_HINH_DANG` + hàng tự chữa + bản gương, nhất quán] policy đi kèm `USING (true)` ⇒ `composition.int -t "khoản 277"` `1 failed`: `vai chủ hàm thấy đúng năm hàng PENDING của vế này: expected [ 'PENDING', 'PENDING', …(6) ] to deeply equal [ 'PENDING', 'PENDING', …(3) ]` — thấy cả hàng `DONE`/`FAILED`/`RUNNING`.
+- **M9** [hardening] hàng EXECUTE thôi canh `app_unseal` (câu sửa và hậu điều kiện) ⇒ `migrations.int` `1 failed`: ⑵ `EXECUTE chỉ app_api` — `app_unseal` còn `EXECUTE` sau `migrate()`.
+- **M10** [migration + hai chỗ ghim, nhất quán] thân bỏ vế `status` ⇒ lượt ĐẦU SỐNG (`3 passed`): policy đi kèm vẫn cắt đúng lát `PENDING` — đo được là hai lớp, không phải một vế thừa. Thêm vế ⑴′ (policy nới `USING (true)` trong giao dịch, ROLLBACK) ⇒ M10 đỏ: `policy nới mà thân hàm vẫn chỉ trả tổ chức có job PENDING: expected { daXong: true, daHong: true, …(2) } to deeply equal { daXong: false, daHong: false, …(2) }`. M1–M9 chạy trước khi có ⑴′; vế ấy không đổi vế đỏ của chúng (M8 đỏ ở vế đứng sau ⑴′).
+
+Mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế ⑴′); 0 sống.
+
+## 7. Giới hạn, nói ra
+- **Chỉ `PENDING`.** Job `RUNNING` hết hạn thuê — tiến trình chết GIỮA handler — không làm tổ chức vào tập; nó chỉ được nhặt lại khi tổ chức đã ở `toChucDaThay` của tiến trình đang chạy (vế hợp, đo ④) hay có một job `PENDING` khác. Đo ranh giới ở ④ và ở đối chứng của hàm — khoản 307. ADR-083 cũng không đếm `RUNNING`. Mặt kia, nói ra: chính ranh giới ấy hôm nay che khoản 300 cho `api` — một job làm CHẾT tiến trình không bị nhặt lại ngay lúc lên (trừ khi tổ chức của nó có việc `PENDING` khác, như trước bản vá khi tổ chức ấy xếp việc kế tiếp), nên 307 không được đóng tách khỏi 300.
+- **Hai tệp ngoài danh sách của lô cần một dòng khai mỗi tệp**, và lô không sửa chúng (ràng buộc của đề bài): `db/migration-shape.test.ts` (`NGOAI_LE_LAC_CHO` — policy đi kèm là policy PERMISSIVE thứ hai trên bảng do `007` tạo, cùng hạng 044/052) và `tests/architecture/duong-sql-ngoai-with-tenant.test.ts` (`DUONG_KHAI` — `apps/api/src/composition.ts` có một câu chạy thẳng trên pool ngoài `withTenant`, `cau` 0 → 1, cùng lý do với worker). Trên cây của lô hai cổng ấy ĐỎ đúng hai vế đó (mục 8); bản CŨ/MỚI và phép thử áp tạm ở mục 9 ⑴ ⑵.
+- **`app_api` nay đọc được một tập con các `org_id`**: tổ chức có việc `PENDING` của `api` lúc gọi — không tên, không email, không nội dung job. UUID tổ chức không phải bí mật (ADR-107), và tập ấy lớn theo lưu lượng thật (lời `/auth/link` cho một tổ chức CÓ THẬT làm nó vào tập tới khi job xong — tức ngay lời đánh thức sau đó), bị chặn trên bởi số tổ chức; nhưng đây vẫn là một đường đọc xuyên tổ chức có chủ ý, cho đúng tiến trình hướng internet mà ADR-040 không muốn cho danh sách đầy đủ.
+- **Tập `kind` của `api` nay sống ở BA chỗ**: bảng handler (`apps/api/src/outbox-api.ts`), policy `095`, thân hàm này — cộng policy FOR INSERT của lô B2 (năm kind). Thêm một kind cho `api` là một migration mới sửa policy `095` VÀ thân hàm (ADR-134), cộng hai hàng ghim; vế đối chiếu ở `apps/api/src/composition.int.test.ts` đỏ nếu quên thân hàm. Hàng tự chữa policy KHÔNG phải nơi chứa tập kind (vị từ chỉ `status`).
+- **Grant cột của vai chủ không có hàng tự chữa**: `REVOKE SELECT … ON outbox_jobs FROM app_liet_ke_to_chuc` sau deploy ⇒ hàm ném 42501 — ồn: `api` không lên ở lần khởi động kế, `[api] outbox poll …` mỗi kỳ ở tiến trình đang chạy; không deploy nào dựng lại quyền ấy. Cùng giới hạn với `SELECT (id)` của `052`.
+- **Policy của `052` (`organizations_liet_ke_worker`) vẫn không có hàng tự chữa** — lỗ kề đo được (mục 3 của lượt soi): `DROP POLICY` rồi `migrate()` ⇒ đi qua im lặng, hàm liệt kê trả 0 tổ chức không lỗi. Không vá ở lô này (ngoài phạm vi câu 10) — khoản 308.
+- **Các lời khai "hàm SECURITY DEFINER duy nhất" / "ĐÚNG hai quyền" / "ĐÚNG MỘT hàm SECURITY DEFINER" thiu ở chỗ lô không sửa được**: hai chú thích của `db/migrations/052_worker_liet_ke_to_chuc.sql` (dòng 114 và 141 — migration đã áp, checksum, khoản 19; đính chính ở tiểu mục ADR-040, cùng cách với khoản 162), hai `lyDo` của `db/migration-shape.test.ts`, một chú thích của `db/vai-neo.int.test.ts`, và câu "Nó KHÔNG giữ được vế ĐẦY ĐỦ" ở `packages/outbox/src/runner.ts` (`packages/outbox` chỉ được chạm nếu runner cần cửa mới — không cần). Bản CŨ/MỚI ở mục 9 ⑶.
+- **Vế hợp giữ nguyên dấu ADR-047**, nên `toChucDaThay` vẫn chỉ lớn lên (bị chặn trên bởi số tổ chức có thật — lời đánh thức chỉ chạy sau một `INSERT` đã thành công). Thứ tự danh sách đổi giữa các kỳ (hàm trả không `ORDER BY`), nên điểm xoay vòng của `runOnce()` (vế (c) của MỤC 3) không còn là một vòng cố định — vẫn có cận, không đo riêng.
+- **Hàng định nghĩa hàm là một PHÁN XÉT dưới vai deploy không sở hữu hàm** (như hàng `052`): câu sửa 42501, nuốt ở BƯỚC 2; chỉ SUPERUSER chữa được thân, và `CREATE OR REPLACE` không đổi được chủ (đo ⑷). Năm cảnh trôi ở `db/migrations.int.test.ts` chạy dưới siêu người dùng của cụm test; dưới vai deploy thường chỉ đo đường đi qua (N2 nhánh 1, hồ sơ N3), không đo từng cảnh trôi.
+- **Vế B6 "đúng hai hàng ghim" chưa chạy trên cây này** (lô B6 gộp trước, không có ở nền `ae58c294`): hàng tự chữa policy dùng cùng tiền điều kiện với hai hàng ghim — mục 9 ⑷.
+- Không chạy `pnpm test:int` trọn, `pnpm evidence`, hay `db/migrations.int.test.ts` trọn tệp (máy dùng chung — đề bài): mười khối liên quan của `migrations.int` (mục 8).
+
+## 8. Số đo
+- Đo trước (`ae58c294` + test, 18:32, tải 2,66): `composition.int -t "khoản 277"` `1 failed | 21 skipped (22)`, 36,9 s — ② ③ KHÔNG xong trong 15 000 ms, năm kỳ vọng đỏ.
+- Sau vá, lượt cuối trên cây của commit (19:25–19:35, tải 0,1–2,9): `apps/api/src/composition.int.test.ts` 24/24, 20,8 s — ② 52 ms, ③ 5 034 ms, ④ 4 937 ms (lượt trước 19:07: ② 51 ms, ③ 5 018 ms, ④ 4 961 ms); `db/migrations.int.test.ts` mười khối liên quan 10/10 (116 bỏ qua), 71,3 s; `db/rls-coverage.int.test.ts` 61/61, 165,7 s; `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38, 314,3 s.
+- Tĩnh: `hardening-khong-in-gia-tri` 7/7, `hardening-co-ly-do` 21/21, `db/hardening-hang.test.ts` 4/4, `kind-outbox-mot-cho` 6/6, `ma-chep-api-worker` 95/95, `qt3-ghim-schema` 12/12, `pool-nghe-du-tin-hieu` 16/16; `db/migration-shape.test.ts` 27/28 và `duong-sql-ngoai-with-tenant` 5/6 — đỏ đúng hai vế chờ dòng khai ở tệp ngoài danh sách; áp tạm hai dòng ấy ⇒ 28/28 và 6/6.
+- `pnpm t0` thoát 0 (505 module, 2121 phụ thuộc, 0 vi phạm); `pnpm test` 136/138 tệp, 2248 đạt | 2 đỏ (đúng hai vế trên) | 1 bỏ qua — trên cây của commit thêm ba ca P9b của `tests/architecture/so-no-tu-doi-chieu.test.ts` (lời khai `93 migration đánh số` ở `Handoff.md`, bàn giao chưa áp): 2245 đạt | 5 đỏ | 1 bỏ qua. Áp thử cả bàn giao (sổ, cột mốc, biên bản, ADR-040, lời khai đếm) rồi hoàn nguyên ⇒ `so-no-tu-doi-chieu` 45/45.
+- Đột biến: mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế ⑴′); `cmp`/sha256 nguyên vẹn sau mỗi ca.
+- Cụm tạm: kế hoạch thân hàm với 60 000 hàng `DONE` — `Bitmap Index Scan on outbox_jobs_claim_idx`, 3 buffer, 0,063 ms; 308 — `DROP POLICY organizations_liet_ke_worker` + `migrate()` ⇒ đi qua, hàm liệt kê 1 → 0 không lỗi.

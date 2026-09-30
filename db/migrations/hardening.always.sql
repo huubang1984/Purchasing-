@@ -382,13 +382,18 @@
 --       và trả bằng một hàng rào chặn deploy.
 --       CỬA cho MATVIEW và cho hàm SECURITY DEFINER: không có cửa kỹ thuật nào (matview không
 --       có RLS, SECURITY DEFINER là leo quyền theo định nghĩa), nên cửa là DANH SÁCH NGOẠI LỆ
---       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ [S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng:
+--       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ ~~[S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng~~
+--       [S1.248 / khoản 277] hiện có HAI dòng:
 --       ~~`public.outbox_danh_sach_to_chuc`~~ [S1.212 / khoản 112 + 163] `('ham', 'public',
 --       'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', lý do)` — khoá năm cột, hàm theo
---       CHỮ KÝ, có chiều khai thiu và bản đối chiếu ở db/rls-coverage.int.test.ts (ADR-040). Thêm một
+--       CHỮ KÝ, có chiều khai thiu và bản đối chiếu ở db/rls-coverage.int.test.ts (ADR-040) — và
+--       [S1.248] `('ham', 'public', 'outbox_to_chuc_co_viec_api()', '101_api_to_chuc_co_viec', lý do)`,
+--       tập tổ chức có việc `PENDING` của `api` (ADR-040 tiểu mục khoản 277). Thêm một
 --       dòng vào đó là một quyết định phải
 --       nhìn thấy, y như NGOAI_LE_HINH_DANG. ~~Tên viết ĐỦ SCHEMA~~ Lược đồ là một cột riêng nên nó đã sẵn sàng cho việc
 --       bỏ giới hạn schema ở vòng fix 2.
+--       [S1.244 / khoản 171] Một dòng chỉ MIỄN khi migration khai sinh của nó đã ghi trong schema_migrations — cùng tiền điều
+--       kiện với các hàng ghim thay chỗ phép cấm; không thoả mà đối tượng có mặt thì (C) nêu nó (xem NGOAI_LE_DOC_VONG).
 --       Hàm thuộc EXTENSION (pg_depend deptype='e') được loại trừ: chúng không do dự án viết
 --       và danh sách ngoại lệ không nên phình theo extension. Đã đo trên PG16.15: pgcrypto
 --       KHÔNG cài hàm prosecdef nào vào public, nên loại trừ này hiện chưa che giấu gì.
@@ -580,6 +585,12 @@ DECLARE
   -- ay. Lenh 'r' (SELECT) chu khong phai 'a'/'w'/'d': vai ay khong ghi duoc gi. Do (S1.82):
   -- `app_unseal` doc THANG `organizations` van thay 0 hang, nen dong nay KHONG noi ban kinh cua
   -- bat ky vai ung dung nao.
+  -- [S1.248 / khoản 277 / ADR-040 tiểu mục] DÒNG THỨ BA: policy ĐỌC của cùng vai chủ hàm trên `outbox_jobs`, cho hàm thứ hai
+  -- của vai ấy (`public.outbox_to_chuc_co_viec_api()`, 101_api_to_chuc_co_viec) — tập tổ chức có việc `PENDING` của `api`.
+  -- Chủ thể hẹp bằng `TO app_liet_ke_to_chuc` (NOLOGIN NOINHERIT), HÀNG hẹp bằng vị từ `status = 'PENDING'`: vai ấy không thấy
+  -- job đã xong, đã hỏng hay đang chạy, và chỉ có `SELECT (org_id, kind, status)` — không `payload` (email của link đăng nhập).
+  -- Lệnh 'r': vai ấy không ghi được gì. Bảng có `org_id` nên phạm vi là 'co_org_id'. Không nới bán kính của vai ứng dụng nào:
+  -- app_api vẫn chỉ thấy hàng đợi của tổ chức nó gắn (policy mang TO vai khác, nên không áp cho app_api).
   -- CHU THICH PHAI O NGOAI khoi VALUES: bo doc o db/rls-coverage.int.test.ts tach hang theo van
   -- ban, va mot dong `--` ben trong lam no thay 1 hang thay vi 2 (do — ba test do cung mot luot).
   NGOAI_LE_HINH_DANG constant text :=
@@ -587,7 +598,9 @@ DECLARE
                ('otp_rate_limits', 'otp_rate_limits_don_cua_so_cu', 'd', 'app_api', 'co_org_id',
                 '((NULLIF(current_setting(''app.org_id''::text, true), ''''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))'),
                ('organizations', 'organizations_liet_ke_worker', 'r', 'app_liet_ke_to_chuc', 'bang_goc',
-                'true'))
+                'true'),
+               ('outbox_jobs', 'outbox_jobs_liet_ke_viec_api', 'r', 'app_liet_ke_to_chuc', 'co_org_id',
+                '(status = ''PENDING''::text)'))
          AS g(bang, polname, lenh, vai_tro, pham_vi, bieu_thuc)$q$;
 
   -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
@@ -627,10 +640,27 @@ DECLARE
   --
   -- BA VẾ GIỮ BÁN KÍNH, và cả ba đo được:
   --   * chủ hàm là `app_liet_ke_to_chuc` — một vai NOLOGIN NOINHERIT không tiến trình nào đăng
-  --     nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG `organizations`;
+  --     nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG `organizations` ~~;~~ [S1.248 / khoản 277] trên
+  --     `organizations` (vai ấy nay còn `SELECT (org_id, kind, status)` trên `outbox_jobs` — cho hàm
+  --     thứ hai của nó, dòng dưới; thân cả hai hàm đều ghim, nên quyền ấy không tới người gọi `052`);
   --   * policy đi kèm mang `TO app_liet_ke_to_chuc`, nên `app_unseal` đọc THẲNG `organizations`
   --     vẫn thấy 0 hàng (đo, cảnh ❹);
   --   * `EXECUTE` bị thu hồi khỏi PUBLIC và khỏi `app_api` (đo cảnh ❺: 42501).
+  --
+  -- [S1.248 / khoản 277 / ADR-040 tiểu mục] DÒNG THỨ HAI: `public.outbox_to_chuc_co_viec_api()`
+  -- (101_api_to_chuc_co_viec) — tập tổ chức có job `PENDING` thuộc ba `kind` của `api`, nguồn mà
+  -- runner của `apps/api` nạp lúc lên và mỗi kỳ poll để job của nó tự phục hồi sau khi khởi động lại.
+  -- Cùng lý do không bỏ được `SECURITY DEFINER`: `outbox_jobs` bật FORCE RLS với policy cách ly không
+  -- `TO`, nên hàm `SECURITY INVOKER` dưới `app_api` chưa gắn tổ chức thấy 0 hàng (đo §S1.248). BỐN VẾ
+  -- GIỮ BÁN KÍNH, cả bốn đo ở `apps/api/src/composition.int.test.ts` (khối khoản 277) và hardening:
+  --   * hàm trả `org_id` của tổ chức có job `PENDING` thuộc tập `kind` của `api` — không phải danh
+  --     sách tổ chức đầy đủ (quyết định câu 10: KHÔNG mở `052` cho `app_api`); job của worker không
+  --     làm tổ chức vào tập;
+  --   * chủ hàm là cùng vai `app_liet_ke_to_chuc`, có ĐÚNG `SELECT (org_id, kind, status)` trên
+  --     `outbox_jobs` — không `payload`;
+  --   * policy đi kèm `outbox_jobs_liet_ke_viec_api` mang `TO app_liet_ke_to_chuc` và vị từ
+  --     `status = 'PENDING'` (dòng thứ ba của NGOAI_LE_HINH_DANG; hàng tự chữa riêng dựng lại nó);
+  --   * `EXECUTE` chỉ cho `app_api` — PUBLIC, `app_unseal`, `app_neo`, `app_khoi_tao` không (42501).
   --
   -- ~~KHOÁ THEO TÊN TRẦN — nói ra vì nó là bậc tự do thật: dòng này miễn trừ MỌI overload cùng tên
   -- và cả một view/matview trùng tên. Hàng ghim thân hàm ở dưới KHÔNG phải lớp chặn overload
@@ -650,7 +680,11 @@ DECLARE
   --            overload `(text)` là một chữ ký KHÁC và mục (C) bắt nó (khoản 163; đo: migrations.int.test.ts);
   --   mig      migration khai sinh, KHÔNG đuôi `.sql` — chiều khai thiu chỉ phán khi tệp ấy đã áp (cùng khuôn
   --            BANG_TENANT_KHAI: tập migration rút gọn của migrations.int.test.ts đi qua; đối tượng bị DROP hay đổi
-  --            hình dạng sau deploy thì ĐỎ có tên);
+  --            hình dạng sau deploy thì ĐỎ có tên); [S1.244 / khoản 171] và dòng chỉ MIỄN khi tệp ấy đã áp — cùng tiền
+  --            điều kiện với các hàng ghim thay chỗ phép cấm (với hàm: hàng ghim thân + chủ hàm và hàng ghim ACL, tiền
+  --            điều kiện `version = '<mig>.sql'`). Tiền điều kiện không thoả mà đối tượng có mặt thì các hàng ấy IM, nên miễn
+  --            trừ rơi theo và mục (C) nêu đối tượng — với hàm, kèm lý do; `db/migration-shape.test.ts` giữ hai tiền điều
+  --            kiện trùng nhau;
   --   ly_do    đọc được — một dòng ở đây là một đường đọc vòng RLS có chủ ý, cùng hạng NGOAI_LE_HINH_DANG.
   -- So bằng NOT EXISTS ở cả hai nhánh: một dòng NULL không tắt gì nữa (khoản 112 — đo ở db/rls-coverage.int.test.ts,
   -- cùng chỗ với bản HAI BẢN KHỚP của danh sách này). Không còn hàng sentinel `('')`: danh sách có dòng thật; ngày nó
@@ -658,7 +692,8 @@ DECLARE
   -- Cột ly_do là MỘT DÒNG (khối này phải bằng từng byte với bộ sinh `khoiValues` của db/hardening-hang.ts).
   NGOAI_LE_DOC_VONG constant text :=
     $q$(VALUES
-         ('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', 'nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (id) trên organizations, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)')
+         ('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', 'nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT ~~chỉ có SELECT (id) trên organizations~~ [S1.248] trên organizations chỉ có SELECT (id) — vai ấy còn sở hữu outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec) với SELECT (org_id, kind, status) trên hàng PENDING của outbox_jobs, thân hai hàm đều ghim —, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)'),
+         ('ham', 'public', 'outbox_to_chuc_co_viec_api()', '101_api_to_chuc_co_viec', 'tập tổ chức có job PENDING của tiến trình api cho JobRunner của nó, nạp lúc lên và mỗi kỳ poll để job của api tự phục hồi sau khi khởi động lại (khoản 277, ADR-040 tiểu mục): outbox_jobs bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_api chưa gắn tổ chức thấy 0 hàng (đo §S1.248); bán kính giữ bằng bốn vế đo được — chỉ trả org_id của tổ chức có job PENDING thuộc ba kind của api, không phải danh sách tổ chức đầy đủ, job của worker không làm tổ chức vào tập; chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (org_id, kind, status) trên outbox_jobs, không payload; policy đi kèm outbox_jobs_liet_ke_viec_api mang TO app_liet_ke_to_chuc và vị từ status = PENDING; EXECUTE chỉ cho app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)')
        ) AS x(loai, nspname, ten, mig, ly_do)$q$;
 
   -- Vị từ "bảng này là CON của một bảng tenant" — lá phân mảnh HOẶC con cháu INHERITS. Con
@@ -908,9 +943,12 @@ DECLARE
         WHERE c.relkind IN ('v', 'm')
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           -- [S1.212 / khoản 112] NOT EXISTS theo khoá (loai, nspname, ten) — bản `NOT IN` cũ tắt cả nhánh khi gặp một dòng NULL.
+          -- [S1.244 / khoản 171] Và chỉ khi migration khai sinh của dòng (cột mig) đã ghi trong schema_migrations — cùng luật với
+          -- nhánh hàm ngay dưới: một dòng khai chỉ có hiệu lực khi đối tượng nó miễn đã ra đời bằng đúng migration ấy.
           AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
                            WHERE x.loai = CASE c.relkind WHEN 'm' THEN 'matview' ELSE 'view' END
-                             AND x.nspname = n.nspname AND x.ten = c.relname)
+                             AND x.nspname = n.nspname AND x.ten = c.relname
+                             AND EXISTS (SELECT 1 FROM public.schema_migrations sm WHERE sm.version = x.mig || '.sql'))
           AND NOT EXISTS (SELECT 1 FROM pg_depend dx
                            WHERE dx.classid = 'pg_class'::regclass AND dx.objid = c.oid
                              AND dx.deptype = 'e')
@@ -936,17 +974,33 @@ DECLARE
        UNION ALL
        -- [S1.212 / khoản 163] Tên in kèm CHỮ KÝ (MAU_CHU_KY_HAM): `public.outbox_danh_sach_to_chuc(text)` — hai overload
        -- không còn cùng một dòng thông điệp, và khoá miễn trừ so đúng chuỗi ấy.
+       -- [S1.244 / khoản 171] MIỄN TRỪ CÓ ĐIỀU KIỆN, cùng điều kiện với hai hàng ghim thay chỗ nó. Một hàm khai ở NGOAI_LE_DOC_VONG
+       -- được miễn vì hàng ghim thân + chủ hàm và hàng ghim ACL canh nó thay phép cấm — và cả hai chỉ chạy khi migration khai sinh
+       -- có trong schema_migrations. Tới vòng này miễn trừ thì VÔ ĐIỀU KIỆN: dòng ấy vắng mà hàm có mặt thì hai hàng IM, miễn trừ
+       -- vẫn đứng, và một thân tuỳ ý chạy dưới quyền chủ hàm mà không mục nào kêu (đo: db/trigger-la-mac-dinh-dong.int.test.ts,
+       -- khối khoản 171). Nay khoá xuôi đọc qua `kh` — phép gộp trên các dòng khai khớp khoá: `mig` là migration khai sinh, `da_ap` đúng
+       -- khi nó đã ghi; không dòng khai ⇒ cả hai NULL — và chỉ miễn khi `da_ap`. Đã khai mà chưa ghi thì hàm bị nêu, kèm lý do.
        SELECT n.nspname || '.' || $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$ || ': hàm SECURITY DEFINER — nó chạy dưới quyền '
               'CHỦ SỞ HỮU nên mọi RLS bên trong được kiểm theo chủ sở hữu, không theo người '
               'gọi. Bỏ SECURITY DEFINER, hoặc khai (''ham'', lược đồ, chữ ký, migration, lý do) vào NGOAI_LE_DOC_VONG '
-              'và bản ở db/rls-coverage.int.test.ts.' AS mo_ta
+              'và bản ở db/rls-coverage.int.test.ts.'
+              || CASE WHEN kh.mig IS NULL THEN ''
+                      ELSE ' Hàm ĐÃ khai ở NGOAI_LE_DOC_VONG (migration ' || kh.mig || ') nhưng migration ấy KHÔNG có trong '
+                           'schema_migrations: miễn trừ chỉ đứng cùng hai hàng ghim thay chỗ nó (thân + chủ hàm, ACL), mà tiền điều '
+                           'kiện của chúng là chính dòng ấy — chúng đang IM (khoản 171). Ghi lại dòng schema_migrations nếu migration '
+                           'ấy đã áp thật rồi deploy lại để hai hàng ghim chạy, hoặc gỡ hàm.'
+                 END AS mo_ta
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         CROSS JOIN LATERAL (
+               SELECT pg_catalog.string_agg(x.mig, ', ') AS mig, pg_catalog.bool_or(sm.version IS NOT NULL) AS da_ap
+                 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
+                 LEFT JOIN public.schema_migrations sm ON sm.version = x.mig || '.sql'
+                WHERE x.loai = 'ham' AND x.nspname = n.nspname
+                  AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$) kh
         WHERE p.prosecdef
           AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
           -- [S1.212 / khoản 163] Khoá theo CHỮ KÝ: một overload cùng tên là một chữ ký khác, không được miễn.
-          AND NOT EXISTS (SELECT 1 FROM $q$ || NGOAI_LE_DOC_VONG || $q$
-                           WHERE x.loai = 'ham' AND x.nspname = n.nspname
-                             AND x.ten = $q$ || pg_catalog.format(MAU_CHU_KY_HAM, 'p') || $q$)
+          AND kh.da_ap IS NOT TRUE
           AND NOT EXISTS (SELECT 1 FROM pg_depend d
                            WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
                              AND d.deptype = 'e')
@@ -1796,9 +1850,16 @@ $ham$;
        ('public.vendor_bid_versions', ARRAY['a_vendor_bid_versions_dat_so_phien_ban', 'vendor_bid_versions_chan_truncate', 'vendor_bid_versions_chi_ghi_them', 'vendor_bid_versions_kiem_han_nop', 'vendor_bid_versions_kiem_phien_khach', 'vendor_bid_versions_kiem_vong_bafo', 'vendor_bid_versions_phai_co_bien_nhan'])
      ) AS tg(bang, ten)$q$;
 
+  -- [S1.244 / khoản 288 / ADR-124] Cột ~~`dinh_nghia` (nguyên `pg_get_triggerdef`)~~ `van_tay_dinh_nghia`: VÂN TAY định nghĩa,
+  -- cùng khuôn các hàng ghim trigger (`vân tay def=`). Trigger lạ là mã người khác viết, và mệnh đề WHEN của nó mang được hằng —
+  -- đo trên cây trước vòng: bản gom phán xét, WARNING «đã GỠ» và WARNING «SAI TRƯỚC khi sửa» (IM5, in ô mô tả) đều in nguyên
+  -- `… WHEN ((new.org_id = '<uuid>'::uuid)) …`. Định nghĩa KHÔNG rời câu này: người vận hành tra nó bằng TÊN (bảng, tên trigger)
+  -- trong một phiên psql — câu tra ở chú thích đầu khối `bang` và ADR-124 mục 6. Cổng T1 (`hardening-khong-in-gia-tri`, vế ⑸)
+  -- nay đọc cả bí danh: một cột mang `pg_get_triggerdef` trần đi vào ô mô tả hay RAISE qua tên cột cũng đỏ.
   CAU_TRIGGER_LA_DU_AN constant text :=
     CTE_TRIGGER_CHAN || $q$
-     SELECT c.oid AS bang_oid, t.tgname::text AS ten, pg_catalog.pg_get_triggerdef(t.oid) AS dinh_nghia,
+     SELECT c.oid AS bang_oid, t.tgname::text AS ten,
+            left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16) AS van_tay_dinh_nghia,
             EXISTS (SELECT 1 FROM $q$ || TRIGGER_DUOC_PHEP || $q$ WHERE pg_catalog.to_regclass(tg.bang) = c.oid) AS bang_co_ten
        FROM pg_trigger t
        JOIN pg_class c ON c.oid = t.tgrelid
@@ -2878,7 +2939,9 @@ $ham$;
   --        phiên khách" — tự nó không mở thêm hàng nào cho ai, nên hợp lệ toàn cục không cần khai;
   --    (b2) RESTRICTIVE khác — ~~SÁU~~ [S1.55] BẢY cột nguyên văn, thêm `nspname` (khoản 98), ở POLICY_RESTRICTIVE_KHAI (tám biến thể của 027 nới
   --        theo một cột cho phiên khách; [S1.233 / khoản 158] cộng HAI policy theo `kind` của `095_outbox_policy_theo_kind` —
-  --        `outbox_jobs_kind_app_api`/`_app_unseal`, FOR UPDATE, mỗi cái MỘT vai, tập `kind` của tiến trình chạy dưới vai ấy);
+  --        `outbox_jobs_kind_app_api`/`_app_unseal`, FOR UPDATE, mỗi cái MỘT vai, tập `kind` của tiến trình chạy dưới vai ấy;
+  --        [S1.246 / khoản 285] cộng MỘT policy của `099_outbox_policy_xep_theo_kind` — `outbox_jobs_kind_xep_app_api`, FOR INSERT
+  --        TO app_api, chỉ vế WITH CHECK (USING khai NULL), tập `kind` mà `app_api` XẾP được);
   --        [CR1] cố ý không soi RESTRICTIVE vì "chỉ thu hẹp" — đúng cho câu
   --        hỏi RÒ, sai cho câu hỏi IM LẶNG: `AS RESTRICTIVE FOR UPDATE USING (false)` làm mọi UPDATE của
   --        app_api ra 0 hàng không lỗi và [CR1] xanh (đo, S1.32);
@@ -2917,6 +2980,10 @@ $ham$;
   -- mà mỗi vai ứng dụng được ghi kết cục, nguyên văn `pg_get_expr`. Thêm một `kind` = một migration `ALTER POLICY` MỚI + sửa dòng
   -- ở đây + dòng gương ở `db/rls-coverage.int.test.ts` (`POLICY_RESTRICTIVE_DA_KHAI`); hai cổng ở `apps/{api,unseal-worker}/src/composition.int.test.ts`
   -- đối chiếu tập ấy với `Object.keys(handlers)` ∪ sổ mồ côi. Thứ tự dòng theo (lược đồ, bảng, policy) — cổng HAI BẢN KHỚP đòi thế.
+  -- [S1.246 / khoản 285] Dòng `outbox_jobs_kind_xep_app_api` (`099_outbox_policy_xep_theo_kind`, ADR-138): tập `kind` mà `app_api`
+  -- XẾP được (FOR INSERT, lệnh `a`, USING NULL) — bằng union `KindOutbox` và bằng hợp hai tập ở trên; thêm một `kind` xếp được = một
+  -- migration `ALTER POLICY … WITH CHECK (…)` MỚI + sửa dòng ở đây + dòng gương. Vế tiền đề của khối khoản 285 ở
+  -- `packages/outbox/src/outbox.int.test.ts` đối chiếu tập ấy với union.
   POLICY_RESTRICTIVE_KHAI constant text :=
     $q$(VALUES
          ('public', 'bid_receipts', 'bid_receipts_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
@@ -2925,6 +2992,7 @@ $ham$;
          ('public', 'guest_sessions', 'guest_sessions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))'),
          ('public', 'outbox_jobs', 'outbox_jobs_kind_app_api', 'w', 'app_api', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))'),
          ('public', 'outbox_jobs', 'outbox_jobs_kind_app_unseal', 'w', 'app_unseal', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))'),
+         ('public', 'outbox_jobs', 'outbox_jobs_kind_xep_app_api', 'a', 'app_api', NULL, '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text, ''UNSEAL_RFQ''::text]))'),
          ('public', 'rfq_bafo_rounds', 'rfq_bafo_rounds_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
          ('public', 'rfq_invitations', 'rfq_invitations_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))'),
          ('public', 'rfq_items', 'rfq_items_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
@@ -2961,6 +3029,9 @@ $ham$;
   -- check-an-ninh-khai.test.ts` đòi `mig` là migration CUỐI CÙNG nhắc tên ràng buộc.
   -- [S1.229 / khoản 71 / ADR-132] Hai dòng `users_email_ascii`/`supplier_contacts_email_ascii` (`092_email_ascii`): miền email là ASCII in được
   -- — vế "danh tính email chuẩn hoá" ở tiêu chí trên; gỡ một trong hai là mở lại cặp confusable Unicode và sự phụ thuộc libc của tập cất được.
+  -- [S1.247 / khoản 283 / ADR-139] Hai dòng `users_email_khong_dau_cham_cuoi`/`supplier_contacts_email_khong_dau_cham_cuoi`
+  -- (`100_email_khong_dau_cham_cuoi`): email không kết thúc bằng dấu chấm — cùng vế ấy; gỡ một trong hai là mở lại `dot@x.vn.` cạnh `dot@x.vn`
+  -- (dạng tuyệt đối của cùng một tên miền: hai hàng, một hộp thư). Định nghĩa khai là deparse dưới `standard_conforming_strings = on`.
   CHECK_AN_NINH_KHAI constant text :=
     $q$(VALUES
          ('public', 'audit_chain_anchors', 'audit_chain_anchors_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
@@ -3001,6 +3072,7 @@ $ham$;
          ('public', 'supplier_contacts', 'supplier_contacts_email_ascii', '092_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
+         ('public', 'supplier_contacts', 'supplier_contacts_email_khong_dau_cham_cuoi', '100_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))'),
          ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
          ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
@@ -3013,7 +3085,8 @@ $ham$;
          ('public', 'user_login_tokens', 'user_login_tokens_purpose_check', '029_dang_nhap_nguoi_mua', 'CHECK ((purpose = ''LOGIN''::text))'),
          ('public', 'user_login_tokens', 'user_login_tokens_token_hash_check', '029_dang_nhap_nguoi_mua', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'users', 'users_email_ascii', '092_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
-         ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))')
+         ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))'),
+         ('public', 'users', 'users_email_khong_dau_cham_cuoi', '100_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))')
        ) AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;
 
   -- [S1.55 / lượt soi 48 NẶNG-3] PERMISSIVE trên bảng mà [CR1] SẼ soi nếu nó ở public — con cháu của bảng tenant (VI_TU_CAN_CO_RLS)
@@ -4257,6 +4330,9 @@ $ham$;
   --     FROM pg_trigger t WHERE t.tgrelid = 'public.<bảng>'::regclass AND NOT t.tgisinternal;
   -- Cổng T1 `tests/architecture/hardening-khong-in-gia-tri.test.ts` cấm nối `prosrc`, `proconfig` trần, `pg_get_*def`,
   -- `pg_get_expr` và `SQLERRM` vào ô mô tả, cột `mo_ta`, RAISE hay bản gom — chỉ đúng ba khuôn trên đi qua, so nguyên văn.
+  -- [S1.244 / khoản 288] Kể cả đi qua BÍ DANH: một cột mà CTE / truy vấn con / VALUES phơi ra với giá trị mang một tên cấm
+  -- (`pg_get_triggerdef(t.oid) AS dinh_nghia` của mục khoản 259 trước vòng này) rồi được nối vào các bề mặt ấy cũng đỏ (vế ⑸).
+  -- Trigger lạ của mục khoản 259 cũng theo luật vân tay: bảng, tên, `vân tay def=`; định nghĩa tra bằng câu thứ hai ở trên.
   bang text[][] := ARRAY[
 
     -- ---- Đối tượng phải TỒN TẠI (R3/R4: phục hồi được, không chỉ phát hiện) -------------
@@ -4323,7 +4399,9 @@ $ham$$q$,
       $q$quyền sở hữu hàm app_current_org_id() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- ---- [S1.82 / khoản 116 / 052 / ADR-040] Hàm SECURITY DEFINER DUY NHẤT của kho ----------
+    -- ---- [S1.82 / khoản 116 / 052 / ADR-040] Hàm SECURITY DEFINER ~~DUY NHẤT~~ ĐẦU TIÊN của kho ----------
+    -- [S1.248 / khoản 277] "DUY NHẤT" thiu từ `101_api_to_chuc_co_viec`: hàm thứ hai, cùng vai chủ, ghim ở hai hàng
+    -- ngay sau hàng ACL dưới đây.
     -- Đây là hàng ghim ĐẦU TIÊN đòi `prosecdef IS TRUE` — 52 hàng còn lại đòi IS FALSE — và
     -- đầu tiên ghim `proowner`. Với một hàm SECURITY DEFINER thì CHỦ HÀM chính là toàn bộ đặc
     -- quyền của nó, nên để chủ hàm ngoài vòng ghim là ghim vỏ mà bỏ ruột.
@@ -4338,6 +4416,10 @@ $ham$$q$,
     -- `to_regprocedure(...) IS NOT NULL` thì một `DROP FUNCTION` sau deploy làm CẢ lượt sửa lẫn
     -- lượt phán xét im lặng bỏ qua — đúng chế độ hỏng mà hàng này tồn tại để chặn. Neo vào
     -- `schema_migrations` thì hàm bị DROP là một hàng ĐỎ, có lối ra in trong chẩn đoán.
+    -- [S1.244 / khoản 171] Chiều ngược của cùng neo: dòng `052_…` vắng mà hàm CÒN thì hàng này (và hàng ACL ngay dưới) IM.
+    -- Mục (C) miễn trừ hàm này CÙNG điều kiện ấy (cột `mig` của NGOAI_LE_DOC_VONG), nên khi hai hàng im thì miễn trừ rơi theo và
+    -- (C) nêu hàm, kèm lý do — không còn một hàm được miễn vĩnh viễn trong khi lớp thay thế vắng mặt. Hai tiền điều kiện trùng
+    -- nhau do `db/migration-shape.test.ts` giữ.
     --
     -- CÂU SỬA KHÔNG ĐỔI ĐƯỢC CHỦ HÀM (`CREATE OR REPLACE` giữ nguyên owner), nên ca "hàm bị DROP
     -- rồi ai đó dựng lại dưới vai deploy" tự chữa được THÂN nhưng ĐỎ ở vế `proowner` — ồn ào, và
@@ -4393,7 +4475,8 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
     -- sau deploy (job neo rớt về 0 tổ chức ở lần chạy kế) được dựng lại ở deploy sau.
     -- [S1.182 / ADR-111 / lượt soi] `app_khoi_tao` KHÔNG: vai ấy chèn được người và vai vào tổ chức nó gắn, và UUID tổ
     -- chức không bí mật (ADR-107) — gọi được hàm này là liệt kê được MỌI tổ chức để chèn vào từng cái. `CAU_QUYEN_KHOI_TAO_SAI`
-    -- chỉ đo quyền QUAN HỆ; hàm SECURITY DEFINER duy nhất của CSDL được canh ở đây, cùng chỗ với ba vai kia.
+    -- chỉ đo quyền QUAN HỆ; hàm SECURITY DEFINER ~~duy nhất~~ [S1.248] đầu tiên của CSDL được canh ở đây, cùng chỗ với ba vai kia
+    -- (hàm thứ hai — `outbox_to_chuc_co_viec_api()` — có hàng ACL riêng ngay dưới, cùng năm vế đảo chiều api/unseal).
     ARRAY[
       $q$EXECUTE trên outbox_danh_sach_to_chuc(): app_unseal có, app_neo có, app_api không, app_khoi_tao không, PUBLIC không (052, 065, 075)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
@@ -4411,6 +4494,79 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
         || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
                       WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()')), '(null)')$q$,
       $q$quyền sở hữu hàm outbox_danh_sach_to_chuc() hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.248 / khoản 277 / 101_api_to_chuc_co_viec / ADR-040 tiểu mục] Hàm SECURITY DEFINER thứ HAI của kho ----
+    -- `public.outbox_to_chuc_co_viec_api()`: tập tổ chức có job `PENDING` thuộc ba `kind` của `api` — nguồn mà runner của
+    -- `apps/api` nạp lúc lên và mỗi kỳ poll (khoản 277). Cùng khuôn hai hàng của `052` ngay trên, cùng ba lý do:
+    --   * ghim thân CÙNG LÚC với khi hàm ra đời — một `CREATE OR REPLACE` sau deploy mà không hàng nào canh thì sống sót qua
+    --     mọi lần `migrate()` (`[T10-I]`), và với hàm này "sống sót" là một thân tuỳ ý chạy dưới quyền chủ hàm, đọc được
+    --     `outbox_jobs` của MỌI tổ chức;
+    --   * ghim `prosecdef IS TRUE` và `proowner`: `SECURITY INVOKER` hay đổi chủ sang một vai thường làm hàm trả 0 hàng KHÔNG
+    --     LỖI (đo §S1.248 — cảnh ❷ của ADR-040), mà với `api` "0 hàng" trông y hệt "không có việc": hỏng im lặng hẳn;
+    --   * tiền điều kiện neo NGUYÊN VĂN vào migration khai sinh trong `schema_migrations`, không vào "hàm đã tồn tại": DROP sau
+    --     deploy là một hàng ĐỎ có tên, không phải hai hàng im.
+    -- Như hàng `052`: trong thực tế hàng định nghĩa là một PHÁN XÉT dưới vai deploy không sở hữu hàm (câu sửa 42501, nuốt ở
+    -- BƯỚC 2), và CREATE OR REPLACE không đổi được chủ.
+    ARRAY[
+      $q$định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '101_api_to_chuc_co_viec.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.outbox_to_chuc_co_viec_api()
+  RETURNS SETOF pg_catalog.uuid
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = pg_catalog
+AS $ham$ SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE']) $ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE'])$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS TRUE
+            AND p.proretset IS TRUE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.uuid'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+            AND p.proowner = to_regrole('app_liet_ke_to_chuc')::oid
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' retset=' || p.proretset::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' chu=' || coalesce(p.proowner::regrole::text, '(null)')
+                          || '. HANG NAY TRONG THUC TE LA MOT PHAN XET, khong tu chua: vai deploy '
+                          || 'KHONG so huu ham nay (chu la app_liet_ke_to_chuc) nen cau sua o o [3] bi tu '
+                          || 'choi 42501 va bi nuot. Loi ra: chay cau o o [3] duoi SUPERUSER, va neu chu ham '
+                          || 'sai thi them ALTER FUNCTION public.outbox_to_chuc_co_viec_api() OWNER TO '
+                          || 'app_liet_ke_to_chuc — CREATE OR REPLACE KHONG doi duoc chu.'
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()')),
+                  'hàm public.outbox_to_chuc_co_viec_api() không tồn tại — 101_api_to_chuc_co_viec đã áp mà hàm bị DROP')$q$,
+      $q$quyền sở hữu hàm outbox_to_chuc_co_viec_api() hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.248 / khoản 277 / 101_api_to_chuc_co_viec] ACL của hàm ấy — người gọi DUY NHẤT là `app_api` ----------------
+    -- Đảo chiều hàng `052` ngay trên: ở đó `app_api` KHÔNG (danh sách tổ chức ĐẦY ĐỦ — ADR-040), ở đây `app_api` là người gọi
+    -- duy nhất, vì tập này HẸP — tổ chức có việc `PENDING` của chính `api` (quyết định câu 10). `app_unseal`, `app_neo`,
+    -- `app_khoi_tao` không có việc gì với nó: worker và job neo đã có `052`, vai khởi tạo không chạy runner. Một `GRANT EXECUTE
+    -- … TO PUBLIC` sau deploy cho mọi vai trong cụm biết tổ chức nào đang có việc; hàng này lật lại ở MỌI lần `migrate()`, và tự
+    -- chữa cả chiều cấp (một `REVOKE … FROM app_api` sau deploy làm `api` không lên được — dựng lại ở deploy sau).
+    ARRAY[
+      $q$EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (101_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '101_api_to_chuc_co_viec.sql')$q$,
+      $q$REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_unseal;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_neo;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_khoi_tao;
+        GRANT EXECUTE ON FUNCTION public.outbox_to_chuc_co_viec_api() TO app_api$q$,
+      $q$(SELECT NOT has_function_privilege('public', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_unseal', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_neo', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_khoi_tao', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND has_function_privilege('app_api', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE'))$q$,
+      $q$'ACL cua outbox_to_chuc_co_viec_api() sai — proacl hien tai: '
+        || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
+                      WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()')), '(null)')$q$,
+      $q$quyền sở hữu hàm outbox_to_chuc_co_viec_api() hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của ~~hai~~ BỐN trigger đăng nhập ----
@@ -14116,9 +14272,13 @@ $ham$;
       $q$quyền sở hữu hàm public.unseal_kiem_du_phe_duyet() và bảng public.unseal_requests (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
+    -- [S1.245 / khoản 266] Thân từ `098_khong_tim_thay_yeu_cau_co_ten.sql`: nhánh không thấy yêu cầu mang tên
+    -- `unseal_approvals_yeu_cau_phai_ton_tai` (`USING … CONSTRAINT`) — `approveUnseal` nhận "không tìm thấy" theo code VÀ
+    -- constraint. Điều kiện neo vào migration ấy, như các hàng "thân từ 074": cụm chưa áp nó giữ thân `019`, không bị lượt sửa
+    -- đẩy thân mới lên trước vòng đánh số.
     ARRAY[
-      $q$hàm + trigger unseal_kiem_nguoi_duyet (019)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '019_unseal.sql')$q$,
+      $q$hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 098_khong_tim_thay_yeu_cau_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '098_khong_tim_thay_yeu_cau_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -14141,7 +14301,8 @@ BEGIN
      FOR NO KEY UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id
-      USING ERRCODE = 'foreign_key_violation';
+      USING ERRCODE = 'foreign_key_violation',
+            CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai';
   END IF;
 
   IF trang_thai IS DISTINCT FROM 'PENDING' THEN
@@ -14179,7 +14340,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE nguoi_yeu_cau uuid; phien_yeu_cau uuid; trang_thai text; BEGIN SELECT r.requested_by, r.requested_by_session_id, r.status INTO nguoi_yeu_cau, phien_yeu_cau, trang_thai FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai IS DISTINCT FROM 'PENDING' THEN RAISE EXCEPTION 'Chi phe duyet duoc yeu cau dang PENDING; dang o %', trang_thai USING ERRCODE = 'check_violation'; END IF; IF NEW.approver_user_id OPERATOR(pg_catalog.=) nguoi_yeu_cau THEN RAISE EXCEPTION 'Nguoi yeu cau mo thau khong duoc tu phe duyet (D2, D3)' USING ERRCODE = 'check_violation'; END IF; -- Vế PHIÊN, và nó KHÔNG thừa với vế người ở trên: một người có thể có hai tài khoản, nhưng -- một PHIÊN thì thuộc về đúng một tài khoản. Chặn cả hai vế đóng cả hai cách đọc của D2. IF NEW.approver_session_id OPERATOR(pg_catalog.=) phien_yeu_cau THEN RAISE EXCEPTION 'Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau (D2)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE nguoi_yeu_cau uuid; phien_yeu_cau uuid; trang_thai text; BEGIN SELECT r.requested_by, r.requested_by_session_id, r.status INTO nguoi_yeu_cau, phien_yeu_cau, trang_thai FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation', CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'; END IF; IF trang_thai IS DISTINCT FROM 'PENDING' THEN RAISE EXCEPTION 'Chi phe duyet duoc yeu cau dang PENDING; dang o %', trang_thai USING ERRCODE = 'check_violation'; END IF; IF NEW.approver_user_id OPERATOR(pg_catalog.=) nguoi_yeu_cau THEN RAISE EXCEPTION 'Nguoi yeu cau mo thau khong duoc tu phe duyet (D2, D3)' USING ERRCODE = 'check_violation'; END IF; -- Vế PHIÊN, và nó KHÔNG thừa với vế người ở trên: một người có thể có hai tài khoản, nhưng -- một PHIÊN thì thuộc về đúng một tài khoản. Chặn cả hai vế đóng cả hai cách đọc của D2. IF NEW.approver_session_id OPERATOR(pg_catalog.=) phien_yeu_cau THEN RAISE EXCEPTION 'Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau (D2)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -14718,6 +14879,116 @@ $ham$;
       $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
     ],
 
+    -- ---- [S1.246 / khoản 285] Policy `kind` XẾP ĐƯỢC của `app_api` trên `outbox_jobs` (`099_outbox_policy_xep_theo_kind`) — dựng lại TỪ DÒNG KHAI
+    -- Cùng lớp mục khoản 158 ngay trên: `outbox_jobs_kind_xep_app_api` là RESTRICTIVE ĐƠN VAI (`TO app_api`), nên `DROP OWNED BY
+    -- app_api` của đường "ops xoá rồi tạo lại vai" (N3, fix round 4) XOÁ nó, và 83⑴ ở lượt phán xét kêu "dòng khai thiu" — đo: bỏ mục
+    -- này thì `db/migrations.int.test.ts` N3 đỏ đúng thông điệp ấy. Mục RIÊNG, không nới danh sách tên của mục khoản 158: điều kiện áp
+    -- dụng là migration KHAI SINH policy này đã áp (không phải `095`), câu sửa là `FOR INSERT … WITH CHECK` (INSERT không có vế
+    -- USING), và phán xét đếm ĐÚNG một dòng khai. Nguồn duy nhất vẫn là dòng khai ở POLICY_RESTRICTIVE_KHAI — biểu thức không chép
+    -- tay lần thứ hai. Chỉ dựng khi policy KHÔNG CÓ: policy đang có mà lệch (ALTER tay) không được "sửa đè" — không có migration nào
+    -- để so — mà bị phán xét ở đây lẫn 83⑴, nêu tên (ADR-028 §2⑵). Vai không tồn tại thì không dựng (BƯỚC 0 lo vai). Cùng lý do
+    -- `EXECUTE format(...)` như mục 042/044/khoản 158: lớp tĩnh cấm tệp khác tạo policy cho bảng của 007.
+    ARRAY[
+      $q$policy kind xếp được của app_api trên outbox_jobs (khoản 285)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '099_outbox_policy_xep_theo_kind.sql')$q$,
+      $q$DO $fn285$
+         DECLARE
+           r record;
+         BEGIN
+           FOR r IN SELECT g.nspname, g.bang, g.polname, g.vai_tro, g.bieu_thuc_with_check
+                      FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs' AND g.lenh = 'a'
+                       AND g.polname = 'outbox_jobs_kind_xep_app_api'
+                       AND g.bieu_thuc_using IS NULL AND g.bieu_thuc_with_check IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM pg_roles rr WHERE rr.rolname = g.vai_tro)
+                       AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                                        WHERE p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+                                          AND p.polname = g.polname)
+           LOOP
+             EXECUTE format('CREATE POLICY %I ON %I.%I AS RESTRICTIVE FOR INSERT TO %I WITH CHECK (%s)',
+                            r.polname, r.nspname, r.bang, r.vai_tro, r.bieu_thuc_with_check);
+           END LOOP;
+         END
+         $fn285$$q$,
+      -- Gương bảy cột của dòng khai (cùng vế so với 83⑴): RESTRICTIVE, lệnh `a`, đúng vai, USING NULL, WITH CHECK nguyên văn.
+      -- `count(*) = 1` chống rỗng ruột: dòng khai phải CÓ ở POLICY_RESTRICTIVE_KHAI, không chỉ "mọi dòng có đều khớp".
+      $q$(SELECT count(*) = 1 AND bool_and(p.oid IS NOT NULL)
+            FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+            LEFT JOIN pg_policy p
+              ON p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+             AND p.polname = g.polname
+             AND NOT p.polpermissive
+             AND p.polcmd::text = g.lenh
+             AND $q$ || BIEU_THUC_VAI_TRO || $q$ = g.vai_tro
+             AND pg_get_expr(p.polqual, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_using
+             AND pg_get_expr(p.polwithcheck, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_with_check
+           WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+             AND g.polname = 'outbox_jobs_kind_xep_app_api')$q$,
+      -- Mô tả nêu TÊN policy, lệnh và vai — không in biểu thức WITH CHECK (luật T1, cùng khuôn mục khoản 158).
+      $q$coalesce((SELECT string_agg(g.polname || ' '
+                                     || CASE WHEN p.oid IS NULL THEN 'KHÔNG tồn tại'
+                                             ELSE 'lệch — restrictive=' || (NOT p.polpermissive)::text
+                                                  || ' lệnh=' || p.polcmd::text
+                                                  || ' vai=' || coalesce(nullif($q$ || BIEU_THUC_VAI_TRO || $q$, ''), '(không có)') END,
+                                     '; ' ORDER BY g.polname)
+                          || ' (chỉ nêu tên — biểu thức WITH CHECK không in ra; so với dòng khai POLICY_RESTRICTIVE_KHAI bằng pg_get_expr(polwithcheck, polrelid) trong pg_policy)'
+                     FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     LEFT JOIN pg_policy p ON p.polrelid = to_regclass(g.nspname || '.' || g.bang) AND p.polname = g.polname
+                    WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+                      AND g.polname = 'outbox_jobs_kind_xep_app_api'),
+                  'không có dòng khai nào cho outbox_jobs_kind_xep_app_api ở POLICY_RESTRICTIVE_KHAI')$q$,
+      $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.248 / khoản 277] Policy đọc việc PENDING của `outbox_jobs` cho vai chủ hàm liệt kê (101_api_to_chuc_co_viec) ----
+    -- Cùng lớp hỏng với mục 044 ngay trên ba mục: `CAU_POLICY_SAI` nguồn (i) chỉ kêu khi bảng KHÔNG CÒN policy PERMISSIVE nào,
+    -- và `outbox_jobs` còn policy cách ly — nên một `DROP POLICY outbox_jobs_liet_ke_viec_api` (hay `DROP OWNED BY
+    -- app_liet_ke_to_chuc`, xoá policy mà vai ấy là chủ thể duy nhất) đi qua MỌI lớp khác trong im lặng. Hệ quả ĐO (§S1.248,
+    -- cảnh ❷ của ADR-040): hàm SECURITY DEFINER của vai ấy trả 0 hàng, KHÔNG LỖI; `api` đọc "0 tổ chức có việc" như "không có
+    -- việc", và job PENDING của nó lại chờ lời xếp việc kế tiếp — đúng khoản 277 quay lại mà không ai kêu. Mục này dựng lại
+    -- policy khi nó VẮNG (không sửa đè một policy đang có mà lệch — cái ấy 83⑴ phán qua dòng thứ ba của NGOAI_LE_HINH_DANG),
+    -- và phán xét đòi ĐÚNG lệnh, ĐÚNG vai, ĐÚNG biểu thức. Vai chưa tồn tại thì không dựng (BƯỚC 0 và mục thuộc tính lo vai).
+    -- `EXECUTE format(...)` với tên bảng là tham số: cùng khuôn và cùng lý do mục 042/044 — lớp tĩnh (`db/migration-shape.test.ts`)
+    -- cấm một tệp tạo policy cho bảng do tệp KHÁC tạo, và mọi mục tự chữa RLS của tệp này đi qua idiom động ấy (bản đầu viết
+    -- nguyên câu trong một chuỗi hằng và lớp tĩnh bắt nó — đo ở vòng này). Mô tả nêu lệnh và vai (tên), không in biểu thức (luật T1).
+    ARRAY[
+      $q$policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (101_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '101_api_to_chuc_co_viec.sql')$q$,
+      $q$DO $fn277$
+         DECLARE
+           ten_bang constant text := 'public.outbox_jobs';
+           vi_tu constant text := 'status OPERATOR(pg_catalog.=) ''PENDING''';
+         BEGIN
+           IF to_regrole('app_liet_ke_to_chuc') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                               WHERE p.polrelid = to_regclass(ten_bang)
+                                 AND p.polname = 'outbox_jobs_liet_ke_viec_api') THEN
+             EXECUTE format('CREATE POLICY outbox_jobs_liet_ke_viec_api ON %s FOR SELECT TO app_liet_ke_to_chuc USING (%s)',
+                            ten_bang, vi_tu);
+           END IF;
+         END
+         $fn277$$q$,
+      $q$(SELECT count(*) = 1 FROM pg_policy p
+           WHERE p.polrelid = to_regclass('public.outbox_jobs')
+             AND p.polname = 'outbox_jobs_liet_ke_viec_api'
+             AND p.polpermissive
+             AND p.polcmd = 'r'
+             AND p.polwithcheck IS NULL
+             AND (SELECT array_agg(r.rolname::text ORDER BY r.rolname COLLATE "C")
+                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)) = ARRAY['app_liet_ke_to_chuc']
+             AND pg_get_expr(p.polqual, p.polrelid) = $than277$(status = 'PENDING'::text)$than277$)$q$,
+      $q$coalesce((SELECT 'policy đọc việc PENDING của outbox_jobs lệch — lệnh=' || p.polcmd::text
+                          || ' permissive=' || p.polpermissive::text
+                          || ' vai=' || coalesce((SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C")
+                                                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)), '(không có)')
+                          || ' — biểu thức USING không in ra (so với bản 101_api_to_chuc_co_viec bằng pg_get_expr(polqual, polrelid) trong pg_policy)'
+                     FROM pg_policy p
+                    WHERE p.polrelid = to_regclass('public.outbox_jobs')
+                      AND p.polname = 'outbox_jobs_liet_ke_viec_api'),
+                  'policy outbox_jobs_liet_ke_viec_api KHÔNG tồn tại — hàm liệt kê việc của api trả 0 tổ chức không lỗi, job PENDING của api không tự phục hồi sau khởi động lại')$q$,
+      $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
+    ],
+
     -- ---- Thuộc tính role (hàng rào S1) ---------------------------------------------------
     -- app_api có BYPASSRLS là đọc được giá thầu của MỌI tổ chức, bất chấp toàn bộ RLS.
     ARRAY[
@@ -14807,10 +15078,14 @@ $ham$;
     -- và ở mục CREATE/TEMP trên database, nơi một tên thêm vào có thể thu hồi quyền của chính chủ database (S1.44) — chưa
     -- đo lại, nên là một hàng riêng. KHÁC khuôn bốn vai ứng dụng ở đúng một cờ: NOINHERIT (BƯỚC 0 tạo nó NOLOGIN NOINHERIT;
     -- mọi quyền nó kế thừa là quyền của thân hàm) — hậu điều kiện đòi `rolinherit IS FALSE`, chẩn đoán nêu `INHERIT` là cờ sai.
-    -- THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — `NOBYPASSRLS` đứng TRƯỚC `NOSUPERUSER`: bộ đọc ở db/hardening-suy-tu-tinh-chat.int.test.ts
+    -- ~~THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — `NOBYPASSRLS` đứng TRƯỚC `NOSUPERUSER`: bộ đọc ở db/hardening-suy-tu-tinh-chat.int.test.ts
     -- quét `ALTER ROLE <tên> NOSUPERUSER … NOBYPASSRLS` làm "tập ghim của CÂY thành viên bốn vai ứng dụng" và ghim đúng tám
     -- tên; vai này KHÔNG thuộc cây ấy (không là thành viên của vai nào), nên cố ý đứng ngoài phép quét ấy. Ngày phép quét mở
-    -- cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách của test trong CÙNG commit.
+    -- cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách của test trong CÙNG commit.~~
+    -- [S1.244 / khoản 265] Thứ tự cờ ở câu sửa dưới đây không còn nghĩa gì: phép quét của db/hardening-suy-tu-tinh-chat.int.test.ts
+    -- (`tapGhimNobypassrls`, §S1.242) đọc mọi `ALTER ROLE <tên> …` mang `NOBYPASSRLS` BẤT KỂ THỨ TỰ CỜ, và vai này đứng ngoài tập
+    -- "cây thành viên bốn vai ứng dụng" bằng lời khai `VAI_NGOAI_CAY` — lý do (NOINHERIT, không là thành viên của vai nào) đo trên
+    -- cụm ở chính vế ấy. Câu SQL giữ nguyên.
     ARRAY[
       $q$thuộc tính role app_liet_ke_to_chuc$q$,
       $q$true$q$,
@@ -16407,6 +16682,10 @@ $ham$;
     -- một giá trị `'khong'` đặt sẵn ở mức vai (`ALTER ROLE <vai deploy> SET`) hay trong phiên không tắt được phán xét, và
     -- `migrate()` đặt GUC tường minh ở MỌI lượt nên nó cũng không tắt được lần gỡ; đặt ở mức database hay `ALTER ROLE ALL`
     -- thì mục khoản 87 còn chặn deploy.
+    -- ~~Thông điệp phán xét nêu bảng, tên, định nghĩa (ADR-122 mục 3).~~ [S1.244 / khoản 288] Thông điệp phán xét và WARNING
+    -- «đã GỠ» nêu bảng, tên và VÂN TAY định nghĩa (ADR-124 — chủ dự án chốt ở kế hoạch đợt 3 câu 3): người vận hành tra định nghĩa
+    -- bằng TÊN. Trigger đã gỡ thì không còn để tra — trigger hợp lệ thì tìm theo tên trong migration đã tạo nó, vân tay so được
+    -- với bản dựng lại.
     ARRAY[
       $q$không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)$q$,
       $q$pg_catalog.current_setting('app.hardening_che_do', true) IS DISTINCT FROM 'sua'
@@ -16418,11 +16697,11 @@ $ham$;
            LOOP
              BEGIN
                EXECUTE pg_catalog.format('DROP TRIGGER %I ON %s', r.ten, r.bang_oid::regclass);
-               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (%). Chỉ trigger trong TRIGGER_DUOC_PHEP được '
+               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (vân tay def=%). Chỉ trigger trong TRIGGER_DUOC_PHEP được '
                              'phép tồn tại trên bảng của dự án (khoản 259). Nếu đây là trigger HỢP LỆ của một migration '
                              'mới thì migration đó vừa bị vô hiệu hoá: ghim nó trong hardening.always.sql và thêm nó '
                              'vào TRIGGER_DUOC_PHEP.',
-                             r.ten, r.bang_oid::regclass, r.dinh_nghia;
+                             r.ten, r.bang_oid::regclass, r.van_tay_dinh_nghia;
              EXCEPTION WHEN OTHERS THEN
                RAISE WARNING 'Hardening: không gỡ được trigger lạ % trên %: SQLSTATE %',
                              r.ten, r.bang_oid::regclass, SQLSTATE;
@@ -16436,7 +16715,7 @@ $ham$;
                                      ELSE ' trên bảng KHÔNG có trong TRIGGER_DUOC_PHEP — hardening CHỈ PHÁN XÉT (ADR-028 §2⑵): '
                                           'gỡ nó bằng DROP TRIGGER hay một migration mới, hoặc ghim nó và khai bảng vào TRIGGER_DUOC_PHEP'
                                 END
-                             || ' — ' || t.dinh_nghia, '; '
+                             || ' — vân tay def=' || t.van_tay_dinh_nghia, '; '
                              ORDER BY t.bang_oid::regclass::text, t.ten)
            FROM ($q$ || CAU_TRIGGER_LA_DU_AN || $q$) t)$q$,
       $q$quyền sở hữu bảng mang trigger lạ (để DROP TRIGGER) hoặc SUPERUSER$q$

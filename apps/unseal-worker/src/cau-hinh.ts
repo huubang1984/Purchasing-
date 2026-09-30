@@ -34,6 +34,14 @@
 // BA QUY TẮC, giống hai app kia:
 //   ⑴ Bí mật KHÔNG có mặc định. Thiếu là ném.
 //   ⑵ Thông điệp lỗi chỉ nêu TÊN biến, không bao giờ nêu GIÁ TRỊ.
+//      [S1.241 / khoản 172] Tới trước vòng này chính tệp này bác lời ấy: `docAdapter` nêu nguyên chuỗi bị từ chối, và `main.ts` in
+//      thẳng thông điệp ra log — một bí mật dán nhầm vào biến adapter ra log nguyên văn. Nay thông điệp chỉ nêu TÊN và ĐIỀU KIỆN.
+//      "Tên" ở tệp này là ba thứ, không hơn: tên BIẾN; tên adapter trong tập đóng đã khai (một chuỗi ĐÃ QUA `docAdapter` là một hằng
+//      của tệp này — `tuChoiBienCuaAdapterKhac`, `docCanhBao`); và tên PHIÊN BẢN của vòng khoá sau khi qua `TEN_PHIEN_BAN` — nhãn ấy đi
+//      vào cột `org_key_pairs.key_version` của CSDL (`createLocalDevOrgKeyProvisioner` → `packages/sealed-envelope/src/key-material.ts`),
+//      tức một định danh, không phải vật liệu khoá, và một khoá 32 byte ở mã hoá chuẩn nào cũng dài hơn trần 32 ký tự của nó. Đo bằng
+//      hành vi ở `cau-hinh.test.ts` khối `[S1.241 / khoản 172]`: mọi biến mà `docCauHinh` đọc, mang một giá trị lạ, ra một thông điệp
+//      không chứa giá trị ấy; vật liệu khoá sau dấu `=` không ra thông điệp nào.
 //   ⑶ Adapter phải được KHAI TÊN, và mỗi biến hôm nay chỉ có ĐÚNG MỘT giá trị hợp lệ [ADR-064: trừ
 //      biến khoá, nay có `local-dev` và `aws-kms`, và hai bộ biến của chúng loại trừ nhau]. Một giá
 //      trị khác ("kms", "pagerduty") là lời khai về một adapter CHƯA TỒN TẠI — ném với đúng câu
@@ -150,9 +158,9 @@ function docSoNguyen(env: MoiTruong, ten: string, macDinh: number, nhoNhat: numb
 function docAdapter<T extends string>(env: MoiTruong, ten: string, hopLe: readonly T[], viec: string): T {
   const v = bat(env, ten);
   if (!(hopLe as readonly string[]).includes(v)) {
-    throw new CauHinhError(
-      `${ten} = "${v}" là một adapter ${viec} CHƯA TỒN TẠI. Hôm nay chỉ có: ${hopLe.join(", ")}.`,
-    );
+    // [S1.241 / khoản 172] TÊN biến và điều kiện — tập adapter đã có, hằng của tệp này. KHÔNG nêu chuỗi bị từ chối (bản trước:
+    // `${ten} = "${v}" …`): nó chính là thứ chưa qua tập đóng, và `main.ts` in thẳng thông điệp này ra log (quy tắc ⑵).
+    throw new CauHinhError(`${ten} khai một adapter ${viec} CHƯA TỒN TẠI. Hôm nay chỉ có: ${hopLe.join(", ")}.`);
   }
   return v as T;
 }

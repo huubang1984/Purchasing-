@@ -166,6 +166,31 @@ describe("[S1.182 / ADR-111] ⑴ tạo tổ chức", () => {
     const t = await withTenant(db.poolAs("app_api"), kq.orgId, (c) => issueLoginToken(c, kq.orgId, { email }));
     expect(t.ok, "người ấy xin được link đăng nhập bằng email như đã khai").toBe(true);
   });
+
+  // [S1.247 / khoản 283 / ADR-139] Dấu chấm cuối tên miền: `dot@khach-cham.vn.` là CÙNG hộp thư với `dot@khach-cham.vn` (RFC 5321 — dạng
+  // tuyệt đối của cùng một tên), nhưng `UNIQUE (org_id, email)` so nguyên văn và phép dò trùng của bản khai so `toLowerCase()` — hai người
+  // dùng, hai magic link, một hộp thư. Từ chối CÓ TÊN trước khi tới CSDL, cả khi dạng không dấu chấm đứng cạnh trong cùng bản khai lẫn khi
+  // nó đã có trong tổ chức; KHÔNG chuẩn hoá (câu 12 của kế hoạch đợt 3). Lược đồ chặn cùng luật bằng `users_email_khong_dau_cham_cuoi`.
+  it("[S1.247 / khoản 283] email có dấu chấm cuối tên miền ⇒ KhoiTaoError nêu vị trí, không tới CSDL, rollback trọn — ở chế độ tạo lẫn thêm người", async () => {
+    const loi = await khoiTao(
+      pool,
+      docBanKhai(banKhaiTao("cham-cuoi", [nguoi("dot@khach-cham.vn", ["BUYER"]), nguoi("dot@khach-cham.vn.", ["FINANCE"])]), "tao"),
+    ).catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(KhoiTaoError);
+    expect((loi as Error).message).toBe("người thứ 2: email có dấu chấm cuối tên miền");
+    expect((loi as { cause?: unknown }).cause, "từ chối ở tầng công cụ, không phải 23514 của CSDL").toBeUndefined();
+    const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM organizations WHERE slug = 'cham-cuoi'");
+    expect(rows[0]!.n, "rollback trọn: người thứ nhất và tổ chức không nằm lại").toBe(0);
+
+    const kq = await khoiTao(pool, docBanKhai(banKhaiTao("cham-cuoi-co-san", [nguoi("dot@khach-cham.vn", ["BUYER"])]), "tao"));
+    const truoc = await dem(kq.orgId);
+    const loiThem = await khoiTao(pool, docBanKhai(banKhaiThem(kq.orgId, [nguoi("Dot@Khach-Cham.VN.", ["FINANCE"])]), "them-nguoi")).catch(
+      (e: unknown) => e,
+    );
+    expect(loiThem).toBeInstanceOf(KhoiTaoError);
+    expect((loiThem as Error).message).toBe("người thứ 1: email có dấu chấm cuối tên miền");
+    expect(await dem(kq.orgId), "người đã có không được thêm một tài khoản thứ hai cho cùng hộp thư").toEqual(truoc);
+  });
 });
 
 describe("[S1.182 / ADR-111] ⑵ thêm người", () => {

@@ -1964,6 +1964,74 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   return { orgId: org };
 }
 
+// ==============================================================================================
+// [S1.242 / khoản 265] TẬP GHIM `NOBYPASSRLS` ĐỌC BẤT KỂ THỨ TỰ CỜ; VAI NGOÀI CÂY ĐỨNG NGOÀI BẰNG LỜI KHAI
+//
+// Tới vòng này vế "[sổ nợ 3]" đọc tập ghim bằng `/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — chỉ câu nào
+// viết `NOSUPERUSER` NGAY sau tên và `NOBYPASSRLS` ở sau nó. Hàng `thuộc tính role app_liet_ke_to_chuc` (S1.212)
+// ghim `NOBYPASSRLS` thật nhưng viết `NOBYPASSRLS NOSUPERUSER …` để ĐỨNG NGOÀI phép quét — tức vai ngoài cây được
+// loại bằng THỨ TỰ CỜ, không bằng khai. Đo trước (§S1.242, hai đột biến văn bản hardening): "sửa cho đều" thứ tự
+// cờ của hàng ấy ⇒ vế đỏ `tám tên … expected […(9)]` — thông điệp nói về cây, không nói về thứ tự; hàng `app_api`
+// viết `NOBYPASSRLS` lên đầu ⇒ vế đỏ `[…(7)]` — một tên ĐANG ghim mà phép quét không thấy.
+// Nay: mọi câu `ALTER ROLE <tên> …` NGOÀI chú thích mà danh sách cờ có `NOBYPASSRLS` ở bất kỳ vị trí nào; trừ đi
+// `VAI_NGOAI_CAY` (khai tên kèm lý do, lý do được ĐO trên cụm ở vế ấy); và chiều ngược — một tên khai mà hardening
+// không còn ghim là dòng khai THIU, đỏ.
+// ==============================================================================================
+
+/**
+ * [S1.242 / khoản 265] Vai hardening ghim `NOBYPASSRLS` mà KHÔNG thuộc cây thành viên của bốn vai ứng dụng. Vế "[sổ nợ 3]" đo lời
+ * khai trên cụm đã migrate: vai tồn tại, NOINHERIT, và không là thành viên của vai ứng dụng nào.
+ */
+const VAI_NGOAI_CAY: Readonly<Record<string, string>> = {
+  app_liet_ke_to_chuc:
+    "[S1.212 / khoản 164] vai CHỦ HÀM của `outbox_danh_sach_to_chuc()` (052) — NOLOGIN NOINHERIT, không là thành viên của vai ứng dụng " +
+    "nào: không kết nối nào mang nó làm current_user qua cây; hàng ghim riêng của nó canh BYPASSRLS cho thân hàm SECURITY DEFINER.",
+};
+
+/**
+ * [S1.242 / khoản 265] Tập tên mà một văn bản hardening ghim `NOBYPASSRLS`: mọi câu `ALTER ROLE <tên> <cờ…>` ngoài chú thích `--`,
+ * danh sách cờ đọc tới `$`, `;` hay dấu nháy kế tiếp (qua được xuống dòng), cờ so theo TỪ và không phân biệt hoa thường — `BYPASSRLS`
+ * không phải `NOBYPASSRLS`. Tên trong ngoặc kép giữ nguyên, tên trần hạ thường như PostgreSQL. Hàm thuần — đo bằng mẫu ở vế
+ * "[S1.242 / khoản 265] phép quét …". Chú thích bị bỏ vì một câu NHẮC trong chú thích không phải một lần ghim: đọc cả chú thích thì
+ * gỡ hàng ghim thật của một vai mà một chú thích còn nhắc câu ấy vẫn xanh.
+ */
+function tapGhimNobypassrls(sql: string): string[] {
+  const ma = sql.replace(/--[^\n]*/gu, "");
+  const ten = new Set<string>();
+  for (const m of ma.matchAll(/\bALTER\s+ROLE\s+("?)(\w+)\1([^$;'"]*)/giu)) {
+    if (m[3]!.toUpperCase().split(/[\s,]+/u).includes("NOBYPASSRLS")) ten.add(m[1] === '"' ? m[2]! : m[2]!.toLowerCase());
+  }
+  return [...ten].sort();
+}
+
+describe("[S1.242 / khoản 265] phép quét tập ghim NOBYPASSRLS — hàm thuần, không cụm", () => {
+  it("mẫu: thứ tự cờ không đổi kết quả, cờ qua được xuống dòng; chú thích, BYPASSRLS trần, cờ của câu khác, từ dính chữ không tính", () => {
+    expect(tapGhimNobypassrls("$q$ALTER ROLE a NOSUPERUSER NOBYPASSRLS$q$, $q$ALTER ROLE b NOBYPASSRLS NOSUPERUSER$q$")).toEqual(["a", "b"]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE c NOSUPERUSER\n          NOCREATEDB NOBYPASSRLS NOLOGIN$q$")).toEqual(["c"]);
+    expect(tapGhimNobypassrls("-- ALTER ROLE d NOSUPERUSER NOBYPASSRLS\n$q$x$q$, -- ALTER ROLE e NOBYPASSRLS\n")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE f NOSUPERUSER BYPASSRLS$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE g NOSUPERUSER$q$,\n      $q$SELECT 'NOBYPASSRLS'$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE i XNOBYPASSRLS NOBYPASSRLSX$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("format('ALTER ROLE %I NOBYPASSRLS', v), $q$ALTER ROLE ALL SET x = 1$q$")).toEqual([]);
+    expect(tapGhimNobypassrls('$q$alter role H nobypassrls$q$, $q$ALTER ROLE "Hoa" WITH NOBYPASSRLS$q$')).toEqual(["Hoa", "h"]);
+  });
+
+  it("trên hardening thật: đảo NGƯỢC danh sách cờ của MỌI câu `ALTER ROLE` (trong bộ nhớ) không đổi tập ghim — dạng thường trực của hai đột biến đo trước", () => {
+    let soCauDao = 0;
+    const dao = HARDENING.replace(/(\bALTER ROLE \w+ )((?:[A-Z]+ )*[A-Z]+)(?=\$q\$)/gu, (_toan, dau: string, co: string) => {
+      const moi = co.split(" ").reverse().join(" ");
+      if (moi !== co && co.split(" ").includes("NOBYPASSRLS")) soCauDao += 1;
+      return dau + moi;
+    });
+    const goc = tapGhimNobypassrls(HARDENING);
+    expect(goc.length, "chống rỗng ruột: tám tên của cây cộng vai ngoài cây").toBeGreaterThanOrEqual(9);
+    expect(soCauDao, "tiền đề: phép đảo thật sự đổi thứ tự cờ của mọi câu ghim").toBeGreaterThanOrEqual(goc.length);
+    expect(tapGhimNobypassrls(dao)).toEqual(goc);
+    // Vai ngoài cây nay được phép quét THẤY — nó đứng ngoài phép so bằng lời khai `VAI_NGOAI_CAY`, không bằng thứ tự cờ.
+    for (const ten of Object.keys(VAI_NGOAI_CAY)) expect(goc).toContain(ten);
+  });
+});
+
 // [S1.96] HẠN Ở MỨC SUITE, vì cái khe hở này là KHE HỞ KIỂU QUÊN KHAI.
 // 31 test của suite này khai `}, 180000);` vì chúng chạy hardening trên một cụm thật; đúng MỘT
 // test không khai, nên nó rơi về hạn mặc định 30 s — và ở lượt evidence S1.96 nó hết hạn.
@@ -2306,9 +2374,14 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     };
 
     // Tập tên mà hardening ghim `NOBYPASSRLS` — đọc THẲNG từ file, không viết tay lại.
-    const daGhim = [...HARDENING.matchAll(/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/gu)]
-      .map((m) => m[1]!)
-      .sort();
+    // ~~`/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — vai ngoài cây đứng ngoài nhờ THỨ TỰ CỜ~~ [S1.242 / khoản 265] Mọi câu
+    // `ALTER ROLE` ngoài chú thích mang `NOBYPASSRLS` ở bất kỳ vị trí nào (`tapGhimNobypassrls`), trừ `VAI_NGOAI_CAY` đã khai.
+    const tapGhim = tapGhimNobypassrls(HARDENING);
+    expect(
+      Object.keys(VAI_NGOAI_CAY).filter((t) => !tapGhim.includes(t)),
+      "dòng khai THIU ở VAI_NGOAI_CAY: tên khai là vai ngoài cây mà hardening không còn ghim NOBYPASSRLS — gỡ dòng khai, hay ghim lại vai",
+    ).toEqual([]);
+    const daGhim = tapGhim.filter((t) => !Object.hasOwn(VAI_NGOAI_CAY, t));
     // [ADR-072 phần 1] SÁU tên, không còn bốn — đúng ca mà khối trên dự báo: danh sách trắng mở cho cặp thứ ba
     // (app_neo, app_neo_login) và người mở GHIM nó (hai khối thuộc tính role của hardening), không viết lý do né.
     // [S1.182 / ADR-111] TÁM tên: cặp thứ tư (app_khoi_tao, app_khoi_tao_login) của task khởi tạo, cùng khuôn.
@@ -2327,6 +2400,22 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     const truoc = await cay();
     expect(truoc.filter((r) => !daGhim.includes(r)), "cây role không được có tên ngoài tập ghim")
       .toEqual([]);
+
+    // [S1.242 / khoản 265] LÝ DO của lời khai "vai ngoài cây", đo trên cụm đã migrate: vai tồn tại, NOINHERIT, và KHÔNG là thành
+    // viên của vai ứng dụng nào — nên nó không bao giờ là current_user của một kết nối qua cây. Lời khai sai (ai đó GRANT một vai ứng
+    // dụng cho nó, hay bật INHERIT) thì đỏ ở đây chứ không lặng lẽ loại một thành viên của cây khỏi phép so.
+    for (const ten of Object.keys(VAI_NGOAI_CAY)) {
+      const { rows: thuocTinh } = await db.pool.query<{ rolinherit: boolean; trong_cay: boolean }>(
+        `SELECT r.rolinherit,
+                EXISTS (SELECT 1 FROM unnest($2::text[]) AS g(ten)
+                         WHERE to_regrole(g.ten) IS NOT NULL
+                           AND pg_has_role(r.oid, to_regrole(g.ten)::oid, 'MEMBER')) AS trong_cay
+           FROM pg_roles r WHERE r.rolname = $1`,
+        [ten, [...VAI_UNG_DUNG]],
+      );
+      expect(thuocTinh, `${ten}: ${VAI_NGOAI_CAY[ten]!}`).toEqual([{ rolinherit: false, trong_cay: false }]);
+      expect(truoc, `${ten} khai ngoài cây mà cụm xếp nó vào cây`).not.toContain(ten);
+    }
 
     // Đột biến: role thứ năm, có BYPASSRLS, là THÀNH VIÊN của `app_api` — tức thừa hưởng mọi quyền
     // của nó VÀ bỏ qua toàn bộ RLS. Đo được: sau `migrate()` nó KHÔNG còn trong cây.

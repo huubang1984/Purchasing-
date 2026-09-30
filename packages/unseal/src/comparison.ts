@@ -3,7 +3,8 @@
 //
 // Hai hàm ở file này là hai mặt của cùng một câu hỏi: **một con số suy ra từ giá được phép xuất
 // hiện lúc nào?** A4 trả lời cho các trường phái sinh (min/max/trung bình/đếm dưới ngân
-// sách/sắp theo giá); A6 trả lời cho một con số còn không cần tới giá — số báo giá đã nhận.
+// sách/sắp theo giá); A6 trả lời cho một con số còn không cần tới giá — số báo giá ~~đã nhận~~
+// **[S1.243 / khoản 271]** sẽ dự thầu (luồng của lời mời còn sống, ADR-128).
 //
 // ----------------------------------------------------------------------------------------------
 // [A4] VÌ SAO CỔNG Ở ĐÂY LÀ LỚP THỨ HAI, KHÔNG PHẢI LỚP THỨ NHẤT
@@ -51,7 +52,8 @@ import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial
 export const COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING", "BAFO_UNSEALED"] as const;
 
 /**
- * Các trạng thái mà "số báo giá đã nhận" không còn là bí mật: hạn nộp đã qua và RFQ đã đóng.
+ * Các trạng thái mà "số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** sẽ dự thầu" không còn là bí mật: hạn nộp đã qua và RFQ đã
+ * đóng.
  *
  * [S1.108] Ba trạng thái BAFO đều ĐÃ qua `CLOSED` một lần, nên con số ấy đã thôi là bí mật từ
  * trước khi vòng hai mở. `BAFO_OPEN` nằm trong tập này DÙ đang nhận báo giá, và đó là đúng: thứ
@@ -396,6 +398,7 @@ export async function buildComparisonTable(
   // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.217): X thu hồi rồi mời lại ⇒ X HAI dòng,
   // cả hai `isLatestForBid = true` (hai luồng, hai `bid_id`), `belowBudget` 3 thay vì 2. Bản rõ KHÔNG bị
   // xoá — lọc ở lần đọc. Cùng vế ở worker và `docBaoGia`; cổng tĩnh `phong-bi-loi-moi-con-song.test.ts`.
+  // [S1.243 / khoản 271] Và ở câu đếm của `countReceivedBids` cuối tệp — số báo giá là số SẼ DỰ THẦU.
   // ==============================================================================================
   const { rows: dong } = await client.query<HangDong>(
     `SELECT d.bid_id,
@@ -558,7 +561,8 @@ export async function buildComparisonTable(
 }
 
 /**
- * [A6] Số báo giá đã nhận — và chế độ nghiêm giấu nó đi trước giờ đóng.
+ * [A6] Số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** SẼ DỰ THẦU — luồng báo giá của lời mời CÒN SỐNG (ADR-128: thu hồi
+ * là loại; câu 7 của kế hoạch đợt 3) — và chế độ nghiêm giấu nó đi trước giờ đóng. Tên hàm giữ `countReceivedBids`.
  *
  * HÌNH DẠNG TRẢ VỀ LÀ MỘT TUYÊN BỐ: `{ disclosed: false }` KHÔNG mang trường `count`. Một API trả
  * `{ count: 0 }` khi đang giấu là một API mà người gọi không phân biệt được "chưa ai nộp" với
@@ -602,11 +606,26 @@ export async function countReceivedBids(
     return { disclosed: false, reason: "STRICT_BLIND_BEFORE_CLOSE", rfqStatus: r.status };
   }
 
+  // ==============================================================================================
+  // [S1.243 / khoản 271] SỐ ĐẾM LÀ SỐ BÁO GIÁ SẼ DỰ THẦU: CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG.
+  //
+  // Chủ dự án chốt ngày 2026-09-30 (kế hoạch đợt 3, câu 7): từ ADR-128 thu hồi lời mời là LOẠI nhà cung cấp
+  // ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm, nên con số trả về đây là số luồng báo giá SẼ DỰ THẦU —
+  // cùng vế `i.revoked_at IS NULL` mà ba bộ đọc phong bì chép nguyên văn. Đo trước bản vá (§S1.217 ghim,
+  // §S1.243 lật): hai luồng, thu hồi một ⇒ `count: 2`; nay 1. `vendor_bids` là một hàng mỗi luồng (`018`),
+  // nên câu này không khử trùng theo `v.bid_id` như ba bộ đọc kia — cổng tĩnh
+  // `tests/architecture/phong-bi-loi-moi-con-song.test.ts` thấy nó bằng tiêu chí hình dạng thứ hai (đọc
+  // `vendor_bids b` + `rfq_invitations i`, gọi `count(`). Tên hàm, tên trường `bidCount` của route và hình
+  // dạng trả về KHÔNG đổi (không đổi API ở lô này); dữ liệu cũng không — lọc ở lần ĐỌC. Thu hồi SAU lần mở
+  // thầu đầu tiên bị `revokeInvitation` chặn, nên từ `UNSEALED` trở đi con số không còn giảm; trước đó nó
+  // giảm mỗi lần bên mua thu hồi — kể cả trong quãng `CLOSED`, khi chế độ nghiêm đã công bố nó.
+  // ==============================================================================================
   const { rows: dem } = await client.query<{ n: number }>(
     `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
        FROM public.vendor_bids b
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
-      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1`,
+      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+        AND i.revoked_at IS NULL`,
     [rfqId],
   );
   return { disclosed: true, count: dem[0]?.n ?? 0 };
