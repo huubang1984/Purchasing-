@@ -22549,3 +22549,6 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 - Lô W trên cây của lô: `apps/web` 10 tệp 358/358 (trước 327); `pnpm test` 138 tệp, 2293 xanh, 1 bỏ qua; typecheck, lint, depcruise sạch.
 - Lô K: 16 tệp đơn vị của lô 337/337; `loi-moi-sau-commit.int` 19/19, `bidding.int` 22/22; `pnpm test` 138 tệp, 2272 xanh, 1 bỏ qua.
 - 298: khối khoản 275 của `kich-ban-41-http.int` 7/7, khối khoản 137 của `unseal-worker.int` 4/4.
+- Cây gộp (ba nhánh lô trên `master` sau #221): `pnpm cap-so --dem` khớp; `so-no-tu-doi-chieu` + `tep-van-ban-git` 52/52; `pnpm t0` xanh (505 module, 2130 phụ thuộc, 0 vi phạm); `pnpm test` 138 tệp, 2303 xanh, 1 bỏ qua.
+- Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `a1fd8bb4`): vòng → S1.249; khoản mới → 309, 310; `--kiem` sạch.
+- `pnpm evidence` trên `a1fd8bb4` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, gồm `db/migrations.int.test.ts` trọn tệp): 4257 khẳng định — 4247 xanh, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo khoản 272 sau cờ); ma trận 75/75 (53 nghiệp vụ + 22 hàng rào); một dòng ma trận đổi — mô tả A6 chép từ `docs/TEST-PLAN.md` (khoản 299).
