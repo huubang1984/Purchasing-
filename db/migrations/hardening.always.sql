@@ -8272,10 +8272,48 @@ $ham$$q$,
       $q$quyền sở hữu hàm rfq_bam_danh_sach(uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.185 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
+    -- [S1.202 / K4b] Bam ngan sach — chu ky ghim no, canh mo goi so no. Mot than tra hang so thi chu ky cu dem tren ngan sach moi: goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
     ARRAY[
-      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (076_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$định nghĩa hàm rfq_bam_ngan_sach(uuid) (086_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '086_rang_ngan_sach.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_bam_ngan_sach(p_rfq uuid) RETURNS bytea
+  LANGUAGE sql
+  STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT sha256(convert_to(
+    coalesce((SELECT 'NGAN_SACH|' || coalesce(b.estimated_value::text, '') || '|' || coalesce(b.currency, '')
+                     || '|' || coalesce(b.policy_id::text, '') || '|' || coalesce(b.tier_tu_so_tien::text, '')
+                     || '|' || p.requires_dual_approval::text
+                FROM public.rfq_packages p
+                LEFT JOIN public.rfq_budgets b ON b.rfq_id = p.id AND b.org_id = p.org_id
+               WHERE p.id = p_rfq), ''),
+    'UTF8'))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT sha256(convert_to( coalesce((SELECT 'NGAN_SACH|' || coalesce(b.estimated_value::text, '') || '|' || coalesce(b.currency, '') || '|' || coalesce(b.policy_id::text, '') || '|' || coalesce(b.tier_tu_so_tien::text, '') || '|' || p.requires_dual_approval::text FROM public.rfq_packages p LEFT JOIN public.rfq_budgets b ON b.rfq_id = p.id AND b.org_id = p.org_id WHERE p.id = p_rfq), ''), 'UTF8'))$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 1
+            AND p.prorettype = 'pg_catalog.bytea'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_bam_ngan_sach(uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_bam_ngan_sach(uuid)')),
+                  'hàm public.rfq_bam_ngan_sach(uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_bam_ngan_sach(uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.185 / S3.2a / K4b] Chu ky mang danh sach no da ky — chi o to chuc da bat; to chuc chua bat NULL, cho D2 cua MVP1 giu mot nguoi mot lan tren moi noi dung. Than `RETURN NEW` bo trong cot thi K4b khong con gi de so.
+    -- [S1.202 / K4b] Than tu 086_rang_ngan_sach.sql: dat CA bam ngan sach — chu ky rang vao ngan sach sau khi canh ve DRAFT (077) mo lai no.
+    ARRAY[
+      $q$hàm + trigger rfq_approvals_dat_bam_danh_sach (076, thân từ 086_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '086_rang_ngan_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8288,8 +8326,10 @@ $ham$$q$,
 BEGIN
   IF public.to_chuc_da_bat_s3(NEW.org_id) THEN
     NEW.approved_list_hash := public.rfq_bam_danh_sach(NEW.rfq_id);
+    NEW.approved_budget_hash := public.rfq_bam_ngan_sach(NEW.rfq_id);
   ELSE
     NEW.approved_list_hash := NULL;
+    NEW.approved_budget_hash := NULL;
   END IF;
   RETURN NEW;
 END
@@ -8309,7 +8349,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$BEGIN IF public.to_chuc_da_bat_s3(NEW.org_id) THEN NEW.approved_list_hash := public.rfq_bam_danh_sach(NEW.rfq_id); ELSE NEW.approved_list_hash := NULL; END IF; RETURN NEW; END$than$
+                = $than$BEGIN IF public.to_chuc_da_bat_s3(NEW.org_id) THEN NEW.approved_list_hash := public.rfq_bam_danh_sach(NEW.rfq_id); NEW.approved_budget_hash := public.rfq_bam_ngan_sach(NEW.rfq_id); ELSE NEW.approved_list_hash := NULL; NEW.approved_budget_hash := NULL; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -8339,9 +8379,10 @@ $ham$;
     ],
 
     -- [S1.185 / S3.2a / K4b] Canh PENDING_APPROVAL->OPEN cua to chuc da bat: du nguoi ky tren noi dung VA danh sach hien tai. Than `RETURN NEW` mo goi bang chu ky tren mot danh sach khac.
+    -- [S1.202 / K4b] Than tu 086_rang_ngan_sach.sql: them phep dem tren NGAN SACH hien tai — bo no thi goi cap kep ha ngan sach roi mo bang mot chu ky (khoản 254).
     ARRAY[
-      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076_danh_sach_moi)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '076_danh_sach_moi.sql')$q$,
+      $q$hàm + trigger rfq_kiem_chu_ky_danh_sach_khi_mo (076, thân từ 086_rang_ngan_sach)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '086_rang_ngan_sach.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -8368,6 +8409,16 @@ BEGIN
     RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co
       USING ERRCODE = 'check_violation';
   END IF;
+  SELECT count(DISTINCT a.approver_user_id) INTO co
+    FROM public.rfq_approvals a
+   WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id
+     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)
+     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)
+     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id);
+  IF co < can THEN
+    RAISE EXCEPTION 'RFQ nay can % chu ky TREN NGAN SACH HIEN TAI, moi co % (K4b)', can, co
+      USING ERRCODE = 'check_violation';
+  END IF;
   RETURN NEW;
 END
 $ham$;
@@ -8386,7 +8437,7 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE can integer; co integer; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE can integer; co integer; BEGIN IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RETURN NEW; END IF; can := CASE WHEN NEW.requires_dual_approval THEN 2 ELSE 1 END; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN DANH SACH MOI HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; SELECT count(DISTINCT a.approver_user_id) INTO co FROM public.rfq_approvals a WHERE a.org_id = NEW.org_id AND a.rfq_id = NEW.id AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id) AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id) AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id); IF co < can THEN RAISE EXCEPTION 'RFQ nay can % chu ky TREN NGAN SACH HIEN TAI, moi co % (K4b)', can, co USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

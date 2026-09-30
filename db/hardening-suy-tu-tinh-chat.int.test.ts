@@ -343,7 +343,8 @@ const HAM_KHONG_PHAI_CANH = [
   // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
   // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
   // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
-  // đi qua cả bốn: năm nhân chứng.
+  // đi qua cả bốn: năm nhân chứng. **[S1.202 / `086_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
+  // `rfq_kiem_chu_ky_danh_sach_khi_mo`) nay mang thêm băm ngân sách; vẫn chỉ ở tổ chức đã bật, nhân chứng không đổi.
   "public.rfq_approvals_dat_bam_danh_sach",
   "public.rfq_invitation_tokens_kiem_goi_da_mo",
   "public.rfq_invitations_kiem_danh_sach",
@@ -2582,7 +2583,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 180000);
+    // [S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
+    // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.
+  }, 600_000);
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";
