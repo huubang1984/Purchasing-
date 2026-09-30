@@ -5,7 +5,7 @@ import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { addRfqItem, createRfq, datNhomHangChoGoi, submitRfqForApproval } from "./rfq.js";
+import { addRfqItem, cancelRfq, createRfq, datNhomHangChoGoi, submitRfqForApproval } from "./rfq.js";
 import { createProcurementPolicy, setRfqBudget } from "./procurement-policy.js";
 import { doiTrangThaiNhomHang, lietKeNhomHang, taoNhomHang } from "./nhom-hang.js";
 import { CAU_CHOT_NHOM_HANG, CHOT_VAO_SO, ChotKiemSoatError } from "./chot-kiem-soat.js";
@@ -481,10 +481,14 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     expect(await hangChot(t.org, rfqId)).toEqual([]);
   });
 
-  it("gói nộp TRƯỚC lần bật, không nhóm hàng; sau lần bật gọi nộp lại ⇒ lời từ chối TRẠNG THÁI, không hàng `CONTROL_DENIED` — chốt chỉ hỏi gói ở DRAFT", async () => {
+  it("gói rời DRAFT TRƯỚC lần bật, không nhóm hàng; sau lần bật gọi nộp lại ⇒ lời từ chối TRẠNG THÁI, không hàng `CONTROL_DENIED` — chốt chỉ hỏi gói ở DRAFT", async () => {
     const t = await taoToChuc();
     const rfqId = await goiSanSang(t);
     expect(await nop(t, rfqId)).toBeNull();
+    // [S1.236 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói chờ duyệt: gói rời DRAFT theo đường MVP1 rồi HUỶ, trước lần ký.
+    await withTenant(apiPool, t.org, (c) =>
+      cancelRfq(c, t.org, { rfqId, reason: "roi DRAFT truoc lan bat", actorSessionId: t.pm.s }, apiPool),
+    );
     const v2 = await chenPhienBan2(t, true, 30);
     await withTenant(apiPool, t.org, (c) =>
       c.query("INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)", [
@@ -496,7 +500,7 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     );
     expect(await nop(t, rfqId)).toMatchObject({ name: "RfqError" });
     expect(await hangChot(t.org, rfqId)).toEqual([]);
-    expect(await trangThaiGoi(rfqId)).toEqual({ status: "PENDING_APPROVAL", category: null });
+    expect(await trangThaiGoi(rfqId)).toEqual({ status: "CANCELLED", category: null });
   });
 
   it("gói thiếu CẢ ngân sách lẫn nhóm hàng ⇒ lời từ chối về ngân sách trước (K1 đứng trước)", async () => {
