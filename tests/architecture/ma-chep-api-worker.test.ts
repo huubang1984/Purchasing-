@@ -648,10 +648,11 @@ const BANG_TEN: readonly HangTen[] = [
   {
     ten: "doc",
     loai: "const",
-    tep: [`${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`],
+    tep: [`${API}routes/anh-xa.ts`, `${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`],
     xuLy: "RIENG",
     doLuong: "KHONG",
-    lyDo: "Bảng route ĐỌC của hai tệp route người mua — nội dung khác nhau theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới).",
+    lyDo: "Bảng route ĐỌC của ~~hai~~ [S1.9101 / gộp #217] ba tệp route người mua (thêm năm route ánh xạ của S4.3b) — nội dung khác nhau " +
+      "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới).",
   },
   {
     ten: "doc",
@@ -773,6 +774,16 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "KHONG",
     lyDo: "Dòng log kết luận của hai bộ canh — nội dung theo thứ mỗi bộ canh.",
   },
+  // [S1.9101 / gộp #217 vào đợt 3] Tên trùng do S4.3b (#217) mang vào sau khi lô A1 kiểm kê — cùng tên, khác việc.
+  {
+    ten: "phanTram",
+    loai: "function",
+    tep: [`${WEB}du-lieu.ts`, `${PILOT}tien.ts`],
+    xuLy: "RIENG",
+    doLuong: "KHONG",
+    lyDo: "Màn `/du-lieu` in một TỈ LỆ 0..1 thành `N%` làm tròn (độ tin của gợi ý ánh xạ, S4.3b); `pilot-gia-lap` chia hai SỐ TIỀN chuỗi " +
+      "bằng `bigint`, một chữ số thập phân dấu phẩy — hai phép tính khác nhau cùng tên.",
+  },
 ];
 
 /** ⑵ Cùng biểu thức chính quy ở hai app — bắt cả bản chép KHÔNG TÊN. Tệp ghi là TẬP tệp mỗi bên có literal ấy. */
@@ -886,9 +897,10 @@ const BANG_MAU: readonly HangMau[] = [
   {
     mau: "/^[0-9a-f]{64}$/u",
     ten: "hex của SHA-256",
-    tep: [`${KHOI_TAO}index.ts`, `${KIEM_TRUOC_APPLY}luat.ts`],
+    tep: [`${API}routes/anh-xa.ts`, `${KHOI_TAO}index.ts`, `${KIEM_TRUOC_APPLY}luat.ts`],
     xuLy: "RIENG",
-    lyDo: "Băm bản khai đã duyệt (`--bam`) / digest ảnh ECR — hai giá trị khác nhau cùng hình dạng SHA-256.",
+    lyDo: "Băm bản khai đã duyệt (`--bam`) / digest ảnh ECR — hai giá trị khác nhau cùng hình dạng SHA-256. [S1.9101 / gộp #217] Và băm " +
+      "dòng hạng mục (`bam`) của route ánh xạ (S4.3b) — giá trị thứ ba, cùng hình dạng.",
   },
   {
     mau: "/^\\d+$/",
