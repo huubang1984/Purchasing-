@@ -9409,15 +9409,15 @@ ghi số tiền vào sổ kiểm toán.
   nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
   SỐ, không phải không biết KHOẢNG.
 
-## ADR-9201 — S4.3a: ánh xạ hạng mục sang hàng chuẩn — `TU_DONG` chỉ theo bí danh, luật ghi ở trigger, tập loại trừ là MỘT hàm đọc cả sổ kiểm toán
+## ADR-121 — S4.3a: ánh xạ hạng mục sang hàng chuẩn — `TU_DONG` chỉ theo bí danh, luật ghi ở trigger, tập loại trừ là MỘT hàm đọc cả sổ kiểm toán
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30: S4.3 chia hai PR, S4.3a là CSDL và gói; tập
 loại trừ của L3 là một hàm SQL dựng trên dữ liệu đã có, S3.3b thêm vế tác giả ngoại lệ vào chính hàm ấy và K5 của S3.3c gọi lại nó;
 hai vế mà hàng dữ liệu chỉ giữ một lần đọc thêm từ sổ kiểm toán; bộ luật chuẩn hoá bản 1 tối thiểu; không mở đường đọc query (E6);
-phần `/tao-thau` của S4.3b đợi chuỗi #199 → #202 → #205 · **[S1.9101]** · **Liên quan:** ADR-097 ⑹ ⑺ (`TU_DONG` chỉ khi trùng bí
+phần `/tao-thau` của S4.3b đợi chuỗi #199 → #202 → #205 · **[S1.204]** · **Liên quan:** ADR-097 ⑹ ⑺ (`TU_DONG` chỉ khi trùng bí
 danh; vai mù giá), ADR-082 ⑿ (tập loại trừ theo hành vi), ADR-051 (luật người đọc dữ liệu thật), ADR-116 (người ghi dữ liệu nền giữ
 `item.manage`), ADR-108 (tên ràng buộc) · **Spec:** S4 §4.4, §5.1 (L1, L2, L3, L13), §2.5 ⒀ ⒁ ⒂ · **Biên bản:**
-`evidence/security-reviews.md` §S1.9101
+`evidence/security-reviews.md` §S1.204
 
 ### Bối cảnh
 
@@ -9496,4 +9496,4 @@ không bảng, không hàm; tập ADR-082 ⑿ chưa có dòng mã nào (K5 là S
 ### Đo
 
 `packages/du-lieu-nen/src/anh-xa.int.test.ts` trên Postgres thật; `chuan-hoa.test.ts` (bảng ca bộ luật 1); tổng điều tra của `db/` và
-`tests/architecture`. Đột biến: §S1.9101.
+`tests/architecture`. Đột biến: §S1.204.

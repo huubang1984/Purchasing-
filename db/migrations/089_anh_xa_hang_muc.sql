@@ -1,10 +1,10 @@
 -- ==============================================================================================
--- 9501_anh_xa_hang_muc — [S1.9101 / S4.3a của spec S4] ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN, GỢI Ý, TẬP LOẠI TRỪ
+-- 089_anh_xa_hang_muc — [S1.204 / S4.3a của spec S4] ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN, GỢI Ý, TẬP LOẠI TRỪ
 -- (spec S4 §4.4, §5.1 L1 · L2 · L3 · L13; §2.4 ⑹ ⑺; §2.5 ⒀ ⒁ ⒂)
 --
 -- Chủ dự án chốt ngày 2026-09-30: S4.3 chia hai PR, S4.3a là CSDL và gói (không route, không màn); tập loại trừ của L3 là MỘT
 -- hàm SQL dựng trên dữ liệu đã có, đọc thêm sổ kiểm toán cho hai vế mà hàng dữ liệu chỉ giữ một lần; bộ luật chuẩn hoá bản 1
--- tối thiểu; không mở đường đọc query (E6). ADR-9201.
+-- tối thiểu; không mở đường đọc query (E6). ADR-121.
 --
 -- (1) `rfq_hang_muc_bam(org, gói, dòng)` — băm của `description`, `unit`, `quantity` HIỆN TẠI của một dòng, trên
 --     `jsonb_build_array(...)::text` (spec §4.4: nối bằng `':'` là mơ hồ vì `unit` là chuỗi tự do). Ánh xạ và gợi ý chỉ có

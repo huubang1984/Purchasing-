@@ -1,4 +1,4 @@
-// [S1.9101 / S4.3a] Lõi thuần của bộ chuẩn hoá (spec S4 §4.4). Tất định: không I/O, không ngẫu nhiên, không đồng hồ.
+// [S1.204 / S4.3a] Lõi thuần của bộ chuẩn hoá (spec S4 §4.4). Tất định: không I/O, không ngẫu nhiên, không đồng hồ.
 //
 // Hai bước đầu của V2.1 §14 KHÔNG ở đây (§2.5 ⒄): làm sạch là hàm SQL `chuoi_sach`, đơn vị là `don_vi_tai`. Lõi nhận chuỗi
 // ĐÃ làm sạch và tập hàng chuẩn đã đọc — không cài lại luật làm sạch.

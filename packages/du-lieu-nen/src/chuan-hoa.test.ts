@@ -1,4 +1,4 @@
-// [S1.9101 / S4.3a / L2] Bảng ca của bộ luật chuẩn hoá, GHIM THEO PHIÊN BẢN (spec S4 §4.4, §2.5 ㉓). Đổi luật mà không thêm
+// [S1.204 / S4.3a / L2] Bảng ca của bộ luật chuẩn hoá, GHIM THEO PHIÊN BẢN (spec S4 §4.4, §2.5 ㉓). Đổi luật mà không thêm
 // phiên bản mới thì bảng này đỏ — đó là điều làm *"tái lập được"* có nghĩa: một hàng gợi ý mang phiên bản 1 tính lại dưới
 // bộ luật 1 ra đúng thứ đã lưu.
 import { describe, expect, it } from "vitest";

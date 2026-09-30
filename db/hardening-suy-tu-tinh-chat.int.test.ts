@@ -143,7 +143,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
   "rfq_awards",
-  // [S1.9101 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
+  // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
   "rfq_item_goi_y",
   "rfq_item_mappings",
   "rfq_unsealed_bids",
@@ -280,7 +280,7 @@ const HAM_KHONG_PHAI_CANH = [
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",
   "public.nhom_hang_kiem_nguoi_tao",
-  // [S1.9101 / S4.3a] Luật ghi của gợi ý và ánh xạ hạng mục — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN. Chỉ gắn INSERT ⇒ không thể là
+  // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ hạng mục — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN. Chỉ gắn INSERT ⇒ không thể là
   // hàm canh; một hàng HỢP LỆ đi qua mỗi hàm — hai câu chèn cuối `dungKichBan()`.
   "public.anh_xa_kiem_luat",
   "public.goi_y_kiem_luat",
@@ -1932,7 +1932,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
   );
 
-  // ---- [S1.9101 / S4.3a / L2 · L3 · L13 / `9501_anh_xa_hang_muc`] Gợi ý và ánh xạ hạng mục ------------------------------------
+  // ---- [S1.204 / S4.3a / L2 · L3 · L13 / `089_anh_xa_hang_muc`] Gợi ý và ánh xạ hạng mục ------------------------------------
   // Mỗi bảng ba bộ ba mới trên INSERT: luật ghi (`goi_y_kiem_luat`, `anh_xa_kiem_luat` — hàm MỚI, từ chối CÓ ĐIỀU KIỆN),
   // `du_lieu_nen_dat_thu_tu` và `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Gói `rfq1` đã mở niêm phong: người ghi là `ql` (giữ
   // `item.manage`, ngoài tập loại trừ của gói), và ánh xạ mang lý do (L13). `hang_muc_bam`, `seq`, `ghi_luc` do trigger đặt.

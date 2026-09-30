@@ -17266,12 +17266,12 @@ bản vá: 9/9.
 
 ---
 
-# §S1.9101 — S4.3a: ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN — `TU_DONG` CHỈ THEO BÍ DANH (L2), NGƯỜI DUYỆT NGOÀI TẬP LOẠI TRỪ (L3 VẾ HÀNH VI), LÝ DO SAU BẢN RÕ (L13) — ADR-9201
+# §S1.204 — S4.3a: ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN — `TU_DONG` CHỈ THEO BÍ DANH (L2), NGƯỜI DUYỆT NGOÀI TẬP LOẠI TRỪ (L3 VẾ HÀNH VI), LÝ DO SAU BẢN RÕ (L13) — ADR-121
 
 ## 1. Vòng này là gì
 
 Nửa đầu của S4.3 (spec S4 §9): CSDL và tầng gói của ánh xạ dòng gói sang hàng chuẩn (§4.4). Không route, không màn, không đường gọi
-từ `apps/`; lượt chuẩn hoá chưa chạy sau lần nộp duyệt — cả ba là S4.3b. Migration `9501_anh_xa_hang_muc`, ADR-9201. **L2** và **L13**
+từ `apps/`; lượt chuẩn hoá chưa chạy sau lần nộp duyệt — cả ba là S4.3b. Migration `089_anh_xa_hang_muc`, ADR-121. **L2** và **L13**
 vào sổ đăng ký (74 bất biến); **L1** thêm hai bảng; **L3** có vế hành vi.
 
 ## 2. Quyết định của chủ dự án
@@ -17290,13 +17290,13 @@ toán (`RFQ_SUBMITTED_FOR_APPROVAL`, `RFQ_BUDGET_SET`), không dựng bảng m�
 
 ## 3. Thay đổi
 
-- **`9501_anh_xa_hang_muc`.** Hai bảng chỉ-ghi-thêm theo khuôn L1 (`du_lieu_nen_dat_thu_tu`, `bid_chi_ghi_them`,
+- **`089_anh_xa_hang_muc`.** Hai bảng chỉ-ghi-thêm theo khuôn L1 (`du_lieu_nen_dat_thu_tu`, `bid_chi_ghi_them`,
   `kiem_danh_tinh_theo_phien`, `ENABLE ALWAYS`, RLS cùng chính sách hạn chế khách): `rfq_item_goi_y` (kết quả `GOI_Y` / `CAN_DUYET`,
   độ tin cậy, phiên bản bộ luật, năm ứng viên đầu trong `dau_vao`) và `rfq_item_mappings` (nguồn `TU_DONG` / `NGUOI_DUYET`; hàng chuẩn
   `NULL` = *"không có hàng chuẩn tương ứng"*; `ly_do` có hình dạng). `hang_muc_bam` do trigger đặt, ngoài `GRANT`, từ
   `rfq_hang_muc_bam(org, gói, dòng)` — SHA-256 của `jsonb_build_array(description, unit, quantity)`. Hàng HIỆU LỰC của một dòng là
-  hàng mới nhất theo `seq` có băm bằng băm hiện tại. Tập loại trừ `rfq_tap_loai_tru(org, gói)` — chín vế (ADR-9201 ③). Luật ghi ở hai
-  trigger `…_bat_bien` (`goi_y_kiem_luat`, `anh_xa_kiem_luat`) — ADR-9201 ②, thứ tự khoá ④, L13 ⑤. Mục ghim `hardening.always.sql` cho
+  hàng mới nhất theo `seq` có băm bằng băm hiện tại. Tập loại trừ `rfq_tap_loai_tru(org, gói)` — chín vế (ADR-121 ③). Luật ghi ở hai
+  trigger `…_bat_bien` (`goi_y_kiem_luat`, `anh_xa_kiem_luat`) — ADR-121 ②, thứ tự khoá ④, L13 ⑤. Mục ghim `hardening.always.sql` cho
   bốn hàm và mười trigger; hai bảng vào `BANG_TENANT_KHAI`.
 - **Gói `du-lieu-nen`.** `chuan-hoa.ts`: lõi thuần `chuanHoa` bản 1 (`PHIEN_BAN_BO_CHUAN_HOA = 1`), nhận chuỗi đã sạch và tập ứng viên,
   trả kết quả, độ tin cậy, thuộc tính trích được, năm ứng viên xếp theo điểm rồi theo mã; phiên bản lạ thì ném. `anh-xa.ts`:
@@ -17395,15 +17395,15 @@ hàng gói trước khi chèn bản rõ; băm không mơ hồ (`numeric(18,4)`, 
 
 | # | Phát hiện | Mức | Xử lý |
 |---|---|---|---|
-| R1 | Đảo thứ tự khoá: `ghiAnhXa` với `taoBiDanh` và `taoHangChuanVaAnhXa` ghi sổ (khoá chuỗi sổ của tổ chức) rồi mới chờ hàng gói ở trigger; worker mở thầu và mọi cạnh trạng thái đi chiều ngược ⇒ 40P01, có thể huỷ lượt mở thầu. Câu *"không vòng chờ"* của ADR-9201 ④ sai | Trung bình | Sửa: hàm gói khoá bí danh rồi hàng gói `FOR SHARE` trước mọi lần ghi sổ; ADR-9201 ④ viết lại. Ca đo thứ tự khoá; đột biến M25, M26 |
+| R1 | Đảo thứ tự khoá: `ghiAnhXa` với `taoBiDanh` và `taoHangChuanVaAnhXa` ghi sổ (khoá chuỗi sổ của tổ chức) rồi mới chờ hàng gói ở trigger; worker mở thầu và mọi cạnh trạng thái đi chiều ngược ⇒ 40P01, có thể huỷ lượt mở thầu. Câu *"không vòng chờ"* của ADR-121 ④ sai | Trung bình | Sửa: hàm gói khoá bí danh rồi hàng gói `FOR SHARE` trước mọi lần ghi sổ; ADR-121 ④ viết lại. Ca đo thứ tự khoá; đột biến M25, M26 |
 | R2 | Lách L3 qua bí danh: người quản lý dữ liệu trong tập loại trừ khai bí danh cho chuỗi của dòng rồi chạy lượt chuẩn hoá ⇒ `TU_DONG` | Trung bình | Sửa: trigger từ chối `TU_DONG` khi tác giả bí danh thuộc tập (`anh_xa_bi_danh_trong_tap_loai_tru`); lượt chuẩn hoá coi bí danh ấy như không có. Ca đo; M20, M27 |
 | R3 | `TU_DONG` đè được quyết định của người duyệt: câu ghi thẳng sau một `NGUOI_DUYET` thành hàng hiệu lực | Trung bình | Sửa: `anh_xa_tu_dong_da_co_anh_xa`. Ca đo; M21 |
 | R4 | ⒁ phụ thuộc thứ tự ghi: bác `NULL` trước lượt chuẩn hoá, hay khi gợi ý đã lưu là `CAN_DUYET` cũ, qua mà không lý do | Trung bình | Sửa: `ghiAnhXa` ghi kết quả vừa tính vào bảng gợi ý trước ánh xạ; trigger đòi lý do khi dòng chưa có gợi ý nào cho băm hiện tại. Hai ca đo; M23, M28 |
-| R5 | Vế sổ kiểm toán không buộc ở CSDL: sửa ngân sách bằng SQL thẳng không để lại hàng sổ; `app_api` ghi được hàng sổ mang `actor_id` tuỳ ý (thêm người vào tập) | Trung bình | Nói ra ở ADR-9201 *Hệ quả*: chiều thêm hỏng về phía đóng; chiều bớt cùng lớp với mọi câu SQL thẳng của `app_api`. Bảng chỉ-ghi-thêm cho lần nộp và lần đặt ngân sách là lựa chọn đã loại ở vòng này (ADR-9201 *Phương án*) |
-| R6 | Tập loại trừ chỉ kiểm lúc ghi | Thấp | Nói ra ở ADR-9201 *Hệ quả* và §8 |
+| R5 | Vế sổ kiểm toán không buộc ở CSDL: sửa ngân sách bằng SQL thẳng không để lại hàng sổ; `app_api` ghi được hàng sổ mang `actor_id` tuỳ ý (thêm người vào tập) | Trung bình | Nói ra ở ADR-121 *Hệ quả*: chiều thêm hỏng về phía đóng; chiều bớt cùng lớp với mọi câu SQL thẳng của `app_api`. Bảng chỉ-ghi-thêm cho lần nộp và lần đặt ngân sách là lựa chọn đã loại ở vòng này (ADR-121 *Phương án*) |
+| R6 | Tập loại trừ chỉ kiểm lúc ghi | Thấp | Nói ra ở ADR-121 *Hệ quả* và §8 |
 | R7 | Gợi ý không chịu lực nhưng hàng đợi in thẳng ứng viên từ JSON, không kèm tác giả | Thấp | Sửa một phần: hàng đợi kèm họ tên người ghi gợi ý. Tính lại hay kiểm id ứng viên lúc đọc — §8 |
 | R8 | `coBanRo` đọc trước khi khoá gói: lượt mở thầu commit chen giữa thì lượt gãy với mã gây hiểu nhầm | Thấp | Sửa theo R1: phép đọc chạy sau `FOR SHARE` |
-| R9 | Trần 0,94 khi thiếu thuộc tính trọng yếu không bao giờ đổi đường đi | Thấp | Giữ đúng spec §4.4; nói ra ở ADR-9201 *Hệ quả* |
+| R9 | Trần 0,94 khi thiếu thuộc tính trọng yếu không bao giờ đổi đường đi | Thấp | Giữ đúng spec §4.4; nói ra ở ADR-121 *Hệ quả* |
 | R10 | Lỗ test: vế `ghi_luc < clock_timestamp()` luôn đúng; không ca đua rút bí danh và `TU_DONG`; tác giả giả chỉ đo trên bảng gợi ý; chưa ca cho R2–R4; `NGUOI_DUYET` nhận `CHUAN_HOA_HOI_TO` làm lý do | Thấp | Sửa: bỏ vế chết; ca đua (M24); tác giả giả trên bảng ánh xạ với câu của `kiem_danh_tinh`; ca cho R2–R4; mã dành riêng (`anh_xa_ma_ly_do_danh_rieng`, M22) |
 
 ## 8. Giới hạn, nói ra

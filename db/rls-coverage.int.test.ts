@@ -830,7 +830,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_evaluations", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
-      // [S1.9101 / S4.3a] Gợi ý và ánh xạ hạng mục: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "rfq_item_goi_y", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_item_mappings", quyen: "SELECT" },
       // [011] `rfq_items` mat DELETE o muc bang, `suppliers`/`supplier_contacts` mat UPDATE theo
@@ -1359,7 +1359,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
-      // [S1.9101 / S4.3a] Gợi ý và ánh xạ: CHỈ INSERT. `hang_muc_bam`, `seq`, `ghi_luc` do trigger đặt, ngoài GRANT; người ghi và
+      // [S1.204 / S4.3a] Gợi ý và ánh xạ: CHỈ INSERT. `hang_muc_bam`, `seq`, `ghi_luc` do trigger đặt, ngoài GRANT; người ghi và
       // phiên dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`).
       { grantee: "app_api", bang: "rfq_item_goi_y", cot: "dau_vao", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_item_goi_y", cot: "do_tin_cay", quyen: "INSERT" },
@@ -2025,7 +2025,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       // đã ngừng dùng.
       "procurement_categories", "procurement_category_changes",
       "rfq_approvals",
-      // [S1.9101 / S4.3a] Nhà cung cấp không đọc được dòng của mình ánh xạ sang hàng chuẩn nào, hay gợi ý nào.
+      // [S1.204 / S4.3a] Nhà cung cấp không đọc được dòng của mình ánh xạ sang hàng chuẩn nào, hay gợi ý nào.
       "rfq_item_goi_y", "rfq_item_mappings",
       // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
       // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có

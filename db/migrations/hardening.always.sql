@@ -3440,8 +3440,8 @@ $ham$;
          ('public', 'rfq_evaluations', '057_luot_danh_gia'),
          ('public', 'rfq_invitation_tokens', '010_invitations'),
          ('public', 'rfq_invitations', '010_invitations'),
-         ('public', 'rfq_item_goi_y', '9501_anh_xa_hang_muc'),
-         ('public', 'rfq_item_mappings', '9501_anh_xa_hang_muc'),
+         ('public', 'rfq_item_goi_y', '089_anh_xa_hang_muc'),
+         ('public', 'rfq_item_mappings', '089_anh_xa_hang_muc'),
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
@@ -10293,10 +10293,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_kiem_nhom_hang_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.3a] Bam cua mot dong — anh xa va goi y chi hieu luc khi bam da luu bang bam hien tai. Mot than tra hang so lam anh xa cu song qua lan sua dong.
+    -- [S1.204 / S4.3a] Bam cua mot dong — anh xa va goi y chi hieu luc khi bam da luu bang bam hien tai. Mot than tra hang so lam anh xa cu song qua lan sua dong.
     ARRAY[
-      $q$định nghĩa hàm rfq_hang_muc_bam(uuid, uuid, integer) (9501_anh_xa_hang_muc)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$định nghĩa hàm rfq_hang_muc_bam(uuid, uuid, integer) (089_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '089_anh_xa_hang_muc.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_hang_muc_bam(p_org uuid, p_rfq uuid, p_line integer) RETURNS bytea
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -10324,10 +10324,10 @@ $ham$$q$,
                   'hàm public.rfq_hang_muc_bam(uuid, uuid, integer) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_hang_muc_bam(uuid, uuid, integer) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET.
+    -- [S1.204 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET.
     ARRAY[
-      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (9501_anh_xa_hang_muc)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (089_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '089_anh_xa_hang_muc.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.rfq_tap_loai_tru(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
@@ -10382,10 +10382,10 @@ $ham$$q$,
                   'hàm public.rfq_tap_loai_tru(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_tap_loai_tru(uuid, uuid) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.3a] Luat ghi goi y: goi da roi DRAFT, dong ton tai, bam do trigger dat, hoi to chi do item.manage. Than `RETURN NEW` som mo goi y cho goi con soan.
+    -- [S1.204 / S4.3a] Luat ghi goi y: goi da roi DRAFT, dong ton tai, bam do trigger dat, hoi to chi do item.manage. Than `RETURN NEW` som mo goi y cho goi con soan.
     ARRAY[
-      $q$hàm + trigger goi_y_kiem_luat (9501_anh_xa_hang_muc)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$hàm + trigger goi_y_kiem_luat (089_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '089_anh_xa_hang_muc.sql')$q$,
       $q$DO $fn93$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -10471,10 +10471,10 @@ $ham$;
                   'hàm public.goi_y_kiem_luat() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.goi_y_kiem_luat() và bảng public.rfq_item_goi_y (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
+    -- [S1.204 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
     ARRAY[
-      $q$hàm + trigger anh_xa_kiem_luat (9501_anh_xa_hang_muc)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$hàm + trigger anh_xa_kiem_luat (089_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '089_anh_xa_hang_muc.sql')$q$,
       $q$DO $fn93$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

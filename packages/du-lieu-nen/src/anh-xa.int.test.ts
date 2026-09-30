@@ -1,4 +1,4 @@
-// [S1.9101 / S4.3a] Ánh xạ hạng mục sang hàng chuẩn — trên Postgres thật (spec S4 §4.4; §5.1 L1 · L2 · L3 · L13; §2.5 ⒁ ⒂).
+// [S1.204 / S4.3a] Ánh xạ hạng mục sang hàng chuẩn — trên Postgres thật (spec S4 §4.4; §5.1 L1 · L2 · L3 · L13; §2.5 ⒁ ⒂).
 //
 //   ⑴ L2 — `TU_DONG` tồn tại khi và chỉ khi chuỗi đã làm sạch trùng một bí danh còn hiệu lực của đúng hàng chuẩn; lượt chuẩn
 //      hoá ghi `TU_DONG` cho mọi dòng khớp bí danh; mọi hàng `TU_DONG` trong CSDL tái lập được từ dữ liệu đã lưu;
@@ -529,7 +529,7 @@ describe("[INV-L3] người ghi NGUOI_DUYET giữ item.manage và nằm ngoài T
   it("[INV-L3] hai vế đọc từ sổ ghim theo TÊN action — tầng gói `rfq` vẫn ghi đúng hai tên ấy, vào đúng loại tài nguyên", () => {
     const rfq = readFileSync(`${GOC}packages/rfq/src/rfq.ts`, "utf8");
     const nganSach = readFileSync(`${GOC}packages/rfq/src/procurement-policy.ts`, "utf8");
-    const mig = readFileSync(`${MIGRATIONS}/9501_anh_xa_hang_muc.sql`, "utf8");
+    const mig = readFileSync(`${MIGRATIONS}/089_anh_xa_hang_muc.sql`, "utf8");
     expect(rfq).toMatch(/action: "RFQ_SUBMITTED_FOR_APPROVAL",\s+resourceType: "rfq_package",/u);
     expect(nganSach).toMatch(/action: "RFQ_BUDGET_SET",\s+resourceType: "rfq_package",/u);
     expect(mig).toContain("a.action IN ('RFQ_SUBMITTED_FOR_APPROVAL', 'RFQ_BUDGET_SET')");
@@ -682,7 +682,7 @@ describe("[INV-L13] gói đã có bản rõ thì ánh xạ đòi lý do — kho�
   });
 });
 
-describe("[S1.9101 / §2.5 ⒁] bác một dòng đã từng có gợi ý GOI_Y đòi lý do", () => {
+describe("[S1.204 / §2.5 ⒁] bác một dòng đã từng có gợi ý GOI_Y đòi lý do", () => {
   it("bác không lý do sau GOI_Y bị từ chối — kể cả khi một gợi ý CAN_DUYET ghi sau; bác dòng chỉ có CAN_DUYET thì không cần", async () => {
     const rfqId = await goiDaNop(["Thép vằn D12", "Gạch thẻ đỏ"]);
     await trong(orgA, (c) => chuanHoaGoi(c, orgA, { rfqId, actorSessionId: pm.phien }));
@@ -706,7 +706,7 @@ describe("[S1.9101 / §2.5 ⒁] bác một dòng đã từng có gợi ý GOI_Y 
   });
 });
 
-describe("[S1.9101 / §2.5 ⒁] bác một dòng chưa qua lượt chuẩn hoá; mã lý do dành riêng", () => {
+describe("[S1.204 / §2.5 ⒁] bác một dòng chưa qua lượt chuẩn hoá; mã lý do dành riêng", () => {
   it("lõi tính lại lúc bác: GOI_Y thì đòi lý do, CAN_DUYET thì không; câu ghi thẳng trên dòng không có gợi ý nào thì đòi lý do", async () => {
     const rfqId = await goiDaNop(["Thép vằn D12", "Gạch thẻ chưa chuẩn hoá", "Cát vàng chưa chuẩn hoá"]);
     expect(await maLoi(trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 1, hangChuanId: null, actorSessionId: ql.phien })))).toBe("CAN_LY_DO");
@@ -729,7 +729,7 @@ describe("[S1.9101 / §2.5 ⒁] bác một dòng chưa qua lượt chuẩn hoá;
   });
 });
 
-describe("[S1.9101 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
+describe("[S1.204 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
   it("hàng đợi: dòng chưa ánh xạ của gói đã nộp, kèm gợi ý hiện hành; dòng đã duyệt và gói còn soạn không có mặt; tổ chức khác không thấy", async () => {
     const rfqId = await goiDaNop(["Thép vằn D12 hàng đợi", "Gạch thẻ hàng đợi"]);
     const soan = await taoGoi(orgA, pm, ["Thép vằn D12 gói còn soạn"]);

@@ -1492,15 +1492,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
-  // [S1.9101 / S4.3a] Hai hàm trợ giúp của ánh xạ hạng mục — không `RETURNS trigger`. Một thân băm hằng số làm ánh xạ cũ sống qua
+  // [S1.204 / S4.3a] Hai hàm trợ giúp của ánh xạ hạng mục — không `RETURNS trigger`. Một thân băm hằng số làm ánh xạ cũ sống qua
   // lần sửa dòng; một thân `rfq_tap_loai_tru` rỗng cho người tạo gói tự ghi ánh xạ `NGUOI_DUYET` (L3). Khuôn đọc thêm
   // `RETURNS SETOF …` vì tập loại trừ trả nhiều hàng.
   const HAM_ANH_XA: readonly { ham: string; chuKy: string; migration: string }[] = [
-    { ham: "rfq_hang_muc_bam", chuKy: "uuid, uuid, integer", migration: "9501_anh_xa_hang_muc.sql" },
-    { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "9501_anh_xa_hang_muc.sql" },
+    { ham: "rfq_hang_muc_bam", chuKy: "uuid, uuid, integer", migration: "089_anh_xa_hang_muc.sql" },
+    { ham: "rfq_tap_loai_tru", chuKy: "uuid, uuid", migration: "089_anh_xa_hang_muc.sql" },
   ];
 
-  it("[S1.9101] hai hàm trợ giúp của ánh xạ hạng mục: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.204] hai hàm trợ giúp của ánh xạ hạng mục: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1601,7 +1601,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_invitation_tokens_kiem_danh_tinh",
         "rfq_invitations_kiem_danh_tinh",
         "rfq_invitations_kiem_nguoi_thu_hoi",
-        // [S1.9101 / S4.3a] Gợi ý và ánh xạ hạng mục — người ghi dẫn xuất từ phiên.
+        // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — người ghi dẫn xuất từ phiên.
         "rfq_item_goi_y_kiem_danh_tinh",
         "rfq_item_mappings_kiem_danh_tinh",
         "rfq_items_kiem_danh_tinh",
@@ -1770,7 +1770,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "canonical_items_dat_thu_tu",
         "item_aliases_dat_thu_tu",
         "item_uom_conversions_dat_thu_tu",
-        // [S1.9101 / S4.3a] Gợi ý và ánh xạ hạng mục — cùng hàm khuôn, thân không đổi.
+        // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — cùng hàm khuôn, thân không đổi.
         "rfq_item_goi_y_dat_thu_tu",
         "rfq_item_mappings_dat_thu_tu",
         "uom_aliases_dat_thu_tu",
@@ -1804,11 +1804,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_dem_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
     { ham: "rfq_chot_lan_nop_da_xem", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_approvals_so_lan_nop"] },
     { ham: "rfq_tra_ve_dat_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_tra_ve_dat_lan_nop"] },
-    // [S1.9101 / S4.3a] Luật ghi của gợi ý và ánh xạ (L2, L3 vế hành vi, L13, §2.5 ⒁). Một thân `RETURN NEW` sớm cho gợi ý trên gói
+    // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ (L2, L3 vế hành vi, L13, §2.5 ⒁). Một thân `RETURN NEW` sớm cho gợi ý trên gói
     // còn soạn và chuẩn hoá hồi tố không `item.manage`; cho `TU_DONG` không bí danh, `NGUOI_DUYET` của chính người tạo gói, và ánh
     // xạ không lý do trên gói đã có bản rõ.
-    { ham: "goi_y_kiem_luat", migration: "9501_anh_xa_hang_muc.sql", trigger: ["rfq_item_goi_y_bat_bien"] },
-    { ham: "anh_xa_kiem_luat", migration: "9501_anh_xa_hang_muc.sql", trigger: ["rfq_item_mappings_bat_bien"] },
+    { ham: "goi_y_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_goi_y_bat_bien"] },
+    { ham: "anh_xa_kiem_luat", migration: "089_anh_xa_hang_muc.sql", trigger: ["rfq_item_mappings_bat_bien"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3458,7 +3458,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
-        "9501_anh_xa_hang_muc.sql",
+        "089_anh_xa_hang_muc.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7887,7 +7887,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
-        "9501_anh_xa_hang_muc.sql",
+        "089_anh_xa_hang_muc.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8193,7 +8193,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
-        "9501_anh_xa_hang_muc.sql",
+        "089_anh_xa_hang_muc.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

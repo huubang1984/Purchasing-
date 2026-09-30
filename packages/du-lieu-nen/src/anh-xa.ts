@@ -1,4 +1,4 @@
-// [S1.9101 / S4.3a] Chuẩn hoá và ánh xạ hạng mục sang hàng chuẩn (spec S4 §4.4, §5.1 L2 · L3 · L13; §2.5 ⒁ ⒂).
+// [S1.204 / S4.3a] Chuẩn hoá và ánh xạ hạng mục sang hàng chuẩn (spec S4 §4.4, §5.1 L2 · L3 · L13; §2.5 ⒁ ⒂).
 //
 // Ba đường GHI, mọi đường cùng khuôn `hang-chuan.ts` — tenant đã gắn, tác giả dẫn xuất từ phiên, một hàng sổ kiểm toán trong
 // CÙNG giao dịch, lần từ chối của CSDL thành `DuLieuNenError` có mã:

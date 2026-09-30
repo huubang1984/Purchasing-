@@ -26,7 +26,7 @@ export class DuLieuNenError extends Error {
       | "KHONG_CO_QUY_DOI"
       | "QUY_DOI_CHUNG_DA_CO"
       | "HE_SO_SAI_HINH_DANG"
-      // [S1.9101 / S4.3a] Ánh xạ và gợi ý.
+      // [S1.204 / S4.3a] Ánh xạ và gợi ý.
       | "GOI_CON_SOAN"
       | "KHONG_CO_HANG_MUC"
       | "TU_DONG_KHONG_KHOP_BI_DANH"
@@ -63,7 +63,7 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   item_uom_conversions_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   // [S1.199 / S4.2b] `CHECK` không tên của `079` trên bí danh đơn vị của tổ chức — tên Postgres tự đặt.
   uom_aliases_bi_danh_sach_check: "CHUOI_RONG",
-  // [S1.9101 / S4.3a] Luật ghi của ánh xạ và gợi ý (`9501_anh_xa_hang_muc`).
+  // [S1.204 / S4.3a] Luật ghi của ánh xạ và gợi ý (`089_anh_xa_hang_muc`).
   anh_xa_goi_con_soan: "GOI_CON_SOAN",
   anh_xa_khong_co_hang_muc: "KHONG_CO_HANG_MUC",
   anh_xa_tu_dong_khong_khop_bi_danh: "TU_DONG_KHONG_KHOP_BI_DANH",

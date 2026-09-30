@@ -40,7 +40,7 @@ export {
   type DonViDanhMuc,
   type KhaiBiDanhDonViInput,
 } from "./bi-danh-don-vi.js";
-// [S1.9101 / S4.3a] Chuẩn hoá và ánh xạ hạng mục: lõi thuần có phiên bản, lượt chuẩn hoá, thao tác hàng đợi, đọc.
+// [S1.204 / S4.3a] Chuẩn hoá và ánh xạ hạng mục: lõi thuần có phiên bản, lượt chuẩn hoá, thao tác hàng đợi, đọc.
 export {
   NGUONG_GOI_Y,
   NGUONG_TU_DONG,
