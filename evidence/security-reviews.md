@@ -18533,8 +18533,8 @@ Script `scratchpad/lo13-dot-bien.py` (mỗi đột biến: sửa, chạy, khôi 
 - **M5** — `totalAmount: String(Number(r.total_amount))` ở chỗ dựng hàng: ca 108 đỏ `expected '1234567890123456.8' to be '1234567890123456.78'`.
 
 ## 7. Giới hạn, nói ra
-- ⑴ `laKhongTimThayYeuCau` đọc mỗi `code`: một 23503 khác trên câu INSERT ấy (người duyệt bị xoá cứng giữa `resolveSessionActor` và INSERT — hôm nay không có đường xoá `users`) cũng thành "không tìm thấy yêu cầu". Khoản 266.
-- ⑵ `cancelUnseal` trên một hàng CÓ THẬT đã `EXECUTED`/`CANCELLED` vẫn 422 cùng câu gộp và 0 hàng sổ — từ chối TRẠNG THÁI ngoài đề bài 133. Khoản 267.
+- ⑴ `laKhongTimThayYeuCau` đọc mỗi `code`: một 23503 khác trên câu INSERT ấy (người duyệt bị xoá cứng giữa `resolveSessionActor` và INSERT — hôm nay không có đường xoá `users`) cũng thành "không tìm thấy yêu cầu". Khoản 266. **[S1.9145]** 266 ĐÓNG: nhánh không thấy yêu cầu của trigger mang tên `unseal_approvals_yeu_cau_phai_ton_tai` (`9545_khong_tim_thay_yeu_cau_co_ten.sql`), bộ lọc đọc `code` VÀ `constraint` — §S1.9145.
+- ⑵ `cancelUnseal` trên một hàng CÓ THẬT đã `EXECUTED`/`CANCELLED` vẫn 422 cùng câu gộp và 0 hàng sổ — từ chối TRẠNG THÁI ngoài đề bài 133. Khoản 267. **[S1.9145]** 267 ĐÓNG: `UNSEAL_CANCEL_DENIED { lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }`, câu 422 riêng mang `ma`, lý do là vế — §S1.9145.
 - ⑶ Hai vế đua của `dieuPhoiLaiSauKhiChet` không vào sổ (lý do ở mục 5); không ca nào dựng được cuộc đua ấy.
 - ⑷ Sổ của tổ chức KHÁC chỉ được đếm ở ca gọi thẳng gói của bảng so sánh (`comparison.int.test.ts` có `orgB`); `unseal.int.test.ts` và các ca HTTP chỉ có một tổ chức — cùng giới hạn §S1.72.
 - ⑸ Đột biến qua HTTP chỉ chạy cho M1 và M3; M2/M4 đo ở gói (đường HTTP đi thẳng vào cùng hàm, ca HTTP đã đo chiều thuận).
@@ -21699,3 +21699,172 @@ khôi phục bằng `cp` từ bản `.va` đã lưu, `cmp` nguyên vẹn sau m�
 - Đột biến M1–M10: mười đỏ đúng vế, không ca sống; `cmp` nguyên vẹn.
 - `pnpm test` 136 tệp: 2175 xanh, 1 bỏ qua (`tests/architecture/xuong-dong-ts.test.ts`, `it.runIf(process.env.CI === "true")`, có
   sẵn), 173,2 s.
+
+# §S1.9145 — LÔ B1 ĐỢT 3: NHÁNH "KHÔNG THẤY YÊU CẦU" CỦA TRIGGER PHÊ DUYỆT MỞ THẦU MANG TÊN, `approveUnseal` ĐỌC CODE VÀ CONSTRAINT; HUỶ MỘT YÊU CẦU KHÔNG CÒN HUỶ ĐƯỢC VÀO SỔ VỚI CÂU VÀ MÃ RIÊNG, LÝ DO LÀ VẾ — KHOẢN 266, 267 ĐÓNG, 9445, 9446 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (266, 267 — hai khoản §S1.213 mở, xếp rổ ở bước 0 đợt 3). Mảnh §11 chạm: *"hai người bên mua phê duyệt
+mở thầu"* — đường từ chối của phê duyệt và huỷ yêu cầu mở thầu; một thân 422 đổi (vế trạng thái của `POST /unseal/:unsealRequestId/cancel`,
+chủ dự án chốt). Một migration (`9545_khong_tim_thay_yeu_cau_co_ten.sql`), một hàng hardening; không ADR mới (một dòng CÓ ở bảng của ADR-060,
+gạch tại chỗ ở tiểu mục [S1.213] của ADR-016); không export mới ở `index.ts`, không phụ thuộc mới. Đóng 266, 267; mở 9445, 9446.
+
+## 1. Vòng này là gì
+
+Lô B1 của đợt trả nợ 3, lượt B (làn hardening, gộp sau B6). Hai khoản §S1.213 để lại trên bề mặt mở thầu. **266** — nhánh không thấy
+yêu cầu của trigger `unseal_kiem_nguoi_duyet` (019) RAISE 23503 không tên và fire trước khoá ngoại, nên `approveUnseal` nhận "không tìm
+thấy" bằng `code` một mình: MỌI 23503 của câu INSERT vào `unseal_approvals` thành hàng `UNSEAL_NOT_FOUND_DENIED`, kể cả một 23503 vì nguyên
+nhân khác — một hàng sổ nói sai nguyên nhân. **267** — `cancelUnseal` trên một yêu cầu CÓ THẬT đã `EXECUTED`/`CANCELLED` trả 422 cùng câu
+gộp "không tìm thấy …, hoặc nó không ở trạng thái huỷ được" và 0 hàng sổ; theo luật ADR-060 đó là một bước sai thứ tự trên chuỗi mở thầu.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, chốt 2026-09-30: **câu 5** (khoản 267) — tách câu 422 và vào sổ `UNSEAL_CANCEL_DENIED {lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC"}`
+theo luật ADR-060 (đổi hợp đồng); phương án "giữ câu gộp, chỉ thêm hàng sổ" bị loại. Khoản 266 nằm ở dòng *"khoản không cần quyết định mới"*
+— hình dạng trong thân hàng. Người tích hợp chốt thêm cho 267 (đề bài lô, khuôn khoản 279 — §S1.9125): `lyDo` là đối số thứ năm của
+`throwAuditedDenial`, hai tên vào `DANH_MUC_VE_CONG`, một nguồn vào `NGUON_VE`, `packages/unseal/src/requests.ts` vào `TEP_TRUYEN_VE`. Các điểm
+tự chốt trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `a97dd48b` (mã sản xuất chưa đổi), cụm cục bộ PostgreSQL 16 (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Log ở `scratchpad/b1/`.
+- `packages/unseal/src/unseal.int.test.ts -t "S1.9145"` (khối mới, tám ca) — `do-truoc-unseal.log`: **7 đỏ / 1 xanh** (đối chứng dương
+  `PENDING`/`APPROVED` huỷ được, 0 hàng). 266: UUID lạ ⇒ `cause` mang `code` 23503 mà `constraint` rỗng (`expected { Object (code, constraint) }
+  to deeply equal { code: '23503', …(1) }`); đột biến lúc chạy trả thân về `019` ⇒ `expected 'UnsealError' to be 'error'` — bộ lọc `code` một
+  mình nhận cả 23503 không tên và ghi một hàng; tên hai chiều ⇒ `expected [] to deeply equal [ undefined ]` (thân thật không có
+  `CONSTRAINT`). 267: huỷ yêu cầu `EXECUTED` ⇒ `expected 'không tìm thấy yêu cầu mở thầu trong …' to be 'Yêu cầu mở thầu này không còn ở trạng…'`;
+  huỷ lần hai yêu cầu `CANCELLED` ⇒ câu gộp, `ma` `undefined`; đối chứng id lạ / vế người ⇒ đỏ chỉ vì chưa có trường `ma`; lần ghi bị chặn
+  ⇒ `expected UnsealError: không tìm thấy yêu cầu mở th… to be an instance of DenialAuditFailedError` — vế trạng thái không thử ghi gì.
+- `packages/identity/src/danh-muc-tu-choi.test.ts` — `do-truoc-danh-muc.log`: **2 đỏ / 8 xanh**: ⑷ NÉM `không thấy \`LyDoTuChoiHuy\` ở cấp tệp`,
+  ⑸ `expected [ …(5) ] to deeply equal [ …(6) ]`.
+- Qua HTTP (tệp tạm `apps/api/src/zz-tam-do-khoan-267.int.test.ts`, bộ điều phối + máy chủ thật, đã xoá) — `do-truoc-http.log`: huỷ yêu cầu
+  `EXECUTED` ⇒ `422 {"error":"không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn, hoặc nó không ở trạng thái huỷ được"}` — giống TỪNG KÝ TỰ
+  thân của id lạ; hàng `UNSEAL_CANCEL_DENIED` duy nhất là của vế người (PM khác), vế trạng thái 0 hàng.
+- `db/migrations.int.test.ts -t` hai ca tĩnh của hàm ghim — `do-truoc-migrations-tinh.log`: **2 đỏ** (`ENOENT … 9545_khong_tim_thay_yeu_cau_co_ten.sql`;
+  `hardening ghim 9545_khong_tim_thay_yeu_cau_co_ten.sql nhưng bản CUỐI ở 019_unseal.sql`) — danh sách mong đợi viết trước migration.
+
+## 4. Thay đổi
+
+- `db/migrations/9545_khong_tim_thay_yeu_cau_co_ten.sql` (MỚI): khối đầu (vì sao, khuôn `074`, "tên là nhãn của nhánh, không phải ràng buộc
+  trong `pg_constraint`"); `CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet()` — thân trích nguyên văn từ `019` bằng script
+  (`scratchpad/b1/tao-migration.py`: đối chiếu thân `019` với câu sửa và `$than$` của hàng ghim cũ trước khi viết), đổi đúng một chỗ: câu
+  `RAISE` của nhánh `IF NOT FOUND` thêm `CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'`. Không đổi trigger nào.
+- `db/migrations/hardening.always.sql` (chỉ hàng của hàm này, script `va-hardening.py` — mỗi chỗ đúng một lần): nhãn
+  `hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 9545_khong_tim_thay_yeu_cau_co_ten.sql)`; điều kiện `version =
+  '9545_khong_tim_thay_yeu_cau_co_ten.sql'`; câu sửa mang thân mới; `$than$` mang thân chuẩn hoá mới; bốn dòng chú thích trên hàng.
+  Vân tay thân chuẩn (công thức ADR-124, tính bằng `node:crypto` trên `$than$`): `f54165e51d57c664` → `159bf1e49d9a8c6f`.
+- `packages/unseal/src/requests.ts`: kiểu `LyDoTuChoiHuy` (hai lý do, docstring); `UnsealError.ma: LyDoTuChoiHuy | null` (tham số `ma` ở
+  tuỳ chọn); hằng `RANG_BUOC_KHONG_TIM_THAY_YEU_CAU` (export khỏi tệp, không khỏi gói); `laKhongTimThayYeuCau` đọc `code` VÀ `constraint`,
+  docstring gạch tại chỗ; `CAU_KHONG_O_TRANG_THAI_HUY_DUOC`; `cancelUnseal` — vế người: `lyDo` một biến → `payload.lyDo` + đối số thứ năm;
+  vế trạng thái: `return throwAuditedDenial(… UNSEAL_CANCEL_DENIED …, payload { lyDo }, new UnsealError(câu riêng, { ma }), lyDo)`; chú thích
+  nhánh không tìm thấy và nhánh trạng thái gạch tại chỗ.
+- `apps/api/src/routes/buyer.ts`: import `UnsealError`; handler `POST /unseal/:unsealRequestId/cancel` bọc lời gọi — `UnsealError` mang
+  `ma` ⇒ `return { status: 422, body: { error, ma } }`; lỗi khác ném như cũ. Khối chú thích nêu vì sao TRẢ VỀ (commit không mang câu ghi nào).
+- `packages/identity/src/rbac.ts`: `DANH_MUC_VE_CONG` thêm `KHONG_O_TRANG_THAI_HUY_DUOC`, `KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC`
+  (48 → 50); docstring của danh mục, của `DenialAuditFailedError.clause`, của `moTaHangDongCuaLanTuChoi` và của `throwAuditedDenial` gạch tại
+  chỗ ("năm" → "sáu" tệp truyền vế; "huỷ yêu cầu mở thầu" rời danh sách không truyền; đếm 15 / 7 / 8; một dòng người gọi mới).
+- `packages/identity/src/danh-muc-tu-choi.test.ts`: `NGUON_VE` thêm `LyDoTuChoiHuy`; `TEP_TRUYEN_VE` thêm `packages/unseal/src/requests.ts`;
+  khối đầu, tiêu đề ⑷ ⑸ và chú thích chống rỗng ruột gạch "năm" → "sáu" tại chỗ.
+- `packages/unseal/src/unseal.int.test.ts`: import `createHash`, `readFileSync`, `moTaHangDongCuaLanTuChoi`, `RANG_BUOC_KHONG_TIM_THAY_YEU_CAU`;
+  khối `describe("[INV-D5] [S1.9145 / khoản 266 · 267] …")` tám ca (ba của 266, năm của 267 — kể cả đối chứng và đối chứng dương); trigger
+  chặn sổ riêng `k267_chan_ghi_so` (TP267).
+- `db/migrations.int.test.ts`: `HAM_56` trỏ `unseal_kiem_nguoi_duyet` sang migration mới (ba dòng chú thích); ba danh sách mong đợi thêm
+  `9545_khong_tim_thay_yeu_cau_co_ten.sql`.
+- `packages/unseal/src/loc-vi-pham-d2.test.ts`: hằng `NHAN_HANG` theo nhãn mới, docstring của hằng một đoạn.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **266 — tên là nhãn của NHÁNH, không đổi tên khoá ngoại thật.** Khuôn `074` (mười ba tên không có trong `pg_constraint`). Khoá ngoại
+  `(org_id, unseal_request_id)` không tới được: trigger khoá hàng yêu cầu `FOR NO KEY UPDATE` trước nó và không vai nào xoá được yêu cầu;
+  đổi tên nó là một DDL trên bảng ngoài hình dạng đã chốt. Hệ quả nói ra ở mục 7.
+- **266 — nhãn hàng ghim đổi theo khuôn "thân từ 074", điều kiện neo migration mới.** Một cụm chưa áp `9545_khong_tim_thay_yeu_cau_co_ten.sql` giữ thân `019` và không bị
+  lượt sửa TRƯỚC vòng đánh số đẩy thân mới lên (không WARNING "SAI TRƯỚC khi sửa" ở lần nâng cấp đầu, không gãy dưới vai deploy không sở hữu
+  hàm); `NHAN_HANG` sửa cùng commit như đề bài cho phép.
+- **266 — ca "trả hàm về 019" là ca THƯỜNG TRỰC, đột biến LÚC CHẠY.** Sửa tệp thì hardening âm thầm dựng lại thân chuẩn (bài học khoản 140);
+  ca chạy nguyên văn câu `CREATE OR REPLACE` của `019`, trả lại bằng `pg_get_functiondef` đã chụp TRƯỚC, và đòi thân lẫn `proconfig` bằng
+  trước. Dạng dựng được duy nhất của "một 23503 khác trên câu INSERT" mà không sửa lược đồ.
+- **266 — ca tên hai chiều đọc `prosrc` THẬT** (khuôn ADR-108 ④): đổi tên ở migration mà quên `requests.ts`, hay ngược lại, đỏ ở đây — đột
+  biến M3 đo. Hằng export khỏi TỆP, không khỏi gói (khuôn `laViPhamD2TheoThongDiep`; `index.ts` và cổng barrel không đổi).
+- **267 — câu 422 mới là hằng**, không nội suy trạng thái hay id; máy khách phân biệt bằng `ma`. Câu nói cả hai nghĩa của trạng thái
+  (*đã được mở thầu hoặc đã bị huỷ*) vì câu `UPDATE` 0 hàng không nói trạng thái nào — đọc lại để nói thì thêm một câu cho một chữ.
+- **267 — `ma` chỉ ở vế trạng thái.** Đề bài: *"thân 422 mới có mã riêng"*; vế người và nhánh không tìm thấy giữ thân 422 cũ (đã có câu
+  riêng / ghim bằng HTTP). `UnsealError.ma` có kiểu `LyDoTuChoiHuy | null` để thêm `ma` cho vế người sau này là một dòng.
+- **267 — câu "không tìm thấy" giữ nguyên văn** dù vế "hoặc nó không ở trạng thái huỷ được" nay thừa: thân 422 ấy ghim ở
+  `apps/api/src/buyer.int.test.ts` (ngoài danh sách tệp của lô) — bàn giao mục 9 đề xuất đoạn sửa.
+- **267 — route TRẢ VỀ 422 thay vì ném.** Bảng 422 chung của bộ điều phối (`apps/api/src/dispatch.ts`, ngoài danh sách) chỉ in `error`. Trả
+  về nghĩa là COMMIT giao dịch của route — đọc: trước lần từ chối nó chỉ đọc (`resolveSessionActor`, `requirePermission` khi cho qua, câu
+  `SELECT`, `listUserIdsWithPermission`, câu `UPDATE` 0 hàng); hàng sổ ở giao dịch độc lập; lần đếm trần từ chối của handler ở kết nối
+  `auditPool` riêng (ADR-112). Khuôn khoản 230 cũng trả về.
+- **267 — nhận vế trạng thái bằng 0 hàng của câu `UPDATE`** (lớp có thẩm quyền) sau câu `SELECT` đã thấy hàng, không đọc lại trạng thái. Cuộc
+  đua hai lần huỷ cùng lúc cho đúng lý do: lần sau chờ khoá hàng, đọc lại `WHERE`, 0 hàng ⇒ "không còn huỷ được".
+- **267 — một biến `lyDo` mỗi lời gọi**, kiểu `LyDoTuChoiHuy`, đi tới `payload.lyDo`, vế và `ma` — một nguồn (khuôn `nemTuChoi` đọc `loi.lyDo`
+  cho cả `payload.ma` và vế). Nguồn ⑷ là kiểu hợp (bộ đọc của §S1.9125 đã đọc kiểu hợp chuỗi trực tiếp).
+- **`rbac.ts` — ngoài `DANH_MUC_VE_CONG`, gạch tại chỗ bốn docstring kể vế.** Lời dặn ở `TEP_TRUYEN_VE`: *"thêm một chỗ … phải sửa cả đây
+  lẫn docstring của `throwAuditedDenial`"*; con số đếm lại trên cây cú pháp (15 lời gọi, 7 truyền vế, 8 không) thay con số cũ.
+- **Không ca HTTP thường trực** (`apps/api/src/buyer.int.test.ts` ngoài danh sách): thân 422 mới đo một lần bằng tệp tạm trên bộ điều phối
+  và máy chủ thật, trước và sau vá, và dưới đột biến M5, M9, M10 — bàn giao mục 9 đề xuất ca thường trực.
+- **Không nhãn INV mới:** tám ca mang `[INV-D5]` (năm) hay không nhãn; cặp (`D5`, `unseal.int.test.ts`) đã khai ở `so-khai-nhan.ts`.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b1/dot-bien.py`: mỗi ca thay đúng các chuỗi (mỗi chuỗi xuất hiện đúng một lần), chạy đúng tệp test, khôi phục từ bản
+sao, `filecmp` nguyên vẹn; sau cả mười ca `sha256sum -c` năm tệp mã khớp bản đã vá. Mười ca, mười ĐỎ, không ca sống (`dot-bien-lan{1,2,3}.log`):
+- M1 [266] `laKhongTimThayYeuCau` về `code === "23503"` một mình ⇒ 1 đỏ: ca đột biến lúc chạy (`expected 'UnsealError' to be 'error'`).
+- M2 [266] bỏ `CONSTRAINT` ở migration VÀ hardening (hai phía khớp — hàm về thân `019`) ⇒ `unseal.int` 4 đỏ: hai ca `approveUnseal` của khoản
+  133 (`expected 'error' to be 'UnsealError'`; ca TP133 nhận lỗi `pg` trần), ca mang tên, ca hai chiều (`expected [] to deeply equal [ Array(1) ]`);
+  hai ca tĩnh của `migrations.int` xanh — đúng: chúng đo hai phía khớp nhau, không đo tên.
+- M3 [266] hằng tên ở `requests.ts` lệch CSDL (`unseal_approvals_yeu_cau_ton_tai`) ⇒ cùng 4 đỏ, ca hai chiều `expected [ Array(1) ] to deeply
+  equal [ 'unseal_approvals_yeu_cau_ton_tai' ]`.
+- M4 [266] hardening giữ câu sửa và `$than$` cũ (không `CONSTRAINT`), migration có tên ⇒ ca tĩnh "thân migration = thân hardening" đỏ;
+  `loc-vi-pham-d2` 6/6 xanh — đúng: nó đo câu `RAISE`, không đo tên.
+- M5 [267] vế trạng thái về như trước (ném câu gộp, không ghi) ⇒ `unseal.int` 3 đỏ (`EXECUTED`, `CANCELLED`, lần ghi bị chặn); ca HTTP đỏ
+  (`expected [ 422, …(1) ] to deeply equal [ 422, { …(2) } ]`).
+- M6 [267] vế trạng thái không truyền vế ⇒ 1 đỏ: ca dòng log (`expected [ 'UNSEAL_CANCEL_DENIED', null, …(1) ] …`); `danh-muc-tu-choi` 10/10
+  xanh — ⑸ đo sự có mặt của đối số theo TỆP, vế người còn truyền.
+- M7 [267] vế người không truyền vế ⇒ 1 đỏ: ca dòng log (`expected [ 'UNSEAL_CANCEL_DENIED', null ] …`); ⑸ xanh, cùng lý do.
+- M8 [267] `DANH_MUC_VE_CONG` thiếu `KHONG_O_TRANG_THAI_HUY_DUOC` ⇒ ca dòng log đỏ (`… UNSEAL_REQUEST HANG_LA …` ≠ `… KHONG_O_TRANG_THAI_HUY_DUOC …`)
+  và ⑷ đỏ (`[ 'AWARDED', …(49) ]` ≠ `…(48)`).
+- M9 [267] route bỏ nhánh `ma` (bảng 422 chung) ⇒ ca HTTP đỏ.
+- M10 [267] vế trạng thái ghi sổ nhưng lời từ chối không mang `ma` ⇒ `unseal.int` 2 đỏ (`expected null to be 'KHONG_O_TRANG_THAI_HUY_DUOC'`, ca
+  `CANCELLED`) và ca HTTP đỏ.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá** (lượt soi đối kháng, đo bằng tệp tạm `packages/unseal/src/zz-tam-lo-ke.int.test.ts`, đã xoá —
+  `tam-lo-ke.log`): **9445** — `requestUnseal` với `rfqId` lạ ⇒ lỗi `pg` trần 23503 không tên của `unseal_kiem_rfq_da_dong`, 0 hàng; cùng hình
+  dạng 266 ở trigger kia, và là một "không tìm thấy" trên đường CÓ CỔNG mà tiểu mục [S1.213] của ADR-016 nói D5 phủ. **9446** — `requestUnseal`
+  trên gói chưa `CLOSED` (C3, 23514) và `approveUnseal` trên yêu cầu không còn `PENDING` (23514) ⇒ 0 hàng; ứng viên CÓ theo luật ADR-060, cần
+  chủ dự án như câu 5.
+- **Câu "không tìm thấy" của huỷ còn vế "hoặc nó không ở trạng thái huỷ được"**, nay không còn đi ra từ câu ấy cho ca trạng thái. Giữ vì
+  thân 422 ấy ghim ở `apps/api/src/buyer.int.test.ts` (ngoài danh sách) — bàn giao mục 9.
+- **Thân 422 mới chưa có ca HTTP thường trực** — đo bằng tệp tạm (mục 5); bàn giao mục 9.
+- **Một 23503 không tên của khoá ngoại thật `(org_id, unseal_request_id)` đi nguyên**, không hàng sổ — theo đúng hình dạng đã chốt ("23503
+  không tên ⇒ đi nguyên"). Hôm nay không tới được (mục 5); nếu một ngày trigger bị tắt (ALWAYS, ghim ở hardening), lần dò id lạ sẽ 422 `tham
+  chieu khong hop le` không sổ — ồn ở log vận hành, im ở sổ.
+- **`loc-vi-pham-d2.test.ts` không đo `CONSTRAINT`** (M4 xanh ở tệp ấy); phép đo tên là ca tĩnh "thân migration = thân hardening" và ca hai
+  chiều ở `unseal.int`. Câu lịch sử ở khối đầu tệp ấy (dòng 26, *"hàng `hàm + trigger unseal_kiem_nguoi_duyet (019)`"*) còn nhãn cũ — đề bài
+  chỉ cho sửa hằng `NHAN_HANG`.
+- **⑸ của `danh-muc-tu-choi` đo sự có mặt theo tệp** (M6, M7 xanh ở ⑸): giá trị vế của từng lời gọi đo ở ca dòng log của `unseal.int`.
+- **`DANH_MUC_VE_CONG` vẫn là MỘT tập phẳng** (§S1.9125 mục 7): `KHONG_O_TRANG_THAI_HUY_DUOC` đặt dưới một `action` khác vẫn ra nguyên văn.
+- **Route trả về 422 = COMMIT**: đúng hôm nay vì giao dịch của route không ghi gì trước lần từ chối (mục 5); một câu ghi thêm vào
+  `cancelUnseal` TRƯỚC vế trạng thái về sau sẽ được commit trên đường từ chối — chú thích tại route nói điều ấy.
+- Không chạy `pnpm test:int` trọn, `db/migrations.int.test.ts` trọn (chỉ bảy khối liên quan), `pnpm evidence` (máy dùng chung; đề bài).
+  `INV-matrix` sẽ đếm thêm năm ca `[INV-D5]` khi người tích hợp sinh lại.
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/B1`; vitest int với hai biến cụm cục bộ. Log ở `scratchpad/b1/`.
+- Đo trước (`a97dd48b` + ca mới): `unseal.int -t "S1.9145"` 7 đỏ / 1 xanh (76: 68 bỏ qua); `danh-muc-tu-choi` 2 đỏ / 8 xanh; HTTP tạm 1 đỏ
+  (422 câu gộp, 0 hàng vế trạng thái); `migrations.int` hai ca tĩnh 2 đỏ.
+- Sau vá: `unseal.int -t "S1.9145"` 8/8; `danh-muc-tu-choi` + `loc-vi-pham-d2` + `mo-ta-hang-dong` 48/48 (10 + 6 + 32); HTTP tạm 1/1
+  (`422 {"error":"Yêu cầu mở thầu này …","ma":"KHONG_O_TRANG_THAI_HUY_DUOC"}`; id lạ và vế người: thân cũ từng ký tự; hai hàng, mỗi lý do một);
+  `migrations.int` hai ca tĩnh 2/2; `pnpm typecheck` exit 0.
+- Đột biến: 10 ca / 10 đỏ, 0 sống; `sha256sum -c` năm tệp mã khớp bản đã vá.
+- Đếm `throwAuditedDenial` trên cây cú pháp (`dem-goi.mjs`): trước 14 lời gọi / 5 truyền vế; sau 15 / 7.
+- Cổng của lô: `packages/unseal/src/unseal.int.test.ts` trọn 76/76 (7,8 s); `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38 (292,5 s);
+  `db/migrations.int.test.ts -t` bảy khối (ba danh sách mong đợi `[Minor] … search_path thù địch`, `[Task 6 … I1 · S1.20]`, `[Task 8 … chỉ có 001/002]`;
+  hai ca tĩnh ghim hàm; `[S1.14 / nợ 54]`; `[S1.13 / nợ 51] hardening khôi phục …`) 7/7 (33,5 s); tĩnh `db/migration-shape.test.ts` 28/28,
+  `tests/architecture/hardening-khong-in-gia-tri.test.ts` 7/7, `tests/architecture/hardening-co-ly-do.test.ts` 21/21.
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 499 module / 2088 phụ thuộc, 0 vi phạm (68 s).
+- `pnpm test`: 136 tệp: 2161 xanh, 1 bỏ qua (tiền tồn), 3 đỏ (195 s) — cả ba là P9b của `tests/architecture/so-no-tu-doi-chieu.test.ts`, cùng một gốc: `Handoff.md khai 93 migration đánh số, kho có 94` — lời khai đếm mà `pnpm cap-so --dem` của người tích hợp viết lại khi áp bàn giao (chung.md mục 2). Chạy lại tệp ấy với migration mới bỏ khỏi chỉ mục git (không chạm tệp nào của người tích hợp): 45/45.
+- Cây cuối (sau khi bỏ một dòng trống thừa ở `packages/unseal/src/requests.ts` — thay đổi duy nhất sau các phép đo trên): `pnpm exec eslint`
+  bảy tệp mã/test đã chạm 0 lỗi; `unseal.int.test.ts` + `loc-vi-pham-d2.test.ts` + `danh-muc-tu-choi.test.ts` 92/92 (76 + 6 + 10).

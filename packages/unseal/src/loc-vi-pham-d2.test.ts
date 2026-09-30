@@ -64,8 +64,12 @@ function thanTrong019(): string {
   return SQL_019.slice(dau, cuoi);
 }
 
-/** [S1.9130 / khoản 181] Nhãn của hàng hardening ghim thân hàm + trigger — đọc nguyên văn, đúng một lần trong tệp. */
-const NHAN_HANG = "$q$hàm + trigger unseal_kiem_nguoi_duyet (019)$q$";
+/**
+ * [S1.9130 / khoản 181] Nhãn của hàng hardening ghim thân hàm + trigger — đọc nguyên văn, đúng một lần trong tệp.
+ * [S1.9145 / khoản 266] Nhãn đổi theo khuôn các hàng "thân từ 074": thân nay từ `9545_khong_tim_thay_yeu_cau_co_ten.sql` (nhánh không
+ * thấy yêu cầu mang `USING CONSTRAINT`; câu thông điệp không đổi, nên các vế dưới — kể cả vế LỊCH SỬ — đọc cùng các câu `RAISE`).
+ */
+const NHAN_HANG = "$q$hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 9545_khong_tim_thay_yeu_cau_co_ten.sql)$q$";
 
 /** [S1.9130 / khoản 181] Văn bản của hàng ấy, từ nhãn tới dòng đóng `    ],` của nó. */
 function hangHardening(): string {

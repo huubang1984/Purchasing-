@@ -14137,9 +14137,13 @@ $ham$;
       $q$quyền sở hữu hàm public.unseal_kiem_du_phe_duyet() và bảng public.unseal_requests (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
+    -- [S1.9145 / khoản 266] Thân từ `9545_khong_tim_thay_yeu_cau_co_ten.sql`: nhánh không thấy yêu cầu mang tên
+    -- `unseal_approvals_yeu_cau_phai_ton_tai` (`USING … CONSTRAINT`) — `approveUnseal` nhận "không tìm thấy" theo code VÀ
+    -- constraint. Điều kiện neo vào migration ấy, như các hàng "thân từ 074": cụm chưa áp nó giữ thân `019`, không bị lượt sửa
+    -- đẩy thân mới lên trước vòng đánh số.
     ARRAY[
-      $q$hàm + trigger unseal_kiem_nguoi_duyet (019)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '019_unseal.sql')$q$,
+      $q$hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 9545_khong_tim_thay_yeu_cau_co_ten.sql)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9545_khong_tim_thay_yeu_cau_co_ten.sql')$q$,
       $q$DO $fn56$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -14162,7 +14166,8 @@ BEGIN
      FOR NO KEY UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id
-      USING ERRCODE = 'foreign_key_violation';
+      USING ERRCODE = 'foreign_key_violation',
+            CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai';
   END IF;
 
   IF trang_thai IS DISTINCT FROM 'PENDING' THEN
@@ -14200,7 +14205,7 @@ $ham$;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE nguoi_yeu_cau uuid; phien_yeu_cau uuid; trang_thai text; BEGIN SELECT r.requested_by, r.requested_by_session_id, r.status INTO nguoi_yeu_cau, phien_yeu_cau, trang_thai FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation'; END IF; IF trang_thai IS DISTINCT FROM 'PENDING' THEN RAISE EXCEPTION 'Chi phe duyet duoc yeu cau dang PENDING; dang o %', trang_thai USING ERRCODE = 'check_violation'; END IF; IF NEW.approver_user_id OPERATOR(pg_catalog.=) nguoi_yeu_cau THEN RAISE EXCEPTION 'Nguoi yeu cau mo thau khong duoc tu phe duyet (D2, D3)' USING ERRCODE = 'check_violation'; END IF; -- Vế PHIÊN, và nó KHÔNG thừa với vế người ở trên: một người có thể có hai tài khoản, nhưng -- một PHIÊN thì thuộc về đúng một tài khoản. Chặn cả hai vế đóng cả hai cách đọc của D2. IF NEW.approver_session_id OPERATOR(pg_catalog.=) phien_yeu_cau THEN RAISE EXCEPTION 'Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau (D2)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE nguoi_yeu_cau uuid; phien_yeu_cau uuid; trang_thai text; BEGIN SELECT r.requested_by, r.requested_by_session_id, r.status INTO nguoi_yeu_cau, phien_yeu_cau, trang_thai FROM public.unseal_requests r WHERE r.id OPERATOR(pg_catalog.=) NEW.unseal_request_id AND r.org_id OPERATOR(pg_catalog.=) NEW.org_id FOR NO KEY UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay yeu cau mo thau %', NEW.unseal_request_id USING ERRCODE = 'foreign_key_violation', CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'; END IF; IF trang_thai IS DISTINCT FROM 'PENDING' THEN RAISE EXCEPTION 'Chi phe duyet duoc yeu cau dang PENDING; dang o %', trang_thai USING ERRCODE = 'check_violation'; END IF; IF NEW.approver_user_id OPERATOR(pg_catalog.=) nguoi_yeu_cau THEN RAISE EXCEPTION 'Nguoi yeu cau mo thau khong duoc tu phe duyet (D2, D3)' USING ERRCODE = 'check_violation'; END IF; -- Vế PHIÊN, và nó KHÔNG thừa với vế người ở trên: một người có thể có hai tài khoản, nhưng -- một PHIÊN thì thuộc về đúng một tài khoản. Chặn cả hai vế đóng cả hai cách đọc của D2. IF NEW.approver_session_id OPERATOR(pg_catalog.=) phien_yeu_cau THEN RAISE EXCEPTION 'Phe duyet phai den tu mot PHIEN KHAC voi phien da yeu cau (D2)' USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

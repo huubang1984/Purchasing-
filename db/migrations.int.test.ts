@@ -2135,7 +2135,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
     { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
-    { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
+    // [S1.9145 / khoản 266] `9545_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại thân: nhánh không thấy yêu cầu mang tên
+    // `unseal_approvals_yeu_cau_phai_ton_tai` (`USING CONSTRAINT`), để `approveUnseal` nhận "không tìm thấy" theo code VÀ constraint.
+    // Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH NGUYÊN VĂN từ `019` bằng script rồi đổi đúng một chỗ.
+    { ham: "unseal_kiem_nguoi_duyet", migration: "9545_khong_tim_thay_yeu_cau_co_ten.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
     // [S1.170 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
     // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
@@ -3876,6 +3879,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8377,6 +8381,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8690,6 +8695,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -1513,10 +1513,12 @@ Bản cài, lớp lỗi và thân 422 KHÔNG đổi:
 1. Bảng so sánh, hai đường đọc có cổng ⇒ `COMPARISON_NOT_FOUND_DENIED`, `resourceType` `RFQ`, `resourceId` là id người gọi gửi, payload
    `{ operation: "BUILD_COMPARISON_TABLE" | "COUNT_RECEIVED_BIDS" }` (hằng; hai hàm chung một mã).
 2. Huỷ và phê duyệt yêu cầu mở thầu ⇒ `UNSEAL_NOT_FOUND_DENIED`, `UNSEAL_REQUEST`, payload `{ operation: "CANCEL_UNSEAL" | "APPROVE_UNSEAL" }`.
-   `cancelUnseal` nhận ra ca này ở câu `SELECT requested_by`, TRƯỚC phép kiểm ai được huỷ. `approveUnseal` bọc MỌI 23503 của câu INSERT
-   `unseal_approvals` thành `UnsealError` có tên (lỗi `pg` ở `cause`) rồi ghi — đọc `code`, không đọc `message`; không có tên ràng buộc để so
-   vì 019 RAISE không tên (khoản 266) — và vì sao "mọi 23503" đứng được: ba khoá ngoại trỏ tổ chức, yêu cầu, người duyệt, hai vế đầu vừa
-   giải trong cùng giao dịch. Qua HTTP, 422 có tên thay "tham chieu khong hop le".
+   `cancelUnseal` nhận ra ca này ở câu `SELECT requested_by`, TRƯỚC phép kiểm ai được huỷ. `approveUnseal` bọc ~~MỌI 23503 của câu INSERT~~
+   ~~`unseal_approvals`~~ **[S1.9145 / khoản 266]** 23503 MANG TÊN `unseal_approvals_yeu_cau_phai_ton_tai` (nhánh không thấy yêu cầu của trigger,
+   đặt ở `9545_khong_tim_thay_yeu_cau_co_ten.sql`) thành `UnsealError` có tên (lỗi `pg` ở `cause`) rồi ghi — đọc `code` ~~, không đọc `message`;~~
+   ~~không có tên ràng buộc để so vì 019 RAISE không tên (khoản 266) — và vì sao "mọi 23503" đứng được: ba khoá ngoại trỏ tổ chức, yêu cầu, người~~
+   ~~duyệt, hai vế đầu vừa giải trong cùng giao dịch~~ VÀ `constraint`, không đọc `message` (khuôn `laTrungPheDuyet`, ADR-108); một 23503 khác
+   trên câu INSERT đi nguyên, không hàng sổ. Qua HTTP, 422 có tên thay "tham chieu khong hop le".
 3. Điều phối lần hai khi lượt trước còn PENDING/RUNNING (vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet`, S1.96) ⇒
    `UNSEAL_DISPATCH_DENIED`, payload `{ reason: "JOB_STILL_ALIVE" }`. Câu S1.96 *"các lần từ chối trong đó không đi qua đường ghi sổ từ chối
    của cổng"* gạch tại chỗ ở `requests.ts`: đúng cho hai vế ĐUA (cổng bốn vế đã từ chối và ghi `UNSEAL_DENIED` trước), sai cho vế này.
@@ -1524,8 +1526,13 @@ Bản cài, lớp lỗi và thân 422 KHÔNG đổi:
    `ghi-so-tu-choi-mot-duong` không đổi: các lời ném là `ComparisonError`/`UnsealError`, không mang hậu tố `DeniedError` — phép đọc theo TÊN
    LỚP của cổng ấy không thấy năm chỗ này, và lớp đo là ba khối `[INV-D5] [S1.213 / khoản 133]` đếm hàng.
 
-**Điều tiểu mục này KHÔNG phủ.** Từ chối TRẠNG THÁI trên một hàng CÓ THẬT: `cancelUnseal` một yêu cầu đã `EXECUTED`/`CANCELLED` vẫn 422
-cùng câu gộp và 0 hàng (khoản 267, luật ADR-060); hai vế đua của `dieuPhoiLaiSauKhiChet`. "Không tìm thấy" ở các đường CRUD thường (ADR-104/108).
+**Điều tiểu mục này KHÔNG phủ.** Từ chối TRẠNG THÁI trên một hàng CÓ THẬT: `cancelUnseal` một yêu cầu đã `EXECUTED`/`CANCELLED` ~~vẫn 422~~
+~~cùng câu gộp và 0 hàng (khoản 267, luật ADR-060)~~ **[S1.9145 / khoản 267]** — nay vào sổ theo luật ADR-060 (dòng CÓ thứ hai ở bảng của ADR ấy):
+`UNSEAL_CANCEL_DENIED { lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }`, câu 422 riêng mang `ma` — nhưng không thuộc tiểu mục này, vì đó không phải
+"không tìm thấy"; hai lần từ chối trạng thái khác của bề mặt (`requestUnseal` C3, `approveUnseal` trên yêu cầu không còn `PENDING`) vẫn 0 hàng
+— khoản 9446; hai vế đua của `dieuPhoiLaiSauKhiChet`. "Không tìm thấy" ở các đường CRUD thường (ADR-104/108). **[S1.9145]** Một "không tìm
+thấy" trên đường CÓ CỔNG mà năm nhánh trên không đếm tới — `requestUnseal` với `rfqId` lạ, 23503 không tên của `unseal_kiem_rfq_da_dong` —
+vẫn 0 hàng: khoản 9445.
 
 **Đo bằng gì.** `packages/unseal/src/comparison.int.test.ts`, `packages/unseal/src/unseal.int.test.ts`, `apps/api/src/buyer.int.test.ts` —
 mỗi nhánh: lớp lỗi và câu như trước, đúng một hàng mang người gọi, loại tài nguyên, id đã gửi và payload đúng hình dạng; hàng sống qua rollback;
@@ -6172,11 +6179,13 @@ chỉ-ghi-thêm, không tỉa được. Mỗi hàng thêm vào làm **mọi lư�
 > **Ghi khi lời từ chối nói rằng NGƯỜI DÙNG cố đi một bước của chuỗi không đúng thứ tự.**
 > **Không ghi khi nó nói rằng CẤU HÌNH chưa sẵn sàng.**
 
-Trên từ vựng hôm nay, luật ấy chia **12 mã** thành **7 / 5**:
+Trên từ vựng hôm nay, luật ấy chia **12 mã** thành **7 / 5** **[S1.9145 / khoản 267]** (từ vựng của `danh-gia`; dòng CÓ thứ hai dưới đây áp cùng
+luật cho một lần từ chối trạng thái của bề mặt mở thầu — chủ dự án chốt 2026-09-30, kế hoạch đợt 3 mục 0, câu 5):
 
 | vào sổ | mã | vì sao |
 |---|---|---|
 | **CÓ** | `RFQ_KHONG_CHAM_DUOC` · `RFQ_KHONG_DE_XUAT_DUOC` · `RFQ_KHONG_MO_VONG_DUOC` · `CHUA_CHAM_LAN_NAO` · `KHONG_CO_DE_XUAT_DANG_CHO` · `KHONG_CO_AWARD_CON_SONG` · `KHONG_CO_VONG_DANG_MO` | mỗi mã là một người bấm một bước sai thứ tự, hay hai người cùng làm trên một gói |
+| **CÓ** **[S1.9145 / khoản 267]** | `UNSEAL_CANCEL_DENIED` payload `{ lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }` (`cancelUnseal`, `packages/unseal/src/requests.ts`) | huỷ một yêu cầu mở thầu đã mở thầu xong hay đã huỷ là một người bấm một bước sai thứ tự trên chuỗi mở thầu; `lyDo` cũng là vế của dòng log mất sổ (khuôn khoản 279), thân 422 mang `ma` (khuôn khoản 230) |
 | **KHÔNG** | `CHINH_SACH_CHUA_KHAI_TRONG_SO` · `THANH_PHAN_CHUA_CO_NGUON` · `CHINH_SACH_TAT_BAFO` · `LECH_TIEN_TE` · `KHONG_CO_BAO_GIA_DOC_DUOC` | sự cố vận hành hay dữ liệu; lặp đúng bằng số lần người dùng thử trước khi ai đó sửa cấu hình |
 
 **Vì sao vế CÓ đáng một hàng sổ:** chuỗi *tạo RFQ → chọn NCC → mở thầu → award → duyệt* chính là chuỗi

@@ -713,6 +713,24 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
 
     // Người DUYỆT thì huỷ được: một yêu cầu kẹt vẫn phải có đường dừng.
     expect((await goi("POST", `/unseal/${id}/cancel`, gd1)).status, "người giữ rfq.unseal.approve huỷ được").toBe(200);
+
+    // [S1.9101 / khoản 267, tích hợp lô B1] Huỷ lần nữa một yêu cầu ĐÃ HUỶ: câu 422 riêng kèm `ma` (không còn câu gộp với "không
+    // tìm thấy"), và ĐÚNG một hàng `UNSEAL_CANCEL_DENIED` mang lý do trạng thái — lần từ chối trạng thái nay vào sổ (luật ADR-060).
+    const truocLan2 = await demTuChoiHuy(xin.id);
+    const lan2 = await goi("POST", `/unseal/${id}/cancel`, xin);
+    expect([lan2.status, lan2.body]).toEqual([
+      422,
+      {
+        error: "Yêu cầu mở thầu này không còn ở trạng thái huỷ được — nó đã được mở thầu hoặc đã bị huỷ.",
+        ma: "KHONG_O_TRANG_THAI_HUY_DUOC",
+      },
+    ]);
+    expect(await demTuChoiHuy(xin.id), "[INV-D5] lần từ chối trạng thái để lại ĐÚNG một hàng").toBe(truocLan2 + 1);
+    const { rows: hangLan2 } = await db.pool.query<{ payload: unknown }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'UNSEAL_CANCEL_DENIED' AND resource_id = $3",
+      [orgA, xin.id, id],
+    );
+    expect(hangLan2.map((h) => h.payload)).toEqual([{ lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }]);
   });
 
   it("[khoản 154] gia hạn hạn nộp ⇒ tin tới ĐÚNG đích của lời mời; lời mời đã thu hồi thì KHÔNG gửi", async () => {
@@ -1498,7 +1516,7 @@ describe("[INV-D5] [S1.213 / khoản 133] \"không tìm thấy\" qua HTTP: bản
     const huy = await goi("POST", `/unseal/${idYc}/cancel`, pm);
     expect([huy.status, huy.body]).toEqual([
       422,
-      { error: "không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn, hoặc nó không ở trạng thái huỷ được" },
+      { error: "Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn." },
     ]);
     expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", idYc)).toEqual([[pm.id, "UNSEAL_REQUEST", { operation: "CANCEL_UNSEAL" }]]);
 
