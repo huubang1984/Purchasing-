@@ -17108,6 +17108,77 @@ Script `scratchpad/lo13-dot-bien.py` (mỗi đột biến: sửa, chạy, khôi 
 
 — hết biên bản §S1.9113 —
 
+# §S1.9120 — TRẢ NỢ SONG SONG ĐỢT 2: GỘP `master` TRƯỚC ĐỢT, 15 QUYẾT ĐỊNH, KHOẢN 69 ĐÓNG BẰNG LỜI, MƯỜI BA LÔ GỘP (22 KHOẢN ĐÓNG, 12 MỚI, 11 ADR, 5 MIGRATION)
+
+**Rổ và mảnh (ADR-043 ⒞):** vòng của người tích hợp — không chạm mảnh nào của `docs/PRODUCT.md` §11 ngoài những gì các lô đã khai ở biên bản riêng. Đóng 69 (bằng lời). Không migration, không ADR của riêng vòng này (ADR-016 thêm một tiểu mục). Biên bản của từng lô: đợt A §S1.9102, §S1.9113, §S1.9122, §S1.9132, §S1.9143, §S1.9152; đợt B §S1.9162, §S1.9172, §S1.9182, §S1.9192, §S1.9130, §S1.9160, §S1.9180.
+
+## 1. Vòng này là gì
+Đợt 2 của trả nợ rổ B theo lô song song (đợt 1: §S1.9110). Người tích hợp: (1) gộp `master` vào nhánh trước khi phóng lô nào; (2) ghi 15 quyết định của chủ dự án thành đề bài lô; (3) đóng khoản 69 bằng lời; (4) gộp 13 nhánh lô, áp 13 tệp bàn giao vào các tệp dùng chung; (5) chạy lại cổng của mỗi lô trên cây đã gộp, gỡ hệ quả liên lô, chạy `pnpm t0` và `pnpm evidence` trên đầu nhánh cuối.
+
+## 2. Quyết định của chủ dự án (2026-09-30, chốt nguyên văn đề xuất)
+1. **18** — CODEOWNERS trỏ `@huubang1984` thay team không tồn tại; bật branch protection "Require review from Code Owners" (việc chủ dự án).
+2. **69** — GIỮ đoạn giữ khoá hàng tới sau pilot; ADR-016 ghi điều kiện xem lại (số đo tranh chấp khoá thật).
+3. **71** — miền email là ASCII in được (local-part và domain), CHECK trên `users.email` và `supplier_contacts.email`; vế ⑶ kiểm 320 byte SAU khi hạ.
+4. **108** — hợp đồng: `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị; test ghim.
+5. **110** — database RIÊNG cho TrustProcure mỗi môi trường; chủ thể FORCE = mọi lược đồ không hệ thống của database.
+6. **117** — thông điệp hardening in vân tay thay thân hàm/định nghĩa trigger, `proconfig` chỉ in tên; cổng T1 cấm nối trở lại.
+7. **133** — D5 phủ "không tìm thấy" trên các đường có cổng của bề mặt mở thầu/so sánh (tiểu mục ADR-016), qua `throwAuditedDenial`.
+8. **138** — chủ dự án chạy hai lượt `workflow_dispatch` (`dot_bien=true`) rồi đóng issue thật (việc chủ dự án).
+9. **177** — dòng log từ chối mất sổ mang băm rút gọn của `userId` (sha256, 12 hex).
+10. **195** — route tự xem link đăng nhập gần đây của chính mình; không lộ token.
+11. **220** — cổng `evaluation.perform` ghi là lớp NÔNG, lớp thật là J3 (ADR-051).
+12. **230** — thân 422 nộp thầu mang `ma`; `nop-thau.js` nói câu riêng cho từng mã.
+13. **232** — hình ⒜: trạng thái `WITHDRAWN` bằng migration, ràng ở CSDL; route rút dưới `award.recommend`.
+14. **250** — thu hồi LOẠI báo giá của lời mời ấy khỏi mở thầu/so sánh/xếp hạng; CHẶN thu hồi sau khi gói đã mở thầu.
+15. **252** — ⑴ + ⑶ ngay (cảnh báo stack 60 cho họ `tp-khoi-tao`; trust policy ghim `job_workflow_ref`); ⑵ trước khách hàng thứ hai.
+Kèm: chạy đợt A (6 lô) rồi đợt B (7 lô), làn hardening gộp tuần tự B1 → B2 → B3 → B4 → B7; tệp dùng chung chỉ người tích hợp chạm.
+
+## 3. Đo trước
+- Bước 0: `master` đi trước nhánh 47 commit; 14 tệp hai bên cùng đổi, 5 xung đột (`Handoff.md`, `db/hardening-suy-tu-tinh-chat.int.test.ts`, `docs/STATE.md`, `evidence/INV-matrix.md`, `evidence/security-reviews.md`). Sau gộp, `pnpm evidence` đỏ hai ca: cổng danh mục (khoản 189) không đọc được hàm bọc `tuChoiTheoChotTaiNguyen` mà `master` thêm ở S1.196 (báo "resourceType không giải được"); kịch bản 41 "bí mật lọt sổ" đỏ ngẫu nhiên vì OTP sáu chữ số là chuỗi con của một hex/UUID trong payload.
+- Đợt B: cả năm agent B1–B5 dừng vì hạn mức API (HTTP 429) giữa lô, để lại worktree dở (B2/B3/B4 đã có mã, B1/B5 mới ở bước đo trước).
+- Sau gộp B2 (vế `grantor` của `tu_sua_duoc`): `db/rls-coverage.int.test.ts` 60/61 — ca ⒦ `[khoản nợ 101]` (lượt soi 51 NẶNG-1: ADMIN không INHERIT trên vai SỞ HỮU bảng "không tính là tự sửa được") đỏ: `expected [] to deeply equal [ Array(1) ]`.
+- Đầu nhánh sau B7 (6c04830): `db/migrations.int.test.ts` trọn tệp 122/123 — đỏ `[fix round 4 — N3] app_api bị DROP rồi tạo lại …`: `DROP OWNED BY app_api` xoá `outbox_jobs_kind_app_api` (9592 là policy RESTRICTIVE đầu tiên `TO <một vai>`), lượt phán xét 83⑴ ném "khai … mà CSDL không có policy đúng bảy cột như thế — dòng khai thiu". Đường phục hồi "ops xoá rồi tạo lại vai" của fix round 4 gãy.
+- Đầu nhánh sau B4 lượt 2 (1889fed): `pnpm evidence` 3744/3746 — đỏ `packages/rfq/src/rfq.int.test.ts` "tên ràng buộc ở ba trigger J3/D2, trigger K4a, trigger K8a và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều" (`…(11) ≠ …(10)`): `9582` đặt tên `j5_luot_cham_khong_moi_nhat` ở `award_kiem_de_xuat` mà bảng tên → mã chốt của tầng ứng dụng chưa có dòng ấy ⇒ 23514 mới không thành `ChotKiemSoatError` có `lyDo`.
+- Gộp B5 sau B3: xung đột `apps/api/src/buyer.int.test.ts` và `packages/danh-gia/src/luot-danh-gia.int.test.ts` — hai lô cùng nối một `describe` vào cuối tệp. Gộp B7 sau B3: xung đột ba danh sách migration mong đợi của `db/migrations.int.test.ts` (B3 thêm 9582/9583, B7 thêm 9580; B4 và B5 không thêm 9592/9530 vì không chạy tệp ấy), và phép so `lan1.slice(-2)` của B3 đòi hai migration của nó là hai tệp cuối.
+
+## 4. Thay đổi
+- Bước 0 (6441267, 69e743e): gộp `master`; `db/danh-sach-ham-canh.ts` nhận mục `public.ncc_kiem_xac_minh` của `master` (danh sách đã dời sang tệp này ở L1); `packages/identity/src/danh-muc-tu-choi.test.ts` — bộ đọc thêm danh sách ĐÓNG `HAM_BOC` (`tuChoiTheoChotTaiNguyen`: tệp, tham số `taiNguyen`, vị trí 3), đọc `resourceType` từ đối số hàm bọc, hai ca mới (mẫu + trên kho); `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` — so bí mật với payload theo ranh giới token `('(^|[^0-9A-Za-z])' || $2 || '($|[^0-9A-Za-z])')`.
+- Khoản 69 (ac4cc0a): hàng sổ ĐÓNG bằng lời; ADR-016 tiểu mục `[S1.9120 / khoản 69]` — giữ tới sau pilot, hai điều kiện xem lại.
+- 13 lô: mỗi lô gộp `--no-ff`, `scratchpad/tich-hop.py` áp hàng sổ nợ (thay theo số, thêm 94NN), cột mốc, biên bản (theo thứ tự NN), gạch RỔ B; ADR-92NN nối cuối `docs/DECISIONS.md`; sửa tại chỗ theo mục 6 bàn giao (ADR-016, 028 §3, 036 hàng 7/23, 051, 054/055, 057 ⒜⒝, 067, 110 ⑸ + Hệ quả, 111; §S1.66 ranh giới ⑵; `so-khai-nhan.ts` A2 và F1; `danh-gia.ts` D5/F1; `.github/CODEOWNERS`; `Handoff.md`); `pnpm cap-so --dem` sau mỗi lô.
+- Hệ quả liên lô: ⑴ ca ⒦ khoản 101 — trả về lô B2 đo (lượt 2, 2cdc6f5): người cấp là CHÍNH CHỦ BẢNG (`OWNER TO` viết lại grantor) và vai chạy migration có ADMIN không INHERIT trên chủ ⇒ tự cắt được SELECT/UPDATE trong một tệp, trạng thái cuối sạch (ca 113 thêm pha ⒠ qua `migrate()` thật); ⒦ lật thành "không chặn trước vòng", chú thích gạch tại chỗ — "ADMIN trên chủ bảng" của lượt soi 51 NẶNG-1 là trường hợp riêng của vế grantor; hardening không đổi. ⑵ B3 × B5: giữ cả hai khối (B3 trước, B5 sau), đóng `describe` của B3 bằng tay vì phần đuôi chung bị git rút ra. ⑶ B3 × B7: ba danh sách mang đủ `9530, 9580, 9582, 9583, 9592` theo thứ tự tên; phép so đuôi đổi thành `arrayContaining` + `indexOf` (sau 9583 còn 9592 của B4).
+  ⑷ N3 — trả về lô B4 (lượt 2, 608ed77): hardening thêm MỘT mục tự chữa `[S1.9192 / khoản 158]` theo khuôn mục 044 — `DO` lặp qua chính `POLICY_RESTRICTIVE_KHAI` (lọc `public.outbox_jobs`, hai tên, `w`, vai tồn tại, policy chưa có) rồi `CREATE POLICY … AS RESTRICTIVE FOR UPDATE TO … USING … WITH CHECK …`; phán xét gương bảy cột + `count(*) = 2`; policy đang có mà lệch thì không sửa đè. Ca `[S1.9192 / khoản 158]` ở `migrations.int` (DROP POLICY → `migrate()` dựng lại đúng cột; `ALTER POLICY … USING (true)` → ném nêu tên). ADR-9292 §Hệ quả thêm một gạch.
+  ⑸ Cổng ADR-108 — trả về lô B3 (lượt 2, 64b0fba): `packages/identity/src/chot-kiem-soat.ts` thêm mã `J5_LUOT_CHAM_KHONG_MOI_NHAT` (`CHOT_VAO_SO`: chốt J5, vào sổ, thông điệp cố định; `CHOT_THEO_RANG_BUOC`: tên → mã); ca `[INV-J5]` đường ứng dụng ở `luot-danh-gia.int` (lượt chấm mới hơn chèn ở kết nối khác ngay trước `INSERT rfq_awards` ⇒ `ChotKiemSoatError` mang `lyDo`, `cause.constraint`, ĐÚNG MỘT hàng `CONTROL_DENIED {ma}`); `award_kiem_mot_award_song` không nằm trong cổng hai chiều (năm thân) — ba tên `j7_rut_*` là lớp đỡ cho đường ghi lạ, tầng ứng dụng từ chối trước câu ghi qua `RFQ_STATE_DENIED`, không thêm mã chốt (kết luận ở §S1.9182).
+- `evidence/INV-matrix.md` sinh lại bằng `pnpm evidence` sau đợt A (561158e) và sau đợt B (đầu nhánh cuối).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Gộp B4 trước B1 dù làn hardening ghi B1 → B2 → B3 → B4: B4 xong trước, ba sửa tối thiểu của nó ở `rls-coverage` (tệp B1) nằm ngoài vùng B1 sửa, `git` gộp sạch; thứ tự làn là để giảm xung đột chứ không phải ràng buộc ngữ nghĩa — đo: sau mỗi lô hardening, `rls-coverage` và `hardening-suy-tu-tinh-chat` chạy lại trên cây gộp.
+- Ba ca đỏ liên lô (⒦ của B2, N3 của B4, cổng ADR-108 của B3) TRẢ VỀ LÔ sửa chứ không tự vá ở tích hợp: cả hai là hành vi của mã lô ấy, đồ gá đo nằm ở lô ấy, và mỗi lô trả lời bằng một commit thứ hai kèm bàn giao cập nhật; người tích hợp áp lại phần đổi (hàng, cột mốc, biên bản thay bằng bản mới; ADR sửa theo cặp CŨ/MỚI).
+- Ca ⒦ TRẢ VỀ LÔ đo chứ không tự lật ở tích hợp: câu hỏi "chủ bảng là người cấp có tự cắt được không" là phép đo của khoản 113, và đồ gá đo nằm ở lô ấy.
+- Commit tích hợp B2 (9e8d2ce) ghi rõ ca ⒦ đỏ trong thông điệp và KHÔNG đẩy tới khi lượt 2 xanh; B3, B5, B6 xếp sau, đẩy một mạch khi rls-coverage 61/61.
+- Agent bị hạn mức: phóng lại tiếp nối trên chính worktree (đọc `git status`/`git diff`, giữ phần đúng), không tạo worktree mới — mỗi lô một commit (B2 hai), không amend.
+- Số tạm S1.91NN/94NN/ADR-92NN/95NN giữ nguyên trên nhánh theo ADR-090; `pnpm cap-so --dem` chỉ viết lời khai đếm.
+
+## 6. Đột biến
+- Không có đột biến riêng của vòng tích hợp; đột biến của từng lô ghi ở biên bản lô (mỗi lô 3–10 ca, tất cả đỏ đúng vế, hai ca sống có lý do đo được: M6 của B1 — `translate`/`lower()` tương đương vì collation "C" của `prosrc`; M3 của B5 — cố ý).
+- Phép đo liên lô thay cho đột biến: ca ⒦ đỏ sau gộp B2 chính là cổng của lượt soi 51 phát hiện một thay đổi ngữ nghĩa ở lớp `tu_sua_duoc` — đúng việc của nó; kết luận sau khi đo là cổng cũ đúng tại thời điểm cũ và nay lật có lý do.
+
+## 7. Giới hạn, nói ra
+- Ba việc của chủ dự án còn nợ, không đóng được từ nhánh: 18 (bật branch protection "Require review from Code Owners"), 252 (`terraform plan/apply` và `gh api PUT …/actions/oidc/customization/sub` theo `infra/terraform/README.md` "Tuỳ biến claim sub" và `docs/APPLY-LAN-DAU.md` 2.0b), 138 (hai lượt `workflow_dispatch` của `do-lap.yml`).
+- Rổ B còn 4: 208, 234, 256, 257 — ngoài phạm vi 15 quyết định.
+- Mỗi lô chỉ chạy cổng của lô trên máy dùng chung (4 lõi); cổng liên lô là của người tích hợp: sau mỗi lô hardening chạy lại `rls-coverage` + `hardening-suy-tu-tinh-chat`; `db/migrations.int.test.ts` trọn tệp chạy một lần trên đầu nhánh cuối; toàn bộ đơn vị + tích hợp chạy một lần bằng `pnpm evidence`.
+- Cổng `check-an-ninh-khai.test.ts` (B3 nới `{3,4}`) nay đọc được dòng khai số tạm bốn chữ số của B3 và B7; sau `pnpm cap-so` ở merge, số thật ba chữ số — cùng cổng.
+- Tiền đề locale của `khoi-tao.int.test.ts` không còn (B7 lật ca thành "Unicode bị từ chối trước `lower()`"), nên `pnpm evidence` không còn ca đỏ có chủ ý nào dưới `C.UTF-8`.
+
+## 8. Số đo
+- Bước 0: sau gộp `master` — `pnpm t0` xanh; `pnpm evidence` 2 đỏ (cổng danh mục; kịch bản 41) → sau sửa xanh; ma trận 71/71.
+- Đợt A (561158e): `pnpm t0` xanh; `pnpm evidence` 3589/3591 (1 bỏ qua có sẵn, 1 đỏ tiền đề locale); ma trận 71/71 ✅ (A2 28 → 53, D3 51 → 52, D5 142 → 167, E1 11 → 14).
+- Đợt B, cổng liên lô trên cây gộp: sau B1 `rls-coverage` 61/61, `hardening-suy` 36/36, `hardening-hang` 4/4; sau B2 (lượt 1) `rls-coverage` 60/61 (⒦), `ghim-trigger-tu-chua` 4/4, `thong-diep-khong-gia-tri` 8/8, `hardening-suy` 36/36; sau B3 `luot-danh-gia.int` 99/99, `buyer.int` 21/21, `kich-ban-41` 58/58, `hardening-suy` 36/36; sau B5 `invitation.int` 77/77, `comparison.int` 31/31, `luot-danh-gia.int` 100/100, `unseal-worker.int` 49/49, `buyer.int` 22/22, `kich-ban-41` 58/58; sau B6 sáu tệp int của worker/api xanh (9, 19, 21, 20, 4, 5); sau B2 lượt 2 ca 113 1/1, `rls-coverage` 61/61; sau B7 `suppliers.int` 27/27, `khoi-tao.int` 17/17 ở hai locale, `unique-oracle` 13/13, `auth.int` 61/61, `rls-coverage` 61/61, `hardening-suy` 36/36, `kich-ban-41` 58/58. `[INV-H20]` 55/55 và cổng T1 sau mỗi lô.
+- Sau B4 lượt 2 (1889fed): sáu tệp tĩnh 103/103 (so-no-tu-doi-chieu, T1, hardening-co-ly-do, check-an-ninh-khai, migration-shape, hardening-hang); `migrations.int` N3 + khoản 158 4/4; `hardening-suy` 36/36; `rls-coverage` 61/61.
+- Đầu nhánh sau B4 lượt 2 (1889fed): `pnpm t0` xanh (478 module, 1966 phụ thuộc, 0 vi phạm); `pnpm evidence` lượt 1 (đơn vị + tích hợp, `C.UTF-8`, gồm `db/migrations.int.test.ts` trọn tệp): 3746 khẳng định — 3744 xanh, 1 bỏ qua có sẵn, 1 đỏ không mang nhãn INV: `packages/rfq/src/rfq.int.test.ts` cổng hai chiều tên ràng buộc ↔ `CHOT_THEO_RANG_BUOC` (ADR-108) — `9582` đặt tên `j5_luot_cham_khong_moi_nhat` ở `award_kiem_de_xuat` mà bảng tên → mã chốt chưa có dòng ấy (11 ≠ 10); ma trận 72/72 ✅ (F1 87 → 104, J5 3 → 4, J7 3 → 8). Trả về lô B3 (lượt 2).
+- Sau B3 lượt 2 (b946b95): 15 tệp tĩnh + `packages/identity` 327/327; `rfq.int` 60/60; `luot-danh-gia.int` 101/101; `buyer.int` 22/22.
+- Đầu nhánh cuối (b946b95): `pnpm t0` xanh (478 module, 1966 phụ thuộc, 0 vi phạm); `pnpm evidence` lượt 2 (đơn vị + tích hợp, `C.UTF-8`, gồm `db/migrations.int.test.ts` trọn tệp): 3747 khẳng định — 3746 xanh, 1 bỏ qua có sẵn, 0 đỏ; ma trận 72/72 ✅, đếm test mang nhãn đổi so với 561158e: F1 87 → 104, J5 3 → 5, J7 3 → 8. `[INV-H20]` 55/55; `pnpm cap-so --dem`: lời khai đếm khớp.
+- Sổ: 22 khoản ĐÓNG, 12 khoản mới (9413 9414 9422 9432 9443 9444 9452 9492 9440 9450 9470 9490), 11 ADR (9202 9213 9222 9223 9243 9252 9262 9292 9282 9230 9280), 5 migration (9530 9580 9582 9583 9592); rổ B 25 → 14 → 4; `pnpm cap-so --dem`: lời khai đếm khớp sau mỗi lô.
+
 # §S1.9121 — KHOẢN 104: TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH ĐƯỢC DỌN Ở MỖI LẦN LẤY CLIENT; `migrate()` SO GUC PHIÊN, PREPARED STATEMENT, CON TRỎ VÀ MỌI TRỤC SAU COMMIT — KHOẢN 4 SỬA CHÚ THÍCH
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — lớp nền của kết nối pool và của `migrate()`, không đổi hành vi
