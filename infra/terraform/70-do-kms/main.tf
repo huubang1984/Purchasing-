@@ -231,7 +231,9 @@ resource "aws_ecs_task_definition" "do" {
     image      = local.image
     essential  = true
     entryPoint = ["bash", "-c"]
-    command    = [each.value.kich_ban]
+    # Gỡ `\r`: checkout CRLF trên Windows (`core.autocrlf=true`) đưa `\r` vào heredoc, bash đọc `{\r` là token lạ và
+    # không chạy dòng nào — cả 18 bước "khong chay" (đo ở lần apply đầu 2026-09-30).
+    command = [replace(each.value.kich_ban, "\r", "")]
     environment = [
       { name = "AWS_REGION", value = local.region },
       { name = "AWS_PAGER", value = "" },

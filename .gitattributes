@@ -69,3 +69,8 @@ evidence/INV-matrix.md text eol=lf
 tools/neo-so-kiem-toan/lambda/*.mjs text eol=lf
 # [ADR-089] Cùng lý do cho Lambda canh đăng ký SNS.
 tools/canh-dang-ky/lambda/*.mjs text eol=lf
+
+# [apply lần đầu 2026-09-30] Stack `70-do-kms` nhúng kịch bản bash trong heredoc của `main.tf`; checkout CRLF trên
+# Windows đưa `\r` vào lệnh của task và bash không chạy dòng nào (phép đo ⒜ ra 18 bước "khong chay"). Stack 70 đã tự gỡ
+# `\r`, dòng này để heredoc về sau không phải nhớ làm lại. Blob `.tf` đều đã LF: không đổi blob nào.
+*.tf text eol=lf
