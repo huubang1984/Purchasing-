@@ -53,7 +53,7 @@ Chỉ ba thứ cần một đường vận hành. Mọi thứ khác đi qua sả
 |---|---|---|
 | Hàng `organizations` (tên, `slug` duy nhất) | **đường vận hành** | RLS FORCE: vế WITH CHECK `id = app_current_org_id()` áp cho mọi vai không SUPERUSER hay BYPASSRLS, kể cả chủ bảng |
 | Hàng `users` | **đường vận hành** | Email phải viết thường (`048`); `status` mặc định `ACTIVE` |
-| Hàng `user_roles` | **đường vận hành** | Hai trigger chặn cặp vai trái luật lúc chèn: D3, và `033` — không ai giữ `policy.manage` cùng `rfq.create` hay `rfq.approve` |
+| Hàng `user_roles` | **đường vận hành** | Hai trigger chặn cặp vai trái luật lúc chèn: D3, và `033` — không ai giữ `policy.manage` cùng `rfq.create` hay `rfq.approve`. **[S1.199]** Cộng hai trigger L3 của `083`: `DATA_STEWARD` (vai quản lý dữ liệu, `item.manage`) chỉ ghép được với `TECHNICAL`, nên tổ chức dùng nền dữ liệu S4 cần một NGƯỜI riêng cho vai ấy — gán nó cho người FINANCE sẵn có thì bản khai hỏng ở đúng người ấy (spec S4 §8.10) |
 | Chính sách mua sắm | sản phẩm | FINANCE khai qua `POST /policy`. Chưa có chính sách thì đặt ngân sách và chấm thầu đều từ chối |
 | Nhà cung cấp, liên hệ | sản phẩm | PROCUREMENT_MANAGER, qua `/suppliers` |
 | Cặp khoá tổ chức | tự sinh | Ở lần mở gói thầu đầu tiên của tổ chức |

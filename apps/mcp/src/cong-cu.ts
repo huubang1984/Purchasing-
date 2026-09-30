@@ -9,7 +9,8 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.200] MƯỜI MỘT~~ [S1.203] MƯỜI BỐN route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
+//      ~~[S1.199] MƯỜI SÁU~~ [S1.203] MƯỜI BẢY route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -143,6 +144,20 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
     "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
     "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
+  "/items":
+    "DANH SÁCH HÀNG CHUẨN của tổ chức, cùng cờ người đang gọi có ghi được không và số người giữ `item.manage`. Hàng chuẩn " +
+    "không mang giá, nên dòng này không nói về giá: nó nói về THƯỚC. Nó là dữ liệu làm việc của màn `/du-lieu`, một màn của " +
+    "người quản lý dữ liệu; gợi ý hàng chuẩn cho người tạo gói là việc của S4.3, chưa có. Một tác tử chỉ-đọc hôm nay không có " +
+    "việc nào cần nó. Route khai `agent: false` và dòng này khai vì sao; ngày nào có việc cần thì đổi một dòng và viết một " +
+    "ADR. [S1.199 / S4.2b]",
+  "/items/:itemId":
+    "CHI TIẾT MỘT HÀNG CHUẨN — mọi phiên bản, bí danh và quy đổi riêng đang hiệu lực, kèm HỌ TÊN người ghi từng thứ. Họ tên " +
+    "người trong tổ chức là thứ `/me` và mọi công cụ khác của bảng này cố ý không trả; dòng này không mở nó cho một tác tử chỉ " +
+    "để đọc một thước đo. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  "/uom":
+    "DANH MỤC ĐƠN VỊ và bí danh đơn vị của tổ chức, kèm họ tên người khai — cùng lý do với `/items/:itemId`. Danh mục toàn " +
+    "cục thì vô hại, nhưng bí danh của tổ chức là thước quy đổi của mọi gói (*\"MT\"* là tấn hay mét), và màn của người " +
+    "quản lý dữ liệu là nơi duy nhất cần đọc nó hôm nay. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
   // [S1.203 / S3.6b1]
   "/rfqs/:rfqId/signals":
     "TÍN HIỆU CHIA NHỎ của một gói thầu — những gói nào bị gộp với nó, dưới cận bậc nào của phiên bản chính sách nào, ai đã " +

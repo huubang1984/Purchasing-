@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Dữ liệu nền — TrustProcure</title>
+<link rel="stylesheet" href="/chung.css">
+</head>
+<body>
+<main>
+  <header class="dau">
+    <h1>Dữ liệu nền: hàng chuẩn và đơn vị đo</h1>
+    <span class="vai">Quản lý dữ liệu</span>
+    <nav><a href="/tao-thau">Màn tạo gói</a> · <a href="/chinh-sach">Màn chính sách</a></nav>
+  </header>
+
+  <section class="buoc" id="b1">
+    <h2><span class="so">1</span> Đăng nhập</h2>
+    <p class="ghi">Người quản lý dữ liệu đặt thước đo cho mọi gói — hàng chuẩn, bí danh, quy đổi — và không thấy giá của gói nào.
+      Mọi lần ghi ở màn này để lại tên người ghi và thời điểm.</p>
+    <label for="org">Mã tổ chức</label>
+    <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
+    <label for="token">Mã đăng nhập</label>
+    <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
+    <label for="ma">Mã sáu số</label>
+    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+    <button id="nut-vao">Vào</button>
+    <div class="bao loi" id="loi1" hidden></div>
+    <div class="bao ok" id="ok1" hidden></div>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div class="bao luu" id="hoi-phien" hidden></div>
+    <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
+    <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+  </section>
+
+  <section class="buoc" id="b2" hidden>
+    <h2><span class="so">2</span> Hàng chuẩn</h2>
+    <div class="bao luu" id="vai-quan-ly" hidden></div>
+    <label for="loc">Lọc theo mã hoặc tên</label>
+    <input id="loc" autocomplete="off" spellcheck="false" placeholder="thép d10">
+    <table id="bang-hang">
+      <thead><tr><th>Mã</th><th>Tên</th><th>Đơn vị gốc</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao luu" id="con-nua" hidden></div>
+    <button id="nut-doc-hang" class="phu">Đọc lại</button>
+    <div class="bao loi" id="loi2" hidden></div>
+  </section>
+
+  <section class="buoc" id="b3" hidden>
+    <h2><span class="so">3</span> Tạo hàng chuẩn</h2>
+    <p class="ghi">Mã và đơn vị gốc không đổi được sau khi tạo: đổi đơn vị gốc là tạo hàng chuẩn mới. Đơn vị gốc phải là đơn vị
+      của danh mục (kg, m, cai…) — đơn vị đóng gói như cây, cuộn, bao đi vào quy đổi riêng ở bước 4.</p>
+    <label for="tao-ma">Mã (viết hoa)</label>
+    <input id="tao-ma" autocomplete="off" spellcheck="false" placeholder="THEP-D10">
+    <label for="tao-don-vi">Đơn vị gốc</label>
+    <input id="tao-don-vi" autocomplete="off" spellcheck="false" placeholder="kg">
+    <label for="tao-ten">Tên</label>
+    <input id="tao-ten" autocomplete="off" placeholder="Thép cây D10 CB300">
+    <label for="tao-thuoc-tinh">Thuộc tính — mỗi dòng một cặp "khoá: giá trị", khoá viết thường</label>
+    <textarea id="tao-thuoc-tinh" rows="4" spellcheck="false" placeholder="nha_san_xuat: Hòa Phát&#10;mac: CB300"></textarea>
+    <label for="tao-trong-yeu">Thuộc tính trọng yếu — khoá cách nhau bằng dấu phẩy</label>
+    <input id="tao-trong-yeu" autocomplete="off" spellcheck="false" placeholder="mac">
+    <button id="nut-tao">Tạo hàng chuẩn</button>
+    <div class="bao loi" id="loi3" hidden></div>
+    <div class="bao ok" id="ok3" hidden></div>
+  </section>
+
+  <section class="buoc" id="b4" hidden>
+    <h2><span class="so">4</span> Chi tiết hàng chuẩn</h2>
+    <dl class="tt" id="tt-hang"></dl>
+    <h3>Các phiên bản</h3>
+    <table id="bang-phien-ban">
+      <thead><tr><th class="so">Bản</th><th>Tên</th><th>Thuộc tính</th><th>Trọng yếu</th><th>Trạng thái</th><th>Người ghi</th><th>Lúc</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="khoi-phien-ban" hidden>
+      <h3>Phiên bản mới</h3>
+      <p class="ghi">Sửa là thêm một phiên bản; phiên bản cũ vẫn đọc được. Ngừng dùng cũng là một phiên bản.</p>
+      <label for="pb-ten">Tên</label>
+      <input id="pb-ten" autocomplete="off">
+      <label for="pb-thuoc-tinh">Thuộc tính</label>
+      <textarea id="pb-thuoc-tinh" rows="4" spellcheck="false"></textarea>
+      <label for="pb-trong-yeu">Thuộc tính trọng yếu</label>
+      <input id="pb-trong-yeu" autocomplete="off" spellcheck="false">
+      <label><input type="checkbox" id="pb-ngung"> Ngừng dùng hàng chuẩn này</label>
+      <button id="nut-phien-ban">Thêm phiên bản</button>
+    </div>
+    <h3>Bí danh đang trỏ về hàng này</h3>
+    <table id="bang-bi-danh">
+      <thead><tr><th>Bí danh (dạng sạch)</th><th>Người khai</th><th>Lúc</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="khoi-bi-danh" hidden>
+      <label for="bd-moi">Bí danh mới — chuỗi như trên phiếu mua hàng; máy chủ làm sạch</label>
+      <input id="bd-moi" autocomplete="off" placeholder="Thép Hòa Phát D10">
+      <button id="nut-bi-danh" class="phu">Khai bí danh</button>
+    </div>
+    <h3>Quy đổi riêng đang hiệu lực</h3>
+    <table id="bang-quy-doi">
+      <thead><tr><th>Quy đổi</th><th>Người khai</th><th>Lúc</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="khoi-quy-doi" hidden>
+      <p class="ghi">Dùng cho đơn vị đóng gói hay đơn vị khác thứ nguyên (mét → kg). Hai đơn vị cùng thứ nguyên của danh mục đã
+        có quy đổi chung và bị từ chối.</p>
+      <label for="qd-tu">Từ đơn vị</label>
+      <input id="qd-tu" autocomplete="off" spellcheck="false" placeholder="cây">
+      <label for="qd-he-so">Hệ số — 1 đơn vị trên bằng bao nhiêu đơn vị dưới</label>
+      <input id="qd-he-so" inputmode="decimal" autocomplete="off" placeholder="7.22">
+      <label for="qd-sang">Sang đơn vị của danh mục</label>
+      <input id="qd-sang" autocomplete="off" spellcheck="false" placeholder="kg">
+      <button id="nut-quy-doi" class="phu">Khai quy đổi</button>
+    </div>
+    <div class="bao loi" id="loi4" hidden></div>
+    <div class="bao ok" id="ok4" hidden></div>
+  </section>
+
+  <section class="buoc" id="b5" hidden>
+    <h2><span class="so">5</span> Đơn vị đo</h2>
+    <p class="ghi">Danh mục đơn vị và bí danh chung do hệ thống gieo, không tổ chức nào sửa được. Dạng mơ hồ — MT, T, M — không
+      có bí danh chung: tổ chức tự khai, và chưa khai thì dòng ấy không quy đổi được. Bí danh của tổ chức đi trước bí danh chung.</p>
+    <table id="bang-don-vi">
+      <thead><tr><th>Mã</th><th>Thứ nguyên</th><th class="so">Hệ số về gốc</th><th>Bí danh chung</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h3>Bí danh đơn vị của tổ chức</h3>
+    <table id="bang-bi-danh-dv">
+      <thead><tr><th>Bí danh (dạng sạch)</th><th>Đơn vị</th><th>Người khai</th><th>Lúc</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="khoi-bi-danh-dv" hidden>
+      <label for="bdv-moi">Bí danh</label>
+      <input id="bdv-moi" autocomplete="off" spellcheck="false" placeholder="MT">
+      <label for="bdv-don-vi">Đơn vị của danh mục</label>
+      <input id="bdv-don-vi" autocomplete="off" spellcheck="false" placeholder="t">
+      <button id="nut-bi-danh-dv" class="phu">Khai bí danh đơn vị</button>
+    </div>
+    <div class="bao loi" id="loi5" hidden></div>
+    <div class="bao ok" id="ok5" hidden></div>
+  </section>
+
+  <footer class="chan">Lát cắt demo — mọi lần ghi dữ liệu nền là một hàng mới, mang người ghi và thời điểm, và để lại dấu vết trong sổ kiểm toán.</footer>
+</main>
+<script type="module" src="/du-lieu.js"></script>
+</body>
+</html>

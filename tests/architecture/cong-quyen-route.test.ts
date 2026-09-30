@@ -89,6 +89,8 @@ const HAM_DOI_TRANG_THAI = [
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
+  // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức — cùng rổ, cùng mã quyền ở route, cùng cổng CSDL.
+  "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
   // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
@@ -104,6 +106,7 @@ const HAM_DOI_TRANG_THAI = [
   "returnRfqToDraft",
   "revokeInvitation",
   "revokeMagicLinkToken",
+  "rutBiDanhDonVi",
   "rutBiDanhHang",
   "rutQuyDoiRieng",
   "setRfqBudget",
@@ -136,6 +139,10 @@ const HAM_CHI_DOC = [
   // [S1.197 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
   // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
   "chuoiSach",
+  // [S1.199 / S4.2b] Chi tiết, danh sách hàng chuẩn và danh mục đơn vị — cùng hạng với `docHangChuan`: không mang giá.
+  // Tác giả đi kèm là họ tên người trong CÙNG tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docChiTietHangChuan",
+  "docDanhMucDonVi",
   "docHangChuan",
   // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
@@ -158,6 +165,7 @@ const HAM_CHI_DOC = [
   // [S1.169 / S3.1c] Mọi phiên bản chính sách cùng chữ ký — cùng hạng với `getActiveProcurementPolicy`: chính sách không
   // phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`), không ở đây.
   "lietKePhienBanChinhSach",
+  "lietKeHangChuan",
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",

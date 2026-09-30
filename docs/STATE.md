@@ -15,6 +15,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 **[2026-09-29 / S1.203] S3.6b1 — TÍN HIỆU CHIA NHỎ (`PURCHASE_SPLITTING`) VÀ CHỐT K10a Ở CẠNH MỞ GÓI.** Chủ dự án chốt ngày 2026-09-29: S3.6b chia hai PR — b1 CSDL, tầng gói, route, K10a; b2 màn ghi nhận, `gieo:demo`, kịch bản 41, T4 —; người gây ra tín hiệu là người tạo và người nộp của MỌI gói trong bằng chứng; chỉ xét cận bậc; mã ở gói mới `packages/kiem-soat`; gói đã huỷ không tính; tín hiệu mới lưu lúc ghi nhận, cạnh mở gói chỉ đọc và từ chối; người gây ra tự ghi nhận thì vào sổ. Đo trước trên `master` `151cbd1`, fixture spec §7: ba gói 480, 470, 490 triệu cùng nhóm ở tổ chức đã bật đều mở được, không tín hiệu, không hàng sổ. `088_tin_hieu_chia_nho` dựng hàm tín hiệu DUY NHẤT `tin_hieu_chia_nho` (tập cùng tổ chức, cùng nhóm hàng, cùng tiền tệ, đã rời DRAFT và chưa huỷ, trong cửa sổ neo `submitted_at` của chính gói; bắn ở cận bậc cao nhất mà tập con dưới nó chứa gói và có tổng ≥ cận; bằng chứng không mang ước lượng), hai bảng chỉ-ghi-thêm `governance_signals` (bằng chứng do trigger đặt) và `governance_signal_acks`, luật người `tin_hieu_chot_nguoi_ghi_nhan`, và chốt `rfq_chot_tin_hieu` — `openRfq` hỏi trước `issueRfqKeyPair`, trigger riêng ở cạnh hỏi lại. Gói `@trustprocure/kiem-soat` (ranh giới `g20-`: không với tới đường mở thầu) ghi ảnh chụp lúc nộp, ghi nhận, đọc; hai route `GET /rfqs/:rfqId/signals` (không cho agent) và `POST /rfqs/:rfqId/signals/acknowledge` (`rfq.approve`). K10a vào sổ đăng ký; ma trận 73. Sau vòng này, cùng fixture: gói thứ ba không mở được tới khi một người duyệt độc lập ghi nhận. Tổ chức chưa bật chạy nguyên MVP1. ADR-120. Biên bản: `evidence/security-reviews.md` §S1.203.
 
+**[2026-09-29 / S1.199] S4.2b — ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ
+NGƯỜI QUẢN LÝ DỮ LIỆU.** Nửa sau của S4.2 (spec S4 §9). Chủ dự án chốt năm điểm ngày 2026-09-29: một PR; đọc mở cho mọi người mua
+của tổ chức, `agent: false`; hình dạng route; §8.10 nói ở màn và ở công cụ khởi tạo, không kiểm trước ở bản khai; `gieo:demo` gieo
+người và ba hàng chuẩn. `routes/du-lieu.ts`: tám route ghi khai `item.manage` (cổng tầng ứng dụng, trên cổng CSDL của S4.2a), ba
+route đọc; `DuLieuNenError` ra 422 có mã. Gói `du-lieu-nen` thêm `lietKeHangChuan` (trần 500, `conNua`), `docChiTietHangChuan`,
+`docDanhMucDonVi`, `khaiBiDanhDonVi`, `rutBiDanhDonVi`; `rutBiDanhHang` nhận `hangChuanId`. `GET /items` không tìm ở máy chủ —
+router không đọc query (E6); màn lọc trên danh sách. Màn `/du-lieu` (ADR-044): danh sách, tạo, chi tiết (phiên bản, bí danh, quy đổi
+riêng), đơn vị đo; người không giữ `item.manage` chỉ xem và màn nói câu §8.10. `gieo:demo`: người `dulieu` và ba hàng chuẩn, mỗi hàng
+một bí danh là nguyên mô tả dòng demo và một quy đổi riêng tính từ kích thước. L3 thêm phép đo tầng HTTP. Không migration, không ADR.
+Biên bản: `evidence/security-reviews.md` §S1.199.
+
 **[2026-09-29 / S1.200] KHOẢN 258 ĐÓNG — NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO: ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT
 (K4b) — ADR-118.** Chữ ký duyệt gói mang băm ngân sách (ADR-115) và lần nộp đã đọc (ADR-117), nhưng không route nào trả ngân
 sách cho người mua. Chủ dự án chốt: route riêng `GET /rfqs/:rfqId/budget`, không mở cho agent (`get_rfq` giữ nguyên); người tạo gói
