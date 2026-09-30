@@ -16942,12 +16942,20 @@ Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đ�
 - **Nhãn đặt hai lần:** bản đầu mang `[INV-K10a]` ở cả `describe` lẫn từng `it`, và bộ gom độ phủ đếm mỗi lần nhãn xuất hiện trong tên đầy
   đủ — K10a ra 25 thay vì 13. Bỏ nhãn ở `describe` (khuôn của K1); lượt T3 sau lần hợp chạy trên tên mới.
 - `pnpm t0` sạch (464 module, 1859 phụ thuộc). `pnpm test`: 123 tệp, 1764 đạt, 1 bỏ qua. `pnpm cap-so --kiem` sạch.
-- **Ma trận:** 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào), đọc từ 3350 khẳng định, cổng evidence XANH; K10a mới **13**, H16
-  55 → 59 (một khối danh sách trắng, ba probe `g20-`). Mốc `MOC_GHIM` 72 → 73.
+- **Ma trận:** 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào), đọc từ 3367 khẳng định, cổng evidence XANH; K10a mới **13**, H16
+  55 → 59 (một khối danh sách trắng, ba probe `g20-`). Mốc `MOC_GHIM` 72 → 73. So với bản của `master` sau #199, ma trận chỉ khác ở
+  hàng K10a, H16 và các con số tổng — D2 (50) và K4b (23) bằng nhau.
 - **Hợp `master` sau #203** (S3.3a, K8a, migration `082`): xung đột ở danh sách trigger chỉ ghi thêm của `db/migrations.int` (hợp sắp
   xếp), năm khối hardening của `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` (giữ khối `supplier_verifications` rồi hai khối
   `governance_*`; chuỗi quyền là hợp sắp xếp), mốc ma trận, cột mốc `docs/STATE.md`, lời khai của `Handoff.md` và cuối biên bản — giữ cả
   hai mục, mục của vòng này đứng sau mục của #203. Lời khai đếm ADR và migration do `cap-so --dem` viết lại. Sau lần hợp: typecheck
   sạch, `pnpm test` 123 tệp, 1764 đạt, 1 bỏ qua; `cap-so --kiem` sạch.
+- **Hợp `master` sau #199** (S1.202, khoản 254, migration `086`, ADR-115): xung đột ở danh sách hàm trợ giúp và ba danh sách migration
+  của `db/migrations.int` (giữ `rfq_bam_ngan_sach` và ba hàm của `088` — mười một hàm; `086` rồi `088`), hàng K4b của sổ đăng ký (lấy
+  bản #199; hàng K10a dời xuống sau K8a), cuối `docs/DECISIONS.md` (ADR-115 rồi ADR-120), cột mốc, lời khai và cuối biên bản. Sau lần
+  hợp: typecheck sạch, `pnpm test` 123 tệp, 1764 đạt, 1 bỏ qua. Lượt T3 toàn bộ trên cây ấy bị cắt khi container khởi động lại lần
+  thứ hai, nên em chạy sáu tệp chịu lần hợp nhiều nhất — `hardening-suy-tu-tinh-chat.int` (nhân chứng hai bên cùng sửa),
+  `tin-hieu-chia-nho.int`, `rang-ngan-sach.int` mới của #199, `buyer.int`, `bac-chinh-sach.int`, `kich-ban-41-http.int` — **184/184**,
+  rồi ghép vào báo cáo T3 toàn bộ sau lần hợp #203: 198 tệp, 3367 khẳng định. `db/migrations.int` sau lần hợp này để CI chạy.
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.203, ADR-120, migration `088_tin_hieu_chia_nho`; các số nhỏ
   hơn chưa vào `master` đã có PR khác giữ.
