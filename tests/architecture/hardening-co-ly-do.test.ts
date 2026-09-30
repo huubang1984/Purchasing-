@@ -390,8 +390,8 @@ export function tenTriggerEnableAlways(hardening: string): readonly string[] {
 }
 
 /**
- * Bốn tên có `ENABLE ALWAYS TRIGGER` mà KHÔNG có văn bản ghim `$def$` — mỗi dòng một lý do đo được:
- * HAI cái ghim bằng THUỘC TÍNH, và HAI cái là `CREATE CONSTRAINT TRIGGER`.
+ * ~~Bốn~~ **[S1.207]** Năm tên có `ENABLE ALWAYS TRIGGER` mà KHÔNG có văn bản ghim `$def$` — mỗi dòng một lý do đo được:
+ * HAI cái ghim bằng THUỘC TÍNH, và ~~HAI~~ BA cái là `CREATE CONSTRAINT TRIGGER`.
  * Danh sách miễn trừ chỉ đứng được khi chính nó bị canh: khẳng định thứ hai đòi mỗi dòng ở đây
  * trỏ một tên CÒN THẬT SỰ xuất hiện ở một câu `ENABLE ALWAYS`, nên một dòng thiu không giữ chỗ
  * được cho một trigger mai sau.
@@ -419,6 +419,11 @@ const ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM: readonly { readonly ten: string; read
   {
     ten: "vendor_bid_versions_phai_co_bien_nhan",
     lyDo: "cùng lý do với hàng trên — `CREATE CONSTRAINT TRIGGER`, tiền tố khác",
+  },
+  {
+    // [S1.207 / khoản 260] Hàng trả về phải đi kèm cạnh về DRAFT — constraint trigger hoãn tới COMMIT, khuôn `017`.
+    ten: "rfq_tra_ve_phai_di_kem_canh",
+    lyDo: "cùng lý do với hai hàng trên — `CREATE CONSTRAINT TRIGGER`, tiền tố khác",
   },
 ];
 
@@ -490,7 +495,7 @@ describe("[INV-H19] [S1.100 / khoản 211] ba chỗ ghim của một trigger", (
 
   // [S1.113 / lượt soi ngang 78 — ③] Người canh cho việc HAI BỘ ĐỌC TRÊN CÙNG MÙ — xem khối khai
   // ở `tenTriggerEnableAlways`. Thay cho cái sàn `>= 60` mà lượt 78 đo ra là đã trôi 25 tên.
-  it("[INV-H19] bộ đọc thứ BA (`ENABLE ALWAYS TRIGGER`) khớp tập đã ghim, trừ BỐN tên có dòng miễn trừ", () => {
+  it("[INV-H19] bộ đọc thứ BA (`ENABLE ALWAYS TRIGGER`) khớp tập đã ghim, trừ ~~BỐN~~ NĂM tên có dòng miễn trừ", () => {
     const daGhim = new Set(docGhimTrigger(HARDENING).map((g) => g.ten));
     const enableAlways = tenTriggerEnableAlways(HARDENING);
     const mienTru = new Map(ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM.map((x) => [x.ten, x.lyDo]));

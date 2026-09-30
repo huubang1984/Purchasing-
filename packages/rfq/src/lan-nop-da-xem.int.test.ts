@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -8,6 +8,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   addRfqItem,
   approveRfq,
+  cancelRfq,
   createRfq,
   getRfq,
   openRfq,
@@ -934,4 +935,127 @@ describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp
       await migrate(db.pool, MIGRATIONS_DIR);
     }
   }, 300000);
+});
+
+// =============================================================================================
+// (8) [S1.207 / khoản 260] HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; BẢNG CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG
+//
+// Lượt soi S1.198 đọc ra: `087` chỉ buộc một chiều — cạnh về DRAFT đòi hàng, hàng không đòi cạnh —, và bảng chỉ-ghi-thêm bằng
+// QUYỀN. Một hàng chèn tay commit được, chiếm `UNIQUE (org, gói, lần nộp)` và thoả vế (4) cho một câu UPDATE thô về sau; chủ bảng
+// xoá một hàng thì chữ ký người trả đã rút đếm lại. Nay một constraint trigger hoãn tới COMMIT đòi gói đã ĐI QUA DRAFT ở lần nộp
+// của hàng (chủ dự án chốt: một tập, khuôn `017`), và `bid_chi_ghi_them` chặn sửa, xoá, TRUNCATE cả với chủ bảng. Đầu vào khác
+// của cùng phép đếm — sửa `rfq_approvals`, nâng `lan_nop` của gói — chủ bảng còn chạm được (khoản 262): khối này không canh chúng.
+// =============================================================================================
+const loiKhongDiKemCanh = (lanNop: number, trangThai: string): string =>
+  `Hang rfq_tra_ve cua lan nop ${lanNop} phai di kem canh ve DRAFT cua chinh lan nop ay trong cung giao dich; goi dang o ${trangThai} (K4a)`;
+const loiChiGhiThem = (thaoTac: string): string => `Bang rfq_tra_ve chi duoc ghi them: thao tac ${thaoTac} bi tu choi (B1, B2)`;
+
+describe("S1.207 — khoản 260: hàng trả về đi kèm cạnh về DRAFT; sổ trả về chỉ-ghi-thêm cả với chủ bảng", () => {
+  it("[INV-K4a] hàng trả về chèn lẻ, không kèm cạnh ⇒ từ chối lúc COMMIT; câu UPDATE thô về DRAFT ở giao dịch sau không có hàng nào để dựa; lần trả về thật của lần nộp ấy đi qua", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    // PM2 — người giữ `rfq.approve` — chèn tay một hàng mang danh tính của chính mình, không đổi trạng thái gói.
+    const le = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_TRA_VE, [t.org, rfqId, t.pm2.u, t.pm2.s, LY_DO])));
+    expect([le?.code, le?.message]).toEqual(["23514", loiKhongDiKemCanh(1, "PENDING_APPROVAL")]);
+    expect(await hangTraVe(rfqId), "không hàng nào ở lại chiếm UNIQUE của lần nộp 1").toEqual([]);
+    const tho = await loi(withTenant(apiPool, t.org, (c) => c.query(CAU_VE_NHAP, [rfqId])));
+    expect(tho?.message, "câu UPDATE thô về sau không dựa được vào hàng lẻ").toBe(
+      "Tra goi ve DRAFT phai kem mot hang rfq_tra_ve cua lan nop 1 — ai tra va vi sao (K4b)",
+    );
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect(await loi(traVe(t, rfqId, t.pm)), "lần trả về thật của lần nộp 1").toBeNull();
+    expect((await hangTraVe(rfqId)).map((h) => [h.lan, h.ai])).toEqual([[1, t.pm.u]]);
+  });
+
+  it("[INV-K4a] hàng trả về đi kèm cạnh MỞ gói hay HUỶ gói trực tiếp trong cùng giao dịch ⇒ từ chối lúc COMMIT, gói ở lại chờ duyệt; không kèm hàng thì mở được", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    const kemMo = await loi(
+      withTenant(apiPool, t.org, async (c) => {
+        await c.query(CAU_TRA_VE, [t.org, rfqId, t.pm.u, t.pm.s, LY_DO]);
+        await openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool);
+      }),
+    );
+    expect([kemMo?.code, kemMo?.message]).toEqual(["23514", loiKhongDiKemCanh(1, "OPEN")]);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    const kemHuy = await loi(
+      withTenant(apiPool, t.org, async (c) => {
+        await c.query(CAU_TRA_VE, [t.org, rfqId, t.pm.u, t.pm.s, LY_DO]);
+        await cancelRfq(c, t.org, { rfqId, reason: "huy goi", actorSessionId: t.pm.s }, apiPool);
+      }),
+    );
+    expect([kemHuy?.code, kemHuy?.message]).toEqual(["23514", loiKhongDiKemCanh(1, "CANCELLED")]);
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect(await hangTraVe(rfqId)).toEqual([]);
+    expect(await loi(mo(t, rfqId)), "đối chứng: không kèm hàng thì mở được").toBeNull();
+    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
+  });
+
+  it("[INV-K4a] trả về rồi nộp lại TRONG CÙNG giao dịch ⇒ đi qua: lần nộp đã tăng, nên gói đã đi qua DRAFT", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await withTenant(apiPool, t.org, async (c) => {
+      await returnRfqToDraft(c, t.org, { rfqId, reason: LY_DO, actorSessionId: t.pm.s }, apiPool);
+      await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
+    });
+    expect(await trangThaiGoi(rfqId)).toBe("PENDING_APPROVAL");
+    expect((await doc(t, rfqId)).lanNop).toBe(2);
+    expect((await hangTraVe(rfqId)).map((h) => h.lan)).toEqual([1]);
+  });
+
+  it("[INV-K4a] đổi `app.org_id` giữa lần chèn hàng lẻ và COMMIT — gói biến khỏi tầm nhìn của hàm dưới RLS — vẫn bị từ chối, không lọt", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    const doiOrg = await loi(
+      withTenant(apiPool, t.org, async (c) => {
+        await c.query(CAU_TRA_VE, [t.org, rfqId, t.pm2.u, t.pm2.s, LY_DO]);
+        await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [randomUUID()]);
+      }),
+    );
+    expect([doiOrg?.code, doiOrg?.message]).toEqual(["23514", "Khong doc duoc goi thau cua hang tra ve luc COMMIT (K4a)"]);
+    expect(await hangTraVe(rfqId)).toEqual([]);
+  });
+
+  it("[INV-K4b] [INV-H19] chủ bảng không xoá, không sửa, không TRUNCATE được hàng trả về — kể cả dưới `session_replication_role = replica` —, nên xoá hàng trả về không còn làm chữ ký đã rút đếm lại", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await duyet(t, rfqId, t.pm2);
+    await traVe(t, rfqId, t.pm2, "nguoi duyet rut chu ky");
+    await nop(t, rfqId);
+    expect((await loi(mo(t, rfqId)))?.message).toBe(loiConHieuLuc(1, 0));
+
+    const xoa = await loi(db.pool.query("DELETE FROM public.rfq_tra_ve WHERE rfq_id = $1", [rfqId]));
+    expect([xoa?.code, xoa?.message]).toEqual(["23514", loiChiGhiThem("DELETE")]);
+    const sua = await loi(db.pool.query("UPDATE public.rfq_tra_ve SET lan_nop = 0 WHERE rfq_id = $1", [rfqId]));
+    expect([sua?.code, sua?.message]).toEqual(["23514", loiChiGhiThem("UPDATE")]);
+    // Mỗi phép thử một giao dịch lùi: TRUNCATE lọt mà không lùi thì xoá sổ trả về của cả cụm.
+    const trongGiaoDichLui = async (truoc: string | null, cau: string, thamSo: readonly unknown[]): Promise<LoiBat | null> => {
+      const c = await db.pool.connect();
+      try {
+        await c.query("BEGIN");
+        if (truoc !== null) await c.query(truoc);
+        return await loi(c.query(cau, [...thamSo]));
+      } finally {
+        await c.query("ROLLBACK");
+        c.release();
+      }
+    };
+    const replica = await trongGiaoDichLui(
+      "SET LOCAL session_replication_role = replica",
+      "DELETE FROM public.rfq_tra_ve WHERE rfq_id = $1",
+      [rfqId],
+    );
+    expect(replica?.message, "ENABLE ALWAYS — replica không tắt được chốt").toBe(loiChiGhiThem("DELETE"));
+    const cat = await trongGiaoDichLui(null, "TRUNCATE public.rfq_tra_ve", []);
+    expect(cat?.message).toBe(loiChiGhiThem("TRUNCATE"));
+
+    expect((await hangTraVe(rfqId)).map((h) => [h.lan, h.ai])).toEqual([[1, t.pm2.u]]);
+    expect((await loi(mo(t, rfqId)))?.message, "chữ ký đã rút vẫn không đếm").toBe(loiConHieuLuc(1, 0));
+  });
 });

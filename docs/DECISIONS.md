@@ -9665,6 +9665,81 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
 - **Không phủ:** trigger trên bảng ngoài lược đồ dự án; event trigger (cần SUPERUSER); một vai giữ quyền DDL cắm lại trigger ngay
   sau deploy — hardening chỉ chữa ở lần deploy kế, như mọi mục khác.
 
+## ADR-123 — Hàng `rfq_tra_ve` phải đi kèm cạnh về DRAFT của chính lần nộp ấy: constraint trigger hoãn tới COMMIT đòi gói đã ĐI QUA DRAFT; sổ trả về chỉ-ghi-thêm cả với chủ bảng
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 phép kiểm lúc COMMIT đòi gói đã ĐI QUA
+cửa DRAFT ở lần nộp của hàng — một tập, khuôn `017` —, không chỉ đã rời `PENDING_APPROVAL` · **[S1.207]** · Migration
+`090_tra_ve_di_kem_canh` · Biên bản: `evidence/security-reviews.md` §S1.207 · **Khoản:** 260 (ghi ở S1.198; đóng ở đây);
+lượt soi mở khoản 262, 263
+
+### Bối cảnh
+
+ADR-117 (3) giữ `rfq_tra_ve` chỉ-ghi-thêm BẰNG QUYỀN và buộc MỘT chiều: cạnh về DRAFT đòi một hàng của chính lần nộp (4), còn hàng
+không đòi cạnh. Lượt soi S1.198 đọc ra hai lỗ (khoản 260, rổ B: cần SQL thô dưới `app_api` hay quyền chủ bảng); vòng này đo chúng
+trên cây `master`:
+
+- Một hàng chèn tay dưới `app_api`, không kèm câu đổi trạng thái, commit được. Lần trả về thật của lần nộp ấy về sau bị từ chối
+  (23505, `rfq_tra_ve_mot_lan_moi_lan_nop`), và một câu UPDATE thô về DRAFT ở giao dịch SAU đi qua — người trả trong CSDL là người
+  đã chèn hàng lẻ.
+- Chủ bảng xoá hàng trả về của người duyệt đã tự trả gói về: gói đang bị từ chối mở vì *0 chữ ký còn hiệu lực* MỞ được bằng chính
+  chữ ký ấy (fail-open). Xoá một chữ ký thì ngược lại — fail-closed; SỬA một chữ ký (`rfq_approvals.lan_nop_da_xem`) thì cũng
+  fail-open — đầu vào khác của cùng phép đếm, lượt soi của vòng này đo, khoản 262.
+
+### Quyết định
+
+1. **Constraint trigger `rfq_tra_ve_phai_di_kem_canh`** — `AFTER INSERT`, `DEFERRABLE INITIALLY DEFERRED`, `ENABLE ALWAYS`, khuôn
+   `017` (b): lúc INSERT gói theo định nghĩa còn chờ duyệt (`rfq_tra_ve_dat_lan_nop` đòi thế), nên chỉ COMMIT trả lời được câu
+   *giao dịch này có trả gói về không*. Hàng được nhận khi gói đứng ở `DRAFT` với ĐÚNG lần nộp của hàng, hoặc lần nộp của gói đã
+   TĂNG — dưới `app_api` lần nộp chỉ tăng ở cạnh `DRAFT→PENDING_APPROVAL`, nên gói đã đi qua DRAFT (trả về rồi nộp lại trong cùng
+   giao dịch; chủ bảng `rfq_packages` thì sửa được cột ấy — khoản 262). Mọi
+   trường hợp khác — gói ở `PENDING_APPROVAL`, `OPEN` hay `CANCELLED` với đúng lần nộp ấy — là một hàng không kèm lần trả về nào:
+   từ chối, cả giao dịch lùi.
+2. **Gói không đọc được lúc COMMIT ⇒ từ chối.** Hàm chạy dưới quyền người gọi, RLS áp: một câu đổi `app.org_id` giữa lần chèn và
+   COMMIT làm gói biến khỏi tầm nhìn. `017` trả `NULL` (bỏ qua) ở chỗ ấy — lượt soi đo được cặp khoá mồ côi commit qua khe ấy,
+   khoản 263 —; hàm này thì không.
+3. **Chỉ-ghi-thêm bằng trigger**, khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE` cấp câu lệnh, cả hai
+   `ENABLE ALWAYS` — chặn cả chủ bảng lẫn superuser, kể cả dưới `session_replication_role = replica`. Hai trigger ghim trong mục
+   `bid_chi_ghi_them (047)`; bảng vào tập chỉ-ghi-thêm suy ra của H19; ba trigger mới có tên trong `TRIGGER_DUOC_PHEP` (khoản 259).
+4. **Migration mang `DROP TRIGGER IF EXISTS` trước mỗi `CREATE`**, khuôn `047`: bảng có từ `087`, nên trên một cụm đang chạy lượt
+   sửa ĐẦU của hardening dựng hai trigger chỉ-ghi-thêm theo mục `047` trước khi tệp đánh số chạy.
+
+### Phương án đã cân nhắc
+
+- **Chỉ đòi gói đã rời `PENDING_APPROVAL`** — đúng chữ của khoản: đóng hai lỗ đã ghi, nhưng để lọt một hàng trả về GIẢ đi kèm cạnh
+  mở gói hay huỷ gói trực tiếp trong cùng giao dịch — một lần trả về không có ghi vào lịch sử. Chủ dự án không chọn.
+- **Cạnh về DRAFT đánh dấu lần trả về trong giao dịch (GUC, bảng tạm)** — phân biệt được *trả về rồi huỷ* với *huỷ thẳng*; thêm một
+  kênh trạng thái người gọi giả được (GUC) hay một bảng mới, cho một luồng tầng gói không có. Bác.
+- **Cạnh về DRAFT đòi hàng do CHÍNH giao dịch ấy chèn (so `xmin`)** — dễ vỡ (giao dịch con), và không đóng lỗ xoá. Bác.
+- **Thu quyền DELETE** — đã vậy từ `087`; chủ bảng vẫn xoá được. Không đủ.
+
+### Đo
+
+Khối (8) của `packages/rfq/src/lan-nop-da-xem.int.test.ts`, năm ca trên Postgres thật dưới `app_api`: hàng lẻ; hàng kèm cạnh mở gói
+và cạnh huỷ gói; trả về rồi nộp lại trong cùng giao dịch (đối chứng — xanh cả trên `master`); đổi `app.org_id` trước COMMIT; chủ bảng
+xoá, sửa, TRUNCATE, kể cả dưới `session_replication_role = replica`. Trên cây `master` bốn ca đỏ. Chín đột biến đều đỏ: sáu ở ca đo
+(bỏ vế lần nộp đã tăng; chỉ đòi hết `PENDING_APPROVAL`; không thấy gói thì bỏ qua; thân `RETURN NULL` sớm; trigger không hoãn; chốt
+bỏ `DELETE`), ba bị hardening chặn ngay ở `migrate()` (thiếu chốt `TRUNCATE`, chốt không `ENABLE ALWAYS`, danh sách
+`TRIGGER_DUOC_PHEP` không khai ba tên mới). Lượt soi đối kháng — savepoint, `DO … EXCEPTION`, nhiều gói và hai tổ chức trong một
+giao dịch, đổi GUC hay vai trước COMMIT, `PREPARE TRANSACTION`, `COPY`, `replica`, `TRUNCATE … CASCADE`, mười kiểu làm hỏng trigger
+rồi `migrate()` — không lách được; nó mở khoản 262 và 263 (rổ B). Biên bản: §S1.207.
+
+### Hệ quả, nói thẳng
+
+- Trả về rồi HUỶ trong CÙNG một giao dịch bị từ chối — fail-closed; tầng gói không làm thế (huỷ là một lời gọi riêng). Trừ một
+  thứ tự: `SET CONSTRAINTS … IMMEDIATE` giữa hai câu chạy phép kiểm lúc gói còn ở DRAFT, và hàng được nhận — gói đã thật sự đi qua
+  DRAFT, nên đó không phải lỗ.
+- `SET CONSTRAINTS ALL IMMEDIATE` đặt trước câu đổi trạng thái làm một lần trả về hợp lệ bị từ chối ngay ở câu chèn — chặt hơn,
+  không lỏng hơn.
+- Hàng đã có trước vòng này không được kiểm lại: constraint trigger chỉ chạy cho hàng mới. Một hàng lẻ commit trước lần nâng cấp
+  giữ nguyên tác dụng — lần trả về thật của lần nộp ấy vẫn 23505, và một câu UPDATE thô về DRAFT ở giao dịch sau vẫn đi qua (người
+  kiểm đo: cụm `master` có hàng lẻ, rồi `migrate()` bằng cây của vòng này).
+- Chủ bảng vẫn làm chữ ký đã rút đếm lại bằng một câu UPDATE trên `rfq_approvals`, và nâng `lan_nop` của gói ngoài cạnh nộp để một
+  hàng lẻ được nhận: hai đầu vào ấy chỉ giữ bằng quyền (khoản 262).
+- Lần deploy đầu trên một cụm đang chạy phát một WARNING *mục "hàm + trigger bid_chi_ghi_them (047)" ở trạng thái SAI TRƯỚC khi
+  sửa*: lượt sửa đầu dựng hai trigger chỉ-ghi-thêm trên bảng đã có — không phải dấu trôi; lần sau im lặng.
+- Như mọi bảng chỉ-ghi-thêm: vai giữ quyền DDL trên bảng gỡ hay tắt được trigger; hardening dựng lại ở lần deploy kế, và mục trigger
+  lạ (khoản 259) canh tên.
+
 ## ADR-135 — S4.3b: lượt chuẩn hoá chạy sau commit của lần nộp duyệt, trong một giao dịch mới, chỉ ở tổ chức có hàng chuẩn đang dùng; năm route ánh xạ `agent: false`
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt sáu điểm ngày 2026-09-30: một PR; lượt chuẩn hoá chạy sau commit
