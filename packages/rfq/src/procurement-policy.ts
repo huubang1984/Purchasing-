@@ -252,7 +252,8 @@ export interface ChuKyChinhSach {
  * có bậc, người ký khác người tạo và giữ `policy.manage`, là phiên bản MỚI NHẤT, đã tới ngày hiệu lực, dưới khoá tư vấn theo tổ
  * chức; [S1.236 / khoản 261] lần ký BẬT S3 (tổ chức chưa bật) chỉ nhận dưới READ COMMITTED và khi tổ chức không còn gói chờ
  * duyệt — gói nộp dưới luật MVP1 không đi qua lần bật; `signed_by` dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); mỗi phiên
- * bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
+ * bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ
+ * để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
  *
  * Cờ triển khai (ADR-105) KHÔNG nằm ở đây mà ở route — hàm này là cơ chế, route là cửa.
  */
