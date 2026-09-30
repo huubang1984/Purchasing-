@@ -17665,7 +17665,8 @@ hai ca GUC). Ba ca xanh trên `master` là ba ca giữ hành vi có sẵn — ha
     `bang_so` và ngoài trigger gọi `chan_sua_xoa()`, mà không có trong danh sách; cột `bang_co_ten`.
   - Mục `không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)`: câu sửa gỡ trigger lạ trên bảng có tên, mỗi lần gỡ một
     khối con và một WARNING (khuôn [CR1]); hậu điều kiện phán xét mọi bảng, thông điệp nêu bảng, tên, định nghĩa, và với bảng không
-    có tên thì lối ra. Điều kiện chỉ sai ở lượt `sua` mang `app.hardening_sau_vong = 'khong'`.
+    có tên thì lối ra. Điều kiện chỉ sai ở lượt `sua` mang `app.hardening_sau_vong = 'khong'`. **[S1.9140 / khoản 9402]** Thông điệp nay
+    nêu VÂN TAY định nghĩa thay định nghĩa (ADR-124) — §S1.9140.
 - `packages/db/src/migrate.ts`: đặt `app.hardening_sau_vong` ở mọi lượt hardening — `'khong'` ở lượt sửa đầu, `'co'` ở các lượt sau.
 - Bốn test cũ cắm trigger lên bảng thử ngoài danh sách để đo phán xét khác (`hardening-suy-tu-tinh-chat.int` — bảng chỉ-ghi-thêm
   phân mảnh và hai ca khoản nợ 79 —, `migrations.int` — fixture `kho.*` —, `outbox.int`): hàm `boMucTriggerLa` khẳng định dòng của mục
@@ -17688,7 +17689,8 @@ hai ca GUC). Ba ca xanh trên `master` là ba ca giữ hành vi có sẵn — ha
   trùng khít danh sách; ⑵ bản đổi tên, bản chép thân hàm, constraint trigger lạ, tên được phép ở bảng khác — trên bảng có tên — bị
   gỡ, mỗi cái đúng một WARNING; ⑶ trigger lạ trên `organizations` và trên một bảng ở schema khác chỉ bị phán xét, thông điệp nêu cả
   hai kèm lối ra, không gì bị gỡ; ⑷ bảng sổ do [CR1] gỡ, `chan_sua_xoa()` ở bảng khác do [CR4] chặn, trigger trên phân mảnh cha bị
-  phán xét đúng một lần; ⑸ gỡ không được (event trigger chặn `DROP TRIGGER`) ⇒ lượt phán xét chặn deploy, nêu bảng, tên, định nghĩa;
+  phán xét đúng một lần; ⑸ gỡ không được (event trigger chặn `DROP TRIGGER`) ⇒ lượt phán xét chặn deploy, nêu bảng, tên, định nghĩa
+  **[S1.9140: nay vân tay định nghĩa — §S1.9140]**;
   ⑹ migration đang chờ gỡ một trigger lạ bằng `DROP TRIGGER` không `IF EXISTS` (khuôn `059`) vẫn chạy được; ⑺ `'khong'` đặt sẵn ở
   mức vai không tắt được lần gỡ, và đặt ngay trong phiên không tắt được lượt phán xét.
 - `packages/rfq/src/lan-nop-da-xem.int.test.ts`, một ca: đổi tên trigger so lần nộp thành tên xếp trước chốt D2 ⇒ trước `migrate()`
@@ -18628,7 +18630,7 @@ Kèm: chạy đợt A (6 lô) rồi đợt B (7 lô), làn hardening gộp tuầ
 - **Gộp (`98fbff7`).** Mười hai tệp xung đột, số của nhánh để nguyên tới lúc cấp: `chot-kiem-soat.ts` (chú thích hai phía), `apps/mcp/src/cong-cu.ts` (mười tám route ở `ROUTE_DOC_KHONG_PHOI`, đếm lại trên mã), `phuc-vu.test.ts` và `buyer.int.test.ts` (khối của `master` trước, khối của nhánh sau — cùng hình dạng B3 × B5 ở mục 4), `outbox.int.test.ts` (kỳ vọng khoản 259 của `master` — hardening CHẶN vì trigger — chạy qua `migrateLai()` của nhánh, vì policy 095 đang nới trong tệp), `migrations.int.test.ts` (087, 088 rồi năm migration của nhánh), `hardening-suy-tu-tinh-chat.int.test.ts` (nhánh đã dời danh sách sang `db/danh-sach-ham-canh.ts` ở khoản 221 — sáu hàm mới của 087/088 chuyển theo, cùng chú thích); `DECISIONS.md` và biên bản (`pnpm cap-so` nối cuối, của `master` trước); `Handoff.md` (lời khai đếm; dòng TEST-PLAN lấy 73 bất biến của `master`); `docs/STATE.md` (cột mốc của nhánh trên cột mốc của `master`; sổ nợ lấy 256/257 ĐÓNG và 258–261 của `master`, rồi các khoản mới của nhánh xếp theo số; dòng RỔ B gộp gạch hai phía, trả lại một dấu cách nhánh làm rơi; dòng ADR và TEST-PLAN lấy của `master`; một dòng trống trước `CÒN MỞ TÍNH TỚI HEAD` mà nhánh làm mất — thiếu nó, dòng ấy thành một hàng của bảng); `evidence/INV-matrix.md` sinh lại ở dưới.
 - **Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `98fbff7`).** Vòng S1.209–S1.233 (người tích hợp đợt 1 → S1.211, đợt 2 → S1.214), ADR-124–134, khoản 264–285, migration 091–095 (089, 090 đã có nhánh khác giữ trên remote). Lần chạy đầu từ chối trước khi ghi: năm số tạm có tiền tố không có chỗ khai — một khoản lô 11 đề xuất mà người tích hợp đợt 1 không đưa vào sổ (nay viết thành lời, không số, ở §S1.212 và cột mốc S1.212), hai tên migration dải `95NN` làm fixture (`migration-shape.test.ts` → `'1234_b'`, `rls-coverage.int.test.ts` → `"999_chua_ap"`), tên tệp đột biến tạm của lô A4 (→ `95NN_…`), một ví dụ regex dải `95NN` ở hàng khoản 284 (→ `"1234_bang_key"`, đo lại: vẫn `false`). Một câu tạo cũ đi qua được vì không mang `_tên` sau số — `BANG_DU("9591", "")` của `migration-shape.test.ts` — giữ nguyên: nó là phép đo dải số tạm, như dữ liệu test của `tools/cap-so`, và `--kiem` không đọc nó là số tạm. Số tạm TRẦN ngoài Markdown mà lệnh để nguyên (chú thích, thông điệp, tên biến và thẻ dollar-quote mang số của `092`) — 85 dòng — thay tay theo đúng bảng trailer; giữ nguyên bốn định danh test chỉ trùng chữ số (một đường route thử của lô L10, một giá trị thử của B1, hai tên fixture của L9, một tên tệp log của B7).
 - **Hệ quả liên nhánh (`2b78fb2`).** `pnpm test` trên `98fbff7`: 2041 xanh, 1 bỏ qua, 3 đỏ — ba cổng của nhánh đọc mã `master` thêm sau điểm rẽ: ⑴ `hardening-khong-in-gia-tri` (khoản 117, ADR-124) — chín hàng `bang` của 087/088 còn nối `prosrc`, giá trị `proconfig`, `pg_get_triggerdef` vào ô mô tả, và RAISE "không gỡ được trigger lạ" của khoản 259 nối `SQLERRM`: đổi đúng sáu khuôn nhánh đã đổi cho 94 hàng cũ; ⑵ `ghim-trigger-nguon` (khoản 214) — chỗ ghim ⑵ của `rfq_packages_dem_lan_nop` và `rfq_packages_kiem_tin_hieu_khi_mo` viết bằng đầu ra `pg_get_triggerdef`: viết lại bằng chính tả nguồn, ⑴/⑶ không đổi; ⑶ `danh-muc-tu-choi` (khoản 189) — `CANONICAL_ITEM`, `UOM_ALIAS` (S4.2b), `RFQ_BUDGET` (khoản 258) vào `DANH_MUC_LOAI_TAI_NGUYEN`.
-- **Hai quyết định cùng ngày chạm nhau — không gỡ ở vòng gộp.** ADR-122 (khoản 259) đòi thông điệp phán xét nêu "bảng, tên, định nghĩa" của trigger lạ (`db/trigger-la-mac-dinh-dong.int.test.ts` ⑸ ghim nguyên `CREATE TRIGGER …`); ADR-124 (khoản 117) đòi định nghĩa trigger in VÂN TAY. Mục khoản 259 đọc định nghĩa qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 (đọc TÊN, không đọc luồng dữ liệu — chỗ thu hẹp đã khai ở đầu cổng) không bắt. Trigger lạ là của người khác viết, và mệnh đề `WHEN` của nó mang được hằng — đúng lớp ADR-124 mô tả. Chọn bên nào là việc của chủ dự án.
+- **Hai quyết định cùng ngày chạm nhau — không gỡ ở vòng gộp.** ADR-122 (khoản 259) đòi thông điệp phán xét nêu "bảng, tên, định nghĩa" của trigger lạ (`db/trigger-la-mac-dinh-dong.int.test.ts` ⑸ ghim nguyên `CREATE TRIGGER …`); ADR-124 (khoản 117) đòi định nghĩa trigger in VÂN TAY. Mục khoản 259 đọc định nghĩa qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 (đọc TÊN, không đọc luồng dữ liệu — chỗ thu hẹp đã khai ở đầu cổng) không bắt. Trigger lạ là của người khác viết, và mệnh đề `WHEN` của nó mang được hằng — đúng lớp ADR-124 mô tả. Chọn bên nào là việc của chủ dự án. **[S1.9140]** Chủ dự án chọn ADR-124 (kế hoạch đợt 3 câu 3); khoản 9402 ĐÓNG — mục khoản 259 nêu bảng, tên và vân tay định nghĩa, cổng T1 đọc bí danh — §S1.9140.
 - **Rổ sau gộp.** Rổ B còn bốn: ~~**138 · 234 · 260 · 261**~~ **[gộp #215] năm: 138 · 234 · 261 · 262 · 263** (gạch cuối mục này) — mục 7 viết "208, 234, 256, 257": 208 đóng từ S1.103 (khoản còn mở là 138, việc của chủ dự án), 256 và 257 đóng ở `master` (S1.198), 260 và 261 mở ở `master` (lượt soi đối kháng S1.198; 260 đang có nhánh riêng `claude/k260-tra-ve-di-kem-canh-5wiyv0`). Hai mươi hai khoản mới của hai đợt (264–285) còn MỞ nhưng chưa đứng ở dòng RỔ nào của `docs/STATE.md` §*Nợ kỹ thuật* — vài hàng tự ghi "Rổ B" trong thân; xếp rổ là việc của vòng kế, không tự xếp ở vòng gộp.
 - **Số đo.** `pnpm cap-so --kiem`: không còn số tạm, không số trùng; `pnpm cap-so --dem`: lời khai đếm khớp; `pnpm t0` xanh (491 module, 2042 phụ thuộc, 0 vi phạm). Năm tệp gác của `2b78fb2` 77/77. `pnpm evidence` trên `2b78fb2` (đơn vị + tích hợp, cụm Postgres 16 cục bộ `C.UTF-8`, 214 tệp, 959 s): 3882 khẳng định — 3881 xanh, 1 bỏ qua có sẵn (`xuong-dong-ts` ⑷, chỉ chạy trên CI), 0 đỏ; ma trận 73/73 ✅ (51 nghiệp vụ + 22 hàng rào). So với ma trận của nhánh (72/72): thêm K10a 15 (S1.203); D2 50 → 65, K4a 22 → 26, K4b 23 → 42, L3 8 → 9, H16 55 → 59, H19 70 → 103 — đúng các test `master` mang vào. So với bản của `master` lấy tạm ở `98fbff7`, bản sinh lại chỉ đổi một hàng: D3 47 → 52; các hàng A2 53, D5 167, E1 14, F1 104, J5 5, J7 8 là số của nhánh.
 - **CI của PR #216 trên `630122f`.** T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh; T3 đỏ 1/1840 — `packages/db/src/vai-tro.int.test.ts` (khoản 104, S1.215) viết cứng TimeZone mặc định `Etc/UTC`, mà `initdb` lấy TimeZone theo máy: cụm cục bộ trên Ubuntu là `Etc/UTC`, `postgres:16-alpine` của CI là `UTC` — nên ca ấy xanh ở mọi lượt đo cục bộ của hai đợt và chỉ đỏ ở lần đầu nhánh chạy CI. Tái hiện cục bộ bằng cụm `initdb` dưới `TZ=UTC` (đỏ đúng câu của CI); sửa: so với TimeZone đọc trên kết nối sạch trước khi làm nhiễm, cộng tiền đề nó khác giá trị làm nhiễm; tệp 25/25 xanh dưới cả hai cụm. Lời khai đầu `packages/test-support/src/postgres-cuc-bo.ts` (ba cờ tắt ghi đĩa là khác biệt DUY NHẤT về cấu hình so với container) thiếu TimeZone mặc định — ghi ra, không sửa ở vòng gộp. **[S1.9130]** Khoản 9401 ĐÓNG: `initdb` của cụm cục bộ chạy dưới `TZ=UTC`, lời khai gạch tại chỗ — §S1.9130.
@@ -21501,3 +21503,199 @@ Một kịch bản cục bộ, ngoài kho: mỗi mũi sửa MỘT chỗ ở mã 
   không cờ `31 passed | 9 skipped (40)`, có cờ là lượt 3 ở trên (`9 passed | 31 skipped (40)`; sau lượt ấy tệp chỉ đổi hai dòng chú
   thích); `pnpm t0` mã 0 (typecheck, eslint, depcruise: 495 mô-đun, không vi phạm); `pnpm test` 133 tệp, `2062 passed | 1 skipped
   (2063)` — ca bỏ qua là ca chỉ-CI có sẵn của `tests/architecture/xuong-dong-ts.test.ts`.
+
+# §S1.9140 — LÔ B6 ĐỢT 3: MỤC KHOẢN 259 NÊU BẢNG, TÊN VÀ VÂN TAY ĐỊNH NGHĨA TRIGGER LẠ; CỔNG T1 ĐỌC BÍ DANH; META-TEST `USING (true)` ĐỌC LỆNH VÀ VAI ĐÍCH DANH; MIỄN TRỪ MỤC (C) CÓ ĐIỀU KIỆN CÙNG HAI HÀNG GHIM THAY CHỖ — KHOẢN 9402, 171 ĐÓNG, 9440, 9441 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — văn bản thông điệp và một điều kiện miễn trừ của
+`hardening.always.sql`, ba tệp test; không route, không màn, không migration, không ADR mới (ADR-122 gạch tại chỗ; ADR-124 thêm một
+tiểu mục; ADR-040 sửa hai hàng). Đóng 9402 (rổ B) và 171 (rổ C, kích hoạt lại theo kế hoạch đợt 3 câu 1); mở 9440 (rổ C đề xuất),
+9441 (rổ B đề xuất).
+
+## 1. Vòng này là gì
+
+Lô B6 của lượt B đợt 3 (`docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/B6.md`) — lô đầu của
+làn hardening. Hai khoản cùng một lớp: một lời khai an ninh đứng trên một phép kiểm HẸP hơn chính nó. **9402** — ADR-122 (khoản 259)
+đòi thông điệp phán xét trigger lạ nêu «bảng, tên, định nghĩa», ADR-124 (khoản 117) đòi định nghĩa trigger in vân tay; mục khoản 259
+in nguyên `pg_get_triggerdef` qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 — đọc tên, không đọc
+luồng — xanh (§S1.214 mục 9). **171** — ⑴ meta-test của cửa `USING (true)` ở `db/migration-shape.test.ts` nhận `TO` cộng một tên bất
+kỳ khác `PUBLIC` và không đọc lệnh; ⑵ cửa miễn trừ mục (C) cho hàm `outbox_danh_sach_to_chuc()` vô điều kiện trong khi hai hàng ghim
+thay chỗ nó có điều kiện (§S1.83). Kèm một việc giao từ lô A5 (§S1.9130, khoản 265): gạch chú thích «THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý»
+đã thiu trên hàng `thuộc tính role app_liet_ke_to_chuc`.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, chốt 2026-09-30: **câu 3** — áp ADR-124 cho mục khoản 259: nêu bảng, tên và vân tay định nghĩa, người vận hành
+tra định nghĩa bằng tên, sửa kỳ vọng ở `db/trigger-la-mac-dinh-dong.int.test.ts` (phương án khác — giữ ADR-122, ghi ngoại lệ có lý do
+vào ADR-124 — không chọn); **câu 1** — 171 kích hoạt lại từ rổ C. Hình dạng của 171 nằm trong thân hàng và đề bài lô.
+
+## 3. Đo trước
+
+Trên `a97dd48`, PostgreSQL 16 cụm cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`), mỗi khoản một ca đỏ, viết TRƯỚC khi vá mã:
+
+- **9402 — cổng.** `tests/architecture/hardening-khong-in-gia-tri.test.ts` 7/7 XANH trên hardening đang in nguyên định nghĩa trigger lạ
+  — đúng câu của thân khoản. Cổng MỚI (vế ⑸) chạy trên chính bản hardening ấy (tệp đo tạm, đã xoá): ba dòng —
+  `hàng "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ô mô tả nối dinh_nghia — bí danh mang pg_get_triggerdef`,
+  `RAISE WARNING (câu 416) nối dinh_nghia — bí danh mang pg_get_triggerdef`, và một dòng kêu nhầm ở hàng `ràng buộc CHECK an ninh …
+  (khoản 105)`, vốn so `ck.dinh_nghia` — cột VALUES mang định nghĩa ràng buộc CHUẨN — trùng tên với bí danh mang giá trị (tên bí danh
+  là toàn cục trong tệp; mục 7). Sau vá không bí danh mang giá trị nào còn tên `dinh_nghia`, cả ba dòng hết.
+- **9402 — hành vi.** Năm kỳ vọng sửa và hai ca mới ở `db/trigger-la-mac-dinh-dong.int.test.ts` (`-t`) trên hardening cũ: 6 đỏ, mỗi ca
+  in đúng đoạn rò (`doanRo`) —
+  ⑵ `Hardening: đã GỠ trigger lạ rfq_approvals_a_so_lan_nop trên rfq_approvals (CREATE TRIGGER rfq_approvals_a_so_lan_nop BEFORE INSERT ON public.rfq_approvals …`;
+  ⑶ `… vào TRIGGER_DUOC_PHEP — CREATE TRIGGER zz_org_sau_chen AFTER INSERT ON public.organizations FOR EA…`;
+  ⑸ `… (rfq_items.zz_khong_go_duoc: TRIGGER LẠ — CREATE TRIGGER zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH …`;
+  ⑺ `… (rfq_items.zz_phan_xet_guc: TRIGGER LẠ — CREATE TRIGGER zz_phan_xet_guc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()). Cần quyền: …`;
+  ⑻ phán xét `… vào TRIGGER_DUOC_PHEP — CREATE TRIGGER zz_org_bi_mat AFTER INSERT ON public.organizations FOR EACH ROW WHEN ((new.id = '5f0c2d8e-7a14-4b36-9c21-e8d4a6b0f3c9'::uuid)) EXECUTE FUNCTION zz_khong_lam_gi()). Cần quyền: …`;
+  ⑻ gỡ — hằng rò ở WARNING «SAI TRƯỚC khi sửa» (IM5 in nguyên ô mô tả) trước cả WARNING «đã GỠ»:
+  `…bi_mat: TRIGGER LẠ — CREATE TRIGGER zz_items_bi_mat BEFORE INSERT ON public.rfq_items FOR EACH ROW WHEN ((new.org_id = '5f0c2d8e-…'::uuid)) EXECUTE FUNCTION zz_khong_lam_gi()). Đang tự chữa`.
+- **171 ⑴.** Meta-test tách thành hàm thuần `kiemTraNgoaiLeUsingTrue` giữ NGUYÊN biểu thức cũ, năm ca mẫu mới (`pnpm vitest run
+  db/migration-shape.test.ts`) ⇒ 5 đỏ, 28 xanh: bản cũ trả `[]` cho `FOR ALL TO app_liet_ke_to_chuc`, `FOR SELECT TO app_api`, dòng khai
+  `vai: ["app_api"]` khớp policy `TO app_api`, và một `ALTER POLICY … TO app_api` cùng tên trong tệp; nó còn KÊU NHẦM
+  `TO "app_liet_ke_to_chuc"` (tên trong nháy kép không khớp `[A-Za-z_]`). `FOR ALL TO app_api` của thân khoản đi qua cùng biểu thức.
+- **171 ⑵.** Khối `[S1.9140 / khoản 171]` của `db/trigger-la-mac-dinh-dong.int.test.ts` trên hardening cũ (hardening chạy `phan_xet` trong
+  một giao dịch rồi ROLLBACK): 2 đỏ, 1 xanh — dòng `052_worker_liet_ke_to_chuc.sql` xoá và thân `outbox_danh_sach_to_chuc()` thay bằng
+  `… UNION ALL SELECT '00000000-…'::uuid` ⇒ phán xét ĐI QUA (`expected null not to be null`): một thân tuỳ ý chạy dưới quyền chủ hàm, hai
+  hàng ghim IM, miễn trừ đứng; dòng xoá, thân chuẩn ⇒ đi qua. Đối chứng (dòng có mặt, thân lạ ⇒ hàng ghim «định nghĩa hàm
+  outbox_danh_sach_to_chuc() (052)» đỏ, mục (C) im) xanh cả trước lẫn sau — tiền đề `phanXetSau([])` là `null` trên cụm sạch.
+
+## 4. Thay đổi
+
+- **`db/migrations/hardening.always.sql`** (+59 −12, chỉ văn bản thông điệp, một điều kiện miễn trừ và chú thích):
+  - khoản 9402: `CAU_TRIGGER_LA_DU_AN` phơi `left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')),
+    'hex'), 16) AS van_tay_dinh_nghia` thay `pg_catalog.pg_get_triggerdef(t.oid) AS dinh_nghia` — viết đúng khuôn `VAN_TAY_TRIGGER` để cổng
+    gỡ nó như mọi hàng ghim; `RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (vân tay def=%)…', …, r.van_tay_dinh_nghia`; ô mô tả
+    nối `' — vân tay def='` và cột vân tay; chú thích trên hằng, trên mục (`~~Thông điệp phán xét nêu bảng, tên, định nghĩa (ADR-122 mục
+    3).~~ [S1.9140 / khoản 9402] …`) và ở khối S1.210 đầu `bang` ghi luật mới. Điều kiện, câu sửa, hậu điều kiện của mục: không đổi.
+  - khoản 171 ⑵: nhánh hàm của `CAU_DOC_VONG` — khoá xuôi đọc qua `CROSS JOIN LATERAL (SELECT pg_catalog.string_agg(x.mig, ', ') AS mig,
+    pg_catalog.bool_or(sm.version IS NOT NULL) AS da_ap FROM <NGOAI_LE_DOC_VONG> LEFT JOIN public.schema_migrations sm ON sm.version =
+    x.mig || '.sql' WHERE <khoá chữ ký>) kh`, miễn khi `kh.da_ap IS TRUE`; thông điệp thêm câu «Hàm ĐÃ khai … nhưng migration ấy KHÔNG
+    có trong schema_migrations … chúng đang IM (khoản 171) …» khi `kh.mig` có mà chưa ghi; nhánh view/matview: `EXISTS` trên
+    `schema_migrations` trong khoá miễn. Khối khai giữ từng byte (bộ sinh `khoiValues`), khối xuất hiện ở đúng ba chỗ, chữ ký hàm ở
+    thông điệp + khoá xuôi (2) và khoá thiu (1) — đúng các phép đếm của `db/rls-coverage.int.test.ts`. Chú thích cột `mig`, đầu mục (C)
+    và hàng ghim `052` ghi luật.
+  - ghi chú liên lô của A5 (khoản 265): bốn dòng «THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý …» gạch tại chỗ (một cặp `~~` như các đoạn gạch
+    nhiều dòng khác của tệp), thêm bốn dòng `[S1.9140 / khoản 265]`; câu SQL giữ nguyên.
+- **`tests/architecture/hardening-khong-in-gia-tri.test.ts`** (7 → 11 `it`): khối đầu tệp thêm vế ⑸ và chỗ thu hẹp của nó; `TEN_CAM`,
+  `beMatMaBiDanh` (thẻ sau `DO` là mã, mở/đóng theo tên; `$q$` là mã; mọi thẻ khác là literal), `tachToken` (token kèm mức ngoặc),
+  `danhSachChon`, `cacNhanh` (đi qua FROM/WHERE của nhánh tới UNION/INTERSECT/EXCEPT cùng mức; `;`, LOOP, THEN kết thúc), `tenCotCua`
+  (AS, ngầm — trừ kiểu nhiều chữ sau `::` —, tham chiếu cột trần), `rangBuocBiDanh` (select-list; `(…) [AS] t(c…)` sau truy vấn con hay
+  VALUES; `WITH [RECURSIVE] t(c…) AS (…)`; bỏ `SELECT` sau GRANT/REVOKE/FOR/phẩy), `laThamChieuCot` (không là tên bảng, tên hàm, bí danh
+  vừa khai, tên kiểu), `biDanhMangGiaTri`, `biDanhTrong` (tên cấm trần không nêu hai lần); `quetHardening` nối ⑸ vào bốn bề mặt;
+  `thongKe` thêm `rangBuoc`, `biDanhMang`; vế chống rỗng ruột đòi ≥ `SAN_RANG_BUOC` (1000; tệp thật 1261) và `van_ban` ← `prosrc`; bốn
+  `it` văn bản mẫu `[S1.9140 / khoản 9402]`.
+- **`db/migration-shape.test.ts`** (28 → 35 `it`): `NgoaiLeUsingTrue` (`lenh: "SELECT"`, `vai`), dòng `052` khai `FOR SELECT` và
+  `["app_liet_ke_to_chuc"]`; `VAI_DUOC_MIEN_USING_TRUE`; `tenVaiTrongTo`; `docChuThePolicy`; `kiemTraNgoaiLeUsingTrue` (dòng khai ↔ câu
+  CREATE; lệnh; tập vai; danh sách vai có tên; `ALTER POLICY` cùng tên); meta-test `[S1.82]` gọi nó (bộ lọc tại chỗ gạch trong chú
+  thích); khối `[S1.9140 / khoản 171 ⑴]` năm `it` mẫu; khối `[S1.9140 / khoản 171 ⑵]` — `tienDeHangGhim`, `kiemHangGhimThayCho`, hai `it`
+  (hardening thật; mẫu gõ nhầm migration và thiếu hàng ACL).
+- **`db/trigger-la-mac-dinh-dong.int.test.ts`** (12 → 17 `it`): khối đầu tệp thêm hai đoạn; `import { createHash } from "node:crypto"`;
+  `vanTayNode`, `traTheoTen` (vân tay trong CSDL tra theo bảng + tên, đòi bằng vân tay `node:crypto` trên văn bản), `doanRo`; ⑵ đòi WARNING
+  «đã GỠ» mang vân tay tra TRƯỚC khi gỡ và không mang `CREATE TRIGGER`; ⑶ ⑸ ⑺ — kỳ vọng cũ gạch trong chú thích, kỳ vọng mới ghim trọn
+  dòng với `vân tay def=<vân tay>` cộng tiền đề «văn bản mà bản gom CŨ in ra»; tên ⑸ gạch «định nghĩa» → «VÂN TAY định nghĩa»; describe
+  `[S1.9140 / khoản 9402]` hai ca ⑻ (hằng UUID trong `WHEN`: phán xét trên `organizations`, gỡ trên `rfq_items`); describe
+  `[S1.9140 / khoản 171]` ba ca (đối chứng, dòng vắng + thân lạ, dòng vắng + thân chuẩn). Không nhãn `[INV-…]` mới.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **9402 — vân tay tính TRONG hằng, định nghĩa không rời câu.** Không giữ cột định nghĩa rồi băm ở hai chỗ in: một cột mang giá trị
+  không có ai cần là một lời mời in lại nó; và cột vân tay viết đúng khuôn `VAN_TAY_TRIGGER` nên cổng gỡ nó như mọi hàng ghim — không
+  khuôn được phép thứ tư. Đo: đột biến M1 (cột mang lại định nghĩa dưới nhãn vân tay) đỏ ở cổng và ở sáu ca int.
+- **9402 — cột vân tay chép NGUYÊN khuôn của hàng ghim, kể cả chỗ không tiền tố.** Quanh nó hằng gọi `pg_catalog.to_regclass`,
+  `pg_catalog.format`…; khuôn vân tay trigger (80 chỗ ở các hàng ghim trên `a97dd48`) viết `left`, `encode`, `pg_get_triggerdef` không
+  tiền tố, và cổng so NGUYÊN VĂN. Hardening ghim `search_path = 'pg_catalog, public'` ở đầu thân DO, nên hàm được gọi là của
+  `pg_catalog`.
+- **9402 — không thêm lời dẫn cách tra vào từng dòng thông điệp.** Bảng và tên đã ở cùng dòng; câu psql tra theo tên có sẵn ở khối S1.210
+  đầu `bang` và ADR-124 mục 6 (tiểu mục mới trỏ tới). Một dòng thông điệp mỗi trigger giữ ngắn như các hàng ghim khác.
+- **9402 — vế ⑸ đọc tham chiếu, không cấm bí danh.** Bí danh mang giá trị mà không tới bề mặt nào vẫn hợp lệ (`van_ban` ← `prosrc`, chỉ
+  để rút TÊN GUC; `bieu_thuc` ← `pg_get_expr`, chỉ để so) — cấm bí danh là cấm phép so, đúng lý do §S1.210 không cấm `pg_get_constraintdef`.
+  Không danh sách miễn nào để nuôi.
+- **9402 — tên bí danh là toàn cục trong tệp, không phân giải phạm vi.** Phân giải phạm vi SQL qua mảnh `$q$` ghép chuỗi là một bộ phân
+  tích SQL; chiều hỏng của bản toàn cục là KÊU NHẦM (đo: hàng khoản 105 trên bản cũ), cửa ra là đổi tên. Tham chiếu chỉ tính khi token
+  không là tên bảng/lược đồ (`x.`), tên hàm (`x(`), bí danh vừa khai (`AS x`) hay tên kiểu (`::x`) — mẫu đối chứng đo.
+- **9402 — bề mặt dò bí danh là mã CỦA HARDENING.** Chỉ `$q$` và khối `DO $…$` là mã; thân hàm ghim, bản chuẩn `$than$`/`$def$` là
+  literal — đo: không vậy thì thân hàm `DECLARE can integer …` sinh bí danh ngầm `integer`, `text`, `uuid`… (lần khảo sát đầu). Đột biến
+  M6 (khối DO thành literal) làm số ràng buộc về 0 và vế chống mù đỏ.
+- **9402 — hai ca ⑻ trong describe riêng không nhãn `[INV-H19]`.** Chúng đo vệ sinh log (ADR-124), không đo H19; bảng đếm nhãn và
+  `so-khai-nhan.ts` không đổi. Ca đổi kỳ vọng (⑵ ⑶ ⑸ ⑺) giữ nhãn cũ — số đếm không đổi.
+- **171 ⑴ — lệnh khai là kiểu `"SELECT"`, không chuỗi tự do.** Vị từ `true` ở lệnh GHI là mở ghi; một ngoại lệ lệnh khác là đổi kiểu —
+  một quyết định nhìn thấy trong diff. Không viết `FOR` là ALL (mặc định PostgreSQL) và đỏ có chữ «(không viết FOR)».
+- **171 ⑴ — danh sách vai có tên là một hằng riêng (`VAI_DUOC_MIEN_USING_TRUE`), ngoài dòng khai.** Dòng khai buộc policy vào ĐÚNG tập vai;
+  danh sách có tên giới hạn vai nào được làm chủ thể hẹp — thêm `app_api` vào dòng khai vẫn đỏ (mẫu đo). Không đọc `VAI_UNG_DUNG` của
+  `@trustprocure/db`: danh sách được phép là tập ĐÓNG (một tên), không phải «mọi tên trừ bốn vai».
+- **171 ⑴ — `ALTER POLICY` cùng tên trong tệp làm dòng khai đỏ.** Chủ thể của policy sau tệp phải là chủ thể của câu CREATE mà meta-test
+  đọc; `kiemTraFailOpen` tha mọi câu cùng (tệp, tên), nên đây là chỗ duy nhất đọc được lần nới ấy. Trong phạm vi «vai ĐÍCH DANH»; mẫu đo.
+- **171 ⑵ — tiếng KÊU đặt ở mục (C), không ở hai hàng ghim.** Miễn trừ rơi đúng khi hai hàng im, nên (C) nêu hàm — kèm câu nói rõ vì sao —
+  và deploy dừng. Nới tiền điều kiện hai hàng ghim sang «hoặc hàm có mặt» sẽ chạy câu sửa của chúng trên một trạng thái mà nguồn gốc của
+  hàm đã mất dấu, và nhân ba tiếng kêu cho một nguyên nhân. Đo: dòng vắng + thân chuẩn vẫn kêu (điều kiện là lớp thay thế có mặt, không
+  phải thân đang đúng).
+- **171 ⑵ — `CROSS JOIN LATERAL` gộp thay `NOT EXISTS`.** Thông điệp cần biết «đã khai mà chưa ghi»; thêm một tham chiếu khối khai hay
+  chữ ký hàm sẽ làm đỏ các phép đếm cấu trúc của `rls-coverage` (khối ba chỗ, chữ ký hai chỗ — tệp ngoài danh sách). Phép gộp trả đúng một
+  hàng mỗi hàm; `bool_or` qua `LEFT JOIN` thay `EXISTS` trong hàm gộp.
+- **171 ⑵ — nhánh view/matview cùng luật.** Cột `mig` một nghĩa cho cả danh sách; hôm nay không view/matview nào khai (đo ở rls-coverage),
+  nên luật mới không kêu ở đâu.
+- **171 ⑵ — ca đo đặt ở `db/trigger-la-mac-dinh-dong.int.test.ts`.** Tệp tích hợp duy nhất của lô chạy hardening trên cụm đã migrate
+  (nơi tự nhiên hơn là `migrations.int` hay `rls-coverage`, ngoài danh sách); chạy `phan_xet` trong giao dịch rồi ROLLBACK, cụm dùng chung
+  không đổi. Khối đầu tệp nói điều này.
+- **171 ⑵ — vế tĩnh giữ hai tiền điều kiện trùng nhau.** Miễn trừ đọc cột `mig`, hàng ghim đọc một literal — hai bản chép của một điều
+  kiện; hàng ghim gõ nhầm tên tệp thì IM MÃI trong khi miễn trừ đứng, đúng hình dạng 171. Đột biến M8 đỏ ở vế này. Vế chống rỗng ruột là
+  SÀN (≥ 1 hàm khai), để hàm khai thứ hai (khoản 277, lô B5) không đỏ vì con số — nó vẫn phải mang hai hàng ghim thay chỗ.
+- **A5 — gạch bằng một cặp `~~` qua bốn dòng**, như các đoạn gạch nhiều dòng khác của tệp; câu SQL giữ nguyên.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b6/dotbien/dot-bien.py`: mỗi ca thay ĐÚNG MỘT chuỗi (xuất hiện đúng một lần) trên bản đã vá, chạy tệp test đích,
+khôi phục bằng `cp` từ bản `.va` đã lưu, `cmp` nguyên vẹn sau mọi ca.
+
+- M1 (9402, hardening) — cột `van_tay_dinh_nghia` ← `pg_catalog.pg_get_triggerdef(t.oid)` (nhãn đúng, giá trị sai) ⇒ T1 đỏ 1/11 với hai
+  dòng ⑸ (`ô mô tả nối van_tay_dinh_nghia — bí danh mang pg_get_triggerdef`, `RAISE WARNING (câu 416) nối van_tay_dinh_nghia — …`); int đỏ 6
+  (⑵ ⑶ ⑸ ⑺ ⑻ ⑻ — `vân tay def=CREATE TRIGGER …`).
+- M2 (9402, hardening) — ô mô tả nối lại `pg_get_triggerdef((SELECT tg.oid …))` ⇒ T1 đỏ (`ô mô tả nối pg_get_triggerdef`, vế ⑴); int đỏ 5
+  (⑶ ⑸ ⑺ ⑻ ⑻); ⑵ xanh — đúng: lối gỡ không đi qua ô mô tả sau khi gỡ.
+- M3 (9402, cổng) — `biDanhTrong` trả rỗng ⇒ 4 mẫu ⑸ đỏ.
+- M4 (9402, cổng) — tắt bí danh ngầm ⇒ đúng mẫu «bí danh NGẦM» đỏ.
+- M5 (9402, cổng) — tắt danh sách cột ⇒ mẫu danh sách cột đỏ VÀ chống mù đỏ (`expected 555 to be greater than or equal to 1000` — 706
+  ràng buộc đến từ danh sách cột VALUES).
+- M6 (9402, cổng) — khối DO thành literal ⇒ chống mù đỏ (`expected 0 …`: cả tệp nằm trong `DO $khoi$`) và mẫu khối DO đỏ.
+- M7 (171 ⑵, hardening) — `kh.da_ap IS NOT TRUE` → `kh.mig IS NULL` (miễn khi đã khai, bất kể đã ghi) ⇒ hai ca int đỏ (`phán xét đi qua …
+  expected null not to be null`); đối chứng xanh.
+- M8 (171 ⑵, hardening) — tiền điều kiện hàng ghim ACL neo `'052_worker_liet_ke_to_chuc_x.sql'` ⇒ `migration-shape` đỏ hai vế: hardening
+  thật (`hàng ghim «EXECUTE trên outbox_danh_sach_to_chuc() …» có tiền điều kiện khác dòng khai …`) và dàn cảnh của mẫu.
+- M9 (171 ⑴, meta-test) — bỏ vế lệnh ⇒ mẫu LỆNH và mẫu thân khoản (`FOR ALL TO app_api` đòi hai vế) đỏ.
+- M10 (171 ⑴, meta-test) — bỏ danh sách vai có tên ⇒ đúng mẫu «vai không có tên trong VAI_DUOC_MIEN_USING_TRUE» đỏ.
+- Không ca sống. `cmp` sau mỗi ca: nguyên vẹn. Log: `scratchpad/b6/dotbien/M1.log` … `M10.log`.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá.** 9440: vế ⑸ đọc bí danh, không đọc tên cột mặc định, biến PL/pgSQL, cột hàm trả bảng, ép cả hàng
+  hay cột catalog thô — sáu kênh đo bằng mẫu, cổng xanh; hardening hôm nay không in qua kênh nào. 9441: 99 hàng ghim khác neo dòng
+  `schema_migrations` IM khi dòng vắng mà đối tượng còn — đo trên chốt K4b (`087`): phán xét đi qua với thân rỗng; `migrate()` đủ tệp
+  thì ồn ào vì `087` chạy lại và gãy.
+- **Tên bí danh toàn cục** — chiều kêu nhầm (đo trên bản cũ ở hàng khoản 105); cửa ra là đổi tên. Bộ đọc select-list là tối giản: lời
+  khai dài hơn một câu SQL (chữ Việt trong ô tên và ô quyền của `$q$`, `GRANT SELECT …`) có thể sinh bí danh ngầm giả — vô hại khi biểu
+  thức không mang tên cấm (khảo sát: không cái nào mang).
+- **Vân tay 16 hex là để TRA** (ADR-124): một người đọc được log và đoán được phần còn lại của định nghĩa có thể thử một tập hằng NHỎ
+  (vd. vài UUID tổ chức) để xác nhận hằng trong `WHEN` — cùng tính chất của vân tay thân hàm.
+- **Trigger đã GỠ không còn để tra theo tên**: trigger hợp lệ của một migration quên ghim thì tìm theo tên trong migration đã tạo nó
+  (`pg_get_triggerdef` in lại định nghĩa khác chính tả nguồn; vân tay so được với bản dựng lại trên một cụm thử).
+- **171 ⑴ — meta-test là lưới bắt sớm**: đọc câu CREATE trong tệp khai; không thấy tư cách thành viên (một `GRANT app_liet_ke_to_chuc TO
+  <vai>` mở rộng chủ thể — mục membership của hardening canh), không thấy `USING ((true))` viết khác (quy tắc `kiemTraFailOpen` đọc cách
+  viết, lớp thẩm quyền là `NGOAI_LE_HINH_DANG`). Khoá dòng khai không mang bảng: `052` đã áp và khoá checksum, nên một policy cùng tên
+  trên bảng khác trong tệp ấy không viết thêm được.
+- **171 ⑵ — hàm khai bị bỏ SECURITY DEFINER khi dòng `052` vắng**: (C) không nêu (không còn là SECURITY DEFINER), chiều khai thiu im
+  (migration chưa ghi), hai hàng ghim im — thân chạy dưới quyền NGƯỜI GỌI, không leo quyền; worker gặp 0 tổ chức thì NÉM (S1.83 ⑵).
+- **Không chạy `pnpm test:int` hay `pnpm evidence` trọn** (máy dùng chung); `db/migrations.int.test.ts` TRỌN một lần trên cây cuối
+  (đề bài cho phép).
+
+## 8. Số đo
+
+- `pnpm typecheck` exit 0; `pnpm exec eslint` bốn tệp đã chạm exit 0; `pnpm t0` exit 0 (typecheck, eslint toàn kho, depcruise 499 module / 2087 phụ thuộc, không vi phạm).
+- Đo trước trên `a97dd48` (mọi vitest tích hợp với hai biến môi trường của chung.md): T1 7/7 xanh; cổng mới trên hardening cũ 3 vi phạm;
+  `trigger-la-mac-dinh-dong.int -t "⑵ khoản 259|⑶ trên bảng|⑸ gỡ|⑺ lượt PHÁN XÉT|khoản 9402|khoản 171"` 8 failed | 1 passed | 8 skipped (17);
+  `migration-shape` 5 failed | 28 passed (33).
+- Sau vá: T1 11/11; `migration-shape` 35/35; `hardening-co-ly-do` 21/21; `ghim-trigger-nguon` 8/8; `hardening-hang` 4/4;
+  `check-an-ninh-khai` 2/2; `trigger-la-mac-dinh-dong.int` 17/17 (58,4 s); `ghim-trigger-tu-chua.int` 4/4; `rls-coverage.int` 61/61
+  (162,9 s); `hardening-suy-tu-tinh-chat.int` 38/38 (296,4 s); `migrations.int` TRỌN 125/125 (966,1 s), một lần. Sau lần sửa cuối
+  (chỉ chú thích SQL) bốn tệp tích hợp ấy chạy lại một lệnh trên cây cuối: 120/120 (625,3 s, máy chung tải cao).
+- Đột biến M1–M10: mười đỏ đúng vế, không ca sống; `cmp` nguyên vẹn.
+- `pnpm test` 136 tệp: 2175 xanh, 1 bỏ qua (`tests/architecture/xuong-dong-ts.test.ts`, `it.runIf(process.env.CI === "true")`, có
+  sẵn), 173,2 s.

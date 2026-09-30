@@ -4616,9 +4616,9 @@ Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), b
 
 | # | Cái giá | Ghi ở đâu |
 |---|---|---|
-| ⑴ | **Dòng ĐẦU TIÊN** của `NGOAI_LE_DOC_VONG` — danh sách RỖNG từ S0 | `hardening.always.sql` |
+| ⑴ | **Dòng ĐẦU TIÊN** của `NGOAI_LE_DOC_VONG` — danh sách RỖNG từ S0. **[S1.9140 / khoản 171]** Miễn trừ CÓ ĐIỀU KIỆN, cùng tiền điều kiện với hai hàng ghim thay chỗ nó (thân + chủ hàm, ACL): chỉ khi `052` có trong `schema_migrations`; dòng ấy vắng mà hàm có mặt thì mục (C) nêu hàm kèm lý do | `hardening.always.sql`, `db/migration-shape.test.ts` |
 | ⑵ | ~~**Mười chỗ trong BẢY migration đã áp**~~ ~~**[S1.83] MƯỜI HAI chỗ trong TÁM migration**~~ **[S1.87] MƯỜI BA chỗ trong TÁM migration** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
-| ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng `TO <vai>` | `db/migration-shape.test.ts` |
+| ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng ~~`TO <vai>`~~ **[S1.9140 / khoản 171]** LỆNH khai viết tường minh (`FOR SELECT`) và ĐÚNG tập vai khai, mỗi vai có tên trong `VAI_DUOC_MIEN_USING_TRUE` (bản trước nhận `TO` cộng một tên bất kỳ khác `PUBLIC` và không đọc lệnh) | `db/migration-shape.test.ts` |
 | ⑷ | Dòng thứ hai của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (044 là dòng đầu) | hai tệp trên |
 | ⑸ | Một vai CSDL thứ ba, ~~và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế~~ **[S1.212]** nằm ngoài `ROLE_CANH` (hai mục dùng danh sách ấy chưa đo lại) nhưng bảy thuộc tính của nó (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN NOINHERIT`) được một hàng riêng của hardening tự chữa — đo ở `db/vai-neo.int.test.ts` | khoản 164 (ĐÓNG S1.212), `hardening.always.sql` |
 | ⑹ | ~~Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp~~ **[S1.212]** Miễn trừ khoá theo CHỮ KÝ `outbox_danh_sach_to_chuc()` dựng từ catalog (`MAU_CHU_KY_HAM`), cùng `loai` và lược đồ, kèm chiều khai thiu; một overload `(text)` là chữ ký khác và mục (C) nêu nó — đo ở `db/migrations.int.test.ts` | khoản 163 (ĐÓNG S1.212), `hardening.always.sql` |
@@ -9704,7 +9704,9 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
 3. **Tự gỡ chỉ trên bảng có tên; phán xét ở mọi bảng — chủ dự án chốt.** Gỡ trigger KHÔNG đơn điệu (ADR-028 §2⑵: nó đổi được hành
    vi một đường ghi hợp lệ), nên bị cấm trên tập suy ra. Trên 44 bảng mà danh sách khai TÊN — tập trigger của chúng đã ghim trọn —,
    lượt sửa gỡ trigger lạ, mỗi lần gỡ một WARNING, đúng khuôn [CR1] của bảng sổ. Trên mọi bảng khác của dự án, mục chỉ phán xét:
-   chặn deploy, thông điệp nêu bảng, tên, định nghĩa và lối ra — gỡ tay, một migration mới, hay ghim nó và khai bảng vào danh sách.
+   chặn deploy, thông điệp nêu bảng, tên, ~~định nghĩa~~ **[S1.9140 / khoản 9402]** VÂN TAY định nghĩa (ADR-124 — chủ dự án chốt ở kế
+   hoạch đợt 3 câu 3; người vận hành tra định nghĩa bằng tên; tiểu mục cuối ADR-124) và lối ra — gỡ tay, một migration mới, hay ghim nó
+   và khai bảng vào danh sách.
    Gỡ không được thì lượt phán xét cũng chặn deploy.
 4. **Lượt sửa đầu đứng yên.** `migrate()` đặt GUC `app.hardening_sau_vong` ở MỌI lượt — `'khong'` ở lượt sửa trước vòng đánh
    số, `'co'` ở các lượt sau —; mục chỉ bỏ qua đúng lượt sửa mang `'khong'`, và lượt phán xét không đọc GUC ấy. Một migration đang
@@ -10142,6 +10144,25 @@ với một khai miễn. Chuẩn S1.51 ⑷ đã áp cho bốn mục policy ở S
 - Cổng T1 so ba khuôn NGUYÊN VĂN: đổi bí danh, bỏ `pg_catalog.`, băm thân chưa chuẩn hoá đều đỏ; sửa khuôn thì sửa ở hardening và ở
   cổng cùng một commit.
 - Không migration, không đổi lược đồ; hàm ghim `hardening.always.sql` không đổi thân hàm nào (chỉ văn bản thông điệp).
+
+### [S1.9140 / khoản 9402] Trigger lạ của mục khoản 259 cũng theo luật vân tay — chủ dự án chốt 2026-09-30 (kế hoạch đợt 3 câu 3)
+
+ADR-122 mục 3 từng đòi thông điệp phán xét của mục `không trigger lạ trên bảng của dự án` nêu *bảng, tên, định nghĩa*; mục ấy đọc
+`pg_get_triggerdef` qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 ở mục 5 — đọc TÊN, không đọc luồng — không bắt.
+Trigger lạ là mã người khác viết và mệnh đề `WHEN` của nó mang được hằng (đo: UUID trong `WHEN` ra nguyên văn ở bản gom phán xét, ở
+WARNING «đã GỠ» và ở WARNING «SAI TRƯỚC khi sửa» của IM5): đúng lớp của ADR này. Chủ dự án chọn ADR này thay vì một ngoại lệ ở đây.
+
+- `CAU_TRIGGER_LA_DU_AN` phơi `van_tay_dinh_nghia` — khuôn vân tay trigger của mục 1 — thay `dinh_nghia`; bản gom phán xét in
+  `<bảng>.<tên>: TRIGGER LẠ … — vân tay def=<16 hex>`, WARNING của lượt sửa in `đã GỠ trigger lạ <tên> trên <bảng> (vân tay def=<16
+  hex>)`. Người vận hành tra định nghĩa bằng TÊN — câu thứ hai ở mục 6, lọc thêm `t.tgname`. Trigger đã GỠ thì không còn để tra: trigger
+  hợp lệ của một migration quên ghim tìm theo tên trong migration đã tạo nó.
+- Cổng T1 thêm vế ⑸: một cột mà CTE, truy vấn con hay danh sách VALUES phơi ra với giá trị mang một trong sáu tên cấm — trực tiếp hay qua
+  một bí danh khác (điểm bất động trên toàn tệp; mảnh `$q$` và khối `DO` là mã, thân hàm và bản chuẩn là literal) — mà được tham chiếu ở
+  ô mô tả, cột `mo_ta`, RAISE hay bản gom là ĐỎ. Bí danh mang giá trị chỉ để so hay rút tên thì được. Tên bí danh là toàn cục trong tệp
+  (trùng tên thì kêu nhầm; cửa ra là đổi tên); tên cột mặc định, biến PL/pgSQL, cột hàm trả bảng, ép cả hàng và cột catalog thô nằm
+  ngoài tầm — khoản 9440.
+- Đo: `db/trigger-la-mac-dinh-dong.int.test.ts` — kỳ vọng ⑵ ⑶ ⑸ ⑺ ghim vân tay tính lại trong CSDL (tra theo bảng + tên) và bằng
+  `node:crypto`; khối `[S1.9140 / khoản 9402]` — hằng UUID trong `WHEN` không ra log ở lối phán xét lẫn lối gỡ. §S1.9140.
 
 ## ADR-130 — Đường khởi tạo tổ chức ngoài workflow: cảnh báo ở audit cho mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai; role `tp-deploy` chỉ về tay `prod-khoi-tao` qua `khoi-tao.yml` (claim `sub` tuỳ biến, ID bất biến); permission set hẹp hoãn tới trước khách hàng thứ hai
 
