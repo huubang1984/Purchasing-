@@ -278,7 +278,11 @@ async function goiNhap(t: ToChuc): Promise<string> {
 /** Nộp duyệt → một chữ ký của người khác người tạo, bằng hàm gói thật. Lần MỞ đi qua route — thứ đang đo. */
 async function nopVaDuyet(t: ToChuc, rfqId: string): Promise<void> {
   await withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
-  await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }, apiPool));
+  await withTenant(apiPool, t.org, async (c) => {
+    // [S1.198 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
+    const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
+    await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, lanNopDaXem: lan }, apiPool);
+  });
 }
 
 async function nhaCungCap(t: ToChuc): Promise<NhaCungCap> {

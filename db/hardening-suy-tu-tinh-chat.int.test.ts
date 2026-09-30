@@ -356,6 +356,14 @@ const HAM_KHONG_PHAI_CANH = [
   // bật mà gói không nhóm hàng. Mọi câu dựng gói, câu gán nhóm và câu nộp duyệt của `dungKichBan()` đi qua.
   "public.rfq_kiem_nhom_hang",
   "public.rfq_kiem_nhom_hang_khi_nop",
+  // [S1.198 / khoản 256 · 257 / `087_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
+  // `rfq_chot_lan_nop_da_xem` (BEFORE INSERT trên `rfq_approvals`) không từ chối hàng nào của `dungKichBan()` — cái đầu chỉ ĐẾM,
+  // cái sau chỉ từ chối ở tổ chức đã bật hay khi lời duyệt tự mang mốc sai, mà lời duyệt của kịch bản đứng trước lần bật. Hàm
+  // thứ ba (`rfq_tra_ve_dat_lan_nop`, BEFORE INSERT trên `rfq_tra_ve`) từ chối CÓ ĐIỀU KIỆN — tổ chức chưa bật hay gói không chờ
+  // duyệt —; câu chèn hàng trả về của kịch bản đứng sau lần bật: một nhân chứng. `rfq_kiem_tra_ve_nhap` nay đòi thêm hàng ấy.
+  "public.rfq_dem_lan_nop",
+  "public.rfq_chot_lan_nop_da_xem",
+  "public.rfq_tra_ve_dat_lan_nop",
   // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
   // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
   // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
@@ -1781,6 +1789,22 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
+  // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
+  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_tra_ve",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
+          "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
+        [org, rfqVe, pm.u, pm.s],
+        { org_id: org, rfq_id: rfqVe, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
+      ),
+    ),
+    1,
+    "rfq_tra_ve",
+  );
   // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
   doiSoHang(
     await so.chung(
@@ -2629,11 +2653,6 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
   }, 180000);
 
-  // [S1.203] HẠN TỈ LỆ VỚI SỐ BẢNG. Thân test chạy một `migrateLai` cho MỖI bảng chỉ-ghi-thêm, cộng một lần đối chứng dương.
-  // Đo ở T3 CI của master sau S1.202: 18 bảng, 19 lần migrate(), **178 687 ms** trên hạn cố định 180 000 ms (≈ 9,4 s mỗi lần).
-  // S1.203 thêm `governance_signals` và `governance_signal_acks` ⇒ 21 lần ⇒ T3 hết hạn ở 180 009 ms. Hạn cố định thì bảng
-  // chỉ-ghi-thêm kế tiếp lại chạm nó; 20 s mỗi lần giữ khoảng hai lần dư khi danh sách dài ra. `BANG_CHI_GHI_THEM_THAT` đếm
-  // đúng vòng lặp vì test "vị từ chỉ-ghi-thêm suy từ tính chất…" đòi nó BẰNG tập suy ra.
   it("[sổ nợ 73] RULE trên bảng chỉ-ghi-thêm: bảng có TÊN thì hardening TỰ GỠ, bảng SUY RA thì hardening NÉM", async () => {
     // Đo trước khi viết mục hardening: rule trên bid_receipts SỐNG QUA migrate() — [CR1] chỉ với tới
     // bang_so. Hai kết quả đúng khác nhau, cùng ranh giới ADR-028 §2⑵ với test LOGGED ở trên.
@@ -2661,7 +2680,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 20_000 * (BANG_CHI_GHI_THEM_THAT.length + 1));
+    // [S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
+    // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.
+  }, 600_000);
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";

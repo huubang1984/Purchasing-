@@ -167,10 +167,12 @@ async function goiDaNop(t: ToChuc, nhom: string | null, giaTri: string, nguoiNop
 
 /** Đủ chữ ký để mở: hai người khi gói cần duyệt kép, một khi không. */
 async function duyet(t: ToChuc, rfqId: string): Promise<void> {
-  const kep = (await db.pool.query<{ k: boolean }>("SELECT requires_dual_approval AS k FROM rfq_packages WHERE id = $1", [rfqId]))
-    .rows[0]!.k;
+  const { k: kep, n: lan } = (
+    await db.pool.query<{ k: boolean; n: number }>("SELECT requires_dual_approval AS k, lan_nop AS n FROM rfq_packages WHERE id = $1", [rfqId])
+  ).rows[0]!;
   for (const ai of kep ? [t.pm2, t.pm3] : [t.pm2]) {
-    await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: ai.s }, apiPool));
+    // [S1.198 / khoản 256] Người duyệt gửi lại lần nộp vừa đọc — ở tổ chức đã bật, `rfq_approvals_so_lan_nop` đòi nó.
+    await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: ai.s, lanNopDaXem: lan }, apiPool));
   }
 }
 
