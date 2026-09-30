@@ -9390,3 +9390,76 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 - Câu (3) chưa đo trên vòng BAFO (`bafo_round_id` khác NULL) và chưa có chỗ chạy ngoài test — khoản 9444.
 - `kich-ban-41*.int.test.ts` đọc `payload.bafoRoundId`/`opened` không đổi; không tệp nào ngoài worker đọc `failedBidVersionIds` của payload.
 ```
+
+## ADR-9222 — Người đã đăng nhập tự xem link đăng nhập gần đây của chính mình: `GET /auth/login-links` là route đọc không mã quyền, đóng với chứng chỉ agent, không bao giờ trả `token_hash`; thông điệp gộp ba trạng thái ở đường vô danh giữ nguyên
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (khoản 195: mở đường cho người ĐÃ đăng nhập, không nới thông điệp ở route vô danh) · **[S1.9122]** · **Khoản nợ liên quan:** 195 (đóng), 9422 (mở), 9481 · **Liên quan:** ADR-020 mục 2 (đăng nhập người mua: magic link + TOTP, token dạng rõ không về client), ADR-039 (phạm vi chứng chỉ agent), ADR-038 (bề mặt MCP chỉ đọc — `ROUTE_DOC_KHONG_PHOI`), ADR-107 (hình dạng link đăng nhập), ADR-048 (mã do hệ thống phát) · **Biên bản:** `evidence/security-reviews.md` §S1.9122
+
+### Bối cảnh
+
+`LoginTokenError` nói *token đăng nhập không hợp lệ, đã hết hạn, hoặc đã dùng* cho cả ba trạng thái, ở `/auth/redeem` và `/auth/totp` — đường vô danh, nơi phân biệt được ba trạng thái là một oracle trên tập token (S1.90). Vế thứ ba lại là vế dẫn tới hành động khác hẳn của người dùng: *báo ngay, có kẻ đã dùng link của tôi*. Đo (khoản 195): tới trước vòng này, muốn biết một link đã bị ai dùng chưa thì phải mở cơ sở dữ liệu, và người mua thật không có cơ sở dữ liệu. Bảng `user_login_tokens` (029) mang đủ để trả lời — `created_at`, `expires_at`, `consumed_at`, `purpose` — và `app_api` đã có `SELECT`; thứ thiếu là một ĐƯỜNG cho người đã chứng minh danh tính, và một chỗ trên màn nói việc phải làm.
+
+### Quyết định
+
+1. **Thông điệp gộp ở đường vô danh GIỮ NGUYÊN.** Không một ký tự của `LoginTokenError` đổi; `/auth/redeem` và `/auth/totp` không nói thêm gì.
+2. **Một hàm đọc của `identity`, `listRecentLoginTokens(client, orgId, userId)`**: `assertTenantBound`; `userId` là `actor.id` của phiên do bộ điều phối đưa vào, không phải lời khai từ thân; câu đọc liệt kê ĐÚNG bốn cột — không `SELECT *`, không bao giờ `token_hash` (băm của một token còn hiệu lực là thứ đối chiếu được với một token bị rò) — cộng `status` suy Ở CSDL (`CONSUMED` khi `consumed_at` có, `EXPIRED` khi `expires_at <= clock_timestamp()`, còn lại `PENDING`; cùng đồng hồ với `redeemLoginToken`; đã dùng thắng hết hạn); tối đa 20 hàng, mới nhất trước. Ra cửa `index.ts` theo tiêu chí của cửa: không trả lời câu hỏi quyền nào, không mở đường ghi nào.
+3. **Route `GET /auth/login-links`** — route ĐỌC của người mua (`BuyerReadRoute`, `mutates: false`), không mã quyền, cùng khuôn `/me`: nó chỉ trả hàng của chính người gọi dưới RLS của tổ chức; phiên đã MFA là điều kiện của mọi route người mua (`resolveSessionByToken`). **`agent: false`**: lịch sử đăng nhập của một con người — lúc nào vào, link nào còn sống — không thuộc ngữ cảnh một chứng chỉ agent; MCP khai KHÔNG PHƠI kèm lý do (`ROUTE_DOC_KHONG_PHOI`). Thân: `{ loginLinks: [{ createdAt, expiresAt, consumedAt, purpose, status }] }`.
+4. **`/login` (`mo-thau`)** vẽ, ngay sau khi vào hay sau «Tiếp tục với phiên này», mỗi link một dòng — «Link lúc X» → «đã dùng lúc Y» / «hết hạn lúc Y, chưa dùng» / «còn hiệu lực tới Y, chưa dùng» — kèm câu *một link «đã dùng» vào lúc không phải bạn đăng nhập nghĩa là người khác đã dùng link của bạn — đăng xuất và báo ngay cho quản trị tổ chức*. Khối là trợ giúp, không phải cổng: máy chủ từ chối hay mất mạng ⇒ ẩn, các bước vẫn mở; về bước 1 ⇒ ẩn và rỗng; phản hồi về muộn bị bỏ.
+5. **Không migration, không đổi quyền CSDL.**
+
+### Phương án đã cân nhắc
+
+- **Nới thông điệp ở đường vô danh** (ba câu cho ba trạng thái) — bác: oracle trên tập token cho kẻ cầm một mã lạ; S1.90 đã nói đây là chống dò tìm có lý.
+- **Route tự thân `POST /auth/login-links` (`self: true`)** — đề bài gợi; bác vì `BuyerSelfRoute` là kiểu của route GHI (`mutates: true`) và `timViPhamBangRoute` không cho GET đổi trạng thái, còn một POST không ghi là "sai phương thức" theo chính lớp canh ấy. "Tự thân" giữ ở PHẠM VI (chỉ hàng của người gọi), không ở kiểu.
+- **`agent: true`** — bác (mục 3); một cookie agent rò không được biết chủ nó vào lúc nào.
+- **Trả cả `id` của token** — không ai cần hôm nay; một cột thêm là một thứ phải giải thích ở A2.
+- **Suy trạng thái ở JS** — bác: hai đồng hồ (máy chủ và trình duyệt) cho hai câu trả lời khác nhau về "còn hiệu lực".
+- **Gửi thư/tin báo khi một link bị dùng** — ngoài phạm vi: một kênh ra ngoài mới, và khoản 199/ADR-048 đã đo rằng tin báo do người khác kích hoạt là một vũ khí nếu không có trần; để cho một vòng có đề bài riêng.
+
+### Hệ quả, nói thẳng
+
+- Bề mặt người mua có thêm một route đọc; MCP có thêm một dòng KHÔNG PHƠI; barrel `identity` có thêm một symbol (danh sách trắng theo).
+- Danh sách cắt ở 20 hàng, không theo thời gian: một người bị phát mã dày (5 tự phục vụ + 2 hệ thống mỗi 15 phút) đẩy một link «đã dùng» cũ hơn ~43 phút ra khỏi danh sách — khoản 9422.
+- Chỉ `/login` có khối; ba trang người mua kia cùng ranh giới với khoản 9481.
+
+### Đo
+
+`apps/api/src/auth.int.test.ts` `[INV-E1]` ba ca cuối (ba trạng thái với chủ nhân, người khác cùng tổ chức không thấy, 401 không cookie / 403 + `AGENT_SCOPE_DENIED` với agent), `apps/api/src/routes.test.ts` (hình dạng route), `apps/web/src/phuc-vu.test.ts` (ba ca DOM); đo trước 404; bảy đột biến đỏ — §S1.9122 mục 3, 6.
+```
+
+```
+## ADR-9223 — Dòng log của lần từ chối MẤT SỔ mang băm rút gọn của người bị từ chối: `nguoi=<12 hex đầu của sha256(userId)>` — một ngoại lệ CÓ HÌNH DẠNG của A2, chỉ ở đúng dòng ấy
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn phương án ⒞ của khoản 177 ngày 2026-09-30 · **[S1.9122]** · **Khoản nợ liên quan:** 177 (đóng), 131 (đóng — §S1.85), 179 (đóng — §S1.9161) · **Liên quan:** ADR-016 (D5 — mỗi lần từ chối một hàng sổ; lần ghi hỏng gãy ồn ào), ADR-042 (khoá ghi sổ bị giữ), ADR-092/112 (trần lần từ chối), khối luật A2 ở `apps/api/src/mo-ta-loi.ts` · **Biên bản:** `evidence/security-reviews.md` §S1.9122
+
+### Bối cảnh
+
+Khi khoá ghi sổ của một tổ chức bị giữ quá trần 2 s (050), mọi lần từ chối của tổ chức ấy gãy 55P03 và thứ còn lại là một dòng log. §S1.85 (khoản 131) làm dòng ấy nói lần từ chối NÀO — mẫu route, `action`, `resourceType`, mã quyền — và §S1.9161 (khoản 179) thêm vế cổng; cả hai cố ý không nói của AI, vì luật A2 của `mo-ta-loi.ts` là *chỉ tên và mã cố định*, và một `userId` là giá trị đầu tiên lọt qua nếu luật nới. Nhưng ở đúng ca này lập luận *danh tính lấy từ sổ* không đứng: hàng sổ mang `actor_id` chính là hàng không ghi được. Đo (khoản 177, dựng lại §S1.85 với ba phiên của ba người): ba dòng giống hệt nhau trừ `requestId` — từ stderr một mình không dựng lại được có bao nhiêu người, càng không phải ai. Ba hình dạng được đưa: ⒜ giữ nguyên; ⒝ `userId` thô kèm hình dạng UUID; ⒞ băm rút gọn.
+
+### Quyết định
+
+1. **Phương án ⒞.** `PermissionAuditFailedError` (tham số thứ tư) và `DenialAuditFailedError` (tham số thứ sáu) mang `nguoiBam: string | null` — 12 ký tự hex đầu của sha256(`userId`), tính bằng `node:crypto`, không khoá, không muối, ở chỗ đã có id trong tay: `requirePermission` (`requirement.userId`) và `throwAuditedDenial` (`event.actorId` khi là chuỗi; SERVICE ⇒ `null`). `moTaHangDongCuaLanTuChoi` nối ` nguoi=<băm>` sau phần hằng (sau vế, nếu có). Không băm ⇒ dòng như trước.
+2. **Ngoại lệ có hình dạng, và chỉ một khe.** Khe `nguoi=` nhận đúng `^[0-9a-f]{12}$`; mọi chuỗi khác — UUID thô (⒝), băm viết hoa, băm đầy đủ 64 hex, 11/13 hex, rỗng, chuỗi mang cả nhãn, bí mật base32, email — ra `nguoi=HANG_LA` như mọi trường khác của dòng. Băm vì thế là một TOKEN hình dạng cố định, không phải một giá trị người dùng; luật *tên và mã cố định* của `mo-ta-loi.ts` giữ nguyên cho mọi thứ còn lại và ghi ngoại lệ này tại chỗ.
+3. **Chỉ ở đúng dòng của lần từ chối MẤT SỔ** — hai lớp bọc ấy —, không ở dòng nào khác của bộ điều phối, worker, outbox. Lần từ chối GHI ĐƯỢC không cần: sổ có `actor_id`.
+4. **Không khoá, không muối, có chủ đích:** giá trị của băm là NỐI các dòng của cùng một người và ĐỐI CHIẾU được khi cần (người điều tra tính lại từ `users.id`); một băm có khoá đòi quản lý khoá cho một chuỗi 48 bit mà ai đọc được `users` cũng tính lại được bằng cách khác. Một dòng đơn lẻ vẫn không nêu ai.
+
+### Phương án đã cân nhắc
+
+- **⒜ giữ nguyên** — bác bởi phép đo: ba người, ba dòng, không phân biệt được; sau một sự cố kéo dài người vận hành không biết bán kính.
+- **⒝ `userId` thô kèm hình dạng UUID** — bác: nới luật A2 bằng đúng giá trị mà luật ấy sinh ra để chặn; một UUID trong log đi vào mọi bộ gom log và nêu thẳng ai.
+- **Băm có khoá (HMAC với một bí mật của tiến trình)** — bác: mua một lớp không ai cần (id không phải bí mật của người dùng, và ai đọc `users` cũng tính lại được bằng cách khác), trả bằng quản lý khoá và mất tính đối chiếu giữa hai tiến trình.
+- **Ghi băm ở mọi dòng 500** — bác: khoản 177 nói "đúng dòng này, không phải mọi dòng"; mọi dòng khác có sổ.
+- **Tính băm trong constructor của lớp lỗi** (từ `denial.userId`) — bác: một lớp lỗi dựng ở nơi khác (test, worker) sẽ tự băm một thứ không phải `userId`; tính ở chỗ ném giữ "cái gì được băm" ở đúng hai dòng.
+
+### Hệ quả, nói thẳng
+
+- Sáu regex ghim dòng log ở `loi-giao-thuc.int.test.ts` và hai ở `log-tu-choi-mat.int.test.ts` mang thêm `nguoi=[0-9a-f]{12}`; dòng của worker (SERVICE) không đổi.
+- 48 bit: đủ để phân biệt trong một sự cố, không phải một định danh; hai người có thể trùng với xác suất 2⁻⁴⁸ mỗi cặp.
+- Vế *CHƯA ĐO* của khoản 177 (bán kính của một sự cố THẬT) vẫn đúng; vòng này đo trong cảnh dựng lại.
+
+### Đo
+
+`apps/api/src/log-tu-choi-mat.int.test.ts` (ba người ⇒ ba băm khác nhau khớp sha256 của ba id, không UUID thô ngoài `requestId`; hai vế cũ ghim băm của đúng người), `packages/identity/src/mo-ta-hang-dong.test.ts` (32 ca — hình dạng, `null`, mười chuỗi sai hình dạng ⇒ `HANG_LA`); đo trước 3 đỏ / 15 đỏ; ba đột biến đỏ — §S1.9122 mục 3, 6.
+```
+
+Sửa tại chỗ ở ADR cũ: KHÔNG. ADR-016 (D5), ADR-020 (đăng nhập), ADR-039 (agent), ADR-038 (MCP) không đổi một chữ — ADR-9222 chỉ THÊM một route đọc dưới đúng ba khuôn ấy, ADR-9223 chỉ ghi một ngoại lệ có hình dạng của luật A2 (luật ấy sống ở `mo-ta-loi.ts`, không ở một ADR có số).

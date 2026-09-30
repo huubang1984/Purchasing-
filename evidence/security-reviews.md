@@ -17181,6 +17181,92 @@ Kết luận đo: PHÁN đắt gấp 3–4 lần cả lần lấy hiện hành v
 
 Kết quả kiểm: xem mục 8 của tệp bàn giao.
 
+# §S1.9122 — DÒNG LOG TỪ CHỐI MẤT SỔ MANG BĂM RÚT GỌN CỦA NGƯỜI BỊ TỪ CHỐI; NGƯỜI ĐÃ ĐĂNG NHẬP TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — KHOẢN 177, 195 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (177 — hai lớp lỗi và một hàm thuần của `identity`, chú thích luật ở `apps/api/src/mo-ta-loi.ts`) và rổ C (195 — một hàm đọc của `identity`, một route đọc, một khối nhỏ ở `/login`). Mảnh §11 của `docs/PRODUCT.md`: chạm mảnh 1 (giao diện) ở một khối của `/login`, không phải hai lỗ đã gọi tên; không chạm mảnh 2/3/4. Không migration (`app_api` đã có `SELECT` trên `user_login_tokens` — 029), không phụ thuộc mới, hai ADR (9222, 9223) ở bàn giao. Đóng 177, 195; mở 9422.
+
+## 1. Vòng này là gì
+
+Lô A3 của đợt trả nợ 2: hai khoản cùng vùng `identity`. Khoản 177 — dòng log của lần từ chối MẤT SỔ (§S1.85) nói lần từ chối nào, không nói của ai; và ở đúng ca này lập luận "danh tính lấy từ sổ" không đứng vì hàng sổ là thứ không ghi được. Khoản 131 tự để ngỏ câu ấy như một quyết định A2 riêng, khoản 177 đưa ba hình dạng, chủ dự án chọn ⒞ ngày 2026-09-30: băm rút gọn của `userId`, trên đúng dòng ấy. Khoản 195 — `LoginTokenError` gộp *không hợp lệ / hết hạn / đã dùng* làm một câu ở đường vô danh (chống dò tìm, giữ), nhưng vế *đã dùng* là vế người mua phải biết để báo, và tới trước vòng này chỉ ai mở được CSDL mới biết; chủ dự án chốt: mở một đường KHÁC cho người đã chứng minh danh tính.
+
+## 2. Quyết định của chủ dự án
+
+Có, ngày 2026-09-30: (a) 177 — phương án ⒞, băm rút gọn của `userId` trên ĐÚNG dòng log của lần từ chối mất sổ, không phải mọi dòng (ADR-9223); (b) 195 — đường riêng cho người ĐÃ đăng nhập tự xem link đăng nhập gần đây của chính mình, thông điệp gộp ở route vô danh GIỮ NGUYÊN (ADR-9222). Các điểm tự chốt trong phạm vi ấy ở mục 5.
+
+## 3. Đo trước
+
+- **177** (`apps/api/src/log-tu-choi-mat.int.test.ts`, viết trước khi vá, chạy trên mã cũ — `lo22-do-truoc-int-177.log`): 3 đỏ / 2 xanh (5). Vế mới dựng lại §S1.85 với BA phiên của BA người (`phienNguoiMua([])` ×3), một lần giữ khoá ghi sổ của tổ chức, ba `POST /suppliers` tuần tự — mã cũ để lại ba dòng `[api] <requestId> POST /suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier.manage <- error 55P03`: từ stderr KHÔNG dựng lại được ai bị từ chối. Hai vế cũ (131, 179) đỏ cùng lý do (`expected null not to be null` trên regex có `nguoi=`). Mức hàm (`mo-ta-hang-dong.test.ts` — `lo22-do-truoc-unit.log`): 15 đỏ / 17 xanh (32) — constructor cũ bỏ qua đối số thêm nên dòng không có `nguoi=`.
+- **195** (`apps/api/src/auth.int.test.ts -t "khoản 195"` — `lo22-do-truoc-int-195.log`): 3 đỏ — `{"error":"khong co duong nay"}: expected 404 to be 200/401`. `routes.test.ts`: 1 đỏ (`bảng ROUTES không có đường GET /auth/login-links`). `phuc-vu.test.ts`: 6 đỏ / 103 xanh (trang không gọi `/auth/login-links`; ba ca mới + ba ca `[S1.177]`/`[khoản 193]` mà `SAU_MO["mo-thau"]` nay đòi).
+
+## 4. Thay đổi
+
+- `packages/identity/src/rbac.ts` (KHÔNG chạm khối danh mục 303–375 — hunk: dòng 1, 43, 80, 385, 416, 426, 430, 746, 776, 826 của bản cũ): `PermissionAuditFailedError` tham số thứ tư `readonly nguoiBam: string | null = null`; `DenialAuditFailedError` tham số thứ sáu cùng tên; `bamNguoiRutGon(userId)` = 12 hex đầu của sha256 (`node:crypto`, không khoá); `HINH_DANG_BAM_NGUOI = /^[0-9a-f]{12}$/u`, `hangBamNguoi`, `noiNguoi`; `moTaHangDongCuaLanTuChoi` nối ` nguoi=<băm>` ở cả hai nhánh khi có băm; `requirePermission` băm `requirement.userId`; `throwAuditedDenial` băm `event.actorId` khi là chuỗi (SERVICE ⇒ `null`). Docstring của hai lớp, của hàm mô tả và của `throwAuditedDenial` ghi vì sao và ranh giới.
+- `apps/api/src/mo-ta-loi.ts`: chỉ chú thích — khối luật đầu tệp thêm đoạn `[S1.9122 / khoản 177 / ADR-9223]`: một ngoại lệ CÓ HÌNH DẠNG, và chỉ một.
+- `packages/identity/src/login.ts`: `listRecentLoginTokens(client, orgId, userId)` + `LoginTokenStatus`, `RecentLoginToken`; khối đầu tệp `~~BẢY~~ TÁM hàm`. `index.ts`: export ba symbol kèm lý do theo tiêu chí của cửa. `tests/architecture/barrel-exports.test.ts`: `"listRecentLoginTokens"` vào `DANH_SACH_TRANG_IDENTITY`.
+- `apps/api/src/routes/auth.ts`: `GET /auth/login-links` (`BuyerReadRoute`, `agent: false`, handler một dòng gọi hàm với `ctx.actor.id`); `ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[]`; khối đầu tệp thêm dòng route.
+- `apps/web/trang/mo-thau.html`: khối `khoi-link-gan-day` (`ghi-link-gan-day`, `link-gan-day`) sau hai nút của khối hỏi phiên. `mo-thau.js`: `GIO`, `moTaLink`, `anLinkGanDay`, `veLinkGanDay` (bộ đếm `luotLinkGanDay`); `moSauDangNhap` gọi `veLinkGanDay()`; `dongCacBuoc` gọi `anLinkGanDay()`.
+- Test: `mo-ta-hang-dong.test.ts` (`boc` nhận băm; khe thứ năm trong `it.each(GIA_TRI)`; describe `[INV-A2] [S1.9122 / khoản 177]` 14 ca; giả mạo có `nguoiBam` vẫn `""`); `log-tu-choi-mat.int.test.ts` (`bamRutGon` tính lại độc lập, hai regex cũ thành `exec` + so băm đúng người, vế ba người); `auth.int.test.ts` (describe `[INV-E1] [S1.9122 / khoản 195]` ba ca ở CUỐI, ⑻/⑽ không chạm; `createHash` thêm vào import); `routes.test.ts` (describe `[khoản 195]`); `phuc-vu.test.ts` (`SAU_MO["mo-thau"]`, stub mặc định `GET /auth/login-links` ⇒ `{loginLinks: []}` khi có cookie, ca khoản 193 nối thêm lời gọi, describe `[khoản 195]` ba ca).
+- Ngoài danh sách lô, sửa đúng dòng vì dòng log / bảng route ĐỔI theo thiết kế: `apps/api/src/loi-giao-thuc.int.test.ts` (sáu regex ⒫⒬⒭⒮ + hai dòng khối khoản 120 thêm `nguoi=[0-9a-f]{12}`, một chú thích ba dòng); `apps/mcp/src/cong-cu.ts` (một mục `"/auth/login-links"` trong `ROUTE_DOC_KHONG_PHOI` kèm lý do, số đếm ở khối đầu `~~MƯỜI~~ MƯỜI MỘT`).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Băm tính ở chỗ ném, không ở constructor**: đề bài cho phép cả hai; chọn chỗ ném để một lớp lỗi dựng từ nơi khác (test, worker) không tự băm một thứ không phải `userId`, và để hai test `mo-ta-loi` dựng lỗi ba/năm tham số giữ nguyên dòng (đo: 9/9 không đổi). Cái giá: hai chỗ ném mỗi chỗ một dòng.
+- **Tên trường `nguoiBam`** theo đúng đề bài (mặt tiền của `rbac.ts` đã có nhiều tên Việt: `moTaHangDongCuaLanTuChoi`, `chayVoiTranTuChoi`, `DANH_MUC_*`).
+- **`hangBamNguoi` canh hình dạng chứ không thuộc-tập** (khác ba danh mục của 189): tập băm là mở theo định nghĩa; hình dạng `^[0-9a-f]{12}$` là thứ ADR-9223 khai, và mười chuỗi sai hình dạng ở test là ranh giới của nó. `bamNguoiRutGon` không export: test int tính lại sha256 độc lập, đó mới là phép đo "khớp sha256 của ba id".
+- **`throwAuditedDenial` băm `event.actorId`** thay vì thêm tham số: ở chín chỗ gọi `actorId` là id người bị từ chối; SERVICE không có ⇒ `null`, dòng worker không đổi (`composition.int.test.ts` của worker giữ nguyên, không chạm).
+- **Ba lần từ chối TUẦN TỰ trong cùng một lần giữ khoá**, không song song: pool api và pool sổ của test đều 3 kết nối, ba lượt chờ khoá song song vừa khít cả hai — một phép đo ở mép của đồ gá là một phép đo đỏ oan được. Cái giá ~6 s.
+- **195 là route ĐỌC (`BuyerReadRoute`) chứ không `self: true`**: kiểu `BuyerSelfRoute` là của route GHI tự thân (`mutates: true`) và `timViPhamBangRoute` không cho một GET đổi trạng thái; "tự thân" ở đây là phạm vi (chỉ hàng của chính người gọi, `userId` từ cookie), cùng khuôn `/me`. Đặt trong `ROUTES_AUTH_SELF` (nới kiểu) để không chạm `routes.ts`.
+- **`agent: false`** — lịch sử đăng nhập của một con người không thuộc ngữ cảnh một agent; ghim ở `routes.test.ts` và ở `ROUTE_DOC_KHONG_PHOI` (cổng MCP đòi, đo được: lượt đầu đỏ).
+- **Trạng thái suy ở CSDL** (`CASE … clock_timestamp()`), không ở JS: cùng đồng hồ với `redeemLoginToken`, và một link đã dùng rồi hết hạn vẫn là "đã dùng".
+- **Không trả `id` của token**: bốn trường đề bài nêu cộng `status`; một cột thêm là một thứ phải giải thích, và chưa ai cần.
+- **Khối web là trợ giúp, không phải cổng**: 401/mất mạng ⇒ ẩn, bước vẫn mở; bộ đếm lượt thay cho phép kiểm lớp `xong` để phản hồi của lượt cũ không vẽ đè lên người vào sau.
+- **Test ⑵ đọc CSDL bằng pool superuser** thay vì đăng nhập chủ nhân lần hai (lượt đầu 60/61 vì `linkVaGhiDanh` đòi `needsEnrollment`): đối chứng đo đúng "ba hàng có thật, người khác không thấy".
+
+## 6. Đột biến
+
+Kịch bản `lo22-dot-bien.py` (scratchpad): sửa tệp, chạy, khôi phục nguyên văn (so nội dung). Mười ca, mỗi ca ĐỎ (`lo22-dot-bien-M*-*.log`):
+- M1 [177] `noiNguoi` bỏ khe `nguoi=` ⇒ đơn vị 25 đỏ / 7 xanh; `log-tu-choi-mat.int` 3 đỏ (`… supplier.manage <- error 55P03: expected null not to be null`).
+- M2 [177] `hangBamNguoi` bỏ phép canh hình dạng (in nguyên văn) ⇒ đơn vị 23 đỏ / 9 xanh (mười chuỗi sai hình dạng và 13 giá trị `GIA_TRI` ở khe băm).
+- M3 [177] `requirePermission` đưa UUID THÔ thay băm ⇒ int 2 đỏ — dòng ra `… supplier.manage nguoi=HANG_LA <- error 55P03`: khe chặn được UUID, và băm không khớp.
+- M4 [195] `listRecentLoginTokens` bỏ vế `user_id = $1` ⇒ ⑵ đỏ (`['CONSUMED','PENDING',…]` ≠ `['CONSUMED']`).
+- M5 [195] câu đọc mang `token_hash` và bản đồ trả `tokenHash` ⇒ ⑴ đỏ (sáu trường thay vì năm).
+- M6 [195] bỏ nhánh `EXPIRED` ⇒ ⑴ đỏ (`['PENDING','CONSUMED','PENDING']`).
+- M7 [195] route `agent: true` ⇒ `routes.test` 1 đỏ (`agentGoiDuoc` true) và ⑶ đỏ (200 mang `loginLinks` thay vì 403).
+- M8 [195] `moSauDangNhap` không gọi `veLinkGanDay` ⇒ DOM 6 đỏ / 12 xanh (ba ca mới + ba ca có `SAU_MO`).
+- M9 [195] `dongCacBuoc` không gọi `anLinkGanDay` ⇒ DOM 1 đỏ (khối còn mở sau đăng xuất).
+- M10 [195] bỏ phép kiểm lượt ⇒ DOM 1 đỏ (phản hồi về muộn sau hashchange vẫn mở khối).
+
+## 7. Giới hạn, nói ra
+
+- Băm sha256 không khoá của một UUID: ai đọc được `users` tính lại được — đó là chủ đích của ⒞ (nối và đối chiếu được), và cũng là lý do nó không phải một lớp ẩn danh; một dòng đơn lẻ vẫn không nêu ai. 48 bit: va chạm trong một sự cố là không đáng kể, không phải bằng không.
+- Khe băm chỉ có ở hai lớp bọc của lần từ chối mất sổ; lần từ chối của SERVICE (worker lúc giải mã) không có `actorId` nên không có khe — dòng worker như trước.
+- Vế *CHƯA ĐO* của hàng 177 (một sự cố THẬT có bao nhiêu người) vẫn đúng: vòng này đo trong cảnh dựng lại.
+- 195: danh sách cắt ở 20 hàng, không theo thời gian (khoản 9422); khối chỉ ở `/login` (`mo-thau`) — ba trang người mua kia cùng ranh giới với khoản 9481; trang hiện giờ theo `toLocaleString("vi-VN")` của trình duyệt, DOM giả không đo múi giờ.
+- `LoginTokenError` từ `listRecentLoginTokens` (userId sai hình dạng) trong nhánh BUYER của bộ điều phối ra 500 thân cố định — không tới được qua HTTP vì `actor.id` đọc từ `sessions`.
+- Số test mang nhãn tăng (A2: `mo-ta-hang-dong` 13 → 27, `log-tu-choi-mat` +1; D5: +1; E1: +3) ⇒ `evidence/INV-matrix.md` sinh lại — mục 6 bàn giao.
+
+## 8. Số đo
+
+Mọi lệnh chạy trong worktree, với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test` cho vitest; các tệp int chạy TUẦN TỰ (một tệp một lượt; `packages/identity` với `--no-file-parallelism`); không lúc nào hai tiến trình dùng Postgres chạy chồng. Log ở `scratchpad/lo22-*.log`.
+
+- `pnpm typecheck`: 0 lỗi (ba lượt: sau vá, sau sửa test ⑵, sau `cong-cu.ts`).
+- `pnpm exec eslint packages/identity/src/rbac.ts packages/identity/src/login.ts packages/identity/src/index.ts packages/identity/src/mo-ta-hang-dong.test.ts apps/api/src/mo-ta-loi.ts apps/api/src/routes/auth.ts apps/api/src/auth.int.test.ts apps/api/src/log-tu-choi-mat.int.test.ts apps/api/src/routes.test.ts apps/api/src/loi-giao-thuc.int.test.ts tests/architecture/barrel-exports.test.ts apps/web/trang/mo-thau.js apps/web/src/phuc-vu.test.ts` (+ `apps/mcp/src/cong-cu.ts`): 0 lỗi.
+- `pnpm exec depcruise packages/identity apps/api apps/web tests --config .dependency-cruiser.cjs`: 253 module / 923 cạnh, 0 vi phạm.
+- ĐO TRƯỚC (test mới trên mã cũ, `lo22-do-truoc-*.log`): `mo-ta-hang-dong` 15 đỏ / 17 xanh (32); `phuc-vu` 6 đỏ / 103 xanh (109); `routes` 1 đỏ / 21 xanh (22); `log-tu-choi-mat.int` 3 đỏ / 2 xanh (5) — `… supplier.manage <- error 55P03: expected null not to be null`; `auth.int -t "khoản 195"` 3 đỏ — `{"error":"khong co duong nay"}: expected 404 to be 200`.
+- Cổng cuối (sau vá), theo thứ tự chạy:
+  - `pnpm vitest run packages/identity/src/mo-ta-hang-dong.test.ts`: 32/32.
+  - `pnpm vitest run apps/web/src/phuc-vu.test.ts`: 109/109.
+  - `pnpm vitest run apps/api/src/routes.test.ts`: 22/22.
+  - `pnpm vitest run apps/api/src/log-tu-choi-mat.int.test.ts`: 5/5 (15,4 s).
+  - `pnpm vitest run apps/api/src/loi-giao-thuc.int.test.ts`: 20/20 (tệp ngoài lô, sáu regex đổi).
+  - `pnpm vitest run packages/identity/src/mo-ta-loi.test.ts apps/api/src/mo-ta-loi.test.ts`: 9/9 (không đổi — chỗ dựng cũ không băm).
+  - `pnpm vitest run tests/architecture`: 36 tệp / 395 đạt, 1 bỏ qua (tiền tồn), 0 đỏ — chạy HAI lượt (trước và sau khi `cong-cu.ts` đổi; 130 s và 147 s).
+  - `pnpm vitest run apps/api/src/auth.int.test.ts` (trọn tệp): lượt đầu 60/61 — vế ⑵ mới đỏ vì LỖI CỦA TEST (gọi `dangNhap` lần hai cho chủ nhân, mà `linkVaGhiDanh` đòi `needsEnrollment === true`); sửa test đọc CSDL bằng pool superuser; lượt hai 61/61 (43 s).
+  - `pnpm vitest run packages/identity --no-file-parallelism`: 10 tệp / 206 đạt (77 s) — `rbac.int` 45, `mfa.int` 54, `mo-ta-hang-dong` 32, `danh-muc-tu-choi` 9, …
+  - Ngoài đề bài vì bảng `ROUTES` đổi: `pnpm vitest run apps/mcp/src/cong-cu.test.ts` — lượt đầu 1 đỏ (*"apps/api có thêm một route ĐỌC mà bảng công cụ MCP không biết"*) ⇒ khai `/auth/login-links` vào `ROUTE_DOC_KHONG_PHOI` kèm lý do ⇒ 15/15; `pnpm vitest run apps/api/src/api.int.test.ts` (bộ quét E6 duyệt mọi route): 15/15.
+- Đột biến: 10 ca / 10 đỏ (mục 6 biên bản; `lo22-dot-bien.py`, log `lo22-dot-bien-M*-*.log`), tệp khôi phục nguyên văn sau mỗi ca (so nội dung; `git status` sau đó đúng 15 tệp của lô).
+- CHƯA chạy: `pnpm test:int` toàn bộ, `pnpm evidence` (tệp cấm — người tích hợp sinh lại INV-matrix) — theo sổ tay.
+
 # §S1.9131 — TRẢ NỢ LÔ L3: BẢNG SO SÁNH TÍNH SỐ TIỀN MỘT LẦN MỖI HÀNG, CHỈ KHI VÔ HƯỚNG (114); KHOẢN 160 ĐÓNG BẰNG PHÉP ĐỌC LẠI `055`
 
 **Rổ và mảnh (ADR-043 ⒞):** hai khoản rổ B. Mảnh §11 chạm: bước *"bảng so sánh hiện ra với giá đúng tới từng chữ số"* — kết quả không đổi, chỉ rẻ hơn; 160 nằm ngoài §11 (S1.95). Không migration, không ADR. Mở khoản 9431.

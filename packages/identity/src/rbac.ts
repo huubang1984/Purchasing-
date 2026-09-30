@@ -821,6 +821,8 @@ export async function requirePermission(
  * và của `approveMfaReset` (./mfa-reset.ts). Trước khoản 119 cả ba tự gọi `withTenant(auditPool, …)` và không bọc lỗi của lần ghi.
  * [S1.72 / khoản 121] Thêm hai người gọi: lần từ chối A4 của `buildComparisonTable` (packages/unseal/src/comparison.ts), và lần từ chối lúc
  * giải mã của worker (apps/unseal-worker/src/index.ts) — worker ghi dưới vai `app_unseal` của nó.
+ * [S1.9113 / khoản 133] Thêm: nhánh không tìm thấy của hai đường đọc bảng so sánh (`tuChoiKhongTimThay`, comparison.ts), của
+ * `cancelUnseal` và `approveUnseal` (23503 bọc), và vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet` (requests.ts).
  *
  * Làm theo thứ tự:
  *   ⑴ `action` và `resourceType` phải là MÃ ĐỊNH DANH viết hoa — cùng hình dạng F7 của `requirePermission`, vì cả hai đi vào sổ bất biến
