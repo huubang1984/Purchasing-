@@ -3168,8 +3168,8 @@ tự lấy được quyền chủ bảng, tự thu hồi được membership tr�
 trước, và chủ thể chủ bảng cũng không. Lượt soi 50 NẶNG-1 bác bản đầu vì chặn cả chúng. ~~Mọi dòng còn lại chỉ có lối ra ngoài
 tầm vai ấy, tức đường vá bằng migration vốn không tồn tại để mà bị chặn.~~ **[S1.66 / lượt soi ngang 59c NẶNG-3]** Câu gạch chỉ
 đúng tới đâu `tu_sua_duoc` nhận ra được đường tự sửa: nó xấp xỉ theo CẢ HAI chiều (S1.58, lượt soi 51 INFO-8). Chiều bỏ qua
-chỉ trả dòng về lượt phán xét sau vòng; chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng, không được đọc —
-là đúng loại ngõ cụt mà điều kiện trên cấm, và chưa đo: khoản 113.
+chỉ trả dòng về lượt phán xét sau vòng; ~~chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng, không được đọc —
+là đúng loại ngõ cụt mà điều kiện trên cấm, và chưa đo: khoản 113.~~ **[S1.9172 / khoản nợ 113]** Chiều CHẶN ấy đã ĐO trên PostgreSQL 16 (`db/migrations.int.test.ts` `[khoản nợ 113]`): vai deploy có ADMIN OPTION (không INHERIT) trên một vai R giữ GRANT OPTION đã cấp quyền bảng — hay EXECUTE trên hàm ngữ cảnh — THẲNG cho nó tự cắt được trong một tệp (`GRANT R TO <vai> WITH INHERIT TRUE; REVOKE … FROM <vai>; REVOKE R FROM <vai>` — PostgreSQL chọn R làm người thu hồi), và bản trước CHẶN dòng ấy trước vòng — một ngõ cụt thật của §3. Nay `tu_sua_duoc` đọc `grantor` của mục ACL cấp thẳng (vế `tu_sua_nguoi_cap`, vế thứ tư của `tu_cat_execute`), đòi ADMIN trên người cấp và KHÔNG thừa kế người cấp; hai đối chứng — không ADMIN, ADMIN kèm INHERIT do superuser cấp — vẫn bị chặn (đo). Xấp xỉ còn lại của `tu_sua_duoc` chỉ về phía bỏ qua; điều kiện của ngoại lệ đứng tới đâu các đường tự sửa đã đo (bốn đường S1.57, ba đường EXECUTE S1.58, một đường `grantor` S1.9172).
 **[S1.58 / khoản nợ 101]** Cùng điều kiện cho dòng mà policy phụ thuộc hàm ngữ cảnh lọc hết vì vai có EXECUTE trên hàm ấy: `tu_sua_duoc`
 chỉ tính ba đường tự cắt EXECUTE — thừa kế chủ hàm, ADMIN trên một vai thừa kế chủ hàm, membership nhóm do chính vai ấy cấp, đo từng
 đường trên PostgreSQL 16 — hay cắt đường tới quyền trên bảng; hai vế quyền chủ bảng không tính, vì lối vá của chúng (thêm policy) không

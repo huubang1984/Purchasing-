@@ -319,8 +319,10 @@ describe("[INV-H19] hardening: mọi phán xét có một dòng lý do trong ADR
 // CÙNG một chính tả canonical) và so TẬP TÊN của ⑵ với tập tên của ⑴/⑶. Nó KHÔNG so NỘI DUNG ⑵
 // với ⑴/⑶, vì hai bên viết hai chính tả khác nhau: ⑵ là nguồn viết tay (`NEW.`,
 // `OPERATOR(pg_catalog.=)`, `IN (…)`) còn ⑴/⑶ là đầu ra `pg_get_triggerdef` (`new.`, `=`,
-// `= ANY (ARRAY[…])`), và 11 câu sửa của tệp này vốn được viết TỪ đầu ra canonical. Phép đo ấy
-// cần chính PostgreSQL làm bộ chuẩn hoá, và nó nằm ở `db/ghim-trigger-tu-chua.int.test.ts`.
+// `= ANY (ARRAY[…])`), và ~~11 câu sửa của tệp này vốn được viết TỪ đầu ra canonical~~ [S1.9172 / khoản 214] 15 câu sửa
+// (trên 146 tên ở `561158e`) từng được viết TỪ đầu ra canonical và đã viết lại theo nguồn. Phép đo ấy
+// cần chính PostgreSQL làm bộ chuẩn hoá, và nó nằm ở `db/ghim-trigger-tu-chua.int.test.ts`; ⑵ nay còn được so TĨNH
+// với câu `CREATE TRIGGER` của migration cuối ở `db/ghim-trigger-nguon.test.ts`.
 // ==============================================================================================
 
 /** Một tên trigger cùng tập văn bản đã ghim của nó (đầu ra `pg_get_triggerdef`, trong `$def$…$def$`). */
