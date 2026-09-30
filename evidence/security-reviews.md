@@ -16822,6 +16822,60 @@ Không có; vòng trả nợ theo phân công ngày 2026-09-29.
 
 — hết biên bản §S1.9131 —
 
+# §S1.9141 — TEST CÓ RĂNG: BỐN VẾ XANH GIẢ THÀNH BỐN VẾ ĐO TIỀN ĐỀ, LƯỢT MỞ THẦU 8 MiB TRÊN ĐƯỜNG ĐIỂM VÀO THẬT — KHOẢN 149, 167, 184, 186 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11. Chỉ test. Không migration, không ADR, không mã sản xuất.
+
+## 1. Vòng này là gì
+Bốn khoản cùng một lớp lỗi: một vế test xanh dù đồ gá không dựng được cảnh nó định đo. 149 (hai vế canh khoản 126 kể tiền đề thay vì khẳng định), 184 (vế ⑻ của khoản 144 không chứng được ba yêu cầu chồng nhau), 186 (đối chứng của vế ⓷ chứng minh hàm và vai tồn tại, không chứng minh mệnh đề lọc chọn được ai), và 167 (khoản 116 đòi đo 106/107 ở cỡ lớn TRÊN đường điểm vào và đo thời hạn handler — chưa ai làm). Phép đo của mỗi khoản là một đột biến đồ gá: vế cũ phải xanh (chứng minh rỗng), vế mới phải đỏ.
+
+## 2. Quyết định của chủ dự án
+Không có; vòng trả nợ theo phân công ngày 2026-09-29.
+
+## 3. Đo trước
+Mỗi khoản một đột biến đồ gá chạy trên vế CŨ (cụm Postgres cục bộ, `TRUSTPROCURE_PG_LOCAL_*`):
+- 149 ⑴ — `bocChanTruocCau(c, "UPDATE public.rfq_packages", …)` đổi mốc câu thành chuỗi không có ⇒ `truocKt2` không bao giờ chạy, không có người giữ nào: `pnpm vitest run apps/unseal-worker/src/unseal-worker.int.test.ts -t "khoản 126"` ⇒ **4/4 XANH**.
+- 149 ⑵ — `demKhoaGhiSoK126` trả 0 vô điều kiện: `rfq.int.test.ts -t "khoản 126"` ⇒ **1/1 XANH**.
+- 184 ⒜ — ba yêu cầu bắn TUẦN TỰ (`await` nối tiếp thay `Promise.all`): `auth.int.test.ts -t "⑻"` ⇒ **1/1 XANH** với đúng bộ số `401,401,429; failed=2`. 184 ⒝ — gỡ vị từ `$3` khỏi `CAU_DAT_COC` (mô phỏng trước S1.83): vế cũ **đỏ** hai lượt (`401,401,401; failed=3`) — trên máy này ba yêu cầu có chồng nhau; vế cũ chỉ mất răng khi chúng không chồng nhau (⒜), và nó không đo điều đó.
+- 186 — hai tên vai trong `EXISTS` đổi thành `vai_khong_ton_tai_1/2`: `khoa-ghi-so-nguoi-giu.int.test.ts -t "⓷"` ⇒ **1/1 XANH**.
+- 167 — không có vế nào để đo trước: `tien-trinh.int.test.ts` chỉ chạy job cỡ nhỏ; không test nào đưa phong bì 64 KiB hay 8 MiB qua `taoTienTrinhUnsealWorker`.
+
+## 4. Thay đổi
+- `apps/unseal-worker/src/unseal-worker.int.test.ts` (chỉ khối khoản 126): `choToiKhiBiChan` tách `-1` (dừng sớm) / `-2` (quá hạn); thêm `pidDangChan`; `KetQuaDoK126` thêm `msNguoiGiuBiChan`, `chanNguoiGiu`, `pidWorker`, `khoaTrongCuaSo`; `truocKt2` đo ba thứ ấy trong cửa sổ và PHÁT `ghiSoDongThoiCuaToChuc()` ở đó (chờ ở ngoài); `khangDinhTienDeCuaSo` (bốn tiền đề) đứng trước ba kết luận ở cả hai ca; `msWorkerBiChan` đòi `-1`, `dongThoi.ms < 2000`, `ketCucNguoiGiu` ghim `KET_CUC_NGUOI_GIU = "23514"`.
+- `packages/rfq/src/rfq.int.test.ts` (chỉ khối khoản 126 ⑵): lấy `pidA` của lần huỷ thứ nhất, đọc `khoaA = demKhoaGhiSoK126(pidA)` ngay trước khi thả A, đòi `1`.
+- `apps/api/src/auth.int.test.ts` (chỉ vế ⑻): người giữ `FOR UPDATE` trên hàng `mfa_credentials`; `demBackendChoDatCoc(pidGiu)` — CTE đệ quy trên `pg_blocking_pids` ∩ backend cầm `RowExclusiveLock` trên `mfa_credentials`; vòng 20 ms tới đủ 3 rồi `ROLLBACK`; đòi `soChoToiDa = 3`, `failed_attempts = MFA_TRAN_SAI_DUONG_PHU`, mã `[401,401,429]`; bỏ `locked_until`; khối chú thích của vế đóng lại bằng cùng dòng `// ====` mà nó mở (chỉ hình thức).
+- `db/khoa-ghi-so-nguoi-giu.int.test.ts`: hằng `CAU_VAI_UNG_DUNG_CON_EXECUTE`; vế ⓷ thêm GRANT → chạy lại → đòi đúng một hàng → REVOKE trong `finally` → đòi rỗng lại.
+- `apps/unseal-worker/src/mo-thau-co-lon.int.test.ts` (MỚI, 31 test, không nhãn INV): tiến trình worker thật chạy nền; ⓪ đo trần 018; `describe` theo hai cỡ × (`it.each` 14 ca + một `it` gom); mỗi lượt in một dòng `[đo khoản 167] …: DONE/1, handler N ms, từ xếp tới xong N ms, lease N s` (chỉ tên ca và mili-giây, không bản rõ).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- 149 ⑴: trên mã đã vá worker KHÔNG bao giờ bị chặn, nên "tiền đề" đúng của vế là *yêu cầu thứ hai bị chặn bởi chính worker trong cửa sổ*, không phải *worker bị chặn*; `msWorkerBiChan = -1` giữ làm kết luận (cùng với việc lần ghi sổ đồng thời PHÁT trong cửa sổ phải xong dưới 2 s). Kết cục người giữ ghim `23514` vì đó là con số đo được và một kết cục khác (`xong`, `55P03`, `40P01`) đều nói thứ tự khoá đã đổi.
+- 184: đếm chồng lấn bằng `pg_blocking_pids` ĐỆ QUY vì PostgreSQL xếp người chờ thứ hai sau người chờ thứ nhất trên khoá tuple (đo: chỉ một backend bị chặn TRỰC TIẾP bởi người giữ); lọc `RowExclusiveLock` trên `mfa_credentials` để không đếm backend còn đứng ở cổng đọc. Với chồng lấn đã ép, bộ số là đẳng thức chứ không `<=`.
+- 167: cỡ đo là cỡ PHONG BÌ (thứ 018 ràng buộc), phần dôi phong bì đo ở một lần niêm phong thật thay vì chép hằng; kỳ vọng so ở phía CSDL để thông điệp đỏ không mang 8 MiB; `TRAN_THAN_BYTE` import tương đối từ `apps/api` theo tiền lệ `tien-trinh.int.test.ts`; trần 60 s chép từ `runner.ts` và được ĐỐI CHỨNG bằng `lease_expires_at − clock_timestamp()` lúc RUNNING.
+- 186: chỉ cấp cho `app_unseal` dạng `bigint` — đúng vai và đúng dạng mà vế ⓵ không đo — và đòi tập KHÔNG NHIỀU HƠN một hàng, để một vai thành viên lạ lọt vào cũng đỏ.
+
+## 6. Đột biến
+Bảy đột biến, tất cả ĐỎ trên vế mới (số trong ngoặc là kết quả trên vế cũ):
+- 149 ⑴ ⒜ mốc câu sai ⇒ 2/4 đỏ `expected -2 to be greater than or equal to 0` (cũ: 4/4 xanh); ⒝ `demKhoaGhiSo` luôn 0 ⇒ 3/4 đỏ, hai ca chính đỏ ở `khoaTrongCuaSo` (cũ: chỉ `it` đối chứng riêng đỏ, hai ca chính xanh).
+- 149 ⑵ `demKhoaGhiSoK126` luôn 0 ⇒ đỏ `expected +0 to be 1` (cũ: xanh).
+- 184 ⒜ tuần tự ⇒ đỏ `chờ tối đa 1 backend … expected 1 to be 3` (cũ: xanh); ⒝ gỡ vị từ `$3` ⇒ đỏ `401,401,401; failed=3; chờ tối đa 3 backend, đủ ba sau 61 ms` (cũ: đỏ).
+- 186 hai tên vai không tồn tại ⇒ đỏ `expected [] to deeply equal [ Array(1) ]` (cũ: xanh).
+- 167 P — `runner.ts` `handlerTimeoutMs ?? 1000` ⇒ ca GOM 8 MiB đỏ `PENDING sau 1 lần, lý do "HANDLER_TIMEOUT", handler 1275 ms`, log worker `outbox UNSEAL_RFQ HANDLER_TIMEOUT HetGioHandlerError`; K — lật kỳ vọng ca 106 ⑴ `raw → giu` ⇒ đỏ (`22P05 unsupported Unicode escape sequence` khi ép bản rõ mang `\u0000` sang `jsonb`); F — không xếp job (trả id giả) ⇒ đỏ ngay `job khong ton tai` (đường `HET_GIO_CHO` không tới được ở đột biến này, nói ra).
+Mọi đột biến đã hoàn tác; `git status` chỉ còn năm tệp của lô.
+
+## 7. Giới hạn, nói ra
+- 167 đo trên cụm Postgres cục bộ (glibc, `fsync=off`) trong một phiên 4 lõi dùng chung: con số là CẬN cho máy này, không phải SLA; `msHandler` là RUNNING→DONE theo đồng hồ test (±10 ms thăm dò). Trần 60 s là trần MỖI JOB — 14 phong bì 8 MiB tốn 10,6 s, tức ~0,75 s/phong bì; ngoại suy (chưa đo) ~80 phong bì 8 MiB trong một RFQ vượt trần ⇒ khoản 9441.
+- 167 không đo qua HTTP: phong bì vào `vendor_bid_versions` bằng fixture SQL (như 106/107); `TRAN_THAN_BYTE` chỉ là cỡ, không phải đường HTTP.
+- 184: chồng lấn được ÉP bằng khoá ngoài, tức vế đo "ba câu tăng được thả nối tiếp trên một hàng sau khi cùng đứng chờ" — đúng cảnh mà vị từ `$3` tồn tại để đỡ; nó không đo cảnh ba yêu cầu tự nhiên tới cùng lúc (cảnh ấy phụ thuộc lịch chạy và là chính khoản 184).
+- 186: vế ⓷ vẫn chỉ lọc hai vai ⇒ khoản 9442; không mở rộng trong lô vì đổi mệnh đề là đổi thứ vế đo, ngoài đề bài.
+- 149 ⑵: đối chứng dương đo ở giao dịch A (người giữ), không ở B — B chờ khoá hàng nên không giữ khoá ghi sổ nào để làm đối chứng.
+
+## 8. Số đo
+- Đo trước (vế cũ + đột biến): 149⑴ 4/4 xanh; 149⑵ 1/1 xanh; 184⒜ 1/1 xanh; 184⒝ 1/1 đỏ ×2; 186 1/1 xanh.
+- Vế mới xanh: 149⑴ 4/4 (`-t "khoản 126"`, 6,3 s); 149⑵ 1/1; 184 1/1 (321 ms, đủ ba backend ~61 ms); 186 6/6 cả tệp; 167 31/31 hai lượt (51,5 s và 53,0 s).
+- 167, lượt 2 (ms handler RUNNING→DONE / từ xếp tới xong): 64 KiB — 106⑴ 36/152, ⑵ 64/175, ⑶ 81/123, lồng sâu 58/81, 64 tầng 63/89, đối chứng escape 48/78, U+0000 thô 48/67, số tiền 48/148, mảng số 57/175, 1 000 ký tự 53/75, 1 001 ký tự 46/67, 1e131072 44/80, khoá trùng 45/74, đối chứng quét 34/93, GOM 14 = 220/270. 8 MiB — 106⑴ 668/724, ⑵ 585/693, ⑶ 465/471, lồng sâu 2 923/2 971, 64 tầng 671/755, đối chứng escape 529/571, U+0000 thô 476/565, số tiền 461/524, mảng ~4,19 triệu số 2 995/3 036, 1 000 ký tự 579/651, 1 001 ký tự 684/760, 1e131072 510/619, khoá trùng 538/581, đối chứng quét 497/576, GOM 14 (112 MiB) = 10 578/10 674. Lease lúc RUNNING: 59,973–59,999 s. Trần 018: 8 388 608 nhận, 8 388 609 ⇒ 23514.
+- Đột biến vế mới: bảy đỏ (mục 6).
+- Cổng: mục 8 của bàn giao.
+
 # §S1.9151 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không
