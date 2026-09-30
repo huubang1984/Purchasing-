@@ -20677,6 +20677,65 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   ~7944, `[Task 8 — (E1)/(E2)]…` ~8248): hệ quả của mọi lô thêm migration, người tích hợp gỡ lúc `cap-so` (cây gộp đã có, theo báo
   "122/123 chỉ N3 đỏ"); cố ý KHÔNG chạm ba danh sách ấy để không xung đột gộp. Đột biến M4: 2/2 đỏ.
 
+# §S1.9101 — TRẢ NỢ SONG SONG ĐỢT 3: HAI MƯƠI QUYẾT ĐỊNH, HAI LƯỢT MƯỜI MỘT LÔ GỘP (26 KHOẢN ĐÓNG, 22 MỚI — 20 CÒN MỞ, 2 ADR, 4 MIGRATION); B4 HUỶ VÌ #219, B7 SANG PHIÊN KHÁC
+
+**Rổ và mảnh (ADR-043 ⒞):** vòng của người tích hợp — không chạm mảnh nào của `docs/PRODUCT.md` §11 ngoài những gì các lô đã khai ở biên bản riêng. Không migration, không ADR của riêng vòng này. Biên bản của từng lô: lượt A §S1.9110 (A1), §S1.9115 (A2), §S1.9120 (A3), §S1.9125 (A4), §S1.9130 (A5), §S1.9135 (A6); lượt B §S1.9140 (B6), §S1.9145 (B1), §S1.9155 (B2), §S1.9160 (B3), §S1.9165 (B5). Kế hoạch và đề bài từng lô: `docs/superpowers/plans/2026-09-30-tra-no-dot-3.md` và thư mục cùng tên.
+
+## 1. Vòng này là gì
+Đợt 3 của trả nợ theo lô song song (đợt 1: §S1.211; đợt 2: §S1.214). Người tích hợp: (1) bước 0 — kế hoạch, `chung.md` và đề bài 12 lô vào kho (lần này trong kho: kế hoạch đợt 2 ở scratchpad đã mất), 22 khoản 264–285 vào dòng RỔ B, hai khoản mới bằng số tạm — 9401 (TimeZone của cụm cục bộ khác container) và 9402 (ADR-122 × ADR-124); (2) gộp đầu PR #216 hai lần giữa lượt A (số đo sau #215; #217 — S4.3b) và `master` một lần giữa lượt B (#216 đã merge, #219); (3) gộp 11 nhánh lô — lượt A rồi làn hardening B —, áp 11 tệp bàn giao vào tệp dùng chung; (4) chạy lại cổng của mỗi lô trên cây gộp, `pnpm evidence` sau lượt A và sau B3; (5) kết đợt: ghi hai quyết định sau chót, `pnpm cap-so`, `pnpm t0`, `pnpm evidence`, PR.
+
+## 2. Quyết định của chủ dự án (2026-09-30)
+Mục 0 của kế hoạch, chốt nguyên văn đề xuất (câu 1–16): phạm vi 29 khoản, 12 lô, hai lượt; 22 khoản 264–285 vào rổ B; ADR-124 áp cho mục khoản 259 (9402); 261 — từ chối chữ ký bật S3 khi tổ chức còn gói chờ duyệt; 267 — tách câu 422, vào sổ `UNSEAL_CANCEL_DENIED {lyDo}` (ADR-060); 268 — cắt 7 ngày, trần 100, `truncated`; 271 — nghĩa "sẽ dự thầu"; 272 — chỉ đo; 275 — chỉ phép đo BAFO; 277 — một hàm hẹp riêng; 282 — một module `apps/web/src/dang-nhap.ts`; 283 — từ chối có tên + `CHECK`; 285 — policy `AS RESTRICTIVE FOR INSERT TO app_api`, break-glass giả còn và nói ra; 269 — hoãn, hàng ghi "mở lại khi nâng trần" (ghi ở vòng này); 234 — để S3.3c/S3.3d đóng; 4 agent một lượt. Sau khi chốt: câu 17 — 262 · 263 vào lượt B (lô B7); câu 18 — S3.3e chưa vào, A3 chạy, 282 không dời; câu 19 — B7 giao phiên đã làm #219 (lúc lượt B đã gộp tới B5); câu 20 — rổ của 20 khoản mới còn mở theo đề xuất của lô: rổ C 9415, 9426, 9440, rổ B phần còn lại (thân hàng gạch "đề xuất", ghi "chủ dự án chốt").
+
+## 3. Đo trước
+- Bước 0: 22 khoản 264–285 không đứng ở dòng RỔ nào; TimeZone mặc định của cụm Postgres cục bộ (`Etc/UTC`) khác `postgres:16-alpine` của CI (`UTC`) — §S1.214 mục 9; mục khoản 259 in nguyên định nghĩa trigger lạ, trái ADR-124.
+- Giữa lượt A: #217 vào đầu PR #216 ⇒ cổng `ma-chep-api-worker` (bộ quét N đơn vị của A1, khoản 280) đỏ 4 ca trên mã của #217 — `doc` ở `apps/api/src/routes/anh-xa.ts`, `phanTram` ở `apps/web/src/du-lieu.ts`, literal băm 64 hex; gộp A3 sau A1 ⇒ cùng cổng đỏ 4 ca — `loiCua`, `truong`, literal UUID ở tám tệp api + web (A3 dựng trên nền chưa có bộ quét); `[INV-H20]` đỏ ở hàng 270 (`|` trần), 9426 (con trỏ migration viết tắt), 282 (con trỏ dạng `{a,b}.html`).
+- Giữa lượt B: PR #219 của một phiên khác merge khoản 261 với đúng hình dạng câu 4 (`097`, ADR-137, khoản 286 mở) lúc lô B4 đang chạy.
+- §S1.221 cụt giữa mục 3 từ lần tích hợp đợt 2 (`e70b56a2`) — lô A1 và A6 cùng thấy.
+
+## 4. Thay đổi
+- Bước 0 (`ba269ae1`): kế hoạch, đề bài; hàng 9401, 9402; dòng RỔ B 5 → 29.
+- 11 lô gộp `--no-ff`: lượt A theo thứ tự xong A4, A2, A5, A1, A3, A6; lượt B tuần tự B6, B1, B2, B3, B5. Mỗi lô: `tich-hop.py` (scratchpad) áp hàng sổ (thay theo số, thêm 94NN), cột mốc, biên bản (theo số vòng), ADR mới nối cuối, cặp sửa tại chỗ (đúng một chỗ khớp); rổ áp tay; lời khai đếm bằng `pnpm cap-so --dem`; tệp bàn giao xoá; cổng của lô chạy lại trên cây gộp.
+- Hệ quả liên nhánh sửa ở tích hợp (mỗi cái nêu ở commit tích hợp): ⑴ `tests/architecture/ma-chep-api-worker.test.ts` — `anh-xa.ts` vào hàng `doc` const và hàng mẫu "hex của SHA-256"; hàng `phanTram`, `loiCua`, `truong` RIENG; literal UUID GIU (`982df9a2`, `58dee904`); ⑵ `[INV-H20]` — `|` thoát ở hàng 270, con trỏ đầy đủ ở 9426 và 282; ⑶ câu hỏi ⑴ ⑵ của B1 (thuộc câu 5): câu "không tìm thấy" của huỷ bỏ vế thừa (`packages/unseal/src/requests.ts`, `unseal.int` hai chỗ, `buyer.int`), ca HTTP thường trực — huỷ lần nữa một yêu cầu đã huỷ ⇒ 422 câu riêng + `ma`, đúng một hàng `UNSEAL_CANCEL_DENIED` mang `lyDo`; ⑷ câu 2 của A5: chú thích TimeZone thiu ở `packages/db/src/vai-tro.int.test.ts` gạch tại chỗ; ⑸ câu ⑴ ⑵ ⑶ của B5 (thuộc câu 10): dòng `NGOAI_LE_LAC_CHO` cho policy `outbox_jobs_liet_ke_viec_api` và lời khai «ĐÚNG MỘT hàm SECURITY DEFINER» gạch ở `db/migration-shape.test.ts`, `cau` 0 → 1 cho `apps/api/src/composition.ts` ở `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`, ba chú thích thiu (`db/vai-neo.int.test.ts`, `db/vai-khoi-tao.int.test.ts`, `packages/outbox/src/runner.ts`); câu ⑷ của B5 (vế "đúng hai hàng ghim" của B6 với hàng policy cùng tiền điều kiện) xanh trên cây gộp; ⑹ §S1.221: ghi chú của người tích hợp cuối mục (`782c5eb0`); ⑺ thứ tự số của nhóm khoản mới ở dòng RỔ B (9441 về sau 9437); ⑻ các cặp bàn giao tính trên nền cũ (lời khai đếm, dòng CÒN MỞ, dòng RỔ B — A6 ⑹, B2 6.1–6.4) thay bằng `pnpm cap-so --dem` và áp tay trên nền mới.
+- Gộp đầu PR #216 và `master`: `fcda7033`, `982df9a2` (git tự gộp; hệ quả ⑴), `20b87df4` — xung đột `Handoff.md` (`pnpm cap-so --dem`), ba danh sách migration mong đợi (097 của #219 trước 9545, 9555, 9560), `docs/STATE.md` (hàng 264–268 lấy bản ĐÓNG của đợt 3; hàng 286 của #219 đặt sau 285; dòng RỔ B lấy bản đợt 3 cộng phần #219); hàng 261 ĐÓNG của `master` tự gộp.
+- Vòng này: hàng 269 ghi quyết định câu 14; thân hàng các khoản mới ghi rổ đã chốt (câu 20); kế hoạch ghi câu 19, 20.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Lượt A gộp theo thứ tự xong, không theo mã lô: lượt A không chạm tệp chung ngoài tệp của người tích hợp, và cổng liên lô chạy lại sau mỗi lô.
+- Hệ quả liên nhánh ở tệp cổng (`ma-chep-api-worker`, `[INV-H20]`) sửa ở tích hợp, không trả về lô: đó là KHAI BÁO thiếu khi hai nhánh gặp nhau, không phải hành vi sai của mã lô — lô nào cũng xanh trên nền của nó.
+- Câu hỏi người tích hợp của B1 (⑴ ⑵) và B5 (⑴ ⑵ ⑶) áp ở tích hợp: hệ quả bắt buộc của quyết định đã chốt (câu 5, câu 10), ở tệp ngoài danh sách của lô.
+- Câu 3 của A5 KHÔNG áp: khai `@trustprocure/tenancy` ở devDependencies của `packages/test-support` đòi viết lại `pnpm-lock.yaml`, mà pnpm cục bộ (v10) giải lại 123 dòng khác bản của CI (pnpm 9) — để như tám gói khác import `tenancy` trong test mà không khai.
+- B4 dừng khi #219 vào: nhánh `dot3/B4` bỏ, không gộp phần nào — hình dạng của #219 là đúng câu 4.
+- Không sửa hàng 262, 263, 234 — hàng của `master` mà phiên khác đang hay sẽ sửa; câu 15, 19 ghi ở kế hoạch và ở đây, tránh xung đột dòng giữa hai phiên.
+- `pnpm t0` và `pnpm evidence` của kết đợt chạy SAU `pnpm cap-so`: cây cấp số thật là cây vào PR (tên migration, số vòng trong tên ca đều đổi).
+
+## 6. Đột biến
+- Không có đột biến riêng của vòng tích hợp; đột biến của từng lô ở biên bản lô.
+
+## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
+- Phạm vi 31 khoản (29 + 262 · 263): đóng 26 — 24 khoản cũ (161, 169, 170, 171, 172, 181, 264, 265, 266, 267, 268, 270, 271, 273, 274, 276, 277, 279, 280, 281, 282, 283, 284, 285) và hai khoản mới của bước 0 (9401, 9402); 261 đóng ở #219; 272, 275 ĐO, giữ MỞ phần còn lại (câu 8, 9); 262, 263 sang phiên khác (câu 19). Lượt soi đối kháng của các lô mở 20 khoản (rổ B 17, rổ C 3 — câu 20).
+- Câu hỏi các lô nêu mà chưa có câu trả lời — chi tiết ở thân hàng và biên bản lô; tệp bàn giao đã xoá, nhánh lô chỉ ở máy tích hợp, nên danh sách này là bản còn lại:
+  1. **272** (A6, §S1.9135) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
+  2. **9435** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
+  3. **9436** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
+  4. **9420, 9421** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
+  5. **9422** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
+  6. Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
+  7. **9446** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
+  8. **285 / 9455** (B2) — cách tách: đóng 285, mở 9455 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 9455 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
+  9. **9460** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
+  10. **9465** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 9437 (trần lượt claim).
+  11. Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
+  12. **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
+- `tests/architecture/khoa-depcruise.test.ts` (đo thời gian) đỏ dưới tải ~10 ở lượt đo của lô B3, xanh khi chạy riêng 16/16 — không phải ca đỏ của mã; CI chạy nó không tải chung.
+
+## 8. Số đo
+- Bước 0 (`ba269ae1`): `so-no-tu-doi-chieu` 45/45, `check-an-ninh-khai` 2/2; lời khai 287 khoản, 58 mở.
+- Hết lượt A (`ae58c294`): `pnpm evidence` (cụm Postgres 16 cục bộ): 4162 khẳng định, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo 272 sau cờ `TRUSTPROCURE_DO_TRAN_MO_THAU`); ma trận 75/75 (`d7378e98`).
+- Sau B6, B1, B2, B3 và gộp `master` (`20b87df4`): `pnpm evidence` 4212 khẳng định, 0 đỏ, 10 bỏ qua; 75/75 (`5c8dd6b3`). `db/migrations.int.test.ts` trọn tệp: 126/126 sau B2, 127/127 sau B3, 128/128 sau B5.
+- Sau B5 (`8f27e4ae`): `composition.int` + `rls-coverage` + `hardening-suy` + `vai-neo` + `vai-khoi-tao` 143/143; cổng tĩnh 198/198; `pnpm test` 138 tệp, 2262 xanh, 1 bỏ qua.
+- Sổ: 26 khoản ĐÓNG, 22 khoản mới (20 mở), 2 ADR mới (ADR-9255, ADR-9260) cùng tiểu mục hay sửa tại chỗ ở ADR-016, 040, 041, 047, 053, 060, 108, 110, 122, 124, 126, 128, 129, 132, 134; 4 migration (9545, 9555, 9560, 9565); trước cấp số `pnpm cap-so --dem`: 308 khoản, 52 mở, 98 migration; rổ A 1, rổ B 26, rổ C 25.
+
 # §S1.9110 — LÔ A1 ĐỢT 3 — CỔNG TĨNH: VẾ ⑵ VIỆC SAU COMMIT FAIL-CLOSED VỚI LỜI GỌI QUA THUỘC TÍNH, LỜI GỌI GẮN LISTENER CÙNG KHỐI VỚI DÒNG DỰNG POOL, KIỂM KÊ MÃ CHÉP N ĐƠN VỊ, REGEX MIỄN GITLEAKS BỐN CHỮ SỐ — KHOẢN 264, 274, 280, 284 ĐÓNG; 9410 MỞ
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — bốn cổng kiến trúc (`tests/architecture/`) và
