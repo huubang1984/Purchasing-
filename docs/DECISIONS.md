@@ -10519,8 +10519,14 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    điều một kết quả benchmark đã lưu ở S4.5 cần để tái lập.
 4. **`quan_sat_gia(p_moc, p_hang_chuan DEFAULT NULL)`, `SECURITY INVOKER STABLE`.** Mỗi hàng một (gói, nhà cung cấp, dòng của gói)
    cho gói mà `gia_da_lo` tại mốc. Báo giá là vị thế cuối của NHÀ CUNG CẤP — phiên bản nộp muộn nhất trong những phiên bản đã mở
-   niêm phong trước mốc, xét trên mọi lời mời của nhà cung cấp ấy trong gói (spec §5.1 L5). Lượt soi đo được luật *"mới nhất theo
-   báo giá"* của bảng so sánh, lượt chấm và worker cho HAI quan sát `HOP_LE` khi nhà cung cấp bị thu hồi lời mời rồi được mời lại. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi trước mốc:
+   niêm phong trước mốc, xét trên mọi lời mời CÒN SỐNG TẠI MỐC của nhà cung cấp ấy trong gói (spec §5.1 L5). **[S1.235, sau
+   ADR-128]** Thu hồi lời mời LOẠI báo giá của lời mời ấy (ADR-128 ①, khoản 250 đóng — chủ dự án chốt *"loại, theo mốc"*): vế
+   `(i.revoked_at IS NULL OR i.revoked_at >= p_moc)` là vế `i.revoked_at IS NULL` của worker, bảng so sánh và lượt chấm viết TẠI
+   MỐC — lời mời thu hồi sau mốc vẫn là quan sát tại mốc ấy; viết nguyên văn thì đọc lại tại một mốc cũ mất quan sát. Từ ADR-128 ③
+   thu hồi bị chặn sau lần mở thầu đầu, nên với dữ liệu mới vế ấy không đổi gì; nó chạm bản rõ mở trước ADR-128. Lượt soi đo được
+   luật *"mới nhất theo báo giá"* cho HAI quan sát `HOP_LE` khi nhà cung cấp bị thu hồi lời mời rồi được mời lại; khoá theo nhà
+   cung cấp là lớp thứ hai cho cùng ca — với chỉ mục một lời mời còn sống mỗi nhà cung cấp (`024`) và vế thu hồi, hai luật cho
+   cùng kết quả trên dữ liệu nhất quán (đột biến M25 nay tương đương, §S1.235 §6). Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi trước mốc:
    ánh xạ hiệu lực (băm bằng băm hiện tại, ADR-121 ①), bí danh đơn vị (qua `don_vi_tai`), quy đổi riêng (qua lõi ②). Ngày quan sát
    là mốc mở giá của gói. Tiền tệ đọc qua `bid_currency` và so với tiền tệ của chính sách của CHÍNH gói — ngân sách ghim, không có thì
    phiên bản hiệu lực lúc gói ra đời (hai nhánh của `rfq_che_do_nghiem`). Sáu trạng thái theo thứ tự ưu tiên `KHONG_DOC_DUOC` ·
@@ -10577,9 +10583,10 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
   `quan_sat_gia`. Test ca băm của cả hai canh; đột biến bỏ vế băm ở thân làm ca đỏ.
 - **Đọc HẾT tổ chức** (`p_hang_chuan` NULL) phân tích lại một phong bì cho mỗi dòng của gói: 84–88 s ở 300.000 quan sát. Không route
   nào đi đường ấy; một route như thế chạm `statement_timeout`.
-- **Bảng so sánh và lượt chấm vẫn đọc theo báo giá**: nhà cung cấp được mời lại có hai hàng ở đó, một hàng ở lịch sử giá — khoản 250
-  (STATE, rổ B) đã ghi phần ấy; lịch sử giá không sửa nó. Báo giá của lời mời đã thu hồi mà không mời lại vẫn là vị thế cuối, như ở
-  bảng so sánh — câu hỏi *"thu hồi có loại báo giá đã nộp không"* của khoản 250 quyết cho cả ba bộ đọc.
+- ~~**Bảng so sánh và lượt chấm vẫn đọc theo báo giá** … câu hỏi của khoản 250 quyết cho cả ba bộ đọc.~~ **[S1.235, sau ADR-128]**
+  Khoản 250 đóng ở ADR-128: thu hồi LOẠI báo giá khỏi mở thầu, bảng so sánh và lượt chấm; lịch sử giá theo cùng luật, viết tại
+  mốc. Cổng tĩnh của ADR-128 (`phong-bi-loi-moi-con-song.test.ts`) chỉ đọc SQL TypeScript khử trùng theo `v.bid_id`, nên không
+  thấy bộ đọc thứ tư này — ca test và đột biến M26/M27 ở `lich-su-gia.int` canh vế của nó.
 - **Đơn giá 0 là `HOP_LE`**: `bid_so_tien` nhận `0`, và một dòng tặng kèm là dữ liệu thật. Benchmark (S4.5) quyết có đọc nó không.
 - **Vị từ trong thân không phải ranh giới** (ADR-095): mã chạy dưới `app_api` vẫn `SELECT` được `rfq_unsealed_bids`. Ranh giới là mục ⑦.
 

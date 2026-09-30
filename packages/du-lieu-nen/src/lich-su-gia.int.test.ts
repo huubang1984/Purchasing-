@@ -707,6 +707,31 @@ describe("[INV-L5] ⑵ vòng BAFO, huỷ, và `status` không được đọc", 
     );
   });
 
+  it("thu hồi lời mời LOẠI báo giá của lời mời ấy — TẠI MỐC (ADR-128, khoản 250): đọc tại mốc trước lần thu hồi còn thấy, đọc sau thì không", async () => {
+    // Bản rõ mở TRƯỚC ADR-128 rồi lời mời mới bị thu hồi: đường ấy nay bị chặn ở tầng gói (ADR-128 ③), nên ghi thẳng.
+    const { rfqId, bg } = await goiDaMo([{ moTa: "Thép D10", soLuong: "1.0000", donVi: "kg" }], [phongBi([[1, "5.00"]]), phongBi([[1, "7.00"]])]);
+    await anhXa(rfqId, 1, hangThep, "do");
+    const truocThuHoi = (await db.pool.query<{ t: string }>("SELECT clock_timestamp()::text AS t")).rows[0]!.t;
+    await db.pool.query(
+      "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = clock_timestamp(), revoked_by = $2, revoked_by_session_id = $3 " +
+        "WHERE id = (SELECT invitation_id FROM vendor_bids WHERE id = $1)",
+      [bg[0]!.bidId, pm.nguoi, pm.phien],
+    );
+    expect(
+      (await quanSat(rfqId)).map((q) => [q.supplier_id, q.thanh_tien]),
+      "bây giờ: báo giá của lời mời đã thu hồi không là quan sát",
+    ).toEqual([[bg[1]!.supplierId, "7.00"]]);
+    expect(
+      (await quanSat(rfqId, truocThuHoi)).map((q) => [q.supplier_id, q.thanh_tien]).sort(),
+      "tại mốc trước lần thu hồi: lời mời còn sống, cả hai là quan sát",
+    ).toEqual(
+      [
+        [bg[0]!.supplierId, "5.00"],
+        [bg[1]!.supplierId, "7.00"],
+      ].sort(),
+    );
+  });
+
   it("gói X không thấy giá CHÍNH nó: mốc bằng mốc mở giá của gói ⇒ 0 hàng", async () => {
     const { rfqId, bg } = await goiDaMo([{ moTa: "Thép D10", soLuong: "1.0000", donVi: "kg" }], [phongBi([[1, "5.00"]])]);
     await anhXa(rfqId, 1, hangThep, "do");

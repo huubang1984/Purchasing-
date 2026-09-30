@@ -20790,10 +20790,18 @@ Trên Postgres 16 thật (cụm cục bộ, mọi migration tới `089`):
   | M22 | tiền tệ gói không ngân sách bỏ nhánh ⑵ | đỏ — 1 ca |
   | M23 | `SAU_MOC` phiên bản không bao giờ | đỏ — 1 ca |
   | M24 | lõi bỏ vế `ghi_luc < p_moc` của cạnh riêng | đỏ — 1 ca |
-  | M25 | vị thế cuối theo BÁO GIÁ thay vì nhà cung cấp (lượt soi T1) | đỏ — 1 ca (thu hồi lời mời rồi mời lại) |
+  | M25 | vị thế cuối theo BÁO GIÁ thay vì nhà cung cấp (lượt soi T1) | đỏ — 1 ca (thu hồi lời mời rồi mời lại). **[sau #216]** chạy lại trên thân có vế thu hồi: XANH — tương đương, xem dưới bảng |
+  | M26 | **[sau #216]** bỏ vế thu hồi lời mời (ADR-128) | đỏ — 1 ca (ca thu hồi tại mốc) |
+  | M27 | **[sau #216]** vế thu hồi không theo mốc — `i.revoked_at IS NULL` nguyên văn ba bộ đọc kia | đỏ — 1 ca (đọc tại mốc trước lần thu hồi) |
 
   Bảng là lượt chạy trên thân CUỐI (sau lượt soi). Lượt trước, trên thân bản 3, có 24 đột biến (chưa có M25), cả 24 đỏ; M1 của lượt
   ấy chạy lại riêng vì `beforeAll` hỏng khi dựng cụm dưới tải (44 ca bỏ qua, không ca nào đo).
+
+  **[sau #216] M25 tương đương.** Chỉ mục `rfq_invitations_mot_loi_moi_con_song` (`024`) cho mỗi (gói, nhà cung cấp) tối đa một
+  lời mời chưa thu hồi; vế `(i.revoked_at IS NULL OR i.revoked_at >= p_moc)` giữ đúng những lời mời còn sống TẠI MỐC; và lời mời
+  mới chỉ ra đời sau lần thu hồi của lời mời cũ, nên báo giá của nó mở sau mốc ấy. Tại một mốc, mỗi nhà cung cấp còn tối đa một
+  luồng báo giá — khoá theo `v.bid_id` hay theo `i.supplier_id` cho cùng kết quả trên dữ liệu nhất quán. Ca T1 (thu hồi rồi mời
+  lại) vẫn đứng, nay đỏ ở M26 thay vì M25. Khoá theo nhà cung cấp được giữ làm lớp thứ hai; hiệu năng của nó đã đo (A/B dưới).
 
 - **Hiệu năng** (`tools/do-lich-su-gia`): 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn (mỗi hàng chuẩn ~500 dòng,
   1.500 quan sát mỗi lần đọc), gieo qua đúng các cạnh của đường thật (`gieo.sql`, 613 s), đo dưới `app_api` với tổ chức gắn ở phiên.
@@ -20828,7 +20836,7 @@ bằng SQL thô. Thân migration đổi ba lần trong lúc soi (các bản đo 
 | # | Mức | Phát hiện | Xử lý |
 |---|---|---|---|
 | C1 | CAO | Mục ghim của `bid_dong_tho` và `quan_sat_gia` còn thân bản đầu: lượt sửa của hardening dựng lại hàm từ bản ghim, nên test chạy trên thân cũ, và `migrations.int` ("bảy hàm") ĐỎ | Sửa trong vòng: năm mục ghim SINH từ thân migration bằng một bộ sinh — lượt đột biến dùng chính bộ sinh ấy; ca thu hồi-mời lại (chỉ thân mới qua) chứng minh thân mới sống sau `migrate()` |
-| T1 | TRUNG | Nhà cung cấp bị thu hồi lời mời rồi được mời lại có hai báo giá đã mở ⇒ hai quan sát `HOP_LE`, nhân đôi trọng số trong trung vị | Sửa trong vòng: vị thế cuối theo nhà cung cấp; ca test; đột biến M25. Bảng so sánh và lượt chấm vẫn đọc theo báo giá — đã là khoản 250 (rổ B), nói ra ở ADR |
+| T1 | TRUNG | Nhà cung cấp bị thu hồi lời mời rồi được mời lại có hai báo giá đã mở ⇒ hai quan sát `HOP_LE`, nhân đôi trọng số trong trung vị | Sửa trong vòng: vị thế cuối theo nhà cung cấp; ca test; đột biến M25. **[sau #216]** ADR-128 đóng khoản 250 (thu hồi loại báo giá); lịch sử giá thêm vế thu hồi TẠI MỐC — cùng ca nay đóng ở hai lớp, M25 tương đương, M26/M27 đỏ |
 | T2 | TRUNG | Ranh giới lách được: thân `BEGIN ATOMIC` (`prosrc` rỗng; mẫu tĩnh trượt sang hàm kế tiếp), schema khác `public`, `CREATE FUNCTION` không `OR REPLACE`, tệp `.sql` ngoài migration, SQL động | Sửa trong vòng: lớp CSDL đọc `pg_get_functiondef` mọi schema cộng view/matview; lớp tĩnh chặn trượt, nhận mọi schema và dạng, cấm `BEGIN ATOMIC` ở migration, liệt kê tệp `.sql`/`.js` khác. SQL động ghép mảnh và tên bảng nội suy trong TypeScript: KHÔNG lớp nào thấy — nói ra |
 | T3 | TRUNG | `gia_da_lo` quét cả `unseal_requests` cho mỗi vòng BAFO | Sửa trong vòng: tra theo `(org_id, rfq_id)` |
 | L1 | THẤP | Ghim không canh `STRICT`: `ALTER … STRICT` làm hàm ra 0 hàng mà hậu điều kiện không thấy | Sửa trong vòng: năm mục ghim đòi `proisstrict IS FALSE`. Tên cột OUT không canh — kiểu trả và số đối số có |

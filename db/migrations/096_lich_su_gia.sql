@@ -32,10 +32,13 @@
 --     `CANCELLED` bị loại từ lúc huỷ.
 -- (4) `quan_sat_gia(p_moc, p_hang_chuan)` — hàm as-of, `SECURITY INVOKER STABLE` (§4.5, §2.5 ⑿). Mỗi hàng một (gói, nhà cung
 --     cấp, dòng của gói) cho gói mà `gia_da_lo` tại `p_moc`; báo giá là vị thế CUỐI của NHÀ CUNG CẤP — phiên bản nộp muộn nhất
---     trong những phiên bản đã mở niêm phong trước mốc, xét trên MỌI lời mời của nhà cung cấp ấy trong gói (spec §5.1 L5: *"vị thế
---     cuối của một nhà cung cấp"*). Khác luật `DISTINCT ON (v.bid_id)` của bảng so sánh, lượt chấm và worker ở đúng một ca: nhà
---     cung cấp bị thu hồi lời mời rồi được mời lại có HAI báo giá — lượt soi đo được hai quan sát `HOP_LE` cho một người, tức một
---     cần gạt nhân đôi trọng số trong trung vị. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi TRƯỚC `p_moc`: ánh xạ hiệu lực của
+--     trong những phiên bản đã mở niêm phong trước mốc, xét trên mọi lời mời CÒN SỐNG TẠI MỐC của nhà cung cấp ấy trong gói (spec
+--     §5.1 L5: *"vị thế cuối của một nhà cung cấp"*). Thu hồi lời mời LOẠI báo giá của lời mời ấy (ADR-128 ①, khoản 250): vế
+--     `(i.revoked_at IS NULL OR i.revoked_at >= p_moc)` là vế `i.revoked_at IS NULL` của worker, bảng so sánh và lượt chấm viết
+--     TẠI MỐC — lời mời thu hồi sau mốc vẫn là quan sát tại mốc ấy. Từ ADR-128 ③ thu hồi bị chặn sau lần mở thầu đầu, nên với dữ
+--     liệu mới vế ấy không đổi gì; nó chạm bản rõ mở trước vòng ấy. Khoá theo nhà cung cấp chứ không theo luồng (`v.bid_id`) là
+--     lớp thứ hai cho cùng ca (lượt soi T1: thu hồi rồi mời lại là hai báo giá đã mở, tức hai quan sát `HOP_LE` cho một người):
+--     với chỉ mục một lời mời còn sống mỗi nhà cung cấp (`024`) và vế trên, hai luật cho cùng kết quả trên dữ liệu nhất quán. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi TRƯỚC `p_moc`: ánh xạ hiệu lực của
 --     dòng (băm bằng băm hiện tại, `089`), bí danh đơn vị (qua `don_vi_tai`), quy đổi riêng (qua lõi (1)). Ngày quan sát là mốc
 --     mở giá của gói — `min(unsealed_at)` (§3.3). Tiền tệ đọc QUA `bid_currency` (`070`) và so với tiền tệ của chính sách của
 --     CHÍNH gói ấy — chính sách ngân sách ghim, không có thì phiên bản hiệu lực lúc gói ra đời: đúng hai nhánh của
@@ -357,6 +360,7 @@ AS $ham$
          JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id
          JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id
         WHERE i.org_id = dg.org_id AND i.rfq_id = dg.rfq_id
+          AND (i.revoked_at IS NULL OR i.revoked_at >= p_moc)
           AND u.unsealed_at < p_moc
         ORDER BY i.supplier_id, v.submitted_at DESC, v.version DESC
      ) f
@@ -390,7 +394,7 @@ $ham$;
 -- (5) CHỈ MỤC CHO CÁC ĐƯỜNG TRA
 -- ============================================================================================
 -- `rfq_invitations` và `unseal_requests` chỉ có chỉ mục (org, gói) RIÊNG PHẦN (lời mời còn sống, yêu cầu đang mở) — lần tra
--- theo gói của (3) và (4) cần MỌI hàng: lời mời đã thu hồi vẫn có báo giá đã mở, yêu cầu đã chạy là thứ (3) hỏi.
+-- theo gói của (3) và (4) cần MỌI hàng: lời mời thu hồi SAU mốc vẫn là quan sát tại mốc ấy, yêu cầu đã chạy là thứ (3) hỏi.
 CREATE INDEX rfq_invitations_goi_idx ON rfq_invitations (org_id, rfq_id);
 CREATE INDEX unseal_requests_goi_idx ON unseal_requests (org_id, rfq_id);
 CREATE INDEX rfq_unsealed_bids_yeu_cau_idx ON rfq_unsealed_bids (org_id, unseal_request_id);
