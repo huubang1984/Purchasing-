@@ -8,13 +8,17 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  KHUNG_TIN_HIEU_RONG,
   TRAN_LY_DO_BYTE,
   baoSauKhiMo,
   baoSauKhiMoi,
   hangNganSach,
   hienTraVe,
+  khungTinHieu,
   loiLyDo,
+  loiLyDoGhiNhan,
   nhanLoiMoi,
+  nhanTrangThaiGoi,
   nhanTrangThaiLoiMoi,
   nutLoiMoi,
   thuTuBuoc,
@@ -167,5 +171,125 @@ describe("[S1.200 / khoản 258] ngân sách ở lần đọc gói", () => {
       "không",
     ]);
     expect(hangNganSach(undefined).map((h) => h[1])).toEqual([null, null, null, null, null]);
+  });
+});
+
+// =============================================================================================
+// [S3.6b2 / K10a] KHUNG TÍN HIỆU CHIA NHỎ GÓI. Thân mẫu dựng đúng hình dạng `lietKeTinHieu` trả qua JSON: mốc là chuỗi ISO,
+// bằng chứng là jsonb của `tin_hieu_chia_nho` (khoá theo thứ tự của jsonb).
+// =============================================================================================
+
+const BC = { can: 1000000000, goi: ["g1", "g2", "g3"], loai: "PURCHASE_SPLITTING", nhom_hang: "n1", chinh_sach: "p2", cua_so_ngay: 30 };
+const GOI = {
+  g1: { tieuDe: "Thep 480", trangThai: "OPEN" },
+  g2: { tieuDe: "Thep 470", trangThai: "OPEN" },
+  g3: { tieuDe: "Thep 490", trangThai: "PENDING_APPROVAL" },
+};
+const hangLuuLucNop = (ghiNhan: unknown[] = []) => ({
+  id: "s1", loai: "PURCHASE_SPLITTING", nguon: "NOP_DUYET", bangChung: BC, doTinCay: "XAC_DINH", giaiThich: "x",
+  tinhLuc: "2026-09-30T01:00:00.000Z", nguoiGhi: "u-pm", nguoiGhiTen: "Anh Soạn", ghiNhan,
+});
+const than = (tinHieu: Record<string, unknown>) => ({ tinHieu: { hienTai: BC, canGhiNhan: true, tinHieu: [hangLuuLucNop()], goi: GOI, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2, ...tinHieu } });
+
+describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
+  it("chờ ghi nhận, người đang xem ghi nhận được: tóm tắt nói tập, cửa sổ và cận; bảng gói theo bằng chứng hiện tại, đánh dấu gói này; mời bấm", () => {
+    const k = khungTinHieu(than({}), "g3");
+    expect(k.hien).toBe(true);
+    expect(k.tomTat).toBe(
+      "Gói này nằm trong 3 gói cùng nhóm hàng nộp duyệt trong 30 ngày, mỗi gói dưới cận 1.000.000.000 mà tổng chạm cận ấy. Gói chỉ mở " +
+        "được sau khi một người giữ quyền duyệt — không tạo, không nộp gói nào trong tập ấy — đọc tín hiệu và ghi nhận nó, kèm lý do.",
+    );
+    expect(k.goi).toEqual([
+      { id: "g1", tieuDe: "Thep 480", trangThai: "đã mở", laGoiNay: false },
+      { id: "g2", tieuDe: "Thep 470", trangThai: "đã mở", laGoiNay: false },
+      { id: "g3", tieuDe: "Thep 490", trangThai: "chờ duyệt", laGoiNay: true },
+    ]);
+    expect(k.lichSu).toEqual([{ luc: "2026-09-30T01:00:00.000Z", noiDung: "Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (3 gói, cận 1.000.000.000)." }]);
+    expect([k.choGhiNhan, k.khongDuoc]).toEqual([true, null]);
+  });
+
+  it("chờ ghi nhận, người đang xem KHÔNG ghi nhận được: không mời bấm, nói đúng câu của máy chủ", () => {
+    const lyDo = "Người tạo hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy.";
+    const k = khungTinHieu(than({ nguoiXem: { ghiNhanDuoc: false, lyDo } }), "g3");
+    expect([k.hien, k.choGhiNhan, k.khongDuoc]).toEqual([true, false, lyDo]);
+    // Máy chủ nói ghi nhận được mà tín hiệu không còn chờ ⇒ không mời bấm (không có gì để ghi nhận).
+    expect(khungTinHieu(than({ canGhiNhan: false }), "g3").choGhiNhan).toBe(false);
+    // Thân lạ ở chỗ người xem ⇒ không mời bấm, không bịa câu.
+    expect([khungTinHieu(than({ nguoiXem: null }), "g3").choGhiNhan, khungTinHieu(than({ nguoiXem: null }), "g3").khongDuoc]).toEqual([false, null]);
+  });
+
+  it("§8.10: không ai trong tổ chức ghi nhận được ⇒ tóm tắt nói tổ chức kẹt; một người thì không", () => {
+    expect(khungTinHieu(than({ soNguoiGhiNhanDuoc: 0 }), "g3").tomTat).toContain("Trong tổ chức hiện không ai ghi nhận được tín hiệu này");
+    expect(khungTinHieu(than({ soNguoiGhiNhanDuoc: 1 }), "g3").tomTat).not.toContain("không ai ghi nhận được");
+  });
+
+  it("đã ghi nhận trên bằng chứng BẰNG hiện tại: tóm tắt nói tín hiệu không chặn nữa; lịch sử có lần ghi nhận với tên và lý do", () => {
+    const k = khungTinHieu(
+      than({
+        canGhiNhan: false,
+        nguoiXem: { ghiNhanDuoc: false, lyDo: null },
+        soNguoiGhiNhanDuoc: null,
+        tinHieu: [hangLuuLucNop([{ id: "a1", lyDo: "Ba cong trinh", nguoi: "u-pm3", nguoiTen: "Chị Duyệt", luc: "2026-09-30T02:00:00.000Z" }])],
+      }),
+      "g3",
+    );
+    expect(k.tomTat).toContain("Tín hiệu đã được ghi nhận — nó không chặn lần mở gói nữa.");
+    expect(k.lichSu.map((d) => d.noiDung)).toEqual([
+      "Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (3 gói, cận 1.000.000.000).",
+      "Chị Duyệt ghi nhận: «Ba cong trinh».",
+    ]);
+    expect([k.choGhiNhan, k.khongDuoc]).toEqual([false, null]);
+  });
+
+  it("bằng chứng TRÔI: ghi nhận cũ trên tập cũ không phải ghi nhận của tập hiện tại; hàng `GHI_NHAN` nói tập đã đổi", () => {
+    const cu = { ...BC, goi: ["g0", "g1", "g2", "g3"] };
+    const k = khungTinHieu(
+      than({
+        tinHieu: [
+          { ...hangLuuLucNop([{ id: "a1", lyDo: "cu", nguoi: "u", nguoiTen: "Chị Duyệt", luc: "2026-09-30T02:00:00.000Z" }]), bangChung: cu },
+          { ...hangLuuLucNop(), id: "s2", nguon: "GHI_NHAN", nguoiGhiTen: "Chị Duyệt", tinhLuc: "2026-09-30T03:00:00.000Z" },
+        ],
+      }),
+      "g3",
+    );
+    expect(k.tomTat).toContain("Gói chỉ mở được sau khi");
+    expect(k.goi.map((g) => g.id), "bảng gói vẽ bằng chứng HIỆN TẠI").toEqual(["g1", "g2", "g3"]);
+    expect(k.lichSu.map((d) => d.noiDung)).toEqual([
+      "Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (4 gói, cận 1.000.000.000).",
+      "Chị Duyệt ghi nhận: «cu».",
+      "Chị Duyệt ghi nhận khi tập gói đã đổi sau lần nộp — tín hiệu được ghi lại theo tập hiện tại (3 gói, cận 1.000.000.000).",
+    ]);
+  });
+
+  it("tín hiệu lúc nộp không còn đúng (hiện tại `null`): khung vẫn hiện, nói không cần ghi nhận, bảng gói vẽ hàng đã lưu mới nhất", () => {
+    const k = khungTinHieu(than({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }), "g3");
+    expect(k.hien).toBe(true);
+    expect(k.tomTat).toBe("Tín hiệu ghi lúc nộp không còn đúng: tập gói hiện tại không chạm cận nào, nên lần mở gói không cần ghi nhận.");
+    expect(k.goi.map((g) => g.id)).toEqual(["g1", "g2", "g3"]);
+    expect(k.choGhiNhan).toBe(false);
+  });
+
+  it("gói không có tín hiệu nào, hay thân lạ: khung rỗng, ẩn; tên gói thiếu thì dùng id, trạng thái lạ nói nguyên văn", () => {
+    expect(khungTinHieu({ tinHieu: { hienTai: null, canGhiNhan: false, tinHieu: [], goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null } }, "g")).toEqual(KHUNG_TIN_HIEU_RONG);
+    for (const la of [null, undefined, "x", {}, { tinHieu: null }, { tinHieu: [] }]) expect(khungTinHieu(la, "g")).toEqual(KHUNG_TIN_HIEU_RONG);
+    const k = khungTinHieu(than({ goi: { g1: { tieuDe: "Thep 480", trangThai: "LA" } } }), "g3");
+    expect(k.goi).toEqual([
+      { id: "g1", tieuDe: "Thep 480", trangThai: "LA", laGoiNay: false },
+      { id: "g2", tieuDe: "g2", trangThai: "—", laGoiNay: false },
+      { id: "g3", tieuDe: "g3", trangThai: "—", laGoiNay: true },
+    ]);
+  });
+
+  it("trạng thái gói nói bằng lời", () => {
+    expect(["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED", "UNSEALED", "CANCELLED", "", 7].map(nhanTrangThaiGoi)).toEqual([
+      "đang soạn", "chờ duyệt", "đã mở", "đã đóng", "đã mở thầu", "đã huỷ", "—", "—",
+    ]);
+  });
+
+  it("lý do ghi nhận: bắt buộc sau khi cắt khoảng trắng, trần tính bằng BYTE như máy chủ", () => {
+    expect(loiLyDoGhiNhan("   ")).toBe("Cần ghi lý do ghi nhận — lý do vào sổ kiểm toán cùng tên người ghi nhận.");
+    expect(loiLyDoGhiNhan(" Ba cong trinh ")).toBeNull();
+    expect(loiLyDoGhiNhan("a".repeat(TRAN_LY_DO_BYTE))).toBeNull();
+    expect(loiLyDoGhiNhan("ệ".repeat(Math.floor(TRAN_LY_DO_BYTE / 3) + 1))).toContain("Lý do dài quá");
   });
 });
