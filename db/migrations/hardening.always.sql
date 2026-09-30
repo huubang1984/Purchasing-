@@ -13131,6 +13131,67 @@ $ham$;
       $q$quyền sở hữu bảng public.otp_rate_limits hoặc SUPERUSER$q$
     ],
 
+    -- ---- [S1.9192 / khoản 158] Hai policy `kind` theo vai của `outbox_jobs` (9592) — dựng lại TỪ DÒNG KHAI ------------
+    -- `9592` là policy RESTRICTIVE đầu tiên của dự án mang `TO <một vai ứng dụng>` (mọi RESTRICTIVE trước nó là PUBLIC, khuôn
+    -- 027). `DROP OWNED BY app_api` — đúng thứ ops làm khi xoá rồi tạo lại vai (đường N3, fix round 4) — XOÁ policy mà vai ấy
+    -- là chủ thể duy nhất, và 83⑴ ở lượt phán xét kêu "dòng khai thiu" (đo: `db/migrations.int.test.ts` N3 đỏ đúng thông điệp
+    -- ấy trước khi có mục này). Mục 044 ở trên là tiền lệ: hardening dựng lại policy THIẾU, phán xét đòi đủ cột. Khác 044,
+    -- biểu thức KHÔNG chép tay lần thứ ba: câu sửa lẫn phán xét đọc từ chính POLICY_RESTRICTIVE_KHAI theo (lược đồ, bảng,
+    -- tên) — dòng khai là nguồn duy nhất, thêm `kind` vẫn là một migration `ALTER POLICY` MỚI cộng sửa dòng khai (ADR-9292).
+    -- Chỉ dựng khi policy KHÔNG CÓ: một policy đang có mà lệch (ALTER tay) không được "sửa đè" — không có migration nào để so —
+    -- mà bị phán xét ở đây lẫn 83⑴, nêu tên. Vai không tồn tại thì không dựng (BƯỚC 0 và mục "thuộc tính role" lo vai) và phán
+    -- xét nêu tên policy. Cùng lý do `EXECUTE format(...)` như mục 042/044: lớp tĩnh cấm tệp khác tạo policy cho bảng của 007.
+    ARRAY[
+      $q$hai policy kind theo vai của outbox_jobs (9592)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9592_outbox_policy_theo_kind.sql')$q$,
+      $q$DO $fn158$
+         DECLARE
+           r record;
+         BEGIN
+           FOR r IN SELECT g.nspname, g.bang, g.polname, g.vai_tro, g.bieu_thuc_using, g.bieu_thuc_with_check
+                      FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs' AND g.lenh = 'w'
+                       AND g.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')
+                       AND EXISTS (SELECT 1 FROM pg_roles rr WHERE rr.rolname = g.vai_tro)
+                       AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                                        WHERE p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+                                          AND p.polname = g.polname)
+           LOOP
+             EXECUTE format('CREATE POLICY %I ON %I.%I AS RESTRICTIVE FOR UPDATE TO %I USING (%s) WITH CHECK (%s)',
+                            r.polname, r.nspname, r.bang, r.vai_tro, r.bieu_thuc_using, r.bieu_thuc_with_check);
+           END LOOP;
+         END
+         $fn158$$q$,
+      -- Gương bảy cột của dòng khai (cùng vế so với 83⑴): RESTRICTIVE, đúng lệnh, đúng vai, USING và WITH CHECK nguyên văn.
+      -- `count(*) = 2` chống rỗng ruột: hai dòng khai phải CÓ ở POLICY_RESTRICTIVE_KHAI, không chỉ "mọi dòng có đều khớp".
+      $q$(SELECT count(*) = 2 AND bool_and(p.oid IS NOT NULL)
+            FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+            LEFT JOIN pg_policy p
+              ON p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+             AND p.polname = g.polname
+             AND NOT p.polpermissive
+             AND p.polcmd::text = g.lenh
+             AND $q$ || BIEU_THUC_VAI_TRO || $q$ = g.vai_tro
+             AND pg_get_expr(p.polqual, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_using
+             AND pg_get_expr(p.polwithcheck, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_with_check
+           WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+             AND g.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal'))$q$,
+      -- Mô tả nêu TÊN policy, lệnh và vai — không in biểu thức USING/WITH CHECK (luật T1, cùng khuôn mục 044).
+      $q$coalesce((SELECT string_agg(g.polname || ' '
+                                     || CASE WHEN p.oid IS NULL THEN 'KHÔNG tồn tại'
+                                             ELSE 'lệch — restrictive=' || (NOT p.polpermissive)::text
+                                                  || ' lệnh=' || p.polcmd::text
+                                                  || ' vai=' || coalesce(nullif($q$ || BIEU_THUC_VAI_TRO || $q$, ''), '(không có)') END,
+                                     '; ' ORDER BY g.polname)
+                          || ' (chỉ nêu tên — biểu thức USING/WITH CHECK không in ra; so với dòng khai POLICY_RESTRICTIVE_KHAI bằng pg_get_expr(polqual, polrelid) trong pg_policy)'
+                     FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     LEFT JOIN pg_policy p ON p.polrelid = to_regclass(g.nspname || '.' || g.bang) AND p.polname = g.polname
+                    WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+                      AND g.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')),
+                  'không có dòng khai nào cho outbox_jobs_kind_app_api/_app_unseal ở POLICY_RESTRICTIVE_KHAI')$q$,
+      $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
+    ],
+
     -- ---- Thuộc tính role (hàng rào S1) ---------------------------------------------------
     -- app_api có BYPASSRLS là đọc được giá thầu của MỌI tổ chức, bất chấp toàn bộ RLS.
     ARRAY[
