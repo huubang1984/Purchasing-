@@ -348,5 +348,47 @@ describe("sha256Hex", () => {
   });
 });
 
+// ==============================================================================================
+// [S1.9101 / kid] PHÍA PHÁT HÀNH HẸP HƠN ĐỊNH DẠNG: KID BIÊN NHẬN KHÔNG MANG `:`
+//
+// Kid biên nhận thành TÊN ĐỐI TƯỢNG S3 (`khoa-bien-nhan/<kid>.json`) khi job neo neo tài liệu khoá — `taiLieuMotKhoa` của
+// `tools/neo-so-kiem-toan/src/aws.ts` chỉ nhận `[A-Za-z0-9._-]`, nên một kid mang `:` mà bộ ký từng nhận làm lệnh neo NÉM
+// (câu hỏi của lô A1, §S1.238). Chủ dự án chốt 2026-09-30: thu hẹp phía PHÁT HÀNH ngay, trước khi có biên nhận thật nào được
+// ký. ĐỊNH DẠNG không đổi: `KID_PATTERN` của `receipt.ts` vẫn cho `:` — đổi định dạng đã ký là thứ ADR-026 §1 cấm (cùng lập
+// luận H11-11 ở `tools/neo-so-kiem-toan/src/index.ts`), và phía KIỂM vẫn phải đọc được mọi văn bản định dạng cho phép.
+// ==============================================================================================
+describe("[S1.9101 / kid] phía phát hành không nhận kid có `:`; định dạng đã ký thì không đổi", () => {
+  it("[S1.9101 / kid] vòng khoá của bộ ký local-dev TỪ CHỐI kid có `:` lúc dựng, thông điệp nêu tập ký tự", () => {
+    for (const kid of ["kms:2026-09", "a:b", ":"]) {
+      expect(() => createLocalDevReceiptSigner(new ReceiptSigningKeyRing(kid, { [kid]: capKhoa() })), kid).toThrow(ReceiptError);
+      expect(() => new ReceiptSigningKeyRing(kid, { [kid]: capKhoa() }), kid).toThrow("[A-Za-z0-9._-]");
+    }
+    // Một khoá CŨ mang `:` trong vòng cũng bị từ chối — vòng khoá là thứ phát hành, không phải thứ kiểm.
+    expect(() => new ReceiptSigningKeyRing("kms-2027-01", { "kms:2026-09": capKhoa(), "kms-2027-01": capKhoa() })).toThrow(/kms:2026-09/u);
+    // Đối chứng: `-` thay `:` ⇒ nhận; biên độ dài của tập hẹp giữ nguyên (64 nhận, 65 không).
+    expect(createLocalDevReceiptSigner(new ReceiptSigningKeyRing("kms-2026-09", { "kms-2026-09": capKhoa() })).activeKeyId).toBe("kms-2026-09");
+    const k64 = `k.${"a".repeat(59)}_-9`;
+    expect(k64).toHaveLength(64);
+    expect(new ReceiptSigningKeyRing(k64, { [k64]: capKhoa() }).activeKeyId).toBe(k64);
+    expect(() => new ReceiptSigningKeyRing(`${k64}x`, { [`${k64}x`]: capKhoa() })).toThrow(ReceiptError);
+  });
+
+  it("[S1.9101 / kid] ĐỊNH DẠNG vẫn nhận kid có `:` — văn bản `kid=kms:2026-09` dựng được, đọc ngược được, và KIỂM được bằng khoá công khai một mình", async () => {
+    // Ký bằng `node:crypto` trực tiếp, KHÔNG qua bộ ký của kho: đây là một biên nhận mà định dạng cho phép, dù phía phát hành
+    // hôm nay không phát nó nữa — phía kiểm phải đọc được nó (ADR-026 §1).
+    const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const van = buildReceiptText(truong({ kid: "kms:2026-09" }));
+    expect(van.split("\n")[2]).toBe("kid=kms:2026-09");
+    expect(parseReceiptText(van).kid).toBe("kms:2026-09");
+    const chuKy = new Uint8Array(createSign("SHA256").update(van).sign(privateKey));
+    const congKhai = new Uint8Array(publicKey.export({ type: "spki", format: "der" }));
+    await expect(verifyReceipt({ canonicalText: van, signature: chuKy, publicKey: congKhai })).resolves.toBe(true);
+    // Đối chứng âm cùng văn bản: đổi kid một ký tự thì chữ ký không còn khớp — `kid` là một phần của thứ được ký.
+    await expect(
+      verifyReceipt({ canonicalText: van.replace("kid=kms:2026-09", "kid=kms-2026-09"), signature: chuKy, publicKey: congKhai }),
+    ).resolves.toBe(false);
+  });
+});
+
 // Giữ tham chiếu kiểu để `webcrypto` không thành import chết nếu file được rút gọn về sau.
 export type _KieuKhoa = webcrypto.CryptoKey;
