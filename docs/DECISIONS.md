@@ -9754,3 +9754,59 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 ### Đo
 
 `apps/unseal-worker/src/unseal-worker.int.test.ts` (kịch bản §S1.181 trên worker thật, cùng giàn cảnh cho ba bộ đọc; chặn sau lần mở; đối chứng CLOSED), `packages/unseal/src/comparison.int.test.ts`, `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/invitation/src/invitation.int.test.ts`, `apps/api/src/buyer.int.test.ts`, `tests/architecture/phong-bi-loi-moi-con-song.test.ts`. Đột biến: §S1.9130 mục 6.
+
+## ADR-9280 — Miền email của sản phẩm là ASCII in được: `CHECK (email ~ '^[!-~]+@[!-~]+$')` trên `users` và `supplier_contacts`, hai đường ghi từ chối có tên; địa chỉ quốc tế hoá (EAI/IDN) bị từ chối tới khi một khách hàng cần
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-013, ADR-015, ADR-028 §2⑵, khoản 63, 70, **71**, 105, 9490
+
+### Bối cảnh
+
+`048`/`049` đưa `CHECK (email = lower(email))` xuống lược đồ và `login.ts` hạ CẢ HAI vế bằng `pg_catalog.lower()`, nên phép tra magic link
+tất định (khoản 63, 70 đóng). Phần còn lại là khoản 71, đo được ở S1.27/S1.61: ⑴ mọi điểm mã là điểm bất động của `lower()` máy chủ đi qua
+ràng buộc — `ασ@corp.com` cạnh `ας@corp.com`, `i̇@corp.com` cạnh `i@corp.com`: hai NGƯỜI DÙNG khác nhau mà mắt người không phân biệt được, một
+mặt tấn công lừa đảo nội bộ trên đúng kênh nhận magic link; ⑵ tập giá trị cột CẤT ĐƯỢC phụ thuộc libc của ảnh nền — `Ⓐlice@corp.com` qua trên
+musl, bị từ chối trên glibc; 124 điểm mã mà `.toLowerCase()` của JS hạ còn máy chủ để nguyên trên musl, 28 trên glibc; dưới ctype C `lower()`
+chỉ gấp ASCII — nên `Ⓐn@x.vn` viết tay sống cạnh `ⓐn@x.vn` do `addSupplierContact` ghi, và một ca test tiền đề locale (`khoi-tao.int`) xanh
+hay đỏ theo máy chạy nó (đo ở S1.9180: đỏ dưới glibc `C.UTF-8`); ⑶ `addSupplierContact` kiểm 320 byte TRƯỚC khi hạ trong khi `İ`/`Ⱥ`/`Ⱦ` hạ
+ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Thân khoản đề ba đường và nói đường «thu hẹp miền» là một quyết định nhìn thấy
+được vì nó từ chối địa chỉ quốc tế hoá (RFC 6531).
+
+### Quyết định
+
+1. **Miền email của sản phẩm là ASCII IN ĐƯỢC**: `users.email` và `supplier_contacts.email` phải khớp `^[!-~]+@[!-~]+$` — mỗi ký tự trong
+   0x21…0x7E, ít nhất một `@` không ở đầu/cuối. Lược đồ cưỡng chế bằng `users_email_ascii` và `supplier_contacts_email_ascii`
+   (`9580_email_ascii`, không `NOT VALID`, đối chiếu trước bằng định danh không in email, không tự sửa); hai dòng khai ở `CHECK_AN_NINH_KHAI`
+   (khoản 105) — gỡ hay đổi là deploy đỏ.
+2. **Hai đường ghi từ chối CÓ TÊN trước khi tới CSDL**: `addSupplierContact` (`SupplierError` thân cố định ⇒ 422) kiểm ASCII TRƯỚC khi hạ chữ
+   thường và 320 byte SAU; `tools/khoi-tao-to-chuc` (`KhoiTaoError` nêu vị trí, không in email, rollback trọn). `login.ts` giữ hai vế cùng
+   `pg_catalog.lower()`: bản vá S1.27 đúng không nhờ miền, và là thứ còn đứng nếu miền có ngày mở lại.
+3. **Mẫu là `[!-~]`, không chặt hơn (dot-atom RFC 5321)**: khoản 71 là bài toán MIỀN KÝ TỰ, không phải hình dạng — hình dạng đã có
+   `supplier_contacts_email_hinh_dang` (011) và `EMAIL_PATTERN`; dot-atom loại cả local-part có nháy và domain literal mà RFC 5321 cho phép, là
+   một quyết định sản phẩm khác chưa ai chốt; và 048 đã ghi «thêm kiểm định dạng vào lược đồ là quyết định khác hẳn».
+4. **Địa chỉ quốc tế hoá (EAI — local-part UTF-8; IDN — tên miền Unicode chưa punycode) bị từ chối**, có tên, ở cả hai tầng. **Điều kiện mở
+   lại:** khi MỘT khách hàng thật cần địa chỉ quốc tế hoá (người mua hay người liên hệ). Khi ấy đường mở là một ADR mới thay ADR này, và
+   TỐI THIỂU phải có: ⒜ một migration đổi hai CHECK (không sửa 9580) và sửa hai dòng khai cùng commit; ⒝ chuẩn hoá MỘT chỗ trước khi ghi
+   (NFC hay NFKC — chọn và đo) và một lớp phát hiện confusable (UTS #39 skeleton) ở mức tổ chức, vì chuẩn hoá không gấp `ς`/`σ` hay `Ⓐ`/`A`;
+   ⒞ đo lại sự lệch giữa `.toLowerCase()` và `lower()` trên ĐÚNG libc của ảnh deploy (khuôn thăm dò S1.61) — hoặc hạ chữ thường ở MỘT tầng duy
+   nhất; ⒟ IDN cất dạng punycode (ASCII) và hiển thị dạng Unicode ở giao diện, để `UNIQUE (org_id, …, email)` so trên dạng chuẩn.
+
+### Phương án bị loại
+
+- **Chuẩn hoá NFC/NFKC trước khi ghi, giữ miền Unicode.** NFKC gấp `Ⓐ` → `A`, nhưng không gấp `ς`/`σ`, `і` (Cyrillic)/`i` (Latin), hay `i̇`
+  sinh từ `İ`; tập cất được vẫn phụ thuộc libc; và cần thêm một lớp confusable để đóng ⑴ — nhiều lớp hơn, đóng ít hơn.
+- **Chấp nhận và ghi vào mô hình đe doạ.** Kênh nhận magic link là kênh xác thực; một cặp confusable ở đó là chiếm tài khoản bằng mắt người,
+  và chưa có khách hàng nào cần địa chỉ quốc tế hoá để đổi lấy.
+- **Dot-atom RFC 5321 (`[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9.-]+`).** Chặt hơn thứ khoản nợ đòi; là quyết định hình dạng, để riêng.
+- **`NOT VALID` + `VALIDATE CONSTRAINT`.** 048: một ràng buộc chưa kiểm là một ràng buộc nói dối về quá khứ; và `VALIDATE` cũng chỉ nói
+  «có vi phạm», không nói ở đâu — khối đối chiếu trước đã làm việc ấy.
+- **Kiểm ASCII chỉ ở tầng ứng dụng.** 049/070: quy ước của mã đúng chừng nào mọi đường ghi nhớ; `users` nay có đường ghi thứ hai
+  (`tools/khoi-tao-to-chuc`) và đường viết tay dưới superuser.
+
+### Hệ quả
+
+- Trên miền ASCII in được, mọi hàm hạ chữ thường (glibc, musl, ICU, ctype C, JS) cho cùng kết quả và bảo toàn độ dài byte ⇒ ⑴ ⑵ ⑶ của khoản
+  71 đóng cùng lúc; ca tiền đề locale của `khoi-tao.int` lật thành «Unicode bị từ chối trước khi tới `lower()`» và xanh dưới mọi locale.
+- Người dùng có địa chỉ quốc tế hoá bị từ chối với thông điệp cố định (422 / `KhoiTaoError` nêu vị trí) — cái giá nhìn thấy được, ghi ở đây.
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào); dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 9490, ngoài
+  phạm vi ADR này.
+- Dữ liệu có sẵn ngoài miền làm deploy dừng với danh sách id; sửa tay dưới vai mà RLS không áp, mỗi thay đổi kèm một sự kiện kiểm toán.

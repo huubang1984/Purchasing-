@@ -18448,6 +18448,140 @@ Kịch bản `scratchpad/lo72-dot-bien.sh` + `lo72-dot-bien.py` — mỗi ca áp
 - Lượt gộp (commit 2): đo trước ⒦ đỏ 1 failed | 53 skipped (`lo72b-do-truoc-rls-k.log`); ca 113 với pha ⒠ 1 passed | 120 skipped, 25,0 s (`lo72b-do-113e.log`); ca 101 với ⒦ lật 1 passed | 53 skipped (`lo72b-do-sau-rls-k.log`); `db/rls-coverage.int.test.ts` trọn vẹn 54/54, 164,7 s (`lo72b-cong-rls-coverage.log`); nhóm T1 64/64 (`lo72b-cong-t1-nhom.log`); `pnpm typecheck` exit 0 (`lo72b-typecheck.log`); eslint hai tệp exit 0 (`lo72b-eslint-{1,2}.log`); hardening `cmp` với `lo72-bak/hardening.always.sql.va` ⇒ không đổi.
 - Cổng cuối của commit 1 (`lo72-cong-cuoi.log`, tuần tự): `pnpm vitest run tests/architecture` 37/37 tệp, 408 passed | 1 skipped (409), 06:42:37 → 06:47:44 (`lo72-cong-architecture.log`) · `db/thong-diep-khong-gia-tri.int.test.ts` 8/8 (`lo72-cong-thong-diep.log`) · `db/migrations.int.test.ts` trọn vẹn 121/121, 1166,8 s (19 ph 28 s thật, máy dùng chung; `lo72-cong-migrations.log`) · `cmp` hardening với bản đã qua đột biến: `cmp lo72-bak/hardening.always.sql.va db/migrations/hardening.always.sql` sau cổng cuối ⇒ nguyên vẹn, và bản trong commit là chính bản ấy.
 
+# §S1.9180 — MIỀN EMAIL LÀ ASCII IN ĐƯỢC: `9580_email_ascii` (CHECK TRÊN `users` VÀ `supplier_contacts`, KHAI Ở HARDENING), HAI ĐƯỜNG GHI TỪ CHỐI CÓ TÊN, VẾ ⑶ SỬA — KHOẢN 71 ĐÓNG, 9490 MỞ (ADR-9280)
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; chạm đường `POST /suppliers/:supplierId/contacts` (bước «mời nhà cung cấp» của kịch bản §11) và đường
+khởi tạo tổ chức (`tools/khoi-tao-to-chuc`); không chạm mảnh nào của bảng `docs/PRODUCT.md` §11 (1, 2 đã xong; 3, 4 không đổi). Một
+migration (`9580_email_ascii`), hai dòng khai ở hardening, không route mới, không màn, không phụ thuộc mới. Đóng 71; mở 9490; ADR-9280.
+
+## 1. Vòng này là gì
+
+Lô B7 của đợt trả nợ 2: khoản 71 (S1.27, mang sang ở S1.61). Ràng buộc chữ thường của `048`/`049` (`email = lower(email)`) làm phép TRA
+tất định, nhưng ⑴ hai địa chỉ TRÔNG GIỐNG HỆT NHAU vẫn cùng tồn tại được trong một tổ chức (`ασ`/`ας`, `i̇`/`i`) — một mặt tấn công lừa đảo
+nội bộ; ⑵ TẬP GIÁ TRỊ cột cất được phụ thuộc libc của ảnh nền (`Ⓐlice@corp.com` qua trên musl, bị từ chối trên glibc; 124 điểm mã mà JS hạ
+còn máy chủ để nguyên trên musl, 28 trên glibc) — `Ⓐn@x.vn` viết tay sống cạnh `ⓐn@x.vn` do sản phẩm ghi; ⑶ `addSupplierContact` kiểm
+320 byte TRƯỚC khi hạ chữ thường trong khi `.toLowerCase()` làm `İ`/`Ⱥ`/`Ⱦ` từ 2 lên 3 byte, nên đầu vào sát 320 byte vấp CHECK độ dài của
+008 thành 23514 thân cố định. Thân khoản tự đề ba đường: thu hẹp miền về một tập mà mọi hàm hạ chữ thường đồng ý (ASCII in được), chuẩn
+hoá NFC/NFKC, hay chấp nhận và ghi vào mô hình đe doạ — và nói rõ đường thứ nhất là một QUYẾT ĐỊNH NHÌN THẤY ĐƯỢC (từ chối địa chỉ quốc tế
+hoá), tức một ADR.
+
+## 2. Quyết định của chủ dự án
+
+2026-09-30: thu hẹp miền email về ASCII IN ĐƯỢC (local-part và domain) trên `users.email` và `supplier_contacts.email`; từ chối EAI/IDN;
+điều kiện mở lại ghi ở ADR-9280; vế ⑶ sửa cùng lượt. Ngoài ra: vòng trả nợ theo phân công ngày 2026-09-29. Bốn điểm trong phạm vi đã duyệt
+tôi tự chốt ở mục 5.
+
+## 3. Đo trước
+
+Test viết trước, chạy trên `561158e` (`scratchpad/lo80-do-truoc-*.log`):
+- `packages/supplier/src/suppliers.int.test.ts`, describe mới `[S1.9180 / khoản 71]`: **7/27 đỏ** — sáu ca Unicode (`ⓐn@x.vn`, `Ⓐn@x.vn`,
+  `đại@x.vn`, `ας@corp.com`, `a@bücher.de`, `ab​@x.vn`) ĐƯỢC CẤT (`expected null to be an instance of SupplierError`; ca Ⓐ đỏ bằng
+  `duplicate key` vì `.toLowerCase()` hạ nó thành `ⓐn@x.vn` đã cất ở ca trước); ca `İ`/`Ⱥ`/`Ⱦ` sát 320 byte đỏ bằng `new row for relation
+  "supplier_contacts" violates check constraint` (23514 — đúng vế ⑶). Ca ASCII (đối chứng) xanh.
+- `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`: **1/17 đỏ** — `Ⓐ.Test@Khach-Unicode.vn` được cất (`expected { cheDo: 'tao', … } to be
+  an instance of KhoiTaoError`). Phát hiện kèm: ca TIỀN ĐỀ LOCALE cũ (`[lượt soi] email mang một điểm mã mà JS và CSDL hạ KHÁC nhau`) đứng
+  trên `pg_catalog.lower('Ⓐ') ≠ 'Ⓐ'.toLowerCase()` — thăm dò trên máy này (`scratchpad/lo80-tham-do.log`, PostgreSQL local, `C.UTF-8`
+  glibc): `lower('Ⓐ') = 'ⓐ'`, `lower('İ') = 'i'` (1 byte), `lower('Ⱥ') = 'ⱥ'` — tức tiền đề SAI dưới glibc `C.UTF-8`, ĐÚNG dưới musl và
+  ctype `C`; ca ấy xanh hay đỏ theo libc của máy chạy test — đúng ranh giới khoản 71 gọi tên.
+- `db/migrations.int.test.ts` `[khoản nợ 71]`: **1 đỏ** — `chưa có migration 9580_email_ascii trong kho`.
+- `db/unique-oracle.int.test.ts` (ca NHẸ-2 lật): **1/13 đỏ** — `ⓐu70@corp.com` VÀO (`promise resolved … instead of rejecting`).
+- `apps/api/src/auth.int.test.ts` `[sổ nợ 63]` (lật): **1 đỏ** — `ⓐlice-63@vidu.vn` VÀO (`expected null to be '23514 users_email_ascii'`).
+- Thăm dò deparse và regex (`lo80-tham-do.log`): `pg_get_constraintdef` = `CHECK ((email ~ '^[!-~]+@[!-~]+$'::text))`; `a@x.vn`,
+  `!#$%&'*+/=?^_`{|}~-@x.vn`, `a~@x.vn`, `A@x.vn` khớp mẫu; `Ⓐ@x.vn`, `ⓐ@x.vn`, `a b@x.vn`, `a\x01@x.vn`, `@x`, `x@`, `a@x.vn\n` không;
+  `a@b@c` khớp (hình dạng là việc của 011/ứng dụng). Hai CHECK cùng vi phạm: PostgreSQL nêu MỘT (đo: `Ⓐlice@x.vn` ⇒ `users_email_chu_thuong`
+  trước `zz_ascii`) — test không ghim cái nào khi cả hai vi phạm.
+
+## 4. Thay đổi
+
+**`db/migrations/9580_email_ascii.sql`** (mới, khuôn 049): khối DO đếm `email OPERATOR(pg_catalog.!~) '^[!-~]+@[!-~]+$'` ở `users` và
+`supplier_contacts`; có hàng ⇒ `RAISE … USING ERRCODE = 'check_violation'` với số hàng và tối đa 20 id MỖI bảng (`-` khi rỗng), KHÔNG in
+email, KHÔNG tự sửa; rồi `ADD CONSTRAINT users_email_ascii` và `supplier_contacts_email_ascii CHECK (email OPERATOR(pg_catalog.~) '^[!-~]+@[!-~]+$')`,
+không `NOT VALID`. Không khối bắt `check_violation` như 049: `migrate()` từ chối hồ sơ N3 trước vòng từ ADR-061 (khoản 102). Chú thích ghi
+lý do chọn `[!-~]` thay dot-atom, phép đo regex, khoá `ACCESS EXCLUSIVE`, và không nhắc tên ràng buộc nào đã khai (cổng `check-an-ninh-khai`
+đòi `mig` là migration CUỐI nhắc tên).
+
+**`db/migrations/hardening.always.sql`** — CHỈ vùng `CHECK_AN_NINH_KHAI` (+4 dòng): hai dòng chú thích `[S1.9180 / khoản 71 / ADR-9280]` và
+hai dòng khai `('public', 'supplier_contacts', 'supplier_contacts_email_ascii', '9580_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))')`,
+`('public', 'users', 'users_email_ascii', '9580_email_ascii', …)` — đặt trước hai dòng `_chu_thuong` theo thứ tự (bảng, tên).
+
+**`packages/supplier/src/suppliers.ts`**: hằng riêng `MAU_EMAIL_ASCII = /^[!-~]+$/u` (không xuất — census `barrel-exports` không đổi);
+`addSupplierContact`: `trim` → rỗng ⇒ `email không được rỗng` → ngoài ASCII ⇒ `SupplierError("email chứa ký tự ngoài ASCII in được — chỉ nhận
+địa chỉ ASCII, không dấu, không khoảng trắng")` → `.toLowerCase()` → `batBuoc(…, 320)` → `EMAIL_PATTERN`. Thân cố định, không giá trị; ⇒ 422 qua
+`LOI_NGHIEP_VU_422` (`apps/api/src/dispatch.ts`), route `POST /suppliers/:supplierId/contacts` chuyền thẳng `body.email`. Chú thích gạch thứ tự cũ.
+
+**`tools/khoi-tao-to-chuc/src/khoi-tao.ts`** (`chenNguoi`, trước câu INSERT): `!/^[!-~]+$/u.test(n.email)` ⇒ `KhoiTaoError("người thứ N: email
+chứa ký tự ngoài ASCII in được")`, không `cause`, trong giao dịch ⇒ rollback trọn. `ban-khai.ts` không chạm.
+
+**`packages/identity/src/login.ts`**: chỉ một đoạn chú thích `[S1.9180]` — miền nay ASCII nên hai hàm hạ đồng ý trên mọi giá trị cất được;
+câu truy vấn GIỮ hai vế cùng `pg_catalog.lower()` (bản vá S1.27 đúng không nhờ miền).
+
+**Test:** `suppliers.int.test.ts` +8 `it` (6 `it.each` Unicode ⇒ `SupplierError` đúng thông điệp, không `code`, không hàng ghi; ca ⑶ với
+tiền đề byte ghim `2 → 3`; ca ASCII: ký tự đặc biệt in được qua, chữ hoa cất ở chữ thường, 320 qua / 321 `dài quá`, rỗng). `khoi-tao.int.test.ts`:
+ca tiền đề locale LẬT (chú thích gạch tên cũ, nêu lý do) + ca ASCII đối chứng. `migrations.int.test.ts`: helper `truoc9580`, `it` `[khoản nợ 71]`
+(dữ liệu `ⓐlice-71`, `ας-71` ở `users`, `đai-71` ở `supplier_contacts` ⇒ `migrate()` NÉM thông điệp NGUYÊN VĂN, 9580 không ghi, hàng nguyên;
+sửa tay ⇒ đi qua, hai ràng buộc `convalidated`, định nghĩa nguyên văn, hai dòng khai đọc từ CHÍNH hardening; INSERT thẳng `ⓐ`, `i̇`, `đ`,
+zero-width ⇒ 23514 đúng tên, ASCII vào; `migrate()` kế `[]`); ba danh sách migration mong đợi +`9580_email_ascii.sql`.
+`unique-oracle.int.test.ts`: ca NHẸ-2 lật (hoa ngoài ASCII ⇒ `_ascii|_chu_thuong`, thường ngoài ASCII ⇒ `_ascii`, ASCII vào).
+`auth.int.test.ts`: ca `[sổ nợ 63]` lật (Ⓐ và ⓐ ⇒ 23514, ASCII vào; `/auth/link` 200, một job, không link); đoạn chú thích «tự hiệu chuẩn» gạch.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. **Mẫu `^[!-~]+@[!-~]+$` thay dot-atom RFC 5321.** Khoản 71 là bài toán MIỀN KÝ TỰ; hình dạng đã có 011 và `EMAIL_PATTERN`; 048 đã ghi
+   «thêm kiểm định dạng vào lược đồ là quyết định khác hẳn»; dot-atom loại cả local-part có nháy và domain literal mà RFC 5321 cho phép.
+   `[!-~]` là ĐÚNG tập mọi hàm hạ chữ thường đồng ý. Hệ quả nói ra: `a@b@c` vẫn vào `users` (như trước 9580).
+2. **Không khối bắt `check_violation` trong 9580** (049 có): ADR-061 làm `migrate()` từ chối hồ sơ N3 trước vòng, nên nhánh ấy không tới được
+   để đo; viết một nhánh không đo được là lời khai rỗng.
+3. **Ca tiền đề locale của `khoi-tao.int.test.ts` LẬT** thành «Unicode bị từ chối trước khi tới `lower()`»: tiền đề cũ đỏ dưới glibc `C.UTF-8`
+   (đo), đúng dưới musl/ctype C — chính sự phụ thuộc mà vòng này xoá. Tên cũ gạch tại chỗ trong chú thích. Xanh dưới cả locale mặc định lẫn
+   `TRUSTPROCURE_PG_LOCAL_LOCALE=C`.
+4. **Hai `it` ngoài danh sách tệp của lô lật theo miền** (`unique-oracle` NHẸ-2, `auth` `[sổ nợ 63]`): cả hai CẤT một địa chỉ chữ thường ngoài
+   ASCII làm đối chứng — miền mới từ chối, lời khai cũ sai theo quyết định. Sửa tối thiểu: một `it` mỗi tệp, tên cũ gạch trong chú thích; không
+   thêm/bớt nhãn `[INV-…]` (ma trận không đổi). Ca NHẸ-3 của `unique-oracle` (tính chất `lower()` máy chủ) giữ nguyên — vẫn đúng và vẫn đo.
+5. **Kiểm ASCII của công cụ đặt ở `khoi-tao.ts` (trong giao dịch), không ở `ban-khai.ts`**: đề bài chỉ định; phép dò trùng của `ban-khai` vẫn
+   `toLowerCase()` — với miền ASCII nó đồng ý với CSDL.
+
+## 6. Đột biến
+
+Khôi phục bằng `cp` từ `scratchpad/lo80-bak/`, so `sha256sum -c`; log `lo80-dot-bien-M*.log`, tóm tắt `lo80-dot-bien.log`. 6/6 đỏ đúng vế:
+- **M1** bỏ hai `ADD CONSTRAINT` trong 9580 ⇒ `[khoản nợ 71]` đỏ: `migrate()` sau sửa tay NÉM `Hardening … (phan_xet) thất bại: … users.users_email_ascii: KHÔNG TỒN TẠI` (mục khoản 105).
+- **M2** bỏ kiểm ASCII ở `addSupplierContact`, GIỮ thứ tự mới ⇒ 6 ca Unicode đỏ bằng 23514 `supplier_contacts_email_ascii`; ca `İ`/`Ⱥ`/`Ⱦ`
+  sát 320 byte VẪN XANH («email dài quá 320 byte» — vế ⑶ được đo độc lập với kiểm ASCII).
+- **M2c** = M2 + kiểm 320 byte TRƯỚC khi hạ (thứ tự cũ) ⇒ ca ấy đỏ bằng 23514 (lỗi gốc của ⑶ tái hiện).
+- **M3** bỏ kiểm ở `khoi-tao.ts` ⇒ thông điệp thành «người thứ 2: thất bại (mã 23514, ràng buộc users_email_ascii)», `cause` có — đỏ.
+- **M4** bỏ dòng khai `users_email_ascii` ⇒ `check-an-ninh.int` «CHECK chưa được phân loại — khai hay miễn kèm lý do: ['users_email_ascii']».
+- **M5** đổi định nghĩa khai thành `[!-}]` ⇒ `[khoản nợ 71]` đỏ: hardening «định nghĩa khác bản khai (so pg_get_constraintdef với CHECK_AN_NINH_KHAI)».
+
+## 7. Giới hạn, nói ra
+
+- HTTP 422 không đo trực tiếp ở vòng này: ánh xạ `SupplierError` ⇒ 422 là lớp có sẵn của `dispatch.ts` (đo ở các ca `SupplierError` khác của
+  `api.int`/kịch bản 41); route chuyền thẳng `body.email` (đọc `routes/buyer.ts`).
+- Cổng `tests/architecture/check-an-ninh-khai.test.ts` đọc dòng khai bằng `'([0-9]{3}_[a-z0-9_]+)'` và lọc tệp `^[0-9]{3}_` — hai dòng số tạm
+  `9580_email_ascii` đứng ngoài tầm nó tới khi `pnpm cap-so` cấp số thật (khi ấy tự vào tầm). `db/rls-coverage.int.test.ts` đã nới `\d{3,4}`
+  ở S1.192 cho cùng lý do; tôi không chạm `tests/architecture` (ngoài danh sách lô) — người tích hợp cân nhắc nới cùng khuôn. Lớp DB-level
+  (`check-an-ninh.int`, mục phán xét khoản 105 trong mọi `migrate()`) đã canh hai dòng ấy — đo ở M1/M4/M5.
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào — như trước); dấu chấm cuối tên miền `dot@x.vn.` qua mọi lớp ở cả hai bảng (đo,
+  `lo80-tham-do-9490.log`) — khoản 9490.
+- Địa chỉ quốc tế hoá bị từ chối ở tầng ứng dụng bằng thông điệp cố định; chưa có mã lỗi riêng (`SupplierError` chỉ có `message`).
+- Hồ sơ N3 của 9580 không đo (không tới được, ADR-061); `ACCESS EXCLUSIVE` trên `users` và `supplier_contacts` trong lúc kiểm — tính chất
+  chung của mọi `ADD CONSTRAINT`, chưa đo thời gian trên dữ liệu lớn.
+- `so-no-tu-doi-chieu` P9b đỏ trên nhánh này sau commit (Handoff khai 84 migration, `hinhDangKho()` đếm `\d+` ⇒ 85) — tệp cấm, mục 6 bàn giao.
+- Không chạy `pnpm test:int`/`pnpm evidence` toàn bộ (máy dùng chung).
+
+## 8. Số đo
+
+- Tĩnh: `pnpm typecheck` xanh; `pnpm exec eslint` 8 tệp xanh; `depcruise` 3 thư mục 0 vi phạm; `db/migration-shape.test.ts` + `tests/architecture`:
+  436 đạt / 1 skip (38 tệp).
+- Int, tuần tự một cụm Postgres một lúc (`scratchpad/lo80-chay.sh`): `suppliers.int` 27/27 (đo trước 7 đỏ); `khoi-tao.int` 17/17 ở
+  `C.UTF-8` VÀ 17/17 ở `TRUSTPROCURE_PG_LOCAL_LOCALE=C` (đo trước 1 đỏ); `migrations.int` trọn tệp 121/121, 1121 s (đo trước 1 đỏ);
+  `unique-oracle.int` 13/13 (đo trước 1 đỏ); `auth.int` 61/61 (đo trước 1 đỏ); `check-an-ninh.int` 4/4; `rls-coverage.int` 54/54;
+  `hardening-suy-tu-tinh-chat.int` 36/36; `kich-ban-41-http.int` 58/58.
+- Đột biến 6/6 đỏ đúng vế (mục 6), khôi phục so băm khớp.
+- Sau commit: `so-no-tu-doi-chieu -t P9b`: 3 đỏ / 42 skip (45) — «Handoff.md khai 84 migration đánh số, kho có 85» (Handoff.md là tệp cấm; bàn giao mục 6).
+- Thăm dò (tệp tạm, đã xoá): `lo80-tham-do.log` — `lower('Ⓐ')='ⓐ'`, `lower('İ')='i'` (1 byte), deparse
+  `CHECK ((email ~ '^[!-~]+@[!-~]+$'::text))`, 12 chuỗi đối chứng regex, thứ tự báo lỗi hai CHECK; `lo80-tham-do-9490.log` — `dot@x.vn.`
+  vào cả hai bảng, `a@b@c.vn` vào `users`, `x@y.vn\t` bị `_email_ascii`.
+- Commit `d1b3ead` trên `lo/80-email-ascii`: 10 tệp, +370/−73.
+
 # §S1.9181 — WEB: `sec-fetch-site` QUA BỘ CHUYỂN TIẾP, TIỀN LÀM TRÒN MỘT LUẬT Ở BA BẢN, `/login` TÁCH GHI DANH KHỎI VÀO — KHOẢN 202, 218, 193 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; chạm mảnh 1 của `docs/PRODUCT.md` §11 ở lớp giao diện (màn `/login` của người mua; con số `amount` mà
