@@ -2299,3 +2299,117 @@ describe("[INV-E1] [S1.216 / khoản 195] GET /auth/login-links — link đăng 
     expect(mo.status, mo.text).toBe(200);
   });
 });
+
+// ==============================================================================================
+// [S1.9120 / khoản 268 / ADR-126] DANH SÁCH LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO THỜI GIAN, VÀ NÓI KHI NÓ BỊ CẮT
+//
+// Tới trước vòng này `listRecentLoginTokens` trả `LIMIT 20` mới nhất trước: trần phát là 5 mã tự phục vụ + 2 mã hệ thống mỗi 15 phút
+// (tối đa 7 hàng / 15 phút), nên 20 hàng phủ chừng 43 phút ở nhịp dày nhất — một link «đã dùng» cũ hơn thế rơi khỏi danh sách, và
+// thân không nói mình cắt. Chủ dự án chốt câu 6 (2026-09-30): cắt theo THỜI GIAN 7 ngày (dài hơn mọi TTL và mọi cửa sổ phát), trần
+// cứng 100 hàng, thân thêm `truncated: boolean` — đúng khi còn hàng TRONG cửa sổ mà trần cắt đi. Mã chèn thẳng bằng pool superuser:
+// `app_api` không có `UPDATE (created_at)` (029), và trần phát 5 mã / 15 phút không cho dựng 101 mã qua đường thật trong một test.
+//   ① 25 mã trong cửa sổ, mã «đã dùng» là mã CŨ NHẤT ⇒ vẫn thấy — đủ 25 hàng — và `truncated: false`;
+//   ② 101 mã trong cửa sổ ⇒ đúng 100 hàng — 100 mã mới nhất, mới nhất trước — và `truncated: true`;
+//   ③ ĐÚNG 100 mã trong cửa sổ (một mã sát mép, 6 ngày 23 giờ trước) cộng hai mã NGOÀI cửa sổ (7 ngày 1 giờ — đã dùng — và 30 ngày)
+//      ⇒ đủ 100 hàng, không mã ngoài cửa sổ nào, và `truncated: false`: mã cũ hơn 7 ngày không làm cờ đúng.
+// Đo trước trên cây trước vòng này: ba vế đỏ — 20 hàng thay vì 25/100, thân không có `truncated`.
+// ==============================================================================================
+describe("[S1.9120 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, trần 100 hàng, `truncated`", () => {
+  interface ThanLink {
+    readonly loginLinks?: readonly { readonly createdAt: string; readonly consumedAt: string | null; readonly status: string }[];
+    readonly truncated?: unknown;
+  }
+
+  /** Chèn `soMa` mã chưa dùng cho chủ nhân `email`: mã thứ g tạo `g` phút trước lúc này, hết hạn 15 phút sau khi tạo. */
+  async function chenMa(email: string, soMa: number): Promise<void> {
+    const r = await db.pool.query(
+      `INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at, created_at)
+       SELECT u.org_id, u.id, sha256(convert_to('k268-' || u.id::text || '-' || g::text, 'UTF8')), 'LOGIN',
+              now() - make_interval(mins => g) + interval '15 minutes', now() - make_interval(mins => g)
+         FROM users u, generate_series(1, $2::int) g
+        WHERE u.org_id = $1 AND u.email = $3`,
+      [orgA, soMa, email],
+    );
+    expect(r.rowCount).toBe(soMa);
+  }
+
+  /** Chèn MỘT mã tạo `truoc` (một interval) trước lúc này; `daDung` ⇒ dùng 3 phút sau khi tạo. */
+  async function chenMaLuc(email: string, truoc: string, daDung: boolean): Promise<void> {
+    const r = await db.pool.query(
+      `INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at, created_at, consumed_at)
+       SELECT u.org_id, u.id, sha256(convert_to('k268-luc-' || u.id::text || '-' || $3::text, 'UTF8')), 'LOGIN',
+              now() - $3::interval + interval '15 minutes', now() - $3::interval,
+              CASE WHEN $4::boolean THEN now() - $3::interval + interval '3 minutes' END
+         FROM users u
+        WHERE u.org_id = $1 AND u.email = $2`,
+      [orgA, email, truoc, daDung],
+    );
+    expect(r.rowCount).toBe(1);
+  }
+
+  async function docLink(cookie: string): Promise<ThanLink> {
+    const r = await goi("GET", "/auth/login-links", { cookie });
+    expect(r.status, r.text).toBe(200);
+    return r.body as ThanLink;
+  }
+
+  it("① 25 mã trong cửa sổ, mã «đã dùng» là mã CŨ NHẤT (2 ngày trước) ⇒ vẫn thấy — đủ 25 hàng, hàng cuối là nó — và `truncated: false`", async () => {
+    const email = "k268-mot@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã ĐÃ DÙNG, tạo lúc này
+    // Mã đã dùng lùi về 2 ngày trước — tạo, hết hạn, dùng cùng dịch —, nên nó thành mã CŨ NHẤT của chủ nhân.
+    const lui = await db.pool.query(
+      `UPDATE user_login_tokens t
+          SET created_at = t.created_at - interval '2 days', expires_at = t.expires_at - interval '2 days',
+              consumed_at = t.consumed_at - interval '2 days'
+         FROM users u
+        WHERE u.id = t.user_id AND u.org_id = $1 AND u.email = $2 AND t.consumed_at IS NOT NULL`,
+      [orgA, email],
+    );
+    expect(lui.rowCount).toBe(1);
+    await chenMa(email, 24); // 24 mã mới hơn, trong 24 phút gần nhất ⇒ 25 mã trong cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "25 mã trong cửa sổ ⇒ 25 hàng").toBe(25);
+    expect(ds.at(-1)?.status, "mã «đã dùng» — cũ nhất — phải còn thấy").toBe("CONSUMED");
+    expect(ds.filter((l) => l.status === "CONSUMED")).toHaveLength(1);
+    expect(b.truncated).toBe(false);
+  });
+
+  it("② 101 mã trong cửa sổ ⇒ ĐÚNG 100 hàng — 100 mã mới nhất, mới nhất trước — và `truncated: true`", async () => {
+    const email = "k268-hai@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã đã dùng, lúc này
+    await chenMa(email, 100); // 100 mã trong 100 phút gần nhất ⇒ 101 mã trong cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "trần cứng 100 hàng").toBe(100);
+    expect(b.truncated, "còn hàng TRONG cửa sổ mà trần cắt đi").toBe(true);
+    // Đối chứng bằng CSDL: 100 hàng trả về là ĐÚNG 100 mã mới nhất của chủ nhân, cùng thứ tự; mã cũ nhất là mã bị cắt.
+    const tat = await db.pool.query<{ created_at: Date }>(
+      `SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id
+        WHERE u.org_id = $1 AND u.email = $2 ORDER BY t.created_at DESC, t.id DESC`,
+      [orgA, email],
+    );
+    expect(tat.rows).toHaveLength(101);
+    expect(ds.map((l) => new Date(l.createdAt).toISOString())).toEqual(tat.rows.slice(0, 100).map((h) => h.created_at.toISOString()));
+  });
+
+  it("③ ĐÚNG 100 mã trong cửa sổ cộng hai mã NGOÀI cửa sổ (7 ngày 1 giờ — đã dùng —, 30 ngày) ⇒ 100 hàng, không mã ngoài cửa sổ nào, `truncated: false`", async () => {
+    const email = "k268-ba@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã đã dùng, lúc này
+    await chenMa(email, 98); // 98 mã trong 98 phút gần nhất
+    await chenMaLuc(email, "6 days 23 hours", false); // trong cửa sổ, sát mép ⇒ đúng 100 mã trong cửa sổ
+    await chenMaLuc(email, "7 days 1 hour", true); // ngoài cửa sổ — và đã dùng
+    await chenMaLuc(email, "30 days", false); // ngoài cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "100 mã trong cửa sổ ⇒ 100 hàng").toBe(100);
+    expect(b.truncated, "mã cũ hơn 7 ngày không được làm cờ «còn nữa» đúng").toBe(false);
+    const bayNgayTruoc = Date.now() - 7 * 24 * 3600 * 1000;
+    for (const l of ds) expect(Date.parse(l.createdAt), "một mã ngoài cửa sổ 7 ngày lọt vào danh sách").toBeGreaterThan(bayNgayTruoc);
+    expect(Date.parse(ds.at(-1)?.createdAt ?? ""), "mã sát mép (6 ngày 23 giờ) vẫn trong cửa sổ, và là hàng cuối").toBeLessThan(Date.now() - 6 * 24 * 3600 * 1000);
+    expect(ds.filter((l) => l.status === "CONSUMED"), "chỉ mã dùng lúc đăng nhập — mã dùng 7 ngày 1 giờ trước nằm ngoài cửa sổ").toHaveLength(1);
+  });
+});

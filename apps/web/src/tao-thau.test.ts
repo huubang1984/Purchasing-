@@ -7,6 +7,7 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
+import { RFQ_STATUSES, RFQ_TRANSITIONS } from "@trustprocure/rfq";
 import {
   KHUNG_TIN_HIEU_RONG,
   TRAN_LY_DO_BYTE,
@@ -51,9 +52,54 @@ describe("[S1.191 / S3.2c2] nhãn trạng thái lời mời", () => {
   });
 });
 
+/**
+ * [S1.9120 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — SUY từ máy trạng thái (`RFQ_TRANSITIONS` của
+ * `@trustprocure/rfq`): `UNSEALED` và mọi trạng thái đi tới được từ nó, trừ `CANCELLED`. Cùng phép suy mà
+ * `packages/invitation/src/invitation.int.test.ts` dùng để ghim `RFQ_STATUSES_AFTER_UNSEAL` — tập máy chủ chặn thu hồi —, nên
+ * bảng dưới đo màn theo ĐÚNG tập ấy mà không import gói `invitation` (hằng ấy không đi qua cửa `index.ts` của gói).
+ */
+function sauMoThau(): ReadonlySet<string> {
+  const toiDuoc = new Set<string>(["UNSEALED"]);
+  for (let doi = true; doi; ) {
+    doi = false;
+    for (const [tu, den] of RFQ_TRANSITIONS) {
+      if (toiDuoc.has(tu) && !toiDuoc.has(den)) {
+        toiDuoc.add(den);
+        doi = true;
+      }
+    }
+  }
+  toiDuoc.delete("CANCELLED");
+  return toiDuoc;
+}
+
 describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
-  it("tổ chức chưa bật: cả hai nút ở mọi trạng thái gói — hợp đồng MVP1, máy chủ tự từ chối", () => {
-    for (const g of TRANG_THAI_GOI) expect(nutLoiMoi(false, g, false), g).toEqual({ guiLai: true, thuHoi: true });
+  it("tổ chức chưa bật: ~~cả hai nút ở mọi trạng thái gói~~ [S1.9120 / khoản 276] *Gửi lại link* ở mọi trạng thái gói — hợp đồng MVP1, máy chủ tự từ chối; *Thu hồi* ẩn sau lần mở thầu", () => {
+    const ra = Object.fromEntries(TRANG_THAI_GOI.map((g) => [g, nutLoiMoi(false, g, false)]));
+    expect(ra).toEqual({
+      DRAFT: { guiLai: true, thuHoi: true },
+      PENDING_APPROVAL: { guiLai: true, thuHoi: true },
+      OPEN: { guiLai: true, thuHoi: true },
+      CLOSED: { guiLai: true, thuHoi: true },
+      BAFO_OPEN: { guiLai: true, thuHoi: false },
+      AWARDED: { guiLai: true, thuHoi: false },
+      CANCELLED: { guiLai: true, thuHoi: true },
+    });
+  });
+
+  // [S1.9120 / khoản 276] Bảng ĐỦ mười một trạng thái của `RFQ_STATUSES`, hai luồng: *Thu hồi* không bao giờ hiện ở trạng thái mà máy
+  // chủ chặn thu hồi (ADR-128 ③ — sau lần mở thầu đầu tiên), và ở tổ chức chưa bật thì hiện ở MỌI trạng thái còn lại (kể cả
+  // `CANCELLED`: thu hồi ở đó vẫn là quyền đóng phiên khách — ADR-128). Tổ chức đã bật giữ luật K4a (chỉ DRAFT), vốn đã hẹp hơn.
+  it("[S1.9120 / khoản 276] *Thu hồi* ẩn ở ĐÚNG các trạng thái sau lần mở thầu (suy từ `RFQ_TRANSITIONS`) ở cả hai luồng; *Gửi lại link* không đổi", () => {
+    const sau = sauMoThau();
+    expect([...sau].sort(), "phép suy phải ra đúng sáu trạng thái ADR-128 ③ kể").toEqual(
+      ["AWARDED", "BAFO_CLOSED", "BAFO_OPEN", "BAFO_UNSEALED", "EVALUATING", "UNSEALED"],
+    );
+    for (const g of RFQ_STATUSES) {
+      expect(nutLoiMoi(false, g, false), `chưa bật · ${g}`).toEqual({ guiLai: true, thuHoi: !sau.has(g) });
+      expect(nutLoiMoi(true, g, false).thuHoi, `đã bật · ${g}`).toBe(g === "DRAFT");
+      expect(nutLoiMoi(true, g, false).guiLai, `đã bật · ${g}`).toBe(g === "OPEN" || g === "BAFO_OPEN");
+    }
   });
 
   it("tổ chức đã bật: thu hồi ĐÚNG ở DRAFT (K4a); gửi lại ĐÚNG khi gói nhận báo giá — OPEN, BAFO_OPEN", () => {

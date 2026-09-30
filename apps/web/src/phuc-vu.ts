@@ -93,8 +93,13 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
  *
  * [S1.199 / S4.2b] `du-lieu` — ô thuộc tính, lọc hiển thị, câu §8.10 và dòng quy đổi của màn dữ liệu nền.
+ *
+ * [S1.9120 / khoản 282] `dang-nhap` — bước 1 của bốn trang người mua (`/login`, `/tao-thau`, `/nhom-hang`, `/chinh-sach`): Tiếp và Vào
+ * tách nhau (khoản 193), khối link đăng nhập gần đây (khoản 195) và câu «còn nữa» (khoản 268). Module ĐẦU TIÊN của danh sách này chạm
+ * DOM — qua `document` mà trang trao vào, không qua tên toàn cục —, nên `phuc-vu.test.ts` quét mã đã gỡ kiểu của mọi module ở đây để
+ * không sink HTML nào lọt vào.
  */
-export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {

@@ -784,10 +784,50 @@ const BANG_TEN: readonly HangTen[] = [
     lyDo: "Màn `/du-lieu` in một TỈ LỆ 0..1 thành `N%` làm tròn (độ tin của gợi ý ánh xạ, S4.3b); `pilot-gia-lap` chia hai SỐ TIỀN chuỗi " +
       "bằng `bigint`, một chữ số thập phân dấu phẩy — hai phép tính khác nhau cùng tên.",
   },
+  // [S1.9101 / tích hợp lô A3] Module đăng nhập dùng chung của web (`apps/web/src/dang-nhap.ts`, khoản 282) mang hai tên và một literal
+  // đã có ở đơn vị khác; lô A3 dựng trên nền chưa có bộ quét N đơn vị của lô A1 nên không thấy.
+  {
+    ten: "loiCua",
+    loai: "function",
+    tep: [`${WEB}dang-nhap.ts`, `${KHOI_TAO}khoi-tao.ts`],
+    xuLy: "RIENG",
+    doLuong: "KHONG",
+    lyDo: "Web dựng câu lỗi từ thân phản hồi HTTP (`error`, hay câu mặc định kèm mã); `khoi-tao-to-chuc` đổi lỗi `pg` (mã, tên ràng " +
+      "buộc) thành `KhoiTaoError` — cùng tên, khác đầu vào và khác việc.",
+  },
+  {
+    ten: "truong",
+    loai: "function",
+    tep: [`${API}routes/anh-xa.ts`, `${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`, `${WEB}dang-nhap.ts`],
+    xuLy: "RIENG",
+    doLuong: "KHONG",
+    lyDo: "Đọc một khoá của một thân chưa kiểm kiểu ở hai phía của HTTP: ba tệp route của api đọc thân YÊU CẦU (cùng một dòng, trong " +
+      "một đơn vị), module đăng nhập của web đọc thân PHẢN HỒI và tự kiểm `typeof` vì chạy trong trình duyệt — không phải bản chép để " +
+      "giữ giống qua ranh giới api ↔ web.",
+  },
 ];
 
 /** ⑵ Cùng biểu thức chính quy ở hai app — bắt cả bản chép KHÔNG TÊN. Tệp ghi là TẬP tệp mỗi bên có literal ấy. */
 const BANG_MAU: readonly HangMau[] = [
+  // [S1.9101 / tích hợp lô A3] Literal UUID của api (tám tệp, một đơn vị) nay cũng ở module đăng nhập của web.
+  {
+    mau: "/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu",
+    ten: "UUID",
+    tep: [
+      `${API}adapters/totp-aws-kms.ts`,
+      `${API}adapters/totp-local-dev.ts`,
+      `${API}dispatch.ts`,
+      `${API}router.ts`,
+      `${API}routes/anh-xa.ts`,
+      `${API}routes/buyer.ts`,
+      `${API}routes/du-lieu.ts`,
+      `${API}routes/guest.ts`,
+      `${WEB}dang-nhap.ts`,
+    ],
+    xuLy: "GIU",
+    lyDo: "Cùng một việc ở mọi chỗ — kiểm hình dạng một id UUID trước khi đưa vào câu SQL hay URL; literal phải giữ y hệt (không nới " +
+      "chữ hoa hay bỏ dấu gạch ở một bản).",
+  },
   {
     mau: "/^[A-Za-z0-9+/]+={0,2}$/u",
     ten: "BASE64",

@@ -20894,6 +20894,192 @@ hình dạng (M7 đỏ cả vế mẫu của bộ đọc `INSERT`).
 - Áp thử bàn giao (hàng sổ, cột mốc, biên bản, tiểu mục ADR-134, dòng tổng kết, đoạn đếm, lời khai đếm ở `Handoff.md`, dòng RỔ C) lên bản tạm
   của bốn tệp người tích hợp: `tests/architecture/so-no-tu-doi-chieu.test.ts` 45/45, `tep-van-ban-git.test.ts` 7/7; khôi phục byte, không commit.
 
+# §S1.9120 — LÔ A3 ĐỢT 3, WEB VÀ ĐĂNG NHẬP: BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA LÀ MỘT MODULE; LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO 7 NGÀY, TRẦN 100, NÓI «CÒN NỮA»; `/tao-thau` NÓI ĐÚNG NGỮ NGHĨA THU HỒI — KHOẢN 282, 268, 276 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B cả ba — 282 (bước 1 của ba trang người mua), 268 (một hàm đọc của `identity`, một route đọc, một câu
+trên màn), 276 (một câu và một nút của `/tao-thau`). Mảnh §11 của `docs/PRODUCT.md`: chạm mảnh 1 (giao diện) ở bước 1 của bốn trang
+người mua và ở dòng lời mời của `/tao-thau`; không chạm mảnh 2/3/4. Không migration, không phụ thuộc mới, không ADR mới — ADR-126,
+ADR-110 ⑸, ADR-128 sửa tại chỗ. Đóng 282, 268, 276; mở 9420, 9421, 9422.
+
+## 1. Vòng này là gì
+
+Lô A3 của đợt trả nợ 3, ba khoản cùng vùng — bước 1 đăng nhập của các trang người mua, và một màn của S3:
+
+- **282** (§S1.230): `tao-thau.js`, `nhom-hang.js`, `chinh-sach.js` chép nguyên khối đăng nhập cũ của `mo-thau.js` — nút Vào gọi
+  `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật ghi danh hiện cùng chỗ câu lỗi, ô mã sáu số hiện sẵn —, nên bốn trang có
+  hai hình dạng cho cùng một bước 1, và người mở thẳng ba trang ấy với link còn hạn gặp lại khiếm khuyết 193. Khối «link đăng nhập
+  gần đây» của 195 cũng chỉ ở `/login`.
+- **268** (§S1.216): `listRecentLoginTokens` trả `LIMIT 20` mới nhất trước; ở nhịp phát dày nhất (5 mã tự phục vụ + 2 mã hệ thống mỗi
+  15 phút) 20 hàng phủ chừng 43 phút, một link «đã dùng» cũ hơn thế rơi khỏi danh sách, và thân không nói mình bị cắt.
+- **276** (§S1.217): sau ADR-128 (thu hồi LOẠI báo giá của lời mời khỏi mở thầu, so sánh và xếp hạng; bị chặn sau lần mở thầu), câu
+  báo sau thu hồi của `/tao-thau` còn nói *"báo giá đã nộp … vẫn nằm trong gói thầu"*, và nút *Thu hồi* ở tổ chức chưa bật S3 hiện
+  ở mọi trạng thái — sau lần mở thầu nó là một nút không bao giờ đi được (422 câu cố định, một hàng `RFQ_STATE_DENIED`).
+
+## 2. Quyết định của chủ dự án
+
+Có, ngày 2026-09-30 (kế hoạch đợt 3, mục 0): (a) câu 11 — 282 đóng bằng cách ⒝: MỘT module `apps/web/src/dang-nhap.ts` phục vụ ở
+`/lib/dang-nhap.js` (`MODULE_WEB`), bốn trang import và gắn vào cùng bộ id; module mang bước 1 đã tách của 193, khối link gần đây của
+195 và câu «còn nữa» của 268; cách ⒜ (chép cách tách sang ba trang) bị loại. Câu 18: S3.3e chưa vào, nên 282 không dời. (b) câu 6 —
+268 cắt theo THỜI GIAN 7 ngày, trần cứng 100 hàng, thân thêm `truncated: boolean`, trang nói «còn nữa»; «giữ 20 hàng, chỉ thêm
+`truncated`» và «ưu tiên hàng `CONSUMED` không thuộc phiên hiện tại» bị loại. (c) 276 không cần quyết định mới — hình dạng của hàng
+sổ: câu báo nói thẳng *báo giá đã nộp theo lời mời này không dự thầu nữa*, `nutLoiMoi` ẩn *Thu hồi* khi gói ∈
+`RFQ_STATUSES_AFTER_UNSEAL` ở cả hai luồng, ADR-110 ⑸ gạch. Điểm tự chốt trong phạm vi ấy ở mục 5.
+
+## 3. Đo trước
+
+Test mới viết trước, chạy trên mã của `deed792` (log ở scratchpad của lô, không commit):
+
+- **268** — HTTP (`apps/api/src/auth.int.test.ts -t "khoản 268"`, trước khi vá): 3 đỏ / 61 bỏ qua — ① `25 mã trong cửa sổ ⇒ 25
+  hàng: expected 20 to be 25`, ② `trần cứng 100 hàng: expected 20 to be 100`, ③ `100 mã trong cửa sổ ⇒ 100 hàng: expected 20 to be
+  100`. Đơn vị (`packages/identity/src/login.test.ts`, `login.ts` lấy lại bản `HEAD` rồi khôi phục, `cmp` khớp): 3 đỏ / 1 xanh —
+  tham số `[userId, 20]` thay vì `[userId, 7, 101]`; hàm trả mảng trơn, không `{ links, truncated }` (`Target cannot be null or
+  undefined`); ca `userId` sai hình dạng xanh như trước. DOM: 4 đỏ (khối `[S1.9120 / khoản 268]`, bốn trang).
+- **276** — `apps/web/src/tao-thau.test.ts`: 2 đỏ / 27 xanh — bảng MVP1 và bảng đủ trạng thái (`chưa bật · UNSEALED: expected {
+  guiLai: true, thuHoi: true } to deeply equal { guiLai: true, thuHoi: false }`); DOM: 2 đỏ (câu báo; dòng lời mời sau mở thầu).
+- **282** — `apps/web/src/phuc-vu.test.ts` (bản chép tạm, dòng import module thay bằng `{}` vì `dang-nhap.ts` chưa có; xoá ngay sau
+  lượt): 39 đỏ / 131 xanh (170) — ba trang kia đỏ 15 ca 193 (ca «Vào mà bỏ qua Tiếp» xanh như ở §S1.230), 9 ca 195, 6 ca `[S1.177]`
+  có `SAU_MO`; cộng 2 ca ADR-107 (hàm của module chưa có), 1 ca tĩnh 282, 4 ca 268, 2 ca 276. Nền `apps/web` trên `deed792`: 9 tệp,
+  274/274.
+
+## 4. Thay đổi
+
+- `apps/web/src/dang-nhap.ts` (mới): `LA_UUID`, `SAI_TO_CHUC`, `docMaToChuc` (từ `mo-thau.js`); `CUA_SO_NGAY_LINK_GAN_DAY = 7`,
+  `moTaLinkDangNhap`, `hangLinkGanDay`, `cauLinkGanDay(conNua, soDong)`; `ID_BUOC_MOT` (mười hai id), `ID_AN_LUC_TAI`;
+  `ganDangNhap({ taiLieu, goi, lichSu, viTri, daVao })` → `{ datLai, veLinkGanDay, anLinkGanDay }` — kiểm đủ mười hai id lúc gắn
+  (thiếu ⇒ ném), trình nghe `nut-ghi-danh` và `nut-vao` (đổi mã ĐÚNG một lần cho mỗi mã; bí mật ở `ghi-danh` với nhãn «KHÔNG phải
+  mã đăng nhập»; ô mã ẩn tới khi máy chủ đã nói; Vào dừng khi vừa nhận bí mật; mất mạng ⇒ câu mất kết nối), xoá mảnh link sau
+  `/auth/totp` (ADR-020 mục 3), `/me` rồi `await daVao(me, orgId)`; khối link gần đây với bộ đếm lượt; câu «còn nữa» khi thân mang
+  `truncated === true`. Không tên DOM toàn cục; chữ ra màn chỉ qua `textContent`.
+- `apps/web/src/phuc-vu.ts`: `"dang-nhap"` vào `MODULE_WEB`, kèm chú thích.
+- `apps/web/trang/mo-thau.js`: import `LA_UUID`, `SAI_TO_CHUC`, `docMaToChuc`, `ganDangNhap`; gỡ `docToChuc`, `doiMaDangNhap`,
+  `doiMa`, `dongKhoiMa`, hai trình nghe, `GIO`, `moTaLink`, `luotLinkGanDay`, `anLinkGanDay`, `veLinkGanDay`, `xoaManhLink`; `phien`
+  còn `rfqId`, `unsealRequestId`; `daVao` nhớ mã tổ chức (ADR-107) rồi `moSauDangNhap`; ô xin link đọc `docMaToChuc($("org").value)`.
+  `mo-thau.html`: một chú thích.
+- `apps/web/trang/{tao-thau,nhom-hang,chinh-sach}.js`: import `ganDangNhap`; gỡ trình nghe `nut-vao` chép, `phien.token`/`daRedeem`
+  (và `orgId` ở `tao-thau.js`), `xoaManhLink`; `moSauDangNhap` gọi `void dangNhap.veLinkGanDay()` trước lời gọi riêng của trang, `dongCacBuoc` gọi
+  `anLinkGanDay()`, `hashchange` và đăng xuất gọi `datLai()` sau `dongCacBuoc()`. Ba HTML: `nut-ghi-danh`, `ghi-danh` dời lên ngay
+  sau nó, `khoi-ma` (ẩn) bọc ô mã và nút Vào, `khoi-link-gan-day`; câu giới thiệu bước 1 nói Tiếp. Ở `tao-thau.*` chỉ các dòng ấy
+  và câu báo 276.
+- `packages/identity/src/login.ts`: `SO_LINK_GAN_DAY = 20` gạch; `CUA_SO_LINK_GAN_DAY_NGAY = 7`, `TRAN_LINK_GAN_DAY = 100`;
+  `RecentLoginTokens { links, truncated }`; câu đọc thêm `created_at > (now() - make_interval(days => $2))`, `LIMIT $3`, tham số
+  `[userId, 7, 101]`; trả 100 hàng đầu và `rows.length > 100`. `apps/api/src/routes/auth.ts`: thân `{ loginLinks, truncated }`,
+  dòng đầu tệp.
+- `apps/web/trang/tao-thau.js` (276): câu báo sau thu hồi *"Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) không dự thầu nữa —
+  nó không được mở thầu, so sánh hay xếp hạng. Nhà cung cấp chỉ cần link mới thì dùng «Gửi lại link», đừng thu hồi."*.
+  `apps/web/src/tao-thau.ts`: `GOI_SAU_MO_THAU` (bản sao để đọc của `RFQ_STATUSES_AFTER_UNSEAL`), `nutLoiMoi(false, …)` trả
+  `thuHoi: !GOI_SAU_MO_THAU.has(trạng thái)`.
+- Test: `apps/web/src/dang-nhap.test.ts` (mới, 8 ca: phép tính thuần; bốn HTML khai đủ bộ id, trạng thái ẩn, `ma` và `nut-vao` trong
+  `khoi-ma` sau `nut-ghi-danh`; hằng 7 ngày khớp `login.ts` bằng văn bản nguồn); `packages/identity/src/login.test.ts` (mới, 4 ca, client
+  giả); `apps/api/src/auth.int.test.ts` (khối `[S1.9120 / khoản 268]` ba ca ở CUỐI tệp); `apps/web/src/tao-thau.test.ts` (import
+  `RFQ_STATUSES`, `RFQ_TRANSITIONS`; bảng MVP1 sửa; bảng đủ mười một trạng thái × hai luồng); `apps/web/src/phuc-vu.test.ts` (`...dangNhap`
+  vào `THU_VIEN`; `SAU_MO` ba trang thêm `GET /auth/login-links`; hai ca ADR-107 đọc hàm của module; khối 193 và khối 195 tham số hoá
+  `BON_TRANG`; khối 268; hai ca 276; hai ca tĩnh 282 — module được phục vụ, bốn trang import và không tự gọi `/auth/redeem`/`/auth/totp`,
+  tập trang còn tự đổi mã ghim `["du-lieu.js"]`; quét sink HTML trên mọi module `MODULE_WEB`) — 136 → 170 ca.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Module mang đúng ba thứ; `docLink`, hỏi lại phiên, đăng xuất, `hashchange` ở lại mỗi trang.** Mỗi trang dọn trạng thái RIÊNG khi về
+  bước 1 (gói, luồng, ngân sách, tín hiệu ở `/tao-thau`; `rfqId`, `unsealRequestId` ở `/login`), và `docLink` của `/login` còn đọc
+  `#<orgId>` trơn và nhớ tổ chức (ADR-107). Đo: chín ca `[S1.177]` chung chạy nguyên; chỉ `SAU_MO` của ba trang thêm một lời gọi.
+- **Trang TRAO `document`, `goi`, `history`, `location`, `daVao` vào module.** `tsconfig.base.json` chỉ `lib: ["ES2023"]` — một tên
+  DOM trong `apps/web/src/*.ts` là lỗi `tsc` —, và khuôn `node:vm` của `phuc-vu.test.ts` chạy hàm module ở realm của test, nên module
+  phải nhận DOM giả từ trang. Đo: `pnpm typecheck` 0 lỗi; 170/170 ca DOM.
+- **`docMaToChuc` một bản, cho bốn trang và ô xin link.** Ba trang kia từng gửi `.trim()` trơn; nay nhận nguyên một link cũ dán vào
+  và nói `SAI_TO_CHUC` khi sai hình dạng (ADR-107). Đo: ca ADR-107 bốn trang (đỏ trước: `doc is not a function`).
+- **Xoá mảnh link trong module**, ngay sau `/auth/totp` thành công và trước `/me` — cùng chỗ cho bốn trang; ca `[S1.177]` «xoá
+  fragment đúng MỘT lần» đo cả bốn.
+- **Kiểm đủ mười hai id lúc gắn (thiếu ⇒ ném) và `dang-nhap.test.ts` đọc bốn HTML.** Khuôn DOM giả tạo phần tử thiếu theo yêu cầu, nên
+  một HTML thiếu id vẫn xanh ở ca DOM; ca đọc HTML là lớp bắt điều ấy. Đo: M6 đỏ ở CẢ ca DOM và ca đọc HTML.
+- **`veLinkGanDay()` ngay khi các bước mở, TRƯỚC lời gọi riêng của trang, không chờ**: khối là trợ giúp, không phải cổng, và thứ tự
+  lời gọi xác định để `SAU_MO` đo được (`GET /me`, `GET /auth/login-links`, rồi lời gọi của trang).
+- **`datLai()` gọi SAU `docLink()`/`dongCacBuoc()`**: nó đọc mã mới đã ở ô. Đo: M7 đỏ.
+- **Trần + 1 trong MỘT câu đọc** (`LIMIT 101`), không câu `count(*)` thứ hai: một ảnh chụp, một vòng khứ hồi. Đo: tham số
+  `[userId, 7, 101]` ở `login.test.ts`; ca ② đối chiếu CSDL.
+- **Mốc cửa sổ `now()`, không `clock_timestamp()`**: đây là ranh giới HIỂN THỊ, cùng đồng hồ với cửa sổ phát của `issueLoginToken`,
+  và hàm STABLE dùng được làm cận của chỉ mục `(org_id, user_id, created_at)` (029); `status` vẫn suy bằng `clock_timestamp()` như
+  `redeemLoginToken`. Đo: QT3 8/8 (ngữ pháp và PREPARE từng câu sản xuất).
+- **`RecentLoginTokens` không ra cửa `index.ts`**: `index.ts` ngoài danh sách tệp của lô, và nơi dùng duy nhất (route) tách hai trường.
+  Danh sách trắng barrel không đổi; `pnpm test` xanh.
+- **Trang chỉ nhận `truncated === true`**: thân thiếu trường (API cũ hơn trang trong lúc triển khai), `false`, `"true"`, `1` ⇒ không
+  «còn nữa». Đo: M4 đỏ bốn ca.
+- **Hằng 7 ngày của trang đối chiếu với `login.ts` bằng văn bản nguồn** (regex `^const CUA_SO_LINK_GAN_DAY_NGAY = (\d+);$`), không mở
+  thêm một export của `login.ts` chỉ để test đọc. Đo: M2 đỏ ở phép đối chiếu.
+- **Không nhãn `[INV-…]` cho ca mới**: ca 268 đo nội dung và trần của một route trợ giúp, không một bất biến mới; nhãn E1 đã ở ba ca
+  195 (quyền đọc). Thêm nhãn là đổi số đếm của `evidence/INV-matrix.md`. Đo: diff không thêm hay bớt dòng `[INV-` nào; `pnpm test`
+  (cả cổng `tools/inv-matrix`) xanh.
+- **Mã của ca int chèn bằng pool superuser, `created_at` tường minh**: `app_api` không có `UPDATE (created_at)` (029), và trần phát 5
+  mã / 15 phút không cho dựng 101 mã qua đường thật trong một test.
+- **276: bản sao tập trong module, test suy tập từ `RFQ_TRANSITIONS`** — cùng phép suy mà `invitation.int.test.ts` ghim hằng của máy
+  chủ. Module chạy trong trình duyệt, không import gói máy chủ; hằng `RFQ_STATUSES_AFTER_UNSEAL` cũng không đi qua cửa `index.ts` của
+  `invitation`. Đo: M9 đỏ ở cả bảng đơn vị và ca DOM.
+- **Câu báo 276 ở lại inline trong `tao-thau.js`**, không thành hằng ở `tao-thau.ts`: thêm một tên vào khối import `/lib/tao-thau.js`
+  là đụng hunk của PR #217. Ca DOM đo nguyên câu (M10 đỏ).
+- **`tao-thau.*` chạm tối thiểu**: `tao-thau.js` chỉ các dòng bước 1 và câu báo (61 dòng ±), `tao-thau.html` chỉ `#b1` (22), 
+  `tao-thau.ts` một hằng, một dòng, chú thích (14); không dời, không định dạng lại khối nào.
+- **Quét sink HTML ở mức test** trên mã đã gỡ kiểu của mọi module `MODULE_WEB` (`innerHTML`, `outerHTML`, `insertAdjacentHTML`,
+  `document.write`): luật eslint của [S1.107] chỉ đọc `apps/web/trang/*.js`, cấu hình eslint ngoài danh sách tệp của lô, và
+  `dang-nhap` là module `MODULE_WEB` ĐẦU TIÊN chạm DOM. Đo: M8 đỏ.
+- **Lượt đi thử trên cụm thật**: Postgres 16 cục bộ (shim), `pnpm pilot:gia-lap cum` (api, web, khoá công khai), `pnpm gieo:demo`
+  (`NODE_ENV=development TRUSTPROCURE_KEY_ADAPTER=local-dev`); Chromium 1194 qua Playwright, khung 390×844; mã sáu số tính trong kịch
+  bản từ bí mật hiện trên màn; «còn nữa» bằng 100 mã chèn thẳng (superuser) cho `duyet2` — cộng mã của bộ gieo là 101; `UNSEALED` của
+  276 bằng cách đổi thân `GET /api/rfqs/<id>` qua `page.route` — đo MÀN, không đo máy chủ (lớp chặn của máy chủ đo ở §S1.217).
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/a3/dot-bien.py`: sửa MỘT chỗ, chạy đúng tệp/khối test, khôi phục từ bản đã vá và so byte (mọi tệp khớp). Mười
+ca, mười ĐỎ đúng vế:
+
+- M1 [268] `truncated: rows.length > 100` → `>=` ⇒ `login.test.ts` 1 đỏ (`100 hàng: expected true to be false`); int ③ đỏ (`mã cũ
+  hơn 7 ngày không được làm cờ «còn nữa» đúng`).
+- M2 [268] cửa sổ 7 → 1 ngày ⇒ `login.test.ts` ca tham số đỏ, `dang-nhap.test.ts` phép đối chiếu đỏ (`expected 1 to be 7`); int ①
+  (`expected 24 to be 25`) và ③ (`expected 99 to be 100`) đỏ.
+- M3 [268] route bỏ `truncated` khỏi thân ⇒ int ① ② ③ đỏ (`expected undefined to be false/true`); ba ca 195 vẫn xanh.
+- M4 [268] trang đọc `truncated` theo truthy ⇒ 4 ca DOM đỏ (`"truncated":"true"` ⇒ «Còn nữa»).
+- M5 [282] bỏ cổng «đúng một lần» của `doiMaDangNhap` ⇒ 4 ca DOM đỏ, mỗi trang một (`[ 'POST /auth/redeem', …(1) ]` ≠
+  `[ 'POST /auth/redeem' ]`).
+- M6 [282] `chinh-sach.html`: `khoi-ma` hiện sẵn ⇒ ca DOM «lúc tải» đỏ VÀ ca đọc HTML đỏ (`#khoi-ma phải ẩn lúc tải`).
+- M7 [282] `nhom-hang.js`: `hashchange` không gọi `datLai()` ⇒ 1 ca DOM đỏ (đổi mã ⇒ redeem cho mã MỚI).
+- M8 [282] một sink `innerHTML` trong module ⇒ ca quét đỏ (`dang-nhap.js mang một sink HTML`).
+- M9 [276] `nutLoiMoi` MVP1 trả lại `thuHoi: true` ⇒ `tao-thau.test.ts` 2 đỏ (`chưa bật · UNSEALED`), 1 ca DOM đỏ (`UNSEALED:
+  [ 'Gửi lại link', 'Thu hồi' ]`).
+- M10 [276] câu báo trở lại *"vẫn nằm trong gói thầu"* ⇒ 1 ca DOM đỏ.
+
+## 7. Giới hạn, nói ra
+
+- 268: danh sách không phân trang — `truncated` nói có phần bị cắt nhưng không đường nào xem phần ấy. Một người bị phát ≥ 100 link
+  trong 7 ngày (tự phục vụ 5 / 15 phút ⇒ chừng 5 giờ phát dày; `/auth/link` là route vô danh, ai biết email cùng mã tổ chức đều kích
+  được) thấy «còn nữa» mà không thấy hàng «đã dùng» cũ hơn 100 hàng mới nhất — phương án «ưu tiên `CONSUMED`» bị loại ở câu 6; câu
+  «còn nữa» tự nói chừng ấy link là bất thường. Link «đã dùng» cũ hơn 7 ngày không hiện, có chủ đích.
+- 282: `/du-lieu` còn bước 1 cũ (9420). Phản hồi `/auth/redeem` về muộn sau khi thẻ đổi mã vẫn gắn cho mã mới (9421) — có từ S1.230,
+  nay ở một chỗ. Phép quét sink là regex trên mã đã gỡ kiểu, không phải cây cú pháp — một sink qua tên thuộc tính tính động lọt được;
+  luật eslint của [S1.107] cũng không đọc `MODULE_WEB`.
+- 276: `GOI_SAU_MO_THAU` là bản sao, có ca suy tập giữ nó khớp; trang đọc trạng thái gói lúc nạp — gói bị người khác mở thầu trong lúc
+  trang đang mở vẫn hiện *Thu hồi* tới lần nạp sau (máy chủ vẫn từ chối, 422 và một hàng `RFQ_STATE_DENIED`). *Gửi lại link* ở tổ chức
+  chưa bật hiện ở mọi trạng thái (9422).
+- DOM giả không đo CSS, tiêu điểm hay múi giờ (`toLocaleString("vi-VN")`); lượt đi thử chỉ Chromium, một khung; `UNSEALED` của 276
+  dựng ở phía màn.
+- Không chạy `pnpm test:int` trọn hay `pnpm evidence` (đề bài chung mục 1); tệp int chạy: `auth.int`, `mfa.int` của `identity`, hai
+  tệp QT3.
+
+## 8. Số đo
+
+Mọi lệnh ở `/home/user/dot3-wt/A3`; tệp int với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`, từng tệp một lượt, không hai tiến trình Postgres chồng nhau.
+
+- Đo trước (mục 3): HTTP 3 đỏ; đơn vị 268 3 đỏ / 1 xanh; `tao-thau.test.ts` 2 đỏ / 27 xanh; DOM 39 đỏ / 131 xanh. Nền `pnpm vitest run
+  apps/web` trên `deed792`: 9 tệp, 274/274.
+- `pnpm vitest run apps/web`: 10 tệp, 317/317 (16 s) — `phuc-vu` 170, `tao-thau` 29, `dang-nhap` 8, còn lại không đổi.
+- `pnpm vitest run apps/api/src/auth.int.test.ts`: 64/64 (53 s); `-t "khoản 268|khoản 195"`: 6/6.
+- `pnpm vitest run packages/identity --exclude "**/*.int.test.ts"`: 6 tệp, 95/95 (`login.test.ts` 4/4).
+- `pnpm vitest run packages/identity/src/mfa.int.test.ts`: 54/54 (24 s).
+- `pnpm vitest run tests/architecture/qt3-cu-phap.int.test.ts tests/architecture/qt3-ngu-phap.int.test.ts`: 2 tệp, 8/8.
+- `pnpm typecheck`: 0 lỗi. `pnpm exec eslint` trên 14 tệp của lô: 0 lỗi. `pnpm exec depcruise apps/web packages/identity apps/api
+  --config .dependency-cruiser.cjs`: 218 module / 800 cạnh, 0 vi phạm.
+- Đột biến: 10/10 đỏ đúng vế (mục 6).
+- Lượt đi thử Chromium bốn trang: 25/25 khẳng định, 0 lỗi JavaScript.
+- `pnpm t0`: xanh (typecheck, lint, depcruise 499 module / 2074 cạnh, 0 vi phạm; 75 s).
+- `pnpm test`: 135 tệp, 2106 đạt, 1 bỏ qua (tiền tồn), 0 đỏ (196 s).
+
 # §S1.9125 — LÔ A4 ĐỢT 3: DÒNG LOG MẤT SỔ MANG MÃ CHỐT VÀ MÃ LÝ DO; CẤU HÌNH WORKER NÊU TÊN KHÔNG NÊU GIÁ TRỊ, LỜI HỨA KHÔNG ĐỌC BA VÒNG ĐO BẰNG HÀNH VI; «NĂM TRÊN SÁU VAI» GẠCH TẠI CHỖ — KHOẢN 279, 270, 172 ĐÓNG, 9425, 9426 MỞ
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B (279, 270) và rổ C kích hoạt lại (172); không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai lời gọi
