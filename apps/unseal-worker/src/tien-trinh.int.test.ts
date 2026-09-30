@@ -400,7 +400,29 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   //
   // Đối chứng: một `kind` KHÔNG khai của cùng tổ chức phải còn nguyên `PENDING` — chứng minh thứ
   // đưa job tới `FAILED` là dòng khai, không phải một vị từ nhặt việc quá rộng (§S1.81 mục 1).
+  //
+  // [S1.9192 / khoản 158] Từ `9592_outbox_policy_theo_kind`, policy `outbox_jobs_kind_app_unseal` chỉ cho `app_unseal`
+  // ghi kết cục cho `kind` trong tập của worker. Kind THỬ này không ở đó (đúng — nó không phải một khai thật, nên
+  // không có migration), và đo (log `lo92-10`): không nới thì job nằm `PENDING`, vế này đỏ vì LỚP CSDL chứ không vì
+  // thứ nó đo (dòng khai + mảng lọc của runner). Nới policy cho ĐÚNG kind thử, dưới siêu người dùng, khôi phục nguyên
+  // văn trong `finally`; `KIND_KHONG_KHAI` KHÔNG được nới — đối chứng của vế này đứng ở cả hai lớp. Bản gương của
+  // `noiPolicyKindTam` ở `apps/api/src/composition.int.test.ts` (hai tệp, hai cụm CSDL, một đồ gá nhỏ).
   // ===============================================================================================
+  async function noiPolicyKindTam(kind: string): Promise<() => Promise<void>> {
+    if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(kind)) throw new Error("kind thử phải khớp CHECK của outbox_jobs.kind");
+    const { rows } = await db.pool.query<{ u: string; wc: string }>(
+      "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+        "  FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname = 'outbox_jobs_kind_app_unseal'",
+    );
+    const goc = rows[0];
+    if (goc === undefined) throw new Error("không thấy policy outbox_jobs_kind_app_unseal — migration 9592 chưa áp?");
+    const noi = `(${goc.u}) OR (kind = '${kind}')`;
+    await db.pool.query(`ALTER POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs USING (${noi}) WITH CHECK (${noi})`);
+    return async () => {
+      await db.pool.query(`ALTER POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs USING (${goc.u}) WITH CHECK (${goc.wc})`);
+    };
+  }
+
   it("⑹ [khoản 168] job mang `kind` mồ côi của một tổ chức CHƯA TỪNG xếp việc qua api ⇒ tiến trình này đưa nó tới FAILED/NO_HANDLER và ghi MỘT dòng; `kind` không khai của cùng tổ chức không bị chạm", async () => {
     const KIND_MO_COI = "THU_MO_COI_168";
     const KIND_KHONG_KHAI = "THU_KHONG_KHAI_168";
@@ -429,6 +451,8 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     };
 
     Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế ⑹ — không phải một khai thật, gỡ trong finally" });
+    // [S1.9192 / khoản 158] Xem khối lý do trên `noiPolicyKindTam`. Khôi phục trong `finally`.
+    const khoiPhucPolicy = await noiPolicyKindTam(KIND_MO_COI);
     const log: string[] = [];
     const cu = console.error;
     console.error = (...a: unknown[]) => {
@@ -459,6 +483,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       await tt.dung();
       console.error = cu;
       Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+      await khoiPhucPolicy();
     }
   }, 60_000);
 

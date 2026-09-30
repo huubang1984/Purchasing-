@@ -31,6 +31,9 @@ import { KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docCauHinh, type MoiTruong } from "./cau-hinh.js";
 import { taoTienTrinhApi, type TienTrinhApi } from "./composition.js";
+// [S1.9192 / khoản 158] Bảng handler THẬT của tiến trình này, để vế cuối tệp đối chiếu với tập `kind` của policy 9592.
+import { buildApiOutboxHandlers } from "./outbox-api.js";
+import { dichVuTest } from "./test-services.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import type { TinHopThuDev } from "./adapters/hop-thu-dev.js";
 
@@ -801,10 +804,79 @@ describe("[S1.169 / ADR-105] cờ ký chính sách đi từ MÔI TRƯỜNG tới
 // một lượt claim (lô 10 job) cho tổ chức ấy sau khi job mồ côi tồn tại — mà job mồ côi vẫn `PENDING`,
 // `attempts` 0, và không dòng log `outbox` nào của tiến trình mang `kind` ấy.
 // ==============================================================================================
+// ===============================================================================================
+// [S1.9192 / khoản 158] TẬP `kind` MÀ CSDL CHO `app_api` GHI KẾT CỤC PHẢI BẰNG BẢNG HANDLER CỦA TIẾN TRÌNH NÀY
+//
+// Migration `9592_outbox_policy_theo_kind` (ADR-9292): policy `outbox_jobs_kind_app_api` (`AS RESTRICTIVE FOR UPDATE TO app_api`)
+// mang NGUYÊN VĂN tập `kind` của `buildApiOutboxHandlers`. Thêm một handler mà quên migration thì job của kind ấy không claim
+// được — nằm `PENDING` im lặng — và vế này đỏ TRƯỚC khi tới đó, ở đúng tệp của tiến trình thêm handler. Bản đối chiếu cả hai
+// vai (và sổ mồ côi của worker) ở `apps/unseal-worker/src/composition.int.test.ts`; hành vi ở `packages/outbox/src/outbox.int.test.ts`.
+// ===============================================================================================
+async function docTapKindCuaPolicyApi(): Promise<readonly string[]> {
+  const { rows } = await db.pool.query<{ vai: string; permissive: boolean; lenh: string; u: string | null; wc: string | null }>(
+    "SELECT array_to_string(ARRAY(SELECT r.rolname FROM unnest(p.polroles) AS o(oid) JOIN pg_roles r ON r.oid = o.oid ORDER BY r.rolname), ',') AS vai, " +
+      "       p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+      "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = 'outbox_jobs_kind_app_api'",
+  );
+  const p = rows[0];
+  expect(p, "CSDL không có policy outbox_jobs_kind_app_api — migration 9592 chưa áp, hay policy đã bị đổi tên/xoá").toBeDefined();
+  expect({ vai: p!.vai, permissive: p!.permissive, lenh: p!.lenh }, "phải là RESTRICTIVE FOR UPDATE, đúng một vai app_api").toEqual({
+    vai: "app_api",
+    permissive: false,
+    lenh: "w",
+  });
+  expect(p!.wc, "WITH CHECK phải bằng USING — hai vế khai cùng một tập").toBe(p!.u);
+  expect(p!.u ?? "", "USING không đúng hình dạng `(kind = ANY (ARRAY['…'::text, …]))`").toMatch(
+    /^\(kind = ANY \(ARRAY\[(?:'[A-Z][A-Z0-9_]{0,63}'::text(?:, )?)+\]\)\)$/u,
+  );
+  return [...(p!.u ?? "").matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!);
+}
+
+/**
+ * [S1.9192 / khoản 158] Policy 9592 ràng tập `kind` của mỗi vai ở CSDL. Vế khoản 168 dưới đây mượn MỘT dòng thử ở sổ mồ côi để
+ * đo rằng runner của `api` KHÔNG nhặt nó; từ 9592 lớp CSDL cũng chặn kind thử ấy, nên nếu không nới policy thì vế ấy xanh CẢ KHI
+ * `api` khai lại sổ (đột biến M5 của §S1.9151 chết). Nới policy của vai cho ĐÚNG kind thử, dưới siêu người dùng — thứ còn quyết
+ * định là mảng lọc của runner — và khôi phục NGUYÊN VĂN trong `finally`. Cụm của tệp này là cụm riêng; cổng khai của hardening
+ * chỉ chạy ở `migrate()`, đã xong ở `beforeAll`.
+ */
+async function noiPolicyKindTam(polname: "outbox_jobs_kind_app_api" | "outbox_jobs_kind_app_unseal", kind: string): Promise<() => Promise<void>> {
+  if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(kind)) throw new Error("kind thử phải khớp CHECK của outbox_jobs.kind");
+  const { rows } = await db.pool.query<{ u: string; wc: string }>(
+    "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid WHERE c.relname = 'outbox_jobs' AND p.polname = $1",
+    [polname],
+  );
+  const goc = rows[0];
+  if (goc === undefined) throw new Error(`không thấy policy ${polname} — migration 9592 chưa áp?`);
+  const noi = `(${goc.u}) OR (kind = '${kind}')`;
+  await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${noi}) WITH CHECK (${noi})`);
+  return async () => {
+    await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${goc.u}) WITH CHECK (${goc.wc})`);
+  };
+}
+
+describe("[INV-F1] [S1.9192 / khoản 158] tập `kind` trong policy `outbox_jobs_kind_app_api` BẰNG bảng handler của tiến trình `api`", () => {
+  it("Object.keys(buildApiOutboxHandlers) = tập kind của policy — thêm một handler mà quên migration thì đỏ ở đây, trước khi job của nó nằm PENDING im lặng", async () => {
+    const handler = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
+    expect(handler.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    expect(
+      [...(await docTapKindCuaPolicyApi())].sort(),
+      "Tập `kind` trong policy của CSDL KHÁC bảng handler của api. Thêm kind = thêm migration (ADR-9292): `ALTER POLICY " +
+        "outbox_jobs_kind_app_api ON public.outbox_jobs USING (…) WITH CHECK (…)` trong một migration MỚI, cộng sửa dòng ở " +
+        "POLICY_RESTRICTIVE_KHAI (hardening.always.sql) và POLICY_RESTRICTIVE_DA_KHAI (db/rls-coverage.int.test.ts).",
+    ).toEqual([...handler].sort());
+  });
+});
+
 describe("[S1.9151 / khoản 168] tiến trình `api` dựng từ môi trường KHÔNG khai sổ `kind` mồ côi", () => {
   it("job mang `kind` trong sổ mồ côi của tổ chức tiến trình này ĐÃ THẤY xếp việc vẫn PENDING, attempts 0, sau khi runner chạy trọn một lượt cho tổ chức ấy (job LOGIN_LINK_SEND xếp SAU nó đã ra tin); không dòng log nào mang `kind` ấy — sổ nay là việc của worker", async () => {
     const KIND_MO_COI = "THU_MO_COI_168_API";
     Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế khoản 168 — không phải một khai thật, gỡ trong finally" });
+    // [S1.9192 / khoản 158] Policy 9592 cũng chặn kind thử này dưới app_api; nới cho đúng nó để thứ được đo vẫn là mảng lọc của
+    // runner (xem `noiPolicyKindTam`). Khôi phục trong `finally`.
+    const khoiPhucPolicy = await noiPolicyKindTam("outbox_jobs_kind_app_api", KIND_MO_COI);
     const log: string[] = [];
     const cu = console.error;
     console.error = (...a: unknown[]) => {
@@ -852,6 +924,7 @@ describe("[S1.9151 / khoản 168] tiến trình `api` dựng từ môi trường
       await tt.dung();
       console.error = cu;
       Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+      await khoiPhucPolicy();
     }
   });
 });

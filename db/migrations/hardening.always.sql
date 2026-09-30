@@ -2707,7 +2707,9 @@ $ham$;
   --    (b1) RESTRICTIVE khuôn 027: `<bảng>_khach`, FOR ALL, PUBLIC, USING = WITH CHECK = "không phải
   --        phiên khách" — tự nó không mở thêm hàng nào cho ai, nên hợp lệ toàn cục không cần khai;
   --    (b2) RESTRICTIVE khác — ~~SÁU~~ [S1.55] BẢY cột nguyên văn, thêm `nspname` (khoản 98), ở POLICY_RESTRICTIVE_KHAI (tám biến thể của 027 nới
-  --        theo một cột cho phiên khách); [CR1] cố ý không soi RESTRICTIVE vì "chỉ thu hẹp" — đúng cho câu
+  --        theo một cột cho phiên khách; [S1.9192 / khoản 158] cộng HAI policy theo `kind` của `9592_outbox_policy_theo_kind` —
+  --        `outbox_jobs_kind_app_api`/`_app_unseal`, FOR UPDATE, mỗi cái MỘT vai, tập `kind` của tiến trình chạy dưới vai ấy);
+  --        [CR1] cố ý không soi RESTRICTIVE vì "chỉ thu hẹp" — đúng cho câu
   --        hỏi RÒ, sai cho câu hỏi IM LẶNG: `AS RESTRICTIVE FOR UPDATE USING (false)` làm mọi UPDATE của
   --        app_api ra 0 hàng không lỗi và [CR1] xanh (đo, S1.32);
   --    (c) mọi policy khác (PERMISSIVE trên bảng RLS NGOÀI tenant, …) — ~~BẢY~~ [S1.55] TÁM cột, thêm `nspname`, ở POLICY_KHAC_KHAI.
@@ -2741,12 +2743,18 @@ $ham$;
   -- Xuống dòng bên trong hai literal `bid_receipts`/`vendor_bid_versions` LÀ MỘT PHẦN của `pg_get_expr`
   -- (deparse subquery) — không được "nắn" thành khoảng trắng; `.gitattributes` giữ *.sql eol=lf nên byte
   -- xuống dòng là LF ở mọi máy. [lượt soi 29, INFO-10]
+  -- [S1.9192 / khoản 158] Hai dòng `outbox_jobs_kind_app_api`/`_app_unseal` (`9592_outbox_policy_theo_kind`, ADR-9292): tập `kind`
+  -- mà mỗi vai ứng dụng được ghi kết cục, nguyên văn `pg_get_expr`. Thêm một `kind` = một migration `ALTER POLICY` MỚI + sửa dòng
+  -- ở đây + dòng gương ở `db/rls-coverage.int.test.ts` (`POLICY_RESTRICTIVE_DA_KHAI`); hai cổng ở `apps/{api,unseal-worker}/src/composition.int.test.ts`
+  -- đối chiếu tập ấy với `Object.keys(handlers)` ∪ sổ mồ côi. Thứ tự dòng theo (lược đồ, bảng, policy) — cổng HAI BẢN KHỚP đòi thế.
   POLICY_RESTRICTIVE_KHAI constant text :=
     $q$(VALUES
          ('public', 'bid_receipts', 'bid_receipts_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
    FROM vendor_bid_versions v)))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
    FROM vendor_bid_versions v)))'),
          ('public', 'guest_sessions', 'guest_sessions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))'),
+         ('public', 'outbox_jobs', 'outbox_jobs_kind_app_api', 'w', 'app_api', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))'),
+         ('public', 'outbox_jobs', 'outbox_jobs_kind_app_unseal', 'w', 'app_unseal', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))'),
          ('public', 'rfq_bafo_rounds', 'rfq_bafo_rounds_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
          ('public', 'rfq_invitations', 'rfq_invitations_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))'),
          ('public', 'rfq_items', 'rfq_items_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
