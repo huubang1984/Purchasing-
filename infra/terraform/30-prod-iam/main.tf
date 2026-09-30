@@ -161,13 +161,20 @@ resource "aws_iam_openid_connect_provider" "github" {
 # [S1.183 / ADR-111] tp-deploy nhận thêm environment "prod-khoi-tao" — workflow `khoi-tao.yml` chạy task tạo tổ chức dưới
 # CÙNG role, nhưng environment ấy bật thêm "Prevent self-review": người bấm không tự duyệt được lần tạo tổ chức và gán vai.
 # Deploy api vẫn đi environment "prod" với luật cũ. Role không đổi quyền theo environment — ranh giới là workflow trên master.
+# [S1.9152 / khoản 252 ⑶ / ADR-9252] `environments` nay là bản đồ environment ⇒ TỆP WORKFLOW (dưới `.github/workflows/`, trên
+# `master`) được nhận role qua environment ấy, hay `null` = không ghim tệp nào. Ghim được vì claim `sub` của kho được TUỲ BIẾN để
+# mang `job_workflow_ref` (khối `deploy_trust` dưới). `prod-khoi-tao` ghim `khoi-tao.yml`: một workflow KHÁC trên master khai
+# `environment: prod-khoi-tao` (lượt soi S1.183) không còn nhận được role. `prod`, `prod-worker` không ghim — chủ dự án giữ như cũ.
 locals {
   deploy = {
     deploy = {
-      environments = ["prod", "prod-khoi-tao"]
-      repos        = local.repo_app
-      services     = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
-      pass_roles   = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job, local.role_arn.khoi_tao]
+      environments = {
+        prod            = null           # như cũ (ADR-067): deploy.yml, người bấm tự duyệt được
+        "prod-khoi-tao" = "khoi-tao.yml" # chỉ khoi-tao.yml@refs/heads/master (ADR-9252)
+      }
+      repos      = local.repo_app
+      services   = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
+      pass_roles = [local.role_arn.api, local.role_arn.migrate, local.role_arn.anchor_job, local.role_arn.khoi_tao]
       # [S1.183 / lượt soi] KHÔNG đọc log nào — cả `/tp/khoi-tao`: kết quả của task khởi tạo suy từ đầu vào đã duyệt (mã tổ
       # chức do workflow chọn), và một quyền đọc log là một kênh đọc sạch cho task tự đăng ký in secret vào nhóm log ấy.
       doc_log = []
@@ -175,7 +182,7 @@ locals {
       xoa_secret = ["${local.secret_arn}/khoi-tao/ban-khai/*"]
     }
     deploy_worker = {
-      environments = ["prod-worker"]
+      environments = { "prod-worker" = null }
       repos        = local.repo_worker
       services     = ["tp-unseal-worker"]
       pass_roles   = [local.role_arn.unseal_worker]
@@ -184,6 +191,20 @@ locals {
       xoa_secret = []
     }
   }
+}
+
+# [S1.9152 / khoản 252 ⑶ / ADR-9252] Claim `sub` của token OIDC được TUỲ BIẾN ở kho GitHub (README, "Tuỳ biến claim `sub`"):
+# `include_claim_keys = ["repo", "context", "job_workflow_ref"]`, nên với một job đứng trong environment, `sub` có dạng
+#   repo:<chủ kho>@<owner_id>/<kho>@<repo_id>:environment:<tên>:job_workflow_ref:<chủ kho>/<kho>/.github/workflows/<tệp>@<ref>
+# Đoạn `repo:` mang ID BẤT BIẾN (kho tạo sau 2026-07-15 — `chung`); `job_workflow_ref` là workflow ĐỊNH NGHĨA job, ghim nó là ghim
+# TỆP trên `master` chứ không chỉ TÊN environment. Cả hai vế là ĐỌC tài liệu GitHub, chưa đo trên token thật (khoản 15): sai thì
+# AWS từ chối role — KHOÁ, không mở — và README nói cách in claim thật rồi sửa `sub_repo` (một dòng). Chưa tuỳ biến claim mà
+# apply, hay tuỳ biến rồi chưa apply, cũng chỉ KHOÁ deploy. `StringLike` vì environment không ghim tệp dùng `*` ở vế workflow;
+# với chuỗi không có `*` nó là so sánh bằng.
+locals {
+  chu_kho  = split("/", module.chung.github_repo)[0]
+  ten_kho  = split("/", module.chung.github_repo)[1]
+  sub_repo = "repo:${local.chu_kho}@${module.chung.github_owner_id}/${local.ten_kho}@${module.chung.github_repo_id}"
 }
 
 data "aws_iam_policy_document" "deploy_trust" {
@@ -200,9 +221,9 @@ data "aws_iam_policy_document" "deploy_trust" {
       values   = ["sts.amazonaws.com"]
     }
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for e in each.value.environments : "repo:${module.chung.github_repo}:environment:${e}"]
+      values   = [for e, wf in each.value.environments : "${local.sub_repo}:environment:${e}:job_workflow_ref:${wf == null ? "*" : "${module.chung.github_repo}/.github/workflows/${wf}@refs/heads/master"}"]
     }
   }
 }
