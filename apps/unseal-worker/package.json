@@ -23,6 +23,7 @@
   "devDependencies": {
     "@trustprocure/bidding": "workspace:*",
     "@trustprocure/invitation": "workspace:*",
+    "@trustprocure/kiem-soat": "workspace:*",
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/supplier": "workspace:*",
     "@trustprocure/test-support": "workspace:*",

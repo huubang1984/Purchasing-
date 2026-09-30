@@ -1593,6 +1593,150 @@ describe("bề mặt tệp", () => {
       expect(soLanDocNganSach(khac.p.trangThai.goi)).toBe(0);
       expect(khac.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(["Giá trị ước lượng", "150000000.00", "Tiền tệ", "VND", "Cần hai người duyệt", "có"]);
     });
+
+    // ==========================================================================================
+    // [S3.6b2 / K10a] KHUNG TÍN HIỆU CHIA NHỎ GÓI trong `/tao-thau`. Chủ dự án chốt ngày 2026-09-30: màn tự đọc tín hiệu ở mỗi lần
+    // đọc gói của tổ chức đã bật (route không cổng), mời bấm «Ghi nhận tín hiệu» chỉ khi máy chủ nói người đang xem ghi nhận được,
+    // và nói vì sao không khi không.
+    // ==========================================================================================
+    const BC_TH = { can: 1000000000, goi: ["r-0", "r-1"], loai: "PURCHASE_SPLITTING", nhom_hang: "n1", chinh_sach: "p2", cua_so_ngay: 30 };
+    const HANG_NOP = {
+      id: "s1", loai: "PURCHASE_SPLITTING", nguon: "NOP_DUYET", bangChung: BC_TH, doTinCay: "XAC_DINH", giaiThich: "x",
+      tinhLuc: "2026-09-30T01:00:00.000Z", nguoiGhi: "u-pm", nguoiGhiTen: "Anh Soạn", ghiNhan: [] as unknown[],
+    };
+    const thanTinHieu = (nguoiXem: unknown, them: Record<string, unknown> = {}) => ({
+      tinHieu: {
+        hienTai: BC_TH, canGhiNhan: true, tinHieu: [HANG_NOP],
+        goi: { "r-0": { tieuDe: "Thép 480", trangThai: "OPEN" }, "r-1": { tieuDe: "Gói", trangThai: "PENDING_APPROVAL" } },
+        nguoiXem, soNguoiGhiNhanDuoc: 1, ...them,
+      },
+    });
+    const KHONG_TIN_HIEU = { tinHieu: { hienTai: null, canGhiNhan: false, tinHieu: [], goi: {}, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null } };
+    const docTinHieu = (id: string, body: unknown) => (l: string) =>
+      l === `GET /rfqs/${id}/signals` ? Promise.resolve({ status: 200, body }) : undefined;
+    const soLanDocTinHieu = (goi: readonly string[], id = "r-1") => goi.filter((g) => g === `GET /rfqs/${id}/signals`).length;
+    const dongGoi = (p: Awaited<ReturnType<typeof dungTrang>>) =>
+      p.el("bang-tin-hieu").querySelector("tbody").con.map((tr) => tr.con.map((td) => td.textContent));
+    const LY_DO_TU_GHI = "Người tạo hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy.";
+
+    it("[S3.6b2 / K10a] tao-thau: gói chờ duyệt có tín hiệu chờ ghi nhận ⇒ khung tự hiện (tóm tắt, bảng gói đánh dấu gói này, lịch sử); người xem ghi nhận được ⇒ ô lý do và nút; lý do rỗng ⇒ không gọi máy chủ; có lý do ⇒ POST acknowledge mang lý do đã cắt, rồi đọc lại gói và khung", async () => {
+      let daGhiNhan = false;
+      const { p } = await moTaoThau(true, "PENDING_APPROVAL", (l) =>
+        l === "POST /rfqs/r-1/signals/acknowledge"
+          ? ((daGhiNhan = true), Promise.resolve({ status: 201, body: { ghiNhan: { signalId: "s1", ackId: "a1", tinHieuMoi: false } } }))
+          : docTinHieu("r-1", daGhiNhan
+            ? thanTinHieu({ ghiNhanDuoc: false, lyDo: null }, {
+              canGhiNhan: false, soNguoiGhiNhanDuoc: null,
+              tinHieu: [{ ...HANG_NOP, ghiNhan: [{ id: "a1", lyDo: "Ba cong trinh", nguoi: "u-b", nguoiTen: "Chị Duyệt", luc: "2026-09-30T02:00:00.000Z" }] }],
+            })
+            : thanTinHieu({ ghiNhanDuoc: true, lyDo: null }))(l));
+      expect(soLanDocTinHieu(p.trangThai.goi), "đọc gói kéo theo MỘT lần đọc tín hiệu").toBe(1);
+      expect(p.el("khoi-tin-hieu").hidden).toBe(false);
+      expect(p.el("tin-hieu-tom-tat").textContent).toContain("Gói này nằm trong 2 gói cùng nhóm hàng nộp duyệt trong 30 ngày, mỗi gói dưới cận 1.000.000.000");
+      // Bảng xếp theo tên gói, không theo id của bằng chứng.
+      expect(dongGoi(p)).toEqual([["Gói (gói này)", "chờ duyệt"], ["Thép 480", "đã mở"]]);
+      expect(p.el("lich-su-tin-hieu").con.map((li) => li.textContent).join("|")).toContain("Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (2 gói, cận 1.000.000.000).");
+      expect([p.el("khoi-ghi-nhan").hidden, p.el("tin-hieu-khong-duoc").hidden]).toEqual([false, true]);
+
+      p.el("ly-do-ghi-nhan").value = "   ";
+      await p.bam("nut-ghi-nhan");
+      expect(p.el("loi4").textContent).toBe("Cần ghi lý do ghi nhận — lý do vào sổ kiểm toán cùng tên người ghi nhận.");
+      expect(p.trangThai.goi, "lý do rỗng: không một lời gọi nào").not.toContain("POST /rfqs/r-1/signals/acknowledge");
+
+      p.el("ly-do-ghi-nhan").value = "  Ba cong trinh  ";
+      await p.bam("nut-ghi-nhan");
+      expect(p.trangThai.than.filter((t) => t.lenh === "POST /rfqs/r-1/signals/acknowledge").map((t) => t.than)).toEqual([{ lyDo: "Ba cong trinh" }]);
+      expect(p.el("ok4").textContent).toBe("Đã ghi nhận tín hiệu. Gói mở được khi đủ chữ ký.");
+      expect(p.el("ly-do-ghi-nhan").value).toBe("");
+      expect(soLanDocTinHieu(p.trangThai.goi), "ghi nhận xong: đọc lại gói, kéo theo lần đọc tín hiệu thứ hai").toBe(2);
+      expect(p.el("tin-hieu-tom-tat").textContent).toContain("Tín hiệu đã được ghi nhận — nó không chặn lần mở gói nữa.");
+      expect(p.el("lich-su-tin-hieu").con.map((li) => li.textContent).join("|")).toContain("Chị Duyệt ghi nhận: «Ba cong trinh».");
+      expect(p.el("khoi-ghi-nhan").hidden, "không còn gì để ghi nhận").toBe(true);
+    });
+
+    it("[S3.6b2 / K10a] tao-thau: người gây ra tín hiệu ⇒ khung hiện, KHÔNG mời bấm, nói đúng câu vì sao không của máy chủ; §8.10 — không ai ghi nhận được ⇒ tóm tắt nói tổ chức kẹt", async () => {
+      const { p } = await moTaoThau(true, "PENDING_APPROVAL", docTinHieu("r-1", thanTinHieu({ ghiNhanDuoc: false, lyDo: LY_DO_TU_GHI }, { soNguoiGhiNhanDuoc: 0 })));
+      expect(p.el("khoi-tin-hieu").hidden).toBe(false);
+      expect(p.el("khoi-ghi-nhan").hidden).toBe(true);
+      expect([p.el("tin-hieu-khong-duoc").hidden, p.el("tin-hieu-khong-duoc").textContent]).toEqual([false, LY_DO_TU_GHI]);
+      expect(p.el("tin-hieu-tom-tat").textContent).toContain("Trong tổ chức hiện không ai ghi nhận được tín hiệu này");
+      expect(p.trangThai.goi.filter((g) => g.startsWith("POST"))).toEqual([]);
+    });
+
+    it("[S3.6b2 / K10a] tao-thau: gói không tín hiệu ⇒ khung ẩn; đọc hỏng ⇒ khung ẩn; tổ chức chưa bật ⇒ không hỏi `/signals`", async () => {
+      const khong = await moTaoThau(true, "PENDING_APPROVAL", docTinHieu("r-1", KHONG_TIN_HIEU));
+      expect([soLanDocTinHieu(khong.p.trangThai.goi), khong.p.el("khoi-tin-hieu").hidden]).toEqual([1, true]);
+      const hong = await moTaoThau(true, "PENDING_APPROVAL", (l) => (l === "GET /rfqs/r-1/signals" ? Promise.resolve({ status: 500, body: { error: "x" } }) : undefined));
+      expect([soLanDocTinHieu(hong.p.trangThai.goi), hong.p.el("khoi-tin-hieu").hidden]).toEqual([1, true]);
+      const mvp1 = await moTaoThau(false, "PENDING_APPROVAL", docTinHieu("r-1", thanTinHieu({ ghiNhanDuoc: true, lyDo: null })));
+      expect([soLanDocTinHieu(mvp1.p.trangThai.goi), mvp1.p.el("khoi-tin-hieu").hidden]).toEqual([0, true]);
+    });
+
+    it("[S3.6b2 / K10a] tao-thau: máy chủ từ chối lần ghi nhận ⇒ in đúng câu của máy chủ, đọc lại khung; câu trả tín hiệu của gói TRƯỚC tới muộn không được vẽ; đăng xuất hay đổi người ⇒ khung đi", async () => {
+      const tuChoi = await moTaoThau(true, "PENDING_APPROVAL", (l) =>
+        l === "POST /rfqs/r-1/signals/acknowledge"
+          ? Promise.resolve({ status: 422, body: { error: "Bằng chứng của tín hiệu vừa đổi — đọc lại rồi ghi nhận tín hiệu hiện tại." } })
+          : docTinHieu("r-1", thanTinHieu({ ghiNhanDuoc: true, lyDo: null }))(l));
+      tuChoi.p.el("ly-do-ghi-nhan").value = "Ba cong trinh";
+      await tuChoi.p.bam("nut-ghi-nhan");
+      expect(tuChoi.p.el("loi4").textContent).toBe("Bằng chứng của tín hiệu vừa đổi — đọc lại rồi ghi nhận tín hiệu hiện tại.");
+      expect(soLanDocTinHieu(tuChoi.p.trangThai.goi), "lời từ chối kéo theo một lần đọc lại khung").toBe(2);
+
+      let tha: () => void = () => undefined;
+      const cham = new Promise<void>((r) => { tha = r; });
+      const p = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: true, choKy: false } })
+            : l === "GET /rfqs/r-1/signals" ? cham.then(() => ({ status: 200, body: thanTinHieu({ ghiNhanDuoc: true, lyDo: null }) }))
+            : l === "GET /rfqs/r-2/signals" ? Promise.resolve({ status: 200, body: KHONG_TIN_HIEU })
+            : goiCua("r-1", A.userId)(l) ?? goiCua("r-2", B.userId)(l),
+      });
+      await p.bam("nut-dung-phien");
+      p.el("rfq").value = "r-1";
+      const docGoiMot = Promise.all((p.el("nut-doc").nghe["click"] ?? []).map((f) => f()));
+      await cho();
+      expect(soLanDocTinHieu(p.trangThai.goi), "lần đọc tín hiệu của r-1 đã đi và đang chờ").toBe(1);
+      p.el("rfq").value = "r-2";
+      await p.bam("nut-doc");
+      tha();
+      await docGoiMot;
+      await cho();
+      expect(p.el("khoi-tin-hieu").hidden, "màn đang mở r-2 (không tín hiệu): tín hiệu của r-1 không được vẽ").toBe(true);
+      expect(dongGoi(p)).toEqual([]);
+
+      // Đọc gói khác: khung của gói trước đi NGAY khi gói mới về, không đợi câu trả tín hiệu của gói mới — trong lúc chờ, màn không đặt
+      // tín hiệu của r-1 cạnh thông tin của r-2.
+      let tha2: () => void = () => undefined;
+      const cham2 = new Promise<void>((r) => { tha2 = r; });
+      const d = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: true, choKy: false } })
+            : l === "GET /rfqs/r-1/signals" ? Promise.resolve({ status: 200, body: thanTinHieu({ ghiNhanDuoc: true, lyDo: null }) })
+            : l === "GET /rfqs/r-2/signals" ? cham2.then(() => ({ status: 200, body: KHONG_TIN_HIEU }))
+            : goiCua("r-1", A.userId)(l) ?? goiCua("r-2", B.userId)(l),
+      });
+      await d.bam("nut-dung-phien");
+      d.el("rfq").value = "r-1";
+      await d.bam("nut-doc");
+      expect(d.el("khoi-tin-hieu").hidden, "r-1 có tín hiệu").toBe(false);
+      d.el("rfq").value = "r-2";
+      const docGoiHai = Promise.all((d.el("nut-doc").nghe["click"] ?? []).map((f) => f()));
+      await cho();
+      expect(soLanDocTinHieu(d.trangThai.goi, "r-2"), "lần đọc tín hiệu của r-2 đã đi và đang chờ").toBe(1);
+      expect([d.el("khoi-tin-hieu").hidden, dongGoi(d)], "đang chờ tín hiệu của r-2: khung của r-1 đã đi").toEqual([true, []]);
+      tha2();
+      await docGoiHai;
+
+      for (const cach of ["dang-xuat", "doi-nguoi"] as const) {
+        const { p: q } = await moTaoThau(true, "PENDING_APPROVAL", docTinHieu("r-1", thanTinHieu({ ghiNhanDuoc: true, lyDo: null })));
+        expect(q.el("khoi-tin-hieu").hidden, cach).toBe(false);
+        if (cach === "dang-xuat") await q.bam("nut-dang-xuat");
+        else await q.doiFragment(`#${ORG}:maCuaB`);
+        expect([q.el("khoi-tin-hieu").hidden, q.el("khoi-ghi-nhan").hidden, dongGoi(q)], cach).toEqual([true, true, []]);
+      }
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {
