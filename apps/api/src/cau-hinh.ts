@@ -20,6 +20,11 @@
 //      là lỗi khởi động, và ngược lại — một cấu hình không được mang hai câu trả lời cho câu "khoá ở
 //      đâu". Dưới `aws-kms`, CMK của TOTP phải khác CMK bọc cặp khoá tổ chức (ADR-063).
 //
+// [S1.9160 / khoản 187] `apps/unseal-worker/src/cau-hinh.ts` giữ một BẢN CHÉP có chủ đích của bộ hàm đọc biến ở đây (worker
+// không import `apps/api`, và không được đọc ba vòng bí mật dưới đây). Bảng kiểm kê ĐÓNG từng cặp và phép đo chống trôi — văn
+// bản cho cặp trùng chữ, hành vi hai `docCauHinh` trên cùng biến cho cặp khác chữ — ở `tests/architecture/ma-chep-api-worker.test.ts`.
+// Đổi ngữ pháp của một biến HAI tiến trình cùng đọc (khoá tổ chức, vùng AWS, CMK, SES, các số nhịp/ngưỡng) thì đổi cả hai bên.
+//
 // VÌ SAO BA VÒNG BÍ MẬT PHẢI ĐÔI MỘT KHÁC NHAU: `TotpSecretUnsealer` (identity) ghi hợp đồng "không
 // được dùng chung vòng khoá chính với bộ mở phong bì thầu" (G1/ADR-006); pepper OTP (ADR-018) là
 // khoá HMAC giữ ngoài CSDL. Dùng một chuỗi base64 cho cả ba biến là lỗi dán-chép dễ nhất trong vận

@@ -83,6 +83,8 @@ const TRE_DAU_TON_DONG_MS = 5_000;
  * của `apps/api/src/mo-ta-loi.ts`); mọi lỗi khác đi vào `release()` đã có người nhận, không ghi.
  * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export để
  * `loi-ket-noi-toi-muon.int.test.ts` đo hành vi trên pool thật. Dây nối thật ở `taoTienTrinhUnsealWorker`.
+ * [S1.9160 / khoản 187] Bản song sinh có kiểm kê: `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn dòng
+ * log với `ghiLogKetNoiHuy` của `api` (bỏ tiền tố tiến trình) — hai bản khác hình dạng có chủ đích, không được khác lời.
  */
 export const ghiKetNoiHuy =
   (ten: string) =>
@@ -97,6 +99,7 @@ export const ghiKetNoiHuy =
  * người gọi đã nhận `CONNECT_WAIT_EXCEEDED` và đi; `withTenant` chỉ phát khi trần ĐÃ nổ nên một sự cố
  * không thành hai dòng (cùng luật với `ghiLogLoiKetNoiToiMuon` của `apps/api/src/mo-ta-loi.ts`).
  * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export — xem `ghiKetNoiHuy`.
+ * [S1.9160 / khoản 187] Bản song sinh của `ghiLogLoiKetNoiToiMuon` (`api`) — cùng phép đo đối chiếu, xem `ghiKetNoiHuy`.
  */
 export const ghiLoiToiMuon =
   (ten: string) =>
