@@ -10218,6 +10218,7 @@ DECLARE
   mo_ta text;
   hang_bi_danh uuid;
   bi_danh_rut boolean;
+  tac_gia_bi_danh uuid;
   co_ban_ro boolean;
   giu_item_manage boolean;
 BEGIN
@@ -10253,16 +10254,26 @@ BEGIN
     INTO co_ban_ro;
 
   IF NEW.nguon = 'TU_DONG' THEN
-    SELECT a.canonical_item_id, a.rut INTO hang_bi_danh, bi_danh_rut
+    SELECT a.canonical_item_id, a.rut, a.tac_gia INTO hang_bi_danh, bi_danh_rut, tac_gia_bi_danh
       FROM public.item_aliases a
      WHERE a.org_id = NEW.org_id
        AND a.bi_danh_sach = public.chuoi_sach(mo_ta)
-       AND a.ghi_luc < pg_catalog.clock_timestamp()
      ORDER BY a.seq DESC
      LIMIT 1;
     IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN
       RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh';
+    END IF;
+    IF tac_gia_bi_danh IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN
+      RAISE EXCEPTION 'Bi danh do nguoi trong tap loai tru cua goi % khai khong tu dong anh xa duoc (L3)', NEW.rfq_id
+        USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_bi_danh_trong_tap_loai_tru';
+    END IF;
+    IF EXISTS (SELECT 1
+                 FROM public.rfq_item_mappings m
+                WHERE m.org_id = NEW.org_id AND m.rfq_id = NEW.rfq_id AND m.line_no = NEW.line_no
+                  AND m.hang_muc_bam = NEW.hang_muc_bam) THEN
+      RAISE EXCEPTION 'Dong % cua goi % da co anh xa hieu luc: TU_DONG khong de len', NEW.line_no, NEW.rfq_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_da_co_anh_xa';
     END IF;
     IF co_ban_ro AND NOT giu_item_manage THEN
       RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id
@@ -10281,16 +10292,24 @@ BEGIN
       RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id
         USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru';
     END IF;
+    IF NEW.ly_do = 'CHUAN_HOA_HOI_TO' THEN
+      RAISE EXCEPTION 'Ma ly do CHUAN_HOA_HOI_TO danh rieng cho TU_DONG'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_ma_ly_do_danh_rieng';
+    END IF;
     IF co_ban_ro AND NEW.ly_do IS NULL THEN
       RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do';
     END IF;
     IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL
-       AND EXISTS (SELECT 1
-                     FROM public.rfq_item_goi_y g
-                    WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
-                      AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y') THEN
-      RAISE EXCEPTION 'Anh xa rong khi ung vien dau co diem goi y can ly do: goi % dong %', NEW.rfq_id, NEW.line_no
+       AND (NOT EXISTS (SELECT 1
+                          FROM public.rfq_item_goi_y g
+                         WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
+                           AND g.hang_muc_bam = NEW.hang_muc_bam)
+            OR EXISTS (SELECT 1
+                         FROM public.rfq_item_goi_y g
+                        WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
+                          AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y')) THEN
+      RAISE EXCEPTION 'Anh xa rong can ly do khi dong chua qua luot chuan hoa hay da tung co goi y: goi % dong %', NEW.rfq_id, NEW.line_no
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do';
     END IF;
   END IF;
@@ -10312,7 +10331,7 @@ $ham$;
          END
          $fn93$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE trang_thai text; mo_ta text; hang_bi_danh uuid; bi_danh_rut boolean; co_ban_ro boolean; giu_item_manage boolean; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3)); SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN RAISE EXCEPTION 'Chi anh xa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan'; END IF; SELECT i.description INTO mo_ta FROM public.rfq_items i WHERE i.org_id = NEW.org_id AND i.rfq_id = NEW.rfq_id AND i.line_no = NEW.line_no; IF mo_ta IS NULL THEN RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc'; END IF; NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no); SELECT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia AND rp.permission_code = 'item.manage') INTO giu_item_manage; SELECT EXISTS (SELECT 1 FROM public.rfq_unsealed_bids ub JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id) INTO co_ban_ro; IF NEW.nguon = 'TU_DONG' THEN SELECT a.canonical_item_id, a.rut INTO hang_bi_danh, bi_danh_rut FROM public.item_aliases a WHERE a.org_id = NEW.org_id AND a.bi_danh_sach = public.chuoi_sach(mo_ta) AND a.ghi_luc < pg_catalog.clock_timestamp() ORDER BY a.seq DESC LIMIT 1; IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh'; END IF; IF co_ban_ro AND NOT giu_item_manage THEN RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage'; END IF; IF co_ban_ro AND NEW.ly_do IS DISTINCT FROM 'CHUAN_HOA_HOI_TO' THEN RAISE EXCEPTION 'TU_DONG tren goi da co ban ro mang ma ly do CHUAN_HOA_HOI_TO (L13): goi %', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_hoi_to_sai_ma_ly_do'; END IF; ELSE IF NOT giu_item_manage THEN RAISE EXCEPTION 'Anh xa NGUOI_DUYET chi do nguoi giu item.manage ghi (L3): nguoi dung %', NEW.tac_gia USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_can_item_manage'; END IF; IF NEW.tac_gia IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru'; END IF; IF co_ban_ro AND NEW.ly_do IS NULL THEN RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do'; END IF; IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL AND EXISTS (SELECT 1 FROM public.rfq_item_goi_y g WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y') THEN RAISE EXCEPTION 'Anh xa rong khi ung vien dau co diem goi y can ly do: goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do'; END IF; END IF; RETURN NEW; END$than$
+                = $than$DECLARE trang_thai text; mo_ta text; hang_bi_danh uuid; bi_danh_rut boolean; tac_gia_bi_danh uuid; co_ban_ro boolean; giu_item_manage boolean; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3)); SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN RAISE EXCEPTION 'Chi anh xa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan'; END IF; SELECT i.description INTO mo_ta FROM public.rfq_items i WHERE i.org_id = NEW.org_id AND i.rfq_id = NEW.rfq_id AND i.line_no = NEW.line_no; IF mo_ta IS NULL THEN RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc'; END IF; NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no); SELECT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia AND rp.permission_code = 'item.manage') INTO giu_item_manage; SELECT EXISTS (SELECT 1 FROM public.rfq_unsealed_bids ub JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id) INTO co_ban_ro; IF NEW.nguon = 'TU_DONG' THEN SELECT a.canonical_item_id, a.rut, a.tac_gia INTO hang_bi_danh, bi_danh_rut, tac_gia_bi_danh FROM public.item_aliases a WHERE a.org_id = NEW.org_id AND a.bi_danh_sach = public.chuoi_sach(mo_ta) ORDER BY a.seq DESC LIMIT 1; IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh'; END IF; IF tac_gia_bi_danh IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN RAISE EXCEPTION 'Bi danh do nguoi trong tap loai tru cua goi % khai khong tu dong anh xa duoc (L3)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_bi_danh_trong_tap_loai_tru'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_item_mappings m WHERE m.org_id = NEW.org_id AND m.rfq_id = NEW.rfq_id AND m.line_no = NEW.line_no AND m.hang_muc_bam = NEW.hang_muc_bam) THEN RAISE EXCEPTION 'Dong % cua goi % da co anh xa hieu luc: TU_DONG khong de len', NEW.line_no, NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_da_co_anh_xa'; END IF; IF co_ban_ro AND NOT giu_item_manage THEN RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage'; END IF; IF co_ban_ro AND NEW.ly_do IS DISTINCT FROM 'CHUAN_HOA_HOI_TO' THEN RAISE EXCEPTION 'TU_DONG tren goi da co ban ro mang ma ly do CHUAN_HOA_HOI_TO (L13): goi %', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_hoi_to_sai_ma_ly_do'; END IF; ELSE IF NOT giu_item_manage THEN RAISE EXCEPTION 'Anh xa NGUOI_DUYET chi do nguoi giu item.manage ghi (L3): nguoi dung %', NEW.tac_gia USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_can_item_manage'; END IF; IF NEW.tac_gia IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru'; END IF; IF NEW.ly_do = 'CHUAN_HOA_HOI_TO' THEN RAISE EXCEPTION 'Ma ly do CHUAN_HOA_HOI_TO danh rieng cho TU_DONG' USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_ma_ly_do_danh_rieng'; END IF; IF co_ban_ro AND NEW.ly_do IS NULL THEN RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do'; END IF; IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL AND (NOT EXISTS (SELECT 1 FROM public.rfq_item_goi_y g WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no AND g.hang_muc_bam = NEW.hang_muc_bam) OR EXISTS (SELECT 1 FROM public.rfq_item_goi_y g WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y')) THEN RAISE EXCEPTION 'Anh xa rong can ly do khi dong chua qua luot chuan hoa hay da tung co goi y: goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do'; END IF; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

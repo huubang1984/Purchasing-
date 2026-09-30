@@ -9259,17 +9259,23 @@ không bảng, không hàm; tập ADR-082 ⑿ chưa có dòng mã nào (K5 là S
    `jsonb_build_array(description, unit, quantity)`) — khuôn C-1: dòng sửa sau lần trả về thì ánh xạ cũ tự thôi.
 2. **Không gắn cổng `du_lieu_nen_kiem_quyen_ghi` của ADR-116** lên hai bảng này: lượt chuẩn hoá chạy sau lần nộp duyệt dưới phiên
    người nộp (giữ `rfq.create`, không giữ `item.manage`). Cổng của chúng là luật ghi riêng (trigger `…_bat_bien`): gói phải đã rời
-   DRAFT; dòng phải tồn tại; `TU_DONG` được CSDL tính lại (L2); `NGUOI_DUYET` đòi `item.manage` và người ngoài tập loại trừ (L3); gói
-   đã có bản rõ thì chỉ người giữ `item.manage` ghi, có lý do, và `TU_DONG` mang mã `CHUAN_HOA_HOI_TO` (L3, L13); ánh xạ `NULL` của
-   một dòng ĐÃ TỪNG có gợi ý `GOI_Y` đòi lý do (§2.5 ⒁ — *"đã từng"*, không *"mới nhất"*: người nộp ghi được gợi ý, và một hàng
-   `CAN_DUYET` ghi sau không được xoá dấu).
+   DRAFT; dòng phải tồn tại; `TU_DONG` được CSDL tính lại (L2), bí danh ấy không do người trong tập loại trừ của gói khai (L3 — người
+   bị loại khỏi lần duyệt không được duyệt gián tiếp qua bí danh), và không đè một ánh xạ đang hiệu lực của dòng; `NGUOI_DUYET` đòi
+   `item.manage` và người ngoài tập loại trừ (L3); gói đã có bản rõ thì chỉ người giữ `item.manage` ghi, có lý do, và `TU_DONG` mang
+   mã `CHUAN_HOA_HOI_TO` — mã ấy dành riêng, người duyệt không khai được (L3, L13); ánh xạ `NULL` không lý do bị từ chối khi dòng
+   ĐÃ TỪNG có gợi ý `GOI_Y`, hay chưa có gợi ý nào cho băm hiện tại (§2.5 ⒁ — *"đã từng"*, không *"mới nhất"*: người nộp ghi được
+   gợi ý, và một hàng `CAN_DUYET` ghi sau không được xoá dấu). `ghiAnhXa` ghi kết quả lõi vừa tính vào bảng gợi ý TRƯỚC ánh xạ, nên
+   lần bác trên dòng chưa qua lượt chuẩn hoá được phán theo điều lõi nói lúc ấy.
 3. **Tập loại trừ là MỘT hàm SQL `rfq_tap_loai_tru(org, gói)`**, đọc: người tạo gói; `submitted_by`; mọi `invited_by` và
    `revoked_by` (mọi hàng, kể cả đã thu hồi); `rfq_budgets.created_by`; người tạo bản ghi nhà cung cấp và người tạo người liên hệ trên
    danh sách; và mọi `actor_id` của hàng sổ `RFQ_SUBMITTED_FOR_APPROVAL`, `RFQ_BUDGET_SET` của gói. Vế *tác giả ngoại lệ* chưa có vì
    bảng ngoại lệ là của S3.3b; S3.3b thêm nó vào chính hàm này.
-4. **Thứ tự khoá một chiều.** Luật ghi của hai bảng lấy TRƯỚC TIÊN khoá tư vấn của `item_aliases` trong tổ chức — cùng khoá
-   `du_lieu_nen_dat_thu_tu` giữ khi khai hay rút một bí danh — rồi mới tới khoá khuôn của bảng mình. Lần kiểm bí danh của L2 vì thế
-   không đua với một lần rút bí danh chưa commit, và mọi giao dịch ghi bí danh, gợi ý hay ánh xạ khoá bí danh trước: không vòng chờ.
+4. **Thứ tự khoá một chiều: bí danh → hàng gói → ghi → sổ.** Luật ghi của hai bảng lấy TRƯỚC TIÊN khoá tư vấn của `item_aliases`
+   trong tổ chức — cùng khoá `du_lieu_nen_dat_thu_tu` giữ khi khai hay rút một bí danh — rồi hàng gói `FOR SHARE`, rồi khoá khuôn của
+   bảng mình. Lần kiểm bí danh của L2 vì thế không đua với một lần rút bí danh chưa commit. Hàm gói lấy hai khoá đầu TRƯỚC mọi lần ghi
+   sổ của giao dịch (khoản 126): worker mở thầu và mọi cạnh trạng thái khoá hàng gói rồi mới ghi sổ, nên một hàm ghi sổ trước (tạo
+   hàng chuẩn, khai bí danh) rồi mới chờ hàng gói là một vòng chờ. Đo bằng một giao dịch giữ hàng gói rồi ghi sổ trong lúc
+   `taoHangChuanVaAnhXa` chờ.
 5. **L13 khoá hàng gói `FOR SHARE` trước phép kiểm bản rõ.** Câu `UPDATE rfq_packages` của giao dịch mở thầu giữ `FOR NO KEY UPDATE` tới
    commit, nên một ánh xạ ghi trong lúc mở thầu chạy thì chờ, rồi thấy bản rõ; giao dịch mở thầu gặp một ánh xạ chưa commit thì chờ
    nó — ánh xạ không lý do là hàng ghi trước mọi bản rõ. Hai chiều đều đo.
@@ -9299,6 +9305,16 @@ không bảng, không hàm; tập ADR-082 ⑿ chưa có dòng mã nào (K5 là S
   gợi ý không chịu lực — người quản lý dữ liệu quyết định, và tác giả hàng gợi ý nằm trên hàng.
 - **Hàng đợi và trạng thái từng dòng đọc mở cho người trong tổ chức** (khuôn S4.2b): mô tả, đơn vị, số lượng người mua đã viết, không giá.
 - **L13 khoá hàng gói ở mỗi lần ghi ánh xạ hay gợi ý**, nên lần ghi xếp hàng với mọi câu đổi trạng thái gói trong lúc nó chạy.
+- **Tập loại trừ phán ở lúc ghi.** Một người vào tập SAU khi đã ghi ánh xạ (mời nhà cung cấp sau đó, chẳng hạn) không làm ánh xạ cũ
+  thôi hiệu lực; lượt kiểm toán đọc được thứ tự từ `seq` và `ghi_luc`.
+- **Vế sổ kiểm toán tin vào đường ghi sổ.** Vai `app_api` gọi được `audit_append` với `actor_id` tuỳ ý: một ứng dụng bị chiếm thêm được
+  người vào tập (chặn một người quản lý dữ liệu khỏi một gói — hỏng về phía đóng), không bớt được ai. Chiều ngược lại: một câu
+  `UPDATE rfq_budgets` thẳng không qua `packages/rfq` không để lại hàng sổ, nên người ấy không vào tập — cùng lớp với mọi câu SQL
+  thẳng của `app_api` mà luật khoản 126 và cổng của ADR-116 đã nói.
+- **Lượt chuẩn hoá bỏ qua bí danh của người trong tập loại trừ khi quyết `TU_DONG`, nhưng lõi vẫn chấm điểm trên nó.** Dòng ấy ra
+  `GOI_Y` với độ tin cậy cao; người quyết vẫn là người quản lý dữ liệu ngoài tập.
+- **Trần 0,94 khi chuỗi thiếu thuộc tính trọng yếu không đổi đường đi ở bản 1** — `TU_DONG` chỉ đến từ bí danh, và 0,80 ≤ điểm < 0,95
+  vẫn là `GOI_Y`. Nó có mặt để điểm ghi trong `dau_vao` nói đúng điều spec §4.4 nói, và để bản sau có ngưỡng khác không phải sửa lõi.
 
 ### Đo
 

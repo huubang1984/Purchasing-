@@ -34,7 +34,10 @@ export class DuLieuNenError extends Error {
       | "HOI_TO_CAN_ITEM_MANAGE"
       | "HOI_TO_SAI_MA_LY_DO"
       | "CAN_LY_DO"
-      | "LY_DO_SAI_HINH_DANG",
+      | "LY_DO_SAI_HINH_DANG"
+      | "BI_DANH_TRONG_TAP_LOAI_TRU"
+      | "DA_CO_ANH_XA"
+      | "MA_LY_DO_DANH_RIENG",
     message: string,
   ) {
     super(message);
@@ -71,6 +74,9 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   anh_xa_sau_ban_ro_can_ly_do: "CAN_LY_DO",
   anh_xa_bo_trong_can_ly_do: "CAN_LY_DO",
   rfq_item_mappings_ly_do_hinh_dang: "LY_DO_SAI_HINH_DANG",
+  anh_xa_bi_danh_trong_tap_loai_tru: "BI_DANH_TRONG_TAP_LOAI_TRU",
+  anh_xa_tu_dong_da_co_anh_xa: "DA_CO_ANH_XA",
+  anh_xa_ma_ly_do_danh_rieng: "MA_LY_DO_DANH_RIENG",
   rfq_item_mappings_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
 };
 
@@ -96,6 +102,9 @@ const CAU_THEO_MA: Readonly<Partial<Record<DuLieuNenError["ma"], string>>> = {
   HOI_TO_SAI_MA_LY_DO: "ánh xạ tự động trên gói đã mở niêm phong mang mã lý do CHUAN_HOA_HOI_TO",
   CAN_LY_DO: "ánh xạ này cần lý do",
   LY_DO_SAI_HINH_DANG: "lý do dài 1 đến 1000 ký tự, không khoảng trắng ở hai đầu",
+  BI_DANH_TRONG_TAP_LOAI_TRU: "bí danh này do một người đã tham gia gói khai — không tự động ánh xạ được",
+  DA_CO_ANH_XA: "dòng đã có ánh xạ — ánh xạ tự động không đè lên",
+  MA_LY_DO_DANH_RIENG: "mã lý do CHUAN_HOA_HOI_TO dành riêng cho ánh xạ tự động",
 };
 
 /** Chạy một lần ghi; lần từ chối của một ràng buộc có tên thành `DuLieuNenError`. Dùng chung trong gói, không ra mặt tiền. */

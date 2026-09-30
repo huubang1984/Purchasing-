@@ -37,14 +37,20 @@
 --     ⒞ Dòng phải tồn tại; băm do trigger đặt.
 --     ⒟ L2 — `TU_DONG` chỉ khi `chuoi_sach(description)` bằng một bí danh CÒN HIỆU LỰC của đúng hàng chuẩn ấy, ghi trước hàng
 --        này: bí danh mới nhất theo `seq` của chuỗi ấy, không phải hàng rút, cùng `canonical_item_id` (§2.4 ⑹). Không ngưỡng
---        độ tin cậy nào ở CSDL.
+--        độ tin cậy nào ở CSDL. *"Ghi trước"* do khoá ⒜ bảo đảm: dưới khoá ấy mọi hàng bí danh nhìn thấy đã commit. Và — lượt
+--        soi của vòng này — `TU_DONG` không đè một ánh xạ hiệu lực đã có của dòng (người nộp duyệt không ghi thẳng được một hàng
+--        `TU_DONG` lên trên quyết định của người duyệt), và bí danh do một người TRONG tập loại trừ của gói khai thì không tự động
+--        ánh xạ được: khai bí danh cho chính chuỗi của dòng rồi chạy lượt chuẩn hoá là một đường `NGUOI_DUYET` đội lốt (L3).
 --     ⒠ L3 vế hành vi — người ghi `NGUOI_DUYET` giữ `item.manage` và nằm ngoài `rfq_tap_loai_tru`. `TU_DONG` và gợi ý trên gói
 --        đã có bản rõ chỉ do người giữ `item.manage` ghi (chuẩn hoá hồi tố, §2.5 ⒂).
 --     ⒡ L13 — gói đã có ít nhất một hàng `rfq_unsealed_bids` thì ánh xạ đòi lý do không rỗng; `TU_DONG` ở đó mang đúng mã
 --        `CHUAN_HOA_HOI_TO`. Khoá theo SỰ TỒN TẠI của hàng bản rõ, không theo `status` (§2.5 ⒀).
---     ⒢ §2.5 ⒁ — ánh xạ `NULL` đòi lý do khi dòng (đúng băm hiện tại) đã từng có một gợi ý `GOI_Y` — ứng viên đầu có điểm
---        gợi ý: ánh xạ `NULL` hàng loạt là lối né *"không đo được"*. *"Đã từng"*, không phải *"gợi ý mới nhất"*: người nộp
---        duyệt ghi được gợi ý, và một hàng `CAN_DUYET` ghi sau không được xoá dấu của hàng `GOI_Y` trước nó.
+--     ⒢ §2.5 ⒁ — ánh xạ `NULL` đòi lý do khi dòng (đúng băm hiện tại) CHƯA qua lượt chuẩn hoá nào, hay đã từng có một gợi ý
+--        `GOI_Y` — ứng viên đầu có điểm gợi ý: ánh xạ `NULL` hàng loạt là lối né *"không đo được"*. *"Đã từng"*, không phải
+--        *"gợi ý mới nhất"*: người nộp duyệt ghi được gợi ý, và một hàng `CAN_DUYET` ghi sau không được xoá dấu của hàng `GOI_Y`
+--        trước nó. Mã `CHUAN_HOA_HOI_TO` dành riêng cho `TU_DONG`.
+--     Tầng gói khoá hàng gói TRƯỚC mọi lần ghi sổ của nó (khoản 126: khoá hàng trước, khoá sổ sau) — worker mở thầu và mọi
+--     cạnh trạng thái đi đúng thứ tự ấy, nên một lần duyệt kèm khai bí danh không dựng được vòng chờ với chúng.
 --     Mỗi lần từ chối mang TÊN RÀNG BUỘC để tầng gói nói câu của người dùng mà không so thông báo.
 --
 -- Mọi hàm và trigger mới ghim ở `hardening.always.sql` trong CÙNG commit (S1.96).
@@ -234,6 +240,7 @@ DECLARE
   mo_ta text;
   hang_bi_danh uuid;
   bi_danh_rut boolean;
+  tac_gia_bi_danh uuid;
   co_ban_ro boolean;
   giu_item_manage boolean;
 BEGIN
@@ -269,16 +276,26 @@ BEGIN
     INTO co_ban_ro;
 
   IF NEW.nguon = 'TU_DONG' THEN
-    SELECT a.canonical_item_id, a.rut INTO hang_bi_danh, bi_danh_rut
+    SELECT a.canonical_item_id, a.rut, a.tac_gia INTO hang_bi_danh, bi_danh_rut, tac_gia_bi_danh
       FROM public.item_aliases a
      WHERE a.org_id = NEW.org_id
        AND a.bi_danh_sach = public.chuoi_sach(mo_ta)
-       AND a.ghi_luc < pg_catalog.clock_timestamp()
      ORDER BY a.seq DESC
      LIMIT 1;
     IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN
       RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh';
+    END IF;
+    IF tac_gia_bi_danh IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN
+      RAISE EXCEPTION 'Bi danh do nguoi trong tap loai tru cua goi % khai khong tu dong anh xa duoc (L3)', NEW.rfq_id
+        USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_bi_danh_trong_tap_loai_tru';
+    END IF;
+    IF EXISTS (SELECT 1
+                 FROM public.rfq_item_mappings m
+                WHERE m.org_id = NEW.org_id AND m.rfq_id = NEW.rfq_id AND m.line_no = NEW.line_no
+                  AND m.hang_muc_bam = NEW.hang_muc_bam) THEN
+      RAISE EXCEPTION 'Dong % cua goi % da co anh xa hieu luc: TU_DONG khong de len', NEW.line_no, NEW.rfq_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_da_co_anh_xa';
     END IF;
     IF co_ban_ro AND NOT giu_item_manage THEN
       RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id
@@ -297,16 +314,24 @@ BEGIN
       RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id
         USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru';
     END IF;
+    IF NEW.ly_do = 'CHUAN_HOA_HOI_TO' THEN
+      RAISE EXCEPTION 'Ma ly do CHUAN_HOA_HOI_TO danh rieng cho TU_DONG'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_ma_ly_do_danh_rieng';
+    END IF;
     IF co_ban_ro AND NEW.ly_do IS NULL THEN
       RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do';
     END IF;
     IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL
-       AND EXISTS (SELECT 1
-                     FROM public.rfq_item_goi_y g
-                    WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
-                      AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y') THEN
-      RAISE EXCEPTION 'Anh xa rong khi ung vien dau co diem goi y can ly do: goi % dong %', NEW.rfq_id, NEW.line_no
+       AND (NOT EXISTS (SELECT 1
+                          FROM public.rfq_item_goi_y g
+                         WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
+                           AND g.hang_muc_bam = NEW.hang_muc_bam)
+            OR EXISTS (SELECT 1
+                         FROM public.rfq_item_goi_y g
+                        WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
+                          AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y')) THEN
+      RAISE EXCEPTION 'Anh xa rong can ly do khi dong chua qua luot chuan hoa hay da tung co goi y: goi % dong %', NEW.rfq_id, NEW.line_no
         USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do';
     END IF;
   END IF;

@@ -40,11 +40,16 @@ async function khoaBiDanh(client: pg.PoolClient, orgId: string): Promise<void> {
   );
 }
 
-/** Gói phải có trong tổ chức và đã rời DRAFT — cùng câu hỏi trigger hỏi, hỏi trước để lượt rỗng không để lại hàng sổ. */
+/**
+ * Gói phải có trong tổ chức và đã rời DRAFT — cùng câu hỏi trigger hỏi, hỏi trước để lượt rỗng không để lại hàng sổ. Khoá hàng gói
+ * `FOR SHARE` ngay đây, TRƯỚC mọi lần ghi sổ của giao dịch (khoản 126: khoá hàng trước, khoá tư vấn ghi sổ sau): worker mở thầu và
+ * mọi cạnh trạng thái khoá hàng gói rồi mới ghi sổ, nên một hàm ở đây ghi sổ trước (khai bí danh, tạo hàng chuẩn) rồi mới chờ hàng
+ * gói ở trigger là một vòng chờ. Cùng khoá ấy giữ cho phép đọc *"gói đã có bản rõ chưa"* ở dưới không đổi tới hết giao dịch.
+ */
 async function kiemGoiDaNop(client: pg.PoolClient, orgId: string, rfqId: string): Promise<void> {
   const { rows } = await client.query<{ status: string }>(
     "SELECT p.status FROM public.rfq_packages p WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-      "AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid",
+      "AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid FOR SHARE",
     [orgId, rfqId],
   );
   const status = rows[0]?.status;
@@ -101,6 +106,7 @@ interface DongGoi {
   readonly sach: string;
   readonly da_co: boolean;
   readonly hang_bi_danh: string | null;
+  readonly tac_gia_bi_danh: string | null;
 }
 
 /** Mọi dòng của gói: chuỗi đã sạch, đã có ánh xạ hiệu lực chưa, bí danh còn hiệu lực (nếu có) trỏ về hàng nào. */
@@ -110,14 +116,56 @@ async function docDongGoi(client: pg.PoolClient, orgId: string, rfqId: string): 
       "EXISTS (SELECT 1 FROM public.rfq_item_mappings m WHERE m.org_id OPERATOR(pg_catalog.=) i.org_id " +
       "AND m.rfq_id OPERATOR(pg_catalog.=) i.rfq_id AND m.line_no OPERATOR(pg_catalog.=) i.line_no " +
       "AND m.hang_muc_bam OPERATOR(pg_catalog.=) public.rfq_hang_muc_bam(i.org_id, i.rfq_id, i.line_no)) AS da_co, " +
-      "(SELECT CASE WHEN a.rut THEN NULL ELSE a.canonical_item_id END FROM public.item_aliases a " +
-      "WHERE a.org_id OPERATOR(pg_catalog.=) i.org_id AND a.bi_danh_sach OPERATOR(pg_catalog.=) public.chuoi_sach(i.description) " +
-      "ORDER BY a.seq DESC LIMIT 1) AS hang_bi_danh " +
-      "FROM public.rfq_items i WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
+      "a.hang_bi_danh, a.tac_gia_bi_danh " +
+      "FROM public.rfq_items i LEFT JOIN LATERAL (" +
+      "SELECT CASE WHEN a.rut THEN NULL ELSE a.canonical_item_id END AS hang_bi_danh, a.tac_gia AS tac_gia_bi_danh " +
+      "FROM public.item_aliases a WHERE a.org_id OPERATOR(pg_catalog.=) i.org_id " +
+      "AND a.bi_danh_sach OPERATOR(pg_catalog.=) public.chuoi_sach(i.description) ORDER BY a.seq DESC LIMIT 1) a ON true " +
+      "WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
       "ORDER BY i.line_no",
     [orgId, rfqId],
   );
   return rows;
+}
+
+async function docTapLoaiTru(client: pg.PoolClient, orgId: string, rfqId: string): Promise<Set<string>> {
+  const { rows } = await client.query<{ n: string }>(
+    "SELECT public.rfq_tap_loai_tru($1::pg_catalog.uuid, $2::pg_catalog.uuid) AS n",
+    [orgId, rfqId],
+  );
+  return new Set(rows.map((r) => r.n));
+}
+
+/**
+ * Ghi một hàng gợi ý cho dòng, trừ khi gợi ý mới nhất (đúng băm, đúng phiên bản) đã y hệt. Trả `true` khi đã ghi. Dùng chung cho
+ * lượt chuẩn hoá và cho lần duyệt: luật ⒁ của CSDL đọc gợi ý đã LƯU, nên lần duyệt ghi kết quả vừa tính trước khi ghi ánh xạ.
+ */
+async function ghiGoiY(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  lineNo: number,
+  sach: string,
+  k: KetQuaChuanHoa,
+  actor: { readonly id: string; readonly sessionId: string },
+): Promise<boolean> {
+  const dauVao = JSON.stringify(dauVaoGoiY(sach, k));
+  const { rows: cu } = await client.query<{ giong: boolean }>(
+    "SELECT g.ket_qua OPERATOR(pg_catalog.=) $4::pg_catalog.text AND g.dau_vao OPERATOR(pg_catalog.=) $5::pg_catalog.jsonb AS giong " +
+      "FROM public.rfq_item_goi_y g WHERE g.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+      "AND g.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid AND g.line_no OPERATOR(pg_catalog.=) $3::pg_catalog.int4 " +
+      "AND g.hang_muc_bam OPERATOR(pg_catalog.=) public.rfq_hang_muc_bam($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.int4) " +
+      "AND g.phien_ban_bo_chuan_hoa OPERATOR(pg_catalog.=) $6::pg_catalog.int4 ORDER BY g.seq DESC LIMIT 1",
+    [orgId, rfqId, lineNo, k.ketQua, dauVao, k.phienBan],
+  );
+  if (cu[0]?.giong === true) return false;
+  await client.query(
+    "INSERT INTO public.rfq_item_goi_y (org_id, rfq_id, line_no, ket_qua, do_tin_cay, phien_ban_bo_chuan_hoa, dau_vao, " +
+      "tac_gia, session_id) VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.int4, $4::pg_catalog.text, " +
+      "$5::pg_catalog.numeric, $6::pg_catalog.int4, $7::pg_catalog.jsonb, $8::pg_catalog.uuid, $9::pg_catalog.uuid)",
+    [orgId, rfqId, lineNo, k.ketQua, String(k.doTinCay), k.phienBan, dauVao, actor.id, actor.sessionId],
+  );
+  return true;
 }
 
 function dauVaoGoiY(sach: string, k: KetQuaChuanHoa): Record<string, unknown> {
@@ -151,7 +199,11 @@ export async function chuanHoaGoi(
   await khoaBiDanh(client, orgId);
   await kiemGoiDaNop(client, orgId, input.rfqId);
   const coBanRo = await goiCoBanRo(client, orgId, input.rfqId);
-  const dong = await docDongGoi(client, orgId, input.rfqId);
+  const loaiTru = await docTapLoaiTru(client, orgId, input.rfqId);
+  // Bí danh do một người TRONG tập loại trừ khai không tự động ánh xạ được (trigger từ chối): dòng ấy đi đường gợi ý.
+  const dong = (await docDongGoi(client, orgId, input.rfqId)).map((d) =>
+    d.tac_gia_bi_danh !== null && loaiTru.has(d.tac_gia_bi_danh) ? { ...d, hang_bi_danh: null } : d,
+  );
   const tap = dong.some((d) => !d.da_co && d.hang_bi_danh === null) ? await docTapUngVien(client, orgId) : [];
 
   let tuDong = 0;
@@ -187,25 +239,10 @@ export async function chuanHoaGoi(
         continue;
       }
       const k = chuanHoa(d.sach, tap);
-      const dauVao = dauVaoGoiY(d.sach, k);
-      const { rows: cu } = await client.query<{ giong: boolean }>(
-        "SELECT g.ket_qua OPERATOR(pg_catalog.=) $4::pg_catalog.text AND g.dau_vao OPERATOR(pg_catalog.=) $5::pg_catalog.jsonb AS giong " +
-          "FROM public.rfq_item_goi_y g WHERE g.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
-          "AND g.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid AND g.line_no OPERATOR(pg_catalog.=) $3::pg_catalog.int4 " +
-          "AND g.hang_muc_bam OPERATOR(pg_catalog.=) public.rfq_hang_muc_bam($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.int4) " +
-          "AND g.phien_ban_bo_chuan_hoa OPERATOR(pg_catalog.=) $6::pg_catalog.int4 ORDER BY g.seq DESC LIMIT 1",
-        [orgId, input.rfqId, d.line_no, k.ketQua, JSON.stringify(dauVao), k.phienBan],
-      );
-      if (cu[0]?.giong === true) {
+      if (!(await ghiGoiY(client, orgId, input.rfqId, d.line_no, d.sach, k, actor))) {
         khongDoi++;
         continue;
       }
-      await client.query(
-        "INSERT INTO public.rfq_item_goi_y (org_id, rfq_id, line_no, ket_qua, do_tin_cay, phien_ban_bo_chuan_hoa, dau_vao, " +
-          "tac_gia, session_id) VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.int4, $4::pg_catalog.text, " +
-          "$5::pg_catalog.numeric, $6::pg_catalog.int4, $7::pg_catalog.jsonb, $8::pg_catalog.uuid, $9::pg_catalog.uuid)",
-        [orgId, input.rfqId, d.line_no, k.ketQua, String(k.doTinCay), k.phienBan, JSON.stringify(dauVao), actor.id, actor.sessionId],
-      );
       if (k.ketQua === "GOI_Y") goiY++;
       else canDuyet++;
     }
@@ -248,6 +285,7 @@ export async function ghiAnhXa(
   await assertTenantBound(client, orgId, "ghiAnhXa");
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await khoaBiDanh(client, orgId);
+  await kiemGoiDaNop(client, orgId, input.rfqId);
   const { rows: dongRows } = await client.query<{ sach: string }>(
     "SELECT public.chuoi_sach(i.description) AS sach FROM public.rfq_items i " +
       "WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
@@ -260,6 +298,9 @@ export async function ghiAnhXa(
   const doTinCay = input.hangChuanId === null ? null : (k.ungVien.find((u) => u.hangChuanId === input.hangChuanId)?.diem ?? null);
 
   return ghiDuLieuNen(async () => {
+    // Kết quả vừa tính vào bảng gợi ý TRƯỚC ánh xạ: luật ⒁ của CSDL đọc gợi ý đã lưu, và một lần bác trên dòng chưa qua lượt
+    // chuẩn hoá — hay qua lượt khi danh mục còn thiếu — phải thấy đúng điều lõi vừa nói.
+    await ghiGoiY(client, orgId, input.rfqId, input.lineNo, sach, k, actor);
     if (input.taoBiDanh === true && input.hangChuanId !== null && sach !== "") {
       await khaiBiDanhHang(client, orgId, { hangChuanId: input.hangChuanId, biDanh: sach, actorSessionId: input.actorSessionId });
     }
@@ -316,7 +357,9 @@ export async function taoHangChuanVaAnhXa(
     readonly actorSessionId: string;
   },
 ): Promise<{ readonly hangChuanId: string; readonly seq: string }> {
+  await assertTenantBound(client, orgId, "taoHangChuanVaAnhXa");
   await khoaBiDanh(client, orgId);
+  await kiemGoiDaNop(client, orgId, input.rfqId);
   const moi = await taoHangChuan(client, orgId, { ...input.hangChuan, actorSessionId: input.actorSessionId });
   const { seq } = await ghiAnhXa(client, orgId, {
     rfqId: input.rfqId,
@@ -342,6 +385,8 @@ export interface DongHangDoi {
     readonly doTinCay: string;
     readonly phienBan: number;
     readonly ungVien: readonly { readonly hangChuanId: string; readonly ma: string; readonly diem: number }[];
+    /** Họ tên người ghi hàng gợi ý — trước khi có bản rõ, người nộp duyệt ghi được gợi ý; người duyệt phải thấy ai đã nói. */
+    readonly tacGia: string;
   } | null;
 }
 
@@ -365,12 +410,14 @@ export async function docHangDoi(
     do_tin_cay: string | null;
     phien_ban: number | null;
     dau_vao: { ungVien?: { hangChuanId: string; ma: string; diem: number }[] } | null;
+    tac_gia: string | null;
   }>(
     "SELECT p.id AS rfq_id, p.title, i.line_no, i.description, i.unit, i.quantity::pg_catalog.text AS quantity, " +
-      "g.ket_qua, g.do_tin_cay::pg_catalog.text AS do_tin_cay, g.phien_ban_bo_chuan_hoa AS phien_ban, g.dau_vao " +
+      "g.ket_qua, g.do_tin_cay::pg_catalog.text AS do_tin_cay, g.phien_ban_bo_chuan_hoa AS phien_ban, g.dau_vao, g.tac_gia " +
       "FROM public.rfq_items i " +
       "JOIN public.rfq_packages p ON p.org_id OPERATOR(pg_catalog.=) i.org_id AND p.id OPERATOR(pg_catalog.=) i.rfq_id " +
-      "LEFT JOIN LATERAL (SELECT g.ket_qua, g.do_tin_cay, g.phien_ban_bo_chuan_hoa, g.dau_vao FROM public.rfq_item_goi_y g " +
+      "LEFT JOIN LATERAL (SELECT g.ket_qua, g.do_tin_cay, g.phien_ban_bo_chuan_hoa, g.dau_vao, u.full_name AS tac_gia " +
+      "FROM public.rfq_item_goi_y g JOIN public.users u ON u.org_id OPERATOR(pg_catalog.=) g.org_id AND u.id OPERATOR(pg_catalog.=) g.tac_gia " +
       "WHERE g.org_id OPERATOR(pg_catalog.=) i.org_id AND g.rfq_id OPERATOR(pg_catalog.=) i.rfq_id " +
       "AND g.line_no OPERATOR(pg_catalog.=) i.line_no " +
       "AND g.hang_muc_bam OPERATOR(pg_catalog.=) public.rfq_hang_muc_bam(i.org_id, i.rfq_id, i.line_no) " +
@@ -393,7 +440,7 @@ export async function docHangDoi(
       goiY:
         r.ket_qua === null || r.do_tin_cay === null || r.phien_ban === null
           ? null
-          : { ketQua: r.ket_qua, doTinCay: r.do_tin_cay, phienBan: r.phien_ban, ungVien: r.dau_vao?.ungVien ?? [] },
+          : { ketQua: r.ket_qua, doTinCay: r.do_tin_cay, phienBan: r.phien_ban, ungVien: r.dau_vao?.ungVien ?? [], tacGia: r.tac_gia ?? "" },
     }),
   );
   return { dong, conNua: rows.length > TRAN_HANG_DOI };

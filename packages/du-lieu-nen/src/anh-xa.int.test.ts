@@ -359,10 +359,11 @@ describe("[INV-L2] TU_DONG tồn tại khi và chỉ khi mô tả đã làm sạ
       "SELECT line_no, ket_qua, dau_vao->'ungVien'->0->>'ma' AS dau FROM rfq_item_goi_y WHERE rfq_id = $1 ORDER BY line_no",
       [rfqId],
     );
-    expect(goiY).toEqual([
-      { line_no: 2, ket_qua: "GOI_Y", dau: "THEP-D12" },
-      { line_no: 3, ket_qua: "CAN_DUYET", dau: expect.any(String) },
+    expect(goiY.map((g) => [g.line_no, g.ket_qua])).toEqual([
+      [2, "GOI_Y"],
+      [3, "CAN_DUYET"],
     ]);
+    expect(goiY[0]?.dau).toBe("THEP-D12");
     const { rows: so } = await db.pool.query<{ action: string; payload: Record<string, unknown> }>(
       "SELECT action, payload FROM audit_events WHERE resource_id = $1 AND action = 'RFQ_ITEMS_NORMALIZED'",
       [rfqId],
@@ -415,6 +416,47 @@ describe("[INV-L2] TU_DONG tồn tại khi và chỉ khi mô tả đã làm sạ
     expect(k).toMatchObject({ tuDong: 1, goiY: 0, canDuyet: 0 });
     expect((await trong(orgA, (c) => docAnhXaGoi(c, orgA, rfq2)))[0]).toMatchObject({ trangThai: "TU_DONG", hangChuan: { ma: "XI-MANG-PCB40" } });
   });
+
+  it("[INV-L2] TU_DONG không đè một ánh xạ đang hiệu lực của dòng — người duyệt đã chọn hàng khác thì bí danh không lật được", async () => {
+    const rfqId = await goiDaNop(["Thép D10 Hòa Phát"]);
+    await trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 1, hangChuanId: hangD12, actorSessionId: ql.phien }));
+    expect(await maLoi(chenThang(orgA, pm, { rfqId, lineNo: 1, nguon: "TU_DONG", hangChuan: hangD10 }))).toBe("anh_xa_tu_dong_da_co_anh_xa");
+    expect(await trong(orgA, (c) => chuanHoaGoi(c, orgA, { rfqId, actorSessionId: pm.phien }))).toMatchObject({ tuDong: 0, daCo: 1 });
+    expect((await trong(orgA, (c) => docAnhXaGoi(c, orgA, rfqId)))[0]).toMatchObject({ trangThai: "NGUOI_DUYET", hangChuan: { id: hangD12 } });
+  });
+
+  it("[INV-L2] đua: câu ghi TU_DONG gặp một lần rút bí danh chưa commit thì chờ nó, rồi thấy hàng rút và bị từ chối", async () => {
+    await trong(orgA, (c) => khaiBiDanhHang(c, orgA, { hangChuanId: hangD12, biDanh: "Thép D12 đua rút", actorSessionId: ql.phien }));
+    const rfqId = await goiDaNop(["Thép D12 đua rút"]);
+    let tha: () => void = () => undefined;
+    const cho = new Promise<void>((r) => {
+      tha = r;
+    });
+    let daRut: () => void = () => undefined;
+    const rutXong = new Promise<void>((r) => {
+      daRut = r;
+    });
+    const giaoDichRut = trong(orgA, async (c) => {
+      await rutBiDanhHang(c, orgA, { biDanh: "Thép D12 đua rút", actorSessionId: ql.phien });
+      daRut();
+      await cho;
+    });
+    await rutXong;
+    let xong = false;
+    const ghi = maLoi(chenThang(orgA, pm, { rfqId, lineNo: 1, nguon: "TU_DONG", hangChuan: hangD12 })).finally(() => {
+      xong = true;
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(xong, "câu ghi TU_DONG phải CHỜ khoá bí danh của giao dịch rút").toBe(false);
+    } finally {
+      // Thả giao dịch rút cả khi khẳng định trên hỏng — nó giữ khoá bí danh của tổ chức, mọi ca sau sẽ treo.
+      tha();
+      await giaoDichRut;
+    }
+    expect(await ghi).toBe("anh_xa_tu_dong_khong_khop_bi_danh");
+    expect(await demHang("rfq_item_mappings", rfqId)).toBe(0);
+  });
 });
 
 describe("[INV-L3] người ghi NGUOI_DUYET giữ item.manage và nằm ngoài TRỌN tập loại trừ của gói (ADR-082 ⑿)", () => {
@@ -431,8 +473,8 @@ describe("[INV-L3] người ghi NGUOI_DUYET giữ item.manage và nằm ngoài T
       "SELECT actor_id, payload FROM audit_events WHERE resource_id = $1 AND action = 'RFQ_ITEM_MAPPED'",
       [rfqId],
     );
-    expect(rows).toEqual([
-      { actor_id: ql.nguoi, payload: { lineNo: 1, nguon: "NGUOI_DUYET", hangChuanId: hangD12, coLyDo: false, taoBiDanh: false, seq: expect.any(String) } },
+    expect(rows.map((r) => ({ actor_id: r.actor_id, payload: { ...r.payload, seq: typeof r.payload["seq"] } }))).toEqual([
+      { actor_id: ql.nguoi, payload: { lineNo: 1, nguon: "NGUOI_DUYET", hangChuanId: hangD12, coLyDo: false, taoBiDanh: false, seq: "string" } },
     ]);
   });
 
@@ -469,6 +511,19 @@ describe("[INV-L3] người ghi NGUOI_DUYET giữ item.manage và nằm ngoài T
     // Đối chứng dương trên CHÍNH gói ấy.
     await trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 1, hangChuanId: hangD12, actorSessionId: ql.phien }));
     expect(await demHang("rfq_item_mappings", rfqId)).toBe(1);
+  });
+
+  it("[INV-L3] bí danh do người trong tập loại trừ của gói khai không tự động ánh xạ gói ấy — lượt chuẩn hoá coi như không có bí danh; câu ghi thẳng bị từ chối", async () => {
+    const tao = await taoNguoi(orgA, ["PROCUREMENT_MANAGER"], "Nguoi tao roi quan ly");
+    const rfqId = await goiDaNop(["Thép D12 bí danh người tạo"], orgA, tao);
+    await thanhQuanLy(orgA, tao);
+    await trong(orgA, (c) => khaiBiDanhHang(c, orgA, { hangChuanId: hangD12, biDanh: "Thép D12 bí danh người tạo", actorSessionId: tao.phien }));
+    expect(await trong(orgA, (c) => chuanHoaGoi(c, orgA, { rfqId, actorSessionId: ql.phien }))).toMatchObject({ tuDong: 0, goiY: 1 });
+    expect((await trong(orgA, (c) => docAnhXaGoi(c, orgA, rfqId)))[0]?.trangThai).toBe("CHO_DUYET");
+    expect(await maLoi(chenThang(orgA, ql, { rfqId, lineNo: 1, nguon: "TU_DONG", hangChuan: hangD12 }))).toBe("anh_xa_bi_danh_trong_tap_loai_tru");
+    // Đối chứng dương: cùng bí danh, một gói người ấy không chạm tới — TU_DONG.
+    const khac = await goiDaNop(["Thép D12 bí danh người tạo"]);
+    expect(await trong(orgA, (c) => chuanHoaGoi(c, orgA, { rfqId: khac, actorSessionId: pm.phien }))).toMatchObject({ tuDong: 1 });
   });
 
   it("[INV-L3] hai vế đọc từ sổ ghim theo TÊN action — tầng gói `rfq` vẫn ghi đúng hai tên ấy, vào đúng loại tài nguyên", () => {
@@ -541,9 +596,44 @@ describe("[INV-L13] gói đã có bản rõ thì ánh xạ đòi lý do — kho�
       await mo.query("COMMIT");
       expect(await ghi).toBe("CAN_LY_DO");
     } finally {
+      // Sau COMMIT thì ROLLBACK chỉ là một cảnh báo; khi khẳng định hỏng giữa chừng, nó thả khoá hàng gói cho các ca sau.
+      await mo.query("ROLLBACK");
       mo.release();
     }
     expect(await demHang("rfq_item_mappings", g.rfqId)).toBe(0);
+  });
+
+  it("[INV-L13] đua ⑴ ở câu ghi thẳng — lớp chặn là trigger, không phải hàm gói: ánh xạ và gợi ý ghi TRONG lúc mở thầu đang chạy thì chờ, rồi bị từ chối", async () => {
+    const g = await goiChoMoThau(["Thép vằn D12"]);
+    const mo = await db.pool.connect();
+    try {
+      await mo.query("BEGIN");
+      await moThauTrong(mo, g);
+      let xong = 0;
+      const anhXa = maLoi(chenThang(orgA, ql, { rfqId: g.rfqId, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: hangD12 })).finally(() => {
+        xong++;
+      });
+      const goiY = maLoi(
+        trong(orgA, (c) =>
+          c.query(
+            "INSERT INTO rfq_item_goi_y (org_id, rfq_id, line_no, ket_qua, do_tin_cay, phien_ban_bo_chuan_hoa, dau_vao, tac_gia, session_id) " +
+              "VALUES ($1, $2, 1, 'GOI_Y', 0.9, 1, '{}', $3, $4)",
+            [orgA, g.rfqId, pm.nguoi, pm.phien],
+          ),
+        ),
+      ).finally(() => {
+        xong++;
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(xong, "hai câu ghi thẳng phải CHỜ khoá hàng gói của giao dịch mở thầu").toBe(0);
+      await mo.query("COMMIT");
+      expect([await anhXa, await goiY]).toEqual(["anh_xa_sau_ban_ro_can_ly_do", "anh_xa_hoi_to_can_item_manage"]);
+    } finally {
+      // Sau COMMIT thì ROLLBACK chỉ là một cảnh báo; khi khẳng định hỏng giữa chừng, nó thả khoá hàng gói cho các ca sau.
+      await mo.query("ROLLBACK");
+      mo.release();
+    }
+    expect([await demHang("rfq_item_mappings", g.rfqId), await demHang("rfq_item_goi_y", g.rfqId)]).toEqual([0, 0]);
   });
 
   it("[INV-L13] đua ⑵: giao dịch mở thầu gặp một ánh xạ chưa commit thì chờ nó — ánh xạ không lý do là hàng ghi TRƯỚC mọi bản rõ", async () => {
@@ -569,13 +659,18 @@ describe("[INV-L13] gói đã có bản rõ thì ánh xạ đòi lý do — kho�
       const moThau = moThauTrong(mo, g).finally(() => {
         xong = true;
       });
-      await new Promise((r) => setTimeout(r, 1500));
-      expect(xong, "câu UPDATE trạng thái của giao dịch mở thầu phải CHỜ khoá FOR SHARE của ánh xạ").toBe(false);
-      tha();
-      await giaoDichAnhXa;
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        expect(xong, "câu UPDATE trạng thái của giao dịch mở thầu phải CHỜ khoá FOR SHARE của ánh xạ").toBe(false);
+      } finally {
+        tha();
+        await giaoDichAnhXa;
+      }
       await moThau;
       await mo.query("COMMIT");
     } finally {
+      // Sau COMMIT thì ROLLBACK chỉ là một cảnh báo; khi khẳng định hỏng giữa chừng, nó thả khoá hàng gói cho các ca sau.
+      await mo.query("ROLLBACK");
       mo.release();
     }
     const { rows } = await db.pool.query<{ ly_do: string | null }>("SELECT ly_do FROM rfq_item_mappings WHERE rfq_id = $1", [g.rfqId]);
@@ -611,6 +706,29 @@ describe("[S1.9101 / §2.5 ⒁] bác một dòng đã từng có gợi ý GOI_Y 
   });
 });
 
+describe("[S1.9101 / §2.5 ⒁] bác một dòng chưa qua lượt chuẩn hoá; mã lý do dành riêng", () => {
+  it("lõi tính lại lúc bác: GOI_Y thì đòi lý do, CAN_DUYET thì không; câu ghi thẳng trên dòng không có gợi ý nào thì đòi lý do", async () => {
+    const rfqId = await goiDaNop(["Thép vằn D12", "Gạch thẻ chưa chuẩn hoá", "Cát vàng chưa chuẩn hoá"]);
+    expect(await maLoi(trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 1, hangChuanId: null, actorSessionId: ql.phien })))).toBe("CAN_LY_DO");
+    expect(await demHang("rfq_item_goi_y", rfqId)).toBe(0);
+    await trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 2, hangChuanId: null, actorSessionId: ql.phien }));
+    expect(await maLoi(chenThang(orgA, ql, { rfqId, lineNo: 3, nguon: "NGUOI_DUYET", hangChuan: null }))).toBe("anh_xa_bo_trong_can_ly_do");
+    await chenThang(orgA, ql, { rfqId, lineNo: 3, nguon: "NGUOI_DUYET", hangChuan: null, lyDo: "vat lieu dia phuong" });
+    expect((await trong(orgA, (c) => docAnhXaGoi(c, orgA, rfqId))).map((d) => d.trangThai)).toEqual(["CHUA_CHUAN_HOA", "NGUOI_DUYET", "NGUOI_DUYET"]);
+  });
+
+  it("CHUAN_HOA_HOI_TO chỉ dành cho TU_DONG: người duyệt khai mã ấy làm lý do bị từ chối, ở tầng gói lẫn câu ghi thẳng", async () => {
+    const rfqId = await goiDaNop(["Thép vằn D12 mã dành riêng"]);
+    expect(
+      await maLoi(trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 1, hangChuanId: hangD12, lyDo: LY_DO_CHUAN_HOA_HOI_TO, actorSessionId: ql.phien }))),
+    ).toBe("MA_LY_DO_DANH_RIENG");
+    expect(await maLoi(chenThang(orgA, ql, { rfqId, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: hangD12, lyDo: LY_DO_CHUAN_HOA_HOI_TO }))).toBe(
+      "anh_xa_ma_ly_do_danh_rieng",
+    );
+    expect(await demHang("rfq_item_mappings", rfqId)).toBe(0);
+  });
+});
+
 describe("[S1.9101 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
   it("hàng đợi: dòng chưa ánh xạ của gói đã nộp, kèm gợi ý hiện hành; dòng đã duyệt và gói còn soạn không có mặt; tổ chức khác không thấy", async () => {
     const rfqId = await goiDaNop(["Thép vằn D12 hàng đợi", "Gạch thẻ hàng đợi"]);
@@ -620,7 +738,7 @@ describe("[S1.9101 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
     const { dong, conNua } = await trong(orgA, (c) => docHangDoi(c, orgA));
     expect(conNua).toBe(false);
     const cuaGoi = dong.filter((d) => d.rfqId === rfqId);
-    expect(cuaGoi.map((d) => [d.lineNo, d.moTa, d.goiY?.ketQua])).toEqual([[2, "Gạch thẻ hàng đợi", "CAN_DUYET"]]);
+    expect(cuaGoi.map((d) => [d.lineNo, d.moTa, d.goiY?.ketQua, d.goiY?.tacGia])).toEqual([[2, "Gạch thẻ hàng đợi", "CAN_DUYET", "Tran Mua Hang"]]);
     expect(dong.some((d) => d.rfqId === soan)).toBe(false);
     expect((await trong(orgB, (c) => docHangDoi(c, orgB))).dong).toEqual([]);
   });
@@ -657,6 +775,38 @@ describe("[S1.9101 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
     expect(await maLoi(chenThang(orgA, ql, { rfqId, lineNo: 9, nguon: "NGUOI_DUYET", hangChuan: hangChuanId }))).toBe("anh_xa_khong_co_hang_muc");
     // Tổ chức khác: không thấy gói (RLS) — câu ghi thẳng bị từ chối, không lọt sang.
     expect(await maLoi(chenThang(orgB, qlB, { rfqId, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: null }))).toBe("anh_xa_goi_con_soan");
+  });
+
+  it("thứ tự khoá (khoản 126): tạo hàng chuẩn rồi ánh xạ không tạo vòng chờ với một giao dịch khoá hàng gói rồi ghi sổ", async () => {
+    const rfqId = await goiDaNop(["Tôn lạnh khoá gói"]);
+    const giu = await db.pool.connect();
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT 1 FROM rfq_packages WHERE id = $1 FOR NO KEY UPDATE", [rfqId]);
+      let xong = false;
+      const tao = maLoi(
+        trong(orgA, (c) =>
+          taoHangChuanVaAnhXa(c, orgA, {
+            rfqId,
+            lineNo: 1,
+            hangChuan: { ma: "TON-LANH-KHOA", ten: "Tôn lạnh khoá gói", donViGoc: "m" },
+            taoBiDanh: true,
+            actorSessionId: ql.phien,
+          }),
+        ),
+      ).finally(() => {
+        xong = true;
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(xong, "hàm gói phải CHỜ hàng gói trước khi ghi sổ").toBe(false);
+      // Giao dịch giữ hàng gói ghi sổ — khoá tư vấn chuỗi sổ của tổ chức; hàm gói chưa giữ nó thì không có vòng.
+      await appendAuditEvent(giu, orgA, { actorType: "USER", actorId: pm.nguoi, action: "RFQ_UPDATED", resourceType: "rfq_package", resourceId: rfqId });
+      await giu.query("COMMIT");
+      expect(await tao).toBe("KHONG_NEM");
+    } finally {
+      giu.release();
+    }
+    expect((await trong(orgA, (c) => docAnhXaGoi(c, orgA, rfqId)))[0]).toMatchObject({ trangThai: "NGUOI_DUYET", hangChuan: { ma: "TON-LANH-KHOA" } });
   });
 
   it("băm của dòng: sửa mô tả sau khi ánh xạ làm ánh xạ cũ thôi hiệu lực — dòng trở lại hàng đợi", async () => {
@@ -713,9 +863,15 @@ describe("[INV-L1] khuôn nền của hai bảng mới", () => {
         ),
       ),
     ).not.toBe("KHONG_NEM");
+    // Băm so ở gói của ca này: ca băm phía trên sửa mô tả một dòng khác sau khi ghi, nên hàng của nó cố ý lệch.
+    // Cùng câu trên bảng ánh xạ: tác giả khai là người quản lý dữ liệu (qua mọi luật ghi), phiên là của người khác.
+    await expect(
+      chenThang(orgA, { nguoi: ql.nguoi, phien: pm.phien }, { rfqId, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: hangD10, lyDo: "tac gia gia" }),
+    ).rejects.toThrow(/khong khop chu phien/iu);
     const { rows } = await db.pool.query<{ so: number; bam: boolean }>(
-      "SELECT seq::int AS so, hang_muc_bam = rfq_hang_muc_bam(org_id, rfq_id, line_no) AS bam FROM rfq_item_goi_y WHERE org_id = $1 ORDER BY seq",
-      [orgA],
+      "SELECT seq::int AS so, rfq_id <> $2 OR hang_muc_bam = rfq_hang_muc_bam(org_id, rfq_id, line_no) AS bam " +
+        "FROM rfq_item_goi_y WHERE org_id = $1 ORDER BY seq",
+      [orgA, rfqId],
     );
     expect(rows.map((r) => r.so)).toEqual(rows.map((_, i) => i + 1));
     expect(rows.every((r) => r.bam)).toBe(true);
