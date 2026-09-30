@@ -1414,6 +1414,22 @@ tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.7
 
 **Đo bằng gì.** `apps/unseal-worker/src/unseal-worker.int.test.ts` (bốn test, gồm đối chứng dương của phép dò khoá và ca giao dịch hỏng thả khoá ngay lúc abort), `packages/rfq/src/rfq.int.test.ts` (đường ⑵), `packages/identity/src/mfa.int.test.ts` (hệ quả E3). Số đo đầy đủ ở `evidence/security-reviews.md` §S1.73.
 
+### [S1.9120 / khoản 69] Đoạn giữ khoá hàng bao trọn round-trip mật mã và lần ghi sổ — GIỮ tới sau pilot, có điều kiện xem lại
+
+Chủ dự án chốt ngày 2026-09-30, trả lời câu hỏi mà khoản 69 để ngỏ từ S1.26: KHÔNG tách lần ghi `MFA_LOCKED` khỏi giao dịch
+request và KHÔNG nhả khoá hàng trước KMS trước pilot. Lý do là một phép cân: cái mua được là bản ghi `MFA_LOCKED` ở lỗi ngoài
+55P03 (`40P01`, khoản 143 — 55P03 đã được SAVEPOINT của khoản 139 giữ) và một trần rút cạn pool mà `connectionTimeoutMillis = 20 s`
+đã chặn; cái phải trả là một lần tái cấu trúc đường login/MFA — đường nhạy nhất của kho, mang nhãn E3/D5 — đổi ngữ nghĩa nguyên tử
+của sổ kiểm toán (cọc thu ở một giao dịch, phán quyết ở giao dịch khác) trong lúc chưa có một số đo nào cho thấy tranh chấp khoá
+hàng xảy ra ngoài IM7 (khoản 128; khoản 126 chưa đo). Trước pilot, rủi ro của bản vá lớn hơn rủi ro nó vá.
+
+Điều kiện xem lại, để lần mở lại không phải cãi lại từ đầu: ⑴ có số đo tranh chấp thật sau pilot — số lần `55P03`/`40P01` trên
+`CAU_DAT_COC` và phân bố thời gian giữ khoá hàng qua `moPhongBiVaSo` + `appendAuditEvent`; hoặc ⑵ khoản 126 đo được một người giữ
+khoá ghi sổ quá 2 s NGOÀI IM7. Khi một trong hai xảy ra, hình dạng đóng là đường đã ghi ở thân khoản 69: cọc commit trong một giao
+dịch ngắn trên kết nối thứ hai (khuôn `auditPool`), `MFA_LOCKED` ghi qua nửa "ghi sổ, không ném" tách từ `throwAuditedDenial`, và lỗi
+của lần ghi không được làm rơi trạng thái khoá E3. Cho tới lúc ấy, lời khai ở tiểu mục [S1.71 / khoản 123] ("ai giữ được khoá quá
+2 s thì đã ở IM7") là tiền đề được chấp nhận, không phải một phép đo.
+
 ### Điều ADR này KHÔNG đóng
 
 - **Nó không làm `app_api` bị chiếm trở nên vô hại.** Một tiến trình `api` đã bị chiếm đặt được
