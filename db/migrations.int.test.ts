@@ -2326,7 +2326,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    { ham: "chinh_sach_kiem_nguoi_ky", migration: "072_bac_cua_goi.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
+    // [S1.236 / khoản 261] Thân từ `097_chan_bat_s3_khi_con_goi_cho`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
+    { ham: "chinh_sach_kiem_nguoi_ky", migration: "097_chan_bat_s3_khi_con_goi_cho.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
     // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
@@ -4107,6 +4108,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
         "9560_email_khong_dau_cham_cuoi.sql",
@@ -8611,6 +8613,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
         "9560_email_khong_dau_cham_cuoi.sql",
@@ -8927,6 +8930,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
         "9560_email_khong_dau_cham_cuoi.sql",
