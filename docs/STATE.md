@@ -13,6 +13,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-29 / S1.199] S4.2b — ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ
+NGƯỜI QUẢN LÝ DỮ LIỆU.** Nửa sau của S4.2 (spec S4 §9). Chủ dự án chốt năm điểm ngày 2026-09-29: một PR; đọc mở cho mọi người mua
+của tổ chức, `agent: false`; hình dạng route; §8.10 nói ở màn và ở công cụ khởi tạo, không kiểm trước ở bản khai; `gieo:demo` gieo
+người và ba hàng chuẩn. `routes/du-lieu.ts`: tám route ghi khai `item.manage` (cổng tầng ứng dụng, trên cổng CSDL của S4.2a), ba
+route đọc; `DuLieuNenError` ra 422 có mã. Gói `du-lieu-nen` thêm `lietKeHangChuan` (trần 500, `conNua`), `docChiTietHangChuan`,
+`docDanhMucDonVi`, `khaiBiDanhDonVi`, `rutBiDanhDonVi`; `rutBiDanhHang` nhận `hangChuanId`. `GET /items` không tìm ở máy chủ —
+router không đọc query (E6); màn lọc trên danh sách. Màn `/du-lieu` (ADR-044): danh sách, tạo, chi tiết (phiên bản, bí danh, quy đổi
+riêng), đơn vị đo; người không giữ `item.manage` chỉ xem và màn nói câu §8.10. `gieo:demo`: người `dulieu` và ba hàng chuẩn, mỗi hàng
+một bí danh là nguyên mô tả dòng demo và một quy đổi riêng tính từ kích thước. L3 thêm phép đo tầng HTTP. Không migration, không ADR.
+Biên bản: `evidence/security-reviews.md` §S1.199.
+
 **[2026-09-29 / S1.200] KHOẢN 258 ĐÓNG — NGƯỜI DUYỆT ĐỌC ĐƯỢC NGÂN SÁCH MÀ CHỮ KÝ RÀNG VÀO: ROUTE RIÊNG CÓ CỔNG, ĐÓNG VỚI AGENT
 (K4b) — ADR-118.** Chữ ký duyệt gói mang băm ngân sách (ADR-115) và lần nộp đã đọc (ADR-117), nhưng không route nào trả ngân
 sách cho người mua. Chủ dự án chốt: route riêng `GET /rfqs/:rfqId/budget`, không mở cho agent (`get_rfq` giữ nguyên); người tạo gói

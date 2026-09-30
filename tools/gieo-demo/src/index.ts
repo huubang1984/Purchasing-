@@ -54,6 +54,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
+import { khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import { createProcurementPolicy, kyPhienBanChinhSach, taoNhomHang } from "@trustprocure/rfq";
@@ -98,6 +99,56 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
   { mo: "Thep tam SS400 day 10mm", sl: "120.0000", dvt: "tam" },
   { mo: "Thep hop ma kem 50x50", sl: "800.0000", dvt: "cay" },
   { mo: "Bu long neo M24 cap 8.8", sl: "2400.0000", dvt: "bo" },
+];
+
+/**
+ * [S1.199 / S4.2b] Ba hàng chuẩn cho ba dòng của `HANG_MUC`, ghi bằng hàm gói dưới phiên người quản lý dữ liệu — đúng đường
+ * màn `/du-lieu` đi. Mỗi hàng: một bí danh là NGUYÊN mô tả của dòng (để S4.3 ánh xạ được), một quy đổi riêng từ đơn vị đóng gói
+ * của dòng về đơn vị gốc.
+ *
+ * HỆ SỐ LÀ PHÉP TÍNH TỪ KÍCH THƯỚC GHI TRONG THUỘC TÍNH, không phải số đo của một nhà máy (spec S4 §8.6 — *"tham số bịa trông như
+ * số đo"*). Công thức nằm ngay dưới, để ai đọc hệ số cũng đọc được nó từ đâu ra; thép 7 850 kg/m³:
+ *   · tấm 1 500 × 6 000 × 10 mm: 1,5 × 6 × 0,010 m³ × 7 850 = 706,5 kg;
+ *   · hộp 50 × 50 dày 1,4 mm, cây 6 m: tiết diện theo đường trung bình 4 × (50 − 1,4) × 1,4 = 272,16 mm², × 7 850 × 6 m
+ *     = 12,818… kg, làm tròn hai chữ số;
+ *   · bu lông neo: một bộ là một bu lông kèm hai đai ốc và hai long đen, đơn vị gốc đếm bu lông — 1 bộ = 1 cái.
+ */
+const HANG_CHUAN_DEMO: readonly {
+  readonly ma: string;
+  readonly donViGoc: string;
+  readonly ten: string;
+  readonly thuocTinh: Readonly<Record<string, string>>;
+  readonly thuocTinhTrongYeu: readonly string[];
+  readonly biDanh: string;
+  readonly quyDoi: { readonly tu: string; readonly heSo: string };
+}[] = [
+  {
+    ma: "THEP-TAM-SS400-10",
+    donViGoc: "kg",
+    ten: "Thép tấm SS400 dày 10 mm, khổ 1500×6000",
+    thuocTinh: { mac: "SS400", day_mm: "10", kho_mm: "1500x6000" },
+    thuocTinhTrongYeu: ["mac", "day_mm"],
+    biDanh: "Thep tam SS400 day 10mm",
+    quyDoi: { tu: "tam", heSo: "706.5" },
+  },
+  {
+    ma: "THEP-HOP-MK-50X50-1.4",
+    donViGoc: "kg",
+    ten: "Thép hộp mạ kẽm 50×50 dày 1,4 mm, cây 6 m",
+    thuocTinh: { be_mat: "ma kem", kich_thuoc_mm: "50x50", day_mm: "1.4", dai_cay_m: "6" },
+    thuocTinhTrongYeu: ["kich_thuoc_mm", "day_mm"],
+    biDanh: "Thep hop ma kem 50x50",
+    quyDoi: { tu: "cay", heSo: "12.82" },
+  },
+  {
+    ma: "BU-LONG-NEO-M24-8.8",
+    donViGoc: "cai",
+    ten: "Bu lông neo M24 cấp bền 8.8",
+    thuocTinh: { duong_kinh: "M24", cap_ben: "8.8", bo_gom: "1 bu long, 2 dai oc, 2 long den" },
+    thuocTinhTrongYeu: ["duong_kinh", "cap_ben"],
+    biDanh: "Bu long neo M24 cap 8.8",
+    quyDoi: { tu: "bo", heSo: "1" },
+  },
 ];
 
 const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "Vat tu Truong Thanh"];
@@ -160,16 +211,22 @@ async function chinh(): Promise<void> {
     // Hai người DUYỆT mang vai DIRECTOR vẫn cần thiết và không thay được: `rfq.unseal.approve`
     // chỉ của DIRECTOR. Nên bối cảnh này có NĂM người, hai vai, hai loại phê duyệt khác nhau —
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
-    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
+    // [S1.199 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
+    // §8.10): `DATA_STEWARD` không ghép được với vai nào ở đây.
+    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
       const email = `${ten}.${duoi}@vidu.vn`;
       const hoTen = ten.startsWith("soan")
         ? `Nguoi soan goi thau ${ten.slice(4)}`.trim()
-        : ten.startsWith("duyet") ? `Nguoi duyet ${ten.slice(-1)}` : `Nguoi tai chinh ${ten.slice(-1)}`;
+        : ten.startsWith("duyet")
+          ? `Nguoi duyet ${ten.slice(-1)}`
+          : ten === "dulieu" ? "Nguoi quan ly du lieu" : `Nguoi tai chinh ${ten.slice(-1)}`;
       const id = (await q<{ id: string }>(
         "INSERT INTO public.users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id",
         [org, email, hoTen],
       )).id;
-      const vai = ten.startsWith("soan") ? "PROCUREMENT_MANAGER" : ten.startsWith("duyet") ? "DIRECTOR" : "FINANCE";
+      const vai = ten.startsWith("soan")
+        ? "PROCUREMENT_MANAGER"
+        : ten.startsWith("duyet") ? "DIRECTOR" : ten === "dulieu" ? "DATA_STEWARD" : "FINANCE";
       await pool.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vai]);
       // MỖI người một phiên riêng: mọi lần ghi có kiểm danh tính (013) đòi một phiên còn sống, và
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
@@ -182,6 +239,31 @@ async function chinh(): Promise<void> {
     }
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
+
+    // [S1.199 / S4.2b] Ba hàng chuẩn, dưới phiên người quản lý dữ liệu — một giao dịch: trigger `du_lieu_nen_kiem_quyen_ghi`
+    // phán người ghi như ở màn.
+    const phienDuLieu = nguoiMua.find((n) => n.email.startsWith("dulieu."))?.sessionId;
+    if (phienDuLieu === undefined) throw new GieoError("thiếu người quản lý dữ liệu");
+    await withTenant(pool, org, async (c) => {
+      for (const h of HANG_CHUAN_DEMO) {
+        const moi = await taoHangChuan(c, org, {
+          ma: h.ma,
+          donViGoc: h.donViGoc,
+          ten: h.ten,
+          thuocTinh: h.thuocTinh,
+          thuocTinhTrongYeu: h.thuocTinhTrongYeu,
+          actorSessionId: phienDuLieu,
+        });
+        await khaiBiDanhHang(c, org, { hangChuanId: moi.id, biDanh: h.biDanh, actorSessionId: phienDuLieu });
+        await khaiQuyDoiRieng(c, org, {
+          hangChuanId: moi.id,
+          tuDonVi: h.quyDoi.tu,
+          sangDonVi: h.donViGoc,
+          heSo: h.quyDoi.heSo,
+          actorSessionId: phienDuLieu,
+        });
+      }
+    });
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
@@ -344,8 +426,15 @@ async function chinh(): Promise<void> {
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
     ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
     ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
-    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh"))) {
+    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh") && !n.email.startsWith("dulieu."))) {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
+    }
+    ra.push("");
+    ra.push("QUẢN LÝ DỮ LIỆU — dulieu (DATA_STEWARD) ở /du-lieu: ba hàng chuẩn cho ba dòng của gói, mỗi hàng một bí danh là");
+    ra.push("  nguyên mô tả dòng và một quy đổi riêng từ tấm / cây / bộ về đơn vị gốc — hệ số tính từ kích thước, không phải số đo.");
+    ra.push("  Người mua khác mở /du-lieu chỉ xem được, và màn nói vì sao.");
+    for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("dulieu."))) {
+      ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/du-lieu#${org}:${nm.token}`);
     }
     if (S3) {
       ra.push("");

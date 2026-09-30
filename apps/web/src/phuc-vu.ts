@@ -91,8 +91,10 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * [S1.191 / S3.2c2] `tao-thau` — thứ tự bước, nút của dòng lời mời và câu báo của màn tạo gói theo luồng mời của tổ chức.
  *
  * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
+ *
+ * [S1.199 / S4.2b] `du-lieu` — ô thuộc tính, lọc hiển thị, câu §8.10 và dòng quy đổi của màn dữ liệu nền.
  */
-export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {
@@ -108,6 +110,9 @@ export const TRANG: Readonly<Record<string, string>> = {
   // [S1.201 / S3.6a] Màn quản lý nhóm hàng của người giữ `category.manage` (spec S3 §4.3).
   "/nhom-hang": "nhom-hang.html",
   "/nhom-hang.js": "nhom-hang.js",
+  // [S1.199 / S4.2b] Màn dữ liệu nền — hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
+  "/du-lieu": "du-lieu.html",
+  "/du-lieu.js": "du-lieu.js",
   "/chung.css": "chung.css",
   // [S1.99 / khoản 198] HAI ĐƯỜNG MÀ SẢN PHẨM ĐÃ SINH RA LINK TỪ S1.12 MÀ KHO CHƯA BAO GIỜ PHỤC
   // VỤ. `apps/api/src/adapters/hop-thu-dev.ts` dựng `${baseUrl}/login#<mã>` cho người mua và

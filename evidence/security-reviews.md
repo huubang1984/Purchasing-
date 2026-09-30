@@ -17112,3 +17112,154 @@ sửa cột ấy, lần chèn buộc vào người của phiên); phiên đình 
   thời gian của một ca): 198 tệp, 3388 khẳng định, 3378 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản
   đã commit: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào; K8a vào ở #203), đọc từ 3388 khẳng định; K4b 42 như trên.
   `pnpm test`: 123 tệp, 1767 đạt, 1 bỏ qua. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+
+---
+
+# §S1.199 — S4.2b: ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ NGƯỜI QUẢN LÝ DỮ LIỆU
+
+## 1. Vòng này là gì
+
+Nửa sau của S4.2 (spec S4 §9): đường HTTP và màn hình trên lớp CSDL và gói của S4.2a (§S1.197). Không migration, không ADR, không
+bất biến mới. **L3** thêm một phép đo ở tầng ứng dụng.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-29, năm đề xuất của lượt bàn S4.2b:
+
+1. Một PR cho cả route lẫn màn.
+2. Đọc hàng chuẩn mở cho MỌI người mua của tổ chức, không riêng người giữ `rfq.create` như spec §4.3; ba route đọc `agent: false`.
+3. Hình dạng route: đường tiếng Anh, tệp mới `routes/du-lieu.ts`; rút là POST (một hàng rút), không DELETE; `DuLieuNenError` ra 422;
+   `GET /items` trả cờ `choGhi`.
+4. §8.10 nói ở màn `/du-lieu` và ở công cụ khởi tạo (test + bảng vai của đề xuất); bản khai không kiểm trước luật vai.
+5. `gieo:demo` gieo người `DATA_STEWARD` và ba hàng chuẩn cho ba dòng demo, hệ số tính từ kích thước, công thức trong chú thích.
+
+## 3. Thay đổi
+
+- **Gói `du-lieu-nen`.** `lietKeHangChuan` (phiên bản mới nhất của từng hàng, xếp theo mã, trần 500, `conNua`; `q` tìm trên dạng sạch
+  `chuoi_sach`), `docChiTietHangChuan` (mọi phiên bản; bí danh và quy đổi riêng ĐANG hiệu lực của đúng hàng; họ tên người ghi),
+  `docDanhMucDonVi` (danh mục toàn cục, bí danh chung, bí danh đang hiệu lực của tổ chức), `khaiBiDanhDonVi`, `rutBiDanhDonVi` (cùng
+  ba bước của `hang-chuan.ts`: tác giả dẫn xuất từ phiên, một câu INSERT chỉ-ghi-thêm, một hàng sổ `UOM_ALIAS_DECLARED` /
+  `UOM_ALIAS_WITHDRAWN` trong cùng giao dịch). `rutBiDanhHang` nhận `hangChuanId`: bí danh đang trỏ sang hàng khác là *"không có"*.
+  Ràng buộc `uom_aliases_bi_danh_sach_check` ánh xạ `CHUOI_RONG`. Lần từ chối từ ràng buộc mang câu tiếng Việt, mã trong ngoặc.
+- **`apps/api/src/routes/du-lieu.ts`.** Ba route đọc (`GET /items`, `GET /items/:itemId`, `GET /uom`), `agent: false`. Tám route ghi,
+  mọi route khai `permission: item.manage`, `resourceType` `CANONICAL_ITEM` hay `UOM_ALIAS`: `POST /items`, `…/versions`,
+  `…/aliases`, `…/aliases/withdraw`, `…/conversions`, `…/conversions/withdraw`, `POST /uom/aliases`, `…/withdraw`. `DuLieuNenError`
+  vào tập 422 của bộ điều phối. `apps/api` phụ thuộc `@trustprocure/du-lieu-nen`.
+- **`apps/mcp`.** Ba route đọc vào `ROUTE_DOC_KHONG_PHOI` kèm lý do (mười ba dòng).
+- **Màn `/du-lieu`** (ADR-044: tệp tĩnh, `textContent`, không script nội tuyến). Đăng nhập theo khuôn `/chinh-sach`; bước 2 danh sách
+  và ô lọc; bước 3 tạo (chỉ khi `choGhi`); bước 4 chi tiết — phiên bản (cột *Bản* đếm theo hàng), bí danh, quy đổi riêng, ghi thêm và
+  rút; bước 5 đơn vị đo và bí danh của tổ chức. Người không giữ `item.manage` chỉ xem, và màn nói câu §8.10. Mọi nút ghi khoá trong
+  lúc lời gọi còn bay. Module thuần `apps/web/src/du-lieu.ts` (`/lib/du-lieu.js`): ô thuộc tính, ô trọng yếu, mã, hệ số, lọc hiển
+  thị, câu §8.10, dòng quy đổi.
+- **`gieo:demo`.** Người `dulieu` (`DATA_STEWARD`) có phiên riêng; ba hàng chuẩn — `THEP-TAM-SS400-10`, `THEP-HOP-MK-50X50-1.4`,
+  `BU-LONG-NEO-M24-8.8` — ghi bằng hàm gói dưới phiên ấy, mỗi hàng một bí danh là NGUYÊN mô tả dòng demo và một quy đổi riêng từ
+  tấm / cây / bộ: 706,5 kg, 12,82 kg, 1 cái. In link `/du-lieu` của người ấy.
+- **§8.10 ngoài màn.** `khoi-tao.int.test.ts` thêm ca bản khai FINANCE + DATA_STEWARD; `docs/DE-XUAT-TAO-TO-CHUC.md` nói ra luật ấy ở
+  bảng vai.
+- **Cổng khai theo.** `barrel-exports` (năm symbol), `cong-quyen-route` (hai hàm ghi, ba hàm đọc), `so-khai-nhan` (L3 thêm
+  `apps/api/src/du-lieu.int.test.ts`), bản đồ `TRANG` và `MODULE_WEB`, test màn `phuc-vu.test.ts` (trang thứ năm của mọi ca S1.177,
+  bốn ca riêng). Lượt quét [INV-H17] của `buyer.int.test.ts` ghim ĐẾM `3` route ghi không có tọa độ tài nguyên; lượt chạy đầu đỏ đúng
+  chỗ ấy (6 ≠ 3). Nay nó nêu TÊN sáu route — ba route tạo mới cũ, `POST /items`, hai route bí danh đơn vị (thứ chúng ghi là một chuỗi
+  của tổ chức, không phải tài nguyên có UUID trên đường dẫn).
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Không tìm ở máy chủ.** Đề xuất ③ là `GET /items?q=`. `router.ts` cắt bỏ query và không đọc nó (⑵ — *"một chỗ không đọc thì không
+  thể rò"*, E6), nên route trả tối đa 500 hàng xếp theo mã cùng `conNua`, và màn lọc trên danh sách đang hiện. Bộ lọc của màn KHÔNG
+  phải `chuoi_sach` — nó không lưu, không so khoá nào, chỉ ẩn dòng. `lietKeHangChuan` vẫn nhận `q` ở tầng gói. Mở một đường đọc query
+  là quyết định về E6, để cho S4.3.
+- **`choGhi` không qua `hasPermission`.** Đề xuất ③ nói *"tính bằng `hasPermission`"*; hàm ấy cố ý không ra mặt tiền của
+  `@trustprocure/identity` (nó mời một cổng quyền im lặng). Route dùng `listUserIdsWithPermission` — danh sách người giữ
+  `item.manage` —, suy ra `choGhi` và `soNguoiQuanLy`. Cờ ấy chỉ để màn biết mở phần ghi; cổng vẫn là `requirePermission` của route ghi
+  và trigger ở CSDL.
+- **`GET /items` trả thêm `soNguoiQuanLy`** — để câu §8.10 phân biệt *"tổ chức chưa ai giữ vai: cần một NGƯỜI MỚI"* với *"đã có người;
+  bạn chỉ xem"*. Con số không mang danh tính.
+- **Ba lỗi màn do lượt đi thử T4 đo được, sửa trong vòng:** bấm đúp một nút ghi ghi hai hàng (hai phiên bản giống hệt, hai hàng sổ);
+  câu thành công cũ nằm cạnh câu lỗi nhập; đọc chi tiết hỏng mà bước 4 vẫn giữ hàng trước. Cộng hai điểm nhỏ: cột *Seq* (thứ tự ghi
+  chung cả tổ chức) đổi thành *Bản* đếm theo hàng; mã thô *"dữ liệu nền từ chối: MA_DA_CO"* thành câu tiếng Việt.
+
+## 5. Đo trước
+
+`apps/api/src/du-lieu.int.test.ts` chạy trên cây có đủ gói và màn nhưng rút `ROUTES_DU_LIEU` khỏi bảng route: 9/9 ca đỏ, mọi lời
+gọi ra `404 khong co duong nay` — người giữ `item.manage` không có đường HTTP nào tới dữ liệu nền. Lượt đầu với route thật: 5/9 đỏ,
+`500 loi noi bo` ở mọi lần từ chối có mã — lần sửa `dispatch.ts` đầu tiên chỉ chèn chú thích mà thiếu tên lớp `DuLieuNenError`. Sau
+bản vá: 9/9.
+
+## 6. Đo
+
+- `packages/du-lieu-nen/src/man-du-lieu.int.test.ts` 10/10 — liệt kê (mới nhất, tìm dạng sạch, trần và `conNua`), chi tiết (bí danh bị
+  rút hay khai lại sang hàng khác biến mất khỏi hàng cũ), bí danh đơn vị (*"MT"* chưa khai ⇒ không quy đổi, khai tấn, khai lại mét
+  thắng, rút ⇒ rơi về bí danh chung hay không quy đổi; ba từ chối có mã; hàng sổ cùng giao dịch), rút bí danh từ trang hàng khác.
+- `apps/api/src/du-lieu.int.test.ts` 9/9 — mười một route, tám khai `item.manage`, ba `agent: false`; **[INV-L3]** người FINANCE gọi
+  tám route ghi ⇒ 403 cả tám, tám hàng `PERMISSION_DENIED` đúng `resource_type`, không hàng nào ở năm bảng nền; trọn đường của người
+  quản lý dữ liệu và `quy_doi_don_vi` thấy đúng cạnh vừa khai (cây → g = 7 220); đọc của người FINANCE (`choGhi` false), tổ chức B
+  không thấy; sáu lần từ chối có tên ra 422, id sai hình dạng ra 404.
+- `apps/web`: `du-lieu.test.ts` 10/10 (ba biểu thức đối chiếu với NGUỒN — `083_hang_chuan.sql` và `hang-chuan.ts`); `phuc-vu.test.ts`
+  thêm trang `/du-lieu` vào bảy ca S1.177 và bốn ca riêng (§8.10 ba trạng thái; `conNua` và mã sai không gọi máy chủ; bấm đúp một lời
+  gọi và câu cũ biến mất; đọc chi tiết hỏng không giữ hàng trước).
+- `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`: bản khai FINANCE + DATA_STEWARD ⇒ hỏng ở người thứ 2, mã 42501, nguyên nhân là câu
+  của trigger L3, không hàng nào của tổ chức mới nằm lại.
+- `gieo:demo` và `gieo:demo --s3` chạy trên Postgres 16 cục bộ: in link `/du-lieu` của `dulieu`; trên CSDL ba hàng chuẩn, ba bí danh,
+  ba quy đổi, `quy_doi_don_vi` của đúng hàng ra `QUY_DOI_RIENG` 706,5 / 12,82 / 1; chín hàng sổ `canonical_item`.
+- **Lượt đi thử T4 — trình duyệt thật.** Cụm: Postgres 16 (container), `gieo:demo`, `apps/api` (`local-dev`, hộp thư dev, đăng nhập
+  bằng `app_api_login`), `apps/web`, Chromium 1194 qua Playwright; script ngoài kho. Mười khẳng định: người `dulieu` vào ⇒ bước 2, 3, 5
+  mở, không câu §8.10; ba hàng gieo, lọc *"thep"* 2, *"bu long"* 1, *"THÉP HỘP"* 1; chi tiết hàng tấm — một bản, bí danh, *"1 tam =
+  706.5 kg"*; tạo `THEP-D10`, khai bí danh, quy đổi *"1 cay = 7.22 kg"*, rút bí danh, phiên bản ngừng dùng; ba lần từ chối (đơn vị
+  đóng gói, mã trùng, mã chữ thường — lần cuối không gửi lời gọi nào); khai và rút *"MT"* là tấn; người soạn (PROCUREMENT_MANAGER) mở
+  `/du-lieu` ⇒ câu *"Tổ chức đã có 1 người giữ vai này; bạn chỉ xem được."*, không bước tạo, không nút rút, `POST /api/items` ⇒ 403;
+  sổ: bảy loại hành động của `dulieu`, một `PERMISSION_DENIED` của người soạn. Không `pageerror`, không vi phạm CSP; ba dòng console
+  là Chromium in cho ba lời gọi 422/403 mà kịch bản cố ý gây ra. Lượt ấy đo được ba lỗi ở mục 4 — đã sửa và có ca đo ở `phuc-vu.test.ts`.
+- **Mười đột biến**, mỗi lần một chỗ, chín đỏ, một tương đương:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | M1 | `POST /items` khai `supplier.manage` | đỏ — 7 ca |
+  | M2 | bỏ `DuLieuNenError` khỏi tập 422 | đỏ — 5 ca |
+  | M3 | `rutBiDanhHang` bỏ vế `hangChuanId` | đỏ — 2 ca |
+  | M4 | chi tiết bỏ `NOT a.rut` | **sống — tương đương**: `CHECK item_aliases_rut_khong_hang` buộc hàng rút mang `canonical_item_id NULL`, nên điều kiện id đã loại nó |
+  | M4b | chi tiết lấy hàng CŨ NHẤT của mỗi bí danh | đỏ — 1 ca |
+  | M5 | danh mục đơn vị giữ bí danh đã rút | đỏ — 1 ca |
+  | M6 | liệt kê lấy phiên bản cũ nhất | đỏ — 1 ca |
+  | M7 | `choGhi` = tổ chức có người quản lý | đỏ — 1 ca |
+  | M8 | câu §8.10 im khi tổ chức đã có người | đỏ — 2 ca |
+  | M9 | màn mở bước tạo cho mọi người | đỏ — 1 ca |
+
+## 7. Giới hạn, nói ra
+
+- Màn lọc trên tối đa 500 hàng đầu theo mã. Tổ chức có nhiều hơn thấy câu *"còn hàng khác"* và không tới được phần còn lại từ màn.
+- Bấm đúp được chặn ở màn, không ở máy chủ: hai lời gọi thật từ hai thẻ vẫn ghi hai hàng — mỗi hàng mang tác giả và mốc, đúng khuôn
+  chỉ-ghi-thêm.
+- `resource_type` trong sổ không cùng cách viết: lần ghi thành công `canonical_item` / `uom_alias` (của gói, từ S4.2a), lần từ chối
+  `CANONICAL_ITEM` / `UOM_ALIAS` (của route, khuôn `rbac.ts`). Kho đã trộn hai kiểu từ trước; vòng này không đổi.
+- `choGhi` đọc lúc tải danh sách: vai bị gỡ trong lúc trang đang mở thì màn còn hiện nút ghi, và route trả 403.
+- Lượt đi thử T4 là một lần, không phải một cổng; script nằm ngoài kho.
+
+## 8. Số đo
+
+- Cây cuối, trước lần cấp số: `pnpm t0` sạch (463 mô-đun, không vi phạm phụ thuộc). `pnpm test`: 123 tệp, 1758 đạt, 1 bỏ qua.
+- T3 các tệp chạm vòng này: `man-du-lieu.int` 10/10, `du-lieu.int` 9/9, `buyer.int` 18/18 (sau khi lượt quét H17 nêu tên), `khoi-tao.int`
+  17/17, `hang-chuan.int` 15/15, `don-vi.int` 12/12, `qt3-cu-phap.int` 1/1 (mọi câu SQL mới được PostgreSQL phân tích). Bốn tệp
+  khác quét trọn `ROUTES`: `api.int` 15/15, `auth.int` 56/56 (phạm vi agent), `loi-giao-thuc.int` 20/20, `loi-moi-sau-commit.int` 19/19.
+- **CI lượt đầu của PR đỏ ở tệp thứ năm quét trọn `ROUTES`**, tệp tôi không chạy cục bộ trước khi đẩy: bộ quét rò rỉ của
+  `kich-ban-41-http.int` (sổ nợ 49) đòi MỌI route ghi có một thân hợp lệ khai sẵn, và tám route mới chưa có (`route ghi POST /items
+  chưa có thân hợp lệ`, cả hai luồng MVP1 và S3). Bản vá: một người `DATA_STEWARD` hy sinh và tám thân trên một hàng chuẩn hy sinh —
+  theo đúng thứ tự bảng route, nên mỗi lần rút có hàng đang hiệu lực để rút và cả tám đi tới 201; không thân nào chạm gói của kịch bản.
+  `kich-ban-41-http.int` 58/58 cục bộ.
+- Mười đột biến: chín đỏ, một tương đương (§6).
+- Ma trận: L3 8 → 9 (ca `[INV-L3]` của `du-lieu.int`). Hàng L3 lấy từ bộ sinh trên báo cáo T3 đầy đủ cục bộ ghép kết quả của
+  `du-lieu.int`; báo cáo ấy cũ hơn #206, nên chỉ hàng L3 được lấy — các hàng khác giữ bản đã commit. CI sinh lại cả ma trận và so từng
+  byte.
+- **Hợp `master` sau #210** (S3.6a, nhóm hàng — migration `085_nhom_hang`, ADR-119): xung đột ở lượt quét [INV-H17] của
+  `buyer.int` (danh sách route ghi không tọa độ giữ cả `POST /categories` lẫn hai route bí danh đơn vị), `ROUTE_DOC_KHONG_PHOI` của
+  `apps/mcp` và lời khai đếm route đọc ở đầu tệp, thân hợp lệ của `kich-ban-41-http.int` (giữ cả ca nhóm hàng lẫn tám ca của vòng
+  này, `hy` mang cả `nhomId` và `itemId`), `MODULE_WEB`, `TRANG` và các bảng bước của `phuc-vu`, danh sách hàm chỉ đọc của cổng quyền
+  route, cột mốc và cuối biên bản. `pnpm cap-so` giữ S1.199.
+- **Hợp `master` sau #203** (S3.3a, xác minh nội bộ nhà cung cấp): xung đột chỉ ở cột mốc và cuối biên bản. `pnpm cap-so` giữ S1.199.
+- **Hợp `master` sau #199** (S1.202, khoản 254, migration `086_rang_ngan_sach`): xung đột chỉ ở cột mốc và cuối biên bản. CI T3 lượt
+  trước đỏ ở `[sổ nợ 73]` của `hardening-suy-tu-tinh-chat` (quá trần 180 s khi #203 thêm một bảng chỉ-ghi-thêm); bản vá của #202 (trần
+  600 s) port nguyên văn vào nhánh. `pnpm cap-so` giữ S1.199.
+- **Hợp `master` sau #202 và #205** (S1.198, khoản 256 và 257, `087_lan_nop_da_xem`, ADR-117; S1.200, khoản 258, route
+  `GET /rfqs/:rfqId/budget`, ADR-118): xung đột ở lời khai đếm route đọc không phơi của `apps/mcp` (nay mười sáu — ba route của vòng
+  này trên mười ba của `master`), kiểu `hy` của `kich-ban-41-http.int` (giữ cả `itemId` lẫn `lanNopB`), cột mốc và cuối biên bản.
+  `pnpm cap-so` giữ S1.199; `pnpm t0` sạch; `pnpm test` 124 tệp, 1789 đạt; `kich-ban-41-http.int`, `buyer.int`, `du-lieu.int`, bốn
+  tệp quét trọn `ROUTES` và `man-du-lieu.int` 210/210.
