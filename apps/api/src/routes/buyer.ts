@@ -53,6 +53,7 @@ import {
   extendRfqDeadline,
   getActiveProcurementPolicy,
   getRfq,
+  getRfqBudget,
   kyPhienBanChinhSach,
   lietKeNhomHang,
   lietKePhienBanChinhSach,
@@ -320,6 +321,27 @@ const doc: readonly BuyerReadRoute[] = [
       const r = await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req));
       if (r === null) throw new HttpError(404, "khong co goi thau");
       return { status: 200, body: { rfq: r } };
+    },
+  },
+  // [S1.200 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-115) — người duyệt đọc được con số mình ký. Màn
+  // `/tao-thau` tự đọc nó ở lần đọc gói cho người tạo gói; người khác bấm «Xem ngân sách». Cổng nằm trong gói (`getRfqBudget`, rổ
+  // `HAM_DOC_CO_QUYEN`): người tạo gói cần `rfq.create`, người khác cần `rfq.approve`; `auditPool` để lần từ chối có bản ghi.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/budget",
+    audience: "BUYER",
+    mutates: false,
+    // [khoản 141] NGÂN SÁCH DỰ TÍNH — thứ neo giá nếu rò xuống bên bán; chủ dự án chốt ngày 2026-09-29: agent không đọc (ADR-118)
+    agent: false,
+    handler: async (ctx) => {
+      const budget = await getRfqBudget(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      if (budget === null) throw new HttpError(404, "khong co goi thau");
+      return { status: 200, body: { budget } };
     },
   },
   {
