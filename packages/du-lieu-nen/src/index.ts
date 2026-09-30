@@ -53,6 +53,8 @@ export {
 export {
   LY_DO_CHUAN_HOA_HOI_TO,
   chuanHoaGoi,
+  chuanHoaSauNop,
+  coHangChuanDangDung,
   docAnhXaGoi,
   docHangDoi,
   ghiAnhXa,
