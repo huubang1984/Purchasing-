@@ -4438,6 +4438,15 @@ một chứng chỉ agent không tự gia hạn và không tự nhân bản. Nó
 `sessions_kiem_totp_gan_day` (039, `ENABLE ALWAYS`, thân bị hardening ghim) bắt mọi hàng phiên do `app_api` chèn có `mfa_verified_at`
 phải đi sau một lần TOTP đúng trong ±90 giây, mà `resolveSessionByToken` lại đòi đúng cột ấy.
 
+**[S1.9101 / khoản 174] Hệ quả vận hành của đường ấy, nói ra.** Chứng chỉ agent có TTL trần một giờ (lớp 1 ở trên) và cách DUY NHẤT có
+chứng chỉ mới là gọi lại `POST /auth/agent-session` với một mã TOTP tươi; còn route ấy đứng sau trần trạng thái `mfaTranDuongPhu`
+(= `MFA_TRAN_SAI_DUONG_PHU` = 2 — S1.83, khoản 144) đọc `failed_attempts`, bộ đếm mà ĐƯỜNG ĐĂNG NHẬP CHÍNH (`/auth/totp`) cũng tăng.
+Nên một người đã gõ sai TOTP 2 lần trên đường chính thì KHÔNG xoay được chứng chỉ agent, kể cả với mã đúng — route trả 429 trước khi
+thử mã: không tiêu mã, không tăng bộ đếm, không khoá — cho tới khi đăng nhập đúng một lần trên đường chính (một lần đúng đặt bộ đếm
+về 0); một tiến trình MCP đang chạy sẽ dừng ở giờ kế tiếp. Đây là fail-closed CÓ CHỦ Ý và đúng thứ tự ưu tiên — đường phát agent là
+đường PHỤ, không được tiêu ngân sách của đường chính — và đường ra là một lần đăng nhập đúng, không cần đặt lại MFA. Ghim ở
+`apps/api/src/auth.int.test.ts` vế ⑽ (§S1.9101).
+
 ### 3. Bị bác, và một chỗ bản đầu sai
 
 - **Một danh sách đường cho phép đặt cạnh `ROUTES`.** Hình dạng đầu tiên của vòng. Bị bác vì một danh sách chuỗi mà không ai đối chiếu

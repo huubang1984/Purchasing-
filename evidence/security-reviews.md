@@ -8630,7 +8630,7 @@ lượt evidence — và **hai trong sáu không đứng được**.
 | **104** trạng thái phiên rò qua pool | A→B | không một migration nào và `db/hardening.always.sql` cũng không đặt GUC mức phiên; mã sản xuất dùng `SET LOCAL`; `withTenant` bắt GUC `app.*` rò ở `BEGIN` kế | **→ B** |
 | **108** `payload` qua `double` | A→B | §11 đòi *giá đúng tới từng chữ số*, nhưng sai số chỉ xuất hiện từ 16 chữ số có nghĩa; `totalAmount` đọc bằng SQL nên luôn đúng | **→ B** |
 | **130** job mở thầu FAILED | A→B | §11 đòi *không một bước nào cần người của dự án can thiệp bằng tay*; phục hồi = huỷ + tạo lại + gom lại HAI phê duyệt; worker có trong pilot | **BÁC — ở lại A** |
-| **135** closure sau commit chạm `ctx.client` | A→B | đúng hai chỗ đăng ký việc sau commit; cả hai không chạm `ctx.client`, và `bu` duy nhất gọi hàm nằm trong `RFQ_INVITE` của route | **→ B** |
+| **135** closure sau commit chạm `ctx.client` | A→B | ~~đúng hai chỗ đăng ký việc sau commit; cả hai không chạm `ctx.client`, và `bu` duy nhất gọi hàm nằm trong `RFQ_INVITE` của route~~ **[S1.9101]** lời khai này đã thiu từ ADR-110/ADR-113 — nay NĂM chỗ (`anon.ts` 1, `buyer.ts` 3 có bù + 1 lô), và cổng `viec-sau-commit.test.ts` đo cả năm: 0 vi phạm | **→ B** |
 | **160** nhân chứng break-glass hết hạn | A→B | `docs/PRODUCT.md` không nhắc break-glass một lần nào; hàng tự khai CHƯA ĐO | **→ B** |
 | **155** job chết không hồi sinh được | ĐÓNG | §11 mảnh 3: chưa có tài khoản AWS, chưa CMK, chưa role ⇒ dự án chưa từng triển khai ⇒ tập chủ thể rỗng | **→ rổ C, KHÔNG đóng** |
 
@@ -16572,6 +16572,63 @@ route nhận thân thiếu (tức một lần XOÁ nhóm hàng của gói đang 
   `docs/DECISIONS.md` (ADR-116 rồi ADR-119) và lời khai đếm (lấy bản `master`, `cap-so --dem` viết lại).
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.201, ADR-119, migration `085_nhom_hang`; các số nhỏ hơn
   chưa vào `master` đã có PR khác giữ.
+
+# §S1.9101 — CỔNG VIỆC SAU COMMIT ĐỌC CÂY CÚ PHÁP, NGƯỠNG MFA ĐI TỪ BẢNG ROUTE QUA `ctx`, HỆ QUẢ 144 × 153 NÓI RA — KHOẢN 135, 188, 174 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11. Một cổng kiến trúc mới, ba dòng mã sản xuất (một trường `ctx`), ba khối chú thích. Không migration, không ADR mới.
+
+## 1. Vòng này là gì
+Ba khoản của bộ điều phối `apps/api` cùng một hình dạng: một lời hứa chỉ có docstring giữ. 135 — việc sau commit (thường, có bù, theo lô) là closure với tới được `ctx.client` đã trả về pool, và hàm ghi trong `bu`/`khiXong` không bị ràng với mã quyền của route; 188 — route khai `mfaTranDuongPhu` mà handler quên truyền xuống câu lệnh thì không cổng nào kêu; 174 — giao điểm 144 × 153 (trần đường phụ đóng luôn đường xoay chứng chỉ agent) chưa tài liệu nào nêu. Vòng dựng lớp cưỡng chế cho hai khoản đầu và ghi hệ quả (cộng một phép đo) cho khoản thứ ba. Lô do hai agent nối nhau (agent trước dừng vì hạn mức sau khi vá và đo M1–M6′); agent sau soát diff, thêm vế ⑶ vào cổng, đo M1 lại và M7, chạy cổng cuối, commit.
+
+## 2. Quyết định của chủ dự án
+Không có; vòng trả nợ theo phân công ngày 2026-09-29.
+
+## 3. Đo trước
+- 135: trên `f3f63ab`, `git grep ctx.client -- tests/architecture` = 0 tệp — không lớp nào đọc thân việc sau commit; năm chỗ đăng ký thật đều sạch (đo bằng chính cổng mới chạy trên mã cũ: 0 vi phạm), nên "đo trước" của khoản là đối chứng dương bằng văn bản mẫu và đột biến trên mã thật (mục 6): mã cũ không có test nào đỏ khi `anon.ts:117` chạm `ctx.client` hay `bu` gọi hàm ngoài mã quyền — vì không có cổng.
+- 188: trên mã cũ (handler nhập hằng `MFA_TRAN_SAI_DUONG_PHU`), `routes.test.ts` khối mới ĐỎ hai vế — ⑴ *câu lệnh phải nhận ngưỡng bộ điều phối đưa vào ctx (3), không phải hằng (2): expected 2 to be 3*; ⑵ *hằng ngưỡng xuất hiện ngoài lời khai của route: expected ['apps/api/src/routes/auth.ts:306'] to deeply equal []*. `auth.int.test.ts` ⑼ ĐỎ: *status: 401,401,429,429; failed=2; ngưỡng route=3; hằng=2 — expected [401,401,429] to deeply equal [401,401,401]*. Bản đầu của ⑼ đo chiều cùng lúc (ba mã sai song song, ngưỡng route 1) cho `401,429,429` trên mã cũ ở cả ba lượt — không đỏ được, nên bỏ; hình dạng tuần tự đỏ tất định.
+- 174: không có vế nào; đo trước là phép đọc: ba tệp không nêu hệ quả, ADR-039 không nêu.
+
+## 4. Thay đổi
+- `tests/architecture/viec-sau-commit.test.ts` (MỚI, 14 test): `docViecSauCommit(vanBan)` thuần — tìm `<ctx>.afterCommit|afterCommitCoBu|afterCommitLoGui(…)`, route bao quanh, mã quyền `PERMISSIONS.X`; vế ⑴ `timChamClient` (client thẳng/`?.`/`["client"]`, bí danh `biDanhClient` với che tên theo tham số hàm trong, truyền nguyên `ctx`); vế ⑵ `timHamGhiNgoaiQuyen` trên `bu`/`khiXong` (hàm gói theo `tenImportGoi`, bảng đóng `HAM_BU_THEO_MA_QUYEN` + `GOI_CUA_HAM_BU` được đo là export thật, SQL tay, hàm cục bộ); vế ⑶ `laVietTaiCho` (đối số là hàm/object literal; `viec`/`gui`/`bu`/`khiXong` là hàm tại chỗ, cho `undefined` và ba ngôi hai nhánh hợp lệ). Vế trên kho thật đòi 0 vi phạm, ≥ 1/≥ 3/≥ 1 chỗ theo loại, mỗi chỗ có bù mang `bu` và mã quyền đọc được, lô dưới `RFQ_OPEN`, có bù dưới `RFQ_INVITE`, có `khiXong`. Tệp route đọc từ `git ls-files -- apps/api/src/routes`, không test.
+- `apps/api/src/route-types.ts`: `BuyerContext.mfaTranDuongPhu: number | null` với docstring vì sao qua `ctx`; docstring `AfterCommit`, `ViecSauCommitCoBu`, `LoGuiSauCommit` gạch "không lớp nào canh (64a-7)" tại chỗ và trỏ cổng.
+- `apps/api/src/dispatch.ts`: ba dòng — điền `mfaTranDuongPhu` vào ngữ cảnh của handler từ `route.mfaTranDuongPhu` (route tự thân) hay `null`.
+- `apps/api/src/routes/auth.ts`: `/auth/agent-session` truyền `tranDuongPhu: ctx.mfaTranDuongPhu ?? undefined`; gạch câu S1.83 "cùng một hằng ở hai chỗ" tại chỗ; khối chú thích khoản 174.
+- `apps/api/src/routes.test.ts`: `vi.mock("@trustprocure/identity")` thay `verifyTotpForLogin`, `ROUTES` nạp động; khối `[S1.9101 / khoản 188]` hai vế ⑴ hành vi trên handler thật, ⑵ cây cú pháp `routes/**`.
+- `apps/api/src/auth.int.test.ts`: ⑼ và ⑽ thêm ở CUỐI khối khoản 141 (sau ⑻, không chạm ⑻); import thêm `THAN_429_MFA`.
+- `packages/identity/src/login.ts` (chỉ docstring `startAgentSession`), `packages/identity/src/mfa-credentials.ts` (chỉ khối cạnh `MFA_TRAN_SAI_DUONG_PHU`): hệ quả vận hành của khoản 174.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- 135 chọn ⒝ (cổng cú pháp) chứ không ⒜ (ngữ cảnh không `client`): closure bắt `ctx` theo phạm vi từ vựng của handler — đổi kiểu tham số của closure không đổi thứ nó nhìn thấy; ⒜ chỉ chặn được nếu handler nhận một `ctx` không có `client`, tức đổi chữ ký của MỌI handler. Cổng đọc theo tên và hình dạng, fail-closed: thứ không đọc xuyên qua được (truyền nguyên `ctx`, hàm cục bộ, SQL tay, `bu` qua biến, đối số qua biến) thì đỏ.
+- Bảng `HAM_BU_THEO_MA_QUYEN` là bảng ĐÓNG hai dòng đọc từ mã thật (`RFQ_OPEN`: `danhDauDaGui`, `revokeMagicLinkToken`; `RFQ_INVITE`: thêm `revokeInvitation`) — thêm dòng là một quyết định "mã quyền ấy có phủ lần ghi ấy không", có đối chứng rằng khoá là của `PERMISSIONS` và hàm là export thật.
+- Vế ⑶ (agent sau thêm): bản đầu bắt `{ bu }` viết tắt nhưng im với `bu: thuHoi` và `ctx.afterCommit(v)` — không nhất quán với chính nguyên tắc fail-closed của tệp; luật nay đòi viết tại chỗ cho cả bốn thuộc tính, và mã thật (`khiXong` ba ngôi ở `reissue`) vẫn xanh.
+- 188 chọn "bộ điều phối truyền vào `ctx`" chứ không thêm vế đọc cú pháp vào `timViPhamBangRoute`: rẻ hơn, và biến lời hứa thành dữ liệu — nguồn ngưỡng là một (bảng route); vế ⑵ của `routes.test.ts` giữ cho không handler nào nhập hằng trở lại. `null` trong `ctx` nghĩa là "route không khai" và `?? undefined` giữ nguyên chữ ký `verifyTotpForLogin` (không truyền ⇒ không vị từ), không đổi gói identity.
+- ⑼ đo tuần tự chứ không cùng lúc (lý do ở mục 3); vế "bộ điều phối điền từ bảng route" đo thẳng bằng hai route vọng, vì chuỗi agent-session một mình không phân biệt "điền null" với "điền đúng".
+- 174: ⑽ ghim QUAN HỆ (đủ ngưỡng ⇒ 429, không tiêu mã, đăng nhập đúng mở lại) chứ không ghim con số 2 — đổi hằng thì vế đi theo; thông điệp đỏ của ⒜ KHÔNG in thân phản hồi vì thân 200 mang token (bản đầu in `r.text`, đã bỏ trước commit).
+
+## 6. Đột biến
+Bảy đột biến ĐỎ, mọi đột biến đã hoàn tác (`anon.ts`, `buyer.ts` đối chiếu bằng `diff` với bản `HEAD`; `git status` chỉ còn tám tệp của lô):
+- M1 `anon.ts:117` `ctx.afterCommit(() => ctx.client.query('SELECT 1').then(…))` ⇒ cổng đỏ 1/14: *apps/api/src/routes/anon.ts:117 afterCommit (POST /guest/otp): closure chạm ctx.client* (đo hai lần: bản cổng đầu 1/12 và bản cuối 1/14).
+- M2 `anon.ts` `const c = ctx.client` rồi closure dùng `c` ⇒ đỏ *bí danh*.
+- M3 `buyer.ts:1178` `bu` gọi thêm `approveMfaReset` (import từ identity, ngoài `RFQ_INVITE`) ⇒ đỏ *bu gọi hàm gói approveMfaReset ngoài danh sách của mã quyền RFQ_INVITE*.
+- M4 `routes/auth.ts` trở lại `tranDuongPhu: MFA_TRAN_SAI_DUONG_PHU` ⇒ `routes.test.ts` 2 đỏ (⑴ *expected 2 to be 3*; ⑵ *['apps/api/src/routes/auth.ts:306']*), `auth.int` ⑼ đỏ *401,401,429; failed=2*.
+- M5 `dispatch.ts` điền `mfaTranDuongPhu: null` ⇒ ⑼ đỏ *ctx.mfaTranDuongPhu phải là ngưỡng route khai: expected { nguong: null } to deeply equal { nguong: 3 }*.
+- M6′ `/auth/agent-session` khai `mfaTranDuongPhu: null` ⇒ ⑽ đỏ *mã đúng vẫn phải 429 … expected 200 to be 429*. (M6 hằng 2 → 3: ⑽ xanh — không phải đột biến của bản vá, là đối chứng rằng vế ghim quan hệ.)
+- M7 `buyer.ts:1178` `const thuHoiNgoai = async (client) => {…}` rồi `bu: thuHoiNgoai` ⇒ đỏ *apps/api/src/routes/buyer.ts:1181 afterCommitCoBu (POST /rfqs/:rfqId/invitations): bu tham chiếu qua biến — phải viết TẠI CHỖ để cổng đọc được*.
+Cộng 14 hình dạng đỏ bằng văn bản mẫu trong chính tệp cổng (client thẳng/`?.`/`["client"]` ở ba loại việc; ba kiểu bí danh; tên ctx khác; truyền nguyên ctx; `createSupplier` ở `bu` và `khiXong`; bí danh import; route không mã quyền; mã quyền dạng chuỗi; SQL tay; hàm cục bộ; `{ bu }`; `bu:`/`viec:`/`gui:` qua biến; đối số qua biến) và 4 đối chứng âm (closure chỉ đọc `ctx.orgId`/`ctx.services`/`ctx.auditPool`; tham số `client` che bí danh; `revokeInvitation`+`danhDauDaGui` dưới `RFQ_INVITE`; `khiXong` ba ngôi).
+
+## 7. Giới hạn, nói ra
+- Cổng 135 đọc theo tên và hình dạng: mù với `ctx` qua `this`/`arguments`/`eval`, và với hàm gói gọi qua thuộc tính vật chủ hay namespace import (`import * as inv`, `inv.revokeInvitation(…)`) — vế ⑵ chỉ bắt thuộc tính tên `query`. Hôm nay `routes/**` không có namespace import từ `@trustprocure/*` (grep = 0) và năm chỗ thật gọi tên trần ⇒ khoản 9401. Vế ⑵ không kiểm `viec`/`gui` theo mã quyền (phần gửi gọi bộ gửi tiêm vào, không cầm `client`).
+- Cổng chỉ đọc `apps/api/src/routes/**` — chỗ đăng ký ở tệp khác của `apps/api` (hôm nay không có) không được đọc; phép đếm "ít nhất năm" là chống rỗng ruột, không phải bằng chứng đủ.
+- 188: `routes.test.ts` ⑴ đòi route khai ngưỡng thì thử mã QUA `verifyTotpForLogin` — một handler thử mã bằng đường khác sẽ đỏ, có chủ ý. ⑼ đo tuần tự; chiều cùng lúc của chính ngưỡng là vế ⑻ (khoản 184, S1.9141), không lặp ở đây.
+- 174: ⑽ mồi `failed_attempts` bằng `UPDATE` trực tiếp thay vì hai lần sai thật trên `/auth/totp` (rẻ và tất định; hai lần sai thật đã có ở ⑹–⑻); mã đúng lấy ở bước +1 vì `dangNhap` vừa tiêu bước hiện tại — vẫn trong cửa sổ ±1 của `verifyTotpCode`.
+- `auth.int.test.ts` chạy trên cây TRƯỚC khi thêm vế ⑶ (vế ⑶ chỉ chạm tệp cổng và một docstring của `route-types.ts`; typecheck lại xanh); `routes.test.ts` + `tests/architecture` chạy lại tại HEAD.
+- Lần chạy lại T1 tại HEAD đầu tiên thiếu hai biến `TRUSTPROCURE_PG_LOCAL_*` nên `qt3-cu-phap.int`/`qt3-ngu-phap.int` đỏ vì không có Postgres — lỗi của phép đo, chạy lại đúng biến (mục 8).
+
+## 8. Số đo
+- Đo trước (mã cũ): 188 — `routes.test.ts` khối mới 2/2 đỏ; `auth.int` ⑼ 1/1 đỏ (`401,401,429; failed=2`). 135 — cổng mới trên mã cũ: 0 vi phạm, 5 chỗ.
+- Bản vá xanh: `tests/architecture/viec-sau-commit.test.ts` 14/14 (~0,3 s); `apps/api/src/routes.test.ts` 21/21; `apps/api/src/auth.int.test.ts` 58/58 (37,3 s).
+- Đột biến: bảy đỏ (mục 6); M6 đối chứng xanh.
+- Cổng: `pnpm typecheck` exit 0 (16,8 s) ×2; `pnpm exec eslint <8 tệp>` exit 0; `pnpm exec depcruise apps/api tests --config .dependency-cruiser.cjs` — no dependency violations found (212 modules, 802 dependencies cruised); `pnpm vitest run apps/api/src/routes.test.ts tests/architecture` (biến PG) — 37 tệp xanh, 416 đạt, 1 bỏ qua (417; ca bỏ qua có sẵn ở `xuong-dong-ts.test.ts`), exit 0, 114 s — lần chạy đầu tại HEAD thiếu hai biến PG nên hai tệp `qt3-*.int` đỏ vì Testcontainers tìm Docker, đã chạy lại đúng biến.
 
 # §S1.9111 — LÔ 11 HARDENING A: `NGOAI_LE_DOC_VONG` KHAI CÓ KHOÁ, SECURITY DEFINER THEO CHỮ KÝ, VAI CHỦ HÀM ĐƯỢC CANH — KHOẢN 112, 163, 164 ĐÓNG
 
