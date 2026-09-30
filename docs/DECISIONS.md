@@ -8676,8 +8676,8 @@ sau mỗi lần nộp trên máy dùng chung.
    riêng (`POST /invitations/:invitationId/unlock`).
    **[S1.188 / ADR-113]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
    lần gửi lại đi được; lời mời đã `SENT` không đổi.
-5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; câu báo sau khi thu hồi nói thẳng báo giá đã
-   nộp theo lời mời ấy vẫn nằm trong gói thầu, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
+5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
+   nộp theo lời mời ấy vẫn nằm trong gói thầu~~ **[S1.9130 / ADR-9230]** thu hồi nay LOẠI báo giá ấy khỏi cuộc thi và bị chặn sau lần mở thầu — câu báo của trang sửa ở khoản 9450, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
    thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
 6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
    `UPDATE (revoked_at, consumed_at)` trên token (`010`), và UPDATE theo cột trên `rfq_invitations` (`010`, `013`) — đủ cho
@@ -8708,8 +8708,8 @@ sau mỗi lần nộp trên máy dùng chung.
 - **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá. **[lượt soi]** Và trần xin OTP
   theo (lời mời, đích) (khoản nợ 35) không gắn với token: ba lần xin OTP bằng link cũ trong cửa sổ 900 s thì link mới cũng nhận
   429 tới hết cửa sổ ấy (đo: `[200, 200, 200, 429]` rồi link mới 429).
-- **Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu** — khoản 250; vòng này đóng đường KHIẾN người mua
-  phải làm thế, không đổi ngữ nghĩa của thu hồi.
+- ~~**Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu**~~ **[S1.9130 / ADR-9230]** thu hồi rồi mời lại vẫn là luồng thứ hai, nhưng báo giá cũ KHÔNG còn dự thầu — khoản 250 đóng; vòng này đóng đường KHIẾN người mua
+  phải làm thế, ~~không đổi ngữ nghĩa của thu hồi~~ ngữ nghĩa của thu hồi đổi ở ADR-9230.
 - **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
 - **Lệch phiên bản**: `/tao-thau` mới gặp API cũ ⇒ 404, nút báo lỗi.
 
@@ -9718,3 +9718,39 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 - Hai mã từ chối mới `KHONG_PHAI_NGUOI_DE_XUAT`, `DE_XUAT_DA_CO_CHU_KY` vào sổ `RFQ_STATE_DENIED` (ADR-060); hàng sổ mới `RFQ_AWARD_WITHDRAWN`.
 - Bản ghim `award_kiem_mot_award_song` ở hardening là bản `9583`; đổi thân là đổi bản ghim cùng commit.
 - Nút «Rút đề xuất» là lớp hiển thị; luật ở trigger. Trang hiện nút theo `status`/`approvals` đọc từ máy chủ, không theo người.
+
+## ADR-9230 — Thu hồi lời mời LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm; sau lần mở thầu đầu tiên, lời mời không thu hồi được nữa
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (đề bài lô B5) · **[S1.9130]** · **Khoản nợ liên quan:** 250 (đóng), 9440, 9450 (mở ở vòng này) · **Liên quan:** ADR-110 (gửi lại link cho chính lời mời — đường quay lại khi mất phiên; ⑸ và một dòng Hệ quả gạch ở vòng này), ADR-060 và ADR-084 ⑸ (lớp `RFQ_STATE_DENIED`), ADR-114 (K4a — thu hồi ngoài DRAFT ở tổ chức bật S3), `018` (`vendor_bids` duy nhất theo lời mời), `024` (một lời mời còn sống mỗi nhà cung cấp), `019` (quyền cột của `app_unseal`), §S1.108 mục 7d (ba bộ đọc, một luật), spec S3 (S3.6c chờ quyết định này) · **Biên bản:** `evidence/security-reviews.md` §S1.9130
+
+### Bối cảnh
+
+`vendor_bids` là duy nhất theo lời mời (`018`), nên thu hồi rồi mời lại cùng nhà cung cấp là hai lời mời và hai luồng báo giá. Ba bộ đọc phong bì/bản rõ — worker mở thầu, `buildComparisonTable`, `docBaoGia` — chia một luật từ §S1.108 mục 7d (*phiên bản lớn nhất của mỗi luồng*) mà không bộ nào hỏi lời mời của luồng còn sống không. Lượt soi đối kháng §S1.181 đo trên worker thật: X nộp 900 triệu, bên mua thu hồi rồi mời lại, X nộp 1 tỷ ⇒ `opened = 4`, bảng so sánh X hai dòng, xếp hạng X hạng 1 bằng giá cũ (khoản 250). ADR-110 đóng đường KHIẾN bên mua phải thu hồi (gửi lại link cho chính lời mời), và ghi rõ nó *không đổi ngữ nghĩa của thu hồi* — câu hỏi để lại cho một ADR: thu hồi có loại báo giá đã nộp không. Spec S3 ghi S3.6c phải chờ câu trả lời ấy.
+
+### Quyết định
+
+1. **Thu hồi lời mời là quyết định LOẠI nhà cung cấp ấy khỏi cuộc thi.** Báo giá đã nộp theo lời mời bị thu hồi không được mở thầu, không vào bảng so sánh, không vào lượt chấm. Mời lại sau thu hồi là luồng duy nhất còn dự thầu. Dữ liệu không đổi: `vendor_bids`, `vendor_bid_versions`, `rfq_unsealed_bids` giữ nguyên (bảng chỉ-ghi-thêm là một câu hỏi kiểm toán thật); lọc ở lần ĐỌC.
+2. **Một vế, ba chỗ, một cổng.** Vế `i.revoked_at IS NULL` trên `rfq_invitations i` chép NGUYÊN VĂN vào ba câu chọn phong bì/bản rõ (bốn câu SQL: worker; câu hàng và CTE `moi_nhat` của bảng so sánh; `docBaoGia`). Không gói chung nào đứng dưới cả ba (`unseal`, `danh-gia` chỉ phụ thuộc `audit`/`identity`; thêm phụ thuộc workspace là đổi `pnpm-lock.yaml`; hằng TypeScript nội suy vào SQL làm bộ đọc QT3 mù ở đúng vế ấy; hàm/view SQL là một migration có thân). Cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi mọi câu SQL sản xuất vừa nối `public.rfq_invitations i` vừa khử trùng theo `v.bid_id` (`DISTINCT ON (v.bid_id)` hay `PARTITION BY v.bid_id`) mang đúng MỘT vế ấy, và đối chứng dương ghim đúng bốn câu ở đúng ba tệp. Câu đọc `rfq_evaluation_lines` (bảng xếp hạng, bộ bằng chứng — đọc thứ lượt chấm ĐÃ ghi), `auditStoredCiphertexts` (kiểm mọi phong bì đã lưu) và `countReceivedBids` KHÔNG khử trùng theo luồng nên ngoài phạm vi có chủ đích. `opened` của lượt mở thầu đếm SAU lọc.
+3. **Sau lần mở thầu đầu tiên, thu hồi bị CHẶN.** Từ cạnh `CLOSED → UNSEALED` của `RFQ_TRANSITIONS` và mọi trạng thái đi tới từ đó — `UNSEALED`, `EVALUATING`, `BAFO_OPEN`, `BAFO_CLOSED`, `BAFO_UNSEALED`, `AWARDED` (`RFQ_STATUSES_AFTER_UNSEAL`, viết cứng ở `packages/invitation` vì gói không phụ thuộc `rfq`; test suy tập từ máy trạng thái và so) — `revokeInvitation` từ chối. Lý do: nếu thu hồi còn được sau khi phong bì đã mở, một người đã thấy giá chọn được ai rời cuộc thi bằng một lần bấm không đi qua bước nào của chuỗi *chọn NCC → mở thầu → chấm → award*. `CANCELLED` KHÔNG thuộc tập: tới được cả trước lẫn sau lần mở, không bộ đọc nào đọc phong bì của gói đã huỷ, thu hồi ở đó vẫn là quyền đóng phiên khách (C3) của bên mua.
+4. **Lời từ chối vào sổ đúng lớp ADR-060/ADR-084 ⑸:** `RFQ_STATE_DENIED` — người dùng cố đi một bước sai thứ tự chuỗi — một hàng ở giao dịch độc lập qua `throwAuditedDenial` (`RFQ`, id gói, payload chỉ mã `{ ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }`), rồi `InvitationError` câu cố định ⇒ 422 qua HTTP. Trạng thái đọc TRƯỚC câu ghi, trong cùng câu đọc gói của khoản 255; không cột nào của lời mời, token, phiên khách đổi; không hàng `INVITATION_REVOKED`; lời mời không tồn tại vẫn `false`, không sổ (ADR-104/108). Mỗi lần cố là một hàng, không gộp. K4a (ADR-114) ở tổ chức bật S3 vẫn là lớp có thẩm quyền và chặn sớm hơn (ngoài DRAFT): hai lớp không giẫm nhau.
+5. **Một GRANT không tránh được:** `9530_app_unseal_doc_thu_hoi_loi_moi` cấp `app_unseal` `SELECT (revoked_at)` trên `rfq_invitations` — `019` cấp vai ấy đúng ba cột và không cột nào nó đọc được mang dấu thu hồi (đo: `permission denied for table rfq_invitations`). `status`, `supplier_id`, `contact_id`, `link_channel` vẫn không cấp. Không hàm, không trigger, không policy; hardening không có gì để ghim.
+
+### Phương án bị loại
+
+- **Không loại — gộp hai luồng hay chặn mời lại khi đã có báo giá** (phân loại C ghi hai lối). Loại: gộp luồng phá `018` và định danh luồng theo lời mời mà mọi biên nhận đã ký; chặn mời lại giữ nguyên lỗ của §S1.181 (link bị lộ, báo giá do người khác nộp vẫn dự thầu) — đúng ca mà bên mua cần thu hồi nhất.
+- **Loại nhưng vẫn cho thu hồi sau lần mở.** Loại: đó là quyền chọn người thắng bằng cách loại người thua sau khi thấy giá.
+- **Chặn cả `CANCELLED`.** Loại: gói đã huỷ không có cuộc thi để mà loại ai; thu hồi ở đó chỉ còn nghĩa đóng phiên khách.
+- **Một nguồn dùng chung bằng hằng/gói/hàm SQL** thay cho cổng tĩnh — lý do ở quyết định 2.
+- **Lọc ở worker bằng `status <> 'REVOKED'`** để tránh GRANT. Loại: `app_unseal` cũng không đọc được `status`, và ba chỗ sẽ không còn cùng một vế.
+
+### Hệ quả, nói thẳng
+
+- **`revokeInvitation` có thêm một nhánh ném** (`InvitationError`) và một câu `JOIN` ở lần đọc trước câu ghi; route thu hồi trả 422 thân cố định ở sáu trạng thái. Đường bù `LINK_SEND_FAILED` đi qua cùng cửa: ở tổ chức chưa bật S3, một lời mời tạo ở gói đã mở mà link gửi hỏng ⇒ phần bù 500 kèm `invitationId` (hợp đồng khoản 124), lời mời còn sống — chưa có đường HTTP nào tạo được lời mời như thế trong lô này.
+- **ADR-110 ⑸ và câu báo sau thu hồi của `/tao-thau`** (*"báo giá đã nộp … vẫn nằm trong gói thầu"*) nay sai; nút *Thu hồi* ở tổ chức chưa bật hiện ở mọi trạng thái. Khoản 9450; ADR-110 gạch tại chỗ.
+- **`countReceivedBids`** vẫn đếm luồng của lời mời đã thu hồi — khoản 9440.
+- **Bản rõ của lượt mở TRƯỚC vòng này** thuộc lời mời bị thu hồi trước lần mở: bảng so sánh và lượt chấm bỏ chúng từ nay; CSDL không đổi.
+- **S3.6c** hết chờ: ngữ nghĩa thu hồi đã chốt.
+
+### Đo
+
+`apps/unseal-worker/src/unseal-worker.int.test.ts` (kịch bản §S1.181 trên worker thật, cùng giàn cảnh cho ba bộ đọc; chặn sau lần mở; đối chứng CLOSED), `packages/unseal/src/comparison.int.test.ts`, `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/invitation/src/invitation.int.test.ts`, `apps/api/src/buyer.int.test.ts`, `tests/architecture/phong-bi-loi-moi-con-song.test.ts`. Đột biến: §S1.9130 mục 6.
