@@ -12,6 +12,7 @@ import {
   baoSauKhiMo,
   baoSauKhiMoi,
   hangNganSach,
+  hienCotHangChuan,
   hienTraVe,
   loiLyDo,
   nhanAnhXa,
@@ -181,5 +182,14 @@ describe("[S1.9101 / S4.3b] cột hàng chuẩn của bảng hạng mục", () =
     expect(nhanAnhXa({ trangThai: "CHO_DUYET", hangChuan: null, lyDo: null })).toBe("Chờ người quản lý dữ liệu duyệt");
     expect(nhanAnhXa({ trangThai: "CHUA_CHUAN_HOA", hangChuan: null, lyDo: null })).toBe("Chưa chuẩn hoá");
     expect(nhanAnhXa({ trangThai: "LA", hangChuan: null, lyDo: null })).toBe("—");
+  });
+});
+
+describe("[S1.9101 / lượt soi S4.3b, L3] cột hàng chuẩn chỉ hiện khi nó nói được điều gì", () => {
+  it("tổ chức có hàng chuẩn đang dùng ⇒ hiện; chưa có mà mọi dòng chưa chuẩn hoá ⇒ ẩn; còn ánh xạ cũ ⇒ hiện; thân lạ ⇒ ẩn", () => {
+    expect(hienCotHangChuan({ coHangChuan: true, dong: [] })).toBe(true);
+    expect(hienCotHangChuan({ coHangChuan: false, dong: [{ trangThai: "CHUA_CHUAN_HOA" }, { trangThai: "CHUA_CHUAN_HOA" }] })).toBe(false);
+    expect(hienCotHangChuan({ coHangChuan: false, dong: [{ trangThai: "CHUA_CHUAN_HOA" }, { trangThai: "NGUOI_DUYET" }] })).toBe(true);
+    for (const la of [undefined, null, {}, { coHangChuan: "true" }, { dong: "x" }]) expect(hienCotHangChuan(la), JSON.stringify(la)).toBe(false);
   });
 });

@@ -18,7 +18,11 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 chuẩn đang dùng (spec §2.3 — tổ chức chưa khai gì chạy đúng hành vi hôm nay); năm route, hai route đọc `agent: false` (ánh xạ là khoá
 của lịch sử giá S4.4); không mở E6; màn hai nơi; `gieo:demo` có một dòng chờ duyệt, dòng PRODUCT §5 chỉ nói phần đã có mã. Bộ điều
 phối có kiểu việc sau commit thứ tư, `afterCommitGiaoDich`: giao dịch MỚI của cùng tổ chức, chỉ khi phản hồi thành công, hỏng thì một
-dòng log và phản hồi giữ nguyên. Route nộp duyệt đăng ký `chuanHoaSauNop` dưới phiên người nộp. `routes/anh-xa.ts`: `GET /mapping-queue`,
+dòng log và phản hồi giữ nguyên; chỉ route ghi đăng ký được; trong giao dịch của việc, chờ khoá ≤ 2 s và mỗi câu ≤ 5 s. Route nộp
+duyệt hỏi *tổ chức có hàng chuẩn đang dùng* trong giao dịch của lần nộp và chỉ khi có mới đăng ký `chuanHoaGoi` dưới phiên người nộp.
+Lượt soi đối kháng: 2 TRUNG, 5 THẤP, một nhóm thông tin — sửa trong vòng (trần của việc, ca route thật với khoá bị giữ, hàng ngừng
+dùng, khoá lạc quan bằng băm dòng, điều kiện trong giao dịch chính và cột ẩn ở tổ chức MVP1, ca tập loại trừ qua HTTP, luật một phản
+hồi cuối của bộ điều phối); hàng đợi là đường liệt kê đầu tiên của tổ chức — nhận, ADR nói ra. `routes/anh-xa.ts`: `GET /mapping-queue`,
 `GET /rfqs/:rfqId/mappings`, ba route ghi khai `item.manage` (duyệt/bác, tạo hàng chuẩn mới rồi duyệt, chuẩn hoá lại). Màn `/du-lieu`
 bước 6 hàng đợi; `/tao-thau` cột *Hàng chuẩn* chỉ đọc. Lượt đi thử T4 trên Chromium: năm khẳng định đạt. Không migration, không bất
 biến mới; L3 thêm phép đo tầng ứng dụng. Biên bản: `evidence/security-reviews.md` §S1.9101.

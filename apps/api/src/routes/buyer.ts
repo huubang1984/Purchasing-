@@ -26,7 +26,7 @@ import {
   type LuotDanhGia,
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
-import { chuanHoaSauNop } from "@trustprocure/du-lieu-nen";
+import { chuanHoaGoi, coHangChuanDangDung } from "@trustprocure/du-lieu-nen";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import {
   clearOtpLockout,
@@ -1031,10 +1031,14 @@ const ghi: readonly BuyerWriteRoute[] = [
       const rfqId = rfqIdParam(ctx.req);
       const rfq = await submitRfqForApproval(ctx.client, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId }, ctx.auditPool);
       // [S1.9101 / S4.3b / ADR-9201] Lượt chuẩn hoá chạy SAU commit, giao dịch riêng, dưới phiên người nộp (spec S4 §4.4): hỏng thì
-      // lần nộp vẫn đứng, người quản lý dữ liệu bấm *chuẩn hoá lại*. Tổ chức chưa có hàng chuẩn đang dùng thì nó không ghi gì.
-      ctx.afterCommitGiaoDich(async (c) => {
-        await chuanHoaSauNop(c, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId });
-      });
+      // lần nộp vẫn đứng, người quản lý dữ liệu bấm *chuẩn hoá lại*. [lượt soi L3] Điều kiện *tổ chức có hàng chuẩn đang dùng* hỏi
+      // NGAY ĐÂY, trong giao dịch của lần nộp: tổ chức MVP1 không đăng ký việc nào — không thêm kết nối, giao dịch hay dòng log. Hàng
+      // cuối cùng ngừng dùng giữa lúc hỏi và lúc chạy thì lượt chạy với tập ứng viên rỗng: gợi ý `CAN_DUYET` không ứng viên, vô hại.
+      if (await coHangChuanDangDung(ctx.client, ctx.orgId)) {
+        ctx.afterCommitGiaoDich(async (c) => {
+          await chuanHoaGoi(c, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId });
+        });
+      }
       return { status: 200, body: { rfq } };
     },
   },

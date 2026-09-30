@@ -8,12 +8,14 @@
 // commit, dưới phiên người nộp (`buyer.ts`); route `normalize` ở đây là nút *chuẩn hoá lại* của người quản lý dữ liệu, kể cả hồi tố.
 //
 // ĐỌC: mọi người mua của tổ chức, không mã quyền — khuôn S4.2b: mô tả, đơn vị, số lượng người mua đã viết, không giá. Cả hai
-// `agent: false` (chủ dự án chốt 2026-09-30; `apps/mcp/src/cong-cu.ts` khai vì sao).
+// `agent: false` (chủ dự án chốt 2026-09-30; `apps/mcp/src/cong-cu.ts` khai vì sao). [lượt soi L2] Hàng đợi là đường LIỆT KÊ đầu tiên
+// của tổ chức: mọi người mua thấy id, tên và dòng của mọi gói đã nộp còn dòng chờ — ADR-9201 ③ nói ra và vì sao nhận.
 //
 // KHÔNG ĐỌC QUERY (E6): hàng đợi trả tối đa 500 dòng cùng cờ `conNua`, màn lọc trên danh sách ấy.
 // ==============================================================================================
 import {
   chuanHoaGoi,
+  coHangChuanDangDung,
   docAnhXaGoi,
   docHangDoi,
   ghiAnhXa,
@@ -52,6 +54,13 @@ function hangChuanIdBatBuoc(body: unknown): string | null {
   const v = truong(body, "hangChuanId");
   if (v === null) return null;
   if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpError(422, 'trường "hangChuanId" phải là UUID hoặc null');
+  return v;
+}
+/** [lượt soi L4] Băm (hex) của dòng mà người duyệt đã thấy ở hàng đợi — vắng hay `null` là không so. */
+function bamTuyChon(body: unknown): string | null {
+  const v = truong(body, "bam");
+  if (v === undefined || v === null) return null;
+  if (typeof v !== "string" || !/^[0-9a-f]{64}$/u.test(v)) throw new HttpError(422, 'trường "bam" phải là 64 chữ số hex');
   return v;
 }
 function thuocTinhTuyChon(body: unknown): Readonly<Record<string, string>> | undefined {
@@ -98,7 +107,11 @@ const doc: readonly BuyerReadRoute[] = [
     handler: async (ctx) => {
       const rfqId = rfqIdParam(ctx.req);
       if ((await getRfq(ctx.client, ctx.orgId, rfqId)) === null) throw new HttpError(404, "khong co goi thau");
-      return { status: 200, body: { dong: await docAnhXaGoi(ctx.client, ctx.orgId, rfqId) } };
+      // [lượt soi L3] `coHangChuan`: màn ẩn cột *Hàng chuẩn* ở tổ chức chưa khai hàng nào (spec §2.3).
+      return {
+        status: 200,
+        body: { dong: await docAnhXaGoi(ctx.client, ctx.orgId, rfqId), coHangChuan: await coHangChuanDangDung(ctx.client, ctx.orgId) },
+      };
     },
   },
 ];
@@ -136,6 +149,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         hangChuanId: hangChuanIdBatBuoc(ctx.req.body),
         lyDo: lyDoTuyChon(ctx.req.body),
         taoBiDanh: taoBiDanhTuyChon(ctx.req.body),
+        bamMongDoi: bamTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { seq } };
@@ -162,6 +176,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         },
         lyDo: lyDoTuyChon(ctx.req.body),
         taoBiDanh: taoBiDanhTuyChon(ctx.req.body),
+        bamMongDoi: bamTuyChon(ctx.req.body),
         actorSessionId: ctx.actor.sessionId,
       });
       return { status: 201, body: { hangChuanId, seq } };

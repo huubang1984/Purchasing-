@@ -507,34 +507,49 @@ async function ghiDong(duoi, than, maOk, cauOk) {
 
 const lyDoNhap = () => { const v = $("xl-ly-do").value.trim(); return v === "" ? null : v; };
 
+/**
+ * [lượt soi S4.3b, L4] Bốn nút của khối xử lý khoá CÙNG NHAU: `motLan` chỉ khoá nút được bấm, nên *Duyệt* và *Bác* bay song song được
+ * cho cùng một dòng — hai hàng ánh xạ, hàng sau đè hàng trước.
+ */
+const NUT_XU_LY = ["nut-duyet", "nut-bac", "nut-tao-duyet", "nut-chuan-hoa-lai"];
+function motLanKhoi(viec) {
+  return async () => {
+    const nut = NUT_XU_LY.map((id) => $(id));
+    if (nut.some((n) => n.disabled)) return;
+    for (const n of nut) n.disabled = true;
+    try { await viec(); } finally { for (const n of nut) n.disabled = false; }
+  };
+}
+
 $("loc-hd").addEventListener("input", veHangDoi);
 $("nut-doc-hd").addEventListener("click", () => { void napHangDoi(); });
 
-$("nut-duyet").addEventListener("click", motLan($("nut-duyet"), async () => {
+$("nut-duyet").addEventListener("click", motLanKhoi(async () => {
   const hangChuanId = $("xl-hang").value;
   if (dangXuLy !== null && hangChuanId === "") { bao($("loi6"), "Chọn một hàng chuẩn, hoặc tạo hàng mới ở dưới."); return; }
   const d = dangXuLy;
-  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId, lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked },
+  // [lượt soi L4] `bam`: băm của dòng mà người duyệt đang thấy — dòng đổi giữa chừng thì máy chủ trả `DONG_DA_DOI`.
+  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId, lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam },
     201, `Đã duyệt dòng ${d?.lineNo} của gói «${d?.tieuDe}».`);
 }));
 
-$("nut-bac").addEventListener("click", motLan($("nut-bac"), async () => {
+$("nut-bac").addEventListener("click", motLanKhoi(async () => {
   const d = dangXuLy;
-  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId: null, lyDo: lyDoNhap() }, 201,
+  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId: null, lyDo: lyDoNhap(), bam: d?.bam }, 201,
     `Đã ghi dòng ${d?.lineNo} của gói «${d?.tieuDe}»: không có hàng chuẩn tương ứng.`);
 }));
 
-$("nut-tao-duyet").addEventListener("click", motLan($("nut-tao-duyet"), async () => {
+$("nut-tao-duyet").addEventListener("click", motLanKhoi(async () => {
   const ma = $("xl-ma").value.trim();
   if (!maHopLe(ma)) { bao($("loi6"), "Mã viết hoa, bắt đầu bằng chữ hoặc số, chỉ chữ, số, dấu chấm, gạch ngang, gạch dưới — tối đa 40 ký tự."); return; }
   const d = dangXuLy;
   const ok = await ghiDong(`items/${d?.lineNo}/mapping/new-item`, {
-    ma, ten: $("xl-ten").value.trim(), donViGoc: $("xl-don-vi").value.trim(), lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked,
+    ma, ten: $("xl-ten").value.trim(), donViGoc: $("xl-don-vi").value.trim(), lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam,
   }, 201, `Đã tạo ${ma} và duyệt dòng ${d?.lineNo} sang nó.`);
   if (ok) await napHangChuan();
 }));
 
-$("nut-chuan-hoa-lai").addEventListener("click", motLan($("nut-chuan-hoa-lai"), async () => {
+$("nut-chuan-hoa-lai").addEventListener("click", motLanKhoi(async () => {
   bao($("loi6"), ""); bao($("ok6"), "");
   if (dangXuLy === null) { bao($("loi6"), "Chưa mở dòng nào."); return; }
   const d = dangXuLy;

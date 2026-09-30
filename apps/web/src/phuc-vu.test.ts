@@ -1165,16 +1165,25 @@ describe("bề mặt tệp", () => {
     };
 
     it("[S1.9101 / S4.3b] tao-thau: gói đã nộp ⇒ đọc trạng thái ánh xạ và vẽ cột hàng chuẩn; gói còn soạn ⇒ không đọc", async () => {
-      const MOT_DONG = (l: string) =>
+      const MOT_DONG = (coHangChuan: boolean, trangThai: string) => (l: string) =>
         l === "GET /rfqs/r-1/items" ? Promise.resolve({ status: 200, body: { items: [{ lineNo: 1, description: "Thép D10", quantity: "10", unit: "kg" }] } })
-        : l === "GET /rfqs/r-1/mappings" ? Promise.resolve({ status: 200, body: { dong: [{ lineNo: 1, trangThai: "TU_DONG", hangChuan: { id: "h-10", ma: "THEP-D10" }, lyDo: null }] } })
+        : l === "GET /rfqs/r-1/mappings"
+          ? Promise.resolve({ status: 200, body: { dong: [{ lineNo: 1, trangThai, hangChuan: trangThai === "TU_DONG" ? { id: "h-10", ma: "THEP-D10" } : null, lyDo: null }], coHangChuan } })
         : undefined;
-      const nop = await moTaoThau(false, "PENDING_APPROVAL", MOT_DONG);
+      const oDong = (p: Awaited<ReturnType<typeof moTaoThau>>["p"]) => p.el("bang-hm").querySelector("tbody").con[0]?.con.map((o) => o.textContent);
+      const nop = await moTaoThau(false, "PENDING_APPROVAL", MOT_DONG(true, "TU_DONG"));
       expect(nop.p.trangThai.goi).toContain("GET /rfqs/r-1/mappings");
-      expect(nop.p.el("bang-hm").querySelector("tbody").con[0]?.con.map((o) => o.textContent)).toEqual(["1", "Thép D10", "10", "kg", "Tự động — THEP-D10"]);
-      const soan = await moTaoThau(false, "DRAFT", MOT_DONG);
+      expect(oDong(nop.p)).toEqual(["1", "Thép D10", "10", "kg", "Tự động — THEP-D10"]);
+      expect(nop.p.el("th-hang-chuan").hidden).toBe(false);
+      const soan = await moTaoThau(false, "DRAFT", MOT_DONG(true, "TU_DONG"));
       expect(soan.p.trangThai.goi).not.toContain("GET /rfqs/r-1/mappings");
-      expect(soan.p.el("bang-hm").querySelector("tbody").con[0]?.con.at(-1)?.textContent).toBe("—");
+      expect(oDong(soan.p), "gói còn soạn: bảng bốn cột của hôm nay").toEqual(["1", "Thép D10", "10", "kg"]);
+      expect(soan.p.el("th-hang-chuan").hidden).toBe(true);
+      // [lượt soi L3] Tổ chức chưa khai hàng chuẩn nào: đọc, nhưng cột không hiện (spec §2.3).
+      const mvp1 = await moTaoThau(false, "PENDING_APPROVAL", MOT_DONG(false, "CHUA_CHUAN_HOA"));
+      expect(mvp1.p.trangThai.goi).toContain("GET /rfqs/r-1/mappings");
+      expect(oDong(mvp1.p)).toEqual(["1", "Thép D10", "10", "kg"]);
+      expect(mvp1.p.el("th-hang-chuan").hidden).toBe(true);
     });
 
     // ~~lớp `moi-truoc`~~ [S1.193 / S3.2c2] Bước mời dời THẬT trong DOM, không bằng CSS `order`: phím Tab và trình đọc màn
@@ -1362,7 +1371,7 @@ describe("bề mặt tệp", () => {
     const HANG_DOI = {
       dong: [
         {
-          rfqId: "r-9", tieuDe: "Mua thep", lineNo: 2, moTa: "Thép vằn D12", donVi: "kg", soLuong: "10.0000",
+          rfqId: "r-9", tieuDe: "Mua thep", lineNo: 2, moTa: "Thép vằn D12", donVi: "kg", soLuong: "10.0000", bam: "ab".repeat(32),
           goiY: { ketQua: "GOI_Y", doTinCay: "0.9400", phienBan: 1, ungVien: [{ hangChuanId: "h-12", ma: "THEP-D12", diem: 0.94 }], tacGia: "Tran Nguoi Mua" },
         },
       ],
@@ -1390,11 +1399,13 @@ describe("bề mặt tệp", () => {
       const bam = p.el("nut-duyet").nghe["click"]?.[0];
       const lan1 = bam?.();
       const lan2 = bam?.();
+      // [lượt soi L4] Nút khác của khối cũng khoá trong lúc lần duyệt còn bay: bác không gửi được song song.
+      const lanBac = p.el("nut-bac").nghe["click"]?.[0]?.();
       tha();
-      await Promise.all([lan1, lan2]);
+      await Promise.all([lan1, lan2, lanBac]);
       await cho();
       const gui = p.trangThai.than.filter((t) => t.lenh === "POST /rfqs/r-9/items/2/mapping");
-      expect(gui).toEqual([{ lenh: "POST /rfqs/r-9/items/2/mapping", than: { hangChuanId: "h-12", lyDo: null, taoBiDanh: true } }]);
+      expect(gui).toEqual([{ lenh: "POST /rfqs/r-9/items/2/mapping", than: { hangChuanId: "h-12", lyDo: null, taoBiDanh: true, bam: "ab".repeat(32) } }]);
       expect(p.el("khoi-xu-ly").hidden).toBe(true);
       expect(p.el("ok6").textContent).toMatch(/Đã duyệt dòng 2/u);
       expect(p.trangThai.goi.filter((g) => g === "GET /mapping-queue")).toHaveLength(2);
@@ -1417,8 +1428,8 @@ describe("bề mặt tệp", () => {
       p.el("xl-ly-do").value = "hang nhap khau";
       await p.bam("nut-bac");
       expect(p.trangThai.than.filter((t) => t.lenh === "POST /rfqs/r-9/items/2/mapping").map((t) => t.than)).toEqual([
-        { hangChuanId: null, lyDo: null },
-        { hangChuanId: null, lyDo: "hang nhap khau" },
+        { hangChuanId: null, lyDo: null, bam: "ab".repeat(32) },
+        { hangChuanId: null, lyDo: "hang nhap khau", bam: "ab".repeat(32) },
       ]);
       expect(p.el("ok6").textContent).toMatch(/không có hàng chuẩn tương ứng/u);
       await nutXuLy(p)?.nghe["click"]?.[0]?.();

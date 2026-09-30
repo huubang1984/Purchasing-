@@ -109,7 +109,11 @@ interface DongGoi {
   readonly tac_gia_bi_danh: string | null;
 }
 
-/** Mọi dòng của gói: chuỗi đã sạch, đã có ánh xạ hiệu lực chưa, bí danh còn hiệu lực (nếu có) trỏ về hàng nào. */
+/**
+ * Mọi dòng của gói: chuỗi đã sạch, đã có ánh xạ hiệu lực chưa, bí danh còn hiệu lực (nếu có) trỏ về hàng nào.
+ * [S1.9101 / lượt soi S4.3b, L1] Bí danh trỏ về hàng đã NGỪNG DÙNG không tự nối: dòng ấy đi đường gợi ý, như tập ứng viên của lõi
+ * (chỉ hàng đang dùng). CSDL không chặn ánh xạ sang hàng ngừng dùng — lớp chặn ở đây và ở `ghiAnhXa`.
+ */
 async function docDongGoi(client: pg.PoolClient, orgId: string, rfqId: string): Promise<DongGoi[]> {
   const { rows } = await client.query<DongGoi>(
     "SELECT i.line_no, public.chuoi_sach(i.description) AS sach, " +
@@ -118,7 +122,10 @@ async function docDongGoi(client: pg.PoolClient, orgId: string, rfqId: string): 
       "AND m.hang_muc_bam OPERATOR(pg_catalog.=) public.rfq_hang_muc_bam(i.org_id, i.rfq_id, i.line_no)) AS da_co, " +
       "a.hang_bi_danh, a.tac_gia_bi_danh " +
       "FROM public.rfq_items i LEFT JOIN LATERAL (" +
-      "SELECT CASE WHEN a.rut THEN NULL ELSE a.canonical_item_id END AS hang_bi_danh, a.tac_gia AS tac_gia_bi_danh " +
+      "SELECT CASE WHEN a.rut OR (SELECT v.trang_thai FROM public.canonical_item_versions v " +
+      "WHERE v.org_id OPERATOR(pg_catalog.=) a.org_id AND v.canonical_item_id OPERATOR(pg_catalog.=) a.canonical_item_id " +
+      "ORDER BY v.seq DESC LIMIT 1) IS DISTINCT FROM 'DANG_DUNG' THEN NULL ELSE a.canonical_item_id END AS hang_bi_danh, " +
+      "a.tac_gia AS tac_gia_bi_danh " +
       "FROM public.item_aliases a WHERE a.org_id OPERATOR(pg_catalog.=) i.org_id " +
       "AND a.bi_danh_sach OPERATOR(pg_catalog.=) public.chuoi_sach(i.description) ORDER BY a.seq DESC LIMIT 1) a ON true " +
       "WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
@@ -261,9 +268,11 @@ export async function chuanHoaGoi(
 }
 
 /**
- * [S1.9101 / S4.3b / ADR-9201] Lượt chuẩn hoá SAU lần nộp duyệt (spec §4.4) — route nộp duyệt đăng ký nó chạy sau commit, trong một
- * giao dịch riêng, dưới phiên người nộp. Chỉ chạy ở tổ chức có ít nhất MỘT hàng chuẩn đang dùng: tổ chức chưa khai gì chạy đúng hành vi
- * hôm nay (spec §2.3) — không hàng gợi ý, không hàng sổ, và cụm test MVP1 xanh nguyên văn. Trả `null` khi không chạy.
+ * [S1.9101 / S4.3b / ADR-9201] Lượt chuẩn hoá SAU lần nộp duyệt (spec §4.4), điều kiện và lượt trong MỘT giao dịch — đường của
+ * `gieo:demo`. ~~Route nộp duyệt đăng ký nó chạy sau commit~~ [lượt soi L3] Route nộp duyệt tách hai nửa: hỏi `coHangChuanDangDung`
+ * trong giao dịch của lần nộp, và chỉ khi có mới đăng ký `chuanHoaGoi` chạy sau commit. Chỉ chạy ở tổ chức có ít nhất MỘT hàng chuẩn
+ * đang dùng: tổ chức chưa khai gì chạy đúng hành vi hôm nay (spec §2.3) — không hàng gợi ý, không hàng sổ, và cụm test MVP1 xanh
+ * nguyên văn. Trả `null` khi không chạy.
  */
 export async function chuanHoaSauNop(
   client: pg.PoolClient,
@@ -271,14 +280,57 @@ export async function chuanHoaSauNop(
   input: { readonly rfqId: string; readonly actorSessionId: string },
 ): Promise<KetQuaLuotChuanHoa | null> {
   await assertTenantBound(client, orgId, "chuanHoaSauNop");
+  if (!(await coHangChuanDangDung(client, orgId))) return null;
+  return chuanHoaGoi(client, orgId, input);
+}
+
+/**
+ * [S1.9101 / S4.3b, lượt soi L3] Tổ chức có ít nhất MỘT hàng chuẩn mà phiên bản mới nhất `DANG_DUNG` không — điều kiện của lượt chuẩn
+ * hoá sau lần nộp. Route nộp duyệt hỏi nó TRONG giao dịch của lần nộp và chỉ đăng ký lượt khi có: tổ chức MVP1 không tốn thêm một kết
+ * nối, một giao dịch, hay một dòng log khi pool đầy. Route đọc trạng thái trả nó kèm các dòng: màn `/tao-thau` ẩn cột *Hàng chuẩn* ở
+ * tổ chức chưa khai hàng nào (spec §2.3).
+ */
+export async function coHangChuanDangDung(client: pg.PoolClient, orgId: string): Promise<boolean> {
+  await assertTenantBound(client, orgId, "coHangChuanDangDung");
   const { rows } = await client.query<{ co: boolean }>(
     "SELECT EXISTS (SELECT 1 FROM public.canonical_items i WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
       "AND (SELECT v.trang_thai FROM public.canonical_item_versions v WHERE v.org_id OPERATOR(pg_catalog.=) i.org_id " +
       "AND v.canonical_item_id OPERATOR(pg_catalog.=) i.id ORDER BY v.seq DESC LIMIT 1) OPERATOR(pg_catalog.=) 'DANG_DUNG') AS co",
     [orgId],
   );
-  if (rows[0]?.co !== true) return null;
-  return chuanHoaGoi(client, orgId, input);
+  return rows[0]?.co === true;
+}
+
+/**
+ * [S1.9101 / lượt soi S4.3b, L4] Khoá lạc quan của hàng đợi: người gọi gửi băm của dòng mà họ ĐÃ THẤY (`bam` của `docHangDoi`), hàm so
+ * với băm hiện tại dưới khoá `FOR SHARE` của hàng gói (`kiemGoiDaNop`) — dòng không đổi được tới hết giao dịch. Gói về DRAFT, dòng bị
+ * sửa rồi nộp lại trong lúc khối xử lý còn mở ⇒ `DONG_DA_DOI`, không ghi lên nội dung người duyệt chưa thấy. Vắng = không so (đường
+ * gói, `gieo:demo`).
+ */
+async function kiemBamMongDoi(client: pg.PoolClient, orgId: string, rfqId: string, lineNo: number, bam: string | null | undefined): Promise<void> {
+  if (bam === undefined || bam === null) return;
+  const { rows } = await client.query<{ bam: string | null }>(
+    "SELECT pg_catalog.encode(public.rfq_hang_muc_bam($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.int4), 'hex') AS bam",
+    [orgId, rfqId, lineNo],
+  );
+  const hienTai = rows[0]?.bam ?? null;
+  if (hienTai !== null && hienTai !== bam) {
+    throw new DuLieuNenError("DONG_DA_DOI", "dòng đã đổi từ lần bạn đọc hàng đợi — đọc lại rồi duyệt (DONG_DA_DOI)");
+  }
+}
+
+/** [S1.9101 / lượt soi S4.3b, L1] Hàng chuẩn đích phải còn dùng: gợi ý đã lưu có thể trỏ về hàng đã ngừng dùng từ đó. */
+async function kiemHangConDung(client: pg.PoolClient, orgId: string, hangChuanId: string | null): Promise<void> {
+  if (hangChuanId === null) return;
+  const { rows } = await client.query<{ trang_thai: string }>(
+    "SELECT v.trang_thai FROM public.canonical_item_versions v WHERE v.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+      "AND v.canonical_item_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid ORDER BY v.seq DESC LIMIT 1",
+    [orgId, hangChuanId],
+  );
+  // Không có hàng nào: để khoá ngoại của `089` phán (`KHONG_CO_HANG_CHUAN`), cùng một mã với hôm nay.
+  if (rows[0] !== undefined && rows[0].trang_thai !== "DANG_DUNG") {
+    throw new DuLieuNenError("HANG_NGUNG_DUNG", "hàng chuẩn này đã ngừng dùng — chọn hàng khác (HANG_NGUNG_DUNG)");
+  }
 }
 
 export interface GhiAnhXaInput {
@@ -290,6 +342,8 @@ export interface GhiAnhXaInput {
   readonly lyDo?: string | null;
   /** Khai chuỗi đã làm sạch của dòng thành bí danh của hàng chuẩn ấy, cùng giao dịch — hàng đợi *học*. */
   readonly taoBiDanh?: boolean;
+  /** [S1.9101 / lượt soi L4] Băm (hex) của dòng mà người duyệt đã thấy — khác băm hiện tại ⇒ `DONG_DA_DOI`. Vắng = không so. */
+  readonly bamMongDoi?: string | null;
   readonly actorSessionId: string;
 }
 
@@ -307,6 +361,8 @@ export async function ghiAnhXa(
   const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
   await khoaBiDanh(client, orgId);
   await kiemGoiDaNop(client, orgId, input.rfqId);
+  await kiemBamMongDoi(client, orgId, input.rfqId, input.lineNo, input.bamMongDoi);
+  await kiemHangConDung(client, orgId, input.hangChuanId);
   const { rows: dongRows } = await client.query<{ sach: string }>(
     "SELECT public.chuoi_sach(i.description) AS sach FROM public.rfq_items i " +
       "WHERE i.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
@@ -375,12 +431,15 @@ export async function taoHangChuanVaAnhXa(
     readonly hangChuan: Omit<TaoHangChuanInput, "actorSessionId">;
     readonly lyDo?: string | null;
     readonly taoBiDanh?: boolean;
+    readonly bamMongDoi?: string | null;
     readonly actorSessionId: string;
   },
 ): Promise<{ readonly hangChuanId: string; readonly seq: string }> {
   await assertTenantBound(client, orgId, "taoHangChuanVaAnhXa");
   await khoaBiDanh(client, orgId);
   await kiemGoiDaNop(client, orgId, input.rfqId);
+  // So băm TRƯỚC khi tạo hàng chuẩn: dòng đã đổi thì từ chối trước lần ghi đầu tiên (`ghiAnhXa` so lại; giao dịch là một khối).
+  await kiemBamMongDoi(client, orgId, input.rfqId, input.lineNo, input.bamMongDoi);
   const moi = await taoHangChuan(client, orgId, { ...input.hangChuan, actorSessionId: input.actorSessionId });
   const { seq } = await ghiAnhXa(client, orgId, {
     rfqId: input.rfqId,
@@ -388,6 +447,7 @@ export async function taoHangChuanVaAnhXa(
     hangChuanId: moi.id,
     lyDo: input.lyDo ?? null,
     taoBiDanh: input.taoBiDanh ?? false,
+    bamMongDoi: input.bamMongDoi ?? null,
     actorSessionId: input.actorSessionId,
   });
   return { hangChuanId: moi.id, seq };
@@ -400,6 +460,8 @@ export interface DongHangDoi {
   readonly moTa: string;
   readonly donVi: string;
   readonly soLuong: string;
+  /** [S1.9101 / lượt soi L4] Băm hiện tại của dòng (hex) — người duyệt gửi lại nó; dòng đổi giữa chừng ⇒ `DONG_DA_DOI`. */
+  readonly bam: string;
   /** Gợi ý hiện hành (đúng băm hiện tại) — `null` khi dòng chưa qua lượt chuẩn hoá nào. */
   readonly goiY: {
     readonly ketQua: "GOI_Y" | "CAN_DUYET";
@@ -427,6 +489,7 @@ export async function docHangDoi(
     description: string;
     unit: string;
     quantity: string;
+    bam: string;
     ket_qua: "GOI_Y" | "CAN_DUYET" | null;
     do_tin_cay: string | null;
     phien_ban: number | null;
@@ -434,6 +497,7 @@ export async function docHangDoi(
     tac_gia: string | null;
   }>(
     "SELECT p.id AS rfq_id, p.title, i.line_no, i.description, i.unit, i.quantity::pg_catalog.text AS quantity, " +
+      "pg_catalog.encode(public.rfq_hang_muc_bam(i.org_id, i.rfq_id, i.line_no), 'hex') AS bam, " +
       "g.ket_qua, g.do_tin_cay::pg_catalog.text AS do_tin_cay, g.phien_ban_bo_chuan_hoa AS phien_ban, g.dau_vao, g.tac_gia " +
       "FROM public.rfq_items i " +
       "JOIN public.rfq_packages p ON p.org_id OPERATOR(pg_catalog.=) i.org_id AND p.id OPERATOR(pg_catalog.=) i.rfq_id " +
@@ -458,6 +522,7 @@ export async function docHangDoi(
       moTa: r.description,
       donVi: r.unit,
       soLuong: r.quantity,
+      bam: r.bam,
       goiY:
         r.ket_qua === null || r.do_tin_cay === null || r.phien_ban === null
           ? null

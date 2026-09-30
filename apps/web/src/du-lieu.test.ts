@@ -166,6 +166,11 @@ describe("[S1.9101 / S4.3b] hàng đợi ánh xạ", () => {
     expect(luaChonHangChuan(null, HANG).map((x) => x.id)).toEqual(["h-10", "h-12"]);
   });
 
+  it("[lượt soi S4.3b, L1] ứng viên của gợi ý đã lưu mà danh sách đang hiện nói là ngừng dùng thì bỏ", () => {
+    const goiYCu = { ...GOI_Y, ungVien: [{ hangChuanId: "h-ngung", ma: "THEP-NGUNG", diem: 0.97 }, ...GOI_Y.ungVien] };
+    expect(luaChonHangChuan(goiYCu, HANG).map((x) => x.id)).toEqual(["h-12", "h-cu", "h-10"]);
+  });
+
   it("lọc hàng đợi theo mô tả hoặc tên gói, bỏ dấu", () => {
     const DS = [
       { tieuDe: "Mua thep quy IV", moTa: "Thép vằn D12" },

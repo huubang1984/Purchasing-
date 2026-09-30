@@ -5,10 +5,12 @@
 //      có gợi ý — lượt chuẩn hoá chạy SAU commit, dưới phiên người nộp, một hàng sổ `RFQ_ITEMS_NORMALIZED`;
 //   ⑵ tổ chức chưa có hàng chuẩn đang dùng: lần nộp duyệt không để lại hàng gợi ý, ánh xạ hay hàng sổ nào — hành vi hôm nay (spec §2.3);
 //   ⑶ ngữ nghĩa của `afterCommitGiaoDich` trên route GIẢ: giao dịch MỚI đã gắn tổ chức, chỉ khi phản hồi thành công, hỏng thì phản hồi
-//      giữ nguyên và một dòng log không nội dung;
+//      giữ nguyên và một dòng log không nội dung; route đọc không đăng ký được; [lượt soi T1 · T2] trên route nộp duyệt THẬT, khoá bí
+//      danh của tổ chức bị giữ ⇒ lần nộp vẫn 200 trong trần 2 s của việc, gói đã PENDING_APPROVAL, không hàng gợi ý nào, một dòng log;
 //   ⑷ năm route: hai route đọc `agent: false`, ba route ghi khai `item.manage` và tọa độ gói; [INV-L3] người tạo gói gọi ba route ghi
-//      ⇒ 403; người quản lý dữ liệu duyệt (hàng đợi học), bác, tạo hàng chuẩn mới, chuẩn hoá lại; lần từ chối có tên ra 422 có mã;
-//      tổ chức khác không thấy hàng đợi.
+//      ⇒ 403 (vế vai), người quản lý dữ liệu nằm trong tập loại trừ ⇒ 422 `TRONG_TAP_LOAI_TRU` (vế hành vi); người quản lý dữ liệu
+//      duyệt (hàng đợi học), bác, tạo hàng chuẩn mới, chuẩn hoá lại; lần từ chối có tên ra 422 có mã; tổ chức khác không thấy hàng đợi;
+//      [lượt soi L1 · L4] hàng ngừng dùng không nhận ánh xạ và bí danh của nó không tự nối; băm mong đợi sai ⇒ `DONG_DA_DOI`.
 // ==============================================================================================
 import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -16,10 +18,13 @@ import { fileURLToPath } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { migrate } from "@trustprocure/db";
+import { chuanHoaSauNop } from "@trustprocure/du-lieu-nen";
+import { PERMISSIONS } from "@trustprocure/identity";
+import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { COOKIE_PHIEN_NGUOI_MUA, createDispatcher } from "./dispatch.js";
 import type { ApiResponse } from "./http.js";
-import type { BuyerContext, BuyerReadRoute, Route } from "./route-types.js";
+import type { BuyerContext, BuyerReadRoute, BuyerWriteRoute, Route } from "./route-types.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
 import { dichVuTest } from "./test-services.js";
@@ -143,8 +148,23 @@ function loiCoTen(ten: string, thongDiep: string): Error {
 }
 
 function tuyenGia(): Route[] {
-  const tuyen = (path: string, handler: (ctx: BuyerContext) => Promise<ApiResponse>): BuyerReadRoute => ({ method: "GET", path, audience: "BUYER", mutates: false, agent: false, handler });
+  // Route GHI: chỉ route `mutates: true` đăng ký được việc giao dịch (lượt soi S4.3b, mục bộ điều phối).
+  const tuyen = (path: string, handler: (ctx: BuyerContext) => Promise<ApiResponse>): BuyerWriteRoute => ({
+    method: "POST",
+    path,
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.RFQ_CREATE,
+    resourceType: "RFQ",
+    handler,
+  });
+  const tuyenDoc = (path: string, handler: (ctx: BuyerContext) => Promise<ApiResponse>): BuyerReadRoute => ({ method: "GET", path, audience: "BUYER", mutates: false, agent: false, handler });
   return [
+    tuyenDoc("/s43b/route-doc", async (ctx) => {
+      await ctx.client.query("SELECT 1");
+      ctx.afterCommitGiaoDich((c) => ghiVet("tu-route-doc", c));
+      return { status: 200, body: { ok: true } };
+    }),
     tuyen("/s43b/hai-viec", async (ctx) => {
       txHandler = (await ctx.client.query<{ t: string }>("SELECT pg_catalog.txid_current()::text AS t")).rows[0]!.t;
       ctx.afterCommitGiaoDich((c) => ghiVet("mot", c));
@@ -154,6 +174,24 @@ function tuyenGia(): Route[] {
     tuyen("/s43b/viec-hong", (ctx) => {
       ctx.afterCommitGiaoDich(() => Promise.reject(loiCoTen("LoiGiaChuanHoa", "noi dung khong duoc ra log")));
       ctx.afterCommitGiaoDich((c) => ghiVet("sau-viec-hong", c));
+      return Promise.resolve({ status: 200, body: { ok: true } });
+    }),
+    // [lượt soi, mục bộ điều phối] Một luật cho mọi nhánh: phản hồi CUỐI không thành công ⇒ việc giao dịch không chạy.
+    tuyen("/s43b/co-bu-hong", (ctx) => {
+      ctx.afterCommitCoBu({
+        viec: () => Promise.reject(loiCoTen("LoiGiaGui", "x")),
+        bu: (c) => ghiVet("bu", c),
+        phanHoiKhiHong: { status: 502, body: { error: "gui hong" } },
+      });
+      ctx.afterCommitGiaoDich((c) => ghiVet("khong-duoc-chay", c));
+      return Promise.resolve({ status: 200, body: { ok: true } });
+    }),
+    tuyen("/s43b/lo-gui-doi-phan-hoi", (ctx) => {
+      ctx.afterCommitLoGui({
+        lanGui: [{ khoa: "k1", gui: () => Promise.reject(loiCoTen("LoiGiaGui", "x")), khiXong: (c) => ghiVet("xong", c), bu: (c) => ghiVet("bu", c) }],
+        phanHoi: (r, khoaHong) => (khoaHong.length > 0 ? { status: 502, body: { khoaHong } } : r),
+      });
+      ctx.afterCommitGiaoDich((c) => ghiVet("khong-duoc-chay", c));
       return Promise.resolve({ status: 200, body: { ok: true } });
     }),
     tuyen("/s43b/phan-hoi-422", (ctx) => {
@@ -206,6 +244,7 @@ describe("[S1.9101 / S4.3b] ⑴ ⑵ lượt chuẩn hoá sau lần nộp duyệt
         { lineNo: 2, trangThai: "CHO_DUYET", hangChuan: null, lyDo: null },
         { lineNo: 3, trangThai: "CHO_DUYET", hangChuan: null, lyDo: null },
       ],
+      coHangChuan: true,
     });
     // Một lượt, dưới phiên NGƯỜI NỘP — tác giả của hàng TU_DONG và của hàng sổ.
     expect(await soLuotChuanHoa(rfqId)).toEqual([
@@ -220,10 +259,13 @@ describe("[S1.9101 / S4.3b] ⑴ ⑵ lượt chuẩn hoá sau lần nộp duyệt
     expect(nop.status, nop.text).toBe(200);
     expect([await demTheoGoi("rfq_item_goi_y", rfqId), await demTheoGoi("rfq_item_mappings", rfqId)]).toEqual([0, 0]);
     expect(await soLuotChuanHoa(rfqId)).toEqual([]);
-    expect(((await goi("GET", `/rfqs/${rfqId}/mappings`, C.nguoiMua)).body as { dong: { trangThai: string }[] }).dong.map((d) => d.trangThai)).toEqual([
-      "CHUA_CHUAN_HOA",
-      "CHUA_CHUAN_HOA",
-    ]);
+    const tt = (await goi("GET", `/rfqs/${rfqId}/mappings`, C.nguoiMua)).body as { dong: { trangThai: string }[]; coHangChuan: boolean };
+    expect(tt.dong.map((d) => d.trangThai)).toEqual(["CHUA_CHUAN_HOA", "CHUA_CHUAN_HOA"]);
+    expect(tt.coHangChuan, "màn ẩn cột hàng chuẩn ở tổ chức này").toBe(false);
+    // Đường của `gieo:demo` — điều kiện và lượt trong một giao dịch — cũng không chạy ở đây.
+    const phien = (await db.pool.query<{ id: string }>("SELECT id FROM sessions WHERE user_id = $1", [C.nguoiMua.id])).rows[0]!.id;
+    expect(await withTenant(apiPool, C.id, (c) => chuanHoaSauNop(c, C.id, { rfqId, actorSessionId: phien }))).toBeNull();
+    expect(await demTheoGoi("rfq_item_goi_y", rfqId)).toBe(0);
   });
 
   it("tổ chức chỉ có hàng chuẩn đã ngừng dùng: cũng không chạy", async () => {
@@ -243,7 +285,7 @@ describe("[S1.9101 / S4.3b] ⑴ ⑵ lượt chuẩn hoá sau lần nộp duyệt
 describe("[S1.9101 / S4.3b] ⑶ `afterCommitGiaoDich` — giao dịch mới, chỉ khi thành công, hỏng không đổi phản hồi", () => {
   it("mỗi việc một giao dịch MỚI đã gắn tổ chức, theo thứ tự đăng ký, sau commit của handler", async () => {
     vet.length = 0;
-    const r = await goiTai(gocGia, "GET", "/s43b/hai-viec", A.nguoiMua);
+    const r = await goiTai(gocGia, "POST", "/s43b/hai-viec", A.nguoiMua);
     expect(r.status, r.text).toBe(200);
     expect(vet.map((v) => v.viec)).toEqual(["mot", "hai"]);
     expect(vet.every((v) => v.org === A.id)).toBe(true);
@@ -254,12 +296,12 @@ describe("[S1.9101 / S4.3b] ⑶ `afterCommitGiaoDich` — giao dịch mới, ch�
     vet.length = 0;
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
-      const r = await goiTai(gocGia, "GET", "/s43b/viec-hong", A.nguoiMua);
+      const r = await goiTai(gocGia, "POST", "/s43b/viec-hong", A.nguoiMua);
       expect(r.status, r.text).toBe(200);
       expect(r.body).toEqual({ ok: true });
       const dong = log.mock.calls.map((c) => String(c[0])).filter((d) => d.includes("giao-dich-sau-commit"));
       expect(dong).toHaveLength(1);
-      expect(dong[0]).toContain("LoiGiaChuanHoa");
+      expect(dong[0]).toMatch(/giao-dich-sau-commit 1\/2 POST \/s43b\/viec-hong LoiGiaChuanHoa/u);
       expect(dong[0]).not.toContain("noi dung");
     } finally {
       log.mockRestore();
@@ -269,10 +311,73 @@ describe("[S1.9101 / S4.3b] ⑶ `afterCommitGiaoDich` — giao dịch mới, ch�
 
   it("phản hồi 4xx: không việc nào chạy", async () => {
     vet.length = 0;
-    const r = await goiTai(gocGia, "GET", "/s43b/phan-hoi-422", A.nguoiMua);
+    const r = await goiTai(gocGia, "POST", "/s43b/phan-hoi-422", A.nguoiMua);
     expect(r.status).toBe(422);
     expect(vet).toEqual([]);
   });
+
+  it("[lượt soi, mục bộ điều phối] việc có bù hỏng, hay lô gửi đổi phản hồi thành lỗi: việc giao dịch không chạy, một dòng `bo-qua`", async () => {
+    for (const duong of ["/s43b/co-bu-hong", "/s43b/lo-gui-doi-phan-hoi"]) {
+      vet.length = 0;
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const r = await goiTai(gocGia, "POST", duong, A.nguoiMua);
+        expect(r.status, duong).toBe(502);
+        const dong = log.mock.calls.map((c) => String(c[0])).filter((d) => d.includes("giao-dich-sau-commit"));
+        expect(dong, duong).toHaveLength(1);
+        expect(dong[0]).toContain(`giao-dich-sau-commit bo-qua 1 POST ${duong}`);
+      } finally {
+        log.mockRestore();
+      }
+      expect(vet.map((v) => v.viec), duong).toEqual(["bu"]);
+    }
+  });
+
+  it("[lượt soi, mục bộ điều phối] route ĐỌC đăng ký việc giao dịch ⇒ ném trong handler, 500, không việc nào chạy", async () => {
+    vet.length = 0;
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const r = await goiTai(gocGia, "GET", "/s43b/route-doc", A.nguoiMua);
+      expect(r.status).toBe(500);
+    } finally {
+      log.mockRestore();
+    }
+    expect(vet).toEqual([]);
+  });
+
+  it("[lượt soi T1 · T2] route nộp duyệt THẬT, khoá bí danh của tổ chức bị giữ: lần nộp vẫn 200 trong trần của việc, gói đã nộp, lượt hỏng để một dòng log", async () => {
+    const giu = await db.pool.connect();
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let rfqId = "";
+    let msNop = -1;
+    try {
+      await giu.query("BEGIN");
+      await giu.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('item_aliases|' || $1::text, 3))", [A.id]);
+      const truoc = Date.now();
+      const kq = await goiDaNop(A, ["Thép D10 Hòa Phát khoá giữ", "Gạch khoá giữ"]);
+      msNop = Date.now() - truoc;
+      rfqId = kq.rfqId;
+      expect(kq.nop.status, kq.nop.text).toBe(200);
+      const dong = log.mock.calls.map((c) => String(c[0])).filter((d) => d.includes("giao-dich-sau-commit"));
+      expect(dong).toHaveLength(1);
+      expect(dong[0]).toMatch(/giao-dich-sau-commit 1\/1 POST \/rfqs\/:rfqId\/submit /u);
+    } finally {
+      log.mockRestore();
+      await giu.query("ROLLBACK");
+      giu.release();
+    }
+    // Trần chờ khoá của việc là 2 s — không phải 15 s của pool. `goiDaNop` gồm cả tạo gói và dòng, nên trần đo rộng tay.
+    expect(msNop).toBeLessThan(8000);
+    const { rows } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(rows[0]?.status).toBe("PENDING_APPROVAL");
+    expect([await demTheoGoi("rfq_item_goi_y", rfqId), await demTheoGoi("rfq_item_mappings", rfqId)]).toEqual([0, 0]);
+    expect(await soLuotChuanHoa(rfqId)).toEqual([]);
+    // Lượt hỏng không mất gì: dòng nằm trong hàng đợi, chưa chuẩn hoá; *chuẩn hoá lại* nối được nó.
+    const hd = (await goi("GET", "/mapping-queue", quanLy)).body as { dong: { rfqId: string; goiY: unknown }[] };
+    expect(hd.dong.filter((d) => d.rfqId === rfqId).map((d) => d.goiY)).toEqual([null, null]);
+    const lai = await goi("POST", `/rfqs/${rfqId}/normalize`, quanLy);
+    expect(lai.status, lai.text).toBe(200);
+  }, 30000);
 });
 
 describe("[S1.9101 / S4.3b] ⑷ năm route ánh xạ", () => {
@@ -297,7 +402,7 @@ describe("[S1.9101 / S4.3b] ⑷ năm route ánh xạ", () => {
     }
   });
 
-  it("[INV-L3] người tạo gói gọi ba route ghi ⇒ 403 cả ba, mỗi lần một hàng PERMISSION_DENIED, không hàng ánh xạ nào", async () => {
+  it("[INV-L3] vế vai: người tạo gói gọi ba route ghi ⇒ 403 cả ba ở cổng `item.manage`, mỗi lần một hàng PERMISSION_DENIED, không hàng ánh xạ nào", async () => {
     const { rfqId } = await goiDaNop(A, ["Thép vằn D12 người tạo"]);
     const truocAnhXa = await demTheoGoi("rfq_item_mappings", rfqId);
     const ca: [string, unknown][] = [
@@ -315,6 +420,21 @@ describe("[S1.9101 / S4.3b] ⑷ năm route ánh xạ", () => {
     );
     expect(rows[0]?.n).toBe("3");
     expect(await demTheoGoi("rfq_item_mappings", rfqId)).toBe(truocAnhXa);
+  });
+
+  it("[INV-L3] vế hành vi, lượt soi L5: người đã tạo và nộp gói rồi thành người quản lý dữ liệu qua được cổng `item.manage` nhưng CSDL từ chối — 422 `TRONG_TAP_LOAI_TRU`", async () => {
+    const X = await nguoi(A.id, ["BUYER"], "Pham Doi Vai");
+    const { rfqId, nop } = await goiDaNop({ ...A, nguoiMua: X }, ["Thép vằn D12 đổi vai"]);
+    expect(nop.status, nop.text).toBe(200);
+    await db.pool.query("DELETE FROM user_roles WHERE org_id = $1 AND user_id = $2", [A.id, X.id]);
+    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'DATA_STEWARD')", [A.id, X.id]);
+    const truoc = await demTheoGoi("rfq_item_mappings", rfqId);
+    const r = await goi("POST", `/rfqs/${rfqId}/items/1/mapping`, X, { hangChuanId: hangD12 });
+    expect(r.status, r.text).toBe(422);
+    expect(r.text).toContain("TRONG_TAP_LOAI_TRU");
+    expect(await demTheoGoi("rfq_item_mappings", rfqId)).toBe(truoc);
+    // Đối chứng dương trên chính dòng ấy: người quản lý NGOÀI tập loại trừ ghi được.
+    expect((await goi("POST", `/rfqs/${rfqId}/items/1/mapping`, quanLy, { hangChuanId: hangD12 })).status).toBe(201);
   });
 
   it("người quản lý dữ liệu: hàng đợi, bác đòi lý do sau GOI_Y (422 có mã), duyệt kèm bí danh, tạo hàng chuẩn mới, chuẩn hoá lại", async () => {
@@ -348,6 +468,7 @@ describe("[S1.9101 / S4.3b] ⑷ năm route ánh xạ", () => {
         { lineNo: 2, trangThai: "NGUOI_DUYET", hangChuan: { id: hangGach, ma: "GACH-THE-DO" }, lyDo: null },
         { lineNo: 3, trangThai: "NGUOI_DUYET", hangChuan: null, lyDo: "vat lieu dia phuong" },
       ],
+      coHangChuan: true,
     });
     // Chuẩn hoá lại: mọi dòng đã có ánh xạ hiệu lực — không đụng.
     const lai = await goi("POST", `/rfqs/${rfqId}/normalize`, quanLy);
@@ -359,6 +480,40 @@ describe("[S1.9101 / S4.3b] ⑷ năm route ánh xạ", () => {
       "TU_DONG",
       "TU_DONG",
     ]);
+  });
+
+  it("[lượt soi L1] hàng chuẩn ngừng dùng: bí danh của nó không tự nối ở lần nộp, và duyệt sang nó ⇒ 422 `HANG_NGUNG_DUNG`", async () => {
+    const h = await goi("POST", "/items", quanLy, { ma: "THEP-CU-NGUNG", ten: "Thép cũ", donViGoc: "kg" });
+    expect(h.status, h.text).toBe(201);
+    const id = (h.body as { hangChuan: { id: string } }).hangChuan.id;
+    expect((await goi("POST", `/items/${id}/aliases`, quanLy, { biDanh: "Thép cũ lô ngừng" })).status).toBe(201);
+    expect((await goi("POST", `/items/${id}/versions`, quanLy, { ten: "Thép cũ", trangThai: "NGUNG_DUNG" })).status).toBe(201);
+    const { rfqId } = await goiDaNop(A, ["Thép cũ lô ngừng"]);
+    const tt = (await goi("GET", `/rfqs/${rfqId}/mappings`, A.nguoiMua)).body as { dong: { trangThai: string }[] };
+    expect(tt.dong.map((d) => d.trangThai)).toEqual(["CHO_DUYET"]);
+    const r = await goi("POST", `/rfqs/${rfqId}/items/1/mapping`, quanLy, { hangChuanId: id, taoBiDanh: true });
+    expect(r.status, r.text).toBe(422);
+    expect(r.text).toContain("HANG_NGUNG_DUNG");
+    expect(await demTheoGoi("rfq_item_mappings", rfqId)).toBe(0);
+  });
+
+  it("[lượt soi L4] hàng đợi mang băm của dòng; băm mong đợi sai ⇒ 422 `DONG_DA_DOI`, không ánh xạ, không hàng chuẩn mồ côi; băm đúng ⇒ 201", async () => {
+    const { rfqId } = await goiDaNop(A, ["Thép vằn D12 băm", "Ống kẽm băm"]);
+    const hd = (await goi("GET", "/mapping-queue", quanLy)).body as { dong: { rfqId: string; lineNo: number; bam: string }[] };
+    const cua = hd.dong.filter((d) => d.rfqId === rfqId);
+    expect(cua.map((d) => d.lineNo)).toEqual([1, 2]);
+    for (const d of cua) expect(d.bam).toMatch(/^[0-9a-f]{64}$/u);
+    const sai = "0".repeat(64);
+    const r = await goi("POST", `/rfqs/${rfqId}/items/1/mapping`, quanLy, { hangChuanId: hangD12, bam: sai });
+    expect(r.status, r.text).toBe(422);
+    expect(r.text).toContain("DONG_DA_DOI");
+    const moi = await goi("POST", `/rfqs/${rfqId}/items/2/mapping/new-item`, quanLy, { ma: "ONG-KEM-BAM", ten: "Ống kẽm", donViGoc: "kg", bam: sai });
+    expect(moi.status, moi.text).toBe(422);
+    expect(moi.text).toContain("DONG_DA_DOI");
+    expect((await db.pool.query("SELECT 1 FROM canonical_items WHERE org_id = $1 AND ma = 'ONG-KEM-BAM'", [A.id])).rowCount).toBe(0);
+    expect(await demTheoGoi("rfq_item_mappings", rfqId)).toBe(0);
+    expect((await goi("POST", `/rfqs/${rfqId}/items/1/mapping`, quanLy, { hangChuanId: hangD12, bam: cua[0]!.bam })).status).toBe(201);
+    expect((await goi("POST", `/rfqs/${rfqId}/items/2/mapping`, quanLy, { hangChuanId: null, lyDo: "x", bam: "khong-hex" })).status).toBe(422);
   });
 
   it("từ chối có tên ra 422 có mã; tham số sai hình dạng và gói lạ ra 404; thân sai kiểu ra 422", async () => {

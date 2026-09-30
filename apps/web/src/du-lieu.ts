@@ -166,14 +166,20 @@ export function locHangDoi<T extends DongHangDoiHienThi>(ds: readonly T[], loc: 
 
 /**
  * Ô chọn hàng chuẩn của một dòng: ứng viên của lõi trước (theo điểm, kèm phần trăm), rồi mọi hàng ĐANG DÙNG khác của danh sách
- * đang hiện. Ứng viên không còn trong danh sách vẫn được liệt — tên để trống, máy chủ phán hàng ấy còn dùng được không.
+ * đang hiện. ~~Ứng viên không còn trong danh sách vẫn được liệt — tên để trống, máy chủ phán hàng ấy còn dùng được không.~~
+ * [lượt soi S4.3b, L1] Gợi ý là hàng đã LƯU: ứng viên của nó có thể đã ngừng dùng từ đó. Ứng viên mà danh sách đang hiện nói là
+ * ngừng dùng thì bỏ; ứng viên không có trong danh sách (danh sách dừng ở 500 hàng) vẫn được liệt, tên để trống — máy chủ từ chối hàng
+ * ngừng dùng bằng mã `HANG_NGUNG_DUNG`.
  */
 export function luaChonHangChuan(
   goiY: GoiYHienThi | null,
   hangChuan: readonly HangChuanChon[],
 ): readonly { readonly id: string; readonly nhan: string }[] {
   const tenTheoId = new Map(hangChuan.map((h) => [h.id, h.ten]));
-  const ungVien = (goiY?.ungVien ?? []).map((u) => ({ id: u.hangChuanId, nhan: `${u.ma} — ${tenTheoId.get(u.hangChuanId) ?? ""} (${phanTram(u.diem)})` }));
+  const ngungDung = new Set(hangChuan.filter((h) => h.trangThai !== "DANG_DUNG").map((h) => h.id));
+  const ungVien = (goiY?.ungVien ?? [])
+    .filter((u) => !ngungDung.has(u.hangChuanId))
+    .map((u) => ({ id: u.hangChuanId, nhan: `${u.ma} — ${tenTheoId.get(u.hangChuanId) ?? ""} (${phanTram(u.diem)})` }));
   const daCo = new Set(ungVien.map((u) => u.id));
   const conLai = hangChuan.filter((h) => h.trangThai === "DANG_DUNG" && !daCo.has(h.id)).map((h) => ({ id: h.id, nhan: `${h.ma} — ${h.ten}` }));
   return [...ungVien, ...conLai];

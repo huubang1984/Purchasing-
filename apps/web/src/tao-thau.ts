@@ -152,6 +152,17 @@ export function hangNganSach(budget: unknown): readonly (readonly [string, strin
  * [S1.9101 / S4.3b] Cột *Hàng chuẩn* của bảng hạng mục — trạng thái ánh xạ của dòng (`GET /rfqs/:rfqId/mappings`) nói bằng lời.
  * Người tạo gói chỉ ĐỌC: người ghi ánh xạ là người quản lý dữ liệu ngoài tập loại trừ của gói (L3). Trạng thái lạ ⇒ `—`.
  */
+/**
+ * [S1.9101 / lượt soi S4.3b, L3] Cột *Hàng chuẩn* chỉ hiện khi nó nói được điều gì: tổ chức có hàng chuẩn đang dùng (`coHangChuan` của
+ * `GET /rfqs/:rfqId/mappings`), hoặc gói đã có một dòng khác *chưa chuẩn hoá* (ánh xạ cũ vẫn là sự thật khi mọi hàng đã ngừng dùng).
+ * Tổ chức chưa khai hàng nào thì màn giữ đúng bảng của hôm nay (spec §2.3). Thân lạ hay đọc hỏng ⇒ ẩn.
+ */
+export function hienCotHangChuan(than: unknown): boolean {
+  const t = than as { readonly coHangChuan?: unknown; readonly dong?: unknown } | null | undefined;
+  if (t?.coHangChuan === true) return true;
+  return Array.isArray(t?.dong) && t.dong.some((d) => (d as { trangThai?: unknown } | null)?.trangThai !== "CHUA_CHUAN_HOA");
+}
+
 export function nhanAnhXa(dong: { readonly trangThai: unknown; readonly hangChuan: { readonly ma: string } | null; readonly lyDo: string | null }): string {
   switch (dong.trangThai) {
     case "TU_DONG":

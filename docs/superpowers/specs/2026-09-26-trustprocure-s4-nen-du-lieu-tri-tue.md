@@ -314,7 +314,7 @@ Mỗi route mới khai trường `agent` (ADR-039). Route đọc lịch sử, be
 > **[S1.9101 / S4.3b] Dựng.** `/du-lieu` thêm bước 6 *Hàng đợi ánh xạ* (duyệt kèm khai bí danh, bác, tạo hàng chuẩn mới rồi duyệt,
 > chuẩn hoá lại cả gói); `/tao-thau` thêm cột *Hàng chuẩn* chỉ đọc. Hai route đọc (`GET /mapping-queue`, `GET /rfqs/:rfqId/mappings`)
 > `agent: false`. Không mở E6: `/tao-thau` chỉ HIỆN trạng thái ánh xạ, không tìm hàng chuẩn — câu *"gợi ý … cần tìm thật"* ở trên
-> không thành việc của vòng này.
+> không thành việc của vòng này. Cột *Hàng chuẩn* ẩn ở tổ chức chưa có hàng chuẩn đang dùng (§2.3).
 
 ---
 
