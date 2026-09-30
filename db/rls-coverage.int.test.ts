@@ -3777,10 +3777,11 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
   // EXECUTE do superuser cấp thẳng khi chủ hàm là vai bootstrap thì tự thu hồi là no-op (đo) ⇒ không tự sửa được ⇒ chặn trước vòng.
   // [lượt soi 51] Đối chứng cho mọi vế lọc: ⒠ policy không phụ thuộc hàm vẫn phủ; ⒣ hình dạng ngoài HINH_DANG_CHUAN mà phụ thuộc hàm vẫn bị
   // loại (pg_depend, NHẸ-5); ⒢ dòng khoản 97 (không policy nào phủ) không được tha nhờ vế EXECUTE (NHẸ-4⒜); ⒡ membership do superuser cấp
-  // bị chặn và lời khuyên không thu hồi khỏi nhóm (vế grantor, NẶNG-2); ⒦ ADMIN trên vai sở hữu bảng không tính là tự sửa cho dòng khoản
-  // 101 (NẶNG-1); ⒤ vai thừa kế chủ bảng đứng ngoài — chủ thể giống chủ, khoản 102 (NẶNG-1). Mọi pha trong một giao dịch ROLLBACK, kể cả
-  // `ALTER FUNCTION … OWNER`.
-  it("[INV-F1] [S1.58 / khoản nợ 101] policy phụ thuộc app_current_org_id() không phủ vai chạy migration có EXECUTE trên hàm ấy mà RLS không coi là chủ: mục nêu kèm đường tới EXECUTE và lối ra theo từng đường; EXECUTE do superuser cấp thẳng hay qua nhóm do superuser cấp ⇒ chặn trước vòng; vai tự cắt được EXECUTE — membership nhóm tự cấp, thừa kế chủ hàm, ADMIN trên chủ hàm — ⇒ 'cố ý KHÔNG chặn nó'; đối chứng: policy không phụ thuộc hàm vẫn phủ, hình dạng khác phụ thuộc hàm vẫn bị loại, dòng khoản 97 không được tha nhờ vế EXECUTE, ADMIN trên vai sở hữu bảng không tính, vai thừa kế chủ bảng đứng ngoài (khoản 102)", async () => {
+  // bị chặn và lời khuyên không thu hồi khỏi nhóm (vế grantor, NẶNG-2); ⒦ ~~ADMIN trên vai sở hữu bảng không tính là tự sửa cho dòng khoản
+  // 101 (NẶNG-1)~~ [S1.9172 / khoản 113] ADMIN (không INHERIT) trên vai sở hữu bảng LÀ người cấp của mục ACL cấp thẳng ⇒ tự cắt được — đo
+  // ngay trong pha: ba bước dưới V, dòng biến mất, không dòng khoản 102; ⒤ vai thừa kế chủ bảng đứng ngoài — chủ thể giống chủ, khoản 102
+  // (NẶNG-1). Mọi pha trong một giao dịch ROLLBACK, kể cả `ALTER FUNCTION … OWNER` và ba bước tự cắt của ⒦.
+  it("[INV-F1] [S1.58 / khoản nợ 101] policy phụ thuộc app_current_org_id() không phủ vai chạy migration có EXECUTE trên hàm ấy mà RLS không coi là chủ: mục nêu kèm đường tới EXECUTE và lối ra theo từng đường; EXECUTE do superuser cấp thẳng hay qua nhóm do superuser cấp ⇒ chặn trước vòng; vai tự cắt được EXECUTE — membership nhóm tự cấp, thừa kế chủ hàm, ADMIN trên chủ hàm — ⇒ 'cố ý KHÔNG chặn nó'; đối chứng: policy không phụ thuộc hàm vẫn phủ, hình dạng khác phụ thuộc hàm vẫn bị loại, dòng khoản 97 không được tha nhờ vế EXECUTE, ADMIN trên vai sở hữu bảng (người cấp của mục ACL) tự cắt được bằng ba bước và không để lại dòng khoản 102 [S1.9172], vai thừa kế chủ bảng đứng ngoài (khoản 102)", async () => {
     const V = "zz_trien101";
     const HAI = ["SELECT", "UPDATE"].map((l) => `public.suppliers/${V} (vai chạy migration)/${l}`);
     const nhanBang = async (c: pg.PoolClient, bang: string): Promise<string[]> =>
@@ -3890,8 +3891,14 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
       expect(f[0]).toContain("Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này");
       expect(await chanTruocVong(c, "public.suppliers"), "⒡ membership do superuser cấp ⇒ chặn trước vòng").toEqual(HAI);
 
-      // ⒦ [lượt soi 51 NẶNG-1] ADMIN (không INHERIT) trên vai SỞ HỮU bảng không tính là tự sửa được cho dòng khoản 101: lối vá của nó là thêm
-      // policy (cổng migration-shape và [CR1] không cho qua) hay tự lấy quyền chủ — thứ chỉ dời dòng sang chủ thể giống chủ.
+      // ⒦ [lượt soi 51 NẶNG-1] ~~ADMIN (không INHERIT) trên vai SỞ HỮU bảng không tính là tự sửa được cho dòng khoản 101: lối vá của nó là thêm
+      // policy (cổng migration-shape và [CR1] không cho qua) hay tự lấy quyền chủ — thứ chỉ dời dòng sang chủ thể giống chủ.~~
+      // [S1.9172 / khoản 113] Câu gạch bỏ sót lối thứ ba: `OWNER TO` viết lại grantor của mục ACL thành chủ mới, nên chủ bảng là NGƯỜI CẤP
+      // giữ mọi quyền kèm GRANT OPTION, và ADMIN (không INHERIT) trên người cấp là đường tự cắt đã đo (vế `tu_sua_nguoi_cap`, khối đo ⒠ của
+      // hardening; `db/migrations.int.test.ts` `[khoản nợ 113]` pha ⒠ đo cùng hình dạng trên `suppliers` qua `migrate()`): trong một tệp dưới
+      // chính V — `GRANT chủ TO V WITH INHERIT TRUE; REVOKE … FROM V; REVOKE chủ FROM V` — quyền mất, cạnh thừa kế tự cấp mất, cạnh ADMIN do
+      // superuser cấp còn nguyên, KHÔNG dời dòng sang chủ thể giống chủ (V không thừa kế chủ ở trạng thái cuối). "ADMIN trên chủ bảng" của
+      // NẶNG-1 nay là trường hợp riêng của vế grantor; hai vế quyền chủ bảng (`tu_sua_chu`) vẫn KHÔNG tính cho dòng này như S1.58 nói.
       await c.query(
         "CREATE ROLE zz_chu101k NOLOGIN; CREATE TABLE public.zz_k101k (org_id uuid); ALTER TABLE public.zz_k101k ENABLE ROW LEVEL SECURITY; " +
           "ALTER TABLE public.zz_k101k FORCE ROW LEVEL SECURITY; " +
@@ -3899,9 +3906,29 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
           `GRANT SELECT ON public.zz_k101k TO ${V}; ALTER TABLE public.zz_k101k OWNER TO zz_chu101k; ` +
           `GRANT zz_chu101k TO ${V} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
       );
-      expect(await chanTruocVong(c, "public.zz_k101k"), "⒦ ADMIN trên chủ bảng không tha dòng khoản 101").toEqual([
-        `public.zz_k101k/${V} (vai chạy migration)/SELECT`,
-      ]);
+      const kDong = [`public.zz_k101k/${V} (vai chạy migration)/SELECT`];
+      const k1 = await nhanBang(c, "public.zz_k101k");
+      expect(nhan(k1), "⒦ dòng khoản 101 vẫn có (EXECUTE qua nhóm zz_nh101b, policy lọc hết)").toEqual(kDong);
+      expect(k1[0]).toContain("cố ý KHÔNG chặn nó");
+      expect(await chanTruocVong(c, "public.zz_k101k"), "⒦ [S1.9172] ADMIN trên chủ bảng = ADMIN trên người cấp ⇒ tự cắt được ⇒ không chặn").toEqual([]);
+      // Ba bước dưới chính V (SET LOCAL ROLE, không savepoint — kết quả phải ở lại để đo trạng thái cuối); RESET ROLE trả về superuser.
+      await c.query(`SET LOCAL ROLE ${V}`);
+      await c.query(`GRANT zz_chu101k TO ${V} WITH INHERIT TRUE; REVOKE SELECT ON public.zz_k101k FROM ${V}; REVOKE zz_chu101k FROM ${V}`);
+      await c.query("RESET ROLE");
+      expect((await c.query<{ co: boolean }>(`SELECT pg_catalog.has_table_privilege('${V}', 'public.zz_k101k', 'SELECT') AS co`)).rows[0]!.co, "⒦ SELECT đã mất").toBe(false);
+      expect(
+        (
+          await c.query<{ admin: boolean; inherit: boolean; tu_cap: boolean }>(
+            `SELECT am.admin_option AS admin, am.inherit_option AS inherit, am.grantor = '${V}'::regrole AS tu_cap FROM pg_auth_members am` +
+              ` WHERE am.roleid = 'zz_chu101k'::regrole AND am.member = '${V}'::regrole ORDER BY 1, 2, 3`,
+          )
+        ).rows,
+        "⒦ trạng thái cuối: chỉ còn cạnh ADMIN do superuser cấp — V KHÔNG thừa kế chủ",
+      ).toEqual([{ admin: true, inherit: false, tu_cap: false }]);
+      expect(
+        (await duoi<{ mo_ta: string }>(c, V, docHangHardening("CAU_PHU_LENH_CHU_BANG_SAI"))).rows.map((r) => r.mo_ta.split(":")[0]!).filter((m) => m.startsWith("public.zz_k101k/")),
+        "⒦ sau ba bước: không dòng nào trên bảng — không dòng khoản 101 của V, không dòng khoản 102 của chủ thể giống chủ",
+      ).toEqual([]);
 
       // ⒤ [lượt soi 51 NẶNG-1] vai THỪA KẾ CHỦ BẢNG (RLS coi là chủ) đứng ngoài vế loại — chủ thể giống chủ, khoản 102 (đo: hồ sơ N3′ với bản
       // đầu đỏ ở mọi lần deploy mà backfill vẫn bị tiêu).
