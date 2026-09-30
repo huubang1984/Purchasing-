@@ -22,7 +22,11 @@ import { PERMISSIONS, listUserIdsWithPermission, requirePermission, resolveSessi
 import { enqueueJob } from "@trustprocure/outbox";
 import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
 
-/** `kind` của job mà worker tiêu thụ. Một hằng, một chỗ ở — worker đọc chính nó. */
+/**
+ * `kind` của job mà worker tiêu thụ. ~~Một hằng, một chỗ ở — worker đọc chính nó.~~ **[S1.9115 / khoản 161]** Chỗ khai tập `kind`
+ * của kho là union `KindOutbox` (`@trustprocure/outbox`, đọc qua `JobInput["kind"]`); lời gọi `enqueueJob` viết literal. Hằng này
+ * còn là tham số câu đếm job đang sống của `dieuPhoiLaiSauKhiChet` và tên cho test; worker giữ bản sao riêng (`apps/unseal-worker`).
+ */
 export const UNSEAL_JOB_KIND = "UNSEAL_RFQ";
 
 /**
@@ -237,7 +241,8 @@ export async function requestUnseal(
   // chừng ấy thời gian giữ khoá thêm. Tin và bản ghi vẫn cùng giao dịch: hỏng ở đâu thì cả hai cùng rollback.
   const xepTin = async (userId: string): Promise<void> => {
     await enqueueJob(client, orgId, {
-      kind: UNSEAL_NOTICE_KIND,
+      // [S1.9115 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+      kind: "UNSEAL_APPROVAL_NOTICE",
       payload: { unsealRequestId: h.id, rfqId: input.rfqId, userId },
       dedupeKey: `unseal-notice:${h.id}:${userId}`,
     });
@@ -639,7 +644,7 @@ async function dieuPhoiLaiSauKhiChet(
   }
 
   await enqueueJob(client, orgId, {
-    kind: UNSEAL_JOB_KIND,
+    kind: "UNSEAL_RFQ",
     payload: { unsealRequestId: bangChung.unsealRequestId, rfqId: bangChung.rfqId },
     dedupeKey: khoaChongTrungMoThau(bangChung.unsealRequestId),
   });
@@ -709,7 +714,7 @@ export async function dispatchUnseal(
   }
 
   await enqueueJob(client, orgId, {
-    kind: UNSEAL_JOB_KIND,
+    kind: "UNSEAL_RFQ",
     payload: { unsealRequestId: bangChung.unsealRequestId, rfqId: bangChung.rfqId },
     dedupeKey: khoaChongTrungMoThau(bangChung.unsealRequestId),
   });

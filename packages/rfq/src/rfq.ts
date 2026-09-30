@@ -54,11 +54,14 @@ export class RfqError extends Error {
 }
 
 /**
- * [C4 vế 5] `kind` của job thông báo gia hạn. Một hằng, một chỗ ở — cùng khuôn `UNSEAL_JOB_KIND`.
+ * [C4 vế 5] `kind` của job thông báo gia hạn. ~~Một hằng, một chỗ ở — cùng khuôn `UNSEAL_JOB_KIND`.~~ **[S1.9115 / khoản 161]** Chỗ
+ * khai tập `kind` của kho là union `KindOutbox` (`@trustprocure/outbox`, đọc qua `JobInput["kind"]`); lời gọi `enqueueJob` viết
+ * literal. Hằng này còn là khoá bảng handler của `api` (`apps/api/src/outbox-api.ts`).
  *
- * Nó CHƯA có handler nào đăng ký, và đó là một phần chênh có tên ở §4 của C4: ở S1, mệnh đề đúng
+ * ~~Nó CHƯA có handler nào đăng ký, và đó là một phần chênh có tên ở §4 của C4: ở S1, mệnh đề đúng
  * ở mức *"ý định thông báo đã nằm cùng chỗ với lần ghi hạn mới"*, chưa đúng ở mức *"nhà cung cấp
- * đã biết"*. Chặng cuối là một tầng vận hành mà `apps/` chưa có.
+ * đã biết"*. Chặng cuối là một tầng vận hành mà `apps/` chưa có.~~ **[S1.9115 / khoản 161]** Thiu từ S1.91 (khoản 154):
+ * handler nằm ở `buildApiOutboxHandlers` (`apps/api/src/outbox-api.ts`) — tiến trình duy nhất đọc được `supplier_contacts`.
  */
 export const RFQ_DEADLINE_NOTICE_KIND = "RFQ_DEADLINE_EXTENDED_NOTICE";
 
@@ -897,7 +900,9 @@ export async function extendRfqDeadline(
   );
   for (const lm of loiMoi) {
     await enqueueJob(client, orgId, {
-      kind: RFQ_DEADLINE_NOTICE_KIND,
+      // [S1.9115 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`; hằng `RFQ_DEADLINE_NOTICE_KIND` là khoá bảng handler của
+      // `api`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+      kind: "RFQ_DEADLINE_EXTENDED_NOTICE",
       payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
       dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
     });
@@ -934,7 +939,7 @@ export async function extendRfqDeadline(
   for (const lm of loiMoiSauGhiSo) {
     if (!daXep.has(lm.id)) {
       await enqueueJob(client, orgId, {
-        kind: RFQ_DEADLINE_NOTICE_KIND,
+        kind: "RFQ_DEADLINE_EXTENDED_NOTICE",
         payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
         dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
       });

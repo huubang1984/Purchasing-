@@ -270,6 +270,9 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
     // im lặng (đo: `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹). Tiến trình khai nay là worker
     // (`tien-trinh.ts`), tiến trình thấy MỌI tổ chức qua hàm `052`. Mảng lọc của runner này là đúng
     // `Object.keys(handlers)`.
+    // [S1.9115 / khoản 170] Runner của TEST (`test-services.ts`, `outboxTest`) là gương của runner này ở dây nối mảng lọc — bảng
+    // handler và `kindKhongNguoiNhan` —, đối chiếu ở `tests/architecture/kind-outbox-mot-cho.test.ts`; khai lại sổ ở đây thì vế
+    // khoản 168 của `composition.int.test.ts` đỏ.
     onJobFailure: (bao) => {
       // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — ~~chỉ tên lý do và kind~~ [S1.67 / khoản 118] tên lý do, kind, và TÊN cùng MÃ
       // cố định của lỗi gốc (`moTaLoiKhongGiaTri`) — không message. Trước vòng này dòng này không nói lỗi gì: job hỏng vì kết nối nhiễm

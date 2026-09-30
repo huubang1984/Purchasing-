@@ -30,7 +30,7 @@ import {
 } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import { HttpError } from "../http.js";
-import { EMAIL_MAX_BYTES, LOGIN_LINK_SEND_KIND } from "../outbox-api.js";
+import { EMAIL_MAX_BYTES } from "../outbox-api.js";
 import { THAN_429_MFA } from "../route-types.js";
 import type { AnonRoute, BuyerReadRoute, BuyerSelfRoute } from "../route-types.js";
 
@@ -123,7 +123,8 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
       // savepoint để giao dịch không bị bỏ dở, và không có gì để đánh thức.
       await ctx.client.query("SAVEPOINT xep_hang");
       try {
-        await enqueueJob(ctx.client, ctx.orgId, { kind: LOGIN_LINK_SEND_KIND, payload: { email } });
+        // [S1.9115 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+        await enqueueJob(ctx.client, ctx.orgId, { kind: "LOGIN_LINK_SEND", payload: { email } });
       } catch (e) {
         if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
         await ctx.client.query("ROLLBACK TO SAVEPOINT xep_hang");

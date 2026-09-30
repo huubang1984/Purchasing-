@@ -10145,7 +10145,7 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
    khoản 83⑴ đòi KHAI: hai dòng bảy cột nguyên văn ở `POLICY_RESTRICTIVE_KHAI` (hardening) và bản gương `POLICY_RESTRICTIVE_DA_KHAI`.
 3. **Tập `kind` mỗi vai từ nay SỐNG Ở CSDL.** Thêm một `kind` — handler mới ở `api` hay worker, hay một dòng sổ mồ côi — là thêm
    MỘT MIGRATION `ALTER POLICY outbox_jobs_kind_<vai> ON public.outbox_jobs USING (…) WITH CHECK (…)` cộng sửa hai dòng khai.
-   Migration đã áp không sửa: kind mới ⇒ migration mới, không sửa `095`.
+   Migration đã áp không sửa: kind mới ⇒ migration mới, không sửa `095`. **[S1.9115 / khoản 161]** Và thêm vào union `KindOutbox` (`packages/outbox/src/enqueue.ts`) — chỗ khai DUY NHẤT tập `kind` của kho ở TypeScript: tsc từ chối kind ngoài union ở mọi lời gọi `enqueueJob`, cổng `tests/architecture/kind-outbox-mot-cho.test.ts` đòi kind LITERAL thuộc union ở mọi lời gọi sản xuất, và cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`) đòi union = hợp hai bảng handler với sổ mồ côi — thiếu vế nào thì đỏ ở đúng tệp.
 4. Cái giá được ĐÒI ở cổng, không ở trí nhớ: hai composition test đối chiếu tập `kind` của policy ĐANG CÓ (đọc `pg_policy`) với
    `Object.keys(handlers)` ∪ sổ mồ côi của chính tiến trình, đỏ ở tệp của tiến trình thêm `kind`, TRƯỚC khi job của nó nằm `PENDING`
    im lặng. Quên migration ⇒ fail-CLOSED (kind mới không vai nào ghi được kết cục), đúng hướng.
@@ -10167,7 +10167,7 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 
 ### Hệ quả
 
-- Một `kind` chỉ có thể thuộc ĐÚNG MỘT vai (cổng "hai tập không giao nhau" đo trên chính policy).
+- Một `kind` chỉ có thể thuộc ĐÚNG MỘT vai (cổng "hai tập không giao nhau" đo trên chính policy). **[S1.9115 / khoản 169]** Và trên hai bảng handler: mệnh đề ⑷ của cổng khoản 34 — một `kind` có handler ở cả `api` lẫn worker thì đỏ ở tệp ấy, trước khi lớp CSDL chặn claim.
 - `DROP OWNED BY <vai>` xoá policy ĐƠN VAI (`095` là RESTRICTIVE đầu tiên `TO <một vai>`) — đường ops xoá rồi tạo lại vai (N3, fix
   round 4). Hardening dựng lại policy THIẾU từ chính dòng khai `POLICY_RESTRICTIVE_KHAI` (mục "hai policy kind theo vai của outbox_jobs
   (095)", cùng lớp mục 044); policy ĐANG CÓ mà lệch thì không sửa đè — phán xét nêu tên. Đo: `db/migrations.int.test.ts` N3 và vế

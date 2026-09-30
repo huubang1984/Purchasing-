@@ -20348,6 +20348,170 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   ~7944, `[Task 8 — (E1)/(E2)]…` ~8248): hệ quả của mọi lô thêm migration, người tích hợp gỡ lúc `cap-so` (cây gộp đã có, theo báo
   "122/123 chỉ N3 đỏ"); cố ý KHÔNG chạm ba danh sách ấy để không xung đột gộp. Đột biến M4: 2/2 đỏ.
 
+# §S1.9115 — LÔ A2 `kind` CỦA OUTBOX: UNION `KindOutbox` KHAI MỘT CHỖ, LITERAL Ở MỌI LỜI GỌI `enqueueJob`, HAI BẢNG HANDLER RỜI NHAU, GƯƠNG TEST CỦA RUNNER `api` CÓ CỔNG — KHOẢN 161 · 169 · 170 ĐÓNG, 9415 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ C — ba khoản mà câu 1 của kế hoạch đợt 3 kích hoạt lại vì có răng với mã sản xuất; không chạm mảnh nào
+của `docs/PRODUCT.md` §11 — không route, không màn, không migration, không đổi hành vi. Đóng 161, 169, 170; mở 9415.
+
+## 1. Vòng này là gì
+
+Lô A2 của đợt trả nợ 3 (lượt A). Ba khoản cùng quanh cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`), lớp canh
+*"mọi `kind` được xếp đều có tiến trình nhận"* — vế chống lỗi §S1.81: một kind ngoài mảng lọc của mọi runner nằm `PENDING` im lặng.
+**161** (§S1.81): cổng tìm tập kind bằng ba mẫu văn bản, nên một kind viết khác ba mẫu ấy vô hình; hình dạng đã chốt — `JobInput.kind`
+thành union khai ở MỘT chỗ, cộng một cổng cây cú pháp cấm `kind` không literal tại lời gọi `enqueueJob`. **169** (§S1.83): cổng KHAI
+*"hai bảng handler không trùng nhau"* mà không khẳng định, và chống rỗng ruột không phân biệt mẫu ⑶ đang chạy với mẫu ⑶ khớp 0 tệp.
+**170** (§S1.83): lời *"phải giống bản thật"* của runner test `api` (`test-services.ts`) không có lớp nào đối chiếu với runner thật
+(`composition.ts`).
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Phạm vi: câu 1 của kế hoạch đợt 3 (chốt 2026-09-30) — sáu khoản rổ C có răng, gồm ba khoản này; hình dạng
+nằm sẵn trong thân hàng (mục 0 của kế hoạch: *"hình dạng đã nằm trong thân hàng"*) và ở đề bài lô `A2.md`. Điểm tự chốt ở mục 5.
+
+## 3. Đo trước
+
+Trên `ba269ae`, cụm Postgres 16 cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Nền: worker `composition.int` 9/9, api `composition.int` 21/21,
+`packages/outbox` 5 tệp 76/76. Ba khoản đều là khoản ĐỌC/PHÒNG — hôm nay không kind nào lọt, không kind nào có hai người nhận, gương
+đang khớp —, nên ca đỏ dựng bằng đột biến tạm trên cây hiện tại và bằng cổng mới chạy trên cây cũ:
+
+- **Phép quét ba mẫu, đếm theo từng mẫu** (bản sao nguyên văn ba biểu thức, 250 tệp): ⑴ `enqueueJob(… kind: "X")` **0** lần khớp;
+  ⑵ `…_KIND = "X"` 6 lần (bốn kind TypeScript, `UNSEAL_RFQ` hai lần); ⑶ `INSERT` viết tay 3 lần (`019`, hai lần ở hardening). Mẫu ⑴
+  chạy trên 0 lời gọi: sáu lời gọi sản xuất đều truyền hằng.
+- **161:** thêm vào `packages/rfq/src/rfq.ts` (tệp đã track) một hàm với ba lời gọi `kind: loaiViec` (`const loaiViec = "THU_LOT_161"`) ·
+  `` kind: `THU_TEMPLATE_${so}` `` · `kind: ["THU", "JOIN", "161"].join("_")` ⇒ `-t "khoản nợ 34"` **2/2 xanh**, `tsc` thoát 0 — ba kind
+  không người nhận vô hình với cả cổng lẫn trình biên dịch. Biến thể `kind: "THU_" + "GHEP_161"` ⇒ đỏ NHẦM: `expected [ 'THU_' ] to deeply
+  equal []` — mẫu ⑴ bắc cầu 400 ký tự từ lời gọi trước và đọc mảnh đầu phép ghép như một kind.
+- **161, cổng mới trên cây cũ** (`tests/architecture/kind-outbox-mot-cho.test.ts` viết trước, chưa vá gì): 2 đỏ / 4 xanh — ⑴ `` `type KindOutbox`
+  phải khai ĐÚNG MỘT lần ở cấp tệp — thấy 0 `` và `` `JobInput.kind` phải mang kiểu `KindOutbox`, bắt buộc — thấy `readonly kind: string;` ``;
+  ⑵ đúng sáu dòng: `apps/api/src/routes/auth.ts › handler › kind không phải literal (tên (biến hay hằng)): LOGIN_LINK_SEND_KIND`,
+  `packages/rfq/src/rfq.ts › extendRfqDeadline › … RFQ_DEADLINE_NOTICE_KIND` ×2, `packages/unseal/src/requests.ts › xepTin › … UNSEAL_NOTICE_KIND`,
+  `› dieuPhoiLaiSauKhiChet › … UNSEAL_JOB_KIND`, `› dispatchUnseal › … UNSEAL_JOB_KIND`.
+- **169a:** thêm `UNSEAL_RFQ: () => Promise.resolve()` vào `buildApiOutboxHandlers` ⇒ worker `composition.int` 8/9: hai vế khoản 34 **xanh**;
+  đỏ duy nhất là vế policy `095` của `api` (S1.233) — *"Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm
+  migration …"*. Đi theo lời khuyên ấy (thêm `UNSEAL_RFQ` vào policy `api`) thì vế *"hai tập không giao nhau"* của policy đỏ (suy, không
+  chạy). Tức từ ADR-134 lớp CSDL bắt được một nửa, bằng một thông điệp dẫn sai hướng sửa; cổng khai tính chất ấy vẫn mù.
+- **169b:** đổi `outbox_jobs` thành `outbox_jobz` trong mẫu ⑶ ⇒ `-t "khoản nợ 34"` **2/2 xanh** — hai kind mốc vẫn thấy qua ⑵.
+- **170:** hai câu đầu của hàng 170 thiu từ S1.222: dòng `kindKhongNguoiNhan` đã rời CẢ HAI tệp (sổ mồ côi sang worker), nên phép đo
+  *"gỡ dòng ở `composition.ts`"* không dựng được. Đo hai chiều còn lại: **170a** thêm `kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN)`
+  (cùng import) CHỈ ở `test-services.ts` ⇒ `tsc` 0, api `composition.int` **21/21 xanh**; sổ rỗng từ S1.91 nên mảng lọc hai runner bằng
+  nhau (`packages/outbox/src/runner.ts:448–450`, ĐỌC) — không test nào phân biệt được; khối khoản 170 của cổng mới trên đột biến ấy ⇒ đỏ.
+  **170b** thêm cùng dòng ở `composition.ts` ⇒ vế khoản 168 đỏ `expected { status: 'FAILED', attempts: 1, … } to deeply equal { … 'PENDING' … }`
+  — chiều ấy có răng từ S1.222 (M5 của §S1.222, đo lại).
+
+## 4. Thay đổi
+
+- `packages/outbox/src/enqueue.ts`: `export type KindOutbox` — union năm literal theo bảng chữ cái (`BREAK_GLASS_UNSEAL_ALERT`,
+  `LOGIN_LINK_SEND`, `RFQ_DEADLINE_EXTENDED_NOTICE`, `UNSEAL_APPROVAL_NOTICE`, `UNSEAL_RFQ` — đúng hợp hai tập của `095`), khối lý do
+  (vì sao, theo vai, "thêm kind = union + handler + migration"); `JobInput.kind: KindOutbox` (docstring gạch `string`). Không ra cửa
+  `index.ts` — người gọi đọc qua `JobInput["kind"]`.
+- Sáu lời gọi sản xuất viết literal, không đổi hành vi: `apps/api/src/routes/auth.ts` (`"LOGIN_LINK_SEND"`, bỏ import `LOGIN_LINK_SEND_KIND`
+  thừa), `packages/rfq/src/rfq.ts` ×2 (`"RFQ_DEADLINE_EXTENDED_NOTICE"`), `packages/unseal/src/requests.ts` ×3 (`"UNSEAL_APPROVAL_NOTICE"`,
+  `"UNSEAL_RFQ"` ×2). Docstring hai hằng `RFQ_DEADLINE_NOTICE_KIND`, `UNSEAL_JOB_KIND` gạch *"Một hằng, một chỗ ở"*; câu *"CHƯA có handler
+  nào … `apps/` chưa có"* cùng docstring gạch (thiu từ S1.91).
+- `tests/architecture/kind-outbox-mot-cho.test.ts` (mới, 6 test, không nhãn `[INV-…]`): khuôn cây cú pháp của S1.72. `docUnionKind` (⑴: union
+  literal, CHECK của `007`, bảng chữ cái, không trùng, `JobInput.kind` bắt buộc mang kiểu ấy); `docLoiGoi` (⑵: mọi tham chiếu `enqueueJob`
+  trong `packages|apps|tools/*/src` không test — tên trần, bí danh import, thuộc tính vật chủ bất kỳ — phải là lời gọi trực tiếp; không tham số
+  kiểu; đúng ba đối số không trải; object literal không trải; đúng một `kind: "<LITERAL>"`, chỉ bỏ ngoặc; literal thuộc union; re-export đổi
+  tên là vi phạm); văn bản mẫu cho mọi hình dạng (kể cả ba hình dạng của đo trước, hằng `_KIND`, `as`, `<T>x`, `satisfies`, ba ngôi, viết tắt,
+  tên tính toán, trải, `@ts-expect-error`, `.call`/`.apply`/`.bind`, `Reflect.apply`, `(0, f)(…)`, phá cấu trúc, gọi bằng chuỗi, hàm bọc) và
+  đối chứng (chú thích, JSDoc, chuỗi, import/export giữ tên, vị trí kiểu, khai báo hàm); chống rỗng ruột: > 50 tệp và lời gọi
+  `packages/unseal/src/requests.ts › dispatchUnseal › UNSEAL_RFQ` phải đọc ra. Khối khoản 170: `docDayNoiLoc` (số runner, bảng handler, nguồn
+  import, mọi lần `kindKhongNguoiNhan` trong mã) của `composition.ts` bằng của `test-services.ts`, đúng một runner mỗi tệp, cộng văn bản mẫu.
+- `apps/unseal-worker/src/composition.int.test.ts`: `docUnionKindCuaKho` (đọc union từ cây cú pháp của `enqueue.ts`), `quetInsertOutbox`
+  (mẫu ⑶ giữ nguyên biểu thức), `doiChieuKind` (hàm thuần của ⑴ ⑴′ ⑵ ⑷). Vế khoản 34: tập kind = union; ⑴ ⑵ văn bản gạch tại chỗ; chống rỗng
+  ruột theo từng nguồn (union mang hai kind worker; mẫu ⑶ đọc ra `BREAK_GLASS_UNSEAL_ALERT` từ `019`); kind của `INSERT` viết tay ⊆ union; ⑴′
+  và ⑷ mới; câu *"và không trùng nhau"* gạch. Hai vế văn bản mẫu mới (⑷ và bộ đọc `INSERT`) trong `describe("[INV-D4] …")` có sẵn.
+- Test gọi `enqueueJob`, chỉ để khớp union: `packages/outbox/src/outbox.int.test.ts` gọi CÙNG hàm qua bí danh kiểu nới `kind` về `string`
+  (~40 kind thử của test cơ chế); `packages/outbox/src/dau-xep-viec.test.ts` đổi `"TEST_KIND"` sang một kind thật (client giả) và thêm một vế
+  hai `@ts-expect-error` (kind lạ, chuỗi ghép) làm mốc chết ở tầng biên dịch; `apps/unseal-worker/src/tien-trinh.int.test.ts` tham số `kind`
+  của `xep` mang `JobInput["kind"]`.
+- `apps/api/src/composition.ts`, `apps/api/src/test-services.ts`: mỗi tệp hai–ba dòng chú thích trỏ tới cổng khoản 170. Không đổi mã.
+- Không chạm: `packages/outbox/src/index.ts` (danh sách trắng barrel), `packages/outbox/src/runner.ts`, `so-kind-mo-coi.ts`,
+  `apps/api/src/outbox-api.ts`, `apps/unseal-worker/src/composition.ts`, mọi tệp cấm.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Thay hai mẫu văn bản TypeScript bằng union, giữ mẫu `INSERT`.** Đo: mẫu ⑴ khớp 0 lời gọi trên `ba269ae`; mẫu ⑵ theo TÊN hằng; trên cây nền
+  union = ⑴ ∪ ⑵ ∪ ⑶ = năm kind, nên thay không mất gì, còn giữ thì giữ một nguồn thứ hai yếu hơn. Mẫu ⑶ giữ vì SQL không qua kiểu.
+- **"Literal" là literal CÚ PHÁP, không phải kiểu literal.** Một cổng cú pháp không phân biệt `const X = "…"` với `const X = y as KindOutbox`;
+  đo (M2): trả một lời gọi về hằng ⇒ `tsc` XANH, chỉ cổng ⑵ đỏ. Giá: sáu lời gọi viết lại, kiểm máy móc literal = giá trị hằng 6/6.
+- **Union là KIỂU, không ra cửa barrel.** `index.ts` và `tests/architecture/barrel-exports.test.ts` ngoài danh sách tệp của lô; người gọi đọc
+  `JobInput["kind"]`; hai cổng đọc khai báo bằng cây cú pháp của tệp (`g4-` chỉ mở `index.ts`; union không có giá trị lúc chạy).
+- **Test cơ chế dùng bí danh kiểu nới, không mở đường `string` trong mã sản xuất.** Đo: union trần ⇒ 69 lỗi kiểu (64 ở `outbox.int.test.ts`,
+  4 `dau-xep-viec`, 1 `tien-trinh`); `enqueueJob<K extends string = KindOutbox>` + `NoInfer` ⇒ 79 lỗi, `Parameters<typeof enqueueJob>` thành
+  `never` ở hai trình bọc `vi.mock`; bí danh `enqueueJobCongKhai as (…kind: string…)` ⇒ 0 lỗi, 0 bề mặt sản xuất.
+- **Union gồm cả `BREAK_GLASS_UNSEAL_ALERT`** (chỉ SQL xếp): đề bài chốt tập kind THẬT của kho, đối chiếu `095` và hai bảng handler.
+- **Cổng khoản 34 đòi union = hợp hai bảng handler ∪ sổ mồ côi (thêm ⑴′), và kind của `INSERT` viết tay ⊆ union** — union là sổ đăng ký
+  duy nhất; đo M4 (kind mới trong union không người nhận ⇒ ⑴ đỏ) và M5 (`INSERT` viết tay kind ngoài union ⇒ đỏ).
+- **169: bốn mệnh đề thành hàm thuần `doiChieuKind`**, để mỗi mệnh đề đỏ được trên văn bản mẫu thay vì chỉ xanh trên cây hôm nay; ⑶ (dòng
+  sổ → khoản MỞ) đọc `docs/STATE.md`, ở lại vế thật. Chống rỗng ruột của mẫu ⑶ neo vào ĐÚNG tệp `019`, không vào hợp các nguồn.
+- **170: cổng đối chiếu, không hằng dùng chung.** Dòng ấy đã không còn ở cả hai tệp (S1.222); hằng dùng chung nghĩa là thêm lại một dòng
+  `kindKhongNguoiNhan` vào composition root thật (chính dòng S1.222 gỡ), hay một export mới ở `outbox-api.ts`/`composition.ts` — cái sau kéo
+  AWS SDK vào mọi test `api` qua `test-services.ts`. Cổng: 0 dòng mã sản xuất đổi. Nó so bảng handler + nguồn import + mọi lần tên
+  `kindKhongNguoiNhan` trong MÃ (bắt cả sổ đi qua một object trải trong tệp) và đòi đúng một runner mỗi tệp.
+- **Một tệp cổng mới cho cả 161 và 170** (đề bài cho một tệp); phạm vi `packages|apps|tools/*/src` — thêm `tools` so với khuôn S1.72 (hôm nay
+  không lời gọi nào ở đó). `tenHamBao` nhận cả hàm gán cho thuộc tính (`handler`).
+- **Re-export đổi tên là vi phạm** — tìm ở lượt tự soi (mục 7): lỗ trong chính cổng của lô, không phải lỗ kề, nên đóng tại chỗ.
+- **Không nhãn `[INV-…]` ở cổng mới** (khuôn S1.210); hai vế mẫu ở worker `composition.int` nằm trong `describe("[INV-D4] …")` có sẵn —
+  cặp (D4, tệp) đã khai, `so-khai-nhan.ts` không đổi.
+
+## 6. Đột biến
+
+Kịch bản `dot-bien.py` (scratchpad, ngoài kho): mỗi ca thay chuỗi chính xác (đếm đúng số lần), chạy đúng lệnh, khôi phục từ bản chụp byte
+ngay trước ca và so byte. Mười ca, mười ĐỎ đúng vế, 0 sống:
+
+| Ca | Khoản | Đổi | Đỏ ở |
+|---|---|---|---|
+| M1 | 161 | `JobInput.kind: KindOutbox` → `string` | `tsc` 2 × TS2578 *"Unused '@ts-expect-error' directive"* (`dau-xep-viec.test.ts`); cổng ⑴ |
+| M2 | 161 | lời gọi của `dispatchUnseal` trả về `kind: UNSEAL_JOB_KIND` | `tsc` XANH; cổng ⑵ đỏ — chỉ cổng bắt |
+| M3 | 161 | union mất `UNSEAL_RFQ` | `tsc` 7 lỗi (mọi chỗ gọi); cổng ⑴ (mốc) + ⑵; khoản 34 (union thiếu kind worker) |
+| M4 | 161 | union thêm `THU_MOI_161` | `tsc` và cổng xanh; khoản 34 ⑴ đỏ — thêm kind là phải quyết người nhận |
+| M5 | 161 | một hằng `INSERT … VALUES ($1, 'THU_SQL_161')` trong `rfq.ts` | khoản 34: kind của `INSERT` viết tay ngoài union |
+| M6 | 169 | handler `UNSEAL_RFQ` thêm vào bảng `api` | khoản 34 ⑷ (mới) + vế policy `095` (có sẵn) — đo trước: chỉ vế policy |
+| M7 | 169 | mẫu ⑶ → `outbox_jobz` (khớp 0 tệp) | khoản 34: *"… không đọc ra BREAK_GLASS_UNSEAL_ALERT từ 019 — nó đang khớp 0 tệp"* + vế mẫu bộ đọc |
+| M8 | 169 | `haiBangTrung: sap([])` (⑷ rỗng ruột) | vế văn bản mẫu ⑷ |
+| M9 | 170 | `kindKhongNguoiNhan` chỉ ở `test-services.ts` | cổng 170; api `composition.int` vẫn 21/21 |
+| M10 | 170 | bảng handler của gương `{ ...buildApiOutboxHandlers(services), THU_GUONG_170: … }` | cổng 170 |
+
+Sau mỗi ca `git status` chỉ còn các sửa của lô; so byte nguyên vẹn. Văn bản mẫu trong hai tệp cổng chạy mọi lần và đỏ nếu bộ đọc mất một
+hình dạng (M7 đỏ cả vế mẫu của bộ đọc `INSERT`).
+
+## 7. Giới hạn, nói ra
+
+- **`INSERT INTO outbox_jobs` viết tay không qua union** (SQL, hay câu lệnh TS ngoài `enqueueJob`) và mẫu ⑶ chỉ đọc một dạng — lượt tự soi đo
+  bằng chính biểu thức: đảo cột, tham số `$2`, hàm, cột `NEW.…`, `INSERT … SELECT`, không danh sách cột ⇒ `[]`; `'THU_' || …` ⇒ `["THU_"]`.
+  Ngoài hình dạng đã chốt (mẫu ⑶ chỉ phải *"vẫn bị phủ"*) ⇒ khoản **9415**, không vá.
+- Cổng đọc theo TÊN và HÌNH DẠNG cú pháp: mù với `eval`/`Function`, tên tính lúc chạy (`outbox["enqueue" + "Job"]`, `Reflect.get`), mã ngoài
+  `packages|apps|tools/*/src`; tệp test không đọc (cố ý). Tên `enqueueJob` bị che bởi một biến cục bộ cùng tên thì cổng coi là hàm — đỏ ồn, không im.
+- Cổng khoản 34 đọc BẢNG HANDLER từ hai hàm dựng (`buildApiOutboxHandlers`, `buildUnsealWorkerHandlers`), không từ runner đang chạy. Phía `api`
+  cổng 170 đòi composition root dựng đúng một runner từ `buildApiOutboxHandlers(services)`; phía worker không có vế tương ứng (runner dựng qua
+  `createUnsealWorkerRunner`, đọc). Một runner thứ hai ở mô-đun khác của một tiến trình vô hình với cả hai cổng; policy `095` vẫn chặn nó ghi kết
+  cục cho kind của vai kia.
+- Cổng 170 không đọc xuyên một phần trải mà tên `kindKhongNguoiNhan` không xuất hiện trong tệp (trải một hằng import); `tuyChon` của `outboxTest`
+  nhận object không literal thì kiểm tra thừa thuộc tính của tsc không chạy.
+- Union mở cho mã TypeScript xếp `BREAK_GLASS_UNSEAL_ALERT` bằng một literal (trước vòng này `string` mở cho mọi kind) — cùng bề mặt khoản 285.
+- Bộ đọc union có hai bản (~15 dòng ở worker `composition.int`, bản đủ vế ở cổng kiến trúc): `g1-khong-import-nguoc-tu-apps-unseal-worker` cấm cổng
+  kiến trúc import bảng handler của worker, và test không import được test.
+- Không chạy `pnpm evidence`, `pnpm test:int` trọn, `unseal.int`/`rfq.int`/`auth.int` (máy dùng chung); hành vi của sáu lời gọi viết lại kiểm bằng
+  literal = giá trị hằng (6/6) và bằng api `composition.int` (đi qua `/auth/link`).
+
+## 8. Số đo
+
+- Nền `ba269ae`: worker `composition.int` 9/9 (7,8 s); api `composition.int` 21/21 (10,8 s); `packages/outbox` 5 tệp 76/76 (13,5 s).
+- Đo trước: mục 3.
+- Sau vá: ba lời gọi của đo trước ⇒ `tsc` thoát 2 (3 × TS2322: `"THU_LOT_161"`, `` `THU_TEMPLATE_${string}` ``, `string` → `KindOutbox`), cổng ⑵ đỏ
+  đúng ba dòng; M6 ⇒ ⑷ đỏ; M7 ⇒ chống rỗng ruột ⑶ đỏ; M9 ⇒ cổng 170 đỏ.
+- Đột biến: 10/10 đỏ đúng vế, 0 sống (mục 6). Literal = giá trị hằng bị thay: 6/6.
+- `pnpm exec eslint` 11 tệp đã chạm: 0 lỗi.
+- Cổng của lô (tuần tự, cụm cục bộ): `pnpm vitest run packages/outbox` 5 tệp 77/77 (17,7 s); `apps/unseal-worker/src/composition.int.test.ts`
+  11/11 (9,6 s); `apps/api/src/composition.int.test.ts` 21/21 (11,8 s); `apps/unseal-worker/src/tien-trinh.int.test.ts` 19/19 (10,9 s);
+  `tests/architecture/kind-outbox-mot-cho.test.ts` 6/6 (2,7 s).
+- `pnpm t0`: thoát 0 — typecheck, eslint toàn kho, depcruise 496 module / 2069 phụ thuộc, 0 vi phạm (1 m 14 s).
+- `pnpm test`: 134/134 tệp, 2066 đạt | 1 bỏ qua (7 m 33 s); lô thêm 1 tệp và 7 test đơn vị (cổng mới 6, `dau-xep-viec` 1).
+- Áp thử bàn giao (hàng sổ, cột mốc, biên bản, tiểu mục ADR-134, dòng tổng kết, đoạn đếm, lời khai đếm ở `Handoff.md`, dòng RỔ C) lên bản tạm
+  của bốn tệp người tích hợp: `tests/architecture/so-no-tu-doi-chieu.test.ts` 45/45, `tep-van-ban-git.test.ts` 7/7; khôi phục byte, không commit.
+
 # §S1.9125 — LÔ A4 ĐỢT 3: DÒNG LOG MẤT SỔ MANG MÃ CHỐT VÀ MÃ LÝ DO; CẤU HÌNH WORKER NÊU TÊN KHÔNG NÊU GIÁ TRỊ, LỜI HỨA KHÔNG ĐỌC BA VÒNG ĐO BẰNG HÀNH VI; «NĂM TRÊN SÁU VAI» GẠCH TẠI CHỖ — KHOẢN 279, 270, 172 ĐÓNG, 9425, 9426 MỞ
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B (279, 270) và rổ C kích hoạt lại (172); không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai lời gọi
