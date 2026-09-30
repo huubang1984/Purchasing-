@@ -509,7 +509,7 @@ export async function migrate(
     const fileLuonChay = tatCaFile.filter((f) => f.endsWith(HAU_TO_LUON_CHAY));
     const fileDanhSo = tatCaFile.filter((f) => !f.endsWith(HAU_TO_LUON_CHAY));
 
-    const chayFileLuonChay = async (cheDo: CheDoHardening): Promise<void> => {
+    const chayFileLuonChay = async (cheDo: CheDoHardening, truocVongDanhSo = false): Promise<void> => {
       for (const file of fileLuonChay) {
         const sql = await readFile(join(dir, file), "utf8");
         try {
@@ -518,6 +518,14 @@ export async function migrate(
           // ROLLBACK và không rò sang migration đánh số hay sang lần dùng kết nối kế tiếp.
           await lockClient.query("SELECT pg_catalog.set_config('app.hardening_che_do', $1, true)", [
             cheDo,
+          ]);
+          // [S1.205 / khoản 259] Lượt sửa ĐẦU nói ra nó đứng trước vòng đánh số: mục "không trigger lạ" của hardening chỉ
+          // gỡ ở lượt sau vòng — một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (059 gỡ một trigger bằng
+          // `DROP TRIGGER` không `IF EXISTS`). Đặt ở MỌI lượt, không chỉ lượt đầu: một `'khong'` đặt sẵn ở mức vai deploy
+          // (`ALTER ROLE <vai> SET`) không được tắt lần gỡ ở lượt sau vòng; đặt ở mức database (`ALTER DATABASE … SET`) hay
+          // `ALTER ROLE ALL SET` thì mục phán xét khoản 87 của hardening còn chặn deploy.
+          await lockClient.query("SELECT pg_catalog.set_config('app.hardening_sau_vong', $1, true)", [
+            truocVongDanhSo ? "khong" : "co",
           ]);
           await lockClient.query(sql);
           await lockClient.query("COMMIT");
@@ -674,7 +682,7 @@ export async function migrate(
       ).rows.map((r) => r.ten);
     const hangVaiTruoc = await docHangMucVai(null);
 
-    await chayFileLuonChay("sua");
+    await chayFileLuonChay("sua", true);
 
     const hangVaiSau = new Set(await docHangMucVai([...new Set(hangVaiTruoc.map((h) => h.slice(0, h.lastIndexOf("."))))]));
     const hangVaiDaGo = hangVaiTruoc.filter((h) => !hangVaiSau.has(h));
