@@ -21,7 +21,16 @@ const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.u
 
 /** Mọi bảng dữ liệu nền mang khuôn L1. Mỗi hạng mục S4 dựng một bảng nền thì thêm tên ở đây — test cuối tệp đòi hai chiều. */
 // [S1.197 / S4.2a] Bốn bảng hàng chuẩn vào cùng khuôn.
-const BANG_DU_LIEU_NEN = ["canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions", "uom_aliases"] as const;
+// [S1.9101 / S4.3a] Gợi ý và ánh xạ hạng mục vào cùng khuôn (`9501_anh_xa_hang_muc`).
+const BANG_DU_LIEU_NEN = [
+  "canonical_item_versions",
+  "canonical_items",
+  "item_aliases",
+  "item_uom_conversions",
+  "rfq_item_goi_y",
+  "rfq_item_mappings",
+  "uom_aliases",
+] as const;
 
 let db: TestDatabase;
 let api: pg.Pool;

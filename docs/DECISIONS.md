@@ -9408,3 +9408,92 @@ ghi số tiền vào sổ kiểm toán.
 - **FINANCE và DIRECTOR vẫn KẸP được ngân sách sau lúc mở niêm phong** — có trước vòng này: họ giữ `bid.view`, và bảng so sánh
   nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
   SỐ, không phải không biết KHOẢNG.
+
+## ADR-9201 — S4.3a: ánh xạ hạng mục sang hàng chuẩn — `TU_DONG` chỉ theo bí danh, luật ghi ở trigger, tập loại trừ là MỘT hàm đọc cả sổ kiểm toán
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30: S4.3 chia hai PR, S4.3a là CSDL và gói; tập
+loại trừ của L3 là một hàm SQL dựng trên dữ liệu đã có, S3.3b thêm vế tác giả ngoại lệ vào chính hàm ấy và K5 của S3.3c gọi lại nó;
+hai vế mà hàng dữ liệu chỉ giữ một lần đọc thêm từ sổ kiểm toán; bộ luật chuẩn hoá bản 1 tối thiểu; không mở đường đọc query (E6);
+phần `/tao-thau` của S4.3b đợi chuỗi #199 → #202 → #205 · **[S1.9101]** · **Liên quan:** ADR-097 ⑹ ⑺ (`TU_DONG` chỉ khi trùng bí
+danh; vai mù giá), ADR-082 ⑿ (tập loại trừ theo hành vi), ADR-051 (luật người đọc dữ liệu thật), ADR-116 (người ghi dữ liệu nền giữ
+`item.manage`), ADR-108 (tên ràng buộc) · **Spec:** S4 §4.4, §5.1 (L1, L2, L3, L13), §2.5 ⒀ ⒁ ⒂ · **Biên bản:**
+`evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Spec S4 §4.4 đặt ánh xạ hạng mục của gói sang hàng chuẩn làm cầu nối giữa dòng tự do của người mua và lịch sử giá. Lượt soi S1.159
+chốt `TU_DONG` chỉ khi chuỗi đã làm sạch trùng CHÍNH XÁC một bí danh còn hiệu lực (ADR-097 ⑹), người ghi `NGUOI_DUYET` giữ
+`item.manage` và nằm ngoài TRỌN tập ADR-082 ⑿ của gói, gói đã có bản rõ thì ánh xạ đòi lý do (L13). Đo trước trên cây của S4.2b:
+không bảng, không hàm; tập ADR-082 ⑿ chưa có dòng mã nào (K5 là S3.3c); `rfq_packages.submitted_by` chỉ giữ người nộp của lần cuối
+(gói trả về rồi nộp lại thì người trước biến mất), `rfq_budgets.created_by` chỉ giữ người đặt ngân sách lần đầu (các lần sau là
+`ON CONFLICT … DO UPDATE` tại chỗ). Cả hai lần đổi đều có một hàng `audit_events` cùng giao dịch.
+
+### Quyết định
+
+1. **Hai bảng chỉ-ghi-thêm theo khuôn nền L1** — `rfq_item_goi_y` (gợi ý: năm ứng viên đầu, điểm, phiên bản bộ luật) và
+   `rfq_item_mappings` (ánh xạ `TU_DONG`/`NGUOI_DUYET`; hàng chuẩn `NULL` là *"không có hàng chuẩn tương ứng"*). Hàng hiệu lực của một
+   dòng là hàng mới nhất theo `seq` có `hang_muc_bam` bằng băm HIỆN TẠI của dòng (`rfq_hang_muc_bam`, trên
+   `jsonb_build_array(description, unit, quantity)`) — khuôn C-1: dòng sửa sau lần trả về thì ánh xạ cũ tự thôi.
+2. **Không gắn cổng `du_lieu_nen_kiem_quyen_ghi` của ADR-116** lên hai bảng này: lượt chuẩn hoá chạy sau lần nộp duyệt dưới phiên
+   người nộp (giữ `rfq.create`, không giữ `item.manage`). Cổng của chúng là luật ghi riêng (trigger `…_bat_bien`): gói phải đã rời
+   DRAFT; dòng phải tồn tại; `TU_DONG` được CSDL tính lại (L2), bí danh ấy không do người trong tập loại trừ của gói khai (L3 — người
+   bị loại khỏi lần duyệt không được duyệt gián tiếp qua bí danh), và không đè một ánh xạ đang hiệu lực của dòng; `NGUOI_DUYET` đòi
+   `item.manage` và người ngoài tập loại trừ (L3); gói đã có bản rõ thì chỉ người giữ `item.manage` ghi, có lý do, và `TU_DONG` mang
+   mã `CHUAN_HOA_HOI_TO` — mã ấy dành riêng, người duyệt không khai được (L3, L13); ánh xạ `NULL` không lý do bị từ chối khi dòng
+   ĐÃ TỪNG có gợi ý `GOI_Y`, hay chưa có gợi ý nào cho băm hiện tại (§2.5 ⒁ — *"đã từng"*, không *"mới nhất"*: người nộp ghi được
+   gợi ý, và một hàng `CAN_DUYET` ghi sau không được xoá dấu). `ghiAnhXa` ghi kết quả lõi vừa tính vào bảng gợi ý TRƯỚC ánh xạ, nên
+   lần bác trên dòng chưa qua lượt chuẩn hoá được phán theo điều lõi nói lúc ấy.
+3. **Tập loại trừ là MỘT hàm SQL `rfq_tap_loai_tru(org, gói)`**, đọc: người tạo gói; `submitted_by`; mọi `invited_by` và
+   `revoked_by` (mọi hàng, kể cả đã thu hồi); `rfq_budgets.created_by`; người tạo bản ghi nhà cung cấp và người tạo người liên hệ trên
+   danh sách; và mọi `actor_id` của hàng sổ `RFQ_SUBMITTED_FOR_APPROVAL`, `RFQ_BUDGET_SET` của gói. Vế *tác giả ngoại lệ* chưa có vì
+   bảng ngoại lệ là của S3.3b; S3.3b thêm nó vào chính hàm này.
+4. **Thứ tự khoá một chiều: bí danh → hàng gói → ghi → sổ.** Luật ghi của hai bảng lấy TRƯỚC TIÊN khoá tư vấn của `item_aliases`
+   trong tổ chức — cùng khoá `du_lieu_nen_dat_thu_tu` giữ khi khai hay rút một bí danh — rồi hàng gói `FOR SHARE`, rồi khoá khuôn của
+   bảng mình. Lần kiểm bí danh của L2 vì thế không đua với một lần rút bí danh chưa commit. Hàm gói lấy hai khoá đầu TRƯỚC mọi lần ghi
+   sổ của giao dịch (khoản 126): worker mở thầu và mọi cạnh trạng thái khoá hàng gói rồi mới ghi sổ, nên một hàm ghi sổ trước (tạo
+   hàng chuẩn, khai bí danh) rồi mới chờ hàng gói là một vòng chờ. Đo bằng một giao dịch giữ hàng gói rồi ghi sổ trong lúc
+   `taoHangChuanVaAnhXa` chờ.
+5. **L13 khoá hàng gói `FOR SHARE` trước phép kiểm bản rõ.** Câu `UPDATE rfq_packages` của giao dịch mở thầu giữ `FOR NO KEY UPDATE` tới
+   commit, nên một ánh xạ ghi trong lúc mở thầu chạy thì chờ, rồi thấy bản rõ; giao dịch mở thầu gặp một ánh xạ chưa commit thì chờ
+   nó — ánh xạ không lý do là hàng ghi trước mọi bản rõ. Hai chiều đều đo.
+6. **Lõi thuần `chuanHoa` có phiên bản.** Bản 1: độ giống chữ Jaccard trigram (khuôn `pg_trgm`, tính ở TypeScript) trên tên phiên bản
+   mới nhất và các bí danh; một thuộc tính trọng yếu, `kich_thuoc` (`d10`, `phi 10`, `10mm`); trùng thì cộng 0,1, hai bên khai mà khác
+   thì chặn dưới 0,80, hàng chuẩn coi là trọng yếu mà chuỗi thiếu thì chặn dưới 0,95; ≥ 0,80 là `GOI_Y`, còn lại `CAN_DUYET`. Hằng giả
+   định. Đổi luật là thêm bộ luật mới và tăng phiên bản; bảng ca ghim theo phiên bản.
+7. **Tầng gói:** `chuanHoaGoi` (lượt chuẩn hoá, chạy lại được, không ghi trùng), `ghiAnhXa` (duyệt hoặc bác, tuỳ chọn khai bí danh cho
+   chính chuỗi ấy — hàng đợi học), `taoHangChuanVaAnhXa`, `docHangDoi`, `docAnhXaGoi`. Sửa thuộc tính và khai bí danh của hàng đợi là
+   hai hàm đã có của S4.2a. Mỗi lần ghi một hàng sổ cùng giao dịch (`RFQ_ITEMS_NORMALIZED`, `RFQ_ITEM_MAPPED`).
+
+### Phương án đã cân nhắc
+
+- **Chỉ đọc cột trên hàng cho tập loại trừ.** Loại: người nộp lần trước và người sửa ngân sách sau lần đầu lọt khỏi tập — một lỗ nói
+  ra được mà không đóng được sau này nếu không đọc sổ.
+- **Bảng chỉ-ghi-thêm mới cho mỗi lần nộp và mỗi lần đặt ngân sách.** Loại ở vòng này: thêm trigger ở cạnh nộp duyệt (spec S4 §3.4 nói
+  S4.3 không thêm trigger ở cạnh) và ở bảng ngân sách, đúng chỗ chuỗi #199 → #202 → #205 đang sửa.
+- **Chờ K5 của S3.3c dựng tập loại trừ.** Loại: S4.3 đứng không hạn; một hàm dùng chung dựng trước là thứ hai hạng mục cùng cần.
+- **Ngưỡng độ tin cậy trên chính sách, `TU_DONG` khi ≥ 95%.** Đã loại ở ADR-097 ⑹: độ tin cậy do ứng dụng khai, CSDL không phán được.
+
+### Hệ quả, nói thẳng
+
+- **Một bất biến an ninh dựa vào TÊN action của sổ.** Đổi tên `RFQ_SUBMITTED_FOR_APPROVAL` hay `RFQ_BUDGET_SET` là mất hai vế của tập
+  loại trừ trong im lặng; test ghim tên ở mã nguồn của `packages/rfq` và ở thân hàm.
+- **Chưa có vế tác giả ngoại lệ** cho tới S3.3b.
+- **`TU_DONG` và gợi ý trước khi có bản rõ ghi được bởi bất kỳ người nào của tổ chức.** `TU_DONG` vô hại vì CSDL tính lại bí danh (L2);
+  gợi ý không chịu lực — người quản lý dữ liệu quyết định, và tác giả hàng gợi ý nằm trên hàng.
+- **Hàng đợi và trạng thái từng dòng đọc mở cho người trong tổ chức** (khuôn S4.2b): mô tả, đơn vị, số lượng người mua đã viết, không giá.
+- **L13 khoá hàng gói ở mỗi lần ghi ánh xạ hay gợi ý**, nên lần ghi xếp hàng với mọi câu đổi trạng thái gói trong lúc nó chạy.
+- **Tập loại trừ phán ở lúc ghi.** Một người vào tập SAU khi đã ghi ánh xạ (mời nhà cung cấp sau đó, chẳng hạn) không làm ánh xạ cũ
+  thôi hiệu lực; lượt kiểm toán đọc được thứ tự từ `seq` và `ghi_luc`.
+- **Vế sổ kiểm toán tin vào đường ghi sổ.** Vai `app_api` gọi được `audit_append` với `actor_id` tuỳ ý: một ứng dụng bị chiếm thêm được
+  người vào tập (chặn một người quản lý dữ liệu khỏi một gói — hỏng về phía đóng), không bớt được ai. Chiều ngược lại: một câu
+  `UPDATE rfq_budgets` thẳng không qua `packages/rfq` không để lại hàng sổ, nên người ấy không vào tập — cùng lớp với mọi câu SQL
+  thẳng của `app_api` mà luật khoản 126 và cổng của ADR-116 đã nói.
+- **Lượt chuẩn hoá bỏ qua bí danh của người trong tập loại trừ khi quyết `TU_DONG`, nhưng lõi vẫn chấm điểm trên nó.** Dòng ấy ra
+  `GOI_Y` với độ tin cậy cao; người quyết vẫn là người quản lý dữ liệu ngoài tập.
+- **Trần 0,94 khi chuỗi thiếu thuộc tính trọng yếu không đổi đường đi ở bản 1** — `TU_DONG` chỉ đến từ bí danh, và 0,80 ≤ điểm < 0,95
+  vẫn là `GOI_Y`. Nó có mặt để điểm ghi trong `dau_vao` nói đúng điều spec §4.4 nói, và để bản sau có ngưỡng khác không phải sửa lõi.
+
+### Đo
+
+`packages/du-lieu-nen/src/anh-xa.int.test.ts` trên Postgres thật; `chuan-hoa.test.ts` (bảng ca bộ luật 1); tổng điều tra của `db/` và
+`tests/architecture`. Đột biến: §S1.9101.

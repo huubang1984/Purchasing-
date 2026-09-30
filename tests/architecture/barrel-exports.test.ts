@@ -1094,6 +1094,17 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docDanhMucDonVi",
   "khaiBiDanhDonVi",
   "rutBiDanhDonVi",
+  // [S1.9101 / S4.3a] Lõi chuẩn hoá có phiên bản và hai ngưỡng giả định; lượt chuẩn hoá, hai thao tác hàng đợi, hai hàm đọc.
+  "NGUONG_GOI_Y",
+  "NGUONG_TU_DONG",
+  "PHIEN_BAN_BO_CHUAN_HOA",
+  "chuanHoa",
+  "LY_DO_CHUAN_HOA_HOI_TO",
+  "chuanHoaGoi",
+  "docAnhXaGoi",
+  "docHangDoi",
+  "ghiAnhXa",
+  "taoHangChuanVaAnhXa",
 ];
 
 const DANH_SACH_TRANG_DANH_GIA = [

@@ -25,7 +25,19 @@ export class DuLieuNenError extends Error {
       | "KHONG_CO_BI_DANH"
       | "KHONG_CO_QUY_DOI"
       | "QUY_DOI_CHUNG_DA_CO"
-      | "HE_SO_SAI_HINH_DANG",
+      | "HE_SO_SAI_HINH_DANG"
+      // [S1.9101 / S4.3a] Ánh xạ và gợi ý.
+      | "GOI_CON_SOAN"
+      | "KHONG_CO_HANG_MUC"
+      | "TU_DONG_KHONG_KHOP_BI_DANH"
+      | "TRONG_TAP_LOAI_TRU"
+      | "HOI_TO_CAN_ITEM_MANAGE"
+      | "HOI_TO_SAI_MA_LY_DO"
+      | "CAN_LY_DO"
+      | "LY_DO_SAI_HINH_DANG"
+      | "BI_DANH_TRONG_TAP_LOAI_TRU"
+      | "DA_CO_ANH_XA"
+      | "MA_LY_DO_DANH_RIENG",
     message: string,
   ) {
     super(message);
@@ -51,6 +63,21 @@ const MA_THEO_RANG_BUOC: Readonly<Record<string, DuLieuNenError["ma"]>> = {
   item_uom_conversions_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
   // [S1.199 / S4.2b] `CHECK` không tên của `079` trên bí danh đơn vị của tổ chức — tên Postgres tự đặt.
   uom_aliases_bi_danh_sach_check: "CHUOI_RONG",
+  // [S1.9101 / S4.3a] Luật ghi của ánh xạ và gợi ý (`9501_anh_xa_hang_muc`).
+  anh_xa_goi_con_soan: "GOI_CON_SOAN",
+  anh_xa_khong_co_hang_muc: "KHONG_CO_HANG_MUC",
+  anh_xa_tu_dong_khong_khop_bi_danh: "TU_DONG_KHONG_KHOP_BI_DANH",
+  anh_xa_nguoi_duyet_can_item_manage: "CAN_ITEM_MANAGE",
+  anh_xa_nguoi_duyet_trong_tap_loai_tru: "TRONG_TAP_LOAI_TRU",
+  anh_xa_hoi_to_can_item_manage: "HOI_TO_CAN_ITEM_MANAGE",
+  anh_xa_hoi_to_sai_ma_ly_do: "HOI_TO_SAI_MA_LY_DO",
+  anh_xa_sau_ban_ro_can_ly_do: "CAN_LY_DO",
+  anh_xa_bo_trong_can_ly_do: "CAN_LY_DO",
+  rfq_item_mappings_ly_do_hinh_dang: "LY_DO_SAI_HINH_DANG",
+  anh_xa_bi_danh_trong_tap_loai_tru: "BI_DANH_TRONG_TAP_LOAI_TRU",
+  anh_xa_tu_dong_da_co_anh_xa: "DA_CO_ANH_XA",
+  anh_xa_ma_ly_do_danh_rieng: "MA_LY_DO_DANH_RIENG",
+  rfq_item_mappings_org_id_canonical_item_id_fkey: "KHONG_CO_HANG_CHUAN",
 };
 
 /**
@@ -67,6 +94,17 @@ const CAU_THEO_MA: Readonly<Partial<Record<DuLieuNenError["ma"], string>>> = {
   CHUOI_RONG: "chuỗi không còn gì sau khi làm sạch",
   QUY_DOI_CHUNG_DA_CO: "hai đầu cùng thứ nguyên của danh mục — quy đổi chung đã có",
   KHONG_CO_HANG_CHUAN: "không có hàng chuẩn này trong tổ chức",
+  GOI_CON_SOAN: "gói còn soạn thảo — chỉ ánh xạ hạng mục của gói đã nộp duyệt",
+  KHONG_CO_HANG_MUC: "gói không có dòng này",
+  TU_DONG_KHONG_KHOP_BI_DANH: "ánh xạ tự động chỉ khi mô tả trùng một bí danh còn hiệu lực của đúng hàng chuẩn",
+  TRONG_TAP_LOAI_TRU: "người duyệt ánh xạ đã tham gia gói này (tạo, mời, đặt ngân sách, nộp duyệt, tạo nhà cung cấp hay liên hệ)",
+  HOI_TO_CAN_ITEM_MANAGE: "gói đã mở niêm phong — chỉ người quản lý dữ liệu chuẩn hoá hồi tố",
+  HOI_TO_SAI_MA_LY_DO: "ánh xạ tự động trên gói đã mở niêm phong mang mã lý do CHUAN_HOA_HOI_TO",
+  CAN_LY_DO: "ánh xạ này cần lý do",
+  LY_DO_SAI_HINH_DANG: "lý do dài 1 đến 1000 ký tự, không khoảng trắng ở hai đầu",
+  BI_DANH_TRONG_TAP_LOAI_TRU: "bí danh này do một người đã tham gia gói khai — không tự động ánh xạ được",
+  DA_CO_ANH_XA: "dòng đã có ánh xạ — ánh xạ tự động không đè lên",
+  MA_LY_DO_DANH_RIENG: "mã lý do CHUAN_HOA_HOI_TO dành riêng cho ánh xạ tự động",
 };
 
 /** Chạy một lần ghi; lần từ chối của một ràng buộc có tên thành `DuLieuNenError`. Dùng chung trong gói, không ra mặt tiền. */

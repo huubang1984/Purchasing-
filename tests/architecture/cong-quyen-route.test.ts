@@ -85,6 +85,10 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
   // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức — cùng rổ, cùng mã quyền ở route, cùng cổng CSDL.
+  // [S1.9101 / S4.3a] Lượt chuẩn hoá và hai thao tác hàng đợi. Route của S4.3b hỏi quyền; CSDL chặn ở trigger `…_bat_bien`:
+  // `NGUOI_DUYET` đòi `item.manage` và người ngoài tập loại trừ (L3), gói đã có bản rõ đòi `item.manage` và lý do (L13).
+  "chuanHoaGoi",
+  "ghiAnhXa",
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
@@ -107,6 +111,7 @@ const HAM_DOI_TRANG_THAI = [
   "setRfqBudget",
   "submitRfqForApproval",
   "taoHangChuan",
+  "taoHangChuanVaAnhXa",
   // [S1.201 / S3.6a] Tạo nhóm hàng — route đòi `category.manage`, hàm hỏi lại cùng mã.
   "taoNhomHang",
   "taoPhienBanHangChuan",
@@ -161,6 +166,9 @@ const HAM_CHI_DOC = [
   // phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`), không ở đây.
   "lietKePhienBanChinhSach",
   "lietKeHangChuan",
+  // [S1.9101 / S4.3a] Hàng đợi ánh xạ và trạng thái ánh xạ từng dòng — mô tả, đơn vị, số lượng người mua đã viết; không giá.
+  "docAnhXaGoi",
+  "docHangDoi",
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",
@@ -262,6 +270,8 @@ const HAM_THUAN_TUY = [
   "laTuChoi",
   "lamTron",
   "tinhChiPhiHieuDung",
+  // [S1.9101 / S4.3a] Lõi chuẩn hoá — không I/O; L2 đòi nó tái lập được theo phiên bản bộ luật.
+  "chuanHoa",
   "vietSo",
   // [ADR-011] Bộ ký aws-kms và phép đọc khoá công khai: không `client` CSDL, không `orgId` —
   // dựng ở composition root, như bản local-dev ngay dưới.
