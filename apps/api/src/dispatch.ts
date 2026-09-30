@@ -248,6 +248,15 @@ const AFTER_COMMIT_TIMEOUT_MS_MAC_DINH = 5000;
  * Cái giá: dưới pool đầy, phần bù hỏng sớm hơn — và bù hỏng thì phản hồi mang `invitationId` để người mua tự thu hồi (64a-1).
  */
 const TRAN_CHO_KET_NOI_BU_MS = 5_000;
+/**
+ * [S1.9101 / S4.3b / ADR-9201, lượt soi T1] Trần của một việc trong giao dịch MỚI (`AfterCommitGiaoDich`) — đặt `SET LOCAL` ở đầu giao
+ * dịch của việc, trước thân việc. Phản hồi của yêu cầu CHỜ việc ấy, nên GUC của pool (chờ khoá 15 s, mỗi câu 15 s) là quá dài: lượt
+ * chuẩn hoá sau lần nộp duyệt giữ khoá tư vấn bí danh của CẢ tổ chức, và một lượt *chuẩn hoá lại* đang chạy ở chỗ khác làm lần nộp treo
+ * 15–30 s rồi hỏng im lặng. Với trần này, mỗi lần chờ khoá gãy sau 2 s và mỗi câu sau 5 s; việc hỏng thì một dòng log, phản hồi giữ
+ * nguyên (ADR-9201 *Hệ quả*).
+ */
+const TRAN_CHO_KHOA_GIAO_DICH_SAU_COMMIT = "2s";
+const TRAN_CAU_GIAO_DICH_SAU_COMMIT = "5s";
 
 export type Dispatcher = (req: Omit<ApiRequest, "params" | "requestId">) => Promise<ApiResponse>;
 
@@ -517,6 +526,53 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
       if (viecCoBu !== undefined || loGui !== undefined) tuChoiViecCoBuThuHai();
       loGui = lo;
     };
+    // [S1.9101 / S4.3b / ADR-9201] Việc sau commit trong giao dịch MỚI (`AfterCommitGiaoDich`) — không đổi phản hồi, không đếm vào trần
+    // một việc có bù. [lượt soi, mục bộ điều phối] Chỉ route GHI đăng ký được: route đọc — kể cả route `agent: true` — không mở được một
+    // giao dịch ghi sau commit. Lần đăng ký trên route đọc ném ngay trong handler, giao dịch của nó rollback.
+    const sauCommitGiaoDich: ((client: pg.PoolClient) => Promise<void>)[] = [];
+    const afterCommitGiaoDich = (viec: (client: pg.PoolClient) => Promise<void>): void => {
+      if (!("mutates" in route) || !route.mutates) {
+        throw Object.assign(new Error("route doc khong dang ky duoc viec giao dich sau commit"), { name: "ViecGiaoDichTrenRouteDoc" });
+      }
+      sauCommitGiaoDich.push(viec);
+    };
+    // Một việc giao dịch có xếp job outbox thì dấu `layDauXepViec` nằm trên kết nối CỦA VIỆC ẤY — đọc-xoá nó ngay trong `finally` của
+    // việc (cùng khuôn ba nhánh ở dưới), rồi đánh thức runner sau commit, không để dấu lại trên một kết nối đã trả về pool.
+    const chayViecGiaoDich = async (orgId: string): Promise<void> => {
+      let xepViec = false;
+      for (const [i, viec] of sauCommitGiaoDich.entries()) {
+        const thuTu = `${String(i + 1)}/${String(sauCommitGiaoDich.length)}`;
+        try {
+          await withTenant(
+            deps.pool,
+            orgId,
+            async (client) => {
+              try {
+                await client.query(
+                  "SELECT pg_catalog.set_config('lock_timeout', $1::pg_catalog.text, true), " +
+                    "pg_catalog.set_config('statement_timeout', $2::pg_catalog.text, true)",
+                  [TRAN_CHO_KHOA_GIAO_DICH_SAU_COMMIT, TRAN_CAU_GIAO_DICH_SAU_COMMIT],
+                );
+                await viec(client);
+              } finally {
+                if (layDauXepViec(client)) xepViec = true;
+              }
+            },
+            { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS },
+          );
+        } catch (e) {
+          // Dòng log mang số thứ tự `i/n` và MẪU đường dẫn đã khai — không tham số, không nội dung lỗi (A2).
+          console.error(`[api] ${requestId} giao-dich-sau-commit ${thuTu} ${route.method} ${route.path} ${moTaLoiKhongGiaTri(e)}`);
+        }
+      }
+      if (xepViec) deps.outboxNudge?.(orgId);
+    };
+    /** Phản hồi CUỐI không thành công (việc có bù hỏng, lô gửi đổi phản hồi) ⇒ việc giao dịch không chạy, và nói ra bằng một dòng. */
+    const boViecGiaoDich = (): void => {
+      if (sauCommitGiaoDich.length > 0) {
+        console.error(`[api] ${requestId} giao-dich-sau-commit bo-qua ${String(sauCommitGiaoDich.length)} ${route.method} ${route.path}`);
+      }
+    };
     const tranSauCommitMs = deps.afterCommitTimeoutMs ?? AFTER_COMMIT_TIMEOUT_MS_MAC_DINH;
     const chaySauCommit = async (r: ApiResponse, orgId: string): Promise<ApiResponse> => {
       // [review H2-7] Chỉ chạy khi phản hồi là thành công: một handler xếp việc rồi trả 4xx (sau
@@ -536,8 +592,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
             await withTenant(deps.pool, orgId, v.bu, { maxConnectWaitMs: TRAN_CHO_KET_NOI_BU_MS });
           } catch (loiBu) {
             console.error(`[api] ${requestId} bu-sau-commit ${moTaLoiKhongGiaTri(loiBu)}`);
+            boViecGiaoDich();
             return v.phanHoiKhiBuHong ?? { status: 500, body: THAN_500 };
           }
+          boViecGiaoDich();
           return v.phanHoiKhiHong;
         }
         // [S1.188 / S3.2b2 / ADR-113] `viec` xong ⇒ việc ghi của lần xong, giao dịch MỚI; hỏng thì một dòng log và phản hồi giữ nguyên.
@@ -577,6 +635,11 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
         }
         ketThuc = lo.phanHoi(r, khoaHong);
       }
+      // [S1.9101 / S4.3b / ADR-9201] Việc trong giao dịch MỚI: lần lượt, mỗi việc một `withTenant`; hỏng ⇒ một dòng log, phản hồi giữ nguyên.
+      // [lượt soi, mục bộ điều phối] Một luật cho mọi nhánh: việc giao dịch chạy khi phản hồi CUỐI thành công — lô gửi đổi phản hồi thành
+      // lỗi thì bỏ, như nhánh việc có bù hỏng ở trên.
+      if (ketThuc.status < 400) await chayViecGiaoDich(orgId);
+      else boViecGiaoDich();
       for (const viec of sauCommit) {
         try {
           await coHan(viec, tranSauCommitMs, "SauCommitQuaHan");
@@ -886,6 +949,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                     afterCommit,
                     afterCommitCoBu,
                     afterCommitLoGui,
+                    afterCommitGiaoDich,
                     choKyChinhSach,
                   }),
                 ),

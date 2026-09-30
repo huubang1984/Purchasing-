@@ -310,6 +310,11 @@ Mỗi route mới khai trường `agent` (ADR-039). Route đọc lịch sử, be
 > `ROUTE_DOC_KHONG_PHOI` của `apps/mcp`. `GET /items` không tìm ở máy chủ: `router.ts` cắt bỏ query và không đọc nó (⑵, E6), nên
 > route trả tối đa 500 hàng xếp theo mã cùng cờ `conNua`, và màn lọc trên danh sách ấy. Mở một đường đọc query là quyết định về E6,
 > để cho S4.3 — nơi gợi ý hàng chuẩn ở `/tao-thau` cần tìm thật.
+>
+> **[S1.9101 / S4.3b] Dựng.** `/du-lieu` thêm bước 6 *Hàng đợi ánh xạ* (duyệt kèm khai bí danh, bác, tạo hàng chuẩn mới rồi duyệt,
+> chuẩn hoá lại cả gói); `/tao-thau` thêm cột *Hàng chuẩn* chỉ đọc. Hai route đọc (`GET /mapping-queue`, `GET /rfqs/:rfqId/mappings`)
+> `agent: false`. Không mở E6: `/tao-thau` chỉ HIỆN trạng thái ánh xạ, không tìm hàng chuẩn — câu *"gợi ý … cần tìm thật"* ở trên
+> không thành việc của vòng này. Cột *Hàng chuẩn* ẩn ở tổ chức chưa có hàng chuẩn đang dùng (§2.3).
 
 ---
 
@@ -1112,7 +1117,7 @@ migration một mình là no-op.
 | ↳ **S4.2b** | API + màn | Route cho hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị; màn `/du-lieu`; `gieo:demo` và `khoi-tao-to-chuc` gán `DATA_STEWARD`; màn nói ra §8.10. **[S1.199]** Xong: 11 route (`routes/du-lieu.ts`), bốn hàm gói (liệt kê, chi tiết, danh mục đơn vị, khai/rút bí danh đơn vị), màn `/du-lieu`; `gieo:demo` gieo người `dulieu` và ba hàng chuẩn cho ba dòng demo. Không migration, không ADR | S4.2a |
 | **S4.3** | Chuẩn hoá & ánh xạ | `TU_DONG` theo bí danh, `rfq_item_goi_y`, hàng đợi năm thao tác, chuẩn hoá hồi tố; **L2**, **L3** vế hành vi, **L13**; dòng PRODUCT §5 (§8.2) | — |
 | ↳ **S4.3a** [S1.204] | CSDL + gói | `rfq_item_goi_y`, `rfq_item_mappings` (khuôn L1), luật ghi ở trigger (L2, L3 vế hành vi, L13, ⒁), tập loại trừ `rfq_tap_loai_tru` (đọc thêm sổ kiểm toán), lõi `chuanHoa` bộ luật 1, lượt chuẩn hoá, duyệt/bác/tạo hàng chuẩn, hàng đợi — `089_anh_xa_hang_muc`, ADR-121. Chủ dự án chốt 2026-09-30: vế tác giả ngoại lệ vào cùng hàm ở S3.3b; không mở E6 | — |
-| ↳ **S4.3b** | API + màn | Lượt chuẩn hoá sau commit cạnh nộp duyệt; route hàng đợi; hàng đợi ở `/du-lieu`; trạng thái ánh xạ từng dòng ở `/tao-thau` (đợi chuỗi #199 → #202 → #205); `gieo:demo`; dòng PRODUCT §5 (§8.2) | S4.3a |
+| ↳ **S4.3b** [S1.9101] | API + màn | Lượt chuẩn hoá sau commit cạnh nộp duyệt; route hàng đợi; hàng đợi ở `/du-lieu`; trạng thái ánh xạ từng dòng ở `/tao-thau` (~~đợi chuỗi #199 → #202 → #205~~ chuỗi đã merge); `gieo:demo`; dòng PRODUCT §5 (§8.2). Chủ dự án chốt 2026-09-30: một PR; lượt chuẩn hoá chỉ ở tổ chức có hàng chuẩn đang dùng; năm route `agent: false`; không E6; dòng PRODUCT §5 chỉ nói phần đã có mã — vế *"chốt tại mốc của gói"* đợi S4.4. ADR-9201 | S4.3a |
 | **S4.4** | Lịch sử giá | `bid_dong_tho`, hàm *"giá đã lộ"*, `quan_sat_gia(p_moc)`; kịch bản 41 có `lines` và kim đơn giá, năm bộ quét; test kiến trúc liệt kê mọi tệp đọc `rfq_unsealed_bids`; đo hiệu năng có biên bản; gieo lại `gieo:demo`; **L5**, **L6** vế lịch sử | S3.2 (kịch bản 41) |
 | **S4.5** | Ghim chính sách + benchmark | Gọi `chinh_sach_tai` của S3.1; nhóm khoá `benchmark`; bảng kết quả và bảng con; bảng so sánh theo dòng ở `/mo-thau`; lớp dữ liệu nền trong bộ xuất ADR-059, định danh băm; **L14**, **L7**, **L6** vế benchmark; kê tên mọi ca chấm bị lật | S3.1 |
 | **S4.6** | Mốc ngoài + lịch sử ngoài hệ thống | `external_price_references`, `external_purchase_history`, dán CSV, dải thứ ba; khai ở ADR-054; **L15**, **L1** vế hai bảng ấy | S4.5 |

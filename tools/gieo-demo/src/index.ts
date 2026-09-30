@@ -54,7 +54,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
-import { khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
+import { chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import { createProcurementPolicy, kyPhienBanChinhSach, taoNhomHang } from "@trustprocure/rfq";
@@ -119,7 +119,11 @@ const HANG_CHUAN_DEMO: readonly {
   readonly ten: string;
   readonly thuocTinh: Readonly<Record<string, string>>;
   readonly thuocTinhTrongYeu: readonly string[];
-  readonly biDanh: string;
+  /**
+   * [S1.9101 / S4.3b] `null` = hàng KHÔNG có bí danh cho dòng của nó: dòng ấy không tự nối lúc nộp mà nằm ở hàng đợi `/du-lieu`
+   * với gợi ý `GOI_Y` (bu lông neo — lõi bản 1 chấm 0,88 cho đúng hàng này), để demo đi được việc duyệt và hàng đợi học.
+   */
+  readonly biDanh: string | null;
   readonly quyDoi: { readonly tu: string; readonly heSo: string };
 }[] = [
   {
@@ -146,7 +150,7 @@ const HANG_CHUAN_DEMO: readonly {
     ten: "Bu lông neo M24 cấp bền 8.8",
     thuocTinh: { duong_kinh: "M24", cap_ben: "8.8", bo_gom: "1 bu long, 2 dai oc, 2 long den" },
     thuocTinhTrongYeu: ["duong_kinh", "cap_ben"],
-    biDanh: "Bu long neo M24 cap 8.8",
+    biDanh: null,
     quyDoi: { tu: "bo", heSo: "1" },
   },
 ];
@@ -254,7 +258,7 @@ async function chinh(): Promise<void> {
           thuocTinhTrongYeu: h.thuocTinhTrongYeu,
           actorSessionId: phienDuLieu,
         });
-        await khaiBiDanhHang(c, org, { hangChuanId: moi.id, biDanh: h.biDanh, actorSessionId: phienDuLieu });
+        if (h.biDanh !== null) await khaiBiDanhHang(c, org, { hangChuanId: moi.id, biDanh: h.biDanh, actorSessionId: phienDuLieu });
         await khaiQuyDoiRieng(c, org, {
           hangChuanId: moi.id,
           tuDonVi: h.quyDoi.tu,
@@ -355,6 +359,10 @@ async function chinh(): Promise<void> {
         "WHERE id OPERATOR(pg_catalog.=) $1",
       [rfq, nguoiGieo, phienGieo],
     );
+    // [S1.9101 / S4.3b] Lượt chuẩn hoá sau lần nộp — cùng hàm route nộp duyệt gọi sau commit, dưới phiên người nộp: hai dòng
+    // trùng bí danh tự nối, dòng bu lông neo vào hàng đợi với gợi ý.
+    const luot = await withTenant(pool, org, (c) => chuanHoaSauNop(c, org, { rfqId: rfq, actorSessionId: phienGieo }));
+    if (luot === null) throw new GieoError("lượt chuẩn hoá không chạy dù tổ chức có hàng chuẩn");
 
     // HAI phê duyệt của HAI người KHÁC người soạn — ngân sách gieo ở trên vượt ngưỡng chính sách,
     // nên máy trạng thái ở tầng CSDL từ chối mở gói thầu khi chưa đủ. Lượt chạy đầu của script này
@@ -430,8 +438,9 @@ async function chinh(): Promise<void> {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
     }
     ra.push("");
-    ra.push("QUẢN LÝ DỮ LIỆU — dulieu (DATA_STEWARD) ở /du-lieu: ba hàng chuẩn cho ba dòng của gói, mỗi hàng một bí danh là");
-    ra.push("  nguyên mô tả dòng và một quy đổi riêng từ tấm / cây / bộ về đơn vị gốc — hệ số tính từ kích thước, không phải số đo.");
+    ra.push("QUẢN LÝ DỮ LIỆU — dulieu (DATA_STEWARD) ở /du-lieu: ba hàng chuẩn cho ba dòng của gói, mỗi hàng một quy đổi riêng từ");
+    ra.push("  tấm / cây / bộ về đơn vị gốc — hệ số tính từ kích thước, không phải số đo. Hai hàng có bí danh là nguyên mô tả dòng:");
+    ra.push(`  lúc nộp, ${String(luot.tuDong)} dòng tự nối; ${String(luot.goiY + luot.canDuyet)} dòng (bu lông neo) chờ ở bước 6 «Hàng đợi ánh xạ».`);
     ra.push("  Người mua khác mở /du-lieu chỉ xem được, và màn nói vì sao.");
     for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("dulieu."))) {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/du-lieu#${org}:${nm.token}`);

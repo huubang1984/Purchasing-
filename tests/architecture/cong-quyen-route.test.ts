@@ -93,6 +93,10 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.204 / S4.3a] Lượt chuẩn hoá và hai thao tác hàng đợi. Route của S4.3b hỏi quyền; CSDL chặn ở trigger `…_bat_bien`:
   // `NGUOI_DUYET` đòi `item.manage` và người ngoài tập loại trừ (L3), gói đã có bản rõ đòi `item.manage` và lý do (L13).
   "chuanHoaGoi",
+  // [S1.9101 / S4.3b] Lượt chuẩn hoá SAU lần nộp duyệt: route nộp duyệt (`rfq.create`) đăng ký `chuanHoaGoi` chạy sau commit dưới
+  // phiên người nộp; hàm này (điều kiện + lượt) là đường của `gieo:demo`. Cổng là luật ghi ở CSDL — trước khi có bản rõ, `TU_DONG`
+  // và gợi ý không đòi quyền (ADR-121 ②).
+  "chuanHoaSauNop",
   "ghiAnhXa",
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
@@ -174,6 +178,8 @@ const HAM_CHI_DOC = [
   // [S1.204 / S4.3a] Hàng đợi ánh xạ và trạng thái ánh xạ từng dòng — mô tả, đơn vị, số lượng người mua đã viết; không giá.
   "docAnhXaGoi",
   "docHangDoi",
+  // [S1.9101 / lượt soi S4.3b, L3] Tổ chức có hàng chuẩn đang dùng không — một `EXISTS`, không mang dữ liệu nào của hàng.
+  "coHangChuanDangDung",
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",

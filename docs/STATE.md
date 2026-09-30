@@ -13,6 +13,20 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-30 / S1.9101] S4.3b — LƯỢT CHUẨN HOÁ SAU LẦN NỘP DUYỆT, HÀNG ĐỢI ÁNH XẠ Ở `/du-lieu`, CỘT HÀNG CHUẨN Ở `/tao-thau`
+— ADR-9201.** Chủ dự án chốt sáu điểm ngày 2026-09-30: một PR; lượt chuẩn hoá chạy sau commit, chỉ ở tổ chức có ít nhất một hàng
+chuẩn đang dùng (spec §2.3 — tổ chức chưa khai gì chạy đúng hành vi hôm nay); năm route, hai route đọc `agent: false` (ánh xạ là khoá
+của lịch sử giá S4.4); không mở E6; màn hai nơi; `gieo:demo` có một dòng chờ duyệt, dòng PRODUCT §5 chỉ nói phần đã có mã. Bộ điều
+phối có kiểu việc sau commit thứ tư, `afterCommitGiaoDich`: giao dịch MỚI của cùng tổ chức, chỉ khi phản hồi thành công, hỏng thì một
+dòng log và phản hồi giữ nguyên; chỉ route ghi đăng ký được; trong giao dịch của việc, chờ khoá ≤ 2 s và mỗi câu ≤ 5 s. Route nộp
+duyệt hỏi *tổ chức có hàng chuẩn đang dùng* trong giao dịch của lần nộp và chỉ khi có mới đăng ký `chuanHoaGoi` dưới phiên người nộp.
+Lượt soi đối kháng: 2 TRUNG, 5 THẤP, một nhóm thông tin — sửa trong vòng (trần của việc, ca route thật với khoá bị giữ, hàng ngừng
+dùng, khoá lạc quan bằng băm dòng, điều kiện trong giao dịch chính và cột ẩn ở tổ chức MVP1, ca tập loại trừ qua HTTP, luật một phản
+hồi cuối của bộ điều phối); hàng đợi là đường liệt kê đầu tiên của tổ chức — nhận, ADR nói ra. `routes/anh-xa.ts`: `GET /mapping-queue`,
+`GET /rfqs/:rfqId/mappings`, ba route ghi khai `item.manage` (duyệt/bác, tạo hàng chuẩn mới rồi duyệt, chuẩn hoá lại). Màn `/du-lieu`
+bước 6 hàng đợi; `/tao-thau` cột *Hàng chuẩn* chỉ đọc. Lượt đi thử T4 trên Chromium: năm khẳng định đạt. Không migration, không bất
+biến mới; L3 thêm phép đo tầng ứng dụng. Biên bản: `evidence/security-reviews.md` §S1.9101.
+
 **[2026-09-30 / S1.204] S4.3a — ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN: `TU_DONG` CHỈ THEO BÍ DANH (L2), NGƯỜI DUYỆT NGOÀI TẬP LOẠI TRỪ
 (L3 VẾ HÀNH VI), LÝ DO SAU BẢN RÕ (L13) — ADR-121.** Chủ dự án chốt năm điểm ngày 2026-09-30: S4.3 chia hai PR (S4.3a CSDL + gói,
 S4.3b API + màn); tập loại trừ của L3 là MỘT hàm SQL dựng trên dữ liệu đã có — S3.3b thêm vế tác giả ngoại lệ vào chính hàm ấy, K5
