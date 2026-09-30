@@ -2551,7 +2551,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 180000);
+    // [S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
+    // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.
+  }, 600_000);
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";
