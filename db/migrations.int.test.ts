@@ -1450,6 +1450,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // NULL, công tắc trả `false`, phiên bản hiệu lực bỏ vế chữ ký, hay phân bậc lệch biên.
   // [S1.185 / S3.2a] Thêm hàm thứ năm, `rfq_bam_danh_sach` của K4b: một thân trả một hằng làm mọi danh sách cùng một băm,
   // và cạnh mở gói đếm chữ ký cũ như thể danh sách chưa đổi.
+  // [S1.202 / khoản 254] Thêm hàm thứ sáu, `rfq_bam_ngan_sach`: một thân trả một hằng làm mọi ngân sách cùng một băm, và
+  // gói cấp kép hạ ngân sách về một chữ ký lại mở được bằng chữ ký cũ.
   const HAM_TRO_GIUP_K1: readonly { ham: string; chuKy: string; migration: string }[] = [
     { ham: "rfq_chot_ngan_sach", chuKy: "uuid, uuid, timestamptz", migration: "072_bac_cua_goi.sql" },
     { ham: "rfq_bac_cua", chuKy: "uuid, numeric, text", migration: "072_bac_cua_goi.sql" },
@@ -1460,9 +1462,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // câu hỏi trạng thái — một thân `SELECT true` cho gán nhóm đã ngừng dùng.
     { ham: "rfq_chot_nhom_hang", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
     { ham: "nhom_hang_con_dung", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
+    { ham: "rfq_bam_ngan_sach", chuKy: "uuid", migration: "086_rang_ngan_sach.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ [S1.201] bảy hàm trợ giúp của K1, K4b và nhóm hàng: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ [S1.202] tám hàm trợ giúp của K1, K4b và nhóm hàng: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1700,8 +1703,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.185 / S3.2a / K4a · K4b · K6] Bốn hàm trigger của danh sách mời. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại
     // đúng lỗ nó đóng: chữ ký không mang băm danh sách (UNIQUE mới thành trang trí), cạnh mở gói không đếm trên danh sách
     // hiện tại, lời mời đổi ở PENDING_APPROVAL, hay token đúc cho gói chưa mở.
-    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "076_danh_sach_moi.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
-    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "076_danh_sach_moi.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
+    // [S1.202 / khoản 254] `086_rang_ngan_sach` định nghĩa lại thân hai hàm đầu — chữ ký mang cả băm ngân sách, cạnh mở gói
+    // đếm trên ngân sách hiện tại. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "rfq_approvals_dat_bam_danh_sach", migration: "086_rang_ngan_sach.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
+    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "086_rang_ngan_sach.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
     // [S1.194 / S3.2d / khoản 255] `080_k4a_co_ten.sql` định nghĩa lại thân K4a — hai nhánh mang tên ràng buộc —, nên con trỏ dời
     // theo quy tắc *migration CUỐI CÙNG*. Thân TRÍCH NGUYÊN VĂN từ `076` rồi đổi đúng hai vế `CONSTRAINT = …`.
     { ham: "rfq_invitations_kiem_danh_sach", migration: "080_k4a_co_ten.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
@@ -3394,6 +3399,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
+        "086_rang_ngan_sach.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7820,6 +7826,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
+        "086_rang_ngan_sach.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8123,6 +8130,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "082_xac_minh_nha_cung_cap.sql",
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
+        "086_rang_ngan_sach.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
