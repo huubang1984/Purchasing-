@@ -17685,4 +17685,14 @@ không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nh
 
 ## 8. Số đo
 
-(điền)
+- Cây cuối, sau lần cấp số (`679a69d`): `tsc`, `eslint`, `depcruise` sạch (478 mô-đun, không vi phạm phụ thuộc); `pnpm cap-so --kiem`
+  sạch.
+- Toàn bộ unit + T3 cục bộ trên cây cuối: 203 tệp, 3469 khẳng định, 3459 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo (8 của
+  `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`). Không ca đỏ nào mang
+  nhãn `[INV-…]`.
+- T3 các tệp chạm vòng này: `lan-nop-da-xem.int` 34/34 (29 → 34: năm ca của khối (8)), `hardening-suy-tu-tinh-chat.int` 36/36,
+  `migrations.int` 119/119, `trigger-la-mac-dinh-dong.int` 12/12, `rls-coverage.int` 51/51, `outbox.int` 50/50;
+  `hardening-co-ly-do` 21/21, `so-no-tu-doi-chieu` 45/45.
+- Chín đột biến, chín đỏ (§5).
+- Ma trận sinh lại từ báo cáo ấy: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào). Ba hàng đổi, cả ba do vòng này: K4a 26 → 30
+  (bốn ca của khối (8)), K4b 42 → 43 và H19 103 → 104 (ca chủ bảng, mang cả hai nhãn).
