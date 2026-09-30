@@ -382,10 +382,13 @@
 --       và trả bằng một hàng rào chặn deploy.
 --       CỬA cho MATVIEW và cho hàm SECURITY DEFINER: không có cửa kỹ thuật nào (matview không
 --       có RLS, SECURITY DEFINER là leo quyền theo định nghĩa), nên cửa là DANH SÁCH NGOẠI LỆ
---       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ [S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng:
+--       viết tay NGOAI_LE_DOC_VONG — ~~hiện RỖNG~~ ~~[S1.82 / khoản 116] hiện có ĐÚNG MỘT dòng~~
+--       [S1.9165 / khoản 277] hiện có HAI dòng:
 --       ~~`public.outbox_danh_sach_to_chuc`~~ [S1.212 / khoản 112 + 163] `('ham', 'public',
 --       'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', lý do)` — khoá năm cột, hàm theo
---       CHỮ KÝ, có chiều khai thiu và bản đối chiếu ở db/rls-coverage.int.test.ts (ADR-040). Thêm một
+--       CHỮ KÝ, có chiều khai thiu và bản đối chiếu ở db/rls-coverage.int.test.ts (ADR-040) — và
+--       [S1.9165] `('ham', 'public', 'outbox_to_chuc_co_viec_api()', '9565_api_to_chuc_co_viec', lý do)`,
+--       tập tổ chức có việc `PENDING` của `api` (ADR-040 tiểu mục khoản 277). Thêm một
 --       dòng vào đó là một quyết định phải
 --       nhìn thấy, y như NGOAI_LE_HINH_DANG. ~~Tên viết ĐỦ SCHEMA~~ Lược đồ là một cột riêng nên nó đã sẵn sàng cho việc
 --       bỏ giới hạn schema ở vòng fix 2.
@@ -580,6 +583,12 @@ DECLARE
   -- ay. Lenh 'r' (SELECT) chu khong phai 'a'/'w'/'d': vai ay khong ghi duoc gi. Do (S1.82):
   -- `app_unseal` doc THANG `organizations` van thay 0 hang, nen dong nay KHONG noi ban kinh cua
   -- bat ky vai ung dung nao.
+  -- [S1.9165 / khoản 277 / ADR-040 tiểu mục] DÒNG THỨ BA: policy ĐỌC của cùng vai chủ hàm trên `outbox_jobs`, cho hàm thứ hai
+  -- của vai ấy (`public.outbox_to_chuc_co_viec_api()`, 9565_api_to_chuc_co_viec) — tập tổ chức có việc `PENDING` của `api`.
+  -- Chủ thể hẹp bằng `TO app_liet_ke_to_chuc` (NOLOGIN NOINHERIT), HÀNG hẹp bằng vị từ `status = 'PENDING'`: vai ấy không thấy
+  -- job đã xong, đã hỏng hay đang chạy, và chỉ có `SELECT (org_id, kind, status)` — không `payload` (email của link đăng nhập).
+  -- Lệnh 'r': vai ấy không ghi được gì. Bảng có `org_id` nên phạm vi là 'co_org_id'. Không nới bán kính của vai ứng dụng nào:
+  -- app_api vẫn chỉ thấy hàng đợi của tổ chức nó gắn (policy mang TO vai khác, nên không áp cho app_api).
   -- CHU THICH PHAI O NGOAI khoi VALUES: bo doc o db/rls-coverage.int.test.ts tach hang theo van
   -- ban, va mot dong `--` ben trong lam no thay 1 hang thay vi 2 (do — ba test do cung mot luot).
   NGOAI_LE_HINH_DANG constant text :=
@@ -587,7 +596,9 @@ DECLARE
                ('otp_rate_limits', 'otp_rate_limits_don_cua_so_cu', 'd', 'app_api', 'co_org_id',
                 '((NULLIF(current_setting(''app.org_id''::text, true), ''''::text) IS NULL) AND (window_start < (now() - make_interval(secs => (1800)::double precision))))'),
                ('organizations', 'organizations_liet_ke_worker', 'r', 'app_liet_ke_to_chuc', 'bang_goc',
-                'true'))
+                'true'),
+               ('outbox_jobs', 'outbox_jobs_liet_ke_viec_api', 'r', 'app_liet_ke_to_chuc', 'co_org_id',
+                '(status = ''PENDING''::text)'))
          AS g(bang, polname, lenh, vai_tro, pham_vi, bieu_thuc)$q$;
 
   -- Kết xuất danh sách role của một policy thành chuỗi so khớp được. Tách ra hằng riêng vì
@@ -627,10 +638,27 @@ DECLARE
   --
   -- BA VẾ GIỮ BÁN KÍNH, và cả ba đo được:
   --   * chủ hàm là `app_liet_ke_to_chuc` — một vai NOLOGIN NOINHERIT không tiến trình nào đăng
-  --     nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG `organizations`;
+  --     nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG `organizations` ~~;~~ [S1.9165 / khoản 277] trên
+  --     `organizations` (vai ấy nay còn `SELECT (org_id, kind, status)` trên `outbox_jobs` — cho hàm
+  --     thứ hai của nó, dòng dưới; thân cả hai hàm đều ghim, nên quyền ấy không tới người gọi `052`);
   --   * policy đi kèm mang `TO app_liet_ke_to_chuc`, nên `app_unseal` đọc THẲNG `organizations`
   --     vẫn thấy 0 hàng (đo, cảnh ❹);
   --   * `EXECUTE` bị thu hồi khỏi PUBLIC và khỏi `app_api` (đo cảnh ❺: 42501).
+  --
+  -- [S1.9165 / khoản 277 / ADR-040 tiểu mục] DÒNG THỨ HAI: `public.outbox_to_chuc_co_viec_api()`
+  -- (9565_api_to_chuc_co_viec) — tập tổ chức có job `PENDING` thuộc ba `kind` của `api`, nguồn mà
+  -- runner của `apps/api` nạp lúc lên và mỗi kỳ poll để job của nó tự phục hồi sau khi khởi động lại.
+  -- Cùng lý do không bỏ được `SECURITY DEFINER`: `outbox_jobs` bật FORCE RLS với policy cách ly không
+  -- `TO`, nên hàm `SECURITY INVOKER` dưới `app_api` chưa gắn tổ chức thấy 0 hàng (đo §S1.9165). BỐN VẾ
+  -- GIỮ BÁN KÍNH, cả bốn đo ở `apps/api/src/composition.int.test.ts` (khối khoản 277) và hardening:
+  --   * hàm trả `org_id` của tổ chức có job `PENDING` thuộc tập `kind` của `api` — không phải danh
+  --     sách tổ chức đầy đủ (quyết định câu 10: KHÔNG mở `052` cho `app_api`); job của worker không
+  --     làm tổ chức vào tập;
+  --   * chủ hàm là cùng vai `app_liet_ke_to_chuc`, có ĐÚNG `SELECT (org_id, kind, status)` trên
+  --     `outbox_jobs` — không `payload`;
+  --   * policy đi kèm `outbox_jobs_liet_ke_viec_api` mang `TO app_liet_ke_to_chuc` và vị từ
+  --     `status = 'PENDING'` (dòng thứ ba của NGOAI_LE_HINH_DANG; hàng tự chữa riêng dựng lại nó);
+  --   * `EXECUTE` chỉ cho `app_api` — PUBLIC, `app_unseal`, `app_neo`, `app_khoi_tao` không (42501).
   --
   -- ~~KHOÁ THEO TÊN TRẦN — nói ra vì nó là bậc tự do thật: dòng này miễn trừ MỌI overload cùng tên
   -- và cả một view/matview trùng tên. Hàng ghim thân hàm ở dưới KHÔNG phải lớp chặn overload
@@ -658,7 +686,8 @@ DECLARE
   -- Cột ly_do là MỘT DÒNG (khối này phải bằng từng byte với bộ sinh `khoiValues` của db/hardening-hang.ts).
   NGOAI_LE_DOC_VONG constant text :=
     $q$(VALUES
-         ('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', 'nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (id) trên organizations, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)')
+         ('ham', 'public', 'outbox_danh_sach_to_chuc()', '052_worker_liet_ke_to_chuc', 'nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT ~~chỉ có SELECT (id) trên organizations~~ [S1.9165] trên organizations chỉ có SELECT (id) — vai ấy còn sở hữu outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec) với SELECT (org_id, kind, status) trên hàng PENDING của outbox_jobs, thân hai hàm đều ghim —, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)'),
+         ('ham', 'public', 'outbox_to_chuc_co_viec_api()', '9565_api_to_chuc_co_viec', 'tập tổ chức có job PENDING của tiến trình api cho JobRunner của nó, nạp lúc lên và mỗi kỳ poll để job của api tự phục hồi sau khi khởi động lại (khoản 277, ADR-040 tiểu mục): outbox_jobs bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_api chưa gắn tổ chức thấy 0 hàng (đo §S1.9165); bán kính giữ bằng bốn vế đo được — chỉ trả org_id của tổ chức có job PENDING thuộc ba kind của api, không phải danh sách tổ chức đầy đủ, job của worker không làm tổ chức vào tập; chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (org_id, kind, status) trên outbox_jobs, không payload; policy đi kèm outbox_jobs_liet_ke_viec_api mang TO app_liet_ke_to_chuc và vị từ status = PENDING; EXECUTE chỉ cho app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec)')
        ) AS x(loai, nspname, ten, mig, ly_do)$q$;
 
   -- Vị từ "bảng này là CON của một bảng tenant" — lá phân mảnh HOẶC con cháu INHERITS. Con
@@ -4323,7 +4352,9 @@ $ham$$q$,
       $q$quyền sở hữu hàm app_current_org_id() (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- ---- [S1.82 / khoản 116 / 052 / ADR-040] Hàm SECURITY DEFINER DUY NHẤT của kho ----------
+    -- ---- [S1.82 / khoản 116 / 052 / ADR-040] Hàm SECURITY DEFINER ~~DUY NHẤT~~ ĐẦU TIÊN của kho ----------
+    -- [S1.9165 / khoản 277] "DUY NHẤT" thiu từ `9565_api_to_chuc_co_viec`: hàm thứ hai, cùng vai chủ, ghim ở hai hàng
+    -- ngay sau hàng ACL dưới đây.
     -- Đây là hàng ghim ĐẦU TIÊN đòi `prosecdef IS TRUE` — 52 hàng còn lại đòi IS FALSE — và
     -- đầu tiên ghim `proowner`. Với một hàm SECURITY DEFINER thì CHỦ HÀM chính là toàn bộ đặc
     -- quyền của nó, nên để chủ hàm ngoài vòng ghim là ghim vỏ mà bỏ ruột.
@@ -4393,7 +4424,8 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
     -- sau deploy (job neo rớt về 0 tổ chức ở lần chạy kế) được dựng lại ở deploy sau.
     -- [S1.182 / ADR-111 / lượt soi] `app_khoi_tao` KHÔNG: vai ấy chèn được người và vai vào tổ chức nó gắn, và UUID tổ
     -- chức không bí mật (ADR-107) — gọi được hàm này là liệt kê được MỌI tổ chức để chèn vào từng cái. `CAU_QUYEN_KHOI_TAO_SAI`
-    -- chỉ đo quyền QUAN HỆ; hàm SECURITY DEFINER duy nhất của CSDL được canh ở đây, cùng chỗ với ba vai kia.
+    -- chỉ đo quyền QUAN HỆ; hàm SECURITY DEFINER ~~duy nhất~~ [S1.9165] đầu tiên của CSDL được canh ở đây, cùng chỗ với ba vai kia
+    -- (hàm thứ hai — `outbox_to_chuc_co_viec_api()` — có hàng ACL riêng ngay dưới, cùng năm vế đảo chiều api/unseal).
     ARRAY[
       $q$EXECUTE trên outbox_danh_sach_to_chuc(): app_unseal có, app_neo có, app_api không, app_khoi_tao không, PUBLIC không (052, 065, 075)$q$,
       $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql')$q$,
@@ -4411,6 +4443,79 @@ AS $ham$ SELECT o.id FROM public.organizations o $ham$$q$,
         || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
                       WHERE p.oid = to_regprocedure('public.outbox_danh_sach_to_chuc()')), '(null)')$q$,
       $q$quyền sở hữu hàm outbox_danh_sach_to_chuc() hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.9165 / khoản 277 / 9565_api_to_chuc_co_viec / ADR-040 tiểu mục] Hàm SECURITY DEFINER thứ HAI của kho ----
+    -- `public.outbox_to_chuc_co_viec_api()`: tập tổ chức có job `PENDING` thuộc ba `kind` của `api` — nguồn mà runner của
+    -- `apps/api` nạp lúc lên và mỗi kỳ poll (khoản 277). Cùng khuôn hai hàng của `052` ngay trên, cùng ba lý do:
+    --   * ghim thân CÙNG LÚC với khi hàm ra đời — một `CREATE OR REPLACE` sau deploy mà không hàng nào canh thì sống sót qua
+    --     mọi lần `migrate()` (`[T10-I]`), và với hàm này "sống sót" là một thân tuỳ ý chạy dưới quyền chủ hàm, đọc được
+    --     `outbox_jobs` của MỌI tổ chức;
+    --   * ghim `prosecdef IS TRUE` và `proowner`: `SECURITY INVOKER` hay đổi chủ sang một vai thường làm hàm trả 0 hàng KHÔNG
+    --     LỖI (đo §S1.9165 — cảnh ❷ của ADR-040), mà với `api` "0 hàng" trông y hệt "không có việc": hỏng im lặng hẳn;
+    --   * tiền điều kiện neo NGUYÊN VĂN vào migration khai sinh trong `schema_migrations`, không vào "hàm đã tồn tại": DROP sau
+    --     deploy là một hàng ĐỎ có tên, không phải hai hàng im.
+    -- Như hàng `052`: trong thực tế hàng định nghĩa là một PHÁN XÉT dưới vai deploy không sở hữu hàm (câu sửa 42501, nuốt ở
+    -- BƯỚC 2), và CREATE OR REPLACE không đổi được chủ.
+    ARRAY[
+      $q$định nghĩa hàm outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9565_api_to_chuc_co_viec.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.outbox_to_chuc_co_viec_api()
+  RETURNS SETOF pg_catalog.uuid
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = pg_catalog
+AS $ham$ SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE']) $ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE'])$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS TRUE
+            AND p.proretset IS TRUE
+            AND p.proconfig = ARRAY['search_path=pg_catalog']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.uuid'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+            AND p.proowner = to_regrole('app_liet_ke_to_chuc')::oid
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' retset=' || p.proretset::text
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' chu=' || coalesce(p.proowner::regrole::text, '(null)')
+                          || '. HANG NAY TRONG THUC TE LA MOT PHAN XET, khong tu chua: vai deploy '
+                          || 'KHONG so huu ham nay (chu la app_liet_ke_to_chuc) nen cau sua o o [3] bi tu '
+                          || 'choi 42501 va bi nuot. Loi ra: chay cau o o [3] duoi SUPERUSER, va neu chu ham '
+                          || 'sai thi them ALTER FUNCTION public.outbox_to_chuc_co_viec_api() OWNER TO '
+                          || 'app_liet_ke_to_chuc — CREATE OR REPLACE KHONG doi duoc chu.'
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()')),
+                  'hàm public.outbox_to_chuc_co_viec_api() không tồn tại — 9565_api_to_chuc_co_viec đã áp mà hàm bị DROP')$q$,
+      $q$quyền sở hữu hàm outbox_to_chuc_co_viec_api() hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.9165 / khoản 277 / 9565_api_to_chuc_co_viec] ACL của hàm ấy — người gọi DUY NHẤT là `app_api` ----------------
+    -- Đảo chiều hàng `052` ngay trên: ở đó `app_api` KHÔNG (danh sách tổ chức ĐẦY ĐỦ — ADR-040), ở đây `app_api` là người gọi
+    -- duy nhất, vì tập này HẸP — tổ chức có việc `PENDING` của chính `api` (quyết định câu 10). `app_unseal`, `app_neo`,
+    -- `app_khoi_tao` không có việc gì với nó: worker và job neo đã có `052`, vai khởi tạo không chạy runner. Một `GRANT EXECUTE
+    -- … TO PUBLIC` sau deploy cho mọi vai trong cụm biết tổ chức nào đang có việc; hàng này lật lại ở MỌI lần `migrate()`, và tự
+    -- chữa cả chiều cấp (một `REVOKE … FROM app_api` sau deploy làm `api` không lên được — dựng lại ở deploy sau).
+    ARRAY[
+      $q$EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (9565_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9565_api_to_chuc_co_viec.sql')$q$,
+      $q$REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_unseal;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_neo;
+        REVOKE ALL ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_khoi_tao;
+        GRANT EXECUTE ON FUNCTION public.outbox_to_chuc_co_viec_api() TO app_api$q$,
+      $q$(SELECT NOT has_function_privilege('public', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_unseal', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_neo', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND NOT has_function_privilege('app_khoi_tao', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE')
+                AND has_function_privilege('app_api', 'public.outbox_to_chuc_co_viec_api()', 'EXECUTE'))$q$,
+      $q$'ACL cua outbox_to_chuc_co_viec_api() sai — proacl hien tai: '
+        || coalesce((SELECT array_to_string(p.proacl, ',') FROM pg_proc p
+                      WHERE p.oid = to_regprocedure('public.outbox_to_chuc_co_viec_api()')), '(null)')$q$,
+      $q$quyền sở hữu hàm outbox_to_chuc_co_viec_api() hoặc SUPERUSER$q$
     ],
 
     -- ---- [S1.11 / 037 / review H3-4] Vị từ "đường ứng dụng" của ~~hai~~ BỐN trigger đăng nhập ----
@@ -14697,6 +14802,55 @@ $ham$;
                     WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
                       AND g.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')),
                   'không có dòng khai nào cho outbox_jobs_kind_app_api/_app_unseal ở POLICY_RESTRICTIVE_KHAI')$q$,
+      $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.9165 / khoản 277] Policy đọc việc PENDING của `outbox_jobs` cho vai chủ hàm liệt kê (9565_api_to_chuc_co_viec) ----
+    -- Cùng lớp hỏng với mục 044 ngay trên hai mục: `CAU_POLICY_SAI` nguồn (i) chỉ kêu khi bảng KHÔNG CÒN policy PERMISSIVE nào,
+    -- và `outbox_jobs` còn policy cách ly — nên một `DROP POLICY outbox_jobs_liet_ke_viec_api` (hay `DROP OWNED BY
+    -- app_liet_ke_to_chuc`, xoá policy mà vai ấy là chủ thể duy nhất) đi qua MỌI lớp khác trong im lặng. Hệ quả ĐO (§S1.9165,
+    -- cảnh ❷ của ADR-040): hàm SECURITY DEFINER của vai ấy trả 0 hàng, KHÔNG LỖI; `api` đọc "0 tổ chức có việc" như "không có
+    -- việc", và job PENDING của nó lại chờ lời xếp việc kế tiếp — đúng khoản 277 quay lại mà không ai kêu. Mục này dựng lại
+    -- policy khi nó VẮNG (không sửa đè một policy đang có mà lệch — cái ấy 83⑴ phán qua dòng thứ ba của NGOAI_LE_HINH_DANG),
+    -- và phán xét đòi ĐÚNG lệnh, ĐÚNG vai, ĐÚNG biểu thức. Vai chưa tồn tại thì không dựng (BƯỚC 0 và mục thuộc tính lo vai).
+    -- `EXECUTE format(...)` với tên bảng là tham số: cùng khuôn và cùng lý do mục 042/044 — lớp tĩnh (`db/migration-shape.test.ts`)
+    -- cấm một tệp tạo policy cho bảng do tệp KHÁC tạo, và mọi mục tự chữa RLS của tệp này đi qua idiom động ấy (bản đầu viết
+    -- nguyên câu trong một chuỗi hằng và lớp tĩnh bắt nó — đo ở vòng này). Mô tả nêu lệnh và vai (tên), không in biểu thức (luật T1).
+    ARRAY[
+      $q$policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (9565_api_to_chuc_co_viec)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9565_api_to_chuc_co_viec.sql')$q$,
+      $q$DO $fn277$
+         DECLARE
+           ten_bang constant text := 'public.outbox_jobs';
+           vi_tu constant text := 'status OPERATOR(pg_catalog.=) ''PENDING''';
+         BEGIN
+           IF to_regrole('app_liet_ke_to_chuc') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                               WHERE p.polrelid = to_regclass(ten_bang)
+                                 AND p.polname = 'outbox_jobs_liet_ke_viec_api') THEN
+             EXECUTE format('CREATE POLICY outbox_jobs_liet_ke_viec_api ON %s FOR SELECT TO app_liet_ke_to_chuc USING (%s)',
+                            ten_bang, vi_tu);
+           END IF;
+         END
+         $fn277$$q$,
+      $q$(SELECT count(*) = 1 FROM pg_policy p
+           WHERE p.polrelid = to_regclass('public.outbox_jobs')
+             AND p.polname = 'outbox_jobs_liet_ke_viec_api'
+             AND p.polpermissive
+             AND p.polcmd = 'r'
+             AND p.polwithcheck IS NULL
+             AND (SELECT array_agg(r.rolname::text ORDER BY r.rolname COLLATE "C")
+                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)) = ARRAY['app_liet_ke_to_chuc']
+             AND pg_get_expr(p.polqual, p.polrelid) = $than277$(status = 'PENDING'::text)$than277$)$q$,
+      $q$coalesce((SELECT 'policy đọc việc PENDING của outbox_jobs lệch — lệnh=' || p.polcmd::text
+                          || ' permissive=' || p.polpermissive::text
+                          || ' vai=' || coalesce((SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C")
+                                                    FROM pg_roles r WHERE r.oid = ANY(p.polroles)), '(không có)')
+                          || ' — biểu thức USING không in ra (so với bản 9565_api_to_chuc_co_viec bằng pg_get_expr(polqual, polrelid) trong pg_policy)'
+                     FROM pg_policy p
+                    WHERE p.polrelid = to_regclass('public.outbox_jobs')
+                      AND p.polname = 'outbox_jobs_liet_ke_viec_api'),
+                  'policy outbox_jobs_liet_ke_viec_api KHÔNG tồn tại — hàm liệt kê việc của api trả 0 tổ chức không lỗi, job PENDING của api không tự phục hồi sau khởi động lại')$q$,
       $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
     ],
 
