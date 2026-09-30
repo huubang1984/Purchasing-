@@ -2028,6 +2028,14 @@ interface PolicyRestrictiveKhai {
  */
 const KIND_APP_API = "(kind = ANY (ARRAY['LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text]))";
 const KIND_APP_UNSEAL = "(kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'UNSEAL_RFQ'::text]))";
+/**
+ * [S1.9155 / khoản 285 / `9555_outbox_policy_xep_theo_kind`] Tập `kind` mà `app_api` XẾP được — RESTRICTIVE FOR INSERT (lệnh `a`),
+ * chỉ vế WITH CHECK (USING khai `null`), nguyên văn `pg_get_expr`; bằng union `KindOutbox` và bằng hợp hai tập trên (ADR-9255). Thêm
+ * một `kind` xếp được là một migration `ALTER POLICY … WITH CHECK (…)` MỚI cộng dòng này và dòng ở hardening.
+ */
+const KIND_XEP_APP_API =
+  "(kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, " +
+  "'UNSEAL_APPROVAL_NOTICE'::text, 'UNSEAL_RFQ'::text]))";
 
 /**
  * MỌI policy RESTRICTIVE của dự án, khoá theo `lược đồ.bảng.policy` [lượt soi 22] và bốn cột (lệnh, vai, USING, WITH CHECK)
@@ -2092,6 +2100,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     // [S1.233 / khoản 158] Hai policy theo `kind` của 095 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.
     ["public.outbox_jobs.outbox_jobs_kind_app_api", { lenh: "w", vai_tro: "app_api", using: KIND_APP_API, with_check: KIND_APP_API }],
     ["public.outbox_jobs.outbox_jobs_kind_app_unseal", { lenh: "w", vai_tro: "app_unseal", using: KIND_APP_UNSEAL, with_check: KIND_APP_UNSEAL }],
+    // [S1.9155 / khoản 285] Policy INSERT của `9555_outbox_policy_xep_theo_kind` — vai ĐÍCH DANH, lệnh INSERT (`a`), không vế USING.
+    ["public.outbox_jobs.outbox_jobs_kind_xep_app_api", { lenh: "a", vai_tro: "app_api", using: null, with_check: KIND_XEP_APP_API }],
   ]);
 })();
 

@@ -10257,7 +10257,7 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
    (`TO app_unseal`) mang ĐÚNG tập khoá của `buildUnsealWorkerHandlers` ∪ sổ `KIND_KHONG_NGUOI_NHAN` (worker là tiến trình khai sổ
    từ S1.222). `USING` = `WITH CHECK`; phần tử theo bảng chữ cái.
 2. Chỉ `FOR UPDATE`. `SELECT` của hai vai không đổi (worker đếm tồn đọng qua mọi `kind` — ADR-083; `api` đọc hàng đợi của mình);
-   `INSERT` của `app_api` không đổi (nó xếp việc cho worker). `SELECT … FOR UPDATE SKIP LOCKED` của `CAU_CLAIM` chịu vế `USING`
+   ~~`INSERT` của `app_api` không đổi (nó xếp việc cho worker).~~ **[S1.9155 / khoản 285]** `INSERT` của `app_api` ràng theo tập `kind` nó XẾP ở một policy riêng — `outbox_jobs_kind_xep_app_api`, `AS RESTRICTIVE FOR INSERT` (ADR-9255); `UNSEAL_RFQ` và `BREAK_GLASS_UNSEAL_ALERT` ở trong tập vì `api` xếp việc cho worker. `SELECT … FOR UPDATE SKIP LOCKED` của `CAU_CLAIM` chịu vế `USING`
    của policy `FOR UPDATE`, nên runner mang nhầm handler của vai kia claim 0 hàng — không lỗi, đúng cơ chế "0 hàng im lặng" mà
    khoản 83⑴ đòi KHAI: hai dòng bảy cột nguyên văn ở `POLICY_RESTRICTIVE_KHAI` (hardening) và bản gương `POLICY_RESTRICTIVE_DA_KHAI`.
 3. **Tập `kind` mỗi vai từ nay SỐNG Ở CSDL.** Thêm một `kind` — handler mới ở `api` hay worker, hay một dòng sổ mồ côi — là thêm
@@ -10278,7 +10278,7 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 - **Policy đọc tập `kind` từ một bảng cấu hình / GUC** thay vì literal: đưa tập ra khỏi tầm của cổng khai nguyên văn (83⑴) và mở
   một đường ghi tập ấy lúc chạy — đúng thứ lớp QUYỀN không được có. Literal + migration là cái giá rẻ hơn.
 - **Ràng cả `INSERT` (và `SELECT`) theo `kind` trong cùng migration.** Đụng ADR-083 và đường xếp việc của `api` (dispatch, trigger
-  `019` chạy dưới vai gọi) — một quyết định riêng, mở ở khoản 285.
+  `019` chạy dưới vai gọi) — một quyết định riêng, mở ở khoản 285. **[S1.9155]** Nửa INSERT đã quyết ở ADR-9255 (khoản 285 đóng): policy RIÊNG `FOR INSERT TO app_api`, migration riêng — không gộp vào `095` vì tập xếp (năm kind) khác tập ghi kết cục (ba); `SELECT` vẫn không ràng (ADR-083).
 - **Đổi mọi `kind` thử trong test sang `kind` thật** để khỏi nới policy: test cơ chế của outbox thôi đọc được, hai vế sổ mồ côi
   mất đối tượng đo; chạy runner dưới siêu người dùng thì mất [T10-D].
 
@@ -10288,11 +10288,11 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 - `DROP OWNED BY <vai>` xoá policy ĐƠN VAI (`095` là RESTRICTIVE đầu tiên `TO <một vai>`) — đường ops xoá rồi tạo lại vai (N3, fix
   round 4). Hardening dựng lại policy THIẾU từ chính dòng khai `POLICY_RESTRICTIVE_KHAI` (mục "hai policy kind theo vai của outbox_jobs
   (095)", cùng lớp mục 044); policy ĐANG CÓ mà lệch thì không sửa đè — phán xét nêu tên. Đo: `db/migrations.int.test.ts` N3 và vế
-  khoản 158.
+  khoản 158. **[S1.9155 / khoản 285]** Policy đơn vai thứ ba `outbox_jobs_kind_xep_app_api` (`FOR INSERT TO app_api`, ADR-9255) đi cùng đường: mục tự chữa RIÊNG (điều kiện là migration khai sinh nó, câu sửa `FOR INSERT … WITH CHECK`); đo: N3 và vế khoản 285 của `db/migrations.int.test.ts`.
 - Thêm `kind` chậm hơn một migration; đổi lại, danh sách `kind` mỗi vai là một sự thật có ở CSDL, kiểm toán được bằng `pg_policy`.
 - Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại hai dòng khai (cùng giá ADR-036 §4).
 - Mọi test chạy runner dưới vai thật với `kind` không thuộc tiến trình nào phải nới policy có khôi phục — ba tệp đã làm; tệp mới
-  phải làm theo, nếu không job của nó nằm `PENDING` và test đỏ ở đúng lớp CSDL.
+  phải làm theo, nếu không job của nó nằm `PENDING` và test đỏ ở đúng lớp CSDL. **[S1.9155 / khoản 285]** Và mọi test XẾP `kind` thử dưới `app_api` phải nới cả policy INSERT `outbox_jobs_kind_xep_app_api` (ADR-9255) — nếu không, lời xếp NÉM 42501; hôm nay chỉ `packages/outbox/src/outbox.int.test.ts` (hai tệp kia chèn job thử dưới siêu người dùng).
 
 ## ADR-131 — Hồ sơ hạ tầng database: MỘT database RIÊNG cho TrustProcure ở mỗi môi trường; phạm vi FORCE của mục khoản 91 là cả database
 
@@ -10447,3 +10447,62 @@ ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Th�
 - `users` vẫn không có CHECK hình dạng (`a@b@c` vào); dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 283, ngoài
   phạm vi ADR này.
 - Dữ liệu có sẵn ngoài miền làm deploy dừng với danh sách id; sửa tay dưới vai mà RLS không áp, mỗi thay đổi kèm một sự kiện kiểm toán.
+
+## ADR-9255 — Tập `kind` mà `app_api` XẾP được sống ở CSDL: một policy `AS RESTRICTIVE FOR INSERT TO app_api`; cảnh báo break-glass giả còn, nói ra
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt câu 13 của kế hoạch trả nợ đợt 3 ngày 2026-09-30 · **[S1.9155]** ·
+**Liên quan:** ADR-134 (khuôn `095` — tập `kind` ghi kết cục theo vai; §Phương án bị loại gọi nửa INSERT là "một quyết định riêng");
+ADR-006 (hai vai ứng dụng; `api` chỉ *yêu cầu* mở thầu qua hàng đợi); ADR-010 (outbox bền + `NOTIFY` cùng giao dịch — trigger `019`);
+ADR-036 §4 (biểu thức policy khai nguyên văn); ADR-028 §2⑵ (tự chữa chỉ thứ migration sở hữu); §S1.9115 (union `KindOutbox`); `007`,
+`019`, `095`, `9555` · **Biên bản:** `evidence/security-reviews.md` §S1.9155 · **Khoản:** 285 (đóng ở đây), 9455 (mở)
+
+### Bối cảnh
+
+`095` (ADR-134) ràng theo `kind` đúng nửa GHI KẾT CỤC và cố ý để ngỏ nửa XẾP: `007` cấp `app_api` `INSERT (org_id, kind, payload,
+dedupe_key, run_after)` trên `outbox_jobs` không theo `kind`. Union `KindOutbox` (§S1.9115) ràng đường TypeScript (`enqueueJob`); một câu
+SQL viết tay dưới `app_api` — mã ngoài `enqueueJob`, một lỗi, một script — thì không. Đo trước (cây không có `9555`): `INSERT` viết tay
+dưới `app_api` một `kind` không tiến trình nào nhận ⇒ VÀO, không lỗi, rồi nằm `PENDING` mãi. Hai đường sản xuất CẦN `app_api` xếp
+`kind` của worker: `dispatchUnseal` xếp `UNSEAL_RFQ`; trigger `unseal_canh_bao_break_glass()` của `019` (SECURITY INVOKER) chèn
+`BREAK_GLASS_UNSEAL_ALERT` trong chính giao dịch tạo yêu cầu break-glass, tức dưới vai gọi.
+
+### Quyết định
+
+1. Một policy `outbox_jobs_kind_xep_app_api ON public.outbox_jobs AS RESTRICTIVE FOR INSERT TO app_api WITH CHECK (kind = ANY
+   (ARRAY[…]))` (migration `9555_outbox_policy_xep_theo_kind`), AND vào `outbox_jobs_tenant_isolation`. Tập = ĐÚNG những `kind` mà
+   `api` xếp: ba khoá của `buildApiOutboxHandlers`, `UNSEAL_RFQ`, `BREAK_GLASS_UNSEAL_ALERT` — tức union `KindOutbox`, tức hợp hai tập của
+   `095` (chỉ `app_api` có GRANT INSERT, nên mọi `kind` của kho xếp dưới vai này). Phần tử theo bảng chữ cái; chỉ vế WITH CHECK.
+2. Khai và canh như `095`: một dòng bảy cột ở `POLICY_RESTRICTIVE_KHAI` (lệnh `a`, USING `NULL`), bản gương ở
+   `db/rls-coverage.int.test.ts`; một mục tự chữa RIÊNG ở hardening dựng lại policy THIẾU từ chính dòng khai (đường N3: `DROP OWNED BY
+   app_api` xoá policy đơn vai), phán xét gương bảy cột và `count(*) = 1`; policy đang có mà lệch thì không sửa đè — nêu tên.
+3. Vi phạm là LỖI, không phải im lặng: INSERT vi phạm WITH CHECK của RLS ném 42501, và thông điệp của PostgreSQL nêu tên policy
+   RESTRICTIVE vi phạm (`new row violates row-level security policy "outbox_jobs_kind_xep_app_api" for table "outbox_jobs"`).
+4. Thêm một `kind` xếp được = một migration `ALTER POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs WITH CHECK (…)` MỚI cộng
+   sửa dòng khai và dòng gương — cùng giá ADR-134 §3, đi cùng migration `ALTER POLICY` của vai ghi kết cục. Quên thì lời xếp kind mới NÉM
+   42501 ở giao dịch nghiệp vụ — fail-closed và ồn ào — và vế tiền đề của khối khoản 285 ở `packages/outbox/src/outbox.int.test.ts`
+   (tập = union `KindOutbox` = hợp hai tập của `095`) đỏ trước đó.
+5. **Giới hạn đã chốt:** `BREAK_GLASS_UNSEAL_ALERT` và `UNSEAL_RFQ` ở lại trong tập của `app_api`. Policy phân biệt `kind`, không phân
+   biệt đường xếp: một cảnh báo break-glass GIẢ (payload tuỳ ý) hay một `UNSEAL_RFQ` trỏ yêu cầu bất kỳ viết tay dưới `app_api` vẫn vào —
+   ghim bằng một vế test, mở ở khoản 9455.
+
+### Phương án bị loại
+
+- **Trigger `019` sang SECURITY DEFINER với vai chủ hẹp**, để `BREAK_GLASS_UNSEAL_ALERT` ra khỏi tập của `app_api` (phương án khác của câu
+  13): cỡ L — một vai mới mang GRANT INSERT và policy riêng, canh vai chủ hàm ở hardening, đụng ADR-006 và ADR-010. Không làm ở đợt 3 —
+  khoản 9455. Bỏ kind ấy khỏi tập mà KHÔNG đổi trigger thì chính yêu cầu break-glass THẬT NÉM 42501 (đo: đối chứng âm của khối khoản 285,
+  đột biến M2 của §S1.9155) — D4 gãy.
+- **`CHECK (kind = ANY (…))` trên bảng** thay policy: CHECK áp cho MỌI vai và MỌI lần `UPDATE` của hàng — một job mang `kind` đã rời tập
+  (kind cũ còn nằm trong hàng đợi) không ghi được kết cục nữa, và thêm CHECK đòi đối chiếu dữ liệu cũ; policy `FOR INSERT` chỉ áp cho hàng
+  MỚI của đúng vai xếp việc.
+- **Gộp vào policy `095`** (đổi `outbox_jobs_kind_app_api` sang lệnh khác): tập ghi kết cục của `app_api` (ba kind) KHÁC tập nó xếp
+  (năm) — một policy không mang được hai tập; và migration đã áp không sửa.
+- **Policy `TO PUBLIC`** thay `TO app_api`: câu 13 chốt `TO app_api`; hôm nay chỉ `app_api` có GRANT INSERT (`007`); vai deploy và
+  migration xếp việc tự do là thiết kế. Một GRANT INSERT mới cho vai khác là một migration mới — nói ra ở §S1.9155 mục 7.
+- **Đọc tập từ một bảng cấu hình / GUC:** cùng lý do ADR-134.
+
+### Hệ quả
+
+- Tập `kind` xếp được là một sự thật có ở CSDL (`pg_policy`), cạnh hai tập ghi kết cục của `095`: ba policy, ba dòng khai.
+- Test xếp `kind` THỬ dưới `app_api` phải nới cả policy này có khôi phục (khuôn ADR-134 §5): `packages/outbox/src/outbox.int.test.ts` làm
+  trong đồ gá đầu tệp; hai tệp còn lại mà ADR-134 §Hệ quả nêu chèn job thử dưới siêu người dùng nên không đổi.
+- Đường ops "xoá rồi tạo lại vai" (N3) đi qua nhờ mục tự chữa riêng; đo: N3 và vế khoản 285 ở `db/migrations.int.test.ts`.
+- Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại dòng khai (cùng giá ADR-036 §4).
