@@ -9446,8 +9446,8 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
    số, `'co'` ở các lượt sau —; mục chỉ bỏ qua đúng lượt sửa mang `'khong'`, và lượt phán xét không đọc GUC ấy. Một migration đang
    chờ có thể còn cần trigger mà HEAD đã bỏ ghim — `059` gỡ `rfq_packages_kiem_yeu_cau_mo_thau` bằng `DROP TRIGGER` không
    `IF EXISTS`, nên gỡ nó sớm là làm gãy vòng đánh số của một cụm còn ở trước `059`. Đặt ở mọi lượt, và phán xét bất kể GUC, để một
-   `'khong'` đặt sẵn ở mức vai (`ALTER ROLE … SET`) không tắt được mục. Chạy hardening ngoài `migrate()` không đặt GUC thì coi như
-   sau vòng.
+   `'khong'` đặt sẵn ở mức vai deploy (`ALTER ROLE <vai> SET`) không tắt được mục; đặt ở mức database hay `ALTER ROLE ALL` thì mục
+   phán xét khoản 87 còn chặn deploy (lượt soi đo cả hai). Chạy hardening ngoài `migrate()` không đặt GUC thì coi như sau vòng.
 5. **Bốn phần loại trừ.** Bảng sổ `bang_so` — [CR1] đã mặc định-đóng với `can_co`, và D2 dựng trigger sổ lên bảng sổ ở MỌI schema,
    thứ danh sách này không liệt kê được. Trigger gọi `chan_sua_xoa()` ở bảng khác — [CR4] phán xét chúng, gỡ ở đây là đổi ngữ nghĩa
    [CR4] trong im lặng. Bản sao trigger trên phân mảnh (`tgparentid <> 0`) — mang tên trigger cha, PostgreSQL từ chối DROP nó; trigger
@@ -9470,6 +9470,11 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
 - **Migration thêm trigger mà quên ghim** trên một bảng có tên: lượt sửa sau vòng gỡ nó kèm WARNING, và deploy xanh. Nó đỏ ở CI:
   `db/trigger-la-mac-dinh-dong.int.test.ts` đòi `migrate()` trên cụm trống không gỡ trigger nào và tập trigger trong cụm trùng khít
   danh sách. Trên bảng chưa có trong danh sách: deploy bị chặn tới khi ghim trigger và khai bảng.
+- **Quên danh sách không đối xứng.** Quên CẢ chỗ ghim lẫn dòng danh sách thì lượt sửa sau vòng gỡ trigger, deploy xanh kèm
+  WARNING — chỉ CI bắt (ca ⑴). Có chỗ ghim mà quên dòng danh sách thì mục ghim dựng lại trigger, mục này gỡ nó, và lượt phán xét
+  chặn deploy vì trigger đã ghim không còn — cổng tĩnh cũng đỏ ở CI.
+- **Trong lúc `migrate()` chạy, trigger lạ trên bảng có tên còn sống** qua lượt sửa đầu và vòng đánh số: một migration đang chờ
+  ghi vào bảng ấy kích nó. Nó bị gỡ ở lượt sửa sau vòng — cái giá của mục 4.
 - **Mọi trigger mới cần ba chỗ ghim (khoản 211) và một chỗ trong `TRIGGER_DUOC_PHEP`.**
 - **Trigger chẩn đoán tạm** mà người vận hành cắm lên một bảng có tên bị lần deploy kế gỡ; trên bảng khác, nó chặn lần deploy kế.
 - **Hàm chép vẫn nằm lại** — mục gỡ trigger, không gỡ hàm; hàm không gắn trigger nào thì không chạy.

@@ -521,8 +521,9 @@ export async function migrate(
           ]);
           // [S1.9101 / khoản 259] Lượt sửa ĐẦU nói ra nó đứng trước vòng đánh số: mục "không trigger lạ" của hardening chỉ
           // gỡ ở lượt sau vòng — một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (059 gỡ một trigger bằng
-          // `DROP TRIGGER` không `IF EXISTS`). Đặt ở MỌI lượt, không chỉ lượt đầu: một `'khong'` đặt sẵn ở mức vai hay database
-          // (`ALTER ROLE … SET`) không được tắt lần gỡ ở lượt sau vòng.
+          // `DROP TRIGGER` không `IF EXISTS`). Đặt ở MỌI lượt, không chỉ lượt đầu: một `'khong'` đặt sẵn ở mức vai deploy
+          // (`ALTER ROLE <vai> SET`) không được tắt lần gỡ ở lượt sau vòng; đặt ở mức database (`ALTER DATABASE … SET`) hay
+          // `ALTER ROLE ALL SET` thì mục phán xét khoản 87 của hardening còn chặn deploy.
           await lockClient.query("SELECT pg_catalog.set_config('app.hardening_sau_vong', $1, true)", [
             truocVongDanhSo ? "khong" : "co",
           ]);

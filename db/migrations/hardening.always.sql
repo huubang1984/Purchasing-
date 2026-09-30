@@ -14872,8 +14872,9 @@ $ham$;
     -- cũng bị gỡ ở đây; `db/trigger-la-mac-dinh-dong.int.test.ts` đo rằng migrate() trên cụm trống không gỡ trigger nào,
     -- nên lối quên ấy đỏ ở CI chứ không đợi tới deploy. Điều kiện của mục chỉ SAI ở đúng một lượt: lượt SỬA mang
     -- `app.hardening_sau_vong = 'khong'` — lượt đầu, trước vòng đánh số. Lượt sửa sau vòng gỡ; lượt PHÁN XÉT phán bất kể GUC ấy:
-    -- một giá trị `'khong'` đặt sẵn ở mức vai hay phiên (`ALTER ROLE … SET`) không tắt được phán xét, và `migrate()` đặt GUC
-    -- tường minh ở MỌI lượt nên nó cũng không tắt được lần gỡ.
+    -- một giá trị `'khong'` đặt sẵn ở mức vai (`ALTER ROLE <vai deploy> SET`) hay trong phiên không tắt được phán xét, và
+    -- `migrate()` đặt GUC tường minh ở MỌI lượt nên nó cũng không tắt được lần gỡ; đặt ở mức database hay `ALTER ROLE ALL`
+    -- thì mục khoản 87 còn chặn deploy.
     ARRAY[
       $q$không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)$q$,
       $q$pg_catalog.current_setting('app.hardening_che_do', true) IS DISTINCT FROM 'sua'
