@@ -9461,7 +9461,13 @@ cửa sổ 30 ngày): ba gói 480, 470, 490 triệu cùng nhóm hàng ở một 
    gói không VỚI TỚI `sealed-envelope`, `unseal` hay `crypto-keys` — kể cả qua `@trustprocure/rfq`, nên gói không phụ thuộc `rfq`, và
    test tích hợp của nó ở `packages/rfq`. Chiều `rfq` → `kiem-soat` được phép.
 8. **Hai route:** `GET /rfqs/:rfqId/signals` (không cho agent — dữ liệu kiểm soát của bên mua, cùng lý do `/categories`) và route ghi
-   nhận (`rfq.approve`, `201`). `KiemSoatError` vào lớp `422`.
+   nhận (`rfq.approve`, `201`). `KiemSoatError` vào lớp `422`. **[S1.206 / S3.6b2]** Chủ dự án chốt ngày 2026-09-30: hàm đọc trả thêm,
+   chỉ đọc — tên và trạng thái các gói mà bằng chứng hiện tại hay một bằng chứng đã lưu nhắc tới, họ tên người ghi và người ghi nhận,
+   người đang xem (danh tính dẫn xuất từ phiên) ghi nhận được không và vì sao không, và số người trong tổ chức ghi nhận được (spec
+   §8.10). Hai vế sau đọc quyền bằng `listUserIdsWithPermission` — khuôn `GET /items` của S1.199, không mở `hasPermission` — rồi CHÍNH
+   hàm `tin_hieu_chot_nguoi_ghi_nhan` mà tầng gói và trigger hỏi, nên câu màn nói không trôi khỏi cổng; lần đọc không để hàng sổ nào.
+   Không một số tiền nào ngoài cận bậc. Tên gói đã đọc được từ `GET /rfqs/:rfqId` (không cổng); họ tên người trong tổ chức đã đi qua
+   route đọc của `/du-lieu`. Màn `/tao-thau` chỉ mời bấm khi máy chủ sẽ nhận.
 9. **K10 tách như K4.** K10a — vế cạnh mở gói — vào sổ đăng ký ở vòng này; vế chữ ký trao thầu vào sổ ở hạng mục dựng tín hiệu của nó.
 
 ### Phương án đã cân nhắc

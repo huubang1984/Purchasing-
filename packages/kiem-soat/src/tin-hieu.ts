@@ -1,6 +1,14 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound, type ActorType } from "@trustprocure/audit";
-import { PERMISSIONS, laMaChot, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import {
+  CHOT_VAO_SO,
+  PERMISSIONS,
+  laMaChot,
+  listUserIdsWithPermission,
+  requirePermission,
+  resolveSessionActor,
+  tuChoiTheoChot,
+} from "@trustprocure/identity";
 
 // =============================================================================================
 // [S1.203 / S3.6b1] TÍN HIỆU CHIA NHỎ GÓI (`PURCHASE_SPLITTING`) VÀ LẦN GHI NHẬN — spec S3 §4.6, §5.1 K10, §2.5 ⒁
@@ -27,6 +35,8 @@ export interface GhiNhanTinHieu {
   readonly id: string;
   readonly lyDo: string;
   readonly nguoi: string;
+  /** [S3.6b2] Họ tên người ghi nhận — để màn nói AI đã đọc tín hiệu, không bắt người duyệt tra một id. */
+  readonly nguoiTen: string | null;
   readonly luc: Date;
 }
 
@@ -41,7 +51,26 @@ export interface TinHieu {
   readonly giaiThich: string;
   readonly tinhLuc: Date;
   readonly nguoiGhi: string;
+  /** [S3.6b2] Họ tên người mà lần nộp hay lần ghi nhận của họ đã lưu hàng này. */
+  readonly nguoiGhiTen: string | null;
   readonly ghiNhan: readonly GhiNhanTinHieu[];
+}
+
+/** [S3.6b2] Một gói mà một bằng chứng — hiện tại hay đã lưu — nhắc tới: tên và trạng thái, không một con số nào. */
+export interface GoiTrongBangChung {
+  readonly tieuDe: string;
+  readonly trangThai: string;
+}
+
+/**
+ * [S3.6b2] Người đang xem ghi nhận được tín hiệu HIỆN TẠI không, và vì sao không. Chỉ để MÀN nói trước — cổng vẫn là
+ * `ghiNhanTinHieu` và trigger `governance_signal_acks_kiem_nguoi`. Không có nó, một người gây ra tín hiệu chỉ biết mình bị loại
+ * sau khi bấm, và lần bấm ấy để một hàng `CONTROL_DENIED` cộng một lần vào trần từ chối của phiên (ADR-112).
+ */
+export interface NguoiXemTinHieu {
+  readonly ghiNhanDuoc: boolean;
+  /** Câu nói vì sao không — `null` khi ghi nhận được, hay khi không có gì cần ghi nhận. */
+  readonly lyDo: string | null;
 }
 
 export interface TinHieuCuaGoi {
@@ -50,7 +79,18 @@ export interface TinHieuCuaGoi {
   /** Gói đang chờ duyệt và tín hiệu hiện tại chưa có lần ghi nhận nào trên một tín hiệu có bằng chứng bằng nó. */
   readonly canGhiNhan: boolean;
   readonly tinHieu: readonly TinHieu[];
+  /** [S3.6b2] Mọi gói mà bằng chứng hiện tại hay một bằng chứng đã lưu nhắc tới, theo id. */
+  readonly goi: Readonly<Record<string, GoiTrongBangChung>>;
+  readonly nguoiXem: NguoiXemTinHieu;
+  /**
+   * [S3.6b2] Số người giữ `rfq.approve` mà luật người cho ghi nhận tín hiệu hiện tại — `0` là tổ chức kẹt (spec §8.10);
+   * `null` khi không có gì cần ghi nhận.
+   */
+  readonly soNguoiGhiNhanDuoc: number | null;
 }
+
+/** [S3.6b2] Câu màn nói khi người đang xem không giữ quyền của cạnh bị chặn. */
+const CAN_QUYEN_GHI_NHAN = "Ghi nhận tín hiệu cần quyền duyệt gói thầu.";
 
 export interface KetQuaGhiNhan {
   readonly signalId: string;
@@ -85,16 +125,31 @@ const CAU_GHI_NHAN =
   "VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.text, $4::pg_catalog.uuid, $5::pg_catalog.uuid) RETURNING id";
 
 const CAU_DOC_TIN_HIEU =
-  "SELECT s.id, s.loai, s.nguon, s.bang_chung, s.do_tin_cay, s.giai_thich, s.tinh_luc, s.created_by " +
-  "FROM public.governance_signals s " +
+  "SELECT s.id, s.loai, s.nguon, s.bang_chung, s.do_tin_cay, s.giai_thich, s.tinh_luc, s.created_by, u.full_name AS nguoi_ten " +
+  "FROM public.governance_signals s LEFT JOIN public.users u ON u.id OPERATOR(pg_catalog.=) s.created_by " +
   "WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND s.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
   "ORDER BY s.tinh_luc, s.id";
 
 const CAU_DOC_GHI_NHAN =
-  "SELECT a.id, a.signal_id, a.ly_do, a.created_by, a.created_at FROM public.governance_signal_acks a " +
+  "SELECT a.id, a.signal_id, a.ly_do, a.created_by, a.created_at, u.full_name AS nguoi_ten FROM public.governance_signal_acks a " +
   "JOIN public.governance_signals s ON s.org_id OPERATOR(pg_catalog.=) a.org_id AND s.id OPERATOR(pg_catalog.=) a.signal_id " +
+  "LEFT JOIN public.users u ON u.id OPERATOR(pg_catalog.=) a.created_by " +
   "WHERE s.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND s.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
   "ORDER BY a.created_at, a.id";
+
+/** [S3.6b2] Tên và trạng thái các gói mà bằng chứng nhắc tới — `$2` là mảng id. Không cột tiền nào. */
+const CAU_DOC_GOI_BANG_CHUNG =
+  "SELECT r.id, r.title, r.status FROM public.rfq_packages r " +
+  "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.uuid[])";
+
+/**
+ * [S3.6b2] Luật người trên tín hiệu HIỆN TẠI, cho từng người trong mảng `$3` — cùng hàm với `CAU_CHOT_NGUOI_GHI_NHAN`, nên màn và
+ * cổng không trôi khỏi nhau. Chỉ đọc: không câu nào ở đây ghi sổ.
+ */
+const CAU_LUAT_NGUOI_NHIEU =
+  "SELECT n.id::pg_catalog.text AS id, public.tin_hieu_chot_nguoi_ghi_nhan($1::pg_catalog.uuid, " +
+  "public.tin_hieu_chia_nho($1::pg_catalog.uuid, $2::pg_catalog.uuid), n.id) AS ly_do " +
+  "FROM pg_catalog.unnest($3::pg_catalog.uuid[]) AS n(id)";
 
 interface NguoiGoi {
   readonly type: ActorType;
@@ -234,9 +289,61 @@ export async function ghiNhanTinHieu(
   return { signalId, ackId, tinHieuMoi };
 }
 
-/** ⑶ Tín hiệu của một gói: tín hiệu hiện tại, việc nó có cần ghi nhận không, và mọi hàng đã ghi cùng các lần ghi nhận. */
-export async function lietKeTinHieu(client: pg.PoolClient, orgId: string, rfqId: string): Promise<TinHieuCuaGoi> {
+/** Id các gói mà một bằng chứng nhắc tới — bằng chứng do hàm SQL dựng, nên hình dạng lạ là một lỗi, không phải một ca. */
+function goiCuaBangChung(bangChung: unknown): string[] {
+  if (bangChung === null) return [];
+  const goi = (bangChung as { goi?: unknown }).goi;
+  if (!Array.isArray(goi) || !goi.every((g): g is string => typeof g === "string")) {
+    throw new Error("bằng chứng tín hiệu không mang mảng id gói — hàm SQL và gói đã trôi khỏi nhau");
+  }
+  return goi;
+}
+
+/**
+ * [S3.6b2] Người đang xem ghi nhận được tín hiệu hiện tại không, và bao nhiêu người trong tổ chức ghi nhận được. Cùng thứ tự với
+ * `ghiNhanTinHieu`: quyền của cạnh bị chặn trước, luật người sau. Quyền đọc bằng `listUserIdsWithPermission` — một DANH SÁCH để màn
+ * nói, như `GET /items` của `/du-lieu` (S1.199) — chứ không mở `hasPermission` ra mặt tiền: không lời từ chối nào xảy ra ở đây, nên
+ * cũng không hàng sổ nào.
+ */
+async function nguoiGhiNhanDuoc(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  nguoiXemId: string,
+): Promise<{ readonly nguoiXem: NguoiXemTinHieu; readonly soNguoiGhiNhanDuoc: number }> {
+  const nguoiDuyet = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_APPROVE);
+  const hoi = [...new Set([...nguoiDuyet, nguoiXemId])];
+  const luat = new Map(
+    (await client.query<{ id: string; ly_do: string | null }>(CAU_LUAT_NGUOI_NHIEU, [orgId, rfqId, hoi])).rows.map((r) => [
+      r.id,
+      r.ly_do,
+    ]),
+  );
+  const maCua = (id: string): string | null => {
+    if (!luat.has(id)) throw new Error("luật người không trả hàng cho một người đã hỏi");
+    return luat.get(id) ?? null;
+  };
+  const soNguoiGhiNhanDuoc = nguoiDuyet.filter((id) => maCua(id) === null).length;
+  if (!nguoiDuyet.includes(nguoiXemId)) return { nguoiXem: { ghiNhanDuoc: false, lyDo: CAN_QUYEN_GHI_NHAN }, soNguoiGhiNhanDuoc };
+  const ma = maCua(nguoiXemId);
+  if (ma === null) return { nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc };
+  if (!laMaChot(ma)) throw new Error("luật người trả một mã không có trong CHOT_VAO_SO — hai bên đã trôi khỏi nhau");
+  return { nguoiXem: { ghiNhanDuoc: false, lyDo: CHOT_VAO_SO[ma].thongDiep }, soNguoiGhiNhanDuoc };
+}
+
+/**
+ * ⑶ Tín hiệu của một gói: tín hiệu hiện tại, việc nó có cần ghi nhận không, mọi hàng đã ghi cùng các lần ghi nhận — và [S3.6b2]
+ * thứ màn `/tao-thau` cần để người duyệt đọc được nó: tên và trạng thái các gói trong bằng chứng, họ tên người ghi, và người đang
+ * xem (danh tính dẫn xuất từ phiên) ghi nhận được không. Chỉ đọc; không một số tiền nào.
+ */
+export async function lietKeTinHieu(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly actorSessionId: string },
+): Promise<TinHieuCuaGoi> {
   await assertTenantBound(client, orgId, "lietKeTinHieu");
+  const nguoiXem = await resolveSessionActor(client, orgId, input.actorSessionId);
+  const rfqId = input.rfqId;
   const goi = (await client.query<{ status: string; bang_chung: unknown; ly_do: string | null }>(CAU_DOC_GOI, [orgId, rfqId]))
     .rows[0];
   if (goi === undefined) throw new KiemSoatError("Không tìm thấy gói thầu trong tổ chức đang gắn.");
@@ -250,17 +357,29 @@ export async function lietKeTinHieu(client: pg.PoolClient, orgId: string, rfqId:
       giai_thich: string;
       tinh_luc: Date;
       created_by: string;
+      nguoi_ten: string | null;
     }>(CAU_DOC_TIN_HIEU, [orgId, rfqId])
   ).rows;
   const ghiNhan = (
-    await client.query<{ id: string; signal_id: string; ly_do: string; created_by: string; created_at: Date }>(CAU_DOC_GHI_NHAN, [
-      orgId,
-      rfqId,
-    ])
+    await client.query<{
+      id: string;
+      signal_id: string;
+      ly_do: string;
+      created_by: string;
+      created_at: Date;
+      nguoi_ten: string | null;
+    }>(CAU_DOC_GHI_NHAN, [orgId, rfqId])
   ).rows;
+  const idGoi = [...new Set([goi.bang_chung, ...tinHieu.map((t) => t.bang_chung)].flatMap(goiCuaBangChung))];
+  const goiBangChung =
+    idGoi.length === 0
+      ? []
+      : (await client.query<{ id: string; title: string; status: string }>(CAU_DOC_GOI_BANG_CHUNG, [orgId, idGoi])).rows;
+  const canGhiNhan = goi.status === "PENDING_APPROVAL" && goi.ly_do !== null;
+  const xem = canGhiNhan ? await nguoiGhiNhanDuoc(client, orgId, rfqId, nguoiXem.id) : null;
   return {
     hienTai: goi.bang_chung,
-    canGhiNhan: goi.status === "PENDING_APPROVAL" && goi.ly_do !== null,
+    canGhiNhan,
     tinHieu: tinHieu.map((t) => ({
       id: t.id,
       loai: t.loai,
@@ -270,9 +389,13 @@ export async function lietKeTinHieu(client: pg.PoolClient, orgId: string, rfqId:
       giaiThich: t.giai_thich,
       tinhLuc: t.tinh_luc,
       nguoiGhi: t.created_by,
+      nguoiGhiTen: t.nguoi_ten,
       ghiNhan: ghiNhan
         .filter((a) => a.signal_id === t.id)
-        .map((a) => ({ id: a.id, lyDo: a.ly_do, nguoi: a.created_by, luc: a.created_at })),
+        .map((a) => ({ id: a.id, lyDo: a.ly_do, nguoi: a.created_by, nguoiTen: a.nguoi_ten, luc: a.created_at })),
     })),
+    goi: Object.fromEntries(goiBangChung.map((g) => [g.id, { tieuDe: g.title, trangThai: g.status }])),
+    nguoiXem: xem?.nguoiXem ?? { ghiNhanDuoc: false, lyDo: null },
+    soNguoiGhiNhanDuoc: xem?.soNguoiGhiNhanDuoc ?? null,
   };
 }

@@ -17626,6 +17626,10 @@ hàng gói trước khi chèn bản rõ; băm không mơ hồ (`numeric(18,4)`, 
   `cap-so` giữ S1.204 / ADR-121 / `089`, `--kiem` sạch; `pnpm t0` sạch; `pnpm test` 125 tệp, 1812 đạt, 1 bỏ qua; T3 của các tệp bị
   chạm: `trigger-la-mac-dinh-dong.int` 12/12, `migrations.int` 120/120, `check-an-ninh.int` 4/4, `du-lieu-nen/anh-xa.int` 23/23,
   `hardening-co-ly-do` 21/21.
+- Hợp `master` lần ba, sau #214 (S1.206, S3.6b2): xung đột duy nhất ở ma trận — dòng K10a lấy của #214, dòng L1 của vòng này.
+  `cap-so --kiem` sạch; không chạy lại `cap-so` — #214 không thêm ADR, migration hay bất biến, và câu *"S1.204, S1.205 đã có PR khác
+  giữ"* của biên bản §S1.206 làm công cụ coi S1.204 là số master đã lấy rồi đánh lại số của vòng này (đo: nó đổi một phần các dòng
+  sang S1.208; hoàn tác). `pnpm test` 125 tệp, 1827 đạt, 1 bỏ qua.
 
 ---
 
@@ -17748,6 +17752,174 @@ hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bả
   lời khai đếm; `pnpm cap-so --dem` viết lại lời khai số ADR (121), `cap-so --kiem` sạch, S1.205 và ADR-122 giữ. `tsc`, `eslint`,
   `depcruise` sạch (477 mô-đun). Toàn bộ unit + T3 cục bộ trên cây hợp: 203 tệp, 3464 khẳng định, 3454 đạt, 1 bỏ qua, 9 đỏ — đúng
   chín ca cũ của máy đo. Ma trận sinh lại trùng từng byte bản đã hợp: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào).
+
+# §S1.206 — S3.6b2: MÀN GHI NHẬN TÍN HIỆU CHIA NHỎ Ở `/tao-thau`, `gieo:demo --s3` ĐỂ GÓI THỨ BA CHỜ GHI NHẬN, KỊCH BẢN 41 BƯỚC 16, LƯỢT ĐI THỬ T4 — S3.6b XONG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — khung chỉ hiện ở tổ chức đã bật, và tổ chức chưa bật không
+hỏi route tín hiệu (ca đối chứng MVP1 của test màn, của kịch bản 41 và của lượt đi thử đo điều ấy). Không đóng, không mở khoản nợ nào.
+Không migration, không ADR mới — ADR-120 ⑻ ghi thêm.
+
+## 1. Vòng này là gì
+
+Phần sau của S3.6b (spec S3 §9): người dùng thật ghi nhận được tín hiệu chia nhỏ từ màn, không chỉ qua route. S3.6b1 (§S1.203) dựng
+CSDL, tầng gói, route và chốt K10a; vòng này dựng khung ghi nhận trong `/tao-thau`, cho `gieo:demo --s3` gieo đúng fixture của spec §7
+và để gói thứ ba chờ ghi nhận, thêm bước 16 vào kịch bản 41 (gói và HTTP), và đi thử trên trình duyệt thật.
+
+## 2. Quyết định của chủ dự án
+
+- (2026-09-30) Một PR cho cả bốn phần.
+- (2026-09-30) Khung nằm trong `/tao-thau`, không màn riêng.
+- (2026-09-30) Hàm đọc trả thêm, chỉ đọc: tên và trạng thái các gói trong bằng chứng, họ tên người ghi và người ghi nhận, người đang
+  xem ghi nhận được không. Không một số tiền nào.
+- (2026-09-30) `gieo:demo --s3` để gói thứ ba (490 triệu) chờ ghi nhận.
+
+## 3. Thay đổi
+
+**Tầng gói — `lietKeTinHieu` (`packages/kiem-soat`)** nhận `{ rfqId, actorSessionId }`; người xem dẫn xuất từ phiên. Thêm:
+- `goi` — tên và trạng thái mọi gói mà bằng chứng hiện tại hay một bằng chứng đã lưu nhắc tới: một câu đọc `rfq_packages`, không cột
+  tiền nào;
+- `nguoiGhiTen` và `ghiNhan[].nguoiTen` — họ tên người ghi và người ghi nhận;
+- `nguoiXem { ghiNhanDuoc, lyDo }` và `soNguoiGhiNhanDuoc` — chỉ khi tín hiệu còn chờ ghi nhận. Quyền đọc bằng
+  `listUserIdsWithPermission(rfq.approve)`; luật người bằng MỘT câu gọi CHÍNH `tin_hieu_chot_nguoi_ghi_nhan` cho người xem và mọi người
+  giữ quyền. Người xem thiếu quyền ⇒ *"Ghi nhận tín hiệu cần quyền duyệt gói thầu."*; hàm luật người trả mã ⇒ câu của `CHOT_VAO_SO`
+  cho mã ấy; mã không có trong bảng ⇒ ném — hai bên đã trôi khỏi nhau.
+
+Route `GET /rfqs/:rfqId/signals` truyền phiên người gọi; vẫn không cổng quyền, vẫn `agent: false`.
+
+**Màn `/tao-thau`.** Khung *Tín hiệu chia nhỏ gói* ở bước duyệt, trên nút *Mở gói*; chỉ tổ chức đã bật đọc route. Hàm thuần
+`khungTinHieu` (`apps/web/src/tao-thau.ts`):
+- tóm tắt nói tập, cửa sổ và cận; thêm câu §8.10 khi `soNguoiGhiNhanDuoc` bằng 0; nói *"đã được ghi nhận"* chỉ khi một lần ghi nhận nằm
+  trên bằng chứng BẰNG bằng chứng hiện tại; nói *"không còn đúng"* khi bằng chứng hiện tại rỗng;
+- bảng gói vẽ bằng chứng hiện tại — không có thì hàng đã lưu mới nhất —, xếp theo tên, đánh dấu gói này;
+- lịch sử ghi và ghi nhận, có họ tên và lý do;
+- ô lý do và nút chỉ khi tín hiệu còn chờ VÀ máy chủ nói người xem ghi nhận được; không thì câu vì sao không của máy chủ.
+
+Mã trang đọc khung ở mỗi lần đọc gói, xoá khung ngay khi đọc gói khác, bỏ câu trả tới muộn, xoá khung khi đăng xuất hay đổi người. Nút
+*Ghi nhận tín hiệu* kiểm lý do phía màn (bắt buộc, trần tính bằng byte như máy chủ), gửi lý do đã cắt, đọc lại gói sau `201`; lời từ
+chối của máy chủ được in nguyên văn rồi khung đọc lại.
+
+**`gieo:demo --s3`.** Người tài chính dựng nhóm `THEP-TAM`; `soan` tạo, đặt ngân sách và nộp ba gói 480 / 470 / 490 triệu; `soan2`
+duyệt cả ba, mang lần nộp; hai gói đầu mở. Gói thứ ba mang tín hiệu, ở `PENDING_APPROVAL`, chờ ghi nhận; bản in nói cách đi thử và id
+ba gói.
+
+**Kịch bản 41 — bước 16, cả hai luồng.** Ba gói ở một nhóm hàng riêng — hai gói hy sinh của bộ quét HTTP ở nhóm của gói chính.
+- Luồng S3: tín hiệu chỉ ở gói nộp sau cùng. Người tạo đọc được lý do không; người độc lập đọc được mình ghi nhận được; số người ghi
+  nhận được là 1 ở bản gói, 2 ở bản HTTP. Lần mở dừng ở chốt K10a — `422` có tên qua HTTP — và không đúc khoá. Người tạo tự ghi nhận ⇒
+  `K10A_TU_GHI_NHAN`, vào sổ. Người độc lập ghi nhận, rồi gói mở. Sổ của gói kể đúng thứ tự: nộp, tín hiệu, duyệt, hai lần từ chối,
+  ghi nhận, đúc khoá, mở.
+- Luồng MVP1: ba gói mở, không hàng tín hiệu, không hàng chốt; route tín hiệu trả khung rỗng.
+- Bản gói thêm một PROCUREMENT_MANAGER độc lập cho luồng S3: hai giám đốc không giữ `rfq.approve`, người mua là người gây ra. Worker khai
+  `@trustprocure/kiem-soat` ở `devDependencies` — chỉ test dùng.
+- Tệp HTTP vào sổ khai nhãn K10a.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Không cổng im lặng.** Cờ người xem đọc quyền bằng danh sách người giữ `rfq.approve`. `hasPermission` cố ý không ra mặt tiền của
+  `@trustprocure/identity` (khuôn `GET /items`, S1.199). Nhờ vậy người tài chính đọc khung không sinh `PERMISSION_DENIED` nào, không
+  tiêu trần từ chối của phiên (ADR-112). Cổng vẫn là `requirePermission` của route ghi và trigger ở CSDL.
+- **Một hàm luật người.** Màn không giữ bản sao luật: hàm đọc gọi chính hàm mà tầng gói và trigger hỏi.
+- **Mức lộ dữ liệu không đổi.** Tên và trạng thái gói đã đọc được qua `GET /rfqs/:rfqId` — không cổng, mở cả cho agent. Họ tên người
+  trong tổ chức đã đi qua route đọc của `/du-lieu`. Route tín hiệu vẫn đóng với agent.
+- **Bảng gói xếp theo tên** — do lượt đi thử đo ra (mục 5).
+- **Bước 16 đứng SAU bước 15.** Sổ của gói chính và mọi khẳng định cũ không đổi; bước 16 tự đo sổ của gói thứ ba.
+
+## 5. Lượt đi thử T4 — trình duyệt thật
+
+Cụm: PostgreSQL 16 dựng bằng `initdb`, CSDL mới; `pnpm gieo:demo --s3` rồi `pnpm gieo:demo`; `apps/api` (`local-dev`, hộp thư dev,
+đăng nhập bằng `app_api_login`); `apps/web`; Chromium 1194 qua Playwright. Hai ngữ cảnh trình duyệt — hai máy — cho `soan` và `soan3`;
+script nằm ngoài kho.
+
+- **Gieo:** gói 490 triệu ở `PENDING_APPROVAL`, một hàng tín hiệu ghi lúc nộp.
+- **`soan`** (tạo và nộp cả ba gói) đọc gói 490 triệu. Khung hiện, tóm tắt *"Gói này nằm trong 3 gói cùng nhóm hàng nộp duyệt trong 30
+  ngày, mỗi gói dưới cận 1.000.000.000 mà tổng chạm cận ấy. …"*. Bảng ba gói: hai *đã mở*, gói này *chờ duyệt*. Lịch sử một dòng:
+  *"Nguoi soan goi thau nộp duyệt; tín hiệu được ghi lúc nộp (3 gói, cận 1.000.000.000)."* Không ô lý do, không nút; câu *"Người tạo
+  hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy."* Khung không mang ước lượng nào.
+- **`soan` bấm *Mở gói*** ⇒ câu của chốt K10a; gói đứng yên, không khoá nào được đúc. `soan` không gửi lời ghi nhận nào — màn không
+  mời bấm.
+- **`soan3`** (PM, không tạo, không nộp gói nào) thấy ô lý do và nút. Lý do rỗng ⇒ câu của màn, không lời gọi nào. Có lý do ⇒ *"Đã
+  ghi nhận tín hiệu. Gói mở được khi đủ chữ ký."* Tóm tắt nay kết bằng *"Tín hiệu đã được ghi nhận — nó không chặn lần mở gói nữa."*;
+  lịch sử thêm *"Nguoi soan goi thau 3 ghi nhận: «…»"*; ô ẩn, lý do đã xoá.
+- **`soan` đọc lại trên máy mình:** thấy đã ghi nhận, câu vì sao không thôi hiện. *Mở gói* ⇒ *"Đã mở gói. …"*; gói `OPEN`.
+- **`soan3` đăng xuất** ⇒ khung ẩn, bảng và lịch sử rỗng.
+- **Đối chứng MVP1:** khung không hiện; màn không hỏi route tín hiệu.
+- **Sổ:** `CONTROL_DENIED` của gói đúng một hàng, `TIN_HIEU_CHUA_GHI_NHAN` — không lần tự ghi nhận nào, vì màn không mời bấm.
+  `GOVERNANCE_SIGNAL_ACKNOWLEDGED` của `soan3`, kèm lý do. 0 hàng `PERMISSION_DENIED` của tổ chức. Thứ tự: bị chặn, ghi nhận, đúc
+  khoá, mở.
+- **Lỗi trình duyệt:** không `pageerror`. Ba `401` `GET /api/me` — mỗi trang hỏi phiên lúc tải, chưa có cookie —, một `422` của lần mở
+  bị chặn (cố ý), một `404` `/favicon.ico` có từ trước.
+- **Đo ra một lỗi màn, sửa trong vòng.** Bảng gói vẽ theo thứ tự id trong bằng chứng, tức theo UUID, nên ba gói *cong trinh 1 / 2 / 3*
+  hiện thành 2, 1, 3. Nay xếp theo tên — số trong tên so theo giá trị, cùng tên thì theo id. Lượt hai trên CSDL gieo lại đạt **36/36**
+  khẳng định, bảng 1, 2, 3.
+
+## 6. Đột biến
+
+Hai mươi lăm đột biến, mỗi lần sửa đúng một chỗ; tệp trả về đúng byte sau mỗi lượt (so sha256). Lượt đầu: 19 đỏ, 5 sống, 1 không khớp
+chuỗi (R1 khớp mười một chỗ — thêm ngữ cảnh rồi chạy lại). Năm con sống đều là ca đo thiếu, không phải mã thừa: fixture của
+`tin-hieu-chia-nho.int` đặt họ tên bằng email, nên đọc nhầm cột không đổi gì (P6, P7); ba ca màn chưa có (W2, W4, J4). Thêm ca đo cho cả
+năm, chạy lại: cả năm đỏ.
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| P1 | bỏ luật người — người xem giữ quyền luôn ghi nhận được | đỏ — 3 ca |
+| P2 | không hỏi quyền của người xem | đỏ — 1 ca |
+| P3 | đếm mọi người giữ quyền, bỏ luật người | đỏ — 3 ca |
+| P4 | tính người xem cả khi không gì cần ghi nhận | đỏ — 2 ca |
+| P5 | bản đồ gói chỉ từ bằng chứng hiện tại | đỏ — 1 ca |
+| P6 | họ tên người ghi lấy email | sống → sau khi sửa fixture: đỏ — 1 ca |
+| P7 | họ tên người ghi nhận lấy email | sống → sau khi sửa fixture: đỏ — 1 ca |
+| P8 | trạng thái gói trong bản đồ cứng `OPEN` | đỏ — 4 ca |
+| R1 | route đọc bằng id người thay vì id phiên | đỏ — 1 ca |
+| W1 | mời bấm khi còn chờ, bỏ vế người xem | đỏ — 2 ca |
+| W2 | câu *"vì sao không"* cả khi không gì cần ghi nhận | sống → thêm ca: đỏ — 1 ca |
+| W3 | bỏ câu §8.10 | đỏ — 2 ca |
+| W4 | *"đã được ghi nhận"* không so bằng chứng | sống → thêm ca: đỏ — 1 ca |
+| W5 | bỏ xếp theo tên | đỏ — 6 ca |
+| W6 | không đánh dấu gói này | đỏ — 3 ca |
+| W7 | đảo nhãn lịch sử `GHI_NHAN` / `NOP_DUYET` | đỏ — 4 ca |
+| W8 | lý do rỗng hợp lệ | đỏ — 2 ca |
+| J1 | không bỏ câu trả tín hiệu tới muộn | đỏ — 1 ca |
+| J2 | đăng xuất không xoá khung | đỏ — 1 ca |
+| J3 | đổi người không xoá khung | đỏ — 1 ca |
+| J4 | đọc gói khác không xoá khung trước khi chờ | sống → thêm vế chờ vào ca màn: đỏ — 1 ca |
+| J5 | hỏi tín hiệu cả ở tổ chức chưa bật | đỏ — 1 ca |
+| J6 | bỏ kiểm lý do phía màn | đỏ — 1 ca |
+| J7 | ghi nhận xong không đọc lại gói | đỏ — 1 ca |
+| J8 | bị từ chối không đọc lại khung | đỏ — 1 ca |
+
+## 7. Giới hạn, nói ra
+
+- **Cờ người xem đọc lúc tải khung.** Vai hay tập gói đổi trong lúc trang mở thì màn nói theo lần đọc; máy chủ vẫn kiểm lại mọi luật ở
+  lần bấm, và lời từ chối được in rồi khung đọc lại.
+- **`soNguoiGhiNhanDuoc` đếm theo vai** — không xét người ấy có phiên, có MFA hay còn làm việc.
+- **Khung chỉ ở `/tao-thau`.** `/mo-thau` không có: gói đã mở thì tín hiệu không chặn gì.
+- **Bước 16 đứng sau bước 15**, nên câu *"sổ kể lại toàn bộ kịch bản"* của bước 15 không kể bước 16; bước 16 tự đo sổ của gói thứ ba.
+- **Lượt đi thử T4 là một lần, không phải một cổng**; script nằm ngoài kho.
+
+## 8. Số đo
+
+- `pnpm t0` sạch (476 module, 1931 phụ thuộc). `pnpm test`: 124 tệp, 1808 đạt, 1 bỏ qua.
+- Test màn: `apps/web/src/tao-thau.test.ts` và `apps/web/src/phuc-vu.test.ts` **147/147**.
+- Tầng gói và luồng: `tin-hieu-chia-nho.int` **14/14** (12 → 14: hàm đọc nói trước cho màn; gói không tín hiệu), `buyer.int` **24/24**,
+  kịch bản 41 bản gói **32/32** (30 → 32), bản HTTP **60/60** (58 → 60). Bốn tệp quét trọn `ROUTES` — `api.int` 15/15, `auth.int` 56/56,
+  `loi-giao-thuc.int` 20/20, `loi-moi-sau-commit.int` 19/19 —, `du-lieu.int` 9/9, và hai bộ đọc QT3 (`qt3-cu-phap.int` 1/1 — mọi câu SQL
+  mới được PostgreSQL phân tích —, `qt3-ngu-phap.int` 7/7). Mười một tệp T3, **257/257**.
+- Hai mươi lăm đột biến, cả hai mươi lăm đỏ (§6).
+- Lượt đi thử T4: **36/36** khẳng định (§5).
+- **Lockfile:** chèn tay đúng một khối (phụ thuộc phát triển `@trustprocure/kiem-soat` của `apps/unseal-worker`); `pnpm install
+  --frozen-lockfile --offline` đi qua. `pnpm install --offline` tự do viết lại hậu tố peer không liên quan — không dùng.
+- **Ma trận:** báo cáo ghép — báo cáo của `master` sau #211 làm nền, thay bằng lượt `pnpm test` và mười một tệp T3 của vòng này — 202
+  tệp, 3468 khẳng định: 3458 đạt, 1 bỏ qua, và đúng chín ca cũ của máy đo đỏ (8 của `packages/test-support/src/postgres.int.test.ts` —
+  không có container runtime —, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` — tiền đề locale). **73/73** bất biến (51/51
+  nghiệp vụ + 22/22 hàng rào), cổng evidence XANH. So với bản của `master`, ma trận chỉ khác ở hàng K10a: 13 → 15 khẳng định (bước 16
+  của kịch bản 41 qua HTTP, hai luồng).
+- **Số hiệu:** `pnpm cap-so` giữ số trên origin và cấp S1.206; S1.204, S1.205 đã có PR khác giữ.
+- **Hợp `master` sau #212** (S1.205, khoản 259, ADR-122 — không migration): xung đột ở cột mốc `docs/STATE.md` và cuối biên bản, giữ
+  cả hai mục — cột mốc S1.206 trên S1.205, §S1.205 rồi §S1.206; sổ khai nhãn, ma trận và `docs/DECISIONS.md` hợp tự động (K10a của vòng
+  này, D2 và H19 của #212). Sau lần hợp: typecheck sạch; T3 chín tệp — năm tệp lần hợp đổi (`hardening-suy-tu-tinh-chat.int` 36/36,
+  `migrations.int` 119/119, `trigger-la-mac-dinh-dong.int` 12/12 mới của #212, `outbox.int` 50/50, `lan-nop-da-xem.int` 29/29) và bốn tệp
+  của vòng này — **376/376**; `pnpm t0` sạch (477 module, 1938 phụ thuộc); `pnpm test` 124 tệp, 1812 đạt, 1 bỏ qua. Báo cáo ghép: 203 tệp,
+  3485 khẳng định, đúng chín ca cũ của máy đo đỏ; ma trận **73/73**, cổng evidence XANH, trùng từng byte bản hợp tự động. `pnpm cap-so`
+  sau lần hợp: S1.206 giữ nguyên, không tệp nào đổi.
 
 ---
 

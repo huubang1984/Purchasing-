@@ -391,8 +391,15 @@ const doc: readonly BuyerReadRoute[] = [
     // [S1.203 / S3.6b1] Tín hiệu chia nhỏ của một gói: tín hiệu hiện tại, việc nó còn chờ ghi nhận không, các hàng đã ghi cùng
     // lần ghi nhận. Không giá nào — bằng chứng chỉ mang id gói, nhóm hàng, phiên bản chính sách, cận bậc, cửa sổ. KHÔNG cho
     // agent: tín hiệu là dữ liệu kiểm soát của bên mua, cùng lý do `/categories`; mở sau là một quyết định có tên.
+    // [S3.6b2] Thêm tên và trạng thái các gói trong bằng chứng, họ tên người ghi, và người đang xem ghi nhận được không — danh
+    // tính dẫn xuất từ phiên, để màn `/tao-thau` nói trước thay vì để một cú bấm sai vào sổ. Vẫn không một con số nào.
     agent: false,
-    handler: async (ctx) => ({ status: 200, body: { tinHieu: await lietKeTinHieu(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } }),
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        tinHieu: await lietKeTinHieu(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }),
+      },
+    }),
   },
   {
     method: "GET",
