@@ -55,6 +55,8 @@ export type MaChotKiemSoat =
   | "J3_PHIEN_DE_XUAT_DUYET"
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
+  | "K8A_NGUOI_MOI_XAC_MINH"
+  | "K8A_NGUOI_TAO_TU_XAC_MINH"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "K10A_TAC_GIA_CHINH_SACH"
   | "K10A_TU_GHI_NHAN"
@@ -65,7 +67,8 @@ export type MaChotKiemSoat =
 export interface DongChot {
   /**
    * Bất biến mà chốt này cưỡng chế — nhóm K của S3, hay J3/D2 của tách bạch nhiệm vụ (khoản 247). [S1.194] Vế có hậu tố
-   * (`K4a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b).
+   * (`K4a`, `K8a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b) — cùng khuôn mã của sổ bất biến
+   * (`KHUON_MA`, khoản 246).
    */
   readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
@@ -211,6 +214,25 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "Lời mời chỉ thu hồi được khi gói thầu còn soạn thảo; gói đang chờ duyệt thì trả về soạn thảo trước, gói đã mở thì chưa " +
       "thu hồi được (K4a).",
   },
+  // [S1.196 / S3.3a / ADR-081 ⑵] Hai lời từ chối K8a — trigger `ncc_kiem_xac_minh` là lớp có thẩm quyền, tầng gói
+  // (`xacMinhNhaCungCap`) bắt CHÍNH lỗi của nó theo tên ràng buộc. Cả hai vào sổ: đó là lần một người tự xác nhận nhà cung cấp
+  // mà chính mình dựng hay chính mình sẽ mời — đúng lối nhà cung cấp vỏ mà K2 đếm (spec §2.4 ⑹).
+  K8A_NGUOI_TAO_TU_XAC_MINH: {
+    chot: "K8a",
+    vaoSo: true,
+    lyDo:
+      "người tạo hồ sơ nhà cung cấp, hay một người liên hệ của nó, tự xác minh hồ sơ ấy — xác minh là thứ cho nhà cung cấp " +
+      "được đếm vào K2, nên người dựng hồ sơ tự xác minh là đúng lối nhà cung cấp vỏ của spec §2.4 ⑹",
+    thongDiep: "Người tạo hồ sơ nhà cung cấp hay người liên hệ của nó không được tự xác minh — cần một người khác xác minh (K8a).",
+  },
+  K8A_NGUOI_MOI_XAC_MINH: {
+    chot: "K8a",
+    vaoSo: true,
+    lyDo:
+      "người giữ `rfq.invite` xác minh một nhà cung cấp — người chọn người dự thi không tự xác nhận người mình chọn (ADR-081 ⑵, " +
+      "ADR-084 ⑵). Tới được khi một người mang cả vai mời lẫn vai xác minh",
+    thongDiep: "Người có quyền mời nhà cung cấp không được xác minh nhà cung cấp (K8a).",
+  },
   J3_PHIEN_DE_XUAT_DUYET: {
     chot: "J3",
     vaoSo: true,
@@ -236,6 +258,9 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
+  // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
+  k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
+  k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
 };
 
 /** Mã chốt của một lỗi `pg` do trigger ném — `check_violation` (23514) mang một tên có trong `CHOT_THEO_RANG_BUOC` — hay `null`. */
@@ -282,6 +307,21 @@ export async function tuChoiTheoChot(
   ma: MaChotKiemSoat,
   cause?: unknown,
 ): Promise<never> {
+  return await tuChoiTheoChotTaiNguyen(auditPool, orgId, actor, { resourceType: "RFQ", resourceId: rfqId }, ma, cause);
+}
+
+/**
+ * [S1.196 / S3.3a] `tuChoiTheoChot` cho một tài nguyên không phải gói thầu — chốt K8a chặn trên một NHÀ CUNG CẤP. Cùng
+ * luật: luôn ném; mã vào sổ ⇒ một hàng `CONTROL_DENIED` ở giao dịch độc lập, payload chỉ mang mã.
+ */
+export async function tuChoiTheoChotTaiNguyen(
+  auditPool: pg.Pool,
+  orgId: string,
+  actor: { readonly type: ActorType; readonly id: string },
+  taiNguyen: { readonly resourceType: string; readonly resourceId: string },
+  ma: MaChotKiemSoat,
+  cause?: unknown,
+): Promise<never> {
   const loi = new ChotKiemSoatError(ma, cause === undefined ? undefined : { cause });
   if (!CHOT_VAO_SO[ma].vaoSo) throw loi;
   return await throwAuditedDenial(
@@ -291,8 +331,8 @@ export async function tuChoiTheoChot(
       actorType: actor.type,
       actorId: actor.id,
       action: ACTION_CHOT_KIEM_SOAT,
-      resourceType: "RFQ",
-      resourceId: rfqId,
+      resourceType: taiNguyen.resourceType,
+      resourceId: taiNguyen.resourceId,
       // Chỉ MÃ, không thông điệp — cùng lý do `RFQ_STATE_DENIED` (`packages/danh-gia/src/tu-choi-vao-so.ts`).
       payload: { ma },
     },

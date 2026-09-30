@@ -2748,6 +2748,9 @@ $ham$;
          ('public', 'sessions', 'sessions_token_hash_check', '006_sessions_and_mfa', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
+         ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_chay_thi_co_moc', '019_unseal', 'CHECK (((status <> ''EXECUTED''::text) OR (executed_at IS NOT NULL)))'),
          ('public', 'unseal_requests', 'unseal_requests_dieu_phoi_du_bo', '022_security_review_s1', 'CHECK ((((dispatched_at IS NULL) = (dispatched_by IS NULL)) AND ((dispatched_at IS NULL) = (dispatched_by_session_id IS NULL))))'),
          ('public', 'unseal_requests', 'unseal_requests_nhan_chung_chi_break_glass', '078_nhan_chung_chi_break_glass', 'CHECK ((break_glass OR ((break_glass_witness_user_id IS NULL) AND (break_glass_witness_session_id IS NULL))))'),
@@ -3445,6 +3448,7 @@ $ham$;
          ('public', 'rfq_unsealed_bids', '019_unseal'),
          ('public', 'sessions', '006_sessions_and_mfa'),
          ('public', 'supplier_contacts', '008_suppliers'),
+         ('public', 'supplier_verifications', '082_xac_minh_nha_cung_cap'),
          ('public', 'suppliers', '008_suppliers'),
          ('public', 'unseal_approvals', '019_unseal'),
          ('public', 'unseal_dispatch_history', '064_lich_su_dieu_phoi'),
@@ -4665,6 +4669,17 @@ $ham$;
              CREATE TRIGGER procurement_category_changes_kiem_danh_tinh BEFORE INSERT ON procurement_category_changes FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
              ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.supplier_verifications') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                                 AND t.tgname = 'supplier_verifications_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_kiem_danh_tinh BEFORE INSERT ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_verifications_kiem_danh_tinh ON public.supplier_verifications;
+             CREATE TRIGGER supplier_verifications_kiem_danh_tinh BEFORE INSERT ON supplier_verifications FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien( 'created_by', 'created_by_session_id');
+             ALTER TABLE public.supplier_verifications ENABLE ALWAYS TRIGGER supplier_verifications_kiem_danh_tinh;
+           END IF;
            IF to_regclass('public.governance_signals') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.governance_signals')
@@ -4944,6 +4959,14 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_kiem_danh_tinh BEFORE INSERT ON public.procurement_category_changes FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
+            AND (to_regclass('public.supplier_verifications') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                               AND t.tgname = 'supplier_verifications_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_kiem_danh_tinh BEFORE INSERT ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('created_by', 'created_by_session_id')$def$))
             AND (to_regclass('public.governance_signals') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.governance_signals')
@@ -5933,6 +5956,28 @@ $ham$;
              CREATE TRIGGER procurement_category_changes_chan_truncate BEFORE TRUNCATE ON procurement_category_changes FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.procurement_category_changes ENABLE ALWAYS TRIGGER procurement_category_changes_chan_truncate;
            END IF;
+           IF to_regclass('public.supplier_verifications') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                                 AND t.tgname = 'supplier_verifications_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_chi_ghi_them BEFORE DELETE OR UPDATE ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_verifications_chi_ghi_them ON public.supplier_verifications;
+             CREATE TRIGGER supplier_verifications_chi_ghi_them BEFORE UPDATE OR DELETE ON supplier_verifications FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.supplier_verifications ENABLE ALWAYS TRIGGER supplier_verifications_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.supplier_verifications') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                                 AND t.tgname = 'supplier_verifications_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_chan_truncate BEFORE TRUNCATE ON public.supplier_verifications FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_verifications_chan_truncate ON public.supplier_verifications;
+             CREATE TRIGGER supplier_verifications_chan_truncate BEFORE TRUNCATE ON supplier_verifications FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.supplier_verifications ENABLE ALWAYS TRIGGER supplier_verifications_chan_truncate;
+           END IF;
            IF to_regclass('public.governance_signals') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.governance_signals')
@@ -6220,6 +6265,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER procurement_category_changes_chan_truncate BEFORE TRUNCATE ON public.procurement_category_changes FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.supplier_verifications') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                               AND t.tgname = 'supplier_verifications_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_chi_ghi_them BEFORE DELETE OR UPDATE ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.supplier_verifications') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                               AND t.tgname = 'supplier_verifications_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_chan_truncate BEFORE TRUNCATE ON public.supplier_verifications FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.governance_signals') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.governance_signals')
@@ -6265,7 +6326,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -8593,6 +8654,219 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_kiem_tra_ve_nhap()')),
                   'hàm public.rfq_kiem_tra_ve_nhap() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_tra_ve_nhap() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.196 / S3.3a] Bam ho so luc xac minh (K8a). Mot than tra hang so lam MOI xac minh con hieu luc sau khi ho so doi — khuon C-1 mat rang.
+    ARRAY[
+      $q$định nghĩa hàm ncc_bam_xac_minh(uuid, uuid) (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.ncc_bam_xac_minh(p_org uuid, p_ncc uuid) RETURNS bytea
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT sha256(convert_to(
+    coalesce((SELECT s.legal_name || '|' || coalesce(s.tax_code, '') || '|' || s.status
+                FROM public.suppliers s
+               WHERE s.org_id = p_org AND s.id = p_ncc), '')
+    || '#' ||
+    coalesce((SELECT string_agg(c.id::text || ':' || c.email || ':' || coalesce(c.phone, '') || ':' || c.status, ';'
+                                ORDER BY c.id)
+                FROM public.supplier_contacts c
+               WHERE c.org_id = p_org AND c.supplier_id = p_ncc), ''),
+    'UTF8'))
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT sha256(convert_to( coalesce((SELECT s.legal_name || '|' || coalesce(s.tax_code, '') || '|' || s.status FROM public.suppliers s WHERE s.org_id = p_org AND s.id = p_ncc), '') || '#' || coalesce((SELECT string_agg(c.id::text || ':' || c.email || ':' || coalesce(c.phone, '') || ':' || c.status, ';' ORDER BY c.id) FROM public.supplier_contacts c WHERE c.org_id = p_org AND c.supplier_id = p_ncc), ''), 'UTF8'))$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.bytea'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_bam_xac_minh(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_bam_xac_minh(uuid, uuid)')),
+                  'hàm public.ncc_bam_xac_minh(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm ncc_bam_xac_minh(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.196 / S3.3a] Cau hoi duy nhat cua K2 ve xac minh (K8a). Mot than `SELECT true` dem moi nha cung cap vo.
+    ARRAY[
+      $q$định nghĩa hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.ncc_xac_minh_con_hieu_luc(p_org uuid, p_ncc uuid) RETURNS boolean
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT coalesce((
+    SELECT v.loai = 'VERIFIED'
+           AND v.het_han_at > now()
+           AND v.bam_ho_so = public.ncc_bam_xac_minh(p_org, p_ncc)
+      FROM public.supplier_verifications v
+     WHERE v.org_id = p_org AND v.supplier_id = p_ncc
+     ORDER BY v.thu_tu DESC
+     LIMIT 1), false)
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT coalesce(( SELECT v.loai = 'VERIFIED' AND v.het_han_at > now() AND v.bam_ho_so = public.ncc_bam_xac_minh(p_org, p_ncc) FROM public.supplier_verifications v WHERE v.org_id = p_org AND v.supplier_id = p_ncc ORDER BY v.thu_tu DESC LIMIT 1), false)$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.bool'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_xac_minh_con_hieu_luc(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_xac_minh_con_hieu_luc(uuid, uuid)')),
+                  'hàm public.ncc_xac_minh_con_hieu_luc(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm ncc_xac_minh_con_hieu_luc(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.196 / S3.3a / K8a] Luat nguoi, thu tu duoi khoa, bam ho so va han hieu luc cua xac minh. Than `RETURN NEW` cho nguoi tao ho so tu xac minh va xoa thu tu — dung lo nha cung cap vo cua K2.
+    ARRAY[
+      $q$hàm + trigger ncc_kiem_xac_minh (082_xac_minh_nha_cung_cap)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '082_xac_minh_nha_cung_cap.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.ncc_kiem_xac_minh()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.ncc_kiem_xac_minh();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.ncc_kiem_xac_minh() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  nguoi_tao_ncc uuid;
+  mst text;
+  trang_thai text;
+  loai_cuoi text;
+  thang integer;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(NEW.supplier_id::pg_catalog.text, 7));
+  SELECT s.created_by, s.tax_code, s.status INTO nguoi_tao_ncc, mst, trang_thai
+    FROM public.suppliers s
+   WHERE s.org_id = NEW.org_id AND s.id = NEW.supplier_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong tim thay nha cung cap de xac minh (K8a)'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    RAISE EXCEPTION 'Chi to chuc da bat S3 moi xac minh nha cung cap (ADR-080)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NOT EXISTS (SELECT 1
+                   FROM public.user_roles ur
+                   JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                  WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by
+                    AND rp.permission_code = 'supplier.qualify') THEN
+    RAISE EXCEPTION 'Nguoi xac minh phai giu supplier.qualify (K8a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.user_roles ur
+               JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+              WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by
+                AND rp.permission_code = 'rfq.invite') THEN
+    RAISE EXCEPTION 'Nguoi giu rfq.invite khong xac minh nha cung cap (K8a)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_nguoi_moi_xac_minh';
+  END IF;
+  IF nguoi_tao_ncc = NEW.created_by
+     OR EXISTS (SELECT 1 FROM public.supplier_contacts c
+                 WHERE c.org_id = NEW.org_id AND c.supplier_id = NEW.supplier_id
+                   AND c.created_by = NEW.created_by) THEN
+    RAISE EXCEPTION 'Nguoi tao ho so nha cung cap hay nguoi lien he khong tu xac minh (K8a)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_nguoi_tao_tu_xac_minh';
+  END IF;
+
+  SELECT v.loai INTO loai_cuoi
+    FROM public.supplier_verifications v
+   WHERE v.org_id = NEW.org_id AND v.supplier_id = NEW.supplier_id
+   ORDER BY v.thu_tu DESC
+   LIMIT 1;
+  NEW.thu_tu := coalesce((SELECT max(v.thu_tu) FROM public.supplier_verifications v
+                           WHERE v.org_id = NEW.org_id AND v.supplier_id = NEW.supplier_id), 0) + 1;
+
+  IF NEW.loai = 'REVOKED' THEN
+    IF loai_cuoi IS DISTINCT FROM 'VERIFIED' THEN
+      RAISE EXCEPTION 'Nha cung cap chua duoc xac minh — khong co gi de thu hoi (K8a)'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.bam_ho_so := NULL;
+    NEW.het_han_at := NULL;
+    RETURN NEW;
+  END IF;
+
+  IF mst IS NULL THEN
+    RAISE EXCEPTION 'Nha cung cap chua co MST — xac minh la xac nhan MST (K8a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF trang_thai <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'Chi xac minh nha cung cap dang ACTIVE (K8a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT p.tham_dinh_hieu_luc_thang INTO thang
+    FROM public.org_procurement_policies p
+   WHERE p.org_id = NEW.org_id AND p.id = public.chinh_sach_hieu_luc(NEW.org_id, now());
+  IF thang IS NULL THEN
+    RAISE EXCEPTION 'Phien ban chinh sach hieu luc khong co han hieu luc tham dinh (K8a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  NEW.bam_ho_so := public.ncc_bam_xac_minh(NEW.org_id, NEW.supplier_id);
+  NEW.het_han_at := now() + pg_catalog.make_interval(months => thang);
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.supplier_verifications') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                                 AND t.tgname = 'supplier_verifications_kiem_xac_minh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.ncc_kiem_xac_minh()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_kiem_xac_minh BEFORE INSERT ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION ncc_kiem_xac_minh()$def$) THEN
+             DROP TRIGGER IF EXISTS supplier_verifications_kiem_xac_minh ON public.supplier_verifications;
+             CREATE TRIGGER supplier_verifications_kiem_xac_minh BEFORE INSERT ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION public.ncc_kiem_xac_minh();
+             ALTER TABLE public.supplier_verifications ENABLE ALWAYS TRIGGER supplier_verifications_kiem_xac_minh;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE nguoi_tao_ncc uuid; mst text; trang_thai text; loai_cuoi text; thang integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.supplier_id::pg_catalog.text, 7)); SELECT s.created_by, s.tax_code, s.status INTO nguoi_tao_ncc, mst, trang_thai FROM public.suppliers s WHERE s.org_id = NEW.org_id AND s.id = NEW.supplier_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay nha cung cap de xac minh (K8a)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN RAISE EXCEPTION 'Chi to chuc da bat S3 moi xac minh nha cung cap (ADR-080)' USING ERRCODE = 'check_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'supplier.qualify') THEN RAISE EXCEPTION 'Nguoi xac minh phai giu supplier.qualify (K8a)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.created_by AND rp.permission_code = 'rfq.invite') THEN RAISE EXCEPTION 'Nguoi giu rfq.invite khong xac minh nha cung cap (K8a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_nguoi_moi_xac_minh'; END IF; IF nguoi_tao_ncc = NEW.created_by OR EXISTS (SELECT 1 FROM public.supplier_contacts c WHERE c.org_id = NEW.org_id AND c.supplier_id = NEW.supplier_id AND c.created_by = NEW.created_by) THEN RAISE EXCEPTION 'Nguoi tao ho so nha cung cap hay nguoi lien he khong tu xac minh (K8a)' USING ERRCODE = 'check_violation', CONSTRAINT = 'k8a_nguoi_tao_tu_xac_minh'; END IF; SELECT v.loai INTO loai_cuoi FROM public.supplier_verifications v WHERE v.org_id = NEW.org_id AND v.supplier_id = NEW.supplier_id ORDER BY v.thu_tu DESC LIMIT 1; NEW.thu_tu := coalesce((SELECT max(v.thu_tu) FROM public.supplier_verifications v WHERE v.org_id = NEW.org_id AND v.supplier_id = NEW.supplier_id), 0) + 1; IF NEW.loai = 'REVOKED' THEN IF loai_cuoi IS DISTINCT FROM 'VERIFIED' THEN RAISE EXCEPTION 'Nha cung cap chua duoc xac minh — khong co gi de thu hoi (K8a)' USING ERRCODE = 'check_violation'; END IF; NEW.bam_ho_so := NULL; NEW.het_han_at := NULL; RETURN NEW; END IF; IF mst IS NULL THEN RAISE EXCEPTION 'Nha cung cap chua co MST — xac minh la xac nhan MST (K8a)' USING ERRCODE = 'check_violation'; END IF; IF trang_thai <> 'ACTIVE' THEN RAISE EXCEPTION 'Chi xac minh nha cung cap dang ACTIVE (K8a)' USING ERRCODE = 'check_violation'; END IF; SELECT p.tham_dinh_hieu_luc_thang INTO thang FROM public.org_procurement_policies p WHERE p.org_id = NEW.org_id AND p.id = public.chinh_sach_hieu_luc(NEW.org_id, now()); IF thang IS NULL THEN RAISE EXCEPTION 'Phien ban chinh sach hieu luc khong co han hieu luc tham dinh (K8a)' USING ERRCODE = 'check_violation'; END IF; NEW.bam_ho_so := public.ncc_bam_xac_minh(NEW.org_id, NEW.supplier_id); NEW.het_han_at := now() + pg_catalog.make_interval(months => thang); RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.supplier_verifications')
+                           AND t.tgname = 'supplier_verifications_kiem_xac_minh'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.ncc_kiem_xac_minh()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER supplier_verifications_kiem_xac_minh BEFORE INSERT ON public.supplier_verifications FOR EACH ROW EXECUTE FUNCTION ncc_kiem_xac_minh()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.ncc_kiem_xac_minh()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.ncc_kiem_xac_minh()')),
+                  'hàm public.ncc_kiem_xac_minh() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.ncc_kiem_xac_minh() và bảng public.supplier_verifications (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.186 / S3.2b1 / K6 / khoan 253] Token ghi lai, LUC DUC, goi da mo chua — cho moi to chuc. Than `RETURN NEW` de cot o gia tri mac dinh, va lan doi link cua to chuc da bat tu choi moi token.
