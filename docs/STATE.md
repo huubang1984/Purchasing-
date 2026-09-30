@@ -13,6 +13,17 @@ một vòng sửa sau BỐN lượt `security-reviewer` đóng bảy phát hiệ
 
 ## Cột mốc hiện tại
 
+**[2026-09-30 / S1.9101] S4.3a — ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN: `TU_DONG` CHỈ THEO BÍ DANH (L2), NGƯỜI DUYỆT NGOÀI TẬP LOẠI TRỪ
+(L3 VẾ HÀNH VI), LÝ DO SAU BẢN RÕ (L13) — ADR-9201.** Chủ dự án chốt năm điểm ngày 2026-09-30: S4.3 chia hai PR (S4.3a CSDL + gói,
+S4.3b API + màn); tập loại trừ của L3 là MỘT hàm SQL dựng trên dữ liệu đã có — S3.3b thêm vế tác giả ngoại lệ vào chính hàm ấy, K5
+của S3.3c gọi lại nó; bộ luật chuẩn hoá bản 1 tối thiểu; không mở đường đọc query (E6); phần `/tao-thau` của S4.3b đợi chuỗi
+#199 → #202 → #205. Đo trước: `submitted_by` chỉ giữ người nộp lần cuối, `rfq_budgets.created_by` chỉ giữ người đặt ngân sách lần
+đầu; chủ dự án chọn đọc thêm hai vế ấy từ sổ kiểm toán. `9501_anh_xa_hang_muc`: hai bảng chỉ-ghi-thêm khuôn L1 (`rfq_item_goi_y`,
+`rfq_item_mappings`), băm dòng `rfq_hang_muc_bam`, tập loại trừ `rfq_tap_loai_tru`, luật ghi ở trigger — khoá bí danh trước, gói
+`FOR SHARE` trước phép kiểm bản rõ. Gói `du-lieu-nen`: lõi thuần `chuanHoa` có phiên bản và bảng ca; `chuanHoaGoi`, `ghiAnhXa`,
+`taoHangChuanVaAnhXa`, `docHangDoi`, `docAnhXaGoi`. L2 và L13 vào sổ đăng ký — 74 bất biến. Không route, không màn. Biên bản:
+`evidence/security-reviews.md` §S1.9101.
+
 **[2026-09-29 / S1.199] S4.2b — ROUTE VÀ MÀN `/du-lieu` CHO HÀNG CHUẨN, BÍ DANH, QUY ĐỔI RIÊNG, BÍ DANH ĐƠN VỊ; `gieo:demo` CÓ
 NGƯỜI QUẢN LÝ DỮ LIỆU.** Nửa sau của S4.2 (spec S4 §9). Chủ dự án chốt năm điểm ngày 2026-09-29: một PR; đọc mở cho mọi người mua
 của tổ chức, `agent: false`; hình dạng route; §8.10 nói ở màn và ở công cụ khởi tạo, không kiểm trước ở bản khai; `gieo:demo` gieo

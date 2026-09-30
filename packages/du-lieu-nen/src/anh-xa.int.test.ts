@@ -641,6 +641,20 @@ describe("[S1.9101 / S4.3a] hàng đợi, thao tác, băm của dòng", () => {
     expect(await maLoi(trong(orgA, (c) => chuanHoaGoi(c, orgA, { rfqId: soan, actorSessionId: pm.phien })))).toBe("GOI_CON_SOAN");
     expect(await maLoi(trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId: soan, lineNo: 1, hangChuanId, actorSessionId: ql.phien })))).toBe("GOI_CON_SOAN");
     expect(await maLoi(trong(orgA, (c) => ghiAnhXa(c, orgA, { rfqId, lineNo: 9, hangChuanId, actorSessionId: ql.phien })))).toBe("KHONG_CO_HANG_MUC");
+    // Câu ghi thẳng, bỏ qua phép hỏi trước của tầng gói: trigger là lớp chặn cuối cho cả hai bảng.
+    expect(await maLoi(chenThang(orgA, ql, { rfqId: soan, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: hangChuanId }))).toBe("anh_xa_goi_con_soan");
+    expect(
+      await maLoi(
+        trong(orgA, (c) =>
+          c.query(
+            "INSERT INTO rfq_item_goi_y (org_id, rfq_id, line_no, ket_qua, do_tin_cay, phien_ban_bo_chuan_hoa, dau_vao, tac_gia, session_id) " +
+              "VALUES ($1, $2, 1, 'GOI_Y', 0.9, 1, '{}', $3, $4)",
+            [orgA, soan, pm.nguoi, pm.phien],
+          ),
+        ),
+      ),
+    ).toBe("anh_xa_goi_con_soan");
+    expect(await maLoi(chenThang(orgA, ql, { rfqId, lineNo: 9, nguon: "NGUOI_DUYET", hangChuan: hangChuanId }))).toBe("anh_xa_khong_co_hang_muc");
     // Tổ chức khác: không thấy gói (RLS) — câu ghi thẳng bị từ chối, không lọt sang.
     expect(await maLoi(chenThang(orgB, qlB, { rfqId, lineNo: 1, nguon: "NGUOI_DUYET", hangChuan: null }))).toBe("anh_xa_goi_con_soan");
   });
