@@ -35,6 +35,15 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       `apps/api/src/adapters/gui-sms.ts` (README, mục stack 85). Không có thì bỏ qua SMS ở lần đầu.
 - [ ] **Zalo OA**: xác thực OA, ứng dụng liên kết, ba template ZNS (`otp`, `duong_dan`, `han_nop`). Không có thì bỏ qua Zalo.
 - [ ] **SES production access**: chỉ xin được sau 5.1 (stack 80), nhưng duyệt mất 1–2 ngày — xin ngay ở 5.2.
+- [ ] **[apply lần đầu 2026-09-30] Quota Lambda của audit** (giờ–ngày) — xin ngay khi có profile `tp-audit` (1.2), TRƯỚC 3.1.
+      Stack 60 đặt `reserved_concurrent_executions = 1` cho hai Lambda (⑺, ⑻), mà AWS giữ ≥ 10 lượt không đặt trước ⇒ trần
+      *Concurrent executions* phải ≥ 12. Tài khoản mới có thể thấp hơn nhiều — audit đo được **5** —, và khi ấy 3.1 hỏng giữa
+      chừng (xem 3.1).
+  ```powershell
+  aws lambda get-account-settings --profile tp-audit --query "AccountLimit.ConcurrentExecutions"
+  aws service-quotas request-service-quota-increase --profile tp-audit --region ap-southeast-1 `
+    --service-code lambda --quota-code L-B99A9384 --desired-value 1000
+  ```
 
 ---
 
@@ -79,6 +88,20 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   terraform plan -var-file canh-bao.tfvars -out plan.tfplan; terraform apply plan.tfplan; cd ..\..\..
   ```
   Stack 60 không phụ thuộc stack 90: rule ⑸ ⑹ bắt alarm theo TÊN/TIỀN TỐ, nên alarm sinh ra sau vẫn có thư.
+  **[apply lần đầu 2026-09-30]** Apply phải kết thúc bằng `Apply complete!` KHÔNG kèm dòng `Error`. Lần đầu, quota Lambda 5
+  (0.3) làm hai `aws_lambda_function` hỏng (`tainted`) và Terraform BỎ QUA mọi thứ phụ thuộc — lịch của hai Lambda, và cả hai
+  `aws_sns_topic_policy`: hai topic giữ policy mặc định, EventBridge publish thất bại (`FailedInvocations`), nên ⑴ ⑵ ⑶ ⑸ ⑹
+  im lặng trong khi thư từ CloudWatch alarm (⑷, ⑻) vẫn tới — trông như đã chạy. Kiểm cả hai topic, mỗi lệnh phải ra `True`:
+  ```powershell
+  foreach ($t in "tp-canh-bao-khoa","tp-canh-bao-van-hanh") {
+    aws sns get-topic-attributes --profile tp-audit --topic-arn "arn:aws:sns:ap-southeast-1:528657840905:$t" `
+      --query Attributes.Policy --output text | Select-String EventBridgeGuiCanhBao -Quiet
+  }
+  ```
+  Quota chưa được nâng thì tạm chạy không có concurrency đặt trước: tạo `infra\terraform\60-canh-bao\tam_override.tf` (khớp
+  `*_override.tf` — git bỏ qua) với hai khối `resource "aws_lambda_function" "canh_moc_neo"` / `"canh_dang_ky"`, mỗi khối
+  một dòng `reserved_concurrent_executions = -1`, rồi plan + apply. Quota được nâng ⇒ xoá tệp, plan chỉ được đổi `-1 → 1` ở
+  hai Lambda, apply.
 - [ ] **3.2 Bấm xác nhận** thư AWS gửi tới `email_canh_bao` (topic `tp-canh-bao-khoa`) **và** tới từng địa chỉ
       `email_van_hanh` (topic `tp-canh-bao-van-hanh`). Địa chỉ chưa xác nhận = chưa nhận cảnh báo nào.
       Đối chứng ⑻ (ADR-089), hai lần gọi tay Lambda đối chiếu đăng ký:
@@ -88,8 +111,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       6 giờ kế — thư OK tới cả hai hộp là dấu hiệu cả hai đã nhận được.
 - [ ] **3.3 Đối chứng dương ⑴**: bằng `tp-prod-keyadmin`, `get-key-policy` rồi `put-key-policy` lại ĐÚNG policy ấy trên một
       khoá prod ⇒ có thư trong vài phút (README, "Rủi ro còn lại").
-- [ ] **3.4 Đối chứng dương ⑵**: `aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
-      ⇒ lời gọi lỗi nhưng **có thư**.
+- [ ] **3.4 Đối chứng dương ⑵**: ~~`aws ecs run-task --profile tp-prod --cluster khong-ton-tai --task-definition tp-unseal-worker`
+      ⇒ lời gọi lỗi nhưng **có thư**.~~ **[apply lần đầu 2026-09-30] Phép thử ấy KHÔNG BAO GIỜ có thư:** task definition
+      `tp-unseal-worker` chưa tồn tại (stack 90 chưa apply) nên ECS từ chối ở bước kiểm đầu vào (`ClientException:
+      TaskDefinition not found`) và CloudTrail ghi `"requestParameters": null` — rule ⑵ lọc theo `requestParameters` nên không
+      khớp. Đối chứng dương của ⑵ dời sang **4.2**: apply stack 70 là một `RegisterTaskDefinition` THÀNH CÔNG gắn role worker
+      vào họ `tp-do-kms-worker`.
 - [ ] **3.5** Dự kiến: alarm ⑺ `tp-canh-bao-canh-moc-neo-khong-chay` có thể vào ALARM ở kỳ 12 giờ đầu nếu Lambda chưa
       chạy lượt nào — gọi tay một lần để về OK:
       `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
@@ -278,7 +305,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 9. Trước dữ liệu thật — kiểm lại
 
 - [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ.
-- [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, 3.4, 4.2.
+- [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2.
 - [ ] Mọi alarm `tp-van-hanh-*`, `tp-dns-bi-chan`, `tp-canh-bao-thieu-moc-neo` đang **OK**.
 - [ ] `che_do_dns = BLOCK`; SES ra khỏi sandbox; DMARC nâng lên `quarantine` sau vài tuần báo cáo sạch.
 - [ ] Dấu vân tay khoá biên nhận (2.4) đã in vào hợp đồng mẫu.
@@ -291,7 +318,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 |---|---|---|
 | 3.1 | ⑷ thiếu mốc neo — ALARM | chưa có mốc neo nào; về OK ở 8.3 |
 | 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
-| 3.3, 3.4, 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
+| 3.3, ~~3.4,~~ 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
 

@@ -36,7 +36,10 @@
 #      — QUY ƯỚC mà stack ECS sau này phải giữ; đổi họ thì sửa `ho_worker` ở đây);
 #   b. RunTask/StartTask ghi đè `taskRoleArn` thành role worker (với BẤT KỲ task definition nào);
 #   c. RegisterTaskDefinition gắn role worker vào một họ KHÁC `tp-unseal-worker`.
-# Cả ba bắt kể lần bị từ chối. KHÔNG bắt: CreateService/UpdateService một service khác dùng họ
+# Cả ba bắt kể lần bị từ chối — TRỪ lần ECS từ chối ở bước kiểm đầu vào (ClientException, vd task
+# definition chưa tồn tại): CloudTrail ghi `requestParameters: null` nên không hình dạng nào khớp (đo
+# 2026-09-30, lần apply đầu). Lời gọi ấy không khởi được task nào. Chưa đo: lần bị từ chối vì quyền.
+# KHÔNG bắt: CreateService/UpdateService một service khác dùng họ
 # worker — đường ấy đi qua `tp-deploy-worker` có duyệt tay; và thay image trong chính họ worker.
 #
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
@@ -686,6 +689,8 @@ resource "aws_iam_role_policy" "canh_moc_neo" {
   })
 }
 
+# reserved_concurrent_executions = 1 cần quota "Concurrent executions" của audit ≥ 12 (hai Lambda × 1, AWS giữ ≥ 10
+# lượt không đặt trước); tài khoản mới có thể chỉ có 5 ⇒ apply hỏng, Lambda `tainted` (APPLY-LAN-DAU 0.3, 3.1).
 resource "aws_lambda_function" "canh_moc_neo" {
   provider                       = aws.audit
   function_name                  = local.ten_canh_moc_neo
@@ -846,6 +851,8 @@ resource "aws_iam_role_policy" "canh_dang_ky" {
   })
 }
 
+# reserved_concurrent_executions = 1 cần quota "Concurrent executions" của audit ≥ 12 (hai Lambda × 1, AWS giữ ≥ 10
+# lượt không đặt trước); tài khoản mới có thể chỉ có 5 ⇒ apply hỏng, Lambda `tainted` (APPLY-LAN-DAU 0.3, 3.1).
 resource "aws_lambda_function" "canh_dang_ky" {
   provider                       = aws.audit
   function_name                  = local.ten_canh_dang_ky

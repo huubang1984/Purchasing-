@@ -426,9 +426,14 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
   nhẹ; cảnh báo trên task mang role worker ngoài service chính thức là stack `60-canh-bao` ⑵:
   `RunTask`/`StartTask` với họ `tp-unseal-worker` hay ghi đè `taskRoleArn` thành role worker, và
   `RegisterTaskDefinition` gắn role worker vào họ khác. **Quy ước ràng buộc stack ECS sau này:**
-  task definition của worker mang họ `tp-unseal-worker`. Kiểm sau apply (đối chứng dương, không
+  task definition của worker mang họ `tp-unseal-worker`. ~~Kiểm sau apply (đối chứng dương, không
   khởi task nào): `aws ecs run-task --cluster khong-ton-tai --task-definition tp-unseal-worker`
-  ⇒ lời gọi lỗi, nhưng CloudTrail vẫn ghi nó kèm `errorCode` ⇒ phải có thư.
+  ⇒ lời gọi lỗi, nhưng CloudTrail vẫn ghi nó kèm `errorCode` ⇒ phải có thư.~~ **[apply lần đầu
+  2026-09-30] Phép thử ấy KHÔNG BAO GIỜ có thư:** khi task definition `tp-unseal-worker` chưa tồn tại,
+  ECS từ chối ở bước kiểm đầu vào (`ClientException: TaskDefinition not found`) và CloudTrail ghi
+  `"requestParameters": null` — cả ba hình dạng của ⑵ đều lọc theo `requestParameters` nên không
+  khớp. Đối chứng dương đúng là apply stack 70 (APPLY-LAN-DAU 4.2): `RegisterTaskDefinition` THÀNH
+  CÔNG gắn role worker vào họ `tp-do-kms-worker` ⇒ phải có thư.
 - **Bucket neo chặn `s3:PutObjectRetention`** với mọi người: job neo phải ghi object **không**
   kèm header Object Lock, để bucket tự áp thời hạn mặc định 365 ngày. Muốn tăng thời hạn về sau
   phải gỡ statement `KhongXoaKhongDoiKhoa` bằng root của audit (Privileged root actions).
