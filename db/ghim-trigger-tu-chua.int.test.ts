@@ -22,6 +22,13 @@
 // commit** rồi phán xét mới đỏ. Test này làm cho ngày ấy xảy ra ngay hôm nay, trong một cụm dùng
 // một lần.
 //
+// **[S1.9172 / khoản 214] Cổng TĨNH bổ sung, không thay:** `db/ghim-trigger-nguon.test.ts` so ⑵ với
+// câu `CREATE TRIGGER` của MIGRATION CUỐI (chuẩn hoá chỉ khoảng trắng và dấu `public.`), sau khi 15
+// chỗ ⑵ từng viết TỪ đầu ra canonical được viết lại theo nguồn. Phân công: cổng này chứng minh ⑵ CÀI
+// RA đúng ⑴/⑶ (PostgreSQL làm bộ chuẩn hoá); cổng tĩnh chứng minh ⑵ ĐỌC ĐƯỢC như nguồn. Đột biến đo
+// được: đảo thứ tự sự kiện ở một ⑵ ⇒ tĩnh ĐỎ, động XANH (cùng trigger); gỡ mệnh đề WHEN ở một ⑵ ⇒ cả
+// hai ĐỎ.
+//
 // **CHỖ THU HẸP, nói ra:** chủ thể là mọi trigger có văn bản ghim mở đầu bằng `CREATE TRIGGER`.
 // Một `CREATE CONSTRAINT TRIGGER` (ví dụ `vendor_bid_versions_phai_co_bien_nhan`) được
 // `pg_get_triggerdef` in ra với tiền tố khác nên nó KHÔNG thuộc tập này — số đo dưới đây nói rõ

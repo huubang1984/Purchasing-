@@ -3127,8 +3127,10 @@ $ham$;
   -- theo từng đường, đường qua nhóm nói KHÔNG thu hồi khỏi nhóm, và nhóm là vai ứng dụng thì nói thẳng. ⑶ NHẸ-5 — khớp nguyên văn im lặng
   -- với hình dạng ngoại lệ đã tiên liệu (khuôn "đấu thầu kín"); nay theo phụ thuộc — hàm bọc lấy hàm ngữ cảnh vẫn lọt (ranh giới). ⑷ NHẸ-3 —
   -- dòng tự sửa được không bị chặn trước vòng nên backfill cùng lượt vẫn bị tiêu — ranh giới, test ghim. Xấp xỉ theo CẢ HAI chiều, nói ra:
-  -- cắt một đường khi còn đường khác (EXECUTE cấp thẳng cộng một nhóm tự cấp) tính là tự sửa được — chiều bỏ qua; ADMIN trên một vai giữ
-  -- GRANT OPTION đã cấp EXECUTE thẳng thì không đọc — chiều chặn (lượt soi 51 INFO-8, cùng điểm mù với vế bảng).
+  -- cắt một đường khi còn đường khác (EXECUTE cấp thẳng cộng một nhóm tự cấp) tính là tự sửa được — chiều bỏ qua; ~~ADMIN trên một vai giữ
+  -- GRANT OPTION đã cấp EXECUTE thẳng thì không đọc — chiều chặn (lượt soi 51 INFO-8, cùng điểm mù với vế bảng).~~ [S1.9172 / khoản nợ 113]
+  -- chiều chặn ấy đã ĐO và đóng: vế thứ tư của `tu_cat_execute` (và vế `tu_sua_nguoi_cap` cho quyền bảng) đọc `grantor` của mục ACL cấp
+  -- thẳng — xem khối đo ⒠ dưới.
   -- [lượt soi 49 NẶNG-1] Mục phán xét SAU vòng đánh số: khi mục đỏ, backfill 0 hàng của CHÍNH lượt đã COMMIT và ghi checksum, REVOKE
   -- rồi chạy lại thì đi qua mà backfill không chạy lại (đo) — thông điệp nói ra; ~~lớp hỏi TRƯỚC vòng (và chụp vai quanh vòng, NHẸ-1)
   -- là khoản 100.~~ [S1.57 / khoản nợ 100] Lớp hỏi TRƯỚC vòng nay có: chủ thể thứ hai tách thành CAU_PHU_LENH_VAI_CHAY_MIGRATION_SAI,
@@ -3143,19 +3145,29 @@ $ham$;
   -- dịch; ⒞ vai tự cấp membership nhóm mang quyền thì tự `REVOKE` được và quyền mất ngay, còn membership do vai khác cấp — kể cả kèm
   -- ADMIN OPTION — thì KHÔNG (PG16 chỉ thu hồi grant của chính người thu hồi: WARNING "has not been granted … by role"), nên vế ba
   -- hỏi `grantor` của cạnh membership; ⒟ thành viên NOINHERIT mà có SET thì "must be owner" nếu không `SET ROLE` — và migration của kho
-  -- không được viết câu đổi vai (db/migration-shape.test.ts), nên dòng ấy KHÔNG thuộc `tu_sua_duoc`. Ba vế đều là xấp xỉ về phía
+  -- không được viết câu đổi vai (db/migration-shape.test.ts), nên dòng ấy KHÔNG thuộc `tu_sua_duoc`. ~~Ba vế đều là xấp xỉ về phía
   -- BỎ QUA nhiều hơn (cắt một đường khi còn đường khác; ADMIN trên một vai superuser) — chiều ấy chỉ trả dòng về lượt phán xét sau
-  -- vòng, không tạo ngõ cụt. Ranh giới: backfill trên dòng `tu_sua_duoc` vẫn có thể bị tiêu trước khi migration vá lỗi chạy — cùng
-  -- hạng với chủ thể thứ nhất; hai thông điệp sau vòng nói ra.
+  -- vòng, không tạo ngõ cụt.~~ [S1.66] Xấp xỉ theo CẢ HAI chiều: chiều bỏ qua chỉ trả dòng về lượt phán xét sau vòng; chiều CHẶN —
+  -- ADMIN trên người cấp của một mục ACL cấp thẳng không được đọc — là khoản 113. [S1.9172 / khoản nợ 113] Đo (PostgreSQL 16,
+  -- db/migrations.int.test.ts `[khoản nợ 113]`): ⒠ vai có ADMIN OPTION (không INHERIT, không SET) trên một vai R giữ GRANT OPTION đã
+  -- cấp SELECT/UPDATE — hay EXECUTE trên hàm ngữ cảnh — THẲNG cho nó tự cắt được trong MỘT tệp: `GRANT R TO <vai> WITH INHERIT TRUE`
+  -- (ADMIN trực tiếp ⇒ người cấp là chính nó; PG16 giữ hai cạnh theo hai người cấp), `REVOKE … FROM <vai>` (PostgreSQL chọn R làm
+  -- người thu hồi vì vai nay thừa kế GRANT OPTION của R), `REVOKE R FROM <vai>` (gỡ đúng cạnh tự cấp) — quyền mất hẳn, cạnh ADMIN do
+  -- superuser cấp còn nguyên. Bản trước chặn dòng ấy trước vòng: một ngõ cụt ADR-028 §3 THẬT — nay vế `tu_sua_nguoi_cap` (quyền bảng)
+  -- và vế thứ tư của `tu_cat_execute` (EXECUTE) đọc `grantor` của mục ACL. Hai đối chứng vẫn bị chặn, đo: không ADMIN trên R (không tự
+  -- cấp thừa kế được, tự REVOKE là no-op); ADMIN KÈM INHERIT do superuser cấp (sau khi cắt đường cấp thẳng còn quyền QUA R, mà cạnh
+  -- ấy không tự gỡ được — ⒞ ở trên) — nên hai vế mới đòi `NOT pg_has_role(vai, R, 'USAGE')`. Ranh giới: backfill trên dòng
+  -- `tu_sua_duoc` vẫn có thể bị tiêu trước khi migration vá lỗi chạy — cùng hạng với chủ thể thứ nhất; hai thông điệp sau vòng nói ra.
   -- Chủ thể thứ nhất (chủ bảng) KHÔNG được hỏi trước: lối ra của nó là chính một migration. Chụp vai quanh vòng ở migrate.ts (so trong
   -- giao dịch của mỗi tệp, trước khi ghi checksum). Đo: hồ sơ N2 với `999_zz_backfill100.sql` đang chờ — bản S1.56 ghi tệp là đã áp,
   -- hàng không đổi; bản này từ chối trước vòng, tệp còn chờ, chạy lại dưới superuser thì backfill áp đủ hàng.
-  -- Mọi mục ACL của một bảng — mức bảng (ACL mặc định khi relacl NULL) và mức cột — dạng (grantee, privilege_type); grantee 0 là PUBLIC.
+  -- Mọi mục ACL của một bảng — mức bảng (ACL mặc định khi relacl NULL) và mức cột — dạng (grantee, grantor, privilege_type); grantee 0 là
+  -- PUBLIC. [S1.9172 / khoản nợ 113] Cột `grantor` thêm cho vế `tu_sua_nguoi_cap`.
   MAU_ACL_CUA_BANG constant text :=
-    $q$(SELECT x.grantee, x.privilege_type
+    $q$(SELECT x.grantee, x.grantor, x.privilege_type
           FROM pg_catalog.aclexplode(coalesce(%1$s.relacl, pg_catalog.acldefault('r', %1$s.relowner))) x
         UNION ALL
-        SELECT x.grantee, x.privilege_type
+        SELECT x.grantee, x.grantor, x.privilege_type
           FROM pg_attribute att, pg_catalog.aclexplode(att.attacl) x
          WHERE att.attrelid = %1$s.oid AND att.attnum > 0 AND NOT att.attisdropped)$q$;
 
@@ -3165,8 +3177,10 @@ $ham$;
               -- cắt được EXECUTE hay cắt được đường tới quyền trên bảng (vế cạnh membership). Hai vế quyền chủ bảng (thừa kế, ADMIN trên vai thừa
               -- kế chủ) KHÔNG tính cho dòng ấy: lối vá của chúng là thêm policy — cổng migration-shape và [CR1] không cho qua nếu không có dòng
               -- ngoại lệ đọc xuyên tổ chức — hay tự lấy quyền chủ, thứ chỉ dời dòng sang chủ thể giống chủ (khoản 102) chứ không sửa gì.
-              CASE WHEN k.vi_tu_loc_het THEN k.tu_cat_execute OR k.tu_sua_canh
-                   ELSE k.tu_sua_chu OR k.tu_sua_canh END AS tu_sua_duoc
+              -- [S1.9172 / khoản nợ 113] Vế thứ ba `tu_sua_nguoi_cap` — mục ACL cấp THẲNG cho vai này bởi một người cấp mà vai này có ADMIN
+              -- OPTION trên nó mà không thừa kế nó — là một đường tới quyền trên bảng tự cắt được, nên tính cho cả hai nhánh (khối đo ⒠).
+              CASE WHEN k.vi_tu_loc_het THEN k.tu_cat_execute OR k.tu_sua_canh OR k.tu_sua_nguoi_cap
+                   ELSE k.tu_sua_chu OR k.tu_sua_canh OR k.tu_sua_nguoi_cap END AS tu_sua_duoc
          FROM (SELECT n.nspname || '.' || c.relname || '/' || pg_catalog.quote_ident(v.rolname) || ' (vai chạy migration)/' || g.ten_lenh AS ten,
               coalesce((SELECT pg_catalog.string_agg(DISTINCT d.mo_ta, ', ' ORDER BY d.mo_ta)
                           FROM (SELECT CASE WHEN a.grantee = 0 THEN 'qua PUBLIC'
@@ -3236,8 +3250,20 @@ $ham$;
                          AND pg_catalog.pg_has_role(v.oid, am.grantor, 'USAGE')
                          AND CASE WHEN a.grantee = 0 OR a.grantee = v.oid THEN false
                                   ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END) AS tu_sua_canh,
+              -- [S1.9172 / khoản nợ 113] vế thứ ba — mục ACL cấp THẲNG cho vai này (grantee = vai) bởi người cấp R ≠ vai mà vai có ADMIN OPTION
+              -- trên R nhưng KHÔNG thừa kế R: một migration dưới vai ấy tự cấp thừa kế R, REVOKE khỏi chính mình (R là người thu hồi), rồi gỡ
+              -- cạnh vừa tự cấp — khối đo ⒠. Vế `NOT … 'USAGE'` chịu lực: đã thừa kế R thì sau khi cắt đường cấp thẳng vai vẫn có quyền QUA R,
+              -- và cạnh ấy do vế cạnh membership ở trên phán (ADMIN kèm INHERIT do superuser cấp ⇒ vẫn chặn — đo).
+              EXISTS (SELECT 1 FROM $q$ || pg_catalog.format(MAU_ACL_CUA_BANG, 'c') || $q$ a
+                       WHERE a.privilege_type = g.ten_lenh
+                         AND a.grantee = v.oid
+                         AND a.grantor <> v.oid
+                         AND pg_catalog.pg_has_role(v.oid, a.grantor, 'MEMBER WITH ADMIN OPTION')
+                         AND NOT pg_catalog.pg_has_role(v.oid, a.grantor, 'USAGE')) AS tu_sua_nguoi_cap,
               -- [S1.58 / khoản nợ 101] cùng ba vế trên hàm ngữ cảnh: thừa kế chủ hàm (tự thu hồi EXECUTE của chủ), ADMIN trên một vai thừa kế
               -- chủ hàm (tự cấp thừa kế rồi thu hồi), cạnh membership INHERIT trên đường tới EXECUTE mà vai ấy thu hồi được — xem khối đo ở trên.
+              -- [S1.9172 / khoản nợ 113] Vế thứ tư: EXECUTE cấp THẲNG bởi R giữ GRANT OPTION mà vai có ADMIN trên R, không thừa kế R — cùng ba
+              -- bước với `tu_sua_nguoi_cap` (khối đo ⒠).
               (pg_catalog.pg_has_role(v.oid, f.proowner, 'USAGE')
                OR EXISTS (SELECT 1 FROM pg_roles x
                            WHERE pg_catalog.pg_has_role(v.oid, x.oid, 'MEMBER WITH ADMIN OPTION')
@@ -3248,7 +3274,13 @@ $ham$;
                              AND pg_catalog.pg_has_role(v.oid, am.member, 'USAGE')
                              AND pg_catalog.pg_has_role(v.oid, am.grantor, 'USAGE')
                              AND CASE WHEN a.grantee = 0 OR a.grantee = v.oid THEN false
-                                      ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END)) AS tu_cat_execute
+                                      ELSE pg_catalog.pg_has_role(am.roleid, a.grantee, 'USAGE') END)
+               OR EXISTS (SELECT 1 FROM pg_catalog.aclexplode(coalesce(f.proacl, pg_catalog.acldefault('f', f.proowner))) a
+                           WHERE a.privilege_type = 'EXECUTE'
+                             AND a.grantee = v.oid
+                             AND a.grantor <> v.oid
+                             AND pg_catalog.pg_has_role(v.oid, a.grantor, 'MEMBER WITH ADMIN OPTION')
+                             AND NOT pg_catalog.pg_has_role(v.oid, a.grantor, 'USAGE'))) AS tu_cat_execute
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_roles r ON r.oid = c.relowner
@@ -3341,12 +3373,16 @@ $ham$;
                       ELSE '' END
               || CASE WHEN t.tu_sua_duoc AND t.vi_tu_loc_het
                       THEN 'Vai này tự cắt được đường tới EXECUTE hay đường tới quyền đã nêu, nên phép hỏi trước vòng của migrate() (khoản '
-                           '100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: gỡ đường ấy.'
+                           '100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: gỡ đường ấy. Đường cấp thẳng bởi '
+                           'một vai mà vai này có ADMIN OPTION trên nó mà không thừa kế (khoản 113): GRANT vai ấy cho chính mình WITH '
+                           'INHERIT TRUE, REVOKE khỏi chính mình, rồi REVOKE vai ấy khỏi chính mình — trong cùng một tệp.'
                       WHEN t.tu_sua_duoc
                       THEN 'Vai này mang hay tự lấy được quyền chủ bảng, hoặc tự cắt được đường tới quyền, nên phép hỏi trước vòng của '
                            'migrate() (khoản 100) cố ý KHÔNG chặn nó — một migration mới chạy dưới chính vai này sửa được: thêm policy '
                            'PERMISSIVE cho lệnh ấy TO chủ bảng hay TO vai này (một quyền đọc/ghi THƯỜNG TRỰC của vai deploy, trên bảng '
-                           'tenant còn phải qua [CR1]), hay gỡ đường tới quyền đã nêu.'
+                           'tenant còn phải qua [CR1]), hay gỡ đường tới quyền đã nêu. Đường cấp thẳng bởi một vai mà vai này có ADMIN '
+                           'OPTION trên nó mà không thừa kế (khoản 113): GRANT vai ấy cho chính mình WITH INHERIT TRUE, REVOKE khỏi chính '
+                           'mình, rồi REVOKE vai ấy khỏi chính mình — trong cùng một tệp.'
                       ELSE 'Phép hỏi trước vòng của migrate() (khoản 100) chặn cấu hình này khi nó có sẵn TRƯỚC vòng đánh số, nên tới được '
                            'đây thì hoặc lượt này không tệp nào chờ, hoặc cấu hình mọc ra TRONG vòng. Sửa, ít quyền nhất trước — cả ba '
                            'nằm ngoài tầm của chính vai này: người cấp, chủ bảng hay SUPERUSER gỡ đường tới quyền đã nêu (đường cấp thẳng: '
@@ -5764,7 +5800,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER bid_receipts_chi_ghi_them BEFORE DELETE OR UPDATE ON public.bid_receipts FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
              DROP TRIGGER IF EXISTS bid_receipts_chi_ghi_them ON public.bid_receipts;
-             CREATE TRIGGER bid_receipts_chi_ghi_them BEFORE DELETE OR UPDATE ON public.bid_receipts FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             CREATE TRIGGER bid_receipts_chi_ghi_them BEFORE UPDATE OR DELETE ON public.bid_receipts FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.bid_receipts ENABLE ALWAYS TRIGGER bid_receipts_chi_ghi_them;
            END IF;
            IF to_regclass('public.rfq_unsealed_bids') IS NOT NULL
@@ -5776,7 +5812,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_unsealed_bids_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_unsealed_bids FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_unsealed_bids_chi_ghi_them ON public.rfq_unsealed_bids;
-             CREATE TRIGGER rfq_unsealed_bids_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_unsealed_bids FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             CREATE TRIGGER rfq_unsealed_bids_chi_ghi_them BEFORE UPDATE OR DELETE ON public.rfq_unsealed_bids FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.rfq_unsealed_bids ENABLE ALWAYS TRIGGER rfq_unsealed_bids_chi_ghi_them;
            END IF;
            IF to_regclass('public.vendor_bid_versions') IS NOT NULL
@@ -5788,7 +5824,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER vendor_bid_versions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.vendor_bid_versions FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
              DROP TRIGGER IF EXISTS vendor_bid_versions_chi_ghi_them ON public.vendor_bid_versions;
-             CREATE TRIGGER vendor_bid_versions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.vendor_bid_versions FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             CREATE TRIGGER vendor_bid_versions_chi_ghi_them BEFORE UPDATE OR DELETE ON public.vendor_bid_versions FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.vendor_bid_versions ENABLE ALWAYS TRIGGER vendor_bid_versions_chi_ghi_them;
            END IF;
            IF to_regclass('public.vendor_bid_versions') IS NOT NULL
@@ -8075,7 +8111,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_ngan_sach_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_kiem_ngan_sach_khi_nop()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_ngan_sach_khi_nop ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_ngan_sach_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION public.rfq_kiem_ngan_sach_khi_nop();
+             CREATE TRIGGER rfq_packages_kiem_ngan_sach_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (OLD.status = 'DRAFT' AND NEW.status = 'PENDING_APPROVAL') EXECUTE FUNCTION public.rfq_kiem_ngan_sach_khi_nop();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_ngan_sach_khi_nop;
            END IF;
          END
@@ -8490,7 +8526,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION rfq_kiem_chu_ky_danh_sach_khi_mo()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_danh_sach_khi_mo ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo();
+             CREATE TRIGGER rfq_packages_kiem_danh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (OLD.status = 'PENDING_APPROVAL' AND NEW.status = 'OPEN') EXECUTE FUNCTION public.rfq_kiem_chu_ky_danh_sach_khi_mo();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_danh_sach_khi_mo;
            END IF;
          END
@@ -8731,7 +8767,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_tra_ve_nhap_chi_khi_bat_s3 BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'DRAFT'::text))) EXECUTE FUNCTION rfq_kiem_tra_ve_nhap()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_tra_ve_nhap_chi_khi_bat_s3 ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_tra_ve_nhap_chi_khi_bat_s3 BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'DRAFT'::text))) EXECUTE FUNCTION public.rfq_kiem_tra_ve_nhap();
+             CREATE TRIGGER rfq_packages_tra_ve_nhap_chi_khi_bat_s3 BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (OLD.status = 'PENDING_APPROVAL' AND NEW.status = 'DRAFT') EXECUTE FUNCTION public.rfq_kiem_tra_ve_nhap();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_tra_ve_nhap_chi_khi_bat_s3;
            END IF;
          END
@@ -10006,7 +10042,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION rfq_kiem_nhom_hang_khi_nop()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_nhom_hang_khi_nop ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'DRAFT'::text) AND (new.status = 'PENDING_APPROVAL'::text))) EXECUTE FUNCTION public.rfq_kiem_nhom_hang_khi_nop();
+             CREATE TRIGGER rfq_packages_kiem_nhom_hang_khi_nop BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (OLD.status = 'DRAFT' AND NEW.status = 'PENDING_APPROVAL') EXECUTE FUNCTION public.rfq_kiem_nhom_hang_khi_nop();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_nhom_hang_khi_nop;
            END IF;
          END
@@ -10925,7 +10961,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_items_chi_sua_khi_soan BEFORE INSERT OR DELETE OR UPDATE ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION rfq_items_chi_sua_khi_soan()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_items_chi_sua_khi_soan ON public.rfq_items;
-             CREATE TRIGGER rfq_items_chi_sua_khi_soan BEFORE INSERT OR DELETE OR UPDATE ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION public.rfq_items_chi_sua_khi_soan();
+             CREATE TRIGGER rfq_items_chi_sua_khi_soan BEFORE INSERT OR UPDATE OR DELETE ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION public.rfq_items_chi_sua_khi_soan();
              ALTER TABLE public.rfq_items ENABLE ALWAYS TRIGGER rfq_items_chi_sua_khi_soan;
            END IF;
          END
@@ -11056,7 +11092,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_bat_bien BEFORE DELETE OR UPDATE ON public.rfq_key_material FOR EACH ROW EXECUTE FUNCTION rfq_key_material_bat_bien()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_key_material_bat_bien ON public.rfq_key_material;
-             CREATE TRIGGER rfq_key_material_bat_bien BEFORE DELETE OR UPDATE ON public.rfq_key_material FOR EACH ROW EXECUTE FUNCTION public.rfq_key_material_bat_bien();
+             CREATE TRIGGER rfq_key_material_bat_bien BEFORE UPDATE OR DELETE ON public.rfq_key_material FOR EACH ROW EXECUTE FUNCTION public.rfq_key_material_bat_bien();
              ALTER TABLE public.rfq_key_material ENABLE ALWAYS TRIGGER rfq_key_material_bat_bien;
            END IF;
          END
@@ -11201,7 +11237,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_key_material_chi_thu_hoi_khi_huy BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION rfq_khoa_chi_thu_hoi_khi_huy()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_key_material_chi_thu_hoi_khi_huy ON public.rfq_key_material;
-             CREATE TRIGGER rfq_key_material_chi_thu_hoi_khi_huy BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (((new.revoked_at IS NOT NULL) AND (old.revoked_at IS NULL))) EXECUTE FUNCTION public.rfq_khoa_chi_thu_hoi_khi_huy();
+             CREATE TRIGGER rfq_key_material_chi_thu_hoi_khi_huy BEFORE UPDATE ON public.rfq_key_material FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL) EXECUTE FUNCTION public.rfq_khoa_chi_thu_hoi_khi_huy();
              ALTER TABLE public.rfq_key_material ENABLE ALWAYS TRIGGER rfq_key_material_chi_thu_hoi_khi_huy;
            END IF;
          END
@@ -11597,7 +11633,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_khoa_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'OPEN'::text) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION rfq_kiem_khoa_khi_mo()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_khoa_khi_mo ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_khoa_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = 'OPEN'::text) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION public.rfq_kiem_khoa_khi_mo();
+             CREATE TRIGGER rfq_packages_kiem_khoa_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (NEW.status OPERATOR(pg_catalog.=) 'OPEN' AND NEW.status IS DISTINCT FROM OLD.status) EXECUTE FUNCTION public.rfq_kiem_khoa_khi_mo();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_khoa_khi_mo;
            END IF;
          END
@@ -11875,7 +11911,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = ANY (ARRAY['PENDING_APPROVAL'::text, 'OPEN'::text])) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION rfq_kiem_nguong_phe_duyet_kep()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_nguong_phe_duyet_kep ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = ANY (ARRAY['PENDING_APPROVAL'::text, 'OPEN'::text])) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION public.rfq_kiem_nguong_phe_duyet_kep();
+             CREATE TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (NEW.status IN ('PENDING_APPROVAL', 'OPEN') AND NEW.status IS DISTINCT FROM OLD.status) EXECUTE FUNCTION public.rfq_kiem_nguong_phe_duyet_kep();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_nguong_phe_duyet_kep;
            END IF;
          END
@@ -11973,7 +12009,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_kiem_yeu_cau_mo_thau BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = ANY (ARRAY['UNSEALED'::text, 'BAFO_UNSEALED'::text])) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION rfq_kiem_yeu_cau_mo_thau()$def$) THEN
              DROP TRIGGER IF EXISTS rfq_packages_kiem_yeu_cau_mo_thau ON public.rfq_packages;
-             CREATE TRIGGER rfq_packages_kiem_yeu_cau_mo_thau BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((new.status = ANY (ARRAY['UNSEALED'::text, 'BAFO_UNSEALED'::text])) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION public.rfq_kiem_yeu_cau_mo_thau();
+             CREATE TRIGGER rfq_packages_kiem_yeu_cau_mo_thau BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (NEW.status IN ('UNSEALED', 'BAFO_UNSEALED') AND NEW.status IS DISTINCT FROM OLD.status) EXECUTE FUNCTION public.rfq_kiem_yeu_cau_mo_thau();
              ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_kiem_yeu_cau_mo_thau;
            END IF;
          END
@@ -12198,7 +12234,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_canh_bao_break_glass AFTER INSERT ON public.unseal_requests FOR EACH ROW WHEN (new.break_glass) EXECUTE FUNCTION unseal_canh_bao_break_glass()$def$) THEN
              DROP TRIGGER IF EXISTS unseal_requests_canh_bao_break_glass ON public.unseal_requests;
-             CREATE TRIGGER unseal_requests_canh_bao_break_glass AFTER INSERT ON public.unseal_requests FOR EACH ROW WHEN (new.break_glass) EXECUTE FUNCTION public.unseal_canh_bao_break_glass();
+             CREATE TRIGGER unseal_requests_canh_bao_break_glass AFTER INSERT ON public.unseal_requests FOR EACH ROW WHEN (NEW.break_glass) EXECUTE FUNCTION public.unseal_canh_bao_break_glass();
              ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_canh_bao_break_glass;
            END IF;
          END
@@ -12454,7 +12490,7 @@ $ham$;
                                  AND t.tgenabled = 'A'
                                  AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER unseal_requests_kiem_du_phe_duyet BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.status = 'APPROVED'::text) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION unseal_kiem_du_phe_duyet()$def$) THEN
              DROP TRIGGER IF EXISTS unseal_requests_kiem_du_phe_duyet ON public.unseal_requests;
-             CREATE TRIGGER unseal_requests_kiem_du_phe_duyet BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (((new.status = 'APPROVED'::text) AND (new.status IS DISTINCT FROM old.status))) EXECUTE FUNCTION public.unseal_kiem_du_phe_duyet();
+             CREATE TRIGGER unseal_requests_kiem_du_phe_duyet BEFORE UPDATE ON public.unseal_requests FOR EACH ROW WHEN (NEW.status OPERATOR(pg_catalog.=) 'APPROVED' AND NEW.status IS DISTINCT FROM OLD.status) EXECUTE FUNCTION public.unseal_kiem_du_phe_duyet();
              ALTER TABLE public.unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_du_phe_duyet;
            END IF;
          END
