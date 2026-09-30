@@ -22715,3 +22715,8 @@ nhiều yêu cầu cho một vòng.
   `pnpm t0` sạch; `pnpm test` 134 tệp, 2075 đạt, 1 bỏ qua; `cap-so --kiem` sạch; `pnpm evidence` toàn bộ T1–T3: 219 tệp, 4012
   khẳng định, 4011 đạt, 1 bỏ qua, 0 đỏ — `lich-su-gia.int` 46/46, `db/migrations.int` 125/125, `bac-chinh-sach.int` 42/42; **76/76**;
   ma trận L5 57 → 58.
+- Hợp lần bốn, sau #221 (S1.237–S1.248, ADR-138–ADR-139, migration `098`–`101` — `c0e2ab6`): xung đột chỉ ở tài liệu; danh sách
+  migration viết cứng tự hợp (`096` … `101`). #221 không chạm ngữ nghĩa lịch sử giá — khoản 271 cho `countReceivedBids` lọc lời mời
+  đã thu hồi, cùng hướng ADR-128. `pnpm t0` sạch; `pnpm test` 139 tệp, 2268 đạt, 1 bỏ qua; `cap-so --kiem` sạch; `pnpm evidence`
+  toàn bộ T1–T3: 225 tệp, 4268 khẳng định, 4258 đạt, 10 bỏ qua (9 là bộ đo mở thầu cỡ lớn chỉ bật theo biến môi trường, của #221),
+  0 đỏ — `lich-su-gia.int` 46/46, `db/migrations.int` 128/128, `hardening-khong-in-gia-tri` 11/11; **76/76**; ma trận không đổi.
