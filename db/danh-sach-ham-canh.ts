@@ -161,6 +161,9 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   "public.rfq_dem_lan_nop",
   "public.rfq_chot_lan_nop_da_xem",
   "public.rfq_tra_ve_dat_lan_nop",
+  // [S1.207 / khoản 260] Constraint trigger hoãn tới COMMIT trên INSERT `rfq_tra_ve`: từ chối CÓ ĐIỀU KIỆN — gói chưa đi qua
+  // DRAFT ở lần nộp của hàng. Nhân chứng: câu chèn hàng trả về của kịch bản, với `hoanTat` trả gói về DRAFT trong cùng giao dịch.
+  "public.rfq_tra_ve_phai_di_kem_canh",
   // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
   // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
   // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
