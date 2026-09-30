@@ -6577,7 +6577,7 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
 
 1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
    GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
-   `tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy. **[S1.183 / ADR-111]** `tp-deploy` tin thêm
+`tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy **[S1.9152 / ADR-9252]** — theo dạng `sub` TUỲ BIẾN của kho (ID bất biến + `job_workflow_ref`; `prod-khoi-tao` ghim cả tệp `khoi-tao.yml`). **[S1.183 / ADR-111]** `tp-deploy` tin thêm
    environment `prod-khoi-tao` (workflow `khoi-tao.yml`), bật thêm *Prevent self-review*.
 2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
    ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
@@ -8879,17 +8879,13 @@ chỉ `master`), `tp-deploy` tin thêm environment ấy — thay cho `prod` ở 
   (một lần duyệt của người khác) nên admin bỏ qua thì job dừng.
 - **[lượt soi] Với quyền quản trị AWS của prod, "hai người" là THỦ TỤC, không phải ranh giới.** Người vận hành tạo bản khai bằng
   profile `tp-prod` (AdministratorAccess) — cùng danh tính ấy chạy thẳng `aws ecs run-task --task-definition tp-khoi-tao
-  --overrides …`, không qua GitHub, và không cảnh báo nào kêu (stack 60 chỉ canh họ task của worker). Cảnh báo cho mọi lần chạy họ
-  `tp-khoi-tao` và cho mọi thay đổi dưới `tp/khoi-tao/ban-khai/`, cùng một permission set hẹp cho người tạo bản khai, là khoản
-  **252** (rổ B).
+--overrides …`, không qua GitHub, và ~~không cảnh báo nào kêu (stack 60 chỉ canh họ task của worker)~~ **[S1.9152 / ADR-9252]** stack 60 ⑼ làm mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai ra thư ở audit (nhân chứng, không phải ranh giới). ~~Cảnh báo cho mọi lần chạy họ `tp-khoi-tao` và cho mọi thay đổi dưới `tp/khoi-tao/ban-khai/`, cùng~~ một permission set hẹp cho người tạo bản khai ~~, là khoản~~ ~~**252** (rổ B)~~ hoãn tới trước khách hàng thứ hai — khoản **9452**.
 - **Role không đổi quyền theo environment.** `tp-deploy` dưới `prod` — nơi một người tự duyệt được — cũng chạy được task
   `tp-khoi-tao` với lệnh bất kỳ và xoá được bí mật bản khai, NẾU mã workflow trên `master` làm việc ấy. `deploy.yml` không làm (test
   hình dạng ghim: **[lượt soi]** không workflow nào ngoài `khoi-tao.yml` nhắc `khoi-tao`, `ban-khai` hay `secretsmanager`), nên
   ranh giới là mã trên `master` cộng bảo vệ nhánh. Tách hẳn cần một role riêng chỉ `prod-khoi-tao` đảm nhận được — chủ dự án chọn
   dùng chung `tp-deploy`.
-- **[lượt soi] Trust policy chỉ ghim TÊN environment**, mà GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow nhắc tên
-  chưa có: `docs/APPLY-LAN-DAU.md` 2.0 tạo ba environment TRƯỚC khi apply stack 30. Ghim thêm `job_workflow_ref` (tuỳ biến claim
-  `sub` của OIDC) thuộc khoản **252**.
+- **[lượt soi] Trust policy ~~chỉ~~ ghim TÊN environment**, mà GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow nhắc tên chưa có: `docs/APPLY-LAN-DAU.md` 2.0 tạo ba environment TRƯỚC khi apply stack 30. ~~Ghim thêm `job_workflow_ref` (tuỳ biến claim `sub` của OIDC) thuộc khoản **252**.~~ **[S1.9152 / ADR-9252]** `prod-khoi-tao` nay ghim cả TỆP `khoi-tao.yml@refs/heads/master` qua claim `sub` tuỳ biến (`include_claim_keys = [repo, context, job_workflow_ref]`; đoạn `repo:` mang ID bất biến vì kho tạo sau 2026-07-15 — chuỗi cũ chưa từng đúng); `prod`/`prod-worker` không ghim tệp. Bước 2.0b của APPLY-LAN-DAU và README mục "Tuỳ biến claim `sub`".
 - **Người duyệt thấy SỐ, không thấy NGƯỜI**: bảng nói ~~không~~ **[lượt soi]** bao nhiêu người mang `DIRECTOR`, không nói AI.
   Người có quyền đọc Secrets Manager của prod mở được đúng phiên bản ấy để đối chiếu, và người có tệp bản khai đối chiếu được băm;
   workflow không làm hộ.
@@ -9537,3 +9533,64 @@ với một khai miễn. Chuẩn S1.51 ⑷ đã áp cho bốn mục policy ở S
 - Cổng T1 so ba khuôn NGUYÊN VĂN: đổi bí danh, bỏ `pg_catalog.`, băm thân chưa chuẩn hoá đều đỏ; sửa khuôn thì sửa ở hardening và ở
   cổng cùng một commit.
 - Không migration, không đổi lược đồ; hàm ghim `hardening.always.sql` không đổi thân hàm nào (chỉ văn bản thông điệp).
+
+## ADR-9252 — Đường khởi tạo tổ chức ngoài workflow: cảnh báo ở audit cho mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai; role `tp-deploy` chỉ về tay `prod-khoi-tao` qua `khoi-tao.yml` (claim `sub` tuỳ biến, ID bất biến); permission set hẹp hoãn tới trước khách hàng thứ hai
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-062, ADR-067, **ADR-111**, khoản 252, 9452
+
+### Bối cảnh
+
+Lượt soi đối kháng S1.183 (ADR-111, "Hệ quả") để lại khoản 252 với hai lỗ: ⒜ người có AdministratorAccess ở prod — cũng là người tạo bản
+khai ở bước 8.1 — chạy được `aws ecs run-task --task-definition tp-khoi-tao`, đăng ký một họ khác mang role `tp-khoi-tao`, hay ghi đè bản
+khai sau khi đã duyệt, không qua hai người của `khoi-tao.yml`, và không cảnh báo nào kêu (stack 60 chỉ canh worker); ⒝ trust policy của
+`tp-deploy` chỉ ghim TÊN environment, nên một workflow KHÁC trên `master` khai `environment: prod-khoi-tao` cũng nhận được role. Ba hình
+dạng đề xuất: ⑴ cảnh báo theo khuôn ⑵ của stack 60; ⑵ permission set hẹp cho người tạo bản khai; ⑶ `job_workflow_ref` vào claim `sub` và
+trust policy. Khi làm ⑶, đọc tài liệu GitHub thấy kho tạo ngày 2026-08-28 — sau mốc 2026-07-15 mà GitHub chuyển kho mới sang *immutable
+subject claims* (`repo:OWNER@OWNER-ID/REPO@REPO-ID:…`, ID không gỡ được kể cả khi tuỳ biến): chuỗi `sub` cũ của stack 30 chưa từng đúng
+cho kho này, chỉ chưa ai chạy (khoản 15).
+
+### Quyết định
+
+1. **⑴ — stack 60 ⑼, cùng khuôn ⑵:** `mau_task_khoi_tao` là đúng chữ của `mau_task_worker` đổi tên local (RunTask/StartTask họ
+   `tp-khoi-tao`; `overrides.taskRoleArn` = role; RegisterTaskDefinition gắn role vào họ KHÁC; chỉ prod; kể lần bị từ chối);
+   `mau_ban_khai` bắt `CreateSecret`/`PutSecretValue`/`UpdateSecret`/`DeleteSecret` dưới `tp/khoi-tao/ban-khai/` (`name` hay `secretId`, tên
+   hay ARN). Mỗi mẫu một rule ở audit ⇒ `tp-canh-bao-khoa` với thư đọc được, một rule ở prod chuyển sang audit. **Không loại trừ
+   `tp-deploy`**: mọi lần chạy — kể cả hợp lệ — ra thư; thư là NHÂN CHỨNG (đối chiếu `assumed-role/tp-deploy/khoi-tao-<run id>` với run
+   đã duyệt), thư không có run là bất thường. Không bắt `GetSecretValue`, `RestoreSecret`.
+2. **⑶ — claim `sub` tuỳ biến, trust policy ghim tệp workflow:** kho đặt `include_claim_keys = ["repo","context","job_workflow_ref"]`
+   (`PUT /repos/huubang1984/Purchasing-/actions/oidc/customization/sub`, chủ dự án chạy tay); stack 30 đòi
+   `repo:<chủ kho>@<owner_id>/<kho>@<repo_id>:environment:<e>:job_workflow_ref:<kho>/.github/workflows/<tệp>@refs/heads/master` bằng
+   `StringLike`; `environments` là bản đồ environment ⇒ tệp: `prod-khoi-tao` ⇒ `khoi-tao.yml`; `prod`, `prod-worker` ⇒ `null` (`*` ở vế
+   workflow — giữ như cũ). Hai hằng ID ở `infra/terraform/chung`. Thứ tự: plan → PUT → GET đối chiếu → apply → đối chứng dương; hai chiều
+   quên đều KHOÁ (AWS từ chối role trước mọi lệnh AWS), không mở.
+3. **⑵ HOÃN tới trước khách hàng thứ hai** — khoản 9452: permission set `KhoiTaoBanKhai` ở stack 20 (chỉ Create/Put/Describe dưới
+   `ban-khai/*`, không Get, không `ecs:*`) thay AdministratorAccess cho người tạo bản khai. Hôm nay người ấy cũng là người giữ mọi thứ
+   khác của prod; một permission set là một thứ phải gán, đăng nhập và bảo trì; ⑴ đã làm đường này không im lặng.
+4. `.github/workflows/khoi-tao.yml` không đổi: `id-token: write`, `environment: prod-khoi-tao`, `role-session-name: khoi-tao-<run id>` đã đủ.
+
+### Phương án bị loại
+
+- **Loại trừ `tp-deploy` khỏi ⑼ để bớt thư.** Tin `userIdentity` là tin một chuỗi mà người có Admin đặt được; thư nhân chứng rẻ hơn thư
+  bị lọc mù.
+- **`include_claim_keys` với `environment` thay `context`.** Cùng dạng `sub` cho job có environment, nhưng job không environment bị từ chối
+  cấp token — một cách hỏng thừa; ví dụ chính thức của tài liệu dùng `context`.
+- **Trust policy tạm nhận CẢ dạng cũ và mới để không có cửa sổ khoá.** Đòi hai lần apply và để dạng cũ được nhận cho tới lần thứ hai —
+  tức ghim chưa có hiệu lực. Cửa sổ khoá vài phút, fail-closed, là rẻ hơn.
+- **Ghim `deploy.yml` cho `prod`/`prod-worker` luôn.** Chủ dự án giữ `prod` như cũ; là một chữ trong bản đồ khi muốn.
+- **Role riêng cho `prod-khoi-tao`.** ADR-111 đã chọn dùng chung `tp-deploy`; ⑶ ghim tệp workflow thu hẹp đúng lỗ ⒝ mà không tách role.
+- **Luật mới ở `tools/kiem-truoc-apply`** cho "claim đã tuỳ biến trước khi apply 30": tool đứng trước stack 90 với AWS chỉ đọc; GitHub API
+  là mặt tín nhiệm khác. Bước 2.0b của APPLY-LAN-DAU và mục README, có cổng hình dạng đọc.
+
+### Hệ quả
+
+- Mỗi lần khởi tạo hợp lệ để lại ít nhất hai thư ở `email_canh_bao` (RunTask, DeleteSecret) cộng Create/Put của 8.1 — dự kiến, ghi ở README.
+- Tuỳ biến claim là của CẢ KHO: token của `deploy.yml` cũng đổi dạng; policy của `prod`/`prod-worker` viết theo dạng mới. Gỡ tuỳ biến hay
+  đổi thứ tự khoá ⇒ mọi deploy bị AWS từ chối role.
+- `sub` thật (dạng bất biến; giá trị `job_workflow_ref` của job không dùng reusable workflow) là ĐỌC tài liệu, chưa đo trên token: sai thì
+  khoá; README nói cách in claim thật (`github/actions-oidc-debugger`) và sửa `sub_repo`/hai hằng ID.
+- `prod` cùng role `tp-deploy` với `prod-khoi-tao` và không ghim tệp: ranh giới cho đường `prod` vẫn là mã trên `master` + test hình dạng
+  (không workflow nào khác nhắc đường khởi tạo) — như ADR-111.
+- Cổng: `tests/architecture/hinh-dang-khoi-tao.test.ts` `[S1.9152]` ghim mẫu ⑼ (= ⑵ đổi tên), tiền tố bản khai ba phía, bốn rule/bốn
+  target/topic policy, điều kiện `sub`, bản đồ environment = tập environment của mọi job có `id-token`, ID ở `chung` = ví dụ ở README, mẫu
+  tuỳ biến đúng thứ tự ở README và 2.0b.
+```

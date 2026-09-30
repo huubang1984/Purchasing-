@@ -17681,6 +17681,140 @@ Kịch bản `lo51-dot-bien-2.py` (ngoài kho): sửa tệp, chạy test của l
 - Ở `81afbc2`: `apps/api/src/composition.int.test.ts` 20/20 (tệp duy nhất đổi so với lượt cổng trên).
 - Đột biến: 5 ca / 5 đỏ (mục 6).
 
+# §S1.9152 — HẠ TẦNG: STACK 60 ⑼ CANH ĐƯỜNG KHỞI TẠO NGOÀI WORKFLOW, TRUST POLICY `tp-deploy` GHIM `job_workflow_ref` QUA CLAIM `sub` TUỲ BIẾN — KHOẢN 252 ĐÓNG (⑴⑶), 9452 MỞ (⑵ HOÃN)
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — Terraform (stack 30, 60, `chung`), README, APPLY-LAN-DAU
+2.0b, một cổng hình dạng; không route, không màn, không migration, không phụ thuộc mới. Đóng 252; mở 9452; ADR-9252.
+
+## 1. Vòng này là gì
+
+Lô A6 của đợt trả nợ 2: khoản 252 — lượt soi đối kháng S1.183 chỉ ra hai lỗ của đường khởi tạo tổ chức (ADR-111): ⒜ người có
+AdministratorAccess ở prod chạy được task `tp-khoi-tao` (hay đăng ký họ khác mang role ấy, hay đổi bản khai) không qua hai người của
+`khoi-tao.yml`, và không cảnh báo nào kêu — stack 60 chỉ canh worker; ⒝ trust policy của `tp-deploy` chỉ ghim TÊN environment, nên
+một workflow khác trên `master` khai `environment: prod-khoi-tao` cũng nhận được role. Ba hình dạng đề xuất; chủ dự án chốt ⑴ (cảnh
+báo theo khuôn ⑵ của stack 60) và ⑶ (`job_workflow_ref` vào claim `sub` và trust policy), hoãn ⑵ (permission set hẹp).
+
+## 2. Quyết định của chủ dự án
+
+2026-09-30: ⑴ và ⑶ làm; ⑵ hoãn tới trước khách hàng thứ hai (ghi ở ADR-9252, tách khoản 9452); `prod` giữ như cũ; Terraform apply và
+lệnh tuỳ biến claim trên GitHub do chủ dự án chạy tay. Ngoài ra: vòng trả nợ theo phân công ngày 2026-09-29. Bốn điểm trong phạm vi đã
+duyệt tôi tự chốt ở mục 5.
+
+## 3. Đo trước
+
+- Cổng mới (sáu test `[S1.9152]` trong `tests/architecture/hinh-dang-khoi-tao.test.ts`) chạy trên mã cũ (`69e743e`): 6/6 ĐỎ, 14 test cũ
+  xanh — `không tìm thấy aws_cloudwatch_event_rule.task_khoi_tao_audit`; stack 60 không có `ho_khoi_tao`, `tien_to_ban_khai`; stack 30
+  không có `StringLike`/`job_workflow_ref`; tập khoá environment của stack 30 rỗng (danh sách, không phải bản đồ); README không có mục
+  "Tuỳ biến claim `sub`" (`scratchpad/lo52-do-truoc.log`).
+- Trên mã cũ, Terraform 1.13.3: `fmt -check` sạch, `init -backend=false` + `validate` xanh hai stack (mốc để so, `lo52-validate-goc.log`).
+- ĐỌC (không đo được ở đây): GitHub API `repos/huubang1984/Purchasing-` — `created_at = 2026-08-28T22:34:27Z`, `owner.id = 234519700`,
+  `id = 1350087523`. Tài liệu GitHub (`github/docs` nhánh `main`, `content/actions/reference/security/oidc.md`, đọc 2026-09-30 qua
+  `raw.githubusercontent.com`; `docs.github.com` bị chặn): "repositories created after July 15, 2026 now use an immutable default
+  subject format that includes both the owner ID and repository ID" — `repo:OWNER@OWNER-ID/REPO@REPO-ID:…`; "`owner_id` and `repo_id`
+  are always included in the `repo` segment of the `sub` claim, even when you customize claims with `include_claim_keys`"; mẫu
+  `["repo","context","job_workflow_ref"]` ⇒ `repo:ORG/REPO:environment:ENV:job_workflow_ref:PATH`; "If the `environment` claim is
+  included (also via `include_claim_keys`), an environment is required and must be provided". Hệ quả: chuỗi cũ
+  `repo:huubang1984/Purchasing-:environment:<tên>` của stack 30 chưa từng đúng cho kho này — chưa ai thấy vì chưa lần nào chạy trên
+  AWS (khoản 15).
+
+## 4. Thay đổi
+
+**`infra/terraform/60-canh-bao/main.tf`** — chỉ thêm dòng (0 dòng xoá/sửa): đầu tệp thêm ⑼ và một khối "vì sao" dưới ⑵; `locals`:
+`ho_khoi_tao`, `role_khoi_tao_arn`, `mau_task_khoi_tao` (đúng chữ ⑵ đổi tên: RunTask/StartTask với `taskDefinition` prefix/equals-ignore-
+case/wildcard của họ `tp-khoi-tao`; RunTask/StartTask với `overrides.taskRoleArn` = role; RegisterTaskDefinition `taskRoleArn` = role và
+`family` anything-but họ; `account = [prod]`; không lọc `errorCode`), `tien_to_ban_khai = "tp/khoi-tao/ban-khai/"`, `mau_ban_khai`
+(`aws.secretsmanager`, `eventName = [CreateSecret, PutSecretValue, UpdateSecret, DeleteSecret]`, `$or` trên `requestParameters.name`
+prefix và `requestParameters.secretId` prefix hay wildcard ARN `…:secret:tp/khoi-tao/ban-khai/*`); mục ⑼ cuối tệp: rule + target ở audit
+cho từng mẫu (`tp-canh-bao-task-khoi-tao`, `tp-canh-bao-ban-khai` ⇒ `tp-canh-bao-khoa`, `input_transformer` với `luc/lenh/ai/loi` và
+`taskDef/ho` hay `ten/id`; thư nói hợp lệ CHỈ khi `<ai>` là `assumed-role/tp-deploy/khoi-tao-RUN_ID` của một run đã được người khác
+duyệt, và dặn việc phải làm), rule + target ở prod (`tp-chuyen-task-khoi-tao`, `tp-chuyen-ban-khai` ⇒ bus audit qua
+`tp-chuyen-canh-bao-khoa`, `depends_on` bus policy); topic policy `EventBridgeGuiCanhBao` thêm hai rule.
+
+**`infra/terraform/30-prod-iam/main.tf`**: `local.deploy.*.environments` từ danh sách thành bản đồ environment ⇒ tệp workflow hay `null`
+(`prod = null`, `"prod-khoi-tao" = "khoi-tao.yml"`; worker `{ "prod-worker" = null }`); `locals { chu_kho, ten_kho, sub_repo }` với
+`sub_repo = "repo:${chu_kho}@${github_owner_id}/${ten_kho}@${github_repo_id}"`; điều kiện `sub` của `deploy_trust`: `StringLike`,
+`[for e, wf in environments : "${sub_repo}:environment:${e}:job_workflow_ref:${wf == null ? "*" : "${github_repo}/.github/workflows/${wf}@refs/heads/master"}"]`;
+`aud` giữ `StringEquals`. Khối chú thích nói cả hai vế là đọc tài liệu và hai chiều quên đều KHOÁ.
+
+**`infra/terraform/chung/main.tf`**: `github_owner_id = "234519700"`, `github_repo_id = "1350087523"` + hai output, chú thích vì sao.
+
+**`infra/terraform/README.md`**: bảng — hàng 30 (trust policy ghim `sub` tuỳ biến; cột "chạy được khi" thêm "claim `sub` đã tuỳ biến"),
+hàng 60 (⑼); đoạn "Tên environment phải đúng ba chuỗi" gạch chuỗi cũ; mục mới **"Tuỳ biến claim `sub` của OIDC — TRƯỚC khi apply stack
+30"**: dạng `sub`, vì sao ID bất biến, `job_workflow_ref` là workflow định nghĩa job, `prod`/`prod-worker` không ghim; thứ tự năm bước
+(plan → `gh api -X PUT …/actions/oidc/customization/sub` với `{"use_default":false,"include_claim_keys":["repo","context","job_workflow_ref"]}`
+→ `GET` đối chiếu → apply → đối chứng dương bằng deploy `api`; đối chứng âm suy từ policy), cửa sổ khoá giữa PUT và apply, cách in claim
+thật bằng `github/actions-oidc-debugger` rồi sửa `sub_repo` một dòng; mục "Khởi tạo tổ chức" thêm gạch đầu dòng về thư ⑼ mỗi lần chạy;
+"Rủi ro còn lại" thêm gạch đầu dòng cho đường AdministratorAccess ⇒ ⑼, đối chứng dương (`run-task --cluster khong-ton-tai
+--task-definition tp-khoi-tao`; `create-secret` của 8.1), ⑵ hoãn.
+
+**`docs/APPLY-LAN-DAU.md`**: 2.0 gạch "chỉ ghim TÊN environment"; bước **2.0b** mới — tuỳ biến claim TRƯỚC 2.1, hai chiều quên đều khoá.
+
+**`tests/architecture/hinh-dang-khoi-tao.test.ts`**: test ⑷ đầu viết lại theo bản đồ environment (lời khai cũ gạch trong chú thích); hai
+`describe` mới `[S1.9152 / khoản 252 ⑴]` và `[… ⑶]`, sáu test (mục 2 liệt kê). Bộ đọc: `mauStack60` (khối `jsonencode`), `khoiTf`, `cacJob`.
+Vế "⑵ còn nguyên": `mau_task_khoi_tao === mau_task_worker.replace(tên)` cộng năm vế tường minh trên CẢ HAI mẫu.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Đoạn `repo:` của `sub` mang ID bất biến.** Đề bài viết `repo:huubang1984/Purchasing-:…`; tài liệu GitHub nói kho tạo sau 2026-07-15
+  dùng dạng có ID và ID không gỡ được khi tuỳ biến. Viết chuỗi cũ là viết một trust policy chắc chắn từ chối mọi token; viết chuỗi mới là
+  một lời khai ĐỌC — nên cả hai hằng ở `chung` (một chỗ), README nói cách đo (in claim thật) và sửa. Chiều sai của lời khai là KHOÁ.
+- **`context` thay `environment` trong `include_claim_keys`.** Cùng cho `environment:<tên>` với job có environment (đúng ví dụ *Requiring a
+  reusable workflow and other claims* của tài liệu); khác ở chỗ job KHÔNG environment vẫn được cấp token (và không khớp policy nào) thay
+  vì bị GitHub từ chối cấp — bớt một cách hỏng, không thêm quyền. Cổng ghim: mọi job có `id-token: write` đứng trong environment.
+- **`StringLike` cho cả ba environment, `prod`/`prod-worker` = `job_workflow_ref:*`.** Chủ dự án giữ `prod` như cũ; `StringLike` trên chuỗi
+  không có `*` là so sánh bằng; một statement không ghép được `StringEquals` OR `StringLike`. Ghim `deploy.yml` cho hai environment ấy là
+  đổi một chữ trong bản đồ — ghi ở ADR-9252 là phương án chưa chọn.
+- **Thêm `UpdateSecret` vào mẫu d.** `update-secret --secret-string` ghi bản mới y như `put-secret-value`; bỏ nó là để một cửa cùng hình
+  dạng. Không thêm `GetSecretValue` (đọc, không đổi — người có Admin đọc được, đúng phần dư khoản nói) và `RestoreSecret`.
+- **Không loại trừ `tp-deploy` khỏi ⑼.** Loại trừ theo `userIdentity` là tin một chuỗi mà người có Admin đặt được (`role-session-name`
+  bất kỳ khi đảm nhận role — nếu trust policy bị sửa); giữ mọi lần chạy ra thư và đối chiếu với run là rẻ hơn và không mù.
+- **Không thêm luật vào `tools/kiem-truoc-apply`.** Hợp đồng của tool là biến của stack 90 + tài khoản prod chỉ đọc (`docs/…` 6.4); lô này
+  không thêm biến, secret hay image nào của stack 90. Luật đáng canh duy nhất — "claim `sub` đã tuỳ biến trước khi apply 30" — nằm ở
+  GitHub API, một mặt tín nhiệm khác (`gh`), và tool không đứng trước stack 30. Bước ấy là 2.0b của APPLY-LAN-DAU và mục README, có cổng
+  hình dạng đọc cả hai.
+
+## 6. Đột biến
+
+`scratchpad/lo52-dot-bien.py` (`lo52-dot-bien.log`, mỗi ca một log riêng): sửa một chỗ, chạy `hinh-dang-khoi-tao.test.ts`, khôi phục bằng
+bản sao, so băm. 14/14 ĐỎ đúng vế:
+- M1 `prod-khoi-tao` → `null` (bỏ ghim) ⇒ 2 đỏ (⑷ cũ, ⑼a). M2 `StringLike` → `StringEquals` ⇒ 1. M3 `sub_repo` bỏ ID ⇒ 1.
+  M12 `deploy_worker` tin thêm `prod-khoi-tao` ⇒ 3 (⑷, ⑼a, ⑼b tập khoá ≠ tập environment).
+- M4 ⑼ RegisterTaskDefinition bỏ `anything-but` ⇒ 1. M11 ⑼ bỏ `account = [local.prod]` ⇒ 1. M14 ⑵ bỏ `anything-but` (⑵ phải nguyên) ⇒ 1.
+- M5 bỏ `DeleteSecret` ⇒ 1. M8 tiền tố nới thành `tp/khoi-tao/` ⇒ 1. M6 topic policy bỏ `ban_khai_audit` ⇒ 1. M7 target prod bỏ `role_arn` ⇒ 1.
+- M9 README đảo thứ tự khoá `include_claim_keys` ⇒ 1. M10 `chung` `repo_id` lệch một đơn vị ⇒ 1 (ví dụ `sub` ở README lệch). M13 2.0b mất
+  `job_workflow_ref` khỏi mẫu ⇒ 1 (lượt đầu M13 SỐNG vì đột biến tương đương — chỉ xoá một chữ ở câu văn, mẫu vẫn còn; siết test ghim
+  nguyên mẫu ở 2.0b rồi đột biến lại).
+
+## 7. Giới hạn, nói ra
+
+- **Chưa đo trên GitHub hay AWS** (khoản 15): `sub` thật của kho (dạng bất biến, và `job_workflow_ref` với job không dùng reusable
+  workflow = tệp của chính workflow) là ĐỌC tài liệu ngày 2026-09-30; mẫu EventBridge chưa chạy `test-event-pattern` hay sự kiện thật
+  (thứ tự/tên trường `requestParameters` của CloudTrail cho ECS và Secrets Manager theo tài liệu và theo ⑵ đang có). Chiều sai của ⑶ là
+  AWS từ chối role — khoá, không mở; chiều sai của ⑴ là thư không tới — README đòi đối chứng dương ngay sau apply.
+- **Cửa sổ khoá** giữa `gh api PUT` và `terraform apply` (làm liền tay); và tuỳ biến claim là của CẢ KHO — `deploy.yml` cũng đổi dạng `sub`,
+  policy của `prod`/`prod-worker` đã viết theo dạng mới. Ai gỡ tuỳ biến (`use_default: true`) khi policy đã đòi dạng mới cũng chỉ khoá.
+- **`prod` không ghim `deploy.yml`** (chủ dự án giữ như cũ): `tp-deploy` là CÙNG role, nên một workflow trên `master` khai
+  `environment: prod` vẫn nhận được role chạy được task `tp-khoi-tao` NẾU mã trên master làm thế — ranh giới vẫn là mã trên master + test
+  hình dạng ("không workflow nào ngoài `khoi-tao.yml` nhắc khoi-tao/ban-khai/secretsmanager"), như ADR-111 đã nói. Ghim `deploy.yml` là
+  một chữ trong bản đồ.
+- **⑼ ra thư cho lần hợp lệ** (RunTask + DeleteSecret mỗi run, Create/Put của 8.1): nhiều thư hơn ⑵; đó là chủ ý (nhân chứng), README nói
+  rõ thư dự kiến.
+- **Cổng đọc CÁCH VIẾT** (regex trên HCL, không gọi Terraform): `terraform validate` bù phần cú pháp/kiểu; ngữ nghĩa IAM/EventBridge chỉ
+  đo được trên AWS.
+- **⑵ hoãn** — khoản 9452; tới lúc ấy, ⑼ là lớp duy nhất nhìn thấy đường này.
+
+## 8. Số đo
+
+- `pnpm vitest run tests/architecture/hinh-dang-khoi-tao.test.ts`: mã cũ 6 đỏ / 14 xanh (đo trước); mã mới 20/20 xanh.
+- Đột biến: 14/14 đỏ đúng vế; tệp khôi phục sạch (băm khớp), `git status --short` sáu tệp của lô.
+- Terraform 1.13.3 (`releases.hashicorp.com`, SHA256SUMS khớp; `registry.terraform.io` bị chặn nên provider aws 6.66.0 và archive 2.8.1 tải
+  từ `releases.hashicorp.com`, checksum khớp, `filesystem_mirror` qua `TF_CLI_CONFIG_FILE`): `fmt -check` sạch; `init -backend=false` +
+  `validate` "Success! The configuration is valid." cho `30-prod-iam` và `60-canh-bao` (trên bản sao ở scratchpad, kèm `chung`) —
+  `lo52-validate-goc.log`, `lo52-validate-sau-va.log`.
+- `pnpm typecheck` sạch; `pnpm exec eslint tests/architecture/hinh-dang-khoi-tao.test.ts` sạch; `pnpm exec depcruise tests tools --config
+  .dependency-cruiser.cjs` 0 vi phạm (255 module, 800 cạnh).
+- Cổng cuối `pnpm vitest run tests/architecture tools/kiem-truoc-apply tests/deploy` (hai biến Postgres cục bộ): 40 tệp xanh / 40; 432 test xanh, 1 bỏ qua (`xuong-dong-ts` vế chỉ chạy trên CI), 0 đỏ; 173,5 s; rc=0 — gồm `hinh-dang-khoi-tao` 20/20, `tools/kiem-truoc-apply` (luat, khop-stack-90, nguon), `tests/deploy/khoi-tao-sh` (bash thật, `aws` giả), hai tệp qt3 int trên cụm Postgres cục bộ
+
 # §S1.9161 — DÒNG LOG TỪ CHỐI CANH THEO TẬP ĐÓNG, MANG VẾ ĐÃ TỪ CHỐI; `it.each` — KHOẢN 189, 179, 185 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một hàm thuần và một lớp lỗi của gói `identity`, ba
