@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, throwAuditedDenial, tuChoiTheoChot } from "@trustprocure/identity";
 import { PepperRing } from "./pepper.js";
 
 // =============================================================================================
@@ -1182,6 +1182,48 @@ export async function listInvitations(
   }));
 }
 
+// ==============================================================================================
+// [S1.9130 / khoản 250 / ADR-9230] THU HỒI LỜI MỜI LOẠI BÁO GIÁ CỦA LỜI MỜI ẤY KHỎI CUỘC THI — NÊN SAU LẦN MỞ
+// THẦU THÌ KHÔNG THU HỒI ĐƯỢC NỮA
+//
+// Từ S1.9130 ba bộ đọc phong bì/bản rõ (worker mở thầu, bảng so sánh, lượt chấm) chỉ đọc luồng của lời mời
+// còn sống. Hệ quả phải chặn: nếu thu hồi còn được SAU khi phong bì đã mở, một người đã thấy giá chọn được
+// ai rời cuộc thi bằng một lần bấm không đi qua bước nào của chuỗi *chọn NCC → mở thầu → chấm → award*.
+// Nên từ trạng thái có lần mở đầu tiên — cạnh `CLOSED → UNSEALED` của `RFQ_TRANSITIONS` (`packages/rfq`) và
+// mọi trạng thái đi tới từ đó, trừ `CANCELLED` — `revokeInvitation` từ chối. `CANCELLED` KHÔNG thuộc tập: nó
+// tới được cả trước lẫn sau lần mở, và không bộ đọc nào đọc phong bì của gói đã huỷ, nên thu hồi ở đó vô
+// hại và vẫn là quyền của bên mua (đóng phiên khách, C3). Tập viết cứng ở đây vì gói này không phụ thuộc
+// `@trustprocure/rfq`; `invitation.int.test.ts` suy nó từ `RFQ_TRANSITIONS` và so.
+//
+// Lời từ chối đi đúng khuôn ADR-060/ADR-084 ⑸: `RFQ_STATE_DENIED` — người dùng cố đi một bước sai thứ tự
+// chuỗi —, một hàng ở giao dịch ĐỘC LẬP qua `throwAuditedDenial` (payload chỉ mã, tài nguyên là GÓI), rồi
+// `InvitationError` câu cố định (422 qua HTTP, `LOI_NGHIEP_VU_422`). Đọc trạng thái TRƯỚC câu ghi, cùng
+// câu đọc gói đã có của khoản 255: không cột nào của lời mời, token hay phiên khách đổi; không hàng
+// `INVITATION_REVOKED`. Không tìm thấy lời mời ⇒ `false` như trước (ADR-104/108, không sổ). Đường bù
+// `reason: "LINK_SEND_FAILED"` (thu hồi thay người mời khi link không gửi được) đi qua cùng cửa: một lời
+// mời tạo được ở gói đã mở là điều K4a (`080`) đã chặn ở tổ chức bật S3, và ở tổ chức chưa bật thì phần
+// bù ấy 500 kèm `invitationId` — ghi ở §S1.9130 mục 7.
+// ==============================================================================================
+
+/**
+ * Trạng thái gói từ lúc có lần mở thầu đầu tiên — `UNSEALED` và mọi trạng thái đi tới từ nó trong
+ * `RFQ_TRANSITIONS`, trừ `CANCELLED`. Thu hồi lời mời ở các trạng thái này bị chặn (ADR-9230).
+ */
+export const RFQ_STATUSES_AFTER_UNSEAL: ReadonlySet<string> = new Set([
+  "UNSEALED",
+  "EVALUATING",
+  "BAFO_OPEN",
+  "BAFO_CLOSED",
+  "BAFO_UNSEALED",
+  "AWARDED",
+]);
+
+/** Mã trong payload của hàng `RFQ_STATE_DENIED` khi thu hồi bị chặn sau lần mở thầu — chỉ mã, không giá trị. */
+export const REVOKE_AFTER_UNSEAL_DENIAL_CODE = "LOI_MOI_THU_HOI_SAU_MO_THAU";
+
+const THONG_DIEP_THU_HOI_SAU_MO_THAU =
+  "Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.";
+
 export async function revokeInvitation(
   client: pg.PoolClient,
   orgId: string,
@@ -1212,10 +1254,30 @@ export async function revokeInvitation(
   //
   // [S1.194 / S3.2d / khoản 255] Gói của lời mời đọc TRƯỚC câu ghi: lời từ chối K4a của trigger làm hỏng giao dịch, mà hàng
   // `CONTROL_DENIED` mang toạ độ GÓI (`tuChoiTheoChot`). Không thấy lời mời thì câu ghi dưới cũng chạm 0 hàng — trả `false` như trước.
-  const { rows: goiCuaLoiMoi } = await client.query<{ rfq_id: string }>(
-    "SELECT rfq_id FROM public.rfq_invitations WHERE id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid",
+  // [S1.9130 / khoản 250] Cùng câu đọc thêm TRẠNG THÁI gói: sau lần mở thầu, thu hồi bị chặn — khối chú thích trên hàm.
+  const { rows: goiCuaLoiMoi } = await client.query<{ rfq_id: string; status: string }>(
+    `SELECT m.rfq_id, r.status
+       FROM public.rfq_invitations m
+       JOIN public.rfq_packages r ON r.id OPERATOR(pg_catalog.=) m.rfq_id AND r.org_id OPERATOR(pg_catalog.=) m.org_id
+      WHERE m.id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid`,
     [input.invitationId],
   );
+  const goi = goiCuaLoiMoi[0];
+  if (goi !== undefined && RFQ_STATUSES_AFTER_UNSEAL.has(goi.status)) {
+    return throwAuditedDenial(
+      auditPool,
+      orgId,
+      {
+        actorType: actor.type,
+        actorId: actor.id,
+        action: "RFQ_STATE_DENIED",
+        resourceType: "RFQ",
+        resourceId: goi.rfq_id,
+        payload: { ma: REVOKE_AFTER_UNSEAL_DENIAL_CODE },
+      },
+      new InvitationError(THONG_DIEP_THU_HOI_SAU_MO_THAU),
+    );
+  }
   let loiMoi: pg.QueryResult;
   try {
     loiMoi = await client.query(
@@ -1265,7 +1327,8 @@ export async function revokeInvitation(
 // Mã trong link mời bị tiêu thụ ở lần xác minh OTP, phiên khách sống tối đa 4 giờ, và từ ADR-109 nhà cung cấp tự thoát
 // được. Tới trước hàm này, hết phiên là hết đường: mời lại cùng nhà cung cấp trả 409 (024: MỘT lời mời còn sống), nên
 // bên mua chỉ còn thu hồi rồi mời lại — tức một lời mời MỚI, một luồng báo giá MỚI (`vendor_bids` duy nhất theo lời
-// mời), và báo giá cũ vẫn đi vào lượt mở thầu (sổ nợ). Hàm này phát một token MỚI cho CHÍNH lời mời ấy: nhà cung cấp
+// mời), ~~và báo giá cũ vẫn đi vào lượt mở thầu (sổ nợ)~~ **[S1.9130 / khoản 250 / ADR-9230]** và báo giá của lời mời đã thu
+// hồi KHÔNG còn dự thầu — thu hồi là loại nhà cung cấp. Hàm này phát một token MỚI cho CHÍNH lời mời ấy: nhà cung cấp
 // quay về đúng hồ sơ báo giá của mình, và lần nộp kế là phiên bản kế của cùng luồng.
 //
 // Bốn điều kiện, xét dưới khoá hàng của lời mời (hai lần gửi lại cùng lúc xếp hàng ở đây, nên phép đếm trần không đua):

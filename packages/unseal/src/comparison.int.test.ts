@@ -1292,3 +1292,64 @@ describe("[S1.9113 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng t�
     expect(String(pSo.totalAmount)).not.toBe(hSo.totalAmount);
   });
 });
+
+// ===============================================================================================
+// [S1.9130 / khoản 250 / ADR-9230] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO BẢNG SO SÁNH
+//
+// Từ S1.9130 worker không mở phong bì của lời mời đã thu hồi (đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts`), nên trên
+// đường thuận hàng bản rõ ấy KHÔNG tồn tại. Ca này dựng đúng thế giới mà vế lọc của bảng so sánh còn phải đứng một mình: bản rõ
+// ĐÃ CÓ (ghi thẳng dưới `app_unseal`, như mọi ca của tệp — hàng của những lượt mở thầu trước S1.9130, hay của một chỗ ghi khác),
+// rồi lời mời bị thu hồi. Hai câu của `buildComparisonTable` — câu hàng và câu tổng hợp — cùng lọc `i.revoked_at IS NULL`, và
+// cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba chỗ đọc mang đúng MỘT vế ấy.
+// ===============================================================================================
+describe("[S1.9130 / khoản 250] bản rõ của lời mời đã thu hồi không vào bảng so sánh", () => {
+  /** Lời mời của một phiên bản báo giá — đọc dưới superuser, không đi qua hàm nào của gói. */
+  async function loiMoiCuaPhienBan(versionId: string): Promise<string> {
+    const { rows } = await db.pool.query<{ invitation_id: string }>(
+      "SELECT b.invitation_id FROM vendor_bid_versions v JOIN vendor_bids b ON b.id = v.bid_id WHERE v.id = $1",
+      [versionId],
+    );
+    return rows[0]?.invitation_id ?? "";
+  }
+
+  it("hai bản rõ, thu hồi lời mời của một ⇒ câu hàng và câu tổng hợp cùng bỏ nó: một dòng, `parsed` 1, min = max = giá còn lại, `belowBudget` 0 — bản rõ vẫn nằm trong CSDL; ĐỐI CHỨNG trước khi thu hồi: hai dòng", async () => {
+    const rfqId = await taoRfqMo(csLong);
+    const vThuHoi = await nopBaoGia(rfqId, "NCC bi thu hoi");
+    const vConLai = await nopBaoGia(rfqId, "NCC con lai");
+    await moThau(rfqId, [
+      [vThuHoi, { totalAmount: "900000.00", currency: "VND" }],
+      [vConLai, { totalAmount: "1200000.00", currency: "VND" }],
+    ]);
+    const doc = (): Promise<ComparisonTable> =>
+      withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+
+    // Đối chứng dương: chưa thu hồi thì cả hai dự thầu — 900 nghìn dưới ngân sách 1 triệu.
+    const truoc = await doc();
+    expect(truoc.rows.map((r) => r.bidVersionId).sort()).toEqual([vThuHoi, vConLai].sort());
+    expect(truoc.aggregates).toMatchObject({ parsed: 2, min: "900000.00", max: "1200000.00", belowBudget: 1 });
+
+    // Thu hồi bằng SQL dưới superuser, ký tên theo trigger 013 — gói không đi qua `revokeInvitation` (nó chặn sau lần mở, đúng
+    // quyết định): thứ đo ở đây là VẾ LỌC, không phải đường thu hồi.
+    const loiMoi = await loiMoiCuaPhienBan(vThuHoi);
+    await db.pool.query(
+      "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1",
+      [loiMoi, uYc, sYc],
+    );
+    const sau = await doc();
+    expect(sau.rows.map((r) => [r.bidVersionId, r.totalAmount, r.isLatestForBid])).toEqual([[vConLai, "1200000.00", true]]);
+    expect(sau.aggregates).toMatchObject({ parsed: 1, unparsed: 0, min: "1200000.00", max: "1200000.00", average: "1200000.00", belowBudget: 0 });
+
+    // Bản rõ KHÔNG bị xoá: bảng chỉ-ghi-thêm, và lịch sử ấy là một câu hỏi kiểm toán thật. Lọc ở lần ĐỌC, không ở dữ liệu.
+    const { rows: banRo } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_unsealed_bids u JOIN vendor_bid_versions v ON v.id = u.bid_version_id " +
+        " JOIN vendor_bids b ON b.id = v.bid_id JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [rfqId],
+    );
+    expect(banRo[0]?.n).toBe("2");
+
+    // GIỚI HẠN ĐÃ ĐO, nói ra (khoản 9440): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
+    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 9440 đỏ đúng đây.
+    const dem = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(dem).toEqual({ disclosed: true, count: 2 });
+  });
+});

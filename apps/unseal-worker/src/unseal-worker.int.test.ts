@@ -22,6 +22,9 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
+// [S1.9130 / khoản 250] Hai gói cùng đọc phong bì/bản rõ với worker — kịch bản §S1.181 đo cả ba bộ đọc trên MỘT giàn cảnh thật.
+import { taoLuotDanhGia } from "@trustprocure/danh-gia";
+import { revokeInvitation } from "@trustprocure/invitation";
 import {
   FAILED_BID_VERSION_IDS_AUDIT_CAP,
   executeUnsealRequest,
@@ -94,7 +97,11 @@ async function taoPhien(userId: string): Promise<string> {
 }
 
 /** Một RFQ đã OPEN kèm vật liệu khoá THẬT. */
-async function taoRfqMo(): Promise<string> {
+/**
+ * RFQ đã OPEN với cặp khoá thật. [S1.9130 / khoản 250] Hai tham số tuỳ chọn cho kịch bản §S1.181: chính sách ghim vào ngân sách
+ * (mặc định `csA`) và ngân sách dự tính (mặc định 1 triệu) — mọi lời gọi cũ giữ nguyên hình dạng.
+ */
+async function taoRfqMo(policyId: string = csA, nganSach = "1000000.00"): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
       "created_by, created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
@@ -108,8 +115,8 @@ async function taoRfqMo(): Promise<string> {
   );
   await db.pool.query(
     "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, " +
-      "created_by, created_by_session_id) VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
-    [orgA, rfqId, csA, uYc, sYc],
+      "created_by, created_by_session_id) VALUES ($1, $2, $6, 'VND', $3, $4, $5)",
+    [orgA, rfqId, policyId, uYc, sYc, nganSach],
   );
   await db.pool.query(
     "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, " +
@@ -132,22 +139,47 @@ async function taoRfqMo(): Promise<string> {
   return rfqId;
 }
 
-/** Nộp một báo giá THẬT (phong bì niêm phong bằng khoá công khai của chính RFQ). */
-async function nopBaoGia(rfqId: string, banRo: string, phongBiRac = false): Promise<string> {
+/**
+ * [S1.9130 / khoản 250] Lời mời, nhà cung cấp và người liên hệ của từng phiên bản `nopBaoGia` đã tạo — kịch bản §S1.181 cần thu
+ * hồi ĐÚNG lời mời của X rồi mời lại ĐÚNG nhà cung cấp ấy. Cùng khuôn `LUONG_CUA_PHIEN_BAN` của `packages/danh-gia`.
+ */
+const LOI_MOI_CUA_PHIEN_BAN = new Map<
+  string,
+  { readonly invitationId: string; readonly supplierId: string; readonly contactId: string }
+>();
+
+/**
+ * Nộp một báo giá THẬT (phong bì niêm phong bằng khoá công khai của chính RFQ).
+ *
+ * [S1.9130 / khoản 250] `nccCoSan`: mời lại một nhà cung cấp ĐÃ CÓ (cùng người liên hệ) thay vì dựng nhà cung cấp mới — đường
+ * *thu hồi rồi mời lại* của ADR-110/khoản 250. Mọi lời gọi cũ không truyền nó và giữ nguyên hành vi.
+ */
+async function nopBaoGia(
+  rfqId: string,
+  banRo: string,
+  phongBiRac = false,
+  nccCoSan?: { readonly supplierId: string; readonly contactId: string },
+): Promise<string> {
   const hex = randomBytes(4).toString("hex");
-  const { rows: ncc } = await db.pool.query<{ id: string }>(
-    "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
-      "VALUES ($1, $2, $3, $4) RETURNING id",
-    [orgA, `NCC ${hex}`, uYc, sYc],
-  );
-  const supplierId = ncc[0]?.id ?? "";
-  const { rows: lh } = await db.pool.query<{ id: string }>(
-    "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
-      "created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) " +
-      "RETURNING id",
-    [orgA, supplierId, `${hex}@vidu.vn`, uYc, sYc],
-  );
-  const contactId = lh[0]?.id ?? "";
+  let supplierId: string;
+  let contactId: string;
+  if (nccCoSan === undefined) {
+    const { rows: ncc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id",
+      [orgA, `NCC ${hex}`, uYc, sYc],
+    );
+    supplierId = ncc[0]?.id ?? "";
+    const { rows: lh } = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, " +
+        "created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) " +
+        "RETURNING id",
+      [orgA, supplierId, `${hex}@vidu.vn`, uYc, sYc],
+    );
+    contactId = lh[0]?.id ?? "";
+  } else {
+    ({ supplierId, contactId } = nccCoSan);
+  }
   const { rows: lm } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, " +
       "invited_by, invited_by_session_id) VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
@@ -219,6 +251,7 @@ async function nopBaoGia(rfqId: string, banRo: string, phongBiRac = false): Prom
         Buffer.alloc(70, 7),
       ],
     );
+    LOI_MOI_CUA_PHIEN_BAN.set(versionId, { invitationId, supplierId, contactId });
     return versionId;
   });
 }
@@ -1026,6 +1059,158 @@ describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang tr
     for (const b of so) {
       expect([b.payload.failedCount, b.payload.failedBidVersionIds, b.payload.failedBidVersionIdsTruncated], b.action).toEqual([0, [], false]);
     }
+  });
+});
+
+// ===============================================================================================
+// [S1.9130 / khoản 250 / ADR-9230] THU HỒI LỜI MỜI LOẠI BÁO GIÁ CỦA LỜI MỜI ẤY KHỎI LƯỢT MỞ THẦU — VÀ SAU LẦN MỞ THÌ
+// KHÔNG THU HỒI ĐƯỢC NỮA
+//
+// Kịch bản của §S1.181 (lượt soi đối kháng), dựng lại trên worker THẬT với phong bì niêm phong thật và trên CÙNG một giàn
+// cảnh cho cả ba bộ đọc: X nộp 900 triệu, bên mua thu hồi lời mời của X rồi mời lại (một lời mời MỚI, một luồng báo giá MỚI —
+// `vendor_bids` duy nhất theo lời mời, `018`; `024` mở lại vế *sau khi thu hồi*), X nộp 1 tỷ ở luồng mới; Y 950 triệu, Z 1,1 tỷ;
+// ngân sách 1 tỷ. Đo trước bản vá trên `561158e` (§S1.9130): `opened = 4`, bản rõ 900 triệu có mặt, bảng so sánh X HAI dòng và
+// `belowBudget` 3, lượt chấm bốn hàng với X hạng 1 bằng giá cũ. Sau bản vá: `opened = 3`, không bản rõ nào của lời mời đã thu
+// hồi, X MỘT dòng giá mới, `belowBudget` 2, xếp hạng Y · X(1 tỷ) · Z.
+//
+// Vế thứ hai của quyết định: sau lần mở thầu, thu hồi bị CHẶN — `revokeInvitation` từ chối có tên, một hàng `RFQ_STATE_DENIED`
+// (đi sai thứ tự chuỗi, ADR-060/ADR-084 ⑸), lời mời còn sống. Đo ở đây trên gói đã mở bằng CHÍNH worker, không ép trạng thái.
+// ===============================================================================================
+describe("[S1.9130 / khoản 250] báo giá của lời mời đã thu hồi không dự thầu; thu hồi sau lần mở thầu bị chặn", () => {
+  /** Chính sách có trọng số đánh giá — lượt chấm đọc phiên bản HIỆN HÀNH (`luot-danh-gia.ts`), nên nó phải là bản mới nhất. */
+  let csCham = "";
+  const gia = (t: string): string => JSON.stringify({ totalAmount: t, currency: "VND" });
+
+  beforeAll(async () => {
+    const { rows } = await db.pool.query<{ id: string }>(
+      // `056`: `eval_components` và `bafo_top_n` cùng khai hoặc cùng chưa (`org_procurement_policies_danh_gia_du_bo`) — 0 là không BAFO.
+      // Ngưỡng cấp kép 10 tỷ: kịch bản §S1.181 có ngân sách 1 tỷ, mà `taoRfqMo` dựng gói KHÔNG cấp kép — dưới ngưỡng 100 triệu
+      // của `csA` trigger ngân sách (D2) từ chối *"Uoc luong dat hoac vuot nguong chinh sach"* (đo ở lần đo trước).
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
+        "created_by, created_by_session_id) " +
+        "SELECT $1, coalesce(max(version), 0) + 1, '10000000000.00', 'VND', $2::jsonb, 0, $3, $4 " +
+        "FROM org_procurement_policies WHERE org_id = $1 RETURNING id",
+      [orgA, '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]', uYc, sYc],
+    );
+    csCham = rows[0]?.id ?? "";
+    expect(csCham).not.toBe("");
+  });
+
+  /** Hàng `RFQ_STATE_DENIED` của một gói — hình dạng trọn, theo thứ tự ghi. */
+  async function hangTuChoiTrangThai(rfqId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  it("X nộp 900 triệu → thu hồi → mời lại → X nộp 1 tỷ ⇒ `opened` 3, không bản rõ nào của lời mời đã thu hồi, bảng so sánh X MỘT dòng giá mới và `belowBudget` 2, xếp hạng Y · X · Z", async () => {
+    const rfqId = await taoRfqMo(csCham, "1000000000.00");
+    const vXCu = await nopBaoGia(rfqId, gia("900000000.00"));
+    const X = LOI_MOI_CUA_PHIEN_BAN.get(vXCu);
+    if (X === undefined) throw new Error("fixture không ghi lời mời của X");
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const vZ = await nopBaoGia(rfqId, gia("1100000000.00"));
+
+    // Thu hồi ở OPEN qua đường THẬT của gói `invitation` — token, thách thức và phiên khách của X chết theo (C3).
+    const daThuHoi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: X.invitationId, actorSessionId: sYc }, apiPool),
+    );
+    expect(daThuHoi).toBe(true);
+    // Mời lại CÙNG nhà cung cấp, cùng người liên hệ: lời mời mới, luồng báo giá mới.
+    const vXMoi = await nopBaoGia(rfqId, gia("1000000000.00"), false, { supplierId: X.supplierId, contactId: X.contactId });
+    const XMoi = LOI_MOI_CUA_PHIEN_BAN.get(vXMoi);
+    expect(XMoi?.supplierId).toBe(X.supplierId);
+    expect(XMoi?.invitationId).not.toBe(X.invitationId);
+
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened, "ba luồng còn sống: Y, Z, X mới — luồng của lời mời đã thu hồi không được mở").toBe(3);
+    expect(ketQua.failedBidVersionIds).toEqual([]);
+
+    // Bản rõ: đúng ba hàng, KHÔNG có phiên bản của lời mời đã thu hồi, và giá 900 triệu không thành bản rõ ở đâu cả.
+    const { rows: banRo } = await withTenant(apiPool, orgA, (c) =>
+      c.query<{ bid_version_id: string; tien: string | null }>(
+        "SELECT bid_version_id, payload ->> 'totalAmount' AS tien FROM rfq_unsealed_bids WHERE unseal_request_id = $1",
+        [requestId],
+      ),
+    );
+    expect(banRo.map((r) => r.bid_version_id).sort()).toEqual([vY, vZ, vXMoi].sort());
+    expect(banRo.map((r) => r.tien).sort()).toEqual(["1000000000.00", "1100000000.00", "950000000.00"]);
+
+    // Bảng so sánh: X MỘT dòng, giá mới, là bản mới nhất của luồng; phép tổng hợp trên ba luồng; `belowBudget` 2 (Y và X mới).
+    const bang = await withTenant(apiPool, orgA, (c) => buildComparisonTable(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang.rows).toHaveLength(3);
+    const dongX = bang.rows.filter((r) => r.supplierId === X.supplierId);
+    expect(dongX.map((r) => [r.bidVersionId, r.totalAmount, r.isLatestForBid])).toEqual([[vXMoi, "1000000000.00", true]]);
+    expect(bang.aggregates).toMatchObject({ parsed: 3, unparsed: 0, min: "950000000.00", max: "1100000000.00", belowBudget: 2 });
+
+    // Xếp hạng: Y · X(1 tỷ) · Z — không hàng nào mang giá cũ.
+    const luot = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const theoHang = [...luot.lines].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+    expect(theoHang.map((l) => [l.bidVersionId, l.effectiveCost, l.rank])).toEqual([
+      [vY, "950000000.00", 1],
+      [vXMoi, "1000000000.00", 2],
+      [vZ, "1100000000.00", 3],
+    ]);
+    expect(luot.lines.some((l) => l.effectiveCost === "900000000.00"), "giá cũ không có mặt trong bảng xếp hạng").toBe(false);
+  }, 120_000);
+
+  it("SAU lần mở thầu, thu hồi lời mời của Y bị chặn: `InvitationError` câu cố định, ĐÚNG MỘT hàng `RFQ_STATE_DENIED` {LOI_MOI_THU_HOI_SAU_MO_THAU} mang người gọi và gói, lời mời và phiên khách còn sống; đối chứng: cùng lời mời ấy thu hồi được ở CLOSED", async () => {
+    const rfqId = await taoRfqMo();
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const Y = LOI_MOI_CUA_PHIEN_BAN.get(vY);
+    if (Y === undefined) throw new Error("fixture không ghi lời mời của Y");
+    const requestId = await dongVaXinMoThau(rfqId);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened).toBe(1);
+    expect(await hangTuChoiTrangThai(rfqId), "đối chứng: lượt mở thầu không để lại hàng từ chối trạng thái nào").toEqual([]);
+
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: Y.invitationId, actorSessionId: sYc }, apiPool),
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi).toBeInstanceOf(Error);
+    expect((loi as Error).name).toBe("InvitationError");
+    expect((loi as Error).message).toBe("Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.");
+    expect(await hangTuChoiTrangThai(rfqId)).toEqual([["USER", uYc, "RFQ", { ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }]]);
+    const { rows: lm } = await db.pool.query<{ status: string; revoked_at: Date | null; phien_song: string }>(
+      "SELECT i.status, i.revoked_at, (SELECT count(*)::text FROM guest_sessions g WHERE g.invitation_id = i.id AND g.revoked_at IS NULL) AS phien_song " +
+        " FROM rfq_invitations i WHERE i.id = $1",
+      [Y.invitationId],
+    );
+    expect(lm[0]).toEqual({ status: "SENT", revoked_at: null, phien_song: "1" });
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+      [Y.invitationId],
+    );
+    expect(so[0]?.n, "không hàng INVITATION_REVOKED nào — lần thu hồi không xảy ra").toBe("0");
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: thu hồi ở CLOSED — TRƯỚC lần mở — vẫn đi qua và không để lại hàng `RFQ_STATE_DENIED`; lượt mở thầu sau đó không mở phong bì ấy (`opened` 0)", async () => {
+    const rfqId = await taoRfqMo();
+    const vY = await nopBaoGia(rfqId, gia("950000000.00"));
+    const Y = LOI_MOI_CUA_PHIEN_BAN.get(vY);
+    if (Y === undefined) throw new Error("fixture không ghi lời mời của Y");
+    const requestId = await dongVaXinMoThau(rfqId);
+    expect(
+      await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId: Y.invitationId, actorSessionId: sYc }, apiPool)),
+    ).toBe(true);
+    expect(await hangTuChoiTrangThai(rfqId)).toEqual([]);
+    const ketQua = await withTenant(unsealPool, orgA, (c) =>
+      executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
+    );
+    expect(ketQua.opened, "phong bì duy nhất thuộc lời mời đã thu hồi ⇒ không mở gì; RFQ vẫn UNSEALED (xem khối `IS NOT DISTINCT FROM`)").toBe(0);
+    const { rows: tt } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(tt[0]?.status).toBe("UNSEALED");
   });
 });
 

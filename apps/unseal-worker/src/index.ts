@@ -549,6 +549,16 @@ export async function executeUnsealRequest(
   //
   // KHÔNG dùng `ON CONFLICT DO NOTHING` ở câu `INSERT` để né xung đột ấy: nuốt xung đột là nuốt
   // luôn ca *hai lần mở cùng một phong bì*, thứ mà `UNIQUE` kia tồn tại để bắt (khoản 227⑵).
+  //
+  // [S1.9130 / khoản 250 / ADR-9230] VÀ CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`. Thu hồi
+  // lời mời là quyết định loại nhà cung cấp ấy khỏi cuộc thi; `vendor_bids` duy nhất theo lời mời (`018`)
+  // nên mời lại sau thu hồi là một luồng MỚI, và không có vế này lượt mở thầu mở CẢ HAI luồng của một
+  // doanh nghiệp — đo ở §S1.181 và §S1.9130: X nộp 900 triệu, thu hồi, mời lại, X nộp 1 tỷ ⇒ `opened = 4`,
+  // bảng so sánh X hai dòng, xếp hạng X hạng 1 bằng giá cũ. `opened` đếm SAU vế lọc. Vế này là bản chép
+  // nguyên văn của cùng vế ở hai câu của `buildComparisonTable` (`packages/unseal`) và ở `docBaoGia`
+  // (`packages/danh-gia`) — ba bộ đọc, một luật, không gói chung nào đứng dưới cả ba —, và cổng tĩnh
+  // `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba chỗ mang đúng MỘT vế ấy. Thu hồi SAU lần
+  // mở bị `revokeInvitation` chặn, nên tập phong bì của một lượt mở không đổi dưới chân worker.
   const { rows: phongBi } = await client.query<HangPhongBi>(
     `SELECT DISTINCT ON (v.bid_id) v.id, v.envelope
        FROM public.vendor_bid_versions v
@@ -556,6 +566,7 @@ export async function executeUnsealRequest(
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
       WHERE i.rfq_id OPERATOR(pg_catalog.=) $1 AND v.org_id OPERATOR(pg_catalog.=) $2
         AND v.bafo_round_id IS NOT DISTINCT FROM $3
+        AND i.revoked_at IS NULL
       ORDER BY v.bid_id, v.version DESC`,
     [r.rfq_id, orgId, r.bafo_round_id],
   );
