@@ -62,6 +62,9 @@ export { moTaLoiKhongGiaTri };
  * là lệch và kết nối bị huỷ bằng `SESSION_STATE_LEFT`: bộ nghe ghi một dòng sai nguyên nhân cạnh dòng 500 của lỗi thật (lượt soi 61a-7,
  * đọc).
  * Gắn MỘT lần cho mỗi pool, ở composition root — không trong `createDispatcher`, vì test dựng nhiều bộ điều phối trên cùng một pool.
+ * [S1.9160 / khoản 187] Bản song sinh của worker là `ghiKetNoiHuy` (`apps/unseal-worker/src/tien-trinh.ts`, hình dạng trả bộ nghe
+ * để cổng `pool-nghe-du-tin-hieu` đọc được lời gọi `.on`); `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn
+ * dòng log của hai bản, bỏ tiền tố tiến trình.
  */
 export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
   pool.on("release", (loi: unknown) => {
@@ -87,6 +90,7 @@ export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
  *
  * Gắn MỘT lần cho mỗi pool, ở composition root — cùng kỷ luật với `ghiLogKetNoiHuy`, và
  * `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi cả hai.
+ * [S1.9160 / khoản 187] Bản song sinh của worker là `ghiLoiToiMuon` — cùng phép đo đối chiếu với `ghiLogKetNoiHuy`.
  */
 export function ghiLogLoiKetNoiToiMuon(pool: pg.Pool, tenPool: string): void {
   ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {
