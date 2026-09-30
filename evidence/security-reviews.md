@@ -16710,7 +16710,7 @@ sau cổng `rfq.open`, trước `issueRfqKeyPair`. Ba mã mới ở `CHOT_VAO_SO
 **Route:** `GET /rfqs/:rfqId/signals` (không cho agent — `ROUTE_DOC_KHONG_PHOI` của MCP khai vì sao), `POST
 /rfqs/:rfqId/signals/acknowledge` (`rfq.approve`, `201`); `KiemSoatError` ⇒ `422`.
 
-**Sổ đăng ký:** K10a vào `docs/TEST-PLAN.md`, `SO_KHAI_NHAN` và mốc ma trận 71 → 72; `CUA_GOI`, `HAM_DOI_TRANG_THAI`, `HAM_CHI_DOC` của
+**Sổ đăng ký:** K10a vào `docs/TEST-PLAN.md`, `SO_KHAI_NHAN` và mốc ma trận 72 → 73 (K8a của #203 đưa nó 71 → 72 trước); `CUA_GOI`, `HAM_DOI_TRANG_THAI`, `HAM_CHI_DOC` của
 cổng quyền route; danh sách trắng cửa `@trustprocure/kiem-soat`; ba probe `g20-`; bộ quét kịch bản 41 HTTP có thân hợp lệ cho route ghi
 nhận; lời khai gói và bất biến ở `Handoff.md`.
 
@@ -16776,14 +16776,20 @@ Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đ�
 - **Lockfile:** chèn tay đúng ba khối (importer `packages/kiem-soat`, phụ thuộc của `packages/rfq` và `apps/api`); `pnpm@9 install
   --frozen-lockfile --lockfile-only` trên bản sao chỉ có manifest đi qua, và lockfile cũ thì đỏ (*specifiers … don't match*). pnpm 10 của
   máy và pnpm 9 chạy tự do đều viết lại hậu tố peer không liên quan — không dùng.
-- **Toàn bộ T3 cục bộ** trên cây đã cấp số: 196 tệp, 3340 ca — 3330 đạt, 1 bỏ qua, 9 đỏ; cả chín là ca cũ của máy đo, không liên quan: 8
-  của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`
-  (tiền đề locale). Lượt đầu bị cắt khi container khởi động lại, sau 40 tệp; trong lượt ấy một ca của `db/migrations.int` đỏ vì máy đo
-  không khởi động được cụm Postgres (`pg_ctl: could not start server`) — lượt thứ hai tệp ấy xanh trọn.
+- **Toàn bộ T3 cục bộ** trên cây đã hợp `master` (#203) và đã cấp số: 197 tệp, 3350 ca — 3340 đạt, 1 bỏ qua, 9 đỏ; cả chín là ca cũ của
+  máy đo, không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale). Trước lần hợp, cùng lệnh: 196 tệp, 3340 ca — 3330 đạt, 1 bỏ qua, cùng
+  chín ca ấy. Lượt đầu tiên bị cắt khi container khởi động lại, sau 40 tệp; trong lượt ấy một ca của `db/migrations.int` đỏ vì máy đo
+  không khởi động được cụm Postgres (`pg_ctl: could not start server`) — hai lượt sau tệp ấy xanh trọn.
 - **Nhãn đặt hai lần:** bản đầu mang `[INV-K10a]` ở cả `describe` lẫn từng `it`, và bộ gom độ phủ đếm mỗi lần nhãn xuất hiện trong tên đầy
-  đủ — K10a ra 25 thay vì 13. Bỏ nhãn ở `describe` (khuôn của K1), chạy lại tệp ấy (12/12) và ghép vào báo cáo.
+  đủ — K10a ra 25 thay vì 13. Bỏ nhãn ở `describe` (khuôn của K1); lượt T3 sau lần hợp chạy trên tên mới.
 - `pnpm t0` sạch (464 module, 1859 phụ thuộc). `pnpm test`: 123 tệp, 1764 đạt, 1 bỏ qua. `pnpm cap-so --kiem` sạch.
-- **Ma trận:** 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào), đọc từ 3340 khẳng định, cổng evidence XANH; K10a mới **13**, H16
-  55 → 59 (một khối danh sách trắng, ba probe `g20-`). Mốc `MOC_GHIM` 71 → 72.
+- **Ma trận:** 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào), đọc từ 3350 khẳng định, cổng evidence XANH; K10a mới **13**, H16
+  55 → 59 (một khối danh sách trắng, ba probe `g20-`). Mốc `MOC_GHIM` 72 → 73.
+- **Hợp `master` sau #203** (S3.3a, K8a, migration `082`): xung đột ở danh sách trigger chỉ ghi thêm của `db/migrations.int` (hợp sắp
+  xếp), năm khối hardening của `kiem_danh_tinh_theo_phien` và `bid_chi_ghi_them` (giữ khối `supplier_verifications` rồi hai khối
+  `governance_*`; chuỗi quyền là hợp sắp xếp), mốc ma trận, cột mốc `docs/STATE.md`, lời khai của `Handoff.md` và cuối biên bản — giữ cả
+  hai mục, mục của vòng này đứng sau mục của #203. Lời khai đếm ADR và migration do `cap-so --dem` viết lại. Sau lần hợp: typecheck
+  sạch, `pnpm test` 123 tệp, 1764 đạt, 1 bỏ qua; `cap-so --kiem` sạch.
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.203, ADR-120, migration `088_tin_hieu_chia_nho`; các số nhỏ
   hơn chưa vào `master` đã có PR khác giữ.
