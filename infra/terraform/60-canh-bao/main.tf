@@ -349,6 +349,7 @@ resource "aws_cloudwatch_event_target" "neo_hong_audit" {
 # PROD — chuyển PutKeyPolicy (⑴), task mang role worker (⑵) và job neo hỏng (⑶) sang audit
 # ---------------------------------------------------------------------------------------------
 data "aws_iam_policy_document" "events_assume" {
+  provider = aws.prod
   statement {
     actions = ["sts:AssumeRole"]
     principals {
@@ -639,6 +640,7 @@ data "archive_file" "canh_moc_neo" {
 }
 
 data "aws_iam_policy_document" "lambda_assume" {
+  provider = aws.audit
   statement {
     actions = ["sts:AssumeRole"]
     principals {
