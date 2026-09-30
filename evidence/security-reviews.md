@@ -17864,3 +17864,10 @@ không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nh
 - Chín đột biến, chín đỏ (§5).
 - Ma trận sinh lại từ báo cáo ấy: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào). Ba hàng đổi, cả ba do vòng này: K4a 26 → 30
   (bốn ca của khối (8)), K4b 42 → 43 và H19 103 → 104 (ca chủ bảng, mang cả hai nhãn).
+- **Hợp `master` sau #214** (S3.6b2, S1.206 — không migration, không ADR mới): xung đột chỉ ở cột mốc của STATE và cuối biên bản
+  — giữ cả hai, S1.207 trên S1.206, §S1.206 rồi §S1.207; ma trận tự hợp (K10a 13 → 15 của #214). `cap-so --dem`: lời khai đếm đã
+  khớp; `cap-so --kiem` sạch; S1.207, ADR-123, khoản 262–263, migration 090 giữ. Trên cây hợp: `tsc`, `eslint` sạch; `depcruise`
+  477 mô-đun, không vi phạm — bằng `master` (lần đo 478 ở trên chạy cùng lúc với T3, lần này không gì chạy song song). T3 toàn bộ:
+  203 tệp, 3490 khẳng định, 3480 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo; các tệp #214 chạm xanh cùng migration 090
+  (`tin-hieu-chia-nho.int` 14/14, `kich-ban-41.int` 32/32, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24). Ma trận sinh lại trùng
+  từng byte bản đã hợp: 73/73.
