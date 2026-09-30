@@ -17731,3 +17731,10 @@ năm, chạy lại: cả năm đỏ.
   nghiệp vụ + 22/22 hàng rào), cổng evidence XANH. So với bản của `master`, ma trận chỉ khác ở hàng K10a: 13 → 15 khẳng định (bước 16
   của kịch bản 41 qua HTTP, hai luồng).
 - **Số hiệu:** `pnpm cap-so` giữ số trên origin và cấp S1.206; S1.204, S1.205 đã có PR khác giữ.
+- **Hợp `master` sau #212** (S1.205, khoản 259, ADR-122 — không migration): xung đột ở cột mốc `docs/STATE.md` và cuối biên bản, giữ
+  cả hai mục — cột mốc S1.206 trên S1.205, §S1.205 rồi §S1.206; sổ khai nhãn, ma trận và `docs/DECISIONS.md` hợp tự động (K10a của vòng
+  này, D2 và H19 của #212). Sau lần hợp: typecheck sạch; T3 chín tệp — năm tệp lần hợp đổi (`hardening-suy-tu-tinh-chat.int` 36/36,
+  `migrations.int` 119/119, `trigger-la-mac-dinh-dong.int` 12/12 mới của #212, `outbox.int` 50/50, `lan-nop-da-xem.int` 29/29) và bốn tệp
+  của vòng này — **376/376**; `pnpm t0` sạch (477 module, 1938 phụ thuộc); `pnpm test` 124 tệp, 1812 đạt, 1 bỏ qua. Báo cáo ghép: 203 tệp,
+  3485 khẳng định, đúng chín ca cũ của máy đo đỏ; ma trận **73/73**, cổng evidence XANH, trùng từng byte bản hợp tự động. `pnpm cap-so`
+  sau lần hợp: S1.206 giữ nguyên, không tệp nào đổi.
