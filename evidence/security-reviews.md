@@ -18053,3 +18053,11 @@ không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nh
   203 tệp, 3490 khẳng định, 3480 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo; các tệp #214 chạm xanh cùng migration 090
   (`tin-hieu-chia-nho.int` 14/14, `kich-ban-41.int` 32/32, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24). Ma trận sinh lại trùng
   từng byte bản đã hợp: 73/73.
+- **Hợp `master` sau #213** (S4.3a, S1.204 — migration `089_anh_xa_hang_muc`, ADR-121): xung đột ở danh sách trigger của
+  `bid_chi_ghi_them` và ba danh sách migration viết cứng của `migrations.int`, tập chỉ-ghi-thêm đo được của H19, dòng khai số bất
+  biến ở STATE và `Handoff.md` — hợp cả hai phía (089 rồi 090; `rfq_item_goi_y`, `rfq_item_mappings` rồi `rfq_tra_ve`; số bất
+  biến của `master`, 75). `hardening.always.sql` tự hợp: phần của vòng này trên nền #213 trùng từng dòng với bản gốc (117/117).
+  `cap-so --dem`: 123 ADR, 88 migration; `cap-so --kiem` sạch; S1.207, ADR-123, khoản 262–263, migration 090 giữ. Trên cây hợp:
+  `tsc`, `eslint` sạch; `depcruise` 481 mô-đun, không vi phạm; T3 toàn bộ 205 tệp, 3529 khẳng định, 3519 đạt, 1 bỏ qua, 9 đỏ — đúng
+  chín ca cũ của máy đo; `migrations.int` 120/120, `hardening-suy-tu-tinh-chat.int` 36/36, `lan-nop-da-xem.int` 34/34,
+  `anh-xa.int` 23/23. Ma trận sinh lại trùng từng byte bản đã hợp: 75/75 (53/53 nghiệp vụ + 22/22 hàng rào).
