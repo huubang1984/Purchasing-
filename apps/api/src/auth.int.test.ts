@@ -1422,42 +1422,120 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   // đúng thứ đo được, và hệ quả ghi ở biên bản §S1.83.
   //
   // RED THẬT trên mã trước bản vá: `failed_attempts` = 3 và ba mã đều 401.
+  //
+  // -----------------------------------------------------------------------------------------------
+  // [S1.9141 / khoản 184 — lượt soi ngang 74 góc 4] CHỒNG LẤN ĐƯỢC ÉP VÀ ĐƯỢC ĐO, KHÔNG ĐƯỢC CẦU MAY.
+  //
+  // Bản S1.83 của vế này bắn ba yêu cầu bằng `Promise.all` rồi đòi `2×401, 1×429, failed = 2`. Nó
+  // KHÔNG chứng được ba yêu cầu thật sự chồng nhau: chỉ cần chúng chạy TUẦN TỰ (tải máy, gộp socket,
+  // máy chủ xử lý nối tiếp) là cổng đọc-rồi-làm CŨ ở bộ điều phối cho ra ĐÚNG bộ số ấy — đo được:
+  // đổi `Promise.all` thành ba `await` nối tiếp ⇒ vế xanh (§S1.9141). Tức phép đo có thể suy biến
+  // thành bản sao đắt tiền của vế ⑹ mà không ai biết, đúng lúc khoản 144 — lớp lỗi đã quay lại BA
+  // lần — cần một người tố giác.
+  //
+  // Nay cảnh được DỰNG: một giao dịch ngoài giữ khoá HÀNG hồ sơ MFA của người này (`FOR UPDATE`),
+  // nên cả ba yêu cầu đi qua cổng đọc-rồi-làm của bộ điều phối (cùng đọc `failed_attempts = 0`) rồi
+  // cùng ĐỨNG CHỜ ở câu `CAU_DAT_COC`. Vế đếm qua `pg_stat_activity`/`pg_locks` đủ BA backend đang
+  // chờ — bị chặn (trực tiếp hay dây chuyền) bởi người giữ, và đã cầm `RowExclusiveLock` trên
+  // `mfa_credentials`, tức đang ở chính câu `UPDATE` ấy — RỒI MỚI nhả khoá. Không đủ ba thì vế ĐỎ
+  // ở tiền đề, không ở kết luận. Ba câu `UPDATE` được thả nối tiếp trên cùng một hàng: hai câu đầu
+  // thấy `0 < 2`, `1 < 2` và tăng; câu thứ ba đánh giá lại vị từ trên hàng ĐÃ cập nhật (EvalPlanQual),
+  // thấy `2 < 2` sai, chạm 0 hàng ⇒ `SIDE_PATH_EXHAUSTED` ⇒ 429. Nên bộ số nay là ĐẲNG THỨC.
+  //
+  // Đột biến đo được (§S1.9141): ⒜ ba yêu cầu tuần tự ⇒ chỉ MỘT backend chờ ⇒ tiền đề đỏ; ⒝ gỡ vị
+  // từ `$3` khỏi `CAU_DAT_COC` (mô phỏng cổng đọc-rồi-làm của bản trước S1.83) ⇒ `401,401,401`,
+  // `failed = 3` ⇒ kết luận đỏ.
+  //
+  // Khẳng định `locked_until IS NULL` của bản trước ĐÃ BỎ: `MFA_MAX_FAILED_ATTEMPTS = 5`, cả bản cũ
+  // (3) lẫn bản mới (2) đều dưới ngưỡng, nên nó luôn đúng — chính khối trên đã viết "KHÔNG đo được ở
+  // đây thì KHÔNG khai ở đây".
+  // -----------------------------------------------------------------------------------------------
   // ===============================================================================================
   it("⑻ ba lần thử CÙNG LÚC không vượt được trần trạng thái — ngưỡng là của CÂU LỆNH, không của một phép đọc trước đó", async () => {
     const u = await taoNguoi("tran-cung-luc@vd.test");
     const nguoi = await dangNhap("tran-cung-luc@vd.test");
 
-    // Ba yêu cầu bắn CÙNG LÚC, không lượt nào chờ lượt nào. `poolAs` có max = 3 nên cả ba thật sự
-    // nằm trong ba giao dịch song song — đây là điều kiện mà vế ⑹ không bao giờ dựng.
-    const ma = (
-      await Promise.all(
-        Array.from({ length: 3 }, () =>
-          goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } }),
-        ),
-      )
-    ).map((r) => r.status);
+    /**
+     * Số backend đang CHỜ ở câu `CAU_DAT_COC`: bị chặn bởi `pidGiu` — trực tiếp, hay dây chuyền qua một
+     * backend khác đang chờ cùng hàng (PostgreSQL xếp người chờ thứ hai sau người chờ thứ nhất, nên
+     * `pg_blocking_pids` của nó trỏ tới người ấy chứ không tới người giữ) — VÀ đã cầm `RowExclusiveLock`
+     * trên `mfa_credentials`, thứ chỉ một câu ghi lên bảng ấy mới lấy. Cổng đọc của bộ điều phối chỉ
+     * lấy `AccessShareLock`, nên một backend còn đứng ở cổng KHÔNG được đếm.
+     */
+    const demBackendChoDatCoc = async (pidGiu: number): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: number }>(
+        "WITH RECURSIVE cho(pid) AS (" +
+          "  SELECT a.pid FROM pg_catalog.pg_stat_activity a WHERE $1::int = ANY (pg_catalog.pg_blocking_pids(a.pid))" +
+          "  UNION" +
+          "  SELECT a.pid FROM pg_catalog.pg_stat_activity a JOIN cho c ON c.pid = ANY (pg_catalog.pg_blocking_pids(a.pid))" +
+          ") SELECT count(*)::int AS n FROM cho c WHERE EXISTS (" +
+          "  SELECT 1 FROM pg_catalog.pg_locks l WHERE l.pid = c.pid AND l.granted AND l.locktype = 'relation'" +
+          "    AND l.relation = 'public.mfa_credentials'::pg_catalog.regclass AND l.mode = 'RowExclusiveLock')",
+        [pidGiu],
+      );
+      return rows[0]?.n ?? -1;
+    };
 
-    const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
-      "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+    const giu = await db.pool.connect();
+    let soChoToiDa = 0;
+    let msDuBa = -1;
+    let ma: number[] = [];
+    try {
+      await giu.query("BEGIN");
+      const pidGiu = (await giu.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      const khoa = await giu.query("SELECT 1 FROM mfa_credentials WHERE org_id = $1 AND user_id = $2 FOR UPDATE", [orgA, u]);
+      expect(khoa.rowCount, "tiền đề: phải khoá được ĐÚNG hàng hồ sơ MFA của người này").toBe(1);
+
+      // Ba yêu cầu bắn CÙNG LÚC. `poolAs` có max = 3 nên cả ba nằm trong ba giao dịch song song —
+      // và từ vòng này điều đó được ĐO ở vòng lặp dưới, không được suy ra từ cỡ pool.
+      const viec = Promise.all(
+        Array.from({ length: 3 }, () => goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } })),
+      );
+      void viec.catch(() => undefined);
+
+      const batDau = Date.now();
+      while (Date.now() - batDau < 10_000) {
+        const n = await demBackendChoDatCoc(pidGiu);
+        soChoToiDa = Math.max(soChoToiDa, n);
+        if (n >= 3) {
+          msDuBa = Date.now() - batDau;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      // Nhả khoá RỒI mới chờ ba câu trả lời — thứ tự ngược lại là một vòng chờ khép kín.
+      await giu.query("ROLLBACK");
+      ma = (await viec).map((r) => r.status);
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const { rows } = await db.pool.query<{ failed_attempts: number }>(
+      "SELECT failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
       [orgA, u],
     );
     const dem = Number(rows[0]?.failed_attempts);
-    const ke = `status: ${ma.slice().sort().join(",")}; failed=${String(dem)}; trần=${String(MFA_TRAN_SAI_DUONG_PHU)}`;
+    const ke =
+      `status: ${ma.slice().sort().join(",")}; failed=${String(dem)}; trần=${String(MFA_TRAN_SAI_DUONG_PHU)}; ` +
+      `chờ tối đa ${String(soChoToiDa)} backend, đủ ba sau ${String(msDuBa)} ms`;
 
-    // ⑴ VẾ CHỊU LỰC. Bộ đếm KHÔNG được vượt ngưỡng, bất kể mấy yêu cầu chạy song song. Đây là
-    //    đúng lời khai mà khối `mfaTranDuongPhu` ở `routes/auth.ts` viết ra, chỉ đọc theo chiều
-    //    đồng thời thay vì chiều tuần tự.
-    expect(dem, `bộ đếm KHÔNG được vượt ngưỡng dù bắn cùng lúc — ${ke}`).toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
+    // ⓪ TIỀN ĐỀ, và nó là vế làm hai vế dưới có nghĩa: cả BA đã cùng đứng ở câu `CAU_DAT_COC` trước khi
+    //    khoá được nhả. Đây là chỗ đột biến ⒜ (ba yêu cầu tuần tự) đỏ.
+    expect(soChoToiDa, `tiền đề: cả BA backend phải cùng chờ ở CAU_DAT_COC trước khi khoá được nhả — ${ke}`).toBe(3);
 
-    // ⑵ Hệ quả trực tiếp: số lần THỰC SỰ tiêu ngân sách không lớn hơn ngưỡng, nên ít nhất một
-    //    trong ba phải bị cắt. Đếm bằng chính mã trả về chứ không bằng đồng hồ.
-    expect(ma.filter((s) => s === 401).length, `số lần tới được handler phải <= ngưỡng — ${ke}`)
-      .toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
-    expect(ma.filter((s) => s === 429).length, `phần dư phải bị cắt bằng 429 — ${ke}`)
-      .toBe(3 - ma.filter((s) => s === 401).length);
+    // ⑴ VẾ CHỊU LỰC. Bộ đếm dừng ĐÚNG ở ngưỡng, dù ba câu tăng được thả liền nhau trên cùng một hàng.
+    //    Đây là đúng lời khai mà khối `mfaTranDuongPhu` ở `routes/auth.ts` viết ra, đọc theo chiều đồng
+    //    thời; và vì chồng lấn đã được ép, nó là đẳng thức chứ không còn là `<=`.
+    expect(dem, `bộ đếm phải dừng ĐÚNG ở ngưỡng dù ba câu tăng chồng nhau — ${ke}`).toBe(MFA_TRAN_SAI_DUONG_PHU);
 
-    // ⑶ Và điều trần ấy tồn tại để bảo vệ vẫn đúng.
-    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+    // ⑵ Hệ quả trực tiếp, đếm bằng chính mã trả về chứ không bằng đồng hồ: đúng `ngưỡng` lần tới được
+    //    cổng mở bí mật (401), phần dư bị cắt bằng 429 — ở câu lệnh, vì cổng của bộ điều phối đã cho
+    //    cả ba đi qua.
+    expect(ma.slice().sort(), `đúng ${String(MFA_TRAN_SAI_DUONG_PHU)}×401 và phần dư 429 — ${ke}`).toEqual([
+      ...Array<number>(MFA_TRAN_SAI_DUONG_PHU).fill(401),
+      ...Array<number>(3 - MFA_TRAN_SAI_DUONG_PHU).fill(429),
+    ]);
   });
 
   // ===============================================================================================
