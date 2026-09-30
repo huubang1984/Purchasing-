@@ -1461,6 +1461,20 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "SELECT app_current_org_id() AS org",
       );
       expect(ketQua.rows[0]?.org).toBeNull();
+
+      // [S1.9155 / khoản 285] Hai policy RESTRICTIVE ĐƠN VAI `TO app_api` trên `outbox_jobs` — ghi kết cục (`095`) và XẾP (`9555_outbox_policy_xep_theo_kind`) —
+      // bị `DROP OWNED BY` ở trên XOÁ; `migrate()` chỉ đi qua vì hardening dựng lại cả hai từ dòng khai, và chúng bám vai MỚI (OID khác;
+      // một policy trỏ OID cũ thì tên vai đọc ra NULL). Thiếu mục tự chữa của khoản 285 thì `migrate()` ở trên NÉM "dòng khai thiu" (83⑴).
+      const { rows: chinhSach } = await db.pool.query<{ polname: string; lenh: string; vai: string | null }>(
+        "SELECT p.polname, p.polcmd::text AS lenh, " +
+          "       (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE \"C\") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai " +
+          "  FROM pg_policy p WHERE p.polrelid = to_regclass('public.outbox_jobs') AND NOT p.polpermissive " +
+          "   AND p.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_xep_app_api') ORDER BY p.polname",
+      );
+      expect(chinhSach).toEqual([
+        { polname: "outbox_jobs_kind_app_api", lenh: "w", vai: "app_api" },
+        { polname: "outbox_jobs_kind_xep_app_api", lenh: "a", vai: "app_api" },
+      ]);
     } finally {
       await db.stop();
     }
@@ -1515,6 +1529,56 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       expect(thongDiep).not.toContain("kind = ANY");
       expect(thongDiep).not.toContain("LOGIN_LINK_SEND");
       expect((await docHai()).find((r) => r.polname === "outbox_jobs_kind_app_api")?.u, "không sửa đè một policy ĐANG CÓ").toBe("true");
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [S1.9155 / khoản 285] `9555_outbox_policy_xep_theo_kind` thêm policy RESTRICTIVE ĐƠN VAI thứ hai `TO app_api` — `FOR INSERT`, chỉ vế
+  // WITH CHECK. Cùng khuôn ca khoản 158 ngay trên, trên mục tự chữa RIÊNG của khoản 285: DROP POLICY ⇒ `migrate()` dựng lại ĐÚNG bảy cột
+  // từ dòng khai (USING vẫn NULL — không "bù" vế nào); ĐỔI WITH CHECK tay ⇒ `migrate()` NÉM nêu tên, không in biểu thức (T1), không sửa đè.
+  it("[S1.9155 / khoản 285] DROP POLICY outbox_jobs_kind_xep_app_api ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai (FOR INSERT, USING NULL); ĐỔI WITH CHECK tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      type HangXep = { polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null };
+      const docXep = async (): Promise<HangXep[]> =>
+        (
+          await db.pool.query<HangXep>(
+            `SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh,
+                    (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai,
+                    pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc
+               FROM pg_policy p
+              WHERE p.polrelid = to_regclass('public.outbox_jobs') AND p.polname = 'outbox_jobs_kind_xep_app_api'`,
+          )
+        ).rows;
+      const truoc = await docXep();
+      expect(truoc.map((r) => [r.polname, r.permissive, r.lenh, r.vai, r.u])).toEqual([["outbox_jobs_kind_xep_app_api", false, "a", "app_api", null]]);
+      expect(truoc[0]?.wc, "vế WITH CHECK phải có").toMatch(/^\(kind = ANY \(ARRAY\[/u);
+      // Dòng khai ở hardening là NGUỒN của câu sửa: bản trong CSDL bằng bản khai (literal nhân đôi nháy, USING khai NULL).
+      const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+      const khai = docHangHardeningTu(hardening, "POLICY_RESTRICTIVE_KHAI");
+      expect(khai, "dòng khai của outbox_jobs_kind_xep_app_api").toContain(
+        `'outbox_jobs_kind_xep_app_api', 'a', 'app_api', NULL, '${truoc[0]!.wc!.replaceAll("'", "''")}'`,
+      );
+
+      await db.pool.query("DROP POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs");
+      expect(await docXep(), "tiền đề: policy đã mất").toEqual([]);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await docXep(), "hardening dựng lại ĐÚNG bảy cột, không chỉ MỘT policy cùng tên").toEqual(truoc);
+
+      // Đối chứng: nới WITH CHECK bằng tay ⇒ NÉM, nêu tên policy, không in biểu thức; bản đã nới CÒN NGUYÊN.
+      await db.pool.query("ALTER POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs WITH CHECK (true)");
+      const loi: unknown = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(loi, "migrate() phải NÉM khi policy đã khai bị đổi").toBeInstanceOf(Error);
+      const thongDiep = (loi as Error).message;
+      expect(thongDiep).toContain("outbox_jobs_kind_xep_app_api");
+      expect(thongDiep).not.toContain("kind = ANY");
+      expect(thongDiep).not.toContain("BREAK_GLASS_UNSEAL_ALERT");
+      expect((await docXep())[0]?.wc, "không sửa đè một policy ĐANG CÓ").toBe("true");
     } finally {
       await db.stop();
     }
@@ -3876,6 +3940,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9555_outbox_policy_xep_theo_kind.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8377,6 +8442,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9555_outbox_policy_xep_theo_kind.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8690,6 +8756,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "093_award_luot_cham_moi_nhat.sql",
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
+        "9555_outbox_policy_xep_theo_kind.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

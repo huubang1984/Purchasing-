@@ -2878,7 +2878,9 @@ $ham$;
   --        phiên khách" — tự nó không mở thêm hàng nào cho ai, nên hợp lệ toàn cục không cần khai;
   --    (b2) RESTRICTIVE khác — ~~SÁU~~ [S1.55] BẢY cột nguyên văn, thêm `nspname` (khoản 98), ở POLICY_RESTRICTIVE_KHAI (tám biến thể của 027 nới
   --        theo một cột cho phiên khách; [S1.233 / khoản 158] cộng HAI policy theo `kind` của `095_outbox_policy_theo_kind` —
-  --        `outbox_jobs_kind_app_api`/`_app_unseal`, FOR UPDATE, mỗi cái MỘT vai, tập `kind` của tiến trình chạy dưới vai ấy);
+  --        `outbox_jobs_kind_app_api`/`_app_unseal`, FOR UPDATE, mỗi cái MỘT vai, tập `kind` của tiến trình chạy dưới vai ấy;
+  --        [S1.9155 / khoản 285] cộng MỘT policy của `9555_outbox_policy_xep_theo_kind` — `outbox_jobs_kind_xep_app_api`, FOR INSERT
+  --        TO app_api, chỉ vế WITH CHECK (USING khai NULL), tập `kind` mà `app_api` XẾP được);
   --        [CR1] cố ý không soi RESTRICTIVE vì "chỉ thu hẹp" — đúng cho câu
   --        hỏi RÒ, sai cho câu hỏi IM LẶNG: `AS RESTRICTIVE FOR UPDATE USING (false)` làm mọi UPDATE của
   --        app_api ra 0 hàng không lỗi và [CR1] xanh (đo, S1.32);
@@ -2917,6 +2919,10 @@ $ham$;
   -- mà mỗi vai ứng dụng được ghi kết cục, nguyên văn `pg_get_expr`. Thêm một `kind` = một migration `ALTER POLICY` MỚI + sửa dòng
   -- ở đây + dòng gương ở `db/rls-coverage.int.test.ts` (`POLICY_RESTRICTIVE_DA_KHAI`); hai cổng ở `apps/{api,unseal-worker}/src/composition.int.test.ts`
   -- đối chiếu tập ấy với `Object.keys(handlers)` ∪ sổ mồ côi. Thứ tự dòng theo (lược đồ, bảng, policy) — cổng HAI BẢN KHỚP đòi thế.
+  -- [S1.9155 / khoản 285] Dòng `outbox_jobs_kind_xep_app_api` (`9555_outbox_policy_xep_theo_kind`, ADR-9255): tập `kind` mà `app_api`
+  -- XẾP được (FOR INSERT, lệnh `a`, USING NULL) — bằng union `KindOutbox` và bằng hợp hai tập ở trên; thêm một `kind` xếp được = một
+  -- migration `ALTER POLICY … WITH CHECK (…)` MỚI + sửa dòng ở đây + dòng gương. Vế tiền đề của khối khoản 285 ở
+  -- `packages/outbox/src/outbox.int.test.ts` đối chiếu tập ấy với union.
   POLICY_RESTRICTIVE_KHAI constant text :=
     $q$(VALUES
          ('public', 'bid_receipts', 'bid_receipts_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (bid_version_id IN ( SELECT v.id
@@ -2925,6 +2931,7 @@ $ham$;
          ('public', 'guest_sessions', 'guest_sessions_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid))'),
          ('public', 'outbox_jobs', 'outbox_jobs_kind_app_api', 'w', 'app_api', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))', '(kind = ANY (ARRAY[''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text]))'),
          ('public', 'outbox_jobs', 'outbox_jobs_kind_app_unseal', 'w', 'app_unseal', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))', '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''UNSEAL_RFQ''::text]))'),
+         ('public', 'outbox_jobs', 'outbox_jobs_kind_xep_app_api', 'a', 'app_api', NULL, '(kind = ANY (ARRAY[''BREAK_GLASS_UNSEAL_ALERT''::text, ''LOGIN_LINK_SEND''::text, ''RFQ_DEADLINE_EXTENDED_NOTICE''::text, ''UNSEAL_APPROVAL_NOTICE''::text, ''UNSEAL_RFQ''::text]))'),
          ('public', 'rfq_bafo_rounds', 'rfq_bafo_rounds_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL)'),
          ('public', 'rfq_invitations', 'rfq_invitations_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (id = (NULLIF(current_setting(''app.guest_invitation_id''::text, true), ''''::text))::uuid))'),
          ('public', 'rfq_items', 'rfq_items_khach', '*', 'PUBLIC', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))', '(((NULLIF(current_setting(''app.guest_session_id''::text, true), ''''::text))::uuid IS NULL) OR (rfq_id = (NULLIF(current_setting(''app.guest_rfq_id''::text, true), ''''::text))::uuid))'),
@@ -14697,6 +14704,67 @@ $ham$;
                     WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
                       AND g.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')),
                   'không có dòng khai nào cho outbox_jobs_kind_app_api/_app_unseal ở POLICY_RESTRICTIVE_KHAI')$q$,
+      $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
+    ],
+
+    -- ---- [S1.9155 / khoản 285] Policy `kind` XẾP ĐƯỢC của `app_api` trên `outbox_jobs` (`9555_outbox_policy_xep_theo_kind`) — dựng lại TỪ DÒNG KHAI
+    -- Cùng lớp mục khoản 158 ngay trên: `outbox_jobs_kind_xep_app_api` là RESTRICTIVE ĐƠN VAI (`TO app_api`), nên `DROP OWNED BY
+    -- app_api` của đường "ops xoá rồi tạo lại vai" (N3, fix round 4) XOÁ nó, và 83⑴ ở lượt phán xét kêu "dòng khai thiu" — đo: bỏ mục
+    -- này thì `db/migrations.int.test.ts` N3 đỏ đúng thông điệp ấy. Mục RIÊNG, không nới danh sách tên của mục khoản 158: điều kiện áp
+    -- dụng là migration KHAI SINH policy này đã áp (không phải `095`), câu sửa là `FOR INSERT … WITH CHECK` (INSERT không có vế
+    -- USING), và phán xét đếm ĐÚNG một dòng khai. Nguồn duy nhất vẫn là dòng khai ở POLICY_RESTRICTIVE_KHAI — biểu thức không chép
+    -- tay lần thứ hai. Chỉ dựng khi policy KHÔNG CÓ: policy đang có mà lệch (ALTER tay) không được "sửa đè" — không có migration nào
+    -- để so — mà bị phán xét ở đây lẫn 83⑴, nêu tên (ADR-028 §2⑵). Vai không tồn tại thì không dựng (BƯỚC 0 lo vai). Cùng lý do
+    -- `EXECUTE format(...)` như mục 042/044/khoản 158: lớp tĩnh cấm tệp khác tạo policy cho bảng của 007.
+    ARRAY[
+      $q$policy kind xếp được của app_api trên outbox_jobs (khoản 285)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9555_outbox_policy_xep_theo_kind.sql')$q$,
+      $q$DO $fn285$
+         DECLARE
+           r record;
+         BEGIN
+           FOR r IN SELECT g.nspname, g.bang, g.polname, g.vai_tro, g.bieu_thuc_with_check
+                      FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs' AND g.lenh = 'a'
+                       AND g.polname = 'outbox_jobs_kind_xep_app_api'
+                       AND g.bieu_thuc_using IS NULL AND g.bieu_thuc_with_check IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM pg_roles rr WHERE rr.rolname = g.vai_tro)
+                       AND NOT EXISTS (SELECT 1 FROM pg_policy p
+                                        WHERE p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+                                          AND p.polname = g.polname)
+           LOOP
+             EXECUTE format('CREATE POLICY %I ON %I.%I AS RESTRICTIVE FOR INSERT TO %I WITH CHECK (%s)',
+                            r.polname, r.nspname, r.bang, r.vai_tro, r.bieu_thuc_with_check);
+           END LOOP;
+         END
+         $fn285$$q$,
+      -- Gương bảy cột của dòng khai (cùng vế so với 83⑴): RESTRICTIVE, lệnh `a`, đúng vai, USING NULL, WITH CHECK nguyên văn.
+      -- `count(*) = 1` chống rỗng ruột: dòng khai phải CÓ ở POLICY_RESTRICTIVE_KHAI, không chỉ "mọi dòng có đều khớp".
+      $q$(SELECT count(*) = 1 AND bool_and(p.oid IS NOT NULL)
+            FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+            LEFT JOIN pg_policy p
+              ON p.polrelid = to_regclass(g.nspname || '.' || g.bang)
+             AND p.polname = g.polname
+             AND NOT p.polpermissive
+             AND p.polcmd::text = g.lenh
+             AND $q$ || BIEU_THUC_VAI_TRO || $q$ = g.vai_tro
+             AND pg_get_expr(p.polqual, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_using
+             AND pg_get_expr(p.polwithcheck, p.polrelid) IS NOT DISTINCT FROM g.bieu_thuc_with_check
+           WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+             AND g.polname = 'outbox_jobs_kind_xep_app_api')$q$,
+      -- Mô tả nêu TÊN policy, lệnh và vai — không in biểu thức WITH CHECK (luật T1, cùng khuôn mục khoản 158).
+      $q$coalesce((SELECT string_agg(g.polname || ' '
+                                     || CASE WHEN p.oid IS NULL THEN 'KHÔNG tồn tại'
+                                             ELSE 'lệch — restrictive=' || (NOT p.polpermissive)::text
+                                                  || ' lệnh=' || p.polcmd::text
+                                                  || ' vai=' || coalesce(nullif($q$ || BIEU_THUC_VAI_TRO || $q$, ''), '(không có)') END,
+                                     '; ' ORDER BY g.polname)
+                          || ' (chỉ nêu tên — biểu thức WITH CHECK không in ra; so với dòng khai POLICY_RESTRICTIVE_KHAI bằng pg_get_expr(polwithcheck, polrelid) trong pg_policy)'
+                     FROM $q$ || POLICY_RESTRICTIVE_KHAI || $q$
+                     LEFT JOIN pg_policy p ON p.polrelid = to_regclass(g.nspname || '.' || g.bang) AND p.polname = g.polname
+                    WHERE g.nspname = 'public' AND g.bang = 'outbox_jobs'
+                      AND g.polname = 'outbox_jobs_kind_xep_app_api'),
+                  'không có dòng khai nào cho outbox_jobs_kind_xep_app_api ở POLICY_RESTRICTIVE_KHAI')$q$,
       $q$quyền sở hữu bảng public.outbox_jobs hoặc SUPERUSER$q$
     ],
 
