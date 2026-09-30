@@ -1179,6 +1179,13 @@ describe("[INV-D5] [S1.72 / khoản 121] worker từ chối lúc giải mã thì
 const GHI_SO_K126 =
   "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
 
+/**
+ * [S1.9141 / khoản 149] Kết cục ĐO ĐƯỢC của yêu cầu mở thầu thứ hai: `23514`. Nó bị chặn ở `FOR SHARE` của trigger 019 bởi khoá
+ * hàng RFQ mà worker lấy TRƯỚC lần ghi sổ đầu; khi worker COMMIT, nó đọc lại hàng đã `UNSEALED` và trigger từ chối — tức đúng thứ tự
+ * khoá mà bản vá khoản 126 mua: hàng trước, khoá tư vấn ghi sổ sau. Ghim để một kết cục KHÁC (`xong`, `55P03`, `40P01`) làm đỏ.
+ */
+const KET_CUC_NGUOI_GIU = "23514";
+
 /** Số khoá tư vấn ghi sổ của `orgA` mà backend `pid` ĐANG GIỮ — đọc từ một kết nối khác. */
 async function demKhoaGhiSo(pid: number): Promise<number> {
   const { rows } = await db.pool.query<{ n: number }>(
@@ -1190,7 +1197,11 @@ async function demKhoaGhiSo(pid: number): Promise<number> {
   return rows[0]?.n ?? -1;
 }
 
-/** Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ, -1 nếu quá hạn hay `dungSom()` báo dừng. */
+/**
+ * Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ; `-1` nếu `dungSom()` báo dừng TRƯỚC khi thấy một lần chặn
+ * nào (tức việc đang theo dõi đã xong mà chưa từng bị chặn); `-2` nếu quá hạn `hanMs`.
+ * [S1.9141 / khoản 149] Bản trước gộp hai ca ấy vào một `-1`, nên "worker xong mà không bị chặn" và "phép dò quá hạn" là một con số.
+ */
 async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: () => boolean): Promise<number> {
   const batDau = Date.now();
   for (;;) {
@@ -1202,9 +1213,16 @@ async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: ()
       );
       if ((rows[0]?.n ?? 0) > 0) return Date.now() - batDau;
     }
-    if (dungSom?.() === true || Date.now() - batDau > hanMs) return -1;
+    if (dungSom?.() === true) return -1;
+    if (Date.now() - batDau > hanMs) return -2;
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/** [S1.9141 / khoản 149] Các pid đang chặn backend `pid` — rỗng nếu không ai chặn. */
+async function pidDangChan(pid: number): Promise<number[]> {
+  const { rows } = await db.pool.query<{ pids: number[] }>("SELECT pg_catalog.pg_blocking_pids($1)::int[] AS pids", [pid]);
+  return rows[0]?.pids ?? [];
 }
 
 /** Một lần ghi sổ của `orgA` trên một kết nối `app_api` riêng: mã lỗi PostgreSQL (null nếu xong) và số ms. */
@@ -1248,8 +1266,23 @@ function bocChanTruocCau(c: pg.PoolClient, moc: string, truoc: () => Promise<voi
 }
 
 interface KetQuaDoK126 {
+  /**
+   * [S1.9141 / khoản 149] TIỀN ĐỀ ⑴: số ms tới khi yêu cầu mở thầu thứ hai bị CHẶN trong cửa sổ kt1–kt2; `-2` nếu nó không bao giờ
+   * bị chặn (đồ gá không dựng được cảnh — không có gì để đo).
+   */
+  readonly msNguoiGiuBiChan: number;
+  /** [S1.9141 / khoản 149] TIỀN ĐỀ ⑵: các pid đang chặn yêu cầu thứ hai lúc ấy — phải là CHÍNH worker, không phải ai khác. */
+  readonly chanNguoiGiu: number[];
+  readonly pidWorker: number;
+  /**
+   * [S1.9141 / khoản 149] ĐỐI CHỨNG DƯƠNG của phép dò, đo trong cùng cảnh: số khoá ghi sổ worker giữ TRONG cửa sổ — sau lần ghi sổ
+   * đầu, trước kt2 — phải là 1. Một phép dò hỏng (luôn ra 0) làm `khoaKhiCho` xanh rỗng; vế này bắt nó.
+   */
+  readonly khoaTrongCuaSo: number;
+  /** Số ms tới khi worker bị chặn; `-1` = worker xong mà chưa từng bị chặn; `-2` = phép dò quá hạn. */
   readonly msWorkerBiChan: number;
   readonly khoaKhiCho: number;
+  /** Lần ghi sổ đồng thời của tổ chức, PHÁT trong cửa sổ kt1–kt2 (khoản 149) — không phải sau khi worker đã xong. */
   readonly dongThoi: { ma: string | null; ms: number };
   readonly ketCucNguoiGiu: string[];
   readonly opened: number;
@@ -1260,6 +1293,12 @@ interface KetQuaDoK126 {
 /**
  * Chạy một lượt mở thầu thật, thả `soNguoiGiu` yêu cầu mở thầu thứ hai vào cửa sổ giữa kt1 và kt2 (cách nhau `cachNhauMs`), rồi đo từ
  * BÊN NGOÀI giao dịch: worker có bị chặn không, lúc ấy nó giữ mấy khoá ghi sổ, và một lần ghi sổ khác của cùng tổ chức đi tới đâu.
+ *
+ * [S1.9141 / khoản 149] TIỀN ĐỀ ĐƯỢC ĐO, KHÔNG ĐƯỢC KỂ. Trên mã đã vá (khoá hàng RFQ lấy TRƯỚC lần ghi sổ đầu, `index.ts` khối cùng
+ * nhãn), worker không bao giờ bị chặn — nên ba vế cũ (`khoaKhiCho`, `dongThoi`, `opened`) đọc ở thời điểm worker ĐÃ XONG và xanh
+ * kể cả khi `truocKt2` không bao giờ chạy (đột biến: đổi mốc câu của `bocChanTruocCau` ⇒ 4/4 xanh, §S1.9141). Bản này đo cảnh
+ * ngay TRONG cửa sổ: yêu cầu thứ hai đã bị chặn chưa, bởi ai, worker đang giữ mấy khoá ghi sổ lúc ấy — và PHÁT lần ghi sổ đồng
+ * thời ngay lúc ấy thay vì sau khi worker xong.
  */
 async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<KetQuaDoK126> {
   const rfqId = await taoRfqMo();
@@ -1269,6 +1308,10 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
   let pidWorker = -1;
   let pidGiuDau = -1;
   let daXong = false;
+  let msNguoiGiuBiChan = -2;
+  let chanNguoiGiu: number[] = [];
+  let khoaTrongCuaSo = -1;
+  let viecDongThoi: Promise<{ ma: string | null; ms: number }> | undefined;
   const ketCuc: string[] = [];
   const viecGiu: Promise<void>[] = [];
 
@@ -1285,7 +1328,12 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
   const truocKt2 = async (): Promise<void> => {
     viecGiu.push(motNguoiGiu(true));
-    await choToiKhiBiChan(() => pidGiuDau, 5_000);
+    msNguoiGiuBiChan = await choToiKhiBiChan(() => pidGiuDau, 5_000);
+    chanNguoiGiu = pidGiuDau > 0 ? await pidDangChan(pidGiuDau) : [];
+    khoaTrongCuaSo = await demKhoaGhiSo(pidWorker);
+    // PHÁT chứ không CHỜ: worker đang nghỉ trong JS ở đúng chỗ này và giữ khoá ghi sổ tới COMMIT; chờ lần ghi sổ ở đây là tự dựng
+    // một vòng chờ khép kín rồi đo cái vòng ấy. Nó được chờ ở ngoài, sau khi worker được thả.
+    viecDongThoi = ghiSoDongThoiCuaToChuc();
     for (let i = 1; i < soNguoiGiu; i++) {
       viecGiu.push(new Promise<void>((r) => setTimeout(r, i * cachNhauMs)).then(motNguoiGiu.bind(null, false)));
     }
@@ -1309,10 +1357,15 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
   const msWorkerBiChan = await choToiKhiBiChan(() => pidWorker, 8_000, () => daXong);
   const khoaKhiCho = await demKhoaGhiSo(pidWorker);
-  const dongThoi = await ghiSoDongThoiCuaToChuc();
   const kq = await chayWorker;
+  // `viecDongThoi` còn `undefined` là đồ gá chưa từng vào cửa sổ — nói ra bằng một mã không phải mã PostgreSQL, không giả vờ "xong".
+  const dongThoi = viecDongThoi === undefined ? { ma: "KHONG_PHAT", ms: -1 } : await viecDongThoi;
   await Promise.all(viecGiu);
   return {
+    msNguoiGiuBiChan,
+    chanNguoiGiu,
+    pidWorker,
+    khoaTrongCuaSo,
     msWorkerBiChan,
     khoaKhiCho,
     dongThoi,
@@ -1325,10 +1378,28 @@ async function doCuaSoKt1Kt2(soNguoiGiu: number, cachNhauMs: number): Promise<Ke
 
 function ke(d: KetQuaDoK126): string {
   return (
+    `yêu cầu thứ hai bị chặn sau ${d.msNguoiGiuBiChan} ms bởi [${d.chanNguoiGiu.join(",")}] (worker pid ${d.pidWorker}), ` +
+    `worker giữ ${d.khoaTrongCuaSo} khoá ghi sổ trong cửa sổ; ` +
     `worker bị chặn sau ${d.msWorkerBiChan} ms và giữ ${d.khoaKhiCho} khoá ghi sổ lúc ấy; ` +
     `lần ghi sổ đồng thời của tổ chức: ${d.dongThoi.ma ?? "xong"} sau ${d.dongThoi.ms} ms; ` +
     `người giữ: [${d.ketCucNguoiGiu.join(",")}]; worker mở ${d.opened} phong bì, lỗi "${d.loiWorker}"; cả lượt ${d.msTong} ms`
   );
+}
+
+/**
+ * [S1.9141 / khoản 149] Bốn khẳng định TIỀN ĐỀ đứng TRƯỚC ba khẳng định kết luận, ở cả hai ca dưới. Đột biến đo được (§S1.9141):
+ * đổi mốc câu của `bocChanTruocCau` để `truocKt2` không bao giờ chạy ⇒ ⒜ đỏ (`-2`), và làm `demKhoaGhiSo` luôn ra 0 ⇒ ⒞ đỏ —
+ * hai đột biến mà bản trước xanh 4/4.
+ */
+function khangDinhTienDeCuaSo(d: KetQuaDoK126, soNguoiGiu: number): void {
+  // ⒜ cảnh đã dựng: yêu cầu thứ hai THẬT SỰ bị chặn trong cửa sổ kt1–kt2.
+  expect(d.msNguoiGiuBiChan, `tiền đề: yêu cầu mở thầu thứ hai phải bị chặn trong cửa sổ kt1–kt2 — ${ke(d)}`).toBeGreaterThanOrEqual(0);
+  // ⒝ và kẻ chặn nó là CHÍNH worker — khoá hàng RFQ mà worker lấy trước lần ghi sổ đầu, không phải một backend nào khác.
+  expect(d.chanNguoiGiu, `tiền đề: kẻ chặn yêu cầu thứ hai phải là chính worker — ${ke(d)}`).toEqual([d.pidWorker]);
+  // ⒞ đối chứng dương của phép dò, trong cùng cảnh: worker đã ghi sổ nên đang giữ ĐÚNG một khoá ghi sổ của tổ chức.
+  expect(d.khoaTrongCuaSo, `đối chứng dương: trong cửa sổ, worker phải giữ đúng một khoá ghi sổ — ${ke(d)}`).toBe(1);
+  // ⒟ và đủ người giữ đã chạy tới kết cục — không ai treo, không ai bị bỏ quên.
+  expect(d.ketCucNguoiGiu, `tiền đề: đủ ${soNguoiGiu} người giữ phải có kết cục — ${ke(d)}`).toHaveLength(soNguoiGiu);
 }
 
 describe("[S1.73 / khoản 126] worker mở thầu chờ khoá hàng RFQ sau lần ghi sổ đầu", () => {
@@ -1414,15 +1485,26 @@ describe("[S1.73 / khoản 126] worker mở thầu chờ khoá hàng RFQ sau l�
 
   it("MỘT yêu cầu mở thầu thứ hai trong cửa sổ kt1–kt2: worker không được chờ khoá hàng trong lúc giữ khoá ghi sổ, và lần ghi sổ đồng thời của tổ chức phải xong", async () => {
     const d = await doCuaSoKt1Kt2(1, 0);
+    khangDinhTienDeCuaSo(d, 1);
+    // Worker XONG mà chưa từng bị chặn (`-1`), không phải "phép dò quá hạn" (`-2`): hai ca ấy nay là hai con số.
+    expect(d.msWorkerBiChan, `worker phải xong mà chưa từng bị chặn — ${ke(d)}`).toBe(-1);
     expect(d.khoaKhiCho, ke(d)).toBe(0);
+    // Lần ghi sổ phát TRONG cửa sổ phải xong, và xong dưới trần 2 s của 050 — worker giữ khoá ghi sổ tới COMMIT nhưng không chờ ai.
     expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.dongThoi.ms, `lần ghi sổ đồng thời phải xong dưới trần 2 s của 050 — ${ke(d)}`).toBeLessThan(2_000);
     expect(d.opened, ke(d)).toBe(1);
+    // Kết cục của người giữ: xem `KET_CUC_NGUOI_GIU`.
+    expect(d.ketCucNguoiGiu, ke(d)).toEqual([KET_CUC_NGUOI_GIU]);
   }, 90_000);
 
   it("BỐN yêu cầu mở thầu cách nhau 500 ms trong cùng cửa sổ: lần ghi sổ đồng thời của tổ chức vẫn phải xong", async () => {
     const d = await doCuaSoKt1Kt2(4, 500);
+    khangDinhTienDeCuaSo(d, 4);
+    expect(d.msWorkerBiChan, `worker phải xong mà chưa từng bị chặn — ${ke(d)}`).toBe(-1);
     expect(d.khoaKhiCho, ke(d)).toBe(0);
     expect(d.dongThoi.ma, ke(d)).toBeNull();
+    expect(d.dongThoi.ms, `lần ghi sổ đồng thời phải xong dưới trần 2 s của 050 — ${ke(d)}`).toBeLessThan(2_000);
     expect(d.opened, ke(d)).toBe(1);
+    expect(d.ketCucNguoiGiu, ke(d)).toEqual(Array<string>(4).fill(KET_CUC_NGUOI_GIU));
   }, 120_000);
 });
