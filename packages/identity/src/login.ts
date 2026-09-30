@@ -160,6 +160,12 @@ export async function issueLoginToken(
   // và `UNIQUE (org_id, email)` bảo đảm **nhiều nhất MỘT hàng khớp**: `rows[0]` tất định. Đó mới
   // đúng là điều khoản nợ 63 đòi.
   //
+  // **[S1.9180 / khoản 71 / ADR-9280]** Miền `users.email` nay là ASCII IN ĐƯỢC (`9580_email_ascii`,
+  // `CHECK (email ~ '^[!-~]+@[!-~]+$')`), nên trên mọi giá trị CẤT ĐƯỢC `lower()` của máy chủ và
+  // `.toLowerCase()` của JS đồng ý: điểm mã phân kỳ (Ⓐ, Ᲊ) không còn cất được, và test `[sổ nợ 63]`
+  // lật theo — nó đo địa chỉ ấy bị 9580 từ chối và `/auth/link` vẫn 200 không link. Câu dưới GIỮ
+  // hai vế cùng hàm: bản vá S1.27 đúng không nhờ miền, và nó là thứ còn đứng nếu miền có ngày mở lại.
+  //
   // ~~Cái giá là câu này không dùng được tiền tố `(org_id, ...)` của chỉ mục duy nhất.~~ **[đã đo
   // lại — gọi sai thứ bị mất]** Tiền tố ấy VẪN được dùng: kế hoạch là Bitmap Index Scan trên
   // `users_org_id_email_key` với `Index Cond: (org_id = ...)`. Thứ mất là cột khoá THỨ HAI —

@@ -70,6 +70,16 @@ export const EMAIL_PATTERN =
   /^[^\s\u0000-\u001f\u007f@]+@[^\s\u0000-\u001f\u007f@]+\.[^\s\u0000-\u001f\u007f@]+$/;
 
 /**
+ * [S1.9180 / khoản 71 / ADR-9280] Miền email của sản phẩm là ASCII IN ĐƯỢC (0x21…0x7E) — bản sao tầng ứng dụng của `CHECK`
+ * `9580_email_ascii` trên `users` và `supplier_contacts` (ở đó `^[!-~]+@[!-~]+$`; vế `@` và dấu chấm là việc của `EMAIL_PATTERN`).
+ * Trên tập ấy `.toLowerCase()` của JS và `lower()` của máy chủ — glibc, musl, ICU, ctype C — cho cùng kết quả và bảo toàn độ dài
+ * byte; ngoài tập ấy hai hàm lệch nhau (124 điểm mã trên musl, 28 trên glibc — S1.27) và hai địa chỉ trông giống hệt nhau cùng tồn
+ * tại được (khoản 71). Kiểm TRƯỚC khi hạ chữ thường, để lỗi có tên và không một điểm mã ngoài ASCII nào đi tới `.toLowerCase()`.
+ * Địa chỉ quốc tế hoá (EAI/IDN) bị từ chối có tên — điều kiện mở lại ở ADR-9280. Không xuất: đường ghi duy nhất là hàm dưới.
+ */
+const MAU_EMAIL_ASCII = /^[!-~]+$/u;
+
+/**
  * Hình dạng số điện thoại — bản sao của `CHECK` ở 008. Lý do nhân bản NẶNG HƠN ở đây so với
  * `TAX_CODE_PATTERN`: `supplier_contacts.phone` là **kênh đã đăng ký** của E2, và `0900 000 001`
  * — cách viết phổ biến nhất ở Việt Nam — bị CSDL từ chối bằng một mã 23514 thay vì một thông báo
@@ -352,7 +362,19 @@ export async function addSupplierContact(
   // Hạ về chữ thường TRƯỚC khi ghi. Không có bước này, `A@x.vn` và `a@x.vn` là HAI hàng khác
   // nhau dưới `UNIQUE (org_id, supplier_id, email)` — ràng buộc mang tên "một email một người
   // liên hệ" không làm được việc đó, và hệ quả ở S1.3 là hai magic link hợp lệ tới cùng hộp thư.
-  const email = batBuoc(input.email, "email", 320).toLowerCase();
+  //
+  // [S1.9180 / khoản 71] Thứ tự: rỗng → ASCII in được → hạ chữ thường → 320 byte → hình dạng.
+  // ~~`batBuoc(input.email, "email", 320).toLowerCase()`~~ — kiểm 320 byte TRƯỚC khi hạ là SAI với
+  // `İ` (U+0130), `Ⱥ` (U+023A), `Ⱦ` (U+023E): `.toLowerCase()` làm chúng từ 2 lên 3 byte (đo bằng
+  // Node), nên một đầu vào sát 320 byte vấp CHECK độ dài của 008 thành 23514 thân cố định (vế ⑶
+  // của khoản 71). Nay ASCII được kiểm trước nên phép hạ bảo toàn độ dài; độ dài vẫn kiểm SAU khi
+  // hạ để thứ tự ấy đúng cả ngày miền có mở lại (ADR-9280). Đo: `suppliers.int.test.ts` `[S1.9180]`.
+  const emailTho = input.email.trim();
+  if (emailTho.length === 0) throw new SupplierError("email không được rỗng");
+  if (!MAU_EMAIL_ASCII.test(emailTho)) {
+    throw new SupplierError("email chứa ký tự ngoài ASCII in được — chỉ nhận địa chỉ ASCII, không dấu, không khoảng trắng");
+  }
+  const email = batBuoc(emailTho.toLowerCase(), "email", 320);
   if (!EMAIL_PATTERN.test(email)) {
     throw new SupplierError("email sai định dạng, hoặc chứa khoảng trắng / ký tự điều khiển");
   }
