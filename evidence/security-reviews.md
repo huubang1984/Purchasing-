@@ -18286,7 +18286,7 @@ Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của 
 - Ca "DROP trần hàm gốc" không đo được ở lớp sản xuất: lượt SỬA của hàng ghim 052 dựng lại thân chuẩn TRƯỚC lượt phán xét (dưới superuser thì thành công) nên chiều thiu im, chỉ vế `proowner` đỏ. Ca đo là "dựng lại sai hình dạng" (đổi kiểu trả về — `CREATE OR REPLACE` bị từ chối), nơi lượt sửa bó tay.
 - Tạo overload trong `public` cần `CREATE` trên schema, không vai ứng dụng nào có (001): test 163 đi bằng superuser, đúng như thân khoản ghi "CHƯA TỚI ĐƯỢC" bằng vai ứng dụng.
 - Hàng 164 tự chữa dưới `db.pool` (superuser) trong test. Dưới vai deploy không superuser, `ALTER ROLE … NOSUPERUSER/NOBYPASSRLS/NOREPLICATION` là việc chỉ superuser làm được — hàng sẽ gãy có tên với ô "quyền cần", cùng giới hạn với bốn hàng `app_api`/`app_unseal`/`app_neo`/`app_khoi_tao`; chưa đo riêng ở vòng này.
-- `hardening-suy-tu-tinh-chat.int.test.ts:2214` đọc tập ghim `NOBYPASSRLS` bằng regex phụ thuộc thứ tự cờ; hàng mới cố ý đứng ngoài. Đó là một quy ước ngầm giữa hai tệp — khoản 265.
+- `hardening-suy-tu-tinh-chat.int.test.ts:2214` đọc tập ghim `NOBYPASSRLS` bằng regex phụ thuộc thứ tự cờ; hàng mới cố ý đứng ngoài. Đó là một quy ước ngầm giữa hai tệp — khoản 265. **[S1.9130]** 265 ĐÓNG: phép quét đọc bất kể thứ tự cờ, vai ngoài cây đứng ngoài bằng khai có lý do đo trên cụm — §S1.9130.
 - Cổng kiến trúc `duong-sql-ngoai-with-tenant` đỏ sẵn ở base (khoản lô đề xuất, không vào sổ) — không thuộc lô, không sửa được vì `packages/test-support/src/postgres*.ts` là tệp cấm.
 
 ## 8. Số đo
@@ -18442,7 +18442,7 @@ Kèm: chạy đợt A (6 lô) rồi đợt B (7 lô), làn hardening gộp tuầ
 - **Hai quyết định cùng ngày chạm nhau — không gỡ ở vòng gộp.** ADR-122 (khoản 259) đòi thông điệp phán xét nêu "bảng, tên, định nghĩa" của trigger lạ (`db/trigger-la-mac-dinh-dong.int.test.ts` ⑸ ghim nguyên `CREATE TRIGGER …`); ADR-124 (khoản 117) đòi định nghĩa trigger in VÂN TAY. Mục khoản 259 đọc định nghĩa qua bí danh `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN`, nên cổng T1 của khoản 117 (đọc TÊN, không đọc luồng dữ liệu — chỗ thu hẹp đã khai ở đầu cổng) không bắt. Trigger lạ là của người khác viết, và mệnh đề `WHEN` của nó mang được hằng — đúng lớp ADR-124 mô tả. Chọn bên nào là việc của chủ dự án.
 - **Rổ sau gộp.** Rổ B còn bốn: ~~**138 · 234 · 260 · 261**~~ **[gộp #215] năm: 138 · 234 · 261 · 262 · 263** (gạch cuối mục này) — mục 7 viết "208, 234, 256, 257": 208 đóng từ S1.103 (khoản còn mở là 138, việc của chủ dự án), 256 và 257 đóng ở `master` (S1.198), 260 và 261 mở ở `master` (lượt soi đối kháng S1.198; 260 đang có nhánh riêng `claude/k260-tra-ve-di-kem-canh-5wiyv0`). Hai mươi hai khoản mới của hai đợt (264–285) còn MỞ nhưng chưa đứng ở dòng RỔ nào của `docs/STATE.md` §*Nợ kỹ thuật* — vài hàng tự ghi "Rổ B" trong thân; xếp rổ là việc của vòng kế, không tự xếp ở vòng gộp.
 - **Số đo.** `pnpm cap-so --kiem`: không còn số tạm, không số trùng; `pnpm cap-so --dem`: lời khai đếm khớp; `pnpm t0` xanh (491 module, 2042 phụ thuộc, 0 vi phạm). Năm tệp gác của `2b78fb2` 77/77. `pnpm evidence` trên `2b78fb2` (đơn vị + tích hợp, cụm Postgres 16 cục bộ `C.UTF-8`, 214 tệp, 959 s): 3882 khẳng định — 3881 xanh, 1 bỏ qua có sẵn (`xuong-dong-ts` ⑷, chỉ chạy trên CI), 0 đỏ; ma trận 73/73 ✅ (51 nghiệp vụ + 22 hàng rào). So với ma trận của nhánh (72/72): thêm K10a 15 (S1.203); D2 50 → 65, K4a 22 → 26, K4b 23 → 42, L3 8 → 9, H16 55 → 59, H19 70 → 103 — đúng các test `master` mang vào. So với bản của `master` lấy tạm ở `98fbff7`, bản sinh lại chỉ đổi một hàng: D3 47 → 52; các hàng A2 53, D5 167, E1 14, F1 104, J5 5, J7 8 là số của nhánh.
-- **CI của PR #216 trên `630122f`.** T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh; T3 đỏ 1/1840 — `packages/db/src/vai-tro.int.test.ts` (khoản 104, S1.215) viết cứng TimeZone mặc định `Etc/UTC`, mà `initdb` lấy TimeZone theo máy: cụm cục bộ trên Ubuntu là `Etc/UTC`, `postgres:16-alpine` của CI là `UTC` — nên ca ấy xanh ở mọi lượt đo cục bộ của hai đợt và chỉ đỏ ở lần đầu nhánh chạy CI. Tái hiện cục bộ bằng cụm `initdb` dưới `TZ=UTC` (đỏ đúng câu của CI); sửa: so với TimeZone đọc trên kết nối sạch trước khi làm nhiễm, cộng tiền đề nó khác giá trị làm nhiễm; tệp 25/25 xanh dưới cả hai cụm. Lời khai đầu `packages/test-support/src/postgres-cuc-bo.ts` (ba cờ tắt ghi đĩa là khác biệt DUY NHẤT về cấu hình so với container) thiếu TimeZone mặc định — ghi ra, không sửa ở vòng gộp.
+- **CI của PR #216 trên `630122f`.** T0, T0b, T0c, T1+T2 (ubuntu, windows) xanh; T3 đỏ 1/1840 — `packages/db/src/vai-tro.int.test.ts` (khoản 104, S1.215) viết cứng TimeZone mặc định `Etc/UTC`, mà `initdb` lấy TimeZone theo máy: cụm cục bộ trên Ubuntu là `Etc/UTC`, `postgres:16-alpine` của CI là `UTC` — nên ca ấy xanh ở mọi lượt đo cục bộ của hai đợt và chỉ đỏ ở lần đầu nhánh chạy CI. Tái hiện cục bộ bằng cụm `initdb` dưới `TZ=UTC` (đỏ đúng câu của CI); sửa: so với TimeZone đọc trên kết nối sạch trước khi làm nhiễm, cộng tiền đề nó khác giá trị làm nhiễm; tệp 25/25 xanh dưới cả hai cụm. Lời khai đầu `packages/test-support/src/postgres-cuc-bo.ts` (ba cờ tắt ghi đĩa là khác biệt DUY NHẤT về cấu hình so với container) thiếu TimeZone mặc định — ghi ra, không sửa ở vòng gộp. **[S1.9130]** Khoản 9401 ĐÓNG: `initdb` của cụm cục bộ chạy dưới `TZ=UTC`, lời khai gạch tại chỗ — §S1.9130.
 - **Gộp #213 sau khi PR mở (`5d0b1d9`, `7cb60fe`).** `master` nhận #213 (S1.204 — S4.3a, `089_anh_xa_hang_muc`, ADR-121, sổ đăng ký 75 bất biến với L2, L13). Bốn tệp xung đột: ba danh sách migration mong đợi (089 rồi 091–095); danh sách hàm không phải hàm canh (hai hàm của 089 sang `db/danh-sach-ham-canh.ts`); lời khai đếm và dòng TEST-PLAN (lấy 75 bất biến của `master`). `pnpm cap-so` chạy lại giữ nguyên bảng — migration 091–095 vẫn lớn hơn 089 — nhưng trả mười bảy dòng mang tên có số dính chữ (tên biến và thẻ dollar-quote mang số của `092`) về dạng số tạm: bước cấp lại số trần sau thu hồi chỉ đọc số KHÔNG dính chữ. Các dòng ấy thay tay lại; mỗi lần gộp `master` kế tiếp trước khi PR vào sẽ lặp lại bước này. Cổng khoản 117 gặp bốn hàng hardening của 089 (hai định nghĩa, hai hàm + trigger): đổi sang khuôn vân tay. `pnpm t0` xanh (495 module, 2061 phụ thuộc); `pnpm evidence` trên `7cb60fe` (216 tệp, 966 s): 3921 khẳng định — 3920 xanh, 1 bỏ qua có sẵn, 0 đỏ; ma trận 75/75 ✅ (53 nghiệp vụ + 22 hàng rào), bản sinh lại trùng từng byte với bản git tự gộp.
 - **CI trên `168af96`: T1+T2 ubuntu đỏ — một cuộc đua, không phải ca đỏ của mã.** `packages/identity/src/danh-muc-tu-choi.test.ts` (khoản 189, S1.225) nạp danh sách tệp sản xuất bằng `readdirSync` lúc nạp module, trong khi `tests/architecture/boundaries.test.ts` chạy song song dựng rồi xoá tệp dò tạm dưới `apps/tmp-probe-<tên>/src/` — liệt kê thấy `apps/tmp-probe-wrapper-door/src/leak.ts`, tới lúc đọc thì tệp đã bị xoá (ENOENT). Đây là đúng lớp mà `tests/architecture/cong-quyen-route.test.ts` đã ghi và chữa bằng `git ls-files`; bộ quét của khoản 189 nay dùng cùng khuôn. Đo: dựng một tệp dò chưa theo dõi — bản cũ liệt kê nó, bản mới không; ngoài tệp ấy hai tập trùng nhau (191 tệp). Tệp 9/9; `pnpm test` 2059 xanh, 1 bỏ qua.
 - **Gộp #215 sau khi PR mở (`9dcac0b`).** `master` nhận #215 (S1.207 — khoản 260 ĐÓNG, `090_tra_ve_di_kem_canh`, ADR-123; lượt soi đối kháng mở 262, 263 — rổ B) lúc PR chờ CI. Sáu tệp xung đột: `pnpm cap-so --dem` gỡ ba (`Handoff.md`, `docs/DECISIONS.md` — ADR-123 nối trước phần của nhánh —, biên bản — §S1.207 trước §S1.209); gỡ tay ba: `db/hardening-suy-tu-tinh-chat.int.test.ts` (hàm `rfq_tra_ve_phai_di_kem_canh` của 090 sang `db/danh-sach-ham-canh.ts`, nơi nhánh đã dời danh sách ở khoản 221; nhân chứng H19 và tập chỉ-ghi-thêm của #215 tự hợp), `db/migrations.int.test.ts` (ba danh sách mong đợi: 090 rồi 091–095), `docs/STATE.md` (cột mốc của nhánh trên S1.207; dòng RỔ B lấy bản nhánh cộng phần của #215 — 260 gạch, 262 · 263 thêm, đếm 4 → 5). Số của `master` (S1.207, ADR-123, khoản 262–263, 090) không chạm dải của nhánh nên không cấp lại, và 090 nhỏ hơn 091 nên thứ tự áp giữ; lời khai đếm viết lại: 285 khoản (56 mở), 134 ADR, 93 migration. Hệ quả liên nhánh: hàng hardening «hàm + trigger rfq_tra_ve_phai_di_kem_canh» của #215 nối `prosrc`, giá trị `proconfig` và `pg_get_triggerdef` vào ô mô tả — cổng khoản 117 đỏ (`pnpm test` 2058 xanh, 1 đỏ); đổi đúng ba khuôn vân tay như các hàng 087/088/089. Sau sửa: `pnpm t0` xanh (495 module, 2062 phụ thuộc, 0 vi phạm); `pnpm evidence` trên `9dcac0b` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, ~16 phút): 3926 khẳng định — 3925 xanh, 1 bỏ qua có sẵn, 0 đỏ; ma trận 75/75 ✅, bản sinh lại trùng từng byte với bản git tự gộp (K4a, K4b, H19 của #215 cộng số của nhánh).
@@ -18945,7 +18945,7 @@ Mọi đột biến đã hoàn tác; `git status` chỉ còn năm tệp của l�
 - 167 đo trên cụm Postgres cục bộ (glibc, `fsync=off`) trong một phiên 4 lõi dùng chung: con số là CẬN cho máy này, không phải SLA; `msHandler` là RUNNING→DONE theo đồng hồ test (±10 ms thăm dò). Trần 60 s là trần MỖI JOB — 14 phong bì 8 MiB tốn 10,6 s, tức ~0,75 s/phong bì; ngoại suy (chưa đo) ~80 phong bì 8 MiB trong một RFQ vượt trần ⇒ khoản 272.
 - 167 không đo qua HTTP: phong bì vào `vendor_bid_versions` bằng fixture SQL (như 106/107); `TRAN_THAN_BYTE` chỉ là cỡ, không phải đường HTTP.
 - 184: chồng lấn được ÉP bằng khoá ngoài, tức vế đo "ba câu tăng được thả nối tiếp trên một hàng sau khi cùng đứng chờ" — đúng cảnh mà vị từ `$3` tồn tại để đỡ; nó không đo cảnh ba yêu cầu tự nhiên tới cùng lúc (cảnh ấy phụ thuộc lịch chạy và là chính khoản 184).
-- 186: vế ⓷ vẫn chỉ lọc hai vai ⇒ khoản 273; không mở rộng trong lô vì đổi mệnh đề là đổi thứ vế đo, ngoài đề bài.
+- 186: vế ⓷ vẫn chỉ lọc hai vai ⇒ khoản 273; không mở rộng trong lô vì đổi mệnh đề là đổi thứ vế đo, ngoài đề bài. **[S1.9130]** 273 ĐÓNG — §S1.9130.
 - 149 ⑵: đối chứng dương đo ở giao dịch A (người giữ), không ở B — B chờ khoá hàng nên không giữ khoá ghi sổ nào để làm đối chứng.
 
 ## 8. Số đo
@@ -19705,7 +19705,7 @@ Kịch bản `dot-bien.sh` (ngoài kho): sửa một dòng, chạy cổng, khôi
 - Tín hiệu ⑵ ở tool vẫn KHÔNG phát: không lời gọi `withTenant` nào trong `tools/` đặt `maxConnectWaitMs`. Listener gắn để cổng đòi đủ
   hai và để một lần đặt trần sau không phải nhớ; không có test hành vi nào ghim dòng log của tool (khoản 183 mang việc ấy cho api/worker).
 - Không test tích hợp nào của tool dựng cảnh SESSION_STATE_LEFT; phép đo của vòng này là cổng tĩnh + đột biến, không phải dòng log thật.
-- `packages/` vẫn ngoài tầm cổng: khoản 281 (mục 7 bàn giao).
+- `packages/` vẫn ngoài tầm cổng: khoản 281 (mục 7 bàn giao). **[S1.9130]** 281 ĐÓNG bằng bộ đếm ở `startPostgres`, không nới cổng — §S1.9130.
 - Cổng tin hai hàm bọc của `api` theo đường import `./mo-ta-loi.js`, không đọc thân — ranh giới ⑴.
 - Hai điều ĐỎ trong `pnpm vitest run tests/architecture tools` KHÔNG do lô này (mục 8): `duong-sql-ngoai-with-tenant.test.ts` ⒜⒞⒟ đỏ vì
   `packages/test-support/src/postgres-cuc-bo.ts` (commit `3d991a3`/`33563ea` của người tích hợp) dựng `pg.Client` và `.connect()` chưa khai;
@@ -20688,3 +20688,176 @@ TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`. Log ở `scratchpad/a4/
   của lô (lô không đổi câu SQL nào), không chạy lại.
 - Lỗ kề (mục 7): `api` `docCauHinh` đọc 40 biến, 3 nêu giá trị (`do-api-cau-hinh.log`, tệp tạm đã xoá); 14 lời gọi `throwAuditedDenial`,
   5 có vế (`dem-goi.log`).
+
+# §S1.9130 — LÔ A5 ĐỢT 3 — POOL CỤM THỬ ĐẾM `SESSION_STATE_LEFT`, CỤM CỤC BỘ `TimeZone = UTC` NHƯ CONTAINER, BA VẾ TEST ĐỌC ĐÚNG NGUỒN — KHOẢN 281, 9401, 273, 265, 181 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — hạ tầng test (`packages/test-support`) và bốn tệp test;
+không route, không màn, không migration, không ADR. Đóng 281, 9401, 273, 265 (rổ B) và 181 (rổ C, kích hoạt lại theo kế hoạch đợt 3
+câu 1); mở 9430, 9431 (rổ B đề xuất).
+
+## 1. Vòng này là gì
+
+Lô A5 của lượt A đợt 3 (`docs/superpowers/plans/2026-09-30-tra-no-dot-3.md`, đề bài `…/2026-09-30-tra-no-dot-3/A5.md`). Năm khoản cùng
+một lớp: một phép đo của bộ test đứng sai chỗ hay đọc sai nguồn, nên nó im đúng lúc nó phải kêu. **281** — hai pool của cụm thử
+không nghe tín hiệu ⑴ của `withTenant` (`release` mang `SESSION_STATE_LEFT`), nên một giao dịch để sót trạng thái phiên dưới test chỉ
+làm một kết nối biến khỏi pool. **9401** — cụm cục bộ khác `postgres:16-alpine` ở `TimeZone` mặc định trong khi đầu
+`postgres-cuc-bo.ts` khai ba cờ là khác biệt DUY NHẤT (T3 của PR #216 đỏ vì thế). **273** — vế ⓷ của
+`khoa-ghi-so-nguoi-giu.int.test.ts` lọc hai vai trong khi mục hardening nó bảo chứng lọc bốn. **265** — tập ghim `NOBYPASSRLS` của
+`hardening-suy-tu-tinh-chat.int.test.ts` loại vai ngoài cây bằng THỨ TỰ CỜ. **181** — bộ lọc D2 đối chiếu với `019` (migration đã áp,
+không thể trôi) thay vì thân mà hardening áp lại.
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Hình dạng của cả năm khoản nằm trong thân hàng và đề bài lô; kế hoạch đợt 3 mục 0 chốt 2026-09-30: câu 1
+(phạm vi, 181 kích hoạt lại từ rổ C), câu 2 (264–285 vào rổ B), và dòng «khoản không cần quyết định mới: … 265, … 273, … 281, TZ …».
+
+## 3. Đo trước
+
+Trên `ba269ae`, PostgreSQL 16 cụm cục bộ (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim`,
+`TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`), mỗi khoản một ca đỏ, viết TRƯỚC khi vá mã:
+
+- **281** — năm ca mới ở `packages/test-support/src/postgres.int.test.ts`; ba ca không cần API mới chạy trên `postgres.ts` cũ (`-t`),
+  cả ba ĐỎ `expected undefined to be an instance of Error`: `withTenant(db.pool, …, set_config('app.org_id', …, false))` — tiền đề
+  xanh (giao dịch commit, `withTenant` không ném) — rồi `stop()` ĐI QUA; cùng cảnh trên `poolAs("app_api")` qua `withMigratedDatabase`
+  ⇒ đi qua; khai một lần mà không dựng cảnh ⇒ đi qua. Tức hôm nay một kết nối bị huỷ và bộ test xanh.
+- **9401** — ca mới `packages/test-support/src/postgres-cuc-bo.int.test.ts`: `SHOW TimeZone` trên cụm của `startPostgres()` ⇒ ĐỎ
+  `expected 'Etc/UTC' to be 'UTC'`. Đo thẳng qua shim `runuser` (`/etc/localtime` → `Etc/UTC`): `initdb` không `TZ` ghi
+  `timezone = 'Etc/UTC'`, `log_timezone = 'Etc/UTC'`; dưới `TZ=UTC` ghi `UTC` cả hai; các dòng khác `initdb` ghi (`max_connections`,
+  `shared_buffers`, `datestyle`, `default_text_search_config`, bốn `lc_*`) không đổi theo `TZ`.
+- **273** — vế ⓷ viết lại đối chứng dương thành vòng qua bốn vai của `VAI_UNG_DUNG`, mệnh đề hai tên CŨ giữ nguyên (`-t "⓷"`) ⇒ ĐỎ:
+  `{ app_api: […], app_unseal: […], app_neo: [], app_khoi_tao: [] }` — mệnh đề cũ mù ở hai cây của ADR-072/ADR-111.
+- **265** — hai đột biến văn bản hardening (khôi phục bằng `cp` rồi `cmp`), vế «[sổ nợ 3]» cũ (`-t`): «sửa cho đều» cờ của hàng
+  `app_liet_ke_to_chuc` (`NOSUPERUSER NOBYPASSRLS …`) ⇒ ĐỎ `tám tên được ghim NOBYPASSRLS: expected […(9)]` — thông điệp nói về cây,
+  không về thứ tự; hàng `app_api` viết `NOBYPASSRLS NOSUPERUSER …` ⇒ ĐỎ `[…(7)]` — một tên ĐANG ghim mà phép quét không thấy.
+- **181** (hàng ghi «ĐỌC»; ca đỏ dựng bằng đột biến văn bản hardening, khôi phục bằng `cp` rồi `cmp`): sửa câu D2
+  `phai den tu mot PHIEN KHAC` thành `phai tu mot PHIEN KHAC` ở thân câu sửa của hàng `hàm + trigger unseal_kiem_nguoi_duyet (019)`, bộ
+  lọc không đổi ⇒ tệp cũ `loc-vi-pham-d2.test.ts` XANH 5/5 — `$than$` của hậu điều kiện còn giữ câu cũ nên `includes` của §R3 thoả.
+  Đổi hẳn câu ở cả thân câu sửa lẫn `$than$` ⇒ tệp cũ đỏ 1/5, chỉ ở §R3 (bộ lọc vẫn được đo với `019`).
+
+## 4. Thay đổi
+
+- **`packages/test-support/src/postgres.ts`** (khoản 281): `import { TenantError } from "@trustprocure/tenancy"`; kiểu
+  `TuyChonDemTrangThaiPhien { soLanSessionStateLeft?: number }`; `startPostgres(tuyChon)`, `poolAs(role, tuyChon)`,
+  `withMigratedDatabase(fn, tuyChon)`; khối lý do `[S1.9130 / khoản 281]` (bốn điểm đã cân); `ganBoDem` (`pool.on("release", …)`
+  đếm đúng `TenantError` mã `SESSION_STATE_LEFT`), `noiGoi` (`tệp:dòng` của người gọi đọc từ ngăn xếp, tương đối với gốc kho),
+  `soLanKhai` (số nguyên không âm, sai hình dạng NÉM trước khi dựng cụm), `moTaLech` (tên, nơi dựng, số — không giá trị). `stop()`:
+  chốt số đếm sau khi mọi pool đóng, dừng máy chủ, rồi ném MỘT lỗi gộp lời phán khoản 28 và khoản 281. Không thêm chỗ dựng pool,
+  `.connect()` hay `pool.query(` nào (ba danh sách khai của `duong-sql-ngoai-with-tenant` không đổi).
+- **`packages/test-support/src/postgres.int.test.ts`**: describe `[S1.9130 / khoản 281]` năm ca — pool superuser không khai ⇒ ném sau
+  khi dừng cụm (`cumDaDung`), nêu tệp và `pool superuser (dựng ở …:N) đếm 1, khai 0`, không mang UUID; `poolAs("app_api")` qua
+  `withMigratedDatabase` ⇒ nêu pool và nơi dựng; khai đúng (hai lần trên `poolAs` — GUC tenant và `row_security` phạm vi phiên —, một
+  trên superuser) ⇒ đi qua, còn `destroyConnectionWhenDone` và `KetNoiNhiemError` của lần lấy client KHÔNG được đếm; khai 1 đếm 0 ⇒
+  ném; khai −1, 1,5, NaN ⇒ ném trước khi chạm cụm.
+- **`packages/outbox/src/outbox.int.test.ts`** `[T10-L]`: hai `db.poolAs("app_api")` của «bật `destroyConnectionWhenDone`» (lần thứ
+  ba `SET search_path` phạm vi phiên) và «ĐƯỜNG SẢN PHẨM» (handler `GAY_O_NHIEM`) khai `{ soLanSessionStateLeft: 1 }`, chú thích lý do.
+- **`packages/test-support/src/postgres-cuc-bo.ts`** (khoản 9401): `initdb` chạy với `env: { ...process.env, TZ: "UTC" }`; lời khai
+  «ba cờ là khác biệt DUY NHẤT» gạch tại chỗ, thay bằng «cấu hình máy chủ duy nhất tệp này CHỌN khác container» cùng danh sách khác
+  biệt ĐÃ BIẾT (locale và libc, bản vá nhỏ PostgreSQL 16, phần ống nối) — ĐÃ BIẾT, không phải ĐỦ; khối mới kể TimeZone, phép đo, lý
+  do chọn `initdb` thay cờ `-c`.
+- **`packages/test-support/src/postgres-cuc-bo.int.test.ts`** (mới): `SHOW TimeZone` = `UTC` trên cụm của `startPostgres()` — chạy
+  cả hai đường, trên CI là giá trị của container; đường cục bộ đòi thêm nguồn `configuration file`.
+- **`db/khoa-ghi-so-nguoi-giu.int.test.ts`** (khoản 273): `CAU_VAI_UNG_DUNG_CON_EXECUTE` lọc `g.rolname = ANY($2::text[])`,
+  `vaiConExecute()` truyền `VAI_UNG_DUNG`; `cayTrongHardening()` đọc nguyên văn mệnh đề `g.rolname IN (…)` của hằng
+  `VAI_KET_NOI_UNG_DUNG` (không thấy ⇒ NÉM); vế ⓷ mở bằng phép đối chiếu hai tập, đếm đủ vai trên cụm, đối chứng dương cấp/thu hồi cho
+  TỪNG vai. Chú thích cũ gạch tại chỗ.
+- **`db/hardening-suy-tu-tinh-chat.int.test.ts`** (khoản 265): khối lý do, `VAI_NGOAI_CAY` (một dòng: `app_liet_ke_to_chuc`, lý do
+  khoản 164), `tapGhimNobypassrls(sql)`; describe mới `[S1.9130 / khoản 265]` (hai `it`, không cụm: tám mẫu; phép đảo ngược danh sách
+  cờ của mọi câu `ALTER ROLE … $q$` trên hardening thật cho cùng tập, ≥ 9 câu ghim đổi thứ tự); vế «[sổ nợ 3]» đọc tập ghim qua hàm
+  mới, trừ `VAI_NGOAI_CAY`, cộng chiều dòng khai thiu và phép đo lý do trên cụm (`rolinherit = false`, không thành viên của vai nào
+  trong `VAI_UNG_DUNG`, không có trong cây). Tám tên của cây không đổi. Hardening không đổi.
+- **`packages/unseal/src/loc-vi-pham-d2.test.ts`** (khoản 181): `thanCauSua()` (thân `CREATE OR REPLACE FUNCTION … AS $ham$…$ham$`
+  của hàng có nhãn `$q$hàm + trigger unseal_kiem_nguoi_duyet (019)$q$`, nhãn đúng một lần, hàng cắt tới dòng đóng), `thanChuan()`
+  (`$than$…$than$` cùng hàng), `thanTrong019()` (tên cũ `thanKiemNguoiDuyet`); ba vế bộ lọc chạy trên thân câu sửa; §R3 thành «thân
+  câu sửa và thân chuẩn cùng câu `RAISE`»; vế LỊCH SỬ mới «câu `RAISE` của `019` = của thân hardening, từng chữ, đúng thứ tự»; vế chuỗi
+  cũ giữ nguyên. Tên describe và đầu tệp gạch tại chỗ. 5 → 6 `it`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **281 — đòi BẰNG, không «không quá».** Khai 1 mà đếm 0 là tiền đề của test đã mất; đo: đột biến `!==` → `>` làm đúng ca «khai 1,
+  đếm 0» đỏ, không ca nào khác.
+- **281 — khai theo POOL, không theo tệp.** Pool dựng trong `it` mang lời khai của chính nó, nên `-t` bỏ `it` thì bỏ cả lời khai; hai
+  pool cố ý của `outbox.int` đều dựng trong `it`. Cái giá, nói ra: một test cố ý dựng cảnh trên pool DÙNG CHUNG của tệp phải dựng pool
+  riêng để khai.
+- **281 — `instanceof TenantError` qua `@trustprocure/tenancy`, không so tên.** Cùng điều kiện các bộ nghe của api, worker và bốn tool
+  dùng (`ma-chep-api-worker` ghim nguyên văn ấy); đo: hai ca đếm đúng qua `withTenant` import từ cùng gói. `test-support` không khai
+  `@trustprocure/tenancy` trong `package.json` (tệp ngoài danh sách của lô; không cổng nào đòi — vế ⑷ của `pham-vi-san-xuat` miễn gói
+  `testOnly`) — mục 9.
+- **281 — «tệp» trong lời phán là tệp gọi `startPostgres`, đọc từ ngăn xếp.** Vitest ánh xạ ngăn xếp về mã nguồn (đo: dòng in ra khớp
+  dòng thật); không đọc được thì in «(không đọc được nơi gọi)», không ném — phép đo không được làm hỏng việc dọn.
+- **9401 — `initdb` dưới `TZ=UTC`, không cờ `-c timezone=UTC`.** Đo trên hai cụm tạm: `ALTER SYSTEM SET timezone` + nạp lại đổi được
+  giá trị đến từ `postgresql.conf` và KHÔNG đổi được giá trị đến từ dòng lệnh. Container lấy từ `postgresql.conf`, nên chỉ đường
+  `initdb` giữ cùng thứ bậc ưu tiên.
+- **9401 — ca đo chạy qua `startPostgres()`, không gọi thẳng `khoiDongCumCucBo`.** Không bị bỏ qua trên CI (ở đó nó ghim giá trị của
+  container, đã thấy ở T3 của #216); vế nguồn chỉ chạy ở đường cục bộ, vì nguồn của container không đo được ở máy không Docker.
+- **273 — `VAI_UNG_DUNG` thay vì chuỗi của hardening, cộng phép đối chiếu hai tập.** Lý do ở hàng 273; đo: hardening bỏ `app_khoi_tao`
+  khỏi `VAI_KET_NOI_UNG_DUNG` ⇒ vế đối chiếu đỏ — một vế đọc chính chuỗi ấy sẽ hẹp theo, im lặng.
+- **273 — đối chứng dương cấp cho TỪNG vai một, không cấp cả bốn một lần.** Cấp một lần thì một mệnh đề chỉ thấy vài vai vẫn ra một tập
+  không rỗng; từng vai một đòi đúng một hàng mỗi lần.
+- **265 — bỏ chú thích `--` trước khi quét.** Đọc cả chú thích thì gỡ hàng ghim thật của một vai mà một chú thích còn nhắc câu ấy vẫn xanh;
+  bỏ chú thích chỉ có thể làm MẤT tên (đỏ), không thêm tên. Đo: bỏ bước lột ⇒ mẫu «chú thích không tính» đỏ.
+- **265 — lý do của `VAI_NGOAI_CAY` đo trên cụm.** Lời khai có răng: ai đó cấp một vai ứng dụng cho `app_liet_ke_to_chuc` hay bật
+  INHERIT thì vế đỏ ngay, không lặng lẽ loại một thành viên của cây khỏi phép so.
+- **265 — phép đảo ngược thứ tự cờ trên hardening THẬT trong bộ nhớ**, dạng thường trực của hai đột biến đo trước: không buộc test vào
+  văn bản của một hàng (chú thích hardening dặn ngày mở phép quét thì đưa `NOSUPERUSER` lên đầu — việc ấy nay không đổi kết quả).
+- **181 — nguồn là thân CÂU SỬA, và thân chuẩn `$than$` cùng hàng phải cùng câu.** Câu sửa là văn bản hardening dựng lại; `$than$` là
+  văn bản mà thân đang chạy phải khớp. Đo: đột biến chỉ ở `$than$` ⇒ §R3 mới đỏ 1/6 (tệp cũ 5/5 xanh); chỉ ở câu sửa ⇒ ba vế đỏ.
+- **181 — vế LỊCH SỬ so câu `RAISE`, không so cả thân.** Lô B1 (khoản 266) định nghĩa lại hàm này bằng migration mới và `USING
+  CONSTRAINT`; so cả thân sẽ đỏ vì một thay đổi hợp lệ không chạm thông điệp.
+
+## 6. Đột biến
+
+Mỗi ca thay đúng một chuỗi (xuất hiện đúng một lần) trên bản đã vá, chạy đúng tệp test, khôi phục bằng `cp` từ bản đã lưu, `cmp`
+nguyên vẹn sau mọi ca. Ca làm hỏng `stop()` chạy dưới một thư mục cụm riêng (`tp-test/a5-dotbien`) để dọn cụm bị bỏ lại mà không
+chạm cụm của lô khác.
+
+- D1 (281) — `poolAs` không gắn bộ đếm ⇒ 2 đỏ: ca `poolAs("app_api")` và ca «khai 1, đếm 0» (`expected undefined …`).
+- D2 (281) — `b.dem !== b.khai` → `b.dem > b.khai` ⇒ 1 đỏ: «khai 1, đếm 0».
+- D3 (281) — đếm mọi lỗi của `release` (`if (loi)`) ⇒ 1 đỏ: ca đối chứng «khai đúng số lần», `poolAs("app_api") … đếm 4, khai 2`.
+- D4 (281) — ném trước `mayChu.dung()` ⇒ 1 đỏ: ca pool superuser, `cumDaDung` — cụm còn nhận kết nối (`promise resolved … instead of
+  rejecting`). Ba cụm bị bỏ lại, đã dừng và xoá.
+- D5 (9401) — bỏ `TZ=UTC` ⇒ đỏ `expected 'Etc/UTC' to be 'UTC'`.
+- D6 (273) — mệnh đề về `IN ('app_api','app_unseal')` (giữ `$2` vô hại) ⇒ đỏ ở đối chứng dương từng vai.
+- D7 (273) — hardening bỏ `app_khoi_tao` khỏi `VAI_KET_NOI_UNG_DUNG` ⇒ đỏ ở phép đối chiếu hai tập (`['app_api','app_neo','app_unseal']`).
+- D8 (265) — `tapGhimNobypassrls` về biểu thức chính quy cũ ⇒ 3 đỏ: mẫu (`['a']` thay `['a','b']`), phép đảo («chống rỗng ruột: … 8 ≥ 9»),
+  dòng khai thiu `app_liet_ke_to_chuc` ở «[sổ nợ 3]».
+- D9 (265) — bỏ bước lột chú thích ⇒ mẫu đỏ (`['d','e']`).
+- D10 (181) — bộ lọc `requests.ts` về chuỗi chết cũ `phai o mot PHIEN khac` ⇒ đỏ «một câu `RAISE` D2 mà bộ lọc KHÔNG khớp là một vế chết».
+- Ca SỐNG của lượt soi đối kháng (9401): thay `TZ=UTC` bằng cờ `-c timezone=UTC` ⇒ vế giá trị XANH (giá trị như nhau). Vế nguồn thêm
+  vào vì thế; chạy lại cùng đột biến ⇒ đỏ `expected 'command line' to be 'configuration file'`.
+- Đột biến văn bản hardening của 181 và 265 ở mục 3, chạy lại trên bản mới: 181 (`phai tu` ở câu sửa) ⇒ 3/6 đỏ; 181 (đổi hẳn câu ở hai
+  chỗ) ⇒ 2/6 đỏ; 181 (`phai tu` CHỈ ở `$than$`) ⇒ 1/6 đỏ, đúng §R3 — tệp cũ 5/5 xanh; 265 (hai đột biến thứ tự cờ cùng lúc) ⇒ 3/3
+  xanh — đúng điều khoản 265 đòi.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá.** 9430: bộ đếm của 281 chỉ ở `startPostgres`; 96 chỗ dựng pool từ `db.connectionString` ở 18 tệp
+  int và pool của composition root ở sáu tệp dựng tiến trình không đếm. 9431: mười ba chỗ mã ở sáu tệp test còn lọc vai ứng dụng bằng
+  hai tên.
+- **Chú thích thiu ngoài tầm lô.** (a) `db/migrations/hardening.always.sql`, chú thích trên hàng `thuộc tính role app_liet_ke_to_chuc`
+  («THỨ TỰ CỜ TRONG CÂU SỬA CÓ CHỦ Ý — … Ngày phép quét mở cho vai ngoài cây thì đưa `NOSUPERUSER` lên đầu và thêm tên vào danh sách
+  của test trong CÙNG commit») — phép quét nay đọc bất kể thứ tự và vai ấy đã khai; lượt A không sửa hardening. (b)
+  `packages/db/src/vai-tro.int.test.ts` 541–542 («`initdb` lấy theo máy — `Etc/UTC` ở cụm cục bộ trên Ubuntu») — cụm cục bộ nay `UTC`;
+  tệp ngoài danh sách của lô. Đề nghị gạch tại chỗ, gửi người tích hợp cùng bàn giao lô: (a) gạch cả bốn dòng ấy, ghi «[S1.9130 /
+  khoản 265] thứ tự cờ ở đây không còn nghĩa gì — phép quét đọc bất kể thứ tự, vai này đứng ngoài bằng lời khai `VAI_NGOAI_CAY`»;
+  (b) gạch «`Etc/UTC` ở cụm cục bộ trên Ubuntu», ghi «[S1.9130 / khoản 9401] cụm cục bộ nay khởi tạo dưới `TZ=UTC`».
+- **Container không đo được ở máy này.** `TimeZone = 'UTC'` của `postgres:16-alpine` là giá trị T3 của #216 thấy; `log_timezone` và
+  nguồn `configuration file` của container là suy từ cách `initdb` chọn múi giờ, nên ca đo chỉ đòi nguồn ở đường cục bộ.
+- **181 — vế LỊCH SỬ so câu, không so thân**, và đọc `RAISE EXCEPTION '…'` (như bản cũ): một thông điệp viết bằng `USING MESSAGE`
+  hay nối chuỗi đứng ngoài phép đọc. Lô B1 (khoản 266) sửa hàng hardening của hàm này; đổi nhãn hàng hay cách viết `RAISE` thì tệp đỏ
+  ồn ào (NÉM có tên), không xanh im.
+- **281 — `noiGoi` đọc chuỗi ngăn xếp dạng POSIX**; đường dẫn Windows không đọc ra (in «(không đọc được nơi gọi)»). Test tích hợp chỉ
+  chạy trên Linux (T3); lời phán vẫn đúng, chỉ thiếu nơi dựng.
+- **Lượt `pnpm test:int` trọn chạy dưới tải của ba lô khác** (tải trung bình 7–15 trên bốn lõi): thời gian đo không đại diện.
+
+## 8. Số đo
+
+- Đo trước trên `ba269ae` (cụm cục bộ PostgreSQL 16, hai biến môi trường của chung.md): `postgres-cuc-bo.int` + `postgres.int -t …` 4
+  failed | 10 skipped (9401: `'Etc/UTC'`; 281: ba ca `stop()` đi qua); `khoa-ghi-so-nguoi-giu.int -t "⓷"` 1 failed (`app_neo`,
+  `app_khoi_tao` rỗng); `hardening-suy-tu-tinh-chat.int -t "sổ nợ 3\]"` dưới hai đột biến thứ tự cờ: 1 failed mỗi ca (9 tên / 7
+  tên); `loc-vi-pham-d2` dưới đột biến `phai tu`: 5 passed (mù), dưới đột biến đổi hẳn câu ở hai chỗ: 1 failed | 4 passed.
+- Sau vá: `postgres-cuc-bo.int` + `postgres.int` 14/14 (38,5 s); `vai-tro.int` 25/25; `khoa-ghi-so-nguoi-giu.int` 6/6;
+  `hardening-suy-tu-tinh-chat.int` 38/38 (293,8 s); `loc-vi-pham-d2` 6/6; `outbox.int` 56/56 (trước lời khai: 56/56 nhưng tệp đỏ ở
+  `afterAll` với hai pool `[T10-L]`, đếm 1, khai 0).
+- Đột biến: D1–D10 đỏ đúng vế (chi tiết mục 6); ca sống `-c timezone=UTC` bị vế nguồn giết; `cmp` nguyên vẹn sau mọi ca.
+- `pnpm t0` exit 0 (496 module, 2067 phụ thuộc, 0 vi phạm); `pnpm test` 133 tệp, 2060 passed | 1 skipped (166 s).
+- `pnpm test:int` TRỌN một lần trên cây cuối: 85 tệp, 1877/1877, 1193 s (ba lô khác chạy cùng lúc, tải trung bình 7–15 trên bốn lõi) — không `stop()` nào lệch ngoài hai pool đã khai của `outbox.int`.

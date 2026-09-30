@@ -538,8 +538,9 @@ describe("[S1.215 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành 
 
   it("ĐỌC TRƯỚC, DỌN SAU: replica do hàm SECURITY DEFINER để lại cùng TimeZone lạ ⇒ lần lấy kế vẫn NÉM KetNoiNhiemError nêu session_replication_role (phán trước khi RESET ALL kịp gỡ), kết nối bị huỷ; kết nối mới sạch", async () => {
     const p = poolMot();
-    // TimeZone mặc định của cụm đọc trên kết nối sạch, không viết cứng: `initdb` lấy theo máy — `Etc/UTC` ở cụm cục bộ trên
-    // Ubuntu, `UTC` ở `postgres:16-alpine` của CI (T3 đỏ ở PR #216 vì hằng `Etc/UTC`).
+    // TimeZone mặc định của cụm đọc trên kết nối sạch, không viết cứng: `initdb` lấy theo máy — ~~`Etc/UTC` ở cụm cục bộ trên
+    // Ubuntu~~ [S1.9130 / khoản 9401: cụm cục bộ nay khởi tạo dưới `TZ=UTC`, nên `UTC` như container; đọc trên kết nối sạch vẫn
+    // giữ, vì máy khác có thể dựng cụm khác], `UTC` ở `postgres:16-alpine` của CI (T3 đỏ ở PR #216 vì hằng `Etc/UTC`).
     const truoc = await docTruc(p);
     expect(truoc.tz, "tiền đề: TimeZone mặc định khác giá trị làm nhiễm").not.toBe("Asia/Ho_Chi_Minh");
     const nhiem = await nhiemRoiTra(p, "SELECT zz99.dat_vai_sao_chep('replica'); SET TimeZone = 'Asia/Ho_Chi_Minh'");
