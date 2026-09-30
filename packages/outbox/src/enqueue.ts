@@ -47,12 +47,12 @@ export function layDauXepViec(client: pg.PoolClient): boolean {
 }
 
 // ==============================================================================================
-// [S1.9115 / khoản 161] TẬP `kind` CỦA KHO — MỘT UNION, KHAI Ở ĐÚNG MỘT CHỖ LÀ ĐÂY
+// [S1.239 / khoản 161] TẬP `kind` CỦA KHO — MỘT UNION, KHAI Ở ĐÚNG MỘT CHỖ LÀ ĐÂY
 //
 // Tới vòng này `JobInput.kind` là `string`, và câu hỏi *"kho xếp những kind nào"* chỉ trả lời được bằng
 // một phép quét VĂN BẢN ba hình dạng ở cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`):
 // `kind: "X"` trong lời gọi, một hằng tên `…_KIND`, và một `INSERT INTO outbox_jobs` viết tay. Một kind
-// truyền qua biến tên khác, qua template hay qua chuỗi ghép lọt cả ba (§S1.81) — đo trước ở §S1.9115: ba
+// truyền qua biến tên khác, qua template hay qua chuỗi ghép lọt cả ba (§S1.81) — đo trước ở §S1.239: ba
 // lời gọi như thế trong mã sản xuất ⇒ cổng xanh, `tsc` thoát 0 — và khi không runner nào có nó trong mảng
 // lọc, job nằm `PENDING` im lặng.
 //
@@ -82,7 +82,7 @@ export interface JobInput {
    * Loại việc. Ràng buộc CẤU TRÚC ở tầng CSDL: `^[A-Z][A-Z0-9_]{0,63}$` (xem 007_outbox.sql).
    * Đây là một NHÃN mà `app_api` đọc lại được, không phải chỗ chứa dữ liệu.
    *
-   * ~~`string`~~ **[S1.9115 / khoản 161]** Một thành viên của `KindOutbox` ở trên, viết LITERAL tại chỗ gọi.
+   * ~~`string`~~ **[S1.239 / khoản 161]** Một thành viên của `KindOutbox` ở trên, viết LITERAL tại chỗ gọi.
    */
   readonly kind: KindOutbox;
   /**

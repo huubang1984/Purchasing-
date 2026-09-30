@@ -4,7 +4,7 @@
 // Hai hàm ở file này là hai mặt của cùng một câu hỏi: **một con số suy ra từ giá được phép xuất
 // hiện lúc nào?** A4 trả lời cho các trường phái sinh (min/max/trung bình/đếm dưới ngân
 // sách/sắp theo giá); A6 trả lời cho một con số còn không cần tới giá — số báo giá ~~đã nhận~~
-// **[S1.9135 / khoản 271]** sẽ dự thầu (luồng của lời mời còn sống, ADR-128).
+// **[S1.243 / khoản 271]** sẽ dự thầu (luồng của lời mời còn sống, ADR-128).
 //
 // ----------------------------------------------------------------------------------------------
 // [A4] VÌ SAO CỔNG Ở ĐÂY LÀ LỚP THỨ HAI, KHÔNG PHẢI LỚP THỨ NHẤT
@@ -52,7 +52,7 @@ import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial
 export const COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING", "BAFO_UNSEALED"] as const;
 
 /**
- * Các trạng thái mà "số báo giá ~~đã nhận~~ **[S1.9135 / khoản 271]** sẽ dự thầu" không còn là bí mật: hạn nộp đã qua và RFQ đã
+ * Các trạng thái mà "số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** sẽ dự thầu" không còn là bí mật: hạn nộp đã qua và RFQ đã
  * đóng.
  *
  * [S1.108] Ba trạng thái BAFO đều ĐÃ qua `CLOSED` một lần, nên con số ấy đã thôi là bí mật từ
@@ -398,7 +398,7 @@ export async function buildComparisonTable(
   // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.217): X thu hồi rồi mời lại ⇒ X HAI dòng,
   // cả hai `isLatestForBid = true` (hai luồng, hai `bid_id`), `belowBudget` 3 thay vì 2. Bản rõ KHÔNG bị
   // xoá — lọc ở lần đọc. Cùng vế ở worker và `docBaoGia`; cổng tĩnh `phong-bi-loi-moi-con-song.test.ts`.
-  // [S1.9135 / khoản 271] Và ở câu đếm của `countReceivedBids` cuối tệp — số báo giá là số SẼ DỰ THẦU.
+  // [S1.243 / khoản 271] Và ở câu đếm của `countReceivedBids` cuối tệp — số báo giá là số SẼ DỰ THẦU.
   // ==============================================================================================
   const { rows: dong } = await client.query<HangDong>(
     `SELECT d.bid_id,
@@ -561,7 +561,7 @@ export async function buildComparisonTable(
 }
 
 /**
- * [A6] Số báo giá ~~đã nhận~~ **[S1.9135 / khoản 271]** SẼ DỰ THẦU — luồng báo giá của lời mời CÒN SỐNG (ADR-128: thu hồi
+ * [A6] Số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** SẼ DỰ THẦU — luồng báo giá của lời mời CÒN SỐNG (ADR-128: thu hồi
  * là loại; câu 7 của kế hoạch đợt 3) — và chế độ nghiêm giấu nó đi trước giờ đóng. Tên hàm giữ `countReceivedBids`.
  *
  * HÌNH DẠNG TRẢ VỀ LÀ MỘT TUYÊN BỐ: `{ disclosed: false }` KHÔNG mang trường `count`. Một API trả
@@ -607,12 +607,12 @@ export async function countReceivedBids(
   }
 
   // ==============================================================================================
-  // [S1.9135 / khoản 271] SỐ ĐẾM LÀ SỐ BÁO GIÁ SẼ DỰ THẦU: CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG.
+  // [S1.243 / khoản 271] SỐ ĐẾM LÀ SỐ BÁO GIÁ SẼ DỰ THẦU: CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG.
   //
   // Chủ dự án chốt ngày 2026-09-30 (kế hoạch đợt 3, câu 7): từ ADR-128 thu hồi lời mời là LOẠI nhà cung cấp
   // ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm, nên con số trả về đây là số luồng báo giá SẼ DỰ THẦU —
   // cùng vế `i.revoked_at IS NULL` mà ba bộ đọc phong bì chép nguyên văn. Đo trước bản vá (§S1.217 ghim,
-  // §S1.9135 lật): hai luồng, thu hồi một ⇒ `count: 2`; nay 1. `vendor_bids` là một hàng mỗi luồng (`018`),
+  // §S1.243 lật): hai luồng, thu hồi một ⇒ `count: 2`; nay 1. `vendor_bids` là một hàng mỗi luồng (`018`),
   // nên câu này không khử trùng theo `v.bid_id` như ba bộ đọc kia — cổng tĩnh
   // `tests/architecture/phong-bi-loi-moi-con-song.test.ts` thấy nó bằng tiêu chí hình dạng thứ hai (đọc
   // `vendor_bids b` + `rfq_invitations i`, gọi `count(`). Tên hàm, tên trường `bidCount` của route và hình

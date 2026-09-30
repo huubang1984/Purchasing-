@@ -1,11 +1,11 @@
 -- ==============================================================================================
--- 9555_outbox_policy_xep_theo_kind — [S1.9155 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC XUỐNG TẦNG CSDL — ADR-9255
+-- 099_outbox_policy_xep_theo_kind — [S1.246 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC XUỐNG TẦNG CSDL — ADR-138
 --
 -- VÌ SAO (khoản 285, lượt soi của §S1.233). `095` (khoản 158, ADR-134) cố ý chỉ ràng `UPDATE`: mỗi vai ứng dụng chỉ ghi kết cục cho
 -- job mang `kind` của tiến trình chạy dưới vai ấy. `INSERT` thì `007` cấp `app_api` trên năm cột `(org_id, kind, payload, dedupe_key,
 -- run_after)` KHÔNG theo `kind`. Đo trước bản vá (`packages/outbox/src/outbox.int.test.ts`, khối khoản 285, chạy trên cây không có tệp
 -- này): `INSERT` viết tay dưới `app_api` một `kind` không tiến trình nào nhận (`THU_KIND_LA_285`) ⇒ VÀO, không lỗi — và nằm `PENDING`
--- mãi, vì không runner nào có nó trong mảng lọc (S1.81). Union `KindOutbox` (§S1.9115) ràng đường TypeScript; câu SQL viết tay (mã
+-- mãi, vì không runner nào có nó trong mảng lọc (S1.81). Union `KindOutbox` (§S1.239) ràng đường TypeScript; câu SQL viết tay (mã
 -- ngoài `enqueueJob`, một lỗi, một script) thì không lớp nào ràng.
 --
 -- HÌNH DẠNG (câu 13 của kế hoạch đợt 3, chủ dự án chốt 2026-09-30 — khuôn `095`): MỘT policy `AS RESTRICTIVE FOR INSERT TO app_api`,
@@ -21,7 +21,7 @@
 -- nêu tên policy — không có "0 hàng im lặng" như `FOR UPDATE`. Toán tử không ghim: cùng khuôn `095`; bản deparse ở dòng khai là
 -- `(kind = ANY (ARRAY['…'::text, …]))`, phần tử theo bảng chữ cái để dòng khai nguyên văn có một dạng duy nhất.
 --
--- GIỚI HẠN, NÓI RA (chủ dự án chốt — khoản 9455): `BREAK_GLASS_UNSEAL_ALERT` PHẢI ở trong tập vì trigger `019` cần nó (đo: bỏ nó khỏi
+-- GIỚI HẠN, NÓI RA (chủ dự án chốt — khoản 305): `BREAK_GLASS_UNSEAL_ALERT` PHẢI ở trong tập vì trigger `019` cần nó (đo: bỏ nó khỏi
 -- tập thì CHÍNH yêu cầu break-glass NÉM 42501 ở câu INSERT của trigger), nên một cảnh báo break-glass GIẢ viết tay dưới `app_api` VẪN
 -- xếp được, cùng một `UNSEAL_RFQ` trỏ yêu cầu bất kỳ (handler kiểm lại trạng thái yêu cầu — không mở được gói). Đổi trigger sang
 -- SECURITY DEFINER với chủ hẹp để kind ấy ra khỏi tập là phương án khác (cỡ L), KHÔNG làm ở đây.

@@ -157,7 +157,7 @@ describe("bề mặt tệp", () => {
       const js = readFileSync(new URL(`../trang/${trang}.js`, import.meta.url), "utf8");
       const ham = /^function docLink\(\) \{[\s\S]*?^\}/mu.exec(js)?.[0];
       expect(ham, `${trang}.js không còn hàm docLink`).toBeDefined();
-      // `/login` dùng hằng `LA_UUID` ~~chung của trang~~ [S1.9120 / khoản 282] import từ `/lib/dang-nhap.js` — MỘT bản với phép đọc ô
+      // `/login` dùng hằng `LA_UUID` ~~chung của trang~~ [S1.240 / khoản 282] import từ `/lib/dang-nhap.js` — MỘT bản với phép đọc ô
       // tổ chức của bước 1 bốn trang; ba trang kia không dùng nó.
       const o = { org: { value: truoc.org }, token: { value: truoc.token } };
       runInNewContext(`${ham ?? ""}\ndocLink();`, { $: (id: "org" | "token") => o[id], location: { hash }, decodeURIComponent, LA_UUID: dangNhap.LA_UUID });
@@ -170,9 +170,9 @@ describe("bề mặt tệp", () => {
     expect(chay("mo-thau", "#chiCoMaTronKhongCoToChuc", { org: "go-tay", token: "" })).toEqual({ org: "go-tay", token: "chiCoMaTronKhongCoToChuc" });
   });
 
-  it("[ADR-107] ô tổ chức của ~~/login~~ [S1.9120 / khoản 282] bốn trang người mua nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
+  it("[ADR-107] ô tổ chức của ~~/login~~ [S1.240 / khoản 282] bốn trang người mua nhận nguyên một link cũ dán vào, và nói đúng khi mã sai hình dạng", () => {
     const ORG = "11111111-1111-4111-8111-111111111111";
-    // [S1.9120 / khoản 282] Phép đọc từng là `docToChuc()` riêng của `mo-thau.js` (vế này trích nó bằng regex); nay là
+    // [S1.240 / khoản 282] Phép đọc từng là `docToChuc()` riêng của `mo-thau.js` (vế này trích nó bằng regex); nay là
     // `docMaToChuc` của `/lib/dang-nhap.js` — bước 1 của bốn trang và ô xin link của `/login` đọc qua CÙNG hàm ấy.
     const doc = dangNhap.docMaToChuc;
     expect(doc(ORG)).toBe(ORG);
@@ -212,7 +212,7 @@ describe("bề mặt tệp", () => {
       "nhom-hang": ["b2", "b3"],
     };
     /**
-     * Lời gọi mỗi trang tự đi sau khi mở các bước — trước lượt đo riêng của từng trang. [S1.9120 / khoản 282] Bốn trang người mua
+     * Lời gọi mỗi trang tự đi sau khi mở các bước — trước lượt đo riêng của từng trang. [S1.240 / khoản 282] Bốn trang người mua
      * hỏi link đăng nhập gần đây của chính mình (`/lib/dang-nhap.js`) ngay khi các bước mở, TRƯỚC lời gọi riêng của trang.
      */
     const SAU_MO: Record<string, readonly string[]> = {
@@ -278,7 +278,7 @@ describe("bề mặt tệp", () => {
       ...taoThau,
       // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
       ...duLieu,
-      // [S1.9120 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
+      // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
       // [S1.181] Đường "Niêm phong và nộp" chạy tới lời gọi POST /guest/bids và vẽ biên nhận: phong bì rỗng, mô tả tối thiểu.
@@ -542,12 +542,12 @@ describe("bề mặt tệp", () => {
     // nói tài khoản này cần ghi danh hay không; nút Tiếp gọi `/auth/redeem` đúng một lần cho mỗi
     // mã đăng nhập và hiện bí mật kèm nhãn nói rõ nó KHÔNG phải mã đăng nhập; Vào chỉ còn là Vào.
     // ~~Ba trang người mua kia (`tao-thau`, `nhom-hang`, `chinh-sach`) chép cùng khối cũ — khoản 282.~~
-    // [S1.9120 / khoản 282] Nay bước 1 là MỘT module, `/lib/dang-nhap.js`, mà bốn trang người mua import và gắn vào CÙNG bộ id
+    // [S1.240 / khoản 282] Nay bước 1 là MỘT module, `/lib/dang-nhap.js`, mà bốn trang người mua import và gắn vào CÙNG bộ id
     // (chủ dự án chốt cách ⒝ ngày 2026-09-30) — nên sáu ca dưới chạy trên cả bốn trang, cộng một ca mới: ô tổ chức sai hình dạng
     // nói đúng câu và không gọi máy chủ (phép đọc của `/login` nay là của cả bốn). Đo trước trên cây cũ: ba trang kia đỏ ở mọi ca
     // cần nút Tiếp hay ô mã ẩn.
     // ==========================================================================================
-    // [S1.9120 / khoản 282] Bốn trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`), cùng bộ id.
+    // [S1.240 / khoản 282] Bốn trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`), cùng bộ id.
     const BON_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach"] as const;
     /** Các cặp dt/dd đã vẽ vào `link-gan-day` (khối link đăng nhập gần đây — khoản 195, 268). */
     const capLink = (p: { el: (id: string) => PhanTu }): [string, string][] => {
@@ -557,7 +557,7 @@ describe("bề mặt tệp", () => {
       return ra;
     };
 
-    describe("[S1.230 / khoản 193 · S1.9120 / khoản 282] bước 1 tách «lấy bí mật ghi danh» khỏi «vào» — bốn trang người mua", () => {
+    describe("[S1.230 / khoản 193 · S1.240 / khoản 282] bước 1 tách «lấy bí mật ghi danh» khỏi «vào» — bốn trang người mua", () => {
       const BI_MAT = "JBSWY3DPEHPK3PXP";
       const CHUA_GHI_DANH = { status: 200, body: { needsEnrollment: true, totpSecretBase32: BI_MAT, issuer: "TrustProcure" } };
       const ghiDanh = (l: string) => (l === "POST /auth/redeem" ? Promise.resolve(CHUA_GHI_DANH) : undefined);
@@ -623,7 +623,7 @@ describe("bề mặt tệp", () => {
           await r.bam("nut-ghi-danh");
           expect(r.trangThai.goi).toEqual([]);
           expect(r.el("loi1").textContent).toMatch(/Cần cả mã tổ chức và mã đăng nhập/u);
-          // [S1.9120 / khoản 282] Ô tổ chức sai hình dạng: câu nói hình dạng đúng (ADR-107), không một lời gọi — cả hai nút.
+          // [S1.240 / khoản 282] Ô tổ chức sai hình dạng: câu nói hình dạng đúng (ADR-107), không một lời gọi — cả hai nút.
           const s = await dungTrang(trang, { hash: "#cong-ty-a:maX", cookie: null });
           await s.bam("nut-ghi-danh");
           s.el("ma").value = "123456";
@@ -688,10 +688,10 @@ describe("bề mặt tệp", () => {
     // tới Y, chưa dùng» — kèm câu nói việc phải làm khi một link «đã dùng» không phải do mình. Lỗi hay
     // 401 ⇒ khối ẩn, các bước vẫn mở (khối là một trợ giúp, không phải một cổng). Về bước 1 (đăng xuất,
     // hashchange) ⇒ khối ẩn và rỗng; một phản hồi về MUỘN sau đó bị bỏ. ~~Cùng ranh giới với khoản 193:
-    // CHỈ `mo-thau`; ba trang người mua kia — khoản 282.~~ [S1.9120 / khoản 282] Khối nay ở `/lib/dang-nhap.js`, nên ba ca dưới
+    // CHỈ `mo-thau`; ba trang người mua kia — khoản 282.~~ [S1.240 / khoản 282] Khối nay ở `/lib/dang-nhap.js`, nên ba ca dưới
     // chạy trên cả bốn trang người mua; đo trước trên cây cũ: ba trang kia đỏ ở cả ba ca.
     // ==========================================================================================
-    describe("[S1.216 / khoản 195 · S1.9120 / khoản 282] link đăng nhập gần đây của chính mình — bốn trang người mua", () => {
+    describe("[S1.216 / khoản 195 · S1.240 / khoản 282] link đăng nhập gần đây của chính mình — bốn trang người mua", () => {
       const BA_LINK = {
         status: 200,
         body: {
@@ -780,7 +780,7 @@ describe("bề mặt tệp", () => {
     });
 
     // ==========================================================================================
-    // [S1.9120 / khoản 268 / ADR-126] DANH SÁCH LINK GẦN ĐÂY NÓI KHI NÓ BỊ CẮT
+    // [S1.240 / khoản 268 / ADR-126] DANH SÁCH LINK GẦN ĐÂY NÓI KHI NÓ BỊ CẮT
     //
     // `GET /auth/login-links` nay trả link trong 7 ngày, tối đa 100 hàng, cộng `truncated: boolean` — đúng khi còn hàng TRONG cửa
     // sổ mà trần cắt đi (chủ dự án chốt câu 6, ngày 2026-09-30). Trang nói «còn nữa»: danh sách đang hiện bao nhiêu link mới nhất,
@@ -789,7 +789,7 @@ describe("bề mặt tệp", () => {
     // mọi lần, để người đọc biết một link cũ hơn thế không hiện ở đây. Đo trước trên cây cũ: đỏ ở cả bốn trang (`/login` chưa có
     // câu nào; ba trang kia không có khối).
     // ==========================================================================================
-    describe("[S1.9120 / khoản 268] danh sách link gần đây nói khi nó bị cắt — bốn trang người mua", () => {
+    describe("[S1.240 / khoản 268] danh sách link gần đây nói khi nó bị cắt — bốn trang người mua", () => {
       const MOT = { createdAt: "2026-09-30T08:00:00Z", expiresAt: "2026-09-30T08:15:00Z", consumedAt: "2026-09-30T08:03:00Z", purpose: "LOGIN", status: "CONSUMED" };
       const voi = (than: unknown) => (l: string) => (l === "GET /auth/login-links" ? Promise.resolve({ status: 200, body: than }) : undefined);
 
@@ -1500,9 +1500,9 @@ describe("bề mặt tệp", () => {
       expect(hong.p.el("ok5").hidden).toBe(true);
     });
 
-    // [S1.9120 / khoản 276 / ADR-128] Thu hồi LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và xếp hạng (S1.217) — câu báo
+    // [S1.240 / khoản 276 / ADR-128] Thu hồi LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và xếp hạng (S1.217) — câu báo
     // ~~nói báo giá cũ vẫn nằm trong gói~~ nói thẳng báo giá ấy không dự thầu nữa, và vẫn chỉ đường Gửi lại link thay cho mời lại.
-    it("[S1.181 / ADR-110 · S1.9120 / khoản 276] tao-thau: Thu hồi xong ⇒ câu báo nói báo giá đã nộp theo lời mời ấy KHÔNG dự thầu nữa và chỉ đường Gửi lại link, không khuyên mời lại", async () => {
+    it("[S1.181 / ADR-110 · S1.240 / khoản 276] tao-thau: Thu hồi xong ⇒ câu báo nói báo giá đã nộp theo lời mời ấy KHÔNG dự thầu nữa và chỉ đường Gửi lại link, không khuyên mời lại", async () => {
       const { p, nut } = await moDanhSachLoiMoi((l) => (l === "POST /invitations/i-1/revoke" ? Promise.resolve({ status: 200, body: { revoked: true } }) : undefined));
       for (const f of nut[1]?.nghe["click"] ?? []) await f();
       expect(p.el("ok5").textContent).toMatch(/Báo giá đã nộp theo lời mời này \(nếu có\) không dự thầu nữa/u);
@@ -1511,10 +1511,10 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok5").textContent).not.toMatch(/Mời lại/u);
     });
 
-    // [S1.9120 / khoản 276 / ADR-128] Sau lần mở thầu đầu tiên thu hồi bị CHẶN ở máy chủ (`RFQ_STATUSES_AFTER_UNSEAL` của
+    // [S1.240 / khoản 276 / ADR-128] Sau lần mở thầu đầu tiên thu hồi bị CHẶN ở máy chủ (`RFQ_STATUSES_AFTER_UNSEAL` của
     // `packages/invitation`) — ở tổ chức chưa bật S3 nút *Thu hồi* từng hiện ở mọi trạng thái và bấm là nhận 422. Nay nó ẩn ở sáu trạng
     // thái sau mở thầu; trước đó (OPEN, CLOSED) vẫn hiện — máy chủ nhận.
-    it("[S1.9120 / khoản 276] tao-thau: tổ chức chưa bật, gói đã mở thầu ⇒ dòng lời mời KHÔNG có nút Thu hồi; gói OPEN hay CLOSED ⇒ vẫn có", async () => {
+    it("[S1.240 / khoản 276] tao-thau: tổ chức chưa bật, gói đã mở thầu ⇒ dòng lời mời KHÔNG có nút Thu hồi; gói OPEN hay CLOSED ⇒ vẫn có", async () => {
       const voiTrangThai = (status: string) => (l: string) =>
         l === "GET /rfqs/r-1" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1", title: "Gói", status } } }) : undefined;
       for (const status of ["UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"]) {
@@ -2347,15 +2347,15 @@ describe("bề mặt tệp", () => {
   });
 
   // ============================================================================================
-  // [S1.9120 / khoản 282] BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA LÀ MỘT MODULE — ĐO BẰNG TỆP, KHÔNG BẰNG LỜI
+  // [S1.240 / khoản 282] BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA LÀ MỘT MODULE — ĐO BẰNG TỆP, KHÔNG BẰNG LỜI
   //
   // Ba vế: ⑴ `/lib/dang-nhap.js` được phục vụ (khai ở `MODULE_WEB`), mang `ganDangNhap`, và KHÔNG import gì — trang tải nó bằng
   // đúng một `import`, không có cây phụ thuộc nào phía sau để thiếu; ⑵ bốn trang người mua import nó, và KHÔNG trang nào tự gọi
   // `/auth/redeem` hay `/auth/totp` nữa — lời gọi ấy chỉ còn ở module; ⑶ tập trang còn tự gọi `/auth/redeem` là ĐÚNG `du-lieu.js`:
-  // màn dữ liệu nền (S4.2b) chép khối cũ, ngoài danh sách tệp của lô — khoản 9420. Vế ⑶ GHIM giới hạn ấy: ngày ai đưa
+  // màn dữ liệu nền (S4.2b) chép khối cũ, ngoài danh sách tệp của lô — khoản 291. Vế ⑶ GHIM giới hạn ấy: ngày ai đưa
   // `du-lieu` sang module, vế này đỏ và phải sửa cùng lúc — cùng khuôn `countReceivedBids` của §S1.217.
   // ============================================================================================
-  it("[S1.9120 / khoản 282] /lib/dang-nhap.js ra JavaScript, không import nào; bốn trang người mua import nó và không tự gọi /auth/redeem, /auth/totp", async () => {
+  it("[S1.240 / khoản 282] /lib/dang-nhap.js ra JavaScript, không import nào; bốn trang người mua import nó và không tự gọi /auth/redeem, /auth/totp", async () => {
     expect(MODULE_WEB).toContain("dang-nhap");
     const r = await goi("/lib/dang-nhap.js");
     expect(r.status).toBe(200);
@@ -2375,13 +2375,13 @@ describe("bề mặt tệp", () => {
       .filter((t) => t.endsWith(".js"))
       .filter((t) => readFileSync(new URL(t, thuMuc), "utf8").includes('"/auth/redeem"'))
       .sort();
-    expect(conChep, "trang còn tự đổi mã đăng nhập ngoài module — khoản 9420 ghim đúng một").toEqual(["du-lieu.js"]);
+    expect(conChep, "trang còn tự đổi mã đăng nhập ngoài module — khoản 291 ghim đúng một").toEqual(["du-lieu.js"]);
   });
 
-  // [S1.9120 / khoản 282] `/lib/dang-nhap.js` là module ĐẦU TIÊN của `MODULE_WEB` chạm DOM — trước nó mọi module ở đây là phép tính
+  // [S1.240 / khoản 282] `/lib/dang-nhap.js` là module ĐẦU TIÊN của `MODULE_WEB` chạm DOM — trước nó mọi module ở đây là phép tính
   // thuần. Luật cấm sink HTML của [S1.107] (eslint `no-restricted-properties`) chỉ đọc `apps/web/trang/*.js`, nên vế này quét mã ĐÃ GỠ
   // KIỂU của mọi module `MODULE_WEB` — đúng thứ trình duyệt nhận — với đối chứng dương và âm trên văn bản mẫu.
-  it("[S1.9120 / khoản 282] không module nào của MODULE_WEB — kể cả bước 1 chạm DOM — mang sink HTML", () => {
+  it("[S1.240 / khoản 282] không module nào của MODULE_WEB — kể cả bước 1 chạm DOM — mang sink HTML", () => {
     const SINK = /\.(?:innerHTML|outerHTML|insertAdjacentHTML)\b|\bdocument\s*\.\s*write(?:ln)?\b/u;
     expect(SINK.test('el.innerHTML = "<b>" + x + "</b>";'), "đối chứng dương: gán innerHTML").toBe(true);
     expect(SINK.test('p.insertAdjacentHTML("beforeend", x);'), "đối chứng dương: insertAdjacentHTML").toBe(true);

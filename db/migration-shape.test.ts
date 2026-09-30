@@ -236,22 +236,22 @@ const NGOAI_LE_LAC_CHO: readonly {
       "[S1.82 / khoản 116 / ADR-040] bảng ra đời ở 002 CÙNG policy cách ly của nó — không có " +
       "cửa sổ trần nào; đây là policy THỨ HAI, FOR SELECT, và chủ thể của nó là ĐÚNG MỘT vai " +
       "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ~~ĐÚNG MỘT hàm SECURITY " +
-      "DEFINER~~ [S1.9165] hàm SECURITY DEFINER liệt kê tổ chức — của 052, và từ " +
-      "9565_api_to_chuc_co_viec hàm hẹp thứ hai, cùng vai, thân cả hai đều ghim. " +
+      "DEFINER~~ [S1.248] hàm SECURITY DEFINER liệt kê tổ chức — của 052, và từ " +
+      "101_api_to_chuc_co_viec hàm hẹp thứ hai, cùng vai, thân cả hai đều ghim. " +
       "Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
       "nên dòng này không nới bán kính của bất kỳ vai ứng dụng nào. Nó NỚI chứ không siết, và " +
       "nới thì đáng bị soi kỹ hơn chứ không đáng một vế điều kiện mới trong quy tắc — cùng " +
       "cách xử lý đã dùng cho 044",
   },
   {
-    tenFile: "9565_api_to_chuc_co_viec.sql",
+    tenFile: "101_api_to_chuc_co_viec.sql",
     tenBang: "outbox_jobs",
     tenPolicy: "outbox_jobs_liet_ke_viec_api",
     lyDo:
-      "[S1.9165 / khoản 277 / ADR-040 tiểu mục] bảng ra đời ở 007 CÙNG policy cách ly của nó — không " +
+      "[S1.248 / khoản 277 / ADR-040 tiểu mục] bảng ra đời ở 007 CÙNG policy cách ly của nó — không " +
       "có cửa sổ trần nào; đây là policy PERMISSIVE thứ hai, FOR SELECT, chủ thể là ĐÚNG vai NOLOGIN " +
       "NOINHERIT `app_liet_ke_to_chuc` (chủ hai hàm SECURITY DEFINER liệt kê, thân đều ghim ở " +
-      "hardening), và hàng hẹp bằng vị từ `status = 'PENDING'` — không USING (true). Đo (§S1.9165): " +
+      "hardening), và hàng hẹp bằng vị từ `status = 'PENDING'` — không USING (true). Đo (§S1.248): " +
       "`app_api` đọc THẲNG `outbox_jobs` khi chưa gắn tổ chức vẫn thấy 0 hàng, nên dòng này không nới " +
       "bán kính của vai ứng dụng nào. NỚI chứ không siết — cùng cách xử lý đã dùng cho 044 và 052",
   },
@@ -366,7 +366,7 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
  * Lớp có thẩm quyền vẫn là `NGOAI_LE_HINH_DANG` ở `hardening.always.sql` — nơi cùng policy này
  * phải có một dòng khoá SÁU cột, trong đó có cả `vai_tro`. Lớp ở đây chỉ là lưới bắt sớm.
  *
- * [S1.9140 / khoản 171 ⑴] Mỗi dòng khai thêm LỆNH và VAI ĐÍCH DANH của chủ thể hẹp ấy — lý do nói "FOR SELECT TO
+ * [S1.244 / khoản 171 ⑴] Mỗi dòng khai thêm LỆNH và VAI ĐÍCH DANH của chủ thể hẹp ấy — lý do nói "FOR SELECT TO
  * app_liet_ke_to_chuc", nên phép kiểm đọc đúng hai thứ đó, không đọc "có một chữ TO".
  */
 interface NgoaiLeUsingTrue {
@@ -388,8 +388,8 @@ const NGOAI_LE_USING_TRUE: readonly NgoaiLeUsingTrue[] = [
     lyDo:
       "chủ thể hẹp thay cho vị từ: `FOR SELECT TO app_liet_ke_to_chuc` — một vai NOLOGIN " +
       "NOINHERIT không tiến trình nào đăng nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này " +
-      "và sở hữu ~~ĐÚNG một hàm SECURITY DEFINER~~ [S1.9165] hàm SECURITY DEFINER liệt kê tổ chức " +
-      "(từ 9565_api_to_chuc_co_viec thêm hàm hẹp thứ hai, cùng vai). Vị từ hẹp hơn không tồn tại: mục đích của " +
+      "và sở hữu ~~ĐÚNG một hàm SECURITY DEFINER~~ [S1.248] hàm SECURITY DEFINER liệt kê tổ chức " +
+      "(từ 101_api_to_chuc_co_viec thêm hàm hẹp thứ hai, cùng vai). Vị từ hẹp hơn không tồn tại: mục đích của " +
       "policy là *mọi* id tổ chức. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` " +
       "vẫn thấy 0 hàng, nên dòng này không mở bán kính của bất kỳ vai ứng dụng nào",
   },
@@ -402,7 +402,7 @@ function laNgoaiLeUsingTrue(pTenFile: string, pTenPolicy: string): boolean {
 }
 
 /**
- * [S1.9140 / khoản 171 ⑴] Vai ĐÍCH DANH được làm chủ thể của một ngoại lệ `USING (true)` — danh sách có tên, không phải "mọi tên
+ * [S1.244 / khoản 171 ⑴] Vai ĐÍCH DANH được làm chủ thể của một ngoại lệ `USING (true)` — danh sách có tên, không phải "mọi tên
  * khác `PUBLIC`". Mỗi tên là một vai NOLOGIN mà không tiến trình nào đăng nhập mang nó làm current_user; thêm một tên là một quyết
  * định an ninh có review, cùng hạng một dòng `NGOAI_LE_USING_TRUE`. Không vai ứng dụng nào (`app_api`, `app_unseal`, `app_neo`,
  * `app_khoi_tao` — chúng phục vụ yêu cầu) và không vai giả (`PUBLIC`, `CURRENT_USER`, `CURRENT_ROLE`, `SESSION_USER`).
@@ -421,7 +421,7 @@ function tenVaiTrongTo(pTho: string): string {
 }
 
 /**
- * [S1.9140 / khoản 171 ⑴] LỆNH và CHỦ THỂ của một câu `CREATE POLICY` — phần thân sau `ON <bảng>`, trước `USING`/`WITH CHECK`
+ * [S1.244 / khoản 171 ⑴] LỆNH và CHỦ THỂ của một câu `CREATE POLICY` — phần thân sau `ON <bảng>`, trước `USING`/`WITH CHECK`
  * (đã bỏ chú thích). Không viết `FOR` là `ALL`, không viết `TO` là `PUBLIC` — đúng mặc định của PostgreSQL. Cú pháp lạ ⇒ NÉM.
  */
 function docChuThePolicy(pThan: string): {
@@ -441,7 +441,7 @@ function docChuThePolicy(pThan: string): {
 }
 
 /**
- * [S1.9140 / khoản 171 ⑴] Meta-test của cửa `USING (true)` thành hàm thuần (đo được trên văn bản mẫu). Danh sách vi phạm —
+ * [S1.244 / khoản 171 ⑴] Meta-test của cửa `USING (true)` thành hàm thuần (đo được trên văn bản mẫu). Danh sách vi phạm —
  * rỗng là xanh. Mỗi dòng khai phải ứng với câu `CREATE POLICY` của tệp; LỆNH viết tường minh bằng lệnh khai; danh sách `TO`
  * BẰNG tập vai khai; mỗi vai khai có tên trong `VAI_DUOC_MIEN_USING_TRUE`; không câu `ALTER POLICY` cùng tên trong tệp.
  */
@@ -458,7 +458,7 @@ function kiemTraNgoaiLeUsingTrue(pFile: Map<string, string>, pNgoaiLe: readonly 
       continue;
     }
     // ~~Vế CHỊU LỰC của mọi dòng trong danh sách này: chủ thể phải hẹp bằng `TO <vai>`. Một ngoại lệ cho một policy `TO PUBLIC`
-    // sẽ đúng là fail-open, và nó phải ĐỎ ở đây.~~ [S1.9140 / khoản 171 ⑴] Biểu thức của vế ấy là `TO` cộng một tên BẤT KỲ khác
+    // sẽ đúng là fail-open, và nó phải ĐỎ ở đây.~~ [S1.244 / khoản 171 ⑴] Biểu thức của vế ấy là `TO` cộng một tên BẤT KỲ khác
     // `PUBLIC`, và nó không đọc LỆNH. Chủ thể hẹp là LỆNH × VAI ĐÍCH DANH — cả hai phải là đúng thứ dòng khai nói.
     const ct = docChuThePolicy(khop[2] ?? "");
     if (ct.lenh !== n.lenh) viPham.push(`${p} — policy là FOR ${ct.lenh}${ct.vietFor ? "" : " (không viết FOR)"}, dòng khai là FOR ${n.lenh}`);
@@ -674,8 +674,8 @@ describe("hình dạng file migration", () => {
   // [S1.82 / khoản 116] Meta-test của cửa `USING (true)` vừa mở, cùng khuôn meta-test của
   // `NGOAI_LE_LAC_CHO` ngay trên: một dòng trỏ tới policy không còn tồn tại là rác IM LẶNG, và
   // rác im lặng trong danh sách ngoại lệ là chỗ mà lần nới tiếp theo trốn vào.
-  // [S1.9140 / khoản 171 ⑴] ~~bộ lọc `chet` viết tại chỗ~~ nay là `kiemTraNgoaiLeUsingTrue` — cùng hàm chạy trên văn bản mẫu
-  // ở khối `[S1.9140 / khoản 171 ⑴]` cuối tệp.
+  // [S1.244 / khoản 171 ⑴] ~~bộ lọc `chet` viết tại chỗ~~ nay là `kiemTraNgoaiLeUsingTrue` — cùng hàm chạy trên văn bản mẫu
+  // ở khối `[S1.244 / khoản 171 ⑴]` cuối tệp.
   it("[S1.82] mỗi ngoại lệ `USING (true)` ứng với một policy CÓ THẬT, có `TO <vai>`, và có lý do", () => {
     expect(
       kiemTraNgoaiLeUsingTrue(cacFile, NGOAI_LE_USING_TRUE),
@@ -1393,7 +1393,7 @@ describe("[S1.232 / khoản 221] bốn vế tĩnh của một bảng tenant mớ
 });
 
 // ============================================================================================
-// [S1.9140 / khoản 171 ⑴] META-TEST CỦA CỬA `USING (true)` ĐỌC LỆNH VÀ VAI ĐÍCH DANH — VĂN BẢN MẪU
+// [S1.244 / khoản 171 ⑴] META-TEST CỦA CỬA `USING (true)` ĐỌC LỆNH VÀ VAI ĐÍCH DANH — VĂN BẢN MẪU
 //
 // Bản S1.82 tự gọi vế `TO <vai>` là vế CHỊU LỰC, nhưng biểu thức của nó là `TO` cộng một tên BẤT KỲ khác `PUBLIC` — `TO app_api`
 // đi qua sạch — và không đọc LỆNH, nên `FOR ALL TO app_api USING (true)` cũng qua (thân khoản 171, §S1.83). Lý do của dòng
@@ -1401,7 +1401,7 @@ describe("[S1.232 / khoản 221] bốn vế tĩnh của một bảng tenant mớ
 // danh sách `TO` bằng đúng tập vai khai, mỗi vai khai có tên trong danh sách vai được phép — và policy không bị `ALTER` lại
 // trong chính tệp (chủ thể sau tệp phải là chủ thể của câu `CREATE`).
 // ============================================================================================
-describe("[S1.9140 / khoản 171 ⑴] meta-test của cửa USING (true) đọc LỆNH và VAI ĐÍCH DANH — văn bản mẫu", () => {
+describe("[S1.244 / khoản 171 ⑴] meta-test của cửa USING (true) đọc LỆNH và VAI ĐÍCH DANH — văn bản mẫu", () => {
   const TEP = "052_worker_liet_ke_to_chuc.sql";
   const DONG: NgoaiLeUsingTrue = {
     tenFile: TEP,
@@ -1458,7 +1458,7 @@ describe("[S1.9140 / khoản 171 ⑴] meta-test của cửa USING (true) đọc 
 });
 
 // ============================================================================================
-// [S1.9140 / khoản 171 ⑵] MIỄN TRỪ MỤC (C) VÀ HAI HÀNG GHIM THAY CHỖ NÓ ĐỨNG CÙNG MỘT ĐIỀU KIỆN
+// [S1.244 / khoản 171 ⑵] MIỄN TRỪ MỤC (C) VÀ HAI HÀNG GHIM THAY CHỖ NÓ ĐỨNG CÙNG MỘT ĐIỀU KIỆN
 //
 // Hàm SECURITY DEFINER khai ở `NGOAI_LE_DOC_VONG` được mục (C) miễn vì hai hàng ghim canh nó thay phép cấm — «định nghĩa hàm
 // <chữ ký> …» (thân + chủ hàm) và «EXECUTE trên <chữ ký> …» (ACL). Hardening nay miễn CÙNG điều kiện với hai hàng ấy: migration
@@ -1492,7 +1492,7 @@ function kiemHangGhimThayCho(pHardening: string): { readonly viPham: string[]; r
   return { viPham, soHam };
 }
 
-describe("[S1.9140 / khoản 171 ⑵] miễn trừ mục (C) và hai hàng ghim thay chỗ nó đứng cùng một điều kiện", () => {
+describe("[S1.244 / khoản 171 ⑵] miễn trừ mục (C) và hai hàng ghim thay chỗ nó đứng cùng một điều kiện", () => {
   const HARDENING = docCacFile().get("hardening.always.sql");
   if (HARDENING === undefined) throw new Error("không đọc được db/migrations/hardening.always.sql");
 

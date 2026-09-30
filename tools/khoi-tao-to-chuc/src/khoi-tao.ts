@@ -82,7 +82,7 @@ async function chenNguoi(c: pg.PoolClient, orgId: string, n: NguoiKhai, i: numbe
   // không in email; ném trong giao dịch nên rollback trọn như mọi lỗi khác của bản khai. Nhờ đó `pg_catalog.lower()` dưới đây và
   // `.toLowerCase()` của phép dò trùng ở `ban-khai.ts` đồng ý trên mọi giá trị cất được — không còn phụ thuộc libc của máy chủ.
   if (!/^[!-~]+$/u.test(n.email)) throw new KhoiTaoError(`${noi}: email chứa ký tự ngoài ASCII in được`);
-  // [S1.9160 / khoản 283 / ADR-9260] Dấu chấm cuối tên miền (`CHECK (email !~ '\.$')`, `9560_email_khong_dau_cham_cuoi.sql`): `dot@x.vn.`
+  // [S1.247 / khoản 283 / ADR-139] Dấu chấm cuối tên miền (`CHECK (email !~ '\.$')`, `100_email_khong_dau_cham_cuoi.sql`): `dot@x.vn.`
   // là dạng tuyệt đối của `dot@x.vn` (RFC 5321) — CÙNG hộp thư, mà `UNIQUE (org_id, email)` so nguyên văn và phép dò trùng của
   // `ban-khai.ts` không gộp hai dạng ⇒ hai người dùng, hai magic link. Từ chối CÓ TÊN cùng khuôn vế ASCII ngay trên; KHÔNG chuẩn hoá.
   // `endsWith` chứ không literal `/\.$/u` (cùng nghĩa: `$` không cờ `m` chỉ khớp cuối chuỗi): literal ấy đã có ở `apps/web/src/du-lieu.ts`

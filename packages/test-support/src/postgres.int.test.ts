@@ -195,13 +195,13 @@ describe("[khoản nợ 28] stop() ĐO được kết nối còn sống, và v�
 });
 
 // ==============================================================================================
-// [S1.9130 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL CỤM THỬ — `release` MANG `TenantError SESSION_STATE_LEFT` ĐƯỢC ĐẾM, `stop()` ĐÒI
+// [S1.242 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL CỤM THỬ — `release` MANG `TenantError SESSION_STATE_LEFT` ĐƯỢC ĐẾM, `stop()` ĐÒI
 // SỐ ĐẾM BẰNG LỜI KHAI
 //
 // `withTenant` thấy trạng thái phiên còn sót sau một giao dịch ĐÃ commit thì huỷ kết nối bằng `release(TenantError
 // SESSION_STATE_LEFT)` và KHÔNG ném (khoản 118): chỗ duy nhất thấy lỗi ấy là sự kiện `release` của pool. Tới vòng này không pool
 // nào của `startPostgres` nghe sự kiện ấy — một mã để sót GUC tenant phạm vi PHIÊN dưới test chỉ làm MỘT kết nối biến khỏi pool, và
-// hai ca đầu dưới đây XANH trên cây cũ ở phần "không ai đếm" (đo trước, §S1.9130). Nay `stop()` đòi mỗi pool đếm BẰNG số đã khai
+// hai ca đầu dưới đây XANH trên cây cũ ở phần "không ai đếm" (đo trước, §S1.242). Nay `stop()` đòi mỗi pool đếm BẰNG số đã khai
 // qua `soLanSessionStateLeft` (mặc định 0) và ném SAU khi dừng cụm, nêu pool, nơi dựng, số đếm, số khai và tệp gọi `startPostgres`.
 // ==============================================================================================
 const ORG_281 = "00000000-0000-4000-8000-000000000281";
@@ -219,7 +219,7 @@ async function cumDaDung(connectionString: string): Promise<void> {
   }
 }
 
-describe("[S1.9130 / khoản 281] stop() đòi số lần withTenant huỷ kết nối vì SESSION_STATE_LEFT bằng số đã khai", { timeout: 120_000 }, () => {
+describe("[S1.242 / khoản 281] stop() đòi số lần withTenant huỷ kết nối vì SESSION_STATE_LEFT bằng số đã khai", { timeout: 120_000 }, () => {
   it("withTenant trên pool superuser để sót GUC tenant phạm vi PHIÊN, không khai ⇒ stop() NÉM sau khi dừng cụm, nêu pool, số đếm, số khai và tệp — không nêu giá trị", async () => {
     const db = await startPostgres();
     const kq = await withTenant(db.pool, ORG_281, async (c) => {

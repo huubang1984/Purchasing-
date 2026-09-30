@@ -27,9 +27,9 @@ export function outboxTest(pool: pg.Pool, services: ApiServices, tuyChon: { hand
     // thứ đã để `kich-ban-41-http.int.test.ts` âm thầm giết một job `UNSEAL_RFQ` mỗi lượt.
     // ~~kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),~~ [S1.222 / khoản 168] Bỏ, vì
     // `composition.ts` bỏ: sổ mồ côi nay do worker khai, và mảng lọc của `api` là đúng bảng handler.
-    // [S1.9115 / khoản 170] "Phải giống" nay có cổng: `tests/architecture/kind-outbox-mot-cho.test.ts` đối chiếu dây nối mảng
+    // [S1.239 / khoản 170] "Phải giống" nay có cổng: `tests/architecture/kind-outbox-mot-cho.test.ts` đối chiếu dây nối mảng
     // lọc của runner này (bảng handler, nguồn import, mọi lần `kindKhongNguoiNhan`) với runner của `composition.ts` — lệch ⇒ đỏ.
-    // [S1.9165 / khoản 277] `listOrganizations` của runner thật — hợp `toChucDaThay` với tập hàm hẹp
+    // [S1.248 / khoản 277] `listOrganizations` của runner thật — hợp `toChucDaThay` với tập hàm hẹp
     // `public.outbox_to_chuc_co_viec_api()` trả — KHÔNG có gương ở đây, có chủ đích: runner này không poll (test gọi `chay(orgId)`
     // tường minh), nên không có danh sách nào để lệch. Dây nối ấy đo trên tiến trình thật: `composition.int.test.ts`, khối khoản 277.
     onJobFailure: (b) => {

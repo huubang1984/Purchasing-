@@ -1,5 +1,5 @@
 -- =============================================================================================
--- `9545_khong_tim_thay_yeu_cau_co_ten.sql` — [S1.9145 / khoản 266] NHÁNH "KHÔNG THẤY YÊU CẦU" CỦA `unseal_kiem_nguoi_duyet` MANG TÊN
+-- `098_khong_tim_thay_yeu_cau_co_ten.sql` — [S1.245 / khoản 266] NHÁNH "KHÔNG THẤY YÊU CẦU" CỦA `unseal_kiem_nguoi_duyet` MANG TÊN
 -- =============================================================================================
 -- `019` RAISE `foreign_key_violation` (23503) KHÔNG tên ràng buộc khi trigger không thấy yêu cầu mở thầu trong tổ chức (id lạ, hay id
 -- CÓ THẬT của tổ chức khác mà RLS giấu) — và trigger fire TRƯỚC khoá ngoại, nên lỗi `pg` mang `code` mà không mang `constraint`. Tầng

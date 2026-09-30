@@ -41,7 +41,7 @@ const TEN_HAM_LAY_KHOA_PHIEN = ["pg_advisory_lock", "pg_advisory_lock_shared", "
  * Mọi cặp (vai, dạng đối số) mà một vai KHÔNG superuser thuộc một vai ứng dụng còn `EXECUTE` được trên bốn hàm ấy. Vế ⓷ đòi tập
  * rỗng; [S1.220 / khoản 186] và đòi thêm rằng chính câu này THẤY được một hàng khi có một hàng để thấy.
  * ~~Mệnh đề thành viên chỉ lọc `app_api` và `app_unseal` — `app_neo`, `app_khoi_tao` chưa nằm trong nó (nói ra, §S1.220).~~
- * [S1.9130 / khoản 273] Tập cây vai là THAM SỐ `$2`, đọc từ `VAI_UNG_DUNG` của `@trustprocure/db` — không còn bản chép hai tên của
+ * [S1.242 / khoản 273] Tập cây vai là THAM SỐ `$2`, đọc từ `VAI_UNG_DUNG` của `@trustprocure/db` — không còn bản chép hai tên của
  * `VAI_KET_NOI_UNG_DUNG` từ S1.86 (ADR-072 thêm `app_neo`, ADR-111 thêm `app_khoi_tao` vào hardening; bản chép không đổi theo). Mệnh
  * đề thành viên giữ nguyên nghĩa của hardening: thành viên `USAGE` hay `SET`, trừ superuser. Vì sao `VAI_UNG_DUNG` chứ không phải chuỗi
  * của hardening: vế này BẢO CHỨNG cho mục hardening, nên tập của nó không được là chính tập mà mục ấy dùng — hardening bỏ một cây thì
@@ -57,14 +57,14 @@ const CAU_VAI_UNG_DUNG_CON_EXECUTE =
   "                AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET'))) " +
   "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta";
 
-/** [S1.9130 / khoản 273] Chạy `CAU_VAI_UNG_DUNG_CON_EXECUTE` với tập hàm và tập cây vai (`VAI_UNG_DUNG`) làm tham số. */
+/** [S1.242 / khoản 273] Chạy `CAU_VAI_UNG_DUNG_CON_EXECUTE` với tập hàm và tập cây vai (`VAI_UNG_DUNG`) làm tham số. */
 async function vaiConExecute(): Promise<string[]> {
   const { rows } = await db.pool.query<{ mo_ta: string }>(CAU_VAI_UNG_DUNG_CON_EXECUTE, [TEN_HAM_LAY_KHOA_PHIEN, [...VAI_UNG_DUNG]]);
   return rows.map((x) => x.mo_ta);
 }
 
 /**
- * [S1.9130 / khoản 273] Bốn tên cây mà `VAI_KET_NOI_UNG_DUNG` của hardening lọc — đọc NGUYÊN VĂN mệnh đề `g.rolname IN (…)` trong hằng
+ * [S1.242 / khoản 273] Bốn tên cây mà `VAI_KET_NOI_UNG_DUNG` của hardening lọc — đọc NGUYÊN VĂN mệnh đề `g.rolname IN (…)` trong hằng
  * ấy. Không thấy hằng hay mệnh đề thì NÉM: đổi hình dạng hằng mà vế đối chiếu im lặng là đúng thứ khoản 273 đóng.
  */
 function cayTrongHardening(): string[] {
@@ -196,7 +196,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
   });
 
   it("⓷ MỌI vai ứng dụng mất EXECUTE trên MỌI dạng đối số của bốn hàm lấy khoá mức phiên", async () => {
-    // [S1.9130 / khoản 273] Tập cây vai của vế này (`VAI_UNG_DUNG`) phải BẰNG tập mà mục hardening nó bảo chứng lọc
+    // [S1.242 / khoản 273] Tập cây vai của vế này (`VAI_UNG_DUNG`) phải BẰNG tập mà mục hardening nó bảo chứng lọc
     // (`VAI_KET_NOI_UNG_DUNG`) — lệch chiều nào cũng đỏ ở đây, trước khi đọc quyền: vế hẹp hơn hardening là đúng khoản 273, vế rộng hơn
     // là hardening bỏ sót một cây mà tiến trình thật `SET ROLE` sang được.
     expect(
@@ -229,7 +229,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
       [TEN_HAM_LAY_KHOA_PHIEN],
     );
     expect(co[0]?.n, "bốn tên × hai dạng đối số").toBe(8);
-    // [S1.9130 / khoản 273] ~~`rolname IN ('app_api','app_unseal')` — đòi 2~~ Đủ MỌI vai của `VAI_UNG_DUNG` có thật trên cụm: một
+    // [S1.242 / khoản 273] ~~`rolname IN ('app_api','app_unseal')` — đòi 2~~ Đủ MỌI vai của `VAI_UNG_DUNG` có thật trên cụm: một
     // tên sai chính tả trong tập làm mệnh đề thành viên mù ở cây ấy, và vế này đỏ trước đối chứng dương.
     const { rows: vai } = await db.pool.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM pg_catalog.pg_roles WHERE rolname = ANY($1::text[])",
@@ -240,7 +240,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
     // [S1.220 / khoản 186 — lượt soi ngang 74 góc 2] ĐỐI CHỨNG DƯƠNG CỦA CHÍNH MỆNH ĐỀ LỌC. Hai đối chứng trên chứng minh HÀM tồn
     // tại và VAI tồn tại; không cái nào chứng minh mệnh đề `EXISTS (… pg_has_role …)` CHỌN ĐƯỢC AI. Đo: đổi hai tên vai trong nó
     // thành hai tên không tồn tại ⇒ tập rỗng VĨNH VIỄN ⇒ vế trên xanh bất kể quyền (§S1.220). Nên: cấp `EXECUTE` cho ~~đúng vai mà
-    // phần ⓷ độc quyền canh (`app_unseal`, vế ⓵ chỉ đo `app_api` dạng `bigint`)~~ [S1.9130 / khoản 273] TỪNG vai của `VAI_UNG_DUNG` —
+    // phần ⓷ độc quyền canh (`app_unseal`, vế ⓵ chỉ đo `app_api` dạng `bigint`)~~ [S1.242 / khoản 273] TỪNG vai của `VAI_UNG_DUNG` —
     // lần lượt, mỗi lần một vai: đối chứng của S1.220 chỉ chứng minh mệnh đề chọn được `app_unseal`, và đo trước vòng này cho thấy
     // `app_neo`, `app_khoi_tao` ra tập RỖNG dưới mệnh đề hai tên —, chạy lại ĐÚNG câu trên, đòi ĐÚNG một hàng, rồi thu
     // hồi trong `finally` để vế này không để lại quyền cho các vế sau.

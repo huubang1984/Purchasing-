@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9120 / khoản 282, 268] PHÉP ĐO CHO MODULE BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
+// [S1.240 / khoản 282, 268] PHÉP ĐO CHO MODULE BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
 //
 // Hành vi trên DOM (Tiếp, Vào, khối link gần đây, «còn nữa») đo ở `phuc-vu.test.ts`, trên CẢ BỐN trang thật chạy trong `node:vm`.
 // Tệp này đo ba thứ đứng một mình:
@@ -27,7 +27,7 @@ import {
 const ORG = "11111111-1111-4111-8111-111111111111";
 const BON_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach"] as const;
 
-describe("[S1.9120 / khoản 282] đọc ô tổ chức — một bản cho bốn trang (ADR-107)", () => {
+describe("[S1.240 / khoản 282] đọc ô tổ chức — một bản cho bốn trang (ADR-107)", () => {
   it("UUID trơn, nguyên link cũ, `#<orgId>`, khoảng trắng ⇒ UUID; rỗng ⇒ chuỗi rỗng; sai hình dạng ⇒ null", () => {
     expect(docMaToChuc(ORG)).toBe(ORG);
     expect(docMaToChuc(`  https://mua.vidu.vn/tao-thau#${ORG}:tokTokTokTokTokTok_-1 `)).toBe(ORG);
@@ -41,7 +41,7 @@ describe("[S1.9120 / khoản 282] đọc ô tổ chức — một bản cho bố
   });
 });
 
-describe("[S1.216 / khoản 195 · S1.9120 / khoản 268] câu của khối link đăng nhập gần đây", () => {
+describe("[S1.216 / khoản 195 · S1.240 / khoản 268] câu của khối link đăng nhập gần đây", () => {
   const L = { createdAt: "2026-09-30T08:00:00Z", expiresAt: "2026-09-30T08:15:00Z" };
 
   it("mỗi trạng thái một câu; giờ viết cho người đọc, không chuỗi ISO; danh sách rỗng ⇒ một dòng «chưa có»", () => {
@@ -68,7 +68,7 @@ describe("[S1.216 / khoản 195 · S1.9120 / khoản 268] câu của khối link
   });
 });
 
-describe("[S1.9120 / khoản 282] bốn trang khai ĐỦ bộ id mà bước 1 gắn vào", () => {
+describe("[S1.240 / khoản 282] bốn trang khai ĐỦ bộ id mà bước 1 gắn vào", () => {
   for (const trang of BON_TRANG) {
     it(`${trang}.html: mỗi id của ID_BUOC_MOT đúng một lần, phần tử ẩn lúc tải đúng như khai, ô mã và nút Vào nằm trong khoi-ma sau nút Tiếp`, () => {
       const html = readFileSync(new URL(`../trang/${trang}.html`, import.meta.url), "utf8");
@@ -87,7 +87,7 @@ describe("[S1.9120 / khoản 282] bốn trang khai ĐỦ bộ id mà bước 1 g
   }
 });
 
-describe("[S1.9120 / khoản 268] cửa sổ nói trên màn khớp cửa sổ của máy chủ", () => {
+describe("[S1.240 / khoản 268] cửa sổ nói trên màn khớp cửa sổ của máy chủ", () => {
   it("CUA_SO_NGAY_LINK_GAN_DAY bằng hằng cửa sổ của `listRecentLoginTokens` — đọc văn bản nguồn, không import", () => {
     const nguon = readFileSync(new URL("../../../packages/identity/src/login.ts", import.meta.url), "utf8");
     const m = /^const CUA_SO_LINK_GAN_DAY_NGAY = (\d+);$/mu.exec(nguon);

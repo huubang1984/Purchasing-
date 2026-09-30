@@ -513,7 +513,7 @@ describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII
 });
 
 // =============================================================================================
-// [S1.9160 / khoản 283 / ADR-9260] DẤU CHẤM CUỐI TÊN MIỀN — TỪ CHỐI CÓ TÊN, KHÔNG CHUẨN HOÁ
+// [S1.247 / khoản 283 / ADR-139] DẤU CHẤM CUỐI TÊN MIỀN — TỪ CHỐI CÓ TÊN, KHÔNG CHUẨN HOÁ
 //
 // Khoản 283 (tách ra từ lượt đo khoản 71 ở S1.229): `dot@x.vn.` CẤT ĐƯỢC cạnh `dot@x.vn` cho CÙNG một nhà cung cấp — `EMAIL_PATTERN` và
 // ràng buộc hình dạng của 011 khớp vì `[^…@]+\.[^…@]+$` lùi được về `x` `.` `vn.`; 092 chỉ kiểm miền ký tự; `UNIQUE (org_id, supplier_id,
@@ -522,7 +522,7 @@ describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII
 // '\.$')` ở lược đồ; KHÔNG chuẩn hoá — bỏ dấu chấm là sửa ngầm địa chỉ người dùng gõ. Ở đây đo tầng ứng dụng (`SupplierError` ⇒ 422 qua
 // `LOI_NGHIEP_VU_422`) và lược đồ dưới superuser (không qua gói này); đối chiếu trước của migration đo ở `db/migrations.int.test.ts`.
 // =============================================================================================
-describe("[S1.9160 / khoản 283] dấu chấm cuối tên miền của người liên hệ bị từ chối có tên", () => {
+describe("[S1.247 / khoản 283] dấu chấm cuối tên miền của người liên hệ bị từ chối có tên", () => {
   let ncc = "";
   beforeAll(async () => {
     ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC dấu chấm cuối", actorSessionId: sA }))).id;

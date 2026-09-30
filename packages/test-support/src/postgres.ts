@@ -6,7 +6,7 @@ import { TenantError } from "@trustprocure/tenancy";
 import { cauHinhCumCucBo, khoiDongCumCucBo, type MayChuPostgres } from "./postgres-cuc-bo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
-/** [S1.9130 / khoản 281] Gốc kho và chính tệp này — để nơi gọi in ra dạng `tệp:dòng` tương đối, đọc được trong log CI. */
+/** [S1.242 / khoản 281] Gốc kho và chính tệp này — để nơi gọi in ra dạng `tệp:dòng` tương đối, đọc được trong log CI. */
 const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
 const TEP_NAY = fileURLToPath(import.meta.url);
 
@@ -16,7 +16,7 @@ const TEP_NAY = fileURLToPath(import.meta.url);
 // sẽ trôi. Khối [fix C1 + I3] từng đứng ở đây nay là khối đầu `packages/db/src/vai-tro.ts`.
 
 /**
- * [S1.9130 / khoản 281] Lời khai của một test CỐ Ý để trạng thái phiên sót dưới `withTenant` — xem khối lý do khoản 281 ở dưới.
+ * [S1.242 / khoản 281] Lời khai của một test CỐ Ý để trạng thái phiên sót dưới `withTenant` — xem khối lý do khoản 281 ở dưới.
  * Đưa cho `poolAs(vai, …)` thì khai cho pool ấy; đưa cho `startPostgres(…)`/`withMigratedDatabase(fn, …)` thì khai cho `pool` superuser.
  */
 export interface TuyChonDemTrangThaiPhien {
@@ -31,7 +31,7 @@ export interface TestDatabase {
   readonly connectionString: string;
   readonly pool: pg.Pool;
   /**
-   * Pool mới chạy dưới một DB role khác — dùng để chứng minh RLS và GRANT chặn thật. [S1.9130 / khoản 281] Mỗi pool mang một bộ
+   * Pool mới chạy dưới một DB role khác — dùng để chứng minh RLS và GRANT chặn thật. [S1.242 / khoản 281] Mỗi pool mang một bộ
    * đếm `SESSION_STATE_LEFT`; test cố ý dựng cảnh ấy khai số lần qua `tuyChon.soLanSessionStateLeft`.
    */
   poolAs(role: string, tuyChon?: TuyChonDemTrangThaiPhien): pg.Pool;
@@ -110,7 +110,7 @@ async function chuoBackendKhachThoat(connectionString: string): Promise<BackendC
 }
 
 // ==============================================================================================
-// [S1.9130 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL NÀY ĐƯỢC ĐẾM — VÀ `stop()` ĐÒI SỐ ĐẾM BẰNG LỜI KHAI
+// [S1.242 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL NÀY ĐƯỢC ĐẾM — VÀ `stop()` ĐÒI SỐ ĐẾM BẰNG LỜI KHAI
 //
 // `withTenant` đọc lại trạng thái phiên sau mọi giao dịch; thấy sót — GUC tenant/khách phạm vi PHIÊN,
 // `session_replication_role`, `row_security`, search path hiệu lực — thì huỷ kết nối bằng
@@ -139,7 +139,7 @@ async function chuoBackendKhachThoat(connectionString: string): Promise<BackendC
 //     không nội suy giá trị vào lỗi của nó).
 // ==============================================================================================
 
-/** [S1.9130 / khoản 281] Một bộ đếm `SESSION_STATE_LEFT` của một pool. */
+/** [S1.242 / khoản 281] Một bộ đếm `SESSION_STATE_LEFT` của một pool. */
 interface BoDemTrangThaiPhien {
   readonly ten: string;
   /** `tệp:dòng` nơi pool được dựng (khung đầu tiên của ngăn xếp nằm ngoài tệp này). */
@@ -149,7 +149,7 @@ interface BoDemTrangThaiPhien {
 }
 
 /**
- * [S1.9130 / khoản 281] Nơi gọi `startPostgres`/`poolAs`: khung đầu tiên của ngăn xếp nằm ngoài tệp này và ngoài `node_modules`, dạng
+ * [S1.242 / khoản 281] Nơi gọi `startPostgres`/`poolAs`: khung đầu tiên của ngăn xếp nằm ngoài tệp này và ngoài `node_modules`, dạng
  * `tệp:dòng` tương đối với gốc kho. Chỉ đọc chuỗi ngăn xếp (vitest đã ánh xạ về mã nguồn); không đọc được thì nói thế, không ném.
  */
 function noiGoi(): string {
@@ -163,7 +163,7 @@ function noiGoi(): string {
   return "(không đọc được nơi gọi)";
 }
 
-/** [S1.9130 / khoản 281] Số lần khai — số nguyên không âm, mặc định 0; sai hình dạng thì NÉM trước khi chạm cụm. */
+/** [S1.242 / khoản 281] Số lần khai — số nguyên không âm, mặc định 0; sai hình dạng thì NÉM trước khi chạm cụm. */
 function soLanKhai(tuyChon: TuyChonDemTrangThaiPhien | undefined, cho: string): number {
   const n = tuyChon?.soLanSessionStateLeft ?? 0;
   if (!Number.isSafeInteger(n) || n < 0) {
@@ -172,7 +172,7 @@ function soLanKhai(tuyChon: TuyChonDemTrangThaiPhien | undefined, cho: string): 
   return n;
 }
 
-/** [S1.9130 / khoản 281] Gắn bộ đếm vào `pool`: mỗi `release` mang `TenantError` mã `SESSION_STATE_LEFT` cộng một. */
+/** [S1.242 / khoản 281] Gắn bộ đếm vào `pool`: mỗi `release` mang `TenantError` mã `SESSION_STATE_LEFT` cộng một. */
 function ganBoDem(pool: pg.Pool, ten: string, noiDung: string, khai: number): BoDemTrangThaiPhien {
   const bo: BoDemTrangThaiPhien = { ten, noiDung, khai, dem: 0 };
   pool.on("release", (loi: unknown) => {
@@ -181,7 +181,7 @@ function ganBoDem(pool: pg.Pool, ten: string, noiDung: string, khai: number): Bo
   return bo;
 }
 
-/** [S1.9130 / khoản 281] Lời phán của `stop()` khi có pool lệch — tên, nơi dựng, số; không giá trị. */
+/** [S1.242 / khoản 281] Lời phán của `stop()` khi có pool lệch — tên, nơi dựng, số; không giá trị. */
 function moTaLech(tepGoi: string, lech: readonly BoDemTrangThaiPhien[]): string {
   return (
     `[khoản 281] ${tepGoi}: số lần withTenant huỷ kết nối bằng TenantError SESSION_STATE_LEFT khác số đã khai — ` +
@@ -210,7 +210,7 @@ async function khoiDongContainer(): Promise<MayChuPostgres> {
 }
 
 export async function startPostgres(tuyChon: TuyChonDemTrangThaiPhien = {}): Promise<TestDatabase> {
-  // [S1.9130 / khoản 281] Nơi gọi và lời khai đọc TRƯỚC mọi `await`: ngăn xếp lúc này còn khung của người gọi, và một lời khai sai
+  // [S1.242 / khoản 281] Nơi gọi và lời khai đọc TRƯỚC mọi `await`: ngăn xếp lúc này còn khung của người gọi, và một lời khai sai
   // hình dạng ném trước khi một cụm nào được dựng.
   const tepGoi = noiGoi();
   const khaiPoolChinh = soLanKhai(tuyChon, `startPostgres (${tepGoi})`);
@@ -223,7 +223,7 @@ export async function startPostgres(tuyChon: TuyChonDemTrangThaiPhien = {}): Pro
   const connectionString = mayChu.connectionString;
   const pool = new pg.Pool({ connectionString, max: 5 });
   const rolePools: pg.Pool[] = [];
-  // [S1.9130 / khoản 281] Một bộ đếm mỗi pool — `pool` superuser trước, rồi từng pool của `poolAs` theo thứ tự dựng.
+  // [S1.242 / khoản 281] Một bộ đếm mỗi pool — `pool` superuser trước, rồi từng pool của `poolAs` theo thứ tự dựng.
   const boDem: BoDemTrangThaiPhien[] = [ganBoDem(pool, "pool superuser", tepGoi, khaiPoolChinh)];
 
   return {
@@ -266,7 +266,7 @@ export async function startPostgres(tuyChon: TuyChonDemTrangThaiPhien = {}): Pro
         conSot = [];
       }
 
-      // [S1.9130 / khoản 281] Chốt số đếm SAU khi mọi pool đã đóng: `withTenant` phát `release` đồng bộ trong `finally` của nó, nên
+      // [S1.242 / khoản 281] Chốt số đếm SAU khi mọi pool đã đóng: `withTenant` phát `release` đồng bộ trong `finally` của nó, nên
       // một giao dịch đã trả về thì đã được đếm; và TRƯỚC khi dừng máy chủ — nhưng ném thì SAU (điểm ⒟ ở khối lý do).
       const lech = boDem.filter((b) => b.dem !== b.khai);
 
@@ -293,7 +293,7 @@ export async function startPostgres(tuyChon: TuyChonDemTrangThaiPhien = {}): Pro
 }
 
 /**
- * Khởi động Postgres, áp dụng toàn bộ migration thật của dự án, chạy `fn`, rồi dọn dẹp. [S1.9130 / khoản 281] `tuyChon` là lời khai
+ * Khởi động Postgres, áp dụng toàn bộ migration thật của dự án, chạy `fn`, rồi dọn dẹp. [S1.242 / khoản 281] `tuyChon` là lời khai
  * cho `pool` superuser, chuyển nguyên cho `startPostgres`.
  */
 export async function withMigratedDatabase(

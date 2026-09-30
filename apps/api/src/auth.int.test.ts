@@ -281,9 +281,9 @@ describe("/auth/link — không liệt kê được email", () => {
     expect(dv.linkDaGui.length, "không người dùng nào mang địa chỉ ấy ⇒ không link").toBe(truoc);
   });
 
-  // [S1.9160 / khoản 283 / ADR-9260] DẤU CHẤM CUỐI TÊN MIỀN. RFC 5321 coi `vidu.vn.` là dạng tuyệt đối của `vidu.vn`: hai hàng `users` khác
+  // [S1.247 / khoản 283 / ADR-139] DẤU CHẤM CUỐI TÊN MIỀN. RFC 5321 coi `vidu.vn.` là dạng tuyệt đối của `vidu.vn`: hai hàng `users` khác
   // nhau MỘT dấu chấm cuối là HAI người dùng cho MỘT hộp thư, mỗi người xin được một magic link riêng — đo trước (lược đồ tới 095): hàng thứ
-  // hai VÀO và `/auth/link` với dạng có dấu chấm phát link cho nó. Nay `users_email_khong_dau_cham_cuoi` (`9560_email_khong_dau_cham_cuoi.sql`)
+  // hai VÀO và `/auth/link` với dạng có dấu chấm phát link cho nó. Nay `users_email_khong_dau_cham_cuoi` (`100_email_khong_dau_cham_cuoi.sql`)
   // chặn ở lược đồ, và `/auth/link` KHÔNG chuẩn hoá (câu 12 của kế hoạch đợt 3 — chuẩn hoá là phương án bị loại): dạng có dấu chấm không tìm
   // ra người dùng dạng không dấu chấm — cùng một 200, một job, không link. Link của dạng không dấu chấm là đối chứng dương của kênh quan sát.
   // Một phép so gộp để lần đỏ in trọn trạng thái đo được, không dừng ở vế đầu.
@@ -2340,7 +2340,7 @@ describe("[INV-E1] [S1.216 / khoản 195] GET /auth/login-links — link đăng 
 });
 
 // ==============================================================================================
-// [S1.9120 / khoản 268 / ADR-126] DANH SÁCH LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO THỜI GIAN, VÀ NÓI KHI NÓ BỊ CẮT
+// [S1.240 / khoản 268 / ADR-126] DANH SÁCH LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO THỜI GIAN, VÀ NÓI KHI NÓ BỊ CẮT
 //
 // Tới trước vòng này `listRecentLoginTokens` trả `LIMIT 20` mới nhất trước: trần phát là 5 mã tự phục vụ + 2 mã hệ thống mỗi 15 phút
 // (tối đa 7 hàng / 15 phút), nên 20 hàng phủ chừng 43 phút ở nhịp dày nhất — một link «đã dùng» cũ hơn thế rơi khỏi danh sách, và
@@ -2353,7 +2353,7 @@ describe("[INV-E1] [S1.216 / khoản 195] GET /auth/login-links — link đăng 
 //      ⇒ đủ 100 hàng, không mã ngoài cửa sổ nào, và `truncated: false`: mã cũ hơn 7 ngày không làm cờ đúng.
 // Đo trước trên cây trước vòng này: ba vế đỏ — 20 hàng thay vì 25/100, thân không có `truncated`.
 // ==============================================================================================
-describe("[S1.9120 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, trần 100 hàng, `truncated`", () => {
+describe("[S1.240 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, trần 100 hàng, `truncated`", () => {
   interface ThanLink {
     readonly loginLinks?: readonly { readonly createdAt: string; readonly consumedAt: string | null; readonly status: string }[];
     readonly truncated?: unknown;

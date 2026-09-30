@@ -1965,12 +1965,12 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
 }
 
 // ==============================================================================================
-// [S1.9130 / khoản 265] TẬP GHIM `NOBYPASSRLS` ĐỌC BẤT KỂ THỨ TỰ CỜ; VAI NGOÀI CÂY ĐỨNG NGOÀI BẰNG LỜI KHAI
+// [S1.242 / khoản 265] TẬP GHIM `NOBYPASSRLS` ĐỌC BẤT KỂ THỨ TỰ CỜ; VAI NGOÀI CÂY ĐỨNG NGOÀI BẰNG LỜI KHAI
 //
 // Tới vòng này vế "[sổ nợ 3]" đọc tập ghim bằng `/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — chỉ câu nào
 // viết `NOSUPERUSER` NGAY sau tên và `NOBYPASSRLS` ở sau nó. Hàng `thuộc tính role app_liet_ke_to_chuc` (S1.212)
 // ghim `NOBYPASSRLS` thật nhưng viết `NOBYPASSRLS NOSUPERUSER …` để ĐỨNG NGOÀI phép quét — tức vai ngoài cây được
-// loại bằng THỨ TỰ CỜ, không bằng khai. Đo trước (§S1.9130, hai đột biến văn bản hardening): "sửa cho đều" thứ tự
+// loại bằng THỨ TỰ CỜ, không bằng khai. Đo trước (§S1.242, hai đột biến văn bản hardening): "sửa cho đều" thứ tự
 // cờ của hàng ấy ⇒ vế đỏ `tám tên … expected […(9)]` — thông điệp nói về cây, không nói về thứ tự; hàng `app_api`
 // viết `NOBYPASSRLS` lên đầu ⇒ vế đỏ `[…(7)]` — một tên ĐANG ghim mà phép quét không thấy.
 // Nay: mọi câu `ALTER ROLE <tên> …` NGOÀI chú thích mà danh sách cờ có `NOBYPASSRLS` ở bất kỳ vị trí nào; trừ đi
@@ -1979,7 +1979,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
 // ==============================================================================================
 
 /**
- * [S1.9130 / khoản 265] Vai hardening ghim `NOBYPASSRLS` mà KHÔNG thuộc cây thành viên của bốn vai ứng dụng. Vế "[sổ nợ 3]" đo lời
+ * [S1.242 / khoản 265] Vai hardening ghim `NOBYPASSRLS` mà KHÔNG thuộc cây thành viên của bốn vai ứng dụng. Vế "[sổ nợ 3]" đo lời
  * khai trên cụm đã migrate: vai tồn tại, NOINHERIT, và không là thành viên của vai ứng dụng nào.
  */
 const VAI_NGOAI_CAY: Readonly<Record<string, string>> = {
@@ -1989,10 +1989,10 @@ const VAI_NGOAI_CAY: Readonly<Record<string, string>> = {
 };
 
 /**
- * [S1.9130 / khoản 265] Tập tên mà một văn bản hardening ghim `NOBYPASSRLS`: mọi câu `ALTER ROLE <tên> <cờ…>` ngoài chú thích `--`,
+ * [S1.242 / khoản 265] Tập tên mà một văn bản hardening ghim `NOBYPASSRLS`: mọi câu `ALTER ROLE <tên> <cờ…>` ngoài chú thích `--`,
  * danh sách cờ đọc tới `$`, `;` hay dấu nháy kế tiếp (qua được xuống dòng), cờ so theo TỪ và không phân biệt hoa thường — `BYPASSRLS`
  * không phải `NOBYPASSRLS`. Tên trong ngoặc kép giữ nguyên, tên trần hạ thường như PostgreSQL. Hàm thuần — đo bằng mẫu ở vế
- * "[S1.9130 / khoản 265] phép quét …". Chú thích bị bỏ vì một câu NHẮC trong chú thích không phải một lần ghim: đọc cả chú thích thì
+ * "[S1.242 / khoản 265] phép quét …". Chú thích bị bỏ vì một câu NHẮC trong chú thích không phải một lần ghim: đọc cả chú thích thì
  * gỡ hàng ghim thật của một vai mà một chú thích còn nhắc câu ấy vẫn xanh.
  */
 function tapGhimNobypassrls(sql: string): string[] {
@@ -2004,7 +2004,7 @@ function tapGhimNobypassrls(sql: string): string[] {
   return [...ten].sort();
 }
 
-describe("[S1.9130 / khoản 265] phép quét tập ghim NOBYPASSRLS — hàm thuần, không cụm", () => {
+describe("[S1.242 / khoản 265] phép quét tập ghim NOBYPASSRLS — hàm thuần, không cụm", () => {
   it("mẫu: thứ tự cờ không đổi kết quả, cờ qua được xuống dòng; chú thích, BYPASSRLS trần, cờ của câu khác, từ dính chữ không tính", () => {
     expect(tapGhimNobypassrls("$q$ALTER ROLE a NOSUPERUSER NOBYPASSRLS$q$, $q$ALTER ROLE b NOBYPASSRLS NOSUPERUSER$q$")).toEqual(["a", "b"]);
     expect(tapGhimNobypassrls("$q$ALTER ROLE c NOSUPERUSER\n          NOCREATEDB NOBYPASSRLS NOLOGIN$q$")).toEqual(["c"]);
@@ -2374,7 +2374,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     };
 
     // Tập tên mà hardening ghim `NOBYPASSRLS` — đọc THẲNG từ file, không viết tay lại.
-    // ~~`/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — vai ngoài cây đứng ngoài nhờ THỨ TỰ CỜ~~ [S1.9130 / khoản 265] Mọi câu
+    // ~~`/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — vai ngoài cây đứng ngoài nhờ THỨ TỰ CỜ~~ [S1.242 / khoản 265] Mọi câu
     // `ALTER ROLE` ngoài chú thích mang `NOBYPASSRLS` ở bất kỳ vị trí nào (`tapGhimNobypassrls`), trừ `VAI_NGOAI_CAY` đã khai.
     const tapGhim = tapGhimNobypassrls(HARDENING);
     expect(
@@ -2401,7 +2401,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     expect(truoc.filter((r) => !daGhim.includes(r)), "cây role không được có tên ngoài tập ghim")
       .toEqual([]);
 
-    // [S1.9130 / khoản 265] LÝ DO của lời khai "vai ngoài cây", đo trên cụm đã migrate: vai tồn tại, NOINHERIT, và KHÔNG là thành
+    // [S1.242 / khoản 265] LÝ DO của lời khai "vai ngoài cây", đo trên cụm đã migrate: vai tồn tại, NOINHERIT, và KHÔNG là thành
     // viên của vai ứng dụng nào — nên nó không bao giờ là current_user của một kết nối qua cây. Lời khai sai (ai đó GRANT một vai ứng
     // dụng cho nó, hay bật INHERIT) thì đỏ ở đây chứ không lặng lẽ loại một thành viên của cây khỏi phép so.
     for (const ten of Object.keys(VAI_NGOAI_CAY)) {

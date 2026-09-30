@@ -24,7 +24,7 @@
 //
 // Cụm tắt `fsync`/`synchronous_commit`/`full_page_writes`: dữ liệu test không cần sống sót một
 // lần mất điện, và ba cờ ấy là ~~khác biệt DUY NHẤT về cấu hình so với container~~
-// [S1.9130 / khoản 9401] cấu hình máy chủ duy nhất tệp này CHỌN khác container. Khác biệt ĐÃ BIẾT còn
+// [S1.242 / khoản 287] cấu hình máy chủ duy nhất tệp này CHỌN khác container. Khác biệt ĐÃ BIẾT còn
 // lại: locale và libc (ranh giới ở trên; `initdb` ghi bốn `lc_*` theo locale), bản vá nhỏ của
 // PostgreSQL 16, và phần ống nối (`listen_addresses`, cổng, thư mục socket).
 // Máy không Docker không đo được container, nên đây là danh sách ĐÃ BIẾT chứ không phải danh sách ĐỦ —
@@ -33,7 +33,7 @@
 // vai thôi đăng nhập được sau khi đổi — dưới `trust` phép đo ấy xanh giả. Mật khẩu của `postgres`
 // đi qua `--pwfile` (tệp tạm trong thư mục cha, xoá ngay sau `initdb`), không qua dòng lệnh.
 //
-// [S1.9130 / khoản 9401] `TimeZone` TỪNG LÀ MỘT KHÁC BIỆT KHÔNG AI KHAI. `initdb` ghi `timezone` và
+// [S1.242 / khoản 287] `TimeZone` TỪNG LÀ MỘT KHÁC BIỆT KHÔNG AI KHAI. `initdb` ghi `timezone` và
 // `log_timezone` vào `postgresql.conf` theo múi giờ của MÁY — `Etc/UTC` trên Ubuntu của phiên đám mây
 // (đo: `/etc/localtime` → `Etc/UTC`), múi giờ thật của máy người phát triển ở chỗ khác —, còn ảnh
 // `postgres:16-alpine` ra `UTC`. Ca khoản 104 của `packages/db/src/vai-tro.int.test.ts` từng viết cứng
@@ -112,7 +112,7 @@ export async function khoiDongCumCucBo(cauHinh: CauHinhCumCucBo): Promise<MayChu
   await writeFile(tepMatKhau, `${MAT_KHAU}\n`, { mode: 0o644 });
   await chmod(tepMatKhau, 0o644);
   try {
-    // [S1.9130 / khoản 9401] `TZ=UTC` chỉ cho tiến trình `initdb`: nó chọn múi giờ ghi vào `postgresql.conf` từ `TZ` trước khi
+    // [S1.242 / khoản 287] `TZ=UTC` chỉ cho tiến trình `initdb`: nó chọn múi giờ ghi vào `postgresql.conf` từ `TZ` trước khi
     // đọc `/etc/localtime`, nên cụm mang `timezone = UTC` như `postgres:16-alpine` bất kể múi giờ của máy (khối đầu tệp).
     await chay(
       initdb,

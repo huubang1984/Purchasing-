@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9125 / khoản 279] MÃ CHỐT ĐI VÀO DÒNG LOG KHI LẦN GHI SỔ `CONTROL_DENIED` GÃY — ĐO Ở MỨC HÀM
+// [S1.241 / khoản 279] MÃ CHỐT ĐI VÀO DÒNG LOG KHI LẦN GHI SỔ `CONTROL_DENIED` GÃY — ĐO Ở MỨC HÀM
 //
 // `tuChoiTheoChotTaiNguyen` ghi một hàng `CONTROL_DENIED` payload `{ ma }` ở giao dịch ĐỘC LẬP qua `throwAuditedDenial`
 // (ADR-108 ⑵). Khi lần ghi ấy gãy — khoá ghi sổ của tổ chức bị giữ quá trần 2 s của `050` ⇒ `55P03` (§S1.225) —, thứ còn lại
@@ -14,7 +14,7 @@
 // Pool giả: lần lấy kết nối của lần ghi sổ ném một `pg.DatabaseError` mang SQLSTATE `55P03` — đúng lớp và mã mà `lock_timeout` của
 // `noi_chuoi_kiem_toan()` ném (§S1.225: `<- error 55P03`). Phần còn lại của chuỗi — `tuChoiTheoChot*`, `throwAuditedDenial`,
 // `withTenant`, lớp lỗi, `moTaLoiKhongGiaTri` — là mã thật. Đường có khoá ghi sổ THẬT trên PostgreSQL 16 đo một lần ở biên bản
-// §S1.9125 mục 3 (phép đo tạm, không vào kho); tệp này là lớp giữ lại.
+// §S1.241 mục 3 (phép đo tạm, không vào kho); tệp này là lớp giữ lại.
 //
 // Không nhãn `[INV-…]`: tệp đo nội dung chẩn đoán của một dòng log, không một bất biến của `TEST-PLAN` (cùng lý do
 // `danh-muc-tu-choi.test.ts`, §S1.225 mục 5).
@@ -68,7 +68,7 @@ const MA = Object.keys(CHOT_VAO_SO) as MaChotKiemSoat[];
 const MA_VAO_SO = MA.filter((ma) => CHOT_VAO_SO[ma].vaoSo);
 const MA_KHONG_VAO_SO = MA.filter((ma) => !CHOT_VAO_SO[ma].vaoSo);
 
-describe("[S1.9125 / khoản 279] lần ghi sổ `CONTROL_DENIED` gãy 55P03 ⇒ dòng log mang MÃ CHỐT", () => {
+describe("[S1.241 / khoản 279] lần ghi sổ `CONTROL_DENIED` gãy 55P03 ⇒ dòng log mang MÃ CHỐT", () => {
   it("đối chứng chống rỗng ruột: bảng có mã vào sổ lẫn mã không vào sổ — hai nhánh dưới đây đều có ca", () => {
     expect(MA_VAO_SO.length).toBeGreaterThan(0);
     expect(MA_KHONG_VAO_SO.length).toBeGreaterThan(0);

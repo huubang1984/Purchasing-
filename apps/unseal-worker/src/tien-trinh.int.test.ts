@@ -313,7 +313,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       // đổi sang bảng thật — `LOGIN_LINK_SEND` không có `email` thì handler ném, job về PENDING
       // với `attempts = 1`, và vế "job của api phải xong" đỏ. Một handler giả làm mốc chết đo
       // đúng cái tên `kind` và không đo gì thêm.
-      // [S1.9115 / khoản 161] `kind` mang kiểu union `KindOutbox` (`JobInput["kind"]`) — hai kind thật dưới đây, không kind thử.
+      // [S1.239 / khoản 161] `kind` mang kiểu union `KindOutbox` (`JobInput["kind"]`) — hai kind thật dưới đây, không kind thử.
       const xep = async (kind: JobInput["kind"], payload: Record<string, unknown>): Promise<string> =>
         withTenant(apiPool, org, (c) => enqueueJob(c, org, { kind, payload }));
       const idMoThau = await xep(UNSEAL_JOB_KIND, { unsealRequestId: randomUUID(), rfqId: randomUUID() });

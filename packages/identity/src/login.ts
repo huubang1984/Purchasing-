@@ -20,7 +20,7 @@
 //   listRecentLoginTokens
 //                       [S1.216 / khoản 195] link đăng nhập gần đây CỦA CHÍNH người gọi — tạo lúc, hết hạn,
 //                       dùng lúc, trạng thái; KHÔNG BAO GIỜ `token_hash`. Cho người ĐÃ đăng nhập; thông điệp
-//                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên. [S1.9120 / khoản 268] Cửa sổ 7
+//                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên. [S1.240 / khoản 268] Cửa sổ 7
 //                       ngày, trần 100 hàng, cờ `truncated` khi trần cắt hàng trong cửa sổ
 //
 // Ba kỷ luật kế thừa nguyên vẹn từ `packages/invitation`:
@@ -585,7 +585,7 @@ export async function revokeSession(client: pg.PoolClient, orgId: string, sessio
 // hàng, mới nhất trước: trần tự phục vụ là 5 mã / 15 phút, nên hai mươi hàng là hơn một giờ dùng dày;~~ chỉ
 // mục `(org_id, user_id, created_at)` của 029 phục vụ đúng câu này.
 //
-// [S1.9120 / khoản 268] Hai mươi hàng là «hơn một giờ dùng dày» chỉ ở trần tự phục vụ; cộng 2 mã hệ thống mỗi 15 phút
+// [S1.240 / khoản 268] Hai mươi hàng là «hơn một giờ dùng dày» chỉ ở trần tự phục vụ; cộng 2 mã hệ thống mỗi 15 phút
 // (`HE_THONG_MAX_TOKENS_PER_WINDOW`, ADR-048) thì nhịp dày nhất là 7 hàng / 15 phút và hai mươi hàng phủ chừng 43 phút — một link
 // «đã dùng» cũ hơn thế rơi khỏi danh sách, và thân không nói mình cắt. Chủ dự án chốt câu 6 (2026-09-30): cắt theo THỜI GIAN —
 // `CUA_SO_LINK_GAN_DAY_NGAY` ngày, dài hơn mọi TTL (15 phút) và mọi cửa sổ phát (15 phút) — với trần cứng `TRAN_LINK_GAN_DAY` hàng, và
@@ -605,21 +605,21 @@ export interface RecentLoginToken {
   readonly status: LoginTokenStatus;
 }
 
-/** [S1.9120 / khoản 268] Kết quả của `listRecentLoginTokens`: các link trong cửa sổ (tối đa trần), và cờ «còn nữa». */
+/** [S1.240 / khoản 268] Kết quả của `listRecentLoginTokens`: các link trong cửa sổ (tối đa trần), và cờ «còn nữa». */
 export interface RecentLoginTokens {
   readonly links: readonly RecentLoginToken[];
   /** Đúng khi còn link TRONG cửa sổ mà trần đã cắt đi — link cũ hơn cửa sổ không tính. */
   readonly truncated: boolean;
 }
 
-// ~~const SO_LINK_GAN_DAY = 20;~~ [S1.9120 / khoản 268] Cửa sổ và trần — câu 6 của chủ dự án. `apps/web/src/dang-nhap.test.ts`
+// ~~const SO_LINK_GAN_DAY = 20;~~ [S1.240 / khoản 268] Cửa sổ và trần — câu 6 của chủ dự án. `apps/web/src/dang-nhap.test.ts`
 // đọc dòng cửa sổ dưới đây bằng văn bản để câu «7 ngày» trên màn không trôi khỏi nó.
 const CUA_SO_LINK_GAN_DAY_NGAY = 7;
 const TRAN_LINK_GAN_DAY = 100;
 
 /**
  * Link đăng nhập gần đây của CHÍNH `userId` — người gọi là bộ điều phối với `actor.id` của phiên; đây không phải một lời khai danh
- * tính từ thân yêu cầu. ~~Trả mảng (có thể rỗng)~~ [S1.9120 / khoản 268] Trả các link tạo trong `CUA_SO_LINK_GAN_DAY_NGAY` ngày gần
+ * tính từ thân yêu cầu. ~~Trả mảng (có thể rỗng)~~ [S1.240 / khoản 268] Trả các link tạo trong `CUA_SO_LINK_GAN_DAY_NGAY` ngày gần
  * nhất, mới nhất trước, tối đa `TRAN_LINK_GAN_DAY` (có thể rỗng), cộng `truncated`; không ném ở ca "không có link": khác các hàm trên,
  * đây là một phép đọc của chính chủ, không có gì để che. `userId` sai hình dạng thì ném như mọi hàm của tệp — một lỗi lập trình,
  * không phải một ca của người dùng.

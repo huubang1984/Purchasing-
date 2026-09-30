@@ -12,11 +12,11 @@
 # buoc nay chi do duoc bang chinh luot CI.
 #
 # Sua o cau hinh, khong sua SQL. Giu TOAN BO luat mac dinh; chi mien phan-bi-coi-la-bi-mat khi no
-# co dung HINH DANG ten tep migration cua du an (`NNN_ten_khong_dau`): ~~ba chu so~~ [S1.9110 / khoan
+# co dung HINH DANG ten tep migration cua du an (`NNN_ten_khong_dau`): ~~ba chu so~~ [S1.238 / khoan
 # 284] ba HOAC BON chu so, gach duoi, chu thuong/so/gach duoi. Khong mien tep, khong mien luat, khong
 # mien theo commit — mot khoa API that khong co hinh dang nay.
 #
-# [S1.9110 / khoan 284] Vi sao bon chu so: ADR-090 cho migration cua mot lo mang so tam `95NN_ten`
+# [S1.238 / khoan 284] Vi sao bon chu so: ADR-090 cho migration cua mot lo mang so tam `95NN_ten`
 # toi luc `pnpm cap-so` cap so that o merge. Mot dong `BANG_TENANT_KHAI` mang so tam cho mot bang co
 # chu `key`/`token` trong ten se lam job `t0c-bi-mat` do TREN NHANH lo — truoc khi cap-so doi so —
 # neu regex chi nhan ba chu so. `db/hardening-hang.ts`, `rls-coverage` va `migration-shape` da nhan

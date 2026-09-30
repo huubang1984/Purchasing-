@@ -28,7 +28,7 @@ function clientGia(tra: readonly (unknown[] | Error)[]): pg.PoolClient {
 }
 
 const ORG = "11111111-1111-4111-8111-111111111111";
-// [S1.9115 / khoản 161] Bốn vế dưới đo DẤU, không đo `kind`: trước vòng này chúng dùng `"TEST_KIND"`; nay `JobInput.kind` là union
+// [S1.239 / khoản 161] Bốn vế dưới đo DẤU, không đo `kind`: trước vòng này chúng dùng `"TEST_KIND"`; nay `JobInput.kind` là union
 // `KindOutbox` nên chúng mượn một kind THẬT — client là giả, không câu SQL nào chạy.
 const KIND = "LOGIN_LINK_SEND";
 
@@ -66,14 +66,14 @@ describe("[khoản 156] dấu xếp việc do chính enqueueJob để lại", ()
 });
 
 // ============================================================================================
-// [S1.9115 / khoản 161] `JobInput.kind` LÀ UNION `KindOutbox` — PHÉP ĐO Ở TẦNG BIÊN DỊCH
+// [S1.239 / khoản 161] `JobInput.kind` LÀ UNION `KindOutbox` — PHÉP ĐO Ở TẦNG BIÊN DỊCH
 //
 // Hai `@ts-expect-error` dưới đây LÀ phép đo, cùng khuôn `packages/audit/src/verifier.test.ts`: nếu ai trả `kind` về `string` thì
 // hai dòng ấy biên dịch được, và `pnpm typecheck` ĐỎ với "Unused '@ts-expect-error' directive" — không cách nào để lớp này mục đi
-// trong im lặng. Hai hình dạng là hai hình dạng của phép đo trước (§S1.9115): một kind ngoài tập, và một chuỗi ghép (kiểu `string`).
+// trong im lặng. Hai hình dạng là hai hình dạng của phép đo trước (§S1.239): một kind ngoài tập, và một chuỗi ghép (kiểu `string`).
 // Vế chạy chỉ để tệp có một khẳng định; trọng tài là tsc.
 // ============================================================================================
-describe("[S1.9115 / khoản 161] `JobInput.kind` là union `KindOutbox` — tsc từ chối kind ngoài tập và chuỗi ghép", () => {
+describe("[S1.239 / khoản 161] `JobInput.kind` là union `KindOutbox` — tsc từ chối kind ngoài tập và chuỗi ghép", () => {
   it("literal trong union biên dịch; kind lạ và chuỗi ghép KHÔNG biên dịch (`@ts-expect-error` là mốc chết)", () => {
     const hop: JobInput = { kind: "UNSEAL_RFQ" };
     // @ts-expect-error — "THU_LOT_161" không thuộc KindOutbox: đúng lỗ khoản 161 (kind không người nhận nằm PENDING im lặng).

@@ -167,11 +167,11 @@ describe("[S1.182 / ADR-111] ⑴ tạo tổ chức", () => {
     expect(t.ok, "người ấy xin được link đăng nhập bằng email như đã khai").toBe(true);
   });
 
-  // [S1.9160 / khoản 283 / ADR-9260] Dấu chấm cuối tên miền: `dot@khach-cham.vn.` là CÙNG hộp thư với `dot@khach-cham.vn` (RFC 5321 — dạng
+  // [S1.247 / khoản 283 / ADR-139] Dấu chấm cuối tên miền: `dot@khach-cham.vn.` là CÙNG hộp thư với `dot@khach-cham.vn` (RFC 5321 — dạng
   // tuyệt đối của cùng một tên), nhưng `UNIQUE (org_id, email)` so nguyên văn và phép dò trùng của bản khai so `toLowerCase()` — hai người
   // dùng, hai magic link, một hộp thư. Từ chối CÓ TÊN trước khi tới CSDL, cả khi dạng không dấu chấm đứng cạnh trong cùng bản khai lẫn khi
   // nó đã có trong tổ chức; KHÔNG chuẩn hoá (câu 12 của kế hoạch đợt 3). Lược đồ chặn cùng luật bằng `users_email_khong_dau_cham_cuoi`.
-  it("[S1.9160 / khoản 283] email có dấu chấm cuối tên miền ⇒ KhoiTaoError nêu vị trí, không tới CSDL, rollback trọn — ở chế độ tạo lẫn thêm người", async () => {
+  it("[S1.247 / khoản 283] email có dấu chấm cuối tên miền ⇒ KhoiTaoError nêu vị trí, không tới CSDL, rollback trọn — ở chế độ tạo lẫn thêm người", async () => {
     const loi = await khoiTao(
       pool,
       docBanKhai(banKhaiTao("cham-cuoi", [nguoi("dot@khach-cham.vn", ["BUYER"]), nguoi("dot@khach-cham.vn.", ["FINANCE"])]), "tao"),

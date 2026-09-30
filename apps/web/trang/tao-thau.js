@@ -27,7 +27,7 @@ const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-// [S1.9120 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây — bước 1 nay là `/lib/dang-nhap.js`.
+// [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây — bước 1 nay là `/lib/dang-nhap.js`.
 let phien = { rfqId: "", supplierId: "", contactId: "", soHangMuc: 0 };
 // [S1.191 / S3.2c2] Luồng của tổ chức (`daBat`) và trạng thái gói đang mở trên màn — dựng lại mỗi lần đổi người.
 let luong = { daBat: false, trangThaiGoi: "" };
@@ -69,7 +69,7 @@ function dienDl(el, hang) {
 // chạy thử đầu tiên của màn ấy ép ra: đọc CẢ mã tổ chức từ fragment, và gọi `/auth/redeem` ĐÚNG
 // một lần cho mỗi mã đăng nhập (gọi lại là máy chủ sinh bí mật TOTP mới, và mã của người dùng
 // không bao giờ đúng nữa).
-// [S1.9120 / khoản 282] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login`: nút Tiếp, nút Vào và khối link đăng nhập gần đây là
+// [S1.240 / khoản 282] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login`: nút Tiếp, nút Vào và khối link đăng nhập gần đây là
 // `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về bước 1.
 // ---------------------------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ window.addEventListener("hashchange", () => {
   thuPhienCo();
 });
 
-// [S1.9120 / khoản 282] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// [S1.240 / khoản 282] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
 // cùng chỗ câu lỗi~~ — khoản 193 ở trang này. Nay bước 1 là module chung; trang trao cho nó việc của riêng mình sau khi vào.
 const dangNhap = ganDangNhap({ taiLieu: document, goi, lichSu: history, viTri: location, daVao: (me) => moSauDangNhap(me, false) });
 
@@ -134,7 +134,7 @@ function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
-  // [S1.9120 / khoản 282] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  // [S1.240 / khoản 282] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
   void dangNhap.veLinkGanDay();
   void napLuong();
 }
@@ -655,7 +655,7 @@ async function napLoiMoi() {
         if (th.status !== 200) { bao($("loi5"), loiCua(th, "Không thu hồi được")); return; }
         // ~~"Đã thu hồi. Mời lại nhà cung cấp ấy được rồi."~~ [S1.181 / ADR-110] Mời lại sau thu hồi là một hồ sơ báo giá
         // MỚI, ~~và báo giá đã nộp theo lời mời vừa thu hồi vẫn nằm trong gói thầu (sổ nợ)~~ — nói ra, và chỉ đường gửi lại link.
-        // [S1.9120 / khoản 276 / ADR-128] Thu hồi LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và xếp hạng: câu nói thẳng.
+        // [S1.240 / khoản 276 / ADR-128] Thu hồi LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và xếp hạng: câu nói thẳng.
         bao($("ok5"), "Đã thu hồi. Báo giá đã nộp theo lời mời này (nếu có) không dự thầu nữa — nó không được mở thầu, so sánh " +
           "hay xếp hạng. Nhà cung cấp chỉ cần link mới thì dùng «Gửi lại link», đừng thu hồi.");
         await napLoiMoi();

@@ -31,7 +31,7 @@ import {
   getUnsealRequest,
   requestUnseal,
 } from "./index.js";
-// [S1.9145 / khoản 266] Tên ràng buộc mà bộ lọc "không tìm thấy" đọc — export KHỎI TỆP, không khỏi gói (cùng khuôn
+// [S1.245 / khoản 266] Tên ràng buộc mà bộ lọc "không tìm thấy" đọc — export KHỎI TỆP, không khỏi gói (cùng khuôn
 // `laViPhamD2TheoThongDiep`): ca hai chiều dưới đây đối chiếu nó với thân hàm THẬT trong CSDL.
 import { RANG_BUOC_KHONG_TIM_THAY_YEU_CAU } from "./requests.js";
 
@@ -1977,19 +1977,19 @@ describe("[INV-D5] [S1.213 / khoản 133] huỷ hay phê duyệt một yêu cầ
 });
 
 // ===============================================================================================
-// [S1.9145 / khoản 266 · 267] "KHÔNG TÌM THẤY YÊU CẦU" NHẬN RA THEO TÊN RÀNG BUỘC; HUỶ MỘT YÊU CẦU KHÔNG CÒN Ở TRẠNG THÁI HUỶ ĐƯỢC
+// [S1.245 / khoản 266 · 267] "KHÔNG TÌM THẤY YÊU CẦU" NHẬN RA THEO TÊN RÀNG BUỘC; HUỶ MỘT YÊU CẦU KHÔNG CÒN Ở TRẠNG THÁI HUỶ ĐƯỢC
 // VÀO SỔ, VỚI CÂU RIÊNG VÀ MÃ RIÊNG
 //
-// 266 — đo trước (§S1.213, đo lại trên `a97dd48b` ở §S1.9145): nhánh không thấy yêu cầu của `unseal_kiem_nguoi_duyet` (019) RAISE
+// 266 — đo trước (§S1.213, đo lại trên `a97dd48b` ở §S1.245): nhánh không thấy yêu cầu của `unseal_kiem_nguoi_duyet` (019) RAISE
 // 23503 KHÔNG tên ràng buộc, nên `laKhongTimThayYeuCau` chỉ đọc `code` — MỌI 23503 của câu INSERT ấy thành hàng `UNSEAL_NOT_FOUND_DENIED`,
-// kể cả một 23503 vì nguyên nhân khác. `9545_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại hàm (thân trích nguyên văn, đổi đúng một
+// kể cả một 23503 vì nguyên nhân khác. `098_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại hàm (thân trích nguyên văn, đổi đúng một
 // chỗ: `CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'`) và bộ lọc đọc `code` VÀ `constraint` — khuôn `laTrungPheDuyet` (ADR-108).
 // 267 — đo trước: huỷ một yêu cầu CÓ THẬT đã `EXECUTED`/`CANCELLED` ⇒ `UnsealError` câu gộp "không tìm thấy …, hoặc nó không ở trạng
 // thái huỷ được", 0 hàng sổ. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 5): tách câu (đổi hợp đồng — thân 422 mang `ma`, khuôn khoản
 // 230) và vào sổ `UNSEAL_CANCEL_DENIED {lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC"}` theo luật ADR-060; người tích hợp chốt thêm (khuôn khoản
-// 279, §S1.9125): `lyDo` là VẾ — đối số thứ năm của `throwAuditedDenial` — để dòng log mất sổ phân biệt hai lý do của cùng `action`.
+// 279, §S1.241): `lyDo` là VẾ — đối số thứ năm của `throwAuditedDenial` — để dòng log mất sổ phân biệt hai lý do của cùng `action`.
 // ===============================================================================================
-describe("[INV-D5] [S1.9145 / khoản 266 · 267] 23503 \"không tìm thấy\" phải MANG TÊN; huỷ một yêu cầu không còn huỷ được để lại đúng một hàng, câu riêng, mã riêng", () => {
+describe("[INV-D5] [S1.245 / khoản 266 · 267] 23503 \"không tìm thấy\" phải MANG TÊN; huỷ một yêu cầu không còn huỷ được để lại đúng một hàng, câu riêng, mã riêng", () => {
   /** Câu 422 MỚI của vế trạng thái — hợp đồng, ghim nguyên văn. */
   const CAU_KHONG_O_TRANG_THAI_HUY_DUOC =
     "Yêu cầu mở thầu này không còn ở trạng thái huỷ được — nó đã được mở thầu hoặc đã bị huỷ.";

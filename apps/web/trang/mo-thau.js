@@ -17,7 +17,7 @@ const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-// [S1.9120 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây: mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây: mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js` (bước 1 chung của bốn trang người mua). Phiên của trang chỉ còn hai con trỏ của các bước sau.
 let phien = { rfqId: "", unsealRequestId: "" };
 
@@ -61,7 +61,7 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
-// [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012) — dùng ở `docLink`. ~~Hằng của trang~~ [S1.9120 / khoản 282] `LA_UUID`
+// [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012) — dùng ở `docLink`. ~~Hằng của trang~~ [S1.240 / khoản 282] `LA_UUID`
 // import từ `/lib/dang-nhap.js`: một bản với phép đọc ô tổ chức của bước 1.
 
 // [S1.176 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
@@ -77,7 +77,7 @@ function nhoToChuc(orgId) {
 }
 
 // [S1.176 / ADR-107] Đọc ô tổ chức — nhận cả một link cũ dán vào, `""` khi ô rỗng, `null` khi sai hình dạng. ~~`docToChuc()` của
-// trang~~ [S1.9120 / khoản 282] `docMaToChuc($("org").value)` của `/lib/dang-nhap.js`, cùng câu `SAI_TO_CHUC`: bước 1 của bốn trang
+// trang~~ [S1.240 / khoản 282] `docMaToChuc($("org").value)` của `/lib/dang-nhap.js`, cùng câu `SAI_TO_CHUC`: bước 1 của bốn trang
 // và ô xin link ở dưới đọc qua MỘT hàm.
 const MAT_KET_NOI = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
 
@@ -113,7 +113,7 @@ function docLink() {
 // 2026-09-20). Nay ô mã sáu số ẩn cho tới khi máy chủ đã nói tài khoản này cần ghi danh hay không;
 // bí mật hiện ở khối riêng, với nhãn nói rõ nó là gì và KHÔNG phải gì.
 //
-// [S1.9120 / khoản 282] ~~`doiMaDangNhap`, `doiMa`, `dongKhoiMa` và hai trình nghe của trang này~~ Bước ấy nay là MỘT module,
+// [S1.240 / khoản 282] ~~`doiMaDangNhap`, `doiMa`, `dongKhoiMa` và hai trình nghe của trang này~~ Bước ấy nay là MỘT module,
 // `/lib/dang-nhap.js`, mà `/tao-thau`, `/nhom-hang`, `/chinh-sach` cũng gắn vào cùng bộ id — ba trang ấy từng chép khối cũ (nút Vào
 // gộp «lấy bí mật» với «vào»), nên người mở thẳng chúng với link còn hạn gặp lại đúng khiếm khuyết trên. Trang trao cho module
 // `document`, `goi`, `history`, `location` và việc của riêng nó sau khi vào: nhớ mã tổ chức (ADR-107), mở các bước.
@@ -152,7 +152,7 @@ function moSauDangNhap(me, dungLai) {
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
   // [S1.216 / khoản 195] Vừa vào (hay vừa nhận phiên) là lúc hỏi link đăng nhập gần đây của chính mình — không chờ, không chặn.
-  // [S1.9120 / khoản 282] Khối ấy nay ở `/lib/dang-nhap.js`.
+  // [S1.240 / khoản 282] Khối ấy nay ở `/lib/dang-nhap.js`.
   void dangNhap.veLinkGanDay();
 }
 
@@ -179,7 +179,7 @@ function dongCacBuoc() {
 // bị bỏ — cùng phép kiểm-lại-sau-await của `thuPhienCo`, ở đây bằng một bộ đếm lượt: mỗi lần hỏi hay mỗi
 // lần về bước 1 là một lượt mới, phản hồi của lượt cũ không vẽ gì (kể cả khi người khác đã vào sau đó).
 //
-// [S1.9120 / khoản 282, 268] ~~`GIO`, `moTaLink`, `anLinkGanDay`, `veLinkGanDay` của trang này~~ Khối ấy nay ở `/lib/dang-nhap.js` —
+// [S1.240 / khoản 282, 268] ~~`GIO`, `moTaLink`, `anLinkGanDay`, `veLinkGanDay` của trang này~~ Khối ấy nay ở `/lib/dang-nhap.js` —
 // bốn trang người mua cùng có nó —, và nó nói thêm cửa sổ 7 ngày và câu «còn nữa» khi thân mang `truncated: true`.
 // ---------------------------------------------------------------------------------------------
 
@@ -231,7 +231,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     phienCho = null;
     phien = { rfqId: "", unsealRequestId: "" };
     dongCacBuoc();
-    // [S1.9120 / khoản 282] Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã sáu số đóng (khoản 193).
+    // [S1.240 / khoản 282] Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã sáu số đóng (khoản 193).
     dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
@@ -242,7 +242,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
 });
 
 // [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ SAU `/auth/totp` — lúc mã đã bị tiêu thụ nên xoá nó không làm
-// mất gì. ~~`xoaManhLink()` của trang~~ [S1.9120 / khoản 282] Việc ấy nay là của nút Vào trong `/lib/dang-nhap.js`, qua `history` và
+// mất gì. ~~`xoaManhLink()` của trang~~ [S1.240 / khoản 282] Việc ấy nay là của nút Vào trong `/lib/dang-nhap.js`, qua `history` và
 // `location` mà trang trao vào.
 
 // [S1.176 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
@@ -726,7 +726,7 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 // là hai con trỏ đọc được dưới quyền của NGƯỜI TRƯỚC. Mang chúng sang phiên của người sau là
 // đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (khoản 204 ghi sai rằng trang ấy không lặp
 // lại khiếm khuyết).
-// [S1.9120 / khoản 282] "Cổng đăng nhập ngay trên" của mắt ⑵ nay ở `/lib/dang-nhap.js`: `phien.token`/`phien.daRedeem` thành trạng
+// [S1.240 / khoản 282] "Cổng đăng nhập ngay trên" của mắt ⑵ nay ở `/lib/dang-nhap.js`: `phien.token`/`phien.daRedeem` thành trạng
 // thái của module, và lối về bước 1 dưới đây đặt lại nó bằng `dangNhap.datLai()`.
 // ==============================================================================================
 // [S1.177] Trình nghe này từng chỉ xoá câu báo, còn các bước 2–8 đã mở thì ĐỂ NGUYÊN — dưới cookie của
@@ -742,7 +742,7 @@ window.addEventListener("hashchange", () => {
     if (el !== null) bao(el, "");
   }
   dongCacBuoc();
-  // [S1.230 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`. [S1.9120 / khoản 282] Cả hai nay sống
+  // [S1.230 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`. [S1.240 / khoản 282] Cả hai nay sống
   // trong `/lib/dang-nhap.js`; `datLai()` đọc mã mới mà `docLink()` vừa đặt vào ô.
   dangNhap.datLai();
   thuPhienCo();

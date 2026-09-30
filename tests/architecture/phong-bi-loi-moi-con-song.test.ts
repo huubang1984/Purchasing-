@@ -19,7 +19,7 @@
 // câu đọc `rfq_evaluation_lines` (bảng xếp hạng, bộ bằng chứng)~~, câu kiểm bản mã đã lưu
 // (`auditStoredCiphertexts`) và `countReceivedBids` KHÔNG khử trùng theo luồng nên đứng ngoài — hai
 // câu đầu đọc thứ lượt chấm ĐÃ ghi, câu ba là kiểm toán mọi phong bì đã lưu, câu cuối là khoản 271.~~
-// **[S1.9135 / khoản 271]** và câu kiểm bản mã đã lưu (`auditStoredCiphertexts`) KHÔNG khử trùng theo
+// **[S1.243 / khoản 271]** và câu kiểm bản mã đã lưu (`auditStoredCiphertexts`) KHÔNG khử trùng theo
 // luồng nên đứng ngoài — hai câu đầu đọc thứ lượt chấm ĐÃ ghi, câu ba là kiểm toán mọi phong bì đã lưu.
 // `countReceivedBids` nay đứng TRONG, qua tiêu chí hình dạng thứ hai ở khối cuối tệp (câu ĐẾM luồng).
 // Một bộ đọc thứ tư chọn phong bì theo luồng mà bỏ vế ⇒ đỏ ở đây; một bộ đọc dùng bí danh khác `i`
@@ -87,7 +87,7 @@ describe("[S1.217 / khoản 250] phong bì của lời mời đã thu hồi khô
 });
 
 // ==============================================================================================
-// [S1.9135 / khoản 271] CÂU ĐẾM LUỒNG BÁO GIÁ CŨNG MANG VẾ — SỐ BÁO GIÁ LÀ SỐ SẼ DỰ THẦU
+// [S1.243 / khoản 271] CÂU ĐẾM LUỒNG BÁO GIÁ CŨNG MANG VẾ — SỐ BÁO GIÁ LÀ SỐ SẼ DỰ THẦU
 //
 // Chủ dự án chốt ngày 2026-09-30 (kế hoạch đợt 3, câu 7): con số của `countReceivedBids` là số báo giá
 // SẼ DỰ THẦU, không phải số đã nhận — khớp ADR-128 (thu hồi là loại). Câu đếm (`FROM public.vendor_bids b
@@ -119,7 +119,7 @@ function viPhamMotVe(cau: readonly CauSql[]): readonly string[] {
   return cau.filter((c) => soVe(c.sql) !== 1).map((c) => `${c.tep}:${String(c.dong)} (${String(soVe(c.sql))} vế)`);
 }
 
-describe("[S1.9135 / khoản 271] câu ĐẾM luồng báo giá qua lời mời cũng mang đúng một vế — số báo giá là số sẽ dự thầu", () => {
+describe("[S1.243 / khoản 271] câu ĐẾM luồng báo giá qua lời mời cũng mang đúng một vế — số báo giá là số sẽ dự thầu", () => {
   const demLuong = moiCauSql().filter((c) => laCauDemLuong(c.sql));
 
   it("mọi câu SQL sản xuất đọc `vendor_bids b` và `rfq_invitations i` rồi ĐẾM mang ĐÚNG MỘT vế `i.revoked_at IS NULL`", () => {

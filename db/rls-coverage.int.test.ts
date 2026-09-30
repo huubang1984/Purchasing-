@@ -95,8 +95,8 @@ const NGOAI_LE_HINH_DANG: readonly DongNgoaiLe[] = [
   // có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này. Lệnh `r` (SELECT) chứ không phải `a`/`w`/`d`: vai
   // ấy không ghi được gì. Đo (§S1.82): `app_unseal` đọc THẲNG `organizations` vẫn 0 hàng.
   ["organizations", "organizations_liet_ke_worker", "r", "app_liet_ke_to_chuc", "bang_goc", "true"],
-  // [S1.9165 / khoản 277 / ADR-040 tiểu mục] Dòng THỨ BA: policy đọc của cùng vai chủ hàm trên `outbox_jobs`, cho hàm thứ hai
-  // của vai ấy (`outbox_to_chuc_co_viec_api()`, `9565_api_to_chuc_co_viec`) — tập tổ chức có việc `PENDING` của `api`. Chủ thể hẹp
+  // [S1.248 / khoản 277 / ADR-040 tiểu mục] Dòng THỨ BA: policy đọc của cùng vai chủ hàm trên `outbox_jobs`, cho hàm thứ hai
+  // của vai ấy (`outbox_to_chuc_co_viec_api()`, `101_api_to_chuc_co_viec`) — tập tổ chức có việc `PENDING` của `api`. Chủ thể hẹp
   // bằng `TO`, HÀNG hẹp bằng vị từ: vai ấy thấy đúng hàng `PENDING`, qua `SELECT (org_id, kind, status)` — không `payload`.
   ["outbox_jobs", "outbox_jobs_liet_ke_viec_api", "r", "app_liet_ke_to_chuc", "co_org_id", "(status = 'PENDING'::text)"],
 ];
@@ -2033,8 +2033,8 @@ interface PolicyRestrictiveKhai {
 const KIND_APP_API = "(kind = ANY (ARRAY['LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text]))";
 const KIND_APP_UNSEAL = "(kind = ANY (ARRAY['BREAK_GLASS_UNSEAL_ALERT'::text, 'UNSEAL_RFQ'::text]))";
 /**
- * [S1.9155 / khoản 285 / `9555_outbox_policy_xep_theo_kind`] Tập `kind` mà `app_api` XẾP được — RESTRICTIVE FOR INSERT (lệnh `a`),
- * chỉ vế WITH CHECK (USING khai `null`), nguyên văn `pg_get_expr`; bằng union `KindOutbox` và bằng hợp hai tập trên (ADR-9255). Thêm
+ * [S1.246 / khoản 285 / `099_outbox_policy_xep_theo_kind`] Tập `kind` mà `app_api` XẾP được — RESTRICTIVE FOR INSERT (lệnh `a`),
+ * chỉ vế WITH CHECK (USING khai `null`), nguyên văn `pg_get_expr`; bằng union `KindOutbox` và bằng hợp hai tập trên (ADR-138). Thêm
  * một `kind` xếp được là một migration `ALTER POLICY … WITH CHECK (…)` MỚI cộng dòng này và dòng ở hardening.
  */
 const KIND_XEP_APP_API =
@@ -2104,7 +2104,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     // [S1.233 / khoản 158] Hai policy theo `kind` của 095 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.
     ["public.outbox_jobs.outbox_jobs_kind_app_api", { lenh: "w", vai_tro: "app_api", using: KIND_APP_API, with_check: KIND_APP_API }],
     ["public.outbox_jobs.outbox_jobs_kind_app_unseal", { lenh: "w", vai_tro: "app_unseal", using: KIND_APP_UNSEAL, with_check: KIND_APP_UNSEAL }],
-    // [S1.9155 / khoản 285] Policy INSERT của `9555_outbox_policy_xep_theo_kind` — vai ĐÍCH DANH, lệnh INSERT (`a`), không vế USING.
+    // [S1.246 / khoản 285] Policy INSERT của `099_outbox_policy_xep_theo_kind` — vai ĐÍCH DANH, lệnh INSERT (`a`), không vế USING.
     ["public.outbox_jobs.outbox_jobs_kind_xep_app_api", { lenh: "a", vai_tro: "app_api", using: null, with_check: KIND_XEP_APP_API }],
   ]);
 })();
@@ -3211,15 +3211,15 @@ const NGOAI_LE_DOC_VONG_DA_KHAI: readonly DongDocVong[] = [
     "public",
     "outbox_danh_sach_to_chuc()",
     "052_worker_liet_ke_to_chuc",
-    "nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT ~~chỉ có SELECT (id) trên organizations~~ [S1.9165] trên organizations chỉ có SELECT (id) — vai ấy còn sở hữu outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec) với SELECT (org_id, kind, status) trên hàng PENDING của outbox_jobs, thân hai hàm đều ghim —, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)",
+    "nguồn danh sách tổ chức cho JobRunner của apps/unseal-worker và cho job neo (ADR-040, khoản 116): organizations bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_unseal thấy 0 hàng (đo §S1.82 cảnh ⓿); bán kính giữ bằng ba vế đo được — chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT ~~chỉ có SELECT (id) trên organizations~~ [S1.248] trên organizations chỉ có SELECT (id) — vai ấy còn sở hữu outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec) với SELECT (org_id, kind, status) trên hàng PENDING của outbox_jobs, thân hai hàm đều ghim —, policy đi kèm mang TO app_liet_ke_to_chuc, EXECUTE thu hồi khỏi PUBLIC và app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_danh_sach_to_chuc() (052)",
   ],
-  // [S1.9165 / khoản 277 / ADR-040 tiểu mục] Dòng THỨ HAI — hàm hẹp của `api`: tập tổ chức có job `PENDING` thuộc ba `kind` của nó.
+  // [S1.248 / khoản 277 / ADR-040 tiểu mục] Dòng THỨ HAI — hàm hẹp của `api`: tập tổ chức có job `PENDING` thuộc ba `kind` của nó.
   [
     "ham",
     "public",
     "outbox_to_chuc_co_viec_api()",
-    "9565_api_to_chuc_co_viec",
-    "tập tổ chức có job PENDING của tiến trình api cho JobRunner của nó, nạp lúc lên và mỗi kỳ poll để job của api tự phục hồi sau khi khởi động lại (khoản 277, ADR-040 tiểu mục): outbox_jobs bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_api chưa gắn tổ chức thấy 0 hàng (đo §S1.9165); bán kính giữ bằng bốn vế đo được — chỉ trả org_id của tổ chức có job PENDING thuộc ba kind của api, không phải danh sách tổ chức đầy đủ, job của worker không làm tổ chức vào tập; chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (org_id, kind, status) trên outbox_jobs, không payload; policy đi kèm outbox_jobs_liet_ke_viec_api mang TO app_liet_ke_to_chuc và vị từ status = PENDING; EXECUTE chỉ cho app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec)",
+    "101_api_to_chuc_co_viec",
+    "tập tổ chức có job PENDING của tiến trình api cho JobRunner của nó, nạp lúc lên và mỗi kỳ poll để job của api tự phục hồi sau khi khởi động lại (khoản 277, ADR-040 tiểu mục): outbox_jobs bật FORCE RLS với policy không có TO nên một hàm SECURITY INVOKER dưới app_api chưa gắn tổ chức thấy 0 hàng (đo §S1.248); bán kính giữ bằng bốn vế đo được — chỉ trả org_id của tổ chức có job PENDING thuộc ba kind của api, không phải danh sách tổ chức đầy đủ, job của worker không làm tổ chức vào tập; chủ hàm app_liet_ke_to_chuc NOLOGIN NOINHERIT chỉ có SELECT (org_id, kind, status) trên outbox_jobs, không payload; policy đi kèm outbox_jobs_liet_ke_viec_api mang TO app_liet_ke_to_chuc và vị từ status = PENDING; EXECUTE chỉ cho app_api; thân và chủ hàm ghim ở hàng định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)",
   ],
 ];
 
@@ -3235,7 +3235,7 @@ describe("[S1.212 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có
 
   it("[INV-F1] HAI BẢN KHỚP: NGOAI_LE_DOC_VONG của hardening bằng bản ở test; mỗi dòng có loai hợp lệ, lý do đọc được, mig là tệp migration thật đã CREATE đối tượng ấy, hàm khai theo chữ ký; CAU_DOC_VONG không còn NOT IN, không phân giải tên, và dùng khối khai ở đúng BA chỗ (hai chiều xuôi, một chiều thiu)", () => {
     expect(docHangHardening("NGOAI_LE_DOC_VONG")).toBe(khoiCua(NGOAI_LE_DOC_VONG_DA_KHAI));
-    // [S1.9165 / khoản 277] ~~hôm nay đúng một dòng (ADR-040)~~ — hai dòng: hàm hẹp của `api` (ADR-040 tiểu mục khoản 277).
+    // [S1.248 / khoản 277] ~~hôm nay đúng một dòng (ADR-040)~~ — hai dòng: hàm hẹp của `api` (ADR-040 tiểu mục khoản 277).
     expect(NGOAI_LE_DOC_VONG_DA_KHAI.length, "hôm nay đúng hai dòng (ADR-040, và tiểu mục khoản 277)").toBe(2);
     const tep = readdirSync(MIGRATIONS_DIR);
     for (const [loai, nsp, t, mig, lyDo] of NGOAI_LE_DOC_VONG_DA_KHAI) {
@@ -3281,7 +3281,7 @@ describe("[S1.212 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có
       // ⑴ khoản 112: dòng NULL không tắt mục. Bản `NOT IN` cũ: `'x' NOT IN (SELECT NULL)` là NULL ⇒ vị từ không bao giờ đúng
       // ⇒ cả hai nhánh im (đo). Nay mọi thứ vẫn bị nêu — kể cả hàm gốc, vì không còn dòng khai nào.
       const khoiNull = `(VALUES (NULL, NULL, NULL, NULL, NULL)) AS x(${COT.join(", ")})`;
-      // [S1.9165 / khoản 277] Hàm thứ hai của lược đồ thật (`outbox_to_chuc_co_viec_api()`) cũng bị nêu khi không còn dòng khai nào.
+      // [S1.248 / khoản 277] Hàm thứ hai của lược đồ thật (`outbox_to_chuc_co_viec_api()`) cũng bị nêu khi không còn dòng khai nào.
       expect(await ten(c, cau.split(khoi).join(khoiNull))).toEqual([
         "public.outbox_danh_sach_to_chuc()", "public.outbox_danh_sach_to_chuc(text)", "public.outbox_to_chuc_co_viec_api()",
         "zz_s112.f(text,integer)", "zz_s112.mv", "zz_s112.v",
@@ -3312,7 +3312,7 @@ describe("[S1.212 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có
         "khai zz_s112.mv (view, migration 052_worker_liet_ke_to_chuc) được miễn mục (C)",
         "public.outbox_danh_sach_to_chuc()",
         "public.outbox_danh_sach_to_chuc(text)",
-        // [S1.9165 / khoản 277] Khối khai chỉ còn năm dòng lệch, nên hàm thứ hai của lược đồ thật cũng bị nêu.
+        // [S1.248 / khoản 277] Khối khai chỉ còn năm dòng lệch, nên hàm thứ hai của lược đồ thật cũng bị nêu.
         "public.outbox_to_chuc_co_viec_api()",
         "zz_s112.f(text,integer)",
         "zz_s112.mv",

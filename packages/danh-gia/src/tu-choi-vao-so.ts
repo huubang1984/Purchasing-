@@ -45,7 +45,7 @@ import type pg from "pg";
 import { throwAuditedDenial } from "@trustprocure/identity";
 
 /**
- * Toàn bộ từ vựng từ chối TRẠNG THÁI của S2. Thêm một mã là thêm một dòng ở `VAO_SO` — [S1.9125 / khoản 279] và một tên ở
+ * Toàn bộ từ vựng từ chối TRẠNG THÁI của S2. Thêm một mã là thêm một dòng ở `VAO_SO` — [S1.241 / khoản 279] và một tên ở
  * `DANH_MUC_VE_CONG` (`packages/identity/src/rbac.ts`), không thì dòng log mất sổ của mã ấy ra `HANG_LA` (vế ⑷ của
  * `packages/identity/src/danh-muc-tu-choi.test.ts` đọc tập khoá của `VAO_SO` ở nguồn và đỏ cho tới khi thêm).
  */
@@ -188,7 +188,7 @@ export async function nemTuChoi(
       payload: { ma: loi.lyDo },
     },
     loi,
-    // [S1.9125 / khoản 279] CÙNG mã làm VẾ (đối số thứ năm) — `DenialAuditFailedError.clause`: khi lần ghi này gãy (55P03), dòng
+    // [S1.241 / khoản 279] CÙNG mã làm VẾ (đối số thứ năm) — `DenialAuditFailedError.clause`: khi lần ghi này gãy (55P03), dòng
     // log của bộ điều phối là thứ duy nhất còn lại, và không có vế nó là `… RFQ_STATE_DENIED RFQ <- error 55P03` cho cả chín mã
     // vào sổ. Đọc từ `loi.lyDo` như `payload.ma` — một nguồn, không tham số thứ hai. Mã ra dòng log qua phép thuộc-tập
     // `DANH_MUC_VE_CONG` của `@trustprocure/identity`, nơi từ vựng `VAO_SO` được chép và đối chiếu với bảng trên.

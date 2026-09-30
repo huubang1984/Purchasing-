@@ -1,13 +1,13 @@
 // ==============================================================================================
 // [S1.224 / khoản 187] BẢNG KIỂM KÊ MÃ CHÉP GIỮA `apps/api/src` VÀ `apps/unseal-worker/src` — ĐÓNG, ĐỌC BẰNG MÁY
-// [S1.9110 / khoản 280] … VÀ GIỮA MỌI `apps/*/src`, `tools/*/src` (N ĐƠN VỊ)
+// [S1.238 / khoản 280] … VÀ GIỮA MỌI `apps/*/src`, `tools/*/src` (N ĐƠN VỊ)
 //
-// [S1.9110 / khoản 280] Bộ quét ~~đọc HAI app theo đề bài S1.224~~ nay đọc MỌI đơn vị `apps/*/src` và `tools/*/src` (tệp theo
+// [S1.238 / khoản 280] Bộ quét ~~đọc HAI app theo đề bài S1.224~~ nay đọc MỌI đơn vị `apps/*/src` và `tools/*/src` (tệp theo
 // `git ls-files`, không `readdirSync` — khoản 189): một tên khai mức module ở ≥ 2 ĐƠN VỊ thì MỌI tệp khai nó phải thuộc một hàng của
 // `BANG_TEN`, một literal regex ở ≥ 2 đơn vị thì mọi tệp mang nó phải thuộc một hàng của `BANG_MAU`. Một hàng là một HỌ bản chép cùng
 // tên (hay cùng literal) chung một cách xử lý; một tên có thể có nhiều họ, tập tệp rời nhau (`moTaLoi` của năm điểm vào / của hai
 // module MCP). Đo trước: bản thứ ba ở `apps/web/src/main.ts` trôi (bỏ nhánh `CauHinhError`) thì cổng cũ 83/83 xanh; bộ quét N đơn vị
-// với ba bảng cũ đỏ (liệt kê ở biên bản §S1.9110). Kiểm kê KHÔNG gộp mã chép nào thành hàm chung (đề bài lô A1) — năm bản `moTaLoi`
+// với ba bảng cũ đỏ (liệt kê ở biên bản §S1.238). Kiểm kê KHÔNG gộp mã chép nào thành hàm chung (đề bài lô A1) — năm bản `moTaLoi`
 // của điểm vào trùng từng ký tự (đo bằng so văn bản), nên không có đề xuất hàm chung.
 //
 // Worker mở thầu ra đời (S1.6, S1.82) bằng cách CHÉP từng mảnh của `api`: bộ đọc cấu hình, bộ mô tả lỗi, hai bộ nghe pool,
@@ -21,25 +21,25 @@
 //   ⑴ CÙNG TÊN — khai báo MỨC MODULE (function, const/let, class, interface, type, enum) có mặt ở CẢ HAI app: `BANG_TEN`;
 //   ⑵ CÙNG HẰNG — một biểu thức chính quy có mặt ở cả hai app, dù đặt tên khác hay không đặt tên: `BANG_MAU`;
 //   ⑶ KHÁC TÊN, CÙNG VIỆC — cặp tìm bằng tay (đọc hai tệp), khai để cổng giữ chúng còn tồn tại ở đúng tệp: `BANG_KHAC_TEN`.
-//   [S1.9110 / khoản 280] "Cả hai app" ở ⑴ ⑵ đọc là "≥ 2 đơn vị"; ⑶ nhận hai bản trở lên (bộ nghe pool của `tools/neo-so-kiem-toan`
+//   [S1.238 / khoản 280] "Cả hai app" ở ⑴ ⑵ đọc là "≥ 2 đơn vị"; ⑶ nhận hai bản trở lên (bộ nghe pool của `tools/neo-so-kiem-toan`
 //   là bản thứ ba của khuôn worker).
 // Mỗi hàng chọn ĐÚNG MỘT cách xử lý và ghi lý do tại hàng:
 //   `NANG`  — một bản ở gói chung, hai bên import. Cổng đòi tên KHÔNG còn khai ở app nào và CÓ khai ở tệp gói chung (kèm regex
-//             đi theo nếu có) — để một bản cục bộ không mọc lại. [S1.9110 / khoản 280] "App nào" là các ĐƠN VỊ của tệp cũ (`tepCu`);
+//             đi theo nếu có) — để một bản cục bộ không mọc lại. [S1.238 / khoản 280] "App nào" là các ĐƠN VỊ của tệp cũ (`tepCu`);
 //             một bản cục bộ ở đơn vị khác là một họ riêng, có hàng riêng (`moTaLoiKhongGiaTri` của hai tool).
 //   `GIU`   — hai bản, KÈM phép đo chống trôi: `VAN_BAN` (mục II so văn bản khai báo từng ký tự, bỏ `export`) hay `HANH_VI`
 //             (mục III chạy hai `docCauHinh` trên CÙNG giá trị của CÙNG biến — cùng nhận hay cùng từ chối, cùng nêu tên biến).
-//             [S1.9110 / khoản 280] ~~hai bản~~ HAI BẢN TRỞ LÊN; thêm `KHUON` (mục II so điều kiện và khuôn dòng log của bộ nghe pool,
+//             [S1.238 / khoản 280] ~~hai bản~~ HAI BẢN TRỞ LÊN; thêm `KHUON` (mục II so điều kiện và khuôn dòng log của bộ nghe pool,
 //             bỏ tiền tố tiến trình — cặp ở `BANG_KHAC_TEN` phải phủ mọi tệp của hàng) và `TEP_TEST` (phép đo HÀNH VI nằm ở tệp test
 //             của từng bản, ghi đường dẫn — cổng đòi tệp ấy còn trong kho và nhắc tên hàm).
 //   `RIENG` — cùng tên nhưng khác hợp đồng CÓ CHỦ ĐÍCH (điểm vào, role đăng nhập, bộ biến khoá) — lý do ghi tại hàng, không đo.
-//             [S1.9110 / khoản 280] Kể cả TRÙNG TÊN không phải bản chép (`main`, `chay`, `chuoi` của các tool — khác việc), và bản
+//             [S1.238 / khoản 280] Kể cả TRÙNG TÊN không phải bản chép (`main`, `chay`, `chuoi` của các tool — khác việc), và bản
 //             chép ĐÃ khác chữ theo lớp lỗi của chính chương trình (`bat`, `batBuoc`) — lý do nêu chỗ khác.
 //
 // CỔNG CÓ RĂNG HAI CHIỀU: một tên mới xuất hiện ở cả hai app mà không có hàng ⇒ đỏ (lần chép kế tiếp không đi vào lặng lẽ); một
 // hàng không còn đúng — tệp đổi, loại đổi, một bên đã xoá, một `NANG` mọc lại, một `GIU` không có phép đo ⇒ đỏ (bảng không được
 // thiu). Đối chứng trong bộ nhớ: một lần quét giả có thêm một hàm chép sang worker phải bị bắt; bộ quét tự kiểm trên văn bản mẫu.
-// [S1.9110 / khoản 280] Và: một bản chép ở một đơn vị MỚI (`apps/moi/src/main.ts` mang `moTaLoi`) ⇒ đỏ nêu tệp; hai họ cùng tên giữ
+// [S1.238 / khoản 280] Và: một bản chép ở một đơn vị MỚI (`apps/moi/src/main.ts` mang `moTaLoi`) ⇒ đỏ nêu tệp; hai họ cùng tên giữ
 // chung một tệp ⇒ đỏ; một họ `GIU` chỉ một tệp ⇒ đỏ (không có gì để so).
 //
 // RANH GIỚI, nói ra — một cổng im lặng bỏ qua một vùng mã là một cổng nói dối về phạm vi của chính nó:
@@ -50,7 +50,7 @@
 //   ⒞ `HANH_VI` chỉ phủ các biến HAI tiến trình cùng đọc; phần riêng mỗi bên (ba vòng bí mật và bộ gửi của `api`, cảnh báo của
 //      worker) đo ở `cau-hinh.test.ts` của mỗi app. Một lệch ĐÃ KHAI (độ dài khoá 32 byte) ghim riêng ở mục III, không giấu.
 //   ⒟ ~~`apps/mcp`, `apps/web`, `apps/public-keys` và `tools/` mang `moTaLoi`/`cau-hinh.ts` cùng khuôn — ngoài tầm (khoản 280).~~
-//      [S1.9110 / khoản 280] Nay trong tầm. Còn ngoài tầm: `packages/` (mã chép giữa gói với nhau hay gói ↔ app — gói chung là CHỖ
+//      [S1.238 / khoản 280] Nay trong tầm. Còn ngoài tầm: `packages/` (mã chép giữa gói với nhau hay gói ↔ app — gói chung là CHỖ
 //      nâng tới, không phải bản chép), tệp ngoài `src/` (`apps/web/trang/*.js` ra thẳng trình duyệt), `.mjs` và mã không khai tên
 //      (bộ mô tả lỗi viết thẳng trong thân của `tools/gieo-demo`). Tên trùng trong MỘT đơn vị mà không đơn vị nào khác khai thì
 //      không đòi hàng (chép trong một app là việc của review app ấy).
@@ -70,25 +70,25 @@ const WORKER = "apps/unseal-worker/src/";
 
 type LoaiKhaiBao = "function" | "const" | "class" | "interface" | "type" | "enum";
 type XuLy = "NANG" | "GIU" | "RIENG";
-/** [S1.9110 / khoản 280] Thêm `KHUON` và `TEP_TEST` — xem khối đầu tệp. */
+/** [S1.238 / khoản 280] Thêm `KHUON` và `TEP_TEST` — xem khối đầu tệp. */
 type DoLuong = "VAN_BAN" | "KHUON" | "HANH_VI" | "TEP_TEST" | "KHONG";
 
 interface HangTen {
   readonly ten: string;
   readonly loai: LoaiKhaiBao;
   /**
-   * ~~Tệp (so với gốc kho) khai tên này ở mỗi bên (`api`, `worker`).~~ [S1.9110 / khoản 280] MỌI tệp (mọi đơn vị) khai tên này và
+   * ~~Tệp (so với gốc kho) khai tên này ở mỗi bên (`api`, `worker`).~~ [S1.238 / khoản 280] MỌI tệp (mọi đơn vị) khai tên này và
    * thuộc HỌ bản chép của hàng — cổng so đúng tập. Họ khác cùng tên là hàng khác, tập tệp rời nhau. Hàng `NANG`: rỗng.
    */
   readonly tep: readonly string[];
   readonly xuLy: XuLy;
   readonly doLuong: DoLuong;
-  /** [S1.9110 / khoản 280] `NANG`: tệp TỪNG giữ bản chép (lịch sử) — tên không được mọc lại ở ĐƠN VỊ của chúng. */
+  /** [S1.238 / khoản 280] `NANG`: tệp TỪNG giữ bản chép (lịch sử) — tên không được mọc lại ở ĐƠN VỊ của chúng. */
   readonly tepCu?: readonly string[];
   /** `NANG`: tệp của gói chung nay giữ bản DUY NHẤT; `mauKemTheo`: regex đi theo hàm, cũng không được còn ở app nào. */
   readonly goiChung?: string;
   readonly mauKemTheo?: string;
-  /** [S1.9110 / khoản 280] `TEP_TEST`: tệp test đo HÀNH VI của từng bản — phải còn trong kho và nhắc tên hàm. */
+  /** [S1.238 / khoản 280] `TEP_TEST`: tệp test đo HÀNH VI của từng bản — phải còn trong kho và nhắc tên hàm. */
   readonly tepTest?: readonly string[];
   readonly lyDo: string;
 }
@@ -97,18 +97,18 @@ interface HangMau {
   /** Đúng văn bản của literal, kể cả cờ — như `ts.RegularExpressionLiteral.text`. */
   readonly mau: string;
   readonly ten: string;
-  /** ~~`api`, `worker`~~ [S1.9110 / khoản 280] Mọi tệp mang literal và thuộc họ của hàng — so đúng tập; họ khác là hàng khác. */
+  /** ~~`api`, `worker`~~ [S1.238 / khoản 280] Mọi tệp mang literal và thuộc họ của hàng — so đúng tập; họ khác là hàng khác. */
   readonly tep: readonly string[];
-  /** [S1.9110 / khoản 280] `RIENG`: cùng literal, khác việc (tách dòng, hex của một băm) — không phải bản chép. */
+  /** [S1.238 / khoản 280] `RIENG`: cùng literal, khác việc (tách dòng, hex của một băm) — không phải bản chép. */
   readonly xuLy: "GIU" | "RIENG";
   readonly lyDo: string;
 }
 
 interface HangKhacTen {
-  /** ~~`api`, `worker`~~ [S1.9110 / khoản 280] Hai bản trở lên. */
+  /** ~~`api`, `worker`~~ [S1.238 / khoản 280] Hai bản trở lên. */
   readonly ban: readonly { readonly ten: string; readonly tep: string }[];
   readonly xuLy: "GIU";
-  /** ~~`VAN_BAN`~~ [S1.9110 / khoản 280] `KHUON` — tên đúng của thứ mục II so ở hai cặp bộ nghe (điều kiện + khuôn dòng log). */
+  /** ~~`VAN_BAN`~~ [S1.238 / khoản 280] `KHUON` — tên đúng của thứ mục II so ở hai cặp bộ nghe (điều kiện + khuôn dòng log). */
   readonly doLuong: "KHUON" | "HANH_VI";
   readonly lyDo: string;
 }
@@ -118,7 +118,7 @@ const CAU_HINH_API = `${API}cau-hinh.ts`;
 const CAU_HINH_WORKER = `${WORKER}cau-hinh.ts`;
 const MAIN_API = `${API}main.ts`;
 const MAIN_WORKER = `${WORKER}main.ts`;
-// [S1.9110 / khoản 280] Các đơn vị khác mà kiểm kê nêu tên nhiều lần.
+// [S1.238 / khoản 280] Các đơn vị khác mà kiểm kê nêu tên nhiều lần.
 const MCP = "apps/mcp/src/";
 const WEB = "apps/web/src/";
 const PUBLIC_KEYS = "apps/public-keys/src/";
@@ -178,7 +178,7 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "VAN_BAN",
     lyDo: "Bộ mô tả lỗi KHỞI ĐỘNG của điểm vào (`CauHinhError` ⇒ message; `Error` ⇒ `tên: message`; khác ⇒ `loi khong ro`). Giữ hai " +
       "bản vì mỗi bản `instanceof` lớp `CauHinhError` của CHÍNH app (hai lớp, mục dưới) và điểm vào cố ý không phụ thuộc gói nào " +
-      "ngoài hai tệp cạnh nó. Hai bản trùng từng ký tự — cổng giữ đúng thế. [S1.9110 / khoản 280] NĂM điểm vào (thêm `apps/mcp`, " +
+      "ngoài hai tệp cạnh nó. Hai bản trùng từng ký tự — cổng giữ đúng thế. [S1.238 / khoản 280] NĂM điểm vào (thêm `apps/mcp`, " +
       "`apps/public-keys`, `apps/web`), cùng lý do; đo bằng so văn bản ở vòng này: năm bản trùng từng ký tự — CHƯA lệch, nên không " +
       "đề xuất hàm chung (hàng sổ 280). Hai bản cùng tên trong `apps/mcp` (`giao-thuc.ts`, `vong-lap.ts`) là một họ khác — hàng dưới.",
   },
@@ -189,7 +189,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "GIU",
     doLuong: "VAN_BAN",
     lyDo: "[ADR-021] Lớp lỗi cấu hình, `name` cố định. Hai lớp riêng vì hai `docCauHinh` là hai hợp đồng riêng (worker cố ý KHÔNG " +
-      "đọc ba vòng bí mật của `api` — khối đầu `cau-hinh.ts` của worker); thân lớp trùng từng ký tự. [S1.9110 / khoản 280] Năm app, " +
+      "đọc ba vòng bí mật của `api` — khối đầu `cau-hinh.ts` của worker); thân lớp trùng từng ký tự. [S1.238 / khoản 280] Năm app, " +
       "năm `docCauHinh` (hàng `docCauHinh`), mỗi điểm vào `instanceof` lớp của CHÍNH app (hàng `moTaLoi`); năm bản trùng từng ký tự.",
   },
   {
@@ -207,7 +207,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "GIU",
     doLuong: "VAN_BAN",
     lyDo: "Bản đồ tên → chuỗi của `process.env`; `api` xuất (test của nó dùng), worker không. So văn bản bỏ `export`. " +
-      "[S1.9110 / khoản 280] `apps/public-keys/src/cau-hinh.ts` và `tools/chay-migrate` khai cùng kiểu; bốn bản trùng.",
+      "[S1.238 / khoản 280] `apps/public-keys/src/cau-hinh.ts` và `tools/chay-migrate` khai cùng kiểu; bốn bản trùng.",
   },
   {
     ten: "BASE64",
@@ -215,7 +215,7 @@ const BANG_TEN: readonly HangTen[] = [
     tep: [CAU_HINH_API, `${PUBLIC_KEYS}cau-hinh.ts`, CAU_HINH_WORKER],
     xuLy: "GIU",
     doLuong: "VAN_BAN",
-    lyDo: "Hình dạng base64 chuẩn của giá trị khoá. Cùng literal còn ở `routes/guest.ts` của `api` (BANG_MAU). [S1.9110 / khoản 280] " +
+    lyDo: "Hình dạng base64 chuẩn của giá trị khoá. Cùng literal còn ở `routes/guest.ts` của `api` (BANG_MAU). [S1.238 / khoản 280] " +
       "`apps/public-keys` kiểm khoá công khai biên nhận (`TRUSTPROCURE_RECEIPT_PUBLIC_KEYS`) bằng cùng hằng; ba bản trùng.",
   },
   {
@@ -305,7 +305,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "RIENG",
     doLuong: "KHONG",
     lyDo: "Thân điểm vào của mỗi tiến trình: cùng ba việc, khác tiến trình dựng (`taoTienTrinhApi` / `taoTienTrinhUnsealWorker`) và " +
-      "`api` in thêm dòng đang nghe. Không phải bản chép để giữ giống. [S1.9110 / khoản 280] Cùng tên ở ba điểm vào khác (`apps/mcp`, " +
+      "`api` in thêm dòng đang nghe. Không phải bản chép để giữ giống. [S1.238 / khoản 280] Cùng tên ở ba điểm vào khác (`apps/mcp`, " +
       "`apps/public-keys`, `apps/web`) và hai tool (`gieo-demo`, `pilot-gia-lap`) — mỗi thân dựng chương trình của CHÍNH nó.",
   },
   {
@@ -315,7 +315,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "RIENG",
     doLuong: "KHONG",
     lyDo: "Hai hợp đồng cấu hình khác nhau có chủ đích (worker KHÔNG đọc ba vòng bí mật của `api` — ADR-006, đo ở `cau-hinh.test.ts` " +
-      "của worker vế ⑼). Phần biến CHUNG của hai hàm đo ở mục III. [S1.9110 / khoản 280] Sáu hợp đồng: mỗi app (và `tools/chay-migrate`) " +
+      "của worker vế ⑼). Phần biến CHUNG của hai hàm đo ở mục III. [S1.238 / khoản 280] Sáu hợp đồng: mỗi app (và `tools/chay-migrate`) " +
       "đọc tập biến của CHÍNH nó; luật chung — thông điệp nêu TÊN biến, không giá trị (ADR-021 ⑵) — đo ở `cau-hinh.test.ts` của từng app.",
   },
   {
@@ -351,10 +351,10 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "KHONG",
     lyDo: "Đọc một trường chuỗi khỏi `payload` của job. `api` có trần `EMAIL_MAX_BYTES` vì chuỗi là email đi gửi; worker đọc id " +
       "(`unsealRequestId`, `rfqId`) rồi truyền làm tham số SQL kiểu uuid — CSDL từ chối rác. Hai hợp đồng, không phải một bản trôi. " +
-      "[S1.9110 / khoản 280] Hợp đồng thứ ba cùng tên: `apps/web/src/cau-hinh.ts` đọc một biến môi trường TUỲ CHỌN (rỗng ⇒ `null`).",
+      "[S1.238 / khoản 280] Hợp đồng thứ ba cùng tên: `apps/web/src/cau-hinh.ts` đọc một biến môi trường TUỲ CHỌN (rỗng ⇒ `null`).",
   },
   // ============================================================================================
-  // [S1.9110 / khoản 280] HỌ MỚI của bộ quét N đơn vị. Thứ tự: giữ (có phép đo), rồi riêng. Họ thứ hai của một tên đã có hàng ở trên
+  // [S1.238 / khoản 280] HỌ MỚI của bộ quét N đơn vị. Thứ tự: giữ (có phép đo), rồi riêng. Họ thứ hai của một tên đã có hàng ở trên
   // ghi tên ấy lần nữa — tập tệp rời nhau.
   // ============================================================================================
   {
@@ -651,7 +651,7 @@ const BANG_TEN: readonly HangTen[] = [
     tep: [`${API}routes/anh-xa.ts`, `${API}routes/buyer.ts`, `${API}routes/du-lieu.ts`],
     xuLy: "RIENG",
     doLuong: "KHONG",
-    lyDo: "Bảng route ĐỌC của ~~hai~~ [S1.9101 / gộp #217] ba tệp route người mua (thêm năm route ánh xạ của S4.3b) — nội dung khác nhau " +
+    lyDo: "Bảng route ĐỌC của ~~hai~~ [S1.237 / gộp #217] ba tệp route người mua (thêm năm route ánh xạ của S4.3b) — nội dung khác nhau " +
       "theo tệp. Cùng tên, dạng hàm, ở `public-keys` (hàng dưới).",
   },
   {
@@ -774,7 +774,7 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "KHONG",
     lyDo: "Dòng log kết luận của hai bộ canh — nội dung theo thứ mỗi bộ canh.",
   },
-  // [S1.9101 / gộp #217 vào đợt 3] Tên trùng do S4.3b (#217) mang vào sau khi lô A1 kiểm kê — cùng tên, khác việc.
+  // [S1.237 / gộp #217 vào đợt 3] Tên trùng do S4.3b (#217) mang vào sau khi lô A1 kiểm kê — cùng tên, khác việc.
   {
     ten: "phanTram",
     loai: "function",
@@ -784,7 +784,7 @@ const BANG_TEN: readonly HangTen[] = [
     lyDo: "Màn `/du-lieu` in một TỈ LỆ 0..1 thành `N%` làm tròn (độ tin của gợi ý ánh xạ, S4.3b); `pilot-gia-lap` chia hai SỐ TIỀN chuỗi " +
       "bằng `bigint`, một chữ số thập phân dấu phẩy — hai phép tính khác nhau cùng tên.",
   },
-  // [S1.9101 / tích hợp lô A3] Module đăng nhập dùng chung của web (`apps/web/src/dang-nhap.ts`, khoản 282) mang hai tên và một literal
+  // [S1.237 / tích hợp lô A3] Module đăng nhập dùng chung của web (`apps/web/src/dang-nhap.ts`, khoản 282) mang hai tên và một literal
   // đã có ở đơn vị khác; lô A3 dựng trên nền chưa có bộ quét N đơn vị của lô A1 nên không thấy.
   {
     ten: "loiCua",
@@ -809,7 +809,7 @@ const BANG_TEN: readonly HangTen[] = [
 
 /** ⑵ Cùng biểu thức chính quy ở hai app — bắt cả bản chép KHÔNG TÊN. Tệp ghi là TẬP tệp mỗi bên có literal ấy. */
 const BANG_MAU: readonly HangMau[] = [
-  // [S1.9101 / tích hợp lô A3] Literal UUID của api (tám tệp, một đơn vị) nay cũng ở module đăng nhập của web.
+  // [S1.237 / tích hợp lô A3] Literal UUID của api (tám tệp, một đơn vị) nay cũng ở module đăng nhập của web.
   {
     mau: "/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu",
     ten: "UUID",
@@ -834,7 +834,7 @@ const BANG_MAU: readonly HangMau[] = [
     tep: [CAU_HINH_API, `${API}routes/guest.ts`, `${PUBLIC_KEYS}cau-hinh.ts`, CAU_HINH_WORKER],
     xuLy: "GIU",
     lyDo: "Hình dạng base64 chuẩn; `routes/guest.ts` dùng cho thân yêu cầu của khách (không phải cấu hình). Đo văn bản qua hàng `BASE64`. " +
-      "[S1.9110 / khoản 280] Cộng `apps/public-keys` (hàng `BASE64`).",
+      "[S1.238 / khoản 280] Cộng `apps/public-keys` (hàng `BASE64`).",
   },
   {
     mau: "/^[A-Za-z0-9._:-]{1,32}$/u",
@@ -879,7 +879,7 @@ const BANG_MAU: readonly HangMau[] = [
     lyDo: "Ngữ pháp của mọi biến số. Đo hành vi ở mục III trên `TRUSTPROCURE_DB_POOL_MAX`, `TRUSTPROCURE_CLOCK_SKEW_*` (biên, rỗng, chữ).",
   },
   // ============================================================================================
-  // [S1.9110 / khoản 280] HỌ MỚI của bộ quét N đơn vị. Literal là chính nó: một bản đổi chữ thì rời họ và hàng thiu — cổng đỏ.
+  // [S1.238 / khoản 280] HỌ MỚI của bộ quét N đơn vị. Literal là chính nó: một bản đổi chữ thì rời họ và hàng thiu — cổng đỏ.
   // ============================================================================================
   {
     mau: "/^[A-Za-z0-9_-]{1,64}$/u",
@@ -939,7 +939,7 @@ const BANG_MAU: readonly HangMau[] = [
     ten: "hex của SHA-256",
     tep: [`${API}routes/anh-xa.ts`, `${KHOI_TAO}index.ts`, `${KIEM_TRUOC_APPLY}luat.ts`],
     xuLy: "RIENG",
-    lyDo: "Băm bản khai đã duyệt (`--bam`) / digest ảnh ECR — hai giá trị khác nhau cùng hình dạng SHA-256. [S1.9101 / gộp #217] Và băm " +
+    lyDo: "Băm bản khai đã duyệt (`--bam`) / digest ảnh ECR — hai giá trị khác nhau cùng hình dạng SHA-256. [S1.237 / gộp #217] Và băm " +
       "dòng hạng mục (`bam`) của route ánh xạ (S4.3b) — giá trị thứ ba, cùng hình dạng.",
   },
   {
@@ -964,7 +964,7 @@ const BANG_KHAC_TEN: readonly HangKhacTen[] = [
     ban: [
       { ten: "ghiLogKetNoiHuy", tep: `${API}mo-ta-loi.ts` },
       { ten: "ghiKetNoiHuy", tep: `${WORKER}tien-trinh.ts` },
-      // [S1.9110 / khoản 280] Bản thứ ba: khuôn worker chép vào job neo ở S1.227 (tiền tố `[neo-so]`).
+      // [S1.238 / khoản 280] Bản thứ ba: khuôn worker chép vào job neo ở S1.227 (tiền tố `[neo-so]`).
       { ten: "ghiKetNoiHuy", tep: NEO },
     ],
     xuLy: "GIU",
@@ -972,7 +972,7 @@ const BANG_KHAC_TEN: readonly HangKhacTen[] = [
     lyDo: "[S1.84 / khoản 129, 173] Bộ nghe `release`: chỉ `TenantError SESSION_STATE_LEFT`, một dòng `ket noi huy <pool> <mô tả>`. " +
       "Hình dạng khác có chủ đích: `api` gắn trong hàm bọc (cổng `pool-nghe-du-tin-hieu` TIN theo đường import `./mo-ta-loi.js`), " +
       "worker trả bộ nghe và gắn tại chỗ dựng pool (cổng ấy đọc lời gọi `.on`). Mục II so ĐIỀU KIỆN và KHUÔN dòng log (bỏ tiền tố " +
-      "tiến trình); thân đo bằng hành vi ở hai `loi-ket-noi-toi-muon.int.test.ts` (S1.221). [S1.9110 / khoản 280] `tools/neo-so-kiem-toan` " +
+      "tiến trình); thân đo bằng hành vi ở hai `loi-ket-noi-toi-muon.int.test.ts` (S1.221). [S1.238 / khoản 280] `tools/neo-so-kiem-toan` " +
       "mang bản thứ ba (khuôn worker, gắn tại chỗ dựng pool); mục II so khuôn của nó cùng hai bản kia — thân của nó chưa có phép đo hành vi.",
   },
   {
@@ -1067,7 +1067,7 @@ function quetTep(tep: readonly string[]): KetQuaQuet {
 }
 
 /**
- * [S1.9110 / khoản 280] ĐƠN VỊ của một tệp: `apps/<app>/src/` hay `tools/<tool>/src/`. Tệp ngoài hai dạng ấy (gói chung, văn bản mẫu
+ * [S1.238 / khoản 280] ĐƠN VỊ của một tệp: `apps/<app>/src/` hay `tools/<tool>/src/`. Tệp ngoài hai dạng ấy (gói chung, văn bản mẫu
  * của đối chứng) là đơn vị của chính nó.
  */
 function donViCua(tep: string): string {
@@ -1076,7 +1076,7 @@ function donViCua(tep: string): string {
 }
 
 /**
- * [S1.9110 / khoản 280] Tệp MÃ SẢN XUẤT của MỌI đơn vị `apps/*\/src`, `tools/*\/src` — `git ls-files`, cùng lọc với `tepSanXuat` (pathspec
+ * [S1.238 / khoản 280] Tệp MÃ SẢN XUẤT của MỌI đơn vị `apps/*\/src`, `tools/*\/src` — `git ls-files`, cùng lọc với `tepSanXuat` (pathspec
  * `*` khớp qua `/`, nên `apps/*\/src/*.ts` gồm cả thư mục con; vế lọc giữ đúng hình dạng đơn vị). Không `readdirSync` (khoản 189).
  */
 function tepSanXuatMoiDonVi(): string[] {
@@ -1086,7 +1086,7 @@ function tepSanXuatMoiDonVi(): string[] {
     .sort();
 }
 
-// ~~`QUET_API`, `QUET_WORKER` — hai lần quét, một mỗi app.~~ [S1.9110 / khoản 280] MỘT lần quét mọi đơn vị; tệp mang đường dẫn nên
+// ~~`QUET_API`, `QUET_WORKER` — hai lần quét, một mỗi app.~~ [S1.238 / khoản 280] MỘT lần quét mọi đơn vị; tệp mang đường dẫn nên
 // mọi phép lọc theo app/tệp đi qua `tep`.
 const QUET = quetTep(tepSanXuatMoiDonVi());
 
@@ -1094,13 +1094,13 @@ function tepCua(ds: readonly KhaiBao[] | undefined): string[] {
   return [...new Set((ds ?? []).map((k) => k.tep))].sort();
 }
 
-/** [S1.9110 / khoản 280] Tệp test mà hàng `TEP_TEST` trỏ tới: văn bản nếu tệp ĐÃ vào kho, `null` nếu không. */
+/** [S1.238 / khoản 280] Tệp test mà hàng `TEP_TEST` trỏ tới: văn bản nếu tệp ĐÃ vào kho, `null` nếu không. */
 function docTepTestKho(tep: string): string | null {
   return git(["ls-files", "--", tep]).trim() === tep ? readFileSync(`${GOC}${tep}`, "utf8") : null;
 }
 
 // ==============================================================================================
-// PHÉP ĐỐI CHIẾU — hàm thuần trên ~~hai kết quả quét~~ [S1.9110 / khoản 280] một kết quả quét mọi đơn vị, để đối chứng trong bộ
+// PHÉP ĐỐI CHIẾU — hàm thuần trên ~~hai kết quả quét~~ [S1.238 / khoản 280] một kết quả quét mọi đơn vị, để đối chứng trong bộ
 // nhớ dựng được lần quét giả.
 // ==============================================================================================
 
@@ -1126,7 +1126,7 @@ function doiChieuTen(
   const loi: string[] = [];
   const hangCua = nhomHo(bang, (h) => `\`${h.ten}\``, "BANG_TEN", loi);
   for (const [ten, ds] of hangCua) if (ds.filter((h) => h.xuLy === "NANG").length > 1) loi.push(`BANG_TEN khai ${ten} NANG hai lần`);
-  // ~~Tên có ở api VÀ worker mà không hàng.~~ [S1.9110 / khoản 280] Tên khai ở ≥ 2 ĐƠN VỊ: mọi tệp khai nó phải thuộc một hàng.
+  // ~~Tên có ở api VÀ worker mà không hàng.~~ [S1.238 / khoản 280] Tên khai ở ≥ 2 ĐƠN VỊ: mọi tệp khai nó phải thuộc một hàng.
   for (const [ten, kb] of quet.khaiBao) {
     const donVi = [...new Set(kb.map((k) => donViCua(k.tep)))].sort();
     if (donVi.length < 2) continue;
@@ -1160,7 +1160,7 @@ function doiChieuTen(
       continue;
     }
     if (h.tep.length === 0) loi.push(`hàng \`${h.ten}\` (${h.xuLy}) không ghi tệp nào`);
-    // ~~So tập tệp mỗi bên.~~ [S1.9110 / khoản 280] Mỗi tệp của hàng còn khai tên ấy (hàng thiu); tệp khai mà chưa thuộc hàng nào thì
+    // ~~So tập tệp mỗi bên.~~ [S1.238 / khoản 280] Mỗi tệp của hàng còn khai tên ấy (hàng thiu); tệp khai mà chưa thuộc hàng nào thì
     // vế CHƯA KHAI trên đã nêu.
     for (const t of h.tep) if (!kb.some((k) => k.tep === t)) loi.push(`hàng \`${h.ten}\`: ${t} không còn khai tên ấy — bảng ghi [${h.tep.join(", ")}]`);
     const loaiThat = new Set(kb.filter((k) => h.tep.includes(k.tep)).map((k) => k.loai));
@@ -1191,7 +1191,7 @@ function doiChieuTen(
 function doiChieuMau(bang: readonly HangMau[], quet: KetQuaQuet): string[] {
   const loi: string[] = [];
   const hangCua = nhomHo(bang, (h) => h.mau, "BANG_MAU", loi);
-  // ~~Literal có ở api VÀ worker mà không hàng.~~ [S1.9110 / khoản 280] Literal ở ≥ 2 ĐƠN VỊ: mọi tệp mang nó phải thuộc một hàng.
+  // ~~Literal có ở api VÀ worker mà không hàng.~~ [S1.238 / khoản 280] Literal ở ≥ 2 ĐƠN VỊ: mọi tệp mang nó phải thuộc một hàng.
   for (const [mau, tap] of quet.mau) {
     const donVi = [...new Set([...tap].map(donViCua))].sort();
     if (donVi.length < 2) continue;
@@ -1232,7 +1232,7 @@ function quetGoiChung(tep: string): KetQuaQuet {
 
 describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — đóng, và cổng giữ nó", () => {
   it("bộ quét không mù: thấy đủ tệp sản xuất và những khai báo đã biết ở cả hai app", () => {
-    // ~~`QUET_API.soTep`, `QUET_WORKER.soTep`~~ [S1.9110 / khoản 280] một lần quét; đếm theo tiền tố.
+    // ~~`QUET_API.soTep`, `QUET_WORKER.soTep`~~ [S1.238 / khoản 280] một lần quét; đếm theo tiền tố.
     expect(tepSanXuat(API).length).toBeGreaterThanOrEqual(25);
     expect(tepSanXuat(WORKER).length).toBeGreaterThanOrEqual(8);
     // Cả tệp ngay trong `src/` lẫn tệp ở thư mục con — hai tầng mà một glob sai bỏ sót một tầng.
@@ -1246,7 +1246,7 @@ describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — 
     expect([...(QUET.mau.get("/^\\d{1,9}$/u") ?? [])].sort()).toEqual([CAU_HINH_API, CAU_HINH_WORKER]);
   });
 
-  it("[S1.9110 / khoản 280] bộ quét không mù ở N đơn vị: đủ năm app, các tool mang mã, tệp ở cả `src/` lẫn thư mục con; `moTaLoi` thấy ở năm điểm vào", () => {
+  it("[S1.238 / khoản 280] bộ quét không mù ở N đơn vị: đủ năm app, các tool mang mã, tệp ở cả `src/` lẫn thư mục con; `moTaLoi` thấy ở năm điểm vào", () => {
     const tep = tepSanXuatMoiDonVi();
     const donVi = new Set(tep.map(donViCua));
     for (const d of [API, WORKER, MCP, WEB, PUBLIC_KEYS, BO_XUAT, KHOI_TAO, PILOT, KIEM_TRUOC_APPLY, "tools/neo-so-kiem-toan/src/"]) {
@@ -1298,7 +1298,7 @@ describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — 
     expect(loiMau.filter((l) => l.includes("CHƯA KHAI") && l.includes("/^[A-Za-z0-9._:-]{1,64}$/u"))).toHaveLength(1);
     // Hàng thiu: bảng ghi một tệp không còn khai — đỏ; hàng GIU không phép đo — đỏ; hàng khác tên trỏ tên không có — đỏ.
     const hangMoTaLoi = BANG_TEN.find((h) => h.ten === "moTaLoi" && h.tep.includes(MAIN_API))!;
-    // ~~`api: [khong-co.ts]`~~ [S1.9110 / khoản 280] thêm một tệp không khai vào họ.
+    // ~~`api: [khong-co.ts]`~~ [S1.238 / khoản 280] thêm một tệp không khai vào họ.
     const thiu: HangTen = { ...hangMoTaLoi, tep: [...hangMoTaLoi.tep, `${API}khong-co.ts`] };
     expect(doiChieuTen([thiu], QUET, quetGoiChung).some((l) => l.includes("apps/api/src/khong-co.ts không còn khai tên ấy"))).toBe(true);
     const khongDo: HangTen = { ...hangMoTaLoi, doLuong: "KHONG" };
@@ -1307,7 +1307,7 @@ describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — 
     expect(doiChieuKhacTen([capThiu], QUET).some((l) => l.includes("`docSoNguyenCu` không còn"))).toBe(true);
   });
 
-  it("[S1.9110 / khoản 280] đối chứng N đơn vị: bản chép ở một đơn vị MỚI ⇒ CHƯA KHAI nêu tệp; hai tệp một đơn vị ⇒ không đòi hàng; một literal chép sang đơn vị mới ⇒ đỏ", () => {
+  it("[S1.238 / khoản 280] đối chứng N đơn vị: bản chép ở một đơn vị MỚI ⇒ CHƯA KHAI nêu tệp; hai tệp một đơn vị ⇒ không đòi hàng; một literal chép sang đơn vị mới ⇒ đỏ", () => {
     const donViMoi = quetGia(
       ["apps/moi/src/main.ts", 'function moTaLoi(e: unknown): string { return String(e); }\nconst NHOM = /\\B(?=(\\d{3})+(?!\\d))/gu;\nvoid NHOM;\n'],
       ["apps/moi/src/a.ts", "export const MOT_DON_VI_A1 = 1;\n"],
@@ -1325,7 +1325,7 @@ describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — 
     ]);
   });
 
-  it("[S1.9110 / khoản 280] đối chứng hình dạng bảng: hai họ giữ chung một tệp; họ GIU một tệp; KHUON không nằm ở BANG_KHAC_TEN; TEP_TEST trỏ tệp không có hay không nhắc tên; NANG ghi tệp hiện tại", () => {
+  it("[S1.238 / khoản 280] đối chứng hình dạng bảng: hai họ giữ chung một tệp; họ GIU một tệp; KHUON không nằm ở BANG_KHAC_TEN; TEP_TEST trỏ tệp không có hay không nhắc tên; NANG ghi tệp hiện tại", () => {
     const hangMoTaLoi = BANG_TEN.find((h) => h.ten === "moTaLoi" && h.tep.includes(MAIN_API))!;
     /** Bảng THẬT với đúng một hàng thay — để lỗi in ra là lỗi của hàng ấy, không phải của một bảng thiếu. */
     const thay = (moi: HangTen, cu: HangTen = hangMoTaLoi): readonly HangTen[] => BANG_TEN.map((h) => (h === cu ? moi : h));
@@ -1379,7 +1379,7 @@ describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — 
 // ==============================================================================================
 // II. PHÉP ĐO CHỐNG TRÔI — VĂN BẢN. Hàng `GIU` + `VAN_BAN`: khai báo hai bên trùng TỪNG KÝ TỰ sau khi bỏ `export`. Hai cặp bộ nghe
 // pool: so ĐIỀU KIỆN lọc và KHUÔN dòng log (đầu, các đoạn chữ, hình dạng từng biểu thức), bỏ tiền tố tiến trình.
-// [S1.9110 / khoản 280] ~~hai bên~~ MỌI tệp của họ trùng từng ký tự với tệp đầu; hai "cặp" bộ nghe nay là hai HỌ (thêm bản của
+// [S1.238 / khoản 280] ~~hai bên~~ MỌI tệp của họ trùng từng ký tự với tệp đầu; hai "cặp" bộ nghe nay là hai HỌ (thêm bản của
 // `tools/neo-so-kiem-toan`), mỗi bản cùng khuôn mong đợi.
 // ==============================================================================================
 
@@ -1424,7 +1424,7 @@ function khuonBoNghe(k: KhaiBao): KhuonBoNghe {
   const m: ts.TemplateExpression = mau;
   return {
     dieuKien,
-    // [S1.9110 / khoản 280] Thêm tiền tố `[neo-so]` (bản thứ ba của khuôn bộ nghe worker). Danh sách ĐÓNG — một tiền tố gõ sai vẫn đỏ.
+    // [S1.238 / khoản 280] Thêm tiền tố `[neo-so]` (bản thứ ba của khuôn bộ nghe worker). Danh sách ĐÓNG — một tiền tố gõ sai vẫn đỏ.
     doanChu: [m.head.text.replace(/^\[(?:api|unseal-worker|neo-so)\] /u, "[<tiến trình>] "), ...m.templateSpans.map((s) => s.literal.text)],
     bieuThuc: m.templateSpans.map((s) => hinhDangBieuThuc(s.expression, k.sf)),
   };
@@ -1433,7 +1433,7 @@ function khuonBoNghe(k: KhaiBao): KhuonBoNghe {
 describe("[S1.224 / khoản 187] phép đo chống trôi — văn bản của các cặp GIU", () => {
   const hangVanBan = BANG_TEN.filter((h) => h.xuLy === "GIU" && h.doLuong === "VAN_BAN");
 
-  // ~~"… và mỗi hàng khai đúng một tệp mỗi bên"~~ [S1.9110 / khoản 280] mỗi họ khai hai tệp trở lên.
+  // ~~"… và mỗi hàng khai đúng một tệp mỗi bên"~~ [S1.238 / khoản 280] mỗi họ khai hai tệp trở lên.
   it("có hàng VAN_BAN để đo, và mỗi hàng khai hai tệp trở lên", () => {
     // Không sàn theo con số hôm nay (một sàn đặt đúng bằng hiện trạng không bao giờ kêu): chỉ đòi có thứ để đo, và vế `it.each`
     // dưới là một test cho MỖI hàng — hàng nào biến mất thì mục I đã đỏ ở "hàng thiu".
@@ -1441,7 +1441,7 @@ describe("[S1.224 / khoản 187] phép đo chống trôi — văn bản của c�
     for (const h of hangVanBan) expect(h.tep.length, h.ten).toBeGreaterThanOrEqual(2);
   });
 
-  // ~~"khai báo ở api và ở worker trùng từng ký tự"~~ [S1.9110 / khoản 280] mọi tệp của họ trùng với tệp đầu; tên test mang tệp đầu để
+  // ~~"khai báo ở api và ở worker trùng từng ký tự"~~ [S1.238 / khoản 280] mọi tệp của họ trùng với tệp đầu; tên test mang tệp đầu để
   // hai họ cùng tên (`moTaLoi`, `UUID`…) là hai test phân biệt được.
   it.each(hangVanBan.map((h) => ({ ten: h.ten, dau: h.tep[0]!, h })))("`$ten` ($dau …): mọi tệp của họ trùng từng ký tự (bỏ `export`)", ({ h }) => {
     const [dau, ...conLai] = h.tep;
@@ -1449,7 +1449,7 @@ describe("[S1.224 / khoản 187] phép đo chống trôi — văn bản của c�
     for (const t of conLai) expect(vanBanKhaiBao(khaiBaoDuyNhat(QUET, h.ten, t)), `${t} lệch ${dau!}`).toBe(mau);
   });
 
-  /** [S1.9110 / khoản 280] Họ bộ nghe ở `BANG_KHAC_TEN` có bản `api` tên `tenApi` — mọi bản của nó, theo thứ tự khai. */
+  /** [S1.238 / khoản 280] Họ bộ nghe ở `BANG_KHAC_TEN` có bản `api` tên `tenApi` — mọi bản của nó, theo thứ tự khai. */
   const hoBoNghe = (tenApi: string): readonly { readonly ten: string; readonly tep: string }[] => {
     const h = BANG_KHAC_TEN.find((x) => x.doLuong === "KHUON" && x.ban.some((b) => b.ten === tenApi));
     if (h === undefined) throw new Error(`BANG_KHAC_TEN không có họ KHUON chứa ${tenApi}`);
@@ -1462,7 +1462,7 @@ describe("[S1.224 / khoản 187] phép đo chống trôi — văn bản của c�
       doanChu: ["[<tiến trình>] ket noi huy ", " ", ""],
       bieuThuc: ["<tên>", "moTaLoiKhongGiaTri(<tên>)"],
     };
-    // ~~hai bản `a`, `w`~~ [S1.9110 / khoản 280] mọi bản của họ (api, worker, neo-so-kiem-toan).
+    // ~~hai bản `a`, `w`~~ [S1.238 / khoản 280] mọi bản của họ (api, worker, neo-so-kiem-toan).
     const ban = hoBoNghe("ghiLogKetNoiHuy");
     expect(ban.length).toBeGreaterThanOrEqual(2);
     for (const b of ban) expect(khuonBoNghe(khaiBaoDuyNhat(QUET, b.ten, b.tep)), `${b.tep}: ${b.ten}`).toEqual(mongDoi);

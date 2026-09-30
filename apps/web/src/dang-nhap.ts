@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9120 / khoản 282] BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA — MỘT BẢN, MỘT PHÉP ĐO
+// [S1.240 / khoản 282] BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA — MỘT BẢN, MỘT PHÉP ĐO
 //
 // Bốn trang người mua — `/login` (`mo-thau`), `/tao-thau`, `/nhom-hang`, `/chinh-sach` — cùng một bước 1: mã tổ chức và mã đăng
 // nhập từ link, rồi TOTP. Tới trước vòng này bước ấy có HAI hình dạng: `/login` đã tách «lấy bí mật ghi danh» khỏi «vào» (khoản 193,
@@ -35,7 +35,7 @@ const MAT_KET_NOI = "Không kết nối được máy chủ. Kiểm tra mạng r
 /**
  * [S1.176 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ chức nằm đúng ở đó trong mọi
  * link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy
- * chủ trong khi ô vẫn đầy. [S1.9120 / khoản 282] Từng là `docToChuc()` riêng của `mo-thau.js`; nay bước 1 của bốn trang và ô xin link
+ * chủ trong khi ô vẫn đầy. [S1.240 / khoản 282] Từng là `docToChuc()` riêng của `mo-thau.js`; nay bước 1 của bốn trang và ô xin link
  * của `/login` đọc qua CÙNG hàm này.
  */
 export function docMaToChuc(giaTri: string): string | null {
@@ -50,11 +50,11 @@ export function docMaToChuc(giaTri: string): string | null {
 }
 
 // ---------------------------------------------------------------------------------------------
-// [S1.216 / khoản 195 · S1.9120 / khoản 268] Câu của khối «link đăng nhập gần đây» — phép tính thuần, `dang-nhap.test.ts` đo.
+// [S1.216 / khoản 195 · S1.240 / khoản 268] Câu của khối «link đăng nhập gần đây» — phép tính thuần, `dang-nhap.test.ts` đo.
 // ---------------------------------------------------------------------------------------------
 
 /**
- * [S1.9120 / khoản 268] Cửa sổ của danh sách, tính bằng ngày — cùng số với `CUA_SO_LINK_GAN_DAY_NGAY` của
+ * [S1.240 / khoản 268] Cửa sổ của danh sách, tính bằng ngày — cùng số với `CUA_SO_LINK_GAN_DAY_NGAY` của
  * `packages/identity/src/login.ts` (máy chủ cắt ở đó; `dang-nhap.test.ts` đối chiếu hai số bằng văn bản nguồn).
  */
 export const CUA_SO_NGAY_LINK_GAN_DAY = 7;
@@ -87,7 +87,7 @@ export function hangLinkGanDay(ds: readonly LinkGanDay[]): readonly (readonly [s
 
 /**
  * Câu dưới tiêu đề khối. Nói cửa sổ ở MỌI lần — một link cũ hơn thế không hiện ở đây — và việc phải làm khi một link «đã dùng» không
- * phải do mình. [S1.9120 / khoản 268] `conNua` (thân mang `truncated: true`) ⇒ nối câu «Còn nữa» nói trang đang hiện bao nhiêu link
+ * phải do mình. [S1.240 / khoản 268] `conNua` (thân mang `truncated: true`) ⇒ nối câu «Còn nữa» nói trang đang hiện bao nhiêu link
  * mới nhất: một danh sách bị cắt phải nói mình bị cắt, và chừng ấy link trong một tuần tự nó là một dấu hiệu.
  */
 export function cauLinkGanDay(conNua: boolean, soDong: number): string {
@@ -101,7 +101,7 @@ export function cauLinkGanDay(conNua: boolean, soDong: number): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9120 / khoản 282] Gắn bước 1 vào một trang.
+// [S1.240 / khoản 282] Gắn bước 1 vào một trang.
 // ---------------------------------------------------------------------------------------------
 
 /** Id mà bước 1 gắn vào — bốn trang khai ĐỦ bộ này trong HTML (`dang-nhap.test.ts` đọc cả bốn tệp). */
@@ -366,7 +366,7 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
         dd.textContent = v;
         dl.append(dt, dd);
       }
-      // [S1.9120 / khoản 268] Chỉ `true` đúng nghĩa mới là «còn nữa»: thiếu trường (API cũ), `false` hay giá trị lạ ⇒ không câu nào.
+      // [S1.240 / khoản 268] Chỉ `true` đúng nghĩa mới là «còn nữa»: thiếu trường (API cũ), `false` hay giá trị lạ ⇒ không câu nào.
       bao($("ghi-link-gan-day"), cauLinkGanDay(truong(r.body, "truncated") === true, ds.length));
       hien($("khoi-link-gan-day"), true);
     } catch {

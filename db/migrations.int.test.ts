@@ -202,11 +202,11 @@ async function truoc092(
   return { ten092, nguoiDung, lienHe, daGhi092, emailCua };
 }
 
-/** [S1.9160 / khoản 283] Migration thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — tên đầy đủ, để `pnpm cap-so` thay được. */
-const TEN_MIG_CHAM_CUOI = "9560_email_khong_dau_cham_cuoi.sql";
+/** [S1.247 / khoản 283] Migration thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — tên đầy đủ, để `pnpm cap-so` thay được. */
+const TEN_MIG_CHAM_CUOI = "100_email_khong_dau_cham_cuoi.sql";
 
 /**
- * [S1.9160 / khoản 283] Dựng một CSDL đã áp mọi migration TRỪ `TEN_MIG_CHAM_CUOI`, với một tổ chức, một người mua có vai và phiên, một nhà
+ * [S1.247 / khoản 283] Dựng một CSDL đã áp mọi migration TRỪ `TEN_MIG_CHAM_CUOI`, với một tổ chức, một người mua có vai và phiên, một nhà
  * cung cấp — để đo migration ấy trên dữ liệu có từ trước (khuôn `truoc092`). Hai hàm chèn chạy dưới superuser (vai của `db.pool`): địa chỉ
  * có dấu chấm cuối tên miền, chữ thường, ASCII in được đi qua 048/049, 092 và ràng buộc hình dạng của 011 — đúng lỗ khoản 283.
  */
@@ -1218,7 +1218,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   }, 300_000);
 
-  // [S1.9160 / khoản 283 / ADR-9260] `TEN_MIG_CHAM_CUOI` thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — dấu chấm cuối tên
+  // [S1.247 / khoản 283 / ADR-139] `TEN_MIG_CHAM_CUOI` thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — dấu chấm cuối tên
   // miền (`dot@x.vn.`, dạng tuyệt đối của `dot@x.vn` theo RFC 5321: cùng một hộp thư) bị từ chối ở lược đồ. Khuôn `092`: đối chiếu TRƯỚC
   // `ALTER`, dừng deploy với số hàng và ĐỊNH DANH (tối đa 20 id mỗi bảng), KHÔNG in email, KHÔNG tự sửa — chuẩn hoá (bỏ dấu chấm cuối) là
   // phương án bị loại (câu 12 của kế hoạch đợt 3), và phép đo dưới cho thấy nó không cơ khí được: ở hàng có dạng anh em không dấu chấm, bỏ
@@ -1253,7 +1253,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         `Migration ${TEN_MIG_CHAM_CUOI} thất bại: email co dau cham cuoi ten mien: users 2 hang — id (toi da 20): ${[uAnhEm, uMot].sort().join(", ")}; ` +
           `supplier_contacts 2 hang — id (toi da 20): ${[cAnhEm, cHai].sort().join(", ")} — sua tay duoi mot vai ma RLS khong ap (bo dau cham cuoi; ` +
           `hang nao da co dang khong dau cham thi hai hang la MOT hop thu — giu mot; doi hay xoa mot dia chi da luu la doi dich magic link: co ` +
-          `nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenKhongDuoi}, khoan no 283, ADR-9260)`,
+          `nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenKhongDuoi}, khoan no 283, ADR-139)`,
       );
       expect(loi!.message, "không in email").not.toMatch(/vidu\.vn/u);
       // Literal `E'\\.$'` thay `'\.$'` (chú thích đầu migration): dưới `standard_conforming_strings = off` — cấu hình đặt sẵn ở mức database
@@ -1626,7 +1626,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       );
       expect(ketQua.rows[0]?.org).toBeNull();
 
-      // [S1.9155 / khoản 285] Hai policy RESTRICTIVE ĐƠN VAI `TO app_api` trên `outbox_jobs` — ghi kết cục (`095`) và XẾP (`9555_outbox_policy_xep_theo_kind`) —
+      // [S1.246 / khoản 285] Hai policy RESTRICTIVE ĐƠN VAI `TO app_api` trên `outbox_jobs` — ghi kết cục (`095`) và XẾP (`099_outbox_policy_xep_theo_kind`) —
       // bị `DROP OWNED BY` ở trên XOÁ; `migrate()` chỉ đi qua vì hardening dựng lại cả hai từ dòng khai, và chúng bám vai MỚI (OID khác;
       // một policy trỏ OID cũ thì tên vai đọc ra NULL). Thiếu mục tự chữa của khoản 285 thì `migrate()` ở trên NÉM "dòng khai thiu" (83⑴).
       const { rows: chinhSach } = await db.pool.query<{ polname: string; lenh: string; vai: string | null }>(
@@ -1698,10 +1698,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
-  // [S1.9155 / khoản 285] `9555_outbox_policy_xep_theo_kind` thêm policy RESTRICTIVE ĐƠN VAI thứ hai `TO app_api` — `FOR INSERT`, chỉ vế
+  // [S1.246 / khoản 285] `099_outbox_policy_xep_theo_kind` thêm policy RESTRICTIVE ĐƠN VAI thứ hai `TO app_api` — `FOR INSERT`, chỉ vế
   // WITH CHECK. Cùng khuôn ca khoản 158 ngay trên, trên mục tự chữa RIÊNG của khoản 285: DROP POLICY ⇒ `migrate()` dựng lại ĐÚNG bảy cột
   // từ dòng khai (USING vẫn NULL — không "bù" vế nào); ĐỔI WITH CHECK tay ⇒ `migrate()` NÉM nêu tên, không in biểu thức (T1), không sửa đè.
-  it("[S1.9155 / khoản 285] DROP POLICY outbox_jobs_kind_xep_app_api ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai (FOR INSERT, USING NULL); ĐỔI WITH CHECK tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+  it("[S1.246 / khoản 285] DROP POLICY outbox_jobs_kind_xep_app_api ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai (FOR INSERT, USING NULL); ĐỔI WITH CHECK tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -2364,10 +2364,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
     { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
-    // [S1.9145 / khoản 266] `9545_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại thân: nhánh không thấy yêu cầu mang tên
+    // [S1.245 / khoản 266] `098_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại thân: nhánh không thấy yêu cầu mang tên
     // `unseal_approvals_yeu_cau_phai_ton_tai` (`USING CONSTRAINT`), để `approveUnseal` nhận "không tìm thấy" theo code VÀ constraint.
     // Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH NGUYÊN VĂN từ `019` bằng script rồi đổi đúng một chỗ.
-    { ham: "unseal_kiem_nguoi_duyet", migration: "9545_khong_tim_thay_yeu_cau_co_ten.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
+    { ham: "unseal_kiem_nguoi_duyet", migration: "098_khong_tim_thay_yeu_cau_co_ten.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
     // [S1.170 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
     // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
@@ -4109,11 +4109,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
-        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
-        "9555_outbox_policy_xep_theo_kind.sql",
-        "9560_email_khong_dau_cham_cuoi.sql",
-        // [S1.9165 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
-        "9565_api_to_chuc_co_viec.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -6103,9 +6103,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   }, 180_000);
 
   // ==========================================================================================
-  // [S1.9165 / khoản 277] HÀM HẸP CỦA `api` VÀ POLICY ĐI KÈM ĐƯỢC HARDENING GHIM — năm cảnh trôi sau deploy, trên MỘT cụm
+  // [S1.248 / khoản 277] HÀM HẸP CỦA `api` VÀ POLICY ĐI KÈM ĐƯỢC HARDENING GHIM — năm cảnh trôi sau deploy, trên MỘT cụm
   // ==========================================================================================
-  // `9565_api_to_chuc_co_viec` dựng hàm SECURITY DEFINER thứ hai của kho (`public.outbox_to_chuc_co_viec_api()`, chủ
+  // `101_api_to_chuc_co_viec` dựng hàm SECURITY DEFINER thứ hai của kho (`public.outbox_to_chuc_co_viec_api()`, chủ
   // `app_liet_ke_to_chuc`, EXECUTE chỉ `app_api`) và một policy `FOR SELECT TO app_liet_ke_to_chuc USING (status = 'PENDING')`
   // trên `outbox_jobs`. Hardening canh bằng ba hàng (định nghĩa hàm, EXECUTE, policy) cộng hai dòng khai (NGOAI_LE_DOC_VONG,
   // NGOAI_LE_HINH_DANG). Mỗi cảnh dưới đây đi qua migrate() THẬT dưới siêu người dùng của cụm test:
@@ -6115,14 +6115,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   //   ⑶ policy bị DROP (cảnh ❷ của ADR-040: hàm trả 0 hàng KHÔNG LỖI) ⇒ dựng lại đúng lệnh, vai, biểu thức;
   //   ⑷ chủ hàm đổi sang app_api ⇒ migrate() GÃY nêu hàng định nghĩa (CREATE OR REPLACE không đổi được chủ);
   //   ⑸ policy nới thành USING (true) ⇒ migrate() GÃY: 83⑴ (hình dạng không duyệt) và hàng policy cùng nêu tên.
-  it("[S1.9165 / khoản 277] hàm hẹp outbox_to_chuc_co_viec_api() và policy đi kèm: thân thay ⇒ tự chữa, WARNING mang vân tay; ACL trôi ⇒ tự chữa; policy DROP ⇒ dựng lại; chủ hàm đổi ⇒ migrate() GÃY nêu hàng định nghĩa; policy nới USING (true) ⇒ migrate() GÃY nêu policy", async () => {
+  it("[S1.248 / khoản 277] hàm hẹp outbox_to_chuc_co_viec_api() và policy đi kèm: thân thay ⇒ tự chữa, WARNING mang vân tay; ACL trôi ⇒ tự chữa; policy DROP ⇒ dựng lại; chủ hàm đổi ⇒ migrate() GÃY nêu hàng định nghĩa; policy nới USING (true) ⇒ migrate() GÃY nêu policy", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
       const HAM = "public.outbox_to_chuc_co_viec_api()";
-      const HANG_DINH_NGHIA = "định nghĩa hàm outbox_to_chuc_co_viec_api() (9565_api_to_chuc_co_viec)";
-      const HANG_ACL = "EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (9565_api_to_chuc_co_viec)";
-      const HANG_POLICY = "policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (9565_api_to_chuc_co_viec)";
+      const HANG_DINH_NGHIA = "định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)";
+      const HANG_ACL = "EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (101_api_to_chuc_co_viec)";
+      const HANG_POLICY = "policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (101_api_to_chuc_co_viec)";
       const THAN_CHUAN =
         "SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE'])";
       const chay = async (): Promise<{ loi: Error | null; canhBao: string[] }> => {
@@ -8748,11 +8748,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
-        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
-        "9555_outbox_policy_xep_theo_kind.sql",
-        "9560_email_khong_dau_cham_cuoi.sql",
-        // [S1.9165 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
-        "9565_api_to_chuc_co_viec.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9067,11 +9067,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "094_award_withdrawn.sql",
         "095_outbox_policy_theo_kind.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
-        "9545_khong_tim_thay_yeu_cau_co_ten.sql",
-        "9555_outbox_policy_xep_theo_kind.sql",
-        "9560_email_khong_dau_cham_cuoi.sql",
-        // [S1.9165 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
-        "9565_api_to_chuc_co_viec.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -7,7 +7,7 @@
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
 //   GET  /auth/login-links (cookie)           → [S1.216 / khoản 195] link đăng nhập gần đây của CHÍNH người gọi — route
 //                                               ĐỌC, không mã quyền, đóng với chứng chỉ agent; không bao giờ `token_hash`;
-//                                               [S1.9120 / khoản 268] 7 ngày, tối đa 100 hàng, `truncated` nói «còn nữa»
+//                                               [S1.240 / khoản 268] 7 ngày, tối đa 100 hàng, `truncated` nói «còn nữa»
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
 // E6: token chỉ đi trong THÂN; link là ~~`/login#<token>`~~ [S1.176 / ADR-107] `/login#<orgId>:<token>` (trang
@@ -124,7 +124,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
       // savepoint để giao dịch không bị bỏ dở, và không có gì để đánh thức.
       await ctx.client.query("SAVEPOINT xep_hang");
       try {
-        // [S1.9115 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+        // [S1.239 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
         await enqueueJob(ctx.client, ctx.orgId, { kind: "LOGIN_LINK_SEND", payload: { email } });
       } catch (e) {
         if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
@@ -384,7 +384,7 @@ export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
     handler: async (ctx) => {
       // `ctx.actor.id` — dẫn xuất từ cookie ở bộ điều phối, không từ thân hay đường dẫn.
       const { links, truncated } = await listRecentLoginTokens(ctx.client, ctx.orgId, ctx.actor.id);
-      // [S1.9120 / khoản 268 / ADR-126] Hợp đồng đổi theo hướng THÊM: `loginLinks` giữ nguyên năm trường, `truncated` mới — đúng khi
+      // [S1.240 / khoản 268 / ADR-126] Hợp đồng đổi theo hướng THÊM: `loginLinks` giữ nguyên năm trường, `truncated` mới — đúng khi
       // còn link trong cửa sổ 7 ngày mà trần 100 hàng cắt đi, để trang nói «còn nữa» thay vì một danh sách cắt mà không nói mình cắt.
       return { status: 200, body: { loginLinks: links, truncated } };
     },

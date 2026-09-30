@@ -23,7 +23,7 @@
 //      chính `permission: PERMISSIONS.X` của route bao quanh. Route không có mã quyền (tự thân, vô danh) thì không hàm gói nào được
 //      gọi ở đó. Và: không SQL tay (`.query(`), không gọi hàm cục bộ (cổng không đọc xuyên qua nó). Cả hai là fail-closed: thứ không
 //      đọc được thì đỏ, không im.
-//      [S1.9110 / khoản 264] Và mọi lời gọi QUA THUỘC TÍNH (`x.f(…)`, `x["f"](…)`, kể cả `new x.F(…)`): vật chủ là namespace import
+//      [S1.238 / khoản 264] Và mọi lời gọi QUA THUỘC TÍNH (`x.f(…)`, `x["f"](…)`, kể cả `new x.F(…)`): vật chủ là namespace import
 //      từ `@trustprocure/*` (`import * as inv`) ⇒ đọc NHƯ TÊN GÓI, `inv.f` đi qua đúng bảng trên; vật chủ thuộc TẬP TRẮNG nhỏ, có tên —
 //      `Promise`, `JSON`, `Array`, `Object` (tên toàn cục, không khai trong tệp) và tham số kết nối của CHÍNH hàm bù (`bu: async
 //      (client) => …`; `.query` trên nó vẫn là SQL tay) ⇒ sạch; MỌI vật chủ khác — một biến, `ctx.services.x`, kết quả một lời gọi,
@@ -38,13 +38,13 @@
 //
 // PHÁT BIỂU ĐÚNG MỨC: cổng đọc theo TÊN và theo HÌNH DẠNG cú pháp. Nó mù với `ctx` đi qua `this`, `arguments`, `eval`~~, và với một hàm
 // gói gọi qua thuộc tính của vật chủ (`goi.revokeInvitation(…)`, `import * as goi` — không import tên trần thì không nhận ra là hàm
-// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 264)~~ **[S1.9110 / khoản 264]** (lời
+// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 264)~~ **[S1.238 / khoản 264]** (lời
 // gọi qua thuộc tính nay fail-closed ở ⑵ — xem trên). Vế ⑵ KHÔNG kiểm `viec`/`gui`
-// (phần gửi) theo mã quyền: chúng gọi bộ gửi tiêm vào, không cầm `client` nào. [S1.9110 / khoản 264] Vế ⑵ chỉ thấy lời gọi VIẾT RA
+// (phần gửi) theo mã quyền: chúng gọi bộ gửi tiêm vào, không cầm `client` nào. [S1.238 / khoản 264] Vế ⑵ chỉ thấy lời gọi VIẾT RA
 // (`f(…)`, `new F(…)`, `` f`…` ``): lời gọi NGẦM — getter, `await` trên một thenable, bộ lặp của `for…of`/spread, ép kiểu gọi
 // `toString`, và một hàm cục bộ khai NGOÀI hàm bù truyền làm callback cho phương thức của tập trắng (`Array.from([client], f)`,
 // `JSON.parse(s, f)`) — không phải một lời gọi hàm ghi viết ra, nên không được đọc (lượt soi đối kháng đo bốn hình dạng ấy: 0 vi
-// phạm — khoản 9410); hôm nay không `bu`/`khiXong` thật nào có vòng lặp, getter, spread hay callback.
+// phạm — khoản 289); hôm nay không `bu`/`khiXong` thật nào có vòng lặp, getter, spread hay callback.
 // Mỗi lỗ nói ra ở đây là một lỗ, không phải một lời khai đã đóng.
 // ==============================================================================================
 import { execFileSync } from "node:child_process";
@@ -84,7 +84,7 @@ const GOI_CUA_HAM_BU: Readonly<Record<string, string>> = {
 /** Hàm toàn cục được gọi trần trong `bu`/`khiXong` mà không phải hàm cục bộ của tệp. */
 const HAM_TOAN_CUC = new Set(["String", "Number", "Boolean", "Array", "Object", "Promise", "Symbol", "BigInt", "Date", "Error"]);
 /**
- * [S1.9110 / khoản 264] TẬP TRẮNG vật chủ của lời gọi qua thuộc tính trong `bu`/`khiXong` — tên toàn cục (không khai trong tệp) không
+ * [S1.238 / khoản 264] TẬP TRẮNG vật chủ của lời gọi qua thuộc tính trong `bu`/`khiXong` — tên toàn cục (không khai trong tệp) không
  * mang năng lực ghi nào của kho. Cộng MỘT vật chủ không nằm ở đây vì nó không có tên cố định: tham số kết nối của chính hàm bù.
  */
 const VAT_CHU_TOAN_CUC = new Set(["Promise", "JSON", "Array", "Object"]);
@@ -107,7 +107,7 @@ export interface KetQuaDoc {
 }
 
 /**
- * ~~`cayCuPhap` — chỉ cây cú pháp.~~ [S1.9110 / khoản 264] Chương trình TypeScript MỘT TỆP (`noResolve`, `noLib`), cùng khuôn
+ * ~~`cayCuPhap` — chỉ cây cú pháp.~~ [S1.238 / khoản 264] Chương trình TypeScript MỘT TỆP (`noResolve`, `noLib`), cùng khuôn
  * `pool-nghe-du-tin-hieu.test.ts`: binder phân giải mỗi tên về đúng khai báo của nó trong tệp (import ⇒ gói và tên xuất, kể cả
  * `import * as`), nên vế ⑵ đọc theo KÝ HIỆU — một biến cục bộ che một tên import hay một tên của tập trắng không lừa được nó. Không
  * đi theo import ra ngoài tệp; tên toàn cục (`Promise`, `JSON`…) không có khai báo nào trong tệp vì không nạp lib.
@@ -142,7 +142,7 @@ function boBoc(e: ts.Expression): ts.Expression {
 }
 
 /**
- * ~~`tenImportGoi(sf)` — bản đồ TÊN cục bộ ⇒ tên gốc, chỉ `import { a as b }`.~~ [S1.9110 / khoản 264] Nguồn của MỘT ký hiệu: gói và
+ * ~~`tenImportGoi(sf)` — bản đồ TÊN cục bộ ⇒ tên gốc, chỉ `import { a as b }`.~~ [S1.238 / khoản 264] Nguồn của MỘT ký hiệu: gói và
  * tên xuất nếu khai báo của nó là một import giá trị (bí danh đã bỏ; `*` cho `import * as`, `default` cho import mặc định); `null`
  * cho mọi khai báo khác (biến, tham số, hàm cục bộ) và cho tên không khai trong tệp.
  */
@@ -312,7 +312,7 @@ function timChamClient(goc: ts.Node, tenCtx: string, biDanh: ReadonlySet<string>
 
 /**
  * Vế ⑵ trên MỘT hàm bù (`than`: hàm viết tại chỗ, ba ngôi của hai hàm, hay một phương thức): mọi lời gọi hàm gói phải nằm trong danh
- * sách của mã quyền; không SQL tay; không hàm cục bộ; và [S1.9110 / khoản 264] mọi lời gọi qua thuộc tính phải có vật chủ là namespace
+ * sách của mã quyền; không SQL tay; không hàm cục bộ; và [S1.238 / khoản 264] mọi lời gọi qua thuộc tính phải có vật chủ là namespace
  * import của kho (đọc như tên gói) hay nằm trong tập trắng — còn lại, và mọi hình dạng lời gọi khác, ĐỎ. Mỗi tên đọc theo KÝ HIỆU (`ch`).
  */
 function timHamGhiNgoaiQuyen(
@@ -329,7 +329,7 @@ function timHamGhiNgoaiQuyen(
     else if (maQuyen === "?") ke(`\`${tenHam}\` gọi hàm gói \`${goc}\`${qua} mà mã quyền của route không đọc được (không phải \`PERMISSIONS.X\`)`);
     else if (!duocPhep.includes(goc)) ke(`\`${tenHam}\` gọi hàm gói \`${goc}\`${qua} ngoài danh sách của mã quyền \`${maQuyen}\``);
   };
-  // [S1.9110 / khoản 264] Tham số kết nối: tham số ĐẦU của chính hàm bù (mỗi nhánh của ba ngôi là một hàm) — bộ chạy trao kết nối của
+  // [S1.238 / khoản 264] Tham số kết nối: tham số ĐẦU của chính hàm bù (mỗi nhánh của ba ngôi là một hàm) — bộ chạy trao kết nối của
   // giao dịch mới ở đó. Theo KÝ HIỆU: một `const client` khai trong thân che nó thì là một ký hiệu khác.
   const thamSoKetNoi = new Set<ts.Symbol>();
   const gomHamGoc = (n: ts.Node): void => {
@@ -407,7 +407,7 @@ function timHamGhiNgoaiQuyen(
     return ((ts.isCallExpression(cha) || ts.isNewExpression(cha)) && cha.expression === y) || (ts.isTaggedTemplateExpression(cha) && cha.tag === y);
   };
   /**
-   * [S1.9110 / khoản 264] Một import giá trị của kho chỉ được xuất hiện trong hàm bù ở vị trí BỊ GỌI trực tiếp — tên trần `f(…)`, hay
+   * [S1.238 / khoản 264] Một import giá trị của kho chỉ được xuất hiện trong hàm bù ở vị trí BỊ GỌI trực tiếp — tên trần `f(…)`, hay
    * vật chủ namespace của `ns.f(…)`. Mọi chỗ khác (đối số, gán, trả về, viết tắt `{ f }`) là một tham chiếu mà một hàm khác gọi hộ —
    * `Array.from([client], ncc.createSupplier)` đi qua tập trắng (`Array`) và không để lại lời gọi nào của `createSupplier` cho vế ⑵ đọc.
    */
@@ -472,7 +472,7 @@ export function docViecSauCommit(vanBan: string, tep = "mau.ts"): KetQuaDoc {
               if (!laVietTaiCho(m.initializer)) ke(`\`${tenM}\` tham chiếu qua biến — phải viết TẠI CHỖ để cổng đọc được`);
               if (laBu) timHamGhiNgoaiQuyen(m.initializer, tenM, maQuyen, ch, sf, ke);
             } else if (ts.isMethodDeclaration(m) && laBu) {
-              // ~~`m.body`~~ [S1.9110 / khoản 264] Cả phương thức: tham số đầu của nó là tham số kết nối (tập trắng của vế ⑵).
+              // ~~`m.body`~~ [S1.238 / khoản 264] Cả phương thức: tham số đầu của nó là tham số kết nối (tập trắng của vế ⑵).
               if (m.body !== undefined) timHamGhiNgoaiQuyen(m, tenM, maQuyen, ch, sf, ke);
             } else if (ts.isShorthandPropertyAssignment(m) && laTaiCho) {
               ke(`\`${tenM}\` tham chiếu qua biến — phải viết TẠI CHỖ để cổng đọc được`);
@@ -688,7 +688,7 @@ describe("[S1.209 / khoản 135] việc sau commit: closure không chạm `ctx.c
     });
   });
 
-  describe("[S1.9110 / khoản 264] vế ⑵ fail-closed với lời gọi qua thuộc tính: namespace import là tên gói, vật chủ ngoài tập trắng thì ĐỎ", () => {
+  describe("[S1.238 / khoản 264] vế ⑵ fail-closed với lời gọi qua thuộc tính: namespace import là tên gói, vật chủ ngoài tập trắng thì ĐỎ", () => {
     const vp = (vanBan: string): string => docViecSauCommit(vanBan).viPham.join("\n");
     /** Một việc có bù dưới `RFQ_INVITE`, thân `bu` là tham số; `dauHandler` là các câu đứng trước lời đăng ký. */
     const viecCoBu = (thanBu: string, dauHandler = ""): string =>

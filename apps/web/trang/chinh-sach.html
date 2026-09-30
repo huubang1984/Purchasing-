@@ -24,7 +24,7 @@
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <!-- [S1.9120 / khoản 282] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login`: Tiếp gọi `/auth/redeem` đúng một lần cho mỗi
+    <!-- [S1.240 / khoản 282] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login`: Tiếp gọi `/auth/redeem` đúng một lần cho mỗi
          mã và nói tài khoản cần ghi danh hay không; ô mã sáu số chỉ mở SAU đó (khoản 193). -->
     <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
     <div class="bao luu" id="ghi-danh" hidden></div>
@@ -40,7 +40,7 @@
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
     <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
-    <!-- [S1.216 / khoản 195 · S1.9120 / khoản 268, 282] Link đăng nhập gần đây của chính người vừa vào, và câu «còn nữa» khi danh
+    <!-- [S1.216 / khoản 195 · S1.240 / khoản 268, 282] Link đăng nhập gần đây của chính người vừa vào, và câu «còn nữa» khi danh
          sách bị cắt — `/lib/dang-nhap.js` điền. Khối là trợ giúp: máy chủ từ chối hay mất mạng thì nó ẩn, các bước vẫn mở. -->
     <div id="khoi-link-gan-day" hidden>
       <p class="ghi" id="ghi-link-gan-day" hidden></p>

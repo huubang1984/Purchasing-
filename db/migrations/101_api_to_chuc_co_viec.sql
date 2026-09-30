@@ -1,5 +1,5 @@
--- db/migrations/9565_api_to_chuc_co_viec.sql
--- [S1.9165 / khoản 277] NGUỒN TẬP TỔ CHỨC CHO `JobRunner` CỦA TIẾN TRÌNH `api` SAU KHI KHỞI ĐỘNG LẠI
+-- db/migrations/101_api_to_chuc_co_viec.sql
+-- [S1.248 / khoản 277] NGUỒN TẬP TỔ CHỨC CHO `JobRunner` CỦA TIẾN TRÌNH `api` SAU KHI KHỞI ĐỘNG LẠI
 --
 -- ============================================================================================
 -- BÀI TOÁN
@@ -9,7 +9,7 @@
 -- ECS thay task, OOM), nên mọi job `PENDING` của `api` — link đăng nhập, tin báo người duyệt, tin gia
 -- hạn: job đang chờ thử lại, job xếp ngay trước khi chết, job mà một instance KHÁC xếp rồi chết trước
 -- lời đánh thức (ADR-022) — chờ tới yêu cầu GHI CÓ XẾP VIỆC kế tiếp của chính tổ chức ấy. Vòng poll 5 s
--- không giúp vì danh sách rỗng. ĐO (§S1.9165, `apps/api/src/composition.int.test.ts` khối khoản 277,
+-- không giúp vì danh sách rỗng. ĐO (§S1.248, `apps/api/src/composition.int.test.ts` khối khoản 277,
 -- trên cây trước tệp này): tiến trình mới, không lời `/auth/link` nào ⇒ job vẫn `PENDING` sau 15 s.
 --
 -- `app_api` KHÔNG tự đọc được hàng đợi xuyên tổ chức: `outbox_jobs` bật ENABLE + FORCE RLS và policy
@@ -32,7 +32,7 @@
 --      chủ thể hẹp bằng `TO`, và hàng hẹp bằng vị từ: vai chủ hàm thấy đúng hàng đang chờ, không thấy
 --      hàng đã xong, đã hỏng, đang chạy;
 --   ⑶ hàm `public.outbox_to_chuc_co_viec_api()`: `EXECUTE` chỉ cho `app_api`, `search_path` ghim.
--- Vì sao chung vai chủ với `052` chứ không một vai mới (biên bản §S1.9165 mục 5): vai ấy NOLOGIN, không
+-- Vì sao chung vai chủ với `052` chứ không một vai mới (biên bản §S1.248 mục 5): vai ấy NOLOGIN, không
 -- tiến trình nào mang nó làm `current_user` ngoài thân hai hàm, và thân cả hai hàm được hardening ghim —
 -- chỉ SUPERUSER thay được thân (ADR-040 "Điều CHƯA CHẮC"). Một vai mới kéo theo BƯỚC 0, một hàng thuộc
 -- tính, và các tập vai khai trong test (tập vai ngoài cây của `db/hardening-suy-tu-tinh-chat.int.test.ts`,
@@ -50,7 +50,7 @@
 --     của kind ấy không được phục hồi sau khởi động lại — và vế đối chiếu với bảng handler ở
 --     `apps/api/src/composition.int.test.ts` (khối khoản 277) đỏ trước khi tới đó.
 --   * Chỉ `PENDING`. Job `RUNNING` mà tiến trình chết giữa handler (hết hạn thuê) KHÔNG làm tổ chức vào
---     tập — ngoài phạm vi câu 10, mở thành khoản 9465 (§S1.9165).
+--     tập — ngoài phạm vi câu 10, mở thành khoản 307 (§S1.248).
 --   * Lời khai *"hàm SECURITY DEFINER DUY NHẤT của kho"* (052 và nơi khác) THIU từ tệp này; chú thích
 --     của `052` không sửa được (checksum, khoản 19) — đính chính ở tiểu mục ADR-040.
 -- ============================================================================================

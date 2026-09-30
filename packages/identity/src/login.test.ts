@@ -1,8 +1,8 @@
 // ==============================================================================================
-// [S1.9120 / khoản 268 / ADR-126] `listRecentLoginTokens` — PHẦN JAVASCRIPT CỦA CỬA SỔ, TRẦN VÀ CỜ «CÒN NỮA»
+// [S1.240 / khoản 268 / ADR-126] `listRecentLoginTokens` — PHẦN JAVASCRIPT CỦA CỬA SỔ, TRẦN VÀ CỜ «CÒN NỮA»
 //
 // Ngữ nghĩa SQL (cửa sổ 7 ngày, thứ tự, RLS, không `token_hash` trong thân) đo trên Postgres thật qua HTTP ở
-// `apps/api/src/auth.int.test.ts` khối `[S1.9120 / khoản 268]`. Tệp này đo đúng phần mà không cần Postgres: câu đọc xin TRẦN + 1 hàng
+// `apps/api/src/auth.int.test.ts` khối `[S1.240 / khoản 268]`. Tệp này đo đúng phần mà không cần Postgres: câu đọc xin TRẦN + 1 hàng
 // (không hơn — một lần đọc không kéo cả lịch sử về), trả ĐÚNG trần hàng đầu theo thứ tự câu đọc, và `truncated` đúng khi và chỉ khi
 // câu đọc trả hơn trần — ở ba mép 0, trần, trần + 1. Client là một bản ghi hai câu: câu của `assertTenantBound` (gắn đúng tổ chức) và
 // câu đọc; câu thứ ba là lỗi.
@@ -44,7 +44,7 @@ function hang(n: number): Record<string, unknown>[] {
   }));
 }
 
-describe("[S1.9120 / khoản 268] listRecentLoginTokens — trần + 1 hàng, cắt đúng trần, cờ «còn nữa»", () => {
+describe("[S1.240 / khoản 268] listRecentLoginTokens — trần + 1 hàng, cắt đúng trần, cờ «còn nữa»", () => {
   it("câu đọc: cửa sổ 7 ngày theo tham số, xin ĐÚNG 101 hàng, liệt kê đúng năm cột và không `token_hash`", async () => {
     const { client, cau } = clientGia(hang(3));
     await listRecentLoginTokens(client, ORG, NGUOI);

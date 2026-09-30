@@ -25,9 +25,9 @@
 // lấy lại thông điệp lỗi qua `GET STACKED DIAGNOSTICS` cũng đóng. Cột điều kiện / hậu điều kiện (ô 2, 4) CỐ Ý không quét:
 // chúng SO SÁNH thân hàm, proconfig, pg_get_triggerdef với bản chuẩn — đó là phép phán xét, không phải thông điệp.
 //
-// ⑸ [S1.9140 / khoản 9402] BÍ DANH. Bốn bề mặt trên đọc TÊN, không đọc luồng dữ liệu: mục khoản 259 đọc `pg_get_triggerdef`
+// ⑸ [S1.244 / khoản 288] BÍ DANH. Bốn bề mặt trên đọc TÊN, không đọc luồng dữ liệu: mục khoản 259 đọc `pg_get_triggerdef`
 // qua bí danh `dinh_nghia` của hằng `CAU_TRIGGER_LA_DU_AN` — khai ở nơi khác, nối vào ô mô tả và RAISE bằng `t.dinh_nghia`,
-// `r.dinh_nghia` — nên cổng XANH trên một mục in nguyên định nghĩa trigger (đo trước của khoản 9402). Nay phép quét dựng thêm
+// `r.dinh_nghia` — nên cổng XANH trên một mục in nguyên định nghĩa trigger (đo trước của khoản 288). Nay phép quét dựng thêm
 // tập BÍ DANH MANG GIÁ TRỊ trên toàn tệp: mọi tên cột mà một truy vấn con, một CTE hay một danh sách VALUES phơi ra — mục
 // select có `AS <tên>` hay bí danh ngầm, nhánh UNION/INTERSECT/EXCEPT theo vị trí, danh sách cột `t(c1, …)` và `WITH t(c1, …)`
 // theo vị trí — mà biểu thức (sau khi gỡ ba khuôn được phép) nhắc một tên cấm hay một bí danh mang giá trị khác (điểm bất
@@ -39,8 +39,8 @@
 // CHỖ THU HẸP, NÓI RA (⑸): tên bí danh là toàn cục trong tệp — một cột trùng tên ở truy vấn khác cũng bị coi là mang giá trị
 // (chiều kêu nhầm; cửa ra là đổi tên); tên cột MẶC ĐỊNH của một mục không bí danh (`left(…)`, `btrim(…)`, `?column?`), cột của
 // hàm trả bảng trong FROM (`unnest`, `regexp_matches`), biến PL/pgSQL (`SELECT … INTO v`, `v := …`), ép cả hàng (`t::text`,
-// `row_to_json(t)`) và cột catalog thô (`tgqual::text`) nằm ngoài tầm ⑸ — đo bằng văn bản mẫu ở lượt soi đối kháng của §S1.9140
-// (cổng xanh trên cả sáu kênh; hardening hôm nay không in qua kênh nào): khoản 9440.
+// `row_to_json(t)`) và cột catalog thô (`tgqual::text`) nằm ngoài tầm ⑸ — đo bằng văn bản mẫu ở lượt soi đối kháng của §S1.244
+// (cổng xanh trên cả sáu kênh; hardening hôm nay không in qua kênh nào): khoản 301.
 //
 // CHỖ THU HẸP, NÓI RA: một cột mô tả không tên `mo_ta` nằm ngoài tầm ⑵; các cờ `provolatile`/`prosecdef`/`tgenabled`,
 // `pg_get_function_identity_arguments` (kiểu tham số — tên) và ba GUC log ở (E4) cố ý được phép; thân hàm ghim trong
@@ -89,7 +89,7 @@ const RE_THE = /^\$[A-Za-z_][A-Za-z_0-9]*\$/u;
 const RE_RAISE = /\bRAISE (WARNING|EXCEPTION|NOTICE|INFO|LOG|DEBUG)\b([^;]*);/gu;
 const RE_GOM = /\bloi_gom := loi_gom \|\| format\(([^;]*)\);/gu;
 const RE_MO_TA = /\bAS mo_ta\b/gu;
-/** [S1.9140 / khoản 9402] Sàn chống mù của vế ⑸ — số ràng buộc bí danh đọc được trên tệp thật (đo ở đầu vòng S1.9140). */
+/** [S1.244 / khoản 288] Sàn chống mù của vế ⑸ — số ràng buộc bí danh đọc được trên tệp thật (đo ở đầu vòng S1.244). */
 const SAN_RANG_BUOC = 1000;
 
 /** Chỉ số NGAY SAU nháy đóng của chuỗi mở ở `i` (`''` là nháy thoát; `E'…'` thoát thêm bằng `\`). NÉM nếu không đóng. */
@@ -264,7 +264,7 @@ const goKhuonDuocPhep = (ma: string): string =>
 const tenCam = (ma: string): string[] => [...new Set([...goKhuonDuocPhep(ma).matchAll(RE_CAM)].map((m) => m[1]!))];
 
 // ---------------------------------------------------------------------------------------------
-// ⑸ [S1.9140 / khoản 9402] BÍ DANH MANG GIÁ TRỊ — bộ đọc select-list tối giản trên bề mặt mã
+// ⑸ [S1.244 / khoản 288] BÍ DANH MANG GIÁ TRỊ — bộ đọc select-list tối giản trên bề mặt mã
 // ---------------------------------------------------------------------------------------------
 
 /** Sáu tên cấm của khoản 117 — cùng tập `RE_CAM`, so từng token (phân biệt hoa thường như `RE_CAM`). */
@@ -615,7 +615,7 @@ function biDanhTrong(be: string, mang: ReadonlyMap<string, string>): string[] {
 /** Danh sách vi phạm — rỗng là xanh. Cú pháp lạ ⇒ NÉM. */
 export function quetHardening(sql: string): string[] {
   const loi: string[] = [];
-  // ⑸ [S1.9140 / khoản 9402] Mỗi bề mặt trả cả tên cấm nối thẳng lẫn tham chiếu tới bí danh mang giá trị.
+  // ⑸ [S1.244 / khoản 288] Mỗi bề mặt trả cả tên cấm nối thẳng lẫn tham chiếu tới bí danh mang giá trị.
   const mang = biDanhMangGiaTri(sql);
   const noi = (be: string): string[] => [...tenCam(be), ...biDanhTrong(be, mang)];
   for (const h of tachHang(sql)) for (const t of noi(beMatMa(h.o[4]!))) loi.push(`hàng "${h.ten}": ô mô tả nối ${t}`);
@@ -650,9 +650,9 @@ export function thongKe(sql: string): {
   readonly vanTayProsrc: number;
   readonly vanTayTrigger: number;
   readonly tenProconfig: number;
-  /** [S1.9140 / khoản 9402] Số ràng buộc tên cột ← biểu thức mà vế ⑸ đọc được trên bề mặt dò bí danh. */
+  /** [S1.244 / khoản 288] Số ràng buộc tên cột ← biểu thức mà vế ⑸ đọc được trên bề mặt dò bí danh. */
   readonly rangBuoc: number;
-  /** [S1.9140 / khoản 9402] Bí danh mang giá trị (tên → tên cấm gốc) — có mặt nhưng không tới bề mặt nào thì được. */
+  /** [S1.244 / khoản 288] Bí danh mang giá trị (tên → tên cấm gốc) — có mặt nhưng không tới bề mặt nào thì được. */
   readonly biDanhMang: ReadonlyMap<string, string>;
 } {
   const hang = tachHang(sql);
@@ -709,7 +709,7 @@ describe("[S1.210 / khoản 117] thông điệp của hardening nêu tên và v�
     expect(tk.vanTayProsrc).toBeGreaterThanOrEqual(90);
     expect(tk.vanTayTrigger).toBeGreaterThanOrEqual(60);
     expect(tk.tenProconfig).toBeGreaterThanOrEqual(90);
-    // [S1.9140 / khoản 9402] Vế ⑸ không mù: đọc được ràng buộc bí danh trên tệp thật (đầu vòng S1.9140: 1261; sàn SAN_RANG_BUOC),
+    // [S1.244 / khoản 288] Vế ⑸ không mù: đọc được ràng buộc bí danh trên tệp thật (đầu vòng S1.244: 1261; sàn SAN_RANG_BUOC),
     // và thấy bí danh mang giá trị có thật — `van_ban` ← `pp.prosrc`, chỉ đi vào `regexp_matches` để rút TÊN GUC, không tới bề
     // mặt nào (vì vậy vế đầu của khối này xanh; cùng loại: `bieu_thuc` ← `pg_get_expr`, chỉ để so). Bộ đọc select-list hỏng thì
     // tập này rỗng và phép quét ⑸ mù.
@@ -786,7 +786,7 @@ describe("[S1.210 / khoản 117] thông điệp của hardening nêu tên và v�
 });
 
 // ---------------------------------------------------------------------------------------------
-// ⑸ [S1.9140 / khoản 9402] Văn bản mẫu — giá trị đi qua bí danh của CTE / truy vấn con / VALUES.
+// ⑸ [S1.244 / khoản 288] Văn bản mẫu — giá trị đi qua bí danh của CTE / truy vấn con / VALUES.
 // ---------------------------------------------------------------------------------------------
 /** Hằng hardening mẫu: `  <TÊN> constant text :=\n    $q$<câu>$q$;` — khuôn các hằng thật. */
 const hang = (ten: string, cau: string): string => `  ${ten} constant text :=\n    $q$${cau}$q$;\n`;
@@ -804,7 +804,7 @@ const moTaLa = (cot: string): string =>
 const raiseLa = (cot: string): string => `  RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (%).', r.ten, r.bang_oid::regclass, r.${cot};\n`;
 const TEN_LA = "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)";
 
-describe("[S1.9140 / khoản 9402] vế ⑸ — giá trị đi qua BÍ DANH của một CTE, truy vấn con hay danh sách VALUES", () => {
+describe("[S1.244 / khoản 288] vế ⑸ — giá trị đi qua BÍ DANH của một CTE, truy vấn con hay danh sách VALUES", () => {
   it("mục khoản 259 TRƯỚC vòng này (bí danh `dinh_nghia` ← pg_get_triggerdef) ⇒ đỏ ở ô mô tả VÀ ở RAISE; bản sau vòng (bí danh mang VÂN TAY) ⇒ xanh", () => {
     expect(quetHardening(mau([hangMau(moTaLa("dinh_nghia"), TEN_LA)], CAU_LA_CU + raiseLa("dinh_nghia")))).toEqual([
       `hàng "${TEN_LA}": ô mô tả nối dinh_nghia — bí danh mang pg_get_triggerdef`,

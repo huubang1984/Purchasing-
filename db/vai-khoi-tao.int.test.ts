@@ -273,7 +273,7 @@ describe("[S1.182 / ADR-111] ⑶ hardening canh app_khoi_tao/app_khoi_tao_login 
         "SET ROLE app_khoi_tao",
         "GRANT SELECT (full_name) ON public.users TO zz_ke_kt",
         "RESET ROLE",
-        // [lượt soi] Hàm liệt kê MỌI tổ chức — SECURITY DEFINER ~~duy nhất~~ [S1.9165] đầu tiên của CSDL (hàm thứ hai,
+        // [lượt soi] Hàm liệt kê MỌI tổ chức — SECURITY DEFINER ~~duy nhất~~ [S1.248] đầu tiên của CSDL (hàm thứ hai,
         // `outbox_to_chuc_co_viec_api()`, chỉ cấp cho app_api — hardening canh app_khoi_tao KHÔNG); câu phán xét quyền quan hệ không thấy nó.
         "GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_khoi_tao",
         // Thiếu: slug, và cột `seq` mà trigger nối chuỗi đọc. (EXECUTE trên hai hàm sổ KHÔNG thử ở đây: PUBLIC có EXECUTE

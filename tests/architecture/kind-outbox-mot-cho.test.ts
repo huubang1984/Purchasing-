@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.9115 / khoản 161 · 170] `kind` CỦA OUTBOX: KHAI Ở MỘT CHỖ, VIẾT LITERAL Ở MỌI LỜI GỌI — VÀ GƯƠNG TEST CỦA RUNNER `api`
+// [S1.239 / khoản 161 · 170] `kind` CỦA OUTBOX: KHAI Ở MỘT CHỖ, VIẾT LITERAL Ở MỌI LỜI GỌI — VÀ GƯƠNG TEST CỦA RUNNER `api`
 //
 // Khoản 161 (§S1.81): cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`) tìm tập `kind` của kho bằng ba mẫu VĂN BẢN —
 // `enqueueJob(… kind: "X")`, một hằng tên `…_KIND = "X"`, một `INSERT INTO outbox_jobs` viết tay — nên một `kind` truyền qua biến tên
 // khác, qua template hay qua chuỗi ghép lọt cả ba; khi không runner nào có nó trong mảng lọc, job nằm `PENDING` im lặng. Đo trước trên
-// `ba269ae` (§S1.9115 mục 3): ba lời gọi `kind: loaiViec` · `` kind: `THU_TEMPLATE_${so}` `` · `kind: [...].join("_")` trong một tệp sản
+// `ba269ae` (§S1.239 mục 3): ba lời gọi `kind: loaiViec` · `` kind: `THU_TEMPLATE_${so}` `` · `kind: [...].join("_")` trong một tệp sản
 // xuất ⇒ cổng khoản 34 2/2 XANH, `tsc` thoát 0; và hình dạng ⑴ của phép quét khớp 0 lời gọi — mọi lời gọi thật truyền một hằng.
 //
 // Lớp đúng, không phải một mẫu thứ tư: `JobInput.kind` là union `KindOutbox` khai ở ĐÚNG MỘT chỗ (`packages/outbox/src/enqueue.ts`), nên
@@ -24,7 +24,7 @@
 //
 // Khoản 170 (§S1.83, khối cuối tệp): `apps/api/src/test-services.ts` dựng runner của TEST và tự khai *"giống HỆT `composition.ts`, và
 // phải giống"* — không lớp nào đối chiếu. Từ S1.222 (khoản 168) dòng `kindKhongNguoiNhan` rời CẢ HAI tệp, và vế khoản 168 của
-// `apps/api/src/composition.int.test.ts` đỏ khi `composition.ts` khai lại (đo lại ở §S1.9115: `FAILED`/1 thay vì `PENDING`/0). Chiều còn
+// `apps/api/src/composition.int.test.ts` đỏ khi `composition.ts` khai lại (đo lại ở §S1.239: `FAILED`/1 thay vì `PENDING`/0). Chiều còn
 // lại — gương test lệch bản thật — vẫn mù: thêm dòng ấy CHỈ ở `test-services.ts` ⇒ `tsc` 0, api `composition.int` 21/21 xanh. Khối cuối
 // đối chiếu DÂY NỐI MẢNG LỌC của hai lời `new JobRunner(…)`: biểu thức bảng handler, nguồn import của hàm dựng nó, và mọi lần tên
 // `kindKhongNguoiNhan` xuất hiện trong mã của hai tệp.
@@ -34,7 +34,7 @@
 // `packages|apps|tools/*/src` — tệp test không đọc: chúng được phép gọi với `kind` thử qua một kiểu nới
 // (`packages/outbox/src/outbox.int.test.ts`). Một `INSERT INTO outbox_jobs` viết tay — SQL, hay câu lệnh trong mã TS ngoài `enqueueJob` —
 // không qua kiểu nào: cổng khoản 34 chỉ đọc MỘT dạng của nó (`(org_id, kind, …) VALUES (…, '<LITERAL>'`); các dạng khác lọt, đo ở lượt tự
-// soi §S1.9115 — khoản 9415. Vế 170 không đọc xuyên một phần trải mà tên `kindKhongNguoiNhan` không xuất hiện trong tệp (trải một hằng
+// soi §S1.239 — khoản 290. Vế 170 không đọc xuyên một phần trải mà tên `kindKhongNguoiNhan` không xuất hiện trong tệp (trải một hằng
 // import từ mô-đun khác).
 // ==============================================================================================
 import { execFileSync } from "node:child_process";
@@ -316,7 +316,7 @@ const LOI_LOI_GOI =
   `mới thì thêm vào union \`${TEN_UNION}\` (${TEP_KHAI}), viết handler ở ĐÚNG MỘT tiến trình và thêm migration \`ALTER POLICY\` (ADR-134). ` +
   "Hằng, biến, template, ghép, ép kiểu hay bí danh là đường khoản 161 đã đo: kind lọt mọi phép quét và job nằm PENDING im lặng.";
 
-describe("[S1.9115 / khoản 161] `kind` của outbox khai ở MỘT chỗ và viết LITERAL ở mọi lời gọi `enqueueJob`", () => {
+describe("[S1.239 / khoản 161] `kind` của outbox khai ở MỘT chỗ và viết LITERAL ở mọi lời gọi `enqueueJob`", () => {
   const union = docUnionKind(readFileSync(join(GOC, TEP_KHAI), "utf8"));
 
   it("⑴ `type KindOutbox` ở enqueue.ts là union literal chuỗi — khớp CHECK của 007, theo bảng chữ cái, không trùng — và `JobInput.kind` mang đúng kiểu ấy", () => {
@@ -375,7 +375,7 @@ describe("[S1.9115 / khoản 161] `kind` của outbox khai ở MỘT chỗ và v
       expect(kq.goi, s).toEqual([]);
       expect(kq.viPham.join("\n"), s).toContain(mong);
     };
-    // Ba hình dạng của phép đo trước (§S1.9115 mục 3) — lọt ba mẫu văn bản cũ và lọt tsc khi `kind` còn là `string`.
+    // Ba hình dạng của phép đo trước (§S1.239 mục 3) — lọt ba mẫu văn bản cũ và lọt tsc khi `kind` còn là `string`.
     do_('const loaiViec = "THU_LOT_161";\nawait enqueueJob(c, o, { kind: loaiViec });', "tên (biến hay hằng)");
     do_("await enqueueJob(c, o, { kind: `THU_TEMPLATE_${so}` });", "template có biến");
     do_('await enqueueJob(c, o, { kind: ["THU", "JOIN", "161"].join("_") });', "lời gọi");
@@ -413,7 +413,7 @@ describe("[S1.9115 / khoản 161] `kind` của outbox khai ở MỘT chỗ và v
     do_('const kq = (0, enqueueJob)(c, o, { kind: "UNSEAL_RFQ" });', "biểu thức");
     do_('await outbox["enqueueJob"](c, o, { kind: "UNSEAL_RFQ" });', "gọi bằng chuỗi");
     do_('import { enqueueJob as xep } from "@trustprocure/outbox";\nconst goiLai = xep;', "gán vào biến");
-    // Lượt tự soi §S1.9115: re-export đổi tên — lời gọi `xep(…)` ở mô-đun kia không mang tên nào cổng nhận ra.
+    // Lượt tự soi §S1.239: re-export đổi tên — lời gọi `xep(…)` ở mô-đun kia không mang tên nào cổng nhận ra.
     do_('export { enqueueJob as xepViec } from "@trustprocure/outbox";', "re-export đổi tên");
     do_('import { enqueueJob as xep } from "@trustprocure/outbox";\nexport { xep };', "re-export đổi tên");
     // Đối chứng: chú thích, JSDoc, chuỗi, import/export và vị trí KIỂU không phải tham chiếu giá trị.
@@ -484,7 +484,7 @@ const LOI_GUONG =
   "ai chạy (khoản 149, 170). Sửa CẢ HAI tệp cùng lúc — và nhớ vế khoản 168 (`apps/api/src/composition.int.test.ts`): sổ mồ côi do worker " +
   "khai, `api` không khai.";
 
-describe("[S1.9115 / khoản 170] runner của test `api` (`test-services.ts`) là gương của runner thật (`composition.ts`) ở dây nối mảng lọc `kind`", () => {
+describe("[S1.239 / khoản 170] runner của test `api` (`test-services.ts`) là gương của runner thật (`composition.ts`) ở dây nối mảng lọc `kind`", () => {
   it("hai lời `new JobRunner(…)` có cùng bảng handler (cùng nguồn import) và cùng mọi lần `kindKhongNguoiNhan` xuất hiện trong mã", () => {
     const that = docDayNoiLoc(readFileSync(join(GOC, "apps/api/src/composition.ts"), "utf8"));
     const guong = docDayNoiLoc(readFileSync(join(GOC, "apps/api/src/test-services.ts"), "utf8"));
@@ -509,7 +509,7 @@ describe("[S1.9115 / khoản 170] runner của test `api` (`test-services.ts`) l
       kindKhongNguoiNhan: [],
     });
     const dong = "kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),";
-    // Đo trước (§S1.9115 mục 3): dòng CHỈ ở gương — tsc 0, api composition.int 21/21 xanh.
+    // Đo trước (§S1.239 mục 3): dòng CHỈ ở gương — tsc 0, api composition.int 21/21 xanh.
     expect(docDayNoiLoc(guong.replace("{ ...tuyChon,", `{ ...tuyChon, ${dong}`))).not.toEqual(docDayNoiLoc(that));
     // Dòng CHỈ ở bản thật — vế khoản 168 cũng đỏ ở chiều này.
     expect(docDayNoiLoc(that.replace("pollIntervalMs: 5000,", `pollIntervalMs: 5000, ${dong}`))).not.toEqual(docDayNoiLoc(guong));

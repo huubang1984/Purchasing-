@@ -106,7 +106,7 @@ export interface TienTrinhApi {
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
 /**
- * [S1.9165 / khoản 277] Câu lấy tập tổ chức có job `PENDING` thuộc tập `kind` của tiến trình này — hàm hẹp `SECURITY DEFINER`
+ * [S1.248 / khoản 277] Câu lấy tập tổ chức có job `PENDING` thuộc tập `kind` của tiến trình này — hàm hẹp `SECURITY DEFINER`
  * `public.outbox_to_chuc_co_viec_api()` (ADR-040 tiểu mục khoản 277; `EXECUTE` chỉ cho `app_api`, hardening canh). Ghim đủ
  * schema cho hàm và kiểu trả về — khuôn [QT3] của `packages/outbox/src/enqueue.ts`: một `search_path` nhiễm không đổi nghĩa câu.
  * Không phải danh sách tổ chức đầy đủ: `app_api` vẫn KHÔNG gọi được hàm `052` (ADR-040, quyết định câu 10 của đợt 3).
@@ -236,7 +236,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
 
   // [sổ nợ 38 / ADR-022 §1] Runner outbox TRONG tiến trình `api`. `app_api` không đọc được danh sách
   // tổ chức (RLS), nên `listOrganizations` là tập tổ chức tiến trình này ĐÃ THẤY enqueue ~~;~~
-  // [S1.9165 / khoản 277] hợp với tập tổ chức có việc `PENDING` của `api` (hàm hẹp — khối cuối đoạn này); `nudge`
+  // [S1.248 / khoản 277] hợp với tập tổ chức có việc `PENDING` của `api` (hàm hẹp — khối cuối đoạn này); `nudge`
   // đánh thức ngay cho tổ chức vừa có job (setImmediate — không chặn phản hồi), vòng poll nhặt job
   // còn sót (thử lại). Giới hạn nhiều instance ghi ở ADR-022.
   //
@@ -262,7 +262,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   // lọc của nó chưa chạy thật trên CloudWatch. Tự phục hồi sau khởi động lại (nạp một danh sách tổ
   // chức cho `api`) là một khoản riêng, đụng ADR-040.~~
   //
-  // [S1.9165 / khoản 277] Câu vừa gạch hết đúng: tập tổ chức của runner nay là HỢP của `toChucDaThay`
+  // [S1.248 / khoản 277] Câu vừa gạch hết đúng: tập tổ chức của runner nay là HỢP của `toChucDaThay`
   // (lời đánh thức tức thì, dấu ADR-047 — giữ nguyên) với tập hàm hẹp `public.outbox_to_chuc_co_viec_api()`
   // trả — tổ chức có job `PENDING` thuộc tập `kind` của tiến trình này, KHÔNG phải danh sách tổ chức đầy đủ
   // (ADR-040 tiểu mục; `052` vẫn thu hồi khỏi `app_api`). Nạp lúc lên (`batDau()` gọi một lần trước khi mở
@@ -274,7 +274,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   // ở `OrganizationLister`): kỳ ấy không phục vụ tổ chức nào qua poll, `onPollError` ghi `[api] outbox poll
   // …` (ADR-083 `poll-loi`); lời đánh thức vẫn chạy vì nó gọi `runOnceForOrg` thẳng. Giới hạn nói ra: job
   // `RUNNING` hết hạn thuê (tiến trình chết GIỮA handler) KHÔNG làm tổ chức vào tập hàm trả — chỉ vào khi
-  // tổ chức ấy có việc `PENDING` khác hay đã ở `toChucDaThay` — khoản 9465.
+  // tổ chức ấy có việc `PENDING` khác hay đã ở `toChucDaThay` — khoản 307.
   const toChucDaThay = new Set<string>();
   const lietKeToChuc = async (): Promise<readonly string[]> => {
     const { rows } = await pool.query<{ id: string }>(CAU_TO_CHUC_CO_VIEC_API);
@@ -296,7 +296,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
     // im lặng (đo: `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹). Tiến trình khai nay là worker
     // (`tien-trinh.ts`), tiến trình thấy MỌI tổ chức qua hàm `052`. Mảng lọc của runner này là đúng
     // `Object.keys(handlers)`.
-    // [S1.9115 / khoản 170] Runner của TEST (`test-services.ts`, `outboxTest`) là gương của runner này ở dây nối mảng lọc — bảng
+    // [S1.239 / khoản 170] Runner của TEST (`test-services.ts`, `outboxTest`) là gương của runner này ở dây nối mảng lọc — bảng
     // handler và `kindKhongNguoiNhan` —, đối chiếu ở `tests/architecture/kind-outbox-mot-cho.test.ts`; khai lại sổ ở đây thì vế
     // khoản 168 của `composition.int.test.ts` đỏ.
     onJobFailure: (bao) => {
@@ -357,7 +357,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
           c.release();
         }
       }
-      // [S1.9165 / khoản 277] Nguồn tập tổ chức có việc phải GỌI ĐƯỢC trước khi mở cổng — cùng khuôn vế ⑵ của worker
+      // [S1.248 / khoản 277] Nguồn tập tổ chức có việc phải GỌI ĐƯỢC trước khi mở cổng — cùng khuôn vế ⑵ của worker
       // (`apps/unseal-worker/src/tien-trinh.ts`): hàm hẹp thiếu (migration khai sinh chưa áp, hàm bị DROP) hay `app_api` mất
       // EXECUTE ⇒ 42883/42501 ⇒ tiến trình KHÔNG lên, thay vì lên rồi hỏng ở mọi kỳ poll với chỉ một dòng `outbox poll`.
       // "0 tổ chức" KHÔNG ném: với `api` đó là trạng thái bình thường — không việc nào đang chờ — khác worker (0 ⇒ cảnh ❷).

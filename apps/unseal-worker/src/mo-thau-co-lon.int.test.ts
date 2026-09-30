@@ -27,7 +27,7 @@
 //   • `leaseGiay`: `lease_expires_at − clock_timestamp()` lúc thấy `RUNNING` — đối chứng dương rằng
 //     trần 60 s đúng là trần đang có hiệu lực trên đường này, không phải 15 s của pool.
 // Một lượt quá trần KHÔNG được vá ở vòng này (đề bài); nó mở `khoản 272`. Số đo ghi ở §S1.220.
-// [S1.9135 / khoản 272] Khối CUỐI tệp đo chính mốc vượt trần ấy — 60 tới 100 phong bì 8 MiB trong một job, cộng ba mốc dò
+// [S1.243 / khoản 272] Khối CUỐI tệp đo chính mốc vượt trần ấy — 60 tới 100 phong bì 8 MiB trong một job, cộng ba mốc dò
 // tới 200 — sau cờ môi trường `TRUSTPROCURE_DO_TRAN_MO_THAU=1` (ca nặng; không cờ thì bỏ qua). Cách chạy ở đầu khối.
 //
 // Không nhãn INV: đây là phép đo khả dụng ở biên cỡ, cùng loại với khối khoản 126 của
@@ -608,7 +608,7 @@ describe("[S1.220 / khoản 167] mở thầu cỡ lớn trên đường điểm 
 });
 
 // ==============================================================================================
-// [S1.9135 / khoản 272] MỐC VƯỢT TRẦN 60 s — MỘT RFQ 60…200 PHONG BÌ 8 MiB TRONG MỘT JOB, TRÊN ĐƯỜNG ĐIỂM VÀO THẬT
+// [S1.243 / khoản 272] MỐC VƯỢT TRẦN 60 s — MỘT RFQ 60…200 PHONG BÌ 8 MiB TRONG MỘT JOB, TRÊN ĐƯỜNG ĐIỂM VÀO THẬT
 //
 // CÁCH CHẠY — ca NẶNG, mặc định BỎ QUA (không chạy trong `pnpm test:int` hay `pnpm evidence` thường):
 //   TRUSTPROCURE_DO_TRAN_MO_THAU=1 pnpm vitest run apps/unseal-worker/src/mo-thau-co-lon.int.test.ts -t "khoản 272"
@@ -635,7 +635,7 @@ describe("[S1.220 / khoản 167] mở thầu cỡ lớn trên đường điểm 
 // việc — sẽ tranh CPU với mốc kế tiếp; hành vi thử lại là của runner, thứ khối này không đổi và không đo. Khối KHÔNG khẳng
 // định mốc vượt trần nằm ở đâu — con số thuộc về máy —; nó khẳng định mỗi mốc có đúng một trong hai kết cục trên và in mốc
 // vượt trần đầu tiên (hay "không mốc nào") ở ca tổng kết, cùng mốc vượt ƯỚC LƯỢNG bằng đường thẳng bình phương nhỏ nhất qua
-// các mốc DONE (`msTuClaim` theo N). VÌ SAO CÓ MỐC DÒ NGOÀI 60–100: lượt đo đầu (§S1.9135, 4 lõi dùng chung, tải ~8,5) KHÔNG
+// các mốc DONE (`msTuClaim` theo N). VÌ SAO CÓ MỐC DÒ NGOÀI 60–100: lượt đo đầu (§S1.243, 4 lõi dùng chung, tải ~8,5) KHÔNG
 // thấy mốc nào tới 100 vượt trần — 37,0 / 44,5 / 53,0 / 50,1 / 43,4 s —, lượt hai ở tải ~2 đi ~0,4 s/phong bì, tức không có
 // mốc dò thì kết cục `HANDLER_TIMEOUT` (không gì được ghi, RFQ vẫn `CLOSED`) chỉ là suy từ mã; 200 × 0,37 s — nhịp NHANH nhất
 // đã đo — vẫn ≥ 60 s.
@@ -740,7 +740,7 @@ function keMoc(s: SoDoMoc): string {
 }
 
 describe.skipIf(!BAT_DO_TRAN_MO_THAU)(
-  "[S1.9135 / khoản 272] mốc vượt trần 60 s của một job mở thầu: 60…100 phong bì 8 MiB (và ba mốc dò 125, 150, 200) trên đường điểm vào thật (cờ TRUSTPROCURE_DO_TRAN_MO_THAU=1)",
+  "[S1.243 / khoản 272] mốc vượt trần 60 s của một job mở thầu: 60…100 phong bì 8 MiB (và ba mốc dò 125, 150, 200) trên đường điểm vào thật (cờ TRUSTPROCURE_DO_TRAN_MO_THAU=1)",
   () => {
     it.each([...MOC_SO_PHONG_BI])(
       "N = %i phong bì 8 MiB (14 ca lặp vòng) trong MỘT job — kết cục lần đầu: DONE dưới trần, hay HANDLER_TIMEOUT đúng ở trần và không để lại gì",

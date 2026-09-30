@@ -104,7 +104,7 @@ function cacChuoi(pGiaTri: string): string[] {
 }
 
 /**
- * Tên migration mà regex miễn PHẢI khớp — thứ nó sinh ra để miễn. ~~Một mẫu ba chữ số.~~ [S1.9110 / khoản 284] Thêm một mẫu BỐN
+ * Tên migration mà regex miễn PHẢI khớp — thứ nó sinh ra để miễn. ~~Một mẫu ba chữ số.~~ [S1.238 / khoản 284] Thêm một mẫu BỐN
  * chữ số: ADR-090 cho migration của một lô mang số tạm `95NN_ten` tới lúc `pnpm cap-so` cấp số thật ở merge, và một dòng
  * `BANG_TENANT_KHAI` mang số tạm cho một bảng có `key`/`token` trong tên là đúng thứ `generic-api-key` đọc thành bí mật — trên
  * NHÁNH lô, trước khi cap-so đổi số. Mẫu là `1234_…` chứ không `95NN_…`: một số tạm thật trong tệp này sẽ bị `pnpm cap-so` thay
@@ -245,12 +245,12 @@ describe("[khoản 132] hình dạng cấu hình gitleaks", () => {
     const rong = kiemHinhDangGitleaks(datBien(regexThat(), "^.*$"));
     expect(rong.length, "regex `^.*$` phải khớp mọi mẫu khoá").toBe(MAU_BI_MAT.length);
     for (const v of rong) expect(v).toMatch(/khớp một chuỗi hình khoá/u);
-    // ~~`doOMot(…"^zz$"…)`~~ [S1.9110 / khoản 284] Một vi phạm cho MỖI mẫu tên migration không khớp — nay hai mẫu.
+    // ~~`doOMot(…"^zz$"…)`~~ [S1.238 / khoản 284] Một vi phạm cho MỖI mẫu tên migration không khớp — nay hai mẫu.
     const zz = kiemHinhDangGitleaks(datBien(regexThat(), "^zz$"));
     expect(zz).toEqual(TEN_TEP_MIGRATION_MAU.map((t) => `regex miễn không khớp tên tệp migration ${t} — thứ nó sinh ra để miễn`));
   });
 
-  it("[S1.9110 / khoản 284] regex miễn nhận tên migration BỐN chữ số (số tạm ADR-090): khớp `1234_bang_key` và hai dòng khai thật, không khớp năm mẫu hình khoá hay số chữ số ngoài 3–4", () => {
+  it("[S1.238 / khoản 284] regex miễn nhận tên migration BỐN chữ số (số tạm ADR-090): khớp `1234_bang_key` và hai dòng khai thật, không khớp năm mẫu hình khoá hay số chữ số ngoài 3–4", () => {
     const re = new RegExp(regexThat(), "u");
     for (const ten of ["1234_bang_key", "017_rfq_key_material", "029_dang_nhap_nguoi_mua"]) expect(re.test(ten), ten).toBe(true);
     for (const mau of MAU_BI_MAT) expect(re.test(mau), `mẫu hình khoá ${mau.slice(0, 4)}… (${mau.length} ký tự)`).toBe(false);

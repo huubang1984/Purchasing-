@@ -303,8 +303,8 @@ describe("[ADR-072 phần 1] ⑶ hardening canh app_neo/app_neo_login như hai c
 // ==============================================================================================
 // [S1.212 / khoản 164] THUỘC TÍNH CỦA VAI CHỦ HÀM `app_liet_ke_to_chuc` — HARDENING CƯỠNG CHẾ, TỰ CHỮA
 //
-// Vai thứ ba ra đời ở 052 (BƯỚC 0 của hardening dựng nó) để SỞ HỮU hàm SECURITY DEFINER ~~duy nhất~~ [S1.9165] đầu tiên của kho
-// (từ 9565_api_to_chuc_co_viec nó sở hữu thêm hàm hẹp thứ hai, `outbox_to_chuc_co_viec_api()`) — và với một
+// Vai thứ ba ra đời ở 052 (BƯỚC 0 của hardening dựng nó) để SỞ HỮU hàm SECURITY DEFINER ~~duy nhất~~ [S1.248] đầu tiên của kho
+// (từ 101_api_to_chuc_co_viec nó sở hữu thêm hàm hẹp thứ hai, `outbox_to_chuc_co_viec_api()`) — và với một
 // hàm SECURITY DEFINER thì CHỦ HÀM là toàn bộ đặc quyền của thân hàm. Tới S1.82 hàng ghim chỉ đọc `proowner`, không đọc
 // thuộc tính của vai ấy: `ALTER ROLE app_liet_ke_to_chuc BYPASSRLS` sau deploy sống qua mọi lần migrate() (đo: trước bản
 // vá, phép đo dưới đây đỏ ở `rolbypassrls`). Nay một hàng TỰ CHỮA theo khuôn `app_api`/`app_unseal`, KHÔNG qua

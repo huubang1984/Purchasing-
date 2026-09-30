@@ -15,7 +15,7 @@ import {
   type OutboxJob,
 } from "./index.js";
 
-// [S1.9115 / khoản 161] `JobInput.kind` nay là union `KindOutbox` — năm kind thật của kho. Tệp này đo CƠ CHẾ của gói (hạn thuê,
+// [S1.239 / khoản 161] `JobInput.kind` nay là union `KindOutbox` — năm kind thật của kho. Tệp này đo CƠ CHẾ của gói (hạn thuê,
 // SKIP LOCKED, lượt thử, chống trùng, QT3…) với ~40 `kind` THỬ (`VIEC_A`, `LUON_LOI`, …) mà không tiến trình nào nhận, nên nó gọi
 // CÙNG hàm `enqueueJob` qua một kiểu nới `kind` về `string`: thân hàm, câu SQL và dấu xếp việc là của hàm công khai, chỉ kiểu của
 // tham số khác. Mã sản xuất không có đường này — `tests/architecture/kind-outbox-mot-cho.test.ts` đòi `kind` literal thuộc union ở
@@ -150,7 +150,7 @@ function runnerChoMotToChuc(
 // bảng handler ∪ sổ mồ côi" ở `apps/{api,unseal-worker}/src/composition.int.test.ts`. Cây KHÔNG có 095 ⇒ `policyGoc` là `undefined`,
 // không nới gì, và khối 12 ĐỎ ở vế tiền đề — không xanh giả.
 //
-// [S1.9155 / khoản 285] Policy THỨ BA, `outbox_jobs_kind_xep_app_api` (`9555_outbox_policy_xep_theo_kind`, ADR-9255): `AS RESTRICTIVE
+// [S1.246 / khoản 285] Policy THỨ BA, `outbox_jobs_kind_xep_app_api` (`099_outbox_policy_xep_theo_kind`, ADR-138): `AS RESTRICTIVE
 // FOR INSERT TO app_api` — tập `kind` mà `app_api` XẾP được (hợp hai tập trên). Dưới bản nguyên văn, mỗi lần khối 1–11 xếp một `kind`
 // THỬ thì NÉM 42501 (INSERT vi phạm WITH CHECK luôn ném — không có "0 hàng im lặng" như UPDATE). Nên phép nới và phép khôi phục ở
 // dưới làm cả policy này, cùng khuôn `(<gốc>) OR NOT (kind = ANY (<hợp mọi tập thật>))`: một `kind` THẬT ngoài tập xếp vẫn bị chặn ở
@@ -190,7 +190,7 @@ async function datPolicyKind(polname: string, using: string, withCheck: string):
   await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${using}) WITH CHECK (${withCheck})`);
 }
 
-// [S1.9155 / khoản 285] Policy INSERT chỉ có vế WITH CHECK (`polqual` NULL) — bộ đọc riêng, không nới bộ đọc của 095.
+// [S1.246 / khoản 285] Policy INSERT chỉ có vế WITH CHECK (`polqual` NULL) — bộ đọc riêng, không nới bộ đọc của 095.
 const POLICY_KIND_XEP_API = "outbox_jobs_kind_xep_app_api";
 
 /** Policy INSERT NGUYÊN VĂN như `migrate()` dựng; `undefined` khi CSDL không có nó. */
@@ -224,7 +224,7 @@ async function noiPolicyXepChoKindThu(): Promise<void> {
 
 /** Nới policy của `app_api` cho `kind` KHÔNG thuộc tiến trình nào — các `kind` thử của tệp này; `kind` thật của vai kia vẫn bị chặn. */
 async function noiPolicyApiChoKindThu(): Promise<void> {
-  // [S1.9155 / khoản 285] Cả policy INSERT — xem khối lý do trên `PolicyKind`.
+  // [S1.246 / khoản 285] Cả policy INSERT — xem khối lý do trên `PolicyKind`.
   await noiPolicyXepChoKindThu();
   if (policyGoc === undefined) return;
   const that = [...new Set([...policyGoc.api.kind, ...policyGoc.unseal.kind])].sort();
@@ -236,7 +236,7 @@ async function noiPolicyApiChoKindThu(): Promise<void> {
 }
 
 async function khoiPhucPolicyGoc(): Promise<void> {
-  // [S1.9155 / khoản 285] Cả policy INSERT, về bản `migrate()` dựng.
+  // [S1.246 / khoản 285] Cả policy INSERT, về bản `migrate()` dựng.
   if (policyXepGoc !== undefined) await datPolicyXep(policyXepGoc.withCheck);
   if (policyGoc === undefined) return;
   await datPolicyKind(POLICY_KIND_API, policyGoc.api.using, policyGoc.api.withCheck);
@@ -265,7 +265,7 @@ beforeAll(async () => {
   const api = await docPolicyKind(POLICY_KIND_API);
   const unseal = await docPolicyKind(POLICY_KIND_UNSEAL);
   policyGoc = api !== undefined && unseal !== undefined ? { api, unseal } : undefined;
-  // [S1.9155 / khoản 285] Policy INSERT đọc cùng lúc, TRƯỚC mọi phép nới.
+  // [S1.246 / khoản 285] Policy INSERT đọc cùng lúc, TRƯỚC mọi phép nới.
   policyXepGoc = await docPolicyXep();
   await noiPolicyApiChoKindThu();
 }, 180_000);
@@ -1707,7 +1707,7 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   }, 60_000);
 
   it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ (pid khác) và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
-    // [S1.9130 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: `SET search_path` phạm vi phiên ở lần thứ ba đổi search path hiệu lực,
+    // [S1.242 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: `SET search_path` phạm vi phiên ở lần thứ ba đổi search path hiệu lực,
     // withTenant huỷ kết nối bằng lỗi ấy (không phải `true` của cờ) — `SET statement_timeout` ở lần đầu không thuộc trục nào của nó.
     const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
     try {
@@ -1742,7 +1742,7 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   }, 60_000);
 
   it("ĐƯỜNG SẢN PHẨM: handler của tổ chức P không làm hỏng job của tổ chức Q trên cùng pool", async () => {
-    // [S1.9130 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: handler `GAY_O_NHIEM` cố ý `SET search_path` không `LOCAL` — đúng một
+    // [S1.242 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: handler `GAY_O_NHIEM` cố ý `SET search_path` không `LOCAL` — đúng một
     // giao dịch của runner để lại trạng thái phiên và bị huỷ kết nối.
     const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
     try {
@@ -2102,7 +2102,7 @@ describe("[INV-F1] [S1.233 / khoản 158] mỗi vai ứng dụng chỉ ghi đư�
   });
 
   it("`UPDATE` viết tay dưới `app_api` nhắm job `UNSEAL_RFQ` của CHÍNH tổ chức ⇒ 0 hàng, KHÔNG lỗi, job còn nguyên; đối chứng: nhắm `LOGIN_LINK_SEND` ⇒ 1 hàng. Chỉ FOR UPDATE: app_api vẫn XẾP và THẤY job của worker", async () => {
-    // ~~INSERT không bị ràng~~ [S1.9155 / khoản 285] INSERT nay ràng theo tập `kind` XẾP được của `app_api` (khối 13), và `UNSEAL_RFQ`
+    // ~~INSERT không bị ràng~~ [S1.246 / khoản 285] INSERT nay ràng theo tập `kind` XẾP được của `app_api` (khối 13), và `UNSEAL_RFQ`
     // thuộc tập ấy — `api` xếp việc cho worker qua `dispatchUnseal` (019/025). Ranh giới CỦA KHỐI NÀY nằm ở GHI KẾT CỤC.
     const idWorker = await xepHang(orgId, { kind: KIND_WORKER });
     const idApi = await xepHang(orgId, { kind: KIND_API });
@@ -2160,18 +2160,18 @@ describe("[INV-F1] [S1.233 / khoản 158] mỗi vai ứng dụng chỉ ghi đư�
 });
 
 // ============================================================================================
-// 13. [S1.9155 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC SỐNG Ở CSDL — KIND LẠ BỊ TỪ CHỐI, HAI ĐƯỜNG XẾP VIỆC CỦA SẢN XUẤT VẪN ĐI QUA
+// 13. [S1.246 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC SỐNG Ở CSDL — KIND LẠ BỊ TỪ CHỐI, HAI ĐƯỜNG XẾP VIỆC CỦA SẢN XUẤT VẪN ĐI QUA
 //
 // `007` cấp `app_api` `INSERT (org_id, kind, payload, dedupe_key, run_after)` không theo `kind`, và `095` (khoản 158) cố ý chỉ ràng
-// `UPDATE`. Đo trước bản vá — cây KHÔNG có `9555_outbox_policy_xep_theo_kind`, ghi ở biên bản §S1.9155: `INSERT` viết tay dưới
+// `UPDATE`. Đo trước bản vá — cây KHÔNG có `099_outbox_policy_xep_theo_kind`, ghi ở biên bản §S1.246: `INSERT` viết tay dưới
 // `app_api` một `kind` không tiến trình nào nhận ⇒ VÀO, và nằm `PENDING` mãi (không runner nào có nó trong mảng lọc). Nay policy
 // `AS RESTRICTIVE FOR INSERT TO app_api` mang ĐÚNG tập mà `api` xếp — ba `kind` của nó, `UNSEAL_RFQ` (`dispatchUnseal`) và
 // `BREAK_GLASS_UNSEAL_ALERT` (trigger `019`, SECURITY INVOKER: câu INSERT của nó chạy dưới vai gọi). Khối đo trên policy NGUYÊN
 // VĂN (khôi phục ở `beforeAll`, nới lại ở `afterAll` — xem khối `PolicyKind` đầu tệp).
-// GIỚI HẠN ĐÃ CHỐT (câu 13 của kế hoạch đợt 3 — khoản 9455): `BREAK_GLASS_UNSEAL_ALERT` phải ở trong tập vì trigger `019` cần nó,
+// GIỚI HẠN ĐÃ CHỐT (câu 13 của kế hoạch đợt 3 — khoản 305): `BREAK_GLASS_UNSEAL_ALERT` phải ở trong tập vì trigger `019` cần nó,
 // nên một cảnh báo break-glass GIẢ viết tay dưới `app_api` VẪN xếp được. Vế cuối ghim điều ấy — ngày nó đóng, vế ấy lật có chủ ý.
 // ============================================================================================
-describe("[INV-F1] [S1.9155 / khoản 285] `app_api` chỉ XẾP được job mang `kind` thuộc tập của nó — kind lạ bị từ chối ở tầng CSDL", () => {
+describe("[INV-F1] [S1.246 / khoản 285] `app_api` chỉ XẾP được job mang `kind` thuộc tập của nó — kind lạ bị từ chối ở tầng CSDL", () => {
   /** Một `kind` đúng hình dạng CHECK của `007` mà không tiến trình nào nhận, không có ở union `KindOutbox`. */
   const KIND_LA = "THU_KIND_LA_285";
   const KIND_CANH_BAO = "BREAK_GLASS_UNSEAL_ALERT";
@@ -2183,7 +2183,7 @@ describe("[INV-F1] [S1.9155 / khoản 285] `app_api` chỉ XẾP được job ma
     await noiPolicyApiChoKindThu();
   });
 
-  /** Union `KindOutbox` — chỗ khai DUY NHẤT tập `kind` của kho ở TypeScript (§S1.9115) — đọc từ văn bản `enqueue.ts`. */
+  /** Union `KindOutbox` — chỗ khai DUY NHẤT tập `kind` của kho ở TypeScript (§S1.239) — đọc từ văn bản `enqueue.ts`. */
   const docUnionKindOutbox = (): string[] => {
     const nguon = readFileSync(fileURLToPath(new URL("./enqueue.ts", import.meta.url)), "utf8");
     const khai = /export type KindOutbox =([^;]*);/u.exec(nguon);
@@ -2346,7 +2346,7 @@ describe("[INV-F1] [S1.9155 / khoản 285] `app_api` chỉ XẾP được job ma
     }
   });
 
-  it("đối chứng dương: trigger `019` (SECURITY INVOKER) chạy dưới `app_api` khi một yêu cầu break-glass được ghi — cảnh báo vào hàng đợi trong CÙNG giao dịch; ĐỐI CHỨNG ÂM: bỏ `BREAK_GLASS_UNSEAL_ALERT` khỏi tập thì CHÍNH yêu cầu break-glass NÉM 42501 nêu tên policy — nên kind ấy PHẢI ở trong tập (giới hạn, khoản 9455)", async () => {
+  it("đối chứng dương: trigger `019` (SECURITY INVOKER) chạy dưới `app_api` khi một yêu cầu break-glass được ghi — cảnh báo vào hàng đợi trong CÙNG giao dịch; ĐỐI CHỨNG ÂM: bỏ `BREAK_GLASS_UNSEAL_ALERT` khỏi tập thì CHÍNH yêu cầu break-glass NÉM 42501 nêu tên policy — nên kind ấy PHẢI ở trong tập (giới hạn, khoản 305)", async () => {
     const { rows: ham } = await db.pool.query<{ secdef: boolean }>(
       "SELECT p.prosecdef AS secdef FROM pg_proc p WHERE p.oid = 'public.unseal_canh_bao_break_glass()'::regprocedure",
     );
@@ -2393,7 +2393,7 @@ describe("[INV-F1] [S1.9155 / khoản 285] `app_api` chỉ XẾP được job ma
     ).toBe("0");
   });
 
-  it("GIỚI HẠN ĐÃ CHỐT (khoản 9455): cảnh báo break-glass GIẢ viết tay dưới `app_api` — payload tuỳ ý, không yêu cầu nào đứng sau — VẪN vào; cùng lớp, `UNSEAL_RFQ` trỏ một yêu cầu không tồn tại cũng vào. Vế này lật khi khoản 9455 đóng", async () => {
+  it("GIỚI HẠN ĐÃ CHỐT (khoản 305): cảnh báo break-glass GIẢ viết tay dưới `app_api` — payload tuỳ ý, không yêu cầu nào đứng sau — VẪN vào; cùng lớp, `UNSEAL_RFQ` trỏ một yêu cầu không tồn tại cũng vào. Vế này lật khi khoản 305 đóng", async () => {
     const yeuCauMa = randomUUID();
     const idGia = await chenTay(orgId, KIND_CANH_BAO, { unsealRequestId: yeuCauMa, rfqId: randomUUID(), requestedBy: randomUUID(), severity: "HIGH" });
     expect(await docHang(idGia), "cảnh báo giả vào hàng đợi như thật").toMatchObject({ kind: KIND_CANH_BAO, status: "PENDING" });

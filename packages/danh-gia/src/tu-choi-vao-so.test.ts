@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9125 / khoản 279] MÃ LÝ DO ĐI VÀO DÒNG LOG KHI LẦN GHI SỔ `RFQ_STATE_DENIED` GÃY — ĐO Ở MỨC HÀM
+// [S1.241 / khoản 279] MÃ LÝ DO ĐI VÀO DÒNG LOG KHI LẦN GHI SỔ `RFQ_STATE_DENIED` GÃY — ĐO Ở MỨC HÀM
 //
 // `nemTuChoi` ghi một hàng `RFQ_STATE_DENIED` payload `{ ma: loi.lyDo }` ở giao dịch ĐỘC LẬP qua `throwAuditedDenial` (ADR-060).
 // Khi lần ghi ấy gãy — khoá ghi sổ của tổ chức bị giữ quá trần 2 s của `050` ⇒ `55P03` (§S1.225) —, dòng log của bộ điều phối là
@@ -69,7 +69,7 @@ const MA = Object.keys(VAO_SO) as MaTuChoiTrangThai[];
 const MA_VAO_SO = MA.filter((ma) => VAO_SO[ma].vaoSo);
 const MA_KHONG_VAO_SO = MA.filter((ma) => !VAO_SO[ma].vaoSo);
 
-describe("[S1.9125 / khoản 279] lần ghi sổ `RFQ_STATE_DENIED` gãy 55P03 ⇒ dòng log mang MÃ LÝ DO", () => {
+describe("[S1.241 / khoản 279] lần ghi sổ `RFQ_STATE_DENIED` gãy 55P03 ⇒ dòng log mang MÃ LÝ DO", () => {
   it("đối chứng chống rỗng ruột: bảng có mã vào sổ lẫn mã không vào sổ — hai nhánh dưới đây đều có ca", () => {
     expect(MA_VAO_SO.length).toBeGreaterThan(0);
     expect(MA_KHONG_VAO_SO.length).toBeGreaterThan(0);

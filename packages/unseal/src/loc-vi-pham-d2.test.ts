@@ -1,10 +1,10 @@
 // ==============================================================================================
 // [S1.85 / khoản 147] BỘ LỌC D2 CỦA `approveUnseal` PHẢI KHỚP NGUYÊN VĂN CÁC CÂU `RAISE` CỦA ~~`019`~~
-// [S1.9130 / khoản 181] THÂN TRIGGER MÀ `hardening.always.sql` ÁP LẠI Ở MỌI LƯỢT `migrate()` — `019` LÀ VẾ LỊCH SỬ.
+// [S1.242 / khoản 181] THÂN TRIGGER MÀ `hardening.always.sql` ÁP LẠI Ở MỌI LƯỢT `migrate()` — `019` LÀ VẾ LỊCH SỬ.
 //
 // Bất biến D5 nói một lần THỬ vi phạm D2 phải để lại dấu vết. `approveUnseal` nhận biết một lần
 // thử như thế bằng THÔNG ĐIỆP của trigger `unseal_kiem_nguoi_duyet` — tức bất biến ấy sống trong
-// HAI bản: thân trigger ~~ở `019_unseal.sql`~~ [S1.9130 / khoản 181] (bản CHẠY: bản hardening áp lại; `019` là bản
+// HAI bản: thân trigger ~~ở `019_unseal.sql`~~ [S1.242 / khoản 181] (bản CHẠY: bản hardening áp lại; `019` là bản
 // dựng đầu), và biểu thức chính quy ở `requests.ts`. Hai bản lệch
 // nhau thì lớp cưỡng chế vẫn chặn (trigger đúng) nhưng DẤU VẾT mất, và không gì kêu lên.
 //
@@ -21,11 +21,11 @@
 // Tệp này là lớp bắt: nó ĐỌC migration thay vì chép lại chuỗi, cùng khuôn §R3 đã dùng cho
 // `ma-tran-quyen.test.ts` và cho thân `noi_chuoi_kiem_toan()`.
 //
-// [S1.9130 / khoản 181] NGUỒN ĐỔI TỪ `019` SANG HARDENING. `019` là một migration ĐÃ ÁP — thân lẫn chú thích khoá bằng checksum
+// [S1.242 / khoản 181] NGUỒN ĐỔI TỪ `019` SANG HARDENING. `019` là một migration ĐÃ ÁP — thân lẫn chú thích khoá bằng checksum
 // (khoản 19) —, nên nó là tệp KHÔNG thể trôi: neo bộ lọc vào đó là neo vào một hằng số. Thân chạy trên MỌI cụm là thân mà hàng
 // `hàm + trigger unseal_kiem_nguoi_duyet (019)` của `hardening.always.sql` áp lại khi thân hiện tại lệch bản chuẩn. Bản cũ đọc bộ lọc
 // với `019` và chỉ hỏi "câu D2 của `019` có mặt Ở ĐÂU ĐÓ trong hardening" (`includes` trên cả tệp, kể cả hậu điều kiện và chú thích).
-// Đo trước (§S1.9130): sửa câu D2 ở thân câu sửa của hàng ấy, không sửa bộ lọc ⇒ bản cũ XANH 5/5 — bản `$than$` của hậu điều kiện
+// Đo trước (§S1.242): sửa câu D2 ở thân câu sửa của hàng ấy, không sửa bộ lọc ⇒ bản cũ XANH 5/5 — bản `$than$` của hậu điều kiện
 // vẫn giữ câu cũ nên `includes` thoả. Nay: ⑴ bộ lọc đối chiếu với các câu `RAISE` của THÂN CÂU SỬA ấy; ⑵ thân câu sửa và thân
 // chuẩn (`$than$`, hậu điều kiện) của CÙNG hàng phải nói cùng các câu; ⑶ `019` là vế LỊCH SỬ — các câu của nó phải khớp từng chữ,
 // đúng thứ tự, với thân hardening, không còn là nguồn duy nhất.
@@ -53,7 +53,7 @@ function moiCauRaiseCuaKho(): { tep: string; cau: string }[] {
 }
 
 /**
- * Thân hàm `unseal_kiem_nguoi_duyet()` ~~— trigger DUY NHẤT của `unseal_approvals` nói "không" vì D2~~ [S1.9130 / khoản 181] ở
+ * Thân hàm `unseal_kiem_nguoi_duyet()` ~~— trigger DUY NHẤT của `unseal_approvals` nói "không" vì D2~~ [S1.242 / khoản 181] ở
  * `019` — bản DỰNG ĐẦU, vế lịch sử. Trigger ấy vẫn là trigger DUY NHẤT của `unseal_approvals` nói "không" vì D2.
  */
 function thanTrong019(): string {
@@ -65,13 +65,13 @@ function thanTrong019(): string {
 }
 
 /**
- * [S1.9130 / khoản 181] Nhãn của hàng hardening ghim thân hàm + trigger — đọc nguyên văn, đúng một lần trong tệp.
- * [S1.9145 / khoản 266] Nhãn đổi theo khuôn các hàng "thân từ 074": thân nay từ `9545_khong_tim_thay_yeu_cau_co_ten.sql` (nhánh không
+ * [S1.242 / khoản 181] Nhãn của hàng hardening ghim thân hàm + trigger — đọc nguyên văn, đúng một lần trong tệp.
+ * [S1.245 / khoản 266] Nhãn đổi theo khuôn các hàng "thân từ 074": thân nay từ `098_khong_tim_thay_yeu_cau_co_ten.sql` (nhánh không
  * thấy yêu cầu mang `USING CONSTRAINT`; câu thông điệp không đổi, nên các vế dưới — kể cả vế LỊCH SỬ — đọc cùng các câu `RAISE`).
  */
-const NHAN_HANG = "$q$hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 9545_khong_tim_thay_yeu_cau_co_ten.sql)$q$";
+const NHAN_HANG = "$q$hàm + trigger unseal_kiem_nguoi_duyet (019, thân từ 098_khong_tim_thay_yeu_cau_co_ten.sql)$q$";
 
-/** [S1.9130 / khoản 181] Văn bản của hàng ấy, từ nhãn tới dòng đóng `    ],` của nó. */
+/** [S1.242 / khoản 181] Văn bản của hàng ấy, từ nhãn tới dòng đóng `    ],` của nó. */
 function hangHardening(): string {
   const dau = HARDENING.indexOf(NHAN_HANG);
   expect(dau, "không tìm thấy hàng ghim `unseal_kiem_nguoi_duyet` trong hardening.always.sql — hàng đã đổi nhãn?").toBeGreaterThan(0);
@@ -82,7 +82,7 @@ function hangHardening(): string {
 }
 
 /**
- * [S1.9130 / khoản 181] Thân CÂU SỬA của hàng ấy — `CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet() … AS $<thẻ>$ … $<thẻ>$`,
+ * [S1.242 / khoản 181] Thân CÂU SỬA của hàng ấy — `CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet() … AS $<thẻ>$ … $<thẻ>$`,
  * đúng văn bản hardening dựng lại khi thân hiện tại lệch bản chuẩn: nguồn NGUYÊN VĂN của các vế dưới.
  */
 function thanCauSua(): string {
@@ -97,7 +97,7 @@ function thanCauSua(): string {
   return hang.slice(moDau, dong);
 }
 
-/** [S1.9130 / khoản 181] Thân CHUẨN của CÙNG hàng — `$than$…$than$` ở hậu điều kiện, bản đã chuẩn hoá khoảng trắng mà mọi cụm phải khớp. */
+/** [S1.242 / khoản 181] Thân CHUẨN của CÙNG hàng — `$than$…$than$` ở hậu điều kiện, bản đã chuẩn hoá khoảng trắng mà mọi cụm phải khớp. */
 function thanChuan(): string {
   const hang = hangHardening();
   const dau = hang.indexOf("$than$");
@@ -112,7 +112,7 @@ function cauRaise(than: string): string[] {
   return [...than.matchAll(/RAISE EXCEPTION '([^']+)'/gu)].map((m) => m[1] ?? "");
 }
 
-/** Hai câu D2 — hai vế mà bộ lọc PHẢI nhận. Nêu bằng mảnh khoá, không chép cả câu: cả câu đọc từ ~~`019`~~ [S1.9130 / khoản 181] thân hardening. */
+/** Hai câu D2 — hai vế mà bộ lọc PHẢI nhận. Nêu bằng mảnh khoá, không chép cả câu: cả câu đọc từ ~~`019`~~ [S1.242 / khoản 181] thân hardening. */
 const MANH_D2 = ["khong duoc tu phe duyet", "PHIEN KHAC"];
 
 describe("[INV-D2] [INV-D5] [S1.85 / khoản 147] bộ lọc D2 đối chiếu với thân trigger CHẠY — bản hardening áp lại; 019 là vế lịch sử", () => {
@@ -142,14 +142,14 @@ describe("[INV-D2] [INV-D5] [S1.85 / khoản 147] bộ lọc D2 đối chiếu v
   });
 
   it("§R3: thân CÂU SỬA và thân CHUẨN (`$than$`) của cùng hàng hardening nói CÙNG các câu `RAISE` — bản dựng lại khi lệch và bản mọi cụm phải khớp là một", () => {
-    // ~~`hardening.includes(c)` trên CẢ TỆP~~ [S1.9130 / khoản 181] Hai biểu diễn của CÙNG thân trong CÙNG hàng: câu sửa là văn bản
+    // ~~`hardening.includes(c)` trên CẢ TỆP~~ [S1.242 / khoản 181] Hai biểu diễn của CÙNG thân trong CÙNG hàng: câu sửa là văn bản
     // hardening dựng lại, `$than$` là văn bản mà thân đang chạy phải khớp (khoảng trắng đã chuẩn hoá). Lệch nhau thì câu nào chạy tuỳ
     // lịch sử của từng cụm — và bộ lọc chỉ được đối chiếu với một trong hai.
     expect(cauRaise(thanChuan()), "câu RAISE ở hậu điều kiện khác câu RAISE ở câu sửa").toEqual(cauRaise(thanCauSua()));
   });
 
   it("vế LỊCH SỬ: mọi câu `RAISE` của thân ở `019` khớp TỪNG CHỮ, ĐÚNG THỨ TỰ, với thân hardening áp lại — 019 là bản dựng đầu, không còn là nguồn", () => {
-    // [S1.9130 / khoản 181] `019` không đổi được (checksum, khoản 19); hardening thì đổi được ở mỗi vòng. Hai bản phải khớp: đổi một
+    // [S1.242 / khoản 181] `019` không đổi được (checksum, khoản 19); hardening thì đổi được ở mỗi vòng. Hai bản phải khớp: đổi một
     // câu ở hardening là đổi thông điệp mà mọi cụm đang chạy ném ra — việc ấy phải đi qua một quyết định nhìn thấy được (sửa vế này có
     // lý do), không lặng lẽ.
     expect(

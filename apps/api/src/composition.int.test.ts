@@ -930,7 +930,7 @@ describe("[S1.222 / khoản 168] tiến trình `api` dựng từ môi trường 
 });
 
 // ==============================================================================================
-// [S1.9165 / khoản 277] TIẾN TRÌNH `api` KHỞI ĐỘNG LẠI TỰ NHẶT VIỆC `PENDING` CỦA CHÍNH NÓ — đo trên `taoTienTrinhApi` thật.
+// [S1.248 / khoản 277] TIẾN TRÌNH `api` KHỞI ĐỘNG LẠI TỰ NHẶT VIỆC `PENDING` CỦA CHÍNH NÓ — đo trên `taoTienTrinhApi` thật.
 //
 // Trước vòng này `listOrganizations` của runner là `() => [...toChucDaThay]`: tập tổ chức mà CHÍNH tiến trình đã thấy xếp việc, rỗng
 // lại sau mỗi lần khởi động (dấu ADR-047). Job `PENDING` của `api` — link đăng nhập, tin báo người duyệt, tin gia hạn — mà tiến trình
@@ -944,7 +944,7 @@ describe("[S1.222 / khoản 168] tiến trình `api` dựng từ môi trường 
 //      commit ⇒ một kỳ poll sau đó nhặt nó (vế "mỗi kỳ", không chỉ "lúc lên").
 // Kỳ vọng mềm (`expect.soft`) cho ② và ③ để lần đỏ nói cả hai cảnh, không dừng ở cảnh đầu.
 // ==============================================================================================
-describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự nhặt job PENDING của chính nó — không cần lời xếp việc nào", () => {
+describe("[S1.248 / khoản 277] tiến trình `api` khởi động lại tự nhặt job PENDING của chính nó — không cần lời xếp việc nào", () => {
   /** Chờ tới khi `log` có một dòng khớp `mau` — trần `hanMs`. */
   async function doiDong(log: readonly string[], mau: RegExp, hanMs = 5000): Promise<string> {
     const het = Date.now() + hanMs;
@@ -1049,7 +1049,7 @@ describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự 
       expect.soft(tinLinkDen("k277@vidu.vn").length, "② tin của job khôi phục vào hộp thư").toBe(1);
       expect.soft(tinLinkDen("k277-s@vidu.vn").length, "③ tin của job chèn thẳng vào hộp thư").toBe(1);
 
-      // ④ HỢP với `toChucDaThay` là chịu lực, và ranh giới của hàm hẹp nói ra bằng phép đo (khoản 9465). Job `RUNNING` hết hạn thuê —
+      // ④ HỢP với `toChucDaThay` là chịu lực, và ranh giới của hàm hẹp nói ra bằng phép đo (khoản 307). Job `RUNNING` hết hạn thuê —
       // cảnh "tiến trình chết GIỮA handler" — là việc `CAU_CLAIM` nhặt lại, nhưng chỉ cho tổ chức CÓ trong danh sách. Tổ chức R vừa
       // xếp việc qua CHÍNH tiến trình ② (lời `/auth/link`, nên R ∈ `toChucDaThay`); tổ chức U thì chưa. Mỗi tổ chức một job `RUNNING`
       // hết hạn thuê, KHÔNG job PENDING nào ⇒ hàm hẹp không trả tổ chức nào; R vẫn được nhặt (nhờ vế hợp), U thì không.
@@ -1078,7 +1078,7 @@ describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự 
       const { rows: conU } = await db.pool.query<{ status: string; attempts: number }>("SELECT status, attempts FROM outbox_jobs WHERE id = $1", [
         jobHetThueU,
       ]);
-      expect(conU, "④ ranh giới (khoản 9465): job RUNNING hết hạn thuê của tổ chức CHƯA thấy xếp việc nằm yên — hàm hẹp chỉ trả tổ chức có việc PENDING").toEqual([
+      expect(conU, "④ ranh giới (khoản 307): job RUNNING hết hạn thuê của tổ chức CHƯA thấy xếp việc nằm yên — hàm hẹp chỉ trả tổ chức có việc PENDING").toEqual([
         { status: "RUNNING", attempts: 1 },
       ]);
     } finally {
@@ -1117,7 +1117,7 @@ describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự 
   // ----------------------------------------------------------------------------------------------
   // ĐỐI CHỨNG của nguồn tập tổ chức — chính hàm hẹp, gọi dưới từng vai trong một giao dịch rồi ROLLBACK (không dấu vết cho vế khác):
   //   ⑴ tổ chức vào tập KHI VÀ CHỈ KHI có job `PENDING` thuộc tập `kind` của `api`: không việc, việc đã `DONE`/`FAILED`, việc
-  //      `RUNNING` hết hạn thuê (khoản 9465 — nói ra bằng phép đo), hay chỉ có việc `PENDING` của worker ⇒ KHÔNG vào tập;
+  //      `RUNNING` hết hạn thuê (khoản 307 — nói ra bằng phép đo), hay chỉ có việc `PENDING` của worker ⇒ KHÔNG vào tập;
   //   ⑴′ nghĩa ấy nằm ở THÂN hàm, không dựa vào vị từ của policy đi kèm (policy nới thành `true` ⇒ tập không đổi);
   //   ⑵ tập `kind` đưa tổ chức vào tập BẰNG bảng handler của `api` và BẰNG tập của policy `outbox_jobs_kind_app_api` (095, đọc theo
   //      TÊN — không phải "policy RESTRICTIVE đầu tiên của app_api": từ lô B2 `app_api` có thêm một policy FOR INSERT mang năm kind).
@@ -1171,7 +1171,7 @@ describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự 
       const kindVaoTap = MOI_KIND.filter((k) => tap.has(theoKind.get(k)!));
       expect(
         { khongViec: tap.has(khongViec), daXong: tap.has(daXong), daHong: tap.has(daHong), dangChayHetThue: tap.has(dangChay) },
-        "không việc, việc đã xong / đã hỏng, việc RUNNING hết hạn thuê (khoản 9465) — không tổ chức nào vào tập",
+        "không việc, việc đã xong / đã hỏng, việc RUNNING hết hạn thuê (khoản 307) — không tổ chức nào vào tập",
       ).toEqual({ khongViec: false, daXong: false, daHong: false, dangChayHetThue: false });
       expect(
         { UNSEAL_RFQ: tap.has(theoKind.get("UNSEAL_RFQ")!), BREAK_GLASS_UNSEAL_ALERT: tap.has(theoKind.get("BREAK_GLASS_UNSEAL_ALERT")!) },
@@ -1184,7 +1184,7 @@ describe("[S1.9165 / khoản 277] tiến trình `api` khởi động lại tự 
 
       // ⑴′ Nghĩa của hàm không dựa vào policy đi kèm: nới policy thành USING (true) trong giao dịch này (ROLLBACK ngay) — thân hàm
       //     TỰ lọc `status`, nên tổ chức chỉ có việc đã xong / đã hỏng / đang chạy vẫn không vào tập. Không vế này thì đột biến "bỏ vế
-      //     status khỏi thân" sống, vì policy còn cắt đúng lát PENDING (đo §S1.9165: M10).
+      //     status khỏi thân" sống, vì policy còn cắt đúng lát PENDING (đo §S1.248: M10).
       await c.query("SAVEPOINT truoc_noi");
       await c.query("ALTER POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs USING (true)");
       await c.query("SET LOCAL ROLE app_api");

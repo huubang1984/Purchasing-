@@ -714,7 +714,7 @@ describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình
     // Người DUYỆT thì huỷ được: một yêu cầu kẹt vẫn phải có đường dừng.
     expect((await goi("POST", `/unseal/${id}/cancel`, gd1)).status, "người giữ rfq.unseal.approve huỷ được").toBe(200);
 
-    // [S1.9101 / khoản 267, tích hợp lô B1] Huỷ lần nữa một yêu cầu ĐÃ HUỶ: câu 422 riêng kèm `ma` (không còn câu gộp với "không
+    // [S1.237 / khoản 267, tích hợp lô B1] Huỷ lần nữa một yêu cầu ĐÃ HUỶ: câu 422 riêng kèm `ma` (không còn câu gộp với "không
     // tìm thấy"), và ĐÚNG một hàng `UNSEAL_CANCEL_DENIED` mang lý do trạng thái — lần từ chối trạng thái nay vào sổ (luật ADR-060).
     const truocLan2 = await demTuChoiHuy(xin.id);
     const lan2 = await goi("POST", `/unseal/${id}/cancel`, xin);

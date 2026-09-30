@@ -53,7 +53,7 @@ describe("[S1.191 / S3.2c2] nhãn trạng thái lời mời", () => {
 });
 
 /**
- * [S1.9120 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — SUY từ máy trạng thái (`RFQ_TRANSITIONS` của
+ * [S1.240 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — SUY từ máy trạng thái (`RFQ_TRANSITIONS` của
  * `@trustprocure/rfq`): `UNSEALED` và mọi trạng thái đi tới được từ nó, trừ `CANCELLED`. Cùng phép suy mà
  * `packages/invitation/src/invitation.int.test.ts` dùng để ghim `RFQ_STATUSES_AFTER_UNSEAL` — tập máy chủ chặn thu hồi —, nên
  * bảng dưới đo màn theo ĐÚNG tập ấy mà không import gói `invitation` (hằng ấy không đi qua cửa `index.ts` của gói).
@@ -74,7 +74,7 @@ function sauMoThau(): ReadonlySet<string> {
 }
 
 describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
-  it("tổ chức chưa bật: ~~cả hai nút ở mọi trạng thái gói~~ [S1.9120 / khoản 276] *Gửi lại link* ở mọi trạng thái gói — hợp đồng MVP1, máy chủ tự từ chối; *Thu hồi* ẩn sau lần mở thầu", () => {
+  it("tổ chức chưa bật: ~~cả hai nút ở mọi trạng thái gói~~ [S1.240 / khoản 276] *Gửi lại link* ở mọi trạng thái gói — hợp đồng MVP1, máy chủ tự từ chối; *Thu hồi* ẩn sau lần mở thầu", () => {
     const ra = Object.fromEntries(TRANG_THAI_GOI.map((g) => [g, nutLoiMoi(false, g, false)]));
     expect(ra).toEqual({
       DRAFT: { guiLai: true, thuHoi: true },
@@ -87,10 +87,10 @@ describe("[S1.191 / S3.2c2] hai nút của một dòng lời mời", () => {
     });
   });
 
-  // [S1.9120 / khoản 276] Bảng ĐỦ mười một trạng thái của `RFQ_STATUSES`, hai luồng: *Thu hồi* không bao giờ hiện ở trạng thái mà máy
+  // [S1.240 / khoản 276] Bảng ĐỦ mười một trạng thái của `RFQ_STATUSES`, hai luồng: *Thu hồi* không bao giờ hiện ở trạng thái mà máy
   // chủ chặn thu hồi (ADR-128 ③ — sau lần mở thầu đầu tiên), và ở tổ chức chưa bật thì hiện ở MỌI trạng thái còn lại (kể cả
   // `CANCELLED`: thu hồi ở đó vẫn là quyền đóng phiên khách — ADR-128). Tổ chức đã bật giữ luật K4a (chỉ DRAFT), vốn đã hẹp hơn.
-  it("[S1.9120 / khoản 276] *Thu hồi* ẩn ở ĐÚNG các trạng thái sau lần mở thầu (suy từ `RFQ_TRANSITIONS`) ở cả hai luồng; *Gửi lại link* không đổi", () => {
+  it("[S1.240 / khoản 276] *Thu hồi* ẩn ở ĐÚNG các trạng thái sau lần mở thầu (suy từ `RFQ_TRANSITIONS`) ở cả hai luồng; *Gửi lại link* không đổi", () => {
     const sau = sauMoThau();
     expect([...sau].sort(), "phép suy phải ra đúng sáu trạng thái ADR-128 ③ kể").toEqual(
       ["AWARDED", "BAFO_CLOSED", "BAFO_OPEN", "BAFO_UNSEALED", "EVALUATING", "UNSEALED"],

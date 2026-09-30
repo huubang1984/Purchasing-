@@ -48,7 +48,7 @@ export function nhanLoiMoi(status: unknown, moiSauKhiKy: unknown): string {
 const GOI_NHAN_BAO_GIA: ReadonlySet<string> = new Set(["OPEN", "BAFO_OPEN"]);
 
 /**
- * [S1.9120 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — `UNSEALED` và mọi trạng thái đi tới từ nó, trừ
+ * [S1.240 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — `UNSEALED` và mọi trạng thái đi tới từ nó, trừ
  * `CANCELLED`. Bản sao ĐỂ ĐỌC của `RFQ_STATUSES_AFTER_UNSEAL` (`packages/invitation`, tập mà `revokeInvitation` chặn thu hồi): module
  * này chạy trong trình duyệt nên không import gói máy chủ; `tao-thau.test.ts` suy tập từ `RFQ_TRANSITIONS` — cùng phép suy ghim hằng
  * của gói ở `invitation.int.test.ts` — và đo màn theo nó, nên hai bản không lệch mà không đỏ.
@@ -59,7 +59,7 @@ const GOI_SAU_MO_THAU: ReadonlySet<string> = new Set(["UNSEALED", "EVALUATING", 
  * Hai nút của một dòng lời mời.
  *   · Lời mời đã thu hồi: không nút nào.
  *   · Tổ chức chưa bật: như MVP1 — ~~cả hai nút~~ *Gửi lại link* ở mọi trạng thái, máy chủ tự từ chối ca nó không cho.
- *     [S1.9120 / khoản 276] *Thu hồi* ẩn sau lần mở thầu (`GOI_SAU_MO_THAU`): từ ADR-128 máy chủ chặn thu hồi ở đó bằng một 422
+ *     [S1.240 / khoản 276] *Thu hồi* ẩn sau lần mở thầu (`GOI_SAU_MO_THAU`): từ ADR-128 máy chủ chặn thu hồi ở đó bằng một 422
  *     câu cố định, nên nút ấy là một nút không bao giờ đi được.
  *   · Tổ chức đã bật: *Thu hồi* chỉ ở DRAFT (K4a — ở OPEN thu hồi bị chặn tới S3.6, ở PENDING_APPROVAL phải trả gói về
  *     soạn thảo trước); *Gửi lại link* chỉ khi gói nhận báo giá — trước lần mở gói chưa có token nào để gửi (K6).

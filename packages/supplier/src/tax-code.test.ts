@@ -82,7 +82,7 @@ describe("hình dạng MST", () => {
     expect(EMAIL_PATTERN.test("@doitac.vn")).toBe(false);
   });
 
-  it("[S1.9160 / khoản 283] email có dấu chấm cuối tên miền không khớp hình dạng — `doitac.vn.` là dạng tuyệt đối của `doitac.vn`", () => {
+  it("[S1.247 / khoản 283] email có dấu chấm cuối tên miền không khớp hình dạng — `doitac.vn.` là dạng tuyệt đối của `doitac.vn`", () => {
     // Đo ở S1.229: mẫu cũ khớp vì `[^…@]+\.[^…@]+$` lùi được về `doitac` `.` `vn.` — bản sao hình dạng để lọt thứ lược đồ nay chặn.
     expect(EMAIL_PATTERN.test("ncc@doitac.vn.")).toBe(false);
     expect(EMAIL_PATTERN.test("ncc@doitac.vn..")).toBe(false);

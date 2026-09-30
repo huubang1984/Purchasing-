@@ -9,8 +9,8 @@
 // được bí mật TOTP là đúng thứ G1 dựng hai vòng khoá riêng để chặn), và một lời hứa không ai đo
 // là một lời hứa sẽ trôi.
 //
-// [S1.9125 / khoản 172] Và phép đo cũ của ca ⑼ đo HẸP hơn lời hứa: *"không ném, và đúng các trường ấy ở tầng trên cùng"* xanh cả
-// trong một thế giới mà `docCauHinh` VẪN đọc ba vòng ấy rồi vứt đi (đo: đột biến đọc-rồi-vứt ở biên bản §S1.9125 — ca cũ xanh). Nay
+// [S1.241 / khoản 172] Và phép đo cũ của ca ⑼ đo HẸP hơn lời hứa: *"không ném, và đúng các trường ấy ở tầng trên cùng"* xanh cả
+// trong một thế giới mà `docCauHinh` VẪN đọc ba vòng ấy rồi vứt đi (đo: đột biến đọc-rồi-vứt ở biên bản §S1.241 — ca cũ xanh). Nay
 // vế ĐỌC của ca ⑼ đo bằng HÀNH VI ở khối cuối tệp: nguồn cấu hình là một Proxy GHI từng tên được đọc giá trị, và tập tên ấy không được
 // giao với bí mật của `apps/api`. Cùng khối đo quy tắc ⑵ của `cau-hinh.ts` bằng hành vi: mọi biến mà `docCauHinh` đọc — tập lấy từ
 // chính nguồn ghi lượt đọc, không từ một danh sách viết tay — mang một giá trị lạ thì bị từ chối nêu TÊN, và giá trị ấy không có trong
@@ -121,9 +121,9 @@ describe("[S1.82 / khoản 116] cấu hình worker mở thầu", () => {
   it("[S1.82] KHÔNG đọc ba vòng bí mật của `apps/api` — đây là một LỜI HỨA SẢN PHẨM, không phải một thiếu sót", () => {
     // ADR-006: tiến trình mở phong bì thầu không được giữ thêm bí mật nào khác. Phép đo: đặt cả
     // ba biến với giá trị RÁC — ~~nếu `docCauHinh` đọc bất kỳ cái nào, nó sẽ ném; nó KHÔNG được ném.~~
-    // [S1.9125 / khoản 172] nếu `docCauHinh` đọc VÀ PHÂN TÍCH bất kỳ cái nào, nó sẽ ném — đọc rồi vứt thì không ném, và ca này vẫn
-    // xanh (đo bằng đột biến, §S1.9125). Ca này giữ vế ĐẦU RA (cấu hình không mang trường nào cho ba vòng); vế ĐỌC đo ở khối
-    // `[S1.9125 / khoản 172]` cuối tệp, bằng nguồn ghi lượt đọc.
+    // [S1.241 / khoản 172] nếu `docCauHinh` đọc VÀ PHÂN TÍCH bất kỳ cái nào, nó sẽ ném — đọc rồi vứt thì không ném, và ca này vẫn
+    // xanh (đo bằng đột biến, §S1.241). Ca này giữ vế ĐẦU RA (cấu hình không mang trường nào cho ba vòng); vế ĐỌC đo ở khối
+    // `[S1.241 / khoản 172]` cuối tệp, bằng nguồn ghi lượt đọc.
     const ch = docCauHinh({
       ...envDu(),
       TRUSTPROCURE_TOTP_MASTER_KEYS: "rac-khong-phai-base64!",
@@ -166,7 +166,7 @@ function envKms(): Record<string, string> {
 
 describe("[ADR-064] cấu hình worker với khoá aws-kms", () => {
   it("đọc vùng và CMK bọc khoá tổ chức; KHÔNG đọc CMK của TOTP hay khoá ký dù chúng có mặt", () => {
-    // [S1.9125 / khoản 172] Ca này đo vế ĐẦU RA; vế ĐỌC ("KHÔNG đọc" ở tên ca) đo ở khối cuối tệp — hai CMK ấy nằm trong
+    // [S1.241 / khoản 172] Ca này đo vế ĐẦU RA; vế ĐỌC ("KHÔNG đọc" ở tên ca) đo ở khối cuối tệp — hai CMK ấy nằm trong
     // `BIEN_BI_MAT_CUA_API`, và cảnh `aws-kms` là một trong ba cảnh của phép đo.
     const ch = docCauHinh({
       ...envKms(),
@@ -253,7 +253,7 @@ describe("[ADR-065] cấu hình cảnh báo worker qua SES", () => {
 });
 
 // ==============================================================================================
-// [S1.9125 / khoản 172] ĐO BẰNG HÀNH VI — NGUỒN CẤU HÌNH GHI LƯỢT ĐỌC
+// [S1.241 / khoản 172] ĐO BẰNG HÀNH VI — NGUỒN CẤU HÌNH GHI LƯỢT ĐỌC
 //
 // Hai lời khai của `cau-hinh.ts`, đo bằng thứ `docCauHinh` LÀM chứ không bằng thứ nó trả về:
 //   ⑼ tiến trình mở phong bì KHÔNG đọc giá trị bí mật nào của `apps/api` — ba vòng (TOTP, pepper OTP, khoá ký biên nhận, cùng biến
@@ -261,7 +261,7 @@ describe("[ADR-065] cấu hình cảnh báo worker qua SES", () => {
 //      qua `process.env` đọc thẳng (trong lúc gọi, `process.env` cũng là một nguồn ghi lượt đọc);
 //   ⑵ thông điệp lỗi chỉ nêu TÊN biến và điều kiện, không bao giờ nêu GIÁ TRỊ — `main.ts` in thẳng thông điệp của `CauHinhError` ra
 //      log. Tập biến được đo là tập mà nguồn ghi lượt đọc THẤY `docCauHinh` đọc ở mỗi cảnh, nên một biến mới tự vào phép đo.
-// Đo trước trên mã trước vòng này (§S1.9125 mục 3): ⑵ đỏ đúng ở hai biến adapter, ba cảnh (`docAdapter` in `${ten} = "${v}"`); ⑼ xanh
+// Đo trước trên mã trước vòng này (§S1.241 mục 3): ⑵ đỏ đúng ở hai biến adapter, ba cảnh (`docAdapter` in `${ten} = "${v}"`); ⑼ xanh
 // trên mã thật và ĐỎ với đột biến đọc-rồi-vứt ba vòng — đột biến mà ca ⑼ cũ để xanh.
 // ==============================================================================================
 
@@ -352,7 +352,7 @@ const CA_QUY_TAC_2 = CANH.flatMap(([canh, env]) => {
   return [...daDoc].sort().map((bien) => ({ canh, bien, env }));
 });
 
-describe("[S1.9125 / khoản 172] đo bằng hành vi — nguồn cấu hình ghi lượt đọc", () => {
+describe("[S1.241 / khoản 172] đo bằng hành vi — nguồn cấu hình ghi lượt đọc", () => {
   it("ĐỐI CHỨNG: nguồn ghi lượt đọc thấy mọi lối đọc giá trị — `env[ten]`, trải, `Object.entries`/`values`, `JSON.stringify`, bộ mô tả", () => {
     const loiDoc: readonly (readonly [string, (e: MoiTruongDoc) => unknown])[] = [
       ["env[ten]", (e) => e["TRUSTPROCURE_OTP_PEPPERS"]],
@@ -405,7 +405,7 @@ describe("[S1.9125 / khoản 172] đo bằng hành vi — nguồn cấu hình gh
     expect(theoCanh("local-dev + ses")).toEqual(expect.arrayContaining(["TRUSTPROCURE_SES_FROM", "TRUSTPROCURE_ALERT_EMAILS"]));
     // Biến KHÔNG có trong môi trường nền mà `docCauHinh` vẫn hỏi — số có mặc định, biến của adapter kia (phép loại trừ). Bẫy thấy
     // chúng vì `docCauHinh` đọc thẳng từ nguồn; một bản cấu hình chép cả môi trường (`{...env}`) rồi đọc bản chép làm tập này co về
-    // đúng các khoá có mặt, và vế ⑵ mù với mọi biến vắng — ca này đỏ khi đó (đột biến M6, §S1.9125), không chỉ ⑼.
+    // đúng các khoá có mặt, và vế ⑵ mù với mọi biến vắng — ca này đỏ khi đó (đột biến M6, §S1.241), không chỉ ⑼.
     expect(theoCanh("local-dev + dev-file")).toEqual(
       expect.arrayContaining(["TRUSTPROCURE_DB_POOL_MAX", "TRUSTPROCURE_OUTBOX_TON_DONG_MS", "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID", "TRUSTPROCURE_SES_FROM"]),
     );

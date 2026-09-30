@@ -1902,7 +1902,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 });
 
 // ===============================================================================================
-// [S1.9135 / khoản 275 / ADR-129 §3] CÂU SUY PHONG BÌ HỎNG NGOÀI SỔ — ĐO TRÊN LƯỢT MỞ THẦU VÒNG BAFO
+// [S1.243 / khoản 275 / ADR-129 §3] CÂU SUY PHONG BÌ HỎNG NGOÀI SỔ — ĐO TRÊN LƯỢT MỞ THẦU VÒNG BAFO
 //
 // ADR-129 cắt `failedBidVersionIds` của hai bản ghi sổ mở thầu còn K = 20 id ĐẦU và nói phần còn lại SUY được bằng
 // MỘT câu SQL (§3), câu ấy lọc `v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id`. §S1.221 đo nó ở
@@ -1924,7 +1924,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 // worker không mở nó, lượt chấm không thấy nó, nó không vào top-N. Với YÊU CẦU VÒNG MỘT, câu §3 trả ĐÚNG id của luồng ấy
 // dù hai bản ghi sổ vòng một mang `failedCount` 0: câu §3 không mang vế `i.revoked_at IS NULL` của ADR-128 (hai ADR cùng đợt
 // 2, hai lô song song), nên luồng BỊ LOẠI được suy thành phong bì HỎNG. Lỗ kề, ngoài phạm vi khoản 275 (vòng một; ở vòng BAFO
-// luồng đã thu hồi không có phiên bản nào nên vế vòng đã loại nó) — khoản 9435, GHIM ở ca cuối để lần sửa ADR-129 §3 đỏ đúng
+// luồng đã thu hồi không có phiên bản nào nên vế vòng đã loại nó) — khoản 298, GHIM ở ca cuối để lần sửa ADR-129 §3 đỏ đúng
 // đó.
 //
 // Hai điểm đồ gá, nói ra: ⒜ cụm test có MỘT địa chỉ người gọi, và `issueOtpChallenge` khoá người gọi sau
@@ -1933,7 +1933,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 // như `dungToChuc` (không gọi lại nó: hai slug của nó đã dùng), ngưỡng phê duyệt kép đặt TRÊN ngân sách — một chữ ký mở
 // gói, một chữ ký mở thầu —, vì thứ đo ở đây là câu suy, không phải D2. Không nhãn INV.
 // ===============================================================================================
-describe("[S1.9135 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 trên lượt mở thầu VÒNG BAFO — 21 phong bì hỏng ⇒ câu suy trả 21 id, 20 đầu là K id của payload", () => {
+describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 trên lượt mở thầu VÒNG BAFO — 21 phong bì hỏng ⇒ câu suy trả 21 id, 20 đầu là K id của payload", () => {
   /** Số nhà cung cấp CÒN SỐNG nộp vòng một (không kể luồng thu hồi); `bafoTopN` của chính sách; số phong bì hỏng ở vòng BAFO. */
   const SO_NCC = 23;
   const TOP_N = 22;
@@ -2230,9 +2230,9 @@ describe("[S1.9135 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr
     );
   });
 
-  it("[S1.9135 / khoản 9435] GIỚI HẠN ĐÃ ĐO, ghim: ở YÊU CẦU VÒNG MỘT câu §3 trả ĐÚNG id của luồng bị thu hồi trước lần mở — 1 id trong khi hai bản ghi sổ vòng một mang `failedCount` 0", async () => {
+  it("[S1.243 / khoản 298] GIỚI HẠN ĐÃ ĐO, ghim: ở YÊU CẦU VÒNG MỘT câu §3 trả ĐÚNG id của luồng bị thu hồi trước lần mở — 1 id trong khi hai bản ghi sổ vòng một mang `failedCount` 0", async () => {
     // Câu §3 không mang vế `i.revoked_at IS NULL` (ADR-128) nên luồng BỊ LOẠI — không mở, không hỏng — được suy thành phong bì
-    // hỏng. Ngoài phạm vi khoản 275 (vòng một): khoản 9435, không vá ở đây. Lần sửa ADR-129 §3 làm ca này ĐỎ đúng đây — lật nó.
+    // hỏng. Ngoài phạm vi khoản 275 (vòng một): khoản 298, không vá ở đây. Lần sửa ADR-129 §3 làm ca này ĐỎ đúng đây — lật nó.
     const cau = await cauSuyCuaAdr129();
     const { rows: so } = await db.pool.query<{ payload: PayloadMoThau }>(
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') " +

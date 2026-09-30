@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-// [S1.9120 / khoản 282] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// [S1.240 / khoản 282] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js`.
 
 async function goi(method, duong, than) {
@@ -44,7 +44,7 @@ function o(noiDung) {
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP, cùng khuôn `chinh-sach.js` (gọi `/auth/redeem` ĐÚNG một lần cho mỗi mã).
-// [S1.9120 / khoản 282] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login`: nút Tiếp, nút Vào và khối link đăng nhập gần đây là
+// [S1.240 / khoản 282] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login`: nút Tiếp, nút Vào và khối link đăng nhập gần đây là
 // `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về bước 1.
 // ---------------------------------------------------------------------------------------------
 
@@ -66,7 +66,7 @@ window.addEventListener("hashchange", () => {
   thuPhienCo();
 });
 
-// [S1.9120 / khoản 282] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// [S1.240 / khoản 282] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
 // cùng chỗ câu lỗi~~ — khoản 193 ở trang này. Nay bước 1 là module chung; trang trao cho nó việc của riêng mình sau khi vào.
 const dangNhap = ganDangNhap({ taiLieu: document, goi, lichSu: history, viTri: location, daVao: (me) => moSauDangNhap(me, false) });
 
@@ -85,7 +85,7 @@ async function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
-  // [S1.9120 / khoản 282] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  // [S1.240 / khoản 282] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
   void dangNhap.veLinkGanDay();
   await napNhomHang();
 }

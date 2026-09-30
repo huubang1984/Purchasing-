@@ -23,7 +23,7 @@ import { enqueueJob } from "@trustprocure/outbox";
 import { assertUnsealAllowed, type UnsealGateReport } from "./gate.js";
 
 /**
- * `kind` của job mà worker tiêu thụ. ~~Một hằng, một chỗ ở — worker đọc chính nó.~~ **[S1.9115 / khoản 161]** Chỗ khai tập `kind`
+ * `kind` của job mà worker tiêu thụ. ~~Một hằng, một chỗ ở — worker đọc chính nó.~~ **[S1.239 / khoản 161]** Chỗ khai tập `kind`
  * của kho là union `KindOutbox` (`@trustprocure/outbox`, đọc qua `JobInput["kind"]`); lời gọi `enqueueJob` viết literal. Hằng này
  * còn là tham số câu đếm job đang sống của `dieuPhoiLaiSauKhiChet` và tên cho test; worker giữ bản sao riêng (`apps/unseal-worker`).
  */
@@ -48,9 +48,9 @@ export function khoaChongTrungMoThau(unsealRequestId: string): string {
 export const UNSEAL_NOTICE_KIND = "UNSEAL_APPROVAL_NOTICE";
 
 /**
- * [S1.9145 / khoản 267] Hai lý do của `UNSEAL_CANCEL_DENIED` — tập ĐÓNG, một kiểu hợp chuỗi trực tiếp. Mỗi lần từ chối huỷ đọc lý do từ
+ * [S1.245 / khoản 267] Hai lý do của `UNSEAL_CANCEL_DENIED` — tập ĐÓNG, một kiểu hợp chuỗi trực tiếp. Mỗi lần từ chối huỷ đọc lý do từ
  * MỘT biến kiểu này và đưa nó tới: `payload.lyDo` của hàng sổ; VẾ (đối số thứ năm) của `throwAuditedDenial` — hai lý do chung một `action`
- * trên cùng route huỷ, nên không vế thì dòng log mất sổ không nói lý do nào (khuôn khoản 279, §S1.9125); và `UnsealError.ma` ở vế trạng
+ * trên cùng route huỷ, nên không vế thì dòng log mất sổ không nói lý do nào (khuôn khoản 279, §S1.241); và `UnsealError.ma` ở vế trạng
  * thái. Thêm một lý do là thêm một tên ở `DANH_MUC_VE_CONG` (`packages/identity/src/rbac.ts`): vế ⑷ của
  * `packages/identity/src/danh-muc-tu-choi.test.ts` đọc kiểu này ở nguồn và đỏ cho tới khi thêm.
  */
@@ -58,7 +58,7 @@ export type LyDoTuChoiHuy = "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC" | "KH
 
 export class UnsealError extends Error {
   /**
-   * [S1.9145 / khoản 267] Mã lý do mà thân 422 mang ra (`ma`, khuôn khoản 230) — hôm nay chỉ vế trạng thái của `cancelUnseal`
+   * [S1.245 / khoản 267] Mã lý do mà thân 422 mang ra (`ma`, khuôn khoản 230) — hôm nay chỉ vế trạng thái của `cancelUnseal`
    * (`KHONG_O_TRANG_THAI_HUY_DUOC`); `null` ở mọi lỗi khác của gói. Route `POST /unseal/:unsealRequestId/cancel` thêm `ma` vào thân khi
    * trường này khác `null`; bảng 422 chung của bộ điều phối vẫn chỉ in `error`.
    */
@@ -257,7 +257,7 @@ export async function requestUnseal(
   // chừng ấy thời gian giữ khoá thêm. Tin và bản ghi vẫn cùng giao dịch: hỏng ở đâu thì cả hai cùng rollback.
   const xepTin = async (userId: string): Promise<void> => {
     await enqueueJob(client, orgId, {
-      // [S1.9115 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+      // [S1.239 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
       kind: "UNSEAL_APPROVAL_NOTICE",
       payload: { unsealRequestId: h.id, rfqId: input.rfqId, userId },
       dedupeKey: `unseal-notice:${h.id}:${userId}`,
@@ -362,8 +362,8 @@ function laTrungPheDuyet(loi: Error): boolean {
 }
 
 /**
- * [S1.9145 / khoản 266] Tên mà nhánh không thấy yêu cầu của `unseal_kiem_nguoi_duyet` mang (`USING … CONSTRAINT`, đặt ở
- * `9545_khong_tim_thay_yeu_cau_co_ten.sql`) — nhãn của NHÁNH, không phải một ràng buộc trong `pg_constraint` (cùng cách `074` đặt tên).
+ * [S1.245 / khoản 266] Tên mà nhánh không thấy yêu cầu của `unseal_kiem_nguoi_duyet` mang (`USING … CONSTRAINT`, đặt ở
+ * `098_khong_tim_thay_yeu_cau_co_ten.sql`) — nhãn của NHÁNH, không phải một ràng buộc trong `pg_constraint` (cùng cách `074` đặt tên).
  * `export` khỏi tệp, không khỏi gói (khuôn `laViPhamD2TheoThongDiep`): `unseal.int.test.ts` đối chiếu nó hai chiều với thân hàm trong CSDL.
  */
 export const RANG_BUOC_KHONG_TIM_THAY_YEU_CAU = "unseal_approvals_yeu_cau_phai_ton_tai";
@@ -380,11 +380,11 @@ export const RANG_BUOC_KHONG_TIM_THAY_YEU_CAU = "unseal_approvals_yeu_cau_phai_t
  * ~~là "không tìm thấy yêu cầu". Vì sao câu ấy đứng được: ba khoá ngoại của `unseal_approvals` trỏ tổ chức, yêu cầu và người duyệt; tổ chức~~
  * ~~là tổ chức đang gắn và người duyệt vừa được `resolveSessionActor` giải trong CÙNG giao dịch, nên chỉ vế yêu cầu còn có thể vắng. Một~~
  * ~~ngày 019 đổi để RAISE mang tên ràng buộc thì siết lại ở đây bằng `constraint`, cùng khuôn `laTrungPheDuyet`.~~
- * **[S1.9145 / khoản 266]** ĐỌC `code` VÀ `constraint`, KHÔNG ĐỌC `message` (nó mang id) — khuôn `laTrungPheDuyet` (ADR-108).
- * `9545_khong_tim_thay_yeu_cau_co_ten.sql` đặt tên cho nhánh không thấy yêu cầu của trigger, nên "không tìm thấy" nay là ĐÚNG nhánh ấy: một
+ * **[S1.245 / khoản 266]** ĐỌC `code` VÀ `constraint`, KHÔNG ĐỌC `message` (nó mang id) — khuôn `laTrungPheDuyet` (ADR-108).
+ * `098_khong_tim_thay_yeu_cau_co_ten.sql` đặt tên cho nhánh không thấy yêu cầu của trigger, nên "không tìm thấy" nay là ĐÚNG nhánh ấy: một
  * 23503 khác trên câu INSERT (khoá ngoại tổ chức hay người duyệt, một khoá ngoại thêm sau, hay chính trigger bị trả về thân `019` không
  * tên) đi NGUYÊN — lỗi `pg` trần, không hàng sổ — thay vì thành một hàng `UNSEAL_NOT_FOUND_DENIED` nói sai nguyên nhân. Đo ở
- * `unseal.int.test.ts` khối `[S1.9145 / khoản 266 · 267]`: tên đi ra ở `cause`; đột biến lúc chạy trả thân về `019` ⇒ đi nguyên, 0 hàng;
+ * `unseal.int.test.ts` khối `[S1.245 / khoản 266 · 267]`: tên đi ra ở `cause`; đột biến lúc chạy trả thân về `019` ⇒ đi nguyên, 0 hàng;
  * tên đối chiếu HAI CHIỀU với thân hàm THẬT trong CSDL.
  */
 function laKhongTimThayYeuCau(loi: Error): boolean {
@@ -773,7 +773,7 @@ export interface CancelUnsealInput {
 }
 
 /**
- * [S1.9145 / khoản 267] Câu 422 của vế TRẠNG THÁI của `cancelUnseal` — tách khỏi câu "không tìm thấy …, hoặc nó không ở trạng thái huỷ
+ * [S1.245 / khoản 267] Câu 422 của vế TRẠNG THÁI của `cancelUnseal` — tách khỏi câu "không tìm thấy …, hoặc nó không ở trạng thái huỷ
  * được" cũ (đổi hợp đồng, kế hoạch đợt 3 mục 0 câu 5). Hằng, không nội suy trạng thái hay id; máy khách phân biệt bằng `ma` ở thân 422.
  */
 const CAU_KHONG_O_TRANG_THAI_HUY_DUOC = "Yêu cầu mở thầu này không còn ở trạng thái huỷ được — nó đã được mở thầu hoặc đã bị huỷ.";
@@ -829,11 +829,11 @@ export async function cancelUnseal(
     // [S1.213 / khoản 133] KHÔNG TÌM THẤY trong tổ chức (UUID lạ, hay id của tổ chức khác mà RLS giấu) ⇒ vào sổ rồi ném. Đo trước
     // bản vá (§S1.72, §S1.213): nhánh này rơi xuống câu `UPDATE` bên dưới (0 hàng) rồi ném `UnsealError` — 0 hàng sổ. Nay được nhận
     // ra ở đây, TRƯỚC phép kiểm ai được huỷ: một id không tồn tại thì không có "người yêu cầu" để so. Ném CÙNG CÂU mà câu `UPDATE`
-    // ~~vẫn ném~~ **[S1.9145 / khoản 267]** từng ném cho ca "không ở trạng thái huỷ được", để thân 422 không đổi (đề bài); vế trạng thái
-    // ấy là một từ chối TRẠNG THÁI trên một hàng có thật và KHÔNG thuộc khoản 133 — ~~vẫn không vào sổ, nói ra ở §S1.213~~ **[S1.9145 /
+    // ~~vẫn ném~~ **[S1.245 / khoản 267]** từng ném cho ca "không ở trạng thái huỷ được", để thân 422 không đổi (đề bài); vế trạng thái
+    // ấy là một từ chối TRẠNG THÁI trên một hàng có thật và KHÔNG thuộc khoản 133 — ~~vẫn không vào sổ, nói ra ở §S1.213~~ **[S1.245 /
     // khoản 267]** nay vào sổ với câu và mã riêng (dưới). ~~Câu ở đây GIỮ NGUYÊN VĂN — thân 422 của nhánh không tìm thấy không đổi (HTTP ghim
-    // nó ở `apps/api/src/buyer.int.test.ts`), dù vế "hoặc nó không ở trạng thái huỷ được" nay không còn đi ra từ câu này (§S1.9145 mục
-    // 7).~~ **[S1.9101 / khoản 267, tích hợp]** Vế thừa cắt: câu nay là câu "không tìm thấy" của `approveUnseal`, từng chữ — nhánh
+    // nó ở `apps/api/src/buyer.int.test.ts`), dù vế "hoặc nó không ở trạng thái huỷ được" nay không còn đi ra từ câu này (§S1.245 mục
+    // 7).~~ **[S1.237 / khoản 267, tích hợp]** Vế thừa cắt: câu nay là câu "không tìm thấy" của `approveUnseal`, từng chữ — nhánh
     // này chỉ còn nghĩa "không tìm thấy"; thân 422 đổi cùng lượt với câu tách của khoản 267 (câu 5 của kế hoạch đợt 3). `return` là chịu lực (cùng lý do với `tuChoi` của cổng): bỏ nó thì hàm đi tiếp với `nguoiTao` rỗng.
     return throwAuditedDenial(
       auditPool,
@@ -854,7 +854,7 @@ export async function cancelUnseal(
   if (nguoiTao !== actor.id) {
     const duyetDuoc = await listUserIdsWithPermission(client, orgId, PERMISSIONS.RFQ_UNSEAL_APPROVE);
     if (!duyetDuoc.includes(actor.id)) {
-      // [S1.9145 / khoản 267] Lý do là cả VẾ (đối số thứ năm): từ vòng này `UNSEAL_CANCEL_DENIED` mang HAI lý do trên cùng route huỷ, nên
+      // [S1.245 / khoản 267] Lý do là cả VẾ (đối số thứ năm): từ vòng này `UNSEAL_CANCEL_DENIED` mang HAI lý do trên cùng route huỷ, nên
       // dòng log mất sổ phải nói lý do nào (khuôn khoản 279). Một biến, ba chỗ đọc — xem `LyDoTuChoiHuy`.
       const lyDo: LyDoTuChoiHuy = "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC";
       await throwAuditedDenial(
@@ -886,7 +886,7 @@ export async function cancelUnseal(
   if (h === undefined) {
     // [S1.213 / khoản 133] Từ vòng này ca "không tìm thấy" đã dừng ở trên (có sổ); tới đây hàng CÓ THẬT mà không ở
     // PENDING/APPROVED — một từ chối TRẠNG THÁI, ngoài khoản 133, ~~không vào sổ. Câu giữ nguyên để thân 422 không đổi.~~
-    // **[S1.9145 / khoản 267]** và nay VÀO SỔ, với câu và mã riêng. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 5): theo luật ADR-060, huỷ
+    // **[S1.245 / khoản 267]** và nay VÀO SỔ, với câu và mã riêng. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 5): theo luật ADR-060, huỷ
     // một yêu cầu đã mở thầu xong hay đã huỷ là NGƯỜI DÙNG đi một bước sai thứ tự trên chuỗi mở thầu — cùng hạng với bảy mã CÓ — nên
     // `UNSEAL_CANCEL_DENIED {lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC"}` ghi ở giao dịch độc lập (sống qua rollback), và câu 422 tách khỏi câu
     // "không tìm thấy" (đổi hợp đồng: `ma` ở thân, khuôn khoản 230 — route `POST /unseal/:unsealRequestId/cancel`). Lý do cũng là VẾ
