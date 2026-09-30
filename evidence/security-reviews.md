@@ -20880,3 +20880,12 @@ nhiều yêu cầu cho một vòng.
   đạt, 1 bỏ qua; `pnpm evidence` toàn bộ T1–T3 trên cây đã hợp: 208 tệp, 3614 khẳng định, 3613 đạt, 1 bỏ qua, 0 đỏ; **76/76**; ma
   trận trùng từng byte với bản hợp tự động. Lượt evidence đầu sau lần hợp đỏ 121 ca vì daemon Docker của máy chạy chết giữa chừng
   (*Could not find a working container runtime strategy*); dựng lại daemon, chạy lại trọn.
+- Hợp lần ba, sau #216 (S1.209–S1.233, ADR-124–ADR-134, migration `091`–`095` — `b682fd9`): xung đột ở cùng các chỗ như lần hai
+  cộng khối cột mốc S1.209–S1.233; danh sách migration viết cứng `091`–`095` rồi `096`, `097`. Hai quyết định của #216 chạm vòng
+  này. ⑴ ADR-124: ô mô tả của mục ghim in VÂN TAY thân hàm và chỉ tên GUC — bốn trong năm mục ghim của S4.4a còn khuôn cũ, cổng
+  `hardening-khong-in-gia-tri` ĐỎ (đo trên cây đã hợp, trước khi sửa); bộ sinh ghim đổi khuôn, xanh. ⑵ ADR-128: thu hồi lời mời LOẠI
+  báo giá (khoản 250 đóng) — `quan_sat_gia` thêm vế `(i.revoked_at IS NULL OR i.revoked_at >= p_moc)`, chủ dự án chốt *"loại, theo
+  mốc"*; ca test mới, M26/M27 đỏ, M25 tương đương (§6). Hiệu năng không đo lại: một vế lọc trên hàng lời mời đã nối sẵn.
+  `pnpm t0` sạch; `pnpm test` 134 tệp, 2075 đạt, 1 bỏ qua; `cap-so --kiem` sạch; `pnpm evidence` toàn bộ T1–T3: 219 tệp, 4012
+  khẳng định, 4011 đạt, 1 bỏ qua, 0 đỏ — `lich-su-gia.int` 46/46, `db/migrations.int` 125/125, `bac-chinh-sach.int` 42/42; **76/76**;
+  ma trận L5 57 → 58.
