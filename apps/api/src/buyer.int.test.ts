@@ -1307,6 +1307,38 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     expect([khongObject.status, khongObject.text]).toEqual([422, expect.stringContaining("phải là mảng các object")]);
     expect((await goi("GET", "/policy/versions", tcA, undefined, gocKy)).text).not.toContain('"version":4');
   });
+
+  it("[S1.9101 / khoản 261] [INV-K4b] tổ chức còn một gói chờ duyệt: lần ký BẬT S3 ⇒ 422 mang lời của trigger, không chữ ký, tổ chức không bật; PM huỷ gói ấy ⇒ ký ⇒ 201, bật", async () => {
+    const org = await toChuc("cs-con-goi-cho");
+    const tcA = await nguoi("tca-cs-cho@vidu.vn", ["FINANCE"], org);
+    const tcB = await nguoi("tcb-cs-cho@vidu.vn", ["FINANCE"], org);
+    const pm = await nguoi("pm-cs-cho@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const mua = await nguoi("mua-cs-cho@vidu.vn", ["BUYER"], org);
+    expect((await goi("POST", "/policy", tcA, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" }, gocKy)).status).toBe(201);
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", mua, { title: "Mua thep tam", deadlineAt: han }, gocKy);
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    const hm = await goi("POST", `/rfqs/${rfqId}/items`, mua, { lineNo: 1, description: "Thep tam SS400", quantity: "100.0000", unit: "tam" }, gocKy);
+    expect(hm.status, hm.text).toBe(201);
+    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, mua, undefined, gocKy);
+    expect(nop.status, nop.text).toBe(200);
+    const v2 = await goi("POST", "/policy", tcA, { version: 2, dualApprovalThreshold: "1000000000.00", currency: "VND", tiers: BAC, ...MUC }, gocKy);
+    expect(v2.status, v2.text).toBe(201);
+    const idV2 = (v2.body as { policy: { id: string } }).policy.id;
+
+    const tuChoi = await goi("POST", `/policy/${idV2}/sign`, tcB, undefined, gocKy);
+    expect(tuChoi.status, tuChoi.text).toBe(422);
+    expect(tuChoi.text).toContain("To chuc con 1 goi cho duyet");
+    expect([await soChuKy(org), await daBat(org)]).toEqual([0, false]);
+
+    const huyGoi = await goi("POST", `/rfqs/${rfqId}/cancel`, pm, { reason: "huy truoc khi bat S3" }, gocKy);
+    expect(huyGoi.status, huyGoi.text).toBe(200);
+    const ok = await goi("POST", `/policy/${idV2}/sign`, tcB, undefined, gocKy);
+    expect(ok.status, ok.text).toBe(201);
+    expect((ok.body as { chuKy: unknown }).chuKy).toMatchObject({ policyId: idV2, version: 2, daBat: true });
+    expect([await soChuKy(org), await daBat(org)]).toEqual([1, true]);
+  });
 });
 
 describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ qua HTTP — đọc, ghi nhận, và chốt K10a ở cạnh mở gói", () => {
