@@ -10115,6 +10115,7 @@ $ham$$q$,
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proisstrict IS FALSE
             AND p.pronargs = 7
             AND p.prorettype = 'pg_catalog.record'::regtype
             AND p.proretset IS TRUE
@@ -10153,6 +10154,7 @@ $ham$$q$,
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proisstrict IS FALSE
             AND p.pronargs = 5
             AND p.prorettype = 'pg_catalog.record'::regtype
             AND p.proretset IS TRUE
@@ -10175,46 +10177,43 @@ $ham$$q$,
   RETURNS TABLE (line_no integer, thanh_tien numeric, ly_do text)
   LANGUAGE sql
   IMMUTABLE
-  SET search_path = pg_catalog, public
 AS $ham$
-  WITH phan_tu AS (
-    SELECT CASE WHEN jsonb_typeof(e) = 'object'
-                 AND jsonb_typeof(e -> 'lineNo') = 'number'
-                 AND (e ->> 'lineNo') ~ '^[1-9][0-9]{0,8}$'
-                THEN (e ->> 'lineNo')::integer END AS so_dong,
-           CASE WHEN jsonb_typeof(e) = 'object' THEN public.bid_so_tien(e ->> 'amount') END AS tien
-      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_payload -> 'lines') = 'array'
-                                     THEN p_payload -> 'lines' ELSE '[]'::jsonb END) e
-  ),
-  bao_gia AS (
-    SELECT public.bid_so_tien(p_payload ->> 'totalAmount') AS tong,
-           coalesce(jsonb_typeof(p_payload -> 'lines') = 'array', false) AS co_mang,
-           (SELECT count(*) FROM phan_tu p WHERE p.so_dong IS NULL OR p.tien IS NULL) AS hong,
-           (SELECT count(*) - count(DISTINCT p.so_dong) FROM phan_tu p WHERE p.so_dong IS NOT NULL) AS trung,
-           (SELECT sum(p.tien) FROM phan_tu p) AS tong_dong
-  ),
-  gom AS (
-    SELECT p.so_dong, CASE WHEN count(*) = 1 THEN max(p.tien) END AS tien
-      FROM phan_tu p
-     GROUP BY p.so_dong
-  )
   SELECT g.so_dong,
-         g.tien,
-         CASE WHEN b.tong IS NULL OR g.so_dong IS NULL OR g.tien IS NULL THEN 'KHONG_DOC_DUOC'
-              WHEN b.hong > 0 OR b.trung > 0 OR b.tong_dong IS DISTINCT FROM b.tong THEN 'LECH_TONG'
+         CASE WHEN g.n OPERATOR(pg_catalog.=) 1 THEN g.tien END,
+         CASE WHEN g.tong IS NULL OR g.so_dong IS NULL
+                   OR g.n OPERATOR(pg_catalog.<>) 1 OR g.n_tien OPERATOR(pg_catalog.<>) 1 THEN 'KHONG_DOC_DUOC'
+              WHEN NOT g.sach OR coalesce(g.tong_dong OPERATOR(pg_catalog.<>) g.tong, true) THEN 'LECH_TONG'
               ELSE NULL END
-    FROM gom g
-   CROSS JOIN bao_gia b
+    FROM (SELECT x.so_dong,
+                 pg_catalog.count(*) AS n,
+                 pg_catalog.count(x.tien) AS n_tien,
+                 pg_catalog.max(x.tien) AS tien,
+                 pg_catalog.bool_and(x.so_dong IS NOT NULL
+                                     AND pg_catalog.count(*) OPERATOR(pg_catalog.=) 1
+                                     AND pg_catalog.count(x.tien) OPERATOR(pg_catalog.=) 1) OVER () AS sach,
+                 pg_catalog.sum(pg_catalog.max(x.tien)) OVER () AS tong_dong,
+                 (SELECT public.bid_so_tien(p_payload OPERATOR(pg_catalog.->>) 'totalAmount')) AS tong
+            FROM (SELECT CASE WHEN pg_catalog.jsonb_typeof(e) OPERATOR(pg_catalog.=) 'object'
+                               AND pg_catalog.jsonb_typeof(e OPERATOR(pg_catalog.->) 'lineNo') OPERATOR(pg_catalog.=) 'number'
+                               AND (e OPERATOR(pg_catalog.->>) 'lineNo') OPERATOR(pg_catalog.~) '^[1-9][0-9]{0,8}$'
+                              THEN (e OPERATOR(pg_catalog.->>) 'lineNo')::pg_catalog.int4 END AS so_dong,
+                         CASE WHEN pg_catalog.jsonb_typeof(e) OPERATOR(pg_catalog.=) 'object'
+                              THEN public.bid_so_tien(e OPERATOR(pg_catalog.->>) 'amount') END AS tien
+                    FROM pg_catalog.jsonb_array_elements(
+                           CASE WHEN pg_catalog.jsonb_typeof(p_payload OPERATOR(pg_catalog.->) 'lines') OPERATOR(pg_catalog.=) 'array'
+                                THEN p_payload OPERATOR(pg_catalog.->) 'lines'
+                                ELSE '[]'::pg_catalog.jsonb END) e) x
+           GROUP BY x.so_dong) g
   UNION ALL
-  SELECT NULL::integer, NULL::numeric, 'KHONG_DOC_DUOC'
-    FROM bao_gia b
-   WHERE NOT b.co_mang
+  SELECT NULL::pg_catalog.int4, NULL::pg_catalog.numeric, 'KHONG_DOC_DUOC'
+   WHERE NOT coalesce(pg_catalog.jsonb_typeof(p_payload OPERATOR(pg_catalog.->) 'lines') OPERATOR(pg_catalog.=) 'array', false)
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$WITH phan_tu AS ( SELECT CASE WHEN jsonb_typeof(e) = 'object' AND jsonb_typeof(e -> 'lineNo') = 'number' AND (e ->> 'lineNo') ~ '^[1-9][0-9]{0,8}$' THEN (e ->> 'lineNo')::integer END AS so_dong, CASE WHEN jsonb_typeof(e) = 'object' THEN public.bid_so_tien(e ->> 'amount') END AS tien FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p_payload -> 'lines') = 'array' THEN p_payload -> 'lines' ELSE '[]'::jsonb END) e ), bao_gia AS ( SELECT public.bid_so_tien(p_payload ->> 'totalAmount') AS tong, coalesce(jsonb_typeof(p_payload -> 'lines') = 'array', false) AS co_mang, (SELECT count(*) FROM phan_tu p WHERE p.so_dong IS NULL OR p.tien IS NULL) AS hong, (SELECT count(*) - count(DISTINCT p.so_dong) FROM phan_tu p WHERE p.so_dong IS NOT NULL) AS trung, (SELECT sum(p.tien) FROM phan_tu p) AS tong_dong ), gom AS ( SELECT p.so_dong, CASE WHEN count(*) = 1 THEN max(p.tien) END AS tien FROM phan_tu p GROUP BY p.so_dong ) SELECT g.so_dong, g.tien, CASE WHEN b.tong IS NULL OR g.so_dong IS NULL OR g.tien IS NULL THEN 'KHONG_DOC_DUOC' WHEN b.hong > 0 OR b.trung > 0 OR b.tong_dong IS DISTINCT FROM b.tong THEN 'LECH_TONG' ELSE NULL END FROM gom g CROSS JOIN bao_gia b UNION ALL SELECT NULL::integer, NULL::numeric, 'KHONG_DOC_DUOC' FROM bao_gia b WHERE NOT b.co_mang$than$
+                = $than$SELECT g.so_dong, CASE WHEN g.n OPERATOR(pg_catalog.=) 1 THEN g.tien END, CASE WHEN g.tong IS NULL OR g.so_dong IS NULL OR g.n OPERATOR(pg_catalog.<>) 1 OR g.n_tien OPERATOR(pg_catalog.<>) 1 THEN 'KHONG_DOC_DUOC' WHEN NOT g.sach OR coalesce(g.tong_dong OPERATOR(pg_catalog.<>) g.tong, true) THEN 'LECH_TONG' ELSE NULL END FROM (SELECT x.so_dong, pg_catalog.count(*) AS n, pg_catalog.count(x.tien) AS n_tien, pg_catalog.max(x.tien) AS tien, pg_catalog.bool_and(x.so_dong IS NOT NULL AND pg_catalog.count(*) OPERATOR(pg_catalog.=) 1 AND pg_catalog.count(x.tien) OPERATOR(pg_catalog.=) 1) OVER () AS sach, pg_catalog.sum(pg_catalog.max(x.tien)) OVER () AS tong_dong, (SELECT public.bid_so_tien(p_payload OPERATOR(pg_catalog.->>) 'totalAmount')) AS tong FROM (SELECT CASE WHEN pg_catalog.jsonb_typeof(e) OPERATOR(pg_catalog.=) 'object' AND pg_catalog.jsonb_typeof(e OPERATOR(pg_catalog.->) 'lineNo') OPERATOR(pg_catalog.=) 'number' AND (e OPERATOR(pg_catalog.->>) 'lineNo') OPERATOR(pg_catalog.~) '^[1-9][0-9]{0,8}$' THEN (e OPERATOR(pg_catalog.->>) 'lineNo')::pg_catalog.int4 END AS so_dong, CASE WHEN pg_catalog.jsonb_typeof(e) OPERATOR(pg_catalog.=) 'object' THEN public.bid_so_tien(e OPERATOR(pg_catalog.->>) 'amount') END AS tien FROM pg_catalog.jsonb_array_elements( CASE WHEN pg_catalog.jsonb_typeof(p_payload OPERATOR(pg_catalog.->) 'lines') OPERATOR(pg_catalog.=) 'array' THEN p_payload OPERATOR(pg_catalog.->) 'lines' ELSE '[]'::pg_catalog.jsonb END) e) x GROUP BY x.so_dong) g UNION ALL SELECT NULL::pg_catalog.int4, NULL::pg_catalog.numeric, 'KHONG_DOC_DUOC' WHERE NOT coalesce(pg_catalog.jsonb_typeof(p_payload OPERATOR(pg_catalog.->) 'lines') OPERATOR(pg_catalog.=) 'array', false)$than$
             AND p.provolatile = 'i'
             AND p.prosecdef IS FALSE
-            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proconfig IS NULL
+            AND p.proisstrict IS FALSE
             AND p.pronargs = 1
             AND p.prorettype = 'pg_catalog.record'::regtype
             AND p.proretset IS TRUE
@@ -10259,15 +10258,17 @@ AS $ham$
                           AND NOT EXISTS (SELECT 1
                                             FROM public.unseal_requests q
                                            WHERE q.org_id = v.org_id
+                                             AND q.rfq_id = v.rfq_id
                                              AND q.bafo_round_id = v.id
                                              AND q.status = 'EXECUTED'
                                              AND q.executed_at < p_moc)))
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$SELECT EXISTS ( SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND (r.cancelled_at IS NULL OR r.cancelled_at >= p_moc) AND EXISTS (SELECT 1 FROM public.unseal_requests q WHERE q.org_id = r.org_id AND q.rfq_id = r.id AND q.bafo_round_id IS NULL AND q.status = 'EXECUTED' AND q.executed_at < p_moc) AND NOT EXISTS (SELECT 1 FROM public.rfq_bafo_rounds v WHERE v.org_id = r.org_id AND v.rfq_id = r.id AND v.opened_at < p_moc AND NOT EXISTS (SELECT 1 FROM public.unseal_requests q WHERE q.org_id = v.org_id AND q.bafo_round_id = v.id AND q.status = 'EXECUTED' AND q.executed_at < p_moc)))$than$
+                = $than$SELECT EXISTS ( SELECT 1 FROM public.rfq_packages r WHERE r.org_id = p_org AND r.id = p_rfq AND (r.cancelled_at IS NULL OR r.cancelled_at >= p_moc) AND EXISTS (SELECT 1 FROM public.unseal_requests q WHERE q.org_id = r.org_id AND q.rfq_id = r.id AND q.bafo_round_id IS NULL AND q.status = 'EXECUTED' AND q.executed_at < p_moc) AND NOT EXISTS (SELECT 1 FROM public.rfq_bafo_rounds v WHERE v.org_id = r.org_id AND v.rfq_id = r.id AND v.opened_at < p_moc AND NOT EXISTS (SELECT 1 FROM public.unseal_requests q WHERE q.org_id = v.org_id AND q.rfq_id = v.rfq_id AND q.bafo_round_id = v.id AND q.status = 'EXECUTED' AND q.executed_at < p_moc)))$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proisstrict IS FALSE
             AND p.pronargs = 3
             AND p.prorettype = 'pg_catalog.bool'::regtype
             AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
@@ -10293,6 +10294,7 @@ $ham$$q$,
   LANGUAGE sql
   STABLE
   SET search_path = pg_catalog, public
+  SET enable_hashagg = off
 AS $ham$
   WITH dong AS (
     SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit
@@ -10308,7 +10310,7 @@ AS $ham$
       JOIN public.rfq_items i ON i.org_id = c.org_id AND i.rfq_id = c.rfq_id AND i.line_no = c.line_no
   ),
   goi AS MATERIALIZED (
-    SELECT x.org_id, x.rfq_id, g.moc_goi, g.tien_te_goi
+    SELECT x.org_id, x.rfq_id, g.moc_goi, g.tien_te_goi, g.cac_dong
       FROM (SELECT DISTINCT d.org_id, d.rfq_id FROM dong d) x
      CROSS JOIN LATERAL (
        SELECT (SELECT min(u.unsealed_at)
@@ -10324,16 +10326,17 @@ AS $ham$
                    FROM public.rfq_packages r
                    JOIN public.org_procurement_policies cs ON cs.org_id = r.org_id
                   WHERE r.org_id = x.org_id AND r.id = x.rfq_id
-                    AND cs.id = public.chinh_sach_hieu_luc(r.org_id, r.created_at))) AS tien_te_goi
+                    AND cs.id = public.chinh_sach_hieu_luc(r.org_id, r.created_at))) AS tien_te_goi,
+              (SELECT array_agg(i.line_no)
+                 FROM public.rfq_items i
+                WHERE i.org_id = x.org_id AND i.rfq_id = x.rfq_id) AS cac_dong
      ) g
      WHERE public.gia_da_lo(x.org_id, x.rfq_id, p_moc)
        AND g.moc_goi IS NOT NULL
   ),
   dong_goi AS MATERIALIZED (
-    SELECT d.org_id, d.rfq_id, d.line_no, d.quantity, d.unit, g.moc_goi, g.tien_te_goi,
-           ax.id AS anh_xa_id, ax.canonical_item_id, ci.don_vi_goc, qd.he_so, qd.ma AS ma_quy_doi,
-           n.anh_xa_hoi_to, n.anh_xa_sau, b.bi_danh_hoi_to, b.bi_danh_sau,
-           c.quy_doi_hoi_to, c.quy_doi_sau, v.phien_ban_hoi_to, v.phien_ban_sau
+    SELECT d.org_id, d.rfq_id, d.line_no, d.quantity, d.unit, g.moc_goi, g.tien_te_goi, g.cac_dong,
+           ax.id AS anh_xa_id, ax.canonical_item_id
       FROM dong d
       JOIN goi g ON g.org_id = d.org_id AND g.rfq_id = d.rfq_id
       LEFT JOIN LATERAL (
@@ -10345,84 +10348,86 @@ AS $ham$
          ORDER BY m.seq DESC
          LIMIT 1
       ) ax ON true
-      LEFT JOIN public.canonical_items ci ON ci.org_id = d.org_id AND ci.id = ax.canonical_item_id
-      CROSS JOIN LATERAL (SELECT public.don_vi_tai(d.org_id, d.unit, p_moc) AS ma) dv
-      LEFT JOIN LATERAL public.quy_doi_da_giai(d.org_id, ax.canonical_item_id,
-                                               dv.ma, coalesce(dv.ma, public.chuoi_sach(d.unit)),
-                                               ci.don_vi_goc, ci.don_vi_goc, p_moc) qd
-             ON ci.id IS NOT NULL
-      CROSS JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE m.ghi_luc >= g.moc_goi AND m.ghi_luc < p_moc) AS anh_xa_hoi_to,
-               count(*) FILTER (WHERE m.ghi_luc >= p_moc) AS anh_xa_sau
-          FROM public.rfq_item_mappings m
-         WHERE m.org_id = d.org_id AND m.rfq_id = d.rfq_id AND m.line_no = d.line_no
-      ) n
-      CROSS JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE a.ghi_luc >= g.moc_goi AND a.ghi_luc < p_moc) AS bi_danh_hoi_to,
-               count(*) FILTER (WHERE a.ghi_luc >= p_moc) AS bi_danh_sau
-          FROM public.uom_aliases a
-         WHERE a.org_id = d.org_id AND a.bi_danh_sach = public.chuoi_sach(d.unit)
-      ) b
-      CROSS JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE q.ghi_luc >= g.moc_goi AND q.ghi_luc < p_moc) AS quy_doi_hoi_to,
-               count(*) FILTER (WHERE q.ghi_luc >= p_moc) AS quy_doi_sau
-          FROM public.item_uom_conversions q
-         WHERE q.org_id = d.org_id AND q.canonical_item_id = ax.canonical_item_id
-           AND qd.ma NOT IN ('CUNG_DON_VI', 'QUY_DOI_CHUNG')
-      ) c
-      CROSS JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE p.ghi_luc >= g.moc_goi AND p.ghi_luc < p_moc) AS phien_ban_hoi_to,
-               count(*) FILTER (WHERE p.ghi_luc >= p_moc) AS phien_ban_sau
-          FROM public.canonical_item_versions p
-         WHERE p.org_id = d.org_id AND p.canonical_item_id = ax.canonical_item_id
-      ) v
      WHERE p_hang_chuan IS NULL OR ax.canonical_item_id = p_hang_chuan
   ),
-  bao_gia AS MATERIALIZED (
-    SELECT g.org_id, g.rfq_id, f.bid_version_id, f.supplier_id, f.payload,
-           public.bid_currency((f.payload ->> 'currency')) AS tien_te
-      FROM goi g
+  don_vi AS MATERIALIZED (
+    SELECT k.org_id, k.unit, public.don_vi_tai(k.org_id, k.unit, p_moc) AS ma, public.chuoi_sach(k.unit) AS khoa
+      FROM (SELECT DISTINCT dg.org_id, dg.unit FROM dong_goi dg) k
+  ),
+  quy_doi AS MATERIALIZED (
+    SELECT k.org_id, k.canonical_item_id, k.unit, ci.don_vi_goc, r.he_so, r.ma
+      FROM (SELECT DISTINCT dg.org_id, dg.canonical_item_id, dg.unit FROM dong_goi dg WHERE dg.canonical_item_id IS NOT NULL) k
+      JOIN public.canonical_items ci ON ci.org_id = k.org_id AND ci.id = k.canonical_item_id
+      JOIN don_vi dv ON dv.org_id = k.org_id AND dv.unit = k.unit
+     CROSS JOIN LATERAL public.quy_doi_da_giai(k.org_id, k.canonical_item_id, dv.ma, coalesce(dv.ma, dv.khoa),
+                                               ci.don_vi_goc, ci.don_vi_goc, p_moc) r
+  ),
+  dong_nhan AS MATERIALIZED (
+    SELECT dg.org_id, dg.rfq_id, dg.line_no, dg.quantity, dg.unit, dg.moc_goi, dg.tien_te_goi, dg.cac_dong,
+           dg.anh_xa_id, dg.canonical_item_id,
+           qd.don_vi_goc, qd.he_so,
+           n.anh_xa_hoi_to, n.anh_xa_sau, b.bi_danh_hoi_to, b.bi_danh_sau,
+           c.quy_doi_hoi_to, c.quy_doi_sau, v.phien_ban_hoi_to, v.phien_ban_sau
+      FROM dong_goi dg
+      JOIN don_vi dv ON dv.org_id = dg.org_id AND dv.unit = dg.unit
+      LEFT JOIN quy_doi qd ON qd.org_id = dg.org_id AND qd.canonical_item_id = dg.canonical_item_id AND qd.unit = dg.unit
      CROSS JOIN LATERAL (
-       SELECT DISTINCT ON (v.bid_id) v.id AS bid_version_id, i.supplier_id, u.payload
-         FROM public.rfq_invitations i
-         JOIN public.vendor_bids b ON b.org_id = i.org_id AND b.invitation_id = i.id
-         JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id
-         JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id
-        WHERE i.org_id = g.org_id AND i.rfq_id = g.rfq_id
-          AND u.unsealed_at < p_moc
-        ORDER BY v.bid_id, v.version DESC
-     ) f
-  ),
-  dong_bao_gia AS MATERIALIZED (
-    SELECT bg.bid_version_id, t.line_no, t.thanh_tien, t.ly_do
-      FROM bao_gia bg
-     CROSS JOIN LATERAL public.bid_dong_tho(bg.payload) t
-  ),
-  ngoai_goi AS (
-    SELECT DISTINCT bg.bid_version_id
-      FROM bao_gia bg
-      JOIN dong_bao_gia t ON t.bid_version_id = bg.bid_version_id
-     WHERE t.line_no IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM public.rfq_items i
-                        WHERE i.org_id = bg.org_id AND i.rfq_id = bg.rfq_id AND i.line_no = t.line_no)
+       SELECT count(*) FILTER (WHERE m.ghi_luc >= dg.moc_goi AND m.ghi_luc < p_moc) AS anh_xa_hoi_to,
+              count(*) FILTER (WHERE m.ghi_luc >= p_moc) AS anh_xa_sau
+         FROM public.rfq_item_mappings m
+        WHERE m.org_id = dg.org_id AND m.rfq_id = dg.rfq_id AND m.line_no = dg.line_no
+     ) n
+     CROSS JOIN LATERAL (
+       SELECT count(*) FILTER (WHERE a.ghi_luc >= dg.moc_goi AND a.ghi_luc < p_moc) AS bi_danh_hoi_to,
+              count(*) FILTER (WHERE a.ghi_luc >= p_moc) AS bi_danh_sau
+         FROM public.uom_aliases a
+        WHERE a.org_id = dg.org_id AND a.bi_danh_sach = dv.khoa
+     ) b
+     CROSS JOIN LATERAL (
+       SELECT count(*) FILTER (WHERE q.ghi_luc >= dg.moc_goi AND q.ghi_luc < p_moc) AS quy_doi_hoi_to,
+              count(*) FILTER (WHERE q.ghi_luc >= p_moc) AS quy_doi_sau
+         FROM public.item_uom_conversions q
+        WHERE q.org_id = dg.org_id AND q.canonical_item_id = dg.canonical_item_id
+          AND qd.ma NOT IN ('CUNG_DON_VI', 'QUY_DOI_CHUNG')
+     ) c
+     CROSS JOIN LATERAL (
+       SELECT count(*) FILTER (WHERE p.ghi_luc >= dg.moc_goi AND p.ghi_luc < p_moc) AS phien_ban_hoi_to,
+              count(*) FILTER (WHERE p.ghi_luc >= p_moc) AS phien_ban_sau
+         FROM public.canonical_item_versions p
+        WHERE p.org_id = dg.org_id AND p.canonical_item_id = dg.canonical_item_id
+     ) v
   ),
   ket_qua AS (
-    SELECT dg.rfq_id, bg.supplier_id, bg.bid_version_id, dg.line_no, dg.moc_goi,
+    SELECT dg.rfq_id, f.supplier_id, f.bid_version_id, dg.line_no, dg.moc_goi,
            dg.anh_xa_id, dg.canonical_item_id, t.thanh_tien, dg.quantity, dg.unit,
-           dg.don_vi_goc, dg.he_so, bg.tien_te,
-           CASE WHEN t.bid_version_id IS NULL OR t.ly_do = 'KHONG_DOC_DUOC' OR ng.bid_version_id IS NOT NULL
-                  THEN 'KHONG_DOC_DUOC'
+           dg.don_vi_goc, dg.he_so, f.tien_te,
+           CASE WHEN t.co_dong = 0 OR t.ly_do = 'KHONG_DOC_DUOC' OR t.ngoai_goi THEN 'KHONG_DOC_DUOC'
                 WHEN t.ly_do = 'LECH_TONG' THEN 'LECH_TONG'
-                WHEN bg.tien_te IS NULL OR dg.tien_te_goi IS NULL OR bg.tien_te <> dg.tien_te_goi THEN 'LECH_TIEN_TE'
+                WHEN f.tien_te IS NULL OR dg.tien_te_goi IS NULL OR f.tien_te <> dg.tien_te_goi THEN 'LECH_TIEN_TE'
                 WHEN dg.canonical_item_id IS NULL THEN 'CHUA_ANH_XA'
                 WHEN dg.he_so IS NULL THEN 'KHONG_QUY_DOI_DUOC'
                 ELSE 'HOP_LE' END AS trang_thai,
            dg.anh_xa_hoi_to, dg.anh_xa_sau, dg.bi_danh_hoi_to, dg.bi_danh_sau,
            dg.quy_doi_hoi_to, dg.quy_doi_sau, dg.phien_ban_hoi_to, dg.phien_ban_sau
-      FROM dong_goi dg
-      JOIN bao_gia bg ON bg.org_id = dg.org_id AND bg.rfq_id = dg.rfq_id
-      LEFT JOIN dong_bao_gia t ON t.bid_version_id = bg.bid_version_id AND t.line_no = dg.line_no
-      LEFT JOIN ngoai_goi ng ON ng.bid_version_id = bg.bid_version_id
+      FROM dong_nhan dg
+     CROSS JOIN LATERAL (
+       SELECT DISTINCT ON (i.supplier_id) v.id AS bid_version_id, i.supplier_id, u.payload,
+              public.bid_currency((u.payload ->> 'currency')) AS tien_te
+         FROM public.rfq_invitations i
+         JOIN public.vendor_bids b ON b.org_id = i.org_id AND b.invitation_id = i.id
+         JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id
+         JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id
+        WHERE i.org_id = dg.org_id AND i.rfq_id = dg.rfq_id
+          AND u.unsealed_at < p_moc
+        ORDER BY i.supplier_id, v.submitted_at DESC, v.version DESC
+     ) f
+     CROSS JOIN LATERAL (
+       SELECT count(*) FILTER (WHERE r.line_no = dg.line_no) AS co_dong,
+              max(r.thanh_tien) FILTER (WHERE r.line_no = dg.line_no) AS thanh_tien,
+              max(r.ly_do) FILTER (WHERE r.line_no = dg.line_no) AS ly_do,
+              coalesce(bool_or(r.line_no IS NOT NULL AND NOT (r.line_no = ANY (dg.cac_dong))), false) AS ngoai_goi
+         FROM public.bid_dong_tho(f.payload) r
+     ) t
   )
   SELECT k.rfq_id, k.supplier_id, k.bid_version_id, k.line_no, k.moc_goi,
          k.anh_xa_id, k.canonical_item_id, k.thanh_tien, k.quantity, k.unit,
@@ -10442,10 +10447,11 @@ AS $ham$
     FROM ket_qua k
 $ham$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$WITH dong AS ( SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit FROM public.rfq_items i WHERE p_hang_chuan IS NULL UNION ALL SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit FROM (SELECT DISTINCT m.org_id, m.rfq_id, m.line_no FROM public.rfq_item_mappings m WHERE p_hang_chuan IS NOT NULL AND m.canonical_item_id = p_hang_chuan AND m.ghi_luc < p_moc) c JOIN public.rfq_items i ON i.org_id = c.org_id AND i.rfq_id = c.rfq_id AND i.line_no = c.line_no ), goi AS MATERIALIZED ( SELECT x.org_id, x.rfq_id, g.moc_goi, g.tien_te_goi FROM (SELECT DISTINCT d.org_id, d.rfq_id FROM dong d) x CROSS JOIN LATERAL ( SELECT (SELECT min(u.unsealed_at) FROM public.unseal_requests q JOIN public.rfq_unsealed_bids u ON u.org_id = q.org_id AND u.unseal_request_id = q.id WHERE q.org_id = x.org_id AND q.rfq_id = x.rfq_id AND u.unsealed_at < p_moc) AS moc_goi, coalesce( (SELECT cs.currency FROM public.rfq_budgets b JOIN public.org_procurement_policies cs ON cs.id = b.policy_id AND cs.org_id = b.org_id WHERE b.org_id = x.org_id AND b.rfq_id = x.rfq_id), (SELECT cs.currency FROM public.rfq_packages r JOIN public.org_procurement_policies cs ON cs.org_id = r.org_id WHERE r.org_id = x.org_id AND r.id = x.rfq_id AND cs.id = public.chinh_sach_hieu_luc(r.org_id, r.created_at))) AS tien_te_goi ) g WHERE public.gia_da_lo(x.org_id, x.rfq_id, p_moc) AND g.moc_goi IS NOT NULL ), dong_goi AS MATERIALIZED ( SELECT d.org_id, d.rfq_id, d.line_no, d.quantity, d.unit, g.moc_goi, g.tien_te_goi, ax.id AS anh_xa_id, ax.canonical_item_id, ci.don_vi_goc, qd.he_so, qd.ma AS ma_quy_doi, n.anh_xa_hoi_to, n.anh_xa_sau, b.bi_danh_hoi_to, b.bi_danh_sau, c.quy_doi_hoi_to, c.quy_doi_sau, v.phien_ban_hoi_to, v.phien_ban_sau FROM dong d JOIN goi g ON g.org_id = d.org_id AND g.rfq_id = d.rfq_id LEFT JOIN LATERAL ( SELECT m.id, m.canonical_item_id FROM public.rfq_item_mappings m WHERE m.org_id = d.org_id AND m.rfq_id = d.rfq_id AND m.line_no = d.line_no AND m.ghi_luc < p_moc AND m.hang_muc_bam = public.rfq_hang_muc_bam(d.org_id, d.rfq_id, d.line_no) ORDER BY m.seq DESC LIMIT 1 ) ax ON true LEFT JOIN public.canonical_items ci ON ci.org_id = d.org_id AND ci.id = ax.canonical_item_id CROSS JOIN LATERAL (SELECT public.don_vi_tai(d.org_id, d.unit, p_moc) AS ma) dv LEFT JOIN LATERAL public.quy_doi_da_giai(d.org_id, ax.canonical_item_id, dv.ma, coalesce(dv.ma, public.chuoi_sach(d.unit)), ci.don_vi_goc, ci.don_vi_goc, p_moc) qd ON ci.id IS NOT NULL CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE m.ghi_luc >= g.moc_goi AND m.ghi_luc < p_moc) AS anh_xa_hoi_to, count(*) FILTER (WHERE m.ghi_luc >= p_moc) AS anh_xa_sau FROM public.rfq_item_mappings m WHERE m.org_id = d.org_id AND m.rfq_id = d.rfq_id AND m.line_no = d.line_no ) n CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE a.ghi_luc >= g.moc_goi AND a.ghi_luc < p_moc) AS bi_danh_hoi_to, count(*) FILTER (WHERE a.ghi_luc >= p_moc) AS bi_danh_sau FROM public.uom_aliases a WHERE a.org_id = d.org_id AND a.bi_danh_sach = public.chuoi_sach(d.unit) ) b CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE q.ghi_luc >= g.moc_goi AND q.ghi_luc < p_moc) AS quy_doi_hoi_to, count(*) FILTER (WHERE q.ghi_luc >= p_moc) AS quy_doi_sau FROM public.item_uom_conversions q WHERE q.org_id = d.org_id AND q.canonical_item_id = ax.canonical_item_id AND qd.ma NOT IN ('CUNG_DON_VI', 'QUY_DOI_CHUNG') ) c CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE p.ghi_luc >= g.moc_goi AND p.ghi_luc < p_moc) AS phien_ban_hoi_to, count(*) FILTER (WHERE p.ghi_luc >= p_moc) AS phien_ban_sau FROM public.canonical_item_versions p WHERE p.org_id = d.org_id AND p.canonical_item_id = ax.canonical_item_id ) v WHERE p_hang_chuan IS NULL OR ax.canonical_item_id = p_hang_chuan ), bao_gia AS MATERIALIZED ( SELECT g.org_id, g.rfq_id, f.bid_version_id, f.supplier_id, f.payload, public.bid_currency((f.payload ->> 'currency')) AS tien_te FROM goi g CROSS JOIN LATERAL ( SELECT DISTINCT ON (v.bid_id) v.id AS bid_version_id, i.supplier_id, u.payload FROM public.rfq_invitations i JOIN public.vendor_bids b ON b.org_id = i.org_id AND b.invitation_id = i.id JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id WHERE i.org_id = g.org_id AND i.rfq_id = g.rfq_id AND u.unsealed_at < p_moc ORDER BY v.bid_id, v.version DESC ) f ), dong_bao_gia AS MATERIALIZED ( SELECT bg.bid_version_id, t.line_no, t.thanh_tien, t.ly_do FROM bao_gia bg CROSS JOIN LATERAL public.bid_dong_tho(bg.payload) t ), ngoai_goi AS ( SELECT DISTINCT bg.bid_version_id FROM bao_gia bg JOIN dong_bao_gia t ON t.bid_version_id = bg.bid_version_id WHERE t.line_no IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.rfq_items i WHERE i.org_id = bg.org_id AND i.rfq_id = bg.rfq_id AND i.line_no = t.line_no) ), ket_qua AS ( SELECT dg.rfq_id, bg.supplier_id, bg.bid_version_id, dg.line_no, dg.moc_goi, dg.anh_xa_id, dg.canonical_item_id, t.thanh_tien, dg.quantity, dg.unit, dg.don_vi_goc, dg.he_so, bg.tien_te, CASE WHEN t.bid_version_id IS NULL OR t.ly_do = 'KHONG_DOC_DUOC' OR ng.bid_version_id IS NOT NULL THEN 'KHONG_DOC_DUOC' WHEN t.ly_do = 'LECH_TONG' THEN 'LECH_TONG' WHEN bg.tien_te IS NULL OR dg.tien_te_goi IS NULL OR bg.tien_te <> dg.tien_te_goi THEN 'LECH_TIEN_TE' WHEN dg.canonical_item_id IS NULL THEN 'CHUA_ANH_XA' WHEN dg.he_so IS NULL THEN 'KHONG_QUY_DOI_DUOC' ELSE 'HOP_LE' END AS trang_thai, dg.anh_xa_hoi_to, dg.anh_xa_sau, dg.bi_danh_hoi_to, dg.bi_danh_sau, dg.quy_doi_hoi_to, dg.quy_doi_sau, dg.phien_ban_hoi_to, dg.phien_ban_sau FROM dong_goi dg JOIN bao_gia bg ON bg.org_id = dg.org_id AND bg.rfq_id = dg.rfq_id LEFT JOIN dong_bao_gia t ON t.bid_version_id = bg.bid_version_id AND t.line_no = dg.line_no LEFT JOIN ngoai_goi ng ON ng.bid_version_id = bg.bid_version_id ) SELECT k.rfq_id, k.supplier_id, k.bid_version_id, k.line_no, k.moc_goi, k.anh_xa_id, k.canonical_item_id, k.thanh_tien, k.quantity, k.unit, k.thanh_tien / k.quantity, k.don_vi_goc, k.he_so, CASE WHEN k.trang_thai = 'HOP_LE' THEN k.thanh_tien / (k.quantity * k.he_so) END, k.tien_te, k.trang_thai, array_remove(ARRAY[CASE WHEN k.anh_xa_hoi_to > 0 THEN 'ANH_XA' END, CASE WHEN k.bi_danh_hoi_to > 0 THEN 'BI_DANH_DON_VI' END, CASE WHEN k.quy_doi_hoi_to > 0 THEN 'QUY_DOI' END, CASE WHEN k.phien_ban_hoi_to > 0 THEN 'PHIEN_BAN_HANG_CHUAN' END], NULL), jsonb_strip_nulls(jsonb_build_object( 'ANH_XA', nullif(k.anh_xa_sau, 0), 'BI_DANH_DON_VI', nullif(k.bi_danh_sau, 0), 'QUY_DOI', nullif(k.quy_doi_sau, 0), 'PHIEN_BAN_HANG_CHUAN', nullif(k.phien_ban_sau, 0))) FROM ket_qua k$than$
+                = $than$WITH dong AS ( SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit FROM public.rfq_items i WHERE p_hang_chuan IS NULL UNION ALL SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit FROM (SELECT DISTINCT m.org_id, m.rfq_id, m.line_no FROM public.rfq_item_mappings m WHERE p_hang_chuan IS NOT NULL AND m.canonical_item_id = p_hang_chuan AND m.ghi_luc < p_moc) c JOIN public.rfq_items i ON i.org_id = c.org_id AND i.rfq_id = c.rfq_id AND i.line_no = c.line_no ), goi AS MATERIALIZED ( SELECT x.org_id, x.rfq_id, g.moc_goi, g.tien_te_goi, g.cac_dong FROM (SELECT DISTINCT d.org_id, d.rfq_id FROM dong d) x CROSS JOIN LATERAL ( SELECT (SELECT min(u.unsealed_at) FROM public.unseal_requests q JOIN public.rfq_unsealed_bids u ON u.org_id = q.org_id AND u.unseal_request_id = q.id WHERE q.org_id = x.org_id AND q.rfq_id = x.rfq_id AND u.unsealed_at < p_moc) AS moc_goi, coalesce( (SELECT cs.currency FROM public.rfq_budgets b JOIN public.org_procurement_policies cs ON cs.id = b.policy_id AND cs.org_id = b.org_id WHERE b.org_id = x.org_id AND b.rfq_id = x.rfq_id), (SELECT cs.currency FROM public.rfq_packages r JOIN public.org_procurement_policies cs ON cs.org_id = r.org_id WHERE r.org_id = x.org_id AND r.id = x.rfq_id AND cs.id = public.chinh_sach_hieu_luc(r.org_id, r.created_at))) AS tien_te_goi, (SELECT array_agg(i.line_no) FROM public.rfq_items i WHERE i.org_id = x.org_id AND i.rfq_id = x.rfq_id) AS cac_dong ) g WHERE public.gia_da_lo(x.org_id, x.rfq_id, p_moc) AND g.moc_goi IS NOT NULL ), dong_goi AS MATERIALIZED ( SELECT d.org_id, d.rfq_id, d.line_no, d.quantity, d.unit, g.moc_goi, g.tien_te_goi, g.cac_dong, ax.id AS anh_xa_id, ax.canonical_item_id FROM dong d JOIN goi g ON g.org_id = d.org_id AND g.rfq_id = d.rfq_id LEFT JOIN LATERAL ( SELECT m.id, m.canonical_item_id FROM public.rfq_item_mappings m WHERE m.org_id = d.org_id AND m.rfq_id = d.rfq_id AND m.line_no = d.line_no AND m.ghi_luc < p_moc AND m.hang_muc_bam = public.rfq_hang_muc_bam(d.org_id, d.rfq_id, d.line_no) ORDER BY m.seq DESC LIMIT 1 ) ax ON true WHERE p_hang_chuan IS NULL OR ax.canonical_item_id = p_hang_chuan ), don_vi AS MATERIALIZED ( SELECT k.org_id, k.unit, public.don_vi_tai(k.org_id, k.unit, p_moc) AS ma, public.chuoi_sach(k.unit) AS khoa FROM (SELECT DISTINCT dg.org_id, dg.unit FROM dong_goi dg) k ), quy_doi AS MATERIALIZED ( SELECT k.org_id, k.canonical_item_id, k.unit, ci.don_vi_goc, r.he_so, r.ma FROM (SELECT DISTINCT dg.org_id, dg.canonical_item_id, dg.unit FROM dong_goi dg WHERE dg.canonical_item_id IS NOT NULL) k JOIN public.canonical_items ci ON ci.org_id = k.org_id AND ci.id = k.canonical_item_id JOIN don_vi dv ON dv.org_id = k.org_id AND dv.unit = k.unit CROSS JOIN LATERAL public.quy_doi_da_giai(k.org_id, k.canonical_item_id, dv.ma, coalesce(dv.ma, dv.khoa), ci.don_vi_goc, ci.don_vi_goc, p_moc) r ), dong_nhan AS MATERIALIZED ( SELECT dg.org_id, dg.rfq_id, dg.line_no, dg.quantity, dg.unit, dg.moc_goi, dg.tien_te_goi, dg.cac_dong, dg.anh_xa_id, dg.canonical_item_id, qd.don_vi_goc, qd.he_so, n.anh_xa_hoi_to, n.anh_xa_sau, b.bi_danh_hoi_to, b.bi_danh_sau, c.quy_doi_hoi_to, c.quy_doi_sau, v.phien_ban_hoi_to, v.phien_ban_sau FROM dong_goi dg JOIN don_vi dv ON dv.org_id = dg.org_id AND dv.unit = dg.unit LEFT JOIN quy_doi qd ON qd.org_id = dg.org_id AND qd.canonical_item_id = dg.canonical_item_id AND qd.unit = dg.unit CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE m.ghi_luc >= dg.moc_goi AND m.ghi_luc < p_moc) AS anh_xa_hoi_to, count(*) FILTER (WHERE m.ghi_luc >= p_moc) AS anh_xa_sau FROM public.rfq_item_mappings m WHERE m.org_id = dg.org_id AND m.rfq_id = dg.rfq_id AND m.line_no = dg.line_no ) n CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE a.ghi_luc >= dg.moc_goi AND a.ghi_luc < p_moc) AS bi_danh_hoi_to, count(*) FILTER (WHERE a.ghi_luc >= p_moc) AS bi_danh_sau FROM public.uom_aliases a WHERE a.org_id = dg.org_id AND a.bi_danh_sach = dv.khoa ) b CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE q.ghi_luc >= dg.moc_goi AND q.ghi_luc < p_moc) AS quy_doi_hoi_to, count(*) FILTER (WHERE q.ghi_luc >= p_moc) AS quy_doi_sau FROM public.item_uom_conversions q WHERE q.org_id = dg.org_id AND q.canonical_item_id = dg.canonical_item_id AND qd.ma NOT IN ('CUNG_DON_VI', 'QUY_DOI_CHUNG') ) c CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE p.ghi_luc >= dg.moc_goi AND p.ghi_luc < p_moc) AS phien_ban_hoi_to, count(*) FILTER (WHERE p.ghi_luc >= p_moc) AS phien_ban_sau FROM public.canonical_item_versions p WHERE p.org_id = dg.org_id AND p.canonical_item_id = dg.canonical_item_id ) v ), ket_qua AS ( SELECT dg.rfq_id, f.supplier_id, f.bid_version_id, dg.line_no, dg.moc_goi, dg.anh_xa_id, dg.canonical_item_id, t.thanh_tien, dg.quantity, dg.unit, dg.don_vi_goc, dg.he_so, f.tien_te, CASE WHEN t.co_dong = 0 OR t.ly_do = 'KHONG_DOC_DUOC' OR t.ngoai_goi THEN 'KHONG_DOC_DUOC' WHEN t.ly_do = 'LECH_TONG' THEN 'LECH_TONG' WHEN f.tien_te IS NULL OR dg.tien_te_goi IS NULL OR f.tien_te <> dg.tien_te_goi THEN 'LECH_TIEN_TE' WHEN dg.canonical_item_id IS NULL THEN 'CHUA_ANH_XA' WHEN dg.he_so IS NULL THEN 'KHONG_QUY_DOI_DUOC' ELSE 'HOP_LE' END AS trang_thai, dg.anh_xa_hoi_to, dg.anh_xa_sau, dg.bi_danh_hoi_to, dg.bi_danh_sau, dg.quy_doi_hoi_to, dg.quy_doi_sau, dg.phien_ban_hoi_to, dg.phien_ban_sau FROM dong_nhan dg CROSS JOIN LATERAL ( SELECT DISTINCT ON (i.supplier_id) v.id AS bid_version_id, i.supplier_id, u.payload, public.bid_currency((u.payload ->> 'currency')) AS tien_te FROM public.rfq_invitations i JOIN public.vendor_bids b ON b.org_id = i.org_id AND b.invitation_id = i.id JOIN public.vendor_bid_versions v ON v.org_id = b.org_id AND v.bid_id = b.id JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id WHERE i.org_id = dg.org_id AND i.rfq_id = dg.rfq_id AND u.unsealed_at < p_moc ORDER BY i.supplier_id, v.submitted_at DESC, v.version DESC ) f CROSS JOIN LATERAL ( SELECT count(*) FILTER (WHERE r.line_no = dg.line_no) AS co_dong, max(r.thanh_tien) FILTER (WHERE r.line_no = dg.line_no) AS thanh_tien, max(r.ly_do) FILTER (WHERE r.line_no = dg.line_no) AS ly_do, coalesce(bool_or(r.line_no IS NOT NULL AND NOT (r.line_no = ANY (dg.cac_dong))), false) AS ngoai_goi FROM public.bid_dong_tho(f.payload) r ) t ) SELECT k.rfq_id, k.supplier_id, k.bid_version_id, k.line_no, k.moc_goi, k.anh_xa_id, k.canonical_item_id, k.thanh_tien, k.quantity, k.unit, k.thanh_tien / k.quantity, k.don_vi_goc, k.he_so, CASE WHEN k.trang_thai = 'HOP_LE' THEN k.thanh_tien / (k.quantity * k.he_so) END, k.tien_te, k.trang_thai, array_remove(ARRAY[CASE WHEN k.anh_xa_hoi_to > 0 THEN 'ANH_XA' END, CASE WHEN k.bi_danh_hoi_to > 0 THEN 'BI_DANH_DON_VI' END, CASE WHEN k.quy_doi_hoi_to > 0 THEN 'QUY_DOI' END, CASE WHEN k.phien_ban_hoi_to > 0 THEN 'PHIEN_BAN_HANG_CHUAN' END], NULL), jsonb_strip_nulls(jsonb_build_object( 'ANH_XA', nullif(k.anh_xa_sau, 0), 'BI_DANH_DON_VI', nullif(k.bi_danh_sau, 0), 'QUY_DOI', nullif(k.quy_doi_sau, 0), 'PHIEN_BAN_HANG_CHUAN', nullif(k.phien_ban_sau, 0))) FROM ket_qua k$than$
             AND p.provolatile = 's'
             AND p.prosecdef IS FALSE
-            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public', 'enable_hashagg=off']
+            AND p.proisstrict IS FALSE
             AND p.pronargs = 2
             AND p.prorettype = 'pg_catalog.record'::regtype
             AND p.proretset IS TRUE

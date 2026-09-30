@@ -9,9 +9,13 @@
 // Spec viết *"hôm nay năm tệp —, và hàm mới là tệp thứ sáu"*. Đo lúc viết lớp này: NĂM tệp TypeScript (`anh-xa.ts` của S4.3a đã là
 // tệp thứ năm, bộ ghi của worker là tệp thứ nhất) và BA hàm SQL (hai trigger luật ghi của `089` và `quan_sat_gia`).
 //
-// Phạm vi đọc: mọi câu SQL trong mã TypeScript SẢN XUẤT (`moiCauSql` của QT3 — ghép chuỗi nối bằng `+`, bỏ chú thích) và thân
-// CUỐI CÙNG của mọi hàm `public.*` qua các migration theo thứ tự tên tệp.
+// Phạm vi đọc: mọi câu SQL trong mã TypeScript SẢN XUẤT (`moiCauSql` của QT3 — ghép chuỗi nối bằng `+`, bỏ chú thích), thân
+// CUỐI CÙNG của mọi hàm qua các migration theo thứ tự tên tệp, và mọi tệp `.sql`/`.js`/`.mjs`/`.cjs` khác đã theo dõi. Lớp CSDL
+// (`lich-su-gia.int.test.ts`) đọc `pg_get_functiondef` của mọi hàm ở mọi schema không hệ thống, cùng mọi view và materialized view.
+// Lớp này KHÔNG thấy SQL động ghép tên bảng từ mảnh (`'rfq_unsealed' || '_bids'`) hay tên bảng nội suy trong mã TypeScript — nói
+// ra ở ADR-9201.
 // ==============================================================================================
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -36,20 +40,34 @@ const HAM_SQL: Readonly<Record<string, string>> = {
   quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`9501`)",
 };
 
-/** Thân CUỐI CÙNG của mỗi hàm `public.*` — migration sau đè migration trước, đúng thứ tự `migrate()` chạy. */
-function thanCuoiCung(): ReadonlyMap<string, string> {
-  const than = new Map<string, string>();
-  const tep = readdirSync(THU_MUC_MIGRATION)
+const tepMigration = (): readonly string[] =>
+  readdirSync(THU_MUC_MIGRATION)
     .filter((t) => /^\d{3,4}_.*\.sql$/u.test(t))
     .sort();
-  for (const t of tep) {
+
+/**
+ * Thân CUỐI CÙNG của mỗi hàm — migration sau đè migration trước, đúng thứ tự `migrate()` chạy. Khoá là tên không schema; hàm
+ * ngoài `public.` mang tiền tố schema. Có hay không `OR REPLACE`, thân dấu `$…$` nào cũng được; phần đầu hàm không được vượt qua
+ * một `CREATE` khác (lượt soi: một thân `BEGIN ATOMIC` không có `AS $…$`, và mẫu lười trượt sang thân của hàm KẾ TIẾP).
+ */
+function thanCuoiCung(): ReadonlyMap<string, string> {
+  const than = new Map<string, string>();
+  for (const t of tepMigration()) {
     const noiDung = readFileSync(`${THU_MUC_MIGRATION}${t}`, "utf8");
-    for (const m of noiDung.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\([\s\S]*?\bAS \$(\w*)\$([\s\S]*?)\$\2\$/gu)) {
-      than.set(m[1]!, m[3]!);
+    for (const m of noiDung.matchAll(
+      /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:(\w+)\.)?(\w+)\((?:(?!\bCREATE\s)[\s\S])*?\bAS\s+\$(\w*)\$([\s\S]*?)\$\3\$/gu,
+    )) {
+      const schema = m[1] ?? "public";
+      than.set(schema === "public" ? m[2]! : `${schema}.${m[2]!}`, m[4]!);
     }
   }
   return than;
 }
+
+/** Tệp mã không phải TypeScript đã theo dõi — `.sql` ngoài `db/migrations`, `.js`/`.mjs`/`.cjs` — cũng chạm được bảng. */
+const TEP_KHAC: Readonly<Record<string, string>> = {
+  "tools/do-lich-su-gia/gieo.sql": "GHI — công cụ đo hiệu năng (T5 ⑷), chỉ chạy bằng `psql` trên CSDL THỬ",
+};
 
 describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
   it("[INV-L5] tệp TypeScript sản xuất có câu SQL chạm `rfq_unsealed_bids` đúng bằng danh sách", () => {
@@ -68,6 +86,23 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
   it("[INV-L5] hàm SQL có thân chạm `rfq_unsealed_bids` đúng bằng danh sách", () => {
     const ham = [...thanCuoiCung()].filter(([, t]) => BANG.test(t)).map(([ten]) => ten).sort();
     expect(ham, "hàm mới chạm bảng bản rõ: thêm một dòng CÓ LÝ DO vào HAM_SQL").toEqual(Object.keys(HAM_SQL).sort());
+  });
+
+  it("[INV-L5] không migration nào dùng thân `BEGIN ATOMIC` — bộ đọc thân ở trên không thấy nó (lượt soi §S1.9101)", () => {
+    const co = tepMigration().filter((t) =>
+      /\bBEGIN\s+ATOMIC\b/iu.test(readFileSync(`${THU_MUC_MIGRATION}${t}`, "utf8").replace(/--[^\n]*/gu, "")),
+    );
+    expect(co).toEqual([]);
+  });
+
+  it("[INV-L5] tệp mã khác TypeScript chạm `rfq_unsealed_bids` đúng bằng danh sách", () => {
+    const goc = fileURLToPath(new URL("../../", import.meta.url));
+    const tep = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+      .split(/\r?\n/u)
+      .filter((d) => /\.(?:sql|js|mjs|cjs)$/u.test(d) && !d.startsWith("db/migrations/") && !d.includes("node_modules/"))
+      .filter((d) => BANG.test(readFileSync(`${goc}${d}`, "utf8")))
+      .sort();
+    expect(tep, "tệp mới chạm bảng bản rõ: thêm một dòng CÓ LÝ DO vào TEP_KHAC").toEqual(Object.keys(TEP_KHAC).sort());
   });
 
   it("[INV-L5] bộ đọc thân hàm tự kiểm: thân cuối cùng thắng, dấu `$…$` nào cũng đọc được", () => {

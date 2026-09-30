@@ -21,14 +21,21 @@
 --     phải số nguyên dương kiểu số JSON, hai phần tử cùng `lineNo`; `LECH_TONG` là dòng đọc được nhưng Σ `amount` của mọi phần tử
 --     KHÁC `totalAmount` — đúng phép so tổng, không luật làm tròn thứ hai (ADR-050 ⑴, khoản 218) — hay có phần tử anh em không đọc
 --     được (tổng khi ấy không kiểm được). `unitPrice` không được đọc: đơn giá = `amount / quantity` (§2.5 ⒁).
+--     KHÔNG có `SET search_path` — cố ý, theo tiền lệ `app_current_org_id` (`001`, hardening [fix round 5 — R3]): mệnh đề SET chặn
+--     nội tuyến, và đo ở biên bản cho thấy gọi hàm này như một hàm riêng cho mỗi báo giá tốn ~0,25 ms mỗi lần — quá nửa thời gian
+--     đọc lịch sử. Không có SET thì thân chạy dưới `search_path` của NGƯỜI GỌI, nên mọi hàm, toán tử, phép ép kiểu trong thân ghim
+--     `pg_catalog.` đủ bốn trục QT3; bảng không có (thân không đọc bảng nào); `public.bid_so_tien` ghim schema. Mục ghim hardening
+--     đòi `proconfig IS NULL` và đúng thân này.
 -- (3) `gia_da_lo(org, gói, mốc)` — vị từ *"giá đã lộ"* theo DỮ LIỆU, tại mốc (§2.5 ⒀): gói chưa huỷ tại mốc; vòng một có
 --     `unseal_requests` `EXECUTED` trước mốc; mọi vòng BAFO MỞ trước mốc cũng vậy. Không đọc `status`: `AWARDED` được tính, gói
 --     `BAFO_OPEN`/`BAFO_CLOSED` thì không (phong bì vòng hai chưa vào `rfq_unsealed_bids`, `unseal-worker/src/index.ts:518-541`),
 --     `CANCELLED` bị loại từ lúc huỷ.
 -- (4) `quan_sat_gia(p_moc, p_hang_chuan)` — hàm as-of, `SECURITY INVOKER STABLE` (§4.5, §2.5 ⑿). Mỗi hàng một (gói, nhà cung
---     cấp, dòng của gói) cho gói mà `gia_da_lo` tại `p_moc`; báo giá là vị thế CUỐI của nhà cung cấp — phiên bản mới nhất đã mở
---     niêm phong trước mốc, đúng luật `DISTINCT ON (v.bid_id) … ORDER BY v.version DESC` của `comparison.ts`, `docBaoGia` và
---     worker (một luật, bốn bộ đọc). Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi TRƯỚC `p_moc`: ánh xạ hiệu lực của
+--     cấp, dòng của gói) cho gói mà `gia_da_lo` tại `p_moc`; báo giá là vị thế CUỐI của NHÀ CUNG CẤP — phiên bản nộp muộn nhất
+--     trong những phiên bản đã mở niêm phong trước mốc, xét trên MỌI lời mời của nhà cung cấp ấy trong gói (spec §5.1 L5: *"vị thế
+--     cuối của một nhà cung cấp"*). Khác luật `DISTINCT ON (v.bid_id)` của bảng so sánh, lượt chấm và worker ở đúng một ca: nhà
+--     cung cấp bị thu hồi lời mời rồi được mời lại có HAI báo giá — lượt soi đo được hai quan sát `HOP_LE` cho một người, tức một
+--     cần gạt nhân đôi trọng số trong trung vị. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi TRƯỚC `p_moc`: ánh xạ hiệu lực của
 --     dòng (băm bằng băm hiện tại, `089`), bí danh đơn vị (qua `don_vi_tai`), quy đổi riêng (qua lõi (1)). Ngày quan sát là mốc
 --     mở giá của gói — `min(unsealed_at)` (§3.3). Tiền tệ đọc QUA `bid_currency` (`070`) và so với tiền tệ của chính sách của
 --     CHÍNH gói ấy — chính sách ngân sách ghim, không có thì phiên bản hiệu lực lúc gói ra đời: đúng hai nhánh của
@@ -49,10 +56,15 @@
 --     `p_hang_chuan` NULL: mọi dòng. Khác NULL: chỉ dòng mà ánh xạ hiệu lực tại mốc trỏ hàng chuẩn ấy. Hai nhánh gác bằng điều kiện
 --     CHỈ trên tham số: hàm SQL không nội tuyến được (có `SET search_path`) chạy bằng kế hoạch chung, và kế hoạch ấy bỏ nhánh kia
 --     lúc chạy — đường đọc lịch sử một hàng chuẩn không phân tích mọi phong bì của tổ chức (ngưỡng §2.5 ㉓, đo ở biên bản).
+--     Hình dạng vì phép đo (biên bản §S1.9101 §6): mỗi bước tính đúng một lần theo khoá của nó — ánh xạ và nhãn theo dòng, đơn vị
+--     theo (tổ chức, chuỗi), quy đổi theo (hàng chuẩn, chuỗi), báo giá theo dòng qua chỉ mục; `bid_dong_tho` nội tuyến vào truy vấn
+--     con của mỗi báo giá; `enable_hashagg = off` là tham số CỦA RIÊNG hàm này — kế hoạch chung đoán mỗi phong bì 100 phần tử, chọn
+--     `HashAggregate` và dựng lại bảng băm ở mỗi báo giá, trong khi một phong bì có vài chục dòng. Đọc HẾT tổ chức (`p_hang_chuan`
+--     NULL) phân tích lại một phong bì cho mỗi dòng của gói — không route nào đi đường ấy.
 --     Vị từ trong thân là *"một luật một chỗ"*, KHÔNG phải ranh giới (§4.5 [S1.159]): `app_api` có `SELECT` mức bảng trên
 --     `rfq_unsealed_bids` (`019:459`). Ranh giới là test kiến trúc liệt kê mọi tệp đọc bảng ấy. Phiên khách và phiên Passport ra
 --     0 hàng vì policy `_khach` của `rfq_unsealed_bids` áp theo NGƯỜI GỌI (`SECURITY INVOKER`).
--- (5) Bảy chỉ mục cho các đường tra của (3) và (4) — số đo trước/sau ở biên bản.
+-- (5) Bảy chỉ mục cho các đường tra của (3) và (4).
 --
 -- Mọi hàm mới và thân mới ghim ở `hardening.always.sql` trong CÙNG commit (S1.96).
 -- ==============================================================================================
@@ -338,7 +350,7 @@ AS $ham$
            dg.quy_doi_hoi_to, dg.quy_doi_sau, dg.phien_ban_hoi_to, dg.phien_ban_sau
       FROM dong_nhan dg
      CROSS JOIN LATERAL (
-       SELECT DISTINCT ON (v.bid_id) v.id AS bid_version_id, i.supplier_id, u.payload,
+       SELECT DISTINCT ON (i.supplier_id) v.id AS bid_version_id, i.supplier_id, u.payload,
               public.bid_currency((u.payload ->> 'currency')) AS tien_te
          FROM public.rfq_invitations i
          JOIN public.vendor_bids b ON b.org_id = i.org_id AND b.invitation_id = i.id
@@ -346,7 +358,7 @@ AS $ham$
          JOIN public.rfq_unsealed_bids u ON u.org_id = v.org_id AND u.bid_version_id = v.id
         WHERE i.org_id = dg.org_id AND i.rfq_id = dg.rfq_id
           AND u.unsealed_at < p_moc
-        ORDER BY v.bid_id, v.version DESC
+        ORDER BY i.supplier_id, v.submitted_at DESC, v.version DESC
      ) f
      CROSS JOIN LATERAL (
        SELECT count(*) FILTER (WHERE r.line_no = dg.line_no) AS co_dong,

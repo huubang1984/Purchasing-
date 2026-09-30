@@ -153,20 +153,25 @@ async function taoGoi(dong: readonly Dong[], tienTeNganSach: "VND" | null = "VND
   return rfqId;
 }
 
-async function nopBaoGia(rfqId: string): Promise<BaoGia> {
-  const supplierId = (
-    await db.pool.query<{ id: string }>(
-      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
-      [orgA, `NCC ${randomBytes(3).toString("hex")}`, pm.nguoi, pm.phien],
-    )
-  ).rows[0]!.id;
-  const lienHe = (
-    await db.pool.query<{ id: string }>(
-      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
-        "VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) RETURNING id",
-      [orgA, supplierId, `${randomBytes(4).toString("hex")}@ncc.vn`, pm.nguoi, pm.phien],
-    )
-  ).rows[0]!.id;
+/** `ncc` cho sẵn: mời lại ĐÚNG nhà cung cấp ấy (lời mời mới, báo giá mới) — ca thu hồi rồi mời lại. */
+async function nopBaoGia(rfqId: string, ncc?: { readonly supplierId: string; readonly lienHe: string }): Promise<BaoGia & { readonly lienHe: string; readonly loiMoi: string }> {
+  const supplierId =
+    ncc?.supplierId ??
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+        [orgA, `NCC ${randomBytes(3).toString("hex")}`, pm.nguoi, pm.phien],
+      )
+    ).rows[0]!.id;
+  const lienHe =
+    ncc?.lienHe ??
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, 'Nguoi ban', $3, '0900000001', $4, $5) RETURNING id",
+        [orgA, supplierId, `${randomBytes(4).toString("hex")}@ncc.vn`, pm.nguoi, pm.phien],
+      )
+    ).rows[0]!.id;
   const loiMoi = (
     await db.pool.query<{ id: string }>(
       "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
@@ -200,7 +205,7 @@ async function nopBaoGia(rfqId: string): Promise<BaoGia> {
     const bidId = (await c.query<{ id: string }>("INSERT INTO vendor_bids (org_id, invitation_id) VALUES ($1, $2) RETURNING id", [orgA, loiMoi]))
       .rows[0]!.id;
     const versionId = await chenPhienBan(c, rfqId, bidId, phienKhach);
-    return { versionId, bidId, phienKhach, supplierId };
+    return { versionId, bidId, phienKhach, supplierId, lienHe, loiMoi };
   });
 }
 
@@ -671,6 +676,37 @@ describe("[INV-L5] ⑵ vòng BAFO, huỷ, và `status` không được đọc", 
     expect(await quanSat(rfqId, truocHuy)).toHaveLength(1);
   });
 
+  it("vị thế cuối theo NHÀ CUNG CẤP: thu hồi lời mời rồi mời lại — hai báo giá đã mở, MỘT quan sát (lần nộp muộn nhất)", async () => {
+    const rfqId = await taoGoi([{ moTa: "Thép D10", soLuong: "1.0000", donVi: "kg" }]);
+    await anhXa(rfqId, 1, hangThep);
+    const dau = await nopBaoGia(rfqId);
+    await db.pool.query("UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1", [
+      dau.loiMoi,
+      pm.nguoi,
+      pm.phien,
+    ]);
+    const lai = await nopBaoGia(rfqId, { supplierId: dau.supplierId, lienHe: dau.lienHe });
+    const khac = await nopBaoGia(rfqId);
+    await dongGoi(rfqId);
+    await moThau(
+      rfqId,
+      await yeuCauMoThau(rfqId),
+      [
+        [dau.versionId, phongBi([[1, "1.00"]])],
+        [lai.versionId, phongBi([[1, "2.00"]])],
+        [khac.versionId, phongBi([[1, "10.00"]])],
+      ],
+      "UNSEALED",
+    );
+    const ds = await quanSat(rfqId);
+    expect(ds.map((q) => [q.supplier_id, q.bid_version_id, q.thanh_tien]).sort(), "một hàng mỗi nhà cung cấp").toEqual(
+      [
+        [dau.supplierId, lai.versionId, "2.00"],
+        [khac.supplierId, khac.versionId, "10.00"],
+      ].sort(),
+    );
+  });
+
   it("gói X không thấy giá CHÍNH nó: mốc bằng mốc mở giá của gói ⇒ 0 hàng", async () => {
     const { rfqId, bg } = await goiDaMo([{ moTa: "Thép D10", soLuong: "1.0000", donVi: "kg" }], [phongBi([[1, "5.00"]])]);
     await anhXa(rfqId, 1, hangThep, "do");
@@ -775,17 +811,20 @@ describe("[INV-L5] ⑶ hàng nền TẠI MỐC và hai nhãn HOI_TO / SAU_MOC", 
 
 // ================================================================================================================================
 describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
-  it("hàm có thân chạm `rfq_unsealed_bids` trên cụm thật đúng bằng danh sách của lớp tĩnh (`ban-ro-liet-ke.test.ts`)", async () => {
+  it("hàm có thân chạm `rfq_unsealed_bids` trên cụm thật — mọi schema, cả thân `BEGIN ATOMIC` — đúng bằng danh sách của lớp tĩnh", async () => {
     const { rows } = await db.pool.query<{ ten: string }>(
-      "SELECT p.proname AS ten FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace " +
-        "WHERE n.nspname = 'public' AND p.prosrc ~ 'rfq_unsealed_bids' ORDER BY 1",
+      "SELECT n.nspname || '.' || p.proname AS ten FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace " +
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%' " +
+        "AND p.prokind IN ('f', 'p') AND pg_get_functiondef(p.oid) ~ 'rfq_unsealed_bids' ORDER BY 1",
     );
-    expect(rows.map((r) => r.ten)).toEqual(["anh_xa_kiem_luat", "goi_y_kiem_luat", "quan_sat_gia"]);
+    expect(rows.map((r) => r.ten)).toEqual(["public.anh_xa_kiem_luat", "public.goi_y_kiem_luat", "public.quan_sat_gia"]);
   });
 
-  it("không view nào đọc bảng bản rõ, và `quan_sat_gia` chạy dưới quyền NGƯỜI GỌI", async () => {
+  it("không view hay materialized view nào đọc bảng bản rõ, và `quan_sat_gia` chạy dưới quyền NGƯỜI GỌI", async () => {
     const { rows } = await db.pool.query<{ n: number; secdef: boolean }>(
-      "SELECT (SELECT count(*)::int FROM pg_views WHERE schemaname = 'public' AND definition ~ 'rfq_unsealed_bids') AS n, " +
+      "SELECT (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
+        "WHERE c.relkind IN ('v', 'm') AND n.nspname NOT IN ('pg_catalog', 'information_schema') " +
+        "AND pg_get_viewdef(c.oid) ~ 'rfq_unsealed_bids') AS n, " +
         "(SELECT prosecdef FROM pg_proc WHERE oid = to_regprocedure('public.quan_sat_gia(timestamptz, uuid)')) AS secdef",
     );
     expect(rows[0]).toEqual({ n: 0, secdef: false });
