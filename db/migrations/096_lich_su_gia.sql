@@ -1,10 +1,10 @@
 -- ==============================================================================================
--- 9501_lich_su_gia — [S1.9101 / S4.4a của spec S4] LỊCH SỬ GIÁ: BỘ ĐỌC DÒNG, VỊ TỪ "GIÁ ĐÃ LỘ", HÀM AS-OF
+-- 096_lich_su_gia — [S1.235 / S4.4a của spec S4] LỊCH SỬ GIÁ: BỘ ĐỌC DÒNG, VỊ TỪ "GIÁ ĐÃ LỘ", HÀM AS-OF
 -- (spec S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁ ㉓, §5.1 L5; ADR-095)
 --
 -- Chủ dự án chốt ngày 2026-09-30: S4.4 chia hai PR, S4.4a là CSDL (không route, không màn); tiền tệ chỉ so trong CHÍNH gói
 -- của quan sát; `SAU_MOC` là số hàng nền MỚI HƠN bị bỏ qua vì ghi từ `p_moc` trở đi, `HOI_TO` là hàng nền ghi sau mốc của
--- chính gói chứa quan sát; lõi quy đổi tách theo mã. ADR-9201.
+-- chính gói chứa quan sát; lõi quy đổi tách theo mã. ADR-136.
 --
 -- (1) `quy_doi_da_giai(org, hàng chuẩn, mã từ, khoá từ, mã sang, khoá sang, mốc)` — THÂN của `quy_doi_don_vi` (`083`) tách ra
 --     nhận hai đầu ĐÃ GIẢI: mã (NULL khi chuỗi không quy về mã nào) và khoá (mã, hoặc chuỗi đã làm sạch — đúng dạng
@@ -56,7 +56,7 @@
 --     `p_hang_chuan` NULL: mọi dòng. Khác NULL: chỉ dòng mà ánh xạ hiệu lực tại mốc trỏ hàng chuẩn ấy. Hai nhánh gác bằng điều kiện
 --     CHỈ trên tham số: hàm SQL không nội tuyến được (có `SET search_path`) chạy bằng kế hoạch chung, và kế hoạch ấy bỏ nhánh kia
 --     lúc chạy — đường đọc lịch sử một hàng chuẩn không phân tích mọi phong bì của tổ chức (ngưỡng §2.5 ㉓, đo ở biên bản).
---     Hình dạng vì phép đo (biên bản §S1.9101 §6): mỗi bước tính đúng một lần theo khoá của nó — ánh xạ và nhãn theo dòng, đơn vị
+--     Hình dạng vì phép đo (biên bản §S1.235 §6): mỗi bước tính đúng một lần theo khoá của nó — ánh xạ và nhãn theo dòng, đơn vị
 --     theo (tổ chức, chuỗi), quy đổi theo (hàng chuẩn, chuỗi), báo giá theo dòng qua chỉ mục; `bid_dong_tho` nội tuyến vào truy vấn
 --     con của mỗi báo giá; `enable_hashagg = off` là tham số CỦA RIÊNG hàm này — kế hoạch chung đoán mỗi phong bì 100 phần tử, chọn
 --     `HashAggregate` và dựng lại bảng băm ở mỗi báo giá, trong khi một phong bì có vài chục dòng. Đọc HẾT tổ chức (`p_hang_chuan`

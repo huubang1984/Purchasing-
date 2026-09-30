@@ -383,7 +383,7 @@ describe("[S1.197 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
     const c = await db.pool.connect();
     try {
       await c.query("BEGIN");
-      // [S1.9101 / S4.4a] Vế ấy nay ở LÕI `quy_doi_da_giai` (`9501`, ADR-9201) — `quy_doi_don_vi` chỉ giải hai chuỗi rồi gọi lõi.
+      // [S1.235 / S4.4a] Vế ấy nay ở LÕI `quy_doi_da_giai` (`096`, ADR-136) — `quy_doi_don_vi` chỉ giải hai chuỗi rồi gọi lõi.
       const than = (
         await c.query<{ src: string }>(
           "SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz)'::regprocedure",

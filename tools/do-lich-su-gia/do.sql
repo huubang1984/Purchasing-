@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- tools/do-lich-su-gia/do.sql — [S1.9101 / S4.4a] ĐO THỜI GIAN ĐỌC LỊCH SỬ GIÁ (spec S4 §2.5 ㉓)
+-- tools/do-lich-su-gia/do.sql — [S1.235 / S4.4a] ĐO THỜI GIAN ĐỌC LỊCH SỬ GIÁ (spec S4 §2.5 ㉓)
 --
 -- Chạy sau `gieo.sql`, trên cùng CSDL THỬ. Đo DƯỚI VAI `app_api` với tổ chức gắn ở phiên — đúng đường của một route: RLS của
 -- mọi bảng áp theo người gọi (`quan_sat_gia` là `SECURITY INVOKER`), nên đo dưới vai chủ cụm (bỏ qua RLS) là đo một đường không

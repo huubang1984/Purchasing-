@@ -1561,17 +1561,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "chuoi_sach", chuKy: "text", migration: "079_don_vi_do.sql" },
     { ham: "don_vi_tai", chuKy: "uuid, text, timestamptz", migration: "079_don_vi_do.sql" },
     // [S1.197 / S4.2a] Thân thêm vế ⑵ (quy đổi riêng, ADR-116) — con trỏ theo migration CUỐI CÙNG.
-    // [S1.9101 / S4.4a] Thân chỉ còn giải hai chuỗi rồi gọi lõi `quy_doi_da_giai` (ADR-9201) — con trỏ dời theo.
-    { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "9501_lich_su_gia.sql" },
-    // [S1.9101 / S4.4a] Lõi theo mã — thân `083` tách ra. Một nhánh `ELSE 1` ở đây là lỗ L4 cho cả quy đổi lẫn lịch sử giá.
-    { ham: "quy_doi_da_giai", chuKy: "uuid, uuid, text, text, text, text, timestamptz", migration: "9501_lich_su_gia.sql" },
-    // [S1.9101 / S4.4a / L5] Ba hàm của lịch sử giá: bộ đọc dòng, vị từ *"giá đã lộ"*, hàm as-of.
-    { ham: "bid_dong_tho", chuKy: "jsonb", migration: "9501_lich_su_gia.sql" },
-    { ham: "gia_da_lo", chuKy: "uuid, uuid, timestamptz", migration: "9501_lich_su_gia.sql" },
-    { ham: "quan_sat_gia", chuKy: "timestamptz, uuid", migration: "9501_lich_su_gia.sql" },
+    // [S1.235 / S4.4a] Thân chỉ còn giải hai chuỗi rồi gọi lõi `quy_doi_da_giai` (ADR-136) — con trỏ dời theo.
+    { ham: "quy_doi_don_vi", chuKy: "uuid, uuid, text, text, timestamptz", migration: "096_lich_su_gia.sql" },
+    // [S1.235 / S4.4a] Lõi theo mã — thân `083` tách ra. Một nhánh `ELSE 1` ở đây là lỗ L4 cho cả quy đổi lẫn lịch sử giá.
+    { ham: "quy_doi_da_giai", chuKy: "uuid, uuid, text, text, text, text, timestamptz", migration: "096_lich_su_gia.sql" },
+    // [S1.235 / S4.4a / L5] Ba hàm của lịch sử giá: bộ đọc dòng, vị từ *"giá đã lộ"*, hàm as-of.
+    { ham: "bid_dong_tho", chuKy: "jsonb", migration: "096_lich_su_gia.sql" },
+    { ham: "gia_da_lo", chuKy: "uuid, uuid, timestamptz", migration: "096_lich_su_gia.sql" },
+    { ham: "quan_sat_gia", chuKy: "timestamptz, uuid", migration: "096_lich_su_gia.sql" },
   ];
 
-  it("[S1.192] ~~ba~~ [S1.9101] bảy hàm của đơn vị đo và lịch sử giá: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.192] ~~ba~~ [S1.235] bảy hàm của đơn vị đo và lịch sử giá: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -3508,7 +3508,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_lich_su_gia.sql",
+        "096_lich_su_gia.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7944,7 +7944,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_lich_su_gia.sql",
+        "096_lich_su_gia.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8253,7 +8253,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_lich_su_gia.sql",
+        "096_lich_su_gia.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

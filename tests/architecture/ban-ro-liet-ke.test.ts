@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [INV-L5] [S1.9101 / S4.4a] MỌI CHỖ CHẠM BẢNG BẢN RÕ `rfq_unsealed_bids` ĐƯỢC LIỆT KÊ BẰNG TÊN
+// [INV-L5] [S1.235 / S4.4a] MỌI CHỖ CHẠM BẢNG BẢN RÕ `rfq_unsealed_bids` ĐƯỢC LIỆT KÊ BẰNG TÊN
 //
 // Spec S4 §4.5 [S1.159]: vị từ *"giá đã lộ"* trong thân `quan_sat_gia` là *"một luật một chỗ"*, KHÔNG phải ranh giới — `app_api`
 // có `SELECT` mức bảng trên `rfq_unsealed_bids` (`019:459`), nên mã chạy dưới `app_api` bỏ qua được hàm (góc B⑧). Ranh giới thật
@@ -13,7 +13,7 @@
 // CUỐI CÙNG của mọi hàm qua các migration theo thứ tự tên tệp, và mọi tệp `.sql`/`.js`/`.mjs`/`.cjs` khác đã theo dõi. Lớp CSDL
 // (`lich-su-gia.int.test.ts`) đọc `pg_get_functiondef` của mọi hàm ở mọi schema không hệ thống, cùng mọi view và materialized view.
 // Lớp này KHÔNG thấy SQL động ghép tên bảng từ mảnh (`'rfq_unsealed' || '_bids'`) hay tên bảng nội suy trong mã TypeScript — nói
-// ra ở ADR-9201.
+// ra ở ADR-136.
 // ==============================================================================================
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
@@ -37,7 +37,7 @@ const TEP_TS: Readonly<Record<string, string>> = {
 const HAM_SQL: Readonly<Record<string, string>> = {
   anh_xa_kiem_luat: "TỒN TẠI — L13: ánh xạ trên gói đã có bản rõ đòi lý do (`089`)",
   goi_y_kiem_luat: "TỒN TẠI — gợi ý trên gói đã có bản rõ chỉ do người giữ `item.manage` ghi (`089`)",
-  quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`9501`)",
+  quan_sat_gia: "ĐỌC — lịch sử giá xuyên gói, vị từ `gia_da_lo` và mốc trong thân (`096`)",
 };
 
 const tepMigration = (): readonly string[] =>
@@ -88,7 +88,7 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     expect(ham, "hàm mới chạm bảng bản rõ: thêm một dòng CÓ LÝ DO vào HAM_SQL").toEqual(Object.keys(HAM_SQL).sort());
   });
 
-  it("[INV-L5] không migration nào dùng thân `BEGIN ATOMIC` — bộ đọc thân ở trên không thấy nó (lượt soi §S1.9101)", () => {
+  it("[INV-L5] không migration nào dùng thân `BEGIN ATOMIC` — bộ đọc thân ở trên không thấy nó (lượt soi §S1.235)", () => {
     const co = tepMigration().filter((t) =>
       /\bBEGIN\s+ATOMIC\b/iu.test(readFileSync(`${THU_MUC_MIGRATION}${t}`, "utf8").replace(/--[^\n]*/gu, "")),
     );
@@ -107,7 +107,7 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
 
   it("[INV-L5] bộ đọc thân hàm tự kiểm: thân cuối cùng thắng, dấu `$…$` nào cũng đọc được", () => {
     const than = thanCuoiCung();
-    // `quy_doi_don_vi` định nghĩa ở `079`, `083` rồi `9501`: bản cuối gọi lõi, không còn tự đọc `item_uom_conversions`.
+    // `quy_doi_don_vi` định nghĩa ở `079`, `083` rồi `096`: bản cuối gọi lõi, không còn tự đọc `item_uom_conversions`.
     expect(than.get("quy_doi_don_vi")).toMatch(/quy_doi_da_giai/u);
     expect(than.get("quy_doi_don_vi")).not.toMatch(/item_uom_conversions/u);
     // Đối chứng dương: thân viết bằng dấu `$tbm$` (`004`) cũng đọc được — không chỉ `$ham$`.

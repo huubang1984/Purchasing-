@@ -18253,12 +18253,12 @@ và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nà
 
 ---
 
-# §S1.9101 — S4.4a: LỊCH SỬ GIÁ Ở TẦNG CSDL — BỘ ĐỌC DÒNG, VỊ TỪ *"GIÁ ĐÃ LỘ"* TẠI MỐC, HÀM AS-OF (L5); LÕI QUY ĐỔI THEO MÃ — ADR-9201
+# §S1.235 — S4.4a: LỊCH SỬ GIÁ Ở TẦNG CSDL — BỘ ĐỌC DÒNG, VỊ TỪ *"GIÁ ĐÃ LỘ"* TẠI MỐC, HÀM AS-OF (L5); LÕI QUY ĐỔI THEO MÃ — ADR-136
 
 ## 1. Vòng này là gì
 
 Nửa đầu của S4.4 (spec S4 §9): ba hàm SQL của lịch sử giá và ranh giới liệt kê mọi chỗ chạm bảng bản rõ. Không route, không màn,
-không đường gọi từ `apps/` — route đọc, kịch bản 41 và `gieo:demo` là S4.4b. Migration `9501_lich_su_gia`, ADR-9201. **L5** vào sổ
+không đường gọi từ `apps/` — route đọc, kịch bản 41 và `gieo:demo` là S4.4b. Migration `096_lich_su_gia`, ADR-136. **L5** vào sổ
 đăng ký (76 bất biến).
 
 ## 2. Quyết định của chủ dự án
@@ -18279,12 +18279,12 @@ Chốt ngày 2026-09-30, bảy đề xuất của lượt bàn S4.4:
 
 ## 3. Thay đổi
 
-- **`9501_lich_su_gia`.** `quy_doi_da_giai` (lõi), `quy_doi_don_vi` (giải hai chuỗi rồi gọi lõi), `bid_dong_tho` (`IMMUTABLE`),
+- **`096_lich_su_gia`.** `quy_doi_da_giai` (lõi), `quy_doi_don_vi` (giải hai chuỗi rồi gọi lõi), `bid_dong_tho` (`IMMUTABLE`),
   `gia_da_lo`, `quan_sat_gia` (`SECURITY INVOKER STABLE`, tham số `p_hang_chuan` mặc định NULL); bảy chỉ mục; `EXECUTE` cho `app_api`,
   thu hồi của `PUBLIC`. Năm mục ghim `hardening.always.sql` (thân, `provolatile`, `prosecdef`, `proconfig`, số đối số, kiểu trả).
 - **Ranh giới.** `tests/architecture/ban-ro-liet-ke.test.ts`: năm tệp TypeScript sản xuất, ba hàm SQL chạm `rfq_unsealed_bids`, mỗi
   dòng một lý do; `anh-xa.ts` không câu nào đọc `payload`; bộ đọc thân hàm tự kiểm (thân cuối cùng thắng, dấu `$tbm$`).
-- **Cổng khai theo.** `migrations.int` (bảy hàm, con trỏ `quy_doi_don_vi` dời sang `9501`), `hang-chuan.int` (đột biến *"bỏ vế ghi
+- **Cổng khai theo.** `migrations.int` (bảy hàm, con trỏ `quy_doi_don_vi` dời sang `096`), `hang-chuan.int` (đột biến *"bỏ vế ghi
   trước mốc"* dời sang lõi), sổ khai nhãn (L5 — hai tệp), `MOC_GHIM` 75 → 76, TEST-PLAN hàng L5 và dòng tổng (trôi hai nhịp, sửa cùng
   lượt), spec S4 §2.5 ⑿, §4.5, §5.1, §9, PRODUCT, STATE.
 - **Đo hiệu năng.** `tools/do-lich-su-gia/gieo.sql`, `do.sql` — chạy bằng `psql` trên một CSDL thử đã qua `migrate()`.

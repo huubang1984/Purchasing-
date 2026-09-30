@@ -352,7 +352,7 @@ export interface MocGhim {
 // [S1.196 / S3.3a] 71 -> 72: K8a vao so dang ky cung luot voi chot CSDL cua no (xac minh noi bo nha cung cap).
 // [S1.203 / S3.6b1] 72 -> 73: K10a — vế cạnh mở gói của K10 — vào sổ đăng ký cùng tín hiệu chia nhỏ và chốt của nó.
 // [S1.204 / S4.3a] 73 -> 75: L2 và L13 vào sổ đăng ký cùng bảng ánh xạ hạng mục và luật ghi của nó.
-// [S1.9101 / S4.4a] 75 -> 76: L5 vào sổ đăng ký cùng ba hàm của lịch sử giá (bộ đọc dòng, *"giá đã lộ"*, hàm as-of).
+// [S1.235 / S4.4a] 75 -> 76: L5 vào sổ đăng ký cùng ba hàm của lịch sử giá (bộ đọc dòng, *"giá đã lộ"*, hàm as-of).
 export const MOC_GHIM: MocGhim = { soPhuToiThieu: 76, coDanhSachToiDa: 0 };
 
 /**

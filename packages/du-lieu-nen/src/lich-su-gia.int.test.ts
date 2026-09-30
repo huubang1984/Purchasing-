@@ -1,4 +1,4 @@
-// [S1.9101 / S4.4a] Lịch sử giá — trên Postgres thật (spec S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁; §5.1 L5).
+// [S1.235 / S4.4a] Lịch sử giá — trên Postgres thật (spec S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁; §5.1 L5).
 //
 //   ⑴ `bid_dong_tho` — bộ đọc dòng: SÁU ca của `bid_so_tien` trên `amount` và trên `totalAmount`, `lines` không phải mảng, hai
 //      phần tử cùng `lineNo`, `lineNo` sai kiểu, phép so tổng CHÍNH XÁC, `unitPrice` không được đọc, không bao giờ ném;
@@ -376,7 +376,7 @@ beforeAll(async () => {
   const tao = async (ma: string, ten: string, donViGoc: string): Promise<string> =>
     (await trong(orgA, (c) => taoHangChuan(c, orgA, { ma, ten, donViGoc, actorSessionId: ql.phien }))).id;
   hangThep = await tao("THEP-D10", "Thép vằn D10", "kg");
-  // Gốc là MÃ mơ hồ `t` (tấn): không bí danh chung nào trỏ nó — đúng ca mà lõi quy đổi theo mã (1) của `9501` sinh ra để đọc.
+  // Gốc là MÃ mơ hồ `t` (tấn): không bí danh chung nào trỏ nó — đúng ca mà lõi quy đổi theo mã (1) của `096` sinh ra để đọc.
   hangCat = await tao("CAT-VANG", "Cát vàng", "t");
   hangCay = await tao("THEP-CAY", "Thép cây 11,7 m", "kg");
 }, 300_000);

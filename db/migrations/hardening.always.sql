@@ -10165,10 +10165,10 @@ $ham$;
       $q$quyền sở hữu hàm public.kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung() và bảng public.user_roles (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.4a] Loi quy doi theo MA — than 083 tach ra, nhan hai dau da giai. Mot nhanh `ELSE 1` o day la lo L4 cho CA quy_doi_don_vi lan quan_sat_gia.
+    -- [S1.235 / S4.4a] Loi quy doi theo MA — than 083 tach ra, nhan hai dau da giai. Mot nhanh `ELSE 1` o day la lo L4 cho CA quy_doi_don_vi lan quan_sat_gia.
     ARRAY[
-      $q$định nghĩa hàm quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz) (9501_lich_su_gia)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lich_su_gia.sql')$q$,
+      $q$định nghĩa hàm quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz) (096_lich_su_gia)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '096_lich_su_gia.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.quy_doi_da_giai(
   p_org uuid, p_hang_chuan uuid, p_tu text, p_khoa_tu text, p_sang text, p_khoa_sang text, p_moc timestamptz)
   RETURNS TABLE (he_so numeric, ma text)
@@ -10243,10 +10243,10 @@ $ham$$q$,
                   'hàm public.quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz) không tồn tại')$q$,
       $q$quyền sở hữu hàm quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.4a] Ham quy doi DUY NHAT (L4, S1.192). [S1.197] than co ve (2). [S1.9101] than chi giai hai chuoi qua `don_vi_tai` roi goi LOI `quy_doi_da_giai` — con tro theo migration CUOI CUNG. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
+    -- [S1.235 / S4.4a] Ham quy doi DUY NHAT (L4, S1.192). [S1.197] than co ve (2). [S1.235] than chi giai hai chuoi qua `don_vi_tai` roi goi LOI `quy_doi_da_giai` — con tro theo migration CUOI CUNG. Mot nhanh `ELSE 1` la he so doan — dung dieu L4 cam.
     ARRAY[
-      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (9501_lich_su_gia)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lich_su_gia.sql')$q$,
+      $q$định nghĩa hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) (096_lich_su_gia)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '096_lich_su_gia.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
   p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
   RETURNS TABLE (he_so numeric, ma text)
@@ -10282,10 +10282,10 @@ $ham$$q$,
                   'hàm public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz) không tồn tại')$q$,
       $q$quyền sở hữu hàm quy_doi_don_vi(uuid, uuid, text, text, timestamptz) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.4a] Bo doc dong cua phong bi da mo (L5). Mot than bo mot trong sau ca cua bid_so_tien hay phep so tong la dong hong vao lich su gia.
+    -- [S1.235 / S4.4a] Bo doc dong cua phong bi da mo (L5). Mot than bo mot trong sau ca cua bid_so_tien hay phep so tong la dong hong vao lich su gia.
     ARRAY[
-      $q$định nghĩa hàm bid_dong_tho(jsonb) (9501_lich_su_gia)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lich_su_gia.sql')$q$,
+      $q$định nghĩa hàm bid_dong_tho(jsonb) (096_lich_su_gia)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '096_lich_su_gia.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.bid_dong_tho(p_payload jsonb)
   RETURNS TABLE (line_no integer, thanh_tien numeric, ly_do text)
   LANGUAGE sql
@@ -10341,10 +10341,10 @@ $ham$$q$,
                   'hàm public.bid_dong_tho(jsonb) không tồn tại')$q$,
       $q$quyền sở hữu hàm bid_dong_tho(jsonb) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.4a] Vi tu *gia da lo* tai moc (L5, spec S4 §2.5 (13)). Mot than bo ve BAFO cho gia vong mot cua goi dang BAFO_CLOSED vao lich su.
+    -- [S1.235 / S4.4a] Vi tu *gia da lo* tai moc (L5, spec S4 §2.5 (13)). Mot than bo ve BAFO cho gia vong mot cua goi dang BAFO_CLOSED vao lich su.
     ARRAY[
-      $q$định nghĩa hàm gia_da_lo(uuid, uuid, timestamptz) (9501_lich_su_gia)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lich_su_gia.sql')$q$,
+      $q$định nghĩa hàm gia_da_lo(uuid, uuid, timestamptz) (096_lich_su_gia)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '096_lich_su_gia.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.gia_da_lo(p_org uuid, p_rfq uuid, p_moc timestamptz) RETURNS boolean
   LANGUAGE sql
   STABLE
@@ -10395,10 +10395,10 @@ $ham$$q$,
                   'hàm public.gia_da_lo(uuid, uuid, timestamptz) không tồn tại')$q$,
       $q$quyền sở hữu hàm gia_da_lo(uuid, uuid, timestamptz) hoặc SUPERUSER$q$
     ],
-    -- [S1.9101 / S4.4a] Ham as-of cua lich su gia (L5). Mot than bo `ghi_luc < p_moc` hay nhan HOI_TO/SAU_MOC la mot luat mu doi duoc sau khi gia lo.
+    -- [S1.235 / S4.4a] Ham as-of cua lich su gia (L5). Mot than bo `ghi_luc < p_moc` hay nhan HOI_TO/SAU_MOC la mot luat mu doi duoc sau khi gia lo.
     ARRAY[
-      $q$định nghĩa hàm quan_sat_gia(timestamptz, uuid) (9501_lich_su_gia)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_lich_su_gia.sql')$q$,
+      $q$định nghĩa hàm quan_sat_gia(timestamptz, uuid) (096_lich_su_gia)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '096_lich_su_gia.sql')$q$,
       $q$CREATE OR REPLACE FUNCTION public.quan_sat_gia(p_moc timestamptz, p_hang_chuan uuid DEFAULT NULL)
   RETURNS TABLE (rfq_id uuid, supplier_id uuid, bid_version_id uuid, line_no integer, ngay_quan_sat timestamptz,
                  anh_xa_id uuid, canonical_item_id uuid, thanh_tien numeric, so_luong numeric, don_vi text,

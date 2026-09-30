@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- tools/do-lich-su-gia/gieo.sql — [S1.9101 / S4.4a] GIEO DỮ LIỆU ĐO LỊCH SỬ GIÁ (spec S4 §2.5 ㉓, §4.5)
+-- tools/do-lich-su-gia/gieo.sql — [S1.235 / S4.4a] GIEO DỮ LIỆU ĐO LỊCH SỬ GIÁ (spec S4 §2.5 ㉓, §4.5)
 --
 -- Ngưỡng GIẢ ĐỊNH của spec: p95 đọc lịch sử MỘT hàng chuẩn < 500 ms ở 5.000 gói × 20 dòng. Tệp này dựng quy mô ấy trên một
 -- CSDL THỬ đã qua `migrate()`; `do.sql` đo. Đây là phép đo có biên bản (T5 ⑷), KHÔNG phải test và không chạy trong CI.

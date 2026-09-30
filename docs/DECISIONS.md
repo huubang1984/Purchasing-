@@ -9828,7 +9828,7 @@ rỉ đi qua ba route ghi); lượt đi thử T4 trên Chromium. Đột biến v
 
 ---
 
-## ADR-9201 — S4.4a: lịch sử giá là ba hàm SQL — bộ đọc dòng, vị từ *"giá đã lộ"* tại mốc, hàm as-of có nhánh lọc theo hàng chuẩn; lõi quy đổi tách theo mã
+## ADR-136 — S4.4a: lịch sử giá là ba hàm SQL — bộ đọc dòng, vị từ *"giá đã lộ"* tại mốc, hàm as-of có nhánh lọc theo hàng chuẩn; lõi quy đổi tách theo mã
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bảy điểm ngày 2026-09-30: S4.4 chia hai PR, S4.4a là CSDL
 (không route, không màn); tiền tệ chỉ so trong CHÍNH gói của quan sát, so với gói X là việc của S4.5; `SAU_MOC` là số hàng nền mới
@@ -9836,9 +9836,9 @@ hơn bị bỏ qua vì ghi từ `p_moc` trở đi, `HOI_TO` là hàng nền ghi 
 `GET /items/:itemId/price-history` (`bid.view`, `agent: false`, mỗi lần đọc một hàng sổ) ở S4.4b; đo hiệu năng bằng một công cụ trong
 kho, vượt ngưỡng thì dừng và báo; `gieo:demo` ba gói đã mở qua đường thật ở S4.4b. Trong lúc đo trước, chủ dự án chọn *"tách lõi
 theo mã"* cho quy đổi (mục ②); sau phép đo hiệu năng (p95 1.125 ms ở bản đầu), chọn *"tối ưu tiếp, không thêm bảng"*, rồi — khi
-bản tối ưu vẫn quanh ngưỡng ở mật độ 1.500 quan sát mỗi lần đọc — chọn *"chấp nhận, nói ra giới hạn"* (mục ⑧) · **[S1.9101]** · **Liên quan:** ADR-095 (hàm as-of, không bảng thứ ba), ADR-054, ADR-050 ⑴ (một
+bản tối ưu vẫn quanh ngưỡng ở mật độ 1.500 quan sát mỗi lần đọc — chọn *"chấp nhận, nói ra giới hạn"* (mục ⑧) · **[S1.235]** · **Liên quan:** ADR-095 (hàm as-of, không bảng thứ ba), ADR-054, ADR-050 ⑴ (một
 luật làm tròn), ADR-103 (tiền tệ đọc qua `bid_currency`), ADR-116 (quy đổi riêng), ADR-121 (ánh xạ hiệu lực theo băm), ADR-017
-(nhãn suy ra, không lưu) · **Spec:** S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁ ㉓, §5.1 L5 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+(nhãn suy ra, không lưu) · **Spec:** S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁ ㉓, §5.1 L5 · **Biên bản:** `evidence/security-reviews.md` §S1.235
 
 ### Bối cảnh
 
@@ -9861,7 +9861,7 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    dòng đọc được mà Σ `amount` KHÁC `totalAmount` CHÍNH XÁC, hay có phần tử anh em không đọc được (tổng khi ấy không kiểm được).
    `unitPrice` không được đọc. Không luật làm tròn nào thêm vào SQL. **Không có `SET search_path`** — tiền lệ `app_current_org_id`:
    mệnh đề SET chặn nội tuyến, và gọi bộ đọc như một hàm riêng cho mỗi báo giá tốn ~0,25 ms mỗi lần (quá nửa thời gian đọc lịch
-   sử, §S1.9101 §6). Thân chạy dưới `search_path` của người gọi nên ghim `pg_catalog.` đủ bốn trục QT3; mục ghim đòi `proconfig IS
+   sử, §S1.235 §6). Thân chạy dưới `search_path` của người gọi nên ghim `pg_catalog.` đủ bốn trục QT3; mục ghim đòi `proconfig IS
    NULL`.
 2. **Lõi quy đổi theo mã `quy_doi_da_giai(org, hàng chuẩn, mã từ, khoá từ, mã sang, khoá sang, mốc)`** — thân của `quy_doi_don_vi`
    tách ra, nhận hai đầu đã giải; `quy_doi_don_vi` chỉ giải hai chuỗi qua `don_vi_tai` rồi gọi lõi, hành vi y nguyên (test S4.1/S4.2a
@@ -9898,7 +9898,7 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    PHẦN —, bản rõ theo yêu cầu, ánh xạ/quy đổi/phiên bản theo hàng chuẩn, bí danh đơn vị theo chuỗi).
 8. **Hiệu năng — chấp nhận, nói ra giới hạn (chủ dự án chốt).** Chi phí ~0,3 ms mỗi quan sát, tuyến tính theo số quan sát của
    MỘT lần đọc; đo trên 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, hai phiên: p95 127–156 ms ở 300 quan sát, 414–469 ms
-   ở 1.200, 488–637 ms ở 1.500 (§S1.9101 §6). Ngưỡng GIẢ ĐỊNH 500 ms của spec §2.5 ㉓ vì vậy đứng chắc tới khoảng 1.200 quan sát mỗi
+   ở 1.200, 488–637 ms ở 1.500 (§S1.235 §6). Ngưỡng GIẢ ĐỊNH 500 ms của spec §2.5 ㉓ vì vậy đứng chắc tới khoảng 1.200 quan sát mỗi
    lần đọc — khoảng 400 gói cùng chứa một hàng chuẩn; ở 1.500, p95 nằm quanh ngưỡng. 200 hàng chuẩn cho 100.000 dòng là giả định bi quan; S4.5 đo lại trên dữ liệu
    pilot thật. Hình dạng vì phép đo: mỗi bước theo khoá của nó (ánh xạ và nhãn theo dòng, đơn vị theo chuỗi, quy đổi theo (hàng chuẩn,
    chuỗi), báo giá theo dòng qua chỉ mục), bộ đọc dòng nội tuyến, và `enable_hashagg = off` là tham số của RIÊNG `quan_sat_gia` — kế
@@ -9944,4 +9944,4 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
 `BAFO_UNSEALED`, tại mốc trước vòng BAFO kể cả sau khi vòng ấy mở, huỷ tại mốc trước và sau; `quan_sat_gia`: sáu trạng thái, gốc mã
 `t`, tiền tệ của gói không ngân sách, phiên khách và tổ chức khác, gói X không thấy chính nó, ánh xạ/bí danh/quy đổi/phiên bản tại mốc
 với hai nhãn, băm hiện tại, hai nhánh trùng khít, tập hàm chạm bản rõ); `tests/architecture/ban-ro-liet-ke.test.ts`; hiệu năng:
-`tools/do-lich-su-gia`. Đột biến và lượt soi đối kháng: §S1.9101.
+`tools/do-lich-su-gia`. Đột biến và lượt soi đối kháng: §S1.235.

@@ -445,7 +445,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   L2: ["packages/du-lieu-nen/src/anh-xa.int.test.ts", "packages/du-lieu-nen/src/chuan-hoa.test.ts"],
   L13: ["packages/du-lieu-nen/src/anh-xa.int.test.ts"],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
-  // L5 — [S1.9101 / S4.4a] nguồn quan sát giá. `lich-su-gia` đo ba hàm SQL trên Postgres thật dưới `app_api`: bộ đọc dòng (sáu ca
+  // L5 — [S1.235 / S4.4a] nguồn quan sát giá. `lich-su-gia` đo ba hàm SQL trên Postgres thật dưới `app_api`: bộ đọc dòng (sáu ca
   // của `bid_so_tien`, phép so tổng), vị từ *"giá đã lộ"* tại mốc (BAFO, huỷ, không đọc `status`), hàm as-of (sáu trạng thái, hàng
   // nền tại mốc, hai nhãn, hai nhánh trùng khít) và tập hàm chạm bản rõ; `ban-ro-liet-ke` là ranh giới tĩnh — mọi tệp TypeScript
   // và hàm SQL chạm `rfq_unsealed_bids` có tên và lý do.
