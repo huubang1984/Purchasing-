@@ -1492,6 +1492,107 @@ describe("bề mặt tệp", () => {
       expect(p.el("ok3").textContent).toBe("Đã tạo nhóm THEP-01.");
       expect(p.el("ma-nhom").value).toBe("");
     });
+
+    // ==========================================================================================
+    // [S1.200 / khoản 258] NGÂN SÁCH CHỮ KÝ RÀNG VÀO. Người tạo gói thấy nó ở lần đọc gói; người khác bấm «Xem ngân sách» — cổng
+    // `rfq.approve` từ chối thì vào sổ và vào trần từ chối của phiên, nên lần từ chối phải đến từ một thao tác cố ý (lượt soi F3,
+    // chủ dự án chốt ngày 2026-09-29).
+    // ==========================================================================================
+    const NGAN_SACH = { rfqId: "r-1", estimatedValue: "150000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "100000000.00", requiresDualApproval: true };
+    const NAM_HANG = ["Giá trị ước lượng", "150000000.00", "Tiền tệ", "VND", "Phiên bản chính sách", "2", "Bậc từ", "100000000.00", "Cần hai người duyệt", "có"];
+    const goiCua = (id: string, createdBy: string, status = "PENDING_APPROVAL") => (l: string) =>
+      l === `GET /rfqs/${id}` ? Promise.resolve({ status: 200, body: { rfq: { id, title: "Gói", status, createdBy, lanNop: 1 } } })
+        : l === `GET /rfqs/${id}/items` ? Promise.resolve({ status: 200, body: { items: [] } })
+        : l === `GET /rfqs/${id}/invitations` ? Promise.resolve({ status: 200, body: { invitations: [] } })
+        : undefined;
+    const docNganSach = (status: number, budget: unknown = NGAN_SACH) => (l: string) =>
+      l === "GET /rfqs/r-1/budget" ? Promise.resolve(status === 200 ? { status, body: { budget } } : { status, body: { error: "x" } }) : undefined;
+    const soLanDocNganSach = (goi: readonly string[]) => goi.filter((g) => g === "GET /rfqs/r-1/budget").length;
+
+    it("[S1.200 / khoản 258] tao-thau: người tạo gói ⇒ màn TỰ đọc ngân sách (năm hàng), nút «Xem ngân sách» ẩn; người khác ⇒ không tự đọc, nút hiện; bấm ⇒ đọc; 403 ⇒ nói không có quyền", async () => {
+      const tao = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", A.userId)(l) ?? docNganSach(200)(l));
+      expect(soLanDocNganSach(tao.p.trangThai.goi)).toBe(1);
+      expect(tao.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(NAM_HANG);
+      expect(tao.p.el("nut-xem-ns").hidden).toBe(true);
+
+      const khac = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", B.userId)(l) ?? docNganSach(403)(l));
+      expect(soLanDocNganSach(khac.p.trangThai.goi), "người không tạo gói: đọc gói không kéo theo lần đọc ngân sách").toBe(0);
+      expect(khac.p.el("tt-ns").con).toEqual([]);
+      expect(khac.p.el("nut-xem-ns").hidden).toBe(false);
+      await khac.p.bam("nut-xem-ns");
+      expect(soLanDocNganSach(khac.p.trangThai.goi)).toBe(1);
+      expect(khac.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(["Ngân sách", "không có quyền đọc ngân sách của gói này"]);
+
+      const duyet = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", B.userId)(l) ?? docNganSach(200)(l));
+      await duyet.p.bam("nut-xem-ns");
+      expect(duyet.p.el("tt-ns").con.map((x) => x.textContent), "người giữ `rfq.approve` bấm nút thì thấy đủ năm hàng").toEqual(NAM_HANG);
+    });
+
+    it("[S1.200 / khoản 258 — lượt soi F4] tao-thau: câu trả ngân sách của gói TRƯỚC tới muộn không được vẽ khi màn đã mở gói khác; thân mang mã gói khác cũng bỏ", async () => {
+      let tha: () => void = () => undefined;
+      const cham = new Promise<void>((r) => { tha = r; });
+      const p = await dungTrang("tao-thau", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan: [], daBat: true, choKy: false } })
+            : l === "GET /rfqs/r-1/budget" ? cham.then(() => ({ status: 200, body: { budget: NGAN_SACH } }))
+            : goiCua("r-1", A.userId)(l) ?? goiCua("r-2", B.userId)(l),
+      });
+      await p.bam("nut-dung-phien");
+      p.el("rfq").value = "r-1";
+      const docGoiMot = Promise.all((p.el("nut-doc").nghe["click"] ?? []).map((f) => f()));
+      await cho();
+      expect(soLanDocNganSach(p.trangThai.goi), "người tạo r-1: lần đọc ngân sách đã đi và đang chờ").toBe(1);
+      p.el("rfq").value = "r-2";
+      await p.bam("nut-doc");
+      tha();
+      await docGoiMot;
+      await cho();
+      expect(p.el("tt-ns").con, "màn đang mở r-2: ngân sách của r-1 không được vẽ").toEqual([]);
+      expect(p.el("nut-xem-ns").hidden, "r-2 do người khác tạo").toBe(false);
+
+      const lech = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", A.userId)(l) ?? docNganSach(200, { ...NGAN_SACH, rfqId: "r-9" })(l));
+      expect(lech.p.el("tt-ns").con, "thân mang mã gói khác").toEqual([]);
+
+      // Ngân sách của r-1 đang hiện; đọc r-2 mà lần đọc hạng mục mất mạng giữa chừng ⇒ bảng đã đi ngay sau lần đọc gói, không
+      // đứng cạnh lần nộp của r-2 mà nút Phê duyệt sẽ gửi.
+      const dut = await moTaoThau(true, "PENDING_APPROVAL", (l) =>
+        l === "GET /rfqs/r-2/items" ? Promise.reject(new Error("mat mang")) : goiCua("r-1", A.userId)(l) ?? goiCua("r-2", B.userId)(l) ?? docNganSach(200)(l));
+      expect(dut.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(NAM_HANG);
+      dut.p.el("rfq").value = "r-2";
+      await dut.p.bam("nut-doc").catch(() => undefined);
+      expect(dut.p.trangThai.goi).toContain("GET /rfqs/r-2/items");
+      expect(dut.p.el("tt-ns").con, "lần đọc r-2 hỏng giữa chừng: ngân sách của r-1 không còn trên màn").toEqual([]);
+    });
+
+    it("[S1.200 / khoản 258 — lượt soi N1] tao-thau: đăng xuất hay đổi người ⇒ bảng ngân sách của người trước đi, nút «Xem ngân sách» ẩn", async () => {
+      for (const cach of ["dang-xuat", "doi-nguoi"] as const) {
+        const { p } = await moTaoThau(true, "PENDING_APPROVAL", (l) => goiCua("r-1", B.userId)(l) ?? docNganSach(200)(l));
+        await p.bam("nut-xem-ns");
+        expect(p.el("tt-ns").con.map((x) => x.textContent), cach).toEqual(NAM_HANG);
+        if (cach === "dang-xuat") await p.bam("nut-dang-xuat");
+        else await p.doiFragment(`#${ORG}:maCuaB`);
+        expect(p.el("tt-ns").con, cach).toEqual([]);
+        expect(p.el("nut-xem-ns").hidden, cach).toBe(true);
+      }
+    });
+
+    it("[S1.200 / khoản 258 — lượt soi N4] tao-thau: đặt ngân sách xong, người tạo gói thấy lại đủ năm hàng (đọc lại); người mua khác thấy ba thứ lần đặt trả về, màn không đọc thay họ", async () => {
+      const dat = (l: string) =>
+        l === "PUT /rfqs/r-1/budget"
+          ? Promise.resolve({ status: 200, body: { budget: { rfqId: "r-1", estimatedValue: "150000000.00", currency: "VND", policyId: "p-2", requiresDualApproval: true } } })
+          : undefined;
+      const tao = await moTaoThau(true, "DRAFT", (l) => goiCua("r-1", A.userId, "DRAFT")(l) ?? dat(l) ?? docNganSach(200)(l));
+      expect(soLanDocNganSach(tao.p.trangThai.goi)).toBe(1);
+      await tao.p.bam("nut-ns");
+      expect(soLanDocNganSach(tao.p.trangThai.goi)).toBe(2);
+      expect(tao.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(NAM_HANG);
+
+      const khac = await moTaoThau(true, "DRAFT", (l) => goiCua("r-1", B.userId, "DRAFT")(l) ?? dat(l) ?? docNganSach(403)(l));
+      await khac.p.bam("nut-ns");
+      expect(soLanDocNganSach(khac.p.trangThai.goi)).toBe(0);
+      expect(khac.p.el("tt-ns").con.map((x) => x.textContent)).toEqual(["Giá trị ước lượng", "150000000.00", "Tiền tệ", "VND", "Cần hai người duyệt", "có"]);
+    });
   });
 
   it("[khoản 198] /i ra trang nộp thầu và /login ra trang mở thầu", async () => {
