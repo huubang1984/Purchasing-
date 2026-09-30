@@ -27,6 +27,8 @@
 //   • `leaseGiay`: `lease_expires_at − clock_timestamp()` lúc thấy `RUNNING` — đối chứng dương rằng
 //     trần 60 s đúng là trần đang có hiệu lực trên đường này, không phải 15 s của pool.
 // Một lượt quá trần KHÔNG được vá ở vòng này (đề bài); nó mở `khoản 272`. Số đo ghi ở §S1.220.
+// [S1.9135 / khoản 272] Khối CUỐI tệp đo chính mốc vượt trần ấy — 60 tới 100 phong bì 8 MiB trong một job, cộng ba mốc dò
+// tới 200 — sau cờ môi trường `TRUSTPROCURE_DO_TRAN_MO_THAU=1` (ca nặng; không cờ thì bỏ qua). Cách chạy ở đầu khối.
 //
 // Không nhãn INV: đây là phép đo khả dụng ở biên cỡ, cùng loại với khối khoản 126 của
 // `unseal-worker.int.test.ts`. Kết quả từng ca được so ở PHÍA CSDL (`payload = $2::jsonb`), không kéo
@@ -35,7 +37,7 @@
 
 import { randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, loadavg, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -604,3 +606,243 @@ describe("[S1.220 / khoản 167] mở thầu cỡ lớn trên đường điểm 
     });
   }
 });
+
+// ==============================================================================================
+// [S1.9135 / khoản 272] MỐC VƯỢT TRẦN 60 s — MỘT RFQ 60…200 PHONG BÌ 8 MiB TRONG MỘT JOB, TRÊN ĐƯỜNG ĐIỂM VÀO THẬT
+//
+// CÁCH CHẠY — ca NẶNG, mặc định BỎ QUA (không chạy trong `pnpm test:int` hay `pnpm evidence` thường):
+//   TRUSTPROCURE_DO_TRAN_MO_THAU=1 pnpm vitest run apps/unseal-worker/src/mo-thau-co-lon.int.test.ts -t "khoản 272"
+// (cộng hai biến `TRUSTPROCURE_PG_LOCAL_*` khi không có Docker). Cần chừng 9 GiB đĩa cho cụm (875 phong bì × 8 MiB, tám
+// RFQ, cộng WAL) và chừng 3 GiB bộ nhớ ở tiến trình test ở mốc 200 (worker nạp MỌI phong bì của RFQ trong MỘT câu); chừng
+// 15 phút trên 4 lõi. Mỗi mốc in một dòng `[đo khoản 272] …` — tên mốc, kết cục, mili-giây, bộ nhớ, số lõi và tải máy; không
+// bản rõ.
+//
+// Chủ dự án chốt (kế hoạch đợt 3, câu 8): khoản 272 CHỈ ĐO ở đợt 3 — trần 60 s (`HANDLER_TIMEOUT`), runner và thiết kế
+// "mở thầu là một giao dịch" KHÔNG đổi; kết quả quyết định hướng sửa ở một ADR sau. §S1.220 đo 14 phong bì 8 MiB trong một
+// job: 10 578 ms, ~0,75 s/phong bì, rồi NGOẠI SUY ~80 phong bì vượt trần. Khối này đo thay cho ngoại suy: mỗi mốc N ∈ {60,
+// 70, 80, 90, 100} (câu 8) cộng BA MỐC DÒ {125, 150, 200} là MỘT RFQ mới với N báo giá, mỗi báo giá một phong bì ĐÚNG 8 MiB
+// mang một trong 14 ca của `CAC_CA` LẶP VÒNG theo thứ tự — cùng hỗn hợp với ca GOM của §S1.220, để giả thuyết ~0,75 s/phong bì
+// được đo trên chính nó —, rồi MỘT job trên tiến trình worker thật chạy nền (khối `beforeAll` của tệp). Mỗi mốc ghi:
+//   • kết cục của LẦN CHẠY ĐẦU — `DONE` (thì dưới trần, đủ N hàng bản rõ, RFQ `UNSEALED`, yêu cầu `EXECUTED`) hay `PENDING` +
+//     `HANDLER_TIMEOUT` (thì ở ĐÚNG trần: `msTuClaim` ≥ 60 000; 0 hàng bản rõ, RFQ vẫn `CLOSED`, yêu cầu vẫn `APPROVED`, 0 hàng
+//     `RFQ_UNSEALED` — lượt mở thầu không để lại gì, lần thử lại làm lại từ đầu). Kết cục nào khác ⇒ ĐỎ;
+//   • `msTuClaim`: từ claim (`lease_expires_at − 60 s`) tới kết cục (`finished_at`, hay `run_after − 30 s` của lần hẹn lại) —
+//     hai mốc cùng đồng hồ CSDL, không phụ thuộc nhịp thăm dò; `msHandler` đồng hồ test như §S1.220; `leaseGiay` lúc thấy
+//     RUNNING — đối chứng rằng trần đang hiệu lực là 60 s;
+//   • thời gian gieo N phong bì; RSS và `arrayBuffers` lớn nhất thấy được ở các nhịp thăm dò (MiB — cận dưới của đỉnh);
+//   • số lõi (`availableParallelism`) và tải máy (`loadavg` 1/5/15 phút) lúc bắt đầu mốc — máy đo có thể DÙNG CHUNG.
+// Sau một `HANDLER_TIMEOUT`, `run_after` của job bị đẩy đi một ngày (superuser): lần thử lại — 30 s sau, làm lại trọn công
+// việc — sẽ tranh CPU với mốc kế tiếp; hành vi thử lại là của runner, thứ khối này không đổi và không đo. Khối KHÔNG khẳng
+// định mốc vượt trần nằm ở đâu — con số thuộc về máy —; nó khẳng định mỗi mốc có đúng một trong hai kết cục trên và in mốc
+// vượt trần đầu tiên (hay "không mốc nào") ở ca tổng kết, cùng mốc vượt ƯỚC LƯỢNG bằng đường thẳng bình phương nhỏ nhất qua
+// các mốc DONE (`msTuClaim` theo N). VÌ SAO CÓ MỐC DÒ NGOÀI 60–100: lượt đo đầu (§S1.9135, 4 lõi dùng chung, tải ~8,5) KHÔNG
+// thấy mốc nào tới 100 vượt trần — 37,0 / 44,5 / 53,0 / 50,1 / 43,4 s —, lượt hai ở tải ~2 đi ~0,4 s/phong bì, tức không có
+// mốc dò thì kết cục `HANDLER_TIMEOUT` (không gì được ghi, RFQ vẫn `CLOSED`) chỉ là suy từ mã; 200 × 0,37 s — nhịp NHANH nhất
+// đã đo — vẫn ≥ 60 s.
+// ==============================================================================================
+const BAT_DO_TRAN_MO_THAU = process.env["TRUSTPROCURE_DO_TRAN_MO_THAU"] === "1";
+/** Năm mốc số phong bì 8 MiB của câu 8 và ba mốc dò (khối đầu) — mỗi mốc một RFQ, một job. */
+const MOC_SO_PHONG_BI = [60, 70, 80, 90, 100, 125, 150, 200] as const;
+/** `retryDelaySeconds` mặc định của `JobRunner` (`tien-trinh.ts` không ghi đè): lần hẹn lại ghi `run_after = clock_timestamp() + 30 s`. */
+const TRE_THU_LAI_GIAY = 30;
+const MIB = 1024 * 1024;
+/** Hạn của một mốc: gieo tới 200 phong bì 8 MiB, một job tới trần, và các phép đọc sau đó. */
+const HAN_MOT_MOC_MS = 10 * 60_000;
+
+interface SoDoMoc {
+  readonly n: number;
+  readonly ketCuc: string;
+  readonly attempts: number;
+  readonly lyDo: string | null;
+  readonly msTuClaim: number;
+  readonly msHandler: number;
+  readonly leaseGiay: number;
+  readonly msGieo: number;
+  readonly hangBanRo: number;
+  readonly hangRfqUnsealed: number;
+  readonly trangThaiRfq: string;
+  readonly trangThaiYeuCau: string;
+  readonly rssDinhMiB: number;
+  readonly arrayBuffersDinhMiB: number;
+  readonly tai: readonly string[];
+}
+const soDoMoc: SoDoMoc[] = [];
+
+interface HangJobMoc {
+  readonly status: string;
+  readonly attempts: number;
+  readonly last_failure_reason: string | null;
+  readonly lease_expires_at: Date | null;
+  readonly finished_at: Date | null;
+  readonly run_after: Date;
+  readonly bay_gio: Date;
+}
+
+/** Chờ kết cục LẦN CHẠY ĐẦU của job; giữ mốc claim theo đồng hồ CSDL và đỉnh bộ nhớ thấy được ở các nhịp thăm dò. */
+async function choKetCucMoc(jobId: string): Promise<{
+  readonly h: HangJobMoc;
+  readonly msTuClaim: number;
+  readonly msHandler: number;
+  readonly leaseGiay: number;
+  readonly rssDinh: number;
+  readonly arrayBuffersDinh: number;
+}> {
+  const batDau = Date.now();
+  let claimLuc: number | null = null;
+  let tRunning = -1;
+  let leaseGiay = -1;
+  let rssDinh = 0;
+  let arrayBuffersDinh = 0;
+  for (;;) {
+    const { rows } = await db.pool.query<HangJobMoc>(
+      "SELECT status, attempts, last_failure_reason, lease_expires_at, finished_at, run_after, clock_timestamp() AS bay_gio " +
+        "FROM outbox_jobs WHERE id = $1",
+      [jobId],
+    );
+    const h = rows[0];
+    if (h === undefined) throw new Error("job khong ton tai");
+    const boNho = process.memoryUsage();
+    rssDinh = Math.max(rssDinh, boNho.rss);
+    arrayBuffersDinh = Math.max(arrayBuffersDinh, boNho.arrayBuffers);
+    if (h.status === "RUNNING" && claimLuc === null && h.lease_expires_at !== null) {
+      claimLuc = h.lease_expires_at.getTime() - TRAN_HANDLER_MS;
+      tRunning = Date.now();
+      leaseGiay = (h.lease_expires_at.getTime() - h.bay_gio.getTime()) / 1000;
+    }
+    const daCoKetCuc = h.status === "DONE" || h.status === "FAILED" || (h.status === "PENDING" && h.attempts > 0);
+    if (daCoKetCuc || Date.now() - batDau > HAN_CHO_JOB_MS) {
+      const ketLuc =
+        h.finished_at !== null
+          ? h.finished_at.getTime()
+          : h.status === "PENDING" && h.attempts > 0
+            ? h.run_after.getTime() - TRE_THU_LAI_GIAY * 1000
+            : -1;
+      return {
+        h: daCoKetCuc ? h : { ...h, status: `HET_GIO_CHO(${h.status})` },
+        msTuClaim: claimLuc === null || ketLuc < 0 ? -1 : ketLuc - claimLuc,
+        msHandler: tRunning < 0 ? -1 : Date.now() - tRunning,
+        leaseGiay,
+        rssDinh,
+        arrayBuffersDinh,
+      };
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+function keMoc(s: SoDoMoc): string {
+  return (
+    `N=${String(s.n)}: ${s.ketCuc}/${String(s.attempts)} lý do "${s.lyDo ?? ""}", từ claim tới kết cục ${String(s.msTuClaim)} ms, ` +
+    `handler ${String(s.msHandler)} ms, lease ${String(s.leaseGiay)} s, gieo ${String(s.msGieo)} ms, bản rõ ${String(s.hangBanRo)}, ` +
+    `RFQ_UNSEALED ${String(s.hangRfqUnsealed)}, RFQ ${s.trangThaiRfq}, yêu cầu ${s.trangThaiYeuCau}, RSS đỉnh ${String(s.rssDinhMiB)} MiB, ` +
+    `arrayBuffers đỉnh ${String(s.arrayBuffersDinhMiB)} MiB; lõi ${String(availableParallelism())}, tải 1/5/15 phút ${s.tai.join("/")}`
+  );
+}
+
+describe.skipIf(!BAT_DO_TRAN_MO_THAU)(
+  "[S1.9135 / khoản 272] mốc vượt trần 60 s của một job mở thầu: 60…100 phong bì 8 MiB (và ba mốc dò 125, 150, 200) trên đường điểm vào thật (cờ TRUSTPROCURE_DO_TRAN_MO_THAU=1)",
+  () => {
+    it.each([...MOC_SO_PHONG_BI])(
+      "N = %i phong bì 8 MiB (14 ca lặp vòng) trong MỘT job — kết cục lần đầu: DONE dưới trần, hay HANDLER_TIMEOUT đúng ở trần và không để lại gì",
+      async (n) => {
+        const tai = loadavg().map((x) => x.toFixed(2));
+        const coBanRo = TRAN_PHONG_BI_BYTE - doiPhongBi;
+        const rfqId = await taoRfqMo();
+        const batDauGieo = Date.now();
+        for (let k = 0; k < n; k++) {
+          const ca = CAC_CA[k % CAC_CA.length];
+          if (ca === undefined) throw new Error("CAC_CA rong");
+          await nopBaoGia(rfqId, ca.dung(coBanRo));
+        }
+        const msGieo = Date.now() - batDauGieo;
+        const { rows: co } = await db.pool.query<{ so: number; nho: number; lon: number }>(
+          "SELECT count(*)::int AS so, min(octet_length(v.envelope))::int AS nho, max(octet_length(v.envelope))::int AS lon " +
+            "FROM vendor_bid_versions v JOIN vendor_bids b ON b.id = v.bid_id JOIN rfq_invitations i ON i.id = b.invitation_id " +
+            "WHERE i.rfq_id = $1",
+          [rfqId],
+        );
+        expect(co[0], "tiền đề: đúng N phong bì, mỗi phong bì ĐÚNG trần 8 MiB của 018").toEqual({ so: n, nho: TRAN_PHONG_BI_BYTE, lon: TRAN_PHONG_BI_BYTE });
+
+        const { requestId, jobId } = await dongXinMoThauVaXepJob(rfqId);
+        const d = await choKetCucMoc(jobId);
+        if (d.h.status === "PENDING" && d.h.attempts > 0) {
+          // Chặn lần thử lại (khối đầu): nó sẽ tranh CPU với mốc sau. Chỉ đổi lịch, không đổi kết cục đã ghi.
+          const hoan = await db.pool.query(
+            "UPDATE outbox_jobs SET run_after = clock_timestamp() + interval '1 day' WHERE id = $1 AND status = 'PENDING'",
+            [jobId],
+          );
+          expect(hoan.rowCount).toBe(1);
+        }
+        const { rows: sau } = await db.pool.query<{ ban_ro: number; unsealed: number; rfq: string; yc: string }>(
+          "SELECT (SELECT count(*)::int FROM rfq_unsealed_bids WHERE unseal_request_id = $2) AS ban_ro, " +
+            "(SELECT count(*)::int FROM audit_events WHERE org_id = $3 AND resource_id = $1 AND action = 'RFQ_UNSEALED') AS unsealed, " +
+            "(SELECT status FROM rfq_packages WHERE id = $1) AS rfq, (SELECT status FROM unseal_requests WHERE id = $2) AS yc",
+          [rfqId, requestId, orgA],
+        );
+        const s: SoDoMoc = {
+          n,
+          ketCuc: d.h.status,
+          attempts: d.h.attempts,
+          lyDo: d.h.last_failure_reason,
+          msTuClaim: d.msTuClaim,
+          msHandler: d.msHandler,
+          leaseGiay: d.leaseGiay,
+          msGieo,
+          hangBanRo: sau[0]?.ban_ro ?? -1,
+          hangRfqUnsealed: sau[0]?.unsealed ?? -1,
+          trangThaiRfq: sau[0]?.rfq ?? "",
+          trangThaiYeuCau: sau[0]?.yc ?? "",
+          rssDinhMiB: Math.round(d.rssDinh / MIB),
+          arrayBuffersDinhMiB: Math.round(d.arrayBuffersDinh / MIB),
+          tai,
+        };
+        soDoMoc.push(s);
+        console.error(`[đo khoản 272] ${keMoc(s)}`);
+
+        expect(s.leaseGiay, `phải thấy job RUNNING với hạn thuê 60 s — ${keMoc(s)}`).toBeGreaterThan(50);
+        expect(s.leaseGiay, keMoc(s)).toBeLessThanOrEqual(60);
+        if (s.ketCuc === "DONE") {
+          expect([s.attempts, s.lyDo], keMoc(s)).toEqual([1, null]);
+          expect(s.msTuClaim, `DONE phải dưới trần — ${keMoc(s)}`).toBeLessThan(TRAN_HANDLER_MS);
+          expect(s.msTuClaim, keMoc(s)).toBeGreaterThan(0);
+          expect([s.hangBanRo, s.hangRfqUnsealed, s.trangThaiRfq, s.trangThaiYeuCau], keMoc(s)).toEqual([n, 1, "UNSEALED", "EXECUTED"]);
+        } else {
+          expect([s.ketCuc, s.attempts, s.lyDo], `kết cục khác DONE chỉ được là HANDLER_TIMEOUT ở lần đầu — ${keMoc(s)}`).toEqual([
+            "PENDING",
+            1,
+            "HANDLER_TIMEOUT",
+          ]);
+          expect(s.msTuClaim, `HANDLER_TIMEOUT phải ở ĐÚNG trần 60 s, không sớm hơn — ${keMoc(s)}`).toBeGreaterThanOrEqual(TRAN_HANDLER_MS);
+          expect([s.hangBanRo, s.hangRfqUnsealed, s.trangThaiRfq, s.trangThaiYeuCau], `quá trần thì không gì được ghi — ${keMoc(s)}`).toEqual([
+            0,
+            0,
+            "CLOSED",
+            "APPROVED",
+          ]);
+        }
+      },
+      HAN_MOT_MOC_MS,
+    );
+
+    it("tổng kết: đủ tám mốc theo thứ tự, mốc vượt trần đầu tiên (hay không mốc nào) và mốc vượt ước lượng, cùng số lõi và tải máy", () => {
+      expect(soDoMoc.map((s) => s.n)).toEqual([...MOC_SO_PHONG_BI]);
+      const vuot = soDoMoc.find((s) => s.ketCuc !== "DONE");
+      // Đường thẳng bình phương nhỏ nhất `msTuClaim ≈ a + b·N` qua các mốc DONE — chỉ để IN, không khẳng định: nhịp mỗi phong bì
+      // đổi theo tải máy dùng chung (lượt một ~0,43–0,66 s, lượt hai ~0,4 s), nên con số thuộc về LƯỢT đo, không thuộc về mã.
+      const done = soDoMoc.filter((s) => s.ketCuc === "DONE" && s.msTuClaim > 0);
+      const tb = (xs: readonly number[]): number => xs.reduce((a, x) => a + x, 0) / Math.max(1, xs.length);
+      const nTb = tb(done.map((s) => s.n));
+      const msTb = tb(done.map((s) => s.msTuClaim));
+      const mau = done.reduce((a, s) => a + (s.n - nTb) ** 2, 0);
+      const b = mau === 0 ? Number.NaN : done.reduce((a, s) => a + (s.n - nTb) * (s.msTuClaim - msTb), 0) / mau;
+      const a = msTb - b * nTb;
+      const uocLuong = done.length >= 2 && b > 0 ? `${String(Math.round((TRAN_HANDLER_MS - a) / b))} (${(b / 1000).toFixed(3)} s/phong bì, chặn ${String(Math.round(a))} ms, ${String(done.length)} mốc DONE)` : "không ước lượng được";
+      console.error(
+        `[đo khoản 272] TỔNG KẾT — lõi ${String(availableParallelism())}; ` +
+          soDoMoc.map((s) => `N=${String(s.n)} ${s.ketCuc} ${String(s.msTuClaim)} ms (tải 1 phút ${s.tai[0] ?? "?"})`).join("; ") +
+          `; mốc vượt trần đầu tiên: ${vuot === undefined ? "không mốc nào — 200 phong bì 8 MiB xong dưới 60 s trên máy này" : `N=${String(vuot.n)}`}` +
+          `; mốc vượt ước lượng tuyến tính: N ≈ ${uocLuong}`,
+      );
+    });
+  },
+);
