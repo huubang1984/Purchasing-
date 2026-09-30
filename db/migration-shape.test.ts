@@ -505,6 +505,9 @@ describe("hình dạng file migration", () => {
       "rfq_unsealed_bids",
       "sessions",
       "supplier_contacts",
+      // [S1.196 / S3.3a / migration xác minh] Xác minh nhà cung cấp (K8a) — chỉ-ghi-thêm, khoá ngoại hợp thành `(org_id, supplier_id)` tới
+      // `suppliers`, policy khách ĐÓNG HẲN.
+      "supplier_verifications",
       "suppliers",
       "unseal_approvals",
       // [S1.129 / khoản 233 / 064] Lịch sử điều phối mở thầu — chỉ-ghi-thêm bằng quyền, khoá

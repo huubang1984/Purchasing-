@@ -9167,3 +9167,76 @@ cửa sổ `chia_nho_cua_so_ngay`. Không có nhóm hàng thì tín hiệu phả
 `packages/rfq/src/nhom-hang.int.test.ts` — 22 ca trên Postgres thật, gồm sáu đột biến trong giao dịch (tắt hay viết lại từng trigger,
 hàm vị từ trả NULL, câu hỏi trạng thái trả hằng) và hai ca đua; `apps/api/src/buyer.int.test.ts` qua HTTP; kịch bản 41 hai bản ở luồng S3; hai màn ở
 `apps/web/src/phuc-vu.test.ts` và `nhom-hang.test.ts`. Đột biến ở mã nguồn: §S1.201.
+
+---
+
+## ADR-115 — Tổ chức đã bật S3: chữ ký mở gói ràng vào NGÂN SÁCH của gói — băm riêng, và cạnh mở gói đếm trên ngân sách hiện tại
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá lỗ này TRƯỚC S3.2c, bằng một PR riêng.
+Cơ chế băm là điểm tôi tự chốt từ tiền lệ (⑴ dưới); chủ dự án bác được · **[S1.202]** · **Liên quan:** spec S3 §2.4 (chữ ký cũ vô
+hiệu bằng băm), ADR-084 ⑵ (cạnh về DRAFT), ADR-080 (công tắc một chiều), `011` C-1, `014` §(4), `076`, `077` · **Biên bản:**
+`evidence/security-reviews.md` §S1.202 · **Khoản:** 254 (ghi ở S1.189; đóng ở đây)
+
+### Bối cảnh
+
+Trước `077`, ngân sách của gói khoá khi gói rời DRAFT (`rfq_budgets_chi_sua_khi_soan`, `014`) và không đường nào quay về: mọi chữ
+ký nằm trên ngân sách cuối cùng, và `014` §(4) viết được *"sau cạnh này nó không lật lại được"* về `requires_dual_approval`. Cạnh
+`PENDING_APPROVAL→DRAFT` của `077` (S3.2b1) mở lại ngân sách. Chữ ký mang băm nội dung (`011`: tiêu đề, hạn, hạng mục) và băm danh
+sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ chức đã bật, gói tầng thật dưới `app_api`:
+
+- gói 150 triệu (ngưỡng kép 100 triệu) cần hai chữ ký, mới có một; trả về, hạ ước lượng xuống 1 triệu, nộp lại ⇒ gói MỞ bằng đúng
+  chữ ký ấy — chữ ký cho lúc gói cần HAI người mở gói bằng MỘT (D2);
+- gói 1 triệu đã ký; trả về, nâng lên 99 triệu — cùng bậc, vẫn một chữ ký —, nộp lại ⇒ gói MỞ bằng chữ ký trên con số 1 triệu.
+
+### Quyết định
+
+1. **Cơ chế: băm, như nội dung và danh sách.** Hàm RIÊNG `rfq_bam_ngan_sach(gói)` băm ước lượng, tiền tệ, phiên bản chính sách
+   ghim, bậc (`tier_tu_so_tien`) và cờ duyệt kép — con số người duyệt đã thấy, cộng mọi thứ quyết định bậc và số chữ ký. Hai hàm băm
+   cũ không đổi. **Chốt từ tiền lệ:** spec §2.4 đã chọn *chữ ký cũ vô hiệu bằng băm* cho chính cạnh này, và S3.2b1 giữ chữ ký cũ làm
+   dấu vết; vá bằng cùng cơ chế là không mở một cơ chế thứ hai.
+2. **Cột `rfq_approvals.approved_budget_hash`**, ngoài `GRANT`, do CÙNG trigger đặt băm danh sách đặt lúc ký — không có thứ tự giữa
+   hai trigger để trôi. Tổ chức chưa bật: NULL, cùng lý do vế NULL của `076` (2).
+3. **Hai UNIQUE** của `rfq_approvals` mang thêm cột ấy, giữ tên: người đã ký ký lại được trên ngân sách MỚI; một người, một phiên chỉ
+   ký một lần trên mỗi bộ ba (nội dung, danh sách, ngân sách). `NULLS NOT DISTINCT` giữ MVP1 đúng một người một lần.
+4. **Cạnh mở gói** của tổ chức đã bật (`rfq_kiem_chu_ky_danh_sach_khi_mo`, `076` (4)) đếm thêm người ký khớp CẢ ngân sách hiện tại,
+   sau phép đếm cũ — giữ nguyên văn —, với lời từ chối nói đúng chỗ lệch: *"RFQ nay can N chu ky TREN NGAN SACH HIEN TAI, moi co M
+   (K4b)"*. Qua route: 422 mang thông điệp ấy (ánh xạ 23514 của bộ điều phối), không hàng sổ — cùng lớp với lời từ chối K4b về danh
+   sách ở cùng cạnh.
+5. **Không điền hàng cũ.** Chữ ký đã có ở tổ chức đã bật mang NULL: không biết nó đã ký trên ngân sách nào, và điền băm HIỆN TẠI chính
+   là lỗ này. Fail-closed: nó không đếm; người ấy ký lại được.
+
+### Phương án đã cân nhắc
+
+- **Khoá ngân sách khi gói đã có chữ ký.** Sửa một con số sai phải xoá chữ ký — trái `011` C-1 (chữ ký là dấu vết) —, hoặc phải có
+  thêm một cạnh chỉ để mở khoá. Bác.
+- **Cạnh về DRAFT vô hiệu mọi chữ ký.** S3.2b1 đã chốt ngược lại: gói nộp lại y nguyên thì chữ ký cũ đếm, vì người duyệt đã ký đúng
+  thứ ấy. Đổi quyết định ấy rộng hơn lỗ cần vá. Bác.
+- **Nhét ngân sách vào `rfq_bam_noi_dung`.** Băm nội dung dùng cho MỌI tổ chức (khối đếm D2 của máy trạng thái gói, `071`): MVP1 đổi,
+  và lần deploy vô hiệu mọi chữ ký đang chờ. Cùng lý do `076` tách băm danh sách (§2.5 ⑾). Bác.
+- **Chỉ băm con số.** Bậc và số chữ ký còn phụ thuộc phiên bản chính sách ghim; một lần ghim sang phiên bản mới với bảng bậc khác đổi
+  kiểm soát mà con số đứng yên. Bác.
+
+### Hệ quả, nói thẳng
+
+- **Đổi ngân sách sau khi ký — kể cả một con số nhỏ, cùng bậc — đòi ký lại.** Đặt lại đúng con số cũ, cùng phiên bản, thì chữ ký cũ
+  đếm lại: băm ràng vào ngân sách, không vào lần nộp.
+- **Phiên bản chính sách mới** hiệu lực giữa lần ký và lần mở: gói được trả về và đặt lại ngân sách thì ghim phiên bản mới, nên phải
+  ký lại dù con số không đổi. Gói không trả về thì ngân sách giữ phiên bản đã ghim, chữ ký vẫn đếm.
+- **Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa.** Hôm nay không tổ chức thật nào bật được S3 (ADR-105); CSDL demo
+  hay dev có gói `PENDING_APPROVAL` ở tổ chức đã bật thì người duyệt ký lại.
+- Chữ ký cũ ở lại trong bảng làm dấu vết — cùng khuôn `011` và `076`.
+- **Hai khoảng trống cùng lớp, lượt soi đo, CHƯA đóng ở ADR này** — chủ dự án chọn vá ở một vòng riêng, trước S3.2c: lời duyệt chỉ
+  mang mã gói, nên PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem (khoản 256
+  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257).
+- `approved_budget_hash` là SHA-256 không muối trên một chuỗi đoán được (con số, tiền tệ, phiên bản, bậc, cờ): biết phiên bản chính
+  sách thì dò lại được ước lượng. Hôm nay không route nào đọc `rfq_approvals`, và RLS chặn phiên khách. Ngày băm ấy đi ra ngoài (bộ
+  bằng chứng S3.9, thân sổ) thì nó ngang ngân sách.
+
+### Đo
+
+`packages/rfq/src/rang-ngan-sach.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật. Đo TRƯỚC trên cây `master` (tạm rút
+`086_rang_ngan_sach`): mười lăm ca có nhãn, mười lăm ca đỏ — các ca hành vi đỏ vì gói MỞ ĐƯỢC. Sau bản vá, mười lăm ca xanh: hạ bậc,
+nâng cùng bậc rồi đặt lại con số cũ, một người ký hai lần vẫn là một người, cờ duyệt kép, bộ ba không ghép được từ hai chữ ký, ghim
+phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; bảy đột biến đều đỏ — bỏ phép đếm trên ngân sách, phép đếm
+thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
+cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 256, 257).
