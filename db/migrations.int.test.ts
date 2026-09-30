@@ -1619,11 +1619,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_de_xuat", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    // [S1.9182 / khoản 231] `9582` định nghĩa lại thân: vế *không lượt chấm nào mới hơn* (khuôn `060` (A)), nhánh có tên
+    // `j5_luot_cham_khong_moi_nhat`. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH từ `074` bằng script.
+    { ham: "award_kiem_de_xuat", migration: "9582_award_luot_cham_moi_nhat.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
     // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
     // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
-    { ham: "award_kiem_mot_award_song", migration: "068_san_mot_chu_ky.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    // [S1.9182 / khoản 232 / ADR-9282] `9583` định nghĩa lại thân: nhánh `WITHDRAWN` ba vế có tên, J7 mở lại sau hàng rút.
+    // Con trỏ dời sang `9583`; thân TRÍCH từ `068` bằng script rồi đổi năm chỗ.
+    { ham: "award_kiem_mot_award_song", migration: "9583_award_withdrawn.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
@@ -3400,6 +3404,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
+        "9582_award_luot_cham_moi_nhat.sql",
+        "9583_award_withdrawn.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7888,6 +7894,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
+        "9582_award_luot_cham_moi_nhat.sql",
+        "9583_award_withdrawn.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8192,6 +8200,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
+        "9582_award_luot_cham_moi_nhat.sql",
+        "9583_award_withdrawn.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
@@ -8698,4 +8708,47 @@ describe("[S1.110 / khoản 226] thêm một trạng thái RFQ phải phân lo�
     const thieu = tapDong.filter((t) => !phanLoai.has(t));
     expect(thieu, "một trạng thái chưa phân loại phải lộ ra").toEqual(["AWARDED"]);
   });
+});
+
+// ==============================================================================================
+// [S1.9182 / khoản 231 · 232 / 9582 · 9583] HAI MIGRATION MỚI VÀ BẢN GHIM CỦA CHÚNG NÓI CÙNG MỘT CÂU TRÊN CỤM THẬT
+//
+// Bẫy S1.96, gặp lại ở S1.110: hardening chạy bước SỬA trước vòng migration đánh số và PHÁN XÉT sau, nên một hàm đã ghim mà
+// chỉ đổi trong migration bị dựng lại về bản ghim ở lượt `migrate()` KẾ — migration thành no-op trong im lặng và không cổng nào
+// đỏ. Hai ca `HAM_56` ở trên so VĂN BẢN (thân migration = thân hardening, con trỏ là migration cuối); ca này đọc CATALOG sau
+// HAI lượt `migrate()`: thân đang sống phải mang vế mới sau cả lượt hardening thứ hai, và CHECK phải nhận `WITHDRAWN`.
+// ==============================================================================================
+describe("[S1.9182 / khoản 231 · 232] thân award đang sống sau migrate() mang vế mới, và CHECK trạng thái award nhận WITHDRAWN", { timeout: 180_000 }, () => {
+  it("prosrc của hai hàm mang tên ràng buộc mới SAU CẢ lượt migrate() thứ hai; rfq_awards_status_check liệt kê BỐN trạng thái", async () => {
+    const db = await startPostgres();
+    try {
+      const lan1 = await migrate(db.pool, MIGRATIONS_DIR);
+      expect(lan1.slice(-2)).toEqual(["9582_award_luot_cham_moi_nhat.sql", "9583_award_withdrawn.sql"]);
+      const docThan = async (): Promise<Record<string, string>> => {
+        const { rows } = await db.pool.query<{ proname: string; prosrc: string }>(
+          "SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace " +
+            "AND proname IN ('award_kiem_de_xuat', 'award_kiem_mot_award_song') ORDER BY proname",
+        );
+        expect(rows.map((r) => r.proname)).toEqual(["award_kiem_de_xuat", "award_kiem_mot_award_song"]);
+        return Object.fromEntries(rows.map((r) => [r.proname, r.prosrc]));
+      };
+      const kiem = (than: Record<string, string>, luc: string): void => {
+        expect(than["award_kiem_de_xuat"], `${luc}: vế lượt chấm mới nhất`).toContain("CONSTRAINT = 'j5_luot_cham_khong_moi_nhat'");
+        for (const t of ["j7_rut_khong_o_proposed", "j7_rut_khong_phai_nguoi_de_xuat", "j7_rut_da_co_chu_ky"]) {
+          expect(than["award_kiem_mot_award_song"], `${luc}: vế ${t}`).toContain(`CONSTRAINT = '${t}'`);
+        }
+      };
+      kiem(await docThan(), "sau lượt 1");
+      const { rows: ck } = await db.pool.query<{ def: string }>(
+        "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint " +
+          " WHERE conrelid = 'public.rfq_awards'::regclass AND conname = 'rfq_awards_status_check'",
+      );
+      expect(ck[0]?.def).toBe("CHECK ((status = ANY (ARRAY['PROPOSED'::text, 'APPROVED'::text, 'CANCELLED'::text, 'WITHDRAWN'::text])))");
+      // Lượt hai: không áp gì, và — đây là vế bắt bẫy S1.96 — hardening KHÔNG trả hai thân về bản cũ.
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      kiem(await docThan(), "sau lượt 2 (hardening chạy lại)");
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
 });

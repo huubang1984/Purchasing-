@@ -744,6 +744,84 @@ describe("bề mặt tệp", () => {
       });
     });
 
+    // [S1.9182 / khoản 232 / ADR-9282] Nút «Rút đề xuất» ở bước 7 của `/login`: chỉ hiện khi đề xuất mới nhất đang PROPOSED
+    // và chưa có chữ ký (đọc từ `GET /award`), và bấm thì gọi đúng `POST /rfqs/:id/award/withdraw` mang lý do. Trang không
+    // phải lớp có thẩm quyền — trigger `9583` là — nên ca này đo trang NÓI đúng và GỌI đúng, không đo luật.
+    describe("[S1.9182 / khoản 232] mo-thau: nút «Rút đề xuất» chỉ hiện khi đề xuất PROPOSED chưa chữ ký, và gọi đúng route", () => {
+      const RFQ = "22222222-2222-4222-8222-222222222222";
+      const award = (status: string, approvals: readonly unknown[]) => ({
+        awardId: "aw-1", rfqId: RFQ, evaluationId: "e-1", bidVersionId: "bv-1", status, reason: "gia thap",
+        actedBy: A.userId, actedAt: "2026-09-30T00:00:00Z", approvals,
+      });
+      /** Trang đã vào phiên A, đọc gói `RFQ` (bước 2), và mọi lời gọi của bước 7 có stub. */
+      const dung = async (traAward: () => { status: number; body: unknown }, rut?: { status: number; body: unknown }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: A,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `POST /rfqs/${RFQ}/award`) return Promise.resolve({ status: 201, body: { award: award("PROPOSED", []) } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve(traAward());
+            if (l === `POST /rfqs/${RFQ}/award/withdraw`) return Promise.resolve(rut ?? { status: 201, body: { award: award("WITHDRAWN", []) } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        return p;
+      };
+      const daGoiRut = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.than.filter((t) => t.lenh === `POST /rfqs/${RFQ}/award/withdraw`).map((t) => t.than);
+
+      it("PROPOSED, 0 chữ ký ⇒ nút hiện sau khi trang đọc đề xuất; bấm ⇒ POST /award/withdraw mang lý do; đọc lại thấy WITHDRAWN ⇒ nút ẩn", async () => {
+        let lan = 0;
+        const p = await dung(() => ({ status: 200, body: { award: award((lan += 1) === 1 ? "PROPOSED" : "WITHDRAWN", []) } }));
+        expect(p.el("nut-rut-de-xuat").hidden, "chưa đọc đề xuất nào: ẩn như HTML khai").toBe(true);
+        p.el("bao-gia-thang").value = "bv-1";
+        p.el("ly-do-award").value = "gia thap";
+        await p.bam("nut-de-xuat");
+        expect(p.el("nut-rut-de-xuat").hidden, "PROPOSED chưa chữ ký ⇒ rút được").toBe(false);
+        p.el("ly-do-award").value = "bam nham bao gia";
+        await p.bam("nut-rut-de-xuat");
+        expect(daGoiRut(p)).toEqual([{ reason: "bam nham bao gia" }]);
+        expect(p.el("ok7").textContent).toMatch(/^Đã rút đề xuất/u);
+        expect(p.el("loi7").hidden).toBe(true);
+        expect(p.el("nut-rut-de-xuat").hidden, "đọc lại thấy WITHDRAWN ⇒ không còn gì để rút").toBe(true);
+      });
+
+      it("PROPOSED ĐÃ CÓ chữ ký ⇒ nút ẩn; APPROVED ⇒ ẩn; chưa có đề xuất ⇒ ẩn — trang không mời một hành động mà CSDL sẽ từ chối", async () => {
+        for (const [ten, tra] of [
+          ["có chữ ký", { status: 200, body: { award: award("PROPOSED", [{ approverUserId: B.userId, approvedAt: "2026-09-30T01:00:00Z" }]) } }],
+          ["APPROVED", { status: 200, body: { award: award("APPROVED", [{ approverUserId: B.userId, approvedAt: "2026-09-30T01:00:00Z" }]) } }],
+          ["chưa có", { status: 200, body: { award: null } }],
+        ] as const) {
+          const p = await dung(() => tra);
+          p.el("bao-gia-thang").value = "bv-1";
+          p.el("ly-do-award").value = "gia thap";
+          await p.bam("nut-de-xuat");
+          expect(p.el("nut-rut-de-xuat").hidden, ten).toBe(true);
+        }
+      });
+
+      it("lý do trống ⇒ câu nói lý do bắt buộc và KHÔNG gọi máy chủ; máy chủ từ chối 422 có tên ⇒ câu của máy chủ ở ô lỗi, nút vẫn hiện", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: award("PROPOSED", []) } }), { status: 422, body: { error: "Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve." } });
+        p.el("bao-gia-thang").value = "bv-1";
+        p.el("ly-do-award").value = "gia thap";
+        await p.bam("nut-de-xuat");
+        p.el("ly-do-award").value = "   ";
+        await p.bam("nut-rut-de-xuat");
+        expect(daGoiRut(p), "lý do trống thì không một lời gọi nào").toEqual([]);
+        expect(p.el("loi7").textContent).toMatch(/Lý do là BẮT BUỘC/u);
+        p.el("ly-do-award").value = "rut ho";
+        await p.bam("nut-rut-de-xuat");
+        expect(daGoiRut(p)).toEqual([{ reason: "rut ho" }]);
+        expect(p.el("loi7").textContent).toBe("Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve.");
+        expect(p.el("ok7").hidden).toBe(true);
+        expect(p.el("nut-rut-de-xuat").hidden, "từ chối thì trạng thái đề xuất không đổi, nút vẫn hiện").toBe(false);
+      });
+    });
+
     it("nop-thau: xoá fragment đúng MỘT lần sau /guest/otp/verify thành công; mã sai thì fragment ở lại", async () => {
       let lanXac = 0;
       const p = await dungTrang("nop-thau", {
