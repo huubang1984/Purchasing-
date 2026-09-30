@@ -25,6 +25,9 @@
 // Một bộ đọc thứ tư chọn phong bì theo luồng mà bỏ vế ⇒ đỏ ở đây; một bộ đọc dùng bí danh khác `i`
 // hay `v` thì lớp này mù — nói ra.
 // ==============================================================================================
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { moiCauSql, type CauSql } from "./qt3-doc-sql.js";
 
@@ -158,5 +161,48 @@ describe("[S1.243 / khoản 271] câu ĐẾM luồng báo giá qua lời mời c
     expect([laCauDemLuong(daoThuTu), viPhamMotVe([mau(daoThuTu)])]).toEqual([true, ["mau.ts:1 (0 vế)"]]);
     expect([laCauDemLuong(kiemBanMa), laCauChonPhongBi(kiemBanMa)]).toEqual([false, false]);
     expect(laCauDemLuong(demLoiMoi)).toBe(false);
+  });
+});
+
+// ==============================================================================================
+// [S1.9101 / khoản 299] CON SỐ LÀ SỐ SẼ DỰ THẦU — VÀ NHÃN TRÊN MÀN NÓI ĐÚNG NGHĨA ẤY
+//
+// Khối trên giữ câu ĐẾM mang vế lời mời còn sống (khoản 271): `bidCount.count` là số báo giá SẼ DỰ THẦU. Hàng 299 (lượt soi đối
+// kháng của 271): nhãn của `/mo-thau` vẫn in "Đã nhận N báo giá" — bên mua thu hồi một lời mời đã có báo giá (ADR-128) thì màn
+// nói "Đã nhận 1" trong khi hai báo giá đã nhận. Lớp này đọc CÂY CÚ PHÁP của trang (không import `apps/`: không cạnh depcruise
+// nào) và xét thứ trang IN ĐƯỢC — mọi literal chuỗi và khuôn, không chú thích: đúng MỘT khuôn là câu mới (kể cả vế "?" khi thân
+// không mang số), và không literal nào còn chữ «Đã nhận».
+//
+// PHÁT BIỂU ĐÚNG MỨC: ghim theo chữ, ở một tệp; không chạy trang (bộ dựng trang ở `apps/web/src/phuc-vu.test.ts`, ngoài phạm vi lô
+// này). Lời khai của MCP (`ROUTE_DOC_KHONG_PHOI`) ghim ở `apps/mcp/src/cong-cu.test.ts`; chú thích route ở
+// `apps/api/src/routes/buyer.ts` sửa cùng vòng nhưng không ghim (một chú thích); dòng A6 của `docs/TEST-PLAN.md` là tệp của người
+// tích hợp. Tên hàm (`countReceivedBids`) và trường (`bidCount`) KHÔNG đổi — đổi là đổi hợp đồng API.
+// ==============================================================================================
+const GOC_KHO = fileURLToPath(new URL("../../", import.meta.url));
+const TRANG_MO_THAU = "apps/web/trang/mo-thau.js";
+const NHAN_SO_BAO_GIA = '`${c?.count ?? "?"} báo giá sẽ dự thầu (không kể lời mời đã thu hồi). Không một mức giá nào đọc được ở đây.`';
+
+/** Văn bản nguồn của mọi literal chuỗi và khuôn (template) của một tệp JS — thứ trang in được; chú thích không tính. */
+function literalCua(tep: string, js: string): string[] {
+  const sf = ts.createSourceFile(tep, js, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const ra: string[] = [];
+  const duyet = (n: ts.Node): void => {
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) ra.push(n.getText(sf));
+    ts.forEachChild(n, duyet);
+  };
+  duyet(sf);
+  return ra;
+}
+
+describe("[S1.9101 / khoản 299] nhãn số báo giá trên `/mo-thau` nói «sẽ dự thầu», không «đã nhận»", () => {
+  it("[S1.9101 / khoản 299] trang in `N báo giá sẽ dự thầu (không kể lời mời đã thu hồi)` từ `bidCount.count`, giữ `?` khi không có số; không literal nào còn chữ «Đã nhận»", () => {
+    const lit = literalCua(TRANG_MO_THAU, readFileSync(`${GOC_KHO}${TRANG_MO_THAU}`, "utf8"));
+    expect(lit.filter((l) => l === NHAN_SO_BAO_GIA), `${TRANG_MO_THAU} phải in đúng một lần câu ${NHAN_SO_BAO_GIA}`).toHaveLength(1);
+    expect(lit.filter((l) => /Đã nhận/u.test(l)), "nghĩa cũ của con số (trước khoản 271) không được đứng lại trên màn").toEqual([]);
+  });
+
+  it("bộ đọc literal tự kiểm: thấy chuỗi, khuôn có và không có biểu thức; không thấy chú thích", () => {
+    const lit = literalCua("mau.js", '// Đã nhận trong chú thích\nconst a = "x";\nconst b = `y`;\nconst c = `Đã nhận ${n} báo giá`;\n/* Đã nhận */\n');
+    expect(lit).toEqual(['"x"', "`y`", "`Đã nhận ${n} báo giá`"]);
   });
 });

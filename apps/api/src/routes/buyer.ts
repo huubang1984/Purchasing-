@@ -471,7 +471,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/bid-count",
     audience: "BUYER",
     mutates: false,
-    // [khoản 141] số hồ sơ thầu đã nhận — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
+    // [khoản 141] số ~~hồ sơ thầu đã nhận~~ [S1.9101 / khoản 299] báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (khoản 271,
+    // ADR-128); tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API) — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
     agent: false,
     handler: async (ctx) => ({
       status: 200,
@@ -609,6 +610,18 @@ export function thanLuotCham(ld: LuotDanhGia): {
 } {
   return { evaluationId: ld.evaluationId, policyId: ld.policyId, policyVersion: ld.policyVersion, currency: ld.currency };
 }
+
+/**
+ * [S1.9101 / khoản 293] Câu 409 của *Gửi lại link* khi gói không nhận báo giá (`RFQ_NOT_ACCEPTING` của `reissueInvitationLink`).
+ * Chủ dự án chốt 2026-09-30: GIỮ nút ở mọi trạng thái của tổ chức chưa bật (hợp đồng MVP1 «máy chủ tự từ chối», `nutLoiMoi` của
+ * `apps/web/src/tao-thau.ts`), nên câu từ chối là thứ người mua ĐỌC — `/tao-thau` in nguyên văn (`loiCua`). ~~`goi thau khong nhan
+ * bao gia`~~ — câu máy, không dấu, không nói khi nào gửi được. Hằng, không nội suy trạng thái hay hạn: câu nêu CẢ HAI điều kiện mà
+ * `reissueInvitationLink` đòi (gói `OPEN` còn hạn nộp; vòng BAFO đang mở còn hạn của vòng) — khuôn câu 422 của huỷ mở thầu
+ * (`packages/unseal/src/requests.ts`). Ba câu khác của route (404, 409 đã thu hồi, 429) giữ nguyên.
+ */
+const CAU_GOI_KHONG_NHAN_BAO_GIA =
+  "Gói thầu này không nhận báo giá lúc này nên không gửi lại link được — chỉ gửi lại được khi gói đang mở và còn hạn nộp, " +
+  "hoặc khi vòng BAFO đang mở và còn hạn.";
 
 // ----------------------------------------------------------------------------------------------
 // GHI — mỗi route một mã quyền. `resourceId` đọc từ ĐƯỜNG DẪN, không từ thân.
@@ -1409,7 +1422,8 @@ const ghi: readonly BuyerWriteRoute[] = [
       if (!kq.ok) {
         if (kq.reason === "NOT_FOUND") throw new HttpError(404, "khong co loi moi");
         if (kq.reason === "REVOKED") throw new HttpError(409, "loi moi da thu hoi");
-        if (kq.reason === "RFQ_NOT_ACCEPTING") throw new HttpError(409, "goi thau khong nhan bao gia");
+        // ~~`"goi thau khong nhan bao gia"`~~ [S1.9101 / khoản 293] câu người đọc nêu điều kiện gửi lại được.
+        if (kq.reason === "RFQ_NOT_ACCEPTING") throw new HttpError(409, CAU_GOI_KHONG_NHAN_BAO_GIA);
         return { status: 429, body: { error: "da gui qua nhieu link cho loi moi nay" }, headers: { "retry-after": String(CUA_SO_LINK_MOI_GIAY) } };
       }
       const loi = kq.invitation;

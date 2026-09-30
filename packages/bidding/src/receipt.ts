@@ -37,7 +37,14 @@ const TRUONG = [
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HEX64_PATTERN = /^[0-9a-f]{64}$/;
 const THOI_GIAN_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
-/** `kid` đi vào một dòng `khoa=gia-tri`, nên nó không được mang `\n` hay `=`. */
+/**
+ * `kid` đi vào một dòng `khoa=gia-tri`, nên nó không được mang `\n` hay `=`.
+ *
+ * [S1.9101 / kid] Đây là tập của ĐỊNH DẠNG ĐÃ KÝ và nó KHÔNG đổi: phía PHÁT HÀNH hẹp hơn (`assertReceiptKid` của `signer.ts` bỏ
+ * `:` — kid thành tên đối tượng khi neo tài liệu khoá), còn phía KIỂM phải đọc được mọi văn bản định dạng này cho phép. Siết hằng
+ * này là đổi định dạng — thứ ADR-026 §1 cấm (cùng lập luận H11-11 ở `tools/neo-so-kiem-toan/src/index.ts`); ca "định dạng không
+ * đổi" ở `receipt.test.ts` ghim chiều ấy.
+ */
 const KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
 
 export class ReceiptError extends Error {

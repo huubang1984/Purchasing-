@@ -210,13 +210,16 @@ resource "aws_kms_alias" "receipt_sign" {
 
 # [ADR-070] kid và nửa công khai sống CÙNG chỗ với khoá: đổi alias sang khoá mới mà không đổi kid là một biên
 # nhận ký bằng khoá này nhưng khai kid của khoá kia. Stack 90 đọc cả hai từ state của stack này.
+# [S1.9101 / kid] Tập ~~[A-Za-z0-9._:-]~~ [A-Za-z0-9._-] — tập phát hành của `assertReceiptKid` (packages/bidding/src/signer.ts),
+# cùng khuôn `neo_kid` của stack 40: kid thành tên đối tượng `khoa-bien-nhan/<kid>.json` khi job neo neo tài liệu khoá. Một kid có
+# `:` đỏ ở `plan`, không phải lúc api/public-keys khởi động.
 variable "receipt_kid" {
   description = "kid của khoá mà alias/tp-receipt-sign đang trỏ tới — đi vào văn bản biên nhận (ADR-011 mục 3)."
   type        = string
   default     = "kms-2026-09"
   validation {
-    condition     = can(regex("^[A-Za-z0-9._:-]{1,64}$", var.receipt_kid))
-    error_message = "receipt_kid: 1–64 ký tự [A-Za-z0-9._:-]."
+    condition     = can(regex("^[A-Za-z0-9._-]{1,64}$", var.receipt_kid))
+    error_message = "receipt_kid: 1–64 ký tự [A-Za-z0-9._-], không \":\" (tên đối tượng khi neo tài liệu khoá biên nhận)."
   }
 }
 
