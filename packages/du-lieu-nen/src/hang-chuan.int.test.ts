@@ -383,10 +383,15 @@ describe("[S1.197 / S4.2a] quy đổi riêng — L4 vế ⑵", () => {
     const c = await db.pool.connect();
     try {
       await c.query("BEGIN");
-      const than = (await c.query<{ src: string }>("SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.quy_doi_don_vi(uuid, uuid, text, text, timestamptz)'::regprocedure")).rows[0]!.src;
+      // [S1.9101 / S4.4a] Vế ấy nay ở LÕI `quy_doi_da_giai` (`9501`, ADR-9201) — `quy_doi_don_vi` chỉ giải hai chuỗi rồi gọi lõi.
+      const than = (
+        await c.query<{ src: string }>(
+          "SELECT prosrc AS src FROM pg_proc WHERE oid = 'public.quy_doi_da_giai(uuid, uuid, text, text, text, text, timestamptz)'::regprocedure",
+        )
+      ).rows[0]!.src;
       expect(than, "vế đột biến phải có mặt để gỡ").toContain("AND c.ghi_luc < p_moc");
-      await c.query(`CREATE OR REPLACE FUNCTION public.quy_doi_don_vi(
-          p_org uuid, p_hang_chuan uuid, p_tu text, p_sang text, p_moc timestamptz)
+      await c.query(`CREATE OR REPLACE FUNCTION public.quy_doi_da_giai(
+          p_org uuid, p_hang_chuan uuid, p_tu text, p_khoa_tu text, p_sang text, p_khoa_sang text, p_moc timestamptz)
           RETURNS TABLE (he_so numeric, ma text) LANGUAGE sql STABLE SET search_path = pg_catalog, public
           AS $ham$${than.replace("AND c.ghi_luc < p_moc", "")}$ham$`);
       await c.query("SELECT set_config('app.org_id', $1, true)", [orgA]);
