@@ -9314,3 +9314,68 @@ Giữ hình dạng JSON của `GET /rfqs/:rfqId/comparison` và của `Compariso
 - Không đổi một byte nào của thân HTTP hay của `ComparisonTable`; `apps/web/trang/mo-thau.js` và `tools/pilot-gia-lap` không đổi.
 - Miền của `totalAmount` chuẩn là một dòng của hợp đồng: một báo giá từ 10^16 là `unparsed`, không phải một số nhỏ hơn.
 - Ngày cần số chính xác trong `payload` (nếu có khách hàng đòi), điểm đổi là ⑴ ở tầng route kèm một bộ phân tích phía client — và ca ghim sẽ đỏ đúng lúc ấy.
+
+## ADR-9243 — Payload sổ của lượt mở thầu mang `failedCount`, tối đa K = 20 id phong bì hỏng đầu và cờ cắt; phần còn lại suy từ dữ liệu, không bảng mới
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — hình dạng do đề bài lô A5 chốt (chủ dự án chốt 2026-09-30); K = 20 và thứ tự
+ổn định là điểm tôi tự chốt trong phạm vi ấy, chủ dự án bác được · **[S1.9143]** · **Liên quan:** khoản 137 (S1.72; đóng ở đây), khoản 134
+(nguồn), ADR-041/`003` (sổ chỉ ghi thêm, CHECK payload), `019` (`rfq_unsealed_bids`), S1.109 (`bafo_round_id` trong payload), [REVIEW AN
+NINH S1.4 — HIGH-2] (đích danh, không chỉ đếm) · **Biên bản:** `evidence/security-reviews.md` §S1.9143 · **Khoản:** 137
+
+### Bối cảnh
+
+`executeUnsealRequest` (`apps/unseal-worker/src/index.ts`) gom id của mọi phong bì không mở được — `failedBidVersionIds`, ĐÍCH DANH theo
+HIGH-2 của S1.4 — rồi ghi trọn mảng ấy vào payload của HAI bản ghi sổ `RFQ_KEY_MATERIAL_UNWRAPPED` và `RFQ_UNSEALED`. Sổ chỉ ghi thêm, mỗi
+hàng nối băm, không xoá được. Đo trên mã trước vòng này (§S1.9143): ~40 byte một id, tuyến tính theo số phong bì hỏng N — N = 50 ⇒ 2 147
+byte, N = 500 ⇒ 20 147 byte mỗi bản ghi; `audit_append` với 5 000 id ⇒ 200 038 byte, 21–43 ms. Không trần sẵn: `003` chỉ CHECK hình dạng
+đối tượng và khoá mang giá; không migration nào đặt trần số lời mời của một gói, và số phong bì hỏng là thứ NHÀ CUNG CẤP quyết (một trình
+duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thước hai hàng sổ vĩnh viễn của tổ chức.
+
+### Quyết định
+
+1. **Payload của cả hai bản ghi mang ba trường, luôn có mặt:** `failedCount` (số phong bì hỏng, ĐỦ), `failedBidVersionIds` (tối đa
+   **K = `FAILED_BID_VERSION_IDS_AUDIT_CAP` = 20** id ĐẦU), `failedBidVersionIdsTruncated` (`true` khi và chỉ khi `failedCount > K`). N = 0
+   ⇒ `0, [], false`. Hằng ở `apps/unseal-worker/src/index.ts`, test ghim K = 20.
+2. **Thứ tự ổn định = thứ tự luồng của câu chọn phong bì** (`ORDER BY v.bid_id, v.version DESC` với `DISTINCT ON (v.bid_id)`): K id ghi là
+   tiền tố của mảng đầy đủ, và của kết quả câu suy ở (3). Không sắp lại theo tiêu chí khác.
+3. **Phần không vào sổ SUY được từ dữ liệu đã có, không bảng mới, không migration.** Với yêu cầu mở thầu `$1` của tổ chức `$2` (chạy trong
+   phiên gắn tổ chức, hay bởi người vận hành đọc được bốn bảng), tập phong bì hỏng — kể cả K id đã ghi — theo cùng thứ tự luồng là:
+   ```sql
+   SELECT v.id FROM (
+     SELECT DISTINCT ON (v.bid_id) v.id, v.bid_id
+       FROM vendor_bid_versions v
+       JOIN vendor_bids b ON b.id = v.bid_id AND b.org_id = v.org_id
+       JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id
+       JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id
+      WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id
+      ORDER BY v.bid_id, v.version DESC) v
+    WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u
+                       WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)
+    ORDER BY v.bid_id;
+   ```
+   Câu này là đúng vế phủ định của việc worker làm: phong bì (bản cuối mỗi luồng, đúng vòng) mà lượt mở thầu KHÔNG để lại hàng bản rõ.
+   `rfq_unsealed_bids` là bảng tenant có RLS sẵn (`019`); sổ chỉ ghi thêm nên hai hàng sổ cùng `failedCount` là mốc đối chiếu cho câu này.
+4. **Giá trị trả về trong tiến trình (`UnsealOutcome.failedBidVersionIds`) KHÔNG cắt** — nó không lưu; docstring nói thứ có trần là sổ.
+5. **Bản ghi cũ không sửa** (sổ chỉ ghi thêm): thiếu `failedCount` nghĩa là ghi trước vòng này, mảng khi ấy là đầy đủ.
+
+### Phương án đã cân nhắc
+
+- **Chứng minh trần sẵn từ số luồng báo giá tối đa của một gói** (vế một của thân khoản). Đo: không có trần — `010`, `024`, `076` không
+  chặn số lời mời; đặt một trần mới cho số lời mời là một quyết định SẢN PHẨM, không phải kỹ thuật. Bác.
+- **Phần còn lại sang một bảng có RLS** (vế hai của thân khoản, nửa sau). Cần migration, khai bảng tenant ở hardening, một đường ghi mới
+  dưới `app_unseal`, và một bảng chỉ để chứa thứ đã suy được từ `rfq_unsealed_bids` — đề bài lô A5 nói dừng nếu buộc phải thêm bảng.
+  Không cần: (3) suy được từ dữ liệu có sẵn. Bác.
+- **Ghi trọn mảng, đặt trần ở CHECK của `003`.** Sổ đứng trước một lượt mở thầu hợp lệ mà từ chối ghi thì RFQ không tuyên bố được
+  `UNSEALED` — một bên ngoài chặn được lượt mở thầu bằng cách nộp nhiều phong bì hỏng. Bác.
+- **Chỉ đếm, không id.** Đúng thứ HIGH-2 của S1.4 đã loại: "đã mở 4 trên 5" không phân biệt với "5 trên 5" ở chỗ nào phía sau. Bác.
+- **K khác 20.** K nhỏ hơn thì ca thường (vài phong bì hỏng) mất đích danh; K lớn hơn thì trần byte tăng tuyến tính mà không mua thêm gì —
+  từ 21 trở đi người đọc phải dùng (3) dù sao. 20 là điểm tự chốt, bác được.
+
+### Hệ quả
+
+- Hai bản ghi sổ của một lượt mở thầu ~1 KB mỗi hàng dù N là bao nhiêu (đo: N = 50 và N = 500 đều 1 004–1 005 byte).
+- Người đọc sổ thấy đủ đích danh khi N ≤ 20; khi N > 20 thấy 20 id đầu, số đủ và cờ, rồi chạy (3) để lấy phần còn lại — cần quyền đọc
+  bốn bảng và biết id yêu cầu mở thầu (có trong payload).
+- Câu (3) chưa đo trên vòng BAFO (`bafo_round_id` khác NULL) và chưa có chỗ chạy ngoài test — khoản 9444.
+- `kich-ban-41*.int.test.ts` đọc `payload.bafoRoundId`/`opened` không đổi; không tệp nào ngoài worker đọc `failedBidVersionIds` của payload.
+```

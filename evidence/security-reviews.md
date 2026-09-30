@@ -17285,6 +17285,32 @@ Mọi đột biến đã hoàn tác; `git status` chỉ còn năm tệp của l�
 - Đột biến vế mới: bảy đỏ (mục 6).
 - Cổng: mục 8 của bàn giao.
 
+# §S1.9143 — DÒNG "LỖI KẾT NỐI TỚI MUỘN" ĐO BẰNG HÀNH VI Ở HAI TIẾN TRÌNH; TRẦN K ID PHONG BÌ HỎNG VÀO SỔ (ADR-9243) — KHOẢN 183, 137 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — test, một hằng và một khối gom payload ở worker mở
+thầu, hai bộ nghe dời ra mức module, một câu lời khai ở cổng kiến trúc; không route, không màn, không migration. Đóng 183, 137; mở 9443, 9444.
+
+## 1. Vòng này là gì
+
+Lô A5 của đợt trả nợ lô B (đợt 2), hai khoản ở `apps/unseal-worker` (và một tệp test ở `apps/api`). Khoản 183 — lớp S1.84 (sự kiện
+lỗi-tới-muộn trên pool, ADR-041) có cổng kiến trúc đòi mọi pool gắn listener, nhưng cổng chỉ đo SỰ CÓ MẶT của lời gọi: thân bộ nghe
+thành no-op thì cổng vẫn xanh, và không tệp test nào ghim dòng `loi ket noi toi muon`. Khoản 137 — hai bản ghi sổ của một lượt mở thầu
+mang trọn mảng `failedBidVersionIds`, không trần, trong một sổ chỉ ghi thêm và nối băm; thân khoản đòi đo theo N và quyết hình dạng ở ADR.
+
+## 2. Quyết định của chủ dự án
+
+Không có; vòng trả nợ theo phân công ngày 2026-09-30 (đề bài lô A5 chốt hình dạng payload: `failedCount` + K = 20 id đầu + cờ, không bảng
+mới). Điểm tự chốt trong phạm vi ấy ở mục 5.
+
+## 3. Đo trước
+
+- **183** — đột biến sống trên mã cũ, đúng lời khoản: thân `ghiLogLoiKetNoiToiMuon` (`apps/api/src/mo-ta-loi.ts`) thành no-op ⇒
+  `tests/architecture/pool-nghe-du-tin-hieu.test.ts` **9/9 xanh**; `ghiLoiToiMuon` của worker no-op ⇒ cổng **9/9 xanh**. Hai tệp int mới
+  (viết trước khi đổi gì ở mã sản xuất, chạy trên chính hai đột biến ấy) ĐỎ ở đúng vế: `expected [] to deeply equal [ Array(1) ]` — tức
+  KHÔNG dòng log nào ra khi kết nối nhiễm tới sau trần. Trên mã không đột biến, cả hai tệp xanh: dòng có sẵn từ S1.84, thứ thiếu là phép đo.
+- **137** — `executeUnsealRequest` thật (`unseal-worker.int.test.ts` fixture: N phong bì niêm phong cho một RFQ KHÁC — đúng ca `unsealBid` từ
+  chối — cộng 1 phong bì tốt), đọc lại hai bản ghi bằng `octet_length(payload::text)` / `pg_column_size(payload)`:
+
 # §S1.9151 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không
