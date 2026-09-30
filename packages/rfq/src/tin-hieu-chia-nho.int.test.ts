@@ -316,7 +316,7 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới 
     // Chốt hỏi TRƯỚC `issueRfqKeyPair` (khoản 31): không một hàng khoá nào của gói bị từ chối.
     expect(await khoaDaDuc(g3)).toBe(0);
 
-    const doc = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, g3));
+    const doc = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId: g3, actorSessionId: t.pm3.s }));
     expect(doc.canGhiNhan).toBe(true);
     expect(doc.hienTai).toEqual(daGhi[0]!.bang_chung);
     expect(doc.tinHieu.map((x) => [x.id, x.nguon, x.doTinCay, x.ghiNhan.length])).toEqual([[daGhi[0]!.id, "NOP_DUYET", "XAC_DINH", 0]]);
@@ -327,7 +327,7 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới 
     expect(await hangSo(t.org, "GOVERNANCE_SIGNAL_ACKNOWLEDGED", g3)).toEqual([
       { signalId: daGhi[0]!.id, ackId: (kq as { ackId: string }).ackId, lyDo: "Ba cong trinh, ba hop dong khung khac nhau" },
     ]);
-    const sau = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, g3));
+    const sau = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId: g3, actorSessionId: t.pm3.s }));
     expect(sau.canGhiNhan).toBe(false);
     expect(sau.tinHieu[0]!.ghiNhan.map((a) => [a.nguoi, a.lyDo])).toEqual([[t.pm3.u, "Ba cong trinh, ba hop dong khung khac nhau"]]);
 
@@ -422,7 +422,11 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới 
     const e = await mo(t, g4);
     expect((e as ChotKiemSoatError).lyDo).toBe("TIN_HIEU_CHUA_GHI_NHAN");
     expect(await khoaDaDuc(g4)).toBe(0);
-    expect((await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, g4))).canGhiNhan).toBe(true);
+    const troi = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId: g4, actorSessionId: t.pm3.s }));
+    expect(troi.canGhiNhan).toBe(true);
+    // [S3.6b2] Bản đồ gói phủ cả bằng chứng CŨ: gói 1 đã rời tập, nhưng hàng tín hiệu lúc nộp còn nhắc nó — màn gọi được tên nó.
+    expect(Object.keys(troi.goi).sort()).toEqual(sapXep([g1, g2, g3, g4]));
+    expect(troi.goi[g1]?.trangThai).toBe("DRAFT");
 
     // Lớp chặn cuối: một lần ghi nhận viết tay trỏ tới tín hiệu CŨ — bằng chứng của nó không còn là kết quả hiện tại.
     const tay = await loi(
@@ -661,5 +665,80 @@ describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới 
       .map(([k]) => k);
     expect(sapXep([...traVe])).toEqual(sapXep(k10a));
     for (const ma of k10a) expect(CHOT_VAO_SO[ma as keyof typeof CHOT_VAO_SO].vaoSo, ma).toBe(true);
+  });
+});
+
+// =============================================================================================
+// [S3.6b2] HÀM ĐỌC NÓI TRƯỚC CHO MÀN `/tao-thau` — chủ dự án chốt ngày 2026-09-30: trả thêm, chỉ đọc.
+//
+// Màn đọc tín hiệu mỗi lần nạp gói (route không cổng), nên thứ hàm đọc nói phải đúng với thứ cổng sẽ làm: người gây ra tín hiệu,
+// người khai phiên bản và người không giữ `rfq.approve` đọc được VÌ SAO không, trước khi bấm — cú bấm ấy để một hàng
+// `CONTROL_DENIED` (hay `PERMISSION_DENIED`) cộng vào trần từ chối của phiên (ADR-112). Bản thân lần đọc không ghi sổ.
+// =============================================================================================
+
+async function hoTen(u: string): Promise<string> {
+  return (await db.pool.query<{ ten: string }>("SELECT full_name AS ten FROM users WHERE id = $1", [u])).rows[0]!.ten;
+}
+
+async function soHangSo(org: string): Promise<number> {
+  return (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1", [org])).rows[0]!.n;
+}
+
+describe("[S3.6b2] hàm đọc tín hiệu nói trước cho màn: tên gói, họ tên người, ai ghi nhận được — và không ghi sổ", () => {
+  it("người tạo, người nộp gói anh em, người khai phiên bản và FINANCE đọc được lý do KHÔNG; người độc lập đọc ĐƯỢC; một người trong tổ chức ghi nhận được; đọc không để hàng sổ nào; sau lần ghi nhận không còn gì cần ghi nhận", async () => {
+    const t = await taoToChuc();
+    const thep = await taoNhom(t, "THEP");
+    const g1 = await goiDaNop(t, thep, "480000000.00");
+    const g2 = await goiDaNop(t, thep, "470000000.00", t.pm2);
+    const g3 = await goiDaNop(t, thep, "490000000.00");
+    const doc = (ai: Nguoi): ReturnType<typeof lietKeTinHieu> =>
+      withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId: g3, actorSessionId: ai.s }));
+    const truoc = await soHangSo(t.org);
+
+    const tuPm = await doc(t.pm);
+    expect(tuPm.canGhiNhan).toBe(true);
+    expect(tuPm.nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep });
+    expect((await doc(t.pm2)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep });
+    expect((await doc(t.pmCs)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TAC_GIA_CHINH_SACH.thongDiep });
+    // FINANCE không giữ quyền của cạnh bị chặn — quyền được hỏi TRƯỚC luật người, cùng thứ tự với `ghiNhanTinHieu`.
+    expect((await doc(t.tc)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: "Ghi nhận tín hiệu cần quyền duyệt gói thầu." });
+
+    const tuPm3 = await doc(t.pm3);
+    expect(tuPm3.nguoiXem).toEqual({ ghiNhanDuoc: true, lyDo: null });
+    // Bốn người giữ `rfq.approve` (bốn PROCUREMENT_MANAGER); luật người loại người tạo, người nộp gói 2 và người khai phiên bản.
+    expect(tuPm3.soNguoiGhiNhanDuoc).toBe(1);
+    expect(tuPm3.goi).toEqual({
+      [g1]: { tieuDe: "Thep 480000000.00", trangThai: "PENDING_APPROVAL" },
+      [g2]: { tieuDe: "Thep 470000000.00", trangThai: "PENDING_APPROVAL" },
+      [g3]: { tieuDe: "Thep 490000000.00", trangThai: "PENDING_APPROVAL" },
+    });
+    // Hàng tín hiệu lúc nộp do người NỘP gói ghi (`ghiTinHieuKhiNop`).
+    expect(tuPm3.tinHieu.map((x) => [x.nguoiGhi, x.nguoiGhiTen])).toEqual([[t.pm.u, await hoTen(t.pm.u)]]);
+
+    // Năm lần đọc — ba người bị luật người loại, một người không giữ quyền — không để một hàng sổ nào.
+    expect(await soHangSo(t.org)).toBe(truoc);
+    expect(await hangChot(t.org, g3)).toEqual([]);
+
+    await ghiNhan(t, g3, t.pm3, "Ba cong trinh, ba hop dong khung khac nhau");
+    const sau = await doc(t.pm3);
+    expect([sau.canGhiNhan, sau.nguoiXem, sau.soNguoiGhiNhanDuoc]).toEqual([false, { ghiNhanDuoc: false, lyDo: null }, null]);
+    expect(sau.tinHieu[0]!.ghiNhan.map((a) => [a.nguoi, a.nguoiTen, a.lyDo])).toEqual([
+      [t.pm3.u, await hoTen(t.pm3.u), "Ba cong trinh, ba hop dong khung khac nhau"],
+    ]);
+  });
+
+  it("gói không có tín hiệu: không gì cần ghi nhận, bản đồ gói rỗng, không ai được mời bấm", async () => {
+    const t = await taoToChuc();
+    const thep = await taoNhom(t, "THEP");
+    const g = await goiDaNop(t, thep, "480000000.00");
+    const doc = await withTenant(apiPool, t.org, (c) => lietKeTinHieu(c, t.org, { rfqId: g, actorSessionId: t.pm3.s }));
+    expect(doc).toMatchObject({
+      hienTai: null,
+      canGhiNhan: false,
+      tinHieu: [],
+      goi: {},
+      nguoiXem: { ghiNhanDuoc: false, lyDo: null },
+      soNguoiGhiNhanDuoc: null,
+    });
   });
 });
