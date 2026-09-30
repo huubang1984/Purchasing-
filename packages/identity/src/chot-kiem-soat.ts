@@ -7,7 +7,9 @@
 //
 // Luật chọn lọc của ADR-060 giữ nguyên: lời từ chối nói NGƯỜI DÙNG cố đi tắt một chốt thì vào sổ;
 // lời từ chối nói dữ liệu hay cấu hình vừa đổi dưới chân họ thì không. Hàng sổ ở giao dịch ĐỘC LẬP
-// qua `throwAuditedDenial`, và payload chỉ mang MÃ.
+// qua `throwAuditedDenial`, và payload chỉ mang MÃ. [S1.241 / khoản 279] Mã ấy cũng đi làm VẾ của lời gọi (đối số thứ năm), nên
+// khi lần ghi sổ gãy, dòng log của lần MẤT SỔ nói được chốt nào — `DANH_MUC_VE_CONG` ở `rbac.ts` chép từ vựng của bảng dưới đây,
+// và `danh-muc-tu-choi.test.ts` đòi bản chép bằng tập khoá của `CHOT_VAO_SO`.
 //
 // [S1.180 / khoản 247 / ADR-108] BẢNG DỜI XUỐNG GÓI NÀY từ `packages/rfq/src/chot-kiem-soat.ts`, đúng như
 // chú thích ở đó đã hẹn: khi một gói khác cần, bảng dời xuống một gói cả hai cùng phụ thuộc — không mọc
@@ -30,6 +32,10 @@
 // (`088_tin_hieu_chia_nho.sql`), tầng gói hỏi trước câu ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Chủ dự
 // án chốt ngày 2026-09-29: người gây ra tự ghi nhận thì vào sổ.
 //
+// [S1.231 / khoản 231] `J5_LUOT_CHAM_KHONG_MOI_NHAT` — vế *lượt chấm mới nhất* mà `093` thêm vào `award_kiem_de_xuat` với
+// tên ràng buộc `j5_luot_cham_khong_moi_nhat`. ADR-108 đòi tên hai phía khớp nhau (cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts`
+// đọc cả thân trigger ấy), nên tên ấy có dòng ở đây dù đường sản xuất không tới được nó: `deXuatTraoThau` tự suy lượt mới nhất.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -43,7 +49,10 @@ import type pg from "pg";
 import type { ActorType } from "@trustprocure/audit";
 import { throwAuditedDenial } from "./rbac.js";
 
-/** Toàn bộ từ vựng chốt kiểm soát. Thêm một mã là thêm một dòng ở `CHOT_VAO_SO`. */
+/**
+ * Toàn bộ từ vựng chốt kiểm soát. Thêm một mã là thêm một dòng ở `CHOT_VAO_SO` — [S1.241 / khoản 279] và một tên ở `DANH_MUC_VE_CONG`
+ * (`rbac.ts`), không thì dòng log mất sổ của mã ấy ra `HANG_LA` (vế ⑷ của `danh-muc-tu-choi.test.ts` đỏ cho tới khi thêm).
+ */
 export type MaChotKiemSoat =
   | "BAC_LECH_HAM_PHAN_BAC"
   | "D2_NGUOI_TAO_TU_DUYET"
@@ -53,6 +62,7 @@ export type MaChotKiemSoat =
   | "J3_NGUOI_DIEU_PHOI_DE_XUAT"
   | "J3_NGUOI_TAO_DE_XUAT"
   | "J3_PHIEN_DE_XUAT_DUYET"
+  | "J5_LUOT_CHAM_KHONG_MOI_NHAT"
   | "K4A_THEM_SAI_TRANG_THAI"
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
@@ -85,7 +95,8 @@ export interface DongChot {
 /**
  * Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166); bảy dòng J3/D2
  * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi"); hai dòng K4a cũng vậy
- * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ").
+ * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ"); một dòng J5 (S1.231 / khoản 231) theo cùng lý lẽ của
+ * `D2_PHIEN_NGUOI_KHAC`: đường sản xuất không tới được, câu ghi nào tới được thì đúng là thứ kiểm toán viên cần thấy.
  */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
   THIEU_NGAN_SACH: {
@@ -241,6 +252,21 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.180)",
     thongDiep: "Phiên đã dùng để đề xuất trao thầu không được dùng để duyệt đề xuất ấy (J3).",
   },
+  // [S1.231 / khoản 231 / 093] Vế *lượt chấm mới nhất* của J5 — trigger `award_kiem_de_xuat` đặt tên, `deXuatTraoThau` bắt
+  // CHÍNH lỗi của nó. Vào sổ: `deXuatTraoThau` tự suy lượt mới nhất và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở
+  // `EVALUATING`, tạo lượt đòi `UNSEALED`/`BAFO_UNSEALED`), nên câu ghi nào tới được nhánh này là một award trỏ vào bảng xếp hạng
+  // ĐÃ BỊ THAY THẾ — một đường ghi thứ hai vào `rfq_awards`, hay một lượt chấm sinh dưới chân người đề xuất (cái giá khoản 231
+  // ghi) — đúng thứ kiểm toán viên cần thấy, cùng lý lẽ `D2_PHIEN_NGUOI_KHAC`.
+  J5_LUOT_CHAM_KHONG_MOI_NHAT: {
+    chot: "J5",
+    vaoSo: true,
+    lyDo:
+      "award trỏ vào một lượt chấm KHÔNG còn là lượt mới nhất của gói thầu — một đề xuất dựa trên bảng xếp hạng TRƯỚC BAFO hay " +
+      "trước một lần chấm lại (spec S2 §8.1⑴). Đường sản xuất không tới được; câu ghi nào tới được là một đường ghi thứ hai hay " +
+      "một lượt chấm sinh dưới chân người đề xuất, và kiểm toán viên cần thấy đúng lần ấy",
+    thongDiep:
+      "Bảng xếp hạng đã đổi từ khi chọn báo giá: gói thầu có một lượt chấm mới hơn — đọc lại bảng xếp hạng rồi đề xuất lại (J5).",
+  },
 };
 
 /**
@@ -256,6 +282,8 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
+  // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`093`).
+  j5_luot_cham_khong_moi_nhat: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
@@ -337,5 +365,9 @@ export async function tuChoiTheoChotTaiNguyen(
       payload: { ma },
     },
     loi,
+    // [S1.241 / khoản 279] CÙNG mã làm VẾ (đối số thứ năm) — `DenialAuditFailedError.clause`: khi lần ghi này gãy (55P03), hàng
+    // sổ mang mã là hàng không ghi được, và dòng log của bộ điều phối là `… CONTROL_DENIED RFQ <- error 55P03` cho mọi chốt. Mã ra
+    // dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG` (`rbac.ts`), nơi từ vựng `CHOT_VAO_SO` được chép và đối chiếu với bảng này.
+    ma,
   );
 }

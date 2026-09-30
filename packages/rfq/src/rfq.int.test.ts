@@ -1632,9 +1632,11 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
       thaA = r;
     });
     let aDaHuy = false;
+    let pidA = -1;
     let pidB = -1;
 
     const huyA = withTenant(apiPool, orgA, async (c) => {
+      pidA = (await c.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
       await cancelRfq(c, orgA, { rfqId, reason: "huy lan mot", actorSessionId: s1 }, apiPool);
       aDaHuy = true;
       await choA;
@@ -1653,12 +1655,20 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
     const msB = await choToiKhiBiChanK126(() => pidB, 8_000);
     const dangCho = await loaiKhoaDangCho(pidB);
     const khoaB = await demKhoaGhiSoK126(pidB);
+    // [S1.220 / khoản 149 ⑵] ĐỐI CHỨNG DƯƠNG CỦA PHÉP DÒ, ĐO TRONG CÙNG CẢNH: lần huỷ thứ nhất đã ghi sổ `RFQ_CANCELLED` và còn
+    // giữ giao dịch mở, nên ngay lúc này nó phải đang giữ ĐÚNG MỘT khoá tư vấn ghi sổ của tổ chức — và phép dò phải THẤY nó.
+    // Không vế này, `expect(khoaB).toBe(0)` là một khẳng định RỖNG: một phép dò hỏng (luôn ra 0) làm nó xanh (đột biến đo được,
+    // §S1.220). Cùng khuôn `gia-han-xep-job-truoc-ghi-so.int.test.ts` [lượt soi 65c-3]; hàng 149 trỏ nhầm tệp ấy, chỗ thiếu là đây.
+    const khoaA = await demKhoaGhiSoK126(pidA);
     thaA();
     await huyA;
     const ketCucB = await huyB;
 
-    const ke = `lần huỷ thứ hai bị chặn sau ${msB} ms, đang chờ khoá loại "${dangCho}", giữ ${khoaB} khoá ghi sổ, kết cục "${ketCucB}"`;
+    const ke =
+      `lần huỷ thứ hai bị chặn sau ${msB} ms, đang chờ khoá loại "${dangCho}", giữ ${khoaB} khoá ghi sổ, kết cục "${ketCucB}"; ` +
+      `lần huỷ thứ nhất (pid ${pidA}) giữ ${khoaA} khoá ghi sổ`;
     expect(msB, `tiền đề: lần huỷ thứ hai phải bị chặn — ${ke}`).toBeGreaterThanOrEqual(0);
+    expect(khoaA, `đối chứng dương: phép dò phải thấy khoá ghi sổ mà lần huỷ thứ nhất đang giữ — ${ke}`).toBe(1);
     expect(dangCho, `phải chờ khoá HÀNG của câu UPDATE — ${ke}`).toContain("transactionid");
     expect(dangCho, `không được chờ khoá tư vấn ghi sổ: thế thì nó đã ghi sổ TRƯỚC khi khoá hàng — ${ke}`).not.toContain("advisory");
     expect(khoaB, ke).toBe(0);

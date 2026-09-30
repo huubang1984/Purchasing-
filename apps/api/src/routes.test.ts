@@ -16,13 +16,24 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import ts from "typescript";
+import { describe, expect, it, vi } from "vitest";
+import { MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU } from "@trustprocure/identity";
 // [khoản nợ 59] Cây nguồn là tài nguyên DÙNG CHUNG: probe bên dưới có thật trên đĩa, và
 // `tests/architecture/boundaries.test.ts` quét TOÀN kho ở một tiến trình khác. Khoá này là
 // thứ giữ hai lượt quét không giẫm lên nhau — xem khối lý do đầy đủ trong chính tệp khoá.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
-import { MIEN_TRAN_NGUOI_GOI, agentGoiDuoc, timViPhamBangRoute, type Route } from "./route-types.js";
-import { ROUTES } from "./routes.js";
+import { MIEN_TRAN_NGUOI_GOI, THAN_429_MFA, agentGoiDuoc, timViPhamBangRoute, type BuyerContext, type BuyerSelfRoute, type Route } from "./route-types.js";
+
+// [S1.209 / khoản 188] `verifyTotpForLogin` được thay bằng một bản giả GHI LẠI đối số — khối cuối tệp đo handler của route tự thân
+// truyền ngưỡng nào xuống câu lệnh. `vi.mock` được kéo lên trước mọi import, nên `ROUTES` nạp bản giả; mọi khối khác của tệp này chỉ
+// đọc HÌNH DẠNG bảng route và không gọi hàm ấy.
+const { verifyTotpForLoginGia } = vi.hoisted(() => ({ verifyTotpForLoginGia: vi.fn() }));
+vi.mock("@trustprocure/identity", async (goc) => ({
+  ...(await goc<typeof import("@trustprocure/identity")>()),
+  verifyTotpForLogin: verifyTotpForLoginGia,
+}));
+const { ROUTES } = await import("./routes.js");
 
 const GOC = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -296,5 +307,106 @@ describe("[khoản 190] đường TÌM yêu cầu mở thầu đóng cửa với
     expect(r, "bảng ROUTES không còn đường GET /unseal/:unsealRequestId").toBeDefined();
     if (r === undefined) return;
     expect(agentGoiDuoc(r)).toBe(true);
+  });
+});
+
+// ==============================================================================================
+// [S1.209 / khoản 188] NGƯỠNG ĐƯỜNG PHỤ ĐI TỪ BẢNG ROUTE XUỐNG CÂU LỆNH QUA `ctx` — HANDLER KHÔNG TỰ NHẬP HẰNG
+//
+// S1.83 khai *"cùng một hằng `MFA_TRAN_SAI_DUONG_PHU` ở cả hai chỗ nên hai nơi không trôi khỏi nhau"* — đúng cho GIÁ TRỊ, không đúng cho
+// SỰ CÓ MẶT (S1.87): một `BuyerSelfRoute` mới khai `mfaTranDuongPhu` ở bảng mà handler quên truyền `tranDuongPhu` xuống `verifyTotpForLogin`
+// thì chỉ còn cổng đi trước của bộ điều phối — chính đường tắt kiểm-rồi-làm mà S1.83 vá —, và MỌI test tuần tự vẫn xanh. Từ vòng này bộ
+// điều phối điền `route.mfaTranDuongPhu` vào `ctx.mfaTranDuongPhu` (`dispatch.ts`), và handler đọc từ ĐÓ. Hai vế đo ở T1, không Postgres:
+//   ⑴ HÀNH VI, trên chính handler của bảng `ROUTES`, `verifyTotpForLogin` thay bằng bản giả ghi đối số: đưa vào `ctx` một ngưỡng LẠ
+//      (khác hằng) thì câu lệnh phải nhận đúng ngưỡng ấy. Trên mã trước vòng này handler nhập hằng ⇒ nhận 2 dù ctx nói 3 ⇒ ĐỎ.
+//   ⑵ HÌNH DẠNG, đọc cây cú pháp `routes/**`: `MFA_TRAN_SAI_DUONG_PHU` chỉ được đứng ở dòng import và ở chính lời khai
+//      `mfaTranDuongPhu:` của route — không ở đâu khác, tức không trong thân handler nào. Trên mã trước vòng này ⇒ ĐỎ ở
+//      `tranDuongPhu: MFA_TRAN_SAI_DUONG_PHU` của `/auth/agent-session`.
+// PHÁT BIỂU ĐÚNG MỨC: vế ⑴ đòi route khai ngưỡng thì handler thử mã QUA `verifyTotpForLogin` với đúng ngưỡng ấy — một handler thử mã bằng
+// đường khác thì vế này đỏ, và đó là chủ ý (đường thử mã của người mua là một). Chiều CÙNG LÚC — ngưỡng ấy có đứng khi N lời gọi song
+// song không — đo ở `auth.int.test.ts` vế ⑼.
+// ==============================================================================================
+describe("[S1.209 / khoản 188] ngưỡng đường phụ: bộ điều phối đưa vào ctx, handler truyền xuống câu lệnh", () => {
+  // Khác hằng (2) để phân biệt "đọc từ ctx" với "nhập hằng"; nhỏ hơn ngưỡng khoá (5) để vẫn là một ngưỡng có nghĩa.
+  const NGUONG_LA = 3;
+
+  function ctxGia(mfaTranDuongPhu: number | null): BuyerContext {
+    const ctx = {
+      req: { method: "POST", path: "/auth/agent-session", params: {}, body: { code: "000000" }, cookies: {}, requestId: "t1-188", remoteAddress: "" },
+      orgId: "00000000-0000-4000-8000-00000000000a",
+      client: {},
+      actor: { type: "USER", id: "00000000-0000-4000-8000-00000000000b", sessionId: "00000000-0000-4000-8000-00000000000c", kind: "USER" },
+      auditPool: {},
+      services: {},
+      afterCommit: () => undefined,
+      afterCommitCoBu: () => undefined,
+      afterCommitLoGui: () => undefined,
+      choKyChinhSach: false,
+      mfaTranDuongPhu,
+    };
+    return ctx as unknown as BuyerContext;
+  }
+
+  it("⑴ mỗi route tự thân khai ngưỡng khác null: handler truyền ĐÚNG `ctx.mfaTranDuongPhu` xuống `verifyTotpForLogin`, và hết ngân sách ⇒ 429 thân cố định", async () => {
+    expect(NGUONG_LA).not.toBe(MFA_TRAN_SAI_DUONG_PHU);
+    expect(NGUONG_LA).toBeLessThan(MFA_MAX_FAILED_ATTEMPTS);
+    const coNguong = ROUTES.filter((r): r is BuyerSelfRoute => r.audience === "BUYER" && r.mutates && r.self === true && r.mfaTranDuongPhu !== null);
+    expect(coNguong.map((r) => `${r.method} ${r.path}`), "phải có ít nhất một route tự thân khai ngưỡng — nếu không vế này rỗng ruột").toContain("POST /auth/agent-session");
+    for (const r of coNguong) {
+      verifyTotpForLoginGia.mockReset();
+      verifyTotpForLoginGia.mockResolvedValue({ ok: false, reason: "SIDE_PATH_EXHAUSTED", lockedUntil: null, justLocked: false });
+      const ph = await r.handler(ctxGia(NGUONG_LA));
+      const ten = `${r.method} ${r.path}`;
+      expect(verifyTotpForLoginGia, `${ten}: route khai ngưỡng thì phải thử mã qua verifyTotpForLogin đúng một lần`).toHaveBeenCalledTimes(1);
+      const thamSo = verifyTotpForLoginGia.mock.calls[0]?.[1] as { tranDuongPhu?: number } | undefined;
+      expect(thamSo?.tranDuongPhu, `${ten}: câu lệnh phải nhận ngưỡng bộ điều phối đưa vào ctx (${String(NGUONG_LA)}), không phải hằng (${String(MFA_TRAN_SAI_DUONG_PHU)})`).toBe(NGUONG_LA);
+      expect(ph.status, ten).toBe(429);
+      expect(ph.body, ten).toEqual(THAN_429_MFA);
+    }
+  });
+
+  it("⑵ trong `apps/api/src/routes/**`, `MFA_TRAN_SAI_DUONG_PHU` chỉ đứng ở import và ở lời khai `mfaTranDuongPhu:` của route — không trong thân handler", () => {
+    const viPham: string[] = [];
+    let soKhai = 0;
+    for (const t of quetNguonApi().filter((d) => d.includes("/routes/"))) {
+      const sf = ts.createSourceFile(t, readFileSync(join(GOC, t), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const duyet = (n: ts.Node): void => {
+        if (ts.isIdentifier(n) && n.text === "MFA_TRAN_SAI_DUONG_PHU") {
+          const cha = n.parent;
+          const laImport = ts.isImportSpecifier(cha);
+          const laKhaiRoute = ts.isPropertyAssignment(cha) && cha.initializer === n && ts.isIdentifier(cha.name) && cha.name.text === "mfaTranDuongPhu";
+          if (laKhaiRoute) soKhai += 1;
+          if (!laImport && !laKhaiRoute) viPham.push(`${t}:${String(sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1)}`);
+        }
+        ts.forEachChild(n, duyet);
+      };
+      duyet(sf);
+    }
+    expect(viPham, "hằng ngưỡng xuất hiện ngoài lời khai của route — một handler đang tự nhập ngưỡng thay vì đọc `ctx.mfaTranDuongPhu`").toEqual([]);
+    // Đối chứng: lời khai ở route vẫn dùng hằng — nguồn duy nhất của giá trị vẫn là `MFA_TRAN_SAI_DUONG_PHU`.
+    expect(soKhai, "không route nào khai `mfaTranDuongPhu: MFA_TRAN_SAI_DUONG_PHU` — phép đọc rỗng ruột").toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ==============================================================================================
+// [S1.216 / khoản 195 / ADR-126] ĐƯỜNG TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — HÌNH DẠNG TRÊN BẢNG ROUTE
+//
+// Thông điệp gộp ba trạng thái ở route VÔ DANH (`LoginTokenError`) giữ nguyên: nó là chống dò tìm. Đường
+// mới mở cho người ĐÃ chứng minh danh tính: một route ĐỌC của người mua dưới `/auth/*`, không mã quyền
+// (nó chỉ đọc hàng của CHÍNH người gọi — `userId` dẫn xuất từ cookie ở bộ điều phối, như `/me`), và
+// ĐÓNG với tác tử chỉ-đọc: một chứng chỉ agent rò không được đọc lịch sử link đăng nhập của chủ nó.
+// Ghim vì đây là một QUYẾT ĐỊNH, không phải một mặc định — cùng lý do với khoản 190 ở trên.
+// ==============================================================================================
+describe("[S1.216 / khoản 195] đường tự xem link đăng nhập gần đây", () => {
+  it("GET /auth/login-links là route ĐỌC của người mua dưới /auth/*, không mã quyền, và đóng cửa với tác tử chỉ-đọc", () => {
+    const r = ROUTES.find((x) => x.method === "GET" && x.path === "/auth/login-links");
+    expect(r, "bảng ROUTES không có đường GET /auth/login-links").toBeDefined();
+    if (r === undefined) return;
+    expect(r.audience).toBe("BUYER");
+    expect(r.audience === "BUYER" && r.mutates).toBe(false);
+    expect("permission" in r, "route đọc của chính mình không khai mã quyền — cùng khuôn `/me`").toBe(false);
+    expect(agentGoiDuoc(r)).toBe(false);
+    // Bảng route thật vẫn không vi phạm nào — vế E6 (không tham số credential trong URL) và hai lời khai `agent` áp cho nó.
+    expect(timViPhamBangRoute(ROUTES)).toEqual([]);
   });
 });

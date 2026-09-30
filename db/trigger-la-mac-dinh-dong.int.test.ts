@@ -22,8 +22,20 @@
 //      `IF EXISTS`) vẫn chạy được;
 //   ⑺ một `app.hardening_sau_vong = 'khong'` đặt sẵn ở mức vai không tắt được lần gỡ (migrate() đặt GUC ở MỌI
 //      lượt), và đặt ngay trong phiên cũng không tắt được lượt phán xét.
+//
+// [S1.244 / khoản 288 / ADR-124] Mọi thông điệp của mục — WARNING «đã GỠ» ở lượt sửa lẫn dòng của bản gom phán xét — nêu
+// BẢNG, TÊN và VÂN TAY định nghĩa (`left(encode(sha256(convert_to(pg_get_triggerdef(oid), 'UTF8')), 'hex'), 16)`, cùng khuôn
+// các hàng ghim khác), không in `pg_get_triggerdef`: trigger lạ là mã người khác viết, và mệnh đề WHEN của nó mang được hằng
+// (đúng lớp ADR-124 tả); người vận hành tra định nghĩa bằng TÊN trong một phiên psql. Kỳ vọng ⑵ ⑶ ⑸ ⑺ ~~ghim nguyên
+// `CREATE TRIGGER …`~~ nay ghim vân tay, tính lại hai cách (trong CSDL trên trigger tra theo tên, và bằng node:crypto trên văn
+// bản định nghĩa); ⑻ đo một hằng UUID trong WHEN không ra log ở cả hai lối (gỡ và phán xét).
+//
+// [S1.244 / khoản 171] Khối cuối tệp đo MỤC (C) của hardening, không phải mục khoản 259 — đặt ở đây vì đây là tệp tích hợp
+// duy nhất của lô đo hardening trên cụm đã migrate: miễn trừ của `NGOAI_LE_DOC_VONG` nay CÓ ĐIỀU KIỆN cùng hai hàng ghim thay
+// chỗ nó, và hàng ghim IM (dòng `schema_migrations` của migration khai sinh vắng) trong khi hàm được miễn trừ có mặt thì KÊU.
 // ===============================================================================================
 
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -100,6 +112,30 @@ async function boPhienCu(): Promise<void> {
 const goCua = (canhBao: readonly string[], ten: string): string[] =>
   canhBao.filter((c) => c.includes(DAU_GO) && c.includes(` ${ten} `));
 
+/** [S1.244 / khoản 288] Vân tay theo ADR-124 tính NGOÀI CSDL: 16 ký tự hex đầu của sha256 trên UTF-8 của văn bản định nghĩa. */
+const vanTayNode = (dinhNghia: string): string => createHash("sha256").update(dinhNghia, "utf8").digest("hex").slice(0, 16);
+
+/**
+ * [S1.244 / khoản 288] Cùng công thức, tính TRONG CSDL trên trigger tra theo (bảng, TÊN) — đúng cách người vận hành tra
+ * (ADR-124 mục 6). Trả kèm văn bản định nghĩa: TEST được đọc định nghĩa, chỉ log deploy thì không.
+ */
+async function traTheoTen(bang: string, ten: string): Promise<{ readonly vanTay: string; readonly dinhNghia: string }> {
+  const { rows } = await db.pool.query<{ v: string; d: string }>(
+    "SELECT left(encode(sha256(convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16) AS v, pg_get_triggerdef(t.oid) AS d " +
+      "  FROM pg_trigger t WHERE t.tgrelid = $1::regclass AND t.tgname = $2",
+    [bang, ten],
+  );
+  expect(rows, `trigger ${ten} trên ${bang} phải tra được bằng tên`).toHaveLength(1);
+  expect(rows[0]!.v, "vân tay tính trong CSDL bằng vân tay tính ngoài CSDL trên cùng văn bản").toBe(vanTayNode(rows[0]!.d));
+  return { vanTay: rows[0]!.v, dinhNghia: rows[0]!.d };
+}
+
+/** [S1.244 / khoản 288] Đoạn quanh một giá trị trong thông điệp — RỖNG khi không rò; lần đỏ in đúng chỗ rò (khuôn `doanMang` S1.210). */
+const doanRo = (thongDiep: string, giaTri: string): string => {
+  const i = thongDiep.indexOf(giaTri);
+  return i < 0 ? "" : thongDiep.slice(Math.max(0, i - 120), i + giaTri.length + 60);
+};
+
 beforeAll(async () => {
   db = await startPostgres();
   const canhBao: string[] = [];
@@ -131,10 +167,16 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
     expect(await triggerCua("public.rfq_approvals"), "dàn cảnh: bản đổi tên xếp trước chốt D2").toEqual(
       [...chuan.filter((t) => t !== "rfq_approvals_so_lan_nop"), "rfq_approvals_a_so_lan_nop"].sort(),
     );
+    // [S1.244 / khoản 288] Tra TRƯỚC khi gỡ: sau lượt sửa trigger không còn để tra bằng tên.
+    const truocGo = await traTheoTen("public.rfq_approvals", "rfq_approvals_a_so_lan_nop");
     const { kq, canhBao } = await migrateLai();
     expect(kq).toBe("OK");
     expect(await triggerCua("public.rfq_approvals")).toEqual(chuan);
-    expect(goCua(canhBao, "rfq_approvals_a_so_lan_nop"), "gỡ được thì phải ỒN ÀO").toHaveLength(1);
+    const go = goCua(canhBao, "rfq_approvals_a_so_lan_nop");
+    expect(go, "gỡ được thì phải ỒN ÀO").toHaveLength(1);
+    // [S1.244 / khoản 288] WARNING «đã GỠ» nêu tên, bảng và VÂN TAY của định nghĩa vừa gỡ — không in định nghĩa (ADR-124).
+    expect(doanRo(go[0]!, "CREATE TRIGGER"), "WARNING «đã GỠ» in định nghĩa trigger").toBe("");
+    expect(go[0]).toContain(`đã GỠ trigger lạ rfq_approvals_a_so_lan_nop trên rfq_approvals (vân tay def=${truocGo.vanTay})`);
   });
 
   it("[INV-H19] ⑵ bản CHÉP THÂN hàm so lần nộp sang một tên hàm khác, gắn dưới tên xếp trước chốt D2, bị gỡ — phép kiểm 'đúng một trigger trỏ vào hàm' không thấy nó", async () => {
@@ -193,9 +235,20 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
       );
       const { kq, canhBao } = await migrateLai();
       expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại:/u);
+      // ~~expect(kq).toContain(`… (organizations.zz_org_sau_chen: TRIGGER LẠ ${CHI_PHAN_XET} — CREATE TRIGGER zz_org_sau_chen AFTER INSERT
+      // ON public.organizations FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi(); zz_kho.nhat_ky.zz_kho_truoc_chen: … — CREATE TRIGGER
+      // zz_kho_truoc_chen BEFORE INSERT ON zz_kho.nhat_ky …).`)~~ [S1.244 / khoản 288] Bản gom nêu bảng, tên và VÂN TAY định nghĩa —
+      // không định nghĩa (ADR-124); vân tay khớp vân tay tính lại trên trigger tra theo tên, trong CSDL và bằng node:crypto.
+      expect(doanRo(kq, "CREATE TRIGGER"), "bản gom in định nghĩa trigger").toBe("");
+      const org = await traTheoTen("public.organizations", "zz_org_sau_chen");
+      const kho = await traTheoTen("zz_kho.nhat_ky", "zz_kho_truoc_chen");
+      expect([org.dinhNghia, kho.dinhNghia], "tiền đề: văn bản mà bản gom CŨ in ra").toEqual([
+        "CREATE TRIGGER zz_org_sau_chen AFTER INSERT ON public.organizations FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()",
+        "CREATE TRIGGER zz_kho_truoc_chen BEFORE INSERT ON zz_kho.nhat_ky FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()",
+      ]);
       expect(kq).toContain(
-        `- "${TEN_MUC}": trạng thái hiện tại SAI (organizations.zz_org_sau_chen: TRIGGER LẠ ${CHI_PHAN_XET} — CREATE TRIGGER zz_org_sau_chen AFTER INSERT ON public.organizations FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi(); ` +
-          `zz_kho.nhat_ky.zz_kho_truoc_chen: TRIGGER LẠ ${CHI_PHAN_XET} — CREATE TRIGGER zz_kho_truoc_chen BEFORE INSERT ON zz_kho.nhat_ky FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()).`,
+        `- "${TEN_MUC}": trạng thái hiện tại SAI (organizations.zz_org_sau_chen: TRIGGER LẠ ${CHI_PHAN_XET} — vân tay def=${org.vanTay}; ` +
+          `zz_kho.nhat_ky.zz_kho_truoc_chen: TRIGGER LẠ ${CHI_PHAN_XET} — vân tay def=${kho.vanTay}).`,
       );
       expect(await triggerCua("public.organizations"), "không tự gỡ").toEqual(["zz_org_sau_chen"]);
       expect(await triggerCua("zz_kho.nhat_ky"), "không tự gỡ").toEqual(["zz_kho_truoc_chen"]);
@@ -254,7 +307,7 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
     expect((await migrateLai()).kq).toBe("OK");
   });
 
-  it("[INV-H19] ⑸ gỡ KHÔNG được (bảng có tên) thì lượt phán xét chặn deploy, nêu bảng, tên và định nghĩa của trigger lạ", async () => {
+  it("[INV-H19] ⑸ gỡ KHÔNG được (bảng có tên) thì lượt phán xét chặn deploy, nêu bảng, tên và ~~định nghĩa~~ VÂN TAY định nghĩa của trigger lạ (khoản 288)", async () => {
     await db.pool.query(
       "CREATE TRIGGER zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION public.zz_khong_lam_gi()",
     );
@@ -267,9 +320,15 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
     try {
       const { kq, canhBao } = await migrateLai();
       expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại:/u);
-      expect(kq).toContain(
-        `- "${TEN_MUC}": trạng thái hiện tại SAI (rfq_items.zz_khong_go_duoc: TRIGGER LẠ — CREATE TRIGGER zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()).`,
+      // ~~expect(kq).toContain(`- "${TEN_MUC}": trạng thái hiện tại SAI (rfq_items.zz_khong_go_duoc: TRIGGER LẠ — CREATE TRIGGER
+      // zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()).`)~~ [S1.244 / khoản 288]
+      // Vân tay thay định nghĩa (ADR-124); gỡ không được nên trigger còn đó để người vận hành tra theo tên — test tra đúng như thế.
+      expect(doanRo(kq, "CREATE TRIGGER"), "bản gom in định nghĩa trigger").toBe("");
+      const tl = await traTheoTen("public.rfq_items", "zz_khong_go_duoc");
+      expect(tl.dinhNghia, "tiền đề: văn bản mà bản gom CŨ in ra").toBe(
+        "CREATE TRIGGER zz_khong_go_duoc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION zz_khong_lam_gi()",
       );
+      expect(kq).toContain(`- "${TEN_MUC}": trạng thái hiện tại SAI (rfq_items.zz_khong_go_duoc: TRIGGER LẠ — vân tay def=${tl.vanTay}).`);
       expect(canhBao.filter((c) => c.includes("không gỡ được trigger lạ zz_khong_go_duoc"))).toHaveLength(1);
     } finally {
       await db.pool.query("DROP EVENT TRIGGER zz_chan_drop_trigger");
@@ -330,6 +389,7 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
     await db.pool.query(
       "CREATE TRIGGER zz_phan_xet_guc AFTER INSERT ON public.rfq_items FOR EACH ROW EXECUTE FUNCTION public.zz_khong_lam_gi()",
     );
+    const tl = await traTheoTen("public.rfq_items", "zz_phan_xet_guc");
     const client = await db.pool.connect();
     let loi: string | null = null;
     try {
@@ -344,6 +404,115 @@ describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger tr
       client.release();
       await db.pool.query("DROP TRIGGER IF EXISTS zz_phan_xet_guc ON public.rfq_items");
     }
-    expect(loi).toContain(`- "${TEN_MUC}": trạng thái hiện tại SAI (rfq_items.zz_phan_xet_guc: TRIGGER LẠ — `);
+    // [S1.244 / khoản 288] Trọn dòng, không chỉ tiền tố: sau `TRIGGER LẠ — ` là VÂN TAY, không phải định nghĩa.
+    expect(loi).toContain(`- "${TEN_MUC}": trạng thái hiện tại SAI (rfq_items.zz_phan_xet_guc: TRIGGER LẠ — vân tay def=${tl.vanTay}).`);
+  });
+});
+
+// ===============================================================================================
+// [S1.244 / khoản 288 / ADR-124] TRIGGER LẠ LÀ MÃ NGƯỜI KHÁC VIẾT — HẰNG TRONG MỆNH ĐỀ WHEN KHÔNG ĐƯỢC RA LOG DEPLOY
+//
+// Đo trên cây trước vòng (hardening của S1.205): trigger lạ mang `WHEN (NEW.… = '<uuid>'::uuid)` ⇒ bản gom phán xét và WARNING
+// «đã GỠ» in nguyên `pg_get_triggerdef`, UUID nằm giữa log. Cổng T1 của khoản 117 không bắt vì định nghĩa đi qua bí danh
+// `dinh_nghia` của `CAU_TRIGGER_LA_DU_AN` (cổng ấy nay có vế ⑸ đọc bí danh). Hai lối, mỗi lối một ca: bảng KHÔNG có tên (chỉ
+// phán xét — trigger còn đó để tra theo tên) và bảng CÓ tên (lượt sửa gỡ — tra TRƯỚC khi gỡ).
+// ===============================================================================================
+describe("[S1.244 / khoản 288] mục khoản 259 nêu bảng, tên và VÂN TAY định nghĩa — hằng trong WHEN không ra log", { timeout: 300000 }, () => {
+  const BI_MAT = "5f0c2d8e-7a14-4b36-9c21-e8d4a6b0f3c9";
+
+  it("⑻ phán xét (bảng không có tên): bản gom nêu bảng, tên, vân tay khớp vân tay tính lại — không định nghĩa, không UUID", async () => {
+    await db.pool.query(
+      `CREATE TRIGGER zz_org_bi_mat AFTER INSERT ON public.organizations FOR EACH ROW WHEN (NEW.id = '${BI_MAT}'::uuid) EXECUTE FUNCTION public.zz_khong_lam_gi()`,
+    );
+    try {
+      const tl = await traTheoTen("public.organizations", "zz_org_bi_mat");
+      expect(tl.dinhNghia, "dàn cảnh: định nghĩa mang hằng").toContain(BI_MAT);
+      const { kq, canhBao } = await migrateLai();
+      expect(kq).toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại:/u);
+      expect(doanRo(kq, BI_MAT), "bản gom phán xét mang hằng của mệnh đề WHEN").toBe("");
+      expect(doanRo(canhBao.join("\n"), BI_MAT), "một WARNING của lượt sửa mang hằng của mệnh đề WHEN").toBe("");
+      expect(kq).toContain(`organizations.zz_org_bi_mat: TRIGGER LẠ ${CHI_PHAN_XET} — vân tay def=${tl.vanTay})`);
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS zz_org_bi_mat ON public.organizations");
+    }
+    expect((await migrateLai()).kq).toBe("OK");
+  });
+
+  it("⑻ gỡ (bảng có tên): WARNING «đã GỠ» nêu tên, bảng, vân tay của định nghĩa vừa gỡ — không định nghĩa, không UUID", async () => {
+    await db.pool.query(
+      `CREATE TRIGGER zz_items_bi_mat BEFORE INSERT ON public.rfq_items FOR EACH ROW WHEN (NEW.org_id = '${BI_MAT}'::uuid) EXECUTE FUNCTION public.zz_khong_lam_gi()`,
+    );
+    try {
+      const tl = await traTheoTen("public.rfq_items", "zz_items_bi_mat");
+      expect(tl.dinhNghia, "dàn cảnh: định nghĩa mang hằng").toContain(BI_MAT);
+      const { kq, canhBao } = await migrateLai();
+      expect(kq).toBe("OK");
+      expect(await triggerCua("public.rfq_items")).not.toContain("zz_items_bi_mat");
+      expect(doanRo(canhBao.join("\n"), BI_MAT), "WARNING của lượt sửa mang hằng của mệnh đề WHEN").toBe("");
+      const go = goCua(canhBao, "zz_items_bi_mat");
+      expect(go).toHaveLength(1);
+      expect(go[0]).toContain(`đã GỠ trigger lạ zz_items_bi_mat trên rfq_items (vân tay def=${tl.vanTay})`);
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS zz_items_bi_mat ON public.rfq_items");
+    }
+  });
+});
+
+// ===============================================================================================
+// [S1.244 / khoản 171 ⑵] MỤC (C): MIỄN TRỪ CỦA `NGOAI_LE_DOC_VONG` CÓ ĐIỀU KIỆN CÙNG HAI HÀNG GHIM THAY CHỖ NÓ
+//
+// Hàm SECURITY DEFINER `public.outbox_danh_sach_to_chuc()` được mục (C) miễn trừ vì hai hàng ghim thay chỗ phép cấm: «định nghĩa
+// hàm outbox_danh_sach_to_chuc() (052)» (thân + chủ hàm) và «EXECUTE trên outbox_danh_sach_to_chuc() …» (ACL). Cả hai CÓ ĐIỀU KIỆN —
+// tiền điều kiện `052_worker_liet_ke_to_chuc.sql` có trong `schema_migrations` —, còn miễn trừ thì ~~VÔ ĐIỀU KIỆN~~: khi dòng ấy
+// vắng mà hàm có mặt, hai hàng IM và miễn trừ vẫn đứng — một thân tuỳ ý chạy dưới quyền chủ hàm mà không mục nào kêu (đo trên cây
+// trước vòng: phán xét đi qua). Nay miễn trừ đứng cùng điều kiện ấy (cột `mig` của dòng khai) và rơi khi nó không thoả: mục (C)
+// nêu hàm kèm lý do. Chạy hardening ở chế độ phan_xet trong một giao dịch rồi ROLLBACK — cụm dùng chung của tệp không đổi.
+// ===============================================================================================
+describe("[S1.244 / khoản 171] mục (C): miễn trừ NGOAI_LE_DOC_VONG có điều kiện cùng hai hàng ghim thay chỗ — hàng ghim IM mà hàm có mặt thì KÊU", { timeout: 300000 }, () => {
+  const THAN_LA = "SELECT o.id FROM public.organizations o UNION ALL SELECT '00000000-0000-4000-8000-000000000000'::pg_catalog.uuid";
+
+  /** Chạy hardening ở chế độ phan_xet trong MỘT giao dịch sau `dan` (dàn cảnh), rồi ROLLBACK. Trả thông điệp lỗi hay null. */
+  async function phanXetSau(dan: readonly string[]): Promise<string | null> {
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const cau of dan) await client.query(cau);
+      await client.query("SELECT set_config('app.hardening_che_do', 'phan_xet', true)");
+      await client.query(HARDENING);
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      client.release();
+    }
+  }
+  const THAY_THAN =
+    "CREATE OR REPLACE FUNCTION public.outbox_danh_sach_to_chuc() RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER " +
+    `SET search_path = pg_catalog AS $ham$ ${THAN_LA} $ham$`;
+  const XOA_DONG_052 = "DELETE FROM public.schema_migrations WHERE version = '052_worker_liet_ke_to_chuc.sql'";
+  const MUC_C = '- "view/matview/hàm SECURITY DEFINER đọc vòng qua RLS": trạng thái hiện tại SAI (public.outbox_danh_sach_to_chuc(): hàm SECURITY DEFINER';
+  const LY_DO = "Hàm ĐÃ khai ở NGOAI_LE_DOC_VONG (migration 052_worker_liet_ke_to_chuc) nhưng migration ấy KHÔNG có trong schema_migrations";
+
+  it("đối chứng: dòng 052 có mặt ⇒ miễn trừ đứng, hàng ghim thân + chủ hàm là lớp thay thế và KÊU về thân lạ; mục (C) im", async () => {
+    expect(await phanXetSau([]), "tiền đề: cụm đã migrate đi qua phán xét").toBeNull();
+    const loi = await phanXetSau([THAY_THAN]);
+    expect(loi).toContain('- "định nghĩa hàm outbox_danh_sach_to_chuc() (052)": trạng thái hiện tại SAI');
+    expect(loi).not.toContain(MUC_C);
+  });
+
+  it("dòng 052 vắng, thân lạ ⇒ hai hàng ghim IM; miễn trừ rơi theo và mục (C) KÊU, nêu hàm và lý do", async () => {
+    const loi = await phanXetSau([THAY_THAN, XOA_DONG_052]);
+    expect(loi, "phán xét đi qua trong khi thân lạ chạy dưới quyền chủ hàm — miễn trừ vô điều kiện").not.toBeNull();
+    expect(loi).not.toContain('- "định nghĩa hàm outbox_danh_sach_to_chuc() (052)"');
+    expect(loi).toContain(MUC_C);
+    expect(loi).toContain(LY_DO);
+  });
+
+  it("dòng 052 vắng, thân CHUẨN ⇒ vẫn KÊU: điều kiện là lớp thay thế có mặt, không phải thân đang đúng", async () => {
+    const loi = await phanXetSau([XOA_DONG_052]);
+    expect(loi, "phán xét đi qua trong khi hai hàng ghim thay chỗ miễn trừ đang IM").not.toBeNull();
+    expect(loi).toContain(MUC_C);
+    expect(loi).toContain(LY_DO);
   });
 });

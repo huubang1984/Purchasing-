@@ -48,15 +48,25 @@ export function nhanLoiMoi(status: unknown, moiSauKhiKy: unknown): string {
 const GOI_NHAN_BAO_GIA: ReadonlySet<string> = new Set(["OPEN", "BAFO_OPEN"]);
 
 /**
+ * [S1.240 / khoản 276 / ADR-128] Trạng thái gói từ lần mở thầu đầu tiên — `UNSEALED` và mọi trạng thái đi tới từ nó, trừ
+ * `CANCELLED`. Bản sao ĐỂ ĐỌC của `RFQ_STATUSES_AFTER_UNSEAL` (`packages/invitation`, tập mà `revokeInvitation` chặn thu hồi): module
+ * này chạy trong trình duyệt nên không import gói máy chủ; `tao-thau.test.ts` suy tập từ `RFQ_TRANSITIONS` — cùng phép suy ghim hằng
+ * của gói ở `invitation.int.test.ts` — và đo màn theo nó, nên hai bản không lệch mà không đỏ.
+ */
+const GOI_SAU_MO_THAU: ReadonlySet<string> = new Set(["UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"]);
+
+/**
  * Hai nút của một dòng lời mời.
  *   · Lời mời đã thu hồi: không nút nào.
- *   · Tổ chức chưa bật: như MVP1 — cả hai nút, máy chủ tự từ chối ca nó không cho.
+ *   · Tổ chức chưa bật: như MVP1 — ~~cả hai nút~~ *Gửi lại link* ở mọi trạng thái, máy chủ tự từ chối ca nó không cho.
+ *     [S1.240 / khoản 276] *Thu hồi* ẩn sau lần mở thầu (`GOI_SAU_MO_THAU`): từ ADR-128 máy chủ chặn thu hồi ở đó bằng một 422
+ *     câu cố định, nên nút ấy là một nút không bao giờ đi được.
  *   · Tổ chức đã bật: *Thu hồi* chỉ ở DRAFT (K4a — ở OPEN thu hồi bị chặn tới S3.6, ở PENDING_APPROVAL phải trả gói về
  *     soạn thảo trước); *Gửi lại link* chỉ khi gói nhận báo giá — trước lần mở gói chưa có token nào để gửi (K6).
  */
 export function nutLoiMoi(daBat: boolean, trangThaiGoi: string, daThuHoi: boolean): { readonly guiLai: boolean; readonly thuHoi: boolean } {
   if (daThuHoi) return { guiLai: false, thuHoi: false };
-  if (!daBat) return { guiLai: true, thuHoi: true };
+  if (!daBat) return { guiLai: true, thuHoi: !GOI_SAU_MO_THAU.has(trangThaiGoi) };
   return { guiLai: GOI_NHAN_BAO_GIA.has(trangThaiGoi), thuHoi: trangThaiGoi === "DRAFT" };
 }
 
@@ -146,6 +156,37 @@ export function hangNganSach(budget: unknown): readonly (readonly [string, strin
     ["Bậc từ", chu(b.tierTuSoTien)],
     ["Cần hai người duyệt", b.requiresDualApproval === true ? "có" : b.requiresDualApproval === false ? "không" : null],
   ];
+}
+
+/**
+ * [S1.234 / lượt soi S4.3b, L3] Cột *Hàng chuẩn* chỉ hiện khi nó nói được điều gì: tổ chức có hàng chuẩn đang dùng (`coHangChuan` của
+ * `GET /rfqs/:rfqId/mappings`), hoặc gói đã có một dòng khác *chưa chuẩn hoá* (ánh xạ cũ vẫn là sự thật khi mọi hàng đã ngừng dùng).
+ * Tổ chức chưa khai hàng nào thì màn giữ đúng bảng của hôm nay (spec §2.3). Thân lạ hay đọc hỏng ⇒ ẩn.
+ */
+export function hienCotHangChuan(than: unknown): boolean {
+  const t = than as { readonly coHangChuan?: unknown; readonly dong?: unknown } | null | undefined;
+  if (t?.coHangChuan === true) return true;
+  return Array.isArray(t?.dong) && t.dong.some((d) => (d as { trangThai?: unknown } | null)?.trangThai !== "CHUA_CHUAN_HOA");
+}
+
+/**
+ * [S1.234 / S4.3b] Cột *Hàng chuẩn* của bảng hạng mục — trạng thái ánh xạ của dòng (`GET /rfqs/:rfqId/mappings`) nói bằng lời.
+ * Người tạo gói chỉ ĐỌC: người ghi ánh xạ là người quản lý dữ liệu ngoài tập loại trừ của gói (L3). Trạng thái lạ ⇒ `—`.
+ */
+export function nhanAnhXa(dong: { readonly trangThai: unknown; readonly hangChuan: { readonly ma: string } | null; readonly lyDo: string | null }): string {
+  switch (dong.trangThai) {
+    case "TU_DONG":
+      return dong.hangChuan === null ? "—" : `Tự động — ${dong.hangChuan.ma}${dong.lyDo === "CHUAN_HOA_HOI_TO" ? " (chuẩn hoá hồi tố)" : ""}`;
+    case "NGUOI_DUYET":
+      if (dong.hangChuan !== null) return `Đã duyệt — ${dong.hangChuan.ma}`;
+      return dong.lyDo === null ? "Không có hàng chuẩn tương ứng" : `Không có hàng chuẩn tương ứng — ${dong.lyDo}`;
+    case "CHO_DUYET":
+      return "Chờ người quản lý dữ liệu duyệt";
+    case "CHUA_CHUAN_HOA":
+      return "Chưa chuẩn hoá";
+    default:
+      return "—";
+  }
 }
 
 // =============================================================================================

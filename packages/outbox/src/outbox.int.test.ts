@@ -1,3 +1,5 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
@@ -6,11 +8,23 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   JobRunner,
-  enqueueJob,
+  enqueueJob as enqueueJobCongKhai,
   type JobFailureReport,
   type JobHandler,
+  type JobInput,
   type OutboxJob,
 } from "./index.js";
+
+// [S1.239 / khoản 161] `JobInput.kind` nay là union `KindOutbox` — năm kind thật của kho. Tệp này đo CƠ CHẾ của gói (hạn thuê,
+// SKIP LOCKED, lượt thử, chống trùng, QT3…) với ~40 `kind` THỬ (`VIEC_A`, `LUON_LOI`, …) mà không tiến trình nào nhận, nên nó gọi
+// CÙNG hàm `enqueueJob` qua một kiểu nới `kind` về `string`: thân hàm, câu SQL và dấu xếp việc là của hàm công khai, chỉ kiểu của
+// tham số khác. Mã sản xuất không có đường này — `tests/architecture/kind-outbox-mot-cho.test.ts` đòi `kind` literal thuộc union ở
+// mọi lời gọi ngoài tệp test.
+const enqueueJob = enqueueJobCongKhai as (
+  client: pg.PoolClient,
+  orgId: string,
+  job: Omit<JobInput, "kind"> & { readonly kind: string },
+) => Promise<string>;
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -120,10 +134,140 @@ function runnerChoMotToChuc(
   return new JobRunner(apiPool, handlers, { listOrganizations: () => [org], ...options });
 }
 
+// ------------------------------------------------------------------------------------------
+// [S1.233 / khoản 158] POLICY `kind` THEO VAI CỦA `095` VÀ CÁC `kind` THỬ CỦA TỆP NÀY
+//
+// Migration `095_outbox_policy_theo_kind` (ADR-134) AND vào `outbox_jobs` hai policy `AS RESTRICTIVE FOR UPDATE`:
+// `app_api` chỉ ghi được kết cục cho job mang `kind` của tiến trình `api`, `app_unseal` cho `kind` của worker. Mọi
+// khối 1–11 dưới đây chạy runner dưới `apiPool` với `kind` THỬ tổng hợp (`VIEC_A`, `LUON_LOI`, …) — không thuộc
+// tiến trình nào — để đo CƠ CHẾ của runner (hạn thuê, SKIP LOCKED, lượt thử, …); dưới policy 095 nguyên vẹn, mọi
+// câu ghi của chúng thành 0 hàng im lặng — đúng cơ chế khoản 158 dựng, và khối 12 đo nó. Nên `beforeAll` NỚI policy
+// của `app_api` cho ĐÚNG những `kind` KHÔNG thuộc tiến trình nào (`OR NOT (kind = ANY (<hợp hai tập thật>))`): ranh
+// giới giữa hai vai trên `kind` THẬT giữ nguyên ở mọi khối; policy của `app_unseal` không nới (không khối nào chạy
+// runner dưới vai ấy với kind thử). Khối 12 KHÔI PHỤC nguyên văn policy như `migrate()` dựng trước khi đo, nới lại khi
+// xong. Đọc từ `pg_policy` qua `pg_get_expr` — thứ ràng là policy ĐANG CÓ, không phải văn bản migration. Cổng khai của
+// hardening chỉ chạy ở `migrate()` (đã xong ở `beforeAll`) nên phép nới không chạm nó; cổng "tập kind của policy =
+// bảng handler ∪ sổ mồ côi" ở `apps/{api,unseal-worker}/src/composition.int.test.ts`. Cây KHÔNG có 095 ⇒ `policyGoc` là `undefined`,
+// không nới gì, và khối 12 ĐỎ ở vế tiền đề — không xanh giả.
+//
+// [S1.246 / khoản 285] Policy THỨ BA, `outbox_jobs_kind_xep_app_api` (`099_outbox_policy_xep_theo_kind`, ADR-138): `AS RESTRICTIVE
+// FOR INSERT TO app_api` — tập `kind` mà `app_api` XẾP được (hợp hai tập trên). Dưới bản nguyên văn, mỗi lần khối 1–11 xếp một `kind`
+// THỬ thì NÉM 42501 (INSERT vi phạm WITH CHECK luôn ném — không có "0 hàng im lặng" như UPDATE). Nên phép nới và phép khôi phục ở
+// dưới làm cả policy này, cùng khuôn `(<gốc>) OR NOT (kind = ANY (<hợp mọi tập thật>))`: một `kind` THẬT ngoài tập xếp vẫn bị chặn ở
+// mọi khối. Khối 13 đo trên bản NGUYÊN VĂN. Cây KHÔNG có migration ấy ⇒ `policyXepGoc` là `undefined`, không nới gì, và khối 13 ĐỎ ở
+// vế tiền đề.
+// ------------------------------------------------------------------------------------------
+interface PolicyKind {
+  readonly using: string;
+  readonly withCheck: string;
+  readonly kind: readonly string[];
+}
+
+const POLICY_KIND_API = "outbox_jobs_kind_app_api";
+const POLICY_KIND_UNSEAL = "outbox_jobs_kind_app_unseal";
+const HINH_DANG_KIND = /^[A-Z][A-Z0-9_]{0,63}$/u;
+
+/** Hai policy 095 NGUYÊN VĂN như `migrate()` dựng; `undefined` khi CSDL không có chúng. */
+let policyGoc: { readonly api: PolicyKind; readonly unseal: PolicyKind } | undefined;
+
+async function docPolicyKind(polname: string): Promise<PolicyKind | undefined> {
+  const { rows } = await db.pool.query<{ u: string | null; wc: string | null }>(
+    "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = $1",
+    [polname],
+  );
+  const p = rows[0];
+  if (p === undefined || p.u === null || p.wc === null) return undefined;
+  return {
+    using: p.u,
+    withCheck: p.wc,
+    kind: [...p.u.matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!),
+  };
+}
+
+async function datPolicyKind(polname: string, using: string, withCheck: string): Promise<void> {
+  await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${using}) WITH CHECK (${withCheck})`);
+}
+
+// [S1.246 / khoản 285] Policy INSERT chỉ có vế WITH CHECK (`polqual` NULL) — bộ đọc riêng, không nới bộ đọc của 095.
+const POLICY_KIND_XEP_API = "outbox_jobs_kind_xep_app_api";
+
+/** Policy INSERT NGUYÊN VĂN như `migrate()` dựng; `undefined` khi CSDL không có nó. */
+let policyXepGoc: { readonly withCheck: string; readonly kind: readonly string[] } | undefined;
+
+async function docPolicyXep(): Promise<{ readonly withCheck: string; readonly kind: readonly string[] } | undefined> {
+  const { rows } = await db.pool.query<{ u: string | null; wc: string | null }>(
+    "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = $1",
+    [POLICY_KIND_XEP_API],
+  );
+  const p = rows[0];
+  if (p === undefined || p.u !== null || p.wc === null) return undefined;
+  return { withCheck: p.wc, kind: [...p.wc.matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!) };
+}
+
+async function datPolicyXep(withCheck: string): Promise<void> {
+  await db.pool.query(`ALTER POLICY ${POLICY_KIND_XEP_API} ON public.outbox_jobs WITH CHECK (${withCheck})`);
+}
+
+/** Nới policy INSERT của `app_api` cho ĐÚNG những `kind` không thuộc tập thật nào (tập xếp ∪ hai tập ghi kết cục). */
+async function noiPolicyXepChoKindThu(): Promise<void> {
+  if (policyXepGoc === undefined) return;
+  const that = [...new Set([...policyXepGoc.kind, ...(policyGoc?.api.kind ?? []), ...(policyGoc?.unseal.kind ?? [])])].sort();
+  if (that.length === 0 || that.some((k) => !HINH_DANG_KIND.test(k))) {
+    throw new Error("tập kind của policy INSERT không đọc được — hình dạng policy đã đổi?");
+  }
+  await datPolicyXep(`(${policyXepGoc.withCheck}) OR NOT (kind = ANY (ARRAY[${that.map((k) => `'${k}'::text`).join(", ")}]))`);
+}
+
+/** Nới policy của `app_api` cho `kind` KHÔNG thuộc tiến trình nào — các `kind` thử của tệp này; `kind` thật của vai kia vẫn bị chặn. */
+async function noiPolicyApiChoKindThu(): Promise<void> {
+  // [S1.246 / khoản 285] Cả policy INSERT — xem khối lý do trên `PolicyKind`.
+  await noiPolicyXepChoKindThu();
+  if (policyGoc === undefined) return;
+  const that = [...new Set([...policyGoc.api.kind, ...policyGoc.unseal.kind])].sort();
+  if (that.length === 0 || that.some((k) => !HINH_DANG_KIND.test(k))) {
+    throw new Error("tập kind của policy 095 không đọc được — hình dạng policy đã đổi?");
+  }
+  const noi = `(${policyGoc.api.using}) OR NOT (kind = ANY (ARRAY[${that.map((k) => `'${k}'::text`).join(", ")}]))`;
+  await datPolicyKind(POLICY_KIND_API, noi, noi);
+}
+
+async function khoiPhucPolicyGoc(): Promise<void> {
+  // [S1.246 / khoản 285] Cả policy INSERT, về bản `migrate()` dựng.
+  if (policyXepGoc !== undefined) await datPolicyXep(policyXepGoc.withCheck);
+  if (policyGoc === undefined) return;
+  await datPolicyKind(POLICY_KIND_API, policyGoc.api.using, policyGoc.api.withCheck);
+  await datPolicyKind(POLICY_KIND_UNSEAL, policyGoc.unseal.using, policyGoc.unseal.withCheck);
+}
+
+/**
+ * `migrate()` GIỮA tệp — hai test ([T10-D] role lạ, [T10-I] trigger lạ) đo điều hardening thấy và không thấy. Cổng khai
+ * `POLICY_RESTRICTIVE_KHAI` của nó đòi policy 095 NGUYÊN VĂN (đo: gọi `migrate()` trên bản đã nới thì hardening NÉM ở
+ * mục 83⑴ — đúng chiều "dòng khai mà CSDL không còn policy như thế"), nên khôi phục trước, nới lại sau, kể cả khi ném.
+ */
+async function migrateLai(): Promise<string[]> {
+  await khoiPhucPolicyGoc();
+  try {
+    return await migrate(db.pool, MIGRATIONS);
+  } finally {
+    await noiPolicyApiChoKindThu();
+  }
+}
+
 beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS);
   apiPool = db.poolAs("app_api");
+  // [S1.233 / khoản 158] Xem khối lý do trên `PolicyKind`.
+  const api = await docPolicyKind(POLICY_KIND_API);
+  const unseal = await docPolicyKind(POLICY_KIND_UNSEAL);
+  policyGoc = api !== undefined && unseal !== undefined ? { api, unseal } : undefined;
+  // [S1.246 / khoản 285] Policy INSERT đọc cùng lúc, TRƯỚC mọi phép nới.
+  policyXepGoc = await docPolicyXep();
+  await noiPolicyApiChoKindThu();
 }, 180_000);
 
 beforeEach(async () => {
@@ -1108,7 +1252,7 @@ describe("[T10-D] runner chạy dưới hồ sơ vai trò THẬT", () => {
       // đã biết (app_api, app_unseal và hai role đăng nhập). Một role thứ năm có BYPASSRLS đi
       // qua migrate() không một tiếng động. Đó là lý do "tạo role app_worker có BYPASSRLS" là
       // một đường vòng RLS không ai canh, chứ không phải một dòng cấu hình vô hại.
-      await expect(migrate(db.pool, MIGRATIONS)).resolves.toEqual([]);
+      await expect(migrateLai()).resolves.toEqual([]);
       const { rows: sau } = await db.pool.query<{ vuot: boolean }>(
         "SELECT rolbypassrls AS vuot FROM pg_roles WHERE rolname = 't10_vuot'",
       );
@@ -1340,7 +1484,7 @@ describe("[T10-I] mốc thời gian", () => {
       // [S1.205 / khoản 259] ~~hardening không thấy gì~~ Nay hardening THẤY — không vì thân hàm, mà vì chính trigger không
       // được ghim: trigger lạ trên bảng không có tên trong `TRIGGER_DUOC_PHEP` chặn deploy. Thân hàm vẫn không được canh, và
       // lượt sửa đã chạy trọn trước lượt phán xét — kết luận của phép đo đứng nguyên: trigger mới phải được ghim.
-      await expect(migrate(db.pool, MIGRATIONS), "hardening chặn vì TRIGGER, không vì thân hàm").rejects.toThrow(
+      await expect(migrateLai(), "hardening chặn vì TRIGGER, không vì thân hàm").rejects.toThrow(
         /t10_thu_trigger\.t10_thu_trigger_cham: TRIGGER LẠ trên bảng KHÔNG có trong TRIGGER_DUOC_PHEP/u,
       );
 
@@ -1516,41 +1660,73 @@ describe("[QT3] ghim toán tử dưới một search_path thù địch", () => {
 // 8. [T10-L] [vòng fix 1 — MỤC 2] TRẠNG THÁI PHIÊN DO HANDLER ĐỂ LẠI KHÔNG ĐI XUYÊN TỔ CHỨC
 // ============================================================================================
 describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
-  it("ĐỐI CHỨNG: KHÔNG bật cờ thì `SET` phạm vi PHIÊN của tổ chức P LÀM HỎNG việc của tổ chức Q", async () => {
-    // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng
-    // định dưới xanh vì không có gì để chặn. Đây là phép đo end-to-end của lỗ mà `withTenant`
-    // để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).
-    const poolDoiChung = db.poolAs("app_api");
+  // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng định dưới xanh vì không có gì để
+  // chặn. ~~Đây là phép đo end-to-end của lỗ mà `withTenant` để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).~~
+  // [S1.211] Bản trước đo trục này QUA `withTenant` trên pool có vai (`poolAs`) và đòi 57014 ở Q. Từ [S1.215 / khoản 104] lớp lấy
+  // client của pool có vai `RESET ALL` khi bốn GUC tenant/khách rỗng, nên `SET statement_timeout` của P không còn tới được Q trên
+  // đường ấy — vế đối chứng cũ đỏ vì lỗ đã ĐÓNG ở một lớp khác, không phải vì trục hết thật. Trục được đo lại trên pool TRẦN
+  // (không lớp lấy client): đó là điều `pg-pool` làm với mọi kết nối, và là thứ hai lớp dưới — `RESET ALL` của lần lấy và cờ
+  // `destroyConnectionWhenDone` — tồn tại để chặn; hai vế kế phân biệt hai lớp ấy bằng `pg_backend_pid()`.
+  it("ĐỐI CHỨNG: trên pool TRẦN, `SET` phạm vi PHIÊN của người dùng trước LÀM HỎNG câu của người dùng kế", async () => {
+    const poolTran = createPool(db.connectionString, 1);
     try {
       // [S1.54 / khoản nợ 96] 100 ms, không còn 1 ms: 1 ms THẤP HƠN độ trễ của chính các câu `withTenant` phát ra — đo trên
       // máy rảnh dưới app_api (400 lượt), COMMIT trần có trung vị 0,30 ms nhưng tối đa 1,88 ms, và khi evidence chạy mọi tệp
       // song song thì câu kết thúc `DO …; COMMIT` của khoản 96 (trung vị 0,39 ms) bị huỷ ngay trong giao dịch của P. Điều test
-      // này đo là trạng thái phiên của P làm hỏng việc của Q — `pg_sleep(0.2)` của Q vẫn dài hơn hạn, nên phép đo giữ nghĩa.
-      await withTenant(poolDoiChung, orgId, (client) => client.query("SET statement_timeout = 100"));
+      // này đo là trạng thái phiên của người trước làm hỏng câu của người kế — `pg_sleep(0.2)` vẫn dài hơn hạn, nên phép đo giữ nghĩa.
+      await poolTran.query("SET statement_timeout = 100");
       let loi: { code?: string } | undefined;
       try {
-        await withTenant(poolDoiChung, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)"));
+        await poolTran.query("SELECT pg_sleep(0.2)");
       } catch (e) {
         loi = e as { code?: string };
       }
-      // 57014 = canceling statement due to statement timeout. Việc của tổ chức Q chết vì một
-      // câu lệnh mà mã của tổ chức P viết.
+      // 57014 = canceling statement due to statement timeout. Câu của người kế chết vì một câu lệnh mà người trước viết.
       expect(loi?.code).toBe("57014");
     } finally {
-      await poolDoiChung.end();
+      await poolTran.end();
     }
   }, 60_000);
 
-  it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+  it("[S1.215 / khoản 104] KHÔNG bật cờ, pool có vai: kết nối ĐƯỢC DÙNG LẠI (cùng pid) nhưng lớp lấy client đã `RESET ALL`, nên tổ chức Q KHÔNG bị ảnh hưởng", async () => {
     const pool = db.poolAs("app_api");
     try {
-      // [S1.54 / khoản nợ 96] 100 ms — lý do và phép đo ở vế đối chứng ngay trên.
-      await withTenant(pool, orgId, (client) => client.query("SET statement_timeout = 100"), {
-        destroyConnectionWhenDone: true,
+      const pidP = await withTenant(pool, orgId, async (client) => {
+        await client.query("SET statement_timeout = 100");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
       });
-      await expect(
-        withTenant(pool, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)")),
-      ).resolves.toBeDefined();
+      const pidQ = await withTenant(pool, orgKhac, async (client) => {
+        await client.query("SELECT pg_sleep(0.2)");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      });
+      // Cùng backend: không gì huỷ kết nối — vế này tách lớp `RESET ALL` của lần lấy khỏi cờ `destroyConnectionWhenDone` ở dưới.
+      expect(pidQ, "không bật cờ thì kết nối được dùng lại").toBe(pidP);
+    } finally {
+      await pool.end();
+    }
+  }, 60_000);
+
+  it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ (pid khác) và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+    // [S1.242 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: `SET search_path` phạm vi phiên ở lần thứ ba đổi search path hiệu lực,
+    // withTenant huỷ kết nối bằng lỗi ấy (không phải `true` của cờ) — `SET statement_timeout` ở lần đầu không thuộc trục nào của nó.
+    const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
+    try {
+      // [S1.54 / khoản nợ 96] 100 ms — lý do và phép đo ở vế đối chứng ngay trên.
+      const pidP = await withTenant(
+        pool,
+        orgId,
+        async (client) => {
+          await client.query("SET statement_timeout = 100");
+          return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+        },
+        { destroyConnectionWhenDone: true },
+      );
+      const pidQ = await withTenant(pool, orgKhac, async (client) => {
+        await client.query("SELECT pg_sleep(0.2)");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      });
+      // [S1.211] Khác backend: cờ huỷ kết nối thật — phân biệt với vế trên, nơi Q lành nhờ `RESET ALL` mà vẫn cùng pid.
+      expect(pidQ, "bật cờ thì Q chạy trên kết nối mới").not.toBe(pidP);
       // Trục THỨ HAI của cùng lỗ, đo riêng: `search_path` cũng không đi theo kết nối.
       await withTenant(
         pool,
@@ -1566,7 +1742,9 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   }, 60_000);
 
   it("ĐƯỜNG SẢN PHẨM: handler của tổ chức P không làm hỏng job của tổ chức Q trên cùng pool", async () => {
-    const pool = db.poolAs("app_api");
+    // [S1.242 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: handler `GAY_O_NHIEM` cố ý `SET search_path` không `LOCAL` — đúng một
+    // giao dịch của runner để lại trạng thái phiên và bị huỷ kết nối.
+    const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
     try {
       const idP = await withTenant(pool, orgId, (client) =>
         enqueueJob(client, orgId, { kind: "GAY_O_NHIEM" }),
@@ -1865,3 +2043,365 @@ describe("[sổ nợ 53] việc sau commit", () => {
   });
 });
 
+// ============================================================================================
+// 12. [S1.233 / khoản 158] RANH GIỚI `kind` THEO VAI Ở TẦNG CSDL — QUYỀN, KHÔNG PHẢI VỆ SINH VẬN HÀNH
+//
+// `007` cấp `app_api` và `025` cấp `app_unseal` CÙNG bộ `GRANT UPDATE` trên sáu cột vòng đời, không theo `kind`; vị
+// từ lọc `kind` của `CAU_CLAIM` (S1.81) chỉ ngăn RUNNER làm điều ấy TÌNH CỜ. Đo trước bản vá — cây KHÔNG có `095`,
+// ghi ở biên bản §S1.233: `UPDATE` viết tay dưới `app_api` nhắm job `UNSEAL_RFQ` của CHÍNH tổ chức ⇒ 1 hàng; dưới
+// `app_unseal` nhắm `LOGIN_LINK_SEND` ⇒ 1 hàng; runner của `api` mang nhầm handler `UNSEAL_RFQ` claim được job ấy.
+// Khối này đo lớp CSDL trên policy NGUYÊN VĂN như `migrate()` dựng (khôi phục ở `beforeAll`, nới lại ở `afterAll` —
+// xem khối `PolicyKind` đầu tệp). Hai `kind` đại diện là hằng THẬT của hai tiến trình; tập ĐẦY ĐỦ đối chiếu ở
+// `apps/{api,unseal-worker}/src/composition.int.test.ts`, không ở đây.
+// ============================================================================================
+describe("[INV-F1] [S1.233 / khoản 158] mỗi vai ứng dụng chỉ ghi được kết cục cho job mang `kind` của tiến trình chạy dưới vai ấy", () => {
+  const KIND_API = "LOGIN_LINK_SEND";
+  const KIND_WORKER = "UNSEAL_RFQ";
+  let unsealPool: pg.Pool;
+
+  beforeAll(async () => {
+    await khoiPhucPolicyGoc();
+    unsealPool = db.poolAs("app_unseal");
+  });
+  afterAll(async () => {
+    await noiPolicyApiChoKindThu();
+  });
+
+  /** Câu ghi kết cục VIẾT TAY — đúng hai trong sáu cột vòng đời mà 007/025 cấp, không qua runner. Trả về số hàng chạm. */
+  const ghiKetCuc = (pool: pg.Pool, org: string, id: string): Promise<number> =>
+    withTenant(pool, org, async (c) => {
+      const r = await c.query("UPDATE outbox_jobs SET status = 'DONE', finished_at = clock_timestamp() WHERE id = $1::uuid", [id]);
+      return r.rowCount ?? 0;
+    });
+
+  const demThay = async (pool: pg.Pool, org: string, id: string): Promise<string> => {
+    const { rows } = await withTenant(pool, org, (c) =>
+      c.query<{ n: string }>("SELECT count(*)::text AS n FROM outbox_jobs WHERE id = $1::uuid", [id]),
+    );
+    return rows[0]?.n ?? "?";
+  };
+
+  it("tiền đề: hai policy RESTRICTIVE FOR UPDATE của 095 đang có, mỗi cái ĐÚNG một vai, USING = WITH CHECK — và khối này đo bản NGUYÊN VĂN, không phải bản đã nới", async () => {
+    expect(policyGoc, "CSDL không có policy outbox_jobs_kind_app_api/_app_unseal — migration 095 chưa áp").toBeDefined();
+    const { rows } = await db.pool.query<{ polname: string; permissive: boolean; lenh: string; vai: string; u: string; wc: string }>(
+      "SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+        "       (SELECT string_agg(r.rolname, ',' ORDER BY r.rolname) FROM pg_roles r WHERE r.oid = ANY (p.polroles)) AS vai, " +
+        "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+        "  FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname IN ($1, $2) ORDER BY p.polname",
+      [POLICY_KIND_API, POLICY_KIND_UNSEAL],
+    );
+    expect(rows.map((r) => ({ polname: r.polname, permissive: r.permissive, lenh: r.lenh, vai: r.vai, haiVeBang: r.u === r.wc }))).toEqual([
+      { polname: POLICY_KIND_API, permissive: false, lenh: "w", vai: "app_api", haiVeBang: true },
+      { polname: POLICY_KIND_UNSEAL, permissive: false, lenh: "w", vai: "app_unseal", haiVeBang: true },
+    ]);
+    // Bản ĐANG CÓ bằng bản `migrate()` dựng: phép nới của `beforeAll` toàn tệp đã được gỡ cho khối này.
+    expect(rows.map((r) => r.u)).toEqual([policyGoc!.api.using, policyGoc!.unseal.using]);
+    // Hai kind đại diện đứng đúng bên — nếu không, các vế "0 hàng" dưới đây đo một thứ khác với thứ chúng nói.
+    expect([policyGoc!.api.kind.includes(KIND_API), policyGoc!.api.kind.includes(KIND_WORKER)], "tập của api").toEqual([true, false]);
+    expect([policyGoc!.unseal.kind.includes(KIND_WORKER), policyGoc!.unseal.kind.includes(KIND_API)], "tập của worker").toEqual([true, false]);
+  });
+
+  it("`UPDATE` viết tay dưới `app_api` nhắm job `UNSEAL_RFQ` của CHÍNH tổ chức ⇒ 0 hàng, KHÔNG lỗi, job còn nguyên; đối chứng: nhắm `LOGIN_LINK_SEND` ⇒ 1 hàng. Chỉ FOR UPDATE: app_api vẫn XẾP và THẤY job của worker", async () => {
+    // ~~INSERT không bị ràng~~ [S1.246 / khoản 285] INSERT nay ràng theo tập `kind` XẾP được của `app_api` (khối 13), và `UNSEAL_RFQ`
+    // thuộc tập ấy — `api` xếp việc cho worker qua `dispatchUnseal` (019/025). Ranh giới CỦA KHỐI NÀY nằm ở GHI KẾT CỤC.
+    const idWorker = await xepHang(orgId, { kind: KIND_WORKER });
+    const idApi = await xepHang(orgId, { kind: KIND_API });
+    expect(await ghiKetCuc(apiPool, orgId, idWorker), "app_api ghi được kết cục cho job của worker").toBe(0);
+    expect(await docHang(idWorker)).toMatchObject({ status: "PENDING", attempts: 0, finished_at: null });
+    expect(await ghiKetCuc(apiPool, orgId, idApi), "đối chứng: job của chính api").toBe(1);
+    expect((await docHang(idApi)).status).toBe("DONE");
+    expect(await demThay(apiPool, orgId, idWorker), "SELECT không đổi: app_api vẫn đọc được job của worker").toBe("1");
+  });
+
+  it("gương: `UPDATE` viết tay dưới `app_unseal` nhắm `LOGIN_LINK_SEND` ⇒ 0 hàng; nhắm `UNSEAL_RFQ` ⇒ 1 hàng; app_unseal vẫn THẤY job của api (tồn đọng đếm qua MỌI kind, ADR-083)", async () => {
+    const idWorker = await xepHang(orgId, { kind: KIND_WORKER });
+    const idApi = await xepHang(orgId, { kind: KIND_API });
+    expect(await ghiKetCuc(unsealPool, orgId, idApi), "app_unseal ghi được kết cục cho job của api").toBe(0);
+    expect(await docHang(idApi)).toMatchObject({ status: "PENDING", attempts: 0, finished_at: null });
+    expect(await ghiKetCuc(unsealPool, orgId, idWorker), "đối chứng: job của chính worker").toBe(1);
+    expect(await demThay(unsealPool, orgId, idApi), "SELECT không đổi: app_unseal vẫn đọc được job của api").toBe("1");
+  });
+
+  it("runner của `api` mang NHẦM handler `UNSEAL_RFQ` claim 0 hàng — job còn PENDING, attempts 0, handler không chạy; đối chứng: runner dưới `app_unseal` cùng bảng handler chạy trọn job ấy", async () => {
+    // Vế này là lớp CSDL đứng SAU vị từ lọc của runner: `kind` NẰM TRONG mảng lọc (có handler), và `SELECT … FOR UPDATE
+    // SKIP LOCKED` của `CAU_CLAIM` vẫn chịu USING của policy FOR UPDATE — 0 hàng, không lỗi, không lượt thử.
+    const id = await xepHang(orgId, { kind: KIND_WORKER });
+    const daChay: string[] = [];
+    const handlers: Readonly<Record<string, JobHandler>> = {
+      [KIND_WORKER]: (job) => {
+        daChay.push(job.kind);
+        return Promise.resolve();
+      },
+    };
+    const runnerApi = new JobRunner(apiPool, handlers, { listOrganizations: () => [orgId] });
+    expect(await runnerApi.runOnce()).toBe(0);
+    expect(daChay).toEqual([]);
+    expect(await docHang(id)).toMatchObject({ status: "PENDING", attempts: 0, last_failure_reason: null });
+
+    const runnerWorker = new JobRunner(unsealPool, handlers, { listOrganizations: () => [orgId] });
+    expect(await runnerWorker.runOnce(), "đối chứng dương: đúng vai thì claim được").toBe(1);
+    expect(daChay).toEqual([KIND_WORKER]);
+    expect(await docHang(id)).toMatchObject({ status: "DONE", attempts: 1 });
+  });
+
+  it("đối chứng dương phía api: runner dưới `app_api` với handler `LOGIN_LINK_SEND` chạy trọn — lớp CSDL không làm tiến trình đúng vai đi tay không", async () => {
+    const id = await xepHang(orgId, { kind: KIND_API });
+    const daChay: string[] = [];
+    const runner = runnerChoMotToChuc({
+      [KIND_API]: (job) => {
+        daChay.push(job.kind);
+        return Promise.resolve();
+      },
+    });
+    expect(await runner.runOnce()).toBe(1);
+    expect(daChay).toEqual([KIND_API]);
+    expect(await docHang(id)).toMatchObject({ status: "DONE", attempts: 1 });
+  });
+});
+
+// ============================================================================================
+// 13. [S1.246 / khoản 285] TẬP `kind` MÀ `app_api` XẾP ĐƯỢC SỐNG Ở CSDL — KIND LẠ BỊ TỪ CHỐI, HAI ĐƯỜNG XẾP VIỆC CỦA SẢN XUẤT VẪN ĐI QUA
+//
+// `007` cấp `app_api` `INSERT (org_id, kind, payload, dedupe_key, run_after)` không theo `kind`, và `095` (khoản 158) cố ý chỉ ràng
+// `UPDATE`. Đo trước bản vá — cây KHÔNG có `099_outbox_policy_xep_theo_kind`, ghi ở biên bản §S1.246: `INSERT` viết tay dưới
+// `app_api` một `kind` không tiến trình nào nhận ⇒ VÀO, và nằm `PENDING` mãi (không runner nào có nó trong mảng lọc). Nay policy
+// `AS RESTRICTIVE FOR INSERT TO app_api` mang ĐÚNG tập mà `api` xếp — ba `kind` của nó, `UNSEAL_RFQ` (`dispatchUnseal`) và
+// `BREAK_GLASS_UNSEAL_ALERT` (trigger `019`, SECURITY INVOKER: câu INSERT của nó chạy dưới vai gọi). Khối đo trên policy NGUYÊN
+// VĂN (khôi phục ở `beforeAll`, nới lại ở `afterAll` — xem khối `PolicyKind` đầu tệp).
+// GIỚI HẠN ĐÃ CHỐT (câu 13 của kế hoạch đợt 3 — khoản 305): `BREAK_GLASS_UNSEAL_ALERT` phải ở trong tập vì trigger `019` cần nó,
+// nên một cảnh báo break-glass GIẢ viết tay dưới `app_api` VẪN xếp được. Vế cuối ghim điều ấy — ngày nó đóng, vế ấy lật có chủ ý.
+// ============================================================================================
+describe("[INV-F1] [S1.246 / khoản 285] `app_api` chỉ XẾP được job mang `kind` thuộc tập của nó — kind lạ bị từ chối ở tầng CSDL", () => {
+  /** Một `kind` đúng hình dạng CHECK của `007` mà không tiến trình nào nhận, không có ở union `KindOutbox`. */
+  const KIND_LA = "THU_KIND_LA_285";
+  const KIND_CANH_BAO = "BREAK_GLASS_UNSEAL_ALERT";
+
+  beforeAll(async () => {
+    await khoiPhucPolicyGoc();
+  });
+  afterAll(async () => {
+    await noiPolicyApiChoKindThu();
+  });
+
+  /** Union `KindOutbox` — chỗ khai DUY NHẤT tập `kind` của kho ở TypeScript (§S1.239) — đọc từ văn bản `enqueue.ts`. */
+  const docUnionKindOutbox = (): string[] => {
+    const nguon = readFileSync(fileURLToPath(new URL("./enqueue.ts", import.meta.url)), "utf8");
+    const khai = /export type KindOutbox =([^;]*);/u.exec(nguon);
+    if (khai === null) throw new Error("không đọc được khai báo `KindOutbox` ở packages/outbox/src/enqueue.ts — hình dạng đã đổi?");
+    return [...khai[1]!.matchAll(/"([A-Z][A-Z0-9_]{0,63})"/gu)].map((m) => m[1]!).sort();
+  };
+
+  /** `INSERT` VIẾT TAY dưới `app_api` — ba trong năm cột `007` cấp, không qua `enqueueJob`. Lỗi CSDL ném nguyên. */
+  const chenTay = (org: string, kind: string, payload: Record<string, unknown> = {}): Promise<string> =>
+    withTenant(apiPool, org, async (c) => {
+      const { rows } = await c.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1::uuid, $2, $3::jsonb) RETURNING id",
+        [org, kind, JSON.stringify(payload)],
+      );
+      return rows[0]!.id;
+    });
+
+  /** Mã lỗi CSDL của lời hứa, hay `VÀO` khi nó đi qua — để lần đỏ in ra đúng điều đã xảy ra. */
+  const ketCuc = (p: Promise<unknown>): Promise<string> =>
+    p.then(
+      () => "VÀO (không lỗi)",
+      (e: unknown) => `${(e as { code?: string }).code ?? "(không mã)"}: ${(e as Error).message}`,
+    );
+
+  const demKind = async (org: string, kind: string): Promise<string> =>
+    (await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM outbox_jobs WHERE org_id = $1 AND kind = $2", [org, kind]))
+      .rows[0]!.n;
+
+  /**
+   * Một RFQ đã CLOSED cùng người yêu cầu và nhân chứng có phiên — khuôn `taoRfqDaDong` của `packages/unseal/src/unseal.int.test.ts`,
+   * SQL viết tay dưới siêu người dùng (gói này không phụ thuộc `@trustprocure/rfq` hay `@trustprocure/unseal`).
+   */
+  async function dungRfqDaDong(org: string): Promise<{ rfqId: string; uYc: string; sYc: string; uNc: string; sNc: string }> {
+    const nguoi = async (email: string, vaiTro: string): Promise<string> => {
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, $2) RETURNING id",
+        [org, email],
+      );
+      await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, rows[0]!.id, vaiTro]);
+      return rows[0]!.id;
+    };
+    const phien = async (userId: string): Promise<string> =>
+      (
+        await db.pool.query<{ id: string }>(
+          "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) " +
+            "VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+          [org, userId, randomBytes(32)],
+        )
+      ).rows[0]!.id;
+    const uYc = await nguoi(`yc-285-${org}@vidu.vn`, "PROCUREMENT_MANAGER");
+    const uNc = await nguoi(`nc-285-${org}@vidu.vn`, "DIRECTOR");
+    const sYc = await phien(uYc);
+    const sNc = await phien(uNc);
+    const csId = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
+          "VALUES ($1, 1, '100000000.00', 'VND', $2, $3) RETURNING id",
+        [org, uYc, sYc],
+      )
+    ).rows[0]!.id;
+    const rfqId = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+          "VALUES ($1, 'Mua thep tam', now() + interval '7 days', false, $2, $3) RETURNING id",
+        [org, uYc, sYc],
+      )
+    ).rows[0]!.id;
+    await db.pool.query(
+      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 1, 'Thep tam', '10.0000', 'tam', $3, $4)",
+      [org, rfqId, uYc, sYc],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, '1000000.00', 'VND', $3, $4, $5)",
+      [org, rfqId, csId, uYc, sYc],
+    );
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
+      [rfqId, uYc, sYc],
+    );
+    await db.pool.query(
+      "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+      [org, rfqId, uNc, sNc],
+    );
+    // Vật liệu khoá sinh TRONG giao dịch mở (017).
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query(
+        "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, " +
+          "created_by_session_id) VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+        [org, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), uYc, sYc],
+      );
+      await c.query(
+        "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+        [rfqId, uYc, sYc],
+      );
+      await c.query("COMMIT");
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+    await db.pool.query(
+      "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong som de kiem tra', " +
+        "closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
+      [rfqId, uYc, sYc],
+    );
+    return { rfqId, uYc, sYc, uNc, sNc };
+  }
+
+  it("tiền đề: policy RESTRICTIVE FOR INSERT TO app_api đang có, CHỈ vế WITH CHECK, đúng bản `migrate()` dựng — tập của nó BẰNG union `KindOutbox` và BẰNG hợp hai tập ghi kết cục của 095", async () => {
+    expect(policyXepGoc, "CSDL không có policy outbox_jobs_kind_xep_app_api — migration của khoản 285 chưa áp").toBeDefined();
+    const { rows } = await db.pool.query<{ permissive: boolean; lenh: string; vai: string; u: string | null; wc: string | null }>(
+      "SELECT p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+        "       (SELECT string_agg(r.rolname, ',' ORDER BY r.rolname) FROM pg_roles r WHERE r.oid = ANY (p.polroles)) AS vai, " +
+        "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+        "  FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname = $1",
+      [POLICY_KIND_XEP_API],
+    );
+    expect(rows.map((r) => ({ permissive: r.permissive, lenh: r.lenh, vai: r.vai, u: r.u }))).toEqual([
+      { permissive: false, lenh: "a", vai: "app_api", u: null },
+    ]);
+    // Bản ĐANG CÓ bằng bản `migrate()` dựng: phép nới của `beforeAll` toàn tệp đã được gỡ cho khối này.
+    expect(rows[0]!.wc).toBe(policyXepGoc!.withCheck);
+    const tap = [...policyXepGoc!.kind].sort();
+    // Chỉ `app_api` có GRANT INSERT trên `outbox_jobs` (007) — mọi lời gọi `enqueueJob` lẫn trigger `019` xếp dưới vai ấy — nên tập
+    // xếp được phải là CẢ union: thiếu một kind thì đường sản xuất của kind ấy NÉM 42501, thừa một kind thì kind lạ lọt.
+    expect(tap, "tập xếp được = union `KindOutbox` (packages/outbox/src/enqueue.ts)").toEqual(docUnionKindOutbox());
+    // Và bằng hợp hai tập ghi kết cục của `095`: mỗi kind xếp được có ĐÚNG MỘT vai ghi kết cục (hai tập rời nhau — cổng khoản 158).
+    expect(policyGoc, "hai policy 095 phải có — khoản 285 xếp theo đúng hai tập ấy").toBeDefined();
+    expect(tap, "tập xếp được = hợp hai tập ghi kết cục của 095").toEqual(
+      [...new Set([...policyGoc!.api.kind, ...policyGoc!.unseal.kind])].sort(),
+    );
+    expect(tap.includes(KIND_LA), "kind lạ của khối này phải nằm NGOÀI tập").toBe(false);
+  });
+
+  it("`INSERT` viết tay dưới `app_api` một `kind` không tiến trình nào nhận ⇒ NÉM 42501 nêu tên policy, không hàng nào vào; qua `enqueueJob` cũng thế; đối chứng: CÙNG câu với `LOGIN_LINK_SEND` ⇒ vào", async () => {
+    const tay = await ketCuc(chenTay(orgId, KIND_LA));
+    const quaHam = await ketCuc(xepHang(orgId, { kind: KIND_LA }));
+    expect(tay, "INSERT tay một kind lạ dưới app_api phải bị CSDL từ chối").toMatch(/^42501: /u);
+    // Nêu TÊN policy: 42501 của vế tổ chức (`outbox_jobs_tenant_isolation`, PERMISSIVE) không mang tên nào — tên ở đây là bằng
+    // chứng câu bị chặn ở ĐÚNG policy này, không ở vế khác.
+    expect(tay).toContain(`"${POLICY_KIND_XEP_API}"`);
+    expect(quaHam, "enqueueJob với kind lạ cũng bị từ chối").toMatch(/^42501: /u);
+    expect(await demKind(orgId, KIND_LA), "không hàng nào của kind lạ vào hàng đợi").toBe("0");
+    const id = await chenTay(orgId, "LOGIN_LINK_SEND");
+    expect((await docHang(id)).kind, "đối chứng: kind thuộc tập ⇒ vào").toBe("LOGIN_LINK_SEND");
+  });
+
+  it("đối chứng dương: MỖI `kind` của union `KindOutbox` xếp được dưới `app_api` qua `enqueueJob` — kể cả `UNSEAL_RFQ` với khoá chống trùng `unseal:<id>` như `dispatchUnseal`", async () => {
+    const union = docUnionKindOutbox();
+    expect(union.length, "union rỗng — bộ đọc mù").toBeGreaterThanOrEqual(5);
+    for (const kind of union) {
+      const dedupeKey = kind === "UNSEAL_RFQ" ? `unseal:${randomUUID()}` : `thu-285:${kind}`;
+      const id = await xepHang(orgId, { kind, payload: { thu: "khoan-285" }, dedupeKey });
+      expect(await docHang(id), `kind ${kind} phải xếp được dưới app_api`).toMatchObject({ kind, status: "PENDING", dedupe_key: dedupeKey });
+    }
+  });
+
+  it("đối chứng dương: trigger `019` (SECURITY INVOKER) chạy dưới `app_api` khi một yêu cầu break-glass được ghi — cảnh báo vào hàng đợi trong CÙNG giao dịch; ĐỐI CHỨNG ÂM: bỏ `BREAK_GLASS_UNSEAL_ALERT` khỏi tập thì CHÍNH yêu cầu break-glass NÉM 42501 nêu tên policy — nên kind ấy PHẢI ở trong tập (giới hạn, khoản 305)", async () => {
+    const { rows: ham } = await db.pool.query<{ secdef: boolean }>(
+      "SELECT p.prosecdef AS secdef FROM pg_proc p WHERE p.oid = 'public.unseal_canh_bao_break_glass()'::regprocedure",
+    );
+    expect(ham.map((h) => h.secdef), "tiền đề: hàm của trigger 019 là SECURITY INVOKER — câu INSERT của nó chạy dưới vai gọi").toEqual([false]);
+    // Hai RFQ ở hai tổ chức: mỗi RFQ chỉ có một yêu cầu đang mở (chỉ mục riêng phần của `019`), nên đối chứng âm cần RFQ riêng.
+    const a = await dungRfqDaDong(orgId);
+    const b = await dungRfqDaDong(orgKhac);
+    const ghiYeuCauBreakGlass = (org: string, f: Awaited<ReturnType<typeof dungRfqDaDong>>): Promise<string> =>
+      withTenant(apiPool, org, async (c) => {
+        // Đúng câu của `requestUnseal` (packages/unseal/src/requests.ts) — không qua hàm ấy vì gói này không phụ thuộc gói kia.
+        const { rows } = await c.query<{ id: string }>(
+          "INSERT INTO public.unseal_requests (org_id, rfq_id, reason, break_glass, requested_by, requested_by_session_id, " +
+            "break_glass_witness_user_id, break_glass_witness_session_id) " +
+            "VALUES ($1, $2, 'su co: thu khoan 285', true, $3, $4, $5, $6) RETURNING id",
+          [org, f.rfqId, f.uYc, f.sYc, f.uNc, f.sNc],
+        );
+        return rows[0]!.id;
+      });
+
+    // ⑴ Đối chứng dương trên policy nguyên văn: câu của `requestUnseal` ⇒ yêu cầu VÀ cảnh báo, cùng giao dịch, dưới `app_api`.
+    const idYc = await ghiYeuCauBreakGlass(orgId, a);
+    const { rows } = await db.pool.query<{ kind: string; payload: Record<string, unknown> }>(
+      "SELECT kind, payload FROM outbox_jobs WHERE org_id = $1 AND dedupe_key = $2",
+      [orgId, `break-glass:${idYc}`],
+    );
+    expect(rows.map((r) => r.kind), "trigger 019 xếp đúng một cảnh báo dưới app_api").toEqual([KIND_CANH_BAO]);
+    expect(rows[0]!.payload).toMatchObject({ unsealRequestId: idYc, rfqId: a.rfqId, requestedBy: a.uYc, severity: "HIGH" });
+
+    // ⑵ Đối chứng âm: tập bỏ đúng kind của trigger. Khôi phục nguyên văn trong `finally`, kể cả khi ném.
+    expect(policyXepGoc!.kind, "tiền đề của đối chứng âm: kind của trigger đang ở trong tập").toContain(KIND_CANH_BAO);
+    const hep = policyXepGoc!.kind.filter((k) => k !== KIND_CANH_BAO);
+    await datPolicyXep(`(kind = ANY (ARRAY[${hep.map((k) => `'${k}'::text`).join(", ")}]))`);
+    let amBan: string;
+    try {
+      amBan = await ketCuc(ghiYeuCauBreakGlass(orgKhac, b));
+    } finally {
+      await khoiPhucPolicyGoc();
+    }
+    expect(amBan, "thiếu BREAK_GLASS_UNSEAL_ALERT trong tập ⇒ yêu cầu break-glass NÉM ở câu INSERT của trigger").toMatch(/^42501: /u);
+    expect(amBan).toContain(`"${POLICY_KIND_XEP_API}"`);
+    expect(
+      (await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM unseal_requests WHERE rfq_id = $1", [b.rfqId])).rows[0]!.n,
+      "yêu cầu cuộn lại cùng cảnh báo — không có yêu cầu break-glass nào thiếu cảnh báo",
+    ).toBe("0");
+  });
+
+  it("GIỚI HẠN ĐÃ CHỐT (khoản 305): cảnh báo break-glass GIẢ viết tay dưới `app_api` — payload tuỳ ý, không yêu cầu nào đứng sau — VẪN vào; cùng lớp, `UNSEAL_RFQ` trỏ một yêu cầu không tồn tại cũng vào. Vế này lật khi khoản 305 đóng", async () => {
+    const yeuCauMa = randomUUID();
+    const idGia = await chenTay(orgId, KIND_CANH_BAO, { unsealRequestId: yeuCauMa, rfqId: randomUUID(), requestedBy: randomUUID(), severity: "HIGH" });
+    expect(await docHang(idGia), "cảnh báo giả vào hàng đợi như thật").toMatchObject({ kind: KIND_CANH_BAO, status: "PENDING" });
+    const idMo = await chenTay(orgId, "UNSEAL_RFQ", { unsealRequestId: yeuCauMa, rfqId: randomUUID() });
+    expect((await docHang(idMo)).kind).toBe("UNSEAL_RFQ");
+    expect(
+      (await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM unseal_requests WHERE id = $1", [yeuCauMa])).rows[0]!.n,
+      "không yêu cầu mở thầu nào đứng sau hai job ấy",
+    ).toBe("0");
+  });
+});

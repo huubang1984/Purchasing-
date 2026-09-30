@@ -11,12 +11,15 @@
 // ==============================================================================================
 
 import { tien } from "/lib/so-tien.js";
+import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-let phien = { orgId: "", token: "", rfqId: "", unsealRequestId: "", daRedeem: false };
+// [S1.240 / khoản 282] `orgId`, `token`, `daRedeem` rời khỏi đây: mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// `/lib/dang-nhap.js` (bước 1 chung của bốn trang người mua). Phiên của trang chỉ còn hai con trỏ của các bước sau.
+let phien = { rfqId: "", unsealRequestId: "" };
 
 /** [S1.90 / khoản 190] Câu này phải chỉ ra LỐI ĐI, vì lối đi ấy vừa mới tồn tại. */
 const CHUA_CO_YEU_CAU =
@@ -58,8 +61,8 @@ function dienDl(el, hang) {
 // Bước 1 — đăng nhập: magic link + TOTP
 // ---------------------------------------------------------------------------------------------
 
-/** [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012). Dùng chung cho `docLink` và hai nút. */
-const LA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+// [S1.176 / ADR-107] Hình dạng mã tổ chức — UUID (ADR-012) — dùng ở `docLink`. ~~Hằng của trang~~ [S1.240 / khoản 282] `LA_UUID`
+// import từ `/lib/dang-nhap.js`: một bản với phép đọc ô tổ chức của bước 1.
 
 // [S1.176 / ADR-107] Trang NHỚ mã tổ chức sau lần vào đầu tiên trên máy này — tiện cho từng người xem,
 // không phải trạng thái phải bền: `orgId` không phải bí mật (ADR-107 mục 1), và kho trình duyệt có thể trống
@@ -73,22 +76,9 @@ function nhoToChuc(orgId) {
   try { localStorage.setItem(KHOA_TO_CHUC, orgId); } catch { /* không nhớ được thì thôi */ }
 }
 
-/**
- * [S1.176 / ADR-107] Đọc ô tổ chức: nhận cả một link cũ dán vào (lấy phần sau `#`, trước `:`), vì mã tổ
- * chức nằm đúng ở đó trong mọi link sản phẩm gửi. Trả `""` khi ô rỗng, `null` khi sai hình dạng — để trang
- * nói đúng lỗi thay vì câu `thiếu trường "orgId"` của máy chủ trong khi ô vẫn đầy.
- */
-function docToChuc() {
-  let s = $("org").value.trim();
-  const h = s.indexOf("#");
-  if (h >= 0) s = s.slice(h + 1);
-  const c = s.indexOf(":");
-  if (c >= 0) s = s.slice(0, c);
-  s = s.trim();
-  if (s === "") return "";
-  return LA_UUID.test(s) ? s : null;
-}
-const SAI_TO_CHUC = "Mã tổ chức có dạng 00000000-0000-0000-0000-000000000000 — phần sau dấu # và trước dấu hai chấm của một link TrustProcure đã gửi.";
+// [S1.176 / ADR-107] Đọc ô tổ chức — nhận cả một link cũ dán vào, `""` khi ô rỗng, `null` khi sai hình dạng. ~~`docToChuc()` của
+// trang~~ [S1.240 / khoản 282] `docMaToChuc($("org").value)` của `/lib/dang-nhap.js`, cùng câu `SAI_TO_CHUC`: bước 1 của bốn trang
+// và ô xin link ở dưới đọc qua MỘT hàm.
 const MAT_KET_NOI = "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.";
 
 function docLink() {
@@ -114,54 +104,29 @@ function docLink() {
   if (h !== "") $("token").value = h;
 }
 
-$("nut-vao").addEventListener("click", async () => {
-  bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = docToChuc();
-  const token = $("token").value.trim();
-  const code = $("ma").value.trim();
-  // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải redeem lại cho token mới.
-  if (token !== phien.token) phien = { ...phien, token, daRedeem: false };
-  if (orgId === null) { bao($("loi1"), SAI_TO_CHUC); return; }
-  if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
-  $("nut-vao").disabled = true;
-  try {
-    // GỌI `/auth/redeem` ĐÚNG MỘT LẦN cho mỗi mã đăng nhập, và đó là một phép sửa do lượt chạy
-    // thử đầu tiên ép ra: mỗi lần gọi lại, máy chủ sinh một bí mật TOTP MỚI cho tài khoản chưa
-    // ghi danh. Bản đầu của trang này gọi lại ở mỗi lần bấm, nên người dùng vừa gõ bí mật A vào
-    // ứng dụng xác thực xong, bấm Vào, thì máy chủ đã đổi sang bí mật B — mã sáu số của họ không
-    // bao giờ đúng, và không có gì trên màn hình giải thích vì sao.
-    if (!phien.daRedeem) {
-      const r1 = await goi("POST", "/auth/redeem", { orgId, token });
-      if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return; }
-      phien = { ...phien, daRedeem: true };
-      if (r1.body?.needsEnrollment === true) {
-        // Lần đầu của một người mua: máy chủ trả bí mật TOTP đúng một lần. Hiện nguyên văn thay
-        // vì giấu sau một mã QR — người đang demo cần gõ nó vào ứng dụng xác thực ngay tại chỗ.
-        bao($("ghi-danh"), `Tài khoản này chưa có MFA. Bí mật TOTP (nhập vào ứng dụng xác thực, rồi nhập mã sáu số và bấm Vào lần nữa): ${r1.body.totpSecretBase32}`);
-        return;
-      }
-    }
-    if (!/^\d{6}$/.test(code)) { bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực."); return; }
-    const r2 = await goi("POST", "/auth/totp", { orgId, token, code });
-    if (r2.status !== 200) {
-      const ly = r2.body?.reason === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng";
-      bao($("loi1"), ly);
-      return;
-    }
-    phien = { ...phien, orgId, token };
+// ---------------------------------------------------------------------------------------------
+// [S1.230 / khoản 193] HAI VIỆC, HAI NÚT: «Tiếp» đổi mã đăng nhập (và ghi danh nếu cần), «Vào» vào.
+//
+// Bản cũ gộp cả hai vào nút Vào: người mới bấm Vào với ô mã sáu số trống, trang gọi `/auth/redeem`,
+// máy chủ trả bí mật TOTP, và bí mật ấy hiện ra CÙNG CHỖ với câu lỗi của lần bấm trượt — nên màn
+// hình không nói nó đang xin thứ gì, và chủ dự án đã đưa nhầm mã đăng nhập thay vì bí mật (đo ngày
+// 2026-09-20). Nay ô mã sáu số ẩn cho tới khi máy chủ đã nói tài khoản này cần ghi danh hay không;
+// bí mật hiện ở khối riêng, với nhãn nói rõ nó là gì và KHÔNG phải gì.
+//
+// [S1.240 / khoản 282] ~~`doiMaDangNhap`, `doiMa`, `dongKhoiMa` và hai trình nghe của trang này~~ Bước ấy nay là MỘT module,
+// `/lib/dang-nhap.js`, mà `/tao-thau`, `/nhom-hang`, `/chinh-sach` cũng gắn vào cùng bộ id — ba trang ấy từng chép khối cũ (nút Vào
+// gộp «lấy bí mật» với «vào»), nên người mở thẳng chúng với link còn hạn gặp lại đúng khiếm khuyết trên. Trang trao cho module
+// `document`, `goi`, `history`, `location` và việc của riêng nó sau khi vào: nhớ mã tổ chức (ADR-107), mở các bước.
+// ---------------------------------------------------------------------------------------------
+const dangNhap = ganDangNhap({
+  taiLieu: document,
+  goi,
+  lichSu: history,
+  viTri: location,
+  daVao: (me, orgId) => {
     nhoToChuc(orgId);
-    xoaManhLink();
-    // `/me` trả `{userId, sessionId, orgId, kind}` — CỐ Ý không trả email hay tên: một route
-    // "tôi là ai" trả về dữ liệu cá nhân là một route mà mọi lỗ IDOR đều muốn có. Bản đầu của
-    // trang này đoán sai hình dạng ấy và in "(không đọc được)" suốt cả lượt chạy thử.
-    const me = await goi("GET", "/me");
-    moSauDangNhap(me.body, false);
-  } catch {
-    // [S1.176] `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
-    bao($("loi1"), MAT_KET_NOI);
-  } finally {
-    $("nut-vao").disabled = false;
-  }
+    moSauDangNhap(me, false);
+  },
 });
 
 const CAC_BUOC_SAU = ["b2", "b3", "b4", "b5", "b6", "b7", "b8"];
@@ -186,6 +151,9 @@ function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  // [S1.216 / khoản 195] Vừa vào (hay vừa nhận phiên) là lúc hỏi link đăng nhập gần đây của chính mình — không chờ, không chặn.
+  // [S1.240 / khoản 282] Khối ấy nay ở `/lib/dang-nhap.js`.
+  void dangNhap.veLinkGanDay();
 }
 
 /** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
@@ -195,7 +163,25 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  // [S1.216 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
+  dangNhap.anLinkGanDay();
 }
+
+// ---------------------------------------------------------------------------------------------
+// [S1.216 / khoản 195 / ADR-126] Link đăng nhập gần đây của CHÍNH mình — vế «báo ngay» của khoản 195.
+//
+// Thông điệp ở bước đổi mã gộp «không hợp lệ / hết hạn / đã dùng» làm một, và phải thế: ở đường vô danh,
+// nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không. Người ĐÃ vào thì được xem: `GET
+// /auth/login-links` trả link của chính họ (máy chủ lấy người từ cookie, không có tham số nào để hỏi
+// người khác), và trang vẽ mỗi link một dòng. Một link «đã dùng lúc Y» mà lúc ấy không phải mình đăng
+// nhập là dấu hiệu duy nhất người mua thấy được mà không cần mở cơ sở dữ liệu. Khối là trợ giúp: máy chủ
+// từ chối hay mất mạng thì ẩn, các bước vẫn mở; về bước 1 thì ẩn và rỗng, và một phản hồi về muộn sau đó
+// bị bỏ — cùng phép kiểm-lại-sau-await của `thuPhienCo`, ở đây bằng một bộ đếm lượt: mỗi lần hỏi hay mỗi
+// lần về bước 1 là một lượt mới, phản hồi của lượt cũ không vẽ gì (kể cả khi người khác đã vào sau đó).
+//
+// [S1.240 / khoản 282, 268] ~~`GIO`, `moTaLink`, `anLinkGanDay`, `veLinkGanDay` của trang này~~ Khối ấy nay ở `/lib/dang-nhap.js` —
+// bốn trang người mua cùng có nó —, và nó nói thêm cửa sổ 7 ngày và câu «còn nữa» khi thân mang `truncated: true`.
+// ---------------------------------------------------------------------------------------------
 
 /**
  * [S1.177] Phiên người mua là cookie `Path=/` sống tới 8 giờ, KỂ CẢ sau khi đóng trình duyệt (`Max-Age`), dùng
@@ -243,8 +229,10 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
+    phien = { rfqId: "", unsealRequestId: "" };
     dongCacBuoc();
+    // [S1.240 / khoản 282] Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã sáu số đóng (khoản 193).
+    dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
     bao($("loi1"), MAT_KET_NOI);
@@ -253,14 +241,9 @@ $("nut-dang-xuat").addEventListener("click", async () => {
   }
 });
 
-/**
- * [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ. Làm SAU `/auth/totp` — lúc mã đã bị tiêu
- * thụ nên xoá nó không làm mất gì — để mã không nằm lại trong thanh địa chỉ và lịch sử trình duyệt.
- * `replaceState` không bắn `hashchange`.
- */
-function xoaManhLink() {
-  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
-}
+// [S1.177] ADR-020 mục 3: trang xoá fragment khỏi thanh địa chỉ SAU `/auth/totp` — lúc mã đã bị tiêu thụ nên xoá nó không làm
+// mất gì. ~~`xoaManhLink()` của trang~~ [S1.240 / khoản 282] Việc ấy nay là của nút Vào trong `/lib/dang-nhap.js`, qua `history` và
+// `location` mà trang trao vào.
 
 // [S1.176 / ADR-107] Xin link đăng nhập. `/auth/link` trả CÙNG một 200 cho mọi email — có người hay
 // không, bị hạn mức hay không (sổ nợ 38) — nên câu báo cũng là MỘT câu: trang không được biết thêm điều
@@ -269,7 +252,7 @@ function xoaManhLink() {
 // (`LOGIN_MAX_TOKENS_PER_WINDOW`, đếm cả mã hệ thống phát) nhận 200 mà không nhận thư.
 $("nut-xin-link").addEventListener("click", async () => {
   bao($("loi-link"), ""); bao($("ok-link"), "");
-  const orgId = docToChuc();
+  const orgId = docMaToChuc($("org").value);
   const email = $("email").value.trim();
   if (orgId === null) { bao($("loi-link"), SAI_TO_CHUC); return; }
   if (orgId === "" || email === "") { bao($("loi-link"), "Cần mã tổ chức và email."); return; }
@@ -601,8 +584,12 @@ async function veTraoThau() {
   const a = r.body.award ?? null;
   if (a === null) {
     dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
+    hien($("nut-rut-de-xuat"), false);
     return;
   }
+  // [S1.231 / khoản 232 / ADR-133] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
+  // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `094`, kể cả khi nút hiện sai.
+  hien($("nut-rut-de-xuat"), a.status === "PROPOSED" && (a.approvals ?? []).length === 0);
   dienDl($("tt-award"), [
     ["Trạng thái", a.status],
     ["Báo giá được chọn", a.bidVersionId],
@@ -641,6 +628,18 @@ $("nut-duyet-award").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
   bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
+  await veTraoThau();
+});
+
+// [S1.231 / khoản 232 / ADR-133] Rút đề xuất — đường của chính người đề xuất (`award.recommend`), cho một đề xuất
+// chưa chữ ký. Ba vế (PROPOSED · cùng người · 0 chữ ký) ràng ở CSDL; lớp gói gọi tên lý do dưới 422 nên `loiCua` đủ.
+$("nut-rut-de-xuat").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const lyDo = $("ly-do-award").value.trim();
+  if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần rút — một hàng trạng thái không lý do là đúng thứ D5 cấm."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/withdraw`, { reason: lyDo });
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không rút được")); return; }
+  bao($("ok7"), "Đã rút đề xuất — một hàng WITHDRAWN, lịch sử còn nguyên. Gói thầu về EVALUATING; đề xuất lại được.");
   await veTraoThau();
 });
 
@@ -727,6 +726,8 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 // là hai con trỏ đọc được dưới quyền của NGƯỜI TRƯỚC. Mang chúng sang phiên của người sau là
 // đúng hình dạng nửa vời mà `tao-thau.js` mắc phải (khoản 204 ghi sai rằng trang ấy không lặp
 // lại khiếm khuyết).
+// [S1.240 / khoản 282] "Cổng đăng nhập ngay trên" của mắt ⑵ nay ở `/lib/dang-nhap.js`: `phien.token`/`phien.daRedeem` thành trạng
+// thái của module, và lối về bước 1 dưới đây đặt lại nó bằng `dangNhap.datLai()`.
 // ==============================================================================================
 // [S1.177] Trình nghe này từng chỉ xoá câu báo, còn các bước 2–8 đã mở thì ĐỂ NGUYÊN — dưới cookie của
 // người trước, và giờ không còn câu nào nói phiên ấy của ai. Mọi link thư đều trỏ `/login`, nên người duyệt
@@ -735,12 +736,15 @@ $("nut-xuat-bang-chung").addEventListener("click", async () => {
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { orgId: "", token: $("token").value.trim(), rfqId: "", unsealRequestId: "", daRedeem: false };
+  phien = { rfqId: "", unsealRequestId: "" };
   for (const id of ["loi1", "loi2", "loi3", "loi4", "loi5", "loi8", "ok1", "ok3", "ok5", "ok8", "ghi-danh", "loi-link", "ok-link"]) {
     const el = $(id);
     if (el !== null) bao(el, "");
   }
   dongCacBuoc();
+  // [S1.230 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`. [S1.240 / khoản 282] Cả hai nay sống
+  // trong `/lib/dang-nhap.js`; `datLai()` đọc mã mới mà `docLink()` vừa đặt vào ô.
+  dangNhap.datLai();
   thuPhienCo();
 });
 

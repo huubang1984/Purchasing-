@@ -22,9 +22,10 @@ export { OutboxError, enqueueJob, type JobInput } from "./enqueue.js";
 // điều phối của `apps/api`: `enqueueJob` đặt dấu, `dispatch.ts` đọc-và-xoá rồi đánh thức runner.
 // Giữ nó trong gói thì `apps/api` phải tự khai lại từng chỗ xếp việc — đúng lớp lỗi khoản 156.
 export { layDauXepViec } from "./enqueue.js";
-// [S1.81 / khoản 154] Sổ `kind` mồ côi. Ra cửa vì nó là hợp đồng GIỮA hai app: `apps/api` truyền
-// nó vào `kindKhongNguoiNhan`, và cổng ở `apps/unseal-worker` đối chiếu nó với hợp hai bảng
-// handler. Một bản chép ở mỗi app là một bản sẽ trôi.
+// [S1.81 / khoản 154] Sổ `kind` mồ côi. Ra cửa vì nó là hợp đồng GIỮA hai app: ~~`apps/api`~~
+// [S1.222 / khoản 168] `apps/unseal-worker` (`tien-trinh.ts`) truyền nó vào `kindKhongNguoiNhan`,
+// và cổng ở cùng app đối chiếu nó với hợp bảng handler THẬT của CẢ HAI tiến trình. Một bản chép ở
+// mỗi app là một bản sẽ trôi.
 export { KIND_KHONG_NGUOI_NHAN } from "./so-kind-mo-coi.js";
 // [ADR-083] Phép đo tồn đọng của hàng đợi. Ra cửa vì người dùng nó ở NGOÀI gói: `apps/unseal-worker`
 // — tiến trình duy nhất liệt kê được MỌI tổ chức — gọi nó trong `withTenant` cho từng tổ chức rồi

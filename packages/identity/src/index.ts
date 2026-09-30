@@ -61,6 +61,11 @@ export {
   type PermissionCheck,
   type PermissionRequirement,
 } from "./rbac.js";
+// [S1.222 / khoản 166] `moTaLoiKhongGiaTri` ra cửa cùng tiêu chí với `moTaHangDongCuaLanTuChoi`, và là lớp bọc ngoài của nó: một
+// hàm THUẦN nhận một lỗi và trả TÊN lớp, mã cố định, các hằng đóng của lần từ chối, và đúng MỘT tầng `cause` — cho dòng log; không
+// đọc CSDL, không trả lời câu hỏi quyền nào. Hai tiến trình gọi nó — `apps/api/src/mo-ta-loi.ts` xuất lại, worker mở thầu gọi thẳng
+// — nên chẩn đoán của hai dòng log không lệch nhau được (tới trước vòng này worker giữ một bản rút gọn: khoản 166).
+export { moTaLoiKhongGiaTri } from "./mo-ta-loi.js";
 // [S1.180 / khoản 247 / ADR-108] Từ vựng chốt kiểm soát (`CONTROL_DENIED`) dời xuống gói này để `rfq` và `danh-gia`
 // cùng đọc MỘT bảng. Ra cửa cùng tiêu chí với `throwAuditedDenial`: `tuChoiTheoChot` NÉM ở mọi nhánh, `laMaChot` chỉ trả lời
 // *mã này có trong bảng không*, `maChotTuLoi` chỉ đọc tên ràng buộc của một lỗi — không câu hỏi quyền nào — nên không
@@ -170,6 +175,13 @@ export {
   USER_SESSION_DEFAULT_TTL_SECONDS,
   enrollOrReplaceTotpForLogin,
   issueLoginToken,
+  // [S1.216 / khoản 195 / ADR-126] Link đăng nhập gần đây của CHÍNH người gọi — phép ĐỌC của chính chủ dưới RLS, `userId` là
+  // `actor.id` của phiên do bộ điều phối đưa vào; không trả lời câu hỏi quyền nào, không mở đường ghi nào, và KHÔNG BAO GIỜ trả
+  // `token_hash`. Thông điệp gộp ba trạng thái của `LoginTokenError` ở đường vô danh giữ nguyên — đây là đường KHÁC, cho người đã
+  // chứng minh danh tính.
+  listRecentLoginTokens,
+  type LoginTokenStatus,
+  type RecentLoginToken,
   redeemLoginToken,
   revokeSession,
   startUserSession,

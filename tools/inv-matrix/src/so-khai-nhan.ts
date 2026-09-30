@@ -32,6 +32,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // `log-tu-choi-mat` qua HTTP trên tiến trình thật (dòng không mang id tổ chức, id người dùng hay thân yêu cầu).
     "apps/api/src/log-tu-choi-mat.int.test.ts",
     "packages/identity/src/mo-ta-hang-dong.test.ts",
+    // [S1.222 / khoản 166] `moTaLoiKhongGiaTri` nay MỘT bản ở identity: `mo-ta-loi.test.ts` của gói đo luật A2 ở mức hàm trên lớp lỗi
+    // thật (`DenialAuditFailedError` mang cause 55P03, `TenantError` — không message, không giá trị), và vế khoản 166 của
+    // `composition.int.test.ts` đo dòng log của worker dựng từ cấu hình (không id yêu cầu, id tổ chức, id job, không thông điệp Postgres).
+    "apps/unseal-worker/src/composition.int.test.ts",
+    "packages/identity/src/mo-ta-loi.test.ts",
   ],
   A3: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
@@ -198,6 +203,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/routes.test.ts",
   ],
   F1: [
+    // [S1.233 / khoản 158] Tập `kind` của hai policy RESTRICTIVE FOR UPDATE trên `outbox_jobs` (095) BẰNG bảng handler ∪ sổ mồ côi
+    // của tiến trình chạy dưới vai ấy — đọc `pg_policy`, đối chiếu với `Object.keys(handlers)` thật; thêm `kind` mà quên migration
+    // thì đỏ ở tệp của tiến trình thêm, trước khi job của nó nằm PENDING im lặng (F1: RLS không là đường làm câu ghi trả 0 hàng im lặng).
+    "apps/api/src/composition.int.test.ts",
+    "apps/unseal-worker/src/composition.int.test.ts",
     "db/migration-shape.test.ts",
     "db/migrations.int.test.ts",
     "db/rls-coverage.int.test.ts",
@@ -432,7 +442,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
+  // [S1.234 / S4.3b] `anh-xa` (apps/api) đo cùng lớp cho ba route ghi ánh xạ: người tạo gói gọi ⇒ 403, không hàng ánh xạ nào.
   L3: [
+    "apps/api/src/anh-xa.int.test.ts",
     "apps/api/src/du-lieu.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",

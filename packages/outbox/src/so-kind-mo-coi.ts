@@ -31,9 +31,15 @@
 //   ⑶ mỗi dòng phải trỏ tới một khoản CÒN MỞ trong `docs/STATE.md`. Khoản đóng ⇒ cổng ĐỎ, vì một
 //      `kind` mồ côi vĩnh viễn là một tính năng chết chứ không phải một trạng thái ổn định.
 //
-// ĐÚNG MỘT tiến trình được khai sổ này vào `JobRunnerOptions.kindKhongNguoiNhan` — hôm nay là
-// `api` (`apps/api/src/composition.ts`). Worker KHÔNG khai: hai tiến trình cùng khai thì cả hai
-// cùng tranh nhau đưa một job mồ côi tới trạng thái cuối, và `attempts` của nó thôi đọc được.
+// ĐÚNG MỘT tiến trình được khai sổ này vào `JobRunnerOptions.kindKhongNguoiNhan` — ~~hôm nay là
+// `api` (`apps/api/src/composition.ts`). Worker KHÔNG khai~~ **[S1.222 / khoản 168] từ vòng này là
+// WORKER (`apps/unseal-worker/src/tien-trinh.ts`); `api` KHÔNG khai.** Lý do đo được (§S1.83, đo
+// lại ở `tien-trinh.int.test.ts` ⑹): bảo đảm "vẫn chết ồn ào" chỉ đứng ở tiến trình CLAIM được job,
+// mà `listOrganizations` của `api` là tập tổ chức nó ĐÃ THẤY enqueue — hẹp nhất trong hệ, rỗng lại
+// sau mỗi lần khởi động — còn worker liệt kê MỌI tổ chức qua hàm `052`. Lý do S1.81 chọn `api`
+// (*"worker có thể chưa được dựng"*) hết hiệu lực từ khi khoản 116 đóng (S1.82). Vẫn chỉ MỘT: hai
+// tiến trình cùng khai thì cả hai cùng tranh nhau đưa một job mồ côi tới trạng thái cuối, và
+// `attempts` của nó thôi đọc được.
 // ==============================================================================================
 
 /**

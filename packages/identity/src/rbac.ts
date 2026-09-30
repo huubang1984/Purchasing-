@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound, type AuditEventInput } from "@trustprocure/audit";
 import { withTenant } from "@trustprocure/tenancy";
-import type { Permission } from "./permissions.js";
+import { PERMISSIONS, type Permission } from "./permissions.js";
 
 /** Ném khi người dùng không có quyền được yêu cầu. Bản ghi kiểm toán ĐÃ được ghi trước đó. */
 export class PermissionDeniedError extends Error {
@@ -41,6 +42,15 @@ export class PermissionAuditFailedError extends Error {
      */
     readonly resourceType: string,
     cause: Error,
+    /**
+     * [S1.216 / khoản 177 / ADR-127] BĂM RÚT GỌN của người bị từ chối — 12 hex đầu của sha256(`denial.userId`), tính ở
+     * `requirePermission` bằng `bamNguoiRutGon`. Có mặt để dòng log của lần MẤT SỔ nói được lần từ chối của AI: ở đúng ca này
+     * hàng sổ — nơi `actor_id` sống — là hàng không ghi được, nên lập luận "danh tính lấy từ sổ" không đứng (§S1.85 mục 7). Là
+     * BĂM chứ không phải `userId`: các dòng của cùng một người nối được với nhau mà không nêu ai; đi vào dòng log qua phép canh
+     * hình dạng `^[0-9a-f]{12}$` ở `moTaHangDongCuaLanTuChoi` — một chuỗi khác (kể cả chính UUID) ra `HANG_LA`. `null` ở chỗ
+     * dựng cũ/test ⇒ dòng không có `nguoi=`.
+     */
+    readonly nguoiBam: string | null = null,
   ) {
     super(
       `Từ chối vì thiếu quyền "${denial.permission}" nhưng KHÔNG ghi được bản ghi kiểm toán ` +
@@ -71,6 +81,21 @@ export class DenialAuditFailedError extends Error {
     readonly resourceType: string,
     readonly denial: Error,
     cause: Error,
+    /**
+     * [S1.225 / khoản 179] VẾ đã từ chối — hằng của người gọi `throwAuditedDenial` (vế của cổng mở thầu trong `UNSEAL_CLAUSES`, vế của
+     * worker lúc giải mã, trạng thái RFQ của A4, [S1.241 / khoản 279] mã chốt kiểm soát, mã từ chối trạng thái, [S1.245 / khoản 267] lý
+     * do từ chối huỷ yêu cầu mở thầu), hay `null` khi người gọi không có vế nào để kể. Có mặt ở đây vì hàng sổ mang vế ấy CHÍNH LÀ hàng
+     * đã không ghi được — ba đường từ chối ghi cùng `action`/`resourceType` [S1.241 / khoản 279] (và mười bảy mã chốt vào sổ chung một
+     * `CONTROL_DENIED`, chín mã lý do chung một `RFQ_STATE_DENIED`, [S1.245 / khoản 267] hai lý do chung một `UNSEAL_CANCEL_DENIED`),
+     * nên không có nó dòng log không nói được vế nào của cổng đã chặn. Đi vào dòng log qua phép thuộc-tập `DANH_MUC_VE_CONG`, không
+     * nguyên văn.
+     */
+    readonly clause: string | null = null,
+    /**
+     * [S1.216 / khoản 177 / ADR-127] Băm rút gọn của `event.actorId` mà `throwAuditedDenial` tính — cùng lý do và cùng phép
+     * canh với `PermissionAuditFailedError.nguoiBam`. Lần từ chối của SERVICE (worker lúc giải mã, `actorId` null) không có ⇒ `null`.
+     */
+    readonly nguoiBam: string | null = null,
   ) {
     super("Một lần từ chối KHÔNG ghi được bản ghi kiểm toán (bất biến D5).", { cause });
     this.name = "DenialAuditFailedError";
@@ -270,30 +295,199 @@ export interface PermissionRequirement extends PermissionCheck {
  *
  * Phát biểu đúng mức: một người CỐ TÌNH vẫn nhét được `GIA_1500000` qua. Cái nó đóng là đường
  * đi VÔ Ý — nội suy một chuỗi người dùng hoặc một thông báo lỗi vào trường này.
+ *
+ * [S1.225 / khoản 189] Hình dạng này nay chỉ canh đường vào SỔ (`requirePermission`, `throwAuditedDenial`). Đường ra DÒNG LOG
+ * (`moTaHangDongCuaLanTuChoi`) thôi dùng nó: nó nhận cả lớp bí mật mà kho này tự sinh ra (bí mật TOTP base32 bắt đầu bằng chữ cái,
+ * UUID viết hoa bỏ gạch nối, hex viết hoa), nên dòng log canh theo TẬP ĐÓNG — ba danh mục dưới đây.
  */
 const HINH_DANG_LOAI_TAI_NGUYEN = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 /**
- * Hình dạng của một MÃ QUYỀN: các đoạn chữ thường nối bằng dấu chấm (`supplier.manage`) — khuôn của MỌI giá trị trong `PERMISSIONS`,
- * và có meta-test đối chiếu danh mục ấy với bảng `permissions` của `005`.
+ * ~~Hình dạng của một MÃ QUYỀN: các đoạn chữ thường nối bằng dấu chấm (`supplier.manage`) — khuôn của MỌI giá trị trong `PERMISSIONS`,~~
+ * ~~và có meta-test đối chiếu danh mục ấy với bảng `permissions` của `005`.~~ [S1.225 / khoản 189] Biểu thức ấy đã bị gỡ: nó nhận
+ * `supplier.delete` — đúng khuôn, không có trong `PERMISSIONS`. Mã quyền ra dòng log nay phải THUỘC `PERMISSIONS` (`MA_QUYEN` dưới đây).
  */
-const HINH_DANG_MA_QUYEN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){1,3}$/u;
 
 /**
- * Thứ thay chỗ một hằng KHÔNG đúng hình dạng. Chính nó là một hằng: nó nói "có một trường ở đây và nó không đúng khuôn" mà không
- * nói trường ấy mang gì. Im lặng bỏ đi thì dòng log ngắn lại một cách không ai giải thích được — cùng lý do với `loi khong ro`.
+ * Thứ thay chỗ một hằng ~~KHÔNG đúng hình dạng~~ [S1.225 / khoản 189] KHÔNG CÓ TRONG DANH MỤC. Chính nó là một hằng: nó nói "có một
+ * trường ở đây và nó không đúng ~~khuôn~~ tên nào đã khai" mà không nói trường ấy mang gì. Im lặng bỏ đi thì dòng log ngắn lại một cách
+ * không ai giải thích được — cùng lý do với `loi khong ro`.
  */
 const HANG_LA = "HANG_LA";
 
 /** `action` của bản ghi mà `requirePermission` ghi khi từ chối. MỘT chỗ ở: câu `appendAuditEvent` dưới đây và dòng log đọc cùng hằng. */
 const ACTION_TU_CHOI_QUYEN = "PERMISSION_DENIED";
 
-function hangMaHoa(v: string): string {
-  return HINH_DANG_LOAI_TAI_NGUYEN.test(v) ? v : HANG_LA;
+/**
+ * [S1.225 / khoản 189] BA DANH MỤC ĐÓNG CỦA DÒNG LOG — "tên thì được, giá trị thì không" nay là phép THUỘC-TẬP, không phải phép canh
+ * hình dạng.
+ *
+ * Vì sao đổi, đo được (§S1.87, khoản 189): `HINH_DANG_LOAI_TAI_NGUYEN` nhận MỌI chuỗi hoa-số-gạch-dưới ≤ 64 bắt đầu bằng chữ cái, mà
+ * đó chính là hình dạng của lớp bí mật kho NÀY tự sinh ra — bí mật TOTP base32 (`JBSWY3DPEHPK3PXP` khớp; `base32()` ở
+ * `apps/api/src/routes/auth.ts` phát nó, bắt đầu bằng chữ cái 26/32 số lần), UUID viết hoa bỏ gạch nối, hex viết hoa — và biểu thức mã
+ * quyền nhận `supplier.delete` dù không có mã ấy. Một tập đóng thì không: thứ không có TÊN trong danh mục ra `HANG_LA`, bất kể hình dạng
+ * (đo ở `mo-ta-hang-dong.test.ts`: bốn chuỗi ấy đi lọt trên mã trước vòng này, nay ra `HANG_LA` ở cả bốn trường).
+ *
+ * Nội dung ba danh mục là thứ ĐO ĐƯỢC ở chỗ gọi, không phải thứ đoán, và phép đo đi HAI CHIỀU: `danh-muc-tu-choi.test.ts` đọc cây cú
+ * pháp của mọi lời gọi `requirePermission`/`throwAuditedDenial` trong mã sản xuất (cộng bảng route của `apps/api`, nơi `resourceType` của
+ * cổng quyền sống, và ba từ vựng vế: `UNSEAL_CLAUSES`, `UnsealExecutionClause`, `RFQ_STATUSES`) và đòi tập hằng ở đó BẰNG tập ở đây;
+ * `mo-ta-hang-dong.test.ts` đòi mọi mã ở đây đi qua nguyên vẹn. Một lần từ chối mới mang mã mới ⇒ test đầu đỏ cho tới khi mã ấy được
+ * khai ở đây — cái giá của một tập đóng, trả lúc viết mã chứ không lúc đọc log sau sự cố.
+ *
+ * Ranh giới, nói ra: đây là danh mục của DÒNG LOG. Đường vào SỔ vẫn canh `action`/`resourceType` theo hình dạng F7 (`requirePermission`
+ * và ⑴ của `throwAuditedDenial`): từ vựng của sổ là mở theo thiết kế — mỗi gói khai hành động của nó, hôm nay hơn tám mươi mã — và
+ * siết nó về một tập trong gói này là cái mà docstring của `HINH_DANG_LOAI_TAI_NGUYEN` đã tiên đoán *sẽ bị nới ra bằng phản xạ*; bán
+ * kính của khoản 189 ở sổ bằng 0 (`action`/`resourceType` là hằng viết cứng ở mọi chỗ gọi, `permission` có kiểu union), còn dòng log là
+ * nơi duy nhất một chuỗi của ba trường ấy đi ra NGOÀI CSDL.
+ */
+/** Hành động của các lần TỪ CHỐI: `PERMISSION_DENIED` của cổng quyền, và `action` ở mọi lời gọi `throwAuditedDenial`. */
+export const DANH_MUC_HANH_DONG_TU_CHOI: ReadonlySet<string> = new Set([
+  ACTION_TU_CHOI_QUYEN,
+  "AGENT_SCOPE_DENIED",
+  "COMPARISON_DENIED",
+  // [S1.213 / khoản 133] "Không tìm thấy RFQ" ở hai đường đọc có cổng của bảng so sánh (`packages/unseal/src/comparison.ts`).
+  "COMPARISON_NOT_FOUND_DENIED",
+  "CONTROL_DENIED",
+  "MFA_RESET_APPROVAL_DENIED",
+  "RFQ_STATE_DENIED",
+  "UNSEAL_APPROVAL_DENIED",
+  "UNSEAL_CANCEL_DENIED",
+  "UNSEAL_DENIED",
+  // [S1.213 / khoản 133] Điều phối LẦN HAI khi lượt trước còn sống (`dieuPhoiLaiSauKhiChet`, `packages/unseal/src/requests.ts`).
+  "UNSEAL_DISPATCH_DENIED",
+  "UNSEAL_EXECUTION_DENIED",
+  // [S1.213 / khoản 133] "Không tìm thấy yêu cầu mở thầu" ở huỷ và phê duyệt (`packages/unseal/src/requests.ts`).
+  "UNSEAL_NOT_FOUND_DENIED",
+]);
+/** `resourceType` ở mọi lời gọi `requirePermission`/`throwAuditedDenial` và ở bảng route của `apps/api`. */
+export const DANH_MUC_LOAI_TAI_NGUYEN: ReadonlySet<string> = new Set([
+  // [S1.199 / S4.2b] Route ghi của dữ liệu nền (`apps/api/src/routes/du-lieu.ts`) — vào danh mục ở lần hợp master sau đợt 2.
+  "CANONICAL_ITEM",
+  "INVITATION",
+  "MFA_RESET_REQUEST",
+  "PROCUREMENT_CATEGORY",
+  "PROCUREMENT_POLICY",
+  "RFQ",
+  // [S1.200 / khoản 258] Lần đọc ngân sách có cổng (`getRfqBudget`, `packages/rfq/src/procurement-policy.ts`).
+  "RFQ_BUDGET",
+  "RFQ_INVITATION",
+  "SESSION",
+  "SUPPLIER",
+  "UNSEAL_REQUEST",
+  // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức (`apps/api/src/routes/du-lieu.ts`).
+  "UOM_ALIAS",
+  "USER",
+]);
+/**
+ * [S1.225 / khoản 179] VẾ đã từ chối: bốn vế `UNSEAL_CLAUSES` của cổng mở thầu (`packages/unseal/src/gate.ts`), hai vế
+ * `UnsealExecutionClause` của worker lúc giải mã (`apps/unseal-worker/src/index.ts`, tập con), và trạng thái RFQ `RFQ_STATUSES`
+ * (`packages/rfq/src/rfq.ts`) mà lần từ chối A4 của bảng so sánh mang. ~~Gói này không import được ba nguồn ấy (chúng phụ thuộc gói này),~~
+ * [S1.241 / khoản 279] Cộng hai từ vựng MÃ: mã chốt kiểm soát — tập khoá của `CHOT_VAO_SO` (`./chot-kiem-soat.ts`, `CONTROL_DENIED`) —
+ * và mã từ chối trạng thái — tập khoá của `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`, `RFQ_STATE_DENIED`): hai đường ấy ghi
+ * mười bảy / chín mã vào sổ dưới MỘT `action` mỗi đường, nên khi lần ghi gãy, dòng log không có vế thì không nói được chốt hay bước nào
+ * (khoản 279). Cả mã `vaoSo: false` (không bao giờ tới dòng mất sổ) cũng ở đây — mười chín và mười bốn tên: nguồn là một tập, đo nó
+ * nguyên vẹn rẻ hơn đo một hiệu.
+ * [S1.245 / khoản 267] Cộng từ vựng thứ sáu: hai lý do từ chối huỷ yêu cầu mở thầu — kiểu hợp `LyDoTuChoiHuy`
+ * (`packages/unseal/src/requests.ts`, `UNSEAL_CANCEL_DENIED`): từ vòng ấy một `action` mang hai lý do trên cùng route huỷ.
+ * Tệp này không import được ~~năm~~ [S1.245] sáu nguồn ấy — ~~bốn~~ năm phụ thuộc gói này, và `chot-kiem-soat.ts` import
+ * `throwAuditedDenial` từ đây nên chiều ngược là một vòng —, nên danh mục chép lại, và `danh-muc-tu-choi.test.ts` đòi bản chép bằng
+ * nguồn (vế ⑷, đọc theo tên ở nguồn).
+ * Danh mục là MỘT tập phẳng: nó canh "tên thì được, giá trị thì không", không canh "vế thuộc đúng từ vựng của `action`" — một vế của
+ * từ vựng này đặt dưới `action` của từ vựng kia vẫn ra nguyên văn (một tên đã khai, không phải một giá trị).
+ */
+export const DANH_MUC_VE_CONG: ReadonlySet<string> = new Set([
+  "PERMISSION",
+  "MFA_FRESH",
+  "RFQ_CLOSED",
+  "POLICY_GATE",
+  "DRAFT",
+  "PENDING_APPROVAL",
+  "OPEN",
+  "CLOSED",
+  "UNSEALED",
+  "EVALUATING",
+  "BAFO_OPEN",
+  "BAFO_CLOSED",
+  "BAFO_UNSEALED",
+  "AWARDED",
+  "CANCELLED",
+  // [S1.241 / khoản 279] Mã chốt kiểm soát — `MaChotKiemSoat`, tập khoá của `CHOT_VAO_SO` (`./chot-kiem-soat.ts`).
+  "BAC_LECH_HAM_PHAN_BAC",
+  "D2_NGUOI_TAO_TU_DUYET",
+  "D2_PHIEN_KHONG_HOP_LE",
+  "D2_PHIEN_NGUOI_KHAC",
+  "J3_NGUOI_DE_XUAT_TU_DUYET",
+  "J3_NGUOI_DIEU_PHOI_DE_XUAT",
+  "J3_NGUOI_TAO_DE_XUAT",
+  "J3_PHIEN_DE_XUAT_DUYET",
+  "J5_LUOT_CHAM_KHONG_MOI_NHAT",
+  "K4A_THEM_SAI_TRANG_THAI",
+  "K4A_THU_HOI_SAI_TRANG_THAI",
+  "K8A_NGUOI_MOI_XAC_MINH",
+  "K8A_NGUOI_TAO_TU_XAC_MINH",
+  "NGAN_SACH_GHIM_BAN_CU",
+  "K10A_TAC_GIA_CHINH_SACH",
+  "K10A_TU_GHI_NHAN",
+  "THIEU_NGAN_SACH",
+  "THIEU_NHOM_HANG",
+  "TIN_HIEU_CHUA_GHI_NHAN",
+  // [S1.241 / khoản 279] Mã từ chối trạng thái — `MaTuChoiTrangThai`, tập khoá của `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`).
+  "CHINH_SACH_CHUA_KHAI_TRONG_SO",
+  "CHINH_SACH_TAT_BAFO",
+  "CHUA_CHAM_LAN_NAO",
+  "DE_XUAT_DA_CO_CHU_KY",
+  "KHONG_CO_AWARD_CON_SONG",
+  "KHONG_CO_BAO_GIA_DOC_DUOC",
+  "KHONG_CO_DE_XUAT_DANG_CHO",
+  "KHONG_CO_VONG_DANG_MO",
+  "KHONG_PHAI_NGUOI_DE_XUAT",
+  "LECH_TIEN_TE",
+  "RFQ_KHONG_CHAM_DUOC",
+  "RFQ_KHONG_DE_XUAT_DUOC",
+  "RFQ_KHONG_MO_VONG_DUOC",
+  "THANH_PHAN_CHUA_CO_NGUON",
+  // [S1.245 / khoản 267] Lý do từ chối huỷ yêu cầu mở thầu — `LyDoTuChoiHuy` (`packages/unseal/src/requests.ts`, `UNSEAL_CANCEL_DENIED`).
+  "KHONG_O_TRANG_THAI_HUY_DUOC",
+  "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC",
+]);
+/** Mã quyền ra dòng log phải là một giá trị của `PERMISSIONS` — danh mục đã có meta-test đối chiếu với bảng `permissions` của `005`. */
+const MA_QUYEN: ReadonlySet<string> = new Set(Object.values(PERMISSIONS));
+
+/** Phép thuộc-tập: `v` có tên trong `danhMuc` thì đi qua nguyên vẹn, không thì `HANG_LA`. */
+function hangMaHoa(v: string, danhMuc: ReadonlySet<string>): string {
+  return danhMuc.has(v) ? v : HANG_LA;
 }
 
 function hangMaQuyen(v: string): string {
-  return HINH_DANG_MA_QUYEN.test(v) ? v : HANG_LA;
+  return hangMaHoa(v, MA_QUYEN);
+}
+
+/**
+ * [S1.216 / khoản 177 / ADR-127] Băm rút gọn của một `userId` cho dòng log của lần từ chối MẤT SỔ: 12 ký tự hex đầu của
+ * sha256(userId), không khoá, không muối — ADR-127 khai đúng phép này để người điều tra tính lại được từ id trong `users` (đó
+ * là toàn bộ giá trị của nó: NỐI các dòng của cùng một người, và đối chiếu được khi cần), trong khi một dòng đơn lẻ không nêu ai.
+ * 48 bit: đủ để ba người trong một sự cố không trùng nhau, không đủ để ai coi nó là một định danh. Tính ở chỗ đã có `userId`
+ * trong tay — `requirePermission` (`requirement.userId`) và `throwAuditedDenial` (`event.actorId`) — không ở lớp lỗi, để một
+ * lớp lỗi dựng từ nơi khác không tự băm một thứ không phải `userId`.
+ */
+function bamNguoiRutGon(userId: string): string {
+  return createHash("sha256").update(userId, "utf8").digest("hex").slice(0, 12);
+}
+
+/**
+ * Hình dạng của khe `nguoi=` — đúng 12 hex thường. Đây là ranh giới của ngoại lệ ADR-127 với A2: một UUID thô (36 ký tự, có
+ * gạch nối), một băm đầy đủ (64 hex), một băm viết hoa, một email, một bí mật base32 — không thứ nào khớp, và ra `HANG_LA` như
+ * mọi trường khác. Không có khe thứ hai.
+ */
+const HINH_DANG_BAM_NGUOI = /^[0-9a-f]{12}$/u;
+
+function hangBamNguoi(v: string): string {
+  return HINH_DANG_BAM_NGUOI.test(v) ? v : HANG_LA;
+}
+
+/** Nối khe `nguoi=` vào phần hằng — chỉ khi lớp lỗi mang băm; không băm thì dòng y như trước vòng này. */
+function noiNguoi(hang: string, nguoiBam: string | null): string {
+  return nguoiBam === null ? hang : `${hang} nguoi=${hangBamNguoi(nguoiBam)}`;
 }
 
 /**
@@ -304,20 +498,42 @@ function hangMaQuyen(v: string): string {
  * `[api] <requestId> PermissionAuditFailedError <- error 55P03` — không `action`, không mã quyền, không `resourceType`, không mẫu
  * route. Sau sự cố không nguồn nào còn cho biết lần từ chối NÀO đã mất (khoản 131, ghi từ S1.72).
  *
- * "TÊN THÌ ĐƯỢC, GIÁ TRỊ THÌ KHÔNG" LÀ MỘT PHÉP KIỂM, KHÔNG PHẢI MỘT LỜI HỨA. Mỗi trường đi qua hình dạng của chính nó — mã định
- * danh viết hoa cho `action`/`resourceType`, khuôn chấm chữ thường cho mã quyền — và thứ không khớp ra `HANG_LA`. Nên kể cả khi một
- * vòng sau đưa nhầm một giá trị (id, email, giá) vào một trong các trường ấy, nó KHÔNG ra được dòng log: một UUID có dấu gạch nối,
- * một email có `@`, một số bắt đầu bằng chữ số — cả ba trượt cả hai hình dạng.
+ * "TÊN THÌ ĐƯỢC, GIÁ TRỊ THÌ KHÔNG" LÀ MỘT PHÉP KIỂM, KHÔNG PHẢI MỘT LỜI HỨA. ~~Mỗi trường đi qua hình dạng của chính nó — mã định~~
+ * ~~danh viết hoa cho `action`/`resourceType`, khuôn chấm chữ thường cho mã quyền — và thứ không khớp ra `HANG_LA`.~~ [S1.225 / khoản 189]
+ * Mỗi trường đi qua DANH MỤC ĐÓNG của chính nó — `DANH_MUC_HANH_DONG_TU_CHOI`, `DANH_MUC_LOAI_TAI_NGUYEN`, `PERMISSIONS`, và
+ * `DANH_MUC_VE_CONG` cho vế — và thứ không có tên trong danh mục ra `HANG_LA`. Nên kể cả khi một vòng sau đưa nhầm một giá trị (id,
+ * email, giá, bí mật) vào một trong các trường ấy, nó KHÔNG ra được dòng log: ~~một UUID có dấu gạch nối, một email có `@`, một số bắt~~
+ * ~~đầu bằng chữ số — cả ba trượt cả hai hình dạng.~~ không giá trị nào là một tên đã khai.
  *
- * [S1.87 / lượt soi ngang 74 góc 2 — ĐO] RANH GIỚI CỦA PHÉP KIỂM ẤY, VÀ CÂU CŨ RỘNG HƠN THỨ NÓ LÀM ĐƯỢC.
+ * [S1.87 / lượt soi ngang 74 góc 2 — ĐO] RANH GIỚI CỦA PHÉP KIỂM ~~ẤY~~ CŨ, VÀ CÂU CŨ RỘNG HƠN THỨ NÓ LÀM ĐƯỢC.
  * ~~cả ba trượt cả hai hình dạng — nên một giá trị KHÔNG ra được dòng log~~ đúng cho ĐÚNG BA ví dụ ấy, không đúng cho mọi giá trị.
  * `HINH_DANG_LOAI_TAI_NGUYEN` nhận MỌI chuỗi hoa-số-gạch-dưới dài ≤ 64 bắt đầu bằng chữ cái, mà đó chính là hình dạng của lớp bí
  * mật kho NÀY tự sinh ra: `base32()` ở `apps/api/src/routes/auth.ts` phát bí mật TOTP theo RFC 4648 (A–Z2–7), và một bí mật bắt đầu
  * bằng chữ cái — 26/32 số lần — KHỚP (đo: `JBSWY3DPEHPK3PXP` khớp; một UUID viết hoa đã bỏ gạch nối cũng khớp). Nên phát biểu đúng
- * mức: đây là CHẶN CẤU TRÚC chống nội suy văn xuôi/id/email/số, KHÔNG phải một bộ lọc bí mật. Hôm nay không đường sản xuất nào đưa
- * một bí mật vào ba trường ấy (`action`/`resourceType` là hằng viết cứng, `permission` có kiểu union), nên bán kính bằng 0 — và đó
- * là lý do đây là một lời khai được thu hẹp chứ không phải một lỗ. Muốn giữ lời hứa rộng thì phải kiểm theo TẬP ĐÓNG chứ không theo
- * hình dạng: khoản 189.
+ * mức: ~~đây là~~ phép canh hình dạng là CHẶN CẤU TRÚC chống nội suy văn xuôi/id/email/số, KHÔNG phải một bộ lọc bí mật. Hôm nay không
+ * đường sản xuất nào đưa một bí mật vào ba trường ấy (`action`/`resourceType` là hằng viết cứng, `permission` có kiểu union), nên bán
+ * kính bằng 0 — và đó là lý do đây là một lời khai được thu hẹp chứ không phải một lỗ. ~~Muốn giữ lời hứa rộng thì phải kiểm theo TẬP~~
+ * ~~ĐÓNG chứ không theo hình dạng: khoản 189.~~ [S1.225 / khoản 189] Nay kiểm theo tập đóng — xem ba danh mục ở trên; đo ở
+ * `mo-ta-hang-dong.test.ts` (`JBSWY3DPEHPK3PXP`, UUID viết hoa bỏ gạch nối, hex viết hoa, `supplier.delete` đều ra `HANG_LA`).
+ *
+ * [S1.225 / khoản 179] HẰNG THỨ BA CỦA `DenialAuditFailedError` — VẾ ĐÃ TỪ CHỐI. Tới trước vòng này nhánh ấy chỉ in `action` và
+ * `resourceType`, mà ba đường từ chối của cổng mở thầu ghi cùng `UNSEAL_DENIED UNSEAL_REQUEST` (đo §S1.87: khoá ghi sổ bị giữ ⇒ dòng
+ * `… UNSEAL_DENIED UNSEAL_REQUEST <- error 55P03`, không nói vế nào), và hàng sổ mang `clause` chính là hàng không ghi được. Nay in
+ * thêm `clause` khi người gọi `throwAuditedDenial` truyền nó — qua `DANH_MUC_VE_CONG`; không truyền thì hai hằng như trước.
+ * [S1.241 / khoản 279] Hai đường nữa truyền vế: chốt kiểm soát (`… CONTROL_DENIED RFQ THIEU_NGAN_SACH …`) và từ chối trạng thái
+ * (`… RFQ_STATE_DENIED RFQ RFQ_KHONG_CHAM_DUOC …`) — đo ở `chot-kiem-soat.test.ts` và `packages/danh-gia/src/tu-choi-vao-so.test.ts`.
+ * [S1.245 / khoản 267] Và huỷ yêu cầu mở thầu (`… UNSEAL_CANCEL_DENIED UNSEAL_REQUEST KHONG_O_TRANG_THAI_HUY_DUOC …` khác
+ * `… KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC …`) — đo ở `packages/unseal/src/unseal.int.test.ts`, khối `[S1.245 / khoản 266 · 267]`.
+ *
+ * [S1.216 / khoản 177 / ADR-127] KHE THỨ NĂM, CÓ HÌNH DẠNG — AI BỊ TỪ CHỐI. §S1.85 để ngỏ (*"ghi id người dùng hay không là một
+ * quyết định A2 riêng"*), và chủ dự án chọn ⒞ ngày 2026-09-30: dòng của lần MẤT SỔ mang `nguoi=<băm rút gọn của userId>` — không
+ * phải mọi dòng, và không phải `userId`. Vì sao ở đúng dòng này: mọi ca khác lấy danh tính từ sổ, còn ca này được định nghĩa bởi
+ * việc hàng sổ ấy không ghi được; sau một sự cố khoá ghi sổ kéo dài, không có nó người vận hành biết route nào bị từ chối mà không
+ * biết bao nhiêu người, và không nguồn nào bù. Vì sao băm chứ không id: các dòng của cùng một người NỐI được với nhau (đo:
+ * `apps/api/src/log-tu-choi-mat.int.test.ts` — ba người, ba băm khác nhau, dựng lại từ stderr một mình), còn một dòng đơn lẻ
+ * không nêu ai; và khe chỉ nhận `^[0-9a-f]{12}$` (`hangBamNguoi`), nên đây là một TOKEN hình dạng cố định như mọi hằng khác trên
+ * dòng, không phải một giá trị người dùng — đó là ranh giới mà `apps/api/src/mo-ta-loi.ts` ghi và ADR-127 khai. Không băm
+ * (`null`) ⇒ dòng như trước; lần từ chối của SERVICE (worker) không có `actorId` nên không có khe này.
  *
  * Cùng kỷ luật A2 với `moTaLoiKhongGiaTri` ở
  * `apps/api/src/mo-ta-loi.ts`, và hàm này là nguồn DUY NHẤT của phần hằng ấy: `apps/api` và `apps/unseal-worker` đều gọi nó, nên hai
@@ -328,9 +544,15 @@ function hangMaQuyen(v: string): string {
  */
 export function moTaHangDongCuaLanTuChoi(loi: unknown): string {
   if (loi instanceof PermissionAuditFailedError) {
-    return `${ACTION_TU_CHOI_QUYEN} ${hangMaHoa(loi.resourceType)} ${hangMaQuyen(loi.denial.permission)}`;
+    return noiNguoi(
+      `${ACTION_TU_CHOI_QUYEN} ${hangMaHoa(loi.resourceType, DANH_MUC_LOAI_TAI_NGUYEN)} ${hangMaQuyen(loi.denial.permission)}`,
+      loi.nguoiBam,
+    );
   }
-  if (loi instanceof DenialAuditFailedError) return `${hangMaHoa(loi.action)} ${hangMaHoa(loi.resourceType)}`;
+  if (loi instanceof DenialAuditFailedError) {
+    const haiHang = `${hangMaHoa(loi.action, DANH_MUC_HANH_DONG_TU_CHOI)} ${hangMaHoa(loi.resourceType, DANH_MUC_LOAI_TAI_NGUYEN)}`;
+    return noiNguoi(loi.clause === null ? haiHang : `${haiHang} ${hangMaHoa(loi.clause, DANH_MUC_VE_CONG)}`, loi.nguoiBam);
+  }
   return "";
 }
 
@@ -646,6 +868,8 @@ export async function requirePermission(
         : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, {
             cause: loi,
           }),
+      // [S1.216 / khoản 177] Băm rút gọn của người bị từ chối — cho dòng log của lần MẤT SỔ; xem `bamNguoiRutGon`.
+      bamNguoiRutGon(requirement.userId),
     );
   }
 
@@ -659,6 +883,9 @@ export async function requirePermission(
  * và của `approveMfaReset` (./mfa-reset.ts). Trước khoản 119 cả ba tự gọi `withTenant(auditPool, …)` và không bọc lỗi của lần ghi.
  * [S1.72 / khoản 121] Thêm hai người gọi: lần từ chối A4 của `buildComparisonTable` (packages/unseal/src/comparison.ts), và lần từ chối lúc
  * giải mã của worker (apps/unseal-worker/src/index.ts) — worker ghi dưới vai `app_unseal` của nó.
+ * [S1.213 / khoản 133] Thêm: nhánh không tìm thấy của hai đường đọc bảng so sánh (`tuChoiKhongTimThay`, comparison.ts), của
+ * `cancelUnseal` và `approveUnseal` (23503 bọc), và vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet` (requests.ts).
+ * [S1.245 / khoản 267] Thêm: vế TRẠNG THÁI của `cancelUnseal` — yêu cầu có thật đã `EXECUTED`/`CANCELLED` (requests.ts).
  *
  * Làm theo thứ tự:
  *   ⑴ `action` và `resourceType` phải là MÃ ĐỊNH DANH viết hoa — cùng hình dạng F7 của `requirePermission`, vì cả hai đi vào sổ bất biến
@@ -667,6 +894,30 @@ export async function requirePermission(
  *      khoản 120] Lớp canh chạy trên CHÍNH kết nối của lần ghi, lấy với trần chờ `TRAN_CHO_KET_NOI_AUDIT_MS`;
  *   ⑶ lần ghi ở giao dịch ĐỘC LẬP — bản ghi sống qua rollback của người gọi (khoản nợ 32).
  * Lỗi ở bất kỳ bước nào ⇒ `DenialAuditFailedError` giữ lần từ chối; không lỗi ⇒ ném `denial`. Không có đường trả về.
+ *
+ * [S1.225 / khoản 179] `clause` — VẾ đã từ chối, một hằng của người gọi (vế của `UNSEAL_CLAUSES`, vế của worker lúc giải mã, trạng thái
+ * RFQ của A4) — đi vào `DenialAuditFailedError.clause` để dòng log của lần MẤT SỔ nói được vế nào; không truyền ⇒ `null`, dòng log như
+ * trước. Nhận qua tham số chứ không đọc `event.payload`: gói này không được đọc tên trường tuỳ ý của một payload (xem
+ * `moTaHangDongCuaLanTuChoi`), và người gọi là người biết trường nào của payload là VẾ. ~~Ba~~ [S1.241 / khoản 279] ~~Năm~~ [S1.245 /
+ * khoản 267] Sáu tệp gọi truyền nó hôm nay: `tuChoi` của cổng mở thầu, lần từ chối A4 của `buildComparisonTable`, `tuChoiLucGiaiMa` của
+ * worker, [S1.241 / khoản 279] `tuChoiTheoChotTaiNguyen` (`./chot-kiem-soat.ts`, vế là mã chốt) và `nemTuChoi`
+ * (`packages/danh-gia/src/tu-choi-vao-so.ts`, vế là mã lý do), [S1.245 / khoản 267] và hai lời gọi `UNSEAL_CANCEL_DENIED` của
+ * `cancelUnseal` (`packages/unseal/src/requests.ts`, vế là `lyDo` ∈ `LyDoTuChoiHuy`) — `danh-muc-tu-choi.test.ts` ghim đúng ~~ba~~ ~~năm~~
+ * sáu tệp ấy. Các chỗ gọi khác (D2 của phê duyệt mở thầu và đặt lại TOTP, ~~huỷ yêu cầu mở thầu,~~ ~~chốt kiểm soát, từ chối trạng thái,~~
+ * phạm vi agent) không có vế cổng theo nghĩa ấy — `action` của chúng đã là một hằng riêng cho mỗi đường — nên không truyền. [S1.241 /
+ * khoản 279] Chốt kiểm soát và từ chối trạng thái từng đứng trong danh sách ấy, sai: mỗi đường là MỘT `action` cho cả một tập mã đóng,
+ * và mã chỉ sống ở payload của chính hàng không ghi được. Danh sách ấy cũng THIẾU — đếm lại ở §S1.241 trên cây cú pháp: mười bốn lời gọi
+ * trong mã sản xuất, năm truyền vế, chín không; chín chỗ ấy là D2 của phê duyệt mở thầu và đặt lại TOTP (`viPham: "D2"`), ~~huỷ yêu cầu
+ * mở thầu (`lyDo` cố định),~~ điều phối lần hai (`reason` cố định), ba lần "không tìm thấy" (`operation` — mỗi giá trị một route), phạm vi
+ * agent (mẫu route), và thu hồi lời mời sau lần mở thầu (`packages/invitation/src/invitation.ts`, `RFQ_STATE_DENIED` payload `{ ma }` —
+ * lời gọi `RFQ_STATE_DENIED` duy nhất trên route thu hồi). Mỗi lần từ chối của ~~chín~~ [S1.245] tám chỗ ấy nhận ra được từ `action` hay
+ * từ mẫu route mà bộ điều phối in cùng dòng. [S1.245 / khoản 267] Đếm lại trên cây cú pháp sau vòng này: mười lăm lời gọi, bảy truyền
+ * vế, tám không. Huỷ yêu cầu mở thầu rời danh sách không truyền: vế trạng thái của nó vào sổ từ vòng này, nên `UNSEAL_CANCEL_DENIED`
+ * mang HAI lý do trên cùng route — `action` và mẫu route không còn nói được lý do nào.
+ *
+ * [S1.216 / khoản 177] `DenialAuditFailedError.nguoiBam` — băm rút gọn của `event.actorId` (`bamNguoiRutGon`), tính ở đây vì đây là chỗ
+ * duy nhất của đường này có id trong tay. Ở mọi chỗ gọi hôm nay `actorId` là id NGƯỜI bị từ chối (`actor.id`, `nguoiXem.id`, `userId`);
+ * lần từ chối của SERVICE (worker lúc giải mã) không có ⇒ `null`, dòng log của worker không đổi.
  *
  * KHÔNG kiểm "pool còn chỗ" tức thì như ~~`khangDinhGhiDuocDocLap`~~ `requirePermission` trước khoản 120 (lượt soi 62a-1, 63a-6). Bản đầu của vòng này có kiểm ấy, và nó đổi hành vi cả
  * khi lần ghi lẽ ra thành công: `auditPool` sản xuất khi ấy (S1.68) có hai kết nối và dùng chung mọi tổ chức, nên một loạt lần ghi song song làm lần từ
@@ -688,6 +939,7 @@ export async function throwAuditedDenial(
   orgId: string,
   event: AuditEventInput,
   denial: Error,
+  clause?: string,
 ): Promise<never> {
   // [S1.184 / khoản 248 / ADR-112] Đếm TRƯỚC lần ghi, ngoài khối bọc lỗi: vượt trần ném nguyên dạng — xem `BoiCanhTranTuChoi`.
   await demTheoBoiCanh(auditPool, orgId);
@@ -716,6 +968,9 @@ export async function throwAuditedDenial(
       loi instanceof Error
         ? loi
         : new Error(`tầng dưới ném một giá trị không phải Error (typeof = ${typeof loi})`, { cause: loi }),
+      clause ?? null,
+      // [S1.216 / khoản 177] Băm rút gọn của `actorId` — id người bị từ chối ở mọi chỗ gọi hôm nay; SERVICE (worker) không có ⇒ null.
+      typeof event.actorId === "string" ? bamNguoiRutGon(event.actorId) : null,
     );
   }
   throw denial;

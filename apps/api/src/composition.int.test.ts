@@ -27,9 +27,13 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
 import { counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { KIND_KHONG_NGUOI_NHAN } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docCauHinh, type MoiTruong } from "./cau-hinh.js";
 import { taoTienTrinhApi, type TienTrinhApi } from "./composition.js";
+// [S1.233 / khoản 158] Bảng handler THẬT của tiến trình này, để vế cuối tệp đối chiếu với tập `kind` của policy 095.
+import { buildApiOutboxHandlers } from "./outbox-api.js";
+import { dichVuTest } from "./test-services.js";
 import { COOKIE_PHIEN_NGUOI_MUA } from "./routes/auth.js";
 import type { TinHopThuDev } from "./adapters/hop-thu-dev.js";
 
@@ -778,5 +782,454 @@ describe("[S1.169 / ADR-105] cờ ký chính sách đi từ MÔI TRƯỜNG tới
     }
     const { rows } = await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM org_policy_signatures WHERE org_id = $1", [org]);
     expect(rows0(rows)).toBe("0");
+  });
+});
+
+// ==============================================================================================
+// [S1.222 / khoản 168] TIẾN TRÌNH `api` KHÔNG KHAI SỔ `kind` MỒ CÔI — ĐO TRÊN `taoTienTrinhApi` THẬT.
+//
+// Nửa thứ hai của khoản 168: sổ mồ côi (`KIND_KHONG_NGUOI_NHAN`) từ vòng này do worker mở thầu khai
+// (`apps/unseal-worker/src/tien-trinh.ts`, đo ở `tien-trinh.int.test.ts` vế ⑹), và ĐÚNG MỘT tiến trình
+// được khai — hai tiến trình cùng khai thì cả hai tranh nhau ghi kết cục và `attempts` của job mồ côi
+// thôi đọc được (`packages/outbox/src/runner.ts`). Vế này ghim nửa *"api KHÔNG khai"* trên dây nối
+// thật: bỏ `kindKhongNguoiNhan` khỏi `composition.ts` là một dòng XOÁ, và không phép đo nào khác đỏ
+// nếu ai đó thêm nó lại — vế này đỏ (đột biến §S1.222 M5: thêm lại dòng ấy ⇒ job mồ côi FAILED).
+//
+// Cảnh: sổ thật hôm nay RỖNG (S1.91), nên vế này cho nó mượn MỘT dòng thử trước khi dựng tiến trình
+// (cùng cách với vế ⑹ của worker; gỡ trong `finally`; tệp này có bản sổ riêng theo cô lập module của
+// vitest, nên cổng vế ⑶ ở `apps/unseal-worker/src/composition.int.test.ts` không thấy dòng này). Tổ
+// chức phải là tổ chức tiến trình này ĐÃ THẤY xếp việc — không thì `listOrganizations` (`toChucDaThay`)
+// không có nó và vế xanh mà không đo gì — nên một lời `/auth/link` đi trước. Đối chứng dương: một lời
+// `/auth/link` THỨ HAI, xếp việc SAU khi job mồ côi đã nằm đó, phải ra tin — tức runner đã chạy trọn
+// một lượt claim (lô 10 job) cho tổ chức ấy sau khi job mồ côi tồn tại — mà job mồ côi vẫn `PENDING`,
+// `attempts` 0, và không dòng log `outbox` nào của tiến trình mang `kind` ấy.
+// ==============================================================================================
+// ===============================================================================================
+// [S1.233 / khoản 158] TẬP `kind` MÀ CSDL CHO `app_api` GHI KẾT CỤC PHẢI BẰNG BẢNG HANDLER CỦA TIẾN TRÌNH NÀY
+//
+// Migration `095_outbox_policy_theo_kind` (ADR-134): policy `outbox_jobs_kind_app_api` (`AS RESTRICTIVE FOR UPDATE TO app_api`)
+// mang NGUYÊN VĂN tập `kind` của `buildApiOutboxHandlers`. Thêm một handler mà quên migration thì job của kind ấy không claim
+// được — nằm `PENDING` im lặng — và vế này đỏ TRƯỚC khi tới đó, ở đúng tệp của tiến trình thêm handler. Bản đối chiếu cả hai
+// vai (và sổ mồ côi của worker) ở `apps/unseal-worker/src/composition.int.test.ts`; hành vi ở `packages/outbox/src/outbox.int.test.ts`.
+// ===============================================================================================
+async function docTapKindCuaPolicyApi(): Promise<readonly string[]> {
+  const { rows } = await db.pool.query<{ vai: string; permissive: boolean; lenh: string; u: string | null; wc: string | null }>(
+    "SELECT array_to_string(ARRAY(SELECT r.rolname FROM unnest(p.polroles) AS o(oid) JOIN pg_roles r ON r.oid = o.oid ORDER BY r.rolname), ',') AS vai, " +
+      "       p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+      "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = 'outbox_jobs_kind_app_api'",
+  );
+  const p = rows[0];
+  expect(p, "CSDL không có policy outbox_jobs_kind_app_api — migration 095 chưa áp, hay policy đã bị đổi tên/xoá").toBeDefined();
+  expect({ vai: p!.vai, permissive: p!.permissive, lenh: p!.lenh }, "phải là RESTRICTIVE FOR UPDATE, đúng một vai app_api").toEqual({
+    vai: "app_api",
+    permissive: false,
+    lenh: "w",
+  });
+  expect(p!.wc, "WITH CHECK phải bằng USING — hai vế khai cùng một tập").toBe(p!.u);
+  expect(p!.u ?? "", "USING không đúng hình dạng `(kind = ANY (ARRAY['…'::text, …]))`").toMatch(
+    /^\(kind = ANY \(ARRAY\[(?:'[A-Z][A-Z0-9_]{0,63}'::text(?:, )?)+\]\)\)$/u,
+  );
+  return [...(p!.u ?? "").matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!);
+}
+
+/**
+ * [S1.233 / khoản 158] Policy 095 ràng tập `kind` của mỗi vai ở CSDL. Vế khoản 168 dưới đây mượn MỘT dòng thử ở sổ mồ côi để
+ * đo rằng runner của `api` KHÔNG nhặt nó; từ 095 lớp CSDL cũng chặn kind thử ấy, nên nếu không nới policy thì vế ấy xanh CẢ KHI
+ * `api` khai lại sổ (đột biến M5 của §S1.222 chết). Nới policy của vai cho ĐÚNG kind thử, dưới siêu người dùng — thứ còn quyết
+ * định là mảng lọc của runner — và khôi phục NGUYÊN VĂN trong `finally`. Cụm của tệp này là cụm riêng; cổng khai của hardening
+ * chỉ chạy ở `migrate()`, đã xong ở `beforeAll`.
+ */
+async function noiPolicyKindTam(polname: "outbox_jobs_kind_app_api" | "outbox_jobs_kind_app_unseal", kind: string): Promise<() => Promise<void>> {
+  if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(kind)) throw new Error("kind thử phải khớp CHECK của outbox_jobs.kind");
+  const { rows } = await db.pool.query<{ u: string; wc: string }>(
+    "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid WHERE c.relname = 'outbox_jobs' AND p.polname = $1",
+    [polname],
+  );
+  const goc = rows[0];
+  if (goc === undefined) throw new Error(`không thấy policy ${polname} — migration 095 chưa áp?`);
+  const noi = `(${goc.u}) OR (kind = '${kind}')`;
+  await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${noi}) WITH CHECK (${noi})`);
+  return async () => {
+    await db.pool.query(`ALTER POLICY ${polname} ON public.outbox_jobs USING (${goc.u}) WITH CHECK (${goc.wc})`);
+  };
+}
+
+describe("[INV-F1] [S1.233 / khoản 158] tập `kind` trong policy `outbox_jobs_kind_app_api` BẰNG bảng handler của tiến trình `api`", () => {
+  it("Object.keys(buildApiOutboxHandlers) = tập kind của policy — thêm một handler mà quên migration thì đỏ ở đây, trước khi job của nó nằm PENDING im lặng", async () => {
+    const handler = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
+    expect(handler.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    expect(
+      [...(await docTapKindCuaPolicyApi())].sort(),
+      "Tập `kind` trong policy của CSDL KHÁC bảng handler của api. Thêm kind = thêm migration (ADR-134): `ALTER POLICY " +
+        "outbox_jobs_kind_app_api ON public.outbox_jobs USING (…) WITH CHECK (…)` trong một migration MỚI, cộng sửa dòng ở " +
+        "POLICY_RESTRICTIVE_KHAI (hardening.always.sql) và POLICY_RESTRICTIVE_DA_KHAI (db/rls-coverage.int.test.ts).",
+    ).toEqual([...handler].sort());
+  });
+});
+
+describe("[S1.222 / khoản 168] tiến trình `api` dựng từ môi trường KHÔNG khai sổ `kind` mồ côi", () => {
+  it("job mang `kind` trong sổ mồ côi của tổ chức tiến trình này ĐÃ THẤY xếp việc vẫn PENDING, attempts 0, sau khi runner chạy trọn một lượt cho tổ chức ấy (job LOGIN_LINK_SEND xếp SAU nó đã ra tin); không dòng log nào mang `kind` ấy — sổ nay là việc của worker", async () => {
+    const KIND_MO_COI = "THU_MO_COI_168_API";
+    Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế khoản 168 — không phải một khai thật, gỡ trong finally" });
+    // [S1.233 / khoản 158] Policy 095 cũng chặn kind thử này dưới app_api; nới cho đúng nó để thứ được đo vẫn là mảng lọc của
+    // runner (xem `noiPolicyKindTam`). Khôi phục trong `finally`.
+    const khoiPhucPolicy = await noiPolicyKindTam("outbox_jobs_kind_app_api", KIND_MO_COI);
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    // Tổ chức và người dùng RIÊNG cho vế này: không job sót của các vế trước, và `toChucDaThay` của tiến trình dựng dưới đây
+    // chỉ có nó. Email phải là của một người dùng ACTIVE — handler `LOGIN_LINK_SEND` không gửi gì cho email lạ (chống dò tài
+    // khoản, `outbox-api.ts`), mà tin trong hộp thư là đối chứng dương của vế này.
+    const orgK = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty K168', 'cong-ty-k168') RETURNING id")
+    ).rows[0]!.id;
+    await db.pool.query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, 'k168@vidu.vn', 'Nguoi mua K168', 'ACTIVE')", [orgK]);
+    const tt = taoTienTrinhApi(docCauHinh(moiTruong()));
+    try {
+      const dc = await tt.batDau();
+      goc = `http://${dc.host}:${dc.port}`;
+      const truoc = docHopThu().length;
+      // ⑴ Tổ chức vào `toChucDaThay` của tiến trình này bằng đúng đường sản xuất: một lời xếp việc qua `api`.
+      const r1 = await goi("POST", "/auth/link", { body: { orgId: orgK, email: "k168@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.68" } });
+      expect(r1.status, r1.text).toBe(200);
+      await doiHopThu(truoc + 1);
+      // ⑵ Job mồ côi của CÙNG tổ chức ấy — chèn thẳng, vì không đường sản xuất nào xếp một `kind` không người nhận.
+      const { rows: gieo } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind) VALUES ($1::uuid, $2) RETURNING id",
+        [orgK, KIND_MO_COI],
+      );
+      const idMoCoi = gieo[0]!.id;
+      // ⑶ Đối chứng dương: runner chạy trọn một lượt claim cho tổ chức ấy SAU khi job mồ côi đã nằm đó.
+      const r2 = await goi("POST", "/auth/link", { body: { orgId: orgK, email: "k168@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.69" } });
+      expect(r2.status, r2.text).toBe(200);
+      await doiHopThu(truoc + 2);
+      // ⑷ Job mồ côi không bị chạm — mảng lọc của runner này là đúng `Object.keys(handlers)`.
+      const { rows: job } = await db.pool.query<{ status: string; attempts: number; last_failure_reason: string | null }>(
+        "SELECT status, attempts, last_failure_reason FROM outbox_jobs WHERE id = $1",
+        [idMoCoi],
+      );
+      expect(job[0], "api KHÔNG được claim job mồ côi — sổ nay do worker khai, và ĐÚNG MỘT tiến trình khai").toEqual({
+        status: "PENDING",
+        attempts: 0,
+        last_failure_reason: null,
+      });
+      expect(log.filter((d) => d.includes(KIND_MO_COI)), JSON.stringify(log)).toEqual([]);
+      expect(log.join("\n")).not.toContain(orgK);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+      Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+      await khoiPhucPolicy();
+    }
+  });
+});
+
+// ==============================================================================================
+// [S1.248 / khoản 277] TIẾN TRÌNH `api` KHỞI ĐỘNG LẠI TỰ NHẶT VIỆC `PENDING` CỦA CHÍNH NÓ — đo trên `taoTienTrinhApi` thật.
+//
+// Trước vòng này `listOrganizations` của runner là `() => [...toChucDaThay]`: tập tổ chức mà CHÍNH tiến trình đã thấy xếp việc, rỗng
+// lại sau mỗi lần khởi động (dấu ADR-047). Job `PENDING` của `api` — link đăng nhập, tin báo người duyệt, tin gia hạn — mà tiến trình
+// trước chưa kịp chạy, hay mà một instance KHÁC đã xếp rồi chết trước lời đánh thức (ADR-022), chờ tới yêu cầu GHI CÓ XẾP VIỆC kế
+// tiếp của chính tổ chức ấy; vòng poll 5 s không giúp vì danh sách rỗng. Ba cảnh, một cụm, hai tiến trình dựng từ cấu hình:
+//   ① tiến trình thứ nhất xếp việc qua `/auth/link` — đường sản xuất; lượt claim của lời đánh thức bị một trigger tạm chặn (lỗi
+//      TP277), tức cảnh "đã xếp, chưa kịp chạy"; rồi `dung()`. Job `PENDING`, attempts 0;
+//   ② tiến trình MỚI, KHÔNG lời `/auth/link` nào (hộp thư chỉ có đúng tin của job ấy, và tổ chức vẫn đúng MỘT job) ⇒ job `DONE`
+//      trong N giây — trước khoản 277: không bao giờ;
+//   ③ khi ② đang chạy, một job `PENDING` của tổ chức KHÁC chèn thẳng, không lời đánh thức nào — cảnh instance khác chết ngay sau
+//      commit ⇒ một kỳ poll sau đó nhặt nó (vế "mỗi kỳ", không chỉ "lúc lên").
+// Kỳ vọng mềm (`expect.soft`) cho ② và ③ để lần đỏ nói cả hai cảnh, không dừng ở cảnh đầu.
+// ==============================================================================================
+describe("[S1.248 / khoản 277] tiến trình `api` khởi động lại tự nhặt job PENDING của chính nó — không cần lời xếp việc nào", () => {
+  /** Chờ tới khi `log` có một dòng khớp `mau` — trần `hanMs`. */
+  async function doiDong(log: readonly string[], mau: RegExp, hanMs = 5000): Promise<string> {
+    const het = Date.now() + hanMs;
+    for (;;) {
+      const dong = log.find((d) => mau.test(d));
+      if (dong !== undefined) return dong;
+      if (Date.now() > het) throw new Error(`het ${hanMs}ms, khong co dong log khop ${String(mau)}: ${JSON.stringify(log)}`);
+      await new Promise((x) => setTimeout(x, 25));
+    }
+  }
+
+  /** Số mili-giây tới khi job `DONE`, hay `null` nếu quá `hanMs` — đọc thẳng CSDL bằng siêu người dùng. */
+  async function doiXong(id: string, hanMs: number): Promise<number | null> {
+    const batDau = Date.now();
+    for (;;) {
+      const { rows } = await db.pool.query<{ status: string }>("SELECT status FROM outbox_jobs WHERE id = $1", [id]);
+      if (rows[0]?.status === "DONE") return Date.now() - batDau;
+      if (Date.now() - batDau > hanMs) return null;
+      await new Promise((x) => setTimeout(x, 50));
+    }
+  }
+
+  async function taoToChuc(ten: string, slug: string, email: string): Promise<string> {
+    const id = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id", [ten, slug])).rows[0]!.id;
+    // Người dùng ACTIVE: handler `LOGIN_LINK_SEND` không gửi gì cho email lạ (chống dò tài khoản), mà tin trong hộp thư là đối chứng dương.
+    await db.pool.query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi mua K277', 'ACTIVE')", [id, email]);
+    return id;
+  }
+
+  const tinLinkDen = (email: string): TinHopThuDev[] => docHopThu().filter((t) => t.loai === "LOGIN_LINK" && t.den === email);
+
+  /** Hạn chờ của ② và ③: BA kỳ poll 5 s — đủ để vế "không bao giờ" không lẫn với "chậm". */
+  const HAN_MS = 15_000;
+
+  it("① job xếp qua /auth/link mà lượt claim bị chặn nằm PENDING qua dung(); ② tiến trình MỚI, KHÔNG lời /auth/link nào ⇒ job DONE và tin vào hộp thư trong N giây, ngay kỳ poll lúc lên; ③ job PENDING chèn thẳng cho tổ chức khác, không lời đánh thức ⇒ một kỳ poll sau nhặt nó", async () => {
+    const orgR = await taoToChuc("Cong ty K277", "cong-ty-k277", "k277@vidu.vn");
+    const orgS = await taoToChuc("Cong ty K277 S", "cong-ty-k277-s", "k277-s@vidu.vn");
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    let tt1: TienTrinhApi | undefined;
+    let tt2: TienTrinhApi | undefined;
+    let nHai: number | null = null;
+    let nBa: number | null = null;
+    let nBon: number | null = null;
+    try {
+      // ① Lượt claim của tiến trình thứ nhất bị chặn — trigger tạm của siêu người dùng, gỡ ngay sau khi tiến trình dừng.
+      await db.pool.query(
+        "CREATE FUNCTION public.k277_chan_nhan() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'k277' USING ERRCODE = 'TP277'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER k277_chan_nhan BEFORE UPDATE ON public.outbox_jobs FOR EACH ROW WHEN (NEW.status = 'RUNNING') EXECUTE FUNCTION public.k277_chan_nhan()",
+      );
+      try {
+        tt1 = taoTienTrinhApi(docCauHinh(moiTruong()));
+        const dc1 = await tt1.batDau();
+        goc = `http://${dc1.host}:${dc1.port}`;
+        const r = await goi("POST", "/auth/link", { body: { orgId: orgR, email: "k277@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.77" } });
+        expect(r.status, r.text).toBe(200);
+        // Lời đánh thức đã chạy và gãy ở claim — job được xếp, không được chạy.
+        expect(await doiDong(log, /^\[api\] outbox (?!poll )/u)).toBe("[api] outbox error TP277");
+        await tt1.dung();
+        tt1 = undefined;
+      } finally {
+        await db.pool.query("DROP TRIGGER IF EXISTS k277_chan_nhan ON public.outbox_jobs");
+        await db.pool.query("DROP FUNCTION IF EXISTS public.k277_chan_nhan()");
+      }
+      const { rows: jobR } = await db.pool.query<{ id: string; kind: string; status: string; attempts: number }>(
+        "SELECT id, kind, status, attempts FROM outbox_jobs WHERE org_id = $1",
+        [orgR],
+      );
+      expect(jobR.map(({ kind, status, attempts }) => ({ kind, status, attempts })), "① để lại đúng MỘT job PENDING chưa thử lần nào").toEqual([
+        { kind: "LOGIN_LINK_SEND", status: "PENDING", attempts: 0 },
+      ]);
+      expect(tinLinkDen("k277@vidu.vn"), "① chưa gửi gì").toEqual([]);
+
+      // ② Tiến trình MỚI — không một yêu cầu HTTP nào tới nó.
+      tt2 = taoTienTrinhApi(docCauHinh(moiTruong()));
+      const dc2 = await tt2.batDau();
+      nHai = await doiXong(jobR[0]!.id, HAN_MS);
+      expect
+        .soft(nHai, `② job PENDING của tổ chức mà tiến trình mới CHƯA thấy xếp việc phải xong trong ${HAN_MS} ms — không lời /auth/link nào`)
+        .not.toBeNull();
+      expect.soft(nHai ?? Number.POSITIVE_INFINITY, "② xong ngay kỳ poll LÚC LÊN — trước kỳ thứ hai (5 s)").toBeLessThan(5000);
+
+      // ③ Job PENDING chèn thẳng cho tổ chức khác — không lời đánh thức nào.
+      const { rows: gieo } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind, payload) VALUES ($1, 'LOGIN_LINK_SEND', $2::jsonb) RETURNING id",
+        [orgS, JSON.stringify({ email: "k277-s@vidu.vn" })],
+      );
+      nBa = await doiXong(gieo[0]!.id, HAN_MS);
+      expect.soft(nBa, `③ job PENDING chèn thẳng phải được một kỳ poll nhặt trong ${HAN_MS} ms`).not.toBeNull();
+
+      // Không lời xếp việc nào ở ②, ③: mỗi tổ chức đúng MỘT job, và mỗi địa chỉ đúng MỘT tin — của chính job ấy.
+      const { rows: dem } = await db.pool.query<{ org_id: string; n: number }>(
+        "SELECT org_id, count(*)::int AS n FROM outbox_jobs WHERE org_id = ANY ($1::uuid[]) GROUP BY org_id ORDER BY org_id",
+        [[orgR, orgS]],
+      );
+      expect(dem.map((d) => d.n), "không lời /auth/link nào ở ② và ③ — mỗi tổ chức vẫn đúng một job").toEqual([1, 1]);
+      expect.soft(tinLinkDen("k277@vidu.vn").length, "② tin của job khôi phục vào hộp thư").toBe(1);
+      expect.soft(tinLinkDen("k277-s@vidu.vn").length, "③ tin của job chèn thẳng vào hộp thư").toBe(1);
+
+      // ④ HỢP với `toChucDaThay` là chịu lực, và ranh giới của hàm hẹp nói ra bằng phép đo (khoản 307). Job `RUNNING` hết hạn thuê —
+      // cảnh "tiến trình chết GIỮA handler" — là việc `CAU_CLAIM` nhặt lại, nhưng chỉ cho tổ chức CÓ trong danh sách. Tổ chức R vừa
+      // xếp việc qua CHÍNH tiến trình ② (lời `/auth/link`, nên R ∈ `toChucDaThay`); tổ chức U thì chưa. Mỗi tổ chức một job `RUNNING`
+      // hết hạn thuê, KHÔNG job PENDING nào ⇒ hàm hẹp không trả tổ chức nào; R vẫn được nhặt (nhờ vế hợp), U thì không.
+      const orgU = await taoToChuc("Cong ty K277 U", "cong-ty-k277-u", "k277-u@vidu.vn");
+      goc = `http://${dc2.host}:${dc2.port}`;
+      const tinTruoc = tinLinkDen("k277@vidu.vn").length;
+      const rLai = await goi("POST", "/auth/link", { body: { orgId: orgR, email: "k277@vidu.vn" }, headers: { "x-forwarded-for": "198.51.100.78" } });
+      expect(rLai.status, rLai.text).toBe(200);
+      // Tin của lời xếp việc này đã ra ⇒ lời đánh thức đã chạy ⇒ R ∈ `toChucDaThay` của tiến trình ②.
+      for (const het = Date.now() + 5000; tinLinkDen("k277@vidu.vn").length === tinTruoc; ) {
+        if (Date.now() > het) throw new Error("het 5000ms, tin cua loi /auth/link o ④ chua ra");
+        await new Promise((x) => setTimeout(x, 50));
+      }
+      const hetThue = async (orgId: string, email: string): Promise<string> =>
+        (
+          await db.pool.query<{ id: string }>(
+            "INSERT INTO outbox_jobs (org_id, kind, payload, status, attempts, lease_expires_at) " +
+              "VALUES ($1, 'LOGIN_LINK_SEND', $2::jsonb, 'RUNNING', 1, now() - interval '1 minute') RETURNING id",
+            [orgId, JSON.stringify({ email })],
+          )
+        ).rows[0]!.id;
+      const jobHetThueR = await hetThue(orgR, "k277@vidu.vn");
+      const jobHetThueU = await hetThue(orgU, "k277-u@vidu.vn");
+      nBon = await doiXong(jobHetThueR, HAN_MS);
+      expect(nBon, "④ job RUNNING hết hạn thuê của tổ chức ĐÃ THẤY xếp việc được kỳ poll nhặt lại — vế hợp với toChucDaThay").not.toBeNull();
+      const { rows: conU } = await db.pool.query<{ status: string; attempts: number }>("SELECT status, attempts FROM outbox_jobs WHERE id = $1", [
+        jobHetThueU,
+      ]);
+      expect(conU, "④ ranh giới (khoản 307): job RUNNING hết hạn thuê của tổ chức CHƯA thấy xếp việc nằm yên — hàm hẹp chỉ trả tổ chức có việc PENDING").toEqual([
+        { status: "RUNNING", attempts: 1 },
+      ]);
+    } finally {
+      await tt1?.dung();
+      await tt2?.dung();
+      console.error = cu;
+      const moTa = (n: number | null): string => (n === null ? `KHÔNG xong trong ${HAN_MS} ms` : `${n} ms`);
+      console.info(`[khoản 277] ② job khôi phục sau khởi động lại: ${moTa(nHai)}; ③ job chèn thẳng: ${moTa(nBa)}; ④ job RUNNING hết hạn thuê của tổ chức đã thấy: ${moTa(nBon)}`);
+    }
+  }, 90_000);
+
+  it("lúc lên: nguồn tập tổ chức không gọi được — app_api mất EXECUTE trên hàm hẹp — ⇒ batDau() ném nêu tên hàm và mã lỗi, không nêu giá trị nào của cấu hình, không cổng nào nghe; GRANT lại ⇒ lên", async () => {
+    await db.pool.query("REVOKE EXECUTE ON FUNCTION public.outbox_to_chuc_co_viec_api() FROM app_api");
+    try {
+      const tt = taoTienTrinhApi(docCauHinh(moiTruong()));
+      const loi = await tt.batDau().then(
+        () => null,
+        (e: Error) => e,
+      );
+      await tt.dung();
+      expect(loi, "hàm hẹp không gọi được mà tiến trình vẫn lên").not.toBeNull();
+      expect(loi!.message).toContain("khong goi duoc public.outbox_to_chuc_co_viec_api()");
+      expect(loi!.message).toContain("error 42501");
+      expect(loi!.message, "không nêu chuỗi kết nối hay mật khẩu").not.toMatch(/mk-api|postgresql:\/\//u);
+    } finally {
+      await db.pool.query("GRANT EXECUTE ON FUNCTION public.outbox_to_chuc_co_viec_api() TO app_api");
+    }
+    const tt2 = taoTienTrinhApi(docCauHinh(moiTruong()));
+    try {
+      await expect(tt2.batDau(), "đối chứng: GRANT lại ⇒ lên").resolves.toMatchObject({ host: "127.0.0.1" });
+    } finally {
+      await tt2.dung();
+    }
+  });
+
+  // ----------------------------------------------------------------------------------------------
+  // ĐỐI CHỨNG của nguồn tập tổ chức — chính hàm hẹp, gọi dưới từng vai trong một giao dịch rồi ROLLBACK (không dấu vết cho vế khác):
+  //   ⑴ tổ chức vào tập KHI VÀ CHỈ KHI có job `PENDING` thuộc tập `kind` của `api`: không việc, việc đã `DONE`/`FAILED`, việc
+  //      `RUNNING` hết hạn thuê (khoản 307 — nói ra bằng phép đo), hay chỉ có việc `PENDING` của worker ⇒ KHÔNG vào tập;
+  //   ⑴′ nghĩa ấy nằm ở THÂN hàm, không dựa vào vị từ của policy đi kèm (policy nới thành `true` ⇒ tập không đổi);
+  //   ⑵ tập `kind` đưa tổ chức vào tập BẰNG bảng handler của `api` và BẰNG tập của policy `outbox_jobs_kind_app_api` (095, đọc theo
+  //      TÊN — không phải "policy RESTRICTIVE đầu tiên của app_api": từ lô B2 `app_api` có thêm một policy FOR INSERT mang năm kind).
+  //      Thêm một handler mà quên thân hàm thì job của nó không tự phục hồi sau khởi động lại — vế này đỏ trước khi tới đó;
+  //   ⑶ bán kính: `EXECUTE` chỉ `app_api` (app_unseal, app_neo, app_khoi_tao, một vai không thành viên nào ⇒ 42501); `app_api` đọc
+  //      thẳng `outbox_jobs` chưa gắn tổ chức vẫn 0 hàng; vai chủ hàm thấy ĐÚNG hàng `PENDING` và không đọc được `payload`.
+  // ----------------------------------------------------------------------------------------------
+  it("đối chứng: tổ chức vào tập khi và chỉ khi có job PENDING thuộc tập kind của api — không việc, việc DONE/FAILED/RUNNING, hay chỉ việc PENDING của worker thì không; tập kind ấy bằng bảng handler của api và bằng policy 095; EXECUTE chỉ app_api, vai chủ hàm thấy đúng hàng PENDING và không đọc được payload", async () => {
+    const KIND_API = Object.keys(buildApiOutboxHandlers(dichVuTest().services)).sort();
+    // Năm kind của union `KindOutbox` (`packages/outbox/src/enqueue.ts`): ba của api, hai của worker.
+    const MOI_KIND = [...KIND_API, "BREAK_GLASS_UNSEAL_ALERT", "UNSEAL_RFQ"].sort();
+    expect(MOI_KIND, "bảng handler của api phải là ba kind của nó — không trùng kind của worker").toHaveLength(5);
+    const c = await db.pool.connect();
+    try {
+      await c.query("BEGIN");
+      const toChuc = async (slug: string): Promise<string> =>
+        (await c.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug])).rows[0]!.id;
+      const theoKind = new Map<string, string>();
+      for (const kind of MOI_KIND) {
+        const id = await toChuc(`k277-${kind.toLowerCase().replaceAll("_", "-")}`);
+        await c.query("INSERT INTO outbox_jobs (org_id, kind) VALUES ($1, $2)", [id, kind]);
+        theoKind.set(kind, id);
+      }
+      const khongViec = await toChuc("k277-khong-viec");
+      const daXong = await toChuc("k277-da-xong");
+      await c.query("INSERT INTO outbox_jobs (org_id, kind, status, finished_at) VALUES ($1, 'LOGIN_LINK_SEND', 'DONE', now())", [daXong]);
+      const daHong = await toChuc("k277-da-hong");
+      await c.query(
+        "INSERT INTO outbox_jobs (org_id, kind, status, attempts, last_failure_reason, finished_at) VALUES ($1, 'LOGIN_LINK_SEND', 'FAILED', 5, 'HANDLER_ERROR', now())",
+        [daHong],
+      );
+      const dangChay = await toChuc("k277-dang-chay-het-thue");
+      await c.query(
+        "INSERT INTO outbox_jobs (org_id, kind, status, attempts, lease_expires_at) VALUES ($1, 'LOGIN_LINK_SEND', 'RUNNING', 1, now() - interval '1 minute')",
+        [dangChay],
+      );
+      const cuaToi = new Set([...theoKind.values(), khongViec, daXong, daHong, dangChay]);
+
+      await c.query("SAVEPOINT truoc_vai");
+      await c.query("SET LOCAL ROLE app_api");
+      const tap = new Set(
+        (await c.query<{ id: string }>("SELECT t.id::text AS id FROM public.outbox_to_chuc_co_viec_api() AS t(id)")).rows
+          .map((r) => r.id)
+          .filter((id) => cuaToi.has(id)),
+      );
+      // ⑶ Policy mới mang TO vai khác: app_api đọc thẳng hàng đợi khi chưa gắn tổ chức vẫn thấy 0 hàng.
+      const docThang = (await c.query<{ n: number }>("SELECT count(*)::int AS n FROM public.outbox_jobs")).rows[0]!.n;
+      await c.query("ROLLBACK TO SAVEPOINT truoc_vai");
+
+      // ⑴ Đúng một hàng mỗi tổ chức của vế này có trong tập — và chỉ tổ chức có việc PENDING của api.
+      const kindVaoTap = MOI_KIND.filter((k) => tap.has(theoKind.get(k)!));
+      expect(
+        { khongViec: tap.has(khongViec), daXong: tap.has(daXong), daHong: tap.has(daHong), dangChayHetThue: tap.has(dangChay) },
+        "không việc, việc đã xong / đã hỏng, việc RUNNING hết hạn thuê (khoản 307) — không tổ chức nào vào tập",
+      ).toEqual({ khongViec: false, daXong: false, daHong: false, dangChayHetThue: false });
+      expect(
+        { UNSEAL_RFQ: tap.has(theoKind.get("UNSEAL_RFQ")!), BREAK_GLASS_UNSEAL_ALERT: tap.has(theoKind.get("BREAK_GLASS_UNSEAL_ALERT")!) },
+        "job PENDING của worker không làm tổ chức vào tập",
+      ).toEqual({ UNSEAL_RFQ: false, BREAK_GLASS_UNSEAL_ALERT: false });
+      // ⑵ Tập kind đưa tổ chức vào tập = bảng handler của api = tập của policy 095 (đọc theo TÊN).
+      expect(kindVaoTap, "tập kind của hàm hẹp phải BẰNG bảng handler của api").toEqual(KIND_API);
+      expect(kindVaoTap, "và bằng tập kind của policy outbox_jobs_kind_app_api (095)").toEqual([...(await docTapKindCuaPolicyApi())].sort());
+      expect(docThang, "app_api đọc thẳng outbox_jobs chưa gắn tổ chức — policy của vai chủ hàm không nới bán kính của app_api").toBe(0);
+
+      // ⑴′ Nghĩa của hàm không dựa vào policy đi kèm: nới policy thành USING (true) trong giao dịch này (ROLLBACK ngay) — thân hàm
+      //     TỰ lọc `status`, nên tổ chức chỉ có việc đã xong / đã hỏng / đang chạy vẫn không vào tập. Không vế này thì đột biến "bỏ vế
+      //     status khỏi thân" sống, vì policy còn cắt đúng lát PENDING (đo §S1.248: M10).
+      await c.query("SAVEPOINT truoc_noi");
+      await c.query("ALTER POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs USING (true)");
+      await c.query("SET LOCAL ROLE app_api");
+      const tapNoi = new Set(
+        (await c.query<{ id: string }>("SELECT t.id::text AS id FROM public.outbox_to_chuc_co_viec_api() AS t(id)")).rows
+          .map((r) => r.id)
+          .filter((id) => cuaToi.has(id)),
+      );
+      await c.query("ROLLBACK TO SAVEPOINT truoc_noi");
+      expect(
+        { daXong: tapNoi.has(daXong), daHong: tapNoi.has(daHong), dangChayHetThue: tapNoi.has(dangChay), coViec: tapNoi.has(theoKind.get("LOGIN_LINK_SEND")!) },
+        "policy nới mà thân hàm vẫn chỉ trả tổ chức có job PENDING",
+      ).toEqual({ daXong: false, daHong: false, dangChayHetThue: false, coViec: true });
+
+      // ⑶ EXECUTE chỉ app_api: ba vai ứng dụng còn lại và một vai không thành viên nào (PUBLIC) bị từ chối.
+      await c.query("CREATE ROLE zz_k277_khong_ai NOLOGIN");
+      for (const vai of ["app_unseal", "app_neo", "app_khoi_tao", "zz_k277_khong_ai"]) {
+        await c.query("SAVEPOINT truoc_vai");
+        await c.query(`SET LOCAL ROLE ${vai}`);
+        const loi = await c.query("SELECT * FROM public.outbox_to_chuc_co_viec_api()").then(
+          () => null,
+          (e: { code?: string }) => e.code ?? "?",
+        );
+        await c.query("ROLLBACK TO SAVEPOINT truoc_vai");
+        expect(loi, `${vai} gọi được hàm hẹp của api`).toBe("42501");
+      }
+      // ⑶ Vai chủ hàm: ĐÚNG hàng PENDING (không hàng DONE / FAILED / RUNNING nào), và không đọc được payload.
+      await c.query("SAVEPOINT truoc_vai");
+      await c.query("SET LOCAL ROLE app_liet_ke_to_chuc");
+      const thay = (
+        await c.query<{ status: string }>("SELECT j.status FROM public.outbox_jobs j WHERE j.org_id = ANY ($1::uuid[])", [[...cuaToi]])
+      ).rows.map((r) => r.status);
+      await c.query("ROLLBACK TO SAVEPOINT truoc_vai");
+      expect(thay, "vai chủ hàm thấy đúng năm hàng PENDING của vế này").toEqual(["PENDING", "PENDING", "PENDING", "PENDING", "PENDING"]);
+      await c.query("SAVEPOINT truoc_vai");
+      await c.query("SET LOCAL ROLE app_liet_ke_to_chuc");
+      const loiPayload = await c.query("SELECT j.payload FROM public.outbox_jobs j LIMIT 1").then(
+        () => null,
+        (e: { code?: string }) => e.code ?? "?",
+      );
+      await c.query("ROLLBACK TO SAVEPOINT truoc_vai");
+      expect(loiPayload, "vai chủ hàm không được đọc payload (email của link đăng nhập)").toBe("42501");
+    } finally {
+      await c.query("ROLLBACK");
+      c.release();
+    }
   });
 });

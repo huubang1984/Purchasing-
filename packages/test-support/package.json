@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "exports": { ".": "./src/index.ts" },
+  "//": "[S1.232 / khoan 223] `trustprocure.testOnly`: goi TU KHAI minh la ha tang kiem thu, va chi vi the ve ⑷ cua `tests/architecture/pham-vi-san-xuat.test.ts` mien doc ma cua no. Loi khai duoc do doi chieu o do: goi khai testOnly ma co ma san xuat import, hay khong ai import, thi do.",
+  "trustprocure": { "testOnly": true },
   "devDependencies": {
     "@testcontainers/postgresql": "^10.13.0",
     "@trustprocure/audit": "workspace:*",

@@ -17,23 +17,39 @@
 
   <section class="buoc" id="b1">
     <h2><span class="so">1</span> Đăng nhập</h2>
-    <p class="ghi">Dán mã từ link đăng nhập, rồi nhập mã sáu số của ứng dụng xác thực. Cần hai
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa
+      <strong>bí mật ghi danh</strong> để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Cần hai
       người khác nhau để mở thầu, nên màn này đăng nhập lại được bằng người thứ hai.</p>
     <label for="org">Mã tổ chức</label>
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <label for="ma">Mã sáu số</label>
-    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
-    <button id="nut-vao">Vào</button>
+    <!-- [S1.230 / khoản 193] Hai việc, hai nút. Tiếp gọi `/auth/redeem` — đúng một lần cho mỗi mã — và
+         nói tài khoản này cần ghi danh hay không; bí mật ghi danh (nếu có) hiện ở khối dưới với nhãn nói rõ
+         nó là gì. Ô mã sáu số chỉ mở SAU đó: bản cũ bắt mọi người mới bấm Vào trượt một lần mới thấy bí mật. -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
-    <div class="bao luu" id="ghi-danh" hidden></div>
     <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước: cookie phiên sống
          tới 8 giờ kể cả sau khi đóng trình duyệt, và trên máy dùng chung nó có thể của người khác. -->
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
     <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <!-- [S1.216 / khoản 195 / ADR-126] Sau khi vào, trang hỏi máy chủ các link đăng nhập gần đây của CHÍNH người này và
+         nói việc phải làm khi một link «đã dùng» không phải do mình: đó là vế «báo ngay» mà thông điệp gộp ở bước đổi mã
+         cố ý không nói. Khối là một trợ giúp — máy chủ từ chối hay mất mạng thì nó ẩn, các bước vẫn mở. Câu và các dòng
+         do ~~`mo-thau.js`~~ [S1.240 / khoản 282] `/lib/dang-nhap.js` điền — bước 1 chung của bốn trang người mua — kèm câu «còn
+         nữa» khi danh sách bị cắt (khoản 268). -->
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
     <!-- [S1.176 / ADR-107] Tới trước vòng này không trang nào gọi `/auth/link`: người dùng trên prod không
          tự xin được link đăng nhập. Máy chủ trả CÙNG một 200 cho mọi email, có người hay không — trang cũng
          nói cùng một câu. -->
@@ -146,18 +162,21 @@
       Báo giá được chọn phải có <strong>chi phí hiệu dụng đọc được</strong> ở đúng lượt ấy.</p>
     <label for="bao-gia-thang">Báo giá được chọn (id phiên bản, lấy từ bảng xếp hạng ở bước 5)</label>
     <input id="bao-gia-thang" type="text" placeholder="uuid của bid version">
-    <label for="ly-do-award">Lý do — <strong>bắt buộc</strong>, ở cả lần đề xuất và lần huỷ</label>
+    <label for="ly-do-award">Lý do — <strong>bắt buộc</strong>, ở cả lần đề xuất, lần rút và lần huỷ</label>
     <input id="ly-do-award" type="text" placeholder="vì sao chọn báo giá này">
     <div class="doi">
       <button id="nut-de-xuat">Đề xuất trao thầu</button>
       <button id="nut-duyet-award" class="phu">Phê duyệt</button>
+      <button id="nut-rut-de-xuat" class="phu" hidden>Rút đề xuất</button>
       <button id="nut-huy-award" class="phu">Huỷ trao thầu</button>
     </div>
     <dl class="tt" id="tt-award"></dl>
     <p class="ghi">Huỷ là một <strong>hàng trạng thái mới</strong>, không một lần sửa: lịch sử ở
       lại nguyên vẹn và câu <em>ai huỷ, lúc nào, vì sao</em> trả lời được từ chính bảng. Gói thầu
       quay về <code>EVALUATING</code> để chấm lại — và cổng huỷ là cổng của người
-      <strong>duyệt</strong>, không của người đề xuất.</p>
+      <strong>duyệt</strong>, không của người đề xuất. Người đề xuất chỉ <strong>rút</strong> được
+      đề xuất <em>của mình</em> khi nó <strong>chưa có chữ ký</strong> nào — nút «Rút đề xuất» chỉ
+      hiện đúng lúc ấy; có chữ ký rồi thì chỉ huỷ được.</p>
     <div class="bao loi" id="loi7" hidden></div>
     <div class="bao ok" id="ok7" hidden></div>
   </section>

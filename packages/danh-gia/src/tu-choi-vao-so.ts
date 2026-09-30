@@ -44,15 +44,21 @@
 import type pg from "pg";
 import { throwAuditedDenial } from "@trustprocure/identity";
 
-/** Toàn bộ từ vựng từ chối TRẠNG THÁI của S2. Thêm một mã là thêm một dòng ở `VAO_SO`. */
+/**
+ * Toàn bộ từ vựng từ chối TRẠNG THÁI của S2. Thêm một mã là thêm một dòng ở `VAO_SO` — [S1.241 / khoản 279] và một tên ở
+ * `DANH_MUC_VE_CONG` (`packages/identity/src/rbac.ts`), không thì dòng log mất sổ của mã ấy ra `HANG_LA` (vế ⑷ của
+ * `packages/identity/src/danh-muc-tu-choi.test.ts` đọc tập khoá của `VAO_SO` ở nguồn và đỏ cho tới khi thêm).
+ */
 export type MaTuChoiTrangThai =
   | "CHINH_SACH_CHUA_KHAI_TRONG_SO"
   | "CHINH_SACH_TAT_BAFO"
   | "CHUA_CHAM_LAN_NAO"
+  | "DE_XUAT_DA_CO_CHU_KY"
   | "KHONG_CO_AWARD_CON_SONG"
   | "KHONG_CO_BAO_GIA_DOC_DUOC"
   | "KHONG_CO_DE_XUAT_DANG_CHO"
   | "KHONG_CO_VONG_DANG_MO"
+  | "KHONG_PHAI_NGUOI_DE_XUAT"
   | "LECH_TIEN_TE"
   | "RFQ_KHONG_CHAM_DUOC"
   | "RFQ_KHONG_DE_XUAT_DUOC"
@@ -69,11 +75,11 @@ export interface DongVaoSo {
 /**
  * Mỗi mã, một quyết định, một lý do. `Record` đầy đủ nên quên một mã là một lỗi BIÊN DỊCH.
  *
- * Bảy mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không đúng thứ
- * tự*. Năm mã `false` đều nói: *cấu hình chưa sẵn sàng*.
+ * ~~Bảy~~ **[S1.231 / khoản 232] CHÍN** mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không
+ * đúng thứ tự*. Năm mã `false` đều nói: *cấu hình chưa sẵn sàng*.
  */
 export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
-  // ---- BẢY mã CHUỖI — vào sổ
+  // ---- ~~BẢY~~ [S1.231] CHÍN mã CHUỖI — vào sổ
   RFQ_KHONG_CHAM_DUOC: {
     vaoSo: true,
     lyDo: "một người bấm CHẤM khi gói thầu chưa ở trạng thái chấm được — bước *mở thầu → chấm* bị đi tắt",
@@ -92,7 +98,16 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   },
   KHONG_CO_DE_XUAT_DANG_CHO: {
     vaoSo: true,
-    lyDo: "một người bấm DUYỆT khi không có đề xuất nào đang chờ — hoặc họ chậm một nhịp, hoặc có người vừa huỷ",
+    lyDo: "một người bấm DUYỆT — [S1.231 / khoản 232] hay RÚT — khi không có đề xuất nào đang chờ: hoặc họ chậm một nhịp, hoặc có người vừa huỷ, rút, hay duyệt",
+  },
+  // ---- [S1.231 / khoản 232 / ADR-133] HAI mã của lần RÚT đề xuất — cùng lớp chuỗi *award → duyệt*, vào sổ
+  KHONG_PHAI_NGUOI_DE_XUAT: {
+    vaoSo: true,
+    lyDo: "một người cố RÚT đề xuất trao thầu của NGƯỜI KHÁC — đường rút chỉ dành cho người đề xuất tự sửa lỗi của mình; người khác phải đi cổng huỷ (`po.approve`), và cố đi tắt là một tín hiệu về chuỗi *award → duyệt*",
+  },
+  DE_XUAT_DA_CO_CHU_KY: {
+    vaoSo: true,
+    lyDo: "người đề xuất cố RÚT một đề xuất ĐÃ CÓ chữ ký duyệt — tức tháo một quyết định đã duyệt bằng chính tay mình mà không qua `po.approve`; đúng ca phê duyệt kép bị bào mòn mà ADR-057 dựng cổng huỷ để chặn",
   },
   KHONG_CO_AWARD_CON_SONG: {
     vaoSo: true,
@@ -173,5 +188,10 @@ export async function nemTuChoi(
       payload: { ma: loi.lyDo },
     },
     loi,
+    // [S1.241 / khoản 279] CÙNG mã làm VẾ (đối số thứ năm) — `DenialAuditFailedError.clause`: khi lần ghi này gãy (55P03), dòng
+    // log của bộ điều phối là thứ duy nhất còn lại, và không có vế nó là `… RFQ_STATE_DENIED RFQ <- error 55P03` cho cả chín mã
+    // vào sổ. Đọc từ `loi.lyDo` như `payload.ma` — một nguồn, không tham số thứ hai. Mã ra dòng log qua phép thuộc-tập
+    // `DANH_MUC_VE_CONG` của `@trustprocure/identity`, nơi từ vựng `VAO_SO` được chép và đối chiếu với bảng trên.
+    loi.lyDo,
   );
 }

@@ -3,7 +3,8 @@
 //
 // Hai hàm ở file này là hai mặt của cùng một câu hỏi: **một con số suy ra từ giá được phép xuất
 // hiện lúc nào?** A4 trả lời cho các trường phái sinh (min/max/trung bình/đếm dưới ngân
-// sách/sắp theo giá); A6 trả lời cho một con số còn không cần tới giá — số báo giá đã nhận.
+// sách/sắp theo giá); A6 trả lời cho một con số còn không cần tới giá — số báo giá ~~đã nhận~~
+// **[S1.243 / khoản 271]** sẽ dự thầu (luồng của lời mời còn sống, ADR-128).
 //
 // ----------------------------------------------------------------------------------------------
 // [A4] VÌ SAO CỔNG Ở ĐÂY LÀ LỚP THỨ HAI, KHÔNG PHẢI LỚP THỨ NHẤT
@@ -51,7 +52,8 @@ import { PERMISSIONS, requirePermission, resolveSessionActor, throwAuditedDenial
 export const COMPARISON_ALLOWED_STATUSES = ["UNSEALED", "EVALUATING", "BAFO_UNSEALED"] as const;
 
 /**
- * Các trạng thái mà "số báo giá đã nhận" không còn là bí mật: hạn nộp đã qua và RFQ đã đóng.
+ * Các trạng thái mà "số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** sẽ dự thầu" không còn là bí mật: hạn nộp đã qua và RFQ đã
+ * đóng.
  *
  * [S1.108] Ba trạng thái BAFO đều ĐÃ qua `CLOSED` một lần, nên con số ấy đã thôi là bí mật từ
  * trước khi vòng hai mở. `BAFO_OPEN` nằm trong tập này DÙ đang nhận báo giá, và đó là đúng: thứ
@@ -258,16 +260,48 @@ function batBuocUuid(gia: string, ten: string): void {
   }
 }
 
-async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<string> {
+/** Trạng thái RFQ trong tổ chức đang gắn, hay `undefined` khi không có hàng nào (UUID lạ, hay hàng của tổ chức khác mà RLS giấu). */
+async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<string | undefined> {
   const { rows } = await client.query<HangTrangThai>(
     "SELECT status FROM public.rfq_packages WHERE id OPERATOR(pg_catalog.=) $1",
     [rfqId],
   );
-  const r = rows[0];
-  if (r === undefined) {
-    throw new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn.");
-  }
-  return r.status;
+  return rows[0]?.status;
+}
+
+/**
+ * [S1.213 / khoản 133] Lần từ chối "không tìm thấy RFQ trong tổ chức" của HAI đường đọc có cổng vào sổ rồi mới ném.
+ *
+ * Đo trước bản vá (§S1.72, đo lại ở §S1.213): `buildComparisonTable` và `countReceivedBids` ném `ComparisonError` mà 0 hàng sổ — với
+ * UUID ngẫu nhiên lẫn id CÓ THẬT của tổ chức khác mà RLS giấu — nên một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt
+ * (tiểu mục ADR-016 [S1.213]): D5 phủ lần "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh
+ * không tìm thấy của cổng mở thầu (khoản 121): `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI ở giao dịch độc lập,
+ * lớp lỗi và thông điệp giữ nguyên. Payload chỉ mang TÊN ĐƯỜNG (một hằng): hai hàm chung một mã, và kiểm toán viên cần biết lần dò đi qua
+ * bảng so sánh hay qua số báo giá. `ComparisonError` không mang hậu tố `DeniedError`, nên cổng `ghi-so-tu-choi-mot-duong` không thấy chỗ
+ * này; `danh-muc-tu-choi` thì thấy — mã phải có trong `DANH_MUC_HANH_DONG_TU_CHOI` —, và khối `[INV-D5] [S1.213 / khoản 133]` của
+ * `comparison.int.test.ts` đếm hàng ở cả sổ của tổ chức người gọi lẫn sổ của tổ chức bị dò. `return` là chịu lực, cùng lý do với
+ * `tuChoi` của cổng mở thầu: bỏ nó thì lời hứa trôi đi và hàm đi tiếp như đã tìm thấy.
+ */
+async function tuChoiKhongTimThay(
+  auditPool: pg.Pool,
+  orgId: string,
+  nguoiGoiId: string,
+  rfqId: string,
+  operation: "BUILD_COMPARISON_TABLE" | "COUNT_RECEIVED_BIDS",
+): Promise<never> {
+  return throwAuditedDenial(
+    auditPool,
+    orgId,
+    {
+      actorType: "USER",
+      actorId: nguoiGoiId,
+      action: "COMPARISON_NOT_FOUND_DENIED",
+      resourceType: "RFQ",
+      resourceId: rfqId,
+      payload: { operation },
+    },
+    new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn."),
+  );
 }
 
 /**
@@ -276,6 +310,19 @@ async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<strin
  * Mọi trường phái sinh mà mệnh đề A4 gọi tên đều nằm ở đây và KHÔNG có đường nào khác tới chúng
  * trong toàn dự án. Với RFQ chưa mở thầu, hàm này NÉM chứ không trả về một bảng rỗng: một bảng
  * rỗng là một câu trả lời, và "có bao nhiêu báo giá dưới ngân sách" trả lời bằng 0 vẫn là trả lời.
+ *
+ * [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG SỐ CỦA BẢNG TRẢ VỀ — cho mọi người gọi, kể cả `GET /rfqs/:rfqId/comparison`:
+ *   ⑴ `rows[].totalAmount` (CHUỖI thập phân, hay `null`) và `aggregates.min/max/average` là SỐ CHUẨN: tính bằng SQL (`bid_so_tien`,
+ *      020/022) và trả về dạng văn bản, nên đúng tới từng chữ số trong miền `numeric(18, 2)`. Ngoài miền ấy — từ 10^16, hơn hai chữ số
+ *      thập phân, âm, không phải số — là `null` và đếm vào `unparsed`, KHÔNG PHẢI một con số đã làm tròn (022 mục 8; đo ở §S1.213: một
+ *      chuỗi 17 chữ số phần nguyên ra `null`).
+ *   ⑵ `rows[].payload` là BẢN HIỂN THỊ của phong bì: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một SỐ JSON quá 15 chữ số có nghĩa
+ *      trong đó — đơn giá, số lượng, hay chính `totalAmount` nếu nhà cung cấp viết nó là số — đã đi qua `double` (đo ở khoản 108:
+ *      `99999999999999.99` ra `99999999999999.98`); chuỗi thì đi nguyên. Người đọc số tiền PHẢI lấy ⑴, không lấy `payload.totalAmount`.
+ *      Cột `jsonb` trong CSDL vẫn giữ đủ chữ số (khoản 107); phép mất nằm ở phía ĐỌC, và một client `JSON.parse` thân HTTP làm tròn thêm
+ *      lần nữa — nên sửa riêng phía máy chủ là chưa đủ, và đó là lý do hợp đồng được GHI ở đây thay vì "sửa" `payload` (ba lựa chọn và lý
+ *      do chọn ở ADR-125). Ghim ở `comparison.int.test.ts` khối `[S1.213 / khoản 108]`; `apps/web/trang/mo-thau.js` và
+ *      `tools/pilot-gia-lap` đọc ⑴ (grep `totalAmount`, §S1.213).
  */
 export async function buildComparisonTable(
   client: pg.PoolClient,
@@ -300,6 +347,9 @@ export async function buildComparisonTable(
   );
 
   const trangThai = await docTrangThai(client, rfqId);
+  if (trangThai === undefined) {
+    return tuChoiKhongTimThay(auditPool, orgId, nguoiXem.id, rfqId, "BUILD_COMPARISON_TABLE");
+  }
   if (!(COMPARISON_ALLOWED_STATUSES as readonly string[]).includes(trangThai)) {
     // [S1.72 / khoản 121, lượt soi 62a-9] Lần từ chối A4 vào sổ ở giao dịch độc lập rồi mới ném. Đo trên master 298cd4e (§S1.72): trước bản
     // vá, CLOSED và OPEN đều ném mà 0 hàng sổ, và `GET /rfqs/:rfqId/comparison` là 422 — nên một người giữ `bid.view` dò "RFQ đã mở thầu
@@ -316,30 +366,78 @@ export async function buildComparisonTable(
         payload: { rfqStatus: trangThai },
       },
       new ComparisonDeniedError(trangThai, `Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở ${trangThai} (A4).`),
+      // [S1.225 / khoản 179] Trạng thái RFQ là "vế" của lần từ chối này, cho dòng log của lần MẤT SỔ.
+      trangThai,
     );
   }
 
+  // ==============================================================================================
+  // [S1.218 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG MỖI CÂU, VÀ CHỈ KHI `totalAmount`
+  // LÀ SỐ HAY CHUỖI.
+  //
+  // Đo trước khi sửa (§S1.218): hai câu dưới gọi `bid_so_tien(payload->>'totalAmount')` BẢY lần cho
+  // mỗi báo giá đọc được (hai ở câu hàng: danh sách chọn và `ORDER BY`; năm ở câu tổng hợp: `min`,
+  // `max`, `avg`, vế ngân sách, `IS NOT NULL`) và BA lần cho một `totalAmount` là MẢNG — `->>` dựng
+  // CẢ CÂY thành văn bản rồi `bid_so_tien` mới ép kiểu hỏng và trả NULL. Với 20 000 phần tử `1e324`
+  // (vài KB jsonb lưu), mỗi lần là 6 540 000 ký tự; `jsonb_typeof` thì trả `array` mà không dựng gì.
+  //
+  // HÌNH DẠNG: `so_tien` là MỘT biểu thức `CASE` — `jsonb_typeof` phải là `number` hay `string`
+  // rồi mới tới `->>` và `bid_so_tien` —, tính trong một lớp mà bộ lập kế hoạch KHÔNG kéo lên
+  // (`pull_up_simple_subquery`): câu hàng đặt nó cạnh hàm cửa sổ `row_number()`, câu tổng hợp đặt
+  // nó trong CTE `DISTINCT ON`. Một lớp `SELECT` đơn thuần thì bị kéo lên và mỗi chỗ tham chiếu
+  // lại thành một bản sao của biểu thức — tức lại bảy lần. Hai câu vẫn là hai câu: một hàng
+  // đọc được đi qua `bid_so_tien` đúng HAI lần, đo ở `comparison.int.test.ts` bằng cách đếm.
+  // `bid_so_tien` vẫn là luật duy nhất về "chuỗi nào là một số tiền" (020, 022); lớp này chỉ
+  // quyết nó có được HỎI hay không. JSON `null`, khoá thiếu, đối tượng, mảng, boolean ⇒ `NULL`,
+  // hàng vẫn ở trong bảng và được đếm là `unparsed` — cùng kết quả với trước, rẻ hơn.
+  //
+  // [S1.217 / khoản 250 / ADR-128] CẢ HAI CÂU CHỈ ĐỌC BẢN RÕ CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`,
+  // ở câu hàng và ở CTE `moi_nhat` của câu tổng hợp — hai câu, một vế, không câu nào phụ thuộc câu kia.
+  // Trên đường thuận từ S1.217 hàng bản rõ ấy không tồn tại (worker không mở phong bì của lời mời đã
+  // thu hồi, và thu hồi sau lần mở bị chặn), nên vế ở đây đứng cho hàng của những lượt mở TRƯỚC vòng này
+  // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.217): X thu hồi rồi mời lại ⇒ X HAI dòng,
+  // cả hai `isLatestForBid = true` (hai luồng, hai `bid_id`), `belowBudget` 3 thay vì 2. Bản rõ KHÔNG bị
+  // xoá — lọc ở lần đọc. Cùng vế ở worker và `docBaoGia`; cổng tĩnh `phong-bi-loi-moi-con-song.test.ts`.
+  // [S1.243 / khoản 271] Và ở câu đếm của `countReceivedBids` cuối tệp — số báo giá là số SẼ DỰ THẦU.
+  // ==============================================================================================
   const { rows: dong } = await client.query<HangDong>(
-    `SELECT v.bid_id,
-            v.id                                         AS bid_version_id,
-            v.version,
-            v.submitted_at,
-            s.id                                         AS supplier_id,
-            s.legal_name,
-            u.payload,
-            public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))::pg_catalog.text AS total_amount,
-            public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
-            r.round_no                                   AS bafo_round_no,
-            (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
-               OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
-       FROM public.rfq_unsealed_bids u
-       JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
-       JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
-       JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
-       JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
-       LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
-      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
-      ORDER BY public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) ASC NULLS LAST, s.legal_name ASC`,
+    `SELECT d.bid_id,
+            d.bid_version_id,
+            d.version,
+            d.submitted_at,
+            d.supplier_id,
+            d.legal_name,
+            d.payload,
+            d.so_tien::pg_catalog.text                   AS total_amount,
+            d.currency,
+            d.bafo_round_no,
+            d.la_moi_nhat
+       FROM (
+         SELECT v.bid_id,
+                v.id                                         AS bid_version_id,
+                v.version,
+                v.submitted_at,
+                s.id                                         AS supplier_id,
+                s.legal_name,
+                u.payload,
+                CASE WHEN pg_catalog.jsonb_typeof(u.payload OPERATOR(pg_catalog.->) 'totalAmount')
+                          OPERATOR(pg_catalog.=) ANY (ARRAY['number', 'string']::pg_catalog.text[])
+                     THEN public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))
+                END                                          AS so_tien,
+                public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
+                r.round_no                                   AS bafo_round_no,
+                (pg_catalog.row_number() OVER (PARTITION BY v.bid_id ORDER BY v.version DESC)
+                   OPERATOR(pg_catalog.=) 1)                 AS la_moi_nhat
+           FROM public.rfq_unsealed_bids u
+           JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
+           JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
+           JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
+           JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
+           LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
+          WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+            AND i.revoked_at IS NULL
+       ) d
+      ORDER BY d.so_tien ASC NULLS LAST, d.legal_name ASC`,
     [rfqId],
   );
 
@@ -355,29 +453,44 @@ export async function buildComparisonTable(
   // (`index.ts`) và `docBaoGia` của `packages/danh-gia` đã chọn: `DISTINCT ON (v.bid_id) …
   // ORDER BY v.version DESC` — lần nộp SAU thay lần nộp TRƯỚC. Ba bộ đọc, một luật, và không bộ
   // nào phụ thuộc một tiền đề ngầm của bộ kia nữa (đó đúng là lỗ mà mục 7d của §S1.108 ghi).
+  //
+  // [S1.218 / khoản 114] `so_tien` tính MỘT lần trong `moi_nhat` — lớp `DISTINCT ON` không bị kéo
+  // lên —, và câu ngoài chỉ tham chiếu cột. Lưu ý nói ra: `DISTINCT ON` chọn SAU khi chiếu, nên biểu
+  // thức chạy cho mọi phiên bản của một luồng chứ không riêng bản mới nhất; rẻ, vì chỉ số hay chuỗi
+  // mới tới `bid_so_tien`, và câu hàng cũng tính cho mọi phiên bản. Bốn chỗ đọc tiền tệ giữ nguyên
+  // hình S1.165: `tien-te-mot-cho-doc.test.ts` ghim đúng NĂM lời gọi `bid_currency` trong mã sản
+  // xuất, và tiền tệ không phải thứ khoản 114 đo — một chuỗi tiền tệ không phình khi `->>`.
   const { rows: th } = await client.query<HangTongHop>(
     `WITH moi_nhat AS (
-       SELECT DISTINCT ON (v.bid_id) u.payload, i.rfq_id, i.org_id
+       SELECT DISTINCT ON (v.bid_id)
+              u.payload,
+              CASE WHEN pg_catalog.jsonb_typeof(u.payload OPERATOR(pg_catalog.->) 'totalAmount')
+                        OPERATOR(pg_catalog.=) ANY (ARRAY['number', 'string']::pg_catalog.text[])
+                   THEN public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))
+              END                                                                  AS so_tien,
+              i.rfq_id,
+              i.org_id
          FROM public.rfq_unsealed_bids u
          JOIN public.vendor_bid_versions v ON v.id OPERATOR(pg_catalog.=) u.bid_version_id AND v.org_id OPERATOR(pg_catalog.=) u.org_id
          JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
          JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
         WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+          AND i.revoked_at IS NULL
         ORDER BY v.bid_id, v.version DESC
      )
-     SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))                AS currency,
-            pg_catalog.count(*)::pg_catalog.int4                                              AS n,
-            pg_catalog.min(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_min,
-            pg_catalog.max(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')))::pg_catalog.text           AS gia_max,
-            pg_catalog.round(pg_catalog.avg(public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount'))), 2)::pg_catalog.text AS gia_tb,
+     SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,
+            pg_catalog.count(*)::pg_catalog.int4                                   AS n,
+            pg_catalog.min(u.so_tien)::pg_catalog.text                             AS gia_min,
+            pg_catalog.max(u.so_tien)::pg_catalog.text                             AS gia_max,
+            pg_catalog.round(pg_catalog.avg(u.so_tien), 2)::pg_catalog.text        AS gia_tb,
             pg_catalog.count(*) FILTER (
               WHERE ns.estimated_value IS NOT NULL
                 AND ns.currency OPERATOR(pg_catalog.=) public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))
-                AND public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) OPERATOR(pg_catalog.<=) ns.estimated_value
+                AND u.so_tien OPERATOR(pg_catalog.<=) ns.estimated_value
             )::pg_catalog.int4                                                     AS duoi_ngan_sach
        FROM moi_nhat u
        LEFT JOIN public.rfq_budgets ns   ON ns.rfq_id OPERATOR(pg_catalog.=) u.rfq_id    AND ns.org_id OPERATOR(pg_catalog.=) u.org_id
-      WHERE public.bid_so_tien((u.payload OPERATOR(pg_catalog.->>) 'totalAmount')) IS NOT NULL
+      WHERE u.so_tien IS NOT NULL
       GROUP BY public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))`,
     [rfqId],
   );
@@ -448,7 +561,8 @@ export async function buildComparisonTable(
 }
 
 /**
- * [A6] Số báo giá đã nhận — và chế độ nghiêm giấu nó đi trước giờ đóng.
+ * [A6] Số báo giá ~~đã nhận~~ **[S1.243 / khoản 271]** SẼ DỰ THẦU — luồng báo giá của lời mời CÒN SỐNG (ADR-128: thu hồi
+ * là loại; câu 7 của kế hoạch đợt 3) — và chế độ nghiêm giấu nó đi trước giờ đóng. Tên hàm giữ `countReceivedBids`.
  *
  * HÌNH DẠNG TRẢ VỀ LÀ MỘT TUYÊN BỐ: `{ disclosed: false }` KHÔNG mang trường `count`. Một API trả
  * `{ count: 0 }` khi đang giấu là một API mà người gọi không phân biệt được "chưa ai nộp" với
@@ -486,17 +600,32 @@ export async function countReceivedBids(
   );
   const r = rows[0];
   if (r === undefined) {
-    throw new ComparisonError("Không tìm thấy RFQ trong tổ chức đang gắn.");
+    return tuChoiKhongTimThay(auditPool, orgId, nguoiDem.id, rfqId, "COUNT_RECEIVED_BIDS");
   }
   if (r.nghiem && !TRANG_THAI_DA_DONG.has(r.status)) {
     return { disclosed: false, reason: "STRICT_BLIND_BEFORE_CLOSE", rfqStatus: r.status };
   }
 
+  // ==============================================================================================
+  // [S1.243 / khoản 271] SỐ ĐẾM LÀ SỐ BÁO GIÁ SẼ DỰ THẦU: CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG.
+  //
+  // Chủ dự án chốt ngày 2026-09-30 (kế hoạch đợt 3, câu 7): từ ADR-128 thu hồi lời mời là LOẠI nhà cung cấp
+  // ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm, nên con số trả về đây là số luồng báo giá SẼ DỰ THẦU —
+  // cùng vế `i.revoked_at IS NULL` mà ba bộ đọc phong bì chép nguyên văn. Đo trước bản vá (§S1.217 ghim,
+  // §S1.243 lật): hai luồng, thu hồi một ⇒ `count: 2`; nay 1. `vendor_bids` là một hàng mỗi luồng (`018`),
+  // nên câu này không khử trùng theo `v.bid_id` như ba bộ đọc kia — cổng tĩnh
+  // `tests/architecture/phong-bi-loi-moi-con-song.test.ts` thấy nó bằng tiêu chí hình dạng thứ hai (đọc
+  // `vendor_bids b` + `rfq_invitations i`, gọi `count(`). Tên hàm, tên trường `bidCount` của route và hình
+  // dạng trả về KHÔNG đổi (không đổi API ở lô này); dữ liệu cũng không — lọc ở lần ĐỌC. Thu hồi SAU lần mở
+  // thầu đầu tiên bị `revokeInvitation` chặn, nên từ `UNSEALED` trở đi con số không còn giảm; trước đó nó
+  // giảm mỗi lần bên mua thu hồi — kể cả trong quãng `CLOSED`, khi chế độ nghiêm đã công bố nó.
+  // ==============================================================================================
   const { rows: dem } = await client.query<{ n: number }>(
     `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
        FROM public.vendor_bids b
        JOIN public.rfq_invitations i ON i.id OPERATOR(pg_catalog.=) b.invitation_id AND i.org_id OPERATOR(pg_catalog.=) b.org_id
-      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1`,
+      WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+        AND i.revoked_at IS NULL`,
     [rfqId],
   );
   return { disclosed: true, count: dem[0]?.n ?? 0 };

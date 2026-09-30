@@ -9,7 +9,7 @@
 //   [029]     app_api KHÔNG chèn được phiên thiếu MFA; đột biến gỡ trigger ⇒ chèn được (RED thật).
 //   Không liệt kê được email: email lạ, email bị đình chỉ, và email đúng cho CÙNG một 200.
 // ==============================================================================================
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +24,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
-import { agentGoiDuoc, type Route } from "./route-types.js";
+import { THAN_429_MFA, agentGoiDuoc, type Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER, LOGIN_TOTP_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
@@ -244,64 +244,80 @@ describe("/auth/link — không liệt kê được email", () => {
   // vấn hạ chữ thường CẢ HAI VẾ bằng `pg_catalog.lower()`. Khi ấy khoá tra cứu và giá trị đã
   // lưu đi qua CÙNG một hàm, nên chúng không lệch được nữa — bất kể libc của ảnh nền là gì.
   //
-  // TEST NÀY TỰ HIỆU CHUẨN, có chủ đích: nó KHÔNG đóng cứng một điểm mã, vì tập điểm mã phân
+  // ~~TEST NÀY TỰ HIỆU CHUẨN, có chủ đích: nó KHÔNG đóng cứng một điểm mã, vì tập điểm mã phân
   // kỳ phụ thuộc libc của máy chủ (đo được: 124 điểm trên musl, 28 trên glibc). Nó hỏi chính
   // CSDL đang chạy xem điểm mã nào phân kỳ, rồi dùng cái đầu tiên. Không có điểm nào — nghĩa là
-  // hai hàm đã trùng khít — thì test nói thẳng là nó không đo được gì, chứ không xanh im lặng.
+  // hai hàm đã trùng khít — thì test nói thẳng là nó không đo được gì, chứ không xanh im lặng.~~
+  // [S1.229 / khoản 71] Đoạn vừa gạch mô tả ca CŨ; ca dưới lật theo `092_email_ascii` — xem chú thích ngay trên `it`.
   // ==========================================================================================
-  it("[sổ nợ 63] địa chỉ mà JS và máy chủ hạ chữ thường KHÁC NHAU vẫn tìm ra người dùng", async () => {
-    // Ứng viên: mọi điểm mã mà JS coi là hạ được. Dừng ở BMP cho rẻ.
-    const ungVien: string[] = [];
-    for (let i = 0x21; i < 0x2600; i += 1) {
-      const c = String.fromCodePoint(i);
-      if (c.toLowerCase() !== c && /^[^\s\u0000-\u001f\u007f@]$/u.test(c)) ungVien.push(c);
-    }
-    // ...và trong số đó, cái nào là ĐIỂM BẤT ĐỘNG của `lower()` trên máy chủ NÀY.
-    const { rows: phanKy } = await db.pool.query<{ c: string }>(
-      "SELECT c FROM unnest($1::text[]) AS c WHERE lower(c) = c ORDER BY c LIMIT 1",
-      [ungVien],
-    );
-    if (phanKy.length === 0) {
-      // Dấu hiệu tích cực ngược: không có gì để đo thì phải NÓI RA, không được xanh im lặng.
-      throw new Error(
-        "Không tìm được điểm mã nào phân kỳ giữa `.toLowerCase()` của JS và `lower()` của máy " +
-          "chủ. Nếu hai hàm đã trùng khít thì test này hết ý nghĩa và phải được viết lại — " +
-          "đừng xoá nó đi trong im lặng.",
-      );
-    }
-    const ky = phanKy[0]!.c;
-    const diaChi = `${ky}lice-63@vidu.vn`;
-
-    // TỔ CHỨC RIÊNG, không dùng `orgA`. Test ngay dưới khẳng định `user_login_tokens` của `orgA`
-    // bằng 0 ở một thời điểm cụ thể; phát một token vào đó từ đây là làm đỏ nó — đo được, và đó
-    // đúng là kiểu ràng buộc chéo mà một test mới dễ mang vào mà không ai thấy.
+  // **[S1.229 / khoản 71 / ADR-132] LẬT CÓ CHỦ ĐÍCH.** ~~địa chỉ mà JS và máy chủ hạ chữ thường KHÁC NHAU vẫn tìm ra người dùng~~ — ca
+  // cũ CẤT một địa chỉ mang điểm mã phân kỳ (tự tìm lúc chạy) rồi đo `/auth/link` tìm ra nó. Nay `092_email_ascii` thu hẹp miền
+  // `users.email` về ASCII in được: địa chỉ ấy KHÔNG CẤT ĐƯỢC (23514) — nên trên mọi giá trị cất được, hai hàm hạ chữ thường trùng khít
+  // bất kể libc. Bản vá S1.27 (cả hai vế cùng `pg_catalog.lower()`) vẫn giữ trong `login.ts`: nó đúng không nhờ miền. Và `/auth/link` với
+  // địa chỉ ấy vẫn là CÙNG một 200, một job, không link — không ai liệt kê được miền qua cửa này. Không cần tự hiệu chuẩn nữa: điểm mã
+  // chọn cố định (Ⓐ, U+24B6 — điểm phân kỳ đo được trên musl ở S1.27).
+  it("[sổ nợ 63] [S1.229 / khoản 71] địa chỉ mang điểm mã ngoài ASCII không cất được vào `users` (092, cả dạng hoa lẫn dạng đã hạ), và `/auth/link` với nó vẫn 200 không link", async () => {
+    const diaChi = "\u24B6lice-63@vidu.vn";
     const org63 = (
       await db.pool.query<{ id: string }>(
         "INSERT INTO organizations (name, slug) VALUES ('Cong ty 63', 'cong-ty-63') RETURNING id",
       )
     ).rows[0]!.id;
-    // Hàng phải cất được: đây chính là vế mà `CHECK (email = lower(email))` CHO QUA.
-    const nguoi63 = (
-      await db.pool.query<{ id: string }>(
-        "INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi 63', 'ACTIVE') RETURNING id",
-        [org63, diaChi],
-      )
-    ).rows[0]!.id;
-    await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'BUYER')", [org63, nguoi63]);
+    const chen = (email: string): Promise<string | null> =>
+      db.pool
+        .query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi 63', 'ACTIVE')", [org63, email])
+        .then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+    expect(await chen(diaChi), "dạng hoa: hai ràng buộc cùng vi phạm, PostgreSQL nêu một").toMatch(/^23514 users_email_(ascii|chu_thuong)$/u);
+    expect(await chen(diaChi.toLowerCase()), "dạng đã hạ (ⓐ — điểm bất động của lower() trên musl, 048 cho qua): 092 chặn").toBe("23514 users_email_ascii");
+    expect(await chen("alice-63@vidu.vn"), "đối chứng ASCII").toBeNull();
 
     const truoc = dv.linkDaGui.length;
     const r = await goi("POST", "/auth/link", { body: { orgId: org63, email: diaChi } });
-    expect(r.status).toBe(200);
-    await ob.chay(org63);
+    expect(r.status, "cùng một 200 với mọi email đúng hình dạng").toBe(200);
+    expect(await ob.chay(org63), "handler không nhìn bảng người dùng: vẫn một job").toBe(1);
+    expect(dv.linkDaGui.length, "không người dùng nào mang địa chỉ ấy ⇒ không link").toBe(truoc);
+  });
 
-    // ĐỎ TRƯỚC BẢN VÁ: khoá tra cứu do JS sinh không khớp hàng, `issueLoginToken` trả NO_USER,
-    // và KHÔNG job nào được xếp hàng — `linkDaGui` đứng yên.
-    expect(
-      dv.linkDaGui.length,
-      `địa chỉ ${JSON.stringify(diaChi)} (điểm mã ${JSON.stringify(ky)}) đã đăng ký nhưng ` +
-        "không sinh được magic link — hai tầng đang dùng hai hàm hạ chữ thường khác nhau",
-    ).toBe(truoc + 1);
-    expect(dv.linkDaGui.at(-1)!.email, "link phải đi tới ĐỊA CHỈ ĐÃ ĐĂNG KÝ").toBe(diaChi);
+  // [S1.247 / khoản 283 / ADR-139] DẤU CHẤM CUỐI TÊN MIỀN. RFC 5321 coi `vidu.vn.` là dạng tuyệt đối của `vidu.vn`: hai hàng `users` khác
+  // nhau MỘT dấu chấm cuối là HAI người dùng cho MỘT hộp thư, mỗi người xin được một magic link riêng — đo trước (lược đồ tới 095): hàng thứ
+  // hai VÀO và `/auth/link` với dạng có dấu chấm phát link cho nó. Nay `users_email_khong_dau_cham_cuoi` (`100_email_khong_dau_cham_cuoi.sql`)
+  // chặn ở lược đồ, và `/auth/link` KHÔNG chuẩn hoá (câu 12 của kế hoạch đợt 3 — chuẩn hoá là phương án bị loại): dạng có dấu chấm không tìm
+  // ra người dùng dạng không dấu chấm — cùng một 200, một job, không link. Link của dạng không dấu chấm là đối chứng dương của kênh quan sát.
+  // Một phép so gộp để lần đỏ in trọn trạng thái đo được, không dừng ở vế đầu.
+  it("[khoản 283] `dot-283@vidu.vn.` không cất được cạnh `dot-283@vidu.vn` ở `users` (23514 có tên), và `/auth/link` với dạng có dấu chấm cuối vẫn 200 không link — không chuẩn hoá", async () => {
+    const org283 = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty 283', 'cong-ty-283') RETURNING id")
+    ).rows[0]!.id;
+    const chen = (email: string): Promise<string | null> =>
+      db.pool
+        .query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi 283', 'ACTIVE')", [org283, email])
+        .then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+    expect(await chen("dot-283@vidu.vn"), "đối chứng").toBeNull();
+    const truoc = dv.linkDaGui.length;
+    const chenCham = await chen("dot-283@vidu.vn.");
+    const chenHaiCham = await chen("hai-283@vidu.vn..");
+    const trangThai: number[] = [];
+    for (const email of ["dot-283@vidu.vn", "dot-283@vidu.vn."]) {
+      trangThai.push((await goi("POST", "/auth/link", { body: { orgId: org283, email } })).status);
+    }
+    const soJob = await ob.chay(org283);
+    const linkToi = dv.linkDaGui
+      .slice(truoc)
+      .map((l) => l.email)
+      .sort();
+    expect({ chenCham, chenHaiCham, trangThai, soJob, linkToi }, "một hộp thư, một người dùng, một link").toEqual({
+      chenCham: "23514 users_email_khong_dau_cham_cuoi",
+      chenHaiCham: "23514 users_email_khong_dau_cham_cuoi",
+      trangThai: [200, 200],
+      soJob: 2,
+      linkToi: ["dot-283@vidu.vn"],
+    });
   });
 
   // [S1.15] Khối này cũng có một vòng đếm (`LOGIN_MAX_TOKENS_PER_WINDOW + 3`) — cùng lý do.
@@ -1422,42 +1438,243 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   // đúng thứ đo được, và hệ quả ghi ở biên bản §S1.83.
   //
   // RED THẬT trên mã trước bản vá: `failed_attempts` = 3 và ba mã đều 401.
+  //
+  // -----------------------------------------------------------------------------------------------
+  // [S1.220 / khoản 184 — lượt soi ngang 74 góc 4] CHỒNG LẤN ĐƯỢC ÉP VÀ ĐƯỢC ĐO, KHÔNG ĐƯỢC CẦU MAY.
+  //
+  // Bản S1.83 của vế này bắn ba yêu cầu bằng `Promise.all` rồi đòi `2×401, 1×429, failed = 2`. Nó
+  // KHÔNG chứng được ba yêu cầu thật sự chồng nhau: chỉ cần chúng chạy TUẦN TỰ (tải máy, gộp socket,
+  // máy chủ xử lý nối tiếp) là cổng đọc-rồi-làm CŨ ở bộ điều phối cho ra ĐÚNG bộ số ấy — đo được:
+  // đổi `Promise.all` thành ba `await` nối tiếp ⇒ vế xanh (§S1.220). Tức phép đo có thể suy biến
+  // thành bản sao đắt tiền của vế ⑹ mà không ai biết, đúng lúc khoản 144 — lớp lỗi đã quay lại BA
+  // lần — cần một người tố giác.
+  //
+  // Nay cảnh được DỰNG: một giao dịch ngoài giữ khoá HÀNG hồ sơ MFA của người này (`FOR UPDATE`),
+  // nên cả ba yêu cầu đi qua cổng đọc-rồi-làm của bộ điều phối (cùng đọc `failed_attempts = 0`) rồi
+  // cùng ĐỨNG CHỜ ở câu `CAU_DAT_COC`. Vế đếm qua `pg_stat_activity`/`pg_locks` đủ BA backend đang
+  // chờ — bị chặn (trực tiếp hay dây chuyền) bởi người giữ, và đã cầm `RowExclusiveLock` trên
+  // `mfa_credentials`, tức đang ở chính câu `UPDATE` ấy — RỒI MỚI nhả khoá. Không đủ ba thì vế ĐỎ
+  // ở tiền đề, không ở kết luận. Ba câu `UPDATE` được thả nối tiếp trên cùng một hàng: hai câu đầu
+  // thấy `0 < 2`, `1 < 2` và tăng; câu thứ ba đánh giá lại vị từ trên hàng ĐÃ cập nhật (EvalPlanQual),
+  // thấy `2 < 2` sai, chạm 0 hàng ⇒ `SIDE_PATH_EXHAUSTED` ⇒ 429. Nên bộ số nay là ĐẲNG THỨC.
+  //
+  // Đột biến đo được (§S1.220): ⒜ ba yêu cầu tuần tự ⇒ chỉ MỘT backend chờ ⇒ tiền đề đỏ; ⒝ gỡ vị
+  // từ `$3` khỏi `CAU_DAT_COC` (mô phỏng cổng đọc-rồi-làm của bản trước S1.83) ⇒ `401,401,401`,
+  // `failed = 3` ⇒ kết luận đỏ.
+  //
+  // Khẳng định `locked_until IS NULL` của bản trước ĐÃ BỎ: `MFA_MAX_FAILED_ATTEMPTS = 5`, cả bản cũ
+  // (3) lẫn bản mới (2) đều dưới ngưỡng, nên nó luôn đúng — chính khối trên đã viết "KHÔNG đo được ở
+  // đây thì KHÔNG khai ở đây".
+  // -----------------------------------------------------------------------------------------------
   // ===============================================================================================
   it("⑻ ba lần thử CÙNG LÚC không vượt được trần trạng thái — ngưỡng là của CÂU LỆNH, không của một phép đọc trước đó", async () => {
     const u = await taoNguoi("tran-cung-luc@vd.test");
     const nguoi = await dangNhap("tran-cung-luc@vd.test");
 
-    // Ba yêu cầu bắn CÙNG LÚC, không lượt nào chờ lượt nào. `poolAs` có max = 3 nên cả ba thật sự
-    // nằm trong ba giao dịch song song — đây là điều kiện mà vế ⑹ không bao giờ dựng.
-    const ma = (
-      await Promise.all(
-        Array.from({ length: 3 }, () =>
-          goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } }),
-        ),
-      )
-    ).map((r) => r.status);
+    /**
+     * Số backend đang CHỜ ở câu `CAU_DAT_COC`: bị chặn bởi `pidGiu` — trực tiếp, hay dây chuyền qua một
+     * backend khác đang chờ cùng hàng (PostgreSQL xếp người chờ thứ hai sau người chờ thứ nhất, nên
+     * `pg_blocking_pids` của nó trỏ tới người ấy chứ không tới người giữ) — VÀ đã cầm `RowExclusiveLock`
+     * trên `mfa_credentials`, thứ chỉ một câu ghi lên bảng ấy mới lấy. Cổng đọc của bộ điều phối chỉ
+     * lấy `AccessShareLock`, nên một backend còn đứng ở cổng KHÔNG được đếm.
+     */
+    const demBackendChoDatCoc = async (pidGiu: number): Promise<number> => {
+      const { rows } = await db.pool.query<{ n: number }>(
+        "WITH RECURSIVE cho(pid) AS (" +
+          "  SELECT a.pid FROM pg_catalog.pg_stat_activity a WHERE $1::int = ANY (pg_catalog.pg_blocking_pids(a.pid))" +
+          "  UNION" +
+          "  SELECT a.pid FROM pg_catalog.pg_stat_activity a JOIN cho c ON c.pid = ANY (pg_catalog.pg_blocking_pids(a.pid))" +
+          ") SELECT count(*)::int AS n FROM cho c WHERE EXISTS (" +
+          "  SELECT 1 FROM pg_catalog.pg_locks l WHERE l.pid = c.pid AND l.granted AND l.locktype = 'relation'" +
+          "    AND l.relation = 'public.mfa_credentials'::pg_catalog.regclass AND l.mode = 'RowExclusiveLock')",
+        [pidGiu],
+      );
+      return rows[0]?.n ?? -1;
+    };
 
-    const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
-      "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+    const giu = await db.pool.connect();
+    let soChoToiDa = 0;
+    let msDuBa = -1;
+    let ma: number[] = [];
+    try {
+      await giu.query("BEGIN");
+      const pidGiu = (await giu.query<{ pid: number }>("SELECT pg_catalog.pg_backend_pid() AS pid")).rows[0]!.pid;
+      const khoa = await giu.query("SELECT 1 FROM mfa_credentials WHERE org_id = $1 AND user_id = $2 FOR UPDATE", [orgA, u]);
+      expect(khoa.rowCount, "tiền đề: phải khoá được ĐÚNG hàng hồ sơ MFA của người này").toBe(1);
+
+      // Ba yêu cầu bắn CÙNG LÚC. `poolAs` có max = 3 nên cả ba nằm trong ba giao dịch song song —
+      // và từ vòng này điều đó được ĐO ở vòng lặp dưới, không được suy ra từ cỡ pool.
+      const viec = Promise.all(
+        Array.from({ length: 3 }, () => goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } })),
+      );
+      void viec.catch(() => undefined);
+
+      const batDau = Date.now();
+      while (Date.now() - batDau < 10_000) {
+        const n = await demBackendChoDatCoc(pidGiu);
+        soChoToiDa = Math.max(soChoToiDa, n);
+        if (n >= 3) {
+          msDuBa = Date.now() - batDau;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      // Nhả khoá RỒI mới chờ ba câu trả lời — thứ tự ngược lại là một vòng chờ khép kín.
+      await giu.query("ROLLBACK");
+      ma = (await viec).map((r) => r.status);
+    } finally {
+      await giu.query("ROLLBACK").catch(() => undefined);
+      giu.release();
+    }
+
+    const { rows } = await db.pool.query<{ failed_attempts: number }>(
+      "SELECT failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
       [orgA, u],
     );
     const dem = Number(rows[0]?.failed_attempts);
-    const ke = `status: ${ma.slice().sort().join(",")}; failed=${String(dem)}; trần=${String(MFA_TRAN_SAI_DUONG_PHU)}`;
+    const ke =
+      `status: ${ma.slice().sort().join(",")}; failed=${String(dem)}; trần=${String(MFA_TRAN_SAI_DUONG_PHU)}; ` +
+      `chờ tối đa ${String(soChoToiDa)} backend, đủ ba sau ${String(msDuBa)} ms`;
 
-    // ⑴ VẾ CHỊU LỰC. Bộ đếm KHÔNG được vượt ngưỡng, bất kể mấy yêu cầu chạy song song. Đây là
-    //    đúng lời khai mà khối `mfaTranDuongPhu` ở `routes/auth.ts` viết ra, chỉ đọc theo chiều
-    //    đồng thời thay vì chiều tuần tự.
-    expect(dem, `bộ đếm KHÔNG được vượt ngưỡng dù bắn cùng lúc — ${ke}`).toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
+    // ⓪ TIỀN ĐỀ, và nó là vế làm hai vế dưới có nghĩa: cả BA đã cùng đứng ở câu `CAU_DAT_COC` trước khi
+    //    khoá được nhả. Đây là chỗ đột biến ⒜ (ba yêu cầu tuần tự) đỏ.
+    expect(soChoToiDa, `tiền đề: cả BA backend phải cùng chờ ở CAU_DAT_COC trước khi khoá được nhả — ${ke}`).toBe(3);
 
-    // ⑵ Hệ quả trực tiếp: số lần THỰC SỰ tiêu ngân sách không lớn hơn ngưỡng, nên ít nhất một
-    //    trong ba phải bị cắt. Đếm bằng chính mã trả về chứ không bằng đồng hồ.
-    expect(ma.filter((s) => s === 401).length, `số lần tới được handler phải <= ngưỡng — ${ke}`)
-      .toBeLessThanOrEqual(MFA_TRAN_SAI_DUONG_PHU);
-    expect(ma.filter((s) => s === 429).length, `phần dư phải bị cắt bằng 429 — ${ke}`)
-      .toBe(3 - ma.filter((s) => s === 401).length);
+    // ⑴ VẾ CHỊU LỰC. Bộ đếm dừng ĐÚNG ở ngưỡng, dù ba câu tăng được thả liền nhau trên cùng một hàng.
+    //    Đây là đúng lời khai mà khối `mfaTranDuongPhu` ở `routes/auth.ts` viết ra, đọc theo chiều đồng
+    //    thời; và vì chồng lấn đã được ép, nó là đẳng thức chứ không còn là `<=`.
+    expect(dem, `bộ đếm phải dừng ĐÚNG ở ngưỡng dù ba câu tăng chồng nhau — ${ke}`).toBe(MFA_TRAN_SAI_DUONG_PHU);
 
-    // ⑶ Và điều trần ấy tồn tại để bảo vệ vẫn đúng.
-    expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+    // ⑵ Hệ quả trực tiếp, đếm bằng chính mã trả về chứ không bằng đồng hồ: đúng `ngưỡng` lần tới được
+    //    cổng mở bí mật (401), phần dư bị cắt bằng 429 — ở câu lệnh, vì cổng của bộ điều phối đã cho
+    //    cả ba đi qua.
+    expect(ma.slice().sort(), `đúng ${String(MFA_TRAN_SAI_DUONG_PHU)}×401 và phần dư 429 — ${ke}`).toEqual([
+      ...Array<number>(MFA_TRAN_SAI_DUONG_PHU).fill(401),
+      ...Array<number>(3 - MFA_TRAN_SAI_DUONG_PHU).fill(429),
+    ]);
+  });
+  // ===============================================================================================
+  // ⑼ [S1.209 / khoản 188] NGƯỠNG MÀ CÂU LỆNH DÙNG LÀ NGƯỠNG CỦA BẢNG ROUTE — KHÔNG PHẢI MỘT HẰNG HANDLER TỰ NHẬP.
+  //
+  // S1.83 khai *"cùng một hằng nên hai nơi không trôi khỏi nhau"* — đúng cho GIÁ TRỊ, không đúng cho SỰ CÓ MẶT (S1.87): không ai canh
+  // handler của một route khai ngưỡng có truyền ngưỡng ấy xuống câu lệnh không. Từ vòng này bộ điều phối đưa `route.mfaTranDuongPhu`
+  // vào `ctx.mfaTranDuongPhu` và handler truyền ĐÚNG thứ ấy xuống `CAU_DAT_COC` (vế T1 ở `routes.test.ts`). Vế này đo qua HTTP thật,
+  // TUẦN TỰ và TẤT ĐỊNH: nhân bản bảng route với `/auth/agent-session` khai ngưỡng 3 — LỚN HƠN hằng 2, nhỏ hơn ngưỡng khoá 5 — rồi gõ
+  // sai liên tiếp. Lần thứ ba đi qua cổng đi trước của bộ điều phối (`failed_attempts` 2 < 3, cổng đọc bảng route), nên thứ duy nhất
+  // còn cắt được nó là vị từ trong câu lệnh, với ngưỡng mà HANDLER truyền: nhập hằng 2 ⇒ `CAU_DAT_COC` không giành được cọc ⇒ 429 ở
+  // lần ba (ĐỎ trên mã trước vòng này, đo được `401,401,429`, failed = 2); đọc ctx ⇒ 401 ở lần ba, 429 ở lần bốn, failed = 3.
+  //
+  // VÌ SAO KHÔNG ĐO CHIỀU CÙNG LÚC như ⑻: bản đầu của vế này bắn ba mã sai song song với ngưỡng route 1, và trên mã CŨ ba lượt chạy
+  // đều cho `401,429,429` — các yêu cầu của CÙNG một phiên xếp hàng qua cổng đi trước trên máy đo, nên chiều ấy không phân biệt được
+  // hai nguồn ngưỡng. Một phép đo không đỏ được trên mã cũ thì không phải một phép đo; hình dạng tuần tự ở đây đỏ tất định.
+  // ===============================================================================================
+  it("⑼ bảng route nhân bản khai ngưỡng 3 (≠ hằng 2): ba lần sai đều 401, lần bốn 429, failed_attempts = 3 — câu lệnh dùng ngưỡng của route", async () => {
+    const NGUONG_ROUTE = 3;
+    expect(NGUONG_ROUTE, "vế chỉ có nghĩa khi ngưỡng của route LỚN HƠN hằng: lần thứ (hằng + 1) mới là lần phân biệt").toBeGreaterThan(MFA_TRAN_SAI_DUONG_PHU);
+    expect(NGUONG_ROUTE, "và nhỏ hơn ngưỡng khoá, để vẫn là một ngưỡng phụ có nghĩa").toBeLessThan(MFA_MAX_FAILED_ATTEMPTS);
+    // Hai route tự thân VỌNG LẠI thứ bộ điều phối đưa vào `ctx.mfaTranDuongPhu` — đo trực tiếp vế "bộ điều phối điền từ bảng route",
+    // vì chuỗi tuần tự của agent-session bên dưới không phân biệt được "điền null" với "điền đúng" (không ngưỡng trong câu lệnh thì cổng
+    // đi trước vẫn cắt ở cùng chỗ). Cùng khuôn `/auth/*`, `self: true`, `agent: false` mà `timViPhamBangRoute` đòi.
+    const vong = (path: string, mfaTranDuongPhu: number | null): Route => ({
+      method: "POST", path, audience: "BUYER", mutates: true, self: true, agent: false, mfaTranDuongPhu,
+      handler: (ctx) => Promise.resolve({ status: 200, body: { nguong: ctx.mfaTranDuongPhu } }),
+    });
+    const bangHep: readonly Route[] = [
+      ...ROUTES.map((r) =>
+        r.audience === "BUYER" && r.mutates && r.self === true && r.path === "/auth/agent-session" ? { ...r, mfaTranDuongPhu: NGUONG_ROUTE } : r,
+      ),
+      vong("/auth/vong-nguong-9101", NGUONG_ROUTE),
+      vong("/auth/vong-khong-nguong-9101", null),
+    ];
+    expect(bangHep.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true && r.mfaTranDuongPhu === NGUONG_ROUTE)).toHaveLength(2);
+    const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, routes: bangHep }), {
+      remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+    });
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    try {
+      const u = await taoNguoi("nguong-cua-route@vd.test");
+      const nguoi = await dangNhap("nguong-cua-route@vd.test");
+      // ⓐ Bộ điều phối điền đúng lời khai của TỪNG route: có ngưỡng ⇒ ngưỡng ấy; `null` ⇒ `null`.
+      const v1 = await goi("POST", "/auth/vong-nguong-9101", { cookie: nguoi.cookie, body: {}, goc: goc2 });
+      expect(v1.status, v1.text).toBe(200);
+      expect(v1.body, "ctx.mfaTranDuongPhu phải là ngưỡng route khai").toEqual({ nguong: NGUONG_ROUTE });
+      const v0 = await goi("POST", "/auth/vong-khong-nguong-9101", { cookie: nguoi.cookie, body: {}, goc: goc2 });
+      expect(v0.status, v0.text).toBe(200);
+      expect(v0.body, "route khai null thì ctx mang null").toEqual({ nguong: null });
+      // ⓑ Và handler thật truyền đúng thứ ấy xuống câu lệnh: chuỗi tuần tự dưới đây.
+      const ma: number[] = [];
+      for (let i = 0; i < NGUONG_ROUTE + 1; i += 1) {
+        ma.push((await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" }, goc: goc2 })).status);
+      }
+      const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
+        "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+        [orgA, u],
+      );
+      const dem = Number(rows[0]?.failed_attempts);
+      const ke = `status: ${ma.join(",")}; failed=${String(dem)}; ngưỡng route=${String(NGUONG_ROUTE)}; hằng=${String(MFA_TRAN_SAI_DUONG_PHU)}`;
+      // Vế chịu lực: lần thứ (hằng + 1) — cổng đi trước đã cho qua — phải TỚI câu lệnh và tiêu ngân sách, tức 401, không 429.
+      expect(ma.slice(0, NGUONG_ROUTE), `đúng ${String(NGUONG_ROUTE)} lần đầu tới câu lệnh — ngưỡng của ROUTE, không của hằng — ${ke}`)
+        .toEqual(Array<number>(NGUONG_ROUTE).fill(401));
+      expect(ma[NGUONG_ROUTE], `lần thứ ${String(NGUONG_ROUTE + 1)} bị cắt ở đúng ngưỡng route — ${ke}`).toBe(429);
+      expect(dem, `bộ đếm dừng ở ngưỡng của ROUTE — ${ke}`).toBe(NGUONG_ROUTE);
+      expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+  // ===============================================================================================
+  // ⑽ [S1.209 / khoản 174] HỆ QUẢ VẬN HÀNH CỦA GIAO ĐIỂM 144 × 153, GHIM LẠI: GÕ SAI TOTP ĐỦ NGƯỠNG TRÊN ĐƯỜNG CHÍNH THÌ KHÔNG XOAY ĐƯỢC
+  // CHỨNG CHỈ AGENT — KỂ CẢ VỚI MÃ ĐÚNG — CHO TỚI KHI ĐĂNG NHẬP ĐÚNG MỘT LẦN.
+  //
+  // Chứng chỉ `AGENT_READONLY` có TTL trần một giờ và cách duy nhất có chứng chỉ mới là gọi lại `/auth/agent-session` với một mã tươi
+  // (khoản 153, ADR-039). Trần trạng thái của ⑹–⑻ đứng trên đúng route ấy và đọc `failed_attempts` — một bộ đếm mà ĐƯỜNG CHÍNH cũng
+  // tăng. Hệ quả: một người đã sai `MFA_TRAN_SAI_DUONG_PHU` lần trên `/auth/totp` thì đường phát agent từ chối họ TRƯỚC khi thử mã, dù
+  // mã đúng; tiến trình MCP đang chạy dừng ở giờ kế tiếp. Fail-closed CÓ CHỦ Ý (đường phụ không được tiêu ngân sách của đường chính)
+  // — vế này ghim bốn điều để nó không thành một bất ngờ vận hành: ⒜ mã đúng vẫn 429 thân cố định; ⒝ lần cắt không tiêu mã, không tăng
+  // bộ đếm, không khoá; ⒞ đường ra DUY NHẤT là một lần đăng nhập đúng trên đường chính (`CAU_GHI_THANH_CONG` đặt `failed_attempts = 0`)
+  // — cùng mã vừa bị 429 vẫn dùng được ở đó; ⒟ sau đó đường phát agent lại tới được câu lệnh (một mã sai cho 401, không 429).
+  // ===============================================================================================
+  it("⑽ failed_attempts = ngưỡng trên đường chính ⇒ /auth/agent-session 429 kể cả mã ĐÚNG và không tiêu mã; đăng nhập đúng mở lại", async () => {
+    const email = "xoay-agent-sau-sai@vd.test";
+    const u = await taoNguoi(email);
+    const nguoi = await dangNhap(email);
+    const docHoSo = async (): Promise<{ failed_attempts: number; locked_until: string | null; last_used_counter: string | null }> =>
+      (
+        await db.pool.query<{ failed_attempts: number; locked_until: string | null; last_used_counter: string | null }>(
+          "SELECT failed_attempts, locked_until, last_used_counter FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+          [orgA, u],
+        )
+      ).rows[0] ?? { failed_attempts: -1, locked_until: "?", last_used_counter: "?" };
+    // Mồi cảnh bằng CSDL: chừng ấy lần sai TRÊN ĐƯỜNG CHÍNH — hồ sơ vẫn bình thường (chưa khoá), chỉ đã tới ngưỡng đường phụ.
+    await db.pool.query("UPDATE mfa_credentials SET failed_attempts = $1 WHERE org_id = $2 AND user_id = $3", [MFA_TRAN_SAI_DUONG_PHU, orgA, u]);
+    const truoc = await docHoSo();
+    // Mã của bước KẾ TIẾP — `dangNhap` vừa tiêu bước hiện tại; +1 vẫn trong cửa sổ ±1 của `verifyTotpCode` và ±3 của trigger 039.
+    const maDung = deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1);
+
+    // ⒜ Mã ĐÚNG vẫn bị cắt, cùng thân với mọi lần cắt của trần trạng thái.
+    const r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: maDung } });
+    expect(r.status, "mã đúng vẫn phải 429 khi hồ sơ đã ở ngưỡng đường phụ (thân không in: phản hồi 200 mang token)").toBe(429);
+    expect(r.body).toEqual(THAN_429_MFA);
+    // ⒝ Lần cắt là một phép đọc: không tiêu mã, không tăng bộ đếm, không khoá.
+    expect(await docHoSo(), "lần cắt không được đổi hồ sơ").toEqual(truoc);
+    expect(truoc.locked_until).toBeNull();
+
+    // ⒞ Đường ra duy nhất: đăng nhập đúng trên đường chính — bằng CHÍNH mã vừa bị 429, vì lần cắt không tiêu nó.
+    const daGui = dv.linkDaGui.length;
+    await goi("POST", "/auth/link", { body: { orgId: orgA, email } });
+    await ob.chay(orgA);
+    expect(dv.linkDaGui).toHaveLength(daGui + 1);
+    const tk = dv.linkDaGui.at(-1)?.token ?? "";
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: tk } })).status).toBe(200);
+    const vao = await goi("POST", "/auth/totp", { body: { orgId: orgA, token: tk, code: maDung } });
+    expect(vao.status, `đăng nhập đúng phải mở lại được — ${vao.text}`).toBe(200);
+    expect((await docHoSo()).failed_attempts, "một lần đúng đặt bộ đếm về 0").toBe(0);
+
+    // ⒟ Đường phát agent lại tới được câu lệnh: một mã SAI cho 401 (đã thử mã), không còn 429 (bị cắt trước khi thử).
+    const lai = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+    expect(lai.status, `sau khi đăng nhập đúng, đường phát agent phải thử mã trở lại — ${lai.text}`).toBe(401);
+    expect((await docHoSo()).failed_attempts).toBe(1);
   });
 
   // ===============================================================================================
@@ -1979,4 +2196,259 @@ describe("[S1.175 / khoản 145] sổ không nhận lần phát chứng chỉ ag
     expect(lai.status, `mã đã tiêu thụ không phát lại được — ${lai.text}`).toBe(401);
     expect(await dem(), "lần thử lại bị từ chối cũng không phát gì").toEqual(truoc);
   }, 60_000);
+});
+
+// ==============================================================================================
+// [S1.216 / khoản 195 / ADR-126] NGƯỜI ĐÃ ĐĂNG NHẬP TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH MÌNH
+//
+// `LoginTokenError` gộp ba trạng thái — không hợp lệ, hết hạn, đã dùng — làm MỘT câu ở route vô danh, và
+// đó là chống dò tìm có lý: vòng này KHÔNG nới câu ấy. Nhưng vế "đã dùng" đáng lẽ dẫn tới *báo ngay, có
+// kẻ đã dùng link của tôi*, và tới trước vòng này phải mở cơ sở dữ liệu mới biết. Nay `GET /auth/login-links`
+// trả cho CHÍNH người gọi (userId dẫn xuất từ cookie, không từ thân) các link gần đây của họ: tạo lúc, hết
+// hạn, dùng lúc, mục đích, và trạng thái suy ở CSDL bằng cùng đồng hồ với `redeemLoginToken`
+// (`clock_timestamp()`). KHÔNG BAO GIỜ `token_hash` — băm của một token còn hiệu lực là thứ đối chiếu được
+// với một token bị rò. Ba vế: ⑴ chủ nhân thấy ba trạng thái ra ba kết quả, thân không mang băm hay một chuỗi
+// bí mật nào; ⑵ người khác cùng tổ chức chỉ thấy của mình; ⑶ không cookie ⇒ 401, chứng chỉ agent ⇒ 403 kèm
+// một hàng `AGENT_SCOPE_DENIED` nêu mẫu route (`agent: false` là một quyết định — `routes.test.ts` ghim).
+// Đo trước trên mã trước vòng này: đường không tồn tại ⇒ 404 ở cả ba vế.
+// ==============================================================================================
+describe("[INV-E1] [S1.216 / khoản 195] GET /auth/login-links — link đăng nhập gần đây của chính người gọi", () => {
+  interface LinkGanDay {
+    readonly createdAt: string;
+    readonly expiresAt: string;
+    readonly consumedAt: string | null;
+    readonly purpose: string;
+    readonly status: string;
+  }
+
+  /** Phát thêm một mã cho chính chủ, như handler tin báo hay `/auth/link` làm — dạng rõ bị bỏ, chỉ hàng băm ở lại. */
+  async function phatThem(email: string): Promise<void> {
+    const kq = await withTenant(apiPool, orgA, (c) => issueLoginToken(c, orgA, { email }));
+    expect(kq.ok, "phát thêm một mã cho chính chủ").toBe(true);
+  }
+
+  function docThan(r: PhanHoi): readonly LinkGanDay[] {
+    const b = r.body as { loginLinks?: readonly LinkGanDay[] } | undefined;
+    expect(Array.isArray(b?.loginLinks), r.text).toBe(true);
+    return b?.loginLinks ?? [];
+  }
+
+  it("⑴ chủ nhân thấy ba trạng thái — đã dùng, hết hạn, còn hiệu lực — mỗi link một hàng, mới nhất trước; KHÔNG `token_hash`, không một chuỗi bí mật nào trong thân", async () => {
+    const email = "k195-chu@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ mã ĐÃ DÙNG (startUserSession tiêu thụ nó)
+    await phatThem(email); // ⇒ mã CÒN HIỆU LỰC
+    await phatThem(email); // ⇒ mã sẽ bị đẩy về quá khứ ⇒ HẾT HẠN
+    // `app_api` không có `UPDATE (expires_at)` (029) — đúng thiết kế —, nên đẩy về quá khứ bằng pool superuser của test-support.
+    // Đẩy cả `created_at` để hàng ấy là hàng CŨ NHẤT: vế thứ tự đo được.
+    const day = await db.pool.query(
+      `UPDATE user_login_tokens SET created_at = now() - interval '20 minutes', expires_at = now() - interval '5 minutes'
+        WHERE id = (SELECT t.id FROM user_login_tokens t JOIN users u ON u.id = t.user_id
+                     WHERE u.org_id = $1 AND u.email = $2 AND t.consumed_at IS NULL ORDER BY t.created_at DESC LIMIT 1)`,
+      [orgA, email],
+    );
+    expect(day.rowCount).toBe(1);
+
+    const r = await goi("GET", "/auth/login-links", { cookie: chu.cookie });
+    expect(r.status, r.text).toBe(200);
+    const ds = docThan(r);
+    expect(ds.map((l) => l.status), "mới nhất trước: còn hiệu lực (vừa phát), đã dùng (lúc đăng nhập), hết hạn (đẩy về 20 phút trước)").toEqual([
+      "PENDING",
+      "CONSUMED",
+      "EXPIRED",
+    ]);
+    for (const l of ds) {
+      expect(Object.keys(l).sort(), "đúng năm trường, không hơn").toEqual(["consumedAt", "createdAt", "expiresAt", "purpose", "status"]);
+      expect(l.purpose).toBe("LOGIN");
+      expect(Number.isNaN(Date.parse(l.createdAt))).toBe(false);
+      expect(Number.isNaN(Date.parse(l.expiresAt))).toBe(false);
+    }
+    const [conHan, daDung, hetHan] = ds;
+    expect(conHan?.consumedAt).toBeNull();
+    expect(Date.parse(conHan?.expiresAt ?? "")).toBeGreaterThan(Date.now());
+    expect(typeof daDung?.consumedAt).toBe("string");
+    expect(hetHan?.consumedAt).toBeNull();
+    expect(Date.parse(hetHan?.expiresAt ?? "")).toBeLessThan(Date.now());
+    expect(Date.parse(ds[0]?.createdAt ?? "")).toBeGreaterThanOrEqual(Date.parse(ds[1]?.createdAt ?? ""));
+    expect(Date.parse(ds[1]?.createdAt ?? "")).toBeGreaterThanOrEqual(Date.parse(ds[2]?.createdAt ?? ""));
+    // Không băm, không token: thân không có chữ "hash", không mang token dạng rõ đã dùng, không mang băm hex/base64 của nó,
+    // và không một chuỗi base64url dài nào — hình dạng của mọi token kho này phát.
+    expect(r.text).not.toMatch(/hash/iu);
+    expect(r.text).not.toContain(chu.token);
+    const bamToken = createHash("sha256").update(chu.token, "utf8").digest();
+    expect(r.text).not.toContain(bamToken.toString("hex"));
+    expect(r.text).not.toContain(bamToken.toString("base64"));
+    expect(r.text).not.toMatch(/[A-Za-z0-9_-]{32,}/u);
+  });
+
+  it("⑵ người khác CÙNG tổ chức chỉ thấy link của mình — không hàng nào của chủ nhân ở vế ⑴", async () => {
+    const email = "k195-nguoi-khac@vd.test";
+    await taoNguoi(email);
+    const khac = await dangNhap(email);
+    const r = await goi("GET", "/auth/login-links", { cookie: khac.cookie });
+    expect(r.status, r.text).toBe(200);
+    const ds = docThan(r);
+    expect(ds.map((l) => l.status)).toEqual(["CONSUMED"]);
+    // Đối chứng, đọc thẳng CSDL bằng pool superuser: chủ nhân của vế ⑴ vẫn có ba hàng — tức ba hàng ấy có thật, cùng tổ chức,
+    // và người này không thấy chúng; hàng duy nhất người này thấy là hàng của CHÍNH họ (cùng mốc tạo).
+    const cuaChu = await db.pool.query<{ created_at: Date }>(
+      "SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id WHERE u.org_id = $1 AND u.email = $2",
+      [orgA, "k195-chu@vd.test"],
+    );
+    expect(cuaChu.rows.length).toBeGreaterThanOrEqual(3);
+    const mocCuaChu = new Set(cuaChu.rows.map((h) => h.created_at.toISOString()));
+    for (const l of ds) expect(mocCuaChu.has(new Date(l.createdAt).toISOString()), "một hàng của chủ nhân lọt sang người khác").toBe(false);
+    const cuaKhac = await db.pool.query<{ created_at: Date }>(
+      "SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id WHERE u.org_id = $1 AND u.email = $2",
+      [orgA, email],
+    );
+    expect(cuaKhac.rows.map((h) => h.created_at.toISOString())).toEqual(ds.map((l) => new Date(l.createdAt).toISOString()));
+  });
+
+  it("⑶ không cookie ⇒ 401 không thân dữ liệu; chứng chỉ agent ⇒ 403 và ĐÚNG MỘT hàng `AGENT_SCOPE_DENIED` nêu mẫu route", async () => {
+    const khong = await goi("GET", "/auth/login-links");
+    expect(khong.status, khong.text).toBe(401);
+    expect(khong.text).not.toContain("loginLinks");
+
+    const email = "k195-agent@vd.test";
+    await taoNguoi(email);
+    const nguoi = await dangNhap(email);
+    const phat = await goi("POST", "/auth/agent-session", {
+      cookie: nguoi.cookie,
+      body: { code: deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1) },
+    });
+    expect(phat.status, phat.text).toBe(200);
+    const agent = `${COOKIE_PHIEN_NGUOI_MUA}=${orgA}.${(phat.body as { token: string }).token}`;
+    const truoc = await db.pool.query<{ n: string }>(
+      "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED'",
+      [orgA],
+    );
+    const r = await goi("GET", "/auth/login-links", { cookie: agent });
+    expect(r.status, r.text).toBe(403);
+    expect(r.text).not.toContain("loginLinks");
+    const sau = await db.pool.query<{ n: string; payload: { routePath?: string } | null }>(
+      `SELECT count(*) OVER () AS n, payload FROM audit_events
+        WHERE org_id = $1 AND action = 'AGENT_SCOPE_DENIED' ORDER BY seq DESC LIMIT 1`,
+      [orgA],
+    );
+    expect(Number(sau.rows[0]?.n ?? 0)).toBe(Number(truoc.rows[0]?.n ?? 0) + 1);
+    expect(sau.rows[0]?.payload?.routePath).toBe("/auth/login-links");
+    // Đối chứng: cùng đường dưới phiên NGƯỜI của chính người ấy thì mở.
+    const mo = await goi("GET", "/auth/login-links", { cookie: nguoi.cookie });
+    expect(mo.status, mo.text).toBe(200);
+  });
+});
+
+// ==============================================================================================
+// [S1.240 / khoản 268 / ADR-126] DANH SÁCH LINK ĐĂNG NHẬP GẦN ĐÂY CẮT THEO THỜI GIAN, VÀ NÓI KHI NÓ BỊ CẮT
+//
+// Tới trước vòng này `listRecentLoginTokens` trả `LIMIT 20` mới nhất trước: trần phát là 5 mã tự phục vụ + 2 mã hệ thống mỗi 15 phút
+// (tối đa 7 hàng / 15 phút), nên 20 hàng phủ chừng 43 phút ở nhịp dày nhất — một link «đã dùng» cũ hơn thế rơi khỏi danh sách, và
+// thân không nói mình cắt. Chủ dự án chốt câu 6 (2026-09-30): cắt theo THỜI GIAN 7 ngày (dài hơn mọi TTL và mọi cửa sổ phát), trần
+// cứng 100 hàng, thân thêm `truncated: boolean` — đúng khi còn hàng TRONG cửa sổ mà trần cắt đi. Mã chèn thẳng bằng pool superuser:
+// `app_api` không có `UPDATE (created_at)` (029), và trần phát 5 mã / 15 phút không cho dựng 101 mã qua đường thật trong một test.
+//   ① 25 mã trong cửa sổ, mã «đã dùng» là mã CŨ NHẤT ⇒ vẫn thấy — đủ 25 hàng — và `truncated: false`;
+//   ② 101 mã trong cửa sổ ⇒ đúng 100 hàng — 100 mã mới nhất, mới nhất trước — và `truncated: true`;
+//   ③ ĐÚNG 100 mã trong cửa sổ (một mã sát mép, 6 ngày 23 giờ trước) cộng hai mã NGOÀI cửa sổ (7 ngày 1 giờ — đã dùng — và 30 ngày)
+//      ⇒ đủ 100 hàng, không mã ngoài cửa sổ nào, và `truncated: false`: mã cũ hơn 7 ngày không làm cờ đúng.
+// Đo trước trên cây trước vòng này: ba vế đỏ — 20 hàng thay vì 25/100, thân không có `truncated`.
+// ==============================================================================================
+describe("[S1.240 / khoản 268] GET /auth/login-links — cửa sổ 7 ngày, trần 100 hàng, `truncated`", () => {
+  interface ThanLink {
+    readonly loginLinks?: readonly { readonly createdAt: string; readonly consumedAt: string | null; readonly status: string }[];
+    readonly truncated?: unknown;
+  }
+
+  /** Chèn `soMa` mã chưa dùng cho chủ nhân `email`: mã thứ g tạo `g` phút trước lúc này, hết hạn 15 phút sau khi tạo. */
+  async function chenMa(email: string, soMa: number): Promise<void> {
+    const r = await db.pool.query(
+      `INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at, created_at)
+       SELECT u.org_id, u.id, sha256(convert_to('k268-' || u.id::text || '-' || g::text, 'UTF8')), 'LOGIN',
+              now() - make_interval(mins => g) + interval '15 minutes', now() - make_interval(mins => g)
+         FROM users u, generate_series(1, $2::int) g
+        WHERE u.org_id = $1 AND u.email = $3`,
+      [orgA, soMa, email],
+    );
+    expect(r.rowCount).toBe(soMa);
+  }
+
+  /** Chèn MỘT mã tạo `truoc` (một interval) trước lúc này; `daDung` ⇒ dùng 3 phút sau khi tạo. */
+  async function chenMaLuc(email: string, truoc: string, daDung: boolean): Promise<void> {
+    const r = await db.pool.query(
+      `INSERT INTO user_login_tokens (org_id, user_id, token_hash, purpose, expires_at, created_at, consumed_at)
+       SELECT u.org_id, u.id, sha256(convert_to('k268-luc-' || u.id::text || '-' || $3::text, 'UTF8')), 'LOGIN',
+              now() - $3::interval + interval '15 minutes', now() - $3::interval,
+              CASE WHEN $4::boolean THEN now() - $3::interval + interval '3 minutes' END
+         FROM users u
+        WHERE u.org_id = $1 AND u.email = $2`,
+      [orgA, email, truoc, daDung],
+    );
+    expect(r.rowCount).toBe(1);
+  }
+
+  async function docLink(cookie: string): Promise<ThanLink> {
+    const r = await goi("GET", "/auth/login-links", { cookie });
+    expect(r.status, r.text).toBe(200);
+    return r.body as ThanLink;
+  }
+
+  it("① 25 mã trong cửa sổ, mã «đã dùng» là mã CŨ NHẤT (2 ngày trước) ⇒ vẫn thấy — đủ 25 hàng, hàng cuối là nó — và `truncated: false`", async () => {
+    const email = "k268-mot@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã ĐÃ DÙNG, tạo lúc này
+    // Mã đã dùng lùi về 2 ngày trước — tạo, hết hạn, dùng cùng dịch —, nên nó thành mã CŨ NHẤT của chủ nhân.
+    const lui = await db.pool.query(
+      `UPDATE user_login_tokens t
+          SET created_at = t.created_at - interval '2 days', expires_at = t.expires_at - interval '2 days',
+              consumed_at = t.consumed_at - interval '2 days'
+         FROM users u
+        WHERE u.id = t.user_id AND u.org_id = $1 AND u.email = $2 AND t.consumed_at IS NOT NULL`,
+      [orgA, email],
+    );
+    expect(lui.rowCount).toBe(1);
+    await chenMa(email, 24); // 24 mã mới hơn, trong 24 phút gần nhất ⇒ 25 mã trong cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "25 mã trong cửa sổ ⇒ 25 hàng").toBe(25);
+    expect(ds.at(-1)?.status, "mã «đã dùng» — cũ nhất — phải còn thấy").toBe("CONSUMED");
+    expect(ds.filter((l) => l.status === "CONSUMED")).toHaveLength(1);
+    expect(b.truncated).toBe(false);
+  });
+
+  it("② 101 mã trong cửa sổ ⇒ ĐÚNG 100 hàng — 100 mã mới nhất, mới nhất trước — và `truncated: true`", async () => {
+    const email = "k268-hai@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã đã dùng, lúc này
+    await chenMa(email, 100); // 100 mã trong 100 phút gần nhất ⇒ 101 mã trong cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "trần cứng 100 hàng").toBe(100);
+    expect(b.truncated, "còn hàng TRONG cửa sổ mà trần cắt đi").toBe(true);
+    // Đối chứng bằng CSDL: 100 hàng trả về là ĐÚNG 100 mã mới nhất của chủ nhân, cùng thứ tự; mã cũ nhất là mã bị cắt.
+    const tat = await db.pool.query<{ created_at: Date }>(
+      `SELECT t.created_at FROM user_login_tokens t JOIN users u ON u.id = t.user_id
+        WHERE u.org_id = $1 AND u.email = $2 ORDER BY t.created_at DESC, t.id DESC`,
+      [orgA, email],
+    );
+    expect(tat.rows).toHaveLength(101);
+    expect(ds.map((l) => new Date(l.createdAt).toISOString())).toEqual(tat.rows.slice(0, 100).map((h) => h.created_at.toISOString()));
+  });
+
+  it("③ ĐÚNG 100 mã trong cửa sổ cộng hai mã NGOÀI cửa sổ (7 ngày 1 giờ — đã dùng —, 30 ngày) ⇒ 100 hàng, không mã ngoài cửa sổ nào, `truncated: false`", async () => {
+    const email = "k268-ba@vd.test";
+    await taoNguoi(email);
+    const chu = await dangNhap(email); // ⇒ một mã đã dùng, lúc này
+    await chenMa(email, 98); // 98 mã trong 98 phút gần nhất
+    await chenMaLuc(email, "6 days 23 hours", false); // trong cửa sổ, sát mép ⇒ đúng 100 mã trong cửa sổ
+    await chenMaLuc(email, "7 days 1 hour", true); // ngoài cửa sổ — và đã dùng
+    await chenMaLuc(email, "30 days", false); // ngoài cửa sổ
+    const b = await docLink(chu.cookie);
+    const ds = b.loginLinks ?? [];
+    expect(ds.length, "100 mã trong cửa sổ ⇒ 100 hàng").toBe(100);
+    expect(b.truncated, "mã cũ hơn 7 ngày không được làm cờ «còn nữa» đúng").toBe(false);
+    const bayNgayTruoc = Date.now() - 7 * 24 * 3600 * 1000;
+    for (const l of ds) expect(Date.parse(l.createdAt), "một mã ngoài cửa sổ 7 ngày lọt vào danh sách").toBeGreaterThan(bayNgayTruoc);
+    expect(Date.parse(ds.at(-1)?.createdAt ?? ""), "mã sát mép (6 ngày 23 giờ) vẫn trong cửa sổ, và là hàng cuối").toBeLessThan(Date.now() - 6 * 24 * 3600 * 1000);
+    expect(ds.filter((l) => l.status === "CONSUMED"), "chỉ mã dùng lúc đăng nhập — mã dùng 7 ngày 1 giờ trước nằm ngoài cửa sổ").toHaveLength(1);
+  });
 });

@@ -27,7 +27,7 @@
 // ==============================================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { TU_CHOI_KHOA_MIGRATE, createPool, migrate } from "@trustprocure/db";
+import { TU_CHOI_KHOA_MIGRATE, VAI_UNG_DUNG, createPool, migrate } from "@trustprocure/db";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -36,6 +36,46 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
 /** Bốn tên hàm LẤY khoá tư vấn mức PHIÊN — khớp nguyên văn danh sách của mục hardening. */
 const TEN_HAM_LAY_KHOA_PHIEN = ["pg_advisory_lock", "pg_advisory_lock_shared", "pg_try_advisory_lock", "pg_try_advisory_lock_shared"];
+
+/**
+ * Mọi cặp (vai, dạng đối số) mà một vai KHÔNG superuser thuộc một vai ứng dụng còn `EXECUTE` được trên bốn hàm ấy. Vế ⓷ đòi tập
+ * rỗng; [S1.220 / khoản 186] và đòi thêm rằng chính câu này THẤY được một hàng khi có một hàng để thấy.
+ * ~~Mệnh đề thành viên chỉ lọc `app_api` và `app_unseal` — `app_neo`, `app_khoi_tao` chưa nằm trong nó (nói ra, §S1.220).~~
+ * [S1.242 / khoản 273] Tập cây vai là THAM SỐ `$2`, đọc từ `VAI_UNG_DUNG` của `@trustprocure/db` — không còn bản chép hai tên của
+ * `VAI_KET_NOI_UNG_DUNG` từ S1.86 (ADR-072 thêm `app_neo`, ADR-111 thêm `app_khoi_tao` vào hardening; bản chép không đổi theo). Mệnh
+ * đề thành viên giữ nguyên nghĩa của hardening: thành viên `USAGE` hay `SET`, trừ superuser. Vì sao `VAI_UNG_DUNG` chứ không phải chuỗi
+ * của hardening: vế này BẢO CHỨNG cho mục hardening, nên tập của nó không được là chính tập mà mục ấy dùng — hardening bỏ một cây thì
+ * mục mù ở cây ấy và một vế đọc cùng chuỗi cũng mù theo; `VAI_UNG_DUNG` là tập mà `poolAs`/`migrate()` dùng thật và bị
+ * `packages/db/src/vai-tro.test.ts` ghim. Hai tập phải khớp — vế ⓷ đối chiếu chúng (`cayTrongHardening`).
+ */
+const CAU_VAI_UNG_DUNG_CON_EXECUTE =
+  "SELECT r.rolname || ' -> ' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS mo_ta " +
+  "FROM pg_catalog.pg_roles r CROSS JOIN pg_catalog.pg_proc p " +
+  "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace " +
+  "WHERE n.nspname = 'pg_catalog' AND p.proname = ANY($1::text[]) AND NOT r.rolsuper " +
+  "  AND EXISTS (SELECT 1 FROM pg_catalog.pg_roles g WHERE g.rolname = ANY($2::text[]) " +
+  "                AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET'))) " +
+  "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta";
+
+/** [S1.242 / khoản 273] Chạy `CAU_VAI_UNG_DUNG_CON_EXECUTE` với tập hàm và tập cây vai (`VAI_UNG_DUNG`) làm tham số. */
+async function vaiConExecute(): Promise<string[]> {
+  const { rows } = await db.pool.query<{ mo_ta: string }>(CAU_VAI_UNG_DUNG_CON_EXECUTE, [TEN_HAM_LAY_KHOA_PHIEN, [...VAI_UNG_DUNG]]);
+  return rows.map((x) => x.mo_ta);
+}
+
+/**
+ * [S1.242 / khoản 273] Bốn tên cây mà `VAI_KET_NOI_UNG_DUNG` của hardening lọc — đọc NGUYÊN VĂN mệnh đề `g.rolname IN (…)` trong hằng
+ * ấy. Không thấy hằng hay mệnh đề thì NÉM: đổi hình dạng hằng mà vế đối chiếu im lặng là đúng thứ khoản 273 đóng.
+ */
+function cayTrongHardening(): string[] {
+  const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+  const hang = /VAI_KET_NOI_UNG_DUNG constant text :=\s*\$q\$([\s\S]*?)\$q\$;/u.exec(hardening)?.[1];
+  const danhSach = hang === undefined ? undefined : /g\.rolname IN \(([^)]*)\)/u.exec(hang)?.[1];
+  if (danhSach === undefined) {
+    throw new Error("không đọc được mệnh đề `g.rolname IN (…)` của hằng VAI_KET_NOI_UNG_DUNG trong hardening.always.sql");
+  }
+  return [...danhSach.matchAll(/'([^']+)'/gu)].map((m) => m[1]!);
+}
 
 let db: TestDatabase;
 let orgA: string;
@@ -156,16 +196,14 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
   });
 
   it("⓷ MỌI vai ứng dụng mất EXECUTE trên MỌI dạng đối số của bốn hàm lấy khoá mức phiên", async () => {
-    const { rows } = await db.pool.query<{ mo_ta: string }>(
-      "SELECT r.rolname || ' -> ' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')' AS mo_ta " +
-        "FROM pg_catalog.pg_roles r CROSS JOIN pg_catalog.pg_proc p " +
-        "JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace " +
-        "WHERE n.nspname = 'pg_catalog' AND p.proname = ANY($1::text[]) AND NOT r.rolsuper " +
-        "  AND EXISTS (SELECT 1 FROM pg_catalog.pg_roles g WHERE g.rolname IN ('app_api','app_unseal') " +
-        "                AND (pg_catalog.pg_has_role(r.oid, g.oid, 'USAGE') OR pg_catalog.pg_has_role(r.oid, g.oid, 'SET'))) " +
-        "  AND pg_catalog.has_function_privilege(r.rolname, p.oid, 'EXECUTE') ORDER BY mo_ta",
-      [TEN_HAM_LAY_KHOA_PHIEN],
-    );
+    // [S1.242 / khoản 273] Tập cây vai của vế này (`VAI_UNG_DUNG`) phải BẰNG tập mà mục hardening nó bảo chứng lọc
+    // (`VAI_KET_NOI_UNG_DUNG`) — lệch chiều nào cũng đỏ ở đây, trước khi đọc quyền: vế hẹp hơn hardening là đúng khoản 273, vế rộng hơn
+    // là hardening bỏ sót một cây mà tiến trình thật `SET ROLE` sang được.
+    expect(
+      [...cayTrongHardening()].sort(),
+      "tập cây của VAI_KET_NOI_UNG_DUNG (hardening) phải bằng VAI_UNG_DUNG (@trustprocure/db) — hai bản của một hàng rào",
+    ).toEqual([...VAI_UNG_DUNG].sort());
+    const rows = await vaiConExecute();
     // [S1.87 / lượt soi ngang 74 góc 3 — ĐO, và phép đo BÁC lời khai cũ của chính vế này.]
     // Lời cũ: ~~"một dạng đối số lọt lưới là một đường vòng nguyên vẹn — `pg_advisory_lock(integer,
     // integer)` lấy CÙNG khoá"~~. SAI. PostgreSQL giữ HAI không gian khoá tư vấn RỜI NHAU, phân
@@ -180,7 +218,7 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
     // khoá: `CAU_KHOA_TU_VAN_PHIEN_SAI` lọc theo `p.proname`, mà `pg_proc` có MỘT HÀNG cho mỗi
     // overload, nên bỏ ngỏ một dạng để lại một hàng ⇒ BƯỚC 3 của hardening gãy.
     expect(
-      rows.map((x) => x.mo_ta),
+      rows,
       "một dạng đối số bỏ ngỏ để lại một hàng ở hậu điều kiện lọc theo `proname` ⇒ BƯỚC 3 gãy; và nó là phòng thủ chiều sâu cho một KHÔNG GIAN KHOÁ KHÁC, không phải một đường vòng tới khoá ghi sổ",
     ).toEqual([]);
 
@@ -191,10 +229,35 @@ describe("[INV-D5] [S1.86 / khoản 128] cận thời gian của người GIỮ 
       [TEN_HAM_LAY_KHOA_PHIEN],
     );
     expect(co[0]?.n, "bốn tên × hai dạng đối số").toBe(8);
+    // [S1.242 / khoản 273] ~~`rolname IN ('app_api','app_unseal')` — đòi 2~~ Đủ MỌI vai của `VAI_UNG_DUNG` có thật trên cụm: một
+    // tên sai chính tả trong tập làm mệnh đề thành viên mù ở cây ấy, và vế này đỏ trước đối chứng dương.
     const { rows: vai } = await db.pool.query<{ n: number }>(
-      "SELECT count(*)::int AS n FROM pg_catalog.pg_roles WHERE rolname IN ('app_api','app_unseal')",
+      "SELECT count(*)::int AS n FROM pg_catalog.pg_roles WHERE rolname = ANY($1::text[])",
+      [[...VAI_UNG_DUNG]],
     );
-    expect(vai[0]?.n).toBe(2);
+    expect(vai[0]?.n, "mọi vai của VAI_UNG_DUNG phải tồn tại trên cụm đã migrate").toBe(VAI_UNG_DUNG.length);
+
+    // [S1.220 / khoản 186 — lượt soi ngang 74 góc 2] ĐỐI CHỨNG DƯƠNG CỦA CHÍNH MỆNH ĐỀ LỌC. Hai đối chứng trên chứng minh HÀM tồn
+    // tại và VAI tồn tại; không cái nào chứng minh mệnh đề `EXISTS (… pg_has_role …)` CHỌN ĐƯỢC AI. Đo: đổi hai tên vai trong nó
+    // thành hai tên không tồn tại ⇒ tập rỗng VĨNH VIỄN ⇒ vế trên xanh bất kể quyền (§S1.220). Nên: cấp `EXECUTE` cho ~~đúng vai mà
+    // phần ⓷ độc quyền canh (`app_unseal`, vế ⓵ chỉ đo `app_api` dạng `bigint`)~~ [S1.242 / khoản 273] TỪNG vai của `VAI_UNG_DUNG` —
+    // lần lượt, mỗi lần một vai: đối chứng của S1.220 chỉ chứng minh mệnh đề chọn được `app_unseal`, và đo trước vòng này cho thấy
+    // `app_neo`, `app_khoi_tao` ra tập RỖNG dưới mệnh đề hai tên —, chạy lại ĐÚNG câu trên, đòi ĐÚNG một hàng, rồi thu
+    // hồi trong `finally` để vế này không để lại quyền cho các vế sau.
+    const thayDuoc: Record<string, string[]> = {};
+    for (const vaiCap of VAI_UNG_DUNG) {
+      await db.pool.query(`GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO ${vaiCap}`);
+      try {
+        thayDuoc[vaiCap] = await vaiConExecute();
+      } finally {
+        await db.pool.query(`REVOKE EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) FROM ${vaiCap}`);
+      }
+    }
+    expect(thayDuoc, "đối chứng dương: mệnh đề lọc phải THẤY đúng quyền vừa cấp, cho TỪNG cây, không nhiều hơn, không ít hơn").toEqual(
+      Object.fromEntries(VAI_UNG_DUNG.map((v) => [v, [`${v} -> pg_advisory_lock(bigint)`]])),
+    );
+    // Và thu hồi xong thì về rỗng — quyền cấp tạm không sống qua vế này.
+    expect(await vaiConExecute()).toEqual([]);
   });
 
   it("⓸ mục hardening và `migrate()` phải nói CÙNG một tập hàm khoá — đổi cơ chế khoá của migrate mà quên mục này thì ĐỎ ở đây", () => {

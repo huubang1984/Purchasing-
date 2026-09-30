@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { docHangHardening as docHangHardeningTu, khoiValues } from "./hardening-hang.js";
+import { HAM_CANH_CHI_GHI_THEM, HAM_KHONG_PHAI_CANH } from "./danh-sach-ham-canh.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 const HARDENING = readFileSync(
@@ -59,13 +60,6 @@ const HARDENING = readFileSync(
  * thì hai trigger dựng sẵn của PostgreSQL đủ để một bảng bị nhận nhầm là chỉ-ghi-thêm và bị CHẶN
  * DEPLOY.
  */
-/**
- * [S1.29, khoản nợ 60] Danh sách KHAI BÁO hàm canh — vế thứ hai của vị từ dưới đây. Tên KHÔNG mang
- * lược đồ vì vị từ ghim `pronamespace = public`; tổng điều tra thì định danh theo `lược đồ.tên`.
- * Bất kỳ tên nào thêm vào đây phải xuất hiện NGUYÊN VĂN trong `hardening.always.sql` (cổng ở test
- * đầu tiên), nên một hàm canh mới là một sửa đổi ở CẢ hai tệp — cố ý.
- */
-const HAM_CANH_CHI_GHI_THEM = ["bid_chi_ghi_them", "chan_sua_xoa"];
 
 /** Vế "hàm này là hàm canh": HÌNH DẠNG (không bao giờ trả về) HOẶC KHAI BÁO (có tên trong danh sách). */
 function veHamCanh(hamCanh: readonly string[], thut: string): string {
@@ -150,6 +144,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
   "rfq_item_goi_y",
   "rfq_item_mappings",
+  // [S1.207 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
+  // `ENABLE ALWAYS`. Trước vòng ấy bảng chỉ-ghi-thêm BẰNG QUYỀN: chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại.
+  "rfq_tra_ve",
   "rfq_unsealed_bids",
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
@@ -256,162 +253,6 @@ function boMucTriggerLa(kq: string, trigger: readonly string[]): string {
  * băng. Hai hàm khai CANH thì vẫn không kiểm toán được bằng hành vi (chứng minh *"từ chối MỌI
  * hàng"* không phải một phép thử), và hôm nay hình dạng đứng thay: cả hai đều không có `RETURN`.
  */
-/**
- * Hàm trigger GHI (INSERT/UPDATE/DELETE, mọi hình thức) **không** phải hàm canh chỉ-ghi-thêm: chúng từ chối CÓ
- * ĐIỀU KIỆN (máy trạng thái, kiểm quyền, bất biến cột), nên bảng mang chúng vẫn sửa/xoá được ở
- * những đường hợp lệ. Đo tại `bebeb41`.
- */
-const HAM_KHONG_PHAI_CANH = [
-  "public.kiem_danh_tinh_theo_phien",
-  // [S1.32] ~~Mười chín~~ **[S1.105]** HAI MƯƠI hàm chỉ gắn INSERT vào tập rộng khi tập ấy mở ra bit 4.
-  // Chúng không thể là hàm canh chỉ-ghi-thêm (không gắn UPDATE/DELETE); khai ở đây để một hàm INSERT mới
-  // không đi vào lặng lẽ.
-  "public.bid_dat_so_phien_ban",
-  "public.bid_kiem_han_nop",
-  "public.bid_kiem_phien_khach",
-  // [S1.108 / 059] Vế top-N của vòng BAFO: nó đọc `NEW.bafo_round_id` mà C1 vừa đặt và RAISE khi
-  // luồng báo giá không nằm trong top-N của lượt đánh giá mà vòng trỏ tới. Một hàng HỢP LỆ đi qua
-  // nó (mọi lần nộp vòng MỘT, vì `bafo_round_id IS NULL` thì nó trả `NEW` ngay), nên nó đòi một
-  // nhân chứng hành vi cho INSERT — `dungKichBan()` đã nộp báo giá thật.
-  "public.bid_kiem_vong_bafo",
-  // [S1.110 / S2.6 / 061] BA hàm cưỡng chế của trao thầu — **J3 · J5 · J7**. Cả ba chỉ gắn
-  // INSERT, nên chúng KHÔNG thể là hàm canh chỉ-ghi-thêm (một bảng vẫn sửa được nếu chỉ có
-  // chúng); thứ giữ hai bảng ấy chỉ-ghi-thêm là `bid_chi_ghi_them`. Một hàng HỢP LỆ đi qua
-  // cả ba, nên cả ba đòi một nhân chứng hành vi — `dungKichBan()` dựng một chuỗi trao thầu
-  // thật ở cuối kịch bản, với BA con người khác nhau vì J3 đòi đúng thế.
-  "public.award_kiem_de_xuat",
-  "public.award_kiem_mot_award_song",
-  "public.award_kiem_nguoi_duyet",
-  "public.bid_phai_co_bien_nhan",
-  // [S1.156 / S3.1a / `069_bac_va_chu_ky_chinh_sach`] BA hàm INSERT của bậc và chữ ký thứ hai: hình dạng `tiers`, *đã bật thì
-  // phải có bậc* (ADR-080), phân tách nhiệm vụ của người ký (ADR-082 ⑺). Chỉ gắn INSERT ⇒ không thể là
-  // hàm canh; một hàng HỢP LỆ đi qua cả ba — `dungKichBan()` chèn phiên bản 2 có bậc rồi ký nó.
-  "public.chinh_sach_da_bat_thi_phai_co_bac",
-  "public.chinh_sach_kiem_bac",
-  "public.chinh_sach_kiem_nguoi_ky",
-  "public.chinh_sach_phien_ban_tang_dan",
-  "public.chot_moc_neo",
-  // [S1.192 / S4.1 / L1 / `079_don_vi_do`] Hàm trigger khuôn của MỌI bảng dữ liệu nền: BEFORE INSERT, lấy khoá tư vấn rồi ĐẶT
-  // `seq` và `ghi_luc` — không bao giờ từ chối. Chỉ gắn INSERT ⇒ không thể là hàm canh; thứ giữ bảng chỉ-ghi-thêm là
-  // `bid_chi_ghi_them`. Nhân chứng: câu khai bí danh cuối `dungKichBan()`.
-  "public.du_lieu_nen_dat_thu_tu",
-  "public.guest_session_kiem_danh_tinh",
-  // [S1.105 / 057] Vế NỘI DUNG của J1: nó so tập `(ma, đơn vị)` của `components` với tập mà phiên bản
-  // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
-  // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
-  "public.kiem_thanh_phan_theo_chinh_sach",
-  // [S1.196 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
-  // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
-  "public.ncc_kiem_xac_minh",
-  // [S1.201 / S3.6a] Luật người của nhóm hàng, và luật người + chiều đổi + thứ tự dưới khoá của lần đổi trạng thái. Chỉ gắn
-  // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
-  "public.nhom_hang_kiem_doi",
-  "public.nhom_hang_kiem_nguoi_tao",
-  // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ hạng mục — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN. Chỉ gắn INSERT ⇒ không thể là
-  // hàm canh; một hàng HỢP LỆ đi qua mỗi hàm — hai câu chèn cuối `dungKichBan()`.
-  "public.anh_xa_kiem_luat",
-  "public.goi_y_kiem_luat",
-  "public.noi_chuoi_kiem_toan",
-  "public.otp_kiem_kenh_khac_link",
-  "public.rfq_khoa_chi_sinh_luc_mo",
-  "public.rfq_khoa_phai_di_kem_lan_mo",
-  "public.rfq_kiem_nguoi_duyet",
-  "public.rfq_kiem_nguoi_tao",
-  "public.sessions_kiem_mfa_khi_tao",
-  "public.sessions_kiem_totp_gan_day",
-  "public.unseal_canh_bao_break_glass",
-  "public.unseal_kiem_nguoi_duyet",
-  "public.unseal_kiem_rfq_da_dong",
-  "public.unseal_kiem_yeu_cau_khi_ghi_ban_ro",
-  // [S1.31] Khối dưới là 20 hàm BEFORE-ROW UPDATE/DELETE của S1.29 CỘNG 5 hàm AFTER-ROW UPDATE vào tập rộng
-  // khi tập ấy thôi khoá theo hình thức BEFORE-ROW (kiem_tra_*, users_thu_hoi_phien_khi_dinh_chi), sắp theo tên.
-  // [lượt soi 25b #5] Chú thích cũ nói "năm hàm" đứng đầu một khối 25 tên.
-  "public.kiem_tra_ma_tran_quyen",
-  "public.kiem_tra_nguong_khong_cung_tay_nguoi_dung",
-  "public.kiem_tra_nguong_khong_cung_tay_vai_tro",
-  // [S1.197 / S4.2a / L3 / `083_hang_chuan`] Khuôn `033` cho người đặt thước dữ liệu: AFTER ROW, từ chối CÓ ĐIỀU KIỆN — chỉ khi một
-  // vai/một người giữ `item.manage` cùng một mã thấy giá. Nhân chứng: mọi câu ghi `user_roles`/`role_permissions` của kịch bản.
-  "public.kiem_tra_quan_ly_du_lieu_mu_gia_nguoi_dung",
-  "public.kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro",
-  // [S1.197 / S4.2a / L3] Cổng GHI của dữ liệu nền — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN (người ghi không giữ `item.manage`).
-  // Nhân chứng: năm câu chèn dữ liệu nền cuối `dungKichBan()`, dưới một `DATA_STEWARD`.
-  "public.du_lieu_nen_kiem_quyen_ghi",
-  "public.kiem_tra_phan_tach_nhiem_vu",
-  "public.loi_moi_khong_song_lai",
-  "public.mfa_credentials_khoa_ho_so_da_xac_nhan",
-  "public.mfa_credentials_xoa_can_yeu_cau",
-  "public.mfa_reset_kiem_chuyen_trang_thai",
-  "public.mfa_reset_kiem_quyen",
-  // [S1.156 / S3.1a / `069_bac_va_chu_ky_chinh_sach`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: từ chối CÓ ĐIỀU KIỆN — chỉ khi
-  // ngân sách ghim một phiên bản có bậc CHƯA KÝ. Câu chèn và câu sửa ngân sách của `dungKichBan()` ghim
-  // phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
-  "public.ngan_sach_khong_ghim_ban_chua_ky",
-  // [S1.166 / S3.1b / `072_bac_cua_goi`] BEFORE INSERT OR UPDATE trên `rfq_budgets`: ĐẶT `tier_tu_so_tien` từ `rfq_bac_cua`,
-  // và từ chối CÓ ĐIỀU KIỆN — chỉ khi tiền tệ lệch một phiên bản có bậc. Câu chèn và câu sửa ngân sách của
-  // `dungKichBan()` ghim phiên bản 1 (không bậc) nên đi qua: hai nhân chứng.
-  "public.ngan_sach_xep_bac",
-  "public.otp_go_khoa_khong_xoa_dau_vet",
-  "public.outbox_jobs_xoa_payload_dang_nhap",
-  // [S1.108 / 059] Ba nhánh trong một hàm: INSERT (một vòng hợp lệ), UPDATE (chỉ `closed_at`, chỉ
-  // một chiều), DELETE (từ chối vô điều kiện). Nhánh DELETE một mình sẽ làm nó là hàm CANH, nhưng
-  // nhánh UPDATE từ chối CÓ ĐIỀU KIỆN — một câu `SET closed_at = now()` hợp lệ đi qua — nên bảng
-  // vẫn sửa được ở đường hợp lệ và nó thuộc danh sách này.
-  "public.bafo_kiem_vong",
-  "public.rfq_budgets_chi_sua_khi_soan",
-  "public.rfq_gia_han_khong_hoi_sinh",
-  "public.rfq_items_chi_sua_khi_soan",
-  "public.rfq_key_material_bat_bien",
-  "public.rfq_khoa_chi_thu_hoi_khi_huy",
-  "public.rfq_kiem_chuyen_trang_thai",
-  "public.rfq_kiem_khoa_khi_mo",
-  // [S1.166 / S3.1b / K1] BEFORE UPDATE `WHEN` cạnh DRAFT→PENDING_APPROVAL: từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức đã
-  // bật S3 mà ngân sách thiếu, ghim bản cũ hay lệch bậc. Câu nộp duyệt của `dungKichBan()` đi qua: một nhân chứng.
-  "public.rfq_kiem_ngan_sach_khi_nop",
-  // [S1.185 / S3.2a / K4a · K4b · K6 / `076_danh_sach_moi`] BỐN hàm của danh sách mời, từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ
-  // chức đã bật S3, và `rfq_approvals_dat_bam_danh_sach` không bao giờ từ chối (nó ĐẶT băm). Tổ chức của `dungKichBan()`
-  // chỉ bật ở câu ký cuối kịch bản, nên câu duyệt, câu mở gói, câu mời, câu thu hồi lời mời và câu đúc token của nó đều
-  // đi qua cả bốn: năm nhân chứng. **[S1.202 / `086_rang_ngan_sach`]** Hai trong bốn hàm (`rfq_approvals_dat_bam_danh_sach`,
-  // `rfq_kiem_chu_ky_danh_sach_khi_mo`) nay mang thêm băm ngân sách; vẫn chỉ ở tổ chức đã bật, nhân chứng không đổi.
-  "public.rfq_approvals_dat_bam_danh_sach",
-  "public.rfq_invitation_tokens_kiem_goi_da_mo",
-  "public.rfq_invitations_kiem_danh_sach",
-  "public.rfq_kiem_chu_ky_danh_sach_khi_mo",
-  // [S1.186 / S3.2b1 / K4a · K6 / `077_tra_ve_nhap`] HAI hàm: cạnh về DRAFT từ chối CÓ ĐIỀU KIỆN — chỉ ở tổ chức chưa bật —, và
-  // `rfq_invitation_tokens_ghi_goi_da_mo` không bao giờ từ chối (nó GHI cột). `dungKichBan()` nộp một gói trước lần bật rồi
-  // trả nó về DRAFT sau lần bật; câu đúc token của nó đi qua hàm thứ hai: hai nhân chứng.
-  "public.rfq_invitation_tokens_ghi_goi_da_mo",
-  "public.rfq_kiem_tra_ve_nhap",
-  // [S1.201 / S3.6a] HAI hàm của nhóm hàng trên `rfq_packages`, từ chối CÓ ĐIỀU KIỆN: `rfq_kiem_nhom_hang` (INSERT, và UPDATE cột
-  // nhóm hàng) chỉ khi gói đã rời DRAFT hay nhóm đã ngừng dùng; `rfq_kiem_nhom_hang_khi_nop` (cạnh nộp duyệt) chỉ ở tổ chức đã
-  // bật mà gói không nhóm hàng. Mọi câu dựng gói, câu gán nhóm và câu nộp duyệt của `dungKichBan()` đi qua.
-  "public.rfq_kiem_nhom_hang",
-  "public.rfq_kiem_nhom_hang_khi_nop",
-  // [S1.198 / khoản 256 · 257 / `087_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
-  // `rfq_chot_lan_nop_da_xem` (BEFORE INSERT trên `rfq_approvals`) không từ chối hàng nào của `dungKichBan()` — cái đầu chỉ ĐẾM,
-  // cái sau chỉ từ chối ở tổ chức đã bật hay khi lời duyệt tự mang mốc sai, mà lời duyệt của kịch bản đứng trước lần bật. Hàm
-  // thứ ba (`rfq_tra_ve_dat_lan_nop`, BEFORE INSERT trên `rfq_tra_ve`) từ chối CÓ ĐIỀU KIỆN — tổ chức chưa bật hay gói không chờ
-  // duyệt —; câu chèn hàng trả về của kịch bản đứng sau lần bật: một nhân chứng. `rfq_kiem_tra_ve_nhap` nay đòi thêm hàng ấy.
-  "public.rfq_dem_lan_nop",
-  "public.rfq_chot_lan_nop_da_xem",
-  "public.rfq_tra_ve_dat_lan_nop",
-  // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
-  // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
-  // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
-  // ghi nhận nó, và mọi câu mở gói phía trên đi qua cạnh.
-  "public.rfq_kiem_tin_hieu_khi_mo",
-  "public.tin_hieu_kiem_ghi",
-  "public.tin_hieu_kiem_ghi_nhan",
-  "public.rfq_kiem_nguong_phe_duyet_kep",
-  "public.rfq_kiem_yeu_cau_mo_thau",
-  "public.thu_hoi_don_dieu",
-  "public.unseal_dieu_phoi_mot_lan",
-  // [S1.129 / khoản 233 / 064] AFTER-ROW UPDATE, không bao giờ từ chối: nó GHI THÊM một hàng lịch
-  // sử khi cặp người-phiên điều phối đổi. Câu điều phối của `dungKichBan()` là nhân chứng hành vi.
-  "public.unseal_ghi_lich_su_dieu_phoi",
-  "public.unseal_kiem_chuyen_trang_thai",
-  "public.unseal_kiem_du_phe_duyet",
-  "public.users_thu_hoi_phien_khi_dinh_chi",
-];
 
 /**
  * Nguồn của TẬP RỘNG — không xét thân hàm. Đây là chỗ khác biệt với `VI_TU_BANG_CHI_GHI_THEM` ở trên.
@@ -1778,19 +1619,6 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // Đứng CUỐI kịch bản vì lần ký BẬT S3 cho tổ chức (ADR-080): từ đó phiên bản không bậc bị từ chối, và
   // phiên bản hiệu lực của một gói tạo SAU lần ký là phiên bản 2. Người tạo (`pm`) KHÁC người ký; người
   // ký giữ `policy.manage` — hôm nay chỉ FINANCE (033).
-  // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
-  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
-  const rfqVe = await rfqSoan();
-  await so.chung(
-    "public.rfq_packages",
-    "UPDATE",
-    api(
-      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
-        "RETURNING status, submitted_by, submitted_by_session_id",
-      [rfqVe, pm.u, pm.s],
-      { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
-    ),
-  );
   const tc = await nguoi("FINANCE");
   const cs2 = await chenNC(
     "public.org_procurement_policies",
@@ -1819,29 +1647,79 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
-  // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
-  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới.
-  doiSoHang(
-    await so.chung(
-      "public.rfq_tra_ve",
-      "INSERT",
-      api(
-        "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
-          "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
-        [org, rfqVe, pm.u, pm.s],
-        { org_id: org, rfq_id: rfqVe, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
-      ),
+  // [S1.186 / S3.2b1 / K4a] Hai gói chờ duyệt ở tổ chức ĐÃ bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
+  // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký phía trên. [S1.207 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy
+  // phải đi kèm cạnh về DRAFT trong CÙNG giao dịch (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT không tách
+  // được thành hai nhân chứng trên một gói — mỗi nhân chứng một gói. [S1.236 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói
+  // chờ duyệt, nên hai gói nộp SAU lần ký, dưới luật S3: ngân sách ghim lại phiên bản 2 (K1) và nhóm hàng `nhomDau` (S3.6a) — một
+  // nhóm KHÁC `nhom` của mục nhóm hàng phía dưới, để lần gán `nhom` cho `rfqVe` ở đó vẫn là một lần ĐỔI nhóm.
+  const nhomDau = await chenNC(
+    "public.procurement_categories",
+    api(
+      "INSERT INTO procurement_categories (org_id, ma, ten, created_by, created_by_session_id) VALUES ($1, 'THEP-DAU', 'Thep dau', $2, $3) " +
+        "RETURNING id, org_id, ma, ten, created_by, created_by_session_id",
+      [org, tc.u, tc.s],
+      { org_id: org, ma: "THEP-DAU", ten: "Thep dau", created_by: tc.u, created_by_session_id: tc.s },
     ),
-    1,
-    "rfq_tra_ve",
   );
-  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
-  doiSoHang(
+  const rfqVe = await rfqSoan();
+  const rfqVe2 = await rfqSoan();
+  for (const goi of [rfqVe, rfqVe2]) {
+    await so.chung(
+      "public.rfq_budgets",
+      "UPDATE",
+      api("UPDATE rfq_budgets SET policy_id = $2 WHERE rfq_id = $1 RETURNING policy_id", [goi, cs2], { policy_id: cs2 }),
+    );
     await so.chung(
       "public.rfq_packages",
       "UPDATE",
-      api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" }),
-    ),
+      api("UPDATE rfq_packages SET category_id = $2 WHERE id = $1 RETURNING category_id", [goi, nhomDau], { category_id: nhomDau }),
+    );
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api(
+        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+          "RETURNING status, submitted_by, submitted_by_session_id",
+        [goi, pm.u, pm.s],
+        { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+      ),
+    );
+  }
+  // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
+  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới. **[S1.207 / khoản 260]** và của
+  // `rfq_tra_ve_phai_di_kem_canh` (DEFERRED): `hoanTat` trả gói về DRAFT trong cùng giao dịch — thiếu nó, hàng lẻ bị từ chối ở
+  // cửa sổ sau `SET CONSTRAINTS ALL IMMEDIATE`, và đó chính là lỗ khoản ấy đóng.
+  const traVe2 = api(
+    "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
+      "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
+    [org, rfqVe2, pm.u, pm.s],
+    { org_id: org, rfq_id: rfqVe2, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
+  );
+  doiSoHang(
+    await so.chung("public.rfq_tra_ve", "INSERT", {
+      ...traVe2,
+      hoanTat: async (c) => {
+        await c.query("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1", [rfqVe2]);
+      },
+    }),
+    1,
+    "rfq_tra_ve",
+  );
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`. **[S1.207 / khoản 260]** Hàng trả về của
+  // `rfqVe` chèn ở bước chuẩn bị của CÙNG giao dịch, dưới `app_api` — đúng thứ tự của `returnRfqToDraft`.
+  const veNhap = api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" });
+  doiSoHang(
+    await so.chung("public.rfq_packages", "UPDATE", {
+      ...veNhap,
+      chuanBi: async (c) => {
+        await veNhap.chuanBi?.(c);
+        await c.query(
+          "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai')",
+          [org, rfqVe, pm.u, pm.s],
+        );
+      },
+    }),
     1,
     "rfq_packages",
   );
@@ -2085,6 +1963,74 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
 
   return { orgId: org };
 }
+
+// ==============================================================================================
+// [S1.242 / khoản 265] TẬP GHIM `NOBYPASSRLS` ĐỌC BẤT KỂ THỨ TỰ CỜ; VAI NGOÀI CÂY ĐỨNG NGOÀI BẰNG LỜI KHAI
+//
+// Tới vòng này vế "[sổ nợ 3]" đọc tập ghim bằng `/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — chỉ câu nào
+// viết `NOSUPERUSER` NGAY sau tên và `NOBYPASSRLS` ở sau nó. Hàng `thuộc tính role app_liet_ke_to_chuc` (S1.212)
+// ghim `NOBYPASSRLS` thật nhưng viết `NOBYPASSRLS NOSUPERUSER …` để ĐỨNG NGOÀI phép quét — tức vai ngoài cây được
+// loại bằng THỨ TỰ CỜ, không bằng khai. Đo trước (§S1.242, hai đột biến văn bản hardening): "sửa cho đều" thứ tự
+// cờ của hàng ấy ⇒ vế đỏ `tám tên … expected […(9)]` — thông điệp nói về cây, không nói về thứ tự; hàng `app_api`
+// viết `NOBYPASSRLS` lên đầu ⇒ vế đỏ `[…(7)]` — một tên ĐANG ghim mà phép quét không thấy.
+// Nay: mọi câu `ALTER ROLE <tên> …` NGOÀI chú thích mà danh sách cờ có `NOBYPASSRLS` ở bất kỳ vị trí nào; trừ đi
+// `VAI_NGOAI_CAY` (khai tên kèm lý do, lý do được ĐO trên cụm ở vế ấy); và chiều ngược — một tên khai mà hardening
+// không còn ghim là dòng khai THIU, đỏ.
+// ==============================================================================================
+
+/**
+ * [S1.242 / khoản 265] Vai hardening ghim `NOBYPASSRLS` mà KHÔNG thuộc cây thành viên của bốn vai ứng dụng. Vế "[sổ nợ 3]" đo lời
+ * khai trên cụm đã migrate: vai tồn tại, NOINHERIT, và không là thành viên của vai ứng dụng nào.
+ */
+const VAI_NGOAI_CAY: Readonly<Record<string, string>> = {
+  app_liet_ke_to_chuc:
+    "[S1.212 / khoản 164] vai CHỦ HÀM của `outbox_danh_sach_to_chuc()` (052) — NOLOGIN NOINHERIT, không là thành viên của vai ứng dụng " +
+    "nào: không kết nối nào mang nó làm current_user qua cây; hàng ghim riêng của nó canh BYPASSRLS cho thân hàm SECURITY DEFINER.",
+};
+
+/**
+ * [S1.242 / khoản 265] Tập tên mà một văn bản hardening ghim `NOBYPASSRLS`: mọi câu `ALTER ROLE <tên> <cờ…>` ngoài chú thích `--`,
+ * danh sách cờ đọc tới `$`, `;` hay dấu nháy kế tiếp (qua được xuống dòng), cờ so theo TỪ và không phân biệt hoa thường — `BYPASSRLS`
+ * không phải `NOBYPASSRLS`. Tên trong ngoặc kép giữ nguyên, tên trần hạ thường như PostgreSQL. Hàm thuần — đo bằng mẫu ở vế
+ * "[S1.242 / khoản 265] phép quét …". Chú thích bị bỏ vì một câu NHẮC trong chú thích không phải một lần ghim: đọc cả chú thích thì
+ * gỡ hàng ghim thật của một vai mà một chú thích còn nhắc câu ấy vẫn xanh.
+ */
+function tapGhimNobypassrls(sql: string): string[] {
+  const ma = sql.replace(/--[^\n]*/gu, "");
+  const ten = new Set<string>();
+  for (const m of ma.matchAll(/\bALTER\s+ROLE\s+("?)(\w+)\1([^$;'"]*)/giu)) {
+    if (m[3]!.toUpperCase().split(/[\s,]+/u).includes("NOBYPASSRLS")) ten.add(m[1] === '"' ? m[2]! : m[2]!.toLowerCase());
+  }
+  return [...ten].sort();
+}
+
+describe("[S1.242 / khoản 265] phép quét tập ghim NOBYPASSRLS — hàm thuần, không cụm", () => {
+  it("mẫu: thứ tự cờ không đổi kết quả, cờ qua được xuống dòng; chú thích, BYPASSRLS trần, cờ của câu khác, từ dính chữ không tính", () => {
+    expect(tapGhimNobypassrls("$q$ALTER ROLE a NOSUPERUSER NOBYPASSRLS$q$, $q$ALTER ROLE b NOBYPASSRLS NOSUPERUSER$q$")).toEqual(["a", "b"]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE c NOSUPERUSER\n          NOCREATEDB NOBYPASSRLS NOLOGIN$q$")).toEqual(["c"]);
+    expect(tapGhimNobypassrls("-- ALTER ROLE d NOSUPERUSER NOBYPASSRLS\n$q$x$q$, -- ALTER ROLE e NOBYPASSRLS\n")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE f NOSUPERUSER BYPASSRLS$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE g NOSUPERUSER$q$,\n      $q$SELECT 'NOBYPASSRLS'$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("$q$ALTER ROLE i XNOBYPASSRLS NOBYPASSRLSX$q$")).toEqual([]);
+    expect(tapGhimNobypassrls("format('ALTER ROLE %I NOBYPASSRLS', v), $q$ALTER ROLE ALL SET x = 1$q$")).toEqual([]);
+    expect(tapGhimNobypassrls('$q$alter role H nobypassrls$q$, $q$ALTER ROLE "Hoa" WITH NOBYPASSRLS$q$')).toEqual(["Hoa", "h"]);
+  });
+
+  it("trên hardening thật: đảo NGƯỢC danh sách cờ của MỌI câu `ALTER ROLE` (trong bộ nhớ) không đổi tập ghim — dạng thường trực của hai đột biến đo trước", () => {
+    let soCauDao = 0;
+    const dao = HARDENING.replace(/(\bALTER ROLE \w+ )((?:[A-Z]+ )*[A-Z]+)(?=\$q\$)/gu, (_toan, dau: string, co: string) => {
+      const moi = co.split(" ").reverse().join(" ");
+      if (moi !== co && co.split(" ").includes("NOBYPASSRLS")) soCauDao += 1;
+      return dau + moi;
+    });
+    const goc = tapGhimNobypassrls(HARDENING);
+    expect(goc.length, "chống rỗng ruột: tám tên của cây cộng vai ngoài cây").toBeGreaterThanOrEqual(9);
+    expect(soCauDao, "tiền đề: phép đảo thật sự đổi thứ tự cờ của mọi câu ghim").toBeGreaterThanOrEqual(goc.length);
+    expect(tapGhimNobypassrls(dao)).toEqual(goc);
+    // Vai ngoài cây nay được phép quét THẤY — nó đứng ngoài phép so bằng lời khai `VAI_NGOAI_CAY`, không bằng thứ tự cờ.
+    for (const ten of Object.keys(VAI_NGOAI_CAY)) expect(goc).toContain(ten);
+  });
+});
 
 // [S1.96] HẠN Ở MỨC SUITE, vì cái khe hở này là KHE HỞ KIỂU QUÊN KHAI.
 // 31 test của suite này khai `}, 180000);` vì chúng chạy hardening trên một cụm thật; đúng MỘT
@@ -2428,9 +2374,14 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     };
 
     // Tập tên mà hardening ghim `NOBYPASSRLS` — đọc THẲNG từ file, không viết tay lại.
-    const daGhim = [...HARDENING.matchAll(/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/gu)]
-      .map((m) => m[1]!)
-      .sort();
+    // ~~`/ALTER ROLE (\w+) NOSUPERUSER[^$]*?NOBYPASSRLS/` — vai ngoài cây đứng ngoài nhờ THỨ TỰ CỜ~~ [S1.242 / khoản 265] Mọi câu
+    // `ALTER ROLE` ngoài chú thích mang `NOBYPASSRLS` ở bất kỳ vị trí nào (`tapGhimNobypassrls`), trừ `VAI_NGOAI_CAY` đã khai.
+    const tapGhim = tapGhimNobypassrls(HARDENING);
+    expect(
+      Object.keys(VAI_NGOAI_CAY).filter((t) => !tapGhim.includes(t)),
+      "dòng khai THIU ở VAI_NGOAI_CAY: tên khai là vai ngoài cây mà hardening không còn ghim NOBYPASSRLS — gỡ dòng khai, hay ghim lại vai",
+    ).toEqual([]);
+    const daGhim = tapGhim.filter((t) => !Object.hasOwn(VAI_NGOAI_CAY, t));
     // [ADR-072 phần 1] SÁU tên, không còn bốn — đúng ca mà khối trên dự báo: danh sách trắng mở cho cặp thứ ba
     // (app_neo, app_neo_login) và người mở GHIM nó (hai khối thuộc tính role của hardening), không viết lý do né.
     // [S1.182 / ADR-111] TÁM tên: cặp thứ tư (app_khoi_tao, app_khoi_tao_login) của task khởi tạo, cùng khuôn.
@@ -2449,6 +2400,22 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     const truoc = await cay();
     expect(truoc.filter((r) => !daGhim.includes(r)), "cây role không được có tên ngoài tập ghim")
       .toEqual([]);
+
+    // [S1.242 / khoản 265] LÝ DO của lời khai "vai ngoài cây", đo trên cụm đã migrate: vai tồn tại, NOINHERIT, và KHÔNG là thành
+    // viên của vai ứng dụng nào — nên nó không bao giờ là current_user của một kết nối qua cây. Lời khai sai (ai đó GRANT một vai ứng
+    // dụng cho nó, hay bật INHERIT) thì đỏ ở đây chứ không lặng lẽ loại một thành viên của cây khỏi phép so.
+    for (const ten of Object.keys(VAI_NGOAI_CAY)) {
+      const { rows: thuocTinh } = await db.pool.query<{ rolinherit: boolean; trong_cay: boolean }>(
+        `SELECT r.rolinherit,
+                EXISTS (SELECT 1 FROM unnest($2::text[]) AS g(ten)
+                         WHERE to_regrole(g.ten) IS NOT NULL
+                           AND pg_has_role(r.oid, to_regrole(g.ten)::oid, 'MEMBER')) AS trong_cay
+           FROM pg_roles r WHERE r.rolname = $1`,
+        [ten, [...VAI_UNG_DUNG]],
+      );
+      expect(thuocTinh, `${ten}: ${VAI_NGOAI_CAY[ten]!}`).toEqual([{ rolinherit: false, trong_cay: false }]);
+      expect(truoc, `${ten} khai ngoài cây mà cụm xếp nó vào cây`).not.toContain(ten);
+    }
 
     // Đột biến: role thứ năm, có BYPASSRLS, là THÀNH VIÊN của `app_api` — tức thừa hưởng mọi quyền
     // của nó VÀ bỏ qua toàn bộ RLS. Đo được: sau `migrate()` nó KHÔNG còn trong cây.
@@ -2984,8 +2951,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       }
       // Tiền tố `(phan_xet)` là của migrate(): lỗi đến từ lượt PHÁN XÉT — tức lượt SỬA (mục điều kiện ném) đã đi qua.
       expect(kq, "lượt sửa đi qua, lượt phán xét gom đúng ba mục").toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 3 mục:/u);
-      expect(kq).toContain('- "mục thử 88 điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
-      expect(kq).toContain('- "mục thử 88 hậu điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
+      expect(kq).toContain('- "mục thử 88 điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném SQLSTATE 22012; mục không được coi là đúng. Cần quyền: không gì.');
+      expect(kq).toContain('- "mục thử 88 hậu điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném SQLSTATE 22012; mục không được coi là đúng. Cần quyền: không gì.');
       expect(kq).toContain('- "mục thử 88 sai": trạng thái hiện tại SAI (cố ý sai). Cần quyền: không gì.');
       // Đối chứng: kho thật (không mục tiêm) đi qua trên cùng CSDL — ba mục tiêm không để lại gì.
       expect(await migrateLai(db)).toBe("OK");

@@ -166,10 +166,12 @@ describe("[S1.183] hình dạng của khoi-tao.yml", () => {
 });
 
 describe("[S1.183] IAM của stack 30 cho đường khởi tạo", () => {
-  it("⑷ tp-deploy tin đúng [prod, prod-khoi-tao] — tên environment của workflow; worker chỉ prod-worker", () => {
-    expect(khoiDeploy("deploy")).toMatch(/\n? {6}environments += \["prod", "prod-khoi-tao"\]\n/u);
-    expect(khoiDeploy("deploy_worker")).toMatch(/\n? {6}environments += \["prod-worker"\]\n/u);
-    expect(TF30).toContain('values   = [for e in each.value.environments : "repo:${module.chung.github_repo}:environment:${e}"]');
+  it("⑷ tp-deploy tin đúng {prod, prod-khoi-tao} — tên environment của workflow; worker chỉ prod-worker", () => {
+    // ~~`environments += ["prod", "prod-khoi-tao"]`~~ **[S1.223 / khoản 252 ⑶]** bản đồ environment ⇒ tệp workflow (hay null); hình
+    // dạng trust policy ghim ở khối `[S1.223]` cuối tệp.
+    expect(khoiDeploy("deploy")).toMatch(/\n? {6}environments = \{\n {8}prod += null(?: +#.*)?\n {8}"prod-khoi-tao" += "khoi-tao\.yml"(?: +#.*)?\n {6}\}\n/u);
+    expect(khoiDeploy("deploy_worker")).toMatch(/\n? {6}environments += \{ "prod-worker" = null \}\n/u);
+    expect(TF30).toContain('values   = [for e, wf in each.value.environments : "${local.sub_repo}:environment:${e}:job_workflow_ref:');
     expect(VAN).toContain("\n    environment: prod-khoi-tao\n");
     expect(doc(".github/workflows/deploy.yml")).not.toContain("prod-khoi-tao");
   });
@@ -296,5 +298,187 @@ describe("[S1.183 / lượt soi] job nhac và tài liệu vận hành", () => {
     expect(dauVao.length).toBe(7);
     for (const d of dauVao) expect(muc81, d).toContain(`\`${d}`);
     expect(muc81).toContain("AWS_CLI_FILE_ENCODING");
+  });
+});
+
+// ==============================================================================================
+// [S1.223 / khoản 252 / ADR-130] ĐƯỜNG KHỞI TẠO CHẠY NGOÀI WORKFLOW KHÔNG IM LẶNG, VÀ ROLE CHỈ VỀ TAY ĐÚNG WORKFLOW
+//   ⑻ stack 60 ⑼: `mau_task_khoi_tao` là ĐÚNG khuôn ⑵ đổi tên (ba nhánh: họ `tp-khoi-tao`; `overrides.taskRoleArn`;
+//      RegisterTaskDefinition gắn role vào họ KHÁC); `mau_ban_khai` bắt Create/Put/Update/DeleteSecret dưới ĐÚNG tiền tố mà stack 30
+//      cho tp-deploy xoá và workflow nhận; mỗi mẫu một rule ở audit (⇒ SNS, thư đọc được, dặn đối chiếu run) và một rule ở prod (⇒ bus
+//      audit qua role chuyển); topic cho hai rule mới publish; ⑵ giữ nguyên ba nhánh.
+//   ⑼ stack 30: claim `sub` TUỲ BIẾN — `prod-khoi-tao` chỉ nhận role qua `khoi-tao.yml@refs/heads/master`; `prod`/`prod-worker` không
+//      ghim (như cũ); đoạn `repo:` mang ID bất biến của chủ kho và kho (một chỗ ở `chung`); README ghi ĐÚNG mẫu tuỳ biến (thứ tự khoá
+//      quyết định hình dạng `sub`), ví dụ `sub` khớp giá trị của `chung`, và thứ tự PUT rồi apply; 2.0 của APPLY-LAN-DAU đòi tuỳ biến
+//      TRƯỚC 2.1; mọi job xin token OIDC đứng trong một environment, và tập environment ấy = tập khoá của stack 30.
+// ==============================================================================================
+
+const TF60 = doc("infra/terraform/60-canh-bao/main.tf");
+const README = doc("infra/terraform/README.md");
+const THU_MUC_WORKFLOWS = fileURLToPath(new URL("../../.github/workflows/", import.meta.url));
+
+/** Khối `<ten> = jsonencode({` … `})` trong `locals` của stack 60. */
+function mauStack60(ten: string): string {
+  const m = new RegExp(`\\n {2}${ten} = jsonencode\\(\\{\\n([\\s\\S]*?)\\n {2}\\}\\)`, "u").exec(TF60);
+  expect(m, `không đọc được local.${ten}`).not.toBeNull();
+  return m?.[1] ?? "";
+}
+
+function khoiTf(tf: string, loai: string, ten: string): string {
+  const batDau = tf.indexOf(`resource "${loai}" "${ten}" {\n`);
+  expect(batDau, `không tìm thấy ${loai}.${ten}`).toBeGreaterThan(-1);
+  return tf.slice(batDau, tf.indexOf("\n}\n", batDau) + 2);
+}
+
+/** Thân từng job của một workflow (sau `jobs:`). */
+function cacJob(van: string): string[] {
+  const jobs = van.slice(van.indexOf("\njobs:\n") + "\njobs:\n".length);
+  return jobs.split(/\n(?= {2}[A-Za-z0-9_-]+:\n)/u);
+}
+
+describe("[S1.223 / khoản 252 ⑴] stack 60 ⑼ — task tp-khoi-tao và bí mật bản khai ngoài workflow", () => {
+  it("⑻ mau_task_khoi_tao = khuôn ⑵ đổi tên: họ tp-khoi-tao; overrides.taskRoleArn; RegisterTaskDefinition vào họ KHÁC — chỉ prod, kể lần bị từ chối; ⑵ còn nguyên", () => {
+    expect(TF60).toMatch(/\n {2}ho_khoi_tao += module\.chung\.role\.khoi_tao\n/u);
+    expect(TF60).toMatch(/\n {2}role_khoi_tao_arn += module\.chung\.role_arn_prod\.khoi_tao\n/u);
+    const ve2 = mauStack60("mau_task_worker");
+    const ve9 = mauStack60("mau_task_khoi_tao");
+    for (const [mau, ho, role] of [
+      [ve2, "local.ho_worker", "local.role_worker_arn"],
+      [ve9, "local.ho_khoi_tao", "local.role_khoi_tao_arn"],
+    ] as const) {
+      expect(mau).toContain('source      = ["aws.ecs"]');
+      expect(mau).toContain('detail-type = ["AWS API Call via CloudTrail"]');
+      expect(mau).toContain("account     = [local.prod]");
+      expect(mau).toContain('eventSource = ["ecs.amazonaws.com"]');
+      expect(mau).not.toMatch(/errorCode/u);
+      expect(mau).toContain(`{ prefix = "\${${ho}}:" },`);
+      expect(mau).toContain(`{ equals-ignore-case = ${ho} },`);
+      expect(mau).toContain(`{ wildcard = "arn:aws:ecs:*:task-definition/\${${ho}}:*" },`);
+      expect(mau).toContain(`requestParameters = { overrides = { taskRoleArn = [${role}] } }`);
+      expect(mau).toContain(`taskRoleArn = [${role}]\n            family      = [{ anything-but = ${ho} }]`);
+      expect([...mau.matchAll(/eventName += \["RunTask", "StartTask"\]/gu)]).toHaveLength(2);
+      expect([...mau.matchAll(/eventName = \["RegisterTaskDefinition"\]/gu)]).toHaveLength(1);
+    }
+    // Cùng chữ, chỉ khác tên local — ⑼ không rộng hơn cũng không hẹp hơn ⑵.
+    expect(ve9).toBe(ve2.replace(/local\.ho_worker/gu, "local.ho_khoi_tao").replace(/local\.role_worker_arn/gu, "local.role_khoi_tao_arn"));
+    // Họ task = tên role (quy ước của ⑵, stack 90 giữ cho khởi tạo).
+    expect(TF90).toContain(`ho = "${giaTriChung("khoi_tao")}"`);
+  });
+
+  it("⑻ mau_ban_khai: Create/Put/Update/DeleteSecret dưới tp/khoi-tao/ban-khai/ (name của Create; secretId của ba lệnh kia, tên hay ARN); tiền tố = câu XoaBanKhai của stack 30 = tên bí mật workflow nhận", () => {
+    expect(TF60).toMatch(/\n {2}tien_to_ban_khai += "tp\/khoi-tao\/ban-khai\/"\n/u);
+    const mau = mauStack60("mau_ban_khai");
+    expect(mau).toContain('source      = ["aws.secretsmanager"]');
+    expect(mau).toContain('detail-type = ["AWS API Call via CloudTrail"]');
+    expect(mau).toContain("account     = [local.prod]");
+    expect(mau).toContain('eventSource = ["secretsmanager.amazonaws.com"]');
+    expect(mau).toMatch(/eventName += \["CreateSecret", "PutSecretValue", "UpdateSecret", "DeleteSecret"\]/u);
+    expect(mau).not.toMatch(/errorCode/u);
+    expect(mau).toContain("{ requestParameters = { name = [{ prefix = local.tien_to_ban_khai }] } },");
+    expect(mau).toContain('{ requestParameters = { secretId = [{ prefix = local.tien_to_ban_khai }, { wildcard = "arn:aws:secretsmanager:*:secret:${local.tien_to_ban_khai}*" }] } },');
+    expect(khoiDeploy("deploy")).toContain('xoa_secret = ["${local.secret_arn}/khoi-tao/ban-khai/*"]');
+    expect(VAN).toContain('description: "Ten bi mat ban khai: tp/khoi-tao/ban-khai/<slug>"');
+  });
+
+  it("⑻ bốn rule, bốn target: audit ⇒ topic khoá, thư đọc được, dặn đối chiếu run (tên phiên khoi-tao-<run id>); prod ⇒ bus audit qua role chuyển; topic cho hai rule mới publish", () => {
+    for (const [ten, mau] of [
+      ["task_khoi_tao", "mau_task_khoi_tao"],
+      ["ban_khai", "mau_ban_khai"],
+    ] as const) {
+      const ruleAudit = khoiTf(TF60, "aws_cloudwatch_event_rule", `${ten}_audit`);
+      expect(ruleAudit).toMatch(/\n {2}provider += aws\.audit\n/u);
+      expect(ruleAudit).toMatch(new RegExp(`\\n {2}event_pattern = local\\.${mau}\\n`, "u"));
+      expect(ruleAudit).toMatch(/\n {2}description += ".*ADR-111.*khoan 252.*"\n/u);
+      const targetAudit = khoiTf(TF60, "aws_cloudwatch_event_target", `${ten}_audit`);
+      expect(targetAudit).toMatch(/\n {2}provider = aws\.audit\n/u);
+      expect(targetAudit).toMatch(new RegExp(`\\n {2}rule += aws_cloudwatch_event_rule\\.${ten}_audit\\.name\\n`, "u"));
+      expect(targetAudit).toMatch(/\n {2}arn += aws_sns_topic\.canh_bao_khoa\.arn\n/u);
+      expect(targetAudit).toContain("\n  input_transformer {\n");
+      for (const [bien, duong] of [
+        ["ai", "$.detail.userIdentity.arn"],
+        ["lenh", "$.detail.eventName"],
+        ["loi", "$.detail.errorCode"],
+        ["luc", "$.time"],
+      ] as const) {
+        expect(targetAudit, `${ten}: ${bien}`).toMatch(new RegExp(`\\n {6}${bien} += "${duong.replace(/[$.]/gu, "\\$&")}"\\n`, "u"));
+      }
+      expect(targetAudit).toMatch(/input_template = "\\"\[TrustProcure\] <lenh> .*<luc>.*<ai>.*<loi>.*tp-deploy\/khoi-tao-RUN_ID.*\\""\n/u);
+      const ruleProd = khoiTf(TF60, "aws_cloudwatch_event_rule", `${ten}_prod`);
+      expect(ruleProd).toMatch(/\n {2}provider += aws\.prod\n/u);
+      expect(ruleProd).toMatch(new RegExp(`\\n {2}event_pattern = local\\.${mau}\\n`, "u"));
+      const targetProd = khoiTf(TF60, "aws_cloudwatch_event_target", `${ten}_prod`);
+      expect(targetProd).toMatch(/\n {2}provider = aws\.prod\n/u);
+      expect(targetProd).toMatch(/\n {2}arn += local\.bus_audit_arn\n/u);
+      expect(targetProd).toMatch(/\n {2}role_arn = aws_iam_role\.chuyen_canh_bao\.arn\n/u);
+      expect(targetProd).toContain("\n  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]\n");
+      expect(targetProd).not.toContain("input_transformer");
+    }
+    expect(khoiTf(TF60, "aws_cloudwatch_event_target", "task_khoi_tao_audit")).toMatch(/\n {6}taskDef += "\$\.detail\.requestParameters\.taskDefinition"\n/u);
+    expect(khoiTf(TF60, "aws_cloudwatch_event_target", "ban_khai_audit")).toMatch(/\n {6}ten += "\$\.detail\.requestParameters\.name"\n/u);
+    expect(khoiTf(TF60, "aws_cloudwatch_event_target", "ban_khai_audit")).toMatch(/\n {6}id += "\$\.detail\.requestParameters\.secretId"\n/u);
+    const chinhSach = khoiTf(TF60, "aws_sns_topic_policy", "canh_bao_khoa");
+    const guiCanhBao = chinhSach.slice(chinhSach.indexOf('Sid       = "EventBridgeGuiCanhBao"'));
+    expect(guiCanhBao).toContain("aws_cloudwatch_event_rule.task_worker_audit.arn,");
+    expect(guiCanhBao).toContain("aws_cloudwatch_event_rule.task_khoi_tao_audit.arn,");
+    expect(guiCanhBao).toContain("aws_cloudwatch_event_rule.ban_khai_audit.arn,");
+    // Tên phiên của role trong workflow là thứ thư dặn đối chiếu.
+    expect(thanJob("chay")).toContain("role-session-name: khoi-tao-${{ github.run_id }}\n");
+  });
+});
+
+describe("[S1.223 / khoản 252 ⑶] trust policy tp-deploy ghim job_workflow_ref qua claim sub tuỳ biến", () => {
+  it("⑼ StringLike trên sub: prod-khoi-tao chỉ qua khoi-tao.yml@refs/heads/master; prod, prod-worker không ghim; đoạn repo: mang ID bất biến từ chung", () => {
+    const trust = /data "aws_iam_policy_document" "deploy_trust" \{\n([\s\S]*?)\n\}\n/u.exec(TF30)?.[1] ?? "";
+    expect(trust).toContain('test     = "StringEquals"\n      variable = "token.actions.githubusercontent.com:aud"\n      values   = ["sts.amazonaws.com"]');
+    expect(trust).toContain(
+      'test     = "StringLike"\n      variable = "token.actions.githubusercontent.com:sub"\n      values   = [for e, wf in each.value.environments : "${local.sub_repo}:environment:${e}:job_workflow_ref:${wf == null ? "*" : "${module.chung.github_repo}/.github/workflows/${wf}@refs/heads/master"}"]',
+    );
+    expect([...trust.matchAll(/String(?:Like|Equals)/gu)]).toHaveLength(2);
+    expect(khoiDeploy("deploy")).toMatch(/^ {6}environments = \{\n {8}prod += null(?: +#.*)?\n {8}"prod-khoi-tao" += "khoi-tao\.yml"(?: +#.*)?\n {6}\}\n/u);
+    expect(khoiDeploy("deploy_worker")).toMatch(/^ {6}environments += \{ "prod-worker" = null \}\n/u);
+    expect(readdirSync(THU_MUC_WORKFLOWS)).toContain("khoi-tao.yml");
+    expect(TF30).toContain('chu_kho  = split("/", module.chung.github_repo)[0]');
+    expect(TF30).toContain('ten_kho  = split("/", module.chung.github_repo)[1]');
+    expect(TF30).toContain('sub_repo = "repo:${local.chu_kho}@${module.chung.github_owner_id}/${local.ten_kho}@${module.chung.github_repo_id}"');
+    expect(giaTriChung("github_repo")).toBe("huubang1984/Purchasing-");
+    expect(giaTriChung("github_owner_id")).toMatch(/^\d{6,12}$/u);
+    expect(giaTriChung("github_repo_id")).toMatch(/^\d{6,12}$/u);
+    expect(CHUNG).toMatch(/\noutput "github_owner_id" \{ value = local\.github_owner_id \}\n/u);
+    expect(CHUNG).toMatch(/\noutput "github_repo_id" \{ value = local\.github_repo_id \}\n/u);
+  });
+
+  it("⑼ mọi job xin token OIDC đứng trong một environment, và tập environment = tập khoá ở stack 30; mỗi environment ở đúng một job", () => {
+    const moiTruong: string[] = [];
+    for (const ten of readdirSync(THU_MUC_WORKFLOWS)) {
+      for (const job of cacJob(doc(`.github/workflows/${ten}`))) {
+        if (!/^ {6}id-token: write$/mu.test(job)) continue;
+        const m = /^ {4}environment: ([a-z-]+)$/mu.exec(job);
+        expect(m, `${ten}: job xin token mà không có environment`).not.toBeNull();
+        moiTruong.push(m?.[1] ?? "");
+      }
+    }
+    expect([...moiTruong].sort()).toEqual(["prod", "prod-khoi-tao", "prod-worker"]);
+    const khoa = [...khoiDeploy("deploy").matchAll(/^ {8}"?([a-z-]+)"? += /gmu), ...khoiDeploy("deploy_worker").matchAll(/\{ "([a-z-]+)" = null \}/gu)].map((m) => m[1] ?? "");
+    expect([...khoa].sort()).toEqual([...moiTruong].sort());
+  });
+
+  it("⑼ README: đúng mẫu tuỳ biến (thứ tự khoá), ví dụ sub khớp chung, PUT trước apply, cách in claim thật; APPLY-LAN-DAU 2.0 đòi tuỳ biến TRƯỚC 2.1", () => {
+    const dau = README.indexOf("### Tuỳ biến claim `sub`");
+    expect(dau).toBeGreaterThan(-1);
+    const muc = README.slice(dau, README.indexOf("\n## ", dau));
+    expect(muc).toContain('{"use_default":false,"include_claim_keys":["repo","context","job_workflow_ref"]}');
+    expect([...muc.matchAll(/include_claim_keys/gu)].length).toBeGreaterThanOrEqual(1);
+    expect(muc).toContain("gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub --input -");
+    expect(muc).toContain("gh api repos/huubang1984/Purchasing-/actions/oidc/customization/sub");
+    const sub = `repo:huubang1984@${giaTriChung("github_owner_id")}/Purchasing-@${giaTriChung("github_repo_id")}:environment:prod-khoi-tao:job_workflow_ref:huubang1984/Purchasing-/.github/workflows/khoi-tao.yml@refs/heads/master`;
+    expect(muc).toContain(sub);
+    expect(muc).toContain("actions-oidc-debugger");
+    expect(muc.indexOf("customization/sub --input -")).toBeLessThan(muc.indexOf("terraform apply"));
+    expect(muc).toMatch(/KHOÁ/u);
+    const hd = doc("docs/APPLY-LAN-DAU.md");
+    const muc20 = hd.slice(hd.indexOf("- [ ] **2.0"), hd.indexOf("- [ ] **2.1"));
+    expect(muc20).toContain('include_claim_keys = ["repo","context","job_workflow_ref"]');
+    expect(muc20).toContain("Tuỳ biến claim `sub`");
+    expect(muc20.indexOf("**2.0b")).toBeGreaterThan(-1);
   });
 });

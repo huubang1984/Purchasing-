@@ -163,6 +163,8 @@ async function tuChoi(
       payload: { clause },
     },
     new UnsealDeniedError(clause, message),
+    // [S1.225 / khoản 179] Vế đã từ chối cho dòng log của lần MẤT SỔ — hàng sổ mang `clause` chính là hàng không ghi được.
+    clause,
   );
 }
 

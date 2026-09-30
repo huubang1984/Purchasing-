@@ -263,6 +263,23 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     }
   });
 
+  // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] PHÉP GHIM CỦA MỘT LỜI KHAI «LỚP NÔNG».
+  //
+  // Cổng `requirePermission(EVALUATION_PERFORM)` của đường chấm (`packages/danh-gia/src/luot-danh-gia.ts`, route
+  // `POST /rfqs/:rfqId/evaluate` ở `apps/api/src/routes/buyer.ts`) ĐỌC NHƯ một lớp phân tách nhiệm vụ nhưng chỉ chặn hai vai;
+  // lớp thật là J3 theo hành vi đã xảy ra (ADR-051). Chủ dự án chọn GHI cổng là lớp nông thay vì thu hẹp ma trận `005`. Ca này
+  // ghim đúng tập vai giữ mã, đọc từ MỌI migration theo thứ tự áp — để ngày ai thêm hay bớt một vai khỏi `evaluation.perform`
+  // (migration mới), ca này đỏ và người ấy phải đọc lại hai chú thích trên: lời khai «lớp nông» có còn đúng không.
+  it("[khoản 220 ⒝] `evaluation.perform` do ĐÚNG năm vai giữ — BUYER, FINANCE, PROCUREMENT_MANAGER, REQUESTER, TECHNICAL; DIRECTOR và DATA_STEWARD không — cổng chấm là lớp NÔNG, lớp thật là J3 (ADR-051)", () => {
+    const giu = [...maTran.entries()]
+      .filter(([, tap]) => tap.has(PERMISSIONS.EVALUATION_PERFORM))
+      .map(([vaiTro]) => vaiTro)
+      .sort();
+    expect(giu).toEqual(["BUYER", "FINANCE", "PROCUREMENT_MANAGER", "REQUESTER", "TECHNICAL"]);
+    const khong = [...maTran.keys()].filter((vaiTro) => !giu.includes(vaiTro)).sort();
+    expect(khong, "hai vai KHÔNG giữ — thứ duy nhất cổng này chặn được trong tổ chức").toEqual(["DATA_STEWARD", "DIRECTOR"]);
+  });
+
   it("[INV-D3] KHÔNG vai trò nào ôm trọn chuỗi năm bước", () => {
     const omTron = [...maTran.entries()]
       .filter(([, tap]) => SEPARATION_OF_DUTIES_CHAIN.every((ma) => tap.has(ma)))

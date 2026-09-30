@@ -17,24 +17,36 @@
 
   <section class="buoc" id="b1">
     <h2><span class="so">1</span> Đăng nhập</h2>
-    <p class="ghi">Dán mã từ link đăng nhập, rồi nhập mã sáu số của ứng dụng xác thực. Một gói
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa
+      <strong>bí mật ghi danh</strong> để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Một gói
       thầu vượt ngưỡng cần HAI người duyệt trước khi mở, nên màn này đăng nhập lại được bằng
       người thứ hai — giống màn mở thầu.</p>
     <label for="org">Mã tổ chức</label>
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <label for="ma">Mã sáu số</label>
-    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
-    <button id="nut-vao">Vào</button>
+    <!-- [S1.240 / khoản 282] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login`: Tiếp gọi `/auth/redeem` đúng một lần cho mỗi
+         mã và nói tài khoản cần ghi danh hay không; ô mã sáu số chỉ mở SAU đó (khoản 193). -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
-    <div class="bao luu" id="ghi-danh" hidden></div>
     <!-- [S1.177] Trình duyệt đang giữ một phiên còn hạn thì trang HỎI thay vì tự mở các bước: cookie phiên sống
          tới 8 giờ kể cả sau khi đóng trình duyệt, và trên máy dùng chung nó có thể của người khác. -->
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
     <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <!-- [S1.216 / khoản 195 · S1.240 / khoản 268, 282] Link đăng nhập gần đây của chính người vừa vào, và câu «còn nữa» khi danh
+         sách bị cắt — `/lib/dang-nhap.js` điền. Khối là trợ giúp: máy chủ từ chối hay mất mạng thì nó ẩn, các bước vẫn mở. -->
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
   </section>
 
   <section class="buoc" id="b2" hidden>
@@ -65,7 +77,8 @@
   <section class="buoc" id="b3" hidden>
     <h2><span class="so">3</span> Hạng mục</h2>
     <p class="ghi">Kịch bản hoàn thành đòi ít nhất ba hạng mục. Số thứ tự tự tăng; sửa được trước
-      khi nộp duyệt.</p>
+      khi nộp duyệt. Sau khi nộp, mỗi dòng được nối với một hàng chuẩn: dòng trùng một bí danh thì tự nối, còn lại chờ người
+      quản lý dữ liệu duyệt — người tạo gói chỉ xem cột ấy.</p>
     <label for="hm-mo-ta">Mô tả</label>
     <input id="hm-mo-ta" autocomplete="off" placeholder="Thep tam SS400 day 10mm">
     <label for="hm-sl">Số lượng</label>
@@ -74,7 +87,7 @@
     <input id="hm-dvt" autocomplete="off" placeholder="tam">
     <button id="nut-them-hm" class="phu">Thêm hạng mục</button>
     <table id="bang-hm">
-      <thead><tr><th class="so">#</th><th>Hạng mục</th><th class="so">SL</th><th>ĐVT</th></tr></thead>
+      <thead><tr><th class="so">#</th><th>Hạng mục</th><th class="so">SL</th><th>ĐVT</th><th id="th-hang-chuan" hidden>Hàng chuẩn</th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="bao loi" id="loi3" hidden></div>
