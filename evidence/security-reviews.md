@@ -18061,3 +18061,192 @@ không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nh
   `tsc`, `eslint` sạch; `depcruise` 481 mô-đun, không vi phạm; T3 toàn bộ 205 tệp, 3529 khẳng định, 3519 đạt, 1 bỏ qua, 9 đỏ — đúng
   chín ca cũ của máy đo; `migrations.int` 120/120, `hardening-suy-tu-tinh-chat.int` 36/36, `lan-nop-da-xem.int` 34/34,
   `anh-xa.int` 23/23. Ma trận sinh lại trùng từng byte bản đã hợp: 75/75 (53/53 nghiệp vụ + 22/22 hàng rào).
+
+# §S1.234 — S4.3b: LƯỢT CHUẨN HOÁ SAU LẦN NỘP DUYỆT, HÀNG ĐỢI ÁNH XẠ Ở `/du-lieu`, CỘT HÀNG CHUẨN Ở `/tao-thau` — ADR-135
+
+## 1. Vòng này là gì
+
+Nửa sau của S4.3 (spec S4 §9): đường HTTP, màn hình và lượt chuẩn hoá tự động trên lớp CSDL và gói của S4.3a (§S1.204). Không
+migration, không bất biến mới; **L3** thêm một phép đo ở tầng ứng dụng. Một kiểu việc sau commit mới ở bộ điều phối.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-30, sáu đề xuất của lượt bàn S4.3b:
+
+1. Một PR, cùng khuôn S4.2b.
+2. Lượt chuẩn hoá chạy sau commit bằng một kiểu việc mới của bộ điều phối, chỉ ở tổ chức có ít nhất một hàng chuẩn đang dùng.
+3. Năm route, đều `agent: false`: hai route đọc mở cho người mua của tổ chức, ba route ghi khai `item.manage`.
+4. Không mở E6.
+5. Hàng đợi ở `/du-lieu`; cột trạng thái chỉ đọc ở `/tao-thau`.
+6. `gieo:demo` bỏ bí danh của một hàng để có một dòng chờ duyệt; dòng PRODUCT §5 chỉ nói phần đã có mã.
+
+## 3. Thay đổi
+
+- **Bộ điều phối** (`dispatch.ts`, `route-types.ts`). `afterCommitGiaoDich` — ADR-135 ①: chỉ route ghi; chạy khi phản hồi CUỐI
+  thành công; trong giao dịch của việc `lock_timeout` 2 s, `statement_timeout` 5 s; dòng log `i/n` kèm mẫu route; dấu xếp việc outbox
+  đọc-xoá trên kết nối của việc.
+- **Route nộp duyệt** (`routes/buyer.ts`) hỏi `coHangChuanDangDung` trong giao dịch của lần nộp, và chỉ khi có mới đăng ký
+  `chuanHoaGoi` dưới phiên người nộp.
+- **Gói `du-lieu-nen`.** `coHangChuanDangDung`; `chuanHoaSauNop` (điều kiện rồi `chuanHoaGoi`, một giao dịch — đường của `gieo:demo`).
+  Hai phép kiểm ở tầng gói (lượt soi L1, L4): hàng chuẩn đích ngừng dùng ⇒ `HANG_NGUNG_DUNG`, bí danh trỏ hàng ngừng dùng không tự nối;
+  băm mong đợi khác băm hiện tại ⇒ `DONG_DA_DOI`. Hàng đợi mang `bam` của từng dòng.
+- **`routes/anh-xa.ts`** — năm route (ADR-135 ③). Thân: `hangChuanId` bắt buộc có mặt (`null` là bác), `lyDo` chuỗi hay vắng,
+  `taoBiDanh` boolean, `bam` 64 chữ số hex hay vắng; `lineNo` sai hình dạng ⇒ 404; gói lạ ở route đọc trạng thái ⇒ 404; route trạng
+  thái trả thêm `coHangChuan`. `DuLieuNenError` ra 422 có mã.
+- **`apps/mcp`.** Hai dòng `ROUTE_DOC_KHONG_PHOI` kèm lý do (mười chín dòng — §S1.203 thêm một dòng trước vòng này).
+- **Màn `/du-lieu`** bước 6 và **`/tao-thau`** cột *Hàng chuẩn* (ADR-135 ⑤). Mọi ô qua `textContent`; bốn nút của khối xử lý khoá
+  CÙNG NHAU trong lúc một lời gọi còn bay; ba lần ghi gửi `bam` của dòng đang mở; ô bí danh bật lại mỗi lần mở một dòng; dòng đang
+  mở mà không còn trong hàng đợi sau lần đọc lại thì khối đóng; ứng viên đã ngừng dùng không vào ô chọn. Cột *Hàng chuẩn* ẩn khi gói
+  còn soạn, khi tổ chức chưa có hàng chuẩn nào và mọi dòng chưa chuẩn hoá, hay khi đọc hỏng. Module thuần: `phanTram`, `nhanGoiY`,
+  `locHangDoi`, `luaChonHangChuan` (`/lib/du-lieu.js`), `nhanAnhXa`, `hienCotHangChuan` (`/lib/tao-thau.js`).
+- **`gieo:demo`.** Bu lông neo không bí danh; lượt chuẩn hoá sau lần nộp; in số dòng tự nối và số dòng chờ.
+- **PRODUCT §5** thêm một dòng; hàng S4 của PRODUCT, spec §3.5 và §9, TEST-PLAN hàng L3.
+- **Cổng khai theo.** `barrel-exports`, `cong-quyen-route` (`chuanHoaSauNop`), `cong-cu` (MCP), `kich-ban-41-http.int` (ba thân hợp lệ,
+  cả ba đi tới 2xx ở hai luồng — đo bằng một dòng in tạm, đã gỡ), bộ giả lập trang `phuc-vu` (bước 6 và lời gọi `GET /mapping-queue`
+  sau đăng nhập), sổ đăng ký nhãn (L3 thêm `apps/api/src/anh-xa.int.test.ts`).
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Điều kiện là *phiên bản mới nhất `DANG_DUNG`*, không *có một hàng chuẩn nào*.** Tổ chức chỉ còn hàng đã ngừng dùng thì lõi không có
+  ứng viên nào; chạy chỉ ghi tiếng ồn.
+- **Việc giao dịch chạy sau việc có bù và lô gửi, trước việc thường**, và không bị trần một việc có bù: nó không đổi phản hồi.
+- **Trần của việc là 2 s chờ khoá và 5 s mỗi câu**, không phải một trần tổng: PG16 không có `transaction_timeout`, và một hạn chót ở
+  JavaScript không huỷ được câu đang chạy mà không `pg_cancel_backend`. Chờ khoá là chỗ treo đo được; câu nào quá 5 s là lượt hỏng.
+- **Hàng ngừng dùng chặn ở tầng gói, không ở CSDL.** Chặn ở trigger `anh_xa_kiem_luat` là sửa `089` (S4.3a) hay thêm một migration —
+  vòng này không migration. Đường ghi của ứng dụng vào bảng ánh xạ là ba hàm của gói; câu ghi tay của người giữ quyền CSDL vẫn đi qua.
+- **Route đọc trạng thái trả 404 cho gói lạ** (qua `getRfq`) thay vì một danh sách rỗng — màn phân biệt được *gói không có* với *gói
+  chưa có dòng*.
+- **Ô chọn ở khối xử lý** liệt ứng viên của lõi trước (kèm điểm), rồi mọi hàng đang dùng khác của danh sách đang hiện — không tìm ở
+  máy chủ (E6).
+
+## 5. Đo trước
+
+`apps/api/src/anh-xa.int.test.ts` trên cây có đủ route và màn nhưng gỡ dòng đăng ký lượt chuẩn hoá ở route nộp duyệt: 2/10 đỏ — dòng
+trùng bí danh không thành `TU_DONG` (mọi dòng *chưa chuẩn hoá*), và hàng đợi không có gợi ý nào cho người quản lý dữ liệu.
+
+Mỗi sửa của lượt soi có phép đo trước của nó ở dạng đột biến (§6, M15–M27): gỡ đúng sửa ấy trên cây cuối thì ca mới đỏ. M16 là số đo
+của T1 — gỡ trần trong giao dịch thì lần nộp với khoá bí danh bị giữ không về: pool của bộ test không đặt `lock_timeout`, việc chờ
+khoá tới khi ca hết hạn 30 s (pool sản xuất `createPool` đặt 15 s), và khoá còn bị giữ kéo đổ các ca sau.
+
+## 6. Đo
+
+- `apps/api/src/anh-xa.int.test.ts` 16/16 — ⑴ lần nộp qua HTTP ở tổ chức có hàng chuẩn: khi phản hồi 200 về, dòng trùng bí danh đã
+  `TU_DONG` (tác giả là người nộp), hai dòng còn lại có gợi ý, một hàng sổ `RFQ_ITEMS_NORMALIZED`; ⑵ tổ chức không có hàng chuẩn,
+  và tổ chức chỉ có hàng ngừng dùng: không hàng gợi ý, ánh xạ hay sổ nào; ⑶ `afterCommitGiaoDich` trên route giả — hai việc, hai giao
+  dịch mới khác giao dịch của handler, đã gắn tổ chức, đúng thứ tự; một việc hỏng ⇒ phản hồi 200 nguyên văn, việc sau vẫn chạy, một
+  dòng log `1/2 POST <mẫu route> <tên lỗi>`, không nội dung; phản hồi 422 ⇒ không việc nào chạy; việc có bù hỏng hay lô gửi đổi phản hồi
+  thành 502 ⇒ không việc nào chạy, một dòng `bo-qua 1`; route đọc đăng ký ⇒ 500, không việc nào chạy; **route nộp duyệt thật** với
+  khoá bí danh bị giữ ở kết nối khác ⇒ 200 sau khoảng 2 s, gói `PENDING_APPROVAL`, không hàng gợi ý, ánh xạ hay sổ, một dòng log
+  `1/1 POST /rfqs/:rfqId/submit`, rồi *chuẩn hoá lại* chạy được; `chuanHoaSauNop` gọi thẳng ở tổ chức không có hàng chuẩn ⇒ `null`;
+  ⑷ năm route khai đúng; **[INV-L3] vế vai**: người tạo gói gọi ba route ghi ⇒ 403 cả ba, ba hàng `PERMISSION_DENIED` tọa độ gói, không
+  hàng ánh xạ nào; **[INV-L3] vế hành vi**: người đã tạo và nộp gói rồi thành người quản lý dữ liệu ⇒ 422 `TRONG_TAP_LOAI_TRU`, đối
+  chứng dương trên cùng dòng; hàng ngừng dùng: bí danh của nó không tự nối (dòng `CHO_DUYET`), duyệt sang nó ⇒ 422 `HANG_NGUNG_DUNG`;
+  băm: hàng đợi mang 64 chữ số hex mỗi dòng, băm sai ⇒ 422 `DONG_DA_DOI` ở cả hai route (không hàng chuẩn nào được tạo), băm đúng ⇒
+  201, băm sai hình dạng ⇒ 422; người quản lý dữ liệu: hàng đợi (kèm tác giả
+  gợi ý), bác sau `GOI_Y` không lý do ⇒ 422 `CAN_LY_DO`, duyệt kèm bí danh, bác có lý do, tạo hàng chuẩn mới, chuẩn hoá lại (không đụng
+  dòng đã có ánh xạ), và hàng đợi học — gói sau cùng chuỗi thành `TU_DONG` ngay ở lần nộp; tổ chức khác không thấy; 422 có mã
+  (`GOI_CON_SOAN`, `KHONG_CO_HANG_MUC`), 404 cho đường sai, 422 cho thân sai kiểu.
+- `apps/web`: `du-lieu.test.ts` 15/15, `tao-thau.test.ts` 19/19 (sáu hàm thuần; ứng viên ngừng dùng bị bỏ; cột ẩn/hiện theo
+  `coHangChuan` và theo dòng đã có ánh xạ); `phuc-vu.test.ts` 118/118 — bước 6 mở cho mọi trang người mua đã vào; người chỉ xem không
+  có nút *Xử lý*; duyệt gửi đúng thân (ứng viên đầu, bí danh bật, lý do `null`, `bam` của dòng), bấm đúp một lời gọi, bấm *Bác* trong
+  lúc lần duyệt còn bay không gửi gì, xong thì khối đóng và hàng đợi đọc lại; máy chủ từ chối ⇒ câu của máy chủ, khối giữ dòng; bác gửi
+  `null` kèm lý do và `bam`; mã sai hình dạng không gọi; `/tao-thau` đọc trạng thái khi gói đã nộp và vẽ cột, gói còn soạn không đọc
+  và bảng bốn cột, tổ chức chưa có hàng chuẩn ⇒ đọc nhưng cột ẩn.
+- `kich-ban-41-http.int` 58/58 — bộ quét rò rỉ đi qua ba route ghi mới, cả ba tới 2xx ở hai luồng, không chữ số giá nào lọt.
+- **`gieo:demo` và `gieo:demo --s3`** trên Postgres 16 cục bộ: mỗi lần hai dòng `TU_DONG` (tấm, hộp) do người soạn, một hàng gợi ý
+  `GOI_Y` 0,88 cho bu lông neo với ứng viên đầu đúng hàng; một hàng sổ `RFQ_ITEMS_NORMALIZED` mỗi lần.
+- **Lượt đi thử T4** (trên cây TRƯỚC các sửa của lượt soi) — Postgres 16, `gieo:demo`, `apps/api` (`local-dev`, hộp thư dev), `apps/web`, Chromium qua Playwright; script
+  ngoài kho. Năm khẳng định, đạt cả năm ngay lượt đầu: ⑴ `dulieu` vào ⇒ bước 6 hiện đúng một dòng bu lông neo, *"Gợi ý 88% —
+  BU-LONG-NEO-M24-8.8"*, người ghi gợi ý là người soạn, có nút *Xử lý*; ⑵ khối xử lý: ứng viên đầu *"BU-LONG-NEO-M24-8.8 — Bu lông neo
+  M24 cấp bền 8.8 (88%)"*, ô bí danh bật sẵn; bác không lý do ⇒ câu `CAN_LY_DO` của máy chủ; duyệt ⇒ hàng đợi trống, khối đóng;
+  ⑶ người soạn ở `/tao-thau` đọc gói ⇒ cột *"Tự động — THEP-TAM-SS400-10"*, *"Tự động — THEP-HOP-MK-50X50-1.4"*, *"Đã duyệt —
+  BU-LONG-NEO-M24-8.8"*; ⑷ người soạn mở `/du-lieu` ⇒ câu §8.10 *"bạn chỉ xem được"*, không nút xử lý, `POST` ánh xạ thẳng ⇒ 403;
+  ⑸ không `pageerror`; hai dòng console là Chromium in cho lần 422 và 403 mà kịch bản cố ý gây ra. CSDL sau lượt: dòng 3 `NGUOI_DUYET`
+  do `dulieu`, bí danh *"bu long neo m24 cap 8 8"* trỏ đúng hàng, một hàng `RFQ_ITEM_MAPPED`, một `PERMISSION_DENIED` của người soạn.
+- **Lượt đi thử T4 lại, trên cây SAU các sửa của lượt soi** — cùng dựng, `gieo:demo` mới, cùng năm khẳng định cộng hai: hai lần ghi
+  của bước ⑵ (bác, duyệt) mang `bam` 64 chữ số hex; ở ⑶ tiêu đề cột *Hàng chuẩn* hiện. Lượt đầu HỎNG ở ⑷: script đọc câu §8.10 ngay
+  khi mạng lặng và thấy ô còn ẩn — trang ghi câu ấy ngay sau đó; script thêm một lần chờ ô hiện, gieo lại, chạy lại: năm/năm đạt,
+  không `pageerror`, hai dòng console là 422 và 403 cố ý.
+- **Hai mươi bảy đột biến**, mỗi lần một chỗ — M1–M14 trên cây trước lượt soi (M1, M2, M5, M6 viết lại theo mã sau lượt soi và chạy
+  lại, vẫn đỏ), M15–M27 cho các sửa của lượt soi. Cả 27 đỏ trên cây cuối:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | M1 | route nộp duyệt không đăng ký lượt chuẩn hoá | đỏ — 2 ca |
+  | M2 | `chuanHoaSauNop` bỏ điều kiện hàng chuẩn | đỏ — 2 ca |
+  | M3 | điều kiện bỏ vế *đang dùng* | đỏ — 1 ca |
+  | M4 | việc giao dịch chạy cả khi phản hồi 4xx | đỏ — 1 ca |
+  | M5 | việc giao dịch hỏng làm hỏng phản hồi | đỏ — 1 ca |
+  | M6 | việc giao dịch hỏng dừng việc sau | đỏ — 1 ca |
+  | M7 | route duyệt khai `rfq.create` | đỏ — 4 ca |
+  | M8 | route đọc trạng thái bỏ 404 gói lạ | đỏ — 1 ca |
+  | M9 | thân vắng `hangChuanId` coi như bác | đỏ — 1 ca |
+  | M10 | ô chọn nhận hàng ngừng dùng | đỏ — 1 ca |
+  | M11 | mở dòng không bật lại ô bí danh | đỏ — 1 ca |
+  | M12 | `/tao-thau` đọc ánh xạ cả khi gói còn soạn | đỏ — 1 ca |
+  | M13 | duyệt thành công không đóng khối xử lý | đỏ — 1 ca |
+  | M14 | nhãn *đã duyệt* đổi thành *tự động* | đỏ — 1 ca |
+  | M15 | route nộp duyệt bỏ điều kiện trong giao dịch (L3) | đỏ — 2 ca (lượt chạy riêng; trong lô chạy song song 13 ca) |
+  | M16 | việc giao dịch không đặt trần khoá/câu (T1) | đỏ — 7 ca (ca khoá bị giữ hết hạn 30 s, khoá còn giữ đổ dây) |
+  | M17 | route đọc đăng ký được việc giao dịch | đỏ — 1 ca |
+  | M18 | lô gửi đổi phản hồi mà việc giao dịch vẫn chạy | đỏ — 1 ca |
+  | M19 | việc có bù hỏng không nói bỏ việc giao dịch | đỏ — 1 ca |
+  | M20 | `ghiAnhXa` nhận hàng ngừng dùng (L1) | đỏ — 1 ca |
+  | M21 | bí danh trỏ hàng ngừng dùng vẫn tự nối (L1) | đỏ — 1 ca |
+  | M22 | `ghiAnhXa` bỏ so băm mong đợi (L4) | đỏ — 1 ca |
+  | M23 | màn không gửi băm khi duyệt (L4) | đỏ — 1 ca |
+  | M24 | khối xử lý bỏ phép kiểm cả nhóm (L4) | đỏ — 1 ca |
+  | M25 | `/tao-thau` luôn hiện cột hàng chuẩn (L3) | đỏ — 1 ca |
+  | M26 | `hienCotHangChuan` bỏ vế `coHangChuan` (L3) | đỏ — 1 ca |
+  | M27 | ô chọn giữ ứng viên đã ngừng dùng (L1) | đỏ — 1 ca |
+
+  Hai dạng đầu của M24 SỐNG và là đột biến tương đương: đưa riêng nút *Bác* về khoá một nút, hay thu danh sách nhóm về một nút — ba
+  nút còn lại vẫn hỏi cả nhóm (hay mọi nút cùng hỏi nút duyệt), nên loại trừ chéo vẫn giữ. Dạng giữ lại gỡ chính phép hỏi cả nhóm.
+
+## 7. Lượt soi đối kháng
+
+Một tác tử soát riêng đọc bản HEAD bằng `git show` (né dòng đột biến tạm), không sửa gì. Không CAO; 2 TRUNG, 5 THẤP, một nhóm
+thông tin về bộ điều phối. Kết cục từng mục:
+
+| Mục | Phát hiện | Kết cục |
+|---|---|---|
+| T1 | Việc sau commit không có trần tổng trong khi phản hồi chờ nó: khoá tư vấn bí danh của cả tổ chức, `lock_timeout`/`statement_timeout` 15 s của pool — lần nộp treo 15–30 s rồi lượt hỏng im lặng; câu ADR *"tối đa 5 s cộng câu hỏng"* nói nhẹ | **Sửa.** `SET LOCAL` 2 s chờ khoá, 5 s mỗi câu ở đầu giao dịch của việc (`dispatch.ts`). ADR viết lại cận trên thật, kể cả lõi đồng bộ; không trần số dòng — §8 |
+| T2 | Test chưa đo *"lỗi chuẩn hoá không chặn nộp duyệt"* trên route thật: đổi route thành chạy lượt trong giao dịch chính thì ⑴ ⑵ vẫn xanh | **Sửa.** Ca mới: một kết nối khác giữ khoá bí danh; lần nộp qua HTTP 200 trong ~2 s, gói `PENDING_APPROVAL`, 0 hàng gợi ý và sổ, đúng một dòng log `1/1 POST /rfqs/:rfqId/submit`, rồi *chuẩn hoá lại* nối được |
+| L1 | Hàng chuẩn ngừng dùng vẫn nhận ánh xạ (gói, trigger, bí danh đều không kiểm); ứng viên cũ đứng đầu ô chọn, bí danh bật sẵn ⇒ mọi dòng sau `TU_DONG` sang hàng đã ngừng | **Sửa ở tầng gói** — `HANG_NGUNG_DUNG`; bí danh trỏ hàng ngừng dùng không tự nối; màn bỏ ứng viên ngừng dùng. CSDL không chặn — §4, §8 |
+| L2 | `GET /mapping-queue` là đường liệt kê toàn tổ chức đầu tiên; lý do trong ADR bỏ qua điểm ấy | **Nhận, nói ra** — ADR-135 *Hệ quả* viết lại; chủ dự án đã chốt *"hai route đọc mở cho người mua"* |
+| L3 | Tổ chức MVP1 tốn thêm kết nối và giao dịch mỗi lần nộp; `/tao-thau` hiện *"Chưa chuẩn hoá"* ở tổ chức không có hàng chuẩn, lệch §2.3 | **Sửa.** Điều kiện hỏi trong giao dịch của lần nộp, không đăng ký việc khi không có; route trạng thái trả `coHangChuan`, màn ẩn cột |
+| L4 | Không khoá lạc quan: dòng sửa rồi nộp lại trong lúc khối xử lý mở ⇒ lần duyệt ghi lên nội dung chưa thấy; *Duyệt* và *Bác* bay song song | **Sửa.** Băm dòng trong hàng đợi, `bam` ở ba lần ghi, `DONG_DA_DOI` dưới khoá `FOR SHARE` của gói; bốn nút khoá cùng nhau |
+| L5 | Nhãn [INV-L3] đo cổng `item.manage`, không đo tập loại trừ qua HTTP | **Sửa.** Ca cũ đổi tên *vế vai*; ca mới *vế hành vi*: người đã tạo và nộp gói rồi thành người quản lý dữ liệu ⇒ 422 `TRONG_TAP_LOAI_TRU`, đối chứng dương |
+| TT | Việc có bù hỏng bỏ việc giao dịch không log, lô gửi đổi phản hồi thì việc vẫn chạy; log thiếu `i/n` và mẫu route; route đọc đăng ký được; dấu xếp việc outbox để lại trên kết nối; closure chạm được `ctx.client` | **Sửa bốn:** một luật *phản hồi cuối thành công* + dòng `bo-qua n`, log `i/n` + mẫu route, route đọc ném, dấu đọc-xoá và đánh thức runner. **Không sửa một** (`ctx.client`) — §8 |
+
+Mục kiểm thấy ổn (điều kiện chạy chỉ sau commit, tác giả là người nộp, lượt hỏng rollback trọn, thứ tự khoá bí danh → gói → sổ, cổng
+và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nào, hai mục MCP khớp `agent: false`) giữ nguyên.
+
+## 8. Giới hạn, nói ra
+
+- Phản hồi của lần nộp duyệt về sau lượt chuẩn hoá; lượt hỏng chỉ để lại một dòng log (ADR-135 *Hệ quả*). Cận trên là 5 s chờ kết
+  nối + 2 s mỗi lần chờ khoá + 5 s mỗi câu, số câu tỉ lệ số dòng; lõi chạy đồng bộ trên luồng sự kiện, O(dòng × hàng chuẩn); không
+  trần số dòng cho lượt sau nộp (lượt soi T1).
+- Hàng đợi là đường LIỆT KÊ đầu tiên của tổ chức: mọi người mua thấy id, tên và dòng của mọi gói đã nộp còn dòng chờ (lượt soi L2 —
+  nhận, ADR-135 *Hệ quả*).
+- CSDL không chặn ánh xạ sang hàng ngừng dùng; chặn ở tầng gói (lượt soi L1).
+- Closure của việc giao dịch vẫn chạm được `ctx.client` đã trả về pool — chỉ chú thích ngăn (lượt soi, mục bộ điều phối; không sửa:
+  vô hiệu hoá `ctx.client` sau commit là đổi kiểu của mọi handler).
+- Gói nộp TRƯỚC khi tổ chức có hàng chuẩn đầu tiên không tự chuẩn hoá; người quản lý dữ liệu bấm *chuẩn hoá lại* từng gói.
+- Hàng đợi 500 dòng cũ nhất; không phân trang ở máy chủ (E6).
+- Ô lý do không tự biết gói đã mở niêm phong: màn in câu của máy chủ khi nó đòi.
+- Lượt đi thử T4 là một lần, không phải một cổng; script nằm ngoài kho.
+
+## 9. Số đo
+
+- Cây cuối — nhánh dựng lại trên `master` sau #213 (`2af75b2`), số đã cấp S1.234 / ADR-135: `pnpm cap-so` giữ số trên remote, và
+  S1.207–S1.233, ADR-123–ADR-134 đã có nhánh khác giữ (S1.208 là của chính nhánh này, do một lần `cap-so --mo-ho master` chạy nhầm lúc
+  hợp #214 vào #213 — §S1.204 §9; không dùng). `pnpm t0` sạch; `pnpm test` 125 tệp, 1837 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
+- `pnpm evidence` — toàn bộ T1–T3 cục bộ trên cây cuối: 206 tệp, 3550 khẳng định, 3549 đạt, 1 bỏ qua; 75/75 bất biến (53/53 nghiệp
+  vụ + 22/22 hàng rào). Ma trận: L3 19 → 21.
+- Vòng này viết trên cây S4.3a trước #211; tới lúc mở PR, `master` đã nhận #211 (S3.6b1), #212 (khoản 259), #214 (S3.6b2) và #213.
+  Hợp ba lần. Xung đột: `apps/mcp` (§S1.203 thêm `/rfqs/:rfqId/signals` — mười chín dòng), `/tao-thau` (khung tín hiệu chia nhỏ của
+  S3.6b2 và cột *Hàng chuẩn* cùng sống: dòng import, hàm thuần, test), lời khai đếm, mốc STATE, cuối DECISIONS và biên bản. T3 các
+  tệp bị chạm, trên cây đã hợp S3.6b2: `apps/api/src/anh-xa.int` 16/16, `kich-ban-41-http.int` 60/60, `buyer.int` 24/24,
+  `du-lieu.int` 9/9; `phuc-vu.test` và `tao-thau.test` (30/30) xanh trong `pnpm test`.
+- Hai mươi bảy đột biến, cả hai mươi bảy đỏ (§6); lượt đi thử T4 hai lần (§6).

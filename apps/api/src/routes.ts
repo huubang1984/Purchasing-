@@ -3,10 +3,11 @@
 //
 // Route là DỮ LIỆU: một mảng đọc được bằng `import { ROUTES }`, không cần khởi động máy chủ. Hình
 // dạng từng route và lớp canh thuần (`timViPhamBangRoute`) nằm ở `route-types.ts`; file này chỉ
-// LẮP ~~ba~~ ~~[S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai)~~ [S1.199] BẢY nhóm (từ SÁU module — `auth.ts`
-// xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
+// LẮP ~~ba~~ ~~[S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai)~~ ~~[S1.199] BẢY nhóm (từ SÁU module — `auth.ts`
+// xuất hai)~~ [S1.234] TÁM nhóm (từ BẢY module — `auth.ts` xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
 // ==============================================================================================
 import type { Route } from "./route-types.js";
+import { ROUTES_ANH_XA } from "./routes/anh-xa.js";
 import { ROUTES_ANON } from "./routes/anon.js";
 import { ROUTES_AUTH, ROUTES_AUTH_SELF } from "./routes/auth.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
@@ -22,5 +23,7 @@ export const ROUTES: readonly Route[] = [
   ...ROUTES_BUYER,
   // [S1.199 / S4.2b] Dữ liệu nền: hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
   ...ROUTES_DU_LIEU,
+  // [S1.234 / S4.3b] Ánh xạ hạng mục: hàng đợi, trạng thái từng dòng, duyệt/bác/tạo hàng chuẩn, chuẩn hoá lại (spec S4 §4.4).
+  ...ROUTES_ANH_XA,
   ...ROUTES_AUTH_SELF,
 ];

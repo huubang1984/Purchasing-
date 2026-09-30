@@ -1101,6 +1101,10 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "chuanHoa",
   "LY_DO_CHUAN_HOA_HOI_TO",
   "chuanHoaGoi",
+  // [S1.234 / S4.3b] Lượt chuẩn hoá sau lần nộp duyệt — chỉ ở tổ chức có hàng chuẩn đang dùng.
+  "chuanHoaSauNop",
+  // [S1.234 / lượt soi S4.3b, L3] Điều kiện của lượt ấy, hỏi trong giao dịch của lần nộp; route đọc trạng thái trả nó kèm các dòng.
+  "coHangChuanDangDung",
   "docAnhXaGoi",
   "docHangDoi",
   "ghiAnhXa",
