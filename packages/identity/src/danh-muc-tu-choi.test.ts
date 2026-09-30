@@ -19,7 +19,10 @@
 //   ⑷ ba từ vựng vế: `UNSEAL_CLAUSES` (`packages/unseal/src/gate.ts`), `UnsealExecutionClause` (`apps/unseal-worker/src/index.ts`),
 //      `RFQ_STATUSES` (`packages/rfq/src/rfq.ts`) — gói identity không import được ba nguồn ấy (chúng phụ thuộc gói này), nên danh mục
 //      vế là bản CHÉP, và tệp này đòi bản chép bằng nguồn;
-//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ba tệp đã khai.
+//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ba tệp đã khai;
+//   ⑹ [bước 0 đợt 2 / S1.196] `resourceType` ở đối số tài nguyên của MỌI lời gọi một HÀM BỌC đã khai (`HAM_BOC`) — hàm ấy truyền
+//      `<thamSo>.resourceType` cho `throwAuditedDenial`, và dạng ấy chỉ được chấp nhận trong đúng tệp định nghĩa của nó; hàm bọc thứ hai
+//      chưa khai ⇒ ĐỎ ở chính chỗ truyền.
 // Một hằng là chuỗi viết tại chỗ, hoặc một `const` cấp tệp mang chuỗi viết tại chỗ trong CÙNG tệp; dạng khác ⇒ ĐỎ kèm tệp:dòng —
 // không đoán, không bỏ qua.
 //
@@ -42,6 +45,13 @@ const THU_MUC_ROUTE = "apps/api/src/routes/";
 const TEP_DIEU_PHOI = "apps/api/src/dispatch.ts";
 /** [khoản 179] Ba chỗ gọi truyền vế — đóng; thêm một chỗ là một quyết định và phải sửa cả đây lẫn docstring của `throwAuditedDenial`. */
 const TEP_TRUYEN_VE = ["apps/unseal-worker/src/index.ts", "packages/unseal/src/comparison.ts", "packages/unseal/src/gate.ts"];
+/**
+ * ⑹ Hàm BỌC truyền `resourceType` từ tham số tới `throwAuditedDenial` — danh sách ĐÓNG, thêm một hàm là một quyết định. Bộ đọc lấy
+ * `resourceType` ở đối số thứ `viTri` (đếm từ 0) của mọi lời gọi hàm ấy, và chỉ chấp nhận `<thamSo>.resourceType` bên trong `tep`.
+ */
+const HAM_BOC = {
+  tuChoiTheoChotTaiNguyen: { tep: "packages/identity/src/chot-kiem-soat.ts", thamSo: "taiNguyen", viTri: 3 },
+} as const;
 const NGUON_VE = {
   UNSEAL_CLAUSES: "packages/unseal/src/gate.ts",
   UnsealExecutionClause: "apps/unseal-worker/src/index.ts",
@@ -57,6 +67,10 @@ interface KetQuaDoc {
   readonly soGoiCongQuyen: number;
   readonly truyenVe: boolean;
   readonly dungRoute: boolean;
+  /** ⑹ Tệp này truyền `<thamSo>.resourceType` của một hàm bọc đã khai (chỉ tệp định nghĩa hàm ấy được). */
+  readonly dungBoc: boolean;
+  /** ⑹ Số lời gọi hàm bọc trong tệp. */
+  readonly soGoiBoc: number;
   readonly khongGiai: readonly string[];
 }
 
@@ -100,9 +114,13 @@ function thuocTinh(obj: ts.ObjectLiteralExpression, ten: string): ts.PropertyAss
   );
 }
 
-type GiaTri = { readonly loai: "chuoi"; readonly gia: string } | { readonly loai: "route" } | { readonly loai: "khong-giai"; readonly lyDo: string };
+type GiaTri =
+  | { readonly loai: "chuoi"; readonly gia: string }
+  | { readonly loai: "route" }
+  | { readonly loai: "boc" }
+  | { readonly loai: "khong-giai"; readonly lyDo: string };
 
-function docGiaTri(sf: ts.SourceFile, obj: ts.ObjectLiteralExpression, ten: string): GiaTri {
+function docGiaTri(tep: string, sf: ts.SourceFile, obj: ts.ObjectLiteralExpression, ten: string): GiaTri {
   const p = thuocTinh(obj, ten);
   if (p === undefined) return { loai: "khong-giai", lyDo: `thiếu thuộc tính ${ten}` };
   const init = boAsConst(p.initializer);
@@ -111,8 +129,10 @@ function docGiaTri(sf: ts.SourceFile, obj: ts.ObjectLiteralExpression, ten: stri
     const gia = chuoiCapTep(sf, init.text);
     return gia === undefined ? { loai: "khong-giai", lyDo: `${ten}: hằng \`${init.text}\` không phải const chuỗi cấp tệp` } : { loai: "chuoi", gia };
   }
-  if (ts.isPropertyAccessExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "route" && init.name.text === ten) {
-    return { loai: "route" };
+  if (ts.isPropertyAccessExpression(init) && ts.isIdentifier(init.expression) && init.name.text === ten) {
+    const goc = init.expression.text;
+    if (goc === "route") return { loai: "route" };
+    if (Object.values(HAM_BOC).some((h) => h.tep === tep && h.thamSo === goc)) return { loai: "boc" };
   }
   return { loai: "khong-giai", lyDo: `${ten}: biểu thức ${ts.SyntaxKind[init.kind]}` };
 }
@@ -132,10 +152,13 @@ export function docTep(tep: string, vanBan: string): KetQuaDoc {
   let soGoiCongQuyen = 0;
   let truyenVe = false;
   let dungRoute = false;
+  let dungBoc = false;
+  let soGoiBoc = 0;
   const ghi = (n: ts.Node, obj: ts.ObjectLiteralExpression, ten: string, vao: Set<string>): void => {
-    const g = docGiaTri(sf, obj, ten);
+    const g = docGiaTri(tep, sf, obj, ten);
     if (g.loai === "chuoi") vao.add(g.gia);
     else if (g.loai === "route") dungRoute = true;
+    else if (g.loai === "boc") dungBoc = true;
     else khongGiai.push(`${tep}:${dong(sf, n)} ${g.lyDo}`);
   };
   duyetCay(sf, (n) => {
@@ -154,13 +177,19 @@ export function docTep(tep: string, vanBan: string): KetQuaDoc {
         const yeuCau = n.arguments[1];
         if (yeuCau !== undefined && ts.isObjectLiteralExpression(yeuCau)) ghi(n, yeuCau, "resourceType", loaiTaiNguyen);
         else khongGiai.push(`${tep}:${dong(sf, n)} requirePermission: đối số yêu cầu không phải đối tượng viết tại chỗ`);
+      } else if (ten !== undefined && Object.hasOwn(HAM_BOC, ten)) {
+        soGoiBoc += 1;
+        const h = HAM_BOC[ten as keyof typeof HAM_BOC];
+        const taiNguyen = n.arguments[h.viTri];
+        if (taiNguyen !== undefined && ts.isObjectLiteralExpression(taiNguyen)) ghi(n, taiNguyen, "resourceType", loaiTaiNguyen);
+        else khongGiai.push(`${tep}:${dong(sf, n)} ${ten}: đối số tài nguyên không phải đối tượng viết tại chỗ`);
       }
     }
     if (tep.startsWith(THU_MUC_ROUTE) && ts.isObjectLiteralExpression(n) && thuocTinh(n, "path") !== undefined && thuocTinh(n, "resourceType") !== undefined) {
       ghi(n, n, "resourceType", route);
     }
   });
-  return { hanhDong, loaiTaiNguyen, route, soGoiTuChoi, soGoiCongQuyen, truyenVe, dungRoute, khongGiai };
+  return { hanhDong, loaiTaiNguyen, route, soGoiTuChoi, soGoiCongQuyen, truyenVe, dungRoute, dungBoc, soGoiBoc, khongGiai };
 }
 
 /** Mọi `.ts` sản xuất dưới `<thư mục>/src` của từng gói/app/tool — không test, không `.d.ts`, không `node_modules`/`dist`. */
@@ -253,6 +282,33 @@ describe("[S1.9161 / khoản 189] danh mục đóng của dòng log từ chối 
     expect([sapXep(route.route), route.khongGiai]).toEqual([["R4"], [`${THU_MUC_ROUTE}b.ts:5 resourceType: hằng \`bien\` không phải const chuỗi cấp tệp`]]);
     // Cùng văn bản ngoài thư mục route thì không phải route.
     expect(docTep("packages/x/src/b.ts", `export const R = [{ path: "/x", resourceType: "R4" }];`).route.size).toBe(0);
+  });
+
+  it("⑹ ĐỐI CHỨNG trên văn bản mẫu: hàm bọc — `<thamSo>.resourceType` chỉ được trong tệp định nghĩa; chỗ gọi hàm bọc cho một tên", () => {
+    const than = `export async function tuChoiTheoChotTaiNguyen(p, o, a, taiNguyen, ma) {
+         return await throwAuditedDenial(p, o, { action: "CONTROL_DENIED", resourceType: taiNguyen.resourceType, payload: {} }, new Error(ma));
+       }`;
+    const dinhNghia = docTep(HAM_BOC.tuChoiTheoChotTaiNguyen.tep, than);
+    expect([dinhNghia.dungBoc, dinhNghia.khongGiai, sapXep(dinhNghia.hanhDong)]).toEqual([true, [], ["CONTROL_DENIED"]]);
+    // Cùng văn bản ở tệp khác: một hàm bọc CHƯA KHAI — đỏ ở chính chỗ truyền, không đoán.
+    const noiKhac = docTep("packages/x/src/boc.ts", than);
+    expect([noiKhac.dungBoc, noiKhac.khongGiai]).toEqual([false, ["packages/x/src/boc.ts:2 resourceType: biểu thức PropertyAccessExpression"]]);
+    const goi = docTep(
+      "packages/x/src/goi.ts",
+      `const TN = "R9";
+       export async function f(p, o, a, id, x) {
+         await tuChoiTheoChotTaiNguyen(p, o, a, { resourceType: TN, resourceId: id }, "MA");
+         await tuChoiTheoChotTaiNguyen(p, o, a, x, "MA");
+       }`,
+    );
+    expect([goi.soGoiBoc, sapXep(goi.loaiTaiNguyen), goi.khongGiai]).toEqual([2, ["R9"], ["packages/x/src/goi.ts:4 tuChoiTheoChotTaiNguyen: đối số tài nguyên không phải đối tượng viết tại chỗ"]]);
+  });
+
+  it("⑹ trên kho: chỉ tệp định nghĩa hàm bọc truyền `<thamSo>.resourceType`, và hàm bọc có chỗ gọi ở gói supplier (K8a) lẫn identity", () => {
+    expect(KET_QUA.filter(([, k]) => k.dungBoc).map(([t]) => t)).toEqual([HAM_BOC.tuChoiTheoChotTaiNguyen.tep]);
+    const goi = KET_QUA.filter(([, k]) => k.soGoiBoc > 0).map(([t]) => t);
+    expect(goi).toContain("packages/supplier/src/xac-minh.ts");
+    expect(goi).toContain(HAM_BOC.tuChoiTheoChotTaiNguyen.tep);
   });
 
   it("bộ đọc thấy các chỗ gọi đã biết của kho, và không chỗ nào nó không giải được", () => {
