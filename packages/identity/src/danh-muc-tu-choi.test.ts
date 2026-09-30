@@ -16,10 +16,14 @@
 //   ⑵ `resourceType` của đối số yêu cầu ở MỌI lời gọi `requirePermission(…)`; lời gọi của bộ điều phối truyền `route.resourceType`,
 //      và đó là chỗ DUY NHẤT được truyền như thế, nên
 //   ⑶ `resourceType` của mọi đối tượng route (có `path` và `resourceType`) trong `apps/api/src/routes/`;
-//   ⑷ ba từ vựng vế: `UNSEAL_CLAUSES` (`packages/unseal/src/gate.ts`), `UnsealExecutionClause` (`apps/unseal-worker/src/index.ts`),
-//      `RFQ_STATUSES` (`packages/rfq/src/rfq.ts`) — gói identity không import được ba nguồn ấy (chúng phụ thuộc gói này), nên danh mục
-//      vế là bản CHÉP, và tệp này đòi bản chép bằng nguồn;
-//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ba tệp đã khai;
+//   ⑷ ~~ba~~ [S1.9125 / khoản 279] năm từ vựng vế: `UNSEAL_CLAUSES` (`packages/unseal/src/gate.ts`), `UnsealExecutionClause`
+//      (`apps/unseal-worker/src/index.ts`), `RFQ_STATUSES` (`packages/rfq/src/rfq.ts`), [S1.9125 / khoản 279] tập KHOÁ của hai bảng mã
+//      `CHOT_VAO_SO` (`packages/identity/src/chot-kiem-soat.ts`) và `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`) — ~~gói identity
+//      không import được ba nguồn ấy (chúng phụ thuộc gói này)~~ `rbac.ts` không import được năm nguồn ấy (bốn phụ thuộc gói này;
+//      `chot-kiem-soat.ts` cùng gói nhưng import `rbac.ts`, nên chiều ngược là một vòng), nên danh mục vế là bản CHÉP, và tệp này đòi
+//      bản chép bằng nguồn;
+//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ~~ba~~ [S1.9125 / khoản 279] năm tệp đã
+//      khai;
 //   ⑹ [bước 0 đợt 2 / S1.196] `resourceType` ở đối số tài nguyên của MỌI lời gọi một HÀM BỌC đã khai (`HAM_BOC`) — hàm ấy truyền
 //      `<thamSo>.resourceType` cho `throwAuditedDenial`, và dạng ấy chỉ được chấp nhận trong đúng tệp định nghĩa của nó; hàm bọc thứ hai
 //      chưa khai ⇒ ĐỎ ở chính chỗ truyền.
@@ -44,8 +48,18 @@ const GOC = fileURLToPath(new URL("../../../", import.meta.url));
 const THU_MUC_ROUTE = "apps/api/src/routes/";
 /** Chỗ DUY NHẤT được truyền `route.resourceType` cho cổng quyền — bảng route ⑶ là phần giải của nó. */
 const TEP_DIEU_PHOI = "apps/api/src/dispatch.ts";
-/** [khoản 179] Ba chỗ gọi truyền vế — đóng; thêm một chỗ là một quyết định và phải sửa cả đây lẫn docstring của `throwAuditedDenial`. */
-const TEP_TRUYEN_VE = ["apps/unseal-worker/src/index.ts", "packages/unseal/src/comparison.ts", "packages/unseal/src/gate.ts"];
+/**
+ * [khoản 179] ~~Ba~~ [S1.9125 / khoản 279] Năm chỗ gọi truyền vế — đóng; thêm một chỗ là một quyết định và phải sửa cả đây lẫn
+ * docstring của `throwAuditedDenial`. Hai chỗ thêm ở khoản 279: chốt kiểm soát (`CONTROL_DENIED`, vế là mã chốt) và từ chối trạng
+ * thái (`RFQ_STATE_DENIED`, vế là mã lý do) — hai đường duy nhất mà payload mang một MÃ của tập đóng dòng log không suy được từ `action`.
+ */
+const TEP_TRUYEN_VE = [
+  "apps/unseal-worker/src/index.ts",
+  "packages/danh-gia/src/tu-choi-vao-so.ts",
+  "packages/identity/src/chot-kiem-soat.ts",
+  "packages/unseal/src/comparison.ts",
+  "packages/unseal/src/gate.ts",
+];
 /**
  * ⑹ Hàm BỌC truyền `resourceType` từ tham số tới `throwAuditedDenial` — danh sách ĐÓNG, thêm một hàm là một quyết định. Bộ đọc lấy
  * `resourceType` ở đối số thứ `viTri` (đếm từ 0) của mọi lời gọi hàm ấy, và chỉ chấp nhận `<thamSo>.resourceType` bên trong `tep`.
@@ -57,6 +71,11 @@ const NGUON_VE = {
   UNSEAL_CLAUSES: "packages/unseal/src/gate.ts",
   UnsealExecutionClause: "apps/unseal-worker/src/index.ts",
   RFQ_STATUSES: "packages/rfq/src/rfq.ts",
+  // [S1.9125 / khoản 279] Hai bảng `Record<Ma, …>` — từ vựng là tập KHOÁ của bảng (`Record` đầy đủ nên khoá = union mã, lỗi biên dịch
+  // nếu lệch). Đọc cả mã `vaoSo: false` (không bao giờ tới dòng mất sổ): nguồn là một tập, đo nó nguyên vẹn rẻ hơn đo một hiệu — cùng
+  // lý do lấy đủ 11 `RFQ_STATUSES` ở §S1.225.
+  CHOT_VAO_SO: "packages/identity/src/chot-kiem-soat.ts",
+  VAO_SO: "packages/danh-gia/src/tu-choi-vao-so.ts",
 } as const;
 
 /** Kết quả đọc MỘT tệp. `khongGiai` là danh sách `tệp:dòng lý do` — mỗi dòng là một chỗ bộ đọc không dám đoán. */
@@ -209,9 +228,18 @@ function tepSanXuat(): string[] {
     .sort();
 }
 
-/** ⑷ Một từ vựng vế ở nguồn: mảng chuỗi `as const` hay kiểu hợp của chuỗi trực tiếp, tìm theo tên ở cấp tệp. */
+/**
+ * ⑷ Một từ vựng vế ở nguồn: mảng chuỗi `as const` hay kiểu hợp của chuỗi trực tiếp, [S1.9125 / khoản 279] hay tập KHOÁ của một bảng
+ * viết tại chỗ (`const X: Readonly<Record<Ma, …>> = { A: …, B: … }`), tìm theo tên ở cấp tệp. Khoá không phải tên hay chuỗi trực tiếp
+ * (khoá tính, `...trải`, viết tắt, phương thức) ⇒ NÉM — không đoán.
+ */
 function tuVung(tep: string, ten: string): string[] {
-  const sf = cayCuPhap(tep, readFileSync(join(GOC, tep), "utf8"));
+  return tuVungTrongVanBan(tep, readFileSync(join(GOC, tep), "utf8"), ten);
+}
+
+/** [S1.9125 / khoản 279] Thân của `tuVung` trên một văn bản cho sẵn — để đối chứng trên văn bản mẫu. */
+function tuVungTrongVanBan(tep: string, vanBan: string, ten: string): string[] {
+  const sf = cayCuPhap(tep, vanBan);
   for (const st of sf.statements) {
     if (ts.isTypeAliasDeclaration(st) && st.name.text === ten) {
       const cac = ts.isUnionTypeNode(st.type) ? st.type.types : [st.type];
@@ -224,7 +252,13 @@ function tuVung(tep: string, ten: string): string[] {
       for (const d of st.declarationList.declarations) {
         if (ts.isIdentifier(d.name) && d.name.text === ten && d.initializer !== undefined) {
           const init = boAsConst(d.initializer);
-          if (!ts.isArrayLiteralExpression(init)) throw new Error(`${tep}: \`${ten}\` không phải mảng viết tại chỗ`);
+          if (ts.isObjectLiteralExpression(init)) {
+            return init.properties.map((p) => {
+              if (ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) return p.name.text;
+              throw new Error(`${tep}: \`${ten}\` có một khoá không phải tên hay chuỗi trực tiếp (${ts.SyntaxKind[p.kind]})`);
+            });
+          }
+          if (!ts.isArrayLiteralExpression(init)) throw new Error(`${tep}: \`${ten}\` không phải mảng hay bảng viết tại chỗ`);
           return init.elements.map((e) => {
             if (ts.isStringLiteral(e)) return e.text;
             throw new Error(`${tep}: \`${ten}\` có một phần tử không phải chuỗi trực tiếp (${ts.SyntaxKind[e.kind]})`);
@@ -309,8 +343,8 @@ describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối B
 
   it("bộ đọc thấy các chỗ gọi đã biết của kho, và không chỗ nào nó không giải được", () => {
     const tepGoi = KET_QUA.filter(([, k]) => k.soGoiTuChoi + k.soGoiCongQuyen > 0).map(([t]) => t);
-    // Ba chỗ gọi mà tệp này ghim ở ⑸, cộng chính `rbac.ts` (nơi `requirePermission` gọi... không — nơi hai hàm được ĐỊNH NGHĨA,
-    // không gọi) — đối chứng chống rỗng ruột không bằng một con số sàn mà bằng ba tên tệp cụ thể.
+    // ~~Ba~~ [S1.9125 / khoản 279] Năm chỗ gọi mà tệp này ghim ở ⑸, cộng chính `rbac.ts` (nơi `requirePermission` gọi... không — nơi
+    // hai hàm được ĐỊNH NGHĨA, không gọi) — đối chứng chống rỗng ruột không bằng một con số sàn mà bằng ~~ba~~ năm tên tệp cụ thể.
     for (const t of TEP_TRUYEN_VE) expect(tepGoi, `không thấy lời gọi nào ở ${t}`).toContain(t);
     expect(tepGoi).toContain(TEP_DIEU_PHOI);
     expect(KET_QUA.flatMap(([, k]) => k.khongGiai)).toEqual([]);
@@ -332,12 +366,33 @@ describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối B
     expect(sapXep(o)).toEqual(sapXep(DANH_MUC_LOAI_TAI_NGUYEN));
   });
 
-  it("⑷ hợp ba từ vựng vế ở nguồn BẰNG `DANH_MUC_VE_CONG` — bản chép trong identity không lệch nguồn", () => {
+  it("⑷ [S1.9125 / khoản 279] ĐỐI CHỨNG trên văn bản mẫu: bộ đọc từ vựng lấy mảng, kiểu hợp, tập khoá của bảng; khoá lạ ⇒ NÉM", () => {
+    const tep = "packages/x/src/tu-vung.ts";
+    const vanBan = `export const MANG = ["A", "B"] as const;
+       export type HOP = "C" | "D";
+       export const BANG: Readonly<Record<"E" | "F", { x: number }>> = { E: { x: 1 }, "F": { x: 2 } };
+       const K = "G";
+       export const TINH = { [K]: 1 };
+       const phu = { H: 1 };
+       export const TRAI = { ...phu, I: 1 };
+       const J = 1;
+       export const VIET_TAT = { J };
+       export const PHUONG_THUC = { L() { return 1; } };`;
+    expect(tuVungTrongVanBan(tep, vanBan, "MANG")).toEqual(["A", "B"]);
+    expect(tuVungTrongVanBan(tep, vanBan, "HOP")).toEqual(["C", "D"]);
+    expect(tuVungTrongVanBan(tep, vanBan, "BANG")).toEqual(["E", "F"]);
+    for (const ten of ["TINH", "TRAI", "VIET_TAT", "PHUONG_THUC"]) {
+      expect(() => tuVungTrongVanBan(tep, vanBan, ten), ten).toThrow(/khoá không phải tên hay chuỗi trực tiếp/u);
+    }
+    expect(() => tuVungTrongVanBan(tep, vanBan, "KHONG_CO")).toThrow(/không thấy/u);
+  });
+
+  it("⑷ hợp ~~ba~~ [S1.9125 / khoản 279] năm từ vựng vế ở nguồn BẰNG `DANH_MUC_VE_CONG` — bản chép trong identity không lệch nguồn", () => {
     const o = new Set(Object.entries(NGUON_VE).flatMap(([ten, tep]) => tuVung(tep, ten)));
     expect(sapXep(o)).toEqual(sapXep(DANH_MUC_VE_CONG));
   });
 
-  it("⑸ [khoản 179] đúng ba tệp truyền vế cho `throwAuditedDenial`: cổng mở thầu, bảng so sánh, worker lúc giải mã", () => {
+  it("⑸ [khoản 179] đúng ~~ba~~ [S1.9125 / khoản 279] năm tệp truyền vế cho `throwAuditedDenial`: cổng mở thầu, bảng so sánh, worker lúc giải mã, chốt kiểm soát, từ chối trạng thái", () => {
     expect(KET_QUA.filter(([, k]) => k.truyenVe).map(([t]) => t)).toEqual(sapXep(TEP_TRUYEN_VE));
   });
 });

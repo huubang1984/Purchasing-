@@ -15,7 +15,8 @@
 //
 // Mã quyền là `bid.view`, KHÔNG phải `evaluation.perform`: đọc một bảng xếp hạng là một lần TIẾT
 // LỘ GIÁ, và nó phải chịu đúng cổng mà bảng so sánh chịu. Một người chấm được (`evaluation.perform`
-// — năm trên sáu vai giữ nó) mà không được xem giá là một trạng thái có thật của sản phẩm.
+// — năm trên ~~sáu~~ **[S1.9125 / khoản 270]** bảy vai giữ nó, ghim ở `ma-tran-quyen.test.ts` ca «khoản 220 ⒝») mà không được xem
+// giá là một trạng thái có thật của sản phẩm.
 // ==============================================================================================
 
 import type pg from "pg";

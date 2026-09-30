@@ -117,7 +117,8 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   // nay có — cuối bảng.
   ["BAFO_OPEN", "CANCELLED"],
   // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
-  // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
+  // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên ~~sáu~~ **[S1.9125 / khoản 270]** bảy vai hôm nay (sáu lúc
+  // S1.106; `083` thêm `DATA_STEWARD`, không giữ `evaluation.perform` — ghim ở `ma-tran-quyen.test.ts` ca «khoản 220 ⒝»).
   ["EVALUATING", "CANCELLED"],
   // [S1.165 / khoản 225, 071] BỐN cạnh huỷ sau khi đóng — `CLOSED`, `UNSEALED` và hai ảnh BAFO của
   // chúng thôi là trạng thái hút. Chúng đòi `cancel_reason` ở chính trigger (vế (i) của `071`).
