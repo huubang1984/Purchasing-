@@ -279,6 +279,12 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // chinh PostgreSQL lam bo chuan hoa, vi hai ben viet hai chinh ta khac nhau.
     "db/ghim-trigger-tu-chua.int.test.ts",
     "db/hardening-suy-tu-tinh-chat.int.test.ts",
+    // [S1.205 / khoản 259] Mặc định-đóng với trigger: trigger lạ bị gỡ trên bảng có tên trong `TRIGGER_DUOC_PHEP`, chặn deploy ở
+    // bảng khác; `migrate()` trên cụm trống không gỡ gì — và chín đột biến của mục đều đỏ ở tệp này.
+    "db/trigger-la-mac-dinh-dong.int.test.ts",
+    // [S1.205 / khoản 259] Kịch bản của lượt soi S1.198 đo trên gói thật: bản đổi tên của trigger so lần nộp xếp trước chốt D2 không
+    // sống qua `migrate()`, nên lời tự duyệt thiếu mốc lại là lời từ chối D2 có sổ.
+    "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "tests/architecture/hardening-co-ly-do.test.ts",
   ],
   H2: [
