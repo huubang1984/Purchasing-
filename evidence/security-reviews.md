@@ -17619,6 +17619,135 @@ hàng gói trước khi chèn bản rõ; băm không mơ hồ (`numeric(18,4)`, 
   giữ S1.204 / ADR-121 / `089`, `--kiem` sạch; `pnpm t0` sạch; `pnpm test` 125 tệp, 1808 đạt, 1 bỏ qua; `pnpm evidence` toàn bộ
   T1–T3 trên cây đã hợp: 204 tệp, 3486 khẳng định, 3485 đạt, 1 bỏ qua; 75/75 bất biến (53/53 nghiệp vụ + 22/22 hàng rào) — ma trận
   sinh lại từ lượt ấy.
+- Hợp `master` lần hai, sau #212 (§S1.205, ADR-122 — khoản 259: chỉ trigger đã ghim được tồn tại, H19): xung đột ở lời khai đếm,
+  mốc STATE, cuối DECISIONS và cuối biên bản — giữ cả hai bên. Mười trigger của `089` (năm trên `rfq_item_goi_y`, năm trên
+  `rfq_item_mappings`) vào `TRIGGER_DUOC_PHEP` — thiếu chúng thì `hardening-co-ly-do` đỏ và hardening gỡ rồi dựng lại chúng ở mọi
+  lần `migrate()`. Ma trận: #212 chỉ đổi hai dòng D2, H19, vòng này chỉ đổi các dòng L và lời khai tổng — bản tự hợp giữ nguyên.
+  `cap-so` giữ S1.204 / ADR-121 / `089`, `--kiem` sạch; `pnpm t0` sạch; `pnpm test` 125 tệp, 1812 đạt, 1 bỏ qua; T3 của các tệp bị
+  chạm: `trigger-la-mac-dinh-dong.int` 12/12, `migrations.int` 120/120, `check-an-ninh.int` 4/4, `du-lieu-nen/anh-xa.int` 23/23,
+  `hardening-co-ly-do` 21/21.
+
+---
+
+# §S1.205 — KHOẢN 259 ĐÓNG: MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN BẢNG CỦA DỰ ÁN — CHỈ TRIGGER ĐÃ GHIM ĐƯỢC TỒN TẠI (H19) — ADR-122
+
+**Rổ và mảnh (ADR-043 ⒞):** hardening, không chạm luồng nào của `docs/PRODUCT.md` §11. Khoản 259 (rổ B, ghi ở §S1.198) đóng.
+Không migration; một mục hardening mới kèm một danh sách; `migrate()` đặt thêm một GUC; một ADR (ADR-122).
+
+## 1. Việc gì
+
+Mỗi mục ghim trigger hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi thiếu; nó không hỏi bảng còn mang trigger nào khác.
+Lượt soi S1.198 (F4) đo: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước chốt D2 ⇒ `migrate()` xanh và bản đổi tên sống
+tiếp, chạy trước D2 — lời tự duyệt thiếu mốc rơi khỏi sổ `CONTROL_DENIED`. Chủ dự án chốt ngày 2026-09-30: chặn MỌI trigger lạ,
+không chỉ bản sao cùng hàm; rồi, khi vòng này đo ra xung đột với ADR-028 §2⑵, chỉ tự gỡ trên bảng có tên và phán xét ở mọi bảng
+khác. Bất biến chạm: H19 (và D2 qua kịch bản của lượt soi).
+
+## 2. Đo trước
+
+Trên hardening và `migrate.ts` của `master` (`71eb2f2`), hai tệp đo của vòng này: mười ca đỏ — kịch bản của lượt soi trên gói thật
+(`lan-nop-da-xem.int.test.ts`: sau `migrate()` bản đổi tên còn, lời tự duyệt thiếu mốc bị từ chối vì lần nộp, không hàng sổ) và chín
+trong mười hai ca của mục (`trigger-la-mac-dinh-dong.int.test.ts`: danh sách không có; bản đổi tên, bản chép hàm, constraint trigger,
+tên được phép ở bảng khác không bị gỡ; trigger lạ ở bảng khác và trên phân mảnh không bị phán xét; lần gỡ hỏng không chặn deploy;
+hai ca GUC). Ba ca xanh trên `master` là ba ca giữ hành vi có sẵn — hai phần loại trừ (bảng sổ, `chan_sua_xoa()`) và lượt sửa đầu —,
+đỏ dưới đột biến của bản vá (§5).
+
+## 3. Thay đổi
+
+- `db/migrations/hardening.always.sql`:
+  - `TRIGGER_DUOC_PHEP` — 163 cặp (bảng, tên) trên 44 bảng: mọi trigger có văn bản ghim `pg_get_triggerdef` (161, kể cả hai
+    `CREATE CONSTRAINT TRIGGER`) cộng hai trigger ghim bằng thuộc tính (`user_roles_phan_tach_nhiem_vu`,
+    `role_permissions_ma_tran_quyen`).
+  - `CAU_TRIGGER_LA_DU_AN` — trigger không nội bộ, không phải bản sao phân mảnh, trên bảng thuộc lược đồ dự án, ngoài bảng sổ
+    `bang_so` và ngoài trigger gọi `chan_sua_xoa()`, mà không có trong danh sách; cột `bang_co_ten`.
+  - Mục `không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)`: câu sửa gỡ trigger lạ trên bảng có tên, mỗi lần gỡ một
+    khối con và một WARNING (khuôn [CR1]); hậu điều kiện phán xét mọi bảng, thông điệp nêu bảng, tên, định nghĩa, và với bảng không
+    có tên thì lối ra. Điều kiện chỉ sai ở lượt `sua` mang `app.hardening_sau_vong = 'khong'`.
+- `packages/db/src/migrate.ts`: đặt `app.hardening_sau_vong` ở mọi lượt hardening — `'khong'` ở lượt sửa đầu, `'co'` ở các lượt sau.
+- Bốn test cũ cắm trigger lên bảng thử ngoài danh sách để đo phán xét khác (`hardening-suy-tu-tinh-chat.int` — bảng chỉ-ghi-thêm
+  phân mảnh và hai ca khoản nợ 79 —, `migrations.int` — fixture `kho.*` —, `outbox.int`): hàm `boMucTriggerLa` khẳng định dòng của mục
+  mới nêu ĐÚNG trigger của fixture rồi bỏ nó, phần còn lại là thứ ca đo; `outbox.int` nay đo rằng hardening thấy trigger `updated_at`
+  không ghim — vì chính trigger, không vì thân hàm.
+- ADR-122; đoạn `CAU_TRIGGER_LA_DU_AN` trong ADR-028; STATE (hàng 259, rổ B, cột mốc), hàng H19 của TEST-PLAN; `so-khai-nhan.ts`
+  khai hai tệp cho H19.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Danh sách tường minh thay vì suy lúc deploy** từ văn bản ghim của `bang` (ADR-122, phương án đã cân nhắc); cổng tĩnh giữ nó
+  trùng khít tập đã ghim bằng hai bộ đọc khác họ.
+- **Bốn phần loại trừ** — bảng sổ, `chan_sua_xoa()` ở bảng khác, bản sao phân mảnh, trigger nội bộ (ADR-122 mục 5).
+- **Lượt sửa đầu đứng yên; lượt phán xét không đọc GUC; `migrate()` đặt GUC ở mọi lượt** (ADR-122 mục 4). Bản đầu chỉ đọc GUC ở
+  cả lượt phán xét và chỉ đặt ở lượt đầu — tôi tự thấy trước lượt soi rằng một `'khong'` đặt sẵn ở mức vai tắt được cả mục, và vá.
+
+## 5. Đo sau
+
+- `db/trigger-la-mac-dinh-dong.int.test.ts`, mười hai ca: ⑴ `migrate()` trên cụm trống không gỡ trigger nào và tập trigger trong cụm
+  trùng khít danh sách; ⑵ bản đổi tên, bản chép thân hàm, constraint trigger lạ, tên được phép ở bảng khác — trên bảng có tên — bị
+  gỡ, mỗi cái đúng một WARNING; ⑶ trigger lạ trên `organizations` và trên một bảng ở schema khác chỉ bị phán xét, thông điệp nêu cả
+  hai kèm lối ra, không gì bị gỡ; ⑷ bảng sổ do [CR1] gỡ, `chan_sua_xoa()` ở bảng khác do [CR4] chặn, trigger trên phân mảnh cha bị
+  phán xét đúng một lần; ⑸ gỡ không được (event trigger chặn `DROP TRIGGER`) ⇒ lượt phán xét chặn deploy, nêu bảng, tên, định nghĩa;
+  ⑹ migration đang chờ gỡ một trigger lạ bằng `DROP TRIGGER` không `IF EXISTS` (khuôn `059`) vẫn chạy được; ⑺ `'khong'` đặt sẵn ở
+  mức vai không tắt được lần gỡ, và đặt ngay trong phiên không tắt được lượt phán xét.
+- `packages/rfq/src/lan-nop-da-xem.int.test.ts`, một ca: đổi tên trigger so lần nộp thành tên xếp trước chốt D2 ⇒ trước `migrate()`
+  lời tự duyệt thiếu mốc bị từ chối vì lần nộp, không hàng sổ; sau `migrate()` đúng ba trigger chuẩn theo đúng thứ tự tên, lời ấy là
+  lời từ chối D2 có một hàng `CONTROL_DENIED`.
+- `tests/architecture/hardening-co-ly-do.test.ts`: danh sách = văn bản ghim ∪ câu `ENABLE ALWAYS TRIGGER` viết thẳng; ba mẫu âm
+  (thiếu một tên, thừa một tên hay đặt tên đã ghim sang bảng khác, khối đổi khuôn ⇒ NÉM).
+- **Mười một đột biến, cả mười một đỏ:** điều kiện luôn đúng (⑸⑹); điều kiện chỉ đọc GUC (⑺); `migrate()` chỉ đặt GUC ở lượt đầu
+  (⑺); `migrate()` không đặt GUC (⑸⑹); bỏ lọc `tgparentid` (⑷c); bỏ loại trừ bảng sổ (mọi ca); bỏ loại trừ `chan_sua_xoa()` (⑷b); câu
+  sửa không gỡ (mười ca); danh sách không theo bảng (⑵); danh sách thiếu một dòng (mọi ca, và cổng tĩnh); tự gỡ cả bảng không tên
+  (⑶⑷c).
+
+## 6. Lượt soi đối kháng
+
+Một lượt, trên `7847a3f` + `fdf5e0f`; người kiểm đo trên Postgres 16 thật bằng một tệp test tạm (đã xoá). Một phần phép đo GUC rơi vào
+lúc bộ đột biến đang ghi đè hai tệp nguồn; người kiểm đo lại trên cây sạch, kết quả không đổi. **Không đường nào giữ được một trigger
+lạ trên bảng có tên qua `migrate()`, hay để một trigger lạ ở bảng khác thoát phán xét.**
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| 1 | Chú thích `migrate.ts` dẫn `ALTER ROLE … SET` cho cả vế database, và không nói rằng một `'khong'` đặt sẵn ở mức database hay `ALTER ROLE ALL` còn bị mục phán xét khoản 87 chặn deploy (đo: trigger lạ vẫn bị gỡ VÀ `migrate()` ném khoản 87; cùng với `app.hardening_che_do`) | Ghi chú | **Sửa trong vòng:** chú thích `migrate.ts`, hardening và ADR-122 mục 4 |
+| 2 | Trigger lạ trên bảng có tên còn sống qua lượt sửa đầu và vòng đánh số — một migration đang chờ ghi vào bảng ấy kích nó | Ghi chú | Đánh đổi cố ý (khuôn `059`); ghi ở ADR-122, hệ quả |
+| 3 | Quên không đối xứng: quên cả chỗ ghim lẫn dòng danh sách ⇒ gỡ, deploy xanh kèm WARNING, chỉ CI bắt; có chỗ ghim mà quên dòng ⇒ ghim dựng lại, mục gỡ, phán xét chặn | Ghi chú | Ghi ở ADR-122, hệ quả |
+| 4 | Trigger lạ gọi `chan_sua_xoa()` trên bảng có tên do [CR4] chặn deploy, không do mục này gỡ (đo) | Ghi chú | Giữ — phần loại trừ (b), cố ý |
+| 5 | Số ca đỏ trên `master` không kiểm được độc lập (người kiểm không được checkout) | Ghi chú | Tác giả đo lại với bộ test cuối: mười ca đỏ (§2) |
+
+**Người kiểm thử và không lách được:** đổi tên xếp trước chốt; chép thân hàm sang tên khác; constraint trigger; tên được phép ở bảng
+khác; trigger xếp SAU mọi trigger đã ghim (`rfq_approvals_zzz`); chạy hardening tay không đặt GUC (`day_du`); giả `'khong'` ở mức vai,
+database, và giả `app.hardening_che_do = 'sua'` ở mức database; trigger lạ ở bảng không tên và schema lạ (chỉ phán xét, không gỡ
+nhầm); dùng lại tên đã ghim với hàm khác (mục ghim dựng lại bản chuẩn); gỡ hỏng; bản sao phân mảnh; bảng sổ; `to_regclass` NULL
+hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bảng có tên nào là bảng phân mảnh (`PARTITION BY` không có trong migration).
+
+## 7. Giới hạn, nói ra
+
+- Trigger hợp lệ của một migration quên cả chỗ ghim lẫn dòng danh sách trên bảng có tên bị lượt sửa sau vòng gỡ kèm WARNING, deploy
+  xanh; CI đỏ ở ca ⑴. Trên bảng chưa có trong danh sách: deploy bị chặn tới khi ghim và khai bảng.
+- Trong lúc `migrate()` chạy, trigger lạ trên bảng có tên còn sống tới lượt sửa sau vòng.
+- Trigger chẩn đoán tạm của người vận hành trên bảng có tên bị lần deploy kế gỡ; trên bảng khác, nó chặn lần deploy kế.
+- Hàm chép nằm lại — mục gỡ trigger, không gỡ hàm.
+- Không phủ trigger trên bảng ngoài lược đồ dự án, event trigger; và như mọi mục hardening, chỉ chữa ở lần deploy kế.
+
+## 8. Số đo
+
+- Cây cuối, sau lần cấp số: `tsc`, `eslint`, `depcruise` sạch (474 mô-đun, không vi phạm phụ thuộc); `pnpm cap-so --kiem` sạch.
+  `pnpm test`: 124 tệp, 1793 đạt, 1 bỏ qua.
+- Toàn bộ unit + T3 cục bộ trên cây cuối: 202 tệp, 3447 khẳng định, 3434 đạt, 1 bỏ qua, 12 đỏ — chín ca cũ của máy đo (8 của
+  `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`) và ba ca tiến trình con
+  của `apps/api/src/composition.int.test.ts`: `main.ts` chạy bằng Node không tìm thấy `@trustprocure/du-lieu-nen`, gói vào từ
+  `master` qua #209 mà máy đo chưa liên kết lại sau lần hợp. Sau `pnpm install --frozen-lockfile --offline`, tệp ấy 19/19. Không ca
+  đỏ nào mang nhãn `[INV-…]`.
+- T3 các tệp chạm vòng này: `trigger-la-mac-dinh-dong.int` 12/12, `lan-nop-da-xem.int` 29/29, `hardening-suy-tu-tinh-chat.int` 36/36,
+  `migrations.int` 119/119, `outbox.int` 50/50; `hardening-co-ly-do` 21/21.
+- Mười một đột biến, mười một đỏ (§5).
+- Ma trận sinh lại từ báo cáo ấy: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào). Hai hàng đổi, cả hai do vòng này: D2 64 → 65
+  (ca của `lan-nop-da-xem.int`); H19 70 → 103 — mười hai ca của `trigger-la-mac-dinh-dong.int` và bốn ca tĩnh, mỗi ca mang nhãn hai
+  lần (ở `describe` và ở tên ca), cộng ca của `lan-nop-da-xem.int`.
+- **Hợp `master` sau #211** (S3.6b1, S1.203 — `088_tin_hieu_chia_nho`, ADR-120): #211 thêm chín trigger đã ghim — bốn trên
+  `governance_signals`, bốn trên `governance_signal_acks`, `rfq_packages_kiem_tin_hieu_khi_mo`. Trên cây hợp, cổng tĩnh của vòng này
+  (`TRIGGER_DUOC_PHEP` trùng khít tập trigger đã ghim) đỏ và gọi đúng tên chín cặp — đã ghim mà thiếu trong danh sách; vòng này khai
+  chúng: danh sách nay 163 cặp trên 44 bảng (161 văn bản ghim, hai thuộc tính). Xung đột ở cột mốc, ADR cuối tệp, cuối biên bản và
+  lời khai đếm; `pnpm cap-so --dem` viết lại lời khai số ADR (121), `cap-so --kiem` sạch, S1.205 và ADR-122 giữ. `tsc`, `eslint`,
+  `depcruise` sạch (477 mô-đun). Toàn bộ unit + T3 cục bộ trên cây hợp: 203 tệp, 3464 khẳng định, 3454 đạt, 1 bỏ qua, 9 đỏ — đúng
+  chín ca cũ của máy đo. Ma trận sinh lại trùng từng byte bản đã hợp: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào).
 
 ---
 

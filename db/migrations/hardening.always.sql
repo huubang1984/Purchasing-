@@ -205,6 +205,10 @@
 --     lượt 1  che_do='sua'      TRƯỚC vòng migration đánh số — chỉ SỬA, không phán xét gì.
 --                               Bắt buộc phải có: 001 GRANT cho app_api/app_unseal nên hai
 --                               role đó phải tồn tại trước khi 001 chạy.
+--                               [S1.205 / khoản 259] Lượt này mang thêm GUC
+--                               "app.hardening_sau_vong" = 'khong' (các lượt sau: 'co'):
+--                               mục "không trigger lạ" đứng yên tới lượt 2 (lý do ở
+--                               TRIGGER_DUOC_PHEP).
 --     [S1.57 / khoản nợ 100] lượt 1b che_do='truoc_vong' — CHỈ khi còn tệp đánh số chưa áp, sau lượt 1,
 --                               trước vòng: hỏi chủ thể "vai chạy migration" của mục 94, TRỪ dòng mà một
 --                               migration dưới chính vai ấy sửa được, rồi RAISE TP100 nếu còn dòng. Ngoại
@@ -1628,6 +1632,97 @@ $ham$;
       WHERE NOT EXISTS (SELECT 1 FROM bang_so bs
                          WHERE bs.relname = b.ten AND bs.nspname = 'public')
         AND (EXISTS (SELECT 1 FROM bang_so) OR $q$ || NEO_003 || $q$)$q$;
+
+  -- [S1.205 / khoản 259] MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN MỌI BẢNG CỦA DỰ ÁN — mở rộng [CR1] của bảng sổ ra mọi bảng.
+  -- Mỗi mục ghim trigger hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi thiếu; nó không hỏi trên bảng còn trigger
+  -- NÀO KHÁC. Đo ở lượt soi của S1.198: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước
+  -- `rfq_approvals_kiem_nguoi_duyet` ⇒ `migrate()` xanh, mục ghim dựng lại trigger đúng tên và GIỮ bản đổi tên — hai
+  -- trigger gọi cùng hàm, một chạy TRƯỚC chốt D2, nên lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng
+  -- `CONTROL_DENIED` (ADR-108 ⑴). Một bản CHÉP THÂN hàm sang tên hàm khác gắn dưới một tên trigger xếp trước chốt thì
+  -- cùng hậu quả, và một phép kiểm "đúng MỘT trigger trỏ vào hàm" không thấy nó — nên chủ thể là MỌI trigger của bảng,
+  -- không phải trigger trỏ vào một hàm đã ghim (chủ dự án chốt ở vòng này). Thứ tự trigger cùng thời điểm là thứ tự
+  -- TÊN, nên khi tập tên đã cố định thì thứ tự cũng cố định theo.
+  -- Tập ĐƯỢC PHÉP là mọi trigger có văn bản ghim `pg_get_triggerdef` (thẻ `def`, kể cả `CREATE CONSTRAINT TRIGGER`) của tệp
+  -- này, cộng hai trigger ghim bằng thuộc tính (`user_roles_phan_tach_nhiem_vu`, `role_permissions_ma_tran_quyen`) — đúng
+  -- tập có câu `ENABLE ALWAYS TRIGGER` viết thẳng; test tĩnh `tests/architecture/hardening-co-ly-do.test.ts` giữ danh sách
+  -- dưới đây TRÙNG KHÍT tập ấy, từng cặp (bảng, tên).
+  -- Nằm ngoài chủ thể, có chủ ý: (a) bảng sổ `bang_so` — [CR1] đã mặc định-đóng với danh sách `can_co` của nó, và D2 dựng
+  -- trigger sổ lên bảng sổ ở MỌI schema, thứ danh sách này không liệt kê được; (b) trigger gọi `chan_sua_xoa()` ở bảng khác
+  -- — [CR4] phán xét chúng (chặn deploy, không tự chữa), gỡ ở đây là đổi ngữ nghĩa [CR4] trong im lặng; (c) bản sao trigger
+  -- trên phân mảnh (`tgparentid <> 0`) — nó mang tên trigger CHA, và PostgreSQL từ chối DROP nó; trigger cha vẫn bị soi;
+  -- (d) trigger nội bộ (khoá ngoại).
+  -- TỰ GỠ CHỈ TRÊN BẢNG CÓ TÊN (ADR-028 §2⑵): gỡ trigger KHÔNG đơn điệu — một trigger hợp lệ mà quên ghim cũng đổi được hành vi
+  -- một đường ghi — nên nó bị cấm trên tập SUY RA. Hardening chỉ tự gỡ trên bảng mà danh sách dưới đây khai TÊN (bảng mà
+  -- tập trigger đã ghim trọn, đúng khuôn [CR1] của bảng sổ); trigger lạ trên mọi bảng KHÁC của dự án chỉ bị PHÁN XÉT —
+  -- chặn deploy, người vận hành gỡ tay hoặc ghim nó (chủ dự án chốt ở vòng này).
+  -- Lượt sửa chỉ gỡ ở lượt SAU vòng đánh số: `migrate()` đặt `app.hardening_sau_vong` ở MỌI lượt — `'khong'` ở lượt đầu, `'co'`
+  -- ở các lượt sau —, và lượt phán xét không đọc GUC ấy. Ở lượt đầu, một migration đang chờ có thể còn cần trigger mà HEAD đã
+  -- bỏ ghim — 059 gỡ `rfq_packages_kiem_yeu_cau_mo_thau` bằng `DROP TRIGGER` không `IF EXISTS`, nên gỡ nó sớm là làm gãy vòng
+  -- đánh số của một cụm còn ở trước 059.
+  TRIGGER_DUOC_PHEP constant text :=
+    $q$(VALUES
+       ('public.bid_receipts', ARRAY['bid_receipts_chan_truncate', 'bid_receipts_chi_ghi_them']),
+       ('public.canonical_item_versions', ARRAY['canonical_item_versions_chan_truncate', 'canonical_item_versions_chi_ghi_them', 'canonical_item_versions_dat_thu_tu', 'canonical_item_versions_kiem_danh_tinh', 'canonical_item_versions_kiem_quyen_ghi']),
+       ('public.canonical_items', ARRAY['canonical_items_chan_truncate', 'canonical_items_chi_ghi_them', 'canonical_items_dat_thu_tu', 'canonical_items_kiem_danh_tinh', 'canonical_items_kiem_quyen_ghi']),
+       ('public.governance_signal_acks', ARRAY['governance_signal_acks_chan_truncate', 'governance_signal_acks_chi_ghi_them', 'governance_signal_acks_kiem_danh_tinh', 'governance_signal_acks_kiem_nguoi']),
+       ('public.governance_signals', ARRAY['governance_signals_chan_truncate', 'governance_signals_chi_ghi_them', 'governance_signals_kiem_danh_tinh', 'governance_signals_tinh']),
+       ('public.guest_sessions', ARRAY['guest_sessions_kiem_danh_tinh', 'guest_sessions_thu_hoi_don_dieu']),
+       ('public.invitation_otp_challenges', ARRAY['invitation_otp_go_khoa_khong_xoa_dau_vet', 'invitation_otp_kiem_kenh', 'invitation_otp_thu_hoi_don_dieu']),
+       ('public.item_aliases', ARRAY['item_aliases_chan_truncate', 'item_aliases_chi_ghi_them', 'item_aliases_dat_thu_tu', 'item_aliases_kiem_danh_tinh', 'item_aliases_kiem_quyen_ghi']),
+       ('public.item_uom_conversions', ARRAY['item_uom_conversions_chan_truncate', 'item_uom_conversions_chi_ghi_them', 'item_uom_conversions_dat_thu_tu', 'item_uom_conversions_kiem_danh_tinh', 'item_uom_conversions_kiem_quyen_ghi']),
+       ('public.mfa_credentials', ARRAY['mfa_credentials_khoa_ho_so_da_xac_nhan', 'mfa_credentials_xoa_can_yeu_cau']),
+       ('public.mfa_reset_requests', ARRAY['mfa_reset_requests_kiem_chuyen_trang_thai', 'mfa_reset_requests_kiem_danh_tinh', 'mfa_reset_requests_kiem_danh_tinh_duyet', 'mfa_reset_requests_kiem_quyen_duyet', 'mfa_reset_requests_kiem_quyen_yeu_cau']),
+       ('public.org_policy_signatures', ARRAY['org_policy_signatures_chan_truncate', 'org_policy_signatures_chi_ghi_them', 'org_policy_signatures_kiem_danh_tinh', 'org_policy_signatures_kiem_nguoi_ky']),
+       ('public.org_procurement_policies', ARRAY['org_procurement_policies_da_bat_thi_phai_co_bac', 'org_procurement_policies_kiem_bac', 'org_procurement_policies_kiem_danh_tinh', 'org_procurement_policies_phien_ban_tang_dan']),
+       ('public.outbox_jobs', ARRAY['outbox_jobs_xoa_payload_dang_nhap']),
+       ('public.procurement_categories', ARRAY['procurement_categories_chan_truncate', 'procurement_categories_chi_ghi_them', 'procurement_categories_kiem_danh_tinh', 'procurement_categories_kiem_nguoi']),
+       ('public.procurement_category_changes', ARRAY['procurement_category_changes_chan_truncate', 'procurement_category_changes_chi_ghi_them', 'procurement_category_changes_kiem_danh_tinh', 'procurement_category_changes_kiem_doi']),
+       ('public.rfq_approvals', ARRAY['rfq_approvals_dat_bam_danh_sach', 'rfq_approvals_kiem_nguoi_duyet', 'rfq_approvals_so_lan_nop']),
+       ('public.rfq_award_approvals', ARRAY['rfq_award_approvals_chan_truncate', 'rfq_award_approvals_chi_ghi_them', 'rfq_award_approvals_kiem_danh_tinh', 'rfq_award_approvals_kiem_nguoi_duyet']),
+       ('public.rfq_awards', ARRAY['rfq_awards_chan_truncate', 'rfq_awards_chi_ghi_them', 'rfq_awards_kiem_danh_tinh', 'rfq_awards_kiem_de_xuat', 'rfq_awards_kiem_mot_award_song']),
+       ('public.rfq_bafo_rounds', ARRAY['rfq_bafo_rounds_kiem_danh_tinh', 'rfq_bafo_rounds_kiem_vong']),
+       ('public.rfq_budgets', ARRAY['rfq_budgets_chi_sua_khi_soan', 'rfq_budgets_khong_ghim_ban_chua_ky', 'rfq_budgets_kiem_danh_tinh', 'rfq_budgets_xep_bac']),
+       ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_thanh_phan']),
+       ('public.rfq_evaluations', ARRAY['rfq_evaluations_kiem_danh_tinh']),
+       ('public.rfq_invitation_tokens', ARRAY['rfq_invitation_tokens_ghi_goi_da_mo', 'rfq_invitation_tokens_kiem_danh_tinh', 'rfq_invitation_tokens_kiem_goi_da_mo', 'rfq_invitation_tokens_thu_hoi_don_dieu']),
+       ('public.rfq_invitations', ARRAY['rfq_invitations_khong_song_lai', 'rfq_invitations_kiem_danh_sach', 'rfq_invitations_kiem_danh_tinh', 'rfq_invitations_kiem_nguoi_thu_hoi', 'rfq_invitations_thu_hoi_don_dieu']),
+       ('public.rfq_item_goi_y', ARRAY['rfq_item_goi_y_bat_bien', 'rfq_item_goi_y_chan_truncate', 'rfq_item_goi_y_chi_ghi_them', 'rfq_item_goi_y_dat_thu_tu', 'rfq_item_goi_y_kiem_danh_tinh']),
+       ('public.rfq_item_mappings', ARRAY['rfq_item_mappings_bat_bien', 'rfq_item_mappings_chan_truncate', 'rfq_item_mappings_chi_ghi_them', 'rfq_item_mappings_dat_thu_tu', 'rfq_item_mappings_kiem_danh_tinh']),
+       ('public.rfq_items', ARRAY['rfq_items_cam_truncate', 'rfq_items_chi_sua_khi_soan', 'rfq_items_kiem_danh_tinh']),
+       ('public.rfq_key_material', ARRAY['rfq_key_material_bat_bien', 'rfq_key_material_chi_sinh_luc_mo', 'rfq_key_material_chi_thu_hoi_khi_huy', 'rfq_key_material_kiem_danh_tinh', 'rfq_key_material_kiem_nguoi_thu_hoi', 'rfq_key_material_kiem_nguoi_xoa', 'rfq_key_material_phai_di_kem_lan_mo']),
+       ('public.rfq_packages', ARRAY['rfq_packages_dem_lan_nop', 'rfq_packages_gia_han_khong_hoi_sinh', 'rfq_packages_kiem_chuyen_trang_thai', 'rfq_packages_kiem_danh_sach_khi_mo', 'rfq_packages_kiem_khoa_khi_mo', 'rfq_packages_kiem_ngan_sach_khi_nop', 'rfq_packages_kiem_nguoi_dong', 'rfq_packages_kiem_nguoi_huy', 'rfq_packages_kiem_nguoi_mo', 'rfq_packages_kiem_nguoi_nop', 'rfq_packages_kiem_nguoi_tao', 'rfq_packages_kiem_nguong_phe_duyet_kep', 'rfq_packages_kiem_nhom_hang_khi_nop', 'rfq_packages_kiem_tin_hieu_khi_mo', 'rfq_packages_kiem_yeu_cau_mo_thau', 'rfq_packages_nhom_hang', 'rfq_packages_tra_ve_nhap_chi_khi_bat_s3']),
+       ('public.rfq_tra_ve', ARRAY['rfq_tra_ve_dat_lan_nop', 'rfq_tra_ve_kiem_danh_tinh']),
+       ('public.rfq_unsealed_bids', ARRAY['rfq_unsealed_bids_chan_truncate', 'rfq_unsealed_bids_chi_ghi_them', 'rfq_unsealed_bids_kiem_yeu_cau']),
+       ('public.role_permissions', ARRAY['role_permissions_ma_tran_quyen', 'role_permissions_nguong_khong_cung_tay', 'role_permissions_quan_ly_du_lieu_mu_gia']),
+       ('public.sessions', ARRAY['sessions_kiem_mfa_khi_tao', 'sessions_kiem_totp_gan_day']),
+       ('public.supplier_contacts', ARRAY['supplier_contacts_kiem_danh_tinh']),
+       ('public.supplier_verifications', ARRAY['supplier_verifications_chan_truncate', 'supplier_verifications_chi_ghi_them', 'supplier_verifications_kiem_danh_tinh', 'supplier_verifications_kiem_xac_minh']),
+       ('public.suppliers', ARRAY['suppliers_kiem_danh_tinh']),
+       ('public.unseal_approvals', ARRAY['unseal_approvals_kiem_danh_tinh', 'unseal_approvals_kiem_nguoi_duyet']),
+       ('public.unseal_requests', ARRAY['unseal_requests_canh_bao_break_glass', 'unseal_requests_dieu_phoi_mot_lan', 'unseal_requests_ghi_lich_su_dieu_phoi', 'unseal_requests_kiem_chuyen_trang_thai', 'unseal_requests_kiem_danh_tinh', 'unseal_requests_kiem_du_phe_duyet', 'unseal_requests_kiem_nguoi_dieu_phoi', 'unseal_requests_kiem_nhan_chung', 'unseal_requests_kiem_rfq_da_dong']),
+       ('public.uom_aliases', ARRAY['uom_aliases_chan_truncate', 'uom_aliases_chi_ghi_them', 'uom_aliases_dat_thu_tu', 'uom_aliases_kiem_danh_tinh', 'uom_aliases_kiem_quyen_ghi']),
+       ('public.uom_aliases_chung', ARRAY['uom_aliases_chung_chan_truncate', 'uom_aliases_chung_chi_ghi_them']),
+       ('public.uom_units', ARRAY['uom_units_chan_truncate', 'uom_units_chi_ghi_them']),
+       ('public.user_login_tokens', ARRAY['user_login_tokens_thu_hoi_don_dieu']),
+       ('public.user_roles', ARRAY['user_roles_nguong_khong_cung_tay', 'user_roles_phan_tach_nhiem_vu', 'user_roles_quan_ly_du_lieu_mu_gia']),
+       ('public.users', ARRAY['users_thu_hoi_phien_khi_dinh_chi']),
+       ('public.vendor_bid_versions', ARRAY['a_vendor_bid_versions_dat_so_phien_ban', 'vendor_bid_versions_chan_truncate', 'vendor_bid_versions_chi_ghi_them', 'vendor_bid_versions_kiem_han_nop', 'vendor_bid_versions_kiem_phien_khach', 'vendor_bid_versions_kiem_vong_bafo', 'vendor_bid_versions_phai_co_bien_nhan'])
+     ) AS tg(bang, ten)$q$;
+
+  CAU_TRIGGER_LA_DU_AN constant text :=
+    CTE_TRIGGER_CHAN || $q$
+     SELECT c.oid AS bang_oid, t.tgname::text AS ten, pg_catalog.pg_get_triggerdef(t.oid) AS dinh_nghia,
+            EXISTS (SELECT 1 FROM $q$ || TRIGGER_DUOC_PHEP || $q$ WHERE pg_catalog.to_regclass(tg.bang) = c.oid) AS bang_co_ten
+       FROM pg_trigger t
+       JOIN pg_class c ON c.oid = t.tgrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE NOT t.tgisinternal
+        AND t.tgparentid = 0
+        AND $q$ || pg_catalog.format(MAU_SCHEMA_DU_AN, 'n') || $q$
+        AND NOT EXISTS (SELECT 1 FROM bang_so b WHERE b.bang_oid = c.oid)
+        AND t.tgfoid IS DISTINCT FROM $q$ || HAM_CHAN || $q$
+        AND NOT EXISTS (SELECT 1 FROM $q$ || TRIGGER_DUOC_PHEP || $q$
+                         WHERE pg_catalog.to_regclass(tg.bang) = c.oid AND t.tgname = ANY (tg.ten))$q$;
 
   -- [CR5 + IM5] Trạng thái VẬT LÝ của bảng sổ: LOGGED, và ràng buộc UNIQUE (org_id, seq).
   CAU_BANG_SO_VAT_LY constant text :=
@@ -15802,6 +15897,50 @@ $ham$;
       $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
       $q$(SELECT string_agg(mo_ta, '; ') FROM ($q$ || CAU_TRIGGER_CHAN_SAI || $q$) t)$q$,
       $q$quyền sở hữu các bảng sổ đó (để CREATE/DROP TRIGGER, DROP RULE và ALTER TABLE) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.205 / khoản 259] Mặc định-đóng với trigger trên mọi bảng của dự án — lý do và chỗ loại trừ ở TRIGGER_DUOC_PHEP.
+    -- Câu sửa chỉ gỡ trên bảng CÓ TÊN trong danh sách (ADR-028 §2⑵); hậu điều kiện phán xét MỌI bảng. Cùng khuôn gỡ của
+    -- [CR1]: mỗi lần gỡ là một khối con riêng, và GỠ ĐƯỢC thì phải ỒN ÀO — một trigger hợp lệ của một migration quên ghim
+    -- cũng bị gỡ ở đây; `db/trigger-la-mac-dinh-dong.int.test.ts` đo rằng migrate() trên cụm trống không gỡ trigger nào,
+    -- nên lối quên ấy đỏ ở CI chứ không đợi tới deploy. Điều kiện của mục chỉ SAI ở đúng một lượt: lượt SỬA mang
+    -- `app.hardening_sau_vong = 'khong'` — lượt đầu, trước vòng đánh số. Lượt sửa sau vòng gỡ; lượt PHÁN XÉT phán bất kể GUC ấy:
+    -- một giá trị `'khong'` đặt sẵn ở mức vai (`ALTER ROLE <vai deploy> SET`) hay trong phiên không tắt được phán xét, và
+    -- `migrate()` đặt GUC tường minh ở MỌI lượt nên nó cũng không tắt được lần gỡ; đặt ở mức database hay `ALTER ROLE ALL`
+    -- thì mục khoản 87 còn chặn deploy.
+    ARRAY[
+      $q$không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)$q$,
+      $q$pg_catalog.current_setting('app.hardening_che_do', true) IS DISTINCT FROM 'sua'
+         OR pg_catalog.current_setting('app.hardening_sau_vong', true) IS DISTINCT FROM 'khong'$q$,
+      $q$DO $tl$
+         DECLARE r RECORD;
+         BEGIN
+           FOR r IN SELECT * FROM ($q$ || CAU_TRIGGER_LA_DU_AN || $q$) t WHERE t.bang_co_ten
+           LOOP
+             BEGIN
+               EXECUTE pg_catalog.format('DROP TRIGGER %I ON %s', r.ten, r.bang_oid::regclass);
+               RAISE WARNING 'Hardening: đã GỠ trigger lạ % trên % (%). Chỉ trigger trong TRIGGER_DUOC_PHEP được '
+                             'phép tồn tại trên bảng của dự án (khoản 259). Nếu đây là trigger HỢP LỆ của một migration '
+                             'mới thì migration đó vừa bị vô hiệu hoá: ghim nó trong hardening.always.sql và thêm nó '
+                             'vào TRIGGER_DUOC_PHEP.',
+                             r.ten, r.bang_oid::regclass, r.dinh_nghia;
+             EXCEPTION WHEN OTHERS THEN
+               RAISE WARNING 'Hardening: không gỡ được trigger lạ % trên %: % (%)',
+                             r.ten, r.bang_oid::regclass, SQLERRM, SQLSTATE;
+             END;
+           END LOOP;
+         END
+         $tl$$q$,
+      $q$NOT EXISTS (SELECT 1 FROM ($q$ || CAU_TRIGGER_LA_DU_AN || $q$) t)$q$,
+      $q$(SELECT string_agg(t.bang_oid::regclass::text || '.' || t.ten || ': TRIGGER LẠ'
+                             || CASE WHEN t.bang_co_ten THEN ''
+                                     ELSE ' trên bảng KHÔNG có trong TRIGGER_DUOC_PHEP — hardening CHỈ PHÁN XÉT (ADR-028 §2⑵): '
+                                          'gỡ nó bằng DROP TRIGGER hay một migration mới, hoặc ghim nó và khai bảng vào TRIGGER_DUOC_PHEP'
+                                END
+                             || ' — ' || t.dinh_nghia, '; '
+                             ORDER BY t.bang_oid::regclass::text, t.ten)
+           FROM ($q$ || CAU_TRIGGER_LA_DU_AN || $q$) t)$q$,
+      $q$quyền sở hữu bảng mang trigger lạ (để DROP TRIGGER) hoặc SUPERUSER$q$
     ],
 
     -- [vòng fix 1 — CR5 + IM5] Trạng thái VẬT LÝ của bảng sổ. Tách khỏi mục trigger để một đột

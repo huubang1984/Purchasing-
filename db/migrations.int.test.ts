@@ -15,6 +15,28 @@ import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
+const DONG_MUC_TRIGGER_LA = '- "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ';
+
+/**
+ * [S1.205 / khoản 259] Một fixture cắm trigger lên bảng không có tên trong `TRIGGER_DUOC_PHEP`, nên mục mặc định-đóng với
+ * trigger chặn deploy vì nó — bất kể phép đo của ca. Khẳng định dòng của mục ấy nêu ĐÚNG những trigger ấy (`bảng.tên`), rồi bỏ
+ * dòng ấy khỏi thông điệp và trừ số mục; không còn mục nào ⇒ `"OK"`. Khuôn của `db/hardening-suy-tu-tinh-chat.int.test.ts`.
+ */
+function boMucTriggerLa(kq: string, trigger: readonly string[]): string {
+  const dong = kq.split("\n");
+  const i = dong.findIndex((d) => d.startsWith(DONG_MUC_TRIGGER_LA));
+  expect(i, `mục trigger lạ phải nêu ${trigger.join(", ")} — kết quả: ${kq.slice(0, 200)}`).toBeGreaterThanOrEqual(0);
+  const neu = [...dong[i]!.matchAll(/(?:\(|; )([a-z_0-9.]+): TRIGGER LẠ/gu)].map((m) => m[1]!).sort();
+  expect(neu, "mục trigger lạ nêu đúng trigger của fixture").toEqual([...trigger].sort());
+  dong.splice(i, 1);
+  const m = /Hardening không sửa được (\d+) mục:/u.exec(dong[0] ?? "");
+  expect(m, "đầu thông báo gom").not.toBeNull();
+  const con = Number(m![1]) - 1;
+  if (con === 0) return "OK";
+  dong[0] = dong[0]!.replace(m![0], `Hardening không sửa được ${con} mục:`);
+  return dong.join("\n");
+}
+
 /**
  * [Task 8] Trạng thái CHUẨN của hai mục (E1)/(E2): cả hai hàm D3 còn nguyên thân + proconfig, và
  * cả hai trigger còn đó ở đúng hình dạng (FOR EACH ROW, AFTER INSERT OR UPDATE = tgtype 21) với
@@ -7504,9 +7526,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // Lượt SỬA vẫn chạy trọn trước lượt phán xét, nên mọi phép đo dưới đây (thông báo, trigger, INSERT) còn nguyên.
         const loiKho = await migrate(poolBat, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
         expect(loiKho, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
-        expect(loiKho!.message).toContain("Hardening không sửa được 1 mục");
-        expect(loiKho!.message).toContain("kho.cha: bảng có cột org_id ngoài public");
-        expect(loiKho!.message).toContain("kho.audit_events: bảng có cột org_id ngoài public");
+        // [S1.205 / khoản 259] Trigger `cha_nuot` trên `kho.cha` — bảng không có tên trong `TRIGGER_DUOC_PHEP` — là trigger lạ:
+        // mục mặc định-đóng với trigger chặn deploy vì nó, đúng một dòng, nêu đúng nó. Bản sao trên `kho.audit_events` không bị hỏi
+        // riêng, và `la_that` trên bảng sổ là việc của [CR1]. Bỏ dòng ấy đi thì còn đúng mục 85.
+        const conLai = boMucTriggerLa(loiKho!.message, ["kho.cha.cha_nuot"]);
+        expect(conLai).toContain("Hardening không sửa được 1 mục");
+        expect(conLai).toContain("kho.cha: bảng có cột org_id ngoài public");
+        expect(conLai).toContain("kho.audit_events: bảng có cột org_id ngoài public");
       } finally {
         await poolBat.end();
       }
