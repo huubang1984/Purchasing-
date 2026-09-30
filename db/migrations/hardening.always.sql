@@ -1689,7 +1689,7 @@ $ham$;
        ('public.rfq_items', ARRAY['rfq_items_cam_truncate', 'rfq_items_chi_sua_khi_soan', 'rfq_items_kiem_danh_tinh']),
        ('public.rfq_key_material', ARRAY['rfq_key_material_bat_bien', 'rfq_key_material_chi_sinh_luc_mo', 'rfq_key_material_chi_thu_hoi_khi_huy', 'rfq_key_material_kiem_danh_tinh', 'rfq_key_material_kiem_nguoi_thu_hoi', 'rfq_key_material_kiem_nguoi_xoa', 'rfq_key_material_phai_di_kem_lan_mo']),
        ('public.rfq_packages', ARRAY['rfq_packages_dem_lan_nop', 'rfq_packages_gia_han_khong_hoi_sinh', 'rfq_packages_kiem_chuyen_trang_thai', 'rfq_packages_kiem_danh_sach_khi_mo', 'rfq_packages_kiem_khoa_khi_mo', 'rfq_packages_kiem_ngan_sach_khi_nop', 'rfq_packages_kiem_nguoi_dong', 'rfq_packages_kiem_nguoi_huy', 'rfq_packages_kiem_nguoi_mo', 'rfq_packages_kiem_nguoi_nop', 'rfq_packages_kiem_nguoi_tao', 'rfq_packages_kiem_nguong_phe_duyet_kep', 'rfq_packages_kiem_nhom_hang_khi_nop', 'rfq_packages_kiem_tin_hieu_khi_mo', 'rfq_packages_kiem_yeu_cau_mo_thau', 'rfq_packages_nhom_hang', 'rfq_packages_tra_ve_nhap_chi_khi_bat_s3']),
-       ('public.rfq_tra_ve', ARRAY['rfq_tra_ve_dat_lan_nop', 'rfq_tra_ve_kiem_danh_tinh']),
+       ('public.rfq_tra_ve', ARRAY['rfq_tra_ve_chan_truncate', 'rfq_tra_ve_chi_ghi_them', 'rfq_tra_ve_dat_lan_nop', 'rfq_tra_ve_kiem_danh_tinh', 'rfq_tra_ve_phai_di_kem_canh']),
        ('public.rfq_unsealed_bids', ARRAY['rfq_unsealed_bids_chan_truncate', 'rfq_unsealed_bids_chi_ghi_them', 'rfq_unsealed_bids_kiem_yeu_cau']),
        ('public.role_permissions', ARRAY['role_permissions_ma_tran_quyen', 'role_permissions_nguong_khong_cung_tay', 'role_permissions_quan_ly_du_lieu_mu_gia']),
        ('public.sessions', ARRAY['sessions_kiem_mfa_khi_tao', 'sessions_kiem_totp_gan_day']),
@@ -6135,6 +6135,28 @@ $ham$;
              CREATE TRIGGER governance_signal_acks_chan_truncate BEFORE TRUNCATE ON governance_signal_acks FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.governance_signal_acks ENABLE ALWAYS TRIGGER governance_signal_acks_chan_truncate;
            END IF;
+           IF to_regclass('public.rfq_tra_ve') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                                 AND t.tgname = 'rfq_tra_ve_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_tra_ve_chi_ghi_them ON public.rfq_tra_ve;
+             CREATE TRIGGER rfq_tra_ve_chi_ghi_them BEFORE UPDATE OR DELETE ON rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_tra_ve') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                                 AND t.tgname = 'rfq_tra_ve_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_chan_truncate BEFORE TRUNCATE ON public.rfq_tra_ve FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_tra_ve_chan_truncate ON public.rfq_tra_ve;
+             CREATE TRIGGER rfq_tra_ve_chan_truncate BEFORE TRUNCATE ON rfq_tra_ve FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_chan_truncate;
+           END IF;
          END
          $fn56$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -6426,6 +6448,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER governance_signal_acks_chan_truncate BEFORE TRUNCATE ON public.governance_signal_acks FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_tra_ve') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                               AND t.tgname = 'rfq_tra_ve_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_tra_ve FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_tra_ve') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                               AND t.tgname = 'rfq_tra_ve_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_tra_ve_chan_truncate BEFORE TRUNCATE ON public.rfq_tra_ve FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -6439,7 +6477,7 @@ $ham$;
                      FROM pg_proc p
                     WHERE p.oid = to_regprocedure('public.bid_chi_ghi_them()')),
                   'hàm public.bid_chi_ghi_them() không tồn tại')$q$,
-      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_unsealed_bids, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+      $q$quyền sở hữu hàm public.bid_chi_ghi_them() và bảng public.bid_receipts, public.governance_signal_acks, public.governance_signals, public.org_policy_signatures, public.procurement_categories, public.procurement_category_changes, public.rfq_award_approvals, public.rfq_awards, public.rfq_tra_ve, public.rfq_unsealed_bids, public.supplier_verifications, public.vendor_bid_versions (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
@@ -9282,6 +9320,81 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_tra_ve_dat_lan_nop()')),
                   'hàm public.rfq_tra_ve_dat_lan_nop() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_tra_ve_dat_lan_nop() và bảng public.rfq_tra_ve (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / khoan 260] Hang tra ve phai di kem canh ve DRAFT cua chinh lan nop ay, doc goi luc COMMIT. Than `RETURN NULL` som de mot hang le commit: no chiem UNIQUE cua lan nop va thoa ve (4) cho mot cau UPDATE tho ve DRAFT o giao dich sau.
+    ARRAY[
+      $q$hàm + trigger rfq_tra_ve_phai_di_kem_canh (9501_tra_ve_di_kem_canh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tra_ve_di_kem_canh.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_tra_ve_phai_di_kem_canh()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_tra_ve_phai_di_kem_canh();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_tra_ve_phai_di_kem_canh() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+  hien_tai integer;
+BEGIN
+  SELECT p.status, p.lan_nop INTO trang_thai, hien_tai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Khong doc duoc goi thau cua hang tra ve luc COMMIT (K4a)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF hien_tai > NEW.lan_nop OR (trang_thai = 'DRAFT' AND hien_tai = NEW.lan_nop) THEN
+    RETURN NULL;
+  END IF;
+  RAISE EXCEPTION 'Hang rfq_tra_ve cua lan nop % phai di kem canh ve DRAFT cua chinh lan nop ay trong cung giao dich; goi dang o % (K4a)', NEW.lan_nop, trang_thai
+    USING ERRCODE = 'check_violation';
+END
+$ham$;
+           IF to_regclass('public.rfq_tra_ve') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                                 AND t.tgname = 'rfq_tra_ve_phai_di_kem_canh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_tra_ve_phai_di_kem_canh()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE CONSTRAINT TRIGGER rfq_tra_ve_phai_di_kem_canh AFTER INSERT ON public.rfq_tra_ve DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION rfq_tra_ve_phai_di_kem_canh()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_tra_ve_phai_di_kem_canh ON public.rfq_tra_ve;
+             CREATE CONSTRAINT TRIGGER rfq_tra_ve_phai_di_kem_canh AFTER INSERT ON public.rfq_tra_ve DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.rfq_tra_ve_phai_di_kem_canh();
+             ALTER TABLE public.rfq_tra_ve ENABLE ALWAYS TRIGGER rfq_tra_ve_phai_di_kem_canh;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; hien_tai integer; BEGIN SELECT p.status, p.lan_nop INTO trang_thai, hien_tai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong doc duoc goi thau cua hang tra ve luc COMMIT (K4a)' USING ERRCODE = 'check_violation'; END IF; IF hien_tai > NEW.lan_nop OR (trang_thai = 'DRAFT' AND hien_tai = NEW.lan_nop) THEN RETURN NULL; END IF; RAISE EXCEPTION 'Hang rfq_tra_ve cua lan nop % phai di kem canh ve DRAFT cua chinh lan nop ay trong cung giao dich; goi dang o % (K4a)', NEW.lan_nop, trang_thai USING ERRCODE = 'check_violation'; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_tra_ve')
+                           AND t.tgname = 'rfq_tra_ve_phai_di_kem_canh'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_tra_ve_phai_di_kem_canh()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE CONSTRAINT TRIGGER rfq_tra_ve_phai_di_kem_canh AFTER INSERT ON public.rfq_tra_ve DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION rfq_tra_ve_phai_di_kem_canh()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tra_ve_phai_di_kem_canh()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_tra_ve_phai_di_kem_canh()')),
+                  'hàm public.rfq_tra_ve_phai_di_kem_canh() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_tra_ve_phai_di_kem_canh() và bảng public.rfq_tra_ve (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.186 / S3.2b1 / K6 / khoan 253] Token ghi lai, LUC DUC, goi da mo chua — cho moi to chuc. Than `RETURN NEW` de cot o gia tri mac dinh, va lan doi link cua to chuc da bat tu choi moi token.

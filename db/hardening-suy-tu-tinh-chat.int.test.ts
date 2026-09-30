@@ -147,6 +147,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
   "rfq_awards",
+  // [S1.9101 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
+  // `ENABLE ALWAYS`. Trước vòng ấy bảng chỉ-ghi-thêm BẰNG QUYỀN: chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại.
+  "rfq_tra_ve",
   "rfq_unsealed_bids",
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
@@ -387,6 +390,9 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_dem_lan_nop",
   "public.rfq_chot_lan_nop_da_xem",
   "public.rfq_tra_ve_dat_lan_nop",
+  // [S1.9101 / khoản 260] Constraint trigger hoãn tới COMMIT trên INSERT `rfq_tra_ve`: từ chối CÓ ĐIỀU KIỆN — gói chưa đi qua
+  // DRAFT ở lần nộp của hàng. Nhân chứng: câu chèn hàng trả về của kịch bản, với `hoanTat` trả gói về DRAFT trong cùng giao dịch.
+  "public.rfq_tra_ve_phai_di_kem_canh",
   // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
   // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
   // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
@@ -1774,16 +1780,21 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
   // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
   const rfqVe = await rfqSoan();
-  await so.chung(
-    "public.rfq_packages",
-    "UPDATE",
-    api(
-      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
-        "RETURNING status, submitted_by, submitted_by_session_id",
-      [rfqVe, pm.u, pm.s],
-      { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
-    ),
-  );
+  // [S1.9101 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy nay phải đi kèm cạnh về DRAFT trong CÙNG giao dịch
+  // (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT của `rfqVe` không còn tách được thành hai nhân chứng trên
+  // một gói — mỗi nhân chứng một gói, cả hai nộp duyệt TRƯỚC lần bật.
+  const rfqVe2 = await rfqSoan();
+  for (const goi of [rfqVe, rfqVe2])
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api(
+        "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+          "RETURNING status, submitted_by, submitted_by_session_id",
+        [goi, pm.u, pm.s],
+        { status: "PENDING_APPROVAL", submitted_by: pm.u, submitted_by_session_id: pm.s },
+      ),
+    );
   const tc = await nguoi("FINANCE");
   const cs2 = await chenNC(
     "public.org_procurement_policies",
@@ -1813,28 +1824,39 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "org_policy_signatures",
   );
   // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
-  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới.
+  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới. **[S1.9101 / khoản 260]** và của
+  // `rfq_tra_ve_phai_di_kem_canh` (DEFERRED): `hoanTat` trả gói về DRAFT trong cùng giao dịch — thiếu nó, hàng lẻ bị từ chối ở
+  // cửa sổ sau `SET CONSTRAINTS ALL IMMEDIATE`, và đó chính là lỗ khoản ấy đóng.
+  const traVe2 = api(
+    "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
+      "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
+    [org, rfqVe2, pm.u, pm.s],
+    { org_id: org, rfq_id: rfqVe2, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
+  );
   doiSoHang(
-    await so.chung(
-      "public.rfq_tra_ve",
-      "INSERT",
-      api(
-        "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
-          "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
-        [org, rfqVe, pm.u, pm.s],
-        { org_id: org, rfq_id: rfqVe, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
-      ),
-    ),
+    await so.chung("public.rfq_tra_ve", "INSERT", {
+      ...traVe2,
+      hoanTat: async (c) => {
+        await c.query("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1", [rfqVe2]);
+      },
+    }),
     1,
     "rfq_tra_ve",
   );
-  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`. **[S1.9101 / khoản 260]** Hàng trả về của
+  // `rfqVe` chèn ở bước chuẩn bị của CÙNG giao dịch, dưới `app_api` — đúng thứ tự của `returnRfqToDraft`.
+  const veNhap = api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" });
   doiSoHang(
-    await so.chung(
-      "public.rfq_packages",
-      "UPDATE",
-      api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" }),
-    ),
+    await so.chung("public.rfq_packages", "UPDATE", {
+      ...veNhap,
+      chuanBi: async (c) => {
+        await veNhap.chuanBi?.(c);
+        await c.query(
+          "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai')",
+          [org, rfqVe, pm.u, pm.s],
+        );
+      },
+    }),
     1,
     "rfq_packages",
   );
