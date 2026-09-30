@@ -17,21 +17,33 @@
 
   <section class="buoc" id="b1">
     <h2><span class="so">1</span> Đăng nhập</h2>
-    <p class="ghi">Người quản lý dữ liệu đặt thước đo cho mọi gói — hàng chuẩn, bí danh, quy đổi — và không thấy giá của gói nào.
-      Mọi lần ghi ở màn này để lại tên người ghi và thời điểm.</p>
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa <strong>bí mật ghi danh</strong>
+      để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Người quản lý dữ liệu đặt thước đo cho mọi gói — hàng chuẩn, bí danh,
+      quy đổi — và không thấy giá của gói nào. Mọi lần ghi ở màn này để lại tên người ghi và thời điểm.</p>
     <label for="org">Mã tổ chức</label>
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <label for="ma">Mã sáu số</label>
-    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
-    <button id="nut-vao">Vào</button>
+    <!-- [S1.9101 / khoản 291] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login` và ba trang người mua kia: Tiếp gọi
+         `/auth/redeem` đúng một lần cho mỗi mã và nói tài khoản cần ghi danh hay không; ô mã sáu số chỉ mở SAU đó (khoản 193). -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
-    <div class="bao luu" id="ghi-danh" hidden></div>
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
     <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <!-- [S1.9101 / khoản 291] Link đăng nhập gần đây của chính người vừa vào (khoản 195), và câu «còn nữa» khi danh sách bị cắt
+         (khoản 268) — `/lib/dang-nhap.js` điền. Khối là trợ giúp: máy chủ từ chối hay mất mạng thì nó ẩn, các bước vẫn mở. -->
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
   </section>
 
   <section class="buoc" id="b2" hidden>
