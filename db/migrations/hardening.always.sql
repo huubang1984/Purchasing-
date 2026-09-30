@@ -205,7 +205,7 @@
 --     lượt 1  che_do='sua'      TRƯỚC vòng migration đánh số — chỉ SỬA, không phán xét gì.
 --                               Bắt buộc phải có: 001 GRANT cho app_api/app_unseal nên hai
 --                               role đó phải tồn tại trước khi 001 chạy.
---                               [S1.9101 / khoản 259] Lượt này mang thêm GUC
+--                               [S1.205 / khoản 259] Lượt này mang thêm GUC
 --                               "app.hardening_sau_vong" = 'khong' (các lượt sau: 'co'):
 --                               mục "không trigger lạ" đứng yên tới lượt 2 (lý do ở
 --                               TRIGGER_DUOC_PHEP).
@@ -1633,7 +1633,7 @@ $ham$;
                          WHERE bs.relname = b.ten AND bs.nspname = 'public')
         AND (EXISTS (SELECT 1 FROM bang_so) OR $q$ || NEO_003 || $q$)$q$;
 
-  -- [S1.9101 / khoản 259] MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN MỌI BẢNG CỦA DỰ ÁN — mở rộng [CR1] của bảng sổ ra mọi bảng.
+  -- [S1.205 / khoản 259] MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN MỌI BẢNG CỦA DỰ ÁN — mở rộng [CR1] của bảng sổ ra mọi bảng.
   -- Mỗi mục ghim trigger hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi thiếu; nó không hỏi trên bảng còn trigger
   -- NÀO KHÁC. Đo ở lượt soi của S1.198: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước
   -- `rfq_approvals_kiem_nguoi_duyet` ⇒ `migrate()` xanh, mục ghim dựng lại trigger đúng tên và GIỮ bản đổi tên — hai
@@ -14866,7 +14866,7 @@ $ham$;
       $q$quyền sở hữu các bảng sổ đó (để CREATE/DROP TRIGGER, DROP RULE và ALTER TABLE) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoản 259] Mặc định-đóng với trigger trên mọi bảng của dự án — lý do và chỗ loại trừ ở TRIGGER_DUOC_PHEP.
+    -- [S1.205 / khoản 259] Mặc định-đóng với trigger trên mọi bảng của dự án — lý do và chỗ loại trừ ở TRIGGER_DUOC_PHEP.
     -- Câu sửa chỉ gỡ trên bảng CÓ TÊN trong danh sách (ADR-028 §2⑵); hậu điều kiện phán xét MỌI bảng. Cùng khuôn gỡ của
     -- [CR1]: mỗi lần gỡ là một khối con riêng, và GỠ ĐƯỢC thì phải ỒN ÀO — một trigger hợp lệ của một migration quên ghim
     -- cũng bị gỡ ở đây; `db/trigger-la-mac-dinh-dong.int.test.ts` đo rằng migrate() trên cụm trống không gỡ trigger nào,

@@ -893,14 +893,14 @@ describe("S1.198 — giới hạn, đo: tổ chức bật S3 khi gói đang ch�
 });
 
 // =============================================================================================
-// (7) [S1.9101 / khoản 259] BẢN ĐỔI TÊN CỦA TRIGGER SO LẦN NỘP KHÔNG SỐNG QUA `migrate()`
+// (7) [S1.205 / khoản 259] BẢN ĐỔI TÊN CỦA TRIGGER SO LẦN NỘP KHÔNG SỐNG QUA `migrate()`
 //
 // Lượt soi S1.198 (F4) đo: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước chốt D2 ⇒ `migrate()` xanh, mục ghim dựng
 // lại tên đúng và GIỮ bản đổi tên — phép so lần nộp chạy trước D2, và lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại
 // hàng `CONTROL_DENIED` (ADR-108 ⑴). Nay hardening mặc định-đóng với trigger (khoản 259): bản đổi tên bị gỡ. Ca dưới đo cả hai phía
 // của lần `migrate()`. Mục hardening được đo riêng ở `db/trigger-la-mac-dinh-dong.int.test.ts`.
 // =============================================================================================
-describe("S1.9101 — khoản 259: bản đổi tên của trigger so lần nộp xếp trước chốt D2 không sống qua `migrate()`", () => {
+describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp xếp trước chốt D2 không sống qua `migrate()`", () => {
   it("[INV-H19] [INV-D2] đổi tên trigger so lần nộp thành tên xếp trước chốt D2 ⇒ lời tự duyệt thiếu mốc mất hàng `CONTROL_DENIED`; `migrate()` gỡ bản đổi tên và dựng lại tên đúng ⇒ lời ấy lại là lời từ chối D2 có sổ", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);

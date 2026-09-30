@@ -18,7 +18,7 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 const DONG_MUC_TRIGGER_LA = '- "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ';
 
 /**
- * [S1.9101 / khoản 259] Một fixture cắm trigger lên bảng không có tên trong `TRIGGER_DUOC_PHEP`, nên mục mặc định-đóng với
+ * [S1.205 / khoản 259] Một fixture cắm trigger lên bảng không có tên trong `TRIGGER_DUOC_PHEP`, nên mục mặc định-đóng với
  * trigger chặn deploy vì nó — bất kể phép đo của ca. Khẳng định dòng của mục ấy nêu ĐÚNG những trigger ấy (`bảng.tên`), rồi bỏ
  * dòng ấy khỏi thông điệp và trừ số mục; không còn mục nào ⇒ `"OK"`. Khuôn của `db/hardening-suy-tu-tinh-chat.int.test.ts`.
  */
@@ -7464,7 +7464,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // Lượt SỬA vẫn chạy trọn trước lượt phán xét, nên mọi phép đo dưới đây (thông báo, trigger, INSERT) còn nguyên.
         const loiKho = await migrate(poolBat, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
         expect(loiKho, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
-        // [S1.9101 / khoản 259] Trigger `cha_nuot` trên `kho.cha` — bảng không có tên trong `TRIGGER_DUOC_PHEP` — là trigger lạ:
+        // [S1.205 / khoản 259] Trigger `cha_nuot` trên `kho.cha` — bảng không có tên trong `TRIGGER_DUOC_PHEP` — là trigger lạ:
         // mục mặc định-đóng với trigger chặn deploy vì nó, đúng một dòng, nêu đúng nó. Bản sao trên `kho.audit_events` không bị hỏi
         // riêng, và `la_that` trên bảng sổ là việc của [CR1]. Bỏ dòng ấy đi thì còn đúng mục 85.
         const conLai = boMucTriggerLa(loiKho!.message, ["kho.cha.cha_nuot"]);

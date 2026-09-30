@@ -1337,7 +1337,7 @@ describe("[T10-I] mốc thời gian", () => {
         "CREATE OR REPLACE FUNCTION t10_cham_updated_at() RETURNS trigger LANGUAGE plpgsql AS " +
           "$$ BEGIN RETURN NEW; END $$",
       );
-      // [S1.9101 / khoản 259] ~~hardening không thấy gì~~ Nay hardening THẤY — không vì thân hàm, mà vì chính trigger không
+      // [S1.205 / khoản 259] ~~hardening không thấy gì~~ Nay hardening THẤY — không vì thân hàm, mà vì chính trigger không
       // được ghim: trigger lạ trên bảng không có tên trong `TRIGGER_DUOC_PHEP` chặn deploy. Thân hàm vẫn không được canh, và
       // lượt sửa đã chạy trọn trước lượt phán xét — kết luận của phép đo đứng nguyên: trigger mới phải được ghim.
       await expect(migrate(db.pool, MIGRATIONS), "hardening chặn vì TRIGGER, không vì thân hàm").rejects.toThrow(

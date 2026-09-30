@@ -565,7 +565,7 @@ describe("[INV-H19] [S1.100 / khoản 211] ba chỗ ghim của một trigger", (
 });
 
 // ==============================================================================================
-// [INV-H19] [S1.9101 / khoản 259] `TRIGGER_DUOC_PHEP` TRÙNG KHÍT TẬP TRIGGER ĐÃ GHIM, TỪNG CẶP (BẢNG, TÊN)
+// [INV-H19] [S1.205 / khoản 259] `TRIGGER_DUOC_PHEP` TRÙNG KHÍT TẬP TRIGGER ĐÃ GHIM, TỪNG CẶP (BẢNG, TÊN)
 //
 // Mục "không trigger lạ trên bảng của dự án" của hardening gỡ mọi trigger ngoài `TRIGGER_DUOC_PHEP`. Danh sách ấy là một bản
 // chép của tập đã ghim, nên hai lối trôi không đối xứng: THIẾU một dòng thì hardening gỡ chính trigger đã ghim rồi mục ghim dựng
@@ -627,10 +627,10 @@ export function lechDuocPhep(hardening: string): readonly string[] {
   return loi;
 }
 
-describe("[INV-H19] [S1.9101 / khoản 259] TRIGGER_DUOC_PHEP trùng khít tập trigger đã ghim", () => {
+describe("[INV-H19] [S1.205 / khoản 259] TRIGGER_DUOC_PHEP trùng khít tập trigger đã ghim", () => {
   it("[INV-H19] danh sách trigger được phép = văn bản ghim ∪ câu ENABLE ALWAYS, từng cặp (bảng, tên)", () => {
     expect(lechDuocPhep(HARDENING)).toEqual([]);
-    expect(docTriggerDuocPhep(HARDENING).size, "số đo S1.9101: 152 văn bản ghim + 2 trigger ghim bằng thuộc tính").toBeGreaterThanOrEqual(154);
+    expect(docTriggerDuocPhep(HARDENING).size, "số đo S1.205: 152 văn bản ghim + 2 trigger ghim bằng thuộc tính").toBeGreaterThanOrEqual(154);
   });
 
   it("[INV-H19] MẪU ÂM: danh sách THIẾU một tên đã ghim thì ĐỎ và gọi tên", () => {

@@ -182,7 +182,7 @@ async function migrateLai(db: TestDatabase): Promise<string> {
 const DONG_MUC_TRIGGER_LA = '- "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ';
 
 /**
- * [S1.9101 / khoản 259] Fixture của tệp này cắm trigger canh lên bảng thử không có tên trong `TRIGGER_DUOC_PHEP`, nên mục
+ * [S1.205 / khoản 259] Fixture của tệp này cắm trigger canh lên bảng thử không có tên trong `TRIGGER_DUOC_PHEP`, nên mục
  * mặc định-đóng với trigger chặn deploy vì chúng — bất kể phép đo của ca. Hàm này khẳng định dòng của mục ấy nêu ĐÚNG những
  * trigger ấy (`bảng.tên`), rồi bỏ dòng ấy khỏi kết quả của `migrateLai` và trừ số mục; không còn mục nào ⇒ `"OK"`. Phần còn
  * lại là thứ ca đang đo.
@@ -2195,7 +2195,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // mục canh nói thẳng ra điều đó.
     // Phân mảnh theo `id`, KHÔNG theo `org_id`: một cột `org_id` biến bảng này thành bảng tenant
     // và kéo theo mọi phép kiểm policy — thứ không liên quan gì tới điều đang đo ở đây.
-    // [S1.9101 / khoản 259] Trigger của fixture mà mục mặc định-đóng với trigger nêu khi lá đã có chốt — xem `boMucTriggerLa`.
+    // [S1.205 / khoản 259] Trigger của fixture mà mục mặc định-đóng với trigger nêu khi lá đã có chốt — xem `boMucTriggerLa`.
     const SO_PM_BA = ["so_pm.so_pm_chan", "so_pm.so_pm_chan_truncate", "so_pm_a.so_pm_a_chan_truncate"];
     await db.pool.query("CREATE TABLE public.so_pm (id uuid) PARTITION BY LIST (id)");
     try {
@@ -2656,7 +2656,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // Đúng ca lượt soi 25a #1 dựng, đo lại trên PostgreSQL 16. Ba trigger cùng gọi hàm canh, cùng ENABLE ALWAYS —
     // ba vế hardening cũ (LOGGED, chốt TRUNCATE, ACL) không có gì để phán trên bảng này (khẳng định ở (d):
     // thông điệp NÉM chỉ nêu mục mới), vế ALWAYS của tổng điều tra cũng xanh.
-    // [S1.9101 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
+    // [S1.205 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
     const ZZ_DK = ["zz_dk.d", "zz_dk.t", "zz_dk.u"];
     await db.pool.query(`
       CREATE TABLE public.zz_dk (id int PRIMARY KEY, a text, b text);
@@ -2729,7 +2729,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   it("[khoản nợ 79] ĐO: chốt TRUNCATE mang WHEN (false) là HỢP LỆ với PostgreSQL 16 và TRUNCATE đi lọt — hardening đòi chốt VÔ ĐIỀU KIỆN", async () => {
     // Cùng cơ chế ADR-036 ⑳ trên vế TRUNCATE: bảng LÀ chỉ-ghi-thêm (hai trigger canh vô điều kiện), chốt
     // TRUNCATE tồn tại, ENABLE ALWAYS, đúng tgtype 34 — chỉ khác một mệnh đề WHEN.
-    // [S1.9101 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
+    // [S1.205 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
     const ZZ_TR = ["zz_tr.d", "zz_tr.t", "zz_tr.u"];
     await db.pool.query(`
       CREATE TABLE public.zz_tr (id int PRIMARY KEY);

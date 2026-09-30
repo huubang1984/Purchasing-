@@ -1,5 +1,5 @@
 // ===============================================================================================
-// [INV-H19] [S1.9101 / khoản 259] MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN MỌI BẢNG CỦA DỰ ÁN
+// [INV-H19] [S1.205 / khoản 259] MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN MỌI BẢNG CỦA DỰ ÁN
 //
 // Mỗi mục ghim trigger của `hardening.always.sql` hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi
 // thiếu — nó không hỏi bảng còn mang trigger NÀO KHÁC. Lượt soi của S1.198 đo: đổi tên
@@ -14,7 +14,7 @@
 //      hàm khác, constraint trigger, tên được phép nhưng ở bảng khác;
 //   ⑶ trigger lạ trên bảng KHÔNG có tên trong danh sách (bảng không mang trigger ghim nào, schema khác,
 //      phân mảnh) chỉ bị PHÁN XÉT — chặn deploy, không tự gỡ (ADR-028 §2⑵: gỡ trigger không đơn điệu,
-//      bị cấm trên tập suy ra; chủ dự án chốt ở S1.9101);
+//      bị cấm trên tập suy ra; chủ dự án chốt ở S1.205);
 //   ⑷ bốn phần loại trừ đứng đúng chỗ: bảng sổ ([CR1] gỡ, không phải mục này), `chan_sua_xoa()` ở bảng
 //      khác ([CR4] chặn deploy), bản sao trên phân mảnh (không bị hỏi riêng);
 //   ⑸ gỡ không được thì lượt phán xét chặn deploy, nêu tên trigger;
@@ -114,10 +114,10 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[INV-H19] [S1.9101 / khoản 259] mặc định-đóng với trigger trên mọi bảng của dự án", { timeout: 300000 }, () => {
+describe("[INV-H19] [S1.205 / khoản 259] mặc định-đóng với trigger trên mọi bảng của dự án", { timeout: 300000 }, () => {
   it("[INV-H19] ⑴ migrate() trên cụm trống không gỡ trigger nào, và tập trigger trong cụm TRÙNG KHÍT TRIGGER_DUOC_PHEP — migration quên ghim trigger đỏ ở đây", async () => {
     const duocPhep = docDuocPhep();
-    expect(duocPhep.size, "chống mù: danh sách phải đọc được, và không nhỏ hơn tập đo ở S1.9101").toBeGreaterThanOrEqual(154);
+    expect(duocPhep.size, "chống mù: danh sách phải đọc được, và không nhỏ hơn tập đo ở S1.205").toBeGreaterThanOrEqual(154);
     expect(canhBaoLanDau.filter((c) => c.includes(DAU_GO)), "lần migrate đầu không được gỡ trigger nào").toEqual([]);
     const trongCum = await chuTheTrongCum();
     expect([...trongCum].filter((k) => !duocPhep.has(k)).sort(), "trigger trong cụm mà không có trong danh sách").toEqual([]);

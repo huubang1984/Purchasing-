@@ -519,7 +519,7 @@ export async function migrate(
           await lockClient.query("SELECT pg_catalog.set_config('app.hardening_che_do', $1, true)", [
             cheDo,
           ]);
-          // [S1.9101 / khoản 259] Lượt sửa ĐẦU nói ra nó đứng trước vòng đánh số: mục "không trigger lạ" của hardening chỉ
+          // [S1.205 / khoản 259] Lượt sửa ĐẦU nói ra nó đứng trước vòng đánh số: mục "không trigger lạ" của hardening chỉ
           // gỡ ở lượt sau vòng — một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (059 gỡ một trigger bằng
           // `DROP TRIGGER` không `IF EXISTS`). Đặt ở MỌI lượt, không chỉ lượt đầu: một `'khong'` đặt sẵn ở mức vai deploy
           // (`ALTER ROLE <vai> SET`) không được tắt lần gỡ ở lượt sau vòng; đặt ở mức database (`ALTER DATABASE … SET`) hay
