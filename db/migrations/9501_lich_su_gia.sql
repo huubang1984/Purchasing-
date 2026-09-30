@@ -204,6 +204,7 @@ AS $ham$
                           AND NOT EXISTS (SELECT 1
                                             FROM public.unseal_requests q
                                            WHERE q.org_id = v.org_id
+                                             AND q.rfq_id = v.rfq_id
                                              AND q.bafo_round_id = v.id
                                              AND q.status = 'EXECUTED'
                                              AND q.executed_at < p_moc)))
@@ -220,6 +221,7 @@ CREATE OR REPLACE FUNCTION public.quan_sat_gia(p_moc timestamptz, p_hang_chuan u
   LANGUAGE sql
   STABLE
   SET search_path = pg_catalog, public
+  SET enable_hashagg = off
 AS $ham$
   WITH dong AS (
     SELECT i.org_id, i.rfq_id, i.line_no, i.quantity, i.unit
