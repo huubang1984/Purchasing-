@@ -185,6 +185,15 @@ export const MFA_LOCKOUT_SECONDS = 900;
 // GIÁ PHẢI TRẢ, nói ra: một người dùng THẬT đã sai hai lần trên đường đăng nhập chính sẽ bị đường
 // phát chứng chỉ agent từ chối cho tới khi họ đăng nhập đúng một lần. Đó là fail-closed có chủ ý —
 // đường phát agent là đường PHỤ, còn đường đăng nhập mới là đường phải luôn mở.
+//
+// [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH của giá ấy — giao điểm với khoản 153 (ADR-039), chưa tài liệu
+// nào nêu tới vòng này: chứng chỉ `AGENT_READONLY` có TTL trần một giờ và cách DUY NHẤT có chứng chỉ
+// mới là gọi lại `POST /auth/agent-session` với một mã TOTP tươi. Nên `failed_attempts >= 2` — dù do
+// hai lần gõ sai trên `/auth/totp` — nghĩa là KHÔNG xoay được chứng chỉ agent, kể cả với mã ĐÚNG
+// (route trả 429 TRƯỚC khi thử mã, không tiêu mã, không tăng bộ đếm), cho tới khi một lần đăng nhập
+// đúng trên đường chính đặt bộ đếm về 0 (`CAU_GHI_THANH_CONG`); một tiến trình MCP đang chạy sẽ dừng
+// ở giờ kế tiếp. Người vận hành nên biết điều này trước khi nó thành một sự cố: đăng nhập đúng một
+// lần là đường ra, không cần đặt lại MFA. Ghim ở `apps/api/src/auth.int.test.ts` vế ⑽.
 // ================================================================================================
 export const MFA_TRAN_SAI_DUONG_PHU = 2;
 

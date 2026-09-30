@@ -467,6 +467,13 @@ export async function startUserSession(
 // được. Tức "phát chứng chỉ máy một lần rồi để đó" là BẤT KHẢ hôm nay mà không nới thân một
 // trigger đang bị ghim; vòng này KHÔNG nới nó. Phát biểu đúng mức: đường này đổi "magic link CỘNG
 // TOTP mỗi giờ" thành "MỘT mã TOTP mỗi giờ" — rẻ hơn hẳn, và vẫn là một con người mỗi giờ.
+//
+// [S1.9101 / khoản 174] VÀ "MỘT MÃ TOTP MỖI GIỜ" CÓ MỘT ĐIỀU KIỆN VẬN HÀNH, nói ra: route gọi hàm này
+// (`POST /auth/agent-session`, `apps/api`) đứng sau trần `MFA_TRAN_SAI_DUONG_PHU` (= 2) đọc thẳng
+// `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng. Người đã gõ sai TOTP 2 lần trên
+// `/auth/totp` thì KHÔNG xoay được chứng chỉ agent, kể cả với mã đúng, cho tới khi đăng nhập đúng
+// một lần (bộ đếm về 0); tiến trình MCP đang chạy dừng ở giờ kế tiếp. Fail-closed có chủ ý — xem
+// khối cạnh `MFA_TRAN_SAI_DUONG_PHU` (mfa-credentials.ts). Đo: `apps/api/src/auth.int.test.ts` vế ⑽.
 // ==============================================================================================
 
 export interface StartedAgentSession {

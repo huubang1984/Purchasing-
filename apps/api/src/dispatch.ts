@@ -881,6 +881,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                     afterCommitCoBu,
                     afterCommitLoGui,
                     choKyChinhSach,
+                    // [S1.9101 / khoản 188] Ngưỡng đường phụ đi từ BẢNG ROUTE xuống handler — cùng nguồn với cổng đi trước ở trên,
+                    // nên hai chỗ không thể lệch nhau. Route không tự thân không khai ngưỡng ⇒ `null`.
+                    mfaTranDuongPhu: route.mutates && route.self === true ? route.mfaTranDuongPhu : null,
                   }),
                 ),
               );
