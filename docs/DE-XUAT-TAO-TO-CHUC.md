@@ -170,5 +170,5 @@ phép đo cụ thể là việc của vòng làm.
 - **Màn quản trị vai trong từng tổ chức**, và câu ai giữ `role.grant`: khuyến nghị để sau pilot (mục 4). ADR-016 để ngỏ
   ai giữ `role.grant`; ADR-044 chỉ gạt màn quản trị người dùng khỏi lát cắt demo của nó.
 - **Khai chính sách mua sắm và nhà cung cấp:** đã có đường qua sản phẩm (mục 2).
-- **Phần còn lại của khoản 15** — CMK, role, stack 30/50/90 chưa apply, SES ra khỏi sandbox, brandname SMS và mẫu ZNS: là
+- **Phần còn lại của khoản 15** — ~~CMK, role, stack 30/50/90 chưa apply,~~ **[apply lần đầu 2026-09-30]** CMK và role đã có (stack 00–60); còn stack 90 chưa apply, SES ra khỏi sandbox, brandname SMS và mẫu ZNS: là
   hạ tầng và thủ tục, theo `docs/APPLY-LAN-DAU.md`. Phương án A chỉ chạy được sau các bước ấy.
