@@ -10100,12 +10100,17 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
        JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id
        JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id
       WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id
+        AND i.revoked_at IS NULL
       ORDER BY v.bid_id, v.version DESC) v
     WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u
                        WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)
     ORDER BY v.bid_id;
    ```
    Câu này là đúng vế phủ định của việc worker làm: phong bì (bản cuối mỗi luồng, đúng vòng) mà lượt mở thầu KHÔNG để lại hàng bản rõ.
+   **[S1.9101 / khoản 298]** Từ ADR-128 (S1.217) worker chỉ mở luồng của lời mời CÒN SỐNG (`apps/unseal-worker/src/index.ts`, cùng
+   vế ở ba bộ đọc phong bì), nên câu mang thêm vế `AND i.revoked_at IS NULL`: thiếu nó, luồng bị thu hồi trước lần mở vòng một được
+   suy thành phong bì HỎNG trong khi sổ ghi `failedCount` 0 (đo §S1.243). Ở vòng BAFO vế này không đổi gì — thu hồi bị chặn từ
+   lần mở đầu (ADR-128 ⑶).
    `rfq_unsealed_bids` là bảng tenant có RLS sẵn (`019`); sổ chỉ ghi thêm nên hai hàng sổ cùng `failedCount` là mốc đối chiếu cho câu này.
 4. **Giá trị trả về trong tiến trình (`UnsealOutcome.failedBidVersionIds`) KHÔNG cắt** — nó không lưu; docstring nói thứ có trần là sổ.
 5. **Bản ghi cũ không sửa** (sổ chỉ ghi thêm): thiếu `failedCount` nghĩa là ghi trước vòng này, mảng khi ấy là đầy đủ.
