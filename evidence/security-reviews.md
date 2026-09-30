@@ -17951,6 +17951,72 @@ Mọi lệnh chạy trong worktree, với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/po
 - Đột biến: 8 ca / 8 đỏ (mục 6 biên bản), tệp khôi phục nguyên văn sau mỗi ca (so nội dung).
 - CHƯA chạy: `pnpm test:int` toàn bộ, `pnpm evidence` (tệp cấm, người tích hợp sinh lại INV-matrix) — theo sổ tay.
 
+# §S1.9162 — LÔ B1 HARDENING GUC: KHUÔN ĐỌC TÊN GUC CÙNG ĐỊNH NGHĨA TOKEN VÀ CÙNG BỀ MẶT VỚI KHUÔN GHI (KHOẢN 111); PHẠM VI FORCE CỦA KHOẢN 91 LÀ CẢ DATABASE VÌ DATABASE RIÊNG — ADR-9262 (KHOẢN 110)
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11. Đóng khoản **110** và **111** (rổ B). Không migration. ADR mới: **ADR-9262**. Sửa tại chỗ: ADR-036 hàng 7, hàng 23.
+
+## 1. Vòng này là gì
+Hai khoản cùng tệp `db/migrations/hardening.always.sql`, hai lớp khác nhau. Khoản 111 là MÃ: `CAU_TEN_GUC_DU_AN_DOC` — tập tên GUC mà mã dự án đọc vào, thứ nhánh ⒞ của mục khoản 87 hỏi `current_setting(tên, true)` cho từng tên để bắt conf / `ALTER SYSTEM` / `options=` (những nguồn không để lại hàng catalog) — bản S1.48 chỉ nhận khoảng trắng giữa token và tên viết `'…'`, trong khi khuôn ghi `CAU_MA_GHI_GUC_VAN_HANH` (khoản 96) đã nhận chú thích và bốn cách viết tên từ S1.54; một tên không vào tập là một tên đặt được ở tầng cụm mà không mục nào nêu. Khoản 110 là QUYẾT ĐỊNH: mục tự chữa FORCE của khoản 91 bật FORCE lên mọi bảng RLS của mọi lược đồ không hệ thống — kể cả một lược đồ "láng giềng" — ở lượt sửa đầu, trước khi lượt phán xét ném; hình dạng phụ thuộc hồ sơ "database riêng hay dùng chung" mà DECISIONS chưa có.
+
+## 2. Quyết định của chủ dự án
+Khoản 110: DATABASE RIÊNG cho TrustProcure mỗi môi trường, chốt ngày 2026-09-30 (`ke-hoach-dot-2.md` mục 0 câu 5; đề bài `lo-spec/lo-62.md`): chủ thể FORCE = mọi lược đồ không hệ thống của database, đúng như hôm nay; không danh sách miễn; ghi hồ sơ vào ADR mới (ADR-9262, mục 5 bàn giao) và ADR-036 hàng 7. Khoản 111: không có quyết định riêng; vòng trả nợ theo phân công ngày 2026-09-29.
+
+## 3. Đo trước
+- Trên `561158e`, PostgreSQL 16.13 cụm cục bộ (`lo62-do-truoc.log`, `pnpm vitest run db/rls-coverage.int.test.ts -t S1.9162`): khối khoản 111 **6/6 đỏ** —
+  ⑴ `tên đọc qua chú thích giữa token phải vào tập: expected [ 'app.zz_a', 'app.zz_b2', 'app.zz_l' ] to deeply equal []` (thân `current_setting/**/(…)`, `current_setting -- …\n(…)`, `current_setting/* a /* b */ c */( /* d */ '…')` — cả ba hàm GỌI THẬT trả `A`/`B`/`L`);
+  ⑵ `expected [ 'app.zz_b', 'app.zz_e', 'app.zz_u' ] to deeply equal []` (`$d$…$d$`, `E'…'`, `U&'…'` — gọi thật trả `B`/`E`/`U`);
+  ⑶ đối chứng vào tập, nhưng `không phải một phép ĐỌC của mã dự án — không vào tập: expected [ 'app.zz_n2' ] to deeply equal []` — bản cũ không có ranh giới từ nên `zz_s111.my_current_setting('app.zz_n2')` nạp `app.zz_n2` vào tập (chiều kêu nhầm: nhánh ⒞ hỏi một tên không ai đọc);
+  ⑷ `expected [ 'app.zz_view', 'app.zz_rule', 'app.zz_when' ] to deeply equal []` (CHECK domain đã vào từ S1.48; view gọi thật trả `V`);
+  ⑸ `expected [ 'app.zz_k', 'app.zz_k2', 'app.zz_d$1', 'app.zz_ê', 'app.zz_Ê' ] to deeply equal []` — nháy kép, `$`, byte ≥ 0x80; `app.zz_s` (`pg_catalog /**/ . /**/ current_setting`) và `app.zz_hoa` thì bản cũ đã nhận;
+  ⑹ TÁC ĐỘNG, thân khoản "chưa đo": `SET app.zz_sys` + `ALTER SYSTEM SET app.zz_sys` + `pg_reload_conf()`, thân `current_setting/**/('app.zz_sys', true)`, kết nối MỚI ⇒ `CAU_GUC_TUY_BIEN_GAN_SAN` trả **rỗng** (`nhánh ⒞ phải nêu app.zz_sys … đã thấy: []`) — nhánh ⒞ im hoàn toàn, `pg_db_role_setting` sạch (0 hàng) nên không nhánh nào khác thấy.
+- Khối khoản 110: **xanh trên bản cũ** — đúng nghĩa ghim (hành vi 59a-3 giữ nguyên, chỉ lời đọc đổi): `zz_bt.t` thuộc chủ thể `VI_TU_FORCE_THIEU`, chủ đọc 2, `migrate()` NÉM với 83⑶ và 94 nêu tên `zz_bt.t`, FORCE đã bật, chủ đọc 0 không lỗi, gỡ lược đồ ⇒ đi qua.
+- Thăm dò trước đó (`lo62-tham-do.sql/.log`, cụm riêng): ARE nhận `\u0080-\U0010FFFF` trong lớp ký tự; PG16 nhận `SET "app.zz_d$1"`, `SET "app.zz_ê"`, `SET "app.x.y"`, từ chối `app.1x`; `SET app.ZZ_A` đọc được qua `app.zz_a` (gấp ASCII) nhưng `app.zz_ê`/`app.zz_Ê` là hai placeholder; deparse của view/rule/WHEN in `current_setting('app.x'::text, true)`; ALTER SYSTEM placeholder cần `SET` trong phiên trước.
+
+## 4. Thay đổi
+- `db/migrations/hardening.always.sql`:
+  - Ba hằng mới ngay trên khuôn đọc (dòng 2234–2254): `MAU_CACH_TOKEN` = `'(?:\s|/\*.*\*/|--[^\n]*\n)'`; `MAU_TEN_NGUYEN_VAN` = `'(?:(?:U&|E)?''(' || ds.ten_re || ')''|\$\w*\$(' || ds.ten_re || ')\$\w*\$)'`; `MAU_LOP_TEN_GUC` = `'[A-Za-z_\u0080-\U0010FFFF][A-Za-z0-9_$\u0080-\U0010FFFF]*(?:\.[A-Za-z_\u0080-\U0010FFFF][A-Za-z0-9_$\u0080-\U0010FFFF]*)+'` — chú thích 16 dòng nêu vì sao MỘT hằng hai chỗ dùng, và từng mảnh.
+  - `CAU_TEN_GUC_DU_AN_DOC` dựng lại (dòng 2256–2323): khối UNION ALL tám bề mặt mang `(nspname, lop, chu, van_ban)` (như khuôn ghi, bỏ cột `vat`); `CROSS JOIN` `ds` (`ten_re` = `MAU_LOP_TEN_GUC`, `cach` = `MAU_CACH_TOKEN`), `dl` (`ten_lit` = `MAU_TEN_NGUYEN_VAN`), `regexp_matches(x.van_ban, '\m(?:pg_catalog' || cach || '*\.' || cach || '*)?"?current_setting"?' || cach || '*\(' || cach || '*' || ten_lit, 'gi')`; `WHERE MAU_SCHEMA_DU_AN(x) AND NOT EXISTS pg_depend deptype 'e'` cho mọi bề mặt; `SELECT DISTINCT translate(coalesce(m[1], m[2]), 'A…Z', 'a…z') AS ten`. Chú thích: câu cũ "tên gộp về chữ thường (PostgreSQL gấp tên GUC)" gạch tại chỗ, thay bằng số đo về `guc_name_compare` và về collation "C" của `prosrc`; đoạn `[S1.9162 / khoản 111]` liệt kê sáu vế ⑴–⑹, vì sao tập phải đủ (nhánh ⒞), phép đo ALTER SYSTEM, ranh giới nói ra (tên dựng lúc chạy, thoát ký tự, tên qua biến — như khuôn ghi).
+  - Khuôn ghi: chú thích "BỀ MẶT = bề mặt của CAU_TEN_GUC_DU_AN_DOC … cộng rule/view và WHEN" gạch tại chỗ (nay hai khuôn cùng bề mặt, cùng token); `ds.cach` và `dl.ten_lit` tham chiếu `MAU_CACH_TOKEN`/`MAU_TEN_NGUYEN_VAN` (dòng 2537–2542; văn bản regex sau khi giải hằng KHÔNG đổi).
+  - Khoản 110: chú thích 9 dòng trên `MAU_SCHEMA_DU_AN` (phạm vi = cả database, ADR-9262, vì sao không thu hẹp / không miễn, lối ra) và 6 dòng trên `VI_TU_FORCE_THIEU` (chủ thể đúng bằng cấu tạo, hệ quả 59a-3 là hệ quả chấp nhận, FORCE đơn điệu — ADR-028 §2⑵, đột biến ghim). Hai hằng KHÔNG đổi một ký tự.
+- `db/rls-coverage.int.test.ts`: import `createPool`; khối `describe("[S1.9162 / khoản 111] …")` — trợ thủ `trongGiaoDich(ddl, kiem)` (BEGIN → DDL → đọc tập qua `docHangHardening("CAU_TEN_GUC_DU_AN_DOC")` → các phép GỌI THẬT → ROLLBACK), `thieu`/`thua`; sáu `it` `[INV-F1]` ⑴–⑹ (⑹ dùng pool riêng cho kết nối mới, thăm dò tới 4 s sau `pg_reload_conf()`, `ALTER SYSTEM RESET` + `DROP SCHEMA` ở `finally`, đòi thông điệp không mang giá trị `zz-gia-tri-9162`, `migrate()` NÉM rồi đi qua sau RESET); khối `describe("[S1.9162 / khoản 110 — ADR-9262] …")` — một `it` `[INV-F1]` ghim `zz_bt` (vai `zz_bt_chu`/`zz_bt_app` NOSUPERUSER NOBYPASSRLS, chủ thể đọc bằng chính `VI_TU_FORCE_THIEU`, dọn ở `finally`).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Khuôn ghi tham chiếu hai hằng chung (bốn dòng ngoài vùng ~2181–2400 của đề bài): "cùng định nghĩa token" mà giữ hai bản chép là đúng tên bài học lượt 30 NHẸ-2; không lô đợt B nào chạm khuôn ghi. Văn bản regex không đổi (đo qua bộ giải hằng và 61/61 rls-coverage).
+- Lớp ký tự tên là `valid_custom_variable_name` (guc.c) chứ không phải lớp cũ: bản cũ bỏ `$` và byte ≥ 0x80 (thân khoản); viết bằng `\u`/`\U` cho ARE (đo). Ranh giới nói ra: `\u0080-\U0010FFFF` là một mã điểm ≥ U+0080 dưới UTF-8 — cùng nghĩa "byte cao" ở encoding của dự án.
+- Gấp tên bằng `translate` (chỉ A–Z), không `lower()`: PostgreSQL so tên GUC bằng `guc_name_compare` gấp chỉ ASCII, nên `app.zz_Ê` và `app.zz_ê` là hai placeholder (đo) và tập phải giữ cả hai để nhánh ⒞ hỏi từng tên. ĐO thêm khi đột biến M6 sống: trong chính câu này `lower()` cũng chỉ gấp ASCII vì `van_ban` mang collation `"C"` kế thừa từ `pg_proc.prosrc` (`pg_collation_for` trên khối UNION ra `"C"`; `pg_get_expr` không collation; `lower('app.zz_Ê' COLLATE "C")` giữ nguyên; `lower()` trên literal của database C.UTF-8 thì gấp). Giữ `translate` vì nó nói thẳng "chỉ ASCII" thay vì tựa vào suy diễn collation của một cột catalog; chú thích ghi đúng số đo, không hơn.
+- Một bộ lọc lược đồ + extension cho MỌI bề mặt (bản cũ chỉ lọc hàm): policy/DEFAULT/CHECK của một quan hệ thuộc extension nay cũng đứng ngoài — cùng lý do 40a I3 (PostGIS trong `public`); thêm `\m` trước tên hàm để `my_current_setting(…)` không nạp tên (đo trước ⑶).
+- Ca ⑹ (tác động) thêm ngoài bốn ca đề bài: thân khoản ghi "`ALTER SYSTEM SET app.zz_a` chưa đo" — đo một lần theo đúng lớp sản xuất (`migrate()` trên kết nối mới, thông điệp không mang giá trị), không chỉ so tập.
+- Khoản 110 đóng bằng chú thích + ghim, không đổi mã: đúng câu chốt của chủ dự án; ghim đọc chính vị từ của hardening (`docHangHardening("VI_TU_FORCE_THIEU")`) chứ không chép, để đột biến thu hẹp đỏ ở phép đo chủ thể.
+- Không chạm `db/hardening-suy-tu-tinh-chat.int.test.ts`: không có ca `zz_bt` sẵn để đổi lời đọc.
+
+## 6. Đột biến
+Kịch bản `scratchpad/lo62-dot-bien.py` + `lo62-dot-bien.sh` — mỗi ca áp một hoàn tác lên bản đã vá (`lo62-bak/hardening.always.sql.va`), chạy `-t "khoản 111"` (M7: `-t "khoản 110"`), khôi phục bằng `cp`, `cmp` nguyên vẹn (`lo62-dot-bien.log`, `lo62-dot-bien-M{1..7}.log`):
+- M1 `MAU_CACH_TOKEN` → `'\s'` ⇒ ⑴ đỏ (`expected [ 'app.zz_a', 'app.zz_b2', 'app.zz_l' ]`) VÀ ⑹ đỏ (`đã thấy: []`); ⑵⑶⑷⑸ xanh — 2 failed | 4 passed.
+- M2 `MAU_TEN_NGUYEN_VAN` chỉ `'…'` ⇒ ⑵ đỏ (`app.zz_b, app.zz_e, app.zz_u`) — 1 | 5.
+- M3 bỏ `\m` ⇒ ⑶ đỏ (`expected [ 'app.zz_n2' ] to deeply equal []`) — 1 | 5.
+- M4 gỡ hai bề mặt `pg_rewrite`/trigger ⇒ ⑷ đỏ (`app.zz_view, app.zz_rule, app.zz_when`) — 1 | 5.
+- M5 `MAU_LOP_TEN_GUC` → lớp cũ `[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z0-9_.]+` ⇒ ⑸ đỏ (ba tên: `app.zz_d$1`, `app.zz_ê`, `app.zz_Ê`) — 1 | 5.
+- M6 `translate` → `pg_catalog.lower` ⇒ **SỐNG** (6 passed) — đột biến TƯƠNG ĐƯƠNG, lý do đo ở mục 5 (`lo62-tham-do-collation.log`; tệp thăm dò tạm `db/zz-lo62-tham-do.int.test.ts` đã xoá, bản sao `lo62-tham-do-collation.int.test.ts.bak`).
+- M7 `MAU_SCHEMA_DU_AN` → `%1$s.nspname = 'public'` ⇒ ghim 110 đỏ ngay phép đo chủ thể (`expected [] to deeply equal [ 'zz_bt.t' ]`) — 1 failed.
+- Sau mỗi ca `cmp` ⇒ nguyên vẹn; `cmp` lần cuối trước cổng cuối và trước commit ⇒ nguyên vẹn (cả hai tệp).
+
+## 7. Giới hạn, nói ra
+- Cùng ranh giới với khuôn ghi (khoản 96, đã khai): tên dựng lúc chạy (`current_setting('app.' || x)`), thoát ký tự trong `E'…'`/`U&'…'`, tên qua biến (ca ⑶ đo: hàm âm vẫn đọc GUC qua biến mà tập không thấy — nói ra, không hứa) không quét được bằng văn bản. `.*` của chú thích khối là tham (`/* a */ x /* b */` nuốt `x`) — chiều kêu nhầm, cùng khuôn ghi.
+- `\m` trước tên hàm: `khac.current_setting(…)` (một hàm tự đặt tên `current_setting` ở lược đồ khác) vẫn vào tập — chiều kêu nhầm, có cửa ra (khai `GUC_TUY_BIEN_KHAI` hay đổi tên hàm).
+- Đột biến M6 tương đương trong môi trường này vì collation "C" của `prosrc`; nếu một bề mặt mới có collation khác được thêm ĐẦU khối UNION thì suy diễn collation đổi — `translate` không phụ thuộc điều ấy, đó là lý do giữ nó.
+- Chú thích khoản 110 nói "83⑶/83⑴/94 nêu tên": ghim đo hai chuỗi (83⑶ và 94); 83⑴ là mục đầu theo 59a-3 (thăm dò), không ghim chuỗi của nó.
+- Cụm test là C.UTF-8 (như test-support mặc định); ca ⑸ đo `app.zz_ê`/`app.zz_Ê` là hai placeholder ở mức PostgreSQL, độc lập locale (guc_name_compare).
+- `pnpm vitest run tests/architecture` chạy KHÔNG env Postgres cục bộ làm hai tệp int QT3 rơi vào testcontainers (`Could not find a working container runtime strategy`) — chạy lại hai tệp ấy có env: 8/8. Không chạy `pnpm test:int`/`pnpm evidence` toàn bộ (máy dùng chung).
+
+## 8. Số đo
+- `pnpm typecheck` ⇒ exit 0 (`lo62-typecheck.log`). `pnpm exec eslint db/rls-coverage.int.test.ts` ⇒ exit 0 (`lo62-eslint-1.log`). `pnpm exec depcruise db --config .dependency-cruiser.cjs` ⇒ no dependency violations (53 modules, 165 dependencies) (`lo62-depcruise.log`).
+- Đo trước trên `561158e` (`lo62-do-truoc.log`): `db/rls-coverage.int.test.ts -t S1.9162` — 6 failed | 1 passed | 54 skipped (61).
+- Bản vá: `lo62-va-hardening.py` — 5 phép thay (A, B: hai chú thích khoản 110; C: ba hằng + khuôn đọc; D: chú thích BỀ MẶT khuôn ghi; E: khuôn ghi dùng hằng chung), cộng một sửa chú thích `lower/translate` sau đột biến M6 (`lo62-va-hardening.log`); `git diff --stat`: hardening 119 dòng đổi (96 +/23 −).
+- Sau vá (`lo62-do-sau.log`): `-t "S1.9162|40a H4"` — 8 passed | 53 skipped; cổng T1 `hardening-khong-in-gia-tri` 7/7 + `hardening-hang.test` 4/4 (`lo62-cong-t1-gate.log`).
+- Đột biến (`lo62-dot-bien.log`): M1 2/4, M2 1/5, M3 1/5, M4 1/5, M5 1/5, M6 0/6 (tương đương — đo), M7 1/0; `cmp` nguyên vẹn sau mỗi ca.
+- Cổng cuối (env `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`): `pnpm vitest run tests/architecture` 35/37 tệp — 400 passed | 8 skipped, 335 s (`lo62-cong-architecture.log`; hai tệp QT3 int thiếu env) → `tests/architecture/qt3-ngu-phap.int.test.ts tests/architecture/qt3-cu-phap.int.test.ts` có env 8/8, 12 s (`lo62-cong-architecture-qt3.log`) ⇒ 37/37; tuần tự `db/rls-coverage.int.test.ts` 61/61 (204,3 s; `lo62-cong-rls-coverage.log`) · `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36 (374,0 s; `lo62-cong-hardening-suy-tu-tinh-chat.log`) · `db/thong-diep-khong-gia-tri.int.test.ts` 8/8 (33,8 s; `lo62-cong-thong-diep.log`). Không ca đỏ nào.
+- Sau cùng: hai tệp trong commit bằng từng byte với bản đã qua đột biến và cổng cuối (`cmp` với `lo62-bak/hardening.always.sql.va`, `lo62-bak/rls-coverage.int.test.ts.va`).
+
 # §S1.9171 — CỔNG `pool-nghe-du-tin-hieu`: QUÉT CẢ `tools/`, NHẬN DIỆN THEO IMPORT ĐÃ PHÂN GIẢI, `NGOAI_LE` CÓ RĂNG — KHOẢN 176, 180, 182 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — một cổng kiến trúc và lớp chẩn đoán của bốn
