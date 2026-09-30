@@ -857,8 +857,13 @@ export async function migrate(
     // migrate() dưới một vai mà RLS không áp hay có policy phủ; policy do chủ bảng thêm). Chủ thể CHỦ BẢNG cũng KHÔNG được hỏi trước:
     // lối ra của nó là chính một migration (ADR-028 §3). Test ghim cả hai chiều dưới vai deploy KHÔNG superuser.
     // [S1.66] `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều (hardening, lượt soi 51 INFO-8). Chiều bỏ qua — cắt một đường khi còn đường khác —
-    // chỉ trả dòng về lượt phán xét sau vòng. Chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng không được đọc — để
-    // một dòng tự sửa được qua đường ấy bị chặn trước vòng: ngõ cụt kiểu ADR-028 §3, CHƯA đo (khoản nợ 113).
+    // chỉ trả dòng về lượt phán xét sau vòng. ~~Chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng không được đọc — để
+    // một dòng tự sửa được qua đường ấy bị chặn trước vòng: ngõ cụt kiểu ADR-028 §3, CHƯA đo (khoản nợ 113).~~ [S1.9172 / khoản nợ 113]
+    // Chiều CHẶN ấy đã ĐO (PostgreSQL 16, `db/migrations.int.test.ts` `[khoản nợ 113]`): vai deploy có ADMIN OPTION (không INHERIT) trên
+    // một vai R giữ GRANT OPTION đã cấp quyền — hay EXECUTE — thẳng cho nó tự cắt được trong một tệp (tự cấp thừa kế R, REVOKE khỏi chính
+    // mình với R là người thu hồi, gỡ cạnh vừa cấp), và bản trước CHẶN dòng ấy trước vòng — ngõ cụt thật. Nay `tu_sua_duoc` đọc `grantor`
+    // của mục ACL cấp thẳng (vế `tu_sua_nguoi_cap`, vế thứ tư của `tu_cat_execute`); hai đối chứng — không ADMIN, ADMIN kèm INHERIT do
+    // superuser cấp — vẫn bị chặn. Xấp xỉ còn lại của `tu_sua_duoc` chỉ về phía bỏ qua.
     // Chỉ khi còn tệp chưa áp: không tệp nào chờ thì không backfill nào bị tiêu, và lượt phán xét sau vòng nêu TRỌN mọi mục thay
     // vì một phép từ chối sớm che các mục khác. Không huỷ kết nối ở phép từ chối này (khác hai phép ngay trên): câu hỏi đọc catalog
     // và mỗi giao dịch mới thấy catalog mới — phiên không mang trạng thái nào mà một lần sửa quyền cần kết nối mới mới thấy.
