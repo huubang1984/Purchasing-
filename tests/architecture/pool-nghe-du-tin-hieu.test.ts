@@ -25,13 +25,13 @@
 // tệp, import được phân giải về (gói, tên xuất) nên bí danh không che được gì — nhưng không đi
 // theo import ra ngoài tệp (đó là ranh giới ⑴ dưới đây).
 //
-// BA RANH GIỚI, nói ra — một cổng im lặng bỏ qua một vùng mã là một cổng nói dối về phạm vi của
+// ~~BA RANH GIỚI~~ [S1.9110 / khoản 274] BỐN RANH GIỚI, nói ra — một cổng im lặng bỏ qua một vùng mã là một cổng nói dối về phạm vi của
 // chính nó (khoản 176; bản đầu của khối này viết ĐÚNG MỘT trong ba, lượt soi ngang 74 đo ra):
 //   ⑴ PHÉP ĐỌC GÓI TRONG MỘT TỆP. Pool và người nghe phải cùng tệp. Người nghe được tính: `<pool>.on("release", …)`
 //      viết thẳng; `ngheLoiKetNoiToiMuon(<pool>, …)` import từ `@trustprocure/tenancy` (bí danh vẫn thấy); hai hàm bọc
 //      `ghiLogKetNoiHuy` / `ghiLogLoiKetNoiToiMuon` CHỈ khi import từ `./mo-ta-loi.js` (composition root của `api`) —
 //      thân hai hàm ấy không được đọc, cổng TIN chúng theo đường import. [S1.221 / khoản 183] Cổng này chỉ đo SỰ CÓ MẶT của
-//      lời gọi gắn; THÂN của bốn bộ nghe (hai hàm bọc của `api`, `ghiKetNoiHuy`/`ghiLoiToiMuon` của worker) đo bằng hành vi trên
+//      lời gọi gắn [S1.9110 / khoản 274] (và CHỖ của nó — ranh giới ⑷); THÂN của bốn bộ nghe (hai hàm bọc của `api`, `ghiKetNoiHuy`/`ghiLoiToiMuon` của worker) đo bằng hành vi trên
 //      pool thật ở `apps/api/src/loi-ket-noi-toi-muon.int.test.ts` và `apps/unseal-worker/src/loi-ket-noi-toi-muon.int.test.ts` —
 //      không thì một thân no-op vẫn qua cổng. Một pool dựng ở tệp này rồi truyền sang tệp khác
 //      để gắn listener bị tính là THIẾU — và lời giải đúng là gắn ở tệp dựng pool (`tools/khoi-tao-to-chuc/src/index.ts`
@@ -52,6 +52,19 @@
 //      `const pool` ở ba hàm của `tools/neo-so-kiem-toan/src/index.ts` là ba pool, và `NGOAI_LE` trỏ được đúng một. Không
 //      thấy: pool lấy từ một hàm TỰ VIẾT ở tệp khác (`layPool()`) — chỗ dựng của nó nằm ở tệp kia và bị tính ở đó là pool
 //      không tên; `import x = require("pg")` (cấm bởi `verbatimModuleSyntax` + ESM).
+//   ⑷ [S1.9110 / khoản 274] CHỖ GẮN: một lời gọi gắn chỉ được TÍNH khi nó là một CÂU LỆNH RIÊNG (`<pool>.on("release", …);`,
+//      `ngheLoiKetNoiToiMuon(<pool>, …);`, hàm bọc của `api`) đứng trong CÙNG danh sách câu lệnh với câu lệnh dựng pool, SAU nó, và
+//      không câu lệnh nào ở giữa có lối ra (`return`, `throw`, `break`/`continue` ra khỏi câu ấy — lối ra trong hàm con không tính)
+//      hay DÙNG pool (trừ chính các lời gọi gắn khác của nó — lượt soi đối kháng: một `for (;;) { await withTenant(pool, …) }` ở giữa
+//      không có lối ra cú pháp mà lời gọi gắn sau nó là mã chết) — tức pool không chạy một bước nào trước khi được nghe, và lời gọi gắn
+//      chạy mỗi lần dòng dựng chạy. Lồng trong `if`/`try`/vòng lặp/hàm con/khối trần, sau `return`/`throw`, nằm trong
+//      một biểu thức (`c && nghe(pool)`), hay đứng trước dòng dựng ⇒ KHÔNG tính (`ganSaiCho` nói vì sao), và pool ấy hiện ở danh sách
+//      thiếu. Đo trên cây cú pháp đã có binder, theo DÒNG DỰNG chứ không theo biến: gán lại cùng biến là một dòng dựng mới cần lời gọi
+//      gắn của riêng nó; pool khai bằng khởi tạo trường lớp (`private q = new pg.Pool()`) không có khối câu lệnh nào ⇒ gán trong
+//      constructor rồi gắn cùng khối. Trước S1.9110 cổng nhận lời gọi gắn Ở BẤT KỲ ĐÂU trong tệp — `ghiLogLoiKetNoiToiMuon(pool, …)`
+//      trong `if (false) {}` hay sau `return` vẫn qua (khoản 274, tách từ khoản 183). Không thấy: một câu lệnh ở giữa NÉM ngầm (một
+//      lời gọi ném) thì lời gọi gắn không chạy — khi ấy tiến trình cũng không lên (hai composition root dựng pool đồng bộ, `main.ts`
+//      bắt và thoát); `process.exit()` hay một hàm trả `never` ở giữa không phải lối ra cú pháp.
 //
 // `NGOAI_LE` CÓ RĂNG (khoản 182): mỗi dòng phải trỏ một pool có thật (tên theo phạm vi), có lý do, và pool ấy KHÔNG được
 // truyền vào `withTenant` trong tệp — vì `withTenant` là nguồn phát DUY NHẤT của cả hai tín hiệu, nên "không đi qua
@@ -137,6 +150,20 @@ interface HoSoTep {
   readonly pool: readonly HoSoPool[];
   /** Số lỗi cú pháp — một tệp không đọc trọn được thì cổng phải kêu chứ không im. */
   readonly loiCuPhap: number;
+  /**
+   * [S1.9110 / khoản 274] Lời gọi gắn trỏ đúng một pool nhưng KHÔNG được tính vì sai chỗ (ranh giới ⑷) — `<dòng> <pool>: <tín hiệu> —
+   * <vì sao>`. Chỉ để chẩn đoán: pool ấy vẫn hiện ở danh sách thiếu nếu không lời gọi nào khác tính cho nó.
+   */
+  readonly ganSaiCho: readonly string[];
+}
+
+/** [S1.9110 / khoản 274] Một DÒNG DỰNG pool: mỗi dòng cần lời gọi gắn của riêng nó (gán lại cùng biến là một dòng dựng khác). */
+interface ChoDung {
+  readonly dong: number;
+  /** Câu lệnh chứa dòng dựng, con TRỰC TIẾP của một danh sách câu lệnh; `null` khi không có (khởi tạo trường lớp, thân `if` không ngoặc…). */
+  readonly cau: ts.Statement | null;
+  release: boolean;
+  toiMuon: boolean;
 }
 
 /** Nguồn của một tên đã import: gói và tên xuất (bí danh đã bỏ); `default` cho import mặc định, `*` cho `import * as`. */
@@ -231,6 +258,64 @@ function ghepTen(duong: string, bien: string): string {
   return duong === "" ? bien : `${duong}.${bien}`;
 }
 
+/**
+ * [S1.9110 / khoản 274] Danh sách câu lệnh mà `cau` là con TRỰC TIẾP — thân khối, tệp, module, `case`/`default`; `undefined` khi cha của
+ * nó không giữ một danh sách (thân `if`/vòng lặp không ngoặc, câu có nhãn).
+ */
+function danhSachCauLenh(cau: ts.Node): readonly ts.Statement[] | undefined {
+  const cha = cau.parent;
+  if (ts.isBlock(cha) || ts.isSourceFile(cha) || ts.isModuleBlock(cha) || ts.isCaseClause(cha) || ts.isDefaultClause(cha)) return cha.statements;
+  return undefined;
+}
+
+/** [S1.9110 / khoản 274] Câu lệnh chứa một biểu thức dựng pool: `const p = createPool(…);` hay `this.p = new pg.Pool(…);` — `null` khi khác. */
+function cauLenhDung(n: ts.Node): ts.Statement | null {
+  let x: ts.Node = n;
+  while (ts.isParenthesizedExpression(x.parent) || ts.isAsExpression(x.parent) || ts.isSatisfiesExpression(x.parent) || ts.isNonNullExpression(x.parent)) {
+    x = x.parent;
+  }
+  const cha = x.parent;
+  if (ts.isVariableDeclaration(cha) && ts.isVariableDeclarationList(cha.parent) && ts.isVariableStatement(cha.parent.parent)) return cha.parent.parent;
+  if (ts.isBinaryExpression(cha) && cha.operatorToken.kind === ts.SyntaxKind.EqualsToken && cha.right === x) {
+    let y: ts.Node = cha;
+    while (ts.isParenthesizedExpression(y.parent)) y = y.parent;
+    if (ts.isExpressionStatement(y.parent)) return y.parent;
+  }
+  return null;
+}
+
+/**
+ * [S1.9110 / khoản 274] Nút đầu tiên trong `cau` (không vào hàm con hay lớp) chuyển điều khiển RA KHỎI `cau`: `return`, `throw`, và
+ * `break`/`continue` mà đích của nó nằm ngoài `cau` (một `break` của vòng lặp con, hay tới một nhãn khai trong `cau`, thì không). `null`
+ * khi không có. `throw` trong một `try` có `catch` ngay trong `cau` vẫn bị tính — fail-closed, lời giải là dời lời gọi gắn lên.
+ */
+function loiRaTrong(cau: ts.Statement): ts.Node | null {
+  let ra: ts.Node | null = null;
+  const duyet = (n: ts.Node, trongVong: boolean, trongSwitch: boolean, nhan: ReadonlySet<string>): void => {
+    if (ra !== null || ts.isFunctionLike(n) || ts.isClassLike(n)) return;
+    if (ts.isReturnStatement(n) || ts.isThrowStatement(n)) {
+      ra = n;
+      return;
+    }
+    if (ts.isBreakStatement(n) && (n.label === undefined ? !(trongVong || trongSwitch) : !nhan.has(n.label.text))) {
+      ra = n;
+      return;
+    }
+    if (ts.isContinueStatement(n) && (n.label === undefined ? !trongVong : !nhan.has(n.label.text))) {
+      ra = n;
+      return;
+    }
+    const vong = trongVong || ts.isIterationStatement(n, false);
+    const sw = trongSwitch || ts.isSwitchStatement(n);
+    const nhanCon = ts.isLabeledStatement(n) ? new Set([...nhan, n.label.text]) : nhan;
+    ts.forEachChild(n, (con) => {
+      duyet(con, vong, sw, nhanCon);
+    });
+  };
+  duyet(cau, false, false, new Set());
+  return ra;
+}
+
 /** Tên theo phạm vi của một ký hiệu đã gán pool — thuộc tính khai ở tham số constructor lấy tên lớp, không lấy `constructor`. */
 function tenTheoPhamVi(kh: ts.Symbol): string {
   const d = kh.declarations?.[0];
@@ -260,50 +345,144 @@ function docVanBan(tep: string, vanBan: string): HoSoTep {
   if (cay === undefined) throw new Error(`không dựng được cây cú pháp của ${tep}`);
   const loiCuPhap = chuongTrinh.getSyntacticDiagnostics(cay).length;
 
+  const dongCua = (n: ts.Node): number => cay.getLineAndCharacterOfPosition(n.getStart(cay)).line + 1;
+
   // Lượt 1: chỗ DỰNG pool, khoá theo ký hiệu được gán; pool không tên đứng riêng.
+  // [S1.9110 / khoản 274] Và mỗi DÒNG DỰNG của một ký hiệu, cùng câu lệnh chứa nó — ranh giới ⑷ đo lời gọi gắn theo dòng dựng.
   const theoKyHieu = new Map<ts.Symbol, HoSoPool>();
+  const choDungCua = new Map<ts.Symbol, ChoDung[]>();
   const khongTen: HoSoPool[] = [];
   const timDung = (n: ts.Node): void => {
     if ((ts.isCallExpression(n) || ts.isNewExpression(n)) && laDungPool(n, ch)) {
       const kh = kyHieuDuocGan(n, ch);
       if (kh === undefined) {
-        const dong = cay.getLineAndCharacterOfPosition(n.getStart(cay)).line + 1;
-        khongTen.push({ ten: ghepTen(duongPhamVi(n), `<khong-ten:${String(dong)}>`), ngheRelease: false, ngheToiMuon: false, quaWithTenant: false });
-      } else if (!theoKyHieu.has(kh)) {
-        theoKyHieu.set(kh, { ten: tenTheoPhamVi(kh), ngheRelease: false, ngheToiMuon: false, quaWithTenant: false });
+        khongTen.push({ ten: ghepTen(duongPhamVi(n), `<khong-ten:${String(dongCua(n))}>`), ngheRelease: false, ngheToiMuon: false, quaWithTenant: false });
+      } else {
+        if (!theoKyHieu.has(kh)) theoKyHieu.set(kh, { ten: tenTheoPhamVi(kh), ngheRelease: false, ngheToiMuon: false, quaWithTenant: false });
+        const cau = cauLenhDung(n);
+        const ds = choDungCua.get(kh) ?? [];
+        ds.push({ dong: dongCua(n), cau: cau !== null && danhSachCauLenh(cau) !== undefined ? cau : null, release: false, toiMuon: false });
+        choDungCua.set(kh, ds);
       }
     }
     ts.forEachChild(n, timDung);
   };
   timDung(cay);
 
+  /**
+   * [S1.9110 / khoản 274] Lời gọi GẮN cho một pool đã biết: `(ký hiệu pool, tín hiệu)`, hay `null`. Một chỗ nhận diện cho cả lượt 2 lẫn
+   * phép kiểm "câu lệnh ở giữa là chính một lời gọi gắn của pool ấy".
+   */
+  const laLoiGoiGan = (n: ts.CallExpression): { readonly kh: ts.Symbol; readonly tinHieu: "release" | "toiMuon" } | null => {
+    const goi = n.expression;
+    const doiSoDau = n.arguments[0];
+    if (doiSoDau === undefined) return null;
+    if (ts.isIdentifier(goi)) {
+      const kh = kyHieuCuaBieuThuc(doiSoDau, ch);
+      if (kh === undefined || !theoKyHieu.has(kh)) return null;
+      const ng = nguonImportCua(ch.getSymbolAtLocation(goi));
+      if (laNguon(ng, TEP_HAM_BOC_API, HAM_BOC_NGHE_RELEASE)) return { kh, tinHieu: "release" };
+      if (laNguon(ng, TEP_HAM_BOC_API, HAM_BOC_NGHE_TOI_MUON) || laNguon(ng, GOI_TENANCY, "ngheLoiKetNoiToiMuon")) return { kh, tinHieu: "toiMuon" };
+      return null;
+    }
+    // `<pool>.on("release", …)` / `this.<pool>.on("release", …)` viết thẳng
+    if (ts.isPropertyAccessExpression(goi) && goi.name.text === "on" && ts.isStringLiteralLike(doiSoDau) && doiSoDau.text === "release") {
+      const kh = kyHieuCuaBieuThuc(goi.expression, ch);
+      return kh !== undefined && theoKyHieu.has(kh) ? { kh, tinHieu: "release" } : null;
+    }
+    return null;
+  };
+  /** Câu lệnh `cau` là CHÍNH một lời gọi gắn của pool `kh` (một câu lệnh biểu thức, lời gọi đứng trần). */
+  const laCauGanCua = (cau: ts.Statement, kh: ts.Symbol): boolean => {
+    if (!ts.isExpressionStatement(cau)) return false;
+    let e = cau.expression;
+    while (ts.isParenthesizedExpression(e)) e = e.expression;
+    return ts.isCallExpression(e) && laLoiGoiGan(e)?.kh === kh;
+  };
+  /** Nút đầu tiên trong `cau` (kể cả trong hàm con) trỏ ký hiệu `kh` — một lần DÙNG pool; `null` khi không có. */
+  const dungKyHieu = (cau: ts.Node, kh: ts.Symbol): ts.Node | null => {
+    let ra: ts.Node | null = null;
+    const duyet = (n: ts.Node): void => {
+      if (ra !== null) return;
+      if (ts.isIdentifier(n) && ch.getSymbolAtLocation(n) === kh) {
+        ra = n;
+        return;
+      }
+      ts.forEachChild(n, duyet);
+    };
+    duyet(cau);
+    return ra;
+  };
+
+  // [S1.9110 / khoản 274] Ranh giới ⑷: lời gọi gắn chỉ được tính cho dòng dựng GẦN NHẤT phía trước nó trong CÙNG danh sách câu lệnh, khi
+  // nó là một câu lệnh riêng và không câu lệnh nào ở giữa có lối ra — hay DÙNG pool trước khi nó được nghe (lượt soi đối kháng:
+  // `for (;;) { await withTenant(pool, …) }` ở giữa không có lối ra cú pháp, lời gọi gắn sau nó là mã chết mà pool vẫn chạy không người
+  // nghe). Trả `null` khi đã tính; không thì lý do (vào `ganSaiCho`).
+  const ganSaiCho: string[] = [];
+  const tinhGan = (kh: ts.Symbol, loiGoi: ts.CallExpression, tinHieu: "release" | "toiMuon"): void => {
+    const cacCho = choDungCua.get(kh) ?? [];
+    const lyDo = ((): string | null => {
+      let x: ts.Node = loiGoi;
+      while (ts.isParenthesizedExpression(x.parent)) x = x.parent;
+      const cauGan = x.parent;
+      if (!ts.isExpressionStatement(cauGan)) return "lời gọi gắn nằm TRONG một biểu thức, không đứng thành câu lệnh riêng";
+      const ds = danhSachCauLenh(cauGan);
+      if (ds === undefined) return "câu lệnh gắn không nằm trong một khối câu lệnh (thân `if`/vòng lặp không ngoặc, câu có nhãn)";
+      const j = ds.indexOf(cauGan);
+      let i = -1;
+      let cho: ChoDung | undefined;
+      for (const c of cacCho) {
+        const k = c.cau === null ? -1 : ds.indexOf(c.cau);
+        if (k !== -1 && k < j && k > i) {
+          i = k;
+          cho = c;
+        }
+      }
+      const dongDung = cacCho.map((c) => String(c.dong)).join(", ");
+      if (cho === undefined) {
+        return cacCho.some((c) => c.cau !== null && ds.includes(c.cau))
+          ? `đứng TRƯỚC dòng dựng pool (dòng ${dongDung})`
+          : `không cùng khối câu lệnh với dòng dựng pool (dòng ${dongDung}) — lồng trong if/try/vòng lặp/hàm con, hay ở khối khác`;
+      }
+      for (let k = i + 1; k < j; k += 1) {
+        const cau = ds[k]!;
+        const ra = loiRaTrong(cau);
+        if (ra !== null) return `sau một lối ra (${ts.SyntaxKind[ra.kind]} ở dòng ${String(dongCua(ra))}) nằm giữa dòng dựng (dòng ${String(cho.dong)}) và lời gọi gắn`;
+        const dung = laCauGanCua(cau, kh) ? null : dungKyHieu(cau, kh);
+        if (dung !== null) return `pool được DÙNG ở dòng ${String(dongCua(dung))} trước lời gọi gắn — giữa dòng dựng (dòng ${String(cho.dong)}) và nó chỉ được có lời gọi gắn khác của chính pool ấy`;
+      }
+      cho[tinHieu] = true;
+      return null;
+    })();
+    if (lyDo !== null) ganSaiCho.push(`${String(dongCua(loiGoi))} ${theoKyHieu.get(kh)?.ten ?? kh.name}: ${tinHieu} — ${lyDo}`);
+  };
+
   // Lượt 2: người nghe và lời gọi `withTenant`, trỏ về pool qua ký hiệu của đối số.
   const timNghe = (n: ts.Node): void => {
     if (ts.isCallExpression(n)) {
       const goi = n.expression;
       const doiSoDau = n.arguments[0];
+      // ~~`p.ngheRelease = true` / `p.ngheToiMuon = true` theo sự có mặt~~ [S1.9110 / khoản 274] tính theo dòng dựng (`tinhGan`).
+      const gan = laLoiGoiGan(n);
+      if (gan !== null) tinhGan(gan.kh, n, gan.tinHieu);
       if (ts.isIdentifier(goi) && doiSoDau !== undefined) {
         const kh = kyHieuCuaBieuThuc(doiSoDau, ch);
         const p = kh === undefined ? undefined : theoKyHieu.get(kh);
-        if (p !== undefined) {
-          const ng = nguonImportCua(ch.getSymbolAtLocation(goi));
-          if (laNguon(ng, TEP_HAM_BOC_API, HAM_BOC_NGHE_RELEASE)) p.ngheRelease = true;
-          if (laNguon(ng, TEP_HAM_BOC_API, HAM_BOC_NGHE_TOI_MUON) || laNguon(ng, GOI_TENANCY, "ngheLoiKetNoiToiMuon")) p.ngheToiMuon = true;
-          if (laNguon(ng, GOI_TENANCY, "withTenant")) p.quaWithTenant = true;
-        }
-      }
-      // `<pool>.on("release", …)` / `this.<pool>.on("release", …)` viết thẳng
-      if (ts.isPropertyAccessExpression(goi) && goi.name.text === "on" && doiSoDau !== undefined && ts.isStringLiteralLike(doiSoDau) && doiSoDau.text === "release") {
-        const kh = kyHieuCuaBieuThuc(goi.expression, ch);
-        const p = kh === undefined ? undefined : theoKyHieu.get(kh);
-        if (p !== undefined) p.ngheRelease = true;
+        if (p !== undefined && laNguon(nguonImportCua(ch.getSymbolAtLocation(goi)), GOI_TENANCY, "withTenant")) p.quaWithTenant = true;
       }
     }
     ts.forEachChild(n, timNghe);
   };
   timNghe(cay);
 
-  return { tep, pool: [...theoKyHieu.values(), ...khongTen], loiCuPhap };
+  // [S1.9110 / khoản 274] Một pool nghe đủ một tín hiệu khi MỌI dòng dựng của nó có lời gọi gắn được tính.
+  for (const [kh, p] of theoKyHieu) {
+    const cacCho = choDungCua.get(kh) ?? [];
+    p.ngheRelease = cacCho.length > 0 && cacCho.every((c) => c.release);
+    p.ngheToiMuon = cacCho.length > 0 && cacCho.every((c) => c.toiMuon);
+  }
+
+  return { tep, pool: [...theoKyHieu.values(), ...khongTen], loiCuPhap, ganSaiCho };
 }
 
 function doc(tep: string): HoSoTep {
@@ -387,6 +566,11 @@ const MAU_HAI_HAM = [
   'export function b(u: string): void { const pool = createPool(u, 1, { role: "app_api" }); void pool; }',
 ].join("\n");
 
+/**
+ * Pool là thuộc tính lớp, khai bằng khởi tạo trường, gắn trong một phương thức. ~~Nghe đủ.~~ [S1.9110 / khoản 274] THIẾU: khởi tạo trường
+ * không có khối câu lệnh nào để lời gọi gắn đứng cùng, và `nghe()` chỉ chạy khi có người gọi — đúng hình dạng "gắn mà có thể không chạy"
+ * của hàng 274. Hình dạng đủ là gán trong constructor rồi gắn ngay cùng khối (`MAU_LOP_GAN_TRONG_CONSTRUCTOR`).
+ */
 const MAU_LOP_NGHE_DU = [
   'import pg from "pg";',
   'import { ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";',
@@ -395,6 +579,21 @@ const MAU_LOP_NGHE_DU = [
   '  nghe(): void { this.q.on("release", () => undefined); ngheLoiKetNoiToiMuon(this.q, () => undefined); }',
   "}",
 ].join("\n");
+
+const MAU_LOP_GAN_TRONG_CONSTRUCTOR = [
+  'import pg from "pg";',
+  'import { ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";',
+  "export class C {",
+  "  private readonly q: pg.Pool;",
+  '  constructor() {\n    this.q = new pg.Pool({});\n    this.q.on("release", () => undefined);\n    ngheLoiKetNoiToiMuon(this.q, () => undefined);\n  }',
+  "}",
+].join("\n");
+
+/** [S1.9110 / khoản 274] Lời gọi gắn bị bỏ vì sai chỗ, in kèm thông điệp đỏ của hai vế thiếu — để lần đỏ nói vì sao. */
+function ganSaiChoCua(hoSo: readonly HoSoTep[]): string {
+  const ds = hoSo.flatMap((h) => h.ganSaiCho.map((g) => `${h.tep}:${g}`));
+  return ds.length === 0 ? "" : `\nlời gọi gắn KHÔNG được tính (ranh giới ⑷):\n${ds.join("\n")}`;
+}
 
 /** Hai hàm bọc của `api`: chỉ được tin khi import từ `./mo-ta-loi.js`. */
 function mauHamBoc(tuTep: string): string {
@@ -434,7 +633,9 @@ describe("[S1.84 → S1.227 / khoản 129, 173, 176, 180, 182] pool của apps/ 
   });
 
   it("ĐỐI CHỨNG: pool là thuộc tính lớp nghe qua `this.<pool>` thì đủ; hàm bọc của api chỉ được tin khi import từ ./mo-ta-loi.js", () => {
-    const lop = [docVanBan(MAU, MAU_LOP_NGHE_DU)];
+    // ~~`MAU_LOP_NGHE_DU`~~ [S1.9110 / khoản 274] Khởi tạo trường + gắn trong phương thức nay THIẾU (ca riêng ở khối khoản 274); thuộc
+    // tính lớp nghe qua `this.<pool>` vẫn đủ khi gán trong constructor và gắn cùng khối.
+    const lop = [docVanBan(MAU, MAU_LOP_GAN_TRONG_CONSTRUCTOR)];
     expect(timThieu(lop, [], "release")).toEqual([]);
     expect(timThieu(lop, [], "toiMuon")).toEqual([]);
     const boc = [docVanBan(MAU, mauHamBoc(TEP_HAM_BOC_API))];
@@ -461,25 +662,138 @@ describe("[S1.84 → S1.227 / khoản 129, 173, 176, 180, 182] pool của apps/ 
     expect(timThieu(hoSo, [hopLe], "release"), "dòng miễn hợp lệ rút đúng một pool khỏi danh sách thiếu").toEqual(["mau.ts: chay.pool"]);
   });
 
+  describe("[S1.9110 / khoản 274] lời gọi gắn phải là một câu lệnh ở CÙNG khối với dòng dựng pool, sau nó, không lối ra ở giữa", () => {
+    /** Một tệp mẫu: pool dựng trong hàm `chay`, `giua` là các câu lệnh giữa dòng dựng và hai lời gọi gắn, `boc` bọc hai lời gọi gắn. */
+    const mauGan = (boc: (gan: string) => string, giua = ""): string =>
+      [
+        'import { createPool } from "@trustprocure/db";',
+        'import { ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";',
+        "export async function chay(url: string, c: boolean): Promise<void> {",
+        '  const pool = createPool(url, 1, { role: "app_api" });',
+        giua,
+        boc('pool.on("release", () => undefined);\n  ngheLoiKetNoiToiMuon(pool, () => undefined);'),
+        '  await withTenant(pool, "org", async () => undefined);',
+        "}",
+      ].join("\n");
+    const thieu = (vanBan: string): readonly string[][] => {
+      const hoSo = [docVanBan(MAU, vanBan)];
+      return [timThieu(hoSo, [], "release"), timThieu(hoSo, [], "toiMuon")];
+    };
+    const DU = [[], []];
+    const THIEU_CA_HAI = [["mau.ts: chay.pool"], ["mau.ts: chay.pool"]];
+
+    it("đối chứng dương: hai lời gọi gắn đứng ngay sau dòng dựng, cùng khối ⇒ đủ; có câu lệnh không lối ra ở giữa ⇒ vẫn đủ", () => {
+      expect(thieu(mauGan((g) => `  ${g}`))).toEqual(DU);
+      // `return` trong một hàm con ở giữa không phải lối ra của khối (dây nối thật: `onPoolError: (e) => …` của pool thứ hai).
+      expect(thieu(mauGan((g) => `  ${g}`, "  const moTa = (e: unknown): string => { return String(e); };\n  void moTa;"))).toEqual(DU);
+    });
+
+    it("văn bản mẫu của hàng sổ: gắn trong `if (false) {}` ⇒ ĐỎ; gắn sau `return` ⇒ ĐỎ", () => {
+      expect(thieu(mauGan((g) => `  if (false) {\n  ${g}\n  }`))).toEqual(THIEU_CA_HAI);
+      expect(thieu(mauGan((g) => `  return;\n  ${g}`))).toEqual(THIEU_CA_HAI);
+    });
+
+    it("lồng trong `try`, vòng lặp, hàm con, khối trần, nhãn; nằm trong một biểu thức (`c && …`); sau `throw` — đều ĐỎ", () => {
+      for (const boc of [
+        (g: string) => `  try {\n  ${g}\n  } finally {\n  }`,
+        (g: string) => `  for (let i = 0; i < 1; i += 1) {\n  ${g}\n  }`,
+        (g: string) => `  const gan = (): void => {\n  ${g}\n  };\n  gan();`,
+        (g: string) => `  {\n  ${g}\n  }`,
+        (g: string) => `  nhan: {\n  ${g}\n  }`,
+        (g: string) => `  if (c) throw new Error("x");\n  else {\n  ${g}\n  }`,
+        (g: string) => `  throw new Error("x");\n  ${g}`,
+      ]) {
+        expect(thieu(mauGan(boc)), boc("<gắn>")).toEqual(THIEU_CA_HAI);
+      }
+      const bieuThuc = mauGan(() => '  c && pool.on("release", () => undefined);\n  void (c ? ngheLoiKetNoiToiMuon(pool, () => undefined) : 0);');
+      expect(thieu(bieuThuc)).toEqual(THIEU_CA_HAI);
+    });
+
+    it("lối ra Ở GIỮA dòng dựng và lời gọi gắn — `if (c) return;`, `break` ra khỏi khối — ⇒ ĐỎ; `break` của một vòng lặp con ở giữa thì không phải lối ra", () => {
+      expect(thieu(mauGan((g) => `  ${g}`, "  if (c) return;"))).toEqual(THIEU_CA_HAI);
+      expect(thieu(mauGan((g) => `  ${g}`, "  for (const x of [1]) { if (x) break; }"))).toEqual(DU);
+      const trongVong = [
+        'import { createPool } from "@trustprocure/db";',
+        'import { ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";',
+        "export function chay(urls: string[]): void {",
+        "  for (const url of urls) {",
+        '    const pool = createPool(url, 1, { role: "app_api" });',
+        "    if (url === '') break;",
+        '    pool.on("release", () => undefined);',
+        "    ngheLoiKetNoiToiMuon(pool, () => undefined);",
+        "  }",
+        "}",
+      ].join("\n");
+      expect(thieu(trongVong)).toEqual(THIEU_CA_HAI);
+    });
+
+    it("lượt soi đối kháng: pool được DÙNG giữa dòng dựng và lời gọi gắn — `withTenant` trước khi nghe, vòng lặp vô tận dùng pool (mã chết sau nó) — ⇒ ĐỎ; lời gọi gắn KIA của chính pool ở giữa thì không phải lần dùng", () => {
+      expect(thieu(mauGan((g) => `  ${g}`, '  await withTenant(pool, "org", async () => undefined);'))).toEqual(THIEU_CA_HAI);
+      expect(thieu(mauGan((g) => `  ${g}`, '  for (;;) {\n    await withTenant(pool, "org", async () => undefined);\n  }'))).toEqual(THIEU_CA_HAI);
+      // Một hàm con ở giữa ĐÓNG lên pool là một lần dùng (fail-closed): ai gọi nó thì cổng không biết là trước hay sau lời gọi gắn.
+      expect(thieu(mauGan((g) => `  ${g}`, "  const dung = (): unknown => pool;\n  void dung;"))).toEqual(THIEU_CA_HAI);
+      const hoSo = docVanBan(MAU, mauGan((g) => `  ${g}`, '  await withTenant(pool, "org", async () => undefined);'));
+      expect(hoSo.ganSaiCho.join("\n")).toMatch(/chay\.pool: release — pool được DÙNG ở dòng 5 trước lời gọi gắn/u);
+      // Đối chứng: `pool.on("release", …)` đứng giữa dòng dựng và `ngheLoiKetNoiToiMuon(pool, …)` — hình dạng của mọi dây nối thật.
+      expect(thieu(mauGan((g) => `  ${g}`))).toEqual(DU);
+    });
+
+    it("mỗi DÒNG DỰNG cần lời gọi gắn của riêng nó: gán lại cùng biến sau khi gắn ⇒ ĐỎ; gắn trước dòng dựng ⇒ ĐỎ; hai nhánh `if` dựng, gắn ở ngoài ⇒ ĐỎ", () => {
+      const ganLai = mauGan((g) => `  ${g}\n  pool = createPool(url, 2, { role: "app_api" });`).replace("const pool", "let pool");
+      expect(thieu(ganLai)).toEqual(THIEU_CA_HAI);
+      const truoc = [
+        'import { createPool } from "@trustprocure/db";',
+        'import { ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";',
+        'import type { Pool } from "pg";',
+        "export function chay(url: string, c: boolean): Pool {",
+        "  let pool: Pool | undefined;",
+        '  if (c) pool = createPool(url, 1, { role: "app_api" });',
+        '  else { pool = createPool(url, 2, { role: "app_api" }); }',
+        '  pool.on("release", () => undefined);',
+        "  ngheLoiKetNoiToiMuon(pool, () => undefined);",
+        "  return pool;",
+        "}",
+      ].join("\n");
+      expect(thieu(truoc)).toEqual(THIEU_CA_HAI);
+    });
+
+    it("pool là thuộc tính lớp: khởi tạo trường không có khối câu lệnh ⇒ ĐỎ dù một phương thức gắn qua `this`; gán trong constructor rồi gắn cùng khối ⇒ đủ", () => {
+      expect(timThieu([docVanBan(MAU, MAU_LOP_NGHE_DU)], [], "release")).toEqual(["mau.ts: C.q"]);
+      const hamDung = [
+        'import pg from "pg";',
+        'import { ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";',
+        "export class D {",
+        "  private readonly q: pg.Pool;",
+        '  constructor() {\n    this.q = new pg.Pool({});\n    this.q.on("release", () => undefined);\n    ngheLoiKetNoiToiMuon(this.q, () => undefined);\n  }',
+        "}",
+      ].join("\n");
+      expect(timThieu([docVanBan(MAU, hamDung)], [], "release")).toEqual([]);
+      expect(timThieu([docVanBan(MAU, hamDung)], [], "toiMuon")).toEqual([]);
+    });
+  });
+
   it("phép quét thật đọc trọn mọi tệp (0 lỗi cú pháp), thấy pool ở CẢ apps/ lẫn tools/, và tên theo phạm vi là duy nhất trong tệp", () => {
     expect(HO_SO_TAT_CA.filter((h) => h.loiCuPhap > 0).map((h) => h.tep), "tệp không đọc trọn được thì cổng mù ở tệp ấy").toEqual([]);
     // Không phải một sàn theo con số hôm nay: nó chỉ bắt ca `git ls-files` trả rỗng cho một trong hai thư mục.
     expect(HO_SO.some((h) => h.tep.startsWith("apps/")), "không thấy pool nào trong apps/ — phép quét rỗng").toBe(true);
     expect(HO_SO.some((h) => h.tep.startsWith("tools/")), "không thấy pool nào trong tools/ — phép quét rỗng (khoản 180)").toBe(true);
     expect(tenTrung(HO_SO)).toEqual([]);
+    // [S1.9110 / khoản 274] Không lời gọi gắn nào trên kho thật bị bỏ vì sai chỗ: một lời gọi gắn chết (trong nhánh không chạy, sau lối
+    // ra) cạnh lời gọi đúng là mã nói dối về thứ nó làm, dù pool vẫn nghe đủ nhờ lời gọi kia.
+    expect(ganSaiChoCua(HO_SO_TAT_CA)).toBe("");
   });
 
   it("mọi pool dựng trong `apps/` và `tools/` có người nghe `release` (khoản 118 · 173 · 180)", () => {
     expect(
       timThieu(HO_SO, NGOAI_LE, "release"),
-      "pool không ai nghe `release` thì một kết nối bị huỷ vì trạng thái phiên còn sót là im lặng",
+      `pool không ai nghe \`release\` thì một kết nối bị huỷ vì trạng thái phiên còn sót là im lặng${ganSaiChoCua(HO_SO)}`,
     ).toEqual([]);
   });
 
   it("mọi pool dựng trong `apps/` và `tools/` có người nghe lỗi-tới-muộn (khoản 129 · 180)", () => {
     expect(
       timThieu(HO_SO, NGOAI_LE, "toiMuon"),
-      "pool không ai nghe lỗi-tới-muộn thì kết nối nhiễm tới sau trần biến mất không dấu vết",
+      `pool không ai nghe lỗi-tới-muộn thì kết nối nhiễm tới sau trần biến mất không dấu vết${ganSaiChoCua(HO_SO)}`,
     ).toEqual([]);
   });
 
