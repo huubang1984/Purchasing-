@@ -9897,6 +9897,71 @@ lô gửi đổi phản hồi và route đọc —, route nộp duyệt thật v
 422 `TRONG_TAP_LOAI_TRU`, hàng ngừng dùng, băm mong đợi); `apps/web` (module thuần, bộ giả lập trang); `kich-ban-41-http.int` (bộ quét rò
 rỉ đi qua ba route ghi); lượt đi thử T4 trên Chromium. Đột biến và lượt soi đối kháng: §S1.234.
 
+## ADR-137 — Chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt: gói nộp dưới luật MVP1 không đi qua lần bật
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn LẦN BẬT, không chặn lời duyệt ·
+**[S1.236]** · Migration `097_chan_bat_s3_khi_con_goi_cho` · Biên bản: `evidence/security-reviews.md` §S1.236 · **Khoản:** 261
+(ghi ở S1.198; đóng ở đây); lượt soi mở khoản 286
+
+### Bối cảnh
+
+ADR-080 làm S3 thành công tắc một chiều theo tổ chức: chữ ký đầu tiên trên một phiên bản chính sách có bậc (`to_chuc_da_bat_s3`).
+Luật của S3 cho danh sách mời (K4a — chỉ đổi ở DRAFT) và cho lời duyệt (K4b — lời duyệt mang lần nộp đã xem, chữ ký mang băm danh
+sách lúc ký) chỉ áp ở tổ chức đã bật. Ở tổ chức chưa bật, danh sách đổi được khi gói đang chờ duyệt (`076`) và lần nộp đứng yên
+(`087` chỉ tăng nó ở cạnh nộp). Lượt soi S1.198 (F6) đo một gói đi qua lần bật: người duyệt đọc gói ở lần nộp 1 với một lời mời;
+PM mời thêm — MVP1 cho —; tổ chức bật; lời duyệt mang mốc 1 đi qua, chữ ký mang băm của danh sách HAI lời mời, và gói MỞ trên một
+danh sách người duyệt chưa đọc. Khoản 261, rổ B.
+
+### Quyết định
+
+1. **Chữ ký bật S3 bị từ chối khi tổ chức còn gói `PENDING_APPROVAL`.** `chinh_sach_kiem_nguoi_ky` (thân từ `097`) thêm một vế:
+   tổ chức CHƯA bật — nên chữ ký này là chữ ký bật — mà còn gói chờ duyệt ⇒ 23514 nêu số gói. Tổ chức duyệt rồi mở, hay huỷ, các
+   gói ấy — ở tổ chức chưa bật không có cạnh về DRAFT (`077`) —, rồi ký. Lời từ chối đi ra `POST /policy/:id/sign` dưới 422 mang
+   nguyên lời của trigger, như mọi luật khác của lần ký; route và tầng gói không đổi.
+2. **Chỉ lần bật bị hỏi.** Chữ ký trên phiên bản có bậc sau lần bật không bị hỏi: gói chờ duyệt lúc ấy đã nộp dưới luật S3, và từ
+   lần bật danh sách của gói chờ duyệt không đổi được (`076`).
+3. **Không đua, nhờ khoá sẵn có.** Phép kiểm đứng sau khoá tư vấn theo tổ chức mà lần ký giữ ĐỘC QUYỀN và cạnh nộp duyệt giữ CHIA
+   SẺ (`072` (4)(5)): một lần nộp đang dở làm lần ký chờ, và câu đếm — một câu mới, một ảnh chụp mới của READ COMMITTED lấy sau khoá —
+   thấy gói nó vừa nộp; một lần nộp tới sau chờ lần ký, rồi đi dưới luật S3. Điều ấy chỉ đúng khi câu đếm lấy ảnh chụp MỚI: lượt
+   soi đo một lần ký REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô dựng lại trọn lỗ gốc (ảnh chụp lấy trước lần nộp, hay trước
+   khoá). Nên **vế bật chỉ nhận dưới READ COMMITTED** — mức của mọi đường ứng dụng —, và mục ghim hardening phán xét
+   **`provolatile = 'v'`** (hàm STABLE đọc ảnh chụp lấy trước khoá).
+4. **Vế đứng cuối, đếm theo tổ chức của chữ ký.** Một chữ ký sai vì lý do khác vẫn nhận đúng lời từ chối của nó; gói của tổ chức
+   khác không đếm (câu đếm lọc theo `org_id` của chữ ký, dưới quyền người gọi).
+
+### Phương án đã cân nhắc
+
+- **Từ chối lời duyệt của một lần nộp bắt đầu trước lúc bật** (đòi trả về, nộp lại) — bật không bị ràng buộc, xử lý từng gói, lần
+  nộp mới đi qua đủ cổng S3, và hai mốc (`submitted_at`, `signed_at`) so được vì cùng đóng dấu sau một khoá; nhưng chạm trigger
+  duyệt (`087`), cần lời từ chối có tên ở tầng gói và HTTP, và mọi gói chờ lúc bật phải đi thêm một vòng. Chủ dự án không chọn.
+- **Nâng lần nộp của mọi gói chờ ở lần bật** — đổi nghĩa của lần nộp (chỉ tăng ở cạnh nộp), và lần nộp mới không đi qua cổng S3 lúc
+  nộp. Bác.
+
+### Đo
+
+Khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — ca giới hạn cũ của khoản 261, LẬT; câu đếm theo tổ chức (hai gói chờ,
+một gói nháp, gói của tổ chức khác); hai chiều đua qua khoá tư vấn; chữ ký sau lần bật — và một ca HTTP ở
+`apps/api/src/buyer.int.test.ts`. Trên cây `master` ba ca của khối (6) đỏ, ca đối chứng xanh, ca HTTP đỏ (201 thay 422 — người kiểm
+đo). Sau lượt soi: ca lần ký dưới REPEATABLE READ và SERIALIZABLE; ca `provolatile`. Đột biến ghi ở biên bản §S1.236.
+
+### Hệ quả, nói thẳng
+
+- Tổ chức đông gói phải chọn lúc không còn gói chờ duyệt để bật S3 — một lần, công tắc một chiều. Hôm nay không tổ chức thật nào bật
+  được S3 (ADR-105).
+- Lần bật bị từ chối không vào sổ `CONTROL_DENIED`: nó là một luật của lần ký, không phải một chốt ở cạnh gói (ADR-084).
+- Phía nộp duyệt không có gác mức cô lập: một lần nộp REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô, ảnh chụp lấy trước lần
+  bật, đọc tổ chức CHƯA bật và đi qua K1 với ngân sách ghim phiên bản cũ; gói ấy rồi MỞ (lượt soi đo). Đó là khoản 286 — chung cho
+  mọi phép kiểm đọc `to_chuc_da_bat_s3` và mọi hàm dựa vào khoá, cùng mức cô lập mặc định của database không được ghim.
+- Hàng có trước `097`: một tổ chức đã bật khi còn gói chờ (cây `master` cho phép) giữ nguyên gói ấy — lời duyệt mốc cũ vẫn qua
+  (lượt soi đo trên cụm `master` rồi `migrate()`). Lớp hai còn đó: chữ ký thời MVP1 không mang băm nên K4b không đếm nó (đo bằng
+  thân `072` mô phỏng). Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+- Một người giữ quyền nộp duyệt giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả gói chờ
+  nguyên tử. Chuyện khả dụng, không phải an ninh.
+- Chữ ký thời MVP1 của một gói đang chờ duyệt không còn đi qua lần bật — ca giới hạn khoản 253 ở `danh-sach-moi.int.test.ts` nay đo
+  lời từ chối; vế *K4b đếm người chứ không đếm hàng* đo lại trong S3. Ba phép đo khác từng nộp gói TRƯỚC lần bật để có một gói chờ
+  duyệt ở tổ chức đã bật — tổng điều tra H19, `bac-chinh-sach`, `nhom-hang` — nay nộp SAU lần ký dưới luật S3, hay huỷ gói trước lần
+  ký.
+
 ## ADR-125 — Hợp đồng số của bảng so sánh: `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị — giữ hình dạng JSON, ghi hợp đồng thay vì đổi `payload`
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 · **[S1.213]** · **Khoản nợ liên quan:** 108 (đóng), 107 (đóng — phía ghi), 114 và 269 (chi phí đọc `payload`) · **Liên quan:** ADR-016 tiểu mục [S1.213 / khoản 133] (cùng vòng), `020`/`022` mục 8 (`bid_so_tien`), `docs/PRODUCT.md` §11 (*"giá đúng tới từng chữ số"*) · **Biên bản:** `evidence/security-reviews.md` §S1.213
