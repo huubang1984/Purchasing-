@@ -18322,7 +18322,7 @@ Trên Postgres 16 thật (cụm cục bộ, mọi migration tới `089`):
 
 ## 6. Đo
 
-- `packages/du-lieu-nen/src/lich-su-gia.int.test.ts` SỐ_ĐO_T3 — Postgres 16 thật, dưới `app_api`; gói đã mở niêm phong và vòng BAFO
+- `packages/du-lieu-nen/src/lich-su-gia.int.test.ts` **45/45** — Postgres 16 thật, dưới `app_api`; gói đã mở niêm phong và vòng BAFO
   dựng bằng SQL thô dưới vai chủ cụm theo đúng thứ tự cạnh của đường thật:
   - **⑴ `bid_dong_tho`** — phong bì trình duyệt; sáu ca trên `amount` (dòng ấy `KHONG_DOC_DUOC`, anh em `LECH_TONG`) và trên
     `totalAmount` (mọi dòng `KHONG_DOC_DUOC`); chuỗi không phải số; bốn dạng `lines` không phải mảng; `lineNo` trùng; sáu dạng
@@ -18340,7 +18340,7 @@ Trên Postgres 16 thật (cụm cục bộ, mọi migration tới `089`):
     của tệp; tập hàm chạm bản rõ trên `pg_proc` bằng danh sách tĩnh, không view nào đọc bản rõ, `quan_sat_gia` không `SECURITY DEFINER`.
 - `tests/architecture/ban-ro-liet-ke.test.ts` 6/6 — năm tệp TypeScript, ba hàm SQL, một tệp `.sql` khác, không `BEGIN ATOMIC`, bộ đọc
   thân tự kiểm.
-- `hang-chuan.int` 23/23 (đột biến S4.2a nay trên lõi), `don-vi.int`, `anh-xa.int` 23/23 — hành vi `quy_doi_don_vi` y nguyên.
+- `hang-chuan.int` 15/15 (đột biến S4.2a nay trên lõi), `don-vi.int` 12/12, `anh-xa.int` 23/23 — hành vi `quy_doi_don_vi` y nguyên.
 - **Hai mươi lăm đột biến**, mỗi lần một chỗ trên thân migration; mục ghim hardening SINH LẠI từ thân đã đột biến (bản áp lại và
   `$than$`) — sửa riêng migration thì `migrate()` chữa về bản ghim và đột biến biến mất trong im lặng (S1.96):
 
@@ -18434,4 +18434,15 @@ nhiều yêu cầu cho một vòng.
 
 ## 9. Số đo
 
-SỐ_ĐO_CUOI
+- Cây cuối — nhánh dựng lại trên `master` sau #217 (`79b0c7a`), số đã cấp S1.235 / ADR-136 / migration `096`: `pnpm cap-so` giữ số
+  trên remote, và S1.207–S1.234, ADR-123–ADR-135, migration `091`–`095` đã có nhánh khác giữ. Hợp không xung đột; ba danh sách
+  migration viết cứng của `db/migrations.int` (khuôn của #215) nhận `096`. `pnpm t0` sạch; `pnpm test` 126 tệp, 1843 đạt, 1 bỏ
+  qua; `pnpm cap-so --kiem` sạch.
+- `pnpm evidence` — toàn bộ T1–T3 cục bộ trên cây cuối: 208 tệp, 3606 khẳng định, 3604 đạt, 1 bỏ qua, **1 ĐỎ**: census của
+  `bac-chinh-sach.int` (*mọi hàm đọc `org_procurement_policies` nằm trong đúng một lớp đã khai*) thấy `quan_sat_gia` chưa khai —
+  đúng việc của nó: hàm mới đọc bảng chính sách phải trả lời *có tự chọn phiên bản không*. Khai `QUA_HAM` (ngân sách ghim theo id,
+  không ngân sách thì QUA `chinh_sach_hieu_luc` lúc gói ra đời; không xếp theo phiên bản); chạy lại tệp ấy 42/42. Ca ấy không mang
+  nhãn bất biến, nên ma trận của lượt chạy đứng: **76/76 bất biến** (54/54 nghiệp vụ + 22/22 hàng rào). Ma trận: hàng L5 mới, 57 khẳng định.
+- `lich-su-gia.int` 45/45, `ban-ro-liet-ke` 6/6, `db/migrations.int` 120/120, `migrate.int` 42/42, `hang-chuan.int` 15/15,
+  `don-vi.int` 12/12, `anh-xa.int` 23/23 trong lượt ấy.
+- Hai mươi lăm đột biến, cả hai mươi lăm đỏ (§6); hiệu năng đo lại trên thân mà mục ghim áp (§6).

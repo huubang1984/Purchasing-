@@ -13,11 +13,11 @@
 Dự án có **hai cách đếm bất biến**, cả hai đều đúng trong phạm vi của mình, và việc lẫn lộn
 chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này chốt cách đếm:
 
-- **53 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
+- **54 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
 - **22 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 75 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 76 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,9 +27,9 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **53** | 53 |
+| Nghiệp vụ (A–G) | **54** | 54 |
 | Hàng rào (H) | **22** | 22 |
-| **Cộng** | **75** | **75** |
+| **Cộng** | **76** | **76** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -38,7 +38,7 @@ G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **53/53** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **54/54** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -97,6 +97,7 @@ Hôm nay: **53/53** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | L3 | Người đặt thước dữ liệu không thấy giá và không cầm thứ bị đo — vế VAI: `item.manage` chỉ ở vai `DATA_STEWARD`; không vai nào, không người nào giữ `item.manage` cùng `bid.view`, `po.approve`, `award.recommend`, `rfq.create` hay `rfq.invite`; và mọi hàng dữ liệu nền do người giữ `item.manage` trong tổ chức của hàng ghi. ~~Vế HÀNH VI — người ghi ánh xạ `NGUOI_DUYET` nằm ngoài trọn tập ADR-082 ⑿ của gói, `TU_DONG` trên gói đã có bản rõ chỉ do người giữ `item.manage` kích hoạt — vào hàng này ở S4.3~~ **[S1.204 / S4.3a]** Vế HÀNH VI: người ghi ánh xạ `NGUOI_DUYET` giữ `item.manage`; nằm ngoài tập loại trừ của gói — người tạo, mọi `invited_by` và `revoked_by`, người đặt ngân sách, người nộp duyệt (hai vế sau đọc cả sổ kiểm toán: cột chỉ giữ một lần), người tạo nhà cung cấp và người liên hệ trên danh sách; vế *tác giả ngoại lệ* vào cùng hàm ở S3.3b; `TU_DONG` hay gợi ý trên gói đã có bản rõ chỉ do người giữ `item.manage` ghi; bí danh do người trong tập loại trừ của gói khai không cho `TU_DONG` trên gói ấy | Hai trigger khuôn `033` — `kiem_tra_quan_ly_du_lieu_mu_gia_vai_tro` trên `role_permissions`, `…_nguoi_dung` trên `user_roles` — với danh sách loại trừ khớp nguyên văn hằng `ITEM_MANAGE_EXCLUDES` (meta-test `ma-tran-quyen`, cặp vai xung đột ghim); cổng ghi CSDL `du_lieu_nen_kiem_quyen_ghi` trên năm bảng nền — `083_hang_chuan`; đột biến gỡ trigger mức người và gỡ cổng ghi làm hai đường cấm đi qua. **[S1.199 / S4.2b]** Tầng ứng dụng: tám route ghi dữ liệu nền khai `item.manage`; người FINANCE gọi cả tám qua HTTP ⇒ 403, mỗi lần một hàng `PERMISSION_DENIED`, không hàng dữ liệu nào (`apps/api/src/du-lieu.int.test.ts`). **[S1.234 / S4.3b]** Ba route ghi ánh xạ khai `item.manage`; người tạo gói gọi cả ba ⇒ 403, mỗi lần một hàng `PERMISSION_DENIED`, không hàng ánh xạ nào (vế vai); người đã tạo và nộp gói rồi thành người quản lý dữ liệu qua được cổng route nhưng CSDL từ chối qua HTTP ⇒ 422 `TRONG_TAP_LOAI_TRU`, đối chứng dương trên cùng dòng (vế hành vi) (`apps/api/src/anh-xa.int.test.ts`). **[S1.204 / S4.3a]** Vế hành vi: trigger `anh_xa_kiem_luat` (bảng `rfq_item_mappings`) và `goi_y_kiem_luat`, hàm DUY NHẤT `rfq_tap_loai_tru(org, gói)` — `089_anh_xa_hang_muc` (ADR-121); ca đo: chín vế, mỗi vế một người đã làm đúng một việc rồi thành người quản lý dữ liệu, cả chín bị từ chối; người tạo gói thành người quản lý dữ liệu rồi khai bí danh — lượt chuẩn hoá không ra `TU_DONG`, câu ghi thẳng bị từ chối; tên hai action của sổ ghim ở test | T1, T3 | 21 | ✅ ĐẠT |  |
 | L2 | Không gộp lặng lẽ: ánh xạ `TU_DONG` tồn tại khi và chỉ khi `chuoi_sach(description)` của dòng bằng một bí danh CÒN HIỆU LỰC của đúng hàng chuẩn ấy, ghi trước hàng ánh xạ, và dòng chưa có ánh xạ hiệu lực — không ngưỡng độ tin cậy nào ở CSDL; mọi khớp mờ là GỢI Ý cho người quản lý dữ liệu, kể cả ≥ 95%; mọi hàng `TU_DONG` tái lập được từ dữ liệu đã lưu; bộ luật gợi ý có phiên bản: đổi luật mà không đổi phiên bản thì bảng ca đỏ; một thuộc tính trọng yếu thiếu chặn độ tin cậy dưới 0,95, mâu thuẫn chặn dưới 0,80 | Trigger `anh_xa_kiem_luat` tính lại cả hai vế dưới khoá tư vấn của bí danh (cùng khoá mà câu khai/rút bí danh giữ) — `089_anh_xa_hang_muc`; ca đo đua với một lần rút bí danh chưa commit; lượt chuẩn hoá `chuanHoaGoi` ghi `TU_DONG` cho mọi dòng khớp bí danh; lõi thuần `chuanHoa` với `PHIEN_BAN_BO_CHUAN_HOA` và bảng ca ghim theo phiên bản (`chuan-hoa.test.ts`) | T1, T3 | 27 | ✅ ĐẠT |  |
 | L13 | Ánh xạ ghi cho một gói đã có ít nhất một hàng `rfq_unsealed_bids` đòi lý do không rỗng; `TU_DONG` ở đó mang đúng mã `CHUAN_HOA_HOI_TO`, mã dành riêng mà người duyệt không khai được — khoá theo SỰ TỒN TẠI của hàng bản rõ, không theo `status`; không đua được với giao dịch mở thầu: một ánh xạ ghi trong lúc nó chạy thì chờ nó commit rồi thấy bản rõ; giao dịch mở thầu gặp một ánh xạ chưa commit thì chờ nó | Trigger `anh_xa_kiem_luat` khoá hàng gói `FOR SHARE` trước phép kiểm bản rõ — câu `UPDATE rfq_packages` của giao dịch mở thầu giữ `FOR NO KEY UPDATE` tới commit — `089_anh_xa_hang_muc`; ca đo hai chiều đua dưới hai kết nối thật (`anh-xa.int.test.ts`), chiều đầu đo cả bằng câu ghi thẳng không qua hàm gói | T3 | 8 | ✅ ĐẠT |  |
+| L5 | Nguồn quan sát giá: mỗi hàng `HOP_LE` của `quan_sat_gia(p_moc)` là vị thế CUỐI của một nhà cung cấp — phiên bản nộp muộn nhất trong những phiên bản đã mở niêm phong trước mốc, xét trên mọi lời mời của nhà cung cấp ấy — trong một gói mà mọi vòng (vòng một, mọi vòng BAFO mở trước mốc) có yêu cầu mở thầu `EXECUTED` trước mốc, chưa huỷ tại mốc; `status` không được đọc. Đơn giá = `amount / quantity`, `unitPrice` không được tin; phép kiểm dòng duy nhất là Σ `amount` = `totalAmount` CHÍNH XÁC; bộ đọc dòng từ chối đúng SÁU ca của `bid_so_tien` và không bao giờ ném. Dòng không đọc được, lệch tổng, khác tiền tệ của chính sách của CHÍNH gói, chưa ánh xạ hay không quy đổi được về MÃ gốc của hàng chuẩn mang đúng mã lý do, không có đơn giá đã quy đổi. Mọi hàng nền đọc TẠI MỐC; loại hàng nền ghi sau mốc mở giá của gói chứa quan sát mang `HOI_TO`, hàng mới hơn `p_moc` bị bỏ qua được đếm ở `SAU_MOC`. Mọi tệp TypeScript sản xuất, mọi hàm SQL chạm `rfq_unsealed_bids` có tên trong một danh sách kèm lý do (spec §4.5: vị từ trong thân là một luật một chỗ, không phải ranh giới) | **[S1.235 / S4.4a]** Ba hàm của `096_lich_su_gia` — `bid_dong_tho` (`IMMUTABLE`), `gia_da_lo`, `quan_sat_gia` (`SECURITY INVOKER STABLE`) — cùng lõi quy đổi theo mã `quy_doi_da_giai` mà `quy_doi_don_vi` gọi lại, cả năm ghim ở `hardening.always.sql`; danh sách tĩnh `tests/architecture/ban-ro-liet-ke.test.ts` cộng phép đo `pg_get_functiondef` ở mọi schema trên cụm thật; đột biến trên từng vế (§S1.235). Hiệu năng là phép đo có biên bản (`tools/do-lich-su-gia`), không phải một vế của hàng này. Vế HTTP — route đọc lịch sử, đối chứng dương của bộ quét — là L6, S4.4b | T1, T3 | 57 | ✅ ĐẠT |  |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
 | H3 | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 | 5 | ✅ ĐẠT |  |
@@ -139,7 +140,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 75` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 76` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 
