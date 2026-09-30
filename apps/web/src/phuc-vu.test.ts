@@ -1633,7 +1633,8 @@ describe("bề mặt tệp", () => {
       expect(soLanDocTinHieu(p.trangThai.goi), "đọc gói kéo theo MỘT lần đọc tín hiệu").toBe(1);
       expect(p.el("khoi-tin-hieu").hidden).toBe(false);
       expect(p.el("tin-hieu-tom-tat").textContent).toContain("Gói này nằm trong 2 gói cùng nhóm hàng nộp duyệt trong 30 ngày, mỗi gói dưới cận 1.000.000.000");
-      expect(dongGoi(p)).toEqual([["Thép 480", "đã mở"], ["Gói (gói này)", "chờ duyệt"]]);
+      // Bảng xếp theo tên gói, không theo id của bằng chứng.
+      expect(dongGoi(p)).toEqual([["Gói (gói này)", "chờ duyệt"], ["Thép 480", "đã mở"]]);
       expect(p.el("lich-su-tin-hieu").con.map((li) => li.textContent).join("|")).toContain("Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (2 gói, cận 1.000.000.000).");
       expect([p.el("khoi-ghi-nhan").hidden, p.el("tin-hieu-khong-duoc").hidden]).toEqual([false, true]);
 

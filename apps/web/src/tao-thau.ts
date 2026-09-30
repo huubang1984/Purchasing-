@@ -222,15 +222,19 @@ export function khungTinHieu(body: unknown, rfqId: string): KhungTinHieu {
 
   const tenGoi = laDoiTuong(t.goi) ? t.goi : {};
   const ve = hienTai ?? daLuu[daLuu.length - 1]?.bangChung;
-  const goi = idGoi(ve).map((id) => {
-    const g = tenGoi[id];
-    return {
-      id,
-      tieuDe: laDoiTuong(g) && typeof g.tieuDe === "string" ? g.tieuDe : id,
-      trangThai: nhanTrangThaiGoi(laDoiTuong(g) ? g.trangThai : undefined),
-      laGoiNay: id === rfqId,
-    };
-  });
+  // Bằng chứng xếp id theo UUID — thứ tự không nói gì với người đọc (lượt đi thử T4 thấy «2, 1, 3»). Màn xếp theo tên gói, số trong
+  // tên so theo giá trị; cùng tên thì theo id cho ổn định.
+  const goi = idGoi(ve)
+    .map((id) => {
+      const g = tenGoi[id];
+      return {
+        id,
+        tieuDe: laDoiTuong(g) && typeof g.tieuDe === "string" ? g.tieuDe : id,
+        trangThai: nhanTrangThaiGoi(laDoiTuong(g) ? g.trangThai : undefined),
+        laGoiNay: id === rfqId,
+      };
+    })
+    .sort((a, b) => a.tieuDe.localeCompare(b.tieuDe, "vi", { numeric: true }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   const canGhiNhan = t.canGhiNhan === true;
   const xem = laDoiTuong(t.nguoiXem) ? t.nguoiXem : {};

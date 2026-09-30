@@ -192,7 +192,7 @@ const hangLuuLucNop = (ghiNhan: unknown[] = []) => ({
 const than = (tinHieu: Record<string, unknown>) => ({ tinHieu: { hienTai: BC, canGhiNhan: true, tinHieu: [hangLuuLucNop()], goi: GOI, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2, ...tinHieu } });
 
 describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
-  it("chờ ghi nhận, người đang xem ghi nhận được: tóm tắt nói tập, cửa sổ và cận; bảng gói theo bằng chứng hiện tại, đánh dấu gói này; mời bấm", () => {
+  it("chờ ghi nhận, người đang xem ghi nhận được: tóm tắt nói tập, cửa sổ và cận; bảng gói theo bằng chứng hiện tại, xếp theo tên, đánh dấu gói này; mời bấm", () => {
     const k = khungTinHieu(than({}), "g3");
     expect(k.hien).toBe(true);
     expect(k.tomTat).toBe(
@@ -200,8 +200,8 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
         "được sau khi một người giữ quyền duyệt — không tạo, không nộp gói nào trong tập ấy — đọc tín hiệu và ghi nhận nó, kèm lý do.",
     );
     expect(k.goi).toEqual([
-      { id: "g1", tieuDe: "Thep 480", trangThai: "đã mở", laGoiNay: false },
       { id: "g2", tieuDe: "Thep 470", trangThai: "đã mở", laGoiNay: false },
+      { id: "g1", tieuDe: "Thep 480", trangThai: "đã mở", laGoiNay: false },
       { id: "g3", tieuDe: "Thep 490", trangThai: "chờ duyệt", laGoiNay: true },
     ]);
     expect(k.lichSu).toEqual([{ luc: "2026-09-30T01:00:00.000Z", noiDung: "Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (3 gói, cận 1.000.000.000)." }]);
@@ -253,7 +253,7 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
       "g3",
     );
     expect(k.tomTat).toContain("Gói chỉ mở được sau khi");
-    expect(k.goi.map((g) => g.id), "bảng gói vẽ bằng chứng HIỆN TẠI").toEqual(["g1", "g2", "g3"]);
+    expect(k.goi.map((g) => g.id), "bảng gói vẽ bằng chứng HIỆN TẠI").toEqual(["g2", "g1", "g3"]);
     expect(k.lichSu.map((d) => d.noiDung)).toEqual([
       "Anh Soạn nộp duyệt; tín hiệu được ghi lúc nộp (4 gói, cận 1.000.000.000).",
       "Chị Duyệt ghi nhận: «cu».",
@@ -265,7 +265,7 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
     const k = khungTinHieu(than({ hienTai: null, canGhiNhan: false, nguoiXem: { ghiNhanDuoc: false, lyDo: null }, soNguoiGhiNhanDuoc: null }), "g3");
     expect(k.hien).toBe(true);
     expect(k.tomTat).toBe("Tín hiệu ghi lúc nộp không còn đúng: tập gói hiện tại không chạm cận nào, nên lần mở gói không cần ghi nhận.");
-    expect(k.goi.map((g) => g.id)).toEqual(["g1", "g2", "g3"]);
+    expect(k.goi.map((g) => g.id)).toEqual(["g2", "g1", "g3"]);
     expect(k.choGhiNhan).toBe(false);
   });
 
@@ -274,10 +274,20 @@ describe("[S3.6b2 / K10a] khung tín hiệu chia nhỏ", () => {
     for (const la of [null, undefined, "x", {}, { tinHieu: null }, { tinHieu: [] }]) expect(khungTinHieu(la, "g")).toEqual(KHUNG_TIN_HIEU_RONG);
     const k = khungTinHieu(than({ goi: { g1: { tieuDe: "Thep 480", trangThai: "LA" } } }), "g3");
     expect(k.goi).toEqual([
-      { id: "g1", tieuDe: "Thep 480", trangThai: "LA", laGoiNay: false },
       { id: "g2", tieuDe: "g2", trangThai: "—", laGoiNay: false },
       { id: "g3", tieuDe: "g3", trangThai: "—", laGoiNay: true },
+      { id: "g1", tieuDe: "Thep 480", trangThai: "LA", laGoiNay: false },
     ]);
+  });
+
+  it("bảng gói xếp theo TÊN, không theo id của bằng chứng (lượt đi thử T4 thấy «2, 1, 3»): số trong tên so theo giá trị, cùng tên thì theo id", () => {
+    const goi = {
+      g1: { tieuDe: "Goi 10", trangThai: "OPEN" },
+      g2: { tieuDe: "Goi 9", trangThai: "OPEN" },
+      g3: { tieuDe: "Goi 9", trangThai: "PENDING_APPROVAL" },
+    };
+    expect(khungTinHieu(than({ goi }), "g3").goi.map((g) => g.id)).toEqual(["g2", "g3", "g1"]);
+    expect(khungTinHieu(than({ goi, hienTai: { ...BC, goi: ["g3", "g2", "g1"] } }), "g3").goi.map((g) => g.id), "không phụ thuộc thứ tự vào").toEqual(["g2", "g3", "g1"]);
   });
 
   it("trạng thái gói nói bằng lời", () => {
