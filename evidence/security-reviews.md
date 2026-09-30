@@ -17363,4 +17363,16 @@ hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bả
 
 ## 8. Số đo
 
-(điền sau T3 cuối)
+- Cây cuối, sau lần cấp số: `tsc`, `eslint`, `depcruise` sạch (474 mô-đun, không vi phạm phụ thuộc); `pnpm cap-so --kiem` sạch.
+  `pnpm test`: 124 tệp, 1793 đạt, 1 bỏ qua.
+- Toàn bộ unit + T3 cục bộ trên cây cuối: 202 tệp, 3447 khẳng định, 3434 đạt, 1 bỏ qua, 12 đỏ — chín ca cũ của máy đo (8 của
+  `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`) và ba ca tiến trình con
+  của `apps/api/src/composition.int.test.ts`: `main.ts` chạy bằng Node không tìm thấy `@trustprocure/du-lieu-nen`, gói vào từ
+  `master` qua #209 mà máy đo chưa liên kết lại sau lần hợp. Sau `pnpm install --frozen-lockfile --offline`, tệp ấy 19/19. Không ca
+  đỏ nào mang nhãn `[INV-…]`.
+- T3 các tệp chạm vòng này: `trigger-la-mac-dinh-dong.int` 12/12, `lan-nop-da-xem.int` 29/29, `hardening-suy-tu-tinh-chat.int` 36/36,
+  `migrations.int` 119/119, `outbox.int` 50/50; `hardening-co-ly-do` 21/21.
+- Mười một đột biến, mười một đỏ (§5).
+- Ma trận sinh lại từ báo cáo ấy: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào). Hai hàng đổi, cả hai do vòng này: D2 64 → 65
+  (ca của `lan-nop-da-xem.int`); H19 70 → 103 — mười hai ca của `trigger-la-mac-dinh-dong.int` và bốn ca tĩnh, mỗi ca mang nhãn hai
+  lần (ở `describe` và ở tên ca), cộng ca của `lan-nop-da-xem.int`.
