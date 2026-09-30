@@ -22496,3 +22496,56 @@ Mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế
 - `pnpm t0` thoát 0 (505 module, 2121 phụ thuộc, 0 vi phạm); `pnpm test` 136/138 tệp, 2248 đạt | 2 đỏ (đúng hai vế trên) | 1 bỏ qua — trên cây của commit thêm ba ca P9b của `tests/architecture/so-no-tu-doi-chieu.test.ts` (lời khai `93 migration đánh số` ở `Handoff.md`, bàn giao chưa áp): 2245 đạt | 5 đỏ | 1 bỏ qua. Áp thử cả bàn giao (sổ, cột mốc, biên bản, ADR-040, lời khai đếm) rồi hoàn nguyên ⇒ `so-no-tu-doi-chieu` 45/45.
 - Đột biến: mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế ⑴′); `cmp`/sha256 nguyên vẹn sau mỗi ca.
 - Cụm tạm: kế hoạch thân hàm với 60 000 hàng `DONE` — `Bitmap Index Scan on outbox_jobs_claim_idx`, 3 buffer, 0,063 ms; 308 — `DROP POLICY organizations_liet_ke_worker` + `migrate()` ⇒ đi qua, hàm liệt kê 1 → 0 không lỗi.
+
+# §S1.9101 — LÔ TRƯỚC PILOT: `/du-lieu` VÀO MODULE ĐĂNG NHẬP, PHẢN HỒI ĐỔI MÃ CỦA LƯỢT CŨ BỊ BỎ, CÂU 409 NGƯỜI ĐỌC, NHÃN «SẼ DỰ THẦU», CÂU SUY PHONG BÌ HỎNG MANG VẾ THU HỒI, KID BIÊN NHẬN KHÔNG `:` — KHOẢN 291, 292, 293, 298, 299 ĐÓNG; 9401, 9402 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** năm khoản rổ B, làm TRƯỚC pilot theo quyết định của chủ dự án — người thật đầu tiên chạm `/du-lieu` và *Gửi lại link*, người vận hành đọc câu §3 của ADR-129 khi có sự cố mở thầu, và kid biên nhận rẻ nhất để thu hẹp lúc chưa có biên nhận thật nào được ký. Không migration, không ADR mới (ADR-038, 110, 126, 129 sửa tại chỗ). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện rộng — mỗi đợt đóng gần bao nhiêu thì lượt soi đối kháng mở lại gần bấy nhiêu, và rổ B theo ADR-043 là "đóng băng tới sau pilot" —, chỉ làm một lô nhỏ không migration gồm những thứ người dùng thật chạm đầu tiên hay rẻ nhất lúc này. Hai agent song song trên worktree riêng: lô W (291, 292 — `apps/web`), lô K (kid, 293, 299); người tích hợp làm 298 và ghi các quyết định câu 3 vào sổ. Gộp `--no-ff` trên nhánh dựng lại từ `master` sau #221.
+
+## 2. Quyết định của chủ dự án (2026-09-30)
+"Làm bước 2, chốt câu 3 như đề xuất":
+- Bước 2: 291 và 292 (`/du-lieu` vào module đăng nhập; bỏ phản hồi `/auth/redeem` về muộn); 293 — GIỮ nút *Gửi lại link*, đổi câu 409 thành câu người đọc; 299 — nhãn "sẽ dự thầu"; 298 — sửa câu §3 của ADR-129; kid biên nhận bỏ `:` (câu 11 của §S1.237 mục 7).
+- Câu 3 (chốt, làm SAU pilot): 272 hướng ⒜ — hạ trần cột `envelope` về 64 KiB; 306 dạng dot-atom RFC 5321; 304 cả hai lần từ chối vào sổ (ADR-060); 300 trước 307; xác nhận cách tách 285/305 và cách đọc khoản 170 của lô A2; luật eslint cấm sink HTML cho `apps/web/src/*.ts` nên làm — mở khoản 9401. Ghi ở thân hàng từng khoản và ở §S1.237 mục 7.
+
+## 3. Đo trước
+- 291 (lô W, nguồn cũ, test mới): 13 đỏ, tất cả ở `du-lieu` — bộ id («id="nut-ghi-danh": expected +0 to be 1»), hai ca `[S1.177]` lệch `SAU_MO`, năm ca 193, ba ca 195, một ca 268, ca ghim («du-lieu.js không import ganDangNhap»).
+- 292: 20 đỏ — bốn trang module đỏ đúng câu từng cảnh («bí mật ghi danh của A hiện dưới mã của B», «câu từ chối của mã A in dưới mã của B», «câu mất mạng của lượt trước đè lên lượt sau đăng xuất», «Vào của mã B đi tiếp tới /auth/totp khi ô đã sang mã C»); `du-lieu` đỏ vì chưa gắn module.
+- Kid, 299 (lô K, bảy tệp đơn vị): 12 đỏ — bộ ký local-dev và aws-kms nhận `kms:2026-09`; cấu hình public-keys và api không ném `CauHinhError`; `ma-chep-api-worker` năm ca; nhãn trang; mô tả MCP. Ca "định dạng không đổi" xanh trước vá — nó ghim hành vi không đổi.
+- 293: `apps/api/src/loi-moi-sau-commit.int.test.ts` 2/19 đỏ — nhận `"goi thau khong nhan bao gia"`.
+- 298 (người tích hợp): sửa ADR-129 §3 ⇒ ca ghim `[S1.243 / khoản 298]` đỏ (`expected [] to deeply equal [id]`) và ca ⑶ đối chứng vế vòng đỏ (22 ≠ 23 — luồng đã thu hồi nay bị loại cả khi gỡ vế vòng).
+
+## 4. Thay đổi
+- 291: `apps/web/trang/du-lieu.js` import `ganDangNhap`, gỡ bước 1 cũ; `du-lieu.html` thêm `nut-ghi-danh`, `khoi-ma`, `khoi-link-gan-day`; ba khối DOM của `apps/web/src/phuc-vu.test.ts` chạy trên năm trang, ca ghim thành `[]`; chú thích `MODULE_WEB` của `apps/web/src/phuc-vu.ts` gạch «bốn trang» (người tích hợp — hệ quả của 291).
+- 292: `luotDoiMa` ở `apps/web/src/dang-nhap.ts`; `datLai` là `doiMa`; `doiMaDangNhap` bỏ trọn phản hồi của lượt đã qua.
+- Kid: `assertReceiptKid` (`packages/bidding/src/signer.ts`, hằng `KID_PHAT_HANH`), `KID` của `apps/public-keys/src/cau-hinh.ts`, `docKidBienNhan` và phép kiểm tên phiên bản của `TRUSTPROCURE_RECEIPT_SIGNING_KEYS` ở `apps/api/src/cau-hinh.ts`, validation `receipt_kid` của `infra/terraform/50-kms-prod/main.tf` — tập `[A-Za-z0-9._-]{1,64}`; `KID_PATTERN` của định dạng (`packages/bidding/src/receipt.ts`) KHÔNG đổi (ADR-026 §1, chú thích H11-11). `tests/architecture/ma-chep-api-worker.test.ts`: hàng `KID` ~~RIENG~~ GIU VAN_BAN ba bản; hàng mẫu kid đổi literal, ba tệp.
+- 293: hằng `CAU_GOI_KHONG_NHAN_BAO_GIA` ở `apps/api/src/routes/buyer.ts`, chỉ nhánh `RFQ_NOT_ACCEPTING`.
+- 299: nhãn của `apps/web/trang/mo-thau.js`; chú thích route, lời khai MCP; ghim ở `tests/architecture/phong-bi-loi-moi-con-song.test.ts` và `apps/mcp/src/cong-cu.test.ts`.
+- 298: ADR-129 §3 mang `AND i.revoked_at IS NULL`; bản chép của `apps/unseal-worker/src/unseal-worker.int.test.ts`; hai ca của khối khoản 275 ở `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` lật.
+- Tệp của người tích hợp: ADR-038 (bid-count), ADR-110 ⑸ (293), ADR-126 (dòng khoản nợ, quyết định 4, hệ quả), ADR-129 §3; `docs/TEST-PLAN.md` dòng A6; §S1.237 mục 7 (mười hai câu đánh dấu), §S1.238 mục 7 (hàng `KID`); hàng 170, 272, 300, 304, 305, 306, 307 ghi quyết định; hàng 291, 292, 293, 298, 299 ĐÓNG; hàng 9401, 9402 mới; dòng CÒN MỞ, RỔ B (26 → 23).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Hai nhãn phiên bản khoá của api (`TRUSTPROCURE_KMS_ORG_KEY_VERSION`, `TRUSTPROCURE_KMS_TOTP_KEY_VERSION`) GIỮ `:` — chúng vào AAD có tiền tố độ dài và encryption context của KMS, không bao giờ thành tên tệp, tên đối tượng hay dòng của văn bản đã ký (lô K; đột biến M6 ghim).
+- Validation `receipt_kid` của terraform stack 50 thu hẹp cùng lúc (lô K) — theo khuôn `neo_kid` của stack 40; giữ nguyên thì thông điệp của nó nói sai và lỗi chỉ nổ lúc api/public-keys khởi động. Máy này không có terraform — `terraform validate` chưa chạy; lần apply kế là phép đo.
+- `datLai` gọi thẳng `doiMa` (một chỗ tăng lượt); lỗi ném của lượt cũ nuốt ngay trong `doiMaDangNhap` — lỗi của `/auth/totp`, `/me`, `daVao` vẫn hiện như cũ (lô W).
+- Nhãn 299 ghim ở cổng kiến trúc của khoản 271, đọc literal qua cây cú pháp vì chú thích mới của trang trích câu cũ (lô K).
+- 298: không làm cổng tĩnh tuỳ chọn đọc khối SQL của ADR — ca tích hợp nay đòi câu của ADR mang vế (`toContain`) và đo vế chịu lực.
+- Phát hiện của lô W (`/auth/totp` về muộn) mở thành khoản 9402 thay vì vá luôn: ngoài phạm vi đã duyệt (năm khoản + kid); rổ chờ chủ dự án xác nhận.
+
+## 6. Đột biến
+- Lô K: 10/10 đỏ đúng vế — trả `:` vào `assertReceiptKid`; siết `KID_PATTERN` của định dạng; trả `:` vào `KID` của public-keys; api đọc kid bằng `docNhanKms`; bỏ phép kiểm kid local-dev; siết `NHAN_KMS`; `KID` của job neo `{1,63}`; trả câu 409 cũ; trả nhãn "Đã nhận"; trả lời khai MCP cũ.
+- Lô W: 12/12 đỏ đúng vế — năm đột biến 292 (bỏ kiểm sau `await`; nhánh ném luôn ném lại; kiểm đặt sau nhánh từ chối; `doiMa` không tăng; `datLai` bản cũ) và bảy đột biến 291 (bỏ `nut-ghi-danh` — chỉ ca bộ id đỏ, DOM giả tự dựng phần tử thiếu; `khoi-ma` hiện sẵn; không `datLai()` khi `hashchange`; không `anLinkGanDay()`; không `veLinkGanDay()`; ca ghim về `["du-lieu.js"]`; thêm một chuỗi `"/auth/redeem"` riêng).
+- 298: gỡ vế khỏi ADR ⇒ hai ca đỏ đúng vế (câu phải mang vế; ⑶ 23 ≠ 22).
+
+## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
+- Không lượt trình duyệt thật cho 291, 292, 293, 299 (máy không có trình duyệt): DOM giả của `phuc-vu.test.ts`, ca bộ id tĩnh, test HTTP của route.
+- Cảnh hẹp của 292 còn lại: dán mã khác vào ô mà chưa bấm trong lúc `/auth/redeem` còn bay ⇒ bí mật của mã cũ hiện tới lần bấm kế (module chỉ biết mã đổi khi có lần bấm) — ghi ở hàng 9402. Có từ trước, không đổi: nút Tiếp tắt tới khi lời gọi của lượt cũ xong; `ok1` của mã trước còn đứng sau khi dán mã khác rồi bấm.
+- Kid: kiểu `ReceiptSigner` là interface — một đối tượng không dựng qua hai factory có thể mang kid có `:` vào `buildReceiptText` (định dạng cho phép); mã sản xuất chỉ có `apps/api/src/co-han.ts` chép kid của bộ ký đã kiểm. Kid mốc neo (`packages/audit/src/anchor-sign.ts`, `TRUSTPROCURE_NEO_KID` cục bộ) vẫn cho `:` (prod — stack 40 — đã hẹp). Tên thiết bị Windows (`NUL`, `CON`) thuộc tập hẹp — nơi neo kiểu tệp trên Windows vẫn có thể gặp; S3 không.
+- 293: bốn câu máy khác của hai route gửi lại link / mời giữ nguyên.
+- Câu hỏi còn chờ: ⑴ rổ của 9402 (lô W đề xuất B, hệ quả nặng hơn 292 — thao tác dưới phiên người trước); ⑵ gọi `assertReceiptKid` trong `submitBid` (`packages/bidding/src/bidding.ts`) để đóng lỗ ở cấp interface — mở khoản hay không; ⑶ thu hẹp kid mốc neo theo cùng quyết định hay không.
+
+## 8. Số đo
+- Lô W trên cây của lô: `apps/web` 10 tệp 358/358 (trước 327); `pnpm test` 138 tệp, 2293 xanh, 1 bỏ qua; typecheck, lint, depcruise sạch.
+- Lô K: 16 tệp đơn vị của lô 337/337; `loi-moi-sau-commit.int` 19/19, `bidding.int` 22/22; `pnpm test` 138 tệp, 2272 xanh, 1 bỏ qua.
+- 298: khối khoản 275 của `kich-ban-41-http.int` 7/7, khối khoản 137 của `unseal-worker.int` 4/4.
