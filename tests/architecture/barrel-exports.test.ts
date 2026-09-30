@@ -247,6 +247,9 @@ const DANH_SACH_TRANG_IDENTITY = [
   "USER_SESSION_DEFAULT_TTL_SECONDS",
   "enrollOrReplaceTotpForLogin",
   "issueLoginToken",
+  // [S1.9122 / khoản 195 / ADR-9222] Phép ĐỌC của chính chủ: link đăng nhập gần đây của `userId` mà bộ điều phối lấy từ phiên.
+  // Không trả lời câu hỏi quyền nào, không mở đường ghi nào; thứ nó KHÔNG trả — `token_hash` — là vế đo ở `auth.int.test.ts`.
+  "listRecentLoginTokens",
   // [S1.91 / khoản 194] Trả DANH SÁCH NGƯỜI NHẬN cho đường xếp việc thông báo — không trả lời
   // câu hỏi "được hay không" cho ai, nên nó không mang chỗ mù mà `hasPermission` mang (khối đầu
   // `packages/identity/src/index.ts`). Trả `userId`, không trả email.

@@ -643,6 +643,9 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     ).rows[0]!.id;
   });
 
+  // [S1.9122 / khoản 177 / ADR-9223] Sáu dòng log ghim dưới đây (⒫ ⒬ ⒭ ⒮ và hai dòng của khối khoản 120) mang thêm `nguoi=<12 hex>` — băm
+  // rút gọn của người bị từ chối, có mặt vì mọi đường ấy ghi `actorId` là id người gọi. Hình dạng của khe đo ở `mo-ta-hang-dong.test.ts`,
+  // đúng người và ba người ba băm đo ở `log-tu-choi-mat.int.test.ts`; ở đây chỉ ghim rằng khe ấy CÓ MẶT, đúng hình dạng, và không gì khác.
   it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log ~~`DenialAuditFailedError <- error 23514`~~ [S1.85 / khoản 131] ~~`POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514`~~ [S1.9161 / khoản 179] `POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514` (cộng VẾ đã từ chối), không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
     const doiChung = await yeuCauMoThauK119();
     const dc = await goi(gocK119, `/unseal/${doiChung}/dispatch`, gdK119.cookie, { method: "POST" });
@@ -654,7 +657,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     expect(r.status).toBe(500);
     expect(JSON.parse(r.body)).toEqual({ error: "loi noi bo" });
     expect(r.log).toHaveLength(1);
-    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514$/u);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE nguoi=[0-9a-f]{12} <- error 23514$/u);
     expect(await demSoK119("UNSEAL_DENIED", id)).toBe(0);
     expect((await db.pool.query("SELECT 1 FROM outbox_jobs WHERE dedupe_key = $1", [`unseal:${id}`])).rows).toHaveLength(0);
   });
@@ -664,7 +667,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     const r = await voiGhiSoBiChanK119("UNSEAL_APPROVAL_DENIED", "42501", () => goi(gocK119, `/unseal/${id}/approve`, gdK119.cookie, { method: "POST" }));
     expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
     expect(r.log).toHaveLength(1);
-    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/approve DenialAuditFailedError UNSEAL_APPROVAL_DENIED UNSEAL_REQUEST <- error 42501$/u);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/approve DenialAuditFailedError UNSEAL_APPROVAL_DENIED UNSEAL_REQUEST nguoi=[0-9a-f]{12} <- error 42501$/u);
     expect(await demSoK119("UNSEAL_APPROVAL_DENIED", id)).toBe(0);
   });
 
@@ -678,7 +681,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     );
     expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
     expect(r.log).toHaveLength(1);
-    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/mfa-resets\/:requestId\/approve DenialAuditFailedError MFA_RESET_APPROVAL_DENIED MFA_RESET_REQUEST <- error TP119$/u);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/mfa-resets\/:requestId\/approve DenialAuditFailedError MFA_RESET_APPROVAL_DENIED MFA_RESET_REQUEST nguoi=[0-9a-f]{12} <- error TP119$/u);
     expect(await demSoK119("MFA_RESET_APPROVAL_DENIED", id)).toBe(0);
   });
 
@@ -689,7 +692,7 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     );
     expect([r.status, JSON.parse(r.body)]).toEqual([500, { error: "loi noi bo" }]);
     expect(r.log).toHaveLength(1);
-    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage <- error 42501$/u);
+    expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=[0-9a-f]{12} <- error 42501$/u);
     // D5 thật, không chỉ dòng log (lượt soi 62a-7): lần từ chối không vào sổ, và thao tác bị từ chối không xảy ra.
     const { rows: soHang } = await db.pool.query<{ n: string }>(
       "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
@@ -756,7 +759,7 @@ describe("[INV-D5] [S1.69 / khoản 120] auditPool hết chỗ kéo dài ⇒ 500
       expect(r.status, r.body).toBe(500);
       expect(JSON.parse(r.body)).toEqual({ error: "loi noi bo" });
       expect(r.log).toHaveLength(1);
-      expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage <- TenantError CONNECT_WAIT_EXCEEDED$/u);
+      expect(r.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=[0-9a-f]{12} <- TenantError CONNECT_WAIT_EXCEEDED$/u);
       expect(await demSoVaNcc(nguoi.id, "K120 HET CHO")).toEqual(["0", "0"]);
 
       const gocSieu = await dungServer(apiPool, undefined, db.pool);
@@ -764,7 +767,7 @@ describe("[INV-D5] [S1.69 / khoản 120] auditPool hết chỗ kéo dài ⇒ 500
       const rSieu = await goi(gocSieu, "/suppliers", nguoiSieu.cookie, { method: "POST", body: { legalName: "K120 SIEU" } });
       expect(rSieu.status).toBe(500);
       expect(rSieu.log).toHaveLength(1);
-      expect(rSieu.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage <- Error$/u);
+      expect(rSieu.log[0]).toMatch(/^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=[0-9a-f]{12} <- Error$/u);
     } finally {
       for (const c of giu) c.release();
       await poolNho.end();

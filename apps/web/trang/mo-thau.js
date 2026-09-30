@@ -250,6 +250,8 @@ function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  // [S1.9122 / khoản 195] Vừa vào (hay vừa nhận phiên) là lúc hỏi link đăng nhập gần đây của chính mình — không chờ, không chặn.
+  veLinkGanDay();
 }
 
 /** [S1.177] Về lại bước 1: ẩn mọi bước sau, bỏ dấu "xong", bỏ khối hỏi phiên và nút Đăng xuất. */
@@ -259,6 +261,57 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  // [S1.9122 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
+  anLinkGanDay();
+}
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9122 / khoản 195 / ADR-9222] Link đăng nhập gần đây của CHÍNH mình — vế «báo ngay» của khoản 195.
+//
+// Thông điệp ở bước đổi mã gộp «không hợp lệ / hết hạn / đã dùng» làm một, và phải thế: ở đường vô danh,
+// nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không. Người ĐÃ vào thì được xem: `GET
+// /auth/login-links` trả link của chính họ (máy chủ lấy người từ cookie, không có tham số nào để hỏi
+// người khác), và trang vẽ mỗi link một dòng. Một link «đã dùng lúc Y» mà lúc ấy không phải mình đăng
+// nhập là dấu hiệu duy nhất người mua thấy được mà không cần mở cơ sở dữ liệu. Khối là trợ giúp: máy chủ
+// từ chối hay mất mạng thì ẩn, các bước vẫn mở; về bước 1 thì ẩn và rỗng, và một phản hồi về muộn sau đó
+// bị bỏ — cùng phép kiểm-lại-sau-await của `thuPhienCo`, ở đây bằng một bộ đếm lượt: mỗi lần hỏi hay mỗi
+// lần về bước 1 là một lượt mới, phản hồi của lượt cũ không vẽ gì (kể cả khi người khác đã vào sau đó).
+// ---------------------------------------------------------------------------------------------
+const GIO = (s) => new Date(s).toLocaleString("vi-VN");
+
+function moTaLink(l) {
+  if (l.status === "CONSUMED") return `đã dùng lúc ${GIO(l.consumedAt)}`;
+  if (l.status === "EXPIRED") return `hết hạn lúc ${GIO(l.expiresAt)}, chưa dùng`;
+  return `còn hiệu lực tới ${GIO(l.expiresAt)}, chưa dùng`;
+}
+
+let luotLinkGanDay = 0;
+
+function anLinkGanDay() {
+  luotLinkGanDay += 1;
+  hien($("khoi-link-gan-day"), false);
+  $("link-gan-day").replaceChildren();
+  bao($("ghi-link-gan-day"), "");
+}
+
+async function veLinkGanDay() {
+  luotLinkGanDay += 1;
+  const luot = luotLinkGanDay;
+  try {
+    const r = await goi("GET", "/auth/login-links");
+    if (luot !== luotLinkGanDay) return;
+    const ds = r.status === 200 && Array.isArray(r.body?.loginLinks) ? r.body.loginLinks : null;
+    if (ds === null) { anLinkGanDay(); return; }
+    dienDl($("link-gan-day"), ds.length === 0
+      ? [["Link đăng nhập gần đây", "chưa có"]]
+      : ds.map((l) => [`Link lúc ${GIO(l.createdAt)}`, moTaLink(l)]));
+    bao($("ghi-link-gan-day"),
+      "Link đăng nhập gần đây của chính bạn. Một link «đã dùng» vào lúc không phải bạn đăng nhập nghĩa là người khác đã " +
+      "dùng link của bạn — đăng xuất và báo ngay cho quản trị tổ chức.");
+    hien($("khoi-link-gan-day"), true);
+  } catch {
+    if (luot === luotLinkGanDay) anLinkGanDay();
+  }
 }
 
 /**

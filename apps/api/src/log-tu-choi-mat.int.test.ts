@@ -30,6 +30,14 @@
 //
 // Nay dòng ấy mang thêm vế `POLICY_GATE` — hằng thứ ba của `DenialAuditFailedError`, do chính chỗ
 // gọi `throwAuditedDenial` truyền vào và đi qua cùng phép thuộc-tập (`packages/identity/src/rbac.ts`).
+//
+// [S1.9122 / khoản 177 / ADR-9223] VẾ THỨ BA — AI BỊ TỪ CHỐI. §S1.85 để ngỏ câu ấy, và ở đúng ca này
+// lập luận "danh tính lấy từ sổ" không đứng: hàng sổ chính là thứ không ghi được. Chủ dự án chọn ⒞
+// (2026-09-30): dòng mang `nguoi=<12 hex đầu của sha256(userId)>` — nối được các dòng của cùng một
+// người với nhau mà không nêu ai; hình dạng ghim ở `moTaHangDongCuaLanTuChoi`. Phép đo là phép đo
+// khoản 177 tự đề ra: dựng lại §S1.85 với BA phiên của BA người, rồi hỏi *"từ stderr một mình, dựng
+// lại được tập người bị từ chối không"* — được, dưới dạng ba băm khác nhau khớp sha256 của ba id, và
+// không dòng nào mang một UUID thô nào ngoài `requestId`. Trên mã trước vòng này dòng không có `nguoi=`.
 // ==============================================================================================
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -60,6 +68,11 @@ const logLoi: string[] = [];
 
 function sha256(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
+}
+
+/** [S1.9122 / khoản 177] Băm rút gọn mà ADR-9223 khai: 12 hex đầu của sha256(userId). Tính LẠI ở đây, độc lập với `rbac.ts`. */
+function bamRutGon(userId: string): string {
+  return sha256(userId).toString("hex").slice(0, 12);
 }
 
 /**
@@ -151,7 +164,7 @@ afterAll(async () => {
 });
 
 describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi sổ vì trần 2 s", { timeout: 120_000 }, () => {
-  it("khoá ghi sổ của tổ chức bị giữ ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` và mã quyền — và KHÔNG một giá trị nào", async () => {
+  it("khoá ghi sổ của tổ chức bị giữ ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` và mã quyền [S1.9122 / khoản 177] cộng băm rút gọn của người bị từ chối — và KHÔNG một giá trị nào", async () => {
     const ai = await phienNguoiMua([]);
     const thaKhoa = await giuKhoaGhiSo(orgA);
     try {
@@ -170,9 +183,13 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       expect([res.status, JSON.parse(than)], than).toEqual([500, { error: "loi noi bo" }]);
       expect(daCho, "phải chờ tới trần 2 s của `050` rồi mới gãy 55P03").toBeGreaterThanOrEqual(1800);
       expect(moi, "một sự cố, một dòng").toHaveLength(1);
-      expect(moi[0]).toMatch(
-        /^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage <- error 55P03$/u,
+      // [S1.9122 / khoản 177] `nguoi=` là khe DUY NHẤT mở thêm: 12 hex, và phải là băm của CHÍNH người bị từ chối.
+      const khop = /^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=([0-9a-f]{12}) <- error 55P03$/u.exec(
+        moi[0] ?? "",
       );
+      expect(khop, moi[0]).not.toBeNull();
+      expect(khop?.[1], "băm rút gọn của chính người bị từ chối").toBe(bamRutGon(ai.id));
+      expect(moi[0], "id người dùng thô không có mặt").not.toContain(ai.id);
       // [S1.87 / lượt soi ngang 74 góc 4 — ĐỌC] VÒNG "ĐỐI CHỨNG A2" Ở ĐÂY ĐÃ BỊ GỠ, và gỡ vì hai
       // lý do đo được, chứ không phải để test ngắn lại:
       //   ⑴ Nó không đo một bit nào. Khẳng định ngay trên neo HAI ĐẦU (`^…$`, KHÔNG cờ `m`) nên
@@ -218,15 +235,71 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       expect(moi, "một sự cố, một dòng").toHaveLength(1);
       // Neo HAI ĐẦU: ngoài 36 ký tự `requestId`, chuỗi bị xác định hoàn toàn — nên id yêu cầu, id tổ chức, id người gọi không
       // có chỗ trong dòng (cùng lập luận với vế trên).
-      expect(moi[0]).toMatch(
-        /^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 55P03$/u,
+      // [S1.9122 / khoản 177] Nhánh `DenialAuditFailedError` cũng mang băm: cổng mở thầu ghi `actorId` của người gọi.
+      const khop = /^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE nguoi=([0-9a-f]{12}) <- error 55P03$/u.exec(
+        moi[0] ?? "",
       );
+      expect(khop, moi[0]).not.toBeNull();
+      expect(khop?.[1], "băm rút gọn của chính người bị từ chối").toBe(bamRutGon(gd.id));
+      expect(moi[0], "id người dùng thô không có mặt").not.toContain(gd.id);
       // D5 thật: lần từ chối không vào sổ.
       const { rows: so } = await db.pool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND action = 'UNSEAL_DENIED' AND resource_id = $2",
         [orgA, idLa],
       );
       expect(so[0]?.n).toBe("0");
+    } finally {
+      await thaKhoa();
+    }
+  });
+
+  it("[S1.9122 / khoản 177] BA phiên của BA người bị từ chối trong cùng một lần giữ khoá ⇒ từ stderr MỘT MÌNH dựng lại được đúng ba băm rút gọn KHÁC NHAU, khớp sha256 của ba id — và ngoài `requestId` không dòng nào mang một UUID thô", async () => {
+    const ba = [await phienNguoiMua([]), await phienNguoiMua([]), await phienNguoiMua([])];
+    const thaKhoa = await giuKhoaGhiSo(orgA);
+    try {
+      const truoc = logLoi.length;
+      // Tuần tự, trong CÙNG một lần giữ khoá: pool api và pool sổ của test đều 3 kết nối, ba lần chờ khoá song song vừa khít cả
+      // hai — một lần đo ở mép của đồ gá là một lần đo đỏ oan được. Mỗi lượt chờ đúng trần 2 s của `050`.
+      const trangThai: number[] = [];
+      for (const ai of ba) {
+        const res = await fetch(`${goc}/suppliers`, {
+          method: "POST",
+          headers: { cookie: ai.cookie, "content-type": "application/json" },
+          body: JSON.stringify({ legalName: TEN_GUI_LEN }),
+        });
+        await res.text();
+        trangThai.push(res.status);
+      }
+      await thaKhoa();
+      const moi = logLoi.slice(truoc);
+
+      expect(trangThai).toEqual([500, 500, 500]);
+      expect(moi, "ba lần từ chối mất sổ, ba dòng").toHaveLength(3);
+      const MAU =
+        /^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=([0-9a-f]{12}) <- error 55P03$/u;
+      const bamTuLog = new Set<string>();
+      for (const dong of moi) {
+        const khop = MAU.exec(dong);
+        expect(khop, dong).not.toBeNull();
+        bamTuLog.add(khop?.[1] ?? "");
+        for (const ai of ba) expect(dong, "id người dùng thô không có mặt").not.toContain(ai.id);
+        // Ngoài 36 ký tự `requestId` ở đầu, phần còn lại của dòng không được mang một UUID nào.
+        expect(dong.slice(dong.indexOf(" POST ")), "phần sau requestId không mang UUID").not.toMatch(
+          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/u,
+        );
+      }
+      // Câu hỏi của khoản 177: từ stderr một mình, dựng lại được TẬP người bị từ chối không? — được, dưới dạng băm: ba người
+      // ⇒ ba băm khác nhau, và mỗi băm là sha256 rút gọn của đúng một id trong ba.
+      expect(bamTuLog.size, "ba người ⇒ ba băm KHÁC NHAU — các dòng nối được với nhau theo người").toBe(3);
+      expect([...bamTuLog].sort()).toEqual(ba.map((ai) => bamRutGon(ai.id)).sort());
+      // D5 thật cho cả ba: không hàng sổ nào.
+      for (const ai of ba) {
+        const { rows } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+          [orgA, ai.id],
+        );
+        expect(rows[0]?.n, ai.id).toBe("0");
+      }
     } finally {
       await thaKhoa();
     }

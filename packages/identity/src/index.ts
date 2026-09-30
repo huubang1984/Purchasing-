@@ -175,6 +175,13 @@ export {
   USER_SESSION_DEFAULT_TTL_SECONDS,
   enrollOrReplaceTotpForLogin,
   issueLoginToken,
+  // [S1.9122 / khoản 195 / ADR-9222] Link đăng nhập gần đây của CHÍNH người gọi — phép ĐỌC của chính chủ dưới RLS, `userId` là
+  // `actor.id` của phiên do bộ điều phối đưa vào; không trả lời câu hỏi quyền nào, không mở đường ghi nào, và KHÔNG BAO GIỜ trả
+  // `token_hash`. Thông điệp gộp ba trạng thái của `LoginTokenError` ở đường vô danh giữ nguyên — đây là đường KHÁC, cho người đã
+  // chứng minh danh tính.
+  listRecentLoginTokens,
+  type LoginTokenStatus,
+  type RecentLoginToken,
   redeemLoginToken,
   revokeSession,
   startUserSession,

@@ -5,6 +5,8 @@
 //   POST /auth/redeem   {orgId, token}        → đã có TOTP chưa; nếu chưa: ghi danh, trả bí mật MỘT LẦN
 //   POST /auth/totp     {orgId, token, code}  → phiên ĐÃ MFA, đi ra bằng cookie `__Host-tp_session`
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
+//   GET  /auth/login-links (cookie)           → [S1.9122 / khoản 195] link đăng nhập gần đây của CHÍNH người gọi — route
+//                                               ĐỌC, không mã quyền, đóng với chứng chỉ agent; không bao giờ `token_hash`
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
 // E6: token chỉ đi trong THÂN; link là ~~`/login#<token>`~~ [S1.176 / ADR-107] `/login#<orgId>:<token>` (trang
@@ -19,6 +21,7 @@ import {
   AgentSessionAuditBusyError,
   LoginTokenError,
   MFA_TRAN_SAI_DUONG_PHU,
+  listRecentLoginTokens,
   redeemLoginToken,
   revokeSession,
   startAgentSession,
@@ -29,7 +32,7 @@ import { enqueueJob } from "@trustprocure/outbox";
 import { HttpError } from "../http.js";
 import { EMAIL_MAX_BYTES, LOGIN_LINK_SEND_KIND } from "../outbox-api.js";
 import { THAN_429_MFA } from "../route-types.js";
-import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
+import type { AnonRoute, BuyerReadRoute, BuyerSelfRoute } from "../route-types.js";
 
 /**
  * [sổ nợ 42 / review L-2] Tiền tố `__Host-`: trình duyệt chỉ nhận cookie này khi nó đến từ một
@@ -213,7 +216,10 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
   },
 ];
 
-export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
+// [S1.9122 / khoản 195] Nhóm này nay mang cả một route ĐỌC của người mua (`GET /auth/login-links`): cùng họ "chạm chính phiên/danh
+// tính của người gọi, không mã quyền", nhưng kiểu `BuyerSelfRoute` là của route GHI tự thân (`mutates: true`, `/auth/*`), còn một
+// phép đọc là `BuyerReadRoute` — `timViPhamBangRoute` không cho một GET đổi trạng thái. Nới kiểu của mảng, giữ tên để `routes.ts` không đổi.
+export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
   {
     method: "POST",
     path: "/auth/logout",
@@ -352,6 +358,32 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         body: { token: phien.token, expiresInSeconds: phien.expiresInSeconds, kind: "AGENT_READONLY" },
       };
     },
+  },
+  {
+    // ==========================================================================================
+    // [S1.9122 / khoản 195 / ADR-9222] TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — vế «báo ngay» của khoản 195.
+    //
+    // `/auth/redeem` và `/auth/totp` trả CÙNG một câu cho ba trạng thái token (không hợp lệ / hết hạn / đã
+    // dùng), và phải thế: ở đường vô danh, nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không.
+    // Nhưng vế "đã dùng" là vế người mua cần thấy — *có kẻ đã dùng link của tôi* — và tới trước vòng này
+    // chỉ ai mở được cơ sở dữ liệu mới thấy. Đường này mở cho người ĐÃ chứng minh danh tính: phiên đã MFA
+    // (mọi phiên người mua qua `resolveSessionByToken` đều thế), và máy chủ lấy người từ cookie — không có
+    // tham số nào để hỏi link của người khác. Route ĐỌC, không mã quyền, cùng khuôn `/me`: nó chỉ trả hàng
+    // của chính người gọi, dưới RLS của tổ chức (`listRecentLoginTokens`, không bao giờ `token_hash`).
+    // ==========================================================================================
+    method: "GET",
+    path: "/auth/login-links",
+    audience: "BUYER",
+    mutates: false,
+    // [khoản 141] Một chứng chỉ agent rò KHÔNG được đọc lịch sử link đăng nhập của chủ nó: danh sách này nói
+    // người ấy đăng nhập lúc nào và link nào còn sống — thứ một kẻ cầm cookie agent dùng để canh thời điểm.
+    // Đóng; `routes.test.ts` ghim quyết định này.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      // `ctx.actor.id` — dẫn xuất từ cookie ở bộ điều phối, không từ thân hay đường dẫn.
+      body: { loginLinks: await listRecentLoginTokens(ctx.client, ctx.orgId, ctx.actor.id) },
+    }),
   },
 ];
 

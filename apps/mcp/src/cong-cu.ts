@@ -9,7 +9,7 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ [S1.169] MƯỜI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.9122] MƯỜI MỘT route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -138,6 +138,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
     "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
     "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
+  "/auth/login-links":
+    "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
+    "ADR-9222). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +
+    "cảnh một agent là cho một chứng chỉ agent rò biết chủ nó vào lúc nào và link nào còn sống. Route " +
+    "khai `agent: false` (`apps/api/src/routes.test.ts` ghim) và dòng này khai vì sao. [S1.9122]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */
