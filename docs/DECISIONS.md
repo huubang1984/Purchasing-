@@ -9652,6 +9652,10 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 ### Hệ quả
 
 - Một `kind` chỉ có thể thuộc ĐÚNG MỘT vai (cổng "hai tập không giao nhau" đo trên chính policy).
+- `DROP OWNED BY <vai>` xoá policy ĐƠN VAI (`9592` là RESTRICTIVE đầu tiên `TO <một vai>`) — đường ops xoá rồi tạo lại vai (N3, fix
+  round 4). Hardening dựng lại policy THIẾU từ chính dòng khai `POLICY_RESTRICTIVE_KHAI` (mục "hai policy kind theo vai của outbox_jobs
+  (9592)", cùng lớp mục 044); policy ĐANG CÓ mà lệch thì không sửa đè — phán xét nêu tên. Đo: `db/migrations.int.test.ts` N3 và vế
+  khoản 158.
 - Thêm `kind` chậm hơn một migration; đổi lại, danh sách `kind` mỗi vai là một sự thật có ở CSDL, kiểm toán được bằng `pg_policy`.
 - Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại hai dòng khai (cùng giá ADR-036 §4).
 - Mọi test chạy runner dưới vai thật với `kind` không thuộc tiến trình nào phải nới policy có khôi phục — ba tệp đã làm; tệp mới

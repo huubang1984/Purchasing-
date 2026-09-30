@@ -18867,6 +18867,10 @@ tự chốt ở mục 5.
 - `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹ trên cây CÓ `9592` nhưng CHƯA nới policy cho `kind` thử (log `lo92-10`): đỏ —
   job mồ côi thử `THU_MO_COI_168` nằm `{ status: 'PENDING', attempts: 0 }` sau 10 s. Đây là đúng cơ chế fail-closed của 9592 áp lên
   một `kind` thử không có migration, không phải lỗi của vế ấy; cách xử lý ở mục 4/5.
+- Sau khi gộp cả đợt (người tích hợp báo): `db/migrations.int.test.ts` N3 (*app_api bị DROP rồi tạo lại*) đỏ trên `bc88648` — tái
+  hiện trong worktree (log `lo92-30`): `DROP OWNED BY app_api` xoá `outbox_jobs_kind_app_api` (vai là chủ thể duy nhất), lượt phán
+  xét ném *"khai public.outbox_jobs.outbox_jobs_kind_app_api (RESTRICTIVE, khoản 83⑴) mà CSDL không có policy đúng bảy cột như thế"*.
+  `9592` là RESTRICTIVE đầu tiên `TO <một vai>` nên lỗ này mới lộ.
 
 ## 4. Thay đổi
 
@@ -18895,7 +18899,18 @@ tự chốt ở mục 5.
   KHI `api` khai lại sổ (đột biến M5 của §S1.9151 chết vì lớp CSDL chặn trước). Thêm hai import thiếu.
 - `apps/unseal-worker/src/tien-trinh.int.test.ts` (NGOÀI danh sách tệp của lô — chạm vì không thể tránh, tối thiểu): vế ⑹ nới policy
   `app_unseal` cho `THU_MO_COI_168`, khôi phục trong `finally`; `THU_KHONG_KHAI_168` cố ý KHÔNG nới — đối chứng đứng ở cả hai lớp.
-- Không chạm: `packages/outbox/src/runner.ts`, `db/migrations.int.test.ts`, vùng hardening của B1/B2/B3/B7, mọi tệp cấm.
+- (commit 2) `db/migrations/hardening.always.sql`: MỘT mục tự chữa `[S1.9192 / khoản 158]` đặt ngay sau mục 044, cùng khuôn: điều kiện
+  `schema_migrations` có `9592_outbox_policy_theo_kind.sql`; câu sửa là `DO` lặp qua CHÍNH `POLICY_RESTRICTIVE_KHAI` (lọc `public`,
+  `outbox_jobs`, hai tên, `lenh = 'w'`, vai tồn tại, policy CHƯA có) rồi `EXECUTE format('CREATE POLICY %I ON %I.%I AS RESTRICTIVE FOR
+  UPDATE TO %I USING (%s) WITH CHECK (%s)')` — biểu thức không chép tay lần thứ ba; phán xét LEFT JOIN `pg_policy` theo đủ bảy cột
+  (RESTRICTIVE, lệnh, `BIEU_THUC_VAI_TRO`, USING, WITH CHECK) và `count(*) = 2` chống rỗng ruột; mô tả nêu tên policy, lệnh, vai —
+  không in biểu thức (T1). Policy ĐANG CÓ mà lệch thì KHÔNG sửa đè (không có migration nào để so), phán xét nêu tên.
+- (commit 2) `db/migrations.int.test.ts` (tệp ngoài danh sách lô — chạm theo yêu cầu của người tích hợp): một `it` `[S1.9192 / khoản 158]`
+  ngay sau N3: đọc hai policy, đối chiếu USING với dòng khai (`docHangHardening("POLICY_RESTRICTIVE_KHAI")`), `DROP POLICY
+  outbox_jobs_kind_app_unseal` → `migrate()` `[]` → hai policy bằng bản trước từng cột; đối chứng `ALTER POLICY … USING (true) WITH
+  CHECK (true)` → `migrate()` NÉM, thông điệp mang tên policy, KHÔNG mang `kind = ANY`/`LOGIN_LINK_SEND`, bản đã nới còn nguyên.
+- Không chạm: `packages/outbox/src/runner.ts`, vùng hardening của B1/B2/B3/B7 (mục mới đứng giữa mục 044 và mục "thuộc tính role"),
+  mọi tệp cấm.
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -18911,6 +18926,9 @@ tự chốt ở mục 5.
 - **Cây không có 9592 ⇒ đồ gá không nới gì và khối 12 đỏ ở tiền đề** — không xanh giả, và tệp vẫn chạy được trên cây cũ để đo trước.
 - **Hai bản của `noiPolicyKindTam`** (api composition, tien-trinh) thay vì một module dùng chung: chỗ chung duy nhất là
   `packages/test-support` (tệp `postgres*.ts` cấm; thêm module mới đụng cổng barrel) — hai bản ≤ 15 dòng, ghi chéo; xem mục 7.
+- **Mục tự chữa đọc dòng khai, không chép biểu thức** (khác 044, vốn giữ `vi_tu` riêng): một nguồn; đổi dòng khai mà quên
+  migration thì 83⑴ và mục này cùng kêu, còn dựng lại thì luôn đúng bản đã khai. **Chỉ dựng khi THIẾU**: sửa đè một policy đang có
+  là quyết định cho một migration, không cho hardening (ADR-028 §2⑵).
 - **Review phần của agent trước:** migration, hai dòng khai, hai cổng đối chiếu đúng đề bài; hai lỗi sửa (import; `*/` trong
   docblock); thu sửa ở rls-coverage về tối thiểu (bỏ sửa docblock cũ). Không làm lại từ đầu.
 
@@ -18933,6 +18951,9 @@ trước, kiểm bằng `diff`. Ba ca, mỗi ca ĐỎ đúng vế:
 - M3 [158] bỏ `'RFQ_DEADLINE_EXTENDED_NOTICE'::text` khỏi tập `app_api` ở cả ba chỗ ⇒ `apps/api/src/composition.int.test.ts -t
   "khoản 158"`: 1 đỏ — *"Tập `kind` trong policy của CSDL KHÁC bảng handler của api. Thêm kind = thêm migration (ADR-9292): `ALTER
   POLICY outbox_jobs_kind_app_api …`"*. (log `lo92-23`)
+- M4 [158, commit 2] BỎ mục tự chữa khỏi hardening (kịch bản `lo92-dot-bien-M4.sh`) ⇒ N3 đỏ — *"promise rejected 'Error: Hardening hardening.always.sql (phan_xet) thất bại …'"*
+  (83⑴ kêu dòng khai thiu như trước bản vá, log `lo92-40`); ca mới `[S1.9192 / khoản 158]` đỏ ở bước *DROP POLICY → migrate()* —
+  cùng lỗi (log `lo92-41`). Khôi phục nguyên văn (`diff -q` sạch), `git status` chỉ còn hai tệp của commit 2.
 - Âm bản của đồ gá nới (không chạy lại — chính là đo trước của `tien-trinh` ⑹, log `lo92-10`): bỏ `noiPolicyKindTam` thì vế ấy đỏ
   *"expected { status: 'PENDING', attempts: 0 } to deeply equal { status: 'FAILED', attempts: 1, last_failure_reason: 'NO_HANDLER' }"*.
 Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status` chỉ còn các sửa của lô.
@@ -18951,6 +18972,9 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   chạm gói ấy.
 - Nhãn `[INV-F1]` mới ở hai composition test chưa khai ở `so-khai-nhan.ts` (tệp cấm) — dòng khai ở bàn giao mục 6; tới khi khai,
   `pnpm evidence` báo nhãn đặt sai chỗ.
+- Mục tự chữa chỉ dựng lại policy THIẾU của đúng hai tên; một RESTRICTIVE đơn vai khác trong tương lai phải có mục riêng (hay nới
+  danh sách tên của mục này) — cổng 83⑴ vẫn bắt "dòng khai thiu" nên không im lặng, chỉ không tự chữa. Không có ca N3 cho `app_unseal`
+  trong kho; mục này dựng cả hai policy nên đường ấy cũng được che, nhưng chưa có test riêng.
 - Sổ mồ côi hôm nay rỗng: nửa "dòng sổ mồ côi mới mà quên migration ⇒ cổng worker đỏ" chứng minh bằng phép hợp trong cổng, chưa
   có dòng thật để đỏ.
 
@@ -18969,3 +18993,13 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   38 tệp, 436 đạt, 1 bỏ qua, 312 s (bằng baseline `lo92-00` của agent trước trên `561158e`).
 - Đột biến: 3 ca / 3 đỏ đúng vế (mục 6).
 - Số test mang nhãn `[INV-F1]` thêm: outbox +5, worker composition +3, api composition +1.
+- Commit 2 (mục tự chữa): `pnpm typecheck` 0 lỗi; `pnpm exec eslint db/migrations.int.test.ts` 0 lỗi (`lo92-31/32`); T1 tĩnh
+  (`db/hardening-hang.test.ts db/migration-shape.test.ts tests/architecture/hardening-khong-in-gia-tri.test.ts
+  tests/architecture/hardening-co-ly-do.test.ts tests/architecture/check-an-ninh-khai.test.ts`) 5 tệp, 58/58 (`lo92-33`);
+  `db/migrations.int.test.ts -t "N3"` 3/3 — N3 xanh (trước mục: 1 đỏ, `lo92-30`) (`lo92-34`); `-t "khoản 158"` 1/1 (`lo92-35`);
+  `db/hardening-suy-tu-tinh-chat.int.test.ts` 36/36, 334 s (`lo92-36`); `db/rls-coverage.int.test.ts` 54/54, 164 s (`lo92-37`);
+  `db/migrations.int.test.ts` TRỌN tệp 118/121, 1217 s (`lo92-38`) — 3 đỏ là ba danh sách migration ghim cứng nhận thêm
+  `9592_outbox_policy_theo_kind.sql` (`[Minor] migrate() dưới search_path thù địch…` ~3456, `[Task 6 — vòng fix 2 — I1 · S1.20] (D5)…`
+  ~7944, `[Task 8 — (E1)/(E2)]…` ~8248): hệ quả của mọi lô thêm migration, người tích hợp gỡ lúc `cap-so` (cây gộp đã có, theo báo
+  "122/123 chỉ N3 đỏ"); cố ý KHÔNG chạm ba danh sách ấy để không xung đột gộp. Đột biến M4: 2/2 đỏ.
+
