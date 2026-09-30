@@ -24,7 +24,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { taoDocDiaChi } from "./dia-chi.js";
 import { BOI_TRAN_DIA_CHI, createDispatcher } from "./dispatch.js";
-import { agentGoiDuoc, type Route } from "./route-types.js";
+import { THAN_429_MFA, agentGoiDuoc, type Route } from "./route-types.js";
 import { COOKIE_PHIEN_NGUOI_MUA, LOGIN_LINK_MAX_PER_CALLER, LOGIN_LINK_MAX_PER_ORG, LOGIN_REDEEM_MAX_PER_CALLER, LOGIN_TOTP_MAX_PER_CALLER } from "./routes/auth.js";
 import { ROUTES } from "./routes.js";
 import { createApiServer } from "./server.js";
@@ -1458,6 +1458,129 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
 
     // ⑶ Và điều trần ấy tồn tại để bảo vệ vẫn đúng.
     expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+  });
+  // ===============================================================================================
+  // ⑼ [S1.9101 / khoản 188] NGƯỠNG MÀ CÂU LỆNH DÙNG LÀ NGƯỠNG CỦA BẢNG ROUTE — KHÔNG PHẢI MỘT HẰNG HANDLER TỰ NHẬP.
+  //
+  // S1.83 khai *"cùng một hằng nên hai nơi không trôi khỏi nhau"* — đúng cho GIÁ TRỊ, không đúng cho SỰ CÓ MẶT (S1.87): không ai canh
+  // handler của một route khai ngưỡng có truyền ngưỡng ấy xuống câu lệnh không. Từ vòng này bộ điều phối đưa `route.mfaTranDuongPhu`
+  // vào `ctx.mfaTranDuongPhu` và handler truyền ĐÚNG thứ ấy xuống `CAU_DAT_COC` (vế T1 ở `routes.test.ts`). Vế này đo qua HTTP thật,
+  // TUẦN TỰ và TẤT ĐỊNH: nhân bản bảng route với `/auth/agent-session` khai ngưỡng 3 — LỚN HƠN hằng 2, nhỏ hơn ngưỡng khoá 5 — rồi gõ
+  // sai liên tiếp. Lần thứ ba đi qua cổng đi trước của bộ điều phối (`failed_attempts` 2 < 3, cổng đọc bảng route), nên thứ duy nhất
+  // còn cắt được nó là vị từ trong câu lệnh, với ngưỡng mà HANDLER truyền: nhập hằng 2 ⇒ `CAU_DAT_COC` không giành được cọc ⇒ 429 ở
+  // lần ba (ĐỎ trên mã trước vòng này, đo được `401,401,429`, failed = 2); đọc ctx ⇒ 401 ở lần ba, 429 ở lần bốn, failed = 3.
+  //
+  // VÌ SAO KHÔNG ĐO CHIỀU CÙNG LÚC như ⑻: bản đầu của vế này bắn ba mã sai song song với ngưỡng route 1, và trên mã CŨ ba lượt chạy
+  // đều cho `401,429,429` — các yêu cầu của CÙNG một phiên xếp hàng qua cổng đi trước trên máy đo, nên chiều ấy không phân biệt được
+  // hai nguồn ngưỡng. Một phép đo không đỏ được trên mã cũ thì không phải một phép đo; hình dạng tuần tự ở đây đỏ tất định.
+  // ===============================================================================================
+  it("⑼ bảng route nhân bản khai ngưỡng 3 (≠ hằng 2): ba lần sai đều 401, lần bốn 429, failed_attempts = 3 — câu lệnh dùng ngưỡng của route", async () => {
+    const NGUONG_ROUTE = 3;
+    expect(NGUONG_ROUTE, "vế chỉ có nghĩa khi ngưỡng của route LỚN HƠN hằng: lần thứ (hằng + 1) mới là lần phân biệt").toBeGreaterThan(MFA_TRAN_SAI_DUONG_PHU);
+    expect(NGUONG_ROUTE, "và nhỏ hơn ngưỡng khoá, để vẫn là một ngưỡng phụ có nghĩa").toBeLessThan(MFA_MAX_FAILED_ATTEMPTS);
+    // Hai route tự thân VỌNG LẠI thứ bộ điều phối đưa vào `ctx.mfaTranDuongPhu` — đo trực tiếp vế "bộ điều phối điền từ bảng route",
+    // vì chuỗi tuần tự của agent-session bên dưới không phân biệt được "điền null" với "điền đúng" (không ngưỡng trong câu lệnh thì cổng
+    // đi trước vẫn cắt ở cùng chỗ). Cùng khuôn `/auth/*`, `self: true`, `agent: false` mà `timViPhamBangRoute` đòi.
+    const vong = (path: string, mfaTranDuongPhu: number | null): Route => ({
+      method: "POST", path, audience: "BUYER", mutates: true, self: true, agent: false, mfaTranDuongPhu,
+      handler: (ctx) => Promise.resolve({ status: 200, body: { nguong: ctx.mfaTranDuongPhu } }),
+    });
+    const bangHep: readonly Route[] = [
+      ...ROUTES.map((r) =>
+        r.audience === "BUYER" && r.mutates && r.self === true && r.path === "/auth/agent-session" ? { ...r, mfaTranDuongPhu: NGUONG_ROUTE } : r,
+      ),
+      vong("/auth/vong-nguong-9101", NGUONG_ROUTE),
+      vong("/auth/vong-khong-nguong-9101", null),
+    ];
+    expect(bangHep.filter((r) => r.audience === "BUYER" && r.mutates && r.self === true && r.mfaTranDuongPhu === NGUONG_ROUTE)).toHaveLength(2);
+    const s2 = createApiServer(createDispatcher({ pool: apiPool, auditPool, services: dv.services, routes: bangHep }), {
+      remoteAddressOf: taoDocDiaChi(["127.0.0.1"]),
+    });
+    await new Promise<void>((xong) => s2.listen(0, "127.0.0.1", xong));
+    const goc2 = `http://127.0.0.1:${(s2.address() as AddressInfo).port}`;
+    try {
+      const u = await taoNguoi("nguong-cua-route@vd.test");
+      const nguoi = await dangNhap("nguong-cua-route@vd.test");
+      // ⓐ Bộ điều phối điền đúng lời khai của TỪNG route: có ngưỡng ⇒ ngưỡng ấy; `null` ⇒ `null`.
+      const v1 = await goi("POST", "/auth/vong-nguong-9101", { cookie: nguoi.cookie, body: {}, goc: goc2 });
+      expect(v1.status, v1.text).toBe(200);
+      expect(v1.body, "ctx.mfaTranDuongPhu phải là ngưỡng route khai").toEqual({ nguong: NGUONG_ROUTE });
+      const v0 = await goi("POST", "/auth/vong-khong-nguong-9101", { cookie: nguoi.cookie, body: {}, goc: goc2 });
+      expect(v0.status, v0.text).toBe(200);
+      expect(v0.body, "route khai null thì ctx mang null").toEqual({ nguong: null });
+      // ⓑ Và handler thật truyền đúng thứ ấy xuống câu lệnh: chuỗi tuần tự dưới đây.
+      const ma: number[] = [];
+      for (let i = 0; i < NGUONG_ROUTE + 1; i += 1) {
+        ma.push((await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" }, goc: goc2 })).status);
+      }
+      const { rows } = await db.pool.query<{ locked_until: string | null; failed_attempts: number }>(
+        "SELECT locked_until, failed_attempts FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+        [orgA, u],
+      );
+      const dem = Number(rows[0]?.failed_attempts);
+      const ke = `status: ${ma.join(",")}; failed=${String(dem)}; ngưỡng route=${String(NGUONG_ROUTE)}; hằng=${String(MFA_TRAN_SAI_DUONG_PHU)}`;
+      // Vế chịu lực: lần thứ (hằng + 1) — cổng đi trước đã cho qua — phải TỚI câu lệnh và tiêu ngân sách, tức 401, không 429.
+      expect(ma.slice(0, NGUONG_ROUTE), `đúng ${String(NGUONG_ROUTE)} lần đầu tới câu lệnh — ngưỡng của ROUTE, không của hằng — ${ke}`)
+        .toEqual(Array<number>(NGUONG_ROUTE).fill(401));
+      expect(ma[NGUONG_ROUTE], `lần thứ ${String(NGUONG_ROUTE + 1)} bị cắt ở đúng ngưỡng route — ${ke}`).toBe(429);
+      expect(dem, `bộ đếm dừng ở ngưỡng của ROUTE — ${ke}`).toBe(NGUONG_ROUTE);
+      expect(rows[0]?.locked_until, `hồ sơ KHÔNG được khoá — ${ke}`).toBeNull();
+    } finally {
+      await new Promise<void>((xong) => s2.close(() => xong()));
+    }
+  });
+  // ===============================================================================================
+  // ⑽ [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH CỦA GIAO ĐIỂM 144 × 153, GHIM LẠI: GÕ SAI TOTP ĐỦ NGƯỠNG TRÊN ĐƯỜNG CHÍNH THÌ KHÔNG XOAY ĐƯỢC
+  // CHỨNG CHỈ AGENT — KỂ CẢ VỚI MÃ ĐÚNG — CHO TỚI KHI ĐĂNG NHẬP ĐÚNG MỘT LẦN.
+  //
+  // Chứng chỉ `AGENT_READONLY` có TTL trần một giờ và cách duy nhất có chứng chỉ mới là gọi lại `/auth/agent-session` với một mã tươi
+  // (khoản 153, ADR-039). Trần trạng thái của ⑹–⑻ đứng trên đúng route ấy và đọc `failed_attempts` — một bộ đếm mà ĐƯỜNG CHÍNH cũng
+  // tăng. Hệ quả: một người đã sai `MFA_TRAN_SAI_DUONG_PHU` lần trên `/auth/totp` thì đường phát agent từ chối họ TRƯỚC khi thử mã, dù
+  // mã đúng; tiến trình MCP đang chạy dừng ở giờ kế tiếp. Fail-closed CÓ CHỦ Ý (đường phụ không được tiêu ngân sách của đường chính)
+  // — vế này ghim bốn điều để nó không thành một bất ngờ vận hành: ⒜ mã đúng vẫn 429 thân cố định; ⒝ lần cắt không tiêu mã, không tăng
+  // bộ đếm, không khoá; ⒞ đường ra DUY NHẤT là một lần đăng nhập đúng trên đường chính (`CAU_GHI_THANH_CONG` đặt `failed_attempts = 0`)
+  // — cùng mã vừa bị 429 vẫn dùng được ở đó; ⒟ sau đó đường phát agent lại tới được câu lệnh (một mã sai cho 401, không 429).
+  // ===============================================================================================
+  it("⑽ failed_attempts = ngưỡng trên đường chính ⇒ /auth/agent-session 429 kể cả mã ĐÚNG và không tiêu mã; đăng nhập đúng mở lại", async () => {
+    const email = "xoay-agent-sau-sai@vd.test";
+    const u = await taoNguoi(email);
+    const nguoi = await dangNhap(email);
+    const docHoSo = async (): Promise<{ failed_attempts: number; locked_until: string | null; last_used_counter: string | null }> =>
+      (
+        await db.pool.query<{ failed_attempts: number; locked_until: string | null; last_used_counter: string | null }>(
+          "SELECT failed_attempts, locked_until, last_used_counter FROM mfa_credentials WHERE org_id = $1 AND user_id = $2",
+          [orgA, u],
+        )
+      ).rows[0] ?? { failed_attempts: -1, locked_until: "?", last_used_counter: "?" };
+    // Mồi cảnh bằng CSDL: chừng ấy lần sai TRÊN ĐƯỜNG CHÍNH — hồ sơ vẫn bình thường (chưa khoá), chỉ đã tới ngưỡng đường phụ.
+    await db.pool.query("UPDATE mfa_credentials SET failed_attempts = $1 WHERE org_id = $2 AND user_id = $3", [MFA_TRAN_SAI_DUONG_PHU, orgA, u]);
+    const truoc = await docHoSo();
+    // Mã của bước KẾ TIẾP — `dangNhap` vừa tiêu bước hiện tại; +1 vẫn trong cửa sổ ±1 của `verifyTotpCode` và ±3 của trigger 039.
+    const maDung = deriveTotpCode(nguoi.biMat, counterForTime(Date.now()) + 1);
+
+    // ⒜ Mã ĐÚNG vẫn bị cắt, cùng thân với mọi lần cắt của trần trạng thái.
+    const r = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: maDung } });
+    expect(r.status, "mã đúng vẫn phải 429 khi hồ sơ đã ở ngưỡng đường phụ (thân không in: phản hồi 200 mang token)").toBe(429);
+    expect(r.body).toEqual(THAN_429_MFA);
+    // ⒝ Lần cắt là một phép đọc: không tiêu mã, không tăng bộ đếm, không khoá.
+    expect(await docHoSo(), "lần cắt không được đổi hồ sơ").toEqual(truoc);
+    expect(truoc.locked_until).toBeNull();
+
+    // ⒞ Đường ra duy nhất: đăng nhập đúng trên đường chính — bằng CHÍNH mã vừa bị 429, vì lần cắt không tiêu nó.
+    const daGui = dv.linkDaGui.length;
+    await goi("POST", "/auth/link", { body: { orgId: orgA, email } });
+    await ob.chay(orgA);
+    expect(dv.linkDaGui).toHaveLength(daGui + 1);
+    const tk = dv.linkDaGui.at(-1)?.token ?? "";
+    expect((await goi("POST", "/auth/redeem", { body: { orgId: orgA, token: tk } })).status).toBe(200);
+    const vao = await goi("POST", "/auth/totp", { body: { orgId: orgA, token: tk, code: maDung } });
+    expect(vao.status, `đăng nhập đúng phải mở lại được — ${vao.text}`).toBe(200);
+    expect((await docHoSo()).failed_attempts, "một lần đúng đặt bộ đếm về 0").toBe(0);
+
+    // ⒟ Đường phát agent lại tới được câu lệnh: một mã SAI cho 401 (đã thử mã), không còn 429 (bị cắt trước khi thử).
+    const lai = await goi("POST", "/auth/agent-session", { cookie: nguoi.cookie, body: { code: "000000" } });
+    expect(lai.status, `sau khi đăng nhập đúng, đường phát agent phải thử mã trở lại — ${lai.text}`).toBe(401);
+    expect((await docHoSo()).failed_attempts).toBe(1);
   });
 
   // ===============================================================================================

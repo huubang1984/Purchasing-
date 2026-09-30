@@ -259,6 +259,15 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     //     lập luận nào — người đọc sau sẽ tin rằng lớp ấy có.
     //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
     //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
+    //
+    // [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH của giao điểm 144 × 153, nói ra: chứng chỉ agent có TTL trần
+    // một giờ và cách DUY NHẤT có chứng chỉ mới là gọi lại route này với một mã TOTP tươi; còn trần
+    // `mfaTranDuongPhu` dưới đây đọc `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng.
+    // Nên một người đã gõ sai TOTP đủ `MFA_TRAN_SAI_DUONG_PHU` lần (= 2) trên `/auth/totp` thì KHÔNG
+    // xoay được chứng chỉ agent — route trả 429 trước khi thử mã, KỂ CẢ mã đúng — cho tới khi họ đăng
+    // nhập đúng một lần trên đường chính (một lần đúng đặt bộ đếm về 0); một tiến trình MCP đang
+    // chạy sẽ dừng ở giờ kế tiếp. Fail-closed CÓ CHỦ Ý và đúng thứ tự ưu tiên: đường phát agent là
+    // đường PHỤ, đường đăng nhập mới là đường phải luôn mở. Ghim ở `auth.int.test.ts` vế ⑽.
     // ==========================================================================================
     method: "POST",
     path: "/auth/agent-session",
@@ -286,10 +295,15 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         ctx.client,
         // [S1.83 / lượt soi ngang 73 — khoản 144] NGƯỠNG ĐI XUỐNG TỚI CÂU LỆNH. Cổng ở bộ điều
         // phối là một đường tắt không thẩm quyền (nó tự khai thế); thứ giữ ngưỡng đứng khi N lời
-        // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
+        // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. ~~Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
         // được dùng ở cả hai chỗ — khai `mfaTranDuongPhu` của route ngay trên và ở đây — nên hai
-        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.
-        { orgId: ctx.orgId, userId: ctx.actor.id, code, tranDuongPhu: MFA_TRAN_SAI_DUONG_PHU },
+        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.~~ **[S1.9101 / khoản 188]
+        // Câu gạch đúng cho GIÁ TRỊ, sai cho SỰ CÓ MẶT (S1.87): một handler quên dòng này thì không
+        // cổng nào kêu.** Nay ngưỡng chỉ có MỘT nguồn — lời khai `mfaTranDuongPhu` của route — và bộ
+        // điều phối đưa nó vào `ctx.mfaTranDuongPhu`; handler không tự nhập hằng nữa (`routes.test.ts`
+        // canh cả hai chiều: câu lệnh nhận đúng thứ trong `ctx`, và hằng không xuất hiện trong thân
+        // handler nào). `null` ở đây nghĩa là route KHÔNG khai ngưỡng ⇒ không truyền; route này khai.
+        { orgId: ctx.orgId, userId: ctx.actor.id, code, tranDuongPhu: ctx.mfaTranDuongPhu ?? undefined },
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
