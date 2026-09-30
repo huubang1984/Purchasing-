@@ -2,17 +2,20 @@
 # CODEOWNERS — REVIEW BẮT BUỘC CHO CÁC HÀNG RÀO AN NINH
 # ============================================================================================
 #
-# ⚠️  CHỦ SỞ HỮU DƯỚI ĐÂY LÀ PLACEHOLDER, CHƯA TỒN TẠI.
-#     `@trustprocure/bao-mat` là một team GitHub CHƯA ĐƯỢC TẠO. Chừng nào nó chưa tồn tại,
-#     GitHub bỏ qua các dòng trỏ tới nó và file này KHÔNG cưỡng chế được gì.
-#     Việc phải làm (bước cấu hình THỦ CÔNG, không tự động hoá được từ repo):
-#       1. Tạo team `bao-mat` trong tổ chức `trustprocure`, thêm ít nhất HAI người.
-#       2. Settings → Branches → nhánh mặc định: bật "Require a pull request before merging",
-#          "Require review from Code Owners", và "Required approvals" >= 2.
-#       3. Thay `@trustprocure/bao-mat` bằng tên team thật ở mọi dòng dưới đây.
-#     Yêu cầu HAI NGƯỜI review KHÔNG cưỡng chế được từ trong `.github/workflows/`: một job
-#     CI đọc được số approval qua API, nhưng nó chạy dưới quyền của chính PR và người mở PR
-#     sửa được workflow trong cùng PR đó. Chỉ branch protection phía GitHub mới cưỡng chế được.
+# [S1.9132 / khoản 18] CHỦ SỞ HỮU LÀ CHỦ KHO. Kho nằm dưới tài khoản cá nhân `huubang1984`, không
+#     dưới một tổ chức GitHub, nên không có team `@trustprocure/bao-mat` nào để trỏ tới — bản trước
+#     trỏ tới một team CHƯA TỒN TẠI và GitHub bỏ qua mọi dòng của nó. Mọi đường dẫn dưới đây nay
+#     trỏ tới `@huubang1984`, tức GitHub yêu cầu được review của chủ kho.
+#
+#     TỆP NÀY MỘT MÌNH CHƯA CƯỠNG CHẾ GÌ. Nó chỉ có răng khi trên GitHub, ở nhánh mặc định, bật:
+#       · Settings → Branches → "Require a pull request before merging",
+#       · "Require review from Code Owners",
+#       · "Required approvals" >= 2 — và vì chủ kho là một người, người thứ HAI phải là một
+#         cộng tác viên thật được thêm vào kho (hoặc một dòng nữa ở đây khi có người ấy).
+#     Chừng nào chưa bật, PR của chính chủ kho tự merge được, và người mở PR không phải chủ kho
+#     cũng không bị chặn. Đây là bước cấu hình THỦ CÔNG của chủ dự án, không tự động hoá được từ
+#     repo: một job CI đọc được số approval qua API nhưng chạy dưới quyền của chính PR, và người
+#     mở PR sửa được workflow trong cùng PR đó. Chỉ branch protection phía GitHub mới cưỡng chế được.
 #
 # VÌ SAO CÓ FILE NÀY, nói bằng kết luận đo được chứ không bằng khẩu hiệu:
 #   Hai reviewer độc lập, ở hai hàng rào khác nhau (hàng rào G1 của Task 7 và hàng rào RLS của
@@ -28,7 +31,7 @@
 #   cần MẮT NGƯỜI, không cần thêm một assertion.
 #
 # Cú pháp: người khớp SAU CÙNG thắng. Dòng đầu (*) cố ý KHÔNG có, để file này chỉ nói về những
-# đường dẫn thật sự cần review bắt buộc — thêm `*` sẽ làm mọi PR đều cần team bảo mật và biến
+# đường dẫn thật sự cần review bắt buộc — thêm `*` sẽ làm mọi PR đều cần chủ kho và biến
 # hàng rào thành thứ người ta tìm cách đi vòng.
 
 # --- Hàng rào RLS / cô lập tổ chức (Task 4) -------------------------------------------------
@@ -36,39 +39,39 @@
 # (cửa theo đối tượng) và NGOAI_LE_DOC_VONG (miễn trừ view/matview/SECDEF). Ba danh sách này
 # là toàn bộ bề mặt "được phép" của cô lập tổ chức: thêm một dòng vào bất kỳ danh sách nào
 # cũng là nới hàng rào, và ba vòng liên tiếp cho thấy mỗi lần nới đều mở kèm một trục mới.
-/db/migrations/hardening.always.sql          @trustprocure/bao-mat
+/db/migrations/hardening.always.sql          @huubang1984
 # Bản sao TypeScript của hai danh sách trên + toàn bộ khẳng định quyền bảng/cột. Meta-test ở
 # đây bắt buộc hai bản phải khớp, nên sửa một bên mà không sửa bên kia là ĐỎ — nhưng "sửa cả
 # hai bên cho khớp" thì test im lặng, và đúng chỗ đó cần người đọc.
-/db/rls-coverage.int.test.ts                 @trustprocure/bao-mat
+/db/rls-coverage.int.test.ts                 @huubang1984
 # Mọi migration: CREATE POLICY / GRANT / ENABLE ROW LEVEL SECURITY sống ở đây, và migration
 # đánh số chỉ chạy MỘT LẦN nên một dòng sai đi vào production là trạng thái vĩnh viễn cho tới
 # khi có migration vá.
-/db/migrations/                              @trustprocure/bao-mat
+/db/migrations/                              @huubang1984
 
 # --- Hàng rào ranh giới module G1 (Task 7) --------------------------------------------------
 # Cấu hình dependency-cruiser là hàng rào duy nhất chặn tầng nghiệp vụ gọi thẳng tầng hạ tầng
 # (và ngược lại). Nó dùng khuôn "mặc định ĐÓNG + cửa tường minh" — cùng lớp bài toán với
 # NGOAI_LE_HINH_DANG: mỗi cửa thêm vào là một quyết định kiến trúc.
-/.dependency-cruiser.cjs                     @trustprocure/bao-mat
+/.dependency-cruiser.cjs                     @huubang1984
 
 # --- Vật liệu mật mã và tenancy -------------------------------------------------------------
 # Bọc/mở khoá, sinh khoá, vòng đời khoá. Một thay đổi im lặng ở đây không làm test nào đỏ mà
 # vẫn làm mọi bản mã trở nên đọc được.
-/packages/crypto-keys/                       @trustprocure/bao-mat
+/packages/crypto-keys/                       @huubang1984
 # withTenant() là ĐIỂM DUY NHẤT gắn tenant context; mọi truy cập dữ liệu có org_id đi qua nó.
 # Nó cũng là đường DUY NHẤT trong repo chạy dưới một search_path mà dự án không kiểm soát.
-/packages/tenancy/                           @trustprocure/bao-mat
+/packages/tenancy/                           @huubang1984
 
 # --- Đường ống và móc tự động ---------------------------------------------------------------
 # Workflow CI là thứ quyết định phép kiểm nào THẬT SỰ chạy trước khi merge. Sửa được workflow
 # là vô hiệu hoá được mọi hàng rào phía trên mà không chạm vào chúng.
-/.github/workflows/                          @trustprocure/bao-mat
+/.github/workflows/                          @huubang1984
 # Chính file này cũng phải nằm trong danh sách, nếu không nó tự gỡ được.
-/.github/CODEOWNERS                          @trustprocure/bao-mat
+/.github/CODEOWNERS                          @huubang1984
 # Hook chạy trên máy người phát triển với quyền của người đó: git-safety.mjs chặn các lệnh git
 # huỷ dữ liệu, protect-secrets.mjs chặn bí mật lọt vào commit.
-/.claude/hooks/                              @trustprocure/bao-mat
+/.claude/hooks/                              @huubang1984
 
 # --- Bộ máy evidence: thứ QUYẾT ĐỊNH KIỂM TOÁN VIÊN ĐƯỢC KỂ CHUYỆN GÌ ------------------------
 # Ba tài sản quyết định "hàng rào có răng không" đã nằm trên. Bốn đường dẫn dưới đây quyết định
@@ -84,13 +87,13 @@
 #   * `PHAM_VI_HEP` / `MA_PHAI_CO_CO_HEP` là thứ DUY NHẤT đứng giữa một ô ✅ và một câu rộng
 #     hơn thứ được đo. Gỡ một dòng làm cờ và mục §4 cùng biến mất, ma trận sinh lại vẫn KHỚP
 #     BYTE, và `git diff --exit-code` vẫn xanh — đo được.
-/tools/inv-matrix/                           @trustprocure/bao-mat
+/tools/inv-matrix/                           @huubang1984
 # Sổ đăng ký bất biến. Xoá một HÀNG ở đây làm một bất biến biến mất khỏi mẫu số mà không lớp
 # nào kêu; §3 của TEST-PLAN cũng là nơi phát biểu tầng nào CHẶN MERGE.
-/docs/TEST-PLAN.md                           @trustprocure/bao-mat
+/docs/TEST-PLAN.md                           @huubang1984
 # Tài liệu trạng thái mang SỔ NỢ ĐƯỢC COMMIT — 12+ khoản đã đo. Xoá một dòng nợ ở đây là cách
 # rẻ nhất để một khoảng trống đã biết biến mất khỏi hồ sơ bàn giao.
-/docs/STATE.md                               @trustprocure/bao-mat
+/docs/STATE.md                               @huubang1984
 # Evidence pack. `INV-matrix.md` sinh tự động và có phép kiểm chống-sửa-tay, nhưng `.gitignore`
 # GIỮ file này nên một lần sửa tay kèm một lần sửa bộ sinh sẽ khớp lại — cần mắt người.
-/evidence/                                   @trustprocure/bao-mat
+/evidence/                                   @huubang1984

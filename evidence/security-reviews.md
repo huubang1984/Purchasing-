@@ -17231,6 +17231,111 @@ Không có; vòng trả nợ theo phân công ngày 2026-09-29.
 
 — hết biên bản §S1.9131 —
 
+# §S1.9132 — API/WEB: THÂN 422 NỘP THẦU MANG MÃ LÝ DO, TRANG NÓI CÂU RIÊNG; CỔNG CHẤM GHI LÀ LỚP NÔNG; CODEOWNERS TRỎ CHỦ KHO — KHOẢN 230, 220, 18 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B; chạm mảnh 1 của `docs/PRODUCT.md` §11 (đường nộp thầu — câu từ chối trên màn nhà cung cấp) ở lớp
+route và giao diện; không route mới, không migration, không ADR, không export mới, không phụ thuộc mới. Đóng 230, 220, 18; mở 9432.
+
+## 1. Vòng này là gì
+
+Lô A4 của đợt trả nợ 2, ba khoản đã có quyết định của chủ dự án. Khoản 230 — từ S1.180 mỗi nhánh trigger của câu nộp đã đặt một tên
+ràng buộc và `submitBid` đã đọc nó thành `NopBiTuChoiError.ma`, nhưng route `POST /guest/bids` vẫn trả một câu chung, nên màn nộp thầu
+không nói được «đã quá hạn» khác «không nằm trong vòng BAFO» khác «phiên đã bị thu hồi». Khoản 220 — cổng `requirePermission(EVALUATION_PERFORM)`
+của đường chấm đọc như một lớp phân tách nhiệm vụ nhưng chỉ chặn `DIRECTOR` (và nay `DATA_STEWARD`); chọn giữa thu hẹp `005` và ghi
+nó là lớp nông. Khoản 18 — `.github/CODEOWNERS` trỏ tới một team không tồn tại.
+
+## 2. Quyết định của chủ dự án
+
+Ngày 2026-09-30: 230 — route trả mã lý do `ma` trong thân 422, trang nói câu riêng cho từng mã, không ERRCODE mới; 220 — ⒝ ghi cổng là
+lớp NÔNG, lớp thật là J3 (ADR-051), không đổi ma trận `005`; 18 — `@trustprocure/bao-mat` → `@huubang1984`, bật «Require review from Code
+Owners» là việc của chủ dự án trên GitHub. Ngoài ba điểm ấy: vòng trả nợ theo phân công, các điểm tự chốt trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Test viết trước, chạy trên mã cũ của `69e743e`, rồi mới vá.
+- 230 int (`guest.int.test.ts` khối `[khoản 230]`): 4 đỏ / 0 xanh — cả bốn đồ gá tới 422 thật, thân không có `ma`
+  (`expected 'undefined' to be 'string'`; thân quá hạn: `{error, gioPhanXu, hanNop}`; ba thân kia: `{error}` với câu chung). Log
+  `scratchpad/lo32-do-truoc-int.log`.
+- 230 DOM (`phuc-vu.test.ts` khối `[khoản 230]`): 2 đỏ / 1 xanh — ca bảy mã đỏ ở mã đầu (`C1_QUA_HAN_NOP: expected 'Gói thầu không nhận
+  báo giá này…' to match /^Đã quá hạn…/`), ca vì hạn đỏ, ca mã lạ XANH (trang cũ đã in `error` nguyên văn — ghim hành vi cũ). Log
+  `scratchpad/lo32-do-truoc-dom.log`. Ca đối chiếu bảng mã viết SAU vá (nó đo hai bản khớp nhau, không có trên mã cũ).
+- 220: ca ghim xanh trên mã hiện tại (23/23) — nó ghim một trạng thái, không tái hiện một lỗi; chiều đỏ đo ở mục 6.
+- 18: `grep -rn "CODEOWNERS\|bao-mat" tests/architecture tools` ⇒ 9 dòng, tất cả là chú thích; không cổng nào đọc tệp.
+
+## 4. Thay đổi
+
+**`packages/bidding/src/bidding.ts`**: `NopQuaHanError.ma = "C1_QUA_HAN_NOP" as const` (docblock nói vì sao không vào
+`MA_THEO_RANG_BUOC`); docstring `NopBiTuChoiError` gạch «phân biệt ba lý do trước người nộp là một quyết định khác»; chú thích trong
+`submitBid` gạch «Hai nhánh kia vẫn chung một thông điệp». Không export mới. **`apps/api/src/routes/guest.ts`**: hai nhánh trả về của
+`POST /guest/bids` mang `ma`; khối chú thích nêu hợp đồng thân đóng. **`apps/web/trang/nop-thau.js`**: `CAU_THEO_MA` (bảy mã → bảy
+câu), `cauTuChoi(b)` (`Object.hasOwn`, mã lạ ⇒ `null`), nhánh `r.status !== 201` dùng câu riêng làm câu đầu, giữ hai giờ khi thân có.
+**`apps/api/src/guest.int.test.ts`**: `randomUUID` vào import; khối `describe("[S1.9132 / khoản 230] …")` với `dungGoiMo`, `phongBiCho`,
+`dungTrangThai` (chép từ `loi-moi-sau-commit.int.test.ts`), `docTuChoi`, `hangSoTuChoi` và bốn ca. **`apps/web/src/phuc-vu.test.ts`**:
+khối `describe("[S1.9132 / khoản 230] nop-thau: …")` bốn ca trong `[S1.177]` (dùng `dungTrang`, `GOI_NOP`, `BIEN_NHAN` sẵn có).
+**`packages/danh-gia/src/luot-danh-gia.ts`**, **`apps/api/src/routes/buyer.ts`** (chỉ khối route chấm): chú thích khoản 220 ⒝.
+**`packages/identity/src/ma-tran-quyen.test.ts`**: ca ghim «[khoản 220 ⒝] …» trong `describe` `[INV-D3] ma trận quyền trong 005…`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **`NopQuaHanError` mang `ma` riêng, không vào `MA_THEO_RANG_BUOC`.** Đề bài cho hai lối («kiểm nó cũng mang `ma` hay thêm cho khớp»).
+  Thêm `c1_qua_han_nop` vào bảng tên → mã sẽ làm `docMaNopBiTuChoi` bắt được nhánh vì hạn khi `DETAIL` hỏng hình dạng — tức một mã «vì
+  hạn» không có hai dấu thời gian, trái với «fail về phía lời từ chối KHÔNG số» của `docLanChanViHan`; và ca hai chiều của
+  `bidding.int.test.ts` cố ý trừ `c1_qua_han_nop`. Nên `ma` là một trường hằng trên lớp, cùng khuôn tên-viết-hoa.
+- **Trang KHÔNG bỏ hai giờ khi biết mã, và KHÔNG bỏ câu chung khi không biết mã.** Hai giờ là hợp đồng của khoản 196 (người bị chặn đối
+  chiếu đồng hồ); câu chung là lối rơi cho api cũ/mới lệch nhau. Đột biến M6 và M5 đo hai vế ấy.
+- **Ca «phiên khách sai» dựng bằng khoá hàng gói thầu** (không sửa mã sản xuất để mở một móc): `bid_kiem_han_nop` lấy `FOR SHARE` trên
+  `rfq_packages` nên một `FOR UPDATE` giữ ở test làm câu INSERT chờ đúng chỗ; đợi bằng `pg_stat_activity`, cùng khuôn ca `[lượt soi]
+  QUA HTTP` sẵn có của tệp. Nộp lần một thành công trước để câu chờ là câu ghi phiên bản, không phải câu tạo luồng (RLS `vendor_bids_khach`
+  đọc GUC, nhưng tôi không muốn phép đo tựa vào điều đó).
+- **Ca ghim 220 không mang nhãn `[INV-…]`**: nó ghim một lời khai, không phải một bất biến; tệp đã khai ở `so-khai-nhan.ts`, nên
+  không đụng tệp cấm.
+- **Chỉ gạch «năm trên sáu» ở hai chỗ của lô** (route chấm, hàng sổ); bốn chỗ ngoài lô và ADR-055 ghi thành khoản 9432 / mục 6 thay vì
+  chạm tệp ngoài danh sách.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/lo32/dot-bien.py`: sửa một chỗ, chạy đúng khối test, khôi phục bằng `cp`. Bảy ca, mỗi ca ĐỎ đúng vế
+(log `scratchpad/lo32-dot-bien-M*.log`):
+- M1 route bỏ `ma` ở nhánh `NopBiTuChoiError` ⇒ int 3 đỏ (BAFO, gói đóng, phiên), quá hạn xanh.
+- M2 route bỏ `ma` ở nhánh `NopQuaHanError` ⇒ int 1 đỏ (quá hạn), ba ca kia xanh.
+- M3 route trả một mã cố định `C1_GOI_KHONG_NHAN_BAO_GIA` ⇒ int 2 đỏ (`expected 'C1_GOI_KHONG_NHAN_BAO_GIA' to be 'BAFO_NGOAI_TOP_N'`,
+  … `'PHIEN_KHACH_KHONG_HOP_LE'`).
+- M4 trang bỏ hàng `BAFO_NGOAI_TOP_N` ⇒ DOM 2 đỏ (ca bảy mã: `BAFO_NGOAI_TOP_N: expected 'Gói thầu không nhận…' to match /không nằm
+  trong vòng BAFO đang mở/`; và ca đối chiếu: `expected [ 'C1_GOI_KHONG_NHAN_BAO_GIA', …(5) ] to deeply equal [ 'BAFO_NGOAI_TOP_N', …(6) ]`).
+- M5 trang in thẳng mã lạ thay vì câu chung ⇒ DOM 1 đỏ (`expected 'Bị từ chối: MA_LA_9999' to be 'Gói thầu không nhận…'`).
+- M6 trang biết mã thì bỏ hai giờ ⇒ DOM 1 đỏ (ca vì hạn).
+- M7 migration tạm `9532_dot_bien_tam.sql` cấp `('DIRECTOR', 'evaluation.perform')` ⇒ ca ghim 220 đỏ (`expected [ Array(6) ] to deeply
+  equal [ 'BUYER', 'FINANCE', …(3) ]`); xoá tệp ⇒ 23/23.
+
+## 7. Giới hạn, nói ra
+
+- 230: `PHIEN_KHACH_KHAC_LOI_MOI` không dựng được qua HTTP (luồng dẫn xuất từ phiên — chính điều trigger canh), `C1_KHONG_VONG_BAFO_DANG_MO`
+  và `C1_KHONG_HAN_NOP` là dữ liệu hỏng: ba mã ấy có câu trên trang và ca DOM, không có ca int. Fixture BAFO chèn `rfq_evaluations` và
+  `rfq_bafo_rounds` với trigger tắt (`060` đòi lượt mới nhất, không đi tới được bằng UPDATE) — trigger trả về đúng trạng thái cũ trước
+  COMMIT, có đòi. `error` của api vẫn là câu chung (hợp đồng cũ giữ cho máy khách không biết mã). DOM giả không đo CSS; không lượt trình
+  duyệt thật.
+- 220 ⒝: là một quyết định GHI — cổng vẫn cho năm vai bấm chấm, và lớp thật J3 chỉ phủ đường award (ADR-051 §Điều ADR này KHÔNG nói);
+  lời khai «năm trên sáu» còn ở `rfq.ts:119`, `vong-bafo.ts:119`, `doc-bang-xep-hang.ts:18`, `luot-danh-gia.int.test.ts:398`,
+  `buyer.ts:615` (khối BAFO, ngoài «route chấm» của đề bài) và ADR-055 — khoản 9432, mục 6.
+- 18: tệp CẤM nên vòng này chỉ soạn nội dung; cưỡng chế thật cần branch protection (chủ dự án) và một cộng tác viên thứ hai — với một
+  chủ kho duy nhất, «≥ 2 approval» chưa có nghĩa. `Handoff.md:232/348` và `STATE.md:1342` còn câu «team chưa được tạo» — mục 6.
+- Cổng cuối chạy với `--no-file-parallelism` cho `packages/identity` (năm tệp int, máy 4 lõi dùng chung); không chạy `test:int`/`evidence`
+  toàn bộ (sổ tay cấm). `bidding.int.test.ts` không chạy lại: `NopQuaHanError` chỉ thêm một trường hằng, ca hai chiều của nó cố ý trừ
+  `c1_qua_han_nop` và `toMatchObject` không đòi tập trường đóng — nhưng nói ra là chưa đo.
+
+## 8. Số đo
+
+- `pnpm vitest run apps/api/src/guest.int.test.ts -t "khoản 230"`: trước 4 đỏ / 0 xanh; sau 4/4. Trọn tệp sau: 26/26 (từ 22).
+- `pnpm vitest run apps/web/src/phuc-vu.test.ts -t "khoản 230"`: trước 2 đỏ / 1 xanh; sau 3/3, rồi 4/4 với ca đối chiếu. Trọn tệp sau:
+  110/110 (từ 106).
+- `pnpm vitest run packages/identity/src/ma-tran-quyen.test.ts`: 23/23 (từ 22; ca ghim xanh trước và sau — đột biến M7 đỏ).
+- Đột biến: 7 ca, đỏ 3·1·2·2·1·1·1.
+- `pnpm typecheck`: 0 (hai lần). `pnpm exec eslint <8 tệp>`: 0. `pnpm exec depcruise apps packages/bidding packages/danh-gia --config
+  .dependency-cruiser.cjs`: 0 vi phạm (248 module, 933 cạnh).
+- `pnpm vitest run apps/web packages/identity tests/architecture --no-file-parallelism` (env Postgres cục bộ): 54/54 tệp, 812 xanh,
+  1 skipped sẵn có, 0 đỏ, 268,6 s. Tuần tự: `guest.int.test.ts` 26/26 (7,95 s); `luot-danh-gia.int.test.ts` 88/88 (12,3 s). Log:
+  `scratchpad/lo32-cong-gate.log`, `lo32-cong-guest-int.log`, `lo32-cong-luot-danh-gia-int.log`, `lo32-cong-cuoi.log`.
+
 # §S1.9141 — TEST CÓ RĂNG: BỐN VẾ XANH GIẢ THÀNH BỐN VẾ ĐO TIỀN ĐỀ, LƯỢT MỞ THẦU 8 MiB TRÊN ĐƯỜNG ĐIỂM VÀO THẬT — KHOẢN 149, 167, 184, 186 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11. Chỉ test. Không migration, không ADR, không mã sản xuất.

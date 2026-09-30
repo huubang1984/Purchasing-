@@ -5470,6 +5470,17 @@ award: spec §2.2⑶ lấy từ chính sách đã có, và việc ấy thuộc S
 cách viết lại — câu sai ở đó được GẠCH và trỏ sang đây, vì một ADR đã merge là một bản ghi lịch sử, không phải
 một trang wiki.
 
+**[S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Ghi chú: cổng `evaluation.perform` của đường chấm là lớp NÔNG, và ADR này là
+lớp thật của nó.** Khoản 220 đo trên `005` rằng `evaluation.perform` do năm vai giữ (REQUESTER · BUYER · TECHNICAL ·
+PROCUREMENT_MANAGER · FINANCE — sáu vai lúc đo, bảy từ `083`; `DIRECTOR` và `DATA_STEWARD` không), nên `requirePermission(EVALUATION_PERFORM)`
+ở `taoLuotDanhGia` và ở route `POST /rfqs/:rfqId/evaluate` chặn khách và tác tử, không chặn «ai trong tổ chức». Hai lối đóng là thu
+hẹp `005` hay ghi nó là lớp nông; chủ dự án chọn lối sau, vì cùng lý do ⑵ ở trên: thu hẹp ma trận đổi một mốc ghim của S0 và cấm rộng
+hơn thứ D3 phát biểu. Lớp thật cho đường chấm — như cho award — là trục *ai đã làm gì trên gói này*: trigger `award_kiem_de_xuat` đọc
+`created_by`/`dispatched_by`; ai chấm không nằm trong trigger ấy (xem §Điều ADR này KHÔNG nói). Lời khai được ghi tại chỗ ở
+`packages/danh-gia/src/luot-danh-gia.ts` và `apps/api/src/routes/buyer.ts`, và tập năm vai được GHIM ở
+`packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220 ⒝»): đổi ma trận thì ca ấy đỏ, và người đổi phải đọc lại đoạn này.
+
+
 ---
 
 ## ADR-052 — `effective_cost` làm tròn TỪNG THÀNH PHẦN rồi cộng, không cộng rồi làm tròn một lần
@@ -5659,7 +5670,7 @@ trắng bốn trường (`thanLuotCham` ở `apps/api/src/routes/buyer.ts` — m
 tệ), nên cổng đọc lại đúng như bảng khai. Hệ quả cho người đọc bảng: cột *cổng ĐỌC* khai cổng của MỌI đường
 đưa giá ra khỏi tiến trình — kể cả thân phản hồi của một route GHI — chứ không chỉ của phép đọc bảng. Đo: T1
 `apps/api/src/than-luot-cham.test.ts`; T3 bước 12b và 12g của `kich-ban-41-http.int.test.ts`, người bấm chấm
-là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, chưa quyết.
+là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, ~~chưa quyết~~ **[S1.9132]** đã quyết ⒝: cổng là lớp nông, ghi ở ADR-051.
 
 ---
 
@@ -5737,7 +5748,7 @@ giữ nó.**
 
 Đây là quyết định của chủ dự án ngày 2026-09-22, và nó đứng trên một phép đo: mở vòng BAFO là hành
 động **duy nhất** của sản phẩm mà người bấm ĐÃ BIẾT giá của mọi người. Nếu nó đi qua
-`evaluation.perform` thì **năm trên sáu** vai mở được — khoản **220** đã đo con số ấy — và `BUYER`
+`evaluation.perform` thì **năm trên ~~sáu~~ bảy** vai mở được (**[S1.9132]** `DATA_STEWARD` của `083` không giữ) — khoản **220** đã đo con số ấy — và `BUYER`
 trong số đó còn giữ cả `rfq.create`, tức một người tự tạo gói, tự chấm, rồi tự mời lại top-N.
 
 Dùng lại `rfq.invite` cũng không đúng dù nó hẹp hơn (`BUYER` + `PROCUREMENT_MANAGER`): **mời SAU
