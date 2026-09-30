@@ -1395,11 +1395,7 @@ tổ chức bị giữ quá 2 s ⇒ lần từ chối gãy ở 2 s (tiểu mục
 lượt, ba hàng (đo; test ghim hai lượt). Một người giữ `bid.view` gọi bảng so sánh liên tục trước mở thầu sinh một hàng mỗi lần — hạn mức theo
 người gọi, khoản 122.
 
-**Phần KHÔNG đóng.** Lần từ chối không mang lớp `…DeniedError` trên cùng bề mặt — "không tìm thấy" ở bảng so sánh, số báo giá, lần huỷ; lần
-điều phối thứ hai; phê duyệt yêu cầu không tồn tại ném 23503 trần — vẫn 0 hàng (đo) — khoản 133. Job mở thầu FAILED không điều phối lại được —
-khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc
-`throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào
-tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
+**Phần KHÔNG đóng.** ~~Lần từ chối không mang lớp `…DeniedError` trên cùng bề mặt — "không tìm thấy" ở bảng so sánh, số báo giá, lần huỷ; lần điều phối thứ hai; phê duyệt yêu cầu không tồn tại ném 23503 trần — vẫn 0 hàng (đo) — khoản 133.~~ **[S1.9113]** Khoản 133 ĐÓNG: cả năm nhánh vào sổ — tiểu mục [S1.9113 / khoản 133] dưới đây. Job mở thầu FAILED không điều phối lại được — khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc `throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
 
 
 ### [S1.73 / khoản 126] Worker mở thầu KHOÁ HÀNG RFQ trước lần ghi sổ đầu — thứ tự khoá của mọi đường ghi là khoá hàng trước, khoá tư vấn ghi sổ sau
@@ -1498,6 +1494,43 @@ ADR này nói danh tính đã xác thực là DẪN XUẤT của một phiên, k
 **Đo bằng gì.** `packages/unseal/src/unseal.int.test.ts`: ghi đè bằng phiên không tồn tại và bằng phiên đã thu hồi đều bị `check_violation` chặn; đối chứng `EXECUTED` vẫn đi qua khi phiên điều phối đã thu hồi. Đột biến lùi trọn lớp — migration cộng cả ba chỗ ghim trong `hardening.always.sql` — giết đúng hai test ấy.
 
 ---
+
+### [S1.9113 / khoản 133] D5 phủ lần từ chối "KHÔNG TÌM THẤY" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — năm nhánh nữa vào sổ
+
+**Bối cảnh.** Tiểu mục [S1.72 / khoản 121] ghi phần không đóng: năm lần từ chối trên cùng bề mặt không mang lớp `…DeniedError` và vẫn 0 hàng
+— "không tìm thấy RFQ" ở `buildComparisonTable` và `countReceivedBids`, "không tìm thấy yêu cầu" ở `cancelUnseal`, lần điều phối thứ hai, và
+`approveUnseal` một yêu cầu không tồn tại ném 23503 trần (RAISE `foreign_key_violation` của trigger `unseal_kiem_nguoi_duyet` — 019 —
+không tên ràng buộc, trước cả khoá ngoại). Chúng không phải "từ chối vì thiếu quyền" theo chữ D5, và ADR-104/ADR-108 để "không tìm thấy hàng
+cha" NGOÀI sổ cho các đường CRUD thường. Câu phải quyết: D5 có phủ lần "không tìm thấy" trên đường CÓ CỔNG không. Đo lại trên `69e743e`
+(`evidence/security-reviews.md` §S1.9113): gọi thẳng gói và qua HTTP, mỗi nhánh 0 hàng ở sổ của tổ chức người gọi; với id CÓ THẬT của tổ chức
+khác (RLS giấu) 0 hàng ở cả hai sổ.
+
+**Quyết định.** Chủ dự án chốt ngày 2026-09-30: **D5 PHỦ** lần từ chối "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so
+sánh — cùng khuôn nhánh không tìm thấy của cổng mở thầu (mục 1 của tiểu mục [S1.72]); **CRUD thường giữ ADR-104/108** (không tìm thấy hàng
+cha ngoài sổ). Ranh giới, nói ra: một đường CÓ CỔNG là một đường mà người gọi đã qua `requirePermission` (hay cổng bốn vế) rồi mới hỏi tới
+hàng — ở đó "không tìm thấy" là một lần DÒ trên một tài nguyên mà quyền của họ phủ, và một người giữ `bid.view` đi dò id RFQ phải để lại dấu.
+Bản cài, lớp lỗi và thân 422 KHÔNG đổi:
+1. Bảng so sánh, hai đường đọc có cổng ⇒ `COMPARISON_NOT_FOUND_DENIED`, `resourceType` `RFQ`, `resourceId` là id người gọi gửi, payload
+   `{ operation: "BUILD_COMPARISON_TABLE" | "COUNT_RECEIVED_BIDS" }` (hằng; hai hàm chung một mã).
+2. Huỷ và phê duyệt yêu cầu mở thầu ⇒ `UNSEAL_NOT_FOUND_DENIED`, `UNSEAL_REQUEST`, payload `{ operation: "CANCEL_UNSEAL" | "APPROVE_UNSEAL" }`.
+   `cancelUnseal` nhận ra ca này ở câu `SELECT requested_by`, TRƯỚC phép kiểm ai được huỷ. `approveUnseal` bọc MỌI 23503 của câu INSERT
+   `unseal_approvals` thành `UnsealError` có tên (lỗi `pg` ở `cause`) rồi ghi — đọc `code`, không đọc `message`; không có tên ràng buộc để so
+   vì 019 RAISE không tên (khoản 9413) — và vì sao "mọi 23503" đứng được: ba khoá ngoại trỏ tổ chức, yêu cầu, người duyệt, hai vế đầu vừa
+   giải trong cùng giao dịch. Qua HTTP, 422 có tên thay "tham chieu khong hop le".
+3. Điều phối lần hai khi lượt trước còn PENDING/RUNNING (vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet`, S1.96) ⇒
+   `UNSEAL_DISPATCH_DENIED`, payload `{ reason: "JOB_STILL_ALIVE" }`. Câu S1.96 *"các lần từ chối trong đó không đi qua đường ghi sổ từ chối
+   của cổng"* gạch tại chỗ ở `requests.ts`: đúng cho hai vế ĐUA (cổng bốn vế đã từ chối và ghi `UNSEAL_DENIED` trước), sai cho vế này.
+4. Ba mã vào `DANH_MUC_HANH_DONG_TU_CHOI` (khoản 189 — `danh-muc-tu-choi.test.ts` đòi danh mục bằng tập hằng ở chỗ gọi). Cổng
+   `ghi-so-tu-choi-mot-duong` không đổi: các lời ném là `ComparisonError`/`UnsealError`, không mang hậu tố `DeniedError` — phép đọc theo TÊN
+   LỚP của cổng ấy không thấy năm chỗ này, và lớp đo là ba khối `[INV-D5] [S1.9113 / khoản 133]` đếm hàng.
+
+**Điều tiểu mục này KHÔNG phủ.** Từ chối TRẠNG THÁI trên một hàng CÓ THẬT: `cancelUnseal` một yêu cầu đã `EXECUTED`/`CANCELLED` vẫn 422
+cùng câu gộp và 0 hàng (khoản 9414, luật ADR-060); hai vế đua của `dieuPhoiLaiSauKhiChet`. "Không tìm thấy" ở các đường CRUD thường (ADR-104/108).
+
+**Đo bằng gì.** `packages/unseal/src/comparison.int.test.ts`, `packages/unseal/src/unseal.int.test.ts`, `apps/api/src/buyer.int.test.ts` —
+mỗi nhánh: lớp lỗi và câu như trước, đúng một hàng mang người gọi, loại tài nguyên, id đã gửi và payload đúng hình dạng; hàng sống qua rollback;
+id thật của tổ chức khác ⇒ hàng ở sổ người gọi, 0 ở sổ kia; lần ghi bị chặn ⇒ `DenialAuditFailedError` giữ lỗi gốc; đối chứng dương 0 hàng.
+Đột biến: bỏ từng lời `throwAuditedDenial` ⇒ đúng ca ấy đỏ, ở gói lẫn HTTP (§S1.9113).
 
 ## ADR-017 — Chính sách tính `requires_dual_approval`: **ngưỡng theo tổ chức, CÓ PHIÊN BẢN, và kết luận phải TÁI LẬP ĐƯỢC**
 
@@ -9256,3 +9289,28 @@ nâng cùng bậc rồi đặt lại con số cũ, một người ký hai lần 
 phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ không điền; bảy đột biến đều đỏ — bỏ phép đếm trên ngân sách, phép đếm
 thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
 cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 256, 257).
+
+## ADR-9213 — Hợp đồng số của bảng so sánh: `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị — giữ hình dạng JSON, ghi hợp đồng thay vì đổi `payload`
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 · **[S1.9113]** · **Khoản nợ liên quan:** 108 (đóng), 107 (đóng — phía ghi), 114 và 9431 (chi phí đọc `payload`) · **Liên quan:** ADR-016 tiểu mục [S1.9113 / khoản 133] (cùng vòng), `020`/`022` mục 8 (`bid_so_tien`), `docs/PRODUCT.md` §11 (*"giá đúng tới từng chữ số"*) · **Biên bản:** `evidence/security-reviews.md` §S1.9113
+
+### Bối cảnh
+Khoản 107 (S1.64) làm phía GHI đúng: `rfq_unsealed_bids.payload` giữ đúng giá trị số đã niêm phong, và `ComparisonRow.totalAmount` cùng `aggregates.*` tính bằng SQL (`bid_so_tien`) nên đúng tới từng chữ số. Khoản 108 (S1.65) đo phía ĐỌC: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON trong `payload` quá 15 chữ số có nghĩa đi qua `double` — `'{"a":99999999999999.99}'::jsonb` ra `99999999999999.98` — và một client JavaScript `JSON.parse` thân HTTP làm tròn thêm lần nữa. S1.95 đo rằng ngưỡng cắn (từ 16 chữ số có nghĩa) nằm ngoài miền giá thật và hạ khoản xuống rổ B, nhưng giữ nguyên câu: *hợp đồng API vẫn phải chốt trước khách hàng thứ hai*. Đo thêm ở S1.9113: `bid_so_tien` (022 mục 8) trả `NULL` từ 10^16 và khi hơn hai chữ số thập phân — tức `totalAmount` chuẩn có MIỀN, và ngoài miền là `null` + `unparsed`, không phải một con số đã làm tròn.
+
+### Quyết định
+Giữ hình dạng JSON của `GET /rfqs/:rfqId/comparison` và của `ComparisonTable`. Hợp đồng, ghi ở docstring `buildComparisonTable` và chú thích route:
+1. `rows[].totalAmount` (chuỗi thập phân, hay `null`) và `aggregates.min/max/average` (chuỗi) là SỐ CHUẨN: tính bằng SQL, trả về dạng văn bản, đúng tới từng chữ số trong miền `numeric(18, 2)`; ngoài miền (từ 10^16, hơn hai chữ số thập phân, âm, không phải số) là `null` và đếm vào `unparsed`.
+2. `rows[].payload` là BẢN HIỂN THỊ của phong bì: số JSON quá 15 chữ số có nghĩa trong đó — đơn giá, số lượng, hay chính `totalAmount` nếu nhà cung cấp viết nó là số — đã qua `double` ở `pg` và qua `JSON.parse` của client thêm lần nữa; chuỗi đi nguyên. Người đọc số tiền PHẢI lấy ⑴. Cột `jsonb` trong CSDL vẫn giữ đủ chữ số.
+3. Ghim bằng test (`comparison.int.test.ts` khối `[S1.9113 / khoản 108]`): hành vi ⑵ được ĐO và giữ đúng như thế — một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản thì cổng này đỏ và hợp đồng phải viết lại, không âm thầm.
+
+### Phương án bị loại
+| phương án | vì sao loại |
+|---|---|
+| ⑴ Trả `payload` dạng VĂN BẢN `jsonb` để client tự phân tích | Đổi hình dạng API cho mọi client hiện có (`apps/web/trang/mo-thau.js`, `tools/pilot-gia-lap`, MCP) để chữa một trường không ai đọc làm số; client JavaScript vẫn `JSON.parse` văn bản ấy và mất lại đúng chỗ ấy — trừ khi mỗi client mang một bộ phân tích số-lớn riêng. Cái giá đổi lấy một lợi ích chưa ai cần (S1.95). |
+| ⑵ Máy chủ xuất số ngoài miền chính xác của `double` thành CHUỖI thập phân | Phải đi lại cả cây `payload` mỗi lần đọc — đúng chi phí O(kích thước) mà khoản 114/9431 vừa đo và đang cố giảm —, phải chép định nghĩa "ngoài miền" của `double` JavaScript vào máy chủ, và một client đọc số ở chỗ đã thành chuỗi cho `NaN` im lặng: một lỗi thay bằng một lỗi khác, khó thấy hơn. |
+| ⑶ **Giữ nguyên, GHI hợp đồng: số chuẩn là `totalAmount` dạng chuỗi** — **CHỌN** | Đúng thứ đã đo: giá thật không tới ngưỡng (S1.95); `totalAmount` đã là số chuẩn từ `020`/khoản 107; mọi client trong kho đọc `totalAmount` (grep). Cái giá, nói ra: một client tự đọc `payload.unitPrice` để tính lại có thể sai từ chữ số thứ 16 — hợp đồng nói điều ấy bằng chữ, và ca test ghim nó bằng số. |
+
+### Hệ quả
+- Không đổi một byte nào của thân HTTP hay của `ComparisonTable`; `apps/web/trang/mo-thau.js` và `tools/pilot-gia-lap` không đổi.
+- Miền của `totalAmount` chuẩn là một dòng của hợp đồng: một báo giá từ 10^16 là `unparsed`, không phải một số nhỏ hơn.
+- Ngày cần số chính xác trong `payload` (nếu có khách hàng đòi), điểm đổi là ⑴ ở tầng route kèm một bộ phân tích phía client — và ca ghim sẽ đỏ đúng lúc ấy.

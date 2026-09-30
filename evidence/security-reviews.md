@@ -16975,6 +16975,70 @@ Kịch bản `scratchpad/lo11/dot-bien.sh` — mỗi ca thay một mảnh của 
 
 **[Người tích hợp, 2026-09-29]** Khoản 9411 trong bàn giao lô này không vào sổ: cổng `duong-sql-ngoai-with-tenant` đã được khai tệp `postgres-cuc-bo.ts` ở commit tích hợp lô L7 (a4595fa) trước khi gộp lô này, nên khoảng trống ấy không còn ở HEAD.
 
+# §S1.9113 — TRẢ NỢ LÔ A2: D5 PHỦ "KHÔNG TÌM THẤY" TRÊN BỀ MẶT MỞ THẦU VÀ BẢNG SO SÁNH (133); HỢP ĐỒNG SỐ CỦA BẢNG SO SÁNH ĐÃ GHI (108)
+
+**Rổ và mảnh (ADR-043 ⒞):** hai khoản rổ B (133 từ S1.72; 108 từ rổ A xuống B ở S1.95). Mảnh §11 chạm: *"hai người bên mua phê duyệt mở thầu"* (đường từ chối của phê duyệt/huỷ/điều phối) và *"bảng so sánh hiện ra với giá đúng tới từng chữ số"* (hợp đồng số). Không migration. ADR mới: ADR-9213. Tiểu mục mới trong ADR-016. Mở khoản 9413, 9414.
+
+## 1. Vòng này là gì
+Lô A2 của đợt trả nợ song song thứ hai. Hai khoản trong `packages/unseal` và mặt tiền HTTP của chúng: **133** — năm lần từ chối trên bề mặt mở thầu và bảng so sánh ném mà không ghi sổ, vì chúng không mang lớp `…DeniedError` và ADR-016 chưa nói D5 có phủ "không tìm thấy" trên đường có cổng không; **108** — `payload` của bảng so sánh đi qua `double` khi `pg` phân tích `jsonb`, và hợp đồng API chưa nói trường nào là số chuẩn.
+
+## 2. Quyết định của chủ dự án
+Hai quyết định, ngày 2026-09-30 (đề bài lô): ⑴ D5 PHỦ lần từ chối "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — ghi ở một tiểu mục của ADR-016; CRUD thường giữ ADR-104/108 (không tìm thấy hàng cha ngoài sổ). ⑵ Khoản 108: giữ hình dạng JSON, ghi hợp đồng — `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị, số quá 15 chữ số có nghĩa có thể mất chính xác. Phần còn lại là vòng trả nợ theo phân công.
+
+## 3. Đo trước
+Trên `69e743e`, ba tệp test với các khối mới, chạy trước khi sửa một dòng mã sản xuất nào (log `scratchpad/lo13-do-truoc-*.log`):
+- `comparison.int.test.ts -t "khoản 133|khoản 108"`: 5 đỏ / 1 xanh (đối chứng dương). ⒜ UUID lạ: `expected [] to deeply equal [ [ 'USER', …(3) ] ]` — `ComparisonError` đúng câu nhưng 0 hàng ở cả hai hàm; ⒝ id CÓ THẬT của tổ chức B, người của A gọi: cùng lỗi, 0 hàng ở cả sổ A lẫn sổ B; ⒞ rollback: `expected +0 to be 1`; ⒟ lần ghi bị chặn: `expected 'ComparisonError' to be 'DenialAuditFailedError'` — chưa có lần ghi nào để chặn. Ca 108 bản đầu (17 chữ số PHẦN NGUYÊN) đỏ `expected null to be '12345678901234567.00'`: `bid_so_tien` (022 mục 8) trả NULL từ 10^16 — đúng luật miền `numeric(18, 2)`, không phải lỗi; ca viết lại với 18 chữ số có nghĩa trong miền (16 + 2) và luật ấy được ghi vào hợp đồng.
+- `unseal.int.test.ts -t "khoản 133"`: 4 đỏ / 1 xanh (đối chứng dương). Huỷ: `expected [] to deeply equal …` (0 hàng); phê duyệt: `expected 'error' to be 'UnsealError'` — lỗi `pg` trần, thông điệp `Khong tim thay yeu cau mo thau <id>` của `RAISE … USING ERRCODE = 'foreign_key_violation'` trong `unseal_kiem_nguoi_duyet` (019), KHÔNG tên ràng buộc, fire trước khoá ngoại; điều phối lần hai: 0 hàng; ca TP133 nhận lỗi `pg` trần thay `DenialAuditFailedError`.
+- `buyer.int.test.ts -t "khoản 133|vòng đời phía người mua"`: 2 đỏ / 2 xanh. Vòng đời: lần bấm điều phối thứ hai 422 đúng câu mà `expected +0 to be 1`; khối 133: bốn đường 422 giữ câu (phê duyệt là `tham chieu khong hop le` của bảng ánh xạ SQLSTATE) mà `expected [] to deeply equal …`.
+
+## 4. Thay đổi
+- `packages/identity/src/rbac.ts` (CHỈ khối `DANH_MUC_HANH_DONG_TU_CHOI`): thêm `COMPARISON_NOT_FOUND_DENIED`, `UNSEAL_DISPATCH_DENIED`, `UNSEAL_NOT_FOUND_DENIED`, mỗi mã một dòng chú thích trỏ chỗ gọi. `danh-muc-tu-choi.test.ts` (khoản 189) 9/9: tập hằng ở chỗ gọi BẰNG danh mục; `mo-ta-hang-dong.test.ts` 18/18: ba mã đi qua dòng log nguyên vẹn.
+- `packages/unseal/src/comparison.ts`: `docTrangThai` trả `string | undefined` thay vì ném; hàm mới `tuChoiKhongTimThay(auditPool, orgId, nguoiGoiId, rfqId, operation)` gọi `throwAuditedDenial` với `COMPARISON_NOT_FOUND_DENIED`, `RFQ`, `resourceId` = id người gọi gửi, payload `{ operation }`, ném `ComparisonError` cùng câu; `buildComparisonTable` và `countReceivedBids` `return` nó ở nhánh không tìm thấy. Docstring `buildComparisonTable` thêm khối hợp đồng số [S1.9113 / khoản 108 / ADR-9213].
+- `packages/unseal/src/requests.ts`: ⑴ `laKhongTimThayYeuCau` (đọc `code` 23503, không đọc `message`, không có tên ràng buộc để so — docstring nói vì sao "mọi 23503 của câu INSERT ấy" là đúng mức); nhánh catch của `approveUnseal` bọc thành `UnsealError("Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.", { cause })` rồi `throwAuditedDenial` `UNSEAL_NOT_FOUND_DENIED` `{ operation: "APPROVE_UNSEAL" }`. ⑵ `cancelUnseal`: `nguoiTao === undefined` ⇒ `return throwAuditedDenial(… UNSEAL_NOT_FOUND_DENIED, { operation: "CANCEL_UNSEAL" }, new UnsealError(<câu cũ>))`; nhánh `h === undefined` sau câu `UPDATE` giữ nguyên câu và thêm chú thích rằng từ vòng này nó chỉ còn là vế trạng thái. ⑶ `dieuPhoiLaiSauKhiChet` nhận `auditPool`; vế "còn một lượt đang sống" ⇒ `return throwAuditedDenial(… UNSEAL_DISPATCH_DENIED, { reason: "JOB_STILL_ALIVE" }, new UnsealError(<câu cũ>))`; câu S1.96 ở chỗ gọi ("không đi qua đường ghi sổ từ chối của cổng") gạch tại chỗ, câu đúng viết cạnh.
+- `apps/api/src/routes/buyer.ts`: chỉ chú thích route `GET /rfqs/:rfqId/comparison` — hợp đồng số, trỏ docstring và ca ghim.
+- `packages/unseal/src/comparison.int.test.ts`: import `randomUUID`, `ComparisonError`; khối `[INV-D5] [S1.9113 / khoản 133]` 5 ca (helper `voiGhiSoBiChan` riêng, `k133_chan_ghi_so`, TP133); khối `[S1.9113 / khoản 108]` 1 ca.
+- `packages/unseal/src/unseal.int.test.ts`: import `UnsealError`; khối `[INV-D5] [S1.9113 / khoản 133]` 5 ca (dùng `yeuCauDaDuyet`, `ketCucJob`, `docHangDieuPhoi` sẵn có).
+- `apps/api/src/buyer.int.test.ts`: import `randomUUID`; ca vòng đời thêm lần bấm điều phối thứ hai (đối chứng 0 hàng trước, 422 cùng câu, 1 hàng sau; và 0 hàng `UNSEAL_NOT_FOUND_DENIED` cho hai lần phê duyệt thật); khối `[INV-D5] [S1.9113 / khoản 133]` 2 ca.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **Ba mã mới thay vì tái dùng mã có sẵn.** ADR-016 hôm nay chỉ có "không tìm thấy" của cổng dưới `UNSEAL_DENIED` + vế `POLICY_GATE`; vế là danh mục ĐÓNG chép từ `UNSEAL_CLAUSES` và `TEP_TRUYEN_VE` ghim đúng ba tệp truyền vế — `requests.ts` không ở đó. `UNSEAL_CANCEL_DENIED`/`UNSEAL_APPROVAL_DENIED` là "bị từ chối vì ai/vì D2" trên một hàng CÓ THẬT, payload đã có hình dạng riêng (`lyDo`, `viPham`) mà test ghim `toEqual`. Nên: một mã "không tìm thấy" cho mỗi bề mặt (`COMPARISON_…`, `UNSEAL_…`) với `operation` phân biệt đường, và `UNSEAL_DISPATCH_DENIED` cho lần bấm hai — mã nói CÁI GÌ bị từ chối, payload nói ĐƯỜNG/LÝ DO bằng hằng.
+- **Khoá payload viết tiếng Anh (`operation`, `reason`)** theo Handoff §14 (trường công khai tiếng Anh) dù hai chỗ gọi cũ trong cùng tệp dùng `lyDo`/`viPham`; giá trị là hằng viết hoa, không nội suy.
+- **`approveUnseal` phân loại 23503 theo `code`, không theo `constraint`:** trigger 019 RAISE không tên ràng buộc và fire trước khoá ngoại, nên không có tên để so; khuôn "đọc code và constraint" của `laTrungPheDuyet` chỉ đi được nửa. Phát biểu đúng mức ghi ở docstring; siết lại là khoản 9413.
+- **`cancelUnseal` nhận ra không-tìm-thấy ở câu `SELECT`, giữ nguyên câu 422 cũ ở cả hai nhánh:** đề bài đòi thân 422 y nguyên; câu cũ gộp hai nghĩa, và tách nó là đổi hợp đồng. Vế "không ở trạng thái huỷ được" vẫn không vào sổ — khoản 9414 hỏi chủ dự án theo luật ADR-060.
+- **Chỉ vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet` vào sổ.** Hai vế đua (trạng thái đổi giữa lần cổng đọc và câu `UPDATE`) chỉ với tới qua một cuộc đua mà cổng bốn vế đã từ chối và ghi `UNSEAL_DENIED` trước — ghi thêm là ghi hai lần; §S1.96 đã nói đột biến tắt chúng sống.
+- **Ca 108 dùng 18 chữ số có nghĩa TRONG miền `numeric(18, 2)`** sau khi bản 17 chữ số phần nguyên đỏ vì `bid_so_tien`; luật miền ấy nay là một dòng của hợp đồng thay vì một bất ngờ.
+- **Không sửa docstring `throwAuditedDenial` ("Người gọi hôm nay")** và **không sửa `TU_CHOI` của `tools/pilot-gia-lap/src/bao-cao.ts`**: ngoài khối được phép của `rbac.ts` và ngoài danh sách tệp lô; ghi ở mục 6/7 ⑺.
+
+## 6. Đột biến
+Script `scratchpad/lo13-dot-bien.py` (mỗi đột biến: sửa, chạy, khôi phục từ bản đã vá, so byte); log `lo13-dot-bien-M*.log`.
+- **M1** — `cancelUnseal` ném trần ở nhánh không tìm thấy: `unseal.int.test.ts` 1 đỏ / 4 xanh (`expected [] to deeply equal [ [ 'USER', …(3) ] ]`); `buyer.int.test.ts -t "khoản 133"` 1 đỏ (`expected [] to deeply equal [ [ …(3) ] ]`).
+- **M2** — tắt vế bọc 23503 ở `approveUnseal`: 2 đỏ — `expected 'error' to be 'UnsealError'` và ca TP133 nhận lỗi `pg` trần `Khong tim thay yeu cau mo thau …` thay `DenialAuditFailedError`.
+- **M3** — vế "còn một lượt đang sống" ném trần: `unseal.int.test.ts` 1 đỏ; `buyer.int.test.ts -t "vòng đời"` đỏ `[INV-D5] lần bấm thứ hai để lại ĐÚNG một hàng: expected +0 to be 1`.
+- **M4** — `countReceivedBids` ném trần, `buildComparisonTable` giữ: `comparison.int.test.ts` 3 đỏ (`expected [ [ 'USER', …(3) ] ] to deeply equal [ …, … ]` ×2, `expected 'ComparisonError' to be 'DenialAuditFailedError'`), 2 xanh (rollback và đối chứng chỉ đi qua `buildComparisonTable`).
+- **M5** — `totalAmount: String(Number(r.total_amount))` ở chỗ dựng hàng: ca 108 đỏ `expected '1234567890123456.8' to be '1234567890123456.78'`.
+
+## 7. Giới hạn, nói ra
+- ⑴ `laKhongTimThayYeuCau` đọc mỗi `code`: một 23503 khác trên câu INSERT ấy (người duyệt bị xoá cứng giữa `resolveSessionActor` và INSERT — hôm nay không có đường xoá `users`) cũng thành "không tìm thấy yêu cầu". Khoản 9413.
+- ⑵ `cancelUnseal` trên một hàng CÓ THẬT đã `EXECUTED`/`CANCELLED` vẫn 422 cùng câu gộp và 0 hàng sổ — từ chối TRẠNG THÁI ngoài đề bài 133. Khoản 9414.
+- ⑶ Hai vế đua của `dieuPhoiLaiSauKhiChet` không vào sổ (lý do ở mục 5); không ca nào dựng được cuộc đua ấy.
+- ⑷ Sổ của tổ chức KHÁC chỉ được đếm ở ca gọi thẳng gói của bảng so sánh (`comparison.int.test.ts` có `orgB`); `unseal.int.test.ts` và các ca HTTP chỉ có một tổ chức — cùng giới hạn §S1.72.
+- ⑸ Đột biến qua HTTP chỉ chạy cho M1 và M3; M2/M4 đo ở gói (đường HTTP đi thẳng vào cùng hàm, ca HTTP đã đo chiều thuận).
+- ⑹ Ca 108 chỉ chạy TRÊN bản đã vá sau khi đổi số (bản vá không chạm đường tính `totalAmount`/`payload`; bản 17 chữ số đã chạy trên mã cũ); M5 chứng minh ghim cắn.
+- ⑺ Ngoài lô, chưa sửa: docstring `throwAuditedDenial` ở `rbac.ts` liệt kê "Người gọi hôm nay" (thiếu ba chỗ mới); `TU_CHOI` của `tools/pilot-gia-lap/src/bao-cao.ts` không có ba mã mới (pilot giả lập không đi đường "không tìm thấy", báo cáo không đếm chúng); ghi chú §4 D5 ở `tools/inv-matrix/src/danh-gia.ts:175` còn câu "…chưa ghi sổ (khoản 133)" — mục 6 của bàn giao đề xuất đoạn sửa.
+- ⑻ `INV-matrix.md` chưa sinh lại (`pnpm evidence` là việc người tích hợp); số ca `[INV-D5]` sẽ tăng — mục 6.
+
+## 8. Số đo
+- `pnpm typecheck`: xanh. `pnpm exec eslint` bảy tệp đã chạm: 0 lỗi. `pnpm exec depcruise packages/unseal packages/identity apps/api --config .dependency-cruiser.cjs`: 171 module, 706 phụ thuộc, 0 vi phạm.
+- `pnpm vitest run packages/identity/src/danh-muc-tu-choi.test.ts packages/identity/src/mo-ta-hang-dong.test.ts tests/architecture/ghi-so-tu-choi-mot-duong.test.ts`: 38/38 (9 + 18 + 11).
+- Đo trước (`69e743e`): comparison 5 đỏ / 1 xanh (30 ca tệp: 24 bỏ qua); unseal 4 đỏ / 1 xanh; buyer 2 đỏ / 2 xanh.
+- Sau vá, trọn tệp, tuần tự: `comparison.int.test.ts` 30/30 (7,6 s); `unseal.int.test.ts` 68/68 (7,1 s); `apps/api/src/buyer.int.test.ts` 20/20 (16,1 s).
+- Đột biến M1–M5: đỏ đúng ca như mục 6; sau mỗi lần, `requests.ts`/`comparison.ts` so byte bằng bản đã vá.
+- `pnpm vitest run tests/architecture`: 36 tệp xanh, 395 đạt / 1 bỏ qua (sẵn có ở `xuong-dong-ts.test.ts`), 147 s — kể cả `duong-sql-ngoai-with-tenant.test.ts` 6/6 (đỏ 3/6 ở đợt 1 trên `c9e13b4`, nay xanh trên `69e743e`)
+- `pnpm vitest run packages/identity --no-file-parallelism`: 10 tệp xanh, 192/192, 79 s (gồm `danh-muc-tu-choi` 9/9, `rbac.int` và bốn tệp int khác)
+- Nhãn `[INV-D5]` (số lần xuất hiện trong tệp, trước → sau): `comparison.int.test.ts` 5 → 11, `unseal.int.test.ts` 16 → 22, `buyer.int.test.ts` 4 → 8; ca `it` mang nhãn mới: 5 + 5 + 2 = 12, `describe` mang nhãn mới: 3.
+
+— hết biên bản §S1.9113 —
+
 # §S1.9121 — KHOẢN 104: TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH ĐƯỢC DỌN Ở MỖI LẦN LẤY CLIENT; `migrate()` SO GUC PHIÊN, PREPARED STATEMENT, CON TRỎ VÀ MỌI TRỤC SAU COMMIT — KHOẢN 4 SỬA CHÚ THÍCH
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — lớp nền của kết nối pool và của `migrate()`, không đổi hành vi
