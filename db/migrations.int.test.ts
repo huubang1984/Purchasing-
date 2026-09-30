@@ -6926,7 +6926,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         'mục "định nghĩa hàm public.audit_compute_hash(...)" ở trạng thái SAI TRƯỚC khi sửa',
       );
       // Và thông báo mang CHẨN ĐOÁN thật, không chỉ tên mục — đó là thứ người vận hành cần.
-      expect(gop).toContain("prosrc hiện tại");
+      // ~~expect(gop).toContain("prosrc hiện tại");~~ [S1.9102 / khoản 117] Chẩn đoán là VÂN TAY của prosrc HIỆN TẠI —
+      // left(encode(sha256(convert_to(<thân đã chuẩn hoá khoảng trắng>, 'UTF8')), 'hex'), 16), tra lại bằng công thức ở
+      // ADR-9202 — không phải thân hàm: thân hàm có thể mang hằng (UUID, email) và WARNING này đi thẳng vào log deploy
+      // (chuẩn S1.51 ⑷). Đòi đúng vân tay của thân VỪA THAY, để phép đo không xanh với một chuỗi hex bất kỳ.
+      const thanHienTai = "SELECT sha256(''::bytea)";
+      const k = gop.indexOf(thanHienTai);
+      expect(k < 0 ? "" : gop.slice(Math.max(0, k - 200), k + 60), "thân hàm hiện tại bị in ra trong WARNING").toBe("");
+      const { rows: vt } = await db.pool.query<{ vt: string }>(
+        "SELECT left(encode(sha256(convert_to($1, 'UTF8')), 'hex'), 16) AS vt",
+        [thanHienTai],
+      );
+      expect(gop).toContain(`vân tay prosrc hiện tại: ${vt[0]!.vt}`);
       // Vế chống rỗng ruột: một mục KHÔNG trôi thì KHÔNG được có warning (nếu không, tín hiệu
       // này chìm trong nhiễu và trở thành vô dụng — đúng chế độ hỏng mà nó sinh ra để đóng).
       expect(gop).not.toContain('mục "định nghĩa hàm public.chot_moc_neo()" ở trạng thái SAI');

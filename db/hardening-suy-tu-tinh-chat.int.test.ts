@@ -2651,8 +2651,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       }
       // Tiền tố `(phan_xet)` là của migrate(): lỗi đến từ lượt PHÁN XÉT — tức lượt SỬA (mục điều kiện ném) đã đi qua.
       expect(kq, "lượt sửa đi qua, lượt phán xét gom đúng ba mục").toMatch(/^NÉM: Hardening hardening\.always\.sql \(phan_xet\) thất bại: Hardening không sửa được 3 mục:/u);
-      expect(kq).toContain('- "mục thử 88 điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
-      expect(kq).toContain('- "mục thử 88 hậu điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném 22012 (division by zero)');
+      expect(kq).toContain('- "mục thử 88 điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném SQLSTATE 22012; mục không được coi là đúng. Cần quyền: không gì.');
+      expect(kq).toContain('- "mục thử 88 hậu điều kiện ném": KHÔNG ĐÁNH GIÁ ĐƯỢC — điều kiện, hậu điều kiện hay mô tả ném SQLSTATE 22012; mục không được coi là đúng. Cần quyền: không gì.');
       expect(kq).toContain('- "mục thử 88 sai": trạng thái hiện tại SAI (cố ý sai). Cần quyền: không gì.');
       // Đối chứng: kho thật (không mục tiêm) đi qua trên cùng CSDL — ba mục tiêm không để lại gì.
       expect(await migrateLai(db)).toBe("OK");
