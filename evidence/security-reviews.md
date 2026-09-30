@@ -18981,6 +18981,8 @@ mới). Điểm tự chốt trong phạm vi ấy ở mục 5.
 - **137** — `executeUnsealRequest` thật (`unseal-worker.int.test.ts` fixture: N phong bì niêm phong cho một RFQ KHÁC — đúng ca `unsealBid` từ
   chối — cộng 1 phong bì tốt), đọc lại hai bản ghi bằng `octet_length(payload::text)` / `pg_column_size(payload)`:
 
+**[S1.9101 — ghi chú của người tích hợp đợt 3] MỤC NÀY CỤT TỪ LẦN TÍCH HỢP ĐỢT 2.** Commit `e70b56a2` (tích hợp lô A5 đợt 2) chỉ đưa vào kho 26 dòng đầu của biên bản lô: phần còn lại của mục 3 và các mục 4–8 không vào, và bàn giao gốc nằm ở scratchpad của phiên ấy — không còn (`git log --all -S` không thấy đoạn tiếp theo ở commit nào). Lô A1 đợt 3 phát hiện khi đọc biên bản. Thay đổi và số đo của vòng vẫn đọc được ở cột mốc `[2026-09-30 / S1.221]` và hai hàng sổ 183, 137 của `docs/STATE.md`, ở ADR-129 và ở các tệp test mà hai hàng trỏ tới; biên bản không được viết lại từ trí nhớ. Nguyên nhân khả dĩ, cùng lớp với lỗi người tích hợp đợt 3 gặp ở bàn giao A1: một khối rào lồng trong biên bản làm bộ áp bàn giao dừng sớm — bộ áp của đợt 3 nhận rào dài bất kỳ, đóng bằng đúng chuỗi mở.
+
 # §S1.222 — SỔ `kind` MỒ CÔI SANG WORKER; `moTaLoiKhongGiaTri` MỘT BẢN — KHOẢN 168, 166 ĐÓNG, 156 ĐÓNG CHỈ LỜI
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai composition root, một gói dùng chung, không
