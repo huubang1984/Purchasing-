@@ -20348,3 +20348,179 @@ Sau mỗi ca: ba tệp khôi phục nguyên văn (`diff -q` sạch), `git status
   ~7944, `[Task 8 — (E1)/(E2)]…` ~8248): hệ quả của mọi lô thêm migration, người tích hợp gỡ lúc `cap-so` (cây gộp đã có, theo báo
   "122/123 chỉ N3 đỏ"); cố ý KHÔNG chạm ba danh sách ấy để không xung đột gộp. Đột biến M4: 2/2 đỏ.
 
+# §S1.9125 — LÔ A4 ĐỢT 3: DÒNG LOG MẤT SỔ MANG MÃ CHỐT VÀ MÃ LÝ DO; CẤU HÌNH WORKER NÊU TÊN KHÔNG NÊU GIÁ TRỊ, LỜI HỨA KHÔNG ĐỌC BA VÒNG ĐO BẰNG HÀNH VI; «NĂM TRÊN SÁU VAI» GẠCH TẠI CHỖ — KHOẢN 279, 270, 172 ĐÓNG, 9425, 9426 MỞ
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (279, 270) và rổ C kích hoạt lại (172); không chạm mảnh nào của `docs/PRODUCT.md` §11 — hai lời gọi
+và một danh mục ở `identity`/`danh-gia`, một thông điệp lỗi khởi động của worker, chú thích, test; không route, không màn, không
+migration, không ADR, không export mới ở `index.ts`, không phụ thuộc mới. Đóng 279, 270, 172; mở 9425, 9426.
+
+## 1. Vòng này là gì
+
+Lô A4 của đợt trả nợ 3, lượt A. Khoản 279 — hai đường từ chối mang MÃ của một tập đóng trong payload (chốt kiểm soát `CONTROL_DENIED`,
+từ chối trạng thái `RFQ_STATE_DENIED`) không đưa mã ấy vào `DenialAuditFailedError.clause`, nên khi lần ghi sổ gãy (khoá ghi sổ bị giữ
+quá trần 2 s của `050` ⇒ 55P03) dòng log của bộ điều phối là `… CONTROL_DENIED RFQ <- error 55P03` cho mười bảy mã, `… RFQ_STATE_DENIED
+RFQ <- error 55P03` cho chín mã — đúng lớp của khoản 179, và cơ chế đã có từ §S1.225. Khoản 270 — lời khai «`evaluation.perform` do năm
+trên sáu vai giữ» thiu từ `083`. Khoản 172 (rổ C, kích hoạt lại) — `cau-hinh.ts` của worker bác quy tắc ⑵ của chính nó ở `docAdapter`, và
+ca ⑼ *"không đọc ba vòng bí mật"* đo bằng đầu ra, xanh cả khi cấu hình đọc rồi vứt.
+
+## 2. Quyết định của chủ dự án
+
+Không có quyết định mới. Kế hoạch đợt 3 mục 0 (chốt 2026-09-30) xếp 279 và 270 vào "khoản không cần quyết định mới" và 172 vào sáu
+khoản rổ C kích hoạt lại, hình dạng nằm trong thân hàng; đề bài `2026-09-30-tra-no-dot-3/A4.md` chốt hình dạng của cả ba. Các điểm
+tự chốt trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `ba269ae` (mã chưa vá) rồi mới vá. Log ở `scratchpad/a4/`.
+- **279 + 172, mức đơn vị** (`chot-kiem-soat.test.ts`, `tu-choi-vao-so.test.ts` mới; `danh-muc-tu-choi.test.ts` vế ⑷ ⑸ sửa; khối
+  `[S1.9125 / khoản 172]` của `cau-hinh.test.ts`) — `do-truoc-unit.log`: **35 đỏ / 95 xanh (130)**. 279: 17 mã chốt vào sổ + ca K8a trên
+  `SUPPLIER` đỏ `expected null to be 'THIEU_NGAN_SACH'` (clause rỗng); 9 mã lý do đỏ `expected null to be 'RFQ_KHONG_CHAM_DUOC'`; ⑷ đỏ
+  `expected [ 'AWARDED', …(47) ] to deeply equal [ 'AWARDED', 'BAFO_CLOSED', …(13) ]`; ⑸ đỏ `expected [ …(3) ] to deeply equal [ …(5) ]`.
+  Đối chứng `vaoSo: false` (2 + 5) và ca A2 xanh sẵn — chúng ghim hành vi cũ đúng. Dòng log của mã cũ in ra (`do-truoc-dong-log.log`):
+  `DenialAuditFailedError CONTROL_DENIED RFQ nguoi=5c663498cd41 <- error 55P03`, `DenialAuditFailedError RFQ_STATE_DENIED RFQ
+  nguoi=5c663498cd41 <- error 55P03`. 172 ⑵: đúng 6 đỏ — hai biến adapter × ba cảnh, `expected 'TRUSTPROCURE_KEY_ADAPTER = "GIA-TRI-L…'
+  not to contain 'GIA-TRI-LA-5b1f9c'`; 45 biến-cảnh còn lại xanh.
+- **279, đường thật** (tệp tạm `packages/danh-gia/src/zz-tam-do-279.int.test.ts`, chạy với cụm PostgreSQL 16 cục bộ rồi xoá —
+  `do-truoc-pg-that.log`): một giao dịch `app_api` giữ khoá ghi sổ của tổ chức (đợi tới khi `pg_locks` thấy khoá được cầm), rồi
+  `tuChoiTheoChot(…, "THIEU_NGAN_SACH")` và `nemTuChoi(…, RFQ_KHONG_CHAM_DUOC)` trên `auditPool` `app_api`: `… CONTROL_DENIED RFQ
+  nguoi=78a2bd679e94 <- error 55P03` sau 2017 ms, `… RFQ_STATE_DENIED RFQ nguoi=78a2bd679e94 <- error 55P03` sau 2005 ms — không mã.
+- **172 ⑼** — khoản ghi "ĐỌC": trên mã thật, cấu hình KHÔNG đọc ba vòng, nên ca mới xanh; phép đo đỏ là một đột biến đọc-rồi-vứt
+  (`void [env["TRUSTPROCURE_TOTP_MASTER_KEYS"], env["TRUSTPROCURE_OTP_PEPPERS"], env["TRUSTPROCURE_RECEIPT_SIGNING_KEYS"]]` đầu
+  `docCauHinh`, `do-truoc-172-dot-bien-doc-vut.log`): ca ⑼ cũ **XANH**, ⑼ mới **ĐỎ ở cả ba cảnh** (`expected [ …(3) ] to deeply equal []`).
+- **270** — khoản về chú thích: phép đo là phép đếm, trên `ba269ae`, năm tệp, bỏ mọi đoạn `~~…~~`, hai mẫu (`sáu|SÁU` + ` vai`; `duy
+  nhất KHÔNG giữ \`evaluation.perform\``) — `khoan-270-dem-lan2.log`: **7 chỗ**: `rfq.ts:120`, `vong-bafo.ts:119`,
+  `doc-bang-xep-hang.ts:18`, `luot-danh-gia.int.test.ts:399` và `:839`, `buyer.ts:592` và `:664`. Hàng sổ đếm năm: nó sót
+  `buyer.ts:591–592` (khối thân `POST /evaluate` của khoản 243 — khớp chính mẫu `sáu vai` của hàng) và `luot-danh-gia.int.test.ts:838–839`
+  (mẫu khác). Quét cả kho (`khoan-270-quet-kho.log`): thêm ADR-053 ở `docs/DECISIONS.md` (sửa tại chỗ cùng vòng) và chín chỗ trong bảy migration
+  đánh số + hai chỗ hardening (khoản 9426).
+
+## 4. Thay đổi
+
+- `packages/identity/src/chot-kiem-soat.ts`: `tuChoiTheoChotTaiNguyen` truyền `ma` làm đối số thứ năm của `throwAuditedDenial`; khối đầu và
+  docstring `MaChotKiemSoat` nói thêm một mã là thêm một tên ở `DANH_MUC_VE_CONG`.
+- `packages/danh-gia/src/tu-choi-vao-so.ts`: `nemTuChoi` truyền `loi.lyDo` (cùng nguồn với `payload.ma`) làm đối số thứ năm; docstring
+  `MaTuChoiTrangThai` như trên.
+- `packages/identity/src/rbac.ts`: `DANH_MUC_VE_CONG` thêm 19 mã chốt và 14 mã lý do (15 → 48); docstring của danh mục (hai từ vựng,
+  vì sao chép, tập phẳng), của `DenialAuditFailedError.clause`, của `moTaHangDongCuaLanTuChoi` và của `throwAuditedDenial` gạch tại chỗ
+  "ba chỗ gọi" và "chốt kiểm soát, từ chối trạng thái" khỏi danh sách không truyền; danh sách các chỗ không truyền kể lại đủ chín (mười
+  bốn lời gọi, đếm trên cây cú pháp).
+- `packages/identity/src/danh-muc-tu-choi.test.ts`: `TEP_TRUYEN_VE` năm tệp; `NGUON_VE` thêm `CHOT_VAO_SO`, `VAO_SO`; bộ đọc từ vựng đọc
+  thêm tập KHOÁ của một bảng viết tại chỗ (`tuVungTrongVanBan` tách ra để đối chứng); một ca đối chứng văn bản mẫu (mảng, kiểu hợp,
+  bảng; khoá tính / trải / viết tắt / phương thức / tên vắng ⇒ NÉM); tiêu đề ⑷ ⑸ và khối đầu gạch "ba" tại chỗ.
+- `packages/identity/src/chot-kiem-soat.test.ts` (MỚI, 22 ca) và `packages/danh-gia/src/tu-choi-vao-so.test.ts` (MỚI, 16 ca): pool giả mà
+  lần lấy kết nối gãy `pg.DatabaseError` 55P03; `it.each` mọi mã vào sổ ⇒ `clause` đúng mã, `denial` đúng lời từ chối, dòng
+  `moTaLoiKhongGiaTri` đúng từng ký tự; đối chứng `vaoSo: false` ném thẳng, pool không bị chạm; ca A2 (không id, không thông điệp).
+- `apps/unseal-worker/src/cau-hinh.ts`: `docAdapter` nêu tên biến và tập adapter; quy tắc ⑵ ở khối đầu kể ba thứ là "tên".
+- `apps/unseal-worker/src/cau-hinh.test.ts`: khối `[S1.9125 / khoản 172]` (58 ca: đối chứng sáu lối đọc; đối chứng tám tên bí mật với
+  nguồn `api`; ⑼ ×3 cảnh qua tham số và `process.env`; đối chứng tập ⑵ không co; ⑵ 51 cặp cảnh × biến; ranh giới vòng khoá); ca ⑼ cũ gạch
+  câu *"nếu đọc bất kỳ cái nào, nó sẽ ném"*, giữ vế đầu ra; ca ADR-064 một dòng trỏ vế đọc; khối đầu tệp một đoạn.
+- Chú thích khoản 270 (không đổi mã): `packages/rfq/src/rfq.ts`, `packages/danh-gia/src/vong-bafo.ts`, `packages/danh-gia/src/doc-bang-xep-hang.ts`,
+  `packages/danh-gia/src/luot-danh-gia.int.test.ts` (hai chỗ), `apps/api/src/routes/buyer.ts` (hai dòng, số dòng tệp giữ nguyên).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Phép đo giữ lại là test ĐƠN VỊ với pool giả; đường thật đo một lần bằng tệp tạm.** Đề bài cho "test đơn vị cạnh hai tệp của 279" và
+  cổng của lô chạy `packages/identity packages/danh-gia` loại `*.int.test.ts`. Pool giả gãy ở lần lấy kết nối, không ở câu ghi như đời
+  thật — nhưng dòng log so từng ký tự trùng với dòng đo trên PostgreSQL 16 thật (trừ băm của người, khác vì id khác): cùng lớp
+  `DatabaseError`, cùng `error 55P03`, cùng một tầng `cause`.
+- **Danh mục lấy CẢ từ vựng, kể cả mã `vaoSo: false`** (2 mã chốt, 5 mã lý do không bao giờ tới dòng mất sổ): nguồn là một tập, đo nó
+  nguyên vẹn rẻ hơn đo một hiệu — cùng lý do §S1.225 lấy đủ 11 `RFQ_STATUSES`.
+- **Vế ⑷ đọc tập KHOÁ của `CHOT_VAO_SO`/`VAO_SO`, không đọc union `MaChotKiemSoat`/`MaTuChoiTrangThai`**: theo chữ đề bài; hai tập bằng
+  nhau ở biên dịch (`Record` đầy đủ). Bộ đọc mới NÉM với mọi khoá không phải tên/chuỗi trực tiếp — đo bằng ca đối chứng văn bản mẫu.
+- **`rbac.ts` chép, không import `CHOT_VAO_SO`** dù cùng gói: `chot-kiem-soat.ts` import `throwAuditedDenial` từ `rbac.ts`, và một danh
+  mục dựng lúc nạp mô-đun trên một vòng import thì tuỳ thứ tự nạp mà gặp TDZ; ⑷ canh bản chép.
+- **Không đổi tên `DANH_MUC_VE_CONG`** dù nay chứa mã, không chỉ "vế cổng": đổi tên chạm `mo-ta-hang-dong.test.ts` (ngoài danh sách);
+  docstring nói rõ nội dung và tính chất tập phẳng.
+- **Không nhãn `[INV-…]` cho hai tệp test mới** — cùng lý do §S1.225 mục 5: đo nội dung chẩn đoán của dòng log, không một bất biến
+  của `TEST-PLAN`; không cần sửa `so-khai-nhan.ts`, `INV-matrix` không đổi.
+- **Sửa luôn danh sách "các chỗ gọi khác" ở docstring `throwAuditedDenial`** (thiếu năm chỗ): cùng đoạn đang gạch, và đếm trên cây cú
+  pháp (14 lời gọi, 5 có vế) cho con số đo được thay câu cũ.
+- **172 — tên phiên bản của vòng khoá là TÊN, giữ trong thông điệp của `docVong`.** Đo được: nhãn đi vào `org_key_pairs.key_version`
+  (`createLocalDevOrgKeyProvisioner` → `packages/sealed-envelope/src/key-material.ts`), tức một định danh nằm sẵn trong CSDL; khoá 32 byte ở
+  base64 (44 ký tự) hay hex (64) dài hơn trần 32 ký tự của `TEN_PHIEN_BAN`. Ca "ranh giới" ghim phía còn lại: vật liệu khoá sau `=` không
+  ra thông điệp nào, kể cả khoá dán thiếu tên hay dán ngược `<khoá>=v1`.
+- **172 — thông điệp mới giữ chữ `CHƯA TỒN TẠI`** (ca cũ "adapter CHƯA TỒN TẠI" ghim nó) và câu "Hôm nay chỉ có: …" (tập đóng — hằng
+  của tệp).
+- **172 — bẫy GHI chứ không NÉM**, và bẫy cả `getOwnPropertyDescriptor`: một cấu hình bọc lượt đọc trong `try` nuốt được lỗi ném từ
+  bẫy, không nuốt được tên đã ghi; bộ mô tả mang giá trị. Cái giá: `Object.keys` cũng đi qua bẫy ấy nên liệt kê tên bị tính là đọc — nghiêng
+  về phía an toàn, và `docCauHinh` hôm nay không liệt kê. Đo bằng ca đối chứng sáu lối đọc.
+- **172 — tám tên bí mật** (sáu biến ba vòng + hai CMK của ADR-064): lời hứa ⑼ và lời hứa ADR-064 là cùng một lớp ("tiến trình mở phong
+  bì không cầm lối vào bí mật nào khác"), cùng tệp test; ca ADR-064 cũ đo đầu ra y như ca ⑼ cũ. Ca đối chiếu tên với nguồn `api` đọc văn
+  bản, không import (không cạnh depcruise).
+- **172 — tập biến của ⑵ lấy từ bẫy, không từ danh sách viết tay**, để biến mới tự vào phép đo; sau đột biến M6 (cấu hình chép cả môi
+  trường làm tập co về đúng các khoá có mặt mà đối chứng cũ vẫn xanh), đối chứng đòi thêm bốn biến VẮNG mặt trong môi trường nền.
+- **172 — ⑼ bẫy cả `process.env` trong lúc gọi** (đồng bộ, `finally` trả lại): thêm sau lượt soi đối kháng — một cấu hình đọc thẳng
+  `process.env` đi vòng qua bẫy trên tham số (đột biến M9).
+- **270 — gạch cả hai chỗ ngoài năm chỗ hàng sổ kể** (`buyer.ts:591–592`, `luot-danh-gia.int.test.ts:838–839`): cùng lời khai, trong tệp
+  được chạm, chỉ chú thích. `buyer.ts`: hai dòng đổi tại chỗ, không thêm dòng, không dời khối (PR #217). Câu lịch sử của `rfq.ts`
+  («S1.106 vừa mở cửa … cho năm trên sáu vai») gạch thành «bảy vai hôm nay (sáu lúc S1.106 …)» — đúng ở cả hai thời điểm.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/a4/dot-bien.py`: áp một chỗ sửa (đòi chuỗi cũ xuất hiện đúng một lần), chạy đúng tệp test (`--reporter=verbose`),
+khôi phục từ bản sao, so byte (`filecmp`); lượt cuối trên bản cuối, sha256 bốn tệp mã trước/sau trùng. Chín ca, chín ĐỎ, không ca sống
+(`dot-bien-lan-cuoi.log`):
+- M1 [279] `chot-kiem-soat.ts` thôi truyền `ma` ⇒ 19 đỏ / 61: 17 mã (`expected null to be 'THIEU_NGAN_SACH'`), ca K8a, ⑸.
+- M2 [279] `tu-choi-vao-so.ts` truyền mã HẰNG `"RFQ_KHONG_CHAM_DUOC"` ⇒ 8 đỏ / 72 (`expected 'RFQ_KHONG_CHAM_DUOC' to be
+  'RFQ_KHONG_DE_XUAT_DUOC'`, …); ca `RFQ_KHONG_CHAM_DUOC` và ⑸ xanh — ⑸ chỉ đo CÓ đối số, giá trị đo ở ca đơn vị.
+- M3 [279] `DANH_MUC_VE_CONG` thiếu `J5_LUOT_CHAM_KHONG_MOI_NHAT` ⇒ 2 đỏ: ⑷ (`[ 'AWARDED', …(47) ]` ≠ `…(46)`) và ca J5 (`Received:
+  "DenialAuditFailedError CONTROL_DENIED RFQ HANG_LA nguoi=5c663498cd41 <- error 55P03"`); `mo-ta-hang-dong.test.ts` xanh — nó lặp trên
+  chính danh mục, nên phép canh "phủ chỗ gọi" là ⑷.
+- M4 [279] một mã chốt MỚI (`K99_THU_DOT_BIEN`, vào sổ) ở `MaChotKiemSoat`/`CHOT_VAO_SO` mà không thêm vào danh mục ⇒ 2 đỏ: ⑷ và ca của
+  mã ấy — đúng lời hứa "cái giá của tập đóng, trả lúc viết mã".
+- M5 [172] `docAdapter` nêu lại giá trị ⇒ 6 đỏ (⑵, hai biến adapter × ba cảnh).
+- M6 [172] `docCauHinh` chép cả môi trường (`const env = { ...envGoc }`) rồi đọc bản chép ⇒ 4 đỏ: ⑼ ×3 và đối chứng chống co của ⑵.
+- M7 [172] `docThuMucTuyetDoi` nêu giá trị ⇒ 2 đỏ (⑵ `TRUSTPROCURE_ALERT_DIR` ở hai cảnh dev-file; cảnh `ses` đọc biến ấy ở phép loại trừ,
+  không qua hàm này).
+- M8 [172] `docVong` nêu vật liệu khoá khi base64 sai ⇒ 1 đỏ (ca ranh giới vòng khoá); ⑵ xanh — giá trị lạ không có dấu `=`.
+- M9 [172] `docCauHinh` đọc thẳng `process.env["TRUSTPROCURE_OTP_PEPPERS"]` ⇒ 3 đỏ (⑼, "đọc thẳng process.env"). Trước lượt soi đối kháng
+  ca này sống — lý do bẫy `process.env` có mặt.
+Khoản 270 không có đột biến mã (chỉ chú thích); phép đếm ở mục 3 là phép đo của nó.
+
+## 7. Giới hạn, nói ra
+
+- 279: pool giả gãy ở lần lấy kết nối, không ở câu `noi_chuoi_kiem_toan()`; đường thật đo một lần (tệp tạm, không vào kho) — kho không
+  giữ ca int nào cho hai đường này (vế HTTP của khoản 179 ở `apps/api/src/log-tu-choi-mat.int.test.ts` phủ cùng cơ chế cho cổng mở thầu).
+- `DANH_MUC_VE_CONG` là MỘT tập phẳng: nó canh "tên thì được, giá trị thì không", không canh "vế thuộc đúng từ vựng của `action`" — một
+  trạng thái RFQ đặt dưới `CONTROL_DENIED` vẫn ra nguyên văn. Không phải lỗ A2 (một tên đã khai), là giới hạn chẩn đoán.
+- ⑸ chỉ đo SỰ CÓ MẶT của đối số thứ năm (M2); giá trị đo ở hai tệp đơn vị, cho đúng hai đường ấy. Một đường thứ sáu truyền sai vế thì
+  ⑸ đỏ (tệp lạ) nhưng giá trị của nó không ai đo cho tới khi có ca riêng.
+- Chín lời gọi không truyền vế nhận ra được từ `action` hay mẫu route; đường thu hồi lời mời sau mở thầu (`RFQ_STATE_DENIED {ma}`) dựa
+  vào việc nó là lời gọi `RFQ_STATE_DENIED` DUY NHẤT trên route thu hồi — một lời gọi thứ hai cùng `action` trên route ấy làm dòng mơ hồ.
+- Liên lô, đã nêu cho người tích hợp: B4 thêm một mã chốt ⇒ ⑷ đỏ cho tới khi tên vào `DANH_MUC_VE_CONG`; B1 thêm `lyDo` thứ hai cho `UNSEAL_CANCEL_DENIED`
+  trên cùng route ⇒ dòng mất sổ của huỷ yêu cầu mở thầu mơ hồ (lớp 279).
+- 172 ⑼ đo `docCauHinh` (tham số + `process.env` trong lúc gọi). Phần còn lại của tiến trình worker đo bằng ĐỌC: trong các gói worker
+  dùng, chỉ `packages/crypto-keys/src/moi-truong.ts` đọc `process.env` — `TRUSTPROCURE_KEY_ADAPTER`, `NODE_ENV`,
+  `TRUSTPROCURE_ALLOW_LOCAL_DEV_KEYS`, `TRUSTPROCURE_ALLOW_DEV_SINKS`; tám tên bí mật không xuất hiện trong mã nào ngoài `apps/api` và tệp
+  test này.
+- 172 ⑵ quét mỗi biến bằng MỘT hình dạng giá trị lạ (có khoảng trắng, không `=`, không `,`); nhánh chỉ nêu giá trị ở hình dạng khác (tên
+  phiên bản của `docVong`) nằm ngoài phép quét — theo quyết định mục 5, và ca ranh giới ghim vật liệu khoá.
+- `main.ts` của worker in `name: message` cho lỗi khởi động không phải `CauHinhError` — ví dụ `KeyError` của `assertLocalDevAllowed` nêu giá
+  trị `NODE_ENV`; không phải bí mật, ngoài phạm vi, không mở khoản.
+- `apps/api/src/cau-hinh.ts` còn nêu giá trị ở ba biến và cổng `ma-chep-api-worker` khai rộng hơn phép đo — khoản 9425, không vá (ngoài
+  danh sách tệp). Lời khai «năm trên sáu vai» trong migration/hardening và «Sáu vai trò mặc định» — khoản 9426.
+- Khối đầu `packages/identity/src/mo-ta-hang-dong.test.ts` (ngoài danh sách) kể nguồn vế của §S1.225 — đúng như một lời kể lịch sử, không
+  sửa; ca "không rỗng ruột" của nó lặp trên danh mục nên tự phủ 33 tên mới.
+- Không chạy `pnpm test:int` trọn, `pnpm evidence` (tệp cấm; không nhãn INV mới nên `INV-matrix` không cần sinh lại vì lô này).
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/A4`; vitest int với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`. Log ở `scratchpad/a4/`.
+- Đo trước (`ba269ae` + ca mới): bốn tệp 35 đỏ / 95 xanh (130); đường thật `CONTROL_DENIED RFQ nguoi=…` 2017 ms, `RFQ_STATE_DENIED RFQ
+  nguoi=…` 2005 ms (1 đỏ); đột biến đọc-rồi-vứt: ca ⑼ cũ xanh, ⑼ mới 3 đỏ; khoản 270: 7 chỗ.
+- Sau vá: bốn tệp 130/130; đường thật `… CONTROL_DENIED RFQ THIEU_NGAN_SACH nguoi=5f2fcf34793c <- error 55P03` 2015 ms, `…
+  RFQ_STATE_DENIED RFQ RFQ_KHONG_CHAM_DUOC nguoi=5f2fcf34793c <- error 55P03` 2005 ms (1/1); khoản 270: 0 chỗ.
+- Đột biến: 9 ca / 9 đỏ, 0 sống; khôi phục nguyên văn (so byte, sha256).
+- Cổng của lô: `pnpm vitest run packages/identity packages/danh-gia --exclude "**/*.int.test.ts"` — 8 tệp / 163 ca xanh (3,6 s);
+  `pnpm vitest run packages/danh-gia/src/luot-danh-gia.int.test.ts` — 101/101 (12,3 s); `pnpm vitest run apps/unseal-worker/src/cau-hinh.test.ts`
+  — 82/82 (từ 24).
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 497 module / 2074 cạnh, 0 vi phạm (69,7 s).
+- `pnpm test`: 135 tệp, 2156 xanh | 1 bỏ qua (tiền tồn) (2157), 201,3 s — gồm `tests/architecture` (`ma-chep-api-worker` mục III xanh với
+  thông điệp mới của worker). Không ca đỏ nào chờ bàn giao được áp.
+- Sau khi viết tệp bàn giao (đã `git add`, để các cổng quét tệp git theo dõi thấy nó): `pnpm vitest run tests/architecture` — 37 tệp đơn
+  vị xanh (494 ca xanh, 8 bỏ qua); hai tệp `qt3-cu-phap.int.test.ts`, `qt3-ngu-phap.int.test.ts` lọt vào lượt chạy (thiếu `--exclude`, không
+  đặt biến cụm cục bộ) và đỏ ở bước dựng Postgres — `Could not find a working container runtime strategy`: môi trường, không phải cổng
+  của lô (lô không đổi câu SQL nào), không chạy lại.
+- Lỗ kề (mục 7): `api` `docCauHinh` đọc 40 biến, 3 nêu giá trị (`do-api-cau-hinh.log`, tệp tạm đã xoá); 14 lời gọi `throwAuditedDenial`,
+  5 có vế (`dem-goi.log`).

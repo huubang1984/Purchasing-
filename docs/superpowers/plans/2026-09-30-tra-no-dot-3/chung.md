@@ -53,7 +53,9 @@ thích mới trong mã mang nhãn `[S1.91NN / khoản N]`.
 tích hợp). Chín mục, đúng thứ tự, mục không có gì thì ghi "Không có.":
 
 1. **Hàng sổ nợ** — bản MỚI nguyên văn của mỗi hàng đổi (khoản đóng: `**[ĐÓNG]**`, câu tóm tắt `**[S1.91NN — ĐO]** …` đứng đầu,
-   phần cũ giữ và gạch theo khuôn hàng 117) và hàng mới `94NN` đủ ba cột. Một hàng một khối ```` ```text ````.
+   phần cũ giữ và gạch theo khuôn hàng 117) và hàng mới `94NN` đủ ba cột. Một hàng một khối ```` ```text ````. Cổng
+   `tests/architecture/so-no-tu-doi-chieu.test.ts` (INV-H20) đọc đúng ba cột và giải mọi con trỏ: không `|` trần trong thân (viết `\|`),
+   cột ba chỉ đường dẫn ĐẦY ĐỦ từ gốc kho của tệp git theo dõi (`db/migrations/059_vong_bafo.sql`, không `059_vong_bafo.sql`).
 2. **Cột mốc** — một đoạn cho `docs/STATE.md` §*Cột mốc hiện tại*, khuôn đoạn `[2026-09-30 / S1.210]`: câu đầu in đậm viết hoa,
    rổ và mảnh `docs/PRODUCT.md` §11 (ADR-043 ⒞), đóng gì, mở gì, trỏ biên bản.
 3. **Biên bản** — mục `# §S1.91NN — …` cho `evidence/security-reviews.md`, tám phần như §S1.210: 1. Vòng này là gì · 2. Quyết

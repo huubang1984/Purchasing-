@@ -589,7 +589,7 @@ const doc: readonly BuyerReadRoute[] = [
 //
 // `taoLuotDanhGia` trả cả `lines` — `effectiveCost`, `rank` và `components` của TỪNG báo giá, tức
 // GIÁ và THỨ HẠNG. Bản trước trả nguyên kết quả ấy, nên mọi vai giữ `evaluation.perform` — năm
-// trên sáu vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
+// trên ~~sáu~~ **[S1.9125 / khoản 270]** bảy vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
 // và hạng của mọi nhà cung cấp ngay trong thân phản hồi của lần bấm chấm. ADR-054 khai `bid.view`
 // là cổng ĐỌC duy nhất của `rfq_evaluation_lines`: đường ấy là `GET /rfqs/:rfqId/ranking`
 // (`docBangXepHang`), và thân route này là một đường đọc thứ hai không đi qua cổng.
@@ -661,7 +661,7 @@ const ghi: readonly BuyerWriteRoute[] = [
   //
   // Mã quyền RIÊNG `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` (ADR-055) — KHÔNG dùng lại
   // `evaluation.perform`: mở vòng BAFO là hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT
-  // giá của mọi người, và `evaluation.perform` do NĂM trên SÁU vai giữ (khoản 220).
+  // giá của mọi người, và `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.9125 / khoản 270]** BẢY vai giữ (khoản 220).
   //
   // Thân KHÔNG mang `evaluationId`, và đó là vế đóng của một lỗ mà lượt soi hình dạng của vòng
   // này tìm ra: `059` cho người gọi khai lượt chấm nào cũng được, nên vòng BAFO thứ hai mời được

@@ -5595,7 +5595,8 @@ gán cho chúng hai hạng khác nhau là khai một thứ tự mà dữ liệu 
 - **Chính sách đa thành phần không chấm được cho tới S2.4.** Một tổ chức muốn cộng phí vận chuyển vào
   Effective Cost hôm nay thấy một lời từ chối, không thấy một bảng xếp hạng gần đúng. Fail-closed, và nó
   có giá.
-- **`evaluation.perform` do NĂM trên SÁU vai giữ** (đo trên `005`: chỉ `DIRECTOR` không có). Nên cổng
+- **`evaluation.perform` do NĂM trên ~~SÁU~~ BẢY vai giữ** **[S1.9125 / khoản 270]** (đo trên `005`: chỉ `DIRECTOR` không có; `083` thêm vai
+  thứ bảy `DATA_STEWARD`, cũng không có — con số ghim ở `packages/identity/src/ma-tran-quyen.test.ts` ca «khoản 220 ⒝»). Nên cổng
   quyền của đường chấm gần như không phân tách được vai nào — cùng hình dạng mà ADR-051 đã tìm ra cho
   **J3**, và nó là lý do J3 cần một lớp theo HÀNH VI chứ không theo QUYỀN.
 
@@ -6206,7 +6207,9 @@ nào. Nửa `vaoSo: false` phải rẻ THẬT — `nemTuChoi` ném thẳng, khô
 ⒞ **Đột biến chịu lực:** chặn đúng lần ghi `RFQ_STATE_DENIED` bằng một trigger trên `audit_events`, rồi
 đòi lời từ chối **GÃY ỒN ÀO** — `DenialAuditFailedError` mang lời từ chối gốc bên trong, không phải lời
 từ chối trần. Một hàng sổ *cố gắng hết sức* thì J6 không có giá trị nào: đúng lúc ai đó gỡ quyền ghi sổ
-là đúng lúc dấu vết biến mất mà không ai biết.
+là đúng lúc dấu vết biến mất mà không ai biết. **[S1.9125 / khoản 279]** Và mang MÃ ở `clause` (`nemTuChoi` truyền `loi.lyDo` làm
+đối số thứ năm của `throwAuditedDenial`): dòng log của lần gãy ấy nói bước nào bị đi tắt (`… RFQ_STATE_DENIED RFQ RFQ_KHONG_CHAM_DUOC
+nguoi=… <- error 55P03`), không chỉ `… RFQ_STATE_DENIED RFQ` cho cả chín mã vào sổ.
 
 ⒟ **Từ vựng cưỡng chế bằng KIỂU, không bằng cổng:** ba union lý do khai bằng `Extract<MaTuChoiTrangThai, …>`,
 và `VAO_SO` là một `Record` ĐẦY ĐỦ — nên một mã mới không có dòng quyết định **không biên dịch được**.
@@ -8544,6 +8547,11 @@ chủ dự án chọn giữ cơ chế của nó và nắn hai điều:
 - **Khoản 248** (`CONTROL_DENIED` đứng ngoài trần lần từ chối theo phiên của ADR-092) nay phủ cả bảy mã J3/D2: ADR-104 đã nêu hai
   `action` của nó không được đếm, nên đổi lớp không làm khe ấy rộng hơn — chỉ gom nó về một `action`. Phép đếm đề xuất ở hàng 248
   đặt trong `tuChoiTheoChot` thì phủ luôn J3/D2.
+- **[S1.9125 / khoản 279] Mã chốt cũng đi vào dòng log khi lần ghi sổ gãy.** Một `action` cho mọi chốt nghĩa là khi hàng `CONTROL_DENIED`
+  không ghi được (khoá ghi sổ bị giữ ⇒ 55P03), dòng log của bộ điều phối từng là `… CONTROL_DENIED RFQ <- error 55P03` cho cả mười bảy mã
+  vào sổ. `tuChoiTheoChotTaiNguyen` nay truyền `ma` làm vế (đối số thứ năm) của `throwAuditedDenial`, và dòng mang mã qua phép thuộc-tập
+  `DANH_MUC_VE_CONG` (`packages/identity/src/rbac.ts`). Thêm một mã vào `CHOT_VAO_SO` nay là thêm cả một tên vào danh mục ấy — vế ⑷ của
+  `danh-muc-tu-choi.test.ts` đọc tập khoá của `CHOT_VAO_SO` ở nguồn và đỏ cho tới khi thêm.
 
 ## ADR-109 — Phiên khách nói tên doanh nghiệp được mời; nhà cung cấp tự thoát phiên khách của mình
 
