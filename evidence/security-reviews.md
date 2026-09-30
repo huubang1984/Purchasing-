@@ -17573,10 +17573,10 @@ hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bả
 
 ---
 
-# §S1.9101 — KHOẢN 260 ĐÓNG: HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; SỔ TRẢ VỀ CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG (K4a, K4b, H19) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401, 9402
+# §S1.207 — KHOẢN 260 ĐÓNG: HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; SỔ TRẢ VỀ CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG (K4a, K4b, H19) — ADR-123; LƯỢT SOI MỞ KHOẢN 262, 263
 
 **Rổ và mảnh (ADR-043 ⒞):** CSDL, luồng S3 trả gói về DRAFT; không đổi `docs/PRODUCT.md` §11. Khoản 260 (rổ B, ghi ở §S1.198)
-đóng. Một migration (`9501_tra_ve_di_kem_canh`), ghim hardening, một ADR (ADR-9201).
+đóng. Một migration (`090_tra_ve_di_kem_canh`), ghim hardening, một ADR (ADR-123).
 
 ## 1. Việc gì
 
@@ -17596,7 +17596,7 @@ sau đi qua; gói mà người duyệt đã tự trả về bị từ chối m�
 
 ## 3. Thay đổi
 
-- `db/migrations/9501_tra_ve_di_kem_canh.sql`:
+- `db/migrations/090_tra_ve_di_kem_canh.sql`:
   - hàm `rfq_tra_ve_phai_di_kem_canh()` và `CONSTRAINT TRIGGER` cùng tên — `AFTER INSERT`, `DEFERRABLE INITIALLY DEFERRED`,
     `ENABLE ALWAYS`: nhận hàng khi gói đứng ở `DRAFT` với đúng lần nộp của hàng hoặc lần nộp đã tăng; gói không đọc được lúc COMMIT
     thì từ chối; còn lại từ chối 23514 nêu lần nộp và trạng thái;
@@ -17609,7 +17609,7 @@ sau đi qua; gói mà người duyệt đã tự trả về bị từ chối m�
   gói kia chèn hàng ở bước chuẩn bị của cùng giao dịch), `rfq_tra_ve` vào tập chỉ-ghi-thêm đo được, hàm mới vào danh sách không-canh;
   sổ ghim hàm và ba danh sách migration viết cứng của `db/migrations.int.test.ts`; dòng miễn trừ của bộ đọc `ENABLE ALWAYS` ở
   `tests/architecture/hardening-co-ly-do.test.ts` (constraint trigger thứ ba, cùng lý do với hai cái của `017` và `018`).
-- ADR-9201; STATE (hàng 260, rổ B, danh sách còn mở, cột mốc); hàng K4a, K4b, H19 của TEST-PLAN.
+- ADR-123; STATE (hàng 260, rổ B, danh sách còn mở, cột mốc); hàng K4a, K4b, H19 của TEST-PLAN.
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -17646,12 +17646,12 @@ mà gói chưa đi qua DRAFT.** Hai lỗ kề, ngoài khoản 260, thành khoả
 
 | # | Phát hiện | Mức | Xử lý |
 |---|---|---|---|
-| 1 | Chủ bảng làm chữ ký đã rút đếm lại bằng một câu `UPDATE rfq_approvals SET lan_nop_da_xem = 2` — bảng chỉ có ba trigger `BEFORE INSERT`: gói MỞ, hàng trả về không bị đụng. Cùng hậu quả với lỗ ⑵, khác bảng; tên ca ⑸, lời ⑵ ở đầu migration và Bối cảnh của ADR nói quá | Vừa | **Khoản 9401 mở** (rổ B); tên ca, đầu migration, ADR, TEST-PLAN thu về *xoá hàng trả về* |
-| 2 | Khuôn `017`: `rfq_khoa_phai_di_kem_lan_mo` bỏ qua khi không thấy gói. Dưới `app_api`, chèn cặp khoá cho gói chờ duyệt rồi đổi `app.org_id` (uuid lạ, rỗng) hay đặt `app.guest_session_id` trước COMMIT ⇒ COMMIT đi qua, cặp khoá mồ côi; `openRfq` sau đó 23505 — gói chỉ còn huỷ. Đối chứng không đổi GUC: 23514 | Vừa (ngoài 260) | **Khoản 9402 mở** (rổ B) |
-| 3 | Hàng lẻ commit trước lần nâng cấp giữ tác dụng: cụm `master` có hàng lẻ, `migrate()` bằng cây này ⇒ lần trả về thật vẫn 23505, câu UPDATE thô về DRAFT ở giao dịch sau vẫn đi qua | Nhẹ | Ghi hệ quả ở ADR-9201, đầu migration, §7 |
-| 4 | *Trả về rồi huỷ trong cùng giao dịch bị từ chối* không tuyệt đối: `SET CONSTRAINTS ALL IMMEDIATE` giữa hai câu ⇒ đi qua (gói `CANCELLED`, hàng ở lại). Gói đã thật sự đi qua DRAFT — không phải lỗ | Nhẹ | Sửa lời ở đầu migration, ADR-9201, §7 |
-| 5 | *Lần nộp chỉ tăng ở cạnh DRAFT→PENDING_APPROVAL* chỉ đúng dưới `app_api`: superuser nâng `lan_nop` cùng giao dịch với một hàng lẻ ⇒ COMMIT đi qua, gói chờ duyệt ở lần 2 mà chưa từng qua DRAFT, hàng giả không xoá được | Nhẹ | Sửa lời (*dưới `app_api`*); vào khoản 9401 |
-| 6 | Nâng cấp sạch từ `master` phát một WARNING *mục "hàm + trigger bid_chi_ghi_them (047)" ở trạng thái SAI TRƯỚC khi sửa*; lần hai im lặng. Bỏ hai câu `DROP TRIGGER IF EXISTS` ⇒ `trigger … already exists` — đúng như chú thích của migration | Ghi chú | Ghi ở ADR-9201 (hệ quả) và §7, để người vận hành không đọc nhầm thành dấu trôi |
+| 1 | Chủ bảng làm chữ ký đã rút đếm lại bằng một câu `UPDATE rfq_approvals SET lan_nop_da_xem = 2` — bảng chỉ có ba trigger `BEFORE INSERT`: gói MỞ, hàng trả về không bị đụng. Cùng hậu quả với lỗ ⑵, khác bảng; tên ca ⑸, lời ⑵ ở đầu migration và Bối cảnh của ADR nói quá | Vừa | **Khoản 262 mở** (rổ B); tên ca, đầu migration, ADR, TEST-PLAN thu về *xoá hàng trả về* |
+| 2 | Khuôn `017`: `rfq_khoa_phai_di_kem_lan_mo` bỏ qua khi không thấy gói. Dưới `app_api`, chèn cặp khoá cho gói chờ duyệt rồi đổi `app.org_id` (uuid lạ, rỗng) hay đặt `app.guest_session_id` trước COMMIT ⇒ COMMIT đi qua, cặp khoá mồ côi; `openRfq` sau đó 23505 — gói chỉ còn huỷ. Đối chứng không đổi GUC: 23514 | Vừa (ngoài 260) | **Khoản 263 mở** (rổ B) |
+| 3 | Hàng lẻ commit trước lần nâng cấp giữ tác dụng: cụm `master` có hàng lẻ, `migrate()` bằng cây này ⇒ lần trả về thật vẫn 23505, câu UPDATE thô về DRAFT ở giao dịch sau vẫn đi qua | Nhẹ | Ghi hệ quả ở ADR-123, đầu migration, §7 |
+| 4 | *Trả về rồi huỷ trong cùng giao dịch bị từ chối* không tuyệt đối: `SET CONSTRAINTS ALL IMMEDIATE` giữa hai câu ⇒ đi qua (gói `CANCELLED`, hàng ở lại). Gói đã thật sự đi qua DRAFT — không phải lỗ | Nhẹ | Sửa lời ở đầu migration, ADR-123, §7 |
+| 5 | *Lần nộp chỉ tăng ở cạnh DRAFT→PENDING_APPROVAL* chỉ đúng dưới `app_api`: superuser nâng `lan_nop` cùng giao dịch với một hàng lẻ ⇒ COMMIT đi qua, gói chờ duyệt ở lần 2 mà chưa từng qua DRAFT, hàng giả không xoá được | Nhẹ | Sửa lời (*dưới `app_api`*); vào khoản 262 |
+| 6 | Nâng cấp sạch từ `master` phát một WARNING *mục "hàm + trigger bid_chi_ghi_them (047)" ở trạng thái SAI TRƯỚC khi sửa*; lần hai im lặng. Bỏ hai câu `DROP TRIGGER IF EXISTS` ⇒ `trigger … already exists` — đúng như chú thích của migration | Ghi chú | Ghi ở ADR-123 (hệ quả) và §7, để người vận hành không đọc nhầm thành dấu trôi |
 | 7 | `DISABLE TRIGGER ALL` rồi `migrate()`: năm trigger của dự án dựng lại, sáu trigger khoá ngoại nội bộ (`RI_ConstraintTrigger_c_*`) vẫn tắt | Ghi chú | Chung cho hardening, ngoài 260; tắt trigger nội bộ đòi superuser. Không mở khoản ở vòng này |
 | 8 | Mọi lần hardening tự chữa chỉ để lại WARNING qua `onThongBao`, và không mã sản xuất nào nối kênh ấy | Ghi chú | Chung, ngoài 260; chú thích `onThongBao` ở `packages/db/src/migrate.ts` đã nói mặc định là im lặng |
 
@@ -17677,11 +17677,11 @@ không còn 23505; hai lần trả về thật cùng lúc — giao dịch sau nh
 - Hàng đã có trước vòng này không được kiểm lại: constraint trigger chỉ chạy cho hàng mới. Một hàng lẻ commit trước lần nâng cấp
   giữ tác dụng (§6 hàng 3).
 - Chủ bảng còn làm chữ ký đã rút đếm lại bằng cách sửa `rfq_approvals`, và nâng `lan_nop` của gói ngoài cạnh nộp để một hàng lẻ được
-  nhận — khoản 9401.
+  nhận — khoản 262.
 - Lần deploy đầu trên một cụm đang chạy phát một WARNING của mục `bid_chi_ghi_them (047)`: lượt sửa đầu dựng hai trigger
   chỉ-ghi-thêm trên bảng đã có; lần sau im lặng.
 - Vai giữ quyền DDL trên bảng gỡ hay tắt được trigger; hardening dựng lại ở lần deploy kế, và mục trigger lạ (khoản 259) canh tên.
-- Khoản 9401, 9402 còn mở (§6).
+- Khoản 262, 263 còn mở (§6).
 
 ## 8. Số đo
 

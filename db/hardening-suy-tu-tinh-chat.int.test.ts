@@ -147,7 +147,7 @@ const BANG_CHI_GHI_THEM_THAT = [
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
   "rfq_awards",
-  // [S1.9101 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
+  // [S1.207 / khoản 260] Sổ trả về — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả hai
   // `ENABLE ALWAYS`. Trước vòng ấy bảng chỉ-ghi-thêm BẰNG QUYỀN: chủ bảng xoá một hàng thì chữ ký người trả đã rút đếm lại.
   "rfq_tra_ve",
   "rfq_unsealed_bids",
@@ -390,7 +390,7 @@ const HAM_KHONG_PHAI_CANH = [
   "public.rfq_dem_lan_nop",
   "public.rfq_chot_lan_nop_da_xem",
   "public.rfq_tra_ve_dat_lan_nop",
-  // [S1.9101 / khoản 260] Constraint trigger hoãn tới COMMIT trên INSERT `rfq_tra_ve`: từ chối CÓ ĐIỀU KIỆN — gói chưa đi qua
+  // [S1.207 / khoản 260] Constraint trigger hoãn tới COMMIT trên INSERT `rfq_tra_ve`: từ chối CÓ ĐIỀU KIỆN — gói chưa đi qua
   // DRAFT ở lần nộp của hàng. Nhân chứng: câu chèn hàng trả về của kịch bản, với `hoanTat` trả gói về DRAFT trong cùng giao dịch.
   "public.rfq_tra_ve_phai_di_kem_canh",
   // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
@@ -1780,7 +1780,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // [S1.186 / S3.2b1 / K4a] Gói nộp duyệt TRƯỚC lần bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
   // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký dưới đây.
   const rfqVe = await rfqSoan();
-  // [S1.9101 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy nay phải đi kèm cạnh về DRAFT trong CÙNG giao dịch
+  // [S1.207 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy nay phải đi kèm cạnh về DRAFT trong CÙNG giao dịch
   // (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT của `rfqVe` không còn tách được thành hai nhân chứng trên
   // một gói — mỗi nhân chứng một gói, cả hai nộp duyệt TRƯỚC lần bật.
   const rfqVe2 = await rfqSoan();
@@ -1824,7 +1824,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     "org_policy_signatures",
   );
   // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
-  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới. **[S1.9101 / khoản 260]** và của
+  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới. **[S1.207 / khoản 260]** và của
   // `rfq_tra_ve_phai_di_kem_canh` (DEFERRED): `hoanTat` trả gói về DRAFT trong cùng giao dịch — thiếu nó, hàng lẻ bị từ chối ở
   // cửa sổ sau `SET CONSTRAINTS ALL IMMEDIATE`, và đó chính là lỗ khoản ấy đóng.
   const traVe2 = api(
@@ -1843,7 +1843,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "rfq_tra_ve",
   );
-  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`. **[S1.9101 / khoản 260]** Hàng trả về của
+  // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`. **[S1.207 / khoản 260]** Hàng trả về của
   // `rfqVe` chèn ở bước chuẩn bị của CÙNG giao dịch, dưới `app_api` — đúng thứ tự của `returnRfqToDraft`.
   const veNhap = api("UPDATE rfq_packages SET status = 'DRAFT' WHERE id = $1 RETURNING status", [rfqVe], { status: "DRAFT" });
   doiSoHang(

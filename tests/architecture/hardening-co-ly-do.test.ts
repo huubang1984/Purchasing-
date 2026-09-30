@@ -390,7 +390,7 @@ export function tenTriggerEnableAlways(hardening: string): readonly string[] {
 }
 
 /**
- * ~~Bốn~~ **[S1.9101]** Năm tên có `ENABLE ALWAYS TRIGGER` mà KHÔNG có văn bản ghim `$def$` — mỗi dòng một lý do đo được:
+ * ~~Bốn~~ **[S1.207]** Năm tên có `ENABLE ALWAYS TRIGGER` mà KHÔNG có văn bản ghim `$def$` — mỗi dòng một lý do đo được:
  * HAI cái ghim bằng THUỘC TÍNH, và ~~HAI~~ BA cái là `CREATE CONSTRAINT TRIGGER`.
  * Danh sách miễn trừ chỉ đứng được khi chính nó bị canh: khẳng định thứ hai đòi mỗi dòng ở đây
  * trỏ một tên CÒN THẬT SỰ xuất hiện ở một câu `ENABLE ALWAYS`, nên một dòng thiu không giữ chỗ
@@ -421,7 +421,7 @@ const ENABLE_ALWAYS_KHONG_CO_VAN_BAN_GHIM: readonly { readonly ten: string; read
     lyDo: "cùng lý do với hàng trên — `CREATE CONSTRAINT TRIGGER`, tiền tố khác",
   },
   {
-    // [S1.9101 / khoản 260] Hàng trả về phải đi kèm cạnh về DRAFT — constraint trigger hoãn tới COMMIT, khuôn `017`.
+    // [S1.207 / khoản 260] Hàng trả về phải đi kèm cạnh về DRAFT — constraint trigger hoãn tới COMMIT, khuôn `017`.
     ten: "rfq_tra_ve_phai_di_kem_canh",
     lyDo: "cùng lý do với hai hàng trên — `CREATE CONSTRAINT TRIGGER`, tiền tố khác",
   },

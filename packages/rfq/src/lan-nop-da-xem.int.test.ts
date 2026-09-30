@@ -938,19 +938,19 @@ describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp
 });
 
 // =============================================================================================
-// (8) [S1.9101 / khoản 260] HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; BẢNG CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG
+// (8) [S1.207 / khoản 260] HÀNG `rfq_tra_ve` PHẢI ĐI KÈM CẠNH VỀ DRAFT CỦA CHÍNH LẦN NỘP ẤY; BẢNG CHỈ-GHI-THÊM CẢ VỚI CHỦ BẢNG
 //
 // Lượt soi S1.198 đọc ra: `087` chỉ buộc một chiều — cạnh về DRAFT đòi hàng, hàng không đòi cạnh —, và bảng chỉ-ghi-thêm bằng
 // QUYỀN. Một hàng chèn tay commit được, chiếm `UNIQUE (org, gói, lần nộp)` và thoả vế (4) cho một câu UPDATE thô về sau; chủ bảng
 // xoá một hàng thì chữ ký người trả đã rút đếm lại. Nay một constraint trigger hoãn tới COMMIT đòi gói đã ĐI QUA DRAFT ở lần nộp
 // của hàng (chủ dự án chốt: một tập, khuôn `017`), và `bid_chi_ghi_them` chặn sửa, xoá, TRUNCATE cả với chủ bảng. Đầu vào khác
-// của cùng phép đếm — sửa `rfq_approvals`, nâng `lan_nop` của gói — chủ bảng còn chạm được (khoản 9401): khối này không canh chúng.
+// của cùng phép đếm — sửa `rfq_approvals`, nâng `lan_nop` của gói — chủ bảng còn chạm được (khoản 262): khối này không canh chúng.
 // =============================================================================================
 const loiKhongDiKemCanh = (lanNop: number, trangThai: string): string =>
   `Hang rfq_tra_ve cua lan nop ${lanNop} phai di kem canh ve DRAFT cua chinh lan nop ay trong cung giao dich; goi dang o ${trangThai} (K4a)`;
 const loiChiGhiThem = (thaoTac: string): string => `Bang rfq_tra_ve chi duoc ghi them: thao tac ${thaoTac} bi tu choi (B1, B2)`;
 
-describe("S1.9101 — khoản 260: hàng trả về đi kèm cạnh về DRAFT; sổ trả về chỉ-ghi-thêm cả với chủ bảng", () => {
+describe("S1.207 — khoản 260: hàng trả về đi kèm cạnh về DRAFT; sổ trả về chỉ-ghi-thêm cả với chủ bảng", () => {
   it("[INV-K4a] hàng trả về chèn lẻ, không kèm cạnh ⇒ từ chối lúc COMMIT; câu UPDATE thô về DRAFT ở giao dịch sau không có hàng nào để dựa; lần trả về thật của lần nộp ấy đi qua", async () => {
     const t = await toChucDaBat();
     const rfqId = await goiNhap(t);

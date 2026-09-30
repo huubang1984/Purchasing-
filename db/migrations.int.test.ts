@@ -1793,10 +1793,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_dem_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
     { ham: "rfq_chot_lan_nop_da_xem", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_approvals_so_lan_nop"] },
     { ham: "rfq_tra_ve_dat_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_tra_ve_dat_lan_nop"] },
-    // [S1.9101 / khoản 260] Hàng trả về phải đi kèm cạnh về DRAFT của chính lần nộp ấy — constraint trigger hoãn tới COMMIT, khuôn
+    // [S1.207 / khoản 260] Hàng trả về phải đi kèm cạnh về DRAFT của chính lần nộp ấy — constraint trigger hoãn tới COMMIT, khuôn
     // `017`. Thân `RETURN NULL` sớm để một hàng lẻ commit: nó chiếm UNIQUE của lần nộp và thoả vế (4) của `087` cho một câu UPDATE
     // thô về DRAFT ở giao dịch sau.
-    { ham: "rfq_tra_ve_phai_di_kem_canh", migration: "9501_tra_ve_di_kem_canh.sql", trigger: ["rfq_tra_ve_phai_di_kem_canh"] },
+    { ham: "rfq_tra_ve_phai_di_kem_canh", migration: "090_tra_ve_di_kem_canh.sql", trigger: ["rfq_tra_ve_phai_di_kem_canh"] },
     // [S1.203 / S3.6b1] Ba hàm trigger của tín hiệu chia nhỏ. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng:
     // người gọi khai bằng chứng của tín hiệu, người gây ra tự ghi nhận tín hiệu của mình, và gói mở qua một câu UPDATE viết tay
     // khi tín hiệu chưa ai ghi nhận.
@@ -3453,7 +3453,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
-        "9501_tra_ve_di_kem_canh.sql",
+        "090_tra_ve_di_kem_canh.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7887,7 +7887,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
-        "9501_tra_ve_di_kem_canh.sql",
+        "090_tra_ve_di_kem_canh.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8194,7 +8194,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "086_rang_ngan_sach.sql",
         "087_lan_nop_da_xem.sql",
         "088_tin_hieu_chia_nho.sql",
-        "9501_tra_ve_di_kem_canh.sql",
+        "090_tra_ve_di_kem_canh.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

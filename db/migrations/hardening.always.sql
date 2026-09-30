@@ -9322,10 +9322,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_tra_ve_dat_lan_nop() và bảng public.rfq_tra_ve (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / khoan 260] Hang tra ve phai di kem canh ve DRAFT cua chinh lan nop ay, doc goi luc COMMIT. Than `RETURN NULL` som de mot hang le commit: no chiem UNIQUE cua lan nop va thoa ve (4) cho mot cau UPDATE tho ve DRAFT o giao dich sau.
+    -- [S1.207 / khoan 260] Hang tra ve phai di kem canh ve DRAFT cua chinh lan nop ay, doc goi luc COMMIT. Than `RETURN NULL` som de mot hang le commit: no chiem UNIQUE cua lan nop va thoa ve (4) cho mot cau UPDATE tho ve DRAFT o giao dich sau.
     ARRAY[
-      $q$hàm + trigger rfq_tra_ve_phai_di_kem_canh (9501_tra_ve_di_kem_canh)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_tra_ve_di_kem_canh.sql')$q$,
+      $q$hàm + trigger rfq_tra_ve_phai_di_kem_canh (090_tra_ve_di_kem_canh)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '090_tra_ve_di_kem_canh.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
