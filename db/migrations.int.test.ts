@@ -1132,6 +1132,60 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
+  // [S1.9192 / khoản 158] `9592` là policy RESTRICTIVE đầu tiên mang `TO <một vai>`: `DROP OWNED BY app_api` của kịch bản N3
+  // ở trên XOÁ `outbox_jobs_kind_app_api` (vai là chủ thể duy nhất), và trước mục tự chữa của hardening N3 đỏ ở 83⑴ — *"khai
+  // public.outbox_jobs.outbox_jobs_kind_app_api … mà CSDL không có policy đúng bảy cột"*. Vế này đo thẳng đường DROP POLICY
+  // (cùng khuôn ca 044 ở dưới), và đối chứng: policy bị ĐỔI biểu thức thì hardening KHÔNG "sửa đè" — không có migration nào
+  // để so — mà NÉM ở lượt phán xét, nêu tên, không in biểu thức (T1).
+  it("[S1.9192 / khoản 158] DROP POLICY một trong hai policy kind theo vai (9592) ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai; ĐỔI biểu thức tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const docHai = async (): Promise<{ polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null }[]> =>
+        (
+          await db.pool.query<{ polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null }>(
+            `SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh,
+                    (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai,
+                    pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc
+               FROM pg_policy p
+              WHERE p.polrelid = to_regclass('public.outbox_jobs')
+                AND p.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_app_unseal')
+              ORDER BY p.polname`,
+          )
+        ).rows;
+      const truoc = await docHai();
+      expect(truoc.map((r) => [r.polname, r.permissive, r.lenh, r.vai])).toEqual([
+        ["outbox_jobs_kind_app_api", false, "w", "app_api"],
+        ["outbox_jobs_kind_app_unseal", false, "w", "app_unseal"],
+      ]);
+      expect(truoc.every((r) => r.u !== null && r.u === r.wc), "hai vế bằng nhau, không NULL").toBe(true);
+      // Dòng khai ở hardening là NGUỒN của câu sửa: bản trong CSDL bằng bản khai (literal nhân đôi nháy).
+      const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+      const khai = docHangHardeningTu(hardening, "POLICY_RESTRICTIVE_KHAI");
+      for (const r of truoc) expect(khai, `dòng khai của ${r.polname}`).toContain(`'${r.polname}', 'w', '${r.vai}', '${r.u!.replaceAll("'", "''")}'`);
+
+      await db.pool.query("DROP POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs");
+      expect((await docHai()).map((r) => r.polname), "tiền đề: policy đã mất").toEqual(["outbox_jobs_kind_app_api"]);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await docHai(), "hardening dựng lại ĐÚNG bảy cột, không chỉ MỘT policy cùng tên").toEqual(truoc);
+
+      // Đối chứng: nới USING/WITH CHECK bằng tay ⇒ NÉM, nêu tên policy, không in biểu thức; bản đã nới CÒN NGUYÊN.
+      await db.pool.query("ALTER POLICY outbox_jobs_kind_app_api ON public.outbox_jobs USING (true) WITH CHECK (true)");
+      const loi: unknown = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(loi, "migrate() phải NÉM khi policy đã khai bị đổi").toBeInstanceOf(Error);
+      const thongDiep = (loi as Error).message;
+      expect(thongDiep).toContain("outbox_jobs_kind_app_api");
+      expect(thongDiep).not.toContain("kind = ANY");
+      expect(thongDiep).not.toContain("LOGIN_LINK_SEND");
+      expect((await docHai()).find((r) => r.polname === "outbox_jobs_kind_app_api")?.u, "không sửa đè một policy ĐANG CÓ").toBe("true");
+    } finally {
+      await db.stop();
+    }
+  });
+
   // [fix round 4 — Minor] "CREATE SCHEMA IF NOT EXISTS app_private" có trong 001 nhưng
   // không test nào phủ nó: xoá dòng đó đi thì không test nào đỏ (đột biến M6 sống sót).
   // Test [fix S2] về app_private tự tạo hàm trong schema đó nên nó đỏ vì lý do khác — lỗi
