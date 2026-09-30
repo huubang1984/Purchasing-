@@ -190,6 +190,12 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
  * Nó cũng là luật đúng cho nhà cung cấp NGOÀI top-N — họ không được mời nộp lại, nên phiên bản mới
  * nhất của họ vẫn là báo giá vòng một, và họ vẫn đứng trong bảng. BAFO cải thiện giá của top-N; nó
  * không loại ai khỏi cuộc thi.
+ *
+ * [S1.9130 / khoản 250 / ADR-9230] Luật THỨ HAI, cũng chép nguyên văn từ worker và bảng so sánh:
+ * **chỉ luồng của lời mời CÒN SỐNG** — `i.revoked_at IS NULL`. Thu hồi lời mời loại doanh nghiệp ấy
+ * khỏi cuộc thi; mời lại sau thu hồi là một luồng mới (`018`), nên thiếu vế này một doanh nghiệp đứng
+ * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
+ * `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba bộ đọc mang đúng một vế ấy.
  */
 async function docBaoGia(
   client: pg.PoolClient,
@@ -210,6 +216,7 @@ async function docBaoGia(
                                        AND i.org_id OPERATOR(pg_catalog.=) b.org_id
       WHERE u.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
         AND i.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND i.revoked_at IS NULL
       ORDER BY v.bid_id, v.version DESC`,
     [orgId, rfqId],
   );

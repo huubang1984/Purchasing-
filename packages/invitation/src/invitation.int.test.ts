@@ -4,9 +4,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { createPool, migrate } from "@trustprocure/db";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
+// [S1.9130 / khoản 250] Chỉ để suy tập trạng thái *sau lần mở* từ máy trạng thái thật và so với hằng của gói.
+import { RFQ_TRANSITIONS } from "@trustprocure/rfq";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   InvitationError,
+  RFQ_STATUSES_AFTER_UNSEAL,
   MAGIC_LINK_TOKEN_BYTES,
   OTP_MAX_FAILED_ATTEMPTS,
   clearOtpLockout,
@@ -1871,5 +1874,229 @@ describe("[sổ nợ 57] đột biến trên policy dọn", () => {
     expect(await con(cuaALai), "hàng của chính tổ chức A").toBe(false);
     expect(await con(cuaBLai), "hàng của tổ chức B còn nguyên").toBe(true);
     await donSach([cuaBLai]);
+  });
+});
+
+// =============================================================================================
+// [S1.9130 / khoản 250 / ADR-9230] SAU LẦN MỞ THẦU, LỜI MỜI KHÔNG THU HỒI ĐƯỢC NỮA — TỪ CHỐI CÓ TÊN, VÀO SỔ
+//
+// Thu hồi lời mời nay LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm (ba bộ đọc, một vế). Nếu thu hồi
+// còn được sau khi phong bì đã mở, người mua đã thấy giá sẽ chọn được ai rời cuộc thi — nên từ trạng thái có lần mở đầu tiên
+// (`CLOSED → UNSEALED` của `RFQ_TRANSITIONS`) trở đi, `revokeInvitation` từ chối: `InvitationError` câu cố định, một hàng
+// `RFQ_STATE_DENIED` {LOI_MOI_THU_HOI_SAU_MO_THAU} ở giao dịch độc lập (đi sai thứ tự chuỗi — ADR-060, ADR-084 ⑸), không cột nào
+// của lời mời, token hay phiên khách đổi. `CANCELLED` KHÔNG thuộc tập: nó tới được cả trước lẫn sau lần mở, và không bộ đọc nào
+// đọc phong bì của gói đã huỷ. Tổ chức chưa bật S3 — K4a (080) không chạy — nên lời từ chối ở đây là của khoản 250, không của K4a.
+// =============================================================================================
+describe("[S1.9130 / khoản 250] thu hồi lời mời sau lần mở thầu bị chặn và vào sổ", () => {
+  const THONG_DIEP =
+    "Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.";
+  const SAU_MO_THAU = ["UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"] as const;
+
+  /** Một gói mới ở DRAFT của `buyerA`, một lời mời còn sống trên nó (đường thật: `createInvitation` + token). */
+  async function goiMoi(): Promise<{ rfqId: string; invitationId: string }> {
+    const { rows } = await db.pool.query<{ id: string }>(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, created_by, created_by_session_id) " +
+        "VALUES ($1, 'Goi cua khoan 250', now() + interval '7 days', $2, $3) RETURNING id",
+      [orgA, buyerA, sBuyerA],
+    );
+    const rfqId = rows[0]?.id ?? "";
+    const duoi = randomBytes(6).toString("hex");
+    const ncc = await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [orgA, `NCC 250 ${duoi}`, buyerA, sBuyerA],
+    );
+    const lh = await db.pool.query<{ id: string }>(
+      "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, phone, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Nguoi duoc moi', $3, $4, $5, $6) RETURNING id",
+      [orgA, ncc.rows[0]?.id ?? "", `k250-${duoi}@vidu.vn`, `09${duoi.slice(0, 8)}`.replace(/[a-f]/g, "2"), buyerA, sBuyerA],
+    );
+    const invitationId = await withTenant(apiPool, orgA, async (c) => {
+      const loi = await createInvitation(
+        c,
+        orgA,
+        { rfqId, supplierId: ncc.rows[0]?.id ?? "", contactId: lh.rows[0]?.id ?? "", linkChannel: "EMAIL", actorSessionId: sBuyerA },
+        apiPool,
+      );
+      await issueMagicLinkToken(c, orgA, { invitationId: loi.id, actorSessionId: sBuyerA });
+      return loi.id;
+    });
+    return { rfqId, invitationId };
+  }
+
+  /**
+   * Đặt trạng thái gói mà KHÔNG đi qua bảng cạnh — khuôn `epTrangThai` của `packages/unseal/src/comparison.int.test.ts`: hai
+   * trigger cạnh tắt trong lúc đặt, bốn ràng buộc mốc của `009`/`011`/`061` (CHECK, không tắt được) đi kèm mốc cho nhất quán.
+   * Khác khuôn ấy một điều: gói ở đây sinh ở DRAFT, nên mọi trạng thái từ `OPEN` trở đi đi QUA cửa OPEN thật trước — `PENDING_APPROVAL`
+   * → cặp khoá → `OPEN` trong MỘT giao dịch (ba vế C5 của `017`: khoá chỉ sinh ở PENDING_APPROVAL, phải đi kèm lần mở ở COMMIT, và
+   * `rfq_packages_kiem_khoa_khi_mo` — trigger KHÔNG nằm trong hai trigger đang tắt — đòi khoá lúc sang OPEN) —, rồi giao dịch thứ
+   * hai mới đặt trạng thái đích.
+   */
+  async function epTrangThai(rfqId: string, trangThai: string): Promise<void> {
+    const DA_MO = ["OPEN", "CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"];
+    const DA_DONG = ["CLOSED", "UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"];
+    for (const t of ["rfq_packages_kiem_chuyen_trang_thai", "rfq_packages_kiem_yeu_cau_mo_thau"]) {
+      await db.pool.query(`ALTER TABLE rfq_packages DISABLE TRIGGER ${t}`);
+    }
+    try {
+      if (DA_MO.includes(trangThai)) {
+        const c = await db.pool.connect();
+        try {
+          await c.query("BEGIN");
+          await c.query(
+            "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
+            [rfqId, buyerA, sBuyerA],
+          );
+          await c.query(
+            "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) " +
+              "VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+            [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), buyerA, sBuyerA],
+          );
+          await c.query(
+            "UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+            [rfqId, buyerA, sBuyerA],
+          );
+          await c.query("COMMIT");
+        } catch (e) {
+          await c.query("ROLLBACK");
+          throw e;
+        } finally {
+          c.release();
+        }
+      }
+      await db.pool.query(
+        "UPDATE rfq_packages SET status = $2, " +
+          "opened_at = CASE WHEN $3 THEN coalesce(opened_at, now()) ELSE NULL END, " +
+          "opened_by = CASE WHEN $3 THEN coalesce(opened_by, $5) ELSE NULL END, " +
+          "opened_by_session_id = CASE WHEN $3 THEN coalesce(opened_by_session_id, $6) ELSE NULL END, " +
+          "closed_at = CASE WHEN $4 THEN coalesce(closed_at, now()) ELSE NULL END, " +
+          "closed_by = CASE WHEN $4 THEN coalesce(closed_by, $5) ELSE NULL END, " +
+          "closed_by_session_id = CASE WHEN $4 THEN coalesce(closed_by_session_id, $6) ELSE NULL END, " +
+          "early_close_reason = CASE WHEN $4 THEN 'dong som de kiem tra' ELSE NULL END, " +
+          "cancelled_at = CASE WHEN $2 = 'CANCELLED' THEN now() ELSE NULL END, " +
+          "cancelled_by = CASE WHEN $2 = 'CANCELLED' THEN $5::uuid ELSE NULL END, " +
+          "cancelled_by_session_id = CASE WHEN $2 = 'CANCELLED' THEN $6::uuid ELSE NULL END " +
+          "WHERE id = $1",
+        [rfqId, trangThai, DA_MO.includes(trangThai), DA_DONG.includes(trangThai), buyerA, sBuyerA],
+      );
+    } finally {
+      for (const t of ["rfq_packages_kiem_yeu_cau_mo_thau", "rfq_packages_kiem_chuyen_trang_thai"]) {
+        await db.pool.query(`ALTER TABLE rfq_packages ENABLE TRIGGER ${t}`);
+      }
+    }
+  }
+
+  /** Hàng `RFQ_STATE_DENIED` của một gói — hình dạng trọn, theo thứ tự ghi. */
+  async function hangTuChoi(rfqId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2 ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  /** Mọi cột đổi được của lời mời, token và phiên khách của nó — để so TRƯỚC/SAU. */
+  async function anhLoiMoi(invitationId: string): Promise<unknown> {
+    const { rows } = await db.pool.query(
+      "SELECT i.status, i.revoked_at, i.revoked_by, i.revoked_by_session_id, " +
+        " (SELECT count(*) FROM rfq_invitation_tokens t WHERE t.invitation_id = i.id AND t.revoked_at IS NULL)::text AS token_song, " +
+        " (SELECT count(*) FROM guest_sessions g WHERE g.invitation_id = i.id AND g.revoked_at IS NULL)::text AS phien_song " +
+        " FROM rfq_invitations i WHERE i.id = $1",
+      [invitationId],
+    );
+    return rows[0];
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  it("gói UNSEALED ⇒ `InvitationError` câu cố định; ĐÚNG MỘT hàng `RFQ_STATE_DENIED` mang người gọi, `RFQ`, id gói và {ma}; hàng sống qua rollback của người gọi; lời mời, token, phiên khách không đổi một cột", async () => {
+    const { rfqId, invitationId } = await goiMoi();
+    await epTrangThai(rfqId, "UNSEALED");
+    const truoc = await anhLoiMoi(invitationId);
+    expect(truoc).toMatchObject({ status: "SENT", revoked_at: null, revoked_by: null, token_song: "1" });
+
+    const loi = await loiCua(
+      withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool)),
+    );
+    expect(loi).toBeInstanceOf(InvitationError);
+    expect((loi as Error).message).toBe(THONG_DIEP);
+    // `withTenant` đã ROLLBACK giao dịch của người gọi; hàng sổ ở giao dịch độc lập nên vẫn còn — đó là toàn bộ điểm của
+    // `throwAuditedDenial` (ADR-060 vế ⒞).
+    expect(await hangTuChoi(rfqId)).toEqual([["USER", buyerA, "RFQ", { ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }]]);
+    expect(await anhLoiMoi(invitationId)).toEqual(truoc);
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM audit_events WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+      [invitationId],
+    );
+    expect(so[0]?.n).toBe("0");
+  });
+
+  it("mọi trạng thái từ lúc có lần mở — UNSEALED, EVALUATING, BAFO_OPEN, BAFO_CLOSED, BAFO_UNSEALED, AWARDED — đều bị chặn, mỗi trạng thái một hàng; thu hồi lần hai cùng gói thêm một hàng nữa (không gộp)", async () => {
+    for (const trangThai of SAU_MO_THAU) {
+      const { rfqId, invitationId } = await goiMoi();
+      await epTrangThai(rfqId, trangThai);
+      const loi = await loiCua(
+        withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool)),
+      );
+      expect(loi, trangThai).toBeInstanceOf(InvitationError);
+      expect((loi as Error).message, trangThai).toBe(THONG_DIEP);
+      expect(await hangTuChoi(rfqId), trangThai).toHaveLength(1);
+      expect((await anhLoiMoi(invitationId)) as { revoked_at: unknown }, trangThai).toMatchObject({ revoked_at: null });
+      if (trangThai === "UNSEALED") {
+        await loiCua(withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool)));
+        expect(await hangTuChoi(rfqId), "mỗi lần cố là một hàng").toHaveLength(2);
+      }
+    }
+  });
+
+  it("ĐỐI CHỨNG DƯƠNG: DRAFT, OPEN, CLOSED (trước lần mở) và CANCELLED thu hồi được — `true`, một hàng INVITATION_REVOKED, KHÔNG hàng RFQ_STATE_DENIED; thu hồi lần hai trả `false` mà cũng không thêm hàng từ chối", async () => {
+    for (const trangThai of ["DRAFT", "OPEN", "CLOSED", "CANCELLED"]) {
+      const { rfqId, invitationId } = await goiMoi();
+      if (trangThai !== "DRAFT") await epTrangThai(rfqId, trangThai);
+      const lan1 = await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool));
+      expect(lan1, trangThai).toBe(true);
+      expect((await anhLoiMoi(invitationId)) as { status: unknown }, trangThai).toMatchObject({ status: "REVOKED", token_song: "0" });
+      const lan2 = await withTenant(apiPool, orgA, (c) => revokeInvitation(c, orgA, { invitationId, actorSessionId: sBuyerA }, apiPool));
+      expect(lan2, trangThai).toBe(false);
+      expect(await hangTuChoi(rfqId), trangThai).toEqual([]);
+      const { rows: so } = await db.pool.query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM audit_events WHERE action = 'INVITATION_REVOKED' AND resource_id = $1",
+        [invitationId],
+      );
+      expect(so[0]?.n, trangThai).toBe("1");
+    }
+  });
+
+  it("tập trạng thái bị chặn SUY từ `RFQ_TRANSITIONS`: mọi trạng thái đi tới được từ `UNSEALED` (cạnh `CLOSED → UNSEALED`), trừ `CANCELLED` — bằng hằng của gói và bằng danh sách ca trên", () => {
+    const toiDuoc = new Set<string>(["UNSEALED"]);
+    for (let doi = true; doi; ) {
+      doi = false;
+      for (const [tu, den] of RFQ_TRANSITIONS) {
+        if (toiDuoc.has(tu) && !toiDuoc.has(den)) {
+          toiDuoc.add(den);
+          doi = true;
+        }
+      }
+    }
+    expect(toiDuoc.has("CANCELLED"), "CANCELLED tới được từ sau lần mở — và bị loại khỏi tập có chủ đích").toBe(true);
+    toiDuoc.delete("CANCELLED");
+    expect([...toiDuoc].sort()).toEqual([...RFQ_STATUSES_AFTER_UNSEAL].sort());
+    expect([...SAU_MO_THAU].sort()).toEqual([...RFQ_STATUSES_AFTER_UNSEAL].sort());
+    // Và ba trạng thái TRƯỚC lần mở của ca đối chứng không nằm trong tập.
+    for (const t of ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"]) expect(RFQ_STATUSES_AFTER_UNSEAL.has(t), t).toBe(false);
+  });
+
+  it("id lời mời không tồn tại ⇒ `false` như trước, không hàng nào — vế trạng thái không đổi đường *không tìm thấy* (ADR-104/108)", async () => {
+    const { rfqId } = await goiMoi();
+    await epTrangThai(rfqId, "UNSEALED");
+    const kq = await withTenant(apiPool, orgA, (c) =>
+      revokeInvitation(c, orgA, { invitationId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301", actorSessionId: sBuyerA }, apiPool),
+    );
+    expect(kq).toBe(false);
+    expect(await hangTuChoi(rfqId)).toEqual([]);
   });
 });

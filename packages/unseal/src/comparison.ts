@@ -388,6 +388,14 @@ export async function buildComparisonTable(
   // `bid_so_tien` vẫn là luật duy nhất về "chuỗi nào là một số tiền" (020, 022); lớp này chỉ
   // quyết nó có được HỎI hay không. JSON `null`, khoá thiếu, đối tượng, mảng, boolean ⇒ `NULL`,
   // hàng vẫn ở trong bảng và được đếm là `unparsed` — cùng kết quả với trước, rẻ hơn.
+  //
+  // [S1.9130 / khoản 250 / ADR-9230] CẢ HAI CÂU CHỈ ĐỌC BẢN RÕ CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`,
+  // ở câu hàng và ở CTE `moi_nhat` của câu tổng hợp — hai câu, một vế, không câu nào phụ thuộc câu kia.
+  // Trên đường thuận từ S1.9130 hàng bản rõ ấy không tồn tại (worker không mở phong bì của lời mời đã
+  // thu hồi, và thu hồi sau lần mở bị chặn), nên vế ở đây đứng cho hàng của những lượt mở TRƯỚC vòng này
+  // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.9130): X thu hồi rồi mời lại ⇒ X HAI dòng,
+  // cả hai `isLatestForBid = true` (hai luồng, hai `bid_id`), `belowBudget` 3 thay vì 2. Bản rõ KHÔNG bị
+  // xoá — lọc ở lần đọc. Cùng vế ở worker và `docBaoGia`; cổng tĩnh `phong-bi-loi-moi-con-song.test.ts`.
   // ==============================================================================================
   const { rows: dong } = await client.query<HangDong>(
     `SELECT d.bid_id,
@@ -424,6 +432,7 @@ export async function buildComparisonTable(
            JOIN public.suppliers s           ON s.id OPERATOR(pg_catalog.=) i.supplier_id    AND s.org_id OPERATOR(pg_catalog.=) i.org_id
            LEFT JOIN public.rfq_bafo_rounds r ON r.id OPERATOR(pg_catalog.=) v.bafo_round_id AND r.org_id OPERATOR(pg_catalog.=) v.org_id
           WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+            AND i.revoked_at IS NULL
        ) d
       ORDER BY d.so_tien ASC NULLS LAST, d.legal_name ASC`,
     [rfqId],
@@ -463,6 +472,7 @@ export async function buildComparisonTable(
          JOIN public.vendor_bids b         ON b.id OPERATOR(pg_catalog.=) v.bid_id         AND b.org_id OPERATOR(pg_catalog.=) v.org_id
          JOIN public.rfq_invitations i     ON i.id OPERATOR(pg_catalog.=) b.invitation_id  AND i.org_id OPERATOR(pg_catalog.=) b.org_id
         WHERE i.rfq_id OPERATOR(pg_catalog.=) $1
+          AND i.revoked_at IS NULL
         ORDER BY v.bid_id, v.version DESC
      )
      SELECT public.bid_currency((u.payload OPERATOR(pg_catalog.->>) 'currency'))  AS currency,

@@ -465,61 +465,64 @@ describe("[sổ nợ 40 / 040] đặt lại TOTP qua HTTP — hai người", () 
 // Khoản 154 là cùng một khoảng trống ở đầu kia: `RFQ_DEADLINE_EXTENDED_NOTICE` được enqueue từ S1.81
 // và không tiến trình nào nhận. Hai khoản đóng bằng MỘT chặng gửi, và đó là lý do chúng cùng vòng.
 // =================================================================================================
-describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình nào gửi", () => {
-  /**
-   * RFQ đã ĐÓNG — cùng khuôn `taoRfqDaDong` của `packages/unseal`, dựng bằng SQL để không phụ thuộc
-   * chính sách mà một test khác trong tệp này có thể đã đặt (hay chưa đặt).
-   *
-   * LUÔN cấp kép, và hai phê duyệt RFQ phải đến từ HAI người khác nhau: cổng D2 ở tầng CSDL từ chối
-   * cạnh PENDING_APPROVAL -> OPEN khi thiếu, và nó từ chối ĐÚNG — fixture thiếu hai hàng ấy làm ba
-   * test đầu của khối này đỏ với *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0"*.
-   */
-  async function rfqDaDong(ai: Nguoi, duyet: readonly Nguoi[], dong = true): Promise<string> {
-    const { rows } = await db.pool.query<{ id: string }>(
-      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
-        "VALUES ($1, 'Bao tin', now() + interval '7 days', true, $2, $3) RETURNING id",
-      [orgA, ai.id, ai.sessionId],
+/**
+ * [S1.9130 / khoản 250] Đưa ra cấp mô-đun (nguyên văn) để khối thu hồi sau mở thầu dùng chung — trước đó nằm trong
+ * `describe("[khoản 194 · 154]…")`.
+ *
+ * RFQ đã ĐÓNG — cùng khuôn `taoRfqDaDong` của `packages/unseal`, dựng bằng SQL để không phụ thuộc
+ * chính sách mà một test khác trong tệp này có thể đã đặt (hay chưa đặt).
+ *
+ * LUÔN cấp kép, và hai phê duyệt RFQ phải đến từ HAI người khác nhau: cổng D2 ở tầng CSDL từ chối
+ * cạnh PENDING_APPROVAL -> OPEN khi thiếu, và nó từ chối ĐÚNG — fixture thiếu hai hàng ấy làm ba
+ * test đầu của khối này đỏ với *"RFQ nay can 2 phe duyet TREN NOI DUNG HIEN TAI, moi co 0"*.
+ */
+async function rfqDaDong(ai: Nguoi, duyet: readonly Nguoi[], dong = true): Promise<string> {
+  const { rows } = await db.pool.query<{ id: string }>(
+    "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id) " +
+      "VALUES ($1, 'Bao tin', now() + interval '7 days', true, $2, $3) RETURNING id",
+    [orgA, ai.id, ai.sessionId],
+  );
+  const rfqId = rows[0]?.id ?? "";
+  await db.pool.query(
+    "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
+      "VALUES ($1, $2, 1, 'Thep tam', '10.0000', 'tam', $3, $4)",
+    [orgA, rfqId, ai.id, ai.sessionId],
+  );
+  await db.pool.query(
+    "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
+    [rfqId, ai.id, ai.sessionId],
+  );
+  for (const d of duyet) {
+    await db.pool.query("INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)", [orgA, rfqId, d.id, d.sessionId]);
+  }
+  const c = await db.pool.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query(
+      "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+      [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), ai.id, ai.sessionId],
     );
-    const rfqId = rows[0]?.id ?? "";
+    await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqId, ai.id, ai.sessionId]);
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK");
+    throw e;
+  } finally {
+    c.release();
+  }
+  // `dong = false` giữ RFQ ở OPEN: cạnh CLOSED -> OPEN KHÔNG tồn tại (máy trạng thái từ chối,
+  // và nó từ chối đúng), nên một test cần RFQ còn mở phải dừng ở đây chứ không mở lại.
+  if (dong) {
     await db.pool.query(
-      "INSERT INTO rfq_items (org_id, rfq_id, line_no, description, quantity, unit, created_by, created_by_session_id) " +
-        "VALUES ($1, $2, 1, 'Thep tam', '10.0000', 'tam', $3, $4)",
-      [orgA, rfqId, ai.id, ai.sessionId],
-    );
-    await db.pool.query(
-      "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1",
+      "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong de kiem tra', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
       [rfqId, ai.id, ai.sessionId],
     );
-    for (const d of duyet) {
-      await db.pool.query("INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)", [orgA, rfqId, d.id, d.sessionId]);
-    }
-    const c = await db.pool.connect();
-    try {
-      await c.query("BEGIN");
-      await c.query(
-        "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, key_version, created_by, created_by_session_id) " +
-          "VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
-        [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), ai.id, ai.sessionId],
-      );
-      await c.query("UPDATE rfq_packages SET status = 'OPEN', opened_at = now(), opened_by = $2, opened_by_session_id = $3 WHERE id = $1", [rfqId, ai.id, ai.sessionId]);
-      await c.query("COMMIT");
-    } catch (e) {
-      await c.query("ROLLBACK");
-      throw e;
-    } finally {
-      c.release();
-    }
-    // `dong = false` giữ RFQ ở OPEN: cạnh CLOSED -> OPEN KHÔNG tồn tại (máy trạng thái từ chối,
-    // và nó từ chối đúng), nên một test cần RFQ còn mở phải dừng ở đây chứ không mở lại.
-    if (dong) {
-      await db.pool.query(
-        "UPDATE rfq_packages SET status = 'CLOSED', closed_at = now(), early_close_reason = 'dong de kiem tra', closed_by = $2, closed_by_session_id = $3 WHERE id = $1",
-        [rfqId, ai.id, ai.sessionId],
-      );
-    }
-    return rfqId;
   }
+  return rfqId;
+}
 
+describe("[khoản 194 · 154] hai tin báo mà tới S1.90 không tiến trình nào gửi", () => {
   /** Mọi người trong tổ chức đang giữ `rfq.unseal.approve` — đọc bằng SQL, không qua hàm đang được đo. */
   async function nguoiDuyetCuaToChuc(): Promise<Set<string>> {
     const { rows } = await db.pool.query<{ id: string }>(
@@ -1498,4 +1501,70 @@ describe("[S1.9182 / khoản 232] rút đề xuất trao thầu qua HTTP", () =>
     );
     expect(aw.map((h) => h.status)).toEqual(["PROPOSED", "WITHDRAWN", "PROPOSED", "APPROVED", "CANCELLED"]);
   }, 180_000);
+});
+
+// [S1.9130 / khoản 250 / ADR-9230] THU HỒI LỜI MỜI SAU LẦN MỞ THẦU QUA HTTP ⇒ 422 THÂN CỐ ĐỊNH, MỘT HÀNG `RFQ_STATE_DENIED`
+// ==============================================================================================
+describe("[S1.9130 / khoản 250] thu hồi lời mời sau lần mở thầu qua HTTP", () => {
+  it("gói CLOSED: thu hồi ⇒ 200 {revoked: true}, 0 hàng từ chối (đối chứng); ép gói sang UNSEALED: thu hồi lời mời thứ hai ⇒ 422 thân cố định, ĐÚNG MỘT hàng RFQ_STATE_DENIED {LOI_MOI_THU_HOI_SAU_MO_THAU} dưới người gọi, lời mời còn sống; lần bấm thứ hai ⇒ 422 và hàng thứ hai", async () => {
+    const pm = await nguoi("k250-pm@vidu.vn", ["PROCUREMENT_MANAGER"]);
+    const gd1 = await nguoi("k250-gd1@vidu.vn", ["DIRECTOR"]);
+    const gd2 = await nguoi("k250-gd2@vidu.vn", ["DIRECTOR"]);
+    const moiNcc = async (ten: string, mst: string, rfqId: string): Promise<string> => {
+      const ncc = await goi("POST", "/suppliers", pm, { legalName: ten, taxCode: mst });
+      expect(ncc.status, ncc.text).toBe(201);
+      const supplierId = (ncc.body as { supplier: { id: string } }).supplier.id;
+      const lh = await goi("POST", `/suppliers/${supplierId}/contacts`, pm, { fullName: "Lien he 250", email: `${mst}@vidu.vn` });
+      expect(lh.status, lh.text).toBe(201);
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO rfq_invitations (org_id, rfq_id, supplier_id, contact_id, link_channel, invited_by, invited_by_session_id) " +
+          "VALUES ($1, $2, $3, $4, 'EMAIL', $5, $6) RETURNING id",
+        [orgA, rfqId, supplierId, (lh.body as { contact: { id: string } }).contact.id, pm.id, pm.sessionId],
+      );
+      return rows[0]?.id ?? "";
+    };
+    const hangTuChoi = async (rfqId: string): Promise<unknown[][]> => {
+      const { rows } = await db.pool.query<{ actor_id: string | null; resource_type: string; payload: unknown }>(
+        "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_STATE_DENIED' AND resource_id = $2 ORDER BY seq",
+        [orgA, rfqId],
+      );
+      return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
+    };
+
+    // Gói OPEN (fixture của khối khoản 154/125), hai lời mời, rồi đóng qua HTTP.
+    const rfqId = await rfqDaDong(pm, [gd1, gd2], false);
+    const lm1 = await moiNcc("Thep 250 A", "0325000001", rfqId);
+    const lm2 = await moiNcc("Thep 250 B", "0325000002", rfqId);
+    expect((await goi("POST", `/rfqs/${rfqId}/close`, pm, { reason: "dong de mo thau" })).status).toBe(200);
+
+    const th1 = await goi("POST", `/invitations/${lm1}/revoke`, pm);
+    expect(th1.status, th1.text).toBe(200);
+    expect(th1.body).toEqual({ revoked: true });
+    expect(await hangTuChoi(rfqId), "đối chứng: trước lần mở, thu hồi không phải một lần từ chối").toEqual([]);
+
+    // Ép sang UNSEALED (cạnh CLOSED→UNSEALED đòi một yêu cầu mở thầu đã chạy — tắt hai trigger cạnh, giữ mốc theo CHECK của 011).
+    for (const t of ["rfq_packages_kiem_chuyen_trang_thai", "rfq_packages_kiem_yeu_cau_mo_thau"]) {
+      await db.pool.query(`ALTER TABLE rfq_packages DISABLE TRIGGER ${t}`);
+    }
+    try {
+      await db.pool.query("UPDATE rfq_packages SET status = 'UNSEALED' WHERE id = $1", [rfqId]);
+    } finally {
+      for (const t of ["rfq_packages_kiem_yeu_cau_mo_thau", "rfq_packages_kiem_chuyen_trang_thai"]) {
+        await db.pool.query(`ALTER TABLE rfq_packages ENABLE TRIGGER ${t}`);
+      }
+    }
+
+    const th2 = await goi("POST", `/invitations/${lm2}/revoke`, pm);
+    expect(th2.status, th2.text).toBe(422);
+    expect(th2.body).toEqual({
+      error: "Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.",
+    });
+    expect(await hangTuChoi(rfqId)).toEqual([[pm.id, "RFQ", { ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }]]);
+    const { rows: lm } = await db.pool.query<{ status: string; revoked_at: Date | null }>("SELECT status, revoked_at FROM rfq_invitations WHERE id = $1", [lm2]);
+    expect(lm[0]).toEqual({ status: "SENT", revoked_at: null });
+
+    const th3 = await goi("POST", `/invitations/${lm2}/revoke`, pm);
+    expect(th3.status).toBe(422);
+    expect(await hangTuChoi(rfqId)).toHaveLength(2);
+  });
 });

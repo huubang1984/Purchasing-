@@ -934,7 +934,10 @@ describe("phủ RLS", () => {
       // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
       // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
       // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
-      // [S1.6] BA cot cua `rfq_invitations`, khong hon: worker phai di tu `vendor_bids` toi
+      // ~~[S1.6] BA cot cua `rfq_invitations`, khong hon~~ [S1.9130 / khoản 250 / 9530] BỐN cột — thêm `revoked_at`:
+      // worker bỏ luồng của lời mời đã thu hồi (`i.revoked_at IS NULL`, ADR-9230), và đó là dấu duy nhất vế ấy cần
+      // (`status = 'REVOKED'` ⇔ `revoked_at IS NOT NULL`, `010`). Phần còn lại của lời khai S1.6 giữ nguyên:
+      // worker phai di tu `vendor_bids` toi
       // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
       // `link_channel`, `status` KHONG duoc cap — worker khong co viec gi voi danh tinh NCC.
       // [ADR-062 / 063] `org_key_pairs.wrapped_private_key`: khoá riêng tổ chức ĐÃ BỌC, worker mở
@@ -957,6 +960,7 @@ describe("phủ RLS", () => {
       { bang: "rfq_bafo_rounds", cot: "top_n" },
       { bang: "rfq_invitations", cot: "id" },
       { bang: "rfq_invitations", cot: "org_id" },
+      { bang: "rfq_invitations", cot: "revoked_at" },
       { bang: "rfq_invitations", cot: "rfq_id" },
       { bang: "rfq_key_material", cot: "algorithm" },
       { bang: "rfq_key_material", cot: "created_at" },

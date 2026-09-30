@@ -3382,3 +3382,52 @@ describe("[S1.9182 / khoản 232] rutDeXuatTraoThau — đường sản xuất c
     expect((await hangAward(r3)).map((h) => h.status)).toEqual(["PROPOSED"]);
   });
 });
+
+// ===============================================================================================
+// [S1.9130 / khoản 250 / ADR-9230] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO LƯỢT CHẤM
+//
+// `docBaoGia` là bộ đọc thứ ba của cùng một luật (worker, bảng so sánh, lượt chấm — §S1.108 mục 7d), và từ S1.9130 cả ba mang
+// cùng vế `i.revoked_at IS NULL` (cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts`). Bản rõ ở đây ghi thẳng,
+// như mọi ca của tệp: thế giới mà vế lọc của lượt chấm phải đứng một mình.
+// ===============================================================================================
+describe("[S1.9130 / khoản 250] bản rõ của lời mời đã thu hồi không vào lượt chấm", { timeout: 180000 }, () => {
+  it("ba bản rõ, thu hồi lời mời của báo giá RẺ NHẤT ⇒ lượt chấm HAI hàng, hạng 1 là giá rẻ nhì, bảng xếp hạng đọc lại đúng hai hàng; bản rõ vẫn còn trong CSDL", async () => {
+    const { rfqId, banRo } = await goiDaMo([
+      ["900000000.00", "VND"],
+      ["950000000.00", "VND"],
+      ["1100000000.00", "VND"],
+    ]);
+    const { rows: lm } = await db.pool.query<{ invitation_id: string }>(
+      "SELECT b.invitation_id FROM vendor_bid_versions v JOIN vendor_bids b ON b.id = v.bid_id WHERE v.id = $1",
+      [banRo[0] ?? ""],
+    );
+    // Thu hồi bằng SQL dưới superuser, ký tên theo trigger 013: `revokeInvitation` CHẶN sau lần mở (đúng quyết định), nên thứ
+    // đo ở đây là VẾ LỌC của `docBaoGia`, không phải đường thu hồi.
+    await db.pool.query(
+      "UPDATE rfq_invitations SET status = 'REVOKED', revoked_at = now(), revoked_by = $2, revoked_by_session_id = $3 WHERE id = $1",
+      [lm[0]?.invitation_id ?? "", uYc, sYc],
+    );
+
+    const luot = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    const theoHang = [...luot.lines].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+    expect(theoHang.map((l) => [l.bidVersionId, l.effectiveCost, l.rank])).toEqual([
+      [banRo[1], "950000000.00", 1],
+      [banRo[2], "1100000000.00", 2],
+    ]);
+    expect(luot.lines.some((l) => l.bidVersionId === banRo[0]), "giá cũ 900 triệu không có hàng nào").toBe(false);
+
+    const bang = await withTenant(apiPool, orgA, (c) => docBangXepHang(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(bang?.rows.map((h) => [h.bidVersionId, h.rank])).toEqual([
+      [banRo[1], 1],
+      [banRo[2], 2],
+    ]);
+
+    // Bản rõ không bị xoá — lọc ở lần đọc.
+    const { rows: so } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM rfq_unsealed_bids u JOIN vendor_bid_versions v ON v.id = u.bid_version_id " +
+        " JOIN vendor_bids b ON b.id = v.bid_id JOIN rfq_invitations i ON i.id = b.invitation_id WHERE i.rfq_id = $1",
+      [rfqId],
+    );
+    expect(so[0]?.n).toBe("3");
+  });
+});
