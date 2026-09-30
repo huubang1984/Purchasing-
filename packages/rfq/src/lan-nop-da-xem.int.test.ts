@@ -891,3 +891,47 @@ describe("S1.198 — giới hạn, đo: tổ chức bật S3 khi gói đang ch�
     expect(await trangThaiGoi(rfqId)).toBe("OPEN");
   });
 });
+
+// =============================================================================================
+// (7) [S1.205 / khoản 259] BẢN ĐỔI TÊN CỦA TRIGGER SO LẦN NỘP KHÔNG SỐNG QUA `migrate()`
+//
+// Lượt soi S1.198 (F4) đo: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước chốt D2 ⇒ `migrate()` xanh, mục ghim dựng
+// lại tên đúng và GIỮ bản đổi tên — phép so lần nộp chạy trước D2, và lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại
+// hàng `CONTROL_DENIED` (ADR-108 ⑴). Nay hardening mặc định-đóng với trigger (khoản 259): bản đổi tên bị gỡ. Ca dưới đo cả hai phía
+// của lần `migrate()`. Mục hardening được đo riêng ở `db/trigger-la-mac-dinh-dong.int.test.ts`.
+// =============================================================================================
+describe("S1.205 — khoản 259: bản đổi tên của trigger so lần nộp xếp trước chốt D2 không sống qua `migrate()`", () => {
+  it("[INV-H19] [INV-D2] đổi tên trigger so lần nộp thành tên xếp trước chốt D2 ⇒ lời tự duyệt thiếu mốc mất hàng `CONTROL_DENIED`; `migrate()` gỡ bản đổi tên và dựng lại tên đúng ⇒ lời ấy lại là lời từ chối D2 có sổ", async () => {
+    const t = await toChucDaBat();
+    const rfqId = await goiNhap(t);
+    await nop(t, rfqId);
+    await db.pool.query("ALTER TRIGGER rfq_approvals_so_lan_nop ON public.rfq_approvals RENAME TO rfq_approvals_a_so_lan_nop");
+    try {
+      // Lỗ, đo trước lần migrate(): phép so lần nộp chạy TRƯỚC chốt D2 ⇒ từ chối vì lần nộp, không hàng sổ nào.
+      expect((await loi(duyetVoi(t, rfqId, t.pm, undefined)))?.message).toBe(loiLanNop(1));
+      expect(await maTuChoiTheoChot(t.org, rfqId)).toEqual([]);
+
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const { rows } = await db.pool.query<{ ten: string }>(
+        "SELECT tgname AS ten FROM pg_trigger WHERE tgrelid = 'public.rfq_approvals'::regclass AND NOT tgisinternal ORDER BY tgname",
+      );
+      expect(rows.map((r) => r.ten), "đúng ba trigger chuẩn, theo đúng thứ tự tên").toEqual([
+        "rfq_approvals_dat_bam_danh_sach",
+        "rfq_approvals_kiem_nguoi_duyet",
+        "rfq_approvals_so_lan_nop",
+      ]);
+
+      const e = await loi(duyetVoi(t, rfqId, t.pm, undefined));
+      expect([e?.ten, e?.message]).toEqual([
+        "ChotKiemSoatError",
+        "Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).",
+      ]);
+      expect(await maTuChoiTheoChot(t.org, rfqId)).toEqual(["D2_NGUOI_TAO_TU_DUYET"]);
+      expect(await soChuKy(rfqId)).toBe(0);
+    } finally {
+      // Phép đo gãy giữa chừng thì trả cụm về bản chuẩn cho các tệp sau không thừa hưởng trigger đổi tên.
+      await db.pool.query("DROP TRIGGER IF EXISTS rfq_approvals_a_so_lan_nop ON public.rfq_approvals");
+      await migrate(db.pool, MIGRATIONS_DIR);
+    }
+  }, 300000);
+});
