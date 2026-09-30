@@ -20,7 +20,8 @@
 //   listRecentLoginTokens
 //                       [S1.216 / khoản 195] link đăng nhập gần đây CỦA CHÍNH người gọi — tạo lúc, hết hạn,
 //                       dùng lúc, trạng thái; KHÔNG BAO GIỜ `token_hash`. Cho người ĐÃ đăng nhập; thông điệp
-//                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên
+//                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên. [S1.240 / khoản 268] Cửa sổ 7
+//                       ngày, trần 100 hàng, cờ `truncated` khi trần cắt hàng trong cửa sổ
 //
 // Ba kỷ luật kế thừa nguyên vẹn từ `packages/invitation`:
 //   • mọi ca hỏng của một bước ném CÙNG MỘT thông điệp (không oracle trên tập người dùng/token);
@@ -580,9 +581,18 @@ export async function revokeSession(client: pg.PoolClient, orgId: string, sessio
 // KHÔNG BAO GIỜ `token_hash`: băm của một token còn hiệu lực là thứ đối chiếu được với một token bị rò, và
 // bảng không có gì khác đáng đưa ra. Trạng thái suy Ở CSDL bằng cùng đồng hồ với `redeemLoginToken`
 // (`clock_timestamp()`), để "còn hiệu lực" ở đây và "đổi được" ở kia không lệch nhau; đã dùng thắng hết hạn
-// (một link đã dùng rồi hết hạn vẫn là "đã dùng" — đó là vế người mua cần thấy). Tối đa `SO_LINK_GAN_DAY`
-// hàng, mới nhất trước: trần tự phục vụ là 5 mã / 15 phút, nên hai mươi hàng là hơn một giờ dùng dày; chỉ
+// (một link đã dùng rồi hết hạn vẫn là "đã dùng" — đó là vế người mua cần thấy). ~~Tối đa `SO_LINK_GAN_DAY`
+// hàng, mới nhất trước: trần tự phục vụ là 5 mã / 15 phút, nên hai mươi hàng là hơn một giờ dùng dày;~~ chỉ
 // mục `(org_id, user_id, created_at)` của 029 phục vụ đúng câu này.
+//
+// [S1.240 / khoản 268] Hai mươi hàng là «hơn một giờ dùng dày» chỉ ở trần tự phục vụ; cộng 2 mã hệ thống mỗi 15 phút
+// (`HE_THONG_MAX_TOKENS_PER_WINDOW`, ADR-048) thì nhịp dày nhất là 7 hàng / 15 phút và hai mươi hàng phủ chừng 43 phút — một link
+// «đã dùng» cũ hơn thế rơi khỏi danh sách, và thân không nói mình cắt. Chủ dự án chốt câu 6 (2026-09-30): cắt theo THỜI GIAN —
+// `CUA_SO_LINK_GAN_DAY_NGAY` ngày, dài hơn mọi TTL (15 phút) và mọi cửa sổ phát (15 phút) — với trần cứng `TRAN_LINK_GAN_DAY` hàng, và
+// trả thêm `truncated`: ĐÚNG khi còn hàng TRONG cửa sổ mà trần cắt đi. Câu đọc lấy trần + 1 hàng để biết điều ấy mà không cần câu
+// đếm thứ hai; hàng cũ hơn cửa sổ không bao giờ làm cờ đúng (chúng không vào câu đọc). Mốc cửa sổ là `now()` — giờ bắt đầu giao
+// dịch, cùng đồng hồ với cửa sổ phát của `issueLoginToken` —, không phải `clock_timestamp()`: đây là một ranh giới HIỂN THỊ chứ
+// không phải một phán quyết "còn dùng được", và một hàm STABLE thì dùng được làm cận của chỉ mục `created_at`.
 // ==============================================================================================
 
 export type LoginTokenStatus = "PENDING" | "EXPIRED" | "CONSUMED";
@@ -595,21 +605,34 @@ export interface RecentLoginToken {
   readonly status: LoginTokenStatus;
 }
 
-const SO_LINK_GAN_DAY = 20;
+/** [S1.240 / khoản 268] Kết quả của `listRecentLoginTokens`: các link trong cửa sổ (tối đa trần), và cờ «còn nữa». */
+export interface RecentLoginTokens {
+  readonly links: readonly RecentLoginToken[];
+  /** Đúng khi còn link TRONG cửa sổ mà trần đã cắt đi — link cũ hơn cửa sổ không tính. */
+  readonly truncated: boolean;
+}
+
+// ~~const SO_LINK_GAN_DAY = 20;~~ [S1.240 / khoản 268] Cửa sổ và trần — câu 6 của chủ dự án. `apps/web/src/dang-nhap.test.ts`
+// đọc dòng cửa sổ dưới đây bằng văn bản để câu «7 ngày» trên màn không trôi khỏi nó.
+const CUA_SO_LINK_GAN_DAY_NGAY = 7;
+const TRAN_LINK_GAN_DAY = 100;
 
 /**
  * Link đăng nhập gần đây của CHÍNH `userId` — người gọi là bộ điều phối với `actor.id` của phiên; đây không phải một lời khai danh
- * tính từ thân yêu cầu. Trả mảng (có thể rỗng), không ném ở ca "không có link": khác các hàm trên, đây là một phép đọc của chính chủ,
- * không có gì để che. `userId` sai hình dạng thì ném như mọi hàm của tệp — một lỗi lập trình, không phải một ca của người dùng.
+ * tính từ thân yêu cầu. ~~Trả mảng (có thể rỗng)~~ [S1.240 / khoản 268] Trả các link tạo trong `CUA_SO_LINK_GAN_DAY_NGAY` ngày gần
+ * nhất, mới nhất trước, tối đa `TRAN_LINK_GAN_DAY` (có thể rỗng), cộng `truncated`; không ném ở ca "không có link": khác các hàm trên,
+ * đây là một phép đọc của chính chủ, không có gì để che. `userId` sai hình dạng thì ném như mọi hàm của tệp — một lỗi lập trình,
+ * không phải một ca của người dùng.
  */
 export async function listRecentLoginTokens(
   client: pg.PoolClient,
   orgId: string,
   userId: string,
-): Promise<readonly RecentLoginToken[]> {
+): Promise<RecentLoginTokens> {
   await assertTenantBound(client, orgId, "listRecentLoginTokens");
   if (!UUID_RE.test(userId)) throw new LoginTokenError();
   // Không `token_hash` trong danh sách cột — và không `SELECT *`: một cột thêm ngày mai không tự đi ra.
+  // Ngoặc quanh phép trừ là BẮT BUỘC — cùng lý do với câu đếm của `issueLoginToken` (mọi `OPERATOR(...)` cùng độ ưu tiên).
   const { rows } = await client.query<{
     created_at: Date;
     expires_at: Date;
@@ -623,9 +646,16 @@ export async function listRecentLoginTokens(
                  ELSE 'PENDING' END AS status
        FROM public.user_login_tokens
       WHERE user_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND created_at OPERATOR(pg_catalog.>)
+            (pg_catalog.now() OPERATOR(pg_catalog.-) pg_catalog.make_interval(days => $2::pg_catalog.int4))
       ORDER BY created_at DESC, id DESC
-      LIMIT $2::pg_catalog.int4`,
-    [userId, SO_LINK_GAN_DAY],
+      LIMIT $3::pg_catalog.int4`,
+    [userId, CUA_SO_LINK_GAN_DAY_NGAY, TRAN_LINK_GAN_DAY + 1],
   );
-  return rows.map((h) => ({ createdAt: h.created_at, expiresAt: h.expires_at, consumedAt: h.consumed_at, purpose: h.purpose, status: h.status }));
+  return {
+    links: rows
+      .slice(0, TRAN_LINK_GAN_DAY)
+      .map((h) => ({ createdAt: h.created_at, expiresAt: h.expires_at, consumedAt: h.consumed_at, purpose: h.purpose, status: h.status })),
+    truncated: rows.length > TRAN_LINK_GAN_DAY,
+  };
 }

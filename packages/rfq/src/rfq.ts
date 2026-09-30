@@ -54,11 +54,14 @@ export class RfqError extends Error {
 }
 
 /**
- * [C4 vế 5] `kind` của job thông báo gia hạn. Một hằng, một chỗ ở — cùng khuôn `UNSEAL_JOB_KIND`.
+ * [C4 vế 5] `kind` của job thông báo gia hạn. ~~Một hằng, một chỗ ở — cùng khuôn `UNSEAL_JOB_KIND`.~~ **[S1.239 / khoản 161]** Chỗ
+ * khai tập `kind` của kho là union `KindOutbox` (`@trustprocure/outbox`, đọc qua `JobInput["kind"]`); lời gọi `enqueueJob` viết
+ * literal. Hằng này còn là khoá bảng handler của `api` (`apps/api/src/outbox-api.ts`).
  *
- * Nó CHƯA có handler nào đăng ký, và đó là một phần chênh có tên ở §4 của C4: ở S1, mệnh đề đúng
+ * ~~Nó CHƯA có handler nào đăng ký, và đó là một phần chênh có tên ở §4 của C4: ở S1, mệnh đề đúng
  * ở mức *"ý định thông báo đã nằm cùng chỗ với lần ghi hạn mới"*, chưa đúng ở mức *"nhà cung cấp
- * đã biết"*. Chặng cuối là một tầng vận hành mà `apps/` chưa có.
+ * đã biết"*. Chặng cuối là một tầng vận hành mà `apps/` chưa có.~~ **[S1.239 / khoản 161]** Thiu từ S1.91 (khoản 154):
+ * handler nằm ở `buildApiOutboxHandlers` (`apps/api/src/outbox-api.ts`) — tiến trình duy nhất đọc được `supplier_contacts`.
  */
 export const RFQ_DEADLINE_NOTICE_KIND = "RFQ_DEADLINE_EXTENDED_NOTICE";
 
@@ -117,7 +120,8 @@ export const RFQ_TRANSITIONS: readonly (readonly [RfqStatus, RfqStatus])[] = [
   // nay có — cuối bảng.
   ["BAFO_OPEN", "CANCELLED"],
   // [S1.107 / lượt soi ngang 77 — CAO ①, 058] Cạnh MỚI: trước nó `EVALUATING` không có một
-  // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên sáu vai.
+  // cạnh ra nào, và S1.106 vừa mở cửa VÀO nó ra HTTP cho năm trên ~~sáu~~ **[S1.241 / khoản 270]** bảy vai hôm nay (sáu lúc
+  // S1.106; `083` thêm `DATA_STEWARD`, không giữ `evaluation.perform` — ghim ở `ma-tran-quyen.test.ts` ca «khoản 220 ⒝»).
   ["EVALUATING", "CANCELLED"],
   // [S1.165 / khoản 225, 071] BỐN cạnh huỷ sau khi đóng — `CLOSED`, `UNSEALED` và hai ảnh BAFO của
   // chúng thôi là trạng thái hút. Chúng đòi `cancel_reason` ở chính trigger (vế (i) của `071`).
@@ -896,7 +900,9 @@ export async function extendRfqDeadline(
   );
   for (const lm of loiMoi) {
     await enqueueJob(client, orgId, {
-      kind: RFQ_DEADLINE_NOTICE_KIND,
+      // [S1.239 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`; hằng `RFQ_DEADLINE_NOTICE_KIND` là khoá bảng handler của
+      // `api`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+      kind: "RFQ_DEADLINE_EXTENDED_NOTICE",
       payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
       dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
     });
@@ -933,7 +939,7 @@ export async function extendRfqDeadline(
   for (const lm of loiMoiSauGhiSo) {
     if (!daXep.has(lm.id)) {
       await enqueueJob(client, orgId, {
-        kind: RFQ_DEADLINE_NOTICE_KIND,
+        kind: "RFQ_DEADLINE_EXTENDED_NOTICE",
         payload: { rfqId: hang.id, invitationId: lm.id, newDeadlineAt: moc },
         dedupeKey: `deadline:${hang.id}:${lm.id}:${moc}`,
       });

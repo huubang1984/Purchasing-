@@ -1900,3 +1900,350 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
   });
 });
+
+// ===============================================================================================
+// [S1.243 / khoản 275 / ADR-129 §3] CÂU SUY PHONG BÌ HỎNG NGOÀI SỔ — ĐO TRÊN LƯỢT MỞ THẦU VÒNG BAFO
+//
+// ADR-129 cắt `failedBidVersionIds` của hai bản ghi sổ mở thầu còn K = 20 id ĐẦU và nói phần còn lại SUY được bằng
+// MỘT câu SQL (§3), câu ấy lọc `v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id`. §S1.221 đo nó ở
+// `unseal-worker.int.test.ts` (N = 50, N = 20) nhưng CHỈ với `bafo_round_id` NULL (vòng một); kịch bản 41 ở trên có lượt
+// BAFO thật mà 0 phong bì hỏng (bước 12e: `failedBidVersionIds` rỗng). Khối này là phép đo còn thiếu — khoản 275, phần
+// BAFO (câu 9 của kế hoạch đợt 3; công cụ/route đọc cho người vận hành HOÃN, hàng sổ giữ MỞ phần ấy). Một gói RIÊNG
+// của một tổ chức RIÊNG, đi qua HTTP như kịch bản: 23 nhà cung cấp nộp vòng một (phong bì tốt; thêm luồng thứ 24, dưới),
+// mở thầu, chấm, vòng BAFO mời top-22; 21 người nộp lại phong bì HỎNG — niêm phong cho một RFQ KHÁC: hình dạng đúng nên `POST /guest/bids` nhận và
+// ký biên nhận, `unsealBid` từ chối —, 1 người nộp lại phong bì tốt, người thứ 23 (ngoài top-N) không nộp lại. Worker
+// mở vòng hai, rồi đo:
+//   ⑴ hai bản ghi sổ của lượt BAFO: `failedCount` 21, đúng K = 20 id ĐẦU, cờ cắt bật, `bafoRoundId` của vòng;
+//   ⑵ câu §3 — ĐỌC NGUYÊN VĂN từ `docs/DECISIONS.md` (ADR-129), không chép — trả ĐÚNG 21 id theo thứ tự luồng: 20 đầu bằng
+//      payload, cả 21 bằng mảng đủ trong tiến trình và bằng tập phong bì hỏng đã nộp; chạy dưới superuser (người vận
+//      hành) VÀ trong phiên `app_api` gắn tổ chức — hai nơi ADR-129 §3 nói câu chạy được;
+//   ⑶ ĐỐI CHỨNG vế vòng: cùng câu gỡ vế `IS NOT DISTINCT FROM r.bafo_round_id` trả 23 id — phong bì VÒNG MỘT của người
+//      thứ 23 và của luồng đã thu hồi (dưới), không có hàng bản rõ dưới yêu cầu vòng hai, lọt vào — tức vế ấy CHỊU LỰC ở
+//      vòng BAFO.
+// Và một luồng THỨ 24: nộp vòng một rồi bị thu hồi ở `CLOSED`, trước lần mở (ADR-128 cho phép tới lần mở đầu tiên) —
+// worker không mở nó, lượt chấm không thấy nó, nó không vào top-N. Với YÊU CẦU VÒNG MỘT, câu §3 trả ĐÚNG id của luồng ấy
+// dù hai bản ghi sổ vòng một mang `failedCount` 0: câu §3 không mang vế `i.revoked_at IS NULL` của ADR-128 (hai ADR cùng đợt
+// 2, hai lô song song), nên luồng BỊ LOẠI được suy thành phong bì HỎNG. Lỗ kề, ngoài phạm vi khoản 275 (vòng một; ở vòng BAFO
+// luồng đã thu hồi không có phiên bản nào nên vế vòng đã loại nó) — khoản 298, GHIM ở ca cuối để lần sửa ADR-129 §3 đỏ đúng
+// đó.
+//
+// Hai điểm đồ gá, nói ra: ⒜ cụm test có MỘT địa chỉ người gọi, và `issueOtpChallenge` khoá người gọi sau
+// `OTP_MAX_PER_CALLER` = 10 lần mỗi 15 phút mỗi tổ chức — 24 nhà cung cấp thật đến từ 24 địa chỉ, nên ngay trước mỗi lần
+// xin OTP khối này xoá bucket `CALLER` của tổ chức (superuser); mọi bucket khác giữ nguyên. ⒝ tổ chức và người dùng dựng
+// như `dungToChuc` (không gọi lại nó: hai slug của nó đã dùng), ngưỡng phê duyệt kép đặt TRÊN ngân sách — một chữ ký mở
+// gói, một chữ ký mở thầu —, vì thứ đo ở đây là câu suy, không phải D2. Không nhãn INV.
+// ===============================================================================================
+describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 trên lượt mở thầu VÒNG BAFO — 21 phong bì hỏng ⇒ câu suy trả 21 id, 20 đầu là K id của payload", () => {
+  /** Số nhà cung cấp CÒN SỐNG nộp vòng một (không kể luồng thu hồi); `bafoTopN` của chính sách; số phong bì hỏng ở vòng BAFO. */
+  const SO_NCC = 23;
+  const TOP_N = 22;
+  const SO_HONG = 21;
+  /** K của ADR-129 — hằng `FAILED_BID_VERSION_IDS_AUDIT_CAP` (ghim ở `unseal-worker.int.test.ts`); viết số ở đây để lần đổi K phải đi qua phép đo này. */
+  const K_ADR_129 = 20;
+  /** RFQ mà phong bì hỏng được niêm phong cho — cùng giá trị fixture `unseal-worker.int.test.ts` dùng cho ca `unsealBid` từ chối. */
+  const RFQ_KHAC = "99999999-9999-4999-8999-999999999999";
+  /** Giá vòng một: 700 triệu + i × 7 triệu — không trùng giá nào của `MOI_GIA`; người thứ 23 đắt nhất nên đứng ngoài top-22. */
+  const giaVongMot = (i: number): string => `${String(700_000_000 + i * 7_000_000)}.00`;
+  const GIA_BAFO_TOT = "690000000.00";
+  /** Bản rõ bên trong một phong bì hỏng — không bao giờ mở được, nên không bao giờ thành một giá. */
+  const GIA_BAFO_HONG = "680000000.00";
+  /** Luồng thứ 24 — bị thu hồi ở `CLOSED`, trước lần mở. Giá RẺ NHẤT: nếu một bộ đọc quên vế thu hồi, nó lên hạng 1. */
+  const TEN_NCC_THU_HOI = "NCC K275 THU HOI";
+  const GIA_NCC_THU_HOI = "650000000.00";
+
+  interface NccK275 {
+    readonly ten: string;
+    readonly cookie: string;
+    /** Phiên bản vòng một (biên nhận của `POST /guest/bids`). */
+    readonly v1: string;
+  }
+  interface PayloadMoThau {
+    readonly bafoRoundId: string | null;
+    readonly opened: number;
+    readonly failedCount: number;
+    readonly failedBidVersionIds: readonly string[];
+    readonly failedBidVersionIdsTruncated: boolean;
+  }
+  interface TrangThaiK275 {
+    mua: Nguoi;
+    pm2: Nguoi;
+    gd1: Nguoi;
+    taiChinh: Nguoi;
+    rfqId: string;
+    ncc: NccK275[];
+    ycVongMot: string;
+    bafoRoundId: string;
+    /** Tên nhà cung cấp trong top-N, theo HẠNG — suy từ `GET /ranking`, không gõ tay. */
+    topTheoHang: string[];
+    ycVongBafo: string;
+    /** Phong bì hỏng đã nộp ở vòng BAFO (biên nhận), theo thứ tự nộp. */
+    vBafoHong: string[];
+    vBafoTot: string;
+    /** Phiên bản vòng một của người ngoài top-N — người không nộp lại. */
+    v1NguoiNgoai: string;
+    /** Lời mời và phiên bản vòng một của luồng thứ 24 — thu hồi ở `CLOSED`, trước lần mở. */
+    loiMoiThuHoi: string;
+    v1ThuHoi: string;
+    /** Mảng ĐỦ trong tiến trình của lượt mở thầu vòng BAFO. */
+    hongTrongTienTrinh: readonly string[];
+  }
+  const st: TrangThaiK275 = {
+    mua: { id: "", cookie: "" },
+    pm2: { id: "", cookie: "" },
+    gd1: { id: "", cookie: "" },
+    taiChinh: { id: "", cookie: "" },
+    rfqId: "",
+    ncc: [],
+    ycVongMot: "",
+    bafoRoundId: "",
+    topTheoHang: [],
+    ycVongBafo: "",
+    vBafoHong: [],
+    vBafoTot: "",
+    v1NguoiNgoai: "",
+    loiMoiThuHoi: "",
+    v1ThuHoi: "",
+    hongTrongTienTrinh: [],
+  };
+
+  /** Câu §3 của ADR-129, đọc NGUYÊN VĂN từ `docs/DECISIONS.md`: khối ```sql DUY NHẤT của mục ADR-129, bỏ thụt lề danh sách. */
+  async function cauSuyCuaAdr129(): Promise<string> {
+    const vanBan = await readFile(fileURLToPath(new URL("../../../docs/DECISIONS.md", import.meta.url)), "utf8");
+    const dau = vanBan.indexOf("\n## ADR-129 ");
+    expect(dau, "không thấy mục ADR-129 trong docs/DECISIONS.md").toBeGreaterThan(0);
+    const cuoi = vanBan.indexOf("\n## ADR-", dau + 1);
+    const muc = vanBan.slice(dau, cuoi < 0 ? undefined : cuoi);
+    expect(muc.split("```sql").length - 1, "ADR-129 phải có ĐÚNG MỘT khối ```sql — câu §3").toBe(1);
+    const khoi = /```sql\n([\s\S]*?)\n[ ]*```/u.exec(muc);
+    if (khoi?.[1] === undefined) throw new Error("ADR-129: khối ```sql không đóng");
+    const cau = khoi[1].split("\n").map((d) => d.replace(/^ {3}/u, "")).join("\n").trim();
+    expect(cau, "câu §3 phải mang vế vòng — thứ khối này đo").toContain("AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id");
+    return cau;
+  }
+
+  /** Nhà cung cấp nộp một phong bì qua HTTP — niêm phong cho `niemPhongCho` bằng khoá công khai THẬT của gói. Trả id phiên bản. */
+  async function nopQuaHttp(cookie: string, niemPhongCho: string, gia: string, ten: string): Promise<string> {
+    const r = await goi("GET", "/guest/rfq", cookie);
+    expect(r.status, r.text).toBe(200);
+    const khoa = (r.body as { publicKeys: { algorithm: string; publicKey: string }[] }).publicKeys.find((k) => k.algorithm === "ECDH_P256");
+    if (khoa === undefined) throw new Error("goi thau khong co khoa ECDH_P256 qua HTTP");
+    const phongBi = await sealBid({
+      rfqId: niemPhongCho,
+      algorithm: "ECDH_P256",
+      recipientPublicKey: new Uint8Array(Buffer.from(khoa.publicKey, "base64")),
+      plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: gia, currency: "VND", nhaCungCap: ten })),
+    });
+    const bn = await goi("POST", "/guest/bids", cookie, { envelope: Buffer.from(phongBi).toString("base64") });
+    expect(bn.status, `${ten}: ${bn.text}`).toBe(201);
+    return (bn.body as { receipt: { bidVersionId: string } }).receipt.bidVersionId;
+  }
+
+  /** Một nhà cung cấp, một người liên hệ, một lời mời qua HTTP; mở phiên khách qua link bộ gửi nhận; nộp vòng một bằng phong bì TỐT. */
+  async function moiVaNopVongMot(ten: string, so: string, gia: string): Promise<{ invitationId: string; cookie: string; v1: string }> {
+    const m = st.mua.cookie;
+    const s = await goi("POST", "/suppliers", m, { legalName: ten, taxCode: `03100000${so}` });
+    expect(s.status, s.text).toBe(201);
+    const supplierId = (s.body as { supplier: { id: string } }).supplier.id;
+    const c = await goi("POST", `/suppliers/${supplierId}/contacts`, m, { fullName: `Kinh doanh K275 ${so}`, email: `k275-${so}@ncc.vn`, phone: `09120000${so}` });
+    expect(c.status, c.text).toBe(201);
+    const contactId = (c.body as { contact: { id: string } }).contact.id;
+    const truoc = dv.loiMoiDaGui.length;
+    const lm = await goi("POST", `/rfqs/${st.rfqId}/invitations`, m, { supplierId, contactId });
+    expect(lm.status, lm.text).toBe(201);
+    expect(dv.loiMoiDaGui).toHaveLength(truoc + 1);
+    // Đồ gá ⒜ (khối đầu): một địa chỉ người gọi thay cho 24 — chỉ bucket `CALLER` của CHÍNH tổ chức này.
+    await db.pool.query("DELETE FROM otp_rate_limits WHERE org_id = $1 AND bucket_kind = 'CALLER'", [orgA]);
+    const cookie = await moPhienKhach(dv.loiMoiDaGui.at(-1)!.token);
+    return { invitationId: (lm.body as { invitation: { id: string } }).invitation.id, cookie, v1: await nopQuaHttp(cookie, st.rfqId, gia, ten) };
+  }
+
+  /** Xin mở thầu, một giám đốc duyệt, người mua điều phối — cổng bốn vế qua HTTP; rồi worker mở (không qua HTTP, như bước 11). */
+  async function moThauQuaCong(lyDo: string): Promise<{ ycId: string; kq: Awaited<ReturnType<typeof executeUnsealRequest>> }> {
+    const yc = await goi("POST", `/rfqs/${st.rfqId}/unseal`, st.mua.cookie, { reason: lyDo });
+    expect(yc.status, yc.text).toBe(201);
+    const ycId = (yc.body as { unsealRequest: { id: string } }).unsealRequest.id;
+    const duyet = await goi("POST", `/unseal/${ycId}/approve`, st.gd1.cookie);
+    expect(duyet.status, duyet.text).toBe(200);
+    expect((duyet.body as { unsealRequest: { status: string } }).unsealRequest.status, "một chữ ký là đủ dưới ngưỡng kép").toBe("APPROVED");
+    const dp = await goi("POST", `/unseal/${ycId}/dispatch`, st.mua.cookie);
+    expect(dp.status, dp.text).toBe(200);
+    const kq = await withTenant(unsealPool, orgA, (c) => executeUnsealRequest(c, orgA, { unsealRequestId: ycId, unwrapper: boMoBoc }, unsealPool));
+    return { ycId, kq };
+  }
+
+  beforeAll(async () => {
+    goc = gocMacDinh;
+    orgA =
+      (
+        await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id", [
+          "Cong ty Mua Sam K275",
+          "cong-ty-k275",
+        ])
+      ).rows[0]?.id ?? "";
+    st.mua = await dangNhap("mua-k275@vidu.vn", "PROCUREMENT_MANAGER");
+    st.pm2 = await dangNhap("pm2-k275@vidu.vn", "PROCUREMENT_MANAGER");
+    st.gd1 = await dangNhap("gd1-k275@vidu.vn", "DIRECTOR");
+    st.taiChinh = await dangNhap("taichinh-k275@vidu.vn", "FINANCE");
+  }, 240000);
+
+  it("dựng qua HTTP: chính sách top-N 22, gói 1 tỷ dưới ngưỡng kép, 24 nhà cung cấp được mời, mở phiên khách và nộp vòng một bằng phong bì TỐT", async () => {
+    const m = st.mua.cookie;
+    const cs = await goi("POST", "/policy", st.taiChinh.cookie, {
+      version: 1,
+      dualApprovalThreshold: "5000000000.00",
+      currency: "VND",
+      evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }],
+      bafoTopN: TOP_N,
+    });
+    expect(cs.status, cs.text).toBe(201);
+    const rfq = await goi("POST", "/rfqs", m, { title: "Thep tam — do cau suy BAFO", deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
+    expect(rfq.status, rfq.text).toBe(201);
+    st.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("POST", `/rfqs/${st.rfqId}/items`, m, { lineNo: 1, description: "Thep tam SS400 10mm", quantity: "100.0000", unit: "tam" })).status).toBe(201);
+    const ns = await goi("PUT", `/rfqs/${st.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
+    expect(ns.status, ns.text).toBe(200);
+    expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(false);
+    expect((await goi("POST", `/rfqs/${st.rfqId}/submit`, m)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${st.rfqId}/approve`, st.pm2.cookie)).status).toBe(200);
+    const mo = await goi("POST", `/rfqs/${st.rfqId}/open`, m);
+    expect(mo.status, mo.text).toBe(200);
+
+    for (let i = 0; i < SO_NCC; i++) {
+      const so = String(i).padStart(2, "0");
+      const ten = `NCC K275 ${so}`;
+      const { cookie, v1 } = await moiVaNopVongMot(ten, so, giaVongMot(i));
+      st.ncc.push({ ten, cookie, v1 });
+    }
+    expect(st.ncc).toHaveLength(SO_NCC);
+    const thuHoi = await moiVaNopVongMot(TEN_NCC_THU_HOI, String(SO_NCC), GIA_NCC_THU_HOI);
+    st.loiMoiThuHoi = thuHoi.invitationId;
+    st.v1ThuHoi = thuHoi.v1;
+  }, 240000);
+
+  it("vòng một: thu hồi luồng thứ 24 ở CLOSED, cổng bốn vế, worker mở 23 phong bì (0 hỏng, luồng đã thu hồi không mở), chấm qua HTTP, mở vòng BAFO — top-22 suy từ bảng xếp hạng, người đắt nhất đứng ngoài", async () => {
+    const m = st.mua.cookie;
+    expect((await goi("POST", `/rfqs/${st.rfqId}/close`, m, { reason: "dong som de do cau suy vong BAFO" })).status).toBe(200);
+    // ADR-128: thu hồi còn được tới lần mở đầu tiên — và nó LOẠI luồng ấy khỏi lượt mở thầu, bảng so sánh, lượt chấm.
+    const thuHoi = await goi("POST", `/invitations/${st.loiMoiThuHoi}/revoke`, m);
+    expect(thuHoi.status, thuHoi.text).toBe(200);
+    expect(thuHoi.body).toEqual({ revoked: true });
+    const { ycId, kq } = await moThauQuaCong("het han nop, mo thau vong mot");
+    st.ycVongMot = ycId;
+    expect([kq.opened, kq.failedBidVersionIds], "vòng một: 23 phong bì tốt mở, luồng đã thu hồi không mở và không hỏng").toEqual([SO_NCC, []]);
+
+    const cham = await goi("POST", `/rfqs/${st.rfqId}/evaluate`, m, {});
+    expect(cham.status, cham.text).toBe(201);
+    const bafo = await goi("POST", `/rfqs/${st.rfqId}/bafo`, m, { deadlineAt: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString() });
+    expect(bafo.status, bafo.text).toBe(201);
+    const vong = (bafo.body as { bafoRound: { bafoRoundId: string; topN: number } }).bafoRound;
+    expect(vong.topN).toBe(TOP_N);
+    st.bafoRoundId = vong.bafoRoundId;
+
+    const bxh = await goi("GET", `/rfqs/${st.rfqId}/ranking`, m);
+    expect(bxh.status, bxh.text).toBe(200);
+    const hang = (bxh.body as { ranking: { rows: { supplierName: string; rank: number | null }[] } }).ranking.rows;
+    expect(hang).toHaveLength(SO_NCC);
+    // Ai trong top-N thì SUY từ bảng xếp hạng, như bước 12c — giá tăng theo thứ tự mời nên hạng phải đúng thứ tự ấy.
+    st.topTheoHang = hang
+      .filter((h) => h.rank !== null && h.rank <= TOP_N)
+      .sort((a, b) => Number(a.rank) - Number(b.rank))
+      .map((h) => h.supplierName);
+    expect(st.topTheoHang).toEqual(st.ncc.slice(0, TOP_N).map((x) => x.ten));
+    const ngoai = hang.filter((h) => h.rank === null || h.rank > TOP_N).map((h) => h.supplierName);
+    expect(ngoai, "đúng một người ngoài top-22: người đắt nhất").toEqual([st.ncc[SO_NCC - 1]?.ten]);
+    st.v1NguoiNgoai = st.ncc.find((x) => x.ten === ngoai[0])?.v1 ?? "";
+    expect(st.v1NguoiNgoai).not.toBe("");
+  }, 240000);
+
+  it("vòng BAFO qua HTTP: 21 người trong top-22 nộp lại phong bì HỎNG (niêm phong cho RFQ khác — nhận, ký biên nhận), hạng 1 nộp lại phong bì tốt; đóng vòng, cổng bốn vế lần hai, worker mở 1, 21 hỏng", async () => {
+    for (const [j, ten] of st.topTheoHang.entries()) {
+      const ncc = st.ncc.find((x) => x.ten === ten);
+      if (ncc === undefined) throw new Error(`khong thay nha cung cap ${ten}`);
+      if (j === 0) st.vBafoTot = await nopQuaHttp(ncc.cookie, st.rfqId, GIA_BAFO_TOT, ten);
+      else st.vBafoHong.push(await nopQuaHttp(ncc.cookie, RFQ_KHAC, GIA_BAFO_HONG, ten));
+    }
+    expect(st.vBafoHong).toHaveLength(SO_HONG);
+    // Tiền đề: 22 phiên bản mới mang ĐÚNG dấu vòng — C1 đặt, J4 cho qua vì cả 22 luồng nằm trong top-N.
+    const { rows: dau } = await db.pool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM vendor_bid_versions WHERE org_id = $1 AND bafo_round_id = $2",
+      [orgA, st.bafoRoundId],
+    );
+    expect(dau[0]?.n).toBe(String(TOP_N));
+
+    expect((await goi("POST", `/rfqs/${st.rfqId}/bafo/close`, st.mua.cookie)).status).toBe(200);
+    const { ycId, kq } = await moThauQuaCong("het han vong BAFO, mo phong bi vong hai");
+    st.ycVongBafo = ycId;
+    st.hongTrongTienTrinh = kq.failedBidVersionIds;
+    expect(kq.opened, "vòng hai: đúng MỘT phong bì tốt").toBe(1);
+    expect(kq.failedBidVersionIds, "mảng trong tiến trình KHÔNG cắt (ADR-129 ⑷)").toHaveLength(SO_HONG);
+    expect([...kq.failedBidVersionIds].sort()).toEqual([...st.vBafoHong].sort());
+    const { rows: tt } = await db.pool.query<{ status: string }>("SELECT status FROM rfq_packages WHERE id = $1", [st.rfqId]);
+    expect(tt[0]?.status).toBe("BAFO_UNSEALED");
+  }, 240000);
+
+  it("⑴ hai bản ghi sổ của lượt BAFO: `failedCount` 21, ĐÚNG 20 id đầu theo thứ tự luồng, cờ cắt bật, mang dấu vòng", async () => {
+    const { rows: so } = await db.pool.query<{ action: string; payload: PayloadMoThau }>(
+      "SELECT action, payload FROM audit_events WHERE org_id = $1 AND resource_id = $2 " +
+        " AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') AND payload->>'unsealRequestId' = $3 ORDER BY seq",
+      [orgA, st.rfqId, st.ycVongBafo],
+    );
+    expect(so.map((b) => b.action)).toEqual(["RFQ_KEY_MATERIAL_UNWRAPPED", "RFQ_UNSEALED"]);
+    for (const b of so) {
+      expect(b.payload.bafoRoundId, b.action).toBe(st.bafoRoundId);
+      expect(b.payload.opened, b.action).toBe(1);
+      expect(b.payload.failedCount, b.action).toBe(SO_HONG);
+      expect(b.payload.failedBidVersionIdsTruncated, b.action).toBe(true);
+      expect(b.payload.failedBidVersionIds, `${b.action}: K = ${String(K_ADR_129)} id ĐẦU của mảng đủ`).toEqual(
+        st.hongTrongTienTrinh.slice(0, K_ADR_129),
+      );
+    }
+  });
+
+  it("⑵ câu §3 của ADR-129 (đọc nguyên văn) trên vòng BAFO: ĐÚNG 21 id = `failedCount`, 20 đầu bằng payload, đủ 21 theo thứ tự luồng — dưới superuser và trong phiên `app_api` gắn tổ chức", async () => {
+    const cau = await cauSuyCuaAdr129();
+    const { rows: so } = await db.pool.query<{ payload: PayloadMoThau }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'RFQ_UNSEALED' AND payload->>'unsealRequestId' = $2",
+      [orgA, st.ycVongBafo],
+    );
+    const payload = so[0]?.payload;
+    if (payload === undefined) throw new Error("khong thay ban ghi RFQ_UNSEALED cua luot BAFO");
+
+    const { rows: suy } = await db.pool.query<{ id: string }>(cau, [st.ycVongBafo, orgA]);
+    const id = suy.map((r) => r.id);
+    expect(id, "câu suy trả ĐÚNG `failedCount` id").toHaveLength(payload.failedCount);
+    expect(id.slice(0, K_ADR_129), "20 id đầu của câu suy BẰNG K id đã ghi sổ").toEqual([...payload.failedBidVersionIds]);
+    expect(id, "cả 21 id theo cùng thứ tự luồng với mảng đủ trong tiến trình").toEqual([...st.hongTrongTienTrinh]);
+    expect([...id].sort(), "tập suy ra = tập phong bì hỏng đã nộp ở vòng BAFO").toEqual([...st.vBafoHong].sort());
+    expect(id, "phong bì tốt của vòng hai có hàng bản rõ — không nằm trong tập suy").not.toContain(st.vBafoTot);
+
+    const { rows: suyApi } = await withTenant(apiPool, orgA, (c) => c.query<{ id: string }>(cau, [st.ycVongBafo, orgA]));
+    expect(suyApi.map((r) => r.id), "cùng câu trong phiên `app_api` gắn tổ chức (RLS bật)").toEqual(id);
+  });
+
+  it("⑶ ĐỐI CHỨNG vế vòng: gỡ `IS NOT DISTINCT FROM r.bafo_round_id` ⇒ 23 id (lọt phong bì VÒNG MỘT của người ngoài top-N và của luồng đã thu hồi) ≠ `failedCount` 21", async () => {
+    const cau = await cauSuyCuaAdr129();
+    const khongVeVong = cau.replace(" AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id", "");
+    expect(khongVeVong, "phép gỡ vế phải thật sự đổi câu").not.toBe(cau);
+    const { rows: lech } = await db.pool.query<{ id: string }>(khongVeVong, [st.ycVongBafo, orgA]);
+    expect(lech.map((r) => r.id).sort(), "không vế vòng: 21 hỏng + bản vòng một của người không nộp lại + của luồng đã thu hồi").toEqual(
+      [...st.vBafoHong, st.v1NguoiNgoai, st.v1ThuHoi].sort(),
+    );
+  });
+
+  it("[S1.243 / khoản 298] GIỚI HẠN ĐÃ ĐO, ghim: ở YÊU CẦU VÒNG MỘT câu §3 trả ĐÚNG id của luồng bị thu hồi trước lần mở — 1 id trong khi hai bản ghi sổ vòng một mang `failedCount` 0", async () => {
+    // Câu §3 không mang vế `i.revoked_at IS NULL` (ADR-128) nên luồng BỊ LOẠI — không mở, không hỏng — được suy thành phong bì
+    // hỏng. Ngoài phạm vi khoản 275 (vòng một): khoản 298, không vá ở đây. Lần sửa ADR-129 §3 làm ca này ĐỎ đúng đây — lật nó.
+    const cau = await cauSuyCuaAdr129();
+    const { rows: so } = await db.pool.query<{ payload: PayloadMoThau }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') " +
+        " AND payload->>'unsealRequestId' = $2 ORDER BY seq",
+      [orgA, st.ycVongMot],
+    );
+    expect(so.map((b) => [b.payload.bafoRoundId, b.payload.opened, b.payload.failedCount]), "sổ vòng một: 23 mở, 0 hỏng").toEqual([
+      [null, SO_NCC, 0],
+      [null, SO_NCC, 0],
+    ]);
+    const { rows: vongMot } = await db.pool.query<{ id: string }>(cau, [st.ycVongMot, orgA]);
+    expect(vongMot.map((r) => r.id), "câu §3 kể luồng đã thu hồi là phong bì hỏng — lệch `failedCount` 0").toEqual([st.v1ThuHoi]);
+  });
+});

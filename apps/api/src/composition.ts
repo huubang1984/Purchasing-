@@ -106,6 +106,13 @@ export interface TienTrinhApi {
 /** Chu kỳ poll của runner outbox — đường thử lại; đường chính là `nudge` ngay sau commit. */
 const OUTBOX_POLL_MS = 5000;
 /**
+ * [S1.248 / khoản 277] Câu lấy tập tổ chức có job `PENDING` thuộc tập `kind` của tiến trình này — hàm hẹp `SECURITY DEFINER`
+ * `public.outbox_to_chuc_co_viec_api()` (ADR-040 tiểu mục khoản 277; `EXECUTE` chỉ cho `app_api`, hardening canh). Ghim đủ
+ * schema cho hàm và kiểu trả về — khuôn [QT3] của `packages/outbox/src/enqueue.ts`: một `search_path` nhiễm không đổi nghĩa câu.
+ * Không phải danh sách tổ chức đầy đủ: `app_api` vẫn KHÔNG gọi được hàm `052` (ADR-040, quyết định câu 10 của đợt 3).
+ */
+const CAU_TO_CHUC_CO_VIEC_API = "SELECT t.id::pg_catalog.text AS id FROM public.outbox_to_chuc_co_viec_api() AS t(id)";
+/**
  * [sổ nợ 55 / 042] Nhịp dọn `caller_rate_limits` ~~. Bảng ấy là bảng DUY NHẤT mà số hàng do người
  * gọi VÔ DANH quyết~~ — và [sổ nợ 57 / 044] của cả `otp_rate_limits`. Bảng đầu vẫn là bảng duy nhất
  * mà số hàng do người gọi VÔ DANH quyết; bảng thứ hai lớn theo lưu lượng THẬT nhưng chưa từng có ai
@@ -228,7 +235,8 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   }, KMS_TIMEOUT_MS_MAC_DINH);
 
   // [sổ nợ 38 / ADR-022 §1] Runner outbox TRONG tiến trình `api`. `app_api` không đọc được danh sách
-  // tổ chức (RLS), nên `listOrganizations` là tập tổ chức tiến trình này ĐÃ THẤY enqueue; `nudge`
+  // tổ chức (RLS), nên `listOrganizations` là tập tổ chức tiến trình này ĐÃ THẤY enqueue ~~;~~
+  // [S1.248 / khoản 277] hợp với tập tổ chức có việc `PENDING` của `api` (hàm hẹp — khối cuối đoạn này); `nudge`
   // đánh thức ngay cho tổ chức vừa có job (setImmediate — không chặn phản hồi), vòng poll nhặt job
   // còn sót (thử lại). Giới hạn nhiều instance ghi ở ADR-022.
   //
@@ -248,15 +256,33 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   // TUỔI có từ ADR-083: worker đo tuổi job `PENDING` quá hạn lâu nhất qua MỌI tổ chức mỗi 5 phút
   // (`apps/unseal-worker/src/canh-ton-dong.ts`, `doTonDong` — trung tính với `kind`, nên việc của
   // tiến trình này cũng được đếm), CloudWatch báo động khi quá 15 phút hai kỳ liền; tiến trình chết
-  // là việc của báo động thiếu task (ADR-077). Câu đầu VẪN ĐÚNG, và là giới hạn nói ra: sau khi tiến
+  // là việc của báo động thiếu task (ADR-077). ~~Câu đầu VẪN ĐÚNG, và là giới hạn nói ra: sau khi tiến
   // trình này khởi động lại, việc `PENDING` của một tổ chức chờ tới yêu cầu GHI CÓ XẾP VIỆC kế tiếp
   // của chính tổ chức ấy — ADR-083 chỉ PHÁT HIỆN (sau ít nhất 15 phút), không tự phục hồi, và mẫu
   // lọc của nó chưa chạy thật trên CloudWatch. Tự phục hồi sau khởi động lại (nạp một danh sách tổ
-  // chức cho `api`) là một khoản riêng, đụng ADR-040.
+  // chức cho `api`) là một khoản riêng, đụng ADR-040.~~
+  //
+  // [S1.248 / khoản 277] Câu vừa gạch hết đúng: tập tổ chức của runner nay là HỢP của `toChucDaThay`
+  // (lời đánh thức tức thì, dấu ADR-047 — giữ nguyên) với tập hàm hẹp `public.outbox_to_chuc_co_viec_api()`
+  // trả — tổ chức có job `PENDING` thuộc tập `kind` của tiến trình này, KHÔNG phải danh sách tổ chức đầy đủ
+  // (ADR-040 tiểu mục; `052` vẫn thu hồi khỏi `app_api`). Nạp lúc lên (`batDau()` gọi một lần trước khi mở
+  // cổng, rồi `runner.start()` chạy kỳ poll đầu ngay) và MỖI kỳ poll — `runOnce()` gọi `listOrganizations`
+  // ở mọi lượt. Nên job `PENDING` mà tiến trình trước chưa kịp chạy, hay mà một instance khác xếp rồi chết
+  // trước lời đánh thức (ADR-022), được nhặt không cần lời xếp việc nào. Đo: `composition.int.test.ts` khối
+  // khoản 277 — tiến trình MỚI, không lời `/auth/link` nào ⇒ job xong ở kỳ poll lúc lên (trước vòng này:
+  // không bao giờ trong 15 s). Lister NÉM khi hàm hỏng (không trả danh sách cụt — hợp đồng ĐẦY ĐỦ + SỐNG
+  // ở `OrganizationLister`): kỳ ấy không phục vụ tổ chức nào qua poll, `onPollError` ghi `[api] outbox poll
+  // …` (ADR-083 `poll-loi`); lời đánh thức vẫn chạy vì nó gọi `runOnceForOrg` thẳng. Giới hạn nói ra: job
+  // `RUNNING` hết hạn thuê (tiến trình chết GIỮA handler) KHÔNG làm tổ chức vào tập hàm trả — chỉ vào khi
+  // tổ chức ấy có việc `PENDING` khác hay đã ở `toChucDaThay` — khoản 307.
   const toChucDaThay = new Set<string>();
+  const lietKeToChuc = async (): Promise<readonly string[]> => {
+    const { rows } = await pool.query<{ id: string }>(CAU_TO_CHUC_CO_VIEC_API);
+    return [...new Set([...toChucDaThay, ...rows.map((r) => r.id)])];
+  };
   const runner = new JobRunner(pool, buildApiOutboxHandlers(services), {
     pollIntervalMs: OUTBOX_POLL_MS,
-    listOrganizations: () => [...toChucDaThay],
+    listOrganizations: lietKeToChuc,
     // ~~[S1.81 / khoản 154] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và đó là tiến trình
     // này. Vì sao `api` chứ không phải worker: `api` là tiến trình chạy thường trực trong mọi
     // triển khai (worker có thể chưa được dựng — khoản 116), nên đặt ở đây thì một `kind` không
@@ -270,6 +296,9 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
     // im lặng (đo: `apps/unseal-worker/src/tien-trinh.int.test.ts` ⑹). Tiến trình khai nay là worker
     // (`tien-trinh.ts`), tiến trình thấy MỌI tổ chức qua hàm `052`. Mảng lọc của runner này là đúng
     // `Object.keys(handlers)`.
+    // [S1.239 / khoản 170] Runner của TEST (`test-services.ts`, `outboxTest`) là gương của runner này ở dây nối mảng lọc — bảng
+    // handler và `kindKhongNguoiNhan` —, đối chiếu ở `tests/architecture/kind-outbox-mot-cho.test.ts`; khai lại sổ ở đây thì vế
+    // khoản 168 của `composition.int.test.ts` đỏ.
     onJobFailure: (bao) => {
       // [CẤM LOG] `bao.cause` có thể mang địa chỉ email — ~~chỉ tên lý do và kind~~ [S1.67 / khoản 118] tên lý do, kind, và TÊN cùng MÃ
       // cố định của lỗi gốc (`moTaLoiKhongGiaTri`) — không message. Trước vòng này dòng này không nói lỗi gì: job hỏng vì kết nối nhiễm
@@ -327,6 +356,22 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
           c.off("error", boQuaLoiKetNoi);
           c.release();
         }
+      }
+      // [S1.248 / khoản 277] Nguồn tập tổ chức có việc phải GỌI ĐƯỢC trước khi mở cổng — cùng khuôn vế ⑵ của worker
+      // (`apps/unseal-worker/src/tien-trinh.ts`): hàm hẹp thiếu (migration khai sinh chưa áp, hàm bị DROP) hay `app_api` mất
+      // EXECUTE ⇒ 42883/42501 ⇒ tiến trình KHÔNG lên, thay vì lên rồi hỏng ở mọi kỳ poll với chỉ một dòng `outbox poll`.
+      // "0 tổ chức" KHÔNG ném: với `api` đó là trạng thái bình thường — không việc nào đang chờ — khác worker (0 ⇒ cảnh ❷).
+      // Hệ quả nói ra: vì thế vế này không bắt được cảnh ❷ của chính hàm này (policy đi kèm bị DROP ⇒ 0 hàng, không lỗi); lớp
+      // bắt nó là hàng tự chữa của hardening dựng lại policy ở mỗi lần `migrate()` — giữa hai lần deploy thì không lớp nào.
+      try {
+        await lietKeToChuc();
+      } catch (e) {
+        throw new Error(
+          "khong goi duoc public.outbox_to_chuc_co_viec_api() — migration tao ham chua ap, ham da bi DROP, app_api mat " +
+            "EXECUTE tren no, hay vai chu ham app_liet_ke_to_chuc mat quyen doc outbox_jobs " +
+            `(${moTaLoiKhongGiaTri(e)}). Khong co nguon nay thi job PENDING cua api khong tu phuc hoi sau khi khoi dong lai.`,
+          { cause: e },
+        );
       }
       // [khoản 196 / ADR-074 phần 1] Đồng hồ CSDL — nguồn phán xử hạn nộp (C1) — phải khớp đồng hồ tiến
       // trình trong ngưỡng, TRƯỚC khi mở cổng. Lệch ⇒ `LechDongHoError` ⇒ không cổng nào nghe. Đo trên

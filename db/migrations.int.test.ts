@@ -202,6 +202,59 @@ async function truoc092(
   return { ten092, nguoiDung, lienHe, daGhi092, emailCua };
 }
 
+/** [S1.247 / khoản 283] Migration thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — tên đầy đủ, để `pnpm cap-so` thay được. */
+const TEN_MIG_CHAM_CUOI = "100_email_khong_dau_cham_cuoi.sql";
+
+/**
+ * [S1.247 / khoản 283] Dựng một CSDL đã áp mọi migration TRỪ `TEN_MIG_CHAM_CUOI`, với một tổ chức, một người mua có vai và phiên, một nhà
+ * cung cấp — để đo migration ấy trên dữ liệu có từ trước (khuôn `truoc092`). Hai hàm chèn chạy dưới superuser (vai của `db.pool`): địa chỉ
+ * có dấu chấm cuối tên miền, chữ thường, ASCII in được đi qua 048/049, 092 và ràng buộc hình dạng của 011 — đúng lỗ khoản 283.
+ */
+async function truocChamCuoi(
+  db: TestDatabase,
+  tmp: string,
+): Promise<{
+  readonly nguoiDung: (email: string) => Promise<string>;
+  readonly lienHe: (email: string) => Promise<string>;
+  readonly daGhi: () => Promise<number>;
+  readonly emailCua: (bang: "users" | "supplier_contacts", id: string) => Promise<string | undefined>;
+}> {
+  const tatCa = await readdir(MIGRATIONS_DIR);
+  expect(tatCa, `chưa có migration ${TEN_MIG_CHAM_CUOI} trong kho`).toContain(TEN_MIG_CHAM_CUOI);
+  for (const f of tatCa) if (f !== TEN_MIG_CHAM_CUOI) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+  await migrate(db.pool, tmp);
+  const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz283', 'zz283') RETURNING id")).rows[0]!.id;
+  const nguoiDung = async (email: string): Promise<string> =>
+    (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi 283') RETURNING id", [org, email])).rows[0]!
+      .id;
+  const pm = await nguoiDung("pm283@vidu.vn");
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, pm]);
+  const phien = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [org, pm, Buffer.alloc(32, 83)],
+    )
+  ).rows[0]!.id;
+  const ncc = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC 283', $2, $3) RETURNING id",
+      [org, pm, phien],
+    )
+  ).rows[0]!.id;
+  const lienHe = async (email: string): Promise<string> =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi lien he 283', $3, $4, $5) RETURNING id",
+        [org, ncc, email, pm, phien],
+      )
+    ).rows[0]!.id;
+  const daGhi = async (): Promise<number> =>
+    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [TEN_MIG_CHAM_CUOI])).rowCount ?? 0;
+  const emailCua = async (bang: "users" | "supplier_contacts", id: string): Promise<string | undefined> =>
+    (await db.pool.query<{ email: string }>(`SELECT email FROM ${bang} WHERE id = $1`, [id])).rows[0]?.email;
+  return { nguoiDung, lienHe, daGhi, emailCua };
+}
+
 /** Đổi user/password của một connection string, giữ nguyên host/port/database. */
 function doiNguoiDung(pChuoiKetNoi: string, pTenRole: string, pMatKhau: string): string {
   const url = new URL(pChuoiKetNoi);
@@ -1165,6 +1218,117 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   }, 300_000);
 
+  // [S1.247 / khoản 283 / ADR-139] `TEN_MIG_CHAM_CUOI` thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — dấu chấm cuối tên
+  // miền (`dot@x.vn.`, dạng tuyệt đối của `dot@x.vn` theo RFC 5321: cùng một hộp thư) bị từ chối ở lược đồ. Khuôn `092`: đối chiếu TRƯỚC
+  // `ALTER`, dừng deploy với số hàng và ĐỊNH DANH (tối đa 20 id mỗi bảng), KHÔNG in email, KHÔNG tự sửa — chuẩn hoá (bỏ dấu chấm cuối) là
+  // phương án bị loại (câu 12 của kế hoạch đợt 3), và phép đo dưới cho thấy nó không cơ khí được: ở hàng có dạng anh em không dấu chấm, bỏ
+  // dấu chấm là va `UNIQUE` (23505) — hai hàng là MỘT hộp thư, giữ hàng nào là quyết định có người chịu. Sửa tay ⇒ đi qua, hai ràng buộc tồn
+  // tại, đã kiểm, định nghĩa nguyên văn; hai dòng khai ở `CHECK_AN_NINH_KHAI` mang đúng `pg_get_constraintdef` (khoản 105); INSERT thẳng dưới
+  // superuser — không qua tầng ứng dụng — ⇒ 23514 đúng tên.
+  it("[khoản 283] hàng email có dấu chấm cuối tên miền có từ trước ⇒ migrate() NÉM với thông báo NGUYÊN VĂN (số hàng và id từng bảng, không email), migration không được ghi, hàng nguyên văn; bỏ dấu chấm ở hàng có dạng anh em va UNIQUE; sửa tay ⇒ đi qua, hai CHECK tồn tại, đã kiểm, có trong khai của hardening; INSERT thẳng dưới superuser ⇒ 23514", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k283-"));
+    try {
+      const { nguoiDung, lienHe, daGhi, emailCua } = await truocChamCuoi(db, tmp);
+      const tenKhongDuoi = TEN_MIG_CHAM_CUOI.replace(/\.sql$/u, "");
+      // Tiền đề, đo trên lược đồ CHƯA có migration: bốn địa chỉ có dấu chấm cuối VÀO cả hai bảng — hai trong số đó cạnh dạng không dấu chấm.
+      await nguoiDung("dot-283@vidu.vn");
+      const uAnhEm = await nguoiDung("dot-283@vidu.vn.");
+      const uMot = await nguoiDung("mot-283@vidu.vn.");
+      await lienHe("lh-283@vidu.vn");
+      const cAnhEm = await lienHe("lh-283@vidu.vn.");
+      const cHai = await lienHe("hai-283@vidu.vn..");
+
+      await copyFile(join(MIGRATIONS_DIR, TEN_MIG_CHAM_CUOI), join(tmp, TEN_MIG_CHAM_CUOI));
+      const loi = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "dữ liệu có dấu chấm cuối mà migration vẫn đi qua").not.toBeNull();
+      expect(await daGhi(), "NÉM thì không được ghi checksum").toBe(0);
+      expect(await emailCua("users", uAnhEm), "hàng giữ nguyên — migration không tự sửa").toBe("dot-283@vidu.vn.");
+      expect(await emailCua("supplier_contacts", cHai)).toBe("hai-283@vidu.vn..");
+      // Thứ tự uuid của PostgreSQL là thứ tự byte, trùng thứ tự chuỗi hex chữ thường của JS.
+      expect(loi!.message).toBe(
+        `Migration ${TEN_MIG_CHAM_CUOI} thất bại: email co dau cham cuoi ten mien: users 2 hang — id (toi da 20): ${[uAnhEm, uMot].sort().join(", ")}; ` +
+          `supplier_contacts 2 hang — id (toi da 20): ${[cAnhEm, cHai].sort().join(", ")} — sua tay duoi mot vai ma RLS khong ap (bo dau cham cuoi; ` +
+          `hang nao da co dang khong dau cham thi hai hang la MOT hop thu — giu mot; doi hay xoa mot dia chi da luu la doi dich magic link: co ` +
+          `nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenKhongDuoi}, khoan no 283, ADR-139)`,
+      );
+      expect(loi!.message, "không in email").not.toMatch(/vidu\.vn/u);
+      // Literal `E'\\.$'` thay `'\.$'` (chú thích đầu migration): dưới `standard_conforming_strings = off` — cấu hình đặt sẵn ở mức database
+      // hay vai rơi vào phiên migrate — khối đối chiếu vẫn đếm ĐÚNG các hàng có dấu chấm cuối, không đếm mọi hàng (`'\.$'` lex thành `.$`).
+      // Chạy nguyên văn tệp trong một giao dịch bỏ đi; `SET LOCAL` hết cùng ROLLBACK nên kết nối trả về pool sạch.
+      const k = await db.pool.connect();
+      try {
+        await k.query("BEGIN");
+        await k.query("SET LOCAL standard_conforming_strings = off");
+        const loiScs = await k.query(readFileSync(join(MIGRATIONS_DIR, TEN_MIG_CHAM_CUOI), "utf8")).then(
+          () => null,
+          (e: Error) => e.message,
+        );
+        expect(loiScs, "chẩn đoán không đổi dưới standard_conforming_strings = off").toBe(
+          loi!.message.replace(`Migration ${TEN_MIG_CHAM_CUOI} thất bại: `, ""),
+        );
+      } finally {
+        await k.query("ROLLBACK");
+        k.release();
+      }
+
+      // Vì sao migration KHÔNG tự bỏ dấu chấm: ở hàng có dạng anh em, bỏ dấu chấm là va UNIQUE (so nguyên văn) — hai hàng là MỘT hộp thư.
+      const doi = (bang: "users" | "supplier_contacts", id: string, email: string): Promise<string | null> =>
+        db.pool.query(`UPDATE ${bang} SET email = $2 WHERE id = $1`, [id, email]).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+      expect(await doi("users", uAnhEm, "dot-283@vidu.vn"), "bỏ dấu chấm ở hàng có dạng anh em").toBe("23505 users_org_id_email_key");
+      expect(await doi("supplier_contacts", cAnhEm, "lh-283@vidu.vn")).toBe("23505 supplier_contacts_org_id_supplier_id_email_key");
+      // Sửa tay như thông báo chỉ, dưới superuser: hàng anh em (cùng hộp thư với hàng đã có; fixture không vai, không phiên, không lời mời)
+      // bị xoá; hàng đơn lẻ bỏ dấu chấm cuối.
+      await db.pool.query("DELETE FROM users WHERE id = $1", [uAnhEm]);
+      await db.pool.query("DELETE FROM supplier_contacts WHERE id = $1", [cAnhEm]);
+      expect(await doi("users", uMot, "mot-283@vidu.vn")).toBeNull();
+      expect(await doi("supplier_contacts", cHai, "hai-283@vidu.vn")).toBeNull();
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([TEN_MIG_CHAM_CUOI]);
+      const { rows: rb } = await db.pool.query<{ bang: string; conname: string; convalidated: boolean; dinh_nghia: string }>(
+        "SELECT conrelid::regclass::text AS bang, conname, convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
+          "WHERE conname IN ('users_email_khong_dau_cham_cuoi', 'supplier_contacts_email_khong_dau_cham_cuoi') ORDER BY conname",
+      );
+      const dinhNghia = "CHECK ((email !~ '\\.$'::text))";
+      expect(rb).toEqual([
+        { bang: "supplier_contacts", conname: "supplier_contacts_email_khong_dau_cham_cuoi", convalidated: true, dinh_nghia: dinhNghia },
+        { bang: "users", conname: "users_email_khong_dau_cham_cuoi", convalidated: true, dinh_nghia: dinhNghia },
+      ]);
+      // Hai dòng khai ở hardening (khoản 105): đúng tên, đúng migration, đúng định nghĩa nguyên văn — đọc từ CHÍNH tệp, không từ bản chép.
+      const hardening = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const dau = hardening.indexOf("CHECK_AN_NINH_KHAI constant text :=");
+      const khai = hardening.slice(dau, hardening.indexOf(") AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;", dau));
+      for (const r of rb) {
+        expect(khai, `dòng khai của ${r.conname}`).toContain(
+          `('public', '${r.bang}', '${r.conname}', '${tenKhongDuoi}', '${r.dinh_nghia.replaceAll("'", "''")}')`,
+        );
+      }
+      // INSERT thẳng dưới superuser — không qua tầng ứng dụng — bị lược đồ chặn, đúng tên; dấu chấm không ở cuối thì vào.
+      const chen = (bang: "users" | "supplier_contacts", email: string): Promise<string | null> =>
+        (bang === "users" ? nguoiDung(email) : lienHe(email)).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+      expect(await chen("users", "dot-283@vidu.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe("23514 users_email_khong_dau_cham_cuoi");
+      expect(await chen("users", "moi-283@vidu.vn.."), "hai dấu chấm cuối").toBe("23514 users_email_khong_dau_cham_cuoi");
+      expect(await chen("supplier_contacts", "lh-283@vidu.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe(
+        "23514 supplier_contacts_email_khong_dau_cham_cuoi",
+      );
+      expect(await chen("users", "ke.toan.283@vidu.com.vn"), "dấu chấm không ở cuối").toBeNull();
+      expect(await chen("supplier_contacts", "ke.toan.283@vidu.com.vn")).toBeNull();
+      // Lược đồ đã ở trạng thái cuối: migrate() kế không áp gì và mục phán xét khoản 105 im.
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([]);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
   // [S1.57 / khoản nợ 100 — lượt soi 50 NẶNG-1] HỎI TRƯỚC VÒNG KHÔNG ĐƯỢC CHẶN DÒNG MÀ MỘT MIGRATION DƯỚI CHÍNH VAI DEPLOY SỬA ĐƯỢC.
   // Bản đầu của vòng chặn mọi dòng của chủ thể "vai chạy migration" — kể cả thành viên thừa kế chủ trên bảng FORCE, vốn tự thêm được
   // policy vì kiểm chủ là has_privs_of_role (đo): migration vá lỗi không bao giờ tới đích, một ngõ cụt ADR-028 §3. Và test "chủ bảng
@@ -1461,6 +1625,20 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "SELECT app_current_org_id() AS org",
       );
       expect(ketQua.rows[0]?.org).toBeNull();
+
+      // [S1.246 / khoản 285] Hai policy RESTRICTIVE ĐƠN VAI `TO app_api` trên `outbox_jobs` — ghi kết cục (`095`) và XẾP (`099_outbox_policy_xep_theo_kind`) —
+      // bị `DROP OWNED BY` ở trên XOÁ; `migrate()` chỉ đi qua vì hardening dựng lại cả hai từ dòng khai, và chúng bám vai MỚI (OID khác;
+      // một policy trỏ OID cũ thì tên vai đọc ra NULL). Thiếu mục tự chữa của khoản 285 thì `migrate()` ở trên NÉM "dòng khai thiu" (83⑴).
+      const { rows: chinhSach } = await db.pool.query<{ polname: string; lenh: string; vai: string | null }>(
+        "SELECT p.polname, p.polcmd::text AS lenh, " +
+          "       (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE \"C\") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai " +
+          "  FROM pg_policy p WHERE p.polrelid = to_regclass('public.outbox_jobs') AND NOT p.polpermissive " +
+          "   AND p.polname IN ('outbox_jobs_kind_app_api', 'outbox_jobs_kind_xep_app_api') ORDER BY p.polname",
+      );
+      expect(chinhSach).toEqual([
+        { polname: "outbox_jobs_kind_app_api", lenh: "w", vai: "app_api" },
+        { polname: "outbox_jobs_kind_xep_app_api", lenh: "a", vai: "app_api" },
+      ]);
     } finally {
       await db.stop();
     }
@@ -1515,6 +1693,56 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       expect(thongDiep).not.toContain("kind = ANY");
       expect(thongDiep).not.toContain("LOGIN_LINK_SEND");
       expect((await docHai()).find((r) => r.polname === "outbox_jobs_kind_app_api")?.u, "không sửa đè một policy ĐANG CÓ").toBe("true");
+    } finally {
+      await db.stop();
+    }
+  });
+
+  // [S1.246 / khoản 285] `099_outbox_policy_xep_theo_kind` thêm policy RESTRICTIVE ĐƠN VAI thứ hai `TO app_api` — `FOR INSERT`, chỉ vế
+  // WITH CHECK. Cùng khuôn ca khoản 158 ngay trên, trên mục tự chữa RIÊNG của khoản 285: DROP POLICY ⇒ `migrate()` dựng lại ĐÚNG bảy cột
+  // từ dòng khai (USING vẫn NULL — không "bù" vế nào); ĐỔI WITH CHECK tay ⇒ `migrate()` NÉM nêu tên, không in biểu thức (T1), không sửa đè.
+  it("[S1.246 / khoản 285] DROP POLICY outbox_jobs_kind_xep_app_api ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai (FOR INSERT, USING NULL); ĐỔI WITH CHECK tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      type HangXep = { polname: string; permissive: boolean; lenh: string; vai: string | null; u: string | null; wc: string | null };
+      const docXep = async (): Promise<HangXep[]> =>
+        (
+          await db.pool.query<HangXep>(
+            `SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh,
+                    (SELECT string_agg(r.rolname::text, ',' ORDER BY r.rolname COLLATE "C") FROM pg_roles r WHERE r.oid = ANY(p.polroles)) AS vai,
+                    pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc
+               FROM pg_policy p
+              WHERE p.polrelid = to_regclass('public.outbox_jobs') AND p.polname = 'outbox_jobs_kind_xep_app_api'`,
+          )
+        ).rows;
+      const truoc = await docXep();
+      expect(truoc.map((r) => [r.polname, r.permissive, r.lenh, r.vai, r.u])).toEqual([["outbox_jobs_kind_xep_app_api", false, "a", "app_api", null]]);
+      expect(truoc[0]?.wc, "vế WITH CHECK phải có").toMatch(/^\(kind = ANY \(ARRAY\[/u);
+      // Dòng khai ở hardening là NGUỒN của câu sửa: bản trong CSDL bằng bản khai (literal nhân đôi nháy, USING khai NULL).
+      const hardening = readFileSync(fileURLToPath(new URL("./migrations/hardening.always.sql", import.meta.url)), "utf8");
+      const khai = docHangHardeningTu(hardening, "POLICY_RESTRICTIVE_KHAI");
+      expect(khai, "dòng khai của outbox_jobs_kind_xep_app_api").toContain(
+        `'outbox_jobs_kind_xep_app_api', 'a', 'app_api', NULL, '${truoc[0]!.wc!.replaceAll("'", "''")}'`,
+      );
+
+      await db.pool.query("DROP POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs");
+      expect(await docXep(), "tiền đề: policy đã mất").toEqual([]);
+      await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+      expect(await docXep(), "hardening dựng lại ĐÚNG bảy cột, không chỉ MỘT policy cùng tên").toEqual(truoc);
+
+      // Đối chứng: nới WITH CHECK bằng tay ⇒ NÉM, nêu tên policy, không in biểu thức; bản đã nới CÒN NGUYÊN.
+      await db.pool.query("ALTER POLICY outbox_jobs_kind_xep_app_api ON public.outbox_jobs WITH CHECK (true)");
+      const loi: unknown = await migrate(db.pool, MIGRATIONS_DIR).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(loi, "migrate() phải NÉM khi policy đã khai bị đổi").toBeInstanceOf(Error);
+      const thongDiep = (loi as Error).message;
+      expect(thongDiep).toContain("outbox_jobs_kind_xep_app_api");
+      expect(thongDiep).not.toContain("kind = ANY");
+      expect(thongDiep).not.toContain("BREAK_GLASS_UNSEAL_ALERT");
+      expect((await docXep())[0]?.wc, "không sửa đè một policy ĐANG CÓ").toBe("true");
     } finally {
       await db.stop();
     }
@@ -2143,7 +2371,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "unseal_dieu_phoi_mot_lan", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_dieu_phoi_mot_lan"] },
     { ham: "unseal_kiem_chuyen_trang_thai", migration: "055_nhan_chung_break_glass_bat_bien.sql", trigger: ["unseal_requests_kiem_chuyen_trang_thai"] },
     { ham: "unseal_kiem_du_phe_duyet", migration: "022_security_review_s1.sql", trigger: ["unseal_requests_kiem_du_phe_duyet"] },
-    { ham: "unseal_kiem_nguoi_duyet", migration: "019_unseal.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
+    // [S1.245 / khoản 266] `098_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại thân: nhánh không thấy yêu cầu mang tên
+    // `unseal_approvals_yeu_cau_phai_ton_tai` (`USING CONSTRAINT`), để `approveUnseal` nhận "không tìm thấy" theo code VÀ constraint.
+    // Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH NGUYÊN VĂN từ `019` bằng script rồi đổi đúng một chỗ.
+    { ham: "unseal_kiem_nguoi_duyet", migration: "098_khong_tim_thay_yeu_cau_co_ten.sql", trigger: ["unseal_approvals_kiem_nguoi_duyet"] },
     { ham: "unseal_kiem_rfq_da_dong", migration: "059_vong_bafo.sql", trigger: ["unseal_requests_kiem_rfq_da_dong"] },
     // [S1.170 / khoản 228] `073_ban_ro_cung_goi` định nghĩa lại thân: bản rõ phải thuộc CÙNG gói và CÙNG vòng với
     // yêu cầu mở thầu. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
@@ -3886,6 +4117,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "096_lich_su_gia.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -5873,6 +6109,138 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await db.stop();
     }
   }, 180_000);
+
+  // ==========================================================================================
+  // [S1.248 / khoản 277] HÀM HẸP CỦA `api` VÀ POLICY ĐI KÈM ĐƯỢC HARDENING GHIM — năm cảnh trôi sau deploy, trên MỘT cụm
+  // ==========================================================================================
+  // `101_api_to_chuc_co_viec` dựng hàm SECURITY DEFINER thứ hai của kho (`public.outbox_to_chuc_co_viec_api()`, chủ
+  // `app_liet_ke_to_chuc`, EXECUTE chỉ `app_api`) và một policy `FOR SELECT TO app_liet_ke_to_chuc USING (status = 'PENDING')`
+  // trên `outbox_jobs`. Hardening canh bằng ba hàng (định nghĩa hàm, EXECUTE, policy) cộng hai dòng khai (NGOAI_LE_DOC_VONG,
+  // NGOAI_LE_HINH_DANG). Mỗi cảnh dưới đây đi qua migrate() THẬT dưới siêu người dùng của cụm test:
+  //   ⑴ thân bị thay bằng một thân RỘNG hơn (mọi tổ chức có việc PENDING, bỏ lọc kind) ⇒ tự chữa, WARNING nêu hàng và VÂN TAY
+  //      của thân đã thay — không thân (ADR-124);
+  //   ⑵ ACL trôi — PUBLIC và app_unseal được cấp, app_api mất ⇒ tự chữa cả hai chiều;
+  //   ⑶ policy bị DROP (cảnh ❷ của ADR-040: hàm trả 0 hàng KHÔNG LỖI) ⇒ dựng lại đúng lệnh, vai, biểu thức;
+  //   ⑷ chủ hàm đổi sang app_api ⇒ migrate() GÃY nêu hàng định nghĩa (CREATE OR REPLACE không đổi được chủ);
+  //   ⑸ policy nới thành USING (true) ⇒ migrate() GÃY: 83⑴ (hình dạng không duyệt) và hàng policy cùng nêu tên.
+  it("[S1.248 / khoản 277] hàm hẹp outbox_to_chuc_co_viec_api() và policy đi kèm: thân thay ⇒ tự chữa, WARNING mang vân tay; ACL trôi ⇒ tự chữa; policy DROP ⇒ dựng lại; chủ hàm đổi ⇒ migrate() GÃY nêu hàng định nghĩa; policy nới USING (true) ⇒ migrate() GÃY nêu policy", async () => {
+    const db = await startPostgres();
+    try {
+      await migrate(db.pool, MIGRATIONS_DIR);
+      const HAM = "public.outbox_to_chuc_co_viec_api()";
+      const HANG_DINH_NGHIA = "định nghĩa hàm outbox_to_chuc_co_viec_api() (101_api_to_chuc_co_viec)";
+      const HANG_ACL = "EXECUTE trên outbox_to_chuc_co_viec_api(): app_api có, app_unseal không, app_neo không, app_khoi_tao không, PUBLIC không (101_api_to_chuc_co_viec)";
+      const HANG_POLICY = "policy đọc việc PENDING của outbox_jobs cho vai chủ hàm liệt kê (101_api_to_chuc_co_viec)";
+      const THAN_CHUAN =
+        "SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING' AND j.kind = ANY (ARRAY['LOGIN_LINK_SEND', 'RFQ_DEADLINE_EXTENDED_NOTICE', 'UNSEAL_APPROVAL_NOTICE'])";
+      const chay = async (): Promise<{ loi: Error | null; canhBao: string[] }> => {
+        const canhBao: string[] = [];
+        const loi = await migrate(db.pool, MIGRATIONS_DIR, {
+          onThongBao: (tb) => {
+            if (tb.severity === "WARNING") canhBao.push(tb.message);
+          },
+        }).then(
+          () => null,
+          (e: Error) => e,
+        );
+        return { loi, canhBao };
+      };
+      const trangThaiHam = async (): Promise<{ than: string; secdef: boolean; chu: string }> =>
+        (
+          await db.pool.query<{ than: string; secdef: boolean; chu: string }>(
+            "SELECT btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) AS than, p.prosecdef AS secdef, p.proowner::regrole::text AS chu " +
+              "FROM pg_proc p WHERE p.oid = to_regprocedure($1)",
+            [HAM],
+          )
+        ).rows[0]!;
+      expect(await trangThaiHam(), "tiền đề: hàm đúng hình dạng sau migrate() đầu").toEqual({ than: THAN_CHUAN, secdef: true, chu: "app_liet_ke_to_chuc" });
+
+      // ⑴ Thân RỘNG hơn — mọi tổ chức có việc PENDING, kể cả việc của worker. Siêu người dùng: chủ hàm giữ nguyên.
+      const THAN_RONG = "SELECT DISTINCT j.org_id FROM public.outbox_jobs j WHERE j.status = 'PENDING'";
+      await db.pool.query(
+        `CREATE OR REPLACE FUNCTION ${HAM} RETURNS SETOF pg_catalog.uuid LANGUAGE sql STABLE SECURITY DEFINER ` +
+          `SET search_path = pg_catalog AS $x$ ${THAN_RONG} $x$`,
+      );
+      const vanTayRong = (
+        await db.pool.query<{ v: string }>("SELECT left(encode(sha256(convert_to($1::text, 'UTF8')), 'hex'), 16) AS v", [THAN_RONG])
+      ).rows[0]!.v;
+      let r = await chay();
+      expect(r.loi, "thân thay dưới siêu người dùng ⇒ tự chữa, không gãy").toBeNull();
+      const canhBaoThan = r.canhBao.filter((m) => m.includes(`mục "${HANG_DINH_NGHIA}" ở trạng thái SAI TRƯỚC khi sửa`));
+      expect(canhBaoThan, JSON.stringify(r.canhBao)).toHaveLength(1);
+      expect(canhBaoThan[0], "WARNING mang VÂN TAY của thân đã thay").toContain(`vân tay prosrc hiện tại: ${vanTayRong}`);
+      expect(canhBaoThan[0], "WARNING không in thân (ADR-124)").not.toContain("j.status = 'PENDING'");
+      expect(await trangThaiHam(), "⑴ thân chuẩn đã về").toEqual({ than: THAN_CHUAN, secdef: true, chu: "app_liet_ke_to_chuc" });
+
+      // ⑵ ACL trôi hai chiều.
+      await db.pool.query(`GRANT EXECUTE ON FUNCTION ${HAM} TO PUBLIC; GRANT EXECUTE ON FUNCTION ${HAM} TO app_unseal; REVOKE EXECUTE ON FUNCTION ${HAM} FROM app_api`);
+      r = await chay();
+      expect(r.loi).toBeNull();
+      expect(r.canhBao.filter((m) => m.includes(`mục "${HANG_ACL}" ở trạng thái SAI TRƯỚC khi sửa`)), JSON.stringify(r.canhBao)).toHaveLength(1);
+      const quyen = (
+        await db.pool.query<{ pub: boolean; api: boolean; unseal: boolean; neo: boolean; khoi_tao: boolean }>(
+          "SELECT has_function_privilege('public', $1, 'EXECUTE') AS pub, has_function_privilege('app_api', $1, 'EXECUTE') AS api, " +
+            "has_function_privilege('app_unseal', $1, 'EXECUTE') AS unseal, has_function_privilege('app_neo', $1, 'EXECUTE') AS neo, " +
+            "has_function_privilege('app_khoi_tao', $1, 'EXECUTE') AS khoi_tao",
+          [HAM],
+        )
+      ).rows[0];
+      expect(quyen, "⑵ EXECUTE chỉ app_api").toEqual({ pub: false, api: true, unseal: false, neo: false, khoi_tao: false });
+
+      // ⑶ Policy bị DROP — cảnh ❷: hàm trả 0 hàng KHÔNG LỖI. Đo cảnh ấy trước khi migrate() dựng lại.
+      const { rows: gieo } = await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('K277', 'k277') RETURNING id");
+      const org = gieo[0]!.id;
+      await db.pool.query("INSERT INTO outbox_jobs (org_id, kind) VALUES ($1, 'LOGIN_LINK_SEND')", [org]);
+      const demDuoiApi = async (): Promise<number> => {
+        const c = await db.pool.connect();
+        try {
+          await c.query("BEGIN; SET LOCAL ROLE app_api");
+          return (await c.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${HAM} AS t(id) WHERE t.id = $1`, [org])).rows[0]!.n;
+        } finally {
+          await c.query("ROLLBACK");
+          c.release();
+        }
+      };
+      expect(await demDuoiApi(), "tiền đề ⑶: tổ chức có việc PENDING của api ở trong tập").toBe(1);
+      await db.pool.query("DROP POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs");
+      expect(await demDuoiApi(), "cảnh ❷ của ADR-040: policy vắng ⇒ 0 hàng, KHÔNG LỖI").toBe(0);
+      r = await chay();
+      expect(r.loi).toBeNull();
+      expect(r.canhBao.filter((m) => m.includes(`mục "${HANG_POLICY}" ở trạng thái SAI TRƯỚC khi sửa`)), JSON.stringify(r.canhBao)).toHaveLength(1);
+      const pol = (
+        await db.pool.query<{ lenh: string; vai: string; u: string; wc: string | null; permissive: boolean }>(
+          "SELECT p.polcmd::text AS lenh, array_to_string(ARRAY(SELECT r.rolname FROM pg_roles r WHERE r.oid = ANY (p.polroles) ORDER BY 1), ',') AS vai, " +
+            "pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc, p.polpermissive AS permissive " +
+            "FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname = 'outbox_jobs_liet_ke_viec_api'",
+        )
+      ).rows;
+      expect(pol, "⑶ policy dựng lại đúng lệnh, vai, biểu thức").toEqual([
+        { lenh: "r", vai: "app_liet_ke_to_chuc", u: "(status = 'PENDING'::text)", wc: null, permissive: true },
+      ]);
+      expect(await demDuoiApi(), "⑶ sau khi dựng lại: tổ chức trở lại tập").toBe(1);
+
+      // ⑷ Chủ hàm đổi sang app_api — hàm SECURITY DEFINER chạy dưới quyền của chính vai gọi nó, CREATE OR REPLACE không đổi được chủ.
+      await db.pool.query(`ALTER FUNCTION ${HAM} OWNER TO app_api`);
+      r = await chay();
+      expect(r.loi, "chủ hàm sai ⇒ migrate() phải GÃY").not.toBeNull();
+      expect(r.loi!.message).toContain(`"${HANG_DINH_NGHIA}": trạng thái hiện tại SAI`);
+      expect(r.loi!.message).toContain("chu=app_api");
+      await db.pool.query(`ALTER FUNCTION ${HAM} OWNER TO app_liet_ke_to_chuc`);
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "⑷ trả chủ ⇒ đi qua").resolves.toEqual([]);
+
+      // ⑸ Policy nới thành USING (true): vai chủ hàm thấy mọi hàng — 83⑴ và hàng policy cùng nêu.
+      await db.pool.query("ALTER POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs USING (true)");
+      r = await chay();
+      expect(r.loi, "policy nới ⇒ migrate() phải GÃY").not.toBeNull();
+      expect(r.loi!.message).toContain("outbox_jobs.outbox_jobs_liet_ke_viec_api: hình dạng biểu thức KHÔNG nằm trong danh sách được duyệt");
+      expect(r.loi!.message).toContain(`"${HANG_POLICY}": trạng thái hiện tại SAI`);
+      expect(r.loi!.message, "thông điệp không in biểu thức").not.toMatch(/USING \(true\)|'PENDING'/u);
+      await db.pool.query("ALTER POLICY outbox_jobs_liet_ke_viec_api ON public.outbox_jobs USING (status = 'PENDING')");
+      await expect(migrate(db.pool, MIGRATIONS_DIR), "⑸ trả biểu thức ⇒ đi qua").resolves.toEqual([]);
+    } finally {
+      await db.stop();
+    }
+  }, 300_000);
 
   // ==========================================================================================
   // [vòng fix 2 — I4 / vòng fix 3 — I4] POLICY "AS RESTRICTIVE" LÀ PHÒNG THỦ CHẶT HƠN
@@ -8389,6 +8757,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "096_lich_su_gia.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8704,6 +9077,11 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "096_lich_su_gia.sql",
         "097_chan_bat_s3_khi_con_goi_cho.sql",
+        "098_khong_tim_thay_yeu_cau_co_ten.sql",
+        "099_outbox_policy_xep_theo_kind.sql",
+        "100_email_khong_dau_cham_cuoi.sql",
+        // [S1.248 / khoản 277] Hàm hẹp của `api` — tập tổ chức có việc PENDING của nó (ADR-040 tiểu mục).
+        "101_api_to_chuc_co_viec.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

@@ -65,9 +65,15 @@ export const TAX_CODE_PATTERN = /^[0-9]{10}(-[0-9]{3})?$/;
  * Vị từ này từ chối MỌI khoảng trắng và ký tự điều khiển, đòi đúng một `@`, và đòi domain có dấu
  * chấm. Nó là phép kiểm HÌNH DẠNG, KHÔNG phải phép kiểm "địa chỉ này có thật" — đừng trích nó
  * rộng hơn thế. Bản sao ở CSDL: `supplier_contacts_email_hinh_dang` (011).
+ *
+ * [S1.247 / khoản 283 / ADR-139] Và ký tự CUỐI không là dấu chấm. Đuôi cũ ~~`\.[^\s\u0000-\u001f\u007f@]+$`~~ khớp `dot@x.vn.`
+ * vì phần sau dấu chấm lùi được về `vn.` (đo ở S1.229) — dạng tuyệt đối của cùng một tên miền (RFC 5321), tức CÙNG hộp thư với
+ * `dot@x.vn`. Bản sao ở CSDL của vế này: `CHECK (email !~ '\.$')` trên `supplier_contacts` và `users`
+ * (`100_email_khong_dau_cham_cuoi.sql`). `addSupplierContact` từ chối dấu chấm cuối bằng lời CÓ TÊN trước khi tới vị từ này
+ * (`MAU_DAU_CHAM_CUOI`); vế ở đây giữ cho vị từ xuất khẩu không gọi "đúng hình dạng" một địa chỉ mà lược đồ từ chối.
  */
 export const EMAIL_PATTERN =
-  /^[^\s\u0000-\u001f\u007f@]+@[^\s\u0000-\u001f\u007f@]+\.[^\s\u0000-\u001f\u007f@]+$/;
+  /^[^\s\u0000-\u001f\u007f@]+@[^\s\u0000-\u001f\u007f@]+\.[^\s\u0000-\u001f\u007f@]*[^\s\u0000-\u001f\u007f@.]$/;
 
 /**
  * [S1.229 / khoản 71 / ADR-132] Miền email của sản phẩm là ASCII IN ĐƯỢC (0x21…0x7E) — bản sao tầng ứng dụng của `CHECK`
@@ -78,6 +84,14 @@ export const EMAIL_PATTERN =
  * Địa chỉ quốc tế hoá (EAI/IDN) bị từ chối có tên — điều kiện mở lại ở ADR-132. Không xuất: đường ghi duy nhất là hàm dưới.
  */
 const MAU_EMAIL_ASCII = /^[!-~]+$/u;
+
+/**
+ * [S1.247 / khoản 283 / ADR-139] Dấu chấm cuối tên miền — bản sao tầng ứng dụng của `CHECK (email !~ '\.$')`
+ * (`100_email_khong_dau_cham_cuoi.sql`, trên `users` lẫn `supplier_contacts`). `dot@x.vn.` là dạng tuyệt đối của `dot@x.vn` (RFC
+ * 5321): CÙNG một hộp thư, mà `UNIQUE (org_id, supplier_id, email)` so nguyên văn nên cho hai hàng — hai lời mời tới một hộp thư. Từ
+ * chối CÓ TÊN, KHÔNG chuẩn hoá (chủ dự án chốt, kế hoạch đợt 3 câu 12): bỏ dấu chấm là sửa ngầm địa chỉ người dùng gõ. Không xuất.
+ */
+const MAU_DAU_CHAM_CUOI = /\.$/u;
 
 /**
  * Hình dạng số điện thoại — bản sao của `CHECK` ở 008. Lý do nhân bản NẶNG HƠN ở đây so với
@@ -363,18 +377,24 @@ export async function addSupplierContact(
   // nhau dưới `UNIQUE (org_id, supplier_id, email)` — ràng buộc mang tên "một email một người
   // liên hệ" không làm được việc đó, và hệ quả ở S1.3 là hai magic link hợp lệ tới cùng hộp thư.
   //
-  // [S1.229 / khoản 71] Thứ tự: rỗng → ASCII in được → hạ chữ thường → 320 byte → hình dạng.
+  // [S1.229 / khoản 71] Thứ tự: rỗng → ASCII in được → hạ chữ thường → 320 byte → ~~hình dạng~~ **[S1.247 / khoản 283]** dấu
+  // chấm cuối → hình dạng.
   // ~~`batBuoc(input.email, "email", 320).toLowerCase()`~~ — kiểm 320 byte TRƯỚC khi hạ là SAI với
   // `İ` (U+0130), `Ⱥ` (U+023A), `Ⱦ` (U+023E): `.toLowerCase()` làm chúng từ 2 lên 3 byte (đo bằng
   // Node), nên một đầu vào sát 320 byte vấp CHECK độ dài của 008 thành 23514 thân cố định (vế ⑶
   // của khoản 71). Nay ASCII được kiểm trước nên phép hạ bảo toàn độ dài; độ dài vẫn kiểm SAU khi
   // hạ để thứ tự ấy đúng cả ngày miền có mở lại (ADR-132). Đo: `suppliers.int.test.ts` `[S1.229]`.
+  // [S1.247 / khoản 283] Dấu chấm cuối đứng TRƯỚC `EMAIL_PATTERN` để lời từ chối nói đúng lý do (vị từ ấy cũng từ chối dấu chấm
+  // cuối, nhưng bằng câu chung "sai định dạng"). Đo: `suppliers.int.test.ts` `[S1.247 / khoản 283]`.
   const emailTho = input.email.trim();
   if (emailTho.length === 0) throw new SupplierError("email không được rỗng");
   if (!MAU_EMAIL_ASCII.test(emailTho)) {
     throw new SupplierError("email chứa ký tự ngoài ASCII in được — chỉ nhận địa chỉ ASCII, không dấu, không khoảng trắng");
   }
   const email = batBuoc(emailTho.toLowerCase(), "email", 320);
+  if (MAU_DAU_CHAM_CUOI.test(email)) {
+    throw new SupplierError("email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối");
+  }
   if (!EMAIL_PATTERN.test(email)) {
     throw new SupplierError("email sai định dạng, hoặc chứa khoảng trắng / ký tự điều khiển");
   }
