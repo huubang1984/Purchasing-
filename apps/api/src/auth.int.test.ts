@@ -281,6 +281,45 @@ describe("/auth/link — không liệt kê được email", () => {
     expect(dv.linkDaGui.length, "không người dùng nào mang địa chỉ ấy ⇒ không link").toBe(truoc);
   });
 
+  // [S1.9160 / khoản 283 / ADR-9260] DẤU CHẤM CUỐI TÊN MIỀN. RFC 5321 coi `vidu.vn.` là dạng tuyệt đối của `vidu.vn`: hai hàng `users` khác
+  // nhau MỘT dấu chấm cuối là HAI người dùng cho MỘT hộp thư, mỗi người xin được một magic link riêng — đo trước (lược đồ tới 095): hàng thứ
+  // hai VÀO và `/auth/link` với dạng có dấu chấm phát link cho nó. Nay `users_email_khong_dau_cham_cuoi` (`9560_email_khong_dau_cham_cuoi.sql`)
+  // chặn ở lược đồ, và `/auth/link` KHÔNG chuẩn hoá (câu 12 của kế hoạch đợt 3 — chuẩn hoá là phương án bị loại): dạng có dấu chấm không tìm
+  // ra người dùng dạng không dấu chấm — cùng một 200, một job, không link. Link của dạng không dấu chấm là đối chứng dương của kênh quan sát.
+  // Một phép so gộp để lần đỏ in trọn trạng thái đo được, không dừng ở vế đầu.
+  it("[khoản 283] `dot-283@vidu.vn.` không cất được cạnh `dot-283@vidu.vn` ở `users` (23514 có tên), và `/auth/link` với dạng có dấu chấm cuối vẫn 200 không link — không chuẩn hoá", async () => {
+    const org283 = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty 283', 'cong-ty-283') RETURNING id")
+    ).rows[0]!.id;
+    const chen = (email: string): Promise<string | null> =>
+      db.pool
+        .query("INSERT INTO users (org_id, email, full_name, status) VALUES ($1, $2, 'Nguoi 283', 'ACTIVE')", [org283, email])
+        .then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+    expect(await chen("dot-283@vidu.vn"), "đối chứng").toBeNull();
+    const truoc = dv.linkDaGui.length;
+    const chenCham = await chen("dot-283@vidu.vn.");
+    const chenHaiCham = await chen("hai-283@vidu.vn..");
+    const trangThai: number[] = [];
+    for (const email of ["dot-283@vidu.vn", "dot-283@vidu.vn."]) {
+      trangThai.push((await goi("POST", "/auth/link", { body: { orgId: org283, email } })).status);
+    }
+    const soJob = await ob.chay(org283);
+    const linkToi = dv.linkDaGui
+      .slice(truoc)
+      .map((l) => l.email)
+      .sort();
+    expect({ chenCham, chenHaiCham, trangThai, soJob, linkToi }, "một hộp thư, một người dùng, một link").toEqual({
+      chenCham: "23514 users_email_khong_dau_cham_cuoi",
+      chenHaiCham: "23514 users_email_khong_dau_cham_cuoi",
+      trangThai: [200, 200],
+      soJob: 2,
+      linkToi: ["dot-283@vidu.vn"],
+    });
+  });
+
   // [S1.15] Khối này cũng có một vòng đếm (`LOGIN_MAX_TOKENS_PER_WINDOW + 3`) — cùng lý do.
   beforeEach(choDuCuaSo);
 

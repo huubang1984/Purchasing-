@@ -511,3 +511,69 @@ describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII
     await expect(them("   ")).rejects.toThrow("email không được rỗng");
   });
 });
+
+// =============================================================================================
+// [S1.9160 / khoản 283 / ADR-9260] DẤU CHẤM CUỐI TÊN MIỀN — TỪ CHỐI CÓ TÊN, KHÔNG CHUẨN HOÁ
+//
+// Khoản 283 (tách ra từ lượt đo khoản 71 ở S1.229): `dot@x.vn.` CẤT ĐƯỢC cạnh `dot@x.vn` cho CÙNG một nhà cung cấp — `EMAIL_PATTERN` và
+// ràng buộc hình dạng của 011 khớp vì `[^…@]+\.[^…@]+$` lùi được về `x` `.` `vn.`; 092 chỉ kiểm miền ký tự; `UNIQUE (org_id, supplier_id,
+// email)` so nguyên văn. RFC 5321 coi tên miền có dấu chấm cuối là dạng tuyệt đối của CÙNG một tên, và bộ gửi SES nhận cả hai ⇒ hai người
+// liên hệ, hai lời mời, MỘT hộp thư. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 12): từ chối CÓ TÊN ở tầng ứng dụng + `CHECK (email !~
+// '\.$')` ở lược đồ; KHÔNG chuẩn hoá — bỏ dấu chấm là sửa ngầm địa chỉ người dùng gõ. Ở đây đo tầng ứng dụng (`SupplierError` ⇒ 422 qua
+// `LOI_NGHIEP_VU_422`) và lược đồ dưới superuser (không qua gói này); đối chiếu trước của migration đo ở `db/migrations.int.test.ts`.
+// =============================================================================================
+describe("[S1.9160 / khoản 283] dấu chấm cuối tên miền của người liên hệ bị từ chối có tên", () => {
+  let ncc = "";
+  beforeAll(async () => {
+    ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC dấu chấm cuối", actorSessionId: sA }))).id;
+  });
+  const them = (email: string) =>
+    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 283", email, actorSessionId: sA }));
+  const emailDaCat = async (): Promise<string[]> =>
+    (await db.pool.query<{ email: string }>("SELECT email FROM supplier_contacts WHERE supplier_id = $1 ORDER BY email", [ncc])).rows.map(
+      (r) => r.email,
+    );
+  const THONG_DIEP_CHAM_CUOI = "email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối";
+
+  it("đối chứng: `dot-283@x.vn` (không dấu chấm cuối) qua và được cất", async () => {
+    expect((await them("dot-283@x.vn")).email).toBe("dot-283@x.vn");
+  });
+
+  it.each([
+    ["dấu chấm cuối — CÙNG hộp thư với `dot-283@x.vn` vừa cất (RFC 5321: dạng tuyệt đối của cùng một tên)", "dot-283@x.vn."],
+    ["chữ hoa và dấu chấm cuối — hạ chữ thường không gỡ dấu chấm", "DOT-283@X.VN."],
+    ["khoảng trắng hai đầu — `trim` xong vẫn còn dấu chấm cuối", "  dot-283@x.vn.  "],
+    ["hai dấu chấm cuối", "hai-283@x.vn.."],
+    ["dấu chấm cuối, không có dạng anh em nào đã cất", "mot-283@x.vn."],
+  ])("%s ⇒ SupplierError có tên (422), không hàng nào được ghi, không 23514", async (_ten, email) => {
+    const truoc = await emailDaCat();
+    const loi = await them(email).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi, "phải bị từ chối").toBeInstanceOf(SupplierError);
+    expect((loi as Error).message).toBe(THONG_DIEP_CHAM_CUOI);
+    expect((loi as { code?: string }).code, "lỗi của tầng ứng dụng, không phải 23514 của CSDL").toBeUndefined();
+    expect(await emailDaCat(), "không hàng nào được ghi").toEqual(truoc);
+  });
+
+  it("dấu chấm KHÔNG ở cuối vẫn qua (trong local-part, giữa tên miền) — luật chỉ chạm đuôi chuỗi", async () => {
+    expect((await them("Ke.Toan.283@NCC.X.VN")).email).toBe("ke.toan.283@ncc.x.vn");
+  });
+
+  it("lược đồ dưới superuser (không qua gói này): `dot-su-283@x.vn` vào, dạng có một hay hai dấu chấm cuối ⇒ 23514 `supplier_contacts_email_khong_dau_cham_cuoi`", async () => {
+    const chen = (email: string): Promise<string | null> =>
+      db.pool
+        .query(
+          "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi 283', $3, $4, $5)",
+          [orgA, ncc, email, uA, sA],
+        )
+        .then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+    expect(await chen("dot-su-283@x.vn"), "đối chứng").toBeNull();
+    expect(await chen("dot-su-283@x.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
+    expect(await chen("hai-su-283@x.vn.."), "hai dấu chấm cuối").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
+  });
+});
