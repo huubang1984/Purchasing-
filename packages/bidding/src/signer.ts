@@ -27,7 +27,7 @@ export interface ReceiptKeyPair {
 }
 
 /**
- * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `receipt.ts`.~~ [S1.9101 / kid] Tập PHÁT HÀNH, HẸP
+ * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `receipt.ts`.~~ [S1.249 / kid] Tập PHÁT HÀNH, HẸP
  * hơn tập của ĐỊNH DẠNG: không `:`. Kid biên nhận thành TÊN ĐỐI TƯỢNG S3 (`khoa-bien-nhan/<kid>.json`) khi job neo neo tài liệu
  * khoá mà `apps/public-keys` công bố (`taiLieuMotKhoa` của `tools/neo-so-kiem-toan/src/aws.ts`, tập `[A-Za-z0-9._-]`) — một kid mang
  * `:` mà bộ ký nhận là một kid ký được, công bố được, mà lệnh neo NÉM (câu hỏi của lô A1, §S1.238). Chủ dự án chốt 2026-09-30: thu
@@ -39,7 +39,7 @@ export interface ReceiptKeyPair {
 const KID_PHAT_HANH = /^[A-Za-z0-9._-]{1,64}$/;
 
 /**
- * `kid` đi nguyên văn vào một dòng `kid=...` của văn bản được ký — dùng chung cho mọi adapter. [S1.9101 / kid] Và thành tên đối
+ * `kid` đi nguyên văn vào một dòng `kid=...` của văn bản được ký — dùng chung cho mọi adapter. [S1.249 / kid] Và thành tên đối
  * tượng S3 khi neo tài liệu khoá: tập phát hành là `[A-Za-z0-9._-]`, 1–64 ký tự — thông điệp nêu đúng tập ấy.
  */
 export function assertReceiptKid(kid: string): void {

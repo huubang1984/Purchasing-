@@ -221,7 +221,7 @@ describe("bề mặt tệp", () => {
       "nhom-hang": ["GET /auth/login-links", "GET /categories"],
       // [S1.199 / S4.2b] Màn dữ liệu nền nạp danh sách hàng chuẩn rồi danh mục đơn vị.
       // [S1.234 / S4.3b] …rồi hàng đợi ánh xạ.
-      // [S1.9101 / khoản 291] Bước 1 của `/du-lieu` nay là `/lib/dang-nhap.js`: link đăng nhập gần đây TRƯỚC lời gọi riêng của màn.
+      // [S1.249 / khoản 291] Bước 1 của `/du-lieu` nay là `/lib/dang-nhap.js`: link đăng nhập gần đây TRƯỚC lời gọi riêng của màn.
       "du-lieu": ["GET /auth/login-links", "GET /items", "GET /uom", "GET /mapping-queue"],
       // [S1.216 / khoản 195] `/login` hỏi link đăng nhập gần đây của chính mình sau khi các bước mở.
       "mo-thau": ["GET /auth/login-links"],
@@ -547,11 +547,11 @@ describe("bề mặt tệp", () => {
     // (chủ dự án chốt cách ⒝ ngày 2026-09-30) — nên sáu ca dưới chạy trên cả bốn trang, cộng một ca mới: ô tổ chức sai hình dạng
     // nói đúng câu và không gọi máy chủ (phép đọc của `/login` nay là của cả bốn). Đo trước trên cây cũ: ba trang kia đỏ ở mọi ca
     // cần nút Tiếp hay ô mã ẩn.
-    // [S1.9101 / khoản 291] Trang thứ năm: `/du-lieu` (S4.2b) từng chép nút Vào cũ — cùng khiếm khuyết 193, mà phép đếm của 282 bỏ
+    // [S1.249 / khoản 291] Trang thứ năm: `/du-lieu` (S4.2b) từng chép nút Vào cũ — cùng khiếm khuyết 193, mà phép đếm của 282 bỏ
     // sót — nay gắn cùng module; ba khối DOM dưới (193, 195, 268) chạy trên năm trang. Đo trước trên cây cũ: `/du-lieu` đỏ ở mọi ca
     // cần nút Tiếp, ô mã ẩn, câu ghi danh mới hay khối link gần đây.
     // ==========================================================================================
-    // [S1.240 / khoản 282] ~~Bốn trang người mua~~ [S1.9101 / khoản 291] Năm trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`),
+    // [S1.240 / khoản 282] ~~Bốn trang người mua~~ [S1.249 / khoản 291] Năm trang người mua — cùng một bước 1 (`/lib/dang-nhap.js`),
     // cùng bộ id. ~~`BON_TRANG`~~ đổi tên theo số trang.
     const NAM_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu"] as const;
     /** Các cặp dt/dd đã vẽ vào `link-gan-day` (khối link đăng nhập gần đây — khoản 195, 268). */
@@ -562,11 +562,11 @@ describe("bề mặt tệp", () => {
       return ra;
     };
 
-    describe("[S1.230 / khoản 193 · S1.240 / khoản 282 · S1.9101 / khoản 291] bước 1 tách «lấy bí mật ghi danh» khỏi «vào» — năm trang người mua", () => {
+    describe("[S1.230 / khoản 193 · S1.240 / khoản 282 · S1.249 / khoản 291] bước 1 tách «lấy bí mật ghi danh» khỏi «vào» — năm trang người mua", () => {
       const BI_MAT = "JBSWY3DPEHPK3PXP";
       const CHUA_GHI_DANH = { status: 200, body: { needsEnrollment: true, totpSecretBase32: BI_MAT, issuer: "TrustProcure" } };
       const ghiDanh = (l: string) => (l === "POST /auth/redeem" ? Promise.resolve(CHUA_GHI_DANH) : undefined);
-      // [S1.9101 / khoản 292] Dụng cụ của bốn ca «phản hồi về muộn» ở cuối vòng dưới.
+      // [S1.249 / khoản 292] Dụng cụ của bốn ca «phản hồi về muộn» ở cuối vòng dưới.
       interface PhanHoi { status: number; body: unknown }
       type Trang = Awaited<ReturnType<typeof dungTrang>>;
       /** Giữ mọi `/auth/redeem`: `ds[i]` là lời gọi thứ i — `tha` trả phản hồi, `nem` là mất mạng. */
@@ -706,7 +706,7 @@ describe("bề mặt tệp", () => {
         });
 
         // ====================================================================================
-        // [S1.9101 / khoản 292] PHẢN HỒI `/auth/redeem` CỦA LƯỢT CŨ KHÔNG ĐƯỢC GẮN CHO MÃ MỚI
+        // [S1.249 / khoản 292] PHẢN HỒI `/auth/redeem` CỦA LƯỢT CŨ KHÔNG ĐƯỢC GẮN CHO MÃ MỚI
         //
         // `doiMaDangNhap` đặt `daRedeem` và vẽ SAU `await`. Tới trước vòng này, phản hồi của mã A về muộn — sau khi thẻ đã sang link
         // của B (`hashchange`), sau khi đã đăng xuất, hay sau khi người khác đã dán mã của mình — được gắn cho mã đang giữ LÚC ẤY: bí
@@ -716,7 +716,7 @@ describe("bề mặt tệp", () => {
         // `/auth/redeem` bị giữ và ca thả từng lời gọi theo thứ tự đi. Đối chứng dương trong từng ca: phản hồi của lượt HIỆN TẠI — bí
         // mật, từ chối, mất mạng — vẫn hiện như cũ.
         // ====================================================================================
-        it(`[S1.9101 / khoản 292] ${trang}: ⑴ hashchange — lời «cần ghi danh» cho mã A về MUỘN ⇒ không bí mật của A dưới mã B, ô mã sáu số không mở; Tiếp lại gọi /auth/redeem cho mã B và vẽ như thường`, async () => {
+        it(`[S1.249 / khoản 292] ${trang}: ⑴ hashchange — lời «cần ghi danh» cho mã A về MUỘN ⇒ không bí mật của A dưới mã B, ô mã sáu số không mở; Tiếp lại gọi /auth/redeem cho mã B và vẽ như thường`, async () => {
           const g = giuRedeem();
           const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: g.thay });
           const lanA = bamGiu(p, "nut-ghi-danh");
@@ -743,7 +743,7 @@ describe("bề mặt tệp", () => {
           expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/redeem"]);
         });
 
-        it(`[S1.9101 / khoản 292] ${trang}: ⑵ hashchange — lời từ chối (401) cho mã A về MUỘN ⇒ không câu nào dưới mã B; mất mạng ở lượt của mã B thì vẫn nói`, async () => {
+        it(`[S1.249 / khoản 292] ${trang}: ⑵ hashchange — lời từ chối (401) cho mã A về MUỘN ⇒ không câu nào dưới mã B; mất mạng ở lượt của mã B thì vẫn nói`, async () => {
           const g = giuRedeem();
           const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: g.thay });
           const lanA = bamGiu(p, "nut-ghi-danh");
@@ -764,7 +764,7 @@ describe("bề mặt tệp", () => {
           expect(p.el("khoi-ma").hidden).toBe(true);
         });
 
-        it(`[S1.9101 / khoản 292] ${trang}: ⑶ đăng xuất (datLai, cùng mã trong ô) — mất mạng của lượt trước về MUỘN ⇒ không câu «không kết nối» đè lên «Đã đăng xuất»; Tiếp lại gọi lại, lời từ chối của lượt này thì in`, async () => {
+        it(`[S1.249 / khoản 292] ${trang}: ⑶ đăng xuất (datLai, cùng mã trong ô) — mất mạng của lượt trước về MUỘN ⇒ không câu «không kết nối» đè lên «Đã đăng xuất»; Tiếp lại gọi lại, lời từ chối của lượt này thì in`, async () => {
           // Trình duyệt đang giữ phiên của người khác (khối hỏi và nút Đăng xuất hiện); A gõ mã của mình, bấm Tiếp, rồi bấm Đăng xuất
           // trước khi máy chủ trả.
           const g = giuRedeem();
@@ -793,7 +793,7 @@ describe("bề mặt tệp", () => {
           expect(p.trangThai.goi).toEqual(["GET /me", "POST /auth/redeem", "POST /auth/logout", "POST /auth/redeem"]);
         });
 
-        it(`[S1.9101 / khoản 292] ${trang}: ⑷ dán mã khác (doiMa) — lời «đã ghi danh» cho mã B về MUỘN khi ô đã sang mã C ⇒ Vào DỪNG, không /auth/totp, ô mã sáu số không mở; phản hồi cho mã C vẽ như thường`, async () => {
+        it(`[S1.249 / khoản 292] ${trang}: ⑷ dán mã khác (doiMa) — lời «đã ghi danh» cho mã B về MUỘN khi ô đã sang mã C ⇒ Vào DỪNG, không /auth/totp, ô mã sáu số không mở; phản hồi cho mã C vẽ như thường`, async () => {
           // Mã A đã đổi xong (ô mã sáu số mở); B dán mã của mình, gõ sáu số, bấm Vào — `/auth/redeem` cho mã B bị giữ; C dán mã của
           // mình và bấm Tiếp.
           const g = giuRedeem();
@@ -838,10 +838,10 @@ describe("bề mặt tệp", () => {
     // 401 ⇒ khối ẩn, các bước vẫn mở (khối là một trợ giúp, không phải một cổng). Về bước 1 (đăng xuất,
     // hashchange) ⇒ khối ẩn và rỗng; một phản hồi về MUỘN sau đó bị bỏ. ~~Cùng ranh giới với khoản 193:
     // CHỈ `mo-thau`; ba trang người mua kia — khoản 282.~~ [S1.240 / khoản 282] Khối nay ở `/lib/dang-nhap.js`, nên ba ca dưới
-    // chạy trên cả bốn trang người mua; đo trước trên cây cũ: ba trang kia đỏ ở cả ba ca. [S1.9101 / khoản 291] Năm trang: `/du-lieu`
+    // chạy trên cả bốn trang người mua; đo trước trên cây cũ: ba trang kia đỏ ở cả ba ca. [S1.249 / khoản 291] Năm trang: `/du-lieu`
     // chưa có khối cho tới vòng này.
     // ==========================================================================================
-    describe("[S1.216 / khoản 195 · S1.240 / khoản 282 · S1.9101 / khoản 291] link đăng nhập gần đây của chính mình — năm trang người mua", () => {
+    describe("[S1.216 / khoản 195 · S1.240 / khoản 282 · S1.249 / khoản 291] link đăng nhập gần đây của chính mình — năm trang người mua", () => {
       const BA_LINK = {
         status: 200,
         body: {
@@ -937,9 +937,9 @@ describe("bề mặt tệp", () => {
     // và chừng ấy link trong một tuần là điều bất thường — báo. Chỉ `true` đúng nghĩa mới là cắt: thiếu trường (API cũ, lệch phiên
     // bản), `false` hay một giá trị lạ ⇒ không câu nào — một danh sách không được nói rộng hơn thân mang. Câu nói cả cửa sổ 7 ngày ở
     // mọi lần, để người đọc biết một link cũ hơn thế không hiện ở đây. Đo trước trên cây cũ: đỏ ở cả bốn trang (`/login` chưa có
-    // câu nào; ba trang kia không có khối). [S1.9101 / khoản 291] Và ở `/du-lieu`, trang thứ năm.
+    // câu nào; ba trang kia không có khối). [S1.249 / khoản 291] Và ở `/du-lieu`, trang thứ năm.
     // ==========================================================================================
-    describe("[S1.240 / khoản 268 · S1.9101 / khoản 291] danh sách link gần đây nói khi nó bị cắt — năm trang người mua", () => {
+    describe("[S1.240 / khoản 268 · S1.249 / khoản 291] danh sách link gần đây nói khi nó bị cắt — năm trang người mua", () => {
       const MOT = { createdAt: "2026-09-30T08:00:00Z", expiresAt: "2026-09-30T08:15:00Z", consumedAt: "2026-09-30T08:03:00Z", purpose: "LOGIN", status: "CONSUMED" };
       const voi = (than: unknown) => (l: string) => (l === "GET /auth/login-links" ? Promise.resolve({ status: 200, body: than }) : undefined);
 
@@ -2504,10 +2504,10 @@ describe("bề mặt tệp", () => {
   // `/auth/redeem` hay `/auth/totp` nữa — lời gọi ấy chỉ còn ở module; ⑶ tập trang còn tự gọi `/auth/redeem` là ĐÚNG `du-lieu.js`:
   // màn dữ liệu nền (S4.2b) chép khối cũ, ngoài danh sách tệp của lô — khoản 291. Vế ⑶ GHIM giới hạn ấy: ngày ai đưa
   // `du-lieu` sang module, vế này đỏ và phải sửa cùng lúc — cùng khuôn `countReceivedBids` của §S1.217.
-  // [S1.9101 / khoản 291] Ngày ấy là vòng này: `du-lieu.js` import module, vế ⑵ đọc NĂM trang, và vế ⑶ ghim tập RỖNG — không trang
+  // [S1.249 / khoản 291] Ngày ấy là vòng này: `du-lieu.js` import module, vế ⑵ đọc NĂM trang, và vế ⑶ ghim tập RỖNG — không trang
   // nào trong `apps/web/trang/` còn tự đổi mã đăng nhập; một trang thứ sáu chép khối cũ làm vế ⑶ đỏ nêu tên nó.
   // ============================================================================================
-  it("[S1.240 / khoản 282] /lib/dang-nhap.js ra JavaScript, không import nào; ~~bốn~~ [S1.9101 / khoản 291] năm trang người mua import nó và không tự gọi /auth/redeem, /auth/totp", async () => {
+  it("[S1.240 / khoản 282] /lib/dang-nhap.js ra JavaScript, không import nào; ~~bốn~~ [S1.249 / khoản 291] năm trang người mua import nó và không tự gọi /auth/redeem, /auth/totp", async () => {
     expect(MODULE_WEB).toContain("dang-nhap");
     const r = await goi("/lib/dang-nhap.js");
     expect(r.status).toBe(200);
@@ -2527,7 +2527,7 @@ describe("bề mặt tệp", () => {
       .filter((t) => t.endsWith(".js"))
       .filter((t) => readFileSync(new URL(t, thuMuc), "utf8").includes('"/auth/redeem"'))
       .sort();
-    // [S1.9101 / khoản 291] ~~`["du-lieu.js"]` — khoản 291 ghim đúng một~~ Tập rỗng: `du-lieu.js` đã sang module.
+    // [S1.249 / khoản 291] ~~`["du-lieu.js"]` — khoản 291 ghim đúng một~~ Tập rỗng: `du-lieu.js` đã sang module.
     expect(conChep, "trang còn tự đổi mã đăng nhập ngoài module").toEqual([]);
   });
 

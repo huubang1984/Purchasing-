@@ -107,7 +107,7 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
   // khoá TỪNG đường: một `it` duyệt mảng sẽ xanh khi ba trong bốn còn đúng.
   it.each([
     { ten: "bảng so sánh GIÁ", duong: "/rfqs/:rfqId/comparison" },
-    // ~~"số hồ sơ thầu đã nhận"~~ [S1.9101 / khoản 299] nhãn của test (không phải tên công cụ — route này không có công cụ nào).
+    // ~~"số hồ sơ thầu đã nhận"~~ [S1.249 / khoản 299] nhãn của test (không phải tên công cụ — route này không có công cụ nào).
     { ten: "số báo giá sẽ dự thầu", duong: "/rfqs/:rfqId/bid-count" },
     { ten: "liên hệ của nhà cung cấp", duong: "/suppliers/:supplierId/contacts" },
     { ten: "ngân sách của gói", duong: "/rfqs/:rfqId/budget" },
@@ -124,10 +124,10 @@ describe("bảng công cụ MCP đối chiếu với ROUTES của apps/api", () 
     expect(ROUTE_DOC_KHONG_PHOI[duong]).toBeDefined();
   });
 
-  // [S1.9101 / khoản 299] Sau khoản 271 con số của `/rfqs/:rfqId/bid-count` là số báo giá SẼ DỰ THẦU (luồng của lời mời còn sống —
+  // [S1.249 / khoản 299] Sau khoản 271 con số của `/rfqs/:rfqId/bid-count` là số báo giá SẼ DỰ THẦU (luồng của lời mời còn sống —
   // ADR-128), không phải số đã nhận: lời khai của dòng không phơi nói đúng nghĩa ấy. Tên hàm (`countReceivedBids`) và trường
   // (`bidCount`) giữ nguyên — đổi là đổi hợp đồng API. Nhãn trên màn `/mo-thau` ghim ở `tests/architecture/phong-bi-loi-moi-con-song.test.ts`.
-  it("[S1.9101 / khoản 299] lý do KHÔNG phơi `/rfqs/:rfqId/bid-count` nói số báo giá SẼ DỰ THẦU, không nói «đã nhận»", () => {
+  it("[S1.249 / khoản 299] lý do KHÔNG phơi `/rfqs/:rfqId/bid-count` nói số báo giá SẼ DỰ THẦU, không nói «đã nhận»", () => {
     const lyDo = ROUTE_DOC_KHONG_PHOI["/rfqs/:rfqId/bid-count"] ?? "";
     expect(lyDo).toMatch(/^SỐ BÁO GIÁ SẼ DỰ THẦU \(không kể lời mời đã thu hồi\) — /u);
     expect(lyDo, "nghĩa cũ của con số (trước khoản 271)").not.toMatch(/đã nhận/iu);

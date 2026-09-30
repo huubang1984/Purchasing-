@@ -20715,18 +20715,18 @@ Mục 0 của kế hoạch, chốt nguyên văn đề xuất (câu 1–16): ph�
 ## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
 - Phạm vi 31 khoản (29 + 262 · 263): đóng 26 — 24 khoản cũ (161, 169, 170, 171, 172, 181, 264, 265, 266, 267, 268, 270, 271, 273, 274, 276, 277, 279, 280, 281, 282, 283, 284, 285) và hai khoản mới của bước 0 (287, 288); 261 đóng ở #219; 272, 275 ĐO, giữ MỞ phần còn lại (câu 8, 9); 262, 263 sang phiên khác (câu 19). Lượt soi đối kháng của các lô mở 20 khoản (rổ B 17, rổ C 3 — câu 20).
 - Câu hỏi các lô nêu mà chưa có câu trả lời — chi tiết ở thân hàng và biên bản lô; tệp bàn giao đã xoá, nhánh lô chỉ ở máy tích hợp, nên danh sách này là bản còn lại:
-  1. **[S1.9101 — chốt: ⒜, sau pilot]** **272** (A6, §S1.243) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
-  2. **[S1.9101 — ĐÓNG]** **298** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
-  3. **[S1.9101 — ĐÓNG]** **299** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
-  4. **[S1.9101 — ĐÓNG]** **291, 292** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
-  5. **[S1.9101 — ĐÓNG: giữ nút, câu 409 người đọc]** **293** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
-  6. **[S1.9101 — chốt: nên làm, sau pilot; khoản 9401]** Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
-  7. **[S1.9101 — chốt: vào sổ, sau pilot]** **304** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
-  8. **[S1.9101 — xác nhận]** **285 / 305** (B2) — cách tách: đóng 285, mở 305 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 305 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
-  9. **[S1.9101 — chốt: dot-atom, sau pilot]** **306** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
-  10. **[S1.9101 — chốt: sau 300, sau pilot]** **307** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 300 (trần lượt claim).
-  11. **[S1.9101 — làm: phía phát hành và công bố bỏ `:`]** Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
-  12. **[S1.9101 — xác nhận]** **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
+  1. **[S1.249 — chốt: ⒜, sau pilot]** **272** (A6, §S1.243) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
+  2. **[S1.249 — ĐÓNG]** **298** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
+  3. **[S1.249 — ĐÓNG]** **299** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
+  4. **[S1.249 — ĐÓNG]** **291, 292** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
+  5. **[S1.249 — ĐÓNG: giữ nút, câu 409 người đọc]** **293** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
+  6. **[S1.249 — chốt: nên làm, sau pilot; khoản 309]** Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
+  7. **[S1.249 — chốt: vào sổ, sau pilot]** **304** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
+  8. **[S1.249 — xác nhận]** **285 / 305** (B2) — cách tách: đóng 285, mở 305 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 305 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
+  9. **[S1.249 — chốt: dot-atom, sau pilot]** **306** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
+  10. **[S1.249 — chốt: sau 300, sau pilot]** **307** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 300 (trần lượt claim).
+  11. **[S1.249 — làm: phía phát hành và công bố bỏ `:`]** Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
+  12. **[S1.249 — xác nhận]** **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
 - `tests/architecture/khoa-depcruise.test.ts` (đo thời gian) đỏ dưới tải ~10 ở lượt đo của lô B3, xanh khi chạy riêng 16/16 — không phải ca đỏ của mã; CI chạy nó không tải chung.
 
 ## 8. Số đo
@@ -20905,7 +20905,7 @@ ncc.createSupplier)` 0 vi phạm (`expected '' to contain '`bu` dùng `ncc`…'`
 - **280** — ngoài tầm: `packages/` (gói chung là chỗ nâng tới), tệp ngoài `src/` (`apps/web/trang/*.js`), `.mjs`, mã không khai tên
   (`tools/gieo-demo` viết bộ mô tả lỗi thẳng trong thân — bộ mô tả thứ tư của `tools/`). Tên trùng trong MỘT đơn vị không đòi hàng.
   Họ `RIENG` không có phép đo: một bản cùng việc đã khác chữ (`bat` của public-keys) có thể trôi tiếp mà không đỏ — chỉ tập tệp của họ
-  được giữ. `TEP_TEST` chỉ đòi tệp test còn và nhắc tên, không đọc phép đo trong đó. Quan sát khi kiểm kê (ghi ở hàng `KID` ~~RIENG~~ **[S1.9101]** GIU VAN_BAN — ba bản trùng chữ sau khi kid biên nhận bỏ `:`):
+  được giữ. `TEP_TEST` chỉ đòi tệp test còn và nhắc tên, không đọc phép đo trong đó. Quan sát khi kiểm kê (ghi ở hàng `KID` ~~RIENG~~ **[S1.249]** GIU VAN_BAN — ba bản trùng chữ sau khi kid biên nhận bỏ `:`):
   kid biên nhận cho `:` (`assertReceiptKid`, `public-keys`), còn job neo bỏ `:` vì kid là tên đối tượng S3 — một kid hợp lệ mang `:` thì
   lệnh neo tài liệu khoá NÉM (không im); câu hỏi ở bàn giao mục 9. `UUID` của hai adapter TOTP nhận chữ hoa, của job neo chỉ chữ thường
   (khoá S3) — hai họ, lý do ghi tại hàng.
@@ -22497,7 +22497,7 @@ Mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế
 - Đột biến: mười ca, mười đỏ đúng vế trên bản commit (M10 sau khi thêm vế ⑴′); `cmp`/sha256 nguyên vẹn sau mỗi ca.
 - Cụm tạm: kế hoạch thân hàm với 60 000 hàng `DONE` — `Bitmap Index Scan on outbox_jobs_claim_idx`, 3 buffer, 0,063 ms; 308 — `DROP POLICY organizations_liet_ke_worker` + `migrate()` ⇒ đi qua, hàm liệt kê 1 → 0 không lỗi.
 
-# §S1.9101 — LÔ TRƯỚC PILOT: `/du-lieu` VÀO MODULE ĐĂNG NHẬP, PHẢN HỒI ĐỔI MÃ CỦA LƯỢT CŨ BỊ BỎ, CÂU 409 NGƯỜI ĐỌC, NHÃN «SẼ DỰ THẦU», CÂU SUY PHONG BÌ HỎNG MANG VẾ THU HỒI, KID BIÊN NHẬN KHÔNG `:` — KHOẢN 291, 292, 293, 298, 299 ĐÓNG; 9401, 9402 MỞ
+# §S1.249 — LÔ TRƯỚC PILOT: `/du-lieu` VÀO MODULE ĐĂNG NHẬP, PHẢN HỒI ĐỔI MÃ CỦA LƯỢT CŨ BỊ BỎ, CÂU 409 NGƯỜI ĐỌC, NHÃN «SẼ DỰ THẦU», CÂU SUY PHONG BÌ HỎNG MANG VẾ THU HỒI, KID BIÊN NHẬN KHÔNG `:` — KHOẢN 291, 292, 293, 298, 299 ĐÓNG; 309, 310 MỞ
 
 **Rổ và mảnh (ADR-043 ⒞):** năm khoản rổ B, làm TRƯỚC pilot theo quyết định của chủ dự án — người thật đầu tiên chạm `/du-lieu` và *Gửi lại link*, người vận hành đọc câu §3 của ADR-129 khi có sự cố mở thầu, và kid biên nhận rẻ nhất để thu hẹp lúc chưa có biên nhận thật nào được ký. Không migration, không ADR mới (ADR-038, 110, 126, 129 sửa tại chỗ). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
 
@@ -22507,7 +22507,7 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 ## 2. Quyết định của chủ dự án (2026-09-30)
 "Làm bước 2, chốt câu 3 như đề xuất":
 - Bước 2: 291 và 292 (`/du-lieu` vào module đăng nhập; bỏ phản hồi `/auth/redeem` về muộn); 293 — GIỮ nút *Gửi lại link*, đổi câu 409 thành câu người đọc; 299 — nhãn "sẽ dự thầu"; 298 — sửa câu §3 của ADR-129; kid biên nhận bỏ `:` (câu 11 của §S1.237 mục 7).
-- Câu 3 (chốt, làm SAU pilot): 272 hướng ⒜ — hạ trần cột `envelope` về 64 KiB; 306 dạng dot-atom RFC 5321; 304 cả hai lần từ chối vào sổ (ADR-060); 300 trước 307; xác nhận cách tách 285/305 và cách đọc khoản 170 của lô A2; luật eslint cấm sink HTML cho `apps/web/src/*.ts` nên làm — mở khoản 9401. Ghi ở thân hàng từng khoản và ở §S1.237 mục 7.
+- Câu 3 (chốt, làm SAU pilot): 272 hướng ⒜ — hạ trần cột `envelope` về 64 KiB; 306 dạng dot-atom RFC 5321; 304 cả hai lần từ chối vào sổ (ADR-060); 300 trước 307; xác nhận cách tách 285/305 và cách đọc khoản 170 của lô A2; luật eslint cấm sink HTML cho `apps/web/src/*.ts` nên làm — mở khoản 309. Ghi ở thân hàng từng khoản và ở §S1.237 mục 7.
 
 ## 3. Đo trước
 - 291 (lô W, nguồn cũ, test mới): 13 đỏ, tất cả ở `du-lieu` — bộ id («id="nut-ghi-danh": expected +0 to be 1»), hai ca `[S1.177]` lệch `SAU_MO`, năm ca 193, ba ca 195, một ca 268, ca ghim («du-lieu.js không import ganDangNhap»).
@@ -22523,7 +22523,7 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 - 293: hằng `CAU_GOI_KHONG_NHAN_BAO_GIA` ở `apps/api/src/routes/buyer.ts`, chỉ nhánh `RFQ_NOT_ACCEPTING`.
 - 299: nhãn của `apps/web/trang/mo-thau.js`; chú thích route, lời khai MCP; ghim ở `tests/architecture/phong-bi-loi-moi-con-song.test.ts` và `apps/mcp/src/cong-cu.test.ts`.
 - 298: ADR-129 §3 mang `AND i.revoked_at IS NULL`; bản chép của `apps/unseal-worker/src/unseal-worker.int.test.ts`; hai ca của khối khoản 275 ở `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` lật.
-- Tệp của người tích hợp: ADR-038 (bid-count), ADR-110 ⑸ (293), ADR-126 (dòng khoản nợ, quyết định 4, hệ quả), ADR-129 §3; `docs/TEST-PLAN.md` dòng A6; §S1.237 mục 7 (mười hai câu đánh dấu), §S1.238 mục 7 (hàng `KID`); hàng 170, 272, 300, 304, 305, 306, 307 ghi quyết định; hàng 291, 292, 293, 298, 299 ĐÓNG; hàng 9401, 9402 mới; dòng CÒN MỞ, RỔ B (26 → 23).
+- Tệp của người tích hợp: ADR-038 (bid-count), ADR-110 ⑸ (293), ADR-126 (dòng khoản nợ, quyết định 4, hệ quả), ADR-129 §3; `docs/TEST-PLAN.md` dòng A6; §S1.237 mục 7 (mười hai câu đánh dấu), §S1.238 mục 7 (hàng `KID`); hàng 170, 272, 300, 304, 305, 306, 307 ghi quyết định; hàng 291, 292, 293, 298, 299 ĐÓNG; hàng 309, 310 mới; dòng CÒN MỞ, RỔ B (26 → 23).
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 - Hai nhãn phiên bản khoá của api (`TRUSTPROCURE_KMS_ORG_KEY_VERSION`, `TRUSTPROCURE_KMS_TOTP_KEY_VERSION`) GIỮ `:` — chúng vào AAD có tiền tố độ dài và encryption context của KMS, không bao giờ thành tên tệp, tên đối tượng hay dòng của văn bản đã ký (lô K; đột biến M6 ghim).
@@ -22531,7 +22531,7 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 - `datLai` gọi thẳng `doiMa` (một chỗ tăng lượt); lỗi ném của lượt cũ nuốt ngay trong `doiMaDangNhap` — lỗi của `/auth/totp`, `/me`, `daVao` vẫn hiện như cũ (lô W).
 - Nhãn 299 ghim ở cổng kiến trúc của khoản 271, đọc literal qua cây cú pháp vì chú thích mới của trang trích câu cũ (lô K).
 - 298: không làm cổng tĩnh tuỳ chọn đọc khối SQL của ADR — ca tích hợp nay đòi câu của ADR mang vế (`toContain`) và đo vế chịu lực.
-- Phát hiện của lô W (`/auth/totp` về muộn) mở thành khoản 9402 thay vì vá luôn: ngoài phạm vi đã duyệt (năm khoản + kid); rổ chờ chủ dự án xác nhận.
+- Phát hiện của lô W (`/auth/totp` về muộn) mở thành khoản 310 thay vì vá luôn: ngoài phạm vi đã duyệt (năm khoản + kid); rổ chờ chủ dự án xác nhận.
 
 ## 6. Đột biến
 - Lô K: 10/10 đỏ đúng vế — trả `:` vào `assertReceiptKid`; siết `KID_PATTERN` của định dạng; trả `:` vào `KID` của public-keys; api đọc kid bằng `docNhanKms`; bỏ phép kiểm kid local-dev; siết `NHAN_KMS`; `KID` của job neo `{1,63}`; trả câu 409 cũ; trả nhãn "Đã nhận"; trả lời khai MCP cũ.
@@ -22540,10 +22540,10 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 
 ## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
 - Không lượt trình duyệt thật cho 291, 292, 293, 299 (máy không có trình duyệt): DOM giả của `phuc-vu.test.ts`, ca bộ id tĩnh, test HTTP của route.
-- Cảnh hẹp của 292 còn lại: dán mã khác vào ô mà chưa bấm trong lúc `/auth/redeem` còn bay ⇒ bí mật của mã cũ hiện tới lần bấm kế (module chỉ biết mã đổi khi có lần bấm) — ghi ở hàng 9402. Có từ trước, không đổi: nút Tiếp tắt tới khi lời gọi của lượt cũ xong; `ok1` của mã trước còn đứng sau khi dán mã khác rồi bấm.
+- Cảnh hẹp của 292 còn lại: dán mã khác vào ô mà chưa bấm trong lúc `/auth/redeem` còn bay ⇒ bí mật của mã cũ hiện tới lần bấm kế (module chỉ biết mã đổi khi có lần bấm) — ghi ở hàng 310. Có từ trước, không đổi: nút Tiếp tắt tới khi lời gọi của lượt cũ xong; `ok1` của mã trước còn đứng sau khi dán mã khác rồi bấm.
 - Kid: kiểu `ReceiptSigner` là interface — một đối tượng không dựng qua hai factory có thể mang kid có `:` vào `buildReceiptText` (định dạng cho phép); mã sản xuất chỉ có `apps/api/src/co-han.ts` chép kid của bộ ký đã kiểm. Kid mốc neo (`packages/audit/src/anchor-sign.ts`, `TRUSTPROCURE_NEO_KID` cục bộ) vẫn cho `:` (prod — stack 40 — đã hẹp). Tên thiết bị Windows (`NUL`, `CON`) thuộc tập hẹp — nơi neo kiểu tệp trên Windows vẫn có thể gặp; S3 không.
 - 293: bốn câu máy khác của hai route gửi lại link / mời giữ nguyên.
-- Câu hỏi còn chờ: ⑴ rổ của 9402 (lô W đề xuất B, hệ quả nặng hơn 292 — thao tác dưới phiên người trước); ⑵ gọi `assertReceiptKid` trong `submitBid` (`packages/bidding/src/bidding.ts`) để đóng lỗ ở cấp interface — mở khoản hay không; ⑶ thu hẹp kid mốc neo theo cùng quyết định hay không.
+- Câu hỏi còn chờ: ⑴ rổ của 310 (lô W đề xuất B, hệ quả nặng hơn 292 — thao tác dưới phiên người trước); ⑵ gọi `assertReceiptKid` trong `submitBid` (`packages/bidding/src/bidding.ts`) để đóng lỗ ở cấp interface — mở khoản hay không; ⑶ thu hẹp kid mốc neo theo cùng quyết định hay không.
 
 ## 8. Số đo
 - Lô W trên cây của lô: `apps/web` 10 tệp 358/358 (trước 327); `pnpm test` 138 tệp, 2293 xanh, 1 bỏ qua; typecheck, lint, depcruise sạch.

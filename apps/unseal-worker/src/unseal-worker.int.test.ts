@@ -968,7 +968,7 @@ async function idTheoThuTuLuong(rfqId: string): Promise<readonly string[]> {
 /**
  * [ADR-129] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
  * mở thầu `$1` KHÔNG để lại hàng bản rõ. Tập này là toàn bộ `failedBidVersionIds` — kể cả K id đã ghi —
- * theo cùng thứ tự luồng; `$2` là tổ chức. [S1.9101 / khoản 298] Bản chép của câu §3 mang cùng vế lời mời còn sống
+ * theo cùng thứ tự luồng; `$2` là tổ chức. [S1.249 / khoản 298] Bản chép của câu §3 mang cùng vế lời mời còn sống
  * (`i.revoked_at IS NULL`, ADR-128) như ADR và như worker — khối khoản 275/298 của `kich-ban-41-http.int.test.ts` đo vế ấy.
  */
 const CAU_SUY_PHONG_BI_HONG =

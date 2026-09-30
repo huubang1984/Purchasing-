@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.240 / khoản 282, 268] PHÉP ĐO CHO MODULE BƯỚC 1 CỦA ~~BỐN~~ [S1.9101 / khoản 291] NĂM TRANG NGƯỜI MUA — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
+// [S1.240 / khoản 282, 268] PHÉP ĐO CHO MODULE BƯỚC 1 CỦA ~~BỐN~~ [S1.249 / khoản 291] NĂM TRANG NGƯỜI MUA — PHẦN THUẦN VÀ LỜI KHAI BỘ ID
 //
-// Hành vi trên DOM (Tiếp, Vào, khối link gần đây, «còn nữa») đo ở `phuc-vu.test.ts`, trên CẢ ~~BỐN~~ [S1.9101 / khoản 291] NĂM trang
+// Hành vi trên DOM (Tiếp, Vào, khối link gần đây, «còn nữa») đo ở `phuc-vu.test.ts`, trên CẢ ~~BỐN~~ [S1.249 / khoản 291] NĂM trang
 // thật chạy trong `node:vm`. Tệp này đo ba thứ đứng một mình:
 //   ⑴ phép tính thuần — đọc ô tổ chức (ADR-107), câu của từng link (khoản 195), câu «còn nữa» (khoản 268);
-//   ⑵ lời khai «cùng bộ id» — ~~bốn~~ [S1.9101 / khoản 291] năm tệp HTML (`du-lieu.html` là tệp thứ năm) khai ĐỦ id mà module gắn
+//   ⑵ lời khai «cùng bộ id» — ~~bốn~~ [S1.249 / khoản 291] năm tệp HTML (`du-lieu.html` là tệp thứ năm) khai ĐỦ id mà module gắn
 //      vào, đúng trạng thái ẩn lúc tải. DOM giả của `phuc-vu.test.ts` dựng phần tử thiếu theo yêu cầu, nên một nút VẮNG MẶT trong
 //      HTML vẫn "bấm" được ở đó — vế này là thứ bắt được nó;
 //   ⑶ cửa sổ 7 ngày mà câu trên màn nói khớp hằng của máy chủ (`packages/identity/src/login.ts`), đọc bằng VĂN BẢN nguồn chứ không
@@ -26,7 +26,7 @@ import {
 } from "./dang-nhap.js";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
-// [S1.9101 / khoản 291] ~~`BON_TRANG` — bốn trang người mua~~ Năm trang: `/du-lieu` (S4.2b) gắn cùng module, cùng bộ id.
+// [S1.249 / khoản 291] ~~`BON_TRANG` — bốn trang người mua~~ Năm trang: `/du-lieu` (S4.2b) gắn cùng module, cùng bộ id.
 const NAM_TRANG = ["mo-thau", "tao-thau", "nhom-hang", "chinh-sach", "du-lieu"] as const;
 
 describe("[S1.240 / khoản 282] đọc ô tổ chức — một bản cho bốn trang (ADR-107)", () => {
@@ -70,7 +70,7 @@ describe("[S1.216 / khoản 195 · S1.240 / khoản 268] câu của khối link 
   });
 });
 
-describe("[S1.240 / khoản 282] ~~bốn~~ [S1.9101 / khoản 291] năm trang khai ĐỦ bộ id mà bước 1 gắn vào", () => {
+describe("[S1.240 / khoản 282] ~~bốn~~ [S1.249 / khoản 291] năm trang khai ĐỦ bộ id mà bước 1 gắn vào", () => {
   for (const trang of NAM_TRANG) {
     it(`${trang}.html: mỗi id của ID_BUOC_MOT đúng một lần, phần tử ẩn lúc tải đúng như khai, ô mã và nút Vào nằm trong khoi-ma sau nút Tiếp`, () => {
       const html = readFileSync(new URL(`../trang/${trang}.html`, import.meta.url), "utf8");

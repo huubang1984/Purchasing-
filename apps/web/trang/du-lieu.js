@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-// [S1.9101 / khoản 291] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// [S1.249 / khoản 291] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
 // `/lib/dang-nhap.js`, như ở bốn trang người mua kia (khoản 282).
 let trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
 let danhMuc = { donVi: [], biDanhChung: [], biDanhToChuc: [] };
@@ -93,7 +93,7 @@ const TRANG_THAI = { DANG_DUNG: "đang dùng", NGUNG_DUNG: "ngừng dùng" };
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP, cùng khuôn `chinh-sach.js` (gọi `/auth/redeem` ĐÚNG một lần cho mỗi mã).
-// [S1.9101 / khoản 291] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login` và ba trang người mua kia: nút Tiếp, nút Vào và khối link đăng nhập
+// [S1.249 / khoản 291] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login` và ba trang người mua kia: nút Tiếp, nút Vào và khối link đăng nhập
 // gần đây là `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về
 // bước 1.
 // ---------------------------------------------------------------------------------------------
@@ -109,14 +109,14 @@ docLink();
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  // [S1.9101 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ — `dangNhap.datLai()` dưới, sau khi các bước đã đóng.
+  // [S1.249 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ — `dangNhap.datLai()` dưới, sau khi các bước đã đóng.
   for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5", "loi6", "ok6"]) bao($(id), "");
   dongCacBuoc();
   dangNhap.datLai();
   thuPhienCo();
 });
 
-// [S1.9101 / khoản 291] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// [S1.249 / khoản 291] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
 // cùng chỗ câu lỗi, ô mã sáu số hiện sẵn, mất mạng thì không câu nào~~ — khoản 193 ở trang thứ năm, mà phép đếm của khoản 282 bỏ sót.
 // Nay bước 1 là module chung: ô tổ chức đọc qua `docMaToChuc` (ADR-107), bí mật ghi danh ở khối riêng; trang trao cho module việc của
 // riêng mình sau khi vào — mở các bước và nạp dữ liệu nền.
@@ -137,7 +137,7 @@ async function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
-  // [S1.9101 / khoản 291] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  // [S1.249 / khoản 291] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
   void dangNhap.veLinkGanDay();
   await napHangChuan();
   await napDonVi();
@@ -155,7 +155,7 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
-  // [S1.9101 / khoản 291] Về bước 1: danh sách link của người trước đi, và phản hồi về muộn của nó bị bỏ.
+  // [S1.249 / khoản 291] Về bước 1: danh sách link của người trước đi, và phản hồi về muộn của nó bị bỏ.
   dangNhap.anLinkGanDay();
 }
 
@@ -195,7 +195,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
     dongCacBuoc();
-    // [S1.9101 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã
+    // [S1.249 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã
     // sáu số đóng (khoản 193).
     dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
@@ -206,7 +206,7 @@ $("nut-dang-xuat").addEventListener("click", async () => {
   }
 });
 
-// [S1.9101 / khoản 291] ~~`xoaManhLink()` của trang~~ — ADR-020 mục 3 (xoá mảnh link SAU `/auth/totp`) nay là việc của nút Vào trong
+// [S1.249 / khoản 291] ~~`xoaManhLink()` của trang~~ — ADR-020 mục 3 (xoá mảnh link SAU `/auth/totp`) nay là việc của nút Vào trong
 // `/lib/dang-nhap.js`, qua `history` và `location` mà trang trao vào.
 
 // ---------------------------------------------------------------------------------------------

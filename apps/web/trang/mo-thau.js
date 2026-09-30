@@ -295,7 +295,7 @@ $("nut-doc").addEventListener("click", async () => {
   const d = await goi("GET", `/rfqs/${id}/bid-count`);
   if (d.status === 200) {
     const c = d.body.bidCount ?? d.body;
-    // [S1.9101 / khoản 299] Từ khoản 271 `count` là số báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (ADR-128) — không phải số
+    // [S1.249 / khoản 299] Từ khoản 271 `count` là số báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (ADR-128) — không phải số
     // đã nhận: ~~"Đã nhận N báo giá."~~ nói "Đã nhận 1" khi bên mua đã thu hồi một lời mời có báo giá, trong khi hai báo giá đã nhận.
     bao($("dem"), c?.disclosed === false
       ? `Số báo giá đang bị giấu (${c.reason}) — chính sách mù nghiêm còn hiệu lực tới khi đóng thầu.`

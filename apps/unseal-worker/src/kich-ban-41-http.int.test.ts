@@ -1917,16 +1917,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 //   ⑵ câu §3 — ĐỌC NGUYÊN VĂN từ `docs/DECISIONS.md` (ADR-129), không chép — trả ĐÚNG 21 id theo thứ tự luồng: 20 đầu bằng
 //      payload, cả 21 bằng mảng đủ trong tiến trình và bằng tập phong bì hỏng đã nộp; chạy dưới superuser (người vận
 //      hành) VÀ trong phiên `app_api` gắn tổ chức — hai nơi ADR-129 §3 nói câu chạy được;
-//   ⑶ ĐỐI CHỨNG vế vòng: cùng câu gỡ vế `IS NOT DISTINCT FROM r.bafo_round_id` trả ~~23~~ [S1.9101 / khoản 298] 22 id —
+//   ⑶ ĐỐI CHỨNG vế vòng: cùng câu gỡ vế `IS NOT DISTINCT FROM r.bafo_round_id` trả ~~23~~ [S1.249 / khoản 298] 22 id —
 //      phong bì VÒNG MỘT của người thứ 23 ~~và của luồng đã thu hồi (dưới)~~, không có hàng bản rõ dưới yêu cầu vòng hai, lọt
-//      vào — tức vế ấy CHỊU LỰC ở vòng BAFO. [S1.9101] Luồng đã thu hồi (dưới) nay bị vế `i.revoked_at IS NULL` của câu §3 loại
+//      vào — tức vế ấy CHỊU LỰC ở vòng BAFO. [S1.249] Luồng đã thu hồi (dưới) nay bị vế `i.revoked_at IS NULL` của câu §3 loại
 //      trước cả vế vòng.
 // Và một luồng THỨ 24: nộp vòng một rồi bị thu hồi ở `CLOSED`, trước lần mở (ADR-128 cho phép tới lần mở đầu tiên) —
 // worker không mở nó, lượt chấm không thấy nó, nó không vào top-N. ~~Với YÊU CẦU VÒNG MỘT, câu §3 trả ĐÚNG id của luồng ấy
 // dù hai bản ghi sổ vòng một mang `failedCount` 0: câu §3 không mang vế `i.revoked_at IS NULL` của ADR-128 (hai ADR cùng đợt
 // 2, hai lô song song), nên luồng BỊ LOẠI được suy thành phong bì HỎNG. Lỗ kề, ngoài phạm vi khoản 275 (vòng một; ở vòng BAFO
 // luồng đã thu hồi không có phiên bản nào nên vế vòng đã loại nó) — khoản 298, GHIM ở ca cuối để lần sửa ADR-129 §3 đỏ đúng
-// đó.~~ [S1.9101 / khoản 298] Câu §3 nay mang vế `i.revoked_at IS NULL` của ADR-128: với YÊU CẦU VÒNG MỘT nó trả 0 id, khớp
+// đó.~~ [S1.249 / khoản 298] Câu §3 nay mang vế `i.revoked_at IS NULL` của ADR-128: với YÊU CẦU VÒNG MỘT nó trả 0 id, khớp
 // `failedCount` 0 của hai bản ghi sổ; gỡ vế ấy thì trả đúng id của luồng đã thu hồi (ca cuối — đo trước bản vá: câu cũ trả
 // đúng id ấy, ca ghim ở §S1.243).
 //
@@ -2228,15 +2228,15 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
     const khongVeVong = cau.replace(" AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id", "");
     expect(khongVeVong, "phép gỡ vế phải thật sự đổi câu").not.toBe(cau);
     const { rows: lech } = await db.pool.query<{ id: string }>(khongVeVong, [st.ycVongBafo, orgA]);
-    // [S1.9101 / khoản 298] Không còn `st.v1ThuHoi`: vế `i.revoked_at IS NULL` của câu §3 loại luồng đã thu hồi dù vế vòng vắng.
+    // [S1.249 / khoản 298] Không còn `st.v1ThuHoi`: vế `i.revoked_at IS NULL` của câu §3 loại luồng đã thu hồi dù vế vòng vắng.
     expect(lech.map((r) => r.id).sort(), "không vế vòng: 21 hỏng + bản vòng một của người không nộp lại").toEqual(
       [...st.vBafoHong, st.v1NguoiNgoai].sort(),
     );
   });
 
-  it("[S1.9101 / khoản 298] ở YÊU CẦU VÒNG MỘT câu §3 KHÔNG kể luồng bị thu hồi trước lần mở — 0 id, khớp `failedCount` 0 của hai bản ghi sổ; gỡ vế `i.revoked_at IS NULL` ⇒ đúng id của luồng ấy", async () => {
+  it("[S1.249 / khoản 298] ở YÊU CẦU VÒNG MỘT câu §3 KHÔNG kể luồng bị thu hồi trước lần mở — 0 id, khớp `failedCount` 0 của hai bản ghi sổ; gỡ vế `i.revoked_at IS NULL` ⇒ đúng id của luồng ấy", async () => {
     // ~~[S1.243] Câu §3 không mang vế `i.revoked_at IS NULL` (ADR-128) nên luồng BỊ LOẠI — không mở, không hỏng — được suy thành
-    // phong bì hỏng.~~ [S1.9101] Ca ghim của §S1.243 (câu trả `[st.v1ThuHoi]`) đỏ đúng ở lần sửa ADR-129 §3 và được lật: câu mang
+    // phong bì hỏng.~~ [S1.249] Ca ghim của §S1.243 (câu trả `[st.v1ThuHoi]`) đỏ đúng ở lần sửa ADR-129 §3 và được lật: câu mang
     // vế lời mời còn sống như worker (`apps/unseal-worker/src/index.ts`), và vế ấy CHỊU LỰC — gỡ nó thì luồng đã thu hồi quay lại.
     const cau = await cauSuyCuaAdr129();
     expect(cau, "câu §3 phải mang vế lời mời còn sống của ADR-128").toContain("AND i.revoked_at IS NULL");

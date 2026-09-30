@@ -166,11 +166,11 @@ describe("[S1.11] docCauHinh — fail-closed, thông điệp chỉ nêu TÊN bi�
     nemVeBien(ky(ed), "TRUSTPROCURE_RECEIPT_SIGNING_KEYS", /P-256/u);
   });
 
-  // [S1.9101 / kid] Tên phiên bản của vòng khoá ký local-dev LÀ kid biên nhận (`ReceiptSigningKeyRing`). Phía phát hành không nhận
+  // [S1.249 / kid] Tên phiên bản của vòng khoá ký local-dev LÀ kid biên nhận (`ReceiptSigningKeyRing`). Phía phát hành không nhận
   // `:` — kid thành tên đối tượng S3 khi job neo neo tài liệu khoá — và lỗi phải là lỗi CẤU HÌNH nêu tên biến, không phải
   // `ReceiptError` lúc dựng tiến trình. Vòng khoá chính và pepper giữ tập của chúng (`TEN_PHIEN_BAN`, cho `:`): tên phiên bản của
   // chúng đi vào AAD, không vào tên tệp hay văn bản đã ký.
-  it("[S1.9101 / kid] khoá ký local-dev: kid (tên phiên bản) có `:` — khoá đang dùng hay khoá cũ — ⇒ ném nêu tên biến và tập ký tự", () => {
+  it("[S1.249 / kid] khoá ký local-dev: kid (tên phiên bản) có `:` — khoá đang dùng hay khoá cũ — ⇒ ném nêu tên biến và tập ký tự", () => {
     nemVeBien(
       envHopLe({ TRUSTPROCURE_RECEIPT_SIGNING_KEYS: `ky:2026=${BI_MAT.ky}`, TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE: "ky:2026" }),
       "TRUSTPROCURE_RECEIPT_SIGNING_KEYS",
@@ -310,11 +310,11 @@ describe("[ADR-064] docCauHinh — adapter khoá aws-kms", () => {
     nemVeBien(envKms({ TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID: "alias/tp org" }), "TRUSTPROCURE_KMS_ORG_WRAP_KEY_ID");
   });
 
-  // [S1.9101 / kid] Kid biên nhận HẸP hơn hai nhãn phiên bản khoá: nó đi vào dòng `kid=` của biên nhận VÀ thành tên đối tượng S3
+  // [S1.249 / kid] Kid biên nhận HẸP hơn hai nhãn phiên bản khoá: nó đi vào dòng `kid=` của biên nhận VÀ thành tên đối tượng S3
   // khi job neo neo tài liệu khoá (`taiLieuMotKhoa`, tập `[A-Za-z0-9._-]`). Hai nhãn phiên bản (`ORG_KEY_VERSION` vào AAD có tiền
   // tố độ dài và cột `key_version`; `TOTP_KEY_VERSION` vào encryption context KMS và cột `secret_key_version`) không thành tên
   // tệp hay tên đối tượng nào — giữ `:`, cùng tập với bộ bọc TOTP aws-kms (`adapters/totp-aws-kms.ts`).
-  it("[S1.9101 / kid] kid biên nhận có `:` ⇒ ném nêu tên biến và tập ký tự; hai nhãn phiên bản khoá vẫn nhận `:`", () => {
+  it("[S1.249 / kid] kid biên nhận có `:` ⇒ ném nêu tên biến và tập ký tự; hai nhãn phiên bản khoá vẫn nhận `:`", () => {
     for (const kid of ["kms:2026-09", "arn:kid", ":"]) {
       nemVeBien(envKms({ TRUSTPROCURE_KMS_RECEIPT_KID: kid }), "TRUSTPROCURE_KMS_RECEIPT_KID", /\[A-Za-z0-9\._-\]/u);
     }

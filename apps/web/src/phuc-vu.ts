@@ -94,7 +94,7 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  *
  * [S1.199 / S4.2b] `du-lieu` — ô thuộc tính, lọc hiển thị, câu §8.10 và dòng quy đổi của màn dữ liệu nền.
  *
- * [S1.240 / khoản 282] `dang-nhap` — bước 1 của ~~bốn~~ [S1.9101 / khoản 291] năm trang người mua (`/login`, `/tao-thau`, `/nhom-hang`,
+ * [S1.240 / khoản 282] `dang-nhap` — bước 1 của ~~bốn~~ [S1.249 / khoản 291] năm trang người mua (`/login`, `/tao-thau`, `/nhom-hang`,
  * `/chinh-sach`, `/du-lieu`): Tiếp và Vào
  * tách nhau (khoản 193), khối link đăng nhập gần đây (khoản 195) và câu «còn nữa» (khoản 268). Module ĐẦU TIÊN của danh sách này chạm
  * DOM — qua `document` mà trang trao vào, không qua tên toàn cục —, nên `phuc-vu.test.ts` quét mã đã gỡ kiểu của mọi module ở đây để

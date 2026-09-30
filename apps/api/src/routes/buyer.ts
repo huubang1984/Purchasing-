@@ -471,7 +471,7 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/bid-count",
     audience: "BUYER",
     mutates: false,
-    // [khoản 141] số ~~hồ sơ thầu đã nhận~~ [S1.9101 / khoản 299] báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (khoản 271,
+    // [khoản 141] số ~~hồ sơ thầu đã nhận~~ [S1.249 / khoản 299] báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (khoản 271,
     // ADR-128); tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API) — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
     agent: false,
     handler: async (ctx) => ({
@@ -612,7 +612,7 @@ export function thanLuotCham(ld: LuotDanhGia): {
 }
 
 /**
- * [S1.9101 / khoản 293] Câu 409 của *Gửi lại link* khi gói không nhận báo giá (`RFQ_NOT_ACCEPTING` của `reissueInvitationLink`).
+ * [S1.249 / khoản 293] Câu 409 của *Gửi lại link* khi gói không nhận báo giá (`RFQ_NOT_ACCEPTING` của `reissueInvitationLink`).
  * Chủ dự án chốt 2026-09-30: GIỮ nút ở mọi trạng thái của tổ chức chưa bật (hợp đồng MVP1 «máy chủ tự từ chối», `nutLoiMoi` của
  * `apps/web/src/tao-thau.ts`), nên câu từ chối là thứ người mua ĐỌC — `/tao-thau` in nguyên văn (`loiCua`). ~~`goi thau khong nhan
  * bao gia`~~ — câu máy, không dấu, không nói khi nào gửi được. Hằng, không nội suy trạng thái hay hạn: câu nêu CẢ HAI điều kiện mà
@@ -1422,7 +1422,7 @@ const ghi: readonly BuyerWriteRoute[] = [
       if (!kq.ok) {
         if (kq.reason === "NOT_FOUND") throw new HttpError(404, "khong co loi moi");
         if (kq.reason === "REVOKED") throw new HttpError(409, "loi moi da thu hoi");
-        // ~~`"goi thau khong nhan bao gia"`~~ [S1.9101 / khoản 293] câu người đọc nêu điều kiện gửi lại được.
+        // ~~`"goi thau khong nhan bao gia"`~~ [S1.249 / khoản 293] câu người đọc nêu điều kiện gửi lại được.
         if (kq.reason === "RFQ_NOT_ACCEPTING") throw new HttpError(409, CAU_GOI_KHONG_NHAN_BAO_GIA);
         return { status: 429, body: { error: "da gui qua nhieu link cho loi moi nay" }, headers: { "retry-after": String(CUA_SO_LINK_MOI_GIAY) } };
       }

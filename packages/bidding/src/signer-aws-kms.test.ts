@@ -128,9 +128,9 @@ describe("[ADR-011] bộ ký biên nhận aws-kms", () => {
     expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid: "kid\nalg=HMAC" })).toThrow(ReceiptError);
   });
 
-  // [S1.9101 / kid] Phía phát hành hẹp hơn định dạng: kid biên nhận thành tên đối tượng S3 khi job neo neo tài liệu khoá
+  // [S1.249 / kid] Phía phát hành hẹp hơn định dạng: kid biên nhận thành tên đối tượng S3 khi job neo neo tài liệu khoá
   // (`taiLieuMotKhoa`, tập `[A-Za-z0-9._-]`). Định dạng vẫn cho `:` — ca "định dạng không đổi" ở `receipt.test.ts`.
-  it("[S1.9101 / kid] kid có `:` bị từ chối lúc DỰNG bộ ký aws-kms — trước lời gọi KMS nào — và thông điệp nêu tập ký tự", () => {
+  it("[S1.249 / kid] kid có `:` bị từ chối lúc DỰNG bộ ký aws-kms — trước lời gọi KMS nào — và thông điệp nêu tập ký tự", () => {
     const kms = new KmsKyGia();
     for (const kid of ["kms:2026-09", "arn:kid", ":"]) {
       expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid }), kid).toThrow(ReceiptError);

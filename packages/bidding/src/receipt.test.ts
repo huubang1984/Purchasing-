@@ -349,7 +349,7 @@ describe("sha256Hex", () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / kid] PHÍA PHÁT HÀNH HẸP HƠN ĐỊNH DẠNG: KID BIÊN NHẬN KHÔNG MANG `:`
+// [S1.249 / kid] PHÍA PHÁT HÀNH HẸP HƠN ĐỊNH DẠNG: KID BIÊN NHẬN KHÔNG MANG `:`
 //
 // Kid biên nhận thành TÊN ĐỐI TƯỢNG S3 (`khoa-bien-nhan/<kid>.json`) khi job neo neo tài liệu khoá — `taiLieuMotKhoa` của
 // `tools/neo-so-kiem-toan/src/aws.ts` chỉ nhận `[A-Za-z0-9._-]`, nên một kid mang `:` mà bộ ký từng nhận làm lệnh neo NÉM
@@ -357,8 +357,8 @@ describe("sha256Hex", () => {
 // ký. ĐỊNH DẠNG không đổi: `KID_PATTERN` của `receipt.ts` vẫn cho `:` — đổi định dạng đã ký là thứ ADR-026 §1 cấm (cùng lập
 // luận H11-11 ở `tools/neo-so-kiem-toan/src/index.ts`), và phía KIỂM vẫn phải đọc được mọi văn bản định dạng cho phép.
 // ==============================================================================================
-describe("[S1.9101 / kid] phía phát hành không nhận kid có `:`; định dạng đã ký thì không đổi", () => {
-  it("[S1.9101 / kid] vòng khoá của bộ ký local-dev TỪ CHỐI kid có `:` lúc dựng, thông điệp nêu tập ký tự", () => {
+describe("[S1.249 / kid] phía phát hành không nhận kid có `:`; định dạng đã ký thì không đổi", () => {
+  it("[S1.249 / kid] vòng khoá của bộ ký local-dev TỪ CHỐI kid có `:` lúc dựng, thông điệp nêu tập ký tự", () => {
     for (const kid of ["kms:2026-09", "a:b", ":"]) {
       expect(() => createLocalDevReceiptSigner(new ReceiptSigningKeyRing(kid, { [kid]: capKhoa() })), kid).toThrow(ReceiptError);
       expect(() => new ReceiptSigningKeyRing(kid, { [kid]: capKhoa() }), kid).toThrow("[A-Za-z0-9._-]");
@@ -373,7 +373,7 @@ describe("[S1.9101 / kid] phía phát hành không nhận kid có `:`; định d
     expect(() => new ReceiptSigningKeyRing(`${k64}x`, { [`${k64}x`]: capKhoa() })).toThrow(ReceiptError);
   });
 
-  it("[S1.9101 / kid] ĐỊNH DẠNG vẫn nhận kid có `:` — văn bản `kid=kms:2026-09` dựng được, đọc ngược được, và KIỂM được bằng khoá công khai một mình", async () => {
+  it("[S1.249 / kid] ĐỊNH DẠNG vẫn nhận kid có `:` — văn bản `kid=kms:2026-09` dựng được, đọc ngược được, và KIỂM được bằng khoá công khai một mình", async () => {
     // Ký bằng `node:crypto` trực tiếp, KHÔNG qua bộ ký của kho: đây là một biên nhận mà định dạng cho phép, dù phía phát hành
     // hôm nay không phát nó nữa — phía kiểm phải đọc được nó (ADR-026 §1).
     const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });

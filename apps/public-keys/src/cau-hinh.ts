@@ -34,7 +34,7 @@ export interface CauHinhPublicKeys {
 type MoiTruong = Readonly<Record<string, string | undefined>>;
 
 /**
- * Cùng hình dạng `assertReceiptKid` của `@trustprocure/bidding`: kid đi nguyên văn vào văn bản đã ký. [S1.9101 / kid] ~~`:` được
+ * Cùng hình dạng `assertReceiptKid` của `@trustprocure/bidding`: kid đi nguyên văn vào văn bản đã ký. [S1.249 / kid] ~~`:` được
  * phép~~ — tập PHÁT HÀNH và CÔNG BỐ là `[A-Za-z0-9._-]`: kid của tài liệu khoá tiến trình này phát thành tên đối tượng S3 khi job
  * neo neo nó (`khoa-bien-nhan/<kid>.json`, `tools/neo-so-kiem-toan/src/aws.ts`) — một kid công bố được thì neo được. Định dạng biên
  * nhận vẫn cho `:` (ADR-026 §1); hàng `KID` GIU VAN_BAN của `tests/architecture/ma-chep-api-worker.test.ts` giữ ba bản trùng chữ.
@@ -83,7 +83,7 @@ export function docCauHinh(env: MoiTruong): CauHinhPublicKeys {
   }
   const publicKeys = new Map<string, Uint8Array>();
   for (const [kid, b64] of Object.entries(tho as Record<string, unknown>)) {
-    // [S1.9101 / kid] Thông điệp nêu TẬP ký tự (không vọng lại kid bị từ chối — nó có thể mang ký tự điều khiển).
+    // [S1.249 / kid] Thông điệp nêu TẬP ký tự (không vọng lại kid bị từ chối — nó có thể mang ký tự điều khiển).
     if (!KID.test(kid)) {
       throw new CauHinhError("TRUSTPROCURE_RECEIPT_PUBLIC_KEYS: có một kid không hợp lệ — kid phải dài 1–64 ký tự [A-Za-z0-9._-] (không \":\")");
     }

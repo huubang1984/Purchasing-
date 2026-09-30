@@ -70,7 +70,7 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "kiểm soát được, và không lớp nào trong hệ thống lấy lại được. Chủ dự án chọn KHÔNG phơi " +
     "ngày 2026-09-17 (ADR-038). Cần đọc giá thì đọc bằng chính giao diện người mua, dưới phiên " +
     "có MFA của một con người.",
-  // [S1.9101 / khoản 299] ~~"SỐ HỒ SƠ THẦU ĐÃ NHẬN — …", "Số hồ sơ nhận được TRƯỚC lễ mở …"~~ — từ khoản 271 con số là số báo
+  // [S1.249 / khoản 299] ~~"SỐ HỒ SƠ THẦU ĐÃ NHẬN — …", "Số hồ sơ nhận được TRƯỚC lễ mở …"~~ — từ khoản 271 con số là số báo
   // giá SẼ DỰ THẦU (luồng của lời mời còn sống, ADR-128). Tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API).
   "/rfqs/:rfqId/bid-count":
     "SỐ BÁO GIÁ SẼ DỰ THẦU (không kể lời mời đã thu hồi) — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +

@@ -165,7 +165,7 @@ describe("[S1.243 / khoản 271] câu ĐẾM luồng báo giá qua lời mời c
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 299] CON SỐ LÀ SỐ SẼ DỰ THẦU — VÀ NHÃN TRÊN MÀN NÓI ĐÚNG NGHĨA ẤY
+// [S1.249 / khoản 299] CON SỐ LÀ SỐ SẼ DỰ THẦU — VÀ NHÃN TRÊN MÀN NÓI ĐÚNG NGHĨA ẤY
 //
 // Khối trên giữ câu ĐẾM mang vế lời mời còn sống (khoản 271): `bidCount.count` là số báo giá SẼ DỰ THẦU. Hàng 299 (lượt soi đối
 // kháng của 271): nhãn của `/mo-thau` vẫn in "Đã nhận N báo giá" — bên mua thu hồi một lời mời đã có báo giá (ADR-128) thì màn
@@ -194,8 +194,8 @@ function literalCua(tep: string, js: string): string[] {
   return ra;
 }
 
-describe("[S1.9101 / khoản 299] nhãn số báo giá trên `/mo-thau` nói «sẽ dự thầu», không «đã nhận»", () => {
-  it("[S1.9101 / khoản 299] trang in `N báo giá sẽ dự thầu (không kể lời mời đã thu hồi)` từ `bidCount.count`, giữ `?` khi không có số; không literal nào còn chữ «Đã nhận»", () => {
+describe("[S1.249 / khoản 299] nhãn số báo giá trên `/mo-thau` nói «sẽ dự thầu», không «đã nhận»", () => {
+  it("[S1.249 / khoản 299] trang in `N báo giá sẽ dự thầu (không kể lời mời đã thu hồi)` từ `bidCount.count`, giữ `?` khi không có số; không literal nào còn chữ «Đã nhận»", () => {
     const lit = literalCua(TRANG_MO_THAU, readFileSync(`${GOC_KHO}${TRANG_MO_THAU}`, "utf8"));
     expect(lit.filter((l) => l === NHAN_SO_BAO_GIA), `${TRANG_MO_THAU} phải in đúng một lần câu ${NHAN_SO_BAO_GIA}`).toHaveLength(1);
     expect(lit.filter((l) => /Đã nhận/u.test(l)), "nghĩa cũ của con số (trước khoản 271) không được đứng lại trên màn").toEqual([]);
