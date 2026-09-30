@@ -17563,3 +17563,10 @@ hay bảng bị đổi tên (phán xét chặn, không gỡ nhầm). Không bả
 - Ma trận sinh lại từ báo cáo ấy: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào). Hai hàng đổi, cả hai do vòng này: D2 64 → 65
   (ca của `lan-nop-da-xem.int`); H19 70 → 103 — mười hai ca của `trigger-la-mac-dinh-dong.int` và bốn ca tĩnh, mỗi ca mang nhãn hai
   lần (ở `describe` và ở tên ca), cộng ca của `lan-nop-da-xem.int`.
+- **Hợp `master` sau #211** (S3.6b1, S1.203 — `088_tin_hieu_chia_nho`, ADR-120): #211 thêm chín trigger đã ghim — bốn trên
+  `governance_signals`, bốn trên `governance_signal_acks`, `rfq_packages_kiem_tin_hieu_khi_mo`. Trên cây hợp, cổng tĩnh của vòng này
+  (`TRIGGER_DUOC_PHEP` trùng khít tập trigger đã ghim) đỏ và gọi đúng tên chín cặp — đã ghim mà thiếu trong danh sách; vòng này khai
+  chúng: danh sách nay 163 cặp trên 44 bảng (161 văn bản ghim, hai thuộc tính). Xung đột ở cột mốc, ADR cuối tệp, cuối biên bản và
+  lời khai đếm; `pnpm cap-so --dem` viết lại lời khai số ADR (121), `cap-so --kiem` sạch, S1.205 và ADR-122 giữ. `tsc`, `eslint`,
+  `depcruise` sạch (477 mô-đun). Toàn bộ unit + T3 cục bộ trên cây hợp: 203 tệp, 3464 khẳng định, 3454 đạt, 1 bỏ qua, 9 đỏ — đúng
+  chín ca cũ của máy đo. Ma trận sinh lại trùng từng byte bản đã hợp: 73/73 bất biến (51/51 nghiệp vụ + 22/22 hàng rào).
