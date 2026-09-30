@@ -79,6 +79,7 @@ import {
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
 import {
+  UnsealError,
   approveUnseal,
   buildComparisonTable,
   cancelUnseal,
@@ -1518,10 +1519,21 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_UNSEAL,
     resourceType: "UNSEAL_REQUEST",
     resourceId: unsealIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
-    }),
+    handler: async (ctx) => {
+      try {
+        return {
+          status: 200,
+          body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
+        };
+      } catch (loi) {
+        // [S1.9145 / khoản 267] Lần từ chối vì TRẠNG THÁI (yêu cầu đã `EXECUTED`/`CANCELLED`) mang `ma` ở thân 422 — khuôn khoản 230:
+        // `error` là câu riêng, `ma` là thứ máy khách đọc. Đường TRẢ VỀ chứ không ném vì bảng 422 chung của bộ điều phối chỉ in `error`;
+        // giao dịch của route không ghi gì trước lần từ chối (hàng `UNSEAL_CANCEL_DENIED` đã ghi ở giao dịch độc lập), nên COMMIT ở đây
+        // không mang theo câu ghi nào. Lỗi không mang `ma` (không tìm thấy, người không được huỷ, mất sổ) đi đường cũ.
+        if (loi instanceof UnsealError && loi.ma !== null) return { status: 422, body: { error: loi.message, ma: loi.ma } };
+        throw loi;
+      }
+    },
   },
   // --------------------------------------------------------------------------------------------
   // [sổ nợ 40 / review M-5] Đặt lại TOTP — hai người. Yêu cầu và phê duyệt cùng một mã quyền; CSDL

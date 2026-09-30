@@ -16,14 +16,15 @@
 //   ⑵ `resourceType` của đối số yêu cầu ở MỌI lời gọi `requirePermission(…)`; lời gọi của bộ điều phối truyền `route.resourceType`,
 //      và đó là chỗ DUY NHẤT được truyền như thế, nên
 //   ⑶ `resourceType` của mọi đối tượng route (có `path` và `resourceType`) trong `apps/api/src/routes/`;
-//   ⑷ ~~ba~~ [S1.9125 / khoản 279] năm từ vựng vế: `UNSEAL_CLAUSES` (`packages/unseal/src/gate.ts`), `UnsealExecutionClause`
-//      (`apps/unseal-worker/src/index.ts`), `RFQ_STATUSES` (`packages/rfq/src/rfq.ts`), [S1.9125 / khoản 279] tập KHOÁ của hai bảng mã
-//      `CHOT_VAO_SO` (`packages/identity/src/chot-kiem-soat.ts`) và `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`) — ~~gói identity
-//      không import được ba nguồn ấy (chúng phụ thuộc gói này)~~ `rbac.ts` không import được năm nguồn ấy (bốn phụ thuộc gói này;
-//      `chot-kiem-soat.ts` cùng gói nhưng import `rbac.ts`, nên chiều ngược là một vòng), nên danh mục vế là bản CHÉP, và tệp này đòi
-//      bản chép bằng nguồn;
-//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ~~ba~~ [S1.9125 / khoản 279] năm tệp đã
-//      khai;
+//   ⑷ ~~ba~~ [S1.9125 / khoản 279] ~~năm~~ [S1.9145 / khoản 267] sáu từ vựng vế: `UNSEAL_CLAUSES` (`packages/unseal/src/gate.ts`),
+//      `UnsealExecutionClause` (`apps/unseal-worker/src/index.ts`), `RFQ_STATUSES` (`packages/rfq/src/rfq.ts`), [S1.9125 / khoản 279] tập
+//      KHOÁ của hai bảng mã `CHOT_VAO_SO` (`packages/identity/src/chot-kiem-soat.ts`) và `VAO_SO` (`packages/danh-gia/src/tu-choi-vao-so.ts`),
+//      [S1.9145 / khoản 267] kiểu hợp `LyDoTuChoiHuy` (`packages/unseal/src/requests.ts`, hai lý do của `UNSEAL_CANCEL_DENIED`) — ~~gói
+//      identity không import được ba nguồn ấy (chúng phụ thuộc gói này)~~ `rbac.ts` không import được ~~năm~~ [S1.9145] sáu nguồn ấy (~~bốn~~
+//      năm phụ thuộc gói này; `chot-kiem-soat.ts` cùng gói nhưng import `rbac.ts`, nên chiều ngược là một vòng), nên danh mục vế là bản
+//      CHÉP, và tệp này đòi bản chép bằng nguồn;
+//   ⑸ [khoản 179] tập tệp có lời gọi `throwAuditedDenial` truyền đối số thứ năm (vế) đúng bằng ~~ba~~ [S1.9125 / khoản 279] ~~năm~~
+//      [S1.9145 / khoản 267] sáu tệp đã khai;
 //   ⑹ [bước 0 đợt 2 / S1.196] `resourceType` ở đối số tài nguyên của MỌI lời gọi một HÀM BỌC đã khai (`HAM_BOC`) — hàm ấy truyền
 //      `<thamSo>.resourceType` cho `throwAuditedDenial`, và dạng ấy chỉ được chấp nhận trong đúng tệp định nghĩa của nó; hàm bọc thứ hai
 //      chưa khai ⇒ ĐỎ ở chính chỗ truyền.
@@ -49,9 +50,12 @@ const THU_MUC_ROUTE = "apps/api/src/routes/";
 /** Chỗ DUY NHẤT được truyền `route.resourceType` cho cổng quyền — bảng route ⑶ là phần giải của nó. */
 const TEP_DIEU_PHOI = "apps/api/src/dispatch.ts";
 /**
- * [khoản 179] ~~Ba~~ [S1.9125 / khoản 279] Năm chỗ gọi truyền vế — đóng; thêm một chỗ là một quyết định và phải sửa cả đây lẫn
- * docstring của `throwAuditedDenial`. Hai chỗ thêm ở khoản 279: chốt kiểm soát (`CONTROL_DENIED`, vế là mã chốt) và từ chối trạng
- * thái (`RFQ_STATE_DENIED`, vế là mã lý do) — hai đường duy nhất mà payload mang một MÃ của tập đóng dòng log không suy được từ `action`.
+ * [khoản 179] ~~Ba~~ [S1.9125 / khoản 279] ~~Năm~~ [S1.9145 / khoản 267] Sáu chỗ gọi truyền vế — đóng; thêm một chỗ là một quyết định
+ * và phải sửa cả đây lẫn docstring của `throwAuditedDenial`. Hai chỗ thêm ở khoản 279: chốt kiểm soát (`CONTROL_DENIED`, vế là mã chốt)
+ * và từ chối trạng thái (`RFQ_STATE_DENIED`, vế là mã lý do) — hai đường duy nhất ~~mà payload mang một MÃ của tập đóng dòng log không
+ * suy được từ `action`~~ [S1.9145 / khoản 267] tới vòng ấy. Chỗ thêm ở khoản 267: huỷ yêu cầu mở thầu (`UNSEAL_CANCEL_DENIED`, vế là
+ * `lyDo` ∈ `LyDoTuChoiHuy`) — từ vòng này `action` ấy mang HAI lý do trên cùng một route, nên dòng log mất sổ không suy được lý do từ
+ * `action` hay mẫu route nữa (người tích hợp chốt theo khuôn khoản 279, §S1.9125).
  */
 const TEP_TRUYEN_VE = [
   "apps/unseal-worker/src/index.ts",
@@ -59,6 +63,7 @@ const TEP_TRUYEN_VE = [
   "packages/identity/src/chot-kiem-soat.ts",
   "packages/unseal/src/comparison.ts",
   "packages/unseal/src/gate.ts",
+  "packages/unseal/src/requests.ts",
 ];
 /**
  * ⑹ Hàm BỌC truyền `resourceType` từ tham số tới `throwAuditedDenial` — danh sách ĐÓNG, thêm một hàm là một quyết định. Bộ đọc lấy
@@ -76,6 +81,8 @@ const NGUON_VE = {
   // lý do lấy đủ 11 `RFQ_STATUSES` ở §S1.225.
   CHOT_VAO_SO: "packages/identity/src/chot-kiem-soat.ts",
   VAO_SO: "packages/danh-gia/src/tu-choi-vao-so.ts",
+  // [S1.9145 / khoản 267] Hai lý do của `UNSEAL_CANCEL_DENIED` — kiểu hợp chuỗi trực tiếp; cùng một biến đi vào `payload.lyDo` và vế.
+  LyDoTuChoiHuy: "packages/unseal/src/requests.ts",
 } as const;
 
 /** Kết quả đọc MỘT tệp. `khongGiai` là danh sách `tệp:dòng lý do` — mỗi dòng là một chỗ bộ đọc không dám đoán. */
@@ -343,8 +350,9 @@ describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối B
 
   it("bộ đọc thấy các chỗ gọi đã biết của kho, và không chỗ nào nó không giải được", () => {
     const tepGoi = KET_QUA.filter(([, k]) => k.soGoiTuChoi + k.soGoiCongQuyen > 0).map(([t]) => t);
-    // ~~Ba~~ [S1.9125 / khoản 279] Năm chỗ gọi mà tệp này ghim ở ⑸, cộng chính `rbac.ts` (nơi `requirePermission` gọi... không — nơi
-    // hai hàm được ĐỊNH NGHĨA, không gọi) — đối chứng chống rỗng ruột không bằng một con số sàn mà bằng ~~ba~~ năm tên tệp cụ thể.
+    // ~~Ba~~ [S1.9125 / khoản 279] ~~Năm~~ [S1.9145 / khoản 267] Sáu chỗ gọi mà tệp này ghim ở ⑸, cộng chính `rbac.ts` (nơi
+    // `requirePermission` gọi... không — nơi hai hàm được ĐỊNH NGHĨA, không gọi) — đối chứng chống rỗng ruột không bằng một con số sàn
+    // mà bằng ~~ba~~ ~~năm~~ sáu tên tệp cụ thể.
     for (const t of TEP_TRUYEN_VE) expect(tepGoi, `không thấy lời gọi nào ở ${t}`).toContain(t);
     expect(tepGoi).toContain(TEP_DIEU_PHOI);
     expect(KET_QUA.flatMap(([, k]) => k.khongGiai)).toEqual([]);
@@ -387,12 +395,12 @@ describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối B
     expect(() => tuVungTrongVanBan(tep, vanBan, "KHONG_CO")).toThrow(/không thấy/u);
   });
 
-  it("⑷ hợp ~~ba~~ [S1.9125 / khoản 279] năm từ vựng vế ở nguồn BẰNG `DANH_MUC_VE_CONG` — bản chép trong identity không lệch nguồn", () => {
+  it("⑷ hợp ~~ba~~ [S1.9125 / khoản 279] ~~năm~~ [S1.9145 / khoản 267] sáu từ vựng vế ở nguồn BẰNG `DANH_MUC_VE_CONG` — bản chép trong identity không lệch nguồn", () => {
     const o = new Set(Object.entries(NGUON_VE).flatMap(([ten, tep]) => tuVung(tep, ten)));
     expect(sapXep(o)).toEqual(sapXep(DANH_MUC_VE_CONG));
   });
 
-  it("⑸ [khoản 179] đúng ~~ba~~ [S1.9125 / khoản 279] năm tệp truyền vế cho `throwAuditedDenial`: cổng mở thầu, bảng so sánh, worker lúc giải mã, chốt kiểm soát, từ chối trạng thái", () => {
+  it("⑸ [khoản 179] đúng ~~ba~~ [S1.9125 / khoản 279] ~~năm~~ [S1.9145 / khoản 267] sáu tệp truyền vế cho `throwAuditedDenial`: cổng mở thầu, bảng so sánh, worker lúc giải mã, chốt kiểm soát, từ chối trạng thái, huỷ yêu cầu mở thầu", () => {
     expect(KET_QUA.filter(([, k]) => k.truyenVe).map(([t]) => t)).toEqual(sapXep(TEP_TRUYEN_VE));
   });
 });
