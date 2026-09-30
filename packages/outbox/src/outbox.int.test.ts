@@ -1648,7 +1648,9 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   }, 60_000);
 
   it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ (pid khác) và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
-    const pool = db.poolAs("app_api");
+    // [S1.9130 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: `SET search_path` phạm vi phiên ở lần thứ ba đổi search path hiệu lực,
+    // withTenant huỷ kết nối bằng lỗi ấy (không phải `true` của cờ) — `SET statement_timeout` ở lần đầu không thuộc trục nào của nó.
+    const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
     try {
       // [S1.54 / khoản nợ 96] 100 ms — lý do và phép đo ở vế đối chứng ngay trên.
       const pidP = await withTenant(
@@ -1681,7 +1683,9 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   }, 60_000);
 
   it("ĐƯỜNG SẢN PHẨM: handler của tổ chức P không làm hỏng job của tổ chức Q trên cùng pool", async () => {
-    const pool = db.poolAs("app_api");
+    // [S1.9130 / khoản 281] Khai MỘT lần `SESSION_STATE_LEFT`: handler `GAY_O_NHIEM` cố ý `SET search_path` không `LOCAL` — đúng một
+    // giao dịch của runner để lại trạng thái phiên và bị huỷ kết nối.
+    const pool = db.poolAs("app_api", { soLanSessionStateLeft: 1 });
     try {
       const idP = await withTenant(pool, orgId, (client) =>
         enqueueJob(client, orgId, { kind: "GAY_O_NHIEM" }),
