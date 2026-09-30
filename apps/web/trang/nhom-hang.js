@@ -9,12 +9,14 @@
 // ==============================================================================================
 
 import { chuanMa, docNhomHang, loiMa, nhanTrangThaiNhom, nutDoiTrangThai } from "/lib/nhom-hang.js";
+import { ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-let phien = { token: "", daRedeem: false };
+// [S1.9120 / khoản 282] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// `/lib/dang-nhap.js`.
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -42,6 +44,8 @@ function o(noiDung) {
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP, cùng khuôn `chinh-sach.js` (gọi `/auth/redeem` ĐÚNG một lần cho mỗi mã).
+// [S1.9120 / khoản 282] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login`: nút Tiếp, nút Vào và khối link đăng nhập gần đây là
+// `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về bước 1.
 // ---------------------------------------------------------------------------------------------
 
 function docLink() {
@@ -56,43 +60,15 @@ docLink();
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { token: $("token").value.trim(), daRedeem: false };
   for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "ok2", "loi3", "ok3"]) bao($(id), "");
   dongCacBuoc();
+  dangNhap.datLai();
   thuPhienCo();
 });
 
-$("nut-vao").addEventListener("click", async () => {
-  bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = $("org").value.trim();
-  const token = $("token").value.trim();
-  const code = $("ma").value.trim();
-  if (token !== phien.token) phien = { token, daRedeem: false };
-  if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
-  $("nut-vao").disabled = true;
-  try {
-    if (!phien.daRedeem) {
-      const r1 = await goi("POST", "/auth/redeem", { orgId, token });
-      if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return; }
-      phien = { ...phien, daRedeem: true };
-      if (r1.body?.needsEnrollment === true) {
-        bao($("ghi-danh"), `Tài khoản này chưa có MFA. Bí mật TOTP (nhập vào ứng dụng xác thực, rồi nhập mã sáu số và bấm Vào lần nữa): ${r1.body.totpSecretBase32}`);
-        return;
-      }
-    }
-    if (!/^\d{6}$/.test(code)) { bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực."); return; }
-    const r2 = await goi("POST", "/auth/totp", { orgId, token, code });
-    if (r2.status !== 200) {
-      bao($("loi1"), r2.body?.reason === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng");
-      return;
-    }
-    xoaManhLink();
-    const me = await goi("GET", "/me");
-    await moSauDangNhap(me.body, false);
-  } finally {
-    $("nut-vao").disabled = false;
-  }
-});
+// [S1.9120 / khoản 282] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// cùng chỗ câu lỗi~~ — khoản 193 ở trang này. Nay bước 1 là module chung; trang trao cho nó việc của riêng mình sau khi vào.
+const dangNhap = ganDangNhap({ taiLieu: document, goi, lichSu: history, viTri: location, daVao: (me) => moSauDangNhap(me, false) });
 
 const CAC_BUOC_SAU = ["b2", "b3"];
 
@@ -109,6 +85,8 @@ async function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  // [S1.9120 / khoản 282] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  void dangNhap.veLinkGanDay();
   await napNhomHang();
 }
 
@@ -119,6 +97,7 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  dangNhap.anLinkGanDay();
 }
 
 /**
@@ -156,8 +135,8 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { token: $("token").value.trim(), daRedeem: false };
     dongCacBuoc();
+    dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
     bao($("loi1"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
@@ -165,10 +144,6 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     $("nut-dang-xuat").disabled = false;
   }
 });
-
-function xoaManhLink() {
-  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
-}
 
 // ---------------------------------------------------------------------------------------------
 // Bước 2 — danh sách, ngừng dùng và dùng lại
