@@ -1040,7 +1040,10 @@ resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_khong_chay" {
 # Cùng khuôn ⑵: rule ở AUDIT bắt sự kiện (của prod chuyển sang) ⇒ SNS `tp-canh-bao-khoa` ⇒ thư đọc được; rule ở PROD chỉ
 # chuyển nguyên sự kiện sang bus của audit qua role `tp-chuyen-canh-bao-khoa`. Người có quyền ở prod gỡ được rule chuyển,
 # nhưng lần gỡ ấy nằm trong CloudTrail tổ chức và không chạm được SNS/rule ở audit. Đối chứng dương (không khởi task nào):
-# `aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao` ⇒ lời gọi lỗi, CloudTrail vẫn ghi kèm errorCode ⇒ thư;
+# ~~`aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao` ⇒ lời gọi lỗi, CloudTrail vẫn ghi kèm errorCode ⇒ thư;~~
+# [rà 2026-10-01] phép thử ấy không bao giờ có thư khi họ tp-khoi-tao chưa tồn tại: ECS từ chối ở bước kiểm đầu vào và CloudTrail
+# ghi `requestParameters: null` — đo ở ⑵ trong lần apply đầu (PR #218); sau stack 90 thì chưa đo. Đối chứng dương của ba hình
+# dạng task là chính lần chạy workflow (RunTask thành công) — APPLY-LAN-DAU 3.7 —
 # và chính lệnh `create-secret` của bước 8.1 là đối chứng dương của mẫu d.
 resource "aws_cloudwatch_event_rule" "task_khoi_tao_audit" {
   provider      = aws.audit
