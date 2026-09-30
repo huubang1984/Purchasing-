@@ -9613,6 +9613,15 @@ trên cây `master`:
 - **Cạnh về DRAFT đòi hàng do CHÍNH giao dịch ấy chèn (so `xmin`)** — dễ vỡ (giao dịch con), và không đóng lỗ xoá. Bác.
 - **Thu quyền DELETE** — đã vậy từ `087`; chủ bảng vẫn xoá được. Không đủ.
 
+### Đo
+
+Khối (8) của `packages/rfq/src/lan-nop-da-xem.int.test.ts`, năm ca trên Postgres thật dưới `app_api`: hàng lẻ; hàng kèm cạnh mở gói
+và cạnh huỷ gói; trả về rồi nộp lại trong cùng giao dịch (đối chứng — xanh cả trên `master`); đổi `app.org_id` trước COMMIT; chủ bảng
+xoá, sửa, TRUNCATE, kể cả dưới `session_replication_role = replica`. Trên cây `master` bốn ca đỏ. Chín đột biến đều đỏ: sáu ở ca đo
+(bỏ vế lần nộp đã tăng; chỉ đòi hết `PENDING_APPROVAL`; không thấy gói thì bỏ qua; thân `RETURN NULL` sớm; trigger không hoãn; chốt
+bỏ `DELETE`), ba bị hardening chặn ngay ở `migrate()` (thiếu chốt `TRUNCATE`, chốt không `ENABLE ALWAYS`, danh sách
+`TRIGGER_DUOC_PHEP` không khai ba tên mới). Biên bản: §S1.9101.
+
 ### Hệ quả, nói thẳng
 
 - Trả về rồi HUỶ trong CÙNG một giao dịch bị từ chối — fail-closed; tầng gói không làm thế (huỷ là một lời gọi riêng).
