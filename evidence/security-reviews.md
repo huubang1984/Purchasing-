@@ -16630,6 +16630,60 @@ Cộng 14 hình dạng đỏ bằng văn bản mẫu trong chính tệp cổng (
 - Đột biến: bảy đỏ (mục 6); M6 đối chứng xanh.
 - Cổng: `pnpm typecheck` exit 0 (16,8 s) ×2; `pnpm exec eslint <8 tệp>` exit 0; `pnpm exec depcruise apps/api tests --config .dependency-cruiser.cjs` — no dependency violations found (212 modules, 802 dependencies cruised); `pnpm vitest run apps/api/src/routes.test.ts tests/architecture` (biến PG) — 37 tệp xanh, 416 đạt, 1 bỏ qua (417; ca bỏ qua có sẵn ở `xuong-dong-ts.test.ts`), exit 0, 114 s — lần chạy đầu tại HEAD thiếu hai biến PG nên hai tệp `qt3-*.int` đỏ vì Testcontainers tìm Docker, đã chạy lại đúng biến.
 
+# §S1.9110 — TRẢ NỢ SONG SONG ĐỢT 1: CỤM POSTGRES CỤC BỘ CHO TEST TÍCH HỢP, KHOẢN 152 ĐÓNG, NĂM KHOẢN SANG RỔ C, MƯỜI LÔ GỘP, HAI CA TEST THIU SAU S1.9121 SỬA
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11. Đóng 152; chuyển 4, 30, 157, 178, 219 sang rổ C. Không migration, không ADR. Biên bản của từng lô: §S1.9101, §S1.9111 … §S1.9191.
+
+## 1. Vòng này là gì
+Vòng của người tích hợp trong đợt trả nợ rổ B theo lô song song. Bốn việc: (1) dựng đường chạy test tích hợp không cần Docker để mỗi agent tự đo được trước khi giao; (2) đóng một khoản đã được vá từ lâu mà hàng sổ chưa ai sửa; (3) gộp mười nhánh lô và áp mười tệp bàn giao vào các tệp dùng chung; (4) chạy toàn bộ bộ test tích hợp trên đầu nhánh đã gộp, sửa hai ca thiu do một lô đổi hành vi của lớp lấy client, sinh lại ma trận bất biến.
+
+## 2. Quyết định của chủ dự án
+- (2026-09-29) Chạy đợt 1 gồm 10 lô, 30 khoản (29 của lô + 152); 5 agent một lượt.
+- (2026-09-29) Giữ chế độ Postgres cục bộ trong PR.
+- (2026-09-29) Chuyển 4, 30, 157, 178, 219 sang rổ C.
+
+## 3. Đo trước
+- `docker version` ⇒ không có daemon; `startPostgres()` (Testcontainers) ném ở bước dựng ⇒ 0/73 tệp `*.int.test.ts` chạy được.
+- Máy có `/usr/lib/postgresql/16/bin` (PostgreSQL 16.13); `initdb` từ chối chạy dưới root — cần shim chạy dưới người dùng `postgres`.
+- Nền trước đợt: `pnpm test` 123 tệp, 1760 test xanh; `pnpm t0` xanh; `pnpm test:int` trên cụm cục bộ 73 tệp — 71 xanh, 2 đỏ (3 test: xác thực `trust`, tiền đề locale).
+- Trên đầu nhánh sau chín lô (07a1d4c): `pnpm test:int` 74 tệp, 1635 test — 1632 xanh, 3 đỏ: `outbox.int.test.ts` `[T10-L]` đối chứng (mong 57014, nhận không lỗi), `db/migrations.int.test.ts` khoản 87 (đối chứng "RESET ⇒ đi qua" bị từ chối sớm `app.org_id`), `khoi-tao.int.test.ts` tiền đề `lower()` (chạy thiếu `TRUSTPROCURE_PG_LOCAL_LOCALE=C`). Chạy riêng ca khoản 87 trên máy rảnh: vẫn đỏ — tất định, không phải tải.
+
+## 4. Thay đổi
+- `packages/test-support/src/postgres-cuc-bo.ts` (mới): `cauHinhCumCucBo()` đọc hai biến bắt buộc và một biến locale tuỳ chọn; `khoiDongCumCucBo()` — `initdb -D <cha>/tp-<pid>-<ngẫu nhiên> --auth-host=scram-sha-256 --auth-local=trust --pwfile=… -E UTF8 --locale=<locale>`, cổng rảnh, `pg_ctl start` với fsync/synchronous_commit/full_page_writes tắt, `CREATE DATABASE trustprocure_test`; `dung()` = `pg_ctl -m immediate stop` + xoá thư mục.
+- `packages/test-support/src/postgres.ts`: `startPostgres()` rẽ theo `cauHinhCumCucBo()`; phần còn lại (poolAs, phép đo khoản 28, `withMigratedDatabase`) không biết mình ở đường nào; `container.stop()` thành `mayChu.dung()`.
+- `tests/architecture/duong-sql-ngoai-with-tenant.test.ts`: khai `postgres-cuc-bo.ts` ở ba danh sách (một `pg.Client` trực tiếp, một đường lấy, không câu lệnh ngoài `withTenant`) — cổng đòi khai, không đòi im.
+- `packages/outbox/src/outbox.int.test.ts` `[T10-L]`: vế đối chứng đo trục "trạng thái phiên đi theo kết nối" trên pool TRẦN (`createPool` không vai) thay vì qua `withTenant` trên `poolAs("app_api")`; thêm vế "không bật cờ, pool có vai: cùng `pg_backend_pid()` mà Q lành" (lớp `RESET ALL` của S1.9121) và vế cờ `destroyConnectionWhenDone` đòi thêm pid KHÁC — hai lớp phân biệt được nhau.
+- `db/migrations.int.test.ts` khoản 87: ba cửa sổ `ALTER DATABASE … SET` / `ALTER ROLE ALL SET` / `ALTER SYSTEM` — mọi câu trong cửa sổ (câu phán xét, đọc `pg_db_role_setting`, RESET) đi qua một kết nối giữ sẵn mở TRƯỚC SET (hay `poolSys` của chính cửa sổ), nên đối chứng "RESET ⇒ đi qua" nhận kết nối sạch dù pool xếp thế nào.
+- `docs/STATE.md`: hàng 152 ĐÓNG; năm hàng thêm đoạn `[S1.9110 — SANG RỔ C]`; hàng của mười lô theo tệp bàn giao; dòng RỔ B/RỔ C; `pnpm cap-so --dem` viết lại dòng CÒN MỞ và lời khai đếm ở `Handoff.md`. `evidence/INV-matrix.md` sinh lại (`pnpm evidence`).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Mỗi lần gọi một cụm riêng, không phải một CSDL trong cụm chung: migration `CREATE ROLE app_api…` là mức cụm, hai tệp test song song trên một cụm sẽ giẫm nhau.
+- `scram-sha-256` thay vì `trust` cho TCP: ca "mật khẩu cũ thôi đăng nhập được" (`chay-migrate.int.test.ts`) xanh giả dưới `trust`.
+- Locale mặc định `C.UTF-8`; `C` chỉ khi test cần tiền đề libc. Không locale glibc nào trùng musl — ghi ở đầu tệp.
+- Hai ca thiu SỬA Ở TEST, không lùi S1.9121: cả hai test đo đúng một lỗ mà S1.9121 đã đóng ở lớp khác (RESET ALL lúc lấy client; huỷ kết nối sau lượt hardening lỗi), và phép từ chối sớm của `migrate()` với phiên mang `app.org_id` là hành vi ĐÚNG — cái sai là test để pool đưa cho đối chứng một phiên thừa kế. Vế đối chứng `[T10-L]` giữ nghĩa chống rỗng ruột bằng cách đo trên pool trần, nơi không lớp nào của dự án đứng giữa.
+- Lô L2 chạy cổng của nó trên `packages/db` + `tests/architecture`, không chạy `outbox.int`/`db/migrations.int` — đúng đề bài; hệ quả liên lô là việc của người tích hợp, nên ghi ở đây chứ không ở hàng 104.
+
+## 6. Đột biến
+- Bỏ hai biến môi trường ⇒ `startPostgres()` đi đường container và ném vì không có Docker (đúng hành vi cũ).
+- Chạy `chay-migrate.int.test.ts` dưới `--auth=trust` (bản đầu) ⇒ đỏ ở `expect((await dangNhap("app_api_login", mk1)).ok).toBe(false)`; dưới scram ⇒ xanh.
+- `khoi-tao.int.test.ts` ca `[lượt soi] email mang một điểm mã…` với `C.UTF-8` ⇒ đỏ đúng ở tiền đề (`pg_catalog.lower('Ⓐ')` = `ⓐ` như JS); với `C` ⇒ 16/16 xanh.
+- Khoản 87: bản vá chỉ cửa sổ (a) ⇒ ca vẫn đỏ, nay ở cửa sổ (a′) `ALTER ROLE ALL` (dòng 4376) — cùng cơ chế thừa kế, xác nhận chẩn đoán; vá cả ba cửa sổ ⇒ xanh.
+- `[T10-L]` đối chứng cũ chạy trên đầu nhánh đã gộp ⇒ `undefined` thay vì `57014` — chính là phép đo rằng lớp `RESET ALL` của S1.9121 chặn trục này trên pool có vai.
+
+## 7. Giới hạn, nói ra
+- Cụm cục bộ chạy PostgreSQL 16.13/glibc, container chạy 16-alpine/musl: khác libc ở `lower()`/collation ngoài ASCII. Ca tiền đề ở `khoi-tao.int.test.ts` là chỗ duy nhất đo được khác biệt ấy trong đợt này; chạy toàn bộ với `C.UTF-8` thì ca ấy đỏ có chủ ý, chạy riêng với `C` thì xanh.
+- Shim `initdb`/`pg_ctl` chạy dưới người dùng `postgres` nằm ngoài kho (`/var/lib/postgresql/tp-shim`), là cấu hình máy, không phải mã.
+- Ca `comparison.int.test.ts` `[S1.164 / khoản 245] ⒜` đỏ một lần dưới tải (chạy song song cả bộ), xanh khi chạy lại — nhạy tải, ghi ở f3f63ab; chưa có khoản riêng.
+- Số tạm S1.91NN/94NN còn nguyên trên nhánh: `pnpm cap-so --kiem` đỏ tới khi gộp `master` và chạy `pnpm cap-so` (ADR-090).
+
+## 8. Số đo
+- `pnpm test:int` trên cụm cục bộ, nền trước đợt: 73 tệp — 71 xanh, 2 đỏ (3 test), 1239 s. Sau sửa scram/locale: `chay-migrate.int` 4/4; `khoi-tao.int` 16/16 (LOCALE=C).
+- Đầu nhánh chín lô (07a1d4c): 74 tệp, 1635 test — 1632 xanh, 3 đỏ (ở trên), 798 s.
+- Sau vá hai ca: `outbox.int.test.ts` 51/51 (T10-L 4/4); `db/migrations.int.test.ts` 120/120 (782 s); `khoi-tao.int.test.ts` 16/16 với `C`.
+- `[INV-H20]` 45/45 sau mỗi lần tích hợp; `pnpm cap-so --dem`: lời khai đếm đã khớp.
+- `pnpm t0` trên đầu nhánh mười lô: typecheck, lint xanh; depcruise 0 vi phạm (469 module, 1902 phụ thuộc).
+- `pnpm evidence` trên đầu nhánh mười lô (đơn vị + tích hợp, `C.UTF-8`): 3493 khẳng định — 3491 xanh, 1 bỏ qua có sẵn, 1 đỏ (tiền đề locale của `khoi-tao.int.test.ts`, không mang nhãn INV); ma trận 71/71 ✅, đếm test mang nhãn đổi ở A2 9 → 28 (sổ khai A2 thêm hai tệp, L5; `it.each`, L6), D3 47 → 51, D5 140 → 142, F1 80 → 87.
+
 # §S1.9111 — LÔ 11 HARDENING A: `NGOAI_LE_DOC_VONG` KHAI CÓ KHOÁ, SECURITY DEFINER THEO CHỮ KÝ, VAI CHỦ HÀM ĐƯỢC CANH — KHOẢN 112, 163, 164 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11. Đóng khoản **112, 163, 164** (rổ B); mở **9411, 9412**. Không migration, không ADR.
