@@ -10394,7 +10394,7 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 
 ## ADR-132 — Miền email của sản phẩm là ASCII in được: `CHECK (email ~ '^[!-~]+@[!-~]+$')` trên `users` và `supplier_contacts`, hai đường ghi từ chối có tên; địa chỉ quốc tế hoá (EAI/IDN) bị từ chối tới khi một khách hàng cần
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-013, ADR-015, ADR-028 §2⑵, khoản 63, 70, **71**, 105, 283
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-013, ADR-015, ADR-028 §2⑵, khoản 63, 70, **71**, 105, 283 · **[S1.9160]** ADR-9260 (dấu chấm cuối tên miền — khoản 283 đóng, nối ADR này)
 
 ### Bối cảnh
 
@@ -10444,8 +10444,10 @@ ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Th�
 - Trên miền ASCII in được, mọi hàm hạ chữ thường (glibc, musl, ICU, ctype C, JS) cho cùng kết quả và bảo toàn độ dài byte ⇒ ⑴ ⑵ ⑶ của khoản
   71 đóng cùng lúc; ca tiền đề locale của `khoi-tao.int` lật thành «Unicode bị từ chối trước khi tới `lower()`» và xanh dưới mọi locale.
 - Người dùng có địa chỉ quốc tế hoá bị từ chối với thông điệp cố định (422 / `KhoiTaoError` nêu vị trí) — cái giá nhìn thấy được, ghi ở đây.
-- `users` vẫn không có CHECK hình dạng (`a@b@c` vào); dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 283, ngoài
-  phạm vi ADR này.
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào); ~~dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 283, ngoài~~
+  ~~phạm vi ADR này~~ **[S1.9160]** dấu chấm cuối tên miền `dot@x.vn.` nay bị từ chối có tên ở hai đường ghi và bằng
+  `CHECK (email !~ '\.$')` trên hai bảng, không chuẩn hoá — ADR-9260 (khoản 283 đóng); dạng tương đương RFC 5322 khác (chú thích,
+  quoted-string) còn cất được cạnh dạng trần — khoản 9460.
 - Dữ liệu có sẵn ngoài miền làm deploy dừng với danh sách id; sửa tay dưới vai mà RLS không áp, mỗi thay đổi kèm một sự kiện kiểm toán.
 
 ## ADR-9255 — Tập `kind` mà `app_api` XẾP được sống ở CSDL: một policy `AS RESTRICTIVE FOR INSERT TO app_api`; cảnh báo break-glass giả còn, nói ra
@@ -10506,3 +10508,59 @@ dưới `app_api` một `kind` không tiến trình nào nhận ⇒ VÀO, không
   trong đồ gá đầu tệp; hai tệp còn lại mà ADR-134 §Hệ quả nêu chèn job thử dưới siêu người dùng nên không đổi.
 - Đường ops "xoá rồi tạo lại vai" (N3) đi qua nhờ mục tự chữa riêng; đo: N3 và vế khoản 285 ở `db/migrations.int.test.ts`.
 - Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại dòng khai (cùng giá ADR-036 §4).
+
+## ADR-9260 — Email không kết thúc bằng dấu chấm: `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts`, hai đường ghi từ chối có tên dấu chấm cuối tên miền; không chuẩn hoá — nối ADR-132
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-09-30 (kế hoạch đợt 3 mục 0, câu 12; đợt trả nợ 3, lô B3) ·
+**[S1.9160]** · **Liên quan:** ADR-132 (miền email ASCII in được — ADR này nối nó), ADR-015, ADR-028 §2⑵, ADR-061, khoản 70, 71, 105, **283**, 9460 ·
+**Biên bản:** `evidence/security-reviews.md` §S1.9160 · **Khoản:** 283 (đóng ở đây)
+
+### Bối cảnh
+
+ADR-132 đóng khoản 71 bằng MIỀN (ASCII in được) và ghi ở §Hệ quả: dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 283,
+ngoài phạm vi. Đo (S1.229, lặp lại ở S1.9160 trên `782c5eb0`): `EMAIL_PATTERN` khớp `dot@x.vn.` vì đuôi `\.[^…@]+$` lùi được về `vn.`; ràng buộc
+hình dạng của 011 khớp cùng lý do; 092 chỉ kiểm miền ký tự; `UNIQUE (org_id, email)` và `UNIQUE (org_id, supplier_id, email)` so nguyên văn;
+`users` không có CHECK hình dạng. Hệ quả đo được: `addSupplierContact` cất `dot-283@x.vn.` cạnh `dot-283@x.vn` cho cùng nhà cung cấp;
+`tools/khoi-tao-to-chuc` tạo hai người dùng `dot@khach-cham.vn` và `dot@khach-cham.vn.`; dưới superuser cả hai bảng nhận; và `/auth/link` với từng
+dạng phát một magic link. RFC 5321 coi tên miền có dấu chấm cuối là dạng tuyệt đối của cùng một tên, và phép kiểm đích của bộ gửi SES
+(`laDiaChiEmail`) nhận cả hai ⇒ hai người dùng (hay hai người liên hệ), hai link (hay hai lời mời), MỘT hộp thư — cùng lớp khoản 70, không phải
+hoa-thường, không phải miền ký tự. Thân khoản đề hai đường: chuẩn hoá bỏ dấu chấm cuối + CHECK, hay siết hình dạng (011 và CHECK hình dạng cho
+`users`).
+
+### Quyết định
+
+1. **Lược đồ: email không kết thúc bằng dấu chấm.** `users_email_khong_dau_cham_cuoi` và `supplier_contacts_email_khong_dau_cham_cuoi`,
+   `CHECK (email !~ '\.$')` — định nghĩa lưu `CHECK ((email !~ '\.$'::text))` — ở một migration (`9560_email_khong_dau_cham_cuoi.sql`), không
+   `NOT VALID`. ĐỐI CHIẾU TRƯỚC theo khuôn 092: có hàng mang dấu chấm cuối ⇒ migration NÉM `check_violation` với số hàng và tối đa 20 id mỗi bảng,
+   không in email, KHÔNG sửa dữ liệu. Hai dòng khai ở `CHECK_AN_NINH_KHAI` (khoản 105 — vế «danh tính email chuẩn hoá»): gỡ hay đổi là deploy đỏ.
+2. **Hai đường ghi từ chối CÓ TÊN trước khi tới CSDL.** `addSupplierContact` — sau hạ chữ thường và 320 byte, trước vị từ hình dạng —
+   `SupplierError("email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối")` ⇒ 422; `tools/khoi-tao-to-chuc` (`chenNguoi`, sau vế
+   ASCII) — `KhoiTaoError("người thứ N: email có dấu chấm cuối tên miền")`, không in email, rollback trọn. `EMAIL_PATTERN` (xuất khẩu) không còn khớp
+   một địa chỉ có dấu chấm cuối.
+3. **KHÔNG chuẩn hoá.** Không tầng nào bỏ dấu chấm cuối thay người dùng. `login.ts` không đổi: `/auth/link` với `dot@x.vn.` không tìm ra `dot@x.vn`.
+4. **Mẫu chỉ chạm ĐUÔI chuỗi.** Dấu chấm trong local-part hay giữa tên miền không đổi gì; hình dạng đầy đủ (dot-atom RFC 5321) vẫn là quyết định
+   ADR-132 §3 để ngỏ — dạng tương đương RFC 5322 khác (chú thích, quoted-string) mang sang khoản 9460.
+5. **Literal `E'\\.$'` ở migration**, không `'\.$'`: cùng một chuỗi dưới `standard_conforming_strings = on`, và không đổi nghĩa khi một `off` đặt sẵn ở
+   mức database/vai rơi vào phiên migrate — dưới `off`, `'\.$'` lex thành `.$`, ràng buộc chặn mọi địa chỉ và khối đối chiếu đếm mọi hàng (đo).
+
+### Phương án bị loại
+
+- **Chuẩn hoá bỏ dấu chấm cuối trước khi ghi (± CHECK).** Chủ dự án loại (câu 12): đổi ngầm địa chỉ người dùng gõ; và trên dữ liệu có sẵn nó không
+  cơ khí được — ở hàng có dạng anh em không dấu chấm, bỏ dấu chấm là va `UNIQUE` (23505, đo), tức phải chọn giữ hàng nào (mỗi hàng có thể đã mang
+  vai, phiên, lời mời). Chuẩn hoá ở ứng dụng mà không kèm CHECK còn để đường viết tay và đường ghi thứ hai mở.
+- **Siết 011 và thêm CHECK hình dạng (dot-atom) cho `users`.** Rộng hơn thứ khoản đòi — quyết định HÌNH DẠNG mà ADR-132 §3 để ngỏ (dot-atom loại cả
+  local-part có nháy và domain literal RFC 5321 cho phép); để riêng — khoản 9460 mang câu hỏi ấy.
+- **Sửa ràng buộc hình dạng của 011 thay vì thêm ràng buộc mới.** 011 chỉ phủ `supplier_contacts`; sửa nó là đổi một dòng khai đang có theo một cách
+  đọc «hình dạng» chưa chốt. Một ràng buộc một câu, cùng tên trên hai bảng thì đọc được và khai được.
+- **Chỉ tầng ứng dụng.** 049/070/ADR-132: quy ước của mã đúng chừng nào mọi đường ghi nhớ; `users` có hai đường ghi cộng đường viết tay.
+- **`NOT VALID` + `VALIDATE CONSTRAINT`.** 048: ràng buộc chưa kiểm nói dối về quá khứ; khối đối chiếu trước đã nói Ở ĐÂU.
+
+### Hệ quả
+
+- `dot@x.vn.` (và `a@x.vn..`) bị từ chối có tên ở hai đường ghi và bằng 23514 đúng tên dưới mọi vai; `EMAIL_PATTERN` và lược đồ đồng ý ở đuôi.
+- Người gõ thừa dấu chấm cuối nhận câu nói đúng lý do (422 / `KhoiTaoError` nêu vị trí) — cái giá nhìn thấy được; ở `/auth/link` thì không nhận link
+  (luôn 200, không liệt kê được email — không đổi).
+- Dữ liệu có sẵn mang dấu chấm cuối làm deploy dừng với danh sách id; sửa tay dưới vai mà RLS không áp — hàng có dạng anh em là MỘT hộp thư: giữ
+  một, mỗi thay đổi kèm một sự kiện kiểm toán.
+- Dạng tương đương RFC 5322 khác (chú thích `dot(x)@…`, quoted-string `"dot"@…`) vẫn cất được cạnh dạng trần — khoản 9460.
+- Một migration, hai dòng khai ở hardening; không route mới, không màn.

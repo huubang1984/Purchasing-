@@ -3000,6 +3000,9 @@ $ham$;
   -- check-an-ninh-khai.test.ts` đòi `mig` là migration CUỐI CÙNG nhắc tên ràng buộc.
   -- [S1.229 / khoản 71 / ADR-132] Hai dòng `users_email_ascii`/`supplier_contacts_email_ascii` (`092_email_ascii`): miền email là ASCII in được
   -- — vế "danh tính email chuẩn hoá" ở tiêu chí trên; gỡ một trong hai là mở lại cặp confusable Unicode và sự phụ thuộc libc của tập cất được.
+  -- [S1.9160 / khoản 283 / ADR-9260] Hai dòng `users_email_khong_dau_cham_cuoi`/`supplier_contacts_email_khong_dau_cham_cuoi`
+  -- (`9560_email_khong_dau_cham_cuoi`): email không kết thúc bằng dấu chấm — cùng vế ấy; gỡ một trong hai là mở lại `dot@x.vn.` cạnh `dot@x.vn`
+  -- (dạng tuyệt đối của cùng một tên miền: hai hàng, một hộp thư). Định nghĩa khai là deparse dưới `standard_conforming_strings = on`.
   CHECK_AN_NINH_KHAI constant text :=
     $q$(VALUES
          ('public', 'audit_chain_anchors', 'audit_chain_anchors_hash_check', '003_audit_events', 'CHECK ((octet_length(hash) = 32))'),
@@ -3040,6 +3043,7 @@ $ham$;
          ('public', 'supplier_contacts', 'supplier_contacts_email_ascii', '092_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_chu_thuong', '049_email_lien_he_chu_thuong', 'CHECK ((email = lower(email)))'),
          ('public', 'supplier_contacts', 'supplier_contacts_email_hinh_dang', '049_email_lien_he_chu_thuong', 'CHECK ((email ~ ''^[^[:space:][:cntrl:]@]+@[^[:space:][:cntrl:]@]+\.[^[:space:][:cntrl:]@]+$''::text))'),
+         ('public', 'supplier_contacts', 'supplier_contacts_email_khong_dau_cham_cuoi', '9560_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))'),
          ('public', 'supplier_verifications', 'supplier_verifications_loai_check', '082_xac_minh_nha_cung_cap', 'CHECK ((loai = ANY (ARRAY[''VERIFIED''::text, ''REVOKED''::text])))'),
          ('public', 'supplier_verifications', 'supplier_verifications_ly_do_theo_loai', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) = (ly_do IS NOT NULL)))'),
          ('public', 'supplier_verifications', 'supplier_verifications_xac_minh_du_cot', '082_xac_minh_nha_cung_cap', 'CHECK (((loai = ''REVOKED''::text) OR ((bam_ho_so IS NOT NULL) AND (het_han_at IS NOT NULL))))'),
@@ -3052,7 +3056,8 @@ $ham$;
          ('public', 'user_login_tokens', 'user_login_tokens_purpose_check', '029_dang_nhap_nguoi_mua', 'CHECK ((purpose = ''LOGIN''::text))'),
          ('public', 'user_login_tokens', 'user_login_tokens_token_hash_check', '029_dang_nhap_nguoi_mua', 'CHECK ((octet_length(token_hash) = 32))'),
          ('public', 'users', 'users_email_ascii', '092_email_ascii', 'CHECK ((email ~ ''^[!-~]+@[!-~]+$''::text))'),
-         ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))')
+         ('public', 'users', 'users_email_chu_thuong', '048_email_nguoi_dung_chu_thuong', 'CHECK ((email = lower(email)))'),
+         ('public', 'users', 'users_email_khong_dau_cham_cuoi', '9560_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))')
        ) AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;
 
   -- [S1.55 / lượt soi 48 NẶNG-3] PERMISSIVE trên bảng mà [CR1] SẼ soi nếu nó ở public — con cháu của bảng tenant (VI_TU_CAN_CO_RLS)

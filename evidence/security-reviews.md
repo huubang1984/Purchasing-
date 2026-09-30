@@ -20093,7 +20093,8 @@ Khôi phục bằng `cp` từ `scratchpad/lo80-bak/`, so `sha256sum -c`; log `lo
   ở S1.192 cho cùng lý do; tôi không chạm `tests/architecture` (ngoài danh sách lô) — người tích hợp cân nhắc nới cùng khuôn. Lớp DB-level
   (`check-an-ninh.int`, mục phán xét khoản 105 trong mọi `migrate()`) đã canh hai dòng ấy — đo ở M1/M4/M5.
 - `users` vẫn không có CHECK hình dạng (`a@b@c` vào — như trước); dấu chấm cuối tên miền `dot@x.vn.` qua mọi lớp ở cả hai bảng (đo,
-  `lo80-tham-do-9490.log`) — khoản 283.
+  `lo80-tham-do-9490.log`) — khoản 283. **[S1.9160]** 283 ĐÓNG: từ chối có tên ở `addSupplierContact` và `tools/khoi-tao-to-chuc`,
+  `CHECK (email !~ '\.$')` trên hai bảng (`9560_email_khong_dau_cham_cuoi.sql`, khai ở `CHECK_AN_NINH_KHAI`), không chuẩn hoá — §S1.9160, ADR-9260.
 - Địa chỉ quốc tế hoá bị từ chối ở tầng ứng dụng bằng thông điệp cố định; chưa có mã lỗi riêng (`SupplierError` chỉ có `message`).
 - Hồ sơ N3 của 092 không đo (không tới được, ADR-061); `ACCESS EXCLUSIVE` trên `users` và `supplier_contacts` trong lúc kiểm — tính chất
   chung của mọi `ADD CONSTRAINT`, chưa đo thời gian trên dữ liệu lớn.
@@ -22046,3 +22047,179 @@ Tám ca / tám đỏ đúng vế, 0 sống.
   thật vào; `pg_notify('trustprocure_break_glass', …)` ⇒ vào (khoản 9455); vai không superuser có INSERT: `app_api` (mức cột),
   `pg_write_all_data` (không thành viên).
 - Đột biến: 8 ca / 8 đỏ đúng vế, 0 sống (mục 6).
+
+# §S1.9160 — LÔ B3 ĐỢT 3 — EMAIL: DẤU CHẤM CUỐI TÊN MIỀN BỊ TỪ CHỐI CÓ TÊN Ở HAI TẦNG — `CHECK (email !~ '\.$')` TRÊN `users` VÀ `supplier_contacts` (`9560_email_khong_dau_cham_cuoi.sql`, ĐỐI CHIẾU TRƯỚC, KHAI Ở HARDENING), `addSupplierContact` VÀ `tools/khoi-tao-to-chuc` TỪ CHỐI TRƯỚC KHI TỚI CSDL, KHÔNG CHUẨN HOÁ — KHOẢN 283 ĐÓNG, 9460 MỞ (ADR-9260)
+
+**Rổ và mảnh (ADR-043 ⒞):** rổ B (283 — tách ra từ khoản 71 ở §S1.229, xếp rổ ở bước 0 đợt 3); chạm đường `POST /suppliers/:supplierId/contacts`
+(bước «mời nhà cung cấp» của kịch bản §11 — địa chỉ trần vẫn qua) và đường khởi tạo tổ chức (`tools/khoi-tao-to-chuc`); không chạm mảnh nào
+của bảng bốn mảnh `docs/PRODUCT.md` §11. Một migration (`9560_email_khong_dau_cham_cuoi.sql`), hai dòng khai ở hardening; không route mới, không
+màn, không phụ thuộc mới, không export mới ở `index.ts`. Đóng 283; mở 9460; ADR-9260.
+
+## 1. Vòng này là gì
+
+Lô B3 của đợt trả nợ 3, lượt B (làn hardening, gộp sau B6 → B1 → B4 → B2). Khoản 283 tách ra từ lượt đo khoản 71 ở §S1.229: sau `092_email_ascii`
+miền email là ASCII in được, nhưng `dot@x.vn.` vẫn cất được cạnh `dot@x.vn` ở CẢ `users` lẫn `supplier_contacts` — `EMAIL_PATTERN` và ràng buộc
+hình dạng của 011 khớp vì đuôi `\.[^…@]+$` lùi được về `vn.`, 092 chỉ kiểm miền ký tự, hai `UNIQUE` so nguyên văn, `users` không có CHECK hình
+dạng. RFC 5321 coi tên miền có dấu chấm cuối là dạng tuyệt đối của cùng một tên và bộ gửi SES nhận cả hai ⇒ hai hàng cho MỘT hộp thư: hai người
+dùng và hai magic link ở `users`, hai người liên hệ và hai lời mời ở `supplier_contacts`. Cùng lớp khoản 70, nhưng không phải hoa-thường và
+không phải miền ký tự, nên ngoài ADR-132.
+
+## 2. Quyết định của chủ dự án
+
+Kế hoạch đợt 3 mục 0, câu 12, chốt 2026-09-30: **từ chối có tên** dấu chấm cuối ở tầng ứng dụng + `CHECK (email !~ '\.$')` trên `users` và
+`supplier_contacts` — một migration, đối chiếu trước (hàng đang có mang dấu chấm cuối ⇒ migration dừng, nêu số hàng, không sửa dữ liệu ngầm —
+khuôn `092`), khai ở `CHECK_AN_NINH_KHAI`; ADR nhỏ nối ADR-132. Phương án bị loại: chuẩn hoá bỏ dấu chấm cuối (sửa dữ liệu ngầm). Đề bài lô chỉ
+định hai đường ghi ở ứng dụng: `EMAIL_PATTERN` / `addSupplierContact` và đường tạo người dùng của `tools/khoi-tao-to-chuc`. Các điểm tự chốt
+trong phạm vi ở mục 5.
+
+## 3. Đo trước
+
+Ca đo viết trước, chạy trên `782c5eb0` (mã sản xuất chưa đổi), cụm cục bộ PostgreSQL 16 (`TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim
+TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test`). Log ở `scratchpad/b3/`. **13 đỏ ở năm tệp:**
+- `packages/supplier/src/tax-code.test.ts` — `do-truoc-tax-code.log`: **1 đỏ / 5 xanh** — `EMAIL_PATTERN.test("ncc@doitac.vn.")`: `expected true to be false`.
+- `packages/supplier/src/suppliers.int.test.ts -t "S1.9160"` — `do-truoc-suppliers.log`: **6 đỏ / 2 xanh** (đối chứng `dot-283@x.vn` và dấu chấm
+  giữa chuỗi xanh). `dot-283@x.vn.` ngay sau `dot-283@x.vn`, `hai-283@x.vn..`, `mot-283@x.vn.` ĐƯỢC CẤT (`phải bị từ chối: expected null to be an
+  instance of SupplierError`); `DOT-283@X.VN.` và `  dot-283@x.vn.  ` — hạ chữ thường, cắt khoảng trắng — va `duplicate key value violates
+  unique…` vì trùng từng ký tự với `dot-283@x.vn.` vừa cất: `UNIQUE` chỉ bắt chuỗi giống hệt, không bắt `dot-283@x.vn`; INSERT dưới superuser
+  `dot-su-283@x.vn.` cạnh `dot-su-283@x.vn` VÀO (`expected null to be '23514 supplier_contacts_email_khong_d…'`).
+- `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts -t "S1.9160"` — `do-truoc-khoi-tao.log`: **1 đỏ** — bản khai `[dot@khach-cham.vn, dot@khach-cham.vn.]`
+  tạo trọn tổ chức (`expected { cheDo: 'tao', …(3) } to be an instance of KhoiTaoError`); phép dò trùng của `ban-khai.ts` (`toLowerCase()`) không
+  gộp hai dạng.
+- `apps/api/src/auth.int.test.ts -t "khoản 283"` — `do-truoc-auth.log`: **1 đỏ**, phép so gộp in trọn trạng thái: `{ chenCham: null, chenHaiCham:
+  null, linkToi: ["dot-283@vidu.vn", "dot-283@vidu.vn."], soJob: 2, trangThai: [200, 200] }` — `users` nhận `dot-283@vidu.vn.` (và `hai-283@vidu.vn..`)
+  cạnh `dot-283@vidu.vn`, và hai lần `/auth/link` phát HAI magic link, một cho mỗi dạng: đúng tiêu đề khoản 283.
+- `db/migrations.int.test.ts -t "khoản 283|search_path thù địch vẫn đặt|Task 6 — vòng fix 2 — I1|Task 8 — \(E1\)/\(E2\)\] trên lược đồ chỉ có 001/002"` —
+  `do-truoc-migrations.log`: **4 đỏ** — `chưa có migration 9560_email_khong_dau_cham_cuoi.sql trong kho`; ba danh sách mong đợi (`[ Array(93) ] to
+  deeply equal [ Array(94) ]` và hai ca `…(90)` / `…(91)`) — viết trước migration. Một ca xanh thứ năm là ca khác mà bộ lọc bắt trúng
+  (`[Task 6 — vòng fix 2 — I1] đổi tên cột…`), không liên quan.
+- Thăm dò (cụm PostgreSQL 16 tạm dựng bằng shim, `C.UTF-8`, đã dừng và xoá): `pg_get_constraintdef` của `CHECK (email OPERATOR(pg_catalog.!~) '\.$')`
+  = `CHECK ((email !~ '\.$'::text))`; mười chuỗi đối chứng qua `!~ '\.$'`: `dot@x.vn`, `a.@x.vn`, `a@x..vn` qua; `dot@x.vn.`, `a@x.vn..`, `.`,
+  `a@x.vn\.` bị chặn; `a@x.vn.` + LF qua (`$` là cuối chuỗi — LF thì 092 chặn); `a@x.vn。` (U+3002), `a@x.vn．` (U+FF0E) qua (092 chặn — ngoài ASCII).
+  Dưới `SET standard_conforming_strings = off`: `'\.$'` lưu thành `CHECK ((email !~ '.$'::text))` (WARNING *nonstandard use of escape*) — ràng buộc
+  chặn MỌI địa chỉ; `E'\\.$'` lưu `\.$` (deparse `'\.$'` khi `on`); `'[.]$'` lưu nguyên.
+
+## 4. Thay đổi
+
+- `db/migrations/9560_email_khong_dau_cham_cuoi.sql` (MỚI, khuôn `092`): khối đầu (khoản 283, quyết định câu 12, vì sao không chuẩn hoá, vì sao
+  literal `E''`, đối chiếu trước, không nhắc tên ràng buộc nào đã khai — cổng `check-an-ninh-khai` đòi dòng khai trỏ migration CUỐI nhắc tên);
+  khối `DO $doi_chieu_cham_cuoi$` đếm `email OPERATOR(pg_catalog.~) E'\\.$'` ở `users` và `supplier_contacts`, có hàng ⇒ `RAISE … USING ERRCODE =
+  'check_violation'` với số hàng và tối đa 20 id MỖI bảng (`-` khi rỗng), lối sửa (bỏ dấu chấm cuối; hàng có dạng anh em là MỘT hộp thư — giữ
+  một), KHÔNG in email, KHÔNG tự sửa; rồi `ADD CONSTRAINT users_email_khong_dau_cham_cuoi` và `supplier_contacts_email_khong_dau_cham_cuoi`
+  `CHECK (email OPERATOR(pg_catalog.!~) E'\\.$')`, không `NOT VALID`.
+- `db/migrations/hardening.always.sql` — CHỈ hằng `CHECK_AN_NINH_KHAI` (+5 / −1): ba dòng chú thích `[S1.9160 / khoản 283 / ADR-9260]` và hai
+  dòng khai `('public', 'supplier_contacts', 'supplier_contacts_email_khong_dau_cham_cuoi', '9560_email_khong_dau_cham_cuoi', 'CHECK ((email !~ ''\.$''::text))')`,
+  `('public', 'users', 'users_email_khong_dau_cham_cuoi', '9560_email_khong_dau_cham_cuoi', …)` theo thứ tự (bảng, tên).
+- `packages/supplier/src/suppliers.ts`: `EMAIL_PATTERN` đổi đuôi `\.[^\s\u0000-\u001f\u007f@]+$` thành `\.[^\s\u0000-\u001f\u007f@]*[^\s\u0000-\u001f\u007f@.]$`
+  (docstring gạch đuôi cũ tại chỗ); hằng riêng `MAU_DAU_CHAM_CUOI = /\.$/u` (không xuất — census `barrel-exports` không đổi); `addSupplierContact`:
+  `… → batBuoc(…, 320)` → dấu chấm cuối ⇒ `SupplierError("email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối")` → `EMAIL_PATTERN`;
+  chú thích thứ tự gạch tại chỗ.
+- `tools/khoi-tao-to-chuc/src/khoi-tao.ts` (`chenNguoi`, sau vế ASCII, trước câu INSERT): `n.email.endsWith(".")` ⇒ `KhoiTaoError("người thứ N: email
+  có dấu chấm cuối tên miền")`, không `cause`, trong giao dịch ⇒ rollback trọn. `ban-khai.ts` không chạm.
+- Test: `packages/supplier/src/suppliers.int.test.ts` khối `[S1.9160 / khoản 283]` 8 `it` (đối chứng; 5 `it.each` — dấu chấm cuối cạnh dạng đã cất,
+  chữ hoa, khoảng trắng hai đầu, hai dấu chấm, đơn lẻ ⇒ `SupplierError` đúng câu, không `code`, không hàng ghi; dấu chấm giữa chuỗi qua; INSERT dưới
+  superuser ⇒ 23514 đúng tên). `packages/supplier/src/tax-code.test.ts` +1 `it` (`EMAIL_PATTERN` từ chối `ncc@doitac.vn.`, `ncc@doitac.vn..`, nhận
+  `ke.toan@doitac.com.vn`). `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` +1 `it` (chế độ tạo: người thứ 2 ⇒ `KhoiTaoError` nêu vị trí, không
+  `cause`, tổ chức không nằm lại; chế độ thêm người: `Dot@Khach-Cham.VN.` vào tổ chức đã có `dot@khach-cham.vn` ⇒ người thứ 1, số đếm không đổi).
+  `apps/api/src/auth.int.test.ts` +1 `it` `[khoản 283]` (23514 đúng tên cho `dot-283@vidu.vn.` và `hai-283@vidu.vn..`; `/auth/link` với hai dạng ⇒ hai
+  200, hai job, MỘT link — tới dạng trần; phép so gộp để lần đỏ in trọn trạng thái). `db/migrations.int.test.ts`: hằng `TEN_MIG_CHAM_CUOI`, helper
+  `truocChamCuoi` (khuôn `truoc092`), `it` `[khoản 283]` (dữ liệu có sẵn ⇒ NÉM nguyên văn; cùng tệp dưới `SET LOCAL standard_conforming_strings = off`
+  ⇒ cùng chẩn đoán; bỏ dấu chấm ở hàng có dạng anh em ⇒ 23505; sửa tay ⇒ đi qua; hai CHECK `convalidated`, định nghĩa nguyên văn, hai dòng khai đọc
+  từ CHÍNH hardening; INSERT thẳng ⇒ 23514 đúng tên, dấu chấm giữa chuỗi vào; `migrate()` kế `[]`); ba danh sách migration mong đợi
+  +`9560_email_khong_dau_cham_cuoi.sql`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+1. **Lời từ chối có tên đứng riêng, VÀ `EMAIL_PATTERN` siết đuôi.** Câu cố định nói đúng lý do (câu chung "sai định dạng" không nói); siết để vị từ
+   xuất khẩu không gọi "đúng hình dạng" một địa chỉ lược đồ từ chối. Đột biến M2 và M3 đo hai vế độc lập.
+2. **Vị trí trong `addSupplierContact`: sau hạ chữ thường và 320 byte, trước `EMAIL_PATTERN`.** Hạ chữ thường không đổi dấu chấm (miền ASCII, ADR-132);
+   đứng trước vị từ hình dạng để câu có tên thắng câu chung (M2: bỏ vế có tên thì câu chung đi ra).
+3. **Kiểm ở `khoi-tao.ts` (trong giao dịch, sau vế ASCII), không ở `ban-khai.ts`** — đề bài chỉ định, cùng khuôn S1.229; thông điệp nêu vị trí, không
+   in email, không `cause`. Viết `endsWith(".")` chứ không literal `/\.$/u`: literal ấy đã có ở `apps/web/src/du-lieu.ts` với nghĩa khác (bỏ dấu chấm
+   cuối của hệ số), và cổng kiểm kê mã chép `tests/architecture/ma-chep-api-worker.test.ts` ⑵ (nay quét cả `tools/*/src`) đỏ «CHƯA KHAI: literal /\.$/u ở
+   2 đơn vị» — đo ở lượt `pnpm test` đầu; tệp cổng ngoài danh sách của lô, và hai chỗ không phải một bản chép.
+4. **Literal `E'\\.$'` ở migration thay `'\.$'`.** Cùng một chuỗi dưới `standard_conforming_strings = on` — định nghĩa lưu đúng hình dạng đã chốt
+   (`CHECK ((email !~ '\.$'::text))`); dưới `off` (đặt sẵn ở mức database/vai — lớp lex mà hardening chỉ ghim cho chính nó) dạng `'\.$'` lex thành `.$`:
+   khối đối chiếu đếm MỌI hàng rồi đổ lỗi "dấu chấm cuối" (đo ở thăm dò và ở M8: 4/3 hàng thay 2/2). Có phép đo thường trực trong `[khoản 283]`.
+5. **Thông điệp đối chiếu nói lối sửa cho hàng có dạng anh em** ("hai hàng là MỘT hộp thư — giữ một"): đo 23505 khi bỏ dấu chấm ở hàng ấy; lấy khuôn
+   `092` (số hàng + id) như đề bài, không thêm truy vấn nhóm kiểu `049`.
+6. **Tên ràng buộc `…_email_khong_dau_cham_cuoi`**, cùng họ `_email_ascii` / `_email_chu_thuong`; dòng khai theo thứ tự (bảng, tên) như S1.229.
+7. **Không chạm `login.ts`.** Đường đăng nhập đọc `users.email` qua `pg_catalog.lower()` hai vế; không chuẩn hoá nghĩa là `/auth/link` với `dot@x.vn.`
+   không tìm ra `dot@x.vn` — đo bằng một `it` mới ở `auth.int.test.ts` (đề bài: «nếu đường đăng nhập đọc email»).
+8. **`tax-code.test.ts` là "test" của `suppliers.ts`** (tệp đơn vị duy nhất import `EMAIL_PATTERN`; đề bài: `suppliers.ts` «và test») — một `it` mới.
+9. **Mẫu chỉ chạm ĐUÔI chuỗi.** `a..b@x.vn`, `a@x..vn`, `.a@x.vn`, `a.@x.vn` không phải "cùng hộp thư với một địa chỉ khác" mà là địa chỉ sai hình
+   dạng; hình dạng đầy đủ là quyết định ADR-132 §3 để ngỏ — ghi ở mục 7 và ở khoản 9460.
+10. **Không nhãn INV mới**; ca mới mang `[S1.9160 / khoản 283]` / `[khoản 283]`.
+
+## 6. Đột biến
+
+Kịch bản `scratchpad/b3/dot-bien.py`: mỗi ca thay đúng các chuỗi (số lần khai trước, lệch là dừng), chạy đúng tệp test, ghi log, khôi phục từ bản
+sao, so sha256 (`khôi phục: NGUYÊN VẸN` sau mọi ca; băm bốn tệp mã sau cùng khớp bản sao). **Mười ca, mười ĐỎ đúng vế, không ca sống** (`dot-bien.log`,
+`dot-bien-M*.log`):
+- **M1** [lược đồ] migration bỏ hai `ADD CONSTRAINT` (giữ khối đối chiếu) ⇒ `migrations.int` `[khoản 283]` đỏ: `migrate()` sau sửa tay NÉM `Hardening …
+  (phan_xet) thất bại: … supplier_contacts.supplier_contacts_email_khong_dau_cham_cuoi: KHÔNG TỒN TẠI; users.users_email_khong_dau_cham_cuoi: KHÔNG TỒN
+  TẠI` (mục khoản 105); `suppliers.int` và `auth.int` đỏ ngay ở `beforeAll` — cùng mục ấy chặn mọi `migrate()` trên cụm mới, nên chúng không tới vế
+  của mình (xem M1b).
+- **M1b** [lược đồ] M1 + bỏ hai dòng khai (mục khoản 105 không chặn) ⇒ `suppliers.int` 1 đỏ đúng ca superuser (`expected null to be '23514
+  supplier_contacts_email_khong_d…'`; năm ca ứng dụng xanh — vế có tên còn); `auth.int` đỏ: `{ chenCham: null, chenHaiCham: null, linkToi: [dạng trần,
+  dạng có dấu chấm] }`; `migrations.int` đỏ: `expected [] to deeply equal [ { …(4) }, { bang: 'users', …(3) } ]`.
+- **M2** [ứng dụng] bỏ lời từ chối có tên ở `addSupplierContact`, GIỮ `EMAIL_PATTERN` đã siết ⇒ 5 ca `it.each` đỏ: `expected 'email sai định dạng, hoặc
+  chứa khoảng trắng / ký tự điều khiển' to be 'email có dấu chấm cuối tên miền — …'`.
+- **M3** [ứng dụng] `EMAIL_PATTERN` về đuôi cũ, GIỮ lời từ chối có tên ⇒ `tax-code` đỏ (`expected true to be false`); `suppliers.int` 8/8 xanh — đúng:
+  vế có tên chặn trước vị từ (M2 và M3 đo hai vế độc lập).
+- **M4** [ứng dụng] M2 + M3 (tầng ứng dụng về như trước) ⇒ 5 ca đỏ `expected error: new row for relation "supplier_con… to be an instance of
+  SupplierError` — lược đồ chặn (23514) nhưng không có tên ở tầng ứng dụng.
+- **M5** [công cụ] bỏ kiểm ở `khoi-tao.ts` ⇒ `khoi-tao.int` đỏ: `expected 'người thứ 2: thất bại (mã 23514, ràng buộc users_email_khong_dau_cham_cuoi)'
+  to be 'người thứ 2: email có dấu chấm cuối tên miền'` (lỗi có `cause`). Chạy lại trên bản `endsWith`: cùng kết quả.
+- **M6** [hardening] bỏ dòng khai `users_email_khong_dau_cham_cuoi` ⇒ `check-an-ninh.int` đỏ `CHECK chưa được phân loại — khai hay miễn kèm lý do:
+  expected [ 'users_email_khong_dau_cham_cuoi' ] to deeply equal []`; `migrations.int` đỏ `dòng khai của users_email_khong_dau_cham_cuoi: expected …
+  to contain …`.
+- **M7** [hardening] định nghĩa khai của `users` đổi thành `''\.+$''` ⇒ `migrations.int` đỏ: `migrate()` sau sửa tay NÉM `users.users_email_khong_dau_cham_cuoi:
+  định nghĩa khác bản khai (so pg_get_constraintdef với CHECK_AN_NINH_KHAI)`.
+- **M8** [migration] sáu literal `E'\\.$'` về `'\.$'` ⇒ `migrations.int` đỏ ở vế `standard_conforming_strings = off`: chẩn đoán `users 4 hang …;
+  supplier_contacts 3 hang …` (mọi hàng) thay `users 2 hang …; supplier_contacts 2 hang …`.
+- **M9** [migration] khối đối chiếu không bao giờ nêu (`IF false THEN`) ⇒ `migrations.int` đỏ: `Migration 9560_email_khong_dau_cham_cuoi.sql thất bại:
+  check constraint "users_email_khong_dau_cham_cuoi" of relation "users" is violated by some row` — 23514 thô, không định danh, thay thông báo nguyên văn.
+
+## 7. Giới hạn, nói ra
+
+- **Lỗ kề, mở thành khoản, không vá** (lượt soi đối kháng, tệp tạm `apps/api/src/zz-tam-lo-ke-283.int.test.ts`, đã xoá — `tam-lo-ke.log`): **9460** —
+  dạng tương đương RFC 5322 của cùng một địa chỉ (chú thích `dot(ghi-chu)@x.vn` và ba vị trí khác, quoted-string `"dot"@x.vn`) cất được cạnh dạng trần
+  ở `supplier_contacts` qua `addSupplierContact` và ở cả hai bảng dưới superuser; dạng chú thích qua `docBanKhai` và phép kiểm đích của bộ gửi SES, và
+  `issueLoginToken` phát link cho nó. Đóng nó là quyết định hình dạng (ADR-132 §3) — câu cho chủ dự án.
+- **"Cùng hộp thư" đứng trên RFC 5321 và phép kiểm đích của bộ gửi**, không trên một lần gửi thật: máy đo không có SES; `laDiaChiEmail` nhận cả
+  `dot@x.vn` lẫn `dot@x.vn.`.
+- **HTTP 422 không đo trực tiếp** ở vòng này (như §S1.229): ánh xạ `SupplierError` ⇒ 422 là lớp có sẵn của `apps/api/src/dispatch.ts`; route chuyền thẳng
+  `body.email`.
+- **`/auth/link` vẫn nhận `dot@x.vn.`** ở phép kiểm hình dạng tối thiểu và xếp một job — không người dùng nào mang địa chỉ ấy nên không link. Người gõ
+  thừa dấu chấm cuối không nhận link (không chuẩn hoá — cái giá nhìn thấy được, ADR-9260 §Hệ quả; luôn 200, không liệt kê được email — không đổi).
+- **`ban-khai.ts` không đổi**: phép dò trùng của bản khai không gộp `dot@x.vn` với `dot@x.vn.`; `khoi-tao.ts` từ chối dạng có dấu chấm trước câu INSERT,
+  nhưng SAU khi giao dịch đã mở (bản khai sai đi tới CSDL rồi mới dừng).
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào — như trước); `a@x..vn`, `.a@x.vn`, `a.@x.vn` vẫn cất được (sai hình dạng, không phải "cùng hộp thư").
+- Đuôi `\.$` không bắt dấu chấm cuối Unicode (`。` U+3002, `．` U+FF0E) — 092 chặn trước vì ngoài ASCII in được (thăm dò).
+- Hồ sơ N3 của migration không đo (không tới được, ADR-061 — lý do của 092). `ACCESS EXCLUSIVE` trên hai bảng trong lúc kiểm — tính chất chung của
+  mọi `ADD CONSTRAINT`. Một hàng có dấu chấm cuối chèn GIỮA khối đối chiếu và `ADD CONSTRAINT` làm câu sau NÉM 23514 thô (vẫn dừng deploy; lần deploy kế
+  khối đối chiếu nêu định danh) — cùng tính chất 092, không đo.
+- M1 không đo `suppliers.int` / `auth.int` tới vế của chúng (mục khoản 105 chặn trước ở `beforeAll`) — M1b đo.
+- `so-no-tu-doi-chieu` P9b đỏ trên nhánh này sau commit (Handoff khai 93 migration đánh số, kho có 94) — tệp cấm; `pnpm cap-so --dem` viết lại.
+- Không chạy `pnpm test:int` trọn, `db/migrations.int.test.ts` trọn tệp (chỉ bốn khối liên quan), `pnpm evidence` (máy dùng chung; đề bài).
+
+## 8. Số đo
+
+Mọi lệnh trong worktree `dot3/B3`; vitest int với hai biến cụm cục bộ; tuần tự một cụm Postgres một lúc. Log ở `scratchpad/b3/`.
+- Đo trước (`782c5eb0` + ca mới): `tax-code` 1 đỏ / 5 xanh; `suppliers.int -t S1.9160` 6 đỏ / 2 xanh (35: 27 bỏ qua); `khoi-tao.int -t S1.9160` 1 đỏ
+  (19: 18 bỏ qua); `auth.int -t "khoản 283"` 1 đỏ (62: 61 bỏ qua); `migrations.int` bốn khối 4 đỏ (126: 121 bỏ qua, 1 xanh ngoài phạm vi).
+- Sau vá: `db/migration-shape.test.ts` 28/28, `tests/architecture/check-an-ninh-khai.test.ts` 2/2, `tax-code` 6/6; `migrations.int` bốn khối 4/4 (67,3 s),
+  `[khoản 283]` với vế `standard_conforming_strings = off` 1/1 (15,0 s); bốn khối chạy lại trên cây cuối đã stage: 4/4 (30,5 s).
+- Cổng của lô: `packages/supplier/src/suppliers.int.test.ts` trọn 35/35 (10,6 s); `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` 19/19 ở `C.UTF-8`
+  (16,1 s) và 19/19 ở `TRUSTPROCURE_PG_LOCAL_LOCALE=C` (17,2 s); `apps/api/src/auth.int.test.ts` trọn 62/62 (54,4 s); `db/check-an-ninh.int.test.ts` 4/4
+  (28,8 s); `db/hardening-suy-tu-tinh-chat.int.test.ts` 38/38 (482,3 s — máy tải nặng); tĩnh `migration-shape` 28/28, `check-an-ninh-khai` 2/2;
+  `tests/architecture/ma-chep-api-worker.test.ts` 95/95.
+- Đột biến: 10 ca / 10 đỏ, 0 sống (mục 6); `khôi phục: NGUYÊN VẸN` sau mỗi ca.
+- `pnpm t0`: exit 0 — `tsc` 0 lỗi, `eslint .` 0, depcruise 499 module / 2086 phụ thuộc, 0 vi phạm (92 s, cây cuối; lượt đầu 74 s, cùng kết quả).
+- `pnpm test`: 136 tệp: 2187 xanh, 1 bỏ qua (tiền tồn), 4 đỏ (272 s, cây cuối, migration và tệp bàn giao đã `git add`) — ba ca P9b của
+  `tests/architecture/so-no-tu-doi-chieu.test.ts` (`Handoff.md khai 93 migration đánh số, kho có 94` — lời khai `pnpm cap-so --dem` viết lại;
+  cùng tệp với migration mới tạm bỏ khỏi chỉ mục git: 45/45) và một ca đo thời gian của `tests/architecture/khoa-depcruise.test.ts` (đối
+  chứng dương «không khoá thì hai tiến trình chồng lấn» hụt dưới tải — máy dùng chung; chạy lại riêng hai lần: 16/16, 16/16; lượt
+  `pnpm test` đầu: xanh). Lượt đầu còn đỏ `tests/architecture/ma-chep-api-worker.test.ts` ⑵ vì literal `/\.$/u` ở `khoi-tao.ts` — đổi sang
+  `endsWith(".")` (mục 5 điểm 3), nay 95/95.
+- Thăm dò và lỗ kề: mục 3, mục 7 (`tam-lo-ke.log`).

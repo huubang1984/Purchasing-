@@ -202,6 +202,59 @@ async function truoc092(
   return { ten092, nguoiDung, lienHe, daGhi092, emailCua };
 }
 
+/** [S1.9160 / khoản 283] Migration thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — tên đầy đủ, để `pnpm cap-so` thay được. */
+const TEN_MIG_CHAM_CUOI = "9560_email_khong_dau_cham_cuoi.sql";
+
+/**
+ * [S1.9160 / khoản 283] Dựng một CSDL đã áp mọi migration TRỪ `TEN_MIG_CHAM_CUOI`, với một tổ chức, một người mua có vai và phiên, một nhà
+ * cung cấp — để đo migration ấy trên dữ liệu có từ trước (khuôn `truoc092`). Hai hàm chèn chạy dưới superuser (vai của `db.pool`): địa chỉ
+ * có dấu chấm cuối tên miền, chữ thường, ASCII in được đi qua 048/049, 092 và ràng buộc hình dạng của 011 — đúng lỗ khoản 283.
+ */
+async function truocChamCuoi(
+  db: TestDatabase,
+  tmp: string,
+): Promise<{
+  readonly nguoiDung: (email: string) => Promise<string>;
+  readonly lienHe: (email: string) => Promise<string>;
+  readonly daGhi: () => Promise<number>;
+  readonly emailCua: (bang: "users" | "supplier_contacts", id: string) => Promise<string | undefined>;
+}> {
+  const tatCa = await readdir(MIGRATIONS_DIR);
+  expect(tatCa, `chưa có migration ${TEN_MIG_CHAM_CUOI} trong kho`).toContain(TEN_MIG_CHAM_CUOI);
+  for (const f of tatCa) if (f !== TEN_MIG_CHAM_CUOI) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+  await migrate(db.pool, tmp);
+  const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz283', 'zz283') RETURNING id")).rows[0]!.id;
+  const nguoiDung = async (email: string): Promise<string> =>
+    (await db.pool.query<{ id: string }>("INSERT INTO users (org_id, email, full_name) VALUES ($1, $2, 'Nguoi 283') RETURNING id", [org, email])).rows[0]!
+      .id;
+  const pm = await nguoiDung("pm283@vidu.vn");
+  await db.pool.query("INSERT INTO user_roles (org_id, user_id, role_code) VALUES ($1, $2, 'PROCUREMENT_MANAGER')", [org, pm]);
+  const phien = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO sessions (org_id, user_id, token_hash, expires_at, mfa_verified_at) VALUES ($1, $2, $3, now() + interval '1 day', now()) RETURNING id",
+      [org, pm, Buffer.alloc(32, 83)],
+    )
+  ).rows[0]!.id;
+  const ncc = (
+    await db.pool.query<{ id: string }>(
+      "INSERT INTO suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, 'NCC 283', $2, $3) RETURNING id",
+      [org, pm, phien],
+    )
+  ).rows[0]!.id;
+  const lienHe = async (email: string): Promise<string> =>
+    (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi lien he 283', $3, $4, $5) RETURNING id",
+        [org, ncc, email, pm, phien],
+      )
+    ).rows[0]!.id;
+  const daGhi = async (): Promise<number> =>
+    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [TEN_MIG_CHAM_CUOI])).rowCount ?? 0;
+  const emailCua = async (bang: "users" | "supplier_contacts", id: string): Promise<string | undefined> =>
+    (await db.pool.query<{ email: string }>(`SELECT email FROM ${bang} WHERE id = $1`, [id])).rows[0]?.email;
+  return { nguoiDung, lienHe, daGhi, emailCua };
+}
+
 /** Đổi user/password của một connection string, giữ nguyên host/port/database. */
 function doiNguoiDung(pChuoiKetNoi: string, pTenRole: string, pMatKhau: string): string {
   const url = new URL(pChuoiKetNoi);
@@ -1157,6 +1210,117 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       expect(await chen("supplier_contacts", "a\u200B-71@vidu.vn"), "zero-width space — 011 để lọt").toBe("23514 supplier_contacts_email_ascii");
       expect(await chen("users", "ascii-sau-71@vidu.vn")).toBeNull();
       expect(await chen("supplier_contacts", "ascii-sau-71@vidu.vn")).toBeNull();
+      // Lược đồ đã ở trạng thái cuối: migrate() kế không áp gì và mục phán xét khoản 105 im.
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([]);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+      await db.stop();
+    }
+  }, 300_000);
+
+  // [S1.9160 / khoản 283 / ADR-9260] `TEN_MIG_CHAM_CUOI` thêm `CHECK (email !~ '\.$')` trên `users` và `supplier_contacts` — dấu chấm cuối tên
+  // miền (`dot@x.vn.`, dạng tuyệt đối của `dot@x.vn` theo RFC 5321: cùng một hộp thư) bị từ chối ở lược đồ. Khuôn `092`: đối chiếu TRƯỚC
+  // `ALTER`, dừng deploy với số hàng và ĐỊNH DANH (tối đa 20 id mỗi bảng), KHÔNG in email, KHÔNG tự sửa — chuẩn hoá (bỏ dấu chấm cuối) là
+  // phương án bị loại (câu 12 của kế hoạch đợt 3), và phép đo dưới cho thấy nó không cơ khí được: ở hàng có dạng anh em không dấu chấm, bỏ
+  // dấu chấm là va `UNIQUE` (23505) — hai hàng là MỘT hộp thư, giữ hàng nào là quyết định có người chịu. Sửa tay ⇒ đi qua, hai ràng buộc tồn
+  // tại, đã kiểm, định nghĩa nguyên văn; hai dòng khai ở `CHECK_AN_NINH_KHAI` mang đúng `pg_get_constraintdef` (khoản 105); INSERT thẳng dưới
+  // superuser — không qua tầng ứng dụng — ⇒ 23514 đúng tên.
+  it("[khoản 283] hàng email có dấu chấm cuối tên miền có từ trước ⇒ migrate() NÉM với thông báo NGUYÊN VĂN (số hàng và id từng bảng, không email), migration không được ghi, hàng nguyên văn; bỏ dấu chấm ở hàng có dạng anh em va UNIQUE; sửa tay ⇒ đi qua, hai CHECK tồn tại, đã kiểm, có trong khai của hardening; INSERT thẳng dưới superuser ⇒ 23514", async () => {
+    const db = await startPostgres();
+    const tmp = await mkdtemp(join(tmpdir(), "tp-k283-"));
+    try {
+      const { nguoiDung, lienHe, daGhi, emailCua } = await truocChamCuoi(db, tmp);
+      const tenKhongDuoi = TEN_MIG_CHAM_CUOI.replace(/\.sql$/u, "");
+      // Tiền đề, đo trên lược đồ CHƯA có migration: bốn địa chỉ có dấu chấm cuối VÀO cả hai bảng — hai trong số đó cạnh dạng không dấu chấm.
+      await nguoiDung("dot-283@vidu.vn");
+      const uAnhEm = await nguoiDung("dot-283@vidu.vn.");
+      const uMot = await nguoiDung("mot-283@vidu.vn.");
+      await lienHe("lh-283@vidu.vn");
+      const cAnhEm = await lienHe("lh-283@vidu.vn.");
+      const cHai = await lienHe("hai-283@vidu.vn..");
+
+      await copyFile(join(MIGRATIONS_DIR, TEN_MIG_CHAM_CUOI), join(tmp, TEN_MIG_CHAM_CUOI));
+      const loi = await migrate(db.pool, tmp).then(
+        () => null,
+        (e: Error) => e,
+      );
+      expect(loi, "dữ liệu có dấu chấm cuối mà migration vẫn đi qua").not.toBeNull();
+      expect(await daGhi(), "NÉM thì không được ghi checksum").toBe(0);
+      expect(await emailCua("users", uAnhEm), "hàng giữ nguyên — migration không tự sửa").toBe("dot-283@vidu.vn.");
+      expect(await emailCua("supplier_contacts", cHai)).toBe("hai-283@vidu.vn..");
+      // Thứ tự uuid của PostgreSQL là thứ tự byte, trùng thứ tự chuỗi hex chữ thường của JS.
+      expect(loi!.message).toBe(
+        `Migration ${TEN_MIG_CHAM_CUOI} thất bại: email co dau cham cuoi ten mien: users 2 hang — id (toi da 20): ${[uAnhEm, uMot].sort().join(", ")}; ` +
+          `supplier_contacts 2 hang — id (toi da 20): ${[cAnhEm, cHai].sort().join(", ")} — sua tay duoi mot vai ma RLS khong ap (bo dau cham cuoi; ` +
+          `hang nao da co dang khong dau cham thi hai hang la MOT hop thu — giu mot; doi hay xoa mot dia chi da luu la doi dich magic link: co ` +
+          `nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenKhongDuoi}, khoan no 283, ADR-9260)`,
+      );
+      expect(loi!.message, "không in email").not.toMatch(/vidu\.vn/u);
+      // Literal `E'\\.$'` thay `'\.$'` (chú thích đầu migration): dưới `standard_conforming_strings = off` — cấu hình đặt sẵn ở mức database
+      // hay vai rơi vào phiên migrate — khối đối chiếu vẫn đếm ĐÚNG các hàng có dấu chấm cuối, không đếm mọi hàng (`'\.$'` lex thành `.$`).
+      // Chạy nguyên văn tệp trong một giao dịch bỏ đi; `SET LOCAL` hết cùng ROLLBACK nên kết nối trả về pool sạch.
+      const k = await db.pool.connect();
+      try {
+        await k.query("BEGIN");
+        await k.query("SET LOCAL standard_conforming_strings = off");
+        const loiScs = await k.query(readFileSync(join(MIGRATIONS_DIR, TEN_MIG_CHAM_CUOI), "utf8")).then(
+          () => null,
+          (e: Error) => e.message,
+        );
+        expect(loiScs, "chẩn đoán không đổi dưới standard_conforming_strings = off").toBe(
+          loi!.message.replace(`Migration ${TEN_MIG_CHAM_CUOI} thất bại: `, ""),
+        );
+      } finally {
+        await k.query("ROLLBACK");
+        k.release();
+      }
+
+      // Vì sao migration KHÔNG tự bỏ dấu chấm: ở hàng có dạng anh em, bỏ dấu chấm là va UNIQUE (so nguyên văn) — hai hàng là MỘT hộp thư.
+      const doi = (bang: "users" | "supplier_contacts", id: string, email: string): Promise<string | null> =>
+        db.pool.query(`UPDATE ${bang} SET email = $2 WHERE id = $1`, [id, email]).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+      expect(await doi("users", uAnhEm, "dot-283@vidu.vn"), "bỏ dấu chấm ở hàng có dạng anh em").toBe("23505 users_org_id_email_key");
+      expect(await doi("supplier_contacts", cAnhEm, "lh-283@vidu.vn")).toBe("23505 supplier_contacts_org_id_supplier_id_email_key");
+      // Sửa tay như thông báo chỉ, dưới superuser: hàng anh em (cùng hộp thư với hàng đã có; fixture không vai, không phiên, không lời mời)
+      // bị xoá; hàng đơn lẻ bỏ dấu chấm cuối.
+      await db.pool.query("DELETE FROM users WHERE id = $1", [uAnhEm]);
+      await db.pool.query("DELETE FROM supplier_contacts WHERE id = $1", [cAnhEm]);
+      expect(await doi("users", uMot, "mot-283@vidu.vn")).toBeNull();
+      expect(await doi("supplier_contacts", cHai, "hai-283@vidu.vn")).toBeNull();
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([TEN_MIG_CHAM_CUOI]);
+      const { rows: rb } = await db.pool.query<{ bang: string; conname: string; convalidated: boolean; dinh_nghia: string }>(
+        "SELECT conrelid::regclass::text AS bang, conname, convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
+          "WHERE conname IN ('users_email_khong_dau_cham_cuoi', 'supplier_contacts_email_khong_dau_cham_cuoi') ORDER BY conname",
+      );
+      const dinhNghia = "CHECK ((email !~ '\\.$'::text))";
+      expect(rb).toEqual([
+        { bang: "supplier_contacts", conname: "supplier_contacts_email_khong_dau_cham_cuoi", convalidated: true, dinh_nghia: dinhNghia },
+        { bang: "users", conname: "users_email_khong_dau_cham_cuoi", convalidated: true, dinh_nghia: dinhNghia },
+      ]);
+      // Hai dòng khai ở hardening (khoản 105): đúng tên, đúng migration, đúng định nghĩa nguyên văn — đọc từ CHÍNH tệp, không từ bản chép.
+      const hardening = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
+      const dau = hardening.indexOf("CHECK_AN_NINH_KHAI constant text :=");
+      const khai = hardening.slice(dau, hardening.indexOf(") AS ck(nspname, bang, conname, mig, dinh_nghia)$q$;", dau));
+      for (const r of rb) {
+        expect(khai, `dòng khai của ${r.conname}`).toContain(
+          `('public', '${r.bang}', '${r.conname}', '${tenKhongDuoi}', '${r.dinh_nghia.replaceAll("'", "''")}')`,
+        );
+      }
+      // INSERT thẳng dưới superuser — không qua tầng ứng dụng — bị lược đồ chặn, đúng tên; dấu chấm không ở cuối thì vào.
+      const chen = (bang: "users" | "supplier_contacts", email: string): Promise<string | null> =>
+        (bang === "users" ? nguoiDung(email) : lienHe(email)).then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+      expect(await chen("users", "dot-283@vidu.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe("23514 users_email_khong_dau_cham_cuoi");
+      expect(await chen("users", "moi-283@vidu.vn.."), "hai dấu chấm cuối").toBe("23514 users_email_khong_dau_cham_cuoi");
+      expect(await chen("supplier_contacts", "lh-283@vidu.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe(
+        "23514 supplier_contacts_email_khong_dau_cham_cuoi",
+      );
+      expect(await chen("users", "ke.toan.283@vidu.com.vn"), "dấu chấm không ở cuối").toBeNull();
+      expect(await chen("supplier_contacts", "ke.toan.283@vidu.com.vn")).toBeNull();
       // Lược đồ đã ở trạng thái cuối: migrate() kế không áp gì và mục phán xét khoản 105 im.
       await expect(migrate(db.pool, tmp)).resolves.toEqual([]);
     } finally {
@@ -3945,6 +4109,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
+        "9560_email_khong_dau_cham_cuoi.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8448,6 +8613,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
+        "9560_email_khong_dau_cham_cuoi.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8763,6 +8929,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "095_outbox_policy_theo_kind.sql",
         "9545_khong_tim_thay_yeu_cau_co_ten.sql",
         "9555_outbox_policy_xep_theo_kind.sql",
+        "9560_email_khong_dau_cham_cuoi.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
