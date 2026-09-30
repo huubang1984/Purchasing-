@@ -833,6 +833,9 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_evaluations", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitation_tokens", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_invitations", quyen: "SELECT" },
+      // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "rfq_item_goi_y", quyen: "SELECT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", quyen: "SELECT" },
       // [011] `rfq_items` mat DELETE o muc bang, `suppliers`/`supplier_contacts` mat UPDATE theo
       // cot: trong toan kho ma khong co mot cau nao dung chung. Nguyen tac do CHINH 008 phat
       // bieu — mot quyen cap 'cho chac' la mot quyen khong ai go ra nua — duoc ap cho app_unseal
@@ -1372,6 +1375,28 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_invitations", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "status", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_invitations", cot: "supplier_id", quyen: "INSERT" },
+      // [S1.204 / S4.3a] Gợi ý và ánh xạ: CHỈ INSERT. `hang_muc_bam`, `seq`, `ghi_luc` do trigger đặt, ngoài GRANT; người ghi và
+      // phiên dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`).
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "dau_vao", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "do_tin_cay", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "ket_qua", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "phien_ban_bo_chuan_hoa", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_goi_y", cot: "tac_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "dau_vao", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "do_tin_cay", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "nguon", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "phien_ban_bo_chuan_hoa", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_item_mappings", cot: "tac_gia", quyen: "INSERT" },
       // [ADR-016 / 016] Hang muc RFQ mang chu ky nguoi them.
       { grantee: "app_api", bang: "rfq_items", cot: "created_by", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_items", cot: "created_by_session_id", quyen: "INSERT" },
@@ -2018,6 +2043,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       // đã ngừng dùng.
       "procurement_categories", "procurement_category_changes",
       "rfq_approvals",
+      // [S1.204 / S4.3a] Nhà cung cấp không đọc được dòng của mình ánh xạ sang hàng chuẩn nào, hay gợi ý nào.
+      "rfq_item_goi_y", "rfq_item_mappings",
       // [S1.110 / S2.6 / 061] Hai bảng trao thầu ĐÓNG HẲN với khách, và đó là một quyết
       // định: một nhà cung cấp biết mình THẮNG trước khi người mua công bố là một tin có
       // giá; biết AI thắng khi mình thua thì càng. Ngày nào sản phẩm có màn *kết quả* cho

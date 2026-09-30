@@ -17451,6 +17451,188 @@ Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đ�
 
 ---
 
+# §S1.204 — S4.3a: ÁNH XẠ HẠNG MỤC SANG HÀNG CHUẨN — `TU_DONG` CHỈ THEO BÍ DANH (L2), NGƯỜI DUYỆT NGOÀI TẬP LOẠI TRỪ (L3 VẾ HÀNH VI), LÝ DO SAU BẢN RÕ (L13) — ADR-121
+
+## 1. Vòng này là gì
+
+Nửa đầu của S4.3 (spec S4 §9): CSDL và tầng gói của ánh xạ dòng gói sang hàng chuẩn (§4.4). Không route, không màn, không đường gọi
+từ `apps/`; lượt chuẩn hoá chưa chạy sau lần nộp duyệt — cả ba là S4.3b. Migration `089_anh_xa_hang_muc`, ADR-121. **L2** và **L13**
+vào sổ đăng ký (74 bất biến); **L1** thêm hai bảng; **L3** có vế hành vi.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-09-30, năm đề xuất của lượt bàn S4.3:
+
+1. S4.3 chia hai PR: S4.3a là CSDL và gói, S4.3b là API và màn.
+2. Tập loại trừ của L3 là MỘT hàm SQL dựng trên dữ liệu đã có; S3.3b thêm vế *tác giả ngoại lệ* vào chính hàm ấy, K5 của S3.3c gọi
+   lại nó.
+3. Bộ luật chuẩn hoá bản 1 tối thiểu: một thuộc tính trọng yếu (`kich_thuoc`), Jaccard trigram, hằng 0,95 / 0,80 là giả định.
+4. Không mở đường đọc query (E6).
+5. Phần `/tao-thau` của S4.3b đợi chuỗi #199 → #202 → #205.
+
+Cùng ngày, sau lần đo trước (§5): hai vế mà hàng dữ liệu chỉ giữ một lần — người nộp duyệt, người đặt ngân sách — đọc thêm từ sổ kiểm
+toán (`RFQ_SUBMITTED_FOR_APPROVAL`, `RFQ_BUDGET_SET`), không dựng bảng mới.
+
+## 3. Thay đổi
+
+- **`089_anh_xa_hang_muc`.** Hai bảng chỉ-ghi-thêm theo khuôn L1 (`du_lieu_nen_dat_thu_tu`, `bid_chi_ghi_them`,
+  `kiem_danh_tinh_theo_phien`, `ENABLE ALWAYS`, RLS cùng chính sách hạn chế khách): `rfq_item_goi_y` (kết quả `GOI_Y` / `CAN_DUYET`,
+  độ tin cậy, phiên bản bộ luật, năm ứng viên đầu trong `dau_vao`) và `rfq_item_mappings` (nguồn `TU_DONG` / `NGUOI_DUYET`; hàng chuẩn
+  `NULL` = *"không có hàng chuẩn tương ứng"*; `ly_do` có hình dạng). `hang_muc_bam` do trigger đặt, ngoài `GRANT`, từ
+  `rfq_hang_muc_bam(org, gói, dòng)` — SHA-256 của `jsonb_build_array(description, unit, quantity)`. Hàng HIỆU LỰC của một dòng là
+  hàng mới nhất theo `seq` có băm bằng băm hiện tại. Tập loại trừ `rfq_tap_loai_tru(org, gói)` — chín vế (ADR-121 ③). Luật ghi ở hai
+  trigger `…_bat_bien` (`goi_y_kiem_luat`, `anh_xa_kiem_luat`) — ADR-121 ②, thứ tự khoá ④, L13 ⑤. Mục ghim `hardening.always.sql` cho
+  bốn hàm và mười trigger; hai bảng vào `BANG_TENANT_KHAI`.
+- **Gói `du-lieu-nen`.** `chuan-hoa.ts`: lõi thuần `chuanHoa` bản 1 (`PHIEN_BAN_BO_CHUAN_HOA = 1`), nhận chuỗi đã sạch và tập ứng viên,
+  trả kết quả, độ tin cậy, thuộc tính trích được, năm ứng viên xếp theo điểm rồi theo mã; phiên bản lạ thì ném. `anh-xa.ts`:
+  `chuanHoaGoi`, `ghiAnhXa`, `taoHangChuanVaAnhXa`, `docHangDoi` (trần 500, `conNua`, gợi ý hiện hành kèm họ tên người ghi), `docAnhXaGoi`
+  (trạng thái từng dòng: `TU_DONG`, `NGUOI_DUYET`, `CHO_DUYET`, `CHUA_CHUAN_HOA`). Mỗi lần ghi một hàng sổ cùng giao dịch
+  (`RFQ_ITEMS_NORMALIZED`, `RFQ_ITEM_MAPPED`). Mười một mã `DuLieuNenError` mới; mọi tên ràng buộc của luật ghi có mã và câu tiếng Việt.
+- **Cổng khai theo.** `barrel-exports`, `cong-quyen-route` (ba hàm ghi, hai hàm đọc, một hàm thuần), `migration-shape`,
+  `check-an-ninh` (miễn trừ của hai bảng), `rls-coverage` (quyền cột, chính sách hạn chế), `don-vi.int` (`BANG_DU_LIEU_NEN` bảy bảng),
+  `migrations.int` (danh sách hàm, trigger, migration), `hardening-suy-tu-tinh-chat` (hai bảng chỉ-ghi-thêm thật, hai hàm không phải
+  cạnh, nhân chứng); sổ đăng ký nhãn `so-khai-nhan` (L1, L2, L3, L13) và `MOC_GHIM` 74; TEST-PLAN các hàng L1, L2, L3, L13; spec S4 §9,
+  PRODUCT.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Không gắn cổng ghi `item.manage` của ADR-116** lên hai bảng mới: lượt chuẩn hoá chạy dưới phiên người nộp duyệt. Cổng của chúng là
+  luật ghi riêng — `TU_DONG` vô hại vì CSDL tính lại bí danh, gợi ý không chịu lực.
+- **Băm dòng trên mô tả, đơn vị, số lượng.** Đơn vị hay số lượng đổi thì hàng chuẩn đã chọn có thể không còn đúng (đơn vị gốc), nên
+  ánh xạ cũ thôi theo.
+- **§2.5 ⒁ đọc *"đã từng"*, không *"mới nhất"*.** Người nộp ghi được gợi ý; một hàng `CAN_DUYET` ghi sau không được xoá dấu của
+  `GOI_Y` trước nó.
+- **Lượt chuẩn hoá không ghi trùng**: dòng đã có ánh xạ hiệu lực không đụng; gợi ý mới nhất (đúng băm, đúng phiên bản) y hệt thì không
+  ghi thêm.
+- **Trần hàng đợi 500 hàng** theo khuôn `lietKeHangChuan` — `router.ts` không đọc query.
+
+## 5. Đo trước
+
+Đọc mã trên cây của S4.2b — không chạy: không bảng, không hàm ánh xạ; tập ADR-082 ⑿ chưa có dòng mã nào. Hai điều quyết định câu hỏi
+của chủ dự án ở §2: lần nộp duyệt ghi đè `rfq_packages.submitted_by` (`packages/rfq/src/rfq.ts`), nên gói trả về rồi nộp lại dưới
+người khác chỉ còn người sau; lần đặt ngân sách thứ hai là `ON CONFLICT … DO UPDATE` chỉ trên giá trị, tiền tệ và chính sách (`procurement-policy.ts`), nên
+`rfq_budgets.created_by` giữ người đầu. Cả hai lần đổi đều ghi một hàng `audit_events` cùng giao dịch, và `app_api` đọc được sổ theo
+tổ chức. Ca chín vế ở §6 dựng hai vế ấy CHỈ trong sổ (hàng sổ của người nộp trước và người đặt ngân sách sau) và đo rằng hàm tìm thấy
+họ; nó không chạy lại luồng trả về rồi nộp lại.
+
+## 6. Đo
+
+- `packages/du-lieu-nen/src/chuan-hoa.test.ts` 15/15 — bảng ca bộ luật 1 (mười một ca ghim điểm và kết quả, gồm hai trần), tất định,
+  thứ tự ứng viên khi bằng điểm, phiên bản lạ.
+- `packages/du-lieu-nen/src/anh-xa.int.test.ts` 23/23 — trên Postgres 16 thật, dưới `app_api`; gói đã mở niêm phong dựng bằng SQL
+  thô dưới vai chủ cụm theo đúng thứ tự cạnh của đường thật (gói nền dữ liệu không với tới đường mở thầu, `g19-`):
+  - **[INV-L2]** lượt chuẩn hoá (một dòng `TU_DONG`, hai gợi ý, một hàng sổ; chạy lại không ghi trùng); câu ghi thẳng `TU_DONG` không
+    bí danh, bí danh trỏ hàng khác, bí danh đã rút — ba lần từ chối, đúng bí danh thì qua; mọi hàng `TU_DONG` trong CSDL tái lập được;
+    hàng đợi học; `TU_DONG` không đè ánh xạ đang hiệu lực; đua với một lần rút bí danh chưa commit — câu ghi chờ rồi bị từ chối.
+  - **[INV-L3]** người không giữ `item.manage` bị từ chối; chín vế của tập loại trừ, mỗi vế một người đã làm đúng một việc rồi thành
+    người quản lý dữ liệu, cả chín bị từ chối, và `rfq_tap_loai_tru` trả đúng chín người; tên hai action của sổ ghim ở nguồn
+    `packages/rfq` và ở thân hàm; bí danh do người tạo gói (đã thành người quản lý dữ liệu) khai không cho `TU_DONG` trên gói ấy, cho
+    trên gói khác; gói đã có bản rõ — người không giữ `item.manage` bị từ chối ở cả `TU_DONG` lẫn gợi ý.
+  - **[INV-L13]** không lý do bị từ chối, có lý do thì qua; `TU_DONG` phải mang đúng mã; đua hai chiều với giao dịch mở thầu dưới hai
+    kết nối thật, qua hàm gói, và chiều ⑴ bằng câu ghi thẳng trên cả hai bảng (lớp chặn cuối là trigger).
+  - **§2.5 ⒁** bác sau `GOI_Y` đòi lý do kể cả khi một `CAN_DUYET` ghi sau; bác dòng chưa qua lượt chuẩn hoá — lõi nói `GOI_Y` thì
+    đòi, `CAN_DUYET` thì không; câu ghi thẳng trên dòng không gợi ý nào thì đòi; mã `CHUAN_HOA_HOI_TO` dành riêng.
+  - Hàng đợi (gói còn soạn không có mặt, tổ chức khác không thấy, tác giả gợi ý); tạo hàng chuẩn rồi ánh xạ; thứ tự khoá — một giao dịch
+    giữ hàng gói `FOR NO KEY UPDATE` rồi ghi sổ trong lúc `taoHangChuanVaAnhXa` chờ, cả hai commit; băm dòng.
+  - **[INV-L1]** chỉ-ghi-thêm kể cả dưới chủ cụm; băm ngoài `GRANT` (42501); tác giả khai khác chủ phiên bị từ chối trên cả hai bảng;
+    `seq` liền mạch.
+- **Hai mươi tám đột biến**, mỗi lần một chỗ; đột biến SQL sửa CẢ migration lẫn mục ghim hardening (bản sửa chữa và thân chuẩn hoá) —
+  sửa riêng migration thì `migrate()` chữa lại về bản ghim và đột biến biến mất trong im lặng:
+
+  | # | Đột biến | Kết quả |
+  |---|---|---|
+  | M1 | L2 bỏ vế bí danh đã rút | **sống — tương đương**: `CHECK` buộc hàng rút mang `canonical_item_id NULL`, nên vế cùng hàng chuẩn đã loại nó |
+  | M2 | L2 bỏ vế cùng hàng chuẩn | đỏ — 2 ca |
+  | M3 | L3 bỏ tập loại trừ ở `NGUOI_DUYET` | đỏ — 1 ca |
+  | M4 | L3 `NGUOI_DUYET` bỏ `item.manage` | đỏ — 1 ca |
+  | M5 | tập loại trừ bỏ vế sổ kiểm toán | đỏ — 2 ca |
+  | M6 | tập loại trừ bỏ vế `revoked_by` | đỏ — 1 ca |
+  | M7 | L13 bỏ `FOR SHARE` ở cả hai trigger | đỏ — 1 ca. Lượt đầu **sống**: sau bản vá R1 hàm gói khoá hàng gói trước trigger, nên hai ca đua đi qua hàm gói không còn đo lớp chặn của CSDL. Thêm ca đua ⑴ bằng câu ghi thẳng trên cả hai bảng; đo lại đỏ |
+  | M8 | L13 bỏ vế lý do | đỏ — 3 ca |
+  | M9 | hồi tố `TU_DONG` bỏ `item.manage` | đỏ — 1 ca |
+  | M10 | hồi tố `TU_DONG` bỏ mã lý do | đỏ — 1 ca |
+  | M11 | bỏ luật ⒁ | đỏ — 2 ca |
+  | M12 | gợi ý nhận gói còn soạn | đỏ — 1 ca |
+  | M13 | băm dòng bỏ mô tả | đỏ — 1 ca |
+  | M14 | gợi ý hồi tố bỏ `item.manage` | đỏ — 1 ca |
+  | M15 | lõi bỏ trần mâu thuẫn | đỏ — 1 ca |
+  | M16 | lõi bỏ trần thiếu | đỏ — 1 ca |
+  | M17 | lượt hồi tố không đặt mã lý do | đỏ — 1 ca |
+  | M18 | hàng đợi không học (bỏ khai bí danh) | đỏ — 1 ca |
+  | M19 | trạng thái dòng bỏ vế băm | đỏ — 1 ca |
+  | M20 | `TU_DONG` bỏ vế bí danh của người trong tập loại trừ (R2) | đỏ — 1 ca |
+  | M21 | `TU_DONG` bỏ vế đã có ánh xạ (R3) | đỏ — 1 ca |
+  | M22 | bỏ mã lý do dành riêng (R10) | đỏ — 1 ca |
+  | M23 | ⒁ bỏ vế dòng chưa có gợi ý (R4) | đỏ — 1 ca |
+  | M24 | trigger bỏ khoá tư vấn bí danh ở cả hai bảng (R10) | đỏ — 1 ca. Lượt đầu 16 ca: ca đua hỏng giữa chừng không thả giao dịch rút, mọi ca sau treo trên khoá bí danh. Ca đua nay thả trong `finally`; đo lại đỏ đúng một ca |
+  | M25 | `taoHangChuanVaAnhXa` tạo hàng chuẩn trước khi khoá hàng gói (R1) | đỏ — 2 ca |
+  | M26 | hàm gói bỏ `FOR SHARE` của hàng gói (R1) | đỏ — 2 ca |
+  | M27 | lượt chuẩn hoá không lọc bí danh của người trong tập loại trừ (R2) | đỏ — 1 ca |
+  | M28 | `ghiAnhXa` không ghi gợi ý trước ánh xạ (R4) | đỏ — 1 ca |
+
+## 7. Lượt soi đối kháng
+
+Một lượt, chỉ đọc, trên cây `s43a-local` gồm cả thay đổi chưa commit. Người kiểm xác nhận: trigger chạy theo tên
+(`bat_bien` → `dat_thu_tu` → `kiem_danh_tinh`) và `kiem_danh_tinh_theo_phien` RAISE chứ không ghi đè; khoá tư vấn trùng khoá của
+`du_lieu_nen_dat_thu_tu`; mỗi câu plpgsql lấy snapshot mới sau khi chờ khoá, nên thấy bí danh và bản rõ đã commit; worker thật khoá
+hàng gói trước khi chèn bản rõ; băm không mơ hồ (`numeric(18,4)`, mảng jsonb) và `app_api` không sửa được `rfq_items`; không hàm nào
+`SECURITY DEFINER`; lõi tất định; mọi tên ràng buộc có mã; mục ghim phủ đủ hàm và trigger.
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| R1 | Đảo thứ tự khoá: `ghiAnhXa` với `taoBiDanh` và `taoHangChuanVaAnhXa` ghi sổ (khoá chuỗi sổ của tổ chức) rồi mới chờ hàng gói ở trigger; worker mở thầu và mọi cạnh trạng thái đi chiều ngược ⇒ 40P01, có thể huỷ lượt mở thầu. Câu *"không vòng chờ"* của ADR-121 ④ sai | Trung bình | Sửa: hàm gói khoá bí danh rồi hàng gói `FOR SHARE` trước mọi lần ghi sổ; ADR-121 ④ viết lại. Ca đo thứ tự khoá; đột biến M25, M26 |
+| R2 | Lách L3 qua bí danh: người quản lý dữ liệu trong tập loại trừ khai bí danh cho chuỗi của dòng rồi chạy lượt chuẩn hoá ⇒ `TU_DONG` | Trung bình | Sửa: trigger từ chối `TU_DONG` khi tác giả bí danh thuộc tập (`anh_xa_bi_danh_trong_tap_loai_tru`); lượt chuẩn hoá coi bí danh ấy như không có. Ca đo; M20, M27 |
+| R3 | `TU_DONG` đè được quyết định của người duyệt: câu ghi thẳng sau một `NGUOI_DUYET` thành hàng hiệu lực | Trung bình | Sửa: `anh_xa_tu_dong_da_co_anh_xa`. Ca đo; M21 |
+| R4 | ⒁ phụ thuộc thứ tự ghi: bác `NULL` trước lượt chuẩn hoá, hay khi gợi ý đã lưu là `CAN_DUYET` cũ, qua mà không lý do | Trung bình | Sửa: `ghiAnhXa` ghi kết quả vừa tính vào bảng gợi ý trước ánh xạ; trigger đòi lý do khi dòng chưa có gợi ý nào cho băm hiện tại. Hai ca đo; M23, M28 |
+| R5 | Vế sổ kiểm toán không buộc ở CSDL: sửa ngân sách bằng SQL thẳng không để lại hàng sổ; `app_api` ghi được hàng sổ mang `actor_id` tuỳ ý (thêm người vào tập) | Trung bình | Nói ra ở ADR-121 *Hệ quả*: chiều thêm hỏng về phía đóng; chiều bớt cùng lớp với mọi câu SQL thẳng của `app_api`. Bảng chỉ-ghi-thêm cho lần nộp và lần đặt ngân sách là lựa chọn đã loại ở vòng này (ADR-121 *Phương án*) |
+| R6 | Tập loại trừ chỉ kiểm lúc ghi | Thấp | Nói ra ở ADR-121 *Hệ quả* và §8 |
+| R7 | Gợi ý không chịu lực nhưng hàng đợi in thẳng ứng viên từ JSON, không kèm tác giả | Thấp | Sửa một phần: hàng đợi kèm họ tên người ghi gợi ý. Tính lại hay kiểm id ứng viên lúc đọc — §8 |
+| R8 | `coBanRo` đọc trước khi khoá gói: lượt mở thầu commit chen giữa thì lượt gãy với mã gây hiểu nhầm | Thấp | Sửa theo R1: phép đọc chạy sau `FOR SHARE` |
+| R9 | Trần 0,94 khi thiếu thuộc tính trọng yếu không bao giờ đổi đường đi | Thấp | Giữ đúng spec §4.4; nói ra ở ADR-121 *Hệ quả* |
+| R10 | Lỗ test: vế `ghi_luc < clock_timestamp()` luôn đúng; không ca đua rút bí danh và `TU_DONG`; tác giả giả chỉ đo trên bảng gợi ý; chưa ca cho R2–R4; `NGUOI_DUYET` nhận `CHUAN_HOA_HOI_TO` làm lý do | Thấp | Sửa: bỏ vế chết; ca đua (M24); tác giả giả trên bảng ánh xạ với câu của `kiem_danh_tinh`; ca cho R2–R4; mã dành riêng (`anh_xa_ma_ly_do_danh_rieng`, M22) |
+
+## 8. Giới hạn, nói ra
+
+- Vế *tác giả ngoại lệ* của tập loại trừ chưa có tới S3.3b.
+- Tập loại trừ phán ở lúc ghi (R6). Vế sổ kiểm toán tin vào đường ghi sổ (R5).
+- Hàng đợi trả ứng viên như đã lưu; người ghi gợi ý trước khi có bản rõ là bất kỳ ai trong tổ chức (R7). S4.3b quyết định màn có tính
+  lại hay không.
+- Hàng đợi tối đa 500 dòng mỗi lần đọc; không phân trang ở máy chủ (E6).
+- Bộ luật 1 chỉ biết một thuộc tính; hằng 0,95 / 0,80 là giả định, chưa đo trên dữ liệu thật.
+- M1 (bỏ vế bí danh đã rút) là đột biến tương đương: `CHECK` buộc hàng rút mang `canonical_item_id NULL`, nên vế cùng hàng chuẩn đã
+  loại nó.
+
+## 9. Số đo
+
+- Cây cuối — nhánh dựng lại trên `master` sau #209, số đã cấp (S1.204, ADR-121, `089`): `pnpm t0` sạch (không vi phạm phụ thuộc);
+  `pnpm test` 125 tệp, 1804 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
+- `pnpm evidence` — toàn bộ T1–T3 cục bộ trên cây cuối: 203 tệp, 3469 khẳng định, 3468 đạt, 1 bỏ qua; 74/74 bất biến (52/52 nghiệp
+  vụ + 22/22 hàng rào). Ma trận: L1 11 → 13, L3 9 → 19, L2 mới 27, L13 mới 8. Lượt đầu hỏng giữa chừng vì trình nền docker của container
+  dừng (`Could not find a working container runtime strategy` ở 78 tệp tích hợp, không ca nào đỏ vì mã); khởi động lại, lượt hai xanh.
+- Tổng điều tra T3 trước lần dựng lại: `db/`, `packages/db`, `packages/du-lieu-nen`, hai tệp QT3 — 36 tệp, 546/546.
+- Hai mươi tám đột biến: hai mươi bảy đỏ, một tương đương (§6).
+- Hợp nhánh #209 (sau #202, #205) vào nhánh làm việc: xung đột ở lời khai đếm (`cap-so --dem` viết lại), danh sách hàm trigger và
+  migration của `migrations.int` (`087` đứng trước số của vòng này), vị trí ADR, cuối biên bản.
+- Hợp `master` sau #211 (S3.6b1 — §S1.203, ADR-120, `088_tin_hieu_chia_nho`, K10a) vào nhánh của PR: xung đột ở tám tệp — mục ghim
+  `hardening.always.sql` (bốn mục của vòng này đứng sau các mục §S1.203), danh sách trigger `chi_ghi_them` của `migrations.int` (hợp
+  của hai bên), `MOC_GHIM` 73 → 75, lời khai sổ đăng ký (75 = 53 nghiệp vụ + 22 hàng rào), thứ tự ADR và biên bản, ma trận. `cap-so`
+  giữ S1.204 / ADR-121 / `089`, `--kiem` sạch; `pnpm t0` sạch; `pnpm test` 125 tệp, 1808 đạt, 1 bỏ qua; `pnpm evidence` toàn bộ
+  T1–T3 trên cây đã hợp: 204 tệp, 3486 khẳng định, 3485 đạt, 1 bỏ qua; 75/75 bất biến (53/53 nghiệp vụ + 22/22 hàng rào) — ma trận
+  sinh lại từ lượt ấy.
+- Hợp `master` lần hai, sau #212 (§S1.205, ADR-122 — khoản 259: chỉ trigger đã ghim được tồn tại, H19): xung đột ở lời khai đếm,
+  mốc STATE, cuối DECISIONS và cuối biên bản — giữ cả hai bên. Mười trigger của `089` (năm trên `rfq_item_goi_y`, năm trên
+  `rfq_item_mappings`) vào `TRIGGER_DUOC_PHEP` — thiếu chúng thì `hardening-co-ly-do` đỏ và hardening gỡ rồi dựng lại chúng ở mọi
+  lần `migrate()`. Ma trận: #212 chỉ đổi hai dòng D2, H19, vòng này chỉ đổi các dòng L và lời khai tổng — bản tự hợp giữ nguyên.
+  `cap-so` giữ S1.204 / ADR-121 / `089`, `--kiem` sạch; `pnpm t0` sạch; `pnpm test` 125 tệp, 1812 đạt, 1 bỏ qua; T3 của các tệp bị
+  chạm: `trigger-la-mac-dinh-dong.int` 12/12, `migrations.int` 120/120, `check-an-ninh.int` 4/4, `du-lieu-nen/anh-xa.int` 23/23,
+  `hardening-co-ly-do` 21/21.
+- Hợp `master` lần ba, sau #214 (S1.206, S3.6b2): xung đột duy nhất ở ma trận — dòng K10a lấy của #214, dòng L1 của vòng này.
+  `cap-so --kiem` sạch; không chạy lại `cap-so` — #214 không thêm ADR, migration hay bất biến, và câu *"S1.204, S1.205 đã có PR khác
+  giữ"* của biên bản §S1.206 làm công cụ coi S1.204 là số master đã lấy rồi đánh lại số của vòng này (đo: nó đổi một phần các dòng
+  sang S1.208; hoàn tác). `pnpm test` 125 tệp, 1827 đạt, 1 bỏ qua.
+
+---
+
 # §S1.205 — KHOẢN 259 ĐÓNG: MẶC ĐỊNH-ĐÓNG VỚI TRIGGER TRÊN BẢNG CỦA DỰ ÁN — CHỈ TRIGGER ĐÃ GHIM ĐƯỢC TỒN TẠI (H19) — ADR-122
 
 **Rổ và mảnh (ADR-043 ⒞):** hardening, không chạm luồng nào của `docs/PRODUCT.md` §11. Khoản 259 (rổ B, ghi ở §S1.198) đóng.

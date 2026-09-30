@@ -40,3 +40,25 @@ export {
   type DonViDanhMuc,
   type KhaiBiDanhDonViInput,
 } from "./bi-danh-don-vi.js";
+// [S1.204 / S4.3a] Chuẩn hoá và ánh xạ hạng mục: lõi thuần có phiên bản, lượt chuẩn hoá, thao tác hàng đợi, đọc.
+export {
+  NGUONG_GOI_Y,
+  NGUONG_TU_DONG,
+  PHIEN_BAN_BO_CHUAN_HOA,
+  chuanHoa,
+  type DiemUngVien,
+  type KetQuaChuanHoa,
+  type UngVienHangChuan,
+} from "./chuan-hoa.js";
+export {
+  LY_DO_CHUAN_HOA_HOI_TO,
+  chuanHoaGoi,
+  docAnhXaGoi,
+  docHangDoi,
+  ghiAnhXa,
+  taoHangChuanVaAnhXa,
+  type AnhXaDong,
+  type DongHangDoi,
+  type GhiAnhXaInput,
+  type KetQuaLuotChuanHoa,
+} from "./anh-xa.js";

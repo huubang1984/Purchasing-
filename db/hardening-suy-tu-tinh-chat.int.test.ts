@@ -147,6 +147,9 @@ const BANG_CHI_GHI_THEM_THAT = [
   // một hàng mới* chỉ là một quy ước của ứng dụng, không một tính chất của dữ liệu.
   "rfq_award_approvals",
   "rfq_awards",
+  // [S1.204 / S4.3a] Gợi ý và ánh xạ hạng mục — khuôn nền L1: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`.
+  "rfq_item_goi_y",
+  "rfq_item_mappings",
   "rfq_unsealed_bids",
   // [S1.196 / S3.3a / K8a] Xác minh nhà cung cấp — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`,
   // cả hai `ENABLE ALWAYS`. Trạng thái xác minh là hàng mới nhất theo thứ tự: sửa được một hàng là viết lại lịch sử ai đã xác
@@ -304,6 +307,10 @@ const HAM_KHONG_PHAI_CANH = [
   // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua cả hai — `dungKichBan()` dựng một nhóm hàng rồi ngừng dùng nó.
   "public.nhom_hang_kiem_doi",
   "public.nhom_hang_kiem_nguoi_tao",
+  // [S1.204 / S4.3a] Luật ghi của gợi ý và ánh xạ hạng mục — BEFORE INSERT, từ chối CÓ ĐIỀU KIỆN. Chỉ gắn INSERT ⇒ không thể là
+  // hàm canh; một hàng HỢP LỆ đi qua mỗi hàm — hai câu chèn cuối `dungKichBan()`.
+  "public.anh_xa_kiem_luat",
+  "public.goi_y_kiem_luat",
   "public.noi_chuoi_kiem_toan",
   "public.otp_kiem_kenh_khac_link",
   "public.rfq_khoa_chi_sinh_luc_mo",
@@ -2049,6 +2056,30 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
         "VALUES ($1, $2, 'cay', 'kg', '7.22', $3, $4) RETURNING id, org_id, canonical_item_id, tu_don_vi, sang_don_vi, tac_gia, session_id",
       [org, hc, ql.u, ql.s],
       { org_id: org, canonical_item_id: hc, tu_don_vi: "cay", sang_don_vi: "kg", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+
+  // ---- [S1.204 / S4.3a / L2 · L3 · L13 / `089_anh_xa_hang_muc`] Gợi ý và ánh xạ hạng mục ------------------------------------
+  // Mỗi bảng ba bộ ba mới trên INSERT: luật ghi (`goi_y_kiem_luat`, `anh_xa_kiem_luat` — hàm MỚI, từ chối CÓ ĐIỀU KIỆN),
+  // `du_lieu_nen_dat_thu_tu` và `kiem_danh_tinh_theo_phien` (hàm CŨ, bảng MỚI). Gói `rfq1` đã mở niêm phong: người ghi là `ql` (giữ
+  // `item.manage`, ngoài tập loại trừ của gói), và ánh xạ mang lý do (L13). `hang_muc_bam`, `seq`, `ghi_luc` do trigger đặt.
+  await chenNC(
+    "public.rfq_item_goi_y",
+    api(
+      "INSERT INTO rfq_item_goi_y (org_id, rfq_id, line_no, ket_qua, do_tin_cay, phien_ban_bo_chuan_hoa, dau_vao, tac_gia, session_id) " +
+        "VALUES ($1, $2, 1, 'GOI_Y', 0.9, 1, '{}', $3, $4) RETURNING id, org_id, rfq_id, line_no, ket_qua, tac_gia, session_id",
+      [org, rfq1, ql.u, ql.s],
+      { org_id: org, rfq_id: rfq1, line_no: 1, ket_qua: "GOI_Y", tac_gia: ql.u, session_id: ql.s },
+    ),
+  );
+  await chenNC(
+    "public.rfq_item_mappings",
+    api(
+      "INSERT INTO rfq_item_mappings (org_id, rfq_id, line_no, nguon, canonical_item_id, phien_ban_bo_chuan_hoa, dau_vao, ly_do, tac_gia, session_id) " +
+        "VALUES ($1, $2, 1, 'NGUOI_DUYET', $3, 1, '{}', 'khoi dong du lieu', $4, $5) " +
+        "RETURNING id, org_id, rfq_id, line_no, nguon, canonical_item_id, ly_do, tac_gia, session_id",
+      [org, rfq1, hc, ql.u, ql.s],
+      { org_id: org, rfq_id: rfq1, line_no: 1, nguon: "NGUOI_DUYET", canonical_item_id: hc, ly_do: "khoi dong du lieu", tac_gia: ql.u, session_id: ql.s },
     ),
   );
 

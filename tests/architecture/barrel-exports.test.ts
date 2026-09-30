@@ -1094,6 +1094,17 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docDanhMucDonVi",
   "khaiBiDanhDonVi",
   "rutBiDanhDonVi",
+  // [S1.204 / S4.3a] Lõi chuẩn hoá có phiên bản và hai ngưỡng giả định; lượt chuẩn hoá, hai thao tác hàng đợi, hai hàm đọc.
+  "NGUONG_GOI_Y",
+  "NGUONG_TU_DONG",
+  "PHIEN_BAN_BO_CHUAN_HOA",
+  "chuanHoa",
+  "LY_DO_CHUAN_HOA_HOI_TO",
+  "chuanHoaGoi",
+  "docAnhXaGoi",
+  "docHangDoi",
+  "ghiAnhXa",
+  "taoHangChuanVaAnhXa",
 ];
 
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
