@@ -11221,11 +11221,11 @@ $ham$$q$,
             AND p.prorettype = 'pg_catalog.bytea'::regtype
             AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_hang_muc_bam(uuid, uuid, integer)'))$q$,
-      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
-                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
                           || ' | volatile=' || p.provolatile::text
                           || ' secdef=' || p.prosecdef::text
-                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
                     FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_hang_muc_bam(uuid, uuid, integer)')),
                   'hàm public.rfq_hang_muc_bam(uuid, uuid, integer) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_hang_muc_bam(uuid, uuid, integer) hoặc SUPERUSER$q$
@@ -11279,11 +11279,11 @@ $ham$$q$,
             AND p.proretset
             AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tap_loai_tru(uuid, uuid)'))$q$,
-      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
-                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — vân tay prosrc hiện tại: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
                           || ' | volatile=' || p.provolatile::text
                           || ' secdef=' || p.prosecdef::text
-                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
                     FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tap_loai_tru(uuid, uuid)')),
                   'hàm public.rfq_tap_loai_tru(uuid, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm rfq_tap_loai_tru(uuid, uuid) hoặc SUPERUSER$q$
@@ -11363,12 +11363,12 @@ $ham$;
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_bat_bien BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION goi_y_kiem_luat()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.goi_y_kiem_luat()'))$q$,
-      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
-                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
                           || ' | secdef=' || p.prosecdef::text
-                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
                           || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
-                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
                                                           FROM pg_trigger t
                                                          WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
                                                        '(KHÔNG CÓ)')
@@ -11522,12 +11522,12 @@ $ham$;
                            AND t.tgenabled = 'A'
                            AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_bat_bien BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION anh_xa_kiem_luat()$def$)
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.anh_xa_kiem_luat()'))$q$,
-      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
-                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
                           || ' | secdef=' || p.prosecdef::text
-                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
                           || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
-                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
                                                           FROM pg_trigger t
                                                          WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
                                                        '(KHÔNG CÓ)')
