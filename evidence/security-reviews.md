@@ -18580,3 +18580,9 @@ nhiều yêu cầu cho một vòng.
 - `lich-su-gia.int` 45/45, `ban-ro-liet-ke` 6/6, `db/migrations.int` 120/120, `migrate.int` 42/42, `hang-chuan.int` 15/15,
   `don-vi.int` 12/12, `anh-xa.int` 23/23 trong lượt ấy.
 - Hai mươi lăm đột biến, cả hai mươi lăm đỏ (§6); hiệu năng đo lại trên thân mà mục ghim áp (§6).
+- Hợp lần hai, sau #219 (S1.236, ADR-137, khoản 286, migration `097` — `9d92a24`): xung đột ở cột mốc STATE (S1.235 trên
+  S1.236), cuối DECISIONS (ADR-137 rồi ADR-136 — thứ tự merge), cuối biên bản, dòng lời khai sổ đăng ký ở STATE và `Handoff.md`, ba
+  danh sách migration viết cứng (`096` rồi `097`); `cap-so --dem` viết lại 90 migration. `pnpm t0` sạch; `pnpm test` 126 tệp, 1843
+  đạt, 1 bỏ qua; `pnpm evidence` toàn bộ T1–T3 trên cây đã hợp: 208 tệp, 3614 khẳng định, 3613 đạt, 1 bỏ qua, 0 đỏ; **76/76**; ma
+  trận trùng từng byte với bản hợp tự động. Lượt evidence đầu sau lần hợp đỏ 121 ca vì daemon Docker của máy chạy chết giữa chừng
+  (*Could not find a working container runtime strategy*); dựng lại daemon, chạy lại trọn.
