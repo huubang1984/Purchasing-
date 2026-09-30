@@ -191,7 +191,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
  * nhất của họ vẫn là báo giá vòng một, và họ vẫn đứng trong bảng. BAFO cải thiện giá của top-N; nó
  * không loại ai khỏi cuộc thi.
  *
- * [S1.9130 / khoản 250 / ADR-9230] Luật THỨ HAI, cũng chép nguyên văn từ worker và bảng so sánh:
+ * [S1.217 / khoản 250 / ADR-128] Luật THỨ HAI, cũng chép nguyên văn từ worker và bảng so sánh:
  * **chỉ luồng của lời mời CÒN SỐNG** — `i.revoked_at IS NULL`. Thu hồi lời mời loại doanh nghiệp ấy
  * khỏi cuộc thi; mời lại sau thu hồi là một luồng mới (`018`), nên thiếu vế này một doanh nghiệp đứng
  * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
@@ -266,7 +266,7 @@ export async function taoLuotDanhGia(
     {
       userId: actor.id,
       orgId,
-      // [S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] CỔNG NÀY LÀ MỘT LỚP NÔNG, nói ra tại chỗ.
+      // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] CỔNG NÀY LÀ MỘT LỚP NÔNG, nói ra tại chỗ.
       // `evaluation.perform` do NĂM vai giữ — REQUESTER · BUYER · TECHNICAL · PROCUREMENT_MANAGER · FINANCE — đo trên
       // ma trận `005` (+`083`) và GHIM ở `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»); trong tổ chức nó chỉ
       // chặn `DIRECTOR` và `DATA_STEWARD`. Nó chặn khách và tác tử, KHÔNG chặn «ai trong tổ chức» — người đọc mã đừng đọc nó

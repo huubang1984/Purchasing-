@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
 import { RfqError } from "./rfq.js";
 
 // =============================================================================================
@@ -485,5 +485,93 @@ export async function setRfqBudget(
     currency: input.currency,
     policyId: chinhSach.id,
     requiresDualApproval: hang.requires_dual_approval,
+  };
+}
+
+/**
+ * [S1.200 / khoản 258] Ngân sách của một gói ĐÚNG như chữ ký duyệt gói ràng vào — năm thứ `rfq_bam_ngan_sach` (`086`) băm: ước
+ * lượng, tiền tệ, phiên bản chính sách ghim, bậc, cờ duyệt kép. Gói chưa có ngân sách: bốn trường đầu `null`.
+ */
+export interface RfqBudgetView {
+  readonly rfqId: string;
+  readonly estimatedValue: string | null;
+  readonly currency: Currency | null;
+  /** Số phiên bản của chính sách ngân sách ghim vào (`rfq_budgets.policy_id`), đọc được thay cho mã. */
+  readonly policyVersion: number | null;
+  /** Cận dưới của bậc áp (`rfq_budgets.tier_tu_so_tien`, `072`); `null` ở phiên bản không bậc. */
+  readonly tierTuSoTien: string | null;
+  readonly requiresDualApproval: boolean;
+}
+
+/**
+ * [S1.200 / khoản 258] Đọc ngân sách cho người duyệt — lời duyệt ràng vào nó (ADR-115), nên người ký phải ĐỌC được nó.
+ *
+ * Hàm đọc CÓ CỔNG (rổ `HAM_DOC_CO_QUYEN`, khoản nợ 33): ngân sách dự tính là thứ neo giá nếu rò xuống bên bán — `setRfqBudget`
+ * cố ý không ghi số tiền vào sổ kiểm toán. Chủ dự án chốt ngày 2026-09-29 (ADR-118): người tạo gói đọc bằng `rfq.create`, người khác cần
+ * `rfq.approve` — đúng chuỗi *tạo → duyệt* ràng vào ngân sách; khuôn `returnRfqToDraft`. Bị từ chối ⇒ `PermissionDeniedError` và
+ * một hàng `PERMISSION_DENIED` ở `auditPool`. Route đọc không mở cho agent (khoản 141 / ADR-039).
+ *
+ * `null` khi gói không có trong tổ chức đang gắn — trả TRƯỚC phép kiểm quyền, cùng thứ tự `returnRfqToDraft`: trong một tổ chức,
+ * gói có hay không đã là điều `GET /rfqs/:rfqId` trả lời cho mọi phiên người mua.
+ *
+ * Hàng từ chối mang `resourceType` RIÊNG `RFQ_BUDGET` (khuôn `RFQ_INVITATION`): cùng `rfq.approve` trên cùng mã gói, một lần đọc
+ * ngân sách bị từ chối không lẫn trong sổ với một lần định trả gói của người khác về soạn thảo (lượt soi §S1.200, F2). Hai câu đọc
+ * lọc cả `org_id` của tổ chức đang gắn, không chỉ dựa vào RLS (khuôn `listInvitations`).
+ */
+export async function getRfqBudget(
+  client: pg.PoolClient,
+  orgId: string,
+  input: { readonly rfqId: string; readonly actorSessionId: string },
+  auditPool: pg.Pool,
+): Promise<RfqBudgetView | null> {
+  await assertTenantBound(client, orgId, "getRfqBudget");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  const { rows: goi } = await client.query<{ created_by: string }>(
+    `SELECT p.created_by FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
+  );
+  const g = goi[0];
+  if (g === undefined) return null;
+
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: g.created_by === actor.id ? PERMISSIONS.RFQ_CREATE : PERMISSIONS.RFQ_APPROVE,
+      resourceType: "RFQ_BUDGET",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  const { rows } = await client.query<{
+    estimated_value: string | null;
+    currency: Currency | null;
+    policy_version: number | null;
+    tier_tu_so_tien: string | null;
+    requires_dual_approval: boolean;
+  }>(
+    `SELECT b.estimated_value::pg_catalog.text AS estimated_value, b.currency, pol.version AS policy_version,
+            b.tier_tu_so_tien::pg_catalog.text AS tier_tu_so_tien, p.requires_dual_approval
+       FROM public.rfq_packages p
+       LEFT JOIN public.rfq_budgets b
+         ON b.rfq_id OPERATOR(pg_catalog.=) p.id AND b.org_id OPERATOR(pg_catalog.=) p.org_id
+       LEFT JOIN public.org_procurement_policies pol
+         ON pol.id OPERATOR(pg_catalog.=) b.policy_id AND pol.org_id OPERATOR(pg_catalog.=) b.org_id
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
+  );
+  const h = rows[0];
+  if (h === undefined) return null;
+  return {
+    rfqId: input.rfqId,
+    estimatedValue: h.estimated_value,
+    currency: h.currency,
+    policyVersion: h.policy_version,
+    tierTuSoTien: h.tier_tu_so_tien,
+    requiresDualApproval: h.requires_dual_approval,
   };
 }

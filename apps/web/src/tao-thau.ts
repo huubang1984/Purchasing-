@@ -123,3 +123,165 @@ export function loiLyDo(lyDo: string): string | null {
   if (new TextEncoder().encode(t).length > TRAN_LY_DO_BYTE) return `Lý do dài quá — tối đa ${String(TRAN_LY_DO_BYTE)} byte, chữ có dấu tính hai hay ba byte.`;
   return null;
 }
+
+/**
+ * [S1.200 / khoản 258] Màn TỰ đọc ngân sách (`GET /rfqs/:rfqId/budget`) ở lần đọc gói chỉ khi người dùng là người tạo gói — họ
+ * đặt nó, và cổng cho họ đọc bằng `rfq.create`. Người khác đọc bằng nút *Xem ngân sách*: cổng đòi `rfq.approve`, và mỗi lần từ
+ * chối là một hàng sổ cộng một lần trong trần từ chối của phiên (ADR-092) — tự đọc ở mỗi lần đọc gói biến lần từ chối thành nhịp
+ * làm việc của mọi người mua không giữ quyền duyệt, và đốt trần mà một lần thử sai quyền THẬT cần để vào sổ (lượt soi §S1.200, F3;
+ * chủ dự án chốt ngày 2026-09-29). Chưa biết người dùng thì không coi là người tạo.
+ */
+export function tuDocNganSach(userId: string, createdBy: unknown): boolean {
+  return userId !== "" && createdBy === userId;
+}
+
+/** [S1.200 / khoản 258] Năm hàng của bảng ngân sách — đúng năm thứ chữ ký duyệt gói ràng vào (`rfq_bam_ngan_sach`, `086`). */
+export function hangNganSach(budget: unknown): readonly (readonly [string, string | null])[] {
+  const b = (budget !== null && typeof budget === "object" ? budget : {}) as Record<string, unknown>;
+  const chu = (v: unknown): string | null => (typeof v === "string" || typeof v === "number" ? String(v) : null);
+  return [
+    ["Giá trị ước lượng", chu(b.estimatedValue)],
+    ["Tiền tệ", chu(b.currency)],
+    ["Phiên bản chính sách", chu(b.policyVersion)],
+    ["Bậc từ", chu(b.tierTuSoTien)],
+    ["Cần hai người duyệt", b.requiresDualApproval === true ? "có" : b.requiresDualApproval === false ? "không" : null],
+  ];
+}
+
+// =============================================================================================
+// [S3.6b2 / K10a] KHUNG TÍN HIỆU CHIA NHỎ GÓI (`PURCHASE_SPLITTING`) — thân `GET /rfqs/:rfqId/signals` đọc ra thứ màn vẽ.
+//
+// Chủ dự án chốt ngày 2026-09-30: khung nằm trong `/tao-thau`; hàm đọc trả thêm tên và trạng thái các gói trong bằng chứng, họ
+// tên người ghi, và người đang xem ghi nhận được không. Màn không phán xét gì: tín hiệu do `tin_hieu_chia_nho` tính, luật người
+// do `tin_hieu_chot_nguoi_ghi_nhan` — màn chỉ nói lại, và chỉ mời bấm khi máy chủ sẽ nhận. Bằng chứng không mang số tiền nào
+// ngoài cận bậc của chính sách.
+// =============================================================================================
+
+/** Một gói trong bằng chứng, như màn vẽ nó. */
+export interface GoiTinHieu {
+  readonly id: string;
+  readonly tieuDe: string;
+  readonly trangThai: string;
+  readonly laGoiNay: boolean;
+}
+
+/** Một dòng lịch sử: mốc (chuỗi ISO của máy chủ, màn định dạng) và câu. */
+export interface DongLichSu {
+  readonly luc: string | null;
+  readonly noiDung: string;
+}
+
+export interface KhungTinHieu {
+  /** Gói không có tín hiệu nào — hiện tại hay đã lưu — thì khung ẩn. */
+  readonly hien: boolean;
+  readonly tomTat: string;
+  readonly goi: readonly GoiTinHieu[];
+  readonly lichSu: readonly DongLichSu[];
+  /** Ô lý do và nút «Ghi nhận tín hiệu»: chỉ khi tín hiệu còn chờ ghi nhận VÀ người đang xem ghi nhận được. */
+  readonly choGhiNhan: boolean;
+  /** Vì sao người đang xem không ghi nhận được — câu của máy chủ; `null` khi không có gì để nói. */
+  readonly khongDuoc: string | null;
+}
+
+export const KHUNG_TIN_HIEU_RONG: KhungTinHieu = { hien: false, tomTat: "", goi: [], lichSu: [], choGhiNhan: false, khongDuoc: null };
+
+/** Trạng thái gói (`rfq_packages.status`) nói bằng lời. Trạng thái lạ trả nguyên văn — màn không đoán. */
+export function nhanTrangThaiGoi(status: unknown): string {
+  switch (status) {
+    case "DRAFT": return "đang soạn";
+    case "PENDING_APPROVAL": return "chờ duyệt";
+    case "OPEN": return "đã mở";
+    case "CLOSED": return "đã đóng";
+    case "UNSEALED": return "đã mở thầu";
+    case "CANCELLED": return "đã huỷ";
+    default: return typeof status === "string" && status !== "" ? status : "—";
+  }
+}
+
+/** Số nguyên có dấu chấm ngăn nghìn — không phụ thuộc bảng ngôn ngữ của trình duyệt. */
+function soNghin(v: unknown): string {
+  const chu = typeof v === "number" || typeof v === "string" ? String(v) : "";
+  return /^\d+$/u.test(chu) ? chu.replace(/\B(?=(\d{3})+(?!\d))/gu, ".") : chu === "" ? "—" : chu;
+}
+
+const laDoiTuong = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const idGoi = (bangChung: unknown): string[] =>
+  laDoiTuong(bangChung) && Array.isArray(bangChung.goi) ? bangChung.goi.filter((g): g is string => typeof g === "string") : [];
+const chuHoacNull = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+
+/**
+ * Thân `GET /rfqs/:rfqId/signals` ra khung. Bảng gói vẽ bằng chứng HIỆN TẠI; không có thì bằng chứng của hàng đã lưu mới nhất —
+ * tập chỉ co lại sau lần nộp, nên hàng cũ nói gói nào đã rời tập.
+ */
+export function khungTinHieu(body: unknown, rfqId: string): KhungTinHieu {
+  const t = laDoiTuong(body) && laDoiTuong(body.tinHieu) ? body.tinHieu : null;
+  if (t === null) return KHUNG_TIN_HIEU_RONG;
+  const daLuu = Array.isArray(t.tinHieu) ? t.tinHieu.filter(laDoiTuong) : [];
+  const hienTai = laDoiTuong(t.hienTai) ? t.hienTai : null;
+  if (hienTai === null && daLuu.length === 0) return KHUNG_TIN_HIEU_RONG;
+
+  const tenGoi = laDoiTuong(t.goi) ? t.goi : {};
+  const ve = hienTai ?? daLuu[daLuu.length - 1]?.bangChung;
+  // Bằng chứng xếp id theo UUID — thứ tự không nói gì với người đọc (lượt đi thử T4 thấy «2, 1, 3»). Màn xếp theo tên gói, số trong
+  // tên so theo giá trị; cùng tên thì theo id cho ổn định.
+  const goi = idGoi(ve)
+    .map((id) => {
+      const g = tenGoi[id];
+      return {
+        id,
+        tieuDe: laDoiTuong(g) && typeof g.tieuDe === "string" ? g.tieuDe : id,
+        trangThai: nhanTrangThaiGoi(laDoiTuong(g) ? g.trangThai : undefined),
+        laGoiNay: id === rfqId,
+      };
+    })
+    .sort((a, b) => a.tieuDe.localeCompare(b.tieuDe, "vi", { numeric: true }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const canGhiNhan = t.canGhiNhan === true;
+  const xem = laDoiTuong(t.nguoiXem) ? t.nguoiXem : {};
+  const choGhiNhan = canGhiNhan && xem.ghiNhanDuoc === true;
+  const khongDuoc = canGhiNhan && !choGhiNhan ? chuHoacNull(xem.lyDo) : null;
+
+  const bc = hienTai ?? {};
+  const nGoi = String(idGoi(hienTai).length);
+  const moTa = `${nGoi} gói cùng nhóm hàng nộp duyệt trong ${soNghin(bc.cua_so_ngay)} ngày, mỗi gói dưới cận ${soNghin(bc.can)} mà tổng chạm cận ấy`;
+  const khop = (s: Record<string, unknown>): boolean => JSON.stringify(s.bangChung) === JSON.stringify(hienTai);
+  let tomTat: string;
+  if (hienTai === null) {
+    tomTat = "Tín hiệu ghi lúc nộp không còn đúng: tập gói hiện tại không chạm cận nào, nên lần mở gói không cần ghi nhận.";
+  } else if (canGhiNhan) {
+    tomTat = `Gói này nằm trong ${moTa}. Gói chỉ mở được sau khi một người giữ quyền duyệt — không tạo, không nộp gói nào trong ` +
+      "tập ấy — đọc tín hiệu và ghi nhận nó, kèm lý do.";
+    if (t.soNguoiGhiNhanDuoc === 0) {
+      tomTat += " Trong tổ chức hiện không ai ghi nhận được tín hiệu này: mọi người giữ quyền duyệt đều dính tới một gói trong tập " +
+        "(spec S3 §8.10) — cần thêm một người duyệt.";
+    }
+  } else if (daLuu.some((s) => khop(s) && Array.isArray(s.ghiNhan) && s.ghiNhan.length > 0)) {
+    tomTat = `Gói này nằm trong ${moTa}. Tín hiệu đã được ghi nhận — nó không chặn lần mở gói nữa.`;
+  } else {
+    tomTat = `Gói này nằm trong ${moTa}.`;
+  }
+
+  const lichSu: DongLichSu[] = [];
+  for (const s of daLuu) {
+    const ai = chuHoacNull(s.nguoiGhiTen) ?? "Một người";
+    const tap = `${String(idGoi(s.bangChung).length)} gói, cận ${soNghin(laDoiTuong(s.bangChung) ? s.bangChung.can : undefined)}`;
+    lichSu.push({
+      luc: chuHoacNull(s.tinhLuc),
+      noiDung: s.nguon === "GHI_NHAN"
+        ? `${ai} ghi nhận khi tập gói đã đổi sau lần nộp — tín hiệu được ghi lại theo tập hiện tại (${tap}).`
+        : `${ai} nộp duyệt; tín hiệu được ghi lúc nộp (${tap}).`,
+    });
+    for (const a of Array.isArray(s.ghiNhan) ? s.ghiNhan.filter(laDoiTuong) : []) {
+      lichSu.push({ luc: chuHoacNull(a.luc), noiDung: `${chuHoacNull(a.nguoiTen) ?? "Một người"} ghi nhận: «${typeof a.lyDo === "string" ? a.lyDo : ""}».` });
+    }
+  }
+  return { hien: true, tomTat, goi, lichSu, choGhiNhan, khongDuoc };
+}
+
+/** Lý do ghi nhận: bắt buộc, không quá trần — cùng số và đơn vị với `ghiNhanTinHieu` (`packages/kiem-soat`). `null` là hợp lệ. */
+export function loiLyDoGhiNhan(lyDo: string): string | null {
+  const t = lyDo.trim();
+  if (t === "") return "Cần ghi lý do ghi nhận — lý do vào sổ kiểm toán cùng tên người ghi nhận.";
+  if (new TextEncoder().encode(t).length > TRAN_LY_DO_BYTE) return `Lý do dài quá — tối đa ${String(TRAN_LY_DO_BYTE)} byte, chữ có dấu tính hai hay ba byte.`;
+  return null;
+}

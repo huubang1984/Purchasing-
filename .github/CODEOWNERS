@@ -2,7 +2,7 @@
 # CODEOWNERS — REVIEW BẮT BUỘC CHO CÁC HÀNG RÀO AN NINH
 # ============================================================================================
 #
-# [S1.9132 / khoản 18] CHỦ SỞ HỮU LÀ CHỦ KHO. Kho nằm dưới tài khoản cá nhân `huubang1984`, không
+# [S1.219 / khoản 18] CHỦ SỞ HỮU LÀ CHỦ KHO. Kho nằm dưới tài khoản cá nhân `huubang1984`, không
 #     dưới một tổ chức GitHub, nên không có team `@trustprocure/bao-mat` nào để trỏ tới — bản trước
 #     trỏ tới một team CHƯA TỒN TẠI và GitHub bỏ qua mọi dòng của nó. Mọi đường dẫn dưới đây nay
 #     trỏ tới `@huubang1984`, tức GitHub yêu cầu được review của chủ kho.

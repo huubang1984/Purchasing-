@@ -118,6 +118,10 @@ const BANG_CHI_GHI_THEM_THAT = [
   // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — cùng khuôn `079` (thứ tự là `ORDER BY relname` của cụm thật).
   "canonical_item_versions",
   "canonical_items",
+  // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận — khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE`, cả
+  // hai `ENABLE ALWAYS`. Sửa được một hàng tín hiệu là đổi bằng chứng mà một lần ghi nhận đã trỏ tới.
+  "governance_signal_acks",
+  "governance_signals",
   "item_aliases",
   "item_uom_conversions",
   // [S1.156 / S3.1a] Chữ ký thứ hai của phiên bản chính sách — khuôn `061`: `bid_chi_ghi_them` ở
@@ -171,6 +175,29 @@ async function migrateLai(db: TestDatabase): Promise<string> {
   } catch (e) {
     return `NÉM: ${(e as Error).message}`;
   }
+}
+
+const DONG_MUC_TRIGGER_LA = '- "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ';
+
+/**
+ * [S1.205 / khoản 259] Fixture của tệp này cắm trigger canh lên bảng thử không có tên trong `TRIGGER_DUOC_PHEP`, nên mục
+ * mặc định-đóng với trigger chặn deploy vì chúng — bất kể phép đo của ca. Hàm này khẳng định dòng của mục ấy nêu ĐÚNG những
+ * trigger ấy (`bảng.tên`), rồi bỏ dòng ấy khỏi kết quả của `migrateLai` và trừ số mục; không còn mục nào ⇒ `"OK"`. Phần còn
+ * lại là thứ ca đang đo.
+ */
+function boMucTriggerLa(kq: string, trigger: readonly string[]): string {
+  const dong = kq.split("\n");
+  const i = dong.findIndex((d) => d.startsWith(DONG_MUC_TRIGGER_LA));
+  expect(i, `mục trigger lạ phải nêu ${trigger.join(", ")} — kết quả: ${kq.slice(0, 200)}`).toBeGreaterThanOrEqual(0);
+  const neu = [...dong[i]!.matchAll(/(?:\(|; )([a-z_0-9.]+): TRIGGER LẠ/gu)].map((m) => m[1]!).sort();
+  expect(neu, "mục trigger lạ nêu đúng trigger của fixture").toEqual([...trigger].sort());
+  dong.splice(i, 1);
+  const m = /Hardening không sửa được (\d+) mục:/u.exec(dong[0] ?? "");
+  expect(m, "đầu thông báo gom").not.toBeNull();
+  const con = Number(m![1]) - 1;
+  if (con === 0) return "OK";
+  dong[0] = dong[0]!.replace(m![0], `Hardening không sửa được ${con} mục:`);
+  return dong.join("\n");
 }
 
 /**
@@ -1627,6 +1654,22 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     1,
     "org_policy_signatures",
   );
+  // [S1.198 / khoản 257] Cạnh về DRAFT đòi một hàng `rfq_tra_ve` của chính lần nộp đang bị trả — nhân chứng của
+  // `rfq_tra_ve_dat_lan_nop` và của `kiem_danh_tinh_theo_phien` trên bảng mới.
+  doiSoHang(
+    await so.chung(
+      "public.rfq_tra_ve",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_tra_ve (org_id, rfq_id, returned_by, returned_by_session_id, reason) VALUES ($1, $2, $3, $4, 'xem lai') " +
+          "RETURNING org_id, rfq_id, returned_by, returned_by_session_id, reason",
+        [org, rfqVe, pm.u, pm.s],
+        { org_id: org, rfq_id: rfqVe, returned_by: pm.u, returned_by_session_id: pm.s, reason: "xem lai" },
+      ),
+    ),
+    1,
+    "rfq_tra_ve",
+  );
   // [S1.186 / S3.2b1 / K4a] Tổ chức đã bật: cạnh về DRAFT đi qua `rfq_kiem_tra_ve_nhap`.
   doiSoHang(
     await so.chung(
@@ -1685,6 +1728,99 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
     ),
     1,
     "rfq_packages",
+  );
+  // ---- [S1.203 / S3.6b1 / `088_tin_hieu_chia_nho`] Tín hiệu chia nhỏ và lần ghi nhận: hai bảng chỉ-ghi-thêm mới, hai hàm INSERT mới
+  // Hai gói cùng nhóm `THEP` ghim phiên bản 2 — bậc của kịch bản có đúng một cận dương, 10 tỷ của đấu thầu chính thức: 6 tỷ + 5 tỷ
+  // ≥ 10 tỷ, mỗi gói dưới 10 tỷ ⇒ một tín hiệu. Gói anh em do `pm2` tạo và nộp; `rfqVe` (của `pm`) nộp lại SAU nó. `pm3` — không
+  // tạo, không nộp gói nào, không khai phiên bản — ghi nhận. Nhân chứng của `tin_hieu_kiem_ghi`, `tin_hieu_kiem_ghi_nhan` và
+  // `kiem_danh_tinh_theo_phien` (hai bảng MỚI). Đứng TRƯỚC lần ngừng dùng nhóm dưới: nhóm đã ngừng thì không gán được cho gói mới.
+  const anhEm = await chenNC(
+    "public.rfq_packages",
+    api(
+      "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id) " +
+        "VALUES ($1, 'Mua thep cuon', $2, true, $3, $4, $5) " +
+        "RETURNING id, org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, category_id",
+      [org, MAI_SAU, pm2.u, pm2.s, nhom],
+      {
+        org_id: org, title: "Mua thep cuon", deadline_at: MAI_SAU, requires_dual_approval: true,
+        created_by: pm2.u, created_by_session_id: pm2.s, category_id: nhom,
+      },
+    ),
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_budgets",
+      "INSERT",
+      api(
+        "INSERT INTO rfq_budgets (org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, '6000000000.00', 'VND', $3, $4, $5) RETURNING org_id, rfq_id, estimated_value, currency, policy_id, created_by, created_by_session_id",
+        [org, anhEm, cs2, pm2.u, pm2.s],
+        { org_id: org, rfq_id: anhEm, estimated_value: "6000000000.00", currency: "VND", policy_id: cs2, created_by: pm2.u, created_by_session_id: pm2.s },
+      ),
+    ),
+    1,
+    "rfq_budgets",
+  );
+  const nopDuyet = async (r: string, ai: { readonly u: string; readonly s: string }): Promise<void> => {
+    doiSoHang(
+      await so.chung(
+        "public.rfq_packages",
+        "UPDATE",
+        api(
+          "UPDATE rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 WHERE id = $1 " +
+            "RETURNING status, submitted_by, submitted_by_session_id",
+          [r, ai.u, ai.s],
+          { status: "PENDING_APPROVAL", submitted_by: ai.u, submitted_by_session_id: ai.s },
+        ),
+      ),
+      1,
+      "rfq_packages",
+    );
+  };
+  await nopDuyet(anhEm, pm2);
+  doiSoHang(
+    await so.chung(
+      "public.rfq_budgets",
+      "UPDATE",
+      api(
+        "UPDATE rfq_budgets SET estimated_value = '5000000000.00', policy_id = $2 WHERE rfq_id = $1 RETURNING estimated_value, policy_id",
+        [rfqVe, cs2],
+        { estimated_value: "5000000000.00", policy_id: cs2 },
+      ),
+    ),
+    1,
+    "rfq_budgets",
+  );
+  doiSoHang(
+    await so.chung(
+      "public.rfq_packages",
+      "UPDATE",
+      api("UPDATE rfq_packages SET requires_dual_approval = true WHERE id = $1 RETURNING requires_dual_approval", [rfqVe], {
+        requires_dual_approval: true,
+      }),
+    ),
+    1,
+    "rfq_packages",
+  );
+  await nopDuyet(rfqVe, pm);
+  const tinHieu = await chenNC(
+    "public.governance_signals",
+    api(
+      "INSERT INTO governance_signals (org_id, rfq_id, loai, nguon, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'PURCHASE_SPLITTING', 'NOP_DUYET', $3, $4) RETURNING id, org_id, rfq_id, loai, nguon, created_by, created_by_session_id",
+      [org, rfqVe, pm.u, pm.s],
+      { org_id: org, rfq_id: rfqVe, loai: "PURCHASE_SPLITTING", nguon: "NOP_DUYET", created_by: pm.u, created_by_session_id: pm.s },
+    ),
+  );
+  const pm3 = await nguoi("PROCUREMENT_MANAGER");
+  await chenNC(
+    "public.governance_signal_acks",
+    api(
+      "INSERT INTO governance_signal_acks (org_id, signal_id, ly_do, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, 'Hai goi cho hai cong trinh khac nhau', $3, $4) RETURNING id, org_id, signal_id, ly_do, created_by, created_by_session_id",
+      [org, tinHieu, pm3.u, pm3.s],
+      { org_id: org, signal_id: tinHieu, ly_do: "Hai goi cho hai cong trinh khac nhau", created_by: pm3.u, created_by_session_id: pm3.s },
+    ),
   );
   await chenNC(
     "public.procurement_category_changes",
@@ -2005,6 +2141,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // mục canh nói thẳng ra điều đó.
     // Phân mảnh theo `id`, KHÔNG theo `org_id`: một cột `org_id` biến bảng này thành bảng tenant
     // và kéo theo mọi phép kiểm policy — thứ không liên quan gì tới điều đang đo ở đây.
+    // [S1.205 / khoản 259] Trigger của fixture mà mục mặc định-đóng với trigger nêu khi lá đã có chốt — xem `boMucTriggerLa`.
+    const SO_PM_BA = ["so_pm.so_pm_chan", "so_pm.so_pm_chan_truncate", "so_pm_a.so_pm_a_chan_truncate"];
     await db.pool.query("CREATE TABLE public.so_pm (id uuid) PARTITION BY LIST (id)");
     try {
       await db.pool.query(
@@ -2049,7 +2187,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       );
 
       // Và vì lá là một lỗ thật, hardening phải KÊU về nó.
-      expect(await migrateLai(db), "lá thiếu chốt TRUNCATE phải làm migrate() NÉM").toMatch(
+      expect(boMucTriggerLa(await migrateLai(db), ["so_pm.so_pm_chan", "so_pm.so_pm_chan_truncate"]), "lá thiếu chốt TRUNCATE phải làm migrate() NÉM").toMatch(
         /so_pm_a/u,
       );
       // Đối chứng dương: cắm chốt cho lá xong thì deploy đi qua.
@@ -2060,7 +2198,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       await db.pool.query(
         "ALTER TABLE public.so_pm_a ENABLE ALWAYS TRIGGER so_pm_a_chan_truncate",
       );
-      expect(await migrateLai(db), "lá có chốt rồi thì deploy phải đi qua").toBe("OK");
+      expect(boMucTriggerLa(await migrateLai(db), SO_PM_BA), "lá có chốt rồi thì deploy phải đi qua").toBe("OK");
 
       // [review lượt 12, M2] LƯỢT ĐỎ THẬT của vế `tgenabled = 'A'`. Đây là chỗ duy nhất đo được
       // nó: `so_pm_a` là bảng SUY RA, không mục ghim nào có tên nó, nên không có lớp tự chữa nào
@@ -2068,11 +2206,11 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       // trong khi `TRUNCATE` đi lọt.
       await db.pool.query("ALTER TABLE public.so_pm_a DISABLE TRIGGER so_pm_a_chan_truncate");
       expect(await thu(db, "TRUNCATE public.so_pm_a"), "chốt đã tắt thì TRUNCATE đi lọt").toBe("OK");
-      expect(await migrateLai(db), "chốt bị TẮT trên bảng SUY RA phải làm migrate() NÉM").toMatch(
+      expect(boMucTriggerLa(await migrateLai(db), SO_PM_BA), "chốt bị TẮT trên bảng SUY RA phải làm migrate() NÉM").toMatch(
         /so_pm_a.*chốt TRUNCATE ĐANG BẬT/su,
       );
       await db.pool.query("ALTER TABLE public.so_pm_a ENABLE ALWAYS TRIGGER so_pm_a_chan_truncate");
-      expect(await migrateLai(db), "đối chứng dương").toBe("OK");
+      expect(boMucTriggerLa(await migrateLai(db), SO_PM_BA), "đối chứng dương").toBe("OK");
     } finally {
       await db.pool.query("DROP TABLE IF EXISTS public.so_pm CASCADE");
       await migrateLai(db);
@@ -2409,7 +2547,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     }
     expect(rows.filter((r) => !BANG_CO_TEN.includes(r.relname)).length, "phải có bảng SUY RA để đo vế phán xét").toBeGreaterThan(0);
     expect(await migrateLai(db), "đối chứng dương: lược đồ đúng vẫn migrate() được").toBe("OK");
-  }, 180000);
+    // [S1.198] Trần 600 s: ca này chạy một lần migrate() đầy đủ cho MỖI bảng chỉ-ghi-thêm, nên thời gian lớn theo số bảng và số mục
+    // ghim. Đo 2026-09-29: 62 s cục bộ; ở CI (chậm hơn 2,5–3,6 lần trên các ca khác của tệp) vượt 180 s khi `rfq_tra_ve` thêm một bảng.
+  }, 600_000);
 
   it("[sổ nợ 75] ĐO: một hàm canh gắn BEFORE UPDATE OR DELETE FOR EACH STATEMENT làm bảng chỉ-ghi-thêm mà H19 không nhận — tập rộng mới THẤY nó, tổng điều tra ĐỎ ở cả hai lời khai, và [S1.39] migrate() NÉM ở mục khoản 83⑺", async () => {
     const ten = "zz_canh_cau_lenh";
@@ -2462,6 +2602,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
     // Đúng ca lượt soi 25a #1 dựng, đo lại trên PostgreSQL 16. Ba trigger cùng gọi hàm canh, cùng ENABLE ALWAYS —
     // ba vế hardening cũ (LOGGED, chốt TRUNCATE, ACL) không có gì để phán trên bảng này (khẳng định ở (d):
     // thông điệp NÉM chỉ nêu mục mới), vế ALWAYS của tổng điều tra cũng xanh.
+    // [S1.205 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
+    const ZZ_DK = ["zz_dk.d", "zz_dk.t", "zz_dk.u"];
     await db.pool.query(`
       CREATE TABLE public.zz_dk (id int PRIMARY KEY, a text, b text);
       INSERT INTO public.zz_dk VALUES (1, 'a', 'b');
@@ -2487,7 +2629,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       const { rows } = await db.pool.query<{ ten: string; co_when: boolean; co_cot: boolean }>(CAU_TAP_RONG);
       expect(rows.find((r) => r.ten === "public.bid_chi_ghi_them")).toMatchObject({ co_when: true, co_cot: true });
       // (d) và migrate() NÉM nêu tên cả hai trigger — lớp SẢN XUẤT, để bảng không rơi khỏi tập trong im lặng.
-      const kq = await migrateLai(db);
+      const kq = boMucTriggerLa(await migrateLai(db), ZZ_DK);
       expect(kq).toMatch(/^NÉM/);
       // [lượt soi 27, NHẸ-3] ghép TÊN trigger với VẾ: đảo hai nhánh CASE trong hardening phải đỏ.
       expect(kq).toMatch(/zz_dk\.u: [^;]*có UPDATE OF/u);
@@ -2503,7 +2645,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER u; ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER d;
       `);
       expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_dk")).toBe(true);
-      expect(await migrateLai(db)).toBe("OK");
+      expect(boMucTriggerLa(await migrateLai(db), ZZ_DK)).toBe("OK");
       // (f) [lượt soi 27, NẶNG-1] Cột thứ ba giữ tên hàm mà hàm canh không chạy: tgenabled. Trigger canh bị
       //     DISABLE ('D') hay ở ENABLE thường ('O') — bảng VẪN trong tập (vị từ cố ý không đọc tgenabled), và
       //     UPDATE đi qua: 'D' luôn; 'O' khi session_replication_role = replica (ADR-036 ⑧). Bản đầu của mục phán
@@ -2511,7 +2653,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       await db.pool.query("ALTER TABLE public.zz_dk DISABLE TRIGGER u");
       expect((await db.pool.query("UPDATE public.zz_dk SET a = 'y' WHERE id = 1")).rowCount, "trigger canh DISABLE ⇒ UPDATE đi qua").toBe(1);
       expect((await db.pool.query<{ relname: string }>(VI_TU_BANG_CHI_GHI_THEM)).rows.some((r) => r.relname === "zz_dk"), "bảng vẫn trong tập").toBe(true);
-      expect(await migrateLai(db)).toMatch(/zz_dk\.u: [^;]*tgenabled=D/u);
+      expect(boMucTriggerLa(await migrateLai(db), ZZ_DK)).toMatch(/zz_dk\.u: [^;]*tgenabled=D/u);
       await db.pool.query("ALTER TABLE public.zz_dk ENABLE TRIGGER u");
       const cr = await db.pool.connect();
       try {
@@ -2522,9 +2664,9 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         await cr.query("ROLLBACK");
         cr.release();
       }
-      expect(await migrateLai(db)).toMatch(/zz_dk\.u: [^;]*tgenabled=O/u);
+      expect(boMucTriggerLa(await migrateLai(db), ZZ_DK)).toMatch(/zz_dk\.u: [^;]*tgenabled=O/u);
       await db.pool.query("ALTER TABLE public.zz_dk ENABLE ALWAYS TRIGGER u");
-      expect(await migrateLai(db)).toBe("OK");
+      expect(boMucTriggerLa(await migrateLai(db), ZZ_DK)).toBe("OK");
     } finally {
       await db.pool.query("DROP TABLE public.zz_dk");
     }
@@ -2533,6 +2675,8 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
   it("[khoản nợ 79] ĐO: chốt TRUNCATE mang WHEN (false) là HỢP LỆ với PostgreSQL 16 và TRUNCATE đi lọt — hardening đòi chốt VÔ ĐIỀU KIỆN", async () => {
     // Cùng cơ chế ADR-036 ⑳ trên vế TRUNCATE: bảng LÀ chỉ-ghi-thêm (hai trigger canh vô điều kiện), chốt
     // TRUNCATE tồn tại, ENABLE ALWAYS, đúng tgtype 34 — chỉ khác một mệnh đề WHEN.
+    // [S1.205 / khoản 259] Ba trigger của fixture mà mục mặc định-đóng với trigger nêu ở mỗi lần migrate() — xem `boMucTriggerLa`.
+    const ZZ_TR = ["zz_tr.d", "zz_tr.t", "zz_tr.u"];
     await db.pool.query(`
       CREATE TABLE public.zz_tr (id int PRIMARY KEY);
       INSERT INTO public.zz_tr VALUES (1);
@@ -2548,7 +2692,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
       expect(await thu(db, "UPDATE public.zz_tr SET id = 2")).toMatch(/^NÉM/);
       expect(await thu(db, "TRUNCATE public.zz_tr"), "TRUNCATE đi lọt qua chốt có WHEN (false)").toBe("OK");
       expect((await db.pool.query<{ n: string }>("SELECT count(*)::text AS n FROM public.zz_tr")).rows[0]?.n).toBe("0");
-      const kq = await migrateLai(db);
+      const kq = boMucTriggerLa(await migrateLai(db), ZZ_TR);
       expect(kq).toMatch(/^NÉM/);
       expect(kq).toContain("chốt TRUNCATE");
       // [lượt soi 27, INFO-6] hai lớp cho một ca: vế chốt TRUNCATE và mục phán xét mới đều nêu tên trigger.
@@ -2560,7 +2704,7 @@ describe("[INV-H19] hardening suy chủ thể từ TÍNH CHẤT, không từ dan
         CREATE TRIGGER t BEFORE TRUNCATE ON public.zz_tr FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
         ALTER TABLE public.zz_tr ENABLE ALWAYS TRIGGER t;
       `);
-      expect(await migrateLai(db)).toBe("OK");
+      expect(boMucTriggerLa(await migrateLai(db), ZZ_TR)).toBe("OK");
       expect(await thu(db, "TRUNCATE public.zz_tr")).toMatch(/^NÉM/);
     } finally {
       await db.pool.query("DROP TABLE public.zz_tr");

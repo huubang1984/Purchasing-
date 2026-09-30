@@ -62,12 +62,18 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/du-lieu-nen':
+        specifier: workspace:*
+        version: link:../../packages/du-lieu-nen
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/kiem-soat':
+        specifier: workspace:*
+        version: link:../../packages/kiem-soat
       '@trustprocure/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
@@ -141,6 +147,9 @@ importers:
       '@trustprocure/invitation':
         specifier: workspace:*
         version: link:../../packages/invitation
+      '@trustprocure/kiem-soat':
+        specifier: workspace:*
+        version: link:../../packages/kiem-soat
       '@trustprocure/rfq':
         specifier: workspace:*
         version: link:../../packages/rfq
@@ -246,6 +255,18 @@ importers:
         specifier: ^8.13.0
         version: 8.23.0
 
+  packages/kiem-soat:
+    dependencies:
+      '@trustprocure/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@trustprocure/identity':
+        specifier: workspace:*
+        version: link:../identity
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.0
+
   packages/outbox:
     dependencies:
       '@trustprocure/tenancy':
@@ -263,6 +284,9 @@ importers:
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../identity
+      '@trustprocure/kiem-soat':
+        specifier: workspace:*
+        version: link:../kiem-soat
       '@trustprocure/outbox':
         specifier: workspace:*
         version: link:../outbox
@@ -391,6 +415,9 @@ importers:
       '@trustprocure/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@trustprocure/du-lieu-nen':
+        specifier: workspace:*
+        version: link:../../packages/du-lieu-nen
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../../packages/identity

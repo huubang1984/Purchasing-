@@ -243,7 +243,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
   // `PENDING` của một tổ chức chỉ được nhặt khi tổ chức ấy có yêu cầu GHI tiếp theo. Một lớp phát
   // hiện theo TUỔI (không phụ thuộc tiến trình nào đang chạy) cần một nguồn tổ chức — đúng bài toán
   // của khoản 116.~~
-  // [S1.9151 / khoản 156] Hai câu sau của đoạn vừa gạch đã thiu: khoản 116 đóng ở S1.82 (hàm `052`,
+  // [S1.222 / khoản 156] Hai câu sau của đoạn vừa gạch đã thiu: khoản 116 đóng ở S1.82 (hàm `052`,
   // ADR-040 — một nguồn tổ chức KHÔNG phụ thuộc tiến trình nào đang chạy), và lớp phát hiện theo
   // TUỔI có từ ADR-083: worker đo tuổi job `PENDING` quá hạn lâu nhất qua MỌI tổ chức mỗi 5 phút
   // (`apps/unseal-worker/src/canh-ton-dong.ts`, `doTonDong` — trung tính với `kind`, nên việc của
@@ -262,7 +262,7 @@ export function taoTienTrinhApi(ch: CauHinhApi, phuThuoc: PhuThuocTienTrinhApi =
     // triển khai (worker có thể chưa được dựng — khoản 116), nên đặt ở đây thì một `kind` không
     // người nhận vẫn tới trạng thái cuối ỒN ÀO ở đúng một chỗ.~~ Hai tiến trình cùng khai thì cả
     // hai cùng tranh nhau ghi kết cục và `attempts` của job ấy thôi đọc được.
-    // [S1.9151 / khoản 168] Sổ mồ côi KHÔNG khai ở đây nữa — `kindKhongNguoiNhan` bỏ khỏi runner
+    // [S1.222 / khoản 168] Sổ mồ côi KHÔNG khai ở đây nữa — `kindKhongNguoiNhan` bỏ khỏi runner
     // này. Lý do S1.81 sai theo hai chiều: khoản 116 đã đóng (S1.82) nên worker là một tiến trình
     // thật, có báo động thiếu task (ADR-077); và *"ỒN ÀO ở đúng một chỗ"* chỉ đúng ở tiến trình CLAIM
     // được job, mà `listOrganizations` của runner này là `toChucDaThay` — tập hẹp nhất trong hệ, rỗng

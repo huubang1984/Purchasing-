@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9191 / khoản 132] CẤU HÌNH CỦA BƯỚC QUÉT BÍ MẬT LÀ MỘT BẢO ĐẢM — NÊN NÓ PHẢI CÓ MỘT MỐC CHẾT
+// [S1.232 / khoản 132] CẤU HÌNH CỦA BƯỚC QUÉT BÍ MẬT LÀ MỘT BẢO ĐẢM — NÊN NÓ PHẢI CÓ MỘT MỐC CHẾT
 //
 // `hinh-dang-ci.test.ts` chỉ đòi chuỗi `gitleaks-action` có mặt trong job `t0c-bi-mat`;
 // `tep-van-ban-git.test.ts` canh để gitleaks đọc được mọi tệp. Không tệp `.ts` nào của kho nhắc tới

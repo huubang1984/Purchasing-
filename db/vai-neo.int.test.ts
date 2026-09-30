@@ -301,7 +301,7 @@ describe("[ADR-072 phần 1] ⑶ hardening canh app_neo/app_neo_login như hai c
 });
 
 // ==============================================================================================
-// [S1.9111 / khoản 164] THUỘC TÍNH CỦA VAI CHỦ HÀM `app_liet_ke_to_chuc` — HARDENING CƯỠNG CHẾ, TỰ CHỮA
+// [S1.212 / khoản 164] THUỘC TÍNH CỦA VAI CHỦ HÀM `app_liet_ke_to_chuc` — HARDENING CƯỠNG CHẾ, TỰ CHỮA
 //
 // Vai thứ ba ra đời ở 052 (BƯỚC 0 của hardening dựng nó) để SỞ HỮU hàm SECURITY DEFINER duy nhất của kho — và với một
 // hàm SECURITY DEFINER thì CHỦ HÀM là toàn bộ đặc quyền của thân hàm. Tới S1.82 hàng ghim chỉ đọc `proowner`, không đọc
@@ -310,7 +310,7 @@ describe("[ADR-072 phần 1] ⑶ hardening canh app_neo/app_neo_login như hai c
 // `ROLE_CANH` (tám tên ấy còn được dùng ở hai mục khác chưa đo lại — khoản 164 nói rõ). Khác khuôn ở đúng một cờ:
 // vai này phải NOINHERIT (mọi quyền nó kế thừa là quyền của thân hàm), trong khi bốn vai ứng dụng phải INHERIT.
 // ==============================================================================================
-describe("[S1.9111 / khoản 164] hardening canh thuộc tính của vai chủ hàm app_liet_ke_to_chuc — trôi TỰ CHỮA, chạy lại không đổi gì", () => {
+describe("[S1.212 / khoản 164] hardening canh thuộc tính của vai chủ hàm app_liet_ke_to_chuc — trôi TỰ CHỮA, chạy lại không đổi gì", () => {
   const thuocTinh = async (): Promise<Record<string, boolean>> =>
     (
       await db.pool.query<Record<string, boolean>>(

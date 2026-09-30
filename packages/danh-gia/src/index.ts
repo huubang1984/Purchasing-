@@ -61,7 +61,7 @@ export {
   docTraoThau,
   duyetTraoThau,
   huyTraoThau,
-  // [S1.9182 / khoản 232 / ADR-9282] Rút một đề xuất chưa chữ ký — hàm ghi thứ tư của trao thầu, cổng `award.recommend`.
+  // [S1.231 / khoản 232 / ADR-133] Rút một đề xuất chưa chữ ký — hàm ghi thứ tư của trao thầu, cổng `award.recommend`.
   rutDeXuatTraoThau,
   type ChuKyDuyet,
   type DeXuatTraoThauInput,

@@ -462,6 +462,10 @@ describe("hình dạng file migration", () => {
       // [S1.197 / S4.2a / `083_hang_chuan`] Bốn bảng hàng chuẩn — khuôn `uom_aliases`: tenant, FORCE RLS, policy khách đóng hẳn.
       "canonical_item_versions",
       "canonical_items",
+      // [S1.203 / S3.6b1 / migration tín hiệu] Tín hiệu chia nhỏ và lần ghi nhận — chỉ-ghi-thêm, khoá ngoại hợp thành
+      // `(org_id, rfq_id)` và `(org_id, signal_id)`, policy khách ĐÓNG HẲN.
+      "governance_signal_acks",
+      "governance_signals",
       "guest_sessions",
       "invitation_otp_challenges",
       "item_aliases",
@@ -502,6 +506,8 @@ describe("hình dạng file migration", () => {
       "rfq_items",
       "rfq_key_material",
       "rfq_packages",
+      // [S1.198 / khoản 257] Sổ trả về — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới `rfq_packages`, policy khách ĐÓNG HẲN.
+      "rfq_tra_ve",
       "rfq_unsealed_bids",
       "sessions",
       "supplier_contacts",
@@ -951,7 +957,7 @@ describe("[S1.57 / khoản nợ 100] migration của kho không viết thẳng m
 });
 
 // ============================================================================================
-// [S1.9191 / khoản 221] BỐN VẾ TĨNH CỦA MỘT BẢNG TENANT MỚI — QUYẾT ĐỊNH ĐƯỢC TỪ VĂN BẢN, KHÔNG CẦN CSDL
+// [S1.232 / khoản 221] BỐN VẾ TĨNH CỦA MỘT BẢNG TENANT MỚI — QUYẾT ĐỊNH ĐƯỢC TỪ VĂN BẢN, KHÔNG CẦN CSDL
 //
 // Đo ở S1.105 trên chính `057`: một bảng tenant mới mang trigger bỏ sót policy `_khach` và cấp
 // `GRANT INSERT` mức BẢNG, và `pnpm t0` + `pnpm test` XANH TRỌN — năm cổng đỏ đều ở `test:int`
@@ -1173,7 +1179,7 @@ function kiemHamTriggerDaKhai(
   return { viPham, daXet: ham.size };
 }
 
-describe("[S1.9191 / khoản 221] bốn vế tĩnh của một bảng tenant mới — đỏ ở T1, không đợi test:int", () => {
+describe("[S1.232 / khoản 221] bốn vế tĩnh của một bảng tenant mới — đỏ ở T1, không đợi test:int", () => {
   const cacFile = docCacFile();
   const HARDENING = cacFile.get("hardening.always.sql");
   if (HARDENING === undefined) throw new Error("không đọc được db/migrations/hardening.always.sql");
@@ -1264,14 +1270,15 @@ describe("[S1.9191 / khoản 221] bốn vế tĩnh của một bảng tenant m�
       ]),
     ).toEqual(["BANG_TENANT_KHAI khai 'bang_cu' (050_bang_cu) mà không migration đánh số nào CREATE TABLE bảng tenant ấy — dòng khai thiu."]);
     expect(kiemKhaiBangTenant(tep, [{ nsp: "public", ten: "bang_moi", mig: "091_bang_moi" }])).toEqual([]);
-    // Bộ đọc hàng khai: đúng khuôn của hardening, kể cả số tạm bốn chữ số.
+    // Bộ đọc hàng khai: đúng khuôn của hardening, kể cả số bốn chữ số như số tạm `95NN` (fixture dùng số ngoài dải tạm:
+    // `pnpm cap-so --kiem` đọc `95NN_…` là số tạm chưa cấp).
     expect(
       docBangTenantKhai(
-        "\n  BANG_TENANT_KHAI constant text :=\n    $q$(VALUES\n         ('public', 'a', '002_a'),\n         ('public', 'b', '9591_b')\n       ) AS bt(nspname, relname, mig)$q$;\n",
+        "\n  BANG_TENANT_KHAI constant text :=\n    $q$(VALUES\n         ('public', 'a', '002_a'),\n         ('public', 'b', '1234_b')\n       ) AS bt(nspname, relname, mig)$q$;\n",
       ),
     ).toEqual([
       { nsp: "public", ten: "a", mig: "002_a" },
-      { nsp: "public", ten: "b", mig: "9591_b" },
+      { nsp: "public", ten: "b", mig: "1234_b" },
     ]);
   });
 

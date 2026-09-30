@@ -43,7 +43,7 @@ describe("tiền — số nguyên lớn, không số thực", () => {
 });
 
 // ==============================================================================================
-// [S1.9181 / khoản 218] BẢN THỨ BA CỦA PHÉP THU VỀ XU PHẢI LÀ CÙNG MỘT LUẬT VỚI SẢN PHẨM
+// [S1.230 / khoản 218] BẢN THỨ BA CỦA PHÉP THU VỀ XU PHẢI LÀ CÙNG MỘT LUẬT VỚI SẢN PHẨM
 //
 // Kho có ba chỗ thu `lượng × đơn giá` về hai chữ số: `apps/web/src/so-tien.ts` (trang nộp thầu),
 // `lamTron` của `@trustprocure/danh-gia` (ghim bằng `pg_catalog.round(x, 2)` chạy thật ở
@@ -54,7 +54,7 @@ describe("tiền — số nguyên lớn, không số thực", () => {
 // có đầu vào. Bộ giả lập tự tính `amount` rồi so với bảng của sản phẩm *"tới từng chữ số"*
 // (`chay-kich-ban.ts`): một luật lệch ở đây là một phép so tự cãi mình.
 // ==============================================================================================
-describe("[S1.9181 / khoản 218] thanhTien của bộ giả lập khớp lamTron của @trustprocure/danh-gia", () => {
+describe("[S1.230 / khoản 218] thanhTien của bộ giả lập khớp lamTron của @trustprocure/danh-gia", () => {
   function cuaSanPham(luong: string, donGia: string): string {
     const a = docSo(luong, SO_LE_HE_SO);
     const b = docSo(donGia, 0);

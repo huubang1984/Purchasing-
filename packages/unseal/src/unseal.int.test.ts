@@ -1013,12 +1013,12 @@ describe("[INV-D3] [khoản 209 + 210] cặp nhân chứng break-glass", () => {
     }
   });
 
-  // [S1.9131 / khoản 160] Khoản 160 khai "MỌI `UPDATE` về sau trên một hàng break-glass đã có nhân
+  // [S1.218 / khoản 160] Khoản 160 khai "MỌI `UPDATE` về sau trên một hàng break-glass đã có nhân
   // chứng đòi phiên nhân chứng còn sống", và S1.96 thêm lối điều phối lại (`dieuPhoiLaiSauKhiChet`)
   // làm chỗ thứ hai nó cắn được. `055` mục (3) thu trigger về `BEFORE INSERT` nên cả hai chỗ đều
   // hết cắn: ca ngay trên đo câu `EXECUTED`, hai ca dưới đo lối điều phối lại — đường mà chưa ca nào
   // dựng đúng cảnh "nhân chứng chết GIỮA lần điều phối và lần bấm lại".
-  it("[INV-D3] [S1.9131 / khoản 160] phiên nhân chứng bị THU HỒI: ĐIỀU PHỐI LẠI sau khi job chết VẪN đi được — câu đổi cặp người-phiên không hỏi nhân chứng nữa", async () => {
+  it("[INV-D3] [S1.218 / khoản 160] phiên nhân chứng bị THU HỒI: ĐIỀU PHỐI LẠI sau khi job chết VẪN đi được — câu đổi cặp người-phiên không hỏi nhân chứng nữa", async () => {
     const { requestId } = await breakGlassDaDuyet();
     await withTenant(apiPool, orgA, (c) =>
       dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
@@ -1044,7 +1044,7 @@ describe("[INV-D3] [khoản 209 + 210] cặp nhân chứng break-glass", () => {
     }
   });
 
-  it("[INV-D3] [S1.9131 / khoản 160] ĐỘT BIẾN: trả trigger nhân chứng về hình `022` (`BEFORE INSERT OR UPDATE`) thì ĐÚNG lối điều phối lại ấy GÃY 23514 — rồi trả lại hình `055`", async () => {
+  it("[INV-D3] [S1.218 / khoản 160] ĐỘT BIẾN: trả trigger nhân chứng về hình `022` (`BEFORE INSERT OR UPDATE`) thì ĐÚNG lối điều phối lại ấy GÃY 23514 — rồi trả lại hình `055`", async () => {
     const docDinhNghia = async (): Promise<readonly (readonly [string, string])[]> => {
       const { rows } = await db.pool.query<{ e: string; d: string }>(
         "SELECT tgenabled::text AS e, pg_get_triggerdef(oid) AS d FROM pg_trigger " +
@@ -1857,16 +1857,16 @@ describe("[S1.187 / khoản 215] yêu cầu không break-glass không mang đư�
 });
 
 // ===============================================================================================
-// [S1.9113 / khoản 133] BA LẦN TỪ CHỐI CỦA BỀ MẶT MỞ THẦU TỪNG KHÔNG GHI SỔ NAY VÀO SỔ
+// [S1.213 / khoản 133] BA LẦN TỪ CHỐI CỦA BỀ MẶT MỞ THẦU TỪNG KHÔNG GHI SỔ NAY VÀO SỔ
 //
-// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.9113): `cancelUnseal` với id không tồn tại ⇒ `UnsealError`, 0 hàng;
+// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.213): `cancelUnseal` với id không tồn tại ⇒ `UnsealError`, 0 hàng;
 // `approveUnseal` với id không tồn tại ⇒ lỗi PostgreSQL 23503 TRẦN (trigger `unseal_kiem_nguoi_duyet` của 019 RAISE
 // `foreign_key_violation` trước cả khoá ngoại), 0 hàng — qua HTTP là 422 "tham chieu khong hop le" của bảng ánh xạ SQLSTATE;
 // `dispatchUnseal` lần hai trên yêu cầu đã điều phối mà lượt trước còn sống ⇒ `UnsealError`, 0 hàng. Chủ dự án chốt (tiểu mục
-// ADR-016 [S1.9113]): D5 phủ cả ba — cùng khuôn `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên (riêng phê duyệt: 23503 được
+// ADR-016 [S1.213]): D5 phủ cả ba — cùng khuôn `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên (riêng phê duyệt: 23503 được
 // bọc thành `UnsealError` có tên, lỗi `pg` giữ ở `cause`), `resourceId` là id NGƯỜI GỌI gửi.
 // ===============================================================================================
-describe("[INV-D5] [S1.9113 / khoản 133] huỷ hay phê duyệt một yêu cầu KHÔNG TÌM THẤY, và điều phối LẦN HAI khi lượt trước còn sống — mỗi lần đúng một hàng sổ", () => {
+describe("[INV-D5] [S1.213 / khoản 133] huỷ hay phê duyệt một yêu cầu KHÔNG TÌM THẤY, và điều phối LẦN HAI khi lượt trước còn sống — mỗi lần đúng một hàng sổ", () => {
   /** Mọi hàng mang `action` của một id — HÌNH DẠNG trọn, theo thứ tự ghi. */
   async function hangTuChoi(action: string, resourceId: string): Promise<unknown[][]> {
     const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(

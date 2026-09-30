@@ -141,12 +141,12 @@ describe("[S1.182 / ADR-111] ⑴ tạo tổ chức", () => {
   });
 
   // ~~[lượt soi] email mang một điểm mã mà JS và CSDL hạ KHÁC nhau: cất bằng hàm CSDL, người ấy xin được link bằng đúng chuỗi đã khai~~
-  // **[S1.9180 / khoản 71 / ADR-9280] LẬT CÓ CHỦ ĐÍCH.** Ca cũ đứng trên tiền đề `pg_catalog.lower('Ⓐ') ≠ 'Ⓐ'.toLowerCase()` — đúng trên
+  // **[S1.229 / khoản 71 / ADR-132] LẬT CÓ CHỦ ĐÍCH.** Ca cũ đứng trên tiền đề `pg_catalog.lower('Ⓐ') ≠ 'Ⓐ'.toLowerCase()` — đúng trên
   // musl và ctype C, SAI trên glibc `C.UTF-8` (đo trên máy chạy test: máy chủ cũng hạ Ⓐ → ⓐ, ca cũ ĐỎ ở tiền đề), tức ca ấy xanh hay đỏ
-  // theo libc của máy — đúng cái ranh giới mà khoản 71 gọi tên. Nay miền `users.email` là ASCII in được (`9580_email_ascii`): địa chỉ
+  // theo libc của máy — đúng cái ranh giới mà khoản 71 gọi tên. Nay miền `users.email` là ASCII in được (`092_email_ascii`): địa chỉ
   // ấy bị từ chối TRƯỚC khi tới `lower()` của CSDL, ở đúng vị trí trong bản khai, không in email, không tổ chức nào nằm lại — và kết quả
   // KHÔNG phụ thuộc locale (chạy cả dưới `TRUSTPROCURE_PG_LOCAL_LOCALE=C`).
-  it("[S1.9180 / khoản 71] email mang điểm mã ngoài ASCII (Ⓐ) ⇒ KhoiTaoError nêu vị trí, bị từ chối TRƯỚC khi tới lower() của CSDL, rollback trọn — không phụ thuộc locale", async () => {
+  it("[S1.229 / khoản 71] email mang điểm mã ngoài ASCII (Ⓐ) ⇒ KhoiTaoError nêu vị trí, bị từ chối TRƯỚC khi tới lower() của CSDL, rollback trọn — không phụ thuộc locale", async () => {
     const email = "\u24B6.Test@Khach-Unicode.vn"; // Ⓐ — CIRCLED LATIN CAPITAL LETTER A
     const loi = await khoiTao(pool, docBanKhai(banKhaiTao("unicode-email", [nguoi("dau@khach-unicode.vn", ["BUYER"]), nguoi(email, ["FINANCE"])]), "tao")).catch(
       (e: unknown) => e,
@@ -158,7 +158,7 @@ describe("[S1.182 / ADR-111] ⑴ tạo tổ chức", () => {
     expect(rows[0]!.n, "rollback trọn: người thứ nhất và tổ chức không nằm lại").toBe(0);
   });
 
-  it("[S1.9180 / khoản 71] email ASCII có chữ hoa và ký tự đặc biệt in được ⇒ cất ở chữ thường bằng hàm CSDL, xin được link bằng đúng chuỗi đã khai", async () => {
+  it("[S1.229 / khoản 71] email ASCII có chữ hoa và ký tự đặc biệt in được ⇒ cất ở chữ thường bằng hàm CSDL, xin được link bằng đúng chuỗi đã khai", async () => {
     const email = "Ke.Toan+71@Khach-ASCII.vn";
     const kq = await khoiTao(pool, docBanKhai(banKhaiTao("ascii-email", [nguoi(email, ["BUYER"])]), "tao"));
     const { rows } = await db.pool.query<{ email: string }>("SELECT email FROM users WHERE org_id = $1", [kq.orgId]);
@@ -186,6 +186,9 @@ describe("[S1.182 / ADR-111] ⑶ mọi lỗi rollback TRỌN, thông điệp nê
     ["tổ hợp vai D3 ở người thứ 2", [nguoi("a@d3.vn", ["BUYER"]), nguoi("bimat.d3@d3.vn", ["PROCUREMENT_MANAGER", "DIRECTOR"], "Tên Bí Mật D3")], /người thứ 2: bị từ chối \(mã 42501/u],
     ["tổ hợp vai 033", [nguoi("bimat.033@d3.vn", ["FINANCE", "BUYER"], "Tên Bí Mật 033")], /người thứ 1: bị từ chối \(mã 42501/u],
     ["email trùng khác hoa thường trong CÙNG bản khai", [nguoi("bimat.trung@d3.vn", ["BUYER"]), nguoi("Bimat.Trung@D3.vn", ["BUYER"])], /người thứ 2: trùng email với người thứ 1/u],
+    // [S1.199 / S4.2b] Spec S4 §8.10: tổ chức nhỏ sẽ muốn gán vai quản lý dữ liệu cho người Tài chính sẵn có — hai trigger L3 của
+    // `083` từ chối, và công cụ nói ra vị trí như mọi tổ hợp vai trái luật khác, không kiểm lại luật ấy ở bản khai.
+    ["tổ hợp vai L3: DATA_STEWARD cùng FINANCE", [nguoi("a@l3.vn", ["BUYER"]), nguoi("bimat.l3@l3.vn", ["FINANCE", "DATA_STEWARD"], "Tên Bí Mật L3")], /người thứ 2: bị từ chối \(mã 42501/u],
   ])("%s ⇒ KhoiTaoError/BanKhaiError, không hàng nào của tổ chức mới nằm lại", async (ten, ds, mau) => {
     const slug = `rollback-${String(ten.length)}-${String(JSON.stringify(ds).length)}`;
     let loi: unknown;
@@ -202,6 +205,7 @@ describe("[S1.182 / ADR-111] ⑶ mọi lỗi rollback TRỌN, thông điệp nê
     const nguyenNhan = (loi as { cause?: { message?: string } }).cause?.message ?? "";
     if (ten === "tổ hợp vai D3 ở người thứ 2") expect(nguyenNhan).toMatch(/Phân tách nhiệm vụ \(D3\)/u);
     if (ten === "tổ hợp vai 033") expect(nguyenNhan).toMatch(/\(D2, 033\)/u);
+    if (ten === "tổ hợp vai L3: DATA_STEWARD cùng FINANCE") expect(nguyenNhan).toMatch(/\(L3, S4\.2\): nguoi dung .* se giu item\.manage/u);
     const { rows } = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM organizations WHERE slug = $1", [slug]);
     expect(rows[0]!.n).toBe(0);
   });

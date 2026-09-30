@@ -5,7 +5,7 @@
 //   POST /auth/redeem   {orgId, token}        → đã có TOTP chưa; nếu chưa: ghi danh, trả bí mật MỘT LẦN
 //   POST /auth/totp     {orgId, token, code}  → phiên ĐÃ MFA, đi ra bằng cookie `__Host-tp_session`
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
-//   GET  /auth/login-links (cookie)           → [S1.9122 / khoản 195] link đăng nhập gần đây của CHÍNH người gọi — route
+//   GET  /auth/login-links (cookie)           → [S1.216 / khoản 195] link đăng nhập gần đây của CHÍNH người gọi — route
 //                                               ĐỌC, không mã quyền, đóng với chứng chỉ agent; không bao giờ `token_hash`
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
@@ -216,7 +216,7 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
   },
 ];
 
-// [S1.9122 / khoản 195] Nhóm này nay mang cả một route ĐỌC của người mua (`GET /auth/login-links`): cùng họ "chạm chính phiên/danh
+// [S1.216 / khoản 195] Nhóm này nay mang cả một route ĐỌC của người mua (`GET /auth/login-links`): cùng họ "chạm chính phiên/danh
 // tính của người gọi, không mã quyền", nhưng kiểu `BuyerSelfRoute` là của route GHI tự thân (`mutates: true`, `/auth/*`), còn một
 // phép đọc là `BuyerReadRoute` — `timViPhamBangRoute` không cho một GET đổi trạng thái. Nới kiểu của mảng, giữ tên để `routes.ts` không đổi.
 export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
@@ -266,7 +266,7 @@ export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
     //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
     //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
     //
-    // [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH của giao điểm 144 × 153, nói ra: chứng chỉ agent có TTL trần
+    // [S1.209 / khoản 174] HỆ QUẢ VẬN HÀNH của giao điểm 144 × 153, nói ra: chứng chỉ agent có TTL trần
     // một giờ và cách DUY NHẤT có chứng chỉ mới là gọi lại route này với một mã TOTP tươi; còn trần
     // `mfaTranDuongPhu` dưới đây đọc `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng.
     // Nên một người đã gõ sai TOTP đủ `MFA_TRAN_SAI_DUONG_PHU` lần (= 2) trên `/auth/totp` thì KHÔNG
@@ -303,7 +303,7 @@ export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
         // phối là một đường tắt không thẩm quyền (nó tự khai thế); thứ giữ ngưỡng đứng khi N lời
         // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. ~~Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
         // được dùng ở cả hai chỗ — khai `mfaTranDuongPhu` của route ngay trên và ở đây — nên hai
-        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.~~ **[S1.9101 / khoản 188]
+        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.~~ **[S1.209 / khoản 188]
         // Câu gạch đúng cho GIÁ TRỊ, sai cho SỰ CÓ MẶT (S1.87): một handler quên dòng này thì không
         // cổng nào kêu.** Nay ngưỡng chỉ có MỘT nguồn — lời khai `mfaTranDuongPhu` của route — và bộ
         // điều phối đưa nó vào `ctx.mfaTranDuongPhu`; handler không tự nhập hằng nữa (`routes.test.ts`
@@ -361,7 +361,7 @@ export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
   },
   {
     // ==========================================================================================
-    // [S1.9122 / khoản 195 / ADR-9222] TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — vế «báo ngay» của khoản 195.
+    // [S1.216 / khoản 195 / ADR-126] TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — vế «báo ngay» của khoản 195.
     //
     // `/auth/redeem` và `/auth/totp` trả CÙNG một câu cho ba trạng thái token (không hợp lệ / hết hạn / đã
     // dùng), và phải thế: ở đường vô danh, nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không.

@@ -167,8 +167,8 @@ describe("[S1.183] hình dạng của khoi-tao.yml", () => {
 
 describe("[S1.183] IAM của stack 30 cho đường khởi tạo", () => {
   it("⑷ tp-deploy tin đúng {prod, prod-khoi-tao} — tên environment của workflow; worker chỉ prod-worker", () => {
-    // ~~`environments += ["prod", "prod-khoi-tao"]`~~ **[S1.9152 / khoản 252 ⑶]** bản đồ environment ⇒ tệp workflow (hay null); hình
-    // dạng trust policy ghim ở khối `[S1.9152]` cuối tệp.
+    // ~~`environments += ["prod", "prod-khoi-tao"]`~~ **[S1.223 / khoản 252 ⑶]** bản đồ environment ⇒ tệp workflow (hay null); hình
+    // dạng trust policy ghim ở khối `[S1.223]` cuối tệp.
     expect(khoiDeploy("deploy")).toMatch(/\n? {6}environments = \{\n {8}prod += null(?: +#.*)?\n {8}"prod-khoi-tao" += "khoi-tao\.yml"(?: +#.*)?\n {6}\}\n/u);
     expect(khoiDeploy("deploy_worker")).toMatch(/\n? {6}environments += \{ "prod-worker" = null \}\n/u);
     expect(TF30).toContain('values   = [for e, wf in each.value.environments : "${local.sub_repo}:environment:${e}:job_workflow_ref:');
@@ -302,7 +302,7 @@ describe("[S1.183 / lượt soi] job nhac và tài liệu vận hành", () => {
 });
 
 // ==============================================================================================
-// [S1.9152 / khoản 252 / ADR-9252] ĐƯỜNG KHỞI TẠO CHẠY NGOÀI WORKFLOW KHÔNG IM LẶNG, VÀ ROLE CHỈ VỀ TAY ĐÚNG WORKFLOW
+// [S1.223 / khoản 252 / ADR-130] ĐƯỜNG KHỞI TẠO CHẠY NGOÀI WORKFLOW KHÔNG IM LẶNG, VÀ ROLE CHỈ VỀ TAY ĐÚNG WORKFLOW
 //   ⑻ stack 60 ⑼: `mau_task_khoi_tao` là ĐÚNG khuôn ⑵ đổi tên (ba nhánh: họ `tp-khoi-tao`; `overrides.taskRoleArn`;
 //      RegisterTaskDefinition gắn role vào họ KHÁC); `mau_ban_khai` bắt Create/Put/Update/DeleteSecret dưới ĐÚNG tiền tố mà stack 30
 //      cho tp-deploy xoá và workflow nhận; mỗi mẫu một rule ở audit (⇒ SNS, thư đọc được, dặn đối chiếu run) và một rule ở prod (⇒ bus
@@ -336,7 +336,7 @@ function cacJob(van: string): string[] {
   return jobs.split(/\n(?= {2}[A-Za-z0-9_-]+:\n)/u);
 }
 
-describe("[S1.9152 / khoản 252 ⑴] stack 60 ⑼ — task tp-khoi-tao và bí mật bản khai ngoài workflow", () => {
+describe("[S1.223 / khoản 252 ⑴] stack 60 ⑼ — task tp-khoi-tao và bí mật bản khai ngoài workflow", () => {
   it("⑻ mau_task_khoi_tao = khuôn ⑵ đổi tên: họ tp-khoi-tao; overrides.taskRoleArn; RegisterTaskDefinition vào họ KHÁC — chỉ prod, kể lần bị từ chối; ⑵ còn nguyên", () => {
     expect(TF60).toMatch(/\n {2}ho_khoi_tao += module\.chung\.role\.khoi_tao\n/u);
     expect(TF60).toMatch(/\n {2}role_khoi_tao_arn += module\.chung\.role_arn_prod\.khoi_tao\n/u);
@@ -426,7 +426,7 @@ describe("[S1.9152 / khoản 252 ⑴] stack 60 ⑼ — task tp-khoi-tao và bí 
   });
 });
 
-describe("[S1.9152 / khoản 252 ⑶] trust policy tp-deploy ghim job_workflow_ref qua claim sub tuỳ biến", () => {
+describe("[S1.223 / khoản 252 ⑶] trust policy tp-deploy ghim job_workflow_ref qua claim sub tuỳ biến", () => {
   it("⑼ StringLike trên sub: prod-khoi-tao chỉ qua khoi-tao.yml@refs/heads/master; prod, prod-worker không ghim; đoạn repo: mang ID bất biến từ chung", () => {
     const trust = /data "aws_iam_policy_document" "deploy_trust" \{\n([\s\S]*?)\n\}\n/u.exec(TF30)?.[1] ?? "";
     expect(trust).toContain('test     = "StringEquals"\n      variable = "token.actions.githubusercontent.com:aud"\n      values   = ["sts.amazonaws.com"]');

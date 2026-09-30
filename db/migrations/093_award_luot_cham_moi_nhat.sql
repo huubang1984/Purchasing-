@@ -1,5 +1,5 @@
 -- =============================================================================================
--- `9582_award_luot_cham_moi_nhat.sql` — [S1.9182 / khoản 231] AWARD CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT — Ở TẦNG CSDL
+-- `093_award_luot_cham_moi_nhat.sql` — [S1.231 / khoản 231] AWARD CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT — Ở TẦNG CSDL
 -- =============================================================================================
 -- Khoản 231 (S1.110) đo một bất đối xứng ĐƯỢC CHỌN: `bafo_kiem_vong` (`060` mục (A)) đòi vòng BAFO trỏ vào lượt chấm mà
 -- KHÔNG GÌ thay thế, còn `award_kiem_de_xuat` (`061`, thân từ `074`) chỉ đòi lượt chấm THUỘC ĐÚNG RFQ — vế *mới nhất* của
@@ -10,7 +10,7 @@
 -- SỬA: thêm vào `award_kiem_de_xuat` một vế `EXISTS (lượt chấm nào của RFQ này mới hơn)`, chép nguyên khuôn `060` mục (A),
 -- ngay sau vế *lượt chấm thuộc đúng RFQ*. Nhánh mới mang TÊN RÀNG BUỘC (`j5_luot_cham_khong_moi_nhat`, khuôn `074`) để một lớp
 -- trên nhận ra nó bằng tên chứ không bằng thông điệp; ~~nó KHÔNG có dòng ở `CHOT_VAO_SO` — hai vế J5 vốn ngoài tập ADR-104~~
--- **[S1.9182, lượt gộp]** nó CÓ dòng `J5_LUOT_CHAM_KHONG_MOI_NHAT` ở `CHOT_THEO_RANG_BUOC`/`CHOT_VAO_SO` (`packages/identity`):
+-- **[S1.231, lượt gộp]** nó CÓ dòng `J5_LUOT_CHAM_KHONG_MOI_NHAT` ở `CHOT_THEO_RANG_BUOC`/`CHOT_VAO_SO` (`packages/identity`):
 -- ADR-108 đòi tên hai phía khớp nhau, và cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts` đọc cả thân này. Đường sản xuất
 -- không tới được nhánh này (lớp gói tự suy lượt mới nhất), nên lần từ chối ở đây là dấu hiệu của một đường ghi LẠ, không của
 -- một người dùng đi tắt — và đúng vì thế nó vào sổ `CONTROL_DENIED`.
@@ -92,7 +92,7 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  -- [S1.9182 / khoản 231 / 9582] VÀ KHÔNG LƯỢT NÀO CỦA GÓI THẦU NÀY MỚI HƠN NÓ — khuôn mục (A) của `060`
+  -- [S1.231 / khoản 231 / 093] VÀ KHÔNG LƯỢT NÀO CỦA GÓI THẦU NÀY MỚI HƠN NÓ — khuôn mục (A) của `060`
   -- (`bafo_kiem_vong`). Thiếu vế này, một award trỏ được vào bảng xếp hạng TRƯỚC BAFO ngay khi có một
   -- đường ghi thứ hai vào `rfq_awards` (nhập liệu hàng loạt, bộ đồng bộ, một route nhận `evaluationId`)
   -- — và mọi lớp còn lại vẫn nhất quán với lượt đã chọn nên không chỗ nào kêu. Hôm nay `deXuatTraoThau`

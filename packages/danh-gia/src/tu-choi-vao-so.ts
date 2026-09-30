@@ -71,11 +71,11 @@ export interface DongVaoSo {
 /**
  * Mỗi mã, một quyết định, một lý do. `Record` đầy đủ nên quên một mã là một lỗi BIÊN DỊCH.
  *
- * ~~Bảy~~ **[S1.9182 / khoản 232] CHÍN** mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không
+ * ~~Bảy~~ **[S1.231 / khoản 232] CHÍN** mã `vaoSo: true` đều nói cùng một câu: *một người cố đi một bước của chuỗi không
  * đúng thứ tự*. Năm mã `false` đều nói: *cấu hình chưa sẵn sàng*.
  */
 export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
-  // ---- ~~BẢY~~ [S1.9182] CHÍN mã CHUỖI — vào sổ
+  // ---- ~~BẢY~~ [S1.231] CHÍN mã CHUỖI — vào sổ
   RFQ_KHONG_CHAM_DUOC: {
     vaoSo: true,
     lyDo: "một người bấm CHẤM khi gói thầu chưa ở trạng thái chấm được — bước *mở thầu → chấm* bị đi tắt",
@@ -94,9 +94,9 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   },
   KHONG_CO_DE_XUAT_DANG_CHO: {
     vaoSo: true,
-    lyDo: "một người bấm DUYỆT — [S1.9182 / khoản 232] hay RÚT — khi không có đề xuất nào đang chờ: hoặc họ chậm một nhịp, hoặc có người vừa huỷ, rút, hay duyệt",
+    lyDo: "một người bấm DUYỆT — [S1.231 / khoản 232] hay RÚT — khi không có đề xuất nào đang chờ: hoặc họ chậm một nhịp, hoặc có người vừa huỷ, rút, hay duyệt",
   },
-  // ---- [S1.9182 / khoản 232 / ADR-9282] HAI mã của lần RÚT đề xuất — cùng lớp chuỗi *award → duyệt*, vào sổ
+  // ---- [S1.231 / khoản 232 / ADR-133] HAI mã của lần RÚT đề xuất — cùng lớp chuỗi *award → duyệt*, vào sổ
   KHONG_PHAI_NGUOI_DE_XUAT: {
     vaoSo: true,
     lyDo: "một người cố RÚT đề xuất trao thầu của NGƯỜI KHÁC — đường rút chỉ dành cho người đề xuất tự sửa lỗi của mình; người khác phải đi cổng huỷ (`po.approve`), và cố đi tắt là một tín hiệu về chuỗi *award → duyệt*",

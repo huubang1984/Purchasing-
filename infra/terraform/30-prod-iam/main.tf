@@ -161,7 +161,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 # [S1.183 / ADR-111] tp-deploy nhận thêm environment "prod-khoi-tao" — workflow `khoi-tao.yml` chạy task tạo tổ chức dưới
 # CÙNG role, nhưng environment ấy bật thêm "Prevent self-review": người bấm không tự duyệt được lần tạo tổ chức và gán vai.
 # Deploy api vẫn đi environment "prod" với luật cũ. Role không đổi quyền theo environment — ranh giới là workflow trên master.
-# [S1.9152 / khoản 252 ⑶ / ADR-9252] `environments` nay là bản đồ environment ⇒ TỆP WORKFLOW (dưới `.github/workflows/`, trên
+# [S1.223 / khoản 252 ⑶ / ADR-130] `environments` nay là bản đồ environment ⇒ TỆP WORKFLOW (dưới `.github/workflows/`, trên
 # `master`) được nhận role qua environment ấy, hay `null` = không ghim tệp nào. Ghim được vì claim `sub` của kho được TUỲ BIẾN để
 # mang `job_workflow_ref` (khối `deploy_trust` dưới). `prod-khoi-tao` ghim `khoi-tao.yml`: một workflow KHÁC trên master khai
 # `environment: prod-khoi-tao` (lượt soi S1.183) không còn nhận được role. `prod`, `prod-worker` không ghim — chủ dự án giữ như cũ.
@@ -170,7 +170,7 @@ locals {
     deploy = {
       environments = {
         prod            = null           # như cũ (ADR-067): deploy.yml, người bấm tự duyệt được
-        "prod-khoi-tao" = "khoi-tao.yml" # chỉ khoi-tao.yml@refs/heads/master (ADR-9252)
+        "prod-khoi-tao" = "khoi-tao.yml" # chỉ khoi-tao.yml@refs/heads/master (ADR-130)
       }
       repos      = local.repo_app
       services   = ["tp-api", "tp-web", "tp-mcp", "tp-public-keys"]
@@ -193,7 +193,7 @@ locals {
   }
 }
 
-# [S1.9152 / khoản 252 ⑶ / ADR-9252] Claim `sub` của token OIDC được TUỲ BIẾN ở kho GitHub (README, "Tuỳ biến claim `sub`"):
+# [S1.223 / khoản 252 ⑶ / ADR-130] Claim `sub` của token OIDC được TUỲ BIẾN ở kho GitHub (README, "Tuỳ biến claim `sub`"):
 # `include_claim_keys = ["repo", "context", "job_workflow_ref"]`, nên với một job đứng trong environment, `sub` có dạng
 #   repo:<chủ kho>@<owner_id>/<kho>@<repo_id>:environment:<tên>:job_workflow_ref:<chủ kho>/<kho>/.github/workflows/<tệp>@<ref>
 # Đoạn `repo:` mang ID BẤT BIẾN (kho tạo sau 2026-07-15 — `chung`); `job_workflow_ref` là workflow ĐỊNH NGHĨA job, ghim nó là ghim

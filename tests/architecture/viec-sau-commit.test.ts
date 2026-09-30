@@ -1,11 +1,11 @@
 // ==============================================================================================
-// [S1.9101 / khoản 135] VIỆC SAU COMMIT — CLOSURE KHÔNG CHẠM `ctx.client`, VÀ HÀM GHI TRONG `bu`/`khiXong` NẰM TRONG MÃ QUYỀN CỦA ROUTE
+// [S1.209 / khoản 135] VIỆC SAU COMMIT — CLOSURE KHÔNG CHẠM `ctx.client`, VÀ HÀM GHI TRONG `bu`/`khiXong` NẰM TRONG MÃ QUYỀN CỦA ROUTE
 //
 // Việc sau commit — thường (`afterCommit`), có bù (`afterCommitCoBu`), theo lô (`afterCommitLoGui`) — chạy khi giao dịch của bộ điều
 // phối đã COMMIT và kết nối của handler đã về pool (`apps/api/src/dispatch.ts`). Closure ấy do handler viết nên nó THẤY `ctx`, gồm
 // `ctx.client`: một closure dùng `ctx.client` chạy câu lệnh trên một kết nối rảnh, hay đang ở trong giao dịch của yêu cầu KHÁC, dưới
 // GUC của tổ chức KHÁC. Và phần bù (`bu`) cùng việc xong (`khiXong`) chạy trong giao dịch MỚI, KHÔNG đi qua cổng quyền lần nữa: nó
-// làm việc dưới mã quyền route đã kiểm, nên chỉ được gọi hàm ghi mà chính mã quyền ấy phủ. Tới S1.9101, cả hai điều chỉ có docstring
+// làm việc dưới mã quyền route đã kiểm, nên chỉ được gọi hàm ghi mà chính mã quyền ấy phủ. Tới S1.209, cả hai điều chỉ có docstring
 // của `route-types.ts` canh (lượt soi 64a-7, 64a-8); §S1.95 đếm *"đúng HAI chỗ đăng ký"* — lời khai ấy đã thiu: hôm nay là NĂM (một
 // `afterCommit` ở `routes/anon.ts`, ba `afterCommitCoBu` và một `afterCommitLoGui` ở `routes/buyer.ts`), và vế dưới đếm lại.
 //
@@ -30,7 +30,7 @@
 //
 // PHÁT BIỂU ĐÚNG MỨC: cổng đọc theo TÊN và theo HÌNH DẠNG cú pháp. Nó mù với `ctx` đi qua `this`, `arguments`, `eval`, và với một hàm
 // gói gọi qua thuộc tính của vật chủ (`goi.revokeInvitation(…)`, `import * as goi` — không import tên trần thì không nhận ra là hàm
-// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 9401). Vế ⑵ KHÔNG kiểm `viec`/`gui`
+// gói; luật *"gọi hàm cục bộ"* chỉ bắt vật chủ là tên trần, còn qua thuộc tính thì mù — khoản 264). Vế ⑵ KHÔNG kiểm `viec`/`gui`
 // (phần gửi) theo mã quyền: chúng gọi bộ gửi tiêm vào, không cầm `client` nào. Mỗi lỗ nói ra ở đây là một lỗ, không phải một lời
 // khai đã đóng.
 // ==============================================================================================
@@ -375,7 +375,7 @@ function mauRoute(tenCtx: string, thanHandler: string, dau = 'permission: PERMIS
   ].join("\n");
 }
 
-describe("[S1.9101 / khoản 135] việc sau commit: closure không chạm `ctx.client`, hàm ghi trong `bu`/`khiXong` nằm trong mã quyền của route", () => {
+describe("[S1.209 / khoản 135] việc sau commit: closure không chạm `ctx.client`, hàm ghi trong `bu`/`khiXong` nằm trong mã quyền của route", () => {
   it("bảng `HAM_BU_THEO_MA_QUYEN` là một phép đo: mỗi khoá là khoá thật của `PERMISSIONS`, mỗi hàm là export thật của gói nó khai", async () => {
     for (const [ma, cacHam] of Object.entries(HAM_BU_THEO_MA_QUYEN)) {
       expect(Object.keys(PERMISSIONS), `\`${ma}\` không phải khoá của PERMISSIONS`).toContain(ma);

@@ -108,7 +108,7 @@ describe("[S1.99 / khoản 206] thành tiền và cộng", () => {
 });
 
 // ==============================================================================================
-// [S1.104 / khoản 218 — ĐO, KHÔNG VÁ] → [S1.9181 / khoản 218 — ĐÓNG] `thanhTien` NAY LÀM TRÒN
+// [S1.104 / khoản 218 — ĐO, KHÔNG VÁ] → [S1.230 / khoản 218 — ĐÓNG] `thanhTien` NAY LÀM TRÒN
 // NỬA-RA-XA-0, CÙNG LUẬT VỚI `lamTron` CỦA `@trustprocure/danh-gia`.
 //
 // ADR-050 mục *Cái giá* nói thẳng: quyết định ⑴ ghim luật làm tròn cho `effective_cost` và nó
@@ -116,7 +116,7 @@ describe("[S1.99 / khoản 206] thành tiền và cộng", () => {
 // vì con số này đi vào PHONG BÌ NIÊM PHONG và người nộp không có lượt thứ hai. ~~Khối này không
 // vá gì. Nó làm một việc khác: biến khoản 218 từ một câu ĐỌC ĐƯỢC thành một con số ĐO ĐƯỢC,
 // và nếu ai đó hợp nhất hai luật thì chính khối này đỏ và nói ra rằng khoản 218 đã đóng.~~
-// **[S1.9181] Vòng riêng ấy là vòng này, và khối này LẬT:** nó từng ĐÒI hai luật lệch nhau ở
+// **[S1.230] Vòng riêng ấy là vòng này, và khối này LẬT:** nó từng ĐÒI hai luật lệch nhau ở
 // đúng 50 phần dư; nay nó đòi hai luật KHỚP trên cả 100 phần dư cộng bảng ca nửa xu, và giữ
 // luật cũ (cắt cụt) làm ĐỐI CHỨNG để phép đo không xanh vì hai bên cùng cắt.
 //
@@ -131,7 +131,7 @@ describe("[S1.99 / khoản 206] thành tiền và cộng", () => {
 // không import được `lamTron` — nó đi thẳng ra trình duyệt qua `/lib/so-tien.js` — nên hai bản
 // là hai bản, và chính vì thế chúng phải được đo cạnh nhau.
 // ==============================================================================================
-describe("[S1.9181 / khoản 218] hai tầng, MỘT luật — thanhTien khớp lamTron của @trustprocure/danh-gia", () => {
+describe("[S1.230 / khoản 218] hai tầng, MỘT luật — thanhTien khớp lamTron của @trustprocure/danh-gia", () => {
   /** `thanhTien` ở tỉ lệ 10^2, đọc lại về `bigint` để so với luật của `@trustprocure/danh-gia`. */
   function cuaTrang(luong: string, donGia: string): bigint | null {
     const s = thanhTien(luong, donGia);

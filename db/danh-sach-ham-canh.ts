@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9191 / khoản 221] HAI DANH SÁCH KHAI BÁO HÀM TRIGGER — MỘT NGUỒN, HAI LỚP ĐỌC
+// [S1.232 / khoản 221] HAI DANH SÁCH KHAI BÁO HÀM TRIGGER — MỘT NGUỒN, HAI LỚP ĐỌC
 //
 // Hai hằng dưới đây từng là hằng NỘI BỘ của `db/hardening-suy-tu-tinh-chat.int.test.ts` (S1.29,
 // khoản nợ 60): tổng điều tra ở đó đòi mỗi hàm trigger trong tập rộng phải nằm trong ĐÚNG MỘT danh
@@ -149,6 +149,21 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // bật mà gói không nhóm hàng. Mọi câu dựng gói, câu gán nhóm và câu nộp duyệt của `dungKichBan()` đi qua.
   "public.rfq_kiem_nhom_hang",
   "public.rfq_kiem_nhom_hang_khi_nop",
+  // [S1.198 / khoản 256 · 257 / `087_lan_nop_da_xem`] BA hàm: `rfq_dem_lan_nop` (BEFORE UPDATE `WHEN` cạnh nộp duyệt) và
+  // `rfq_chot_lan_nop_da_xem` (BEFORE INSERT trên `rfq_approvals`) không từ chối hàng nào của `dungKichBan()` — cái đầu chỉ ĐẾM,
+  // cái sau chỉ từ chối ở tổ chức đã bật hay khi lời duyệt tự mang mốc sai, mà lời duyệt của kịch bản đứng trước lần bật. Hàm
+  // thứ ba (`rfq_tra_ve_dat_lan_nop`, BEFORE INSERT trên `rfq_tra_ve`) từ chối CÓ ĐIỀU KIỆN — tổ chức chưa bật hay gói không chờ
+  // duyệt —; câu chèn hàng trả về của kịch bản đứng sau lần bật: một nhân chứng. `rfq_kiem_tra_ve_nhap` nay đòi thêm hàng ấy.
+  "public.rfq_dem_lan_nop",
+  "public.rfq_chot_lan_nop_da_xem",
+  "public.rfq_tra_ve_dat_lan_nop",
+  // [S1.203 / S3.6b1] BA hàm của tín hiệu chia nhỏ, từ chối CÓ ĐIỀU KIỆN: `tin_hieu_kiem_ghi` (INSERT tín hiệu) chỉ khi gói không
+  // chờ duyệt hay không có tín hiệu; `tin_hieu_kiem_ghi_nhan` (INSERT lần ghi nhận) chỉ khi người ghi nhận bị loại hay bằng chứng
+  // đã đổi; `rfq_kiem_tin_hieu_khi_mo` (cạnh mở gói) chỉ khi tín hiệu chưa ai ghi nhận. `dungKichBan()` dựng một tín hiệu thật,
+  // ghi nhận nó, và mọi câu mở gói phía trên đi qua cạnh.
+  "public.rfq_kiem_tin_hieu_khi_mo",
+  "public.tin_hieu_kiem_ghi",
+  "public.tin_hieu_kiem_ghi_nhan",
   "public.rfq_kiem_nguong_phe_duyet_kep",
   "public.rfq_kiem_yeu_cau_mo_thau",
   "public.thu_hoi_don_dieu",

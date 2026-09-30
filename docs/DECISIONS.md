@@ -1383,7 +1383,7 @@ và "chỉ cổng"). Bản cài:
 5. `apps/unseal-worker` khai `@trustprocure/identity` ở `dependencies`: mã chạy import gói ấy từ S1.6 mà khai ở `devDependencies`, và t0 không
    thấy vì quy tắc depcruise chỉ xét cạnh `npm-dev`, không thấy gói workspace. Cổng phạm vi sản xuất thêm vế import lúc chạy. [S1.72 / lượt soi
    67a-1, 67a-2] Ngoặc chỉ mang kiểu nội tuyến (`import { type A } from …`) vẫn tính — đo: dưới `node --experimental-transform-types` câu import
-   còn lại và gói vẫn được nạp —, và rổ miễn của vế ấy không chứa gói dưới `apps/` — [lượt soi 67c-5, 67c-7] hay `tools/` — [S1.9191 / khoản 223] và chỉ nhận gói TỰ KHAI `trustprocure.testOnly` dưới `packages/`; phép đọc import cũng
+   còn lại và gói vẫn được nạp —, và rổ miễn của vế ấy không chứa gói dưới `apps/` — [lượt soi 67c-5, 67c-7] hay `tools/` — [S1.232 / khoản 223] và chỉ nhận gói TỰ KHAI `trustprocure.testOnly` dưới `packages/`; phép đọc import cũng
    đọc cây cú pháp. `packages/unseal` chuyển `@trustprocure/tenancy`, chỉ test
    dùng, sang `devDependencies` (lượt soi 62a-6 mang sang).
 
@@ -1395,7 +1395,7 @@ tổ chức bị giữ quá 2 s ⇒ lần từ chối gãy ở 2 s (tiểu mục
 lượt, ba hàng (đo; test ghim hai lượt). Một người giữ `bid.view` gọi bảng so sánh liên tục trước mở thầu sinh một hàng mỗi lần — hạn mức theo
 người gọi, khoản 122.
 
-**Phần KHÔNG đóng.** ~~Lần từ chối không mang lớp `…DeniedError` trên cùng bề mặt — "không tìm thấy" ở bảng so sánh, số báo giá, lần huỷ; lần điều phối thứ hai; phê duyệt yêu cầu không tồn tại ném 23503 trần — vẫn 0 hàng (đo) — khoản 133.~~ **[S1.9113]** Khoản 133 ĐÓNG: cả năm nhánh vào sổ — tiểu mục [S1.9113 / khoản 133] dưới đây. Job mở thầu FAILED không điều phối lại được — khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc `throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
+**Phần KHÔNG đóng.** ~~Lần từ chối không mang lớp `…DeniedError` trên cùng bề mặt — "không tìm thấy" ở bảng so sánh, số báo giá, lần huỷ; lần điều phối thứ hai; phê duyệt yêu cầu không tồn tại ném 23503 trần — vẫn 0 hàng (đo) — khoản 133.~~ **[S1.213]** Khoản 133 ĐÓNG: cả năm nhánh vào sổ — tiểu mục [S1.213 / khoản 133] dưới đây. Job mở thầu FAILED không điều phối lại được — khoản 130. Cổng lời tạo `…DeniedError` đọc cây cú pháp theo TÊN: lần từ chối ném bằng lớp tên khác, bí danh qua biến, và một hàm bọc `throwAuditedDenial` bị gọi mà không `return`/`await` thì mù. Worker cần `auditPool` khác pool của runner khi pool ấy nhỏ — chưa có điểm vào tiến trình, khoản 116. Chi tiết ở `evidence/security-reviews.md` §S1.72.
 
 
 ### [S1.73 / khoản 126] Worker mở thầu KHOÁ HÀNG RFQ trước lần ghi sổ đầu — thứ tự khoá của mọi đường ghi là khoá hàng trước, khoá tư vấn ghi sổ sau
@@ -1410,7 +1410,7 @@ người gọi, khoản 122.
 
 **Đo bằng gì.** `apps/unseal-worker/src/unseal-worker.int.test.ts` (bốn test, gồm đối chứng dương của phép dò khoá và ca giao dịch hỏng thả khoá ngay lúc abort), `packages/rfq/src/rfq.int.test.ts` (đường ⑵), `packages/identity/src/mfa.int.test.ts` (hệ quả E3). Số đo đầy đủ ở `evidence/security-reviews.md` §S1.73.
 
-### [S1.9120 / khoản 69] Đoạn giữ khoá hàng bao trọn round-trip mật mã và lần ghi sổ — GIỮ tới sau pilot, có điều kiện xem lại
+### [S1.214 / khoản 69] Đoạn giữ khoá hàng bao trọn round-trip mật mã và lần ghi sổ — GIỮ tới sau pilot, có điều kiện xem lại
 
 Chủ dự án chốt ngày 2026-09-30, trả lời câu hỏi mà khoản 69 để ngỏ từ S1.26: KHÔNG tách lần ghi `MFA_LOCKED` khỏi giao dịch
 request và KHÔNG nhả khoá hàng trước KMS trước pilot. Lý do là một phép cân: cái mua được là bản ghi `MFA_LOCKED` ở lỗi ngoài
@@ -1495,14 +1495,14 @@ ADR này nói danh tính đã xác thực là DẪN XUẤT của một phiên, k
 
 ---
 
-### [S1.9113 / khoản 133] D5 phủ lần từ chối "KHÔNG TÌM THẤY" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — năm nhánh nữa vào sổ
+### [S1.213 / khoản 133] D5 phủ lần từ chối "KHÔNG TÌM THẤY" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — năm nhánh nữa vào sổ
 
 **Bối cảnh.** Tiểu mục [S1.72 / khoản 121] ghi phần không đóng: năm lần từ chối trên cùng bề mặt không mang lớp `…DeniedError` và vẫn 0 hàng
 — "không tìm thấy RFQ" ở `buildComparisonTable` và `countReceivedBids`, "không tìm thấy yêu cầu" ở `cancelUnseal`, lần điều phối thứ hai, và
 `approveUnseal` một yêu cầu không tồn tại ném 23503 trần (RAISE `foreign_key_violation` của trigger `unseal_kiem_nguoi_duyet` — 019 —
 không tên ràng buộc, trước cả khoá ngoại). Chúng không phải "từ chối vì thiếu quyền" theo chữ D5, và ADR-104/ADR-108 để "không tìm thấy hàng
 cha" NGOÀI sổ cho các đường CRUD thường. Câu phải quyết: D5 có phủ lần "không tìm thấy" trên đường CÓ CỔNG không. Đo lại trên `69e743e`
-(`evidence/security-reviews.md` §S1.9113): gọi thẳng gói và qua HTTP, mỗi nhánh 0 hàng ở sổ của tổ chức người gọi; với id CÓ THẬT của tổ chức
+(`evidence/security-reviews.md` §S1.213): gọi thẳng gói và qua HTTP, mỗi nhánh 0 hàng ở sổ của tổ chức người gọi; với id CÓ THẬT của tổ chức
 khác (RLS giấu) 0 hàng ở cả hai sổ.
 
 **Quyết định.** Chủ dự án chốt ngày 2026-09-30: **D5 PHỦ** lần từ chối "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so
@@ -1515,22 +1515,22 @@ Bản cài, lớp lỗi và thân 422 KHÔNG đổi:
 2. Huỷ và phê duyệt yêu cầu mở thầu ⇒ `UNSEAL_NOT_FOUND_DENIED`, `UNSEAL_REQUEST`, payload `{ operation: "CANCEL_UNSEAL" | "APPROVE_UNSEAL" }`.
    `cancelUnseal` nhận ra ca này ở câu `SELECT requested_by`, TRƯỚC phép kiểm ai được huỷ. `approveUnseal` bọc MỌI 23503 của câu INSERT
    `unseal_approvals` thành `UnsealError` có tên (lỗi `pg` ở `cause`) rồi ghi — đọc `code`, không đọc `message`; không có tên ràng buộc để so
-   vì 019 RAISE không tên (khoản 9413) — và vì sao "mọi 23503" đứng được: ba khoá ngoại trỏ tổ chức, yêu cầu, người duyệt, hai vế đầu vừa
+   vì 019 RAISE không tên (khoản 266) — và vì sao "mọi 23503" đứng được: ba khoá ngoại trỏ tổ chức, yêu cầu, người duyệt, hai vế đầu vừa
    giải trong cùng giao dịch. Qua HTTP, 422 có tên thay "tham chieu khong hop le".
 3. Điều phối lần hai khi lượt trước còn PENDING/RUNNING (vế "còn một lượt đang sống" của `dieuPhoiLaiSauKhiChet`, S1.96) ⇒
    `UNSEAL_DISPATCH_DENIED`, payload `{ reason: "JOB_STILL_ALIVE" }`. Câu S1.96 *"các lần từ chối trong đó không đi qua đường ghi sổ từ chối
    của cổng"* gạch tại chỗ ở `requests.ts`: đúng cho hai vế ĐUA (cổng bốn vế đã từ chối và ghi `UNSEAL_DENIED` trước), sai cho vế này.
 4. Ba mã vào `DANH_MUC_HANH_DONG_TU_CHOI` (khoản 189 — `danh-muc-tu-choi.test.ts` đòi danh mục bằng tập hằng ở chỗ gọi). Cổng
    `ghi-so-tu-choi-mot-duong` không đổi: các lời ném là `ComparisonError`/`UnsealError`, không mang hậu tố `DeniedError` — phép đọc theo TÊN
-   LỚP của cổng ấy không thấy năm chỗ này, và lớp đo là ba khối `[INV-D5] [S1.9113 / khoản 133]` đếm hàng.
+   LỚP của cổng ấy không thấy năm chỗ này, và lớp đo là ba khối `[INV-D5] [S1.213 / khoản 133]` đếm hàng.
 
 **Điều tiểu mục này KHÔNG phủ.** Từ chối TRẠNG THÁI trên một hàng CÓ THẬT: `cancelUnseal` một yêu cầu đã `EXECUTED`/`CANCELLED` vẫn 422
-cùng câu gộp và 0 hàng (khoản 9414, luật ADR-060); hai vế đua của `dieuPhoiLaiSauKhiChet`. "Không tìm thấy" ở các đường CRUD thường (ADR-104/108).
+cùng câu gộp và 0 hàng (khoản 267, luật ADR-060); hai vế đua của `dieuPhoiLaiSauKhiChet`. "Không tìm thấy" ở các đường CRUD thường (ADR-104/108).
 
 **Đo bằng gì.** `packages/unseal/src/comparison.int.test.ts`, `packages/unseal/src/unseal.int.test.ts`, `apps/api/src/buyer.int.test.ts` —
 mỗi nhánh: lớp lỗi và câu như trước, đúng một hàng mang người gọi, loại tài nguyên, id đã gửi và payload đúng hình dạng; hàng sống qua rollback;
 id thật của tổ chức khác ⇒ hàng ở sổ người gọi, 0 ở sổ kia; lần ghi bị chặn ⇒ `DenialAuditFailedError` giữ lỗi gốc; đối chứng dương 0 hàng.
-Đột biến: bỏ từng lời `throwAuditedDenial` ⇒ đúng ca ấy đỏ, ở gói lẫn HTTP (§S1.9113).
+Đột biến: bỏ từng lời `throwAuditedDenial` ⇒ đúng ca ấy đỏ, ở gói lẫn HTTP (§S1.213).
 
 ## ADR-017 — Chính sách tính `requires_dual_approval`: **ngưỡng theo tổ chức, CÓ PHIÊN BẢN, và kết luận phải TÁI LẬP ĐƯỢC**
 
@@ -3169,7 +3169,7 @@ trước, và chủ thể chủ bảng cũng không. Lượt soi 50 NẶNG-1 bá
 tầm vai ấy, tức đường vá bằng migration vốn không tồn tại để mà bị chặn.~~ **[S1.66 / lượt soi ngang 59c NẶNG-3]** Câu gạch chỉ
 đúng tới đâu `tu_sua_duoc` nhận ra được đường tự sửa: nó xấp xỉ theo CẢ HAI chiều (S1.58, lượt soi 51 INFO-8). Chiều bỏ qua
 chỉ trả dòng về lượt phán xét sau vòng; ~~chiều CHẶN — ADMIN trên một vai giữ GRANT OPTION đã cấp quyền thẳng, không được đọc —
-là đúng loại ngõ cụt mà điều kiện trên cấm, và chưa đo: khoản 113.~~ **[S1.9172 / khoản nợ 113]** Chiều CHẶN ấy đã ĐO trên PostgreSQL 16 (`db/migrations.int.test.ts` `[khoản nợ 113]`): vai deploy có ADMIN OPTION (không INHERIT) trên một vai R giữ GRANT OPTION đã cấp quyền bảng — hay EXECUTE trên hàm ngữ cảnh — THẲNG cho nó tự cắt được trong một tệp (`GRANT R TO <vai> WITH INHERIT TRUE; REVOKE … FROM <vai>; REVOKE R FROM <vai>` — PostgreSQL chọn R làm người thu hồi), và bản trước CHẶN dòng ấy trước vòng — một ngõ cụt thật của §3. Nay `tu_sua_duoc` đọc `grantor` của mục ACL cấp thẳng (vế `tu_sua_nguoi_cap`, vế thứ tư của `tu_cat_execute`), đòi ADMIN trên người cấp và KHÔNG thừa kế người cấp; hai đối chứng — không ADMIN, ADMIN kèm INHERIT do superuser cấp — vẫn bị chặn (đo). Xấp xỉ còn lại của `tu_sua_duoc` chỉ về phía bỏ qua; điều kiện của ngoại lệ đứng tới đâu các đường tự sửa đã đo (bốn đường S1.57, ba đường EXECUTE S1.58, một đường `grantor` S1.9172).
+là đúng loại ngõ cụt mà điều kiện trên cấm, và chưa đo: khoản 113.~~ **[S1.228 / khoản nợ 113]** Chiều CHẶN ấy đã ĐO trên PostgreSQL 16 (`db/migrations.int.test.ts` `[khoản nợ 113]`): vai deploy có ADMIN OPTION (không INHERIT) trên một vai R giữ GRANT OPTION đã cấp quyền bảng — hay EXECUTE trên hàm ngữ cảnh — THẲNG cho nó tự cắt được trong một tệp (`GRANT R TO <vai> WITH INHERIT TRUE; REVOKE … FROM <vai>; REVOKE R FROM <vai>` — PostgreSQL chọn R làm người thu hồi), và bản trước CHẶN dòng ấy trước vòng — một ngõ cụt thật của §3. Nay `tu_sua_duoc` đọc `grantor` của mục ACL cấp thẳng (vế `tu_sua_nguoi_cap`, vế thứ tư của `tu_cat_execute`), đòi ADMIN trên người cấp và KHÔNG thừa kế người cấp; hai đối chứng — không ADMIN, ADMIN kèm INHERIT do superuser cấp — vẫn bị chặn (đo). Xấp xỉ còn lại của `tu_sua_duoc` chỉ về phía bỏ qua; điều kiện của ngoại lệ đứng tới đâu các đường tự sửa đã đo (bốn đường S1.57, ba đường EXECUTE S1.58, một đường `grantor` S1.228).
 **[S1.58 / khoản nợ 101]** Cùng điều kiện cho dòng mà policy phụ thuộc hàm ngữ cảnh lọc hết vì vai có EXECUTE trên hàm ấy: `tu_sua_duoc`
 chỉ tính ba đường tự cắt EXECUTE — thừa kế chủ hàm, ADMIN trên một vai thừa kế chủ hàm, membership nhóm do chính vai ấy cấp, đo từng
 đường trên PostgreSQL 16 — hay cắt đường tới quyền trên bảng; hai vế quyền chủ bảng không tính, vì lối vá của chúng (thêm policy) không
@@ -3282,6 +3282,8 @@ S1.16), và lần thứ ba một phép đo bác bỏ lý do đã được viết
 **[ADR-072 phần 1 / 065] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_NEO_SAI`** — *quyền quan hệ của `app_neo`*, vai chỉ-đọc của job neo. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_neo` gọi được hàm liệt kê tổ chức mà `app_api` cố ý không có (ADR-040), và đổi lại nó được ĐỊNH NGHĨA bằng việc không ghi được gì — một `GRANT INSERT … TO app_neo` hay `GRANT SELECT ON <bảng nghiệp vụ> TO app_neo` sau deploy biến vai liệt kê-mọi-tổ-chức thành một vai đọc/ghi dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG (`has_*_privilege`), hai chiều: THỪA (mọi quyền ghi trên mọi quan hệ của lược đồ dự án, SELECT ngoài hai bảng sổ, cột mốc neo ngoài `org_id, seq, hash`, mọi quyền sequence) và THIẾU (đúng các quyền 065 cấp). Câu sửa **đơn điệu theo §2⑵**: `REVOKE` những gì cấp ĐÍCH DANH cho `app_neo` ngoài danh sách, `GRANT` lại đúng danh sách của 065 — thứ 065 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi (chạm mọi vai của cụm) — mục phán xét và nêu lối ra. Đo ở `db/vai-neo.int.test.ts`.
 
 **[S1.182 / ADR-111 / 075] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_QUYEN_KHOI_TAO_SAI`** — *quyền quan hệ của `app_khoi_tao`*, vai của task khởi tạo tổ chức. Lý do nó CHẶN ĐƯỢC DEPLOY: `app_khoi_tao` chèn được tổ chức, người dùng và vai — năng lực mà `app_api` cố ý không có (002) — và đổi lại nó được ĐỊNH NGHĨA bằng một danh sách quyền CỘT: một `GRANT SELECT (email) ON users`, `GRANT INSERT (id) ON users` (oracle `users_pkey` mà 002 đã đóng), `GRANT UPDATE …` hay `GRANT SELECT ON <bảng nghiệp vụ>` cho nó sau deploy biến vai mở tổ chức thành một vai đọc dữ liệu cá nhân hay sửa dữ liệu khách hàng, nên nó phải đỏ ở deploy kế chứ không đợi một lượt test. Chủ thể theo quyền HIỆU DỤNG, THEO CỘT, hai chiều: THỪA (SELECT/INSERT/UPDATE/REFERENCES trên từng cột của mọi quan hệ thuộc lược đồ dự án ngoài danh sách của 075; DELETE/TRUNCATE/TRIGGER trên mọi quan hệ; mọi quyền sequence) và THIẾU (từng bộ bảng–quyền–cột của danh sách, EXECUTE trên `audit_append` và `audit_compute_hash`). Câu sửa **đơn điệu theo §2⑵**: `REVOKE ALL` trên mọi quan hệ mà ACL bảng hay ACL cột có tên `app_khoi_tao`, rồi `GRANT` lại đúng danh sách của 075 — thứ 075 sở hữu theo TÊN. Quyền đến qua PUBLIC thì KHÔNG tự thu hồi — mục phán xét và nêu lối ra. Đo ở `db/vai-khoi-tao.int.test.ts`.
+
+**[S1.205 / khoản 259 — ADR-122] Một mục TỰ CHỮA rồi phán xét ở hậu điều kiện: `CAU_TRIGGER_LA_DU_AN`** — *không trigger lạ trên bảng của dự án*. Lý do nó CHẶN ĐƯỢC DEPLOY: một trigger ngoài tập đã ghim đứng được TRƯỚC một chốt — bản đổi tên của `rfq_approvals_so_lan_nop` xếp trước `rfq_approvals_kiem_nguoi_duyet` làm lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng `CONTROL_DENIED` (ADR-108 ⑴), và bản chép thân hàm sang một tên hàm khác cũng vậy — mà mục ghim hỏi trigger theo TÊN không thấy nó (khoản 259). Chủ thể là mọi trigger không nội bộ, không phải bản sao phân mảnh, trên mọi bảng của lược đồ dự án, trừ bảng sổ ([CR1]) và trigger gọi `chan_sua_xoa()` ([CR4]); tập được phép là `TRIGGER_DUOC_PHEP`, cổng tĩnh giữ nó trùng khít tập đã ghim. Câu sửa là `DROP TRIGGER` — **KHÔNG đơn điệu** —, nên theo §2⑵ nó chỉ chạy trên bảng mà danh sách khai TÊN (tập trigger của bảng ấy đã ghim trọn, đúng khuôn [CR1] của bảng sổ); trên phần còn lại — tập SUY RA — mục chỉ phán xét (chủ dự án chốt ở S1.205). Chỉ ở lượt sửa SAU vòng đánh số: `migrate()` đặt `app.hardening_sau_vong = 'khong'` ở lượt đầu, vì một migration đang chờ có thể còn cần trigger mà HEAD đã bỏ ghim (`059`). Đo ở `db/trigger-la-mac-dinh-dong.int.test.ts`.
 
 ### 7. Đo bằng gì
 
@@ -4115,7 +4117,7 @@ chạy trong kho (không phải suy đoán).
 | 4 | RLS policy PERMISSIVE với vị từ hằng/lệch (`USING (true)`, `USING (false)`, không ràng buộc tenant) | 0 hàng hoặc rò xuyên tổ chức | danh sách trắng hình dạng [CR1] + ngoại lệ khoá sáu cột, ở cả hardening lẫn `rls-coverage` (S0) **[S1.49 / khoản 93]** lớp sản xuất là `CAU_POLICY_SAI` nguồn (ii): mọi policy PERMISSIVE trên bảng tenant phải khớp NGUYÊN VĂN `HINH_DANG_CHUAN` hay `NGOAI_LE_HINH_DANG` của đúng (bảng, policy, lệnh, vai) | ✓ |
 | 5 | RLS policy RESTRICTIVE `USING (false)` | 0 hàng, không lỗi; `migrate()` OK | **[S1.32]** tổng điều tra policy RESTRICTIVE — khai đủ bốn cột nguyên văn, 29 dòng **[S1.37]** cụm đã deploy: chủ DB thường tạo được và `migrate()` đi qua (đo) — mục hardening là **khoản nợ 83** **[S1.38]** lớp sản xuất: `CAU_POLICY_LOP_SAI` — mọi policy trên bảng RLS thuộc đúng một lớp; RESTRICTIVE khuôn 027 nhận theo tính chất, tám biến thể khai ~~sáu~~ bảy cột nguyên văn ở hardening (`POLICY_RESTRICTIVE_KHAI`, bản test đòi khớp) — **[S1.55 / khoản 98, lượt soi 48]** cột đầu là lược đồ, khớp theo (lược đồ, bảng, policy); cột vai so theo OID 0 và `quote_ident` — vai thật tên PUBLIC viết hoa không giả được PUBLIC (đo); `USING (false)` chưa khai ⇒ `migrate()` NÉM (đo: `zz_chan`, `[I4]`) | ✓ |
 | 6 | RLS bật mà không policy PERMISSIVE nào phủ (lệnh, vai) dù quyền đã cấp — mặc định-từ-chối | SELECT/UPDATE/DELETE 0 hàng không lỗi; INSERT ném | **[S1.32]** tổng điều tra *phủ lệnh*: 87/87 tổ hợp (bảng, vai, quyền) hôm nay có policy **[S1.37]** cụm đã deploy: chủ DB thường tạo được và `migrate()` đi qua (đo) — mục hardening là **khoản nợ 83** **[S1.38]** lớp sản xuất: `CAU_PHU_LENH_SAI` — rộng hơn tổng điều tra ở test một vế (bốn vai kết nối, thành viên kế thừa), KHÔNG miễn con của bảng tenant: con có GRANT riêng mà không policy là đúng ca này (lượt soi 29 NẶNG-2 — bản đầu miễn với lý do viết cho câu hỏi RÒ); đo: `zz_rong83` app_unseal có SELECT mà policy chỉ TO app_api ⇒ NÉM; bốn fixture con/lá ở `migrations.int.test.ts` đổi kỳ vọng **[S1.44]** tập vai của `CAU_PHU_LENH_SAI` = TÍNH CHẤT ∪ TÊN ĐÃ GHIM (`VAI_KET_NOI_UNG_DUNG` ∪ `ROLE_CANH` — lượt soi 36 #1: membership là thứ ADMIN OPTION đổi được, `REVOKE app_api FROM app_api_login` + GRANT trực tiếp làm bản chỉ-tính-chất im), quyền xét theo KẾ THỪA (`pg_has_role … 'USAGE'`, nêu `(qua nhóm)`); vai lạ thành viên app_api mang GRANT trực tiếp được thấy dù BƯỚC 1 không gỡ được — đo ba bản đối chứng im đúng chỗ (khoản 88). `VAI_KET_NOI_UNG_DUNG` đổi `'MEMBER'` → `'USAGE' OR 'SET'`: membership chỉ-admin (PostgreSQL 16 cấp cho vai CREATEROLE tạo role) không phải kết nối ứng dụng — hồ sơ N3 đo: theo `'MEMBER'` hardening thu hồi CREATE của chính chủ database, 001 gãy **[S1.49 / khoản 93]** và `CAU_POLICY_SAI` nguồn (i): bảng tenant không có policy PERMISSIVE nào là vi phạm — fail-closed nhưng là sự cố sẵn sàng, thường là dấu vết một `DROP POLICY` sau triển khai | ✓ |
-| 7 | RLS bật trên bảng NGOÀI tập tenant — lớp [CR1] không soi | như 4–6, vô hình | **[S1.32]** tổng điều tra bảng RLS ngoài tenant (khai: `caller_rate_limits`) **[S1.37]** cụm đã deploy: chủ DB thường tạo được và `migrate()` đi qua (đo) — mục hardening là **khoản nợ 83** **[S1.38]** lớp sản xuất: `CAU_RLS_NGOAI_TENANT_SAI` — bảng RLS ngoài `VI_TU_CAN_CO_RLS` phải ở `BANG_RLS_NGOAI_TENANT_KHAI` (đo: `zz_ngoai83` ⇒ NÉM); và `caller_rate_limits_khach` nay là một hàng của `POLICY_KHAC_KHAI` + ghim nguyên văn ở mục riêng (82⑵) **[S1.55 / khoản 98]** và policy trên bảng RLS ngoài `public` nay có đường khai: `POLICY_KHAC_KHAI` và `POLICY_RESTRICTIVE_KHAI` mang cột lược đồ, 83⑴ khớp theo (lược đồ, bảng, policy) — trước đó bảng ngoài `public` khai được ở 83⑶ mà policy của nó thì không (đo: `zz98.t`, ngõ cụt ADR-028 §3); **[lượt soi 48 NẶNG-3]** trừ PERMISSIVE trên dữ liệu tenant mà [CR1] không soi (con cháu bảng tenant, bảng có org_id): không khai được — đo, bản đầu để một dòng khai mở đường đọc thẳng lá phân vùng ngoài `public` ra hàng của hai tổ chức **[S1.50 / khoản 91]** và cờ RLS thôi thì chưa đủ: `ENABLE` KHÔNG áp cho chủ bảng, nên mục tự chữa `VI_TU_FORCE_THIEU` bật `FORCE ROW LEVEL SECURITY` trên MỌI bảng bật RLS của lược đồ dự án (trừ đối tượng extension) — suy từ tính chất, không từ danh sách khai; đo dưới một chủ bảng KHÔNG superuser vì superuser bỏ qua RLS ở mọi cấu hình. Cái giá: chủ bảng chịu RLS ⇒ bảng có policy chỉ áp cho vai ứng dụng làm chủ đọc/ghi 0 hàng im lặng — khoản 94 **[S1.66 / lượt soi ngang 59a-3]** mục tự chữa FORCE chạm cả bảng RLS ~~ngoài dự án~~ chưa khai của cùng database, trước khi 83⑶ phán xét — đo, khoản 110 **[S1.9162 / ADR-9262]** PHẠM VI: chủ thể FORCE = mọi bảng bật RLS của mọi lược đồ không hệ thống của database — đúng bằng cấu tạo, vì hồ sơ hạ tầng là DATABASE RIÊNG mỗi môi trường (chủ dự án chốt 2026-09-30); "láng giềng" không có hồ sơ để tồn tại, một lược đồ lạ là đối tượng của dự án chưa khai (83⑶ đòi khai, 94 nêu chủ bảng 0 hàng); hệ quả 59a-3 là hệ quả chấp nhận (FORCE đơn điệu — ADR-028 §2⑵); lối ra: khai 83⑶ + policy phủ chủ, hay gỡ; `migrate()` dưới superuser/BYPASSRLS. Ghim: `rls-coverage` khối khoản 110 — khoản 110 ĐÓNG | ✓ |
+| 7 | RLS bật trên bảng NGOÀI tập tenant — lớp [CR1] không soi | như 4–6, vô hình | **[S1.32]** tổng điều tra bảng RLS ngoài tenant (khai: `caller_rate_limits`) **[S1.37]** cụm đã deploy: chủ DB thường tạo được và `migrate()` đi qua (đo) — mục hardening là **khoản nợ 83** **[S1.38]** lớp sản xuất: `CAU_RLS_NGOAI_TENANT_SAI` — bảng RLS ngoài `VI_TU_CAN_CO_RLS` phải ở `BANG_RLS_NGOAI_TENANT_KHAI` (đo: `zz_ngoai83` ⇒ NÉM); và `caller_rate_limits_khach` nay là một hàng của `POLICY_KHAC_KHAI` + ghim nguyên văn ở mục riêng (82⑵) **[S1.55 / khoản 98]** và policy trên bảng RLS ngoài `public` nay có đường khai: `POLICY_KHAC_KHAI` và `POLICY_RESTRICTIVE_KHAI` mang cột lược đồ, 83⑴ khớp theo (lược đồ, bảng, policy) — trước đó bảng ngoài `public` khai được ở 83⑶ mà policy của nó thì không (đo: `zz98.t`, ngõ cụt ADR-028 §3); **[lượt soi 48 NẶNG-3]** trừ PERMISSIVE trên dữ liệu tenant mà [CR1] không soi (con cháu bảng tenant, bảng có org_id): không khai được — đo, bản đầu để một dòng khai mở đường đọc thẳng lá phân vùng ngoài `public` ra hàng của hai tổ chức **[S1.50 / khoản 91]** và cờ RLS thôi thì chưa đủ: `ENABLE` KHÔNG áp cho chủ bảng, nên mục tự chữa `VI_TU_FORCE_THIEU` bật `FORCE ROW LEVEL SECURITY` trên MỌI bảng bật RLS của lược đồ dự án (trừ đối tượng extension) — suy từ tính chất, không từ danh sách khai; đo dưới một chủ bảng KHÔNG superuser vì superuser bỏ qua RLS ở mọi cấu hình. Cái giá: chủ bảng chịu RLS ⇒ bảng có policy chỉ áp cho vai ứng dụng làm chủ đọc/ghi 0 hàng im lặng — khoản 94 **[S1.66 / lượt soi ngang 59a-3]** mục tự chữa FORCE chạm cả bảng RLS ~~ngoài dự án~~ chưa khai của cùng database, trước khi 83⑶ phán xét — đo, khoản 110 **[S1.226 / ADR-131]** PHẠM VI: chủ thể FORCE = mọi bảng bật RLS của mọi lược đồ không hệ thống của database — đúng bằng cấu tạo, vì hồ sơ hạ tầng là DATABASE RIÊNG mỗi môi trường (chủ dự án chốt 2026-09-30); "láng giềng" không có hồ sơ để tồn tại, một lược đồ lạ là đối tượng của dự án chưa khai (83⑶ đòi khai, 94 nêu chủ bảng 0 hàng); hệ quả 59a-3 là hệ quả chấp nhận (FORCE đơn điệu — ADR-028 §2⑵); lối ra: khai 83⑶ + policy phủ chủ, hay gỡ; `migrate()` dưới superuser/BYPASSRLS. Ghim: `rls-coverage` khối khoản 110 — khoản 110 ĐÓNG | ✓ |
 | 8 | `session_replication_role = replica` bỏ qua trigger `ENABLE` thường | hàm canh KHÔNG chạy — fail-open, ngược chiều với 1–7 | **[S1.32]** trigger canh phải `ENABLE ALWAYS` (tổng điều tra, `luon_bat`); 047 đã ghim ALWAYS cho chốt TRUNCATE **[S1.39]** tiền đề SUSET: `CAU_PARAMETER_ACL_SAI` — `pg_parameter_acl` cấp cho PUBLIC/vai ứng dụng ⇒ NÉM (đo: `GRANT SET ON PARAMETER session_replication_role TO app_api`) **[S1.51 / khoản 92]** ~~và lớp bắt chính GUC ấy được gắn sẵn TRƯỚC khi phiên bắt đầu: `CAU_GUC_VAN_HANH_GAN_SAN` phán xét ba GUC vận hành (`row_security`, `session_replication_role`, `search_path`) khi `pg_settings.reset_val` của phiên deploy khác `boot_val` với nguồn ngoài `database` — tức `ALTER ROLE ALL SET` (đo: `source = 'global'`, và `migrate()` từng ĐI QUA), `ALTER ROLE <vai> SET`, postgresql.conf / `ALTER SYSTEM`, `options=` trên chuỗi kết nối. Ba mục "đặt ở mức database" chỉ tự chữa nguồn `database`, nên nguồn ấy cố ý đứng ngoài mục mới; không tự sửa vì RESET ở mức vai/cụm là SUSET (khoản 92)~~ **[S1.66 / lượt soi ngang 59a-6, 59c NẶNG-2]** câu gạch tả bản ĐẦU của S1.51, bị lượt soi 43 bác (NẶNG-1: một hàng ưu tiên cao che hàng thấp; NHẸ-3: so `boot_val` là neo cổng vào mặc định biên dịch). Hình dạng cuối của `CAU_GUC_VAN_HANH_GAN_SAN` là ba nhánh — ⒜ CATALOG, ⒝ PHIÊN DEPLOY so với `GUC_VAN_HANH_DOI`, ⒞ dòng khai thiu — ở hàng 26. `options=` trên chuỗi kết nối DEPLOY hiện ở nhánh ⒝; `options=` phía ỨNG DỤNG không phiên deploy nào thấy, hàng rào duy nhất là `createPool` từ chối nó | ✓ |
 | 9 | `ALTER TABLE … DISABLE TRIGGER` | như 8 | tổng điều tra: trigger canh `tgenabled = 'D'` là vi phạm (S1.29); **[S1.36, ghi ở S1.42]** lớp sản xuất: `CAU_TRIGGER_CANH_CO_DIEU_KIEN` (vế `tgenabled <> 'A'`, mọi bảng có trigger canh) — đo: trigger canh DISABLE ⇒ `migrate()` NÉM | ✓ |
 | 10 | VIEW / MATVIEW / bảng ngoài / bảng phân mảnh làm đích ghi (`INSTEAD OF` trả NULL, FDW ghi ra cụm khác, lá phân mảnh không chốt) | 0 hàng hoặc ghi lệch chỗ | **[S1.32]** tổng điều tra `relkind`: mọi đích DML là bảng thường trừ khi khai (rỗng); [I2] hardening bắt view trên bảng tenant; lá phân mảnh đo ở test lá **[S1.37]** cụm đã deploy: chủ DB thường tạo được và `migrate()` đi qua (đo) — mục hardening là **khoản nợ 83** **[S1.39]** lớp sản xuất: `CAU_QUAN_HE_KHAC_SAI` — bảng ngoài, matview, view có trigger INSTEAD OF phải khai (`QUAN_HE_KHAC_KHAI`, rỗng); view trơn và bảng phân mảnh cố ý không phán (đo: view `security_invoker` đi qua, view có INSTEAD OF ⇒ NÉM) **[S1.66 / lượt soi ngang 59c INFO-18]** — trong phạm vi `CAU_QUAN_HE_KHAC_SAI`; từ S1.50 mục (C) đòi MỌI view của lược đồ dự án `security_invoker` (khoản 91 — cùng hàng, đoạn `[S1.50 / khoản 91]`); `NGOAI_LE_DOC_VONG` vẫn là một trục tên — khoản 112 **[S1.49 / khoản 93]** lớp sản xuất khi ĐÍCH GHI là bảng sổ: `CAU_BANG_SO_VAT_LY` và `CAU_CHI_GHI_THEM_VAT_LY` (LOGGED, bảng THẬT, UNIQUE `(org_id, seq)`); và `CAU_DOC_VONG` cho view/matview/`SECURITY DEFINER` — đích ghi hay đích đọc không phải bảng thường thì lớp [CR1] không soi. **[S1.50 / khoản 91]** `CAU_DOC_VONG` nay KHÔNG còn vế đích cho nhánh view: mọi view/matview của lược đồ dự án phải `security_invoker` (matview thì khai), đối xứng nhánh SECDEF — vì `pg_depend` chỉ nối view với quan hệ tham chiếu TRỰC TIẾP nên chuỗi view lồng và view đọc qua hàm lọt mọi vế đích (đo). ~~`CAU_HINH_DANG_CHINH_TAC` và `CAU_COT_NGOAI_CHUOI`~~ hai mục hình dạng cột chuyển sang **hàng 25** (lượt soi 41 NẶNG-2: chúng canh một cơ chế khác) | ✓ |
@@ -4131,7 +4133,7 @@ chạy trong kho (không phải suy đoán).
 | 20 | Trigger canh có `WHEN (…)` hay `UPDATE OF <cột>` — hàm canh KHÔNG CHẠY cho một phần câu, tên hàm và tên trigger giữ nguyên — **lượt soi 25a chỉ ra**; cùng lớp hàng 8–9 (hàm canh không chạy), và `003_audit_events.sql` đã biết nó từ S0 | UPDATE cột khác / mọi DELETE đi qua với 1 hàng, không lỗi; bảng vẫn "chỉ-ghi-thêm" theo vị từ suy ra (LOGGED/TRUNCATE/ACL đều xanh) | bảng CÓ TÊN: hardening soi `tgqual`/`tgattr` từ S0 (`CTE_TRIGGER_CHAN`); bảng SUY RA: ~~**chưa có — khoản nợ 79**~~ **[S1.36]** vị từ (cả hai bản) chỉ đếm trigger canh khi `tgqual IS NULL AND tgattr = ''` — bảng rơi khỏi tập; mục phán xét `CAU_TRIGGER_CANH_CO_DIEU_KIEN` ở hardening chặn deploy khi bất kỳ trigger nào của hàm canh có WHEN/UPDATE OF hay không ENABLE ALWAYS (`tgenabled` — lượt soi 27; hàng 8–9 cho bảng suy ra nay cũng có lớp sản xuất) — để không rơi trong im lặng; chốt TRUNCATE cũng phải `tgqual IS NULL` — **đo mới:** `WHEN (false)` trên trigger TRUNCATE hợp lệ và TRUNCATE đi lọt; tập rộng mang `co_when`/`co_cot` | ✓ (đo: `zz_dk` — vị từ cũ nhận, vị từ mới thả, `migrate()` NÉM nêu `zz_dk.u`/`zz_dk.d`; `zz_tr` — TRUNCATE lọt qua chốt có WHEN, `migrate()` NÉM) |
 | 21 | Trigger gọi hàm KHÔNG plpgsql (`internal`/C/PL khác — vd `suppress_redundant_updates_trigger()` có sẵn, hay `CREATE FUNCTION … LANGUAGE <khác>`) — **lượt soi 25a chỉ ra** | `UPDATE 0`, không lỗi; vô hình với mọi tổng điều tra (đều lọc `lanname = 'plpgsql'`), với vị từ và với nhân chứng | ~~**chưa có — khoản nợ 79**~~ **[S1.36]** tổng điều tra NGÔN NGỮ trigger ở `[INV-H19]`: mọi trigger của dự án gọi hàm plpgsql trừ `TRIGGER_NGOAI_PLPGSQL_DA_KHAI` (rỗng), đối chứng dương là chính hàm built-in ấy; vế plpgsql ở vị từ GIỮ vì lý do đo được của nó vẫn đúng. ~~**Giới hạn ghi ra:** lớp này CHỈ Ở TEST — trên cụm đã deploy chưa có mục hardening, theo cách đọc §3⑶ cho tới khi khoản 81 quyết;~~ **[S1.39, ghi ở S1.42]** mục hardening `CAU_TRIGGER_NGOAI_PLPGSQL_SAI`; ~~ranh giới (lượt soi 27 INFO-5): tạo hàm `internal`/C cần superuser và PL tin cậy khác chưa cài, nên đường này ngoài mô hình đe doạ của hardening (chủ bảng không superuser)~~ **[S1.37] bác:** chỉ TẠO hàm C cần superuser; GẮN hàm C có sẵn thì không (built-in; extension tin cậy `tcn`), và `plperl` là extension tin cậy — đo; hôm nay 85 trigger plpgsql, 0 trigger ngôn ngữ khác **[S1.37]** đo: chủ DB thường gắn được trigger gọi hàm built-in KHÔNG cần tạo hàm, và `plperl` là extension tin cậy — ranh giới *cần superuser* SAI cho hàng này ⇒ mục hardening `prolang` là **khoản nợ 83** **[S1.39]** lớp sản xuất: `CAU_TRIGGER_NGOAI_PLPGSQL_SAI` — mọi trigger không nội bộ trong lược đồ dự án gọi hàm plpgsql trừ khai (`TRIGGER_NGOAI_PLPGSQL_KHAI`, rỗng); đo: `suppress_redundant_updates_trigger` ⇒ `migrate()` NÉM — giới hạn *chỉ ở test* của S1.36 hết | ✓ (đo: UPDATE cùng giá trị ⇒ 0 hàng; `lanname = 'internal'`; tập rộng không thấy nó) |
 | 22 | `ALTER TABLE con NO INHERIT cha` — hàng đang nằm ở bảng con rời tầm của câu ghi qua bảng cha — **lượt soi 25a chỉ ra** (hàng 13 từng xếp nhầm vào *lỗi*) | UPDATE/DELETE qua cha 0 hàng, không lỗi; con vẫn là `relkind 'r'` hợp lệ với tổng điều tra; ~~không census nào đọc `pg_inherits`~~ **[S1.40]** 82⑴ đọc | ~~**chưa có — khoản nợ 82** (tổng điều tra `pg_inherits` ngoài phân mảnh, danh sách khai rỗng + đối chứng dương); kho có fixture con INHERITS ở schema `khac` nên là ca có thật~~ **[S1.40] mục hardening `CAU_KE_THUA_SAI`** — mọi cặp `pg_inherits` không phân mảnh có con trong lược đồ dự án (loại `pg_temp`: bảng tạm là của riêng phiên, đo) phải khai ở `KE_THUA_KHAI` (rỗng); canh TIỀN ĐỀ như 83⑧ vì sau cú tách catalog không còn dấu vết; chiều ngược khi cả hai bảng còn. Giới hạn: cặp đã khai bị tách rồi tái dùng tên — ~~khoản 85~~ **[S1.41]** con cũ tắt RLS bị `CAU_ORG_ID_NGOAI_PUBLIC_SAI` phán (đo). DETACH PARTITION là cùng cơ chế ở vị trí khác: lá public ⇒ [CR1]; lá ngoài public đã RLS ⇒ 83⑶; tạo-và-tách giữa hai deploy ⇒ ~~khoản 85~~ **[S1.41]** `CAU_ORG_ID_NGOAI_PUBLIC_SAI` ở deploy kế — mức bảo đảm "phát hiện ở deploy kế" (§5). Fixture `khac`/`con_tt` của kho nay NÉM ở mục này (kỳ vọng lật) | ✓ (đo: trước 1 hàng, sau `NO INHERIT` 0 hàng) |
-| 23 | GUC `app.*` gắn sẵn cho phiên ứng dụng — `ALTER DATABASE/ROLE/ROLE ALL … SET`, `ALTER SYSTEM`/postgresql.conf, `options=` trên chuỗi kết nối, `GRANT SET ON PARAMETER`, `proconfig` hàm — **lượt soi ngang 33a #1; hàng thêm ở S1.48 (40b #1) vì §2 tự khai là nguồn** | mọi câu ngoài `withTenant` chạy dưới tổ chức do người khác chọn; mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` thu hẹp ⇒ câu ghi của người mua 0 hàng không lỗi | **[S1.47]** mục phán xét `CAU_GUC_TUY_BIEN_GAN_SAN` năm nhánh (không tự RESET — chủ database thường 42501, RESET ALL im lặng placeholder, đo); `withTenant` từ chối trước `fn` khi bốn GUC đã có giá trị lúc mở giao dịch; **[S1.48]** `migrate()` từ chối trước lượt sửa (40a H1), `withTenant` phân biệt rò phiên bằng RESET (40a NẶNG-1) **[S1.66 / lượt soi ngang 59a-5]** khuôn ĐỌC tên GUC không cùng định nghĩa token với khuôn ghi của khoản 96 — đo, khoản 111 **[S1.9162]** khuôn đọc `CAU_TEN_GUC_DU_AN_DOC` dựng lại trên ba hằng dùng chung với khuôn ghi (`MAU_CACH_TOKEN`, `MAU_TEN_NGUYEN_VAN`, `MAU_LOP_TEN_GUC`): chú thích giữa token, `'…'`/`E'…'`/`U&'…'`/dollar-quote, `"current_setting"`/`pg_catalog.`, `$` và byte ≥ 0x80, gấp chỉ ASCII; cùng bề mặt (thêm `pg_rewrite`, WHEN của trigger); tác động đo: `ALTER SYSTEM SET app.zz_sys` với thân `current_setting/**/(…)` — bản cũ nhánh ⒞ IM, bản mới nêu tên và `migrate()` NÉM (`rls-coverage` khối khoản 111, sáu ca) — khoản 111 ĐÓNG | ✓ (đo: test khoản 87, H1; with-tenant S1.47/S1.48) |
+| 23 | GUC `app.*` gắn sẵn cho phiên ứng dụng — `ALTER DATABASE/ROLE/ROLE ALL … SET`, `ALTER SYSTEM`/postgresql.conf, `options=` trên chuỗi kết nối, `GRANT SET ON PARAMETER`, `proconfig` hàm — **lượt soi ngang 33a #1; hàng thêm ở S1.48 (40b #1) vì §2 tự khai là nguồn** | mọi câu ngoài `withTenant` chạy dưới tổ chức do người khác chọn; mọi phiên thành phiên khách ⇒ 29 policy RESTRICTIVE `_khach` thu hẹp ⇒ câu ghi của người mua 0 hàng không lỗi | **[S1.47]** mục phán xét `CAU_GUC_TUY_BIEN_GAN_SAN` năm nhánh (không tự RESET — chủ database thường 42501, RESET ALL im lặng placeholder, đo); `withTenant` từ chối trước `fn` khi bốn GUC đã có giá trị lúc mở giao dịch; **[S1.48]** `migrate()` từ chối trước lượt sửa (40a H1), `withTenant` phân biệt rò phiên bằng RESET (40a NẶNG-1) **[S1.66 / lượt soi ngang 59a-5]** khuôn ĐỌC tên GUC không cùng định nghĩa token với khuôn ghi của khoản 96 — đo, khoản 111 **[S1.226]** khuôn đọc `CAU_TEN_GUC_DU_AN_DOC` dựng lại trên ba hằng dùng chung với khuôn ghi (`MAU_CACH_TOKEN`, `MAU_TEN_NGUYEN_VAN`, `MAU_LOP_TEN_GUC`): chú thích giữa token, `'…'`/`E'…'`/`U&'…'`/dollar-quote, `"current_setting"`/`pg_catalog.`, `$` và byte ≥ 0x80, gấp chỉ ASCII; cùng bề mặt (thêm `pg_rewrite`, WHEN của trigger); tác động đo: `ALTER SYSTEM SET app.zz_sys` với thân `current_setting/**/(…)` — bản cũ nhánh ⒞ IM, bản mới nêu tên và `migrate()` NÉM (`rls-coverage` khối khoản 111, sáu ca) — khoản 111 ĐÓNG | ✓ (đo: test khoản 87, H1; with-tenant S1.47/S1.48) |
 | 24 | Bảng đa tổ chức KHÔNG có cột tên `org_id` — dữ liệu buộc vào tổ chức qua một khoá ngoại tới bảng tenant (`to_chuc uuid REFERENCES organizations(id)`, `(to_chuc, nguoi) REFERENCES users (org_id, id)`), ở mọi schema kể cả `public` — **lượt soi 32 INFO-6; hàng thêm ở S1.49 (khoản 93) cho lớp đã có từ S1.46** | không vị từ nào nhận: (A) không bật RLS, [CR1] không soi, 85 không thấy, 83⑵/⑶ không thấy ⇒ một GRANT mở hàng của MỌI tổ chức — rò, không phải 0 hàng | **[S1.46]** `CAU_KHOA_NGOAI_TENANT_SAI` — bảng (r/p) trong lược đồ dự án, không cột `org_id`, có khoá ngoại (của nó hay của tổ tiên INHERITS) tới một bảng tenant theo tính chất, ngoài tập tenant, không RLS ⇒ phải khai (`BANG_KHOA_NGOAI_TENANT_KHAI`, rỗng); **[S1.48]** khoá ngoại HỢP THÀNH cũng tính | ✓ (đo: lỗ rò thật ở `k` lẫn `public`, `migrate()` NÉM cho cả hai — `rls-coverage.int.test.ts` describe S1.46) |
 | 25 | Bảng sổ kiểm toán TRÔI HÌNH DẠNG CỘT — thêm một cột ngoài chuỗi hash, hay đổi tên/kiểu một cột chính tắc — **lượt soi 41 NẶNG-2 tách khỏi hàng 10** | không phải 0 hàng: `audit_events` RỚT khỏi tập `can_co` của lớp C ⇒ trigger nối chuỗi thôi được tự chữa, và một cột lạ là chỗ dữ liệu đi ra NGOÀI chuỗi hash — cả hai trong IM LẶNG, VĨNH VIỄN | **[S1.20]** `CAU_HINH_DANG_CHINH_TAC` (hình dạng cột của bảng sổ chính tắc) và `CAU_COT_NGOAI_CHUOI` (không cột nào ngoài chuỗi hash) — hai mục PHÁN XÉT, không tự chữa: đổi hình dạng cột không phải thao tác đơn điệu (ADR-028 §2⑵) | ✓ (đo: `db/hardening-suy-tu-tinh-chat.int.test.ts` H19 và `db/audit-append-only.int.test.ts`) |
 | 26 | Ba GUC VẬN HÀNH (`row_security`, `session_replication_role`, `search_path`) gắn sẵn cho phiên từ nguồn NGOÀI mức database — `ALTER ROLE ALL SET` (hàng 0,0), `ALTER ROLE <vai> SET` kể cả `IN DATABASE`, postgresql.conf / `ALTER SYSTEM`, `options=` trên chuỗi kết nối, và một câu `SET` còn sót trong phiên ; cộng hai đường cùng hạng — `proconfig` của hàm và `GRANT SET / ALTER SYSTEM ON PARAMETER` cho vai không superuser — **lượt soi 39 NHẸ-1 + lượt soi ngang 40a H5; khoản nợ 92, 95** | `row_security = off` KHÔNG phải 0 hàng mà là LỖI ở mọi câu chạm bảng RLS của vai thường (sự cố sẵn sàng, [fix round 4]); `session_replication_role = replica` bỏ qua trigger `ENABLE` thường ⇒ hàm canh không chạy, fail-open (cùng cơ chế hàng 8, lớp `ENABLE ALWAYS` vẫn giữ); `search_path` là che tên (khoản 78) ⇒ câu viết TRẦN rơi vào quan hệ của người khác. Ba mục "… đặt ở mức database" lọc `setrole = 0 AND setdatabase = <db hiện tại>` nên MÙ với cả bốn nguồn trên | **[S1.51]** mục phán xét `CAU_GUC_VAN_HANH_GAN_SAN` ba nhánh — ⒜ CATALOG (`pg_db_role_setting`, trừ đúng hàng ba mục kề sở hữu; không hỏi `source` nên miễn nhiễm ƯU TIÊN NGUỒN, và là nhánh duy nhất phủ `search_path`), ⒝ PHIÊN DEPLOY (`pg_settings`, vế `reset_val` cho nguồn không để lại hàng catalog + vế `setting` cho câu `SET` còn sót — đo: `SET` không đụng `reset_val`), ⒞ dòng khai thiu; so với `GUC_VAN_HANH_DOI` chứ không so `boot_val`. Không tự chữa (`ALTER ROLE ALL RESET` / `ALTER SYSTEM RESET` là SUSET). Cộng HAI phép đọc ở `migrate()` [S1.66 / lượt soi ngang 59c NHẸ-9: hai THỜI ĐIỂM — theo câu SQL là ba: GUC trước lượt sửa, và hàng mức database chụp trước lẫn sau lượt sửa; §S1.51 đếm BA]: trước lượt sửa (bỏ qua nguồn `database` để ba mục kề còn chạy được — nếu không, chúng thành mã chết theo ADR-028 §2⑷) và ngay sau lượt sửa (chặn vòng migration đánh số, đòi kết nối mới). Ranh giới đo được: sau khi `search_path` bị ghim thì `source` hoá `session` còn `reset_val` giữ giá trị độc ⇒ BƯỚC 3 không phân biệt được "mức database vừa chữa" với "ALTER SYSTEM", nên ca ấy chặn ở phép đọc TRƯỚC LÚC GHIM, và chỉ với bốn nguồn áp cho MỌI phiên (conf, ALTER SYSTEM, dòng lệnh, biến môi trường, ALTER ROLE ALL) — `rolconfig` của vai deploy cố ý đứng ngoài, `[CR1]`/`[Minor]` ghim rằng migrate() chạy được dưới search_path thù địch. **[S1.51 / lượt soi 44 CAO-1]** thêm phép chụp hàng mức database TRƯỚC và SAU lượt sửa: một hàng mức database mang GIÁ TRỊ ĐÚNG là biện pháp giảm nhẹ hợp lệ đang CHE một độc ở tầng thấp hơn, và lượt sửa gỡ nó vô điều kiện ⇒ gỡ được hàng nào thì deploy DỪNG và đòi kết nối mới. Ba tên được xét theo TÍNH CHẤT (`mau`), không theo chuỗi: `local` hợp lệ như `origin`, và `search_path` ~~chỉ đòi "không schema lạ đứng TRƯỚC `public`"~~ **[S1.52 / khoản 95]** — bản ấy nhận cả `public, pg_catalog`, tiền đề cướp đã đo (`lower('ABC')` ra `CUOP`) — nay: `pg_catalog` chỉ ở vị trí ĐẦU, trước `public` chỉ `pg_catalog` rồi `"$user"`; `pg_catalog`, `""`, `pg_catalog, pg_temp`, `"$user"`, `pg_catalog, "$user"` được nhận; `row_security` nhận mọi cách viết TRUE vì `proconfig` lưu nguyên chữ (đo). **[S1.52]** thêm nhánh ⒟ `pg_parameter_acl` (`ALTER SYSTEM` trên ba tên; `SET` chỉ trên tham số SUSET, suy từ `pg_settings.context`) và nhánh ⒠ `proconfig` của hàm lược đồ dự án. ~~Ranh giới: thân hàm `set_config(…, false)` ghi vào phiên người gọi và phiên giữ nguyên sau khi trả về (đo) — khoản 96~~ **[S1.54]** đường ấy có lớp — hàng 28 **[S1.66 / lượt soi ngang 59a-2, 59a-4]** chưa phủ: lượt sửa gỡ hàng che mức VAI mà không dừng, và mặc định vai đặt giữa hai lần deploy — đo, khoản 109 | `db/migrations.int.test.ts` `[khoản nợ 92]` (mười bốn vế) và `[khoản nợ 95]` |
@@ -4186,7 +4188,7 @@ chạy trong kho (không phải suy đoán).
   sách khai, bản test giữ cùng danh sách và một cổng đòi hai bản khớp: ~~ba~~ bốn có hàng (`POLICY_RESTRICTIVE_KHAI`
   tám biến thể của 027, `POLICY_KHAC_KHAI` một, `BANG_RLS_NGOAI_TENANT_KHAI`, `BANG_TENANT_KHAI` 29 tên [S1.43]), ~~năm~~ bảy rỗng có meta-test sentinel
   (`QUAN_HE_KHAC_KHAI`, `TRIGGER_NGOAI_PLPGSQL_KHAI`, `RULE_KHAI`, `KE_THUA_KHAI`, `BANG_ORG_ID_NGOAI_PUBLIC_KHAI`, `BANG_KHOA_NGOAI_TENANT_KHAI` [S1.46], `GUC_TUY_BIEN_KHAI` [S1.47]);
-  cộng ở test: ~~`HAM_KHONG_PHAI_CANH`~~ **[S1.9191 / khoản 221]** `HAM_KHONG_PHAI_CANH` (nay ở `db/danh-sach-ham-canh.ts`, hai tệp test đọc chung — tổng điều tra và `migration-shape` vế ⑷), `RULE_DA_KHAI`, `LOAI_DA_KHAI`. Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
+  cộng ở test: ~~`HAM_KHONG_PHAI_CANH`~~ **[S1.232 / khoản 221]** `HAM_KHONG_PHAI_CANH` (nay ở `db/danh-sach-ham-canh.ts`, hai tệp test đọc chung — tổng điều tra và `migration-shape` vế ⑷), `RULE_DA_KHAI`, `LOAI_DA_KHAI`. Một policy `<bảng>_khach` mới cho một bảng mới là **hai** thay đổi — migration
   và một dòng khai — cố ý, như ADR-035 §4 đã nói cho nhãn test.
 - **Biểu thức policy khai NGUYÊN VĂN `pg_get_expr`.** Đổi phiên bản PostgreSQL có thể đổi cách
   deparse (khoảng trắng, ngoặc) ⇒ đỏ ồn ào chứ không xanh im lặng; sửa bằng cách chép lại biểu thức
@@ -4487,14 +4489,14 @@ một chứng chỉ agent không tự gia hạn và không tự nhân bản. Nó
 `sessions_kiem_totp_gan_day` (039, `ENABLE ALWAYS`, thân bị hardening ghim) bắt mọi hàng phiên do `app_api` chèn có `mfa_verified_at`
 phải đi sau một lần TOTP đúng trong ±90 giây, mà `resolveSessionByToken` lại đòi đúng cột ấy.
 
-**[S1.9101 / khoản 174] Hệ quả vận hành của đường ấy, nói ra.** Chứng chỉ agent có TTL trần một giờ (lớp 1 ở trên) và cách DUY NHẤT có
+**[S1.209 / khoản 174] Hệ quả vận hành của đường ấy, nói ra.** Chứng chỉ agent có TTL trần một giờ (lớp 1 ở trên) và cách DUY NHẤT có
 chứng chỉ mới là gọi lại `POST /auth/agent-session` với một mã TOTP tươi; còn route ấy đứng sau trần trạng thái `mfaTranDuongPhu`
 (= `MFA_TRAN_SAI_DUONG_PHU` = 2 — S1.83, khoản 144) đọc `failed_attempts`, bộ đếm mà ĐƯỜNG ĐĂNG NHẬP CHÍNH (`/auth/totp`) cũng tăng.
 Nên một người đã gõ sai TOTP 2 lần trên đường chính thì KHÔNG xoay được chứng chỉ agent, kể cả với mã đúng — route trả 429 trước khi
 thử mã: không tiêu mã, không tăng bộ đếm, không khoá — cho tới khi đăng nhập đúng một lần trên đường chính (một lần đúng đặt bộ đếm
 về 0); một tiến trình MCP đang chạy sẽ dừng ở giờ kế tiếp. Đây là fail-closed CÓ CHỦ Ý và đúng thứ tự ưu tiên — đường phát agent là
 đường PHỤ, không được tiêu ngân sách của đường chính — và đường ra là một lần đăng nhập đúng, không cần đặt lại MFA. Ghim ở
-`apps/api/src/auth.int.test.ts` vế ⑽ (§S1.9101).
+`apps/api/src/auth.int.test.ts` vế ⑽ (§S1.209).
 
 ### 3. Bị bác, và một chỗ bản đầu sai
 
@@ -4618,8 +4620,8 @@ Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), b
 | ⑵ | ~~**Mười chỗ trong BẢY migration đã áp**~~ ~~**[S1.83] MƯỜI HAI chỗ trong TÁM migration**~~ **[S1.87] MƯỜI BA chỗ trong TÁM migration** khai *“mục (C) CẤM mọi SECURITY DEFINER”* nay THIU và KHÔNG sửa được (checksum, khoản 19) | khoản 162 |
 | ⑶ | **Ngoại lệ ĐẦU TIÊN** của quy tắc `USING (true)` — kèm một meta-test đòi policy phải hẹp chủ thể bằng `TO <vai>` | `db/migration-shape.test.ts` |
 | ⑷ | Dòng thứ hai của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (044 là dòng đầu) | hai tệp trên |
-| ⑸ | Một vai CSDL thứ ba, ~~và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế~~ **[S1.9111]** nằm ngoài `ROLE_CANH` (hai mục dùng danh sách ấy chưa đo lại) nhưng bảy thuộc tính của nó (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN NOINHERIT`) được một hàng riêng của hardening tự chữa — đo ở `db/vai-neo.int.test.ts` | khoản 164 (ĐÓNG S1.9111), `hardening.always.sql` |
-| ⑹ | ~~Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp~~ **[S1.9111]** Miễn trừ khoá theo CHỮ KÝ `outbox_danh_sach_to_chuc()` dựng từ catalog (`MAU_CHU_KY_HAM`), cùng `loai` và lược đồ, kèm chiều khai thiu; một overload `(text)` là chữ ký khác và mục (C) nêu nó — đo ở `db/migrations.int.test.ts` | khoản 163 (ĐÓNG S1.9111), `hardening.always.sql` |
+| ⑸ | Một vai CSDL thứ ba, ~~và nó nằm NGOÀI `ROLE_CANH` nên thuộc tính của nó không được hardening cưỡng chế~~ **[S1.212]** nằm ngoài `ROLE_CANH` (hai mục dùng danh sách ấy chưa đo lại) nhưng bảy thuộc tính của nó (`NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN NOINHERIT`) được một hàng riêng của hardening tự chữa — đo ở `db/vai-neo.int.test.ts` | khoản 164 (ĐÓNG S1.212), `hardening.always.sql` |
+| ⑹ | ~~Miễn trừ khoá theo TÊN TRẦN, nên một overload cùng tên đi qua cả hai lớp~~ **[S1.212]** Miễn trừ khoá theo CHỮ KÝ `outbox_danh_sach_to_chuc()` dựng từ catalog (`MAU_CHU_KY_HAM`), cùng `loai` và lược đồ, kèm chiều khai thiu; một overload `(text)` là chữ ký khác và mục (C) nêu nó — đo ở `db/migrations.int.test.ts` | khoản 163 (ĐÓNG S1.212), `hardening.always.sql` |
 
 Và một quyền MƯỢN trong đúng giao dịch của `052`: `ALTER … OWNER TO` đòi người chạy đổi được vai sang vai đích **và** chủ mới
 phải có `CREATE` trên schema. Cả hai được cấp rồi trả lại trong cùng giao dịch — đo từng cái một, mỗi cái một thông điệp lỗi
@@ -4680,7 +4682,7 @@ phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai 
   tới TRONG trần vẫn đi ra qua `Promise.race` cho người gọi và MỘT sự cố không bao giờ thành HAI dòng. Có đối chứng đo vế này.
 - Tên sự kiện KHÔNG phải `'error'`: `EventEmitter` NÉM khi `'error'` không ai nghe, nên một pool chưa gắn listener sẽ giết
   tiến trình thay vì mất tín hiệu. Tên riêng làm hỏng-êm, và cái giá ấy được trả bằng cổng.
-- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` ~~nghe đủ~~ **[S1.9171 / khoản 180]** và `tools/` nghe đủ hai tín hiệu mất-không-ai-biết:
+- `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` ~~nghe đủ~~ **[S1.227 / khoản 180]** và `tools/` nghe đủ hai tín hiệu mất-không-ai-biết:
   `release` mang `SESSION_STATE_LEFT` (khoản 118) và lỗi-tới-muộn (khoản 129). Cổng đọc CÂY CÚ PHÁP, không phải biểu thức
   chính quy.
 
@@ -5360,9 +5362,9 @@ trận quyền có cổng riêng `[INV-D3]`, nên thêm mã là việc có phép
 
 ### Cái giá — nói thẳng
 
-- ~~**Trình duyệt VẪN cắt cụt.**~~ **[S1.9181] Trình duyệt nay làm tròn cùng luật.** Quyết định ⑴ ghim luật cho `effective_cost`; nó KHÔNG sửa `so-tien.ts`. ~~Nên cho
+- ~~**Trình duyệt VẪN cắt cụt.**~~ **[S1.230] Trình duyệt nay làm tròn cùng luật.** Quyết định ⑴ ghim luật cho `effective_cost`; nó KHÔNG sửa `so-tien.ts`. ~~Nên cho
   tới khi ai đó hợp nhất, hai tầng của cùng một sản phẩm hiển thị hai con số khác nhau ở đúng nửa xu.~~ Ghi thành
-  **khoản 218** chứ không hứa suông — **[S1.9181]** và khoản 218 đóng ở vòng ấy: `thanhTien` của `apps/web/src/so-tien.ts` thu về xu bằng nửa-ra-xa-0, `so-tien.test.ts` đối chiếu với `lamTron` trên cả 100 phần dư cộng bảng ca nửa xu, bản thứ ba ở `tools/pilot-gia-lap/src/tien.ts` đo cùng cách. Ba bản vẫn là ba bản (`so-tien.ts` đi thẳng ra trình duyệt, không import được); lớp giữ là phép đo cạnh nhau, không phải một hằng số dùng chung.
+  **khoản 218** chứ không hứa suông — **[S1.230]** và khoản 218 đóng ở vòng ấy: `thanhTien` của `apps/web/src/so-tien.ts` thu về xu bằng nửa-ra-xa-0, `so-tien.test.ts` đối chiếu với `lamTron` trên cả 100 phần dư cộng bảng ca nửa xu, bản thứ ba ở `tools/pilot-gia-lap/src/tien.ts` đo cùng cách. Ba bản vẫn là ba bản (`so-tien.ts` đi thẳng ra trình duyệt, không import được); lớp giữ là phép đo cạnh nhau, không phải một hằng số dùng chung.
 - **Một trigger đắt hơn một chỉ mục, và nó cần đột biến riêng.** Một chỉ mục UNIQUE sai thì CSDL vẫn chặn; một
   trigger sai thì **hai award cùng sống**, và không gì báo. S2.6 phải mang đúng con đột biến ấy.
 - **Từ chối cả lượt đánh giá khi lệch tiền tệ là một cánh cửa đóng.** Một gói thầu đa tiền tệ thật sẽ không chấm
@@ -5470,7 +5472,7 @@ award: spec §2.2⑶ lấy từ chính sách đã có, và việc ấy thuộc S
 cách viết lại — câu sai ở đó được GẠCH và trỏ sang đây, vì một ADR đã merge là một bản ghi lịch sử, không phải
 một trang wiki.
 
-**[S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Ghi chú: cổng `evaluation.perform` của đường chấm là lớp NÔNG, và ADR này là
+**[S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Ghi chú: cổng `evaluation.perform` của đường chấm là lớp NÔNG, và ADR này là
 lớp thật của nó.** Khoản 220 đo trên `005` rằng `evaluation.perform` do năm vai giữ (REQUESTER · BUYER · TECHNICAL ·
 PROCUREMENT_MANAGER · FINANCE — sáu vai lúc đo, bảy từ `083`; `DIRECTOR` và `DATA_STEWARD` không), nên `requirePermission(EVALUATION_PERFORM)`
 ở `taoLuotDanhGia` và ở route `POST /rfqs/:rfqId/evaluate` chặn khách và tác tử, không chặn «ai trong tổ chức». Hai lối đóng là thu
@@ -5508,7 +5510,7 @@ Lý do là **J2**, không phải số học:
 
 ⑴ **J2 nói kiểm toán viên cầm dữ liệu, chạy hàm, ra đúng con số.** Với cách này, phép kiểm là một phép CỘNG —
 công cụ yếu nhất có thể, và ai cũng có. Với cách kia, họ còn phải tái lập ĐÚNG luật làm tròn; mà luật ấy chính
-là thứ hai tầng của sản phẩm đang bất đồng (**khoản 218**, ~~vẫn mở~~ **[S1.9181] đóng — ba bản một luật, đo ở `so-tien.test.ts` và `tien.test.ts`**). Một bất biến mà muốn kiểm phải trước hết
+là thứ hai tầng của sản phẩm đang bất đồng (**khoản 218**, ~~vẫn mở~~ **[S1.230] đóng — ba bản một luật, đo ở `so-tien.test.ts` và `tien.test.ts`**). Một bất biến mà muốn kiểm phải trước hết
 đồng ý về một luật đang tranh chấp thì không phải một bất biến, nó là một lời mời tranh luận.
 
 ⑵ **S2.4 hiện bảng thành phần lên màn.** Nếu các dòng hiển thị không cộng ra con số cuối, người mua đọc một
@@ -5670,7 +5672,7 @@ trắng bốn trường (`thanLuotCham` ở `apps/api/src/routes/buyer.ts` — m
 tệ), nên cổng đọc lại đúng như bảng khai. Hệ quả cho người đọc bảng: cột *cổng ĐỌC* khai cổng của MỌI đường
 đưa giá ra khỏi tiến trình — kể cả thân phản hồi của một route GHI — chứ không chỉ của phép đọc bảng. Đo: T1
 `apps/api/src/than-luot-cham.test.ts`; T3 bước 12b và 12g của `kich-ban-41-http.int.test.ts`, người bấm chấm
-là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, ~~chưa quyết~~ **[S1.9132]** đã quyết ⒝: cổng là lớp nông, ghi ở ADR-051.
+là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, ~~chưa quyết~~ **[S1.219]** đã quyết ⒝: cổng là lớp nông, ghi ở ADR-051.
 
 ---
 
@@ -5748,7 +5750,7 @@ giữ nó.**
 
 Đây là quyết định của chủ dự án ngày 2026-09-22, và nó đứng trên một phép đo: mở vòng BAFO là hành
 động **duy nhất** của sản phẩm mà người bấm ĐÃ BIẾT giá của mọi người. Nếu nó đi qua
-`evaluation.perform` thì **năm trên ~~sáu~~ bảy** vai mở được (**[S1.9132]** `DATA_STEWARD` của `083` không giữ) — khoản **220** đã đo con số ấy — và `BUYER`
+`evaluation.perform` thì **năm trên ~~sáu~~ bảy** vai mở được (**[S1.219]** `DATA_STEWARD` của `083` không giữ) — khoản **220** đã đo con số ấy — và `BUYER`
 trong số đó còn giữ cả `rfq.create`, tức một người tự tạo gói, tự chấm, rồi tự mời lại top-N.
 
 Dùng lại `rfq.invite` cũng không đúng dù nó hẹp hơn (`BUYER` + `PROCUREMENT_MANAGER`): **mời SAU
@@ -5897,8 +5899,8 @@ không bằng cách vượt. Nên `huyTraoThau` đòi `po.approve`.
 
 ~~Cái giá, nói thẳng: **người đề xuất không tự rút lại được đề xuất của mình.**~~ Đó là một quyền hẹp hơn
 và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hay một cổng phụ thuộc trạng thái, và cả
-hai là thiết kế mới. ~~Ghi thành khoản **232**.~~ **[S1.9182 / khoản 232 ĐÓNG — ADR-9282]** Chủ dự án chốt
-ngày 2026-09-30 hình ⒜: `9583` thêm trạng thái thứ tư `WITHDRAWN` — chỉ đi từ một hàng `PROPOSED` có 0 chữ
+hai là thiết kế mới. ~~Ghi thành khoản **232**.~~ **[S1.231 / khoản 232 ĐÓNG — ADR-133]** Chủ dự án chốt
+ngày 2026-09-30 hình ⒜: `094` thêm trạng thái thứ tư `WITHDRAWN` — chỉ đi từ một hàng `PROPOSED` có 0 chữ
 ký, chỉ người đề xuất ghi được (so `acted_by`), và không phải một award còn sống: RFQ về `EVALUATING` qua
 đúng cạnh của huỷ, J7 mở lại. Route `POST /rfqs/:rfqId/award/withdraw` dưới `award.recommend`. Cổng huỷ
 giữ nguyên `po.approve`.
@@ -5924,7 +5926,7 @@ nguồn chỉ có từ S1.103 — một lần điều phối lại trước đó
 e.created_at DESC` của `deXuatTraoThau` là lớp DUY NHẤT.~~ Bất đối xứng ấy có lý do đo được —
 `rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một thân yêu cầu khai được nó,
 còn `evaluationId` của award không phải tham số của hàm nào — và nó vào sổ thành khoản **231**.
-**[S1.9182 / khoản 231 ĐÓNG]** Từ `9582`, `award_kiem_de_xuat` đòi cả *không lượt chấm nào của RFQ mới
+**[S1.231 / khoản 231 ĐÓNG]** Từ `093`, `award_kiem_de_xuat` đòi cả *không lượt chấm nào của RFQ mới
 hơn* (khuôn `060` (A), nhánh có tên `j5_luot_cham_khong_moi_nhat`): hai lớp nói cùng một câu như vòng BAFO.
 
 Nó **không** đổi gì ở `cancelRfq`, `countReceivedBids`, hay đường niêm phong.
@@ -6583,7 +6585,7 @@ phải được gỡ trước dữ liệu khách hàng thật, tức cần bộ 
 
 1. **Kích hoạt:** chỉ `workflow_dispatch` trên `master`; không deploy tự động khi merge. Environment
    GitHub `prod` và `prod-worker` bật *Required reviewers* và chỉ nhận nhánh `master` — trust policy của
-`tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy **[S1.9152 / ADR-9252]** — theo dạng `sub` TUỲ BIẾN của kho (ID bất biến + `job_workflow_ref`; `prod-khoi-tao` ghim cả tệp `khoi-tao.yml`). **[S1.183 / ADR-111]** `tp-deploy` tin thêm
+`tp-deploy`/`tp-deploy-worker` (stack 30) ghim `sub` theo đúng environment ấy **[S1.223 / ADR-130]** — theo dạng `sub` TUỲ BIẾN của kho (ID bất biến + `job_workflow_ref`; `prod-khoi-tao` ghim cả tệp `khoi-tao.yml`). **[S1.183 / ADR-111]** `tp-deploy` tin thêm
    environment `prod-khoi-tao` (workflow `khoi-tao.yml`), bật thêm *Prevent self-review*.
 2. **Ba job, hai ranh giới:** `build` chạy `docker build` (tức `pnpm install`, script vòng đời của bên thứ
    ba) **không** có `id-token` hay quyền AWS; image đi sang job deploy dưới dạng artifact giữ một ngày. Job
@@ -8677,7 +8679,7 @@ sau mỗi lần nộp trên máy dùng chung.
    **[S1.188 / ADR-113]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
    lần gửi lại đi được; lời mời đã `SENT` không đổi.
 5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
-   nộp theo lời mời ấy vẫn nằm trong gói thầu~~ **[S1.9130 / ADR-9230]** thu hồi nay LOẠI báo giá ấy khỏi cuộc thi và bị chặn sau lần mở thầu — câu báo của trang sửa ở khoản 9450, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
+   nộp theo lời mời ấy vẫn nằm trong gói thầu~~ **[S1.217 / ADR-128]** thu hồi nay LOẠI báo giá ấy khỏi cuộc thi và bị chặn sau lần mở thầu — câu báo của trang sửa ở khoản 276, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
    thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
 6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
    `UPDATE (revoked_at, consumed_at)` trên token (`010`), và UPDATE theo cột trên `rfq_invitations` (`010`, `013`) — đủ cho
@@ -8708,8 +8710,8 @@ sau mỗi lần nộp trên máy dùng chung.
 - **Khoá OTP theo lời mời** (`012` §H3) vẫn chặn link mới tới khi hết khoá hay bên mua gỡ khoá. **[lượt soi]** Và trần xin OTP
   theo (lời mời, đích) (khoản nợ 35) không gắn với token: ba lần xin OTP bằng link cũ trong cửa sổ 900 s thì link mới cũng nhận
   429 tới hết cửa sổ ấy (đo: `[200, 200, 200, 429]` rồi link mới 429).
-- ~~**Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu**~~ **[S1.9130 / ADR-9230]** thu hồi rồi mời lại vẫn là luồng thứ hai, nhưng báo giá cũ KHÔNG còn dự thầu — khoản 250 đóng; vòng này đóng đường KHIẾN người mua
-  phải làm thế, ~~không đổi ngữ nghĩa của thu hồi~~ ngữ nghĩa của thu hồi đổi ở ADR-9230.
+- ~~**Thu hồi rồi mời lại vẫn là luồng báo giá thứ hai, và báo giá cũ vẫn dự thầu**~~ **[S1.217 / ADR-128]** thu hồi rồi mời lại vẫn là luồng thứ hai, nhưng báo giá cũ KHÔNG còn dự thầu — khoản 250 đóng; vòng này đóng đường KHIẾN người mua
+  phải làm thế, ~~không đổi ngữ nghĩa của thu hồi~~ ngữ nghĩa của thu hồi đổi ở ADR-128.
 - **`BAFO_OPEN`**: link gửi lại cho nhà cung cấp ngoài top-N mở được phiên nhưng không nộp được (trigger của `059`).
 - **Lệch phiên bản**: `/tao-thau` mới gặp API cũ ⇒ 404, nút báo lỗi.
 
@@ -8885,13 +8887,13 @@ chỉ `master`), `tp-deploy` tin thêm environment ấy — thay cho `prod` ở 
   (một lần duyệt của người khác) nên admin bỏ qua thì job dừng.
 - **[lượt soi] Với quyền quản trị AWS của prod, "hai người" là THỦ TỤC, không phải ranh giới.** Người vận hành tạo bản khai bằng
   profile `tp-prod` (AdministratorAccess) — cùng danh tính ấy chạy thẳng `aws ecs run-task --task-definition tp-khoi-tao
---overrides …`, không qua GitHub, và ~~không cảnh báo nào kêu (stack 60 chỉ canh họ task của worker)~~ **[S1.9152 / ADR-9252]** stack 60 ⑼ làm mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai ra thư ở audit (nhân chứng, không phải ranh giới). ~~Cảnh báo cho mọi lần chạy họ `tp-khoi-tao` và cho mọi thay đổi dưới `tp/khoi-tao/ban-khai/`, cùng~~ một permission set hẹp cho người tạo bản khai ~~, là khoản~~ ~~**252** (rổ B)~~ hoãn tới trước khách hàng thứ hai — khoản **9452**.
+--overrides …`, không qua GitHub, và ~~không cảnh báo nào kêu (stack 60 chỉ canh họ task của worker)~~ **[S1.223 / ADR-130]** stack 60 ⑼ làm mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai ra thư ở audit (nhân chứng, không phải ranh giới). ~~Cảnh báo cho mọi lần chạy họ `tp-khoi-tao` và cho mọi thay đổi dưới `tp/khoi-tao/ban-khai/`, cùng~~ một permission set hẹp cho người tạo bản khai ~~, là khoản~~ ~~**252** (rổ B)~~ hoãn tới trước khách hàng thứ hai — khoản **278**.
 - **Role không đổi quyền theo environment.** `tp-deploy` dưới `prod` — nơi một người tự duyệt được — cũng chạy được task
   `tp-khoi-tao` với lệnh bất kỳ và xoá được bí mật bản khai, NẾU mã workflow trên `master` làm việc ấy. `deploy.yml` không làm (test
   hình dạng ghim: **[lượt soi]** không workflow nào ngoài `khoi-tao.yml` nhắc `khoi-tao`, `ban-khai` hay `secretsmanager`), nên
   ranh giới là mã trên `master` cộng bảo vệ nhánh. Tách hẳn cần một role riêng chỉ `prod-khoi-tao` đảm nhận được — chủ dự án chọn
   dùng chung `tp-deploy`.
-- **[lượt soi] Trust policy ~~chỉ~~ ghim TÊN environment**, mà GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow nhắc tên chưa có: `docs/APPLY-LAN-DAU.md` 2.0 tạo ba environment TRƯỚC khi apply stack 30. ~~Ghim thêm `job_workflow_ref` (tuỳ biến claim `sub` của OIDC) thuộc khoản **252**.~~ **[S1.9152 / ADR-9252]** `prod-khoi-tao` nay ghim cả TỆP `khoi-tao.yml@refs/heads/master` qua claim `sub` tuỳ biến (`include_claim_keys = [repo, context, job_workflow_ref]`; đoạn `repo:` mang ID bất biến vì kho tạo sau 2026-07-15 — chuỗi cũ chưa từng đúng); `prod`/`prod-worker` không ghim tệp. Bước 2.0b của APPLY-LAN-DAU và README mục "Tuỳ biến claim `sub`".
+- **[lượt soi] Trust policy ~~chỉ~~ ghim TÊN environment**, mà GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow nhắc tên chưa có: `docs/APPLY-LAN-DAU.md` 2.0 tạo ba environment TRƯỚC khi apply stack 30. ~~Ghim thêm `job_workflow_ref` (tuỳ biến claim `sub` của OIDC) thuộc khoản **252**.~~ **[S1.223 / ADR-130]** `prod-khoi-tao` nay ghim cả TỆP `khoi-tao.yml@refs/heads/master` qua claim `sub` tuỳ biến (`include_claim_keys = [repo, context, job_workflow_ref]`; đoạn `repo:` mang ID bất biến vì kho tạo sau 2026-07-15 — chuỗi cũ chưa từng đúng); `prod`/`prod-worker` không ghim tệp. Bước 2.0b của APPLY-LAN-DAU và README mục "Tuỳ biến claim `sub`".
 - **Người duyệt thấy SỐ, không thấy NGƯỜI**: bảng nói ~~không~~ **[lượt soi]** bao nhiêu người mang `DIRECTOR`, không nói AI.
   Người có quyền đọc Secrets Manager của prod mở được đúng phiên bản ấy để đối chiếu, và người có tệp bản khai đối chiếu được băm;
   workflow không làm hộ.
@@ -9289,7 +9291,7 @@ sách mời (`076`), không mang ngân sách. Đo trên `master` `8f90bf2`, tổ
 - Chữ ký cũ ở lại trong bảng làm dấu vết — cùng khuôn `011` và `076`.
 - **Hai khoảng trống cùng lớp, lượt soi đo, CHƯA đóng ở ADR này** — chủ dự án chọn vá ở một vòng riêng, trước S3.2c: lời duyệt chỉ
   mang mã gói, nên PM trả về, sửa, nộp lại giữa lần người duyệt xem và lần bấm ký thì chữ ký ghi lên thứ người ấy chưa xem (khoản 256
-  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257).
+  — chung cho cả ba băm); và lần trả về không rút chữ ký của chính người trả (khoản 257). **[S1.198]** Cả hai đóng ở ADR-117.
 - `approved_budget_hash` là SHA-256 không muối trên một chuỗi đoán được (con số, tiền tệ, phiên bản, bậc, cờ): biết phiên bản chính
   sách thì dò lại được ước lượng. Hôm nay không route nào đọc `rfq_approvals`, và RLS chặn phiên khách. Ngày băm ấy đi ra ngoài (bộ
   bằng chứng S3.9, thân sổ) thì nó ngang ngân sách.
@@ -9303,24 +9305,366 @@ phiên bản mới, cột ngoài `GRANT` và vế NULL của MVP1, hàng cũ kh�
 thứ hai chỉ xét ngân sách, băm bỏ ước lượng, bỏ phiên bản chính sách, bỏ cờ duyệt kép, trigger bỏ vế ngân sách (fail-closed), UNIQUE bỏ
 cột. Hai ca không nhãn ghim hai khoảng trống còn mở (khoản 256, 257).
 
-## ADR-9213 — Hợp đồng số của bảng so sánh: `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị — giữ hình dạng JSON, ghi hợp đồng thay vì đổi `payload`
+## ADR-117 — Tổ chức đã bật S3: lời duyệt gói mang LẦN NỘP người duyệt đã xem, và lần trả về rút chữ ký của CHÍNH người trả — bộ đếm lần nộp, sổ `rfq_tra_ve`, cạnh mở gói đếm chữ ký còn hiệu lực
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 · **[S1.9113]** · **Khoản nợ liên quan:** 108 (đóng), 107 (đóng — phía ghi), 114 và 9431 (chi phí đọc `payload`) · **Liên quan:** ADR-016 tiểu mục [S1.9113 / khoản 133] (cùng vòng), `020`/`022` mục 8 (`bid_so_tien`), `docs/PRODUCT.md` §11 (*"giá đúng tới từng chữ số"*) · **Biên bản:** `evidence/security-reviews.md` §S1.9113
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 vá cả hai khoản ở một vòng riêng trước S3.2c,
+hình dạng của mỗi khoản (hàng sổ 256, 257), và mốc lần nộp chỉ BẮT BUỘC ở tổ chức đã bật: route MVP1 giữ hợp đồng không thân, gửi
+thì phải đúng. Bộ đếm thay cho mốc thời gian, cột về NULL ở MVP1 và thứ tự trigger là điểm tôi tự chốt (⑴ ⑵ dưới); chủ dự án bác
+được · **[S1.198]** · **Liên quan:** ADR-115 (băm ngân sách), ADR-084 ⑵ (cạnh về DRAFT, *"trả về thay vì không ký"*), ADR-108 ⑴
+(không bớt nhánh ghi nào của D2), ADR-080 (công tắc một chiều), `011` C-1, `071`, `076`, `077`, `086` · **Biên bản:**
+`evidence/security-reviews.md` §S1.198 · **Khoản:** 256, 257 (ghi ở S1.202; đóng ở đây)
 
 ### Bối cảnh
-Khoản 107 (S1.64) làm phía GHI đúng: `rfq_unsealed_bids.payload` giữ đúng giá trị số đã niêm phong, và `ComparisonRow.totalAmount` cùng `aggregates.*` tính bằng SQL (`bid_so_tien`) nên đúng tới từng chữ số. Khoản 108 (S1.65) đo phía ĐỌC: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON trong `payload` quá 15 chữ số có nghĩa đi qua `double` — `'{"a":99999999999999.99}'::jsonb` ra `99999999999999.98` — và một client JavaScript `JSON.parse` thân HTTP làm tròn thêm lần nữa. S1.95 đo rằng ngưỡng cắn (từ 16 chữ số có nghĩa) nằm ngoài miền giá thật và hạ khoản xuống rổ B, nhưng giữ nguyên câu: *hợp đồng API vẫn phải chốt trước khách hàng thứ hai*. Đo thêm ở S1.9113: `bid_so_tien` (022 mục 8) trả `NULL` từ 10^16 và khi hơn hai chữ số thập phân — tức `totalAmount` chuẩn có MIỀN, và ngoài miền là `null` + `unparsed`, không phải một con số đã làm tròn.
+
+Lượt soi của S1.202 (ADR-115) đo hai khoảng trống dưới cạnh `PENDING_APPROVAL→DRAFT` của `077`, ở tổ chức đã bật:
+
+- **Khoản 256.** Lời duyệt chỉ mang mã gói, nên chữ ký mang ba băm (nội dung, danh sách, ngân sách) của CSDL LÚC CHÈN, không của
+  thứ người duyệt đã xem. Người duyệt xem gói ở 1 triệu; PM trả về, đặt 99 triệu, nộp lại; người duyệt bấm ký ⇒ chữ ký nằm trên 99
+  triệu, và gói MỞ.
+- **Khoản 257.** Cạnh về DRAFT không xoá chữ ký (`077` (1)), và người, lý do của lần trả về chỉ nằm ở sổ kiểm toán. PM2 ký, rồi chính
+  PM2 trả gói về; PM nộp lại y nguyên ⇒ gói MỞ bằng chữ ký PM2 vừa muốn rút.
+
+Hai ca giới hạn của `rang-ngan-sach.int.test.ts` ghim hai hành vi ấy tới vòng này.
+
+### Quyết định
+
+1. **Mốc là một BỘ ĐẾM: `rfq_packages.lan_nop`.** Trigger riêng ở cạnh DRAFT→PENDING_APPROVAL cộng một; cột ngoài mọi `GRANT`, bên gọi
+   không chọn được lần nộp của mình. Hàng cũ giữ 0. **Tự chốt, không dùng `submitted_at` (`072`):** mốc đi một vòng qua trình duyệt
+   (`GET` rồi lời duyệt), và `timestamptz` qua JSON sang JavaScript mất phần micro giây, nên phép so bằng gãy; vế ⑸ cần THỨ TỰ giữa
+   các lần nộp, mà đồng hồ tường có thể lùi.
+2. **Lời duyệt mang `lan_nop_da_xem`.** `GET /rfqs/:rfqId` trả `rfq.lanNop`; `POST /rfqs/:rfqId/approve` nhận thân `{lanNop}` tuỳ
+   chọn; màn `/tao-thau` gửi lần nộp của CHÍNH lần đọc gói; `approveRfq` không tự điền. Trigger `rfq_approvals_so_lan_nop` khoá hàng
+   gói `FOR NO KEY UPDATE`, đọc lại trạng thái — gói đã rời `PENDING_APPROVAL` thì từ chối có tên, ở MỌI tổ chức —, rồi so:
+   - tổ chức đã bật: bắt buộc; vắng hay lệch lần nộp hiện tại ⇒ 23514 *"Goi thau dang o lan nop N; loi duyet khong mang dung lan nop
+     nay — doc lai goi roi duyet (K4b)"* — 422 qua route, không hàng sổ: nó nói gói đã đổi sau lúc đọc, cùng lớp lời từ chối trạng
+     thái;
+   - tổ chức chưa bật: tuỳ chọn, gửi thì phải đúng; rồi cột ĐẶT VỀ NULL. **Tự chốt:** phép đếm D2 của `071` đếm HÀNG, và UNIQUE
+     `NULLS NOT DISTINCT` giữ mỗi người một hàng chỉ khi cột này cùng NULL — cùng lý do vế NULL của `076` (2).
+
+   **Tự chốt — thứ tự:** tên trigger xếp SAU `rfq_approvals_kiem_nguoi_duyet`, nên phép so chạy cuối. Lời tự duyệt hay phiên hỏng
+   vẫn bị chốt D2 từ chối và vào sổ `CONTROL_DENIED` dù mốc thiếu hay sai — ADR-108 ⑴. Cái giá: hai băm (trigger đầu), trạng thái
+   và băm nội dung (D2) đều đọc TRƯỚC khoá, mỗi câu một ảnh chụp. **Vế trạng thái dưới khoá** là thứ trả giá ấy: gói còn
+   `PENDING_APPROVAL` ở đúng lần nộp người duyệt đã đọc thì nó chưa rời lần nộp ấy — rời chỉ có một đường, và lần nộp sau mang số
+   mới —, mà ở tổ chức đã bật mọi lần sửa gói đòi DRAFT, nên mọi phép băm trước khoá tính trên chính lần nộp ấy. Không có vế này, một
+   lần trả về cộng một lần sửa commit giữa phép kiểm trạng thái và phép băm nội dung của D2 để lại chữ ký trên nội dung người duyệt
+   chưa đọc, và gói nộp lại mở bằng nó — lượt soi đo được (§S1.198 F1). Khoá giữ tới hết giao dịch: lần trả về, nộp lại hay mở gói
+   chạy cùng lúc phải chờ lời duyệt commit, và lời duyệt gặp một lần như thế đang chạy thì chờ nó, rồi thấy gói đã rời
+   `PENDING_APPROVAL`. **`FOR NO KEY UPDATE`, không `FOR SHARE`:** lời duyệt của một tổ chức vốn nối tiếp ở khoá sổ kiểm toán
+   (`004`), và khoá chia sẻ để một giao dịch duyệt rồi mở gói deadlock với một lời duyệt song song.
+3. **Hai UNIQUE của `rfq_approvals` mang thêm `lan_nop_da_xem`**, giữ tên: người đã rút chữ ký bằng lần trả về ký lại được trên lần
+   nộp MỚI dù ba băm y nguyên. Một người vẫn đếm MỘT ở cạnh mở gói — ba phép đếm của K4b là `count(DISTINCT người)`.
+4. **Sổ `rfq_tra_ve`** — mỗi lần trả về một hàng: người, phiên, lần nộp bị trả, lý do. Chỉ-ghi-thêm BẰNG QUYỀN (khuôn `rfq_approvals`
+   và `064`); danh tính dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); lần nộp do trigger đặt từ gói, trigger ấy đòi tổ chức đã bật
+   và gói đang `PENDING_APPROVAL`, khoá hàng gói `FOR NO KEY UPDATE`; `UNIQUE (org, gói, lần nộp)`. `returnRfqToDraft` chèn hàng
+   trước câu đổi trạng thái, và cạnh về DRAFT (`077`) đòi một hàng của CHÍNH lần nộp đang bị trả: người và lý do nằm trong CSDL, không
+   chỉ ở sổ kiểm toán. Một hàng `app_api` chèn tay chỉ rút được chữ ký của chính người chèn — chỉ làm K4b chặt hơn.
+5. **Cạnh mở gói đếm lần ba — chữ ký CÒN HIỆU LỰC:** khớp ba băm hiện tại, mang lần nộp, và người ký không có hàng trả về ở một lần
+   nộp không sớm hơn lần họ đã ký — *"K4b bỏ qua chữ ký của một người cũ hơn lần trả về gần nhất của chính người ấy"*. Hai phép đếm
+   trước giữ nguyên văn và nguyên thông điệp; lần ba nói *"RFQ nay can N chu ky CON HIEU LUC — …, moi co M (K4b)"*. Chữ ký không mang
+   lần nộp — mọi chữ ký đặt trước `087_lan_nop_da_xem` — không đếm: không biết người ấy đã xem gì (fail-closed, khuôn ADR-115 ⑸).
+
+### Phương án đã cân nhắc
+
+- **Mốc là `submitted_at`.** Như ⑴: phép so bằng gãy qua JSON, và không cho thứ tự đáng tin. Bác.
+- **Người duyệt gửi lại ba băm đã thấy.** `GET` phải lộ băm, và băm không phân biệt hai lần nộp y nguyên — vế ⑸ cần biết chữ ký
+  CŨ HƠN lần trả về. Bác.
+- **Trả về thì xoá hay đánh dấu chữ ký.** Trái `011` C-1 (chữ ký là dấu vết, bảng chỉ-ghi-thêm) và S3.2b1 (gói nộp lại y nguyên thì
+  chữ ký của người KHÁC vẫn đếm). Bác.
+- **Một thao tác *rút chữ ký* riêng.** Route và quyền mới; ADR-084 ⑵ đã coi trả về là cách người duyệt nói *không*. Chủ dự án chọn
+  ghi lần trả về. Bác.
+- **Trigger so xếp ĐẦU các trigger BEFORE INSERT** — bản đầu của vòng này: băm tính dưới khoá, nhưng lời tự duyệt thiếu mốc bị từ
+  chối vì lần nộp TRƯỚC chốt D2 và rơi khỏi sổ. Bác; một đột biến đổi tên đo đúng hệ quả ấy.
+- **Khoá `FOR SHARE`, không đọc lại trạng thái** — bản thứ hai của vòng này. Lượt soi đo khe ở D2 (trên) và một deadlock khi một giao
+  dịch duyệt rồi mở gói gặp một lời duyệt song song. Bác.
+- **Tầng gói điền lần nộp hiện tại khi người gọi không gửi.** Chính là lỗ của khoản 256. Bác.
+
+### Hệ quả, nói thẳng
+
+- **Client của tổ chức đã bật PHẢI gửi `lanNop`.** Màn cũ, script, lời gọi API tay không gửi ⇒ 422 có tên. Màn `/tao-thau` và kịch bản
+  41 gửi; `gieo:demo` đọc lần nộp từ CSDL — công cụ dev, không có người xem.
+- **Máy chủ không biết người duyệt đã XEM gì**, chỉ biết client đã ĐỌC lần nộp nào. Một client đọc rồi ký ngay mà không hiện gói cho
+  người dùng vẫn qua. Mốc dời phép so từ *"CSDL lúc bấm"* về *"thứ client đã đọc"*; phần còn lại là việc của màn.
+- **Lời duyệt khoá hàng gói `FOR NO KEY UPDATE` tới hết giao dịch, ở MỌI tổ chức** — trigger chạy cả ở MVP1. Lần mở gói, trả về hay
+  nộp lại chạy cùng lúc phải chờ lời duyệt commit; hai lời duyệt song song nối tiếp nhau — chúng vốn nối tiếp ở khoá sổ kiểm toán.
+- **Ở tổ chức chưa bật, một ca đua đổi kết quả:** lời duyệt gặp lần mở gói đang chạy trước đây để lại một hàng chữ ký và một hàng
+  `RFQ_APPROVED` trên gói đã mở; nay nó chờ, rồi bị từ chối có tên (*"RFQ vua roi PENDING_APPROVAL (nay dang OPEN) …"*, 422). Hợp
+  đồng route không đổi.
+- **Thân lời duyệt sai kiểu hay tràn `integer`** bị từ chối TRƯỚC chốt D2 — ở route (422 kiểu), hay lúc Postgres gắn tham số (22003 ⇒
+  422 thân cố định) — nên một lời tự duyệt mang thân như thế không để lại hàng `CONTROL_DENIED`. Lời gọi không thành, và mọi route
+  kiểm đầu vào trước nghiệp vụ; nói ra vì trước vòng này route duyệt không có thân.
+- **Người duyệt đã ký rồi trả về thì chữ ký ấy không đếm ở MỌI lần nộp sau**, dù gói y nguyên — người ấy ký lại. Người tạo trả về
+  không rút chữ ký của ai.
+- **Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa** — như ADR-115; hôm nay không tổ chức thật nào bật được S3
+  (ADR-105).
+- `lanNop` ra ở `GET /rfqs/:rfqId` của người mua; `GET /guest/rfq` là danh sách trắng và không mang nó.
+- Lần từ chối vì mốc sai không vào sổ — như lần từ chối vì trạng thái. Nếu chủ dự án muốn đếm những lần ấy, đó là việc của khoản 255.
+- **Bốn khoảng trống lượt soi mở, rổ B:** người duyệt không đọc được ngân sách mà chữ ký ràng vào — mốc chỉ bảo đảm chữ ký rơi lên
+  lần nộp client đã đọc, không bảo đảm màn đã HIỆN đủ lần nộp ấy; danh sách mời thì S3.2c2 đã làm mới ở lần đọc gói (khoản 258); mục ghim trigger
+  không bắt bản sao cùng hàm dưới tên khác, nên thứ tự sau chốt D2 không được ghim (259); hàng `rfq_tra_ve` không buộc đi kèm cạnh về
+  DRAFT, và xoá nó làm chữ ký đã rút đếm lại (260); bật S3 giữa lúc gói chờ duyệt — danh sách đổi ở MVP1 khi gói chờ không làm lần
+  nộp tăng (261).
+
+### Đo
+
+`packages/rfq/src/lan-nop-da-xem.int.test.ts` — Postgres thật, dưới `app_api`, hàm gói thật — và hai ca HTTP ở `buyer.int.test.ts`.
+Đo TRƯỚC: hai ca giới hạn của `rang-ngan-sach.int.test.ts` (S1.202) xanh trên nhánh gốc — gói MỞ ở cả hai kịch bản; vòng này bỏ hai
+ca ấy, và ca đầu của khối khoản 256 và khối khoản 257 của tệp mới là hai kịch bản ấy, LẬT. Chín đột biến đều đỏ: bộ đếm đứng yên,
+phép so bỏ, bỏ khoá hàng gói, bỏ vế trạng thái, trigger so xếp trước chốt D2, bỏ vế NULL ở MVP1, cạnh mở gói bỏ vế *người ký chưa
+trả về*, bỏ vế *mang lần nộp*, cạnh về DRAFT bỏ vế *kèm hàng trả về*. Khe của D2 đo bằng một `pg_sleep` chèn giữa phép kiểm trạng
+thái và phép băm nội dung: bản thật từ chối lời duyệt; bỏ vế trạng thái thì gói nộp lại MỞ bằng chữ ký trên hạng mục thêm sau lúc
+người duyệt đọc.
+
+## ADR-118 — Người duyệt đọc ngân sách mà chữ ký ràng vào: route riêng có cổng, đóng với agent
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-29 route riêng không mở cho agent, và quyền đọc
+của người tạo gói cộng người duyệt; sau lượt soi, cũng ngày ấy, chọn thêm lúc nào màn đọc (mục 3) và việc không ghi sổ lần đọc
+thành công (mục 4) · **[S1.200]** · **Liên quan:** ADR-115 (băm
+ngân sách), ADR-117 (lần nộp đã xem), ADR-038/039 và khoản 141 (bề mặt agent), ADR-092 (trần lần từ chối), khoản nợ 33 (hàm đọc có
+cổng) · **Biên bản:** `evidence/security-reviews.md` §S1.200 · **Khoản:** 258 (ghi ở S1.198; đóng ở đây)
+
+### Bối cảnh
+
+Từ ADR-115, chữ ký duyệt gói của tổ chức đã bật mang băm ngân sách — ước lượng, tiền tệ, phiên bản chính sách ghim, bậc, cờ duyệt
+kép —, và từ ADR-117 nó rơi lên đúng lần nộp client đã đọc. Nhưng không route nào trả ngân sách cho người mua: chỉ có
+`PUT /rfqs/:rfqId/budget`, và màn `/tao-thau` hiện ngân sách từ câu trả của lần đặt. Người duyệt ký lên một con số không đọc được ở
+đâu (khoản 258; vế danh sách mời đã khép ở S3.2c2). Ngân sách lại là thứ neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không
+ghi số tiền vào sổ kiểm toán.
+
+### Quyết định
+
+1. **Route riêng `GET /rfqs/:rfqId/budget`, `agent: false`.** `GET /rfqs/:rfqId` — công cụ `get_rfq` của MCP — giữ nguyên; lý do
+   không phơi nằm ở `ROUTE_DOC_KHONG_PHOI`, khuôn bảng so sánh giá (ADR-038). Trả đúng năm thứ băm ngân sách ràng vào, phiên bản
+   chính sách bằng SỐ thay cho mã; gói chưa có ngân sách thì bốn trường ngân sách `null`.
+2. **Hàm đọc có cổng `getRfqBudget`** (rổ `HAM_DOC_CO_QUYEN`, khoản nợ 33): người tạo gói đọc bằng `rfq.create`, người khác cần
+   `rfq.approve` — đúng chuỗi *tạo → duyệt* mà ngân sách neo; khuôn `returnRfqToDraft`. Bị từ chối ⇒ 403 và một hàng
+   `PERMISSION_DENIED` mang loại tài nguyên riêng `RFQ_BUDGET` — không lẫn với lần định trả gói về soạn thảo, cùng quyền, cùng
+   mã gói. Hôm nay chỉ PROCUREMENT_MANAGER giữ `rfq.approve`, nên FINANCE, DIRECTOR, TECHNICAL, REQUESTER và người mua không phải
+   người tạo thì không đọc; vai `AUDITOR` của spec S4b (ADR-100) chưa có, và không giữ quyền nào trong hai quyền ấy.
+3. **Lúc nào màn đọc — chủ dự án chốt sau lượt soi:** màn `/tao-thau` TỰ đọc ở lần đọc gói chỉ khi người dùng là người tạo gói;
+   người khác — người duyệt cũng vậy — bấm nút *Xem ngân sách*. Lần từ chối vào sổ và vào trần từ chối của phiên (ADR-092), nên nó
+   phải đến từ một thao tác cố ý, không từ nhịp đọc gói. `hasPermission` cố ý không ra khỏi gói identity — một phép hỏi quyền im
+   lặng là một cổng im lặng —, nên màn không biết trước ai giữ `rfq.approve`.
+4. **Lần đọc thành công không vào sổ — chủ dự án chốt.** Ba hàm đọc có cổng thì có ghi — `COMPARISON_VIEWED`, `RANKING_VIEWED`,
+   `EVIDENCE_BUNDLE_EXPORTED` (ADR-102) —, vì chúng trả GIÁ của bên bán sau mở thầu. Ngân sách là con số của chính bên mua, người
+   đọc đã qua cổng, và mỗi hàng sổ là một cái giá vĩnh viễn (ADR-060) cộng một lần lấy khoá chuỗi sổ của tổ chức.
+
+### Phương án đã cân nhắc
+
+- **Gộp ngân sách vào `GET /rfqs/:rfqId`** — một lần đọc, một ảnh chụp cùng `lanNop`. Agent MCP đọc được ước lượng, nới bề mặt của
+  khoản 141. Chủ dự án bác.
+- **Mọi phiên người mua đọc được.** FINANCE, DIRECTOR đọc được con số mà sổ kiểm toán cố ý không ghi. Chủ dự án bác.
+- **Màn tự đọc ở mọi lần đọc gói.** Người không giữ quyền để lại một hàng `PERMISSION_DENIED` mỗi lần đọc và chạm trần lần từ chối
+  của phiên. Bác.
+- **Màn tự đọc khi người dùng là người tạo gói HAY gói đang chờ duyệt** — bản đầu của vòng này. Lượt soi (F3) đo: mọi người không giữ
+  `rfq.approve` — người mua nộp giúp gói của đồng nghiệp, FINANCE, DIRECTOR, TECHNICAL, REQUESTER — để lại một hàng từ chối mỗi lần
+  đọc hay nộp một gói đang chờ duyệt; hết trần 30 thì lần thử sai quyền THẬT sau đó của phiên ra 429 và không vào sổ. Chủ dự án bác.
+- **Gắn lần đọc vào nút Phê duyệt** — bấm một lần hiện ngân sách, bấm lần hai mới ký. Người duyệt trên màn này luôn thấy ngân sách
+  trước khi ký, đổi lại luồng duyệt thành hai bước. Chủ dự án không chọn.
+- **Ghi `RFQ_BUDGET_VIEWED` mỗi lần đọc thành công** — biết ai đã xem ngân sách trước khi ký, đổi lại chuỗi sổ dài thêm. Chủ dự án
+  bác (mục 4).
+- **Thêm quyền vào `GET /me` để màn biết trước.** Nới một route agent đọc được, cho một phép tính màn làm được bằng thứ nó đã có.
+  Bác.
+
+### Hệ quả, nói thẳng
+
+- **Người không giữ `rfq.approve` bấm *Xem ngân sách*** thì để lại một hàng `PERMISSION_DENIED` (`RFQ_BUDGET`) và một lần trong trần
+  từ chối — chỉ khi bấm; bảng ngân sách nói *không có quyền*. Người tạo gói mất `rfq.create` thì bị từ chối ở mỗi lần đọc gói của
+  chính mình.
+- **Cổng ghi rộng hơn cổng đọc.** Người mua khác đặt được ngân sách của gói đồng nghiệp (`rfq.create`) mà không đọc lại được nó nếu
+  không giữ `rfq.approve`; màn vẽ ba thứ lần đặt trả về và không đọc thay họ.
+- **Người duyệt ký được mà không mở ngân sách** — máy chủ không biết người duyệt đã xem gì (ADR-117); nút chỉ làm cho việc xem
+  làm được.
+- **Bốn lần đọc tách nhau** — gói (`lanNop`), hạng mục, lời mời, ngân sách. Không ảnh chụp chung, nhưng ở tổ chức đã bật mọi lần sửa
+  đòi DRAFT và lần nộp lại tăng `lanNop`: thứ đọc SAU `lanNop` mà khác lần nộp ấy thì lời duyệt mang mốc cũ bị từ chối (ADR-117).
+  Màn xoá bảng ngân sách ngay sau lần đọc gói và chỉ vẽ câu trả của gói đang mở, nên bảng không đứng cạnh lần nộp của gói khác.
+- **Sổ không nói ai đã XEM ngân sách** — chỉ nói ai bị từ chối (mục 4).
+- **FINANCE và DIRECTOR vẫn KẸP được ngân sách sau lúc mở niêm phong** — có trước vòng này: họ giữ `bid.view`, và bảng so sánh
+  nói bao nhiêu giá không vượt ước lượng (`belowBudget`, `packages/unseal/src/comparison.ts`). *Không đọc* ở đây là không đọc CON
+  SỐ, không phải không biết KHOẢNG.
+
+## ADR-120 — S3.6b1: tín hiệu chia nhỏ — một hàm SQL, hai bảng chỉ ghi thêm, ghi nhận bởi người độc lập, chốt K10a ở cạnh mở gói
+
+**Ngày:** 2026-09-29 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-29: S3.6b chia hai PR, b1 là CSDL, tầng gói,
+route và K10 ở cạnh mở gói (vào sổ đăng ký là K10a); *người gây ra* tín hiệu là người tạo và người nộp của MỌI gói trong bằng chứng;
+tín hiệu chỉ xét cận bậc; mã ở gói mới `packages/kiem-soat`; gói đã huỷ không tính; bằng chứng đổi sau lần nộp thì tín hiệu mới được
+lưu lúc GHI NHẬN — cạnh mở gói chỉ đọc và từ chối; người gây ra tự ghi nhận là `CONTROL_DENIED`, vào sổ · **[S1.203]** ·
+**Liên quan:** ADR-084 ⑵ ⑷ (quyền của cạnh bị chặn, `CONTROL_DENIED`), ADR-080 (công tắc), ADR-119 (nhóm hàng), ADR-054 (không giá
+dạng rõ ngoài phong bì), ADR-060 (luật ghi sổ chọn lọc) · **Spec:** S3 §2.4 ⑺, §2.5 ⒁, §4.6, §5.1 (K10), §9 (S3.6) · **Biên bản:**
+`evidence/security-reviews.md` §S1.203
+
+### Bối cảnh
+
+Spec S3 §4.6 đặt tín hiệu `PURCHASE_SPLITTING` ở cạnh `DRAFT→PENDING_APPROVAL` và đòi cạnh `PENDING_APPROVAL→OPEN` có một lần ghi
+nhận; §2.5 ⒁ chốt một điều kiện fail-closed, cửa sổ neo `submitted_at`, khoá (tổ chức, nhóm hàng), người ghi nhận ngoài {người tạo,
+người gây ra} và giữ quyền của cạnh bị chặn. Đo trước trên `master` `151cbd1`, fixture của spec §7 (bậc 0 / 100 triệu / 1 tỷ / 10 tỷ,
+cửa sổ 30 ngày): ba gói 480, 470, 490 triệu cùng nhóm hàng ở một tổ chức đã bật đều mở được, không bảng tín hiệu, không hàng
+`CONTROL_DENIED` nào — tổng 1,44 tỷ đi qua ba lần duyệt bậc 100 triệu mà không ai được hỏi.
+
+### Quyết định
+
+1. **Một hàm tính tín hiệu, `tin_hieu_chia_nho(org, gói)`** — TypeScript không giữ bản sao (spec §2 hàng 6). Tập xét: chính gói ấy và
+   mọi gói cùng tổ chức, cùng nhóm hàng, cùng đơn vị tiền, đã rời DRAFT và chưa huỷ, nộp duyệt trong `chia_nho_cua_so_ngay` ngày tính
+   NGƯỢC từ `submitted_at` của chính gói. Tín hiệu bắn ở cận `T` cao nhất — mọi `tu_so_tien` > 0 của phiên bản mà ngân sách của gói
+   ghim, không `dual_approval_threshold` — mà tập con {gói có ước lượng dưới `T`} chứa chính gói ấy và có tổng ≥ `T` (`≥` như
+   `rfq_bac_cua`). Bằng chứng: loại, nhóm hàng, phiên bản chính sách, cửa sổ, cận, danh sách id gói đã sắp — không một ước lượng nào.
+   Tổ chức chưa bật: `NULL`.
+2. **Hai bảng CHỈ GHI THÊM.** `governance_signals` mang năm thứ V2.1 §19 đòi; bằng chứng, độ tin cậy (`XAC_DINH`), giải thích và mốc
+   tính do trigger `governance_signals_tinh` đặt, ngoài `GRANT` — mọi hàng là một ảnh chụp THẬT của hàm, chỉ ghi cho gói đang chờ duyệt
+   có tín hiệu. Cột `nguon`: `NOP_DUYET` hay `GHI_NHAN`. `governance_signal_acks` — một người ghi nhận một tín hiệu một lần, kèm lý do.
+   RLS `FORCE`, policy khách đóng hẳn, `kiem_danh_tinh_theo_phien`, `bid_chi_ghi_them` ở `UPDATE OR DELETE` và `TRUNCATE`.
+3. **Ảnh chụp lúc nộp.** `submitRfqForApproval` gọi `ghiTinHieuKhiNop` sau câu nộp, trong cùng giao dịch: gói có tín hiệu thì một hàng
+   `NOP_DUYET` và một hàng sổ `GOVERNANCE_SIGNAL_RECORDED`. Không chặn gì.
+4. **Ghi nhận** (`ghiNhanTinHieu`, route `POST /rfqs/:rfqId/signals/acknowledge`): người giữ `rfq.approve` — quyền của cạnh bị chặn
+   (ADR-084 ⑵) —, kèm lý do, khi gói đang chờ duyệt. Luật người là MỘT hàm, `tin_hieu_chot_nguoi_ghi_nhan`: người tạo hay người nộp của
+   BẤT KỲ gói nào trong bằng chứng ⇒ `K10A_TU_GHI_NHAN`; người khai phiên bản chính sách mà gói ghim (§2.4 ⑺) ⇒
+   `K10A_TAC_GIA_CHINH_SACH`. Tầng gói hỏi nó TRƯỚC câu ghi và từ chối theo `CHOT_VAO_SO` — hàng `CONTROL_DENIED` ở giao dịch độc lập;
+   trigger `governance_signal_acks_kiem_nguoi` hỏi lại trạng thái, quyền, luật người và bằng chứng trên câu ghi. Lần ghi nhận trỏ tới
+   tín hiệu có bằng chứng BẰNG kết quả hiện tại; không có thì lần ghi nhận LƯU một tín hiệu `GHI_NHAN` trước — trong giao dịch thành
+   công của chính nó.
+5. **Chốt K10a ở cạnh `PENDING_APPROVAL→OPEN`, một điều kiện, fail-closed.** Hàm vị từ `rfq_chot_tin_hieu(org, gói)`: tín hiệu tính NGAY
+   LÚC ẤY mà không có lần ghi nhận nào trên một tín hiệu có bằng chứng bằng nó ⇒ `TIN_HIEU_CHUA_GHI_NHAN`. `openRfq` hỏi nó sau cổng
+   `rfq.open` và TRƯỚC `issueRfqKeyPair` (khoản 31); trigger riêng `rfq_packages_kiem_tin_hieu_khi_mo`, `WHEN` đúng cạnh, hỏi lại — lớp
+   chặn cuối cho câu viết tay (tên ràng buộc `k10_tin_hieu_chua_ghi_nhan`).
+6. **Không khoá tư vấn mới.** Tập của một gói chỉ CO lại sau lần nộp: gói nộp sau nằm ngoài cửa sổ (neo vào `submitted_at` của gói này),
+   gói trả về DRAFT hay bị huỷ rời tập, và `submitted_at` đóng dấu lại ở mỗi lần nộp. Một lần đọc cũ chỉ có thể thấy NHIỀU gói hơn —
+   tức một lần ghi nhận trên tập rộng hơn tập lúc mở.
+7. **Gói mới `@trustprocure/kiem-soat`** (spec §3.2) giữ ba hàm có trạng thái; ranh giới `depcruise` họ `g20-`: chỉ `index.ts` là cửa, và
+   gói không VỚI TỚI `sealed-envelope`, `unseal` hay `crypto-keys` — kể cả qua `@trustprocure/rfq`, nên gói không phụ thuộc `rfq`, và
+   test tích hợp của nó ở `packages/rfq`. Chiều `rfq` → `kiem-soat` được phép.
+8. **Hai route:** `GET /rfqs/:rfqId/signals` (không cho agent — dữ liệu kiểm soát của bên mua, cùng lý do `/categories`) và route ghi
+   nhận (`rfq.approve`, `201`). `KiemSoatError` vào lớp `422`. **[S1.206 / S3.6b2]** Chủ dự án chốt ngày 2026-09-30: hàm đọc trả thêm,
+   chỉ đọc — tên và trạng thái các gói mà bằng chứng hiện tại hay một bằng chứng đã lưu nhắc tới, họ tên người ghi và người ghi nhận,
+   người đang xem (danh tính dẫn xuất từ phiên) ghi nhận được không và vì sao không, và số người trong tổ chức ghi nhận được (spec
+   §8.10). Hai vế sau đọc quyền bằng `listUserIdsWithPermission` — khuôn `GET /items` của S1.199, không mở `hasPermission` — rồi CHÍNH
+   hàm `tin_hieu_chot_nguoi_ghi_nhan` mà tầng gói và trigger hỏi, nên câu màn nói không trôi khỏi cổng; lần đọc không để hàng sổ nào.
+   Không một số tiền nào ngoài cận bậc. Tên gói đã đọc được từ `GET /rfqs/:rfqId` (không cổng); họ tên người trong tổ chức đã đi qua
+   route đọc của `/du-lieu`. Màn `/tao-thau` chỉ mời bấm khi máy chủ sẽ nhận.
+9. **K10 tách như K4.** K10a — vế cạnh mở gói — vào sổ đăng ký ở vòng này; vế chữ ký trao thầu vào sổ ở hạng mục dựng tín hiệu của nó.
+
+### Phương án đã cân nhắc
+
+- **Tầng gói tính lại và LƯU tín hiệu mới ở cạnh mở gói, trong một giao dịch riêng** — đúng chữ §4.6. Chủ dự án chọn lưu lúc ghi nhận:
+  cạnh mở gói thành một người ghi thứ hai của bảng tín hiệu, ghi từ một lần mở ĐANG BỊ TỪ CHỐI và bởi chính người bị chặn; lưu lúc ghi
+  nhận thì mọi hàng tín hiệu ra đời ở lần nộp hay ở tay người độc lập, trong một giao dịch thành công.
+- **Chỉ loại người tạo GÓI NÀY** — chữ gốc của §4.6. Loại (§2.5 ⒁, chủ dự án chốt): người tạo một gói anh em hay người nộp nó là người
+  gây ra tín hiệu như người tạo gói cuối.
+- **Xét cả `dual_approval_threshold` làm cận.** Chủ dự án chọn chỉ cận bậc: tín hiệu nói về việc né một BẬC; ngưỡng duyệt kép là quy tắc
+  của MVP1, có đường đo riêng (D2).
+- **Tính cả gói đã huỷ.** Chủ dự án chọn không: gói đã huỷ không mua gì, và giữ nó trong tập làm một lần huỷ đúng thủ tục kéo theo một
+  tín hiệu không tắt được.
+- **Đưa ba tên ràng buộc K10a vào `CHOT_THEO_RANG_BUOC`** để lần từ chối của trigger cũng vào sổ. Không làm: bảng ấy khoá hai chiều với
+  thân bốn hàm của `074`/`080`, và đường thuận đã vào sổ qua hàm vị từ hỏi trước; lần chặn của trigger chỉ tới từ câu viết tay hay một
+  cuộc đua — cùng giới hạn J6/ADR-060.
+- **Dời `kiemChot` về `@trustprocure/identity`** để hai gói dùng chung. Không làm: bộ đọc QT3 rút câu SQL theo TỆP, nên hàm gọi
+  `.query(` phải đứng cạnh các câu nó chạy — khuôn đã ghi ở `packages/rfq/src/chot-kiem-soat.ts`. `hoiChot` của gói mới là bản thứ hai
+  cùng mười dòng.
+- **Khoá tư vấn theo (tổ chức, nhóm hàng)** giữa nộp, ghi nhận và mở. Không cần — quyết định 6.
+
+### Hệ quả, nói thẳng
+
+- **Một tổ chức nhỏ có thể kẹt.** Gói có tín hiệu cần một người giữ `rfq.approve` không tạo, không nộp gói nào trong bằng chứng và không
+  khai phiên bản chính sách. Ba PROCUREMENT_MANAGER mà mỗi người tạo một gói anh em thì không ai ghi nhận được — đúng ý §8.10 (số người
+  tối thiểu), và thông điệp từ chối nói điều ấy.
+- **`K10A_TAC_GIA_CHINH_SACH` hiếm khi bắn ở cạnh mở gói:** `033` cấm một người giữ `policy.manage` cùng `rfq.approve`, nên người khai
+  phiên bản chỉ tới được khi vai của họ đổi sau lần khai. Luật vẫn ở đó vì vai đổi, và vì §2.4 ⑺ đòi nó cho mọi lần ghi nhận.
+- **Nhóm hàng chỉ mạnh bằng người chọn nó** (ADR-119): xếp gói anh em vào hai nhóm là né tín hiệu.
+- **Bằng chứng mang id gói anh em.** Người đọc route tín hiệu thấy những gói nào bị gộp; route không cho agent.
+- **Mỗi lần nộp duyệt thêm một câu hỏi** (hàm trả `NULL` ngay ở tổ chức chưa bật); mỗi lần mở và mỗi lần đọc tính lại tập.
+
+### Đo
+
+`packages/rfq/src/tin-hieu-chia-nho.int.test.ts` trên Postgres thật dưới `app_api`, gồm tám đột biến trong giao dịch (tắt trigger ở cạnh,
+hàm vị từ trả NULL, luật người trả NULL, bỏ vế huỷ, `<=` thay `<`, thứ tự cận, bỏ `bool_or`, bỏ vế tiền tệ); `apps/api/src/buyer.int.test.ts`
+qua HTTP; bộ quét của kịch bản 41 HTTP; ba probe `g20-`. Đột biến ở mã nguồn: §S1.203.
+
+## ADR-122 — Mặc định-đóng với trigger trên bảng của dự án: chỉ trigger đã ghim được tồn tại; hardening tự gỡ trigger lạ trên bảng có tên, phán xét ở mọi bảng khác
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn MỌI trigger lạ, không chỉ bản sao cùng
+hàm; khi vòng này đo ra rằng tự gỡ trên mọi bảng vi phạm ADR-028 §2⑵, cũng ngày ấy chọn chỉ tự gỡ trên bảng có tên và phán xét ở
+mọi bảng khác (mục 3) · **[S1.205]** · **Liên quan:** ADR-028 §2⑵ (tự chữa chỉ thứ đơn điệu trên tập suy ra), [CR1] và [CR4] của
+bảng sổ, khoản 211 (ba chỗ ghim của một trigger), ADR-108 ⑴ (lời từ chối D2 vào sổ), ADR-117 (trigger so lần nộp) · **Biên bản:**
+`evidence/security-reviews.md` §S1.205 · **Khoản:** 259 (ghi ở S1.198; đóng ở đây)
+
+### Bối cảnh
+
+Mỗi mục ghim trigger của `hardening.always.sql` hỏi trigger theo TÊN và định nghĩa, rồi dựng lại khi thiếu; nó không hỏi bảng còn
+mang trigger nào khác. Lượt soi S1.198 (F4) đo: đổi tên `rfq_approvals_so_lan_nop` thành một tên xếp trước
+`rfq_approvals_kiem_nguoi_duyet` ⇒ `migrate()` xanh, mục ghim dựng lại trigger đúng tên và GIỮ bản đổi tên. Phép so lần nộp chạy
+trước chốt D2, nên lời tự duyệt thiếu mốc bị từ chối vì lần nộp mà không để lại hàng `CONTROL_DENIED` (ADR-108 ⑴). Chung cho mọi
+mục ghim trigger. Hướng ghi ở khoản 259 — *mục ghim đòi đúng MỘT trigger trỏ vào hàm* — không đủ: một bản CHÉP THÂN hàm sang tên
+hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả mà không trỏ vào hàm đã ghim. Cả hai lối cần quyền DDL trên bảng (rổ B).
+
+### Quyết định
+
+1. **Danh sách `TRIGGER_DUOC_PHEP`** trong hardening: mọi cặp (bảng, tên) có văn bản ghim `pg_get_triggerdef` — 161, kể cả hai
+   `CREATE CONSTRAINT TRIGGER` — cộng hai trigger ghim bằng thuộc tính (`user_roles_phan_tach_nhiem_vu`,
+   `role_permissions_ma_tran_quyen`): 163 cặp trên 44 bảng. Cổng tĩnh (`tests/architecture/hardening-co-ly-do.test.ts`) giữ danh
+   sách trùng khít tập đã ghim bằng hai bộ đọc khác họ — văn bản ghim, và câu `ENABLE ALWAYS TRIGGER` viết thẳng.
+2. **Mục `không trigger lạ trên bảng của dự án`** (`CAU_TRIGGER_LA_DU_AN`): trigger không nội bộ, không phải bản sao phân mảnh, trên
+   một bảng thuộc lược đồ dự án, mà không có trong danh sách là TRIGGER LẠ. Thứ tự trigger cùng thời điểm là thứ tự tên, nên tập tên
+   cố định thì thứ tự cố định theo.
+3. **Tự gỡ chỉ trên bảng có tên; phán xét ở mọi bảng — chủ dự án chốt.** Gỡ trigger KHÔNG đơn điệu (ADR-028 §2⑵: nó đổi được hành
+   vi một đường ghi hợp lệ), nên bị cấm trên tập suy ra. Trên 44 bảng mà danh sách khai TÊN — tập trigger của chúng đã ghim trọn —,
+   lượt sửa gỡ trigger lạ, mỗi lần gỡ một WARNING, đúng khuôn [CR1] của bảng sổ. Trên mọi bảng khác của dự án, mục chỉ phán xét:
+   chặn deploy, thông điệp nêu bảng, tên, định nghĩa và lối ra — gỡ tay, một migration mới, hay ghim nó và khai bảng vào danh sách.
+   Gỡ không được thì lượt phán xét cũng chặn deploy.
+4. **Lượt sửa đầu đứng yên.** `migrate()` đặt GUC `app.hardening_sau_vong` ở MỌI lượt — `'khong'` ở lượt sửa trước vòng đánh
+   số, `'co'` ở các lượt sau —; mục chỉ bỏ qua đúng lượt sửa mang `'khong'`, và lượt phán xét không đọc GUC ấy. Một migration đang
+   chờ có thể còn cần trigger mà HEAD đã bỏ ghim — `059` gỡ `rfq_packages_kiem_yeu_cau_mo_thau` bằng `DROP TRIGGER` không
+   `IF EXISTS`, nên gỡ nó sớm là làm gãy vòng đánh số của một cụm còn ở trước `059`. Đặt ở mọi lượt, và phán xét bất kể GUC, để một
+   `'khong'` đặt sẵn ở mức vai deploy (`ALTER ROLE <vai> SET`) không tắt được mục; đặt ở mức database hay `ALTER ROLE ALL` thì mục
+   phán xét khoản 87 còn chặn deploy (lượt soi đo cả hai). Chạy hardening ngoài `migrate()` không đặt GUC thì coi như sau vòng.
+5. **Bốn phần loại trừ.** Bảng sổ `bang_so` — [CR1] đã mặc định-đóng với `can_co`, và D2 dựng trigger sổ lên bảng sổ ở MỌI schema,
+   thứ danh sách này không liệt kê được. Trigger gọi `chan_sua_xoa()` ở bảng khác — [CR4] phán xét chúng, gỡ ở đây là đổi ngữ nghĩa
+   [CR4] trong im lặng. Bản sao trigger trên phân mảnh (`tgparentid <> 0`) — mang tên trigger cha, PostgreSQL từ chối DROP nó; trigger
+   cha vẫn bị hỏi. Trigger nội bộ (khoá ngoại).
+
+### Phương án đã cân nhắc
+
+- **Hẹp, đúng lời khoản:** mục ghim đòi đúng MỘT trigger trỏ vào hàm, gỡ bản thừa. Bản chép thân hàm sang tên hàm khác đi lọt —
+  cùng người, cùng hậu quả. Chủ dự án bác.
+- **Tự gỡ trên mọi bảng của dự án** — bản đầu của vòng. Vi phạm ADR-028 §2⑵: trigger hợp lệ của một migration quên ghim trên một
+  bảng mới bị gỡ chỉ kèm một WARNING, và deploy xanh. Chủ dự án chọn giữ ADR-028.
+- **Chỉ phán xét, không gỡ ở đâu.** Khớp ADR-028 nhất, nhưng kịch bản 259 — trên một bảng mà mọi trigger đều do migration sở hữu
+  theo tên — cũng phải gỡ tay. Chủ dự án không chọn.
+- **Chạy cả ở lượt sửa đầu.** Làm gãy vòng đánh số theo khuôn `059` (mục 4). Bác.
+- **Tập được phép suy lúc deploy từ văn bản ghim của chính `bang`.** Không cần danh sách chép, nhưng mục phải đọc chuỗi SQL của các
+  mục khác bằng regex lúc deploy. Bác: danh sách tường minh đọc được trong diff, và cổng tĩnh bắt trôi.
+
+### Hệ quả, nói thẳng
+
+- **Migration thêm trigger mà quên ghim** trên một bảng có tên: lượt sửa sau vòng gỡ nó kèm WARNING, và deploy xanh. Nó đỏ ở CI:
+  `db/trigger-la-mac-dinh-dong.int.test.ts` đòi `migrate()` trên cụm trống không gỡ trigger nào và tập trigger trong cụm trùng khít
+  danh sách. Trên bảng chưa có trong danh sách: deploy bị chặn tới khi ghim trigger và khai bảng.
+- **Quên danh sách không đối xứng.** Quên CẢ chỗ ghim lẫn dòng danh sách thì lượt sửa sau vòng gỡ trigger, deploy xanh kèm
+  WARNING — chỉ CI bắt (ca ⑴). Có chỗ ghim mà quên dòng danh sách thì mục ghim dựng lại trigger, mục này gỡ nó, và lượt phán xét
+  chặn deploy vì trigger đã ghim không còn — cổng tĩnh cũng đỏ ở CI.
+- **Trong lúc `migrate()` chạy, trigger lạ trên bảng có tên còn sống** qua lượt sửa đầu và vòng đánh số: một migration đang chờ
+  ghi vào bảng ấy kích nó. Nó bị gỡ ở lượt sửa sau vòng — cái giá của mục 4.
+- **Mọi trigger mới cần ba chỗ ghim (khoản 211) và một chỗ trong `TRIGGER_DUOC_PHEP`.**
+- **Trigger chẩn đoán tạm** mà người vận hành cắm lên một bảng có tên bị lần deploy kế gỡ; trên bảng khác, nó chặn lần deploy kế.
+- **Hàm chép vẫn nằm lại** — mục gỡ trigger, không gỡ hàm; hàm không gắn trigger nào thì không chạy.
+- **Không phủ:** trigger trên bảng ngoài lược đồ dự án; event trigger (cần SUPERUSER); một vai giữ quyền DDL cắm lại trigger ngay
+  sau deploy — hardening chỉ chữa ở lần deploy kế, như mọi mục khác.
+
+## ADR-125 — Hợp đồng số của bảng so sánh: `totalAmount` (chuỗi) là số chuẩn, `payload` là bản hiển thị — giữ hình dạng JSON, ghi hợp đồng thay vì đổi `payload`
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 · **[S1.213]** · **Khoản nợ liên quan:** 108 (đóng), 107 (đóng — phía ghi), 114 và 269 (chi phí đọc `payload`) · **Liên quan:** ADR-016 tiểu mục [S1.213 / khoản 133] (cùng vòng), `020`/`022` mục 8 (`bid_so_tien`), `docs/PRODUCT.md` §11 (*"giá đúng tới từng chữ số"*) · **Biên bản:** `evidence/security-reviews.md` §S1.213
+
+### Bối cảnh
+Khoản 107 (S1.64) làm phía GHI đúng: `rfq_unsealed_bids.payload` giữ đúng giá trị số đã niêm phong, và `ComparisonRow.totalAmount` cùng `aggregates.*` tính bằng SQL (`bid_so_tien`) nên đúng tới từng chữ số. Khoản 108 (S1.65) đo phía ĐỌC: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON trong `payload` quá 15 chữ số có nghĩa đi qua `double` — `'{"a":99999999999999.99}'::jsonb` ra `99999999999999.98` — và một client JavaScript `JSON.parse` thân HTTP làm tròn thêm lần nữa. S1.95 đo rằng ngưỡng cắn (từ 16 chữ số có nghĩa) nằm ngoài miền giá thật và hạ khoản xuống rổ B, nhưng giữ nguyên câu: *hợp đồng API vẫn phải chốt trước khách hàng thứ hai*. Đo thêm ở S1.213: `bid_so_tien` (022 mục 8) trả `NULL` từ 10^16 và khi hơn hai chữ số thập phân — tức `totalAmount` chuẩn có MIỀN, và ngoài miền là `null` + `unparsed`, không phải một con số đã làm tròn.
 
 ### Quyết định
 Giữ hình dạng JSON của `GET /rfqs/:rfqId/comparison` và của `ComparisonTable`. Hợp đồng, ghi ở docstring `buildComparisonTable` và chú thích route:
 1. `rows[].totalAmount` (chuỗi thập phân, hay `null`) và `aggregates.min/max/average` (chuỗi) là SỐ CHUẨN: tính bằng SQL, trả về dạng văn bản, đúng tới từng chữ số trong miền `numeric(18, 2)`; ngoài miền (từ 10^16, hơn hai chữ số thập phân, âm, không phải số) là `null` và đếm vào `unparsed`.
 2. `rows[].payload` là BẢN HIỂN THỊ của phong bì: số JSON quá 15 chữ số có nghĩa trong đó — đơn giá, số lượng, hay chính `totalAmount` nếu nhà cung cấp viết nó là số — đã qua `double` ở `pg` và qua `JSON.parse` của client thêm lần nữa; chuỗi đi nguyên. Người đọc số tiền PHẢI lấy ⑴. Cột `jsonb` trong CSDL vẫn giữ đủ chữ số.
-3. Ghim bằng test (`comparison.int.test.ts` khối `[S1.9113 / khoản 108]`): hành vi ⑵ được ĐO và giữ đúng như thế — một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản thì cổng này đỏ và hợp đồng phải viết lại, không âm thầm.
+3. Ghim bằng test (`comparison.int.test.ts` khối `[S1.213 / khoản 108]`): hành vi ⑵ được ĐO và giữ đúng như thế — một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản thì cổng này đỏ và hợp đồng phải viết lại, không âm thầm.
 
 ### Phương án bị loại
 | phương án | vì sao loại |
 |---|---|
 | ⑴ Trả `payload` dạng VĂN BẢN `jsonb` để client tự phân tích | Đổi hình dạng API cho mọi client hiện có (`apps/web/trang/mo-thau.js`, `tools/pilot-gia-lap`, MCP) để chữa một trường không ai đọc làm số; client JavaScript vẫn `JSON.parse` văn bản ấy và mất lại đúng chỗ ấy — trừ khi mỗi client mang một bộ phân tích số-lớn riêng. Cái giá đổi lấy một lợi ích chưa ai cần (S1.95). |
-| ⑵ Máy chủ xuất số ngoài miền chính xác của `double` thành CHUỖI thập phân | Phải đi lại cả cây `payload` mỗi lần đọc — đúng chi phí O(kích thước) mà khoản 114/9431 vừa đo và đang cố giảm —, phải chép định nghĩa "ngoài miền" của `double` JavaScript vào máy chủ, và một client đọc số ở chỗ đã thành chuỗi cho `NaN` im lặng: một lỗi thay bằng một lỗi khác, khó thấy hơn. |
+| ⑵ Máy chủ xuất số ngoài miền chính xác của `double` thành CHUỖI thập phân | Phải đi lại cả cây `payload` mỗi lần đọc — đúng chi phí O(kích thước) mà khoản 114/269 vừa đo và đang cố giảm —, phải chép định nghĩa "ngoài miền" của `double` JavaScript vào máy chủ, và một client đọc số ở chỗ đã thành chuỗi cho `NaN` im lặng: một lỗi thay bằng một lỗi khác, khó thấy hơn. |
 | ⑶ **Giữ nguyên, GHI hợp đồng: số chuẩn là `totalAmount` dạng chuỗi** — **CHỌN** | Đúng thứ đã đo: giá thật không tới ngưỡng (S1.95); `totalAmount` đã là số chuẩn từ `020`/khoản 107; mọi client trong kho đọc `totalAmount` (grep). Cái giá, nói ra: một client tự đọc `payload.unitPrice` để tính lại có thể sai từ chữ số thứ 16 — hợp đồng nói điều ấy bằng chữ, và ca test ghim nó bằng số. |
 
 ### Hệ quả
@@ -9328,18 +9672,18 @@ Giữ hình dạng JSON của `GET /rfqs/:rfqId/comparison` và của `Compariso
 - Miền của `totalAmount` chuẩn là một dòng của hợp đồng: một báo giá từ 10^16 là `unparsed`, không phải một số nhỏ hơn.
 - Ngày cần số chính xác trong `payload` (nếu có khách hàng đòi), điểm đổi là ⑴ ở tầng route kèm một bộ phân tích phía client — và ca ghim sẽ đỏ đúng lúc ấy.
 
-## ADR-9243 — Payload sổ của lượt mở thầu mang `failedCount`, tối đa K = 20 id phong bì hỏng đầu và cờ cắt; phần còn lại suy từ dữ liệu, không bảng mới
+## ADR-129 — Payload sổ của lượt mở thầu mang `failedCount`, tối đa K = 20 id phong bì hỏng đầu và cờ cắt; phần còn lại suy từ dữ liệu, không bảng mới
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — hình dạng do đề bài lô A5 chốt (chủ dự án chốt 2026-09-30); K = 20 và thứ tự
-ổn định là điểm tôi tự chốt trong phạm vi ấy, chủ dự án bác được · **[S1.9143]** · **Liên quan:** khoản 137 (S1.72; đóng ở đây), khoản 134
+ổn định là điểm tôi tự chốt trong phạm vi ấy, chủ dự án bác được · **[S1.221]** · **Liên quan:** khoản 137 (S1.72; đóng ở đây), khoản 134
 (nguồn), ADR-041/`003` (sổ chỉ ghi thêm, CHECK payload), `019` (`rfq_unsealed_bids`), S1.109 (`bafo_round_id` trong payload), [REVIEW AN
-NINH S1.4 — HIGH-2] (đích danh, không chỉ đếm) · **Biên bản:** `evidence/security-reviews.md` §S1.9143 · **Khoản:** 137
+NINH S1.4 — HIGH-2] (đích danh, không chỉ đếm) · **Biên bản:** `evidence/security-reviews.md` §S1.221 · **Khoản:** 137
 
 ### Bối cảnh
 
 `executeUnsealRequest` (`apps/unseal-worker/src/index.ts`) gom id của mọi phong bì không mở được — `failedBidVersionIds`, ĐÍCH DANH theo
 HIGH-2 của S1.4 — rồi ghi trọn mảng ấy vào payload của HAI bản ghi sổ `RFQ_KEY_MATERIAL_UNWRAPPED` và `RFQ_UNSEALED`. Sổ chỉ ghi thêm, mỗi
-hàng nối băm, không xoá được. Đo trên mã trước vòng này (§S1.9143): ~40 byte một id, tuyến tính theo số phong bì hỏng N — N = 50 ⇒ 2 147
+hàng nối băm, không xoá được. Đo trên mã trước vòng này (§S1.221): ~40 byte một id, tuyến tính theo số phong bì hỏng N — N = 50 ⇒ 2 147
 byte, N = 500 ⇒ 20 147 byte mỗi bản ghi; `audit_append` với 5 000 id ⇒ 200 038 byte, 21–43 ms. Không trần sẵn: `003` chỉ CHECK hình dạng
 đối tượng và khoá mang giá; không migration nào đặt trần số lời mời của một gói, và số phong bì hỏng là thứ NHÀ CUNG CẤP quyết (một trình
 duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thước hai hàng sổ vĩnh viễn của tổ chức.
@@ -9389,13 +9733,13 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 - Hai bản ghi sổ của một lượt mở thầu ~1 KB mỗi hàng dù N là bao nhiêu (đo: N = 50 và N = 500 đều 1 004–1 005 byte).
 - Người đọc sổ thấy đủ đích danh khi N ≤ 20; khi N > 20 thấy 20 id đầu, số đủ và cờ, rồi chạy (3) để lấy phần còn lại — cần quyền đọc
   bốn bảng và biết id yêu cầu mở thầu (có trong payload).
-- Câu (3) chưa đo trên vòng BAFO (`bafo_round_id` khác NULL) và chưa có chỗ chạy ngoài test — khoản 9444.
+- Câu (3) chưa đo trên vòng BAFO (`bafo_round_id` khác NULL) và chưa có chỗ chạy ngoài test — khoản 275.
 - `kich-ban-41*.int.test.ts` đọc `payload.bafoRoundId`/`opened` không đổi; không tệp nào ngoài worker đọc `failedBidVersionIds` của payload.
 ```
 
-## ADR-9222 — Người đã đăng nhập tự xem link đăng nhập gần đây của chính mình: `GET /auth/login-links` là route đọc không mã quyền, đóng với chứng chỉ agent, không bao giờ trả `token_hash`; thông điệp gộp ba trạng thái ở đường vô danh giữ nguyên
+## ADR-126 — Người đã đăng nhập tự xem link đăng nhập gần đây của chính mình: `GET /auth/login-links` là route đọc không mã quyền, đóng với chứng chỉ agent, không bao giờ trả `token_hash`; thông điệp gộp ba trạng thái ở đường vô danh giữ nguyên
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (khoản 195: mở đường cho người ĐÃ đăng nhập, không nới thông điệp ở route vô danh) · **[S1.9122]** · **Khoản nợ liên quan:** 195 (đóng), 9422 (mở), 9481 · **Liên quan:** ADR-020 mục 2 (đăng nhập người mua: magic link + TOTP, token dạng rõ không về client), ADR-039 (phạm vi chứng chỉ agent), ADR-038 (bề mặt MCP chỉ đọc — `ROUTE_DOC_KHONG_PHOI`), ADR-107 (hình dạng link đăng nhập), ADR-048 (mã do hệ thống phát) · **Biên bản:** `evidence/security-reviews.md` §S1.9122
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (khoản 195: mở đường cho người ĐÃ đăng nhập, không nới thông điệp ở route vô danh) · **[S1.216]** · **Khoản nợ liên quan:** 195 (đóng), 268 (mở), 282 · **Liên quan:** ADR-020 mục 2 (đăng nhập người mua: magic link + TOTP, token dạng rõ không về client), ADR-039 (phạm vi chứng chỉ agent), ADR-038 (bề mặt MCP chỉ đọc — `ROUTE_DOC_KHONG_PHOI`), ADR-107 (hình dạng link đăng nhập), ADR-048 (mã do hệ thống phát) · **Biên bản:** `evidence/security-reviews.md` §S1.216
 
 ### Bối cảnh
 
@@ -9421,22 +9765,22 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 ### Hệ quả, nói thẳng
 
 - Bề mặt người mua có thêm một route đọc; MCP có thêm một dòng KHÔNG PHƠI; barrel `identity` có thêm một symbol (danh sách trắng theo).
-- Danh sách cắt ở 20 hàng, không theo thời gian: một người bị phát mã dày (5 tự phục vụ + 2 hệ thống mỗi 15 phút) đẩy một link «đã dùng» cũ hơn ~43 phút ra khỏi danh sách — khoản 9422.
-- Chỉ `/login` có khối; ba trang người mua kia cùng ranh giới với khoản 9481.
+- Danh sách cắt ở 20 hàng, không theo thời gian: một người bị phát mã dày (5 tự phục vụ + 2 hệ thống mỗi 15 phút) đẩy một link «đã dùng» cũ hơn ~43 phút ra khỏi danh sách — khoản 268.
+- Chỉ `/login` có khối; ba trang người mua kia cùng ranh giới với khoản 282.
 
 ### Đo
 
-`apps/api/src/auth.int.test.ts` `[INV-E1]` ba ca cuối (ba trạng thái với chủ nhân, người khác cùng tổ chức không thấy, 401 không cookie / 403 + `AGENT_SCOPE_DENIED` với agent), `apps/api/src/routes.test.ts` (hình dạng route), `apps/web/src/phuc-vu.test.ts` (ba ca DOM); đo trước 404; bảy đột biến đỏ — §S1.9122 mục 3, 6.
+`apps/api/src/auth.int.test.ts` `[INV-E1]` ba ca cuối (ba trạng thái với chủ nhân, người khác cùng tổ chức không thấy, 401 không cookie / 403 + `AGENT_SCOPE_DENIED` với agent), `apps/api/src/routes.test.ts` (hình dạng route), `apps/web/src/phuc-vu.test.ts` (ba ca DOM); đo trước 404; bảy đột biến đỏ — §S1.216 mục 3, 6.
 ```
 
 ```
-## ADR-9223 — Dòng log của lần từ chối MẤT SỔ mang băm rút gọn của người bị từ chối: `nguoi=<12 hex đầu của sha256(userId)>` — một ngoại lệ CÓ HÌNH DẠNG của A2, chỉ ở đúng dòng ấy
+## ADR-127 — Dòng log của lần từ chối MẤT SỔ mang băm rút gọn của người bị từ chối: `nguoi=<12 hex đầu của sha256(userId)>` — một ngoại lệ CÓ HÌNH DẠNG của A2, chỉ ở đúng dòng ấy
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn phương án ⒞ của khoản 177 ngày 2026-09-30 · **[S1.9122]** · **Khoản nợ liên quan:** 177 (đóng), 131 (đóng — §S1.85), 179 (đóng — §S1.9161) · **Liên quan:** ADR-016 (D5 — mỗi lần từ chối một hàng sổ; lần ghi hỏng gãy ồn ào), ADR-042 (khoá ghi sổ bị giữ), ADR-092/112 (trần lần từ chối), khối luật A2 ở `apps/api/src/mo-ta-loi.ts` · **Biên bản:** `evidence/security-reviews.md` §S1.9122
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn phương án ⒞ của khoản 177 ngày 2026-09-30 · **[S1.216]** · **Khoản nợ liên quan:** 177 (đóng), 131 (đóng — §S1.85), 179 (đóng — §S1.225) · **Liên quan:** ADR-016 (D5 — mỗi lần từ chối một hàng sổ; lần ghi hỏng gãy ồn ào), ADR-042 (khoá ghi sổ bị giữ), ADR-092/112 (trần lần từ chối), khối luật A2 ở `apps/api/src/mo-ta-loi.ts` · **Biên bản:** `evidence/security-reviews.md` §S1.216
 
 ### Bối cảnh
 
-Khi khoá ghi sổ của một tổ chức bị giữ quá trần 2 s (050), mọi lần từ chối của tổ chức ấy gãy 55P03 và thứ còn lại là một dòng log. §S1.85 (khoản 131) làm dòng ấy nói lần từ chối NÀO — mẫu route, `action`, `resourceType`, mã quyền — và §S1.9161 (khoản 179) thêm vế cổng; cả hai cố ý không nói của AI, vì luật A2 của `mo-ta-loi.ts` là *chỉ tên và mã cố định*, và một `userId` là giá trị đầu tiên lọt qua nếu luật nới. Nhưng ở đúng ca này lập luận *danh tính lấy từ sổ* không đứng: hàng sổ mang `actor_id` chính là hàng không ghi được. Đo (khoản 177, dựng lại §S1.85 với ba phiên của ba người): ba dòng giống hệt nhau trừ `requestId` — từ stderr một mình không dựng lại được có bao nhiêu người, càng không phải ai. Ba hình dạng được đưa: ⒜ giữ nguyên; ⒝ `userId` thô kèm hình dạng UUID; ⒞ băm rút gọn.
+Khi khoá ghi sổ của một tổ chức bị giữ quá trần 2 s (050), mọi lần từ chối của tổ chức ấy gãy 55P03 và thứ còn lại là một dòng log. §S1.85 (khoản 131) làm dòng ấy nói lần từ chối NÀO — mẫu route, `action`, `resourceType`, mã quyền — và §S1.225 (khoản 179) thêm vế cổng; cả hai cố ý không nói của AI, vì luật A2 của `mo-ta-loi.ts` là *chỉ tên và mã cố định*, và một `userId` là giá trị đầu tiên lọt qua nếu luật nới. Nhưng ở đúng ca này lập luận *danh tính lấy từ sổ* không đứng: hàng sổ mang `actor_id` chính là hàng không ghi được. Đo (khoản 177, dựng lại §S1.85 với ba phiên của ba người): ba dòng giống hệt nhau trừ `requestId` — từ stderr một mình không dựng lại được có bao nhiêu người, càng không phải ai. Ba hình dạng được đưa: ⒜ giữ nguyên; ⒝ `userId` thô kèm hình dạng UUID; ⒞ băm rút gọn.
 
 ### Quyết định
 
@@ -9461,17 +9805,17 @@ Khi khoá ghi sổ của một tổ chức bị giữ quá trần 2 s (050), m�
 
 ### Đo
 
-`apps/api/src/log-tu-choi-mat.int.test.ts` (ba người ⇒ ba băm khác nhau khớp sha256 của ba id, không UUID thô ngoài `requestId`; hai vế cũ ghim băm của đúng người), `packages/identity/src/mo-ta-hang-dong.test.ts` (32 ca — hình dạng, `null`, mười chuỗi sai hình dạng ⇒ `HANG_LA`); đo trước 3 đỏ / 15 đỏ; ba đột biến đỏ — §S1.9122 mục 3, 6.
+`apps/api/src/log-tu-choi-mat.int.test.ts` (ba người ⇒ ba băm khác nhau khớp sha256 của ba id, không UUID thô ngoài `requestId`; hai vế cũ ghim băm của đúng người), `packages/identity/src/mo-ta-hang-dong.test.ts` (32 ca — hình dạng, `null`, mười chuỗi sai hình dạng ⇒ `HANG_LA`); đo trước 3 đỏ / 15 đỏ; ba đột biến đỏ — §S1.216 mục 3, 6.
 ```
 
-Sửa tại chỗ ở ADR cũ: KHÔNG. ADR-016 (D5), ADR-020 (đăng nhập), ADR-039 (agent), ADR-038 (MCP) không đổi một chữ — ADR-9222 chỉ THÊM một route đọc dưới đúng ba khuôn ấy, ADR-9223 chỉ ghi một ngoại lệ có hình dạng của luật A2 (luật ấy sống ở `mo-ta-loi.ts`, không ở một ADR có số).
+Sửa tại chỗ ở ADR cũ: KHÔNG. ADR-016 (D5), ADR-020 (đăng nhập), ADR-039 (agent), ADR-038 (MCP) không đổi một chữ — ADR-126 chỉ THÊM một route đọc dưới đúng ba khuôn ấy, ADR-127 chỉ ghi một ngoại lệ có hình dạng của luật A2 (luật ấy sống ở `mo-ta-loi.ts`, không ở một ADR có số).
 
-## ADR-9202 — Thông điệp của hardening nêu tên và VÂN TAY: thân hàm và định nghĩa trigger in dấu vân tay, `proconfig` chỉ in tên GUC, `SQLERRM` thay bằng `SQLSTATE`; một cổng T1 cấm nối trở lại
+## ADR-124 — Thông điệp của hardening nêu tên và VÂN TAY: thân hàm và định nghĩa trigger in dấu vân tay, `proconfig` chỉ in tên GUC, `SQLERRM` thay bằng `SQLSTATE`; một cổng T1 cấm nối trở lại
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt nhánh ⑴ của khoản 117 ngày 2026-09-30 (đợt trả nợ 2, lô A1) ·
-**[S1.9102]** · **Liên quan:** S1.51 ⑷ (chuẩn "tên thì được, giá trị thì không"), S1.66 lượt soi 59a-8 (bốn mục policy đã vá cùng chuẩn),
+**[S1.210]** · **Liên quan:** S1.51 ⑷ (chuẩn "tên thì được, giá trị thì không"), S1.66 lượt soi 59a-8 (bốn mục policy đã vá cùng chuẩn),
 ADR-028 (ranh giới tự chữa / phán xét — không đổi), ADR-036 (danh mục cơ chế — không đổi), IM5 (vòng fix 1: sửa chữa không im lặng) ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9102 · **Khoản:** 117 (đóng ở đây)
+**Biên bản:** `evidence/security-reviews.md` §S1.210 · **Khoản:** 117 (đóng ở đây)
 
 ### Bối cảnh
 
@@ -9525,7 +9869,7 @@ với một khai miễn. Chuẩn S1.51 ⑷ đã áp cho bốn mục policy ở S
   và mã `SQLSTATE` đủ để người vận hành biết lớp lỗi (42501, 42P01, 22P02…), tên mục và tên đối tượng đã có trong cùng câu.
 - **Cổng cấm cả `pg_get_constraintdef`/`pg_get_ruledef`/`pg_get_viewdef`/`prosqlbody`.** Bác cho vòng này: cổng đọc cả ô, và hàng
   khoản 105 dùng `pg_get_constraintdef` làm vị từ LỌC trong ô mô tả (so, không in) — cấm tên ấy là cấm một phép so hợp lệ. Mở rộng
-  đòi một bộ đọc biết đâu là biểu thức chuỗi (§S1.9102 mục 7).
+  đòi một bộ đọc biết đâu là biểu thức chuỗi (§S1.210 mục 7).
 
 ### Hệ quả
 
@@ -9540,9 +9884,9 @@ với một khai miễn. Chuẩn S1.51 ⑷ đã áp cho bốn mục policy ở S
   cổng cùng một commit.
 - Không migration, không đổi lược đồ; hàm ghim `hardening.always.sql` không đổi thân hàm nào (chỉ văn bản thông điệp).
 
-## ADR-9252 — Đường khởi tạo tổ chức ngoài workflow: cảnh báo ở audit cho mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai; role `tp-deploy` chỉ về tay `prod-khoi-tao` qua `khoi-tao.yml` (claim `sub` tuỳ biến, ID bất biến); permission set hẹp hoãn tới trước khách hàng thứ hai
+## ADR-130 — Đường khởi tạo tổ chức ngoài workflow: cảnh báo ở audit cho mọi lần chạy họ/role `tp-khoi-tao` và mọi lần đổi bản khai; role `tp-deploy` chỉ về tay `prod-khoi-tao` qua `khoi-tao.yml` (claim `sub` tuỳ biến, ID bất biến); permission set hẹp hoãn tới trước khách hàng thứ hai
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-062, ADR-067, **ADR-111**, khoản 252, 9452
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-062, ADR-067, **ADR-111**, khoản 252, 278
 
 ### Bối cảnh
 
@@ -9569,7 +9913,7 @@ cho kho này, chỉ chưa ai chạy (khoản 15).
    `StringLike`; `environments` là bản đồ environment ⇒ tệp: `prod-khoi-tao` ⇒ `khoi-tao.yml`; `prod`, `prod-worker` ⇒ `null` (`*` ở vế
    workflow — giữ như cũ). Hai hằng ID ở `infra/terraform/chung`. Thứ tự: plan → PUT → GET đối chiếu → apply → đối chứng dương; hai chiều
    quên đều KHOÁ (AWS từ chối role trước mọi lệnh AWS), không mở.
-3. **⑵ HOÃN tới trước khách hàng thứ hai** — khoản 9452: permission set `KhoiTaoBanKhai` ở stack 20 (chỉ Create/Put/Describe dưới
+3. **⑵ HOÃN tới trước khách hàng thứ hai** — khoản 278: permission set `KhoiTaoBanKhai` ở stack 20 (chỉ Create/Put/Describe dưới
    `ban-khai/*`, không Get, không `ecs:*`) thay AdministratorAccess cho người tạo bản khai. Hôm nay người ấy cũng là người giữ mọi thứ
    khác của prod; một permission set là một thứ phải gán, đăng nhập và bảo trì; ⑴ đã làm đường này không im lặng.
 4. `.github/workflows/khoi-tao.yml` không đổi: `id-token: write`, `environment: prod-khoi-tao`, `role-session-name: khoi-tao-<run id>` đã đủ.
@@ -9596,17 +9940,17 @@ cho kho này, chỉ chưa ai chạy (khoản 15).
   khoá; README nói cách in claim thật (`github/actions-oidc-debugger`) và sửa `sub_repo`/hai hằng ID.
 - `prod` cùng role `tp-deploy` với `prod-khoi-tao` và không ghim tệp: ranh giới cho đường `prod` vẫn là mã trên `master` + test hình dạng
   (không workflow nào khác nhắc đường khởi tạo) — như ADR-111.
-- Cổng: `tests/architecture/hinh-dang-khoi-tao.test.ts` `[S1.9152]` ghim mẫu ⑼ (= ⑵ đổi tên), tiền tố bản khai ba phía, bốn rule/bốn
+- Cổng: `tests/architecture/hinh-dang-khoi-tao.test.ts` `[S1.223]` ghim mẫu ⑼ (= ⑵ đổi tên), tiền tố bản khai ba phía, bốn rule/bốn
   target/topic policy, điều kiện `sub`, bản đồ environment = tập environment của mọi job có `id-token`, ID ở `chung` = ví dụ ở README, mẫu
   tuỳ biến đúng thứ tự ở README và 2.0b.
 ```
 
-## ADR-9292 — Ranh giới `kind` theo vai của `outbox_jobs` sống ở CSDL: hai policy `AS RESTRICTIVE FOR UPDATE`, thêm `kind` là thêm migration
+## ADR-134 — Ranh giới `kind` theo vai của `outbox_jobs` sống ở CSDL: hai policy `AS RESTRICTIVE FOR UPDATE`, thêm `kind` là thêm migration
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-09-30 (làm khoản 158, chấp nhận giá) · **[S1.9192]** ·
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt 2026-09-30 (làm khoản 158, chấp nhận giá) · **[S1.233]** ·
 **Liên quan:** khoản 158 (§S1.81); ADR-006 (hai vai ứng dụng); ADR-036 §4 (biểu thức policy khai nguyên văn); ADR-040 (nguồn tổ chức
-của worker); ADR-083 (tồn đọng đếm qua mọi `kind`); §S1.9151 (sổ `kind` mồ côi do worker khai); `007`, `025`, `9592` ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9192
+của worker); ADR-083 (tồn đọng đếm qua mọi `kind`); §S1.222 (sổ `kind` mồ côi do worker khai); `007`, `025`, `095` ·
+**Biên bản:** `evidence/security-reviews.md` §S1.233
 
 ### Bối cảnh
 
@@ -9619,17 +9963,17 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 
 ### Quyết định
 
-1. Hai policy `AS RESTRICTIVE FOR UPDATE` trên `public.outbox_jobs` (migration `9592`), đối xứng theo vai và theo tập `kind`:
+1. Hai policy `AS RESTRICTIVE FOR UPDATE` trên `public.outbox_jobs` (migration `095`), đối xứng theo vai và theo tập `kind`:
    `outbox_jobs_kind_app_api` (`TO app_api`) mang ĐÚNG tập khoá của `buildApiOutboxHandlers`; `outbox_jobs_kind_app_unseal`
    (`TO app_unseal`) mang ĐÚNG tập khoá của `buildUnsealWorkerHandlers` ∪ sổ `KIND_KHONG_NGUOI_NHAN` (worker là tiến trình khai sổ
-   từ S1.9151). `USING` = `WITH CHECK`; phần tử theo bảng chữ cái.
+   từ S1.222). `USING` = `WITH CHECK`; phần tử theo bảng chữ cái.
 2. Chỉ `FOR UPDATE`. `SELECT` của hai vai không đổi (worker đếm tồn đọng qua mọi `kind` — ADR-083; `api` đọc hàng đợi của mình);
    `INSERT` của `app_api` không đổi (nó xếp việc cho worker). `SELECT … FOR UPDATE SKIP LOCKED` của `CAU_CLAIM` chịu vế `USING`
    của policy `FOR UPDATE`, nên runner mang nhầm handler của vai kia claim 0 hàng — không lỗi, đúng cơ chế "0 hàng im lặng" mà
    khoản 83⑴ đòi KHAI: hai dòng bảy cột nguyên văn ở `POLICY_RESTRICTIVE_KHAI` (hardening) và bản gương `POLICY_RESTRICTIVE_DA_KHAI`.
 3. **Tập `kind` mỗi vai từ nay SỐNG Ở CSDL.** Thêm một `kind` — handler mới ở `api` hay worker, hay một dòng sổ mồ côi — là thêm
    MỘT MIGRATION `ALTER POLICY outbox_jobs_kind_<vai> ON public.outbox_jobs USING (…) WITH CHECK (…)` cộng sửa hai dòng khai.
-   Migration đã áp không sửa: kind mới ⇒ migration mới, không sửa `9592`.
+   Migration đã áp không sửa: kind mới ⇒ migration mới, không sửa `095`.
 4. Cái giá được ĐÒI ở cổng, không ở trí nhớ: hai composition test đối chiếu tập `kind` của policy ĐANG CÓ (đọc `pg_policy`) với
    `Object.keys(handlers)` ∪ sổ mồ côi của chính tiến trình, đỏ ở tệp của tiến trình thêm `kind`, TRƯỚC khi job của nó nằm `PENDING`
    im lặng. Quên migration ⇒ fail-CLOSED (kind mới không vai nào ghi được kết cục), đúng hướng.
@@ -9645,27 +9989,27 @@ kia). Lớp CSDL chưa có, và không có lớp nào khác đo được nó.
 - **Policy đọc tập `kind` từ một bảng cấu hình / GUC** thay vì literal: đưa tập ra khỏi tầm của cổng khai nguyên văn (83⑴) và mở
   một đường ghi tập ấy lúc chạy — đúng thứ lớp QUYỀN không được có. Literal + migration là cái giá rẻ hơn.
 - **Ràng cả `INSERT` (và `SELECT`) theo `kind` trong cùng migration.** Đụng ADR-083 và đường xếp việc của `api` (dispatch, trigger
-  `019` chạy dưới vai gọi) — một quyết định riêng, mở ở khoản 9492.
+  `019` chạy dưới vai gọi) — một quyết định riêng, mở ở khoản 285.
 - **Đổi mọi `kind` thử trong test sang `kind` thật** để khỏi nới policy: test cơ chế của outbox thôi đọc được, hai vế sổ mồ côi
   mất đối tượng đo; chạy runner dưới siêu người dùng thì mất [T10-D].
 
 ### Hệ quả
 
 - Một `kind` chỉ có thể thuộc ĐÚNG MỘT vai (cổng "hai tập không giao nhau" đo trên chính policy).
-- `DROP OWNED BY <vai>` xoá policy ĐƠN VAI (`9592` là RESTRICTIVE đầu tiên `TO <một vai>`) — đường ops xoá rồi tạo lại vai (N3, fix
+- `DROP OWNED BY <vai>` xoá policy ĐƠN VAI (`095` là RESTRICTIVE đầu tiên `TO <một vai>`) — đường ops xoá rồi tạo lại vai (N3, fix
   round 4). Hardening dựng lại policy THIẾU từ chính dòng khai `POLICY_RESTRICTIVE_KHAI` (mục "hai policy kind theo vai của outbox_jobs
-  (9592)", cùng lớp mục 044); policy ĐANG CÓ mà lệch thì không sửa đè — phán xét nêu tên. Đo: `db/migrations.int.test.ts` N3 và vế
+  (095)", cùng lớp mục 044); policy ĐANG CÓ mà lệch thì không sửa đè — phán xét nêu tên. Đo: `db/migrations.int.test.ts` N3 và vế
   khoản 158.
 - Thêm `kind` chậm hơn một migration; đổi lại, danh sách `kind` mỗi vai là một sự thật có ở CSDL, kiểm toán được bằng `pg_policy`.
 - Đổi phiên bản PostgreSQL có thể đổi deparse ⇒ chặn deploy tới khi chép lại hai dòng khai (cùng giá ADR-036 §4).
 - Mọi test chạy runner dưới vai thật với `kind` không thuộc tiến trình nào phải nới policy có khôi phục — ba tệp đã làm; tệp mới
   phải làm theo, nếu không job của nó nằm `PENDING` và test đỏ ở đúng lớp CSDL.
 
-## ADR-9262 — Hồ sơ hạ tầng database: MỘT database RIÊNG cho TrustProcure ở mỗi môi trường; phạm vi FORCE của mục khoản 91 là cả database
+## ADR-131 — Hồ sơ hạ tầng database: MỘT database RIÊNG cho TrustProcure ở mỗi môi trường; phạm vi FORCE của mục khoản 91 là cả database
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (đợt trả nợ 2, lô B1; `ke-hoach-dot-2.md` mục 0 câu 5) ·
-**[S1.9162]** · **Liên quan:** ADR-028 §2⑵ (tự chữa trên tập suy ra khi và chỉ khi đơn điệu; lượt sửa COMMIT trước lượt phán xét), ADR-036 hàng 7 (RLS trên bảng ngoài tập tenant; khoản 91 và 94), TP100 và 049 (chạy `migrate()` dưới vai mà RLS không áp), lượt soi 49 INFO-2 và §S1.66 59a-3 (thăm dò "láng giềng"), khoản 134 (vế "bảng của vai deploy" không loại được gì dưới superuser) ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9162 · **Khoản:** 110 (đóng ở đây)
+**[S1.226]** · **Liên quan:** ADR-028 §2⑵ (tự chữa trên tập suy ra khi và chỉ khi đơn điệu; lượt sửa COMMIT trước lượt phán xét), ADR-036 hàng 7 (RLS trên bảng ngoài tập tenant; khoản 91 và 94), TP100 và 049 (chạy `migrate()` dưới vai mà RLS không áp), lượt soi 49 INFO-2 và §S1.66 59a-3 (thăm dò "láng giềng"), khoản 134 (vế "bảng của vai deploy" không loại được gì dưới superuser) ·
+**Biên bản:** `evidence/security-reviews.md` §S1.226 · **Khoản:** 110 (đóng ở đây)
 
 ### Bối cảnh
 
@@ -9678,7 +10022,7 @@ Bức tranh vận hành (hôm nay): một vai deploy chạy `migrate()` (superus
 1. **Hồ sơ: mỗi môi trường (dev, staging, prod) của TrustProcure là MỘT database PostgreSQL riêng** (một database trên một cụm/instance quản trị — chuẩn RDS), do vai deploy của dự án sở hữu việc thay đổi lược đồ; các vai ứng dụng chỉ kết nối. Không dự án khác, không tenant lạ, không "láng giềng" nào có hồ sơ để tồn tại trong database ấy. Nhiều tổ chức (tenant) sống trong cùng database qua RLS (ADR-036) — không đổi.
 2. **Hệ quả cho khoản 91: chủ thể FORCE = mọi bảng bật RLS của mọi lược đồ không hệ thống của database — đúng bằng cấu tạo.** `VI_TU_FORCE_THIEU` và `MAU_SCHEMA_DU_AN` giữ nguyên văn. Một lược đồ không hệ thống xuất hiện là một đối tượng CỦA DỰ ÁN chưa khai: 83⑶ đòi khai, 94 nêu "chủ bảng 0 hàng" — không dòng nào im. Hệ quả 59a-3 (FORCE ở lượt sửa đầu, chủ đọc 0 hàng) là hệ quả CHẤP NHẬN: FORCE đơn điệu và fail-closed (ADR-028 §2⑵), và không có láng giềng nào để bảo vệ.
 3. **Lối ra khi một lược đồ lạ xuất hiện:** hoặc nó là của dự án — khai ở `BANG_RLS_NGOAI_TENANT_KHAI` (83⑶) với policy phủ cả chủ bảng (94) — hoặc gỡ nó. Không có lối "miễn vì là láng giềng". `migrate()` chạy dưới vai mà RLS không áp (superuser hay BYPASSRLS) trên database riêng ấy, như TP100 và 049 khuyên.
-4. **Ghim:** `db/rls-coverage.int.test.ts` khối `[S1.9162 / khoản 110 — ADR-9262]` giữ nguyên hành vi 59a-3 với lời đọc mới; đột biến thu hẹp `MAU_SCHEMA_DU_AN` về `public` đỏ ở phép đo chủ thể. ADR-036 hàng 7 ghi phạm vi.
+4. **Ghim:** `db/rls-coverage.int.test.ts` khối `[S1.226 / khoản 110 — ADR-131]` giữ nguyên hành vi 59a-3 với lời đọc mới; đột biến thu hẹp `MAU_SCHEMA_DU_AN` về `public` đỏ ở phép đo chủ thể. ADR-036 hàng 7 ghi phạm vi.
 
 ### Phương án bị loại
 
@@ -9693,15 +10037,15 @@ Bức tranh vận hành (hôm nay): một vai deploy chạy `migrate()` (superus
 - Không migration, không đổi mã phán xét; chú thích trên `MAU_SCHEMA_DU_AN` và `VI_TU_FORCE_THIEU` là bằng chứng kiểm toán của phạm vi.
 - Điều kiện xem lại: nếu một ngày có nhu cầu ghép chung database (không dự kiến), ADR này phải được thay bằng một hồ sơ mới TRƯỚC khi ghép, vì phạm vi FORCE sẽ chạm dữ liệu của người khác.
 
-## ADR-9282 — Trạng thái thứ tư `WITHDRAWN`: người đề xuất rút đề xuất chưa chữ ký của mình, ràng ở CSDL, dưới cổng `award.recommend`
+## ADR-133 — Trạng thái thứ tư `WITHDRAWN`: người đề xuất rút đề xuất chưa chữ ký của mình, ràng ở CSDL, dưới cổng `award.recommend`
 
-**Trạng thái:** Đã chấp nhận (chủ dự án chốt hình ⒜ ngày 2026-09-30) · **Ngày:** 2026-09-30 · **Vòng:** S1.9182 / khoản 232
+**Trạng thái:** Đã chấp nhận (chủ dự án chốt hình ⒜ ngày 2026-09-30) · **Ngày:** 2026-09-30 · **Vòng:** S1.231 / khoản 232
 
 ### Bối cảnh
 ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bốn vai giữ: huỷ qua mã ấy cho một `BUYER` huỷ award ĐÃ DUYỆT rồi đề xuất người khác — phê duyệt kép bị bào mòn. Cái giá nói ra ở ADR-057 và khoản 232: người đề xuất bấm nhầm báo giá phải đi tìm `FINANCE`/`DIRECTOR` để undo, kể cả khi đề xuất CHƯA có chữ ký nào. Hai hình dạng đóng được cân ở S1.110: ⒜ trạng thái thứ tư `WITHDRAWN`; ⒝ cổng phụ thuộc trạng thái trên `huyTraoThau`.
 
 ### Quyết định
-⑴ `rfq_awards.status` nhận giá trị thứ tư **`WITHDRAWN`** (`9583`). Chuỗi của `061` nay:
+⑴ `rfq_awards.status` nhận giá trị thứ tư **`WITHDRAWN`** (`094`). Chuỗi của `061` nay:
 ```
 (chưa có) --PROPOSED--> PROPOSED --APPROVED--> APPROVED --CANCELLED--> CANCELLED --PROPOSED--> …
                             |--CANCELLED--> CANCELLED --PROPOSED--> …
@@ -9720,12 +10064,12 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 ### Hệ quả
 - Bảng `rfq_awards` có bốn trạng thái; `TrangThaiTraoThau`, `docTraoThau`, màn mở thầu và bộ xuất bằng chứng thấy hàng `WITHDRAWN` như một hàng lịch sử thường.
 - Hai mã từ chối mới `KHONG_PHAI_NGUOI_DE_XUAT`, `DE_XUAT_DA_CO_CHU_KY` vào sổ `RFQ_STATE_DENIED` (ADR-060); hàng sổ mới `RFQ_AWARD_WITHDRAWN`.
-- Bản ghim `award_kiem_mot_award_song` ở hardening là bản `9583`; đổi thân là đổi bản ghim cùng commit.
+- Bản ghim `award_kiem_mot_award_song` ở hardening là bản `094`; đổi thân là đổi bản ghim cùng commit.
 - Nút «Rút đề xuất» là lớp hiển thị; luật ở trigger. Trang hiện nút theo `status`/`approvals` đọc từ máy chủ, không theo người.
 
-## ADR-9230 — Thu hồi lời mời LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm; sau lần mở thầu đầu tiên, lời mời không thu hồi được nữa
+## ADR-128 — Thu hồi lời mời LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm; sau lần mở thầu đầu tiên, lời mời không thu hồi được nữa
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (đề bài lô B5) · **[S1.9130]** · **Khoản nợ liên quan:** 250 (đóng), 9440, 9450 (mở ở vòng này) · **Liên quan:** ADR-110 (gửi lại link cho chính lời mời — đường quay lại khi mất phiên; ⑸ và một dòng Hệ quả gạch ở vòng này), ADR-060 và ADR-084 ⑸ (lớp `RFQ_STATE_DENIED`), ADR-114 (K4a — thu hồi ngoài DRAFT ở tổ chức bật S3), `018` (`vendor_bids` duy nhất theo lời mời), `024` (một lời mời còn sống mỗi nhà cung cấp), `019` (quyền cột của `app_unseal`), §S1.108 mục 7d (ba bộ đọc, một luật), spec S3 (S3.6c chờ quyết định này) · **Biên bản:** `evidence/security-reviews.md` §S1.9130
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (đề bài lô B5) · **[S1.217]** · **Khoản nợ liên quan:** 250 (đóng), 271, 276 (mở ở vòng này) · **Liên quan:** ADR-110 (gửi lại link cho chính lời mời — đường quay lại khi mất phiên; ⑸ và một dòng Hệ quả gạch ở vòng này), ADR-060 và ADR-084 ⑸ (lớp `RFQ_STATE_DENIED`), ADR-114 (K4a — thu hồi ngoài DRAFT ở tổ chức bật S3), `018` (`vendor_bids` duy nhất theo lời mời), `024` (một lời mời còn sống mỗi nhà cung cấp), `019` (quyền cột của `app_unseal`), §S1.108 mục 7d (ba bộ đọc, một luật), spec S3 (S3.6c chờ quyết định này) · **Biên bản:** `evidence/security-reviews.md` §S1.217
 
 ### Bối cảnh
 
@@ -9737,7 +10081,7 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 2. **Một vế, ba chỗ, một cổng.** Vế `i.revoked_at IS NULL` trên `rfq_invitations i` chép NGUYÊN VĂN vào ba câu chọn phong bì/bản rõ (bốn câu SQL: worker; câu hàng và CTE `moi_nhat` của bảng so sánh; `docBaoGia`). Không gói chung nào đứng dưới cả ba (`unseal`, `danh-gia` chỉ phụ thuộc `audit`/`identity`; thêm phụ thuộc workspace là đổi `pnpm-lock.yaml`; hằng TypeScript nội suy vào SQL làm bộ đọc QT3 mù ở đúng vế ấy; hàm/view SQL là một migration có thân). Cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi mọi câu SQL sản xuất vừa nối `public.rfq_invitations i` vừa khử trùng theo `v.bid_id` (`DISTINCT ON (v.bid_id)` hay `PARTITION BY v.bid_id`) mang đúng MỘT vế ấy, và đối chứng dương ghim đúng bốn câu ở đúng ba tệp. Câu đọc `rfq_evaluation_lines` (bảng xếp hạng, bộ bằng chứng — đọc thứ lượt chấm ĐÃ ghi), `auditStoredCiphertexts` (kiểm mọi phong bì đã lưu) và `countReceivedBids` KHÔNG khử trùng theo luồng nên ngoài phạm vi có chủ đích. `opened` của lượt mở thầu đếm SAU lọc.
 3. **Sau lần mở thầu đầu tiên, thu hồi bị CHẶN.** Từ cạnh `CLOSED → UNSEALED` của `RFQ_TRANSITIONS` và mọi trạng thái đi tới từ đó — `UNSEALED`, `EVALUATING`, `BAFO_OPEN`, `BAFO_CLOSED`, `BAFO_UNSEALED`, `AWARDED` (`RFQ_STATUSES_AFTER_UNSEAL`, viết cứng ở `packages/invitation` vì gói không phụ thuộc `rfq`; test suy tập từ máy trạng thái và so) — `revokeInvitation` từ chối. Lý do: nếu thu hồi còn được sau khi phong bì đã mở, một người đã thấy giá chọn được ai rời cuộc thi bằng một lần bấm không đi qua bước nào của chuỗi *chọn NCC → mở thầu → chấm → award*. `CANCELLED` KHÔNG thuộc tập: tới được cả trước lẫn sau lần mở, không bộ đọc nào đọc phong bì của gói đã huỷ, thu hồi ở đó vẫn là quyền đóng phiên khách (C3) của bên mua.
 4. **Lời từ chối vào sổ đúng lớp ADR-060/ADR-084 ⑸:** `RFQ_STATE_DENIED` — người dùng cố đi một bước sai thứ tự chuỗi — một hàng ở giao dịch độc lập qua `throwAuditedDenial` (`RFQ`, id gói, payload chỉ mã `{ ma: "LOI_MOI_THU_HOI_SAU_MO_THAU" }`), rồi `InvitationError` câu cố định ⇒ 422 qua HTTP. Trạng thái đọc TRƯỚC câu ghi, trong cùng câu đọc gói của khoản 255; không cột nào của lời mời, token, phiên khách đổi; không hàng `INVITATION_REVOKED`; lời mời không tồn tại vẫn `false`, không sổ (ADR-104/108). Mỗi lần cố là một hàng, không gộp. K4a (ADR-114) ở tổ chức bật S3 vẫn là lớp có thẩm quyền và chặn sớm hơn (ngoài DRAFT): hai lớp không giẫm nhau.
-5. **Một GRANT không tránh được:** `9530_app_unseal_doc_thu_hoi_loi_moi` cấp `app_unseal` `SELECT (revoked_at)` trên `rfq_invitations` — `019` cấp vai ấy đúng ba cột và không cột nào nó đọc được mang dấu thu hồi (đo: `permission denied for table rfq_invitations`). `status`, `supplier_id`, `contact_id`, `link_channel` vẫn không cấp. Không hàm, không trigger, không policy; hardening không có gì để ghim.
+5. **Một GRANT không tránh được:** `091_app_unseal_doc_thu_hoi_loi_moi` cấp `app_unseal` `SELECT (revoked_at)` trên `rfq_invitations` — `019` cấp vai ấy đúng ba cột và không cột nào nó đọc được mang dấu thu hồi (đo: `permission denied for table rfq_invitations`). `status`, `supplier_id`, `contact_id`, `link_channel` vẫn không cấp. Không hàm, không trigger, không policy; hardening không có gì để ghim.
 
 ### Phương án bị loại
 
@@ -9750,18 +10094,18 @@ ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bố
 ### Hệ quả, nói thẳng
 
 - **`revokeInvitation` có thêm một nhánh ném** (`InvitationError`) và một câu `JOIN` ở lần đọc trước câu ghi; route thu hồi trả 422 thân cố định ở sáu trạng thái. Đường bù `LINK_SEND_FAILED` đi qua cùng cửa: ở tổ chức chưa bật S3, một lời mời tạo ở gói đã mở mà link gửi hỏng ⇒ phần bù 500 kèm `invitationId` (hợp đồng khoản 124), lời mời còn sống — chưa có đường HTTP nào tạo được lời mời như thế trong lô này.
-- **ADR-110 ⑸ và câu báo sau thu hồi của `/tao-thau`** (*"báo giá đã nộp … vẫn nằm trong gói thầu"*) nay sai; nút *Thu hồi* ở tổ chức chưa bật hiện ở mọi trạng thái. Khoản 9450; ADR-110 gạch tại chỗ.
-- **`countReceivedBids`** vẫn đếm luồng của lời mời đã thu hồi — khoản 9440.
+- **ADR-110 ⑸ và câu báo sau thu hồi của `/tao-thau`** (*"báo giá đã nộp … vẫn nằm trong gói thầu"*) nay sai; nút *Thu hồi* ở tổ chức chưa bật hiện ở mọi trạng thái. Khoản 276; ADR-110 gạch tại chỗ.
+- **`countReceivedBids`** vẫn đếm luồng của lời mời đã thu hồi — khoản 271.
 - **Bản rõ của lượt mở TRƯỚC vòng này** thuộc lời mời bị thu hồi trước lần mở: bảng so sánh và lượt chấm bỏ chúng từ nay; CSDL không đổi.
 - **S3.6c** hết chờ: ngữ nghĩa thu hồi đã chốt.
 
 ### Đo
 
-`apps/unseal-worker/src/unseal-worker.int.test.ts` (kịch bản §S1.181 trên worker thật, cùng giàn cảnh cho ba bộ đọc; chặn sau lần mở; đối chứng CLOSED), `packages/unseal/src/comparison.int.test.ts`, `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/invitation/src/invitation.int.test.ts`, `apps/api/src/buyer.int.test.ts`, `tests/architecture/phong-bi-loi-moi-con-song.test.ts`. Đột biến: §S1.9130 mục 6.
+`apps/unseal-worker/src/unseal-worker.int.test.ts` (kịch bản §S1.181 trên worker thật, cùng giàn cảnh cho ba bộ đọc; chặn sau lần mở; đối chứng CLOSED), `packages/unseal/src/comparison.int.test.ts`, `packages/danh-gia/src/luot-danh-gia.int.test.ts`, `packages/invitation/src/invitation.int.test.ts`, `apps/api/src/buyer.int.test.ts`, `tests/architecture/phong-bi-loi-moi-con-song.test.ts`. Đột biến: §S1.217 mục 6.
 
-## ADR-9280 — Miền email của sản phẩm là ASCII in được: `CHECK (email ~ '^[!-~]+@[!-~]+$')` trên `users` và `supplier_contacts`, hai đường ghi từ chối có tên; địa chỉ quốc tế hoá (EAI/IDN) bị từ chối tới khi một khách hàng cần
+## ADR-132 — Miền email của sản phẩm là ASCII in được: `CHECK (email ~ '^[!-~]+@[!-~]+$')` trên `users` và `supplier_contacts`, hai đường ghi từ chối có tên; địa chỉ quốc tế hoá (EAI/IDN) bị từ chối tới khi một khách hàng cần
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-013, ADR-015, ADR-028 §2⑵, khoản 63, 70, **71**, 105, 9490
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** (chủ dự án chốt 2026-09-30) · Liên quan: ADR-013, ADR-015, ADR-028 §2⑵, khoản 63, 70, **71**, 105, 283
 
 ### Bối cảnh
 
@@ -9771,7 +10115,7 @@ ràng buộc — `ασ@corp.com` cạnh `ας@corp.com`, `i̇@corp.com` cạnh `
 mặt tấn công lừa đảo nội bộ trên đúng kênh nhận magic link; ⑵ tập giá trị cột CẤT ĐƯỢC phụ thuộc libc của ảnh nền — `Ⓐlice@corp.com` qua trên
 musl, bị từ chối trên glibc; 124 điểm mã mà `.toLowerCase()` của JS hạ còn máy chủ để nguyên trên musl, 28 trên glibc; dưới ctype C `lower()`
 chỉ gấp ASCII — nên `Ⓐn@x.vn` viết tay sống cạnh `ⓐn@x.vn` do `addSupplierContact` ghi, và một ca test tiền đề locale (`khoi-tao.int`) xanh
-hay đỏ theo máy chạy nó (đo ở S1.9180: đỏ dưới glibc `C.UTF-8`); ⑶ `addSupplierContact` kiểm 320 byte TRƯỚC khi hạ trong khi `İ`/`Ⱥ`/`Ⱦ` hạ
+hay đỏ theo máy chạy nó (đo ở S1.229: đỏ dưới glibc `C.UTF-8`); ⑶ `addSupplierContact` kiểm 320 byte TRƯỚC khi hạ trong khi `İ`/`Ⱥ`/`Ⱦ` hạ
 ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Thân khoản đề ba đường và nói đường «thu hẹp miền» là một quyết định nhìn thấy
 được vì nó từ chối địa chỉ quốc tế hoá (RFC 6531).
 
@@ -9779,7 +10123,7 @@ ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Th�
 
 1. **Miền email của sản phẩm là ASCII IN ĐƯỢC**: `users.email` và `supplier_contacts.email` phải khớp `^[!-~]+@[!-~]+$` — mỗi ký tự trong
    0x21…0x7E, ít nhất một `@` không ở đầu/cuối. Lược đồ cưỡng chế bằng `users_email_ascii` và `supplier_contacts_email_ascii`
-   (`9580_email_ascii`, không `NOT VALID`, đối chiếu trước bằng định danh không in email, không tự sửa); hai dòng khai ở `CHECK_AN_NINH_KHAI`
+   (`092_email_ascii`, không `NOT VALID`, đối chiếu trước bằng định danh không in email, không tự sửa); hai dòng khai ở `CHECK_AN_NINH_KHAI`
    (khoản 105) — gỡ hay đổi là deploy đỏ.
 2. **Hai đường ghi từ chối CÓ TÊN trước khi tới CSDL**: `addSupplierContact` (`SupplierError` thân cố định ⇒ 422) kiểm ASCII TRƯỚC khi hạ chữ
    thường và 320 byte SAU; `tools/khoi-tao-to-chuc` (`KhoiTaoError` nêu vị trí, không in email, rollback trọn). `login.ts` giữ hai vế cùng
@@ -9789,7 +10133,7 @@ ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Th�
    một quyết định sản phẩm khác chưa ai chốt; và 048 đã ghi «thêm kiểm định dạng vào lược đồ là quyết định khác hẳn».
 4. **Địa chỉ quốc tế hoá (EAI — local-part UTF-8; IDN — tên miền Unicode chưa punycode) bị từ chối**, có tên, ở cả hai tầng. **Điều kiện mở
    lại:** khi MỘT khách hàng thật cần địa chỉ quốc tế hoá (người mua hay người liên hệ). Khi ấy đường mở là một ADR mới thay ADR này, và
-   TỐI THIỂU phải có: ⒜ một migration đổi hai CHECK (không sửa 9580) và sửa hai dòng khai cùng commit; ⒝ chuẩn hoá MỘT chỗ trước khi ghi
+   TỐI THIỂU phải có: ⒜ một migration đổi hai CHECK (không sửa 092) và sửa hai dòng khai cùng commit; ⒝ chuẩn hoá MỘT chỗ trước khi ghi
    (NFC hay NFKC — chọn và đo) và một lớp phát hiện confusable (UTS #39 skeleton) ở mức tổ chức, vì chuẩn hoá không gấp `ς`/`σ` hay `Ⓐ`/`A`;
    ⒞ đo lại sự lệch giữa `.toLowerCase()` và `lower()` trên ĐÚNG libc của ảnh deploy (khuôn thăm dò S1.61) — hoặc hạ chữ thường ở MỘT tầng duy
    nhất; ⒟ IDN cất dạng punycode (ASCII) và hiển thị dạng Unicode ở giao diện, để `UNIQUE (org_id, …, email)` so trên dạng chuẩn.
@@ -9811,6 +10155,6 @@ ra 3 byte từ 2 — lỗi 23514 thân cố định thay vì lỗi có tên. Th�
 - Trên miền ASCII in được, mọi hàm hạ chữ thường (glibc, musl, ICU, ctype C, JS) cho cùng kết quả và bảo toàn độ dài byte ⇒ ⑴ ⑵ ⑶ của khoản
   71 đóng cùng lúc; ca tiền đề locale của `khoi-tao.int` lật thành «Unicode bị từ chối trước khi tới `lower()`» và xanh dưới mọi locale.
 - Người dùng có địa chỉ quốc tế hoá bị từ chối với thông điệp cố định (422 / `KhoiTaoError` nêu vị trí) — cái giá nhìn thấy được, ghi ở đây.
-- `users` vẫn không có CHECK hình dạng (`a@b@c` vào); dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 9490, ngoài
+- `users` vẫn không có CHECK hình dạng (`a@b@c` vào); dấu chấm cuối tên miền `dot@x.vn.` đi qua mọi lớp ở cả hai bảng — khoản 283, ngoài
   phạm vi ADR này.
 - Dữ liệu có sẵn ngoài miền làm deploy dừng với danh sách id; sửa tay dưới vai mà RLS không áp, mỗi thay đổi kèm một sự kiện kiểm toán.

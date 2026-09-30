@@ -23,7 +23,7 @@
 // nhau. Tiến trình này giữ MỘT vòng nên không có gì để so — dán nhầm giá trị pepper vào
 // `TRUSTPROCURE_MASTER_KEYS` thì nó LÊN ĐƯỢC và chỉ hỏng lúc mở phong bì. Ghi ở ADR-040.
 //
-// [S1.9160 / khoản 187] TỆP NÀY LÀ MỘT BẢN CHÉP CÓ CHỦ ĐÍCH, VÀ CÓ KIỂM KÊ. Bộ hàm đọc biến (`bat`, `docSoNguyen`, `docAdapter`,
+// [S1.224 / khoản 187] TỆP NÀY LÀ MỘT BẢN CHÉP CÓ CHỦ ĐÍCH, VÀ CÓ KIỂM KÊ. Bộ hàm đọc biến (`bat`, `docSoNguyen`, `docAdapter`,
 // `docVong`, `docDatabaseUrl`, `docThuMucTuyetDoi`, `tuChoiBienCuaAdapterKhac`), `CauHinhError`, `VongBiMat` và bốn biểu thức
 // hình dạng chép từ `apps/api/src/cau-hinh.ts` — hai bản vì đoạn trên. Từng cặp được liệt kê ĐÓNG và đo chống trôi ở
 // `tests/architecture/ma-chep-api-worker.test.ts`: cặp trùng chữ so văn bản từng ký tự; cặp khác chữ (thông điệp riêng mỗi

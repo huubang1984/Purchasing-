@@ -2970,7 +2970,7 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng ~~`R
 
 
 // ================================================================================================
-// [S1.9182 / khoản 231 / 9582] AWARD CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT — LỚP CSDL, KHUÔN `060` (A)
+// [S1.231 / khoản 231 / 093] AWARD CHỈ TRỎ ĐƯỢC VÀO LƯỢT CHẤM MỚI NHẤT — LỚP CSDL, KHUÔN `060` (A)
 //
 // Trước vòng này vế *mới nhất* chỉ sống ở câu `ORDER BY e.created_at DESC` của `deXuatTraoThau` (ca
 // "lượt chấm được suy là lượt MỚI NHẤT" ở trên): `award_kiem_de_xuat` đòi lượt chấm THUỘC ĐÚNG RFQ,
@@ -2978,7 +2978,7 @@ describe("[S1.167 / khoản 247] lần vi phạm J3 để lại một hàng ~~`R
 // dưới `app_api`, cùng khuôn ca `060` ở trên: đi qua lớp gói thì lớp dưới không bao giờ được hỏi.
 // ================================================================================================
 
-describe("[S1.9182 / khoản 231 / 9582] award trỏ vào lượt chấm CŨ bị CSDL từ chối", { timeout: 300000 }, () => {
+describe("[S1.231 / khoản 231 / 093] award trỏ vào lượt chấm CŨ bị CSDL từ chối", { timeout: 300000 }, () => {
   it("[INV-J5] lượt CŨ sau một chu kỳ BAFO ⇒ 23514 `j5_luot_cham_khong_moi_nhat`; ĐỐI CHỨNG DƯƠNG: cùng câu với lượt MỚI NHẤT thì đi qua", async () => {
     // Một chu kỳ BAFO trọn vẹn để có HAI lượt chấm trên cùng một RFQ — cùng giàn cảnh với ca `060`.
     const { rfqId, banRo, luotId: luot1 } = await daCham(
@@ -3002,7 +3002,7 @@ describe("[S1.9182 / khoản 231 / 9582] award trỏ vào lượt chấm CŨ b�
     );
     expect(l1[0]?.effective_cost, "tiền đề: báo giá có hàng xếp hạng đọc được ở lượt CŨ").not.toBeNull();
 
-    // VẾ ÂM — lượt CŨ. Trước `9582` câu này ĐI QUA: một award nói về bảng xếp hạng TRƯỚC BAFO.
+    // VẾ ÂM — lượt CŨ. Trước `093` câu này ĐI QUA: một award nói về bảng xếp hạng TRƯỚC BAFO.
     await expect(
       chenAwardTho({
         rfqId,
@@ -3037,11 +3037,11 @@ describe("[S1.9182 / khoản 231 / 9582] award trỏ vào lượt chấm CŨ b�
     return rows.map((r) => [r.actor_id, r.resource_type, r.payload]);
   }
 
-  // [S1.9182, lượt gộp / ADR-108] Chiều ỨNG DỤNG của tên `j5_luot_cham_khong_moi_nhat`: `deXuatTraoThau` tự suy lượt mới nhất
+  // [S1.231, lượt gộp / ADR-108] Chiều ỨNG DỤNG của tên `j5_luot_cham_khong_moi_nhat`: `deXuatTraoThau` tự suy lượt mới nhất
   // và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở `EVALUATING`, tạo lượt đòi `UNSEALED`/`BAFO_UNSEALED`), nên nhánh
   // này chỉ tới được bằng một ĐƯỜNG GHI THỨ HAI — đúng cái giá khoản 231 ghi. Dựng nó bằng một `client` bọc: ngay trước câu
   // `INSERT INTO public.rfq_awards`, một kết nối KHÁC (cùng vai `app_api`) chèn và commit một bản sao lượt chấm với `created_at`
-  // mới; câu INSERT (READ COMMITTED) thấy hàng ấy, trigger `9582` từ chối bằng TÊN, và tầng gói phải đổi tên ấy thành mã chốt cộng
+  // mới; câu INSERT (READ COMMITTED) thấy hàng ấy, trigger `093` từ chối bằng TÊN, và tầng gói phải đổi tên ấy thành mã chốt cộng
   // một hàng sổ ở giao dịch độc lập — cùng khuôn J3 của khoản 247.
   it("[INV-J5] đường ứng dụng: lượt chấm MỚI HƠN sinh ra giữa câu chọn lượt và câu INSERT của `deXuatTraoThau` ⇒ `ChotKiemSoatError` J5_LUOT_CHAM_KHONG_MOI_NHAT mang lỗi trigger ở `cause`, ĐÚNG MỘT hàng CONTROL_DENIED {ma}, không hàng award, RFQ đứng yên", async () => {
     const { rfqId, banRo, luotId } = await sanSangTraoThau();
@@ -3091,7 +3091,7 @@ describe("[S1.9182 / khoản 231 / 9582] award trỏ vào lượt chấm CŨ b�
 });
 
 // ================================================================================================
-// [S1.9182 / khoản 232 / 9583 / ADR-9282] `WITHDRAWN` — NGƯỜI ĐỀ XUẤT RÚT ĐỀ XUẤT CHƯA CHỮ KÝ CỦA MÌNH
+// [S1.231 / khoản 232 / 094 / ADR-133] `WITHDRAWN` — NGƯỜI ĐỀ XUẤT RÚT ĐỀ XUẤT CHƯA CHỮ KÝ CỦA MÌNH
 //
 // Chủ dự án chốt ⒜ ngày 2026-09-30: trạng thái THỨ TƯ trong chuỗi của `061`. Nó chỉ đi từ một hàng
 // `PROPOSED` KHÔNG chữ ký, chỉ NGƯỜI ĐỀ XUẤT ghi được (so `acted_by` — cột DẪN XUẤT từ phiên, `013`),
@@ -3142,10 +3142,10 @@ async function hangSoTuChoiTrangThai(rfqId: string): Promise<readonly unknown[][
   return rows.map((r) => [r.actor_id, r.payload]);
 }
 
-describe("[S1.9182 / khoản 232 / 9583] WITHDRAWN ở tầng CSDL — ba vế của `award_kiem_mot_award_song`", { timeout: 300000 }, () => {
+describe("[S1.231 / khoản 232 / 094] WITHDRAWN ở tầng CSDL — ba vế của `award_kiem_mot_award_song`", { timeout: 300000 }, () => {
   it("[INV-J7] PROPOSED chưa chữ ký ⇒ WITHDRAWN bởi CHÍNH người đề xuất đi qua; WITHDRAWN không phải award còn sống: PROPOSED mới đi được, APPROVED/CANCELLED thì không", async () => {
     const { rfqId, banRo, luotId, dx } = await coDeXuat();
-    // Trước `9583`: `rfq_awards_status_check` từ chối ngay chữ WITHDRAWN (23514, không tên trigger).
+    // Trước `094`: `rfq_awards_status_check` từ chối ngay chữ WITHDRAWN (23514, không tên trigger).
     const rut = await chenAwardTho({
       rfqId,
       evaluationId: dx.evaluationId,
@@ -3303,7 +3303,7 @@ describe("[S1.9182 / khoản 232 / 9583] WITHDRAWN ở tầng CSDL — ba vế c
   });
 });
 
-describe("[S1.9182 / khoản 232] rutDeXuatTraoThau — đường sản xuất của lần rút", { timeout: 300000 }, () => {
+describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất của lần rút", { timeout: 300000 }, () => {
   it("người đề xuất rút ⇒ hàng WITHDRAWN chép đúng báo giá, RFQ về EVALUATING, một hàng sổ RFQ_AWARD_WITHDRAWN, và đề xuất LẠI được", async () => {
     const { rfqId, banRo, dx } = await coDeXuat();
     expect(await trangThaiRfq(rfqId)).toBe("AWARDED");
@@ -3444,13 +3444,13 @@ describe("[S1.9182 / khoản 232] rutDeXuatTraoThau — đường sản xuất c
 });
 
 // ===============================================================================================
-// [S1.9130 / khoản 250 / ADR-9230] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO LƯỢT CHẤM
+// [S1.217 / khoản 250 / ADR-128] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO LƯỢT CHẤM
 //
-// `docBaoGia` là bộ đọc thứ ba của cùng một luật (worker, bảng so sánh, lượt chấm — §S1.108 mục 7d), và từ S1.9130 cả ba mang
+// `docBaoGia` là bộ đọc thứ ba của cùng một luật (worker, bảng so sánh, lượt chấm — §S1.108 mục 7d), và từ S1.217 cả ba mang
 // cùng vế `i.revoked_at IS NULL` (cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts`). Bản rõ ở đây ghi thẳng,
 // như mọi ca của tệp: thế giới mà vế lọc của lượt chấm phải đứng một mình.
 // ===============================================================================================
-describe("[S1.9130 / khoản 250] bản rõ của lời mời đã thu hồi không vào lượt chấm", { timeout: 180000 }, () => {
+describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi không vào lượt chấm", { timeout: 180000 }, () => {
   it("ba bản rõ, thu hồi lời mời của báo giá RẺ NHẤT ⇒ lượt chấm HAI hàng, hạng 1 là giá rẻ nhì, bảng xếp hạng đọc lại đúng hai hàng; bản rõ vẫn còn trong CSDL", async () => {
     const { rfqId, banRo } = await goiDaMo([
       ["900000000.00", "VND"],

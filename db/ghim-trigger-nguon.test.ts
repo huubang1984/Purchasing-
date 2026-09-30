@@ -1,5 +1,5 @@
 // ===============================================================================================
-// [S1.9172 / khoản 214] CHỖ GHIM ⑵ CỦA HARDENING PHẢI VIẾT BẰNG CHÍNH TẢ NGUỒN — SO TĨNH VỚI CÂU
+// [S1.228 / khoản 214] CHỖ GHIM ⑵ CỦA HARDENING PHẢI VIẾT BẰNG CHÍNH TẢ NGUỒN — SO TĨNH VỚI CÂU
 // `CREATE TRIGGER` CỦA MIGRATION CUỐI ĐỊNH NGHĨA NÓ
 //
 // Mỗi trigger hardening tự chữa có ba chỗ ghim (khoản 211, `tests/architecture/hardening-co-ly-do.test.ts`):
@@ -13,7 +13,7 @@
 // ai, người hay cổng, đối chiếu được ⑵ với migration bằng mắt hay bằng văn bản; và một bộ chuẩn hoá SQL
 // viết tay để so hai chính tả là thứ S1.72 đã trả giá một lần.
 //
-// VÌ SAO CỔNG NÀY ĐỨNG ĐƯỢC SAU S1.9172, và chỉ sau đó: đo trên `561158e` — chủ thể 146 tên (148 kể cả
+// VÌ SAO CỔNG NÀY ĐỨNG ĐƯỢC SAU S1.228, và chỉ sau đó: đo trên `561158e` — chủ thể 146 tên (148 kể cả
 // hai `CREATE CONSTRAINT TRIGGER`, nằm ngoài chủ thể); 15 chỗ ⑵ lệch chính tả nguồn (4 `BEFORE DELETE OR
 // UPDATE`, 1 `BEFORE INSERT OR DELETE OR UPDATE`, 10 mệnh đề `WHEN` canonical); 109 chỉ khác dấu `public.`
 // trước tên bảng; 22 trùng từng chữ. 15 chỗ ấy được viết lại bằng chính tả nguồn (sau: 0 lệch, 124 chỉ khác
@@ -240,7 +240,7 @@ function mauHardening(cauSua: string, def = "CREATE TRIGGER zz_canh BEFORE UPDAT
 const NGUON_ZZ = "CREATE TRIGGER zz_canh\n  BEFORE UPDATE ON zz\n  FOR EACH ROW\n  WHEN (NEW.a IS NOT NULL)\n  EXECUTE FUNCTION public.f();\n";
 const MIGRATION_ZZ: ReadonlyMap<string, string> = new Map([["010_zz.sql", "-- CREATE TRIGGER zz_canh trong chú thích không tính\n" + NGUON_ZZ]]);
 
-describe("[S1.9172 / khoản 214] chỗ ghim ⑵ viết bằng chính tả nguồn — so tĩnh với migration cuối", () => {
+describe("[S1.228 / khoản 214] chỗ ghim ⑵ viết bằng chính tả nguồn — so tĩnh với migration cuối", () => {
   it("mọi chỗ ghim ⑵ của hardening khớp câu CREATE TRIGGER của migration cuối định nghĩa nó, sau chuẩn hoá khoảng trắng và lược đồ public", () => {
     const { hardening, migrations } = docThatCuaKho();
     const kq = viPhamGhimNguon(hardening, migrations);

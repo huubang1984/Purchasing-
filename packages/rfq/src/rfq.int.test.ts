@@ -1655,10 +1655,10 @@ describe("[S1.73 / khoản 126 ⑵] lần huỷ RFQ thứ hai chờ khoá hàng 
     const msB = await choToiKhiBiChanK126(() => pidB, 8_000);
     const dangCho = await loaiKhoaDangCho(pidB);
     const khoaB = await demKhoaGhiSoK126(pidB);
-    // [S1.9141 / khoản 149 ⑵] ĐỐI CHỨNG DƯƠNG CỦA PHÉP DÒ, ĐO TRONG CÙNG CẢNH: lần huỷ thứ nhất đã ghi sổ `RFQ_CANCELLED` và còn
+    // [S1.220 / khoản 149 ⑵] ĐỐI CHỨNG DƯƠNG CỦA PHÉP DÒ, ĐO TRONG CÙNG CẢNH: lần huỷ thứ nhất đã ghi sổ `RFQ_CANCELLED` và còn
     // giữ giao dịch mở, nên ngay lúc này nó phải đang giữ ĐÚNG MỘT khoá tư vấn ghi sổ của tổ chức — và phép dò phải THẤY nó.
     // Không vế này, `expect(khoaB).toBe(0)` là một khẳng định RỖNG: một phép dò hỏng (luôn ra 0) làm nó xanh (đột biến đo được,
-    // §S1.9141). Cùng khuôn `gia-han-xep-job-truoc-ghi-so.int.test.ts` [lượt soi 65c-3]; hàng 149 trỏ nhầm tệp ấy, chỗ thiếu là đây.
+    // §S1.220). Cùng khuôn `gia-han-xep-job-truoc-ghi-so.int.test.ts` [lượt soi 65c-3]; hàng 149 trỏ nhầm tệp ấy, chỗ thiếu là đây.
     const khoaA = await demKhoaGhiSoK126(pidA);
     thaA();
     await huyA;

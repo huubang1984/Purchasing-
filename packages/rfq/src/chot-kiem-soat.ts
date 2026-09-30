@@ -49,6 +49,16 @@ export const CAU_CHOT_NHOM_HANG =
   "AND r.status OPERATOR(pg_catalog.=) 'DRAFT'";
 
 /**
+ * [S1.203 / S3.6b1] Câu hỏi chốt K10a ở cạnh mở gói (`088_tin_hieu_chia_nho`): `$1` tổ chức, `$2` gói. Hàm vị từ tính tín hiệu
+ * chia nhỏ NGAY LÚC HỎI và đòi một lần ghi nhận trên một tín hiệu có bằng chứng bằng nó; gói không ở PENDING_APPROVAL thì không
+ * hàng nào, tức cho qua, và câu mở nói lời từ chối trạng thái — như K1.
+ */
+export const CAU_CHOT_TIN_HIEU =
+  "SELECT public.rfq_chot_tin_hieu(r.org_id, r.id) AS ly_do FROM public.rfq_packages r " +
+  "WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid " +
+  "AND r.status OPERATOR(pg_catalog.=) 'PENDING_APPROVAL'";
+
+/**
  * Hỏi một hàm vị từ của chốt rồi ném theo bảng. Gọi TRƯỚC mọi tác dụng phụ của thao tác.
  *
  * `cau` là một câu SQL trả đúng một cột `ly_do` — NULL khi cho qua. Mã lạ ⇒ lỗi KHÔNG tên: hàm SQL và

@@ -32,7 +32,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // `log-tu-choi-mat` qua HTTP trên tiến trình thật (dòng không mang id tổ chức, id người dùng hay thân yêu cầu).
     "apps/api/src/log-tu-choi-mat.int.test.ts",
     "packages/identity/src/mo-ta-hang-dong.test.ts",
-    // [S1.9151 / khoản 166] `moTaLoiKhongGiaTri` nay MỘT bản ở identity: `mo-ta-loi.test.ts` của gói đo luật A2 ở mức hàm trên lớp lỗi
+    // [S1.222 / khoản 166] `moTaLoiKhongGiaTri` nay MỘT bản ở identity: `mo-ta-loi.test.ts` của gói đo luật A2 ở mức hàm trên lớp lỗi
     // thật (`DenialAuditFailedError` mang cause 55P03, `TenantError` — không message, không giá trị), và vế khoản 166 của
     // `composition.int.test.ts` đo dòng log của worker dựng từ cấu hình (không id yêu cầu, id tổ chức, id job, không thông điệp Postgres).
     "apps/unseal-worker/src/composition.int.test.ts",
@@ -129,6 +129,10 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [S1.202 / khoản 254] Gói cấp kép MỘT chữ ký, trả về, hạ ngân sách về một chữ ký: chữ ký cho lúc gói cần hai người
     // không mở được gói — và đột biến bỏ phép đếm trên ngân sách mở lại đúng lỗ ấy.
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
+    // [S1.198 / khoản 256 · khoản 257] Cột lần nộp về NULL ở tổ chức chưa bật là điểm chịu lực của phép đếm HÀNG ở `071`: gói cấp
+    // kép, một người duyệt không mốc rồi mốc đúng bị UNIQUE chặn — và đột biến bỏ vế NULL mở gói bằng một người. Lời tự duyệt
+    // thiếu mốc vẫn là lời từ chối D2 có sổ (trigger so lần nộp chạy sau chốt D2), và đột biến đổi thứ tự làm nó rơi khỏi sổ.
+    "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "packages/unseal/src/unseal.int.test.ts",
   ],
   D3: [
@@ -199,7 +203,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/routes.test.ts",
   ],
   F1: [
-    // [S1.9192 / khoản 158] Tập `kind` của hai policy RESTRICTIVE FOR UPDATE trên `outbox_jobs` (9592) BẰNG bảng handler ∪ sổ mồ côi
+    // [S1.233 / khoản 158] Tập `kind` của hai policy RESTRICTIVE FOR UPDATE trên `outbox_jobs` (095) BẰNG bảng handler ∪ sổ mồ côi
     // của tiến trình chạy dưới vai ấy — đọc `pg_policy`, đối chiếu với `Object.keys(handlers)` thật; thêm `kind` mà quên migration
     // thì đỏ ở tệp của tiến trình thêm, trước khi job của nó nằm PENDING im lặng (F1: RLS không là đường làm câu ghi trả 0 hàng im lặng).
     "apps/api/src/composition.int.test.ts",
@@ -285,6 +289,12 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // chinh PostgreSQL lam bo chuan hoa, vi hai ben viet hai chinh ta khac nhau.
     "db/ghim-trigger-tu-chua.int.test.ts",
     "db/hardening-suy-tu-tinh-chat.int.test.ts",
+    // [S1.205 / khoản 259] Mặc định-đóng với trigger: trigger lạ bị gỡ trên bảng có tên trong `TRIGGER_DUOC_PHEP`, chặn deploy ở
+    // bảng khác; `migrate()` trên cụm trống không gỡ gì — và chín đột biến của mục đều đỏ ở tệp này.
+    "db/trigger-la-mac-dinh-dong.int.test.ts",
+    // [S1.205 / khoản 259] Kịch bản của lượt soi S1.198 đo trên gói thật: bản đổi tên của trigger so lần nộp xếp trước chốt D2 không
+    // sống qua `migrate()`, nên lời tự duyệt thiếu mốc lại là lời từ chối D2 có sổ.
+    "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "tests/architecture/hardening-co-ly-do.test.ts",
   ],
   H2: [
@@ -386,14 +396,20 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // commit, `SENT` sau lần gửi được, gửi hỏng để lời mời *chưa gửi* (K6).
   // [S1.202 / khoản 254] `rang-ngan-sach` đo chữ ký ràng vào ngân sách (K4b): hạ bậc, nâng cùng bậc, ghim phiên bản chính sách
   // mới, cột ngoài `GRANT`, vế NULL của MVP1, hàng cũ không điền, và mỗi vế của bản vá một đột biến.
+  // [S1.198 / khoản 256 · khoản 257] `lan-nop-da-xem` đo lời duyệt mang lần nộp đã xem và lần trả về rút chữ ký của chính người
+  // trả (K4b), hàng `rfq_tra_ve` mà cạnh về DRAFT đòi (K4a), và mỗi vế một đột biến; `buyer.int` đo thân `{lanNop}` của route duyệt
+  // ở tổ chức đã bật (K4b).
   K4a: [
     "apps/api/src/buyer.int.test.ts",
     "apps/api/src/luong-moi-s3.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
+    "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
   K4b: [
+    "apps/api/src/buyer.int.test.ts",
     "packages/rfq/src/danh-sach-moi.int.test.ts",
+    "packages/rfq/src/lan-nop-da-xem.int.test.ts",
     "packages/rfq/src/rang-ngan-sach.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
@@ -403,13 +419,29 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/rfq/src/danh-sach-moi.int.test.ts",
     "packages/rfq/src/tra-ve-nhap.int.test.ts",
   ],
+  // K10a — [S1.203 / S3.6b1] tín hiệu chia nhỏ ở cạnh mở gói. `tin-hieu-chia-nho` đo dưới `app_api`: fixture 480/470/490 của
+  // spec §7, luật người ở tầng gói và ở trigger, bằng chứng trôi, tập anh em (huỷ, khác nhóm, tiền tệ, cửa sổ, cận), đối chứng
+  // MVP1, lớp chặn cuối, và mỗi vế của hàm tín hiệu một đột biến. Tệp HTTP đo hai route và lời từ chối có tên.
+  // [S3.6b2] Kịch bản 41 qua HTTP đi trọn fixture ấy trên tổ chức của kịch bản, ở cả hai luồng: lần mở dừng ở 422 có tên và không đúc
+  // khoá, người tạo tự ghi nhận bị từ chối, người độc lập ghi nhận rồi gói mở — sổ kể lại đúng thứ tự; luồng MVP1 mở cả ba.
+  K10a: [
+    "apps/api/src/buyer.int.test.ts",
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    "packages/rfq/src/tin-hieu-chia-nho.int.test.ts",
+  ],
   // L1 · L4 — [S1.192 / S4.1] đơn vị đo. `don-vi` đo dưới `app_api` trên Postgres thật: khuôn ghi của bảng dữ liệu nền (ba cột
   // ngoài GRANT, trigger đặt `seq`/`ghi_luc`, chỉ-ghi-thêm, hai giao dịch đồng thời, tổng điều tra `BANG_DU_LIEU_NEN`) cho L1;
   // bảng ca quy đổi, bí danh tại mốc và đột biến `ELSE 1` cho L4.
   // [S1.197 / S4.2a] `hang-chuan` đo bốn bảng hàng chuẩn (L1), vế ⑵ của quy đổi (L4) và vai quản lý dữ liệu mù giá cùng cổng
   // ghi CSDL (L3); `ma-tran-quyen` khoá ba bản của danh sách loại trừ và cặp vai xung đột (L3, T1).
   L1: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
-  L3: ["packages/du-lieu-nen/src/hang-chuan.int.test.ts", "packages/identity/src/ma-tran-quyen.test.ts"],
+  // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
+  // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
+  L3: [
+    "apps/api/src/du-lieu.int.test.ts",
+    "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
+    "packages/identity/src/ma-tran-quyen.test.ts",
+  ],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.

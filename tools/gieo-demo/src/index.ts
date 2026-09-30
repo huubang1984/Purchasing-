@@ -54,9 +54,20 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
+import { khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
-import { createProcurementPolicy, kyPhienBanChinhSach, taoNhomHang } from "@trustprocure/rfq";
+import {
+  addRfqItem,
+  approveRfq,
+  createProcurementPolicy,
+  createRfq,
+  kyPhienBanChinhSach,
+  openRfq,
+  setRfqBudget,
+  submitRfqForApproval,
+  taoNhomHang,
+} from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
@@ -100,6 +111,56 @@ const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dv
   { mo: "Bu long neo M24 cap 8.8", sl: "2400.0000", dvt: "bo" },
 ];
 
+/**
+ * [S1.199 / S4.2b] Ba hàng chuẩn cho ba dòng của `HANG_MUC`, ghi bằng hàm gói dưới phiên người quản lý dữ liệu — đúng đường
+ * màn `/du-lieu` đi. Mỗi hàng: một bí danh là NGUYÊN mô tả của dòng (để S4.3 ánh xạ được), một quy đổi riêng từ đơn vị đóng gói
+ * của dòng về đơn vị gốc.
+ *
+ * HỆ SỐ LÀ PHÉP TÍNH TỪ KÍCH THƯỚC GHI TRONG THUỘC TÍNH, không phải số đo của một nhà máy (spec S4 §8.6 — *"tham số bịa trông như
+ * số đo"*). Công thức nằm ngay dưới, để ai đọc hệ số cũng đọc được nó từ đâu ra; thép 7 850 kg/m³:
+ *   · tấm 1 500 × 6 000 × 10 mm: 1,5 × 6 × 0,010 m³ × 7 850 = 706,5 kg;
+ *   · hộp 50 × 50 dày 1,4 mm, cây 6 m: tiết diện theo đường trung bình 4 × (50 − 1,4) × 1,4 = 272,16 mm², × 7 850 × 6 m
+ *     = 12,818… kg, làm tròn hai chữ số;
+ *   · bu lông neo: một bộ là một bu lông kèm hai đai ốc và hai long đen, đơn vị gốc đếm bu lông — 1 bộ = 1 cái.
+ */
+const HANG_CHUAN_DEMO: readonly {
+  readonly ma: string;
+  readonly donViGoc: string;
+  readonly ten: string;
+  readonly thuocTinh: Readonly<Record<string, string>>;
+  readonly thuocTinhTrongYeu: readonly string[];
+  readonly biDanh: string;
+  readonly quyDoi: { readonly tu: string; readonly heSo: string };
+}[] = [
+  {
+    ma: "THEP-TAM-SS400-10",
+    donViGoc: "kg",
+    ten: "Thép tấm SS400 dày 10 mm, khổ 1500×6000",
+    thuocTinh: { mac: "SS400", day_mm: "10", kho_mm: "1500x6000" },
+    thuocTinhTrongYeu: ["mac", "day_mm"],
+    biDanh: "Thep tam SS400 day 10mm",
+    quyDoi: { tu: "tam", heSo: "706.5" },
+  },
+  {
+    ma: "THEP-HOP-MK-50X50-1.4",
+    donViGoc: "kg",
+    ten: "Thép hộp mạ kẽm 50×50 dày 1,4 mm, cây 6 m",
+    thuocTinh: { be_mat: "ma kem", kich_thuoc_mm: "50x50", day_mm: "1.4", dai_cay_m: "6" },
+    thuocTinhTrongYeu: ["kich_thuoc_mm", "day_mm"],
+    biDanh: "Thep hop ma kem 50x50",
+    quyDoi: { tu: "cay", heSo: "12.82" },
+  },
+  {
+    ma: "BU-LONG-NEO-M24-8.8",
+    donViGoc: "cai",
+    ten: "Bu lông neo M24 cấp bền 8.8",
+    thuocTinh: { duong_kinh: "M24", cap_ben: "8.8", bo_gom: "1 bu long, 2 dai oc, 2 long den" },
+    thuocTinhTrongYeu: ["duong_kinh", "cap_ben"],
+    biDanh: "Bu long neo M24 cap 8.8",
+    quyDoi: { tu: "bo", heSo: "1" },
+  },
+];
+
 const NHA_CUNG_CAP: readonly string[] = ["Thep Dong Anh", "Kim khi Hai Phong", "Vat tu Truong Thanh"];
 /**
  * [S1.174 / S3.1d] Gói demo 9 tỷ nằm ở bậc 2 của §4.1, và bậc ấy đòi NĂM nhà cung cấp (K2 — chưa cưỡng chế ở S3.1, nhưng
@@ -125,7 +186,7 @@ async function chinh(): Promise<void> {
   const soDienThoai = String(randomBytes(4).readUInt32BE(0) % 10000000).padStart(7, "0");
 
   const pool = new pg.Pool({ connectionString: url, max: 4 });
-  // [S1.9171 / khoản 180] Pool này đi qua `withTenant` (nửa CÓ tenant của script), nên hai tín hiệu mất-không-ai-biết mà
+  // [S1.227 / khoản 180] Pool này đi qua `withTenant` (nửa CÓ tenant của script), nên hai tín hiệu mất-không-ai-biết mà
   // cổng `pool-nghe-du-tin-hieu` — nay quét cả `tools/` và thấy cả `new pg.Pool` — đòi phải có người nghe: ⑴ `release`
   // mang `TenantError` SESSION_STATE_LEFT (kết nối bị huỷ vì trạng thái phiên còn sót, không ném cho ai); ⑵ lỗi tới muộn
   // sau trần `maxConnectWaitMs` (ở đây không đặt trần; gắn để không phải nhớ). Chỉ TÊN và MÃ lỗi, không `message`.
@@ -172,16 +233,22 @@ async function chinh(): Promise<void> {
     // Hai người DUYỆT mang vai DIRECTOR vẫn cần thiết và không thay được: `rfq.unseal.approve`
     // chỉ của DIRECTOR. Nên bối cảnh này có NĂM người, hai vai, hai loại phê duyệt khác nhau —
     // và sự khác nhau ấy chính là Separation of Duties chứ không phải thừa thãi.
-    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
+    // [S1.199 / S4.2b] `dulieu` — người quản lý dữ liệu, một NGƯỜI MỚI chứ không phải một vai thêm cho người sẵn có (spec S4
+    // §8.10): `DATA_STEWARD` không ghép được với vai nào ở đây.
+    for (const ten of ["soan", "soan2", "soan3", "duyet1", "duyet2", "dulieu", ...(S3 ? ["taichinh1", "taichinh2"] : [])]) {
       const email = `${ten}.${duoi}@vidu.vn`;
       const hoTen = ten.startsWith("soan")
         ? `Nguoi soan goi thau ${ten.slice(4)}`.trim()
-        : ten.startsWith("duyet") ? `Nguoi duyet ${ten.slice(-1)}` : `Nguoi tai chinh ${ten.slice(-1)}`;
+        : ten.startsWith("duyet")
+          ? `Nguoi duyet ${ten.slice(-1)}`
+          : ten === "dulieu" ? "Nguoi quan ly du lieu" : `Nguoi tai chinh ${ten.slice(-1)}`;
       const id = (await q<{ id: string }>(
         "INSERT INTO public.users (org_id, email, full_name) VALUES ($1, $2, $3) RETURNING id",
         [org, email, hoTen],
       )).id;
-      const vai = ten.startsWith("soan") ? "PROCUREMENT_MANAGER" : ten.startsWith("duyet") ? "DIRECTOR" : "FINANCE";
+      const vai = ten.startsWith("soan")
+        ? "PROCUREMENT_MANAGER"
+        : ten.startsWith("duyet") ? "DIRECTOR" : ten === "dulieu" ? "DATA_STEWARD" : "FINANCE";
       await pool.query("INSERT INTO public.user_roles (org_id, user_id, role_code) VALUES ($1, $2, $3)", [org, id, vai]);
       // MỖI người một phiên riêng: mọi lần ghi có kiểm danh tính (013) đòi một phiên còn sống, và
       // `rfq_approvals_mot_phien_mot_lan` của 009 đòi một phiên KHÁC NHAU cho mỗi người duyệt.
@@ -194,6 +261,31 @@ async function chinh(): Promise<void> {
     }
     const nguoiGieo = nguoiMua[0]?.id ?? "";
     const phienGieo = nguoiMua[0]?.sessionId ?? "";
+
+    // [S1.199 / S4.2b] Ba hàng chuẩn, dưới phiên người quản lý dữ liệu — một giao dịch: trigger `du_lieu_nen_kiem_quyen_ghi`
+    // phán người ghi như ở màn.
+    const phienDuLieu = nguoiMua.find((n) => n.email.startsWith("dulieu."))?.sessionId;
+    if (phienDuLieu === undefined) throw new GieoError("thiếu người quản lý dữ liệu");
+    await withTenant(pool, org, async (c) => {
+      for (const h of HANG_CHUAN_DEMO) {
+        const moi = await taoHangChuan(c, org, {
+          ma: h.ma,
+          donViGoc: h.donViGoc,
+          ten: h.ten,
+          thuocTinh: h.thuocTinh,
+          thuocTinhTrongYeu: h.thuocTinhTrongYeu,
+          actorSessionId: phienDuLieu,
+        });
+        await khaiBiDanhHang(c, org, { hangChuanId: moi.id, biDanh: h.biDanh, actorSessionId: phienDuLieu });
+        await khaiQuyDoiRieng(c, org, {
+          hangChuanId: moi.id,
+          tuDonVi: h.quyDoi.tu,
+          sangDonVi: h.donViGoc,
+          heSo: h.quyDoi.heSo,
+          actorSessionId: phienDuLieu,
+        });
+      }
+    });
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
@@ -294,9 +386,12 @@ async function chinh(): Promise<void> {
     // Chế độ mặc định giữ nguyên hình dạng cũ (bốn chữ ký — cả hai giám đốc, một lối tắt của câu SQL, route không cho).
     // [S1.190 / S3.2c1] `--s3`: trigger đặt băm danh sách lúc ký — danh sách năm lời mời vừa dựng ở DRAFT.
     const nguoiDuyetGoi = S3 ? nguoiMua.filter((n) => /^soan[23]\./u.test(n.email)) : nguoiMua.slice(1);
+    // [S1.198 / khoản 256] Mỗi chữ ký mang lần nộp đang có — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó; tổ
+    // chức chưa bật nhận nó như một lời duyệt tự gửi mốc đúng.
     for (const nm of nguoiDuyetGoi) {
       await pool.query(
-        "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id, lan_nop_da_xem) " +
+          "SELECT $1, $2, $3, $4, p.lan_nop FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $2",
         [org, rfq, nm.id, nm.sessionId],
       );
     }
@@ -334,6 +429,58 @@ async function chinh(): Promise<void> {
       }
     });
 
+    // [S3.6b2 / K10a] `--s3`: tín hiệu chia nhỏ gói. Nhóm hàng RIÊNG — trong `KET-CAU`, gói 9 tỷ ở trên nhập tập và tín hiệu bắn ở cận
+    // 10 tỷ thay vì 1 tỷ. Ba gói 480 / 470 / 490 triệu do người soạn tạo và nộp đúng theo thứ tự ấy, mỗi lần nộp một giao dịch: cửa sổ
+    // tính NGƯỢC từ `submitted_at` của chính gói, nên chỉ gói nộp sau cùng mang tín hiệu — và chỉ `submitRfqForApproval` ghi ảnh chụp
+    // lúc nộp (câu UPDATE thẳng như gói 9 tỷ thì không). Mỗi gói dưới ngưỡng kép 1 tỷ nên một chữ ký của soan2 là đủ. Hai gói đầu mở
+    // bằng `openRfq`; gói thứ ba dừng ở cạnh mở — chủ dự án chốt ngày 2026-09-30: người demo tự đi đường bị chặn, ghi nhận, rồi mở.
+    const chiaNho = S3
+      ? await (async (): Promise<readonly { readonly giaTri: string; readonly id: string }[]> => {
+          const f1 = nguoiMua.find((n) => n.email.startsWith("taichinh1."));
+          const soan = nguoiMua.find((n) => n.email.startsWith("soan."));
+          const soan2 = nguoiMua.find((n) => n.email.startsWith("soan2."));
+          if (f1 === undefined || soan === undefined || soan2 === undefined) throw new GieoError("--s3: thiếu người cho tín hiệu chia nhỏ");
+          const nhom = (await withTenant(pool, org, (c) =>
+            taoNhomHang(c, org, { ma: "THEP-TAM", ten: "Thep tam cho cong trinh", actorSessionId: f1.sessionId }, pool),
+          )).id;
+          const han = new Date(Date.now() + 2 * 24 * 3600 * 1000);
+          const goi: { readonly giaTri: string; readonly id: string }[] = [];
+          for (const [i, giaTri] of ["480000000.00", "470000000.00", "490000000.00"].entries()) {
+            const id = await withTenant(pool, org, async (c) => {
+              const r = await createRfq(c, org, {
+                title: `Thep tam cong trinh ${String(i + 1)} ${duoi}`,
+                deadlineAt: han,
+                createdBySessionId: soan.sessionId,
+                categoryId: nhom,
+              });
+              await setRfqBudget(c, org, { rfqId: r.id, estimatedValue: giaTri, currency: "VND", actorSessionId: soan.sessionId });
+              await addRfqItem(c, org, {
+                rfqId: r.id,
+                lineNo: 1,
+                description: "Thep tam SS400 day 10mm",
+                quantity: "40.0000",
+                unit: "tam",
+                actorSessionId: soan.sessionId,
+              });
+              return r.id;
+            });
+            await withTenant(pool, org, (c) => submitRfqForApproval(c, org, { rfqId: id, actorSessionId: soan.sessionId }, pool));
+            const lanNop = (await q<{ n: number }>(
+              "SELECT p.lan_nop AS n FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) $1",
+              [id],
+            )).n;
+            await withTenant(pool, org, (c) => approveRfq(c, org, { rfqId: id, sessionId: soan2.sessionId, lanNopDaXem: lanNop }, pool));
+            if (i < 2) {
+              await withTenant(pool, org, (c) =>
+                openRfq(c, org, { rfqId: id, actorSessionId: soan.sessionId, orgKeys: createLocalDevOrgKeyProvisioner(vong) }, pool),
+              );
+            }
+            goi.push({ giaTri, id });
+          }
+          return goi;
+        })()
+      : [];
+
     const tokenNguoiMua: { readonly email: string; readonly token: string }[] = [];
     for (const nm of nguoiMua) {
       const kq = await withTenant(pool, org, (c) => issueLoginToken(c, org, { email: nm.email }));
@@ -353,8 +500,15 @@ async function chinh(): Promise<void> {
     ra.push("NGƯỜI MUA — lần đầu vào sẽ hiện bí mật TOTP để ghi danh.");
     ra.push("  soan tạo gói thầu ở /tao-thau; soan2 + soan3 (cùng PROCUREMENT_MANAGER) phê duyệt — phê duyệt kép đòi HAI người KHÁC người tạo.");
     ra.push("  duyet1 + duyet2 (DIRECTOR) phê duyệt MỞ THẦU ở /mo-thau — hai loại phê duyệt khác nhau.");
-    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh"))) {
+    for (const nm of tokenNguoiMua.filter((n) => !n.email.startsWith("taichinh") && !n.email.startsWith("dulieu."))) {
       ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/mo-thau#${org}:${nm.token}`);
+    }
+    ra.push("");
+    ra.push("QUẢN LÝ DỮ LIỆU — dulieu (DATA_STEWARD) ở /du-lieu: ba hàng chuẩn cho ba dòng của gói, mỗi hàng một bí danh là");
+    ra.push("  nguyên mô tả dòng và một quy đổi riêng từ tấm / cây / bộ về đơn vị gốc — hệ số tính từ kích thước, không phải số đo.");
+    ra.push("  Người mua khác mở /du-lieu chỉ xem được, và màn nói vì sao.");
+    for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("dulieu."))) {
+      ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/du-lieu#${org}:${nm.token}`);
     }
     if (S3) {
       ra.push("");
@@ -364,6 +518,14 @@ async function chinh(): Promise<void> {
       for (const nm of tokenNguoiMua.filter((n) => n.email.startsWith("taichinh"))) {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
       }
+    }
+    if (chiaNho.length > 0) {
+      ra.push("");
+      ra.push("TÍN HIỆU CHIA NHỎ (K10a) — nhóm hàng THEP-TAM: soan tạo và nộp ba gói 480 / 470 / 490 triệu trong cửa sổ 30 ngày, mỗi gói");
+      ra.push("  dưới cận 1 tỷ mà tổng 1,44 tỷ chạm cận ấy. Hai gói đầu đã mở. Gói thứ ba soan2 đã duyệt nhưng CHƯA mở được: soan đọc gói");
+      ra.push("  ở /tao-thau, bấm «Mở gói» thì bị chặn, và màn nói soan không tự ghi nhận được. soan3 đọc gói, ghi nhận tín hiệu kèm lý do;");
+      ra.push("  rồi soan mở gói. Đăng nhập bằng link của người ấy ở trên, rồi mở /tao-thau — trang hỏi «Tiếp tục với phiên này».");
+      for (const g of chiaNho) ra.push(`  ${`gói ${g.giaTri.slice(0, 3)} triệu`.padEnd(24)} ${g.id}`);
     }
     ra.push("");
     ra.push(`mã gói thầu để dán vào bước 2 của màn người mua: ${rfq}`);

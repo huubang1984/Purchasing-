@@ -1254,6 +1254,59 @@ describe("biên giới module của packages/du-lieu-nen", () => {
 });
 
 // ==============================================================================================
+// [INV-H16] [S1.203 / S3.6b1] BIÊN GIỚI CỦA packages/kiem-soat — HỌ QUY TẮC `g20-`
+//
+// Hai quy tắc, cùng khuôn `g19-`: cửa chỉ là index.ts, và gói không VỚI TỚI đường mở thầu (spec S3 §3.1, §3.2). Probe âm thứ
+// hai đi qua `@trustprocure/rfq` chứ không import thẳng `sealed-envelope`: đó là đường một người sẽ thật sự viết — gói rfq đã
+// có sẵn khuôn `kiemChot` — và nó chỉ bị chặn vì quy tắc là `reachable: true`, không phải một phép canh trực tiếp.
+// ==============================================================================================
+describe("biên giới module của packages/kiem-soat", () => {
+  it("[INV-H16] chặn import TƯƠNG ĐỐI xuyên gói vào packages/kiem-soat/src", () => {
+    const probe = "packages/audit/src/zzprobe-kiem-soat-tuong-doi.ts";
+    writeFileSync(
+      probe,
+      ['import { lietKeTinHieu } from "../../kiem-soat/src/tin-hieu.js";', "export { lietKeTinHieu };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["packages/audit", "packages/kiem-soat"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-kiem-soat-tuong-doi.ts");
+      expect(output).toContain("g20-kiem-soat-chi-index-la-cua-cong-khai");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] packages/kiem-soat không với tới sealed-envelope, unseal hay crypto-keys — kể cả GIÁN TIẾP qua @trustprocure/rfq", () => {
+    const probe = "packages/kiem-soat/src/zzprobe-mo-thau.ts";
+    writeFileSync(probe, ['import { openRfq } from "@trustprocure/rfq";', "export { openRfq };", ""].join("\n"));
+    try {
+      const { status, output } = depcruise(["packages/kiem-soat", "packages/rfq", "packages/sealed-envelope"]);
+      expect(status).not.toBe(0);
+      expect(output).toContain("zzprobe-mo-thau.ts");
+      expect(output).toContain("g20-kiem-soat-khong-cham-duong-mo-thau");
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  }, 60000);
+
+  it("[INV-H16] cửa index.ts VẪN đi qua được, và gói hôm nay không với tới đường mở thầu — đối chứng dương", () => {
+    mkdirSync("apps/tmp-probe-kiem-soat-cua/src", { recursive: true });
+    writeFileSync(
+      "apps/tmp-probe-kiem-soat-cua/src/dung.ts",
+      ['import { lietKeTinHieu } from "../../../packages/kiem-soat/src/index.js";', "export { lietKeTinHieu };", ""].join("\n"),
+    );
+    try {
+      const { status, output } = depcruise(["apps/tmp-probe-kiem-soat-cua", "packages/kiem-soat", "packages/audit", "packages/identity"]);
+      expect(output).not.toContain("g20-");
+      expect(status, `cửa hợp pháp bị chặn:\n${output}`).toBe(0);
+    } finally {
+      rmSync("apps/tmp-probe-kiem-soat-cua", { recursive: true, force: true });
+    }
+  }, 60000);
+});
+
+// ==============================================================================================
 // [INV-H16] BIÊN GIỚI MODULE CỦA packages/invitation — HỌ QUY TẮC `g7-`
 // ==============================================================================================
 describe("biên giới module của packages/invitation", () => {

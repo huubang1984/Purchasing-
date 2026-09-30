@@ -387,12 +387,12 @@ describe("[khoản nợ 70] email của người liên hệ nhà cung cấp khô
   });
 
   // ~~[khoản nợ 70] [lượt soi 54 NHẸ-2] một chữ hoa NGOÀI ASCII mà máy chủ gấp được cũng bị từ chối — ràng buộc không co về ASCII (tự hiệu chuẩn)~~
-  // **[S1.9180 / khoản 71 / ADR-9280] LẬT CÓ CHỦ ĐÍCH.** Ca cũ đo rằng ràng buộc chữ thường KHÔNG co về ASCII, và cho một chữ THƯỜNG ngoài
-  // ASCII đi vào làm đối chứng — đúng thứ khoản 71 gọi tên là lỗ (tập giá trị cất được phụ thuộc `lower()` của libc). Nay `9580_email_ascii`
+  // **[S1.229 / khoản 71 / ADR-132] LẬT CÓ CHỦ ĐÍCH.** Ca cũ đo rằng ràng buộc chữ thường KHÔNG co về ASCII, và cho một chữ THƯỜNG ngoài
+  // ASCII đi vào làm đối chứng — đúng thứ khoản 71 gọi tên là lỗ (tập giá trị cất được phụ thuộc `lower()` của libc). Nay `092_email_ascii`
   // thu hẹp MIỀN về ASCII in được: chữ hoa ngoài ASCII vẫn bị từ chối (hai ràng buộc cùng vi phạm — ASCII và chữ thường — PostgreSQL nêu
   // một, không ghim cái nào), và chữ THƯỜNG ngoài ASCII CŨNG bị từ chối, bởi đúng ràng buộc ASCII. Không còn tự hiệu chuẩn theo máy chủ:
   // điểm mã chọn cố định, kết quả không đổi theo libc.
-  it("[khoản nợ 70] [S1.9180 / khoản 71] chữ hoa NGOÀI ASCII bị từ chối, và chữ THƯỜNG ngoài ASCII cũng bị từ chối bởi ràng buộc ASCII — miền không còn phụ thuộc lower() của máy chủ", async () => {
+  it("[khoản nợ 70] [S1.229 / khoản 71] chữ hoa NGOÀI ASCII bị từ chối, và chữ THƯỜNG ngoài ASCII cũng bị từ chối bởi ràng buộc ASCII — miền không còn phụ thuộc lower() của máy chủ", async () => {
     await expect(them(nccA, "\u24B6u70@corp.com"), "Ⓐ").rejects.toThrow(/supplier_contacts_email_(ascii|chu_thuong)/u);
     await expect(them(nccA, "\u24D0u70@corp.com"), "ⓐ").rejects.toThrow(/supplier_contacts_email_ascii/u);
     await expect(them(nccA, "\u0110u70@corp.com"), "Đ").rejects.toThrow(/supplier_contacts_email_(ascii|chu_thuong)/u);

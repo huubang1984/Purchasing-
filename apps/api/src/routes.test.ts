@@ -25,7 +25,7 @@ import { MFA_MAX_FAILED_ATTEMPTS, MFA_TRAN_SAI_DUONG_PHU } from "@trustprocure/i
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
 import { MIEN_TRAN_NGUOI_GOI, THAN_429_MFA, agentGoiDuoc, timViPhamBangRoute, type BuyerContext, type BuyerSelfRoute, type Route } from "./route-types.js";
 
-// [S1.9101 / khoản 188] `verifyTotpForLogin` được thay bằng một bản giả GHI LẠI đối số — khối cuối tệp đo handler của route tự thân
+// [S1.209 / khoản 188] `verifyTotpForLogin` được thay bằng một bản giả GHI LẠI đối số — khối cuối tệp đo handler của route tự thân
 // truyền ngưỡng nào xuống câu lệnh. `vi.mock` được kéo lên trước mọi import, nên `ROUTES` nạp bản giả; mọi khối khác của tệp này chỉ
 // đọc HÌNH DẠNG bảng route và không gọi hàm ấy.
 const { verifyTotpForLoginGia } = vi.hoisted(() => ({ verifyTotpForLoginGia: vi.fn() }));
@@ -311,7 +311,7 @@ describe("[khoản 190] đường TÌM yêu cầu mở thầu đóng cửa với
 });
 
 // ==============================================================================================
-// [S1.9101 / khoản 188] NGƯỠNG ĐƯỜNG PHỤ ĐI TỪ BẢNG ROUTE XUỐNG CÂU LỆNH QUA `ctx` — HANDLER KHÔNG TỰ NHẬP HẰNG
+// [S1.209 / khoản 188] NGƯỠNG ĐƯỜNG PHỤ ĐI TỪ BẢNG ROUTE XUỐNG CÂU LỆNH QUA `ctx` — HANDLER KHÔNG TỰ NHẬP HẰNG
 //
 // S1.83 khai *"cùng một hằng `MFA_TRAN_SAI_DUONG_PHU` ở cả hai chỗ nên hai nơi không trôi khỏi nhau"* — đúng cho GIÁ TRỊ, không đúng cho
 // SỰ CÓ MẶT (S1.87): một `BuyerSelfRoute` mới khai `mfaTranDuongPhu` ở bảng mà handler quên truyền `tranDuongPhu` xuống `verifyTotpForLogin`
@@ -326,7 +326,7 @@ describe("[khoản 190] đường TÌM yêu cầu mở thầu đóng cửa với
 // đường khác thì vế này đỏ, và đó là chủ ý (đường thử mã của người mua là một). Chiều CÙNG LÚC — ngưỡng ấy có đứng khi N lời gọi song
 // song không — đo ở `auth.int.test.ts` vế ⑼.
 // ==============================================================================================
-describe("[S1.9101 / khoản 188] ngưỡng đường phụ: bộ điều phối đưa vào ctx, handler truyền xuống câu lệnh", () => {
+describe("[S1.209 / khoản 188] ngưỡng đường phụ: bộ điều phối đưa vào ctx, handler truyền xuống câu lệnh", () => {
   // Khác hằng (2) để phân biệt "đọc từ ctx" với "nhập hằng"; nhỏ hơn ngưỡng khoá (5) để vẫn là một ngưỡng có nghĩa.
   const NGUONG_LA = 3;
 
@@ -389,7 +389,7 @@ describe("[S1.9101 / khoản 188] ngưỡng đường phụ: bộ điều phối
 });
 
 // ==============================================================================================
-// [S1.9122 / khoản 195 / ADR-9222] ĐƯỜNG TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — HÌNH DẠNG TRÊN BẢNG ROUTE
+// [S1.216 / khoản 195 / ADR-126] ĐƯỜNG TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — HÌNH DẠNG TRÊN BẢNG ROUTE
 //
 // Thông điệp gộp ba trạng thái ở route VÔ DANH (`LoginTokenError`) giữ nguyên: nó là chống dò tìm. Đường
 // mới mở cho người ĐÃ chứng minh danh tính: một route ĐỌC của người mua dưới `/auth/*`, không mã quyền
@@ -397,7 +397,7 @@ describe("[S1.9101 / khoản 188] ngưỡng đường phụ: bộ điều phối
 // ĐÓNG với tác tử chỉ-đọc: một chứng chỉ agent rò không được đọc lịch sử link đăng nhập của chủ nó.
 // Ghim vì đây là một QUYẾT ĐỊNH, không phải một mặc định — cùng lý do với khoản 190 ở trên.
 // ==============================================================================================
-describe("[S1.9122 / khoản 195] đường tự xem link đăng nhập gần đây", () => {
+describe("[S1.216 / khoản 195] đường tự xem link đăng nhập gần đây", () => {
   it("GET /auth/login-links là route ĐỌC của người mua dưới /auth/*, không mã quyền, và đóng cửa với tác tử chỉ-đọc", () => {
     const r = ROUTES.find((x) => x.method === "GET" && x.path === "/auth/login-links");
     expect(r, "bảng ROUTES không có đường GET /auth/login-links").toBeDefined();

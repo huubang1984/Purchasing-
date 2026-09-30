@@ -268,15 +268,15 @@ async function docTrangThai(client: pg.PoolClient, rfqId: string): Promise<strin
 }
 
 /**
- * [S1.9113 / khoản 133] Lần từ chối "không tìm thấy RFQ trong tổ chức" của HAI đường đọc có cổng vào sổ rồi mới ném.
+ * [S1.213 / khoản 133] Lần từ chối "không tìm thấy RFQ trong tổ chức" của HAI đường đọc có cổng vào sổ rồi mới ném.
  *
- * Đo trước bản vá (§S1.72, đo lại ở §S1.9113): `buildComparisonTable` và `countReceivedBids` ném `ComparisonError` mà 0 hàng sổ — với
+ * Đo trước bản vá (§S1.72, đo lại ở §S1.213): `buildComparisonTable` và `countReceivedBids` ném `ComparisonError` mà 0 hàng sổ — với
  * UUID ngẫu nhiên lẫn id CÓ THẬT của tổ chức khác mà RLS giấu — nên một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt
- * (tiểu mục ADR-016 [S1.9113]): D5 phủ lần "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh
+ * (tiểu mục ADR-016 [S1.213]): D5 phủ lần "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh
  * không tìm thấy của cổng mở thầu (khoản 121): `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI ở giao dịch độc lập,
  * lớp lỗi và thông điệp giữ nguyên. Payload chỉ mang TÊN ĐƯỜNG (một hằng): hai hàm chung một mã, và kiểm toán viên cần biết lần dò đi qua
  * bảng so sánh hay qua số báo giá. `ComparisonError` không mang hậu tố `DeniedError`, nên cổng `ghi-so-tu-choi-mot-duong` không thấy chỗ
- * này; `danh-muc-tu-choi` thì thấy — mã phải có trong `DANH_MUC_HANH_DONG_TU_CHOI` —, và khối `[INV-D5] [S1.9113 / khoản 133]` của
+ * này; `danh-muc-tu-choi` thì thấy — mã phải có trong `DANH_MUC_HANH_DONG_TU_CHOI` —, và khối `[INV-D5] [S1.213 / khoản 133]` của
  * `comparison.int.test.ts` đếm hàng ở cả sổ của tổ chức người gọi lẫn sổ của tổ chức bị dò. `return` là chịu lực, cùng lý do với
  * `tuChoi` của cổng mở thầu: bỏ nó thì lời hứa trôi đi và hàm đi tiếp như đã tìm thấy.
  */
@@ -309,18 +309,18 @@ async function tuChoiKhongTimThay(
  * trong toàn dự án. Với RFQ chưa mở thầu, hàm này NÉM chứ không trả về một bảng rỗng: một bảng
  * rỗng là một câu trả lời, và "có bao nhiêu báo giá dưới ngân sách" trả lời bằng 0 vẫn là trả lời.
  *
- * [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG SỐ CỦA BẢNG TRẢ VỀ — cho mọi người gọi, kể cả `GET /rfqs/:rfqId/comparison`:
+ * [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG SỐ CỦA BẢNG TRẢ VỀ — cho mọi người gọi, kể cả `GET /rfqs/:rfqId/comparison`:
  *   ⑴ `rows[].totalAmount` (CHUỖI thập phân, hay `null`) và `aggregates.min/max/average` là SỐ CHUẨN: tính bằng SQL (`bid_so_tien`,
  *      020/022) và trả về dạng văn bản, nên đúng tới từng chữ số trong miền `numeric(18, 2)`. Ngoài miền ấy — từ 10^16, hơn hai chữ số
- *      thập phân, âm, không phải số — là `null` và đếm vào `unparsed`, KHÔNG PHẢI một con số đã làm tròn (022 mục 8; đo ở §S1.9113: một
+ *      thập phân, âm, không phải số — là `null` và đếm vào `unparsed`, KHÔNG PHẢI một con số đã làm tròn (022 mục 8; đo ở §S1.213: một
  *      chuỗi 17 chữ số phần nguyên ra `null`).
  *   ⑵ `rows[].payload` là BẢN HIỂN THỊ của phong bì: `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một SỐ JSON quá 15 chữ số có nghĩa
  *      trong đó — đơn giá, số lượng, hay chính `totalAmount` nếu nhà cung cấp viết nó là số — đã đi qua `double` (đo ở khoản 108:
  *      `99999999999999.99` ra `99999999999999.98`); chuỗi thì đi nguyên. Người đọc số tiền PHẢI lấy ⑴, không lấy `payload.totalAmount`.
  *      Cột `jsonb` trong CSDL vẫn giữ đủ chữ số (khoản 107); phép mất nằm ở phía ĐỌC, và một client `JSON.parse` thân HTTP làm tròn thêm
  *      lần nữa — nên sửa riêng phía máy chủ là chưa đủ, và đó là lý do hợp đồng được GHI ở đây thay vì "sửa" `payload` (ba lựa chọn và lý
- *      do chọn ở ADR-9213). Ghim ở `comparison.int.test.ts` khối `[S1.9113 / khoản 108]`; `apps/web/trang/mo-thau.js` và
- *      `tools/pilot-gia-lap` đọc ⑴ (grep `totalAmount`, §S1.9113).
+ *      do chọn ở ADR-125). Ghim ở `comparison.int.test.ts` khối `[S1.213 / khoản 108]`; `apps/web/trang/mo-thau.js` và
+ *      `tools/pilot-gia-lap` đọc ⑴ (grep `totalAmount`, §S1.213).
  */
 export async function buildComparisonTable(
   client: pg.PoolClient,
@@ -364,16 +364,16 @@ export async function buildComparisonTable(
         payload: { rfqStatus: trangThai },
       },
       new ComparisonDeniedError(trangThai, `Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở ${trangThai} (A4).`),
-      // [S1.9161 / khoản 179] Trạng thái RFQ là "vế" của lần từ chối này, cho dòng log của lần MẤT SỔ.
+      // [S1.225 / khoản 179] Trạng thái RFQ là "vế" của lần từ chối này, cho dòng log của lần MẤT SỔ.
       trangThai,
     );
   }
 
   // ==============================================================================================
-  // [S1.9131 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG MỖI CÂU, VÀ CHỈ KHI `totalAmount`
+  // [S1.218 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG MỖI CÂU, VÀ CHỈ KHI `totalAmount`
   // LÀ SỐ HAY CHUỖI.
   //
-  // Đo trước khi sửa (§S1.9131): hai câu dưới gọi `bid_so_tien(payload->>'totalAmount')` BẢY lần cho
+  // Đo trước khi sửa (§S1.218): hai câu dưới gọi `bid_so_tien(payload->>'totalAmount')` BẢY lần cho
   // mỗi báo giá đọc được (hai ở câu hàng: danh sách chọn và `ORDER BY`; năm ở câu tổng hợp: `min`,
   // `max`, `avg`, vế ngân sách, `IS NOT NULL`) và BA lần cho một `totalAmount` là MẢNG — `->>` dựng
   // CẢ CÂY thành văn bản rồi `bid_so_tien` mới ép kiểu hỏng và trả NULL. Với 20 000 phần tử `1e324`
@@ -389,11 +389,11 @@ export async function buildComparisonTable(
   // quyết nó có được HỎI hay không. JSON `null`, khoá thiếu, đối tượng, mảng, boolean ⇒ `NULL`,
   // hàng vẫn ở trong bảng và được đếm là `unparsed` — cùng kết quả với trước, rẻ hơn.
   //
-  // [S1.9130 / khoản 250 / ADR-9230] CẢ HAI CÂU CHỈ ĐỌC BẢN RÕ CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`,
+  // [S1.217 / khoản 250 / ADR-128] CẢ HAI CÂU CHỈ ĐỌC BẢN RÕ CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`,
   // ở câu hàng và ở CTE `moi_nhat` của câu tổng hợp — hai câu, một vế, không câu nào phụ thuộc câu kia.
-  // Trên đường thuận từ S1.9130 hàng bản rõ ấy không tồn tại (worker không mở phong bì của lời mời đã
+  // Trên đường thuận từ S1.217 hàng bản rõ ấy không tồn tại (worker không mở phong bì của lời mời đã
   // thu hồi, và thu hồi sau lần mở bị chặn), nên vế ở đây đứng cho hàng của những lượt mở TRƯỚC vòng này
-  // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.9130): X thu hồi rồi mời lại ⇒ X HAI dòng,
+  // và cho một chỗ ghi khác. Đo trước bản vá (§S1.181, §S1.217): X thu hồi rồi mời lại ⇒ X HAI dòng,
   // cả hai `isLatestForBid = true` (hai luồng, hai `bid_id`), `belowBudget` 3 thay vì 2. Bản rõ KHÔNG bị
   // xoá — lọc ở lần đọc. Cùng vế ở worker và `docBaoGia`; cổng tĩnh `phong-bi-loi-moi-con-song.test.ts`.
   // ==============================================================================================
@@ -451,7 +451,7 @@ export async function buildComparisonTable(
   // ORDER BY v.version DESC` — lần nộp SAU thay lần nộp TRƯỚC. Ba bộ đọc, một luật, và không bộ
   // nào phụ thuộc một tiền đề ngầm của bộ kia nữa (đó đúng là lỗ mà mục 7d của §S1.108 ghi).
   //
-  // [S1.9131 / khoản 114] `so_tien` tính MỘT lần trong `moi_nhat` — lớp `DISTINCT ON` không bị kéo
+  // [S1.218 / khoản 114] `so_tien` tính MỘT lần trong `moi_nhat` — lớp `DISTINCT ON` không bị kéo
   // lên —, và câu ngoài chỉ tham chiếu cột. Lưu ý nói ra: `DISTINCT ON` chọn SAU khi chiếu, nên biểu
   // thức chạy cho mọi phiên bản của một luồng chứ không riêng bản mới nhất; rẻ, vì chỉ số hay chuỗi
   // mới tới `bid_so_tien`, và câu hàng cũng tính cho mọi phiên bản. Bốn chỗ đọc tiền tệ giữ nguyên

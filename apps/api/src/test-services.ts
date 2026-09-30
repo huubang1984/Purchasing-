@@ -25,7 +25,7 @@ export function outboxTest(pool: pg.Pool, services: ApiServices, tuyChon: { hand
     // [S1.81 / khoản 154] Giống HỆT `apps/api/src/composition.ts`, và phải giống: runner của test
     // mà nhặt nhiều loại việc hơn runner thật là một phép đo trên một đường không ai chạy — đúng
     // thứ đã để `kich-ban-41-http.int.test.ts` âm thầm giết một job `UNSEAL_RFQ` mỗi lượt.
-    // ~~kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),~~ [S1.9151 / khoản 168] Bỏ, vì
+    // ~~kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),~~ [S1.222 / khoản 168] Bỏ, vì
     // `composition.ts` bỏ: sổ mồ côi nay do worker khai, và mảng lọc của `api` là đúng bảng handler.
     onJobFailure: (b) => {
       loi.push(b);

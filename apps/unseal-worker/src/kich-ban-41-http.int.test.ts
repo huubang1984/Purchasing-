@@ -35,7 +35,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { auditStoredCiphertexts, verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
-import { counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { CHOT_VAO_SO, counterForTime, deriveTotpCode } from "@trustprocure/identity";
 import { sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -464,11 +464,15 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       }
       expect(dv.loiMoiDaGui, "luồng S3: không link nào đi trước lần mở gói").toHaveLength(truoc);
     }
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m)).status).toBe(200);
+    const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
+    expect(nop.status).toBe(200);
+    // [S1.198 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
+    // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
+    const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
     // [INV-D2] người tạo không tự duyệt được (trigger 011 — 422, và [review H2-10] đọc đúng LÝ DO), hai PM khác duyệt.
     // [S1.180 / khoản 247 / ADR-108] Tầng gói bắt lỗi của trigger theo TÊN ràng buộc, từ chối theo chốt — câu là của bảng
     // `CHOT_VAO_SO`, vẫn gọi tên `(D2)` — và để lại một hàng `CONTROL_DENIED`.
-    const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m);
+    const tuDuyet = await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, m, moc);
     expect(tuDuyet.status).toBe(422);
     expect(tuDuyet.text).toContain("Người tạo gói thầu không được duyệt chính gói ấy — cần một người khác duyệt (D2).");
     const { rows: soD2 } = await db.pool.query(
@@ -476,8 +480,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       [trangThai.rfqId],
     );
     expect(soD2, "lần tự duyệt ấy để lại đúng một hàng sổ").toHaveLength(1);
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie)).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
+    expect((await goi("POST", `/rfqs/${trangThai.rfqId}/approve`, trangThai.pm3.cookie, moc)).status).toBe(200);
     const guiTruocMo = dv.loiMoiDaGui.length;
     const mo = await goi("POST", `/rfqs/${trangThai.rfqId}/open`, m);
     expect(mo.status, mo.text).toBe(200);
@@ -617,8 +621,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const hyA = await taoRfqHy("RFQ hy sinh A (mo)");
     expect((await goi("POST", `/rfqs/${hyA}/items`, m, { lineNo: 1, description: "Vat tu hy sinh", quantity: "1.0000", unit: "cai" })).status).toBe(201);
     expect((await goi("PUT", `/rfqs/${hyA}/budget`, m, { estimatedValue: "10000000.00", currency: "VND" })).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${hyA}/submit`, m)).status).toBe(200);
-    expect((await goi("POST", `/rfqs/${hyA}/approve`, trangThai.pm2.cookie)).status).toBe(200);
+    const nopHyA = await goi("POST", `/rfqs/${hyA}/submit`, m);
+    expect(nopHyA.status).toBe(200);
+    const mocHyA = batS3 ? { lanNop: (nopHyA.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+    expect((await goi("POST", `/rfqs/${hyA}/approve`, trangThai.pm2.cookie, mocHyA)).status).toBe(200);
     expect((await goi("POST", `/rfqs/${hyA}/open`, m)).status).toBe(200);
     const nccHy = await goi("POST", "/suppliers", m, { legalName: "Cong ty Hy Sinh", taxCode: "0399999999" });
     expect(nccHy.status, nccHy.text).toBe(201);
@@ -640,8 +646,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     });
     const hyB = await taoRfqHy("RFQ hy sinh B (nhap)");
     const nanHy = await dangNhap("nan-hy@vidu.vn", "BUYER");
-    const hy: { unsealId: string; mfaResetId: string; policyId: string; nhomId: string } = {
-      unsealId: UUID0, mfaResetId: UUID0, policyId: UUID0, nhomId: UUID0,
+    // [S1.199 / S4.2b] Người quản lý dữ liệu HY SINH: tám route ghi dữ liệu nền đòi `item.manage`, và chỉ `DATA_STEWARD` giữ
+    // mã ấy — gọi bằng `m` thì dừng ở 403 của cổng, tức route không đi tới nghiệp vụ.
+    const quanLyHy = await dangNhap("quan-ly-hy@vidu.vn", "DATA_STEWARD");
+    const hy: { unsealId: string; mfaResetId: string; policyId: string; nhomId: string; itemId: string; lanNopB: number } = {
+      unsealId: UUID0,
+      mfaResetId: UUID0,
+      policyId: UUID0,
+      nhomId: UUID0,
+      itemId: UUID0,
+      lanNopB: 0,
     };
 
     /** Thân + đích + người gọi hợp lệ cho MỖI route ghi; đọc kết quả để cho route sau một đích thật. */
@@ -724,9 +738,21 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         case "PUT /rfqs/:rfqId/category":
           return { path: r.path.replace(":rfqId", hyB), body: { categoryId: trangThai.nhomHangId ?? hy.nhomId }, cookie: m };
         case "POST /rfqs/:rfqId/submit":
-          return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
+          return {
+            path: r.path.replace(":rfqId", hyB),
+            body: {},
+            cookie: m,
+            sau: (ph) => {
+              if (ph.status === 200) hy.lanNopB = (ph.body as { rfq: { lanNop: number } }).rfq.lanNop;
+            },
+          };
+        // [S1.198 / khoản 256] Luồng S3 gửi lần nộp mà ca ngay trên vừa đọc; luồng MVP1 giữ thân rỗng — hợp đồng cũ.
         case "POST /rfqs/:rfqId/approve":
-          return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: trangThai.pm2.cookie };
+          return { path: r.path.replace(":rfqId", hyB), body: batS3 ? { lanNop: hy.lanNopB } : {}, cookie: trangThai.pm2.cookie };
+        // [S1.203 / S3.6b1 · K10a] Người duyệt thứ hai ghi nhận tín hiệu của gói hy sinh B — gói nhỏ, không tín hiệu nào ở cả hai
+        // luồng, nên lời gọi qua cổng `rfq.approve`, qua bộ đọc thân, và dừng ở lời từ chối nghiệp vụ có tên của `KiemSoatError`.
+        case "POST /rfqs/:rfqId/signals/acknowledge":
+          return { path: r.path.replace(":rfqId", hyB), body: { lyDo: "ghi nhan de quet" }, cookie: trangThai.pm2.cookie };
         case "POST /rfqs/:rfqId/open":
           return { path: r.path.replace(":rfqId", hyB), body: {}, cookie: m };
         case "POST /rfqs/:rfqId/extend":
@@ -791,7 +817,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB).replace(":awardId", UUID0), body: {}, cookie: trangThai.gd1.cookie };
         case "POST /rfqs/:rfqId/award/cancel":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "huy de quet" }, cookie: trangThai.gd1.cookie };
-        // [S1.9182 / khoản 232] Route RÚT đi bằng `m` (PROCUREMENT_MANAGER giữ `award.recommend`) tới `hyB` ở DRAFT ⇒ dừng ở
+        // [S1.231 / khoản 232] Route RÚT đi bằng `m` (PROCUREMENT_MANAGER giữ `award.recommend`) tới `hyB` ở DRAFT ⇒ dừng ở
         // `TraoThauTuChoiError` 422 có tên, sau bộ đọc thân — cùng lý do ba route trên.
         case "POST /rfqs/:rfqId/award/withdraw":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "rut de quet" }, cookie: m };
@@ -810,6 +836,32 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         // tên — vẫn là "qua bộ đọc thân", đúng thứ bộ quét cần.
         case "POST /mfa-resets/:requestId/cancel":
           return { path: r.path.replace(":requestId", hy.mfaResetId), body: {}, cookie: m };
+        // [S1.199 / S4.2b] Tám route dữ liệu nền, trên một hàng chuẩn HY SINH do ca đầu tạo — không hàng nào dính tới gói của
+        // kịch bản. Bảng route đặt tạo → phiên bản → khai/rút bí danh → khai/rút quy đổi → khai/rút bí danh đơn vị, nên mỗi lần
+        // rút có đúng hàng đang hiệu lực để rút: cả tám đi trọn tới 201.
+        case "POST /items":
+          return {
+            path: r.path,
+            body: { ma: "QUET-HY-SINH", donViGoc: "kg", ten: "Hang chuan quet" },
+            cookie: quanLyHy.cookie,
+            sau: (ph) => {
+              if (ph.status === 201) hy.itemId = (ph.body as { hangChuan: { id: string } }).hangChuan.id;
+            },
+          };
+        case "POST /items/:itemId/versions":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { ten: "Hang chuan quet ban 2" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/aliases":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { biDanh: "hang quet hy sinh" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/aliases/withdraw":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { biDanh: "hang quet hy sinh" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/conversions":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { tuDonVi: "bao", sangDonVi: "kg", heSo: "50" }, cookie: quanLyHy.cookie };
+        case "POST /items/:itemId/conversions/withdraw":
+          return { path: r.path.replace(":itemId", hy.itemId), body: { tuDonVi: "bao", sangDonVi: "kg" }, cookie: quanLyHy.cookie };
+        case "POST /uom/aliases":
+          return { path: r.path, body: { biDanh: "bao quet", donVi: "kg" }, cookie: quanLyHy.cookie };
+        case "POST /uom/aliases/withdraw":
+          return { path: r.path, body: { biDanh: "bao quet" }, cookie: quanLyHy.cookie };
         default:
           return null;
       }
@@ -1698,5 +1750,137 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     for (const t of [...dv.linkDaGui.map((l) => l.token), ...dv.otpDaGui.map((o) => o.code)]) expect(toanBo).not.toContain(t);
     expect(toanBo).not.toContain("KMS gia dang hong");
     for (const g of quetRoRi(toanBo)) expect.fail(`giá trong log: ${g}`);
+  });
+
+  it("[INV-K10a] bước 16 — [S3.6b2] ba gói 480/470/490 triệu cùng nhóm hàng qua HTTP: gói nộp sau cùng mang tín hiệu chia nhỏ, lần mở dừng ở 422 có tên, người tạo tự ghi nhận bị từ chối, người độc lập ghi nhận rồi gói mở — luồng MVP1 mở cả ba như trước", async () => {
+    // Fixture spec S3 §7: mỗi gói dưới cận 1 tỷ của bậc 2 (§4.1), tổng 1,44 tỷ chạm cận ấy. Nhóm hàng RIÊNG: tập anh em của tín hiệu
+    // là mọi gói cùng nhóm trong tổ chức, và hai gói hy sinh của bộ quét nằm ở nhóm của gói chính. Luồng MVP1: không nhóm hàng, không
+    // bậc — lời duyệt không thân, và cả ba gói đi đúng đường cũ.
+    const m = trangThai.mua.cookie;
+    let nhomHang: string | null = null;
+    if (batS3) {
+      const nhom = await goi("POST", "/categories", trangThai.taiChinh.cookie, { ma: "thep-ct", ten: "Thep tam cho cong trinh" });
+      expect(nhom.status, nhom.text).toBe(201);
+      nhomHang = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    }
+    const goiCon: string[] = [];
+    for (const [i, giaTri] of ["480000000.00", "470000000.00", "490000000.00"].entries()) {
+      const r = await goi("POST", "/rfqs", m, {
+        title: `Thep tam cong trinh ${i + 1}`,
+        deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+        ...(nhomHang === null ? {} : { categoryId: nhomHang }),
+      });
+      expect(r.status, r.text).toBe(201);
+      const id = (r.body as { rfq: { id: string } }).rfq.id;
+      expect((await goi("POST", `/rfqs/${id}/items`, m, { lineNo: 1, description: "Thep tam SS400 10mm", quantity: "150.0000", unit: "tan" })).status).toBe(201);
+      const ns = await goi("PUT", `/rfqs/${id}/budget`, m, { estimatedValue: giaTri, currency: "VND" });
+      expect(ns.status, ns.text).toBe(200);
+      expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval, "dưới ngưỡng kép 500 triệu").toBe(false);
+      const nop = await goi("POST", `/rfqs/${id}/submit`, m);
+      expect(nop.status, nop.text).toBe(200);
+      const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+      expect((await goi("POST", `/rfqs/${id}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
+      goiCon.push(id);
+      // Hai gói đầu: tổng 950 triệu chưa chạm cận — mở như mọi gói, ở cả hai luồng.
+      if (i < 2) {
+        const mo = await goi("POST", `/rfqs/${id}/open`, m);
+        expect(mo.status, mo.text).toBe(200);
+      }
+    }
+    const [g1, g2, g3] = goiCon;
+    if (g1 === undefined || g2 === undefined || g3 === undefined) throw new Error("thieu goi cua buoc 16");
+    const hangChot = async (): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = ANY($2::uuid[]) ORDER BY seq",
+          [orgA, goiCon],
+        )
+      ).rows.map((r) => r.ma);
+    const docTinHieu = async (cookie: string): Promise<Record<string, unknown>> => {
+      const ph = await goi("GET", `/rfqs/${g3}/signals`, cookie);
+      expect(ph.status, ph.text).toBe(200);
+      return (ph.body as { tinHieu: Record<string, unknown> }).tinHieu;
+    };
+
+    if (!batS3) {
+      expect(await docTinHieu(m), "luồng MVP1: không tín hiệu, không ai được mời bấm").toMatchObject({
+        hienTai: null,
+        canGhiNhan: false,
+        tinHieu: [],
+        goi: {},
+        nguoiXem: { ghiNhanDuoc: false, lyDo: null },
+      });
+      const mo = await goi("POST", `/rfqs/${g3}/open`, m);
+      expect(mo.status, "luồng MVP1: gói thứ ba mở như hai gói đầu").toBe(200);
+      const { rows } = await db.pool.query("SELECT 1 FROM governance_signals WHERE rfq_id = ANY($1::uuid[])", [goiCon]);
+      expect(rows, "luồng MVP1: không một hàng tín hiệu nào").toHaveLength(0);
+      expect(await hangChot(), "luồng MVP1: không một lần từ chối nào vào sổ").toEqual([]);
+      return;
+    }
+
+    // Màn `/tao-thau` đọc route này trước khi mời bấm: người tạo đọc được lý do KHÔNG, người độc lập đọc được mình ghi nhận được —
+    // và trong tổ chức hai người ghi nhận được (hai PM duyệt), không một con số tiền nào trong thân.
+    const docMua = await docTinHieu(m);
+    expect(docMua).toMatchObject({ canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep } });
+    const docPm3 = await docTinHieu(trangThai.pm3.cookie);
+    expect(docPm3).toMatchObject({ canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 });
+    expect(docPm3.goi).toEqual({
+      [g1]: { tieuDe: "Thep tam cong trinh 1", trangThai: "OPEN" },
+      [g2]: { tieuDe: "Thep tam cong trinh 2", trangThai: "OPEN" },
+      [g3]: { tieuDe: "Thep tam cong trinh 3", trangThai: "PENDING_APPROVAL" },
+    });
+    expect(JSON.stringify(docPm3), "thân đọc tín hiệu không mang ước lượng nào").not.toMatch(/4[789]0000000/u);
+
+    // Đủ chữ ký mà vẫn không mở: 422 với câu của bảng `CHOT_VAO_SO`, gói đứng yên, không khoá nào được đúc.
+    const chan = await goi("POST", `/rfqs/${g3}/open`, m);
+    expect(chan.status).toBe(422);
+    expect(chan.text).toContain(CHOT_VAO_SO.TIN_HIEU_CHUA_GHI_NHAN.thongDiep);
+    const { rows: khoa } = await db.pool.query("SELECT 1 FROM rfq_key_material WHERE rfq_id = $1", [g3]);
+    expect(khoa, "không khoá nào được đúc cho gói bị chặn").toHaveLength(0);
+
+    // Người tạo tự ghi nhận — màn đã nói trước là không; route từ chối theo chốt, và lần ấy cũng vào sổ.
+    const tuGhi = await goi("POST", `/rfqs/${g3}/signals/acknowledge`, m, { lyDo: "Toi tao ca ba goi, toi xac nhan" });
+    expect(tuGhi.status).toBe(422);
+    expect(tuGhi.text).toContain(CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep);
+
+    const LY_DO = "Ba cong trinh khac nhau, ba hop dong khung rieng";
+    const ghi = await goi("POST", `/rfqs/${g3}/signals/acknowledge`, trangThai.pm3.cookie, { lyDo: LY_DO });
+    expect(ghi.status, ghi.text).toBe(201);
+    expect((ghi.body as { ghiNhan: { tinHieuMoi: boolean } }).ghiNhan.tinHieuMoi, "tập gói không đổi từ lúc nộp").toBe(false);
+    const sau = await docTinHieu(m);
+    expect(sau.canGhiNhan, "sau lần ghi nhận không còn gì cần ghi nhận").toBe(false);
+    const mo = await goi("POST", `/rfqs/${g3}/open`, m);
+    expect(mo.status, mo.text).toBe(200);
+    expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
+
+    // Sổ kể lại câu chuyện của gói thứ ba theo đúng thứ tự: nộp và tín hiệu, duyệt, bị chặn, tự ghi nhận bị từ chối, ghi nhận độc
+    // lập, rồi mới đúc khoá và mở.
+    const { rows: soG3 } = await db.pool.query<{ action: string; ma: string | null; nguoi: string | null }>(
+      "SELECT action, payload->>'ma' AS ma, actor_id::text AS nguoi FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+      [orgA, g3],
+    );
+    const QUAN_TAM = new Set([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    expect(soG3.filter((r) => QUAN_TAM.has(r.action)).map((r) => (r.ma === null ? r.action : `${r.action}:${r.ma}`))).toEqual([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED:TIN_HIEU_CHUA_GHI_NHAN",
+      "CONTROL_DENIED:K10A_TU_GHI_NHAN",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    expect(soG3.find((r) => r.action === "GOVERNANCE_SIGNAL_ACKNOWLEDGED")?.nguoi, "người ghi nhận là người độc lập").toBe(trangThai.pm3.id);
+    const hanhDong = soG3.map((r) => r.action);
+    expect(hanhDong.indexOf("RFQ_KEY_MATERIAL_ISSUED"), "khoá chỉ được đúc SAU lần ghi nhận").toBeGreaterThan(
+      hanhDong.indexOf("GOVERNANCE_SIGNAL_ACKNOWLEDGED"),
+    );
+    expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
   });
 });

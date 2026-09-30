@@ -154,9 +154,9 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
         // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN đi đường TRẢ VỀ, không ném: giao dịch còn lành
         // và đang mang hàng sổ `BID_DEADLINE_DENIED` (xem `NopQuaHanError`), nên bộ điều phối COMMIT nó.
         // Ném ở đây thì giao dịch rollback và hàng sổ đi theo — đúng thứ khoản 196 đo được là thiếu.
-        // Hai dấu thời gian là thứ người bị chặn đối chiếu với đồng hồ của mình; ~~không mang gì khác~~ **[S1.9132]** cộng `ma`.
+        // Hai dấu thời gian là thứ người bị chặn đối chiếu với đồng hồ của mình; ~~không mang gì khác~~ **[S1.219]** cộng `ma`.
         //
-        // [S1.9132 / khoản 230] MỌI lần từ chối mang `ma` — mã của nhánh trigger đã phán xử (`NopQuaHanError.ma` cho VÌ HẠN,
+        // [S1.219 / khoản 230] MỌI lần từ chối mang `ma` — mã của nhánh trigger đã phán xử (`NopQuaHanError.ma` cho VÌ HẠN,
         // `NopBiTuChoiError.ma` ∈ `MA_THEO_RANG_BUOC` cho phần còn lại) — để trang nộp thầu nói «đã quá hạn» khác «không nằm trong
         // vòng BAFO» khác «phiên đã bị thu hồi». `error` vẫn là câu chung cho máy khách không biết mã. Thân là tập trường ĐÓNG:
         // không câu của CSDL (hai câu trigger nội suy `bid_id`/`bafo_round_id`), không id luồng, không trạng thái gói —
@@ -165,7 +165,7 @@ export const ROUTES_GUEST: readonly GuestRoute[] = [
           return { status: 422, body: { error: loi.message, ma: loi.ma, gioPhanXu: loi.gioCsdl, hanNop: loi.hanNop } };
         }
         // [S1.167 / khoản 247] Hai nhánh chặn còn lại của câu nộp — cùng hợp đồng: giao dịch còn lành và mang ~~`BID_SUBMIT_DENIED`~~
-        // **[S1.180]** `BID_STATE_DENIED` mang mã của nhánh — **[S1.9132]** và mã ấy đi ra thân.
+        // **[S1.180]** `BID_STATE_DENIED` mang mã của nhánh — **[S1.219]** và mã ấy đi ra thân.
         if (loi instanceof NopBiTuChoiError) return { status: 422, body: { error: loi.message, ma: loi.ma } };
         throw loi;
       }

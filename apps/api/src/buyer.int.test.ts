@@ -12,6 +12,8 @@
 //   [INV-K1]  [S1.166] tổ chức đã bật S3: nộp duyệt gói không ngân sách ⇒ 422 có tên, một hàng CONTROL_DENIED.
 //   [S1.169] ký phiên bản chính sách: cờ triển khai TẮT ⇒ 409, không câu ghi; BẬT ⇒ mỗi luật trigger một 422 có tên, người
 //             thứ hai ký bản mới nhất ⇒ bật S3; phiên bản kế tiếp tính theo bản MỚI NHẤT, không theo bản hiệu lực.
+//   [INV-K10a] [S1.203] gói thứ ba của ba gói 480/470/490 triệu cùng nhóm ⇒ mở 422 có tên và một hàng CONTROL_DENIED; người
+//             gây ra ghi nhận ⇒ 422 có tên; không `rfq.approve` ⇒ 403; người độc lập ghi nhận ⇒ 201, rồi mở 200.
 // ==============================================================================================
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -19,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
+import { CHOT_VAO_SO, HE_THONG_MAX_TOKENS_PER_WINDOW, LOGIN_MAX_TOKENS_PER_WINDOW, PERMISSIONS } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createDispatcher } from "./dispatch.js";
@@ -162,8 +164,21 @@ describe("[INV-H17] quét MỌI route ghi của người mua bằng một phiên
     // dẫn) để lại `resource_id = UUID0`; số bản ghi có toạ độ bằng đúng số route khai nó.
     const coToaDo = routeGhi.filter((r) => "resourceId" in r && r.resourceId !== undefined).length;
     expect(coToaDo, "phải có route khai resourceId").toBeGreaterThan(10);
-    // [S1.201 / S3.6a] Thêm `POST /categories` — tạo mới, chưa có toạ độ.
-    expect(routeGhi.length - coToaDo, "route ghi KHÔNG có toạ độ: chỉ POST /policy, /suppliers, /rfqs, /categories (tạo mới)").toBe(4);
+    // ~~Đếm `3`~~ ~~[S1.201 / S3.6a] `4` — thêm `POST /categories` (tạo mới)~~ [S1.199 / S4.2b] Nêu TÊN thay vì đếm: ba route
+    // tạo mới cũ, `POST /categories` (tạo mới, S3.6a), `POST /items` (tạo mới) và hai route bí danh đơn vị — thứ chúng ghi là một
+    // CHUỖI của tổ chức, không phải một tài nguyên có UUID trên đường dẫn.
+    expect(
+      routeGhi.filter((r) => !("resourceId" in r && r.resourceId !== undefined)).map((r) => `${r.method} ${r.path}`).sort(),
+      "route ghi KHÔNG có toạ độ",
+    ).toEqual([
+      "POST /categories",
+      "POST /items",
+      "POST /policy",
+      "POST /rfqs",
+      "POST /suppliers",
+      "POST /uom/aliases",
+      "POST /uom/aliases/withdraw",
+    ]);
     const { rows } = await db.pool.query<{ n: string }>(
       "SELECT count(*) AS n FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' AND resource_id = $3",
       [orgA, khongQuyen.id, UUID0],
@@ -372,7 +387,7 @@ describe("vòng đời phía người mua qua HTTP — kịch bản mục 41, n�
     expect(dp.status, dp.text).toBe(200);
     const trangThai = await goi("GET", `/unseal/${unsealId}`, pm1);
     expect(trangThai.status).toBe(200);
-    // [S1.9113 / khoản 133] Bấm điều phối LẦN HAI khi lượt đầu còn PENDING: 422 cùng câu như trước, và — mới — đúng một hàng
+    // [S1.213 / khoản 133] Bấm điều phối LẦN HAI khi lượt đầu còn PENDING: 422 cùng câu như trước, và — mới — đúng một hàng
     // `UNSEAL_DISPATCH_DENIED`. Đo trước bản vá: 422, 0 hàng. Đối chứng ngay trước đó: lần điều phối ĐẦU (200) không để lại hàng
     // từ chối nào, và hai lần phê duyệt THẬT ở trên không để lại `UNSEAL_NOT_FOUND_DENIED` nào.
     const demHangTuChoi = async (action: string): Promise<number> => {
@@ -466,7 +481,7 @@ describe("[sổ nợ 40 / 040] đặt lại TOTP qua HTTP — hai người", () 
 // và không tiến trình nào nhận. Hai khoản đóng bằng MỘT chặng gửi, và đó là lý do chúng cùng vòng.
 // =================================================================================================
 /**
- * [S1.9130 / khoản 250] Đưa ra cấp mô-đun (nguyên văn) để khối thu hồi sau mở thầu dùng chung — trước đó nằm trong
+ * [S1.217 / khoản 250] Đưa ra cấp mô-đun (nguyên văn) để khối thu hồi sau mở thầu dùng chung — trước đó nằm trong
  * `describe("[khoản 194 · 154]…")`.
  *
  * RFQ đã ĐÓNG — cùng khuôn `taoRfqDaDong` của `packages/unseal`, dựng bằng SQL để không phụ thuộc
@@ -946,62 +961,62 @@ describe("[S1.166 / S3.1b] K1 qua HTTP — lời từ chối của một CHỐT 
   });
 });
 
-describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
-  /** Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên. */
-  async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; rfqId: string }> {
-    const org = (
-      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug])
-    ).rows[0]?.id ?? "";
-    const pm = await nguoi(`pm-${slug}@vidu.vn`, ["PROCUREMENT_MANAGER"], org);
-    const mua = await nguoi(`mua-${slug}@vidu.vn`, ["BUYER"], org);
-    const tc = await nguoi(`tc-${slug}@vidu.vn`, ["FINANCE"], org);
-    const tc2 = await nguoi(`tc2-${slug}@vidu.vn`, ["FINANCE"], org);
-    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
-    if (bat) {
-      const bac = [
-        {
-          tu_so_tien: 0,
-          so_ncc_toi_thieu: 1,
-          award_vai_khac_nhau: false,
-          ky_danh_sach_moi: false,
-          xoay_vong_n: 0,
-          award_so_chu_ky: 1,
-          award_vai: ["DIRECTOR"],
-          tham_dinh_truoc_trao: false,
-          khai_xung_dot: false,
-          dau_thau_chinh_thuc: false,
-        },
-        { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true },
-      ];
-      const v2 = (
-        await db.pool.query<{ id: string }>(
-          "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
-            "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
-          [org, JSON.stringify(bac), tc.id, tc.sessionId],
-        )
-      ).rows[0]?.id;
-      await db.pool.query(
-        "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
-        [org, v2, tc2.id, tc2.sessionId],
-      );
-    }
-    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-    const rfq = await goi("POST", "/rfqs", pm, { title: "Mua thep tra ve", deadlineAt: han });
-    expect(rfq.status, rfq.text).toBe(201);
-    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
-    expect((await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
-    // [S1.201 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — người tài chính dựng nhóm, người tạo gói gán nó.
-    if (bat) {
-      const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
-      expect(nhom.status, nhom.text).toBe(201);
-      const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
-      expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId })).status).toBe(200);
-    }
-    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
-    expect(nop.status, nop.text).toBe(200);
-    return { org, pm, mua, rfqId };
+/** Tổ chức RIÊNG, gói do PM tạo đã nộp duyệt. `bat`: BẬT S3 bằng câu dựng dưới chủ sở hữu, khuôn ca K1 ở trên. */
+async function goiDaNop(slug: string, bat: boolean): Promise<{ org: string; pm: Nguoi; mua: Nguoi; rfqId: string }> {
+  const org = (
+    await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ($1, $1) RETURNING id", [slug])
+  ).rows[0]?.id ?? "";
+  const pm = await nguoi(`pm-${slug}@vidu.vn`, ["PROCUREMENT_MANAGER"], org);
+  const mua = await nguoi(`mua-${slug}@vidu.vn`, ["BUYER"], org);
+  const tc = await nguoi(`tc-${slug}@vidu.vn`, ["FINANCE"], org);
+  const tc2 = await nguoi(`tc2-${slug}@vidu.vn`, ["FINANCE"], org);
+  expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+  if (bat) {
+    const bac = [
+      {
+        tu_so_tien: 0,
+        so_ncc_toi_thieu: 1,
+        award_vai_khac_nhau: false,
+        ky_danh_sach_moi: false,
+        xoay_vong_n: 0,
+        award_so_chu_ky: 1,
+        award_vai: ["DIRECTOR"],
+        tham_dinh_truoc_trao: false,
+        khai_xung_dot: false,
+        dau_thau_chinh_thuc: false,
+      },
+      { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true },
+    ];
+    const v2 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+          "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
+        [org, JSON.stringify(bac), tc.id, tc.sessionId],
+      )
+    ).rows[0]?.id;
+    await db.pool.query(
+      "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
+      [org, v2, tc2.id, tc2.sessionId],
+    );
   }
+  const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  const rfq = await goi("POST", "/rfqs", pm, { title: "Mua thep tra ve", deadlineAt: han });
+  expect(rfq.status, rfq.text).toBe(201);
+  const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+  expect((await goi("PUT", `/rfqs/${rfqId}/budget`, pm, { estimatedValue: "1000000.00", currency: "VND" })).status).toBe(200);
+  // [S1.201 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — người tài chính dựng nhóm, người tạo gói gán nó.
+  if (bat) {
+    const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
+    expect(nhom.status, nhom.text).toBe(201);
+    const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    expect((await goi("PUT", `/rfqs/${rfqId}/category`, pm, { categoryId: nhomId })).status).toBe(200);
+  }
+  const nop = await goi("POST", `/rfqs/${rfqId}/submit`, pm);
+  expect(nop.status, nop.text).toBe(200);
+  return { org, pm, mua, rfqId };
+}
 
+describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ tổ chức đã bật, người tạo hoặc người duyệt, có lý do", () => {
   it("[INV-K4a] tổ chức đã bật: BUYER không phải người tạo ⇒ 403 và một hàng `PERMISSION_DENIED` trên `rfq.approve`; thiếu lý do ⇒ 422; người tạo có lý do ⇒ 200 và gói ở DRAFT; lần hai ⇒ 422 trạng thái", async () => {
     const { org, pm, mua, rfqId } = await goiDaNop("tra-ve-bat", true);
     const duong = `/rfqs/${rfqId}/return-to-draft`;
@@ -1033,6 +1048,100 @@ describe("[S1.186 / S3.2b1] cạnh `PENDING_APPROVAL→DRAFT` qua HTTP — chỉ
     const kq = await goi("POST", `/rfqs/${rfqId}/return-to-draft`, pm, { reason: "muon sua danh sach" });
     expect([kq.status, (kq.body as { error: string }).error]).toEqual([422, "chỉ tổ chức đã bật S3 mới trả gói về nháp được"]);
     expect((await goi("GET", `/rfqs/${rfqId}`, pm)).body).toMatchObject({ rfq: { status: "PENDING_APPROVAL" } });
+  });
+});
+
+describe("[S1.198 / khoản 256] lời duyệt gói qua HTTP mang `lanNop` vừa đọc — bắt buộc ở tổ chức đã bật, MVP1 giữ hợp đồng không thân", () => {
+  it("[INV-K4b] tổ chức đã bật: `GET` trả `lanNop` 1; duyệt không thân, thân rỗng, mốc 0 hay `null` ⇒ 422 có tên; mốc không phải số nguyên hay tràn `integer` ⇒ 422; mốc 1 ⇒ 200", async () => {
+    const { org, rfqId } = await goiDaNop("lan-nop-bat", true);
+    const pm2 = await nguoi("pm2-lan-nop-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    expect((await goi("GET", `/rfqs/${rfqId}`, pm2)).body).toMatchObject({ rfq: { lanNop: 1 } });
+
+    const duong = `/rfqs/${rfqId}/approve`;
+    const loiLanNop = { error: "Goi thau dang o lan nop 1; loi duyet khong mang dung lan nop nay — doc lai goi roi duyet (K4b)" };
+    for (const than of [undefined, {}, { lanNop: 0 }, { lanNop: null }]) {
+      const kq = await goi("POST", duong, pm2, than);
+      expect([kq.status, kq.body], JSON.stringify(than) ?? "không thân").toEqual([422, loiLanNop]);
+    }
+    const chuoi = await goi("POST", duong, pm2, { lanNop: "1" });
+    expect([chuoi.status, chuoi.body]).toEqual([422, { error: 'trường "lanNop" phải là số nguyên' }]);
+    // Tràn `integer` của cột: Postgres từ chối lúc gắn tham số (22003), TRƯỚC mọi trigger — lớp 22 là lỗi đầu vào, 422 thân cố định.
+    const tran = await goi("POST", duong, pm2, { lanNop: 2147483648 });
+    expect([tran.status, tran.body]).toEqual([422, { error: "du lieu sai kieu" }]);
+
+    const ok = await goi("POST", duong, pm2, { lanNop: 1 });
+    expect(ok.status, ok.text).toBe(200);
+  });
+
+  it("tổ chức CHƯA bật: duyệt không thân ⇒ 200 như MVP1 — hợp đồng route không đổi", async () => {
+    const { org, rfqId } = await goiDaNop("lan-nop-chua-bat", false);
+    const pm2 = await nguoi("pm2-lan-nop-chua-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const kq = await goi("POST", `/rfqs/${rfqId}/approve`, pm2);
+    expect(kq.status, kq.text).toBe(200);
+  });
+});
+
+describe("[S1.200 / khoản 258] `GET /rfqs/:rfqId/budget` — người duyệt đọc được ngân sách mình ký; người tạo gói và người giữ `rfq.approve`, không ai khác", () => {
+  /** Hàng từ chối của một người, dạng `loại tài nguyên quyền` — lần đọc ngân sách mang loại riêng `RFQ_BUDGET` (lượt soi F2). */
+  async function demTuChoiNganSach(org: string, ai: string): Promise<string[]> {
+    const { rows } = await db.pool.query<{ q: string }>(
+      "SELECT resource_type || ' ' || (payload->>'permission') AS q FROM audit_events " +
+        "WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED' ORDER BY seq",
+      [org, ai],
+    );
+    return rows.map((r) => r.q);
+  }
+
+  it("[INV-K4b] tổ chức đã bật, gói chờ duyệt: người tạo và người duyệt đọc đủ năm thứ chữ ký ràng vào; BUYER khác và FINANCE ⇒ 403, một hàng `PERMISSION_DENIED` trên `rfq.approve`; mã gói lạ ⇒ 404", async () => {
+    const { org, pm, mua, rfqId } = await goiDaNop("ns-doc-bat", true);
+    const pm2 = await nguoi("pm2-ns-doc-bat@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const tc3 = await nguoi("tc3-ns-doc-bat@vidu.vn", ["FINANCE"], org);
+    const duong = `/rfqs/${rfqId}/budget`;
+    const mong = { rfqId, estimatedValue: "1000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "0.00", requiresDualApproval: false };
+    for (const ai of [pm, pm2]) {
+      const kq = await goi("GET", duong, ai);
+      expect([kq.status, kq.body], kq.text).toEqual([200, { budget: mong }]);
+    }
+    for (const ai of [mua, tc3]) {
+      const kq = await goi("GET", duong, ai);
+      expect(kq.status, kq.text).toBe(403);
+      expect(await demTuChoiNganSach(org, ai.id)).toEqual(["RFQ_BUDGET rfq.approve"]);
+    }
+    expect((await goi("GET", `/rfqs/${UUID0}/budget`, pm2)).status).toBe(404);
+  });
+
+  it("[INV-K4b] người tạo gói là BUYER — chỉ giữ `rfq.create`, không giữ `rfq.approve`: đọc được ngân sách của gói mình đã nộp, không hàng từ chối (lượt soi F1)", async () => {
+    const { org, mua } = await goiDaNop("ns-doc-mua", true);
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", mua, { title: "Goi cua nguoi mua", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    expect((await goi("PUT", `/rfqs/${rfqId}/budget`, mua, { estimatedValue: "2000000.00", currency: "VND" })).status).toBe(200);
+    // [S1.200 / S3.6a] Tổ chức đã bật đòi nhóm hàng trước lần nộp — gói nhận nhóm `goiDaNop` đã dựng cho tổ chức.
+    const nhomId = (await db.pool.query<{ id: string }>("SELECT id FROM procurement_categories WHERE org_id = $1", [org])).rows[0]?.id ?? "";
+    expect((await goi("PUT", `/rfqs/${rfqId}/category`, mua, { categoryId: nhomId })).status).toBe(200);
+    const nop = await goi("POST", `/rfqs/${rfqId}/submit`, mua);
+    expect(nop.status, nop.text).toBe(200);
+    const kq = await goi("GET", `/rfqs/${rfqId}/budget`, mua);
+    expect([kq.status, kq.body], kq.text).toEqual([
+      200,
+      { budget: { rfqId, estimatedValue: "2000000.00", currency: "VND", policyVersion: 2, tierTuSoTien: "0.00", requiresDualApproval: false } },
+    ]);
+    expect(await demTuChoiNganSach(org, mua.id)).toEqual([]);
+  });
+
+  it("gói chưa có ngân sách: bốn trường ngân sách `null`; tổ chức chưa bật đọc như tổ chức đã bật — route cho mọi tổ chức", async () => {
+    const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('ns-trong', 'ns-trong') RETURNING id")).rows[0]?.id ?? "";
+    const pm = await nguoi("pm-ns-trong@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const rfq = await goi("POST", "/rfqs", pm, { title: "Chua dat ngan sach", deadlineAt: han });
+    expect(rfq.status, rfq.text).toBe(201);
+    const rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
+    const kq = await goi("GET", `/rfqs/${rfqId}/budget`, pm);
+    expect([kq.status, kq.body]).toEqual([
+      200,
+      { budget: { rfqId, estimatedValue: null, currency: null, policyVersion: null, tierTuSoTien: null, requiresDualApproval: true } },
+    ]);
   });
 });
 
@@ -1220,14 +1329,147 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
   });
 });
 
+describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ qua HTTP — đọc, ghi nhận, và chốt K10a ở cạnh mở gói", () => {
+  it("[INV-K10a] ba gói 480/470/490 triệu cùng nhóm: mở gói thứ ba ⇒ 422 có tên + một hàng sổ; người gây ra ghi nhận ⇒ 422 có tên; BUYER ⇒ 403; thiếu lý do ⇒ 422; người độc lập ⇒ 201; lần hai ⇒ 422; rồi mở ⇒ 200", async () => {
+    const org = (
+      await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('Cong ty K10a', 'cong-ty-k10a') RETURNING id")
+    ).rows[0]?.id ?? "";
+    const pm = await nguoi("pm-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const pm2 = await nguoi("pm2-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const pm3 = await nguoi("pm3-k10a@vidu.vn", ["PROCUREMENT_MANAGER"], org);
+    const mua = await nguoi("mua-k10a@vidu.vn", ["BUYER"], org);
+    // Người ghi nhận ĐỘC LẬP giữ ĐÚNG MỘT mã, `rfq.approve`: route khai sai mã (vd. `rfq.create`) thì người này 403 ở cổng —
+    // hàm gói hỏi lại `rfq.approve` nên một người giữ cả hai mã không phân biệt được hai bản.
+    await db.pool.query("INSERT INTO roles (code, name) VALUES ('KIEM_K10A_DUYET', 'Chi duyet goi')");
+    await db.pool.query("INSERT INTO role_permissions (role_code, permission_code) VALUES ('KIEM_K10A_DUYET', 'rfq.approve')");
+    const docLap = await nguoi("doclap-k10a@vidu.vn", ["KIEM_K10A_DUYET"], org);
+    const tc = await nguoi("tc-k10a@vidu.vn", ["FINANCE"], org);
+    const tc2 = await nguoi("tc2-k10a@vidu.vn", ["FINANCE"], org);
+    expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
+    // Phiên bản có bậc 0 / 1 tỷ / 10 tỷ, cửa sổ 30 ngày — câu DỰNG dưới chủ sở hữu, khuôn ca K1 ở trên. Mọi trigger vẫn chạy.
+    const bac = (tu: number): Record<string, unknown> => ({
+      tu_so_tien: tu,
+      so_ncc_toi_thieu: 1,
+      award_vai_khac_nhau: false,
+      ky_danh_sach_moi: false,
+      xoay_vong_n: 0,
+      award_so_chu_ky: 1,
+      award_vai: ["DIRECTOR"],
+      tham_dinh_truoc_trao: false,
+      khai_xung_dot: false,
+      dau_thau_chinh_thuc: false,
+    });
+    const v2 = (
+      await db.pool.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, tiers, chia_nho_cua_so_ngay, " +
+          "tham_dinh_hieu_luc_thang, created_by, created_by_session_id) VALUES ($1, 2, '100000000.00', 'VND', $2::jsonb, 30, 12, $3, $4) RETURNING id",
+        [org, JSON.stringify([bac(0), bac(1_000_000_000), { tu_so_tien: 10_000_000_000, dau_thau_chinh_thuc: true }]), tc.id, tc.sessionId],
+      )
+    ).rows[0]?.id;
+    await db.pool.query(
+      "INSERT INTO org_policy_signatures (org_id, policy_id, signed_by, signed_by_session_id) VALUES ($1, $2, $3, $4)",
+      [org, v2, tc2.id, tc2.sessionId],
+    );
+    const nhom = await goi("POST", "/categories", tc, { ma: "THEP", ten: "Thep" });
+    expect(nhom.status, nhom.text).toBe(201);
+    const nhomId = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    const han = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+    const goiDaDuyet = async (giaTri: string): Promise<string> => {
+      const rfq = await goi("POST", "/rfqs", pm, { title: `Thep ${giaTri}`, deadlineAt: han });
+      expect(rfq.status, rfq.text).toBe(201);
+      const id = (rfq.body as { rfq: { id: string } }).rfq.id;
+      expect((await goi("PUT", `/rfqs/${id}/budget`, pm, { estimatedValue: giaTri, currency: "VND" })).status).toBe(200);
+      expect((await goi("PUT", `/rfqs/${id}/category`, pm, { categoryId: nhomId })).status).toBe(200);
+      expect((await goi("POST", `/rfqs/${id}/items`, pm, { lineNo: 1, description: "Thep tam", quantity: "10", unit: "tam" })).status).toBe(201);
+      const nop = await goi("POST", `/rfqs/${id}/submit`, pm);
+      expect(nop.status, nop.text).toBe(200);
+      for (const ai of [pm2, pm3]) {
+        // [S1.198 / khoản 256] Người duyệt gửi lại lần nộp vừa đọc — ở tổ chức đã bật, route duyệt đòi nó.
+        const lanNop = ((await goi("GET", `/rfqs/${id}`, ai)).body as { rfq: { lanNop: number } }).rfq.lanNop;
+        const d = await goi("POST", `/rfqs/${id}/approve`, ai, { lanNop });
+        expect(d.status, d.text).toBe(200);
+      }
+      return id;
+    };
+    const hangSo = async (rfqId: string): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = $2 ORDER BY seq",
+          [org, rfqId],
+        )
+      ).rows.map((r) => r.ma);
+
+    for (const v of ["480000000.00", "470000000.00"]) {
+      const id = await goiDaDuyet(v);
+      const mo = await goi("POST", `/rfqs/${id}/open`, pm);
+      expect(mo.status, mo.text).toBe(200);
+    }
+    const g3 = await goiDaDuyet("490000000.00");
+    const duongGhiNhan = `/rfqs/${g3}/signals/acknowledge`;
+
+    const doc = await goi("GET", `/rfqs/${g3}/signals`, pm);
+    expect(doc.status, doc.text).toBe(200);
+    const tinHieu = (doc.body as { tinHieu: { canGhiNhan: boolean; hienTai: { can: number; goi: string[] }; tinHieu: unknown[] } }).tinHieu;
+    expect([tinHieu.canGhiNhan, tinHieu.hienTai.can, tinHieu.hienTai.goi.length, tinHieu.tinHieu.length]).toEqual([true, 1_000_000_000, 3, 1]);
+
+    // [S3.6b2] Thứ màn cần: người đang xem — dẫn xuất từ PHIÊN, không từ thân hay query — ghi nhận được không, và vì sao không.
+    type DocMan = { tinHieu: { nguoiXem: unknown; soNguoiGhiNhanDuoc: number | null; goi: Record<string, { tieuDe: string }> } };
+    const xem = async (ai: typeof pm): Promise<DocMan["tinHieu"]> => {
+      const r = await goi("GET", `/rfqs/${g3}/signals`, ai);
+      expect(r.status, r.text).toBe(200);
+      return (r.body as DocMan).tinHieu;
+    };
+    expect((await xem(pm)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep });
+    expect((await xem(mua)).nguoiXem).toEqual({ ghiNhanDuoc: false, lyDo: "Ghi nhận tín hiệu cần quyền duyệt gói thầu." });
+    const tuDocLap = await xem(docLap);
+    expect(tuDocLap.nguoiXem).toEqual({ ghiNhanDuoc: true, lyDo: null });
+    // Người giữ `rfq.approve`: ba PROCUREMENT_MANAGER và người độc lập; chỉ `pm` — người tạo và nộp cả ba gói — bị loại.
+    expect(tuDocLap.soNguoiGhiNhanDuoc).toBe(3);
+    expect(Object.values(tuDocLap.goi).map((g) => g.tieuDe).sort()).toEqual(["Thep 470000000.00", "Thep 480000000.00", "Thep 490000000.00"]);
+    // Bốn lần đọc không để hàng sổ nào — kể cả của người không giữ quyền (hàng PERMISSION_DENIED duy nhất của `mua` ở dưới).
+    expect(await hangSo(g3)).toEqual([]);
+
+    const chan = await goi("POST", `/rfqs/${g3}/open`, pm);
+    expect([chan.status, (chan.body as { error: string }).error]).toEqual([422, CHOT_VAO_SO.TIN_HIEU_CHUA_GHI_NHAN.thongDiep]);
+    expect(await hangSo(g3)).toEqual(["TIN_HIEU_CHUA_GHI_NHAN"]);
+
+    const tuGhi = await goi("POST", duongGhiNhan, pm, { lyDo: "toi tao ca ba goi" });
+    expect([tuGhi.status, (tuGhi.body as { error: string }).error]).toEqual([422, CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep]);
+    expect(await hangSo(g3)).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
+
+    const bi = await goi("POST", duongGhiNhan, mua, { lyDo: "buyer khong duyet" });
+    expect(bi.status, bi.text).toBe(403);
+    const { rows: tuChoi } = await db.pool.query<{ q: string; r: string }>(
+      "SELECT payload->>'permission' AS q, resource_id::text AS r FROM audit_events WHERE org_id = $1 AND actor_id = $2 AND action = 'PERMISSION_DENIED'",
+      [org, mua.id],
+    );
+    expect(tuChoi).toEqual([{ q: "rfq.approve", r: g3 }]);
+
+    const thieu = await goi("POST", duongGhiNhan, docLap, {});
+    expect([thieu.status, thieu.text]).toEqual([422, JSON.stringify({ error: 'thiếu trường "lyDo"' })]);
+
+    const ghi = await goi("POST", duongGhiNhan, docLap, { lyDo: "Ba cong trinh, ba hop dong khung khac nhau" });
+    expect(ghi.status, ghi.text).toBe(201);
+    expect((ghi.body as { ghiNhan: { tinHieuMoi: boolean } }).ghiNhan.tinHieuMoi).toBe(false);
+    const lan2 = await goi("POST", duongGhiNhan, docLap, { lyDo: "lan hai" });
+    expect([lan2.status, (lan2.body as { error: string }).error]).toEqual([422, "Bạn đã ghi nhận tín hiệu này rồi."]);
+
+    const sau = await goi("GET", `/rfqs/${g3}/signals`, pm);
+    expect((sau.body as { tinHieu: { canGhiNhan: boolean } }).tinHieu.canGhiNhan).toBe(false);
+    const mo = await goi("POST", `/rfqs/${g3}/open`, pm);
+    expect(mo.status, mo.text).toBe(200);
+  });
+});
+
 // ==============================================================================================
-// [S1.9113 / khoản 133] "KHÔNG TÌM THẤY" QUA HTTP TRÊN BỀ MẶT MỞ THẦU VÀ BẢNG SO SÁNH
+// [S1.213 / khoản 133] "KHÔNG TÌM THẤY" QUA HTTP TRÊN BỀ MẶT MỞ THẦU VÀ BẢNG SO SÁNH
 //
 // Đo trước bản vá trên `69e743e`: bốn đường dưới đây trả 422 mà 0 hàng sổ — bảng so sánh và số báo giá cùng câu "Không tìm thấy RFQ
 // trong tổ chức đang gắn.", huỷ mở thầu câu cũ của `cancelUnseal`, còn phê duyệt là 422 "tham chieu khong hop le" của bảng ánh xạ
-// SQLSTATE (23503 trần). Lần bấm điều phối THỨ HAI đo ở ca vòng đời phía trên. Chủ dự án chốt: D5 phủ chúng (tiểu mục ADR-016 [S1.9113]).
+// SQLSTATE (23503 trần). Lần bấm điều phối THỨ HAI đo ở ca vòng đời phía trên. Chủ dự án chốt: D5 phủ chúng (tiểu mục ADR-016 [S1.213]).
 // ==============================================================================================
-describe("[INV-D5] [S1.9113 / khoản 133] \"không tìm thấy\" qua HTTP: bảng so sánh, số báo giá, huỷ và phê duyệt mở thầu — 422 giữ câu, mỗi lần đúng một hàng sổ", () => {
+describe("[INV-D5] [S1.213 / khoản 133] \"không tìm thấy\" qua HTTP: bảng so sánh, số báo giá, huỷ và phê duyệt mở thầu — 422 giữ câu, mỗi lần đúng một hàng sổ", () => {
   async function hangTuChoi(action: string, resourceId: string): Promise<unknown[][]> {
     const { rows } = await db.pool.query<{ actor_id: string | null; resource_type: string; payload: unknown }>(
       "SELECT actor_id, resource_type, payload FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq",
@@ -1284,7 +1526,7 @@ describe("[INV-D5] [S1.9113 / khoản 133] \"không tìm thấy\" qua HTTP: bả
 });
 
 // ==============================================================================================
-// [S1.9182 / khoản 232 / ADR-9282] RÚT ĐỀ XUẤT TRAO THẦU QUA HTTP — `POST /rfqs/:rfqId/award/withdraw` DƯỚI `award.recommend`
+// [S1.231 / khoản 232 / ADR-133] RÚT ĐỀ XUẤT TRAO THẦU QUA HTTP — `POST /rfqs/:rfqId/award/withdraw` DƯỚI `award.recommend`
 //
 // Giàn cảnh dựng THẲNG tới `CLOSED` trong một TỔ CHỨC RIÊNG (cùng khuôn `luot-danh-gia.int.test.ts`: phong bì giả, bản rõ ghi
 // thẳng dưới `app_unseal` — đường mở thầu thật đã có `kich-ban-41-http`; tổ chức riêng vì các ca S3 ở trên đã bật kiểm soát theo
@@ -1292,7 +1534,7 @@ describe("[INV-D5] [S1.9113 / khoản 133] \"không tìm thấy\" qua HTTP: bả
 // trận quyền: BUYER rút được đề xuất CỦA MÌNH; BUYER KHÔNG huỷ được award đã duyệt (403 — `po.approve` không đổi, ADR-057);
 // FINANCE huỷ được. Mỗi lần từ chối có tên để lại một hàng `RFQ_STATE_DENIED` mang mã (ADR-060).
 // ==============================================================================================
-describe("[S1.9182 / khoản 232] rút đề xuất trao thầu qua HTTP", () => {
+describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => {
   const TP_GIA = '[{"ma":"gia","don_vi":"TIEN","he_so":"1.0000"}]';
 
   /** Một gói thầu của `pm` đã ĐÓNG với ba báo giá niêm phong giả — sẵn sàng xin mở thầu qua HTTP. */
@@ -1503,9 +1745,9 @@ describe("[S1.9182 / khoản 232] rút đề xuất trao thầu qua HTTP", () =>
   }, 180_000);
 });
 
-// [S1.9130 / khoản 250 / ADR-9230] THU HỒI LỜI MỜI SAU LẦN MỞ THẦU QUA HTTP ⇒ 422 THÂN CỐ ĐỊNH, MỘT HÀNG `RFQ_STATE_DENIED`
+// [S1.217 / khoản 250 / ADR-128] THU HỒI LỜI MỜI SAU LẦN MỞ THẦU QUA HTTP ⇒ 422 THÂN CỐ ĐỊNH, MỘT HÀNG `RFQ_STATE_DENIED`
 // ==============================================================================================
-describe("[S1.9130 / khoản 250] thu hồi lời mời sau lần mở thầu qua HTTP", () => {
+describe("[S1.217 / khoản 250] thu hồi lời mời sau lần mở thầu qua HTTP", () => {
   it("gói CLOSED: thu hồi ⇒ 200 {revoked: true}, 0 hàng từ chối (đối chứng); ép gói sang UNSEALED: thu hồi lời mời thứ hai ⇒ 422 thân cố định, ĐÚNG MỘT hàng RFQ_STATE_DENIED {LOI_MOI_THU_HOI_SAU_MO_THAU} dưới người gọi, lời mời còn sống; lần bấm thứ hai ⇒ 422 và hàng thứ hai", async () => {
     const pm = await nguoi("k250-pm@vidu.vn", ["PROCUREMENT_MANAGER"]);
     const gd1 = await nguoi("k250-gd1@vidu.vn", ["DIRECTOR"]);

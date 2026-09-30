@@ -54,7 +54,7 @@ const HAM_DOI_TRANG_THAI = [
   "duyetTraoThau",
   "huyTraoThau",
   "moVongBafo",
-  // [S1.9182 / khoản 232 / ADR-9282] Hàm ghi THỨ BẢY của `@trustprocure/danh-gia`: rút đề xuất — route đòi `award.recommend`,
+  // [S1.231 / khoản 232 / ADR-133] Hàm ghi THỨ BẢY của `@trustprocure/danh-gia`: rút đề xuất — route đòi `award.recommend`,
   // cùng mã với lần đề xuất; hàm hỏi lại cùng mã.
   "rutDeXuatTraoThau",
   "taoLuotDanhGia",
@@ -84,9 +84,16 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.188 / S3.2b2 / ADR-113] Đúc token cho mọi lời mời còn sống trong giao dịch mở gói — route mở gói đòi `rfq.open`.
   "ducTokenKhiMoGoi",
   "extendRfqDeadline",
+  // [S1.203 / S3.6b1 · K10a] Ghi nhận tín hiệu chia nhỏ — route đòi `rfq.approve`, hàm hỏi lại cùng mã rồi luật người.
+  "ghiNhanTinHieu",
+  // [S1.203 / S3.6b1] Ảnh chụp tín hiệu lúc nộp duyệt — người gọi duy nhất là `submitRfqForApproval`, sau cổng `rfq.create`
+  // của route nộp; một module `apps/` gọi thẳng nó mà không nhắc quyền là đúng thứ lớp này bắt.
+  "ghiTinHieuKhiNop",
   "issueMagicLinkToken",
   // [S1.197 / S4.2a] Bốn hàm ghi dữ liệu nền của `@trustprocure/du-lieu-nen` — route của S4.2b đòi `item.manage`. Cổng ở CSDL
   // (`du_lieu_nen_kiem_quyen_ghi`) đứng dưới route, không thay nó.
+  // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức — cùng rổ, cùng mã quyền ở route, cùng cổng CSDL.
+  "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
   // [S1.169 / S3.1c] Lần ký đầu tiên của một phiên bản có bậc BẬT S3 cho tổ chức, một chiều (ADR-080 ⑵). Route của nó đòi
@@ -102,6 +109,7 @@ const HAM_DOI_TRANG_THAI = [
   "returnRfqToDraft",
   "revokeInvitation",
   "revokeMagicLinkToken",
+  "rutBiDanhDonVi",
   "rutBiDanhHang",
   "rutQuyDoiRieng",
   "setRfqBudget",
@@ -134,6 +142,10 @@ const HAM_CHI_DOC = [
   // [S1.197 / S4.2a] Ba hàm đọc của dữ liệu nền: hàng chuẩn không mang giá (spec S4 §4.3 — *"đọc nó không phải là đọc giá"*),
   // và làm sạch chuỗi / quy đổi đơn vị là phép tính trên danh mục. Vế *ai gọi được* đóng ở route của S4.2b.
   "chuoiSach",
+  // [S1.199 / S4.2b] Chi tiết, danh sách hàng chuẩn và danh mục đơn vị — cùng hạng với `docHangChuan`: không mang giá.
+  // Tác giả đi kèm là họ tên người trong CÙNG tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`).
+  "docChiTietHangChuan",
+  "docDanhMucDonVi",
   "docHangChuan",
   // [S1.196 / S3.3a / K8a] Trạng thái xác minh của một nhà cung cấp — không phải bí mật với người trong tổ chức, cùng hạng với
   // `getSupplier`. Vế *ai gọi được* đóng ở route (`agent: false`).
@@ -156,9 +168,14 @@ const HAM_CHI_DOC = [
   // [S1.169 / S3.1c] Mọi phiên bản chính sách cùng chữ ký — cùng hạng với `getActiveProcurementPolicy`: chính sách không
   // phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route (`agent: false`), không ở đây.
   "lietKePhienBanChinhSach",
+  "lietKeHangChuan",
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",
+  // [S1.203 / S3.6b1] Tín hiệu chia nhỏ của một gói — không giá: bằng chứng mang id gói, nhóm hàng, phiên bản chính sách, cận
+  // bậc và cửa sổ, tức những thứ người trong tổ chức đã đọc được ở `GET /policy` và `GET /rfqs/:id`. Vế *ai gọi được* đóng ở
+  // route (`agent: false`).
+  "lietKeTinHieu",
   "listRfqItems",
   "listSupplierContacts",
   "listSuppliers",
@@ -236,6 +253,9 @@ const HAM_DOC_CO_QUYEN = [
   // [mảnh 1 / màn xuất bằng chứng] Bộ bằng chứng mang MỌI hàng của MỌI lượt chấm — rộng hơn cả
   // bảng xếp hạng. Hai cổng `audit.read` + `bid.view` đứng THẲNG trong thân `xuatBoBangChung`.
   "xuatBoBangChung",
+  // [S1.200 / khoản 258] Ngân sách dự tính neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không ghi số tiền vào sổ. Cổng
+  // đứng THẲNG trong thân `getRfqBudget`: người tạo gói `rfq.create`, người khác `rfq.approve`.
+  "getRfqBudget",
 ] as const;
 
 /**
@@ -324,6 +344,8 @@ const CUA_GOI = [
   "@trustprocure/danh-gia",
   // [S1.197 / S4.2a] Gói dữ liệu nền có hàm GHI từ S4.2a — vào danh sách CÙNG lúc, không đợi route đầu tiên (khuôn khoản 33).
   "@trustprocure/du-lieu-nen",
+  // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 — vào danh sách CÙNG lúc gói ra đời (khuôn khoản 33).
+  "@trustprocure/kiem-soat",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------

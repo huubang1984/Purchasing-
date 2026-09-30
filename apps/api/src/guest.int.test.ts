@@ -823,7 +823,7 @@ describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /gues
 });
 
 // ==============================================================================================
-// [S1.9132 / khoản 230] LẦN NỘP BỊ TỪ CHỐI MANG MÃ LÝ DO TRONG THÂN 422 — QUA HTTP
+// [S1.219 / khoản 230] LẦN NỘP BỊ TỪ CHỐI MANG MÃ LÝ DO TRONG THÂN 422 — QUA HTTP
 //
 // Phần CSDL đã xong ở `074`/ADR-108: mỗi nhánh trigger của câu nộp đặt một TÊN RÀNG BUỘC, `submitBid` đọc nó ở trường
 // `constraint` (không đọc chuỗi) thành `NopBiTuChoiError.ma` (tập ĐÓNG `MA_THEO_RANG_BUOC`) hay `NopQuaHanError`. Phần còn
@@ -834,7 +834,7 @@ describe("[S1.181 / ADR-109] tên nhà cung cấp được mời, và POST /gues
 //      phải hợp đồng với trình duyệt;
 //   ⑶ hàng sổ của nhánh (`BID_STATE_DENIED` mang cùng `ma`) nằm lại — route vẫn đi đường TRẢ VỀ, giao dịch commit.
 // ==============================================================================================
-describe("[S1.9132 / khoản 230] lần nộp bị từ chối mang MÃ lý do trong thân 422", () => {
+describe("[S1.219 / khoản 230] lần nộp bị từ chối mang MÃ lý do trong thân 422", () => {
   /** Cùng công thức RFQ OPEN có khoá của `beforeAll`, trên một gói RIÊNG cho từng ca — gói chung `rfqA` phải còn hạn. */
   async function dungGoiMo(tieuDe: string): Promise<string> {
     const rfq = (await db.pool.query<{ id: string }>(

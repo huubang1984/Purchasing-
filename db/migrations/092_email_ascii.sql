@@ -1,5 +1,5 @@
 -- =============================================================================================
--- 9580_email_ascii — [khoản nợ 71 / ADR-9280] `users.email` VÀ `supplier_contacts.email` CHỈ NHẬN ASCII IN ĐƯỢC
+-- 092_email_ascii — [khoản nợ 71 / ADR-132] `users.email` VÀ `supplier_contacts.email` CHỈ NHẬN ASCII IN ĐƯỢC
 -- =============================================================================================
 -- Khoản nợ 71, nguyên văn (S1.27, mang sang ở S1.61): hai địa chỉ TRÔNG GIỐNG HỆT NHAU vẫn cùng tồn tại được trong một tổ chức —
 -- `ασ@corp.com` cạnh `ας@corp.com` (sigma cuối từ), `i̇@corp.com` (U+0069 U+0307) cạnh `i@corp.com` — và TẬP GIÁ TRỊ mà cột chấp nhận
@@ -7,17 +7,17 @@
 -- phân kỳ giữa `.toLowerCase()` của JS và `lower()` của máy chủ trên musl, 28 trên glibc. Ràng buộc chữ thường của `048`/`049`
 -- (`email = lower(email)`) ĐÚNG với mọi hàm `lower()` — nhưng CÁI GÌ CẤT ĐƯỢC thì do hàm ấy quyết, tức do libc.
 --
--- QUYẾT ĐỊNH (chủ dự án chốt 2026-09-30, ADR-9280): thu hẹp MIỀN GIÁ TRỊ về ASCII IN ĐƯỢC — `^[!-~]+@[!-~]+$`: mỗi ký tự trong
+-- QUYẾT ĐỊNH (chủ dự án chốt 2026-09-30, ADR-132): thu hẹp MIỀN GIÁ TRỊ về ASCII IN ĐƯỢC — `^[!-~]+@[!-~]+$`: mỗi ký tự trong
 -- 0x21…0x7E, có ít nhất một `@` không ở đầu hay cuối. Trên tập ấy MỌI hàm hạ chữ thường — `lower()` của glibc, musl, ICU, ctype C, và
 -- `.toLowerCase()` của JS — cho CÙNG một kết quả và bảo toàn độ dài byte; không còn cặp confusable Unicode; không còn điểm mã mà JS hạ
 -- mà máy chủ để nguyên. Địa chỉ quốc tế hoá (EAI/IDN, RFC 6531) bị TỪ CHỐI CÓ TÊN ở tầng ứng dụng (422) và ở đây bằng 23514; điều kiện
--- mở lại — khi một khách hàng cần địa chỉ quốc tế hoá — ghi ở ADR-9280.
+-- mở lại — khi một khách hàng cần địa chỉ quốc tế hoá — ghi ở ADR-132.
 --
 -- VÌ SAO `[!-~]` MÀ KHÔNG CHẶT HƠN (dot-atom của RFC 5321): ⑴ khoản 71 là bài toán MIỀN KÝ TỰ (confusable, libc), không phải bài toán
 -- HÌNH DẠNG — hình dạng đã có ràng buộc riêng của `011` trên `supplier_contacts` và `EMAIL_PATTERN` ở tầng ứng dụng; `048` đã ghi "thêm
 -- một phép kiểm định dạng vào lược đồ là một quyết định khác hẳn". ⑵ dot-atom loại cả local-part có nháy kép và domain literal `[a.b.c.d]`
 -- mà RFC 5321 cho phép — hẹp hơn thứ khoản nợ đòi, và là một quyết định sản phẩm chưa ai chốt. ⑶ `[!-~]` là ĐÚNG tập mà mọi hàm hạ chữ
--- thường đồng ý — không hơn, không kém. Đo (thăm dò S1.9180, PostgreSQL 16, `C.UTF-8`): `a@x.vn`, `!#$%&'*+/=?^_`{|}~-@x.vn`, `a~@x.vn`
+-- thường đồng ý — không hơn, không kém. Đo (thăm dò S1.229, PostgreSQL 16, `C.UTF-8`): `a@x.vn`, `!#$%&'*+/=?^_`{|}~-@x.vn`, `a~@x.vn`
 -- qua; `Ⓐ@x.vn`, `ⓐ@x.vn`, `a b@x.vn`, `a\x01@x.vn`, `@x`, `x@`, `a@x.vn\n` bị từ chối. `a@b@c` qua ở ĐÂY (hình dạng là việc của 011 và
 -- của tầng ứng dụng, không của file này).
 --
@@ -33,10 +33,10 @@
 -- `Ⱦ` hạ ra 3 byte từ 2, đo bằng Node); `tools/khoi-tao-to-chuc` kiểm ASCII trước khi ghi `users`; `login.ts` giữ hai vế cùng
 -- `pg_catalog.lower()`. Hai dòng khai ở `CHECK_AN_NINH_KHAI` của hardening (khoản 105): gỡ hay đổi một trong hai ⇒ `migrate()` kế NÉM.
 -- Đo: `db/migrations.int.test.ts` `[khoản nợ 71]` (dữ liệu có sẵn ⇒ NÉM nguyên văn, sửa tay ⇒ đi qua, INSERT thẳng Unicode dưới
--- superuser ⇒ 23514), `packages/supplier/src/suppliers.int.test.ts` và `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` `[S1.9180]`.
+-- superuser ⇒ 23514), `packages/supplier/src/suppliers.int.test.ts` và `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` `[S1.229]`.
 -- =============================================================================================
 
-DO $doi_chieu_9580$
+DO $doi_chieu_092$
 DECLARE
   so_nguoi_dung bigint;
   so_lien_he bigint;
@@ -60,7 +60,7 @@ BEGIN
              WHERE c.email OPERATOR(pg_catalog.!~) '^[!-~]+@[!-~]+$'
              ORDER BY c.id LIMIT 20) x;
 
-    RAISE EXCEPTION 'email ngoai ASCII in duoc: users % hang — id (toi da 20): %; supplier_contacts % hang — id (toi da 20): % — sua tay duoi mot vai ma RLS khong ap (doi mot dia chi da luu la doi dich magic link: co nguoi chiu, kem mot su kien kiem toan), roi deploy lai (9580_email_ascii, khoan no 71, ADR-9280)',
+    RAISE EXCEPTION 'email ngoai ASCII in duoc: users % hang — id (toi da 20): %; supplier_contacts % hang — id (toi da 20): % — sua tay duoi mot vai ma RLS khong ap (doi mot dia chi da luu la doi dich magic link: co nguoi chiu, kem mot su kien kiem toan), roi deploy lai (092_email_ascii, khoan no 71, ADR-132)',
       so_nguoi_dung, COALESCE(id_nguoi_dung, '-'), so_lien_he, COALESCE(id_lien_he, '-')
       USING ERRCODE = 'check_violation';
   END IF;
@@ -73,4 +73,4 @@ BEGIN
     ADD CONSTRAINT supplier_contacts_email_ascii
     CHECK (email OPERATOR(pg_catalog.~) '^[!-~]+@[!-~]+$');
 END
-$doi_chieu_9580$;
+$doi_chieu_092$;

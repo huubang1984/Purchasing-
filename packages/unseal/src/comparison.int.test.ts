@@ -235,7 +235,7 @@ async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
 /**
  * Đóng RFQ, xin + duyệt mở thầu, ghi bản rõ dưới `app_unseal`, rồi tuyên bố UNSEALED.
  *
- * [S1.9131 / khoản 114] Một `payload` là CHUỖI được ghi NGUYÊN VĂN làm văn bản JSON, không qua
+ * [S1.218 / khoản 114] Một `payload` là CHUỖI được ghi NGUYÊN VĂN làm văn bản JSON, không qua
  * `JSON.stringify`: ca `1e324` không viết ra được từ một giá trị JS (`Number("1e324")` là
  * `Infinity`, và `JSON.stringify(Infinity)` là `null`) — Postgres thì đọc `1e324` thành một
  * `numeric` 325 chữ số, và đó đúng là thứ khoản 114 đo.
@@ -941,10 +941,10 @@ describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại mộ
 });
 
 // ===============================================================================================
-// [S1.9131 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG BẢN RÕ MỖI CÂU, VÀ KHÔNG TÍNH TRÊN
+// [S1.218 / khoản 114] SỐ TIỀN ĐƯỢC TÍNH ĐÚNG MỘT LẦN MỖI HÀNG BẢN RÕ MỖI CÂU, VÀ KHÔNG TÍNH TRÊN
 // MỘT `totalAmount` KHÔNG VÔ HƯỚNG
 //
-// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.9131): `comparison.ts` gọi
+// ĐO TRƯỚC khi sửa, trên đúng tệp này (biên bản §S1.218): `comparison.ts` gọi
 // `bid_so_tien(payload->>'totalAmount')` BẢY lần cho mỗi báo giá đọc được (hai ở câu hàng, năm ở
 // câu tổng hợp) và BA lần cho một báo giá mà `totalAmount` là MẢNG — vì `->>` dựng CẢ CÂY thành văn
 // bản trước khi `bid_so_tien` kịp trả NULL. Với 20 000 phần tử `1e324` (120 KB văn bản vào, vài KB
@@ -955,7 +955,7 @@ describe("[S1.164 / khoản 245] lượt ĐỌC bảng so sánh để lại mộ
 // chung, một trần thời gian là một test lúc đỏ lúc xanh, còn số lần gọi thì không. Thời lượng của
 // ca ⒜ (không hàm bọc) là số đo mili-giây; nó được ghi ở biên bản, không được khẳng định ở đây.
 // ===============================================================================================
-describe("[S1.9131 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng bản rõ mỗi câu, và không chạy trên `totalAmount` không vô hướng", () => {
+describe("[S1.218 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng bản rõ mỗi câu, và không chạy trên `totalAmount` không vô hướng", () => {
   const SO_PHAN_TU = 20_000;
   /** Văn bản JSON THÔ — xem chú thích của `moThau`. */
   const MANG_1E324 = `{"totalAmount":[${Array.from({ length: SO_PHAN_TU }, () => "1e324").join(",")}],"currency":"VND"}`;
@@ -1098,15 +1098,15 @@ describe("[S1.9131 / khoản 114] `bid_so_tien` chạy một lần mỗi hàng b
 });
 
 // ===============================================================================================
-// [S1.9113 / khoản 133] LẦN TỪ CHỐI "KHÔNG TÌM THẤY RFQ" CỦA HAI ĐƯỜNG ĐỌC CÓ CỔNG VÀO SỔ
+// [S1.213 / khoản 133] LẦN TỪ CHỐI "KHÔNG TÌM THẤY RFQ" CỦA HAI ĐƯỜNG ĐỌC CÓ CỔNG VÀO SỔ
 //
-// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.9113): `buildComparisonTable` và `countReceivedBids` với một id RFQ không có
+// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.213): `buildComparisonTable` và `countReceivedBids` với một id RFQ không có
 // trong tổ chức — UUID ngẫu nhiên, hay id CÓ THẬT của tổ chức khác mà RLS giấu — ném `ComparisonError` mà 0 hàng sổ; qua HTTP là 422
-// cùng câu, cũng 0 hàng. Một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt (tiểu mục ADR-016 [S1.9113]): D5 PHỦ lần
+// cùng câu, cũng 0 hàng. Một người giữ `bid.view` dò id RFQ không để lại gì. Chủ dự án chốt (tiểu mục ADR-016 [S1.213]): D5 PHỦ lần
 // "không tìm thấy" trên các đường CÓ CỔNG của bề mặt mở thầu và bảng so sánh — cùng khuôn nhánh không tìm thấy của cổng mở thầu
 // (khoản 121): `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên, `resourceId` là id NGƯỜI GỌI gửi, hàng vào sổ của TỔ CHỨC NGƯỜI GỌI.
 // ===============================================================================================
-describe("[INV-D5] [S1.9113 / khoản 133] hai đường đọc có cổng từ chối vì KHÔNG TÌM THẤY RFQ thì ghi sổ — lớp lỗi và thông điệp giữ nguyên", () => {
+describe("[INV-D5] [S1.213 / khoản 133] hai đường đọc có cổng từ chối vì KHÔNG TÌM THẤY RFQ thì ghi sổ — lớp lỗi và thông điệp giữ nguyên", () => {
   let auditPool: pg.Pool;
   const THONG_DIEP = "Không tìm thấy RFQ trong tổ chức đang gắn.";
 
@@ -1233,15 +1233,15 @@ describe("[INV-D5] [S1.9113 / khoản 133] hai đường đọc có cổng từ 
 });
 
 // ===============================================================================================
-// [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG API CỦA BẢNG SO SÁNH: `totalAmount` (CHUỖI) LÀ SỐ CHUẨN, `payload` LÀ BẢN HIỂN THỊ
+// [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG API CỦA BẢNG SO SÁNH: `totalAmount` (CHUỖI) LÀ SỐ CHUẨN, `payload` LÀ BẢN HIỂN THỊ
 //
 // `pg` phân tích cột `jsonb` bằng `JSON.parse`, nên một số JSON quá 15 chữ số có nghĩa trong `payload` đi qua `double` ở PHÍA ĐỌC —
 // đo ở khoản 108: `'{"a":99999999999999.99}'::jsonb` đọc qua `pg` ra `99999999999999.98`. `totalAmount` của hàng thì tính bằng SQL
-// (`bid_so_tien`, 020) và trả về dạng CHUỖI, nên đúng tới từng chữ số. Chủ dự án chốt GIỮ hình dạng JSON và GHI HỢP ĐỒNG (ADR-9213);
+// (`bid_so_tien`, 020) và trả về dạng CHUỖI, nên đúng tới từng chữ số. Chủ dự án chốt GIỮ hình dạng JSON và GHI HỢP ĐỒNG (ADR-125);
 // khối dưới đây ghim ĐÚNG hành vi ấy — không "sửa" nó — để một vòng sau đổi cách phân tích của `pg` hay đổi `payload` sang văn bản
 // thì cổng này đỏ và hợp đồng phải viết lại. Cột `jsonb` trong CSDL vẫn giữ đủ chữ số: phép mất xảy ra ở phía đọc, và ca đo nói rõ chỗ.
 // ===============================================================================================
-describe("[S1.9113 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng tới từng chữ số, `payload` là bản hiển thị và có thể mất chính xác từ 16 chữ số có nghĩa", () => {
+describe("[S1.213 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng tới từng chữ số, `payload` là bản hiển thị và có thể mất chính xác từ 16 chữ số có nghĩa", () => {
   it("số tiền 18 chữ số có nghĩa (16 nguyên + 2 thập phân): `totalAmount` và phép tổng hợp giữ nguyên; `payload` đọc qua `pg` đã làm tròn — cả trường đơn giá lẫn khi chính `totalAmount` trong phong bì là số JSON; CSDL vẫn giữ đủ chữ số", async () => {
     const rfqId = await taoRfqMo(csNghiem);
     const vChuoi = await nopBaoGia(rfqId, "NCC Chuoi");
@@ -1294,15 +1294,15 @@ describe("[S1.9113 / khoản 108] hợp đồng: `totalAmount` chuỗi đúng t�
 });
 
 // ===============================================================================================
-// [S1.9130 / khoản 250 / ADR-9230] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO BẢNG SO SÁNH
+// [S1.217 / khoản 250 / ADR-128] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO BẢNG SO SÁNH
 //
-// Từ S1.9130 worker không mở phong bì của lời mời đã thu hồi (đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts`), nên trên
+// Từ S1.217 worker không mở phong bì của lời mời đã thu hồi (đo ở `apps/unseal-worker/src/unseal-worker.int.test.ts`), nên trên
 // đường thuận hàng bản rõ ấy KHÔNG tồn tại. Ca này dựng đúng thế giới mà vế lọc của bảng so sánh còn phải đứng một mình: bản rõ
-// ĐÃ CÓ (ghi thẳng dưới `app_unseal`, như mọi ca của tệp — hàng của những lượt mở thầu trước S1.9130, hay của một chỗ ghi khác),
+// ĐÃ CÓ (ghi thẳng dưới `app_unseal`, như mọi ca của tệp — hàng của những lượt mở thầu trước S1.217, hay của một chỗ ghi khác),
 // rồi lời mời bị thu hồi. Hai câu của `buildComparisonTable` — câu hàng và câu tổng hợp — cùng lọc `i.revoked_at IS NULL`, và
 // cổng tĩnh `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba chỗ đọc mang đúng MỘT vế ấy.
 // ===============================================================================================
-describe("[S1.9130 / khoản 250] bản rõ của lời mời đã thu hồi không vào bảng so sánh", () => {
+describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi không vào bảng so sánh", () => {
   /** Lời mời của một phiên bản báo giá — đọc dưới superuser, không đi qua hàm nào của gói. */
   async function loiMoiCuaPhienBan(versionId: string): Promise<string> {
     const { rows } = await db.pool.query<{ invitation_id: string }>(
@@ -1347,8 +1347,8 @@ describe("[S1.9130 / khoản 250] bản rõ của lời mời đã thu hồi kh�
     );
     expect(banRo[0]?.n).toBe("2");
 
-    // GIỚI HẠN ĐÃ ĐO, nói ra (khoản 9440): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
-    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 9440 đỏ đúng đây.
+    // GIỚI HẠN ĐÃ ĐO, nói ra (khoản 271): `countReceivedBids` đếm `vendor_bids` qua `rfq_invitations` mà KHÔNG lọc thu hồi —
+    // ngoài ba câu chọn phong bì của khoản 250. Số báo giá đã nhận vẫn là 2 sau khi thu hồi. Ghim để lần đóng 271 đỏ đúng đây.
     const dem = await withTenant(apiPool, orgA, (c) => countReceivedBids(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
     expect(dem).toEqual({ disclosed: true, count: 2 });
   });

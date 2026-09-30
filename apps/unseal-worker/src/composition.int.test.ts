@@ -39,7 +39,7 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // app; `@trustprocure/api` KHÔNG được thành dependency của worker (đường chạy worker không chạm api).
 import { buildApiOutboxHandlers } from "../../api/src/outbox-api.js";
 import { dichVuTest } from "../../api/src/test-services.js";
-// [S1.9151 / khoản 166] Bộ mô tả lỗi của TIẾN TRÌNH `api`, để vế cuối tệp đối chiếu dòng log của
+// [S1.222 / khoản 166] Bộ mô tả lỗi của TIẾN TRÌNH `api`, để vế cuối tệp đối chiếu dòng log của
 // worker với chuỗi mà `api` cho CÙNG một lỗi. Cùng lý do và cùng tiền lệ với hai dòng trên: test
 // là nơi duy nhất nối hai app.
 import { moTaLoiKhongGiaTri as moTaLoiCuaApi } from "../../api/src/mo-ta-loi.js";
@@ -423,7 +423,7 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
 });
 
 // ===============================================================================================
-// [S1.9151 / khoản 166] MỘT BỘ MÔ TẢ LỖI CHO CẢ HAI TIẾN TRÌNH — ĐO TRÊN TIẾN TRÌNH WORKER DỰNG TỪ CẤU HÌNH
+// [S1.222 / khoản 166] MỘT BỘ MÔ TẢ LỖI CHO CẢ HAI TIẾN TRÌNH — ĐO TRÊN TIẾN TRÌNH WORKER DỰNG TỪ CẤU HÌNH
 //
 // Khoản 166 (§S1.82): `moTaLoiKhongGiaTri` có HAI bản. Bản đầy đủ ở `apps/api/src/mo-ta-loi.ts` nêu
 // thêm MỘT tầng `cause` cho lỗi không có trường `code` (khoản 119) và nhận `TenantError` theo lớp;
@@ -438,8 +438,8 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
 // `DenialAuditFailedError` mang lỗi ấy ở `cause`, và `onJobFailure` của `tien-trinh.ts` ghi dòng.
 // Vế đối chiếu: bộ mô tả của `api` cho một lỗi CÙNG HÌNH DẠNG phải cho đúng phần đuôi của dòng ấy.
 // ===============================================================================================
-describe("[INV-A2] [S1.9151 / khoản 166] dòng log của worker mô tả lỗi bằng CÙNG một hàm với api", () => {
-  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, ~~hai~~ [S1.9161 / khoản 179] ba hằng đóng (cộng vế `POLICY_GATE`) và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
+describe("[INV-A2] [S1.222 / khoản 166] dòng log của worker mô tả lỗi bằng CÙNG một hàm với api", () => {
+  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, ~~hai~~ [S1.225 / khoản 179] ba hằng đóng (cộng vế `POLICY_GATE`) và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
     const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
     let thaKhoa: () => void = () => {};
     const choTha = new Promise<void>((xong) => {
@@ -483,7 +483,7 @@ describe("[INV-A2] [S1.9151 / khoản 166] dòng log của worker mô tả lỗi
       await giuKhoa;
       expect(dong, JSON.stringify(log)).toBeDefined();
 
-      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, ~~hai~~ [S1.9161 / khoản 179] BA hằng đóng — vế
+      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, ~~hai~~ [S1.225 / khoản 179] BA hằng đóng — vế
       // `POLICY_GATE` là vế "không tìm thấy" của `tuChoiLucGiaiMa` —, `cause` là lỗi Postgres mang `55P03`. Thông điệp cố ý
       // mang giá trị để vế A2 dưới có thứ để bắt.
       const cungLoi = new DenialAuditFailedError(
@@ -520,12 +520,12 @@ describe("[INV-A2] [S1.9151 / khoản 166] dòng log của worker mô tả lỗi
 });
 
 // ===============================================================================================
-// [S1.9192 / khoản 158] TẬP `kind` MÀ CSDL CHO MỖI VAI GHI KẾT CỤC PHẢI BẰNG TẬP `kind` CỦA TIẾN TRÌNH ẤY
+// [S1.233 / khoản 158] TẬP `kind` MÀ CSDL CHO MỖI VAI GHI KẾT CỤC PHẢI BẰNG TẬP `kind` CỦA TIẾN TRÌNH ẤY
 //
-// Migration `9592_outbox_policy_theo_kind` (ADR-9292): hai policy `AS RESTRICTIVE FOR UPDATE` trên `outbox_jobs`, mỗi cái một
+// Migration `095_outbox_policy_theo_kind` (ADR-134): hai policy `AS RESTRICTIVE FOR UPDATE` trên `outbox_jobs`, mỗi cái một
 // vai, mang NGUYÊN VĂN tập `kind` của tiến trình chạy dưới vai ấy — lớp QUYỀN dưới lớp vệ sinh vận hành của S1.81 (vị từ lọc
 // `kind` ở runner). Cái giá chủ dự án đã chấp nhận: thêm một `kind` là thêm một migration. Cổng này là chỗ cái giá ấy được ĐÒI:
-// một handler mới — hay một dòng sổ mồ côi mới, vì worker là tiến trình khai sổ (S1.9151) — mà không có migration thì job của
+// một handler mới — hay một dòng sổ mồ côi mới, vì worker là tiến trình khai sổ (S1.222) — mà không có migration thì job của
 // kind ấy KHÔNG vai nào claim được: nó nằm `PENDING` im lặng, đúng lớp lỗi §S1.81 mô tả, và vế dưới đỏ TRƯỚC khi tới đó.
 // Đọc `pg_policy` qua `pg_get_expr`, không đọc tệp migration: thứ ràng là policy ĐANG CÓ trong CSDL, không phải văn bản.
 // Hành vi (0 hàng dưới vai kia, runner đúng vai vẫn chạy) đo ở `packages/outbox/src/outbox.int.test.ts`, vế khoản 158.
@@ -549,7 +549,7 @@ async function docTapKindCuaPolicy(polname: string): Promise<TapKindCuaPolicy> {
     [polname],
   );
   const p = rows[0];
-  expect(p, `CSDL không có policy ${polname} trên outbox_jobs — migration 9592 chưa áp, hay policy đã bị đổi tên/xoá`).toBeDefined();
+  expect(p, `CSDL không có policy ${polname} trên outbox_jobs — migration 095 chưa áp, hay policy đã bị đổi tên/xoá`).toBeDefined();
   expect({ permissive: p!.permissive, lenh: p!.lenh }, `${polname} phải là RESTRICTIVE FOR UPDATE`).toEqual({ permissive: false, lenh: "w" });
   expect(p!.wc, `${polname}: WITH CHECK phải bằng USING — hai vế khai cùng một tập`).toBe(p!.u);
   expect(p!.u ?? "", `${polname}: USING không đúng hình dạng \`(kind = ANY (ARRAY['…'::text, …]))\``).toMatch(
@@ -559,12 +559,12 @@ async function docTapKindCuaPolicy(polname: string): Promise<TapKindCuaPolicy> {
 }
 
 const LOI_THEM_KIND =
-  "Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm migration (ADR-9292): một tệp " +
+  "Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm migration (ADR-134): một tệp " +
   "`db/migrations/<số>_….sql` mang `ALTER POLICY <policy> ON public.outbox_jobs USING (…) WITH CHECK (…)` với tập mới, " +
   "cộng sửa dòng ở POLICY_RESTRICTIVE_KHAI (hardening.always.sql) và POLICY_RESTRICTIVE_DA_KHAI (db/rls-coverage.int.test.ts). " +
   "Không có migration thì job của kind ấy không vai nào claim được — nằm PENDING im lặng.";
 
-describe("[INV-F1] [S1.9192 / khoản 158] tập `kind` trong policy của mỗi vai BẰNG tập `kind` của tiến trình ấy", () => {
+describe("[INV-F1] [S1.233 / khoản 158] tập `kind` trong policy của mỗi vai BẰNG tập `kind` của tiến trình ấy", () => {
   it("`outbox_jobs_kind_app_unseal` (TO app_unseal) = Object.keys(buildUnsealWorkerHandlers) ∪ Object.keys(KIND_KHONG_NGUOI_NHAN) — thêm handler hay dòng sổ mồ côi mà quên migration thì đỏ ở đây", async () => {
     const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_unseal");
     expect(policy.vai, "policy của worker phải áp cho ĐÚNG một vai: app_unseal").toBe("app_unseal");
@@ -577,13 +577,13 @@ describe("[INV-F1] [S1.9192 / khoản 158] tập `kind` trong policy của mỗi
       }),
     );
     expect(handler.length, "bảng handler của worker rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
-    // Sổ mồ côi HÔM NAY rỗng (S1.91) — hợp ở đây vì worker là tiến trình khai nó (S1.9151): một dòng khai mà không có
+    // Sổ mồ côi HÔM NAY rỗng (S1.91) — hợp ở đây vì worker là tiến trình khai nó (S1.222): một dòng khai mà không có
     // migration thì worker claim 0 hàng, tức "vẫn chết ồn ào" của khoản 154/168 thôi đúng.
     const tienTrinh = [...new Set([...handler, ...Object.keys(KIND_KHONG_NGUOI_NHAN)])].sort();
     expect([...policy.kind].sort(), LOI_THEM_KIND).toEqual(tienTrinh);
   });
 
-  it("`outbox_jobs_kind_app_api` (TO app_api) = Object.keys(buildApiOutboxHandlers) — `api` KHÔNG khai sổ mồ côi (S1.9151), nên không cộng gì", async () => {
+  it("`outbox_jobs_kind_app_api` (TO app_api) = Object.keys(buildApiOutboxHandlers) — `api` KHÔNG khai sổ mồ côi (S1.222), nên không cộng gì", async () => {
     const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_api");
     expect(policy.vai, "policy của api phải áp cho ĐÚNG một vai: app_api").toBe("app_api");
     const handler = Object.keys(buildApiOutboxHandlers(dichVuTest().services));

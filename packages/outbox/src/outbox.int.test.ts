@@ -121,19 +121,19 @@ function runnerChoMotToChuc(
 }
 
 // ------------------------------------------------------------------------------------------
-// [S1.9192 / khoản 158] POLICY `kind` THEO VAI CỦA `9592` VÀ CÁC `kind` THỬ CỦA TỆP NÀY
+// [S1.233 / khoản 158] POLICY `kind` THEO VAI CỦA `095` VÀ CÁC `kind` THỬ CỦA TỆP NÀY
 //
-// Migration `9592_outbox_policy_theo_kind` (ADR-9292) AND vào `outbox_jobs` hai policy `AS RESTRICTIVE FOR UPDATE`:
+// Migration `095_outbox_policy_theo_kind` (ADR-134) AND vào `outbox_jobs` hai policy `AS RESTRICTIVE FOR UPDATE`:
 // `app_api` chỉ ghi được kết cục cho job mang `kind` của tiến trình `api`, `app_unseal` cho `kind` của worker. Mọi
 // khối 1–11 dưới đây chạy runner dưới `apiPool` với `kind` THỬ tổng hợp (`VIEC_A`, `LUON_LOI`, …) — không thuộc
-// tiến trình nào — để đo CƠ CHẾ của runner (hạn thuê, SKIP LOCKED, lượt thử, …); dưới policy 9592 nguyên vẹn, mọi
+// tiến trình nào — để đo CƠ CHẾ của runner (hạn thuê, SKIP LOCKED, lượt thử, …); dưới policy 095 nguyên vẹn, mọi
 // câu ghi của chúng thành 0 hàng im lặng — đúng cơ chế khoản 158 dựng, và khối 12 đo nó. Nên `beforeAll` NỚI policy
 // của `app_api` cho ĐÚNG những `kind` KHÔNG thuộc tiến trình nào (`OR NOT (kind = ANY (<hợp hai tập thật>))`): ranh
 // giới giữa hai vai trên `kind` THẬT giữ nguyên ở mọi khối; policy của `app_unseal` không nới (không khối nào chạy
 // runner dưới vai ấy với kind thử). Khối 12 KHÔI PHỤC nguyên văn policy như `migrate()` dựng trước khi đo, nới lại khi
 // xong. Đọc từ `pg_policy` qua `pg_get_expr` — thứ ràng là policy ĐANG CÓ, không phải văn bản migration. Cổng khai của
 // hardening chỉ chạy ở `migrate()` (đã xong ở `beforeAll`) nên phép nới không chạm nó; cổng "tập kind của policy =
-// bảng handler ∪ sổ mồ côi" ở `apps/{api,unseal-worker}/src/composition.int.test.ts`. Cây KHÔNG có 9592 ⇒ `policyGoc` là `undefined`,
+// bảng handler ∪ sổ mồ côi" ở `apps/{api,unseal-worker}/src/composition.int.test.ts`. Cây KHÔNG có 095 ⇒ `policyGoc` là `undefined`,
 // không nới gì, và khối 12 ĐỎ ở vế tiền đề — không xanh giả.
 // ------------------------------------------------------------------------------------------
 interface PolicyKind {
@@ -146,7 +146,7 @@ const POLICY_KIND_API = "outbox_jobs_kind_app_api";
 const POLICY_KIND_UNSEAL = "outbox_jobs_kind_app_unseal";
 const HINH_DANG_KIND = /^[A-Z][A-Z0-9_]{0,63}$/u;
 
-/** Hai policy 9592 NGUYÊN VĂN như `migrate()` dựng; `undefined` khi CSDL không có chúng. */
+/** Hai policy 095 NGUYÊN VĂN như `migrate()` dựng; `undefined` khi CSDL không có chúng. */
 let policyGoc: { readonly api: PolicyKind; readonly unseal: PolicyKind } | undefined;
 
 async function docPolicyKind(polname: string): Promise<PolicyKind | undefined> {
@@ -174,7 +174,7 @@ async function noiPolicyApiChoKindThu(): Promise<void> {
   if (policyGoc === undefined) return;
   const that = [...new Set([...policyGoc.api.kind, ...policyGoc.unseal.kind])].sort();
   if (that.length === 0 || that.some((k) => !HINH_DANG_KIND.test(k))) {
-    throw new Error("tập kind của policy 9592 không đọc được — hình dạng policy đã đổi?");
+    throw new Error("tập kind của policy 095 không đọc được — hình dạng policy đã đổi?");
   }
   const noi = `(${policyGoc.api.using}) OR NOT (kind = ANY (ARRAY[${that.map((k) => `'${k}'::text`).join(", ")}]))`;
   await datPolicyKind(POLICY_KIND_API, noi, noi);
@@ -187,8 +187,8 @@ async function khoiPhucPolicyGoc(): Promise<void> {
 }
 
 /**
- * `migrate()` GIỮA tệp — hai test ([T10-D] role lạ, [T10-I] trigger lạ) đo rằng hardening KHÔNG thấy thứ KHÁC. Cổng khai
- * `POLICY_RESTRICTIVE_KHAI` của nó đòi policy 9592 NGUYÊN VĂN (đo: gọi `migrate()` trên bản đã nới thì hardening NÉM ở
+ * `migrate()` GIỮA tệp — hai test ([T10-D] role lạ, [T10-I] trigger lạ) đo điều hardening thấy và không thấy. Cổng khai
+ * `POLICY_RESTRICTIVE_KHAI` của nó đòi policy 095 NGUYÊN VĂN (đo: gọi `migrate()` trên bản đã nới thì hardening NÉM ở
  * mục 83⑴ — đúng chiều "dòng khai mà CSDL không còn policy như thế"), nên khôi phục trước, nới lại sau, kể cả khi ném.
  */
 async function migrateLai(): Promise<string[]> {
@@ -204,7 +204,7 @@ beforeAll(async () => {
   db = await startPostgres();
   await migrate(db.pool, MIGRATIONS);
   apiPool = db.poolAs("app_api");
-  // [S1.9192 / khoản 158] Xem khối lý do trên `PolicyKind`.
+  // [S1.233 / khoản 158] Xem khối lý do trên `PolicyKind`.
   const api = await docPolicyKind(POLICY_KIND_API);
   const unseal = await docPolicyKind(POLICY_KIND_UNSEAL);
   policyGoc = api !== undefined && unseal !== undefined ? { api, unseal } : undefined;
@@ -1422,7 +1422,12 @@ describe("[T10-I] mốc thời gian", () => {
         "CREATE OR REPLACE FUNCTION t10_cham_updated_at() RETURNS trigger LANGUAGE plpgsql AS " +
           "$$ BEGIN RETURN NEW; END $$",
       );
-      await expect(migrateLai(), "hardening không thấy gì").resolves.toEqual([]);
+      // [S1.205 / khoản 259] ~~hardening không thấy gì~~ Nay hardening THẤY — không vì thân hàm, mà vì chính trigger không
+      // được ghim: trigger lạ trên bảng không có tên trong `TRIGGER_DUOC_PHEP` chặn deploy. Thân hàm vẫn không được canh, và
+      // lượt sửa đã chạy trọn trước lượt phán xét — kết luận của phép đo đứng nguyên: trigger mới phải được ghim.
+      await expect(migrateLai(), "hardening chặn vì TRIGGER, không vì thân hàm").rejects.toThrow(
+        /t10_thu_trigger\.t10_thu_trigger_cham: TRIGGER LẠ trên bảng KHÔNG có trong TRIGGER_DUOC_PHEP/u,
+      );
 
       await db.pool.query("INSERT INTO t10_thu_trigger (id) VALUES (2)");
       const sau = await db.pool.query<{ ghi_chu: string | null }>(
@@ -1598,7 +1603,7 @@ describe("[QT3] ghim toán tử dưới một search_path thù địch", () => {
 describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
   // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng định dưới xanh vì không có gì để
   // chặn. ~~Đây là phép đo end-to-end của lỗ mà `withTenant` để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).~~
-  // [S1.9110] Bản trước đo trục này QUA `withTenant` trên pool có vai (`poolAs`) và đòi 57014 ở Q. Từ [S1.9121 / khoản 104] lớp lấy
+  // [S1.211] Bản trước đo trục này QUA `withTenant` trên pool có vai (`poolAs`) và đòi 57014 ở Q. Từ [S1.215 / khoản 104] lớp lấy
   // client của pool có vai `RESET ALL` khi bốn GUC tenant/khách rỗng, nên `SET statement_timeout` của P không còn tới được Q trên
   // đường ấy — vế đối chứng cũ đỏ vì lỗ đã ĐÓNG ở một lớp khác, không phải vì trục hết thật. Trục được đo lại trên pool TRẦN
   // (không lớp lấy client): đó là điều `pg-pool` làm với mọi kết nối, và là thứ hai lớp dưới — `RESET ALL` của lần lấy và cờ
@@ -1624,7 +1629,7 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
     }
   }, 60_000);
 
-  it("[S1.9121 / khoản 104] KHÔNG bật cờ, pool có vai: kết nối ĐƯỢC DÙNG LẠI (cùng pid) nhưng lớp lấy client đã `RESET ALL`, nên tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+  it("[S1.215 / khoản 104] KHÔNG bật cờ, pool có vai: kết nối ĐƯỢC DÙNG LẠI (cùng pid) nhưng lớp lấy client đã `RESET ALL`, nên tổ chức Q KHÔNG bị ảnh hưởng", async () => {
     const pool = db.poolAs("app_api");
     try {
       const pidP = await withTenant(pool, orgId, async (client) => {
@@ -1659,7 +1664,7 @@ describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
         await client.query("SELECT pg_sleep(0.2)");
         return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
       });
-      // [S1.9110] Khác backend: cờ huỷ kết nối thật — phân biệt với vế trên, nơi Q lành nhờ `RESET ALL` mà vẫn cùng pid.
+      // [S1.211] Khác backend: cờ huỷ kết nối thật — phân biệt với vế trên, nơi Q lành nhờ `RESET ALL` mà vẫn cùng pid.
       expect(pidQ, "bật cờ thì Q chạy trên kết nối mới").not.toBe(pidP);
       // Trục THỨ HAI của cùng lỗ, đo riêng: `search_path` cũng không đi theo kết nối.
       await withTenant(
@@ -1976,17 +1981,17 @@ describe("[sổ nợ 53] việc sau commit", () => {
 });
 
 // ============================================================================================
-// 12. [S1.9192 / khoản 158] RANH GIỚI `kind` THEO VAI Ở TẦNG CSDL — QUYỀN, KHÔNG PHẢI VỆ SINH VẬN HÀNH
+// 12. [S1.233 / khoản 158] RANH GIỚI `kind` THEO VAI Ở TẦNG CSDL — QUYỀN, KHÔNG PHẢI VỆ SINH VẬN HÀNH
 //
 // `007` cấp `app_api` và `025` cấp `app_unseal` CÙNG bộ `GRANT UPDATE` trên sáu cột vòng đời, không theo `kind`; vị
-// từ lọc `kind` của `CAU_CLAIM` (S1.81) chỉ ngăn RUNNER làm điều ấy TÌNH CỜ. Đo trước bản vá — cây KHÔNG có `9592`,
-// ghi ở biên bản §S1.9192: `UPDATE` viết tay dưới `app_api` nhắm job `UNSEAL_RFQ` của CHÍNH tổ chức ⇒ 1 hàng; dưới
+// từ lọc `kind` của `CAU_CLAIM` (S1.81) chỉ ngăn RUNNER làm điều ấy TÌNH CỜ. Đo trước bản vá — cây KHÔNG có `095`,
+// ghi ở biên bản §S1.233: `UPDATE` viết tay dưới `app_api` nhắm job `UNSEAL_RFQ` của CHÍNH tổ chức ⇒ 1 hàng; dưới
 // `app_unseal` nhắm `LOGIN_LINK_SEND` ⇒ 1 hàng; runner của `api` mang nhầm handler `UNSEAL_RFQ` claim được job ấy.
 // Khối này đo lớp CSDL trên policy NGUYÊN VĂN như `migrate()` dựng (khôi phục ở `beforeAll`, nới lại ở `afterAll` —
 // xem khối `PolicyKind` đầu tệp). Hai `kind` đại diện là hằng THẬT của hai tiến trình; tập ĐẦY ĐỦ đối chiếu ở
 // `apps/{api,unseal-worker}/src/composition.int.test.ts`, không ở đây.
 // ============================================================================================
-describe("[INV-F1] [S1.9192 / khoản 158] mỗi vai ứng dụng chỉ ghi được kết cục cho job mang `kind` của tiến trình chạy dưới vai ấy", () => {
+describe("[INV-F1] [S1.233 / khoản 158] mỗi vai ứng dụng chỉ ghi được kết cục cho job mang `kind` của tiến trình chạy dưới vai ấy", () => {
   const KIND_API = "LOGIN_LINK_SEND";
   const KIND_WORKER = "UNSEAL_RFQ";
   let unsealPool: pg.Pool;
@@ -2013,8 +2018,8 @@ describe("[INV-F1] [S1.9192 / khoản 158] mỗi vai ứng dụng chỉ ghi đư
     return rows[0]?.n ?? "?";
   };
 
-  it("tiền đề: hai policy RESTRICTIVE FOR UPDATE của 9592 đang có, mỗi cái ĐÚNG một vai, USING = WITH CHECK — và khối này đo bản NGUYÊN VĂN, không phải bản đã nới", async () => {
-    expect(policyGoc, "CSDL không có policy outbox_jobs_kind_app_api/_app_unseal — migration 9592 chưa áp").toBeDefined();
+  it("tiền đề: hai policy RESTRICTIVE FOR UPDATE của 095 đang có, mỗi cái ĐÚNG một vai, USING = WITH CHECK — và khối này đo bản NGUYÊN VĂN, không phải bản đã nới", async () => {
+    expect(policyGoc, "CSDL không có policy outbox_jobs_kind_app_api/_app_unseal — migration 095 chưa áp").toBeDefined();
     const { rows } = await db.pool.query<{ polname: string; permissive: boolean; lenh: string; vai: string; u: string; wc: string }>(
       "SELECT p.polname, p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
         "       (SELECT string_agg(r.rolname, ',' ORDER BY r.rolname) FROM pg_roles r WHERE r.oid = ANY (p.polroles)) AS vai, " +

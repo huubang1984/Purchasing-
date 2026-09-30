@@ -76,7 +76,7 @@ function bam(vanBan: string): string {
 }
 
 /**
- * [S1.9171 / khoản 180] Hai tín hiệu mất-không-ai-biết của pool đi qua `withTenant` — ⑴ `release` mang `TenantError`
+ * [S1.227 / khoản 180] Hai tín hiệu mất-không-ai-biết của pool đi qua `withTenant` — ⑴ `release` mang `TenantError`
  * SESSION_STATE_LEFT (kết nối bị huỷ vì trạng thái phiên còn sót, không ném cho ai), ⑵ lỗi tới muộn sau trần
  * `maxConnectWaitMs` (ở đây không đặt trần; gắn để cổng `pool-nghe-du-tin-hieu`, nay quét cả `tools/`, đòi đủ hai). Cùng khuôn
  * `pnpm neo`. Chỉ TÊN lỗi và MÃ hằng, không `message` (A2); tool không import được `apps/api/src/mo-ta-loi.ts`.
@@ -95,7 +95,7 @@ async function xuat(thamSo: readonly string[]): Promise<number> {
 
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
     role: "app_api",
-    // ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc `apps/`)~~ [S1.9171 / khoản 180] cổng
+    // ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc `apps/`)~~ [S1.227 / khoản 180] cổng
     // ấy nay quét cả `tools/`; lớp `'error'` vẫn nằm trong `createPool` (hợp đồng của `pg`), dòng dưới chỉ thêm phần chẩn
     // đoán, hai tín hiệu riêng của kho gắn ngay dưới. Cùng khuôn `pnpm neo`.
     onPoolError: (e) => console.error(`[bang-chung] pool loi ${e instanceof Error ? e.name : "loi la"}`),

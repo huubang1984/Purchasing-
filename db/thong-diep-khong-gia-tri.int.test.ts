@@ -95,7 +95,7 @@ describe("[S1.66 / lượt soi ngang 59a-8] thông điệp của các mục canh
 });
 
 // ==============================================================================================
-// [S1.9102 / khoản 117] CÙNG LỚP VỚI BỐN MỤC POLICY Ở TRÊN — CÁC MỤC CANH THÂN HÀM/TRIGGER VÀ HAI WARNING "KHÔNG ĐÁNH GIÁ ĐƯỢC"
+// [S1.210 / khoản 117] CÙNG LỚP VỚI BỐN MỤC POLICY Ở TRÊN — CÁC MỤC CANH THÂN HÀM/TRIGGER VÀ HAI WARNING "KHÔNG ĐÁNH GIÁ ĐƯỢC"
 //
 // Đo trước bản vá (thân khoản 117, S1.66 lượt soi 59a-8 mở rộng; đo lại trên cây 69e743e): ⑴ `ALTER FUNCTION
 // public.app_current_org_id() SET app.org_id = '<uuid>'` rồi `migrate()` dưới superuser ⇒ đi qua (tự chữa) nhưng WARNING của
@@ -106,13 +106,13 @@ describe("[S1.66 / lượt soi ngang 59a-8] thông điệp của các mục canh
 // chốt nhánh ⑴ (2026-09-30): VÂN TAY thay thân hàm và định nghĩa trigger, `proconfig` chỉ in TÊN GUC, `SQLERRM` → `SQLSTATE`.
 // Vân tay = left(encode(sha256(convert_to(<văn bản>, 'UTF8')), 'hex'), 16) — ca ⑵ và ⑸ tính lại đúng công thức ấy (trong
 // CSDL và ngoài CSDL bằng node:crypto) và đòi WARNING mang đúng vân tay của văn bản HIỆN TẠI: chẩn đoán của IM5 còn dùng
-// được, chỉ là tra qua vân tay (ADR-9202) thay vì đọc thẳng trong log. Cổng T1: `tests/architecture/hardening-khong-in-gia-tri.test.ts`.
+// được, chỉ là tra qua vân tay (ADR-124) thay vì đọc thẳng trong log. Cổng T1: `tests/architecture/hardening-khong-in-gia-tri.test.ts`.
 // ==============================================================================================
-describe("[S1.9102 / khoản 117] thông điệp của các mục canh thân hàm/trigger và WARNING 'không đánh giá được' nêu TÊN và VÂN TAY — không in prosrc, giá trị proconfig, định nghĩa trigger hay SQLERRM", () => {
+describe("[S1.210 / khoản 117] thông điệp của các mục canh thân hàm/trigger và WARNING 'không đánh giá được' nêu TÊN và VÂN TAY — không in prosrc, giá trị proconfig, định nghĩa trigger hay SQLERRM", () => {
   const UUID = "11111111-2222-4333-8444-555555559102";
   const MUC_HAM = 'mục "định nghĩa hàm app_current_org_id()" ở trạng thái SAI TRƯỚC khi sửa';
 
-  /** Công thức tra của ADR-9202, chạy trong CSDL — đúng thứ người vận hành gõ trong psql. */
+  /** Công thức tra của ADR-124, chạy trong CSDL — đúng thứ người vận hành gõ trong psql. */
   const vanTayCua = async (vanBan: string): Promise<string> => {
     const { rows } = await db.pool.query<{ vt: string }>(
       "SELECT left(encode(sha256(convert_to($1, 'UTF8')), 'hex'), 16) AS vt",

@@ -220,7 +220,7 @@ function mocNuocCao(neo: readonly ExternalAnchor[]): number {
 }
 
 /**
- * [S1.9171 / khoản 180] HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT của một pool đi qua `withTenant`, gắn MỘT lần cho mỗi pool ngay
+ * [S1.227 / khoản 180] HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT của một pool đi qua `withTenant`, gắn MỘT lần cho mỗi pool ngay
  * chỗ dựng — cùng khuôn `apps/unseal-worker/src/tien-trinh.ts`; cổng `tests/architecture/pool-nghe-du-tin-hieu.test.ts`
  * nay quét cả `tools/` nên không quên lại được.
  *   ⑴ `release` mang `TenantError` SESSION_STATE_LEFT: `withTenant` huỷ kết nối vì trạng thái phiên còn sót sau giao
@@ -254,7 +254,7 @@ async function xuat(kho: AnchorStore, org: readonly string[], aws: CauHinhAws | 
     // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
     role: "app_neo",
     // [S1.94 / khoản 103 + 180] ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc
-    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.9171 / khoản 180] cổng ấy nay quét cả
+    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.227 / khoản 180] cổng ấy nay quét cả
     // `tools/`; lớp `'error'` vẫn nằm trong `createPool` vì `'error'` là hợp đồng của `pg` (không ai nghe thì tiến
     // trình chết), không phải tín hiệu riêng của kho. Dòng dưới chỉ thêm phần CHẨN ĐOÁN; hai tín hiệu riêng gắn ngay dưới.
     onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
@@ -320,7 +320,7 @@ async function kiem(kho: AnchorStore, org: readonly string[]): Promise<number> {
     // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
     role: "app_neo",
     // [S1.94 / khoản 103 + 180] ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc
-    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.9171 / khoản 180] cổng ấy nay quét cả
+    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.227 / khoản 180] cổng ấy nay quét cả
     // `tools/`; lớp `'error'` vẫn nằm trong `createPool` vì `'error'` là hợp đồng của `pg` (không ai nghe thì tiến
     // trình chết), không phải tín hiệu riêng của kho. Dòng dưới chỉ thêm phần CHẨN ĐOÁN; hai tín hiệu riêng gắn ngay dưới.
     onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
@@ -683,7 +683,7 @@ const CAU_LIET_KE_TO_CHUC =
   "SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)";
 
 async function lietKeToChuc(): Promise<readonly string[]> {
-  // [S1.9171 / khoản 180] Pool này chạy đúng MỘT câu thẳng (`pool.query`), không đi qua `withTenant`, nên không tín hiệu
+  // [S1.227 / khoản 180] Pool này chạy đúng MỘT câu thẳng (`pool.query`), không đi qua `withTenant`, nên không tín hiệu
   // nào trong hai tín hiệu của cổng `pool-nghe-du-tin-hieu` phát được trên nó — khai `NGOAI_LE` ở cổng (`lietKeToChuc.pool`)
   // thay vì gắn hai listener chết; cổng kiểm rằng pool được miễn thật sự không đi qua `withTenant`.
   const pool = createPool(batBuoc("DATABASE_URL"), 1, {

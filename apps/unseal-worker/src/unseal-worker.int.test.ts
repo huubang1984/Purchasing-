@@ -22,7 +22,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
-// [S1.9130 / khoản 250] Hai gói cùng đọc phong bì/bản rõ với worker — kịch bản §S1.181 đo cả ba bộ đọc trên MỘT giàn cảnh thật.
+// [S1.217 / khoản 250] Hai gói cùng đọc phong bì/bản rõ với worker — kịch bản §S1.181 đo cả ba bộ đọc trên MỘT giàn cảnh thật.
 import { taoLuotDanhGia } from "@trustprocure/danh-gia";
 import { revokeInvitation } from "@trustprocure/invitation";
 import {
@@ -98,7 +98,7 @@ async function taoPhien(userId: string): Promise<string> {
 
 /** Một RFQ đã OPEN kèm vật liệu khoá THẬT. */
 /**
- * RFQ đã OPEN với cặp khoá thật. [S1.9130 / khoản 250] Hai tham số tuỳ chọn cho kịch bản §S1.181: chính sách ghim vào ngân sách
+ * RFQ đã OPEN với cặp khoá thật. [S1.217 / khoản 250] Hai tham số tuỳ chọn cho kịch bản §S1.181: chính sách ghim vào ngân sách
  * (mặc định `csA`) và ngân sách dự tính (mặc định 1 triệu) — mọi lời gọi cũ giữ nguyên hình dạng.
  */
 async function taoRfqMo(policyId: string = csA, nganSach = "1000000.00"): Promise<string> {
@@ -140,7 +140,7 @@ async function taoRfqMo(policyId: string = csA, nganSach = "1000000.00"): Promis
 }
 
 /**
- * [S1.9130 / khoản 250] Lời mời, nhà cung cấp và người liên hệ của từng phiên bản `nopBaoGia` đã tạo — kịch bản §S1.181 cần thu
+ * [S1.217 / khoản 250] Lời mời, nhà cung cấp và người liên hệ của từng phiên bản `nopBaoGia` đã tạo — kịch bản §S1.181 cần thu
  * hồi ĐÚNG lời mời của X rồi mời lại ĐÚNG nhà cung cấp ấy. Cùng khuôn `LUONG_CUA_PHIEN_BAN` của `packages/danh-gia`.
  */
 const LOI_MOI_CUA_PHIEN_BAN = new Map<
@@ -151,7 +151,7 @@ const LOI_MOI_CUA_PHIEN_BAN = new Map<
 /**
  * Nộp một báo giá THẬT (phong bì niêm phong bằng khoá công khai của chính RFQ).
  *
- * [S1.9130 / khoản 250] `nccCoSan`: mời lại một nhà cung cấp ĐÃ CÓ (cùng người liên hệ) thay vì dựng nhà cung cấp mới — đường
+ * [S1.217 / khoản 250] `nccCoSan`: mời lại một nhà cung cấp ĐÃ CÓ (cùng người liên hệ) thay vì dựng nhà cung cấp mới — đường
  * *thu hồi rồi mời lại* của ADR-110/khoản 250. Mọi lời gọi cũ không truyền nó và giữ nguyên hành vi.
  */
 async function nopBaoGia(
@@ -917,16 +917,16 @@ describe("worker mở thầu — chuỗi trọn vẹn", () => {
 });
 
 // ===============================================================================================
-// [S1.9143 / khoản 137 / ADR-9243] TRẦN PAYLOAD `failedBidVersionIds` CỦA HAI BẢN GHI SỔ MỞ THẦU
+// [S1.221 / khoản 137 / ADR-129] TRẦN PAYLOAD `failedBidVersionIds` CỦA HAI BẢN GHI SỔ MỞ THẦU
 //
-// Đo trước trên mã trước vòng này (biên bản §S1.9143): payload của `RFQ_KEY_MATERIAL_UNWRAPPED` và
+// Đo trước trên mã trước vòng này (biên bản §S1.221): payload của `RFQ_KEY_MATERIAL_UNWRAPPED` và
 // `RFQ_UNSEALED` mang TRỌN mảng id phong bì hỏng — ~40 byte một id, tuyến tính theo N: N = 50 ⇒
 // 2 147 byte, N = 500 ⇒ 20 147 byte MỖI bản ghi (hai bản ghi một lượt), trong một sổ chỉ ghi thêm và
 // nối băm; `003` chỉ CHECK hình dạng và khoá mang giá, không CHECK kích thước; không trần nào cho số
-// lời mời của một gói (`010`, `024`, `076`). Hình dạng ADR-9243: `failedCount` (đủ),
+// lời mời của một gói (`010`, `024`, `076`). Hình dạng ADR-129: `failedCount` (đủ),
 // `failedBidVersionIds` CẮT còn `FAILED_BID_VERSION_IDS_AUDIT_CAP` id ĐẦU theo thứ tự ổn định của câu
 // chọn phong bì (`ORDER BY v.bid_id`), cờ `failedBidVersionIdsTruncated`; phần còn lại KHÔNG vào sổ —
-// suy được bằng `CAU_SUY_PHONG_BI_HONG` dưới đây (nguyên văn ở ADR-9243): phiên bản CUỐI của mỗi luồng
+// suy được bằng `CAU_SUY_PHONG_BI_HONG` dưới đây (nguyên văn ở ADR-129): phiên bản CUỐI của mỗi luồng
 // báo giá của gói, đúng vòng, không có hàng bản rõ dưới yêu cầu mở thầu ấy. Kết quả TRẢ VỀ trong tiến
 // trình (`UnsealOutcome.failedBidVersionIds`) vẫn đủ — nó không được lưu.
 // ===============================================================================================
@@ -966,7 +966,7 @@ async function idTheoThuTuLuong(rfqId: string): Promise<readonly string[]> {
 }
 
 /**
- * [ADR-9243] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
+ * [ADR-129] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
  * mở thầu `$1` KHÔNG để lại hàng bản rõ. Tập này là toàn bộ `failedBidVersionIds` — kể cả K id đã ghi —
  * theo cùng thứ tự luồng; `$2` là tổ chức.
  */
@@ -997,12 +997,12 @@ async function moThauVaDoc(
   return { ketQua, so };
 }
 
-describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang trần K id phong bì hỏng (ADR-9243)", () => {
-  it("K là 20 — hằng của ADR-9243, không phải một con số tình cờ trong test", () => {
+describe("[S1.221 / khoản 137] payload sổ của lượt mở thầu mang trần K id phong bì hỏng (ADR-129)", () => {
+  it("K là 20 — hằng của ADR-129, không phải một con số tình cờ trong test", () => {
     expect(FAILED_BID_VERSION_IDS_AUDIT_CAP).toBe(20);
   });
 
-  it("N = 50 phong bì hỏng ⇒ HAI bản ghi mang `failedCount` 50, ĐÚNG 20 id đầu theo thứ tự luồng, cờ cắt bật, mỗi bản ghi dưới trần byte; 30 id còn lại suy được bằng câu ADR-9243; kết quả trả về đủ 50; chuỗi băm sổ nối", async () => {
+  it("N = 50 phong bì hỏng ⇒ HAI bản ghi mang `failedCount` 50, ĐÚNG 20 id đầu theo thứ tự luồng, cờ cắt bật, mỗi bản ghi dưới trần byte; 30 id còn lại suy được bằng câu ADR-129; kết quả trả về đủ 50; chuỗi băm sổ nối", async () => {
     const rfqId = await taoRfqMo();
     for (let i = 0; i < 50; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 100 + i }), true);
     await nopBaoGia(rfqId, JSON.stringify({ donGia: 7 }));
@@ -1023,7 +1023,7 @@ describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang tr
       expect(b.byte_van_ban, `${b.action}: ${String(b.byte_van_ban)} byte`).toBeLessThanOrEqual(TRAN_BYTE_MOT_BAN_GHI);
     }
 
-    // Phần KHÔNG vào sổ suy được: câu ADR-9243 trả đủ 50 id theo cùng thứ tự — 20 id đã ghi là tiền tố của nó.
+    // Phần KHÔNG vào sổ suy được: câu ADR-129 trả đủ 50 id theo cùng thứ tự — 20 id đã ghi là tiền tố của nó.
     const { rows: suy } = await db.pool.query<{ id: string }>(CAU_SUY_PHONG_BI_HONG, [ketQua.unsealRequestId, orgA]);
     expect(suy.map((r) => r.id)).toEqual(hongTheoThuTu);
     expect(suy.map((r) => r.id).slice(FAILED_BID_VERSION_IDS_AUDIT_CAP), "30 id còn lại").toEqual(hongTheoThuTu.slice(20));
@@ -1034,7 +1034,7 @@ describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang tr
     expect(kiem.problems.filter((p) => p.kind !== "NOT_ANCHORED")).toEqual([]);
   }, 120_000);
 
-  it("N = 20 phong bì hỏng (đúng biên K) ⇒ đủ 20 id, `failedCount` 20, cờ cắt TẮT; câu ADR-9243 trả đúng 20 id ấy", async () => {
+  it("N = 20 phong bì hỏng (đúng biên K) ⇒ đủ 20 id, `failedCount` 20, cờ cắt TẮT; câu ADR-129 trả đúng 20 id ấy", async () => {
     const rfqId = await taoRfqMo();
     for (let i = 0; i < FAILED_BID_VERSION_IDS_AUDIT_CAP; i++) await nopBaoGia(rfqId, JSON.stringify({ donGia: 200 + i }), true);
     await nopBaoGia(rfqId, JSON.stringify({ donGia: 9 }));
@@ -1063,20 +1063,20 @@ describe("[S1.9143 / khoản 137] payload sổ của lượt mở thầu mang tr
 });
 
 // ===============================================================================================
-// [S1.9130 / khoản 250 / ADR-9230] THU HỒI LỜI MỜI LOẠI BÁO GIÁ CỦA LỜI MỜI ẤY KHỎI LƯỢT MỞ THẦU — VÀ SAU LẦN MỞ THÌ
+// [S1.217 / khoản 250 / ADR-128] THU HỒI LỜI MỜI LOẠI BÁO GIÁ CỦA LỜI MỜI ẤY KHỎI LƯỢT MỞ THẦU — VÀ SAU LẦN MỞ THÌ
 // KHÔNG THU HỒI ĐƯỢC NỮA
 //
 // Kịch bản của §S1.181 (lượt soi đối kháng), dựng lại trên worker THẬT với phong bì niêm phong thật và trên CÙNG một giàn
 // cảnh cho cả ba bộ đọc: X nộp 900 triệu, bên mua thu hồi lời mời của X rồi mời lại (một lời mời MỚI, một luồng báo giá MỚI —
 // `vendor_bids` duy nhất theo lời mời, `018`; `024` mở lại vế *sau khi thu hồi*), X nộp 1 tỷ ở luồng mới; Y 950 triệu, Z 1,1 tỷ;
-// ngân sách 1 tỷ. Đo trước bản vá trên `561158e` (§S1.9130): `opened = 4`, bản rõ 900 triệu có mặt, bảng so sánh X HAI dòng và
+// ngân sách 1 tỷ. Đo trước bản vá trên `561158e` (§S1.217): `opened = 4`, bản rõ 900 triệu có mặt, bảng so sánh X HAI dòng và
 // `belowBudget` 3, lượt chấm bốn hàng với X hạng 1 bằng giá cũ. Sau bản vá: `opened = 3`, không bản rõ nào của lời mời đã thu
 // hồi, X MỘT dòng giá mới, `belowBudget` 2, xếp hạng Y · X(1 tỷ) · Z.
 //
 // Vế thứ hai của quyết định: sau lần mở thầu, thu hồi bị CHẶN — `revokeInvitation` từ chối có tên, một hàng `RFQ_STATE_DENIED`
 // (đi sai thứ tự chuỗi, ADR-060/ADR-084 ⑸), lời mời còn sống. Đo ở đây trên gói đã mở bằng CHÍNH worker, không ép trạng thái.
 // ===============================================================================================
-describe("[S1.9130 / khoản 250] báo giá của lời mời đã thu hồi không dự thầu; thu hồi sau lần mở thầu bị chặn", () => {
+describe("[S1.217 / khoản 250] báo giá của lời mời đã thu hồi không dự thầu; thu hồi sau lần mở thầu bị chặn", () => {
   /** Chính sách có trọng số đánh giá — lượt chấm đọc phiên bản HIỆN HÀNH (`luot-danh-gia.ts`), nên nó phải là bản mới nhất. */
   let csCham = "";
   const gia = (t: string): string => JSON.stringify({ totalAmount: t, currency: "VND" });
@@ -1517,7 +1517,7 @@ const GHI_SO_K126 =
   "SELECT seq FROM public.audit_append($1, 'SYSTEM', NULL, $2, 'K126', NULL, '{}'::jsonb, NULL, NULL, NULL)";
 
 /**
- * [S1.9141 / khoản 149] Kết cục ĐO ĐƯỢC của yêu cầu mở thầu thứ hai: `23514`. Nó bị chặn ở `FOR SHARE` của trigger 019 bởi khoá
+ * [S1.220 / khoản 149] Kết cục ĐO ĐƯỢC của yêu cầu mở thầu thứ hai: `23514`. Nó bị chặn ở `FOR SHARE` của trigger 019 bởi khoá
  * hàng RFQ mà worker lấy TRƯỚC lần ghi sổ đầu; khi worker COMMIT, nó đọc lại hàng đã `UNSEALED` và trigger từ chối — tức đúng thứ tự
  * khoá mà bản vá khoản 126 mua: hàng trước, khoá tư vấn ghi sổ sau. Ghim để một kết cục KHÁC (`xong`, `55P03`, `40P01`) làm đỏ.
  */
@@ -1537,7 +1537,7 @@ async function demKhoaGhiSo(pid: number): Promise<number> {
 /**
  * Chờ tới khi backend `pid` bị một backend khác CHẶN. Trả số ms đã chờ; `-1` nếu `dungSom()` báo dừng TRƯỚC khi thấy một lần chặn
  * nào (tức việc đang theo dõi đã xong mà chưa từng bị chặn); `-2` nếu quá hạn `hanMs`.
- * [S1.9141 / khoản 149] Bản trước gộp hai ca ấy vào một `-1`, nên "worker xong mà không bị chặn" và "phép dò quá hạn" là một con số.
+ * [S1.220 / khoản 149] Bản trước gộp hai ca ấy vào một `-1`, nên "worker xong mà không bị chặn" và "phép dò quá hạn" là một con số.
  */
 async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: () => boolean): Promise<number> {
   const batDau = Date.now();
@@ -1556,7 +1556,7 @@ async function choToiKhiBiChan(layPid: () => number, hanMs: number, dungSom?: ()
   }
 }
 
-/** [S1.9141 / khoản 149] Các pid đang chặn backend `pid` — rỗng nếu không ai chặn. */
+/** [S1.220 / khoản 149] Các pid đang chặn backend `pid` — rỗng nếu không ai chặn. */
 async function pidDangChan(pid: number): Promise<number[]> {
   const { rows } = await db.pool.query<{ pids: number[] }>("SELECT pg_catalog.pg_blocking_pids($1)::int[] AS pids", [pid]);
   return rows[0]?.pids ?? [];
@@ -1604,15 +1604,15 @@ function bocChanTruocCau(c: pg.PoolClient, moc: string, truoc: () => Promise<voi
 
 interface KetQuaDoK126 {
   /**
-   * [S1.9141 / khoản 149] TIỀN ĐỀ ⑴: số ms tới khi yêu cầu mở thầu thứ hai bị CHẶN trong cửa sổ kt1–kt2; `-2` nếu nó không bao giờ
+   * [S1.220 / khoản 149] TIỀN ĐỀ ⑴: số ms tới khi yêu cầu mở thầu thứ hai bị CHẶN trong cửa sổ kt1–kt2; `-2` nếu nó không bao giờ
    * bị chặn (đồ gá không dựng được cảnh — không có gì để đo).
    */
   readonly msNguoiGiuBiChan: number;
-  /** [S1.9141 / khoản 149] TIỀN ĐỀ ⑵: các pid đang chặn yêu cầu thứ hai lúc ấy — phải là CHÍNH worker, không phải ai khác. */
+  /** [S1.220 / khoản 149] TIỀN ĐỀ ⑵: các pid đang chặn yêu cầu thứ hai lúc ấy — phải là CHÍNH worker, không phải ai khác. */
   readonly chanNguoiGiu: number[];
   readonly pidWorker: number;
   /**
-   * [S1.9141 / khoản 149] ĐỐI CHỨNG DƯƠNG của phép dò, đo trong cùng cảnh: số khoá ghi sổ worker giữ TRONG cửa sổ — sau lần ghi sổ
+   * [S1.220 / khoản 149] ĐỐI CHỨNG DƯƠNG của phép dò, đo trong cùng cảnh: số khoá ghi sổ worker giữ TRONG cửa sổ — sau lần ghi sổ
    * đầu, trước kt2 — phải là 1. Một phép dò hỏng (luôn ra 0) làm `khoaKhiCho` xanh rỗng; vế này bắt nó.
    */
   readonly khoaTrongCuaSo: number;
@@ -1631,9 +1631,9 @@ interface KetQuaDoK126 {
  * Chạy một lượt mở thầu thật, thả `soNguoiGiu` yêu cầu mở thầu thứ hai vào cửa sổ giữa kt1 và kt2 (cách nhau `cachNhauMs`), rồi đo từ
  * BÊN NGOÀI giao dịch: worker có bị chặn không, lúc ấy nó giữ mấy khoá ghi sổ, và một lần ghi sổ khác của cùng tổ chức đi tới đâu.
  *
- * [S1.9141 / khoản 149] TIỀN ĐỀ ĐƯỢC ĐO, KHÔNG ĐƯỢC KỂ. Trên mã đã vá (khoá hàng RFQ lấy TRƯỚC lần ghi sổ đầu, `index.ts` khối cùng
+ * [S1.220 / khoản 149] TIỀN ĐỀ ĐƯỢC ĐO, KHÔNG ĐƯỢC KỂ. Trên mã đã vá (khoá hàng RFQ lấy TRƯỚC lần ghi sổ đầu, `index.ts` khối cùng
  * nhãn), worker không bao giờ bị chặn — nên ba vế cũ (`khoaKhiCho`, `dongThoi`, `opened`) đọc ở thời điểm worker ĐÃ XONG và xanh
- * kể cả khi `truocKt2` không bao giờ chạy (đột biến: đổi mốc câu của `bocChanTruocCau` ⇒ 4/4 xanh, §S1.9141). Bản này đo cảnh
+ * kể cả khi `truocKt2` không bao giờ chạy (đột biến: đổi mốc câu của `bocChanTruocCau` ⇒ 4/4 xanh, §S1.220). Bản này đo cảnh
  * ngay TRONG cửa sổ: yêu cầu thứ hai đã bị chặn chưa, bởi ai, worker đang giữ mấy khoá ghi sổ lúc ấy — và PHÁT lần ghi sổ đồng
  * thời ngay lúc ấy thay vì sau khi worker xong.
  */
@@ -1724,7 +1724,7 @@ function ke(d: KetQuaDoK126): string {
 }
 
 /**
- * [S1.9141 / khoản 149] Bốn khẳng định TIỀN ĐỀ đứng TRƯỚC ba khẳng định kết luận, ở cả hai ca dưới. Đột biến đo được (§S1.9141):
+ * [S1.220 / khoản 149] Bốn khẳng định TIỀN ĐỀ đứng TRƯỚC ba khẳng định kết luận, ở cả hai ca dưới. Đột biến đo được (§S1.220):
  * đổi mốc câu của `bocChanTruocCau` để `truocKt2` không bao giờ chạy ⇒ ⒜ đỏ (`-2`), và làm `demKhoaGhiSo` luôn ra 0 ⇒ ⒞ đỏ —
  * hai đột biến mà bản trước xanh 4/4.
  */

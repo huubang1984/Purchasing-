@@ -254,7 +254,7 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
   "packages/test-support/src/postgres-cuc-bo.ts": {
     so: 1,
     lyDo:
-      "[S1.9110] hạ tầng test — đường cụm Postgres CỤC BỘ khi không có Docker: một pg.Client superuser nối vào CSDL `postgres` " +
+      "[S1.211] hạ tầng test — đường cụm Postgres CỤC BỘ khi không có Docker: một pg.Client superuser nối vào CSDL `postgres` " +
       "của cụm vừa initdb chỉ để CREATE DATABASE trustprocure_test, rồi end(); cùng vai với pg.Client của postgres.ts",
   },
 };
@@ -343,7 +343,7 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 1,
     cau: 0,
     lyDo:
-      "[S1.9110] hạ tầng test — cụm cục bộ: một connect() của pg.Client superuser để CREATE DATABASE (câu chạy trên client, " +
+      "[S1.211] hạ tầng test — cụm cục bộ: một connect() của pg.Client superuser để CREATE DATABASE (câu chạy trên client, " +
       "không trên pool), trước khi có bất kỳ pool nào; không có tenant để đi qua withTenant",
   },
 };
@@ -396,7 +396,7 @@ const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyD
   "packages/test-support/src/postgres-cuc-bo.ts": {
     so: 1,
     lyDo:
-      "[S1.9110] hạ tầng test — pg.Client một lần để CREATE DATABASE trên cụm cục bộ vừa khởi động; kết nối đứt ở đó làm " +
+      "[S1.211] hạ tầng test — pg.Client một lần để CREATE DATABASE trên cụm cục bộ vừa khởi động; kết nối đứt ở đó làm " +
       "startPostgres() ném và bộ test đỏ, không có tiến trình sản xuất nào để chết",
   },
 };

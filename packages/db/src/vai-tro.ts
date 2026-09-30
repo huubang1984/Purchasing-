@@ -73,7 +73,7 @@ export class KetNoiNhiemError extends Error {
 const mocLuocDo = new WeakMap<pg.PoolClient, string>();
 
 /**
- * [S1.9121 / khoản 104] Câu đọc trạng thái phiên ở mỗi lần lấy client — MỘT hằng đứng riêng, mở đầu bằng SELECT, để hai cổng
+ * [S1.215 / khoản 104] Câu đọc trạng thái phiên ở mỗi lần lấy client — MỘT hằng đứng riêng, mở đầu bằng SELECT, để hai cổng
  * [INV-H21] (`qt3-ghim-schema`, `qt3-cu-phap`) thấy và PREPARE được nó; `ganVaiChoClient` nội suy nó vào CUỐI câu nhiều lệnh
  * `SET ROLE …` nên vẫn không thêm vòng đi-về. Đọc: `current_user`, ba GUC vận hành theo tính chất và search path hiệu lực (khoản 99),
  * và TÊN của bốn GUC tenant/khách đang có giá trị — cùng phép đọc của `withTenant` (placeholder không có ở `pg_settings`, đo S1.47).
@@ -91,7 +91,7 @@ const CAU_DOC_TRANG_THAI =
   "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS guc_tenant";
 
 /**
- * [S1.9121 / khoản 104] Số kết quả mà câu nhiều lệnh của `ganVaiChoClient` PHẢI trả về (SET ROLE, DISCARD, CLOSE, DEALLOCATE,
+ * [S1.215 / khoản 104] Số kết quả mà câu nhiều lệnh của `ganVaiChoClient` PHẢI trả về (SET ROLE, DISCARD, CLOSE, DEALLOCATE,
  * UNLISTEN, SELECT unlock, SELECT đọc). Hình dạng được ĐÒI, không được tin — cùng bài học 40a I8 của `withTenant`: driver hay pooler
  * trả về ít hơn nghĩa là một lệnh dọn không chạy hay phép đọc mù, và khi ấy client không được giao ra.
  */
@@ -129,17 +129,17 @@ interface HangTrangThai {
  * Lệch ⇒ NÉM `KetNoiNhiemError`, và `ganVaiTroChoPool` huỷ kết nối (`release(loi)`) — người gọi không bao giờ nhận nó; kết nối mới mở
  * thay, nên sửa xong mặc định phiên thì pool tự lành. Chỉ TÊN GUC vào thông báo.
  *
- * [S1.9121 / khoản 104] VÀ DỌN TRẠNG THÁI PHIÊN NGOÀI BA GUC ẤY — DỌN, KHÔNG PHÁN, VÌ ĐÃ ĐO. Mọi GUC phiên khác (ba GUC IM7 của
+ * [S1.215 / khoản 104] VÀ DỌN TRẠNG THÁI PHIÊN NGOÀI BA GUC ẤY — DỌN, KHÔNG PHÁN, VÌ ĐÃ ĐO. Mọi GUC phiên khác (ba GUC IM7 của
  * `createPool` bị SET về 0 — đo S1.59; `TimeZone`, `DateStyle`, …) và trạng thái phiên ngoài GUC mà `DISCARD TEMP` không dọn — prepared
  * statement, con trỏ WITH HOLD (giữ hàng của người trước cho người kế FETCH), kênh LISTEN (thông báo của người trước tới người kế), khoá
  * tư vấn MỨC PHIÊN (chỉ hàm SECURITY DEFINER lấy được dưới vai ứng dụng — khoản 128) — đi theo kết nối sang người dùng kế tiếp. Hai
- * hướng đo trên cụm cục bộ (PostgreSQL 16.13, trung vị 2 000 lần, biên bản §S1.9121): PHÁN bằng một lần quét `pg_settings`
+ * hướng đo trên cụm cục bộ (PostgreSQL 16.13, trung vị 2 000 lần, biên bản §S1.215): PHÁN bằng một lần quét `pg_settings`
  * (`source = 'session'` hay `setting <> reset_val`) ghép vào câu đọc giá thêm ~930 µs mỗi lần lấy — hơn ba lần CẢ lần lấy hiện hành
  * (275 µs); đếm `pg_locks` thêm ~215 µs; ba bộ đếm prepared/con trỏ/LISTEN thêm ~65 µs. DỌN thì `RESET ALL` 37 µs một vòng đi-về, và
  * `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` ghép vào câu `SET ROLE` thêm ~10 µs. Nên:
  *   - bốn thứ ngoài GUC được DỌN VÔ ĐIỀU KIỆN ngay trong câu `SET ROLE; DISCARD TEMP` — cùng khuôn `DISCARD TEMP` của khoản 78, không
  *     vòng đi-về nào thêm, và không tín hiệu nào của lớp khác nằm ở đó (mã sản xuất không dùng prepared statement có tên, con trỏ hay
- *     LISTEN — census bằng grep, S1.9121; `DEALLOCATE ALL` vì thế không đụng bộ nhớ `parsedStatements` của driver);
+ *     LISTEN — census bằng grep, S1.215; `DEALLOCATE ALL` vì thế không đụng bộ nhớ `parsedStatements` của driver);
  *   - GUC phiên thì ĐỌC TRƯỚC, DỌN SAU: câu đọc chạy TRƯỚC `RESET ALL`, nên ba GUC vận hành vẫn bị PHÁN theo khoản 99 (replica do hàm
  *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi bốn GUC
  *     tenant/khách RỖNG. Giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant`
@@ -153,7 +153,7 @@ interface HangTrangThai {
  * tương đối ~~(nguồn cấu hình do hardening khoản 92 canh lúc deploy)~~ [S1.66 / lượt soi ngang 59a-2, 59a-4: hardening canh nguồn mức
  * database và catalog, KHÔNG canh hàng che mức vai hay mặc định vai đặt giữa hai lần deploy — đo, khoản 109]; một câu TỰ commit (`pool.query` ghi) chạy trọn trước khi lớp này thấy
  * gì — lớp chặn commit của mã ngoài withTenant là giao dịch tường minh kết thúc bằng khối DO của khoản 96 (⑴), census vế ⒝; ~~GUC phiên
- * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.~~ [S1.9121 / khoản 104] GUC phiên khác ba GUC này không được đọc
+ * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.~~ [S1.215 / khoản 104] GUC phiên khác ba GUC này không được đọc
  * mà được RESET (có điều kiện, ở trên), nên một GUC phiên lạ không bao giờ thành một dòng log; `DISCARD SEQUENCES`/`DISCARD PLANS`
  * (giá trị `currval`, kế hoạch đã cache) không dọn — không đường nào của dự án đọc chúng qua kết nối pool.
  */
@@ -170,7 +170,7 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
   // ấy sống hết đời kết nối pool và vẫn che tên (đo trên PostgreSQL 16: sau REVOKE, cùng kết nối,
   // `sessions` trần vẫn đếm 0). Xoá nó ở MỖI lần giao client đóng cửa sổ ấy. Không phải DISCARD ALL:
   // DISCARD ALL đụng cả vai và cấu hình phiên.
-  // [S1.9121 / khoản 104] Cùng câu: `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` (bốn thứ ngoài GUC — dọn, xem
+  // [S1.215 / khoản 104] Cùng câu: `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` (bốn thứ ngoài GUC — dọn, xem
   // docstring), rồi câu đọc trạng thái ở CUỐI — đọc SAU khi dọn bốn thứ ấy nhưng TRƯỚC `RESET ALL` ở dưới. Vẫn không phải DISCARD ALL:
   // nó RESET cả vai và không chạy được trong khối ngầm của câu nhiều lệnh.
   // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết sẵn chữ thường —
@@ -217,7 +217,7 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
             "path hiệu lực cũng làm mỗi kết nối pool bị huỷ một lần."),
     );
   }
-  // [S1.9121 / khoản 104] DỌN SAU KHI ĐỌC, và chỉ khi không GUC tenant/khách nào có giá trị — xem docstring. Một vòng đi-về (đo 37 µs).
+  // [S1.215 / khoản 104] DỌN SAU KHI ĐỌC, và chỉ khi không GUC tenant/khách nào có giá trị — xem docstring. Một vòng đi-về (đo 37 µs).
   if (!hang.guc_tenant) {
     await client.query("RESET ALL");
   }

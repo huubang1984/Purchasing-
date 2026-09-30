@@ -14,10 +14,10 @@ bí mật, biến GitHub, các đối chứng dương và những thư cảnh b�
 | `00-bootstrap` | management | `tp-mgmt` | Bucket S3 lưu state (state local) | **ngay bây giờ** |
 | `10-audit` | audit | `tp-audit` | Bucket CloudTrail, bucket neo (Object Lock COMPLIANCE 365 ngày), role `tp-anchor-writer` | audit được mở lại |
 | `20-management` | management | `tp-mgmt` | Permission set `KeyAdmin` (gán `tp-key-admins` cho audit + prod), CloudTrail tổ chức | sau 10 |
-| `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`, **[S1.183]** `tp-khoi-tao`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` — **[S1.9152 / khoản 252 ⑶]** trust policy ghim `sub` TUỲ BIẾN (ID bất biến của kho + `job_workflow_ref`; mục "Tuỳ biến claim `sub`") | prod được mở lại, **và** claim `sub` của kho đã tuỳ biến |
+| `30-prod-iam` | prod | `tp-prod` | GitHub OIDC; task role `tp-api`, `tp-unseal-worker`, `tp-migrate`, `tp-anchor-job`, **[S1.183]** `tp-khoi-tao`; `tp-ecs-execution`; `tp-deploy`, `tp-deploy-worker` — **[S1.223 / khoản 252 ⑶]** trust policy ghim `sub` TUỲ BIẾN (ID bất biến của kho + `job_workflow_ref`; mục "Tuỳ biến claim `sub`") | prod được mở lại, **và** claim `sub` của kho đã tuỳ biến |
 | `40-kms-audit` | audit | `tp-audit-keyadmin` | Khoá ký mốc neo `alias/tp-anchor-sign` | sau 10, 20 |
 | `50-kms-prod` | prod | `tp-prod-keyadmin` | `alias/tp-org-wrap`, `alias/tp-receipt-sign`, `alias/tp-totp` (ADR-063) | sau 20, 30 |
-| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-088); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-086); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-089); **[S1.9152 / khoản 252 ⑴]** task họ/role `tp-khoi-tao` được chạy hay đăng ký — kể cả ngoài `khoi-tao.yml` — và mọi lần tạo/ghi/sửa/xoá bí mật bản khai `tp/khoi-tao/ban-khai/*` (ADR-9252) (prod chuyển sự kiện sang audit) | sau 10, 20 |
+| `60-canh-bao` | audit + prod | `tp-audit`, `tp-prod` | Cảnh báo email: `PutKeyPolicy` trên khoá KMS của audit/prod; task mang role worker chạy ngoài service `tp-unseal-worker`; job neo `tp-neo` hỏng (ADR-072); 36 giờ không có mốc neo mới trong bucket neo (ADR-073); truy vấn DNS ngoài danh sách trong VPC prod (ADR-076); vận hành — ALB, ECS, RDS của prod vào ALARM hoặc trở về OK (ADR-077), tới hộp thư vận hành riêng `email_van_hanh` (ADR-088); mốc neo theo từng tổ chức — Lambda `tp-canh-moc-neo` ở audit (ADR-086); địa chỉ nhận cảnh báo chưa xác nhận / mất đăng ký / đăng ký lạ — Lambda `tp-canh-dang-ky` ở audit, thư tới cả hai hộp (ADR-089); **[S1.223 / khoản 252 ⑴]** task họ/role `tp-khoi-tao` được chạy hay đăng ký — kể cả ngoài `khoi-tao.yml` — và mọi lần tạo/ghi/sửa/xoá bí mật bản khai `tp/khoi-tao/ban-khai/*` (ADR-130) (prod chuyển sự kiện sang audit) | sau 10, 20 |
 | `70-do-kms` | prod | `tp-prod` | **Dùng một lần** cho phép đo ⒜: VPC tối thiểu, cluster `tp-do-kms`, hai task definition aws-cli mang role `tp-api` / `tp-unseal-worker`. Đo xong thì `destroy` | sau 30, 50 (và 60 nếu muốn đo luôn cảnh báo) |
 | `80-ses` | prod | `tp-prod` | Gửi thư thật qua SES (ADR-065): danh tính domain + DKIM, MAIL FROM, configuration set `tp-thu`; quyền `ses:SendEmail` theo đúng một địa chỉ gửi cho `tp-api` và `tp-unseal-worker` | sau 30 |
 | `85-sms-zalo` | prod | `tp-prod` | Kênh SMS và Zalo ZNS của api (ADR-069): sender ID Việt Nam + configuration set `tp-sms`, quyền `sms-voice:SendTextMessage` từ đúng sender ID ấy; secret `tp/api/zalo-oa` (api Get + Put) | sau 30 |
@@ -333,11 +333,11 @@ Sau lần chạy tay đầu tiên ở trên (stack 90 cần image có sẵn), m�
 nhật hai biến khoá cùng lúc với apply stack 90 — không thì lần deploy kế đỏ ở `kiem`, đúng như mong đợi.
 
 Tên environment phải đúng ~~hai~~ **[S1.183]** ba chuỗi trên: trust policy của `tp-deploy`/`tp-deploy-worker` (stack 30)
-ghim ~~`sub = repo:huubang1984/Purchasing-:environment:<tên>`~~ **[S1.9152 / khoản 252 ⑶]** `sub` theo dạng TUỲ BIẾN của kho — mục
+ghim ~~`sub = repo:huubang1984/Purchasing-:environment:<tên>`~~ **[S1.223 / khoản 252 ⑶]** `sub` theo dạng TUỲ BIẾN của kho — mục
 ngay dưới; với `prod-khoi-tao` ghim cả TỆP workflow. Không có secret nào — pipeline lấy quyền
 AWS bằng OIDC.
 
-### Tuỳ biến claim `sub` của OIDC — TRƯỚC khi apply stack 30 (khoản 252 ⑶, ADR-9252, S1.9152)
+### Tuỳ biến claim `sub` của OIDC — TRƯỚC khi apply stack 30 (khoản 252 ⑶, ADR-130, S1.223)
 
 Trust policy của `tp-deploy` và `tp-deploy-worker` đòi `sub` theo dạng TUỲ BIẾN của kho, không phải dạng mặc định:
 
@@ -416,7 +416,7 @@ PHIÊN BẢN (`VersionId`) và BĂM SHA-256 của nó. Các bước người v�
 - Nhóm `concurrency` RIÊNG (`khoi-tao-prod`): một lần khởi tạo chờ duyệt không chặn deploy. Chạy trùng migrate vẫn an toàn —
   hardening thu hồi rồi cấp lại quyền của `app_khoi_tao` trong MỘT giao dịch.
 - Kho CÔNG KHAI: đầu vào và tóm tắt của run ai cũng đọc được — slug, mã tổ chức, số người theo vai.
-- **[S1.9152 / khoản 252 ⑴] Mỗi lần chạy để lại thư** ở `email_canh_bao` (stack 60 ⑼): `RunTask` họ `tp-khoi-tao` bởi
+- **[S1.223 / khoản 252 ⑴] Mỗi lần chạy để lại thư** ở `email_canh_bao` (stack 60 ⑼): `RunTask` họ `tp-khoi-tao` bởi
   `assumed-role/tp-deploy/khoi-tao-<run id>` và `DeleteSecret` bản khai — cộng `CreateSecret`/`PutSecretValue` của người vận hành ở
   8.1 trước đó. Thư là nhân chứng: đối chiếu `<run id>` với run trên GitHub. Thư mà KHÔNG có run đã duyệt (một phiên SSO chạy
   `run-task`, đăng ký họ khác mang role `tp-khoi-tao`, Put/Update bản khai SAU khi đã duyệt) là lần chạy ngoài workflow — dừng task,
@@ -481,14 +481,14 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
   khởi task nào): `aws ecs run-task --cluster khong-ton-tai --task-definition tp-unseal-worker`
   ⇒ lời gọi lỗi, nhưng CloudTrail vẫn ghi nó kèm `errorCode` ⇒ phải có thư.
 - **Người có AdministratorAccess ở prod chạy được task `tp-khoi-tao` không qua hai người của `khoi-tao.yml`** (khoản 252) — tạo
-  tổ chức, người dùng và vai. Không lớp nào CHẶN: đó là người giữ mọi thứ khác của prod. **[S1.9152]** Stack `60-canh-bao` ⑼ làm
+  tổ chức, người dùng và vai. Không lớp nào CHẶN: đó là người giữ mọi thứ khác của prod. **[S1.223]** Stack `60-canh-bao` ⑼ làm
   đường ấy không im lặng, cùng khuôn ⑵: `RunTask`/`StartTask` họ `tp-khoi-tao` hay ghi đè `taskRoleArn` thành role ấy,
   `RegisterTaskDefinition` gắn role ấy vào họ khác, và mọi `CreateSecret`/`PutSecretValue`/`UpdateSecret`/`DeleteSecret` dưới
   `tp/khoi-tao/ban-khai/` ⇒ thư — kể cả lần hợp lệ (thư là nhân chứng, đối chiếu run trên GitHub). Kiểm sau apply (đối chứng
   dương, không khởi task nào): `aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao --profile tp-prod` ⇒ lời gọi
   lỗi, CloudTrail vẫn ghi kèm `errorCode` ⇒ phải có thư; và lệnh `create-secret` của bước 8.1 phải ra thư — không có thư thì ⑼
   chưa chạy dù `apply` xanh. Không bắt `GetSecretValue` (đọc bản khai) và `RestoreSecret`. Permission set hẹp cho người tạo bản khai
-  (khoản 252 ⑵) hoãn tới trước khách hàng thứ hai — khoản 9452.
+  (khoản 252 ⑵) hoãn tới trước khách hàng thứ hai — khoản 278.
 - **Bucket neo chặn `s3:PutObjectRetention`** với mọi người: job neo phải ghi object **không**
   kèm header Object Lock, để bucket tự áp thời hạn mặc định 365 ngày. Muốn tăng thời hạn về sau
   phải gỡ statement `KhongXoaKhongDoiKhoa` bằng root của audit (Privileged root actions).

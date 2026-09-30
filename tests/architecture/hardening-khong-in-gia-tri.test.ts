@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9102 / khoản 117 / ADR-9202] THÔNG ĐIỆP CỦA HARDENING NÊU TÊN VÀ VÂN TAY — KHÔNG NỐI THÂN HÀM,
+// [S1.210 / khoản 117 / ADR-124] THÔNG ĐIỆP CỦA HARDENING NÊU TÊN VÀ VÂN TAY — KHÔNG NỐI THÂN HÀM,
 // ĐỊNH NGHĨA TRIGGER, GIÁ TRỊ `proconfig` HAY `SQLERRM` VÀO Ô MÔ TẢ, CỘT `mo_ta`, RAISE HAY BẢN GOM
 //
 // Chuẩn S1.51 ⑷: thông điệp deploy là bề mặt rò dữ liệu — tên thì được, giá trị thì không. S1.66 vá bốn mục canh
@@ -10,7 +10,7 @@
 // thân; một điều kiện ném 22P02 ⇒ WARNING mang `invalid input syntax for type uuid: "<giá trị>"`.
 //
 // Chủ dự án chốt nhánh ⑴ (2026-09-30): in DẤU VÂN TAY thay cho thân hàm và định nghĩa trigger, `proconfig` chỉ in TÊN GUC,
-// `SQLERRM` thay bằng `SQLSTATE` — và cổng này cấm nối trở lại. Cách tra thân hàm từ vân tay: ADR-9202 và chú thích đầu
+// `SQLERRM` thay bằng `SQLSTATE` — và cổng này cấm nối trở lại. Cách tra thân hàm từ vân tay: ADR-124 và chú thích đầu
 // khối `bang` của hardening.
 //
 // PHÉP QUÉT là hàm thuần trên văn bản (`quetHardening`), BỐN BỀ MẶT:
@@ -30,7 +30,7 @@
 // hardening bị quét ở ⑶ như mã của chính tệp (hôm nay: không thân nào nối tên cấm). Danh sách cấm là ĐÚNG SÁU TÊN của khoản
 // 117 — không `pg_get_constraintdef`/`pg_get_ruledef`/`pg_get_viewdef`/`prosqlbody`: phép quét đọc cả ô nên một vị từ LỌC
 // (hàng khoản 105 so `pg_get_constraintdef` trong ô mô tả) sẽ bị nhầm là nối; mở rộng đòi một bộ đọc biết đâu là biểu thức
-// chuỗi — ghi ở biên bản §S1.9102 mục 7.
+// chuỗi — ghi ở biên bản §S1.210 mục 7.
 //
 // VĂN BẢN MẪU ĐỘT BIẾN ĐỎ (từng vế một fixture ở cuối tệp): trả một ô mô tả về
 //   `'… — prosrc hiện tại: ' || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))`
@@ -316,7 +316,7 @@ const MO_TA_MOI =
   " FROM pg_trigger t WHERE t.tgfoid = p.oid AND NOT t.tgisinternal), '(KHÔNG CÓ)')" +
   " FROM pg_proc p WHERE p.oid = to_regprocedure('public.app_current_org_id()')), 'hàm không tồn tại')";
 
-describe("[S1.9102 / khoản 117] thông điệp của hardening nêu tên và vân tay, không in giá trị", () => {
+describe("[S1.210 / khoản 117] thông điệp của hardening nêu tên và vân tay, không in giá trị", () => {
   it("hardening.always.sql: không ô mô tả, cột mo_ta, RAISE hay bản gom nào nối prosrc, proconfig trần, pg_get_*def, pg_get_expr hay SQLERRM", () => {
     expect(quetHardening(HARDENING)).toEqual([]);
   });
@@ -328,7 +328,7 @@ describe("[S1.9102 / khoản 117] thông điệp của hardening nêu tên và v
     expect(tk.moTa).toBeGreaterThanOrEqual(50);
     expect(tk.raise).toBeGreaterThanOrEqual(30);
     expect(tk.gom).toBeGreaterThanOrEqual(3);
-    // Đầu vòng S1.9102: 94 / 71 / 94. Sàn "≥" để một hàng ghim mới không làm cổng đỏ vì lý do lạ; về 0 thì phép quét mù.
+    // Đầu vòng S1.210: 94 / 71 / 94. Sàn "≥" để một hàng ghim mới không làm cổng đỏ vì lý do lạ; về 0 thì phép quét mù.
     expect(tk.vanTayProsrc).toBeGreaterThanOrEqual(90);
     expect(tk.vanTayTrigger).toBeGreaterThanOrEqual(60);
     expect(tk.tenProconfig).toBeGreaterThanOrEqual(90);

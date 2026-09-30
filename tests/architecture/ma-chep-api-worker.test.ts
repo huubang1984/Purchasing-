@@ -1,12 +1,12 @@
 // ==============================================================================================
-// [S1.9160 / khoản 187] BẢNG KIỂM KÊ MÃ CHÉP GIỮA `apps/api/src` VÀ `apps/unseal-worker/src` — ĐÓNG, ĐỌC BẰNG MÁY
+// [S1.224 / khoản 187] BẢNG KIỂM KÊ MÃ CHÉP GIỮA `apps/api/src` VÀ `apps/unseal-worker/src` — ĐÓNG, ĐỌC BẰNG MÁY
 //
 // Worker mở thầu ra đời (S1.6, S1.82) bằng cách CHÉP từng mảnh của `api`: bộ đọc cấu hình, bộ mô tả lỗi, hai bộ nghe pool,
 // `moTaLoi` của điểm vào. `g1-` cấm mọi module ngoài worker import nó và worker không import `apps/api`, nên chép là con đường
 // duy nhất — và không ai liệt kê những gì đã chép. Ba bản chép ĐÃ trôi thật trước khi ai đo (khoản 166: bản `moTaLoi` của worker
 // thiếu tầng `cause`, không nhận `TenantError` theo lớp; hằng mã năm ký tự hai bản) và được nâng lên `@trustprocure/identity` ở
-// S1.9151. Khoản 187 hỏi câu còn lại: *còn gì nữa đã chép mà chưa ai đối chiếu* — và đòi một câu trả lời có kết quả ghi ra, có
-// cổng giữ. Tệp này là cả hai: ba bảng dưới đây LÀ bảng kiểm kê (biên bản §S1.9160 chép từ đây), và ba `describe` là cổng.
+// S1.222. Khoản 187 hỏi câu còn lại: *còn gì nữa đã chép mà chưa ai đối chiếu* — và đòi một câu trả lời có kết quả ghi ra, có
+// cổng giữ. Tệp này là cả hai: ba bảng dưới đây LÀ bảng kiểm kê (biên bản §S1.224 chép từ đây), và ba `describe` là cổng.
 //
 // BA CHIỀU KIỂM KÊ, đọc cây cú pháp TypeScript (không regex trên văn bản: chú thích và chuỗi không phải khai báo):
 //   ⑴ CÙNG TÊN — khai báo MỨC MODULE (function, const/let, class, interface, type, enum) có mặt ở CẢ HAI app: `BANG_TEN`;
@@ -30,7 +30,7 @@
 //   ⒝ ⑵ chỉ regex, không so chuỗi hay số: chuỗi chung của hai app là khuôn dòng log của bộ nghe pool và có phép đo riêng ở mục II.
 //   ⒞ `HANH_VI` chỉ phủ các biến HAI tiến trình cùng đọc; phần riêng mỗi bên (ba vòng bí mật và bộ gửi của `api`, cảnh báo của
 //      worker) đo ở `cau-hinh.test.ts` của mỗi app. Một lệch ĐÃ KHAI (độ dài khoá 32 byte) ghim riêng ở mục III, không giấu.
-//   ⒟ `apps/mcp`, `apps/web`, `apps/public-keys` và `tools/` mang `moTaLoi`/`cau-hinh.ts` cùng khuôn — ngoài tầm (khoản 9470).
+//   ⒟ `apps/mcp`, `apps/web`, `apps/public-keys` và `tools/` mang `moTaLoi`/`cau-hinh.ts` cùng khuôn — ngoài tầm (khoản 280).
 // ==============================================================================================
 
 import { execFileSync } from "node:child_process";
@@ -102,7 +102,7 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "KHONG",
     goiChung: MO_TA_LOI_CHUNG,
     lyDo:
-      "[S1.9151 / khoản 166] Bản của worker (tên cục bộ `moTaLoi`, ~5 dòng) thiếu tầng `cause` và không nhận `TenantError` " +
+      "[S1.222 / khoản 166] Bản của worker (tên cục bộ `moTaLoi`, ~5 dòng) thiếu tầng `cause` và không nhận `TenantError` " +
       "theo lớp — lệch THẬT, đo trên tiến trình worker (`composition.int.test.ts`). Nâng lên identity (gói cả hai đã phụ thuộc, " +
       "nơi `moTaHangDongCuaLanTuChoi` sống); `api` xuất lại đúng hàm ấy (`mo-ta-loi.test.ts` ghim `toBe`), worker gọi thẳng.",
   },
@@ -114,7 +114,7 @@ const BANG_TEN: readonly HangTen[] = [
     xuLy: "NANG",
     doLuong: "KHONG",
     goiChung: MO_TA_LOI_CHUNG,
-    lyDo: "[S1.9151] Hàm phụ đi theo `moTaLoiKhongGiaTri`; worker chưa từng có tên này (bản chép của nó gộp một dòng). Giữ hàng để " +
+    lyDo: "[S1.222] Hàm phụ đi theo `moTaLoiKhongGiaTri`; worker chưa từng có tên này (bản chép của nó gộp một dòng). Giữ hàng để " +
       "một bản phụ không mọc lại ở `api`.",
   },
   {
@@ -126,7 +126,7 @@ const BANG_TEN: readonly HangTen[] = [
     doLuong: "KHONG",
     goiChung: MO_TA_LOI_CHUNG,
     mauKemTheo: "/^[0-9A-Z]{5}$/u",
-    lyDo: "[S1.9151 / khoản 166] Hình dạng SQLSTATE chép hai bản (worker chép literal không tên). Đi cùng hàm lên identity; cổng " +
+    lyDo: "[S1.222 / khoản 166] Hình dạng SQLSTATE chép hai bản (worker chép literal không tên). Đi cùng hàm lên identity; cổng " +
       "đòi cả TÊN lẫn LITERAL không còn ở app nào.",
   },
   {
@@ -212,7 +212,7 @@ const BANG_TEN: readonly HangTen[] = [
     worker: [CAU_HINH_WORKER],
     xuLy: "GIU",
     doLuong: "VAN_BAN",
-    lyDo: "Đọc biến bắt buộc, thông điệp chỉ nêu TÊN (quy tắc ⑵). [S1.9160] Worker viết `v.length === 0` nơi `api` viết `v === \"\"` " +
+    lyDo: "Đọc biến bắt buộc, thông điệp chỉ nêu TÊN (quy tắc ⑵). [S1.224] Worker viết `v.length === 0` nơi `api` viết `v === \"\"` " +
       "— cùng nghĩa, khác chữ; đồng văn bản ở vòng này để cổng so được từng ký tự.",
   },
   {
@@ -404,7 +404,7 @@ const BANG_KHAC_TEN: readonly HangKhacTen[] = [
     lyDo: "[S1.84 / khoản 129, 173] Bộ nghe `release`: chỉ `TenantError SESSION_STATE_LEFT`, một dòng `ket noi huy <pool> <mô tả>`. " +
       "Hình dạng khác có chủ đích: `api` gắn trong hàm bọc (cổng `pool-nghe-du-tin-hieu` TIN theo đường import `./mo-ta-loi.js`), " +
       "worker trả bộ nghe và gắn tại chỗ dựng pool (cổng ấy đọc lời gọi `.on`). Mục II so ĐIỀU KIỆN và KHUÔN dòng log (bỏ tiền tố " +
-      "tiến trình); thân đo bằng hành vi ở hai `loi-ket-noi-toi-muon.int.test.ts` (S1.9143).",
+      "tiến trình); thân đo bằng hành vi ở hai `loi-ket-noi-toi-muon.int.test.ts` (S1.221).",
   },
   {
     api: { ten: "ghiLogLoiKetNoiToiMuon", tep: `${API}mo-ta-loi.ts` },
@@ -596,7 +596,7 @@ function quetGoiChung(tep: string): KetQuaQuet {
   return kq;
 }
 
-describe("[S1.9160 / khoản 187] bảng kiểm kê mã chép api ↔ worker — đóng, và cổng giữ nó", () => {
+describe("[S1.224 / khoản 187] bảng kiểm kê mã chép api ↔ worker — đóng, và cổng giữ nó", () => {
   it("bộ quét không mù: thấy đủ tệp sản xuất và những khai báo đã biết ở cả hai app", () => {
     expect(QUET_API.soTep).toBeGreaterThanOrEqual(25);
     expect(QUET_WORKER.soTep).toBeGreaterThanOrEqual(8);
@@ -728,7 +728,7 @@ function khuonBoNghe(k: KhaiBao): KhuonBoNghe {
   };
 }
 
-describe("[S1.9160 / khoản 187] phép đo chống trôi — văn bản của các cặp GIU", () => {
+describe("[S1.224 / khoản 187] phép đo chống trôi — văn bản của các cặp GIU", () => {
   const hangVanBan = BANG_TEN.filter((h) => h.xuLy === "GIU" && h.doLuong === "VAN_BAN");
 
   it("có hàng VAN_BAN để đo, và mỗi hàng khai đúng một tệp mỗi bên", () => {
@@ -999,7 +999,7 @@ function moTaKetQua(kq: KetQuaDoc): string {
   return e instanceof Error ? `TỪ CHỐI ${e.name}: ${e.message}` : "TỪ CHỐI (không phải Error)";
 }
 
-describe("[S1.9160 / khoản 187] phép đo chống trôi — hành vi: hai `docCauHinh` trên cùng giá trị của cùng biến", () => {
+describe("[S1.224 / khoản 187] phép đo chống trôi — hành vi: hai `docCauHinh` trên cùng giá trị của cùng biến", () => {
   let docApi: DocCauHinh;
   let docWorker: DocCauHinh;
   const nap = async (): Promise<void> => {

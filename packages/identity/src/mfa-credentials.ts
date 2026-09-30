@@ -186,7 +186,7 @@ export const MFA_LOCKOUT_SECONDS = 900;
 // phát chứng chỉ agent từ chối cho tới khi họ đăng nhập đúng một lần. Đó là fail-closed có chủ ý —
 // đường phát agent là đường PHỤ, còn đường đăng nhập mới là đường phải luôn mở.
 //
-// [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH của giá ấy — giao điểm với khoản 153 (ADR-039), chưa tài liệu
+// [S1.209 / khoản 174] HỆ QUẢ VẬN HÀNH của giá ấy — giao điểm với khoản 153 (ADR-039), chưa tài liệu
 // nào nêu tới vòng này: chứng chỉ `AGENT_READONLY` có TTL trần một giờ và cách DUY NHẤT có chứng chỉ
 // mới là gọi lại `POST /auth/agent-session` với một mã TOTP tươi. Nên `failed_attempts >= 2` — dù do
 // hai lần gõ sai trên `/auth/totp` — nghĩa là KHÔNG xoay được chứng chỉ agent, kể cả với mã ĐÚNG

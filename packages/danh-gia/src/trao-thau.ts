@@ -16,7 +16,7 @@
 //     sống*, nên trạng thái RFQ phải nói cùng một câu;
 //   * hàng `APPROVED` **không đổi** trạng thái RFQ — nó đã ở `AWARDED`;
 //   * hàng `CANCELLED` đưa về `EVALUATING`, và đó là lúc một đề xuất mới đi được;
-//   * **[S1.9182 / khoản 232 / ADR-9282]** hàng `WITHDRAWN` — người đề xuất rút đề xuất CHƯA chữ ký của
+//   * **[S1.231 / khoản 232 / ADR-133]** hàng `WITHDRAWN` — người đề xuất rút đề xuất CHƯA chữ ký của
 //     mình — cũng đưa về `EVALUATING`: hàng rút không phải một award còn sống, và J7 mở lại sau nó.
 //
 // Nếu `PROPOSED` KHÔNG đặt `AWARDED`, thì giữa lúc đề xuất và lúc duyệt, RFQ đứng ở `EVALUATING`
@@ -36,8 +36,8 @@
 // lớp **DUY NHẤT**~~ — một bất đối xứng có chủ ý ghi thành khoản **231**, không một chỗ bỏ sót:
 // `060` cần lớp CSDL vì `rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một
 // thân yêu cầu khai được nó; ở đây `evaluationId` không phải tham số của hàm nào, nên vectơ ấy
-// chưa có đường. ~~Ngày nào có, khoản 231 là chỗ đã ghi cái giá.~~ **[S1.9182 / khoản 231 ĐÓNG]**
-// Từ `9582`, `award_kiem_de_xuat` cũng đòi *không lượt chấm nào của RFQ mới hơn* (khuôn `060` mục (A),
+// chưa có đường. ~~Ngày nào có, khoản 231 là chỗ đã ghi cái giá.~~ **[S1.231 / khoản 231 ĐÓNG]**
+// Từ `093`, `award_kiem_de_xuat` cũng đòi *không lượt chấm nào của RFQ mới hơn* (khuôn `060` mục (A),
 // nhánh có tên `j5_luot_cham_khong_moi_nhat`): câu `ORDER BY e.created_at DESC` dưới đây nay là lớp
 // THỨ HAI, và hai lớp nói cùng một câu như ở vòng BAFO. Ca đo khoá vế này nằm ở
 // `luot-danh-gia.int.test.ts` — ca cũ đo lớp gói, ca `[khoản 231]` chèn thẳng một hàng trỏ lượt CŨ —
@@ -54,8 +54,8 @@
 // ~~Cái giá, nói thẳng: người đề xuất **không tự rút lại được** đề xuất của mình.~~ Đó là một quyền
 // hẹp hơn và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hoặc một cổng phụ thuộc
 // trạng thái, và cả hai đều là thiết kế mới. ~~Không dựng ở vòng này — ghi thành khoản **232**.~~
-// **[S1.9182 / khoản 232 ĐÓNG — ADR-9282]** Chủ dự án chốt hình ⒜: `rutDeXuatTraoThau` ghi hàng
-// `WITHDRAWN` (`9583`) dưới cổng `award.recommend` — cùng cổng với lần đề xuất, KHÔNG một cổng đọc dữ
+// **[S1.231 / khoản 232 ĐÓNG — ADR-133]** Chủ dự án chốt hình ⒜: `rutDeXuatTraoThau` ghi hàng
+// `WITHDRAWN` (`094`) dưới cổng `award.recommend` — cùng cổng với lần đề xuất, KHÔNG một cổng đọc dữ
 // liệu nào ở `apps/api`. Ba vế ràng ở CSDL: hàng mới nhất là `PROPOSED`, người rút là người đề xuất
 // (`acted_by`, cột dẫn xuất từ phiên), đề xuất có 0 chữ ký. Cổng huỷ giữ nguyên `po.approve`.
 // ==============================================================================================
@@ -93,7 +93,7 @@ export type LyDoTuChoiTraoThau = Extract<
   | "CHUA_CHAM_LAN_NAO"
   | "KHONG_CO_DE_XUAT_DANG_CHO"
   | "KHONG_CO_AWARD_CON_SONG"
-  // [S1.9182 / khoản 232] hai lối từ chối của lần RÚT.
+  // [S1.231 / khoản 232] hai lối từ chối của lần RÚT.
   | "KHONG_PHAI_NGUOI_DE_XUAT"
   | "DE_XUAT_DA_CO_CHU_KY"
 >;
@@ -108,7 +108,7 @@ export class TraoThauTuChoiError extends Error {
   }
 }
 
-// [S1.9182 / khoản 232 / ADR-9282] `WITHDRAWN` — trạng thái thứ tư (`9583`): người đề xuất rút đề xuất chưa chữ ký.
+// [S1.231 / khoản 232 / ADR-133] `WITHDRAWN` — trạng thái thứ tư (`094`): người đề xuất rút đề xuất chưa chữ ký.
 export type TrangThaiTraoThau = "PROPOSED" | "APPROVED" | "CANCELLED" | "WITHDRAWN";
 
 /** Một hàng sự kiện của `rfq_awards` — KHÔNG mang một mức giá nào. */
@@ -161,7 +161,7 @@ export interface HuyTraoThauInput {
   readonly actorSessionId: string;
 }
 
-/** [S1.9182 / khoản 232] Rút đề xuất — cùng hình dạng với huỷ: một lý do BẮT BUỘC, không `awardId` (hàng mới nhất là đích). */
+/** [S1.231 / khoản 232] Rút đề xuất — cùng hình dạng với huỷ: một lý do BẮT BUỘC, không `awardId` (hàng mới nhất là đích). */
 export interface RutDeXuatTraoThauInput {
   readonly rfqId: string;
   readonly reason: string;
@@ -335,7 +335,7 @@ export async function deXuatTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
     // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.180] theo chốt).
-    // [S1.9182 / khoản 231] Vế J5 *lượt chấm mới nhất* của `9582` đi cùng đường: tên `j5_luot_cham_khong_moi_nhat` có dòng ở
+    // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `093` đi cùng đường: tên `j5_luot_cham_khong_moi_nhat` có dòng ở
     // `CHOT_THEO_RANG_BUOC` (ADR-108), nên một lượt chấm sinh dưới chân câu chọn ở trên — chỉ tới được bằng một đường ghi thứ hai
     // — thành `ChotKiemSoatError` mang `J5_LUOT_CHAM_KHONG_MOI_NHAT` và một hàng `CONTROL_DENIED`.
     const ma = maChotTuLoi(loi);
@@ -566,7 +566,7 @@ export async function huyTraoThau(
   }
 
   const truoc = await awardMoiNhat(client, orgId, input.rfqId);
-  // [S1.9182 / khoản 232] `WITHDRAWN` cũng không phải một award còn sống — cùng vế với trigger `9583`.
+  // [S1.231 / khoản 232] `WITHDRAWN` cũng không phải một award còn sống — cùng vế với trigger `094`.
   if (truoc === undefined || truoc.status === "CANCELLED" || truoc.status === "WITHDRAWN") {
     return nemTuChoi(
       auditPool,
@@ -645,9 +645,9 @@ export async function huyTraoThau(
 /**
  * RÚT một đề xuất trao thầu CHƯA CÓ CHỮ KÝ — bởi chính người đã đề xuất — và đưa gói thầu về `EVALUATING`.
  *
- * [S1.9182 / khoản 232 / ADR-9282] Cổng là `award.recommend` — cùng cổng với lần đề xuất, KHÔNG phải một
+ * [S1.231 / khoản 232 / ADR-133] Cổng là `award.recommend` — cùng cổng với lần đề xuất, KHÔNG phải một
  * cổng đọc dữ liệu: ba vế *hàng mới nhất là `PROPOSED`* · *người rút là người đề xuất* · *0 chữ ký* sống ở
- * `award_kiem_mot_award_song` (`9583`), lớp có thẩm quyền, mỗi vế một tên ràng buộc. Ba phép kiểm dưới đây
+ * `award_kiem_mot_award_song` (`094`), lớp có thẩm quyền, mỗi vế một tên ràng buộc. Ba phép kiểm dưới đây
  * chỉ làm thông điệp nói được VÌ SAO và để lại một hàng sổ mang mã (ADR-060: cả ba là dấu vết của một người
  * cố đi một bước của chuỗi *award → duyệt* không đúng thứ tự). Có chữ ký rồi thì rút không tháo được — chỉ
  * `huyTraoThau` (`po.approve`, ADR-057) — nên phê duyệt kép không bị bào mòn bằng đường này. `reason` BẮT
@@ -852,7 +852,7 @@ export async function docTraoThau(
   // Chữ ký thuộc về ĐỀ XUẤT, không về hàng mới nhất — `rfq_award_approvals.award_id` trỏ tới hàng
   // `PROPOSED`. Với một hàng `APPROVED`/`CANCELLED`/`WITHDRAWN`, đề xuất tương ứng là hàng `PROPOSED` mới nhất
   // KHÔNG muộn hơn nó; `truoc_id` của trigger đọc cùng một thứ.
-  // [S1.9182 / khoản 232] ~~Câu cũ JOIN MỌI hàng `PROPOSED` không muộn hơn hàng mới nhất~~ — sau một chu kỳ
+  // [S1.231 / khoản 232] ~~Câu cũ JOIN MỌI hàng `PROPOSED` không muộn hơn hàng mới nhất~~ — sau một chu kỳ
   // `PROPOSED(chữ ký)→APPROVED→CANCELLED→PROPOSED`, đề xuất MỚI bị gán chữ ký của chu kỳ TRƯỚC, và nút
   // «Rút đề xuất» (đọc `approvals`) ẩn sai. Nay chọn ĐÚNG MỘT hàng: `PROPOSED` mới nhất của gói thầu, cùng
   // khoá sắp xếp với `awardMoiNhat`. Vế *không muộn hơn `h`* là THỪA — `h` là hàng mới nhất nên mọi hàng

@@ -27,7 +27,7 @@ function inTien(xu: bigint): string {
 
 /**
  * Thành tiền của một dòng: `soLuong` (≤ 4 chữ số lẻ) × `donGia` (số nguyên đồng), ~~làm tròn nửa lên tới xu~~
- * **[S1.9181 / khoản 218]** làm tròn **nửa-ra-xa-0** tới xu — MỘT luật với `lamTron` của `@trustprocure/danh-gia`
+ * **[S1.230 / khoản 218]** làm tròn **nửa-ra-xa-0** tới xu — MỘT luật với `lamTron` của `@trustprocure/danh-gia`
  * và `thanhTien` của `apps/web/src/so-tien.ts` (ADR-050 ⑴). Trên miền không âm mà `SO_LUONG`/`DON_GIA` cưỡng chế,
  * nửa-lên và nửa-ra-xa-0 là cùng một hàm, nên thân hàm không đổi; đổi là LỜI KHAI, và `tien.test.ts` đối chiếu
  * với `lamTron` ở cả 100 phần dư cộng bảng ca nửa xu. Giữ bản riêng thay vì import: gói này không khai

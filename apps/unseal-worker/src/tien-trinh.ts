@@ -62,7 +62,7 @@ const CAU_LIET_KE_TO_CHUC =
 const TRE_DAU_TON_DONG_MS = 5_000;
 
 // ==============================================================================================
-// [S1.9151 / khoản 166] BỘ MÔ TẢ LỖI CHO DÒNG LOG: MỘT HÀM, HAI TIẾN TRÌNH.
+// [S1.222 / khoản 166] BỘ MÔ TẢ LỖI CHO DÒNG LOG: MỘT HÀM, HAI TIẾN TRÌNH.
 //
 // ~~Tới trước vòng này tệp này giữ một `moTaLoi` CỤC BỘ ~5 dòng — "bản rút gọn của
 // `apps/api/src/mo-ta-loi.ts`", chép có chủ đích vì mã CHẠY của worker không import được `apps/api`
@@ -81,9 +81,9 @@ const TRE_DAU_TON_DONG_MS = 5_000;
  * [S1.84 / khoản 129 và khoản 173] Bộ nghe `release` của một pool: ghi MỘT dòng khi `withTenant` huỷ
  * một kết nối vì `SESSION_STATE_LEFT` — lỗi ấy không được ném cho ai (cùng luật với `ghiLogKetNoiHuy`
  * của `apps/api/src/mo-ta-loi.ts`); mọi lỗi khác đi vào `release()` đã có người nhận, không ghi.
- * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export để
+ * [S1.221 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export để
  * `loi-ket-noi-toi-muon.int.test.ts` đo hành vi trên pool thật. Dây nối thật ở `taoTienTrinhUnsealWorker`.
- * [S1.9160 / khoản 187] Bản song sinh có kiểm kê: `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn dòng
+ * [S1.224 / khoản 187] Bản song sinh có kiểm kê: `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn dòng
  * log với `ghiLogKetNoiHuy` của `api` (bỏ tiền tố tiến trình) — hai bản khác hình dạng có chủ đích, không được khác lời.
  */
 export const ghiKetNoiHuy =
@@ -98,8 +98,8 @@ export const ghiKetNoiHuy =
  * [S1.84 / khoản 129] Bộ nghe lỗi-tới-muộn của một pool: lần lấy kết nối tới SAU trần `maxConnectWaitMs`,
  * người gọi đã nhận `CONNECT_WAIT_EXCEEDED` và đi; `withTenant` chỉ phát khi trần ĐÃ nổ nên một sự cố
  * không thành hai dòng (cùng luật với `ghiLogLoiKetNoiToiMuon` của `apps/api/src/mo-ta-loi.ts`).
- * [S1.9143 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export — xem `ghiKetNoiHuy`.
- * [S1.9160 / khoản 187] Bản song sinh của `ghiLogLoiKetNoiToiMuon` (`api`) — cùng phép đo đối chiếu, xem `ghiKetNoiHuy`.
+ * [S1.221 / khoản 183] Thân giữ nguyên, chỉ dời ra mức module và export — xem `ghiKetNoiHuy`.
+ * [S1.224 / khoản 187] Bản song sinh của `ghiLogLoiKetNoiToiMuon` (`api`) — cùng phép đo đối chiếu, xem `ghiKetNoiHuy`.
  */
 export const ghiLoiToiMuon =
   (ten: string) =>
@@ -147,14 +147,14 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
   //
   // ~~Bộ mô tả là `moTaLoi` CỤC BỘ của tiến trình này, không phải bản của `apps/api`: mã CHẠY của
   // worker không được import từ `apps/api` (quy tắc `g1-`). Bản cục bộ hẹp hơn — khoản 166.~~
-  // [S1.9151 / khoản 166] Bộ mô tả là `moTaLoiKhongGiaTri` của `@trustprocure/identity` — cùng bản
+  // [S1.222 / khoản 166] Bộ mô tả là `moTaLoiKhongGiaTri` của `@trustprocure/identity` — cùng bản
   // với `apps/api`, không đi qua `apps/api` (quy tắc `g1-` giữ nguyên).
   // ============================================================================================
   // GẮN TỪNG POOL MỘT, không qua một vòng lặp: cổng `pool-nghe-du-tin-hieu.test.ts` đọc TÊN BIẾN
   // trên cây cú pháp, và một vòng lặp biến hai cái tên ấy thành một biến vòng lặp mà cổng không
   // thấy. Bản đầu của khối này viết bằng vòng lặp và cổng ĐỎ — giữ lại lý do ở đây để lần sau
   // không ai "dọn gọn" nó về vòng lặp rồi làm cổng mù. Chỉ CÁI GỌI được trải ra; phần thân dùng
-  // chung qua hai hàm dựng bộ nghe ~~ngay dưới~~ [S1.9143 / khoản 183] ở mức module (`ghiKetNoiHuy`,
+  // chung qua hai hàm dựng bộ nghe ~~ngay dưới~~ [S1.221 / khoản 183] ở mức module (`ghiKetNoiHuy`,
   // `ghiLoiToiMuon`, export để `loi-ket-noi-toi-muon.int.test.ts` đo HÀNH VI của chúng — cổng kiến
   // trúc chỉ thấy lời gọi), nên không có logic nào bị chép hai lần.
   pool.on("release", ghiKetNoiHuy("pool"));
@@ -210,7 +210,7 @@ export function taoTienTrinhUnsealWorker(ch: CauHinhWorker, phuThuoc: PhuThuocTi
     {
       pollIntervalMs: ch.pollIntervalMs,
       listOrganizations: lietKeToChuc,
-      // [S1.9151 / khoản 168] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và từ vòng này đó
+      // [S1.222 / khoản 168] ĐÚNG MỘT tiến trình trong hệ khai sổ `kind` mồ côi, và từ vòng này đó
       // là tiến trình NÀY — không còn là `api`. Vì sao: bảo đảm của sổ là *"một `kind` không người
       // nhận vẫn tới trạng thái cuối ỒN ÀO"*, và nó chỉ đứng ở tiến trình CLAIM được job ấy. `api`
       // chỉ claim cho tập tổ chức nó ĐÃ THẤY enqueue (`toChucDaThay`, rỗng lại sau mỗi lần khởi

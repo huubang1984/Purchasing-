@@ -258,7 +258,11 @@ async function goiDaHuy(t: ToChuc): Promise<string> {
     });
     await submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool);
   });
-  await withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s }, apiPool));
+  await withTenant(apiPool, t.org, async (c) => {
+    // [S1.198 / khoản 256] Lời duyệt mang lần nộp vừa đọc — tổ chức đã bật đòi nó.
+    const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]!.n;
+    await approveRfq(c, t.org, { rfqId, sessionId: t.pm2.s, lanNopDaXem: lan }, apiPool);
+  });
   await withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
   await withTenant(apiPool, t.org, (c) =>
     cancelRfq(c, t.org, { rfqId, reason: "Huy de do han xoa khoa", actorSessionId: t.pm.s }, apiPool),
@@ -876,6 +880,10 @@ describe("S3.1a — phiên bản hiệu lực: `chinh_sach_hieu_luc` và bốn c
       rfq_che_do_nghiem: "QUA_HAM",
       rfq_key_material_bat_bien: "QUA_HAM",
       rfq_khoa_du_dieu_kien_xoa: "QUA_HAM",
+      // [S1.203 / S3.6b1] Hàm tín hiệu đọc cửa sổ và bậc của ĐÚNG phiên bản ngân sách gói ghim; luật người ghi nhận đọc tác giả của
+      // phiên bản mà bằng chứng mang.
+      tin_hieu_chia_nho: "THEO_ID",
+      tin_hieu_chot_nguoi_ghi_nhan: "THEO_ID",
       to_chuc_da_bat_s3: "KHAC",
     };
     const { rows } = await db.pool.query<{ ten: string; src: string }>(

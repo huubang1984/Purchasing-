@@ -1,7 +1,7 @@
 // ==============================================================================================
 // apps/api/src/mo-ta-loi.ts — MÔ TẢ MỘT LỖI CHO DÒNG LOG, KHÔNG MANG GIÁ TRỊ
 //
-// [S1.9151 / khoản 166] Thân `moTaLoiKhongGiaTri` nay ở `packages/identity/src/mo-ta-loi.ts` — MỘT bản cho cả `api` lẫn worker mở thầu;
+// [S1.222 / khoản 166] Thân `moTaLoiKhongGiaTri` nay ở `packages/identity/src/mo-ta-loi.ts` — MỘT bản cho cả `api` lẫn worker mở thầu;
 // tệp này xuất lại nó (xem khối cạnh import) và giữ hai bộ nghe pool của `api`. Hai khối dưới vẫn là lời khai đúng về luật của hàm.
 //
 // [S1.67 / khoản 118] Mọi chỗ ghi log lỗi của bộ điều phối và composition root mô tả lỗi bằng MỘT hàm: dòng 500, dòng 42501 và dòng
@@ -14,12 +14,12 @@
 // hằng). KHÔNG được ghi: `message` — thông điệp của lỗi Postgres mang tên bảng, tên ràng buộc, và DETAIL của nó có thể mang giá trị hàng;
 // ~~`cause` — lỗi lồng mang câu lệnh và tham số~~ [S1.68 / khoản 119] `cause` nguyên — lỗi lồng mang câu lệnh và tham số; `stack` (A2).
 //
-// [S1.9122 / khoản 177 / ADR-9223] MỘT NGOẠI LỆ CÓ HÌNH DẠNG, và chỉ một: đúng dòng của lần từ chối MẤT SỔ (hai lớp bọc dưới) mang
+// [S1.216 / khoản 177 / ADR-127] MỘT NGOẠI LỆ CÓ HÌNH DẠNG, và chỉ một: đúng dòng của lần từ chối MẤT SỔ (hai lớp bọc dưới) mang
 // thêm `nguoi=<12 hex>` — băm rút gọn sha256 của `userId`, do `moTaHangDongCuaLanTuChoi` (identity) in và ghim bằng `^[0-9a-f]{12}$`.
 // Nó là một TOKEN hình dạng cố định, không phải một giá trị người dùng: không lần ngược ra tên hay email, một UUID thô hay băm đầy đủ
 // đặt nhầm vào khe ấy ra `HANG_LA`, và không trường nào khác đi qua khe ấy. Vì sao ở đúng dòng này mà không ở dòng khác: ở mọi ca
 // khác danh tính lấy từ sổ; ca này là ca hàng sổ không ghi được (§S1.85 mục 7, khoản 177). Luật "tên và mã cố định" ở trên giữ
-// nguyên cho mọi thứ còn lại — ADR-9223 ghi ngoại lệ, và ranh giới của nó là chính biểu thức hình dạng.
+// nguyên cho mọi thứ còn lại — ADR-127 ghi ngoại lệ, và ranh giới của nó là chính biểu thức hình dạng.
 //
 // [S1.68 / khoản 119] Một lỗi KHÔNG có trường `code` mà có `cause` là Error được nêu thêm MỘT tầng: `tên <- tên và mã của cause`, cùng luật
 // trên. Hôm nay chủ yếu là hai lớp bọc của lần ghi sổ từ chối (`DenialAuditFailedError`, `PermissionAuditFailedError`) — trước khoản này
@@ -33,7 +33,7 @@ import type pg from "pg";
 import { moTaLoiKhongGiaTri } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 
-// [S1.9151 / khoản 166] THÂN HÀM ĐÃ DỜI: `moTaLoiKhongGiaTri` (cùng `MA_NAM_KY_TU` và `moTaMotTang`) nay sống ở
+// [S1.222 / khoản 166] THÂN HÀM ĐÃ DỜI: `moTaLoiKhongGiaTri` (cùng `MA_NAM_KY_TU` và `moTaMotTang`) nay sống ở
 // `packages/identity/src/mo-ta-loi.ts`, MỘT bản cho cả `api` lẫn worker mở thầu — worker không import được `apps/api` (`g1-`), và bản
 // rút gọn nó giữ tới trước vòng này thiếu tầng `cause` (đo ở `apps/unseal-worker/src/composition.int.test.ts`). Hai luật ở đầu tệp —
 // không `message`, không `cause` nguyên, đúng một tầng — không đổi và vẫn được `mo-ta-loi.test.ts` đo qua chính cửa này. Xuất lại để
@@ -62,7 +62,7 @@ export { moTaLoiKhongGiaTri };
  * là lệch và kết nối bị huỷ bằng `SESSION_STATE_LEFT`: bộ nghe ghi một dòng sai nguyên nhân cạnh dòng 500 của lỗi thật (lượt soi 61a-7,
  * đọc).
  * Gắn MỘT lần cho mỗi pool, ở composition root — không trong `createDispatcher`, vì test dựng nhiều bộ điều phối trên cùng một pool.
- * [S1.9160 / khoản 187] Bản song sinh của worker là `ghiKetNoiHuy` (`apps/unseal-worker/src/tien-trinh.ts`, hình dạng trả bộ nghe
+ * [S1.224 / khoản 187] Bản song sinh của worker là `ghiKetNoiHuy` (`apps/unseal-worker/src/tien-trinh.ts`, hình dạng trả bộ nghe
  * để cổng `pool-nghe-du-tin-hieu` đọc được lời gọi `.on`); `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn
  * dòng log của hai bản, bỏ tiền tố tiến trình.
  */
@@ -90,7 +90,7 @@ export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
  *
  * Gắn MỘT lần cho mỗi pool, ở composition root — cùng kỷ luật với `ghiLogKetNoiHuy`, và
  * `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi cả hai.
- * [S1.9160 / khoản 187] Bản song sinh của worker là `ghiLoiToiMuon` — cùng phép đo đối chiếu với `ghiLogKetNoiHuy`.
+ * [S1.224 / khoản 187] Bản song sinh của worker là `ghiLoiToiMuon` — cùng phép đo đối chiếu với `ghiLogKetNoiHuy`.
  */
 export function ghiLogLoiKetNoiToiMuon(pool: pg.Pool, tenPool: string): void {
   ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {

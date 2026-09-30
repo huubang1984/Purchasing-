@@ -1,5 +1,5 @@
 -- =============================================================================================
--- `9583_award_withdrawn.sql` — [S1.9182 / khoản 232 / ADR-9282] TRẠNG THÁI THỨ TƯ `WITHDRAWN`: NGƯỜI ĐỀ XUẤT RÚT ĐỀ XUẤT
+-- `094_award_withdrawn.sql` — [S1.231 / khoản 232 / ADR-133] TRẠNG THÁI THỨ TƯ `WITHDRAWN`: NGƯỜI ĐỀ XUẤT RÚT ĐỀ XUẤT
 -- CHƯA CHỮ KÝ CỦA MÌNH
 -- =============================================================================================
 -- Khoản 232 (S1.110) đo một lựa chọn có giá: cổng HUỶ là cổng của người DUYỆT (`po.approve`, ADR-057) — đúng, vì
@@ -60,7 +60,7 @@ BEGIN
 
   IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN
     -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7.
-    -- [S1.9182 / khoản 232] ...hay đã RÚT: `WITHDRAWN` không phải một award còn sống (ADR-9282).
+    -- [S1.231 / khoản 232] ...hay đã RÚT: `WITHDRAWN` không phải một award còn sống (ADR-133).
     IF truoc_status IS NOT NULL
        AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED'
        AND truoc_status OPERATOR(pg_catalog.<>) 'WITHDRAWN' THEN
@@ -87,7 +87,7 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  -- [S1.9182 / khoản 232 / 9583 / ADR-9282] `WITHDRAWN` — người đề xuất RÚT đề xuất CHƯA CHỮ KÝ của mình.
+  -- [S1.231 / khoản 232 / 094 / ADR-133] `WITHDRAWN` — người đề xuất RÚT đề xuất CHƯA CHỮ KÝ của mình.
   -- Ba vế, và cả ba sống Ở ĐÂY chứ không ở lớp gói: ⑴ hàng mới nhất là `PROPOSED`; ⑵ người rút là người
   -- đề xuất — `acted_by` là cột DẪN XUẤT từ phiên (`013`), nên đây là phép so CON NGƯỜI, không so vai;
   -- ⑶ đề xuất ấy chưa có chữ ký nào — có chữ ký rồi thì chỉ HUỶ (`po.approve`, ADR-057) mới tháo được,
@@ -138,7 +138,7 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. [S1.9182 / khoản 232] Sau một
+  -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. [S1.231 / khoản 232] Sau một
   -- hàng `WITHDRAWN` cũng không còn gì để huỷ: hàng rút không phải một award còn sống.
   IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' OR truoc_status OPERATOR(pg_catalog.=) 'WITHDRAWN' THEN
     RAISE EXCEPTION 'Award cua RFQ % da huy roi hoac da rut (hang moi nhat: %)', NEW.rfq_id, truoc_status

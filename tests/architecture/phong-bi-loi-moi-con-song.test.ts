@@ -1,7 +1,7 @@
 // ==============================================================================================
-// [S1.9130 / khoản 250 / ADR-9230] PHONG BÌ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG DỰ THẦU — BA BỘ ĐỌC, MỘT VẾ
+// [S1.217 / khoản 250 / ADR-128] PHONG BÌ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG DỰ THẦU — BA BỘ ĐỌC, MỘT VẾ
 //
-// Thu hồi lời mời từ S1.9130 LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm.
+// Thu hồi lời mời từ S1.217 LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm.
 // Ba bộ đọc chọn phong bì/bản rõ — worker mở thầu (`apps/unseal-worker/src/index.ts`), hai câu của
 // `buildComparisonTable` (`packages/unseal/src/comparison.ts`) và `docBaoGia` (`packages/danh-gia/src/
 // luot-danh-gia.ts`) — đã chia một luật từ §S1.108 mục 7d: *một hàng cho một luồng báo giá, phiên bản
@@ -18,7 +18,7 @@
 // chọn phong bì theo luồng là câu vừa nối `public.rfq_invitations i` vừa khử trùng theo `v.bid_id`;
 // câu đọc `rfq_evaluation_lines` (bảng xếp hạng, bộ bằng chứng), câu kiểm bản mã đã lưu
 // (`auditStoredCiphertexts`) và `countReceivedBids` KHÔNG khử trùng theo luồng nên đứng ngoài — hai
-// câu đầu đọc thứ lượt chấm ĐÃ ghi, câu ba là kiểm toán mọi phong bì đã lưu, câu cuối là khoản 9440.
+// câu đầu đọc thứ lượt chấm ĐÃ ghi, câu ba là kiểm toán mọi phong bì đã lưu, câu cuối là khoản 271.
 // Một bộ đọc thứ tư chọn phong bì theo luồng mà bỏ vế ⇒ đỏ ở đây; một bộ đọc dùng bí danh khác `i`
 // hay `v` thì lớp này mù — nói ra.
 // ==============================================================================================
@@ -50,7 +50,7 @@ function theoTep(cau: readonly CauSql[]): Record<string, number> {
   return ra;
 }
 
-describe("[S1.9130 / khoản 250] phong bì của lời mời đã thu hồi không dự thầu — ba bộ đọc, một vế", () => {
+describe("[S1.217 / khoản 250] phong bì của lời mời đã thu hồi không dự thầu — ba bộ đọc, một vế", () => {
   const chonPhongBi = moiCauSql().filter((c) => laCauChonPhongBi(c.sql));
 
   it("mọi câu SQL sản xuất chọn phong bì/bản rõ theo luồng và nối `rfq_invitations i` mang ĐÚNG MỘT vế `i.revoked_at IS NULL`", () => {

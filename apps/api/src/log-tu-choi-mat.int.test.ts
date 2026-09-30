@@ -19,7 +19,7 @@
 // mang một giá trị nào — id tổ chức, id người dùng, tên người gọi gửi lên. Thiếu vế sau thì
 // "dòng log nói nhiều hơn" là một lời khen mà A2 phải trả giá.
 //
-// [S1.9161 / khoản 179] VẾ THỨ HAI, QUA NHÁNH `DenialAuditFailedError`. Hai vế trên đều đi qua
+// [S1.225 / khoản 179] VẾ THỨ HAI, QUA NHÁNH `DenialAuditFailedError`. Hai vế trên đều đi qua
 // `PermissionAuditFailedError` của cổng quyền; các lần từ chối NGOÀI cổng quyền (cổng mở thầu, A4,
 // worker lúc giải mã) bọc bằng lớp kia, và tới trước vòng này dòng log của chúng chỉ mang `action`
 // và `resourceType` — ba đường ghi cùng `UNSEAL_DENIED UNSEAL_REQUEST` nên khi mất sổ không nói
@@ -31,7 +31,7 @@
 // Nay dòng ấy mang thêm vế `POLICY_GATE` — hằng thứ ba của `DenialAuditFailedError`, do chính chỗ
 // gọi `throwAuditedDenial` truyền vào và đi qua cùng phép thuộc-tập (`packages/identity/src/rbac.ts`).
 //
-// [S1.9122 / khoản 177 / ADR-9223] VẾ THỨ BA — AI BỊ TỪ CHỐI. §S1.85 để ngỏ câu ấy, và ở đúng ca này
+// [S1.216 / khoản 177 / ADR-127] VẾ THỨ BA — AI BỊ TỪ CHỐI. §S1.85 để ngỏ câu ấy, và ở đúng ca này
 // lập luận "danh tính lấy từ sổ" không đứng: hàng sổ chính là thứ không ghi được. Chủ dự án chọn ⒞
 // (2026-09-30): dòng mang `nguoi=<12 hex đầu của sha256(userId)>` — nối được các dòng của cùng một
 // người với nhau mà không nêu ai; hình dạng ghim ở `moTaHangDongCuaLanTuChoi`. Phép đo là phép đo
@@ -70,14 +70,14 @@ function sha256(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
 }
 
-/** [S1.9122 / khoản 177] Băm rút gọn mà ADR-9223 khai: 12 hex đầu của sha256(userId). Tính LẠI ở đây, độc lập với `rbac.ts`. */
+/** [S1.216 / khoản 177] Băm rút gọn mà ADR-127 khai: 12 hex đầu của sha256(userId). Tính LẠI ở đây, độc lập với `rbac.ts`. */
 function bamRutGon(userId: string): string {
   return sha256(userId).toString("hex").slice(0, 12);
 }
 
 /**
  * Một phiên NGƯỜI MUA đã qua MFA, với các vai trò cho trước. Không vai trò nào ⇒ mọi route ghi của nó là một lần từ chối
- * của cổng quyền; [S1.9161 / khoản 179] `DIRECTOR` ⇒ qua được cổng quyền `rfq.unseal` để tới cổng mở thầu.
+ * của cổng quyền; [S1.225 / khoản 179] `DIRECTOR` ⇒ qua được cổng quyền `rfq.unseal` để tới cổng mở thầu.
  */
 async function phienNguoiMua(vaiTro: readonly string[]): Promise<{ id: string; cookie: string }> {
   const { rows } = await db.pool.query<{ id: string }>(
@@ -164,7 +164,7 @@ afterAll(async () => {
 });
 
 describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi sổ vì trần 2 s", { timeout: 120_000 }, () => {
-  it("khoá ghi sổ của tổ chức bị giữ ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` và mã quyền [S1.9122 / khoản 177] cộng băm rút gọn của người bị từ chối — và KHÔNG một giá trị nào", async () => {
+  it("khoá ghi sổ của tổ chức bị giữ ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` và mã quyền [S1.216 / khoản 177] cộng băm rút gọn của người bị từ chối — và KHÔNG một giá trị nào", async () => {
     const ai = await phienNguoiMua([]);
     const thaKhoa = await giuKhoaGhiSo(orgA);
     try {
@@ -183,7 +183,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       expect([res.status, JSON.parse(than)], than).toEqual([500, { error: "loi noi bo" }]);
       expect(daCho, "phải chờ tới trần 2 s của `050` rồi mới gãy 55P03").toBeGreaterThanOrEqual(1800);
       expect(moi, "một sự cố, một dòng").toHaveLength(1);
-      // [S1.9122 / khoản 177] `nguoi=` là khe DUY NHẤT mở thêm: 12 hex, và phải là băm của CHÍNH người bị từ chối.
+      // [S1.216 / khoản 177] `nguoi=` là khe DUY NHẤT mở thêm: 12 hex, và phải là băm của CHÍNH người bị từ chối.
       const khop = /^\[api\] [0-9a-f-]{36} POST \/suppliers PermissionAuditFailedError PERMISSION_DENIED SUPPLIER supplier\.manage nguoi=([0-9a-f]{12}) <- error 55P03$/u.exec(
         moi[0] ?? "",
       );
@@ -217,7 +217,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
     }
   });
 
-  it("[S1.9161 / khoản 179] khoá ghi sổ bị giữ, cổng mở thầu từ chối một yêu cầu KHÔNG TÌM THẤY ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` VÀ VẾ `POLICY_GATE` — qua nhánh `DenialAuditFailedError`, không một giá trị nào", async () => {
+  it("[S1.225 / khoản 179] khoá ghi sổ bị giữ, cổng mở thầu từ chối một yêu cầu KHÔNG TÌM THẤY ⇒ 500 sau ~2 s với MỘT dòng log mang mẫu route, `action`, `resourceType` VÀ VẾ `POLICY_GATE` — qua nhánh `DenialAuditFailedError`, không một giá trị nào", async () => {
     const gd = await phienNguoiMua(["DIRECTOR"]);
     const idLa = randomUUID();
     const thaKhoa = await giuKhoaGhiSo(orgA);
@@ -235,7 +235,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
       expect(moi, "một sự cố, một dòng").toHaveLength(1);
       // Neo HAI ĐẦU: ngoài 36 ký tự `requestId`, chuỗi bị xác định hoàn toàn — nên id yêu cầu, id tổ chức, id người gọi không
       // có chỗ trong dòng (cùng lập luận với vế trên).
-      // [S1.9122 / khoản 177] Nhánh `DenialAuditFailedError` cũng mang băm: cổng mở thầu ghi `actorId` của người gọi.
+      // [S1.216 / khoản 177] Nhánh `DenialAuditFailedError` cũng mang băm: cổng mở thầu ghi `actorId` của người gọi.
       const khop = /^\[api\] [0-9a-f-]{36} POST \/unseal\/:unsealRequestId\/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE nguoi=([0-9a-f]{12}) <- error 55P03$/u.exec(
         moi[0] ?? "",
       );
@@ -253,7 +253,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
     }
   });
 
-  it("[S1.9122 / khoản 177] BA phiên của BA người bị từ chối trong cùng một lần giữ khoá ⇒ từ stderr MỘT MÌNH dựng lại được đúng ba băm rút gọn KHÁC NHAU, khớp sha256 của ba id — và ngoài `requestId` không dòng nào mang một UUID thô", async () => {
+  it("[S1.216 / khoản 177] BA phiên của BA người bị từ chối trong cùng một lần giữ khoá ⇒ từ stderr MỘT MÌNH dựng lại được đúng ba băm rút gọn KHÁC NHAU, khớp sha256 của ba id — và ngoài `requestId` không dòng nào mang một UUID thô", async () => {
     const ba = [await phienNguoiMua([]), await phienNguoiMua([]), await phienNguoiMua([])];
     const thaKhoa = await giuKhoaGhiSo(orgA);
     try {
@@ -305,7 +305,7 @@ describe("[INV-D5] [INV-A2] [S1.85 / khoản 131] lần từ chối mất khỏi
     }
   });
 
-  it("ĐỐI CHỨNG [S1.9161 / khoản 179]: không ai giữ khoá ⇒ cùng lời gọi ra 422 và MỘT hàng sổ `UNSEAL_DENIED` mang vế `POLICY_GATE`, không dòng log", async () => {
+  it("ĐỐI CHỨNG [S1.225 / khoản 179]: không ai giữ khoá ⇒ cùng lời gọi ra 422 và MỘT hàng sổ `UNSEAL_DENIED` mang vế `POLICY_GATE`, không dòng log", async () => {
     const gd = await phienNguoiMua(["DIRECTOR"]);
     const idLa = randomUUID();
     const truoc = logLoi.length;

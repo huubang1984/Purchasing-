@@ -23,7 +23,7 @@ export { OutboxError, enqueueJob, type JobInput } from "./enqueue.js";
 // Giữ nó trong gói thì `apps/api` phải tự khai lại từng chỗ xếp việc — đúng lớp lỗi khoản 156.
 export { layDauXepViec } from "./enqueue.js";
 // [S1.81 / khoản 154] Sổ `kind` mồ côi. Ra cửa vì nó là hợp đồng GIỮA hai app: ~~`apps/api`~~
-// [S1.9151 / khoản 168] `apps/unseal-worker` (`tien-trinh.ts`) truyền nó vào `kindKhongNguoiNhan`,
+// [S1.222 / khoản 168] `apps/unseal-worker` (`tien-trinh.ts`) truyền nó vào `kindKhongNguoiNhan`,
 // và cổng ở cùng app đối chiếu nó với hợp bảng handler THẬT của CẢ HAI tiến trình. Một bản chép ở
 // mỗi app là một bản sẽ trôi.
 export { KIND_KHONG_NGUOI_NHAN } from "./so-kind-mo-coi.js";

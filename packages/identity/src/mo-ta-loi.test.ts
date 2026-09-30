@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9151 / khoản 166] BỘ MÔ TẢ LỖI DÙNG CHUNG — LUẬT A2 ĐO Ở CHÍNH GÓI GIỮ NÓ.
+// [S1.222 / khoản 166] BỘ MÔ TẢ LỖI DÙNG CHUNG — LUẬT A2 ĐO Ở CHÍNH GÓI GIỮ NÓ.
 //
 // `apps/api/src/mo-ta-loi.test.ts` đo trọn luật (S1.67 / khoản 118, S1.68 / khoản 119) qua cửa xuất lại của `api`, và vẫn đứng. Tệp
 // này đo hai ca mà khoản 166 gọi tên, trên LỚP LỖI THẬT chứ không trên một `Error` gán tên: `DenialAuditFailedError` mang `cause` là
@@ -19,7 +19,7 @@ function loiPg(code: string): Error {
   return Object.assign(new Error(`canceling statement due to lock timeout ${GIA_TRI}`), { name: "error", code });
 }
 
-describe("[INV-A2] [S1.9151 / khoản 166] moTaLoiKhongGiaTri — một bản cho hai tiến trình", () => {
+describe("[INV-A2] [S1.222 / khoản 166] moTaLoiKhongGiaTri — một bản cho hai tiến trình", () => {
   it("`DenialAuditFailedError` mang cause 55P03 ⇒ tên lớp, hai hằng đóng, rồi đúng MỘT tầng cause: tên và SQLSTATE — không message, không giá trị", () => {
     const loi = new DenialAuditFailedError("UNSEAL_EXECUTION_DENIED", "UNSEAL_REQUEST", new Error(`tu choi ${GIA_TRI}`), loiPg("55P03"));
     const dong = moTaLoiKhongGiaTri(loi);

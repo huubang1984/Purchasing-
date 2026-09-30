@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9143 / khoản 183] HAI DÒNG LOG "MẤT-KHÔNG-AI-BIẾT" CỦA WORKER — ĐO BẰNG HÀNH VI TRÊN POOL THẬT
+// [S1.221 / khoản 183] HAI DÒNG LOG "MẤT-KHÔNG-AI-BIẾT" CỦA WORKER — ĐO BẰNG HÀNH VI TRÊN POOL THẬT
 //
 // Khoản 183 (§S1.87): chuỗi `loi ket noi toi muon` chỉ có ở hai tệp sản xuất, không một tệp test
 // nào; cổng `tests/architecture/pool-nghe-du-tin-hieu.test.ts` chỉ đo SỰ CÓ MẶT của lời gọi gắn
@@ -109,7 +109,7 @@ async function canhToiMuon(
   }
 }
 
-describe("[S1.9143 / khoản 183] worker: bộ nghe lỗi-tới-muộn và bộ nghe release ghi đúng dòng, trên pool thật", () => {
+describe("[S1.221 / khoản 183] worker: bộ nghe lỗi-tới-muộn và bộ nghe release ghi đúng dòng, trên pool thật", () => {
   it("⑴ kết nối NHIỄM tới SAU trần ⇒ người gọi nhận CONNECT_WAIT_EXCEEDED, và ĐÚNG MỘT dòng `[unseal-worker] loi ket noi toi muon pool KetNoiNhiemError` — bộ nghe release không thêm dòng nào; dòng không mang id tổ chức; pool về 0/0/0", async () => {
     const pool = poolNgheDu("pool");
     const { log, tat } = batLog();

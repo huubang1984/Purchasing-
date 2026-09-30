@@ -1,7 +1,7 @@
 // ==============================================================================================
 // [ADR-020 mục 2 / S1.10.4] ĐĂNG NHẬP NGƯỜI MUA — nửa PHÁT của khoản nợ 6
 //
-// ~~Bốn bước, bốn hàm~~ [S1.79 / lượt soi ngang 72] ~~BẢY~~ [S1.9122 / khoản 195] TÁM hàm, mỗi hàm một giao dịch của người gọi.
+// ~~Bốn bước, bốn hàm~~ [S1.79 / lượt soi ngang 72] ~~BẢY~~ [S1.216 / khoản 195] TÁM hàm, mỗi hàm một giao dịch của người gọi.
 // Khối này khai "bốn" rồi liệt NĂM tên, còn hai hàm thêm sau thì không ai thêm vào danh sách:
 // `enrollOrReplaceTotpForLogin` (S1.10.7) và `startAgentSession` (S1.76 / khoản 141). Một khối mở
 // đầu liệt kê thiếu không làm test nào đỏ — nó chỉ làm người đọc tin rằng tệp này nhỏ hơn thật.
@@ -18,7 +18,7 @@
 //                       TTL trần MỘT GIỜ; vẫn đòi một mã TOTP TƯƠI vì trigger 039 bắt buộc thế
 //   revokeSession       đăng xuất
 //   listRecentLoginTokens
-//                       [S1.9122 / khoản 195] link đăng nhập gần đây CỦA CHÍNH người gọi — tạo lúc, hết hạn,
+//                       [S1.216 / khoản 195] link đăng nhập gần đây CỦA CHÍNH người gọi — tạo lúc, hết hạn,
 //                       dùng lúc, trạng thái; KHÔNG BAO GIỜ `token_hash`. Cho người ĐÃ đăng nhập; thông điệp
 //                       gộp của `LoginTokenError` ở đường vô danh giữ nguyên
 //
@@ -160,10 +160,10 @@ export async function issueLoginToken(
   // và `UNIQUE (org_id, email)` bảo đảm **nhiều nhất MỘT hàng khớp**: `rows[0]` tất định. Đó mới
   // đúng là điều khoản nợ 63 đòi.
   //
-  // **[S1.9180 / khoản 71 / ADR-9280]** Miền `users.email` nay là ASCII IN ĐƯỢC (`9580_email_ascii`,
+  // **[S1.229 / khoản 71 / ADR-132]** Miền `users.email` nay là ASCII IN ĐƯỢC (`092_email_ascii`,
   // `CHECK (email ~ '^[!-~]+@[!-~]+$')`), nên trên mọi giá trị CẤT ĐƯỢC `lower()` của máy chủ và
   // `.toLowerCase()` của JS đồng ý: điểm mã phân kỳ (Ⓐ, Ᲊ) không còn cất được, và test `[sổ nợ 63]`
-  // lật theo — nó đo địa chỉ ấy bị 9580 từ chối và `/auth/link` vẫn 200 không link. Câu dưới GIỮ
+  // lật theo — nó đo địa chỉ ấy bị 092 từ chối và `/auth/link` vẫn 200 không link. Câu dưới GIỮ
   // hai vế cùng hàm: bản vá S1.27 đúng không nhờ miền, và nó là thứ còn đứng nếu miền có ngày mở lại.
   //
   // ~~Cái giá là câu này không dùng được tiền tố `(org_id, ...)` của chỉ mục duy nhất.~~ **[đã đo
@@ -478,7 +478,7 @@ export async function startUserSession(
 // trigger đang bị ghim; vòng này KHÔNG nới nó. Phát biểu đúng mức: đường này đổi "magic link CỘNG
 // TOTP mỗi giờ" thành "MỘT mã TOTP mỗi giờ" — rẻ hơn hẳn, và vẫn là một con người mỗi giờ.
 //
-// [S1.9101 / khoản 174] VÀ "MỘT MÃ TOTP MỖI GIỜ" CÓ MỘT ĐIỀU KIỆN VẬN HÀNH, nói ra: route gọi hàm này
+// [S1.209 / khoản 174] VÀ "MỘT MÃ TOTP MỖI GIỜ" CÓ MỘT ĐIỀU KIỆN VẬN HÀNH, nói ra: route gọi hàm này
 // (`POST /auth/agent-session`, `apps/api`) đứng sau trần `MFA_TRAN_SAI_DUONG_PHU` (= 2) đọc thẳng
 // `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng. Người đã gõ sai TOTP 2 lần trên
 // `/auth/totp` thì KHÔNG xoay được chứng chỉ agent, kể cả với mã đúng, cho tới khi đăng nhập đúng
@@ -568,7 +568,7 @@ export async function revokeSession(client: pg.PoolClient, orgId: string, sessio
 }
 
 // ==============================================================================================
-// [S1.9122 / khoản 195 / ADR-9222] LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI
+// [S1.216 / khoản 195 / ADR-126] LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI
 //
 // `LoginTokenError` gộp ba trạng thái — không hợp lệ, hết hạn, đã dùng — làm MỘT câu, và đó là chống dò
 // tìm CÓ LÝ ở một đường vô danh: phân biệt được chúng là một oracle trên tập token. Vòng này KHÔNG nới câu

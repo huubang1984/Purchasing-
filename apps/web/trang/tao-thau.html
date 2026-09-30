@@ -93,10 +93,30 @@
     <label for="tien-te">Tiền tệ</label>
     <input id="tien-te" autocomplete="off" value="VND">
     <button id="nut-ns" class="phu">Đặt ngân sách</button>
+    <!-- [S1.200 / khoản 258] Người tạo gói thấy ngân sách ở lần đọc gói; người khác đọc bằng nút này (cổng `rfq.approve`). -->
+    <button id="nut-xem-ns" class="phu" hidden>Xem ngân sách</button>
     <dl class="tt" id="tt-ns"></dl>
     <div class="doi">
       <button id="nut-nop-duyet" class="phu">Nộp duyệt</button>
       <button id="nut-duyet" class="phu">Phê duyệt</button>
+    </div>
+    <!-- [S3.6b2 / K10a] Tín hiệu chia nhỏ gói: màn đọc nó ở mỗi lần đọc gói của tổ chức đã bật (route không cổng, không hàng sổ
+         nào). Ghi nhận là thao tác cố ý của người giữ quyền duyệt không tạo, không nộp gói nào trong tín hiệu; lý do bắt buộc và
+         vào sổ. Màn chỉ mời bấm khi máy chủ sẽ nhận, và nói vì sao không. -->
+    <div id="khoi-tin-hieu" hidden>
+      <h3>Tín hiệu chia nhỏ gói</h3>
+      <p class="ghi" id="tin-hieu-tom-tat"></p>
+      <table id="bang-tin-hieu">
+        <thead><tr><th>Gói trong tín hiệu</th><th>Trạng thái</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <ul id="lich-su-tin-hieu"></ul>
+      <div class="bao luu" id="tin-hieu-khong-duoc" hidden></div>
+      <div id="khoi-ghi-nhan" hidden>
+        <label for="ly-do-ghi-nhan">Lý do ghi nhận</label>
+        <input id="ly-do-ghi-nhan" autocomplete="off" placeholder="Ba công trình khác nhau, ba hợp đồng khung riêng">
+        <button id="nut-ghi-nhan" class="phu">Ghi nhận tín hiệu</button>
+      </div>
     </div>
     <!-- ~~Mở thầu~~ [S1.193 / S3.2c2] Mở GÓI là PENDING_APPROVAL→OPEN; mở THẦU là CLOSED→UNSEALED (spec S3 §3.3). -->
     <button id="nut-mo">Mở gói</button>

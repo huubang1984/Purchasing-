@@ -178,7 +178,7 @@ export interface TuyChonRunnerWorker {
   readonly listOrganizations: () => Promise<readonly string[]> | readonly string[];
   readonly onPollError: (error: unknown) => void;
   /**
-   * [S1.9151 / khoản 168] Sổ `kind` mồ côi mà runner này nhặt DÙ không có handler — để chúng tới
+   * [S1.222 / khoản 168] Sổ `kind` mồ côi mà runner này nhặt DÙ không có handler — để chúng tới
    * trạng thái cuối ỒN ÀO (`NO_HANDLER`) thay vì nằm `PENDING`. Từ vòng này tiến trình worker là
    * tiến trình DUY NHẤT khai nó (`tien-trinh.ts` truyền `Object.keys(KIND_KHONG_NGUOI_NHAN)`), vì
    * nó là tiến trình duy nhất thấy MỌI tổ chức; `api` không khai.

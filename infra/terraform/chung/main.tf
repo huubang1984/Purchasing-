@@ -16,7 +16,7 @@ locals {
   }
 
   github_repo = "huubang1984/Purchasing-"
-  # [S1.9152 / khoản 252 ⑶ / ADR-9252] ID BẤT BIẾN của chủ kho và của kho (GitHub API `repos/<kho>`: `owner.id`, `id`). Kho tạo
+  # [S1.223 / khoản 252 ⑶ / ADR-130] ID BẤT BIẾN của chủ kho và của kho (GitHub API `repos/<kho>`: `owner.id`, `id`). Kho tạo
   # ngày 2026-08-28 — sau mốc 2026-07-15 mà GitHub chuyển kho mới sang "immutable subject claims" —, nên đoạn `repo:` của claim
   # `sub` là `repo:<chủ kho>@<owner_id>/<kho>@<repo_id>`, KHÔNG phải `repo:<chủ kho>/<kho>` (đọc tài liệu, chưa đo trên token
   # thật — README, "Tuỳ biến claim `sub`"). Stack 30 ghép chúng vào trust policy của hai role deploy.

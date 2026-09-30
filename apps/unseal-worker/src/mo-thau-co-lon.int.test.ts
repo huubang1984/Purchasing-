@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9141 / khoản 167] LƯỢT MỞ THẦU CỠ LỚN TRÊN ĐƯỜNG ĐIỂM VÀO THẬT CỦA WORKER — VÀ THỜI HẠN 60 s
+// [S1.220 / khoản 167] LƯỢT MỞ THẦU CỠ LỚN TRÊN ĐƯỜNG ĐIỂM VÀO THẬT CỦA WORKER — VÀ THỜI HẠN 60 s
 // CỦA HANDLER, ĐO CHỨ KHÔNG KHAI.
 //
 // Khoản 116 ghi rằng phép đo của 106/107 chạy trên một đường KHÁC đường sẽ chạy: `unseal-worker.int
@@ -26,7 +26,7 @@
 //   • `msTuXep`: `finished_at − created_at`, đồng hồ CSDL — cận trên gồm cả một nhịp poll (100 ms);
 //   • `leaseGiay`: `lease_expires_at − clock_timestamp()` lúc thấy `RUNNING` — đối chứng dương rằng
 //     trần 60 s đúng là trần đang có hiệu lực trên đường này, không phải 15 s của pool.
-// Một lượt quá trần KHÔNG được vá ở vòng này (đề bài); nó mở `khoản 9441`. Số đo ghi ở §S1.9141.
+// Một lượt quá trần KHÔNG được vá ở vòng này (đề bài); nó mở `khoản 272`. Số đo ghi ở §S1.220.
 //
 // Không nhãn INV: đây là phép đo khả dụng ở biên cỡ, cùng loại với khối khoản 126 của
 // `unseal-worker.int.test.ts`. Kết quả từng ca được so ở PHÍA CSDL (`payload = $2::jsonb`), không kéo
@@ -517,7 +517,7 @@ afterAll(async () => {
   await db?.stop();
 });
 
-describe("[S1.9141 / khoản 167] mở thầu cỡ lớn trên đường điểm vào thật của worker", () => {
+describe("[S1.220 / khoản 167] mở thầu cỡ lớn trên đường điểm vào thật của worker", () => {
   it("⓪ ĐỐI CHỨNG của cỡ: phong bì đúng trần 8 MiB được nhận, thêm MỘT byte thì 018 từ chối (23514) — trần đo được, không chép", async () => {
     const rfqId = await taoRfqMo();
     const { bidId, guestSessionId } = await nopBaoGia(rfqId, BAN_RO_SACH);

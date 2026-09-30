@@ -942,7 +942,7 @@ describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với tr
 // Ranh giới ghim bằng test: tệp đổi vai rồi tự RESET ROLE trước khi kết thúc thì phép so không thấy (chỉ so trạng thái cuối tệp).
 // =====================================================================================
 // ==============================================================================================
-// [S1.9121 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI TÁM TRỤC ĐÃ CHỤP: GUC PHIÊN BẤT KỲ, PREPARED STATEMENT, CON TRỎ, KHOÁ TƯ VẤN MỨC PHIÊN, KÊNH LISTEN
+// [S1.215 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI TÁM TRỤC ĐÃ CHỤP: GUC PHIÊN BẤT KỲ, PREPARED STATEMENT, CON TRỎ, KHOÁ TƯ VẤN MỨC PHIÊN, KÊNH LISTEN
 //
 // S1.66 chụp tám trục cuối mỗi tệp (ba GUC vận hành, bốn GUC tenant/khách, đối tượng tạm); GUC phiên KHÁC mà một tệp đặt (`statement_timeout`,
 // `TimeZone`, …) vẫn đi theo sang tệp sau và các lượt hardening sau vòng (khoản 104, đọc chưa đo). Nay `CAU_TRANG_THAI_PHIEN` chụp thêm
@@ -957,7 +957,7 @@ describe("[S1.66 / lượt soi ngang 59a-1] tệp migration kết thúc với tr
 // ra điều ấy, HUỶ kết nối để nhả chúng. Và lỗi của lượt hardening SAU vòng nay đặt `phaiHuyPhien`; lượt `truoc_vong` lỗi thì kết nối được
 // giữ như S1.57.
 // ==============================================================================================
-describe("[S1.9121 / khoản 104] tệp migration để lại GUC phiên bất kỳ, prepared statement, con trỏ, khoá tư vấn mức phiên hay kênh LISTEN; lượt hardening sau vòng lỗi", () => {
+describe("[S1.215 / khoản 104] tệp migration để lại GUC phiên bất kỳ, prepared statement, con trỏ, khoá tư vấn mức phiên hay kênh LISTEN; lượt hardening sau vòng lỗi", () => {
   const daGhi = async (tep: string): Promise<boolean> =>
     ((await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [tep])).rowCount ?? 0) > 0;
   const coBang = async (ten: string): Promise<boolean> =>

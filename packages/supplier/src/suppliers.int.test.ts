@@ -440,17 +440,17 @@ describe("danh tính là dẫn xuất, không phải lời khai", () => {
 });
 
 // =============================================================================================
-// [S1.9180 / khoản 71 / ADR-9280] MIỀN EMAIL LÀ ASCII IN ĐƯỢC — kiểm TRƯỚC khi hạ chữ thường, độ dài 320 byte SAU
+// [S1.229 / khoản 71 / ADR-132] MIỀN EMAIL LÀ ASCII IN ĐƯỢC — kiểm TRƯỚC khi hạ chữ thường, độ dài 320 byte SAU
 //
 // Khoản 71 (S1.27, mang sang S1.61): tập giá trị mà `users.email`/`supplier_contacts.email` cất được phụ thuộc `lower()` của libc trên
 // máy chủ (124 điểm mã phân kỳ trên musl, 28 trên glibc), hai địa chỉ trông giống hệt nhau cùng tồn tại được, và vế ⑶ —
 // `addSupplierContact` kiểm 320 byte TRƯỚC khi hạ trong khi `.toLowerCase()` làm `İ`/`Ⱥ`/`Ⱦ` từ 2 lên 3 byte, nên đầu vào sát 320 byte
-// vấp CHECK độ dài của 008 thành 23514 thân cố định. `9580_email_ascii` thu hẹp miền về ASCII in được ở LƯỢC ĐỒ (đo ở
+// vấp CHECK độ dài của 008 thành 23514 thân cố định. `092_email_ascii` thu hẹp miền về ASCII in được ở LƯỢC ĐỒ (đo ở
 // `db/migrations.int.test.ts` `[khoản nợ 71]`); ở đây đo TẦNG ỨNG DỤNG: lỗi CÓ TÊN (`SupplierError` ⇒ 422 qua `LOI_NGHIEP_VU_422` của
 // `apps/api/src/dispatch.ts`, route `POST /suppliers/:supplierId/contacts` chuyền thẳng `body.email`), không một điểm mã ngoài ASCII nào
 // tới CSDL, ASCII in được thì qua và cất ở chữ thường.
 // =============================================================================================
-describe("[S1.9180 / khoản 71] miền email của người liên hệ là ASCII in được", () => {
+describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII in được", () => {
   let ncc = "";
   beforeAll(async () => {
     ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC email ASCII", actorSessionId: sA }))).id;

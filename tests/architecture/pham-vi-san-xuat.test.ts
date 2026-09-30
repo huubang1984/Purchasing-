@@ -40,7 +40,7 @@
 // xanh. ~~Gói mà mọi nơi import đều là test (vế ⑵) được miễn — "mã sản xuất" của nó là hạ tầng kiểm thử; [lượt soi 67a-2] trừ gói dưới
 // `apps/`: app là lá, không mã sản xuất nào import nó, nên một lần nhắc tên app trong một tệp test đủ đưa cả app vào rổ miễn — và mỗi app có
 // mã sản xuất phải có tệp được đọc. [lượt soi 67c-5] Tool cũng là lá, và chạy lúc vận hành (`pnpm neo`): rổ miễn chỉ nhận gói dưới `packages/`,
-// và mỗi tool có mã sản xuất cũng phải có tệp được đọc.~~ [S1.9191 / khoản 223] Rổ miễn của vế ⑷ là LỜI KHAI, không phải phép suy: phép đếm của
+// và mỗi tool có mã sản xuất cũng phải có tệp được đọc.~~ [S1.232 / khoản 223] Rổ miễn của vế ⑷ là LỜI KHAI, không phải phép suy: phép đếm của
 // vế ⑵ xếp một gói KHÔNG AI IMPORT Ở MÃ SẢN XUẤT vào cùng rổ với gói chỉ test dùng, nên `packages/danh-gia` sống hai vòng với hai phụ thuộc lúc
 // chạy không khai mà bốn cổng xanh trọn (§S1.106). Nay MỌI gói dưới `packages/`, `apps/`, `tools/` đều được đọc; chỉ gói tự khai
 // `"trustprocure": { "testOnly": true }` trong `package.json` của nó — hôm nay `packages/test-support` — được miễn; lời khai chỉ có nghĩa dưới
@@ -96,7 +96,7 @@ interface Manifest {
   readonly ten: string;
   readonly dependencies: Record<string, string>;
   readonly devDependencies: Record<string, string>;
-  /** [S1.9191 / khoản 223] Gói TỰ KHAI mình chỉ dùng cho test: `"trustprocure": { "testOnly": true }` trong `package.json`. */
+  /** [S1.232 / khoản 223] Gói TỰ KHAI mình chỉ dùng cho test: `"trustprocure": { "testOnly": true }` trong `package.json`. */
   readonly chiDungChoTest: boolean;
 }
 
@@ -198,7 +198,7 @@ function importLucChay(vanBan: string): string[] {
  * nên với phép đếm của vế ⑵ một lần nhắc tên app trong một tệp test đủ đưa cả app vào rổ, và vế ⑷ bỏ qua toàn bộ mã của app ấy.
  * [lượt soi 67c-5] CHỈ gói dưới `packages/`: tool cũng là lá, và chạy lúc vận hành — `pnpm neo` chạy `tools/neo-so-kiem-toan/src/index.ts`.
  *
- * [S1.9191 / khoản 223] Rổ miễn nay là LỜI KHAI: gói có `"trustprocure": { "testOnly": true }` trong `package.json` của nó, và chỉ dưới
+ * [S1.232 / khoản 223] Rổ miễn nay là LỜI KHAI: gói có `"trustprocure": { "testOnly": true }` trong `package.json` của nó, và chỉ dưới
  * `packages/`. Phép đếm của vế ⑵ không còn là nguồn của rổ miễn — nó xếp một gói KHÔNG AI IMPORT Ở MÃ SẢN XUẤT (một gói lá mới chưa nối
  * dây, như `packages/danh-gia` ở S1.104–S1.105) vào cùng rổ với gói chỉ test dùng, và vế ⑷ bỏ qua toàn bộ mã của gói ấy cho tới ngày có
  * người import — đúng lúc bốn vi phạm lộ ra cùng nhau. Lời khai được đo đối chiếu ở hai chiều: `khaiKhongKhop` đòi mỗi gói khai test-only
@@ -352,7 +352,7 @@ describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯ�
     expect(importLucChay('import type u = require("@trustprocure/u");\nexport type * from "@trustprocure/v";')).toEqual([]);
   });
 
-  it("[S1.72 / lượt soi 67a-2, 67c-5] [S1.9191 / khoản 223] rổ miễn của vế ⑷ chỉ nhận lời khai của gói dưới `packages/`: app hay tool khai test-only là khai sai chỗ; kho hôm nay chỉ `test-support` khai", () => {
+  it("[S1.72 / lượt soi 67a-2, 67c-5] [S1.232 / khoản 223] rổ miễn của vế ⑷ chỉ nhận lời khai của gói dưới `packages/`: app hay tool khai test-only là khai sai chỗ; kho hôm nay chỉ `test-support` khai", () => {
     const gia = (duongDan: string): Manifest => ({
       duongDan,
       ten: `@trustprocure/${duongDan.split("/")[1]!}`,
@@ -369,21 +369,21 @@ describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯ�
     expect(mienTruVe4(manifest)).toEqual(["@trustprocure/test-support"]);
   });
 
-  it("[S1.9191 / khoản 223] gói khai test-only phải được phép đếm của vế ⑵ xác nhận — khai để trốn vế ⑷ thì đỏ", () => {
+  it("[S1.232 / khoản 223] gói khai test-only phải được phép đếm của vế ⑵ xác nhận — khai để trốn vế ⑷ thì đỏ", () => {
     const chiTest = goiChiDungChoTest(tenWorkspace);
     expect(khaiKhongKhop(mienTruVe4(manifest), chiTest)).toEqual([]);
     // Gói có mã sản xuất import nó, hay không ai import: khai test-only đều không đứng được.
     expect(khaiKhongKhop(["@trustprocure/db", "@trustprocure/goi-la-gia"], chiTest)).toEqual(["@trustprocure/db", "@trustprocure/goi-la-gia"]);
   });
 
-  it("[S1.72 / khoản 121] gói workspace mà mã sản xuất import LÚC CHẠY phải nằm ở `dependencies` của chính gói — [S1.9191 / khoản 223] MỌI gói được đọc, chỉ gói tự khai test-only dưới `packages/` được miễn; mỗi lá có mã sản xuất phải có tệp được đọc", () => {
+  it("[S1.72 / khoản 121] gói workspace mà mã sản xuất import LÚC CHẠY phải nằm ở `dependencies` của chính gói — [S1.232 / khoản 223] MỌI gói được đọc, chỉ gói tự khai test-only dưới `packages/` được miễn; mỗi lá có mã sản xuất phải có tệp được đọc", () => {
     const mien = mienTruVe4(manifest);
     expect(mien, "chống rỗng ruột: rổ miễn phải có gói tự khai (test-support)").not.toEqual([]);
     const cacTep = tepGit("*.ts").filter((t) => /^(?:packages|apps|tools)\/[^/]+\/src\/.+\.ts$/u.test(t) && !laTepTest(t));
     const { daDoc, soImport, laDaDoc, viPham } = kiemVe4(manifest, mien, cacTep, docTepGoc);
     expect(daDoc, "chống rỗng ruột: không đọc được tệp mã sản xuất nào").toBeGreaterThan(50);
     expect(soImport, "chống rỗng ruột: không thấy import @trustprocure/* lúc chạy nào").toBeGreaterThan(20);
-    // [S1.72 / lượt soi 67a-2, 67c-5] Chống rỗng ruột theo từng lá — [S1.9191] nay cả gói: mất cả một lá khỏi phép đọc không làm hai chốt trên đỏ.
+    // [S1.72 / lượt soi 67a-2, 67c-5] Chống rỗng ruột theo từng lá — [S1.232] nay cả gói: mất cả một lá khỏi phép đọc không làm hai chốt trên đỏ.
     const laCoMa = [...new Set(cacTep.map((t) => t.split("/").slice(0, 2).join("/")))].sort();
     expect(laCoMa.filter((a) => a.startsWith("packages/")).length, "chống rỗng ruột: không thấy mã sản xuất nào dưới packages/").toBeGreaterThanOrEqual(10);
     expect(laCoMa.filter((a) => a.startsWith("apps/")).length, "chống rỗng ruột: không thấy mã sản xuất nào dưới apps/").toBeGreaterThanOrEqual(3);
@@ -396,7 +396,7 @@ describe("[khoản nợ 21] phạm vi sản xuất là một tính chất ĐƯ�
     expect(viPham).toEqual([]);
   });
 
-  it("[S1.9191 / khoản 223] đỏ: gói lá KHÔNG AI IMPORT ở mã sản xuất mà thiếu khai phụ thuộc lúc chạy — phép đếm của vế ⑵ (rổ miễn cũ) tha nó, rổ miễn theo lời khai thì không", () => {
+  it("[S1.232 / khoản 223] đỏ: gói lá KHÔNG AI IMPORT ở mã sản xuất mà thiếu khai phụ thuộc lúc chạy — phép đếm của vế ⑵ (rổ miễn cũ) tha nó, rổ miễn theo lời khai thì không", () => {
     const la: Manifest = {
       duongDan: "packages/goi-la-gia/package.json",
       ten: "@trustprocure/goi-la-gia",

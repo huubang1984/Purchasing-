@@ -22,7 +22,7 @@
 // commit** rồi phán xét mới đỏ. Test này làm cho ngày ấy xảy ra ngay hôm nay, trong một cụm dùng
 // một lần.
 //
-// **[S1.9172 / khoản 214] Cổng TĨNH bổ sung, không thay:** `db/ghim-trigger-nguon.test.ts` so ⑵ với
+// **[S1.228 / khoản 214] Cổng TĨNH bổ sung, không thay:** `db/ghim-trigger-nguon.test.ts` so ⑵ với
 // câu `CREATE TRIGGER` của MIGRATION CUỐI (chuẩn hoá chỉ khoảng trắng và dấu `public.`), sau khi 15
 // chỗ ⑵ từng viết TỪ đầu ra canonical được viết lại theo nguồn. Phân công: cổng này chứng minh ⑵ CÀI
 // RA đúng ⑴/⑶ (PostgreSQL làm bộ chuẩn hoá); cổng tĩnh chứng minh ⑵ ĐỌC ĐƯỢC như nguồn. Đột biến đo

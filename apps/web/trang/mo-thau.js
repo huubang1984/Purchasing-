@@ -115,7 +115,7 @@ function docLink() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9181 / khoản 193] HAI VIỆC, HAI NÚT: «Tiếp» đổi mã đăng nhập (và ghi danh nếu cần), «Vào» vào.
+// [S1.230 / khoản 193] HAI VIỆC, HAI NÚT: «Tiếp» đổi mã đăng nhập (và ghi danh nếu cần), «Vào» vào.
 //
 // Bản cũ gộp cả hai vào nút Vào: người mới bấm Vào với ô mã sáu số trống, trang gọi `/auth/redeem`,
 // máy chủ trả bí mật TOTP, và bí mật ấy hiện ra CÙNG CHỖ với câu lỗi của lần bấm trượt — nên màn
@@ -250,7 +250,7 @@ function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
-  // [S1.9122 / khoản 195] Vừa vào (hay vừa nhận phiên) là lúc hỏi link đăng nhập gần đây của chính mình — không chờ, không chặn.
+  // [S1.216 / khoản 195] Vừa vào (hay vừa nhận phiên) là lúc hỏi link đăng nhập gần đây của chính mình — không chờ, không chặn.
   veLinkGanDay();
 }
 
@@ -261,12 +261,12 @@ function dongCacBuoc() {
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
-  // [S1.9122 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
+  // [S1.216 / khoản 195] Về bước 1 là danh sách link của người trước phải đi, và một phản hồi về muộn của nó bị bỏ.
   anLinkGanDay();
 }
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9122 / khoản 195 / ADR-9222] Link đăng nhập gần đây của CHÍNH mình — vế «báo ngay» của khoản 195.
+// [S1.216 / khoản 195 / ADR-126] Link đăng nhập gần đây của CHÍNH mình — vế «báo ngay» của khoản 195.
 //
 // Thông điệp ở bước đổi mã gộp «không hợp lệ / hết hạn / đã dùng» làm một, và phải thế: ở đường vô danh,
 // nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không. Người ĐÃ vào thì được xem: `GET
@@ -722,8 +722,8 @@ async function veTraoThau() {
     hien($("nut-rut-de-xuat"), false);
     return;
   }
-  // [S1.9182 / khoản 232 / ADR-9282] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
-  // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `9583`, kể cả khi nút hiện sai.
+  // [S1.231 / khoản 232 / ADR-133] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
+  // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `094`, kể cả khi nút hiện sai.
   hien($("nut-rut-de-xuat"), a.status === "PROPOSED" && (a.approvals ?? []).length === 0);
   dienDl($("tt-award"), [
     ["Trạng thái", a.status],
@@ -766,7 +766,7 @@ $("nut-duyet-award").addEventListener("click", async () => {
   await veTraoThau();
 });
 
-// [S1.9182 / khoản 232 / ADR-9282] Rút đề xuất — đường của chính người đề xuất (`award.recommend`), cho một đề xuất
+// [S1.231 / khoản 232 / ADR-133] Rút đề xuất — đường của chính người đề xuất (`award.recommend`), cho một đề xuất
 // chưa chữ ký. Ba vế (PROPOSED · cùng người · 0 chữ ký) ràng ở CSDL; lớp gói gọi tên lý do dưới 422 nên `loiCua` đủ.
 $("nut-rut-de-xuat").addEventListener("click", async () => {
   bao($("loi7"), ""); bao($("ok7"), "");
@@ -875,7 +875,7 @@ window.addEventListener("hashchange", () => {
     if (el !== null) bao(el, "");
   }
   dongCacBuoc();
-  // [S1.9181 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`.
+  // [S1.230 / khoản 193] Mã mới thì phải đổi lại ở máy chủ: ô mã sáu số đóng cùng `daRedeem`.
   dongKhoiMa();
   thuPhienCo();
 });

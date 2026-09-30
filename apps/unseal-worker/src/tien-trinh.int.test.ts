@@ -166,7 +166,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   }, 60_000);
 
   // ===============================================================================================
-  // [S1.9161 / khoản 185] BA ĐỘT BIẾN CỦA `052` — MỘT BẢNG CHO VẾ ⑵ (đo HÀM) VÀ VẾ ⑵b (đo `batDau()`), MỖI ĐỘT BIẾN MỘT `it`.
+  // [S1.225 / khoản 185] BA ĐỘT BIẾN CỦA `052` — MỘT BẢNG CHO VẾ ⑵ (đo HÀM) VÀ VẾ ⑵b (đo `batDau()`), MỖI ĐỘT BIẾN MỘT `it`.
   //
   // Trước vòng này cả ba chạy trong một vòng `for` của MỘT `it` ở mỗi vế: ⒜ đỏ thì ⒝ và ⒞ không bao giờ chạy — mà ⑵b là lớp DUY NHẤT
   // canh cảnh ❷ của ADR-040. Nay `it.each` khoá theo ca, và `finally` phục hồi nằm trong TỪNG ca, nên một ca đỏ không để lược đồ
@@ -300,7 +300,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     // dựng nó từ `Object.keys(handlers)` HỢP `Object.keys(KIND_KHONG_NGUOI_NHAN)`, tức HAI. Mốc
     // chết đo trên một mảng lọc mà sản xuất không dùng thì nó canh một tiến trình không tồn tại.
     // ~~Nay cả hai vế lấy đúng thứ `apps/api/src/composition.ts` lấy.~~
-    // **[S1.9151 / khoản 168] SỔ MỒ CÔI ĐỔI CHỦ: `apps/api/src/composition.ts` THÔI khai, `tien-trinh.ts`
+    // **[S1.222 / khoản 168] SỔ MỒ CÔI ĐỔI CHỦ: `apps/api/src/composition.ts` THÔI khai, `tien-trinh.ts`
     // của tiến trình này khai.** Nên vế `api` dưới đây KHÔNG truyền `kindKhongNguoiNhan` — mảng lọc của
     // nó là đúng `Object.keys(handlers)` như sản xuất từ vòng này — còn vế `worker` truyền
     // `Object.keys(KIND_KHONG_NGUOI_NHAN)` như `tien-trinh.ts`. Sổ hôm nay RỖNG (S1.91), nên ở vòng này
@@ -336,7 +336,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
           listOrganizations: () => [org],
           onJobFailure: () => undefined,
           // ~~Đúng mảng lọc mà `apps/api/src/composition.ts` truyền — không phải một tập con tiện tay.~~
-          // [S1.9151 / khoản 168] KHÔNG `kindKhongNguoiNhan`: `apps/api/src/composition.ts` thôi khai sổ
+          // [S1.222 / khoản 168] KHÔNG `kindKhongNguoiNhan`: `apps/api/src/composition.ts` thôi khai sổ
           // mồ côi từ vòng này, và mảng lọc của `api` là đúng `Object.keys(handlers)`.
         },
       );
@@ -361,7 +361,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
           listOrganizations: () => [org],
           onPollError: () => undefined,
           maxAttempts: 1,
-          // [S1.9151 / khoản 168] Đúng sổ mà `tien-trinh.ts` khai — tiến trình này là tiến trình DUY NHẤT
+          // [S1.222 / khoản 168] Đúng sổ mà `tien-trinh.ts` khai — tiến trình này là tiến trình DUY NHẤT
           // khai sổ mồ côi từ vòng này.
           kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
         },
@@ -381,7 +381,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   }, 90_000);
 
   // ===============================================================================================
-  // ⑹ [S1.9151 / khoản 168] SỔ `kind` MỒ CÔI KHAI Ở TIẾN TRÌNH THẤY MỌI TỔ CHỨC — ĐO TRÊN ĐƯỜNG SẼ CHẠY.
+  // ⑹ [S1.222 / khoản 168] SỔ `kind` MỒ CÔI KHAI Ở TIẾN TRÌNH THẤY MỌI TỔ CHỨC — ĐO TRÊN ĐƯỜNG SẼ CHẠY.
   //
   // Khoản 168 (§S1.83): tới trước vòng này sổ khai ở `api`, mà `listOrganizations` của `api` là tập
   // tổ chức tiến trình ấy ĐÃ THẤY enqueue (`toChucDaThay`, rỗng lại sau mỗi lần khởi động). Một job
@@ -401,7 +401,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   // Đối chứng: một `kind` KHÔNG khai của cùng tổ chức phải còn nguyên `PENDING` — chứng minh thứ
   // đưa job tới `FAILED` là dòng khai, không phải một vị từ nhặt việc quá rộng (§S1.81 mục 1).
   //
-  // [S1.9192 / khoản 158] Từ `9592_outbox_policy_theo_kind`, policy `outbox_jobs_kind_app_unseal` chỉ cho `app_unseal`
+  // [S1.233 / khoản 158] Từ `095_outbox_policy_theo_kind`, policy `outbox_jobs_kind_app_unseal` chỉ cho `app_unseal`
   // ghi kết cục cho `kind` trong tập của worker. Kind THỬ này không ở đó (đúng — nó không phải một khai thật, nên
   // không có migration), và đo (log `lo92-10`): không nới thì job nằm `PENDING`, vế này đỏ vì LỚP CSDL chứ không vì
   // thứ nó đo (dòng khai + mảng lọc của runner). Nới policy cho ĐÚNG kind thử, dưới siêu người dùng, khôi phục nguyên
@@ -415,7 +415,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
         "  FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname = 'outbox_jobs_kind_app_unseal'",
     );
     const goc = rows[0];
-    if (goc === undefined) throw new Error("không thấy policy outbox_jobs_kind_app_unseal — migration 9592 chưa áp?");
+    if (goc === undefined) throw new Error("không thấy policy outbox_jobs_kind_app_unseal — migration 095 chưa áp?");
     const noi = `(${goc.u}) OR (kind = '${kind}')`;
     await db.pool.query(`ALTER POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs USING (${noi}) WITH CHECK (${noi})`);
     return async () => {
@@ -451,7 +451,7 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     };
 
     Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế ⑹ — không phải một khai thật, gỡ trong finally" });
-    // [S1.9192 / khoản 158] Xem khối lý do trên `noiPolicyKindTam`. Khôi phục trong `finally`.
+    // [S1.233 / khoản 158] Xem khối lý do trên `noiPolicyKindTam`. Khôi phục trong `finally`.
     const khoiPhucPolicy = await noiPolicyKindTam(KIND_MO_COI);
     const log: string[] = [];
     const cu = console.error;

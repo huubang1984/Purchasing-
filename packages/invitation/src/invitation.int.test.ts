@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { createPool, migrate } from "@trustprocure/db";
 import { withGuestSession, withTenant } from "@trustprocure/tenancy";
-// [S1.9130 / khoản 250] Chỉ để suy tập trạng thái *sau lần mở* từ máy trạng thái thật và so với hằng của gói.
+// [S1.217 / khoản 250] Chỉ để suy tập trạng thái *sau lần mở* từ máy trạng thái thật và so với hằng của gói.
 import { RFQ_TRANSITIONS } from "@trustprocure/rfq";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
@@ -1878,7 +1878,7 @@ describe("[sổ nợ 57] đột biến trên policy dọn", () => {
 });
 
 // =============================================================================================
-// [S1.9130 / khoản 250 / ADR-9230] SAU LẦN MỞ THẦU, LỜI MỜI KHÔNG THU HỒI ĐƯỢC NỮA — TỪ CHỐI CÓ TÊN, VÀO SỔ
+// [S1.217 / khoản 250 / ADR-128] SAU LẦN MỞ THẦU, LỜI MỜI KHÔNG THU HỒI ĐƯỢC NỮA — TỪ CHỐI CÓ TÊN, VÀO SỔ
 //
 // Thu hồi lời mời nay LOẠI báo giá của lời mời ấy khỏi lượt mở thầu, bảng so sánh và lượt chấm (ba bộ đọc, một vế). Nếu thu hồi
 // còn được sau khi phong bì đã mở, người mua đã thấy giá sẽ chọn được ai rời cuộc thi — nên từ trạng thái có lần mở đầu tiên
@@ -1887,7 +1887,7 @@ describe("[sổ nợ 57] đột biến trên policy dọn", () => {
 // của lời mời, token hay phiên khách đổi. `CANCELLED` KHÔNG thuộc tập: nó tới được cả trước lẫn sau lần mở, và không bộ đọc nào
 // đọc phong bì của gói đã huỷ. Tổ chức chưa bật S3 — K4a (080) không chạy — nên lời từ chối ở đây là của khoản 250, không của K4a.
 // =============================================================================================
-describe("[S1.9130 / khoản 250] thu hồi lời mời sau lần mở thầu bị chặn và vào sổ", () => {
+describe("[S1.217 / khoản 250] thu hồi lời mời sau lần mở thầu bị chặn và vào sổ", () => {
   const THONG_DIEP =
     "Gói thầu đã mở thầu nên lời mời không thu hồi được nữa; báo giá đã nộp theo lời mời ấy đã vào lượt mở thầu.";
   const SAU_MO_THAU = ["UNSEALED", "EVALUATING", "BAFO_OPEN", "BAFO_CLOSED", "BAFO_UNSEALED", "AWARDED"] as const;

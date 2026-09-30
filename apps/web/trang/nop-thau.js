@@ -328,7 +328,7 @@ $("tien-te").addEventListener("input", tinhLai);
 // Bước 4 — niêm phong và nộp
 // ---------------------------------------------------------------------------------------------
 
-// [S1.9132 / khoản 230] MÃ LÝ DO TỪ CHỐI → CÂU CHO NGƯỜI NỘP.
+// [S1.219 / khoản 230] MÃ LÝ DO TỪ CHỐI → CÂU CHO NGƯỜI NỘP.
 //
 // Thân 422 của `POST /guest/bids` mang `ma` — tên ràng buộc mà trigger của câu nộp đã đặt, viết hoa (`MA_THEO_RANG_BUOC` của
 // `packages/bidding`, cộng `C1_QUA_HAN_NOP` của nhánh vì hạn). Trang tra bảng này chứ KHÔNG đọc câu chữ của `error`: câu
@@ -408,7 +408,7 @@ $("nut-nop").addEventListener("click", async () => {
     if (r.status !== 201) {
       // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
       // in cả hai, để người bị chặn đối chiếu được với đồng hồ của mình và với hạn trên màn hình.
-      // [S1.9132 / khoản 230] Câu đầu là câu RIÊNG theo `ma` (bảng `CAU_THEO_MA`) khi 422 mang mã trang biết; không thì là
+      // [S1.219 / khoản 230] Câu đầu là câu RIÊNG theo `ma` (bảng `CAU_THEO_MA`) khi 422 mang mã trang biết; không thì là
       // `error` nguyên văn — hai giờ vẫn kèm theo hễ thân có, kể cả với một api cũ không mang `ma`.
       const b = r.body;
       const viHan = r.status === 422 && b !== null && typeof b === "object" && typeof b.gioPhanXu === "string" && typeof b.hanNop === "string";

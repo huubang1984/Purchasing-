@@ -125,7 +125,7 @@ export interface PublicContext {
  * Handler xếp việc ấy vào đây; bộ điều phối chạy SAU khi giao dịch đã commit, và một lỗi ở đó không
  * đổi phản hồi (đã quyết) — chỉ được ghi tên ra log.
  * [S1.70 / lượt soi 64a-8] Việc ấy chạy khi kết nối của handler đã trả về pool: closure không được dùng `ctx.client`.
- * [S1.9101 / khoản 135] Điều ấy nay có lớp canh: `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của mọi lời gọi
+ * [S1.209 / khoản 135] Điều ấy nay có lớp canh: `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của mọi lời gọi
  * `ctx.afterCommit*(…)` trong `routes/**` — `ctx.client`, bí danh của nó, hay truyền nguyên `ctx` vào closure đều đỏ; việc phải viết
  * TẠI CHỖ (một closure khai ở ngoài rồi truyền vào cũng đỏ, vì cổng không đọc xuyên qua biến).
  */
@@ -142,7 +142,7 @@ export type AfterCommit = (viec: () => Promise<void>) => void;
  * `viec` và `bu` chạy SAU khi `withTenant` của handler đã trả kết nối về pool: closure KHÔNG được dùng `ctx.client` — kết nối ấy đã rảnh,
  * hay đã ở trong giao dịch của một yêu cầu khác; `bu` dùng `client` được truyền vào (lượt soi 64a-8). Phần bù không đi qua cổng quyền lần
  * nữa: nó chạy dưới mã quyền route đã kiểm, nên chỉ được làm việc mà chính mã quyền ấy cho phép — ~~không lớp nào canh điều này (64a-7)~~
- * **[S1.9101 / khoản 135] cả hai điều nay có cổng:** `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của `routes/**` — closure
+ * **[S1.209 / khoản 135] cả hai điều nay có cổng:** `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của `routes/**` — closure
  * chạm `ctx.client` (kể cả qua bí danh) thì đỏ; hàm gói gọi trong `bu`/`khiXong` phải nằm trong bảng đóng `HAM_BU_THEO_MA_QUYEN` của
  * chính mã quyền route khai, SQL tay và hàm cục bộ ở đó cũng đỏ.
  */
@@ -189,7 +189,7 @@ export interface LanGuiSauCommit {
  * link nào không đi, và điều ấy không đổi khi hàng CSDL chậm một bước.
  *
  * Cùng hai điều của `ViecSauCommitCoBu`: closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8), và phần bù không đi qua cổng
- * quyền lần nữa (64a-7) — [S1.9101 / khoản 135] cùng cổng `viec-sau-commit.test.ts` canh, đọc cả `bu`/`khiXong` của TỪNG lần gửi.
+ * quyền lần nữa (64a-7) — [S1.209 / khoản 135] cùng cổng `viec-sau-commit.test.ts` canh, đọc cả `bu`/`khiXong` của TỪNG lần gửi.
  */
 export interface LoGuiSauCommit {
   readonly lanGui: readonly LanGuiSauCommit[];
@@ -262,7 +262,7 @@ export interface BuyerContext {
    */
   readonly choKyChinhSach: boolean;
   /**
-   * [S1.9101 / khoản 188] Ngưỡng `failed_attempts` mà route TỰ THÂN đã khai (`BuyerSelfRoute.mfaTranDuongPhu`), do BỘ ĐIỀU PHỐI
+   * [S1.209 / khoản 188] Ngưỡng `failed_attempts` mà route TỰ THÂN đã khai (`BuyerSelfRoute.mfaTranDuongPhu`), do BỘ ĐIỀU PHỐI
    * điền từ chính bảng route — không phải một hằng handler tự nhập. Route đọc và route ghi có mã quyền nhận `null`: chúng không
    * khai ngưỡng nào. Handler thử mã TOTP truyền đúng giá trị này xuống `tranDuongPhu` của `verifyTotpForLogin`.
    *

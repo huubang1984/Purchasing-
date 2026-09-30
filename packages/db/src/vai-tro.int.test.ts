@@ -313,7 +313,7 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
     }
     const sau = await trangThai(p);
     expect(sau.pid, "kết nối sạch theo tính chất không bị huỷ").toBe(truoc.pid);
-    // ~~expect(sau.vai).toBe("local")~~ [S1.9121 / khoản 104] lớp lấy client nay RESET ALL SAU khi đọc: `local` không bị phán (đọc thấy
+    // ~~expect(sau.vai).toBe("local")~~ [S1.215 / khoản 104] lớp lấy client nay RESET ALL SAU khi đọc: `local` không bị phán (đọc thấy
     // trước khi dọn — khẳng định pid ở trên là vế chịu lực) nhưng người kế tiếp nhận lại mặc định phiên `origin`.
     expect(sau.vai).toBe("origin");
     expect(sau.rls).toBe("on");
@@ -414,11 +414,11 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
 });
 
 // ==============================================================================================
-// [S1.9121 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH KHÔNG ĐI THEO KẾT NỐI POOL SANG NGƯỜI DÙNG KẾ TIẾP
+// [S1.215 / khoản 104] TRẠNG THÁI PHIÊN NGOÀI BA GUC VẬN HÀNH KHÔNG ĐI THEO KẾT NỐI POOL SANG NGƯỜI DÙNG KẾ TIẾP
 //
 // Khoản 99 đọc ba GUC ở mỗi lần lấy client; mọi GUC phiên khác (ba GUC IM7 về 0 — đo S1.59; `TimeZone`, …) và trạng thái phiên ngoài
 // GUC mà `DISCARD TEMP` không dọn (prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá tư vấn mức phiên) thì không. Hai hướng đo
-// trên cụm cục bộ (PostgreSQL 16.13, đăng nhập `app_api_login`, trung vị của 2 000 lần, máy bốn lõi dùng chung — số ở §S1.9121): PHÁN
+// trên cụm cục bộ (PostgreSQL 16.13, đăng nhập `app_api_login`, trung vị của 2 000 lần, máy bốn lõi dùng chung — số ở §S1.215): PHÁN
 // bằng một lần quét `pg_settings` (`source = 'session'` hay `setting <> reset_val`) ghép vào câu đọc giá thêm ~930 µs mỗi lần lấy — hơn
 // ba lần CẢ lần lấy hiện hành (275 µs); đếm `pg_locks` thêm ~215 µs; ba bộ đếm prepared/con trỏ/LISTEN thêm ~65 µs. DỌN thì `RESET ALL`
 // 37 µs một vòng đi-về, và bộ `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` ghép vào câu `SET ROLE` thêm ~10 µs.
@@ -429,7 +429,7 @@ describe("[S1.59 / khoản nợ 99] mỗi lần lấy client của pool có vai 
 // (khoản 128 — đo 42501): đường còn lại là một hàm SECURITY DEFINER do migration dựng, dựng ở đây để đo; khoá thuộc về BACKEND nên nó ở
 // lại trên kết nối sau khi hàm trả về.
 // ==============================================================================================
-describe("[S1.9121 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành được DỌN ở mỗi lần lấy client — GUC phiên lạ, prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá tư vấn mức phiên; tín hiệu rò GUC tenant của withTenant giữ nguyên", () => {
+describe("[S1.215 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành được DỌN ở mỗi lần lấy client — GUC phiên lạ, prepared statement, con trỏ WITH HOLD, kênh LISTEN, khoá tư vấn mức phiên; tín hiệu rò GUC tenant của withTenant giữ nguyên", () => {
   interface TrucNgoai {
     pid: number;
     st: string;

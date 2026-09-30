@@ -32,7 +32,7 @@
 //      `kind` mồ côi vĩnh viễn là một tính năng chết chứ không phải một trạng thái ổn định.
 //
 // ĐÚNG MỘT tiến trình được khai sổ này vào `JobRunnerOptions.kindKhongNguoiNhan` — ~~hôm nay là
-// `api` (`apps/api/src/composition.ts`). Worker KHÔNG khai~~ **[S1.9151 / khoản 168] từ vòng này là
+// `api` (`apps/api/src/composition.ts`). Worker KHÔNG khai~~ **[S1.222 / khoản 168] từ vòng này là
 // WORKER (`apps/unseal-worker/src/tien-trinh.ts`); `api` KHÔNG khai.** Lý do đo được (§S1.83, đo
 // lại ở `tien-trinh.int.test.ts` ⑹): bảo đảm "vẫn chết ồn ào" chỉ đứng ở tiến trình CLAIM được job,
 // mà `listOrganizations` của `api` là tập tổ chức nó ĐÃ THẤY enqueue — hẹp nhất trong hệ, rỗng lại

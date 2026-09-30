@@ -1,7 +1,7 @@
 // ==============================================================================================
 // packages/identity/src/mo-ta-loi.ts — MÔ TẢ MỘT LỖI CHO DÒNG LOG, KHÔNG MANG GIÁ TRỊ — MỘT BẢN CHO HAI TIẾN TRÌNH
 //
-// [S1.9151 / khoản 166] Dời từ `apps/api/src/mo-ta-loi.ts` (S1.67 / khoản 118, S1.68 / khoản 119, S1.85 / khoản 131); thân hàm giữ
+// [S1.222 / khoản 166] Dời từ `apps/api/src/mo-ta-loi.ts` (S1.67 / khoản 118, S1.68 / khoản 119, S1.85 / khoản 131); thân hàm giữ
 // nguyên. Vì sao dời, đo được (§S1.82; đo lại ở `apps/unseal-worker/src/composition.int.test.ts`): worker mở thầu không import được
 // `apps/api` (quy tắc `g1-`) nên giữ một bản rút gọn ~5 dòng — không tầng `cause`, không nhận `TenantError` theo lớp — và một
 // `DenialAuditFailedError` (lớp lỗi khoản 121 dựng cho ĐÚNG worker) ra dòng log không có SQLSTATE của lần ghi sổ đã hỏng, ở tiến trình

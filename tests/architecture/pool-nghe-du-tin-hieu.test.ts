@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.84 / khoản 129 và khoản 173] MỌI POOL DỰNG TRONG `apps/` ~~PHẢI~~ **[S1.9171 / khoản 180] VÀ `tools/`** PHẢI NGHE
+// [S1.84 / khoản 129 và khoản 173] MỌI POOL DỰNG TRONG `apps/` ~~PHẢI~~ **[S1.227 / khoản 180] VÀ `tools/`** PHẢI NGHE
 // ĐỦ HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT.
 //
 // Hai tín hiệu ấy có chung một tính chất: chúng KHÔNG được ném cho ai, nên nếu không có người
@@ -16,7 +16,7 @@
 // nên cùng một sự cố để lại dấu ở `api` và không để lại gì ở tiến trình DUY NHẤT giải mã được
 // phong bì. Một lớp quên được mà không ai biết thì không phải một lớp. Và nó bị quên LẦN THỨ HAI
 // ở ngoài tầm quét: tới S1.87, `tools/neo-so-kiem-toan` dựng hai pool đi qua `withTenant` mà
-// không gắn gì (khoản 180) — vòng S1.9171 nới tầm quét và gắn.
+// không gắn gì (khoản 180) — vòng S1.227 nới tầm quét và gắn.
 //
 // PHÉP ĐỌC LÀ CÂY CÚ PHÁP CÓ BINDER, không phải biểu thức chính quy: một chuỗi trong chú thích
 // hay một tên biến trùng chữ không được tính là một lời gọi, và hai biến cùng tên ở hai hàm là
@@ -30,7 +30,7 @@
 //   ⑴ PHÉP ĐỌC GÓI TRONG MỘT TỆP. Pool và người nghe phải cùng tệp. Người nghe được tính: `<pool>.on("release", …)`
 //      viết thẳng; `ngheLoiKetNoiToiMuon(<pool>, …)` import từ `@trustprocure/tenancy` (bí danh vẫn thấy); hai hàm bọc
 //      `ghiLogKetNoiHuy` / `ghiLogLoiKetNoiToiMuon` CHỈ khi import từ `./mo-ta-loi.js` (composition root của `api`) —
-//      thân hai hàm ấy không được đọc, cổng TIN chúng theo đường import. [S1.9143 / khoản 183] Cổng này chỉ đo SỰ CÓ MẶT của
+//      thân hai hàm ấy không được đọc, cổng TIN chúng theo đường import. [S1.221 / khoản 183] Cổng này chỉ đo SỰ CÓ MẶT của
 //      lời gọi gắn; THÂN của bốn bộ nghe (hai hàm bọc của `api`, `ghiKetNoiHuy`/`ghiLoiToiMuon` của worker) đo bằng hành vi trên
 //      pool thật ở `apps/api/src/loi-ket-noi-toi-muon.int.test.ts` và `apps/unseal-worker/src/loi-ket-noi-toi-muon.int.test.ts` —
 //      không thì một thân no-op vẫn qua cổng. Một pool dựng ở tệp này rồi truyền sang tệp khác
@@ -42,7 +42,7 @@
 //   ⑵ THƯ MỤC: `git ls-files -- "apps/**/*.ts" "tools/**/*.ts"`, bỏ test và `.d.ts`. `packages/` đứng ngoài tầm — hôm nay
 //      ở đó có đúng ba chỗ dựng pool: `packages/db/src/pool.ts` (chính `createPool`, không có gì để nghe) và hai pool của
 //      `packages/test-support/src/postgres.ts` (hạ tầng test; ⑴ phát trên chúng khi mã được test để sót trạng thái phiên,
-//      và không test nào đỏ vì thế — khoản 9471). Tệp chưa `git add` không được quét — `git ls-files` là chủ ý để tệp dò tạm
+//      và không test nào đỏ vì thế — khoản 281). Tệp chưa `git add` không được quét — `git ls-files` là chủ ý để tệp dò tạm
 //      không lọt vào.
 //   ⑶ HÌNH DẠNG NHẬN DIỆN: một pool là `createPool(…)` của `@trustprocure/db` (tên trần, bí danh, hay qua `import * as`) hoặc
 //      `new Pool(…)` của `pg` (`import pg from`, `import * as`, `import { Pool as … }`) — phân giải theo import, không theo
@@ -407,7 +407,7 @@ function mauHamBoc(tuTep: string): string {
   ].join("\n");
 }
 
-describe("[S1.84 → S1.9171 / khoản 129, 173, 176, 180, 182] pool của apps/ và tools/ nghe đủ hai tín hiệu", () => {
+describe("[S1.84 → S1.227 / khoản 129, 173, 176, 180, 182] pool của apps/ và tools/ nghe đủ hai tín hiệu", () => {
   it("ĐỐI CHỨNG trong bộ nhớ: một tệp mẫu có pool đi qua withTenant mà không nghe gì ⇒ thiếu cả hai tín hiệu, và không miễn", () => {
     const hoSo = [docVanBan(MAU, MAU_KHONG_NGHE)];
     expect(hoSo[0]?.pool).toEqual([{ ten: "chay.pool", ngheRelease: false, ngheToiMuon: false, quaWithTenant: true }]);

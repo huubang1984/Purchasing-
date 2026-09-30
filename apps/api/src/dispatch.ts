@@ -272,6 +272,9 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   // `KHONG_CO_BAO_GIA_DOC_DUOC`). Thiếu dòng này, cả năm đi ra dưới 500 — một lời từ chối có
   // tên bị đọc thành một sự cố máy chủ, và người mua không biết phải sửa gì.
   "DanhGiaTuChoiError",
+  // [S1.199 / S4.2b] Lần từ chối có MÃ của dữ liệu nền (`MA_DA_CO`, `DON_VI_KHONG_CO_TRONG_DANH_MUC`, `KHONG_CO_BI_DANH`…) —
+  // người quản lý dữ liệu cần đọc được mình phải sửa gì, không phải một 500.
+  "DuLieuNenError",
   // [S1.109 / S2.5] Bốn lối TỪ CHỐI CÓ TÊN của lớp vòng BAFO (`RFQ_KHONG_MO_VONG_DUOC`,
   // `CHUA_CHAM_LAN_NAO`, `CHINH_SACH_TAT_BAFO`, `KHONG_CO_VONG_DANG_MO`). Cùng lớp lỗi mà S2.4
   // vừa vấp: thiếu dòng này, một lời từ chối có tên đi ra dưới 500 và người mua không biết sửa gì.
@@ -283,6 +286,9 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   // [S1.166 / S3.1b / ADR-084 ⑷] Lớp từ chối thứ ba của K12 — một CHỐT KIỂM SOÁT chặn (`CHOT_VAO_SO`,
   // `packages/rfq/src/chot-kiem-soat.ts`). Thông điệp là hằng của bảng, không nội suy dữ liệu nào.
   "ChotKiemSoatError",
+  // [S1.203 / S3.6b1] Lời từ chối nghiệp vụ của `@trustprocure/kiem-soat` (lý do rỗng, gói không chờ duyệt, không có tín hiệu,
+  // đã ghi nhận rồi, bằng chứng vừa đổi). Thông điệp là hằng, không nội suy dữ liệu nào.
+  "KiemSoatError",
 ]);
 
 const THAN_401 = { error: "phien khong hop le" } as const;
@@ -881,7 +887,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
                     afterCommitCoBu,
                     afterCommitLoGui,
                     choKyChinhSach,
-                    // [S1.9101 / khoản 188] Ngưỡng đường phụ đi từ BẢNG ROUTE xuống handler — cùng nguồn với cổng đi trước ở trên,
+                    // [S1.209 / khoản 188] Ngưỡng đường phụ đi từ BẢNG ROUTE xuống handler — cùng nguồn với cổng đi trước ở trên,
                     // nên hai chỗ không thể lệch nhau. Route không tự thân không khai ngưỡng ⇒ `null`.
                     mfaTranDuongPhu: route.mutates && route.self === true ? route.mfaTranDuongPhu : null,
                   }),

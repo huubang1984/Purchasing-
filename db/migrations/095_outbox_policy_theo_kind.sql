@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9592_outbox_policy_theo_kind — [S1.9192 / khoản 158] RANH GIỚI `kind` THEO VAI XUỐNG TẦNG CSDL — ADR-9292
+-- 095_outbox_policy_theo_kind — [S1.233 / khoản 158] RANH GIỚI `kind` THEO VAI XUỐNG TẦNG CSDL — ADR-134
 --
 -- VÌ SAO (§S1.81, khoản 158). `007` cấp `app_api` và `025` cấp `app_unseal` CÙNG một bộ `GRANT UPDATE` trên đúng sáu cột
 -- vòng đời của `outbox_jobs`, không giới hạn theo `kind`. Vị từ lọc `kind` của `CAU_CLAIM` (S1.81, `packages/outbox/src/runner.ts`)
@@ -11,9 +11,9 @@
 --
 -- HÌNH DẠNG. Hai policy `AS RESTRICTIVE FOR UPDATE`, đối xứng theo vai và theo tập `kind`, AND vào `outbox_jobs_tenant_isolation`
 -- của `007` (khuôn `027`: RESTRICTIVE chỉ SIẾT, không nới, nên đặt ở tệp khác tệp tạo bảng không mở cửa sổ nào — khoản nợ 29):
---   · `TO app_api`    — ba khoá của `buildApiOutboxHandlers` (`apps/api/src/outbox-api.ts`); `api` KHÔNG khai sổ mồ côi (S1.9151);
+--   · `TO app_api`    — ba khoá của `buildApiOutboxHandlers` (`apps/api/src/outbox-api.ts`); `api` KHÔNG khai sổ mồ côi (S1.222);
 --   · `TO app_unseal` — hai khoá của `buildUnsealWorkerHandlers` (`apps/unseal-worker/src/composition.ts`) ∪ sổ `kind` mồ côi
---     `KIND_KHONG_NGUOI_NHAN` (`packages/outbox/src/so-kind-mo-coi.ts`; worker là tiến trình khai nó từ S1.9151) — hôm nay sổ RỖNG.
+--     `KIND_KHONG_NGUOI_NHAN` (`packages/outbox/src/so-kind-mo-coi.ts`; worker là tiến trình khai nó từ S1.222) — hôm nay sổ RỖNG.
 -- Chỉ `FOR UPDATE`: `SELECT` của cả hai vai không đổi (worker đếm tồn đọng qua MỌI `kind`, ADR-083; `api` đọc hàng đợi của mình),
 -- `INSERT` của `app_api` không đổi (nó xếp việc cho worker qua `dispatchUnseal`, `019`/`025`). `SELECT … FOR UPDATE SKIP LOCKED`
 -- trong `CAU_CLAIM` cũng chịu vế USING của policy `FOR UPDATE` (đo: PostgreSQL 16), nên một runner mang NHẦM handler của vai kia
@@ -24,7 +24,7 @@
 -- khuôn `007`/`027`; bản deparse ở hai dòng khai là `(kind = ANY (ARRAY['…'::text, …]))`.
 -- Thứ tự phần tử trong mảng: theo bảng chữ cái — để dòng khai nguyên văn có một dạng duy nhất.
 --
--- CÁI GIÁ, NÓI RA (ADR-9292; chủ dự án chấp nhận 2026-09-30): tập `kind` mỗi vai nay SỐNG Ở CSDL. Thêm một `kind` — một handler
+-- CÁI GIÁ, NÓI RA (ADR-134; chủ dự án chấp nhận 2026-09-30): tập `kind` mỗi vai nay SỐNG Ở CSDL. Thêm một `kind` — một handler
 -- mới ở `api` hay worker, hay một dòng sổ mồ côi — là thêm MỘT MIGRATION `ALTER POLICY outbox_jobs_kind_<vai> ON public.outbox_jobs
 -- USING (…) WITH CHECK (…)` cộng sửa hai dòng khai. Quên migration thì kind mới KHÔNG vai nào ghi được kết cục: job nằm `PENDING`
 -- im lặng — fail-CLOSED, đúng hướng — và hai cổng đối chiếu tập `kind` của policy với `Object.keys(handlers)` ∪ sổ mồ côi

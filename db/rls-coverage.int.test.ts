@@ -512,7 +512,7 @@ describe("phủ RLS", () => {
     // [S1.82 / khoản 116] Nay có BA giá trị: `052` thêm `TO app_liet_ke_to_chuc`. Khẳng định vì
     // thế mạnh hơn một bậc nữa — nó đo cả nhánh PUBLIC (OID 0, không có hàng trong pg_roles)
     // lẫn HAI role thật khác nhau.
-    // [S1.9192 / khoản 158] BỐN giá trị: `9592` là policy đầu tiên viết `TO app_unseal` (RESTRICTIVE FOR UPDATE theo `kind`).
+    // [S1.233 / khoản 158] BỐN giá trị: `095` là policy đầu tiên viết `TO app_unseal` (RESTRICTIVE FOR UPDATE theo `kind`).
     expect(
       [...new Set(rows.map((r) => r.vai_tro))].sort(),
       "vai_tro không kết xuất được PUBLIC — khoá sáu cột đang so bằng chuỗi rỗng",
@@ -773,6 +773,9 @@ describe("phủ RLS", () => {
       // [S1.197 / S4.2a] Bốn bảng hàng chuẩn: SELECT mức bảng, INSERT theo cột — không UPDATE, không DELETE (L1).
       { grantee: "app_api", bang: "canonical_item_versions", quyen: "SELECT" },
       { grantee: "app_api", bang: "canonical_items", quyen: "SELECT" },
+      // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
+      { grantee: "app_api", bang: "governance_signal_acks", quyen: "SELECT" },
+      { grantee: "app_api", bang: "governance_signals", quyen: "SELECT" },
       { grantee: "app_api", bang: "guest_sessions", quyen: "SELECT" },
       { grantee: "app_api", bang: "invitation_otp_challenges", quyen: "SELECT" },
       { grantee: "app_api", bang: "item_aliases", quyen: "SELECT" },
@@ -839,6 +842,8 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      // [S1.198 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
+      { grantee: "app_api", bang: "rfq_tra_ve", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
@@ -934,8 +939,8 @@ describe("phủ RLS", () => {
       // [S1.4 / 017] `rfq_key_material` la bang DAU TIEN ma app_unseal doc duoc mot cot ma
       // app_api KHONG doc duoc. `wrapped_private_key` o day chinh la thu dong khoan [NO ADR-006]
       // ben duoi — xem test "[ADR-006] khong role nao bao trum role kia".
-      // ~~[S1.6] BA cot cua `rfq_invitations`, khong hon~~ [S1.9130 / khoản 250 / 9530] BỐN cột — thêm `revoked_at`:
-      // worker bỏ luồng của lời mời đã thu hồi (`i.revoked_at IS NULL`, ADR-9230), và đó là dấu duy nhất vế ấy cần
+      // ~~[S1.6] BA cot cua `rfq_invitations`, khong hon~~ [S1.217 / khoản 250 / 091] BỐN cột — thêm `revoked_at`:
+      // worker bỏ luồng của lời mời đã thu hồi (`i.revoked_at IS NULL`, ADR-128), và đó là dấu duy nhất vế ấy cần
       // (`status = 'REVOKED'` ⇔ `revoked_at IS NOT NULL`, `010`). Phần còn lại của lời khai S1.6 giữ nguyên:
       // worker phai di tu `vendor_bids` toi
       // `rfq_packages` va duong duy nhat la qua bang nay. `supplier_id`, `contact_id`,
@@ -1102,6 +1107,19 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "canonical_items", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "session_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "canonical_items", cot: "tac_gia", quyen: "INSERT" },
+      // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận: CHỈ INSERT. Bằng chứng, độ tin cậy, giải thích và mốc tính KHÔNG cấp — trigger
+      // `governance_signals_tinh` đặt chúng, nên người gọi không khai được bằng chứng.
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signal_acks", cot: "signal_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "created_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "created_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "loai", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "nguon", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "governance_signals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "challenge_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "expires_at", quyen: "INSERT" },
       { grantee: "app_api", bang: "guest_sessions", cot: "invitation_id", quyen: "INSERT" },
@@ -1264,6 +1282,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "procurement_category_changes", cot: "loai", quyen: "INSERT" },
       { grantee: "app_api", bang: "procurement_category_changes", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      // [S1.198 / khoản 256] Lời duyệt mang lần nộp người duyệt đã xem — trigger `rfq_approvals_so_lan_nop` so nó.
+      { grantee: "app_api", bang: "rfq_approvals", cot: "lan_nop_da_xem", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
@@ -1429,6 +1449,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
+      // [S1.198 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "rfq_id", quyen: "INSERT" },
       // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
       // muc sang RFQ khac hay sang to chuc khac.
       // [S1.2] `rfq_packages` — `status` co UPDATE va no BUOC phai co de ung dung lam viec.
@@ -1970,9 +1996,9 @@ interface PolicyRestrictiveKhai {
 }
 
 /**
- * [S1.9192 / khoản 158 / `9592_outbox_policy_theo_kind`] Ranh giới `kind` theo vai trên `outbox_jobs`: mỗi vai ứng dụng chỉ UPDATE
+ * [S1.233 / khoản 158 / `095_outbox_policy_theo_kind`] Ranh giới `kind` theo vai trên `outbox_jobs`: mỗi vai ứng dụng chỉ UPDATE
  * được job mang `kind` của tiến trình chạy dưới vai ấy — RESTRICTIVE FOR UPDATE, một policy một vai, nguyên văn `pg_get_expr`.
- * Thêm một `kind` là một migration `ALTER POLICY` MỚI cộng dòng này và dòng ở hardening (ADR-9292); cổng đối chiếu tập kind với
+ * Thêm một `kind` là một migration `ALTER POLICY` MỚI cộng dòng này và dòng ở hardening (ADR-134); cổng đối chiếu tập kind với
  * `Object.keys(handlers)` ∪ sổ mồ côi ở `apps/{api,unseal-worker}/src/composition.int.test.ts`.
  */
 const KIND_APP_API = "(kind = ANY (ARRAY['LOGIN_LINK_SEND'::text, 'RFQ_DEADLINE_EXTENDED_NOTICE'::text, 'UNSEAL_APPROVAL_NOTICE'::text]))";
@@ -1997,6 +2023,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "audit_chain_anchors", "audit_events", "invitation_otp_challenges", "mfa_credentials",
       // [S1.197 / S4.2a] L6: không phiên khách nào đọc hàng chuẩn, bí danh hay quy đổi riêng.
       "canonical_item_versions", "canonical_items", "item_aliases", "item_uom_conversions",
+      // [S1.203 / S3.6b1] Tín hiệu là việc nội bộ bên mua — nhà cung cấp không đọc được gói nào bị soi là chia nhỏ.
+      "governance_signal_acks", "governance_signals",
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",
@@ -2013,6 +2041,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
+      // [S1.198 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
+      "rfq_tra_ve",
       "sessions", "supplier_contacts",
       // [S1.196 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
       "supplier_verifications",
@@ -2032,7 +2062,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
     khachNoi("rfq_packages", khachHoac(veGuest("id", "app.guest_rfq_id"))),
     khachNoi("vendor_bid_versions", khachHoac("(bid_id IN ( SELECT b.id\n   FROM vendor_bids b))")),
     khachNoi("vendor_bids", khachHoac(veGuest("invitation_id", "app.guest_invitation_id"))),
-    // [S1.9192 / khoản 158] Hai policy theo `kind` của 9592 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.
+    // [S1.233 / khoản 158] Hai policy theo `kind` của 095 — vai ĐÍCH DANH, lệnh UPDATE (`w`), hai vế bằng nhau.
     ["public.outbox_jobs.outbox_jobs_kind_app_api", { lenh: "w", vai_tro: "app_api", using: KIND_APP_API, with_check: KIND_APP_API }],
     ["public.outbox_jobs.outbox_jobs_kind_app_unseal", { lenh: "w", vai_tro: "app_unseal", using: KIND_APP_UNSEAL, with_check: KIND_APP_UNSEAL }],
   ]);
@@ -3118,7 +3148,7 @@ describe("[S1.50 / khoản nợ 91] cửa ra 83⑶: FORCE và view không securi
 });
 
 // ===============================================================================================
-// [S1.9111 / khoản 112 + 163] NGOAI_LE_DOC_VONG — CỬA RA CỦA MỤC (C) — LÀ MỘT DANH SÁCH KHAI CÓ KHOÁ
+// [S1.212 / khoản 112 + 163] NGOAI_LE_DOC_VONG — CỬA RA CỦA MỤC (C) — LÀ MỘT DANH SÁCH KHAI CÓ KHOÁ
 //
 // Bản S1.50–S1.82: `(VALUES (''), ('public.outbox_danh_sach_to_chuc')) AS x(ten)`, so bằng `NOT IN` theo TÊN TRẦN ở cả hai
 // nhánh của mục (C). Ba lỗ, cả ba đo ở đây: ⑴ một dòng NULL làm `NOT IN` ra NULL và tắt CẢ HAI nhánh — mọi view và mọi hàm
@@ -3130,7 +3160,7 @@ describe("[S1.50 / khoản nợ 91] cửa ra 83⑶: FORCE và view không securi
 // neo vào migration nguồn (cùng khuôn BANG_TENANT_KHAI: tập migration rút gọn đi qua, đối tượng bị DROP thì ĐỎ có tên).
 // ===============================================================================================
 
-/** [S1.9111] Năm cột của NGOAI_LE_DOC_VONG — mỗi cột là một trục thu hẹp miễn trừ; bản hardening phải BẰNG bản này. */
+/** [S1.212] Năm cột của NGOAI_LE_DOC_VONG — mỗi cột là một trục thu hẹp miễn trừ; bản hardening phải BẰNG bản này. */
 const COT_NGOAI_LE_DOC_VONG = ["loai", "nspname", "ten", "mig", "ly_do"] as const;
 /** `ten` là tên quan hệ (view/matview) hay CHỮ KÝ hàm như `regprocedure` in ra không kèm lược đồ (`f(text,integer)`). */
 type DongDocVong = readonly [loai: "ham" | "view" | "matview", nspname: string, ten: string, mig: string, lyDo: string];
@@ -3144,7 +3174,7 @@ const NGOAI_LE_DOC_VONG_DA_KHAI: readonly DongDocVong[] = [
   ],
 ];
 
-describe("[S1.9111 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có khoá; hàm khoá theo chữ ký", () => {
+describe("[S1.212 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai có khoá; hàm khoá theo chữ ký", () => {
   const COT: readonly string[] = COT_NGOAI_LE_DOC_VONG;
   const khoiCua = (dong: readonly (readonly string[])[]): string => khoiValues(dong, "x", COT);
   const MIG_THAT = "052_worker_liet_ke_to_chuc";
@@ -3236,7 +3266,7 @@ describe("[S1.9111 / khoản 112 + 163] NGOAI_LE_DOC_VONG là danh sách khai c�
       ]);
       // Chiều thiu neo vào migration nguồn: cùng năm dòng lệch, mig chưa áp ⇒ KHÔNG dòng thiu nào (tập migration rút gọn của
       // migrations.int.test.ts đi qua) — chiều xuôi vẫn nêu đủ.
-      const chuaAp = lech.map(([l, n, t, , ly]): readonly string[] => [l, n, t, "9511_chua_ap", ly]);
+      const chuaAp = lech.map(([l, n, t, , ly]): readonly string[] => [l, n, t, "999_chua_ap", ly]);
       expect(await dau(c, voiKhai(chuaAp))).toEqual([
         "public.outbox_danh_sach_to_chuc()", "public.outbox_danh_sach_to_chuc(text)", "zz_s112.f(text,integer)", "zz_s112.mv", "zz_s112.v",
       ]);
@@ -3778,10 +3808,10 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
   // [lượt soi 51] Đối chứng cho mọi vế lọc: ⒠ policy không phụ thuộc hàm vẫn phủ; ⒣ hình dạng ngoài HINH_DANG_CHUAN mà phụ thuộc hàm vẫn bị
   // loại (pg_depend, NHẸ-5); ⒢ dòng khoản 97 (không policy nào phủ) không được tha nhờ vế EXECUTE (NHẸ-4⒜); ⒡ membership do superuser cấp
   // bị chặn và lời khuyên không thu hồi khỏi nhóm (vế grantor, NẶNG-2); ⒦ ~~ADMIN trên vai sở hữu bảng không tính là tự sửa cho dòng khoản
-  // 101 (NẶNG-1)~~ [S1.9172 / khoản 113] ADMIN (không INHERIT) trên vai sở hữu bảng LÀ người cấp của mục ACL cấp thẳng ⇒ tự cắt được — đo
+  // 101 (NẶNG-1)~~ [S1.228 / khoản 113] ADMIN (không INHERIT) trên vai sở hữu bảng LÀ người cấp của mục ACL cấp thẳng ⇒ tự cắt được — đo
   // ngay trong pha: ba bước dưới V, dòng biến mất, không dòng khoản 102; ⒤ vai thừa kế chủ bảng đứng ngoài — chủ thể giống chủ, khoản 102
   // (NẶNG-1). Mọi pha trong một giao dịch ROLLBACK, kể cả `ALTER FUNCTION … OWNER` và ba bước tự cắt của ⒦.
-  it("[INV-F1] [S1.58 / khoản nợ 101] policy phụ thuộc app_current_org_id() không phủ vai chạy migration có EXECUTE trên hàm ấy mà RLS không coi là chủ: mục nêu kèm đường tới EXECUTE và lối ra theo từng đường; EXECUTE do superuser cấp thẳng hay qua nhóm do superuser cấp ⇒ chặn trước vòng; vai tự cắt được EXECUTE — membership nhóm tự cấp, thừa kế chủ hàm, ADMIN trên chủ hàm — ⇒ 'cố ý KHÔNG chặn nó'; đối chứng: policy không phụ thuộc hàm vẫn phủ, hình dạng khác phụ thuộc hàm vẫn bị loại, dòng khoản 97 không được tha nhờ vế EXECUTE, ADMIN trên vai sở hữu bảng (người cấp của mục ACL) tự cắt được bằng ba bước và không để lại dòng khoản 102 [S1.9172], vai thừa kế chủ bảng đứng ngoài (khoản 102)", async () => {
+  it("[INV-F1] [S1.58 / khoản nợ 101] policy phụ thuộc app_current_org_id() không phủ vai chạy migration có EXECUTE trên hàm ấy mà RLS không coi là chủ: mục nêu kèm đường tới EXECUTE và lối ra theo từng đường; EXECUTE do superuser cấp thẳng hay qua nhóm do superuser cấp ⇒ chặn trước vòng; vai tự cắt được EXECUTE — membership nhóm tự cấp, thừa kế chủ hàm, ADMIN trên chủ hàm — ⇒ 'cố ý KHÔNG chặn nó'; đối chứng: policy không phụ thuộc hàm vẫn phủ, hình dạng khác phụ thuộc hàm vẫn bị loại, dòng khoản 97 không được tha nhờ vế EXECUTE, ADMIN trên vai sở hữu bảng (người cấp của mục ACL) tự cắt được bằng ba bước và không để lại dòng khoản 102 [S1.228], vai thừa kế chủ bảng đứng ngoài (khoản 102)", async () => {
     const V = "zz_trien101";
     const HAI = ["SELECT", "UPDATE"].map((l) => `public.suppliers/${V} (vai chạy migration)/${l}`);
     const nhanBang = async (c: pg.PoolClient, bang: string): Promise<string[]> =>
@@ -3893,7 +3923,7 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
 
       // ⒦ [lượt soi 51 NẶNG-1] ~~ADMIN (không INHERIT) trên vai SỞ HỮU bảng không tính là tự sửa được cho dòng khoản 101: lối vá của nó là thêm
       // policy (cổng migration-shape và [CR1] không cho qua) hay tự lấy quyền chủ — thứ chỉ dời dòng sang chủ thể giống chủ.~~
-      // [S1.9172 / khoản 113] Câu gạch bỏ sót lối thứ ba: `OWNER TO` viết lại grantor của mục ACL thành chủ mới, nên chủ bảng là NGƯỜI CẤP
+      // [S1.228 / khoản 113] Câu gạch bỏ sót lối thứ ba: `OWNER TO` viết lại grantor của mục ACL thành chủ mới, nên chủ bảng là NGƯỜI CẤP
       // giữ mọi quyền kèm GRANT OPTION, và ADMIN (không INHERIT) trên người cấp là đường tự cắt đã đo (vế `tu_sua_nguoi_cap`, khối đo ⒠ của
       // hardening; `db/migrations.int.test.ts` `[khoản nợ 113]` pha ⒠ đo cùng hình dạng trên `suppliers` qua `migrate()`): trong một tệp dưới
       // chính V — `GRANT chủ TO V WITH INHERIT TRUE; REVOKE … FROM V; REVOKE chủ FROM V` — quyền mất, cạnh thừa kế tự cấp mất, cạnh ADMIN do
@@ -3910,7 +3940,7 @@ describe("[S1.56 / khoản nợ 97] mục 94: vai chạy migration không phải
       const k1 = await nhanBang(c, "public.zz_k101k");
       expect(nhan(k1), "⒦ dòng khoản 101 vẫn có (EXECUTE qua nhóm zz_nh101b, policy lọc hết)").toEqual(kDong);
       expect(k1[0]).toContain("cố ý KHÔNG chặn nó");
-      expect(await chanTruocVong(c, "public.zz_k101k"), "⒦ [S1.9172] ADMIN trên chủ bảng = ADMIN trên người cấp ⇒ tự cắt được ⇒ không chặn").toEqual([]);
+      expect(await chanTruocVong(c, "public.zz_k101k"), "⒦ [S1.228] ADMIN trên chủ bảng = ADMIN trên người cấp ⇒ tự cắt được ⇒ không chặn").toEqual([]);
       // Ba bước dưới chính V (SET LOCAL ROLE, không savepoint — kết quả phải ở lại để đo trạng thái cuối); RESET ROLE trả về superuser.
       await c.query(`SET LOCAL ROLE ${V}`);
       await c.query(`GRANT zz_chu101k TO ${V} WITH INHERIT TRUE; REVOKE SELECT ON public.zz_k101k FROM ${V}; REVOKE zz_chu101k FROM ${V}`);
@@ -4019,7 +4049,7 @@ describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
 });
 
 // ===============================================================================================
-// [S1.9162 / khoản 111 — lượt soi ngang 59a-5] KHUÔN ĐỌC TÊN GUC DÙNG CHUNG ĐỊNH NGHĨA TOKEN VỚI KHUÔN GHI (khoản 96)
+// [S1.226 / khoản 111 — lượt soi ngang 59a-5] KHUÔN ĐỌC TÊN GUC DÙNG CHUNG ĐỊNH NGHĨA TOKEN VỚI KHUÔN GHI (khoản 96)
 //
 // Nhánh ⒞ của khoản 87 hỏi `current_setting(tên, true)` cho TỪNG tên của tập này, trong phiên deploy — lớp duy nhất cho conf /
 // `ALTER SYSTEM` / `options=` của mọi GUC tuỳ biến ngoài bốn tên ghim cứng. Một tên KHÔNG vào tập là một tên đặt được ở tầng ấy
@@ -4031,7 +4061,7 @@ describe("[S1.48 / lượt soi ngang 40a H4] CAU_TEN_GUC_DU_AN_DOC", () => {
 // PostgreSQL đọc GUC qua cách viết ấy (phép đo không rỗng ruột). Fixture trong giao dịch rồi ROLLBACK, trừ ca ALTER SYSTEM
 // (kết nối mới cần đối tượng đã commit).
 // ===============================================================================================
-describe("[S1.9162 / khoản 111] CAU_TEN_GUC_DU_AN_DOC — cùng định nghĩa token và cùng bề mặt với khuôn ghi CAU_MA_GHI_GUC_VAN_HANH", () => {
+describe("[S1.226 / khoản 111] CAU_TEN_GUC_DU_AN_DOC — cùng định nghĩa token và cùng bề mặt với khuôn ghi CAU_MA_GHI_GUC_VAN_HANH", () => {
   const cauDoc = (): string => docHangHardening("CAU_TEN_GUC_DU_AN_DOC");
   /** Dựng fixture trong MỘT giao dịch, đọc tập tên và các phép đọc thật `kiem` (qua chính đối tượng vừa dựng), rồi ROLLBACK. */
   const trongGiaoDich = async (
@@ -4207,17 +4237,17 @@ describe("[S1.9162 / khoản 111] CAU_TEN_GUC_DU_AN_DOC — cùng định nghĩa
 });
 
 // ===============================================================================================
-// [S1.9162 / khoản 110 — ADR-9262] PHẠM VI FORCE CỦA KHOẢN 91 LÀ CẢ DATABASE — DATABASE RIÊNG, KHÔNG LÁNG GIỀNG
+// [S1.226 / khoản 110 — ADR-131] PHẠM VI FORCE CỦA KHOẢN 91 LÀ CẢ DATABASE — DATABASE RIÊNG, KHÔNG LÁNG GIỀNG
 //
 // Lượt soi ngang 59a-3 đo: một lược đồ `zz_bt` của vai thường, bảng ENABLE RLS không FORCE với policy chỉ `TO zz_bt_app`, bị mục
 // tự chữa FORCE (khoản 91) chạm ở lượt SỬA ĐẦU, trước khi lượt phán xét ném — và chủ bảng đọc 0 hàng không lỗi. Thân khoản gọi đó
 // là "bảng RLS ngoài dự án của cùng database" và để ngỏ hình dạng vì DECISIONS chưa có hồ sơ database. Chủ dự án chốt 2026-09-30
-// (ADR-9262): DATABASE RIÊNG mỗi môi trường — mọi lược đồ không hệ thống của database LÀ của dự án theo cấu tạo, "láng giềng"
+// (ADR-131): DATABASE RIÊNG mỗi môi trường — mọi lược đồ không hệ thống của database LÀ của dự án theo cấu tạo, "láng giềng"
 // không có hồ sơ để tồn tại. Ca dưới đây GHIM đúng hành vi đã đo với lời đọc mới: phạm vi ĐÃ CHỌN, hệ quả CHẤP NHẬN, và không gì
 // im lặng — 83⑶ nêu tên bảng, 94 nêu "chủ bảng 0 hàng". Vị từ `VI_TU_FORCE_THIEU`/`MAU_SCHEMA_DU_AN` không đổi; đột biến thu hẹp
 // nó (về `public`) ⇒ ca này đỏ ở ngay phép đo chủ thể.
 // ===============================================================================================
-describe("[S1.9162 / khoản 110 — ADR-9262] phạm vi FORCE của khoản 91 là CẢ DATABASE: database riêng, không láng giềng", () => {
+describe("[S1.226 / khoản 110 — ADR-131] phạm vi FORCE của khoản 91 là CẢ DATABASE: database riêng, không láng giềng", () => {
   const CHU = "zz_bt_chu";
   const APP = "zz_bt_app";
   const donDep = async (): Promise<void> => {
@@ -4253,7 +4283,7 @@ describe("[S1.9162 / khoản 110 — ADR-9262] phạm vi FORCE của khoản 91 
       );
       expect(
         await chuThe(),
-        "phạm vi của VI_TU_FORCE_THIEU là mọi lược đồ không hệ thống của database — zz_bt THUỘC phạm vi (ADR-9262: database riêng, không có láng giềng để miễn)",
+        "phạm vi của VI_TU_FORCE_THIEU là mọi lược đồ không hệ thống của database — zz_bt THUỘC phạm vi (ADR-131: database riêng, không có láng giềng để miễn)",
       ).toEqual(["zz_bt.t"]);
       expect(
         (await duoiChu<{ n: number }>("SELECT count(*)::int AS n FROM zz_bt.t")).rows[0]!.n,

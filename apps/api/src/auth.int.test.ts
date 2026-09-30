@@ -248,15 +248,15 @@ describe("/auth/link — không liệt kê được email", () => {
   // kỳ phụ thuộc libc của máy chủ (đo được: 124 điểm trên musl, 28 trên glibc). Nó hỏi chính
   // CSDL đang chạy xem điểm mã nào phân kỳ, rồi dùng cái đầu tiên. Không có điểm nào — nghĩa là
   // hai hàm đã trùng khít — thì test nói thẳng là nó không đo được gì, chứ không xanh im lặng.~~
-  // [S1.9180 / khoản 71] Đoạn vừa gạch mô tả ca CŨ; ca dưới lật theo `9580_email_ascii` — xem chú thích ngay trên `it`.
+  // [S1.229 / khoản 71] Đoạn vừa gạch mô tả ca CŨ; ca dưới lật theo `092_email_ascii` — xem chú thích ngay trên `it`.
   // ==========================================================================================
-  // **[S1.9180 / khoản 71 / ADR-9280] LẬT CÓ CHỦ ĐÍCH.** ~~địa chỉ mà JS và máy chủ hạ chữ thường KHÁC NHAU vẫn tìm ra người dùng~~ — ca
-  // cũ CẤT một địa chỉ mang điểm mã phân kỳ (tự tìm lúc chạy) rồi đo `/auth/link` tìm ra nó. Nay `9580_email_ascii` thu hẹp miền
+  // **[S1.229 / khoản 71 / ADR-132] LẬT CÓ CHỦ ĐÍCH.** ~~địa chỉ mà JS và máy chủ hạ chữ thường KHÁC NHAU vẫn tìm ra người dùng~~ — ca
+  // cũ CẤT một địa chỉ mang điểm mã phân kỳ (tự tìm lúc chạy) rồi đo `/auth/link` tìm ra nó. Nay `092_email_ascii` thu hẹp miền
   // `users.email` về ASCII in được: địa chỉ ấy KHÔNG CẤT ĐƯỢC (23514) — nên trên mọi giá trị cất được, hai hàm hạ chữ thường trùng khít
   // bất kể libc. Bản vá S1.27 (cả hai vế cùng `pg_catalog.lower()`) vẫn giữ trong `login.ts`: nó đúng không nhờ miền. Và `/auth/link` với
   // địa chỉ ấy vẫn là CÙNG một 200, một job, không link — không ai liệt kê được miền qua cửa này. Không cần tự hiệu chuẩn nữa: điểm mã
   // chọn cố định (Ⓐ, U+24B6 — điểm phân kỳ đo được trên musl ở S1.27).
-  it("[sổ nợ 63] [S1.9180 / khoản 71] địa chỉ mang điểm mã ngoài ASCII không cất được vào `users` (9580, cả dạng hoa lẫn dạng đã hạ), và `/auth/link` với nó vẫn 200 không link", async () => {
+  it("[sổ nợ 63] [S1.229 / khoản 71] địa chỉ mang điểm mã ngoài ASCII không cất được vào `users` (092, cả dạng hoa lẫn dạng đã hạ), và `/auth/link` với nó vẫn 200 không link", async () => {
     const diaChi = "\u24B6lice-63@vidu.vn";
     const org63 = (
       await db.pool.query<{ id: string }>(
@@ -271,7 +271,7 @@ describe("/auth/link — không liệt kê được email", () => {
           (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
         );
     expect(await chen(diaChi), "dạng hoa: hai ràng buộc cùng vi phạm, PostgreSQL nêu một").toMatch(/^23514 users_email_(ascii|chu_thuong)$/u);
-    expect(await chen(diaChi.toLowerCase()), "dạng đã hạ (ⓐ — điểm bất động của lower() trên musl, 048 cho qua): 9580 chặn").toBe("23514 users_email_ascii");
+    expect(await chen(diaChi.toLowerCase()), "dạng đã hạ (ⓐ — điểm bất động của lower() trên musl, 048 cho qua): 092 chặn").toBe("23514 users_email_ascii");
     expect(await chen("alice-63@vidu.vn"), "đối chứng ASCII").toBeNull();
 
     const truoc = dv.linkDaGui.length;
@@ -1401,12 +1401,12 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   // RED THẬT trên mã trước bản vá: `failed_attempts` = 3 và ba mã đều 401.
   //
   // -----------------------------------------------------------------------------------------------
-  // [S1.9141 / khoản 184 — lượt soi ngang 74 góc 4] CHỒNG LẤN ĐƯỢC ÉP VÀ ĐƯỢC ĐO, KHÔNG ĐƯỢC CẦU MAY.
+  // [S1.220 / khoản 184 — lượt soi ngang 74 góc 4] CHỒNG LẤN ĐƯỢC ÉP VÀ ĐƯỢC ĐO, KHÔNG ĐƯỢC CẦU MAY.
   //
   // Bản S1.83 của vế này bắn ba yêu cầu bằng `Promise.all` rồi đòi `2×401, 1×429, failed = 2`. Nó
   // KHÔNG chứng được ba yêu cầu thật sự chồng nhau: chỉ cần chúng chạy TUẦN TỰ (tải máy, gộp socket,
   // máy chủ xử lý nối tiếp) là cổng đọc-rồi-làm CŨ ở bộ điều phối cho ra ĐÚNG bộ số ấy — đo được:
-  // đổi `Promise.all` thành ba `await` nối tiếp ⇒ vế xanh (§S1.9141). Tức phép đo có thể suy biến
+  // đổi `Promise.all` thành ba `await` nối tiếp ⇒ vế xanh (§S1.220). Tức phép đo có thể suy biến
   // thành bản sao đắt tiền của vế ⑹ mà không ai biết, đúng lúc khoản 144 — lớp lỗi đã quay lại BA
   // lần — cần một người tố giác.
   //
@@ -1419,7 +1419,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
   // thấy `0 < 2`, `1 < 2` và tăng; câu thứ ba đánh giá lại vị từ trên hàng ĐÃ cập nhật (EvalPlanQual),
   // thấy `2 < 2` sai, chạm 0 hàng ⇒ `SIDE_PATH_EXHAUSTED` ⇒ 429. Nên bộ số nay là ĐẲNG THỨC.
   //
-  // Đột biến đo được (§S1.9141): ⒜ ba yêu cầu tuần tự ⇒ chỉ MỘT backend chờ ⇒ tiền đề đỏ; ⒝ gỡ vị
+  // Đột biến đo được (§S1.220): ⒜ ba yêu cầu tuần tự ⇒ chỉ MỘT backend chờ ⇒ tiền đề đỏ; ⒝ gỡ vị
   // từ `$3` khỏi `CAU_DAT_COC` (mô phỏng cổng đọc-rồi-làm của bản trước S1.83) ⇒ `401,401,401`,
   // `failed = 3` ⇒ kết luận đỏ.
   //
@@ -1515,7 +1515,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     ]);
   });
   // ===============================================================================================
-  // ⑼ [S1.9101 / khoản 188] NGƯỠNG MÀ CÂU LỆNH DÙNG LÀ NGƯỠNG CỦA BẢNG ROUTE — KHÔNG PHẢI MỘT HẰNG HANDLER TỰ NHẬP.
+  // ⑼ [S1.209 / khoản 188] NGƯỠNG MÀ CÂU LỆNH DÙNG LÀ NGƯỠNG CỦA BẢNG ROUTE — KHÔNG PHẢI MỘT HẰNG HANDLER TỰ NHẬP.
   //
   // S1.83 khai *"cùng một hằng nên hai nơi không trôi khỏi nhau"* — đúng cho GIÁ TRỊ, không đúng cho SỰ CÓ MẶT (S1.87): không ai canh
   // handler của một route khai ngưỡng có truyền ngưỡng ấy xuống câu lệnh không. Từ vòng này bộ điều phối đưa `route.mfaTranDuongPhu`
@@ -1585,7 +1585,7 @@ describe("[khoản 141] phạm vi của chứng chỉ phiên", () => {
     }
   });
   // ===============================================================================================
-  // ⑽ [S1.9101 / khoản 174] HỆ QUẢ VẬN HÀNH CỦA GIAO ĐIỂM 144 × 153, GHIM LẠI: GÕ SAI TOTP ĐỦ NGƯỠNG TRÊN ĐƯỜNG CHÍNH THÌ KHÔNG XOAY ĐƯỢC
+  // ⑽ [S1.209 / khoản 174] HỆ QUẢ VẬN HÀNH CỦA GIAO ĐIỂM 144 × 153, GHIM LẠI: GÕ SAI TOTP ĐỦ NGƯỠNG TRÊN ĐƯỜNG CHÍNH THÌ KHÔNG XOAY ĐƯỢC
   // CHỨNG CHỈ AGENT — KỂ CẢ VỚI MÃ ĐÚNG — CHO TỚI KHI ĐĂNG NHẬP ĐÚNG MỘT LẦN.
   //
   // Chứng chỉ `AGENT_READONLY` có TTL trần một giờ và cách duy nhất có chứng chỉ mới là gọi lại `/auth/agent-session` với một mã tươi
@@ -2160,7 +2160,7 @@ describe("[S1.175 / khoản 145] sổ không nhận lần phát chứng chỉ ag
 });
 
 // ==============================================================================================
-// [S1.9122 / khoản 195 / ADR-9222] NGƯỜI ĐÃ ĐĂNG NHẬP TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH MÌNH
+// [S1.216 / khoản 195 / ADR-126] NGƯỜI ĐÃ ĐĂNG NHẬP TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH MÌNH
 //
 // `LoginTokenError` gộp ba trạng thái — không hợp lệ, hết hạn, đã dùng — làm MỘT câu ở route vô danh, và
 // đó là chống dò tìm có lý: vòng này KHÔNG nới câu ấy. Nhưng vế "đã dùng" đáng lẽ dẫn tới *báo ngay, có
@@ -2173,7 +2173,7 @@ describe("[S1.175 / khoản 145] sổ không nhận lần phát chứng chỉ ag
 // một hàng `AGENT_SCOPE_DENIED` nêu mẫu route (`agent: false` là một quyết định — `routes.test.ts` ghim).
 // Đo trước trên mã trước vòng này: đường không tồn tại ⇒ 404 ở cả ba vế.
 // ==============================================================================================
-describe("[INV-E1] [S1.9122 / khoản 195] GET /auth/login-links — link đăng nhập gần đây của chính người gọi", () => {
+describe("[INV-E1] [S1.216 / khoản 195] GET /auth/login-links — link đăng nhập gần đây của chính người gọi", () => {
   interface LinkGanDay {
     readonly createdAt: string;
     readonly expiresAt: string;

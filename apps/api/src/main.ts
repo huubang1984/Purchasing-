@@ -15,7 +15,7 @@
 import { CauHinhError, docCauHinh } from "./cau-hinh.js";
 import { taoTienTrinhApi } from "./composition.js";
 
-// [S1.9160 / khoản 187] Bản song sinh ở `apps/unseal-worker/src/main.ts` — cổng `tests/architecture/ma-chep-api-worker.test.ts`
+// [S1.224 / khoản 187] Bản song sinh ở `apps/unseal-worker/src/main.ts` — cổng `tests/architecture/ma-chep-api-worker.test.ts`
 // so hai thân hàm từng ký tự; đổi một bên là đổi cả hai.
 function moTaLoi(e: unknown): string {
   if (e instanceof CauHinhError) return e.message;

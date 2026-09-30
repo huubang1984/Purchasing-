@@ -56,11 +56,11 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 - [ ] **2.0 [S1.183 / lượt soi] Ba environment GitHub TRƯỚC 2.1** — `prod`, `prod-worker`, `prod-khoi-tao`, đủ luật bảo vệ
       của 7.1 (người duyệt, chỉ `master`, và với `prod-khoi-tao`: *Prevent self-review*, tắt admin bypass); biến của chúng điền
-      ở 7.1. Trust policy của stack 30 ~~chỉ~~ ghim TÊN environment (**[S1.9152 / khoản 252 ⑶]** và với `prod-khoi-tao` cả TỆP
+      ở 7.1. Trust policy của stack 30 ~~chỉ~~ ghim TÊN environment (**[S1.223 / khoản 252 ⑶]** và với `prod-khoi-tao` cả TỆP
       `khoi-tao.yml` — chỉ khi claim `sub` đã tuỳ biến, 2.0b), và GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow
       nhắc tên chưa có: apply 2.1 trước thì trong khoảng tới 7.1, một workflow trên nhánh bất kỳ khai `environment: prod` là
       nhận được `tp-deploy`.
-- [ ] **2.0b [S1.9152 / khoản 252 ⑶] Tuỳ biến claim `sub` của OIDC TRƯỚC 2.1** — `infra/terraform/README.md`, mục "Tuỳ biến claim
+- [ ] **2.0b [S1.223 / khoản 252 ⑶] Tuỳ biến claim `sub` của OIDC TRƯỚC 2.1** — `infra/terraform/README.md`, mục "Tuỳ biến claim
       `sub`": một lệnh `gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub` với
       `include_claim_keys = ["repo","context","job_workflow_ref"]` (đúng thứ tự), rồi `GET` cùng đường dẫn để đối chiếu. Trust policy
       của stack 30 đòi `sub` dạng ấy — đoạn `repo:` mang ID bất biến của kho (tạo sau 2026-07-15) và `job_workflow_ref`; apply 2.1 mà

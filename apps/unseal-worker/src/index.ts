@@ -102,14 +102,14 @@ export interface ExecuteUnsealInput {
 }
 
 /**
- * [S1.9143 / khoản 137 / ADR-9243] TRẦN số id phong bì hỏng đi vào payload của HAI bản ghi sổ của một
+ * [S1.221 / khoản 137 / ADR-129] TRẦN số id phong bì hỏng đi vào payload của HAI bản ghi sổ của một
  * lượt mở thầu (`RFQ_KEY_MATERIAL_UNWRAPPED`, `RFQ_UNSEALED`).
  *
  * Đo trước vòng này: mỗi id ~40 byte, tuyến tính theo N — N = 50 ⇒ 2 147 byte, N = 500 ⇒ 20 147 byte MỖI
  * bản ghi, trong một sổ chỉ ghi thêm và nối băm; `003` không CHECK kích thước, và không trần nào cho số
  * lời mời của một gói. Payload nay mang `failedCount` (đủ), `failedBidVersionIds` cắt còn K id ĐẦU theo
  * thứ tự ổn định của câu chọn phong bì (`ORDER BY v.bid_id`), và cờ `failedBidVersionIdsTruncated`; phần
- * còn lại KHÔNG vào sổ — suy được bằng câu truy vấn ghi ở ADR-9243 (bản cuối mỗi luồng báo giá của gói,
+ * còn lại KHÔNG vào sổ — suy được bằng câu truy vấn ghi ở ADR-129 (bản cuối mỗi luồng báo giá của gói,
  * đúng vòng, không có hàng `rfq_unsealed_bids` dưới yêu cầu ấy). Đo ở `unseal-worker.int.test.ts`.
  */
 export const FAILED_BID_VERSION_IDS_AUDIT_CAP = 20;
@@ -130,7 +130,7 @@ export interface UnsealOutcome {
    * câu, và phân biệt được chúng là một oracle. Danh tính hàng thì không phải oracle — nhà cung
    * cấp đã biết mình nộp gì.
    *
-   * [S1.9143 / khoản 137 / ADR-9243] Trường này — giá trị TRẢ VỀ trong tiến trình, không lưu — vẫn
+   * [S1.221 / khoản 137 / ADR-129] Trường này — giá trị TRẢ VỀ trong tiến trình, không lưu — vẫn
    * mang ĐỦ mọi id, theo thứ tự luồng của câu chọn phong bì. Thứ có TRẦN là hai bản ghi SỔ: chúng
    * mang `failedCount`, tối đa `FAILED_BID_VERSION_IDS_AUDIT_CAP` id đầu của chính mảng này, và cờ
    * `failedBidVersionIdsTruncated` — xem hằng ấy.
@@ -418,7 +418,7 @@ function tuChoiLucGiaiMa(
       payload: { clause },
     },
     new UnsealExecutionDeniedError(clause, message, cause === undefined ? undefined : { cause }),
-    // [S1.9161 / khoản 179] Vế đã từ chối cho dòng log của lần MẤT SỔ — cùng lý do với `tuChoi` của cổng mở thầu.
+    // [S1.225 / khoản 179] Vế đã từ chối cho dòng log của lần MẤT SỔ — cùng lý do với `tuChoi` của cổng mở thầu.
     clause,
   );
 }
@@ -550,10 +550,10 @@ export async function executeUnsealRequest(
   // KHÔNG dùng `ON CONFLICT DO NOTHING` ở câu `INSERT` để né xung đột ấy: nuốt xung đột là nuốt
   // luôn ca *hai lần mở cùng một phong bì*, thứ mà `UNIQUE` kia tồn tại để bắt (khoản 227⑵).
   //
-  // [S1.9130 / khoản 250 / ADR-9230] VÀ CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`. Thu hồi
+  // [S1.217 / khoản 250 / ADR-128] VÀ CHỈ LUỒNG CỦA LỜI MỜI CÒN SỐNG: `i.revoked_at IS NULL`. Thu hồi
   // lời mời là quyết định loại nhà cung cấp ấy khỏi cuộc thi; `vendor_bids` duy nhất theo lời mời (`018`)
   // nên mời lại sau thu hồi là một luồng MỚI, và không có vế này lượt mở thầu mở CẢ HAI luồng của một
-  // doanh nghiệp — đo ở §S1.181 và §S1.9130: X nộp 900 triệu, thu hồi, mời lại, X nộp 1 tỷ ⇒ `opened = 4`,
+  // doanh nghiệp — đo ở §S1.181 và §S1.217: X nộp 900 triệu, thu hồi, mời lại, X nộp 1 tỷ ⇒ `opened = 4`,
   // bảng so sánh X hai dòng, xếp hạng X hạng 1 bằng giá cũ. `opened` đếm SAU vế lọc. Vế này là bản chép
   // nguyên văn của cùng vế ở hai câu của `buildComparisonTable` (`packages/unseal`) và ở `docBaoGia`
   // (`packages/danh-gia`) — ba bộ đọc, một luật, không gói chung nào đứng dưới cả ba —, và cổng tĩnh
@@ -661,11 +661,11 @@ export async function executeUnsealRequest(
     for (const h of khoaToChuc.values()) h.dispose();
   }
 
-  // [S1.9143 / khoản 137 / ADR-9243] PHẦN PHONG BÌ HỎNG ĐI VÀO SỔ, dựng MỘT lần cho cả hai bản ghi:
+  // [S1.221 / khoản 137 / ADR-129] PHẦN PHONG BÌ HỎNG ĐI VÀO SỔ, dựng MỘT lần cho cả hai bản ghi:
   // số đủ, K id ĐẦU của mảng (thứ tự = thứ tự luồng của câu chọn phong bì, `ORDER BY v.bid_id`, nên
   // ổn định giữa hai lần đọc), và cờ nói rằng có phần không vào sổ. ~~Ghi trọn mảng~~ — trước vòng
   // này hai bản ghi mang trọn `failedBidVersionIds`, ~40 byte một id, không trần, trong một sổ chỉ
-  // ghi thêm (đo: N = 500 ⇒ 20 147 byte mỗi bản ghi). Phần cắt đi suy được từ dữ liệu — câu ở ADR-9243.
+  // ghi thêm (đo: N = 500 ⇒ 20 147 byte mỗi bản ghi). Phần cắt đi suy được từ dữ liệu — câu ở ADR-129.
   const phongBiHongVaoSo = {
     failedCount: failedBidVersionIds.length,
     failedBidVersionIds: failedBidVersionIds.slice(0, FAILED_BID_VERSION_IDS_AUDIT_CAP),

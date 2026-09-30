@@ -263,7 +263,7 @@ describe("[INV-D3] ma trận quyền trong 005 thoả phân tách nhiệm vụ",
     }
   });
 
-  // [S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] PHÉP GHIM CỦA MỘT LỜI KHAI «LỚP NÔNG».
+  // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] PHÉP GHIM CỦA MỘT LỜI KHAI «LỚP NÔNG».
   //
   // Cổng `requirePermission(EVALUATION_PERFORM)` của đường chấm (`packages/danh-gia/src/luot-danh-gia.ts`, route
   // `POST /rfqs/:rfqId/evaluate` ở `apps/api/src/routes/buyer.ts`) ĐỌC NHƯ một lớp phân tách nhiệm vụ nhưng chỉ chặn hai vai;

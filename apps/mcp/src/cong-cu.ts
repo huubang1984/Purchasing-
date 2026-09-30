@@ -9,7 +9,8 @@
 //      phép có một bản sao thứ hai của nó (một cổng quyền chép sang đây là một cổng sẽ trôi);
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
-//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ [S1.9122] MƯỜI MỘT route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
+//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ [S1.216] MƯỜI TÁM route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -58,6 +59,11 @@ export function thamSoCuaDuong(pDuong: string): string[] {
  * đã viết sẵn.
  */
 export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
+  "/rfqs/:rfqId/budget":
+    "NGÂN SÁCH DỰ TÍNH của gói — thứ neo giá nếu rò xuống bên bán: `setRfqBudget` cố ý không ghi số " +
+    "tiền vào sổ kiểm toán, và hàm đọc `getRfqBudget` có cổng (người tạo gói, người duyệt). Route " +
+    "ra đời ở S1.200 cho người duyệt đọc con số mình ký (khoản 258); chủ dự án chọn KHÔNG phơi cho " +
+    "agent ngày 2026-09-29 — khuôn bảng so sánh giá (ADR-038).",
   "/rfqs/:rfqId/comparison":
     "BẢNG SO SÁNH GIÁ sau mở thầu — thứ toàn bộ sản phẩm sinh ra để bảo vệ. Một công cụ MCP đưa " +
     "nó vào ngữ cảnh của một agent là đưa giá của mọi nhà cung cấp ra một nơi chủ dự án không " +
@@ -138,11 +144,31 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH SÁCH NHÓM HÀNG của tổ chức, kể cả nhóm đã ngừng dùng. Nhóm hàng là KHOÁ của tín hiệu chia nhỏ (K10): biết nhóm nào " +
     "tồn tại và nhóm nào vừa ngừng là biết cách xếp gói để tín hiệu không gộp chúng. Người soạn gói đọc nó trên màn " +
     "`/tao-thau`; một tác tử chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
+  "/items":
+    "DANH SÁCH HÀNG CHUẨN của tổ chức, cùng cờ người đang gọi có ghi được không và số người giữ `item.manage`. Hàng chuẩn " +
+    "không mang giá, nên dòng này không nói về giá: nó nói về THƯỚC. Nó là dữ liệu làm việc của màn `/du-lieu`, một màn của " +
+    "người quản lý dữ liệu; gợi ý hàng chuẩn cho người tạo gói là việc của S4.3, chưa có. Một tác tử chỉ-đọc hôm nay không có " +
+    "việc nào cần nó. Route khai `agent: false` và dòng này khai vì sao; ngày nào có việc cần thì đổi một dòng và viết một " +
+    "ADR. [S1.199 / S4.2b]",
+  "/items/:itemId":
+    "CHI TIẾT MỘT HÀNG CHUẨN — mọi phiên bản, bí danh và quy đổi riêng đang hiệu lực, kèm HỌ TÊN người ghi từng thứ. Họ tên " +
+    "người trong tổ chức là thứ `/me` và mọi công cụ khác của bảng này cố ý không trả; dòng này không mở nó cho một tác tử chỉ " +
+    "để đọc một thước đo. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  "/uom":
+    "DANH MỤC ĐƠN VỊ và bí danh đơn vị của tổ chức, kèm họ tên người khai — cùng lý do với `/items/:itemId`. Danh mục toàn " +
+    "cục thì vô hại, nhưng bí danh của tổ chức là thước quy đổi của mọi gói (*\"MT\"* là tấn hay mét), và màn của người " +
+    "quản lý dữ liệu là nơi duy nhất cần đọc nó hôm nay. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  // [S1.203 / S3.6b1]
+  "/rfqs/:rfqId/signals":
+    "TÍN HIỆU CHIA NHỎ của một gói thầu — những gói nào bị gộp với nó, dưới cận bậc nào của phiên bản chính sách nào, ai đã " +
+    "ghi nhận và vì sao. Nó là dữ liệu KIỂM SOÁT của bên mua: biết tín hiệu gộp những gói nào, với cửa sổ bao nhiêu ngày, là " +
+    "biết cách xếp gói để lần sau nó không gộp. Người duyệt đọc nó trên giao diện người mua trước khi ghi nhận; một tác tử " +
+    "chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
   "/auth/login-links":
     "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
-    "ADR-9222). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +
+    "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +
     "cảnh một agent là cho một chứng chỉ agent rò biết chủ nó vào lúc nào và link nào còn sống. Route " +
-    "khai `agent: false` (`apps/api/src/routes.test.ts` ghim) và dòng này khai vì sao. [S1.9122]",
+    "khai `agent: false` (`apps/api/src/routes.test.ts` ghim) và dòng này khai vì sao. [S1.216]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

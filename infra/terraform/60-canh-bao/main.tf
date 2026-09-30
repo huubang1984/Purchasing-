@@ -13,7 +13,7 @@
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
 #   ⑻ [ADR-089] Đường thư: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, báo địa chỉ trong `email_canh_bao`/`email_van_hanh`
 #      chưa xác nhận hay mất đăng ký, và đăng ký lạ — gửi tới CẢ HAI topic.
-#   ⑼ [S1.9152 / khoản 252 ⑴ / ADR-9252] Đường KHỞI TẠO TỔ CHỨC (ADR-111) đi ngoài workflow `khoi-tao.yml`: task họ `tp-khoi-tao`
+#   ⑼ [S1.223 / khoản 252 ⑴ / ADR-130] Đường KHỞI TẠO TỔ CHỨC (ADR-111) đi ngoài workflow `khoi-tao.yml`: task họ `tp-khoi-tao`
 #      được RunTask/StartTask, `taskRoleArn` ghi đè thành role tp-khoi-tao, RegisterTaskDefinition gắn role ấy vào họ KHÁC — cùng
 #      khuôn ⑵ —, và MỌI lần tạo/ghi/xoá bí mật bản khai dưới `tp/khoi-tao/ban-khai/`. Thư là NHÂN CHỨNG, không phải lời buộc
 #      tội: lần chạy hợp lệ cũng ra thư, và thư mà không có run đã duyệt trên GitHub là bất thường.
@@ -55,7 +55,7 @@
 #     tp-deploy sau khi task thoát 0. Put/Update SAU khi đã duyệt là ca công cụ chặn bằng băm (S1.183) — thư làm nó lộ ra sớm
 #     hơn. KHÔNG bắt GetSecretValue (đọc, không đổi) và RestoreSecret (xoá của workflow không có cửa sổ khôi phục).
 # Cả bốn bắt kể lần bị từ chối. Permission set hẹp cho người tạo bản khai (khoản 252 ⑵) hoãn tới trước khách hàng thứ hai —
-# khoản 9452; tới lúc ấy, ⑼ là lớp duy nhất nhìn thấy đường này.
+# khoản 278; tới lúc ấy, ⑼ là lớp duy nhất nhìn thấy đường này.
 #
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
 # (CloudTrail tổ chức phải bật: sự kiện "AWS API Call via CloudTrail" đi ra từ đó).
@@ -169,7 +169,7 @@ locals {
     }
   })
 
-  # ⑼ [S1.9152 / khoản 252 ⑴] — cùng chữ với ⑵, đổi tên: họ task của khởi tạo dùng lại tên role (stack 90: `ho = "tp-khoi-tao"`).
+  # ⑼ [S1.223 / khoản 252 ⑴] — cùng chữ với ⑵, đổi tên: họ task của khởi tạo dùng lại tên role (stack 90: `ho = "tp-khoi-tao"`).
   ho_khoi_tao       = module.chung.role.khoi_tao
   role_khoi_tao_arn = module.chung.role_arn_prod.khoi_tao
   mau_task_khoi_tao = jsonencode({
@@ -1026,7 +1026,7 @@ resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_khong_chay" {
 }
 
 # ---------------------------------------------------------------------------------------------
-# ⑼ [S1.9152 / khoản 252 ⑴ / ADR-9252] Đường khởi tạo tổ chức chạy ngoài workflow — task tp-khoi-tao, bí mật bản khai
+# ⑼ [S1.223 / khoản 252 ⑴ / ADR-130] Đường khởi tạo tổ chức chạy ngoài workflow — task tp-khoi-tao, bí mật bản khai
 # ---------------------------------------------------------------------------------------------
 # Cùng khuôn ⑵: rule ở AUDIT bắt sự kiện (của prod chuyển sang) ⇒ SNS `tp-canh-bao-khoa` ⇒ thư đọc được; rule ở PROD chỉ
 # chuyển nguyên sự kiện sang bus của audit qua role `tp-chuyen-canh-bao-khoa`. Người có quyền ở prod gỡ được rule chuyển,

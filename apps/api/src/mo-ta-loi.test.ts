@@ -66,7 +66,7 @@ describe("[S1.68 / khoản 119] moTaLoiKhongGiaTri nêu thêm MỘT tầng `caus
   });
 });
 
-describe("[S1.9151 / khoản 166] bản của api LÀ bản của identity", () => {
+describe("[S1.222 / khoản 166] bản của api LÀ bản của identity", () => {
   it("`moTaLoiKhongGiaTri` mà apps/api xuất là ĐÚNG hàm của @trustprocure/identity — không một bản bọc, không một bản chép; hai mô tả trên vẫn đo luật của bản chung", () => {
     expect(moTaLoiKhongGiaTri).toBe(moTaLoiCuaIdentity);
   });

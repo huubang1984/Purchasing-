@@ -77,7 +77,7 @@ export function donGiaNguoiGo(chuoi: string): string | null {
 /**
  * `sl` (tối đa 4 chữ số thập phân) × `dg` (số nguyên) → chuỗi tiền 2 chữ số thập phân.
  *
- * [S1.9181 / khoản 218] Tích ở tỉ lệ 10^4 thu về xu bằng luật **nửa-ra-xa-0** — luật của
+ * [S1.230 / khoản 218] Tích ở tỉ lệ 10^4 thu về xu bằng luật **nửa-ra-xa-0** — luật của
  * `pg_catalog.round(x, 2)` và của `lamTron` ở `@trustprocure/danh-gia` (ADR-050 ⑴), tức con số
  * đi vào phong bì là con số mà mọi phép tính phía máy chủ sẽ tính ra lại. ~~Bản trước chia
  * `BigInt` thẳng, tức CẮT CỤT về 0~~ — lệch với luật của sản phẩm ở 50 trên 100 phần dư (mọi phần

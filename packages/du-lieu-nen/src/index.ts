@@ -10,17 +10,33 @@ export {
 // [S1.197 / S4.2a] Hàng chuẩn, bí danh hàng, quy đổi riêng.
 export {
   DuLieuNenError,
+  docChiTietHangChuan,
   docHangChuan,
   khaiBiDanhHang,
   khaiQuyDoiRieng,
+  lietKeHangChuan,
   rutBiDanhHang,
   rutQuyDoiRieng,
   taoHangChuan,
   taoPhienBanHangChuan,
+  type BiDanhHangHieuLuc,
+  type ChiTietHangChuan,
   type HangChuan,
   type HangChuanMoi,
   type KhaiBiDanhHangInput,
   type KhaiQuyDoiRiengInput,
+  type PhienBanHangChuan,
+  type QuyDoiRiengHieuLuc,
   type TaoHangChuanInput,
   type TaoPhienBanInput,
 } from "./hang-chuan.js";
+// [S1.199 / S4.2b] Danh mục đơn vị và bí danh đơn vị của tổ chức — đường ghi của màn `/du-lieu`.
+export {
+  docDanhMucDonVi,
+  khaiBiDanhDonVi,
+  rutBiDanhDonVi,
+  type BiDanhDonViHieuLuc,
+  type DanhMucDonVi,
+  type DonViDanhMuc,
+  type KhaiBiDanhDonViInput,
+} from "./bi-danh-don-vi.js";

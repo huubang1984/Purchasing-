@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9161 / khoản 189, 179] BA DANH MỤC ĐÓNG CỦA DÒNG LOG TỪ CHỐI BẰNG TẬP HẰNG Ở CHỖ GỌI — ĐO TRÊN CÂY CÚ PHÁP
+// [S1.225 / khoản 189, 179] BA DANH MỤC ĐÓNG CỦA DÒNG LOG TỪ CHỐI BẰNG TẬP HẰNG Ở CHỖ GỌI — ĐO TRÊN CÂY CÚ PHÁP
 //
 // `rbac.ts` canh dòng log của một lần từ chối MẤT SỔ bằng phép THUỘC-TẬP (khoản 189): `action`, `resourceType` và vế cổng phải có
 // tên trong `DANH_MUC_HANH_DONG_TU_CHOI`, `DANH_MUC_LOAI_TAI_NGUYEN`, `DANH_MUC_VE_CONG`, không thì ra `HANG_LA`. Một tập đóng mua
@@ -248,7 +248,7 @@ function sapXep(t: Iterable<string>): string[] {
 const KET_QUA = tepSanXuat().map((tep) => [tep, docTep(tep, readFileSync(join(GOC, tep), "utf8"))] as const);
 const hop = (lay: (k: KetQuaDoc) => ReadonlySet<string>): Set<string> => new Set(KET_QUA.flatMap(([, k]) => [...lay(k)]));
 
-describe("[S1.9161 / khoản 189] danh mục đóng của dòng log từ chối BẰNG tập hằng ở chỗ gọi", () => {
+describe("[S1.225 / khoản 189] danh mục đóng của dòng log từ chối BẰNG tập hằng ở chỗ gọi", () => {
   it("ĐỐI CHỨNG trên văn bản mẫu: bộ đọc lấy chuỗi tại chỗ, hằng cấp tệp, `route.resourceType`, route, vế; và ĐỎ với thứ nó không giải được", () => {
     const mau = docTep(
       "packages/x/src/a.ts",

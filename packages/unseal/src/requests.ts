@@ -341,9 +341,9 @@ function laTrungPheDuyet(loi: Error): boolean {
 }
 
 /**
- * [S1.9113 / khoản 133] YÊU CẦU KHÔNG TỒN TẠI TRONG TỔ CHỨC LÚC PHÊ DUYỆT — 23503 của câu INSERT `unseal_approvals`.
+ * [S1.213 / khoản 133] YÊU CẦU KHÔNG TỒN TẠI TRONG TỔ CHỨC LÚC PHÊ DUYỆT — 23503 của câu INSERT `unseal_approvals`.
  *
- * Đo trước bản vá (§S1.72, đo lại ở §S1.9113): với một id không có trong tổ chức — UUID ngẫu nhiên, hay id CÓ THẬT của tổ chức khác mà
+ * Đo trước bản vá (§S1.72, đo lại ở §S1.213): với một id không có trong tổ chức — UUID ngẫu nhiên, hay id CÓ THẬT của tổ chức khác mà
  * RLS giấu — trigger `unseal_kiem_nguoi_duyet` (019) không thấy hàng và RAISE `foreign_key_violation` (23503) KHÔNG mang tên ràng buộc,
  * trước cả khi khoá ngoại của 019 kịp kiểm; lỗi `pg` trần đi ra (`name` là `error`), qua HTTP là 422 "tham chieu khong hop le" của bảng
  * ánh xạ SQLSTATE, 0 hàng sổ.
@@ -433,7 +433,7 @@ export async function approveUnseal(
         loi,
       );
     }
-    // [S1.9113 / khoản 133] Không tìm thấy yêu cầu ⇒ bọc thành `UnsealError` CÓ TÊN (lỗi `pg` giữ ở `cause`), ghi
+    // [S1.213 / khoản 133] Không tìm thấy yêu cầu ⇒ bọc thành `UnsealError` CÓ TÊN (lỗi `pg` giữ ở `cause`), ghi
     // `UNSEAL_NOT_FOUND_DENIED` ở giao dịch độc lập, rồi ném — cùng khuôn nhánh không tìm thấy của cổng mở thầu (khoản 121) và của
     // `cancelUnseal` dưới đây. Thông điệp là hằng, không mang id. Xem `laKhongTimThayYeuCau`.
     if (loi instanceof Error && laKhongTimThayYeuCau(loi)) {
@@ -551,7 +551,7 @@ export interface DispatchUnsealInput {
 // `unseal_requests_kiem_nhan_chung` (022) — trigger ấy fire ở MỌI update khi hàng có nhân chứng,
 // và nó đòi phiên nhân chứng còn sống. Phiên ấy hết hạn thì điều phối lại gãy. Đó là khoản 160,
 // và vòng này KHÔNG đóng nó; nó chỉ thêm một chỗ nữa mà khoản 160 cắn được.~~
-// **[S1.9131 / khoản 160]** Ranh giới ấy đã hết từ `055` mục (3) (khoản 210, S1.100): trigger
+// **[S1.218 / khoản 160]** Ranh giới ấy đã hết từ `055` mục (3) (khoản 210, S1.100): trigger
 // `unseal_requests_kiem_nhan_chung` nay chỉ fire `BEFORE INSERT`, nên câu `UPDATE` dưới đây KHÔNG
 // hỏi phiên nhân chứng nữa — một nhân chứng đã đăng xuất không làm gãy điều phối lại, cũng như
 // không làm gãy câu `EXECUTED` của worker. Đo ở `unseal.int.test.ts`, khối `[INV-D3] [khoản 209 +
@@ -604,9 +604,9 @@ async function dieuPhoiLaiSauKhiChet(
     [orgId, UNSEAL_JOB_KIND, khoaChongTrungMoThau(bangChung.unsealRequestId)],
   );
   if (Number(dem[0]?.n ?? "0") > 0) {
-    // [S1.9113 / khoản 133] ĐÂY LÀ "LẦN ĐIỀU PHỐI THỨ HAI" mà khoản 133 đo được 0 hàng: người bấm lại đi trọn cổng bốn vế (MỌI từ
+    // [S1.213 / khoản 133] ĐÂY LÀ "LẦN ĐIỀU PHỐI THỨ HAI" mà khoản 133 đo được 0 hàng: người bấm lại đi trọn cổng bốn vế (MỌI từ
     // chối QUYỀN đã vào sổ ở đó), rồi bị chặn vì lượt trước còn PENDING/RUNNING. Chủ dự án chốt D5 phủ nó (tiểu mục ADR-016
-    // [S1.9113]) — vào sổ ở giao dịch độc lập rồi ném, lớp lỗi và thông điệp giữ nguyên; `reason` là một hằng. Hai vế ĐUA phía dưới
+    // [S1.213]) — vào sổ ở giao dịch độc lập rồi ném, lớp lỗi và thông điệp giữ nguyên; `reason` là một hằng. Hai vế ĐUA phía dưới
     // (trạng thái đổi giữa lần cổng đọc và câu `UPDATE`) KHÔNG đi qua đây: qua đường công khai cổng đã từ chối trước và đã ghi
     // `UNSEAL_DENIED`, nên ghi thêm là ghi hai lần một lần từ chối. `return` là chịu lực: bỏ nó thì hàm đi tiếp và xếp job thứ hai.
     return throwAuditedDenial(
@@ -700,7 +700,7 @@ export async function dispatchUnseal(
     // [S1.96 / khoản 130] KHÔNG còn là một ca lỗi. Xem khối `dieuPhoiLaiSauKhiChet` bên dưới.
     // ~~Các lần từ chối trong đó là từ chối TRẠNG THÁI, không phải từ chối QUYỀN — cùng hạng với
     // câu "đã được điều phối rồi" mà nhánh này thay thế, nên chúng không đi qua đường ghi sổ
-    // từ chối của cổng.~~ [S1.9113 / khoản 133] Câu gạch đúng cho hai vế ĐUA trong đó (cổng bốn
+    // từ chối của cổng.~~ [S1.213 / khoản 133] Câu gạch đúng cho hai vế ĐUA trong đó (cổng bốn
     // vế đã phủ và đã ghi sổ trước) và SAI cho vế "còn một lượt đang sống": đó chính là lần bấm
     // thứ hai mà khoản 133 đo được 0 hàng, và chủ dự án chốt D5 phủ nó — nay đi qua
     // `throwAuditedDenial` (`UNSEAL_DISPATCH_DENIED`), nên nhánh này nhận `auditPool`. Mọi từ
@@ -785,11 +785,11 @@ export async function cancelUnseal(
   );
   const nguoiTao = chu[0]?.requested_by;
   if (nguoiTao === undefined) {
-    // [S1.9113 / khoản 133] KHÔNG TÌM THẤY trong tổ chức (UUID lạ, hay id của tổ chức khác mà RLS giấu) ⇒ vào sổ rồi ném. Đo trước
-    // bản vá (§S1.72, §S1.9113): nhánh này rơi xuống câu `UPDATE` bên dưới (0 hàng) rồi ném `UnsealError` — 0 hàng sổ. Nay được nhận
+    // [S1.213 / khoản 133] KHÔNG TÌM THẤY trong tổ chức (UUID lạ, hay id của tổ chức khác mà RLS giấu) ⇒ vào sổ rồi ném. Đo trước
+    // bản vá (§S1.72, §S1.213): nhánh này rơi xuống câu `UPDATE` bên dưới (0 hàng) rồi ném `UnsealError` — 0 hàng sổ. Nay được nhận
     // ra ở đây, TRƯỚC phép kiểm ai được huỷ: một id không tồn tại thì không có "người yêu cầu" để so. Ném CÙNG CÂU mà câu `UPDATE`
     // vẫn ném cho ca "không ở trạng thái huỷ được", để thân 422 không đổi (đề bài); vế trạng thái ấy là một từ chối TRẠNG THÁI trên
-    // một hàng có thật và KHÔNG thuộc khoản 133 — vẫn không vào sổ, nói ra ở §S1.9113. `return` là chịu lực (cùng lý do với `tuChoi`
+    // một hàng có thật và KHÔNG thuộc khoản 133 — vẫn không vào sổ, nói ra ở §S1.213. `return` là chịu lực (cùng lý do với `tuChoi`
     // của cổng): bỏ nó thì hàm đi tiếp với `nguoiTao` rỗng.
     return throwAuditedDenial(
       auditPool,
@@ -836,7 +836,7 @@ export async function cancelUnseal(
   );
   const h = rows[0];
   if (h === undefined) {
-    // [S1.9113 / khoản 133] Từ vòng này ca "không tìm thấy" đã dừng ở trên (có sổ); tới đây hàng CÓ THẬT mà không ở
+    // [S1.213 / khoản 133] Từ vòng này ca "không tìm thấy" đã dừng ở trên (có sổ); tới đây hàng CÓ THẬT mà không ở
     // PENDING/APPROVED — một từ chối TRẠNG THÁI, ngoài khoản 133, không vào sổ. Câu giữ nguyên để thân 422 không đổi.
     throw new UnsealError(
       "không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn, hoặc nó không ở trạng thái huỷ được",

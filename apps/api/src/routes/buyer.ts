@@ -28,6 +28,7 @@ import {
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
+import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import {
   clearOtpLockout,
   createInvitation,
@@ -54,6 +55,7 @@ import {
   extendRfqDeadline,
   getActiveProcurementPolicy,
   getRfq,
+  getRfqBudget,
   kyPhienBanChinhSach,
   lietKeNhomHang,
   lietKePhienBanChinhSach,
@@ -323,6 +325,27 @@ const doc: readonly BuyerReadRoute[] = [
       return { status: 200, body: { rfq: r } };
     },
   },
+  // [S1.200 / khoản 258] Ngân sách ĐÚNG như chữ ký duyệt gói ràng vào (ADR-115) — người duyệt đọc được con số mình ký. Màn
+  // `/tao-thau` tự đọc nó ở lần đọc gói cho người tạo gói; người khác bấm «Xem ngân sách». Cổng nằm trong gói (`getRfqBudget`, rổ
+  // `HAM_DOC_CO_QUYEN`): người tạo gói cần `rfq.create`, người khác cần `rfq.approve`; `auditPool` để lần từ chối có bản ghi.
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/budget",
+    audience: "BUYER",
+    mutates: false,
+    // [khoản 141] NGÂN SÁCH DỰ TÍNH — thứ neo giá nếu rò xuống bên bán; chủ dự án chốt ngày 2026-09-29: agent không đọc (ADR-118)
+    agent: false,
+    handler: async (ctx) => {
+      const budget = await getRfqBudget(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
+        ctx.auditPool,
+      );
+      if (budget === null) throw new HttpError(404, "khong co goi thau");
+      return { status: 200, body: { budget } };
+    },
+  },
   {
     method: "GET",
     path: "/rfqs/:rfqId/invitations",
@@ -359,6 +382,24 @@ const doc: readonly BuyerReadRoute[] = [
     // [khoản 141] hạng mục mua — cái gì, bao nhiêu
     agent: true,
     handler: async (ctx) => ({ status: 200, body: { items: await listRfqItems(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } }),
+  },
+  {
+    method: "GET",
+    path: "/rfqs/:rfqId/signals",
+    audience: "BUYER",
+    mutates: false,
+    // [S1.203 / S3.6b1] Tín hiệu chia nhỏ của một gói: tín hiệu hiện tại, việc nó còn chờ ghi nhận không, các hàng đã ghi cùng
+    // lần ghi nhận. Không giá nào — bằng chứng chỉ mang id gói, nhóm hàng, phiên bản chính sách, cận bậc, cửa sổ. KHÔNG cho
+    // agent: tín hiệu là dữ liệu kiểm soát của bên mua, cùng lý do `/categories`; mở sau là một quyết định có tên.
+    // [S3.6b2] Thêm tên và trạng thái các gói trong bằng chứng, họ tên người ghi, và người đang xem ghi nhận được không — danh
+    // tính dẫn xuất từ phiên, để màn `/tao-thau` nói trước thay vì để một cú bấm sai vào sổ. Vẫn không một con số nào.
+    agent: false,
+    handler: async (ctx) => ({
+      status: 200,
+      body: {
+        tinHieu: await lietKeTinHieu(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }),
+      },
+    }),
   },
   {
     method: "GET",
@@ -404,12 +445,12 @@ const doc: readonly BuyerReadRoute[] = [
     mutates: false,
     // [khoản 141] BẢNG SO SÁNH GIÁ — thứ toàn bộ sản phẩm sinh ra để bảo vệ
     //
-    // [S1.9113 / khoản 108 / ADR-9213] HỢP ĐỒNG SỐ của thân trả về: `comparison.rows[].totalAmount` (CHUỖI thập phân, hay
+    // [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG SỐ của thân trả về: `comparison.rows[].totalAmount` (CHUỖI thập phân, hay
     // `null`) và `comparison.aggregates.min/max/average` là SỐ CHUẨN — tính bằng SQL, đúng tới từng chữ số trong miền
     // `numeric(18, 2)`. `comparison.rows[].payload` là BẢN HIỂN THỊ của phong bì: một số JSON quá 15 chữ số có nghĩa trong đó đã
     // qua `double` khi `pg` phân tích `jsonb`, và qua `JSON.parse` của client thêm lần nữa — client đọc số tiền PHẢI lấy
     // `totalAmount`, không lấy `payload.totalAmount` (`apps/web/trang/mo-thau.js` làm đúng thế). Toàn văn và phép đo ở docstring
-    // `buildComparisonTable` (`packages/unseal/src/comparison.ts`); ghim ở `comparison.int.test.ts` khối `[S1.9113 / khoản 108]`.
+    // `buildComparisonTable` (`packages/unseal/src/comparison.ts`); ghim ở `comparison.int.test.ts` khối `[S1.213 / khoản 108]`.
     agent: false,
     handler: async (ctx) => ({
       status: 200,
@@ -575,11 +616,11 @@ const ghi: readonly BuyerWriteRoute[] = [
   // [S1.106 / S2.4] CHẤM — cạnh `UNSEALED->EVALUATING` của `011`, và nó là route ghi DUY NHẤT mang
   // `evaluation.perform`.
   //
-  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.9132]** BẢY vai giữ
-  // (chỉ `DIRECTOR` không — **[S1.9132]** và `DATA_STEWARD` của `083`), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
+  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.219]** BẢY vai giữ
+  // (chỉ `DIRECTOR` không — **[S1.219]** và `DATA_STEWARD` của `083`), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
   // chặn được "ai trong tổ chức". Ghi ra ở đúng chỗ người đọc mã route sẽ tìm.
   //
-  // [S1.9132 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Cổng này ĐƯỢC GIỮ LÀ LỚP NÔNG, ma trận `005` KHÔNG thu hẹp. Lớp
+  // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Cổng này ĐƯỢC GIỮ LÀ LỚP NÔNG, ma trận `005` KHÔNG thu hẹp. Lớp
   // thật của phân tách nhiệm vụ trên đường chấm là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói (ADR-051, trigger
   // `award_kiem_de_xuat`), không phải danh sách vai. Năm vai giữ mã này được GHIM ở
   // `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»): ai đổi ma trận thì ca ấy đỏ và phải đọc lại đoạn này
@@ -678,14 +719,14 @@ const ghi: readonly BuyerWriteRoute[] = [
   //
   // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
   // tự suy lượt chấm MỚI NHẤT. ~~Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
-  // thuộc đúng RFQ, không đòi nó mới nhất~~ **[S1.9182 / khoản 231]** từ `9582` tầng CSDL cũng đòi lượt
+  // thuộc đúng RFQ, không đòi nó mới nhất~~ **[S1.231 / khoản 231]** từ `093` tầng CSDL cũng đòi lượt
   // mới nhất (`j5_luot_cham_khong_moi_nhat`) — hai lớp, như vòng BAFO; ca đo ở `luot-danh-gia.int`.
   //
   // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
   // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
   // người khác — phê duyệt kép bị tháo bằng cách bào mòn. ~~Cái giá: người đề xuất không tự rút lại
-  // được (khoản **232**).~~ **[S1.9182 / khoản 232 / ADR-9282]** Route THỨ TƯ `…/award/withdraw` dưới
-  // `award.recommend`: người đề xuất RÚT đề xuất CHƯA chữ ký của mình — ba vế ràng ở CSDL (`9583`), không
+  // được (khoản **232**).~~ **[S1.231 / khoản 232 / ADR-133]** Route THỨ TƯ `…/award/withdraw` dưới
+  // `award.recommend`: người đề xuất RÚT đề xuất CHƯA chữ ký của mình — ba vế ràng ở CSDL (`094`), không
   // một cổng quyền đọc dữ liệu nào ở đây, và cổng huỷ không đổi.
   // --------------------------------------------------------------------------------------------
   {
@@ -765,8 +806,8 @@ const ghi: readonly BuyerWriteRoute[] = [
       },
     }),
   },
-  // [S1.9182 / khoản 232 / ADR-9282] RÚT đề xuất — cổng `award.recommend`, cùng cổng với lần đề xuất. Không `awardId`: hàng
-  // mới nhất là đích, và `9583` từ chối nếu nó không phải `PROPOSED` của chính người gọi với 0 chữ ký.
+  // [S1.231 / khoản 232 / ADR-133] RÚT đề xuất — cổng `award.recommend`, cùng cổng với lần đề xuất. Không `awardId`: hàng
+  // mới nhất là đích, và `094` từ chối nếu nó không phải `PROPOSED` của chính người gọi với 0 chữ ký.
   {
     method: "POST",
     path: "/rfqs/:rfqId/award/withdraw",
@@ -1067,10 +1108,41 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_APPROVE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
+    // [S1.198 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
+    // Route không hỏi tổ chức đã bật chưa — trigger `rfq_approvals_so_lan_nop` đòi nó ở tổ chức đã bật (422 có tên khi vắng hay
+    // lệch), còn tổ chức chưa bật giữ hợp đồng MVP1: không thân vẫn duyệt được.
     handler: async (ctx) => {
-      await approveRfq(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId }, ctx.auditPool);
+      await approveRfq(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId, lanNopDaXem: soNguyenTuyChon(ctx.req.body, "lanNop") },
+        ctx.auditPool,
+      );
       return { status: 200, body: { rfq: await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } };
     },
+  },
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/signals/acknowledge",
+    audience: "BUYER",
+    mutates: true,
+    // [S1.203 / S3.6b1 · K10a] Ghi nhận tín hiệu chia nhỏ HIỆN TẠI của gói đang chờ duyệt, kèm lý do — cùng cổng với duyệt gói.
+    // Hàm gói hỏi lại cùng mã, rồi luật người (không tạo, không nộp gói nào trong bằng chứng, không khai phiên bản chính sách
+    // mà gói ghim) — lời từ chối vào sổ `CONTROL_DENIED`. Bằng chứng đã đổi sau lần nộp thì tín hiệu mới được lưu ở đây.
+    permission: PERMISSIONS.RFQ_APPROVE,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        ghiNhan: await ghiNhanTinHieu(
+          ctx.client,
+          ctx.orgId,
+          { rfqId: rfqIdParam(ctx.req), lyDo: chuoiBatBuoc(ctx.req.body, "lyDo"), actorSessionId: ctx.actor.sessionId },
+          ctx.auditPool,
+        ),
+      },
+    }),
   },
   {
     method: "POST",

@@ -643,10 +643,10 @@ describe("[INV-D5] [S1.68 / khoản 119] lần ghi sổ của một lần từ c
     ).rows[0]!.id;
   });
 
-  // [S1.9122 / khoản 177 / ADR-9223] Sáu dòng log ghim dưới đây (⒫ ⒬ ⒭ ⒮ và hai dòng của khối khoản 120) mang thêm `nguoi=<12 hex>` — băm
+  // [S1.216 / khoản 177 / ADR-127] Sáu dòng log ghim dưới đây (⒫ ⒬ ⒭ ⒮ và hai dòng của khối khoản 120) mang thêm `nguoi=<12 hex>` — băm
   // rút gọn của người bị từ chối, có mặt vì mọi đường ấy ghi `actorId` là id người gọi. Hình dạng của khe đo ở `mo-ta-hang-dong.test.ts`,
   // đúng người và ba người ba băm đo ở `log-tu-choi-mat.int.test.ts`; ở đây chỉ ghim rằng khe ấy CÓ MẶT, đúng hình dạng, và không gì khác.
-  it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log ~~`DenialAuditFailedError <- error 23514`~~ [S1.85 / khoản 131] ~~`POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514`~~ [S1.9161 / khoản 179] `POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514` (cộng VẾ đã từ chối), không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
+  it("[INV-D5] ⒫ vế POLICY_GATE của cổng mở thầu, lần ghi `UNSEAL_DENIED` ném 23514 ⇒ 500 thân cố định với MỘT dòng log ~~`DenialAuditFailedError <- error 23514`~~ [S1.85 / khoản 131] ~~`POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST <- error 23514`~~ [S1.225 / khoản 179] `POST /unseal/:unsealRequestId/dispatch DenialAuditFailedError UNSEAL_DENIED UNSEAL_REQUEST POLICY_GATE <- error 23514` (cộng VẾ đã từ chối), không hàng sổ, không job (trước bản vá: 422 mang thông điệp nội bộ của lỗi, 0 dòng log); đối chứng không chặn ⇒ 422 không log, một hàng", async () => {
     const doiChung = await yeuCauMoThauK119();
     const dc = await goi(gocK119, `/unseal/${doiChung}/dispatch`, gdK119.cookie, { method: "POST" });
     expect([dc.status, dc.log]).toEqual([422, []]);

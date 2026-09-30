@@ -15,6 +15,28 @@ import { docHangHardening as docHangHardeningTu } from "./hardening-hang.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("./migrations", import.meta.url));
 
+const DONG_MUC_TRIGGER_LA = '- "không trigger lạ trên bảng của dự án (mặc định-đóng, khoản 259)": ';
+
+/**
+ * [S1.205 / khoản 259] Một fixture cắm trigger lên bảng không có tên trong `TRIGGER_DUOC_PHEP`, nên mục mặc định-đóng với
+ * trigger chặn deploy vì nó — bất kể phép đo của ca. Khẳng định dòng của mục ấy nêu ĐÚNG những trigger ấy (`bảng.tên`), rồi bỏ
+ * dòng ấy khỏi thông điệp và trừ số mục; không còn mục nào ⇒ `"OK"`. Khuôn của `db/hardening-suy-tu-tinh-chat.int.test.ts`.
+ */
+function boMucTriggerLa(kq: string, trigger: readonly string[]): string {
+  const dong = kq.split("\n");
+  const i = dong.findIndex((d) => d.startsWith(DONG_MUC_TRIGGER_LA));
+  expect(i, `mục trigger lạ phải nêu ${trigger.join(", ")} — kết quả: ${kq.slice(0, 200)}`).toBeGreaterThanOrEqual(0);
+  const neu = [...dong[i]!.matchAll(/(?:\(|; )([a-z_0-9.]+): TRIGGER LẠ/gu)].map((m) => m[1]!).sort();
+  expect(neu, "mục trigger lạ nêu đúng trigger của fixture").toEqual([...trigger].sort());
+  dong.splice(i, 1);
+  const m = /Hardening không sửa được (\d+) mục:/u.exec(dong[0] ?? "");
+  expect(m, "đầu thông báo gom").not.toBeNull();
+  const con = Number(m![1]) - 1;
+  if (con === 0) return "OK";
+  dong[0] = dong[0]!.replace(m![0], `Hardening không sửa được ${con} mục:`);
+  return dong.join("\n");
+}
+
 /**
  * [Task 8] Trạng thái CHUẨN của hai mục (E1)/(E2): cả hai hàm D3 còn nguyên thân + proconfig, và
  * cả hai trigger còn đó ở đúng hình dạng (FOR EACH ROW, AFTER INSERT OR UPDATE = tgtype 21) với
@@ -130,24 +152,24 @@ async function truoc049(
 }
 
 /**
- * [khoản nợ 71] Dựng một CSDL đã áp mọi migration TRỪ `9580_email_ascii`, với chuỗi danh tính (tổ chức, người mua có vai và phiên) và một
- * nhà cung cấp — để đo `9580` trên dữ liệu có từ trước. Hai hàm chèn chạy dưới superuser (vai của `db.pool`), nên chèn được địa chỉ ngoài
+ * [khoản nợ 71] Dựng một CSDL đã áp mọi migration TRỪ `092_email_ascii`, với chuỗi danh tính (tổ chức, người mua có vai và phiên) và một
+ * nhà cung cấp — để đo `092` trên dữ liệu có từ trước. Hai hàm chèn chạy dưới superuser (vai của `db.pool`), nên chèn được địa chỉ ngoài
  * ASCII — ở CHỮ THƯỜNG, để đi qua ràng buộc chữ thường của 048/049 và ràng buộc hình dạng của 011: đúng lỗ khoản 71 gọi tên.
  */
-async function truoc9580(
+async function truoc092(
   db: TestDatabase,
   tmp: string,
 ): Promise<{
-  readonly ten9580: string;
+  readonly ten092: string;
   readonly nguoiDung: (email: string) => Promise<string>;
   readonly lienHe: (email: string) => Promise<string>;
-  readonly daGhi9580: () => Promise<number>;
+  readonly daGhi092: () => Promise<number>;
   readonly emailCua: (bang: "users" | "supplier_contacts", id: string) => Promise<string | undefined>;
 }> {
-  const tep = (await readdir(MIGRATIONS_DIR)).filter((f) => f.startsWith("9580_email_ascii"));
-  expect(tep, "chưa có migration 9580_email_ascii trong kho").toHaveLength(1);
-  const ten9580 = tep[0]!;
-  for (const f of await readdir(MIGRATIONS_DIR)) if (f !== ten9580) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
+  const tep = (await readdir(MIGRATIONS_DIR)).filter((f) => f.startsWith("092_email_ascii"));
+  expect(tep, "chưa có migration 092_email_ascii trong kho").toHaveLength(1);
+  const ten092 = tep[0]!;
+  for (const f of await readdir(MIGRATIONS_DIR)) if (f !== ten092) await copyFile(join(MIGRATIONS_DIR, f), join(tmp, f));
   await migrate(db.pool, tmp);
   const org = (await db.pool.query<{ id: string }>("INSERT INTO organizations (name, slug) VALUES ('zz71', 'zz71') RETURNING id")).rows[0]!.id;
   const nguoiDung = async (email: string): Promise<string> =>
@@ -173,11 +195,11 @@ async function truoc9580(
         [org, ncc, email, pm, phien],
       )
     ).rows[0]!.id;
-  const daGhi9580 = async (): Promise<number> =>
-    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [ten9580])).rowCount ?? 0;
+  const daGhi092 = async (): Promise<number> =>
+    (await db.pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [ten092])).rowCount ?? 0;
   const emailCua = async (bang: "users" | "supplier_contacts", id: string): Promise<string | undefined> =>
     (await db.pool.query<{ email: string }>(`SELECT email FROM ${bang} WHERE id = $1`, [id])).rows[0]?.email;
-  return { ten9580, nguoiDung, lienHe, daGhi9580, emailCua };
+  return { ten092, nguoiDung, lienHe, daGhi092, emailCua };
 }
 
 /** Đổi user/password của một connection string, giữ nguyên host/port/database. */
@@ -686,7 +708,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // do chủ bảng thêm), nên chặn sớm không lấy mất lối ra nào mà một migration chạy dưới vai ấy làm được — trừ migration tự SET ROLE
   // sang chủ, ranh giới nói ra.~~ [S1.66 / lượt soi ngang 59c NẶNG-3, lượt soi 60b] Lượt hỏi trước vòng bỏ qua dòng mà `tu_sua_duoc`
   // nhận ra là tự sửa được (S1.57; lượt soi 50 INFO-8 thay vế SET ROLE); `tu_sua_duoc` xấp xỉ theo CẢ HAI chiều — ~~chiều CHẶN chưa đo,
-  // khoản 113.~~ [S1.9172] chiều CHẶN đã đo và đóng ở ca `[khoản nợ 113]` ngay dưới: đường cấp thẳng bởi một vai mà vai deploy có ADMIN
+  // khoản 113.~~ [S1.228] chiều CHẶN đã đo và đóng ở ca `[khoản nợ 113]` ngay dưới: đường cấp thẳng bởi một vai mà vai deploy có ADMIN
   // OPTION trên nó nay được đọc là tự sửa được; xấp xỉ còn lại chỉ về phía bỏ qua.
   it("[INV-F1] [khoản nợ 100] hồ sơ N2 với một backfill đang chờ: trien_khai có SELECT, UPDATE trên suppliers mà policy chỉ TO app_api ⇒ migrate() dưới trien_khai TỪ CHỐI TRƯỚC vòng đánh số — backfill không chạy, không dòng schema_migrations, hàng giữ nguyên, thông điệp nêu bảng/vai/lệnh; chạy dưới chủ bảng ⇒ backfill áp đủ hàng", async () => {
     const db = await startPostgres();
@@ -763,10 +785,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   }, 300_000);
 
-  // [S1.9172 / khoản nợ 113] CHIỀU CHẶN CỦA `tu_sua_duoc` — ĐO, KHÔNG ĐỌC. S1.66 ghi rằng `tu_sua_duoc` không đọc `grantor` của mục
+  // [S1.228 / khoản nợ 113] CHIỀU CHẶN CỦA `tu_sua_duoc` — ĐO, KHÔNG ĐỌC. S1.66 ghi rằng `tu_sua_duoc` không đọc `grantor` của mục
   // ACL, nên một vai R giữ GRANT OPTION đã cấp quyền THẲNG cho vai deploy, trong khi vai deploy có ADMIN OPTION trên R, là một đường
   // tự cắt được mà lượt hỏi trước vòng vẫn chặn — đúng loại ngõ cụt ADR-028 §3 mà điều kiện của ngoại lệ S1.57 cấm. Đo (PostgreSQL 16,
-  // thăm dò S1.9172) dưới chính trien_khai, trong MỘT tệp migration: `GRANT R TO trien_khai WITH INHERIT TRUE` (ADMIN trực tiếp ⇒
+  // thăm dò S1.228) dưới chính trien_khai, trong MỘT tệp migration: `GRANT R TO trien_khai WITH INHERIT TRUE` (ADMIN trực tiếp ⇒
   // người cấp là chính trien_khai, PG16 giữ hai cạnh membership theo hai người cấp), rồi `REVOKE … FROM trien_khai` — PostgreSQL chọn R
   // làm người thu hồi vì trien_khai nay thừa kế GRANT OPTION của R — rồi `REVOKE R FROM trien_khai` gỡ đúng cạnh thừa kế vừa tự cấp:
   // quyền mất hẳn, cạnh ADMIN do superuser cấp còn nguyên. Hai ĐỐI CHỨNG thiếu một vế thì vẫn bị chặn: không ADMIN trên R (không tự
@@ -906,7 +928,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // Không EXECUTE ⇒ policy chuẩn lại tính là phủ (câu chạm bảng ném 42501, ồn — khoản 101 ⒝): lượt sau đi qua.
       await expect(migrate(p, tmp), "⒟ sau khi tự cắt EXECUTE, deploy xanh").resolves.toEqual([]);
 
-      // ⒠ [S1.9172 / lượt gộp — rls-coverage ⒦ (lượt soi 51 NẶNG-1)] NGƯỜI CẤP LÀ CHÍNH CHỦ BẢNG: bảng do superuser tạo và cấp SELECT, UPDATE cho
+      // ⒠ [S1.228 / lượt gộp — rls-coverage ⒦ (lượt soi 51 NẶNG-1)] NGƯỜI CẤP LÀ CHÍNH CHỦ BẢNG: bảng do superuser tạo và cấp SELECT, UPDATE cho
       // trien_khai rồi `OWNER TO zz_chu113k` (PostgreSQL viết lại grantor của mục ACL thành chủ mới), trien_khai có ADMIN (không INHERIT,
       // không SET) trên chủ mới; EXECUTE trên hàm ngữ cảnh do superuser cấp thẳng (không tự cắt được) để dòng thuộc nhánh `vi_tu_loc_het`.
       // ⒦ của rls-coverage từng ghim dòng này BỊ CHẶN với lý do "lối vá là thêm policy hay tự lấy quyền chủ — chỉ dời dòng sang chủ thể giống
@@ -1070,35 +1092,35 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   }, 300_000);
 
-  // [khoản nợ 71 / ADR-9280] `9580_email_ascii` thu hẹp miền của `users.email` và `supplier_contacts.email` về ASCII in được — hai bảng CÓ
+  // [khoản nợ 71 / ADR-132] `092_email_ascii` thu hẹp miền của `users.email` và `supplier_contacts.email` về ASCII in được — hai bảng CÓ
   // đường ghi (`tools/khoi-tao-to-chuc`, `addSupplierContact`) nên có thể đã có dữ liệu. Cùng khuôn 049: đối chiếu TRƯỚC `ALTER`, dừng deploy
   // với ĐỊNH DANH (tối đa 20 id mỗi bảng), KHÔNG in email, KHÔNG tự sửa (đổi một địa chỉ đã lưu là đổi đích magic link); sửa tay ⇒ đi qua,
   // hai ràng buộc tồn tại và đã kiểm; hai dòng khai ở `CHECK_AN_NINH_KHAI` mang đúng `pg_get_constraintdef` (khoản 105); INSERT thẳng
   // Unicode dưới superuser — không qua tầng ứng dụng — ⇒ 23514 đúng tên, kể cả những địa chỉ mà 048/049/011 đều cho qua.
-  it("[khoản nợ 71] hàng email ngoài ASCII có từ trước ⇒ migrate() NÉM với thông báo NGUYÊN VĂN (số hàng và id từng bảng, không email), 9580 không được ghi, hàng nguyên văn; sửa tay ⇒ đi qua, hai CHECK tồn tại, đã kiểm, có trong khai của hardening; INSERT thẳng Unicode dưới superuser ⇒ 23514", async () => {
+  it("[khoản nợ 71] hàng email ngoài ASCII có từ trước ⇒ migrate() NÉM với thông báo NGUYÊN VĂN (số hàng và id từng bảng, không email), 092 không được ghi, hàng nguyên văn; sửa tay ⇒ đi qua, hai CHECK tồn tại, đã kiểm, có trong khai của hardening; INSERT thẳng Unicode dưới superuser ⇒ 23514", async () => {
     const db = await startPostgres();
     const tmp = await mkdtemp(join(tmpdir(), "tp-k71-"));
     try {
-      const { ten9580, nguoiDung, lienHe, daGhi9580, emailCua } = await truoc9580(db, tmp);
-      const tenMig = ten9580.replace(/\.sql$/u, "");
+      const { ten092, nguoiDung, lienHe, daGhi092, emailCua } = await truoc092(db, tmp);
+      const tenMig = ten092.replace(/\.sql$/u, "");
       const uA = await nguoiDung("\u24D0lice-71@vidu.vn"); // ⓐ — điểm bất động của lower() trên musl, 048 cho qua
       const uB = await nguoiDung("\u03B1\u03C2-71@vidu.vn"); // ας — sigma cuối từ, confusable với ασ (ví dụ của khoản 71)
       const cA = await lienHe("\u0111ai-71@vidu.vn"); // đ — 049 và 011 đều cho qua
 
-      await copyFile(join(MIGRATIONS_DIR, ten9580), join(tmp, ten9580));
+      await copyFile(join(MIGRATIONS_DIR, ten092), join(tmp, ten092));
       const loi = await migrate(db.pool, tmp).then(
         () => null,
         (e: Error) => e,
       );
-      expect(loi, "dữ liệu ngoài ASCII mà 9580 vẫn đi qua").not.toBeNull();
-      expect(await daGhi9580(), "9580 NÉM thì không được ghi checksum").toBe(0);
+      expect(loi, "dữ liệu ngoài ASCII mà 092 vẫn đi qua").not.toBeNull();
+      expect(await daGhi092(), "092 NÉM thì không được ghi checksum").toBe(0);
       expect(await emailCua("users", uB), "hàng giữ nguyên — migration không tự sửa").toBe("\u03B1\u03C2-71@vidu.vn");
       expect(await emailCua("supplier_contacts", cA)).toBe("\u0111ai-71@vidu.vn");
       // Thứ tự uuid của PostgreSQL là thứ tự byte, trùng thứ tự chuỗi hex chữ thường của JS.
       expect(loi!.message).toBe(
-        `Migration ${ten9580} thất bại: email ngoai ASCII in duoc: users 2 hang — id (toi da 20): ${[uA, uB].sort().join(", ")}; ` +
+        `Migration ${ten092} thất bại: email ngoai ASCII in duoc: users 2 hang — id (toi da 20): ${[uA, uB].sort().join(", ")}; ` +
           `supplier_contacts 1 hang — id (toi da 20): ${cA} — sua tay duoi mot vai ma RLS khong ap (doi mot dia chi da luu la doi dich ` +
-          `magic link: co nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenMig}, khoan no 71, ADR-9280)`,
+          `magic link: co nguoi chiu, kem mot su kien kiem toan), roi deploy lai (${tenMig}, khoan no 71, ADR-132)`,
       );
       expect(loi!.message, "không in email").not.toMatch(/vidu\.vn/u);
 
@@ -1106,7 +1128,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await db.pool.query("UPDATE users SET email = 'alice-71@vidu.vn' WHERE id = $1", [uA]);
       await db.pool.query("UPDATE users SET email = 'as-71@vidu.vn' WHERE id = $1", [uB]);
       await db.pool.query("UPDATE supplier_contacts SET email = 'dai-71@vidu.vn' WHERE id = $1", [cA]);
-      await expect(migrate(db.pool, tmp)).resolves.toEqual([ten9580]);
+      await expect(migrate(db.pool, tmp)).resolves.toEqual([ten092]);
       const { rows: rb } = await db.pool.query<{ bang: string; conname: string; convalidated: boolean; dinh_nghia: string }>(
         "SELECT conrelid::regclass::text AS bang, conname, convalidated, pg_get_constraintdef(oid) AS dinh_nghia FROM pg_constraint " +
           "WHERE conname IN ('users_email_ascii', 'supplier_contacts_email_ascii') ORDER BY conname",
@@ -1444,12 +1466,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     }
   });
 
-  // [S1.9192 / khoản 158] `9592` là policy RESTRICTIVE đầu tiên mang `TO <một vai>`: `DROP OWNED BY app_api` của kịch bản N3
+  // [S1.233 / khoản 158] `095` là policy RESTRICTIVE đầu tiên mang `TO <một vai>`: `DROP OWNED BY app_api` của kịch bản N3
   // ở trên XOÁ `outbox_jobs_kind_app_api` (vai là chủ thể duy nhất), và trước mục tự chữa của hardening N3 đỏ ở 83⑴ — *"khai
   // public.outbox_jobs.outbox_jobs_kind_app_api … mà CSDL không có policy đúng bảy cột"*. Vế này đo thẳng đường DROP POLICY
   // (cùng khuôn ca 044 ở dưới), và đối chứng: policy bị ĐỔI biểu thức thì hardening KHÔNG "sửa đè" — không có migration nào
   // để so — mà NÉM ở lượt phán xét, nêu tên, không in biểu thức (T1).
-  it("[S1.9192 / khoản 158] DROP POLICY một trong hai policy kind theo vai (9592) ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai; ĐỔI biểu thức tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
+  it("[S1.233 / khoản 158] DROP POLICY một trong hai policy kind theo vai (095) ⇒ migrate() dựng lại ĐÚNG bảy cột từ dòng khai; ĐỔI biểu thức tay ⇒ migrate() NÉM nêu tên policy, không in biểu thức, không sửa đè", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -1829,9 +1851,14 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "rfq_chot_nhom_hang", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
     { ham: "nhom_hang_con_dung", chuKy: "uuid, uuid", migration: "085_nhom_hang.sql" },
     { ham: "rfq_bam_ngan_sach", chuKy: "uuid", migration: "086_rang_ngan_sach.sql" },
+    // [S1.203 / S3.6b1] Ba hàm của tín hiệu chia nhỏ: hàm tín hiệu — một thân `RETURN NULL` tắt K10a ở cả tầng gói lẫn cạnh —,
+    // luật người ghi nhận — một thân `RETURN NULL` cho người gây ra tự ghi nhận —, và vị từ của chốt ở cạnh mở gói.
+    { ham: "tin_hieu_chia_nho", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
+    { ham: "tin_hieu_chot_nguoi_ghi_nhan", chuKy: "uuid, jsonb, uuid", migration: "088_tin_hieu_chia_nho.sql" },
+    { ham: "rfq_chot_tin_hieu", chuKy: "uuid, uuid", migration: "088_tin_hieu_chia_nho.sql" },
   ];
 
-  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ [S1.202] tám hàm trợ giúp của K1, K4b và nhóm hàng: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
+  it("[S1.166] ~~bốn~~ ~~[S1.185] năm~~ ~~[S1.201] bảy~~ ~~[S1.202] tám~~ [S1.203] mười một hàm trợ giúp của K1, K4b, nhóm hàng và tín hiệu chia nhỏ: thân ở migration CUỐI CÙNG định nghĩa hàm và ở hardening.always.sql khớp nhau, và khớp hậu điều kiện $than$", () => {
     const thuMuc = fileURLToPath(new URL("./migrations", import.meta.url));
     const docFile = (tenFile: string): string => readFileSync(`${thuMuc}/${tenFile}`, "utf8");
     const hardening = docFile("hardening.always.sql");
@@ -1916,7 +1943,12 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       // XUẤT (ADR-016) chứ không phải một trường trong thân yêu cầu.
       // **[S1.156]** HAI MƯƠI TƯ: `org_policy_signatures` — chữ ký thứ hai của phiên bản chính sách, cùng
       // khuôn `rfq_award_approvals` (người ký là DẪN XUẤT từ phiên).
+      // **[S1.198 / khoản 257]** HAI MƯƠI LĂM: `rfq_tra_ve` — người trả gói về là DẪN XUẤT từ phiên, nên một hàng chèn tay chỉ rút
+      // được chữ ký của CHÍNH người chèn.
       trigger: [
+        // [S1.203 / S3.6b1] Tín hiệu và lần ghi nhận — người ghi và người ghi nhận là DẪN XUẤT từ phiên.
+        "governance_signal_acks_kiem_danh_tinh",
+        "governance_signals_kiem_danh_tinh",
         "org_policy_signatures_kiem_danh_tinh",
         "org_procurement_policies_kiem_danh_tinh",
         // [S1.201 / S3.6a] Nhóm hàng và lần đổi trạng thái của nó — người tạo và người đổi là DẪN XUẤT từ phiên.
@@ -1938,6 +1970,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "rfq_packages_kiem_nguoi_huy",
         "rfq_packages_kiem_nguoi_mo",
         "rfq_packages_kiem_nguoi_nop",
+        "rfq_tra_ve_kiem_danh_tinh",
         "supplier_contacts_kiem_danh_tinh",
         "supplier_verifications_kiem_danh_tinh",
         "suppliers_kiem_danh_tinh",
@@ -1973,7 +2006,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // thêm hai bảng CHỈ-GHI-THÊM, mỗi bảng HAI trigger. Con trỏ `migration` VẪN là `047` vì đó
     // là migration cuối cùng định nghĩa THÂN hàm — `061` chỉ treo thêm trigger, và mục hardening
     // canh bốn cái mới bằng vế CÓ ĐIỀU KIỆN `to_regclass(...) IS NULL OR ...` (khuôn mục 013).
-    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
+    { ham: "bid_chi_ghi_them", migration: "047_chi_ghi_them_chan_truncate.sql", trigger: ["bid_receipts_chan_truncate", "bid_receipts_chi_ghi_them", "canonical_item_versions_chan_truncate", "canonical_item_versions_chi_ghi_them", "canonical_items_chan_truncate", "canonical_items_chi_ghi_them", "governance_signal_acks_chan_truncate", "governance_signal_acks_chi_ghi_them", "governance_signals_chan_truncate", "governance_signals_chi_ghi_them", "item_aliases_chan_truncate", "item_aliases_chi_ghi_them", "item_uom_conversions_chan_truncate", "item_uom_conversions_chi_ghi_them", "org_policy_signatures_chan_truncate", "org_policy_signatures_chi_ghi_them", "procurement_categories_chan_truncate", "procurement_categories_chi_ghi_them", "procurement_category_changes_chan_truncate", "procurement_category_changes_chi_ghi_them", "rfq_award_approvals_chan_truncate", "rfq_award_approvals_chi_ghi_them", "rfq_awards_chan_truncate", "rfq_awards_chi_ghi_them", "rfq_unsealed_bids_chan_truncate", "rfq_unsealed_bids_chi_ghi_them", "supplier_verifications_chan_truncate", "supplier_verifications_chi_ghi_them", "uom_aliases_chan_truncate", "uom_aliases_chi_ghi_them", "uom_aliases_chung_chan_truncate", "uom_aliases_chung_chi_ghi_them", "uom_units_chan_truncate", "uom_units_chi_ghi_them", "vendor_bid_versions_chan_truncate", "vendor_bid_versions_chi_ghi_them"] },
     // [S1.108 / S2.5] BA nhánh trong một hàm — INSERT (vòng hợp lệ), UPDATE (chỉ `closed_at`,
     // một chiều), DELETE (từ chối). `pg_get_triggerdef` in `BEFORE INSERT OR UPDATE OR DELETE`
     // thành `BEFORE INSERT OR DELETE OR UPDATE` — đã ĐO trên postgres 16, không đoán.
@@ -1985,15 +2018,15 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // khoá tư vấn của J7 — không cổng nào khác của kho thấy ba việc đó.
     // [S1.129 / khoản 233] `064` định nghĩa lại thân (vế 3 đọc `unseal_dispatch_history`), nên con
     // trỏ theo quy tắc *migration CUỐI CÙNG* sang `064`; `061` chỉ còn dựng trigger.
-    // [S1.9182 / khoản 231] `9582` định nghĩa lại thân: vế *không lượt chấm nào mới hơn* (khuôn `060` (A)), nhánh có tên
+    // [S1.231 / khoản 231] `093` định nghĩa lại thân: vế *không lượt chấm nào mới hơn* (khuôn `060` (A)), nhánh có tên
     // `j5_luot_cham_khong_moi_nhat`. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*; thân TRÍCH từ `074` bằng script.
-    { ham: "award_kiem_de_xuat", migration: "9582_award_luot_cham_moi_nhat.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
+    { ham: "award_kiem_de_xuat", migration: "093_award_luot_cham_moi_nhat.sql", trigger: ["rfq_awards_kiem_de_xuat"] },
     // [S1.142 / khoản 242 ⑴] `068` định nghĩa lại thân chỉ để sửa một lời khai sai trong chú thích
     // (đổi `CHU_KY_CAN` KHÔNG đủ cho hai chữ ký); `prosrc` giữ cả chú thích, nên con trỏ dời sang `068`
     // theo quy tắc *migration CUỐI CÙNG*. `061` chỉ còn dựng trigger.
-    // [S1.9182 / khoản 232 / ADR-9282] `9583` định nghĩa lại thân: nhánh `WITHDRAWN` ba vế có tên, J7 mở lại sau hàng rút.
-    // Con trỏ dời sang `9583`; thân TRÍCH từ `068` bằng script rồi đổi năm chỗ.
-    { ham: "award_kiem_mot_award_song", migration: "9583_award_withdrawn.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
+    // [S1.231 / khoản 232 / ADR-133] `094` định nghĩa lại thân: nhánh `WITHDRAWN` ba vế có tên, J7 mở lại sau hàng rút.
+    // Con trỏ dời sang `094`; thân TRÍCH từ `068` bằng script rồi đổi năm chỗ.
+    { ham: "award_kiem_mot_award_song", migration: "094_award_withdrawn.sql", trigger: ["rfq_awards_kiem_mot_award_song"] },
     { ham: "award_kiem_nguoi_duyet", migration: "074_tu_choi_co_ten.sql", trigger: ["rfq_award_approvals_kiem_nguoi_duyet"] },
     { ham: "bid_dat_so_phien_ban", migration: "018_vendor_bids.sql", trigger: ["a_vendor_bid_versions_dat_so_phien_ban"] },
     { ham: "bid_kiem_han_nop", migration: "074_tu_choi_co_ten.sql", trigger: ["vendor_bid_versions_kiem_han_nop"] },
@@ -2076,7 +2109,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.202 / khoản 254] `086_rang_ngan_sach` định nghĩa lại thân hai hàm đầu — chữ ký mang cả băm ngân sách, cạnh mở gói
     // đếm trên ngân sách hiện tại. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "rfq_approvals_dat_bam_danh_sach", migration: "086_rang_ngan_sach.sql", trigger: ["rfq_approvals_dat_bam_danh_sach"] },
-    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "086_rang_ngan_sach.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
+    { ham: "rfq_kiem_chu_ky_danh_sach_khi_mo", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_kiem_danh_sach_khi_mo"] },
     // [S1.194 / S3.2d / khoản 255] `080_k4a_co_ten.sql` định nghĩa lại thân K4a — hai nhánh mang tên ràng buộc —, nên con trỏ dời
     // theo quy tắc *migration CUỐI CÙNG*. Thân TRÍCH NGUYÊN VĂN từ `076` rồi đổi đúng hai vế `CONSTRAINT = …`.
     { ham: "rfq_invitations_kiem_danh_sach", migration: "080_k4a_co_ten.sql", trigger: ["rfq_invitations_kiem_danh_sach"] },
@@ -2084,7 +2117,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // [S1.186 / S3.2b1 / K4a · K6] Cạnh về DRAFT chỉ ở tổ chức đã bật, và token ghi lại lúc đúc gói đã mở chưa. Thân
     // `RETURN NEW` mở lại đường về DRAFT cho MVP1 — mà ràng buộc chữ ký của `076` (3) dựa vào việc MVP1 không có đường ấy —,
     // hay để cột ở `false` cho mọi token, và lần đổi link của tổ chức đã bật từ chối cả token hợp lệ.
-    { ham: "rfq_kiem_tra_ve_nhap", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
+    // [S1.198 / khoản 257] `087_lan_nop_da_xem` định nghĩa lại thân hàm cạnh về DRAFT: cạnh đòi một hàng `rfq_tra_ve` của chính
+    // lần nộp đang bị trả. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
+    { ham: "rfq_kiem_tra_ve_nhap", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
@@ -2122,6 +2157,18 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "nhom_hang_kiem_doi", migration: "085_nhom_hang.sql", trigger: ["procurement_category_changes_kiem_doi"] },
     { ham: "rfq_kiem_nhom_hang", migration: "085_nhom_hang.sql", trigger: ["rfq_packages_nhom_hang"] },
     { ham: "rfq_kiem_nhom_hang_khi_nop", migration: "085_nhom_hang.sql", trigger: ["rfq_packages_kiem_nhom_hang_khi_nop"] },
+    // [S1.198 / khoản 256 · 257] Ba hàm mới: đếm lần nộp, chốt lời duyệt vào lần nộp đã xem, đặt lần nộp của hàng trả về. Thân
+    // `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng: lần nộp đứng yên (lời duyệt trên lần xem cũ đi qua), lời duyệt không
+    // bị so, hay hàng trả về mang lần nộp NULL.
+    { ham: "rfq_dem_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_dem_lan_nop"] },
+    { ham: "rfq_chot_lan_nop_da_xem", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_approvals_so_lan_nop"] },
+    { ham: "rfq_tra_ve_dat_lan_nop", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_tra_ve_dat_lan_nop"] },
+    // [S1.203 / S3.6b1] Ba hàm trigger của tín hiệu chia nhỏ. Một thân `RETURN NEW` ở bất kỳ cái nào mở lại đúng lỗ nó đóng:
+    // người gọi khai bằng chứng của tín hiệu, người gây ra tự ghi nhận tín hiệu của mình, và gói mở qua một câu UPDATE viết tay
+    // khi tín hiệu chưa ai ghi nhận.
+    { ham: "tin_hieu_kiem_ghi", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signals_tinh"] },
+    { ham: "tin_hieu_kiem_ghi_nhan", migration: "088_tin_hieu_chia_nho.sql", trigger: ["governance_signal_acks_kiem_nguoi"] },
+    { ham: "rfq_kiem_tin_hieu_khi_mo", migration: "088_tin_hieu_chia_nho.sql", trigger: ["rfq_packages_kiem_tin_hieu_khi_mo"] },
   ];
 
   /** Mọi hàm trigger được hardening ghim — hai khối, một khuôn. */
@@ -3770,11 +3817,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
-        "9530_app_unseal_doc_thu_hoi_loi_moi.sql",
-        "9580_email_ascii.sql",
-        "9582_award_luot_cham_moi_nhat.sql",
-        "9583_award_withdrawn.sql",
-        "9592_outbox_policy_theo_kind.sql",
+        "087_lan_nop_da_xem.sql",
+        "088_tin_hieu_chia_nho.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -4717,9 +4766,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       };
 
       // (a) mức database — phán xét, không tự RESET, không in giá trị.
-      // [S1.9110] Mọi câu của cửa sổ SET … RESET đi qua MỘT kết nối giữ sẵn, mở TRƯỚC `ALTER DATABASE … SET` (không thừa kế
+      // [S1.211] Mọi câu của cửa sổ SET … RESET đi qua MỘT kết nối giữ sẵn, mở TRƯỚC `ALTER DATABASE … SET` (không thừa kế
       // GUC); `migrate(db.pool)` trong cửa sổ lấy kết nối KHÁC — kết nối ấy thừa kế, bị từ chối sớm rồi HUỶ. Bản trước để
-      // `setconfigDb()` và câu RESET tự lấy kết nối từ pool: sau [S1.9121 / khoản 104] (lượt hardening sau vòng lỗi cũng huỷ kết nối)
+      // `setconfigDb()` và câu RESET tự lấy kết nối từ pool: sau [S1.215 / khoản 104] (lượt hardening sau vòng lỗi cũng huỷ kết nối)
       // pool không còn kết nối rảnh nào mở trước SET, nên hai câu ấy mở kết nối MỚI trong cửa sổ — thừa kế `app.org_id`, về pool —
       // và đối chứng "RESET ⇒ đi qua" nhận đúng nó: từ chối sớm là ĐÚNG (phiên mang GUC), vế đối chứng thì đo sai thứ. Nay đối
       // chứng lấy hoặc kết nối giữ sẵn (mở trước SET) hoặc một kết nối mở SAU RESET — cả hai sạch, không tuỳ thứ tự pool.
@@ -4754,7 +4803,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
 
       // (a′) [lượt soi 39 NHẸ-1] `ALTER ROLE ALL SET` — hàng (setrole 0, setdatabase 0): bị bắt VÀ có tên riêng (bản đầu: mo_ta NULL,
       //      thông điệp "SAI ()"); ba mục kề (row_security/…) không thấy hàng ấy — khoản 92.
-      // [S1.9110] Cùng kỷ luật cửa sổ như (a): `ALTER ROLE ALL SET` cũng áp cho mọi phiên mở SAU nó.
+      // [S1.211] Cùng kỷ luật cửa sổ như (a): `ALTER ROLE ALL SET` cũng áp cho mọi phiên mở SAU nó.
       const knTruocSetAll = await db.pool.connect();
       try {
         await knTruocSetAll.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
@@ -4791,7 +4840,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "SELECT current_setting('app.org_id', true) AS v, (SELECT count(*)::int FROM pg_settings WHERE name = 'app.org_id') AS ps",
         );
         expect(nguon[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới, và placeholder vắng ở pg_settings (đo)").toEqual({ v: guc, ps: 0 });
-        // [S1.9110] Đọc qua `poolSys`, không qua `db.pool`: một kết nối `db.pool` mở trong cửa sổ ALTER SYSTEM thừa kế `app.org_id`
+        // [S1.211] Đọc qua `poolSys`, không qua `db.pool`: một kết nối `db.pool` mở trong cửa sổ ALTER SYSTEM thừa kế `app.org_id`
         // và về pool — cùng kỷ luật cửa sổ như (a).
         expect(await setconfigDb(poolSys), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
         // [S1.48 / 40a H1] migrate() nay TỪ CHỐI SỚM (trước lượt sửa) cho bốn GUC lõi; nhánh ⒞ ở BƯỚC 3 vẫn đứng cho tập tên
@@ -5733,13 +5782,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   }, 180_000);
 
   // ==========================================================================================
-  // [S1.9111 / khoản 163] MIỄN TRỪ SECURITY DEFINER KHOÁ THEO CHỮ KÝ, KHÔNG THEO TÊN TRẦN
+  // [S1.212 / khoản 163] MIỄN TRỪ SECURITY DEFINER KHOÁ THEO CHỮ KÝ, KHÔNG THEO TÊN TRẦN
   // ==========================================================================================
   // Bản S1.82: `NGOAI_LE_DOC_VONG` miễn `public.outbox_danh_sach_to_chuc` theo TÊN, còn hàng ghim thân hàm khoá chữ ký
   // `()` — nên `outbox_danh_sach_to_chuc(text) SECURITY DEFINER` với thân tuỳ ý đi qua CẢ HAI lớp (đo: migrate() đi qua
   // trước bản vá). Tạo hàm trong `public` cần CREATE trên schema — không vai ứng dụng nào có (001) — nên đường tới là
   // superuser, đúng như khoản 163 ghi; test đi qua migrate() THẬT, và đối chứng "hàm gốc vẫn qua" đo ở cùng thông điệp.
-  it("[S1.9111 / khoản 163] overload public.outbox_danh_sach_to_chuc(text) SECURITY DEFINER do superuser tạo làm migrate() GÃY và nêu ĐÚNG CHỮ KÝ; hàm gốc () — khai theo chữ ký — không bị nêu; DROP overload ⇒ đi qua", async () => {
+  it("[S1.212 / khoản 163] overload public.outbox_danh_sach_to_chuc(text) SECURITY DEFINER do superuser tạo làm migrate() GÃY và nêu ĐÚNG CHỮ KÝ; hàm gốc () — khai theo chữ ký — không bị nêu; DROP overload ⇒ đi qua", async () => {
     const db = await startPostgres();
     try {
       await migrate(db.pool, MIGRATIONS_DIR);
@@ -7301,9 +7350,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         'mục "định nghĩa hàm public.audit_compute_hash(...)" ở trạng thái SAI TRƯỚC khi sửa',
       );
       // Và thông báo mang CHẨN ĐOÁN thật, không chỉ tên mục — đó là thứ người vận hành cần.
-      // ~~expect(gop).toContain("prosrc hiện tại");~~ [S1.9102 / khoản 117] Chẩn đoán là VÂN TAY của prosrc HIỆN TẠI —
+      // ~~expect(gop).toContain("prosrc hiện tại");~~ [S1.210 / khoản 117] Chẩn đoán là VÂN TAY của prosrc HIỆN TẠI —
       // left(encode(sha256(convert_to(<thân đã chuẩn hoá khoảng trắng>, 'UTF8')), 'hex'), 16), tra lại bằng công thức ở
-      // ADR-9202 — không phải thân hàm: thân hàm có thể mang hằng (UUID, email) và WARNING này đi thẳng vào log deploy
+      // ADR-124 — không phải thân hàm: thân hàm có thể mang hằng (UUID, email) và WARNING này đi thẳng vào log deploy
       // (chuẩn S1.51 ⑷). Đòi đúng vân tay của thân VỪA THAY, để phép đo không xanh với một chuỗi hex bất kỳ.
       const thanHienTai = "SELECT sha256(''::bytea)";
       const k = gop.indexOf(thanHienTai);
@@ -7866,9 +7915,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         // Lượt SỬA vẫn chạy trọn trước lượt phán xét, nên mọi phép đo dưới đây (thông báo, trigger, INSERT) còn nguyên.
         const loiKho = await migrate(poolBat, MIGRATIONS_DIR).then(() => null, (e: Error) => e);
         expect(loiKho, "bảng org_id ngoài public không RLS phải bị khoản 85 bắt").not.toBeNull();
-        expect(loiKho!.message).toContain("Hardening không sửa được 1 mục");
-        expect(loiKho!.message).toContain("kho.cha: bảng có cột org_id ngoài public");
-        expect(loiKho!.message).toContain("kho.audit_events: bảng có cột org_id ngoài public");
+        // [S1.205 / khoản 259] Trigger `cha_nuot` trên `kho.cha` — bảng không có tên trong `TRIGGER_DUOC_PHEP` — là trigger lạ:
+        // mục mặc định-đóng với trigger chặn deploy vì nó, đúng một dòng, nêu đúng nó. Bản sao trên `kho.audit_events` không bị hỏi
+        // riêng, và `la_that` trên bảng sổ là việc của [CR1]. Bỏ dòng ấy đi thì còn đúng mục 85.
+        const conLai = boMucTriggerLa(loiKho!.message, ["kho.cha.cha_nuot"]);
+        expect(conLai).toContain("Hardening không sửa được 1 mục");
+        expect(conLai).toContain("kho.cha: bảng có cột org_id ngoài public");
+        expect(conLai).toContain("kho.audit_events: bảng có cột org_id ngoài public");
       } finally {
         await poolBat.end();
       }
@@ -8263,11 +8316,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
-        "9530_app_unseal_doc_thu_hoi_loi_moi.sql",
-        "9580_email_ascii.sql",
-        "9582_award_luot_cham_moi_nhat.sql",
-        "9583_award_withdrawn.sql",
-        "9592_outbox_policy_theo_kind.sql",
+        "087_lan_nop_da_xem.sql",
+        "088_tin_hieu_chia_nho.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8572,11 +8627,13 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "083_hang_chuan.sql",
         "085_nhom_hang.sql",
         "086_rang_ngan_sach.sql",
-        "9530_app_unseal_doc_thu_hoi_loi_moi.sql",
-        "9580_email_ascii.sql",
-        "9582_award_luot_cham_moi_nhat.sql",
-        "9583_award_withdrawn.sql",
-        "9592_outbox_policy_theo_kind.sql",
+        "087_lan_nop_da_xem.sql",
+        "088_tin_hieu_chia_nho.sql",
+        "091_app_unseal_doc_thu_hoi_loi_moi.sql",
+        "092_email_ascii.sql",
+        "093_award_luot_cham_moi_nhat.sql",
+        "094_award_withdrawn.sql",
+        "095_outbox_policy_theo_kind.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
@@ -9086,21 +9143,21 @@ describe("[S1.110 / khoản 226] thêm một trạng thái RFQ phải phân lo�
 });
 
 // ==============================================================================================
-// [S1.9182 / khoản 231 · 232 / 9582 · 9583] HAI MIGRATION MỚI VÀ BẢN GHIM CỦA CHÚNG NÓI CÙNG MỘT CÂU TRÊN CỤM THẬT
+// [S1.231 / khoản 231 · 232 / 093 · 094] HAI MIGRATION MỚI VÀ BẢN GHIM CỦA CHÚNG NÓI CÙNG MỘT CÂU TRÊN CỤM THẬT
 //
 // Bẫy S1.96, gặp lại ở S1.110: hardening chạy bước SỬA trước vòng migration đánh số và PHÁN XÉT sau, nên một hàm đã ghim mà
 // chỉ đổi trong migration bị dựng lại về bản ghim ở lượt `migrate()` KẾ — migration thành no-op trong im lặng và không cổng nào
 // đỏ. Hai ca `HAM_56` ở trên so VĂN BẢN (thân migration = thân hardening, con trỏ là migration cuối); ca này đọc CATALOG sau
 // HAI lượt `migrate()`: thân đang sống phải mang vế mới sau cả lượt hardening thứ hai, và CHECK phải nhận `WITHDRAWN`.
 // ==============================================================================================
-describe("[S1.9182 / khoản 231 · 232] thân award đang sống sau migrate() mang vế mới, và CHECK trạng thái award nhận WITHDRAWN", { timeout: 180_000 }, () => {
+describe("[S1.231 / khoản 231 · 232] thân award đang sống sau migrate() mang vế mới, và CHECK trạng thái award nhận WITHDRAWN", { timeout: 180_000 }, () => {
   it("prosrc của hai hàm mang tên ràng buộc mới SAU CẢ lượt migrate() thứ hai; rfq_awards_status_check liệt kê BỐN trạng thái", async () => {
     const db = await startPostgres();
     try {
       const lan1 = await migrate(db.pool, MIGRATIONS_DIR);
-      // Hai migration của lô nằm trong lượt 1 theo thứ tự; sau chúng còn migration của lô khác cùng đợt (9592), nên không so đuôi.
-      expect(lan1).toEqual(expect.arrayContaining(["9582_award_luot_cham_moi_nhat.sql", "9583_award_withdrawn.sql"]));
-      expect(lan1.indexOf("9582_award_luot_cham_moi_nhat.sql")).toBeLessThan(lan1.indexOf("9583_award_withdrawn.sql"));
+      // Hai migration của lô nằm trong lượt 1 theo thứ tự; sau chúng còn migration của lô khác cùng đợt (095), nên không so đuôi.
+      expect(lan1).toEqual(expect.arrayContaining(["093_award_luot_cham_moi_nhat.sql", "094_award_withdrawn.sql"]));
+      expect(lan1.indexOf("093_award_luot_cham_moi_nhat.sql")).toBeLessThan(lan1.indexOf("094_award_withdrawn.sql"));
       const docThan = async (): Promise<Record<string, string>> => {
         const { rows } = await db.pool.query<{ proname: string; prosrc: string }>(
           "SELECT proname, prosrc FROM pg_proc WHERE pronamespace = 'public'::regnamespace " +

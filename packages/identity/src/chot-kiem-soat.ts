@@ -25,7 +25,12 @@
 // [S1.201 / S3.6a] `THIEU_NHOM_HANG` — gói của tổ chức đã bật rời DRAFT không nhóm hàng. Khuôn K1: hàm vị từ
 // `rfq_chot_nhom_hang` (`085_nhom_hang.sql`), tầng gói hỏi trước câu ghi. Chủ dự án chốt ngày 2026-09-29: vào sổ.
 //
-// [S1.9182 / khoản 231] `J5_LUOT_CHAM_KHONG_MOI_NHAT` — vế *lượt chấm mới nhất* mà `9582` thêm vào `award_kiem_de_xuat` với
+// [S1.203 / S3.6b1] Ba dòng K10a — tín hiệu chia nhỏ chưa ghi nhận ở cạnh mở gói, và hai người bị loại khỏi lần ghi nhận (người
+// gây ra, tác giả phiên bản chính sách). Khuôn K1: hàm vị từ `rfq_chot_tin_hieu` và `tin_hieu_chot_nguoi_ghi_nhan`
+// (`088_tin_hieu_chia_nho.sql`), tầng gói hỏi trước câu ghi; trigger hỏi lại làm lớp chặn cuối, không qua bảng tên → mã. Chủ dự
+// án chốt ngày 2026-09-29: người gây ra tự ghi nhận thì vào sổ.
+//
+// [S1.231 / khoản 231] `J5_LUOT_CHAM_KHONG_MOI_NHAT` — vế *lượt chấm mới nhất* mà `093` thêm vào `award_kiem_de_xuat` với
 // tên ràng buộc `j5_luot_cham_khong_moi_nhat`. ADR-108 đòi tên hai phía khớp nhau (cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts`
 // đọc cả thân trigger ấy), nên tên ấy có dòng ở đây dù đường sản xuất không tới được nó: `deXuatTraoThau` tự suy lượt mới nhất.
 //
@@ -58,8 +63,11 @@ export type MaChotKiemSoat =
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
   | "NGAN_SACH_GHIM_BAN_CU"
+  | "K10A_TAC_GIA_CHINH_SACH"
+  | "K10A_TU_GHI_NHAN"
   | "THIEU_NGAN_SACH"
-  | "THIEU_NHOM_HANG";
+  | "THIEU_NHOM_HANG"
+  | "TIN_HIEU_CHUA_GHI_NHAN";
 
 export interface DongChot {
   /**
@@ -82,7 +90,7 @@ export interface DongChot {
 /**
  * Mỗi mã, một quyết định, một lý do. Hai quyết định `vaoSo` của K1 là của chủ dự án (S1.166); bảy dòng J3/D2
  * cũng vậy (S1.180 / khoản 247 — "cả bảy lần vào sổ", rồi "đặt tên hết các nhánh ADR-104 đang ghi"); hai dòng K4a cũng vậy
- * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ"); một dòng J5 (S1.9182 / khoản 231) theo cùng lý lẽ của
+ * (S1.194 / khoản 255 — "K4a là `CONTROL_DENIED`, vào sổ"); một dòng J5 (S1.231 / khoản 231) theo cùng lý lẽ của
  * `D2_PHIEN_NGUOI_KHAC`: đường sản xuất không tới được, câu ghi nào tới được thì đúng là thứ kiểm toán viên cần thấy.
  */
 export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
@@ -117,6 +125,31 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "một người nộp duyệt một gói KHÔNG nhóm hàng ở tổ chức đã bật S3 — nhóm hàng là khoá của tín hiệu chia nhỏ (K10, spec §4.3), " +
       "nên bỏ bước này là né tín hiệu soi chính mình; cùng lý do `THIEU_NGAN_SACH` vào sổ. Kiểm toán viên hỏi tới đúng lần cố ấy",
     thongDiep: "Tổ chức đã bật kiểm soát theo bậc: gói thầu phải có nhóm hàng trước khi nộp duyệt.",
+  },
+  TIN_HIEU_CHUA_GHI_NHAN: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "một người mở một gói mà tín hiệu chia nhỏ tính NGAY LÚC ẤY chưa được ai ghi nhận (spec §4.6, §2.5 ⒁): tín hiệu không chặn " +
+      "cạnh nào, nó chặn việc không ai đọc nó — và lần mở bỏ qua bước đọc ấy là đúng thứ kiểm toán viên hỏi tới",
+    thongDiep:
+      "Gói thầu có tín hiệu chia nhỏ chưa được ghi nhận: một người duyệt không tạo, không nộp gói nào trong tín hiệu phải ghi nhận nó trước khi mở gói.",
+  },
+  K10A_TU_GHI_NHAN: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "người tạo hay người nộp một gói nằm trong bằng chứng cố ghi nhận chính tín hiệu soi mình — mũi dò T5 mà spec §6 gọi tên. " +
+      "Chủ dự án chốt ngày 2026-09-29: vào sổ, cùng khuôn người tạo tự duyệt gói (D2)",
+    thongDiep: "Người tạo hay người nộp một gói trong tín hiệu không ghi nhận được tín hiệu ấy.",
+  },
+  K10A_TAC_GIA_CHINH_SACH: {
+    chot: "K10a",
+    vaoSo: true,
+    lyDo:
+      "người khai phiên bản chính sách mà gói ghim cố ghi nhận tín hiệu của gói ấy (spec §2.4 ⑺): người đặt cận bậc không tự xác " +
+      "nhận một tập gói nằm ngay dưới cận của chính mình",
+    thongDiep: "Người khai phiên bản chính sách mà gói ghim không ghi nhận được tín hiệu của gói.",
   },
   D2_NGUOI_TAO_TU_DUYET: {
     chot: "D2",
@@ -214,7 +247,7 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
       "hai người dùng chung một phiên; ADR-104 đã ghi nó và chủ dự án chốt không bớt nhánh nào (S1.180)",
     thongDiep: "Phiên đã dùng để đề xuất trao thầu không được dùng để duyệt đề xuất ấy (J3).",
   },
-  // [S1.9182 / khoản 231 / 9582] Vế *lượt chấm mới nhất* của J5 — trigger `award_kiem_de_xuat` đặt tên, `deXuatTraoThau` bắt
+  // [S1.231 / khoản 231 / 093] Vế *lượt chấm mới nhất* của J5 — trigger `award_kiem_de_xuat` đặt tên, `deXuatTraoThau` bắt
   // CHÍNH lỗi của nó. Vào sổ: `deXuatTraoThau` tự suy lượt mới nhất và hai hàm sản xuất không đua nhau được (đề xuất đòi RFQ ở
   // `EVALUATING`, tạo lượt đòi `UNSEALED`/`BAFO_UNSEALED`), nên câu ghi nào tới được nhánh này là một award trỏ vào bảng xếp hạng
   // ĐÃ BỊ THAY THẾ — một đường ghi thứ hai vào `rfq_awards`, hay một lượt chấm sinh dưới chân người đề xuất (cái giá khoản 231
@@ -244,7 +277,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   j3_nguoi_dieu_phoi_de_xuat: "J3_NGUOI_DIEU_PHOI_DE_XUAT",
   j3_nguoi_de_xuat_tu_duyet: "J3_NGUOI_DE_XUAT_TU_DUYET",
   j3_phien_de_xuat_duyet: "J3_PHIEN_DE_XUAT_DUYET",
-  // [S1.9182 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`9582`).
+  // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `award_kiem_de_xuat` (`093`).
   j5_luot_cham_khong_moi_nhat: "J5_LUOT_CHAM_KHONG_MOI_NHAT",
   k4a_them_sai_trang_thai: "K4A_THEM_SAI_TRANG_THAI",
   k4a_thu_hoi_sai_trang_thai: "K4A_THU_HOI_SAI_TRANG_THAI",

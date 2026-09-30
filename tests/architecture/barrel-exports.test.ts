@@ -212,7 +212,7 @@ const DANH_SACH_TRANG_IDENTITY = [
   // [S1.85 / khoản 131] Hàm THUẦN trả các hằng đóng của một lần từ chối không ghi được sổ, cho dòng log — không đọc CSDL, không
   // trả lời câu hỏi quyền nào.
   "moTaHangDongCuaLanTuChoi",
-  // [S1.9151 / khoản 166] Bộ mô tả lỗi cho dòng log — hàm THUẦN bọc ngoài hàm trên, MỘT bản cho `api` và worker mở thầu; không đọc
+  // [S1.222 / khoản 166] Bộ mô tả lỗi cho dòng log — hàm THUẦN bọc ngoài hàm trên, MỘT bản cho `api` và worker mở thầu; không đọc
   // CSDL, không trả lời câu hỏi quyền nào.
   "moTaLoiKhongGiaTri",
   "SEPARATION_OF_DUTIES_CHAIN",
@@ -247,7 +247,7 @@ const DANH_SACH_TRANG_IDENTITY = [
   "USER_SESSION_DEFAULT_TTL_SECONDS",
   "enrollOrReplaceTotpForLogin",
   "issueLoginToken",
-  // [S1.9122 / khoản 195 / ADR-9222] Phép ĐỌC của chính chủ: link đăng nhập gần đây của `userId` mà bộ điều phối lấy từ phiên.
+  // [S1.216 / khoản 195 / ADR-126] Phép ĐỌC của chính chủ: link đăng nhập gần đây của `userId` mà bộ điều phối lấy từ phiên.
   // Không trả lời câu hỏi quyền nào, không mở đường ghi nào; thứ nó KHÔNG trả — `token_hash` — là vế đo ở `auth.int.test.ts`.
   "listRecentLoginTokens",
   // [S1.91 / khoản 194] Trả DANH SÁCH NGƯỜI NHẬN cho đường xếp việc thông báo — không trả lời
@@ -539,6 +539,9 @@ const DANH_SACH_TRANG_RFQ = [
   "extendRfqDeadline",
   "getActiveProcurementPolicy",
   "getRfq",
+  // [S1.200 / khoản 258] Đọc ngân sách cho người duyệt — hàm đọc có cổng (`rfq.create` cho người tạo gói, `rfq.approve` cho người
+  // khác), rổ `HAM_DOC_CO_QUYEN` của `cong-quyen-route.test.ts`.
+  "getRfqBudget",
   // [S1.169 / S3.1c] Ký phiên bản chính sách (luật ở trigger `chinh_sach_kiem_nguoi_ky`) và liệt kê mọi phiên bản cho màn
   // `/chinh-sach` — câu đọc chọn phiên bản hiệu lực bằng CHÍNH `chinh_sach_hieu_luc`, không bằng luật thứ hai.
   "kyPhienBanChinhSach",
@@ -1091,7 +1094,18 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "rutQuyDoiRieng",
   "taoHangChuan",
   "taoPhienBanHangChuan",
+  // [S1.199 / S4.2b] Hai hàm đọc cho màn `/du-lieu`, và đường ghi bí danh đơn vị của tổ chức.
+  "docChiTietHangChuan",
+  "lietKeHangChuan",
+  "docDanhMucDonVi",
+  "khaiBiDanhDonVi",
+  "rutBiDanhDonVi",
 ];
+
+// [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
+// Không symbol nào tính tín hiệu — phép tính là MỘT hàm SQL (`tin_hieu_chia_nho`); một bản tính thứ hai đi vòng qua cửa là hai
+// tầng cho hai câu trả lời về cùng một gói.
+const DANH_SACH_TRANG_KIEM_SOAT = ["KiemSoatError", "ghiNhanTinHieu", "ghiTinHieuKhiNop", "lietKeTinHieu"];
 
 const DANH_SACH_TRANG_DANH_GIA = [
   // [S1.105 / S2.3] BỐN symbol của lớp CÓ TRẠNG THÁI. Gói thôi thuần tính toán ở CỬA, nhưng
@@ -1126,7 +1140,7 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "docTraoThau",
   "duyetTraoThau",
   "huyTraoThau",
-  // [S1.9182 / khoản 232 / ADR-9282] Symbol THỨ SÁU của lớp trao thầu: rút một đề xuất chưa chữ ký — cổng `award.recommend`,
+  // [S1.231 / khoản 232 / ADR-133] Symbol THỨ SÁU của lớp trao thầu: rút một đề xuất chưa chữ ký — cổng `award.recommend`,
   // `apps/api/src/routes/buyer.ts` gọi nó ở route `…/award/withdraw`. Vẫn không hàm nào cho phiên KHÁCH.
   "rutDeXuatTraoThau",
   // [mảnh 1 / màn xuất bằng chứng] Nửa XUẤT của bộ bằng chứng S2.7 xuống gói để CLI và `apps/api`
@@ -1209,6 +1223,15 @@ describe("bề mặt export công khai của bốn gói S0 còn lại", () => {
       ".",
       DANH_SACH_TRANG_DU_LIEU_NEN,
       "Đơn vị đo là THƯỚC của benchmark: một bản quy đổi thứ hai đi vòng qua cửa là hai tầng cho hai con số (khoản 218).",
+    );
+  });
+
+  it("[INV-H16] cửa @trustprocure/kiem-soat chỉ xuất đúng danh sách trắng", async () => {
+    await kiemCuaTheoDanhSach(
+      "kiem-soat",
+      ".",
+      DANH_SACH_TRANG_KIEM_SOAT,
+      "Tín hiệu chia nhỏ đứng giữa một gói thầu và lần mở nó (K10a): một bản tính thứ hai đi vòng qua cửa là hai câu trả lời.",
     );
   });
 
@@ -1327,6 +1350,7 @@ const DANH_SACH_TRANG_THEO_CUA: ReadonlyMap<string, ReadonlyMap<string, readonly
     ["db", new Map([[".", DANH_SACH_TRANG_DB]])],
     ["identity", new Map([[".", DANH_SACH_TRANG_IDENTITY]])],
     ["invitation", new Map([[".", DANH_SACH_TRANG_INVITATION]])],
+    ["kiem-soat", new Map([[".", DANH_SACH_TRANG_KIEM_SOAT]])],
     ["outbox", new Map([[".", DANH_SACH_TRANG_OUTBOX]])],
     ["rfq", new Map([[".", DANH_SACH_TRANG_RFQ]])],
     [

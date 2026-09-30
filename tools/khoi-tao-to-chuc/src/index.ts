@@ -246,7 +246,7 @@ export async function chay(ds: readonly string[]): Promise<string> {
       stderr.write(`[khoi-tao] pool loi ${e instanceof Error ? e.name : "loi la"}\n`);
     },
   });
-  // [S1.9171 / khoản 180] Pool đi qua `withTenant` ở `khoi-tao.ts` (`khoiTao`), nên hai tín hiệu mất-không-ai-biết của nó
+  // [S1.227 / khoản 180] Pool đi qua `withTenant` ở `khoi-tao.ts` (`khoiTao`), nên hai tín hiệu mất-không-ai-biết của nó
   // gắn Ở ĐÂY — chỗ dựng pool, đúng ranh giới "cùng một tệp" của cổng `pool-nghe-du-tin-hieu` (nay quét cả `tools/`):
   // ⑴ `release` mang `TenantError` SESSION_STATE_LEFT — `withTenant` huỷ kết nối vì trạng thái phiên còn sót sau giao
   // dịch, không ném cho ai; ⑵ lỗi tới muộn sau trần `maxConnectWaitMs` (`khoiTao` không đặt trần; gắn để không phải nhớ).
