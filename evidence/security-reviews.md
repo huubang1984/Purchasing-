@@ -18369,4 +18369,18 @@ với `master`; `bac-chinh-sach` và `nhom-hang` đỏ khi bỏ vế DRAFT của
 
 ## 8. Số đo
 
-(điền)
+- Cây cuối, sau lần hợp `master` (#217) và lần cấp số (`9edffee`): `tsc`, `eslint` sạch; `depcruise` 483 mô-đun, không vi phạm phụ
+  thuộc (chạy riêng — lần đầu chạy cùng lúc với T3 và vấp thư mục thăm dò tạm của test kiến trúc); `pnpm cap-so --kiem` sạch.
+- Toàn bộ unit + T3 cục bộ trên cây cuối: 206 tệp, 3563 khẳng định, 3553 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo (8 của
+  `packages/test-support/src/postgres.int.test.ts`, 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`). Không ca đỏ nào mang
+  nhãn `[INV-…]`.
+- T3 các tệp chạm vòng này: `lan-nop-da-xem.int` 39/39 (34 → 39: khối (6) một ca → sáu ca), `danh-sach-moi.int` 23/23,
+  `bac-chinh-sach.int` 42/42, `nhom-hang.int` 22/22, `buyer.int` 25/25, `hardening-suy-tu-tinh-chat.int` 36/36, `migrations.int`
+  120/120, `trigger-la-mac-dinh-dong.int` 12/12; `so-no-tu-doi-chieu` 45/45.
+- Chín đột biến, chín đỏ (§5).
+- Ma trận sinh lại từ báo cáo ấy: 75/75 bất biến (53/53 nghiệp vụ + 22/22 hàng rào). Hai hàng đổi, cả hai do vòng này: K4a 30 → 31
+  (ca đầu của khối (6)), K4b 43 → 50 (năm ca của khối (6), ca HTTP, ca *K4b đếm người* của `danh-sach-moi`).
+- **Hợp `master` sau #217** (S4.3b, S1.234 — không migration, không bất biến mới, ADR-135): xung đột chỉ ở tài liệu — cuối
+  DECISIONS (ADR-135 rồi ADR-137), cột mốc STATE (S1.236 trên S1.234), cuối biên bản (§S1.234 rồi §S1.236) — giữ cả hai phía. Số
+  của vòng cấp sau lần hợp ấy: S1.236, ADR-137, khoản 286, migration 097 — S1.235, ADR-136, khoản 264–285 và migration 091–096 đã
+  có lời giữ trên remote (nhánh `cap-so/…`). Các số trên đo trên cây đã hợp.
