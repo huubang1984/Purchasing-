@@ -9463,3 +9463,77 @@ Khi khoá ghi sổ của một tổ chức bị giữ quá trần 2 s (050), m�
 ```
 
 Sửa tại chỗ ở ADR cũ: KHÔNG. ADR-016 (D5), ADR-020 (đăng nhập), ADR-039 (agent), ADR-038 (MCP) không đổi một chữ — ADR-9222 chỉ THÊM một route đọc dưới đúng ba khuôn ấy, ADR-9223 chỉ ghi một ngoại lệ có hình dạng của luật A2 (luật ấy sống ở `mo-ta-loi.ts`, không ở một ADR có số).
+
+## ADR-9202 — Thông điệp của hardening nêu tên và VÂN TAY: thân hàm và định nghĩa trigger in dấu vân tay, `proconfig` chỉ in tên GUC, `SQLERRM` thay bằng `SQLSTATE`; một cổng T1 cấm nối trở lại
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt nhánh ⑴ của khoản 117 ngày 2026-09-30 (đợt trả nợ 2, lô A1) ·
+**[S1.9102]** · **Liên quan:** S1.51 ⑷ (chuẩn "tên thì được, giá trị thì không"), S1.66 lượt soi 59a-8 (bốn mục policy đã vá cùng chuẩn),
+ADR-028 (ranh giới tự chữa / phán xét — không đổi), ADR-036 (danh mục cơ chế — không đổi), IM5 (vòng fix 1: sửa chữa không im lặng) ·
+**Biên bản:** `evidence/security-reviews.md` §S1.9102 · **Khoản:** 117 (đóng ở đây)
+
+### Bối cảnh
+
+`db/migrations/hardening.always.sql` ghim thân của mọi hàm và trigger của dự án. Khi thân hiện tại lệch bản chuẩn, ô mô tả của hàng —
+thứ mà WARNING của lượt sửa (IM5) và bản gom của BƯỚC 3 in nguyên văn — nối `prosrc` đã chuẩn hoá khoảng trắng, giá trị `proconfig`
+và `pg_get_triggerdef`. Đo trên cây `69e743e`, lược đồ thật (`db/thong-diep-khong-gia-tri.int.test.ts` bản đo trước): `ALTER FUNCTION
+public.app_current_org_id() SET app.org_id = '<uuid>'` rồi `migrate()` dưới superuser ⇒ đi qua, nhưng WARNING mang
+`config=app.org_id=<uuid>`; thân hàm mang hằng UUID ⇒ WARNING mang `prosrc hiện tại: SELECT '<uuid>'::uuid`; trigger dựng lại với
+`WHEN (NEW.org_id = '<uuid>'::uuid)` ⇒ WARNING mang nguyên `CREATE TRIGGER … WHEN ((new.org_id = '<uuid>'::uuid)) …`; dưới vai deploy
+không sở hữu hàm ⇒ `migrate()` NÉM và bản gom mang cùng chuỗi; một điều kiện ném 22P02 ⇒ WARNING "không đánh giá được" mang
+`invalid input syntax for type uuid: "bi-mat-…"` — `SQLERRM` mang giá trị làm ném. Đếm: 94 chỗ nối `prosrc`, 94 chỗ nối giá trị
+`proconfig`, 71 chỗ nối `pg_get_triggerdef`, 22 chỗ `SQLERRM` ở RAISE WARNING / bản gom. Thông điệp ấy đi thẳng vào log deploy.
+
+Thân khoản để ngỏ hai nhánh loại trừ nhau: ⑴ in vân tay và cấm nối bằng một cổng; ⑵ coi thân hàm của dự án là mã, giữ chẩn đoán IM5
+với một khai miễn. Chuẩn S1.51 ⑷ đã áp cho bốn mục policy ở S1.66; IM5 thì cần "chẩn đoán thật, không chỉ tên mục".
+
+### Quyết định
+
+1. **Thân hàm và định nghĩa trigger in DẤU VÂN TAY, không in văn bản.** Vân tay = `left(encode(sha256(convert_to(<văn bản>, 'UTF8')),
+   'hex'), 16)`; với thân hàm, `<văn bản>` là `btrim(regexp_replace(prosrc, '\s+', ' ', 'g'))` — đúng văn bản mà hậu điều kiện so — nên
+   vân tay của bản chuẩn tính được từ chính dollar-quote ở cột hậu điều kiện của hàng ghim; với trigger là `pg_get_triggerdef(t.oid)`.
+   Ô mô tả ghi `vân tay prosrc hiện tại: <16 hex>` và `<tên trigger>:enabled=<cờ>:vân tay def=<16 hex>`; tên đối tượng đi cùng
+   (tên mục nêu hàm, ô mô tả nêu tên trigger); các cờ `volatile`/`secdef`/`enabled` giữ nguyên.
+2. **`proconfig` chỉ in TÊN GUC**, giữ thứ tự: `config(chỉ tên GUC)=<tên,…>` qua `split_part(x, '=', 1)`; NULL vẫn in `(null)`.
+3. **`SQLERRM` thay bằng `SQLSTATE`** ở mọi RAISE WARNING và ở bản gom BƯỚC 3 (`… ném SQLSTATE 22P02; …`). Thông điệp lỗi của
+   PostgreSQL mang giá trị làm ném; mã lỗi thì không.
+4. **Điều kiện phán xét không đổi.** Cột điều kiện và hậu điều kiện vẫn so nguyên văn thân hàm, `proconfig`, `pg_get_triggerdef`; chỉ
+   văn bản thông điệp đổi. Hai lượt sửa/phán xét, khuôn IM5, ADR-028 và ADR-036 đứng nguyên.
+5. **Một cổng T1** `tests/architecture/hardening-khong-in-gia-tri.test.ts` cấm nối trở lại: quét ô mô tả của mọi hàng `bang`, cột
+   `mo_ta` của mọi câu phán xét, mọi RAISE và mọi `loi_gom := … format(…)` trên bề mặt mã (chuỗi và chú thích bỏ, mọi dollar-quote gỡ);
+   chỉ ba khuôn nguyên văn được đi qua (vân tay thân hàm, vân tay trigger, tên `proconfig`); `SQLERRM`, `MESSAGE_TEXT`,
+   `PG_EXCEPTION_*` cấm toàn tệp. Danh sách cấm là đúng sáu tên của khoản 117.
+6. **Cách tra của người vận hành** (chú thích đầu khối `bang` của hardening ghi cùng câu): trong một phiên psql — không qua log —
+   ```sql
+   SELECT p.oid::regprocedure, left(encode(sha256(convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16), p.prosrc
+     FROM pg_proc p WHERE p.oid = to_regprocedure('public.<hàm>(<kiểu tham số>)');
+   SELECT t.tgname, left(encode(sha256(convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), pg_get_triggerdef(t.oid)
+     FROM pg_trigger t WHERE t.tgrelid = 'public.<bảng>'::regclass AND NOT t.tgisinternal;
+   ```
+   rồi so với vân tay của bản chuẩn tính cùng công thức trên dollar-quote ở cột hậu điều kiện của hàng ghim. Cùng công thức tính được
+   ngoài CSDL (`sha256` của UTF-8, 16 ký tự hex đầu) — ca ⑵ đo bằng `node:crypto`.
+
+### Phương án bị loại
+
+- **⑵ Thân hàm của dự án là mã, giữ chẩn đoán IM5, khai miễn `prosrc` cho hàm dự án.** Bác: thân hàm là mã của dự án cho tới lần
+  `CREATE OR REPLACE` sau deploy — và chính lúc ấy WARNING mới nói — nên thứ được in là thân do người khác viết, có thể mang hằng;
+  một khai miễn theo tên hàm là một danh sách nữa phải nuôi, và cổng sẽ phải phân biệt "hàm dự án" với "hàm lạ" bằng tên.
+- **Chỉ che giá trị trong `proconfig`, giữ thân hàm.** Bác: thân hàm mang hằng đã đo (⑵), và UUID trong thân đi thẳng vào log.
+- **Băm cả chuỗi mô tả thay vì từng thành phần.** Bác: mất tên trigger và các cờ — đúng phần chẩn đoán không mang giá trị.
+- **Giữ `SQLERRM`, chỉ đổi ở "không đánh giá được ĐIỀU KIỆN".** Bác: cùng biến ở 22 chỗ; cổng cấm theo tên thì phải cấm toàn tệp,
+  và mã `SQLSTATE` đủ để người vận hành biết lớp lỗi (42501, 42P01, 22P02…), tên mục và tên đối tượng đã có trong cùng câu.
+- **Cổng cấm cả `pg_get_constraintdef`/`pg_get_ruledef`/`pg_get_viewdef`/`prosqlbody`.** Bác cho vòng này: cổng đọc cả ô, và hàng
+  khoản 105 dùng `pg_get_constraintdef` làm vị từ LỌC trong ô mô tả (so, không in) — cấm tên ấy là cấm một phép so hợp lệ. Mở rộng
+  đòi một bộ đọc biết đâu là biểu thức chuỗi (§S1.9102 mục 7).
+
+### Hệ quả
+
+- **Chẩn đoán IM5 đổi hình, không đổi bản chất:** WARNING vẫn nêu ĐÚNG mục và tên đối tượng, cộng vân tay của thân HIỆN TẠI; người
+  vận hành tra thân bằng một câu psql thay vì đọc log. Cái giá: thêm một bước; ca ⑵ và ⑸ đo rằng vân tay in ra khớp vân tay tính lại
+  trên thân/định nghĩa hiện tại, ca IM5 đo trên `audit_compute_hash`.
+- **`SQLSTATE` thay `SQLERRM`:** mất tên đối tượng mà PostgreSQL nhét trong thông điệp (vd. `permission denied for function x`); tên
+  mục và tên đối tượng của hardening vẫn ở cùng câu; với `2BP01` ở BƯỚC 1 câu WARNING đã nêu sẵn `REVOKE … CASCADE`.
+- **Hai `expect` của `db/hardening-suy-tu-tinh-chat.int.test.ts`** đọc bản gom `ném 22012 (division by zero)` nay đọc `ném SQLSTATE
+  22012;` — tên test ("với SQLSTATE — không phải một 'division by zero' trần") vẫn đúng.
+- Cổng T1 so ba khuôn NGUYÊN VĂN: đổi bí danh, bỏ `pg_catalog.`, băm thân chưa chuẩn hoá đều đỏ; sửa khuôn thì sửa ở hardening và ở
+  cổng cùng một commit.
+- Không migration, không đổi lược đồ; hàm ghim `hardening.always.sql` không đổi thân hàm nào (chỉ văn bản thông điệp).
