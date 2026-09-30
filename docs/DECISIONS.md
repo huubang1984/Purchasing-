@@ -9497,3 +9497,69 @@ không bảng, không hàm; tập ADR-082 ⑿ chưa có dòng mã nào (K5 là S
 
 `packages/du-lieu-nen/src/anh-xa.int.test.ts` trên Postgres thật; `chuan-hoa.test.ts` (bảng ca bộ luật 1); tổng điều tra của `db/` và
 `tests/architecture`. Đột biến: §S1.204.
+
+## ADR-9201 — S4.3b: lượt chuẩn hoá chạy sau commit của lần nộp duyệt, trong một giao dịch mới, chỉ ở tổ chức có hàng chuẩn đang dùng; năm route ánh xạ `agent: false`
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt sáu điểm ngày 2026-09-30: một PR; lượt chuẩn hoá chạy sau commit
+bằng một kiểu việc mới của bộ điều phối, chỉ ở tổ chức có ít nhất một hàng chuẩn đang dùng; năm route, hai route đọc `agent: false`;
+không mở E6; hàng đợi ở `/du-lieu`, cột chỉ đọc ở `/tao-thau`; `gieo:demo` có một dòng chờ duyệt, và dòng PRODUCT §5 chỉ nói phần
+đã có mã · **[S1.9101]** · **Liên quan:** ADR-121 (S4.3a — luật ghi của ánh xạ), ADR-113 (lô gửi sau commit), khoản 124 (việc sau
+commit có bù), ADR-039 (trường `agent`), ADR-038 (bề mặt MCP chỉ đọc) · **Spec:** S4 §2.3, §3.5, §4.4, §8.2 · **Biên bản:**
+`evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh
+
+Spec S4 §4.4: tầng gói chuẩn hoá SAU khi cạnh `DRAFT→PENDING_APPROVAL` commit, trong một giao dịch riêng — một lỗi chuẩn hoá không
+được chặn việc nộp duyệt, và S4 không thêm trigger ở cạnh ấy (§3.4); không outbox, vì chuẩn hoá là hàm thuần. Bộ điều phối có ba kiểu
+việc sau commit: việc thường (ngoài CSDL, không kết nối), việc có bù (kết quả đổi phản hồi, khoản 124) và lô gửi (ADR-113). Không
+kiểu nào cầm một giao dịch CSDL mới mà không đổi phản hồi. Spec §2.3: tổ chức không khai gì chạy đúng hành vi hôm nay, và cụm test
+hiện có là đối chứng.
+
+### Quyết định
+
+1. **Kiểu việc sau commit thứ tư: `afterCommitGiaoDich`.** Handler người mua đăng ký một closure nhận kết nối; bộ điều phối chạy mọi
+   việc đã đăng ký khi phản hồi của handler thành công — sau việc có bù và lô gửi, trước việc thường —, theo thứ tự đăng ký, mỗi
+   việc một `withTenant` MỚI (lần lấy kết nối có trần 5 s). Hỏng ⇒ MỘT dòng log `giao-dich-sau-commit` mang tên lỗi, không nội dung;
+   phản hồi giữ nguyên; việc sau vẫn chạy. Không giới hạn số việc: việc này không tranh câu trả lời.
+2. **Route nộp duyệt đăng ký `chuanHoaSauNop` dưới phiên người nộp.** Hàm chạy `chuanHoaGoi` khi tổ chức có ít nhất một hàng chuẩn
+   mà phiên bản mới nhất `DANG_DUNG`; không thì trả `null` và không ghi gì — không hàng gợi ý, không hàng sổ.
+3. **Năm route** (`apps/api/src/routes/anh-xa.ts`): `GET /mapping-queue` (hàng đợi, tối đa 500 dòng, `conNua`), `GET /rfqs/:rfqId/mappings`
+   (trạng thái từng dòng; gói lạ ⇒ 404), và ba route ghi khai `item.manage` với tọa độ gói — `POST /rfqs/:rfqId/normalize` (chuẩn hoá
+   lại, kể cả hồi tố), `POST /rfqs/:rfqId/items/:lineNo/mapping` (duyệt hay bác; `hangChuanId` bắt buộc có mặt, `null` là bác),
+   `POST …/mapping/new-item`. Hai route đọc mở cho người mua của tổ chức (khuôn S4.2b) và `agent: false`: ánh xạ là khoá để đọc lịch
+   sử giá ở S4.4 — dòng nào nối với hàng nào quyết định giá của gói nào đứng cạnh nhau —, và mặt ấy chưa mở cho một tác tử trước khi
+   quyết mặt tiền của lịch sử giá.
+4. **Không mở E6.** Hàng đợi trả 500 dòng cũ nhất và màn lọc trên đó; `/tao-thau` chỉ hiện trạng thái, không tìm hàng chuẩn.
+5. **Màn.** `/du-lieu` bước 6: bảng hàng đợi (gói, dòng, mô tả, số lượng, gợi ý, người ghi gợi ý); nút *Xử lý* chỉ khi người xem ghi
+   được; khối xử lý có ô chọn (ứng viên của lõi trước, kèm điểm; rồi hàng đang dùng khác), ô bí danh bật sẵn, ô lý do, bốn nút — duyệt,
+   bác, tạo hàng chuẩn mới rồi duyệt, chuẩn hoá lại cả gói. `/tao-thau`: cột *Hàng chuẩn* chỉ đọc, đọc khi gói đã rời DRAFT.
+6. **`gieo:demo`.** Hàng bu lông neo không có bí danh: lúc nộp, hai dòng tự nối, dòng thứ ba vào hàng đợi với gợi ý `GOI_Y` (lõi bản
+   1 chấm 0,88 cho đúng hàng ấy).
+7. **PRODUCT §5.** Dòng mới thay *"chuẩn hoá dữ liệu chống thao túng giá"* bằng điều đã có mã. Câu của spec §8.2 có vế *"thước đo
+   … được chốt tại mốc của gói; mọi hàng ghi sau đó mang nhãn"* — vế ấy là hàm đọc tại mốc của S4.4, chưa có, nên chưa vào PRODUCT.
+
+### Phương án đã cân nhắc
+
+- **Chuẩn hoá trong giao dịch của cạnh nộp duyệt.** Loại: một lỗi chuẩn hoá chặn lần nộp, trái spec §4.4.
+- **Outbox.** Loại: spec §4.4 — hàm thuần, không dịch vụ ngoài, không có gì để thử lại theo lịch; nút *chuẩn hoá lại* là đường chữa.
+- **Việc thường tự mở `withTenant` bằng một pool trong `services`.** Loại: handler người mua cố ý chỉ cầm `auditPool`; một pool chung
+  trong tay handler là đường ghi ngoài giao dịch của yêu cầu, không qua kỷ luật của bộ điều phối (chỉ khi thành công, một dòng log).
+- **Chạy ở mọi tổ chức.** Loại: tổ chức chưa có hàng chuẩn thì mọi dòng là `CAN_DUYET` không ứng viên, hàng đợi đầy tiếng ồn, và luồng
+  MVP1 có thêm hàng sổ — trái §2.3.
+- **Mở hai route đọc cho agent.** Loại ở vòng này: cần một công cụ MCP mới và một quyết định về lịch sử giá chưa có.
+
+### Hệ quả, nói thẳng
+
+- **Phản hồi của lần nộp duyệt về SAU lượt chuẩn hoá**: bộ điều phối chờ việc sau commit rồi mới trả. Lần nộp chậm thêm một lượt;
+  lượt hỏng thì chậm thêm tối đa một lần lấy kết nối (5 s) cộng thời gian của câu hỏng.
+- **Lượt hỏng không có cảnh báo chủ động** — một dòng log; gói nằm ở *chưa chuẩn hoá* trong hàng đợi tới khi người quản lý dữ liệu
+  bấm *chuẩn hoá lại*.
+- **Tổ chức tạo hàng chuẩn đầu tiên SAU khi đã có gói nộp**: gói cũ không tự chuẩn hoá; chúng hiện trong hàng đợi là *chưa chuẩn hoá*.
+- **Hàng đợi đọc mở cho mọi người mua của tổ chức** — mô tả, đơn vị, số lượng của mọi gói đã nộp, không giá. Người mua đã đọc được
+  mọi gói của tổ chức qua `GET /rfqs/:rfqId` từ MVP1.
+
+### Đo
+
+`apps/api/src/anh-xa.int.test.ts` (lượt sau nộp, ba ca điều kiện, ngữ nghĩa `afterCommitGiaoDich` trên route giả, năm route, [INV-L3]
+người tạo gói ⇒ 403); `apps/web` (module thuần, bộ giả lập trang); `kich-ban-41-http.int` (bộ quét rò rỉ đi qua ba route ghi); lượt đi
+thử T4 trên Chromium. Đột biến: §S1.9101.

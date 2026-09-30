@@ -416,7 +416,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
+  // [S1.9101 / S4.3b] `anh-xa` (apps/api) đo cùng lớp cho ba route ghi ánh xạ: người tạo gói gọi ⇒ 403, không hàng ánh xạ nào.
   L3: [
+    "apps/api/src/anh-xa.int.test.ts",
     "apps/api/src/du-lieu.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
