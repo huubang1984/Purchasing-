@@ -5895,9 +5895,13 @@ giữ; `po.approve` chỉ **FINANCE · DIRECTOR**. Nếu huỷ đi qua `award.re
 được một award **đã duyệt** rồi đề xuất người khác — phê duyệt kép bị tháo bằng cách **bào mòn**, chứ
 không bằng cách vượt. Nên `huyTraoThau` đòi `po.approve`.
 
-Cái giá, nói thẳng: **người đề xuất không tự rút lại được đề xuất của mình.** Đó là một quyền hẹp hơn
+~~Cái giá, nói thẳng: **người đề xuất không tự rút lại được đề xuất của mình.**~~ Đó là một quyền hẹp hơn
 và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hay một cổng phụ thuộc trạng thái, và cả
-hai là thiết kế mới. Ghi thành khoản **232**.
+hai là thiết kế mới. ~~Ghi thành khoản **232**.~~ **[S1.9182 / khoản 232 ĐÓNG — ADR-9282]** Chủ dự án chốt
+ngày 2026-09-30 hình ⒜: `9583` thêm trạng thái thứ tư `WITHDRAWN` — chỉ đi từ một hàng `PROPOSED` có 0 chữ
+ký, chỉ người đề xuất ghi được (so `acted_by`), và không phải một award còn sống: RFQ về `EVALUATING` qua
+đúng cạnh của huỷ, J7 mở lại. Route `POST /rfqs/:rfqId/award/withdraw` dưới `award.recommend`. Cổng huỷ
+giữ nguyên `po.approve`.
 
 ### Điều ADR này KHÔNG nói
 
@@ -5915,11 +5919,13 @@ mã cũ, A điều phối → B điều phối lại → A đề xuất thì ĐI
 thì lại đi qua. Giới hạn nói ra: backfill hồi phục người điều phối cũ từ hàng sổ `UNSEAL_REDISPATCHED`,
 nguồn chỉ có từ S1.103 — một lần điều phối lại trước đó không để lại cặp cũ ở đâu cả.
 
-Nó **không** nói lượt chấm mà award dựa trên được canh ở hai lớp. Khác `060` (vòng BAFO), tầng CSDL
+~~Nó **không** nói lượt chấm mà award dựa trên được canh ở hai lớp. Khác `060` (vòng BAFO), tầng CSDL
 ở đây chỉ đòi lượt chấm **thuộc đúng RFQ**, không đòi nó là lượt **mới nhất**; câu `ORDER BY
-e.created_at DESC` của `deXuatTraoThau` là lớp DUY NHẤT. Bất đối xứng ấy có lý do đo được —
+e.created_at DESC` của `deXuatTraoThau` là lớp DUY NHẤT.~~ Bất đối xứng ấy có lý do đo được —
 `rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một thân yêu cầu khai được nó,
 còn `evaluationId` của award không phải tham số của hàm nào — và nó vào sổ thành khoản **231**.
+**[S1.9182 / khoản 231 ĐÓNG]** Từ `9582`, `award_kiem_de_xuat` đòi cả *không lượt chấm nào của RFQ mới
+hơn* (khuôn `060` (A), nhánh có tên `j5_luot_cham_khong_moi_nhat`): hai lớp nói cùng một câu như vòng BAFO.
 
 Nó **không** đổi gì ở `cancelRfq`, `countReceivedBids`, hay đường niêm phong.
 
@@ -9682,3 +9688,33 @@ Bức tranh vận hành (hôm nay): một vai deploy chạy `migrate()` (superus
 - **Mọi lược đồ không hệ thống là của dự án:** bảng RLS chưa khai bị FORCE ở lượt sửa đầu rồi deploy bị chặn và nêu tên — hai mục phán xét (83⑶, 94) là bề mặt nhìn thấy được; không cần danh sách miễn.
 - Không migration, không đổi mã phán xét; chú thích trên `MAU_SCHEMA_DU_AN` và `VI_TU_FORCE_THIEU` là bằng chứng kiểm toán của phạm vi.
 - Điều kiện xem lại: nếu một ngày có nhu cầu ghép chung database (không dự kiến), ADR này phải được thay bằng một hồ sơ mới TRƯỚC khi ghép, vì phạm vi FORCE sẽ chạm dữ liệu của người khác.
+
+## ADR-9282 — Trạng thái thứ tư `WITHDRAWN`: người đề xuất rút đề xuất chưa chữ ký của mình, ràng ở CSDL, dưới cổng `award.recommend`
+
+**Trạng thái:** Đã chấp nhận (chủ dự án chốt hình ⒜ ngày 2026-09-30) · **Ngày:** 2026-09-30 · **Vòng:** S1.9182 / khoản 232
+
+### Bối cảnh
+ADR-057 đặt cổng HUỶ award ở `po.approve` vì `award.recommend` do bốn vai giữ: huỷ qua mã ấy cho một `BUYER` huỷ award ĐÃ DUYỆT rồi đề xuất người khác — phê duyệt kép bị bào mòn. Cái giá nói ra ở ADR-057 và khoản 232: người đề xuất bấm nhầm báo giá phải đi tìm `FINANCE`/`DIRECTOR` để undo, kể cả khi đề xuất CHƯA có chữ ký nào. Hai hình dạng đóng được cân ở S1.110: ⒜ trạng thái thứ tư `WITHDRAWN`; ⒝ cổng phụ thuộc trạng thái trên `huyTraoThau`.
+
+### Quyết định
+⑴ `rfq_awards.status` nhận giá trị thứ tư **`WITHDRAWN`** (`9583`). Chuỗi của `061` nay:
+```
+(chưa có) --PROPOSED--> PROPOSED --APPROVED--> APPROVED --CANCELLED--> CANCELLED --PROPOSED--> …
+                            |--CANCELLED--> CANCELLED --PROPOSED--> …
+                            |--WITHDRAWN--> WITHDRAWN --PROPOSED--> …   (0 chữ ký, cùng con người)
+```
+⑵ Ba vế của `WITHDRAWN` sống ở `award_kiem_mot_award_song`, mỗi vế một tên ràng buộc: hàng mới nhất là `PROPOSED` (`j7_rut_khong_o_proposed`); người ghi là người đề xuất, so `acted_by` — cột dẫn xuất từ phiên (`j7_rut_khong_phai_nguoi_de_xuat`); đề xuất ấy có 0 chữ ký (`j7_rut_da_co_chu_ky`). Hàng `WITHDRAWN` nói về đúng báo giá của đề xuất (vế *cùng báo giá* của `061`).
+⑶ `WITHDRAWN` KHÔNG phải một award còn sống: J7 cho `PROPOSED` mới sau nó; `APPROVED`/`CANCELLED` sau nó bị từ chối; RFQ về `EVALUATING` qua đúng cạnh `AWARDED->EVALUATING` mà ADR-057 mở cho huỷ. Máy trạng thái RFQ không đổi.
+⑷ Đường rút: `rutDeXuatTraoThau` và `POST /rfqs/:rfqId/award/withdraw` dưới **`award.recommend`** — cùng cổng với lần đề xuất. KHÔNG một cổng quyền đọc dữ liệu nào ở `apps/api`. Cổng huỷ giữ nguyên `po.approve`: có chữ ký rồi thì chỉ huỷ được, vì rút được sau chữ ký là để người đề xuất tháo một quyết định đã duyệt bằng chính tay mình.
+
+### Phương án bị loại
+- ⒝ cổng phụ thuộc trạng thái trên `huyTraoThau` (`award.recommend` đủ khi `PROPOSED` 0 chữ ký, `po.approve` khi đã duyệt): rẻ hơn một migration, nhưng là tiền lệ "route đọc dữ liệu để chọn mã quyền" mà `apps/api` cố ý không có — và mở nó ở route trao thầu là mở ở chỗ đắt nhất; `cong-quyen-route.test.ts` sẽ phải hiểu một loại cổng mới.
+- Cho rút cả khi đã có chữ ký (chỉ đòi chưa `APPROVED`): tháo được một chữ ký của người duyệt bằng tay người đề xuất — cùng lỗ phê duyệt kép bị bào mòn.
+- Xoá/sửa hàng `PROPOSED` thay vì thêm hàng: `rfq_awards` chỉ-ghi-thêm (`061`, §2.3⑹); lịch sử *ai đề xuất, ai rút, lúc nào, vì sao* phải trả lời được từ chính bảng.
+- So vai thay vì so người (`role = người đề xuất`): FINANCE giữ cả hai mã, lớp vai trò không phân biệt nổi; chỉ phép so `acted_by` chặn được.
+
+### Hệ quả
+- Bảng `rfq_awards` có bốn trạng thái; `TrangThaiTraoThau`, `docTraoThau`, màn mở thầu và bộ xuất bằng chứng thấy hàng `WITHDRAWN` như một hàng lịch sử thường.
+- Hai mã từ chối mới `KHONG_PHAI_NGUOI_DE_XUAT`, `DE_XUAT_DA_CO_CHU_KY` vào sổ `RFQ_STATE_DENIED` (ADR-060); hàng sổ mới `RFQ_AWARD_WITHDRAWN`.
+- Bản ghim `award_kiem_mot_award_song` ở hardening là bản `9583`; đổi thân là đổi bản ghim cùng commit.
+- Nút «Rút đề xuất» là lớp hiển thị; luật ở trigger. Trang hiện nút theo `status`/`approvals` đọc từ máy chủ, không theo người.

@@ -18280,6 +18280,61 @@ Kịch bản `scratchpad/lo81-dot-bien-{202,218,193}.py`: sửa một chỗ, ch�
   0 vi phạm (125 module, 301 cạnh).
 - `pnpm vitest run apps/web tools/pilot-gia-lap/src/tien.test.ts tests/architecture`: 44 tệp: lượt một (không biến Postgres) 42 tệp xanh / 610 test xanh, 2 tệp đỏ là `qt3-cu-phap.int.test.ts` và `qt3-ngu-phap.int.test.ts` (`Could not find a working container runtime strategy` — cần Postgres, không liên quan bản vá; 224,9 s); lượt hai chạy đúng hai tệp ấy với `TRUSTPROCURE_PG_LOCAL_BIN=/var/lib/postgresql/tp-shim TRUSTPROCURE_PG_LOCAL_DATA=/var/lib/postgresql/tp-test` ⇒ 2/2 tệp, 8/8 test xanh (6,6 s). Cộng lại: 44/44 tệp, 618 test xanh, 1 skipped (`xuong-dong-ts.test.ts`, sẵn có), 0 đỏ. Log: `scratchpad/lo81-cong-cuoi.log`, `scratchpad/lo81-cong-cuoi-qt3.log`.
 
+# §S1.9182 — TRẢ NỢ LÔ B3: AWARD ĐÒI LƯỢT CHẤM MỚI NHẤT Ở TẦNG CSDL (231); TRẠNG THÁI `WITHDRAWN` — NGƯỜI ĐỀ XUẤT RÚT ĐỀ XUẤT CHƯA CHỮ KÝ CỦA MÌNH (232, ADR-9282)
+
+**Rổ và mảnh (ADR-043 ⒞):** hai khoản rổ B. Mảnh §11 chạm: bước *người mua CHỌN nhà cung cấp* (bước 7 màn mở thầu) — thêm một nút, không bước nào của kịch bản cũ đổi. Hai migration `9582`, `9583`; ADR-9282; sửa tại chỗ ADR-057. Không khoản mới.
+
+## 1. Vòng này là gì
+Lô B3 của đợt trả nợ 2 (lượt B). **231** — `award_kiem_de_xuat` chỉ đòi lượt chấm thuộc đúng RFQ, không đòi mới nhất; vế *mới nhất* sống ở một câu `ORDER BY` của lớp gói, bất đối xứng với `bafo_kiem_vong`. **232** — người đề xuất không tự rút được đề xuất của mình vì cổng huỷ là `po.approve` (ADR-057); chủ dự án chốt hình ⒜.
+
+## 2. Quyết định của chủ dự án
+Cho **232**, ngày 2026-09-30: hình ⒜ — trạng thái thứ tư `WITHDRAWN` chỉ người ĐỀ XUẤT ghi được, `award_kiem_mot_award_song` đòi hàng trước đó là `PROPOSED` KHÔNG chữ ký; route rút đi qua `award.recommend`; huỷ award đã duyệt vẫn đòi `po.approve`; không cổng quyền đọc dữ liệu ở `apps/api`. Cho **231**: không có; vòng trả nợ theo phân công.
+
+## 3. Đo trước
+Trên `561158e` (agent trước, log `scratchpad/lo82-do-truoc-danh-gia.log`, 6 ca đỏ / 92 bỏ qua):
+- **231**: `[INV-J5] lượt CŨ sau một chu kỳ BAFO ⇒ 23514 j5_luot_cham_khong_moi_nhat` đỏ — `promise resolved "'20d39491-…'" instead of rejecting`: hàng award trỏ lượt chấm TRƯỚC BAFO chèn thẳng dưới `app_api` ĐI QUA, không trigger nào kêu.
+- **232**: 5 ca `[INV-J7]` đỏ cùng một chỗ — `new row for relation "rfq_awards" violates check constraint "rfq_awards_status_check"` (chữ `WITHDRAWN` chưa có trong tập đóng); ba ca đòi tên ràng buộc nhận `constraint: 'rfq_awards_status_check'` thay cho `j7_rut_da_co_chu_ky` / `j7_rut_khong_phai_nguoi_de_xuat` / `j7_rut_khong_o_proposed`.
+- **`docTraoThau`** (agent này, ca "đọc chữ ký của ĐÚNG đề xuất mới nhất", chạy trên `trao-thau.ts` trước vá — `scratchpad/lo82-do-truoc-docTraoThau.log`): đỏ `chữ ký của chu kỳ trước KHÔNG thuộc đề xuất này: expected [ { …(2) } ] to deeply equal []` — `approvals` của đề xuất MỚI mang `{ approverUserId: <uDuyet>, approvedAt: … }` của chu kỳ `PROPOSED→APPROVED→CANCELLED` trước đó.
+
+## 4. Thay đổi
+- `db/migrations/9582_award_luot_cham_moi_nhat.sql` (mới): `CREATE OR REPLACE FUNCTION public.award_kiem_de_xuat()` — thân trích nguyên văn từ `074`, thêm biến `moc_cua_luot` và một khối trước `RETURN NEW`: đọc `created_at` của lượt được trỏ, `EXISTS` lượt cùng `(org, rfq)` có `created_at` lớn hơn ⇒ `RAISE … ERRCODE check_violation, CONSTRAINT j5_luot_cham_khong_moi_nhat`. Không đổi trigger.
+- `db/migrations/9583_award_withdrawn.sql` (mới): ⑴ `DROP`/`ADD CONSTRAINT rfq_awards_status_check` với `WITHDRAWN`; ⑵ `award_kiem_mot_award_song` thân trích từ `068`, đổi năm chỗ (biến `truoc_acted_by`; đọc thêm `a.acted_by`; J7 cho `PROPOSED` sau `WITHDRAWN`; nhánh `WITHDRAWN` ba vế có tên; `CANCELLED` sau `WITHDRAWN` bị từ chối).
+- `db/migrations/hardening.always.sql` — CHỈ ba chỗ: dòng `CHECK_AN_NINH_KHAI` của `rfq_awards_status_check` (→ `9583_award_withdrawn`, bốn giá trị); khối ghim `award_kiem_de_xuat` (nhãn, điều kiện `schema_migrations` → `9582`, bản đẹp, `$than$`); khối ghim `award_kiem_mot_award_song` (→ `9583`). Không chạm vùng B1/B2/B4/B7.
+- `db/migrations.int.test.ts`: con trỏ `HAM_56` của hai hàm dời sang `9582`/`9583`; ba danh sách thứ tự migration thêm hai tệp; ca MỚI Ở CUỐI TỆP: sau `migrate()` lượt 1, `prosrc` hai hàm mang các tên ràng buộc mới và `pg_get_constraintdef` của CHECK liệt kê bốn trạng thái; lượt 2 không áp gì VÀ hai thân vẫn mang vế mới (bẫy S1.96: hardening trả về bản ghim).
+- `packages/danh-gia/src/trao-thau.ts`: `TrangThaiTraoThau` + `WITHDRAWN`; `LyDoTuChoiTraoThau` + `KHONG_PHAI_NGUOI_DE_XUAT`, `DE_XUAT_DA_CO_CHU_KY`; `RutDeXuatTraoThauInput`; `rutDeXuatTraoThau`; `huyTraoThau` coi `WITHDRAWN` không phải award còn sống; `docTraoThau` chọn đúng MỘT hàng khi đọc chữ ký — `PROPOSED` mới nhất của gói thầu (subquery `ORDER BY acted_at DESC, id DESC LIMIT 1`, cùng khoá với `awardMoiNhat`), KHÔNG còn tham số thời gian `$3` đi qua JS; chú thích đầu tệp gạch hai lời khai cũ.
+- `packages/danh-gia/src/tu-choi-vao-so.ts`: hai mã mới `vaoSo: true` (bảy → chín mã chuỗi); lý do của `KHONG_CO_DE_XUAT_DANG_CHO` nhắc thêm lần RÚT. `packages/danh-gia/src/index.ts`: export hàm + kiểu.
+- `apps/api/src/routes/buyer.ts`: route `POST /rfqs/:rfqId/award/withdraw` (`BUYER`, `mutates`, `AWARD_RECOMMEND`, `resourceType: RFQ`, 201, thân `{ reason }`); chú thích gạch hai lời khai cũ.
+- `apps/web/trang/mo-thau.html/.js`: nút `nut-rut-de-xuat` (`hidden` mặc định), `veTraoThau` bật nút khi `PROPOSED` và `approvals` rỗng; handler gọi route, lý do bắt buộc, `loiCua` cho 422.
+- Test: `luot-danh-gia.int.test.ts` (+1 `[INV-J5]`, +5 `[INV-J7]`, +5 ca đường sản xuất, helper `kyThang`/`coDeXuat`/`hangSoTuChoiTrangThai`); `buyer.int.test.ts` (+1 ca dài qua HTTP, giàn `goiDaDong` trong tổ chức riêng); `phuc-vu.test.ts` (+3 ca DOM); `kich-ban-41-http.int.test.ts` (+1 nhánh quét route); `cong-quyen-route.test.ts` (+`rutDeXuatTraoThau`); `barrel-exports.test.ts` (+`rutDeXuatTraoThau`); `check-an-ninh-khai.test.ts` (bộ đọc nhận migration 3–4 chữ số).
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+⑴ **Ba vế của `WITHDRAWN` sống ở trigger, mỗi vế một tên ràng buộc** (khuôn `074`); lớp gói lặp lại ba phép kiểm CHỈ để gọi tên lý do và để lại hàng sổ mang mã — đột biến M232b cho thấy bỏ phép kiểm ở gói thì CSDL vẫn chặn. ⑵ **`docTraoThau` vá luôn ở vòng này** dù lỗi có từ S1.110: nút «Rút đề xuất» hứa "chỉ hiện khi 0 chữ ký" bằng cách đọc `approvals`, mà câu cũ JOIN mọi hàng `PROPOSED` không muộn hơn hàng mới nhất — sau một chu kỳ `PROPOSED(chữ ký)→APPROVED→CANCELLED→PROPOSED` đề xuất mới bị gán chữ ký cũ và nút ẩn sai; lớp có thẩm quyền (trigger, đếm theo `truoc_id`) không sai, nên đây là lỗi hiển thị, nhưng nó làm lời hứa của 232 sai. Vá là một subquery chọn hàng `PROPOSED` mới nhất, cùng khoá sắp xếp với `awardMoiNhat`; ca đo riêng. Bản ĐẦU của vá giữ vế `dx.acted_at <= $3` (với `$3 = h.acted_at`) và ĐỎ y như trước vá: `h.acted_at` là một `Date` của JS, pg tuần tự hoá ở MILI-giây, còn `acted_at` là micro-giây, nên chính hàng mới nhất bị loại và subquery rơi về hàng `PROPOSED` cũ. Vế ấy vốn thừa — `h` là hàng mới nhất nên mọi `PROPOSED` đều không muộn hơn nó — nên bản cuối bỏ hẳn tham số thời gian; ghi vào chú thích tại chỗ. Cùng bẫy ấy nằm sẵn trong câu cũ (một `PROPOSED` có chữ ký mà chưa `APPROVED` đọc ra 0 chữ ký) nhưng đường sản xuất không tới được vì `duyetTraoThau` ghi chữ ký và hàng `APPROVED` cùng giao dịch. ⑶ **Người rút so bằng `acted_by`**, không so vai — `acted_by` là cột dẫn xuất từ phiên (`013`); ca "FINANCE giữ CẢ `award.recommend` lẫn `po.approve` vẫn bị chặn" ghim rằng lớp vai trò không phân biệt nổi. ⑷ **Không dòng `CHOT_VAO_SO` cho `j5_luot_cham_khong_moi_nhat`**: đường sản xuất không tới được nhánh ấy; một lần từ chối ở đó là dấu hiệu của một đường ghi LẠ, không của người dùng đi tắt. ⑸ **Rút sau `WITHDRAWN` không mở lại cho `CANCELLED`**: hàng rút không phải award còn sống, nên `huyTraoThau` sau đó trả `KHONG_CO_AWARD_CON_SONG` như sau `CANCELLED`. ⑹ **Ca test sai của agent trước sửa bằng gói thứ hai**, không nới `kyThang`: `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong một giao dịch, nên trên gói đã có chữ ký của chính `uDuyet` thì lần duyệt vấp `UNIQUE` của `061` — đúng luật, không phải thứ ca ấy đo. ⑺ Máy trạng thái RFQ (`rfq_kiem_chuyen_trang_thai`) không đổi: nó chỉ canh cạnh, `AWARDED->EVALUATING` đã có từ `061`.
+
+## 6. Đột biến
+- **M231** — thay `e2.created_at > moc_cua_luot` bằng `… AND false` ở `9582` VÀ ở hai bản ghim của `award_kiem_de_xuat` trong hardening (không chạm hai chỗ cùng chuỗi của `bafo_kiem_vong`): `pnpm vitest run … -t "khoản 231"` ⇒ 1 đỏ, `promise resolved "'bdf9bab5-…'" instead of rejecting`. Khôi phục bằng `cp` từ bản sao, `cmp` khớp.
+- **M232** — `IF so_chu_ky > 0 THEN` → `IF so_chu_ky > 0 AND false THEN` ở `9583` và bản ghim: `-t "chu_ky|CHU_KY"` ⇒ ca CSDL `j7_rut_da_co_chu_ky` đỏ (`promise resolved instead of rejecting`), ca đường sản xuất `DE_XUAT_DA_CO_CHU_KY` xanh (lớp gói vẫn chặn — vì thế ca CSDL phải chèn thẳng). Khôi phục, `cmp` khớp.
+- **M232b** — lớp gói: `if ((chuKy[0]?.n ?? 0) > 0)` → `… && false` ở `rutDeXuatTraoThau`: `-t "DE_XUAT_DA_CO_CHU_KY"` ⇒ đỏ, thông điệp nhận được là của CSDL `De xuat da co 1 chu ky duyet — khong rut duoc, chi huy duoc (J7)` thay cho `TraoThauTuChoiError`. Khôi phục, `cmp` khớp.
+- **Đột biến trong ca** (`[INV-J7] ĐỘT BIẾN`): `ALTER TABLE rfq_awards DISABLE TRIGGER rfq_awards_kiem_mot_award_song` ⇒ hàng `WITHDRAWN` đã có chữ ký, bởi người khác, đi lọt; `ENABLE ALWAYS` trả lại, `tgenabled = 'A'`.
+- **`docTraoThau`**: đo trước bằng bản `trao-thau.ts` trước vá (mục 3), tức chính bản vá là đột biến ngược.
+
+## 7. Giới hạn, nói ra
+- Vế *mới nhất* của `9582` so `created_at` của `rfq_evaluations`; ca hoà không tới được vì `taoLuotDanhGia` đòi RFQ ở `UNSEALED`/`BAFO_UNSEALED` rồi lật sang `EVALUATING` — hai lượt của một gói không sinh trong cùng giao dịch. Chưa có ca ghim điều ấy; nếu ngày nào có một đường tạo lượt khác, đọc lại.
+- `rutDeXuatTraoThau` không nhận `awardId`: hàng mới nhất là đích. Một người đề xuất bấm rút đúng lúc người khác vừa huỷ thì nhận `KHONG_CO_DE_XUAT_DANG_CHO` (vào sổ) — đúng ADR-060, không phải lỗi.
+- Nút «Rút đề xuất» chỉ là lớp hiển thị; luật ở trigger. Trang không đọc `acted_by` nên người KHÁC người đề xuất vẫn thấy nút khi đề xuất đang `PROPOSED` 0 chữ ký, bấm thì nhận 422 có tên (ca DOM thứ ba đo đúng đường ấy). Ẩn theo người đòi trang biết `userId` của phiên — chưa có ở `mo-thau.js`; không mở ở vòng này.
+- `check-an-ninh-khai.test.ts` nới bộ đọc sang 3–4 chữ số để dòng khai `9583_…` không vô hình; sau `pnpm cap-so` số thật ba chữ số, bộ đọc vẫn đúng.
+- Cổng `db/hardening-suy-tu-tinh-chat.int.test.ts` chạy dù không có hàm trigger mới (bản ghim hai hàm đổi): 36/36, 310 s. Không chạy `pnpm test:int`/`pnpm evidence` toàn bộ (sổ tay).
+
+## 8. Số đo
+- `pnpm typecheck`: xanh (hai lần, trước và sau vá `docTraoThau`). `pnpm exec eslint` 13 tệp đã chạm: 0 lỗi. `pnpm exec depcruise packages/danh-gia apps --config .dependency-cruiser.cjs`: 247 module, 933 phụ thuộc, 0 vi phạm.
+- `pnpm vitest run db/migration-shape.test.ts db/hardening-hang.test.ts apps/web tests/architecture`: 47 tệp, 671 xanh, 1 bỏ qua (sẵn có). `tests/architecture/hardening-khong-in-gia-tri.test.ts` xanh.
+- `packages/danh-gia/src/luot-danh-gia.int.test.ts`: lần 1 97/98 (ca test sai, mục 5 ⑹); lần 2 98/98 (16,3 s); lần 3 với bản đầu của vá `docTraoThau` 98/99 (bẫy mili-giây, mục 5 ⑵); lần 4 với bản cuối **99/99** (16,2 s).
+- `apps/api/src/buyer.int.test.ts`: 21/21 (22,2 s), chạy lại sau vá `docTraoThau`: 21/21 (21,1 s). `apps/unseal-worker/src/kich-ban-41-http.int.test.ts`: 58/58 (19,9 s).
+- `db/migrations.int.test.ts` trọn một lần cuối: **121/121**, 1 252 s (~21 phút, máy dùng chung); ca mới `[S1.9182 / khoản 231 · 232]` xanh (6,0 s); hai ca `HAM_56` so văn bản thân/bản ghim xanh.
+- Đột biến: M231 1 đỏ; M232 1 đỏ / 2 xanh; M232b 1 đỏ (mục 6).
+- Đo trước: 6 đỏ (log agent trước) + ca `docTraoThau` đỏ trên bản trước vá (`expected [ { …(2) } ] to deeply equal []`).
+
+— hết biên bản §S1.9182 —
+
 # §S1.9191 — CỔNG TĨNH: HÌNH DẠNG GITLEAKS, BỐN VẾ VĂN BẢN CỦA BẢNG TENANT, VẾ ⑷ PHẠM VI SẢN XUẤT ĐỌC MỌI GÓI — KHOẢN 132, 221, 223 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** rổ B; không chạm mảnh nào của `docs/PRODUCT.md` §11 — ba cổng kiến trúc/T1, không route, không màn, không
