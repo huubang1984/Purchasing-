@@ -35,7 +35,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type pg from "pg";
 import { auditStoredCiphertexts, verifyReceipt } from "@trustprocure/bidding";
 import { migrate } from "@trustprocure/db";
-import { counterForTime, deriveTotpCode } from "@trustprocure/identity";
+import { CHOT_VAO_SO, counterForTime, deriveTotpCode } from "@trustprocure/identity";
 import { sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
@@ -1741,5 +1741,137 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     for (const t of [...dv.linkDaGui.map((l) => l.token), ...dv.otpDaGui.map((o) => o.code)]) expect(toanBo).not.toContain(t);
     expect(toanBo).not.toContain("KMS gia dang hong");
     for (const g of quetRoRi(toanBo)) expect.fail(`giá trong log: ${g}`);
+  });
+
+  it("[INV-K10a] bước 16 — [S3.6b2] ba gói 480/470/490 triệu cùng nhóm hàng qua HTTP: gói nộp sau cùng mang tín hiệu chia nhỏ, lần mở dừng ở 422 có tên, người tạo tự ghi nhận bị từ chối, người độc lập ghi nhận rồi gói mở — luồng MVP1 mở cả ba như trước", async () => {
+    // Fixture spec S3 §7: mỗi gói dưới cận 1 tỷ của bậc 2 (§4.1), tổng 1,44 tỷ chạm cận ấy. Nhóm hàng RIÊNG: tập anh em của tín hiệu
+    // là mọi gói cùng nhóm trong tổ chức, và hai gói hy sinh của bộ quét nằm ở nhóm của gói chính. Luồng MVP1: không nhóm hàng, không
+    // bậc — lời duyệt không thân, và cả ba gói đi đúng đường cũ.
+    const m = trangThai.mua.cookie;
+    let nhomHang: string | null = null;
+    if (batS3) {
+      const nhom = await goi("POST", "/categories", trangThai.taiChinh.cookie, { ma: "thep-ct", ten: "Thep tam cho cong trinh" });
+      expect(nhom.status, nhom.text).toBe(201);
+      nhomHang = (nhom.body as { nhomHang: { id: string } }).nhomHang.id;
+    }
+    const goiCon: string[] = [];
+    for (const [i, giaTri] of ["480000000.00", "470000000.00", "490000000.00"].entries()) {
+      const r = await goi("POST", "/rfqs", m, {
+        title: `Thep tam cong trinh ${i + 1}`,
+        deadlineAt: new Date(Date.now() + 7 * 86400_000).toISOString(),
+        ...(nhomHang === null ? {} : { categoryId: nhomHang }),
+      });
+      expect(r.status, r.text).toBe(201);
+      const id = (r.body as { rfq: { id: string } }).rfq.id;
+      expect((await goi("POST", `/rfqs/${id}/items`, m, { lineNo: 1, description: "Thep tam SS400 10mm", quantity: "150.0000", unit: "tan" })).status).toBe(201);
+      const ns = await goi("PUT", `/rfqs/${id}/budget`, m, { estimatedValue: giaTri, currency: "VND" });
+      expect(ns.status, ns.text).toBe(200);
+      expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval, "dưới ngưỡng kép 500 triệu").toBe(false);
+      const nop = await goi("POST", `/rfqs/${id}/submit`, m);
+      expect(nop.status, nop.text).toBe(200);
+      const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
+      expect((await goi("POST", `/rfqs/${id}/approve`, trangThai.pm2.cookie, moc)).status).toBe(200);
+      goiCon.push(id);
+      // Hai gói đầu: tổng 950 triệu chưa chạm cận — mở như mọi gói, ở cả hai luồng.
+      if (i < 2) {
+        const mo = await goi("POST", `/rfqs/${id}/open`, m);
+        expect(mo.status, mo.text).toBe(200);
+      }
+    }
+    const [g1, g2, g3] = goiCon;
+    if (g1 === undefined || g2 === undefined || g3 === undefined) throw new Error("thieu goi cua buoc 16");
+    const hangChot = async (): Promise<string[]> =>
+      (
+        await db.pool.query<{ ma: string }>(
+          "SELECT payload->>'ma' AS ma FROM audit_events WHERE org_id = $1 AND action = 'CONTROL_DENIED' AND resource_id = ANY($2::uuid[]) ORDER BY seq",
+          [orgA, goiCon],
+        )
+      ).rows.map((r) => r.ma);
+    const docTinHieu = async (cookie: string): Promise<Record<string, unknown>> => {
+      const ph = await goi("GET", `/rfqs/${g3}/signals`, cookie);
+      expect(ph.status, ph.text).toBe(200);
+      return (ph.body as { tinHieu: Record<string, unknown> }).tinHieu;
+    };
+
+    if (!batS3) {
+      expect(await docTinHieu(m), "luồng MVP1: không tín hiệu, không ai được mời bấm").toMatchObject({
+        hienTai: null,
+        canGhiNhan: false,
+        tinHieu: [],
+        goi: {},
+        nguoiXem: { ghiNhanDuoc: false, lyDo: null },
+      });
+      const mo = await goi("POST", `/rfqs/${g3}/open`, m);
+      expect(mo.status, "luồng MVP1: gói thứ ba mở như hai gói đầu").toBe(200);
+      const { rows } = await db.pool.query("SELECT 1 FROM governance_signals WHERE rfq_id = ANY($1::uuid[])", [goiCon]);
+      expect(rows, "luồng MVP1: không một hàng tín hiệu nào").toHaveLength(0);
+      expect(await hangChot(), "luồng MVP1: không một lần từ chối nào vào sổ").toEqual([]);
+      return;
+    }
+
+    // Màn `/tao-thau` đọc route này trước khi mời bấm: người tạo đọc được lý do KHÔNG, người độc lập đọc được mình ghi nhận được —
+    // và trong tổ chức hai người ghi nhận được (hai PM duyệt), không một con số tiền nào trong thân.
+    const docMua = await docTinHieu(m);
+    expect(docMua).toMatchObject({ canGhiNhan: true, nguoiXem: { ghiNhanDuoc: false, lyDo: CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep } });
+    const docPm3 = await docTinHieu(trangThai.pm3.cookie);
+    expect(docPm3).toMatchObject({ canGhiNhan: true, nguoiXem: { ghiNhanDuoc: true, lyDo: null }, soNguoiGhiNhanDuoc: 2 });
+    expect(docPm3.goi).toEqual({
+      [g1]: { tieuDe: "Thep tam cong trinh 1", trangThai: "OPEN" },
+      [g2]: { tieuDe: "Thep tam cong trinh 2", trangThai: "OPEN" },
+      [g3]: { tieuDe: "Thep tam cong trinh 3", trangThai: "PENDING_APPROVAL" },
+    });
+    expect(JSON.stringify(docPm3), "thân đọc tín hiệu không mang ước lượng nào").not.toMatch(/4[789]0000000/u);
+
+    // Đủ chữ ký mà vẫn không mở: 422 với câu của bảng `CHOT_VAO_SO`, gói đứng yên, không khoá nào được đúc.
+    const chan = await goi("POST", `/rfqs/${g3}/open`, m);
+    expect(chan.status).toBe(422);
+    expect(chan.text).toContain(CHOT_VAO_SO.TIN_HIEU_CHUA_GHI_NHAN.thongDiep);
+    const { rows: khoa } = await db.pool.query("SELECT 1 FROM rfq_key_material WHERE rfq_id = $1", [g3]);
+    expect(khoa, "không khoá nào được đúc cho gói bị chặn").toHaveLength(0);
+
+    // Người tạo tự ghi nhận — màn đã nói trước là không; route từ chối theo chốt, và lần ấy cũng vào sổ.
+    const tuGhi = await goi("POST", `/rfqs/${g3}/signals/acknowledge`, m, { lyDo: "Toi tao ca ba goi, toi xac nhan" });
+    expect(tuGhi.status).toBe(422);
+    expect(tuGhi.text).toContain(CHOT_VAO_SO.K10A_TU_GHI_NHAN.thongDiep);
+
+    const LY_DO = "Ba cong trinh khac nhau, ba hop dong khung rieng";
+    const ghi = await goi("POST", `/rfqs/${g3}/signals/acknowledge`, trangThai.pm3.cookie, { lyDo: LY_DO });
+    expect(ghi.status, ghi.text).toBe(201);
+    expect((ghi.body as { ghiNhan: { tinHieuMoi: boolean } }).ghiNhan.tinHieuMoi, "tập gói không đổi từ lúc nộp").toBe(false);
+    const sau = await docTinHieu(m);
+    expect(sau.canGhiNhan, "sau lần ghi nhận không còn gì cần ghi nhận").toBe(false);
+    const mo = await goi("POST", `/rfqs/${g3}/open`, m);
+    expect(mo.status, mo.text).toBe(200);
+    expect((mo.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");
+
+    // Sổ kể lại câu chuyện của gói thứ ba theo đúng thứ tự: nộp và tín hiệu, duyệt, bị chặn, tự ghi nhận bị từ chối, ghi nhận độc
+    // lập, rồi mới đúc khoá và mở.
+    const { rows: soG3 } = await db.pool.query<{ action: string; ma: string | null; nguoi: string | null }>(
+      "SELECT action, payload->>'ma' AS ma, actor_id::text AS nguoi FROM audit_events WHERE org_id = $1 AND resource_id = $2 ORDER BY seq",
+      [orgA, g3],
+    );
+    const QUAN_TAM = new Set([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    expect(soG3.filter((r) => QUAN_TAM.has(r.action)).map((r) => (r.ma === null ? r.action : `${r.action}:${r.ma}`))).toEqual([
+      "RFQ_SUBMITTED_FOR_APPROVAL",
+      "GOVERNANCE_SIGNAL_RECORDED",
+      "RFQ_APPROVED",
+      "CONTROL_DENIED:TIN_HIEU_CHUA_GHI_NHAN",
+      "CONTROL_DENIED:K10A_TU_GHI_NHAN",
+      "GOVERNANCE_SIGNAL_ACKNOWLEDGED",
+      "RFQ_OPENED",
+    ]);
+    expect(soG3.find((r) => r.action === "GOVERNANCE_SIGNAL_ACKNOWLEDGED")?.nguoi, "người ghi nhận là người độc lập").toBe(trangThai.pm3.id);
+    const hanhDong = soG3.map((r) => r.action);
+    expect(hanhDong.indexOf("RFQ_KEY_MATERIAL_ISSUED"), "khoá chỉ được đúc SAU lần ghi nhận").toBeGreaterThan(
+      hanhDong.indexOf("GOVERNANCE_SIGNAL_ACKNOWLEDGED"),
+    );
+    expect(await hangChot()).toEqual(["TIN_HIEU_CHUA_GHI_NHAN", "K10A_TU_GHI_NHAN"]);
   });
 });
