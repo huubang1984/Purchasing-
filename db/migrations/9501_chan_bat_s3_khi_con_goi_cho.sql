@@ -16,9 +16,12 @@
 -- SẺ (`072` (4)). Một lần nộp đang dở làm lần ký chờ, và câu đếm — một câu mới, nên một ảnh chụp mới của READ COMMITTED, lấy
 -- SAU khoá — thấy gói nó vừa nộp; một lần nộp tới sau chờ lần ký, và đọc tổ chức đã bật. Câu đếm lọc theo `org_id` của chính
 -- chữ ký và chạy dưới quyền người gọi — cùng tầm nhìn đã tìm ra phiên bản chính sách ở đầu hàm. Phép kiểm đứng CUỐI: một chữ ký
--- sai vì lý do khác vẫn nhận đúng lời từ chối của nó. Thân còn lại NGUYÊN VĂN `072`. Giới hạn, nói ra: "không đua" đúng dưới READ
--- COMMITTED — mức của mọi đường ứng dụng. Dưới REPEATABLE READ ảnh chụp cố định từ câu đầu giao dịch, nên câu đếm sau khoá không
--- thấy một lần nộp vừa commit — cùng giới hạn của khoá tư vấn đã nói ở §S1.156.
+-- sai vì lý do khác vẫn nhận đúng lời từ chối của nó. Thân còn lại NGUYÊN VĂN `072`.
+--
+-- "Không đua" chỉ đúng khi câu đếm lấy ảnh chụp MỚI sau khoá: READ COMMITTED, hàm VOLATILE. Lượt soi của vòng đo: một lần ký
+-- REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô giữ ảnh chụp lấy TRƯỚC lần nộp — hay trước khoá, nếu câu ký là câu đầu —, và
+-- dựng lại trọn lỗ gốc. Nên vế bật từ chối mọi mức khác READ COMMITTED (mức của mọi đường ứng dụng), và mục ghim phán xét
+-- `provolatile`. Phía nộp duyệt dưới mức ấy là khoản 9401.
 --
 -- Hàm mới ghim ở `hardening.always.sql` trong CÙNG commit (S1.96); trigger không đổi.
 -- ==============================================================================================

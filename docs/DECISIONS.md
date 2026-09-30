@@ -9744,7 +9744,7 @@ rồi `migrate()` — không lách được; nó mở khoản 262 và 263 (rổ 
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn LẦN BẬT, không chặn lời duyệt ·
 **[S1.9101]** · Migration `9501_chan_bat_s3_khi_con_goi_cho` · Biên bản: `evidence/security-reviews.md` §S1.9101 · **Khoản:** 261
-(ghi ở S1.198; đóng ở đây)
+(ghi ở S1.198; đóng ở đây); lượt soi mở khoản 9401
 
 ### Bối cảnh
 
@@ -9765,8 +9765,10 @@ danh sách người duyệt chưa đọc. Khoản 261, rổ B.
    lần bật danh sách của gói chờ duyệt không đổi được (`076`).
 3. **Không đua, nhờ khoá sẵn có.** Phép kiểm đứng sau khoá tư vấn theo tổ chức mà lần ký giữ ĐỘC QUYỀN và cạnh nộp duyệt giữ CHIA
    SẺ (`072` (4)(5)): một lần nộp đang dở làm lần ký chờ, và câu đếm — một câu mới, một ảnh chụp mới của READ COMMITTED lấy sau khoá —
-   thấy gói nó vừa nộp; một lần nộp tới sau chờ lần ký, rồi đi dưới luật S3. Đúng dưới READ COMMITTED, mức của mọi đường ứng
-   dụng — cùng giới hạn của khoá tư vấn đã nói ở §S1.156.
+   thấy gói nó vừa nộp; một lần nộp tới sau chờ lần ký, rồi đi dưới luật S3. Điều ấy chỉ đúng khi câu đếm lấy ảnh chụp MỚI: lượt
+   soi đo một lần ký REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô dựng lại trọn lỗ gốc (ảnh chụp lấy trước lần nộp, hay trước
+   khoá). Nên **vế bật chỉ nhận dưới READ COMMITTED** — mức của mọi đường ứng dụng —, và mục ghim hardening phán xét
+   **`provolatile = 'v'`** (hàm STABLE đọc ảnh chụp lấy trước khoá).
 4. **Vế đứng cuối, đếm theo tổ chức của chữ ký.** Một chữ ký sai vì lý do khác vẫn nhận đúng lời từ chối của nó; gói của tổ chức
    khác không đếm (câu đếm lọc theo `org_id` của chữ ký, dưới quyền người gọi).
 
@@ -9782,16 +9784,22 @@ danh sách người duyệt chưa đọc. Khoản 261, rổ B.
 
 Khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — ca giới hạn cũ của khoản 261, LẬT; câu đếm theo tổ chức (hai gói chờ,
 một gói nháp, gói của tổ chức khác); hai chiều đua qua khoá tư vấn; chữ ký sau lần bật — và một ca HTTP ở
-`apps/api/src/buyer.int.test.ts`. Trên cây `master` ba ca đỏ, ca đối chứng xanh. Bảy đột biến ghi ở biên bản §S1.9101.
+`apps/api/src/buyer.int.test.ts`. Trên cây `master` ba ca của khối (6) đỏ, ca đối chứng xanh, ca HTTP đỏ (201 thay 422 — người kiểm
+đo). Sau lượt soi: ca lần ký dưới REPEATABLE READ và SERIALIZABLE; ca `provolatile`. Đột biến ghi ở biên bản §S1.9101.
 
 ### Hệ quả, nói thẳng
 
 - Tổ chức đông gói phải chọn lúc không còn gói chờ duyệt để bật S3 — một lần, công tắc một chiều. Hôm nay không tổ chức thật nào bật
   được S3 (ADR-105).
 - Lần bật bị từ chối không vào sổ `CONTROL_DENIED`: nó là một luật của lần ký, không phải một chốt ở cạnh gói (ADR-084).
-- Một giao dịch REPEATABLE READ dưới câu SQL thô giữ ảnh chụp từ câu đầu của nó: lần ký như thế không thấy một lần nộp commit sau
-  ảnh chụp, và một lần nộp như thế không thấy một lần bật commit sau ảnh chụp. Giới hạn chung của khoá tư vấn (§S1.156); mọi đường
-  của ứng dụng chạy READ COMMITTED.
+- Phía nộp duyệt không có gác mức cô lập: một lần nộp REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô, ảnh chụp lấy trước lần
+  bật, đọc tổ chức CHƯA bật và đi qua K1 với ngân sách ghim phiên bản cũ; gói ấy rồi MỞ (lượt soi đo). Đó là khoản 9401 — chung cho
+  mọi phép kiểm đọc `to_chuc_da_bat_s3` và mọi hàm dựa vào khoá, cùng mức cô lập mặc định của database không được ghim.
+- Hàng có trước `9501`: một tổ chức đã bật khi còn gói chờ (cây `master` cho phép) giữ nguyên gói ấy — lời duyệt mốc cũ vẫn qua
+  (lượt soi đo trên cụm `master` rồi `migrate()`). Lớp hai còn đó: chữ ký thời MVP1 không mang băm nên K4b không đếm nó (đo bằng
+  thân `072` mô phỏng). Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+- Một người giữ quyền nộp duyệt giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả gói chờ
+  nguyên tử. Chuyện khả dụng, không phải an ninh.
 - Chữ ký thời MVP1 của một gói đang chờ duyệt không còn đi qua lần bật — ca giới hạn khoản 253 ở `danh-sach-moi.int.test.ts` nay đo
   lời từ chối; vế *K4b đếm người chứ không đếm hàng* đo lại trong S3. Ba phép đo khác từng nộp gói TRƯỚC lần bật để có một gói chờ
   duyệt ở tổ chức đã bật — tổng điều tra H19, `bac-chinh-sach`, `nhom-hang` — nay nộp SAU lần ký dưới luật S3, hay huỷ gói trước lần
