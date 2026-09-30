@@ -358,15 +358,21 @@ export const DANH_MUC_HANH_DONG_TU_CHOI: ReadonlySet<string> = new Set([
 ]);
 /** `resourceType` ở mọi lời gọi `requirePermission`/`throwAuditedDenial` và ở bảng route của `apps/api`. */
 export const DANH_MUC_LOAI_TAI_NGUYEN: ReadonlySet<string> = new Set([
+  // [S1.199 / S4.2b] Route ghi của dữ liệu nền (`apps/api/src/routes/du-lieu.ts`) — vào danh mục ở lần hợp master sau đợt 2.
+  "CANONICAL_ITEM",
   "INVITATION",
   "MFA_RESET_REQUEST",
   "PROCUREMENT_CATEGORY",
   "PROCUREMENT_POLICY",
   "RFQ",
+  // [S1.200 / khoản 258] Lần đọc ngân sách có cổng (`getRfqBudget`, `packages/rfq/src/procurement-policy.ts`).
+  "RFQ_BUDGET",
   "RFQ_INVITATION",
   "SESSION",
   "SUPPLIER",
   "UNSEAL_REQUEST",
+  // [S1.199 / S4.2b] Bí danh đơn vị của tổ chức (`apps/api/src/routes/du-lieu.ts`).
+  "UOM_ALIAS",
   "USER",
 ]);
 /**
