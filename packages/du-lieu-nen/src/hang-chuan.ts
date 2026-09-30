@@ -37,7 +37,10 @@ export class DuLieuNenError extends Error {
       | "LY_DO_SAI_HINH_DANG"
       | "BI_DANH_TRONG_TAP_LOAI_TRU"
       | "DA_CO_ANH_XA"
-      | "MA_LY_DO_DANH_RIENG",
+      | "MA_LY_DO_DANH_RIENG"
+      // [S1.234 / S4.3b, lượt soi L1 · L4] Hai phép kiểm ở tầng gói, không có ràng buộc CSDL đứng sau.
+      | "HANG_NGUNG_DUNG"
+      | "DONG_DA_DOI",
     message: string,
   ) {
     super(message);
