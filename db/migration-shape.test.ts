@@ -235,11 +235,25 @@ const NGOAI_LE_LAC_CHO: readonly {
     lyDo:
       "[S1.82 / khoản 116 / ADR-040] bảng ra đời ở 002 CÙNG policy cách ly của nó — không có " +
       "cửa sổ trần nào; đây là policy THỨ HAI, FOR SELECT, và chủ thể của nó là ĐÚNG MỘT vai " +
-      "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ĐÚNG MỘT hàm SECURITY " +
-      "DEFINER. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
+      "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ~~ĐÚNG MỘT hàm SECURITY " +
+      "DEFINER~~ [S1.9165] hàm SECURITY DEFINER liệt kê tổ chức — của 052, và từ " +
+      "9565_api_to_chuc_co_viec hàm hẹp thứ hai, cùng vai, thân cả hai đều ghim. " +
+      "Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
       "nên dòng này không nới bán kính của bất kỳ vai ứng dụng nào. Nó NỚI chứ không siết, và " +
       "nới thì đáng bị soi kỹ hơn chứ không đáng một vế điều kiện mới trong quy tắc — cùng " +
       "cách xử lý đã dùng cho 044",
+  },
+  {
+    tenFile: "9565_api_to_chuc_co_viec.sql",
+    tenBang: "outbox_jobs",
+    tenPolicy: "outbox_jobs_liet_ke_viec_api",
+    lyDo:
+      "[S1.9165 / khoản 277 / ADR-040 tiểu mục] bảng ra đời ở 007 CÙNG policy cách ly của nó — không " +
+      "có cửa sổ trần nào; đây là policy PERMISSIVE thứ hai, FOR SELECT, chủ thể là ĐÚNG vai NOLOGIN " +
+      "NOINHERIT `app_liet_ke_to_chuc` (chủ hai hàm SECURITY DEFINER liệt kê, thân đều ghim ở " +
+      "hardening), và hàng hẹp bằng vị từ `status = 'PENDING'` — không USING (true). Đo (§S1.9165): " +
+      "`app_api` đọc THẲNG `outbox_jobs` khi chưa gắn tổ chức vẫn thấy 0 hàng, nên dòng này không nới " +
+      "bán kính của vai ứng dụng nào. NỚI chứ không siết — cùng cách xử lý đã dùng cho 044 và 052",
   },
 ];
 
@@ -374,7 +388,8 @@ const NGOAI_LE_USING_TRUE: readonly NgoaiLeUsingTrue[] = [
     lyDo:
       "chủ thể hẹp thay cho vị từ: `FOR SELECT TO app_liet_ke_to_chuc` — một vai NOLOGIN " +
       "NOINHERIT không tiến trình nào đăng nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này " +
-      "và sở hữu ĐÚNG một hàm SECURITY DEFINER. Vị từ hẹp hơn không tồn tại: mục đích của " +
+      "và sở hữu ~~ĐÚNG một hàm SECURITY DEFINER~~ [S1.9165] hàm SECURITY DEFINER liệt kê tổ chức " +
+      "(từ 9565_api_to_chuc_co_viec thêm hàm hẹp thứ hai, cùng vai). Vị từ hẹp hơn không tồn tại: mục đích của " +
       "policy là *mọi* id tổ chức. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` " +
       "vẫn thấy 0 hàng, nên dòng này không mở bán kính của bất kỳ vai ứng dụng nào",
   },

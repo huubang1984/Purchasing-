@@ -84,8 +84,11 @@ export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void
  * S1.79 đã vá bản sao thứ tư (`:320-323`), cách đó hai trăm dòng. Phép đo về chính lượt quét ấy:
  * nó bám vào chuỗi *"apps/ rỗng"* chứ không vào TÍNH CHẤT, nên hai câu cùng nghĩa viết khác chữ
  * thì chỉ một câu được vá.** Cài đặt sản phẩm CÓ từ S1.10: `apps/api/src/composition.ts` tiêm một
- * lister thật. Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
- * điều đó ghi ở chính chỗ nó.
+ * lister thật. ~~Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
+ * điều đó ghi ở chính chỗ nó.~~ **[S1.9165 / khoản 277]** Nay lister ấy là tập "đã thấy enqueue" HỢP
+ * với tập hàm hẹp `public.outbox_to_chuc_co_viec_api()` trả (tổ chức có job `PENDING` thuộc tập
+ * `kind` của `api`, ADR-040 tiểu mục): ĐẦY ĐỦ cho mọi job `PENDING` của `api`, không cho job `RUNNING`
+ * hết hạn thuê của tổ chức tiến trình chưa thấy (khoản 9465) — điều đó ghi ở chính chỗ nó.
  *
  * ~~Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG cần role vượt RLS: một hàm `SECURITY DEFINER` do
  * CHỦ SỞ HỮU BẢNG sở hữu, `REVOKE FROM PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là

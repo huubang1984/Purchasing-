@@ -4581,7 +4581,7 @@ MAI SAU, và nó nay có phép đo riêng: một route tự thân có handler N�
 
 ## ADR-040 — Nguồn danh sách tổ chức cho tiến trình worker: một hàm `SECURITY DEFINER`, một vai chủ hàm riêng, và một policy hẹp
 
-**Ngày:** 2026-09-18 · **Trạng thái:** ĐÃ CHẤP NHẬN · **Khoản nợ:** 116 (đóng), 162–166 (mở)
+**Ngày:** 2026-09-18 · **Trạng thái:** ĐÃ CHẤP NHẬN · **Khoản nợ:** 116 (đóng), 162–166 (mở) · **[S1.9165]** 277 (đóng — tiểu mục cuối ADR), 9465, 9466 (mở)
 
 ### Bối cảnh
 
@@ -4615,7 +4615,7 @@ Hình dạng được chọn (`db/migrations/052_worker_liet_ke_to_chuc.sql`), b
 
 1. vai `app_liet_ke_to_chuc` — NOLOGIN NOINHERIT, do hardening BƯỚC 0 tạo (role là đối tượng CỤM; một migration đánh số chỉ
    chạy một lần, nên role bị DROP sẽ không bao giờ trở lại);
-2. vai ấy có ĐÚNG hai quyền: `SELECT (id)` trên `organizations` và `EXECUTE` trên `app_current_org_id()`;
+2. vai ấy có ĐÚNG hai quyền: `SELECT (id)` trên `organizations` và `EXECUTE` trên `app_current_org_id()` ~~;~~ **[S1.9165 / khoản 277]** — từ `9565_api_to_chuc_co_viec` thêm quyền thứ ba cho hàm thứ hai của nó, `SELECT (org_id, kind, status)` trên `outbox_jobs`, cùng một policy thứ hai `FOR SELECT TO app_liet_ke_to_chuc USING (status = 'PENDING')` (tiểu mục cuối ADR);
 3. một policy `FOR SELECT TO app_liet_ke_to_chuc USING (true)` — chủ thể hẹp bằng `TO`, không bằng vị từ;
 4. hàm `public.outbox_danh_sach_to_chuc()` `SECURITY DEFINER`, `ALTER … OWNER TO` vai ấy, `REVOKE` khỏi PUBLIC và `app_api`.
 
@@ -4652,6 +4652,63 @@ người tạo). Một cụm nơi vai chủ hàm do superuser tạo sẵn sẽ g
 - Hàng ghim thân hàm trong thực tế là một **PHÁN XÉT**, không tự chữa: vai deploy không sở hữu hàm nên câu sửa bị 42501 và bị
   nuốt. Đó cũng là một tính chất TỐT — chỉ SUPERUSER thay được thân hàm, vì chủ hàm là NOLOGIN — nhưng nó khác lời hứa
   “tự chữa” của mọi hàng khác, nên nó được viết ra trong chẩn đoán của chính hàng ấy.
+
+### [S1.9165 / khoản 277] Tiểu mục — nguồn tập tổ chức cho runner của `api`: một hàm HẸP riêng, không phải `052`
+
+**Chốt:** chủ dự án, 2026-09-30 (kế hoạch trả nợ đợt 3, câu 10). **Biên bản:** `evidence/security-reviews.md` §S1.9165.
+
+**Bối cảnh.** Runner outbox của `api` lấy danh sách tổ chức từ `toChucDaThay` — tập tổ chức mà chính tiến trình đã thấy xếp việc
+(ADR-047) —, nên sau mỗi lần khởi động lại tập ấy rỗng và job `PENDING` của `api` chờ tới lời xếp việc kế tiếp của chính tổ chức ấy
+(khoản 277; đo §S1.9165: tiến trình mới, không lời `/auth/link` nào ⇒ job không xong trong 15 s). `app_api` không đọc được hàng đợi
+xuyên tổ chức: `outbox_jobs` bật FORCE RLS, policy cách ly không có `TO`.
+
+**Quyết định.** Migration `9565_api_to_chuc_co_viec`:
+
+1. hàm `public.outbox_to_chuc_co_viec_api()` — `RETURNS SETOF uuid`, `STABLE SECURITY DEFINER`, `SET search_path = pg_catalog`; trả
+   `org_id` (DISTINCT) của job `status = 'PENDING'` thuộc ĐÚNG tập `kind` của `api` — ba khoá của `buildApiOutboxHandlers` = tập của
+   policy `outbox_jobs_kind_app_api` (`095`), viết cứng trong thân, không tham số;
+2. chủ hàm là **cùng vai** `app_liet_ke_to_chuc`, cấp thêm `SELECT (org_id, kind, status)` trên `outbox_jobs` — không `payload`;
+3. một policy `outbox_jobs_liet_ke_viec_api` `FOR SELECT TO app_liet_ke_to_chuc USING (status = 'PENDING')` — chủ thể hẹp bằng `TO`,
+   hàng hẹp bằng vị từ (cảnh ❷ ở trên áp nguyên: không có nó hàm trả 0 hàng, không lỗi — đo lại trên hàm này);
+4. `EXECUTE` chỉ `app_api` (PUBLIC, `app_unseal`, `app_neo`, `app_khoi_tao` không), đặt trước khi đổi chủ; đổi chủ bằng hai quyền
+   mượn trong giao dịch — nguyên khuôn `052`.
+
+Hardening: dòng thứ hai của `NGOAI_LE_DOC_VONG` (khoá chữ ký), dòng thứ ba của `NGOAI_LE_HINH_DANG`, hàng «định nghĩa hàm …»
+(thân, cờ, `proconfig`, chủ), hàng «EXECUTE trên …», và một hàng tự chữa dựng lại policy khi vắng (khuôn 044). Runner của `api`:
+`listOrganizations` = `toChucDaThay` ∪ tập hàm trả; `batDau()` gọi một lần trước khi mở cổng (không gọi được ⇒ không lên), mỗi kỳ
+poll gọi lại.
+
+**Vì sao hàm hẹp, không mở `052` cho `app_api`.** ⑴ Bán kính — lý do gốc của ADR-040 giữ nguyên: `api` là tiến trình hướng
+internet, một lỗi ở một handler không được đọc ra danh sách MỌI khách hàng; tập hẹp chỉ là tổ chức có việc `PENDING` của chính
+`api` tại lúc gọi — một tập con đổi theo thời gian, không tên. ⑵ Đúng việc — runner chỉ cần tổ chức CÓ việc; với `052`, mỗi kỳ poll
+(5 s) mở một giao dịch claim cho MỌI tổ chức để tìm vài tổ chức có việc. ⑶ Đúng tập kind — một tổ chức chỉ có việc của worker
+(`UNSEAL_RFQ`, `BREAK_GLASS_UNSEAL_ALERT`) không phải việc của `api`, và `api` không claim được chúng (mảng lọc của runner, policy `095`).
+
+**Vì sao không "worker quét PENDING quá tuổi rồi đánh thức".** Worker thấy mọi tổ chức nhưng KHÔNG có handler của `api` và không
+được có (D-cách ly, khoản 158), nên nó chỉ đánh thức được qua một kênh mới sang `api` (NOTIFY hay HTTP) — một đường mới giữa hai tiến
+trình —, và độ trễ phục hồi thành ngưỡng tuổi thay vì một kỳ poll.
+
+**Vì sao chung vai chủ.** Vai ấy NOLOGIN NOINHERIT; quyền của nó chỉ tới được qua thân các hàm nó sở hữu, và thân cả hai hàm đều
+ghim — chỉ SUPERUSER thay được thân ("Điều CHƯA CHẮC" ở trên). Quyền thêm vào không tới người gọi `052`. Một vai thứ năm kéo theo
+BƯỚC 0, một hàng thuộc tính, và các tập vai khai trong test — nhiều bề mặt hơn cho cùng bán kính.
+
+**Cái giá, ghi ra.**
+
+- Vế ⑵ của "Quyết định" ở trên ("ĐÚNG hai quyền") và hai chú thích của `052` — *"chủ của hàm `SECURITY DEFINER` duy nhất trong
+  kho"* (dòng 114), *"Sau file này vai chủ hàm có đúng hai quyền"* (dòng 141) — thiu từ `9565_api_to_chuc_co_viec`; chú thích của
+  migration đã áp không sửa được (checksum, khoản 19) — đính chính sống ở đây, cùng cách khoản 162.
+- Dòng thứ ba của `NGOAI_LE_HINH_DANG` và của `NGOAI_LE_LAC_CHO` (`db/migration-shape.test.ts`); dòng thứ hai của `NGOAI_LE_DOC_VONG`.
+- `app_api` đọc được tập tổ chức có việc `PENDING` của nó — một đường đọc xuyên tổ chức có chủ ý, hẹp hơn `052`.
+- Tập `kind` của `api` sống ở ba chỗ (bảng handler, `095`, thân hàm): thêm kind là migration sửa `095` VÀ thân hàm (ADR-134); vế
+  đối chiếu ở `apps/api/src/composition.int.test.ts` đỏ nếu quên thân hàm.
+- `api` KHÔNG LÊN khi hàm không gọi được (thiếu, mất `EXECUTE`, vai chủ mất quyền cột) — ồn thay vì lên mà mất tự phục hồi.
+- Chỉ `PENDING`: job `RUNNING` hết hạn thuê của tổ chức chưa thấy xếp việc không được nhặt — khoản 9465. Policy của `052` không có
+  hàng tự chữa (DROP ⇒ 0 tổ chức im lặng) — khoản 9466.
+
+**Đo bằng gì.** `apps/api/src/composition.int.test.ts` khối `[S1.9165 / khoản 277]` (khởi động lại: job khôi phục 51–52 ms ở kỳ poll
+lúc lên, job chèn thẳng ~5,0 s, vế hợp và ranh giới `RUNNING`; lúc lên fail-closed; đối chứng của hàm và bán kính);
+`db/migrations.int.test.ts` khối `[S1.9165 / khoản 277]` (năm cảnh trôi qua `migrate()`); `db/rls-coverage.int.test.ts` (hai bản
+khớp, câu phán xét mục (C)); mười đột biến đỏ — §S1.9165 mục 3, 6.
 
 ## ADR-041 — Tín hiệu của lỗi kết nối TỚI SAU trần đi ra bằng một sự kiện trên pool, và cái giá của nó được trả bằng một cổng
 
@@ -5105,7 +5162,10 @@ client về pool. Rồi đánh thức sau commit nếu phản hồi `< 400`, gi�
 
 - **Nửa còn lại của khoản 156 vẫn MỞ, và nó phải được đọc đúng:** dấu chỉ sống trong tiến trình đã xếp việc. Tiến trình khởi động lại thì
   `toChucDaThay` rỗng, nên việc `PENDING` của một tổ chức chờ tới yêu cầu GHI *có xếp việc* kế tiếp của chính tổ chức ấy. Hẹp hơn nhiều so với
-  *"chờ một ai đó tình cờ xin link đăng nhập"*, và vẫn không phải *"không bao giờ mất"*.
+  *"chờ một ai đó tình cờ xin link đăng nhập"*, và vẫn không phải *"không bao giờ mất"*. **[S1.9165 / khoản 277]** Nửa ấy (tách thành
+  khoản 277 ở §S1.222) nay ĐÓNG: runner của `api` hợp dấu này với tập hàm hẹp `public.outbox_to_chuc_co_viec_api()` trả — tổ chức có
+  job `PENDING` thuộc tập `kind` của `api` —, nạp lúc lên và mỗi kỳ poll (ADR-040 tiểu mục khoản 277); dấu vẫn là đường TỨC THÌ, hàm là
+  đường phục hồi. Phần còn lại, nói ra: job `RUNNING` hết hạn thuê của tổ chức tiến trình chưa thấy xếp việc — khoản 9465.
 - **Nhiều instance vẫn theo ADR-022.** Dấu không đổi gì ở đó: mỗi tiến trình đánh thức tập tổ chức của riêng nó.
 - **`WeakSet` buộc dấu vào ĐỊNH DANH của client.** Một tầng nào đó bọc `PoolClient` bằng proxy giữa `enqueueJob` và bộ điều phối sẽ làm dấu mất
   lặng lẽ. Hôm nay không có tầng ấy; nếu mai có, `dau-xep-viec.test.ts` vế ⑵ là chỗ nó sẽ hiện ra.

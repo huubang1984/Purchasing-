@@ -324,8 +324,14 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
   },
   "apps/api/src/composition.ts": {
     lay: 1,
-    cau: 0,
-    lyDo: "batDau(): khangDinhPhienDangNhapUngDung trên một client của mỗi pool trước khi mở cổng — chỉ đọc; ⑵ ở ganVaiTroChoPool",
+    cau: 1,
+    lyDo:
+      "⑴ `lay`: batDau(): khangDinhPhienDangNhapUngDung trên một client của mỗi pool trước khi mở cổng — chỉ đọc; ⑵ ở " +
+      "ganVaiTroChoPool. [S1.9165 / khoản 277] ⑵ `cau`: lời gọi `public.outbox_to_chuc_co_viec_api()` — tập tổ chức có job " +
+      "PENDING của api, nguồn `listOrganizations` của runner (lúc lên và mỗi kỳ poll). Câu hỏi 'những tổ chức nào' ĐỨNG TRƯỚC " +
+      "câu hỏi 'tổ chức nào', nên nó không gắn được tenant theo định nghĩa — cùng lý do với worker. Bán kính: hàm SECURITY " +
+      "DEFINER trả ĐÚNG một cột `org_id` của tổ chức có việc PENDING thuộc ba kind của api, EXECUTE chỉ app_api, và app_api " +
+      "đọc THẲNG outbox_jobs chưa gắn tổ chức vẫn 0 hàng (đo)",
   },
   "packages/db/src/migrate.ts": {
     lay: 1,
