@@ -286,6 +286,9 @@ const LOI_NGHIEP_VU_422: ReadonlySet<string> = new Set([
   // [S1.166 / S3.1b / ADR-084 ⑷] Lớp từ chối thứ ba của K12 — một CHỐT KIỂM SOÁT chặn (`CHOT_VAO_SO`,
   // `packages/rfq/src/chot-kiem-soat.ts`). Thông điệp là hằng của bảng, không nội suy dữ liệu nào.
   "ChotKiemSoatError",
+  // [S1.203 / S3.6b1] Lời từ chối nghiệp vụ của `@trustprocure/kiem-soat` (lý do rỗng, gói không chờ duyệt, không có tín hiệu,
+  // đã ghi nhận rồi, bằng chứng vừa đổi). Thông điệp là hằng, không nội suy dữ liệu nào.
+  "KiemSoatError",
 ]);
 
 const THAN_401 = { error: "phien khong hop le" } as const;

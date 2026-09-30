@@ -39,6 +39,12 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   canonical_item_versions_trang_thai_mien: "MIEN",
   canonical_item_versions_trong_yeu_co_gia_tri: "JSON",
   canonical_items_ma_hinh_dang: "DINH_DANG",
+  // [S1.203 / S3.6b1] Ba cột phân loại của tín hiệu và lý do ghi nhận. Tín hiệu được CHỐT theo bằng chứng mà CSDL tính (trigger
+  // `governance_signals_tinh`) và vị từ `rfq_chot_tin_hieu` so bằng chứng — không đọc ba cột này.
+  governance_signal_acks_ly_do_check: "DO_DAI",
+  governance_signals_do_tin_cay_check: "MIEN",
+  governance_signals_loai_check: "MIEN",
+  governance_signals_nguon_check: "MIEN",
   guest_sessions_verified_channel_check: "MIEN",
   invitation_otp_challenges_channel_check: "MIEN",
   invitation_otp_challenges_destination_hash_check: "DO_DAI",

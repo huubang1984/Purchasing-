@@ -10,7 +10,7 @@
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
 //   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
-//      [S1.199] MƯỜI SÁU route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      ~~[S1.199] MƯỜI SÁU~~ [S1.203] MƯỜI BẢY route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -158,6 +158,12 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "DANH MỤC ĐƠN VỊ và bí danh đơn vị của tổ chức, kèm họ tên người khai — cùng lý do với `/items/:itemId`. Danh mục toàn " +
     "cục thì vô hại, nhưng bí danh của tổ chức là thước quy đổi của mọi gói (*\"MT\"* là tấn hay mét), và màn của người " +
     "quản lý dữ liệu là nơi duy nhất cần đọc nó hôm nay. Route khai `agent: false` và dòng này khai vì sao. [S1.199 / S4.2b]",
+  // [S1.203 / S3.6b1]
+  "/rfqs/:rfqId/signals":
+    "TÍN HIỆU CHIA NHỎ của một gói thầu — những gói nào bị gộp với nó, dưới cận bậc nào của phiên bản chính sách nào, ai đã " +
+    "ghi nhận và vì sao. Nó là dữ liệu KIỂM SOÁT của bên mua: biết tín hiệu gộp những gói nào, với cửa sổ bao nhiêu ngày, là " +
+    "biết cách xếp gói để lần sau nó không gộp. Người duyệt đọc nó trên giao diện người mua trước khi ghi nhận; một tác tử " +
+    "chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */
