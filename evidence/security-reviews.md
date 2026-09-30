@@ -17419,4 +17419,12 @@ hàng gói trước khi chèn bản rõ; băm không mơ hồ (`numeric(18,4)`, 
 
 ## 9. Số đo
 
-{{SO_DO}}
+- Cây cuối — nhánh dựng lại trên `master` sau #209, số đã cấp (S1.204, ADR-121, `089`): `pnpm t0` sạch (không vi phạm phụ thuộc);
+  `pnpm test` 125 tệp, 1804 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch.
+- `pnpm evidence` — toàn bộ T1–T3 cục bộ trên cây cuối: 203 tệp, 3469 khẳng định, 3468 đạt, 1 bỏ qua; 74/74 bất biến (52/52 nghiệp
+  vụ + 22/22 hàng rào). Ma trận: L1 11 → 13, L3 9 → 19, L2 mới 27, L13 mới 8. Lượt đầu hỏng giữa chừng vì trình nền docker của container
+  dừng (`Could not find a working container runtime strategy` ở 78 tệp tích hợp, không ca nào đỏ vì mã); khởi động lại, lượt hai xanh.
+- Tổng điều tra T3 trước lần dựng lại: `db/`, `packages/db`, `packages/du-lieu-nen`, hai tệp QT3 — 36 tệp, 546/546.
+- Hai mươi tám đột biến: hai mươi bảy đỏ, một tương đương (§6).
+- Hợp nhánh #209 (sau #202, #205) vào nhánh làm việc: xung đột ở lời khai đếm (`cap-so --dem` viết lại), danh sách hàm trigger và
+  migration của `migrations.int` (`087` đứng trước số của vòng này), vị trí ADR, cuối biên bản.
