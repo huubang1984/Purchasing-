@@ -271,7 +271,7 @@ async function defDotBien(ham: string, cu: string, moi: string): Promise<string>
 
 const sapXep = (ds: readonly string[]): string[] => [...ds].sort();
 
-describe("[INV-K10a] tín hiệu chia nhỏ chặn lần mở gói tới khi một người độc lập ghi nhận nó", () => {
+describe("[S1.203 / S3.6b1] tín hiệu chia nhỏ chặn lần mở gói tới khi một người độc lập ghi nhận nó", () => {
   it("[INV-K10a] ĐO: ba gói 480/470/490 triệu cùng nhóm trong 30 ngày — gói thứ ba mang tín hiệu từ lúc nộp và KHÔNG mở được khi chưa ai ghi nhận; lần từ chối vào sổ, không khoá nào được đúc; ghi nhận độc lập thì mở được", async () => {
     const t = await taoToChuc();
     const thep = await taoNhom(t, "THEP");

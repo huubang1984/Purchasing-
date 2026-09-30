@@ -16689,4 +16689,25 @@ Lượt đầu của M11 không khớp chuỗi (thụt lề sai trong bảng đ�
 
 ## 8. Số đo
 
-‹điền sau lượt T3›
+- **Đo trước / đo sau** — §3: cùng tệp đo, `master` `151cbd1` ⇒ ba gói `OPEN`, 0 tín hiệu, 0 hàng sổ; cây này ⇒ gói thứ ba dừng ở
+  `TIN_HIEU_CHUA_GHI_NHAN`.
+- Tệp mới `packages/rfq/src/tin-hieu-chia-nho.int.test.ts` **12/12** — gồm tám đột biến trong giao dịch. Qua HTTP và luồng S3:
+  `apps/api/src/buyer.int.test.ts` **19/19** (hai vòng quét route ghi phủ route ghi nhận), `kich-ban-41-http.int` **58/58**. Sổ đăng ký
+  CSDL: `db/migrations.int` **119/119**, `hardening-suy-tu-tinh-chat.int` **36/36**, `rls-coverage.int` **51/51**, `check-an-ninh.int`
+  **4/4**, `migration-shape` **20/20**, census `bac-chinh-sach.int` **42/42**. Kiến trúc: `barrel-exports` **33/33**, `cong-quyen-route`
+  **15/15**, `apps/mcp/src/cong-cu.test.ts` **15/15**, `apps/api/src/routes.test.ts` **19/19**, ba probe `g20-` **3/3**.
+- Mười ba đột biến ở mã nguồn, mười ba lần đỏ (§6).
+- **Lockfile:** chèn tay đúng ba khối (importer `packages/kiem-soat`, phụ thuộc của `packages/rfq` và `apps/api`); `pnpm@9 install
+  --frozen-lockfile --lockfile-only` trên bản sao chỉ có manifest đi qua, và lockfile cũ thì đỏ (*specifiers … don't match*). pnpm 10 của
+  máy và pnpm 9 chạy tự do đều viết lại hậu tố peer không liên quan — không dùng.
+- **Toàn bộ T3 cục bộ** trên cây đã cấp số: 196 tệp, 3340 ca — 3330 đạt, 1 bỏ qua, 9 đỏ; cả chín là ca cũ của máy đo, không liên quan: 8
+  của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts`
+  (tiền đề locale). Lượt đầu bị cắt khi container khởi động lại, sau 40 tệp; trong lượt ấy một ca của `db/migrations.int` đỏ vì máy đo
+  không khởi động được cụm Postgres (`pg_ctl: could not start server`) — lượt thứ hai tệp ấy xanh trọn.
+- **Nhãn đặt hai lần:** bản đầu mang `[INV-K10a]` ở cả `describe` lẫn từng `it`, và bộ gom độ phủ đếm mỗi lần nhãn xuất hiện trong tên đầy
+  đủ — K10a ra 25 thay vì 13. Bỏ nhãn ở `describe` (khuôn của K1), chạy lại tệp ấy (12/12) và ghép vào báo cáo.
+- `pnpm t0` sạch (464 module, 1859 phụ thuộc). `pnpm test`: 123 tệp, 1764 đạt, 1 bỏ qua. `pnpm cap-so --kiem` sạch.
+- **Ma trận:** 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào), đọc từ 3340 khẳng định, cổng evidence XANH; K10a mới **13**, H16
+  55 → 59 (một khối danh sách trắng, ba probe `g20-`). Mốc `MOC_GHIM` 71 → 72.
+- **Số hiệu:** `pnpm cap-so` giữ số trên origin (chủ dự án cho phép) và cấp S1.203, ADR-120, migration `088_tin_hieu_chia_nho`; các số nhỏ
+  hơn chưa vào `master` đã có PR khác giữ.
