@@ -103,7 +103,14 @@ function cacChuoi(pGiaTri: string): string[] {
   });
 }
 
-const TEN_TEP_MIGRATION_MAU = "017_rfq_key_material";
+/**
+ * Tên migration mà regex miễn PHẢI khớp — thứ nó sinh ra để miễn. ~~Một mẫu ba chữ số.~~ [S1.9110 / khoản 284] Thêm một mẫu BỐN
+ * chữ số: ADR-090 cho migration của một lô mang số tạm `95NN_ten` tới lúc `pnpm cap-so` cấp số thật ở merge, và một dòng
+ * `BANG_TENANT_KHAI` mang số tạm cho một bảng có `key`/`token` trong tên là đúng thứ `generic-api-key` đọc thành bí mật — trên
+ * NHÁNH lô, trước khi cap-so đổi số. Mẫu là `1234_…` chứ không `95NN_…`: một số tạm thật trong tệp này sẽ bị `pnpm cap-so` thay
+ * (dạng migration không đuôi), còn thứ cần ghim là HÌNH DẠNG — bốn chữ số, gạch dưới.
+ */
+const TEN_TEP_MIGRATION_MAU: readonly string[] = ["017_rfq_key_material", "1234_bang_key"];
 
 /** Vi phạm hình dạng của một `.gitleaks.toml`; rỗng nghĩa là đúng khuôn ghim. */
 export function kiemHinhDangGitleaks(pVanBan: string): string[] {
@@ -138,7 +145,7 @@ export function kiemHinhDangGitleaks(pVanBan: string): string[] {
     for (const r of regexes) {
       if (!r.startsWith("^") || !r.endsWith("$")) viPham.push(`regex miễn phải NEO hai đầu (^…$): ${r}`);
       const re = new RegExp(r, "u");
-      if (!re.test(TEN_TEP_MIGRATION_MAU)) viPham.push(`regex miễn không khớp tên tệp migration ${TEN_TEP_MIGRATION_MAU} — thứ nó sinh ra để miễn`);
+      for (const ten of TEN_TEP_MIGRATION_MAU) if (!re.test(ten)) viPham.push(`regex miễn không khớp tên tệp migration ${ten} — thứ nó sinh ra để miễn`);
       for (const mau of MAU_BI_MAT) if (re.test(mau)) viPham.push(`regex miễn khớp một chuỗi hình khoá (${mau.length} ký tự, bắt đầu ${mau.slice(0, 4)}) — nó rộng hơn tên tệp migration`);
     }
   }
@@ -238,7 +245,19 @@ describe("[khoản 132] hình dạng cấu hình gitleaks", () => {
     const rong = kiemHinhDangGitleaks(datBien(regexThat(), "^.*$"));
     expect(rong.length, "regex `^.*$` phải khớp mọi mẫu khoá").toBe(MAU_BI_MAT.length);
     for (const v of rong) expect(v).toMatch(/khớp một chuỗi hình khoá/u);
-    doOMot(datBien(regexThat(), "^zz$"), /không khớp tên tệp migration/u);
+    // ~~`doOMot(…"^zz$"…)`~~ [S1.9110 / khoản 284] Một vi phạm cho MỖI mẫu tên migration không khớp — nay hai mẫu.
+    const zz = kiemHinhDangGitleaks(datBien(regexThat(), "^zz$"));
+    expect(zz).toEqual(TEN_TEP_MIGRATION_MAU.map((t) => `regex miễn không khớp tên tệp migration ${t} — thứ nó sinh ra để miễn`));
+  });
+
+  it("[S1.9110 / khoản 284] regex miễn nhận tên migration BỐN chữ số (số tạm ADR-090): khớp `1234_bang_key` và hai dòng khai thật, không khớp năm mẫu hình khoá hay số chữ số ngoài 3–4", () => {
+    const re = new RegExp(regexThat(), "u");
+    for (const ten of ["1234_bang_key", "017_rfq_key_material", "029_dang_nhap_nguoi_mua"]) expect(re.test(ten), ten).toBe(true);
+    for (const mau of MAU_BI_MAT) expect(re.test(mau), `mẫu hình khoá ${mau.slice(0, 4)}… (${mau.length} ký tự)`).toBe(false);
+    // Biên của phần số: hai và năm chữ số không phải tên migration nào của kho (số thật ba chữ số, số tạm `95NN` bốn chữ số).
+    for (const ten of ["12_bang_key", "12345_bang_key", "1234_", "1234_Bang_key"]) expect(re.test(ten), ten).toBe(false);
+    // Đối chứng: regex CŨ (ba chữ số) đặt lại vào `.gitleaks.toml` của kho ⇒ đỏ đúng một vế, đúng mẫu bốn chữ số — cổng bắt lùi.
+    doOMot(datBien(regexThat(), "^\\d{3}_[a-z0-9_]{1,60}$"), /không khớp tên tệp migration 1234_bang_key/u);
   });
 
   it("đỏ: [[rules]] ghi đè; khối lạ; khoá lạ ở mức gốc; cú pháp bộ đọc không hiểu thì NÉM chứ không bỏ qua", () => {

@@ -4684,7 +4684,8 @@ phụ thuộc `pg`), nên nó cần một cạnh phụ thuộc mới giữa hai 
   tiến trình thay vì mất tín hiệu. Tên riêng làm hỏng-êm, và cái giá ấy được trả bằng cổng.
 - `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi MỌI pool dựng trong `apps/` ~~nghe đủ~~ **[S1.227 / khoản 180]** và `tools/` nghe đủ hai tín hiệu mất-không-ai-biết:
   `release` mang `SESSION_STATE_LEFT` (khoản 118) và lỗi-tới-muộn (khoản 129). Cổng đọc CÂY CÚ PHÁP, không phải biểu thức
-  chính quy.
+  chính quy. **[S1.9110 / khoản 274]** Và lời gọi gắn chỉ được tính khi nó là một câu lệnh riêng ở CÙNG khối câu lệnh với dòng dựng
+  pool, sau nó, không lối ra hay lần dùng pool nào ở giữa — một lời gọi gắn trong nhánh chết hay sau `return` không còn tính là nghe.
 
 ### Hệ quả
 
