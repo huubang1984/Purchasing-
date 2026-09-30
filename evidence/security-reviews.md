@@ -16649,6 +16649,164 @@ Phần đầu của S3.3 (spec S3 §9). Chủ dự án chốt ngày 2026-09-29: 
 
 K8a vào sổ đăng ký — 72 bất biến sau khi hợp #204 (L3). Không khoản nào mở hay đóng.
 
+---
+
+# §S1.202 — KHOẢN 254 ĐÓNG: CHỮ KÝ MỞ GÓI RÀNG VÀO NGÂN SÁCH (K4b, D2) — ADR-115; LƯỢT SOI MỞ KHOẢN 256, KHOẢN 257
+
+**Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11; chạy dưới công tắc ADR-080. Khoản 254 (rổ B, ghi ở §S1.189) đóng;
+lượt soi mở khoản 256 và khoản 257 (rổ B), vá ở vòng sau. Một migration (`086_rang_ngan_sach`), một ADR (ADR-115),
+không route mới.
+
+## 1. Việc gì
+
+Cạnh `PENDING_APPROVAL→DRAFT` của S3.2b1 (`077`, §S1.186) mở lại ngân sách của gói — trước nó, ngân sách khoá khi gói rời DRAFT
+(`rfq_budgets_chi_sua_khi_soan`, `014`) và không đường nào quay về. Chữ ký mở gói mang băm nội dung (`011`) và băm danh sách mời
+(`076`), không mang ngân sách. Lỗ này được tìm ở lượt soi của một bản S3.2b song song — bản ấy bỏ đi khi `master` nhận S3.2b từ #194 và
+#195, và §S1.189 ghi lỗ ấy thành khoản 254 —, rồi đo lại trên `master`. Chủ dự án chọn ngày 2026-09-29: vá TRƯỚC S3.2c, bằng một PR riêng; hai khoảng trống lượt soi của vòng
+này đo thêm cũng vá ở một vòng riêng trước S3.2c. Bất biến chạm: K4b, D2.
+
+## 2. Đo trước
+
+Trên cây `master` `8f90bf2` (bản sao cục bộ), tổ chức đã bật, hàm gói thật dưới `app_api`:
+- gói 150 triệu (ngưỡng kép 100 triệu), một chữ ký của PM2 — lần mở thứ nhất bị chặn *"can 2 phe duyet … moi co 1 (D2)"*; trả về,
+  hạ ước lượng xuống 1 triệu, nộp lại ⇒ gói **MỞ** bằng đúng chữ ký ấy;
+- gói 1 triệu, một chữ ký; trả về, nâng lên 99 triệu — cùng bậc —, nộp lại ⇒ gói **MỞ** bằng chữ ký trên con số 1 triệu, một hàng
+  chữ ký.
+
+Tệp đo của vòng này chạy trên cùng cây — tạm rút `086_rang_ngan_sach` khỏi thư mục migration —: mười lăm ca có nhãn, mười lăm ca đỏ;
+các ca hành vi đỏ vì gói mở được.
+
+## 3. Thay đổi
+
+**Migration `086_rang_ngan_sach`:**
+- `rfq_bam_ngan_sach(gói)` — hàm băm RIÊNG, khuôn `rfq_bam_danh_sach`: `NGAN_SACH|ước lượng|tiền tệ|phiên bản chính sách|bậc|cờ duyệt
+  kép`, `LEFT JOIN` ngân sách để cờ duyệt kép luôn nằm trong băm. `STABLE`, không `SECURITY DEFINER`, `search_path` ghim.
+- Cột `rfq_approvals.approved_budget_hash`, ngoài `GRANT`; thân `rfq_approvals_dat_bam_danh_sach` (`076`) cộng một vế — cùng trigger
+  đặt cả hai băm. Tổ chức chưa bật: NULL.
+- Hai UNIQUE `rfq_approvals_mot_nguoi_mot_lan`, `rfq_approvals_mot_phien_mot_lan` mang thêm cột ấy, giữ tên, giữ `NULLS NOT DISTINCT`.
+- Thân `rfq_kiem_chu_ky_danh_sach_khi_mo` (`076`) cộng một phép đếm thứ hai — người ký khác nhau khớp nội dung, danh sách VÀ ngân sách
+  hiện tại — với lời từ chối riêng *"RFQ nay can N chu ky TREN NGAN SACH HIEN TAI, moi co M (K4b)"*. Phép đếm đầu giữ nguyên văn.
+- Không điền hàng cũ (ADR-115 ⑸).
+
+**Hardening:** mục ghim mới cho `rfq_bam_ngan_sach(uuid)` (khuôn `rfq_bam_danh_sach`); hai mục ghim của `076` trỏ sang thân và cổng
+`086_rang_ngan_sach`. `db/migrations.int.test.ts`: hàm trợ giúp thứ sáu, con trỏ *migration cuối cùng* của hai hàm trigger, ba danh
+sách migration. `db/hardening-suy-tu-tinh-chat.int.test.ts`: chú thích của bốn hàm danh sách mời nói hai hàm nay mang thêm băm ngân
+sách — nhân chứng không đổi (hàm mới không phải hàm trigger).
+
+**Sổ đăng ký:** hàng K4b của `docs/TEST-PLAN.md`; `so-khai-nhan.ts` khai tệp test mới cho K4b và D2. Không mã mới — ~~68~~ 70 bất biến (L1, L4 vào ở S1.192, #201).
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Cơ chế băm, không khoá ngân sách, không xoá chữ ký.** Spec §2.4 đã chọn *chữ ký cũ vô hiệu bằng băm* cho chính cạnh này, và S3.2b1
+  giữ chữ ký cũ làm dấu vết. Các phương án khác và lý do bác: ADR-115.
+- **Băm mang phiên bản chính sách, bậc và cờ duyệt kép**, không chỉ con số: số chữ ký ở cạnh mở gói đọc cờ duyệt kép, cờ ấy suy từ
+  ngưỡng kép của phiên bản ghim — hay do người mua tự nâng —, và bậc suy từ bảng bậc của phiên bản ấy.
+- **Lời từ chối riêng cho vế ngân sách**, sau phép đếm cũ: người mua đọc được chữ ký lệch ở đâu.
+- **Không điền hàng cũ** — fail-closed; hôm nay không tổ chức thật nào bật được S3 (ADR-105).
+
+## 5. Đo sau
+
+`packages/rfq/src/rang-ngan-sach.int.test.ts` — Postgres thật dưới `app_api`, hàm gói thật, mỗi ca một tổ chức riêng:
+- hạ bậc: chữ ký ở 150 triệu không mở gói 1 triệu (*"can 1 chu ky TREN NGAN SACH HIEN TAI, moi co 0 (K4b)"*), chính người ấy ký lại ⇒
+  mở, hai hàng chữ ký;
+- nâng cùng bậc lên 99 triệu ⇒ không mở; trả về lần nữa, đặt lại đúng 1 triệu ⇒ chữ ký cũ mở được, một hàng;
+- một người ký hai lần trên hai ngân sách của gói cấp kép ⇒ vẫn MỘT người: khối đếm `count(*)` của `071` thấy hai hàng, phép đếm
+  DISTINCT ở cạnh mở gói thì không; người thứ hai ký ⇒ mở;
+- cờ duyệt kép: gói tự nâng lên hai chữ ký, một người ký, trả về, đặt lại đúng ngân sách cũ — cờ tính lại về `false` — ⇒ chữ ký cho lúc
+  gói cần hai người không mở được gói một chữ ký;
+- bộ ba không ghép được: PM2 ký (danh sách L1, 1 triệu), PM3 ký (L2, 99 triệu), trả về, thu hồi lời mời vừa thêm ⇒ gói ở (L1,
+  99 triệu) — chưa ai ký — không mở;
+- cùng con số, ghim sang phiên bản chính sách 3 (y hệt 2) ⇒ không mở; ký lại ⇒ mở;
+- cột: băm lúc ký khớp `rfq_bam_ngan_sach`; `app_api` khai cột ⇒ 42501; tổ chức chưa bật ⇒ NULL, một người vẫn chỉ ký một lần;
+- hàng cũ: chữ ký đặt khi hàm chưa có vế ngân sách ⇒ không đếm; người ấy ký lại ⇒ mở.
+
+**Đột biến ở lược đồ, bảy, cả bảy đỏ:** bỏ phép đếm trên ngân sách ở cạnh mở gói (hai lỗ đo trước mở lại); phép đếm thứ hai chỉ xét
+ngân sách (bộ ba ghép từ hai chữ ký mở); băm bỏ ước lượng (nâng cùng bậc mở); bỏ phiên bản chính sách (ghim phiên bản mới mở); bỏ cờ
+duyệt kép (gói tự nâng mở bằng một chữ ký); trigger bỏ vế ngân sách (chữ ký hợp lệ bị từ chối — vế ấy không trang trí); hai UNIQUE bỏ
+cột (người đã ký không ký lại được trên ngân sách mới — `23505`, trong một giao dịch ROLLBACK, giới hạn ở gói của ca). Hai đột biến
+TƯƠNG ĐƯƠNG, không đo: băm bỏ tiền tệ, bỏ bậc — ở tổ chức đã bật tiền tệ phải khớp phiên bản có bậc (`ngan_sach_xep_bac`) và bậc suy
+từ phiên bản và ước lượng, nên không đường nào đổi riêng chúng.
+
+**Giới hạn, đo** — hai ca không nhãn ghim hành vi hôm nay của khoản 256 và khoản 257 (§6); vòng vá của hai khoản ấy lật chúng.
+
+**Hồi quy:** `tra-ve-nhap` 15/15, `danh-sach-moi` 21/21, `rfq.int` 60/60, `luong-moi-s3` 14/14, `buyer.int` 18/18, `kich-ban-41` 30/30,
+`kich-ban-41-http` 58/58, `hardening-suy-tu-tinh-chat` 36/36, `db/migrations.int` 118/118.
+
+## 6. Lượt soi đối kháng
+
+Một lượt, trên cây của commit đầu vòng này; người kiểm đo trên Postgres 16 thật dưới `app_api`, hàm gói thật, dò bằng tệp test tạm
+xoá ngay sau mỗi lượt chạy. **Không đường nào lách được bản vá.** Người kiểm xác nhận: hai lỗ tái hiện trên `master` và đóng ở
+`086_rang_ngan_sach`; băm không bao giờ NULL và không va chạm dấu phân cách (mọi trường có dạng cố định, không trường nào chứa `|`),
+không phụ thuộc thiết đặt phiên; `PENDING_APPROVAL→OPEN` là cạnh DUY NHẤT vào `OPEN`; `app_api` không xoá được ngân sách hay chữ ký;
+lần sửa ngân sách đòi DRAFT dưới khoá `FOR NO KEY UPDATE` hàng gói; ca đua lời duyệt tính trên 1 triệu treo chưa commit trong lúc PM trả
+về, đặt 99 triệu, nộp lại thì fail-closed; MVP1 không đổi; nâng cấp thật `master` → `086_rang_ngan_sach` với dữ liệu đang bay đúng như
+§3 nói; mục ghim hardening sửa được cả ba hàm bị làm lệch và hai trigger bị tắt.
+
+| # | Phát hiện | Mức | Xử lý |
+|---|---|---|---|
+| S1 | Lời duyệt chỉ mang mã gói: PM trả về, đặt 99 triệu, nộp lại giữa lần người duyệt xem gói ở 1 triệu và lần bấm ký ⇒ chữ ký ghi lên 99 triệu, gói mở. Chung cho ba băm; có từ `077` | Trung bình | **Khoản 256 mở** (rổ B). Chủ dự án chọn vá ở vòng riêng trước S3.2c: mốc lần nộp trong lời duyệt |
+| S2 | Người duyệt đã ký rồi tự trả gói về không rút được chữ ký của mình: nộp lại y nguyên ⇒ mở | Thấp | **Khoản 257 mở** (rổ B). Chủ dự án chọn ĐỔI quyết định của S3.2b1, cùng vòng với 256 |
+| S3 | Đột biến sống sót: băm bỏ cờ duyệt kép; phép đếm thứ hai chỉ xét ngân sách | Thấp | Sửa trong vòng: ca *cờ duyệt kép* và ca *bộ ba* cộng hai đột biến — cả hai nay đỏ |
+| S4 | Đầu mục khối đột biến nói *mỗi vế một lần đỏ* — sai khi hai đột biến trên còn sống | Thấp | Sửa: khối nay có đủ bảy vế; tiền tệ và bậc ghi là đột biến tương đương |
+| S5 | Lời của phép đếm đầu (`076`) nói *danh sách* dù danh sách không đổi | Thông tin | Ghi ở §7; ca *một người ký hai lần* khẳng định nguyên văn thay vì một biểu thức nới |
+| S6 | Số tạm trần (dải `95NN`) trong chú thích TypeScript — `cap-so` chỉ thay dạng trần trong Markdown | Thông tin | Sửa: `086_rang_ngan_sach`. Một chú thích số tạm trần như thế (ý là `078`) có sẵn ở `packages/unseal/src/unseal.int.test.ts`, đứng ngoài vòng này. [S1.202] Ô này từng viết chính số tạm ấy, và mỗi lần cấp số `cap-so` thay nó thành số migration của nhánh — nay viết bằng dải |
+| S7 | Băm ngân sách là SHA-256 không muối trên chuỗi đoán được — CHƯA ĐO: không route nào đọc `rfq_approvals` | Thông tin | Ghi ở ADR-115 và §7: ngày băm đi ra ngoài (S3.9) thì nó ngang ngân sách |
+| S8 | Hai chú thích sai nhỏ: đột biến ràng buộc không toàn cục; số chữ ký đọc ngưỡng kép, không đọc bảng bậc | Thông tin | Sửa |
+
+## 7. Giới hạn, nói ra
+
+- Đổi ngân sách sau khi ký — kể cả trong cùng bậc — đòi ký lại; phiên bản chính sách mới ghim lúc đặt lại ngân sách cũng vậy.
+- Chữ ký có sẵn ở tổ chức đã bật trước migration không đếm nữa: người duyệt ký lại.
+- **Khoản 256 và khoản 257 còn mở** tới vòng vá của chúng (§6): chữ ký dưới cạnh về DRAFT chưa ràng vào thứ người duyệt đã xem, và
+  lần trả về chưa rút chữ ký của người trả.
+- Lời từ chối vế ngân sách không vào sổ `CONTROL_DENIED` — cùng lớp với lời từ chối K4b về danh sách ở cùng cạnh; K12 phân loại mọi
+  lời từ chối của S3 ở S3.9. Lời của phép đếm đầu (`076`) nói *danh sách* cả khi chỗ lệch là một người ký hai lần.
+- `approved_budget_hash` không muối: biết phiên bản chính sách thì dò lại được ước lượng. Hôm nay không lộ ra đâu (§6 S7).
+
+## 8. Số đo
+
+- `packages/rfq/src/rang-ngan-sach.int.test.ts` 17/17 — mười lăm ca có nhãn, hai ca giới hạn không nhãn. Trên cây `master` (tạm rút
+  `086_rang_ngan_sach`): mười lăm ca có nhãn đều đỏ.
+- Toàn bộ T3 cục bộ trên cây cuối, trước lần cấp số: 191 tệp, 3228 khẳng định, 3218 đạt, 1 bỏ qua, 9 đỏ — đúng chín ca cũ của máy đo,
+  không liên quan: 8 của `packages/test-support/src/postgres.int.test.ts` (không có container runtime) và 1 của
+  `tools/khoi-tao-to-chuc/src/khoi-tao.int.test.ts` (tiền đề locale).
+- `pnpm t0` sạch. `pnpm test`: 121 tệp, 1704 đạt, 1 bỏ qua — sau khi `cap-so --dem` viết lại lời khai số ADR, số migration và số khoản
+  ở STATE và Handoff.
+- Bảy đột biến ở lược đồ, bảy lần đỏ (§5); hai đột biến tương đương ghi ra, không đo.
+- Ma trận: 68/68 bất biến (46/46 nghiệp vụ + 22/22 hàng rào), đọc từ 3228 khẳng định; K4b 8 → 23, D2 45 → 50. Không mã mới.
+- **Sau khi merge `master` tới #201 (S4.0 + S4.1 giữ S1.192 và `079`) và cấp lại số vòng, số migration:** toàn bộ T3 cục bộ
+  trên cây cuối: 193 tệp, 3264 khẳng định, 3254 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã
+  commit: 70/70 bất biến (48/48 nghiệp vụ + 22/22 hàng rào), đọc từ 3264 khẳng định. `pnpm t0` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #198 (S3.2c2 phần bù, giữ S1.193) và cấp lại số vòng:** toàn bộ T3 cục bộ trên cây cuối: 193 tệp,
+  3269 khẳng định, 3259 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 70/70 bất biến,
+  đọc từ 3269 khẳng định. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #206 (S3.2d, giữ S1.194, ADR-114, `080`) và cấp lại số vòng, số ADR, số migration:** toàn bộ T3
+  cục bộ trên cây cuối: 193 tệp, 3275 khẳng định, 3265 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại: 70/70
+  bất biến, đọc từ 3275 khẳng định; K4b 8 → 23 như trên, K4a 22 (của #206). `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem`
+  sạch.
+- **Sau khi merge `master` tới #207 (`cap-so` giữ số trên origin) — không số nào của vòng này đổi:** lời giữ số vòng, số ADR,
+  số migration và hai số khoản của nhánh này đã có sẵn trên origin, và `pnpm cap-so` bản mới cấp lại đúng những số ấy. Toàn bộ T3
+  cục bộ trên cây cuối: 193 tệp, 3278 khẳng định, 3268 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản
+  đã commit: 70/70 bất biến, đọc từ 3278 khẳng định. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #208 (#204 — S4.2a giữ S1.197, ADR-116, `083_hang_chuan`; #208 — `cap-so`) và cấp lại số vòng, số
+  migration:** dòng lời khai số migration của `Handoff.md` trên `master` còn mang thẻ vòng cũ của #204 từ trước lần nó chuyển sang
+  lời giữ, nên `cap-so` coi số vòng của nhánh là số `master` đã khai và cấp số mới — các số ở giữa đã có lời giữ —: S1.202. Thẻ ấy
+  sửa về số của #204 trên chính dòng mà nhánh viết lại (lời khai đếm). Migration phải lớn hơn `083`, và hai số kế đã có lời giữ, nên
+  thành `086_rang_ngan_sach`. ADR-115, khoản 256 và khoản 257 giữ nguyên. Toàn bộ T3 cục bộ trên cây cuối: 194 tệp, 3299 khẳng định,
+  3289 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến (49/49 nghiệp vụ +
+  22/22 hàng rào; L3 vào ở #204), đọc từ 3299 khẳng định; K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch;
+  `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #210 (S3.6a — S1.201, `085_nhom_hang`; tổ chức đã bật không nộp duyệt được gói không nhóm hàng):**
+  số của vòng giữ nguyên (`086_rang_ngan_sach` vẫn lớn hơn `085`). Mười bảy ca của `rang-ngan-sach.int.test.ts` đỏ ở lần nộp duyệt —
+  *"gói thầu phải có nhóm hàng trước khi nộp duyệt"* —; tệp dựng nhóm hàng theo khuôn #210 dùng cho `tra-ve-nhap` (người FINANCE dựng
+  một nhóm cho mỗi tổ chức, gói nhận nhóm lúc tạo): 17/17 xanh lại. Toàn bộ T3 cục bộ trên cây cuối: 196 tệp, 3340 khẳng định, 3330
+  đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại trùng bản đã commit: 71/71 bất biến, đọc từ 3340 khẳng định;
+  K4b 23, D2 50 như trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+- **Sau khi merge `master` tới #203 (S3.3a — S1.196, `082_xac_minh_nha_cung_cap`; K8a vào sổ đăng ký):** số của vòng giữ nguyên.
+  Toàn bộ T3 cục bộ trên cây cuối: 197 tệp, 3350 khẳng định, 3340 đạt, 1 bỏ qua, 9 đỏ — cùng chín ca cũ của máy đo. Ma trận sinh lại
+  trùng bản đã commit: 72/72 bất biến (50/50 nghiệp vụ + 22/22 hàng rào; K8a vào ở #203), đọc từ 3350 khẳng định; K4b 23, D2 50 như
+  trên. `tsc`, `eslint`, `depcruise` sạch; `pnpm cap-so --kiem` sạch.
+
 # §S1.203 — S3.6b1: TÍN HIỆU CHIA NHỎ (`PURCHASE_SPLITTING`) VÀ CHỐT K10a Ở CẠNH MỞ GÓI
 
 **Rổ và mảnh (ADR-043 ⒞):** không chạm mảnh nào của `docs/PRODUCT.md` §11 — tổ chức chưa bật không bị đòi gì (ca đối chứng MVP1 đo điều
