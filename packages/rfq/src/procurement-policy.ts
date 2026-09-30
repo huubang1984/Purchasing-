@@ -248,9 +248,9 @@ export interface ChuKyChinhSach {
 /**
  * [S1.169 / S3.1c / ADR-082 ⑺] Ký một phiên bản chính sách có bậc — và lần ký đầu tiên như thế BẬT S3 cho tổ chức.
  *
- * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ `9501_chan_bat_s3_khi_con_goi_cho`): phiên bản
+ * Mọi luật của lần ký nằm ở trigger `chinh_sach_kiem_nguoi_ky` (`069`, thân từ `097_chan_bat_s3_khi_con_goi_cho`): phiên bản
  * có bậc, người ký khác người tạo và giữ `policy.manage`, là phiên bản MỚI NHẤT, đã tới ngày hiệu lực, dưới khoá tư vấn theo tổ
- * chức; [S1.9101 / khoản 261] lần ký BẬT S3 (tổ chức chưa bật) chỉ nhận dưới READ COMMITTED và khi tổ chức không còn gói chờ
+ * chức; [S1.236 / khoản 261] lần ký BẬT S3 (tổ chức chưa bật) chỉ nhận dưới READ COMMITTED và khi tổ chức không còn gói chờ
  * duyệt — gói nộp dưới luật MVP1 không đi qua lần bật; `signed_by` dẫn xuất từ phiên (`kiem_danh_tinh_theo_phien`); mỗi phiên
  * bản một chữ ký (`UNIQUE`). Hàm này không kiểm lại một luật nào trong số ấy: một bản sao ở TypeScript chỉ thêm một chỗ để trôi, và lời từ chối của trigger đã có tên (`RAISE` ⇒ 422).
  *

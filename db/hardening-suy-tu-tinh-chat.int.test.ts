@@ -1815,7 +1815,7 @@ async function dungKichBan(c: pg.PoolClient, so: SoNhanChung): Promise<{ readonl
   // [S1.186 / S3.2b1 / K4a] Hai gói chờ duyệt ở tổ chức ĐÃ bật — ở tổ chức chưa bật thì cạnh về DRAFT bị chặn, nên nhân chứng của
   // `rfq_kiem_tra_ve_nhap` phải đứng SAU lần ký phía trên. [S1.207 / khoản 260] Gói THỨ HAI cho nhân chứng của hàng trả về: hàng ấy
   // phải đi kèm cạnh về DRAFT trong CÙNG giao dịch (constraint trigger hoãn tới COMMIT), nên câu chèn và cạnh về DRAFT không tách
-  // được thành hai nhân chứng trên một gói — mỗi nhân chứng một gói. [S1.9101 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói
+  // được thành hai nhân chứng trên một gói — mỗi nhân chứng một gói. [S1.236 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói
   // chờ duyệt, nên hai gói nộp SAU lần ký, dưới luật S3: ngân sách ghim lại phiên bản 2 (K1) và nhóm hàng `nhomDau` (S3.6a) — một
   // nhóm KHÁC `nhom` của mục nhóm hàng phía dưới, để lần gán `nhom` cho `rfqVe` ở đó vẫn là một lần ĐỔI nhóm.
   const nhomDau = await chenNC(

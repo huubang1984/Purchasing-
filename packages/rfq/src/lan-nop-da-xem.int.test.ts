@@ -872,12 +872,12 @@ describe("S1.198 — đột biến: gỡ từng vế thì khoảng trống mở 
 });
 
 // =============================================================================================
-// (6) [S1.9101 / khoản 261] CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT
+// (6) [S1.236 / khoản 261] CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT
 //
 // Lượt soi S1.198 (F6) đo: ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở tổ chức đã bật) và
 // lần nộp đứng yên; tổ chức bật S3 giữa chừng thì lời duyệt mốc 1 đi qua với danh sách người duyệt chưa đọc, và gói MỞ. Chủ dự án
 // chốt chặn LẦN BẬT: chữ ký đầu tiên trên một phiên bản có bậc bị từ chối khi tổ chức còn gói ở `PENDING_APPROVAL`
-// (`9501_chan_bat_s3_khi_con_goi_cho`). Ca đầu là ca giới hạn cũ của khối này, LẬT.
+// (`097_chan_bat_s3_khi_con_goi_cho`). Ca đầu là ca giới hạn cũ của khối này, LẬT.
 // =============================================================================================
 const loiConGoiCho = (n: number): string =>
   `To chuc con ${n} goi cho duyet: duyet roi mo, hoac huy, cac goi ay truoc khi bat S3 (ADR-080)`;
@@ -910,7 +910,7 @@ async function soChuKyChinhSach(org: string): Promise<number> {
 const huy = (t: ToChuc, rfqId: string): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => cancelRfq(c, t.org, { rfqId, reason: "huy goi truoc khi bat S3", actorSessionId: t.pm.s }, apiPool));
 
-describe("S1.9101 — khoản 261: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt", () => {
+describe("S1.236 — khoản 261: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt", () => {
   it("[INV-K4a] [INV-K4b] khoản 261 — người duyệt đọc gói (lần nộp 1, một lời mời); PM mời thêm khi gói đang chờ — MVP1 cho —; chữ ký BẬT S3 bị từ chối, tổ chức không bật và không một chữ ký; huỷ gói ấy rồi ký thì bật", async () => {
     const t = await taoToChuc();
     const rfqId = await goiNhap(t);

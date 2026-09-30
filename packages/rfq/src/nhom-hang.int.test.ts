@@ -485,7 +485,7 @@ describe("S3.6a — chốt nhóm hàng: tổ chức đã bật không nộp duy�
     const t = await taoToChuc();
     const rfqId = await goiSanSang(t);
     expect(await nop(t, rfqId)).toBeNull();
-    // [S1.9101 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói chờ duyệt: gói rời DRAFT theo đường MVP1 rồi HUỶ, trước lần ký.
+    // [S1.236 / khoản 261] Lần bật bị từ chối khi tổ chức còn gói chờ duyệt: gói rời DRAFT theo đường MVP1 rồi HUỶ, trước lần ký.
     await withTenant(apiPool, t.org, (c) =>
       cancelRfq(c, t.org, { rfqId, reason: "roi DRAFT truoc lan bat", actorSessionId: t.pm.s }, apiPool),
     );

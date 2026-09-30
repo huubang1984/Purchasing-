@@ -18253,10 +18253,10 @@ và kiểu thân của ba route ghi, không sink HTML, MVP1 không ghi hàng nà
 
 ---
 
-# §S1.9101 — KHOẢN 261 ĐÓNG: CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT — GÓI NỘP DƯỚI LUẬT MVP1 KHÔNG ĐI QUA LẦN BẬT (K4a, K4b) — ADR-9201; LƯỢT SOI MỞ KHOẢN 9401
+# §S1.236 — KHOẢN 261 ĐÓNG: CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT — GÓI NỘP DƯỚI LUẬT MVP1 KHÔNG ĐI QUA LẦN BẬT (K4a, K4b) — ADR-137; LƯỢT SOI MỞ KHOẢN 286
 
 **Rổ và mảnh (ADR-043 ⒞):** CSDL, luồng S3 bật công tắc ADR-080; không đổi `docs/PRODUCT.md` §11. Khoản 261 (rổ B, ghi ở
-§S1.198) đóng. Một migration (`9501_chan_bat_s3_khi_con_goi_cho`), ghim hardening, một ADR (ADR-9201).
+§S1.198) đóng. Một migration (`097_chan_bat_s3_khi_con_goi_cho`), ghim hardening, một ADR (ADR-137).
 
 ## 1. Việc gì
 
@@ -18277,21 +18277,21 @@ luật S3 — xanh: đối chứng giữ bản vá không chặn oan, và đỏ 
 
 ## 3. Thay đổi
 
-- `db/migrations/9501_chan_bat_s3_khi_con_goi_cho.sql`: định nghĩa lại `chinh_sach_kiem_nguoi_ky` — thân `072` nguyên văn, cộng một
+- `db/migrations/097_chan_bat_s3_khi_con_goi_cho.sql`: định nghĩa lại `chinh_sach_kiem_nguoi_ky` — thân `072` nguyên văn, cộng một
   vế CUỐI: tổ chức chưa bật (chữ ký này là chữ ký bật) ⇒ giao dịch phải ở READ COMMITTED, và tổ chức không còn gói `PENDING_APPROVAL`
   của CHÍNH tổ chức ký — không thì 23514 nêu mức cô lập hay số gói. Trigger không đổi.
-- `db/migrations/hardening.always.sql`: mục ghim `hàm + trigger chinh_sach_kiem_nguoi_ky` theo thân mới — nhãn, điều kiện (`9501` đã
+- `db/migrations/hardening.always.sql`: mục ghim `hàm + trigger chinh_sach_kiem_nguoi_ky` theo thân mới — nhãn, điều kiện (`097` đã
   áp), câu sửa, hậu điều kiện —, và hậu điều kiện phán xét thêm `provolatile = 'v'` (chuỗi chẩn đoán nêu `volatile=`).
 - Test: khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — sáu ca; một ca HTTP ở `apps/api/src/buyer.int.test.ts`; sổ ghim
   hàm và ba danh sách migration viết cứng của `db/migrations.int.test.ts`.
 - Bốn phép đo từng nộp gói TRƯỚC lần bật để có một gói chờ duyệt ở tổ chức đã bật, sắp lại theo luật mới: tổng điều tra H19
   (`db/hardening-suy-tu-tinh-chat.int.test.ts` — hai gói nộp SAU lần ký, dưới luật S3: ngân sách ghim lại phiên bản 2, nhóm hàng
   riêng); ca giới hạn khoản 253 của `packages/rfq/src/danh-sach-moi.int.test.ts` (nay đo lời từ chối, cộng một ca lớp hai cho dữ
-  liệu có từ trước `9501`; vế *K4b đếm người chứ không đếm hàng* dời ra khối riêng, đo trong S3, khẳng định nguyên văn);
+  liệu có từ trước `097`; vế *K4b đếm người chứ không đếm hàng* dời ra khối riêng, đo trong S3, khẳng định nguyên văn);
   `packages/rfq/src/bac-chinh-sach.int.test.ts` và `packages/rfq/src/nhom-hang.int.test.ts` (gói rời DRAFT theo đường MVP1 rồi huỷ
   trước lần ký — ý đo giữ nguyên).
 - Docstring `kyPhienBanChinhSach` (`packages/rfq/src/procurement-policy.ts`) theo thân mới.
-- ADR-9201; STATE (hàng 261 ĐÓNG, hàng 9401 MỞ, rổ B, cột mốc); hàng K4a, K4b của TEST-PLAN.
+- ADR-137; STATE (hàng 261 ĐÓNG, hàng 286 MỞ, rổ B, cột mốc); hàng K4a, K4b của TEST-PLAN.
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -18336,13 +18336,13 @@ sửa trong vòng.
 | # | Phát hiện | Mức | Xử lý |
 |---|---|---|---|
 | 1 | Lần ký REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô dưới `app_api`: ảnh chụp lấy trước lần nộp (hay trước khoá, nếu câu ký là câu đầu) nên câu đếm không thấy gói chờ — nộp, người duyệt đọc lần 1, PM mời thêm, ký, rồi lời duyệt mốc 1 và mở: gói `OPEN` với hai lời mời. Chỉ khi CẢ HAI phía SERIALIZABLE mới ra 40001. Lời *giới hạn đã nói* ở đầu migration và ADR nói nhẹ hơn hậu quả, và dẫn §S1.156 — nơi viết SERIALIZABLE bắt ca ấy, sai khi chỉ một phía SERIALIZABLE | Vừa | **Sửa trong vòng:** vế bật chỉ nhận dưới READ COMMITTED; ca đo REPEATABLE READ và SERIALIZABLE; lời văn viết lại |
-| 2 | Phía nộp duyệt REPEATABLE READ/SERIALIZABLE, ảnh chụp lấy trước lần bật: đọc tổ chức CHƯA bật, qua K1 với ngân sách ghim phiên bản cũ, rồi duyệt và mở — K1 lọt ở tổ chức đã bật | Vừa (ngoài 261) | **Khoản 9401 mở** (rổ B) |
-| 3 | Ca *K4b đếm người* đo cả chuỗi ba vế `count(DISTINCT)`, không từng vế: đột biến một hay hai vế vẫn khớp regex của ca. Ca cũ cũng không đo DISTINCT — chữ ký thời MVP1 bị loại vì băm NULL | Nhẹ | **Sửa trong vòng:** khẳng định nguyên văn lời vế danh sách; dời ca ra khối riêng; một ca lớp hai giữ phép đo *K4b không đếm chữ ký băm NULL* cho dữ liệu có từ trước `9501` |
-| 4 | Nâng cấp không soát dữ liệu đã đi qua lần bật: trên cụm `master`, tổ chức bật khi còn gói chờ, mời thêm; `migrate()` lên cây này im lặng; lời duyệt mốc 1 và mở vẫn qua | Nhẹ | Ghi ở ADR-9201 (hệ quả) và §7; hôm nay không tổ chức thật nào bật được S3 (ADR-105) |
-| 5 | Mục ghim không phán xét `provolatile`: `ALTER FUNCTION … STABLE` làm chiều đua ⑴ đi lọt dưới READ COMMITTED; `migrate()` dựng lại VOLATILE mà không báo | Nhẹ | **Sửa trong vòng** cho hàm ký: hậu điều kiện đòi `provolatile = 'v'`, ca đo. Các hàm khác dựa vào khoá: khoản 9401 |
-| 6 | Mức READ COMMITTED của đường ứng dụng không được ghim: `ALTER DATABASE … SET default_transaction_isolation = 'repeatable read'` ⇒ `migrate()` im lặng, `withTenant` chạy REPEATABLE READ; trong đua, `kyPhienBanChinhSach` chỉ gãy vì sổ kiểm toán — lớp chặn tình cờ | Nhẹ | Lần bật nay tự gác (hàng 1, fail-closed); phần chung vào khoản 9401 |
-| 7 | Lời văn: dòng K4b của TEST-PLAN chèn sai chỗ; docstring `kyPhienBanChinhSach` còn *thân từ `072`*; ADR và STATE dẫn §S1.9101 khi biên bản chưa vào kho; ca HTTP cũng đỏ trên `master`; câu tuyệt đối *không đi qua lần bật* chỉ đúng dưới READ COMMITTED với dữ liệu mới | Nhẹ | **Sửa trong vòng** |
-| 8 | Một người giữ quyền nộp giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả nguyên tử | Ghi chú | Ghi ở ADR-9201 (hệ quả): khả dụng, không phải an ninh |
+| 2 | Phía nộp duyệt REPEATABLE READ/SERIALIZABLE, ảnh chụp lấy trước lần bật: đọc tổ chức CHƯA bật, qua K1 với ngân sách ghim phiên bản cũ, rồi duyệt và mở — K1 lọt ở tổ chức đã bật | Vừa (ngoài 261) | **Khoản 286 mở** (rổ B) |
+| 3 | Ca *K4b đếm người* đo cả chuỗi ba vế `count(DISTINCT)`, không từng vế: đột biến một hay hai vế vẫn khớp regex của ca. Ca cũ cũng không đo DISTINCT — chữ ký thời MVP1 bị loại vì băm NULL | Nhẹ | **Sửa trong vòng:** khẳng định nguyên văn lời vế danh sách; dời ca ra khối riêng; một ca lớp hai giữ phép đo *K4b không đếm chữ ký băm NULL* cho dữ liệu có từ trước `097` |
+| 4 | Nâng cấp không soát dữ liệu đã đi qua lần bật: trên cụm `master`, tổ chức bật khi còn gói chờ, mời thêm; `migrate()` lên cây này im lặng; lời duyệt mốc 1 và mở vẫn qua | Nhẹ | Ghi ở ADR-137 (hệ quả) và §7; hôm nay không tổ chức thật nào bật được S3 (ADR-105) |
+| 5 | Mục ghim không phán xét `provolatile`: `ALTER FUNCTION … STABLE` làm chiều đua ⑴ đi lọt dưới READ COMMITTED; `migrate()` dựng lại VOLATILE mà không báo | Nhẹ | **Sửa trong vòng** cho hàm ký: hậu điều kiện đòi `provolatile = 'v'`, ca đo. Các hàm khác dựa vào khoá: khoản 286 |
+| 6 | Mức READ COMMITTED của đường ứng dụng không được ghim: `ALTER DATABASE … SET default_transaction_isolation = 'repeatable read'` ⇒ `migrate()` im lặng, `withTenant` chạy REPEATABLE READ; trong đua, `kyPhienBanChinhSach` chỉ gãy vì sổ kiểm toán — lớp chặn tình cờ | Nhẹ | Lần bật nay tự gác (hàng 1, fail-closed); phần chung vào khoản 286 |
+| 7 | Lời văn: dòng K4b của TEST-PLAN chèn sai chỗ; docstring `kyPhienBanChinhSach` còn *thân từ `072`*; ADR và STATE dẫn §S1.236 khi biên bản chưa vào kho; ca HTTP cũng đỏ trên `master`; câu tuyệt đối *không đi qua lần bật* chỉ đúng dưới READ COMMITTED với dữ liệu mới | Nhẹ | **Sửa trong vòng** |
+| 8 | Một người giữ quyền nộp giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả nguyên tử | Ghi chú | Ghi ở ADR-137 (hệ quả): khả dụng, không phải an ninh |
 
 **Người kiểm thử và không lách được** (dưới READ COMMITTED, `app_api` nếu không ghi khác): đua nộp/ký hai chiều, `MERGE` làm cạnh
 nộp; `DO … EXCEPTION` nuốt lời từ chối (tổ chức không bật); savepoint, `ROLLBACK TO`; CTE ghi một câu cả hai chiều (K1 hay câu đếm
@@ -18360,12 +18360,12 @@ với `master`; `bac-chinh-sach` và `nhom-hang` đỏ khi bỏ vế DRAFT của
   tổ chức ở trạng thái không bật. Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
 - Lần bật bị từ chối không vào sổ `CONTROL_DENIED` — một luật của lần ký, không phải chốt ở cạnh gói.
 - Lần bật chỉ nhận dưới READ COMMITTED. Phía nộp duyệt không có gác ấy: một lần nộp REPEATABLE READ bằng câu SQL thô, ảnh chụp lấy
-  trước lần bật, lọt K1 ở tổ chức đã bật — khoản 9401.
-- Hàng có trước `9501`: một tổ chức đã bật khi còn gói chờ giữ nguyên gói ấy; lớp hai còn đó — chữ ký thời MVP1 không mang băm nên K4b
+  trước lần bật, lọt K1 ở tổ chức đã bật — khoản 286.
+- Hàng có trước `097`: một tổ chức đã bật khi còn gói chờ giữ nguyên gói ấy; lớp hai còn đó — chữ ký thời MVP1 không mang băm nên K4b
   không đếm nó.
 - Phép kiểm dựa vào khoá tư vấn mà cạnh nộp giữ chia sẻ (`072` (4)); một đường ghi đưa gói sang `PENDING_APPROVAL` mà không qua
   trigger ấy — vai giữ quyền DDL tắt trigger — đi vòng qua, như mọi luật khác của cạnh nộp; hardening dựng lại ở lần deploy kế.
-- Khoản 9401 còn mở.
+- Khoản 286 còn mở.
 
 ## 8. Số đo
 

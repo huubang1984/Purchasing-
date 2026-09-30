@@ -1728,8 +1728,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    // [S1.9101 / khoản 261] Thân từ `9501_chan_bat_s3_khi_con_goi_cho`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
-    { ham: "chinh_sach_kiem_nguoi_ky", migration: "9501_chan_bat_s3_khi_con_goi_cho.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
+    // [S1.236 / khoản 261] Thân từ `097_chan_bat_s3_khi_con_goi_cho`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
+    { ham: "chinh_sach_kiem_nguoi_ky", migration: "097_chan_bat_s3_khi_con_goi_cho.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
     // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.
     { ham: "ncc_kiem_xac_minh", migration: "082_xac_minh_nha_cung_cap.sql", trigger: ["supplier_verifications_kiem_xac_minh"] },
@@ -3502,7 +3502,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_chan_bat_s3_khi_con_goi_cho.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -7938,7 +7938,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_chan_bat_s3_khi_con_goi_cho.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -8247,7 +8247,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "088_tin_hieu_chia_nho.sql",
         "089_anh_xa_hang_muc.sql",
         "090_tra_ve_di_kem_canh.sql",
-        "9501_chan_bat_s3_khi_con_goi_cho.sql",
+        "097_chan_bat_s3_khi_con_goi_cho.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {

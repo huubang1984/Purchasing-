@@ -9826,11 +9826,11 @@ lô gửi đổi phản hồi và route đọc —, route nộp duyệt thật v
 422 `TRONG_TAP_LOAI_TRU`, hàng ngừng dùng, băm mong đợi); `apps/web` (module thuần, bộ giả lập trang); `kich-ban-41-http.int` (bộ quét rò
 rỉ đi qua ba route ghi); lượt đi thử T4 trên Chromium. Đột biến và lượt soi đối kháng: §S1.234.
 
-## ADR-9201 — Chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt: gói nộp dưới luật MVP1 không đi qua lần bật
+## ADR-137 — Chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt: gói nộp dưới luật MVP1 không đi qua lần bật
 
 **Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 chặn LẦN BẬT, không chặn lời duyệt ·
-**[S1.9101]** · Migration `9501_chan_bat_s3_khi_con_goi_cho` · Biên bản: `evidence/security-reviews.md` §S1.9101 · **Khoản:** 261
-(ghi ở S1.198; đóng ở đây); lượt soi mở khoản 9401
+**[S1.236]** · Migration `097_chan_bat_s3_khi_con_goi_cho` · Biên bản: `evidence/security-reviews.md` §S1.236 · **Khoản:** 261
+(ghi ở S1.198; đóng ở đây); lượt soi mở khoản 286
 
 ### Bối cảnh
 
@@ -9843,7 +9843,7 @@ danh sách người duyệt chưa đọc. Khoản 261, rổ B.
 
 ### Quyết định
 
-1. **Chữ ký bật S3 bị từ chối khi tổ chức còn gói `PENDING_APPROVAL`.** `chinh_sach_kiem_nguoi_ky` (thân từ `9501`) thêm một vế:
+1. **Chữ ký bật S3 bị từ chối khi tổ chức còn gói `PENDING_APPROVAL`.** `chinh_sach_kiem_nguoi_ky` (thân từ `097`) thêm một vế:
    tổ chức CHƯA bật — nên chữ ký này là chữ ký bật — mà còn gói chờ duyệt ⇒ 23514 nêu số gói. Tổ chức duyệt rồi mở, hay huỷ, các
    gói ấy — ở tổ chức chưa bật không có cạnh về DRAFT (`077`) —, rồi ký. Lời từ chối đi ra `POST /policy/:id/sign` dưới 422 mang
    nguyên lời của trigger, như mọi luật khác của lần ký; route và tầng gói không đổi.
@@ -9871,7 +9871,7 @@ danh sách người duyệt chưa đọc. Khoản 261, rổ B.
 Khối (6) của `packages/rfq/src/lan-nop-da-xem.int.test.ts` — ca giới hạn cũ của khoản 261, LẬT; câu đếm theo tổ chức (hai gói chờ,
 một gói nháp, gói của tổ chức khác); hai chiều đua qua khoá tư vấn; chữ ký sau lần bật — và một ca HTTP ở
 `apps/api/src/buyer.int.test.ts`. Trên cây `master` ba ca của khối (6) đỏ, ca đối chứng xanh, ca HTTP đỏ (201 thay 422 — người kiểm
-đo). Sau lượt soi: ca lần ký dưới REPEATABLE READ và SERIALIZABLE; ca `provolatile`. Đột biến ghi ở biên bản §S1.9101.
+đo). Sau lượt soi: ca lần ký dưới REPEATABLE READ và SERIALIZABLE; ca `provolatile`. Đột biến ghi ở biên bản §S1.236.
 
 ### Hệ quả, nói thẳng
 
@@ -9879,9 +9879,9 @@ một gói nháp, gói của tổ chức khác); hai chiều đua qua khoá tư 
   được S3 (ADR-105).
 - Lần bật bị từ chối không vào sổ `CONTROL_DENIED`: nó là một luật của lần ký, không phải một chốt ở cạnh gói (ADR-084).
 - Phía nộp duyệt không có gác mức cô lập: một lần nộp REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô, ảnh chụp lấy trước lần
-  bật, đọc tổ chức CHƯA bật và đi qua K1 với ngân sách ghim phiên bản cũ; gói ấy rồi MỞ (lượt soi đo). Đó là khoản 9401 — chung cho
+  bật, đọc tổ chức CHƯA bật và đi qua K1 với ngân sách ghim phiên bản cũ; gói ấy rồi MỞ (lượt soi đo). Đó là khoản 286 — chung cho
   mọi phép kiểm đọc `to_chuc_da_bat_s3` và mọi hàm dựa vào khoá, cùng mức cô lập mặc định của database không được ghim.
-- Hàng có trước `9501`: một tổ chức đã bật khi còn gói chờ (cây `master` cho phép) giữ nguyên gói ấy — lời duyệt mốc cũ vẫn qua
+- Hàng có trước `097`: một tổ chức đã bật khi còn gói chờ (cây `master` cho phép) giữ nguyên gói ấy — lời duyệt mốc cũ vẫn qua
   (lượt soi đo trên cụm `master` rồi `migrate()`). Lớp hai còn đó: chữ ký thời MVP1 không mang băm nên K4b không đếm nó (đo bằng
   thân `072` mô phỏng). Hôm nay không tổ chức thật nào bật được S3 (ADR-105).
 - Một người giữ quyền nộp duyệt giữ được tổ chức ở trạng thái không bật bằng cách luôn còn một gói chờ — không có đường xả gói chờ

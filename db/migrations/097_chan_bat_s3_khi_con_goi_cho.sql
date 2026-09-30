@@ -1,5 +1,5 @@
 -- ==============================================================================================
--- 9501_chan_bat_s3_khi_con_goi_cho — [S1.9101 / khoản 261] CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT
+-- 097_chan_bat_s3_khi_con_goi_cho — [S1.236 / khoản 261] CHỮ KÝ BẬT S3 BỊ TỪ CHỐI KHI TỔ CHỨC CÒN GÓI CHỜ DUYỆT
 --
 -- Lượt soi S1.198 (F6) đo, khoản 261 ghi. Ở tổ chức chưa bật, danh sách mời đổi được khi gói đang chờ duyệt (`076` chỉ chặn ở
 -- tổ chức đã bật) và lần nộp đứng yên (`087` chỉ tăng nó ở cạnh DRAFT→PENDING_APPROVAL). Người duyệt đọc gói ở lần nộp 1 với
@@ -21,7 +21,7 @@
 -- "Không đua" chỉ đúng khi câu đếm lấy ảnh chụp MỚI sau khoá: READ COMMITTED, hàm VOLATILE. Lượt soi của vòng đo: một lần ký
 -- REPEATABLE READ hay SERIALIZABLE bằng câu SQL thô giữ ảnh chụp lấy TRƯỚC lần nộp — hay trước khoá, nếu câu ký là câu đầu —, và
 -- dựng lại trọn lỗ gốc. Nên vế bật từ chối mọi mức khác READ COMMITTED (mức của mọi đường ứng dụng), và mục ghim phán xét
--- `provolatile`. Phía nộp duyệt dưới mức ấy là khoản 9401.
+-- `provolatile`. Phía nộp duyệt dưới mức ấy là khoản 286.
 --
 -- Hàm mới ghim ở `hardening.always.sql` trong CÙNG commit (S1.96); trigger không đổi.
 -- ==============================================================================================

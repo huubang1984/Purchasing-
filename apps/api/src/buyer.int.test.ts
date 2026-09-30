@@ -1308,7 +1308,7 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     expect((await goi("GET", "/policy/versions", tcA, undefined, gocKy)).text).not.toContain('"version":4');
   });
 
-  it("[S1.9101 / khoản 261] [INV-K4b] tổ chức còn một gói chờ duyệt: lần ký BẬT S3 ⇒ 422 mang lời của trigger, không chữ ký, tổ chức không bật; PM huỷ gói ấy ⇒ ký ⇒ 201, bật", async () => {
+  it("[S1.236 / khoản 261] [INV-K4b] tổ chức còn một gói chờ duyệt: lần ký BẬT S3 ⇒ 422 mang lời của trigger, không chữ ký, tổ chức không bật; PM huỷ gói ấy ⇒ ký ⇒ 201, bật", async () => {
     const org = await toChuc("cs-con-goi-cho");
     const tcA = await nguoi("tca-cs-cho@vidu.vn", ["FINANCE"], org);
     const tcB = await nguoi("tcb-cs-cho@vidu.vn", ["FINANCE"], org);
