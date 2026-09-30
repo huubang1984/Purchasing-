@@ -719,8 +719,12 @@ async function veTraoThau() {
   const a = r.body.award ?? null;
   if (a === null) {
     dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
+    hien($("nut-rut-de-xuat"), false);
     return;
   }
+  // [S1.9182 / khoản 232 / ADR-9282] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
+  // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `9583`, kể cả khi nút hiện sai.
+  hien($("nut-rut-de-xuat"), a.status === "PROPOSED" && (a.approvals ?? []).length === 0);
   dienDl($("tt-award"), [
     ["Trạng thái", a.status],
     ["Báo giá được chọn", a.bidVersionId],
@@ -759,6 +763,18 @@ $("nut-duyet-award").addEventListener("click", async () => {
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
   bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
+  await veTraoThau();
+});
+
+// [S1.9182 / khoản 232 / ADR-9282] Rút đề xuất — đường của chính người đề xuất (`award.recommend`), cho một đề xuất
+// chưa chữ ký. Ba vế (PROPOSED · cùng người · 0 chữ ký) ràng ở CSDL; lớp gói gọi tên lý do dưới 422 nên `loiCua` đủ.
+$("nut-rut-de-xuat").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  const lyDo = $("ly-do-award").value.trim();
+  if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần rút — một hàng trạng thái không lý do là đúng thứ D5 cấm."); return; }
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/withdraw`, { reason: lyDo });
+  if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không rút được")); return; }
+  bao($("ok7"), "Đã rút đề xuất — một hàng WITHDRAWN, lịch sử còn nguyên. Gói thầu về EVALUATING; đề xuất lại được.");
   await veTraoThau();
 });
 

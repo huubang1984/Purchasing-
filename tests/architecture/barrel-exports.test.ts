@@ -1126,6 +1126,9 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "docTraoThau",
   "duyetTraoThau",
   "huyTraoThau",
+  // [S1.9182 / khoản 232 / ADR-9282] Symbol THỨ SÁU của lớp trao thầu: rút một đề xuất chưa chữ ký — cổng `award.recommend`,
+  // `apps/api/src/routes/buyer.ts` gọi nó ở route `…/award/withdraw`. Vẫn không hàm nào cho phiên KHÁCH.
+  "rutDeXuatTraoThau",
   // [mảnh 1 / màn xuất bằng chứng] Nửa XUẤT của bộ bằng chứng S2.7 xuống gói để CLI và `apps/api`
   // ghi ra cùng byte. `xuatBoBangChung` là đường có cổng; `dungBoBangChung` không cổng, chỉ công
   // cụ vận hành gọi. Năm hằng số là hình dạng của bundle mà nửa KIỂM ở `tools/` đối chiếu.

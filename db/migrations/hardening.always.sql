@@ -2885,7 +2885,7 @@ $ham$;
          ('public', 'otp_rate_limits', 'otp_rate_limits_bucket_hash_check', '010_invitations', 'CHECK ((octet_length(bucket_hash) = 32))'),
          ('public', 'procurement_category_changes', 'procurement_category_changes_loai_check', '085_nhom_hang', 'CHECK ((loai = ANY (ARRAY[''RETIRED''::text, ''REACTIVATED''::text])))'),
          ('public', 'rfq_awards', 'rfq_awards_reason_check', '061_trao_thau', 'CHECK ((btrim(reason) <> ''''::text))'),
-         ('public', 'rfq_awards', 'rfq_awards_status_check', '061_trao_thau', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text])))'),
+         ('public', 'rfq_awards', 'rfq_awards_status_check', '9583_award_withdrawn', 'CHECK ((status = ANY (ARRAY[''PROPOSED''::text, ''APPROVED''::text, ''CANCELLED''::text, ''WITHDRAWN''::text])))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_han_sau_tao', '010_invitations', 'CHECK ((expires_at > created_at))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_purpose_check', '010_invitations', 'CHECK ((purpose = ''BID_SUBMISSION''::text))'),
          ('public', 'rfq_invitation_tokens', 'rfq_invitation_tokens_token_hash_check', '010_invitations', 'CHECK ((octet_length(token_hash) = 32))'),
@@ -6923,9 +6923,11 @@ $ham$;
     -- `CREATE OR REPLACE` thay than nay bang `RETURN NEW` mo lai dung bo ba ma J3 cam, va
     -- khong mot cong nao khac cua kho thay dieu do. [S1.129 / khoan 233] Tu `064` ve *nguoi
     -- dieu phoi* doc `unseal_dispatch_history` — moi nguoi TUNG dieu phoi, khong chi lan dang chay.
+    -- [S1.9182 / khoan 231] Tu `9582` them ve *khong luot cham nao cua RFQ moi hon* (khuon 060 muc (A)),
+    -- nhanh co ten `j5_luot_cham_khong_moi_nhat`: bo no la award tro duoc vao bang xep hang TRUOC BAFO.
     ARRAY[
-      $q$hàm + trigger award_kiem_de_xuat (061, thân từ 074_tu_choi_co_ten.sql)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '074_tu_choi_co_ten.sql')$q$,
+      $q$hàm + trigger award_kiem_de_xuat (061, thân từ 9582_award_luot_cham_moi_nhat)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9582_award_luot_cham_moi_nhat.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -6938,6 +6940,7 @@ $ham$;
 DECLARE
   nguoi_tao uuid;
   gia numeric;
+  moc_cua_luot timestamptz;
 BEGIN
   -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử.
   IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN
@@ -7000,6 +7003,28 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
+  -- [S1.9182 / khoản 231 / 9582] VÀ KHÔNG LƯỢT NÀO CỦA GÓI THẦU NÀY MỚI HƠN NÓ — khuôn mục (A) của `060`
+  -- (`bafo_kiem_vong`). Thiếu vế này, một award trỏ được vào bảng xếp hạng TRƯỚC BAFO ngay khi có một
+  -- đường ghi thứ hai vào `rfq_awards` (nhập liệu hàng loạt, bộ đồng bộ, một route nhận `evaluationId`)
+  -- — và mọi lớp còn lại vẫn nhất quán với lượt đã chọn nên không chỗ nào kêu. Hôm nay `deXuatTraoThau`
+  -- tự suy lượt mới nhất; từ đây hai lớp nói cùng một câu, như `060` đã làm cho vòng BAFO. Ca hoà
+  -- `created_at` không tới được: hai lượt của cùng gói thầu không sinh trong cùng một giao dịch
+  -- (`taoLuotDanhGia` đòi RFQ ở `UNSEALED`/`BAFO_UNSEALED` rồi lật sang `EVALUATING`).
+  SELECT e.created_at INTO moc_cua_luot
+    FROM public.rfq_evaluations e
+   WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id
+     AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id;
+  IF EXISTS (SELECT 1 FROM public.rfq_evaluations e2
+              WHERE e2.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
+                AND e2.org_id OPERATOR(pg_catalog.=) NEW.org_id
+                AND e2.created_at OPERATOR(pg_catalog.>) moc_cua_luot) THEN
+    RAISE EXCEPTION
+      'Luot cham % khong phai luot moi nhat cua RFQ % — award phai dua tren bang xep hang DANG CO HIEU LUC (J5)',
+      NEW.evaluation_id, NEW.rfq_id
+      USING ERRCODE = 'check_violation',
+            CONSTRAINT = 'j5_luot_cham_khong_moi_nhat';
+  END IF;
+
   RETURN NEW;
 END
 $ham$;
@@ -7017,7 +7042,7 @@ $ham$;
          END
          $fn57$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE nguoi_tao uuid; gia numeric; BEGIN -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử. IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN RETURN NEW; END IF; SELECT p.created_by INTO nguoi_tao FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy. IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation', CONSTRAINT = 'j3_nguoi_tao_de_xuat'; END IF; -- [J3 vế 3] ...và người TỪNG ĐIỀU PHỐI mở thầu cũng không — mọi lần, kể cả lần đã bị điều phối -- lại đè lên (khoản 233, `064`). Đọc bảng lịch sử, không đọc `unseal_requests.dispatched_by`. IF EXISTS (SELECT 1 FROM public.unseal_dispatch_history h WHERE h.org_id OPERATOR(pg_catalog.=) NEW.org_id AND h.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND h.dispatched_by OPERATOR(pg_catalog.=) NEW.acted_by) THEN RAISE EXCEPTION 'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation', CONSTRAINT = 'j3_nguoi_dieu_phoi_de_xuat'; END IF; -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có. SELECT l.effective_cost INTO gia FROM public.rfq_evaluation_lines l WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id; IF gia IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id USING ERRCODE = 'check_violation'; END IF; -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO. IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN RAISE EXCEPTION 'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE nguoi_tao uuid; gia numeric; moc_cua_luot timestamptz; BEGIN -- Chỉ hàng ĐỀ XUẤT đi qua phép kiểm này; hàng `APPROVED`/`CANCELLED` do mục (6) phán xử. IF NEW.status IS DISTINCT FROM 'PROPOSED' THEN RETURN NEW; END IF; SELECT p.created_by INTO nguoi_tao FROM public.rfq_packages p WHERE p.id OPERATOR(pg_catalog.=) NEW.rfq_id AND p.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay RFQ % trong to chuc %', NEW.rfq_id, NEW.org_id USING ERRCODE = 'foreign_key_violation'; END IF; -- [J3 vế 2] Người TẠO gói thầu không được là người đề xuất trao thầu cho chính gói ấy. IF nguoi_tao OPERATOR(pg_catalog.=) NEW.acted_by THEN RAISE EXCEPTION 'Nguoi tao goi thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation', CONSTRAINT = 'j3_nguoi_tao_de_xuat'; END IF; -- [J3 vế 3] ...và người TỪNG ĐIỀU PHỐI mở thầu cũng không — mọi lần, kể cả lần đã bị điều phối -- lại đè lên (khoản 233, `064`). Đọc bảng lịch sử, không đọc `unseal_requests.dispatched_by`. IF EXISTS (SELECT 1 FROM public.unseal_dispatch_history h WHERE h.org_id OPERATOR(pg_catalog.=) NEW.org_id AND h.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND h.dispatched_by OPERATOR(pg_catalog.=) NEW.acted_by) THEN RAISE EXCEPTION 'Nguoi dieu phoi mo thau khong duoc de xuat trao thau cho chinh goi ay (J3)' USING ERRCODE = 'check_violation', CONSTRAINT = 'j3_nguoi_dieu_phoi_de_xuat'; END IF; -- [J5 vế NỘI DUNG] Khoá ngoại hợp thành đã buộc có một HÀNG XẾP HẠNG; nó KHÔNG buộc hàng ấy -- đọc được giá. `057` cho một báo giá không đọc được giá vẫn có hàng, với `effective_cost` và -- `rank` cùng NULL (§2.3⑺) — và một award dựa trên nó là một quyết định dựa trên số không có. SELECT l.effective_cost INTO gia FROM public.rfq_evaluation_lines l WHERE l.org_id OPERATOR(pg_catalog.=) NEW.org_id AND l.evaluation_id OPERATOR(pg_catalog.=) NEW.evaluation_id AND l.bid_version_id OPERATOR(pg_catalog.=) NEW.bid_version_id; IF gia IS NULL THEN RAISE EXCEPTION 'Bao gia duoc chon khong co effective_cost doc duoc o luot cham % (J5)', NEW.evaluation_id USING ERRCODE = 'check_violation'; END IF; -- [J5 vế RFQ] Lượt chấm được trỏ tới phải là lượt CỦA CHÍNH GÓI THẦU NÀY. Khoá ngoại hợp thành -- buộc `(org_id, evaluation_id, bid_version_id)` tồn tại ở `rfq_evaluation_lines`, và hàng ấy -- buộc `evaluation_id` tồn tại ở `rfq_evaluations` — nhưng KHÔNG chuỗi nào buộc lượt chấm ấy -- thuộc `NEW.rfq_id`. Cùng ca mà `059` đã gặp cho vòng BAFO. IF NOT EXISTS (SELECT 1 FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id) THEN RAISE EXCEPTION 'Luot cham % khong thuoc RFQ % (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; -- [S1.9182 / khoản 231 / 9582] VÀ KHÔNG LƯỢT NÀO CỦA GÓI THẦU NÀY MỚI HƠN NÓ — khuôn mục (A) của `060` -- (`bafo_kiem_vong`). Thiếu vế này, một award trỏ được vào bảng xếp hạng TRƯỚC BAFO ngay khi có một -- đường ghi thứ hai vào `rfq_awards` (nhập liệu hàng loạt, bộ đồng bộ, một route nhận `evaluationId`) -- — và mọi lớp còn lại vẫn nhất quán với lượt đã chọn nên không chỗ nào kêu. Hôm nay `deXuatTraoThau` -- tự suy lượt mới nhất; từ đây hai lớp nói cùng một câu, như `060` đã làm cho vòng BAFO. Ca hoà -- `created_at` không tới được: hai lượt của cùng gói thầu không sinh trong cùng một giao dịch -- (`taoLuotDanhGia` đòi RFQ ở `UNSEALED`/`BAFO_UNSEALED` rồi lật sang `EVALUATING`). SELECT e.created_at INTO moc_cua_luot FROM public.rfq_evaluations e WHERE e.id OPERATOR(pg_catalog.=) NEW.evaluation_id AND e.org_id OPERATOR(pg_catalog.=) NEW.org_id; IF EXISTS (SELECT 1 FROM public.rfq_evaluations e2 WHERE e2.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id AND e2.org_id OPERATOR(pg_catalog.=) NEW.org_id AND e2.created_at OPERATOR(pg_catalog.>) moc_cua_luot) THEN RAISE EXCEPTION 'Luot cham % khong phai luot moi nhat cua RFQ % — award phai dua tren bang xep hang DANG CO HIEU LUC (J5)', NEW.evaluation_id, NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'j5_luot_cham_khong_moi_nhat'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
@@ -7121,9 +7146,12 @@ $ham$;
     -- ghim la thu giu con so ay: mot lan ha no ve 0 bien phe duyet kep thanh mot lan bam.
     -- Khoa tu van `pg_advisory_xact_lock` cung nam trong than — go no ra thi hai giao dich
     -- cung doc *chua co award nao* roi cung chen, va J7 mat rang ma khong ai kieu.
+    -- [S1.9182 / khoan 232 / ADR-9282] Tu `9583` them nhanh `WITHDRAWN` voi ba ve co ten (hang truoc la
+    -- PROPOSED · cung nguoi de xuat · 0 chu ky); hang rut KHONG phai award con song. Bo mot ve la nguoi
+    -- de xuat thao duoc mot chu ky bang tay minh, hay nguoi khac rut ho — dung lo ma cong huy (ADR-057) chan.
     ARRAY[
-      $q$hàm + trigger award_kiem_mot_award_song (061, thân từ 068)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '068_san_mot_chu_ky.sql')$q$,
+      $q$hàm + trigger award_kiem_mot_award_song (061, thân từ 9583_award_withdrawn)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9583_award_withdrawn.sql')$q$,
       $q$DO $fn57$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -7139,13 +7167,14 @@ DECLARE
   truoc_id uuid;
   truoc_eval uuid;
   truoc_bid uuid;
+  truoc_acted_by uuid;
   so_chu_ky integer;
 BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
             pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1));
 
-  SELECT a.status, a.id, a.evaluation_id, a.bid_version_id
-    INTO truoc_status, truoc_id, truoc_eval, truoc_bid
+  SELECT a.status, a.id, a.evaluation_id, a.bid_version_id, a.acted_by
+    INTO truoc_status, truoc_id, truoc_eval, truoc_bid, truoc_acted_by
     FROM public.rfq_awards a
    WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id
      AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id
@@ -7154,7 +7183,10 @@ BEGIN
 
   IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN
     -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7.
-    IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN
+    -- [S1.9182 / khoản 232] ...hay đã RÚT: `WITHDRAWN` không phải một award còn sống (ADR-9282).
+    IF truoc_status IS NOT NULL
+       AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED'
+       AND truoc_status OPERATOR(pg_catalog.<>) 'WITHDRAWN' THEN
       RAISE EXCEPTION
         'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)',
         NEW.rfq_id, truoc_status
@@ -7176,6 +7208,34 @@ BEGIN
     RAISE EXCEPTION
       'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status
       USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- [S1.9182 / khoản 232 / 9583 / ADR-9282] `WITHDRAWN` — người đề xuất RÚT đề xuất CHƯA CHỮ KÝ của mình.
+  -- Ba vế, và cả ba sống Ở ĐÂY chứ không ở lớp gói: ⑴ hàng mới nhất là `PROPOSED`; ⑵ người rút là người
+  -- đề xuất — `acted_by` là cột DẪN XUẤT từ phiên (`013`), nên đây là phép so CON NGƯỜI, không so vai;
+  -- ⑶ đề xuất ấy chưa có chữ ký nào — có chữ ký rồi thì chỉ HUỶ (`po.approve`, ADR-057) mới tháo được,
+  -- vì rút được sau chữ ký là để người đề xuất tháo một quyết định đã duyệt bằng chính tay mình.
+  IF NEW.status OPERATOR(pg_catalog.=) 'WITHDRAWN' THEN
+    IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN
+      RAISE EXCEPTION 'Chi rut duoc mot de xuat dang o PROPOSED; hang moi nhat dang o % (J7)', truoc_status
+        USING ERRCODE = 'check_violation',
+              CONSTRAINT = 'j7_rut_khong_o_proposed';
+    END IF;
+    IF truoc_acted_by IS DISTINCT FROM NEW.acted_by THEN
+      RAISE EXCEPTION 'Chi nguoi de xuat moi rut duoc de xuat cua minh (J7)'
+        USING ERRCODE = 'check_violation',
+              CONSTRAINT = 'j7_rut_khong_phai_nguoi_de_xuat';
+    END IF;
+    SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky
+      FROM public.rfq_award_approvals ap
+     WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id
+       AND ap.award_id OPERATOR(pg_catalog.=) truoc_id;
+    IF so_chu_ky > 0 THEN
+      RAISE EXCEPTION 'De xuat da co % chu ky duyet — khong rut duoc, chi huy duoc (J7)', so_chu_ky
+        USING ERRCODE = 'check_violation',
+              CONSTRAINT = 'j7_rut_da_co_chu_ky';
+    END IF;
+    RETURN NEW;
   END IF;
 
   IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN
@@ -7201,9 +7261,10 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt.
-  IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN
-    RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id
+  -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. [S1.9182 / khoản 232] Sau một
+  -- hàng `WITHDRAWN` cũng không còn gì để huỷ: hàng rút không phải một award còn sống.
+  IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' OR truoc_status OPERATOR(pg_catalog.=) 'WITHDRAWN' THEN
+    RAISE EXCEPTION 'Award cua RFQ % da huy roi hoac da rut (hang moi nhat: %)', NEW.rfq_id, truoc_status
       USING ERRCODE = 'check_violation';
   END IF;
 
@@ -7224,7 +7285,7 @@ $ham$;
          END
          $fn57$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE CHU_KY_CAN constant integer := 1; truoc_status text; truoc_id uuid; truoc_eval uuid; truoc_bid uuid; so_chu_ky integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1)); SELECT a.status, a.id, a.evaluation_id, a.bid_version_id INTO truoc_status, truoc_id, truoc_eval, truoc_bid FROM public.rfq_awards a WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7. IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' THEN RAISE EXCEPTION 'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó. IF truoc_status IS NULL THEN RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status USING ERRCODE = 'check_violation'; END IF; -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất. IF NEW.evaluation_id IS DISTINCT FROM truoc_eval OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN RAISE EXCEPTION 'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status USING ERRCODE = 'check_violation'; END IF; IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %', truoc_status USING ERRCODE = 'check_violation'; END IF; -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. [S1.142 / khoản 242 ⑴] Đổi `CHU_KY_CAN` KHÔNG đủ -- để có hai chữ ký. `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong CÙNG một giao dịch, nên -- với hằng là 2, lần duyệt đầu bị từ chối ở đây và chữ ký của nó rơi theo giao dịch; người -- duyệt thứ hai gặp đúng lỗi ấy — trao thầu không bao giờ duyệt được. Hai chữ ký cần chữ ký -- sống ĐỘC LẬP với hàng `APPROVED`: việc của S3.5. SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky < CHU_KY_CAN THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' THEN RAISE EXCEPTION 'Award cua RFQ % da huy roi', NEW.rfq_id USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
+                = $than$DECLARE CHU_KY_CAN constant integer := 1; truoc_status text; truoc_id uuid; truoc_eval uuid; truoc_bid uuid; truoc_acted_by uuid; so_chu_ky integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.rfq_id::pg_catalog.text, 1)); SELECT a.status, a.id, a.evaluation_id, a.bid_version_id, a.acted_by INTO truoc_status, truoc_id, truoc_eval, truoc_bid, truoc_acted_by FROM public.rfq_awards a WHERE a.org_id OPERATOR(pg_catalog.=) NEW.org_id AND a.rfq_id OPERATOR(pg_catalog.=) NEW.rfq_id ORDER BY a.acted_at DESC, a.id DESC LIMIT 1; IF NEW.status OPERATOR(pg_catalog.=) 'PROPOSED' THEN -- Đề xuất ĐƯỢC phép khi chưa có hàng nào, hay khi hàng mới nhất đã HUỶ. Đây là vế J7. -- [S1.9182 / khoản 232] ...hay đã RÚT: `WITHDRAWN` không phải một award còn sống (ADR-9282). IF truoc_status IS NOT NULL AND truoc_status OPERATOR(pg_catalog.<>) 'CANCELLED' AND truoc_status OPERATOR(pg_catalog.<>) 'WITHDRAWN' THEN RAISE EXCEPTION 'RFQ % da co mot award con song (hang moi nhat: %) — toi da MOT (J7)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- Mọi hàng KHÔNG phải `PROPOSED` đòi một hàng trước đó. IF truoc_status IS NULL THEN RAISE EXCEPTION 'RFQ % chua co de xuat trao thau nao de % ', NEW.rfq_id, NEW.status USING ERRCODE = 'check_violation'; END IF; -- Chuỗi chỉ đi một chiều, và hàng mới phải nói về CÙNG báo giá của đề xuất đang sống — nếu -- không, một hàng `APPROVED` "duyệt" được một báo giá khác hẳn thứ đã đề xuất. IF NEW.evaluation_id IS DISTINCT FROM truoc_eval OR NEW.bid_version_id IS DISTINCT FROM truoc_bid THEN RAISE EXCEPTION 'Hang % phai noi ve dung bao gia cua de xuat dang song', NEW.status USING ERRCODE = 'check_violation'; END IF; -- [S1.9182 / khoản 232 / 9583 / ADR-9282] `WITHDRAWN` — người đề xuất RÚT đề xuất CHƯA CHỮ KÝ của mình. -- Ba vế, và cả ba sống Ở ĐÂY chứ không ở lớp gói: ⑴ hàng mới nhất là `PROPOSED`; ⑵ người rút là người -- đề xuất — `acted_by` là cột DẪN XUẤT từ phiên (`013`), nên đây là phép so CON NGƯỜI, không so vai; -- ⑶ đề xuất ấy chưa có chữ ký nào — có chữ ký rồi thì chỉ HUỶ (`po.approve`, ADR-057) mới tháo được, -- vì rút được sau chữ ký là để người đề xuất tháo một quyết định đã duyệt bằng chính tay mình. IF NEW.status OPERATOR(pg_catalog.=) 'WITHDRAWN' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi rut duoc mot de xuat dang o PROPOSED; hang moi nhat dang o % (J7)', truoc_status USING ERRCODE = 'check_violation', CONSTRAINT = 'j7_rut_khong_o_proposed'; END IF; IF truoc_acted_by IS DISTINCT FROM NEW.acted_by THEN RAISE EXCEPTION 'Chi nguoi de xuat moi rut duoc de xuat cua minh (J7)' USING ERRCODE = 'check_violation', CONSTRAINT = 'j7_rut_khong_phai_nguoi_de_xuat'; END IF; SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky > 0 THEN RAISE EXCEPTION 'De xuat da co % chu ky duyet — khong rut duoc, chi huy duoc (J7)', so_chu_ky USING ERRCODE = 'check_violation', CONSTRAINT = 'j7_rut_da_co_chu_ky'; END IF; RETURN NEW; END IF; IF NEW.status OPERATOR(pg_catalog.=) 'APPROVED' THEN IF truoc_status IS DISTINCT FROM 'PROPOSED' THEN RAISE EXCEPTION 'Chi duyet duoc mot de xuat dang o PROPOSED; hang moi nhat dang o %', truoc_status USING ERRCODE = 'check_violation'; END IF; -- MỘT chữ ký, đúng §7 — chốt ngày 2026-09-22. [S1.142 / khoản 242 ⑴] Đổi `CHU_KY_CAN` KHÔNG đủ -- để có hai chữ ký. `duyetTraoThau` ghi chữ ký và hàng `APPROVED` trong CÙNG một giao dịch, nên -- với hằng là 2, lần duyệt đầu bị từ chối ở đây và chữ ký của nó rơi theo giao dịch; người -- duyệt thứ hai gặp đúng lỗi ấy — trao thầu không bao giờ duyệt được. Hai chữ ký cần chữ ký -- sống ĐỘC LẬP với hàng `APPROVED`: việc của S3.5. SELECT pg_catalog.count(*)::pg_catalog.int4 INTO so_chu_ky FROM public.rfq_award_approvals ap WHERE ap.org_id OPERATOR(pg_catalog.=) NEW.org_id AND ap.award_id OPERATOR(pg_catalog.=) truoc_id; IF so_chu_ky < CHU_KY_CAN THEN RAISE EXCEPTION 'De xuat trao thau can % chu ky duyet; dang co % (J3)', CHU_KY_CAN, so_chu_ky USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END IF; -- `CANCELLED` — huỷ được một đề xuất đang chờ HAY một award đã duyệt. [S1.9182 / khoản 232] Sau một -- hàng `WITHDRAWN` cũng không còn gì để huỷ: hàng rút không phải một award còn sống. IF truoc_status OPERATOR(pg_catalog.=) 'CANCELLED' OR truoc_status OPERATOR(pg_catalog.=) 'WITHDRAWN' THEN RAISE EXCEPTION 'Award cua RFQ % da huy roi hoac da rut (hang moi nhat: %)', NEW.rfq_id, truoc_status USING ERRCODE = 'check_violation'; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0

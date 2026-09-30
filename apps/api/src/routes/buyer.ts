@@ -22,6 +22,7 @@ import {
   duyetTraoThau,
   huyTraoThau,
   moVongBafo,
+  rutDeXuatTraoThau,
   taoLuotDanhGia,
   type LuotDanhGia,
   xuatBoBangChung,
@@ -676,13 +677,16 @@ const ghi: readonly BuyerWriteRoute[] = [
   // hai con người: `award.recommend` để ĐỀ XUẤT, `po.approve` để DUYỆT.
   //
   // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
-  // tự suy lượt chấm MỚI NHẤT. Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
-  // thuộc đúng RFQ, không đòi nó mới nhất — nên một ca đo khoá riêng vế ấy.
+  // tự suy lượt chấm MỚI NHẤT. ~~Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
+  // thuộc đúng RFQ, không đòi nó mới nhất~~ **[S1.9182 / khoản 231]** từ `9582` tầng CSDL cũng đòi lượt
+  // mới nhất (`j5_luot_cham_khong_moi_nhat`) — hai lớp, như vòng BAFO; ca đo ở `luot-danh-gia.int`.
   //
   // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
   // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
-  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. Cái giá: người đề xuất không tự rút lại
-  // được (khoản **232**).
+  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. ~~Cái giá: người đề xuất không tự rút lại
+  // được (khoản **232**).~~ **[S1.9182 / khoản 232 / ADR-9282]** Route THỨ TƯ `…/award/withdraw` dưới
+  // `award.recommend`: người đề xuất RÚT đề xuất CHƯA chữ ký của mình — ba vế ràng ở CSDL (`9583`), không
+  // một cổng quyền đọc dữ liệu nào ở đây, và cổng huỷ không đổi.
   // --------------------------------------------------------------------------------------------
   {
     method: "POST",
@@ -749,6 +753,32 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 201,
       body: {
         award: await huyTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // [S1.9182 / khoản 232 / ADR-9282] RÚT đề xuất — cổng `award.recommend`, cùng cổng với lần đề xuất. Không `awardId`: hàng
+  // mới nhất là đích, và `9583` từ chối nếu nó không phải `PROPOSED` của chính người gọi với 0 chữ ký.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/withdraw",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.AWARD_RECOMMEND,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await rutDeXuatTraoThau(
           ctx.client,
           ctx.orgId,
           {

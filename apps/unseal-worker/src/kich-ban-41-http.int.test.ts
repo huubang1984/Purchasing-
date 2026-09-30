@@ -791,6 +791,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
           return { path: r.path.replace(":rfqId", hyB).replace(":awardId", UUID0), body: {}, cookie: trangThai.gd1.cookie };
         case "POST /rfqs/:rfqId/award/cancel":
           return { path: r.path.replace(":rfqId", hyB), body: { reason: "huy de quet" }, cookie: trangThai.gd1.cookie };
+        // [S1.9182 / khoản 232] Route RÚT đi bằng `m` (PROCUREMENT_MANAGER giữ `award.recommend`) tới `hyB` ở DRAFT ⇒ dừng ở
+        // `TraoThauTuChoiError` 422 có tên, sau bộ đọc thân — cùng lý do ba route trên.
+        case "POST /rfqs/:rfqId/award/withdraw":
+          return { path: r.path.replace(":rfqId", hyB), body: { reason: "rut de quet" }, cookie: m };
         case "POST /users/:userId/mfa-reset":
           return {
             path: r.path.replace(":userId", nanHy.id),
