@@ -9569,3 +9569,55 @@ hàm khác, gắn dưới một tên xếp trước chốt, cùng hậu quả m�
 - **Hàm chép vẫn nằm lại** — mục gỡ trigger, không gỡ hàm; hàm không gắn trigger nào thì không chạy.
 - **Không phủ:** trigger trên bảng ngoài lược đồ dự án; event trigger (cần SUPERUSER); một vai giữ quyền DDL cắm lại trigger ngay
   sau deploy — hardening chỉ chữa ở lần deploy kế, như mọi mục khác.
+
+## ADR-9201 — Hàng `rfq_tra_ve` phải đi kèm cạnh về DRAFT của chính lần nộp ấy: constraint trigger hoãn tới COMMIT đòi gói đã ĐI QUA DRAFT; sổ trả về chỉ-ghi-thêm cả với chủ bảng
+
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chọn ngày 2026-09-30 phép kiểm lúc COMMIT đòi gói đã ĐI QUA
+cửa DRAFT ở lần nộp của hàng — một tập, khuôn `017` —, không chỉ đã rời `PENDING_APPROVAL` · **[S1.9101]** · Migration
+`9501_tra_ve_di_kem_canh` · Biên bản: `evidence/security-reviews.md` §S1.9101 · **Khoản:** 260 (ghi ở S1.198; đóng ở đây)
+
+### Bối cảnh
+
+ADR-117 (3) giữ `rfq_tra_ve` chỉ-ghi-thêm BẰNG QUYỀN và buộc MỘT chiều: cạnh về DRAFT đòi một hàng của chính lần nộp (4), còn hàng
+không đòi cạnh. Lượt soi S1.198 đọc ra hai lỗ (khoản 260, rổ B: cần SQL thô dưới `app_api` hay quyền chủ bảng); vòng này đo chúng
+trên cây `master`:
+
+- Một hàng chèn tay dưới `app_api`, không kèm câu đổi trạng thái, commit được. Lần trả về thật của lần nộp ấy về sau bị từ chối
+  (23505, `rfq_tra_ve_mot_lan_moi_lan_nop`), và một câu UPDATE thô về DRAFT ở giao dịch SAU đi qua — người trả trong CSDL là người
+  đã chèn hàng lẻ.
+- Chủ bảng xoá hàng trả về của người duyệt đã tự trả gói về: gói đang bị từ chối mở vì *0 chữ ký còn hiệu lực* MỞ được bằng chính
+  chữ ký ấy (fail-open). Xoá một chữ ký thì ngược lại — fail-closed.
+
+### Quyết định
+
+1. **Constraint trigger `rfq_tra_ve_phai_di_kem_canh`** — `AFTER INSERT`, `DEFERRABLE INITIALLY DEFERRED`, `ENABLE ALWAYS`, khuôn
+   `017` (b): lúc INSERT gói theo định nghĩa còn chờ duyệt (`rfq_tra_ve_dat_lan_nop` đòi thế), nên chỉ COMMIT trả lời được câu
+   *giao dịch này có trả gói về không*. Hàng được nhận khi gói đứng ở `DRAFT` với ĐÚNG lần nộp của hàng, hoặc lần nộp của gói đã
+   TĂNG — lần nộp chỉ tăng ở cạnh `DRAFT→PENDING_APPROVAL`, nên gói đã đi qua DRAFT (trả về rồi nộp lại trong cùng giao dịch). Mọi
+   trường hợp khác — gói ở `PENDING_APPROVAL`, `OPEN` hay `CANCELLED` với đúng lần nộp ấy — là một hàng không kèm lần trả về nào:
+   từ chối, cả giao dịch lùi.
+2. **Gói không đọc được lúc COMMIT ⇒ từ chối.** Hàm chạy dưới quyền người gọi, RLS áp: một câu đổi `app.org_id` giữa lần chèn và
+   COMMIT làm gói biến khỏi tầm nhìn. `017` trả `NULL` (bỏ qua) ở chỗ ấy; hàm này thì không.
+3. **Chỉ-ghi-thêm bằng trigger**, khuôn `069`: `bid_chi_ghi_them` ở `UPDATE OR DELETE` cộng chốt `TRUNCATE` cấp câu lệnh, cả hai
+   `ENABLE ALWAYS` — chặn cả chủ bảng lẫn superuser, kể cả dưới `session_replication_role = replica`. Hai trigger ghim trong mục
+   `bid_chi_ghi_them (047)`; bảng vào tập chỉ-ghi-thêm suy ra của H19; ba trigger mới có tên trong `TRIGGER_DUOC_PHEP` (khoản 259).
+4. **Migration mang `DROP TRIGGER IF EXISTS` trước mỗi `CREATE`**, khuôn `047`: bảng có từ `087`, nên trên một cụm đang chạy lượt
+   sửa ĐẦU của hardening dựng hai trigger chỉ-ghi-thêm theo mục `047` trước khi tệp đánh số chạy.
+
+### Phương án đã cân nhắc
+
+- **Chỉ đòi gói đã rời `PENDING_APPROVAL`** — đúng chữ của khoản: đóng hai lỗ đã ghi, nhưng để lọt một hàng trả về GIẢ đi kèm cạnh
+  mở gói hay huỷ gói trực tiếp trong cùng giao dịch — một lần trả về không có ghi vào lịch sử. Chủ dự án không chọn.
+- **Cạnh về DRAFT đánh dấu lần trả về trong giao dịch (GUC, bảng tạm)** — phân biệt được *trả về rồi huỷ* với *huỷ thẳng*; thêm một
+  kênh trạng thái người gọi giả được (GUC) hay một bảng mới, cho một luồng tầng gói không có. Bác.
+- **Cạnh về DRAFT đòi hàng do CHÍNH giao dịch ấy chèn (so `xmin`)** — dễ vỡ (giao dịch con), và không đóng lỗ xoá. Bác.
+- **Thu quyền DELETE** — đã vậy từ `087`; chủ bảng vẫn xoá được. Không đủ.
+
+### Hệ quả, nói thẳng
+
+- Trả về rồi HUỶ trong CÙNG một giao dịch bị từ chối — fail-closed; tầng gói không làm thế (huỷ là một lời gọi riêng).
+- `SET CONSTRAINTS ALL IMMEDIATE` đặt trước câu đổi trạng thái làm một lần trả về hợp lệ bị từ chối ngay ở câu chèn — chặt hơn,
+  không lỏng hơn.
+- Hàng đã có trước vòng này không được kiểm lại: constraint trigger chỉ chạy cho hàng mới.
+- Như mọi bảng chỉ-ghi-thêm: vai giữ quyền DDL trên bảng gỡ hay tắt được trigger; hardening dựng lại ở lần deploy kế, và mục trigger
+  lạ (khoản 259) canh tên.
