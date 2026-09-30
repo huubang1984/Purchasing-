@@ -838,6 +838,8 @@ describe("phủ RLS", () => {
       // ghi kiem toan nao.
       { grantee: "app_api", bang: "rfq_items", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_packages", quyen: "SELECT" },
+      // [S1.198 / khoản 257] `rfq_tra_ve` — chỉ-ghi-thêm bằng quyền, khuôn `rfq_approvals`: SELECT mức bảng, INSERT theo cột.
+      { grantee: "app_api", bang: "rfq_tra_ve", quyen: "SELECT" },
       { grantee: "app_api", bang: "rfq_unsealed_bids", quyen: "SELECT" },
       { grantee: "app_api", bang: "role_permissions", quyen: "SELECT" },
       { grantee: "app_api", bang: "roles", quyen: "SELECT" },
@@ -1259,6 +1261,8 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "procurement_category_changes", cot: "loai", quyen: "INSERT" },
       { grantee: "app_api", bang: "procurement_category_changes", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "approver_user_id", quyen: "INSERT" },
+      // [S1.198 / khoản 256] Lời duyệt mang lần nộp người duyệt đã xem — trigger `rfq_approvals_so_lan_nop` so nó.
+      { grantee: "app_api", bang: "rfq_approvals", cot: "lan_nop_da_xem", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "org_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "rfq_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_approvals", cot: "session_id", quyen: "INSERT" },
@@ -1424,6 +1428,12 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "rfq_packages", cot: "submitted_by_session_id", quyen: "UPDATE" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "INSERT" },
       { grantee: "app_api", bang: "rfq_packages", cot: "title", quyen: "UPDATE" },
+      // [S1.198 / khoản 257] `rfq_tra_ve` — `lan_nop` do trigger đặt từ gói, `returned_at` do CSDL đặt, `id` do mặc định.
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "reason", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "returned_by_session_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "rfq_tra_ve", cot: "rfq_id", quyen: "INSERT" },
       // [S1.2] `rfq_items` — `org_id` va `rfq_id` chi INSERT: khong duong nao chuyen mot hang
       // muc sang RFQ khac hay sang to chuc khac.
       // [S1.2] `rfq_packages` — `status` co UPDATE va no BUOC phai co de ung dung lam viec.
@@ -1999,6 +2009,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "rfq_budgets", "rfq_evaluation_lines",
       "rfq_evaluations",
       "rfq_invitation_tokens", "rfq_unsealed_bids",
+      // [S1.198 / khoản 257] Nhà cung cấp không có việc gì với việc ai của bên mua trả gói về.
+      "rfq_tra_ve",
       "sessions", "supplier_contacts",
       // [S1.196 / S3.3a / K8a] Xác minh là việc nội bộ bên mua — nhà cung cấp không đọc được ai đã xác nhận hồ sơ mình.
       "supplier_verifications",

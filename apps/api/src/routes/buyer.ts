@@ -1024,8 +1024,16 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_APPROVE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
+    // [S1.198 / khoản 256] Thân `{lanNop}` TUỲ CHỌN ở route: lần nộp người duyệt đã xem (`GET /rfqs/:rfqId` trả `rfq.lanNop`).
+    // Route không hỏi tổ chức đã bật chưa — trigger `rfq_approvals_so_lan_nop` đòi nó ở tổ chức đã bật (422 có tên khi vắng hay
+    // lệch), còn tổ chức chưa bật giữ hợp đồng MVP1: không thân vẫn duyệt được.
     handler: async (ctx) => {
-      await approveRfq(ctx.client, ctx.orgId, { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId }, ctx.auditPool);
+      await approveRfq(
+        ctx.client,
+        ctx.orgId,
+        { rfqId: rfqIdParam(ctx.req), sessionId: ctx.actor.sessionId, lanNopDaXem: soNguyenTuyChon(ctx.req.body, "lanNop") },
+        ctx.auditPool,
+      );
       return { status: 200, body: { rfq: await getRfq(ctx.client, ctx.orgId, rfqIdParam(ctx.req)) } };
     },
   },
