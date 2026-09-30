@@ -4384,7 +4384,7 @@ rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
    riêng canh đúng đường dẫn ấy:
    - `/rfqs/:rfqId/comparison` — bảng so sánh GIÁ sau mở thầu, thứ toàn bộ sản phẩm sinh ra để bảo vệ. Ai cần đọc giá thì
      đọc bằng giao diện người mua, dưới phiên có MFA của một con người;
-   - `/rfqs/:rfqId/bid-count` — số hồ sơ thầu đã nhận. Bản đầu phơi nó; lượt soi 69 M-6 hỏi vì sao hai hàm CÙNG rổ
+   - `/rfqs/:rfqId/bid-count` — số ~~hồ sơ thầu đã nhận~~ **[S1.9101 / khoản 299]** báo giá sẽ dự thầu (không kể lời mời đã thu hồi). Bản đầu phơi nó; lượt soi 69 M-6 hỏi vì sao hai hàm CÙNG rổ
      `HAM_DOC_CO_QUYEN` — rổ tồn tại vì cả hai có mục đích duy nhất là kiểm soát tiết lộ — lại đi hai hướng, và chủ dự án
      rút nó. **Giá phải trả được nói ra:** đó là công cụ DUY NHẤT có cổng quyền thật và có ghi sổ kiểm toán, nên sau khi
      rút, không công cụ nào để lại dấu vết — khoản nợ 142;
@@ -8756,7 +8756,7 @@ sau mỗi lần nộp trên máy dùng chung.
    riêng (`POST /invitations/:invitationId/unlock`).
    **[S1.188 / ADR-113]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
    lần gửi lại đi được; lời mời đã `SENT` không đổi.
-5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống **[S1.240 / khoản 276]** — *Thu hồi* không hiện sau lần mở thầu (sáu trạng thái của `RFQ_STATUSES_AFTER_UNSEAL`) ở cả hai luồng; *Gửi lại link* ở tổ chức chưa bật vẫn hiện ở mọi trạng thái — khoản 293; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
+5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống **[S1.240 / khoản 276]** — *Thu hồi* không hiện sau lần mở thầu (sáu trạng thái của `RFQ_STATUSES_AFTER_UNSEAL`) ở cả hai luồng; *Gửi lại link* ở tổ chức chưa bật vẫn hiện ở mọi trạng thái — ~~khoản 293~~ **[S1.9101 / khoản 293]** có chủ đích (chủ dự án chốt 2026-09-30, «máy chủ tự từ chối»): 409 của gói không nhận báo giá là câu người đọc nêu hai điều kiện, trang in nguyên văn; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
    nộp theo lời mời ấy vẫn nằm trong gói thầu~~ **[S1.217 / ADR-128]** thu hồi nay LOẠI báo giá ấy khỏi cuộc thi và bị chặn sau lần mở thầu — câu báo của trang ~~sửa ở khoản 276~~ **[S1.240 / khoản 276]** nói thẳng *"báo giá đã nộp theo lời mời này (nếu có) không dự thầu nữa — nó không được mở thầu, so sánh hay xếp hạng"*, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
    thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
 6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),

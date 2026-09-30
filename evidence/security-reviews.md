@@ -20715,18 +20715,18 @@ Mục 0 của kế hoạch, chốt nguyên văn đề xuất (câu 1–16): ph�
 ## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
 - Phạm vi 31 khoản (29 + 262 · 263): đóng 26 — 24 khoản cũ (161, 169, 170, 171, 172, 181, 264, 265, 266, 267, 268, 270, 271, 273, 274, 276, 277, 279, 280, 281, 282, 283, 284, 285) và hai khoản mới của bước 0 (287, 288); 261 đóng ở #219; 272, 275 ĐO, giữ MỞ phần còn lại (câu 8, 9); 262, 263 sang phiên khác (câu 19). Lượt soi đối kháng của các lô mở 20 khoản (rổ B 17, rổ C 3 — câu 20).
 - Câu hỏi các lô nêu mà chưa có câu trả lời — chi tiết ở thân hàng và biên bản lô; tệp bàn giao đã xoá, nhánh lô chỉ ở máy tích hợp, nên danh sách này là bản còn lại:
-  1. **272** (A6, §S1.243) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
-  2. **298** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
-  3. **299** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
-  4. **291, 292** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
-  5. **293** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
-  6. Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
-  7. **304** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
-  8. **285 / 305** (B2) — cách tách: đóng 285, mở 305 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 305 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
-  9. **306** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
-  10. **307** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 300 (trần lượt claim).
-  11. Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
-  12. **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
+  1. **[S1.9101 — chốt: ⒜, sau pilot]** **272** (A6, §S1.243) — hướng cho ADR: ⒜ hạ trần cột `envelope` về cỡ đường ghi duy nhất (64 KiB; một migration + hardening), để trần lược đồ và trần sản phẩm là một; ⒝ đọc phong bì theo con trỏ/từng lô trong cùng giao dịch; ⒞ chỉ khi sản phẩm cần phong bì lớn — tách lượt mở thầu, `handlerTimeoutMs` theo N, hay trần số lời mời mỗi RFQ.
+  2. **[S1.9101 — ĐÓNG]** **298** (A6) — sửa ngay câu §3 của ADR-129 (thiếu vế thu hồi): một dòng SQL ở `docs/DECISIONS.md`, bản chép ở `apps/unseal-worker/src/unseal-worker.int.test.ts`, lật ca ghim ở `kich-ban-41-http.int.test.ts`.
+  3. **[S1.9101 — ĐÓNG]** **299** (A6) — nhãn "Đã nhận N báo giá" ở `apps/web/trang/mo-thau.js`: lô nào làm.
+  4. **[S1.9101 — ĐÓNG]** **291, 292** (A3) — gộp `/du-lieu` vào module đăng nhập: #217 đã vào `master`, không còn chặn; cỡ S.
+  5. **[S1.9101 — ĐÓNG: giữ nút, câu 409 người đọc]** **293** (A3) — ẩn *Gửi lại link* theo `GOI_NHAN_BAO_GIA` ở cả hai luồng (bỏ hợp đồng «máy chủ tự từ chối» cho nút ấy), hay giữ nút và đổi câu 409 thành câu người đọc.
+  6. **[S1.9101 — chốt: nên làm, sau pilot; khoản 9401]** Luật eslint cấm sink HTML (S1.107) có mở ra `apps/web/src/*.ts` không (A3; hôm nay một ca quét regex ở `apps/web/src/phuc-vu.test.ts` đỡ).
+  7. **[S1.9101 — chốt: vào sổ, sau pilot]** **304** (B1) — hai lần từ chối trạng thái của bề mặt mở thầu (`requestUnseal` trên gói chưa `CLOSED`, `approveUnseal` trên yêu cầu không còn `PENDING`) vào sổ hay không (luật ADR-060).
+  8. **[S1.9101 — xác nhận]** **285 / 305** (B2) — cách tách: đóng 285, mở 305 cho cảnh báo break-glass giả thay vì giữ 285 mở với lời hẹp lại; rổ của 305 đã chốt (câu 20), cách tách chưa được xác nhận riêng.
+  9. **[S1.9101 — chốt: dot-atom, sau pilot]** **306** (B3) — hình dạng email: dot-atom RFC 5321, hay chỉ loại `(`, `)`, `"`, `\` (ADR-132 §3 để ngỏ); kèm hai câu nhỏ — kiểm dấu chấm cuối ở `tools/khoi-tao-to-chuc/src/ban-khai.ts` trước CSDL, một ca HTTP thường trực cho 422 có tên.
+  10. **[S1.9101 — chốt: sau 300, sau pilot]** **307** (B5) — mở rộng vị từ của hàm hẹp sang `RUNNING` hết hạn thuê; phải đi cùng 300 (trần lượt claim).
+  11. **[S1.9101 — làm: phía phát hành và công bố bỏ `:`]** Kid có `:` (A1) — kid hợp lệ theo `assertReceiptKid` mang `:` làm lệnh neo tài liệu khoá NÉM (kid là tên đối tượng S3): mở một khoản (thu hẹp `assertReceiptKid`, hay mã hoá kid) hay không.
+  12. **[S1.9101 — xác nhận]** **170** (A2) — tiền đề đo của đề bài đổi từ S1.222; lô đóng phần còn lại bằng cổng đối chiếu dây nối mảng lọc — xin xác nhận cách đọc ấy.
 - `tests/architecture/khoa-depcruise.test.ts` (đo thời gian) đỏ dưới tải ~10 ở lượt đo của lô B3, xanh khi chạy riêng 16/16 — không phải ca đỏ của mã; CI chạy nó không tải chung.
 
 ## 8. Số đo
@@ -20905,7 +20905,7 @@ ncc.createSupplier)` 0 vi phạm (`expected '' to contain '`bu` dùng `ncc`…'`
 - **280** — ngoài tầm: `packages/` (gói chung là chỗ nâng tới), tệp ngoài `src/` (`apps/web/trang/*.js`), `.mjs`, mã không khai tên
   (`tools/gieo-demo` viết bộ mô tả lỗi thẳng trong thân — bộ mô tả thứ tư của `tools/`). Tên trùng trong MỘT đơn vị không đòi hàng.
   Họ `RIENG` không có phép đo: một bản cùng việc đã khác chữ (`bat` của public-keys) có thể trôi tiếp mà không đỏ — chỉ tập tệp của họ
-  được giữ. `TEP_TEST` chỉ đòi tệp test còn và nhắc tên, không đọc phép đo trong đó. Quan sát khi kiểm kê (ghi ở hàng `KID` RIENG):
+  được giữ. `TEP_TEST` chỉ đòi tệp test còn và nhắc tên, không đọc phép đo trong đó. Quan sát khi kiểm kê (ghi ở hàng `KID` ~~RIENG~~ **[S1.9101]** GIU VAN_BAN — ba bản trùng chữ sau khi kid biên nhận bỏ `:`):
   kid biên nhận cho `:` (`assertReceiptKid`, `public-keys`), còn job neo bỏ `:` vì kid là tên đối tượng S3 — một kid hợp lệ mang `:` thì
   lệnh neo tài liệu khoá NÉM (không im); câu hỏi ở bàn giao mục 9. `UUID` của hai adapter TOTP nhận chữ hoa, của job neo chỉ chữ thường
   (khoá S3) — hai họ, lý do ghi tại hàng.

@@ -45,7 +45,7 @@ vì test chỉ phát hiện, còn cưỡng chế mới ngăn chặn.
 | **A3** | Truy vấn SQL trực tiếp vào bảng bid, kể cả bằng role quản trị, chỉ cho ra ciphertext | Lược đồ: cột chỉ chứa ciphertext | T3 |
 | **A4** | Không trường phái sinh nào rò rỉ giá trước mở thầu: không min/max/trung bình, không "số NCC dưới ngân sách", không sắp xếp theo giá, không nhãn "giá tốt nhất", không biểu đồ | Bộ quét rò rỉ tự động | **T2** |
 | **A5** | Nhà cung cấp không biết được danh tính, sự tồn tại, số lượng hay giá của nhà cung cấp khác — kể cả gián tiếp qua ID tuần tự, số thứ tự, hay thời gian phản hồi | Ứng dụng + ID không tuần tự | T2, T5, T6 |
-| **A6** | Số báo giá đã nhận cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 |
+| **A6** | Số báo giá ~~đã nhận~~ **[S1.9101 / khoản 299]** sẽ dự thầu (không kể lời mời đã thu hồi — khoản 271, ADR-128) cũng là thông tin nhạy cảm; ẩn khỏi Buyer trước CLOSED khi chính sách bật chế độ nghiêm | Ứng dụng | T2, T5 |
 
 > **A4 là bất biến rủi ro nhất.** Nó không bị vi phạm bởi tấn công mà bởi thiện chí — một
 > lập trình viên thêm nhãn "đã có 3/5 báo giá, thấp nhất dưới ngân sách" vì nghĩ đang giúp
