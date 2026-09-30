@@ -9760,7 +9760,8 @@ rỉ đi qua ba route ghi); lượt đi thử T4 trên Chromium. Đột biến v
 hơn bị bỏ qua vì ghi từ `p_moc` trở đi, `HOI_TO` là hàng nền ghi sau mốc của chính gói chứa quan sát; route đọc
 `GET /items/:itemId/price-history` (`bid.view`, `agent: false`, mỗi lần đọc một hàng sổ) ở S4.4b; đo hiệu năng bằng một công cụ trong
 kho, vượt ngưỡng thì dừng và báo; `gieo:demo` ba gói đã mở qua đường thật ở S4.4b. Trong lúc đo trước, chủ dự án chọn *"tách lõi
-theo mã"* cho quy đổi (mục ②) · **[S1.9101]** · **Liên quan:** ADR-095 (hàm as-of, không bảng thứ ba), ADR-054, ADR-050 ⑴ (một
+theo mã"* cho quy đổi (mục ②); sau phép đo hiệu năng (p95 1.125 ms ở bản đầu), chọn *"tối ưu tiếp, không thêm bảng"*, rồi — khi
+bản tối ưu vẫn quanh ngưỡng ở mật độ 1.500 quan sát mỗi lần đọc — chọn *"chấp nhận, nói ra giới hạn"* (mục ⑧) · **[S1.9101]** · **Liên quan:** ADR-095 (hàm as-of, không bảng thứ ba), ADR-054, ADR-050 ⑴ (một
 luật làm tròn), ADR-103 (tiền tệ đọc qua `bid_currency`), ADR-116 (quy đổi riêng), ADR-121 (ánh xạ hiệu lực theo băm), ADR-017
 (nhãn suy ra, không lưu) · **Spec:** S4 §4.5, §3.3, §2.5 ⑿ ⒀ ⒁ ㉓, §5.1 L5 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
 
@@ -9783,7 +9784,10 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    NULL là đọc được và tổng khớp; `KHONG_DOC_DUOC` là sáu ca của `bid_so_tien` trên `amount` (dòng ấy) hay `totalAmount` (cả báo
    giá), phần tử không phải đối tượng, `lineNo` không phải số nguyên dương kiểu SỐ JSON, hai phần tử cùng `lineNo`; `LECH_TONG` là
    dòng đọc được mà Σ `amount` KHÁC `totalAmount` CHÍNH XÁC, hay có phần tử anh em không đọc được (tổng khi ấy không kiểm được).
-   `unitPrice` không được đọc. Không luật làm tròn nào thêm vào SQL.
+   `unitPrice` không được đọc. Không luật làm tròn nào thêm vào SQL. **Không có `SET search_path`** — tiền lệ `app_current_org_id`:
+   mệnh đề SET chặn nội tuyến, và gọi bộ đọc như một hàm riêng cho mỗi báo giá tốn ~0,25 ms mỗi lần (quá nửa thời gian đọc lịch
+   sử, §S1.9101 §6). Thân chạy dưới `search_path` của người gọi nên ghim `pg_catalog.` đủ bốn trục QT3; mục ghim đòi `proconfig IS
+   NULL`.
 2. **Lõi quy đổi theo mã `quy_doi_da_giai(org, hàng chuẩn, mã từ, khoá từ, mã sang, khoá sang, mốc)`** — thân của `quy_doi_don_vi`
    tách ra, nhận hai đầu đã giải; `quy_doi_don_vi` chỉ giải hai chuỗi qua `don_vi_tai` rồi gọi lõi, hành vi y nguyên (test S4.1/S4.2a
    canh; đột biến *"bỏ vế ghi trước mốc của cạnh riêng"* của S4.2a dời sang lõi). `quan_sat_gia` gọi lõi với đích là MÃ gốc, không
@@ -9793,8 +9797,9 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    loại gói TỪ LÚC huỷ, không hồi tố: lần đọc tại một mốc trước lúc huỷ vẫn thấy gói — cùng nghĩa *"tại mốc"* với mọi vế khác, và là
    điều một kết quả benchmark đã lưu ở S4.5 cần để tái lập.
 4. **`quan_sat_gia(p_moc, p_hang_chuan DEFAULT NULL)`, `SECURITY INVOKER STABLE`.** Mỗi hàng một (gói, nhà cung cấp, dòng của gói)
-   cho gói mà `gia_da_lo` tại mốc. Báo giá là phiên bản mới nhất ĐÃ MỞ NIÊM PHONG trước mốc — đúng luật `DISTINCT ON (v.bid_id) …
-   ORDER BY v.version DESC` của bảng so sánh, lượt chấm và worker. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi trước mốc:
+   cho gói mà `gia_da_lo` tại mốc. Báo giá là vị thế cuối của NHÀ CUNG CẤP — phiên bản nộp muộn nhất trong những phiên bản đã mở
+   niêm phong trước mốc, xét trên mọi lời mời của nhà cung cấp ấy trong gói (spec §5.1 L5). Lượt soi đo được luật *"mới nhất theo
+   báo giá"* của bảng so sánh, lượt chấm và worker cho HAI quan sát `HOP_LE` khi nhà cung cấp bị thu hồi lời mời rồi được mời lại. Hàng nền là hàng mới nhất theo `seq` trong những hàng ghi trước mốc:
    ánh xạ hiệu lực (băm bằng băm hiện tại, ADR-121 ①), bí danh đơn vị (qua `don_vi_tai`), quy đổi riêng (qua lõi ②). Ngày quan sát
    là mốc mở giá của gói. Tiền tệ đọc qua `bid_currency` và so với tiền tệ của chính sách của CHÍNH gói — ngân sách ghim, không có thì
    phiên bản hiệu lực lúc gói ra đời (hai nhánh của `rfq_che_do_nghiem`). Sáu trạng thái theo thứ tự ưu tiên `KHONG_DOC_DUOC` ·
@@ -9812,8 +9817,17 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
    chức. Test đo hai nhánh trùng khít nhau ở hai mốc, trên mọi hàng chuẩn của tệp.
 7. **Ranh giới là danh sách có tên, không phải hàm.** `tests/architecture/ban-ro-liet-ke.test.ts` liệt kê năm tệp TypeScript sản
    xuất và ba hàm SQL chạm `rfq_unsealed_bids`, mỗi dòng một lý do; tệp hay hàm thứ N làm cổng đỏ. `anh-xa.ts` chỉ được hỏi SỰ TỒN TẠI.
-   Tầng CSDL đo cùng tập bằng `pg_proc`. Bảy chỉ mục cho các đường tra (lời mời và yêu cầu mở thầu theo gói — chỉ mục có sẵn là RIÊNG
+   Tầng CSDL đo cùng tập bằng `pg_get_functiondef` ở MỌI schema (thân `BEGIN ATOMIC` có `prosrc` rỗng — lượt soi), cộng view và
+   materialized view; lớp tĩnh cấm thân `BEGIN ATOMIC` ở migration và liệt kê cả tệp `.sql`/`.js` ngoài migration. Không lớp nào
+   thấy SQL động ghép tên bảng từ mảnh, hay tên bảng nội suy trong mã TypeScript. Bảy chỉ mục cho các đường tra (lời mời và yêu cầu mở thầu theo gói — chỉ mục có sẵn là RIÊNG
    PHẦN —, bản rõ theo yêu cầu, ánh xạ/quy đổi/phiên bản theo hàng chuẩn, bí danh đơn vị theo chuỗi).
+8. **Hiệu năng — chấp nhận, nói ra giới hạn (chủ dự án chốt).** Chi phí ~0,3 ms mỗi quan sát, tuyến tính theo số quan sát của
+   MỘT lần đọc; đo trên 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, hai phiên: p95 127–156 ms ở 300 quan sát, 414–469 ms
+   ở 1.200, 488–637 ms ở 1.500 (§S1.9101 §6). Ngưỡng GIẢ ĐỊNH 500 ms của spec §2.5 ㉓ vì vậy đứng chắc tới khoảng 1.200 quan sát mỗi
+   lần đọc — khoảng 400 gói cùng chứa một hàng chuẩn; ở 1.500, p95 nằm quanh ngưỡng. 200 hàng chuẩn cho 100.000 dòng là giả định bi quan; S4.5 đo lại trên dữ liệu
+   pilot thật. Hình dạng vì phép đo: mỗi bước theo khoá của nó (ánh xạ và nhãn theo dòng, đơn vị theo chuỗi, quy đổi theo (hàng chuẩn,
+   chuỗi), báo giá theo dòng qua chỉ mục), bộ đọc dòng nội tuyến, và `enable_hashagg = off` là tham số của RIÊNG `quan_sat_gia` — kế
+   hoạch chung đoán mỗi phong bì 100 phần tử và dựng lại một bảng băm cho mỗi báo giá.
 
 ### Phương án đã cân nhắc
 
@@ -9823,9 +9837,14 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
 - **Biến thể *"tại mốc"* của các hàm nền** (điểm ③ của đề xuất ban đầu). Không cần: đo trước cho thấy `don_vi_tai`, `quy_doi_don_vi` đã
   nhận mốc. Phiên bản hàng chuẩn và ánh xạ đọc tại mốc ngay trong thân.
 - **Vị thế cuối = phiên bản mới nhất ĐÃ NỘP trong các vòng đã mở** (không phải mới nhất đã MỞ). Chặt hơn ở ca phong bì BAFO giải mã
-  hỏng. Loại ở vòng này: ba bộ đọc đang chạy dùng luật *"mới nhất đã mở"*, và một luật thứ hai làm lịch sử giá và bảng xếp hạng nói hai
-  giá khác nhau cho cùng một nhà cung cấp. Nói ra ở hệ quả.
+  hỏng. Loại ở vòng này: ba bộ đọc đang chạy dùng luật *"mới nhất đã mở"*. Nói ra ở hệ quả.
 - **Chỉ `quan_sat_gia(p_moc)`, lọc ở bên gọi.** Loại: đo ở biên bản — mỗi lần đọc phân tích mọi phong bì.
+- **Bộ đọc theo lô `bid_dong_tho_lo(jsonb[])`** (phương án chủ dự án chọn trước khi đo): đo p95 706 ms (một lần gọi mỗi dòng) và
+  654 ms (một lần gọi cho cả lượt) ở 1.500 quan sát — CHẬM hơn bản nội tuyến: gom 30.000 phần tử theo (phong bì, dòng) rồi nối ngược
+  về từng báo giá đắt hơn chi phí gọi. Bỏ.
+- **Viết lại thân `bid_so_tien` (`022`) bằng `pg_input_is_valid`** thay khối `EXCEPTION`: đo 86 → 69 ms trên 30.000 lần gọi, cùng
+  sáu ca. Không chọn: chạm một hàm đã ghim dùng chung với bảng so sánh và lượt chấm, cho ~17 ms.
+- **Bảng lưu** (lối thoát của ADR-095): không chọn — chủ dự án chọn nói ra giới hạn (mục ⑧).
 
 ### Hệ quả, nói thẳng
 
@@ -9835,8 +9854,12 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
   bản hiệu lực lúc gói ra đời), viết hai lần. Gộp thành một hàm là sửa một hàm đã ghim ngoài phạm vi S4.4a.
 - **Hai bản cài của *"ánh xạ hiệu lực"***: luật *"mới nhất theo `seq` có băm bằng băm hiện tại"* sống ở tầng gói S4.3a và ở thân
   `quan_sat_gia`. Test ca băm của cả hai canh; đột biến bỏ vế băm ở thân làm ca đỏ.
+- **Đọc HẾT tổ chức** (`p_hang_chuan` NULL) phân tích lại một phong bì cho mỗi dòng của gói: 84–88 s ở 300.000 quan sát. Không route
+  nào đi đường ấy; một route như thế chạm `statement_timeout`.
+- **Bảng so sánh và lượt chấm vẫn đọc theo báo giá**: nhà cung cấp được mời lại có hai hàng ở đó, một hàng ở lịch sử giá — khoản 250
+  (STATE, rổ B) đã ghi phần ấy; lịch sử giá không sửa nó. Báo giá của lời mời đã thu hồi mà không mời lại vẫn là vị thế cuối, như ở
+  bảng so sánh — câu hỏi *"thu hồi có loại báo giá đã nộp không"* của khoản 250 quyết cho cả ba bộ đọc.
 - **Đơn giá 0 là `HOP_LE`**: `bid_so_tien` nhận `0`, và một dòng tặng kèm là dữ liệu thật. Benchmark (S4.5) quyết có đọc nó không.
-- **Mỗi lần đọc giữ mọi hàm ở kế hoạch chung**: thân được lập kế hoạch lại ở mỗi câu gọi. Số đo ở biên bản.
 - **Vị từ trong thân không phải ranh giới** (ADR-095): mã chạy dưới `app_api` vẫn `SELECT` được `rfq_unsealed_bids`. Ranh giới là mục ⑦.
 
 ### Đo
