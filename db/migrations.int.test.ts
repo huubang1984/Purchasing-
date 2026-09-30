@@ -721,7 +721,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
   // quyền mất hẳn, cạnh ADMIN do superuser cấp còn nguyên. Hai ĐỐI CHỨNG thiếu một vế thì vẫn bị chặn: không ADMIN trên R (không tự
   // cấp thừa kế được, tự REVOKE là no-op); ADMIN KÈM INHERIT do superuser cấp (sau khi cắt đường cấp thẳng, trien_khai còn quyền QUA R
   // mà cạnh do superuser cấp thì không tự gỡ được — S1.57 ⒞). Cùng hình dạng trên EXECUTE của app_current_org_id() (khoản 101).
-  it("[INV-F1] [khoản nợ 113] vai R giữ GRANT OPTION cấp SELECT, UPDATE thẳng cho trien_khai; trien_khai có ADMIN OPTION (không INHERIT, không SET) trên R ⇒ tự cắt được: không tệp chờ thì NÉM ở mục 94 và nói 'cố ý KHÔNG chặn nó', migration vá lỗi dưới chính trien_khai (tự cấp thừa kế R, REVOKE khỏi chính mình, gỡ thừa kế) tới đích, lượt sau đi qua; ĐỐI CHỨNG không ADMIN ⇒ chặn trước vòng; ADMIN kèm INHERIT do superuser cấp ⇒ chặn trước vòng; cùng hình dạng trên EXECUTE của app_current_org_id()", async () => {
+  it("[INV-F1] [khoản nợ 113] vai R giữ GRANT OPTION cấp SELECT, UPDATE thẳng cho trien_khai; trien_khai có ADMIN OPTION (không INHERIT, không SET) trên R ⇒ tự cắt được: không tệp chờ thì NÉM ở mục 94 và nói 'cố ý KHÔNG chặn nó', migration vá lỗi dưới chính trien_khai (tự cấp thừa kế R, REVOKE khỏi chính mình, gỡ thừa kế) tới đích, lượt sau đi qua; ĐỐI CHỨNG không ADMIN ⇒ chặn trước vòng; ADMIN kèm INHERIT do superuser cấp ⇒ chặn trước vòng; cùng hình dạng trên EXECUTE của app_current_org_id(); người cấp là CHÍNH CHỦ BẢNG (OWNER TO viết lại grantor) cũng tự cắt được và trạng thái cuối sạch", async () => {
     const db = await startPostgres();
     const tmp = await mkdtemp(join(tmpdir(), "tp-k113-"));
     let poolTrienKhai: pg.Pool | undefined;
@@ -745,14 +745,16 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
             "SELECT pg_catalog.has_function_privilege('trien_khai', 'public.app_current_org_id()', 'EXECUTE') AS co",
           )
         ).rows[0]!.co;
-      /** Mọi cạnh membership trien_khai → R, theo (ADMIN, INHERIT, người cấp là chính trien_khai?). */
-      const canhR = async (): Promise<readonly { admin: boolean; inherit: boolean; tu_cap: boolean }[]> =>
+      /** Mọi cạnh membership trien_khai → <vai>, theo (ADMIN, INHERIT, người cấp là chính trien_khai?). */
+      const canhCua = async (vai: string): Promise<readonly { admin: boolean; inherit: boolean; tu_cap: boolean }[]> =>
         (
           await db.pool.query<{ admin: boolean; inherit: boolean; tu_cap: boolean }>(
             "SELECT am.admin_option AS admin, am.inherit_option AS inherit, am.grantor = 'trien_khai'::regrole AS tu_cap" +
-              "  FROM pg_auth_members am WHERE am.roleid = 'zz_r113'::regrole AND am.member = 'trien_khai'::regrole ORDER BY 1, 2, 3",
+              "  FROM pg_auth_members am WHERE am.roleid = $1::regrole AND am.member = 'trien_khai'::regrole ORDER BY 1, 2, 3",
+            [vai],
           )
         ).rows;
+      const canhR = (): Promise<readonly { admin: boolean; inherit: boolean; tu_cap: boolean }[]> => canhCua("zz_r113");
       /** Dạng dòng của chủ thể thứ hai trong thông điệp SAU vòng — cùng khuôn với test khoản 100 ở dưới. */
       const dongSauVong = (lenh: string, duong: string): string =>
         `public.suppliers/trien_khai (vai chạy migration)/${lenh}: RLS áp cho vai chạy migration trên bảng này và vai ấy CÒN QUYỀN lệnh này (${duong})`;
@@ -852,6 +854,44 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       expect(await canhR()).toEqual([{ admin: true, inherit: false, tu_cap: false }]);
       // Không EXECUTE ⇒ policy chuẩn lại tính là phủ (câu chạm bảng ném 42501, ồn — khoản 101 ⒝): lượt sau đi qua.
       await expect(migrate(p, tmp), "⒟ sau khi tự cắt EXECUTE, deploy xanh").resolves.toEqual([]);
+
+      // ⒠ [S1.9172 / lượt gộp — rls-coverage ⒦ (lượt soi 51 NẶNG-1)] NGƯỜI CẤP LÀ CHÍNH CHỦ BẢNG: bảng do superuser tạo và cấp SELECT, UPDATE cho
+      // trien_khai rồi `OWNER TO zz_chu113k` (PostgreSQL viết lại grantor của mục ACL thành chủ mới), trien_khai có ADMIN (không INHERIT,
+      // không SET) trên chủ mới; EXECUTE trên hàm ngữ cảnh do superuser cấp thẳng (không tự cắt được) để dòng thuộc nhánh `vi_tu_loc_het`.
+      // ⒦ của rls-coverage từng ghim dòng này BỊ CHẶN với lý do "lối vá là thêm policy hay tự lấy quyền chủ — chỉ dời dòng sang chủ thể giống
+      // chủ (khoản 102)". Đo: chủ bảng là người cấp giữ MỌI quyền kèm GRANT OPTION, nên cùng ba bước cắt được đường cấp thẳng; trạng thái cuối
+      // SẠCH — không còn thừa kế chủ (chỉ cạnh ADMIN do superuser cấp), không dòng khoản 102, lượt sau đi qua `[]`. Vế `tu_sua_nguoi_cap` đúng
+      // cả khi người cấp là chủ bảng; ⒦ đã lật theo phép đo này.
+      await db.pool.query(
+        "GRANT EXECUTE ON FUNCTION public.app_current_org_id() TO trien_khai; CREATE ROLE zz_chu113k NOLOGIN; " +
+          "ALTER TABLE public.suppliers OWNER TO zz_chu113k; GRANT zz_chu113k TO trien_khai WITH ADMIN TRUE, INHERIT FALSE, SET FALSE",
+      );
+      expect(
+        (
+          await db.pool.query<{ nguoi_cap: string }>(
+            "SELECT DISTINCT a.grantor::regrole::text AS nguoi_cap FROM pg_class c, pg_catalog.aclexplode(c.relacl) a" +
+              " WHERE c.oid = 'public.suppliers'::regclass AND a.grantee = 'trien_khai'::regrole AND a.privilege_type IN ('SELECT', 'UPDATE')",
+          )
+        ).rows.map((r) => r.nguoi_cap),
+        "⒠ fixture: OWNER TO viết lại người cấp của mục ACL thành chủ mới",
+      ).toEqual(["zz_chu113k"]);
+      const loiE = await loiCua(migrate(p, tmp));
+      expect(loiE, "⒠ đối chứng — cấu hình này đỏ ở mục 94").not.toBeNull();
+      expect(loiE!.message, "⒠ không tệp chờ ⇒ không hỏi trước vòng").not.toContain(TU_CHOI_TRUOC_VONG);
+      expect(loiE!.message, `⒠ ${loiE!.message.slice(0, 400)}`).toContain(dongSauVong("SELECT", "cấp thẳng cho vai này"));
+      expect(loiE!.message, "⒠ người cấp là chủ bảng, ADMIN không INHERIT trên chủ: vẫn là đường tự cắt được").toContain("cố ý KHÔNG chặn nó");
+      const VA3 = "993_zz_va_loi113_chu_bang.sql";
+      await writeFile(
+        join(tmp, VA3),
+        "GRANT zz_chu113k TO trien_khai WITH INHERIT TRUE;\nREVOKE SELECT, UPDATE ON public.suppliers FROM trien_khai;\nREVOKE zz_chu113k FROM trien_khai;\n",
+        "utf8",
+      );
+      await expect(migrate(p, tmp), "⒠ migration vá lỗi dưới chính trien_khai — người cấp là chủ bảng — phải tới được đích").resolves.toEqual([VA3]);
+      expect(await conSelect(), "⒠ quyền cấp thẳng bởi chủ bảng đã mất").toBe(false);
+      expect(await canhCua("zz_chu113k"), "⒠ trạng thái cuối sạch: không còn thừa kế chủ, chỉ cạnh ADMIN do superuser cấp").toEqual([
+        { admin: true, inherit: false, tu_cap: false },
+      ]);
+      await expect(migrate(p, tmp), "⒠ lượt sau đi qua: không dòng khoản 102 (trien_khai không thừa kế chủ), không dòng nào khác").resolves.toEqual([]);
     } finally {
       await poolTrienKhai?.end();
       await rm(tmp, { recursive: true, force: true });
