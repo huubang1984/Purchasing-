@@ -8069,6 +8069,11 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
   IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+      RAISE EXCEPTION 'Chu ky bat S3 chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay goi vua nop (ADR-080)',
+        pg_catalog.current_setting('transaction_isolation')
+        USING ERRCODE = 'check_violation';
+    END IF;
     SELECT count(*)::integer INTO goi_cho
       FROM public.rfq_packages g
      WHERE g.org_id = NEW.org_id AND g.status = 'PENDING_APPROVAL';
@@ -8095,8 +8100,9 @@ $ham$;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
-                = $than$DECLARE nguoi_tao uuid; co_bac boolean; phien_ban integer; hieu_luc_tu timestamptz; goi_cho integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 2)); NEW.signed_at := pg_catalog.clock_timestamp(); SELECT p.created_by, p.tiers IS NOT NULL, p.version, p.effective_from INTO nguoi_tao, co_bac, phien_ban, hieu_luc_tu FROM public.org_procurement_policies p WHERE p.org_id = NEW.org_id AND p.id = NEW.policy_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay phien ban chinh sach de ky (ADR-082)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT co_bac THEN RAISE EXCEPTION 'Chi phien ban chinh sach CO BAC moi nhan chu ky thu hai (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF NEW.signed_by = nguoi_tao THEN RAISE EXCEPTION 'Nguoi tao phien ban chinh sach khong duoc tu ky (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.signed_by AND rp.permission_code = 'policy.manage') THEN RAISE EXCEPTION 'Nguoi ky phien ban chinh sach phai giu policy.manage (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies q WHERE q.org_id = NEW.org_id AND q.version > phien_ban) THEN RAISE EXCEPTION 'Chi ky duoc phien ban chinh sach MOI NHAT cua to chuc (ADR-080)' USING ERRCODE = 'check_violation'; END IF; IF hieu_luc_tu > NEW.signed_at THEN RAISE EXCEPTION 'Phien ban chinh sach chua toi ngay hieu luc — ky khi toi (ADR-080)' USING ERRCODE = 'check_violation'; END IF; IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN SELECT count(*)::integer INTO goi_cho FROM public.rfq_packages g WHERE g.org_id = NEW.org_id AND g.status = 'PENDING_APPROVAL'; IF goi_cho > 0 THEN RAISE EXCEPTION 'To chuc con % goi cho duyet: duyet roi mo, hoac huy, cac goi ay truoc khi bat S3 (ADR-080)', goi_cho USING ERRCODE = 'check_violation'; END IF; END IF; RETURN NEW; END$than$
+                = $than$DECLARE nguoi_tao uuid; co_bac boolean; phien_ban integer; hieu_luc_tu timestamptz; goi_cho integer; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 2)); NEW.signed_at := pg_catalog.clock_timestamp(); SELECT p.created_by, p.tiers IS NOT NULL, p.version, p.effective_from INTO nguoi_tao, co_bac, phien_ban, hieu_luc_tu FROM public.org_procurement_policies p WHERE p.org_id = NEW.org_id AND p.id = NEW.policy_id; IF NOT FOUND THEN RAISE EXCEPTION 'Khong tim thay phien ban chinh sach de ky (ADR-082)' USING ERRCODE = 'foreign_key_violation'; END IF; IF NOT co_bac THEN RAISE EXCEPTION 'Chi phien ban chinh sach CO BAC moi nhan chu ky thu hai (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF NEW.signed_by = nguoi_tao THEN RAISE EXCEPTION 'Nguoi tao phien ban chinh sach khong duoc tu ky (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.signed_by AND rp.permission_code = 'policy.manage') THEN RAISE EXCEPTION 'Nguoi ky phien ban chinh sach phai giu policy.manage (ADR-082)' USING ERRCODE = 'check_violation'; END IF; IF EXISTS (SELECT 1 FROM public.org_procurement_policies q WHERE q.org_id = NEW.org_id AND q.version > phien_ban) THEN RAISE EXCEPTION 'Chi ky duoc phien ban chinh sach MOI NHAT cua to chuc (ADR-080)' USING ERRCODE = 'check_violation'; END IF; IF hieu_luc_tu > NEW.signed_at THEN RAISE EXCEPTION 'Phien ban chinh sach chua toi ngay hieu luc — ky khi toi (ADR-080)' USING ERRCODE = 'check_violation'; END IF; IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN RAISE EXCEPTION 'Chu ky bat S3 chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay goi vua nop (ADR-080)', pg_catalog.current_setting('transaction_isolation') USING ERRCODE = 'check_violation'; END IF; SELECT count(*)::integer INTO goi_cho FROM public.rfq_packages g WHERE g.org_id = NEW.org_id AND g.status = 'PENDING_APPROVAL'; IF goi_cho > 0 THEN RAISE EXCEPTION 'To chuc con % goi cho duyet: duyet roi mo, hoac huy, cac goi ay truoc khi bat S3 (ADR-080)', goi_cho USING ERRCODE = 'check_violation'; END IF; END IF; RETURN NEW; END$than$
             AND p.prosecdef IS FALSE
+            AND p.provolatile = 'v'
             AND p.proconfig = ARRAY['search_path=pg_catalog, public']
             AND p.pronargs = 0
             AND p.prorettype = 'pg_catalog.trigger'::regtype
@@ -8112,6 +8118,7 @@ $ham$;
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
                           || ' | secdef=' || p.prosecdef::text
+                          || ' | volatile=' || p.provolatile::text
                           || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
                           || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
                                                                            || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)

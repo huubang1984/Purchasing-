@@ -1012,6 +1012,57 @@ describe("S1.9101 — khoản 261: chữ ký bật S3 bị từ chối khi tổ 
     expect(await loi(kyBan(t, await banCoBac(t, 3)))).toBeNull();
     expect(await soChuKyChinhSach(t.org)).toBe(2);
   });
+
+  it("[INV-K4b] lần ký bật dưới REPEATABLE READ hay SERIALIZABLE bị từ chối — ảnh chụp lấy TRƯỚC lần nộp không thấy gói chờ, và lượt soi dựng lại trọn lỗ gốc bằng đúng đường ấy", async () => {
+    const t = await taoToChuc();
+    const rfqId = await goiNhap(t);
+    const v2 = await banCoBac(t, 2);
+    const loiMuc = (muc: string): string =>
+      `Chu ky bat S3 chi nhan duoi READ COMMITTED (giao dich dang o ${muc}): anh chup cu khong thay goi vua nop (ADR-080)`;
+    const moMuc = async (muc: string): Promise<pg.PoolClient> => {
+      const c = await db.pool.connect();
+      await c.query(`BEGIN ISOLATION LEVEL ${muc}`);
+      await c.query("SET LOCAL ROLE app_api");
+      await c.query("SELECT pg_catalog.set_config('app.org_id', $1, true)", [t.org]);
+      return c;
+    };
+    // REPEATABLE READ: ảnh chụp lấy ở câu đầu; gói nộp và commit SAU đó, ở kết nối khác; rồi mới ký.
+    const rr = await moMuc("REPEATABLE READ");
+    try {
+      await rr.query("SELECT 1");
+      await nop(t, rfqId);
+      expect((await loi(rr.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiMuc("repeatable read"));
+    } finally {
+      await dong(rr, "ROLLBACK");
+    }
+    // SERIALIZABLE, câu ký là câu đầu — ảnh chụp lấy lúc câu bắt đầu, TRƯỚC khoá tư vấn.
+    const sr = await moMuc("SERIALIZABLE");
+    try {
+      expect((await loi(sr.query(CAU_KY_BAN, [t.org, v2, t.tc.u, t.tc.s])))?.message).toBe(loiMuc("serializable"));
+    } finally {
+      await dong(sr, "ROLLBACK");
+    }
+    expect([await daBat(t.org), await soChuKyChinhSach(t.org), await trangThaiGoi(rfqId)]).toEqual([false, 0, "PENDING_APPROVAL"]);
+    // Đối chứng READ COMMITTED: lời của câu đếm, rồi huỷ gói thì bật.
+    expect((await loi(kyBan(t, v2)))?.message).toBe(loiConGoiCho(1));
+    await huy(t, rfqId);
+    expect(await loi(kyBan(t, v2))).toBeNull();
+  });
+
+  it("hardening phán xét `provolatile` của hàm ký: đổi thành STABLE — câu đếm dùng ảnh chụp lấy TRƯỚC khoá — thì `migrate()` báo trạng thái SAI trước khi sửa và dựng lại VOLATILE", async () => {
+    const volatile = async (): Promise<string> =>
+      (await db.pool.query<{ v: string }>("SELECT provolatile AS v FROM pg_proc WHERE oid = 'public.chinh_sach_kiem_nguoi_ky()'::regprocedure")).rows[0]!.v;
+    await db.pool.query("ALTER FUNCTION public.chinh_sach_kiem_nguoi_ky() STABLE");
+    try {
+      expect(await volatile()).toBe("s");
+      const thongBao: string[] = [];
+      await migrate(db.pool, MIGRATIONS_DIR, { onThongBao: (tb) => thongBao.push(tb.message) });
+      expect(thongBao.some((m) => m.includes("chinh_sach_kiem_nguoi_ky") && m.includes("SAI TRƯỚC khi sửa") && m.includes("volatile=s"))).toBe(true);
+      expect(await volatile()).toBe("v");
+    } finally {
+      await db.pool.query("ALTER FUNCTION public.chinh_sach_kiem_nguoi_ky() VOLATILE");
+    }
+  }, 300000);
 });
 
 // =============================================================================================

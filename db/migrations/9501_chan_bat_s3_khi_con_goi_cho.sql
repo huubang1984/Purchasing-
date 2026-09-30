@@ -71,6 +71,11 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
   IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN
+    IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+      RAISE EXCEPTION 'Chu ky bat S3 chi nhan duoi READ COMMITTED (giao dich dang o %): anh chup cu khong thay goi vua nop (ADR-080)',
+        pg_catalog.current_setting('transaction_isolation')
+        USING ERRCODE = 'check_violation';
+    END IF;
     SELECT count(*)::integer INTO goi_cho
       FROM public.rfq_packages g
      WHERE g.org_id = NEW.org_id AND g.status = 'PENDING_APPROVAL';

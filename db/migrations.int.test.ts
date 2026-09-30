@@ -1728,7 +1728,7 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     { ham: "chinh_sach_da_bat_thi_phai_co_bac", migration: "069_bac_va_chu_ky_chinh_sach.sql", trigger: ["org_procurement_policies_da_bat_thi_phai_co_bac"] },
     // [S1.166 / S3.1b] `072_bac_cua_goi` định nghĩa lại thân hàm ký (`signed_at` đóng dấu SAU khoá tư vấn), nên con
     // trỏ dời theo quy tắc *migration CUỐI CÙNG*.
-    // [S1.9101 / khoản 261] Thân từ `9501`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
+    // [S1.9101 / khoản 261] Thân từ `9501_chan_bat_s3_khi_con_goi_cho`: chữ ký bật S3 bị từ chối khi tổ chức còn gói chờ duyệt.
     { ham: "chinh_sach_kiem_nguoi_ky", migration: "9501_chan_bat_s3_khi_con_goi_cho.sql", trigger: ["org_policy_signatures_kiem_nguoi_ky"] },
     // [S1.196 / S3.3a / K8a] Luật người, thứ tự, băm và hạn của xác minh nhà cung cấp. Một thân `RETURN NEW` cho người dựng hồ
     // sơ tự xác minh và để `thu_tu` NULL.

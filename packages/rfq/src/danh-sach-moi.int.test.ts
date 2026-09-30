@@ -840,7 +840,8 @@ describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 
 
   // [S1.9101 / khoản 261] Ca này từng đo chữ ký thời MVP1 của một gói đang PENDING_APPROVAL ĐI QUA lần bật (K4b không đếm nó,
   // người ấy ký lại được). Nay lần bật bị từ chối khi tổ chức còn gói chờ duyệt — `9501_chan_bat_s3_khi_con_goi_cho` —, nên tình
-  // huống ấy không còn tới được: ca dưới đo lời từ chối. Vế *K4b đếm người chứ không đếm hàng* đo lại ở ca kế, trong S3.
+  // huống ấy không còn tới được: ca dưới đo lời từ chối, ca kế đo lớp hai cho dữ liệu có từ trước
+  // `9501_chan_bat_s3_khi_con_goi_cho`. Vế *K4b đếm người chứ không đếm hàng* đo lại trong S3, ở khối ngay sau.
   it("[S1.9101 / khoản 261] gói đang PENDING_APPROVAL lúc bật — kể cả gói đã mang chữ ký thời MVP1, không băm — chặn lần bật: chữ ký thời MVP1 không còn đi qua lần bật", async () => {
     const t = await taoToChuc();
     for (const giaTri of [GOI_THUONG, GOI_CAP_KEP]) {
@@ -856,6 +857,30 @@ describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 
     expect(rows[0]?.b).toBe(false);
   });
 
+  it("[S1.9101 / khoản 261] lớp hai, cho dữ liệu có TRƯỚC `9501_chan_bat_s3_khi_con_goi_cho` — mô phỏng bằng thân `072` ở lần ký: chữ ký thời MVP1 của gói chờ duyệt không mang băm nên K4b không đếm nó; người ấy ký lại thì mở", async () => {
+    const t = await taoToChuc();
+    const thuong = await goiNhap(t);
+    await moi(t, thuong, await nhaCungCap(t));
+    await nop(t, thuong);
+    await duyet(t, thuong, t.pm2);
+    await voiHamDotBien("public.chinh_sach_kiem_nguoi_ky()", "  IF NOT public.to_chuc_da_bat_s3(NEW.org_id) THEN\n", "  IF false THEN\n", () =>
+      batS3(t),
+    );
+    // Sàn một chữ ký của `071` thấy chữ ký cũ và cho qua; K4b không thấy nó trên danh sách hiện tại.
+    expect((await loi(mo(t, thuong)))?.message).toBe("RFQ nay can 1 chu ky TREN DANH SACH MOI HIEN TAI, moi co 0 (K4b)");
+    await duyet(t, thuong, t.pm2);
+    expect(await loi(mo(t, thuong))).toBeNull();
+  });
+});
+
+// =============================================================================================
+// [S1.9101] K4b ĐẾM NGƯỜI, KHÔNG ĐẾM HÀNG — ĐO TRONG S3
+//
+// Ca giới hạn khoản 253 từng mang vế này trên chữ ký thời MVP1 — ở đó chữ ký cũ bị loại vì băm NULL, không vì đếm người. Ca dưới
+// dựng HAI hàng hiệu lực của CÙNG một người trên cùng nội dung, danh sách và ngân sách, và khẳng định nguyên văn lời của vế danh
+// sách — vế đầu thấy người ấy.
+// =============================================================================================
+describe("S1.9101 — K4b đếm người chứ không đếm hàng, đo trong S3", () => {
   it("[INV-K4b] một người mang HAI chữ ký hiệu lực khớp nội dung hiện tại — ký ở lần nộp 1, PM trả về, nộp lại y nguyên, ký lại ở lần nộp 2 —: khối đếm `count(*)` của `071` thấy hai và cho qua; K4b đếm NGƯỜI và chặn; người thứ hai ký thì mở", async () => {
     const t = await toChucDaBat();
     const kep = await goiNhap(t, GOI_CAP_KEP);
@@ -868,7 +893,7 @@ describe("S3.2a — giới hạn, đo: gói đang bay lúc tổ chức bật S3 
     await nop(t, kep);
     await duyet(t, kep, t.pm2);
     expect(await bamDaKy(kep), "cùng một người, hai hàng, cùng băm danh sách").toHaveLength(2);
-    expect((await loi(mo(t, kep)))?.message).toMatch(/can 2 chu ky .*moi co 1 \(K4b\)$/u);
+    expect((await loi(mo(t, kep)))?.message).toBe("RFQ nay can 2 chu ky TREN DANH SACH MOI HIEN TAI, moi co 1 (K4b)");
     await duyet(t, kep, t.pm3);
     expect(await loi(mo(t, kep))).toBeNull();
   });
