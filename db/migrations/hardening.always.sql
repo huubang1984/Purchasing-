@@ -3440,6 +3440,8 @@ $ham$;
          ('public', 'rfq_evaluations', '057_luot_danh_gia'),
          ('public', 'rfq_invitation_tokens', '010_invitations'),
          ('public', 'rfq_invitations', '010_invitations'),
+         ('public', 'rfq_item_goi_y', '9501_anh_xa_hang_muc'),
+         ('public', 'rfq_item_mappings', '9501_anh_xa_hang_muc'),
          ('public', 'rfq_items', '009_rfq'),
          ('public', 'rfq_key_material', '017_rfq_key_material'),
          ('public', 'rfq_packages', '009_rfq'),
@@ -4645,6 +4647,28 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_kiem_danh_tinh BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_kiem_danh_tinh;
            END IF;
+           IF to_regclass('public.rfq_item_goi_y') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                                 AND t.tgname = 'rfq_item_goi_y_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_goi_y_kiem_danh_tinh ON public.rfq_item_goi_y;
+             CREATE TRIGGER rfq_item_goi_y_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
+             ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_kiem_danh_tinh;
+           END IF;
+           IF to_regclass('public.rfq_item_mappings') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                                 AND t.tgname = 'rfq_item_mappings_kiem_danh_tinh'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_mappings_kiem_danh_tinh ON public.rfq_item_mappings;
+             CREATE TRIGGER rfq_item_mappings_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('tac_gia', 'session_id');
+             ALTER TABLE public.rfq_item_mappings ENABLE ALWAYS TRIGGER rfq_item_mappings_kiem_danh_tinh;
+           END IF;
            IF to_regclass('public.procurement_categories') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.procurement_categories')
@@ -4919,6 +4943,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_kiem_danh_tinh BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
+            AND (to_regclass('public.rfq_item_goi_y') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                               AND t.tgname = 'rfq_item_goi_y_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
+            AND (to_regclass('public.rfq_item_mappings') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                               AND t.tgname = 'rfq_item_mappings_kiem_danh_tinh'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_kiem_danh_tinh BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION kiem_danh_tinh_theo_phien('tac_gia', 'session_id')$def$))
             AND (to_regclass('public.procurement_categories') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.procurement_categories')
@@ -5817,6 +5857,28 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_chi_ghi_them BEFORE UPDATE OR DELETE ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_chi_ghi_them;
            END IF;
+           IF to_regclass('public.rfq_item_goi_y') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                                 AND t.tgname = 'rfq_item_goi_y_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_goi_y_chi_ghi_them ON public.rfq_item_goi_y;
+             CREATE TRIGGER rfq_item_goi_y_chi_ghi_them BEFORE UPDATE OR DELETE ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_chi_ghi_them;
+           END IF;
+           IF to_regclass('public.rfq_item_mappings') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                                 AND t.tgname = 'rfq_item_mappings_chi_ghi_them'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_mappings_chi_ghi_them ON public.rfq_item_mappings;
+             CREATE TRIGGER rfq_item_mappings_chi_ghi_them BEFORE UPDATE OR DELETE ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_item_mappings ENABLE ALWAYS TRIGGER rfq_item_mappings_chi_ghi_them;
+           END IF;
            IF to_regclass('public.uom_aliases') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
                                WHERE t.tgrelid = to_regclass('public.uom_aliases')
@@ -5871,6 +5933,28 @@ $ham$;
              DROP TRIGGER IF EXISTS item_uom_conversions_chan_truncate ON public.item_uom_conversions;
              CREATE TRIGGER item_uom_conversions_chan_truncate BEFORE TRUNCATE ON public.item_uom_conversions FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_chan_truncate;
+           END IF;
+           IF to_regclass('public.rfq_item_goi_y') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                                 AND t.tgname = 'rfq_item_goi_y_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chan_truncate BEFORE TRUNCATE ON public.rfq_item_goi_y FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_goi_y_chan_truncate ON public.rfq_item_goi_y;
+             CREATE TRIGGER rfq_item_goi_y_chan_truncate BEFORE TRUNCATE ON public.rfq_item_goi_y FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_chan_truncate;
+           END IF;
+           IF to_regclass('public.rfq_item_mappings') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                                 AND t.tgname = 'rfq_item_mappings_chan_truncate'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_chan_truncate BEFORE TRUNCATE ON public.rfq_item_mappings FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_mappings_chan_truncate ON public.rfq_item_mappings;
+             CREATE TRIGGER rfq_item_mappings_chan_truncate BEFORE TRUNCATE ON public.rfq_item_mappings FOR EACH STATEMENT EXECUTE FUNCTION public.bid_chi_ghi_them();
+             ALTER TABLE public.rfq_item_mappings ENABLE ALWAYS TRIGGER rfq_item_mappings_chan_truncate;
            END IF;
            IF to_regclass('public.procurement_categories') IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM pg_trigger t
@@ -6109,6 +6193,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_chi_ghi_them BEFORE DELETE OR UPDATE ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_item_goi_y') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                               AND t.tgname = 'rfq_item_goi_y_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_item_mappings') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                               AND t.tgname = 'rfq_item_mappings_chi_ghi_them'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_chi_ghi_them BEFORE DELETE OR UPDATE ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.uom_aliases') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.uom_aliases')
@@ -6149,6 +6249,22 @@ $ham$;
                                AND t.tgfoid = p.oid
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_chan_truncate BEFORE TRUNCATE ON public.item_uom_conversions FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_item_goi_y') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                               AND t.tgname = 'rfq_item_goi_y_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_chan_truncate BEFORE TRUNCATE ON public.rfq_item_goi_y FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
+            AND (to_regclass('public.rfq_item_mappings') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                               AND t.tgname = 'rfq_item_mappings_chan_truncate'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = p.oid
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_chan_truncate BEFORE TRUNCATE ON public.rfq_item_mappings FOR EACH STATEMENT EXECUTE FUNCTION bid_chi_ghi_them()$def$))
             AND (to_regclass('public.procurement_categories') IS NULL
                  OR EXISTS (SELECT 1 FROM pg_trigger t
                              WHERE t.tgrelid = to_regclass('public.procurement_categories')
@@ -8905,6 +9021,30 @@ $ham$;
              CREATE TRIGGER item_uom_conversions_dat_thu_tu BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
              ALTER TABLE public.item_uom_conversions ENABLE ALWAYS TRIGGER item_uom_conversions_dat_thu_tu;
            END IF;
+           IF to_regclass('public.rfq_item_goi_y') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                                 AND t.tgname = 'rfq_item_goi_y_dat_thu_tu'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_dat_thu_tu BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_goi_y_dat_thu_tu ON public.rfq_item_goi_y;
+             CREATE TRIGGER rfq_item_goi_y_dat_thu_tu BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
+             ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_dat_thu_tu;
+           END IF;
+           IF to_regclass('public.rfq_item_mappings') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                                 AND t.tgname = 'rfq_item_mappings_dat_thu_tu'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_dat_thu_tu BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_mappings_dat_thu_tu ON public.rfq_item_mappings;
+             CREATE TRIGGER rfq_item_mappings_dat_thu_tu BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION public.du_lieu_nen_dat_thu_tu();
+             ALTER TABLE public.rfq_item_mappings ENABLE ALWAYS TRIGGER rfq_item_mappings_dat_thu_tu;
+           END IF;
          END
          $fn91$$q$,
       $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -8953,6 +9093,22 @@ $ham$;
                                AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
                                AND t.tgenabled = 'A'
                                AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER item_uom_conversions_dat_thu_tu BEFORE INSERT ON public.item_uom_conversions FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
+            AND (to_regclass('public.rfq_item_goi_y') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                               AND t.tgname = 'rfq_item_goi_y_dat_thu_tu'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_dat_thu_tu BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
+            AND (to_regclass('public.rfq_item_mappings') IS NULL
+                 OR EXISTS (SELECT 1 FROM pg_trigger t
+                             WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                               AND t.tgname = 'rfq_item_mappings_dat_thu_tu'
+                               AND NOT t.tgisinternal
+                               AND t.tgfoid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()')
+                               AND t.tgenabled = 'A'
+                               AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_dat_thu_tu BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION du_lieu_nen_dat_thu_tu()$def$))
            FROM pg_proc p WHERE p.oid = to_regprocedure('public.du_lieu_nen_dat_thu_tu()'))$q$,
       $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
                           || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
@@ -9813,6 +9969,325 @@ $ham$;
                     WHERE p.oid = to_regprocedure('public.rfq_kiem_nhom_hang_khi_nop()')),
                   'hàm public.rfq_kiem_nhom_hang_khi_nop() không tồn tại')$q$,
       $q$quyền sở hữu hàm public.rfq_kiem_nhom_hang_khi_nop() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.9101 / S4.3a] Bam cua mot dong — anh xa va goi y chi hieu luc khi bam da luu bang bam hien tai. Mot than tra hang so lam anh xa cu song qua lan sua dong.
+    ARRAY[
+      $q$định nghĩa hàm rfq_hang_muc_bam(uuid, uuid, integer) (9501_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_hang_muc_bam(p_org uuid, p_rfq uuid, p_line integer) RETURNS bytea
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT pg_catalog.sha256(pg_catalog.convert_to(
+           pg_catalog.jsonb_build_array(i.description, i.unit, i.quantity)::pg_catalog.text, 'UTF8'))
+    FROM public.rfq_items i
+   WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.line_no = p_line
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT pg_catalog.sha256(pg_catalog.convert_to( pg_catalog.jsonb_build_array(i.description, i.unit, i.quantity)::pg_catalog.text, 'UTF8')) FROM public.rfq_items i WHERE i.org_id = p_org AND i.rfq_id = p_rfq AND i.line_no = p_line$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 3
+            AND p.prorettype = 'pg_catalog.bytea'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_hang_muc_bam(uuid, uuid, integer)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_hang_muc_bam(uuid, uuid, integer)')),
+                  'hàm public.rfq_hang_muc_bam(uuid, uuid, integer) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_hang_muc_bam(uuid, uuid, integer) hoặc SUPERUSER$q$
+    ],
+    -- [S1.9101 / S4.3a] Tap loai tru ADR-082 (12) cua L3. Mot than `SELECT NULL::uuid WHERE false` cho nguoi tao goi tu ghi anh xa NGUOI_DUYET.
+    ARRAY[
+      $q$định nghĩa hàm rfq_tap_loai_tru(uuid, uuid) (9501_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$CREATE OR REPLACE FUNCTION public.rfq_tap_loai_tru(p_org uuid, p_rfq uuid) RETURNS SETOF uuid
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $ham$
+  SELECT DISTINCT n FROM (
+    SELECT p.created_by AS n FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq
+    UNION ALL
+    SELECT p.submitted_by FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq
+    UNION ALL
+    SELECT i.invited_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq
+    UNION ALL
+    SELECT i.revoked_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq
+    UNION ALL
+    SELECT b.created_by FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq
+    UNION ALL
+    SELECT s.created_by
+      FROM public.rfq_invitations i
+      JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id
+     WHERE i.org_id = p_org AND i.rfq_id = p_rfq
+    UNION ALL
+    SELECT c.created_by
+      FROM public.rfq_invitations i
+      JOIN public.supplier_contacts c ON c.org_id = i.org_id AND c.id = i.contact_id
+     WHERE i.org_id = p_org AND i.rfq_id = p_rfq
+    UNION ALL
+    SELECT a.actor_id
+      FROM public.audit_events a
+     WHERE a.org_id = p_org
+       AND a.resource_type = 'rfq_package'
+       AND a.resource_id = p_rfq
+       AND a.actor_type = 'USER'
+       AND a.action IN ('RFQ_SUBMITTED_FOR_APPROVAL', 'RFQ_BUDGET_SET')
+  ) t
+  WHERE n IS NOT NULL
+$ham$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$SELECT DISTINCT n FROM ( SELECT p.created_by AS n FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT p.submitted_by FROM public.rfq_packages p WHERE p.org_id = p_org AND p.id = p_rfq UNION ALL SELECT i.invited_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT i.revoked_by FROM public.rfq_invitations i WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT b.created_by FROM public.rfq_budgets b WHERE b.org_id = p_org AND b.rfq_id = p_rfq UNION ALL SELECT s.created_by FROM public.rfq_invitations i JOIN public.suppliers s ON s.org_id = i.org_id AND s.id = i.supplier_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT c.created_by FROM public.rfq_invitations i JOIN public.supplier_contacts c ON c.org_id = i.org_id AND c.id = i.contact_id WHERE i.org_id = p_org AND i.rfq_id = p_rfq UNION ALL SELECT a.actor_id FROM public.audit_events a WHERE a.org_id = p_org AND a.resource_type = 'rfq_package' AND a.resource_id = p_rfq AND a.actor_type = 'USER' AND a.action IN ('RFQ_SUBMITTED_FOR_APPROVAL', 'RFQ_BUDGET_SET') ) t WHERE n IS NOT NULL$than$
+            AND p.provolatile = 's'
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 2
+            AND p.prorettype = 'pg_catalog.uuid'::regtype
+            AND p.proretset
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'sql')
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tap_loai_tru(uuid, uuid)'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm khác bản chuẩn — prosrc hiện tại: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | volatile=' || p.provolatile::text
+                          || ' secdef=' || p.prosecdef::text
+                          || ' config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                    FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_tap_loai_tru(uuid, uuid)')),
+                  'hàm public.rfq_tap_loai_tru(uuid, uuid) không tồn tại')$q$,
+      $q$quyền sở hữu hàm rfq_tap_loai_tru(uuid, uuid) hoặc SUPERUSER$q$
+    ],
+    -- [S1.9101 / S4.3a] Luat ghi goi y: goi da roi DRAFT, dong ton tai, bam do trigger dat, hoi to chi do item.manage. Than `RETURN NEW` som mo goi y cho goi con soan.
+    ARRAY[
+      $q$hàm + trigger goi_y_kiem_luat (9501_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$DO $fn93$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.goi_y_kiem_luat()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.goi_y_kiem_luat();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.goi_y_kiem_luat() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3));
+  SELECT p.status INTO trang_thai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+     FOR SHARE;
+  IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN
+    RAISE EXCEPTION 'Chi chuan hoa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan';
+  END IF;
+  NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no);
+  IF NEW.hang_muc_bam IS NULL THEN
+    RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc';
+  END IF;
+  IF EXISTS (SELECT 1
+               FROM public.rfq_unsealed_bids ub
+               JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id
+              WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id)
+     AND NOT EXISTS (SELECT 1
+                       FROM public.user_roles ur
+                       JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                      WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia
+                        AND rp.permission_code = 'item.manage') THEN
+    RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id
+      USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_item_goi_y') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                                 AND t.tgname = 'rfq_item_goi_y_bat_bien'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.goi_y_kiem_luat()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_bat_bien BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION goi_y_kiem_luat()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_goi_y_bat_bien ON public.rfq_item_goi_y;
+             CREATE TRIGGER rfq_item_goi_y_bat_bien BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION public.goi_y_kiem_luat();
+             ALTER TABLE public.rfq_item_goi_y ENABLE ALWAYS TRIGGER rfq_item_goi_y_bat_bien;
+           END IF;
+         END
+         $fn93$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3)); SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN RAISE EXCEPTION 'Chi chuan hoa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan'; END IF; NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no); IF NEW.hang_muc_bam IS NULL THEN RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc'; END IF; IF EXISTS (SELECT 1 FROM public.rfq_unsealed_bids ub JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id) AND NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia AND rp.permission_code = 'item.manage') THEN RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_item_goi_y')
+                           AND t.tgname = 'rfq_item_goi_y_bat_bien'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.goi_y_kiem_luat()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_goi_y_bat_bien BEFORE INSERT ON public.rfq_item_goi_y FOR EACH ROW EXECUTE FUNCTION goi_y_kiem_luat()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.goi_y_kiem_luat()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.goi_y_kiem_luat()')),
+                  'hàm public.goi_y_kiem_luat() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.goi_y_kiem_luat() và bảng public.rfq_item_goi_y (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+    -- [S1.9101 / S4.3a] Luat ghi anh xa — L2, L3 ve hanh vi, L13, (14). Than `RETURN NEW` som cho TU_DONG khong bi danh va NGUOI_DUYET cua chinh nguoi tao goi.
+    ARRAY[
+      $q$hàm + trigger anh_xa_kiem_luat (9501_anh_xa_hang_muc)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_anh_xa_hang_muc.sql')$q$,
+      $q$DO $fn93$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.anh_xa_kiem_luat()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.anh_xa_kiem_luat();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.anh_xa_kiem_luat() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  trang_thai text;
+  mo_ta text;
+  hang_bi_danh uuid;
+  bi_danh_rut boolean;
+  co_ban_ro boolean;
+  giu_item_manage boolean;
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3));
+  SELECT p.status INTO trang_thai
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id
+     FOR SHARE;
+  IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN
+    RAISE EXCEPTION 'Chi anh xa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan';
+  END IF;
+  SELECT i.description INTO mo_ta
+    FROM public.rfq_items i
+   WHERE i.org_id = NEW.org_id AND i.rfq_id = NEW.rfq_id AND i.line_no = NEW.line_no;
+  IF mo_ta IS NULL THEN
+    RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc';
+  END IF;
+  NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no);
+
+  SELECT EXISTS (SELECT 1
+                   FROM public.user_roles ur
+                   JOIN public.role_permissions rp ON rp.role_code = ur.role_code
+                  WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia
+                    AND rp.permission_code = 'item.manage')
+    INTO giu_item_manage;
+  SELECT EXISTS (SELECT 1
+                   FROM public.rfq_unsealed_bids ub
+                   JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id
+                  WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id)
+    INTO co_ban_ro;
+
+  IF NEW.nguon = 'TU_DONG' THEN
+    SELECT a.canonical_item_id, a.rut INTO hang_bi_danh, bi_danh_rut
+      FROM public.item_aliases a
+     WHERE a.org_id = NEW.org_id
+       AND a.bi_danh_sach = public.chuoi_sach(mo_ta)
+       AND a.ghi_luc < pg_catalog.clock_timestamp()
+     ORDER BY a.seq DESC
+     LIMIT 1;
+    IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN
+      RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh';
+    END IF;
+    IF co_ban_ro AND NOT giu_item_manage THEN
+      RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id
+        USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage';
+    END IF;
+    IF co_ban_ro AND NEW.ly_do IS DISTINCT FROM 'CHUAN_HOA_HOI_TO' THEN
+      RAISE EXCEPTION 'TU_DONG tren goi da co ban ro mang ma ly do CHUAN_HOA_HOI_TO (L13): goi %', NEW.rfq_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_hoi_to_sai_ma_ly_do';
+    END IF;
+  ELSE
+    IF NOT giu_item_manage THEN
+      RAISE EXCEPTION 'Anh xa NGUOI_DUYET chi do nguoi giu item.manage ghi (L3): nguoi dung %', NEW.tac_gia
+        USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_can_item_manage';
+    END IF;
+    IF NEW.tac_gia IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN
+      RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id
+        USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru';
+    END IF;
+    IF co_ban_ro AND NEW.ly_do IS NULL THEN
+      RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do';
+    END IF;
+    IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL
+       AND EXISTS (SELECT 1
+                     FROM public.rfq_item_goi_y g
+                    WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no
+                      AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y') THEN
+      RAISE EXCEPTION 'Anh xa rong khi ung vien dau co diem goi y can ly do: goi % dong %', NEW.rfq_id, NEW.line_no
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_item_mappings') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                                 AND t.tgname = 'rfq_item_mappings_bat_bien'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.anh_xa_kiem_luat()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_bat_bien BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION anh_xa_kiem_luat()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_item_mappings_bat_bien ON public.rfq_item_mappings;
+             CREATE TRIGGER rfq_item_mappings_bat_bien BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION public.anh_xa_kiem_luat();
+             ALTER TABLE public.rfq_item_mappings ENABLE ALWAYS TRIGGER rfq_item_mappings_bat_bien;
+           END IF;
+         END
+         $fn93$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE trang_thai text; mo_ta text; hang_bi_danh uuid; bi_danh_rut boolean; co_ban_ro boolean; giu_item_manage boolean; BEGIN PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtextextended('item_aliases|' || NEW.org_id::pg_catalog.text, 3)); SELECT p.status INTO trang_thai FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id FOR SHARE; IF trang_thai IS NULL OR trang_thai = 'DRAFT' THEN RAISE EXCEPTION 'Chi anh xa hang muc cua goi da roi DRAFT (goi %)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_goi_con_soan'; END IF; SELECT i.description INTO mo_ta FROM public.rfq_items i WHERE i.org_id = NEW.org_id AND i.rfq_id = NEW.rfq_id AND i.line_no = NEW.line_no; IF mo_ta IS NULL THEN RAISE EXCEPTION 'Goi % khong co dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_khong_co_hang_muc'; END IF; NEW.hang_muc_bam := public.rfq_hang_muc_bam(NEW.org_id, NEW.rfq_id, NEW.line_no); SELECT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.role_permissions rp ON rp.role_code = ur.role_code WHERE ur.org_id = NEW.org_id AND ur.user_id = NEW.tac_gia AND rp.permission_code = 'item.manage') INTO giu_item_manage; SELECT EXISTS (SELECT 1 FROM public.rfq_unsealed_bids ub JOIN public.unseal_requests ur ON ur.org_id = ub.org_id AND ur.id = ub.unseal_request_id WHERE ur.org_id = NEW.org_id AND ur.rfq_id = NEW.rfq_id) INTO co_ban_ro; IF NEW.nguon = 'TU_DONG' THEN SELECT a.canonical_item_id, a.rut INTO hang_bi_danh, bi_danh_rut FROM public.item_aliases a WHERE a.org_id = NEW.org_id AND a.bi_danh_sach = public.chuoi_sach(mo_ta) AND a.ghi_luc < pg_catalog.clock_timestamp() ORDER BY a.seq DESC LIMIT 1; IF NOT FOUND OR bi_danh_rut OR hang_bi_danh IS DISTINCT FROM NEW.canonical_item_id THEN RAISE EXCEPTION 'TU_DONG chi khi mo ta da lam sach trung mot bi danh con hieu luc cua dung hang chuan (L2): goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_tu_dong_khong_khop_bi_danh'; END IF; IF co_ban_ro AND NOT giu_item_manage THEN RAISE EXCEPTION 'Goi % da co ban ro: chi nguoi giu item.manage chuan hoa hoi to (L3)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_hoi_to_can_item_manage'; END IF; IF co_ban_ro AND NEW.ly_do IS DISTINCT FROM 'CHUAN_HOA_HOI_TO' THEN RAISE EXCEPTION 'TU_DONG tren goi da co ban ro mang ma ly do CHUAN_HOA_HOI_TO (L13): goi %', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_hoi_to_sai_ma_ly_do'; END IF; ELSE IF NOT giu_item_manage THEN RAISE EXCEPTION 'Anh xa NGUOI_DUYET chi do nguoi giu item.manage ghi (L3): nguoi dung %', NEW.tac_gia USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_can_item_manage'; END IF; IF NEW.tac_gia IN (SELECT public.rfq_tap_loai_tru(NEW.org_id, NEW.rfq_id)) THEN RAISE EXCEPTION 'Nguoi ghi anh xa NGUOI_DUYET nam trong tap loai tru cua goi % (L3, ADR-082)', NEW.rfq_id USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'anh_xa_nguoi_duyet_trong_tap_loai_tru'; END IF; IF co_ban_ro AND NEW.ly_do IS NULL THEN RAISE EXCEPTION 'Goi % da co ban ro: anh xa can ly do (L13)', NEW.rfq_id USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_sau_ban_ro_can_ly_do'; END IF; IF NEW.canonical_item_id IS NULL AND NEW.ly_do IS NULL AND EXISTS (SELECT 1 FROM public.rfq_item_goi_y g WHERE g.org_id = NEW.org_id AND g.rfq_id = NEW.rfq_id AND g.line_no = NEW.line_no AND g.hang_muc_bam = NEW.hang_muc_bam AND g.ket_qua = 'GOI_Y') THEN RAISE EXCEPTION 'Anh xa rong khi ung vien dau co diem goi y can ly do: goi % dong %', NEW.rfq_id, NEW.line_no USING ERRCODE = 'check_violation', CONSTRAINT = 'anh_xa_bo_trong_can_ly_do'; END IF; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_item_mappings')
+                           AND t.tgname = 'rfq_item_mappings_bat_bien'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.anh_xa_kiem_luat()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_item_mappings_bat_bien BEFORE INSERT ON public.rfq_item_mappings FOR EACH ROW EXECUTE FUNCTION anh_xa_kiem_luat()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.anh_xa_kiem_luat()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — prosrc: '
+                          || btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config=' || coalesce(array_to_string(p.proconfig, ','), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':def=' || pg_get_triggerdef(t.oid), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.anh_xa_kiem_luat()')),
+                  'hàm public.anh_xa_kiem_luat() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.anh_xa_kiem_luat() và bảng public.rfq_item_mappings (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     ARRAY[
