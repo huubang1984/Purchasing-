@@ -354,9 +354,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       expect(token, "luồng S3: không token nào trước lần mở gói").toHaveLength(0);
     }
     await withTenant(apiPool, orgA, async (c) => {
-      await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
-      await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd1 }, apiPool);
-      await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd2 }, apiPool);
+      const nop = await submitRfqForApproval(c, orgA, { rfqId: trangThai.rfqId, actorSessionId: sMua }, apiPool);
+      // [S1.198 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem. Luồng MVP1 giữ lời duyệt không mốc — hợp đồng cũ.
+      const moc = batS3 ? { lanNopDaXem: nop.lanNop } : {};
+      await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd1, ...moc }, apiPool);
+      await approveRfq(c, orgA, { rfqId: trangThai.rfqId, sessionId: sGd2, ...moc }, apiPool);
       const mo = await openRfq(c, orgA, {
         rfqId: trangThai.rfqId,
         actorSessionId: sMua,

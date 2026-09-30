@@ -206,8 +206,12 @@ const datNganSach = (t: ToChuc, rfqId: string, giaTri: string): Promise<unknown>
   withTenant(apiPool, t.org, (c) => setRfqBudget(c, t.org, { rfqId, estimatedValue: giaTri, currency: "VND", actorSessionId: t.pm.s }));
 const nop = (t: ToChuc, rfqId: string): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => submitRfqForApproval(c, t.org, { rfqId, actorSessionId: t.pm.s }, apiPool));
+/** [S1.198 / khoản 256] Người duyệt gửi lại lần nộp VỪA ĐỌC — ở tổ chức đã bật, trigger `rfq_approvals_so_lan_nop` đòi nó. */
 const duyet = (t: ToChuc, rfqId: string, ai: Nguoi): Promise<void> =>
-  withTenant(apiPool, t.org, (c) => approveRfq(c, t.org, { rfqId, sessionId: ai.s }, apiPool));
+  withTenant(apiPool, t.org, async (c) => {
+    const lan = (await c.query<{ n: number }>("SELECT lan_nop AS n FROM public.rfq_packages WHERE id = $1", [rfqId])).rows[0]?.n;
+    await approveRfq(c, t.org, { rfqId, sessionId: ai.s, ...(lan === undefined ? {} : { lanNopDaXem: lan }) }, apiPool);
+  });
 const mo = (t: ToChuc, rfqId: string): Promise<unknown> =>
   withTenant(apiPool, t.org, (c) => openRfq(c, t.org, { rfqId, actorSessionId: t.pm.s, orgKeys: boBocGia }, apiPool));
 const traVe = (t: ToChuc, rfqId: string, reason: string = LY_DO): Promise<unknown> =>
@@ -271,10 +275,10 @@ async function soChuKy(rfqId: string): Promise<number> {
  * ĐỘT BIẾN TOÀN CỤC một hàm: thay ĐÚNG một chỗ trong định nghĩa hiện tại, chạy việc, rồi dựng lại bản gốc. Kịch bản đi qua
  * nhiều giao dịch của tầng gói nên đột biến không gói được trong một giao dịch.
  */
-async function voiHamDotBien<T>(ham: string, cu: string, moi: string, viec: () => Promise<T>): Promise<T> {
+async function voiHamDotBien<T>(ham: string, cu: string, moi: string, viec: () => Promise<T>, soCho = 1): Promise<T> {
   const goc = (await db.pool.query<{ def: string }>("SELECT pg_get_functiondef($1::regprocedure) AS def", [ham])).rows[0]!.def;
-  expect(goc.split(cu).length - 1, `đột biến phải khớp ĐÚNG một chỗ trong ${ham}`).toBe(1);
-  await db.pool.query(goc.replace(cu, moi));
+  expect(goc.split(cu).length - 1, `đột biến phải khớp ĐÚNG ${soCho} chỗ trong ${ham}`).toBe(soCho);
+  await db.pool.query(goc.split(cu).join(moi));
   try {
     return await viec();
   } finally {
@@ -282,8 +286,10 @@ async function voiHamDotBien<T>(ham: string, cu: string, moi: string, viec: () =
   }
 }
 
-/** Câu chèn chữ ký của `approveRfq`, nguyên cột — ba băm do trigger đặt. */
-const CAU_KY = "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)";
+/** Câu chèn chữ ký của `approveRfq`, nguyên cột — ba băm do trigger đặt; lần nộp đã xem là lần nộp hiện tại (khoản 256). */
+const CAU_KY =
+  "INSERT INTO public.rfq_approvals (org_id, rfq_id, approver_user_id, session_id, lan_nop_da_xem) " +
+  "SELECT $1, $2, $3, $4, p.lan_nop FROM public.rfq_packages p WHERE p.id = $2";
 
 /** ĐỘT BIẾN trong MỘT giao dịch rồi ROLLBACK — khuôn `trongDotBien` của `tra-ve-nhap`. */
 async function trongDotBien<T>(org: string, dotBien: readonly string[], viec: (c: pg.PoolClient) => Promise<T>): Promise<T> {
@@ -572,24 +578,27 @@ describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () =
     ).toBe("OPEN");
   });
 
-  it("[INV-K4b] phép đếm thứ hai chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
+  it("[INV-K4b] hai phép đếm có vế ngân sách chỉ xét ngân sách, bỏ nội dung và danh sách ⇒ hai chữ ký trên hai bộ ba ghép thành bộ ba chưa ai ký (lượt soi S1.202, M2)", async () => {
     expect(
       await voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
         "     AND a.approved_content_hash = public.rfq_bam_noi_dung(NEW.id)\n     AND a.approved_list_hash = public.rfq_bam_danh_sach(NEW.id)\n     AND a.approved_budget_hash",
         "     AND a.approved_budget_hash",
         ghepBoBa,
+        2,
       ),
     ).toBe("OPEN");
   });
 
   it("[INV-K4b] [INV-D2] cạnh mở gói bỏ phép đếm trên ngân sách ⇒ cả hai lỗ đo trên master mở lại", async () => {
+    // [S1.198] Vế ngân sách nay có ở HAI phép đếm — thứ hai, và thứ ba (chữ ký còn hiệu lực) —; đột biến gỡ cả hai.
     const boDem = <T>(viec: () => Promise<T>): Promise<T> =>
       voiHamDotBien(
         "public.rfq_kiem_chu_ky_danh_sach_khi_mo()",
-        "\n     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id);",
-        ";",
+        "\n     AND a.approved_budget_hash = public.rfq_bam_ngan_sach(NEW.id)",
+        "",
         viec,
+        2,
       );
     expect(await boDem(nangCungBac), "nâng cùng bậc").toBe("OPEN");
     expect(await boDem(haBac), "hạ bậc cấp kép").toBe("OPEN");
@@ -646,44 +655,5 @@ describe("S1.202 — đột biến: gỡ từng vế thì lỗ mở lại", () =
     expect(await soChuKy(rfqId), "hai giao dịch đều ROLLBACK").toBe(1);
     await duyet(t, rfqId, t.pm2);
     expect(await loi(mo(t, rfqId))).toBeNull();
-  });
-});
-
-// =============================================================================================
-// (4) GIỚI HẠN, ĐO — HAI KHOẢN MỞ TỪ LƯỢT SOI S1.202 (khoản 256, khoản 257)
-//
-// Hai ca dưới ghim hành vi HÔM NAY; chủ dự án chọn vá cả hai ở một vòng riêng trước S3.2c, và vòng ấy lật hai ca này. Không
-// mang nhãn bất biến: chúng đo một khoảng trống, không đo một chốt.
-// =============================================================================================
-describe("S1.202 — giới hạn, đo: chữ ký dưới cạnh về DRAFT (khoản 256, khoản 257)", () => {
-  it("khoản 256 — người duyệt xem gói ở 1 triệu; trước lần bấm ký, PM trả về, đặt 99 triệu, nộp lại: lời duyệt ghi lên 99 triệu mà người duyệt chưa từng xem, và gói MỞ — lời duyệt chỉ mang mã gói", async () => {
-    const t = await toChucDaBat();
-    const rfqId = await goiNhap(t);
-    await nop(t, rfqId);
-    const daXem = (await db.pool.query<{ b: Buffer }>("SELECT public.rfq_bam_ngan_sach($1) AS b", [rfqId])).rows[0]!.b;
-    await traVe(t, rfqId);
-    await datNganSach(t, rfqId, GOI_THUONG_LON);
-    await nop(t, rfqId);
-    await duyet(t, rfqId, t.pm2);
-    const { rows } = await db.pool.query<{ b: Buffer }>("SELECT approved_budget_hash AS b FROM rfq_approvals WHERE rfq_id = $1", [rfqId]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.b.equals(daXem), "chữ ký KHÔNG mang ngân sách người duyệt đã xem").toBe(false);
-    expect(await loi(mo(t, rfqId))).toBeNull();
-    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
-  });
-
-  it("khoản 257 — PM2 ký, rồi chính PM2 (giữ `rfq.approve`) trả gói về; PM nộp lại y nguyên ⇒ gói MỞ bằng chữ ký cũ của PM2 — lần trả về không rút chữ ký của người trả", async () => {
-    const t = await toChucDaBat();
-    const rfqId = await goiNhap(t);
-    await nop(t, rfqId);
-    await duyet(t, rfqId, t.pm2);
-    await withTenant(apiPool, t.org, (c) =>
-      returnRfqToDraft(c, t.org, { rfqId, reason: "nguoi duyet rut chu ky", actorSessionId: t.pm2.s }, apiPool),
-    );
-    expect(await trangThaiGoi(rfqId)).toBe("DRAFT");
-    await nop(t, rfqId);
-    expect(await loi(mo(t, rfqId))).toBeNull();
-    expect(await trangThaiGoi(rfqId)).toBe("OPEN");
-    expect(await soChuKy(rfqId), "không ai ký lại").toBe(1);
   });
 });
