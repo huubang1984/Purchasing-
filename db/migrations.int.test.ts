@@ -4309,8 +4309,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       await migrate(db.pool, MIGRATIONS_DIR);
       const tenDb = (await db.pool.query<{ d: string }>("SELECT current_database() AS d")).rows[0]!.d;
       const loiCua = (p: Promise<unknown>): Promise<Error | null> => p.then(() => null, (e: Error) => e);
-      const setconfigDb = async (): Promise<string[] | null> =>
-        (await db.pool.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
+      const setconfigDb = async (q: pg.Pool | pg.PoolClient = db.pool): Promise<string[] | null> =>
+        (await q.query<{ s: string[] | null }>("SELECT setconfig AS s FROM pg_db_role_setting WHERE setrole = 0")).rows[0]?.s ?? null;
       const guc = "00000000-0000-4000-8000-000000000087";
       const HARDENING = readFileSync(join(MIGRATIONS_DIR, "hardening.always.sql"), "utf8");
       const CAU87 = docHangHardeningTu(HARDENING, "CAU_GUC_TUY_BIEN_GAN_SAN");
@@ -4331,12 +4331,23 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
       };
 
       // (a) mức database — phán xét, không tự RESET, không in giá trị.
-      await db.pool.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
-      const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      bat87(loi, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "GUC tuỳ biến gắn sẵn ở mức database phải bị bắt");
-      await nhanhA(db.pool, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ (câu phán xét chạy trực tiếp)");
-      expect(await setconfigDb(), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
-      await db.pool.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      // [S1.9110] Mọi câu của cửa sổ SET … RESET đi qua MỘT kết nối giữ sẵn, mở TRƯỚC `ALTER DATABASE … SET` (không thừa kế
+      // GUC); `migrate(db.pool)` trong cửa sổ lấy kết nối KHÁC — kết nối ấy thừa kế, bị từ chối sớm rồi HUỶ. Bản trước để
+      // `setconfigDb()` và câu RESET tự lấy kết nối từ pool: sau [S1.9121 / khoản 104] (lượt hardening sau vòng lỗi cũng huỷ kết nối)
+      // pool không còn kết nối rảnh nào mở trước SET, nên hai câu ấy mở kết nối MỚI trong cửa sổ — thừa kế `app.org_id`, về pool —
+      // và đối chứng "RESET ⇒ đi qua" nhận đúng nó: từ chối sớm là ĐÚNG (phiên mang GUC), vế đối chứng thì đo sai thứ. Nay đối
+      // chứng lấy hoặc kết nối giữ sẵn (mở trước SET) hoặc một kết nối mở SAU RESET — cả hai sạch, không tuỳ thứ tự pool.
+      const knTruocSet = await db.pool.connect();
+      try {
+        await knTruocSet.query(`ALTER DATABASE "${tenDb}" SET app.org_id = '${guc}'`);
+        const loi = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+        bat87(loi, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "GUC tuỳ biến gắn sẵn ở mức database phải bị bắt");
+        await nhanhA(knTruocSet, `database ${tenDb}: GUC tuỳ biến app.org_id gắn sẵn`, "nhánh ⒜ (câu phán xét chạy trực tiếp)");
+        expect(await setconfigDb(knTruocSet), "hardening không tự RESET GUC placeholder").toEqual([`app.org_id=${guc}`]);
+        await knTruocSet.query(`ALTER DATABASE "${tenDb}" RESET app.org_id`);
+      } finally {
+        knTruocSet.release();
+      }
       await expect(migrate(db.pool, MIGRATIONS_DIR), "đối chứng: RESET ⇒ đi qua").resolves.toEqual([]);
 
       // (b) vai có tên: bốn mục RESET ALL đứng TRƯỚC và tự chữa — mục 87 im (kề nhau, không chồng).
@@ -4357,11 +4368,17 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
 
       // (a′) [lượt soi 39 NHẸ-1] `ALTER ROLE ALL SET` — hàng (setrole 0, setdatabase 0): bị bắt VÀ có tên riêng (bản đầu: mo_ta NULL,
       //      thông điệp "SAI ()"); ba mục kề (row_security/…) không thấy hàng ấy — khoản 92.
-      await db.pool.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
-      const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
-      bat87(loiAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "ALTER ROLE ALL phải bị bắt");
-      await nhanhA(db.pool, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "nhánh ⒜′ (câu phán xét chạy trực tiếp)");
-      await db.pool.query("ALTER ROLE ALL RESET app.org_id");
+      // [S1.9110] Cùng kỷ luật cửa sổ như (a): `ALTER ROLE ALL SET` cũng áp cho mọi phiên mở SAU nó.
+      const knTruocSetAll = await db.pool.connect();
+      try {
+        await knTruocSetAll.query(`ALTER ROLE ALL SET app.org_id = '${guc}'`);
+        const loiAll = await loiCua(migrate(db.pool, MIGRATIONS_DIR));
+        bat87(loiAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "ALTER ROLE ALL phải bị bắt");
+        await nhanhA(knTruocSetAll, "mọi vai, mọi database (ALTER ROLE ALL): GUC tuỳ biến app.org_id gắn sẵn", "nhánh ⒜′ (câu phán xét chạy trực tiếp)");
+        await knTruocSetAll.query("ALTER ROLE ALL RESET app.org_id");
+      } finally {
+        knTruocSetAll.release();
+      }
       await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
 
       // (e) [lượt soi 39 NHẸ-5] proconfig của hàm trong lược đồ dự án.
@@ -4388,7 +4405,9 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
           "SELECT current_setting('app.org_id', true) AS v, (SELECT count(*)::int FROM pg_settings WHERE name = 'app.org_id') AS ps",
         );
         expect(nguon[0], "ALTER SYSTEM phải có hiệu lực trên kết nối mới, và placeholder vắng ở pg_settings (đo)").toEqual({ v: guc, ps: 0 });
-        expect(await setconfigDb(), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
+        // [S1.9110] Đọc qua `poolSys`, không qua `db.pool`: một kết nối `db.pool` mở trong cửa sổ ALTER SYSTEM thừa kế `app.org_id`
+        // và về pool — cùng kỷ luật cửa sổ như (a).
+        expect(await setconfigDb(poolSys), "pg_db_role_setting sạch — bản đầu mù ở đây").toBeNull();
         // [S1.48 / 40a H1] migrate() nay TỪ CHỐI SỚM (trước lượt sửa) cho bốn GUC lõi; nhánh ⒞ ở BƯỚC 3 vẫn đứng cho tập tên
         // rộng hơn — đo bằng câu phán xét chạy trực tiếp trên chính phiên ấy.
         const loiSys = await loiCua(migrate(poolSys, MIGRATIONS_DIR));

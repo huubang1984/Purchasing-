@@ -1511,41 +1511,71 @@ describe("[QT3] ghim toán tử dưới một search_path thù địch", () => {
 // 8. [T10-L] [vòng fix 1 — MỤC 2] TRẠNG THÁI PHIÊN DO HANDLER ĐỂ LẠI KHÔNG ĐI XUYÊN TỔ CHỨC
 // ============================================================================================
 describe("[T10-L] trạng thái phiên không đi xuyên tổ chức", () => {
-  it("ĐỐI CHỨNG: KHÔNG bật cờ thì `SET` phạm vi PHIÊN của tổ chức P LÀM HỎNG việc của tổ chức Q", async () => {
-    // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng
-    // định dưới xanh vì không có gì để chặn. Đây là phép đo end-to-end của lỗ mà `withTenant`
-    // để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).
-    const poolDoiChung = db.poolAs("app_api");
+  // Vế chống rỗng ruột của cả nhóm, và nó ĐI TRƯỚC: nếu trục này không thật thì mọi khẳng định dưới xanh vì không có gì để
+  // chặn. ~~Đây là phép đo end-to-end của lỗ mà `withTenant` để hở — khối `finally` của nó chỉ đọc lại MỘT trục (`app.org_id`).~~
+  // [S1.9110] Bản trước đo trục này QUA `withTenant` trên pool có vai (`poolAs`) và đòi 57014 ở Q. Từ [S1.9121 / khoản 104] lớp lấy
+  // client của pool có vai `RESET ALL` khi bốn GUC tenant/khách rỗng, nên `SET statement_timeout` của P không còn tới được Q trên
+  // đường ấy — vế đối chứng cũ đỏ vì lỗ đã ĐÓNG ở một lớp khác, không phải vì trục hết thật. Trục được đo lại trên pool TRẦN
+  // (không lớp lấy client): đó là điều `pg-pool` làm với mọi kết nối, và là thứ hai lớp dưới — `RESET ALL` của lần lấy và cờ
+  // `destroyConnectionWhenDone` — tồn tại để chặn; hai vế kế phân biệt hai lớp ấy bằng `pg_backend_pid()`.
+  it("ĐỐI CHỨNG: trên pool TRẦN, `SET` phạm vi PHIÊN của người dùng trước LÀM HỎNG câu của người dùng kế", async () => {
+    const poolTran = createPool(db.connectionString, 1);
     try {
       // [S1.54 / khoản nợ 96] 100 ms, không còn 1 ms: 1 ms THẤP HƠN độ trễ của chính các câu `withTenant` phát ra — đo trên
       // máy rảnh dưới app_api (400 lượt), COMMIT trần có trung vị 0,30 ms nhưng tối đa 1,88 ms, và khi evidence chạy mọi tệp
       // song song thì câu kết thúc `DO …; COMMIT` của khoản 96 (trung vị 0,39 ms) bị huỷ ngay trong giao dịch của P. Điều test
-      // này đo là trạng thái phiên của P làm hỏng việc của Q — `pg_sleep(0.2)` của Q vẫn dài hơn hạn, nên phép đo giữ nghĩa.
-      await withTenant(poolDoiChung, orgId, (client) => client.query("SET statement_timeout = 100"));
+      // này đo là trạng thái phiên của người trước làm hỏng câu của người kế — `pg_sleep(0.2)` vẫn dài hơn hạn, nên phép đo giữ nghĩa.
+      await poolTran.query("SET statement_timeout = 100");
       let loi: { code?: string } | undefined;
       try {
-        await withTenant(poolDoiChung, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)"));
+        await poolTran.query("SELECT pg_sleep(0.2)");
       } catch (e) {
         loi = e as { code?: string };
       }
-      // 57014 = canceling statement due to statement timeout. Việc của tổ chức Q chết vì một
-      // câu lệnh mà mã của tổ chức P viết.
+      // 57014 = canceling statement due to statement timeout. Câu của người kế chết vì một câu lệnh mà người trước viết.
       expect(loi?.code).toBe("57014");
     } finally {
-      await poolDoiChung.end();
+      await poolTran.end();
     }
   }, 60_000);
 
-  it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+  it("[S1.9121 / khoản 104] KHÔNG bật cờ, pool có vai: kết nối ĐƯỢC DÙNG LẠI (cùng pid) nhưng lớp lấy client đã `RESET ALL`, nên tổ chức Q KHÔNG bị ảnh hưởng", async () => {
+    const pool = db.poolAs("app_api");
+    try {
+      const pidP = await withTenant(pool, orgId, async (client) => {
+        await client.query("SET statement_timeout = 100");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      });
+      const pidQ = await withTenant(pool, orgKhac, async (client) => {
+        await client.query("SELECT pg_sleep(0.2)");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      });
+      // Cùng backend: không gì huỷ kết nối — vế này tách lớp `RESET ALL` của lần lấy khỏi cờ `destroyConnectionWhenDone` ở dưới.
+      expect(pidQ, "không bật cờ thì kết nối được dùng lại").toBe(pidP);
+    } finally {
+      await pool.end();
+    }
+  }, 60_000);
+
+  it("bật `destroyConnectionWhenDone` thì kết nối bị huỷ (pid khác) và tổ chức Q KHÔNG bị ảnh hưởng", async () => {
     const pool = db.poolAs("app_api");
     try {
       // [S1.54 / khoản nợ 96] 100 ms — lý do và phép đo ở vế đối chứng ngay trên.
-      await withTenant(pool, orgId, (client) => client.query("SET statement_timeout = 100"), {
-        destroyConnectionWhenDone: true,
+      const pidP = await withTenant(
+        pool,
+        orgId,
+        async (client) => {
+          await client.query("SET statement_timeout = 100");
+          return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+        },
+        { destroyConnectionWhenDone: true },
+      );
+      const pidQ = await withTenant(pool, orgKhac, async (client) => {
+        await client.query("SELECT pg_sleep(0.2)");
+        return (await client.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
       });
-      await expect(
-        withTenant(pool, orgKhac, (client) => client.query("SELECT pg_sleep(0.2)")),
-      ).resolves.toBeDefined();
+      // [S1.9110] Khác backend: cờ huỷ kết nối thật — phân biệt với vế trên, nơi Q lành nhờ `RESET ALL` mà vẫn cùng pid.
+      expect(pidQ, "bật cờ thì Q chạy trên kết nối mới").not.toBe(pidP);
       // Trục THỨ HAI của cùng lỗ, đo riêng: `search_path` cũng không đi theo kết nối.
       await withTenant(
         pool,
