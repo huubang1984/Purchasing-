@@ -538,6 +538,10 @@ describe("[S1.215 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành 
 
   it("ĐỌC TRƯỚC, DỌN SAU: replica do hàm SECURITY DEFINER để lại cùng TimeZone lạ ⇒ lần lấy kế vẫn NÉM KetNoiNhiemError nêu session_replication_role (phán trước khi RESET ALL kịp gỡ), kết nối bị huỷ; kết nối mới sạch", async () => {
     const p = poolMot();
+    // TimeZone mặc định của cụm đọc trên kết nối sạch, không viết cứng: `initdb` lấy theo máy — `Etc/UTC` ở cụm cục bộ trên
+    // Ubuntu, `UTC` ở `postgres:16-alpine` của CI (T3 đỏ ở PR #216 vì hằng `Etc/UTC`).
+    const truoc = await docTruc(p);
+    expect(truoc.tz, "tiền đề: TimeZone mặc định khác giá trị làm nhiễm").not.toBe("Asia/Ho_Chi_Minh");
     const nhiem = await nhiemRoiTra(p, "SELECT zz99.dat_vai_sao_chep('replica'); SET TimeZone = 'Asia/Ho_Chi_Minh'");
     expect(nhiem.vai).toBe("replica");
     const loi = await loiKhiLay(p.connect());
@@ -546,7 +550,7 @@ describe("[S1.215 / khoản 104] trạng thái phiên NGOÀI ba GUC vận hành 
     expect(loi!.message).toContain("session_replication_role");
     const sau = await docTruc(p);
     expect(sau.pid).not.toBe(nhiem.pid);
-    expect([sau.vai, sau.tz]).toEqual(["origin", "Etc/UTC"]);
+    expect([sau.vai, sau.tz]).toEqual(["origin", truoc.tz]);
   });
 
   it("RANH GIỚI ghim (khoản 87): GUC tenant rò ở phạm vi phiên ⇒ KHÔNG RESET ALL, KHÔNG phán — GUC phiên khác trên cùng kết nối còn nguyên, tín hiệu rò còn nguyên cho withTenant phân biệt bằng RESET; bốn thứ ngoài GUC vẫn được dọn", async () => {
