@@ -1338,10 +1338,10 @@ describe("bề mặt tệp", () => {
         expect(q.el("nut-rut-de-xuat").hidden, "chính người đề xuất (B) mở lại trang ⇒ rút được").toBe(false);
       });
 
-      // [S1.9101 / khoản 9402] «Huỷ trao thầu» gọi `POST …/award/cancel` theo GÓI, không cần trao thầu nào đang hiện — đo trên
+      // [S1.257 / khoản 333] «Huỷ trao thầu» gọi `POST …/award/cancel` theo GÓI, không cần trao thầu nào đang hiện — đo trên
       // trình duyệt thật: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ ⇒ `CANCELLED`, và thứ vừa huỷ chỉ hiện SAU đó.
       // Khuôn khoản 321 của «Phê duyệt»: lần bấm đầu — hay khi trao thầu đã đổi từ lúc đọc — chỉ vẽ nó ra.
-      it("khoản 9402: «Huỷ trao thầu» khi chưa đọc ⇒ lần bấm đầu chỉ HIỆN trao thầu sắp huỷ; lần hai mới huỷ; đổi giữa chừng ⇒ không huỷ; lý do trống ⇒ không gọi gì", async () => {
+      it("khoản 333: «Huỷ trao thầu» khi chưa đọc ⇒ lần bấm đầu chỉ HIỆN trao thầu sắp huỷ; lần hai mới huỷ; đổi giữa chừng ⇒ không huỷ; lý do trống ⇒ không gọi gì", async () => {
         const daHuy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g === `POST /rfqs/${RFQ}/award/cancel`);
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
         p.el("ly-do-award").value = "nha cung cap rut bao gia";
@@ -1381,10 +1381,10 @@ describe("bề mặt tệp", () => {
       });
     });
 
-    // [S1.9101 / khoản 9401] Bước 3: câu báo sau mỗi chữ ký mở thầu là MỘT hằng — *"Thiếu người thứ hai thì điều phối sẽ bị từ chối"* —
+    // [S1.257 / khoản 332] Bước 3: câu báo sau mỗi chữ ký mở thầu là MỘT hằng — *"Thiếu người thứ hai thì điều phối sẽ bị từ chối"* —
     // kể cả khi chính chữ ký ấy làm yêu cầu đủ (đo trên trình duyệt ở §S1.255: Phó Tổng Giám đốc ký XD-03 ⇒ `APPROVED 2 / 2`, câu
     // vẫn nói thiếu). Câu nay đọc yêu cầu vừa nạp lại: đủ ⇒ nói đủ và chỉ sang «Điều phối giải mã»; chưa đủ ⇒ nói thiếu, kèm số.
-    it("[S1.9101 / khoản 9401] mo-thau bước 3: chữ ký làm yêu cầu ĐỦ ⇒ câu báo nói đủ và chỉ sang Điều phối; chưa đủ ⇒ nói chưa đủ, kèm số", async () => {
+    it("[S1.257 / khoản 332] mo-thau bước 3: chữ ký làm yêu cầu ĐỦ ⇒ câu báo nói đủ và chỉ sang Điều phối; chưa đủ ⇒ nói chưa đủ, kèm số", async () => {
       const RFQ = "55555555-5555-4555-8555-555555555555";
       const yc = (status: string, dem: number) => ({ id: "yc-1", status, approvalCount: dem, requiredApprovals: 2, breakGlass: false });
       // Cột cuối: lần nạp lại SAU khi ký hỏng (500) — câu dựa vào `status` của phản hồi lần ký, không đoán "chưa đủ".

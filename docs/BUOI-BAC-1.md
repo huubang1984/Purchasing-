@@ -30,7 +30,7 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
 - [ ] **Docker Desktop đã chạy**, rồi chạy trọn khối lệnh PowerShell của kế hoạch §4 **một lần trên chính máy này**.
   Khối ấy đã đo trên PowerShell 7 cho Linux, ~~**chưa ai đo trên Windows PowerShell 5.1 và Docker Desktop**~~ **[S1.255] và
   trên một máy Windows 11 (Windows PowerShell 5.1, Docker Desktop 29.7.2): chưa có container, container đang chạy, container
-  đã dừng — cả ba 10/10** (kế hoạch §4). **[S1.9101]** Docker tắt thì khối dừng sau 69 giây với câu hỏi *"Docker Desktop đã
+  đã dừng — cả ba 10/10** (kế hoạch §4). **[S1.257]** Docker tắt thì khối dừng sau 69 giây với câu hỏi *"Docker Desktop đã
   chạy chưa?"* — bật Docker Desktop rồi chạy lại khối. Đường dẫn và ACL vẫn là của từng máy, nên vẫn chạy một lần trên CHÍNH máy này. Lỗi
   lộ ra ở bước này thì sửa trước ngày gặp, không phải trong phòng họp.
 - [ ] **[S1.255] Máy có nhiều tài khoản Windows:** chạy `icacls` trên thư mục kho. Thấy `Users` hay `Authenticated Users`

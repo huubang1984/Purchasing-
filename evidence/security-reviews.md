@@ -23459,10 +23459,10 @@ Sau báo cáo của vòng, chủ dự án: *"Bật auto-fix, sửa khoản 328"*
   C:\Users\nguye …"* trước khi sinh bí mật; lượt vẫn 10/10 ĐẠT, cô lập 2/2. Nhánh không cảnh báo (thư mục dưới hồ sơ) chỉ đo bằng
   test — chạy thật với `--thu-muc` mới trên cùng CSDL thì công cụ từ chối đúng như khoản 165, và một CSDL mới thì vòng không dựng.
 
-# §S1.9101 — BẬC 1: DOCKER TẮT ĐO TRÊN WINDOWS; CÂU BÁO SAU CHỮ KÝ MỞ THẦU VÀ «HUỶ TRAO THẦU» CỦA `/login` — KHOẢN 9401, 9402 ĐÓNG
+# §S1.257 — BẬC 1: DOCKER TẮT ĐO TRÊN WINDOWS; CÂU BÁO SAU CHỮ KÝ MỞ THẦU VÀ «HUỶ TRAO THẦU» CỦA `/login` — KHOẢN 332, 333 ĐÓNG
 
-**Rổ và mảnh (ADR-043):** hai khoản sinh và đóng trong vòng — để mở thì 9401 là rổ A ⒜ (câu sai trên màn của phút 5–25 buổi
-bậc 1), 9402 rổ B (huỷ trao thầu không nằm trên kịch bản §11). Không migration, không ADR, không route; không mảnh nào của
+**Rổ và mảnh (ADR-043):** hai khoản sinh và đóng trong vòng — để mở thì 332 là rổ A ⒜ (câu sai trên màn của phút 5–25 buổi
+bậc 1), 333 rổ B (huỷ trao thầu không nằm trên kịch bản §11). Không migration, không ADR, không route; không mảnh nào của
 `docs/PRODUCT.md` §11 đổi.
 
 ## 1. Vòng này là gì
@@ -23481,26 +23481,26 @@ nguyên văn như §S1.255 (tệp `.ps1` UTF-8 có BOM, `powershell.exe -NoProfi
 Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa sổ ấy vẽ câu tiếng Việt).
 
 ## 3. Hai chỗ nhỏ
-- **Khoản 9401 — câu báo sau chữ ký mở thầu.** §S1.255 mục 3 đo: Phó Tổng Giám đốc ký XD-03 ⇒ `APPROVED 2 / 2`, câu vẫn *"Thiếu
+- **Khoản 332 — câu báo sau chữ ký mở thầu.** §S1.255 mục 3 đo: Phó Tổng Giám đốc ký XD-03 ⇒ `APPROVED 2 / 2`, câu vẫn *"Thiếu
   người thứ hai thì điều phối sẽ bị từ chối"*. Nay `cauSauChuKy` (`apps/web/trang/mo-thau.js`) đọc yêu cầu vừa nạp lại: `APPROVED`
   ⇒ *"Đã ghi chữ ký phê duyệt — yêu cầu đã đủ 2 / 2 chữ ký. Người xin mở bấm «Điều phối giải mã»."*; khác ⇒ *"Đã ghi một chữ ký
   phê duyệt. Chưa đủ chữ ký (1 / 2) — điều phối sẽ bị từ chối cho tới khi đủ."*; lần nạp lại hỏng ⇒ dựa vào `status` của phản hồi
   lần ký. Ngưỡng lấy từ máy chủ (khoản 192).
-- **Khoản 9402 — «Huỷ trao thầu».** Đo trước khi sửa, trên trình duyệt: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ
+- **Khoản 333 — «Huỷ trao thầu».** Đo trước khi sửa, trên trình duyệt: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ
   ⇒ *"Đã huỷ trao thầu…"*, `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Nay theo khuôn khoản 321: trang đọc lại trao thầu mới nhất;
   chưa hiện, hay đã đổi từ lúc đọc ⇒ chỉ vẽ ra kèm *"Trao thầu sắp huỷ hiện ở dưới — … bấm Huỷ trao thầu lần nữa để huỷ."*;
   đọc lại bị từ chối ⇒ câu 403 của khoản 323; gói chưa có trao thầu ⇒ nói ra. Lý do trống vẫn chặn trước mọi lời gọi.
 
 ## 4. Điểm tôi tự chốt
-- 9402 theo đúng khuôn khoản 321 (lần bấm đầu chỉ hiện) chứ không thêm id trao thầu vào route: route nhận id là một thay đổi API
+- 333 theo đúng khuôn khoản 321 (lần bấm đầu chỉ hiện) chứ không thêm id trao thầu vào route: route nhận id là một thay đổi API
   và một ADR, cho một đường không nằm trên kịch bản §11. Cái giá, nói ra: giữa lần đọc lại và lần huỷ, máy chủ huỷ trao thầu còn
   sống lúc ấy, không theo id.
-- 9401: bản đầu dùng phản hồi của lần ký và bỏ lần nạp lại vì nghĩ hai thứ cùng hình dạng — lượt đi lại trên trình duyệt cho câu
+- 332: bản đầu dùng phản hồi của lần ký và bỏ lần nạp lại vì nghĩ hai thứ cùng hình dạng — lượt đi lại trên trình duyệt cho câu
   *"…đã đủ chữ ký"* KHÔNG số: phản hồi của `POST /unseal/:id/approve` không mang `approvalCount`/`requiredApprovals`. Bản cuối đọc
   yêu cầu nạp lại, và stub của test mang đúng hình dạng thật (đột biến H7 đỏ nhờ đó).
 
 ## 5. Đo
-- **Đỏ trước trên `master` (`830ffdc4`):** ca 9401 đỏ ở ca *đủ* (*"…Thiếu ng…"* không khớp *"đã đủ 2 / 2"*); ca 9402 đỏ ở khẳng định
+- **Đỏ trước trên `master` (`830ffdc4`):** ca 332 đỏ ở ca *đủ* (*"…Thiếu ng…"* không khớp *"đã đủ 2 / 2"*); ca 333 đỏ ở khẳng định
   đầu (*"huỷ một trao thầu chưa hiện trên màn"*).
 - **Đột biến** (trọn `apps/web/src/phuc-vu.test.ts` + cổng câu cấm, 278 ca; bản gốc và bản sau 0 đỏ): H1 câu luôn nói chưa đủ;
   H2 trả hằng cũ; H3 huỷ không cần trao thầu đang hiện; H4 chỉ đòi đã đọc một trao thầu nào đó; H5 bỏ nhánh 403 của lần đọc lại;
