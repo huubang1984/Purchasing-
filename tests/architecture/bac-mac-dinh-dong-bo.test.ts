@@ -8,7 +8,8 @@
 // ==============================================================================================
 
 import { describe, expect, it } from "vitest";
-import { BAC_MAC_DINH, MUC_MAC_DINH, NGUONG_KEP_MAC_DINH } from "../../apps/web/src/chinh-sach.js";
+import { BAC_MAC_DINH, BENCHMARK_MAC_DINH, MUC_MAC_DINH, NGUONG_KEP_MAC_DINH } from "../../apps/web/src/chinh-sach.js";
+import { NHOM_BENCHMARK_MAU, docNhomBenchmark } from "../../packages/du-lieu-nen/src/benchmark.js";
 import { BAC_DEMO, MUC_DEMO } from "../../tools/gieo-demo/src/chinh-sach-demo.js";
 
 describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:demo --s3 khai CÙNG một chính sách", () => {
@@ -28,5 +29,12 @@ describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:dem
       [1000000000, false],
       [10000000000, true],
     ]);
+  });
+
+  // [S1.9101 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): mẫu của màn là bản chép của mẫu ở gói — `gieo:demo` import thẳng bản ở
+  // gói, nên hai bản là đủ. Và mẫu phải đọc được bởi chính bộ đọc của lượt chấm: một mẫu mà `docNhomBenchmark` từ chối là mẫu hỏng.
+  it("[S1.9101 / S4.5b] mẫu nhóm khoá `benchmark` của màn trùng mẫu của gói, và bộ đọc của lượt chấm nhận nó", () => {
+    expect(BENCHMARK_MAC_DINH).toEqual(NHOM_BENCHMARK_MAU);
+    expect(docNhomBenchmark(BENCHMARK_MAC_DINH)).not.toBeNull();
   });
 });

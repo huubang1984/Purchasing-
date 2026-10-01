@@ -81,6 +81,12 @@ export interface CreateProcurementPolicyInput {
   /** [S1.169] Hai cột mức chính sách (`069`): tất-cả-hoặc-không cùng `tiers`, dương — CSDL phán. */
   readonly chiaNhoCuaSoNgay?: number | null;
   readonly thamDinhHieuLucThang?: number | null;
+  /**
+   * [S1.9101 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): sáu khoá, mọi giá trị là CHUỖI. `undefined` hay `null` ⇒ phiên bản
+   * KHÔNG cấu hình benchmark — benchmark của gói ghim phiên bản này hiện *"chưa cấu hình"*, lượt chấm vẫn chạy. Tầng này chỉ kiểm
+   * hình dạng NGOÀI (một object các chuỗi); tập khoá, biên và thứ tự ngưỡng là của `CHECK` `org_procurement_policies_benchmark_hinh_dang`.
+   */
+  readonly benchmark?: Readonly<Record<string, string>> | null;
   readonly actorSessionId: string;
 }
 
@@ -174,6 +180,17 @@ function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chi
   return { bac: JSON.stringify(mang), chiaNho, thamDinh };
 }
 
+/** [S1.9101 / S4.5b] Hình dạng NGOÀI của nhóm khoá `benchmark` — object, mọi giá trị là chuỗi. */
+function benchmarkJson(input: CreateProcurementPolicyInput): string | null {
+  const tho: unknown = input.benchmark ?? null;
+  if (tho === null) return null;
+  if (typeof tho !== "object" || Array.isArray(tho)) throw new RfqError("benchmark phải là một object");
+  for (const v of Object.values(tho as Record<string, unknown>)) {
+    if (typeof v !== "string") throw new RfqError("mọi giá trị của benchmark phải là chuỗi");
+  }
+  return JSON.stringify(tho);
+}
+
 /**
  * Thêm MỘT PHIÊN BẢN chính sách. Không có hàm sửa, và đó là toàn bộ cơ chế: `app_api` không có
  * `UPDATE`/`DELETE` trên bảng này (014). Sửa được ngưỡng của một phiên bản đã dùng nghĩa là phân
@@ -197,14 +214,15 @@ export async function createProcurementPolicy(
 
   const { tp, topN } = trongSoJson(input);
   const { bac, chiaNho, thamDinh } = bacJson(input);
+  const benchmark = benchmarkJson(input);
 
   const { rows } = await client.query<HangChinhSach>(
     `INSERT INTO public.org_procurement_policies
        (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n,
-        created_by, created_by_session_id, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang)
-     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8, $9::pg_catalog.jsonb, $10, $11)
+        created_by, created_by_session_id, tiers, chia_nho_cua_so_ngay, tham_dinh_hieu_luc_thang, benchmark)
+     VALUES ($1, $2, $3::pg_catalog.numeric, $4, $5::pg_catalog.jsonb, $6, $7, $8, $9::pg_catalog.jsonb, $10, $11, $12::pg_catalog.jsonb)
      RETURNING ${COT_CHINH_SACH}`,
-    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId, bac, chiaNho, thamDinh],
+    [orgId, input.version, nguong, input.currency, tp, topN, actor.id, actor.sessionId, bac, chiaNho, thamDinh, benchmark],
   );
   const hang = rows[0];
   if (hang === undefined) throw new RfqError("Câu INSERT org_procurement_policies không trả về hàng");
@@ -229,6 +247,8 @@ export async function createProcurementPolicy(
       // [S1.169] Cùng lý do `soThanhPhan`: sổ nói phiên bản có bậc hay không và bao nhiêu bậc; ma trận nằm ở chính hàng
       // chính sách, bất biến, xuất được.
       soBac: input.tiers?.length ?? 0,
+      // [S1.9101 / S4.5b] Có cấu hình benchmark hay không — ngưỡng nằm ở chính hàng chính sách, bất biến, xuất được.
+      coBenchmark: benchmark !== null,
     },
   });
 
@@ -302,6 +322,8 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly tiers: readonly Readonly<Record<string, unknown>>[] | null;
   readonly chiaNhoCuaSoNgay: number | null;
   readonly thamDinhHieuLucThang: number | null;
+  /** [S1.9101 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
+  readonly benchmark: Readonly<Record<string, string>> | null;
   readonly createdBy: string;
   readonly signedBy: string | null;
   readonly signedAt: Date | null;
@@ -320,6 +342,7 @@ interface HangPhienBan extends HangChinhSach {
   tiers: Record<string, unknown>[] | null;
   chia_nho_cua_so_ngay: number | null;
   tham_dinh_hieu_luc_thang: number | null;
+  benchmark: Record<string, string> | null;
   created_by: string;
   signed_by: string | null;
   signed_at: Date | null;
@@ -339,7 +362,7 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
 
   const { rows } = await client.query<HangPhienBan>(
     `SELECT p.id, p.version, p.dual_approval_threshold, p.currency, p.effective_from, p.tiers,
-            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.created_by, s.signed_by, s.signed_at,
+            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.benchmark, p.created_by, s.signed_by, s.signed_at,
             p.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now()) AS hieu_luc
        FROM public.org_procurement_policies p
        LEFT JOIN public.org_policy_signatures s
@@ -358,6 +381,7 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
       tiers: h.tiers,
       chiaNhoCuaSoNgay: h.chia_nho_cua_so_ngay,
       thamDinhHieuLucThang: h.tham_dinh_hieu_luc_thang,
+      benchmark: h.benchmark,
       createdBy: h.created_by,
       signedBy: h.signed_by,
       signedAt: h.signed_at,

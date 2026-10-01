@@ -29,6 +29,7 @@
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
+import { docNhomBenchmark, ghiBenchmarkLuotCham, tinhBenchmarkGoi, type NhomBenchmark } from "@trustprocure/du-lieu-nen";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 import {
   laTuChoi,
@@ -112,7 +113,7 @@ interface ThanhPhanChinhSachTho {
   readonly he_so: string;
 }
 
-interface HangBaoGia {
+export interface HangBaoGia {
   readonly bid_version_id: string;
   readonly tien: string | null;
   readonly currency: string | null;
@@ -141,6 +142,8 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   readonly id: string;
   readonly version: number;
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
+  /** [S1.9101 / S4.5b] Nhóm khoá `benchmark` của CÙNG phiên bản ghim — vế benchmark của L14. `null`: chưa cấu hình. */
+  readonly benchmark: NhomBenchmark | null;
 }> {
   // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách: một phiên bản có bậc chưa có chữ ký thứ hai TRƯỚC lúc gói mở
   // không áp cho gói (ADR-082 ⑺). [S1.253] Hàm ấy chạy MỘT lần, lúc gói mở, dưới khoá tư vấn chính sách; câu này đọc kết quả.
@@ -148,8 +151,9 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
     readonly id: string | null;
     readonly version: number | null;
     readonly eval_components: HangChinhSach["eval_components"];
+    readonly benchmark: unknown;
   }>(
-    `SELECT o.id, o.version, o.eval_components
+    `SELECT o.id, o.version, o.eval_components, o.benchmark
        FROM public.rfq_packages r
        LEFT JOIN public.org_procurement_policies o
          ON o.id OPERATOR(pg_catalog.=) r.chinh_sach_ghim_id
@@ -188,6 +192,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
     id: cs.id,
     version: cs.version,
     thanhPhan: tp as readonly ThanhPhanChinhSach[],
+    benchmark: docNhomBenchmark(hang.benchmark),
   };
 }
 
@@ -218,7 +223,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
  * hai hàng và giá cũ có thể thắng hạng 1 (đo §S1.181). Bản rõ không bị xoá — lọc ở lần đọc; cổng tĩnh
  * `tests/architecture/phong-bi-loi-moi-con-song.test.ts` đòi ba bộ đọc mang đúng một vế ấy.
  */
-async function docBaoGia(
+export async function docBaoGia(
   client: pg.PoolClient,
   orgId: string,
   rfqId: string,
@@ -424,6 +429,21 @@ export async function taoLuotDanhGia(
     });
   }
 
+  // [S1.9101 / S4.5b / L7, L14] Benchmark ghi ĐÚNG MỘT LẦN, ở đây, trong giao dịch tạo lượt chấm — khoá ngoại `ghi_luc →
+  // rfq_evaluations.created_at` (`9501`) từ chối mọi lần ghi ở giao dịch khác. Ngưỡng đọc từ CÙNG phiên bản ghim với trọng số, và
+  // khoá ngoại `(evaluation_id, rfq_id, policy_id)` buộc điều ấy ở CSDL. Phiên bản ghim chưa cấu hình nhóm `benchmark` ⇒ không
+  // hàng nào, lượt chấm vẫn chạy (ADR-141 ⑧). Tập báo giá đem so là ĐÚNG tập vừa xếp hạng.
+  let soDongBenchmark: number | null = null;
+  if (cs.benchmark !== null) {
+    const ketQua = await tinhBenchmarkGoi(client, orgId, {
+      rfqId: input.rfqId,
+      bidVersionIds: tinh.map((t) => t.bidVersionId),
+      nhom: cs.benchmark,
+    });
+    await ghiBenchmarkLuotCham(client, orgId, { evaluationId, policyId: cs.id, ketQua });
+    soDongBenchmark = ketQua.dong.length;
+  }
+
   // Cạnh `UNSEALED->EVALUATING` có từ `011:147` và CHƯA AI ĐI QUA. Câu này là thứ làm nó sống.
   // Vế `AND status IN (...)` là lớp CÓ THẨM QUYỀN cho ca trạng thái đổi giữa lần đọc ở trên và
   // câu này; phép kiểm ở trên chỉ làm thông điệp nói được VÌ SAO.
@@ -466,6 +486,8 @@ export async function taoLuotDanhGia(
       currency,
       soBaoGia: lines.length,
       soDocDuoc: docDuoc.length,
+      // [S1.9101 / S4.5b] Số dòng benchmark đã ghi; `null` khi phiên bản ghim chưa cấu hình. Không nhãn, không con số.
+      soDongBenchmark,
       evaluatedBySessionId: input.actorSessionId,
     },
   });

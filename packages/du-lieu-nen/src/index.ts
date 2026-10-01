@@ -73,3 +73,23 @@ export {
   type QuanSatGia,
   type TrangThaiQuanSat,
 } from "./lich-su-gia.js";
+// [S1.9101 / S4.5b] Benchmark giá: mẫu và bộ đọc nhóm khoá `benchmark`, phép tính của một gói, phép ghi của lượt chấm (L7). Lõi
+// thuần (`tinhDai`, `ganNhan`) không ra cửa: người dùng của nó là hai hàm dưới và bộ kiểm ngoại tuyến của S4.5c cài lại từ đặc tả.
+export {
+  NHOM_BENCHMARK_MAU,
+  docNhomBenchmark,
+  type ChieuLech,
+  type DaiBenchmark,
+  type NhanBenchmark,
+  type NhomBenchmark,
+  type QuanSatBenchmark,
+} from "./benchmark.js";
+export {
+  ghiBenchmarkLuotCham,
+  tinhBenchmarkGoi,
+  type BenchmarkGoi,
+  type DaiCuaGoi,
+  type DongBenchmark,
+  type GhiBenchmarkInput,
+  type TinhBenchmarkGoiInput,
+} from "./benchmark-goi.js";

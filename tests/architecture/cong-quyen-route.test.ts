@@ -101,6 +101,9 @@ const HAM_DOI_TRANG_THAI = [
   // và gợi ý không đòi quyền (ADR-121 ②).
   "chuanHoaSauNop",
   "ghiAnhXa",
+  // [S1.9101 / S4.5b] Ghi kết quả benchmark — chỉ `taoLuotDanhGia` gọi, trong giao dịch tạo lượt chấm (cổng `evaluation.perform`);
+  // khoá ngoại `…_cua_luot_cham_fk` (`9501`) từ chối mọi lần ghi ở giao dịch khác.
+  "ghiBenchmarkLuotCham",
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
@@ -135,6 +138,9 @@ const HAM_DOI_TRANG_THAI = [
  * đường gọi KHÔNG CÓ NGƯỜI DÙNG NÀO (một job nền chạy dưới `app_api`).
  */
 const HAM_CHI_DOC = [
+  // [S1.9101 / S4.5b] `tinhBenchmarkGoi` KHÔNG mang cổng: nó là phép TÍNH, và đúng hai chỗ gọi có cổng — lượt chấm
+  // (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ). `ban-ro-liet-ke.test.ts` ghim tập chỗ gọi.
+  "tinhBenchmarkGoi",
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
   // `app_unseal`, và KHÔNG có người dùng nào để hỏi quyền. Cùng lý do đã ghi cho `listSuppliers`.
   "auditStoredCiphertexts",
@@ -273,6 +279,9 @@ const HAM_DOC_CO_QUYEN = [
   // [S1.251 / S4.4b] Lịch sử giá là giá SAU mở thầu, gom từ nhiều gói — cổng `bid.view` đứng THẲNG trong thân `docLichSuGia`
   // (spec S4 §4.5), cùng cổng của bảng so sánh và bảng xếp hạng.
   "docLichSuGia",
+  // [S1.9101 / S4.5b] Benchmark là thông tin về giá SAU mở thầu — cổng `bid.view` đứng THẲNG trong thân `docBenchmark`, hàng sổ
+  // `BENCHMARK_READ` mỗi lần đọc.
+  "docBenchmark",
 ] as const;
 
 /**
@@ -293,6 +302,8 @@ const HAM_THUAN_TUY = [
   "tinhChiPhiHieuDung",
   // [S1.204 / S4.3a] Lõi chuẩn hoá — không I/O; L2 đòi nó tái lập được theo phiên bản bộ luật.
   "chuanHoa",
+  // [S1.9101 / S4.5b] Bộ đọc nhóm khoá `benchmark` của phiên bản chính sách — không I/O.
+  "docNhomBenchmark",
   "vietSo",
   // [ADR-011] Bộ ký aws-kms và phép đọc khoá công khai: không `client` CSDL, không `orgId` —
   // dựng ở composition root, như bản local-dev ngay dưới.

@@ -11009,3 +11009,88 @@ sau; ⑹ `opened_at` do người gọi đặt thành khoản 319, không sửa t
   L14 — đường sản xuất không tới được (`taoLuotDanhGia` khoá và đọc gói trước).
 - **Nhánh *không có phiên bản ghim* không có ca riêng ở tầng gói** — dựng nó cần một tổ chức không phiên bản nào trước lúc mở gói; vế CSDL
   của nó đi chung một vế `v_ghim IS NULL OR … IS DISTINCT FROM` với ca đã đo.
+
+## ADR-9201 — S4.5b: benchmark giá `TRUNG_VI_THEO_GOI_V1` — nhóm khoá `benchmark` của phiên bản chính sách; kết quả và đầu vào ghi đúng một lần trong giao dịch tạo lượt chấm (khoá ngoại tới `created_at`), không cột tiền; mỗi (báo giá, dòng) một nhãn, kể cả `KHONG_DO_DUOC`; giá của chính dòng đọc lúc tính
+
+**Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-01, cả bốn theo đề xuất: ⑴ bảng con lưu
+THAM CHIẾU quan sát — (báo giá, dòng) khoá ngoại tới `rfq_unsealed_bids` — cùng id hàng ánh xạ và cờ hồi tố; quy đổi, bí danh và phiên
+bản hàng chuẩn tái lập bằng phép đọc as-of tại mốc đã lưu; `quan_sat_gia` không đổi; ⑵ nhãn thứ năm `KHONG_DO_DUOC` kèm lý do, một hàng
+cho MỌI dòng của MỌI báo giá; ⑶ đơn giá của chính dòng đọc LÚC TÍNH, lưu kèm cờ hồi tố (ngoại lệ `SAU_MO_GIA` của L1), còn dải đọc tại mốc
+mở giá của gói; ⑷ chi tiết theo đề xuất — luật nhãn, biên ngưỡng, nhóm khoá trên `/chinh-sach` có mẫu và cảnh báo tĩnh, bộ đọc có cổng,
+phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 1. Chốt phương pháp của ADR-141 ⑧ áp nguyên · **[S1.9101]** ·
+**Liên quan:** ADR-141 (phiên bản ghim, chốt phương pháp), ADR-136 (`quan_sat_gia`), ADR-140 ⑦ (bộ đọc có cổng, hàng sổ), ADR-095
+(lịch sử giá là hàm as-of), ADR-053 ⑴ (số là chuỗi), ADR-017 (ứng dụng tính, CSDL lưu) · **Spec:** S4 §4.1, §4.6, §2.4 ⑾, §2.5 ⑿ ㉒,
+§5.1 L7, L14, §9 S4.5b · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — bảy phép đo trước khi viết
+
+1. **`quan_sat_gia` không trả id của quy đổi, bí danh hay phiên bản hàng chuẩn** — chỉ `anh_xa_id`; bí danh đơn vị TOÀN CỤC
+   (`uom_aliases_chung`) không có cột id. Chữ của spec §4.6 *"cùng id mọi hàng nền đã dùng"* không viết được mà không sửa hàm ấy.
+2. **Đơn giá quy đổi là `numeric` với số chữ số lẻ THAY ĐỔI** (`thanh_tien / (so_luong · he_so)`); lõi bigint co giãn của
+   `chi-phi-hieu-dung.ts` có số chữ số lẻ cố định. Trung vị và tứ phân vị cần cộng, trừ, nhân, so và chia cho luỹ thừa của 2.
+3. **Lượt chấm chạy trong MỘT giao dịch** (`withTenant` mở `BEGIN`), và `rfq_evaluations.created_at` là `DEFAULT now()` ngoài
+   `GRANT INSERT` (`057`) — hằng của giao dịch.
+4. **`quan_sat_gia` không có tham số gói.** Đọc hết tổ chức tốn 84–88 s (biên bản §S1.235); đọc theo hàng chuẩn ~0,3 ms mỗi quan sát.
+   Dòng không có ánh xạ hiệu lực tới hàng chuẩn nào không ra ở lần đọc theo hàng chuẩn nào.
+5. **`Date` của JavaScript cắt micro giây**, còn `unsealed_at`/`ghi_luc` giữ micro giây — một mốc đi qua `Date` rồi quay lại SQL lệch tới
+   999 µs, đủ để tập quan sát `< mốc` khác đi.
+6. **jsonpath của Postgres 16 có `.double()`, không có `.decimal()`**; dạng phủ định `NOT jsonb_path_exists(… ? (sai))` để lọt khoá vắng
+   mặt (M5 của §S1.235). Đo trên cụm Postgres 16: dạng dương với `like_regex` trên chuỗi trước `.double()` nhận đúng hai mẫu hợp lệ và từ chối
+   15 mẫu hỏng (số mũ, `NaN`, số JSON, thiếu khoá, thừa khoá, ngoài biên, năm chữ số lẻ, số 0 đứng đầu, ngưỡng bằng nhau).
+7. **`evaluation.perform` do năm vai giữ, ba trong số ấy không giữ `bid.view`** (khoản 220): lượt chấm không được trả nhãn cho người gọi.
+
+### Quyết định
+
+1. **Nhóm khoá `org_procurement_policies.benchmark jsonb`** (`9501_benchmark_gia`) — sáu khoá, mọi giá trị là CHUỖI: `cua_so_thang`
+   [1, 60], `san_goi` [1, 50], `san_ncc` [1, 50], `nguong_lech_vua`/`nguong_lech_cao` dương tối đa bốn chữ số lẻ với
+   `0 < vừa < cao ≤ 10`, `phuong_phap` = `TRUNG_VI_THEO_GOI_V1`. `CHECK` `org_procurement_policies_benchmark_hinh_dang` ở dạng dương: tập khoá
+   đúng sáu (`benchmark - ARRAY[…] = '{}'`), `like_regex` trên chuỗi, rồi `.double()` cho biên và thứ tự (spec §2.5 ㉒ — ngưỡng, không phải
+   tiền). `GRANT INSERT (benchmark)`, không `UPDATE`. `NULL` = chưa cấu hình. Bộ đọc `docNhomBenchmark` phán lại từng khoá và NÉM khi lệch.
+2. **Phương pháp** (lõi thuần `packages/du-lieu-nen/src/benchmark.ts`, số học `so-thap-phan.ts` — `m / 10^s` bigint): dải của (gói X, hàng
+   chuẩn, tiền tệ của báo giá) gồm quan sát `HOP_LE` của `quan_sat_gia(mốc mở giá của X, hàng chuẩn)`, không của CHÍNH X, ngày quan sát trong
+   [mốc − `cua_so_thang` tháng lịch UTC, mốc) — ngày cuối tháng kẹp về cuối tháng đích —, cùng tiền tệ, đơn giá khác 0; khác tiền tệ và đơn giá
+   0 bị loại và ĐẾM. Mỗi gói một trung vị; mốc so là trung vị các trung vị gói; dải [Q1, Q3] (nội suy tuyến tính, nghĩa `percentile_cont`).
+   Sàn: ≥ `san_goi` gói VÀ ≥ `san_ncc` nhà cung cấp, không thì `CHUA_DU_LICH_SU` và không con số. Nhãn: |p − m| ≤ vừa·m ⇒ `BINH_THUONG`,
+   ≤ cao·m ⇒ `LECH_VUA`, còn lại `LECH_CAO`; hai nhãn lệch mang `TREN`/`DUOI`; so bằng nhân chéo. Thời điểm qua lại giữa SQL và TypeScript
+   là micro giây kể từ epoch (`extract('epoch', …)` là `numeric`; đi về bằng `'epoch' + n · 1 µs` — 200.000 mẫu khứ hồi chính xác).
+3. **Phạm vi một lần tính** (`benchmark-goi.ts`, `tinhBenchmarkGoi`): mỗi (báo giá trong tập lượt chấm xếp hạng, dòng của X) một kết quả.
+   Giá của chính dòng đọc `quan_sat_gia(mốc đọc, hàng chuẩn)` lọc theo X — mốc đọc là `now()` của giao dịch, tức `ghi_luc` của hàng —,
+   kèm `hoi_to` của dòng. Hàng chuẩn ứng viên là mọi hàng chuẩn mà một hàng ánh xạ của gói từng trỏ; `quan_sat_gia` giữ luật *ánh xạ hiệu
+   lực*. Dòng không ra ở lần đọc nào ⇒ `KHONG_DO_DUOC` lý do `CHUA_ANH_XA`; dòng ra với trạng thái khác `HOP_LE` ⇒ `KHONG_DO_DUOC` lý do là
+   trạng thái ấy. Mốc mở giá = `min(unsealed_at)` của X — đúng định nghĩa `moc_goi` trong thân `quan_sat_gia`; lần đọc giá của X kiểm hai
+   định nghĩa cho cùng một mốc, lệch thì NÉM.
+4. **Lưu gì.** `price_benchmark_results`: một hàng mỗi (báo giá, dòng) — nhãn, chiều, lý do, phương pháp, mốc mở giá, khoá dải (hàng chuẩn,
+   tiền tệ, đầu cửa sổ), số đếm (quan sát, gói, nhà cung cấp, gói cùng người tạo, quan sát hồi tố, loại vì tiền tệ, loại vì giá 0), `hoi_to`
+   của chính dòng, `anh_xa_id`, `policy_id`, `rfq_id`. `price_benchmark_inputs`: một hàng mỗi quan sát đã vào một dải — (báo giá, dòng) khoá
+   ngoại tới `rfq_unsealed_bids`, `anh_xa_id`, `hoi_to`; khoá theo (lượt chấm, hàng chuẩn, tiền tệ), vì mọi báo giá của X trên cùng hàng chuẩn
+   và tiền tệ so với CÙNG một dải. Không cột nào có đơn vị tiền; không lưu tỉ lệ lệch (cộng giá của dòng thì suy ra trung vị) và không lưu
+   dải. `SAU_MOC` không lưu: nó đếm hàng ghi từ mốc tới LÚC ĐỌC, nên không tái lập được — màn của S4.5c đọc nó as-of.
+5. **Ghi đúng một lần, trong giao dịch tạo lượt chấm** — bằng KHOÁ NGOẠI, không trigger: `price_benchmark_results_cua_luot_cham_fk`
+   `(org_id, evaluation_id, rfq_id, policy_id, ghi_luc) → rfq_evaluations (org_id, id, rfq_id, policy_id, created_at)` và
+   `price_benchmark_inputs_cua_luot_cham_fk` `(org_id, evaluation_id, ghi_luc) → (org_id, id, created_at)`. `ghi_luc` và `created_at` đều
+   `DEFAULT now()` ngoài `GRANT`, nên bằng nhau khi và chỉ khi cùng giao dịch; hàng kết quả mang `rfq_id` và `policy_id` của CHÍNH lượt chấm —
+   vế benchmark của L14 nằm ở CSDL. Hai bảng chỉ-ghi-thêm BẰNG QUYỀN (khuôn `rfq_evaluation_lines`, `057`), policy khách đóng hẳn.
+   `taoLuotDanhGia` gọi tính và ghi sau các hàng xếp hạng, trước cạnh `EVALUATING`, chỉ khi phiên bản ghim cấu hình nhóm `benchmark`; nó
+   không trả nhãn nào (điểm 7 của bối cảnh) — sổ `RFQ_EVALUATED` thêm `soDongBenchmark`.
+6. **Bộ đọc `docBenchmark`** (`packages/danh-gia/src/doc-benchmark.ts`, cổng `bid.view` trong thân, một hàng `BENCHMARK_READ` không nhãn
+   không giá mỗi lần đọc thành công): gói `UNSEALED`/`BAFO_UNSEALED` ⇒ tính as-of dưới phiên bản ghim trên đúng tập báo giá lượt chấm sẽ xếp
+   hạng (`docBaoGia`); trạng thái khác ⇒ hàng ĐÃ GHI của lượt chấm mới nhất; chưa có ⇒ `CHUA_CO_KET_QUA`; phiên bản không cấu hình ⇒
+   `CHUA_CAU_HINH`. Route và màn ở S4.5c. Cổng tĩnh `ban-ro-liet-ke` ghim đúng hai chỗ gọi `tinhBenchmarkGoi`.
+7. **Màn `/chinh-sach`**: ô cho nhóm khoá (bỏ chọn ⇒ `null`), mẫu GIẢ ĐỊNH của spec §4.1 — bản chép của `NHOM_BENCHMARK_MAU`, khoá nhau ở
+   `bac-mac-dinh-dong-bo.test.ts` —, cảnh báo tĩnh không chặn (sàn dưới 3, ngưỡng vừa từ 20%, cửa sổ trên 24 hay dưới 3 tháng, phiên bản
+   không cấu hình); *"tác động trên lịch sử thật"* chờ S4.5c. Bảng phiên bản có cột benchmark. `gieo:demo` khai mẫu ở phiên bản 1.
+8. **L7 vào sổ đăng ký; L14 nhận vế benchmark.**
+
+### Hệ quả và giới hạn nói ra
+
+- **Lệch chữ spec §4.6** (*"bảng con … cùng id mọi hàng nền đã dùng"*): bảng con mang id ánh xạ, không mang id quy đổi, bí danh hay phiên bản
+  hàng chuẩn — các hàng ấy tái lập bằng phép đọc as-of tại `moc_mo_gia`, vì mọi bảng nền là chỉ-ghi-thêm có `ghi_luc` do trigger đặt (L1).
+- **CSDL không kiểm ĐỦ hàng hay ĐÚNG nhãn.** Khoá ngoại buộc *cùng giao dịch, cùng gói, cùng phiên bản*; một đường ghi thứ hai dưới
+  `app_api` TRONG CHÍNH giao dịch tạo lượt chấm vẫn ghi được nhãn tuỳ ý. Phép tính lại L7 là lớp phát hiện.
+- **Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi nó còn hỏng ở trục khác** (dòng bỏ trống, lệch tổng) — trạng thái thật cần đọc hết tổ chức.
+- **Cuộc đua as-of chung của L1**: một hàng nền ghi ở giao dịch khác với `ghi_luc` trước `now()` của lượt chấm mà commit SAU lần đọc thì phép
+  tính lại về sau thấy nó.
+- **Gói huỷ sau mốc của X vẫn vào dải** — luật một chỗ của `quan_sat_gia` (ADR-136 ③: loại TỪ LÚC huỷ).
+- **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
+- **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn của gói (giá của X tại mốc đọc, dải tại mốc mở giá); số đo ở biên bản §S1.9101.
+- **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 9401) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.

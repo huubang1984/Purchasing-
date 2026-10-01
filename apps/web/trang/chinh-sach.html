@@ -54,7 +54,7 @@
       phiên bản. Một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC người khai đã ký nó.</p>
     <dl class="tt" id="tt-to-chuc"></dl>
     <table id="bang-pb">
-      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
+      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Benchmark</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
       <tbody></tbody>
     </table>
     <button id="nut-doc-pb" class="phu">Đọc lại</button>
@@ -104,6 +104,26 @@
       <thead><tr><th class="so">Từ số tiền</th><th class="so">Tài chính</th><th class="so">Mua sắm</th><th class="so">Giám đốc</th><th class="so">Tổng</th></tr></thead>
       <tbody></tbody>
     </table>
+    <!-- [S1.9101 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): so đơn giá của một gói với lịch sử NỘI BỘ của tổ chức, theo
+         phương pháp `TRUNG_VI_THEO_GOI_V1`. Bỏ chọn thì phiên bản không cấu hình benchmark — không mặc định ngầm. -->
+    <h3>Benchmark giá</h3>
+    <p class="ghi">Mỗi gói đã mở trong cửa sổ cho một trung vị; mốc so là trung vị của các trung vị ấy. Dưới sàn thì nhãn là
+      «chưa đủ lịch sử», không con số nào. Nhãn chỉ là tín hiệu để xem xét: «thấp bất thường» dẫn tới một yêu cầu làm rõ,
+      không bao giờ là căn cứ loại một báo giá. Gói ghim phiên bản hiệu lực lúc nó mở — đổi ngưỡng ở đây không đổi nhãn của
+      gói đã mở.</p>
+    <label><input type="checkbox" id="co-benchmark"> Cấu hình benchmark cho phiên bản này</label>
+    <div id="khoi-benchmark" hidden>
+      <label for="bm-cua-so">Cửa sổ lịch sử (tháng, 1–60)</label>
+      <input id="bm-cua-so" inputmode="numeric" autocomplete="off" placeholder="12">
+      <label for="bm-san-goi">Sàn: số gói tối thiểu (1–50)</label>
+      <input id="bm-san-goi" inputmode="numeric" autocomplete="off" placeholder="3">
+      <label for="bm-san-ncc">Sàn: số nhà cung cấp khác nhau tối thiểu (1–50)</label>
+      <input id="bm-san-ncc" inputmode="numeric" autocomplete="off" placeholder="3">
+      <label for="bm-vua">Ngưỡng lệch vừa (tỉ lệ so với trung vị, tối đa 4 chữ số lẻ)</label>
+      <input id="bm-vua" inputmode="decimal" autocomplete="off" placeholder="0.05">
+      <label for="bm-cao">Ngưỡng lệch cao (lớn hơn ngưỡng vừa, tối đa 10)</label>
+      <input id="bm-cao" inputmode="decimal" autocomplete="off" placeholder="0.10">
+    </div>
     <div class="bao luu" id="canh-bao" hidden></div>
     <button id="nut-tao-pb">Tạo phiên bản</button>
     <div class="bao loi" id="loi3" hidden></div>
