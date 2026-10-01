@@ -23095,4 +23095,9 @@ Một agent đọc trọn diff của bản đầu (`14b0337`, chỉ đọc). Kh�
 
 ## 10. Số đo
 
-SO_DO_S45A_CHO_DIEN
+- Cây cuối (trên `master` `fc0dcc7` — #225 đã merge; master không đổi trong vòng): `pnpm t0` sạch (512 module, không vi phạm phụ thuộc);
+  `pnpm test` 139 tệp, 2337 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.253, ADR-141, khoản 319, migration `102`).
+- Lô tích hợp chạm vòng này trên mã chụp: `luot-danh-gia.int` 112/112, `rfq.int` 60/60, `bac-chinh-sach.int` 42/42, `guest.int` 26/26,
+  `lich-su-gia.int` 51/51, `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128.
+- `pnpm evidence` toàn bộ T1–T3 trên `e283e09`: 226 tệp, 4369 khẳng định, 4359 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi
+  trường), **0 đỏ**; **78/78 bất biến** (56 nghiệp vụ + 22 hàng rào); L14 đo bằng 11 khẳng định.
