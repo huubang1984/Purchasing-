@@ -72,7 +72,7 @@ import {
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
-import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, type NhaCungCapGieo } from "./goi-da-mo.js";
+import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -238,6 +238,8 @@ async function chinh(): Promise<void> {
   });
   try {
     await migrate(pool, MIGRATIONS_DIR);
+    // [S1.9101 / lượt soi T1] Trước khi gieo GÌ: worker con của ba gói đã mở nhận việc của mọi tổ chức (`goi-da-mo.ts`).
+    await tuChoiKhiCoViecCuaToChucKhac(pool, null);
 
     const q = async <T extends Record<string, unknown>>(sql: string, tham: readonly unknown[] = []): Promise<T> => {
       const { rows } = await pool.query<T>(sql, [...tham]);

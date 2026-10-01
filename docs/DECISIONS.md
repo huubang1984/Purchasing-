@@ -10885,18 +10885,34 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
    ba dòng của gói demo, ba nhà cung cấp đầu của gói demo), lời mời (ở DRAFT với `--s3`), nộp duyệt, lượt chuẩn hoá sau nộp, ánh xạ
    tay dòng bu lông neo bởi người quản lý dữ liệu, một chữ ký, mở gói kèm cặp khoá; nhà cung cấp đi link → OTP → phiên khách, niêm
    phong bằng khoá công khai của gói, nộp lấy biên nhận đã ký; đóng sớm có lý do; yêu cầu mở thầu, duyệt, điều phối qua cổng bốn vế;
-   rồi `apps/unseal-worker/src/main.ts` chạy làm tiến trình con với môi trường SẠCH (khuôn `pilot-gia-lap`, hàm `moiTruongSach` khai
-   GIU ở bảng kiểm kê mã chép) tới khi ba gói `UNSEALED`. Ba gói dưới ngưỡng kép, tổng ngân sách dưới cận 100 triệu; với `--s3`, một
+   rồi `apps/unseal-worker/src/main.ts` chạy làm tiến trình con tới khi ba gói `UNSEALED`. Ba gói dưới ngưỡng kép, tổng ngân sách dưới cận 100 triệu; với `--s3`, một
    nhóm hàng RIÊNG — chung nhóm với gói 9 tỷ hay vượt cận ấy sẽ bắn tín hiệu chia nhỏ (K10a) chặn gói thứ ba. Hai biến môi trường mới
    bắt buộc: `TRUSTPROCURE_SEED_WORKER_DATABASE_URL` (`app_unseal_login`, không phải URL đặc quyền) và cặp
    `TRUSTPROCURE_RECEIPT_SIGNING_KEYS`/`_ACTIVE` của `api` (biên nhận kiểm chứng được như mọi biên nhận khác); đọc cả ba TRƯỚC khi gieo.
+   **[lượt soi §S1.9101]** Worker liệt kê MỌI tổ chức của cụm, nên công cụ từ chối — trước khi gieo gì, và lần nữa ngay trước khi bật
+   worker — khi cụm có việc `UNSEAL_RFQ` hay `BREAK_GLASS_UNSEAL_ALERT` đang chờ của tổ chức khác (worker con sẽ mở khoá của họ bằng
+   vòng khoá của lượt gieo, và giao cảnh báo break-glass của họ vào một thư mục tạm). Môi trường của tiến trình con là danh sách CHO
+   PHÉP (đường dẫn, thư mục nhà và tạm, ngôn ngữ, múi giờ) cộng đúng các biến worker đòi — không mang bí mật nào khác của người gọi;
+   cha thoát thì worker bị giết; thư mục tạm bị xoá khi xong sạch.
+7. **Đường đọc DUY NHẤT** (lượt soi §S1.9101): `tests/architecture/ban-ro-liet-ke.test.ts` đòi tập tệp TypeScript sản xuất có câu SQL
+   gọi `quan_sat_gia` hay `gia_da_lo` đúng bằng `packages/du-lieu-nen/src/lich-su-gia.ts`. `app_api` có `EXECUTE` trên cả hai, và
+   `quan_sat_gia(now(), NULL)` trả giá của cả tổ chức: một bộ đọc thứ hai không cổng (benchmark của S4.5, một báo cáo) sẽ đi qua mọi
+   lớp khác. Bộ dò số của kịch bản 41 đọc thêm mọi lá SỐ của thân JSON (một mảng số trần là một mẩu cho biểu thức chính quy), và
+   bước 14 quét thêm một kim ĐƠN GIÁ ĐÃ QUY ĐỔI — tập rỗng: nó chỉ sinh ra trong thân hàm.
 
 ### Hệ quả và giới hạn nói ra
 
 - **Một vòng BAFO đang mở rút CẢ gói khỏi lịch sử**, không chỉ vòng hai: `gia_da_lo` (ADR-136 ③) đòi mọi vòng mở trước mốc đã mở niêm
   phong. Vị thế cuối của top-2 chưa biết, nên không quan sát nào của gói là vị thế cuối. Kịch bản 41 ghim điều ấy ở `BAFO_OPEN`.
 - **Mốc `now()` không đo được bằng một đột biến**: đọc tại `'infinity'` cho cùng kết quả trên dữ liệu đã commit — không hàng nền nào
-  ghi sau `now()` của giao dịch đọc. Tương đương, nói ra (§S1.9101).
+  ghi sau `now()` của giao dịch đọc. Tương đương, nói ra (§S1.9101). Và `now()` là lúc BẮT ĐẦU giao dịch đọc: một lần mở vòng BAFO
+  commit giữa `BEGIN` của người đọc và câu `quan_sat_gia` có `opened_at` ≥ mốc, nên lần đọc ấy còn trả quan sát vòng một của gói —
+  vài mili giây, và là giá chính người giữ `bid.view` đã đọc được ngay trước lần mở vòng (lượt soi §S1.9101).
+- **`AWARDED` có trong lịch sử** dù bảng so sánh đóng ở trạng thái ấy — có chủ đích (ADR-136 ③: đóng bảng so sánh là luồng màn, không
+  canh một bí mật nào).
+- **Bộ quét giá dùng `LIKE`** mà không thoát `_`, `%`: một kim chứa chúng chỉ khớp RỘNG hơn (không mù); các kim hôm nay không có `%`.
+  Bộ dò số không đọc mọi cách viết (`9.300.000,000000`, `9 300 000.000000000000`): thân JSON của sản phẩm không sinh ra chúng.
+- **Cửa sổ của chốt `gieo:demo`**: việc của tổ chức khác xếp TRONG lúc worker con chạy (tối đa 90 giây) vẫn bị nó nhận.
 - **Lượt quét route hỏi hàng chuẩn thật, nhưng vế ấy không có khẳng định riêng** — trả về UUID giả thì lượt quét vẫn xanh (404). Lời
   khai L6 dựa vào bốn ca `[INV-L6]` hỏi thẳng route, không vào lượt quét.
 - **Bộ quét chỉ đọc schema `public`** — như bốn bản chép cũ; hôm nay không quan hệ nào ở schema khác.

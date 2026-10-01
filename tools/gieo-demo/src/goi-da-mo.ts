@@ -9,8 +9,8 @@
 //
 // VÌ SAO TIẾN TRÌNH CON, không gọi `executeUnsealRequest` trong tiến trình: hàng rào G1/G8 (`.dependency-cruiser.cjs`) chỉ cho
 // `apps/unseal-worker` chạm cửa giải mã. Chủ dự án chốt 2026-10-01: worker thật, không nới hàng rào. Tiến trình con nhận môi
-// trường SẠCH (khuôn `tools/pilot-gia-lap/src/cum.ts`): mọi `TRUSTPROCURE_*`, `PG*`, `DATABASE_URL` của người gọi bị bỏ — URL đặc
-// quyền của công cụ này không đi xuống worker —, rồi đặt đúng những biến worker đòi.
+// trường theo danh sách CHO PHÉP — URL đặc quyền và mọi bí mật khác của người gọi không đi xuống worker —, rồi đặt đúng những biến
+// worker đòi. Trước khi bật, công cụ từ chối nếu cụm có việc worker sẽ nhận của tổ chức khác (lượt soi §S1.9101).
 //
 // HAI CHỖ DỰNG BỐI CẢNH KHÔNG ĐI ĐƯỜNG CỦA MÀN, nói ra: ⑴ ánh xạ dòng bu lông neo do người quản lý dữ liệu ghi bằng `ghiAnhXa`
 // TRƯỚC lần mở (dòng ấy không có bí danh — gói demo chính để nó ở hàng đợi); ⑵ bộ OTP dùng một vòng pepper RIÊNG của lượt gieo:
@@ -22,7 +22,7 @@
 
 import { spawn } from "node:child_process";
 import { closeSync, openSync, readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -236,15 +236,52 @@ export async function gieoBaGoiDaDieuPhoi(b: BoiCanhGoiDaMo): Promise<readonly G
   return ra;
 }
 
-/** Môi trường sạch của tiến trình con — bỏ mọi biến của người gọi có thể mang URL đặc quyền hay bí mật. */
-function moiTruongSach(goc: NodeJS.ProcessEnv): Record<string, string> {
+/**
+ * [lượt soi §S1.9101 — L3] Môi trường của tiến trình con theo danh sách CHO PHÉP: chỉ những biến một tiến trình Node cần để chạy
+ * (đường dẫn, thư mục nhà và tạm, ngôn ngữ, múi giờ), rồi đúng những biến worker đòi được đặt tường minh. Một danh sách CẤM (khuôn
+ * `pilot-gia-lap`) để lọt mọi bí mật đặt tên khác (`POSTGRES_PASSWORD`, `AWS_*`, token CI) xuống tiến trình cầm cửa giải mã — trái
+ * lời hứa G1 *"worker không cầm lối vào bí mật nào khác"* (`apps/unseal-worker/src/cau-hinh.ts`).
+ */
+const BIEN_CHO_WORKER = ["PATH", "Path", "HOME", "USERPROFILE", "SYSTEMROOT", "SystemRoot", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "TZ"];
+function moiTruongChoWorker(goc: NodeJS.ProcessEnv): Record<string, string> {
   const ra: Record<string, string> = {};
-  for (const [k, v] of Object.entries(goc)) {
-    if (v === undefined) continue;
-    if (k.startsWith("TRUSTPROCURE_") || k.startsWith("PG") || k === "DATABASE_URL" || k === "NODE_ENV" || k.startsWith("NODE_OPTIONS")) continue;
-    ra[k] = v;
+  for (const k of BIEN_CHO_WORKER) {
+    const v = goc[k];
+    if (v !== undefined) ra[k] = v;
   }
   return ra;
+}
+
+/**
+ * [lượt soi §S1.9101 — T1] Hai loại việc worker nhận (`apps/unseal-worker/src/composition.ts`) — cộng sổ `kind` mồ côi
+ * (`KIND_KHONG_NGUOI_NHAN`, rỗng hôm nay). Worker liệt kê MỌI tổ chức của cụm, nên worker con của công cụ này nhận cả việc của tổ
+ * chức khác: mở khoá của họ bằng vòng khoá của lượt gieo, giao cảnh báo break-glass của họ vào một thư mục tạm (người nhận thật
+ * không bao giờ được báo — D4).
+ */
+const KIND_WORKER_GIEO = ["UNSEAL_RFQ", "BREAK_GLASS_UNSEAL_ALERT"];
+
+/**
+ * [lượt soi §S1.9101 — T1] Từ chối khi cụm có việc worker sẽ nhận của tổ chức KHÁC `org` (`null`: của bất kỳ tổ chức nào — lần kiểm
+ * TRƯỚC khi gieo, lúc tổ chức của lượt chưa tồn tại). Một câu chỉ đọc trên kết nối đặc quyền: câu hỏi "những tổ chức nào" đứng trước
+ * câu hỏi "tổ chức nào", không gắn được tenant. Còn một cửa sổ — việc của tổ chức khác xếp TRONG lúc worker con chạy —, nói ra ở
+ * ADR-9201.
+ */
+export async function tuChoiKhiCoViecCuaToChucKhac(pool: pg.Pool, org: string | null): Promise<void> {
+  const n = (
+    await pool.query<{ n: number }>(
+      "SELECT pg_catalog.count(*)::pg_catalog.int4 AS n FROM public.outbox_jobs j " +
+        "WHERE ($1::pg_catalog.uuid IS NULL OR j.org_id OPERATOR(pg_catalog.<>) $1::pg_catalog.uuid) " +
+        "AND j.kind OPERATOR(pg_catalog.=) ANY ($2::pg_catalog.text[]) " +
+        "AND j.status OPERATOR(pg_catalog.=) ANY (ARRAY['PENDING', 'RUNNING']::pg_catalog.text[])",
+      [org, KIND_WORKER_GIEO],
+    )
+  ).rows[0]?.n;
+  if (n !== 0) {
+    throw new GoiDaMoError(
+      `cụm có ${String(n)} việc mở thầu hay cảnh báo break-glass đang chờ của tổ chức khác — worker con của gieo:demo nhận việc ` +
+        "của MỌI tổ chức. Chạy gieo:demo trên một CSDL riêng, hay đợi worker của cụm xử lý xong.",
+    );
+  }
 }
 
 export interface WorkerGieo {
@@ -265,6 +302,8 @@ export async function chayWorkerToiKhiMo(
   ch: WorkerGieo,
   choMs = 90_000,
 ): Promise<void> {
+  // Lần kiểm thứ hai, ngay trước khi bật: việc của tổ chức khác có thể đã xếp trong lúc gieo ba gói.
+  await tuChoiKhiCoViecCuaToChucKhac(pool, org);
   const thuMuc = await mkdtemp(join(tmpdir(), "tp-gieo-worker-"));
   const log = join(thuMuc, "unseal-worker.log");
   const fd = openSync(log, "a", 0o600);
@@ -276,7 +315,7 @@ export async function chayWorkerToiKhiMo(
         {
           cwd: fileURLToPath(new URL("../../../", import.meta.url)),
           env: {
-            ...moiTruongSach(process.env),
+            ...moiTruongChoWorker(process.env),
             NODE_ENV: "development",
             TRUSTPROCURE_DATABASE_URL: ch.databaseUrl,
             TRUSTPROCURE_KEY_ADAPTER: "local-dev",
@@ -301,6 +340,19 @@ export async function chayWorkerToiKhiMo(
       return "(không đọc được log)";
     }
   };
+  // [lượt soi §S1.9101 — L4] Cha thoát giữa chừng (lỗi không bắt, Ctrl-C) thì worker không được sống tiếp, cầm vòng khoá và phục vụ
+  // mọi tổ chức: giết nó ĐỒNG BỘ ở `exit`, và biến hai tín hiệu thành một lần thoát có mã.
+  const gietCon = (): void => {
+    if (con.exitCode === null && con.signalCode === null) con.kill("SIGKILL");
+  };
+  const thoatVi = (tinHieu: NodeJS.Signals): void => {
+    gietCon();
+    process.exit(tinHieu === "SIGINT" ? 130 : 143);
+  };
+  process.once("exit", gietCon);
+  process.once("SIGINT", thoatVi);
+  process.once("SIGTERM", thoatVi);
+  let xongSach = false;
   try {
     const han = Date.now() + choMs;
     for (;;) {
@@ -313,7 +365,10 @@ export async function chayWorkerToiKhiMo(
         );
         return rows[0]?.n ?? 0;
       });
-      if (daMo === rfqIds.length) return;
+      if (daMo === rfqIds.length) {
+        xongSach = true;
+        return;
+      }
       if (Date.now() > han) throw new GoiDaMoError(`worker chưa mở xong ${String(rfqIds.length)} gói sau ${String(choMs)} ms — log ${log}:\n${duoiLogWorker()}`);
       await new Promise((xong) => setTimeout(xong, 500));
     }
@@ -324,5 +379,10 @@ export async function chayWorkerToiKhiMo(
       const hetGio = new Promise<"het">((kq) => setTimeout(() => kq("het"), 8000).unref());
       if ((await Promise.race([xong.then(() => "xong" as const), hetGio])) === "het") con.kill("SIGKILL");
     }
+    process.removeListener("exit", gietCon);
+    process.removeListener("SIGINT", thoatVi);
+    process.removeListener("SIGTERM", thoatVi);
+    // Thư mục tạm (log, thư mục cảnh báo dev) đi khi xong sạch; hỏng thì ở lại — thông điệp lỗi trỏ tới log trong nó.
+    if (xongSach) await rm(thuMuc, { recursive: true, force: true });
   }
 }

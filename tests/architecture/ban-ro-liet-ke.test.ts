@@ -72,9 +72,19 @@ const TEP_KHAC: Readonly<Record<string, string>> = {
 describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
   it("[INV-L5] tệp TypeScript sản xuất có câu SQL chạm `rfq_unsealed_bids` đúng bằng danh sách", () => {
     const tep = [...new Set(moiCauSql().filter((c) => BANG.test(c.sql)).map((c) => c.tep))].sort();
-    expect(tep, "tệp mới chạm bảng bản rõ: đọc lịch sử thì gọi `public.quan_sat_gia`, không thì thêm một dòng CÓ LÝ DO vào TEP_TS").toEqual(
+    expect(tep, "tệp mới chạm bảng bản rõ: đọc lịch sử thì gọi `docLichSuGia` (cổng `bid.view`, hàng sổ), không thì thêm một dòng CÓ LÝ DO vào TEP_TS").toEqual(
       Object.keys(TEP_TS).sort(),
     );
+  });
+
+  it("[INV-L6] [S1.9101 / lượt soi T2] chỉ `docLichSuGia` gọi `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất — đường đọc DUY NHẤT, sau cổng `bid.view` và kèm hàng sổ", () => {
+    // `app_api` có EXECUTE trên hai hàm (`096`), và `quan_sat_gia(now(), NULL)` trả giá của CẢ tổ chức. Một bộ đọc thứ hai — benchmark
+    // của S4.5, một báo cáo — gọi hàm mà không có cổng thì mọi lớp khác vẫn xanh: lớp liệt kê ở trên chỉ thấy tên BẢNG bản rõ.
+    const HAM = /\b(?:quan_sat_gia|gia_da_lo)\s*\(/u;
+    const tep = [...new Set(moiCauSql().filter((c) => HAM.test(c.sql)).map((c) => c.tep))].sort();
+    expect(tep, "tệp mới gọi hàm lịch sử giá: đi qua `docLichSuGia`, hay thêm tệp vào đây kèm cổng và hàng sổ của nó").toEqual([
+      "packages/du-lieu-nen/src/lich-su-gia.ts",
+    ]);
   });
 
   it("[INV-L5] `anh-xa.ts` chỉ hỏi SỰ TỒN TẠI — không câu nào của nó đọc `payload`", () => {

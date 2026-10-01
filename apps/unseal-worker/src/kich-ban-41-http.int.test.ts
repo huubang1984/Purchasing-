@@ -240,6 +240,18 @@ function rutSo(vanBan: string): ReadonlySet<number> {
       if (Number.isFinite(n)) ra.add(Math.round(n));
     }
   }
+  // [lượt soi §S1.9101 — L1] MẢNG SỐ TRẦN của JSON: `[9300000,9220000]` là MỘT mẩu cho biểu thức trên (dấu phẩy là dấu phân cách
+  // nghìn), và cả hai cách đọc đều sai. Thân là JSON thì đọc thêm mọi lá SỐ của nó theo giá trị.
+  const la = (v: unknown): void => {
+    if (typeof v === "number" && Number.isFinite(v)) ra.add(Math.round(v));
+    else if (Array.isArray(v)) v.forEach(la);
+    else if (v !== null && typeof v === "object") Object.values(v).forEach(la);
+  };
+  try {
+    la(JSON.parse(vanBan));
+  } catch {
+    // Không phải JSON — hai cách đọc trên là đủ.
+  }
   return ra;
 }
 
@@ -1100,6 +1112,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // Đối chứng dương của bộ dò đơn giá, trên đúng cách Postgres in thương của phép chia `numeric` (đo trên 16-alpine).
     expect(quetDonGia(JSON.stringify({ donGia: "9300000.000000000000" }))).toEqual([GIA_SUA_LAI]);
     expect(quetRoRi(JSON.stringify({ donGia: "9300000.000000000000" }))).toEqual([]);
+    expect(quetDonGia(JSON.stringify({ donGia: [9300000, 9220000] })), "mảng số trần (lượt soi L1)").toEqual([GIA_SUA_LAI, GIA_BAFO[1]]);
+    expect(quetRoRi("[930000000,922000000]")).toEqual([GIA_SUA_LAI, GIA_BAFO[1]]);
+    expect(await trangThaiRfq()).toBe("UNSEALED");
     const truoc = await soHangLichSu();
     const { ph, tatCa, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
     expect(ph.status, ph.text).toBe(200);
@@ -1519,6 +1534,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   it("[INV-L6] LỊCH SỬ GIÁ ở BAFO_CLOSED — vòng đã đóng nhưng CHƯA mở niêm phong: vẫn không một quan sát nào của gói, không một đơn giá BAFO nào", async () => {
     // Spec S4 §5.1 L6: đối chứng chạy ở CẢ `BAFO_OPEN` lẫn `BAFO_CLOSED` — ở `BAFO_CLOSED` phong bì vòng hai chưa vào bảng bản rõ, và
     // một vị từ theo `status` (*"mọi vòng BAFO đã ĐÓNG"* của bản nháp) sẽ cho gói đi ra với giá vòng một làm vị thế cuối.
+    expect(await trangThaiRfq()).toBe("BAFO_CLOSED");
     const { ph, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
     expect(ph.status, ph.text).toBe(200);
     expect(cuaGoi).toEqual([]);
@@ -1849,6 +1865,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(donGiaCua(GIA_SUA_LAI)).toBe("9300000.00");
     expect((await quetGiaMoiQuanHe(db.pool, donGiaCua(GIA_SUA_LAI))).dinh, "đơn giá chỉ ở bảng bản rõ").toEqual(["rfq_unsealed_bids"]);
     expect((await quetGiaMoiQuanHe(db.pool, donGiaCua(GIA_BAFO[0]))).dinh).toEqual(["rfq_unsealed_bids"]);
+    // [lượt soi §S1.9101 — L2] Đơn giá ĐÃ QUY ĐỔI (về kg) — đúng con số một bảng đệm của benchmark dễ lưu nhất — không ở đâu cả, kể
+    // cả bảng bản rõ: nó chỉ sinh ra trong thân `quan_sat_gia`. Kim là thương in đúng như Postgres in nó trong lịch sử.
+    const quyDoi = (
+      await db.pool.query<{ v: string }>("SELECT ($1::numeric / ($2::numeric * $3::numeric))::text AS v", [GIA_SUA_LAI, "100.0000", HANG_CHUAN_CHINH.heSoTam])
+    ).rows[0]!.v;
+    expect(quyDoi.startsWith("10969.568")).toBe(true);
+    expect((await quetGiaMoiQuanHe(db.pool, quyDoi)).dinh, "đơn giá quy đổi không được lưu ở đâu").toEqual([]);
     // Đối chứng dương trên CỤM CỦA KỊCH BẢN: một materialized view dựng LÚC CHẠY, ngoài migration — đúng chỗ hở mục (C) của
     // hardening không thấy — chép đơn giá ra; cùng bộ quét phải kể nó.
     await db.pool.query("CREATE MATERIALIZED VIEW public.zz_doi_chung_don_gia AS SELECT payload -> 'lines' AS dong FROM public.rfq_unsealed_bids");

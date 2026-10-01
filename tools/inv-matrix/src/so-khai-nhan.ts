@@ -467,6 +467,8 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
     "packages/du-lieu-nen/src/lich-su-gia.int.test.ts",
     "packages/test-support/src/quet-gia.int.test.ts",
+    // [lượt soi §S1.9101 — T2] đường đọc DUY NHẤT của `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất.
+    "tests/architecture/ban-ro-liet-ke.test.ts",
   ],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.

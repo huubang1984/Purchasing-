@@ -298,6 +298,14 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
       "withTenant, và đó là ranh giới thật giữa hai nửa của script",
   },
+  "tools/gieo-demo/src/goi-da-mo.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[S1.9101 / lượt soi T1] MỘT câu chỉ đọc trước khi bật worker con: đếm việc mở thầu và cảnh báo break-glass đang chờ của tổ " +
+      "chức KHÁC — worker liệt kê mọi tổ chức, nên công cụ từ chối bật nó khi nó sẽ nhận việc của người khác. Câu hỏi 'những tổ " +
+      "chức nào' đứng trước câu hỏi 'tổ chức nào', không gắn được tenant. Mọi bước nghiệp vụ của ba gói đi qua withTenant",
+  },
   "tools/pilot-gia-lap/src/csdl.ts": {
     lay: 0,
     cau: 1,
