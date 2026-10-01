@@ -26,12 +26,28 @@ export interface ReceiptKeyPair {
   readonly publicKey: Uint8Array;
 }
 
-const KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+/**
+ * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `receipt.ts`.~~ [S1.249 / kid] Tập PHÁT HÀNH, HẸP
+ * hơn tập của ĐỊNH DẠNG: không `:`. Kid biên nhận thành TÊN ĐỐI TƯỢNG S3 (`khoa-bien-nhan/<kid>.json`) khi job neo neo tài liệu
+ * khoá mà `apps/public-keys` công bố (`taiLieuMotKhoa` của `tools/neo-so-kiem-toan/src/aws.ts`, tập `[A-Za-z0-9._-]`) — một kid mang
+ * `:` mà bộ ký nhận là một kid ký được, công bố được, mà lệnh neo NÉM (câu hỏi của lô A1, §S1.238). Chủ dự án chốt 2026-09-30: thu
+ * hẹp ở ĐÂY, trước khi có biên nhận thật nào được ký. `KID_PATTERN` của `receipt.ts` KHÔNG đổi: nó là hằng của ĐỊNH DẠNG ĐÃ KÝ, và
+ * phía KIỂM phải đọc được mọi văn bản định dạng cho phép — đổi định dạng là thứ ADR-026 §1 cấm (cùng lập luận H11-11 ở
+ * `tools/neo-so-kiem-toan/src/index.ts`). Bản chép cùng tập ở `apps/api/src/cau-hinh.ts` và `apps/public-keys/src/cau-hinh.ts`
+ * (hàng `KID` của `tests/architecture/ma-chep-api-worker.test.ts`).
+ */
+const KID_PHAT_HANH = /^[A-Za-z0-9._-]{1,64}$/;
 
-/** `kid` đi nguyên văn vào một dòng `kid=...` của văn bản được ký — dùng chung cho mọi adapter. */
+/**
+ * `kid` đi nguyên văn vào một dòng `kid=...` của văn bản được ký — dùng chung cho mọi adapter. [S1.249 / kid] Và thành tên đối
+ * tượng S3 khi neo tài liệu khoá: tập phát hành là `[A-Za-z0-9._-]`, 1–64 ký tự — thông điệp nêu đúng tập ấy.
+ */
 export function assertReceiptKid(kid: string): void {
-  if (!KID_PATTERN.test(kid)) {
-    throw new ReceiptError(`Định danh khoá "${kid}" không hợp lệ: nó đi vào một dòng "kid=..." của văn bản đã ký.`);
+  if (!KID_PHAT_HANH.test(kid)) {
+    throw new ReceiptError(
+      `Định danh khoá "${kid}" không hợp lệ: phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — nó đi vào một dòng "kid=..." ` +
+        "của văn bản đã ký và thành tên đối tượng khi neo tài liệu khoá biên nhận.",
+    );
   }
 }
 

@@ -1,5 +1,8 @@
 // ==============================================================================================
-// [S1.240 / khoản 282] BƯỚC 1 CỦA BỐN TRANG NGƯỜI MUA — MỘT BẢN, MỘT PHÉP ĐO
+// [S1.240 / khoản 282] BƯỚC 1 CỦA ~~BỐN~~ [S1.249 / khoản 291] NĂM TRANG NGƯỜI MUA — MỘT BẢN, MỘT PHÉP ĐO
+//
+// [S1.249 / khoản 291] Trang thứ năm: `/du-lieu` (S4.2b, người quản lý dữ liệu) từng chép nút Vào cũ — khiếm khuyết 193 mà phép đếm
+// của 282 bỏ sót — nay gắn vào cùng bộ id như bốn trang dưới; không trang nào trong `apps/web/trang/` còn tự gọi `/auth/redeem`.
 //
 // Bốn trang người mua — `/login` (`mo-thau`), `/tao-thau`, `/nhom-hang`, `/chinh-sach` — cùng một bước 1: mã tổ chức và mã đăng
 // nhập từ link, rồi TOTP. Tới trước vòng này bước ấy có HAI hình dạng: `/login` đã tách «lấy bí mật ghi danh» khỏi «vào» (khoản 193,
@@ -10,12 +13,15 @@
 //   ⑴ bước 1 đã tách của khoản 193 — «Tiếp» đổi mã đăng nhập ở máy chủ ĐÚNG MỘT LẦN cho mỗi mã và nói tài khoản cần ghi danh hay
 //      không; bí mật ghi danh ở khối riêng, với nhãn nói nó là gì và KHÔNG phải gì; ô mã sáu số ẩn tới khi máy chủ đã nói. «Vào»
 //      đổi mã nếu chưa đổi (dừng nếu vừa nhận bí mật), gọi `/auth/totp`, xoá mảnh link khỏi thanh địa chỉ (ADR-020 mục 3), hỏi
-//      `/me` rồi TRAO cho trang mở các bước của nó (`daVao`). Ô tổ chức đọc bằng `docMaToChuc` (ADR-107: nhận nguyên link cũ);
+//      `/me` rồi TRAO cho trang mở các bước của nó (`daVao`). Ô tổ chức đọc bằng `docMaToChuc` (ADR-107: nhận nguyên link cũ).
+//      [S1.249 / khoản 292] Mỗi lần đổi mã (`datLai`, dán mã khác) là một lượt mới: phản hồi `/auth/redeem` của lượt cũ về muộn
+//      bị bỏ trọn, không gắn cho mã đang giữ;
 //   ⑵ khối «link đăng nhập gần đây» của khoản 195 (ADR-126) — mỗi link một dòng, bộ đếm lượt bỏ phản hồi về muộn;
 //   ⑶ câu «còn nữa» của khoản 268 — thân `GET /auth/login-links` mang `truncated`.
 // Phần còn lại của bước 1 ở lại MỖI trang, có chủ đích: đọc mảnh link (`docLink`), hỏi lại phiên lúc tải và «Tiếp tục với phiên
 // này» (`thuPhienCo`, [S1.177]), đăng xuất, `hashchange` — mỗi trang dọn trạng thái RIÊNG của nó khi về bước 1 (gói đang mở, ngân
-// sách, luồng mời…), rồi gọi `datLai()` của module; chín ca `[S1.177]` chung của `phuc-vu.test.ts` đo cả bốn.
+// sách, luồng mời…), rồi gọi `datLai()` của module; chín ca `[S1.177]` chung của `phuc-vu.test.ts` đo cả ~~bốn~~ [S1.249 / khoản 291]
+// năm.
 //
 // Không một chỗ nào ở đây chạm `document`, `fetch`, `history` hay `location` toàn cục: trang TRAO chúng vào. Hai lý do đo được,
 // không phải khẩu vị: `tsconfig` của kho không có `lib: ["DOM"]` (ADR-044 — một tên DOM ở đây là lỗi `tsc`), và `phuc-vu.test.ts`
@@ -104,7 +110,10 @@ export function cauLinkGanDay(conNua: boolean, soDong: number): string {
 // [S1.240 / khoản 282] Gắn bước 1 vào một trang.
 // ---------------------------------------------------------------------------------------------
 
-/** Id mà bước 1 gắn vào — bốn trang khai ĐỦ bộ này trong HTML (`dang-nhap.test.ts` đọc cả bốn tệp). */
+/**
+ * Id mà bước 1 gắn vào — ~~bốn~~ [S1.249 / khoản 291] năm trang khai ĐỦ bộ này trong HTML (`dang-nhap.test.ts` đọc cả ~~bốn~~ năm
+ * tệp).
+ */
 export const ID_BUOC_MOT = [
   "org",
   "token",
@@ -164,7 +173,8 @@ export interface TuyChonDangNhap {
 export interface DangNhap {
   /**
    * Về bước 1 (đăng xuất, đổi mảnh link): mã đăng nhập đang ở ô phải đổi lại ở máy chủ trước khi vào, ô mã sáu số đóng và rỗng, bí
-   * mật của người trước đi. Trang gọi SAU `docLink()` — lúc ô mã đã mang mã mới.
+   * mật của người trước đi. Trang gọi SAU `docLink()` — lúc ô mã đã mang mã mới. [S1.249 / khoản 292] Và một lượt đổi mã mới bắt
+   * đầu: phản hồi `/auth/redeem` còn bay của lượt trước bị bỏ khi về, kể cả khi ô vẫn mang cùng mã.
    */
   datLai(): void;
   /** [khoản 195 / 268] Hỏi link gần đây của chính mình và vẽ; lỗi hay 401 ⇒ khối ẩn. Trang gọi ngay khi các bước mở. */
@@ -208,6 +218,9 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
   // Mã đăng nhập mà phiên của trang đang giữ, và máy chủ đã đổi nó chưa — hai thứ `phien.token` / `phien.daRedeem` của mỗi trang
   // trước vòng này, nay MỘT chỗ.
   let dangGiu = { token: "", daRedeem: false };
+  // [S1.249 / khoản 292] Lượt đổi mã: tăng MỖI lần `dangGiu` đổi chủ (`doiMa` — kể cả qua `datLai`). `doiMaDangNhap` chụp nó trước
+  // `await` và bỏ phản hồi của lượt đã qua — cùng khuôn `luotLinkGanDay` của khối link gần đây (khoản 195).
+  let luotDoiMa = 0;
 
   /** Ô mã sáu số chỉ có nghĩa sau khi máy chủ đã nói tài khoản cần ghi danh hay không — đóng nó cùng lúc `daRedeem` về false. */
   function dongKhoiMa(giuMaSauSo: boolean): void {
@@ -221,6 +234,7 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
    * được đứng lại. `giuMaSauSo`: từ nút Vào, mã sáu số vừa gõ đi cùng mã vừa dán nên giữ; từ nút Tiếp, nó là của người trước nên xoá.
    */
   function doiMa(token: string, giuMaSauSo: boolean): void {
+    luotDoiMa += 1;
     dangGiu = { token, daRedeem: false };
     dongKhoiMa(giuMaSauSo);
   }
@@ -228,15 +242,29 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
   /**
    * Đổi mã đăng nhập ở máy chủ, ĐÚNG MỘT LẦN cho mỗi mã — mỗi lần gọi lại, máy chủ sinh một bí mật TOTP MỚI cho tài khoản chưa ghi
    * danh, và mã sáu số của người vừa gõ bí mật cũ không bao giờ đúng nữa (lượt chạy thử đầu tiên của `/login` đo đúng thế).
-   * Trả `"ghi-danh"` khi vừa nhận bí mật, `"san-sang"` khi ô mã sáu số dùng được, `null` khi máy chủ từ chối (câu đã ở `loi1`).
-   * Ném khi mất mạng.
+   * Trả `"ghi-danh"` khi vừa nhận bí mật, `"san-sang"` khi ô mã sáu số dùng được, `null` khi máy chủ từ chối (câu đã ở `loi1`)
+   * [S1.249 / khoản 292] hay khi phản hồi thuộc một lượt đã qua (không vẽ gì). Ném khi mất mạng — [S1.249 / khoản 292] chỉ khi
+   * lượt còn là lượt hiện tại.
    */
   async function doiMaDangNhap(orgId: string, token: string): Promise<"ghi-danh" | "san-sang" | null> {
     if (dangGiu.daRedeem) {
       hien($("khoi-ma"), true);
       return "san-sang";
     }
-    const r1 = await tc.goi("POST", "/auth/redeem", { orgId, token });
+    // [S1.249 / khoản 292] Lượt của lần đổi này, chụp TRƯỚC `await`. Trong lúc chờ, thẻ có thể đã về bước 1 (`datLai` — đăng xuất,
+    // `hashchange`) hay người khác đã dán mã của mình (`doiMa`): phản hồi khi ấy là của mã CŨ, và đặt `daRedeem` hay vẽ bí mật lúc
+    // ấy là gắn nó cho mã đang giữ — mã của người sau (đo: bí mật ghi danh của A hiện dưới mã của B, Tiếp không bao giờ đổi mã của B,
+    // Vào của mã cũ đi tới `/auth/totp`). Nên nó bị bỏ TRỌN — 200, từ chối hay mất mạng: không đặt, không vẽ `ghi-danh`/`ok1`/`loi1`,
+    // không mở ô mã sáu số; `null` để nút Vào dừng.
+    const luot = luotDoiMa;
+    let r1: PhanHoiDangNhap;
+    try {
+      r1 = await tc.goi("POST", "/auth/redeem", { orgId, token });
+    } catch (loi) {
+      if (luot !== luotDoiMa) return null;
+      throw loi;
+    }
+    if (luot !== luotDoiMa) return null;
     if (r1.status !== 200) {
       bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được"));
       return null;
@@ -309,7 +337,8 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
     nut.disabled = true;
     try {
       // Vào mà chưa đổi mã (mã vừa dán, hay bước Tiếp bị bỏ qua): đổi ở đây, cùng đường và cùng "đúng một lần" với nút Tiếp. Vừa nhận
-      // bí mật thì DỪNG — mã sáu số lúc này không thể đúng, vì ứng dụng xác thực chưa có bí mật.
+      // bí mật thì DỪNG — mã sáu số lúc này không thể đúng, vì ứng dụng xác thực chưa có bí mật. [S1.249 / khoản 292] `null` cũng
+      // dừng: máy chủ từ chối, hay mã này đã bị thay trong lúc chờ — không `/auth/totp` nào mang một mã mà ô không còn giữ.
       if ((await doiMaDangNhap(o.orgId, o.token)) !== "san-sang") return;
       if (!/^\d{6}$/u.test(code)) {
         bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực.");
@@ -375,9 +404,9 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
   }
 
   return {
+    // [S1.249 / khoản 292] ~~Hai câu chép của `doiMa`~~ Đúng `doiMa` với mã đang ở ô: một chỗ đổi chủ `dangGiu`, một chỗ tăng lượt.
     datLai: () => {
-      dangGiu = { token: $("token").value.trim(), daRedeem: false };
-      dongKhoiMa(false);
+      doiMa($("token").value.trim(), false);
     },
     veLinkGanDay,
     anLinkGanDay,

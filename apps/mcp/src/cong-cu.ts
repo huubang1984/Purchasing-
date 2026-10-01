@@ -70,11 +70,13 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "kiểm soát được, và không lớp nào trong hệ thống lấy lại được. Chủ dự án chọn KHÔNG phơi " +
     "ngày 2026-09-17 (ADR-038). Cần đọc giá thì đọc bằng chính giao diện người mua, dưới phiên " +
     "có MFA của một con người.",
+  // [S1.249 / khoản 299] ~~"SỐ HỒ SƠ THẦU ĐÃ NHẬN — …", "Số hồ sơ nhận được TRƯỚC lễ mở …"~~ — từ khoản 271 con số là số báo
+  // giá SẼ DỰ THẦU (luồng của lời mời còn sống, ADR-128). Tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API).
   "/rfqs/:rfqId/bid-count":
-    "SỐ HỒ SƠ THẦU ĐÃ NHẬN — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +
+    "SỐ BÁO GIÁ SẼ DỰ THẦU (không kể lời mời đã thu hồi) — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +
     "vì cả hai hàm có MỤC ĐÍCH DUY NHẤT là kiểm soát tiết lộ (`tests/architecture/" +
-    "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số hồ sơ nhận được TRƯỚC " +
-    "lễ mở là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
+    "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số báo giá sẽ dự thầu, biết TRƯỚC " +
+    "lễ mở, là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
     "hỏi vì sao hai hàm cùng rổ lại đi hai hướng, và chủ dự án rút nó ngày 2026-09-17 (ADR-038).",
   "/rfqs/:rfqId/ranking":
     "BẢNG XẾP HẠNG của lượt chấm mới nhất — và nó mang NHIỀU HƠN bảng so sánh giá ở ngay trên: " +
