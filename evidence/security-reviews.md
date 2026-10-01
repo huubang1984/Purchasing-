@@ -23065,6 +23065,7 @@ máy người vận hành; build image lần đầu (CI không build — `ADD --
 - `pnpm typecheck` sạch; ESLint trên mọi tệp TS đổi sạch.
 - Đơn vị trên các thư mục chạm tới (`tests/architecture`, `tests/deploy`, `apps/api/src/adapters`, `tools/kiem-truoc-apply`,
   `ban-khai.test.ts`): 55 tệp, 737 đạt, 1 bỏ qua; `qt3-cu-phap.int` + `qt3-ngu-phap.int` trên Postgres 16 cục bộ: 8/8.
+
 # §S1.253 — S4.5a: GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH Ở CẠNH VÀO OPEN; LƯỢT CHẤM DÙNG ĐÚNG PHIÊN BẢN ẤY (L14, VẾ LƯỢT CHẤM) — ADR-141
 
 ## 1. Vòng này là gì
@@ -23200,6 +23201,89 @@ Một agent đọc trọn diff của bản đầu (`14b0337`, chỉ đọc). Kh�
   `lich-su-gia.int` 51/51, `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128.
 - `pnpm evidence` toàn bộ T1–T3 trên `e283e09`: 226 tệp, 4369 khẳng định, 4359 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi
   trường), **0 đỏ**; **78/78 bất biến** (56 nghiệp vụ + 22 hàng rào); L14 đo bằng 11 khẳng định.
+
+# §S1.254 — DIỄN TẬP §11: `pilot:gia-lap` TRÊN `fc0dcc75`, KỊCH BẢN TRÌNH DIỄN VÀ TRỌN CÂU §11 TRÊN CHROMIUM — BƯỚC CHỌN NHÀ CUNG CẤP NAY ĐI ĐƯỢC BẰNG CHUỘT; KHOẢN 320–324 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** 320 và 322 chạm thẳng câu của `docs/PRODUCT.md` §11 (*người mua chọn nhà cung cấp*; *trên điện
+thoại của họ*) — rổ A nếu để mở; 321 cùng bước 7; 323, 324 theo luật là rổ B, chủ dự án chốt sửa luôn vì nằm trên kịch bản
+trình diễn. Không migration, không route mới, không ADR mới.
+
+## 1. Vòng này là gì
+Việc (a) của đề xuất ngày 2026-10-01: diễn tập kịch bản §11 bằng công cụ giả lập trên `master` hiện tại, để tìm chỗ chặn ở cụm
+cục bộ, rẻ hơn tìm trên AWS. Ba lớp đo: `pnpm pilot:gia-lap` (API thật, bốn tiến trình); kịch bản trình diễn §5 của kế hoạch
+pilot giả lập trên Chromium; và trọn câu §11 trên Chromium — một gói MỚI dựng bằng màn hình, không bằng API.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+*"làm a + b như đề xuất"*; sau khi nghe phát hiện: *"F1–F3 rổ A sửa ngay; F4, F5 sửa luôn"*; F3 *"màn hẹp: mỗi hạng mục thành
+một khối"*.
+
+## 3. Đo trước
+- **`pilot:gia-lap` chế độ nhanh trên `fc0dcc75`** (Postgres 16.13 cục bộ, Node 22.22): 10/10 kịch bản, cô lập 2/2 (đối chứng
+  2/2), 268 bước người dùng, 155 phép kiểm, chặn đúng 16/16, vào sổ 15/16, biên nhận 35/35, bộ bằng chứng 5/5, 28 giây — khớp
+  lượt S1.168; log bốn tiến trình sạch.
+- **Kịch bản trình diễn §5 trên Chromium** (Playwright 1.56, Chromium 1194): nộp SX-04 ở 375×812 (OTP qua SMS, biên nhận `kid=k1`,
+  `ciphertext_sha256`); trưởng phòng thấy *"Số báo giá đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"*; XD-03 người xin mở tự duyệt ⇒
+  403 với câu của S1.90, Phó TGĐ ký, điều phối, bảng so sánh ba dòng; XD-04 người đề xuất tự duyệt ⇒ **`khong co quyen`** nguyên văn
+  (323), TGĐ duyệt — **khối đề xuất rỗng lúc ký** (321); bộ bằng chứng tải về, `pnpm bang-chung kiem` ⇒ `ok=true hang=3 dat=3`.
+- **Trọn câu §11 trên Chromium, tổ chức SX:** nhân viên mua hàng tạo gói ba hạng mục (số lượng `20`, `262.5`, `12.3456`), ngân
+  sách, nộp duyệt; *Tạo nhà cung cấp* với vai BUYER ⇒ **`khong co quyen`** (323 — phân quyền đúng, câu thô); trưởng phòng duyệt, mở,
+  tạo ba nhà cung cấp và mời qua thư; ba nhà cung cấp mở đúng link `/i#…` trong hộp thư, OTP qua SMS, nộp ở 375px — tổng trên trang
+  khớp từng chữ số với phép tính độc lập bằng `BigInt` (`385.744.980,72`, `379.570.212,00`, `394.314.656,54` — dòng thứ ba sinh
+  chữ số thứ ba, `…,544` ⇒ `…,54`); đóng sớm có lý do, xin mở, giám đốc duyệt, điều phối; bảng so sánh khớp cả ba; chấm thầu;
+  **bảng xếp hạng không in id phiên bản mà bước 7 đòi** — quét UUID của trang chỉ ra mã lượt chấm, `/ranking` có `bidVersionId`
+  (320); id lấy từ API thì đề xuất, duyệt, bộ bằng chứng `ok=true`.
+- **Ô đơn giá** (322), đo bằng `clientWidth`/`scrollWidth` trên trang: 40 / 57 / 63 / 79px ở 320 / 360 / 375 / 414px, mọi giá
+  từ 6 chữ số bị cắt; 768px đủ.
+- **Công cụ** (324): link SX-04 đã xác minh OTP rồi đóng trình duyệt ⇒ mở lại ở trình duyệt khác ra 422 *"magic link … đã
+  dùng"* mà `lien-ket` vẫn liệt kê; sáu lần `dang-nhap` cho một người trong 15 phút ⇒ lần thứ sáu *"hết 20000 ms mà hộp thư chưa
+  có link"*; lượt chế độ chậm đầu tiên hỏng sau 62 phút với `28P01` ở `api` — nó chạy trên CSDL thứ hai của CÙNG máy chủ Postgres
+  với cụm trình diễn, và lần dựng lại cụm ấy đặt lại mật khẩu hai vai đăng nhập.
+
+## 4. Thay đổi
+- `apps/web/trang/mo-thau.js` + `.html`: cột **Chọn** ở bảng xếp hạng (hàng có hạng), điền id vào ô bước 7; nhãn ô sửa; nút
+  **Đọc đề xuất**; Phê duyệt: lần đầu (hay khi đề xuất đổi từ lúc đọc) chỉ vẽ đề xuất, lần hai ký; khối đề xuất gọi tên nhà cung
+  cấp, chi phí hiệu dụng, hạng từ hàng xếp hạng cùng `bidVersionId` và cùng `evaluationId`; `loiCua` đổi thân 403 hằng thành câu
+  đọc được.
+- `apps/web/trang/tao-thau.js`: cùng `loiCua`.
+- `apps/web/trang/nop-thau.js` + `.html`, `chung.css`: nhãn `data-nhan` cho SL, ĐVT, Đơn giá; bảng lớp `hang-gia`; luật dưới 480px.
+- `tools/pilot-gia-lap`: `lien-ket` in cách xử lý link đã dùng; `dang-nhap` nói trần 5 link/15 phút và cách dùng phiên còn hạn;
+  lời dặn XD-04 nói nút Đọc đề xuất.
+- Tài liệu: kế hoạch pilot giả lập §4 (hai lượt không chung một máy chủ Postgres), §5 (ba điều đo được), §6b (lượt này);
+  `docs/PRODUCT.md` (lời khai S1.113 sửa tại chỗ).
+- Test (`apps/web/src/phuc-vu.test.ts`): năm ca ở `/mo-thau`, một ở `/tao-thau`, một ở `/nop-thau`.
+- Sổ: mốc STATE, hàng 320–324; `Handoff.md` 318 → 323 khoản, 48 còn mở.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **321 đổi cách kích so với lúc chốt.** Chủ dự án chọn *"nạp gói thì vẽ đề xuất"*. `/me` không trả quyền, nên trang không biết
+  người dùng có `bid.view` không; tự đọc `/ranking` và `/award` lúc nạp gói làm người không giữ quyền ấy (vai BUYER) để lại hai hàng
+  PERMISSION_DENIED cho một lần xem họ không hề bấm — sổ từ chối thôi là chứng cứ của một lần thử. Cách đã làm giữ đúng mục đích
+  (không ai ký lên khối trống) mà không tự gọi gì: lần bấm Phê duyệt đầu hiện đề xuất, lần hai ký; đề xuất đổi giữa hai lần thì
+  phải đọc lại.
+- 320 không thêm nút ở bảng so sánh: đề xuất phải dựa trên lượt chấm MỚI NHẤT (khoản 231), và bảng so sánh là bảng lịch sử.
+- 322 dùng một lớp cho riêng bảng của `/nop-thau` vì bảng xếp hạng của `/mo-thau` mang cùng id `bang-hang`.
+- 323 chỉ đổi ĐÚNG thân hằng `khong co quyen`: 403 *"nguon khong duoc phep"* của `server.ts` là một lỗi khác, in nguyên văn.
+
+## 6. Đo
+- `phuc-vu.test.ts` 230/230.
+- Chế độ nhanh trên mã đã sửa (commit cục bộ `3fe7c457`): 10/10, cô lập 2/2.
+- Chromium, mã đã sửa: SX-04 ở 320/360/375/414px — ô đơn giá 252/292/307/346px, `185.000.000` hiện trọn, trang không tràn ngang;
+  768px vẫn là bảng 191px; nộp ở 375px ra biên nhận. XD-03 đi từ chữ ký mở thầu thứ hai tới trao thầu đã duyệt **chỉ bằng chuột**:
+  Chọn điền id, Phó phòng đề xuất; Tổng Giám đốc bấm Phê duyệt lần một — không ký, khối đề xuất hiện *"[GL] Công ty TNHH Bê tông
+  Phú Lộc Tiến · 2.444.646.875,00 · hạng 1"* và lý do — lần hai ký. XD-04: người đề xuất bấm Phê duyệt hai lần ⇒ *"Không duyệt
+  được: tài khoản đang đăng nhập không có quyền làm việc này…"*. Nạp gói không gọi `/ranking` hay `/award`.
+- Chế độ chậm SX-06, chạy lại trên một máy chủ Postgres RIÊNG (cổng 55434), mã `a6855822` cộng các thay đổi của lô (b) chưa commit
+  lúc bắt đầu — không tệp nào trên đường của SX-06: **1/1 ĐẠT**, 62 phút 6 giây — nộp sau hạn ⇒ 422 và đúng một hàng
+  `BID_DEADLINE_DENIED`; đóng đúng hạn; trao thầu đã duyệt; biên nhận 2/2; bộ bằng chứng 1/1; log `api` không có `28P01`.
+
+## 7. Đột biến
+Sáu đột biến trên mã đã sửa, mỗi cái đỏ đúng ca của nó: gỡ nút Chọn; gỡ chốt đọc-trước-khi-ký (hai ca); gỡ chốt lượt chấm;
+gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhãn ô đơn giá.
+
+## 8. Giới hạn, nói ra
+- Bố cục màn hẹp đo trên Chromium, không trên Safari iOS hay máy Android thật.
+- `lien-ket` vẫn KHÔNG biết link nào đã tiêu thụ — nó chỉ nói cách xử lý.
+- 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
+- Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
 
 # §S1.9101 — S4.5b: BENCHMARK GIÁ `TRUNG_VI_THEO_GOI_V1` — NHÓM KHOÁ `benchmark`, HAI BẢNG KẾT QUẢ GHI MỘT LẦN CÙNG LƯỢT CHẤM, BỘ ĐỌC CÓ CỔNG (L7; VẾ BENCHMARK CỦA L14) — ADR-9201
 

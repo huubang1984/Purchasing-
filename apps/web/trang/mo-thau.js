@@ -39,7 +39,16 @@ async function goi(method, duong, than) {
   return { status: res.status, body, chu };
 }
 
+// [S1.254 / khoản 323] Thân 403 của `apps/api` là MỘT hằng (`THAN_403` của `dispatch.ts` — khoản 191: API không nói thiếu
+// quyền NÀO), và in nguyên văn thì người dùng đọc một chuỗi không dấu, kể cả trong kịch bản trình diễn. Trang biết người dùng
+// vừa bấm gì, nên nói được một câu đọc được mà không tiết lộ thêm gì; mọi thân lỗi khác vẫn in nguyên văn.
+const THAN_403 = "khong co quyen";
+
 function loiCua(r, macDinh) {
+  if (r.status === 403 && r.body?.error === THAN_403) {
+    return `${macDinh}: tài khoản đang đăng nhập không có quyền làm việc này — vai hiện tại không được cấp quyền ấy. ` +
+      "Đổi sang người phù hợp ở bước 1.";
+  }
   if (r.body !== null && typeof r.body === "object" && typeof r.body.error === "string") return r.body.error;
   return `${macDinh} (mã ${r.status})`;
 }
@@ -281,7 +290,7 @@ $("nut-doc").addEventListener("click", async () => {
   bao($("loi2"), "");
   const id = $("rfq").value.trim();
   if (id === "") { bao($("loi2"), "Cần mã gói thầu."); return; }
-  phien = { ...phien, rfqId: id };
+  phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "" };
   const r = await goi("GET", `/rfqs/${id}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return; }
   const rfq = r.body.rfq;
@@ -491,9 +500,11 @@ async function veXepHang() {
   // `null` là câu trả lời ĐÚNG cho "chưa chấm lần nào", cùng khuôn `veYeuCau` ở bước 3. Một bảng
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
   if (b === null) {
+    phien = { ...phien, xepHang: [], xepHangLuot: "" };
     dienDl($("tt-luot"), [["Lượt chấm", "chưa chấm lần nào — bấm Chấm thầu"]]);
     return;
   }
+  phien = { ...phien, xepHang: Array.isArray(b.rows) ? b.rows : [], xepHangLuot: b.evaluationId };
   dienDl($("tt-luot"), [
     ["Mã lượt chấm", b.evaluationId],
     ["Chính sách phiên bản", b.policyVersion],
@@ -512,6 +523,23 @@ async function veXepHang() {
     const o = document.createElement("td");
     o.append(veThanhPhan(h.components ?? []));
     tr.append(o);
+    // [S1.254 / khoản 320] Bước 7 đề xuất trên ĐÚNG id phiên bản báo giá, mà trước vòng này không bảng nào in id ấy — người
+    // mua thật không đề xuất trao thầu được bằng giao diện. Nút chỉ có ở hàng có hạng: báo giá không có chi phí hiệu dụng đọc
+    // được ở lượt chấm này thì `award_kiem_de_xuat` từ chối nó.
+    const chon = document.createElement("td");
+    if (h.rank !== null && typeof h.bidVersionId === "string") {
+      const nut = document.createElement("button");
+      nut.className = "phu";
+      nut.textContent = "Chọn";
+      nut.addEventListener("click", () => {
+        $("bao-gia-thang").value = h.bidVersionId;
+        bao($("loi5"), "");
+        bao($("ok5"), `Đã chọn ${h.supplierName} (hạng ${String(h.rank)}). Id phiên bản báo giá đã điền ở bước 7 — ghi lý do rồi bấm ` +
+          "Đề xuất trao thầu.");
+      });
+      chon.append(nut);
+    }
+    tr.append(chon);
     tbody.append(tr);
   }
 }
@@ -585,15 +613,29 @@ async function veTraoThau() {
   if (r.status !== 200) { bao($("loi7"), loiCua(r, "Chưa đọc được đề xuất trao thầu")); return; }
   const a = r.body.award ?? null;
   if (a === null) {
+    phien = { ...phien, awardDaDoc: "" };
     dienDl($("tt-award"), [["Trao thầu", "chưa có đề xuất nào"]]);
     hien($("nut-rut-de-xuat"), false);
     return;
   }
+  // Cùng cổng `bid.view` với lời đọc vừa qua, nên bảng xếp hạng đọc được; hỏng thì bước 5 nói lý do, đề xuất vẫn hiện id.
+  const timHang = () => (phien.xepHangLuot === a.evaluationId
+    ? (phien.xepHang ?? []).find((h) => h.bidVersionId === a.bidVersionId) ?? null
+    : null);
+  if (timHang() === null) await veXepHang();
   // [S1.231 / khoản 232 / ADR-133] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
   // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `094`, kể cả khi nút hiện sai.
   hien($("nut-rut-de-xuat"), a.status === "PROPOSED" && (a.approvals ?? []).length === 0);
+  // [S1.254 / khoản 321] Id phiên bản không nói được với người duyệt là AI thắng: gọi tên từ hàng xếp hạng cùng id, của ĐÚNG
+  // lượt chấm mà đề xuất dựa trên (`evaluationId`). Không có hàng ấy thì hiện id như trước — không đoán từ một lượt khác.
+  const hang = timHang();
   dienDl($("tt-award"), [
     ["Trạng thái", a.status],
+    ...(hang === null ? [] : [
+      ["Nhà cung cấp", hang.supplierName],
+      ["Chi phí hiệu dụng", hang.effectiveCost === null ? "—" : tien(hang.effectiveCost)],
+      ["Hạng ở lượt chấm", hang.rank === null ? "—" : String(hang.rank)],
+    ]),
     ["Báo giá được chọn", a.bidVersionId],
     ["Dựa trên lượt chấm", a.evaluationId],
     ["Lý do", a.reason],
@@ -602,6 +644,7 @@ async function veTraoThau() {
       ? "chưa có"
       : a.approvals.map((c) => new Date(c.approvedAt).toLocaleString("vi-VN")).join(" · ")],
   ]);
+  phien = { ...phien, awardDaDoc: a.awardId };
 }
 
 $("nut-de-xuat").addEventListener("click", async () => {
@@ -618,6 +661,13 @@ $("nut-de-xuat").addEventListener("click", async () => {
   await veTraoThau();
 });
 
+// [S1.254 / khoản 321] Đọc đề xuất mà không ký — cùng khuôn «Đọc bảng xếp hạng» của bước 5.
+$("nut-doc-award").addEventListener("click", async () => {
+  bao($("loi7"), ""); bao($("ok7"), "");
+  if (phien.rfqId === "") { bao($("loi7"), "Đọc gói thầu ở bước 2 trước."); return; }
+  await veTraoThau();
+});
+
 $("nut-duyet-award").addEventListener("click", async () => {
   bao($("loi7"), ""); bao($("ok7"), "");
   // Người duyệt ký lên ĐÚNG đề xuất họ vừa đọc, nên `awardId` đi trong đường dẫn: giữa lúc đọc
@@ -627,6 +677,16 @@ $("nut-duyet-award").addEventListener("click", async () => {
   const a = doc.status === 200 ? (doc.body.award ?? null) : null;
   if (a === null) { bao($("loi7"), "Chưa có đề xuất nào để duyệt."); return; }
   if (a.status !== "PROPOSED") { bao($("loi7"), `Đề xuất đang ở ${a.status}, không duyệt được.`); return; }
+  // [S1.254 / khoản 321] Ký lên đề xuất ĐÃ HIỆN TRÊN MÀN: lần bấm đầu — hay khi đề xuất đã đổi từ lúc đọc — chỉ vẽ nó ra
+  // (nhà cung cấp, chi phí hiệu dụng, lý do). Trước vòng này nút ký lên một khối trống. Không tự vẽ lúc nạp gói: người không giữ
+  // `bid.view` mở gói sẽ để lại hai hàng PERMISSION_DENIED cho một lần xem mà họ không hề bấm.
+  if (phien.awardDaDoc !== a.awardId) {
+    await veTraoThau();
+    if (phien.awardDaDoc !== "") {
+      bao($("ok7"), "Đề xuất sắp ký hiện ở dưới — đọc nhà cung cấp, chi phí và lý do, rồi bấm Phê duyệt lần nữa để ký.");
+    }
+    return;
+  }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/approve`);
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không duyệt được")); return; }
   bao($("ok7"), "Đã phê duyệt trao thầu. Gói thầu ĐỨNG YÊN ở AWARDED — nó đã ở đó từ lúc có đề xuất.");
