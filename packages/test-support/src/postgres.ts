@@ -7,8 +7,8 @@ import { cauHinhCumCucBo, khoiDongCumCucBo, type MayChuPostgres } from "./postgr
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 /** [S1.242 / khoản 281] Gốc kho và chính tệp này — để nơi gọi in ra dạng `tệp:dòng` tương đối, đọc được trong log CI. */
-const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
-const TEP_NAY = fileURLToPath(import.meta.url);
+const GOC_KHO = gachXuoi(fileURLToPath(new URL("../../../", import.meta.url)));
+const TEP_NAY = gachXuoi(fileURLToPath(import.meta.url));
 
 // [S1.11] Danh sách đóng các DB role hợp lệ mà poolAs() được phép chuyển sang NAY SỐNG Ở
 // `@trustprocure/db` (`VAI_UNG_DUNG`), cùng với cơ chế gắn vai — vì composition root của
@@ -151,16 +151,24 @@ interface BoDemTrangThaiPhien {
 /**
  * [S1.242 / khoản 281] Nơi gọi `startPostgres`/`poolAs`: khung đầu tiên của ngăn xếp nằm ngoài tệp này và ngoài `node_modules`, dạng
  * `tệp:dòng` tương đối với gốc kho. Chỉ đọc chuỗi ngăn xếp (vitest đã ánh xạ về mã nguồn); không đọc được thì nói thế, không ném.
+ * [Windows, 2026-10-01] Khung của tệp test trên Windows là `D:\…\x.test.ts:1:2` — bản trước chỉ nhận đường bắt đầu bằng `/`
+ * nên bỏ qua nó, rồi trả khung `node_modules\.pnpm\@vitest…` vì phép lọc chỉ tìm `/node_modules/`. Nay nhận cả ổ đĩa, và mọi
+ * đường dẫn được so và in ở dạng gạch xuôi.
  */
 function noiGoi(): string {
   for (const dong of (new Error().stack ?? "").split("\n").slice(1)) {
-    const m = /(?:\(|at )((?:file:\/\/)?\/[^()]+?):(\d+):\d+\)?$/u.exec(dong.trim());
+    const m = /(?:\(|at )((?:file:\/\/)?(?:\/|[A-Za-z]:[\\/])[^()]+?):(\d+):\d+\)?$/u.exec(dong.trim());
     if (m === null) continue;
-    const tep = m[1]!.startsWith("file://") ? fileURLToPath(m[1]!) : m[1]!;
+    const tep = gachXuoi(m[1]!.startsWith("file://") ? fileURLToPath(m[1]!) : m[1]!);
     if (tep === TEP_NAY || tep.includes("/node_modules/")) continue;
     return `${tep.startsWith(GOC_KHO) ? tep.slice(GOC_KHO.length) : tep}:${m[2]!}`;
   }
   return "(không đọc được nơi gọi)";
+}
+
+/** [Windows, 2026-10-01] `fileURLToPath` và ngăn xếp của Node trên Windows dùng `\` — đưa về `/` trước khi so hay in. */
+function gachXuoi(duong: string): string {
+  return duong.replace(/\\/gu, "/");
 }
 
 /** [S1.242 / khoản 281] Số lần khai — số nguyên không âm, mặc định 0; sai hình dạng thì NÉM trước khi chạm cụm. */
