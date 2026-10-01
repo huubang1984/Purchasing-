@@ -451,7 +451,7 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   const http = new PhienHttp(`http://127.0.0.1:${ts.cong.api}`, "127.0.0.1");
   const r = await http.goi("POST", "/auth/link", { orgId: tc.orgId, email });
   if (r.status !== 200) throw new PilotError(`/auth/link trả ${r.status} — cụm có đang chạy không?`);
-  // [S1.9102 / khoản 9405] `/auth/link` LUÔN trả 200 cùng một thân (chống dò email); quá trần 5 link mỗi người trong 15 phút
+  // [S1.254 / khoản 324] `/auth/link` LUÔN trả 200 cùng một thân (chống dò email); quá trần 5 link mỗi người trong 15 phút
   // (`issueLoginToken`) thì nó không gửi gì. Đo ở diễn tập §11: lệnh chỉ nói "hộp thư chưa có link" — người trình diễn không
   // biết phải đợi, hay dùng lại phiên còn hạn.
   const tin = await hopThu.cho(`link đăng nhập của ${email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === tc.orgId && t.den === email).catch((e: unknown) => {
@@ -530,7 +530,7 @@ async function lienKet(ts: ThamSo, thuMuc: string): Promise<number> {
   }
   if (n === 0) viet("không còn lời mời nào chờ nộp");
   else {
-    // [S1.9102 / khoản 9405] Link mời bị TIÊU THỤ ở lần xác minh OTP đầu tiên ([H5]), mà trạng thái của công cụ không biết lần ấy:
+    // [S1.254 / khoản 324] Link mời bị TIÊU THỤ ở lần xác minh OTP đầu tiên ([H5]), mà trạng thái của công cụ không biết lần ấy:
     // một link đã xác minh nhưng chưa nộp vẫn được liệt kê, và mở nó ở trình duyệt khác ra 422. Đo ở diễn tập §11.
     viet("Mỗi link mở được tới lần xác minh OTP ĐẦU TIÊN. Đã xác minh mà chưa nộp: nộp tiếp bằng phiên cũ trên CÙNG trình duyệt, hoặc");
     viet("bên mua bấm «Gửi lại link» ở /tao-thau bước 5. Đừng diễn thử bằng link sẽ dùng khi gặp khách.");

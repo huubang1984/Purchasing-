@@ -50,7 +50,7 @@ async function goi(method, duong, than) {
   return { status: res.status, body, chu };
 }
 
-// [S1.9102 / khoản 9404] Cùng câu với `/mo-thau`: thân 403 của `apps/api` là hằng `khong co quyen` (`dispatch.ts`), in nguyên
+// [S1.254 / khoản 323] Cùng câu với `/mo-thau`: thân 403 của `apps/api` là hằng `khong co quyen` (`dispatch.ts`), in nguyên
 // văn là một chuỗi không dấu — đo ở diễn tập §11: người mua vai BUYER bấm «Tạo nhà cung cấp». Thân lỗi khác in nguyên văn.
 const THAN_403 = "khong co quyen";
 

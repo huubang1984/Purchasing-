@@ -146,7 +146,7 @@ tr.thap td { background: var(--luc-nen); }
    phải con số đang có hiệu lực, nên nó không được trông ngang hàng. */
 tr.mo td { opacity: 0.55; font-style: italic; }
 
-/* [S1.9102 / khoản 9403] Bảng hạng mục của /nop-thau trên màn hẹp: mỗi hạng mục là một khối — mô tả trên, số lượng và đơn vị
+/* [S1.254 / khoản 322] Bảng hạng mục của /nop-thau trên màn hẹp: mỗi hạng mục là một khối — mô tả trên, số lượng và đơn vị
    giữa, ô đơn giá rộng hết dòng dưới. Đo trên Chromium trước vòng này: ở 320–414px ô đơn giá của bảng bốn cột chỉ rộng 40–79px
    và cắt mọi giá từ 6 chữ số, nên nhà cung cấp không đọc lại được con số mình sắp niêm phong. */
 @media (max-width: 480px) {

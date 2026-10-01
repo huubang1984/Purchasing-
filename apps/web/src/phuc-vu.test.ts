@@ -1221,10 +1221,10 @@ describe("bề mặt tệp", () => {
       });
     });
 
-    // [S1.9102 / khoản 9401, 9402, 9404] Bước 5 và 7 của `/mo-thau` — đo ở diễn tập §11 trên Chromium: bảng xếp hạng không in id
+    // [S1.254 / khoản 320, 321, 323] Bước 5 và 7 của `/mo-thau` — đo ở diễn tập §11 trên Chromium: bảng xếp hạng không in id
     // phiên bản mà bước 7 đòi gõ (người mua thật không đề xuất trao thầu được bằng giao diện), nút Phê duyệt ký lên một khối
     // trống, và một lần thiếu quyền hiện nguyên chuỗi `khong co quyen`.
-    describe("[S1.9102] mo-thau: Chọn ở bảng xếp hạng, đọc đề xuất trước khi ký, câu 403", () => {
+    describe("[S1.254] mo-thau: Chọn ở bảng xếp hạng, đọc đề xuất trước khi ký, câu 403", () => {
       const RFQ = "33333333-3333-4333-8333-333333333333";
       const XEP_HANG = {
         evaluationId: "e-7", policyVersion: 1, currency: "VND", evaluatedAt: "2026-10-01T00:00:00Z",
@@ -1258,7 +1258,7 @@ describe("bề mặt tệp", () => {
       const daKy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g.startsWith(`POST /rfqs/${RFQ}/award/`));
       const ttAward = (p: Awaited<ReturnType<typeof dung>>) => p.el("tt-award").con.map((x) => x.textContent).join("|");
 
-      it("khoản 9401: hàng có hạng mang nút Chọn, bấm thì id phiên bản điền vào ô của bước 7; hàng không hạng thì không có nút", async () => {
+      it("khoản 320: hàng có hạng mang nút Chọn, bấm thì id phiên bản điền vào ô của bước 7; hàng không hạng thì không có nút", async () => {
         const p = await dung(() => ({ status: 200, body: { award: null } }));
         expect(p.trangThai.goi.filter((g) => g.includes("/ranking") || g.includes("/award")), "nạp gói KHÔNG tự đọc bước 5 hay 7").toEqual([]);
         await p.bam("nut-xep-hang");
@@ -1272,7 +1272,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("ok5").textContent).toMatch(/Đã chọn Công ty Thép Một \(hạng 1\)/u);
       });
 
-      it("khoản 9402: Phê duyệt lần đầu chỉ HIỆN đề xuất (tên nhà cung cấp, chi phí, lý do) — lần hai mới ký, đúng đề xuất đã hiện", async () => {
+      it("khoản 321: Phê duyệt lần đầu chỉ HIỆN đề xuất (tên nhà cung cấp, chi phí, lý do) — lần hai mới ký, đúng đề xuất đã hiện", async () => {
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
         await p.bam("nut-duyet-award");
         expect(daKy(p), "lần bấm đầu không ký").toEqual([]);
@@ -1286,7 +1286,7 @@ describe("bề mặt tệp", () => {
         expect(p.el("ok7").textContent).toMatch(/^Đã phê duyệt trao thầu/u);
       });
 
-      it("khoản 9402: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {
+      it("khoản 321: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {
         let lan = 0;
         // Lần đọc thứ nhất (nút Đọc đề xuất) thấy aw-1; từ lần thứ hai máy chủ đã có aw-2.
         const p = await dung(() => ({ status: 200, body: { award: deXuat((lan += 1) <= 1 ? "aw-1" : "aw-2") } }));
@@ -1298,14 +1298,14 @@ describe("bề mặt tệp", () => {
         expect(daKy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-2/approve`]);
       });
 
-      it("khoản 9402: đề xuất dựa trên một lượt chấm KHÁC lượt của bảng xếp hạng ⇒ chỉ hiện id, không gọi tên từ lượt khác", async () => {
+      it("khoản 321: đề xuất dựa trên một lượt chấm KHÁC lượt của bảng xếp hạng ⇒ chỉ hiện id, không gọi tên từ lượt khác", async () => {
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1", "e-cu") } }));
         await p.bam("nut-doc-award");
         expect(ttAward(p)).not.toMatch(/Nhà cung cấp/u);
         expect(ttAward(p)).toMatch(/Báo giá được chọn\|bv-1/u);
       });
 
-      it("khoản 9404: 403 hằng của api ⇒ câu đọc được mang tên việc; thân 403 khác và lỗi khác in nguyên văn", async () => {
+      it("khoản 323: 403 hằng của api ⇒ câu đọc được mang tên việc; thân 403 khác và lỗi khác in nguyên văn", async () => {
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }), { status: 403, body: { error: "khong co quyen" } });
         await p.bam("nut-doc-award");
         await p.bam("nut-duyet-award");
@@ -1323,7 +1323,7 @@ describe("bề mặt tệp", () => {
       });
     });
 
-    it("[S1.9102 / khoản 9404] tao-thau: 403 hằng của api ở «Tạo nhà cung cấp» (vai BUYER) ⇒ câu đọc được; lỗi khác in nguyên văn", async () => {
+    it("[S1.254 / khoản 323] tao-thau: 403 hằng của api ở «Tạo nhà cung cấp» (vai BUYER) ⇒ câu đọc được; lỗi khác in nguyên văn", async () => {
       for (const [than, mong] of [
         [{ status: 403, body: { error: "khong co quyen" } }, /^Không tạo được nhà cung cấp: tài khoản đang đăng nhập không có quyền làm việc này/u],
         [{ status: 422, body: { error: "Mã số thuế đã có trong tổ chức" } }, /^Mã số thuế đã có trong tổ chức$/u],
@@ -1337,7 +1337,7 @@ describe("bề mặt tệp", () => {
       }
     });
 
-    it("[S1.9102 / khoản 9403] nop-thau: mỗi ô của hàng hạng mục mang nhãn cho màn hẹp; bảng mang lớp `hang-gia` mà luật CSS dưới 480px đọc", async () => {
+    it("[S1.254 / khoản 322] nop-thau: mỗi ô của hàng hạng mục mang nhãn cho màn hẹp; bảng mang lớp `hang-gia` mà luật CSS dưới 480px đọc", async () => {
       const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
       await p.bam("nut-dung-phien");
       const o = p.el("bang-hang").querySelector("tbody").con[0]?.con ?? [];

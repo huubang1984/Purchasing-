@@ -23066,10 +23066,10 @@ máy người vận hành; build image lần đầu (CI không build — `ADD --
 - Đơn vị trên các thư mục chạm tới (`tests/architecture`, `tests/deploy`, `apps/api/src/adapters`, `tools/kiem-truoc-apply`,
   `ban-khai.test.ts`): 55 tệp, 737 đạt, 1 bỏ qua; `qt3-cu-phap.int` + `qt3-ngu-phap.int` trên Postgres 16 cục bộ: 8/8.
 
-# §S1.9102 — DIỄN TẬP §11: `pilot:gia-lap` TRÊN `fc0dcc75`, KỊCH BẢN TRÌNH DIỄN VÀ TRỌN CÂU §11 TRÊN CHROMIUM — BƯỚC CHỌN NHÀ CUNG CẤP NAY ĐI ĐƯỢC BẰNG CHUỘT; KHOẢN 9401–9405 ĐÓNG
+# §S1.254 — DIỄN TẬP §11: `pilot:gia-lap` TRÊN `fc0dcc75`, KỊCH BẢN TRÌNH DIỄN VÀ TRỌN CÂU §11 TRÊN CHROMIUM — BƯỚC CHỌN NHÀ CUNG CẤP NAY ĐI ĐƯỢC BẰNG CHUỘT; KHOẢN 320–324 ĐÓNG
 
-**Rổ và mảnh (ADR-043 ⒞):** 9401 và 9403 chạm thẳng câu của `docs/PRODUCT.md` §11 (*người mua chọn nhà cung cấp*; *trên điện
-thoại của họ*) — rổ A nếu để mở; 9402 cùng bước 7; 9404, 9405 theo luật là rổ B, chủ dự án chốt sửa luôn vì nằm trên kịch bản
+**Rổ và mảnh (ADR-043 ⒞):** 320 và 322 chạm thẳng câu của `docs/PRODUCT.md` §11 (*người mua chọn nhà cung cấp*; *trên điện
+thoại của họ*) — rổ A nếu để mở; 321 cùng bước 7; 323, 324 theo luật là rổ B, chủ dự án chốt sửa luôn vì nằm trên kịch bản
 trình diễn. Không migration, không route mới, không ADR mới.
 
 ## 1. Vòng này là gì
@@ -23088,17 +23088,17 @@ một khối"*.
 - **Kịch bản trình diễn §5 trên Chromium** (Playwright 1.56, Chromium 1194): nộp SX-04 ở 375×812 (OTP qua SMS, biên nhận `kid=k1`,
   `ciphertext_sha256`); trưởng phòng thấy *"Số báo giá đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"*; XD-03 người xin mở tự duyệt ⇒
   403 với câu của S1.90, Phó TGĐ ký, điều phối, bảng so sánh ba dòng; XD-04 người đề xuất tự duyệt ⇒ **`khong co quyen`** nguyên văn
-  (9404), TGĐ duyệt — **khối đề xuất rỗng lúc ký** (9402); bộ bằng chứng tải về, `pnpm bang-chung kiem` ⇒ `ok=true hang=3 dat=3`.
+  (323), TGĐ duyệt — **khối đề xuất rỗng lúc ký** (321); bộ bằng chứng tải về, `pnpm bang-chung kiem` ⇒ `ok=true hang=3 dat=3`.
 - **Trọn câu §11 trên Chromium, tổ chức SX:** nhân viên mua hàng tạo gói ba hạng mục (số lượng `20`, `262.5`, `12.3456`), ngân
-  sách, nộp duyệt; *Tạo nhà cung cấp* với vai BUYER ⇒ **`khong co quyen`** (9404 — phân quyền đúng, câu thô); trưởng phòng duyệt, mở,
+  sách, nộp duyệt; *Tạo nhà cung cấp* với vai BUYER ⇒ **`khong co quyen`** (323 — phân quyền đúng, câu thô); trưởng phòng duyệt, mở,
   tạo ba nhà cung cấp và mời qua thư; ba nhà cung cấp mở đúng link `/i#…` trong hộp thư, OTP qua SMS, nộp ở 375px — tổng trên trang
   khớp từng chữ số với phép tính độc lập bằng `BigInt` (`385.744.980,72`, `379.570.212,00`, `394.314.656,54` — dòng thứ ba sinh
   chữ số thứ ba, `…,544` ⇒ `…,54`); đóng sớm có lý do, xin mở, giám đốc duyệt, điều phối; bảng so sánh khớp cả ba; chấm thầu;
   **bảng xếp hạng không in id phiên bản mà bước 7 đòi** — quét UUID của trang chỉ ra mã lượt chấm, `/ranking` có `bidVersionId`
-  (9401); id lấy từ API thì đề xuất, duyệt, bộ bằng chứng `ok=true`.
-- **Ô đơn giá** (9403), đo bằng `clientWidth`/`scrollWidth` trên trang: 40 / 57 / 63 / 79px ở 320 / 360 / 375 / 414px, mọi giá
+  (320); id lấy từ API thì đề xuất, duyệt, bộ bằng chứng `ok=true`.
+- **Ô đơn giá** (322), đo bằng `clientWidth`/`scrollWidth` trên trang: 40 / 57 / 63 / 79px ở 320 / 360 / 375 / 414px, mọi giá
   từ 6 chữ số bị cắt; 768px đủ.
-- **Công cụ** (9405): link SX-04 đã xác minh OTP rồi đóng trình duyệt ⇒ mở lại ở trình duyệt khác ra 422 *"magic link … đã
+- **Công cụ** (324): link SX-04 đã xác minh OTP rồi đóng trình duyệt ⇒ mở lại ở trình duyệt khác ra 422 *"magic link … đã
   dùng"* mà `lien-ket` vẫn liệt kê; sáu lần `dang-nhap` cho một người trong 15 phút ⇒ lần thứ sáu *"hết 20000 ms mà hộp thư chưa
   có link"*; lượt chế độ chậm đầu tiên hỏng sau 62 phút với `28P01` ở `api` — nó chạy trên CSDL thứ hai của CÙNG máy chủ Postgres
   với cụm trình diễn, và lần dựng lại cụm ấy đặt lại mật khẩu hai vai đăng nhập.
@@ -23115,17 +23115,17 @@ một khối"*.
 - Tài liệu: kế hoạch pilot giả lập §4 (hai lượt không chung một máy chủ Postgres), §5 (ba điều đo được), §6b (lượt này);
   `docs/PRODUCT.md` (lời khai S1.113 sửa tại chỗ).
 - Test (`apps/web/src/phuc-vu.test.ts`): năm ca ở `/mo-thau`, một ở `/tao-thau`, một ở `/nop-thau`.
-- Sổ: mốc STATE, hàng 9401–9405; `Handoff.md` 318 → 323 khoản, 48 còn mở.
+- Sổ: mốc STATE, hàng 320–324; `Handoff.md` 318 → 323 khoản, 48 còn mở.
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
-- **9402 đổi cách kích so với lúc chốt.** Chủ dự án chọn *"nạp gói thì vẽ đề xuất"*. `/me` không trả quyền, nên trang không biết
+- **321 đổi cách kích so với lúc chốt.** Chủ dự án chọn *"nạp gói thì vẽ đề xuất"*. `/me` không trả quyền, nên trang không biết
   người dùng có `bid.view` không; tự đọc `/ranking` và `/award` lúc nạp gói làm người không giữ quyền ấy (vai BUYER) để lại hai hàng
   PERMISSION_DENIED cho một lần xem họ không hề bấm — sổ từ chối thôi là chứng cứ của một lần thử. Cách đã làm giữ đúng mục đích
   (không ai ký lên khối trống) mà không tự gọi gì: lần bấm Phê duyệt đầu hiện đề xuất, lần hai ký; đề xuất đổi giữa hai lần thì
   phải đọc lại.
-- 9401 không thêm nút ở bảng so sánh: đề xuất phải dựa trên lượt chấm MỚI NHẤT (khoản 231), và bảng so sánh là bảng lịch sử.
-- 9403 dùng một lớp cho riêng bảng của `/nop-thau` vì bảng xếp hạng của `/mo-thau` mang cùng id `bang-hang`.
-- 9404 chỉ đổi ĐÚNG thân hằng `khong co quyen`: 403 *"nguon khong duoc phep"* của `server.ts` là một lỗi khác, in nguyên văn.
+- 320 không thêm nút ở bảng so sánh: đề xuất phải dựa trên lượt chấm MỚI NHẤT (khoản 231), và bảng so sánh là bảng lịch sử.
+- 322 dùng một lớp cho riêng bảng của `/nop-thau` vì bảng xếp hạng của `/mo-thau` mang cùng id `bang-hang`.
+- 323 chỉ đổi ĐÚNG thân hằng `khong co quyen`: 403 *"nguon khong duoc phep"* của `server.ts` là một lỗi khác, in nguyên văn.
 
 ## 6. Đo
 - `phuc-vu.test.ts` 230/230.
@@ -23146,5 +23146,5 @@ gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhã
 ## 8. Giới hạn, nói ra
 - Bố cục màn hẹp đo trên Chromium, không trên Safari iOS hay máy Android thật.
 - `lien-ket` vẫn KHÔNG biết link nào đã tiêu thụ — nó chỉ nói cách xử lý.
-- 9402 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
+- 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
 - Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
