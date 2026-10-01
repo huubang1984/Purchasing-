@@ -455,6 +455,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   L2: ["packages/du-lieu-nen/src/anh-xa.int.test.ts", "packages/du-lieu-nen/src/chuan-hoa.test.ts"],
   L13: ["packages/du-lieu-nen/src/anh-xa.int.test.ts"],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
+  // L5 — [S1.235 / S4.4a] nguồn quan sát giá. `lich-su-gia` đo ba hàm SQL trên Postgres thật dưới `app_api`: bộ đọc dòng (sáu ca
+  // của `bid_so_tien`, phép so tổng), vị từ *"giá đã lộ"* tại mốc (BAFO, huỷ, không đọc `status`), hàm as-of (sáu trạng thái, hàng
+  // nền tại mốc, hai nhãn, hai nhánh trùng khít) và tập hàm chạm bản rõ; `ban-ro-liet-ke` là ranh giới tĩnh — mọi tệp TypeScript
+  // và hàm SQL chạm `rfq_unsealed_bids` có tên và lý do.
+  L5: ["packages/du-lieu-nen/src/lich-su-gia.int.test.ts", "tests/architecture/ban-ro-liet-ke.test.ts"],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],

@@ -356,6 +356,10 @@ repo:huubang1984@234519700/Purchasing-@1350087523:environment:<tên>:job_workflo
   `prod` và `prod-worker` không ghim (`job_workflow_ref:*`) — như cũ, chủ dự án chốt 2026-09-30.
 - Cả hai vế là ĐỌC tài liệu GitHub, chưa đo trên token thật của kho. Sai thì AWS **từ chối** role (KHOÁ, không mở) — bước 4 dưới
   nói cách in claim thật.
+- **[rà 2026-10-01] Nửa `repo:` đã khớp một nguồn của GitHub** (API cấu hình, chưa phải token thật):
+  `gh api repos/huubang1984/Purchasing-/actions/oidc/customization/sub` trả `use_immutable_subject: true` và `sub_claim_prefix`
+  `repo:huubang1984@234519700/Purchasing-@1350087523` — trùng hai hằng ở `chung`. Cùng lượt ấy còn `use_default: true`: bước 2
+  dưới chưa làm.
 
 **Thứ tự — làm liền tay trong một buổi.** Giữa bước 2 và bước 3, mọi job deploy xin role đều bị AWS từ chối (đỏ ở bước
 `configure-aws-credentials`, trước mọi lệnh AWS): KHOÁ chứ không MỞ. Quên bước 2 rồi apply, hay làm bước 2 rồi quên apply, cũng chỉ
@@ -443,7 +447,15 @@ Tức nếu lời khai trên sai, tiến trình nói ra.
 
 Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, bắt buộc trước dữ liệu thật):
 
-1. Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒ trường `ClockDrift` có
+1. ~~Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒~~ **[rà 2026-10-01]** Không vào được một task đang
+   chạy: stack 90 không bật ECS Exec, và image `node:22-bookworm-slim` không có `curl`. Thay bằng một task `tp-migrate` chạy một
+   lần với lệnh ghi đè — cùng cụm Fargate, cùng subnet ứng dụng; nó đọc metadata bằng `fetch` của Node, **chưa đo**. Tệp
+   `clockdrift.json`, lưu UTF-8 bằng trình soạn (không bằng `Out-File` của PowerShell 5):
+   ```json
+   {"containerOverrides":[{"name":"tp-migrate","command":["node","-e","fetch(process.env.ECS_CONTAINER_METADATA_URI_V4+'/task').then(r=>r.json()).then(j=>console.log('CLOCKDRIFT '+JSON.stringify(j.ClockDrift)))"]}]}
+   ```
+   Chạy lệnh in bởi `terraform output lenh_chay_migrate`, thêm `--overrides file://clockdrift.json`, rồi tìm `CLOCKDRIFT` trong
+   `/tp/migrate` ⇒ trường `ClockDrift` có
    `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
 2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
    không có dòng `canh bao LechDongHo`.
@@ -477,17 +489,25 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
   nhẹ; cảnh báo trên task mang role worker ngoài service chính thức là stack `60-canh-bao` ⑵:
   `RunTask`/`StartTask` với họ `tp-unseal-worker` hay ghi đè `taskRoleArn` thành role worker, và
   `RegisterTaskDefinition` gắn role worker vào họ khác. **Quy ước ràng buộc stack ECS sau này:**
-  task definition của worker mang họ `tp-unseal-worker`. Kiểm sau apply (đối chứng dương, không
+  task definition của worker mang họ `tp-unseal-worker`. ~~Kiểm sau apply (đối chứng dương, không
   khởi task nào): `aws ecs run-task --cluster khong-ton-tai --task-definition tp-unseal-worker`
-  ⇒ lời gọi lỗi, nhưng CloudTrail vẫn ghi nó kèm `errorCode` ⇒ phải có thư.
+  ⇒ lời gọi lỗi, nhưng CloudTrail vẫn ghi nó kèm `errorCode` ⇒ phải có thư.~~ **[apply lần đầu
+  2026-09-30] Phép thử ấy KHÔNG BAO GIỜ có thư:** khi task definition `tp-unseal-worker` chưa tồn tại,
+  ECS từ chối ở bước kiểm đầu vào (`ClientException: TaskDefinition not found`) và CloudTrail ghi
+  `"requestParameters": null` — cả ba hình dạng của ⑵ đều lọc theo `requestParameters` nên không
+  khớp. Đối chứng dương đúng là apply stack 70 (APPLY-LAN-DAU 4.2): `RegisterTaskDefinition` THÀNH
+  CÔNG gắn role worker vào họ `tp-do-kms-worker` ⇒ phải có thư.
 - **Người có AdministratorAccess ở prod chạy được task `tp-khoi-tao` không qua hai người của `khoi-tao.yml`** (khoản 252) — tạo
   tổ chức, người dùng và vai. Không lớp nào CHẶN: đó là người giữ mọi thứ khác của prod. **[S1.223]** Stack `60-canh-bao` ⑼ làm
   đường ấy không im lặng, cùng khuôn ⑵: `RunTask`/`StartTask` họ `tp-khoi-tao` hay ghi đè `taskRoleArn` thành role ấy,
   `RegisterTaskDefinition` gắn role ấy vào họ khác, và mọi `CreateSecret`/`PutSecretValue`/`UpdateSecret`/`DeleteSecret` dưới
-  `tp/khoi-tao/ban-khai/` ⇒ thư — kể cả lần hợp lệ (thư là nhân chứng, đối chiếu run trên GitHub). Kiểm sau apply (đối chứng
+  `tp/khoi-tao/ban-khai/` ⇒ thư — kể cả lần hợp lệ (thư là nhân chứng, đối chiếu run trên GitHub). ~~Kiểm sau apply (đối chứng
   dương, không khởi task nào): `aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao --profile tp-prod` ⇒ lời gọi
   lỗi, CloudTrail vẫn ghi kèm `errorCode` ⇒ phải có thư; và lệnh `create-secret` của bước 8.1 phải ra thư — không có thư thì ⑼
-  chưa chạy dù `apply` xanh. Không bắt `GetSecretValue` (đọc bản khai) và `RestoreSecret`. Permission set hẹp cho người tạo bản khai
+  chưa chạy dù `apply` xanh.~~ **[rà 2026-10-01] Phép thử `run-task` ấy là đúng phép thử đã gạch ở ⑵ ngay trên:** khi họ
+  `tp-khoi-tao` chưa tồn tại (trước stack 90) CloudTrail ghi `"requestParameters": null` nên không bao giờ có thư; sau stack 90
+  thì chưa đo. Đối chứng dương của ⑼ là bước 8.1 (APPLY-LAN-DAU 3.7): lệnh `create-secret` phải ra thư, lần chạy workflow phải
+  ra thư `RunTask` và `DeleteSecret` — thiếu thư thì ⑼ chưa chạy dù `apply` xanh. Không bắt `GetSecretValue` (đọc bản khai) và `RestoreSecret`. Permission set hẹp cho người tạo bản khai
   (khoản 252 ⑵) hoãn tới trước khách hàng thứ hai — khoản 278.
 - **Bucket neo chặn `s3:PutObjectRetention`** với mọi người: job neo phải ghi object **không**
   kèm header Object Lock, để bucket tự áp thời hạn mặc định 365 ngày. Muốn tăng thời hạn về sau
