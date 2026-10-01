@@ -31,7 +31,16 @@ async function goi(method, duong, than) {
   return { status: res.status, body, chu };
 }
 
+// [S1.9101 / khoản 9402] Khuôn khoản 323 (S1.254, `mo-thau.js`, `tao-thau.js`) cho trang này: thân 403 của `apps/api` là MỘT
+// hằng không dấu, cố ý không nói thiếu quyền nào (khoản 191); trang nói thay bằng việc vừa bấm. Mọi thân lỗi khác — kể cả
+// 403 `nguon khong duoc phep` của lớp chống CSRF theo origin — vẫn in nguyên văn.
+const THAN_403 = "khong co quyen";
+
 function loiCua(r, macDinh) {
+  if (r.status === 403 && r.body?.error === THAN_403) {
+    return `${macDinh}: tài khoản đang đăng nhập không có quyền làm việc này — vai hiện tại không được cấp quyền ấy. ` +
+      "Đổi sang người phù hợp ở bước 1.";
+  }
   if (r.body !== null && typeof r.body === "object" && typeof r.body.error === "string") return r.body.error;
   return `${macDinh} (mã ${r.status})`;
 }

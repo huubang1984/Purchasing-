@@ -147,8 +147,14 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
 - mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
   ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
   Docker Desktop đã chạy chưa, bash với `ECONNREFUSED` của công cụ;
-- **chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
-  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.
+- ~~**chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
+  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.~~ **[S1.9101] Đã đo trên Windows thật** (Windows 11,
+  Windows PowerShell 5.1.26100, Docker Desktop 29.7.2, Node 24.18.0; khối chạy từ một tệp `.ps1` UTF-8 có BOM, không dán vào
+  cửa sổ console): ba tình huống — chưa có container, container đang chạy, container đã dừng — đều đi tới lượt giả lập 10/10
+  ĐẠT, cô lập 2/2, số đo trùng từng con với lượt Linux. Từ lệnh tới cụm sẵn sàng: 34 giây ở hai lần chạy lại; lần đầu (áp 100
+  migration) không bấm giờ chính xác — dưới hai phút. Dừng cụm theo cây tiến trình trả hết cổng, không tiến trình mồ côi.
+  Tình huống *Docker không chạy* KHÔNG đo trên Windows: phải tắt Docker Desktop. Người trình diễn vẫn chạy khối một lần trên
+  chính máy của buổi gặp — đường dẫn và ACL là của từng máy (đoạn *Thư mục trạng thái* dưới).
 
 Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:
 - xoá thư mục trạng thái mà giữ container: công cụ từ chối trước khi dựng cụm và nói cách sửa;
@@ -177,7 +183,9 @@ Làm lại từ đầu thì xoá cả hai: `docker rm -f tp-pilot-gia-lap` và t
 
 **Thư mục trạng thái** mặc định là `.pilot-gia-lap/` ở gốc kho và nằm trong `.gitignore`. Quyền 0700 chỉ có trên POSIX:
 trên Windows, Node bỏ qua bit quyền và thư mục thừa hưởng ACL của thư mục cha — nên để kho, hay `--thu-muc`, dưới hồ sơ
-người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. `--thu-muc` trỏ vào
+người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. **[S1.9101] Đo trên máy của lượt đi thử
+Windows:** kho nằm trên `D:\`, và gốc ổ ấy cho `Authenticated Users` quyền sửa, `Users` quyền đọc; máy có hai tài khoản bật —
+thư mục trạng thái thừa hưởng đúng ACL ấy. Công cụ không cảnh báo (khoản 9404). `--thu-muc` trỏ vào
 trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngoài kho thì chỗ nào cũng được. Nó chứa:
 - `cum.json`: bí mật cụm;
 - `trang-thai.json`: bí mật TOTP của người mua giả lập và token lời mời, GỘP qua các lượt chạy (lượt mới nhất trước) —
@@ -209,7 +217,7 @@ bấm **Đọc**. Không màn nào dưới đây cần gõ SQL.
 | 2–7 | `/nop-thau` (khung hẹp) | `lien-ket` lấy link SX-04 → **Mở lời mời** → **Gửi mã** → `otp <số>` → **Xác minh** → nhập đơn giá → **Niêm phong và nộp** | Giá mã hoá ngay trong trình duyệt; biên nhận ký số hiện ra với `kid` và `ciphertext_sha256` |
 | 7–9 | `/mo-thau` | `dang-nhap hung.nv@…` → vào bằng mã TOTP → nạp gói SX-04 | *"Số báo giá đang bị giấu"* — kể cả trưởng phòng cũng không thấy **số** báo giá trước khi đóng |
 | 9–13 | `/mo-thau` bước 3–4 | Gói XD-03: TRƯỚC TIÊN người xin mở thầu bấm **Phê duyệt** ở bước 3 ⇒ bị chặn; rồi Phó Tổng Giám đốc bấm **Phê duyệt** — chữ ký thứ hai; người xin mở bấm **Điều phối giải mã**; bước 4 **Đọc bảng so sánh** | Lần tự duyệt bị cổng quyền chặn (403). Worker mở phong bì; bảng so sánh khớp tới từng đồng |
-| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: TRƯỚC TIÊN người đề xuất bấm **Phê duyệt** ở bước 7 ⇒ bị chặn; rồi Tổng Giám đốc bấm **Phê duyệt**; bước 8 **Tải bộ bằng chứng**; chạy `pnpm bang-chung kiem --bo <thư mục>` | Lần tự duyệt bị cổng quyền chặn (403). Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
+| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: TRƯỚC TIÊN người đề xuất bấm ~~**Phê duyệt** ở bước 7 ⇒ bị chặn~~ **[S1.9101] Đọc đề xuất** rồi **Phê duyệt** ở bước 7 ⇒ bị chặn (từ khoản 321, lần bấm **Phê duyệt** đầu khi chưa đọc chỉ HIỆN đề xuất — chưa tới cổng quyền); rồi Tổng Giám đốc bấm ~~**Phê duyệt**~~ **[S1.9101] Đọc đề xuất** rồi **Phê duyệt**; bước 8 **Tải bộ bằng chứng**; chạy `pnpm bang-chung kiem --bo <thư mục>` | Lần tự duyệt bị cổng quyền chặn (403). Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
 | 17–20 | Hỏi khách | Ba câu nặng nhất của `TIEN-DE-CHUA-DO.md`: B4 → A1 → B1 | Chuyển sang bậc 1–2 của mục 7 |
 
 Lần tự duyệt phải đi TRƯỚC lần duyệt thật: sau khi đề xuất đã duyệt, trang `/mo-thau` chặn nút **Phê duyệt** ngay trên trình
