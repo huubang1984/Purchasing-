@@ -23381,6 +23381,10 @@ hai đếm; lưu nhãn + chiều, không tỉ lệ; phiên bản không nhóm be
   gọi `quan_sat_gia` mỗi hàng chuẩn (~0,45 s mỗi lần ở 1.500 quan sát, khớp §S1.235), cộng chi phí cố định ~20 ms mỗi lần gọi. Mỗi câu dưới
   `statement_timeout` 15 s; một lượt chấm ~66 hàng chuẩn ở quy mô này vượt 60 s — trần nhàn rỗi mặc định của ALB. Lượt soi đếm thêm: ứng viên
   gồm cả hàng chuẩn của ánh xạ đã bị thay, mỗi cái một lần đọc nữa.
+- **Ca lật, kê tên.** `anh-xa.int` `[INV-L1]` — `TRUNCATE rfq_item_mappings` trần nay dừng ở phép kiểm khoá ngoại (hai bảng benchmark trỏ tới
+  nó) TRƯỚC chốt chỉ-ghi-thêm; bảng vẫn không bị xoá trắng, ca đổi sang `TRUNCATE … CASCADE` để đo đúng chốt (đo ở lượt `pnpm evidence` trên
+  `99ba914`: 1 đỏ / 4469). `luot-danh-gia.int` và kịch bản 41: không ca nào lật — phiên bản chính sách của `luot-danh-gia.int` không có nhóm
+  `benchmark`, kịch bản 41 nay có và vẫn xanh.
 
 ## 7. Đột biến
 
