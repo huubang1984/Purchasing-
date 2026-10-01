@@ -17,6 +17,7 @@ import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import ts from "typescript";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -1320,6 +1321,21 @@ describe("bề mặt tệp", () => {
           await q.bam("nut-duyet-award");
           expect(q.el("loi7").textContent).toBe(mong);
         }
+      });
+
+      // [S1.255 / khoản 327] Khoản 321 làm đề xuất ĐỌC ĐƯỢC trước khi ký — và từ đó người DUYỆT cũng thấy nút «Rút đề xuất»
+      // cạnh «Phê duyệt» (đo trên trình duyệt thật: Tổng Giám đốc ở XD-04). Rút là đường của CHÍNH người đề xuất (khoản 232,
+      // trigger `094` từ chối người khác); trước S1.254 nút không bao giờ hiện cho người duyệt chỉ vì đề xuất không được đọc.
+      it("khoản 327: người xem KHÔNG phải người đề xuất ⇒ nút «Rút đề xuất» ẩn; chính người đề xuất ⇒ hiện", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
+        await p.bam("nut-doc-award");
+        expect(ttAward(p), "đối chứng: đề xuất của A đã hiện cho B").toMatch(/PROPOSED/u);
+        expect(p.el("nut-rut-de-xuat").hidden, "B (người duyệt) thấy nút rút đề xuất của A").toBe(true);
+        await p.bam("nut-duyet-award");
+        expect(p.el("nut-rut-de-xuat").hidden, "sau lần bấm Phê duyệt đầu (chỉ hiện đề xuất) cũng vậy").toBe(true);
+        const q = await dung(() => ({ status: 200, body: { award: { ...deXuat("aw-1"), actedBy: B.userId } } }));
+        await q.bam("nut-doc-award");
+        expect(q.el("nut-rut-de-xuat").hidden, "chính người đề xuất (B) mở lại trang ⇒ rút được").toBe(false);
       });
     });
 
@@ -3099,4 +3115,74 @@ el.textContent = location.hash;
       },
     );
   }, TRAN_TEST_GIU_KHOA_MS);
+});
+
+// ================================================================================================
+// [S1.255 / khoản 326] 403 MANG HẰNG CỦA MÁY CHỦ KHÔNG ĐI THẲNG RA MÀN — CẢ BẢY BẢN `loiCua`
+//
+// Thân 403 của `apps/api` là MỘT hằng (`THAN_403 = { error: "khong co quyen" }`, `apps/api/src/dispatch.ts`) và nó phải ở
+// nguyên như thế (khoản 191: nói thiếu quyền nào là dựng bản đồ mô hình quyền cho người dò). Khoản 191 sửa bước 3 của
+// `/login` (S1.90); khoản 323 (S1.254) sửa `loiCua` của `/login` và `/tao-thau` — đổi ĐÚNG thân hằng ấy, để 403 khác (như
+// `nguon khong duoc phep` của lớp chống CSRF theo origin, `apps/api/src/server.ts`) vẫn in nguyên văn. Năm bản còn lại —
+// `/chinh-sach`, `/nhom-hang`, `/du-lieu`, `/nop-thau` và `/lib/dang-nhap.js` — vẫn in ba chữ không dấu; `du-lieu.js` có sẵn
+// một câu 403 riêng đứng SAU dòng đọc `body.error`, tức mã chết từ lúc viết, vì API luôn gửi kèm hằng ấy.
+//
+// Lớp này đòi trên CẢ BẢY tệp: 403 mang đúng hằng ⇒ câu mở đầu bằng việc vừa bấm, nói vì quyền, không mang hằng; 403 thân
+// khác, 422 có tên ⇒ đúng câu của máy chủ; không thân ⇒ câu mặc định kèm mã. Và mọi lần đọc `.error` trong bảy tệp nằm TRONG
+// `loiCua` — một lối thứ hai in câu của máy chủ là một lối lớp này không đo. PHÁT BIỂU ĐÚNG MỨC: các hằng không dấu khác của
+// API (`phien khong hop le`, `qua nhieu yeu cau`, `khong co duong nay`, `loi noi bo`) và câu không dấu của trigger vẫn đi ra
+// nguyên văn; lớp này không dịch chúng.
+// ================================================================================================
+describe("[S1.255 / khoản 326] 403 mang hằng của máy chủ không đi thẳng ra màn — bảy bản `loiCua`", () => {
+  const TEP: readonly string[] = [
+    "trang/mo-thau.js", "trang/tao-thau.js", "trang/chinh-sach.js", "trang/nhom-hang.js",
+    "trang/du-lieu.js", "trang/nop-thau.js", "src/dang-nhap.ts",
+  ];
+  const nguon = (t: string) => readFileSync(new URL(`../${t}`, import.meta.url), "utf8");
+  const cay = (t: string) => ts.createSourceFile(t, nguon(t), ts.ScriptTarget.Latest, true, t.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  const hamLoiCua = (sf: ts.SourceFile) =>
+    sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === "loiCua");
+  type LoiCua = (r: { status: number; body: unknown }, macDinh: string) => string;
+  /** `loiCua` của một tệp, chạy riêng — kèm hằng `THAN_403` cấp tệp nếu tệp có (khuôn khoản 323). */
+  const layLoiCua = (t: string): LoiCua => {
+    const sf = cay(t);
+    const fn = hamLoiCua(sf);
+    if (fn === undefined) throw new Error(`${t}: không có \`function loiCua\` ở cấp tệp`);
+    const hang = sf.statements.filter((s) => ts.isVariableStatement(s) && s.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === "THAN_403"));
+    const van = [...hang, fn].map((s) => s.getText(sf)).join("\n");
+    const js = ts.transpileModule(van, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    return runInNewContext(`${js}\nloiCua`) as LoiCua;
+  };
+
+  it.each(TEP)("%s: 403 mang hằng `khong co quyen` ⇒ câu mở đầu bằng việc vừa bấm, nói vì quyền, không mang hằng", (t) => {
+    const cau = layLoiCua(t)({ status: 403, body: { error: "khong co quyen" } }, "Không làm được việc thử");
+    expect(cau).not.toMatch(/khong co quyen/u);
+    expect(cau).toMatch(/^Không làm được việc thử/u);
+    expect(cau).toMatch(/quyền/u);
+  });
+
+  it.each(TEP)("%s: 403 thân khác (chống CSRF theo origin) và 422 có tên đi ra nguyên văn; không thân ⇒ câu mặc định kèm mã", (t) => {
+    const loiCua = layLoiCua(t);
+    expect(loiCua({ status: 403, body: { error: "nguon khong duoc phep" } }, "Không làm được")).toBe("nguon khong duoc phep");
+    expect(loiCua({ status: 422, body: { error: "Câu có tên của lớp gói." } }, "Không làm được")).toBe("Câu có tên của lớp gói.");
+    expect(loiCua({ status: 500, body: null }, "Không làm được")).toBe("Không làm được (mã 500)");
+  });
+
+  it("mọi lần đọc `.error` trong bảy tệp nằm TRONG `loiCua` — không lối thứ hai in câu của máy chủ", () => {
+    const ngoai: string[] = [];
+    for (const t of TEP) {
+      const sf = cay(t);
+      const fn = hamLoiCua(sf);
+      const dong = (n: ts.Node) => `${t}:${String(sf.getLineAndCharacterOfPosition(n.getStart()).line + 1)}`;
+      const di = (n: ts.Node): void => {
+        if (n === fn) return;
+        if (ts.isPropertyAccessExpression(n) && n.name.text === "error") ngoai.push(dong(n));
+        if (ts.isElementAccessExpression(n) && ts.isStringLiteral(n.argumentExpression) && n.argumentExpression.text === "error") ngoai.push(dong(n));
+        if (ts.isBindingElement(n) && ((n.propertyName !== undefined && ts.isIdentifier(n.propertyName) && n.propertyName.text === "error") || (n.propertyName === undefined && ts.isIdentifier(n.name) && n.name.text === "error"))) ngoai.push(dong(n));
+        ts.forEachChild(n, di);
+      };
+      di(sf);
+    }
+    expect(ngoai).toEqual([]);
+  });
 });

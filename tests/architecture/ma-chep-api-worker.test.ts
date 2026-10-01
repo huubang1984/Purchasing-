@@ -327,6 +327,17 @@ const BANG_TEN: readonly HangTen[] = [
     lyDo: "`app_api_login` / `app_unseal_login` — hai cặp role mà `hardening.always.sql` (`CAP_HOP_LE`) giữ; khác giá trị là bản chất.",
   },
   {
+    ten: "THAN_403",
+    loai: "const",
+    tep: [`${API}dispatch.ts`, `${WEB}dang-nhap.ts`],
+    xuLy: "RIENG",
+    doLuong: "KHONG",
+    lyDo: "[S1.255 / khoản 326] `api`: THÂN phản hồi 403 (một object, khoản 191 — không nói thiếu quyền nào). `/lib/dang-nhap.js`: " +
+      "CHUỖI mà `loiCua` của trang nhận ra để nói thay bằng câu đọc được (khuôn khoản 323; `apps/web/trang/*.js` cũng khai, ngoài tầm " +
+      "cổng này). Khác kiểu, khác việc — không phải bản chép để giữ giống mã. Phụ thuộc GIÁ TRỊ thì có, và nói ra: `api` đổi chuỗi " +
+      "thì trang trở về in nguyên văn (hành vi trước S1.254) — không test nào nối hai bên; test của `api` chỉ đo mã 403.",
+  },
+  {
     ten: "BIEN_KHOA_LOCAL_DEV",
     loai: "const",
     tep: [CAU_HINH_API, CAU_HINH_WORKER],
