@@ -185,7 +185,8 @@ Làm lại từ đầu thì xoá cả hai: `docker rm -f tp-pilot-gia-lap` và t
 trên Windows, Node bỏ qua bit quyền và thư mục thừa hưởng ACL của thư mục cha — nên để kho, hay `--thu-muc`, dưới hồ sơ
 người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. **[S1.255] Đo trên máy của lượt đi thử
 Windows:** kho nằm trên `D:\`, và gốc ổ ấy cho `Authenticated Users` quyền sửa, `Users` quyền đọc; máy có hai tài khoản bật —
-thư mục trạng thái thừa hưởng đúng ACL ấy. Công cụ không cảnh báo (khoản 328). `--thu-muc` trỏ vào
+thư mục trạng thái thừa hưởng đúng ACL ấy. Công cụ nay in một câu cảnh báo lúc dựng cụm khi thư mục trạng thái nằm ngoài
+hồ sơ người dùng (khoản 328 — theo đường dẫn, không đọc ACL). `--thu-muc` trỏ vào
 trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngoài kho thì chỗ nào cũng được. Nó chứa:
 - `cum.json`: bí mật cụm;
 - `trang-thai.json`: bí mật TOTP của người mua giả lập và token lời mời, GỘP qua các lượt chạy (lượt mới nhất trước) —

@@ -35,7 +35,8 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
 - [ ] **[S1.255] Máy có nhiều tài khoản Windows:** chạy `icacls` trên thư mục kho. Thấy `Users` hay `Authenticated Users`
   thì tài khoản khác trên máy đọc được `cum.json`, bí mật TOTP của người mua giả lập (`trang-thai.json`) và link đăng nhập
   còn hạn trong `hop-thu/` — đặt kho dưới `C:\Users\<tên>\` (mặc định chỉ chủ hồ sơ đọc được), hay thêm
-  `--thu-muc "$env:USERPROFILE\.pilot-gia-lap"` vào MỌI lệnh `pnpm pilot:gia-lap`. Công cụ không tự cảnh báo (khoản 328).
+  `--thu-muc "$env:USERPROFILE\.pilot-gia-lap"` vào MỌI lệnh `pnpm pilot:gia-lap`. Công cụ in một câu *CẢNH BÁO (khoản 328)*
+  lúc dựng cụm khi thư mục trạng thái nằm ngoài hồ sơ người dùng — theo đường dẫn, không đọc ACL, nên vẫn chạy `icacls`.
 - [ ] Đi thử một lượt kịch bản §5 của kế hoạch, bấm đủ các nút, để biết mỗi màn mất bao lâu trên máy này.
 - [ ] In mục 4 của tệp này — hai bản: một cho người hỏi, một để trống ghi tay.
 

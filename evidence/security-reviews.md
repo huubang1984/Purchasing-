@@ -23285,11 +23285,11 @@ gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhã
 - 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
 - Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
 
-# §S1.255 — BẬC 1 CỦA THANG PILOT, PHẦN TRÊN MÁY: KHỐI LỆNH CHẠY NGUYÊN VĂN TRÊN WINDOWS THẬT; CHÂN TRANG `/nop-thau` VÀ CỔNG CÂU CẤM; PHẦN CÒN LẠI CỦA KHOẢN 321 VÀ 323 — KHOẢN 325–327 ĐÓNG, KHOẢN 328 MỞ
+# §S1.255 — BẬC 1 CỦA THANG PILOT, PHẦN TRÊN MÁY: KHỐI LỆNH CHẠY NGUYÊN VĂN TRÊN WINDOWS THẬT; CHÂN TRANG `/nop-thau` VÀ CỔNG CÂU CẤM; PHẦN CÒN LẠI CỦA KHOẢN 321 VÀ 323; CẢNH BÁO ACL TRÊN WINDOWS — KHOẢN 325–328 ĐÓNG
 
-**Rổ và mảnh (ADR-043):** ba khoản sinh và đóng trong vòng — để mở thì 325, 327 là rổ A ⒜ (một bước của kịch bản trình diễn
-chạy ra thứ người dùng thấy là sai: một lời khai sai trên màn, một nút mời hành động sẽ bị từ chối), 326 rổ B. Khoản 328 mở,
-rổ B. Không migration, không ADR, không route; không mảnh nào của `docs/PRODUCT.md` §11 đổi. Thang năm bậc vẫn là đề xuất (ADR-101).
+**Rổ và mảnh (ADR-043):** bốn khoản sinh và đóng trong vòng — để mở thì 325, 327 là rổ A ⒜ (một bước của kịch bản trình diễn
+chạy ra thứ người dùng thấy là sai: một lời khai sai trên màn, một nút mời hành động sẽ bị từ chối), 326 và 328 rổ B. Khoản 328
+lúc đầu chỉ ghi sổ; chủ dự án chọn sửa ngay (2026-10-02) — mục 11. Không migration, không ADR, không route; không mảnh nào của `docs/PRODUCT.md` §11 đổi. Thang năm bậc vẫn là đề xuất (ADR-101).
 
 ## 1. Vòng này là gì — và vì sao nó dựng hai lần
 Chủ dự án, 2026-10-01: *"Chạy bậc 1 của thang pilot"*. Bậc 1 (`docs/BUOI-BAC-1.md`) là sáu mươi phút với một trưởng phòng mua
@@ -23372,7 +23372,8 @@ Vinh *Đọc đề xuất* ⇒ đề xuất hiện, nút *Rút đề xuất* Ẩ
   ấy (nút rút).
 - **403 theo khuôn khoản 323, không theo bản đầu.** Bản đầu đổi MỌI 403, nên nuốt cả 403 `nguon khong duoc phep` của lớp chống
   CSRF theo origin — lỗi cấu hình hay gặp nhất khi dựng thật — rồi chẩn đoán nhầm thành lỗi quyền (lượt soi, TRUNG-1).
-- **328 không sửa:** ghi khoản và thêm bước kiểm `icacls` vào `BUOI-BAC-1.md` §1 — mọi dữ liệu là giả lập.
+- **328** lúc đầu chỉ ghi khoản và thêm bước kiểm `icacls` vào `BUOI-BAC-1.md` §1 — mọi dữ liệu là giả lập. Chủ dự án chọn sửa
+  sau khi nghe báo cáo (mục 11).
 
 ## 6. Đo
 - **Đỏ trước trên `6b73a4ad`** (chạy test mới trên mã master): cổng câu cấm đỏ đúng ca *"không văn bản nào…"*, tại chân trang;
@@ -23436,3 +23437,22 @@ Bản đầu (trên `4d801263`, không đẩy) có mười lăm đột biến kh
 - `pnpm evidence` trên `7b757853`: vitest thoát mã 0, 4437 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1609
   giây; `evidence/INV-matrix.md` không đổi.
 - Đột biến: 11/11 (mục 7). Lượt giả lập trên mã cuối: 10/10 ĐẠT, cô lập 2/2 (mục 2).
+
+## 11. Khoản 328 — sửa theo lựa chọn của chủ dự án (2026-10-02)
+Sau báo cáo của vòng, chủ dự án: *"Bật auto-fix, sửa khoản 328"*.
+- **Cách sửa:** `canhBaoAclWindows(nenTang, thuMuc, hoSo)` trong `tools/pilot-gia-lap/src/cum.ts` trả một câu cảnh báo khi nền tảng
+  là Windows và thư mục trạng thái nằm NGOÀI hồ sơ người dùng (`win32.relative` ra `..`, `..\…` hay một đường dẫn tuyệt đối — ổ
+  khác); `chuanBiCum` (lệnh chạy và `cum`) gọi nó với `process.platform` và `homedir()` rồi in ra stderr. Các lệnh hỗ trợ
+  (`lien-ket`, `otp`, `dang-nhap`) không in, để buổi trình diễn không ồn.
+- **Điểm tôi tự chốt:** kiểm theo ĐƯỜNG DẪN thay vì đọc ACL (`Get-Acl` qua PowerShell): hồ sơ người dùng mặc định chỉ chủ đọc
+  được, nên điều kiện ấy đúng là điều kế hoạch §4 khuyên, kiểm được trên mọi máy chạy test, và không thêm một tiến trình con mỗi lần
+  dựng cụm. Cái giá, nói ra: thư mục ngoài hồ sơ mà ACL đã siết vẫn bị cảnh báo, và một hồ sơ bị nới ACL thì không. Cảnh báo,
+  không từ chối — mọi dữ liệu của cụm là giả lập. So bằng `path.win32` tường minh, nên test chạy được trên CI Linux.
+- **Đỏ trước:** hai ca mới trong `tools/pilot-gia-lap/src/phu-tro.test.ts` đỏ trên mã trước khi sửa (*"canhBaoAclWindows is not a
+  function"*; `chuanBiCum` chưa gọi).
+- **Đột biến** (trọn `phu-tro.test.ts`, 22 ca, cùng khuôn mục 7; bản gốc và bản sau: 0 đỏ): K1 luôn trả `null` ⇒ 1 đỏ; K2 bỏ vế
+  `..` (chỉ xét ổ khác) ⇒ 1 đỏ (bẫy `C:\Users\nguye2`, `..\rdp`); K3 `chuanBiCum` không gọi ⇒ 1 đỏ; K4 cảnh báo cả trên POSIX ⇒ 1 đỏ.
+- **Đo trên máy thật:** lượt giả lập thứ năm (kho trên `D:\`) in *"CẢNH BÁO (khoản 328): trên Windows, thư mục trạng thái
+  D:\Claude\TrustProcure\.claude\worktrees\bac-1-pilot\.pilot-gia-lap thừa hưởng ACL của thư mục cha — … nằm ngoài hồ sơ người dùng
+  C:\Users\nguye …"* trước khi sinh bí mật; lượt vẫn 10/10 ĐẠT, cô lập 2/2. Nhánh không cảnh báo (thư mục dưới hồ sơ) chỉ đo bằng
+  test — chạy thật với `--thu-muc` mới trên cùng CSDL thì công cụ từ chối đúng như khoản 165, và một CSDL mới thì vòng không dựng.

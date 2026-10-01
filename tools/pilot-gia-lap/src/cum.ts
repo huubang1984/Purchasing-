@@ -24,7 +24,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
@@ -86,6 +86,29 @@ export function kiemThuMucTrangThai(goc: string, thuMuc: string): void {
   throw new CumError(
     `thư mục trạng thái ${thuMuc} nằm trong kho mà không dưới một thư mục \`.pilot-gia-lap\` — nó sẽ giữ khoá và bí mật TOTP ` +
       "ở chỗ git theo dõi. Dùng một đường dẫn ngoài kho, hay <gốc kho>/.pilot-gia-lap/<tên>",
+  );
+}
+
+/**
+ * [S1.255 / khoản 328] Câu cảnh báo khi dựng cụm trên Windows mà thư mục trạng thái nằm NGOÀI hồ sơ người dùng; `null` khi không.
+ *
+ * Windows bỏ qua `mode: 0o700` của `docBiMat`: thư mục thừa hưởng ACL của cha. Đo trên máy của lượt đi thử bậc 1: kho trên `D:\`,
+ * gốc ổ cho `Authenticated Users` quyền sửa và `Users` quyền đọc, máy có hai tài khoản bật — tài khoản kia đọc được `cum.json`,
+ * bí mật TOTP và link đăng nhập còn hạn. Hồ sơ người dùng mặc định chỉ chủ đọc được, nên "nằm dưới hồ sơ" là đúng điều kế hoạch
+ * §4 khuyên. PHÁT BIỂU ĐÚNG MỨC: đây là phép kiểm theo ĐƯỜNG DẪN, không đọc ACL — một thư mục ngoài hồ sơ mà ACL đã siết vẫn bị
+ * cảnh báo, và một hồ sơ mà ai đó đã nới ACL thì không. Cảnh báo, không từ chối: mọi dữ liệu của cụm là giả lập.
+ * So bằng `path.win32` (không phụ thuộc máy chạy test); `win32.relative` so không phân biệt hoa thường, như Windows.
+ */
+export function canhBaoAclWindows(nenTang: NodeJS.Platform, thuMuc: string, hoSo: string): string | null {
+  if (nenTang !== "win32") return null;
+  const r = win32.relative(hoSo, thuMuc);
+  if (r !== ".." && !r.startsWith(`..${win32.sep}`) && !win32.isAbsolute(r)) return null;
+  return (
+    `CẢNH BÁO (khoản 328): trên Windows, thư mục trạng thái ${thuMuc} thừa hưởng ACL của thư mục cha — bit 0700 không có tác ` +
+    `dụng — và nó nằm ngoài hồ sơ người dùng ${hoSo}. Nếu thư mục cha cho \`Users\` hay \`Authenticated Users\` đọc, một tài khoản ` +
+    "khác trên máy này đọc được cum.json (vòng khoá, mật khẩu hai vai đăng nhập), bí mật TOTP của người mua giả lập và link đăng " +
+    `nhập còn hạn trong hop-thu/. Kiểm: icacls "${thuMuc}". Tránh: đặt kho dưới hồ sơ người dùng, hay thêm ` +
+    `--thu-muc "${win32.join(hoSo, ".pilot-gia-lap")}" vào MỌI lệnh pnpm pilot:gia-lap.`
   );
 }
 
