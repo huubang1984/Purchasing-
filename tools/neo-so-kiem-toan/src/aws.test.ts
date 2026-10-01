@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { GetPublicKeyCommand, SignCommand } from "@aws-sdk/client-kms";
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand } from "@aws-sdk/client-s3";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { loadVerifiedAnchors, verifyAnchorRecord, type SignedAnchorRecord } from "@trustprocure/audit";
+import { AnchorError, loadVerifiedAnchors, verifyAnchorRecord, type SignedAnchorRecord } from "@trustprocure/audit";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   createS3AnchorStore,
@@ -135,6 +135,46 @@ describe("[ADR-071] nơi cất S3 + bộ ký KMS", () => {
     expect(verifyAnchorRecord(bg, new Map([["kms-neo-1", khoaCongKhai]]), "t").seq).toBe(7);
     const lech = kmsGia(generateKeyPairSync("ec", { namedCurve: "P-256" }), generateKeyPairSync("ec", { namedCurve: "P-256" }));
     await expect(taoBoKyNeoAwsKms({ client: lech, keyId: "k", kid: "kms-neo-1" })).rejects.toThrow(/không kiểm được/u);
+  });
+
+  // [S1.250 / kid] Bộ ký mốc neo KMS là phía PHÁT HÀNH: kid của nó đi vào dòng `kid=` của mốc neo và thành `khoa-<kid>.pem` khi
+  // `trich` tách mốc neo — tập `[A-Za-z0-9._-]` (cùng `neo_kid` của stack 40, cùng vòng khoá local-dev ở `anchor-sign.ts`).
+  // Định dạng mốc neo vẫn cho `:` (ca "định dạng không đổi" ở `packages/audit/src/anchor-sign.test.ts`).
+  it("[S1.250 / kid] kid có `:` ⇒ AnchorError nêu tập ký tự, TRƯỚC mọi lời gọi KMS", async () => {
+    const lenh: string[] = [];
+    const kmsGhi: KmsKyNeo = {
+      send(l: SignCommand | GetPublicKeyCommand): Promise<never> {
+        lenh.push(l.constructor.name);
+        return Promise.reject(new Error("KMS không được gọi với một kid bị từ chối"));
+      },
+    };
+    for (const kid of ["kms:neo-1", "arn:kid", ":"]) {
+      await expect(taoBoKyNeoAwsKms({ client: kmsGhi, keyId: "k", kid }), kid).rejects.toThrow(AnchorError);
+      await expect(taoBoKyNeoAwsKms({ client: kmsGhi, keyId: "k", kid }), kid).rejects.toThrow("[A-Za-z0-9._-]");
+    }
+    expect(lenh, "không lệnh KMS nào đã gửi").toEqual([]);
+    // Đối chứng: giá trị mặc định của `neo_kid` (stack 40) đi qua và ký được.
+    const { boKy } = await taoBoKyNeoAwsKms({ client: kmsGia(), keyId: "k", kid: "kms-neo-2026-09" });
+    expect(boKy.activeKeyId).toBe("kms-neo-2026-09");
+  });
+
+  // [S1.250 / kid — lượt soi đối kháng] `kid` đọc nhiều lần (kiểm, `activeKeyId`, văn bản, tự kiểm) cho một getter trả kid hợp lệ
+  // cho phép kiểm và kid có `:` cho mốc neo. Bộ ký phải đọc ĐÚNG MỘT lần và ký bằng chính giá trị đã kiểm.
+  it("[S1.250 / kid] `kid` là getter đổi giá trị sau lần đọc đầu ⇒ mốc neo mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
+    let soLanDoc = 0;
+    const t = {
+      client: kmsGia(),
+      keyId: "k",
+      get kid(): string {
+        soLanDoc += 1;
+        return soLanDoc === 1 ? "kms-neo-1" : "kms:neo-1";
+      },
+    };
+    const { boKy } = await taoBoKyNeoAwsKms(t);
+    const bg = await boKy.ky({ orgId: ORG, seq: 3, hashHex: "b".repeat(64), exportedAt: "2026-10-01T00:00:00.000Z" });
+    expect(boKy.activeKeyId).toBe("kms-neo-1");
+    expect(bg.text).toContain("\nkid=kms-neo-1\n");
+    expect(soLanDoc, "bộ ký đọc `kid` đúng một lần").toBe(1);
   });
 });
 

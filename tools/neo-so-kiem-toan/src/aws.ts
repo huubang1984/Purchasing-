@@ -31,6 +31,7 @@ import {
 import { AssumeRoleCommand, type AssumeRoleCommandOutput } from "@aws-sdk/client-sts";
 import {
   AnchorError,
+  antoanChoBaoCao,
   buildAnchorText,
   verifyAnchorRecord,
   type AnchorFields,
@@ -154,15 +155,26 @@ export async function taoBoKyNeoAwsKms(t: {
   readonly keyId: string;
   readonly kid: string;
 }): Promise<{ readonly boKy: BoKyNeo; readonly khoaCongKhai: Uint8Array }> {
+  // [S1.250 / kid] Bộ ký KMS là phía PHÁT HÀNH của mốc neo: kid của nó đi vào dòng `kid=` và thành `khoa-<kid>.pem` khi `trich`
+  // tách mốc neo (H11-11). Kiểm bằng tập phát hành TRƯỚC mọi lời gọi KMS — cùng vòng khoá local-dev (`anchor-sign.ts`), cùng
+  // `neo_kid` của stack 40. `buildAnchorText` dưới chỉ giữ tập rộng của ĐỊNH DẠNG (cho `:`). Đọc kid của tham số ĐÚNG MỘT lần
+  // (lượt soi đối kháng): nó có thể là một getter, và giá trị đã kiểm phải là giá trị bộ ký dùng ở mọi chỗ dưới.
+  const kid = t.kid;
+  if (!laKidPhatHanh(kid)) {
+    throw new AnchorError(
+      `kid ký mốc neo "${antoanChoBaoCao(kid)}" không hợp lệ: phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — nó thành tên ` +
+        'tệp khi "pnpm neo trich" tách mốc neo.',
+    );
+  }
   const pk = await t.client.send(new GetPublicKeyCommand({ KeyId: t.keyId }));
   if (pk.KeySpec !== "ECC_NIST_P256" || pk.KeyUsage !== "SIGN_VERIFY" || pk.PublicKey === undefined) {
     throw new AnchorError(`Khoá ký mốc neo phải là ECC_NIST_P256 / SIGN_VERIFY, KMS trả ${String(pk.KeySpec)} / ${String(pk.KeyUsage)}.`);
   }
   const khoaCongKhai = new Uint8Array(pk.PublicKey);
   const boKy: BoKyNeo = {
-    activeKeyId: t.kid,
+    activeKeyId: kid,
     async ky(fields) {
-      const text = buildAnchorText({ ...fields, kid: t.kid });
+      const text = buildAnchorText({ ...fields, kid });
       const ra = await t.client.send(
         new SignCommand({ KeyId: t.keyId, Message: Buffer.from(text, "utf8"), MessageType: "RAW", SigningAlgorithm: "ECDSA_SHA_256" }),
       );
@@ -174,9 +186,9 @@ export async function taoBoKyNeoAwsKms(t: {
   // kiểm được, và lỗi chỉ lộ ra ở lần kiểm toán thật (cùng lý do H9-3 của bộ ký local-dev).
   const mau = await boKy.ky({ orgId: "00000000-0000-0000-0000-000000000000", seq: 1, hashHex: "0".repeat(64), exportedAt: "1970-01-01T00:00:00.000Z" });
   try {
-    verifyAnchorRecord(mau, new Map([[t.kid, khoaCongKhai]]), "tu-kiem");
+    verifyAnchorRecord(mau, new Map([[kid, khoaCongKhai]]), "tu-kiem");
   } catch (loi) {
-    throw new AnchorError(`Chữ ký KMS của "${t.kid}" không kiểm được bằng nửa công khai của chính khoá ấy.`, { cause: loi });
+    throw new AnchorError(`Chữ ký KMS của "${kid}" không kiểm được bằng nửa công khai của chính khoá ấy.`, { cause: loi });
   }
   return { boKy, khoaCongKhai };
 }
@@ -184,7 +196,20 @@ export async function taoBoKyNeoAwsKms(t: {
 // ---------------------------------------------------------------------------------------------
 // Neo tài liệu khoá biên nhận
 // ---------------------------------------------------------------------------------------------
+/**
+ * Kid làm tên đối tượng `khoa-bien-nhan/<kid>.json` — từ S1.249 cùng chữ với tập phát hành kid biên nhận (hàng `KID` GIU
+ * VAN_BAN của `tests/architecture/ma-chep-api-worker.test.ts`). [S1.250 / kid] Và là tập phát hành của kid KÝ MỐC NEO trong công
+ * cụ này (`laKidPhatHanh` — bộ ký KMS ở trên, `TRUSTPROCURE_NEO_KID` ở `index.ts`): một tập, không thêm bản chép.
+ */
 const KID = /^[A-Za-z0-9._-]{1,64}$/u;
+
+/**
+ * [S1.250 / kid] `kid` thuộc tập PHÁT HÀNH `[A-Za-z0-9._-]{1,64}` — kid biên nhận (S1.249) và kid ký mốc neo (chủ dự án chốt
+ * 2026-10-01) dùng chung. Phía KIỂM không gọi hàm này: nó đọc tập rộng của định dạng (`anchor-text.ts`, `receipt.ts`).
+ */
+export function laKidPhatHanh(kid: string): boolean {
+  return KID.test(kid);
+}
 
 /** Tài liệu một khoá — ĐÚNG byte của `GET /.well-known/trustprocure-receipt-keys/<kid>` (apps/public-keys). */
 export function taiLieuMotKhoa(kid: string, spkiB64: string): Uint8Array {

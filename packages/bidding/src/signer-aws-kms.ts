@@ -48,10 +48,13 @@ function kiemKeyId(keyId: string): void {
 
 export function createAwsKmsReceiptSigner(cfg: AwsKmsReceiptSignerConfig): ReceiptSigner {
   kiemKeyId(cfg.keyId);
-  assertReceiptKid(cfg.kid);
+  // [S1.250 / kid] Đọc `cfg.kid` ĐÚNG MỘT LẦN: giá trị đã kiểm là giá trị thành `activeKeyId` — một getter đổi giá trị sau
+  // lần đọc đầu không lọt được kid có `:` qua phép kiểm (cùng khuôn `submitBid` và bộ ký mốc neo KMS).
+  const kid = cfg.kid;
+  assertReceiptKid(kid);
   return {
     name: "aws-kms",
-    activeKeyId: cfg.kid,
+    activeKeyId: kid,
     async sign(canonicalText: string): Promise<Uint8Array> {
       let ra: SignCommandOutput;
       try {

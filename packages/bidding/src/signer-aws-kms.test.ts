@@ -130,6 +130,27 @@ describe("[ADR-011] bộ ký biên nhận aws-kms", () => {
 
   // [S1.249 / kid] Phía phát hành hẹp hơn định dạng: kid biên nhận thành tên đối tượng S3 khi job neo neo tài liệu khoá
   // (`taiLieuMotKhoa`, tập `[A-Za-z0-9._-]`). Định dạng vẫn cho `:` — ca "định dạng không đổi" ở `receipt.test.ts`.
+  // [S1.250 / kid] Chủ dự án chốt 2026-10-01: bộ dựng đọc `cfg.kid` ĐÚNG MỘT LẦN — giá trị đã kiểm là giá trị thành
+  // `activeKeyId`. Một cấu hình mang getter đổi giá trị sau lần đọc đầu không được lọt kid có `:` qua phép kiểm (cùng khuôn
+  // ca getter của `submitBid` ở `bidding.int.test.ts` và của bộ ký mốc neo KMS).
+  it("[S1.250 / kid] bộ dựng đọc `cfg.kid` đúng một lần: getter đổi giá trị sau lần đọc đầu ⇒ `activeKeyId` là ĐÚNG giá trị đã kiểm", () => {
+    const kms = new KmsKyGia();
+    const gia = ["kms-2026-09", "kms:2026-09"];
+    let soLanDoc = 0;
+    const cfg = {
+      client: kms,
+      keyId: KEY_ID,
+      get kid(): string {
+        const v = gia[Math.min(soLanDoc, gia.length - 1)] as string;
+        soLanDoc += 1;
+        return v;
+      },
+    };
+    const boKy = createAwsKmsReceiptSigner(cfg);
+    expect(boKy.activeKeyId, "bộ ký phải mang kid ĐÃ KIỂM").toBe("kms-2026-09");
+    expect(soLanDoc, "getter `kid` đọc đúng một lần").toBe(1);
+  });
+
   it("[S1.249 / kid] kid có `:` bị từ chối lúc DỰNG bộ ký aws-kms — trước lời gọi KMS nào — và thông điệp nêu tập ký tự", () => {
     const kms = new KmsKyGia();
     for (const kid of ["kms:2026-09", "arn:kid", ":"]) {

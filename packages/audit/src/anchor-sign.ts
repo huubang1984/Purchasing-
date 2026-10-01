@@ -30,7 +30,7 @@
 
 import { createSign, generateKeyPairSync } from "node:crypto";
 import { assertLocalDevAllowed } from "@trustprocure/crypto-keys";
-import { AnchorError, buildAnchorText, type AnchorFields } from "./anchor-text.js";
+import { AnchorError, antoanChoBaoCao, buildAnchorText, type AnchorFields } from "./anchor-text.js";
 import { verifyAnchorRecord, type SignedAnchorRecord } from "./anchor-verify.js";
 
 /** Một cặp khoá ký mốc neo, cả hai nửa ở dạng DER: khoá riêng PKCS8, khoá công khai SPKI. */
@@ -39,7 +39,17 @@ export interface AnchorKeyPair {
   readonly publicKey: Uint8Array;
 }
 
-const KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+/**
+ * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `anchor-text.ts`.~~ [S1.250 / kid] Tập PHÁT
+ * HÀNH của kid ký mốc neo, HẸP hơn tập của ĐỊNH DẠNG: không `:`. Kid đi vào dòng `kid=` của mốc neo VÀ thành tên tệp
+ * `khoa-<kid>.pem` khi `pnpm neo trich` tách mốc neo cho kiểm toán viên — `kidAnToanChoTenTep` của
+ * `tools/neo-so-kiem-toan/src/index.ts` chỉ nhận `[A-Za-z0-9._-]` (H11-11), nên một kid mang `:` mà vòng khoá nhận là một mốc neo
+ * ký được mà không trích được. Chủ dự án chốt 2026-10-01, cùng nguyên tắc với kid biên nhận (`assertReceiptKid`, S1.249); cùng
+ * tập với `neo_kid` của terraform stack 40, với `taoBoKyNeoAwsKms` và `TRUSTPROCURE_NEO_KID` của công cụ neo. `KID_PATTERN` của
+ * `anchor-text.ts` KHÔNG đổi: nó là hằng của ĐỊNH DẠNG ĐÃ KÝ, và phía KIỂM phải đọc được mọi mốc neo định dạng cho phép — đổi
+ * định dạng là thứ ADR-026 §1 cấm (lập luận H11-11).
+ */
+const KID_PHAT_HANH = /^[A-Za-z0-9._-]{1,64}$/;
 
 /**
  * Vòng khoá ký mốc neo. Cùng khuôn `ReceiptSigningKeyRing`, cùng luật: xoay khoá là **thêm** một
@@ -58,9 +68,11 @@ export class AnchorSigningKeyRing {
       throw new AnchorError("Vòng khoá ký mốc neo phải có ít nhất một khoá.");
     }
     for (const [kid, k] of cap) {
-      if (!KID_PATTERN.test(kid)) {
+      // [S1.250 / kid] Thông điệp nêu tập ký tự; kid đi qua `antoanChoBaoCao` (H9-6) — nó có thể mang ký tự điều khiển.
+      if (!KID_PHAT_HANH.test(kid)) {
         throw new AnchorError(
-          `Định danh khoá "${kid}" không hợp lệ: nó đi vào một dòng "kid=..." của văn bản đã ký.`,
+          `Định danh khoá "${antoanChoBaoCao(kid)}" không hợp lệ: phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — nó đi ` +
+            'vào một dòng "kid=..." của văn bản đã ký và thành tên tệp khi "pnpm neo trich" tách mốc neo.',
         );
       }
       if (k.privateKey.length === 0 || k.publicKey.length === 0) {
