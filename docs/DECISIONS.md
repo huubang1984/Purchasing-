@@ -11104,5 +11104,8 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
 - **Đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn của lượt chấm vòng một** (không có giá vòng hai — phong bì chưa vào bản rõ), cùng tư
   thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
-- **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn của gói (giá của X tại mốc đọc, dải tại mốc mở giá); số đo ở biên bản §S1.9101.
+- **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn ỨNG VIÊN của gói (giá của X tại mốc đọc, dải tại mốc mở giá). Đo ở 5.000 gói
+  × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
+  18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.9101). Hướng xử lý chờ chủ dự án trước S4.5c — đọc
+  as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy.
 - **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 9401) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.

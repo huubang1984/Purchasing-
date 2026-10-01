@@ -185,7 +185,7 @@ const CUA_SO_DAI = 24;
 const CUA_SO_NGAN = 3;
 
 /** Chuỗi chữ số → số; mọi dạng khác (kể cả chuỗi rỗng) → `null`. */
-const soNguyen = (chuoi: string): number | null => (/^[0-9]{1,4}$/u.test(chuoi.trim()) ? Number(chuoi.trim()) : null);
+const nguyenTuChuoi = (chuoi: string): number | null => (/^[0-9]{1,4}$/u.test(chuoi.trim()) ? Number(chuoi.trim()) : null);
 
 /**
  * Cảnh báo tĩnh cho nhóm khoá đang soạn — một câu mỗi điều. `null`: phiên bản KHÔNG cấu hình benchmark. Giá trị không đọc được
@@ -198,8 +198,8 @@ export function canhBaoBenchmark(nhom: NhomBenchmark | null): readonly string[] 
     ];
   }
   const ra: string[] = [];
-  const goi = soNguyen(nhom.san_goi);
-  const ncc = soNguyen(nhom.san_ncc);
+  const goi = nguyenTuChuoi(nhom.san_goi);
+  const ncc = nguyenTuChuoi(nhom.san_ncc);
   if ((goi !== null && goi < SAN_TOI_THIEU) || (ncc !== null && ncc < SAN_TOI_THIEU)) {
     ra.push(`Sàn dưới ${String(SAN_TOI_THIEU)} gói hay ${String(SAN_TOI_THIEU)} nhà cung cấp: một hai người quen báo giá là đủ đặt cả dải mà gói sau bị so.`);
   }
@@ -207,7 +207,7 @@ export function canhBaoBenchmark(nhom: NhomBenchmark | null): readonly string[] 
   if (vua !== null && vua >= NGUONG_VUA_RONG) {
     ra.push("Ngưỡng lệch vừa từ 20% trở lên: một giá lệch tới mức ấy so với trung vị vẫn hiện «trong dải lịch sử».");
   }
-  const cuaSo = soNguyen(nhom.cua_so_thang);
+  const cuaSo = nguyenTuChuoi(nhom.cua_so_thang);
   if (cuaSo !== null && cuaSo > CUA_SO_DAI) {
     ra.push(`Cửa sổ dài hơn ${String(CUA_SO_DAI)} tháng: giá cũ kéo trung vị, nhất là khi giá thị trường đã đổi.`);
   }

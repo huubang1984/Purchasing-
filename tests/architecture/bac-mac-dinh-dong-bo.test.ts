@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BAC_MAC_DINH, BENCHMARK_MAC_DINH, MUC_MAC_DINH, NGUONG_KEP_MAC_DINH } from "../../apps/web/src/chinh-sach.js";
-import { NHOM_BENCHMARK_MAU, docNhomBenchmark } from "../../packages/du-lieu-nen/src/benchmark.js";
+import { NHOM_BENCHMARK_MAU, docNhomBenchmark } from "@trustprocure/du-lieu-nen";
 import { BAC_DEMO, MUC_DEMO } from "../../tools/gieo-demo/src/chinh-sach-demo.js";
 
 describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:demo --s3 khai CÙNG một chính sách", () => {
