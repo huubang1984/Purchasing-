@@ -23515,4 +23515,6 @@ Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa 
 - Khối dán vào console tương tác vẫn chưa đo.
 
 ## 7. Số đo
-(điền sau lượt đo trên HEAD)
+- `pnpm t0` xanh; `pnpm test` 141 tệp, 2396 đạt, 14 bỏ qua, 0 đỏ (trên `62045598`, cùng mã, trước lần cấp số).
+- `pnpm evidence` trên `e0ab81be`: vitest thoát mã 0, 4441 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1712
+  giây; `evidence/INV-matrix.md` không đổi.
