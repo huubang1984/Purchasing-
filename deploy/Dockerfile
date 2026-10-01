@@ -35,7 +35,10 @@ COPY tools/neo-so-kiem-toan tools/neo-so-kiem-toan
 COPY tools/khoi-tao-to-chuc tools/khoi-tao-to-chuc
 COPY db db
 # Bó CA của RDS (toàn cầu). Đổi bó ⇒ đổi checksum ở đây, có chủ đích.
-ADD --chmod=0644 --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
+# [apply lần đầu 2026-10-01] AWS thay bó ngày 2026-09-29 (Last-Modified 23:32:50 GMT, thêm CA của vùng mới): checksum
+# cũ e5bb2084… làm `docker build` dừng ở "digest mismatch". Bó mới đo hai nơi ra cùng sha256 (Docker Desktop của người
+# vận hành và một lần tải độc lập): 111 chứng chỉ, đều là Root CA tự ký của Amazon RDS, có ap-southeast-1.
+ADD --chmod=0644 --checksum=sha256:fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c \
     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
 
 FROM nguon AS cai-api
