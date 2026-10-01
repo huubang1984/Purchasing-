@@ -71,7 +71,7 @@ import {
 } from "@trustprocure/rfq";
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
-import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
+import { BAC_DEMO, BAFO_TOP_N_DEMO, MUC_DEMO, TRONG_SO_DEMO } from "./chinh-sach-demo.js";
 import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, tuChoiKhiCoViecCuaToChucKhac, type NhaCungCapGieo } from "./goi-da-mo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
@@ -331,6 +331,9 @@ async function chinh(): Promise<void> {
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
+    // [S1.253 / S4.5a / L14] Phiên bản 1 khai LUÔN trọng số chấm (`gia`, hệ số 1) và BAFO top-2: lượt chấm của mọi gói gieo dưới
+    // đây dùng phiên bản hiệu lực lúc gói MỞ, nên một phiên bản khai trọng số SAU lúc mở — cách người demo chấm được trước vòng
+    // này — không còn áp cho gói nào đã mở.
     const chinhSach = S3
       ? await (async (): Promise<string> => {
           const f1 = nguoiMua.find((n) => n.email.startsWith("taichinh1."));
@@ -342,6 +345,8 @@ async function chinh(): Promise<void> {
               dualApprovalThreshold: MUC_DEMO.nguongKep,
               currency: "VND",
               tiers: BAC_DEMO,
+              evalComponents: TRONG_SO_DEMO,
+              bafoTopN: BAFO_TOP_N_DEMO,
               chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
               thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
               actorSessionId: f1.sessionId,
@@ -352,9 +357,9 @@ async function chinh(): Promise<void> {
           return cs.id;
         })()
       : (await q<{ id: string }>(
-          "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, created_by, created_by_session_id) " +
-            "VALUES ($1, 1, '1000000000.00', 'VND', $2, $3) RETURNING id",
-          [org, nguoiGieo, phienGieo],
+          "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
+            "created_by, created_by_session_id) VALUES ($1, 1, '1000000000.00', 'VND', $2::pg_catalog.jsonb, $3::pg_catalog.int4, $4, $5) RETURNING id",
+          [org, JSON.stringify(TRONG_SO_DEMO), BAFO_TOP_N_DEMO, nguoiGieo, phienGieo],
         )).id;
 
     // [S1.201 / S3.6a] `--s3`: F1 (FINANCE, giữ `category.manage`) dựng nhóm hàng bằng hàm gói — tổ chức đã bật không nộp duyệt

@@ -22965,3 +22965,238 @@ thông điệp lỗi; thứ tự cổng đúng (người không giữ `bid.view`
   `agent: false`, và đòi route thứ mười hai đúng là `GET /items/:itemId/price-history` (`5ded942`); `apps/api` 29 tệp, 391/391.
 - `pnpm evidence` toàn bộ T1–T3 trên `5ded942`: 226 tệp, 4326 khẳng định, 4316 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo
   biến môi trường), **0 đỏ**; **77/77 bất biến** (55 nghiệp vụ + 22 hàng rào); L6 đo bằng 15 khẳng định, L5 59.
+
+# §S1.252 — TRƯỚC APPLY STACK 90: `kiem-truoc-apply` IN LÝ DO CỦA TERRAFORM; OUTPUT `xac_minh_acm` CHO 6.2; BĂM BẢN KHAI CRLF; BOM CỦA SECRET ZALO; MÃ VAI `DATA_STEWARD`; WORKER 0/0; BẢNG THƯ DỰ KIẾN — KHOẢN 311–318 ĐÓNG; CÁCH ĐO `ClockDrift` GHIM PHẦN KHÔNG CẦN AWS
+
+**Rổ và mảnh (ADR-043 ⒞):** tám khoản mới, sinh và đóng trong vòng — để mở thì bốn lỗi chặn (312–315) là rổ A vì chúng chặn
+khoản 15, tức mảnh 3 của `docs/PRODUCT.md` §11 (*triển khai thật*). Khoản 15 vẫn mở. Không migration, không ADR mới, không route,
+không màn.
+
+## 1. Vòng này là gì
+Việc (b) của đề xuất ngày 2026-10-01: hỗ trợ lần apply stack 90 — chạy `kiem-truoc-apply`, rà trước từng bước của
+`docs/APPLY-LAN-DAU.md` mục 6–8, viết cách đo `ClockDrift` cho 6.7. Phiên đám mây không có tài khoản AWS: mọi phép đo dưới
+dùng Terraform thật trên bản sao các stack (backend local), `aws` giả, và mã nguồn của chính các công cụ.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+*"làm a + b như đề xuất"*; sau khi nghe các phát hiện: lô (b) *"sửa hết, PR riêng ngay"* — gồm bốn lỗi chặn, hai lời sai và mười
+bốn chỗ nhỏ; lô (a) (diễn tập §11) làm sau, PR riêng.
+
+## 3. Đo trước
+- Terraform 1.13.3 (tải từ releases.hashicorp.com) + provider aws 6.66.0 (bản mà tám tệp lock của lần apply đầu ghim), bản sao
+  `infra/terraform` trong scratchpad: `terraform validate` stack 80, 85, 90 — **sạch** cả ba.
+- `kiem-truoc-apply` chạy trọn: `terraform console` thật (bản sao stack 90, `backend_override.tf` sang `local`) và một `aws` giả
+  (tài khoản prod, secret có AWSCURRENT, image có, SES đã xác minh, còn sandbox). `prod.tfvars` mẫu của 6.1 điền đủ, digest thật
+  ⇒ `0 do, 5 vang`, thoát 0 — đúng năm `[VANG]` mà 6.4 hứa (`so_ban_api`, `so_ban_worker`, `che_do_dns`, `kenh_otp`, `ses.sandbox`);
+  digest còn `000…` ⇒ bảy `[DO]`, thoát 1; placeholder của `ses` ⇒ `[DO]` đúng chỗ.
+- **311:** biến trượt validation ⇒ `terraform console` THOÁT 0, lý do ra stderr, stdout mở đầu bằng *"Warning: Due to the problems
+  above…"*; tool in *"khong doc duoc bien qua terraform console (da terraform init trong 90-ecs chua?): stdout cua terraform
+  console khong phai chuoi JSON"*, thoát 2, không in lý do. Đo ở hai ca: `ten_mien = "<app.domain>"` và `anh.api` ghi thẻ.
+- **312:** cấu hình `terraform_data` cùng hình dạng (output đọc một tài nguyên được target và một không) — sau `apply -target`,
+  `terraform output ban_ghi_dns` ⇒ *Output not found*; output chỉ đọc tài nguyên đã target ⇒ có giá trị.
+- **313:** `awscli` 1.42.0 (`pip download`): `LOCAL_PREFIX_MAP = {'file://': (get_file, {'mode': 'r'}) …}`, `compat_open` ⇒
+  `open(filename, 'r', encoding=…)` — chế độ văn bản, newline mặc định. Mô phỏng: tệp CRLF ⇒ băm byte trên đĩa `fa7071c4…`, băm
+  chuỗi CLI đọc `f7596088…`.
+- **314, 315, 316:** đo bằng test mới trên mã cũ — ca BOM của secret Zalo đỏ; năm ca `DATA_STEWARD` ⇒ ba ca lệch giữa script và
+  `docThamSo` ở cả hai locale, phép ghim mảng đỏ; ca 0/0 của `kiem-sau-deploy.sh worker` đỏ.
+- **Ghim tài liệu** (`hinh-dang-apply-lan-dau.test.ts`) chạy trên tệp của `fc0dcc75`: 3/3 đỏ.
+
+## 4. Thay đổi
+- `tools/kiem-truoc-apply`: `docBienTerraform(thuMucStack, varFile, lenh = ["terraform"])` dùng `spawnSync`; dòng `Error:` ở
+  stderr ⇒ `TerraformTuChoiBienError` (con của `TienTrinhError`) mang stderr; `index.ts` in nguyên lời Terraform, thoát 2.
+- `infra/terraform/90-ecs/main.tf`: `output "xac_minh_acm"` — chỉ `aws_acm_certificate.api`.
+- `apps/api/src/adapters/kho-token-zalo.ts`: `phanTichSecretZalo` bỏ MỘT BOM ở đầu (cùng cách `docBanKhai`).
+- `deploy/trien-khai.sh`: `MA_VAI` thêm `DATA_STEWARD`; dòng gợi ý băm của bảng người duyệt nói tệp phải LF.
+- `deploy/kiem-sau-deploy.sh`: `worker` đòi `desiredCount` là số dương; câu hỏng chỉ `so_ban_worker` và APPLY-LAN-DAU 8.2.
+- `docs/APPLY-LAN-DAU.md`: 0.1 (Node, pnpm); 6.1 (`dich_vu_endpoint` là `local`; mật khẩu chữ-số kèm lệnh sinh); 6.2
+  (`xac_minh_acm`); 6.3 (digest lọc thẻ, `<ecr>` là registry); 6.4 (`-chdir`, thư dự kiến); 6.5 (`-raw`); 6.7 (`lenh_chay_neo`
+  qua `-json`, `curl.exe -s -D - -o NUL`, cách đọc `CLOCKDRIFT undefined`); 6.8 (apply, không deploy); 8.1 (`$env:TEMP`, LF và lệnh
+  kiểm CR, luật slug, `DATA_STEWARD`, SES sandbox); 8.2 (bỏ nhánh pipeline); bảng thư dự kiến ba hàng mới.
+- `infra/terraform/README.md`: stack 85 bước 3 (`WriteAllText`, `$env:TEMP`); DNS (ALERT vẫn ra thư ⑸, cú pháp Logs Insights,
+  `dich_vu_endpoint` là `local`); thư lần apply đầu; stack 90 bước 1 (mật khẩu), 2 (`xac_minh_acm`), 4 (`<ecr>`, digest), 5 (`-raw`,
+  bốn dòng `vai`), 7 (`curl.exe`); neo (`-json`, `--overrides` qua tệp); "Nguồn thời gian" (phần đã đo, cách đọc ba kết quả).
+- Test mới: `tests/architecture/hinh-dang-apply-lan-dau.test.ts` (3), `tests/architecture/hinh-dang-clockdrift.test.ts` (3),
+  `tests/deploy/kiem-sau-deploy-sh.test.ts` (3); thêm vào `tools/kiem-truoc-apply/src/nguon.test.ts` (4),
+  `apps/api/src/adapters/kho-token-zalo.test.ts` (1), `tests/deploy/khoi-tao-sh.test.ts` (năm ca + một phép ghim).
+- Sổ: mốc đầu `docs/STATE.md`, hàng 311–318, dòng trỏ ở khoản 15; `Handoff.md` 310 → 318 khoản, 48 còn mở.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- 311 thoát 2 (không đọc được biến), không 1: hợp đồng của tool đã định nghĩa 1 là *có `[DO]`*, và ở ca này tool chưa đọc được
+  biến nào để xếp mức.
+- 312 thêm output mới thay vì đổi `ban_ghi_dns`: `ban_ghi_dns` vẫn đúng cho 6.5 (CNAME `cong_khai`), và người vận hành đã quen nó.
+- 313 sửa ở tài liệu, không ở công cụ: băm phải là băm của đúng byte đã duyệt; nới phép so (chuẩn hoá xuống dòng) là nới chính
+  điều người duyệt ký.
+- 314 sửa cả hai phía: tài liệu (không ghi BOM) và `api` (bỏ một BOM) — `docBanKhai` đã có tiền lệ, và một secret Zalo hỏng làm
+  chết kênh OTP chỉ để lộ ra khi nhà cung cấp đầu tiên bấm *Gửi mã*.
+- 317 chỉ sửa tài liệu: đổi rule ⑹ (`previousState`) cần thêm một lần apply stack 60 của chủ dự án; bảng thư dự kiến đủ cho lần
+  dựng đầu.
+
+## 6. Đo
+- 311: cùng hai tệp ⇒ tool in *"terraform tu choi bien trong … - sua tep roi chay lai, khong plan:"* rồi nguyên lời Terraform
+  (*"ten_mien phải là một domain chữ thường hợp lệ."*, *"Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."*), thoát 2.
+- 312: cấu hình `terraform_data` thêm output chỉ đọc chứng chỉ ⇒ có giá trị ngay sau `apply -target`; stack 90 sau sửa:
+  `terraform validate` sạch, `terraform fmt -check` sạch.
+- Ghim tài liệu 3/3, ClockDrift 3/3, `kiem-sau-deploy` 3/3, `khoi-tao-sh` 10/10, `kho-token-zalo` 4/4, `kiem-truoc-apply` 27/27.
+- `ClockDrift` (6.7): đúng argv của `clockdrift.json` (không shell) chạy trên Node 22.22 với endpoint metadata v4 giả — có trường
+  ⇒ một dòng `CLOCKDRIFT {…"SYNCHRONIZED"}`, thoát 0; thiếu trường ⇒ `CLOCKDRIFT undefined`, VẪN thoát 0; endpoint không trả lời
+  hay thiếu biến môi trường ⇒ thoát 1. Không alarm nào nghe `/tp/migrate`, nên lượt đo không kích cảnh báo giả.
+
+## 7. Đột biến
+- `nguon.ts`: gỡ phép kiểm `Error:` ở stderr ⇒ ca *"biến trượt validation"* đỏ với đúng triệu chứng cũ.
+- `kho-token-zalo.ts`: gỡ bước bỏ BOM ⇒ ca BOM đỏ.
+- `hinh-dang-clockdrift.test.ts`: đổi tên container trong README ⇒ ⑴ đỏ; `ENTRYPOINT` cho đích `migrate` ⇒ ⑵ đỏ; đọc
+  `j.ClockDrifts` ⇒ ⑶ đỏ — mỗi đột biến đúng một vế.
+- `trien-khai.sh` và `kiem-sau-deploy.sh`: bản cũ chính là đột biến — đo trước ở mục 3.
+
+## 8. Lượt rà mục 6–8 — điểm đã kiểm lại, điểm chưa kiểm được
+Agent chỉ đọc báo bốn lỗi chặn, hai lời sai, mười bốn chỗ nhỏ. Người tích hợp kiểm lại: C1 (đo bằng Terraform), C2 (mã nguồn
+awscli + mô phỏng), C3 (README + `phanTichSecretZalo`), C4 (hai mảng), S1 (`kiem-sau-deploy.sh`, `desired_count`,
+`update-service`), S2 (rule ⑹ stack 60, bộ lọc DNS), mười bốn chỗ nhỏ (từng chỗ trên mã — `server.ts` 405 cho HEAD, bốn
+`docVaiTuUrl` của `chay-migrate`, `SLUG` của script, `.gitignore`, output `lenh_chay_neo`, `local.dich_vu_endpoint`…). Cần AWS hay
+Windows thật mới biết: số thư ⑹ chính xác; hành vi `InvalidServiceName`; nháy kép của `--overrides` trên PowerShell 5.1; CRLF trên
+máy người vận hành; build image lần đầu (CI không build — `ADD --checksum` của bó CA RDS và `corepack prepare` cần mạng).
+
+## 9. Giới hạn, nói ra
+- Không lệnh nào ở đây chạy trên AWS. `terraform validate` không thay `plan`: nó không đọc remote state của stack 40/50 hay
+  secret.
+- 313 còn dựa vào việc người vận hành làm theo tài liệu; hỏng thì vẫn hỏng an toàn (task dừng TRƯỚC CSDL).
+- 314 ca cp1252 (không đặt `AWS_CLI_FILE_ENCODING`) chỉ chữa bằng tài liệu — `api` bỏ `\uFEFF`, không bỏ ba ký tự cp1252.
+
+## 10. Số đo
+- `pnpm typecheck` sạch; ESLint trên mọi tệp TS đổi sạch.
+- Đơn vị trên các thư mục chạm tới (`tests/architecture`, `tests/deploy`, `apps/api/src/adapters`, `tools/kiem-truoc-apply`,
+  `ban-khai.test.ts`): 55 tệp, 737 đạt, 1 bỏ qua; `qt3-cu-phap.int` + `qt3-ngu-phap.int` trên Postgres 16 cục bộ: 8/8.
+# §S1.253 — S4.5a: GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH Ở CẠNH VÀO OPEN; LƯỢT CHẤM DÙNG ĐÚNG PHIÊN BẢN ẤY (L14, VẾ LƯỢT CHẤM) — ADR-141
+
+## 1. Vòng này là gì
+
+PR đầu trong ba PR của S4.5 (spec S4 §9): lượt chấm thôi đọc phiên bản chính sách hiệu lực LÚC CHẤM, và đọc phiên bản gói đã CHỤP lúc
+mở. Một migration (`102_ghim_chinh_sach_luot_cham`), không route mới, không màn. **L14** vào sổ đăng ký với vế lượt chấm (78 bất
+biến); vế benchmark ở S4.5b, vế TCO và form nhà cung cấp tách số mới ở S4.7. Dựng trên `master` sau khi #225 (S4.4b) merge.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-10-01, sáu điểm, cả sáu theo đề xuất. Lượt đầu (trước khi viết mã):
+
+1. Luật ghim: phiên bản HIỆU LỰC lúc gói mở — luật `chinh_sach_hieu_luc` của S3.1, không một hàm `chinh_sach_tai` thứ hai —, kèm trigger
+   trên `rfq_evaluations` mà lần vi phạm vào sổ `CONTROL_DENIED`.
+2. S4.5 chia ba PR: S4.5a ghim chính sách (L14); S4.5b CSDL và lõi benchmark (L7); S4.5c phần hiện ở `/mo-thau`, bộ xuất ADR-059, vế
+   benchmark của L6.
+3. Bảng so sánh hiện benchmark ngay khi gói `UNSEALED`, tính as-of tại mốc mở giá ở mỗi lần đọc; lượt chấm ghi kết quả đúng một lần.
+4. Năm chi tiết phương pháp benchmark (ADR-141, *Quyết định* 8).
+
+Lượt sau lượt soi đối kháng (mục 8):
+
+5. CHỤP phiên bản vào gói ở cạnh vào OPEN, không tính lại `chinh_sach_hieu_luc(org, opened_at)` về sau.
+6. `opened_at` do người gọi đặt thành khoản 319 (rổ B), không sửa trong S4.5a.
+
+## 3. Thay đổi
+
+- **Migration `102_ghim_chinh_sach_luot_cham`.** Cột `rfq_packages.chinh_sach_ghim_id` (khoá ngoại hợp thành tới
+  `org_procurement_policies`, ngoài mọi `GRANT` ghi; gói đã mở được điền bằng phép tính lại tại `opened_at`); trigger
+  `rfq_ghim_chinh_sach_khi_mo` (BEFORE UPDATE `WHEN` cạnh `PENDING_APPROVAL→OPEN`: khoá tư vấn `hashtextextended(org, 2)` rồi
+  `chinh_sach_hieu_luc(org, clock_timestamp())`); trigger `rfq_evaluations_kiem_phien_ban_ghim` (BEFORE INSERT, tên
+  `l14_phien_ban_khong_ghim`). Hai thân và hai trigger ghim ở `hardening.always.sql`; `TRIGGER_DUOC_PHEP` nhận hai tên.
+- **Tầng gói.** `docChinhSach` đọc cột ghim; `taoLuotDanhGia` bắt lỗi của trigger theo tên ⇒ `CONTROL_DENIED`; thông điệp từ chối cấu
+  hình gọi tên phiên bản ghim. Mã chốt `L14_PHIEN_BAN_KHONG_GHIM` ở `CHOT_VAO_SO` (`vaoSo: true`), `CHOT_THEO_RANG_BUOC`,
+  `DANH_MUC_VE_CONG`; `DongChot.chot` nhận tiền tố `L`; dòng `VAO_SO` của `CHINH_SACH_CHUA_KHAI_TRONG_SO` nói lại vì sao.
+- **`gieo:demo`.** Phiên bản 1 khai trọng số (`gia`, `1.0000`) và BAFO top-2 ở cả hai chế độ (`TRONG_SO_DEMO`, `BAFO_TOP_N_DEMO`).
+- **Test.** Mười một ca `[INV-L14]` ở `luot-danh-gia.int` (giàn cảnh mở gói tách hai nửa `taoRfqChoMo` / `moGoiDaDuyet`); cổng tên hai
+  chiều ở `rfq.int` gom thân trigger L14; hai chú thích nói lượt chấm đọc bản mới nhất (kịch bản 41 HTTP, `unseal-worker.int`) sửa.
+- **Cổng khai theo.** `HAM_KHONG_PHAI_CANH` (hai hàm), `HAM_GHIM` và ba danh sách migration viết cứng của `migrations.int`, cổng
+  `doc-chinh-sach-mot-ham` (lớp `THEO_ID` nhận cột ghim; lượt chấm thôi là chỗ đọc *chính sách hiện hành*), sổ khai nhãn (L14),
+  `MOC_GHIM` 77 → 78, TEST-PLAN hàng L14 và dòng tổng, lời khai đếm, spec S4 §4.1, §5.1 L14, §9, PRODUCT, STATE (mốc và khoản 319),
+  ADR-141.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Lần chọn lượt chấm dưới phiên bản khác là `CONTROL_DENIED`; gói không có phiên bản ghim có trọng số là từ chối CẤU HÌNH** (không vào
+  sổ, mã cũ `CHINH_SACH_CHUA_KHAI_TRONG_SO` giữ nguyên) — đúng luật ADR-060 và spec S4 §5 L12. Một phiên bản MỚI không cứu được gói đã
+  mở; thông điệp nói ra.
+- **`clock_timestamp()` trong trigger chụp**, không `NEW.opened_at` (người gọi gửi) và không `now()` (lúc giao dịch mở bắt đầu).
+- **Khoá tư vấn dùng chung** với lần tạo và lần ký phiên bản — không dựng khoá thứ hai.
+- **Trigger chụp mới, nhỏ, ở đúng cạnh** — không sửa thân `rfq_kiem_chuyen_trang_thai`.
+- **Khoá ngoại hợp thành** cho cột ghim (khuôn `org_id` của kho).
+- **Không ca riêng cho nhánh *không có phiên bản ghim* ở tầng gói** — dựng nó cần một tổ chức không phiên bản nào trước lúc mở; nói ra
+  ở ADR-141.
+
+## 5. Đo trước
+
+Trên `fc0dcc7` (master sau #225), Postgres 16:
+
+1. `taoLuotDanhGia` → `docChinhSach` chọn `chinh_sach_hieu_luc(org, now())`; `rfq_evaluations` chỉ có trigger danh tính (`057`),
+   `policy_id` trong `GRANT INSERT`. Đột biến M1 (mục 7) dựng lại đúng hành vi ấy trên mã mới: các ca phiên bản khai sau lúc mở đỏ.
+2. `effective_from >= created_at` (`022`), `created_at` ngoài `GRANT INSERT` (`014`); `opened_at` chỉ đặt một lần (`011`).
+3. Ca lật: không ca nào trong `luot-danh-gia.int` (108/108 trên mã của bản đầu); kịch bản 41 HTTP khai phiên bản 2 sau bước 2 —
+   chú thích sai tiền đề; `gieo:demo` gieo phiên bản 1 không trọng số.
+4. Lượt soi đối kháng (mục 8) đo thêm hai đường lùi mốc của phép tính lại — cả hai thành tiền đề khẳng định trong ca đo (phép tính lại
+   tại `opened_at` chọn phiên bản lùi mốc; tại `opened_at` năm 2100 chọn phiên bản mới nhất).
+
+## 6. Đo
+
+- **`luot-danh-gia.int` — mười một ca `[INV-L14]`**: phiên bản khai SAU lúc mở không đổi trọng số (hệ số 1 chứ không 2) kèm đối chứng
+  dương (gói mở sau phiên bản hệ số 2 thì dùng nó); phiên bản ghim không trọng số ⇒ câu gọi tên phiên bản ghim, không hàng sổ, không
+  lượt, gói đứng yên; phiên bản HẸN GIỜ tạo trước lúc mở không áp; lượt chấm lại sau BAFO cùng phiên bản dù một phiên bản mới hơn khai
+  giữa hai lượt; câu ghi thẳng dưới `app_api` mang phiên bản khác ⇒ 23514 `l14_phien_ban_khong_ghim`, đối chứng dương với phiên bản
+  ghim; đột biến tắt trigger lúc chạy ⇒ câu ấy đi lọt; đường ứng dụng (client bọc thay `policy_id` của câu INSERT) ⇒ `ChotKiemSoatError`
+  mang lỗi trigger ở `cause`, đúng một hàng `CONTROL_DENIED {ma}`, không lượt, gói đứng yên; đường ⑴ phiên bản lùi mốc; đường ⑵
+  `opened_at` năm 2100 đặt dưới `app_api`; `app_api` ghi cột ghim ⇒ 42501 (UPDATE và INSERT); lần mở CHỜ một phiên bản đang ghi dở
+  dưới hai kết nối rồi chụp đúng phiên bản ấy.
+- **Toàn tệp** `luot-danh-gia.int` 112/112, `rfq.int` 60/60, `bac-chinh-sach.int` 42/42, `guest.int` 26/26, `lich-su-gia.int` 51/51,
+  `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128 (ba danh sách migration viết cứng nhận
+  `102` sau lượt chạy đầu đỏ đúng ba ca ấy).
+- **`gieo:demo` đo tay** trên cụm Postgres 16 mới, hai chế độ: MVP1 và `--s3` đều thoát 0; mọi gói đã mở ghim phiên bản 1 có trọng số, cột ghim bằng `chinh_sach_hieu_luc(org, opened_at)` (ba gói đã mở và gói demo chính ở MVP1; thêm ba gói `Thep tam cong trinh` ở `--s3`, gói `PENDING_APPROVAL` không có phiên bản ghim — đúng, chưa mở). Lượt đo của bản đầu (trước cột chụp) cho cùng kết quả về trọng số.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ (thân SQL sửa cả ở migration lẫn hai dạng của mục ghim hardening), chạy khối `[INV-L14]` (M5 thêm cổng tên hai
+chiều), khôi phục tệp từ bản sao.
+
+Mười một đỏ, không đột biến nào sống (M9 sống ở lượt đầu — xem dưới).
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | `docChinhSach` đọc phiên bản hiệu lực `now()` thay cột ghim (hành vi trước vòng) | ĐỎ — 4 ca |
+| M2 | `docChinhSach` tính lại `chinh_sach_hieu_luc(org, opened_at)` (bản đầu của vòng này) | ĐỎ — 1 ca (đường ⑴) |
+| M3 | trigger lượt chấm bỏ phép so | ĐỎ — 4 ca |
+| M4 | trigger lượt chấm so với phiên bản hiệu lực `now()` thay cột ghim | ĐỎ — 6 ca |
+| M5 | trigger lượt chấm bỏ tên ràng buộc | ĐỎ — 4 ca, cộng cổng tên hai chiều ở `rfq.int` |
+| M6 | `L14_PHIEN_BAN_KHONG_GHIM` `vaoSo: false` | ĐỎ — 1 ca (đường ứng dụng) |
+| M7 | `taoLuotDanhGia` không bắt lỗi trigger theo tên | ĐỎ — 1 ca (đường ứng dụng) |
+| M8 | trigger chụp không đặt cột | ĐỎ — 9 ca |
+| M9 | trigger chụp đọc `NEW.opened_at` thay `clock_timestamp()` | lượt đầu **XANH** — ca đường ⑵ chỉ khai phiên bản mới SAU lúc mở, nên hai cách chụp cho cùng kết quả. Ca nay mang một phiên bản HẸN GIỜ có sẵn lúc mở ⇒ **ĐỎ — 1 ca** |
+| M10 | trigger chụp bỏ khoá tư vấn chính sách | ĐỎ — 1 ca (khoá dưới hai kết nối) |
+| M11 | cấp `UPDATE (chinh_sach_ghim_id)` cho `app_api` | ĐỎ — 1 ca (quyền cột) |
+
+## 8. Lượt soi đối kháng
+
+Một agent đọc trọn diff của bản đầu (`14b0337`, chỉ đọc). Không CAO trên đường HTTP của sản phẩm.
+
+- **TRUNG-1 — giao dịch giữ lâu lùi được `created_at`** (`014`: `DEFAULT now()`, lúc giao dịch BẮT ĐẦU): một phiên `app_api` `BEGIN`
+  trước lúc gói mở, chèn phiên bản sau khi giá lộ ⇒ `created_at = effective_from < opened_at`, phép tính lại chọn nó, trigger nhận nó.
+  Bản đầu của ADR viết cửa sổ ấy *"trước khi giá lộ"* — sai. **Đóng** bằng cột chụp (quyết định 5); ca *đường ⑴*.
+- **TRUNG-2 — `opened_at` do người gọi đặt** (`009` cấp `UPDATE (opened_at)`): mở gói với `opened_at` năm 2100 ⇒ phép tính lại thành
+  *"mới nhất lúc chấm"*. **Đóng cho L14** bằng cột chụp; phần còn lại (K6, bộ bằng chứng) là **khoản 319**, rổ B (quyết định 6).
+- **THẤP-3 — tài liệu trích bằng chứng chưa có** (biên bản này, ma trận): đóng ở vòng này.
+- **THẤP-4 — số tạm và `CREATE TRIGGER` không idempotent**: `pnpm cap-so` đổi tên mọi chỗ tham chiếu cùng lúc (mục ghim hardening khoá
+  theo đúng tên tệp); khuôn của mọi migration trong kho — không đổi.
+- **INFO**: dữ liệu cũ (gói đã chấm lần đầu dưới phiên bản lúc chấm rồi mở BAFO; cụm demo gieo trước vòng này) và nhãn sổ của nhánh
+  *không thấy gói* — nói ra ở ADR-141.
+- Lượt soi xác nhận: ba thân của mục ghim khớp sau chuẩn hoá; BAFO, trao thầu, bộ bằng chứng đọc `e.policy_id`; `opened_at` NOT NULL ở
+  hai trạng thái chấm được; `signed_at` ngoài `GRANT`; ca client bọc không xanh rỗng ruột; quy ước sổ khớp.
+
+## 9. Giới hạn, nói ra
+
+- Đổi hành vi MVP1 cho mọi tổ chức (spec §8.11): gói mở dưới phiên bản chưa khai trọng số không chấm được; cụm demo cũ phải gieo lại.
+- Phiên bản ghim là phiên bản hiệu lực lúc trigger chụp chạy, không lúc `opened_at`; khoá tư vấn chính sách giữ tới hết giao dịch mở.
+- Hai mốc ghim cho một gói (bậc/ngân sách ở S3.1, lượt chấm ở đây).
+- Lượt chấm đã ghi không kiểm lại; nhánh *không phiên bản ghim* không có ca riêng ở tầng gói.
+- Khoản 319: `opened_at` vẫn do người gọi đặt cho mọi chỗ khác đọc nó.
+
+## 10. Số đo
+
+- Cây cuối (trên `master` `fc0dcc7` — #225 đã merge; master không đổi trong vòng): `pnpm t0` sạch (512 module, không vi phạm phụ thuộc);
+  `pnpm test` 139 tệp, 2337 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.253, ADR-141, khoản 319, migration `102`).
+- Lô tích hợp chạm vòng này trên mã chụp: `luot-danh-gia.int` 112/112, `rfq.int` 60/60, `bac-chinh-sach.int` 42/42, `guest.int` 26/26,
+  `lich-su-gia.int` 51/51, `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128.
+- `pnpm evidence` toàn bộ T1–T3 trên `e283e09`: 226 tệp, 4369 khẳng định, 4359 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi
+  trường), **0 đỏ**; **78/78 bất biến** (56 nghiệp vụ + 22 hàng rào); L14 đo bằng 11 khẳng định.

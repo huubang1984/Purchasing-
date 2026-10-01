@@ -156,7 +156,7 @@ neo() {
 # cùng bộ đầu vào.
 # ---------------------------------------------------------------------------------------------
 TRAN_SO_NGUOI=50                                                               # TRAN_SO_NGUOI của ban-khai.ts
-MA_VAI=(REQUESTER BUYER TECHNICAL PROCUREMENT_MANAGER FINANCE DIRECTOR)          # MA_VAI của ban-khai.ts, đúng thứ tự
+MA_VAI=(REQUESTER BUYER TECHNICAL PROCUREMENT_MANAGER FINANCE DIRECTOR DATA_STEWARD)  # MA_VAI của ban-khai.ts, đúng thứ tự
 UUID_V4='^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 SLUG='[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'
 
@@ -220,7 +220,8 @@ bang_duyet() {
 | Số người theo vai | \`$VAI\` |
 
 Task đọc ĐÚNG phiên bản trên, so băm, và dừng TRƯỚC khi chạm CSDL nếu bản khai lệch tổ chức, số người hay số theo vai.
-Người có tệp bản khai đối chiếu được băm: \`(Get-FileHash ban-khai.json -Algorithm SHA256).Hash.ToLower()\`. Người duyệt phải
+Người có tệp bản khai đối chiếu được băm: \`(Get-FileHash ban-khai.json -Algorithm SHA256).Hash.ToLower()\` — tệp xuống dòng LF
+(AWS CLI bỏ ký tự CR khi nạp \`file://\`, nên tệp CRLF cho băm khác; APPLY-LAN-DAU 8.1). Người duyệt phải
 khác người bấm; chạy xong (thoát 0) thì bí mật bị xoá, không cửa sổ khôi phục.
 EOF
 }

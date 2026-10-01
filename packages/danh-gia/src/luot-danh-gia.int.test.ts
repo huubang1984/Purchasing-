@@ -118,6 +118,13 @@ async function taoChinhSach(evalComponents: string | null, topN = 0): Promise<st
 const LUONG_CUA_PHIEN_BAN = new Map<string, { readonly bidId: string; readonly phienKhach: string }>();
 
 async function taoRfqMo(policyId: string): Promise<string> {
+  const rfqId = await taoRfqChoMo(policyId);
+  await moGoiDaDuyet(rfqId);
+  return rfqId;
+}
+
+/** [S1.253 / S4.5a] Nửa đầu của `taoRfqMo`: gói ở `PENDING_APPROVAL`, đủ một chữ ký — mọi khoá tư vấn chính sách của cạnh nộp đã nhả. */
+async function taoRfqChoMo(policyId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
       "created_by, created_by_session_id) VALUES ($1, 'Mua thep tam', $2, false, $3, $4) RETURNING id",
@@ -144,6 +151,11 @@ async function taoRfqMo(policyId: string): Promise<string> {
     "INSERT INTO rfq_approvals (org_id, rfq_id, approver_user_id, session_id) VALUES ($1, $2, $3, $4)",
     [orgA, rfqId, uD1, sD1],
   );
+  return rfqId;
+}
+
+/** [S1.253 / S4.5a] Nửa sau: khoá gói rồi đi cạnh vào `OPEN` — ca đo khoá tư vấn chạy nó song song với một lần ghi phiên bản. */
+async function moGoiDaDuyet(rfqId: string): Promise<void> {
   const c = await db.pool.connect();
   try {
     await c.query("BEGIN");
@@ -163,7 +175,6 @@ async function taoRfqMo(policyId: string): Promise<string> {
   } finally {
     c.release();
   }
-  return rfqId;
 }
 
 async function nopBaoGia(rfqId: string, tenNcc: string): Promise<string> {
@@ -3492,5 +3503,344 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
       [rfqId],
     );
     expect(so[0]?.n).toBe("3");
+  });
+});
+
+// ================================================================================================
+// [S1.253 / S4.5a / L14 / ADR-141] LƯỢT CHẤM DÙNG PHIÊN BẢN CHÍNH SÁCH GHIM LÚC GÓI MỞ
+//
+// Trước vòng này `taoLuotDanhGia` đọc `chinh_sach_hieu_luc(org, now())`: một phiên bản khai SAU lúc giá lộ đổi được trọng số
+// của lượt chấm (góc C① của lượt soi S1.159). Chủ dự án chốt 2026-10-01: phiên bản của gói X là phiên bản HIỆU LỰC lúc X mở —
+// luật `chinh_sach_hieu_luc` của S3.1 —, CHỤP vào `rfq_packages.chinh_sach_ghim_id` ở cạnh vào OPEN dưới khoá tư vấn chính sách
+// (trigger `rfq_ghim_chinh_sach_khi_mo`, `102`), không tính lại từ dấu thời gian về sau: lượt soi §S1.253 đo hai đường lùi mốc
+// dưới `app_api` (⑴ giao dịch giữ lâu, ⑵ `opened_at` do người gọi đặt). Hai lớp đọc cột ấy: tầng gói, và trigger
+// `rfq_evaluations_kiem_phien_ban_ghim` từ chối mọi `policy_id` khác, với tên `l14_phien_ban_khong_ghim`.
+//
+// Hệ số `2.0000` cho mã `gia` là một CẦN GẠT ĐO, không một cấu hình hợp lệ về sản phẩm (L8 ở S4.7 sẽ đòi `he_so` của mã `TIEN`
+// bằng "1"): nó làm phiên bản nào đã áp đọc được ngay trên con số — gấp đôi hay không.
+// ================================================================================================
+
+describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sách hiệu lực lúc gói mở", { timeout: 300000 }, () => {
+  const TP_GIA_GAP_DOI = '[{"ma":"gia","don_vi":"TIEN","he_so":"2.0000"}]';
+
+  async function chinhSachCuaLuot(rfqId: string): Promise<readonly string[]> {
+    const { rows } = await db.pool.query<{ policy_id: string }>(
+      "SELECT policy_id FROM rfq_evaluations WHERE org_id = $1 AND rfq_id = $2 ORDER BY created_at",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => r.policy_id);
+  }
+
+  async function hangSoTuChoi(rfqId: string): Promise<readonly (readonly unknown[])[]> {
+    const { rows } = await db.pool.query<{ action: string; actor_id: string; resource_type: string; payload: unknown }>(
+      "SELECT action, actor_id, resource_type, payload FROM audit_events " +
+        "WHERE org_id = $1 AND resource_id = $2 AND action IN ('CONTROL_DENIED', 'RFQ_STATE_DENIED') ORDER BY seq",
+      [orgA, rfqId],
+    );
+    return rows.map((r) => [r.action, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  async function phienBanGhim(rfqId: string): Promise<string | null> {
+    const { rows } = await db.pool.query<{ id: string | null }>("SELECT chinh_sach_ghim_id AS id FROM rfq_packages WHERE id = $1", [rfqId]);
+    return rows[0]?.id ?? null;
+  }
+
+  async function hieuLucTaiMoLuc(rfqId: string): Promise<string | null> {
+    const { rows } = await db.pool.query<{ id: string | null }>(
+      "SELECT public.chinh_sach_hieu_luc(org_id, opened_at) AS id FROM rfq_packages WHERE id = $1",
+      [rfqId],
+    );
+    return rows[0]?.id ?? null;
+  }
+
+  function chenLuotTho(rfqId: string, policyId: string): Promise<unknown> {
+    return withTenant(apiPool, orgA, (c) =>
+      c.query(
+        "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+          "VALUES ($1, $2, $3, 'VND', $4, $5)",
+        [orgA, rfqId, policyId, uYc, sYc],
+      ),
+    );
+  }
+
+  async function hieuLucBayGio(): Promise<string> {
+    const { rows } = await db.pool.query<{ id: string }>("SELECT public.chinh_sach_hieu_luc($1, now()) AS id", [orgA]);
+    return rows[0]?.id ?? "";
+  }
+
+  it("[INV-L14] phiên bản khai SAU lúc gói mở không đổi được trọng số: lượt chấm dưới phiên bản ghim (hệ số 1, không 2); ĐỐI CHỨNG DƯƠNG: gói mở SAU phiên bản ấy thì dùng nó", async () => {
+    const { rfqId, banRo, csId } = await goiDaMo([["100.00", "VND"], ["90.00", "VND"]]);
+    const moi = await taoChinhSach(TP_GIA_GAP_DOI);
+    expect(await hieuLucBayGio(), "tiền đề: phiên bản MỚI là phiên bản hiệu lực lúc chấm — đúng thứ lượt chấm cũ đọc").toBe(moi);
+
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.policyId).toBe(csId);
+    const theoId = new Map(kq.lines.map((l) => [l.bidVersionId, l.effectiveCost]));
+    expect([theoId.get(banRo[0] ?? ""), theoId.get(banRo[1] ?? "")], "hệ số của phiên bản GHIM, không của phiên bản mới").toEqual([
+      "100.00",
+      "90.00",
+    ]);
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([csId]);
+
+    // ĐỐI CHỨNG DƯƠNG — gói mở SAU một phiên bản hệ số 2 thì chấm dưới phiên bản ấy. Không có vế này, ca trên xanh cả khi hệ số
+    // `2.0000` không bao giờ được áp ở đâu.
+    const sau = await goiDaMo([["100.00", "VND"]], TP_GIA_GAP_DOI);
+    const kqSau = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId: sau.rfqId, actorSessionId: sYc }, apiPool),
+    );
+    expect(kqSau.policyId).toBe(sau.csId);
+    expect(kqSau.lines.map((l) => l.effectiveCost)).toEqual(["200.00"]);
+  });
+
+  it("[INV-L14] gói mở dưới phiên bản CHƯA khai trọng số ⇒ từ chối GỌI TÊN phiên bản ghim, kể cả khi phiên bản mới hơn đã khai; không hàng sổ nào (cấu hình), không lượt nào, RFQ đứng yên", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]], null);
+    const { rows: ghim } = await db.pool.query<{ version: number }>(
+      "SELECT o.version FROM rfq_packages r JOIN org_procurement_policies o ON o.id = r.chinh_sach_ghim_id WHERE r.id = $1",
+      [rfqId],
+    );
+    await taoChinhSach(TP_GIA);
+    const loi = await withTenant(apiPool, orgA, (c) =>
+      taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool),
+    ).catch((e: unknown) => e);
+    expect(loi).toBeInstanceOf(DanhGiaTuChoiError);
+    expect((loi as DanhGiaTuChoiError).lyDo).toBe("CHINH_SACH_CHUA_KHAI_TRONG_SO");
+    expect((loi as DanhGiaTuChoiError).message).toContain(
+      `Chính sách phiên bản ${String(ghim[0]?.version)} chưa khai trọng số đánh giá. Gói thầu này ghim phiên bản ấy lúc mở; ` +
+        "phiên bản tạo sau lúc mở không áp cho gói này (L14).",
+    );
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([]);
+    expect(await hangSoTuChoi(rfqId), "từ chối CẤU HÌNH không vào sổ (ADR-060, spec S4 §5 L12)").toEqual([]);
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+  });
+
+  it("[INV-L14] phiên bản HẸN GIỜ — tạo TRƯỚC lúc gói mở, hiệu lực SAU — không áp cho gói: luật *hiệu lực tại `opened_at`*, không *tạo trước `opened_at`* (chủ dự án chốt 2026-10-01)", async () => {
+    const truoc = await taoChinhSach(TP_GIA);
+    // Phiên bản hệ số 2, tạo ngay bây giờ, hiệu lực sau một ngày — `effective_from` nằm trong `GRANT INSERT` của `app_api`.
+    const { rows: ke } = await db.pool.query<{ n: number }>(
+      "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
+      [orgA],
+    );
+    const { rows: hen } = await db.pool.query<{ id: string }>(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, effective_from, " +
+        "eval_components, bafo_top_n, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, '100000000.00', 'VND', now() + interval '1 day', $3::jsonb, 0, $4, $5) RETURNING id",
+      [orgA, ke[0]?.n ?? 0, TP_GIA_GAP_DOI, uYc, sYc],
+    );
+    const henId = hen[0]?.id ?? "";
+    const rfqId = await taoRfqMo(truoc);
+    const ver = await nopBaoGia(rfqId, `NCC hen gio ${randomBytes(2).toString("hex")}`);
+    await moThau(rfqId, [[ver, { totalAmount: "100.00", currency: "VND" }]]);
+    const { rows: tao } = await db.pool.query<{ truoc_mo: boolean }>(
+      "SELECT o.created_at < r.opened_at AS truoc_mo FROM org_procurement_policies o, rfq_packages r WHERE o.id = $1 AND r.id = $2",
+      [henId, rfqId],
+    );
+    expect(tao[0]?.truoc_mo, "tiền đề: phiên bản hẹn giờ TẠO trước lúc gói mở").toBe(true);
+
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.policyId).toBe(truoc);
+    expect(kq.lines.map((l) => l.effectiveCost)).toEqual(["100.00"]);
+  });
+
+  it("[INV-L14] lượt chấm LẠI sau vòng BAFO dùng cùng phiên bản ghim, dù một phiên bản mới hơn đã khai giữa hai lượt", async () => {
+    const { rfqId, banRo, luotId: luot1 } = await daCham([["300.00", "VND"], ["200.00", "VND"], ["250.00", "VND"]], 2);
+    const [ghim] = await chinhSachCuaLuot(rfqId);
+    await taoChinhSach(TP_GIA_GAP_DOI, 2);
+    const vong = await moVongBafo(rfqId, luot1, 2);
+    const lai = await nopLaiBafo(rfqId, banRo[1] ?? "");
+    await moThauBafo(rfqId, vong, [[lai, { totalAmount: "150.00", currency: "VND" }]]);
+    const kq2 = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq2.policyId).toBe(ghim);
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([ghim, ghim]);
+    expect(new Map(kq2.lines.map((l) => [l.bidVersionId, l.effectiveCost])).get(lai)).toBe("150.00");
+  });
+
+  it("[INV-L14] lớp CSDL: câu INSERT thẳng dưới `app_api` mang phiên bản KHÁC phiên bản ghim ⇒ 23514 `l14_phien_ban_khong_ghim`; ĐỐI CHỨNG DƯƠNG: cùng câu với phiên bản ghim thì đi qua", async () => {
+    const { rfqId, csId } = await goiDaMo([["100.00", "VND"]]);
+    const moi = await taoChinhSach(TP_GIA);
+    expect(await phienBanGhim(rfqId), "tiền đề: cạnh vào OPEN đã chụp phiên bản hiệu lực").toBe(csId);
+    await expect(chenLuotTho(rfqId, moi)).rejects.toMatchObject({ code: "23514", constraint: "l14_phien_ban_khong_ghim" });
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([]);
+    await chenLuotTho(rfqId, csId);
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([csId]);
+  });
+
+  it("[INV-L14] ĐỘT BIẾN — tắt `rfq_evaluations_kiem_phien_ban_ghim` lúc chạy thì câu INSERT mang phiên bản khai SAU lúc mở ĐI LỌT", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]]);
+    const moi = await taoChinhSach(TP_GIA);
+    await db.pool.query("ALTER TABLE public.rfq_evaluations DISABLE TRIGGER rfq_evaluations_kiem_phien_ban_ghim");
+    try {
+      await withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_evaluations (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id) " +
+            "VALUES ($1, $2, $3, 'VND', $4, $5)",
+          [orgA, rfqId, moi, uYc, sYc],
+        ),
+      );
+    } finally {
+      await db.pool.query("ALTER TABLE public.rfq_evaluations ENABLE ALWAYS TRIGGER rfq_evaluations_kiem_phien_ban_ghim");
+    }
+    expect(await chinhSachCuaLuot(rfqId), "lỗ đo được: không trigger thì CSDL nhận phiên bản khai sau khi thấy giá").toEqual([moi]);
+  });
+
+  // Chiều ỨNG DỤNG của tên `l14_phien_ban_khong_ghim`: `docChinhSach` đọc đúng hàm ghim, nên nhánh này chỉ tới được bằng một bộ đọc
+  // lệch hay một đường ghi thứ hai — cùng cái giá J5 ghi ở khoản 231. Dựng nó bằng một `client` bọc thay `policy_id` của câu
+  // `INSERT INTO public.rfq_evaluations` bằng phiên bản khai SAU lúc mở: trigger từ chối bằng TÊN, và tầng gói phải đổi tên ấy thành
+  // mã chốt cộng một hàng sổ ở giao dịch độc lập.
+  it("[INV-L14] đường ứng dụng: `policy_id` lệch tới câu INSERT ⇒ `ChotKiemSoatError` L14_PHIEN_BAN_KHONG_GHIM mang lỗi trigger ở `cause`, ĐÚNG MỘT hàng CONTROL_DENIED {ma}, không lượt nào, RFQ đứng yên", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]]);
+    const moi = await taoChinhSach(TP_GIA);
+    let soLanThay = 0;
+    type CauHoi = (...doiSo: unknown[]) => Promise<unknown>;
+    const boc = (c: pg.PoolClient): pg.PoolClient => {
+      const goc = c.query.bind(c) as unknown as CauHoi;
+      const hoi: CauHoi = async (...doiSo) => {
+        const cau = doiSo[0];
+        if (typeof cau === "string" && cau.includes("INSERT INTO public.rfq_evaluations") && Array.isArray(doiSo[1])) {
+          const thamSo = [...(doiSo[1] as unknown[])];
+          thamSo[2] = moi;
+          soLanThay += 1;
+          return await goc(cau, thamSo);
+        }
+        return await goc(...doiSo);
+      };
+      const b = Object.create(c) as pg.PoolClient;
+      Object.defineProperty(b, "query", { value: hoi });
+      return b;
+    };
+    await expect(
+      withTenant(apiPool, orgA, (c) => taoLuotDanhGia(boc(c), orgA, { rfqId, actorSessionId: sYc }, apiPool)),
+    ).rejects.toMatchObject({
+      name: "ChotKiemSoatError",
+      lyDo: "L14_PHIEN_BAN_KHONG_GHIM",
+      message: CHOT_VAO_SO.L14_PHIEN_BAN_KHONG_GHIM.thongDiep,
+      cause: { code: "23514", constraint: "l14_phien_ban_khong_ghim" },
+    });
+    expect(soLanThay, "tiền đề: bộ bọc đã thay đúng một câu").toBe(1);
+    expect(await hangSoTuChoi(rfqId)).toEqual([["CONTROL_DENIED", uYc, "RFQ", { ma: "L14_PHIEN_BAN_KHONG_GHIM" }]]);
+    expect(await chinhSachCuaLuot(rfqId), "giao dịch chấm đã rollback").toEqual([]);
+    expect(await trangThaiRfq(rfqId)).toBe("UNSEALED");
+    expect(maChotTuLoi(Object.assign(new Error("x"), { code: "23514", constraint: "l14_phien_ban_khong_ghim" }))).toBe(
+      "L14_PHIEN_BAN_KHONG_GHIM",
+    );
+  });
+
+  // ---- Lượt soi §S1.253: hai đường lùi mốc của phép TÍNH LẠI `chinh_sach_hieu_luc(org, opened_at)`, và cột chụp đóng cả hai ----
+
+  it("[INV-L14] đường ⑴: phiên bản LÙI MỐC — `created_at = effective_from` trước lúc mở, chèn SAU lúc mở (giao dịch giữ lâu) — không đổi được phiên bản ghim; phép tính lại tại `opened_at` thì chọn nó", async () => {
+    const { rfqId, csId } = await goiDaMo([["100.00", "VND"]]);
+    const { rows: ke } = await db.pool.query<{ n: number }>(
+      "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
+      [orgA],
+    );
+    // `created_at` là `now()` của giao dịch tạo — lúc nó BẮT ĐẦU. Vai chủ cụm đặt thẳng cột ấy để dựng đúng hàng mà một giao dịch
+    // `app_api` mở trước lúc gói mở rồi chèn sau khi giá lộ sẽ để lại.
+    const { rows: lui } = await db.pool.query<{ id: string }>(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, effective_from, created_at, " +
+        "eval_components, bafo_top_n, created_by, created_by_session_id) " +
+        "SELECT $1, $2, '100000000.00', 'VND', r.opened_at - interval '1 minute', r.opened_at - interval '1 minute', $3::jsonb, 0, $4, $5 " +
+        "FROM rfq_packages r WHERE r.id = $6 RETURNING id",
+      [orgA, ke[0]?.n ?? 0, TP_GIA_GAP_DOI, uYc, sYc, rfqId],
+    );
+    const luiId = lui[0]?.id ?? "";
+    expect(await hieuLucTaiMoLuc(rfqId), "tiền đề: phép tính lại tại `opened_at` chọn phiên bản lùi mốc").toBe(luiId);
+    expect(await phienBanGhim(rfqId)).toBe(csId);
+
+    const kq = await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
+    expect(kq.policyId).toBe(csId);
+    expect(kq.lines.map((l) => l.effectiveCost)).toEqual(["100.00"]);
+    await expect(chenLuotTho(rfqId, luiId)).rejects.toMatchObject({ code: "23514", constraint: "l14_phien_ban_khong_ghim" });
+  });
+
+  it("[INV-L14] đường ⑵: mở gói với `opened_at` ở năm 2100 không đổi được phiên bản ghim — cột chụp theo đồng hồ của cạnh, không theo giá trị người gọi gửi; câu ghi thẳng mang phiên bản mới nhất bị từ chối", async () => {
+    const csId = await taoChinhSach(TP_GIA);
+    const rfqId = await taoRfqChoMo(csId);
+    // Một phiên bản HẸN GIỜ có sẵn lúc mở (hiệu lực sau một ngày): chụp theo `NEW.opened_at` năm 2100 sẽ chọn nó, chụp theo đồng hồ
+    // của cạnh thì không — vế này là thứ phân biệt hai cách chụp (đột biến M9, §S1.253).
+    const { rows: ke } = await db.pool.query<{ n: number }>(
+      "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
+      [orgA],
+    );
+    await db.pool.query(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, effective_from, " +
+        "eval_components, bafo_top_n, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, '100000000.00', 'VND', now() + interval '1 day', $3::jsonb, 0, $4, $5)",
+      [orgA, ke[0]?.n ?? 0, TP_GIA_GAP_DOI, uYc, sYc],
+    );
+    // Dưới `app_api`, không dưới vai chủ cụm: `opened_at` nằm trong `GRANT UPDATE` của vai ứng dụng (`009`) — đó là đường ghi thứ hai.
+    await withTenant(apiPool, orgA, async (c) => {
+      await c.query(
+        "INSERT INTO rfq_key_material (org_id, rfq_id, algorithm, public_key, wrapped_private_key, " +
+          "key_version, created_by, created_by_session_id) VALUES ($1, $2, 'ECDH_P256', $3, $4, 'test-v1', $5, $6)",
+        [orgA, rfqId, Buffer.alloc(91, 1), Buffer.alloc(80, 2), uYc, sYc],
+      );
+      await c.query(
+        "UPDATE rfq_packages SET status = 'OPEN', opened_at = '2100-01-01T00:00:00Z', opened_by = $2, opened_by_session_id = $3 WHERE id = $1",
+        [rfqId, uYc, sYc],
+      );
+    });
+    const { rows: mo } = await db.pool.query<{ nam: number }>("SELECT extract(year FROM opened_at)::int AS nam FROM rfq_packages WHERE id = $1", [rfqId]);
+    expect(mo[0]?.nam, "tiền đề: `app_api` đặt được `opened_at` ở năm 2100 (khoản 319)").toBe(2100);
+    const moi = await taoChinhSach(TP_GIA_GAP_DOI);
+    expect(await hieuLucTaiMoLuc(rfqId), "tiền đề: tại `opened_at` năm 2100, phép tính lại chọn phiên bản khai SAU lúc mở").toBe(moi);
+    expect(await phienBanGhim(rfqId)).toBe(csId);
+    await expect(chenLuotTho(rfqId, moi)).rejects.toMatchObject({ code: "23514", constraint: "l14_phien_ban_khong_ghim" });
+    await chenLuotTho(rfqId, csId);
+    expect(await chinhSachCuaLuot(rfqId)).toEqual([csId]);
+  });
+
+  it("[INV-L14] `app_api` không ghi được cột phiên bản ghim — câu UPDATE và câu INSERT mang cột ấy đều bị từ chối quyền (42501)", async () => {
+    const { rfqId } = await goiDaMo([["100.00", "VND"]]);
+    const moi = await taoChinhSach(TP_GIA);
+    await expect(
+      withTenant(apiPool, orgA, (c) => c.query("UPDATE rfq_packages SET chinh_sach_ghim_id = $1 WHERE id = $2", [moi, rfqId])),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        c.query(
+          "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, created_by, created_by_session_id, chinh_sach_ghim_id) " +
+            "VALUES ($1, 'Goi tu ghim', $2, false, $3, $4, $5)",
+          [orgA, MAI_SAU, uYc, sYc, moi],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+  });
+
+  it("[INV-L14] lần mở CHỜ một phiên bản đang ghi dở (cùng khoá tư vấn chính sách), rồi chụp đúng phiên bản ấy — không để một phiên bản commit sau lần chụp mà vẫn hiệu lực trước nó", async () => {
+    const csId = await taoChinhSach(TP_GIA);
+    const rfqId = await taoRfqChoMo(csId);
+    const { rows: ke } = await db.pool.query<{ n: number }>(
+      "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
+      [orgA],
+    );
+    const c1 = await db.pool.connect();
+    let moiId = "";
+    let mo: Promise<void> | undefined;
+    try {
+      await c1.query("BEGIN");
+      const { rows } = await c1.query<{ id: string }>(
+        "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
+          "created_by, created_by_session_id) VALUES ($1, $2, '100000000.00', 'VND', $3::jsonb, 0, $4, $5) RETURNING id",
+        [orgA, ke[0]?.n ?? 0, TP_GIA_GAP_DOI, uYc, sYc],
+      );
+      moiId = rows[0]?.id ?? "";
+      mo = moGoiDaDuyet(rfqId);
+      let cho = false;
+      for (let i = 0; i < 100 && !cho; i += 1) {
+        const { rows: k } = await db.pool.query<{ n: string }>(
+          "SELECT count(*)::text AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted",
+        );
+        cho = k[0]?.n !== "0";
+        if (!cho) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(cho, "lần mở phải CHỜ khoá tư vấn mà lần ghi phiên bản đang giữ").toBe(true);
+      await c1.query("COMMIT");
+    } catch (e) {
+      await c1.query("ROLLBACK");
+      throw e;
+    } finally {
+      c1.release();
+    }
+    await mo;
+    expect(await phienBanGhim(rfqId), "phiên bản commit trong lúc lần mở chờ là phiên bản đã hiệu lực khi gói thực sự mở").toBe(moiId);
   });
 });

@@ -14,7 +14,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { inKetQua, kiemAws, kiemBien } from "./luat.js";
-import { congAwsCli, DocBienError, docBienTerraform, TienTrinhError } from "./nguon.js";
+import { congAwsCli, DocBienError, docBienTerraform, TerraformTuChoiBienError, TienTrinhError } from "./nguon.js";
 
 const THU_MUC_STACK_90 = fileURLToPath(new URL("../../../infra/terraform/90-ecs", import.meta.url));
 
@@ -37,8 +37,13 @@ async function main(): Promise<number> {
 
   let doc;
   try {
-    doc = docBienTerraform(values.terraform, THU_MUC_STACK_90, resolve(varFile));
+    doc = docBienTerraform(THU_MUC_STACK_90, resolve(varFile), [values.terraform]);
   } catch (e) {
+    if (e instanceof TerraformTuChoiBienError) {
+      console.error(`kiem-truoc-apply: terraform tu choi bien trong ${varFile} - sua tep roi chay lai, khong plan:`);
+      console.error(e.stderr);
+      return 2;
+    }
     if (e instanceof TienTrinhError || e instanceof DocBienError) {
       console.error(`kiem-truoc-apply: khong doc duoc bien qua terraform console (da terraform init trong 90-ecs chua?): ${e.message}`);
       if (e instanceof TienTrinhError && e.stderr !== "") console.error(e.stderr);
