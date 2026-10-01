@@ -12,7 +12,9 @@
 --     So bằng `.double()` vì jsonpath của Postgres 16 không có `.decimal()` (spec §2.5 ㉒): đó là ngưỡng, không phải tiền, và hai
 --     giá trị bốn chữ số lẻ khác nhau cách nhau ≥ 1e-4 — xa hơn sai số của `double` nhiều bậc. Vế HÌNH DẠNG dùng `like_regex` trên
 --     CHUỖI trước, nên `.double()` không bao giờ nhận `"1e3"`, `"NaN"` hay một số JSON. Cả hai vế viết DẠNG DƯƠNG
---     (`jsonb_path_exists(... ? (điều kiện))`): dạng phủ định để lọt khoá vắng mặt (biên bản an ninh, M5 của S1.235).
+--     (`jsonb_path_exists(... ? (điều kiện))`): dạng phủ định để lọt khoá vắng mặt (biên bản an ninh, M5 của S1.235). Và ở chế độ
+--     `strict`: chế độ `lax` mặc định tự MỞ MẢNG cho cả `like_regex` lẫn `.double()`, nên `"cua_so_thang": ["12", "99"]` qua cả biên
+--     ≤ 60 rồi làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi (lượt soi đối kháng §S1.9101, TRUNG-1).
 -- (2) `price_benchmark_results` — MỘT hàng cho MỖI (báo giá của lượt chấm, dòng của gói). Không cột tiền: nhãn, chiều, lý do không
 --     đo được, khoá dải (hàng chuẩn, tiền tệ, cửa sổ), số đếm thành phần (n gói · m nhà cung cấp · k gói cùng người tạo · h quan sát
 --     hồi tố · số quan sát bị loại vì khác tiền tệ và vì đơn giá 0), cờ hồi tố của chính dòng.
@@ -30,6 +32,7 @@
 --     Giới hạn nói ra: CSDL không kiểm ĐỦ hàng (mỗi dòng × mỗi báo giá) hay ĐÚNG nhãn — phép tính lại L7 kiểm.
 -- (5) Hai bảng chỉ-ghi-thêm BẰNG QUYỀN — khuôn `rfq_evaluation_lines` (`057`): `SELECT` mức bảng, `INSERT` theo cột không có `id`
 --     (INV-H14) và không có `ghi_luc`; không `UPDATE`, không `DELETE`. Policy khách ĐÓNG HẲN.
+-- (6) `item_uom_conversions.he_so` hữu hạn — vá lượt soi: `'NaN' > 0` qua `CHECK` của `083` và làm lượt chấm có benchmark ném mãi.
 -- ==============================================================================================
 
 -- ============================================================================================
@@ -46,14 +49,14 @@ ALTER TABLE org_procurement_policies
                  OPERATOR(pg_catalog.=) '{}'::pg_catalog.jsonb
              AND pg_catalog.jsonb_path_exists(
                    benchmark,
-                   '$ ? (@.cua_so_thang like_regex "^[1-9][0-9]?$" && @.san_goi like_regex "^[1-9][0-9]?$"
+                   'strict $ ? (@.cua_so_thang like_regex "^[1-9][0-9]?$" && @.san_goi like_regex "^[1-9][0-9]?$"
                          && @.san_ncc like_regex "^[1-9][0-9]?$"
                          && @.nguong_lech_vua like_regex "^(0|[1-9][0-9]?)([.][0-9]{1,4})?$"
                          && @.nguong_lech_cao like_regex "^(0|[1-9][0-9]?)([.][0-9]{1,4})?$"
                          && @.phuong_phap == "TRUNG_VI_THEO_GOI_V1")')
              AND pg_catalog.jsonb_path_exists(
                    benchmark,
-                   '$ ? (@.cua_so_thang.double() <= 60 && @.san_goi.double() <= 50 && @.san_ncc.double() <= 50
+                   'strict $ ? (@.cua_so_thang.double() <= 60 && @.san_goi.double() <= 50 && @.san_ncc.double() <= 50
                          && @.nguong_lech_vua.double() > 0
                          && @.nguong_lech_vua.double() < @.nguong_lech_cao.double()
                          && @.nguong_lech_cao.double() <= 10)')));
@@ -206,3 +209,18 @@ CREATE POLICY price_benchmark_inputs_khach ON price_benchmark_inputs AS RESTRICT
 GRANT SELECT ON price_benchmark_inputs TO app_api;
 GRANT INSERT (org_id, evaluation_id, canonical_item_id, tien_te, bid_version_id, line_no, anh_xa_id, hoi_to)
   ON price_benchmark_inputs TO app_api;
+
+-- ============================================================================================
+-- (6) HỆ SỐ QUY ĐỔI RIÊNG PHẢI HỮU HẠN
+-- ============================================================================================
+-- [lượt soi đối kháng §S1.9101 — THẤP-5] `item_uom_conversions_rut_khong_he_so` (`083`) đòi `he_so > 0`, và `'NaN' > 0` là ĐÚNG
+-- trong Postgres — đúng lỗ `rfq_items.quantity` đã đóng ở `011`. Dưới `app_api` với phiên người quản lý dữ liệu, `he_so 'NaN'` VÀO;
+-- `quan_sat_gia` khi ấy trả đơn giá quy đổi `NaN` mang trạng thái `HOP_LE`, và lượt chấm có benchmark của mọi gói mà dải đọc tới quy
+-- đổi ấy NÉM — gói kẹt ở `UNSEALED`, không trao thầu được; khai một quy đổi đúng SAU lúc mở không cứu, vì dải đọc tại mốc. Tầng gói
+-- chặn bằng mẫu `HE_SO` (`hang-chuan.ts`), nên chỉ SQL thô tới được. Ràng buộc mới thay vì sửa `083`: migration đã áp không sửa
+-- (ADR-028).
+ALTER TABLE item_uom_conversions
+  ADD CONSTRAINT item_uom_conversions_he_so_huu_han
+  CHECK (he_so IS NULL
+         OR (he_so OPERATOR(pg_catalog.<>) 'NaN'::pg_catalog.numeric
+             AND he_so OPERATOR(pg_catalog.<) 'Infinity'::pg_catalog.numeric));

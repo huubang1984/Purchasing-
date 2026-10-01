@@ -91,14 +91,20 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     ]);
   });
 
-  it("[INV-L6] [S1.9101 / S4.5b] `tinhBenchmarkGoi` chỉ được gọi từ hai chỗ có cổng — lượt chấm (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ)", () => {
+  it("[INV-L6] [S1.9101 / S4.5b] `tinhBenchmarkGoi` chỉ được dùng ở hai chỗ có cổng — lượt chấm (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ); `ghiBenchmarkLuotCham` chỉ ở lượt chấm", () => {
+    // [lượt soi §S1.9101 — GHI CHÚ-8] Quét theo KÝ HIỆU, không theo mẫu lời gọi: `import { tinhBenchmarkGoi as t }` hay
+    // `const f = tinhBenchmarkGoi` vượt được một mẫu `tinhBenchmarkGoi(` — nhưng không vượt được việc tên ấy xuất hiện trong tệp.
     const goc = fileURLToPath(new URL("../../", import.meta.url));
-    const goi = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+    const tepSanXuat = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
       .split(/\r?\n/u)
-      .filter((t) => /^(packages|apps|tools)\/.*\/src\/.*\.ts$/u.test(t) && !t.includes(".test."))
-      .filter((t) => /(?<!function )\btinhBenchmarkGoi\s*\(/u.test(readFileSync(`${goc}${t}`, "utf8")))
-      .sort();
-    expect(goi).toEqual(["packages/danh-gia/src/doc-benchmark.ts", "packages/danh-gia/src/luot-danh-gia.ts"]);
+      .filter((t) => /^(packages|apps|tools)\/.*\/src\/.*\.[cm]?[jt]s$/u.test(t) && !t.includes(".test."));
+    const nhac = (ten: string): string[] =>
+      tepSanXuat.filter((t) => new RegExp(`\\b${ten}\\b`, "u").test(readFileSync(`${goc}${t}`, "utf8"))).sort();
+    const NOI_DINH_NGHIA = ["packages/du-lieu-nen/src/benchmark-goi.ts", "packages/du-lieu-nen/src/index.ts"];
+    expect(nhac("tinhBenchmarkGoi")).toEqual(
+      [...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts", "packages/danh-gia/src/luot-danh-gia.ts"].sort(),
+    );
+    expect(nhac("ghiBenchmarkLuotCham")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/luot-danh-gia.ts"].sort());
     const docBm = readFileSync(`${goc}packages/danh-gia/src/doc-benchmark.ts`, "utf8");
     expect(docBm).toMatch(/permission: PERMISSIONS\.BID_VIEW/u);
     expect(docBm).toMatch(/action: "BENCHMARK_READ"/u);

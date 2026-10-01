@@ -45,6 +45,17 @@ export interface DongBenchmarkHien {
 
 export type BenchmarkCuaGoi =
   | { readonly trangThai: "CHUA_CO_KET_QUA"; readonly rfqStatus: string }
+  /**
+   * Lượt chấm mới nhất mang phiên bản CÓ cấu hình benchmark mà không có hàng kết quả nào — trái phép ghi một lần của `taoLuotDanhGia`,
+   * tức lượt ấy đến từ một đường ghi khác (SQL thô dưới `app_api`, khoản 9402). Không nhãn nào đi ra; không ném, để một lượt chấm thô
+   * không khoá vĩnh viễn mọi lần đọc của gói (lượt soi §S1.9101, TRUNG-2).
+   */
+  | {
+      readonly trangThai: "THIEU_KET_QUA";
+      readonly evaluationId: string;
+      readonly policyId: string;
+      readonly policyVersion: number;
+    }
   | {
       readonly trangThai: "CHUA_CAU_HINH";
       readonly nguon: NguonBenchmark;
@@ -201,10 +212,10 @@ export async function docBenchmark(
       const dau = rows[0];
       if (dau === undefined) {
         // Ghi đúng một lần trong giao dịch tạo lượt chấm: không hàng nào ⇔ phiên bản của lượt chấm chưa cấu hình nhóm `benchmark`.
-        if (docNhomBenchmark(l.benchmark) !== null) {
-          throw new Error("lượt chấm có phiên bản cấu hình benchmark mà không có hàng kết quả nào — trái phép ghi một lần (L7)");
-        }
-        ketQua = { trangThai: "CHUA_CAU_HINH", nguon: "LUOT_CHAM", evaluationId: l.id, policyId: l.policy_id, policyVersion: l.version };
+        ketQua =
+          docNhomBenchmark(l.benchmark) === null
+            ? { trangThai: "CHUA_CAU_HINH", nguon: "LUOT_CHAM", evaluationId: l.id, policyId: l.policy_id, policyVersion: l.version }
+            : { trangThai: "THIEU_KET_QUA", evaluationId: l.id, policyId: l.policy_id, policyVersion: l.version };
       } else {
         ketQua = {
           trangThai: "CO",
@@ -247,7 +258,7 @@ export async function docBenchmark(
     payload: {
       rfqId: input.rfqId,
       trangThai: ketQua.trangThai,
-      nguon: ketQua.trangThai === "CHUA_CO_KET_QUA" ? null : ketQua.nguon,
+      nguon: ketQua.trangThai === "CHUA_CO_KET_QUA" || ketQua.trangThai === "THIEU_KET_QUA" ? null : ketQua.nguon,
       soDong: ketQua.trangThai === "CO" ? ketQua.dong.length : 0,
       viewedBySessionId: input.actorSessionId,
     },

@@ -54,6 +54,8 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   item_aliases_bi_danh_sach_da_lam_sach: "DINH_DANG",
   item_aliases_rut_khong_hang: "DINH_DANG",
   item_uom_conversions_hai_dau_khac: "DINH_DANG",
+  // [S1.9101 / lượt soi S4.5b] Hệ số quy đổi riêng hữu hạn — `'NaN' > 0` là đúng trong Postgres.
+  item_uom_conversions_he_so_huu_han: "HUU_HAN",
   item_uom_conversions_rut_khong_he_so: "SO",
   item_uom_conversions_tu_don_vi_da_lam_sach: "DINH_DANG",
   master_key_check_values_kcv_check: "DO_DAI",

@@ -283,10 +283,10 @@ async function goiLichSu(
   bo: Bo,
   hang: string,
   tien: readonly string[],
-  tuy: { readonly hoiTo?: boolean; readonly luc?: string } = {},
+  tuy: { readonly hoiTo?: boolean; readonly luc?: string; readonly khongAnhXa?: boolean } = {},
 ): Promise<{ readonly rfqId: string; readonly bg: readonly BaoGia[] }> {
   const rfqId = await taoGoi(bo, [["Vat tu", "10", "kg"]]);
-  if (tuy.hoiTo !== true) await anhXa(bo.org, rfqId, 1, hang);
+  if (tuy.hoiTo !== true && tuy.khongAnhXa !== true) await anhXa(bo.org, rfqId, 1, hang);
   const bg: BaoGia[] = [];
   for (let i = 0; i < tien.length; i += 1) bg.push(await nopBaoGia(bo, rfqId));
   await moThau(
@@ -336,6 +336,7 @@ let lichSuThep: readonly { readonly rfqId: string; readonly bg: readonly BaoGia[
 let lichSuCat: readonly { readonly rfqId: string; readonly bg: readonly BaoGia[] }[] = [];
 let asOfTruocCham: BenchmarkCuaGoi | null = null;
 let sauMocX: { readonly rfqId: string; readonly bg: readonly BaoGia[] } = { rfqId: "", bg: [] };
+let anhXaSauMocX: { readonly rfqId: string; readonly bg: readonly BaoGia[] } = { rfqId: "", bg: [] };
 let evaluationId = "";
 
 beforeAll(async () => {
@@ -373,6 +374,9 @@ beforeAll(async () => {
     await goiLichSu(boA, hangThep, ["5000"], { luc: luc26Thang }),
   ];
   lichSuCat = [await goiLichSu(boA, hangCat, ["500"]), await goiLichSu(boA, hangCat, ["550"])];
+  // Gói thép mở TRƯỚC X mà chỉ được ánh xạ SAU khi X mở: tại mốc của X dòng ấy chưa ánh xạ — dải không thấy nó; đọc hàng nền tại lúc
+  // chấm thì thấy (đối chứng cho "dải đọc tại MỐC MỞ GIÁ", đột biến M12 của §S1.9101).
+  anhXaSauMocX = await goiLichSu(boA, hangThep, ["2000"], { khongAnhXa: true });
 
   rfqX = await taoGoi(boA2, [
     ["Thep vang D10", "10", "kg"],
@@ -391,6 +395,7 @@ beforeAll(async () => {
   await anhXa(orgA, rfqX, 3, hangCat, "anh xa sau khi mo de do hoi to cua chinh dong");
   // Gói thép mở SAU mốc mở giá của X nhưng TRƯỚC lượt chấm: dải đọc TẠI MỐC của X nên không thấy nó — đọc tại lúc chấm thì thấy.
   sauMocX = await goiLichSu(boA, hangThep, ["10"]);
+  await anhXa(orgA, anhXaSauMocX.rfqId, 1, hangThep, "anh xa sau moc mo gia cua X");
 
   asOfTruocCham = await trong(orgA, (c) => docBenchmark(c, orgA, { rfqId: rfqX, actorSessionId: pm.phien }, api));
   evaluationId = (await trong(orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId: rfqX, actorSessionId: pm.phien }, api))).evaluationId;
@@ -486,6 +491,7 @@ describe("[INV-L7] ⑴ lượt chấm ghi đúng một hàng mỗi (báo giá, d
     const cuaX = new Set(bgX.map((b) => b.versionId));
     expect(dv.filter((d) => cuaX.has(d.bid_version_id)), "L7: không tự so").toEqual([]);
     expect(dv.filter((d) => d.bid_version_id === sauMocX.bg[0]!.versionId), "gói mở sau mốc của X không vào dải").toEqual([]);
+    expect(dv.filter((d) => d.bid_version_id === anhXaSauMocX.bg[0]!.versionId), "ánh xạ ghi sau mốc của X không vào dải").toEqual([]);
     const hoiTo = dv.filter((d) => d.hoi_to.length > 0).map((d) => d.bid_version_id).sort();
     expect(hoiTo).toEqual(lichSuThep[2]!.bg.map((b) => b.versionId).sort());
   });
@@ -601,6 +607,13 @@ describe("[INV-L7] nhóm khoá `benchmark` — `CHECK` của CSDL", { timeout: 1
     ["thừa khoá", { ...NHOM_BENCHMARK_MAU, x: "1" }],
     ["phương pháp lạ", { ...NHOM_BENCHMARK_MAU, phuong_phap: "TRUNG_VI_TU_PHAN_VI_V1" }],
     ["mảng", [NHOM_BENCHMARK_MAU]],
+    // [lượt soi §S1.9101 — TRUNG-1] jsonpath `lax` tự mở mảng: năm dạng dưới đây từng QUA `CHECK` và làm lượt chấm ném mãi.
+    ["cửa sổ là mảng", { ...NHOM_BENCHMARK_MAU, cua_so_thang: ["12"] }],
+    ["cửa sổ là mảng vượt biên", { ...NHOM_BENCHMARK_MAU, cua_so_thang: ["12", "99"] }],
+    ["ngưỡng vừa là mảng", { ...NHOM_BENCHMARK_MAU, nguong_lech_vua: ["0.05", "0.50"], nguong_lech_cao: ["0.10"] }],
+    ["ngưỡng cao là mảng vượt biên", { ...NHOM_BENCHMARK_MAU, nguong_lech_cao: ["0.10", "50"] }],
+    ["phương pháp là mảng", { ...NHOM_BENCHMARK_MAU, phuong_phap: ["TRUNG_VI_THEO_GOI_V1"] }],
+    ["sàn là đối tượng", { ...NHOM_BENCHMARK_MAU, san_goi: { a: "3" } }],
   ])("%s ⇒ `org_procurement_policies_benchmark_hinh_dang` từ chối", async (_ten, tho) => {
     await expect(chen(tho)).rejects.toMatchObject({ code: "23514", constraint: "org_procurement_policies_benchmark_hinh_dang" });
   });
@@ -609,6 +622,24 @@ describe("[INV-L7] nhóm khoá `benchmark` — `CHECK` của CSDL", { timeout: 1
     await expect(
       chen({ ...NHOM_BENCHMARK_MAU, cua_so_thang: "60", san_goi: "50", san_ncc: "1", nguong_lech_vua: "9.9999", nguong_lech_cao: "10" }),
     ).resolves.toMatchObject({ rowCount: 1 });
+  });
+});
+
+describe("[INV-L7] hệ số quy đổi riêng hữu hạn — một `NaN` trong dải làm lượt chấm ném mãi", { timeout: 120_000 }, () => {
+  // [lượt soi §S1.9101 — THẤP-5] `'NaN' > 0` là đúng trong Postgres, nên `CHECK` của `083` nhận nó.
+  const chen = (heSo: string) =>
+    trong(orgA, (c) =>
+      c.query(
+        "INSERT INTO item_uom_conversions (org_id, canonical_item_id, tu_don_vi, sang_don_vi, he_so, tac_gia, session_id) " +
+          "VALUES ($1, $2, 'bao', 'kg', $3::numeric, $4, $5)",
+        [orgA, hangCat, heSo, ql.nguoi, ql.phien],
+      ),
+    );
+  it.each(["NaN", "Infinity"])("`he_so` %s ⇒ `item_uom_conversions_he_so_huu_han` từ chối", async (heSo) => {
+    await expect(chen(heSo)).rejects.toMatchObject({ code: "23514", constraint: "item_uom_conversions_he_so_huu_han" });
+  });
+  it("đối chứng dương: `he_so` 50 vào", async () => {
+    await expect(chen("50")).resolves.toMatchObject({ rowCount: 1 });
   });
 });
 
@@ -694,6 +725,21 @@ describe("[INV-L7] ⑸ docBenchmark", { timeout: 180_000 }, () => {
     );
     expect(rows).toHaveLength(truoc + 1);
     expect(Object.keys(rows[0]!.payload).sort()).toEqual(["nguon", "rfqId", "soDong", "trangThai", "viewedBySessionId"]);
+  });
+
+  it("[lượt soi §S1.9101 — TRUNG-2] lượt chấm THÔ không hàng benchmark dưới phiên bản có cấu hình ⇒ `THIEU_KET_QUA`, không nhãn, không ném", async () => {
+    const { rfqId, bg } = await goiMoiDaMo();
+    const luot = await trong(orgA, async (c) => {
+      const id = await luotTho(c, rfqId, bg.versionId);
+      await c.query("UPDATE rfq_packages SET status = 'EVALUATING' WHERE id = $1", [rfqId]);
+      return id;
+    });
+    expect(await trong(orgA, (c) => docBenchmark(c, orgA, { rfqId, actorSessionId: pm.phien }, api))).toEqual({
+      trangThai: "THIEU_KET_QUA",
+      evaluationId: luot,
+      policyId: chinhSachA2,
+      policyVersion: 2,
+    });
   });
 
   it("gói chưa mở niêm phong ⇒ `CHUA_CO_KET_QUA`, không con số, không lần tính nào", async () => {

@@ -11085,12 +11085,24 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
 
 - **Lệch chữ spec §4.6** (*"bảng con … cùng id mọi hàng nền đã dùng"*): bảng con mang id ánh xạ, không mang id quy đổi, bí danh hay phiên bản
   hàng chuẩn — các hàng ấy tái lập bằng phép đọc as-of tại `moc_mo_gia`, vì mọi bảng nền là chỉ-ghi-thêm có `ghi_luc` do trigger đặt (L1).
-- **CSDL không kiểm ĐỦ hàng hay ĐÚNG nhãn.** Khoá ngoại buộc *cùng giao dịch, cùng gói, cùng phiên bản*; một đường ghi thứ hai dưới
-  `app_api` TRONG CHÍNH giao dịch tạo lượt chấm vẫn ghi được nhãn tuỳ ý. Phép tính lại L7 là lớp phát hiện.
+- **CSDL không kiểm ĐỦ hàng hay ĐÚNG nhãn.** Khoá ngoại buộc *cùng giao dịch, cùng gói, cùng phiên bản* với MỘT hàng `rfq_evaluations` —
+  không buộc hàng ấy là của `taoLuotDanhGia`. ~~Một đường ghi thứ hai dưới `app_api` TRONG CHÍNH giao dịch tạo lượt chấm vẫn ghi được nhãn
+  tuỳ ý.~~ **[lượt soi §S1.9101, TRUNG-2] Câu vừa gạch hẹp hơn thực tế:** `rfq_evaluations` không có cổng trạng thái (`057`), nên một
+  giao dịch thô dưới `app_api` TẠO được một lượt chấm mới ở bất kỳ trạng thái nào, kèm hàng xếp hạng và nhãn tuỳ ý, và mọi bộ đọc lấy lượt
+  mới nhất — **khoản 9402** (có từ S2.3; bảng xếp hạng giả được y hệt). Phép tính lại L7 là lớp phát hiện. Lượt chấm thô không hàng
+  benchmark dưới phiên bản có cấu hình đọc ra `THIEU_KET_QUA`, không ném.
 - **Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi nó còn hỏng ở trục khác** (dòng bỏ trống, lệch tổng) — trạng thái thật cần đọc hết tổ chức.
 - **Cuộc đua as-of chung của L1**: một hàng nền ghi ở giao dịch khác với `ghi_luc` trước `now()` của lượt chấm mà commit SAU lần đọc thì phép
   tính lại về sau thấy nó.
-- **Gói huỷ sau mốc của X vẫn vào dải** — luật một chỗ của `quan_sat_gia` (ADR-136 ③: loại TỪ LÚC huỷ).
+- **Gói huỷ sau mốc của X vẫn vào dải** — luật một chỗ của `quan_sat_gia` (ADR-136 ③: loại TỪ LÚC huỷ). Mốc huỷ do người gọi đặt dưới
+  `app_api` lùi được về trước mốc của X và đổi kết quả tính lại — **khoản 9403** (cùng lớp khoản 319).
+- **[lượt soi §S1.9101, TRUNG-1, đóng trong vòng]** `CHECK` nhóm khoá ở chế độ jsonpath `lax` để lọt giá trị dạng MẢNG (`["12", "99"]`
+  qua cả biên) và làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi; nay `strict`. **[THẤP-5, đóng trong vòng]** `item_uom_conversions.he_so`
+  nhận `'NaN'` (`'NaN' > 0` là đúng) — một quy đổi `NaN` trong dải làm lượt chấm ném mãi; nay có ràng buộc hữu hạn.
+- **Cửa sổ tháng tính theo lịch UTC** — khớp Postgres khi `TimeZone = UTC` (0/20.000 lệch, lượt soi); theo giờ `Asia/Ho_Chi_Minh` lệch một
+  ngày quanh cuối tháng ở ~5,5% mốc. Bộ kiểm ngoại tuyến và `DAC-TA.md` của S4.5c phải nói UTC.
+- **Đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn của lượt chấm vòng một** (không có giá vòng hai — phong bì chưa vào bản rõ), cùng tư
+  thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
 - **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn của gói (giá của X tại mốc đọc, dải tại mốc mở giá); số đo ở biên bản §S1.9101.
 - **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 9401) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.
