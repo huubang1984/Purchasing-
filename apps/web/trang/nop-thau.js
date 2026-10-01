@@ -328,6 +328,34 @@ $("tien-te").addEventListener("input", tinhLai);
 // Bước 4 — niêm phong và nộp
 // ---------------------------------------------------------------------------------------------
 
+// [S1.219 / khoản 230] MÃ LÝ DO TỪ CHỐI → CÂU CHO NGƯỜI NỘP.
+//
+// Thân 422 của `POST /guest/bids` mang `ma` — tên ràng buộc mà trigger của câu nộp đã đặt, viết hoa (`MA_THEO_RANG_BUOC` của
+// `packages/bidding`, cộng `C1_QUA_HAN_NOP` của nhánh vì hạn). Trang tra bảng này chứ KHÔNG đọc câu chữ của `error`: câu
+// chữ đổi được, mã là hợp đồng. Mã không có trong bảng (api mới hơn trang, hay thân không mang mã) ⇒ `error` nguyên văn —
+// câu chung cũ. Mỗi câu nói rõ báo giá CHƯA đi và việc kế tiếp của người nộp; không câu nào chép câu của CSDL.
+const CAU_THEO_MA = {
+  C1_QUA_HAN_NOP: "Đã quá hạn nộp báo giá theo giờ của hệ thống — báo giá CHƯA được gửi.",
+  C1_GOI_KHONG_NHAN_BAO_GIA:
+    "Gói thầu này không còn nhận báo giá — đã đóng, đã huỷ hay chưa mở lại. Báo giá CHƯA được gửi; tải lại trang để xem trạng thái hiện tại của gói.",
+  BAFO_NGOAI_TOP_N:
+    "Luồng báo giá của bạn không nằm trong vòng BAFO đang mở — vòng này chỉ mời các nhà cung cấp trong top-N của lượt xếp hạng nộp lại. Báo giá CHƯA được gửi.",
+  C1_KHONG_VONG_BAFO_DANG_MO:
+    "Gói thầu đang ở vòng BAFO nhưng hệ thống không thấy vòng nào đang mở — dữ liệu gói thầu không nhất quán. Báo giá CHƯA được gửi; báo cho bên mua.",
+  C1_KHONG_HAN_NOP:
+    "Gói thầu đang mở mà không có hạn nộp — dữ liệu gói thầu không nhất quán. Báo giá CHƯA được gửi; báo cho bên mua.",
+  PHIEN_KHACH_KHONG_HOP_LE:
+    "Phiên nộp thầu đã hết hạn hoặc đã bị thu hồi ngay trước lúc ghi — báo giá CHƯA được gửi. Xin bên mua gửi lại link mời.",
+  PHIEN_KHACH_KHAC_LOI_MOI:
+    "Phiên nộp thầu trên trình duyệt này thuộc một lời mời khác với luồng báo giá — báo giá CHƯA được gửi. Tải lại trang để làm tiếp với đúng phiên.",
+};
+
+/** Câu riêng cho `ma` của thân 422, hay `null` khi thân không mang mã / mã lạ (⇒ người gọi rơi về `error` nguyên văn). */
+function cauTuChoi(b) {
+  if (b === null || typeof b !== "object" || typeof b.ma !== "string") return null;
+  return Object.hasOwn(CAU_THEO_MA, b.ma) ? CAU_THEO_MA[b.ma] : null;
+}
+
 $("nut-nop").addEventListener("click", async () => {
   bao($("loi3"), "");
   const tong = tinhLai();
@@ -380,14 +408,17 @@ $("nut-nop").addEventListener("click", async () => {
     if (r.status !== 201) {
       // [khoản 196 / ADR-074 phần 2] Lần chặn VÌ HẠN mang giờ hệ thống lúc phán xử và hạn đã so —
       // in cả hai, để người bị chặn đối chiếu được với đồng hồ của mình và với hạn trên màn hình.
+      // [S1.219 / khoản 230] Câu đầu là câu RIÊNG theo `ma` (bảng `CAU_THEO_MA`) khi 422 mang mã trang biết; không thì là
+      // `error` nguyên văn — hai giờ vẫn kèm theo hễ thân có, kể cả với một api cũ không mang `ma`.
       const b = r.body;
       const viHan = r.status === 422 && b !== null && typeof b === "object" && typeof b.gioPhanXu === "string" && typeof b.hanNop === "string";
+      const cauDau = (r.status === 422 ? cauTuChoi(b) : null) ?? loiCua(r, "Không nộp được");
       bao(
         $("loi3"),
         viHan
-          ? `${b.error} Giờ hệ thống lúc phán xử: ${gioDoc(b.gioPhanXu)} (${b.gioPhanXu}). Hạn nộp: ${gioDoc(b.hanNop)} (${b.hanNop}). ` +
+          ? `${cauDau} Giờ hệ thống lúc phán xử: ${gioDoc(b.gioPhanXu)} (${b.gioPhanXu}). Hạn nộp: ${gioDoc(b.hanNop)} (${b.hanNop}). ` +
             "Hệ thống đã ghi lại lần nộp bị chặn này."
-          : loiCua(r, "Không nộp được"),
+          : cauDau,
       );
       $("nut-nop").disabled = false;
       return;

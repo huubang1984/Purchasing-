@@ -58,9 +58,10 @@ import { KMSClient } from "@aws-sdk/client-kms";
 import { S3Client } from "@aws-sdk/client-s3";
 import { STSClient } from "@aws-sdk/client-sts";
 import { createPool } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import {
   createS3AnchorStore,
+  laKidPhatHanh,
   muonNguoiGhiNeo,
   neoKhoaBienNhan,
   taoBoKyNeoAwsKms,
@@ -86,7 +87,7 @@ const CACH_DUNG = `Cách dùng:
 Biến môi trường:
   DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan") — đăng nhập bằng app_neo_login
   TRUSTPROCURE_NEO_KHO             thư mục nơi cất — HOẶC bộ S3 dưới, không cả hai
-  TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
+  TRUSTPROCURE_NEO_KID             định danh khoá ký, 1–64 ký tự [A-Za-z0-9._-] (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (local-dev, chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_CONG_KHAI  SPKI DER, base64 — "<kid>=<base64>", lặp lại bằng dấu phẩy
 
@@ -106,6 +107,24 @@ function batBuoc(ten: string): string {
   const gt = env[ten];
   if (gt === undefined || gt.trim() === "") throw new Error(`Thiếu biến môi trường ${ten}.`);
   return gt.trim();
+}
+
+/**
+ * [S1.250 / kid] `TRUSTPROCURE_NEO_KID` — kid KÝ mốc neo, phía PHÁT HÀNH: tập `[A-Za-z0-9._-]{1,64}` (`laKidPhatHanh`), cùng
+ * `neo_kid` của terraform stack 40 và vòng khoá local-dev (`anchor-sign.ts`). Một chỗ đọc cho cả hai chế độ ký (local-dev, KMS),
+ * kiểm trước khi dựng bộ ký — trước khi đọc khoá, trước lời gọi KMS nào —, lỗi nêu TÊN biến. Vòng khoá CÔNG KHAI
+ * (`TRUSTPROCURE_NEO_KHOA_CONG_KHAI`, đường KIỂM) vẫn nhận tập rộng của định dạng: một mốc neo kid có `:` ký trước vòng này vẫn
+ * phải `kiem` được.
+ */
+function docKidNeo(): string {
+  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  if (!laKidPhatHanh(kid)) {
+    throw new Error(
+      'TRUSTPROCURE_NEO_KID phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — kid ký mốc neo thành tên tệp khi "pnpm neo trich" ' +
+        "tách mốc neo. Định dạng mốc neo vẫn đọc được kid cũ có \":\"; chỉ đường KÝ từ chối nó.",
+    );
+  }
+  return kid;
 }
 
 /**
@@ -165,7 +184,8 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
     throw new Error("TRUSTPROCURE_NEO_KMS_KEY_ID và TRUSTPROCURE_NEO_KHOA_RIENG loại trừ nhau.");
   }
   if (aws === undefined) throw new Error("Ký bằng KMS cần bộ biến S3/role của job neo (TRUSTPROCURE_NEO_S3_BUCKET…).");
-  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo.
+  const kid = docKidNeo();
   const kms = new KMSClient({ region: aws.region, credentials: aws.dangNhap });
   const { boKy, khoaCongKhai } = await taoBoKyNeoAwsKms({ client: kms, keyId, kid });
   const vong = new Map(tuyChon("TRUSTPROCURE_NEO_KHOA_CONG_KHAI") === undefined ? [] : docKhoaCongKhai());
@@ -178,7 +198,8 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
 }
 
 function docBoKy(): AnchorSigner {
-  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo — trước cả phép tra nửa công khai.
+  const kid = docKidNeo();
   const congKhai = docKhoaCongKhai().get(kid);
   if (congKhai === undefined) {
     // Bộ ký cần cả hai nửa để dựng vòng khoá, và đòi nửa công khai ở đây mua thêm một thứ: người
@@ -219,16 +240,48 @@ function mocNuocCao(neo: readonly ExternalAnchor[]): number {
   return neo.reduce((cao, n) => (n.seq > cao ? n.seq : cao), 0);
 }
 
+/**
+ * [S1.227 / khoản 180] HAI TÍN HIỆU MẤT-KHÔNG-AI-BIẾT của một pool đi qua `withTenant`, gắn MỘT lần cho mỗi pool ngay
+ * chỗ dựng — cùng khuôn `apps/unseal-worker/src/tien-trinh.ts`; cổng `tests/architecture/pool-nghe-du-tin-hieu.test.ts`
+ * nay quét cả `tools/` nên không quên lại được.
+ *   ⑴ `release` mang `TenantError` SESSION_STATE_LEFT: `withTenant` huỷ kết nối vì trạng thái phiên còn sót sau giao
+ *      dịch, và KHÔNG ném cho ai — trước vòng này `xuat` ký mốc neo dưới một trạng thái phiên bẩn mà không để lại một dòng.
+ *   ⑵ lỗi của lần lấy kết nối tới SAU trần `maxConnectWaitMs`: hai lời gọi `withTenant` ở đây không đặt trần nên hôm nay
+ *      ⑵ không phát; gắn để một lần đặt trần sau này không phải nhớ, và để cổng đòi đủ hai ở mọi pool.
+ * Bộ mô tả là bản CỤC BỘ — tool không import được `apps/api/src/mo-ta-loi.ts` (biên giới gói): chỉ TÊN lỗi và MÃ hằng
+ * (`TenantError.code`, SQLSTATE năm ký tự), không `message`, không `cause` (A2).
+ */
+function moTaLoiKhongGiaTri(loi: unknown): string {
+  if (!(loi instanceof Error)) return "loi la";
+  const ma = (loi as { code?: unknown }).code;
+  return typeof ma === "string" && /^[0-9A-Z_]{2,64}$/u.test(ma) ? `${loi.name} ${ma}` : loi.name;
+}
+const ghiKetNoiHuy =
+  (ten: string) =>
+  (loi: unknown): void => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+      console.error(`[neo-so] ket noi huy ${ten} ${moTaLoiKhongGiaTri(loi)}`);
+    }
+  };
+const ghiLoiToiMuon =
+  (ten: string) =>
+  (loi: unknown): void => {
+    console.error(`[neo-so] loi ket noi toi muon ${ten} ${moTaLoiKhongGiaTri(loi)}`);
+  };
+
 async function xuat(kho: AnchorStore, org: readonly string[], aws: CauHinhAws | undefined): Promise<number> {
   const { boKy, khoaCongKhai } = await docBoKyTheoCheDo(aws);
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
     // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
     role: "app_neo",
-    // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
-    // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
-    // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
+    // [S1.94 / khoản 103 + 180] ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc
+    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.227 / khoản 180] cổng ấy nay quét cả
+    // `tools/`; lớp `'error'` vẫn nằm trong `createPool` vì `'error'` là hợp đồng của `pg` (không ai nghe thì tiến
+    // trình chết), không phải tín hiệu riêng của kho. Dòng dưới chỉ thêm phần CHẨN ĐOÁN; hai tín hiệu riêng gắn ngay dưới.
     onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
   });
+  pool.on("release", ghiKetNoiHuy("xuat"));
+  ngheLoiKetNoiToiMuon(pool, ghiLoiToiMuon("xuat"));
   let soHong = 0;
   try {
     for (const id of org) {
@@ -287,11 +340,14 @@ async function kiem(kho: AnchorStore, org: readonly string[]): Promise<number> {
   const pool = createPool(batBuoc("DATABASE_URL"), 2, {
     // [ADR-072 phần 1] Vai CHỈ-ĐỌC của job neo, không phải app_api — xem khối đầu tệp.
     role: "app_neo",
-    // [S1.94 / khoản 103 + 180] Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu`
-    // (`TEP_APP` chỉ đọc `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`
-    // chứ không nằm ở từng chỗ dựng pool. Dòng dưới chỉ thêm phần CHẨN ĐOÁN.
+    // [S1.94 / khoản 103 + 180] ~~Công cụ này đứng NGOÀI tầm cổng `pool-nghe-du-tin-hieu` (`TEP_APP` chỉ đọc
+    // `apps/`), và đó chính là lý do lớp `'error'` nằm trong `createPool`~~ [S1.227 / khoản 180] cổng ấy nay quét cả
+    // `tools/`; lớp `'error'` vẫn nằm trong `createPool` vì `'error'` là hợp đồng của `pg` (không ai nghe thì tiến
+    // trình chết), không phải tín hiệu riêng của kho. Dòng dưới chỉ thêm phần CHẨN ĐOÁN; hai tín hiệu riêng gắn ngay dưới.
     onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),
   });
+  pool.on("release", ghiKetNoiHuy("kiem"));
+  ngheLoiKetNoiToiMuon(pool, ghiLoiToiMuon("kiem"));
   let soHong = 0;
   try {
     for (const id of org) {
@@ -458,6 +514,10 @@ function pemTuSpkiDer(der: Uint8Array): string {
  * theo hỏng. Siết ở ĐÂY chứ không ở `anchor-text.ts`: `KID_PATTERN` là một hằng của ĐỊNH DẠNG ĐÃ
  * KÝ, siết nó sẽ làm những mốc neo cũ mang `kid` có `:` không còn kiểm được — đổi định dạng để
  * sửa một vấn đề tên tệp là đúng thứ ADR-026 §1 cấm.
+ *
+ * [S1.250 / kid] Phía PHÁT HÀNH nay cùng tập (`KID_PHAT_HANH` của `anchor-sign.ts`, `docKidNeo`, bộ ký KMS của `aws.ts`): một kid
+ * có `:` chỉ còn tới được đây từ một mốc neo ký TRƯỚC vòng này. Vế này giữ nguyên — nó là chỗ duy nhất phía KIỂM dùng kid làm tên
+ * tệp.
  */
 function kidAnToanChoTenTep(kid: string): string {
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(kid)) {
@@ -648,6 +708,9 @@ const CAU_LIET_KE_TO_CHUC =
   "SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)";
 
 async function lietKeToChuc(): Promise<readonly string[]> {
+  // [S1.227 / khoản 180] Pool này chạy đúng MỘT câu thẳng (`pool.query`), không đi qua `withTenant`, nên không tín hiệu
+  // nào trong hai tín hiệu của cổng `pool-nghe-du-tin-hieu` phát được trên nó — khai `NGOAI_LE` ở cổng (`lietKeToChuc.pool`)
+  // thay vì gắn hai listener chết; cổng kiểm rằng pool được miễn thật sự không đi qua `withTenant`.
   const pool = createPool(batBuoc("DATABASE_URL"), 1, {
     role: "app_neo",
     onPoolError: (e) => console.error(`[neo-so] pool loi ${e instanceof Error ? e.name : "loi la"}`),

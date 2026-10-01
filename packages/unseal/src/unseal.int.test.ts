@@ -10,17 +10,19 @@
 // giữ `packages/unseal` không có một cạnh phụ thuộc nào nó không cần lúc chạy.
 // =============================================================================================
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
-import { DenialAuditFailedError } from "@trustprocure/identity";
+import { DenialAuditFailedError, moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import {
   UNSEAL_CLAUSES,
   UnsealDeniedError,
+  UnsealError,
   approveUnseal,
   assertUnsealAllowed,
   cancelUnseal,
@@ -29,6 +31,9 @@ import {
   getUnsealRequest,
   requestUnseal,
 } from "./index.js";
+// [S1.245 / khoản 266] Tên ràng buộc mà bộ lọc "không tìm thấy" đọc — export KHỎI TỆP, không khỏi gói (cùng khuôn
+// `laViPhamD2TheoThongDiep`): ca hai chiều dưới đây đối chiếu nó với thân hàm THẬT trong CSDL.
+import { RANG_BUOC_KHONG_TIM_THAY_YEU_CAU } from "./requests.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -1012,6 +1017,83 @@ describe("[INV-D3] [khoản 209 + 210] cặp nhân chứng break-glass", () => {
     }
   });
 
+  // [S1.218 / khoản 160] Khoản 160 khai "MỌI `UPDATE` về sau trên một hàng break-glass đã có nhân
+  // chứng đòi phiên nhân chứng còn sống", và S1.96 thêm lối điều phối lại (`dieuPhoiLaiSauKhiChet`)
+  // làm chỗ thứ hai nó cắn được. `055` mục (3) thu trigger về `BEFORE INSERT` nên cả hai chỗ đều
+  // hết cắn: ca ngay trên đo câu `EXECUTED`, hai ca dưới đo lối điều phối lại — đường mà chưa ca nào
+  // dựng đúng cảnh "nhân chứng chết GIỮA lần điều phối và lần bấm lại".
+  it("[INV-D3] [S1.218 / khoản 160] phiên nhân chứng bị THU HỒI: ĐIỀU PHỐI LẠI sau khi job chết VẪN đi được — câu đổi cặp người-phiên không hỏi nhân chứng nữa", async () => {
+    const { requestId } = await breakGlassDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await dotHetLuot(requestId);
+    // Nhân chứng đăng xuất SAU lần điều phối đầu và TRƯỚC lần bấm lại — đúng cảnh khoản 160 chưa đo.
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sD1]);
+    try {
+      const bangChung = await withTenant(apiPool, orgA, (c) =>
+        dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+      );
+      expect(bangChung.breakGlass, "tiền đề: đây là đường break-glass").toBe(true);
+      expect(await ketCucJob(requestId), "job cũ ở lại làm dấu vết, job mới đứng cạnh nó").toEqual(["FAILED", "PENDING"]);
+      expect((await docHangDieuPhoi(requestId)).dispatched_by_session_id).toBe(sYcB);
+      expect(await docNhanChung(requestId), "cặp nhân chứng gốc giữ nguyên — lối này không chạm nó").toEqual({ u: uD1, s: sD1 });
+      const { rows } = await db.pool.query<{ payload: { breakGlass?: unknown } }>(
+        "SELECT payload FROM audit_events WHERE action = 'UNSEAL_REDISPATCHED' AND resource_id = $1",
+        [requestId],
+      );
+      expect(rows.map((r) => r.payload.breakGlass), "D4: hàng sổ điều phối lại vẫn nói đây là break-glass").toEqual([true]);
+    } finally {
+      await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sD1]);
+    }
+  });
+
+  it("[INV-D3] [S1.218 / khoản 160] ĐỘT BIẾN: trả trigger nhân chứng về hình `022` (`BEFORE INSERT OR UPDATE`) thì ĐÚNG lối điều phối lại ấy GÃY 23514 — rồi trả lại hình `055`", async () => {
+    const docDinhNghia = async (): Promise<readonly (readonly [string, string])[]> => {
+      const { rows } = await db.pool.query<{ e: string; d: string }>(
+        "SELECT tgenabled::text AS e, pg_get_triggerdef(oid) AS d FROM pg_trigger " +
+          " WHERE tgname = 'unseal_requests_kiem_nhan_chung' AND NOT tgisinternal",
+      );
+      return rows.map((r) => [r.e, r.d] as const);
+    };
+    const hinh055 = await docDinhNghia();
+    expect(hinh055, "tiền đề: trigger đang ở hình `055` — `BEFORE INSERT`, ENABLE ALWAYS").toHaveLength(1);
+    expect(hinh055[0]?.[0]).toBe("A");
+    expect(hinh055[0]?.[1]).toMatch(/ BEFORE INSERT ON public\.unseal_requests /u);
+
+    const { requestId } = await breakGlassDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    await dotHetLuot(requestId);
+    await db.pool.query("UPDATE sessions SET revoked_at = now() WHERE id = $1", [sD1]);
+    await db.pool.query("DROP TRIGGER unseal_requests_kiem_nhan_chung ON unseal_requests");
+    try {
+      await db.pool.query(
+        "CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT OR UPDATE ON unseal_requests " +
+          " FOR EACH ROW WHEN (NEW.break_glass_witness_user_id IS NOT NULL) " +
+          " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')",
+      );
+      await db.pool.query("ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung");
+      await expect(
+        withTenant(apiPool, orgA, (c) =>
+          dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYcB }, auditPool),
+        ),
+      ).rejects.toMatchObject({ code: "23514", message: /Phien khong hop le/u });
+      expect(await ketCucJob(requestId), "không job nào được xếp — đúng cảnh khoản 160 mô tả").toEqual(["FAILED"]);
+    } finally {
+      await db.pool.query("UPDATE sessions SET revoked_at = NULL WHERE id = $1", [sD1]);
+      await db.pool.query("DROP TRIGGER IF EXISTS unseal_requests_kiem_nhan_chung ON unseal_requests");
+      await db.pool.query(
+        "CREATE TRIGGER unseal_requests_kiem_nhan_chung BEFORE INSERT ON unseal_requests " +
+          " FOR EACH ROW WHEN (NEW.break_glass_witness_user_id IS NOT NULL) " +
+          " EXECUTE FUNCTION public.kiem_danh_tinh_theo_phien('break_glass_witness_user_id', 'break_glass_witness_session_id')",
+      );
+      await db.pool.query("ALTER TABLE unseal_requests ENABLE ALWAYS TRIGGER unseal_requests_kiem_nhan_chung");
+      expect(await docDinhNghia(), "khôi phục phải trả lại ĐÚNG định nghĩa `055`, kể cả ENABLE ALWAYS").toEqual(hinh055);
+    }
+  });
+
   it("[INV-D3] [khoản 210] ĐỐI CHỨNG DƯƠNG: nhân chứng BỊA lúc CHÈN vẫn bị chặn — thu hẹp `WHEN` không tắt lớp", async () => {
     const rfqId = await taoRfqDaDong();
     await expect(
@@ -1775,5 +1857,331 @@ describe("[S1.187 / khoản 215] yêu cầu không break-glass không mang đư�
     const rfqId = await taoRfqDaDong();
     const { rowCount } = await withTenant(apiPool, orgA, (c) => c.query(CHEN, [orgA, rfqId, uYc, sYc, null, null]));
     expect(rowCount).toBe(1);
+  });
+});
+
+// ===============================================================================================
+// [S1.213 / khoản 133] BA LẦN TỪ CHỐI CỦA BỀ MẶT MỞ THẦU TỪNG KHÔNG GHI SỔ NAY VÀO SỔ
+//
+// Đo trước bản vá (§S1.72, đo lại trên `69e743e` ở §S1.213): `cancelUnseal` với id không tồn tại ⇒ `UnsealError`, 0 hàng;
+// `approveUnseal` với id không tồn tại ⇒ lỗi PostgreSQL 23503 TRẦN (trigger `unseal_kiem_nguoi_duyet` của 019 RAISE
+// `foreign_key_violation` trước cả khoá ngoại), 0 hàng — qua HTTP là 422 "tham chieu khong hop le" của bảng ánh xạ SQLSTATE;
+// `dispatchUnseal` lần hai trên yêu cầu đã điều phối mà lượt trước còn sống ⇒ `UnsealError`, 0 hàng. Chủ dự án chốt (tiểu mục
+// ADR-016 [S1.213]): D5 phủ cả ba — cùng khuôn `throwAuditedDenial`, lớp lỗi và thông điệp giữ nguyên (riêng phê duyệt: 23503 được
+// bọc thành `UnsealError` có tên, lỗi `pg` giữ ở `cause`), `resourceId` là id NGƯỜI GỌI gửi.
+// ===============================================================================================
+describe("[INV-D5] [S1.213 / khoản 133] huỷ hay phê duyệt một yêu cầu KHÔNG TÌM THẤY, và điều phối LẦN HAI khi lượt trước còn sống — mỗi lần đúng một hàng sổ", () => {
+  /** Mọi hàng mang `action` của một id — HÌNH DẠNG trọn, theo thứ tự ghi. */
+  async function hangTuChoi(action: string, resourceId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq",
+      [orgA, action, resourceId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ — cùng khuôn `voiGhiSoBiChan` của khối khoản 119. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k133_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k133 thong diep noi bo' USING ERRCODE = 'TP133'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k133_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k133_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k133_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k133_chan_ghi_so()");
+    }
+  }
+
+  it("[INV-D5] `cancelUnseal` với UUID ngẫu nhiên ⇒ `UnsealError` cùng câu như trước, và đúng một `UNSEAL_NOT_FOUND_DENIED` mang người gọi, `UNSEAL_REQUEST`, id đã gửi và tên đường", async () => {
+    const id = randomUUID();
+    const loi = await loiCua(
+      withTenant(apiPool, orgA, (c) => cancelUnseal(c, orgA, { unsealRequestId: id, actorSessionId: sYc }, auditPool)),
+    );
+    expect(loi).toBeInstanceOf(UnsealError);
+    expect((loi as Error).message).toBe(
+      "Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.",
+    );
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id)).toEqual([["USER", uYc, "UNSEAL_REQUEST", { operation: "CANCEL_UNSEAL" }]]);
+  });
+
+  it("[INV-D5] `approveUnseal` với UUID ngẫu nhiên ⇒ `UnsealError` CÓ TÊN thay 23503 trần (lỗi `pg` giữ ở `cause`), và đúng một `UNSEAL_NOT_FOUND_DENIED`", async () => {
+    const id = randomUUID();
+    const loi = await loiCua(
+      withTenant(apiPool, orgA, (c) => approveUnseal(c, orgA, { unsealRequestId: id, actorSessionId: sD1 }, auditPool)),
+    );
+    expect((loi as Error).name, "trước bản vá: `error` — lỗi PostgreSQL trần").toBe("UnsealError");
+    expect(loi).toBeInstanceOf(UnsealError);
+    expect((loi as Error).message).toBe("Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.");
+    expect(((loi as Error).cause as { code?: unknown } | undefined)?.code, "lỗi `pg` gốc đi theo ở `cause`").toBe("23503");
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id)).toEqual([["USER", uD1, "UNSEAL_REQUEST", { operation: "APPROVE_UNSEAL" }]]);
+  });
+
+  it("[INV-D5] `dispatchUnseal` lần hai khi lượt trước còn PENDING ⇒ `UnsealError` cùng câu như trước, đúng một `UNSEAL_DISPATCH_DENIED`; không job thứ hai, cặp người-phiên không đổi", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await withTenant(apiPool, orgA, (c) =>
+      dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc }, auditPool),
+    );
+    expect(await hangTuChoi("UNSEAL_DISPATCH_DENIED", requestId), "đối chứng: lần điều phối ĐẦU không phải một lần từ chối").toEqual([]);
+    const loi = await loiCua(
+      withTenant(apiPool, orgA, (c) => dispatchUnseal(c, orgA, { unsealRequestId: requestId, actorSessionId: sYc2 }, auditPool)),
+    );
+    expect(loi).toBeInstanceOf(UnsealError);
+    expect((loi as Error).message).toBe("Yêu cầu mở thầu này vẫn còn một lượt đang chờ chạy — chưa có gì để điều phối lại.");
+    expect(await hangTuChoi("UNSEAL_DISPATCH_DENIED", requestId)).toEqual([
+      ["USER", uYc2, "UNSEAL_REQUEST", { reason: "JOB_STILL_ALIVE" }],
+    ]);
+    expect(await ketCucJob(requestId), "không job thứ hai nào được xếp").toEqual(["PENDING"]);
+    expect((await docHangDieuPhoi(requestId)).dispatched_by_session_id, "cặp người-phiên KHÔNG đổi").toBe(sYc);
+  });
+
+  it("[INV-D5] ĐỐI CHỨNG DƯƠNG: id có thật — phê duyệt được, huỷ được — 0 hàng `UNSEAL_NOT_FOUND_DENIED`", async () => {
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "doi chung khoan 133", actorSessionId: sYc }, auditPool),
+    );
+    await withTenant(apiPool, orgA, (c) =>
+      approveUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sD1 }, auditPool),
+    );
+    const huy = await withTenant(apiPool, orgA, (c) =>
+      cancelUnseal(c, orgA, { unsealRequestId: yc.id, actorSessionId: sYc }, auditPool),
+    );
+    expect(huy.status).toBe("CANCELLED");
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", yc.id)).toEqual([]);
+  });
+
+  it("[INV-D5] lần ghi `UNSEAL_NOT_FOUND_DENIED` của phê duyệt ném TP133 ⇒ `DenialAuditFailedError` giữ `UnsealError` (đã bọc 23503) trong `denial`, lỗi của lần ghi trong `cause`; không hàng sổ nào", async () => {
+    const id = randomUUID();
+    const loi = await voiGhiSoBiChan("UNSEAL_NOT_FOUND_DENIED", () =>
+      loiCua(withTenant(apiPool, orgA, (c) => approveUnseal(c, orgA, { unsealRequestId: id, actorSessionId: sD1 }, auditPool))),
+    );
+    expect(loi).toBeInstanceOf(DenialAuditFailedError);
+    const x = loi as DenialAuditFailedError;
+    expect(x.denial).toBeInstanceOf(UnsealError);
+    expect(x.denial.message).toBe("Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.");
+    expect((x.cause as { code?: unknown }).code).toBe("TP133");
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id)).toEqual([]);
+  });
+});
+
+// ===============================================================================================
+// [S1.245 / khoản 266 · 267] "KHÔNG TÌM THẤY YÊU CẦU" NHẬN RA THEO TÊN RÀNG BUỘC; HUỶ MỘT YÊU CẦU KHÔNG CÒN Ở TRẠNG THÁI HUỶ ĐƯỢC
+// VÀO SỔ, VỚI CÂU RIÊNG VÀ MÃ RIÊNG
+//
+// 266 — đo trước (§S1.213, đo lại trên `a97dd48b` ở §S1.245): nhánh không thấy yêu cầu của `unseal_kiem_nguoi_duyet` (019) RAISE
+// 23503 KHÔNG tên ràng buộc, nên `laKhongTimThayYeuCau` chỉ đọc `code` — MỌI 23503 của câu INSERT ấy thành hàng `UNSEAL_NOT_FOUND_DENIED`,
+// kể cả một 23503 vì nguyên nhân khác. `098_khong_tim_thay_yeu_cau_co_ten.sql` định nghĩa lại hàm (thân trích nguyên văn, đổi đúng một
+// chỗ: `CONSTRAINT = 'unseal_approvals_yeu_cau_phai_ton_tai'`) và bộ lọc đọc `code` VÀ `constraint` — khuôn `laTrungPheDuyet` (ADR-108).
+// 267 — đo trước: huỷ một yêu cầu CÓ THẬT đã `EXECUTED`/`CANCELLED` ⇒ `UnsealError` câu gộp "không tìm thấy …, hoặc nó không ở trạng
+// thái huỷ được", 0 hàng sổ. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 5): tách câu (đổi hợp đồng — thân 422 mang `ma`, khuôn khoản
+// 230) và vào sổ `UNSEAL_CANCEL_DENIED {lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC"}` theo luật ADR-060; người tích hợp chốt thêm (khuôn khoản
+// 279, §S1.241): `lyDo` là VẾ — đối số thứ năm của `throwAuditedDenial` — để dòng log mất sổ phân biệt hai lý do của cùng `action`.
+// ===============================================================================================
+describe("[INV-D5] [S1.245 / khoản 266 · 267] 23503 \"không tìm thấy\" phải MANG TÊN; huỷ một yêu cầu không còn huỷ được để lại đúng một hàng, câu riêng, mã riêng", () => {
+  /** Câu 422 MỚI của vế trạng thái — hợp đồng, ghim nguyên văn. */
+  const CAU_KHONG_O_TRANG_THAI_HUY_DUOC =
+    "Yêu cầu mở thầu này không còn ở trạng thái huỷ được — nó đã được mở thầu hoặc đã bị huỷ.";
+  /** Câu CŨ của nhánh không tìm thấy — giữ nguyên (thân 422 của khoản 133). */
+  const CAU_KHONG_TIM_THAY_KHI_HUY = "Không tìm thấy yêu cầu mở thầu trong tổ chức đang gắn.";
+
+  /** Mọi hàng mang `action` của một id — HÌNH DẠNG trọn, theo thứ tự ghi. */
+  async function hangTuChoi(action: string, resourceId: string): Promise<unknown[][]> {
+    const { rows } = await db.pool.query<{ actor_type: string; actor_id: string | null; resource_type: string; payload: unknown }>(
+      "SELECT actor_type, actor_id, resource_type, payload FROM audit_events " +
+        " WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq",
+      [orgA, action, resourceId],
+    );
+    return rows.map((r) => [r.actor_type, r.actor_id, r.resource_type, r.payload]);
+  }
+
+  const loiCua = (p: Promise<unknown>): Promise<unknown> =>
+    p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+  const huy = (unsealRequestId: string, actorSessionId: string): Promise<unknown> =>
+    loiCua(withTenant(apiPool, orgA, (c) => cancelUnseal(c, orgA, { unsealRequestId, actorSessionId }, auditPool)));
+
+  /** Chặn ĐÚNG lần ghi mang `action` bằng một trigger trên sổ — cùng khuôn `voiGhiSoBiChan` của khối khoản 119/133. */
+  async function voiGhiSoBiChan<T>(action: string, viec: () => Promise<T>): Promise<T> {
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.k267_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'k267 thong diep noi bo' USING ERRCODE = 'TP267'; END$$",
+      );
+      await db.pool.query(
+        `CREATE TRIGGER k267_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = '${action}') ` +
+          "EXECUTE FUNCTION public.k267_chan_ghi_so()",
+      );
+      return await viec();
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS k267_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.k267_chan_ghi_so()");
+    }
+  }
+
+  /** Băm rút gọn của khe `nguoi=` — cùng công thức ADR-127 khai (sha256 của userId, 12 hex đầu). */
+  const bamNguoi = (userId: string): string => createHash("sha256").update(userId, "utf8").digest("hex").slice(0, 12);
+
+  /** Thân và `proconfig` của hàm đang chạy — để đo đột biến lúc chạy rồi đòi trả lại đúng như cũ. */
+  async function hamDangChay(): Promise<{ src: string; cfg: string[] | null }> {
+    const { rows } = await db.pool.query<{ src: string; cfg: string[] | null }>(
+      "SELECT p.prosrc AS src, p.proconfig AS cfg FROM pg_catalog.pg_proc p WHERE p.oid = to_regprocedure('public.unseal_kiem_nguoi_duyet()')",
+    );
+    const h = rows[0];
+    if (h === undefined) throw new Error("không thấy public.unseal_kiem_nguoi_duyet() trong CSDL");
+    return h;
+  }
+
+  it("[INV-D5] [khoản 266] `approveUnseal` với UUID ngẫu nhiên ⇒ 23503 MANG TÊN `unseal_approvals_yeu_cau_phai_ton_tai` ở `cause`, `UnsealError` có tên và đúng một `UNSEAL_NOT_FOUND_DENIED`", async () => {
+    const id = randomUUID();
+    const loi = await loiCua(
+      withTenant(apiPool, orgA, (c) => approveUnseal(c, orgA, { unsealRequestId: id, actorSessionId: sD1 }, auditPool)),
+    );
+    expect(loi).toBeInstanceOf(UnsealError);
+    const goc = (loi as Error).cause as { code?: unknown; constraint?: unknown } | undefined;
+    expect(
+      { code: goc?.code, constraint: goc?.constraint },
+      "trước khoản 266: `constraint` rỗng — trigger 019 RAISE 23503 không `USING CONSTRAINT`",
+    ).toEqual({ code: "23503", constraint: "unseal_approvals_yeu_cau_phai_ton_tai" });
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id)).toEqual([["USER", uD1, "UNSEAL_REQUEST", { operation: "APPROVE_UNSEAL" }]]);
+  });
+
+  it("[khoản 266] ĐỘT BIẾN LÚC CHẠY: thân hàm trả về bản `019` (23503 KHÔNG tên) ⇒ lỗi `pg` đi NGUYÊN — không `UnsealError`, 0 hàng `UNSEAL_NOT_FOUND_DENIED`; thân được trả lại đúng như cũ", async () => {
+    // Một 23503 không mang tên của nhánh "không tìm thấy" là đúng hình dạng của một 23503 vì nguyên nhân KHÁC trên câu INSERT ấy (khoá
+    // ngoại người duyệt, khoá ngoại thêm sau): đường lỗi CHUNG, không một hàng sổ nói sai nguyên nhân. Dựng nó bằng cách chạy lại
+    // NGUYÊN VĂN câu `CREATE OR REPLACE FUNCTION` của `019` lúc chạy — sửa tệp thì hardening âm thầm dựng lại thân chuẩn (khoản 140).
+    const sql019 = readFileSync(fileURLToPath(new URL("../../../db/migrations/019_unseal.sql", import.meta.url)), "utf8");
+    const dau = sql019.indexOf("CREATE OR REPLACE FUNCTION public.unseal_kiem_nguoi_duyet()");
+    const cuoi = sql019.indexOf("$ham$;", sql019.indexOf("AS $ham$", dau) + 8);
+    expect([dau, cuoi].every((v) => v > 0), "đọc được câu định nghĩa hàm ở 019").toBe(true);
+    const cau019 = sql019.slice(dau, cuoi + "$ham$;".length);
+    expect(cau019, "tiền đề: bản 019 không mang tên ràng buộc").not.toMatch(/CONSTRAINT\s*=/u);
+
+    const truoc = await hamDangChay();
+    const { rows: dn } = await db.pool.query<{ d: string }>(
+      "SELECT pg_catalog.pg_get_functiondef(to_regprocedure('public.unseal_kiem_nguoi_duyet()')) AS d",
+    );
+    const dinhNghiaTruoc = dn[0]?.d ?? "";
+    expect(dinhNghiaTruoc).toContain("unseal_kiem_nguoi_duyet");
+    const id = randomUUID();
+    let loi: unknown;
+    try {
+      await db.pool.query(cau019);
+      expect((await hamDangChay()).src, "tiền đề: thân đang chạy là thân 019").not.toMatch(/CONSTRAINT\s*=/u);
+      loi = await loiCua(
+        withTenant(apiPool, orgA, (c) => approveUnseal(c, orgA, { unsealRequestId: id, actorSessionId: sD1 }, auditPool)),
+      );
+    } finally {
+      await db.pool.query(dinhNghiaTruoc);
+    }
+    expect(await hamDangChay(), "thân và proconfig phải được trả lại đúng như trước đột biến").toEqual(truoc);
+    expect((loi as Error | null)?.name, "23503 KHÔNG tên đi nguyên — lỗi `pg` trần, không `UnsealError`").toBe("error");
+    expect(loi).not.toBeInstanceOf(UnsealError);
+    const e = loi as { code?: unknown; constraint?: unknown };
+    expect({ code: e.code, constraint: e.constraint }).toEqual({ code: "23503", constraint: undefined });
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id), "0 hàng — một 23503 không tên không được ghi thành 'không tìm thấy'").toEqual([]);
+  });
+
+  it("[khoản 266] tên ràng buộc HAI CHIỀU: các `CONSTRAINT = '…'` trong thân `unseal_kiem_nguoi_duyet` THẬT trong CSDL đúng bằng tên mà `requests.ts` đọc", async () => {
+    // Khuôn phép đo hai chiều của ADR-108 ④: đổi tên ở một phía mà quên phía kia là đỏ — ở đây chứ không ở một ca "không tìm thấy"
+    // im lặng rơi về đường lỗi chung.
+    const { src } = await hamDangChay();
+    const ten = [...src.matchAll(/CONSTRAINT\s*=\s*'([a-z0-9_]+)'/gu)].map((m) => m[1]);
+    expect(ten).toEqual([RANG_BUOC_KHONG_TIM_THAY_YEU_CAU]);
+  });
+
+  it("[INV-D5] [khoản 267] `cancelUnseal` trên yêu cầu đã `EXECUTED` ⇒ `UnsealError` câu RIÊNG, `ma` `KHONG_O_TRANG_THAI_HUY_DUOC`, đúng một `UNSEAL_CANCEL_DENIED {lyDo}` mang người gọi; không hàng 'không tìm thấy', trạng thái không đổi", async () => {
+    const { requestId } = await yeuCauDaDuyet();
+    await db.pool.query("UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1", [requestId]);
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", requestId), "đối chứng: chưa lần từ chối huỷ nào").toEqual([]);
+    const loi = await huy(requestId, sYc);
+    expect(loi).toBeInstanceOf(UnsealError);
+    expect((loi as Error).message, "trước khoản 267: câu gộp 'không tìm thấy …, hoặc …'").toBe(CAU_KHONG_O_TRANG_THAI_HUY_DUOC);
+    expect((loi as UnsealError).ma).toBe("KHONG_O_TRANG_THAI_HUY_DUOC");
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", requestId), "trước khoản 267: 0 hàng").toEqual([
+      ["USER", uYc, "UNSEAL_REQUEST", { lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }],
+    ]);
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", requestId), "hàng CÓ THẬT — không phải 'không tìm thấy'").toEqual([]);
+    expect((await docHangDieuPhoi(requestId)).status).toBe("EXECUTED");
+  });
+
+  it("[INV-D5] [khoản 267] `cancelUnseal` lần HAI trên yêu cầu đã `CANCELLED` ⇒ cùng câu, cùng mã, đúng một `UNSEAL_CANCEL_DENIED` — lần huỷ đầu không để lại lần từ chối nào", async () => {
+    const rfqId = await taoRfqDaDong();
+    const yc = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "huy hai lan khoan 267", actorSessionId: sYc }, auditPool),
+    );
+    expect(await huy(yc.id, sYc), "lần huỷ đầu đi qua").toBeNull();
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", yc.id), "đối chứng: lần huỷ đầu không phải một lần từ chối").toEqual([]);
+    const loi = await huy(yc.id, sYc);
+    expect(loi).toBeInstanceOf(UnsealError);
+    expect([(loi as Error).message, (loi as UnsealError).ma]).toEqual([CAU_KHONG_O_TRANG_THAI_HUY_DUOC, "KHONG_O_TRANG_THAI_HUY_DUOC"]);
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", yc.id)).toEqual([["USER", uYc, "UNSEAL_REQUEST", { lyDo: "KHONG_O_TRANG_THAI_HUY_DUOC" }]]);
+  });
+
+  it("[INV-D5] [khoản 267] ĐỐI CHỨNG: id lạ vẫn là 'không tìm thấy' — câu CŨ, không `ma`, không `UNSEAL_CANCEL_DENIED`; và người không được huỷ vẫn nhận lý do người, không `ma`", async () => {
+    const id = randomUUID();
+    const khongThay = await huy(id, sYc);
+    expect(khongThay).toBeInstanceOf(UnsealError);
+    expect([(khongThay as Error).message, (khongThay as UnsealError).ma]).toEqual([CAU_KHONG_TIM_THAY_KHI_HUY, null]);
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", id)).toEqual([]);
+    expect(await hangTuChoi("UNSEAL_NOT_FOUND_DENIED", id)).toEqual([["USER", uYc, "UNSEAL_REQUEST", { operation: "CANCEL_UNSEAL" }]]);
+
+    // `uYc2` giữ `rfq.unseal`, không phải người yêu cầu, không giữ `rfq.unseal.approve` — vế AI ĐƯỢC HUỶ đứng TRƯỚC vế trạng thái.
+    const { requestId } = await yeuCauDaDuyet();
+    await db.pool.query("UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1", [requestId]);
+    const khongDuoc = await huy(requestId, sYc2);
+    expect(khongDuoc).toBeInstanceOf(UnsealError);
+    expect((khongDuoc as UnsealError).ma, "thân 422 của vế người không đổi — chỉ vế trạng thái mang `ma`").toBeNull();
+    expect(await hangTuChoi("UNSEAL_CANCEL_DENIED", requestId)).toEqual([
+      ["USER", uYc2, "UNSEAL_REQUEST", { lyDo: "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC" }],
+    ]);
+  });
+
+  it("[INV-D5] [khoản 267] ĐỐI CHỨNG DƯƠNG: huỷ yêu cầu `PENDING` và `APPROVED` đi qua — 0 hàng `UNSEAL_CANCEL_DENIED`", async () => {
+    const rfqId = await taoRfqDaDong(true);
+    const choDuyet = await withTenant(apiPool, orgA, (c) =>
+      requestUnseal(c, orgA, { rfqId, reason: "doi chung khoan 267", actorSessionId: sYc }, auditPool),
+    );
+    expect(await huy(choDuyet.id, sYc)).toBeNull();
+    const { requestId: daDuyet } = await yeuCauDaDuyet();
+    expect(await huy(daDuyet, sYc)).toBeNull();
+    expect([...(await hangTuChoi("UNSEAL_CANCEL_DENIED", choDuyet.id)), ...(await hangTuChoi("UNSEAL_CANCEL_DENIED", daDuyet))]).toEqual([]);
+    expect((await docHangDieuPhoi(daDuyet)).status).toBe("CANCELLED");
+  });
+
+  it("[INV-D5] [khoản 267] lần ghi `UNSEAL_CANCEL_DENIED` bị chặn ⇒ `DenialAuditFailedError` mang VẾ — hai lý do của cùng `action` ra HAI dòng log khác nhau; không hàng sổ nào", async () => {
+    const { requestId: daChay } = await yeuCauDaDuyet();
+    await db.pool.query("UPDATE unseal_requests SET status = 'EXECUTED', executed_at = now() WHERE id = $1", [daChay]);
+    const { requestId: conSong } = await yeuCauDaDuyet();
+    const [trangThai, nguoi] = await voiGhiSoBiChan("UNSEAL_CANCEL_DENIED", async () => [await huy(daChay, sYc), await huy(conSong, sYc2)]);
+
+    expect(trangThai, "vế trạng thái: lần ghi gãy ⇒ gãy ỒN ÀO, không lời từ chối trần").toBeInstanceOf(DenialAuditFailedError);
+    const x = trangThai as DenialAuditFailedError;
+    expect([x.action, x.clause, x.denial.message]).toEqual(["UNSEAL_CANCEL_DENIED", "KHONG_O_TRANG_THAI_HUY_DUOC", CAU_KHONG_O_TRANG_THAI_HUY_DUOC]);
+    expect((x.cause as { code?: unknown }).code).toBe("TP267");
+    expect(moTaHangDongCuaLanTuChoi(x)).toBe(`UNSEAL_CANCEL_DENIED UNSEAL_REQUEST KHONG_O_TRANG_THAI_HUY_DUOC nguoi=${bamNguoi(uYc)}`);
+
+    expect(nguoi).toBeInstanceOf(DenialAuditFailedError);
+    const y = nguoi as DenialAuditFailedError;
+    expect([y.action, y.clause]).toEqual(["UNSEAL_CANCEL_DENIED", "KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC"]);
+    expect(moTaHangDongCuaLanTuChoi(y), "trước vòng này: `… UNSEAL_CANCEL_DENIED UNSEAL_REQUEST nguoi=…` — không nói lý do nào").toBe(
+      `UNSEAL_CANCEL_DENIED UNSEAL_REQUEST KHONG_PHAI_NGUOI_YEU_CAU_VA_KHONG_DUYET_DUOC nguoi=${bamNguoi(uYc2)}`,
+    );
+    expect([...(await hangTuChoi("UNSEAL_CANCEL_DENIED", daChay)), ...(await hangTuChoi("UNSEAL_CANCEL_DENIED", conSong))]).toEqual([]);
+    expect((await docHangDieuPhoi(conSong)).status, "lần từ chối không đổi trạng thái").toBe("APPROVED");
   });
 });

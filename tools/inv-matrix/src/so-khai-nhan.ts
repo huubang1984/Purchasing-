@@ -32,6 +32,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // `log-tu-choi-mat` qua HTTP trên tiến trình thật (dòng không mang id tổ chức, id người dùng hay thân yêu cầu).
     "apps/api/src/log-tu-choi-mat.int.test.ts",
     "packages/identity/src/mo-ta-hang-dong.test.ts",
+    // [S1.222 / khoản 166] `moTaLoiKhongGiaTri` nay MỘT bản ở identity: `mo-ta-loi.test.ts` của gói đo luật A2 ở mức hàm trên lớp lỗi
+    // thật (`DenialAuditFailedError` mang cause 55P03, `TenantError` — không message, không giá trị), và vế khoản 166 của
+    // `composition.int.test.ts` đo dòng log của worker dựng từ cấu hình (không id yêu cầu, id tổ chức, id job, không thông điệp Postgres).
+    "apps/unseal-worker/src/composition.int.test.ts",
+    "packages/identity/src/mo-ta-loi.test.ts",
   ],
   A3: [
     "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
@@ -198,6 +203,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "apps/api/src/routes.test.ts",
   ],
   F1: [
+    // [S1.233 / khoản 158] Tập `kind` của hai policy RESTRICTIVE FOR UPDATE trên `outbox_jobs` (095) BẰNG bảng handler ∪ sổ mồ côi
+    // của tiến trình chạy dưới vai ấy — đọc `pg_policy`, đối chiếu với `Object.keys(handlers)` thật; thêm `kind` mà quên migration
+    // thì đỏ ở tệp của tiến trình thêm, trước khi job của nó nằm PENDING im lặng (F1: RLS không là đường làm câu ghi trả 0 hàng im lặng).
+    "apps/api/src/composition.int.test.ts",
+    "apps/unseal-worker/src/composition.int.test.ts",
     "db/migration-shape.test.ts",
     "db/migrations.int.test.ts",
     "db/rls-coverage.int.test.ts",
@@ -432,7 +442,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   // [S1.199 / S4.2b] `du-lieu` (apps/api) đo cổng ghi ở TẦNG ỨNG DỤNG: người giữ vai khác gọi tám route ghi qua HTTP ⇒ 403 và
   // hàng PERMISSION_DENIED, không hàng dữ liệu nền nào — lớp đứng trên cổng CSDL mà `hang-chuan` đo (L3).
+  // [S1.234 / S4.3b] `anh-xa` (apps/api) đo cùng lớp cho ba route ghi ánh xạ: người tạo gói gọi ⇒ 403, không hàng ánh xạ nào.
   L3: [
+    "apps/api/src/anh-xa.int.test.ts",
     "apps/api/src/du-lieu.int.test.ts",
     "packages/du-lieu-nen/src/anh-xa.int.test.ts",
     "packages/du-lieu-nen/src/hang-chuan.int.test.ts",
@@ -443,6 +455,21 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   L2: ["packages/du-lieu-nen/src/anh-xa.int.test.ts", "packages/du-lieu-nen/src/chuan-hoa.test.ts"],
   L13: ["packages/du-lieu-nen/src/anh-xa.int.test.ts"],
   L4: ["packages/du-lieu-nen/src/don-vi.int.test.ts", "packages/du-lieu-nen/src/hang-chuan.int.test.ts"],
+  // L5 — [S1.235 / S4.4a] nguồn quan sát giá. `lich-su-gia` đo ba hàm SQL trên Postgres thật dưới `app_api`: bộ đọc dòng (sáu ca
+  // của `bid_so_tien`, phép so tổng), vị từ *"giá đã lộ"* tại mốc (BAFO, huỷ, không đọc `status`), hàm as-of (sáu trạng thái, hàng
+  // nền tại mốc, hai nhãn, hai nhánh trùng khít) và tập hàm chạm bản rõ; `ban-ro-liet-ke` là ranh giới tĩnh — mọi tệp TypeScript
+  // và hàm SQL chạm `rfq_unsealed_bids` có tên và lý do.
+  L5: ["packages/du-lieu-nen/src/lich-su-gia.int.test.ts", "tests/architecture/ban-ro-liet-ke.test.ts"],
+  // L6 — [S1.251 / S4.4b] vế lịch sử giá. Kịch bản 41 qua HTTP đo route thật ở bốn trạng thái của gói (UNSEALED, BAFO_OPEN,
+  // BAFO_CLOSED, BAFO_UNSEALED) cùng đối chứng dương của bộ quét đơn giá; `lich-su-gia` đo `docLichSuGia` ở tầng gói (cổng, hình
+  // dạng đóng, hàng sổ, fail-closed); `quet-gia` là đối chứng dương của bộ quét giá chung trên bốn loại quan hệ.
+  L6: [
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    "packages/du-lieu-nen/src/lich-su-gia.int.test.ts",
+    "packages/test-support/src/quet-gia.int.test.ts",
+    // [lượt soi §S1.251 — T2] đường đọc DUY NHẤT của `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất.
+    "tests/architecture/ban-ro-liet-ke.test.ts",
+  ],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],

@@ -46,12 +46,45 @@ export function layDauXepViec(client: pg.PoolClient): boolean {
   return co;
 }
 
+// ==============================================================================================
+// [S1.239 / khoản 161] TẬP `kind` CỦA KHO — MỘT UNION, KHAI Ở ĐÚNG MỘT CHỖ LÀ ĐÂY
+//
+// Tới vòng này `JobInput.kind` là `string`, và câu hỏi *"kho xếp những kind nào"* chỉ trả lời được bằng
+// một phép quét VĂN BẢN ba hình dạng ở cổng khoản 34 (`apps/unseal-worker/src/composition.int.test.ts`):
+// `kind: "X"` trong lời gọi, một hằng tên `…_KIND`, và một `INSERT INTO outbox_jobs` viết tay. Một kind
+// truyền qua biến tên khác, qua template hay qua chuỗi ghép lọt cả ba (§S1.81) — đo trước ở §S1.239: ba
+// lời gọi như thế trong mã sản xuất ⇒ cổng xanh, `tsc` thoát 0 — và khi không runner nào có nó trong mảng
+// lọc, job nằm `PENDING` im lặng.
+//
+// Nay tập ấy là một KIỂU: một kind ngoài năm tên dưới đây không biên dịch ở bất kỳ chỗ gọi nào. Cổng
+// `tests/architecture/kind-outbox-mot-cho.test.ts` đòi thêm: ở mọi lời gọi `enqueueJob` trong mã sản xuất,
+// `kind` là một LITERAL — không biến, không hằng, không template, không ghép, không ép kiểu — để kiểu
+// không bị qua mặt bằng `as` và để kind đọc được ngay tại chỗ gọi; nó cũng đọc CHÍNH khai báo này (một
+// union literal, theo bảng chữ cái). Cổng khoản 34 đọc union này thay cho hai mẫu văn bản TypeScript cũ,
+// đòi nó bằng hợp hai bảng handler với sổ mồ côi, và vẫn quét `INSERT` viết tay (trigger `019`).
+//
+// Theo vai (ADR-134, `095`): tiến trình `api` nhận LOGIN_LINK_SEND, RFQ_DEADLINE_EXTENDED_NOTICE,
+// UNSEAL_APPROVAL_NOTICE; worker nhận BREAK_GLASS_UNSEAL_ALERT (chỉ xếp bằng SQL — trigger `019`) và
+// UNSEAL_RFQ. Thêm một kind: thêm vào đây, viết handler ở ĐÚNG MỘT tiến trình, thêm migration
+// `ALTER POLICY` (ADR-134) — ba cổng đỏ tới khi đủ cả ba.
+//
+// Không ra cửa `index.ts` (danh sách trắng barrel khoá): người gọi đọc nó qua `JobInput["kind"]`.
+// ==============================================================================================
+export type KindOutbox =
+  | "BREAK_GLASS_UNSEAL_ALERT"
+  | "LOGIN_LINK_SEND"
+  | "RFQ_DEADLINE_EXTENDED_NOTICE"
+  | "UNSEAL_APPROVAL_NOTICE"
+  | "UNSEAL_RFQ";
+
 export interface JobInput {
   /**
    * Loại việc. Ràng buộc CẤU TRÚC ở tầng CSDL: `^[A-Z][A-Z0-9_]{0,63}$` (xem 007_outbox.sql).
    * Đây là một NHÃN mà `app_api` đọc lại được, không phải chỗ chứa dữ liệu.
+   *
+   * ~~`string`~~ **[S1.239 / khoản 161]** Một thành viên của `KindOutbox` ở trên, viết LITERAL tại chỗ gọi.
    */
-  readonly kind: string;
+  readonly kind: KindOutbox;
   /**
    * Nội dung của việc.
    *

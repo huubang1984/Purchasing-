@@ -5,6 +5,9 @@
 //   POST /auth/redeem   {orgId, token}        → đã có TOTP chưa; nếu chưa: ghi danh, trả bí mật MỘT LẦN
 //   POST /auth/totp     {orgId, token, code}  → phiên ĐÃ MFA, đi ra bằng cookie `__Host-tp_session`
 //   POST /auth/logout   (cookie)              → thu hồi phiên, xoá cookie — route "tự thân", không mã quyền
+//   GET  /auth/login-links (cookie)           → [S1.216 / khoản 195] link đăng nhập gần đây của CHÍNH người gọi — route
+//                                               ĐỌC, không mã quyền, đóng với chứng chỉ agent; không bao giờ `token_hash`;
+//                                               [S1.240 / khoản 268] 7 ngày, tối đa 100 hàng, `truncated` nói «còn nữa»
 //
 // E2 cho người mua: token magic link KHÔNG mở phiên — chỉ `/auth/totp` mở, và nó đòi mã.
 // E6: token chỉ đi trong THÂN; link là ~~`/login#<token>`~~ [S1.176 / ADR-107] `/login#<orgId>:<token>` (trang
@@ -19,6 +22,7 @@ import {
   AgentSessionAuditBusyError,
   LoginTokenError,
   MFA_TRAN_SAI_DUONG_PHU,
+  listRecentLoginTokens,
   redeemLoginToken,
   revokeSession,
   startAgentSession,
@@ -27,9 +31,9 @@ import {
 } from "@trustprocure/identity";
 import { enqueueJob } from "@trustprocure/outbox";
 import { HttpError } from "../http.js";
-import { EMAIL_MAX_BYTES, LOGIN_LINK_SEND_KIND } from "../outbox-api.js";
+import { EMAIL_MAX_BYTES } from "../outbox-api.js";
 import { THAN_429_MFA } from "../route-types.js";
-import type { AnonRoute, BuyerSelfRoute } from "../route-types.js";
+import type { AnonRoute, BuyerReadRoute, BuyerSelfRoute } from "../route-types.js";
 
 /**
  * [sổ nợ 42 / review L-2] Tiền tố `__Host-`: trình duyệt chỉ nhận cookie này khi nó đến từ một
@@ -120,7 +124,8 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
       // savepoint để giao dịch không bị bỏ dở, và không có gì để đánh thức.
       await ctx.client.query("SAVEPOINT xep_hang");
       try {
-        await enqueueJob(ctx.client, ctx.orgId, { kind: LOGIN_LINK_SEND_KIND, payload: { email } });
+        // [S1.239 / khoản 161] `kind` LITERAL tại chỗ gọi (union `KindOutbox`) — cổng tests/architecture/kind-outbox-mot-cho.test.ts.
+        await enqueueJob(ctx.client, ctx.orgId, { kind: "LOGIN_LINK_SEND", payload: { email } });
       } catch (e) {
         if (!(e instanceof Error && "code" in e && e.code === "23503")) throw e;
         await ctx.client.query("ROLLBACK TO SAVEPOINT xep_hang");
@@ -213,7 +218,10 @@ export const ROUTES_AUTH: readonly AnonRoute[] = [
   },
 ];
 
-export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
+// [S1.216 / khoản 195] Nhóm này nay mang cả một route ĐỌC của người mua (`GET /auth/login-links`): cùng họ "chạm chính phiên/danh
+// tính của người gọi, không mã quyền", nhưng kiểu `BuyerSelfRoute` là của route GHI tự thân (`mutates: true`, `/auth/*`), còn một
+// phép đọc là `BuyerReadRoute` — `timViPhamBangRoute` không cho một GET đổi trạng thái. Nới kiểu của mảng, giữ tên để `routes.ts` không đổi.
+export const ROUTES_AUTH_SELF: readonly (BuyerSelfRoute | BuyerReadRoute)[] = [
   {
     method: "POST",
     path: "/auth/logout",
@@ -259,6 +267,15 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
     //     lập luận nào — người đọc sau sẽ tin rằng lớp ấy có.
     //   • Token đi trong THÂN, không trong cookie: người vận hành chép nó sang biến môi trường
     //     của tiến trình MCP. Cookie không giúp được gì cho một tiến trình không phải trình duyệt.
+    //
+    // [S1.209 / khoản 174] HỆ QUẢ VẬN HÀNH của giao điểm 144 × 153, nói ra: chứng chỉ agent có TTL trần
+    // một giờ và cách DUY NHẤT có chứng chỉ mới là gọi lại route này với một mã TOTP tươi; còn trần
+    // `mfaTranDuongPhu` dưới đây đọc `failed_attempts` — bộ đếm mà đường đăng nhập chính cũng tăng.
+    // Nên một người đã gõ sai TOTP đủ `MFA_TRAN_SAI_DUONG_PHU` lần (= 2) trên `/auth/totp` thì KHÔNG
+    // xoay được chứng chỉ agent — route trả 429 trước khi thử mã, KỂ CẢ mã đúng — cho tới khi họ đăng
+    // nhập đúng một lần trên đường chính (một lần đúng đặt bộ đếm về 0); một tiến trình MCP đang
+    // chạy sẽ dừng ở giờ kế tiếp. Fail-closed CÓ CHỦ Ý và đúng thứ tự ưu tiên: đường phát agent là
+    // đường PHỤ, đường đăng nhập mới là đường phải luôn mở. Ghim ở `auth.int.test.ts` vế ⑽.
     // ==========================================================================================
     method: "POST",
     path: "/auth/agent-session",
@@ -286,10 +303,15 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         ctx.client,
         // [S1.83 / lượt soi ngang 73 — khoản 144] NGƯỠNG ĐI XUỐNG TỚI CÂU LỆNH. Cổng ở bộ điều
         // phối là một đường tắt không thẩm quyền (nó tự khai thế); thứ giữ ngưỡng đứng khi N lời
-        // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
+        // gọi chạy cùng lúc là vị từ trong `CAU_DAT_COC`. ~~Cùng một hằng `MFA_TRAN_SAI_DUONG_PHU`
         // được dùng ở cả hai chỗ — khai `mfaTranDuongPhu` của route ngay trên và ở đây — nên hai
-        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.
-        { orgId: ctx.orgId, userId: ctx.actor.id, code, tranDuongPhu: MFA_TRAN_SAI_DUONG_PHU },
+        // nơi không trôi khỏi nhau được mà không ai đổi chính hằng ấy.~~ **[S1.209 / khoản 188]
+        // Câu gạch đúng cho GIÁ TRỊ, sai cho SỰ CÓ MẶT (S1.87): một handler quên dòng này thì không
+        // cổng nào kêu.** Nay ngưỡng chỉ có MỘT nguồn — lời khai `mfaTranDuongPhu` của route — và bộ
+        // điều phối đưa nó vào `ctx.mfaTranDuongPhu`; handler không tự nhập hằng nữa (`routes.test.ts`
+        // canh cả hai chiều: câu lệnh nhận đúng thứ trong `ctx`, và hằng không xuất hiện trong thân
+        // handler nào). `null` ở đây nghĩa là route KHÔNG khai ngưỡng ⇒ không truyền; route này khai.
+        { orgId: ctx.orgId, userId: ctx.actor.id, code, tranDuongPhu: ctx.mfaTranDuongPhu ?? undefined },
         ctx.services.totpSecretUnsealer,
       );
       if (!kq.ok) {
@@ -337,6 +359,34 @@ export const ROUTES_AUTH_SELF: readonly BuyerSelfRoute[] = [
         status: 200,
         body: { token: phien.token, expiresInSeconds: phien.expiresInSeconds, kind: "AGENT_READONLY" },
       };
+    },
+  },
+  {
+    // ==========================================================================================
+    // [S1.216 / khoản 195 / ADR-126] TỰ XEM LINK ĐĂNG NHẬP GẦN ĐÂY — vế «báo ngay» của khoản 195.
+    //
+    // `/auth/redeem` và `/auth/totp` trả CÙNG một câu cho ba trạng thái token (không hợp lệ / hết hạn / đã
+    // dùng), và phải thế: ở đường vô danh, nói khác đi là cho kẻ cầm một mã lạ biết mã ấy còn sống không.
+    // Nhưng vế "đã dùng" là vế người mua cần thấy — *có kẻ đã dùng link của tôi* — và tới trước vòng này
+    // chỉ ai mở được cơ sở dữ liệu mới thấy. Đường này mở cho người ĐÃ chứng minh danh tính: phiên đã MFA
+    // (mọi phiên người mua qua `resolveSessionByToken` đều thế), và máy chủ lấy người từ cookie — không có
+    // tham số nào để hỏi link của người khác. Route ĐỌC, không mã quyền, cùng khuôn `/me`: nó chỉ trả hàng
+    // của chính người gọi, dưới RLS của tổ chức (`listRecentLoginTokens`, không bao giờ `token_hash`).
+    // ==========================================================================================
+    method: "GET",
+    path: "/auth/login-links",
+    audience: "BUYER",
+    mutates: false,
+    // [khoản 141] Một chứng chỉ agent rò KHÔNG được đọc lịch sử link đăng nhập của chủ nó: danh sách này nói
+    // người ấy đăng nhập lúc nào và link nào còn sống — thứ một kẻ cầm cookie agent dùng để canh thời điểm.
+    // Đóng; `routes.test.ts` ghim quyết định này.
+    agent: false,
+    handler: async (ctx) => {
+      // `ctx.actor.id` — dẫn xuất từ cookie ở bộ điều phối, không từ thân hay đường dẫn.
+      const { links, truncated } = await listRecentLoginTokens(ctx.client, ctx.orgId, ctx.actor.id);
+      // [S1.240 / khoản 268 / ADR-126] Hợp đồng đổi theo hướng THÊM: `loginLinks` giữ nguyên năm trường, `truncated` mới — đúng khi
+      // còn link trong cửa sổ 7 ngày mà trần 100 hàng cắt đi, để trang nói «còn nữa» thay vì một danh sách cắt mà không nói mình cắt.
+      return { status: 200, body: { loginLinks: links, truncated } };
     },
   },
 ];

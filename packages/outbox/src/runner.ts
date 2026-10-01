@@ -84,8 +84,11 @@ export type JobHandler = (job: OutboxJob, client: pg.PoolClient) => Promise<void
  * S1.79 đã vá bản sao thứ tư (`:320-323`), cách đó hai trăm dòng. Phép đo về chính lượt quét ấy:
  * nó bám vào chuỗi *"apps/ rỗng"* chứ không vào TÍNH CHẤT, nên hai câu cùng nghĩa viết khác chữ
  * thì chỉ một câu được vá.** Cài đặt sản phẩm CÓ từ S1.10: `apps/api/src/composition.ts` tiêm một
- * lister thật. Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
- * điều đó ghi ở chính chỗ nó.
+ * lister thật. ~~Nó KHÔNG giữ được vế ĐẦY ĐỦ (tập "tổ chức tiến trình này đã thấy enqueue"), và
+ * điều đó ghi ở chính chỗ nó.~~ **[S1.248 / khoản 277]** Nay lister ấy là tập "đã thấy enqueue" HỢP
+ * với tập hàm hẹp `public.outbox_to_chuc_co_viec_api()` trả (tổ chức có job `PENDING` thuộc tập
+ * `kind` của `api`, ADR-040 tiểu mục): ĐẦY ĐỦ cho mọi job `PENDING` của `api`, không cho job `RUNNING`
+ * hết hạn thuê của tổ chức tiến trình chưa thấy (khoản 307) — điều đó ghi ở chính chỗ nó.
  *
  * ~~Đường cài đặt ĐẦY ĐỦ đã được đo là KHÔNG cần role vượt RLS: một hàm `SECURITY DEFINER` do
  * CHỦ SỞ HỮU BẢNG sở hữu, `REVOKE FROM PUBLIC` + `GRANT EXECUTE` cho đúng role runner, thân là
@@ -194,16 +197,20 @@ export interface JobRunnerOptions {
    * trạng thái cuối một cách ỒN ÀO thay vì để chúng nằm `PENDING` im lặng.
    *
    * Từ S1.81 `CAU_CLAIM` lọc theo `kind`, và mảng lọc là `Object.keys(handlers)` hợp với mảng
-   * này. Không có nó, một `kind` mà KHÔNG tiến trình nào nhận (hôm nay:
-   * `RFQ_DEADLINE_EXTENDED_NOTICE`) thôi bị claim, nên nó thôi để lại cả dòng log lẫn hàng
+   * này. Không có nó, một `kind` mà KHÔNG tiến trình nào nhận (~~hôm nay:
+   * `RFQ_DEADLINE_EXTENDED_NOTICE`~~ [S1.222] `kind` ấy có chặng cuối ở `api` từ S1.91, và sổ mồ
+   * côi hôm nay RỖNG) thôi bị claim, nên nó thôi để lại cả dòng log lẫn hàng
    * `FAILED` — vị từ lọc khi ấy đổi một thất bại ỒN ÀO thành một thất bại IM LẶNG, đúng lớp
    * khiếm khuyết mà nhánh `NO_HANDLER` sinh ra để chặn.
    *
    * Nguồn duy nhất nên truyền vào đây là `KIND_KHONG_NGUOI_NHAN` (`so-kind-mo-coi.ts`), và
    * ĐÚNG MỘT tiến trình được truyền: hai tiến trình cùng khai thì cả hai cùng tranh nhau đưa một
-   * job mồ côi tới trạng thái cuối. Một `kind` khai ở đây mà tiến trình KHÁC có handler cho nó
-   * là một lỗi GIẾT VIỆC — vế ⑵ của cổng ở `apps/unseal-worker/src/composition.int.test.ts`
-   * canh đúng ca ấy.
+   * job mồ côi tới trạng thái cuối. [S1.222 / khoản 168] Tiến trình ấy phải là tiến trình CLAIM
+   * ĐƯỢC job của MỌI tổ chức — bảo đảm "ồn ào" chỉ đứng ở đó — nên từ vòng này đó là worker mở
+   * thầu (`apps/unseal-worker/src/tien-trinh.ts`, danh sách tổ chức từ hàm `052`), không còn là
+   * `api` (danh sách là tập tổ chức đã thấy enqueue, rỗng lại sau khởi động). Một `kind` khai ở
+   * đây mà tiến trình KHÁC có handler cho nó là một lỗi GIẾT VIỆC — vế ⑵ của cổng ở
+   * `apps/unseal-worker/src/composition.int.test.ts` canh đúng ca ấy.
    */
   readonly kindKhongNguoiNhan?: readonly string[];
   /** Quan sát viên. MẶC ĐỊNH IM LẶNG — gói này không tự ghi log bao giờ. */

@@ -10,28 +10,40 @@
 <body>
 <main>
   <header class="dau">
-    <h1>Dữ liệu nền: hàng chuẩn và đơn vị đo</h1>
+    <h1>Dữ liệu nền: hàng chuẩn, đơn vị đo và ánh xạ</h1>
     <span class="vai">Quản lý dữ liệu</span>
     <nav><a href="/tao-thau">Màn tạo gói</a> · <a href="/chinh-sach">Màn chính sách</a></nav>
   </header>
 
   <section class="buoc" id="b1">
     <h2><span class="so">1</span> Đăng nhập</h2>
-    <p class="ghi">Người quản lý dữ liệu đặt thước đo cho mọi gói — hàng chuẩn, bí danh, quy đổi — và không thấy giá của gói nào.
-      Mọi lần ghi ở màn này để lại tên người ghi và thời điểm.</p>
+    <p class="ghi">Dán mã từ link đăng nhập rồi bấm Tiếp. Lần đầu của một tài khoản, trang đưa <strong>bí mật ghi danh</strong>
+      để nhập vào ứng dụng xác thực — sau đó mới hỏi mã sáu số. Người quản lý dữ liệu đặt thước đo cho mọi gói — hàng chuẩn, bí danh,
+      quy đổi — và không thấy giá của gói nào. Mọi lần ghi ở màn này để lại tên người ghi và thời điểm.</p>
     <label for="org">Mã tổ chức</label>
     <input id="org" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000">
     <label for="token">Mã đăng nhập</label>
     <input id="token" autocomplete="off" spellcheck="false" placeholder="mã trong link">
-    <label for="ma">Mã sáu số</label>
-    <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
-    <button id="nut-vao">Vào</button>
+    <!-- [S1.249 / khoản 291] Bước 1 của `/lib/dang-nhap.js` — cùng bộ id với `/login` và ba trang người mua kia: Tiếp gọi
+         `/auth/redeem` đúng một lần cho mỗi mã và nói tài khoản cần ghi danh hay không; ô mã sáu số chỉ mở SAU đó (khoản 193). -->
+    <button id="nut-ghi-danh">Tiếp — kiểm tra mã đăng nhập</button>
+    <div class="bao luu" id="ghi-danh" hidden></div>
+    <div id="khoi-ma" hidden>
+      <label for="ma">Mã sáu số của ứng dụng xác thực</label>
+      <input id="ma" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
+      <button id="nut-vao">Vào</button>
+    </div>
     <div class="bao loi" id="loi1" hidden></div>
     <div class="bao ok" id="ok1" hidden></div>
-    <div class="bao luu" id="ghi-danh" hidden></div>
     <div class="bao luu" id="hoi-phien" hidden></div>
     <button id="nut-dung-phien" hidden>Tiếp tục với phiên này</button>
     <button id="nut-dang-xuat" class="phu" hidden>Đăng xuất</button>
+    <!-- [S1.249 / khoản 291] Link đăng nhập gần đây của chính người vừa vào (khoản 195), và câu «còn nữa» khi danh sách bị cắt
+         (khoản 268) — `/lib/dang-nhap.js` điền. Khối là trợ giúp: máy chủ từ chối hay mất mạng thì nó ẩn, các bước vẫn mở. -->
+    <div id="khoi-link-gan-day" hidden>
+      <p class="ghi" id="ghi-link-gan-day" hidden></p>
+      <dl class="tt" id="link-gan-day"></dl>
+    </div>
   </section>
 
   <section class="buoc" id="b2" hidden>
@@ -139,6 +151,45 @@
     </div>
     <div class="bao loi" id="loi5" hidden></div>
     <div class="bao ok" id="ok5" hidden></div>
+  </section>
+
+  <section class="buoc" id="b6" hidden>
+    <h2><span class="so">6</span> Hàng đợi ánh xạ</h2>
+    <p class="ghi">Dòng của các gói đã nộp duyệt mà chưa nối với hàng chuẩn nào. Dòng trùng CHÍNH XÁC một bí danh thì hệ thống tự
+      nối lúc nộp; mọi dòng khác chờ ở đây, kèm tối đa năm ứng viên và tên người ghi gợi ý. Người đã chạm vào một gói — tạo, nộp,
+      mời, đặt ngân sách — không duyệt được dòng của gói ấy: máy chủ từ chối.</p>
+    <label for="loc-hd">Lọc theo mô tả hoặc tên gói</label>
+    <input id="loc-hd" autocomplete="off" spellcheck="false" placeholder="thép d12">
+    <table id="bang-hang-doi">
+      <thead><tr><th>Gói</th><th class="so">Dòng</th><th>Mô tả</th><th class="so">SL</th><th>ĐVT</th><th>Gợi ý</th><th>Người ghi gợi ý</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="bao luu" id="con-nua-hd" hidden></div>
+    <button id="nut-doc-hd" class="phu">Đọc lại hàng đợi</button>
+    <div id="khoi-xu-ly" hidden>
+      <h3>Xử lý dòng</h3>
+      <dl class="tt" id="tt-dong"></dl>
+      <label for="xl-hang">Hàng chuẩn — ứng viên của hệ thống đứng đầu, kèm điểm</label>
+      <select id="xl-hang"></select>
+      <label><input type="checkbox" id="xl-bi-danh" checked> Khai mô tả của dòng làm bí danh của hàng đã chọn — lần sau dòng
+        giống hệt tự nối</label>
+      <label for="xl-ly-do">Lý do — bắt buộc khi gói đã mở niêm phong, hay khi bác một dòng từng có gợi ý</label>
+      <input id="xl-ly-do" autocomplete="off">
+      <button id="nut-duyet">Duyệt sang hàng đã chọn</button>
+      <button id="nut-bac" class="phu">Bác — không có hàng chuẩn tương ứng</button>
+      <h3>Hoặc tạo hàng chuẩn mới cho dòng này</h3>
+      <label for="xl-ma">Mã (viết hoa)</label>
+      <input id="xl-ma" autocomplete="off" spellcheck="false" placeholder="GACH-THE-DO">
+      <label for="xl-don-vi">Đơn vị gốc</label>
+      <input id="xl-don-vi" autocomplete="off" spellcheck="false" placeholder="cai">
+      <label for="xl-ten">Tên</label>
+      <input id="xl-ten" autocomplete="off">
+      <button id="nut-tao-duyet" class="phu">Tạo hàng chuẩn rồi duyệt</button>
+      <p class="ghi">Sửa thuộc tính hay khai thêm bí danh cho một hàng chuẩn: mở hàng ấy ở bước 2.</p>
+      <button id="nut-chuan-hoa-lai" class="phu">Chuẩn hoá lại cả gói</button>
+    </div>
+    <div class="bao loi" id="loi6" hidden></div>
+    <div class="bao ok" id="ok6" hidden></div>
   </section>
 
   <footer class="chan">Lát cắt demo — mọi lần ghi dữ liệu nền là một hàng mới, mang người ghi và thời điểm, và để lại dấu vết trong sổ kiểm toán.</footer>

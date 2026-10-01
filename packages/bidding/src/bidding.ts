@@ -27,7 +27,7 @@ import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { describeEnvelope } from "@trustprocure/sealed-envelope";
 import { ReceiptError, buildReceiptText, sha256Hex } from "./receipt.js";
-import type { ReceiptSigner } from "./signer.js";
+import { assertReceiptKid, type ReceiptSigner } from "./signer.js";
 
 /** `check_violation` — ba trigger `BEFORE INSERT` của `vendor_bid_versions` đều `RAISE` mã này. */
 const MA_CHECK_VIOLATION = "23514";
@@ -59,6 +59,14 @@ const DAU_THOI_GIAN_CHINH_TAC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u
  * hàng sổ đi theo — đúng như mọi lỗi khác.
  */
 export class NopQuaHanError extends BiddingError {
+  /**
+   * [S1.219 / khoản 230] Mã của nhánh VÌ HẠN, cùng khuôn `NopBiTuChoiError.ma` (tên ràng buộc `c1_qua_han_nop` của trigger,
+   * viết hoa) — để route `POST /guest/bids` trả MỘT trường `ma` cho mọi lần từ chối và trang nộp thầu tra một bảng. Cố ý KHÔNG
+   * nằm trong `MA_THEO_RANG_BUOC`: nhánh này có lối riêng (đọc `DETAIL` có cấu trúc), và một `DETAIL` hỏng hình dạng phải rơi
+   * về `BiddingError` chung — không bao giờ về một mã «vì hạn» thiếu hai dấu thời gian.
+   */
+  readonly ma = "C1_QUA_HAN_NOP" as const;
+
   constructor(
     readonly gioCsdl: string,
     readonly hanNop: string,
@@ -101,7 +109,9 @@ function docMaNopBiTuChoi(loi: unknown): MaNopBiTuChoi | null {
  *
  * CÙNG HỢP ĐỒNG VỚI `NopQuaHanError`, đọc kỹ: khi lỗi này bay ra, giao dịch của người gọi **CÒN LÀNH** — `submitBid` đã lùi về
  * savepoint của chính nó — và nó đã MANG một hàng sổ ~~`BID_SUBMIT_DENIED`~~ **[S1.180]** `BID_STATE_DENIED` mang `ma`. Route `POST /guest/bids` trả 422 bằng đường TRẢ VỀ để
- * hàng ấy sống. Thông điệp giữ NGUYÊN câu chung của bản trước: phân biệt ba lý do trước người nộp là một quyết định khác.
+ * hàng ấy sống. Thông điệp giữ NGUYÊN câu chung của bản trước: ~~phân biệt ba lý do trước người nộp là một quyết định khác.~~
+ * **[S1.219 / khoản 230]** quyết định ấy đã có (chủ dự án chốt 2026-09-30): route trả `ma` trong thân 422 cạnh câu chung, và trang
+ * nộp thầu (`apps/web/trang/nop-thau.js`) nói câu riêng cho từng mã — câu chung ở đây là lối rơi cho máy khách không biết mã.
  */
 export class NopBiTuChoiError extends BiddingError {
   constructor(
@@ -198,6 +208,13 @@ export async function submitBid(
 ): Promise<BidReceiptRecord> {
   await assertTenantBound(client, orgId, "submitBid");
   batBuocUuid(input.guestSessionId, "guestSessionId");
+  // [S1.250 / kid] Kid của bộ ký đi vào dòng `kid=` của biên nhận sắp phát — kiểm bằng tập PHÁT HÀNH ở ĐÂY, trước MỌI lần ghi
+  // (luồng, phiên bản, hàng sổ). Hai factory đã kiểm (`ReceiptSigningKeyRing`, `createAwsKmsReceiptSigner`, S1.249), nhưng
+  // `ReceiptSigner` là một interface: một đối tượng tự dựng mang kid mà định dạng cho phép (`:`) từng đi thẳng vào
+  // `buildReceiptText` — và một kid định dạng cũng cấm (`\n`) từng ném ở đó, SAU câu ghi phiên bản. Chủ dự án chốt 2026-10-01.
+  // Đọc `activeKeyId` ĐÚNG MỘT lần (lượt soi đối kháng): nó có thể là một getter, và giá trị đã kiểm phải là giá trị đi vào văn bản.
+  const kid = input.signer.activeKeyId;
+  assertReceiptKid(kid);
 
   // Phong bì phải ĐỌC ĐƯỢC trước khi nó được cất. Một mảng byte bất kỳ cũng qua được `CHECK` độ
   // dài của 018, nhưng nó sẽ là một báo giá KHÔNG BAO GIỜ mở được — và điều đó chỉ lộ ra ở lần mở
@@ -256,7 +273,8 @@ export async function submitBid(
   //
   // [khoản 196 / 066] Nhánh VÌ HẠN nay được phân biệt — không bằng chuỗi lỗi mà bằng trường
   // `constraint` (`c1_qua_han_nop`) cùng `DETAIL` có cấu trúc mà trigger đặt, đúng hướng câu trên
-  // nêu. Hai nhánh kia vẫn chung một thông điệp.
+  // nêu. ~~Hai nhánh kia vẫn chung một thông điệp.~~ **[S1.180 / ADR-108]** mọi nhánh còn lại mang tên ràng buộc → `ma`;
+  // **[S1.219 / khoản 230]** và `ma` đi tới người nộp: route trả nó trong thân 422, trang tra bảng mã → câu.
   let ban: { id: string; version: number; submitted_at_text: string }[];
   try {
     const kq = await client.query<{
@@ -336,7 +354,8 @@ export async function submitBid(
   }
 
   const canonicalText = buildReceiptText({
-    kid: input.signer.activeKeyId,
+    // ~~`input.signer.activeKeyId`~~ [S1.250 / kid] giá trị đã kiểm ở đầu hàm.
+    kid,
     rfqId: p.rfq_id,
     bidId,
     version: b.version,

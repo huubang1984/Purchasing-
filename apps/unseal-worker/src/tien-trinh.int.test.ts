@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { randomUUID } from "node:crypto";
 import { migrate } from "@trustprocure/db";
-import { KIND_KHONG_NGUOI_NHAN, JobRunner, enqueueJob } from "@trustprocure/outbox";
+import { KIND_KHONG_NGUOI_NHAN, JobRunner, enqueueJob, type JobInput } from "@trustprocure/outbox";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docCauHinh } from "./cau-hinh.js";
@@ -165,58 +165,75 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     }
   }, 60_000);
 
-  it("⑵ hàm 052 trả ĐỦ tổ chức dưới vai app_unseal — và BA đột biến lúc chạy đều giết nó", async () => {
-    const dem = async (): Promise<number> => {
-      const { rows } = await unsealPool.query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM public.outbox_danh_sach_to_chuc()",
-      );
-      return Number(rows[0]!.n);
-    };
+  // ===============================================================================================
+  // [S1.225 / khoản 185] BA ĐỘT BIẾN CỦA `052` — MỘT BẢNG CHO VẾ ⑵ (đo HÀM) VÀ VẾ ⑵b (đo `batDau()`), MỖI ĐỘT BIẾN MỘT `it`.
+  //
+  // Trước vòng này cả ba chạy trong một vòng `for` của MỘT `it` ở mỗi vế: ⒜ đỏ thì ⒝ và ⒞ không bao giờ chạy — mà ⑵b là lớp DUY NHẤT
+  // canh cảnh ❷ của ADR-040. Nay `it.each` khoá theo ca, và `finally` phục hồi nằm trong TỪNG ca, nên một ca đỏ không để lược đồ
+  // hỏng cho ca sau. Đối chứng dương của mỗi vế tách ra riêng.
+  // ===============================================================================================
+  const DOT_BIEN_052 = [
+    {
+      ten: "⒜ SECURITY INVOKER — hàm thôi chạy dưới quyền chủ",
+      dotBien: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
+      phucHoi: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
+    },
+    {
+      ten: "⒝ DROP POLICY — policy là thứ CHỊU LỰC, không phải SECURITY DEFINER",
+      dotBien: "DROP POLICY organizations_liet_ke_worker ON public.organizations",
+      phucHoi: "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
+    },
+    {
+      ten: "⒞ đổi CHỦ HÀM sang một vai thường — chủ hàm là thứ CHỊU LỰC",
+      dotBien: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
+      phucHoi: "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
+    },
+  ] as const;
+
+  /**
+   * Phục hồi một đột biến, VÀ cấp lại EXECUTE. ĐỔI CHỦ VIẾT LẠI ACL — đo được ở lượt S1.82: sau ⒞ thì `app_unseal` MẤT EXECUTE và
+   * câu đếm ném 42501. Cùng cơ chế đã buộc `052` phải đặt khối ACL TRƯỚC `ALTER … OWNER TO`. Nên phục hồi phải cấp lại, không chỉ đổi
+   * chủ về — và cấp lại cho cả ba, vì `GRANT` lặp là no-op.
+   */
+  async function phucHoi052(cau: string): Promise<void> {
+    await db.pool.query(cau);
+    await db.pool.query("GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal");
+  }
+
+  const dem = async (): Promise<number> => {
+    const { rows } = await unsealPool.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM public.outbox_danh_sach_to_chuc()",
+    );
+    return Number(rows[0]!.n);
+  };
+
+  it("⑵ đối chứng dương: hàm 052 trả ĐỦ tổ chức dưới vai app_unseal — và đọc THẲNG organizations vẫn 0 hàng", async () => {
     const demThang = async (): Promise<number> => {
       const { rows } = await unsealPool.query<{ n: string }>(
         "SELECT count(*)::text AS n FROM public.organizations",
       );
       return Number(rows[0]!.n);
     };
-
     expect(await dem(), "hàm phải thấy ĐÚNG mọi tổ chức, không phải > 0").toBe(cacOrg.length);
     // VẾ GIỮ BÁN KÍNH: policy mới mang `TO app_liet_ke_to_chuc`, nên đọc THẲNG vẫn 0 hàng.
     expect(await demThang(), "app_unseal KHÔNG được đọc thẳng organizations").toBe(0);
+  }, 60_000);
 
-    for (const [ten, dotBien, phucHoi] of [
-      [
-        "⒜ SECURITY INVOKER — hàm thôi chạy dưới quyền chủ",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
-      ],
-      [
-        "⒝ DROP POLICY — policy là thứ CHỊU LỰC, không phải SECURITY DEFINER",
-        "DROP POLICY organizations_liet_ke_worker ON public.organizations",
-        "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
-      ],
-      [
-        "⒞ đổi CHỦ HÀM sang một vai thường — chủ hàm là thứ CHỊU LỰC",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
-      ],
-    ] as const) {
+  it.each(DOT_BIEN_052)(
+    "⑵ $ten ⇒ hàm 052 trả 0 hàng; phục hồi ⇒ trở lại đủ",
+    async ({ ten, dotBien, phucHoi }) => {
       await db.pool.query(dotBien);
       try {
         // Khẳng định ĐỘT BIẾN ĐÃ ÁP trước khi đếm — một đột biến "chạy rồi" mà không áp cho một
         // con số xanh giả, đúng bài học của khoản 99.
         expect(await dem(), ten).toBe(0);
       } finally {
-        await db.pool.query(phucHoi);
-        // ĐỔI CHỦ VIẾT LẠI ACL — đo được ở chính lượt này: sau ⒞ thì `app_unseal` MẤT EXECUTE và
-        // câu đếm ném 42501. Cùng cơ chế đã buộc `052` phải đặt khối ACL TRƯỚC `ALTER … OWNER TO`.
-        // Nên phục hồi phải cấp lại, không chỉ đổi chủ về.
-        await db.pool.query(
-          "GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal",
-        );
+        await phucHoi052(phucHoi);
       }
-    }
-    expect(await dem(), "phục hồi cả ba ⇒ trở lại đủ").toBe(cacOrg.length);
-  }, 60_000);
+      expect(await dem(), "phục hồi ⇒ trở lại đủ").toBe(cacOrg.length);
+    },
+    60_000,
+  );
 
   // ===============================================================================================
   // ⑵b [S1.83 / lượt soi ngang 73] BA ĐỘT BIẾN CỦA VẾ ⑵ CHO **0 HÀNG, KHÔNG LỖI** — VÀ TRƯỚC VÒNG
@@ -229,26 +246,11 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
   // động ghi `to chuc thay duoc: 0`. Tức chính cái hỏng mà `052` sinh ra để giết thì im lặng ở
   // tiến trình dùng `052`.
   //
-  // Vế này lấy ĐÚNG ba đột biến của ⑵ và hỏi câu của ⑶.
+  // Vế này lấy ĐÚNG ba đột biến của ⑵ (cùng bảng `DOT_BIEN_052`) và hỏi câu của ⑶.
   // ===============================================================================================
-  it("⑵b ba đột biến cho 0 hàng KHÔNG LỖI ⇒ `batDau()` NÉM — cảnh ❷ không được thành im lặng", async () => {
-    for (const [ten, dotBien, phucHoi] of [
-      [
-        "⒜ SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY INVOKER",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() SECURITY DEFINER",
-      ],
-      [
-        "⒝ DROP POLICY",
-        "DROP POLICY organizations_liet_ke_worker ON public.organizations",
-        "CREATE POLICY organizations_liet_ke_worker ON public.organizations FOR SELECT TO app_liet_ke_to_chuc USING (true)",
-      ],
-      [
-        "⒞ đổi CHỦ HÀM",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_unseal",
-        "ALTER FUNCTION public.outbox_danh_sach_to_chuc() OWNER TO app_liet_ke_to_chuc",
-      ],
-    ] as const) {
+  it.each(DOT_BIEN_052)(
+    "⑵b $ten cho 0 hàng KHÔNG LỖI ⇒ `batDau()` NÉM — cảnh ❷ không được thành im lặng",
+    async ({ ten, dotBien, phucHoi }) => {
       await db.pool.query(dotBien);
       const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong()));
       try {
@@ -257,14 +259,13 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
         await expect(tt.batDau(), ten).rejects.toThrow(/tra 0 to chuc/u);
       } finally {
         await tt.dung();
-        await db.pool.query(phucHoi);
-        await db.pool.query(
-          "GRANT EXECUTE ON FUNCTION public.outbox_danh_sach_to_chuc() TO app_unseal",
-        );
+        await phucHoi052(phucHoi);
       }
-    }
-    // ĐỐI CHỨNG DƯƠNG: phục hồi xong thì tiến trình lên lại được — vế trên đỏ vì đột biến, không
-    // phải vì `batDau()` hỏng sẵn.
+    },
+    60_000,
+  );
+
+  it("⑵b ĐỐI CHỨNG DƯƠNG: sau ba đột biến đã phục hồi, tiến trình lên lại được — các ca trên đỏ vì đột biến, không phải vì `batDau()` hỏng sẵn", async () => {
     const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong()));
     try {
       await expect(tt.batDau()).resolves.toBeUndefined();
@@ -298,7 +299,12 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
     // runner trong test là `["LOGIN_LINK_SEND"]` — MỘT phần tử — trong khi tiến trình `api` thật
     // dựng nó từ `Object.keys(handlers)` HỢP `Object.keys(KIND_KHONG_NGUOI_NHAN)`, tức HAI. Mốc
     // chết đo trên một mảng lọc mà sản xuất không dùng thì nó canh một tiến trình không tồn tại.
-    // Nay cả hai vế lấy đúng thứ `apps/api/src/composition.ts` lấy.
+    // ~~Nay cả hai vế lấy đúng thứ `apps/api/src/composition.ts` lấy.~~
+    // **[S1.222 / khoản 168] SỔ MỒ CÔI ĐỔI CHỦ: `apps/api/src/composition.ts` THÔI khai, `tien-trinh.ts`
+    // của tiến trình này khai.** Nên vế `api` dưới đây KHÔNG truyền `kindKhongNguoiNhan` — mảng lọc của
+    // nó là đúng `Object.keys(handlers)` như sản xuất từ vòng này — còn vế `worker` truyền
+    // `Object.keys(KIND_KHONG_NGUOI_NHAN)` như `tien-trinh.ts`. Sổ hôm nay RỖNG (S1.91), nên ở vòng này
+    // hai mảng lọc không đổi kích thước; vế ⑹ dưới là chỗ đo đường ấy với một dòng thử.
     const org = cacOrg[0]!;
     const apiPool = db.poolAs("app_api");
     try {
@@ -307,7 +313,8 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       // đổi sang bảng thật — `LOGIN_LINK_SEND` không có `email` thì handler ném, job về PENDING
       // với `attempts = 1`, và vế "job của api phải xong" đỏ. Một handler giả làm mốc chết đo
       // đúng cái tên `kind` và không đo gì thêm.
-      const xep = async (kind: string, payload: Record<string, unknown>): Promise<string> =>
+      // [S1.239 / khoản 161] `kind` mang kiểu union `KindOutbox` (`JobInput["kind"]`) — hai kind thật dưới đây, không kind thử.
+      const xep = async (kind: JobInput["kind"], payload: Record<string, unknown>): Promise<string> =>
         withTenant(apiPool, org, (c) => enqueueJob(c, org, { kind, payload }));
       const idMoThau = await xep(UNSEAL_JOB_KIND, { unsealRequestId: randomUUID(), rfqId: randomUUID() });
       // Không có người dùng nào mang địa chỉ này ⇒ `issueLoginToken` trả `ok: false` ⇒ handler kết
@@ -329,8 +336,9 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
         {
           listOrganizations: () => [org],
           onJobFailure: () => undefined,
-          // Đúng mảng lọc mà `apps/api/src/composition.ts` truyền — không phải một tập con tiện tay.
-          kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
+          // ~~Đúng mảng lọc mà `apps/api/src/composition.ts` truyền — không phải một tập con tiện tay.~~
+          // [S1.222 / khoản 168] KHÔNG `kindKhongNguoiNhan`: `apps/api/src/composition.ts` thôi khai sổ
+          // mồ côi từ vòng này, và mảng lọc của `api` là đúng `Object.keys(handlers)`.
         },
       );
       expect(await runnerApi.runOnce(), "api chỉ được nhặt job của CHÍNH nó").toBe(1);
@@ -350,7 +358,14 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
           auditPool: db.poolAs("app_unseal"),
           onJobFailure: () => undefined,
         },
-        { listOrganizations: () => [org], onPollError: () => undefined, maxAttempts: 1 },
+        {
+          listOrganizations: () => [org],
+          onPollError: () => undefined,
+          maxAttempts: 1,
+          // [S1.222 / khoản 168] Đúng sổ mà `tien-trinh.ts` khai — tiến trình này là tiến trình DUY NHẤT
+          // khai sổ mồ côi từ vòng này.
+          kindKhongNguoiNhan: Object.keys(KIND_KHONG_NGUOI_NHAN),
+        },
       );
       await runnerWorker.runOnce();
       expect(
@@ -365,6 +380,113 @@ describe("[S1.82 / khoản 116] điểm vào tiến trình worker mở thầu", 
       await apiPool.end().catch(() => undefined);
     }
   }, 90_000);
+
+  // ===============================================================================================
+  // ⑹ [S1.222 / khoản 168] SỔ `kind` MỒ CÔI KHAI Ở TIẾN TRÌNH THẤY MỌI TỔ CHỨC — ĐO TRÊN ĐƯỜNG SẼ CHẠY.
+  //
+  // Khoản 168 (§S1.83): tới trước vòng này sổ khai ở `api`, mà `listOrganizations` của `api` là tập
+  // tổ chức tiến trình ấy ĐÃ THẤY enqueue (`toChucDaThay`, rỗng lại sau mỗi lần khởi động). Một job
+  // mang `kind` mồ côi của một tổ chức chưa ai xếp việc qua `api` thì KHÔNG tiến trình nào claim —
+  // nó nằm `PENDING` im lặng, đúng thứ sổ mồ côi sinh ra để chặn. Tiến trình này thấy MỌI tổ chức
+  // (hàm `052`), nên bảo đảm *"vẫn chết ồn ào"* đặt ở đây mới đúng chỗ.
+  //
+  // SỔ THẬT HÔM NAY RỖNG (S1.91, khoản 154 đóng), nên phép đo phải cho nó MỘT dòng thử — và cho
+  // TRÊN ĐÚNG ĐỐI TƯỢNG tiến trình đọc (`KIND_KHONG_NGUOI_NHAN`, đọc lúc `taoTienTrinhUnsealWorker`
+  // dựng runner), không qua một cửa tiêm riêng: một cửa tiêm đo được cửa ấy chứ không đo được dây
+  // nối mặc định, và dây nối mặc định là thứ khoản này nói tới. Dòng thử được gỡ trong `finally`;
+  // tệp này có sổ riêng của nó (vitest cô lập module theo tệp), nên cổng ở
+  // `composition.int.test.ts` — vế ⑶ đòi mỗi dòng trỏ một khoản CÒN MỞ — không thấy dòng này.
+  // Ai đóng băng đối tượng ấy (`Object.freeze`) thì vế này NÉM chứ không xanh giả: khi ấy mở một
+  // cửa tiêm trong `PhuThuocTienTrinhWorker` là bước kế tiếp, và câu này ở đây để bước ấy có lý do.
+  //
+  // Đối chứng: một `kind` KHÔNG khai của cùng tổ chức phải còn nguyên `PENDING` — chứng minh thứ
+  // đưa job tới `FAILED` là dòng khai, không phải một vị từ nhặt việc quá rộng (§S1.81 mục 1).
+  //
+  // [S1.233 / khoản 158] Từ `095_outbox_policy_theo_kind`, policy `outbox_jobs_kind_app_unseal` chỉ cho `app_unseal`
+  // ghi kết cục cho `kind` trong tập của worker. Kind THỬ này không ở đó (đúng — nó không phải một khai thật, nên
+  // không có migration), và đo (log `lo92-10`): không nới thì job nằm `PENDING`, vế này đỏ vì LỚP CSDL chứ không vì
+  // thứ nó đo (dòng khai + mảng lọc của runner). Nới policy cho ĐÚNG kind thử, dưới siêu người dùng, khôi phục nguyên
+  // văn trong `finally`; `KIND_KHONG_KHAI` KHÔNG được nới — đối chứng của vế này đứng ở cả hai lớp. Bản gương của
+  // `noiPolicyKindTam` ở `apps/api/src/composition.int.test.ts` (hai tệp, hai cụm CSDL, một đồ gá nhỏ).
+  // ===============================================================================================
+  async function noiPolicyKindTam(kind: string): Promise<() => Promise<void>> {
+    if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(kind)) throw new Error("kind thử phải khớp CHECK của outbox_jobs.kind");
+    const { rows } = await db.pool.query<{ u: string; wc: string }>(
+      "SELECT pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+        "  FROM pg_policy p WHERE p.polrelid = 'public.outbox_jobs'::regclass AND p.polname = 'outbox_jobs_kind_app_unseal'",
+    );
+    const goc = rows[0];
+    if (goc === undefined) throw new Error("không thấy policy outbox_jobs_kind_app_unseal — migration 095 chưa áp?");
+    const noi = `(${goc.u}) OR (kind = '${kind}')`;
+    await db.pool.query(`ALTER POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs USING (${noi}) WITH CHECK (${noi})`);
+    return async () => {
+      await db.pool.query(`ALTER POLICY outbox_jobs_kind_app_unseal ON public.outbox_jobs USING (${goc.u}) WITH CHECK (${goc.wc})`);
+    };
+  }
+
+  it("⑹ [khoản 168] job mang `kind` mồ côi của một tổ chức CHƯA TỪNG xếp việc qua api ⇒ tiến trình này đưa nó tới FAILED/NO_HANDLER và ghi MỘT dòng; `kind` không khai của cùng tổ chức không bị chạm", async () => {
+    const KIND_MO_COI = "THU_MO_COI_168";
+    const KIND_KHONG_KHAI = "THU_KHONG_KHAI_168";
+    // Tổ chức MỚI: chưa ai xin link đăng nhập, chưa một lời `enqueueJob` nào đi qua `api` — tức
+    // không nằm trong `toChucDaThay` của một tiến trình `api` nào.
+    const { rows: tc } = await db.pool.query<{ id: string }>(
+      "INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id",
+      ["Cong ty F", "cong-ty-f-k168"],
+    );
+    const orgF = tc[0]!.id;
+    const gieo = async (kind: string): Promise<string> => {
+      const { rows } = await db.pool.query<{ id: string }>(
+        "INSERT INTO outbox_jobs (org_id, kind) VALUES ($1::uuid, $2) RETURNING id",
+        [orgF, kind],
+      );
+      return rows[0]!.id;
+    };
+    const idMoCoi = await gieo(KIND_MO_COI);
+    const idKhongKhai = await gieo(KIND_KHONG_KHAI);
+    const doc = async (id: string): Promise<{ status: string; attempts: number; last_failure_reason: string | null }> => {
+      const { rows } = await db.pool.query<{ status: string; attempts: number; last_failure_reason: string | null }>(
+        "SELECT status, attempts, last_failure_reason FROM outbox_jobs WHERE id = $1",
+        [id],
+      );
+      return rows[0]!;
+    };
+
+    Object.assign(KIND_KHONG_NGUOI_NHAN, { [KIND_MO_COI]: "dòng THỬ của vế ⑹ — không phải một khai thật, gỡ trong finally" });
+    // [S1.233 / khoản 158] Xem khối lý do trên `noiPolicyKindTam`. Khôi phục trong `finally`.
+    const khoiPhucPolicy = await noiPolicyKindTam(KIND_MO_COI);
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_OUTBOX_POLL_MS: "200" })));
+    try {
+      await tt.batDau();
+      const het = Date.now() + 10_000;
+      while ((await doc(idMoCoi)).status !== "FAILED" && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+      }
+      expect(await doc(idMoCoi), "job mồ côi phải tới trạng thái cuối ỒN ÀO — nếu còn PENDING thì không tiến trình nào khai sổ").toEqual({
+        status: "FAILED",
+        attempts: 1,
+        last_failure_reason: "NO_HANDLER",
+      });
+      expect(log.filter((d) => d.startsWith(`[unseal-worker] outbox ${KIND_MO_COI}`)), JSON.stringify(log)).toEqual([
+        `[unseal-worker] outbox ${KIND_MO_COI} NO_HANDLER (bo cuoc)`,
+      ]);
+      expect(await doc(idKhongKhai), "`kind` KHÔNG khai không được bị claim — vị từ lọc của S1.81 vẫn đứng").toEqual({
+        status: "PENDING",
+        attempts: 0,
+        last_failure_reason: null,
+      });
+      expect(log.join("\n")).not.toContain(orgF);
+    } finally {
+      await tt.dung();
+      console.error = cu;
+      Reflect.deleteProperty(KIND_KHONG_NGUOI_NHAN, KIND_MO_COI);
+      await khoiPhucPolicy();
+    }
+  }, 60_000);
 
   it("⑷ hai pool TRÙNG NHAU bị chặn ở lời gọi, không phải ở một docstring (khoản 121)", () => {
     expect(() =>

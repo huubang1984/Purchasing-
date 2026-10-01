@@ -73,6 +73,40 @@ export class KetNoiNhiemError extends Error {
 const mocLuocDo = new WeakMap<pg.PoolClient, string>();
 
 /**
+ * [S1.215 / khoản 104] Câu đọc trạng thái phiên ở mỗi lần lấy client — MỘT hằng đứng riêng, mở đầu bằng SELECT, để hai cổng
+ * [INV-H21] (`qt3-ghim-schema`, `qt3-cu-phap`) thấy và PREPARE được nó; `ganVaiChoClient` nội suy nó vào CUỐI câu nhiều lệnh
+ * `SET ROLE …` nên vẫn không thêm vòng đi-về. Đọc: `current_user`, ba GUC vận hành theo tính chất và search path hiệu lực (khoản 99),
+ * và TÊN của bốn GUC tenant/khách đang có giá trị — cùng phép đọc của `withTenant` (placeholder không có ở `pg_settings`, đo S1.47).
+ * Chỉ tên đi vào thông báo, không bao giờ giá trị.
+ */
+const CAU_DOC_TRANG_THAI =
+  "SELECT current_user AS current_role_name, " +
+  "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
+  "pg_catalog.current_setting('row_security') AS rls, " +
+  "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do, " +
+  "pg_catalog.concat_ws(', ', " +
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.org_id', true), '') IS NOT NULL THEN 'app.org_id' END, " +
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_session_id', true), '') IS NOT NULL THEN 'app.guest_session_id' END, " +
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_invitation_id', true), '') IS NOT NULL THEN 'app.guest_invitation_id' END, " +
+  "  CASE WHEN NULLIF(pg_catalog.current_setting('app.guest_rfq_id', true), '') IS NOT NULL THEN 'app.guest_rfq_id' END) AS guc_tenant";
+
+/**
+ * [S1.215 / khoản 104] Số kết quả mà câu nhiều lệnh của `ganVaiChoClient` PHẢI trả về (SET ROLE, DISCARD, CLOSE, DEALLOCATE,
+ * UNLISTEN, SELECT unlock, SELECT đọc). Hình dạng được ĐÒI, không được tin — cùng bài học 40a I8 của `withTenant`: driver hay pooler
+ * trả về ít hơn nghĩa là một lệnh dọn không chạy hay phép đọc mù, và khi ấy client không được giao ra.
+ */
+const SO_KET_QUA_LAY_CLIENT = 7;
+
+/** Hàng duy nhất của `CAU_DOC_TRANG_THAI`. Alias viết sẵn chữ thường — Postgres tự hạ thường định danh không có dấu ngoặc kép. */
+interface HangTrangThai {
+  current_role_name: string;
+  vai_sao_chep: string;
+  rls: string;
+  luoc_do: string;
+  guc_tenant: string | null;
+}
+
+/**
  * Tái khẳng định vai trên MỘT client cụ thể ngay trước khi giao cho người gọi, và ném lỗi rõ
  * ràng nếu SET ROLE không có hiệu lực thật.
  *
@@ -94,13 +128,34 @@ const mocLuocDo = new WeakMap<pg.PoolClient, string>();
  *     trong SQL — bản đầu đọc tên GUC và làm cổng ấy đỏ (lượt soi 52 NẶNG-1, đo) — và đây cũng là cách đọc của withTenant ⑵.
  * Lệch ⇒ NÉM `KetNoiNhiemError`, và `ganVaiTroChoPool` huỷ kết nối (`release(loi)`) — người gọi không bao giờ nhận nó; kết nối mới mở
  * thay, nên sửa xong mặc định phiên thì pool tự lành. Chỉ TÊN GUC vào thông báo.
+ *
+ * [S1.215 / khoản 104] VÀ DỌN TRẠNG THÁI PHIÊN NGOÀI BA GUC ẤY — DỌN, KHÔNG PHÁN, VÌ ĐÃ ĐO. Mọi GUC phiên khác (ba GUC IM7 của
+ * `createPool` bị SET về 0 — đo S1.59; `TimeZone`, `DateStyle`, …) và trạng thái phiên ngoài GUC mà `DISCARD TEMP` không dọn — prepared
+ * statement, con trỏ WITH HOLD (giữ hàng của người trước cho người kế FETCH), kênh LISTEN (thông báo của người trước tới người kế), khoá
+ * tư vấn MỨC PHIÊN (chỉ hàm SECURITY DEFINER lấy được dưới vai ứng dụng — khoản 128) — đi theo kết nối sang người dùng kế tiếp. Hai
+ * hướng đo trên cụm cục bộ (PostgreSQL 16.13, trung vị 2 000 lần, biên bản §S1.215): PHÁN bằng một lần quét `pg_settings`
+ * (`source = 'session'` hay `setting <> reset_val`) ghép vào câu đọc giá thêm ~930 µs mỗi lần lấy — hơn ba lần CẢ lần lấy hiện hành
+ * (275 µs); đếm `pg_locks` thêm ~215 µs; ba bộ đếm prepared/con trỏ/LISTEN thêm ~65 µs. DỌN thì `RESET ALL` 37 µs một vòng đi-về, và
+ * `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` ghép vào câu `SET ROLE` thêm ~10 µs. Nên:
+ *   - bốn thứ ngoài GUC được DỌN VÔ ĐIỀU KIỆN ngay trong câu `SET ROLE; DISCARD TEMP` — cùng khuôn `DISCARD TEMP` của khoản 78, không
+ *     vòng đi-về nào thêm, và không tín hiệu nào của lớp khác nằm ở đó (mã sản xuất không dùng prepared statement có tên, con trỏ hay
+ *     LISTEN — census bằng grep, S1.215; `DEALLOCATE ALL` vì thế không đụng bộ nhớ `parsedStatements` của driver);
+ *   - GUC phiên thì ĐỌC TRƯỚC, DỌN SAU: câu đọc chạy TRƯỚC `RESET ALL`, nên ba GUC vận hành vẫn bị PHÁN theo khoản 99 (replica do hàm
+ *     SECURITY DEFINER để lại bị huỷ kết nối chứ không bị RESET âm thầm — test ghim); rồi `RESET ALL` — một vòng đi-về — CHỈ khi bốn GUC
+ *     tenant/khách RỖNG. Giá trị có sẵn ở đó là tín hiệu của phép phân biệt mặc-định-phiên/rò-phiên bằng RESET của `withTenant`
+ *     (khoản 87, S1.48): xoá nó ở đây là xoá đúng thứ withTenant dùng để nói "rò từ mã ngoài withTenant, huỷ kết nối". Khi ấy lớp này
+ *     KHÔNG dọn GUC phiên và KHÔNG phán — withTenant ở BEGIN kế tiếp phân biệt và huỷ; đường không qua withTenant nhận kết nối mang
+ *     GUC tenant rò cùng GUC phiên khác chưa dọn (nói ra — cùng ranh giới khoản 87/99). `RESET ALL` không đụng vai (`role` mang
+ *     GUC_NO_RESET_ALL — đo: `current_user` giữ nguyên) và trả ba GUC IM7 về giá trị PGOPTIONS (nguồn `client` không bị RESET ALL chạm).
  * RANH GIỚI, nói ra: lỗi rơi vào lần lấy KẾ TIẾP của kết nối ấy — có thể là một yêu cầu khác, không phải mã đã làm nhiễm; DDL đổi search
  * path hiệu lực của MỌI kết nối như nhau thì mỗi kết nối pool bị huỷ một lần, mỗi lần một lời gọi ném (test ghim), rồi kết nối mới lấy
  * mốc mới — cấu hình máy chủ nạp lại cũng vậy (suy luận, lượt soi 52 NHẸ-1, chưa đo), kể cả khi giá trị mới là giá trị xấu, vì mốc là
  * tương đối ~~(nguồn cấu hình do hardening khoản 92 canh lúc deploy)~~ [S1.66 / lượt soi ngang 59a-2, 59a-4: hardening canh nguồn mức
  * database và catalog, KHÔNG canh hàng che mức vai hay mặc định vai đặt giữa hai lần deploy — đo, khoản 109]; một câu TỰ commit (`pool.query` ghi) chạy trọn trước khi lớp này thấy
- * gì — lớp chặn commit của mã ngoài withTenant là giao dịch tường minh kết thúc bằng khối DO của khoản 96 (⑴), census vế ⒝; GUC phiên
- * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.
+ * gì — lớp chặn commit của mã ngoài withTenant là giao dịch tường minh kết thúc bằng khối DO của khoản 96 (⑴), census vế ⒝; ~~GUC phiên
+ * khác ba GUC này và trạng thái phiên ngoài GUC không được đọc ở đây.~~ [S1.215 / khoản 104] GUC phiên khác ba GUC này không được đọc
+ * mà được RESET (có điều kiện, ở trên), nên một GUC phiên lạ không bao giờ thành một dòng log; `DISCARD SEQUENCES`/`DISCARD PLANS`
+ * (giá trị `currval`, kế hoạch đã cache) không dọn — không đường nào của dự án đọc chúng qua kết nối pool.
  */
 async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<void> {
   const trangThaiGiaoDich = client.getTransactionStatus();
@@ -115,21 +170,23 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
   // ấy sống hết đời kết nối pool và vẫn che tên (đo trên PostgreSQL 16: sau REVOKE, cùng kết nối,
   // `sessions` trần vẫn đếm 0). Xoá nó ở MỖI lần giao client đóng cửa sổ ấy. Không phải DISCARD ALL:
   // DISCARD ALL đụng cả vai và cấu hình phiên.
-  await client.query(`SET ROLE ${vai}; DISCARD TEMP`);
+  // [S1.215 / khoản 104] Cùng câu: `CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; pg_advisory_unlock_all()` (bốn thứ ngoài GUC — dọn, xem
+  // docstring), rồi câu đọc trạng thái ở CUỐI — đọc SAU khi dọn bốn thứ ấy nhưng TRƯỚC `RESET ALL` ở dưới. Vẫn không phải DISCARD ALL:
+  // nó RESET cả vai và không chạy được trong khối ngầm của câu nhiều lệnh.
   // Postgres tự hạ thường định danh không có dấu ngoặc kép, nên alias phải viết sẵn chữ thường —
   // viết hoa ở đây sẽ đọc ra "undefined" một cách âm thầm.
-  const { rows } = await client.query<{
-    current_role_name: string;
-    vai_sao_chep: string;
-    rls: string;
-    luoc_do: string;
-  }>(
-    "SELECT current_user AS current_role_name, " +
-      "pg_catalog.current_setting('session_replication_role') AS vai_sao_chep, " +
-      "pg_catalog.current_setting('row_security') AS rls, " +
-      "pg_catalog.current_schemas(false)::pg_catalog.text AS luoc_do",
-  );
-  const hang = rows[0];
+  const ketQua = (await client.query(
+    `SET ROLE ${vai}; DISCARD TEMP; CLOSE ALL; DEALLOCATE ALL; UNLISTEN *; SELECT pg_catalog.pg_advisory_unlock_all(); ${CAU_DOC_TRANG_THAI}`,
+  )) as unknown;
+  const cacKetQua = Array.isArray(ketQua) ? (ketQua as pg.QueryResult<HangTrangThai>[]) : [];
+  if (cacKetQua.length !== SO_KET_QUA_LAY_CLIENT) {
+    throw new Error(
+      `ganVaiTroChoPool("${vai}"): câu lấy client phải trả về đúng ${String(SO_KET_QUA_LAY_CLIENT)} kết quả, nhận ` +
+        `${String(cacKetQua.length)} — driver hay pooler không chạy đủ câu nhiều lệnh, một lệnh dọn có thể đã bị bỏ và phép đọc ` +
+        "trạng thái phiên mù. Không giao client này cho bất kỳ ai dùng.",
+    );
+  }
+  const hang = cacKetQua[SO_KET_QUA_LAY_CLIENT - 1]?.rows[0];
   if (hang === undefined || hang.current_role_name !== vai) {
     throw new Error(
       `ganVaiTroChoPool("${vai}"): SET ROLE không có hiệu lực — current_user vẫn là ` +
@@ -159,6 +216,10 @@ async function ganVaiChoClient(client: pg.PoolClient, vai: VaiUngDung): Promise<
             "withTenant đã đổi chúng ở phạm vi phiên rồi trả kết nối về pool (khoản nợ 99); DDL hay cấu hình máy chủ nạp lại đổi search " +
             "path hiệu lực cũng làm mỗi kết nối pool bị huỷ một lần."),
     );
+  }
+  // [S1.215 / khoản 104] DỌN SAU KHI ĐỌC, và chỉ khi không GUC tenant/khách nào có giá trị — xem docstring. Một vòng đi-về (đo 37 µs).
+  if (!hang.guc_tenant) {
+    await client.query("RESET ALL");
   }
 }
 

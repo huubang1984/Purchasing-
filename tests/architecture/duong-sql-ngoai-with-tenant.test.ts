@@ -251,6 +251,12 @@ const DUNG_TRUC_TIEP_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     so: 3,
     lyDo: "hạ tầng test: pg.Client dựng CSDL của cụm thử, pool superuser của cụm là cố ý, poolAs bọc ganVaiTroChoPool",
   },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    so: 1,
+    lyDo:
+      "[S1.211] hạ tầng test — đường cụm Postgres CỤC BỘ khi không có Docker: một pg.Client superuser nối vào CSDL `postgres` " +
+      "của cụm vừa initdb chỉ để CREATE DATABASE trustprocure_test, rồi end(); cùng vai với pg.Client của postgres.ts",
+  },
 };
 
 /** Vế ⒞: số chỗ lấy client và chạy câu thẳng trên pool của từng tệp, kèm lý do. */
@@ -292,6 +298,14 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
       "đặt GUC cho một org_id đã có. Phần SAU đó (khoá RFQ, nhà cung cấp, lời mời, token đăng nhập) thì CÓ đi qua " +
       "withTenant, và đó là ranh giới thật giữa hai nửa của script",
   },
+  "tools/gieo-demo/src/goi-da-mo.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[S1.251 / lượt soi T1] MỘT câu chỉ đọc trước khi bật worker con: đếm việc mở thầu và cảnh báo break-glass đang chờ của tổ " +
+      "chức KHÁC — worker liệt kê mọi tổ chức, nên công cụ từ chối bật nó khi nó sẽ nhận việc của người khác. Câu hỏi 'những tổ " +
+      "chức nào' đứng trước câu hỏi 'tổ chức nào', không gắn được tenant. Mọi bước nghiệp vụ của ba gói đi qua withTenant",
+  },
   "tools/pilot-gia-lap/src/csdl.ts": {
     lay: 0,
     cau: 1,
@@ -318,8 +332,14 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
   },
   "apps/api/src/composition.ts": {
     lay: 1,
-    cau: 0,
-    lyDo: "batDau(): khangDinhPhienDangNhapUngDung trên một client của mỗi pool trước khi mở cổng — chỉ đọc; ⑵ ở ganVaiTroChoPool",
+    cau: 1,
+    lyDo:
+      "⑴ `lay`: batDau(): khangDinhPhienDangNhapUngDung trên một client của mỗi pool trước khi mở cổng — chỉ đọc; ⑵ ở " +
+      "ganVaiTroChoPool. [S1.248 / khoản 277] ⑵ `cau`: lời gọi `public.outbox_to_chuc_co_viec_api()` — tập tổ chức có job " +
+      "PENDING của api, nguồn `listOrganizations` của runner (lúc lên và mỗi kỳ poll). Câu hỏi 'những tổ chức nào' ĐỨNG TRƯỚC " +
+      "câu hỏi 'tổ chức nào', nên nó không gắn được tenant theo định nghĩa — cùng lý do với worker. Bán kính: hàm SECURITY " +
+      "DEFINER trả ĐÚNG một cột `org_id` của tổ chức có việc PENDING thuộc ba kind của api, EXECUTE chỉ app_api, và app_api " +
+      "đọc THẲNG outbox_jobs chưa gắn tổ chức vẫn 0 hàng (đo)",
   },
   "packages/db/src/migrate.ts": {
     lay: 1,
@@ -332,6 +352,20 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 1,
     cau: 0,
     lyDo: "hạ tầng test — pg.Client dựng CSDL của cụm thử",
+  },
+  "packages/test-support/src/quet-gia.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[S1.251 / S4.4b] hạ tầng test — bộ quét giá dạng rõ của bốn kịch bản (A3, ADR-054): MỘT câu trên pool CHỦ CỤM người gọi " +
+      "truyền vào, đúng vế *kể cả bằng role quản trị* của A3; nó quét mọi tổ chức nên không có một tenant để đi qua withTenant",
+  },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    lay: 1,
+    cau: 0,
+    lyDo:
+      "[S1.211] hạ tầng test — cụm cục bộ: một connect() của pg.Client superuser để CREATE DATABASE (câu chạy trên client, " +
+      "không trên pool), trước khi có bất kỳ pool nào; không có tenant để đi qua withTenant",
   },
 };
 
@@ -379,6 +413,12 @@ const LAY_KHONG_NGHE_DA_KHAI: Record<string, { readonly so: number; readonly lyD
     lyDo:
       "hạ tầng test — pg.Client một lần của phép đo backend còn sót ngay trước khi dừng container; kết nối đứt ở đó làm bộ test đỏ, " +
       "không có tiến trình sản xuất nào để chết",
+  },
+  "packages/test-support/src/postgres-cuc-bo.ts": {
+    so: 1,
+    lyDo:
+      "[S1.211] hạ tầng test — pg.Client một lần để CREATE DATABASE trên cụm cục bộ vừa khởi động; kết nối đứt ở đó làm " +
+      "startPostgres() ném và bộ test đỏ, không có tiến trình sản xuất nào để chết",
   },
 };
 

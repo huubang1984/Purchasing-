@@ -438,3 +438,142 @@ describe("danh tính là dẫn xuất, không phải lời khai", () => {
     }
   });
 });
+
+// =============================================================================================
+// [S1.229 / khoản 71 / ADR-132] MIỀN EMAIL LÀ ASCII IN ĐƯỢC — kiểm TRƯỚC khi hạ chữ thường, độ dài 320 byte SAU
+//
+// Khoản 71 (S1.27, mang sang S1.61): tập giá trị mà `users.email`/`supplier_contacts.email` cất được phụ thuộc `lower()` của libc trên
+// máy chủ (124 điểm mã phân kỳ trên musl, 28 trên glibc), hai địa chỉ trông giống hệt nhau cùng tồn tại được, và vế ⑶ —
+// `addSupplierContact` kiểm 320 byte TRƯỚC khi hạ trong khi `.toLowerCase()` làm `İ`/`Ⱥ`/`Ⱦ` từ 2 lên 3 byte, nên đầu vào sát 320 byte
+// vấp CHECK độ dài của 008 thành 23514 thân cố định. `092_email_ascii` thu hẹp miền về ASCII in được ở LƯỢC ĐỒ (đo ở
+// `db/migrations.int.test.ts` `[khoản nợ 71]`); ở đây đo TẦNG ỨNG DỤNG: lỗi CÓ TÊN (`SupplierError` ⇒ 422 qua `LOI_NGHIEP_VU_422` của
+// `apps/api/src/dispatch.ts`, route `POST /suppliers/:supplierId/contacts` chuyền thẳng `body.email`), không một điểm mã ngoài ASCII nào
+// tới CSDL, ASCII in được thì qua và cất ở chữ thường.
+// =============================================================================================
+describe("[S1.229 / khoản 71] miền email của người liên hệ là ASCII in được", () => {
+  let ncc = "";
+  beforeAll(async () => {
+    ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC email ASCII", actorSessionId: sA }))).id;
+  });
+  const them = (email: string) =>
+    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 71", email, actorSessionId: sA }));
+  const demLienHe = async (): Promise<number> =>
+    (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM supplier_contacts WHERE supplier_id = $1", [ncc])).rows[0]!.n;
+  const THONG_DIEP_ASCII = "email chứa ký tự ngoài ASCII in được — chỉ nhận địa chỉ ASCII, không dấu, không khoảng trắng";
+
+  it.each([
+    ["chữ thường ngoài ASCII (ⓐ — điểm bất động của lower() trên musl, 048/049 cho qua)", "ⓐn@x.vn"],
+    ["chữ hoa ngoài ASCII (Ⓐ) — trước đây .toLowerCase() hạ rồi cất", "Ⓐn@x.vn"],
+    ["tiếng Việt có dấu", "đại@x.vn"],
+    ["sigma cuối từ (ς) — confusable với σ, ví dụ của khoản 71", "ας@corp.com"],
+    ["tên miền quốc tế hoá (IDN, chưa punycode)", "a@bücher.de"],
+    ["zero-width space ở giữa — EMAIL_PATTERN và 011 đều để lọt", "ab​@x.vn"],
+  ])("Unicode ⇒ SupplierError có tên (422), không hàng nào được ghi, không 23514: %s", async (_ten, email) => {
+    const truoc = await demLienHe();
+    const loi = await them(email).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi, "phải bị từ chối").toBeInstanceOf(SupplierError);
+    expect((loi as Error).message).toBe(THONG_DIEP_ASCII);
+    expect((loi as { code?: string }).code, "lỗi của tầng ứng dụng, không phải 23514 của CSDL").toBeUndefined();
+    expect(await demLienHe(), "không hàng nào được ghi").toBe(truoc);
+  });
+
+  it("[khoản 71 ⑶] `İ`/`Ⱥ`/`Ⱦ` sát 320 byte — trước đây 23514 thân cố định (kiểm độ dài TRƯỚC khi hạ); nay lỗi có tên của tầng ứng dụng, không một mã Postgres nào", async () => {
+    const duoi = "@x.vn";
+    for (const ky of ["İ", "Ⱥ", "Ⱦ"]) {
+      // Tiền đề đo bằng Node: 2 byte trước khi hạ, 3 byte sau — ghim để ca này không xanh oan nếu ICU của Node đổi.
+      expect(Buffer.byteLength(ky, "utf8"), `${ky} trước khi hạ`).toBe(2);
+      expect(Buffer.byteLength(ky.toLowerCase(), "utf8"), `${ky} sau khi hạ`).toBe(3);
+      const email = ky + "a".repeat(320 - 2 - duoi.length) + duoi;
+      expect(Buffer.byteLength(email, "utf8")).toBe(320);
+      expect(Buffer.byteLength(email.toLowerCase(), "utf8")).toBe(321);
+      const loi = await them(email).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(loi, `${ky}: phải bị từ chối`).toBeInstanceOf(SupplierError);
+      expect((loi as { code?: string }).code, `${ky}: không được là mã Postgres`).toBeUndefined();
+      expect((loi as Error).message, "thông điệp không mang giá trị").not.toContain("aaaa");
+    }
+  });
+
+  it("ASCII in được ⇒ qua và cất ở chữ thường — kể cả mọi ký tự đặc biệt in được; đúng 320 byte qua, 321 bị từ chối có tên", async () => {
+    const dacBiet = "a!#$%&'*+/=?^_`{|}~-b@ncc-71.vn";
+    expect((await them(dacBiet)).email).toBe(dacBiet);
+    expect((await them("Ke.Toan+71@NCC-71.VN")).email).toBe("ke.toan+71@ncc-71.vn");
+    const duoi = "@x.vn";
+    const vua = "b".repeat(320 - duoi.length) + duoi;
+    expect(Buffer.byteLength(vua, "utf8")).toBe(320);
+    expect((await them(vua)).email).toBe(vua);
+    await expect(them(`c${vua}`)).rejects.toThrow("email dài quá 320 byte");
+    await expect(them("   ")).rejects.toThrow("email không được rỗng");
+  });
+});
+
+// =============================================================================================
+// [S1.247 / khoản 283 / ADR-139] DẤU CHẤM CUỐI TÊN MIỀN — TỪ CHỐI CÓ TÊN, KHÔNG CHUẨN HOÁ
+//
+// Khoản 283 (tách ra từ lượt đo khoản 71 ở S1.229): `dot@x.vn.` CẤT ĐƯỢC cạnh `dot@x.vn` cho CÙNG một nhà cung cấp — `EMAIL_PATTERN` và
+// ràng buộc hình dạng của 011 khớp vì `[^…@]+\.[^…@]+$` lùi được về `x` `.` `vn.`; 092 chỉ kiểm miền ký tự; `UNIQUE (org_id, supplier_id,
+// email)` so nguyên văn. RFC 5321 coi tên miền có dấu chấm cuối là dạng tuyệt đối của CÙNG một tên, và bộ gửi SES nhận cả hai ⇒ hai người
+// liên hệ, hai lời mời, MỘT hộp thư. Chủ dự án chốt (kế hoạch đợt 3 mục 0, câu 12): từ chối CÓ TÊN ở tầng ứng dụng + `CHECK (email !~
+// '\.$')` ở lược đồ; KHÔNG chuẩn hoá — bỏ dấu chấm là sửa ngầm địa chỉ người dùng gõ. Ở đây đo tầng ứng dụng (`SupplierError` ⇒ 422 qua
+// `LOI_NGHIEP_VU_422`) và lược đồ dưới superuser (không qua gói này); đối chiếu trước của migration đo ở `db/migrations.int.test.ts`.
+// =============================================================================================
+describe("[S1.247 / khoản 283] dấu chấm cuối tên miền của người liên hệ bị từ chối có tên", () => {
+  let ncc = "";
+  beforeAll(async () => {
+    ncc = (await withTenant(apiPool, orgA, (c) => createSupplier(c, orgA, { legalName: "NCC dấu chấm cuối", actorSessionId: sA }))).id;
+  });
+  const them = (email: string) =>
+    withTenant(apiPool, orgA, (c) => addSupplierContact(c, orgA, { supplierId: ncc, fullName: "Nguoi lien he 283", email, actorSessionId: sA }));
+  const emailDaCat = async (): Promise<string[]> =>
+    (await db.pool.query<{ email: string }>("SELECT email FROM supplier_contacts WHERE supplier_id = $1 ORDER BY email", [ncc])).rows.map(
+      (r) => r.email,
+    );
+  const THONG_DIEP_CHAM_CUOI = "email có dấu chấm cuối tên miền — nhập địa chỉ không có dấu chấm ở cuối";
+
+  it("đối chứng: `dot-283@x.vn` (không dấu chấm cuối) qua và được cất", async () => {
+    expect((await them("dot-283@x.vn")).email).toBe("dot-283@x.vn");
+  });
+
+  it.each([
+    ["dấu chấm cuối — CÙNG hộp thư với `dot-283@x.vn` vừa cất (RFC 5321: dạng tuyệt đối của cùng một tên)", "dot-283@x.vn."],
+    ["chữ hoa và dấu chấm cuối — hạ chữ thường không gỡ dấu chấm", "DOT-283@X.VN."],
+    ["khoảng trắng hai đầu — `trim` xong vẫn còn dấu chấm cuối", "  dot-283@x.vn.  "],
+    ["hai dấu chấm cuối", "hai-283@x.vn.."],
+    ["dấu chấm cuối, không có dạng anh em nào đã cất", "mot-283@x.vn."],
+  ])("%s ⇒ SupplierError có tên (422), không hàng nào được ghi, không 23514", async (_ten, email) => {
+    const truoc = await emailDaCat();
+    const loi = await them(email).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(loi, "phải bị từ chối").toBeInstanceOf(SupplierError);
+    expect((loi as Error).message).toBe(THONG_DIEP_CHAM_CUOI);
+    expect((loi as { code?: string }).code, "lỗi của tầng ứng dụng, không phải 23514 của CSDL").toBeUndefined();
+    expect(await emailDaCat(), "không hàng nào được ghi").toEqual(truoc);
+  });
+
+  it("dấu chấm KHÔNG ở cuối vẫn qua (trong local-part, giữa tên miền) — luật chỉ chạm đuôi chuỗi", async () => {
+    expect((await them("Ke.Toan.283@NCC.X.VN")).email).toBe("ke.toan.283@ncc.x.vn");
+  });
+
+  it("lược đồ dưới superuser (không qua gói này): `dot-su-283@x.vn` vào, dạng có một hay hai dấu chấm cuối ⇒ 23514 `supplier_contacts_email_khong_dau_cham_cuoi`", async () => {
+    const chen = (email: string): Promise<string | null> =>
+      db.pool
+        .query(
+          "INSERT INTO supplier_contacts (org_id, supplier_id, full_name, email, created_by, created_by_session_id) VALUES ($1, $2, 'Nguoi 283', $3, $4, $5)",
+          [orgA, ncc, email, uA, sA],
+        )
+        .then(
+          () => null,
+          (e: { code?: string; constraint?: string }) => `${e.code ?? "?"} ${e.constraint ?? "?"}`,
+        );
+    expect(await chen("dot-su-283@x.vn"), "đối chứng").toBeNull();
+    expect(await chen("dot-su-283@x.vn."), "dấu chấm cuối, cạnh dạng không dấu chấm").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
+    expect(await chen("hai-su-283@x.vn.."), "hai dấu chấm cuối").toBe("23514 supplier_contacts_email_khong_dau_cham_cuoi");
+  });
+});

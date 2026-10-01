@@ -125,6 +125,9 @@ export interface PublicContext {
  * Handler xếp việc ấy vào đây; bộ điều phối chạy SAU khi giao dịch đã commit, và một lỗi ở đó không
  * đổi phản hồi (đã quyết) — chỉ được ghi tên ra log.
  * [S1.70 / lượt soi 64a-8] Việc ấy chạy khi kết nối của handler đã trả về pool: closure không được dùng `ctx.client`.
+ * [S1.209 / khoản 135] Điều ấy nay có lớp canh: `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của mọi lời gọi
+ * `ctx.afterCommit*(…)` trong `routes/**` — `ctx.client`, bí danh của nó, hay truyền nguyên `ctx` vào closure đều đỏ; việc phải viết
+ * TẠI CHỖ (một closure khai ở ngoài rồi truyền vào cũng đỏ, vì cổng không đọc xuyên qua biến).
  */
 export type AfterCommit = (viec: () => Promise<void>) => void;
 
@@ -138,7 +141,10 @@ export type AfterCommit = (viec: () => Promise<void>) => void;
  *
  * `viec` và `bu` chạy SAU khi `withTenant` của handler đã trả kết nối về pool: closure KHÔNG được dùng `ctx.client` — kết nối ấy đã rảnh,
  * hay đã ở trong giao dịch của một yêu cầu khác; `bu` dùng `client` được truyền vào (lượt soi 64a-8). Phần bù không đi qua cổng quyền lần
- * nữa: nó chạy dưới mã quyền route đã kiểm, nên chỉ được làm việc mà chính mã quyền ấy cho phép — không lớp nào canh điều này (64a-7).
+ * nữa: nó chạy dưới mã quyền route đã kiểm, nên chỉ được làm việc mà chính mã quyền ấy cho phép — ~~không lớp nào canh điều này (64a-7)~~
+ * **[S1.209 / khoản 135] cả hai điều nay có cổng:** `tests/architecture/viec-sau-commit.test.ts` đọc cây cú pháp của `routes/**` — closure
+ * chạm `ctx.client` (kể cả qua bí danh) thì đỏ; hàm gói gọi trong `bu`/`khiXong` phải nằm trong bảng đóng `HAM_BU_THEO_MA_QUYEN` của
+ * chính mã quyền route khai, SQL tay và hàm cục bộ ở đó cũng đỏ.
  */
 export interface ViecSauCommitCoBu {
   readonly viec: () => Promise<void>;
@@ -183,7 +189,7 @@ export interface LanGuiSauCommit {
  * link nào không đi, và điều ấy không đổi khi hàng CSDL chậm một bước.
  *
  * Cùng hai điều của `ViecSauCommitCoBu`: closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8), và phần bù không đi qua cổng
- * quyền lần nữa (64a-7).
+ * quyền lần nữa (64a-7) — [S1.209 / khoản 135] cùng cổng `viec-sau-commit.test.ts` canh, đọc cả `bu`/`khiXong` của TỪNG lần gửi.
  */
 export interface LoGuiSauCommit {
   readonly lanGui: readonly LanGuiSauCommit[];
@@ -191,6 +197,24 @@ export interface LoGuiSauCommit {
 }
 
 export type AfterCommitLoGui = (lo: LoGuiSauCommit) => void;
+
+/**
+ * [S1.234 / S4.3b / ADR-135] Việc sau commit TRONG MỘT GIAO DỊCH MỚI của cùng tổ chức — hôm nay: lượt chuẩn hoá sau lần nộp duyệt
+ * (spec S4 §4.4: *"trong một giao dịch riêng … một lỗi chuẩn hoá không được chặn việc nộp duyệt"*). Khác `AfterCommit` — việc ngoài
+ * CSDL, không cầm kết nối —, và khác việc có bù: kết quả của nó KHÔNG đổi phản hồi và không có phần bù.
+ *
+ * Bộ điều phối chạy mọi việc đã đăng ký, theo thứ tự đăng ký, khi phản hồi CUỐI thành công — sau việc có bù và lô gửi, trước việc
+ * thường —, mỗi việc một `withTenant` MỚI (lần lấy kết nối có trần 5 s; trong giao dịch: chờ khoá 2 s, mỗi câu 5 s). Hỏng ⇒ MỘT dòng
+ * log `giao-dich-sau-commit i/n` mang mẫu route và tên lỗi, không nội dung (A2); phản hồi giữ nguyên, vì lần ghi của handler đã commit
+ * và việc sau là phần cộng thêm chạy lại được. Việc có bù hỏng hay lô gửi đổi phản hồi thành lỗi ⇒ không việc nào chạy, một dòng
+ * `giao-dich-sau-commit bo-qua n`. Không giới hạn số việc: việc này không đổi phản hồi, nên hai việc không tranh nhau câu trả lời như
+ * hai việc có bù (lượt soi 64a-2).
+ *
+ * Chỉ route GHI đăng ký được (`mutates: true`); route đọc gọi hàm này ⇒ ném, giao dịch của handler rollback.
+ *
+ * Closure KHÔNG được dùng `ctx.client` (lượt soi 64a-8): nó nhận kết nối của giao dịch mới làm tham số.
+ */
+export type AfterCommitGiaoDich = (viec: (client: pg.PoolClient) => Promise<void>) => void;
 
 /**
  * Đường VÔ DANH có tổ chức: chưa có phiên, tự chứng minh bằng token trong THÂN yêu cầu (magic
@@ -250,11 +274,24 @@ export interface BuyerContext {
   readonly afterCommitCoBu: AfterCommitCoBu;
   /** [S1.188 / S3.2b2 / ADR-113] Lô N lần gửi sau commit, mỗi lần hỏng riêng — xem `LoGuiSauCommit`. */
   readonly afterCommitLoGui: AfterCommitLoGui;
+  /** [S1.234 / S4.3b / ADR-135] Việc sau commit trong một giao dịch MỚI của cùng tổ chức — xem `AfterCommitGiaoDich`. */
+  readonly afterCommitGiaoDich: AfterCommitGiaoDich;
   /**
    * [S1.169 / S3.1c / ADR-105] Cờ triển khai của lần ký chính sách — tức nút BẬT S3. Đọc từ cấu hình lúc khởi động
    * (`choKyChinhSach`), mặc định TẮT; route ký đọc nó TRƯỚC mọi câu ghi.
    */
   readonly choKyChinhSach: boolean;
+  /**
+   * [S1.209 / khoản 188] Ngưỡng `failed_attempts` mà route TỰ THÂN đã khai (`BuyerSelfRoute.mfaTranDuongPhu`), do BỘ ĐIỀU PHỐI
+   * điền từ chính bảng route — không phải một hằng handler tự nhập. Route đọc và route ghi có mã quyền nhận `null`: chúng không
+   * khai ngưỡng nào. Handler thử mã TOTP truyền đúng giá trị này xuống `tranDuongPhu` của `verifyTotpForLogin`.
+   *
+   * VÌ SAO QUA `ctx`: S1.83 đặt cùng một hằng ở hai chỗ — lời khai của route và lời gọi trong handler — và khai *"nên hai nơi không
+   * trôi khỏi nhau"*. Đúng cho GIÁ TRỊ, sai cho SỰ CÓ MẶT (S1.87): một route mới khai ngưỡng mà handler quên truyền thì chỉ còn cổng
+   * đi trước của bộ điều phối — đường tắt kiểm-rồi-làm mà S1.83 vừa vá — và không cổng nào kêu. Nay bảng route là nguồn DUY NHẤT,
+   * và `routes.test.ts` đo trên chính handler rằng câu lệnh nhận đúng thứ nằm trong `ctx` (T1) — cộng `auth.int.test.ts` vế ⑼ qua HTTP.
+   */
+  readonly mfaTranDuongPhu: number | null;
 }
 
 interface RouteBase {

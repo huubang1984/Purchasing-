@@ -54,6 +54,9 @@ const HAM_DOI_TRANG_THAI = [
   "duyetTraoThau",
   "huyTraoThau",
   "moVongBafo",
+  // [S1.231 / khoản 232 / ADR-133] Hàm ghi THỨ BẢY của `@trustprocure/danh-gia`: rút đề xuất — route đòi `award.recommend`,
+  // cùng mã với lần đề xuất; hàm hỏi lại cùng mã.
+  "rutDeXuatTraoThau",
   "taoLuotDanhGia",
   "addSupplierContact",
   "approveRfq",
@@ -93,6 +96,10 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.204 / S4.3a] Lượt chuẩn hoá và hai thao tác hàng đợi. Route của S4.3b hỏi quyền; CSDL chặn ở trigger `…_bat_bien`:
   // `NGUOI_DUYET` đòi `item.manage` và người ngoài tập loại trừ (L3), gói đã có bản rõ đòi `item.manage` và lý do (L13).
   "chuanHoaGoi",
+  // [S1.234 / S4.3b] Lượt chuẩn hoá SAU lần nộp duyệt: route nộp duyệt (`rfq.create`) đăng ký `chuanHoaGoi` chạy sau commit dưới
+  // phiên người nộp; hàm này (điều kiện + lượt) là đường của `gieo:demo`. Cổng là luật ghi ở CSDL — trước khi có bản rõ, `TU_DONG`
+  // và gợi ý không đòi quyền (ADR-121 ②).
+  "chuanHoaSauNop",
   "ghiAnhXa",
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
@@ -174,6 +181,8 @@ const HAM_CHI_DOC = [
   // [S1.204 / S4.3a] Hàng đợi ánh xạ và trạng thái ánh xạ từng dòng — mô tả, đơn vị, số lượng người mua đã viết; không giá.
   "docAnhXaGoi",
   "docHangDoi",
+  // [S1.234 / lượt soi S4.3b, L3] Tổ chức có hàng chuẩn đang dùng không — một `EXISTS`, không mang dữ liệu nào của hàng.
+  "coHangChuanDangDung",
   // [S1.201 / S3.6a] Danh sách nhóm hàng — không giá, không phải bí mật với người trong tổ chức. Vế *ai gọi được* đóng ở route
   // (`agent: false`).
   "lietKeNhomHang",
@@ -261,6 +270,9 @@ const HAM_DOC_CO_QUYEN = [
   // [S1.200 / khoản 258] Ngân sách dự tính neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không ghi số tiền vào sổ. Cổng
   // đứng THẲNG trong thân `getRfqBudget`: người tạo gói `rfq.create`, người khác `rfq.approve`.
   "getRfqBudget",
+  // [S1.251 / S4.4b] Lịch sử giá là giá SAU mở thầu, gom từ nhiều gói — cổng `bid.view` đứng THẲNG trong thân `docLichSuGia`
+  // (spec S4 §4.5), cùng cổng của bảng so sánh và bảng xếp hạng.
+  "docLichSuGia",
 ] as const;
 
 /**

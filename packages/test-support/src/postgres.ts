@@ -1,20 +1,40 @@
 import { fileURLToPath } from "node:url";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { ganVaiTroChoPool, laVaiUngDung, VAI_UNG_DUNG, migrate } from "@trustprocure/db";
+import { TenantError } from "@trustprocure/tenancy";
+import { cauHinhCumCucBo, khoiDongCumCucBo, type MayChuPostgres } from "./postgres-cuc-bo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
+/** [S1.242 / khoản 281] Gốc kho và chính tệp này — để nơi gọi in ra dạng `tệp:dòng` tương đối, đọc được trong log CI. */
+const GOC_KHO = gachXuoi(fileURLToPath(new URL("../../../", import.meta.url)));
+const TEP_NAY = gachXuoi(fileURLToPath(import.meta.url));
 
 // [S1.11] Danh sách đóng các DB role hợp lệ mà poolAs() được phép chuyển sang NAY SỐNG Ở
 // `@trustprocure/db` (`VAI_UNG_DUNG`), cùng với cơ chế gắn vai — vì composition root của
 // `apps/api` cần đúng cơ chế ấy cho tiến trình thật, và hai bản chép của một hàng rào là một bản
 // sẽ trôi. Khối [fix C1 + I3] từng đứng ở đây nay là khối đầu `packages/db/src/vai-tro.ts`.
 
+/**
+ * [S1.242 / khoản 281] Lời khai của một test CỐ Ý để trạng thái phiên sót dưới `withTenant` — xem khối lý do khoản 281 ở dưới.
+ * Đưa cho `poolAs(vai, …)` thì khai cho pool ấy; đưa cho `startPostgres(…)`/`withMigratedDatabase(fn, …)` thì khai cho `pool` superuser.
+ */
+export interface TuyChonDemTrangThaiPhien {
+  /**
+   * Số lần pool này huỷ một kết nối bằng `release(TenantError SESSION_STATE_LEFT)` trước `stop()` — mặc định 0. `stop()` đòi số
+   * đếm BẰNG đúng số này (không phải "không quá"). Số nguyên không âm; sai hình dạng thì NÉM ngay lúc gọi.
+   */
+  readonly soLanSessionStateLeft?: number;
+}
+
 export interface TestDatabase {
   readonly connectionString: string;
   readonly pool: pg.Pool;
-  /** Pool mới chạy dưới một DB role khác — dùng để chứng minh RLS và GRANT chặn thật. */
-  poolAs(role: string): pg.Pool;
+  /**
+   * Pool mới chạy dưới một DB role khác — dùng để chứng minh RLS và GRANT chặn thật. [S1.242 / khoản 281] Mỗi pool mang một bộ
+   * đếm `SESSION_STATE_LEFT`; test cố ý dựng cảnh ấy khai số lần qua `tuyChon.soLanSessionStateLeft`.
+   */
+  poolAs(role: string, tuyChon?: TuyChonDemTrangThaiPhien): pg.Pool;
   stop(): Promise<void>;
 }
 
@@ -89,21 +109,136 @@ async function chuoBackendKhachThoat(connectionString: string): Promise<BackendC
   }
 }
 
-export async function startPostgres(): Promise<TestDatabase> {
-  const container: StartedPostgreSqlContainer = await new PostgreSqlContainer("postgres:16-alpine")
+// ==============================================================================================
+// [S1.242 / khoản 281] TÍN HIỆU ⑴ CỦA HAI POOL NÀY ĐƯỢC ĐẾM — VÀ `stop()` ĐÒI SỐ ĐẾM BẰNG LỜI KHAI
+//
+// `withTenant` đọc lại trạng thái phiên sau mọi giao dịch; thấy sót — GUC tenant/khách phạm vi PHIÊN,
+// `session_replication_role`, `row_security`, search path hiệu lực — thì huỷ kết nối bằng
+// `release(TenantError SESSION_STATE_LEFT)` và KHÔNG ném: lỗi ấy chỉ đi vào sự kiện `release` của pool
+// (khoản 118). Tiến trình thật nghe nó (cổng `pool-nghe-du-tin-hieu`, tín hiệu ⑴); hai pool của tệp
+// này thì không, nên tới vòng này một mã sản xuất để sót trạng thái phiên dưới test làm MỘT kết nối
+// biến khỏi pool và không test nào đỏ (khoản 281, §S1.227 mục 7 — cổng ấy quét `apps/`, `tools/`).
+//
+// Nay `startPostgres` gắn một bộ đếm `release` cho `pool` và cho MỌI pool của `poolAs`; `stop()` so
+// từng bộ đếm với số lần KHAI và ném, nêu tệp gọi `startPostgres`, từng pool lệch (tên, nơi dựng, số
+// đếm, số khai). Test CỐ Ý dựng cảnh ấy khai qua tham số có tên `soLanSessionStateLeft` — ở
+// `poolAs(vai, { … })` cho pool của chính nó, ở `startPostgres({ … })` cho `pool` superuser. Không có
+// cờ tắt vế.
+//
+// BỐN ĐIỂM ĐÃ CÂN:
+//   ⒜ Đếm ĐÚNG mã `SESSION_STATE_LEFT` của `TenantError`. `KetNoiNhiemError` của lần lấy client, lỗi
+//     gốc của một giao dịch hỏng, `true` của `destroyConnectionWhenDone` cũng huỷ kết nối qua
+//     `release`, nhưng là đường KHÁC đã có người đo riêng — ca đối chứng ở `postgres.int.test.ts`.
+//   ⒝ Đòi BẰNG, không đòi "không quá": khai 1 mà đếm 0 nghĩa là tiền đề của test đã mất (withTenant
+//     thôi bắt trục nó dựng) — cũng đỏ.
+//   ⒞ Khai theo POOL, không theo tệp: pool dựng trong chính `it` thì `-t` lọc bỏ `it` ấy cũng bỏ luôn
+//     lời khai, nên chạy một phần tệp không đỏ oan. Hệ quả: một test cố ý dựng cảnh trên pool DÙNG
+//     CHUNG của cả tệp thì phải dựng pool riêng để khai.
+//   ⒟ Ném SAU khi dừng máy chủ, cùng luật ⑵ của khoản 28; hai lời phán (khoản 28, khoản 281) gộp
+//     vào MỘT lỗi. Thông điệp chỉ mang tên, nơi dựng và số — không giá trị GUC nào (withTenant cũng
+//     không nội suy giá trị vào lỗi của nó).
+// ==============================================================================================
+
+/** [S1.242 / khoản 281] Một bộ đếm `SESSION_STATE_LEFT` của một pool. */
+interface BoDemTrangThaiPhien {
+  readonly ten: string;
+  /** `tệp:dòng` nơi pool được dựng (khung đầu tiên của ngăn xếp nằm ngoài tệp này). */
+  readonly noiDung: string;
+  readonly khai: number;
+  dem: number;
+}
+
+/**
+ * [S1.242 / khoản 281] Nơi gọi `startPostgres`/`poolAs`: khung đầu tiên của ngăn xếp nằm ngoài tệp này và ngoài `node_modules`, dạng
+ * `tệp:dòng` tương đối với gốc kho. Chỉ đọc chuỗi ngăn xếp (vitest đã ánh xạ về mã nguồn); không đọc được thì nói thế, không ném.
+ * [Windows, 2026-10-01] Khung của tệp test trên Windows là `D:\…\x.test.ts:1:2` — bản trước chỉ nhận đường bắt đầu bằng `/`
+ * nên bỏ qua nó, rồi trả khung `node_modules\.pnpm\@vitest…` vì phép lọc chỉ tìm `/node_modules/`. Nay nhận cả ổ đĩa, và mọi
+ * đường dẫn được so và in ở dạng gạch xuôi.
+ */
+function noiGoi(): string {
+  for (const dong of (new Error().stack ?? "").split("\n").slice(1)) {
+    const m = /(?:\(|at )((?:file:\/\/)?(?:\/|[A-Za-z]:[\\/])[^()]+?):(\d+):\d+\)?$/u.exec(dong.trim());
+    if (m === null) continue;
+    const tep = gachXuoi(m[1]!.startsWith("file://") ? fileURLToPath(m[1]!) : m[1]!);
+    if (tep === TEP_NAY || tep.includes("/node_modules/")) continue;
+    return `${tep.startsWith(GOC_KHO) ? tep.slice(GOC_KHO.length) : tep}:${m[2]!}`;
+  }
+  return "(không đọc được nơi gọi)";
+}
+
+/** [Windows, 2026-10-01] `fileURLToPath` và ngăn xếp của Node trên Windows dùng `\` — đưa về `/` trước khi so hay in. */
+function gachXuoi(duong: string): string {
+  return duong.replace(/\\/gu, "/");
+}
+
+/** [S1.242 / khoản 281] Số lần khai — số nguyên không âm, mặc định 0; sai hình dạng thì NÉM trước khi chạm cụm. */
+function soLanKhai(tuyChon: TuyChonDemTrangThaiPhien | undefined, cho: string): number {
+  const n = tuyChon?.soLanSessionStateLeft ?? 0;
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new Error(`[khoản 281] ${cho}: soLanSessionStateLeft phải là số nguyên không âm — nhận ${String(n)}.`);
+  }
+  return n;
+}
+
+/** [S1.242 / khoản 281] Gắn bộ đếm vào `pool`: mỗi `release` mang `TenantError` mã `SESSION_STATE_LEFT` cộng một. */
+function ganBoDem(pool: pg.Pool, ten: string, noiDung: string, khai: number): BoDemTrangThaiPhien {
+  const bo: BoDemTrangThaiPhien = { ten, noiDung, khai, dem: 0 };
+  pool.on("release", (loi: unknown) => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") bo.dem += 1;
+  });
+  return bo;
+}
+
+/** [S1.242 / khoản 281] Lời phán của `stop()` khi có pool lệch — tên, nơi dựng, số; không giá trị. */
+function moTaLech(tepGoi: string, lech: readonly BoDemTrangThaiPhien[]): string {
+  return (
+    `[khoản 281] ${tepGoi}: số lần withTenant huỷ kết nối bằng TenantError SESSION_STATE_LEFT khác số đã khai — ` +
+    lech.map((b) => `${b.ten} (dựng ở ${b.noiDung}) đếm ${String(b.dem)}, khai ${String(b.khai)}`).join("; ") +
+    ". Đếm NHIỀU hơn khai: một giao dịch dưới withTenant để lại trạng thái phiên (SET không LOCAL, set_config(…, false), " +
+    "search_path, session_replication_role, row_security) — dưới tiến trình thật mỗi lần như thế là một kết nối bị huỷ mà chỉ " +
+    "một dòng log `ket noi huy` nói ra; sửa mã, hay nếu test CỐ Ý dựng cảnh ấy thì khai số lần ở " +
+    "`poolAs(vai, { soLanSessionStateLeft })` / `startPostgres({ soLanSessionStateLeft })`. Đếm ÍT hơn khai: tiền đề của test " +
+    "đã mất — withTenant thôi bắt trục mà test ấy dựng."
+  );
+}
+
+/** Đường mặc định: một container Testcontainers cho mỗi lần gọi. */
+async function khoiDongContainer(): Promise<MayChuPostgres> {
+  const container = await new PostgreSqlContainer("postgres:16-alpine")
     .withDatabase("trustprocure_test")
     .withUsername("postgres")
     .withPassword("postgres")
     .start();
+  return {
+    connectionString: container.getConnectionUri(),
+    async dung(): Promise<void> {
+      await container.stop();
+    },
+  };
+}
 
-  const connectionString = container.getConnectionUri();
+export async function startPostgres(tuyChon: TuyChonDemTrangThaiPhien = {}): Promise<TestDatabase> {
+  // [S1.242 / khoản 281] Nơi gọi và lời khai đọc TRƯỚC mọi `await`: ngăn xếp lúc này còn khung của người gọi, và một lời khai sai
+  // hình dạng ném trước khi một cụm nào được dựng.
+  const tepGoi = noiGoi();
+  const khaiPoolChinh = soLanKhai(tuyChon, `startPostgres (${tepGoi})`);
+
+  // Không có Docker thì đi đường cụm cục bộ (xem đầu `postgres-cuc-bo.ts`); có đủ hai biến môi
+  // trường mới rẽ, còn lại container như trước. Mọi thứ dưới đây không biết mình đang ở đường nào.
+  const cucBo = cauHinhCumCucBo();
+  const mayChu: MayChuPostgres = cucBo === undefined ? await khoiDongContainer() : await khoiDongCumCucBo(cucBo);
+
+  const connectionString = mayChu.connectionString;
   const pool = new pg.Pool({ connectionString, max: 5 });
   const rolePools: pg.Pool[] = [];
+  // [S1.242 / khoản 281] Một bộ đếm mỗi pool — `pool` superuser trước, rồi từng pool của `poolAs` theo thứ tự dựng.
+  const boDem: BoDemTrangThaiPhien[] = [ganBoDem(pool, "pool superuser", tepGoi, khaiPoolChinh)];
 
   return {
     connectionString,
     pool,
-    poolAs(role: string): pg.Pool {
+    poolAs(role: string, tuyChonPool?: TuyChonDemTrangThaiPhien): pg.Pool {
+      const noiDung = noiGoi();
       if (!laVaiUngDung(role)) {
         throw new Error(
           `poolAs: vai trò không hợp lệ "${role}" — chỉ chấp nhận ${VAI_UNG_DUNG.join(" hoặc ")}.`,
@@ -112,7 +247,9 @@ export async function startPostgres(): Promise<TestDatabase> {
       // Gán vào một const mới ngay sau khi type guard xác thực: TypeScript không giữ narrowing
       // của tham số hàm xuyên vào một closure lồng bên trong, nên phải "chốt" kiểu vào một binding mới.
       const vaiTroDaXacThuc = role;
+      const khai = soLanKhai(tuyChonPool, `poolAs("${vaiTroDaXacThuc}") (${noiDung})`);
       const rolePool = ganVaiTroChoPool(new pg.Pool({ connectionString, max: 3 }), vaiTroDaXacThuc);
+      boDem.push(ganBoDem(rolePool, `poolAs("${vaiTroDaXacThuc}")`, noiDung, khai));
       rolePools.push(rolePool);
       return rolePool;
     },
@@ -137,13 +274,18 @@ export async function startPostgres(): Promise<TestDatabase> {
         conSot = [];
       }
 
-      await container.stop();
+      // [S1.242 / khoản 281] Chốt số đếm SAU khi mọi pool đã đóng: `withTenant` phát `release` đồng bộ trong `finally` của nó, nên
+      // một giao dịch đã trả về thì đã được đếm; và TRƯỚC khi dừng máy chủ — nhưng ném thì SAU (điểm ⒟ ở khối lý do).
+      const lech = boDem.filter((b) => b.dem !== b.khai);
 
+      await mayChu.dung();
+
+      const loiPhan: string[] = [];
       if (conSot.length > 0) {
         const moTa = conSot
           .map((b) => `pid=${b.pid} db=${b.datname ?? "?"} state=${b.state ?? "?"} app=${b.application_name ?? "?"}`)
           .join("; ");
-        throw new Error(
+        loiPhan.push(
           `[khoản nợ 28] Bộ test này dừng container khi còn ${conSot.length} kết nối khách sống ` +
             `sau ${HAN_CHO_KET_NOI_THOAT_MS}ms chờ. Đó chính là nguồn của \`57P01\` ` +
             `("terminating connection due to administrator command") — một lỗi làm JOB đỏ mà ` +
@@ -152,15 +294,21 @@ export async function startPostgres(): Promise<TestDatabase> {
             `\`afterAll\`, TRƯỚC khi \`db.stop()\` chạy. Backend còn sót: ${moTa}`,
         );
       }
+      if (lech.length > 0) loiPhan.push(moTaLech(tepGoi, lech));
+      if (loiPhan.length > 0) throw new Error(loiPhan.join("\n"));
     },
   };
 }
 
-/** Khởi động Postgres, áp dụng toàn bộ migration thật của dự án, chạy `fn`, rồi dọn dẹp. */
+/**
+ * Khởi động Postgres, áp dụng toàn bộ migration thật của dự án, chạy `fn`, rồi dọn dẹp. [S1.242 / khoản 281] `tuyChon` là lời khai
+ * cho `pool` superuser, chuyển nguyên cho `startPostgres`.
+ */
 export async function withMigratedDatabase(
   fn: (db: TestDatabase) => Promise<void>,
+  tuyChon: TuyChonDemTrangThaiPhien = {},
 ): Promise<void> {
-  const db = await startPostgres();
+  const db = await startPostgres(tuyChon);
   // [khoản nợ 28] `finally { await db.stop() }` trần KHÔNG dùng được nữa: `stop()` nay có thể
   // ném vì rò rỉ kết nối, và một lần ném trong `finally` NUỐT lỗi gốc của thân hàm — tức phép
   // đo mới sẽ che mất đúng thứ bộ test đang tìm. Lỗi của thân hàm luôn thắng; lỗi dọn dẹp chỉ

@@ -2,7 +2,8 @@
 // [S1.199 / S4.2b] MÀN DỮ LIỆU NỀN — spec S4 §3.5 (`/du-lieu`), §4.2, §4.3, §8.10
 //
 // Bốn việc: ⑴ danh sách hàng chuẩn, lọc trên màn; ⑵ tạo hàng chuẩn; ⑶ chi tiết một hàng — phiên bản, bí danh, quy đổi riêng —
-// và ghi thêm vào từng thứ; ⑷ danh mục đơn vị cùng bí danh đơn vị của tổ chức. Mọi luật nằm ở máy chủ và CSDL (`083`): màn
+// và ghi thêm vào từng thứ; ⑷ danh mục đơn vị cùng bí danh đơn vị của tổ chức. [S1.234 / S4.3b] Việc thứ năm: ⑸ hàng đợi ánh xạ —
+// duyệt (kèm khai bí danh, để hàng đợi học), bác, tạo hàng chuẩn mới rồi duyệt, chuẩn hoá lại cả gói; luật ở trigger `089`. Mọi luật nằm ở máy chủ và CSDL (`083`): màn
 // không kiểm lại luật nào, nó chỉ nói trước điều máy chủ sẽ nói (`/lib/du-lieu.js` — một bản cài, `tsc` gác, vitest đo).
 //
 // Phần GHI chỉ hiện khi `GET /items` trả `choGhi`; không thì màn nói câu §8.10 — vai quản lý dữ liệu là một NGƯỜI MỚI, không
@@ -11,17 +12,24 @@
 // Trang không chèn chuỗi nào của máy chủ vào HTML: mọi ô đi qua `textContent`.
 // ==============================================================================================
 
-import { cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, maHopLe, moTaQuyDoi, vietThuocTinh } from "/lib/du-lieu.js";
+import {
+  cauVaiQuanLy, docThuocTinh, docTrongYeu, heSoHopLe, locHangChuan, locHangDoi, luaChonHangChuan, maHopLe, moTaQuyDoi, nhanGoiY, vietThuocTinh,
+} from "/lib/du-lieu.js";
+import { ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
 const hien = (el, co) => { el.hidden = !co; };
 const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 
-let phien = { token: "", daRedeem: false };
+// [S1.249 / khoản 291] ~~`let phien = { token: "", daRedeem: false };`~~ — mã đăng nhập và "đã đổi ở máy chủ chưa" nay sống trong
+// `/lib/dang-nhap.js`, như ở bốn trang người mua kia (khoản 282).
 let trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
 let danhMuc = { donVi: [], biDanhChung: [], biDanhToChuc: [] };
 /** Chi tiết hàng chuẩn đang mở ở bước 4 — `null` khi bước 4 đóng. */
 let dangXem = null;
+/** [S1.234 / S4.3b] Hàng đợi đang hiện ở bước 6, và dòng đang mở ở khối xử lý — `null` khi khối đóng. */
+let hangDoi = { dong: [], conNua: false };
+let dangXuLy = null;
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -85,6 +93,9 @@ const TRANG_THAI = { DANG_DUNG: "đang dùng", NGUNG_DUNG: "ngừng dùng" };
 
 // ---------------------------------------------------------------------------------------------
 // Bước 1 — đăng nhập: magic link + TOTP, cùng khuôn `chinh-sach.js` (gọi `/auth/redeem` ĐÚNG một lần cho mỗi mã).
+// [S1.249 / khoản 291] ~~Cùng khuôn~~ CÙNG MỘT BẢN với `/login` và ba trang người mua kia: nút Tiếp, nút Vào và khối link đăng nhập
+// gần đây là `/lib/dang-nhap.js`; trang giữ `docLink`, lối hỏi lại phiên, đăng xuất và `hashchange`, và gọi `dangNhap.datLai()` khi về
+// bước 1.
 // ---------------------------------------------------------------------------------------------
 
 function docLink() {
@@ -98,46 +109,21 @@ docLink();
 window.addEventListener("hashchange", () => {
   docLink();
   phienCho = null;
-  phien = { token: $("token").value.trim(), daRedeem: false };
-  for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5"]) bao($(id), "");
+  // [S1.249 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ — `dangNhap.datLai()` dưới, sau khi các bước đã đóng.
+  for (const id of ["loi1", "ok1", "ghi-danh", "loi2", "loi3", "ok3", "loi4", "ok4", "loi5", "ok5", "loi6", "ok6"]) bao($(id), "");
   dongCacBuoc();
+  dangNhap.datLai();
   thuPhienCo();
 });
 
-$("nut-vao").addEventListener("click", async () => {
-  bao($("loi1"), ""); bao($("ghi-danh"), "");
-  const orgId = $("org").value.trim();
-  const token = $("token").value.trim();
-  const code = $("ma").value.trim();
-  if (token !== phien.token) phien = { token, daRedeem: false };
-  if (orgId === "" || token === "") { bao($("loi1"), "Cần cả mã tổ chức và mã đăng nhập."); return; }
-  $("nut-vao").disabled = true;
-  try {
-    if (!phien.daRedeem) {
-      const r1 = await goi("POST", "/auth/redeem", { orgId, token });
-      if (r1.status !== 200) { bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được")); return; }
-      phien = { ...phien, daRedeem: true };
-      if (r1.body?.needsEnrollment === true) {
-        bao($("ghi-danh"), `Tài khoản này chưa có MFA. Bí mật TOTP (nhập vào ứng dụng xác thực, rồi nhập mã sáu số và bấm Vào lần nữa): ${r1.body.totpSecretBase32}`);
-        return;
-      }
-    }
-    if (!/^\d{6}$/.test(code)) { bao($("loi1"), "Nhập mã sáu số của ứng dụng xác thực."); return; }
-    const r2 = await goi("POST", "/auth/totp", { orgId, token, code });
-    if (r2.status !== 200) {
-      bao($("loi1"), r2.body?.reason === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng");
-      return;
-    }
-    xoaManhLink();
-    const me = await goi("GET", "/me");
-    await moSauDangNhap(me.body, false);
-  } finally {
-    $("nut-vao").disabled = false;
-  }
-});
+// [S1.249 / khoản 291] ~~Trình nghe `nut-vao` chép của `/login` cũ: `/auth/redeem` rồi `/auth/totp` trong một lượt, bí mật TOTP hiện
+// cùng chỗ câu lỗi, ô mã sáu số hiện sẵn, mất mạng thì không câu nào~~ — khoản 193 ở trang thứ năm, mà phép đếm của khoản 282 bỏ sót.
+// Nay bước 1 là module chung: ô tổ chức đọc qua `docMaToChuc` (ADR-107), bí mật ghi danh ở khối riêng; trang trao cho module việc của
+// riêng mình sau khi vào — mở các bước và nạp dữ liệu nền.
+const dangNhap = ganDangNhap({ taiLieu: document, goi, lichSu: history, viTri: location, daVao: (me) => moSauDangNhap(me, false) });
 
 /** Bước 3 chỉ mở cho người ghi được; bước 4 mở khi bấm Xem một hàng. */
-const CAC_BUOC_SAU = ["b2", "b5"];
+const CAC_BUOC_SAU = ["b2", "b5", "b6"];
 
 async function moSauDangNhap(me, dungLai) {
   const u = me?.userId;
@@ -151,18 +137,26 @@ async function moSauDangNhap(me, dungLai) {
   hien($("nut-dang-xuat"), true);
   $("b1").classList.add("xong");
   for (const b of CAC_BUOC_SAU) hien($(b), true);
+  // [S1.249 / khoản 291] Khối link đăng nhập gần đây (khoản 195, 268) — trước lời gọi riêng của màn, không chờ.
+  void dangNhap.veLinkGanDay();
   await napHangChuan();
   await napDonVi();
+  await napHangDoi();
 }
 
 function dongCacBuoc() {
   $("b1").classList.remove("xong");
   for (const b of [...CAC_BUOC_SAU, "b3", "b4"]) hien($(b), false);
   xoaChiTiet();
+  xoaXuLy();
+  hangDoi = { dong: [], conNua: false };
+  $("bang-hang-doi").querySelector("tbody").replaceChildren();
   trangThai = { hangChuan: [], conNua: false, choGhi: false, soNguoiQuanLy: 0 };
   bao($("hoi-phien"), "");
   hien($("nut-dung-phien"), false);
   hien($("nut-dang-xuat"), false);
+  // [S1.249 / khoản 291] Về bước 1: danh sách link của người trước đi, và phản hồi về muộn của nó bị bỏ.
+  dangNhap.anLinkGanDay();
 }
 
 /**
@@ -200,8 +194,10 @@ $("nut-dang-xuat").addEventListener("click", async () => {
     const r = await goi("POST", "/auth/logout");
     if (r.status !== 200 && r.status !== 401) { bao($("loi1"), loiCua(r, "Không đăng xuất được")); return; }
     phienCho = null;
-    phien = { token: $("token").value.trim(), daRedeem: false };
     dongCacBuoc();
+    // [S1.249 / khoản 291] ~~`phien = { token: …, daRedeem: false };`~~ Mã đang ở ô phải đổi lại ở máy chủ trước lần vào sau; ô mã
+    // sáu số đóng (khoản 193).
+    dangNhap.datLai();
     bao($("ok1"), "Đã đăng xuất. Trình duyệt này không còn giữ phiên của bạn.");
   } catch {
     bao($("loi1"), "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.");
@@ -210,9 +206,8 @@ $("nut-dang-xuat").addEventListener("click", async () => {
   }
 });
 
-function xoaManhLink() {
-  try { history.replaceState(null, "", location.pathname + location.search); } catch { /* không xoá được thì thôi */ }
-}
+// [S1.249 / khoản 291] ~~`xoaManhLink()` của trang~~ — ADR-020 mục 3 (xoá mảnh link SAU `/auth/totp`) nay là việc của nút Vào trong
+// `/lib/dang-nhap.js`, qua `history` và `location` mà trang trao vào.
 
 // ---------------------------------------------------------------------------------------------
 // Bước 2 — danh sách hàng chuẩn, và câu §8.10
@@ -415,4 +410,139 @@ $("nut-bi-danh-dv").addEventListener("click", motLan($("nut-bi-danh-dv"), async 
   const donVi = $("bdv-don-vi").value.trim();
   if (biDanh === "" || donVi === "") { bao($("loi5"), "Nhập cả bí danh và đơn vị."); return; }
   await ghiDonVi("/uom/aliases", { biDanh, donVi }, `Đã khai "${biDanh}" là ${donVi}.`);
+}));
+
+// ---------------------------------------------------------------------------------------------
+// [S1.234 / S4.3b] Bước 6 — hàng đợi ánh xạ (spec S4 §4.4). Đọc mở cho người mua của tổ chức; nút xử lý chỉ hiện khi `choGhi`.
+// Mọi luật ở trigger `089`: người trong tập loại trừ của gói, lý do sau khi mở niêm phong, bác sau GOI_Y — máy chủ nói, màn in.
+// ---------------------------------------------------------------------------------------------
+
+async function napHangDoi() {
+  bao($("loi6"), "");
+  const r = await goi("GET", "/mapping-queue");
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Không đọc được hàng đợi ánh xạ")); return; }
+  hangDoi = { dong: Array.isArray(r.body?.dong) ? r.body.dong : [], conNua: r.body?.conNua === true };
+  bao($("con-nua-hd"), hangDoi.conNua
+    ? `Màn hiện ${hangDoi.dong.length} dòng cũ nhất; hàng đợi còn dòng khác. Xử lý bớt rồi bấm Đọc lại.`
+    : hangDoi.dong.length === 0 ? "Hàng đợi trống — mọi dòng của các gói đã nộp đều đã nối với hàng chuẩn hoặc đã được bác." : "");
+  // Dòng đang mở mà không còn trong hàng đợi (người khác vừa xử lý) thì đóng khối — nút ghi không có đích cũ.
+  if (dangXuLy !== null && !hangDoi.dong.some((d) => d.rfqId === dangXuLy.rfqId && d.lineNo === dangXuLy.lineNo)) xoaXuLy();
+  veHangDoi();
+}
+
+function veHangDoi() {
+  const tb = $("bang-hang-doi").querySelector("tbody");
+  tb.replaceChildren();
+  for (const d of locHangDoi(hangDoi.dong, $("loc-hd").value)) {
+    const tr = document.createElement("tr");
+    tr.append(o(d.tieuDe), o(String(d.lineNo), "so"), o(d.moTa), o(d.soLuong, "so"), o(d.donVi), o(nhanGoiY(d.goiY)), o(d.goiY?.tacGia ?? "—"));
+    tr.append(trangThai.choGhi ? oNut("Xử lý", () => { moXuLy(d); }) : o(""));
+    tb.append(tr);
+  }
+}
+
+function xoaXuLy() {
+  dangXuLy = null;
+  $("tt-dong").replaceChildren();
+  $("xl-hang").replaceChildren();
+  for (const id of ["xl-ly-do", "xl-ma", "xl-don-vi", "xl-ten"]) $(id).value = "";
+  hien($("khoi-xu-ly"), false);
+}
+
+function moXuLy(d) {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  dangXuLy = d;
+  dienDl($("tt-dong"), [
+    ["Gói", d.tieuDe],
+    ["Dòng", d.lineNo],
+    ["Mô tả", d.moTa],
+    ["Số lượng", `${d.soLuong} ${d.donVi}`],
+    ["Gợi ý", nhanGoiY(d.goiY)],
+    ["Người ghi gợi ý", d.goiY?.tacGia ?? "—"],
+  ]);
+  const chon = $("xl-hang");
+  chon.replaceChildren();
+  for (const l of luaChonHangChuan(d.goiY, trangThai.hangChuan)) {
+    const op = document.createElement("option");
+    op.value = l.id;
+    op.textContent = l.nhan;
+    chon.append(op);
+  }
+  // Mỗi dòng mở ra với ô bí danh bật — mặc định là hàng đợi học; người duyệt tắt nó cho một mô tả không nên thành bí danh.
+  $("xl-bi-danh").checked = true;
+  $("xl-ly-do").value = "";
+  $("xl-ma").value = "";
+  $("xl-don-vi").value = "";
+  $("xl-ten").value = d.moTa;
+  hien($("khoi-xu-ly"), true);
+}
+
+/** Một lần ghi cho dòng đang mở, rồi đọc lại hàng đợi — màn không tự đoán kết quả. Trả `true` khi máy chủ nhận. */
+async function ghiDong(duoi, than, maOk, cauOk) {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  if (dangXuLy === null) { bao($("loi6"), "Chưa mở dòng nào."); return false; }
+  const d = dangXuLy;
+  const r = await goi("POST", `/rfqs/${d.rfqId}/${duoi}`, than);
+  if (r.status !== maOk) { bao($("loi6"), loiCua(r, "Máy chủ từ chối")); return false; }
+  xoaXuLy();
+  await napHangDoi();
+  bao($("ok6"), cauOk);
+  return true;
+}
+
+const lyDoNhap = () => { const v = $("xl-ly-do").value.trim(); return v === "" ? null : v; };
+
+/**
+ * [lượt soi S4.3b, L4] Bốn nút của khối xử lý khoá CÙNG NHAU: `motLan` chỉ khoá nút được bấm, nên *Duyệt* và *Bác* bay song song được
+ * cho cùng một dòng — hai hàng ánh xạ, hàng sau đè hàng trước.
+ */
+const NUT_XU_LY = ["nut-duyet", "nut-bac", "nut-tao-duyet", "nut-chuan-hoa-lai"];
+function motLanKhoi(viec) {
+  return async () => {
+    const nut = NUT_XU_LY.map((id) => $(id));
+    if (nut.some((n) => n.disabled)) return;
+    for (const n of nut) n.disabled = true;
+    try { await viec(); } finally { for (const n of nut) n.disabled = false; }
+  };
+}
+
+$("loc-hd").addEventListener("input", veHangDoi);
+$("nut-doc-hd").addEventListener("click", () => { void napHangDoi(); });
+
+$("nut-duyet").addEventListener("click", motLanKhoi(async () => {
+  const hangChuanId = $("xl-hang").value;
+  if (dangXuLy !== null && hangChuanId === "") { bao($("loi6"), "Chọn một hàng chuẩn, hoặc tạo hàng mới ở dưới."); return; }
+  const d = dangXuLy;
+  // [lượt soi L4] `bam`: băm của dòng mà người duyệt đang thấy — dòng đổi giữa chừng thì máy chủ trả `DONG_DA_DOI`.
+  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId, lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam },
+    201, `Đã duyệt dòng ${d?.lineNo} của gói «${d?.tieuDe}».`);
+}));
+
+$("nut-bac").addEventListener("click", motLanKhoi(async () => {
+  const d = dangXuLy;
+  await ghiDong(`items/${d?.lineNo}/mapping`, { hangChuanId: null, lyDo: lyDoNhap(), bam: d?.bam }, 201,
+    `Đã ghi dòng ${d?.lineNo} của gói «${d?.tieuDe}»: không có hàng chuẩn tương ứng.`);
+}));
+
+$("nut-tao-duyet").addEventListener("click", motLanKhoi(async () => {
+  const ma = $("xl-ma").value.trim();
+  if (!maHopLe(ma)) { bao($("loi6"), "Mã viết hoa, bắt đầu bằng chữ hoặc số, chỉ chữ, số, dấu chấm, gạch ngang, gạch dưới — tối đa 40 ký tự."); return; }
+  const d = dangXuLy;
+  const ok = await ghiDong(`items/${d?.lineNo}/mapping/new-item`, {
+    ma, ten: $("xl-ten").value.trim(), donViGoc: $("xl-don-vi").value.trim(), lyDo: lyDoNhap(), taoBiDanh: $("xl-bi-danh").checked, bam: d?.bam,
+  }, 201, `Đã tạo ${ma} và duyệt dòng ${d?.lineNo} sang nó.`);
+  if (ok) await napHangChuan();
+}));
+
+$("nut-chuan-hoa-lai").addEventListener("click", motLanKhoi(async () => {
+  bao($("loi6"), ""); bao($("ok6"), "");
+  if (dangXuLy === null) { bao($("loi6"), "Chưa mở dòng nào."); return; }
+  const d = dangXuLy;
+  const r = await goi("POST", `/rfqs/${d.rfqId}/normalize`);
+  if (r.status !== 200) { bao($("loi6"), loiCua(r, "Không chuẩn hoá lại được")); return; }
+  const k = r.body?.ketQua ?? {};
+  xoaXuLy();
+  await napHangDoi();
+  bao($("ok6"), `Đã chuẩn hoá lại gói «${d.tieuDe}»: ${k.tuDong ?? 0} dòng tự nối, ${(k.goiY ?? 0) + (k.canDuyet ?? 0)} gợi ý mới, ` +
+    `${k.daCo ?? 0} dòng đã có ánh xạ.`);
 }));

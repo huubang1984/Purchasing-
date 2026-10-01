@@ -13,6 +13,10 @@
 #      36 giờ không có mốc mới — ca một tổ chức bị bỏ khỏi danh sách ở prod mà job `lich` vẫn thoát 0.
 #   ⑻ [ADR-089] Đường thư: Lambda `tp-canh-dang-ky` ở audit, mỗi 6 giờ, báo địa chỉ trong `email_canh_bao`/`email_van_hanh`
 #      chưa xác nhận hay mất đăng ký, và đăng ký lạ — gửi tới CẢ HAI topic.
+#   ⑼ [S1.223 / khoản 252 ⑴ / ADR-130] Đường KHỞI TẠO TỔ CHỨC (ADR-111) đi ngoài workflow `khoi-tao.yml`: task họ `tp-khoi-tao`
+#      được RunTask/StartTask, `taskRoleArn` ghi đè thành role tp-khoi-tao, RegisterTaskDefinition gắn role ấy vào họ KHÁC — cùng
+#      khuôn ⑵ —, và MỌI lần tạo/ghi/xoá bí mật bản khai dưới `tp/khoi-tao/ban-khai/`. Thư là NHÂN CHỨNG, không phải lời buộc
+#      tội: lần chạy hợp lệ cũng ra thư, và thư mà không có run đã duyệt trên GitHub là bất thường.
 #
 # ⑴
 # Vì sao: KeyAdmin có kms:PutKeyPolicy (không tránh được — không ai sửa được policy thì khoá hỏng
@@ -41,6 +45,20 @@
 # 2026-09-30, lần apply đầu). Lời gọi ấy không khởi được task nào. Chưa đo: lần bị từ chối vì quyền.
 # KHÔNG bắt: CreateService/UpdateService một service khác dùng họ
 # worker — đường ấy đi qua `tp-deploy-worker` có duyệt tay; và thay image trong chính họ worker.
+#
+# ⑼ Cùng ba hình dạng a/b/c cho role `tp-khoi-tao` — vai chèn được tổ chức, người dùng và vai (năng lực mà tp-api cố ý không
+# có, ADR-111). Workflow `khoi-tao.yml` bắt một NGƯỜI KHÁC người bấm duyệt, nhưng người có AdministratorAccess ở prod chạy
+# được `aws ecs run-task --task-definition tp-khoi-tao` không qua GitHub, và stack này không CHẶN được (cùng lý do ⑴): nó làm
+# đường ấy KHÔNG IM LẶNG. Khác ⑵ ở hai điểm:
+#   • KHÔNG loại trừ `tp-deploy`: đường hợp lệ cũng là một RunTask họ `tp-khoi-tao`, nên MỌI lần chạy ra thư, kể cả lần hợp lệ.
+#     Thư nêu <ai>; đường hợp lệ là `assumed-role/tp-deploy/khoi-tao-<run id>` (role-session-name của workflow) — đối chiếu với
+#     run ấy trên GitHub. Một tên khác (phiên SSO của một người) là lần chạy ngoài workflow.
+#   • Thêm mẫu d: bí mật bản khai (email, họ tên) dưới `tp/khoi-tao/ban-khai/` — CreateSecret (mang `name`), PutSecretValue,
+#     UpdateSecret, DeleteSecret (mang `secretId`, tên hay ARN). Dự kiến: Create/Put bởi người vận hành ở bước 8.1, Delete bởi
+#     tp-deploy sau khi task thoát 0. Put/Update SAU khi đã duyệt là ca công cụ chặn bằng băm (S1.183) — thư làm nó lộ ra sớm
+#     hơn. KHÔNG bắt GetSecretValue (đọc, không đổi) và RestoreSecret (xoá của workflow không có cửa sổ khôi phục).
+# Cả bốn bắt kể lần bị từ chối. Permission set hẹp cho người tạo bản khai (khoản 252 ⑵) hoãn tới trước khách hàng thứ hai —
+# khoản 278; tới lúc ấy, ⑼ là lớp duy nhất nhìn thấy đường này.
 #
 # Tài khoản: audit + prod. Profile: tp-audit và tp-prod (AdministratorAccess). Chạy sau 10 và 20
 # (CloudTrail tổ chức phải bật: sự kiện "AWS API Call via CloudTrail" đi ra từ đó).
@@ -154,6 +172,58 @@ locals {
     }
   })
 
+  # ⑼ [S1.223 / khoản 252 ⑴] — cùng chữ với ⑵, đổi tên: họ task của khởi tạo dùng lại tên role (stack 90: `ho = "tp-khoi-tao"`).
+  ho_khoi_tao       = module.chung.role.khoi_tao
+  role_khoi_tao_arn = module.chung.role_arn_prod.khoi_tao
+  mau_task_khoi_tao = jsonencode({
+    source      = ["aws.ecs"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    account     = [local.prod]
+    detail = {
+      eventSource = ["ecs.amazonaws.com"]
+      "$or" = [
+        {
+          eventName = ["RunTask", "StartTask"]
+          requestParameters = {
+            taskDefinition = [
+              { prefix = "${local.ho_khoi_tao}:" },
+              { equals-ignore-case = local.ho_khoi_tao },
+              { wildcard = "arn:aws:ecs:*:task-definition/${local.ho_khoi_tao}:*" },
+            ]
+          }
+        },
+        {
+          eventName         = ["RunTask", "StartTask"]
+          requestParameters = { overrides = { taskRoleArn = [local.role_khoi_tao_arn] } }
+        },
+        {
+          eventName = ["RegisterTaskDefinition"]
+          requestParameters = {
+            taskRoleArn = [local.role_khoi_tao_arn]
+            family      = [{ anything-but = local.ho_khoi_tao }]
+          }
+        },
+      ]
+    }
+  })
+
+  # ⑼ d — bí mật bản khai. Tiền tố là thứ stack 30 cho tp-deploy xoá và workflow nhận làm tên (`hinh-dang-khoi-tao.test.ts` so ba
+  # phía). CreateSecret mang `name`; ba lệnh kia mang `secretId` — tên hay ARN (`…:secret:tp/khoi-tao/ban-khai/<slug>-XXXXXX`).
+  tien_to_ban_khai = "tp/khoi-tao/ban-khai/"
+  mau_ban_khai = jsonencode({
+    source      = ["aws.secretsmanager"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    account     = [local.prod]
+    detail = {
+      eventSource = ["secretsmanager.amazonaws.com"]
+      eventName   = ["CreateSecret", "PutSecretValue", "UpdateSecret", "DeleteSecret"]
+      "$or" = [
+        { requestParameters = { name = [{ prefix = local.tien_to_ban_khai }] } },
+        { requestParameters = { secretId = [{ prefix = local.tien_to_ban_khai }, { wildcard = "arn:aws:secretsmanager:*:secret:${local.tien_to_ban_khai}*" }] } },
+      ]
+    }
+  })
+
   # ⑶ [ADR-072] Job neo (`tp-neo`, lịch hằng ngày) DỪNG mà không thành công: container thoát ≠ 0 (xuất hay kiểm
   # hỏng ở ít nhất một tổ chức — `kiem` đỏ là dấu hiệu sổ bị sửa/cắt) hoặc task không khởi động được. Không có
   # cảnh báo này thì một lịch hỏng im lặng hàng tháng — đúng khuôn H9-3 của ADR-026.
@@ -259,6 +329,8 @@ resource "aws_sns_topic_policy" "canh_bao_khoa" {
               aws_cloudwatch_event_rule.task_worker_audit.arn,
               aws_cloudwatch_event_rule.neo_hong_audit.arn,
               aws_cloudwatch_event_rule.dns_bi_chan_audit.arn,
+              aws_cloudwatch_event_rule.task_khoi_tao_audit.arn,
+              aws_cloudwatch_event_rule.ban_khai_audit.arn,
             ]
           }
         }
@@ -960,4 +1032,97 @@ resource "aws_cloudwatch_metric_alarm" "canh_dang_ky_khong_chay" {
   treat_missing_data  = "breaching"
   alarm_actions       = local.topic_canh_bao
   ok_actions          = local.topic_canh_bao
+}
+
+# ---------------------------------------------------------------------------------------------
+# ⑼ [S1.223 / khoản 252 ⑴ / ADR-130] Đường khởi tạo tổ chức chạy ngoài workflow — task tp-khoi-tao, bí mật bản khai
+# ---------------------------------------------------------------------------------------------
+# Cùng khuôn ⑵: rule ở AUDIT bắt sự kiện (của prod chuyển sang) ⇒ SNS `tp-canh-bao-khoa` ⇒ thư đọc được; rule ở PROD chỉ
+# chuyển nguyên sự kiện sang bus của audit qua role `tp-chuyen-canh-bao-khoa`. Người có quyền ở prod gỡ được rule chuyển,
+# nhưng lần gỡ ấy nằm trong CloudTrail tổ chức và không chạm được SNS/rule ở audit. Đối chứng dương (không khởi task nào):
+# ~~`aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao` ⇒ lời gọi lỗi, CloudTrail vẫn ghi kèm errorCode ⇒ thư;~~
+# [rà 2026-10-01] phép thử ấy không bao giờ có thư khi họ tp-khoi-tao chưa tồn tại: ECS từ chối ở bước kiểm đầu vào và CloudTrail
+# ghi `requestParameters: null` — đo ở ⑵ trong lần apply đầu (PR #218); sau stack 90 thì chưa đo. Đối chứng dương của ba hình
+# dạng task là chính lần chạy workflow (RunTask thành công) — APPLY-LAN-DAU 3.7 —
+# và chính lệnh `create-secret` của bước 8.1 là đối chứng dương của mẫu d.
+resource "aws_cloudwatch_event_rule" "task_khoi_tao_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-task-khoi-tao"
+  description   = "Task mang role tp-khoi-tao (tao to chuc, nguoi dung, vai) duoc chay hay dang ky - ke ca ngoai workflow khoi-tao.yml (ADR-111, khoan 252)"
+  event_pattern = local.mau_task_khoi_tao
+}
+
+resource "aws_cloudwatch_event_target" "task_khoi_tao_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.task_khoi_tao_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc     = "$.time"
+      lenh    = "$.detail.eventName"
+      ai      = "$.detail.userIdentity.arn"
+      taskDef = "$.detail.requestParameters.taskDefinition"
+      ho      = "$.detail.requestParameters.family"
+      loi     = "$.detail.errorCode"
+    }
+    input_template = "\"[TrustProcure] <lenh> voi ho task tp-khoi-tao hoac role tp-khoi-tao (tao to chuc, nguoi dung va vai tren prod). Luc <luc>, boi <ai>, task definition <taskDef>, ho <ho>, errorCode <loi> (rong = THANH CONG). HOP LE chi khi <ai> la assumed-role/tp-deploy/khoi-tao-RUN_ID cua mot run khoi-tao.yml da duoc NGUOI KHAC nguoi bam duyet (GitHub Actions, run id ay). Khong co run ay: dung task ngay (ecs stop-task), doc CloudTrail va cac hang users/user_roles vua them.\""
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "ban_khai_audit" {
+  provider      = aws.audit
+  name          = "tp-canh-bao-ban-khai"
+  description   = "Bi mat ban khai tp/khoi-tao/ban-khai/* duoc tao, ghi, sua hay xoa (ADR-111, khoan 252)"
+  event_pattern = local.mau_ban_khai
+}
+
+resource "aws_cloudwatch_event_target" "ban_khai_audit" {
+  provider = aws.audit
+  rule     = aws_cloudwatch_event_rule.ban_khai_audit.name
+  arn      = aws_sns_topic.canh_bao_khoa.arn
+
+  input_transformer {
+    input_paths = {
+      luc  = "$.time"
+      lenh = "$.detail.eventName"
+      ai   = "$.detail.userIdentity.arn"
+      ten  = "$.detail.requestParameters.name"
+      id   = "$.detail.requestParameters.secretId"
+      loi  = "$.detail.errorCode"
+    }
+    input_template = "\"[TrustProcure] <lenh> tren bi mat ban khai (email, ho ten) duoi tp/khoi-tao/ban-khai/. Luc <luc>, boi <ai>, name <ten>, secretId <id>, errorCode <loi> (rong = THANH CONG). DU KIEN: CreateSecret/PutSecretValue boi nguoi van hanh o buoc 8.1 TRUOC khi bam workflow; DeleteSecret boi assumed-role/tp-deploy/khoi-tao-RUN_ID sau khi task thoat 0. Ngoai hai ca ay - nhat la Put/Update SAU khi da duyet, hay Delete boi mot nguoi - doi chieu run tren GitHub va CloudTrail.\""
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "task_khoi_tao_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-task-khoi-tao"
+  description   = "Chuyen RunTask/StartTask/RegisterTaskDefinition mang ho hoac role tp-khoi-tao sang audit (ADR-111, khoan 252)"
+  event_pattern = local.mau_task_khoi_tao
+}
+
+resource "aws_cloudwatch_event_target" "task_khoi_tao_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.task_khoi_tao_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
+}
+
+resource "aws_cloudwatch_event_rule" "ban_khai_prod" {
+  provider      = aws.prod
+  name          = "tp-chuyen-ban-khai"
+  description   = "Chuyen Create/Put/Update/DeleteSecret duoi tp/khoi-tao/ban-khai/ sang audit (ADR-111, khoan 252)"
+  event_pattern = local.mau_ban_khai
+}
+
+resource "aws_cloudwatch_event_target" "ban_khai_prod" {
+  provider = aws.prod
+  rule     = aws_cloudwatch_event_rule.ban_khai_prod.name
+  arn      = local.bus_audit_arn
+  role_arn = aws_iam_role.chuyen_canh_bao.arn
+
+  depends_on = [aws_cloudwatch_event_bus_policy.nhan_tu_prod]
 }

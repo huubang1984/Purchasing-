@@ -20,6 +20,11 @@
 //      là lỗi khởi động, và ngược lại — một cấu hình không được mang hai câu trả lời cho câu "khoá ở
 //      đâu". Dưới `aws-kms`, CMK của TOTP phải khác CMK bọc cặp khoá tổ chức (ADR-063).
 //
+// [S1.224 / khoản 187] `apps/unseal-worker/src/cau-hinh.ts` giữ một BẢN CHÉP có chủ đích của bộ hàm đọc biến ở đây (worker
+// không import `apps/api`, và không được đọc ba vòng bí mật dưới đây). Bảng kiểm kê ĐÓNG từng cặp và phép đo chống trôi — văn
+// bản cho cặp trùng chữ, hành vi hai `docCauHinh` trên cùng biến cho cặp khác chữ — ở `tests/architecture/ma-chep-api-worker.test.ts`.
+// Đổi ngữ pháp của một biến HAI tiến trình cùng đọc (khoá tổ chức, vùng AWS, CMK, SES, các số nhịp/ngưỡng) thì đổi cả hai bên.
+//
 // VÌ SAO BA VÒNG BÍ MẬT PHẢI ĐÔI MỘT KHÁC NHAU: `TotpSecretUnsealer` (identity) ghi hợp đồng "không
 // được dùng chung vòng khoá chính với bộ mở phong bì thầu" (G1/ADR-006); pepper OTP (ADR-018) là
 // khoá HMAC giữ ngoài CSDL. Dùng một chuỗi base64 cho cả ba biến là lỗi dán-chép dễ nhất trong vận
@@ -162,6 +167,14 @@ export type CauHinhApi = CauHinhApiChung & (KhoaLocalDev | KhoaAwsKms) & (GuiDev
 export type MoiTruong = Readonly<Record<string, string | undefined>>;
 
 const TEN_PHIEN_BAN = /^[A-Za-z0-9._:-]{1,32}$/u;
+/**
+ * [S1.249 / kid] Kid biên nhận — tập PHÁT HÀNH của `assertReceiptKid` (`@trustprocure/bidding`): `[A-Za-z0-9._-]`, HẸP hơn
+ * `TEN_PHIEN_BAN` và `NHAN_KMS` (hai tập ấy cho `:`). Kid thành tên đối tượng S3 khi job neo neo tài liệu khoá mà `public-keys` công
+ * bố (`khoa-bien-nhan/<kid>.json`); chủ dự án chốt 2026-09-30 thu hẹp phía phát hành trước khi có biên nhận thật nào được ký.
+ * Kiểm ở ĐÂY để lỗi là lỗi cấu hình nêu tên biến, không phải `ReceiptError` lúc `composition.ts` dựng bộ ký. Bản chép cùng chữ ở
+ * `apps/public-keys/src/cau-hinh.ts` và `tools/neo-so-kiem-toan/src/aws.ts` (hàng `KID` của `ma-chep-api-worker`).
+ */
+const KID = /^[A-Za-z0-9._-]{1,64}$/u;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 
 function bat(env: MoiTruong, ten: string): string {
@@ -232,6 +245,14 @@ function docVongKhoaKy(env: MoiTruong, tenBien: string, tenActive: string): Vong
   const tho = docVong(env, tenBien, tenActive, null);
   const keys: Record<string, ReceiptKeyPair> = {};
   for (const [kid, der] of Object.entries(tho.keys)) {
+    // [S1.249 / kid] Tên phiên bản của vòng này LÀ kid biên nhận (`ReceiptSigningKeyRing`) — `docVong` đã giữ nó trong
+    // `TEN_PHIEN_BAN` (cho `:`); tập phát hành hẹp hơn. Không vọng lại tên (khuôn thông điệp của `docVong`).
+    if (!KID.test(kid)) {
+      throw new CauHinhError(
+        `${tenBien}: tên phiên bản của khoá ký là kid biên nhận — chỉ gồm ký tự [A-Za-z0-9._-] (không ":": kid thành tên đối ` +
+          "tượng khi neo tài liệu khoá)",
+      );
+    }
     let rieng;
     try {
       rieng = createPrivateKey({ key: der, format: "der", type: "pkcs8" });
@@ -392,12 +413,28 @@ function tuChoiBienCuaAdapterKhac(env: MoiTruong, adapter: string, bienKhac: rea
   }
 }
 
+/**
+ * Nhãn phiên bản khoá của adapter aws-kms. ~~Cũng là tập của kid biên nhận.~~ [S1.249 / kid] Chỉ còn HAI nhãn phiên bản
+ * (`TRUSTPROCURE_KMS_ORG_KEY_VERSION`, `TRUSTPROCURE_KMS_TOTP_KEY_VERSION`), và chúng GIỮ `:`: nhãn cặp khoá tổ chức vào AAD có tiền
+ * tố độ dài (`aadV2`) và cột `key_version`, nhãn TOTP vào encryption context KMS và cột `secret_key_version` — không nhãn nào
+ * thành tên tệp, tên đối tượng hay một dòng của văn bản đã ký; bộ bọc TOTP aws-kms (`adapters/totp-aws-kms.ts`) nhận cùng tập.
+ * Kid biên nhận đọc bằng `docKidBienNhan` (tập `KID`, không `:`).
+ */
 const NHAN_KMS = /^[A-Za-z0-9._:-]{1,64}$/u;
 const VUNG_AWS = /^[a-z]{2}(?:-[a-z]+)+-\d$/u;
 
 function docNhanKms(env: MoiTruong, ten: string): string {
   const v = bat(env, ten);
   if (!NHAN_KMS.test(v)) throw new CauHinhError(`${ten} phải dài 1–64 ký tự [A-Za-z0-9._:-]`);
+  return v;
+}
+
+/** [S1.249 / kid] Kid biên nhận của adapter aws-kms — tập `KID` (không `:`), hẹp hơn hai nhãn phiên bản của `docNhanKms`. */
+function docKidBienNhan(env: MoiTruong, ten: string): string {
+  const v = bat(env, ten);
+  if (!KID.test(v)) {
+    throw new CauHinhError(`${ten} phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":": kid biên nhận thành tên đối tượng khi neo tài liệu khoá)`);
+  }
   return v;
 }
 
@@ -418,7 +455,8 @@ function docKhoaKms(env: MoiTruong): CauHinhKms {
     totpKeyId: docKeyIdKms(env, "TRUSTPROCURE_KMS_TOTP_KEY_ID"),
     totpKeyVersion: docNhanKms(env, "TRUSTPROCURE_KMS_TOTP_KEY_VERSION"),
     receiptKeyId: docKeyIdKms(env, "TRUSTPROCURE_KMS_RECEIPT_KEY_ID"),
-    receiptKid: docNhanKms(env, "TRUSTPROCURE_KMS_RECEIPT_KID"),
+    // ~~`docNhanKms`~~ [S1.249 / kid] tập phát hành của kid biên nhận.
+    receiptKid: docKidBienNhan(env, "TRUSTPROCURE_KMS_RECEIPT_KID"),
   };
   // ADR-063: bí mật TOTP KHÔNG được bọc bằng khoá mở hồ sơ thầu. So theo chuỗi khai — hai cách viết
   // khác nhau của cùng một CMK (alias và ARN) lọt qua đây; key policy của tp-org-wrap (chỉ worker

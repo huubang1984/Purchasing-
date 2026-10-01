@@ -34,6 +34,12 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **SMS brandname Việt Nam** (tuần): hồ sơ sender ID ở AWS End User Messaging SMS, ba mẫu nội dung chép nguyên văn từ
       `apps/api/src/adapters/gui-sms.ts` (README, mục stack 85). Không có thì bỏ qua SMS ở lần đầu.
 - [ ] **Zalo OA**: xác thực OA, ứng dụng liên kết, ba template ZNS (`otp`, `duong_dan`, `han_nop`). Không có thì bỏ qua Zalo.
+- [ ] **[rà 2026-10-01] Ít nhất MỘT trong hai kênh trên phải xong trước khi nhà cung cấp THẬT nộp thầu** — "bỏ qua ở lần đầu"
+      chỉ đúng cho lần apply. OTP không bao giờ đi cùng kênh với link (ADR-015 mục 1): `/guest/redeem` chỉ mời chọn OTP ở kênh
+      KHÁC kênh link (`apps/api/src/routes/anon.ts`), link mời mặc định đi bằng thư, và kênh chưa bật thì NÉM chứ không rơi về
+      thư (ADR-069 mục 1). Chỉ có SES ⇒ nhà cung cấp mở được link mà không nhận được OTP, tức không nộp được — kịch bản
+      `docs/PRODUCT.md` §11 dừng ở bước ấy. Brandname tính bằng tuần: đây là việc dài nhất trên đường tới pilot.
+      `pnpm kiem-truoc-apply` báo `[VANG] kenh_otp` khi `sms` và `zalo` đều rỗng.
 - [ ] **SES production access**: chỉ xin được sau 5.1 (stack 80), nhưng duyệt mất 1–2 ngày — xin ngay ở 5.2.
 - [ ] **[apply lần đầu 2026-09-30] Quota Lambda của audit** (giờ–ngày) — xin ngay khi có profile `tp-audit` (1.2), TRƯỚC 3.1.
       Stack 60 đặt `reserved_concurrent_executions = 1` cho hai Lambda (⑺, ⑻), mà AWS giữ ≥ 10 lượt không đặt trước ⇒ trần
@@ -60,14 +66,31 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **1.5** Gán **cả hai người** giữ khoá vào nhóm `tp-key-admins`; tạo profile `tp-prod` (AdministratorAccess),
       `tp-audit-keyadmin`, `tp-prod-keyadmin` (KeyAdmin) — README, "Chuẩn bị một lần".
 - [ ] **1.6** Commit các `.terraform.lock.hcl` sinh ra (sau `terraform providers lock -platform=windows_amd64 -platform=linux_amd64`).
+      **[rà 2026-10-01]** Tám tệp của lần apply đầu (stack 00–70: `hashicorp/aws` 6.66.0; stack 60 thêm `hashicorp/archive`
+      2.8.1) đã commit, có hash của cả hai nền tảng. `providers lock` đòi `terraform get` trước (module `chung`). Stack 80, 85,
+      90: commit tệp lock ở lần `init` đầu.
 
 ## 2. Danh tính và khoá
 
 - [ ] **2.0 [S1.183 / lượt soi] Ba environment GitHub TRƯỚC 2.1** — `prod`, `prod-worker`, `prod-khoi-tao`, đủ luật bảo vệ
       của 7.1 (người duyệt, chỉ `master`, và với `prod-khoi-tao`: *Prevent self-review*, tắt admin bypass); biến của chúng điền
-      ở 7.1. Trust policy của stack 30 chỉ ghim TÊN environment, và GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow
+      ở 7.1. Trust policy của stack 30 ~~chỉ~~ ghim TÊN environment (**[S1.223 / khoản 252 ⑶]** và với `prod-khoi-tao` cả TỆP
+      `khoi-tao.yml` — chỉ khi claim `sub` đã tuỳ biến, 2.0b), và GitHub tự tạo một environment KHÔNG bảo vệ khi một workflow
       nhắc tên chưa có: apply 2.1 trước thì trong khoảng tới 7.1, một workflow trên nhánh bất kỳ khai `environment: prod` là
       nhận được `tp-deploy`.
+- [ ] **2.0b [S1.223 / khoản 252 ⑶] Tuỳ biến claim `sub` của OIDC TRƯỚC 2.1** — `infra/terraform/README.md`, mục "Tuỳ biến claim
+      `sub`": một lệnh `gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub` với
+      `include_claim_keys = ["repo","context","job_workflow_ref"]` (đúng thứ tự), rồi `GET` cùng đường dẫn để đối chiếu. Trust policy
+      của stack 30 đòi `sub` dạng ấy — đoạn `repo:` mang ID bất biến của kho (tạo sau 2026-07-15) và `job_workflow_ref`; apply 2.1 mà
+      chưa làm bước này, hay làm bước này mà chưa apply 2.1, thì mọi job deploy bị AWS từ chối role (KHOÁ, không mở) cho tới khi hai
+      phía khớp. Chuỗi `sub` là ĐỌC tài liệu GitHub: bước 4 của mục README nói cách in claim thật nếu 7.3 đỏ ở bước lấy role.
+      **[rà 2026-10-01] Prod hiện tại:** stack 30 và 60 được apply ngày 2026-09-30 từ cây CHƯA có khoản 252 ⑴⑶ (vào master
+      2026-10-01): trust policy của hai role deploy còn ghim `repo:huubang1984/Purchasing-:environment:<tên>`, dạng mà GitHub
+      không cấp cho kho này (README, "Tuỳ biến claim `sub`"), và stack 60 chưa có ⑼. Làm 2.0b, apply lại 30, rồi apply lại 60
+      (3.1) — trước 6.4. Theo diff, plan của 60 chỉ THÊM tám tài nguyên ⑼ (bốn rule, bốn target) và SỬA tại chỗ policy của
+      topic `tp-canh-bao-khoa` — cộng `-1 → 1` ở hai Lambda nếu đã xoá `tam_override.tf`. `canh-bao.tfvars` và `tam_override.tf`
+      bị git bỏ qua: apply từ một checkout khác thì chép chúng theo. Ngày 2026-10-01 `gh api …/oidc/customization/sub` còn trả
+      `use_default: true`.
 - [ ] **2.1 `30-prod-iam`** (`tp-prod`) — OIDC GitHub, task role, execution role, hai role deploy. **Trước 50**: KMS từ chối
       key policy trỏ tới role chưa tồn tại.
 - [ ] **2.2 `40-kms-audit`** (`tp-audit-keyadmin`) — khoá ký mốc neo `alias/tp-anchor-sign`.
@@ -122,6 +145,11 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       `aws lambda invoke --profile tp-audit --function-name tp-canh-moc-neo out.json` (phải `0 to chuc, 0 thieu`).
 - [ ] **3.6** Dự kiến: alarm ⑷ (36 giờ không có mốc neo) vào ALARM ngay và gửi thư — đúng, vì chưa có mốc neo nào. Nó về
       OK sau lượt `lich` đầu tiên có tổ chức (8.3).
+- [ ] **3.7 [rà 2026-10-01] Đối chứng dương ⑼ (khoản 252 ⑴) — KHÔNG làm ở đây.** README và chú thích stack 60 đề
+      `aws ecs run-task --cluster khong-ton-tai --task-definition tp-khoi-tao`: trước 6.4 họ `tp-khoi-tao` chưa tồn tại, nên đó
+      đúng là phép thử đã gạch ở 3.4 — `requestParameters: null`, không bao giờ có thư; sau 6.4 thì chưa ai đo. Đối chứng dương
+      của ⑼ nằm ở 8.1: `create-secret` bản khai ra một thư (mẫu d), và lần chạy workflow ra thư `RunTask` họ `tp-khoi-tao` bởi
+      `assumed-role/tp-deploy/khoi-tao-<run id>` cùng thư `DeleteSecret`.
 
 ## 4. Phép đo ⒜ — bắt buộc trước dữ liệu thật
 
@@ -134,7 +162,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] **5.1 `80-ses`**: `-var ten_mien=<domain> -var dia_chi_gui=... -var dia_chi_canh_bao=...`; thêm bản ghi DNS
       (`terraform output ban_ghi_dns`): ba CNAME DKIM, MX + SPF của MAIL FROM, DMARC `p=none`.
 - [ ] **5.2** Chờ SES xác minh domain (`aws sesv2 get-email-identity`), rồi **xin production access** ngay.
-- [ ] **5.3 `85-sms-zalo`** (tuỳ chọn, khi brandname đã duyệt): `-var sender_id=<BRANDNAME>`; output `sms.registered = true`.
+- [ ] **5.3 `85-sms-zalo`** (~~tuỳ chọn,~~ **[rà 2026-10-01]** không bắt buộc cho lần apply nhưng BẮT BUỘC — nó hoặc Zalo — trước
+      nhà cung cấp thật, 0.3; khi brandname đã duyệt): `-var sender_id=<BRANDNAME>`; output `sms.registered = true`.
       Xin ra khỏi sandbox SMS, đặt trần chi tiêu. Zalo: nạp secret `tp/api/zalo-oa` (README, stack 85, bước 3).
 
 ## 6. Stack 90 — chạy thật
@@ -194,7 +223,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
   `000…`; image nằm đúng kho ECR của prod và có thật; ~~bốn~~ **[S1.182]** năm secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
   giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
-  `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt.
+  `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt;
+  **[rà 2026-10-01]** `[VANG] kenh_otp` là đúng tới khi stack 85 xong (5.3) — nhưng tới lúc ấy nhà cung cấp thật chưa nộp được (0.3).
   Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
 - [ ] `terraform plan -var-file prod.tfvars -out plan.tfplan` — đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
       policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. `terraform apply plan.tfplan` (chờ ACM xác minh).
@@ -219,6 +249,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] README stack 90 bước 7: `/api/health`, `/nop-thau` (CSP), `/.well-known/trustprocure-receipt-keys` (sha256 trùng 2.4),
       header ADR-075 (`curl.exe -sI`), `http://` ⇒ 301.
 - [ ] Nguồn thời gian (README, "Nguồn thời gian"): `ClockDrift` SYNCHRONIZED trong một task api; chép vào STATE khoản 15.
+      **[rà 2026-10-01]** Lệnh `curl` "trong một task" của README không chạy được — stack 90 không bật ECS Exec và image
+      `node:22-bookworm-slim` không có `curl`; README nay đề một task `tp-migrate` chạy một lần với lệnh ghi đè (chưa đo).
 
 ### 6.8 DNS Firewall: ALERT ⇒ BLOCK
 
@@ -281,6 +313,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
        ```
        Tên bí mật là `tp/khoi-tao/ban-khai/` + một slug (a-z, 0-9, gạch nối) — kho là kho CÔNG KHAI, tên và mọi đầu vào của
        run ai cũng đọc được: đừng đặt email hay tên khách vào đó nếu danh sách khách là bí mật kinh doanh.
+       **[rà 2026-10-01]** `create-secret` này ra một thư ⑼ tới hộp thư an ninh — đối chứng dương của ⑼ (3.7). Không có thư ⇒ ⑼
+       chưa chạy (stack 60 trên prod còn là bản trước khoản 252 — 2.0b): dừng, đừng bấm workflow.
     2. Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master`: `che_do = tao`, `bi_mat`, `phien_ban`,
        `bam`, `to_chuc = <slug>`, `so_nguoi`, `vai` (số người mang từng mã vai theo thứ tự `REQUESTER, BUYER, TECHNICAL,
        PROCUREMENT_MANAGER, FINANCE, DIRECTOR`, vd `BUYER=1,PROCUREMENT_MANAGER=2,DIRECTOR=1`).
@@ -289,6 +323,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
        bản khai qua kênh khác thì đối chiếu cả băm), rồi duyệt ở `prod-khoi-tao`.
     4. Job `chay` xanh ⇒ tóm tắt có *Người duyệt: @…*, dòng kết quả (mã tổ chức, số người, vai) và *đã xoá*. Gửi `/login#<mã>`
        cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107).
+       **[rà 2026-10-01]** Lần chạy ra thêm thư ⑼: `RunTask` họ `tp-khoi-tao` bởi `assumed-role/tp-deploy/khoi-tao-<run id>` — đối
+       chiếu `<run id>` với run — và `DeleteSecret` bản khai.
     5. **[lượt soi]** Job `chay` KHÔNG xanh — hỏng, bị từ chối, bị huỷ, hay artifact hết hạn — ⇒ bí mật CÒN; job `nhac` nói điều
        ấy ở tóm tắt. Chạy lại là an toàn (đã commit thì dừng ở "slug đã có" / "email đã có"); sửa bản khai thì `put-secret-value`
        với cùng biến mã hoá — VersionId và băm MỚI, một lần duyệt mới —; bỏ thì xoá tay. Sau MỌI lần không xanh, soát bí mật
@@ -305,7 +341,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ## 9. Trước dữ liệu thật — kiểm lại
 
 - [ ] Hai người giữ KeyAdmin; người nhận cảnh báo không chỉ là họ.
-- [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2.
+- [ ] **[rà 2026-10-01]** Ít nhất một kênh OTP ngoài thư (SMS hay Zalo) đã bật — `pnpm kiem-truoc-apply` hết `[VANG] kenh_otp` (0.3).
+- [ ] STATE khoản 15 có: bảng 18 bước ⒜, kết quả `ClockDrift`, và ngày giờ đối chứng dương 3.3, ~~3.4,~~ 4.2, **[rà 2026-10-01]** 8.1 (⑼).
 - [ ] Mọi alarm `tp-van-hanh-*`, `tp-dns-bi-chan`, `tp-canh-bao-thieu-moc-neo` đang **OK**.
 - [ ] `che_do_dns = BLOCK`; SES ra khỏi sandbox; DMARC nâng lên `quarantine` sau vài tuần báo cáo sạch.
 - [ ] Dấu vân tay khoá biên nhận (2.4) đã in vào hợp đồng mẫu.
@@ -320,6 +357,7 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, ~~3.4,~~ 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
+| 8.1 | **[rà 2026-10-01]** ⑼ — `CreateSecret`, rồi `RunTask` và `DeleteSecret` của workflow | chính là đối chứng dương của ⑼ (3.7) — **thiếu thư mới là sự cố**; thư ⑼ KHÔNG khớp một run đã duyệt thì dừng task (README, khoản 252) |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
 
 Thư ⑹ tới hộp thư **vận hành** (`email_van_hanh`); mọi thư còn lại tới hộp thư **an ninh** (`email_canh_bao`). Một thư ⑹

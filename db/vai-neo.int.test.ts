@@ -299,3 +299,50 @@ describe("[ADR-072 phần 1] ⑶ hardening canh app_neo/app_neo_login như hai c
     await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
   }, 240_000);
 });
+
+// ==============================================================================================
+// [S1.212 / khoản 164] THUỘC TÍNH CỦA VAI CHỦ HÀM `app_liet_ke_to_chuc` — HARDENING CƯỠNG CHẾ, TỰ CHỮA
+//
+// Vai thứ ba ra đời ở 052 (BƯỚC 0 của hardening dựng nó) để SỞ HỮU hàm SECURITY DEFINER ~~duy nhất~~ [S1.248] đầu tiên của kho
+// (từ 101_api_to_chuc_co_viec nó sở hữu thêm hàm hẹp thứ hai, `outbox_to_chuc_co_viec_api()`) — và với một
+// hàm SECURITY DEFINER thì CHỦ HÀM là toàn bộ đặc quyền của thân hàm. Tới S1.82 hàng ghim chỉ đọc `proowner`, không đọc
+// thuộc tính của vai ấy: `ALTER ROLE app_liet_ke_to_chuc BYPASSRLS` sau deploy sống qua mọi lần migrate() (đo: trước bản
+// vá, phép đo dưới đây đỏ ở `rolbypassrls`). Nay một hàng TỰ CHỮA theo khuôn `app_api`/`app_unseal`, KHÔNG qua
+// `ROLE_CANH` (tám tên ấy còn được dùng ở hai mục khác chưa đo lại — khoản 164 nói rõ). Khác khuôn ở đúng một cờ:
+// vai này phải NOINHERIT (mọi quyền nó kế thừa là quyền của thân hàm), trong khi bốn vai ứng dụng phải INHERIT.
+// ==============================================================================================
+describe("[S1.212 / khoản 164] hardening canh thuộc tính của vai chủ hàm app_liet_ke_to_chuc — trôi TỰ CHỮA, chạy lại không đổi gì", () => {
+  const thuocTinh = async (): Promise<Record<string, boolean>> =>
+    (
+      await db.pool.query<Record<string, boolean>>(
+        "SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication, rolcanlogin, rolinherit " +
+          "FROM pg_roles WHERE rolname = 'app_liet_ke_to_chuc'",
+      )
+    ).rows[0]!;
+  const CHUAN = {
+    rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolbypassrls: false, rolreplication: false, rolcanlogin: false, rolinherit: false,
+  };
+
+  it("bảy cờ ở trạng thái chuẩn hôm nay, và hàng canh có tên trong hardening (không nằm trong ROLE_CANH)", () => {
+    expect(HARDENING).toContain("$q$thuộc tính role app_liet_ke_to_chuc$q$");
+    expect(docHangHardening(HARDENING, "ROLE_CANH"), "khoản 164: không nhét vào ROLE_CANH khi chưa đo lại các mục dùng nó").not.toContain("app_liet_ke_to_chuc");
+  });
+
+  it("BYPASSRLS + CREATEDB + CREATEROLE + INHERIT + LOGIN đặt lên vai chủ hàm ⇒ migrate() kế đưa về NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION NOLOGIN NOINHERIT; hàm liệt kê vẫn chạy dưới app_neo; chạy lại là no-op", async () => {
+    expect(await thuocTinh(), "tiền đề: chuẩn trước khi đột biến").toEqual(CHUAN);
+    await db.pool.query("ALTER ROLE app_liet_ke_to_chuc BYPASSRLS CREATEDB CREATEROLE INHERIT LOGIN");
+    expect((await thuocTinh()).rolbypassrls, "đối chứng: trôi có thật").toBe(true);
+    await migrate(db.pool, MIGRATIONS_DIR);
+    expect(await thuocTinh(), "lượt SỬA đưa cả bảy cờ về chuẩn").toEqual(CHUAN);
+    // Đường sản xuất của hàm SECURITY DEFINER vẫn sống sau khi tự chữa (pool mới — kết nối cũ mang cấu hình lúc mở).
+    const pool2 = createPool(urlDangNhap("app_neo_login", MAT_KHAU), 1, { role: "app_neo" });
+    try {
+      const { rows } = await pool2.query<{ id: string }>("SELECT t.id::pg_catalog.text AS id FROM public.outbox_danh_sach_to_chuc() AS t(id)");
+      expect(rows.map((r) => r.id)).toEqual(expect.arrayContaining([orgA, orgB]));
+    } finally {
+      await pool2.end();
+    }
+    await expect(migrate(db.pool, MIGRATIONS_DIR)).resolves.toEqual([]);
+    expect(await thuocTinh()).toEqual(CHUAN);
+  }, 240_000);
+});

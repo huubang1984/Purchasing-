@@ -22,10 +22,12 @@ import {
   duyetTraoThau,
   huyTraoThau,
   moVongBafo,
+  rutDeXuatTraoThau,
   taoLuotDanhGia,
   type LuotDanhGia,
   xuatBoBangChung,
 } from "@trustprocure/danh-gia";
+import { chuanHoaGoi, coHangChuanDangDung } from "@trustprocure/du-lieu-nen";
 import { PERMISSIONS, approveMfaReset, cancelMfaReset, requestMfaReset } from "@trustprocure/identity";
 import { ghiNhanTinHieu, lietKeTinHieu } from "@trustprocure/kiem-soat";
 import {
@@ -78,6 +80,7 @@ import {
   xacMinhNhaCungCap,
 } from "@trustprocure/supplier";
 import {
+  UnsealError,
   approveUnseal,
   buildComparisonTable,
   cancelUnseal,
@@ -443,6 +446,13 @@ const doc: readonly BuyerReadRoute[] = [
     audience: "BUYER",
     mutates: false,
     // [khoản 141] BẢNG SO SÁNH GIÁ — thứ toàn bộ sản phẩm sinh ra để bảo vệ
+    //
+    // [S1.213 / khoản 108 / ADR-125] HỢP ĐỒNG SỐ của thân trả về: `comparison.rows[].totalAmount` (CHUỖI thập phân, hay
+    // `null`) và `comparison.aggregates.min/max/average` là SỐ CHUẨN — tính bằng SQL, đúng tới từng chữ số trong miền
+    // `numeric(18, 2)`. `comparison.rows[].payload` là BẢN HIỂN THỊ của phong bì: một số JSON quá 15 chữ số có nghĩa trong đó đã
+    // qua `double` khi `pg` phân tích `jsonb`, và qua `JSON.parse` của client thêm lần nữa — client đọc số tiền PHẢI lấy
+    // `totalAmount`, không lấy `payload.totalAmount` (`apps/web/trang/mo-thau.js` làm đúng thế). Toàn văn và phép đo ở docstring
+    // `buildComparisonTable` (`packages/unseal/src/comparison.ts`); ghim ở `comparison.int.test.ts` khối `[S1.213 / khoản 108]`.
     agent: false,
     handler: async (ctx) => ({
       status: 200,
@@ -461,7 +471,8 @@ const doc: readonly BuyerReadRoute[] = [
     path: "/rfqs/:rfqId/bid-count",
     audience: "BUYER",
     mutates: false,
-    // [khoản 141] số hồ sơ thầu đã nhận — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
+    // [khoản 141] số ~~hồ sơ thầu đã nhận~~ [S1.249 / khoản 299] báo giá SẼ DỰ THẦU — luồng của lời mời còn sống (khoản 271,
+    // ADR-128); tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API) — cùng rổ HAM_DOC_CO_QUYEN với bảng giá
     agent: false,
     handler: async (ctx) => ({
       status: 200,
@@ -581,7 +592,7 @@ const doc: readonly BuyerReadRoute[] = [
 //
 // `taoLuotDanhGia` trả cả `lines` — `effectiveCost`, `rank` và `components` của TỪNG báo giá, tức
 // GIÁ và THỨ HẠNG. Bản trước trả nguyên kết quả ấy, nên mọi vai giữ `evaluation.perform` — năm
-// trên sáu vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
+// trên ~~sáu~~ **[S1.241 / khoản 270]** bảy vai, trong đó REQUESTER, BUYER, TECHNICAL KHÔNG giữ `bid.view` (`005`) — đọc được giá
 // và hạng của mọi nhà cung cấp ngay trong thân phản hồi của lần bấm chấm. ADR-054 khai `bid.view`
 // là cổng ĐỌC duy nhất của `rfq_evaluation_lines`: đường ấy là `GET /rfqs/:rfqId/ranking`
 // (`docBangXepHang`), và thân route này là một đường đọc thứ hai không đi qua cổng.
@@ -600,6 +611,18 @@ export function thanLuotCham(ld: LuotDanhGia): {
   return { evaluationId: ld.evaluationId, policyId: ld.policyId, policyVersion: ld.policyVersion, currency: ld.currency };
 }
 
+/**
+ * [S1.249 / khoản 293] Câu 409 của *Gửi lại link* khi gói không nhận báo giá (`RFQ_NOT_ACCEPTING` của `reissueInvitationLink`).
+ * Chủ dự án chốt 2026-09-30: GIỮ nút ở mọi trạng thái của tổ chức chưa bật (hợp đồng MVP1 «máy chủ tự từ chối», `nutLoiMoi` của
+ * `apps/web/src/tao-thau.ts`), nên câu từ chối là thứ người mua ĐỌC — `/tao-thau` in nguyên văn (`loiCua`). ~~`goi thau khong nhan
+ * bao gia`~~ — câu máy, không dấu, không nói khi nào gửi được. Hằng, không nội suy trạng thái hay hạn: câu nêu CẢ HAI điều kiện mà
+ * `reissueInvitationLink` đòi (gói `OPEN` còn hạn nộp; vòng BAFO đang mở còn hạn của vòng) — khuôn câu 422 của huỷ mở thầu
+ * (`packages/unseal/src/requests.ts`). Ba câu khác của route (404, 409 đã thu hồi, 429) giữ nguyên.
+ */
+const CAU_GOI_KHONG_NHAN_BAO_GIA =
+  "Gói thầu này không nhận báo giá lúc này nên không gửi lại link được — chỉ gửi lại được khi gói đang mở và còn hạn nộp, " +
+  "hoặc khi vòng BAFO đang mở và còn hạn.";
+
 // ----------------------------------------------------------------------------------------------
 // GHI — mỗi route một mã quyền. `resourceId` đọc từ ĐƯỜNG DẪN, không từ thân.
 // ----------------------------------------------------------------------------------------------
@@ -608,9 +631,15 @@ const ghi: readonly BuyerWriteRoute[] = [
   // [S1.106 / S2.4] CHẤM — cạnh `UNSEALED->EVALUATING` của `011`, và nó là route ghi DUY NHẤT mang
   // `evaluation.perform`.
   //
-  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên SÁU vai giữ
-  // (chỉ `DIRECTOR` không), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
+  // Khoản **220** nói ra giới hạn của chính cổng này: `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.219]** BẢY vai giữ
+  // (chỉ `DIRECTOR` không — **[S1.219]** và `DATA_STEWARD` của `083`), nên cổng ở đây là một lớp NÔNG — nó chặn được khách và tác tử, không
   // chặn được "ai trong tổ chức". Ghi ra ở đúng chỗ người đọc mã route sẽ tìm.
+  //
+  // [S1.219 / khoản 220 ⒝ — chủ dự án chốt 2026-09-30] Cổng này ĐƯỢC GIỮ LÀ LỚP NÔNG, ma trận `005` KHÔNG thu hẹp. Lớp
+  // thật của phân tách nhiệm vụ trên đường chấm là J3 theo HÀNH VI ĐÃ XẢY RA trên từng gói (ADR-051, trigger
+  // `award_kiem_de_xuat`), không phải danh sách vai. Năm vai giữ mã này được GHIM ở
+  // `packages/identity/src/ma-tran-quyen.test.ts` (ca «khoản 220»): ai đổi ma trận thì ca ấy đỏ và phải đọc lại đoạn này
+  // cùng chú thích cạnh `requirePermission` trong `taoLuotDanhGia` (`packages/danh-gia/src/luot-danh-gia.ts`).
   //
   // `taoLuotDanhGia` tự gọi `requirePermission` lần nữa với CÙNG mã — khoản nợ 31/33, lớp của gói
   // chứ không của route; xem khối đầu tệp.
@@ -647,7 +676,7 @@ const ghi: readonly BuyerWriteRoute[] = [
   //
   // Mã quyền RIÊNG `rfq.bafo.open`, chỉ `PROCUREMENT_MANAGER` (ADR-055) — KHÔNG dùng lại
   // `evaluation.perform`: mở vòng BAFO là hành động duy nhất của sản phẩm mà người bấm ĐÃ BIẾT
-  // giá của mọi người, và `evaluation.perform` do NĂM trên SÁU vai giữ (khoản 220).
+  // giá của mọi người, và `evaluation.perform` do NĂM trên ~~SÁU~~ **[S1.241 / khoản 270]** BẢY vai giữ (khoản 220).
   //
   // Thân KHÔNG mang `evaluationId`, và đó là vế đóng của một lỗ mà lượt soi hình dạng của vòng
   // này tìm ra: `059` cho người gọi khai lượt chấm nào cũng được, nên vòng BAFO thứ hai mời được
@@ -704,13 +733,16 @@ const ghi: readonly BuyerWriteRoute[] = [
   // hai con người: `award.recommend` để ĐỀ XUẤT, `po.approve` để DUYỆT.
   //
   // Thân KHÔNG mang `evaluationId`, cùng vế đóng mà `060` vừa dựng cho vòng BAFO: `deXuatTraoThau`
-  // tự suy lượt chấm MỚI NHẤT. Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
-  // thuộc đúng RFQ, không đòi nó mới nhất — nên một ca đo khoá riêng vế ấy.
+  // tự suy lượt chấm MỚI NHẤT. ~~Ở đây nó là lớp DUY NHẤT — `award_kiem_de_xuat` chỉ đòi lượt chấm
+  // thuộc đúng RFQ, không đòi nó mới nhất~~ **[S1.231 / khoản 231]** từ `093` tầng CSDL cũng đòi lượt
+  // mới nhất (`j5_luot_cham_khong_moi_nhat`) — hai lớp, như vòng BAFO; ca đo ở `luot-danh-gia.int`.
   //
   // HUỶ đi qua `po.approve`, KHÔNG `award.recommend`: `award.recommend` do BỐN vai giữ (kèm
   // `BUYER`), nên một cổng huỷ theo mã ấy cho `BUYER` huỷ được một award ĐÃ DUYỆT rồi đề xuất
-  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. Cái giá: người đề xuất không tự rút lại
-  // được (khoản **232**).
+  // người khác — phê duyệt kép bị tháo bằng cách bào mòn. ~~Cái giá: người đề xuất không tự rút lại
+  // được (khoản **232**).~~ **[S1.231 / khoản 232 / ADR-133]** Route THỨ TƯ `…/award/withdraw` dưới
+  // `award.recommend`: người đề xuất RÚT đề xuất CHƯA chữ ký của mình — ba vế ràng ở CSDL (`094`), không
+  // một cổng quyền đọc dữ liệu nào ở đây, và cổng huỷ không đổi.
   // --------------------------------------------------------------------------------------------
   {
     method: "POST",
@@ -777,6 +809,32 @@ const ghi: readonly BuyerWriteRoute[] = [
       status: 201,
       body: {
         award: await huyTraoThau(
+          ctx.client,
+          ctx.orgId,
+          {
+            rfqId: rfqIdParam(ctx.req),
+            reason: chuoiBatBuoc(ctx.req.body, "reason"),
+            actorSessionId: ctx.actor.sessionId,
+          },
+          ctx.auditPool,
+        ),
+      },
+    }),
+  },
+  // [S1.231 / khoản 232 / ADR-133] RÚT đề xuất — cổng `award.recommend`, cùng cổng với lần đề xuất. Không `awardId`: hàng
+  // mới nhất là đích, và `094` từ chối nếu nó không phải `PROPOSED` của chính người gọi với 0 chữ ký.
+  {
+    method: "POST",
+    path: "/rfqs/:rfqId/award/withdraw",
+    audience: "BUYER",
+    mutates: true,
+    permission: PERMISSIONS.AWARD_RECOMMEND,
+    resourceType: "RFQ",
+    resourceId: rfqIdParam,
+    handler: async (ctx) => ({
+      status: 201,
+      body: {
+        award: await rutDeXuatTraoThau(
           ctx.client,
           ctx.orgId,
           {
@@ -1045,17 +1103,20 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_CREATE,
     resourceType: "RFQ",
     resourceId: rfqIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: {
-        rfq: await submitRfqForApproval(
-          ctx.client,
-          ctx.orgId,
-          { rfqId: rfqIdParam(ctx.req), actorSessionId: ctx.actor.sessionId },
-          ctx.auditPool,
-        ),
-      },
-    }),
+    handler: async (ctx) => {
+      const rfqId = rfqIdParam(ctx.req);
+      const rfq = await submitRfqForApproval(ctx.client, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId }, ctx.auditPool);
+      // [S1.234 / S4.3b / ADR-135] Lượt chuẩn hoá chạy SAU commit, giao dịch riêng, dưới phiên người nộp (spec S4 §4.4): hỏng thì
+      // lần nộp vẫn đứng, người quản lý dữ liệu bấm *chuẩn hoá lại*. [lượt soi L3] Điều kiện *tổ chức có hàng chuẩn đang dùng* hỏi
+      // NGAY ĐÂY, trong giao dịch của lần nộp: tổ chức MVP1 không đăng ký việc nào — không thêm kết nối, giao dịch hay dòng log. Hàng
+      // cuối cùng ngừng dùng giữa lúc hỏi và lúc chạy thì lượt chạy với tập ứng viên rỗng: gợi ý `CAN_DUYET` không ứng viên, vô hại.
+      if (await coHangChuanDangDung(ctx.client, ctx.orgId)) {
+        ctx.afterCommitGiaoDich(async (c) => {
+          await chuanHoaGoi(c, ctx.orgId, { rfqId, actorSessionId: ctx.actor.sessionId });
+        });
+      }
+      return { status: 200, body: { rfq } };
+    },
   },
   {
     method: "POST",
@@ -1361,7 +1422,8 @@ const ghi: readonly BuyerWriteRoute[] = [
       if (!kq.ok) {
         if (kq.reason === "NOT_FOUND") throw new HttpError(404, "khong co loi moi");
         if (kq.reason === "REVOKED") throw new HttpError(409, "loi moi da thu hoi");
-        if (kq.reason === "RFQ_NOT_ACCEPTING") throw new HttpError(409, "goi thau khong nhan bao gia");
+        // ~~`"goi thau khong nhan bao gia"`~~ [S1.249 / khoản 293] câu người đọc nêu điều kiện gửi lại được.
+        if (kq.reason === "RFQ_NOT_ACCEPTING") throw new HttpError(409, CAU_GOI_KHONG_NHAN_BAO_GIA);
         return { status: 429, body: { error: "da gui qua nhieu link cho loi moi nay" }, headers: { "retry-after": String(CUA_SO_LINK_MOI_GIAY) } };
       }
       const loi = kq.invitation;
@@ -1475,10 +1537,21 @@ const ghi: readonly BuyerWriteRoute[] = [
     permission: PERMISSIONS.RFQ_UNSEAL,
     resourceType: "UNSEAL_REQUEST",
     resourceId: unsealIdParam,
-    handler: async (ctx) => ({
-      status: 200,
-      body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
-    }),
+    handler: async (ctx) => {
+      try {
+        return {
+          status: 200,
+          body: { unsealRequest: await cancelUnseal(ctx.client, ctx.orgId, { unsealRequestId: unsealIdParam(ctx.req), actorSessionId: ctx.actor.sessionId }, ctx.auditPool) },
+        };
+      } catch (loi) {
+        // [S1.245 / khoản 267] Lần từ chối vì TRẠNG THÁI (yêu cầu đã `EXECUTED`/`CANCELLED`) mang `ma` ở thân 422 — khuôn khoản 230:
+        // `error` là câu riêng, `ma` là thứ máy khách đọc. Đường TRẢ VỀ chứ không ném vì bảng 422 chung của bộ điều phối chỉ in `error`;
+        // giao dịch của route không ghi gì trước lần từ chối (hàng `UNSEAL_CANCEL_DENIED` đã ghi ở giao dịch độc lập), nên COMMIT ở đây
+        // không mang theo câu ghi nào. Lỗi không mang `ma` (không tìm thấy, người không được huỷ, mất sổ) đi đường cũ.
+        if (loi instanceof UnsealError && loi.ma !== null) return { status: 422, body: { error: loi.message, ma: loi.ma } };
+        throw loi;
+      }
+    },
   },
   // --------------------------------------------------------------------------------------------
   // [sổ nợ 40 / review M-5] Đặt lại TOTP — hai người. Yêu cầu và phê duyệt cùng một mã quyền; CSDL

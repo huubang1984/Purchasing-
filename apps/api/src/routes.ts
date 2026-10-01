@@ -3,15 +3,18 @@
 //
 // Route là DỮ LIỆU: một mảng đọc được bằng `import { ROUTES }`, không cần khởi động máy chủ. Hình
 // dạng từng route và lớp canh thuần (`timViPhamBangRoute`) nằm ở `route-types.ts`; file này chỉ
-// LẮP ~~ba~~ ~~[S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai)~~ [S1.199] BẢY nhóm (từ SÁU module — `auth.ts`
-// xuất hai) lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
+// LẮP ~~ba~~ ~~[S1.79] SÁU nhóm (từ NĂM module — `auth.ts` xuất hai)~~ ~~[S1.199] BẢY nhóm (từ SÁU module — `auth.ts`
+// xuất hai)~~ ~~[S1.234] TÁM nhóm (từ BẢY module — `auth.ts` xuất hai)~~ [S1.251] CHÍN nhóm (từ TÁM module — `auth.ts` xuất
+// hai) lại. Thứ tự KHÔNG có nghĩa: mỗi cặp (method, path) là duy nhất — lớp canh đòi thế.
 // ==============================================================================================
 import type { Route } from "./route-types.js";
+import { ROUTES_ANH_XA } from "./routes/anh-xa.js";
 import { ROUTES_ANON } from "./routes/anon.js";
 import { ROUTES_AUTH, ROUTES_AUTH_SELF } from "./routes/auth.js";
 import { ROUTES_BUYER } from "./routes/buyer.js";
 import { ROUTES_DU_LIEU } from "./routes/du-lieu.js";
 import { ROUTES_GUEST } from "./routes/guest.js";
+import { ROUTES_LICH_SU_GIA } from "./routes/lich-su-gia.js";
 import { ROUTES_PUBLIC } from "./routes/public.js";
 
 export const ROUTES: readonly Route[] = [
@@ -22,5 +25,9 @@ export const ROUTES: readonly Route[] = [
   ...ROUTES_BUYER,
   // [S1.199 / S4.2b] Dữ liệu nền: hàng chuẩn, bí danh, quy đổi riêng, bí danh đơn vị (spec S4 §3.5).
   ...ROUTES_DU_LIEU,
+  // [S1.234 / S4.3b] Ánh xạ hạng mục: hàng đợi, trạng thái từng dòng, duyệt/bác/tạo hàng chuẩn, chuẩn hoá lại (spec S4 §4.4).
+  ...ROUTES_ANH_XA,
+  // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — cổng `bid.view` trong gói, `agent: false` (spec S4 §4.5, L6).
+  ...ROUTES_LICH_SU_GIA,
   ...ROUTES_AUTH_SELF,
 ];

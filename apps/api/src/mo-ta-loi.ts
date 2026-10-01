@@ -1,6 +1,9 @@
 // ==============================================================================================
 // apps/api/src/mo-ta-loi.ts — MÔ TẢ MỘT LỖI CHO DÒNG LOG, KHÔNG MANG GIÁ TRỊ
 //
+// [S1.222 / khoản 166] Thân `moTaLoiKhongGiaTri` nay ở `packages/identity/src/mo-ta-loi.ts` — MỘT bản cho cả `api` lẫn worker mở thầu;
+// tệp này xuất lại nó (xem khối cạnh import) và giữ hai bộ nghe pool của `api`. Hai khối dưới vẫn là lời khai đúng về luật của hàm.
+//
 // [S1.67 / khoản 118] Mọi chỗ ghi log lỗi của bộ điều phối và composition root mô tả lỗi bằng MỘT hàm: dòng 500, dòng 42501 và dòng
 // `sau-commit` của `dispatch`; dòng outbox và bộ dọn; dòng của bộ nghe `release`. Trước khoản này mỗi chỗ tự viết `e.name`: một lỗi
 // Postgres ra dòng log "error" không SQLSTATE, và dòng lỗi job outbox không nói lỗi gì. Ngoại lệ có chủ đích: `main.ts` in `tên:
@@ -11,6 +14,13 @@
 // hằng). KHÔNG được ghi: `message` — thông điệp của lỗi Postgres mang tên bảng, tên ràng buộc, và DETAIL của nó có thể mang giá trị hàng;
 // ~~`cause` — lỗi lồng mang câu lệnh và tham số~~ [S1.68 / khoản 119] `cause` nguyên — lỗi lồng mang câu lệnh và tham số; `stack` (A2).
 //
+// [S1.216 / khoản 177 / ADR-127] MỘT NGOẠI LỆ CÓ HÌNH DẠNG, và chỉ một: đúng dòng của lần từ chối MẤT SỔ (hai lớp bọc dưới) mang
+// thêm `nguoi=<12 hex>` — băm rút gọn sha256 của `userId`, do `moTaHangDongCuaLanTuChoi` (identity) in và ghim bằng `^[0-9a-f]{12}$`.
+// Nó là một TOKEN hình dạng cố định, không phải một giá trị người dùng: không lần ngược ra tên hay email, một UUID thô hay băm đầy đủ
+// đặt nhầm vào khe ấy ra `HANG_LA`, và không trường nào khác đi qua khe ấy. Vì sao ở đúng dòng này mà không ở dòng khác: ở mọi ca
+// khác danh tính lấy từ sổ; ca này là ca hàng sổ không ghi được (§S1.85 mục 7, khoản 177). Luật "tên và mã cố định" ở trên giữ
+// nguyên cho mọi thứ còn lại — ADR-127 ghi ngoại lệ, và ranh giới của nó là chính biểu thức hình dạng.
+//
 // [S1.68 / khoản 119] Một lỗi KHÔNG có trường `code` mà có `cause` là Error được nêu thêm MỘT tầng: `tên <- tên và mã của cause`, cùng luật
 // trên. Hôm nay chủ yếu là hai lớp bọc của lần ghi sổ từ chối (`DenialAuditFailedError`, `PermissionAuditFailedError`) — trước khoản này
 // dòng log của chúng chỉ có tên, nên người vận hành không phân biệt được lần ghi hỏng vì mất quyền (42501) với kết nối đứt hay trigger chặn
@@ -20,29 +30,16 @@
 // ra mã" thay vì "không có trường" và làm đỏ test ấy). Đúng một tầng — không đi theo chuỗi.
 // ==============================================================================================
 import type pg from "pg";
-import { moTaHangDongCuaLanTuChoi } from "@trustprocure/identity";
+import { moTaLoiKhongGiaTri } from "@trustprocure/identity";
 import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 
-/** Hình dạng của SQLSTATE: đúng năm ký tự chữ số và chữ hoa. */
-const MA_NAM_KY_TU = /^[0-9A-Z]{5}$/u;
-
-export function moTaLoiKhongGiaTri(loi: unknown): string {
-  if (!(loi instanceof Error)) return "loi khong ro";
-  const dong = moTaMotTang(loi);
-  return !("code" in loi) && loi.cause instanceof Error ? `${dong} <- ${moTaMotTang(loi.cause)}` : dong;
-}
-
-function moTaMotTang(loi: Error): string {
-  // [S1.85 / khoản 131] Và các HẰNG ĐÓNG của một lần từ chối không ghi được sổ, nếu lỗi này là một trong hai lớp bọc ấy. Phép kiểm
-  // hình dạng nằm trong `moTaHangDongCuaLanTuChoi` (packages/identity) — MỘT chỗ ở cho cả `api` lẫn worker mở thầu — và nó trả chuỗi
-  // RỖNG cho mọi lỗi khác, kể cả một lỗi chỉ mang TÊN của hai lớp ấy. Luật A2 của tệp này không đổi: thứ đi qua đây vẫn chỉ là tên
-  // lớp, mã cố định và mã định danh viết hoa; `message` và `cause` nguyên vẫn không vào dòng.
-  const hang = moTaHangDongCuaLanTuChoi(loi);
-  const duoi = hang === "" ? "" : ` ${hang}`;
-  if (loi instanceof TenantError) return `${loi.name} ${loi.code}${duoi}`;
-  const ma = (loi as { code?: unknown }).code;
-  return typeof ma === "string" && MA_NAM_KY_TU.test(ma) ? `${loi.name} ${ma}${duoi}` : `${loi.name}${duoi}`;
-}
+// [S1.222 / khoản 166] THÂN HÀM ĐÃ DỜI: `moTaLoiKhongGiaTri` (cùng `MA_NAM_KY_TU` và `moTaMotTang`) nay sống ở
+// `packages/identity/src/mo-ta-loi.ts`, MỘT bản cho cả `api` lẫn worker mở thầu — worker không import được `apps/api` (`g1-`), và bản
+// rút gọn nó giữ tới trước vòng này thiếu tầng `cause` (đo ở `apps/unseal-worker/src/composition.int.test.ts`). Hai luật ở đầu tệp —
+// không `message`, không `cause` nguyên, đúng một tầng — không đổi và vẫn được `mo-ta-loi.test.ts` đo qua chính cửa này. Xuất lại để
+// các chỗ gọi trong `apps/api` (bộ điều phối, composition root, hai bộ nghe dưới) không đổi; `mo-ta-loi.test.ts` ghim rằng thứ xuất lại
+// là ĐÚNG hàm của identity, không một bản bọc.
+export { moTaLoiKhongGiaTri };
 
 /**
  * [S1.67 / khoản 118] Ghi MỘT dòng khi pool huỷ một kết nối vì `SESSION_STATE_LEFT`.
@@ -65,6 +62,9 @@ function moTaMotTang(loi: Error): string {
  * là lệch và kết nối bị huỷ bằng `SESSION_STATE_LEFT`: bộ nghe ghi một dòng sai nguyên nhân cạnh dòng 500 của lỗi thật (lượt soi 61a-7,
  * đọc).
  * Gắn MỘT lần cho mỗi pool, ở composition root — không trong `createDispatcher`, vì test dựng nhiều bộ điều phối trên cùng một pool.
+ * [S1.224 / khoản 187] Bản song sinh của worker là `ghiKetNoiHuy` (`apps/unseal-worker/src/tien-trinh.ts`, hình dạng trả bộ nghe
+ * để cổng `pool-nghe-du-tin-hieu` đọc được lời gọi `.on`); `tests/architecture/ma-chep-api-worker.test.ts` so điều kiện lọc và khuôn
+ * dòng log của hai bản, bỏ tiền tố tiến trình.
  */
 export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
   pool.on("release", (loi: unknown) => {
@@ -90,6 +90,7 @@ export function ghiLogKetNoiHuy(pool: pg.Pool, tenPool: string): void {
  *
  * Gắn MỘT lần cho mỗi pool, ở composition root — cùng kỷ luật với `ghiLogKetNoiHuy`, và
  * `tests/architecture/pool-nghe-du-tin-hieu.test.ts` đòi cả hai.
+ * [S1.224 / khoản 187] Bản song sinh của worker là `ghiLoiToiMuon` — cùng phép đo đối chiếu với `ghiLogKetNoiHuy`.
  */
 export function ghiLogLoiKetNoiToiMuon(pool: pg.Pool, tenPool: string): void {
   ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {

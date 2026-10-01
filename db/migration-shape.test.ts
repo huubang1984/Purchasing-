@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { HAM_CANH_CHI_GHI_THEM, HAM_KHONG_PHAI_CANH } from "./danh-sach-ham-canh.js";
+import { docHangHardening } from "./hardening-hang.js";
 
 // ============================================================================================
 // [S7b-T3] TÍNH NGUYÊN TỬ CỦA MỘT BẢNG CÓ RLS — CƯỠNG CHẾ TĨNH, KHÔNG CẦN DATABASE
@@ -233,11 +235,25 @@ const NGOAI_LE_LAC_CHO: readonly {
     lyDo:
       "[S1.82 / khoản 116 / ADR-040] bảng ra đời ở 002 CÙNG policy cách ly của nó — không có " +
       "cửa sổ trần nào; đây là policy THỨ HAI, FOR SELECT, và chủ thể của nó là ĐÚNG MỘT vai " +
-      "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ĐÚNG MỘT hàm SECURITY " +
-      "DEFINER. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
+      "NOLOGIN NOINHERIT (`app_liet_ke_to_chuc`) sinh ra để sở hữu ~~ĐÚNG MỘT hàm SECURITY " +
+      "DEFINER~~ [S1.248] hàm SECURITY DEFINER liệt kê tổ chức — của 052, và từ " +
+      "101_api_to_chuc_co_viec hàm hẹp thứ hai, cùng vai, thân cả hai đều ghim. " +
+      "Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` vẫn thấy 0 hàng, " +
       "nên dòng này không nới bán kính của bất kỳ vai ứng dụng nào. Nó NỚI chứ không siết, và " +
       "nới thì đáng bị soi kỹ hơn chứ không đáng một vế điều kiện mới trong quy tắc — cùng " +
       "cách xử lý đã dùng cho 044",
+  },
+  {
+    tenFile: "101_api_to_chuc_co_viec.sql",
+    tenBang: "outbox_jobs",
+    tenPolicy: "outbox_jobs_liet_ke_viec_api",
+    lyDo:
+      "[S1.248 / khoản 277 / ADR-040 tiểu mục] bảng ra đời ở 007 CÙNG policy cách ly của nó — không " +
+      "có cửa sổ trần nào; đây là policy PERMISSIVE thứ hai, FOR SELECT, chủ thể là ĐÚNG vai NOLOGIN " +
+      "NOINHERIT `app_liet_ke_to_chuc` (chủ hai hàm SECURITY DEFINER liệt kê, thân đều ghim ở " +
+      "hardening), và hàng hẹp bằng vị từ `status = 'PENDING'` — không USING (true). Đo (§S1.248): " +
+      "`app_api` đọc THẲNG `outbox_jobs` khi chưa gắn tổ chức vẫn thấy 0 hàng, nên dòng này không nới " +
+      "bán kính của vai ứng dụng nào. NỚI chứ không siết — cùng cách xử lý đã dùng cho 044 và 052",
   },
 ];
 
@@ -349,19 +365,31 @@ function kiemTraLacCho(pFile: Map<string, string>): string[] {
  *
  * Lớp có thẩm quyền vẫn là `NGOAI_LE_HINH_DANG` ở `hardening.always.sql` — nơi cùng policy này
  * phải có một dòng khoá SÁU cột, trong đó có cả `vai_tro`. Lớp ở đây chỉ là lưới bắt sớm.
+ *
+ * [S1.244 / khoản 171 ⑴] Mỗi dòng khai thêm LỆNH và VAI ĐÍCH DANH của chủ thể hẹp ấy — lý do nói "FOR SELECT TO
+ * app_liet_ke_to_chuc", nên phép kiểm đọc đúng hai thứ đó, không đọc "có một chữ TO".
  */
-const NGOAI_LE_USING_TRUE: readonly {
+interface NgoaiLeUsingTrue {
   readonly tenFile: string;
   readonly tenPolicy: string;
+  /** Lệnh của policy, viết TƯỜNG MINH `FOR <lệnh>` — không viết FOR là ALL (PostgreSQL). Chỉ SELECT: vị từ `true` ở lệnh GHI là mở ghi. */
+  readonly lenh: "SELECT";
+  /** Danh sách `TO` của policy, ĐÚNG tập này (tên như PostgreSQL gấp: trần hạ thường, nháy kép giữ nguyên). */
+  readonly vai: readonly string[];
   readonly lyDo: string;
-}[] = [
+}
+
+const NGOAI_LE_USING_TRUE: readonly NgoaiLeUsingTrue[] = [
   {
     tenFile: "052_worker_liet_ke_to_chuc.sql",
     tenPolicy: "organizations_liet_ke_worker",
+    lenh: "SELECT",
+    vai: ["app_liet_ke_to_chuc"],
     lyDo:
       "chủ thể hẹp thay cho vị từ: `FOR SELECT TO app_liet_ke_to_chuc` — một vai NOLOGIN " +
       "NOINHERIT không tiến trình nào đăng nhập được, có ĐÚNG `SELECT (id)` trên ĐÚNG bảng này " +
-      "và sở hữu ĐÚNG một hàm SECURITY DEFINER. Vị từ hẹp hơn không tồn tại: mục đích của " +
+      "và sở hữu ~~ĐÚNG một hàm SECURITY DEFINER~~ [S1.248] hàm SECURITY DEFINER liệt kê tổ chức " +
+      "(từ 101_api_to_chuc_co_viec thêm hàm hẹp thứ hai, cùng vai). Vị từ hẹp hơn không tồn tại: mục đích của " +
       "policy là *mọi* id tổ chức. Đo (§S1.82 cảnh ❹): `app_unseal` đọc THẲNG `organizations` " +
       "vẫn thấy 0 hàng, nên dòng này không mở bán kính của bất kỳ vai ứng dụng nào",
   },
@@ -371,6 +399,80 @@ function laNgoaiLeUsingTrue(pTenFile: string, pTenPolicy: string): boolean {
   return NGOAI_LE_USING_TRUE.some(
     (n) => n.tenFile === pTenFile && chuanHoaTen(n.tenPolicy) === pTenPolicy,
   );
+}
+
+/**
+ * [S1.244 / khoản 171 ⑴] Vai ĐÍCH DANH được làm chủ thể của một ngoại lệ `USING (true)` — danh sách có tên, không phải "mọi tên
+ * khác `PUBLIC`". Mỗi tên là một vai NOLOGIN mà không tiến trình nào đăng nhập mang nó làm current_user; thêm một tên là một quyết
+ * định an ninh có review, cùng hạng một dòng `NGOAI_LE_USING_TRUE`. Không vai ứng dụng nào (`app_api`, `app_unseal`, `app_neo`,
+ * `app_khoi_tao` — chúng phục vụ yêu cầu) và không vai giả (`PUBLIC`, `CURRENT_USER`, `CURRENT_ROLE`, `SESSION_USER`).
+ */
+const VAI_DUOC_MIEN_USING_TRUE: ReadonlySet<string> = new Set([
+  // [S1.82 / khoản 116, S1.212 / khoản 164] NOLOGIN NOINHERIT, chủ của ĐÚNG một hàm SECURITY DEFINER (`outbox_danh_sach_to_chuc()`),
+  // có ĐÚNG `SELECT (id)` trên `organizations`; thuộc tính vai ghim ở hàng `thuộc tính role app_liet_ke_to_chuc` của hardening.
+  "app_liet_ke_to_chuc",
+]);
+
+/** Tên vai trong mệnh đề `TO` như PostgreSQL hiểu: vai giả viết HOA, tên trần hạ thường, tên trong nháy kép giữ nguyên. */
+function tenVaiTrongTo(pTho: string): string {
+  const ten = pTho.trim();
+  if (/^(PUBLIC|CURRENT_USER|CURRENT_ROLE|SESSION_USER)$/iu.test(ten)) return ten.toUpperCase();
+  return chuanHoaTen(ten);
+}
+
+/**
+ * [S1.244 / khoản 171 ⑴] LỆNH và CHỦ THỂ của một câu `CREATE POLICY` — phần thân sau `ON <bảng>`, trước `USING`/`WITH CHECK`
+ * (đã bỏ chú thích). Không viết `FOR` là `ALL`, không viết `TO` là `PUBLIC` — đúng mặc định của PostgreSQL. Cú pháp lạ ⇒ NÉM.
+ */
+function docChuThePolicy(pThan: string): {
+  readonly lenh: string;
+  readonly vietFor: boolean;
+  readonly vai: readonly string[];
+  readonly vietTo: boolean;
+} {
+  const dau = pThan.split(/\bUSING\b|\bWITH\s+CHECK\b/iu)[0]!;
+  const m = new RegExp(
+    String.raw`^\s*(?:AS\s+(?:PERMISSIVE|RESTRICTIVE)\s+)?(?:FOR\s+(ALL|SELECT|INSERT|UPDATE|DELETE)\s*)?(?:\bTO\s+(${DINH_DANH}(?:\s*,\s*${DINH_DANH})*)\s*)?$`,
+    "iu",
+  ).exec(dau);
+  if (m === null) throw new Error(`thân CREATE POLICY ngoài văn phạm đọc được: ${JSON.stringify(dau.trim().slice(0, 80))}`);
+  const vai = m[2] === undefined ? ["PUBLIC"] : [...m[2].matchAll(new RegExp(DINH_DANH, "gu"))].map((x) => tenVaiTrongTo(x[0]));
+  return { lenh: (m[1] ?? "ALL").toUpperCase(), vietFor: m[1] !== undefined, vai: [...new Set(vai)].sort(), vietTo: m[2] !== undefined };
+}
+
+/**
+ * [S1.244 / khoản 171 ⑴] Meta-test của cửa `USING (true)` thành hàm thuần (đo được trên văn bản mẫu). Danh sách vi phạm —
+ * rỗng là xanh. Mỗi dòng khai phải ứng với câu `CREATE POLICY` của tệp; LỆNH viết tường minh bằng lệnh khai; danh sách `TO`
+ * BẰNG tập vai khai; mỗi vai khai có tên trong `VAI_DUOC_MIEN_USING_TRUE`; không câu `ALTER POLICY` cùng tên trong tệp.
+ */
+function kiemTraNgoaiLeUsingTrue(pFile: Map<string, string>, pNgoaiLe: readonly NgoaiLeUsingTrue[]): string[] {
+  const viPham: string[] = [];
+  for (const n of pNgoaiLe) {
+    const p = `${n.tenFile}: ngoại lệ USING (true) "${n.tenPolicy}"`;
+    const sqlTho = pFile.get(n.tenFile);
+    const sql = sqlTho === undefined ? "" : boChuThich(sqlTho);
+    const tenPolicy = mauTenBang(chuanHoaTen(n.tenPolicy));
+    const khop = new RegExp(String.raw`CREATE\s+POLICY\s+${tenPolicy}\s+ON\s+${TEN_CO_SCHEMA}([\s\S]*?);`, "i").exec(sql);
+    if (khop === null) {
+      viPham.push(`${p} không ứng với câu CREATE POLICY nào của tệp`);
+      continue;
+    }
+    // ~~Vế CHỊU LỰC của mọi dòng trong danh sách này: chủ thể phải hẹp bằng `TO <vai>`. Một ngoại lệ cho một policy `TO PUBLIC`
+    // sẽ đúng là fail-open, và nó phải ĐỎ ở đây.~~ [S1.244 / khoản 171 ⑴] Biểu thức của vế ấy là `TO` cộng một tên BẤT KỲ khác
+    // `PUBLIC`, và nó không đọc LỆNH. Chủ thể hẹp là LỆNH × VAI ĐÍCH DANH — cả hai phải là đúng thứ dòng khai nói.
+    const ct = docChuThePolicy(khop[2] ?? "");
+    if (ct.lenh !== n.lenh) viPham.push(`${p} — policy là FOR ${ct.lenh}${ct.vietFor ? "" : " (không viết FOR)"}, dòng khai là FOR ${n.lenh}`);
+    const khai = [...new Set(n.vai.map(tenVaiTrongTo))].sort();
+    if (ct.vai.join(",") !== khai.join(",")) {
+      viPham.push(`${p} — policy TO ${ct.vai.join(", ")}${ct.vietTo ? "" : " (không viết TO)"}, dòng khai TO ${khai.join(", ")}`);
+    }
+    for (const v of khai) if (!VAI_DUOC_MIEN_USING_TRUE.has(v)) viPham.push(`${p} — vai ${v} không có tên trong VAI_DUOC_MIEN_USING_TRUE`);
+    const soAlter = [...sql.matchAll(new RegExp(String.raw`ALTER\s+POLICY\s+${tenPolicy}\s+ON\b`, "gi"))].length;
+    if (soAlter > 0) {
+      viPham.push(`${p} — ${soAlter} câu ALTER POLICY cùng tên trong tệp: chủ thể sau tệp không còn là chủ thể của câu CREATE`);
+    }
+  }
+  return viPham;
 }
 
 function kiemTraFailOpen(pFile: Map<string, string>): string[] {
@@ -572,23 +674,11 @@ describe("hình dạng file migration", () => {
   // [S1.82 / khoản 116] Meta-test của cửa `USING (true)` vừa mở, cùng khuôn meta-test của
   // `NGOAI_LE_LAC_CHO` ngay trên: một dòng trỏ tới policy không còn tồn tại là rác IM LẶNG, và
   // rác im lặng trong danh sách ngoại lệ là chỗ mà lần nới tiếp theo trốn vào.
+  // [S1.244 / khoản 171 ⑴] ~~bộ lọc `chet` viết tại chỗ~~ nay là `kiemTraNgoaiLeUsingTrue` — cùng hàm chạy trên văn bản mẫu
+  // ở khối `[S1.244 / khoản 171 ⑴]` cuối tệp.
   it("[S1.82] mỗi ngoại lệ `USING (true)` ứng với một policy CÓ THẬT, có `TO <vai>`, và có lý do", () => {
-    const chet = NGOAI_LE_USING_TRUE.filter((n) => {
-      const sql = cacFile.get(n.tenFile);
-      if (sql === undefined) return true;
-      const re = new RegExp(
-        String.raw`CREATE\s+POLICY\s+${n.tenPolicy}\s+ON\s+${TEN_CO_SCHEMA}([\s\S]*?);`,
-        "i",
-      );
-      const khop = re.exec(boChuThich(sql));
-      if (khop === null) return true;
-      // Vế CHỊU LỰC của mọi dòng trong danh sách này: chủ thể phải hẹp bằng `TO <vai>`. Một
-      // ngoại lệ cho một policy `TO PUBLIC` sẽ đúng là fail-open, và nó phải ĐỎ ở đây.
-      const than = khop[2] ?? "";
-      return !/\bTO\s+(?!PUBLIC\b)[A-Za-z_][A-Za-z0-9_$]*/i.test(than);
-    });
     expect(
-      chet,
+      kiemTraNgoaiLeUsingTrue(cacFile, NGOAI_LE_USING_TRUE),
       "ngoại lệ USING (true) không ứng với policy nào đang tồn tại, hoặc policy ấy không hẹp " +
         "chủ thể bằng `TO <vai>` — khi ấy nó fail-open thật và ngoại lệ không đứng được",
     ).toEqual([]);
@@ -954,5 +1044,476 @@ describe("[S1.57 / khoản nợ 100] migration của kho không viết thẳng m
 
   it("RANH GIỚI ghim: tên ghép lúc chạy thì bộ dò KHÔNG thấy — phần ấy còn lại phép so vai cuối tệp của migrate()", () => {
     expect(timDoiVai("SELECT set_config('ro' || 'le', 'x', true); DO $d$ BEGIN EXECUTE format('SET %s x', 'ROLE'); END $d$")).toEqual([]);
+  });
+});
+
+// ============================================================================================
+// [S1.232 / khoản 221] BỐN VẾ TĨNH CỦA MỘT BẢNG TENANT MỚI — QUYẾT ĐỊNH ĐƯỢC TỪ VĂN BẢN, KHÔNG CẦN CSDL
+//
+// Đo ở S1.105 trên chính `057`: một bảng tenant mới mang trigger bỏ sót policy `_khach` và cấp
+// `GRANT INSERT` mức BẢNG, và `pnpm t0` + `pnpm test` XANH TRỌN — năm cổng đỏ đều ở `test:int`
+// (138 s cho năm tệp). Bốn trong bảy lời khai mà bảng ấy đòi quyết định được từ VĂN BẢN migration:
+//   ⑴ migration số lớn hơn `027` mà `CREATE TABLE` có `org_id` thì phải `CREATE POLICY <bảng>_khach …
+//      AS RESTRICTIVE` trong CÙNG tệp — `027` lấp MỘT LẦN cho lược đồ của ngày ấy, hardening chỉ PHÁN
+//      XÉT chứ không DỰNG; `rls-coverage` [S1.48] đếm từ catalog "RESTRICTIVE = MỘT cho MỖI bảng tenant".
+//   ⑵ không migration nào cấp `INSERT` mà cấp được cột `id` trên bảng tenant: `GRANT INSERT`/`ALL` mức
+//      BẢNG, `GRANT INSERT (… id …)` theo cột, hay `ALTER DEFAULT PRIVILEGES … GRANT INSERT ON TABLES`
+//      (cấp trước cho bảng chưa có tên) — cấp `id` biến `<bảng>_pkey` thành oracle xuyên tổ chức mà
+//      ADR-013 từ chối. Bảng gốc `organizations` được miễn vế cột: `id` của nó LÀ tổ chức và vai khởi
+//      tạo (`075`) phải đặt nó.
+//   ⑶ tên bảng tenant phải có trong `BANG_TENANT_KHAI` của `hardening.always.sql`, dòng khai trỏ đúng
+//      tệp đã `CREATE TABLE`, và không dòng khai nào thiu — bản tĩnh của phép so `[INV-F1] HAI BẢN KHỚP`
+//      ở `rls-coverage`, đọc qua `docHangHardening` (chỉ ĐỌC hardening).
+//   ⑷ mỗi hàm `CREATE FUNCTION … RETURNS trigger` gắn vào INSERT/UPDATE/DELETE phải có tên trong
+//      `HAM_CANH_CHI_GHI_THEM` hoặc `HAM_KHONG_PHAI_CANH` (`db/danh-sach-ham-canh.ts` — cùng nguồn với
+//      tổng điều tra của `hardening-suy-tu-tinh-chat.int.test.ts`). Tập rộng ở đó là bit 4/8/16 của
+//      `tgtype`, nên một hàm CHỈ gắn `TRUNCATE` (`rfq_items_cam_truncate`, 011) nằm ngoài cả hai danh
+//      sách ở đó và ở đây; một hàm không `CREATE TRIGGER` nào gắn thì VẪN phải khai (fail-closed).
+// Vế thứ năm — nhân chứng hành vi của khoản 74 — KHÔNG quyết định được từ văn bản và ở lại `test:int`.
+// Lớp này là lưới bắt sớm đọc CÁCH VIẾT (cùng ranh giới với `kiemTraFailOpen`); lớp có thẩm quyền vẫn
+// là hardening + `rls-coverage` + tổng điều tra. Mỗi vế có một lượt đỏ thật trên văn bản mẫu bên dưới.
+// ============================================================================================
+
+/** Số của một migration đánh số (`027_…` → 27, `95NN_…` → số tạm bốn chữ số); `null` cho `.always.sql` hay tên lạ. */
+function soMigration(pTenFile: string): number | null {
+  if (pTenFile.endsWith(".always.sql")) return null;
+  const m = /^(\d{3,4})_/u.exec(pTenFile);
+  return m === null ? null : Number(m[1]);
+}
+
+const laMigrationDanhSo = (pTenFile: string): boolean => soMigration(pTenFile) !== null;
+
+/** Tách theo dấu phẩy NGOÀI ngoặc: `INSERT (a, b), UPDATE (c)` → hai phần tử, không bốn. */
+function tachTheoPhayNgoaiNgoac(pVan: string): string[] {
+  const ra: string[] = [];
+  let sau = 0;
+  let hienTai = "";
+  for (const c of pVan) {
+    if (c === "(") sau += 1;
+    else if (c === ")") sau -= 1;
+    if (c === "," && sau === 0) {
+      ra.push(hienTai.trim());
+      hienTai = "";
+    } else {
+      hienTai += c;
+    }
+  }
+  if (hienTai.trim() !== "") ra.push(hienTai.trim());
+  return ra;
+}
+
+/** ⑴ Bảng tenant sinh sau `027` (không phải lá phân mảnh) phải có `CREATE POLICY <bảng>_khach … AS RESTRICTIVE` cùng tệp. */
+function kiemPolicyKhach(pFile: Map<string, string>): { viPham: string[]; daXet: number } {
+  const viPham: string[] = [];
+  let daXet = 0;
+  for (const bang of timCacBang(pFile)) {
+    const so = soMigration(bang.tenFile);
+    if (!bang.chiuRangBuocTenant || bang.chaPhanManh !== null || so === null || so <= 27) continue;
+    daXet += 1;
+    const sql = boChuThich(pFile.get(bang.tenFile)!);
+    const tenPolicy = `${bang.tenBang}_khach`;
+    const re = new RegExp(
+      String.raw`CREATE\s+POLICY\s+(?:"${neo(tenPolicy)}"|${neo(tenPolicy)})\s+ON\s+${mauTenBang(bang.tenBang)}(?![A-Za-z0-9_$"])\s+AS\s+RESTRICTIVE\b`,
+      "iu",
+    );
+    if (!re.test(sql)) {
+      viPham.push(
+        `${bang.tenFile} tạo bảng tenant "${bang.tenBang}" (sau 027) nhưng không có CREATE POLICY ${tenPolicy} ON ${bang.tenBang} AS RESTRICTIVE ` +
+          "trong CÙNG tệp — 027 chỉ lấp một lần cho lược đồ của ngày ấy; hardening phán xét chứ không dựng.",
+      );
+    }
+  }
+  return { viPham, daXet };
+}
+
+/** ⑵ Không `GRANT` nào cấp được cột `id` của một bảng tenant qua INSERT: mức BẢNG (`INSERT`, `ALL`) hay theo cột có `id`. */
+function kiemGrantInsertCapId(pFile: Map<string, string>): { viPham: string[]; daXet: number } {
+  const bangTenant = new Set(timCacBang(pFile).filter((b) => b.chiuRangBuocTenant).map((b) => b.tenBang));
+  const viPham: string[] = [];
+  let daXet = 0;
+  const reTen = new RegExp(`^${TEN_CO_SCHEMA}$`, "u");
+  for (const [tenFile, sqlTho] of pFile) {
+    if (!laMigrationDanhSo(tenFile)) continue;
+    const sql = boChuThich(sqlTho);
+    // Đường vòng qua phép đọc `GRANT`: quyền MẶC ĐỊNH cho bảng sinh sau (`001` giải thích vì sao kho không dùng nó; hôm nay chỉ
+    // xuất hiện trong chú thích). Cấm hẳn cho mọi câu cấp INSERT/ALL ON TABLES — không xét bảng nào, vì nó áp cho bảng CHƯA có tên.
+    for (const khop of sql.matchAll(/\bALTER\s+DEFAULT\s+PRIVILEGES\b[^;]*?\bGRANT\s+([^;]+?)\s+ON\s+TABLES\b[^;]*;/giu)) {
+      if (tachTheoPhayNgoaiNgoac(khop[1]!).some((q) => /^(?:INSERT|ALL(?:\s+PRIVILEGES)?)$/iu.test(q))) {
+        viPham.push(`${tenFile}: ALTER DEFAULT PRIVILEGES … GRANT INSERT/ALL ON TABLES — cấp trước cho mọi bảng sinh sau, kể cả bảng tenant, mức BẢNG.`);
+      }
+    }
+    // `[^;]` giữ phép đọc trong MỘT câu: `GRANT vai TO vai;` (không `ON`) không được nuốt sang câu GRANT kế.
+    for (const khop of sql.matchAll(/\bGRANT\s+([^;]+?)\s+ON\s+(?:TABLE\s+)?([^;]+?)\s+TO\s+[^;]*;/giu)) {
+      const dich = khop[2]!.trim();
+      if (
+        /^(?:SEQUENCE|FUNCTION|PROCEDURE|ROUTINE|SCHEMA|DATABASE|TYPE|DOMAIN|LANGUAGE|TABLESPACE|FOREIGN|LARGE|PARAMETER|ALL\s+(?:SEQUENCES|FUNCTIONS|PROCEDURES|ROUTINES))\b/iu.test(dich)
+      ) {
+        continue;
+      }
+      const quyen = tachTheoPhayNgoaiNgoac(khop[1]!);
+      const mucBang = quyen.filter((q) => /^(?:INSERT|ALL(?:\s+PRIVILEGES)?)$/iu.test(q));
+      const cotId = quyen
+        .filter((q) => /^INSERT\s*\(/iu.test(q))
+        .flatMap((q) => tachTheoPhayNgoaiNgoac(q.replace(/^INSERT\s*\(/iu, "").replace(/\)\s*$/u, "")))
+        .map(chuanHoaTen)
+        .filter((c) => c === "id");
+      const toanSchema = /^ALL\s+TABLES\b/iu.test(dich);
+      const cacBang = toanSchema
+        ? ["<ALL TABLES IN SCHEMA>"]
+        : tachTheoPhayNgoaiNgoac(dich).map((t) => {
+            const m = reTen.exec(t);
+            return chuanHoaTen(m === null ? t : m[1]!);
+          });
+      for (const bang of cacBang) {
+        if (!toanSchema && !bangTenant.has(bang)) continue;
+        daXet += 1;
+        if (mucBang.length > 0) {
+          viPham.push(
+            `${tenFile}: GRANT ${mucBang.join(", ")} ON ${bang} — quyền INSERT mức BẢNG cấp cả \`id\`, biến ${bang}_pkey thành oracle ` +
+              "xuyên tổ chức (ADR-013). Cấp theo CỘT, không có `id` (khuôn 002).",
+          );
+        }
+        if (cotId.length > 0 && !BANG_GOC_TENANT.includes(bang)) {
+          viPham.push(`${tenFile}: GRANT INSERT (… id …) ON ${bang} — cột \`id\` của bảng tenant không được cấp INSERT (ADR-013).`);
+        }
+      }
+    }
+  }
+  return { viPham, daXet };
+}
+
+interface HangKhaiTenant {
+  readonly nsp: string;
+  readonly ten: string;
+  readonly mig: string;
+}
+
+/** Hàng của `BANG_TENANT_KHAI` — cùng bộ đọc với `rls-coverage` (`\d{3,4}`: số tạm `95NN` bốn chữ số). */
+function docBangTenantKhai(pHardeningSql: string): HangKhaiTenant[] {
+  return [...docHangHardening(pHardeningSql, "BANG_TENANT_KHAI").matchAll(/\('(\w+)', '(\w+)', '(\d{3,4}_\w+)'\)/gu)].map(
+    (m) => ({ nsp: m[1]!, ten: m[2]!, mig: m[3]! }),
+  );
+}
+
+/** ⑶ Hai chiều: mọi bảng tenant của migration đánh số có dòng khai trỏ đúng tệp; mọi dòng khai ứng với một bảng có thật. */
+function kiemKhaiBangTenant(pFile: Map<string, string>, pKhai: readonly HangKhaiTenant[]): string[] {
+  const viPham: string[] = [];
+  const bang = timCacBang(pFile).filter((b) => b.chiuRangBuocTenant && laMigrationDanhSo(b.tenFile));
+  const khaiTheoTen = new Map(pKhai.map((h) => [h.ten, h] as const));
+  for (const b of bang) {
+    const h = khaiTheoTen.get(b.tenBang);
+    if (h === undefined) {
+      viPham.push(`${b.tenFile}: bảng tenant "${b.tenBang}" chưa có trong BANG_TENANT_KHAI của hardening.always.sql (ADR-037).`);
+    } else if (h.nsp !== "public" || `${h.mig}.sql` !== b.tenFile) {
+      viPham.push(`BANG_TENANT_KHAI khai ('${h.nsp}', '${h.ten}', '${h.mig}') nhưng CREATE TABLE của bảng ấy ở ${b.tenFile}.`);
+    }
+  }
+  const daTao = new Set(bang.map((b) => b.tenBang));
+  for (const h of pKhai) {
+    if (!daTao.has(h.ten)) {
+      viPham.push(`BANG_TENANT_KHAI khai '${h.ten}' (${h.mig}) mà không migration đánh số nào CREATE TABLE bảng tenant ấy — dòng khai thiu.`);
+    }
+  }
+  return viPham;
+}
+
+const SU_KIEN_TAP_RONG: readonly string[] = ["INSERT", "UPDATE", "DELETE"];
+
+/** `lược_đồ.tên` của một hàm/trigger đọc từ văn bản; không lược đồ thì `public`, đúng cách tổng điều tra định danh. */
+function tenDayDu(pSchema: string | undefined, pTen: string): string {
+  return `${pSchema === undefined ? "public" : chuanHoaTen(pSchema)}.${chuanHoaTen(pTen)}`;
+}
+
+/** ⑷ Mỗi hàm `RETURNS trigger` trong migration đánh số phải nằm trong một trong hai danh sách khai — trừ hàm CHỈ gắn `TRUNCATE`. */
+function kiemHamTriggerDaKhai(
+  pFile: Map<string, string>,
+  pCanh: readonly string[],
+  pKhong: readonly string[],
+): { viPham: string[]; daXet: number } {
+  const ham = new Map<string, string[]>();
+  const suKien = new Map<string, Set<string>>();
+  const reHam = new RegExp(
+    String.raw`CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:(${DINH_DANH})\s*\.\s*)?(${DINH_DANH})\s*\([^)]*\)\s*RETURNS\s+(?:pg_catalog\s*\.\s*)?trigger\b`,
+    "giu",
+  );
+  const reTrigger = new RegExp(
+    String.raw`CREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\s+${DINH_DANH}\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\s+([^;]+?)\s+ON\s+[^;]+?EXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(?:(${DINH_DANH})\s*\.\s*)?(${DINH_DANH})\s*\(`,
+    "giu",
+  );
+  for (const [tenFile, sqlTho] of pFile) {
+    if (!laMigrationDanhSo(tenFile)) continue;
+    const sql = boChuThich(sqlTho);
+    for (const m of sql.matchAll(reHam)) {
+      const ten = tenDayDu(m[1], m[2]!);
+      ham.set(ten, [...(ham.get(ten) ?? []), tenFile]);
+    }
+    for (const m of sql.matchAll(reTrigger)) {
+      const ten = tenDayDu(m[2], m[3]!);
+      const tap = suKien.get(ten) ?? new Set<string>();
+      for (const ve of m[1]!.split(/\s+OR\s+/iu)) tap.add(ve.trim().split(/\s+/u)[0]!.toUpperCase());
+      suKien.set(ten, tap);
+    }
+  }
+  const daKhai = new Set([...pCanh.map((h) => `public.${h}`), ...pKhong]);
+  const viPham: string[] = [];
+  for (const [ten, tep] of ham) {
+    const gan = suKien.get(ten);
+    const chiTruncate = gan !== undefined && gan.size > 0 && [...gan].every((e) => !SU_KIEN_TAP_RONG.includes(e));
+    if (chiTruncate || daKhai.has(ten)) continue;
+    viPham.push(
+      `${[...new Set(tep)].join(", ")}: hàm trigger ${ten} ` +
+        (gan === undefined ? "không CREATE TRIGGER nào gắn (hàm chết, hay gắn bằng SQL động) và " : `gắn ${[...gan].join("/")} mà `) +
+        "không có tên trong HAM_CANH_CHI_GHI_THEM hay HAM_KHONG_PHAI_CANH (db/danh-sach-ham-canh.ts). Khai nó vào ĐÚNG MỘT danh " +
+        "sách — tổng điều tra ở hardening-suy-tu-tinh-chat.int.test.ts sẽ phán xét lời khai ấy.",
+    );
+  }
+  return { viPham, daXet: ham.size };
+}
+
+describe("[S1.232 / khoản 221] bốn vế tĩnh của một bảng tenant mới — đỏ ở T1, không đợi test:int", () => {
+  const cacFile = docCacFile();
+  const HARDENING = cacFile.get("hardening.always.sql");
+  if (HARDENING === undefined) throw new Error("không đọc được db/migrations/hardening.always.sql");
+
+  it("[INV-F1] ⑴ mọi bảng tenant sinh sau 027 có CREATE POLICY <bảng>_khach … AS RESTRICTIVE trong cùng tệp", () => {
+    const { viPham, daXet } = kiemPolicyKhach(cacFile);
+    expect(daXet, "chống rỗng ruột: phải thấy các bảng tenant sinh sau 027").toBeGreaterThanOrEqual(15);
+    expect(viPham).toEqual([]);
+  });
+
+  it("[INV-F1] ⑵ không GRANT nào cấp được cột `id` của bảng tenant qua INSERT — mức bảng, ALL, hay theo cột", () => {
+    const { viPham, daXet } = kiemGrantInsertCapId(cacFile);
+    expect(daXet, "chống rỗng ruột: phải thấy các câu GRANT trên bảng tenant").toBeGreaterThanOrEqual(100);
+    expect(viPham).toEqual([]);
+  });
+
+  it("[INV-F1] ⑶ tên bảng tenant có trong BANG_TENANT_KHAI, dòng khai trỏ đúng tệp CREATE TABLE, không dòng khai thiu", () => {
+    const khai = docBangTenantKhai(HARDENING);
+    expect(khai.length, "bản khai đang rỗng — bộ đọc mù").toBeGreaterThanOrEqual(40);
+    expect(kiemKhaiBangTenant(cacFile, khai)).toEqual([]);
+  });
+
+  it("[INV-F1] ⑷ mọi hàm RETURNS trigger gắn INSERT/UPDATE/DELETE có tên trong HAM_CANH_CHI_GHI_THEM hoặc HAM_KHONG_PHAI_CANH", () => {
+    const { viPham, daXet } = kiemHamTriggerDaKhai(cacFile, HAM_CANH_CHI_GHI_THEM, HAM_KHONG_PHAI_CANH);
+    expect(daXet, "chống rỗng ruột: phải thấy các hàm trigger của kho").toBeGreaterThanOrEqual(70);
+    expect(viPham).toEqual([]);
+  });
+
+  // Bốn lượt đỏ thật trên văn bản mẫu — mỗi vế một đột biến nhỏ nhất, kèm đối chứng xanh để chắc cửa hẹp đúng chỗ.
+  const BANG_DU = (pSo: string, pKhach: string): [string, string] => [
+    `${pSo}_bang_moi.sql`,
+    "CREATE TABLE bang_moi (id uuid PRIMARY KEY, org_id uuid NOT NULL);\n" +
+      "ALTER TABLE bang_moi ENABLE ROW LEVEL SECURITY;\nALTER TABLE bang_moi FORCE ROW LEVEL SECURITY;\n" +
+      "CREATE POLICY bang_moi_tenant ON bang_moi USING (org_id = app_current_org_id()) WITH CHECK (org_id = app_current_org_id());\n" +
+      pKhach +
+      "GRANT SELECT, INSERT (org_id) ON bang_moi TO app_api;",
+  ];
+  const KHACH = "CREATE POLICY bang_moi_khach ON bang_moi AS RESTRICTIVE USING (app_current_guest_session_id() IS NULL) WITH CHECK (app_current_guest_session_id() IS NULL);\n";
+
+  it("⑴ đỏ: bảng tenant ở migration sau 027 thiếu policy _khach; policy _khach PERMISSIVE cũng đỏ; trước 027 không đòi; có đủ thì xanh", () => {
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", "")])).viPham).toEqual([
+      '091_bang_moi.sql tạo bảng tenant "bang_moi" (sau 027) nhưng không có CREATE POLICY bang_moi_khach ON bang_moi AS RESTRICTIVE ' +
+        "trong CÙNG tệp — 027 chỉ lấp một lần cho lược đồ của ngày ấy; hardening phán xét chứ không dựng.",
+    ]);
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", KHACH.replace(" AS RESTRICTIVE", ""))])).viPham).toHaveLength(1);
+    expect(kiemPolicyKhach(new Map([BANG_DU("012", "")]))).toEqual({ viPham: [], daXet: 0 });
+    expect(kiemPolicyKhach(new Map([BANG_DU("091", KHACH)]))).toEqual({ viPham: [], daXet: 1 });
+    // Số tạm bốn chữ số của `pnpm cap-so` (ADR-090) cũng là "sau 027".
+    expect(kiemPolicyKhach(new Map([BANG_DU("9591", "")])).viPham).toHaveLength(1);
+  });
+
+  it("⑵ đỏ: GRANT INSERT mức bảng, GRANT ALL, GRANT INSERT (id, …) theo cột, và ALL TABLES IN SCHEMA; theo cột không có id thì xanh; organizations được miễn vế cột", () => {
+    const [tenFile, sql] = BANG_DU("091", KHACH);
+    const thay = (pGrant: string): string[] => kiemGrantInsertCapId(new Map([[tenFile, sql.replace("GRANT SELECT, INSERT (org_id) ON bang_moi TO app_api;", pGrant)]])).viPham;
+    expect(thay("GRANT SELECT, INSERT ON bang_moi TO app_api;")).toEqual([
+      "091_bang_moi.sql: GRANT INSERT ON bang_moi — quyền INSERT mức BẢNG cấp cả `id`, biến bang_moi_pkey thành oracle xuyên tổ chức (ADR-013). Cấp theo CỘT, không có `id` (khuôn 002).",
+    ]);
+    expect(thay("GRANT ALL PRIVILEGES ON TABLE public.bang_moi TO app_api;")).toHaveLength(1);
+    expect(thay("GRANT INSERT (org_id, id) ON bang_moi TO app_api;")).toEqual([
+      "091_bang_moi.sql: GRANT INSERT (… id …) ON bang_moi — cột `id` của bảng tenant không được cấp INSERT (ADR-013).",
+    ]);
+    expect(thay("GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO app_api;")).toHaveLength(1);
+    expect(thay("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT ON TABLES TO app_api;")).toEqual([
+      "091_bang_moi.sql: ALTER DEFAULT PRIVILEGES … GRANT INSERT/ALL ON TABLES — cấp trước cho mọi bảng sinh sau, kể cả bảng tenant, mức BẢNG.",
+    ]);
+    expect(thay("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_api;")).toEqual([]);
+    // Xanh: theo cột không có `id`; INSERT mức bảng trên bảng KHÔNG tenant; `GRANT vai TO vai` không bị nuốt sang câu sau.
+    expect(thay("GRANT INSERT (org_id), UPDATE (org_id) ON bang_moi TO app_api;")).toEqual([]);
+    expect(thay("CREATE TABLE danh_muc (id int); GRANT INSERT ON danh_muc TO app_api;")).toEqual([]);
+    expect(thay("GRANT app_api TO app_unseal; GRANT SELECT ON bang_moi TO app_api;")).toEqual([]);
+    expect(
+      kiemGrantInsertCapId(new Map([["091_goc.sql", "CREATE TABLE organizations (id uuid PRIMARY KEY); GRANT INSERT (id, name) ON organizations TO app_khoi_tao;"]])).viPham,
+    ).toEqual([]);
+  });
+
+  it("⑶ đỏ: bảng tenant chưa khai; dòng khai trỏ sai tệp; dòng khai thiu — khai đúng thì xanh", () => {
+    const tep = new Map([BANG_DU("091", KHACH)]);
+    expect(kiemKhaiBangTenant(tep, [])).toEqual([
+      '091_bang_moi.sql: bảng tenant "bang_moi" chưa có trong BANG_TENANT_KHAI của hardening.always.sql (ADR-037).',
+    ]);
+    expect(kiemKhaiBangTenant(tep, [{ nsp: "public", ten: "bang_moi", mig: "090_khac" }])).toEqual([
+      "BANG_TENANT_KHAI khai ('public', 'bang_moi', '090_khac') nhưng CREATE TABLE của bảng ấy ở 091_bang_moi.sql.",
+    ]);
+    expect(
+      kiemKhaiBangTenant(tep, [
+        { nsp: "public", ten: "bang_moi", mig: "091_bang_moi" },
+        { nsp: "public", ten: "bang_cu", mig: "050_bang_cu" },
+      ]),
+    ).toEqual(["BANG_TENANT_KHAI khai 'bang_cu' (050_bang_cu) mà không migration đánh số nào CREATE TABLE bảng tenant ấy — dòng khai thiu."]);
+    expect(kiemKhaiBangTenant(tep, [{ nsp: "public", ten: "bang_moi", mig: "091_bang_moi" }])).toEqual([]);
+    // Bộ đọc hàng khai: đúng khuôn của hardening, kể cả số bốn chữ số như số tạm `95NN` (fixture dùng số ngoài dải tạm:
+    // `pnpm cap-so --kiem` đọc `95NN_…` là số tạm chưa cấp).
+    expect(
+      docBangTenantKhai(
+        "\n  BANG_TENANT_KHAI constant text :=\n    $q$(VALUES\n         ('public', 'a', '002_a'),\n         ('public', 'b', '1234_b')\n       ) AS bt(nspname, relname, mig)$q$;\n",
+      ),
+    ).toEqual([
+      { nsp: "public", ten: "a", mig: "002_a" },
+      { nsp: "public", ten: "b", mig: "1234_b" },
+    ]);
+  });
+
+  it("⑷ đỏ: hàm RETURNS trigger gắn INSERT mà không ở danh sách nào; không gắn gì cũng đỏ; chỉ gắn TRUNCATE thì miễn; đã khai thì xanh", () => {
+    const HAM = "CREATE OR REPLACE FUNCTION public.ham_moi() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN RETURN NEW; END $f$;\n";
+    const GAN = (pSuKien: string): string => `CREATE TRIGGER t BEFORE ${pSuKien} ON bang_moi FOR EACH ROW EXECUTE FUNCTION ham_moi();\n`;
+    const kiem = (pSql: string, pKhong: readonly string[] = []): string[] => kiemHamTriggerDaKhai(new Map([["091_x.sql", pSql]]), ["chan_sua_xoa"], pKhong).viPham;
+    expect(kiem(HAM + GAN("INSERT OR UPDATE OF ghi_chu"))).toEqual([
+      "091_x.sql: hàm trigger public.ham_moi gắn INSERT/UPDATE mà không có tên trong HAM_CANH_CHI_GHI_THEM hay HAM_KHONG_PHAI_CANH " +
+        "(db/danh-sach-ham-canh.ts). Khai nó vào ĐÚNG MỘT danh sách — tổng điều tra ở hardening-suy-tu-tinh-chat.int.test.ts sẽ phán xét lời khai ấy.",
+    ]);
+    expect(kiem(HAM)).toHaveLength(1);
+    expect(kiem(HAM + GAN("TRUNCATE"))).toEqual([]);
+    expect(kiem(HAM + GAN("INSERT"), ["public.ham_moi"])).toEqual([]);
+    // Danh sách canh khai KHÔNG lược đồ; tổng điều tra định danh `public.<tên>` — hai cách viết phải gặp nhau ở đây.
+    expect(kiem(HAM.replace("ham_moi", "chan_sua_xoa") + GAN("UPDATE OR DELETE").replace("ham_moi", "chan_sua_xoa"))).toEqual([]);
+    // Hàm thường (không RETURNS trigger) không bị đòi; `.always.sql` không bị đọc.
+    expect(kiem("CREATE FUNCTION f() RETURNS void LANGUAGE sql AS $f$ SELECT 1 $f$;")).toEqual([]);
+    expect(kiemHamTriggerDaKhai(new Map([["hardening.always.sql", HAM]]), [], []).viPham).toEqual([]);
+  });
+});
+
+// ============================================================================================
+// [S1.244 / khoản 171 ⑴] META-TEST CỦA CỬA `USING (true)` ĐỌC LỆNH VÀ VAI ĐÍCH DANH — VĂN BẢN MẪU
+//
+// Bản S1.82 tự gọi vế `TO <vai>` là vế CHỊU LỰC, nhưng biểu thức của nó là `TO` cộng một tên BẤT KỲ khác `PUBLIC` — `TO app_api`
+// đi qua sạch — và không đọc LỆNH, nên `FOR ALL TO app_api USING (true)` cũng qua (thân khoản 171, §S1.83). Lý do của dòng
+// ngoại lệ nói "FOR SELECT TO app_liet_ke_to_chuc": phép kiểm nay đọc đúng hai thứ ấy — lệnh viết tường minh bằng lệnh khai,
+// danh sách `TO` bằng đúng tập vai khai, mỗi vai khai có tên trong danh sách vai được phép — và policy không bị `ALTER` lại
+// trong chính tệp (chủ thể sau tệp phải là chủ thể của câu `CREATE`).
+// ============================================================================================
+describe("[S1.244 / khoản 171 ⑴] meta-test của cửa USING (true) đọc LỆNH và VAI ĐÍCH DANH — văn bản mẫu", () => {
+  const TEP = "052_worker_liet_ke_to_chuc.sql";
+  const DONG: NgoaiLeUsingTrue = {
+    tenFile: TEP,
+    tenPolicy: "organizations_liet_ke_worker",
+    lenh: "SELECT",
+    vai: ["app_liet_ke_to_chuc"],
+    lyDo: "dòng mẫu — lý do không phải thứ đang đo ở khối này",
+  };
+  const kiem = (pSql: string, pDong: NgoaiLeUsingTrue = DONG): string[] => kiemTraNgoaiLeUsingTrue(new Map([[TEP, pSql]]), [pDong]);
+  const cau = (pChuThe: string): string =>
+    `CREATE POLICY organizations_liet_ke_worker ON public.organizations ${pChuThe} USING (true);`;
+  const P = `${TEP}: ngoại lệ USING (true) "organizations_liet_ke_worker"`;
+
+  it("đối chứng: đúng lệnh, đúng vai — kể cả vai viết trong nháy kép, chú thích giữa các vế, xuống dòng — thì xanh", () => {
+    expect(kiem(cau("FOR SELECT TO app_liet_ke_to_chuc"))).toEqual([]);
+    expect(kiem(cau('FOR SELECT\n  TO "app_liet_ke_to_chuc" -- chú thích\n'))).toEqual([]);
+    expect(kiem(cau("AS PERMISSIVE FOR SELECT TO app_liet_ke_to_chuc"))).toEqual([]);
+  });
+
+  it("LỆNH: FOR ALL ⇒ đỏ; không viết FOR (PostgreSQL hiểu là ALL) ⇒ đỏ; FOR DELETE ⇒ đỏ", () => {
+    expect(kiem(cau("FOR ALL TO app_liet_ke_to_chuc"))).toEqual([`${P} — policy là FOR ALL, dòng khai là FOR SELECT`]);
+    expect(kiem(cau("TO app_liet_ke_to_chuc"))).toEqual([`${P} — policy là FOR ALL (không viết FOR), dòng khai là FOR SELECT`]);
+    expect(kiem(cau("FOR DELETE TO app_liet_ke_to_chuc"))).toEqual([`${P} — policy là FOR DELETE, dòng khai là FOR SELECT`]);
+  });
+
+  it("VAI ĐÍCH DANH: TO app_api ⇒ đỏ (bản S1.82 xanh); thừa một vai ⇒ đỏ; TO PUBLIC hay không viết TO ⇒ đỏ; thân khoản 171 — FOR ALL TO app_api — đỏ ở CẢ HAI vế", () => {
+    expect(kiem(cau("FOR SELECT TO app_api"))).toEqual([`${P} — policy TO app_api, dòng khai TO app_liet_ke_to_chuc`]);
+    expect(kiem(cau("FOR SELECT TO app_liet_ke_to_chuc, app_api"))).toEqual([
+      `${P} — policy TO app_api, app_liet_ke_to_chuc, dòng khai TO app_liet_ke_to_chuc`,
+    ]);
+    expect(kiem(cau("FOR SELECT TO PUBLIC"))).toEqual([`${P} — policy TO PUBLIC, dòng khai TO app_liet_ke_to_chuc`]);
+    expect(kiem(cau("FOR SELECT"))).toEqual([`${P} — policy TO PUBLIC (không viết TO), dòng khai TO app_liet_ke_to_chuc`]);
+    expect(kiem(cau("FOR ALL TO app_api"))).toEqual([
+      `${P} — policy là FOR ALL, dòng khai là FOR SELECT`,
+      `${P} — policy TO app_api, dòng khai TO app_liet_ke_to_chuc`,
+    ]);
+  });
+
+  it("dòng khai mang một vai KHÔNG có tên trong VAI_DUOC_MIEN_USING_TRUE ⇒ đỏ dù policy khớp dòng khai — vai ứng dụng không bao giờ là chủ thể hẹp", () => {
+    expect(kiem(cau("FOR SELECT TO app_api"), { ...DONG, vai: ["app_api"] })).toEqual([
+      `${P} — vai app_api không có tên trong VAI_DUOC_MIEN_USING_TRUE`,
+    ]);
+    expect(kiem(cau("FOR SELECT TO PUBLIC"), { ...DONG, vai: ["PUBLIC"] })).toEqual([
+      `${P} — vai PUBLIC không có tên trong VAI_DUOC_MIEN_USING_TRUE`,
+    ]);
+  });
+
+  it("ALTER POLICY cùng tên trong tệp ⇒ đỏ (chủ thể sau tệp không còn là chủ thể của câu CREATE); không có câu CREATE ⇒ đỏ", () => {
+    expect(
+      kiem(cau("FOR SELECT TO app_liet_ke_to_chuc") + "\nALTER POLICY organizations_liet_ke_worker ON public.organizations TO app_api;"),
+    ).toEqual([`${P} — 1 câu ALTER POLICY cùng tên trong tệp: chủ thể sau tệp không còn là chủ thể của câu CREATE`]);
+    expect(kiem("SELECT 1;")).toEqual([`${P} không ứng với câu CREATE POLICY nào của tệp`]);
+  });
+});
+
+// ============================================================================================
+// [S1.244 / khoản 171 ⑵] MIỄN TRỪ MỤC (C) VÀ HAI HÀNG GHIM THAY CHỖ NÓ ĐỨNG CÙNG MỘT ĐIỀU KIỆN
+//
+// Hàm SECURITY DEFINER khai ở `NGOAI_LE_DOC_VONG` được mục (C) miễn vì hai hàng ghim canh nó thay phép cấm — «định nghĩa hàm
+// <chữ ký> …» (thân + chủ hàm) và «EXECUTE trên <chữ ký> …» (ACL). Hardening nay miễn CÙNG điều kiện với hai hàng ấy: migration
+// khai sinh (cột `mig`) có trong `schema_migrations`. Điều kiện của miễn trừ đọc cột `mig`; tiền điều kiện của hai hàng ghim là
+// một literal — hai bản chép của một điều kiện. Vế này giữ chúng trùng nhau: một hàng ghim neo migration khác (gõ nhầm tên tệp,
+// đổi tên tệp) thì IM MÃI trong khi miễn trừ đứng — đúng hình dạng khoản 171 — và đỏ ở đây. Hàm khai mà thiếu hàng ghim cũng đỏ.
+// ============================================================================================
+
+/** Tiền điều kiện chuẩn của một hàng ghim thay chỗ: migration khai sinh đã áp — nguyên văn khuôn của hardening. */
+const tienDeHangGhim = (pMig: string): string =>
+  `to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '${pMig}.sql')`;
+
+/** Vi phạm của cặp (dòng khai hàm ở NGOAI_LE_DOC_VONG ↔ hai hàng ghim thay chỗ) trên văn bản hardening — rỗng là xanh. */
+function kiemHangGhimThayCho(pHardening: string): { readonly viPham: string[]; readonly soHam: number } {
+  const viPham: string[] = [];
+  const khoi = docHangHardening(pHardening, "NGOAI_LE_DOC_VONG");
+  let soHam = 0;
+  for (const [, loai, nsp, ten, mig] of khoi.matchAll(/\('([^']*)', '([^']*)', '([^']*)', '([^']*)', '(?:[^']|'')*'\)/gu)) {
+    if (loai !== "ham") continue;
+    soHam += 1;
+    for (const nhan of [`định nghĩa hàm ${ten!}`, `EXECUTE trên ${ten!}`]) {
+      const re = new RegExp(String.raw`\n {4}ARRAY\[\n {6}\$q\$${neo(nhan)}[^$]*\$q\$,\n {6}\$q\$([^$]*)\$q\$,`, "gu");
+      const khop = [...pHardening.matchAll(re)];
+      if (khop.length !== 1) {
+        viPham.push(`${nsp!}.${ten!}: cần đúng một hàng ghim «${nhan} …» thay chỗ miễn trừ mục (C) — thấy ${khop.length}`);
+      } else if (khop[0]![1] !== tienDeHangGhim(mig!)) {
+        viPham.push(`${nsp!}.${ten!}: hàng ghim «${nhan} …» có tiền điều kiện khác dòng khai (migration ${mig!}): ${khop[0]![1]!}`);
+      }
+    }
+  }
+  return { viPham, soHam };
+}
+
+describe("[S1.244 / khoản 171 ⑵] miễn trừ mục (C) và hai hàng ghim thay chỗ nó đứng cùng một điều kiện", () => {
+  const HARDENING = docCacFile().get("hardening.always.sql");
+  if (HARDENING === undefined) throw new Error("không đọc được db/migrations/hardening.always.sql");
+
+  it("hardening thật: mỗi hàm khai ở NGOAI_LE_DOC_VONG có đúng hai hàng ghim thay chỗ, tiền điều kiện neo ĐÚNG migration của dòng khai", () => {
+    const { viPham, soHam } = kiemHangGhimThayCho(HARDENING);
+    // Sàn, không số đúng: một hàm khai mới (khoản 277, lô B5) phải mang hai hàng ghim thay chỗ như `052` — vế dưới đòi thế.
+    expect(soHam, "chống rỗng ruột: hôm nay một hàm khai (ADR-040)").toBeGreaterThanOrEqual(1);
+    expect(viPham).toEqual([]);
+  });
+
+  it("văn bản mẫu: hàng ghim neo migration khác (gõ nhầm) ⇒ đỏ nêu tiền điều kiện; thiếu hàng ghim ACL ⇒ đỏ", () => {
+    const tienDe = tienDeHangGhim("052_worker_liet_ke_to_chuc");
+    expect(HARDENING.split(tienDe).length - 1, "dàn cảnh: hai hàng ghim mang đúng tiền điều kiện này").toBe(2);
+    const goNham = HARDENING.replace(tienDe, tienDeHangGhim("052_worker_liet_ke_to_chuc_cu"));
+    expect(kiemHangGhimThayCho(goNham).viPham).toEqual([
+      "public.outbox_danh_sach_to_chuc(): hàng ghim «định nghĩa hàm outbox_danh_sach_to_chuc() …» có tiền điều kiện khác dòng khai " +
+        `(migration 052_worker_liet_ke_to_chuc): ${tienDeHangGhim("052_worker_liet_ke_to_chuc_cu")}`,
+    ]);
+    const thieuAcl = HARDENING.replace("$q$EXECUTE trên outbox_danh_sach_to_chuc():", "$q$EXECUTE-trên outbox_danh_sach_to_chuc():");
+    expect(kiemHangGhimThayCho(thieuAcl).viPham).toEqual([
+      "public.outbox_danh_sach_to_chuc(): cần đúng một hàng ghim «EXECUTE trên outbox_danh_sach_to_chuc() …» thay chỗ miễn trừ mục (C) — thấy 0",
+    ]);
   });
 });

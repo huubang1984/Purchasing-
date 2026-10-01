@@ -15,7 +15,9 @@
 //   * hàng `PROPOSED` đặt trạng thái RFQ sang `AWARDED` — J7 coi một đề xuất đang chờ là *còn
 //     sống*, nên trạng thái RFQ phải nói cùng một câu;
 //   * hàng `APPROVED` **không đổi** trạng thái RFQ — nó đã ở `AWARDED`;
-//   * hàng `CANCELLED` đưa về `EVALUATING`, và đó là lúc một đề xuất mới đi được.
+//   * hàng `CANCELLED` đưa về `EVALUATING`, và đó là lúc một đề xuất mới đi được;
+//   * **[S1.231 / khoản 232 / ADR-133]** hàng `WITHDRAWN` — người đề xuất rút đề xuất CHƯA chữ ký của
+//     mình — cũng đưa về `EVALUATING`: hàng rút không phải một award còn sống, và J7 mở lại sau nó.
 //
 // Nếu `PROPOSED` KHÔNG đặt `AWARDED`, thì giữa lúc đề xuất và lúc duyệt, RFQ đứng ở `EVALUATING`
 // — và `moVongBafo` mở được một vòng BAFO **dưới chân một đề xuất đang chờ duyệt**, tức danh sách
@@ -29,13 +31,17 @@
 // chu kỳ BAFO có HAI lượt chấm, một `evaluationId` khai từ ngoài chọn được bảng xếp hạng **TRƯỚC**
 // BAFO. Nên nó được **suy** — lượt mới nhất — y như `moVongBafo`.
 //
-// Và khác `060`, tầng CSDL ở đây **không** canh vế ấy: `award_kiem_de_xuat` chỉ đòi lượt chấm
+// ~~Và khác `060`, tầng CSDL ở đây **không** canh vế ấy: `award_kiem_de_xuat` chỉ đòi lượt chấm
 // thuộc đúng RFQ, không đòi nó là lượt mới nhất. Nên câu `ORDER BY e.created_at DESC` dưới đây là
-// lớp **DUY NHẤT** — một bất đối xứng có chủ ý ghi thành khoản **231**, không một chỗ bỏ sót:
+// lớp **DUY NHẤT**~~ — một bất đối xứng có chủ ý ghi thành khoản **231**, không một chỗ bỏ sót:
 // `060` cần lớp CSDL vì `rfq_bafo_rounds.evaluation_id` có `GRANT INSERT` cho `app_api` và một
 // thân yêu cầu khai được nó; ở đây `evaluationId` không phải tham số của hàm nào, nên vectơ ấy
-// chưa có đường. Ngày nào có, khoản 231 là chỗ đã ghi cái giá. Ca đo khoá vế này nằm ở
-// `luot-danh-gia.int.test.ts`, đo SAU một chu kỳ BAFO — tức ở đúng thế giới có HAI lượt chấm.
+// chưa có đường. ~~Ngày nào có, khoản 231 là chỗ đã ghi cái giá.~~ **[S1.231 / khoản 231 ĐÓNG]**
+// Từ `093`, `award_kiem_de_xuat` cũng đòi *không lượt chấm nào của RFQ mới hơn* (khuôn `060` mục (A),
+// nhánh có tên `j5_luot_cham_khong_moi_nhat`): câu `ORDER BY e.created_at DESC` dưới đây nay là lớp
+// THỨ HAI, và hai lớp nói cùng một câu như ở vòng BAFO. Ca đo khoá vế này nằm ở
+// `luot-danh-gia.int.test.ts` — ca cũ đo lớp gói, ca `[khoản 231]` chèn thẳng một hàng trỏ lượt CŨ —
+// cả hai đo SAU một chu kỳ BAFO, tức ở đúng thế giới có HAI lượt chấm.
 //
 // ----------------------------------------------------------------------------------------------
 // HUỶ ĐÒI `po.approve`, KHÔNG PHẢI `award.recommend`
@@ -45,9 +51,13 @@
 // thì một `BUYER` huỷ được một award **đã duyệt** rồi đề xuất người khác — tức phê duyệt kép bị
 // tháo bằng cách bào mòn chứ không bằng cách vượt. Cổng huỷ vì thế là cổng của người **duyệt**.
 //
-// Cái giá, nói thẳng: người đề xuất **không tự rút lại được** đề xuất của mình. Đó là một quyền
+// ~~Cái giá, nói thẳng: người đề xuất **không tự rút lại được** đề xuất của mình.~~ Đó là một quyền
 // hẹp hơn và hợp lý, nhưng nó đòi một trạng thái thứ tư (`WITHDRAWN`) hoặc một cổng phụ thuộc
-// trạng thái, và cả hai đều là thiết kế mới. Không dựng ở vòng này — ghi thành khoản **232**.
+// trạng thái, và cả hai đều là thiết kế mới. ~~Không dựng ở vòng này — ghi thành khoản **232**.~~
+// **[S1.231 / khoản 232 ĐÓNG — ADR-133]** Chủ dự án chốt hình ⒜: `rutDeXuatTraoThau` ghi hàng
+// `WITHDRAWN` (`094`) dưới cổng `award.recommend` — cùng cổng với lần đề xuất, KHÔNG một cổng đọc dữ
+// liệu nào ở `apps/api`. Ba vế ràng ở CSDL: hàng mới nhất là `PROPOSED`, người rút là người đề xuất
+// (`acted_by`, cột dẫn xuất từ phiên), đề xuất có 0 chữ ký. Cổng huỷ giữ nguyên `po.approve`.
 // ==============================================================================================
 
 import type pg from "pg";
@@ -83,6 +93,9 @@ export type LyDoTuChoiTraoThau = Extract<
   | "CHUA_CHAM_LAN_NAO"
   | "KHONG_CO_DE_XUAT_DANG_CHO"
   | "KHONG_CO_AWARD_CON_SONG"
+  // [S1.231 / khoản 232] hai lối từ chối của lần RÚT.
+  | "KHONG_PHAI_NGUOI_DE_XUAT"
+  | "DE_XUAT_DA_CO_CHU_KY"
 >;
 
 export class TraoThauTuChoiError extends Error {
@@ -95,7 +108,8 @@ export class TraoThauTuChoiError extends Error {
   }
 }
 
-export type TrangThaiTraoThau = "PROPOSED" | "APPROVED" | "CANCELLED";
+// [S1.231 / khoản 232 / ADR-133] `WITHDRAWN` — trạng thái thứ tư (`094`): người đề xuất rút đề xuất chưa chữ ký.
+export type TrangThaiTraoThau = "PROPOSED" | "APPROVED" | "CANCELLED" | "WITHDRAWN";
 
 /** Một hàng sự kiện của `rfq_awards` — KHÔNG mang một mức giá nào. */
 export interface TraoThau {
@@ -142,6 +156,13 @@ export interface DuyetTraoThauInput {
 }
 
 export interface HuyTraoThauInput {
+  readonly rfqId: string;
+  readonly reason: string;
+  readonly actorSessionId: string;
+}
+
+/** [S1.231 / khoản 232] Rút đề xuất — cùng hình dạng với huỷ: một lý do BẮT BUỘC, không `awardId` (hàng mới nhất là đích). */
+export interface RutDeXuatTraoThauInput {
   readonly rfqId: string;
   readonly reason: string;
   readonly actorSessionId: string;
@@ -314,6 +335,9 @@ export async function deXuatTraoThau(
   } catch (loi) {
     // [S1.167 / khoản 247] J3 vế 2 và 3 sống ở trigger `award_kiem_de_xuat` (`061`, thân `064`): lần vi phạm huỷ giao dịch nên
     // trước vòng này không để lại hàng sổ nào. Ghi ở giao dịch ĐỘC LẬP rồi ném — xem khối đầu tệp ([S1.180] theo chốt).
+    // [S1.231 / khoản 231] Vế J5 *lượt chấm mới nhất* của `093` đi cùng đường: tên `j5_luot_cham_khong_moi_nhat` có dòng ở
+    // `CHOT_THEO_RANG_BUOC` (ADR-108), nên một lượt chấm sinh dưới chân câu chọn ở trên — chỉ tới được bằng một đường ghi thứ hai
+    // — thành `ChotKiemSoatError` mang `J5_LUOT_CHAM_KHONG_MOI_NHAT` và một hàng `CONTROL_DENIED`.
     const ma = maChotTuLoi(loi);
     if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
     throw loi;
@@ -542,7 +566,8 @@ export async function huyTraoThau(
   }
 
   const truoc = await awardMoiNhat(client, orgId, input.rfqId);
-  if (truoc === undefined || truoc.status === "CANCELLED") {
+  // [S1.231 / khoản 232] `WITHDRAWN` cũng không phải một award còn sống — cùng vế với trigger `094`.
+  if (truoc === undefined || truoc.status === "CANCELLED" || truoc.status === "WITHDRAWN") {
     return nemTuChoi(
       auditPool,
       orgId,
@@ -618,6 +643,169 @@ export async function huyTraoThau(
 }
 
 /**
+ * RÚT một đề xuất trao thầu CHƯA CÓ CHỮ KÝ — bởi chính người đã đề xuất — và đưa gói thầu về `EVALUATING`.
+ *
+ * [S1.231 / khoản 232 / ADR-133] Cổng là `award.recommend` — cùng cổng với lần đề xuất, KHÔNG phải một
+ * cổng đọc dữ liệu: ba vế *hàng mới nhất là `PROPOSED`* · *người rút là người đề xuất* · *0 chữ ký* sống ở
+ * `award_kiem_mot_award_song` (`094`), lớp có thẩm quyền, mỗi vế một tên ràng buộc. Ba phép kiểm dưới đây
+ * chỉ làm thông điệp nói được VÌ SAO và để lại một hàng sổ mang mã (ADR-060: cả ba là dấu vết của một người
+ * cố đi một bước của chuỗi *award → duyệt* không đúng thứ tự). Có chữ ký rồi thì rút không tháo được — chỉ
+ * `huyTraoThau` (`po.approve`, ADR-057) — nên phê duyệt kép không bị bào mòn bằng đường này. `reason` BẮT
+ * BUỘC như mọi hàng của `rfq_awards`.
+ */
+export async function rutDeXuatTraoThau(
+  client: pg.PoolClient,
+  orgId: string,
+  input: RutDeXuatTraoThauInput,
+  auditPool: pg.Pool,
+): Promise<TraoThau> {
+  await assertTenantBound(client, orgId, "rutDeXuatTraoThau");
+  const actor = await resolveSessionActor(client, orgId, input.actorSessionId);
+
+  await requirePermission(
+    client,
+    {
+      userId: actor.id,
+      orgId,
+      permission: PERMISSIONS.AWARD_RECOMMEND,
+      resourceType: "RFQ",
+      resourceId: input.rfqId,
+    },
+    auditPool,
+  );
+
+  // `FOR NO KEY UPDATE` giữ hàng RFQ suốt hàm — cùng khuôn `deXuatTraoThau`/`huyTraoThau`.
+  const { rows: rfq } = await client.query<{ status: string }>(
+    `SELECT p.status FROM public.rfq_packages p
+      WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+      FOR NO KEY UPDATE`,
+    [orgId, input.rfqId],
+  );
+  const trangThai = rfq[0]?.status;
+  if (trangThai !== "AWARDED") {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_DE_XUAT_DANG_CHO",
+        `Chỉ rút được khi gói thầu đang ở AWARDED với một đề xuất đang chờ; gói này đang ở ${trangThai ?? "(không tìm thấy)"}.`,
+      ),
+    );
+  }
+
+  const truoc = await awardMoiNhat(client, orgId, input.rfqId);
+  if (truoc === undefined || truoc.status !== "PROPOSED") {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_DE_XUAT_DANG_CHO",
+        `Chỉ rút được một đề xuất đang ở PROPOSED; hàng mới nhất đang ở ${truoc?.status ?? "(chưa có đề xuất nào)"}.`,
+      ),
+    );
+  }
+  // Phép so CON NGƯỜI: `acted_by` là cột dẫn xuất từ phiên (`013`), `actor.id` cũng dẫn từ phiên đang gọi.
+  if (truoc.acted_by !== actor.id) {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_PHAI_NGUOI_DE_XUAT",
+        "Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve.",
+      ),
+    );
+  }
+  const { rows: chuKy } = await client.query<{ n: number }>(
+    `SELECT pg_catalog.count(*)::pg_catalog.int4 AS n
+       FROM public.rfq_award_approvals ap
+      WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND ap.award_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, truoc.id],
+  );
+  if ((chuKy[0]?.n ?? 0) > 0) {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "DE_XUAT_DA_CO_CHU_KY",
+        "Đề xuất này đã có chữ ký duyệt nên không rút được — chỉ huỷ được, và huỷ đòi po.approve.",
+      ),
+    );
+  }
+
+  // Hàng `WITHDRAWN` chép ĐÚNG `evaluation_id`/`bid_version_id` của đề xuất — vế *cùng báo giá* của `061`.
+  const { rows: award } = await client.query<HangAward>(
+    `INSERT INTO public.rfq_awards
+       (org_id, rfq_id, evaluation_id, bid_version_id, status, reason,
+        acted_by, acted_by_session_id)
+     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid,
+             $5::pg_catalog.text, $6::pg_catalog.text, $7::pg_catalog.uuid, $8::pg_catalog.uuid)
+     RETURNING id, rfq_id, evaluation_id, bid_version_id, status, reason, acted_by, acted_at`,
+    [
+      orgId,
+      input.rfqId,
+      truoc.evaluation_id,
+      truoc.bid_version_id,
+      "WITHDRAWN",
+      input.reason,
+      actor.id,
+      input.actorSessionId,
+    ],
+  );
+  const a = award[0];
+  if (a === undefined) throw new Error("Không ghi được lần rút đề xuất trao thầu.");
+
+  // Cạnh `AWARDED->EVALUATING` — cùng cạnh mà lần huỷ đi (ADR-057): không award nào còn sống.
+  const doi = await client.query(
+    `UPDATE public.rfq_packages
+        SET status = 'EVALUATING'
+      WHERE org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND status OPERATOR(pg_catalog.=) 'AWARDED'`,
+    [orgId, input.rfqId],
+  );
+  if (doi.rowCount !== 1) {
+    return nemTuChoi(
+      auditPool,
+      orgId,
+      actor.id,
+      input.rfqId,
+      new TraoThauTuChoiError(
+        "KHONG_CO_DE_XUAT_DANG_CHO",
+        "Trạng thái gói thầu đã đổi giữa lúc rút đề xuất; lần rút này không được ghi nhận.",
+      ),
+    );
+  }
+
+  await appendAuditEvent(client, orgId, {
+    actorType: "USER",
+    actorId: actor.id,
+    action: "RFQ_AWARD_WITHDRAWN",
+    resourceType: "rfq_award",
+    resourceId: a.id,
+    payload: {
+      rfqId: input.rfqId,
+      proposalAwardId: truoc.id,
+      evaluationId: truoc.evaluation_id,
+      bidVersionId: truoc.bid_version_id,
+      reason: input.reason,
+      withdrawnBySessionId: input.actorSessionId,
+    },
+  });
+
+  return doiAward(a);
+}
+
+/**
  * Award MỚI NHẤT của một gói thầu kèm chữ ký của nó, `null` khi chưa có hàng nào.
  *
  * KHÔNG 404 khi chưa có award: *"gói thầu này chưa có đề xuất trao thầu"* là một câu trả lời ĐÚNG
@@ -662,19 +850,29 @@ export async function docTraoThau(
   if (h === undefined) return null;
 
   // Chữ ký thuộc về ĐỀ XUẤT, không về hàng mới nhất — `rfq_award_approvals.award_id` trỏ tới hàng
-  // `PROPOSED`. Với một hàng `APPROVED`/`CANCELLED`, đề xuất tương ứng là hàng `PROPOSED` mới nhất
+  // `PROPOSED`. Với một hàng `APPROVED`/`CANCELLED`/`WITHDRAWN`, đề xuất tương ứng là hàng `PROPOSED` mới nhất
   // KHÔNG muộn hơn nó; `truoc_id` của trigger đọc cùng một thứ.
+  // [S1.231 / khoản 232] ~~Câu cũ JOIN MỌI hàng `PROPOSED` không muộn hơn hàng mới nhất~~ — sau một chu kỳ
+  // `PROPOSED(chữ ký)→APPROVED→CANCELLED→PROPOSED`, đề xuất MỚI bị gán chữ ký của chu kỳ TRƯỚC, và nút
+  // «Rút đề xuất» (đọc `approvals`) ẩn sai. Nay chọn ĐÚNG MỘT hàng: `PROPOSED` mới nhất của gói thầu, cùng
+  // khoá sắp xếp với `awardMoiNhat`. Vế *không muộn hơn `h`* là THỪA — `h` là hàng mới nhất nên mọi hàng
+  // `PROPOSED` đều không muộn hơn nó — và còn là một bẫy: đưa `h.acted_at` (một `Date` của JS, độ chính
+  // xác mili-giây) trở lại SQL so với cột micro-giây thì chính hàng mới nhất bị loại (đo: ca `docTraoThau
+  // đọc chữ ký của ĐÚNG đề xuất mới nhất` đỏ với bản đầu của vá). Không tham số thời gian đi qua JS.
   const { rows: chuKy } = await client.query<{ approver_user_id: string; approved_at: Date }>(
     `SELECT ap.approver_user_id, ap.approved_at
        FROM public.rfq_award_approvals ap
-       JOIN public.rfq_awards dx ON dx.org_id OPERATOR(pg_catalog.=) ap.org_id
-                                AND dx.id OPERATOR(pg_catalog.=) ap.award_id
       WHERE ap.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
-        AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
-        AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
-        AND dx.acted_at OPERATOR(pg_catalog.<=) $3::pg_catalog.timestamptz
+        AND ap.award_id OPERATOR(pg_catalog.=) (
+              SELECT dx.id
+                FROM public.rfq_awards dx
+               WHERE dx.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+                 AND dx.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+                 AND dx.status OPERATOR(pg_catalog.=) 'PROPOSED'
+               ORDER BY dx.acted_at DESC, dx.id DESC
+               LIMIT 1)
       ORDER BY ap.approved_at ASC`,
-    [orgId, rfqId, h.acted_at],
+    [orgId, rfqId],
   );
 
   return {

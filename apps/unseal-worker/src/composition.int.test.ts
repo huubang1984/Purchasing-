@@ -17,17 +17,27 @@
 // đã quyết định chưa"* — xanh với `RFQ_DEADLINE_EXTENDED_NOTICE` suốt từ 2026-09-05, trong khi
 // không tiến trình nào trong kho nhận nó. Cổng hỏi sai câu, và một cổng hỏi sai câu xanh hơn một
 // cổng không tồn tại. Câu hỏi mới đối chiếu với `Object.keys` của cả hai bảng handler.
+//
+// **[S1.239 / khoản 161 · 169] Vế ⑶ đổi NGUỒN và thêm một mệnh đề.** Tập `kind` của kho thôi suy từ
+// ba mẫu văn bản — một kind viết khác ba mẫu ấy (qua biến, template, `join`) lọt cả ba, đo trước ở
+// §S1.239 — mà đọc từ union `KindOutbox` khai ở `packages/outbox/src/enqueue.ts` (tsc từ chối kind
+// ngoài union; `tests/architecture/kind-outbox-mot-cho.test.ts` đòi kind LITERAL ở mọi lời gọi sản
+// xuất), cộng mẫu `INSERT` viết tay còn giữ cho đường SQL (trigger `019`). Và mệnh đề mà vế này KHAI
+// từ S1.81 mà không khẳng định — hai bảng handler RỜI NHAU — nay là mệnh đề ⑷, có văn bản mẫu.
 // =============================================================================================
 
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { migrate } from "@trustprocure/db";
-import { withTenant } from "@trustprocure/tenancy";
+import { createPool, migrate } from "@trustprocure/db";
+import { DenialAuditFailedError, moTaLoiKhongGiaTri } from "@trustprocure/identity";
+import { TenantError, withTenant } from "@trustprocure/tenancy";
 import { KIND_KHONG_NGUOI_NHAN, enqueueJob, type JobFailureReport } from "@trustprocure/outbox";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // [S1.81 / khoản 154] Import TƯƠNG ĐỐI xuyên app, cùng lý do và cùng tiền lệ với
@@ -37,6 +47,12 @@ import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // app; `@trustprocure/api` KHÔNG được thành dependency của worker (đường chạy worker không chạm api).
 import { buildApiOutboxHandlers } from "../../api/src/outbox-api.js";
 import { dichVuTest } from "../../api/src/test-services.js";
+// [S1.222 / khoản 166] Bộ mô tả lỗi của TIẾN TRÌNH `api`, để vế cuối tệp đối chiếu dòng log của
+// worker với chuỗi mà `api` cho CÙNG một lỗi. Cùng lý do và cùng tiền lệ với hai dòng trên: test
+// là nơi duy nhất nối hai app.
+import { moTaLoiKhongGiaTri as moTaLoiCuaApi } from "../../api/src/mo-ta-loi.js";
+import { docCauHinh } from "./cau-hinh.js";
+import { taoTienTrinhUnsealWorker } from "./tien-trinh.js";
 import {
   BREAK_GLASS_ALERT_KIND,
   KIND_KHONG_NHAN,
@@ -57,12 +73,113 @@ let apiPool: pg.Pool;
 let unsealPool: pg.Pool;
 let auditUnsealPool: pg.Pool;
 let orgA: string;
+/** [khoản 166] Chuỗi kết nối của vai ĐĂNG NHẬP thật của worker, cho vế dựng tiến trình từ cấu hình. */
+let urlLogin: string;
+let thuMucCanhBao: string;
+const KHOA_32 = Buffer.alloc(32, 3).toString("base64");
+
+function doiNguoiDung(chuoi: string, nguoi: string, matKhau: string): string {
+  const u = new URL(chuoi);
+  u.username = nguoi;
+  u.password = matKhau;
+  return u.toString();
+}
+
+/** Cùng khuôn `tien-trinh.int.test.ts`: cấu hình tối thiểu để `docCauHinh` dựng được tiến trình. */
+function moiTruong(ghiDe: Record<string, string> = {}): Record<string, string> {
+  return {
+    TRUSTPROCURE_DATABASE_URL: urlLogin,
+    TRUSTPROCURE_DB_POOL_MAX: "2",
+    TRUSTPROCURE_KEY_ADAPTER: "local-dev",
+    TRUSTPROCURE_MASTER_KEYS: `v1=${KHOA_32}`,
+    TRUSTPROCURE_MASTER_KEY_ACTIVE: "v1",
+    TRUSTPROCURE_ALERT_ADAPTER: "dev-file",
+    TRUSTPROCURE_ALERT_DIR: thuMucCanhBao,
+    ...ghiDe,
+  };
+}
+
+/** Cùng câu với `apps/api/src/log-tu-choi-mat.int.test.ts`: khoá tư vấn ghi sổ của tổ chức đang được cầm chưa. */
+async function demKhoaGiuDuoc(org: string): Promise<number> {
+  const { rows } = await db.pool.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM pg_catalog.pg_locks WHERE locktype = 'advisory' AND granted " +
+      "AND classid = ((pg_catalog.hashtextextended($1::text, 0) >> 32) & 4294967295)::oid " +
+      "AND objid = (pg_catalog.hashtextextended($1::text, 0) & 4294967295)::oid",
+    [org],
+  );
+  return rows[0]?.n ?? -1;
+}
 
 /** Bộ mở bọc giả — không lượt nào của file này chạy tới đường mở thầu thật. */
 const boMoBocGia = {
   name: "khong-dung-toi",
   openOrgKey: () => Promise.reject(new Error("khong nen goi toi day")),
 };
+
+/**
+ * [S1.239 / khoản 161] Tập `kind` của kho: union `KindOutbox` ở `packages/outbox/src/enqueue.ts`, đọc bằng CÂY CÚ PHÁP của tệp — không
+ * import: union là một KIỂU (không có giá trị lúc chạy), và `g4-` chỉ mở `index.ts` của gói. Bộ đọc đầy đủ (vế hình dạng: literal, CHECK
+ * của 007, bảng chữ cái, `JobInput.kind`) cùng văn bản mẫu ở `tests/architecture/kind-outbox-mot-cho.test.ts`; ở đây chỉ lấy thành viên
+ * và NÉM khi không đọc được. Hai bản vì `g1-khong-import-nguoc-tu-apps-unseal-worker` cấm cổng kiến trúc import bảng handler của worker —
+ * phép đối chiếu với bảng handler phải chạy ở đây.
+ */
+function docUnionKindCuaKho(): string[] {
+  const tep = "packages/outbox/src/enqueue.ts";
+  const sf = ts.createSourceFile(tep, readFileSync(join(GOC, tep), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const khai = sf.statements.filter((c): c is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(c) && c.name.text === "KindOutbox");
+  if (khai.length !== 1) throw new Error(`${tep}: cần ĐÚNG MỘT \`type KindOutbox\` ở cấp tệp — thấy ${String(khai.length)}`);
+  const kieu = khai[0]!.type;
+  return (ts.isUnionTypeNode(kieu) ? [...kieu.types] : [kieu]).map((t) => {
+    if (ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal)) return t.literal.text;
+    throw new Error(`${tep}: KindOutbox có thành viên không phải literal chuỗi — \`${t.getText(sf)}\``);
+  });
+}
+
+/**
+ * Hình dạng ⑶ của phép quét cũ, GIỮ NGUYÊN biểu thức: `INSERT INTO [public.]outbox_jobs (org_id, kind, …) VALUES (…, 'X', …)` — đường xếp
+ * việc DUY NHẤT không qua kiểu của `enqueueJob` (trigger plpgsql `019`, bản ghim của nó ở hardening). Bản đầu quét lỏng (`outbox_jobs` rồi
+ * bất kỳ chuỗi HOA nào trong 400 ký tự) và nhặt luôn `PENDING`/`RUNNING`; biểu thức này bám vào CẤU TRÚC câu lệnh.
+ */
+function quetInsertOutbox(noiDung: string): string[] {
+  return [
+    ...noiDung.matchAll(
+      /INSERT\s+INTO\s+(?:public\.)?outbox_jobs\s*\(\s*org_id\s*,\s*kind[^)]*\)\s*VALUES\s*\(\s*[^,]+,\s*'([A-Z][A-Z0-9_]{2,63})'/gi,
+    ),
+  ].map((m) => m[1] ?? "");
+}
+
+interface DoiChieuKind {
+  /** ⑴ kind của kho không tiến trình nào nhận và không khai mồ côi. */
+  readonly khongAiNhan: readonly string[];
+  /** ⑴′ handler hay dòng sổ mồ côi cho một kind KHÔNG có trong tập của kho. */
+  readonly ngoaiTap: readonly string[];
+  /** ⑵ kind vừa có handler vừa khai mồ côi. */
+  readonly vuaNhanVuaMoCoi: readonly string[];
+  /** ⑷ kind có handler ở CẢ worker LẪN api. */
+  readonly haiBangTrung: readonly string[];
+}
+
+/**
+ * [S1.239 / khoản 169] Bốn mệnh đề của cổng khoản 34 dưới dạng một hàm THUẦN — để mỗi mệnh đề đo được bằng văn bản mẫu, không chỉ bằng
+ * cây hôm nay (nơi cả bốn đều rỗng). Mệnh đề ⑶ (dòng sổ mồ côi trỏ khoản còn mở) đọc `docs/STATE.md`, nên ở lại trong vế thật.
+ */
+function doiChieuKind(v: {
+  readonly kind: readonly string[];
+  readonly handlerWorker: readonly string[];
+  readonly handlerApi: readonly string[];
+  readonly soMoCoi: readonly string[];
+}): DoiChieuKind {
+  const coNguoiNhan = new Set([...v.handlerWorker, ...v.handlerApi]);
+  const moCoi = new Set(v.soMoCoi);
+  const tap = new Set(v.kind);
+  const sap = (ds: Iterable<string>): string[] => [...new Set(ds)].sort();
+  return {
+    khongAiNhan: sap(v.kind.filter((k) => !coNguoiNhan.has(k) && !moCoi.has(k))),
+    ngoaiTap: sap([...coNguoiNhan, ...moCoi].filter((k) => !tap.has(k))),
+    vuaNhanVuaMoCoi: sap([...coNguoiNhan].filter((k) => moCoi.has(k))),
+    haiBangTrung: sap(v.handlerWorker.filter((k) => v.handlerApi.includes(k))),
+  };
+}
 
 beforeAll(async () => {
   db = await startPostgres();
@@ -75,6 +192,10 @@ beforeAll(async () => {
   unsealPool = db.poolAs("app_unseal");
   auditUnsealPool = db.poolAs("app_unseal");
   expect(orgA).not.toBe("");
+  // [khoản 166] Vai đăng nhập thật của worker — `docCauHinh` từ chối URL superuser theo TÊN.
+  await db.pool.query("CREATE ROLE app_unseal_login LOGIN PASSWORD 'mk-unseal' IN ROLE app_unseal");
+  urlLogin = doiNguoiDung(db.connectionString, "app_unseal_login", "mk-unseal");
+  thuMucCanhBao = mkdtempSync(join(tmpdir(), "tp-canh-bao-166-"));
 }, 180000);
 
 afterAll(async () => {
@@ -207,36 +328,52 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       .split(/\r?\n/)
       .filter((t) => (t.endsWith(".ts") || t.endsWith(".sql")) && !t.includes(".test."));
 
-    const kind = new Set<string>();
+    // [S1.239 / khoản 161] TẬP `kind` NAY ĐỌC TỪ MỘT CHỖ KHAI, không suy từ văn bản: union `KindOutbox`
+    // (`packages/outbox/src/enqueue.ts`) — tsc từ chối kind ngoài union ở MỌI lời gọi `enqueueJob`, và
+    // `tests/architecture/kind-outbox-mot-cho.test.ts` đòi kind LITERAL thuộc union ở mọi lời gọi sản xuất.
+    const kind = docUnionKindCuaKho();
+    const sqlTheoTep = new Map<string, readonly string[]>();
     for (const t of cacTep) {
       const noiDung = readFileSync(join(GOC, t), "utf8");
-      // BA hình dạng THẬT trong kho, và ba là đủ vì mỗi cái tương ứng một cách enqueue có thật:
-      //   ⑴ `kind: "X"`      — lời gọi `enqueueJob` phía TypeScript;
-      //   ⑵ `..._KIND = "X"` — hằng được export rồi truyền vào chỗ khác;
+      // ~~BA hình dạng THẬT trong kho, và ba là đủ vì mỗi cái tương ứng một cách enqueue có thật:~~
+      //   ~~⑴ `kind: "X"`      — lời gọi `enqueueJob` phía TypeScript;~~
+      //   ~~⑵ `..._KIND = "X"` — hằng được export rồi truyền vào chỗ khác;~~
       //   ⑶ `INSERT INTO public.outbox_jobs (org_id, kind, ...) VALUES (..., 'X', ...)` — trigger
       //      plpgsql, và nó luôn đặt `kind` ở ĐÚNG vị trí thứ hai của danh sách cột.
+      // **[S1.239 / khoản 161]** "Ba là đủ" sai: một kind qua biến tên khác, template hay `join` lọt cả ba (đo trước
+      // §S1.239: ba lời gọi như thế trong mã sản xuất ⇒ vế này 2/2 xanh), và ⑴ chạy trên 0 lời gọi (mọi lời gọi truyền
+      // hằng; chuỗi ghép `"THU_" + …` bị ⑴ đọc nhầm thành kind `THU_`). ⑴ ⑵ nhường chỗ cho union ở trên; ⑶ GIỮ — SQL viết
+      // tay không qua kiểu nào (`quetInsertOutbox`).
       //
       // Vế ⑶ bản đầu quét lỏng (`outbox_jobs` rồi bất kỳ chuỗi HOA nào trong 400 ký tự) và nó
       // nhặt luôn `PENDING`/`RUNNING` — tức lớp canh tự sinh việc cho mình. Nay nó bám vào CẤU
       // TRÚC câu lệnh chứ không vào khoảng cách.
-      // Vế ⑴ phải bám vào `enqueueJob(`, không vào chữ `kind` một mình: dự án có những đối
+      // ~~Vế ⑴ phải bám vào `enqueueJob(`, không vào chữ `kind` một mình: dự án có những đối
       // tượng KHÁC cũng mang trường `kind` (`SEQ_GAP`, `LINK_BROKEN`, … của bộ kiểm chuỗi
-      // kiểm toán), và bản đầu nhặt luôn chúng — một lớp canh tự sinh việc cho mình.
-      for (const m of noiDung.matchAll(
-        /enqueueJob\([\s\S]{0,400}?\bkind:\s*"([A-Z][A-Z0-9_]{2,63})"/g,
-      )) {
-        kind.add(m[1] ?? "");
-      }
-      for (const m of noiDung.matchAll(/_KIND\s*=\s*"([A-Z][A-Z0-9_]{2,63})"/g)) kind.add(m[1] ?? "");
-      for (const m of noiDung.matchAll(
-        /INSERT\s+INTO\s+(?:public\.)?outbox_jobs\s*\(\s*org_id\s*,\s*kind[^)]*\)\s*VALUES\s*\(\s*[^,]+,\s*'([A-Z][A-Z0-9_]{2,63})'/gi,
-      )) {
-        kind.add(m[1] ?? "");
-      }
+      // kiểm toán), và bản đầu nhặt luôn chúng — một lớp canh tự sinh việc cho mình.~~ [S1.239] Vế ⑴ đã gỡ.
+      const k = quetInsertOutbox(noiDung);
+      if (k.length > 0) sqlTheoTep.set(t, k);
     }
-    // Chống rỗng ruột: phép quét phải THẬT SỰ thấy hai `kind` đã biết.
-    expect([...kind]).toContain(BREAK_GLASS_ALERT_KIND);
-    expect([...kind]).toContain(UNSEAL_JOB_KIND);
+    // ~~Chống rỗng ruột: phép quét phải THẬT SỰ thấy hai `kind` đã biết.~~
+    // [S1.239 / khoản 169] Chống rỗng ruột TỪNG NGUỒN MỘT. Bản trước đòi hai kind đã biết có mặt trong HỢP ba hình dạng, nên
+    // một hình dạng khớp 0 tệp vẫn xanh khi hình dạng khác che nó — đo trước (§S1.239): sửa ⑶ cho khớp 0 tệp ⇒ vế này 2/2 xanh
+    // (⑵ thấy cả hai hằng), và trên cây ấy ⑴ ĐÃ khớp 0 lời gọi mà không ai biết. Nay union phải mang hai kind của worker, VÀ ⑶
+    // phải ĐANG đọc ra kind cảnh báo từ chính `019` — "⑶ đang chạy" khác "⑶ khớp 0 tệp".
+    expect(kind, "union KindOutbox đọc được mà thiếu kind của worker — bộ đọc hỏng, hay union bị cắt?").toEqual(
+      expect.arrayContaining([BREAK_GLASS_ALERT_KIND, UNSEAL_JOB_KIND]),
+    );
+    expect(
+      sqlTheoTep.get("db/migrations/019_unseal.sql") ?? [],
+      `hình dạng ⑶ (INSERT viết tay) không đọc ra ${BREAK_GLASS_ALERT_KIND} từ 019 — nó đang khớp ${String(sqlTheoTep.size)} tệp: ` +
+        `[${[...sqlTheoTep.keys()].join(", ")}]. Một phép quét khớp 0 tệp là một phép quét không chạy.`,
+    ).toContain(BREAK_GLASS_ALERT_KIND);
+    // [S1.239 / khoản 161] Union là tập kind THẬT của kho, nên kind mà SQL viết tay xếp cũng phải nằm trong nó.
+    const sqlNgoaiTap = [...new Set([...sqlTheoTep.values()].flat())].filter((k) => !kind.includes(k)).sort();
+    expect(
+      sqlNgoaiTap,
+      "Một INSERT viết tay xếp kind KHÔNG có trong union KindOutbox (packages/outbox/src/enqueue.ts). Union là tập kind thật của " +
+        "kho: thêm kind vào đó, viết handler ở đúng một tiến trình, và thêm migration ALTER POLICY (ADR-134).",
+    ).toEqual([]);
 
     // [S1.81 / khoản 154] CÂU HỎI CỦA CỔNG NÀY ĐÃ ĐỔI, và cái cũ là một lớp canh tự làm mù mình.
     //
@@ -259,33 +396,49 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       }),
     );
     const handlerApi = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
-    // Chống rỗng ruột ở vế mới: hai bảng handler phải THẬT SỰ không rỗng và không trùng nhau.
+    // Chống rỗng ruột ở vế mới: hai bảng handler phải THẬT SỰ không rỗng ~~và không trùng nhau~~. [S1.239 / khoản 169] Vế
+    // "không trùng nhau" của câu này từng là một lời KHAI không có khẳng định nào; nay nó là mệnh đề ⑷ dưới.
     expect(handlerWorker.length, "bảng handler của worker rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
     expect(handlerApi.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
-    const coNguoiNhan = new Set([...handlerWorker, ...handlerApi]);
+    const doi = doiChieuKind({ kind, handlerWorker, handlerApi, soMoCoi: Object.keys(KIND_KHONG_NGUOI_NHAN) });
 
-    // ⑴ mọi `kind` enqueue được phải có người nhận, hoặc được KHAI là mồ côi.
-    const khongAiNhan = [...kind].filter(
-      (k) => !coNguoiNhan.has(k) && !Object.hasOwn(KIND_KHONG_NGUOI_NHAN, k),
-    );
+    // ⑴ mọi `kind` ~~enqueue được~~ [S1.239] của kho phải có người nhận, hoặc được KHAI là mồ côi.
     expect(
-      khongAiNhan,
+      doi.khongAiNhan,
       "Một `kind` được enqueue ở đâu đó nhưng KHÔNG tiến trình nào có handler cho nó, và nó " +
         "cũng KHÔNG được khai trong KIND_KHONG_NGUOI_NHAN. Đường ĐÚNG là viết handler ở tiến " +
         "trình giữ đủ quyền cho nó. Khai vào sổ mồ côi là đường TẠM, và nó đòi một khoản còn " +
         "mở giữ chặng cuối — xem packages/outbox/src/so-kind-mo-coi.ts.",
+    ).toEqual([]);
+    // ⑴′ [S1.239 / khoản 161] Chiều ngược: handler hay dòng sổ mồ côi cho một kind KHÔNG có trong union. Union thôi là tập thật của
+    // kho — một handler chết, hay một kind xếp qua đường mà union chưa khai; cùng lúc, policy `095` (ADR-134) phải mang nó.
+    expect(
+      doi.ngoaiTap,
+      "Có handler (hay dòng sổ mồ côi) cho một kind KHÔNG có trong union KindOutbox (packages/outbox/src/enqueue.ts). Thêm kind vào " +
+        "union — nó là chỗ khai DUY NHẤT tập kind của kho (khoản 161) — hay gỡ handler chết.",
     ).toEqual([]);
 
     // ⑵ hai rổ không giao nhau. Vế này là vế GIẾT VIỆC: một `kind` vừa khai mồ côi vừa có
     // handler ở tiến trình khác sẽ bị tiến trình khai sổ nhặt rồi ghi thẳng `FAILED`/`NO_HANDLER`
     // trước khi tiến trình có handler kịp chạm tới — đúng lỗi mà cả vòng S1.81 tồn tại để vá,
     // chỉ khác là lần này do một dòng khai tường minh.
-    const vuaNhanVuaMoCoi = [...coNguoiNhan].filter((k) => Object.hasOwn(KIND_KHONG_NGUOI_NHAN, k));
     expect(
-      vuaNhanVuaMoCoi,
+      doi.vuaNhanVuaMoCoi,
       "Một `kind` vừa có handler vừa được khai mồ côi. Tiến trình khai sổ sẽ GIẾT job của tiến " +
         "trình có handler: nó claim job ấy (kind nằm trong mảng lọc) rồi ghi NO_HANDLER, bỏ cuộc " +
         "ngay lượt thử thứ nhất. Xoá dòng khỏi KIND_KHONG_NGUOI_NHAN.",
+    ).toEqual([]);
+
+    // ⑷ [S1.239 / khoản 169] HAI BẢNG HANDLER RỜI NHAU. Một `kind` có handler ở CẢ worker LẪN api thì hai runner cùng có nó trong
+    // mảng lọc, cùng claim được job ấy, và job chạy ở tiến trình nào là chuyện ai poll trước. Tới vòng này vế này chỉ được KHAI
+    // (câu "chống rỗng ruột" ở trên) — ba mệnh đề cũ đều xanh với một kind như thế (đo trước §S1.239: thêm `UNSEAL_RFQ` vào bảng
+    // handler của api ⇒ vế này 2/2 xanh; chỉ vế policy `095` của api đỏ, với lời khuyên "thêm migration" — đi theo nó thì vế "hai
+    // tập không giao nhau" của policy mới đỏ). Văn bản mẫu ở vế kế tiếp.
+    expect(
+      doi.haiBangTrung,
+      "Một `kind` có handler ở CẢ worker (buildUnsealWorkerHandlers) LẪN api (buildApiOutboxHandlers). Hai runner cùng claim được " +
+        "job của nó, và nơi nó chạy là chuyện ai poll trước — còn policy 095 (ADR-134) chỉ cho ĐÚNG MỘT vai ghi kết cục. Giữ handler ở " +
+        "đúng một tiến trình — tiến trình giữ đủ quyền cho việc ấy.",
     ).toEqual([]);
 
     // ⑶ mỗi dòng của sổ mồ côi phải trỏ tới một khoản CÒN MỞ. Một `kind` mồ côi VĨNH VIỄN là một
@@ -315,6 +468,40 @@ describe("[INV-D4] cảnh báo break-glass có người nhận, và một lần 
       }),
     );
     for (const k of coHandler) expect(Object.hasOwn(KIND_KHONG_NHAN, k)).toBe(false);
+  });
+
+  it("[khoản nợ 34] [S1.239 / khoản 169] văn bản mẫu: một `kind` có handler ở CẢ HAI tiến trình ⇒ mệnh đề ⑷ đỏ trong khi ba mệnh đề cũ đều xanh; đối chứng rời nhau ⇒ xanh; mỗi mệnh đề còn lại đỏ trên mẫu của nó", () => {
+    // Hình dạng của phép đo trước: `UNSEAL_RFQ` có handler ở worker VÀ ở api.
+    const hai = doiChieuKind({
+      kind: ["LOGIN_LINK_SEND", "UNSEAL_RFQ"],
+      handlerWorker: ["UNSEAL_RFQ"],
+      handlerApi: ["LOGIN_LINK_SEND", "UNSEAL_RFQ"],
+      soMoCoi: [],
+    });
+    expect(hai.haiBangTrung, "mệnh đề ⑷ phải thấy kind có handler ở hai tiến trình").toEqual(["UNSEAL_RFQ"]);
+    expect([hai.khongAiNhan, hai.ngoaiTap, hai.vuaNhanVuaMoCoi], "ba mệnh đề cũ KHÔNG thấy nó — đó là lỗ khoản 169").toEqual([[], [], []]);
+    // Đối chứng: hai bảng rời nhau ⇒ cả bốn rỗng.
+    expect(
+      doiChieuKind({ kind: ["LOGIN_LINK_SEND", "UNSEAL_RFQ"], handlerWorker: ["UNSEAL_RFQ"], handlerApi: ["LOGIN_LINK_SEND"], soMoCoi: [] }),
+    ).toEqual({ khongAiNhan: [], ngoaiTap: [], vuaNhanVuaMoCoi: [], haiBangTrung: [] });
+    // Mỗi mệnh đề còn lại đỏ trên mẫu của nó — bốn mệnh đề là bốn câu hỏi khác nhau, không cái nào là cái kia viết lại.
+    expect(doiChieuKind({ kind: ["A_B", "C_D"], handlerWorker: ["A_B"], handlerApi: [], soMoCoi: [] }).khongAiNhan).toEqual(["C_D"]);
+    expect(doiChieuKind({ kind: ["A_B"], handlerWorker: ["A_B"], handlerApi: ["E_F"], soMoCoi: [] }).ngoaiTap).toEqual(["E_F"]);
+    expect(doiChieuKind({ kind: ["A_B"], handlerWorker: ["A_B"], handlerApi: [], soMoCoi: ["A_B"] }).vuaNhanVuaMoCoi).toEqual(["A_B"]);
+  });
+
+  it("[khoản nợ 34] [S1.239 / khoản 169] văn bản mẫu — hình dạng ⑶ (INSERT viết tay): câu của `019` đọc ra kind; tham số `$2` của `enqueueJob`, `PENDING`/`RUNNING` và một câu không phải INSERT thì không", () => {
+    expect(
+      quetInsertOutbox(
+        "BEGIN\n  INSERT INTO public.outbox_jobs (org_id, kind, payload, dedupe_key)\n  VALUES (\n    NEW.org_id,\n    'BREAK_GLASS_UNSEAL_ALERT',\n    x);",
+      ),
+    ).toEqual(["BREAK_GLASS_UNSEAL_ALERT"]);
+    expect(quetInsertOutbox("INSERT INTO outbox_jobs (org_id, kind) VALUES ($1, 'UNSEAL_RFQ')")).toEqual(["UNSEAL_RFQ"]);
+    // Đối chứng: câu chèn của `enqueueJob` (kind là tham số), và những chữ HOA không phải kind.
+    expect(quetInsertOutbox("INSERT INTO public.outbox_jobs (org_id, kind, payload) VALUES ($1::pg_catalog.uuid, $2::pg_catalog.text, $3)")).toEqual(
+      [],
+    );
+    expect(quetInsertOutbox("UPDATE public.outbox_jobs SET status = 'RUNNING' WHERE status = 'PENDING'")).toEqual([]);
   });
 });
 
@@ -371,5 +558,181 @@ describe("[INV-D5] [S1.72 / khoản 121] job mở thầu bị worker từ chối
       [jobId],
     );
     expect(rows[0]).toEqual({ status: "FAILED", attempts: 2 });
+  });
+});
+
+// ===============================================================================================
+// [S1.222 / khoản 166] MỘT BỘ MÔ TẢ LỖI CHO CẢ HAI TIẾN TRÌNH — ĐO TRÊN TIẾN TRÌNH WORKER DỰNG TỪ CẤU HÌNH
+//
+// Khoản 166 (§S1.82): `moTaLoiKhongGiaTri` có HAI bản. Bản đầy đủ ở `apps/api/src/mo-ta-loi.ts` nêu
+// thêm MỘT tầng `cause` cho lỗi không có trường `code` (khoản 119) và nhận `TenantError` theo lớp;
+// bản rút gọn ~5 dòng ở `tien-trinh.ts` của tiến trình này — vì mã CHẠY của worker không import được
+// `apps/api` (`g1-`) — thì không. Hệ quả: một `DenialAuditFailedError`, đúng lớp lỗi khoản 121 dựng
+// cho tiến trình NÀY, ra dòng log không có SQLSTATE của lần ghi sổ đã hỏng ở worker, trong khi ở `api`
+// cùng lỗi ấy ra `… <- error 55P03`. Tức tiến trình DUY NHẤT giải mã được lại có chẩn đoán nghèo hơn.
+//
+// Cảnh dựng cùng khuôn `apps/api/src/log-tu-choi-mat.int.test.ts` (§S1.85): một giao dịch khác giữ
+// khoá ghi sổ của tổ chức quá trần 2 s của `050`; job `UNSEAL_RFQ` trên một yêu cầu không tìm thấy bị
+// từ chối, lần ghi `UNSEAL_EXECUTION_DENIED` ở `auditPool` gãy `55P03`, handler ném
+// `DenialAuditFailedError` mang lỗi ấy ở `cause`, và `onJobFailure` của `tien-trinh.ts` ghi dòng.
+// Vế đối chiếu: bộ mô tả của `api` cho một lỗi CÙNG HÌNH DẠNG phải cho đúng phần đuôi của dòng ấy.
+// ===============================================================================================
+describe("[INV-A2] [S1.222 / khoản 166] dòng log của worker mô tả lỗi bằng CÙNG một hàm với api", () => {
+  it("lần ghi sổ từ chối của worker gãy 55P03 ⇒ dòng `outbox` của tiến trình thật mang tên lớp bọc, ~~hai~~ [S1.225 / khoản 179] ba hằng đóng (cộng vế `POLICY_GATE`) và `<- error 55P03` — đúng chuỗi bộ mô tả của api cho cùng lỗi; không mang giá trị nào", async () => {
+    const poolGiuKhoa = createPool(db.connectionString, 1, { role: "app_api" });
+    let thaKhoa: () => void = () => {};
+    const choTha = new Promise<void>((xong) => {
+      thaKhoa = xong;
+    });
+    const log: string[] = [];
+    const cu = console.error;
+    console.error = (...a: unknown[]) => {
+      log.push(a.map(String).join(" "));
+    };
+    const tt = taoTienTrinhUnsealWorker(docCauHinh(moiTruong({ TRUSTPROCURE_OUTBOX_POLL_MS: "200" })));
+    let giuKhoa: Promise<void> | undefined;
+    const id = randomUUID();
+    let jobId = "";
+    try {
+      giuKhoa = withTenant(poolGiuKhoa, orgA, async (c) => {
+        await c.query(
+          "SELECT * FROM public.audit_append($1,'USER',NULL,'K166_GIU_KHOA','RFQ',NULL,'{}'::jsonb,NULL,NULL,NULL)",
+          [orgA],
+        );
+        await choTha;
+      });
+      // Chờ tới khi khoá THẬT SỰ được cầm — không thì lần ghi sổ đi qua và test xanh mà không đo gì.
+      const han = Date.now() + 5000;
+      for (;;) {
+        if ((await demKhoaGiuDuoc(orgA)) >= 1) break;
+        if (Date.now() > han) throw new Error("het 5000ms ma khoa ghi so cua to chuc chua duoc cam");
+        await new Promise<void>((xong) => setTimeout(xong, 20));
+      }
+      jobId = await withTenant(apiPool, orgA, (c) =>
+        enqueueJob(c, orgA, { kind: UNSEAL_JOB_KIND, payload: { unsealRequestId: id }, dedupeKey: `unseal:${id}` }),
+      );
+      await tt.batDau();
+      const het = Date.now() + 20_000;
+      let dong: string | undefined;
+      while (dong === undefined && Date.now() < het) {
+        await new Promise((x) => setTimeout(x, 100));
+        dong = log.find((d) => d.startsWith("[unseal-worker] outbox UNSEAL_RFQ "));
+      }
+      thaKhoa();
+      await giuKhoa;
+      expect(dong, JSON.stringify(log)).toBeDefined();
+
+      // Lỗi CÙNG HÌNH DẠNG với lỗi worker vừa ném: lớp bọc của khoản 121, ~~hai~~ [S1.225 / khoản 179] BA hằng đóng — vế
+      // `POLICY_GATE` là vế "không tìm thấy" của `tuChoiLucGiaiMa` —, `cause` là lỗi Postgres mang `55P03`. Thông điệp cố ý
+      // mang giá trị để vế A2 dưới có thứ để bắt.
+      const cungLoi = new DenialAuditFailedError(
+        "UNSEAL_EXECUTION_DENIED",
+        "UNSEAL_REQUEST",
+        new Error(`tu choi mang ${id}`),
+        Object.assign(new Error(`canceling statement due to lock timeout ${orgA}`), { name: "error", code: "55P03" }),
+        "POLICY_GATE",
+      );
+      expect(moTaLoiCuaApi(cungLoi)).toBe("DenialAuditFailedError UNSEAL_EXECUTION_DENIED UNSEAL_REQUEST POLICY_GATE <- error 55P03");
+      expect(dong, "worker phải mô tả lỗi ĐÚNG như api mô tả cùng lỗi ấy — kể cả tầng `cause`").toBe(
+        `[unseal-worker] outbox UNSEAL_RFQ HANDLER_ERROR ${moTaLoiCuaApi(cungLoi)}`,
+      );
+      // A2: không id yêu cầu, không id tổ chức, không id job, không thông điệp của lỗi Postgres.
+      for (const giaTri of [id, orgA, jobId, "lock timeout"]) expect(dong).not.toContain(giaTri);
+      // Và `TenantError` — lớp mà bản rút gọn của worker không nhận theo lớp — đi qua cùng luật.
+      expect(moTaLoiCuaApi(new TenantError("SESSION_STATE_LEFT", `thong diep mang ${orgA}`))).toBe("TenantError SESSION_STATE_LEFT");
+      // Và bản của `api` LÀ bản dùng chung của identity mà `tien-trinh.ts` gọi — không phải hai hàm tình cờ cho cùng chuỗi.
+      expect(moTaLoiCuaApi).toBe(moTaLoiKhongGiaTri);
+      // Job về PENDING chờ lượt thử lại (maxAttempts mặc định 5) — đúng hệ quả đã ghi ở khoản 121.
+      const { rows } = await db.pool.query<{ status: string; attempts: number }>(
+        "SELECT status, attempts FROM outbox_jobs WHERE id = $1",
+        [jobId],
+      );
+      expect(rows[0]).toEqual({ status: "PENDING", attempts: 1 });
+    } finally {
+      thaKhoa();
+      await giuKhoa?.catch(() => undefined);
+      await tt.dung();
+      console.error = cu;
+      await poolGiuKhoa.end().catch(() => undefined);
+    }
+  }, 60_000);
+});
+
+// ===============================================================================================
+// [S1.233 / khoản 158] TẬP `kind` MÀ CSDL CHO MỖI VAI GHI KẾT CỤC PHẢI BẰNG TẬP `kind` CỦA TIẾN TRÌNH ẤY
+//
+// Migration `095_outbox_policy_theo_kind` (ADR-134): hai policy `AS RESTRICTIVE FOR UPDATE` trên `outbox_jobs`, mỗi cái một
+// vai, mang NGUYÊN VĂN tập `kind` của tiến trình chạy dưới vai ấy — lớp QUYỀN dưới lớp vệ sinh vận hành của S1.81 (vị từ lọc
+// `kind` ở runner). Cái giá chủ dự án đã chấp nhận: thêm một `kind` là thêm một migration. Cổng này là chỗ cái giá ấy được ĐÒI:
+// một handler mới — hay một dòng sổ mồ côi mới, vì worker là tiến trình khai sổ (S1.222) — mà không có migration thì job của
+// kind ấy KHÔNG vai nào claim được: nó nằm `PENDING` im lặng, đúng lớp lỗi §S1.81 mô tả, và vế dưới đỏ TRƯỚC khi tới đó.
+// Đọc `pg_policy` qua `pg_get_expr`, không đọc tệp migration: thứ ràng là policy ĐANG CÓ trong CSDL, không phải văn bản.
+// Hành vi (0 hàng dưới vai kia, runner đúng vai vẫn chạy) đo ở `packages/outbox/src/outbox.int.test.ts`, vế khoản 158.
+// ===============================================================================================
+interface TapKindCuaPolicy {
+  readonly vai: string;
+  readonly kind: readonly string[];
+}
+
+/**
+ * Tập `kind` của một policy theo vai trên `outbox_jobs`: phải là RESTRICTIVE, FOR UPDATE, USING = WITH CHECK, và ĐÚNG hình dạng
+ * `(kind = ANY (ARRAY['…'::text, …]))` — bộ đọc này cố ý không hiểu hình dạng nào khác; một hình dạng khác là một quyết định mới.
+ */
+async function docTapKindCuaPolicy(polname: string): Promise<TapKindCuaPolicy> {
+  const { rows } = await db.pool.query<{ vai: string; permissive: boolean; lenh: string; u: string | null; wc: string | null }>(
+    "SELECT array_to_string(ARRAY(SELECT r.rolname FROM unnest(p.polroles) AS o(oid) JOIN pg_roles r ON r.oid = o.oid ORDER BY r.rolname), ',') AS vai, " +
+      "       p.polpermissive AS permissive, p.polcmd::text AS lenh, " +
+      "       pg_get_expr(p.polqual, p.polrelid) AS u, pg_get_expr(p.polwithcheck, p.polrelid) AS wc " +
+      "  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace " +
+      " WHERE n.nspname = 'public' AND c.relname = 'outbox_jobs' AND p.polname = $1",
+    [polname],
+  );
+  const p = rows[0];
+  expect(p, `CSDL không có policy ${polname} trên outbox_jobs — migration 095 chưa áp, hay policy đã bị đổi tên/xoá`).toBeDefined();
+  expect({ permissive: p!.permissive, lenh: p!.lenh }, `${polname} phải là RESTRICTIVE FOR UPDATE`).toEqual({ permissive: false, lenh: "w" });
+  expect(p!.wc, `${polname}: WITH CHECK phải bằng USING — hai vế khai cùng một tập`).toBe(p!.u);
+  expect(p!.u ?? "", `${polname}: USING không đúng hình dạng \`(kind = ANY (ARRAY['…'::text, …]))\``).toMatch(
+    /^\(kind = ANY \(ARRAY\[(?:'[A-Z][A-Z0-9_]{0,63}'::text(?:, )?)+\]\)\)$/u,
+  );
+  return { vai: p!.vai, kind: [...(p!.u ?? "").matchAll(/'([A-Z][A-Z0-9_]{0,63})'::text/gu)].map((m) => m[1]!) };
+}
+
+const LOI_THEM_KIND =
+  "Tập `kind` trong policy của CSDL KHÁC tập kind của tiến trình. Thêm kind = thêm migration (ADR-134): một tệp " +
+  "`db/migrations/<số>_….sql` mang `ALTER POLICY <policy> ON public.outbox_jobs USING (…) WITH CHECK (…)` với tập mới, " +
+  "cộng sửa dòng ở POLICY_RESTRICTIVE_KHAI (hardening.always.sql) và POLICY_RESTRICTIVE_DA_KHAI (db/rls-coverage.int.test.ts). " +
+  "Không có migration thì job của kind ấy không vai nào claim được — nằm PENDING im lặng.";
+
+describe("[INV-F1] [S1.233 / khoản 158] tập `kind` trong policy của mỗi vai BẰNG tập `kind` của tiến trình ấy", () => {
+  it("`outbox_jobs_kind_app_unseal` (TO app_unseal) = Object.keys(buildUnsealWorkerHandlers) ∪ Object.keys(KIND_KHONG_NGUOI_NHAN) — thêm handler hay dòng sổ mồ côi mà quên migration thì đỏ ở đây", async () => {
+    const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_unseal");
+    expect(policy.vai, "policy của worker phải áp cho ĐÚNG một vai: app_unseal").toBe("app_unseal");
+    const handler = Object.keys(
+      buildUnsealWorkerHandlers({
+        unwrapper: boMoBocGia,
+        auditPool: auditUnsealPool,
+        alertSink: { name: "x", deliver: () => Promise.resolve() },
+        onJobFailure: () => undefined,
+      }),
+    );
+    expect(handler.length, "bảng handler của worker rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    // Sổ mồ côi HÔM NAY rỗng (S1.91) — hợp ở đây vì worker là tiến trình khai nó (S1.222): một dòng khai mà không có
+    // migration thì worker claim 0 hàng, tức "vẫn chết ồn ào" của khoản 154/168 thôi đúng.
+    const tienTrinh = [...new Set([...handler, ...Object.keys(KIND_KHONG_NGUOI_NHAN)])].sort();
+    expect([...policy.kind].sort(), LOI_THEM_KIND).toEqual(tienTrinh);
+  });
+
+  it("`outbox_jobs_kind_app_api` (TO app_api) = Object.keys(buildApiOutboxHandlers) — `api` KHÔNG khai sổ mồ côi (S1.222), nên không cộng gì", async () => {
+    const policy = await docTapKindCuaPolicy("outbox_jobs_kind_app_api");
+    expect(policy.vai, "policy của api phải áp cho ĐÚNG một vai: app_api").toBe("app_api");
+    const handler = Object.keys(buildApiOutboxHandlers(dichVuTest().services));
+    expect(handler.length, "bảng handler của api rỗng — phép đối chiếu vô nghĩa").toBeGreaterThan(0);
+    expect([...policy.kind].sort(), LOI_THEM_KIND).toEqual([...handler].sort());
+  });
+
+  it("hai tập không giao nhau — một `kind` không thể thuộc hai vai (vế ⑵ của khoản 34, nay đo trên chính policy)", async () => {
+    const worker = await docTapKindCuaPolicy("outbox_jobs_kind_app_unseal");
+    const api = await docTapKindCuaPolicy("outbox_jobs_kind_app_api");
+    expect(worker.kind.filter((k) => api.kind.includes(k)), "kind thuộc cả hai policy: hai vai cùng ghi được kết cục cho một job").toEqual([]);
   });
 });

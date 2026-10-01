@@ -93,8 +93,14 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * [S1.201 / S3.6a] `nhom-hang` — đọc danh sách nhóm hàng, mã hợp lệ và ô chọn nhóm hàng, cho màn `/nhom-hang` và `/tao-thau`.
  *
  * [S1.199 / S4.2b] `du-lieu` — ô thuộc tính, lọc hiển thị, câu §8.10 và dòng quy đổi của màn dữ liệu nền.
+ *
+ * [S1.240 / khoản 282] `dang-nhap` — bước 1 của ~~bốn~~ [S1.249 / khoản 291] năm trang người mua (`/login`, `/tao-thau`, `/nhom-hang`,
+ * `/chinh-sach`, `/du-lieu`): Tiếp và Vào
+ * tách nhau (khoản 193), khối link đăng nhập gần đây (khoản 195) và câu «còn nữa» (khoản 268). Module ĐẦU TIÊN của danh sách này chạm
+ * DOM — qua `document` mà trang trao vào, không qua tên toàn cục —, nên `phuc-vu.test.ts` quét mã đã gỡ kiểu của mọi module ở đây để
+ * không sink HTML nào lọt vào.
  */
-export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {
@@ -218,8 +224,16 @@ async function docThan(req: IncomingMessage): Promise<Buffer | null> {
  * đúng thứ `taoDocDiaChi` của api tồn tại để chặn, nên tiến trình này để api nhìn thấy socket
  * thật của nó. Hệ quả: mọi người dùng demo dùng CHUNG một ô đếm hạn mức theo người gọi — chấp
  * nhận được cho một buổi trình bày, và ADR-044 ghi nó ra thay vì để ai đó phát hiện lúc đang demo.
+ *
+ * [S1.230 / khoản 202] `sec-fetch-site` đi qua vì nó là VẾ THỨ HAI của cùng phòng vệ ấy:
+ * `nguonKhac` ở `apps/api/src/server.ts` đọc `origin`, và khi không có `origin` thì đọc
+ * `sec-fetch-site` — với lời khai *"trình duyệt luôn gửi ít nhất MỘT trong hai"*. Danh sách này
+ * từng chuyển `origin` mà bỏ `sec-fetch-site`, nên một yêu cầu ghi không mang `origin` bị 403
+ * khi gọi thẳng api và đi lọt khi đi qua đây: lời khai "hai tín hiệu" chỉ còn một sau proxy.
+ * Chỉ đúng header ấy, không cả họ `sec-fetch-*`: api chỉ đọc một, và danh sách trắng không mở
+ * theo tiền tố. `apps/web/src/phuc-vu.test.ts` đo header ĐẾN upstream ở cả hai chiều.
  */
-const HEADER_LEN = ["cookie", "content-type", "accept", "origin"] as const;
+const HEADER_LEN = ["cookie", "content-type", "accept", "origin", "sec-fetch-site"] as const;
 /** Header được chuyển tiếp XUỐNG trình duyệt. `set-cookie` đi riêng ngay dưới: nó là MẢNG, và nó là thứ làm phiên khách sống được. */
 const HEADER_XUONG = ["content-type"] as const;
 

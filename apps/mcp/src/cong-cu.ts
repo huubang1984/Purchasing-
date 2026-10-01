@@ -10,7 +10,7 @@
 //   ⑵ không mang route GHI. Không phải "chưa mang": ADR-038 chọn bề mặt CHỈ ĐỌC, và cổng đối
 //      chiếu làm một công cụ ghi không viết được;
 //   ⑶ không mang ~~bốn~~ ~~[S1.98] NĂM~~ ~~[S1.106] SÁU~~ ~~[S1.109] BẢY~~ ~~[S1.110] TÁM~~ ~~[S1.169] MƯỜI~~ ~~[S1.201] MƯỜI MỘT~~ ~~[S1.196] MƯỜI HAI~~ ~~[S1.200] MƯỜI MỘT~~
-//      ~~[S1.199] MƯỜI SÁU~~ [S1.203] MƯỜI BẢY route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
+//      ~~[S1.199] MƯỜI SÁU~~ ~~[S1.203] MƯỜI BẢY~~ ~~[S1.216] MƯỜI TÁM~~ ~~[S1.234] MƯỜI CHÍN~~ [S1.214 — gộp #217] HAI MƯƠI route đọc ở `ROUTE_DOC_KHONG_PHOI`. Mỗi dòng ở đó
 //      là một lần chủ dự án nói KHÔNG, không phải một việc chưa làm.
 //
 // Mặt tiền của MCP (tên công cụ, mô tả, tên tham số) bằng TIẾNG ANH — nó là giao thức, người đọc
@@ -70,11 +70,13 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "kiểm soát được, và không lớp nào trong hệ thống lấy lại được. Chủ dự án chọn KHÔNG phơi " +
     "ngày 2026-09-17 (ADR-038). Cần đọc giá thì đọc bằng chính giao diện người mua, dưới phiên " +
     "có MFA của một con người.",
+  // [S1.249 / khoản 299] ~~"SỐ HỒ SƠ THẦU ĐÃ NHẬN — …", "Số hồ sơ nhận được TRƯỚC lễ mở …"~~ — từ khoản 271 con số là số báo
+  // giá SẼ DỰ THẦU (luồng của lời mời còn sống, ADR-128). Tên hàm `countReceivedBids` và trường `bidCount` giữ nguyên (hợp đồng API).
   "/rfqs/:rfqId/bid-count":
-    "SỐ HỒ SƠ THẦU ĐÃ NHẬN — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +
+    "SỐ BÁO GIÁ SẼ DỰ THẦU (không kể lời mời đã thu hồi) — cùng rổ `HAM_DOC_CO_QUYEN` với bảng so sánh giá, và rổ ấy tồn tại " +
     "vì cả hai hàm có MỤC ĐÍCH DUY NHẤT là kiểm soát tiết lộ (`tests/architecture/" +
-    "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số hồ sơ nhận được TRƯỚC " +
-    "lễ mở là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
+    "cong-quyen-route.test.ts` gọi thẳng con số này là nhạy cảm — A6). Số báo giá sẽ dự thầu, biết TRƯỚC " +
+    "lễ mở, là một tín hiệu cạnh tranh thật. Bản đầu của S1.74 có công cụ này; lượt soi 69 M-6 " +
     "hỏi vì sao hai hàm cùng rổ lại đi hai hướng, và chủ dự án rút nó ngày 2026-09-17 (ADR-038).",
   "/rfqs/:rfqId/ranking":
     "BẢNG XẾP HẠNG của lượt chấm mới nhất — và nó mang NHIỀU HƠN bảng so sánh giá ở ngay trên: " +
@@ -164,6 +166,26 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "ghi nhận và vì sao. Nó là dữ liệu KIỂM SOÁT của bên mua: biết tín hiệu gộp những gói nào, với cửa sổ bao nhiêu ngày, là " +
     "biết cách xếp gói để lần sau nó không gộp. Người duyệt đọc nó trên giao diện người mua trước khi ghi nhận; một tác tử " +
     "chỉ-đọc không có việc gì cần nó. Mở sau là một quyết định có tên.",
+  "/mapping-queue":
+    "HÀNG ĐỢI ÁNH XẠ của tổ chức — mọi dòng chưa ánh xạ của MỌI gói đã nộp, kèm năm ứng viên hàng chuẩn và họ tên người ghi gợi " +
+    "ý. Ánh xạ là khoá để đọc lịch sử giá ở S4.4: dòng nào nối với hàng nào quyết định giá của gói nào đứng cạnh nhau. Chủ dự " +
+    "án chốt ngày 2026-09-30 chưa mở mặt ấy cho một tác tử trước khi quyết mặt tiền của lịch sử giá. Route khai `agent: false` " +
+    "và dòng này khai vì sao. [S1.234 / S4.3b]",
+  "/rfqs/:rfqId/mappings":
+    "TRẠNG THÁI ÁNH XẠ từng dòng của một gói — tự động, đã duyệt, không có hàng tương ứng, chờ duyệt, chưa chuẩn hoá — kèm mã " +
+    "hàng chuẩn và lý do. Cùng lý do với `/mapping-queue`: ánh xạ là khoá của lịch sử giá, và chủ dự án chốt ngày 2026-09-30 " +
+    "chưa mở nó cho một tác tử. Người soạn gói đọc nó trên màn `/tao-thau`. Route khai `agent: false` và dòng này khai vì sao. " +
+    "[S1.234 / S4.3b]",
+  "/items/:itemId/price-history":
+    "LỊCH SỬ GIÁ CỦA MỘT HÀNG CHUẨN — đơn giá, thành tiền và nhà cung cấp của MỌI gói đã mở niêm phong có dòng nối với hàng ấy, " +
+    "xuyên gói. Cùng hạng tiết lộ với `/rfqs/:rfqId/comparison` và hơn: nó gom giá của nhiều gói vào một lần đọc. Spec S4 §3.5 " +
+    "khai mọi route đọc lịch sử giá, benchmark và mốc ngoài là `agent: false`; cổng `bid.view` và hàng sổ `PRICE_HISTORY_READ` " +
+    "nằm trong `docLichSuGia`. Route khai `agent: false` và dòng này khai vì sao. [S1.251 / S4.4b]",
+  "/auth/login-links":
+    "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
+    "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +
+    "cảnh một agent là cho một chứng chỉ agent rò biết chủ nó vào lúc nào và link nào còn sống. Route " +
+    "khai `agent: false` (`apps/api/src/routes.test.ts` ghim) và dòng này khai vì sao. [S1.216]",
 };
 
 /** Bảng gốc: tên công cụ, đường dẫn, mô tả. `thamSo` được SUY ở dưới. */

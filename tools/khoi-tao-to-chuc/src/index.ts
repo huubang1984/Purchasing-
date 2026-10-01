@@ -36,6 +36,7 @@ import { argv, env, exit, stderr, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { createPool } from "@trustprocure/db";
+import { TenantError, ngheLoiKetNoiToiMuon } from "@trustprocure/tenancy";
 import { BanKhaiError, MA_VAI, SLUG, TRAN_SO_NGUOI, UUID_V4, docBanKhai, kiemKhop, type CheDo, type KyVong } from "./ban-khai.js";
 import { KhoiTaoError, khoiTao } from "./khoi-tao.js";
 
@@ -244,6 +245,19 @@ export async function chay(ds: readonly string[]): Promise<string> {
     onPoolError: (e) => {
       stderr.write(`[khoi-tao] pool loi ${e instanceof Error ? e.name : "loi la"}\n`);
     },
+  });
+  // [S1.227 / khoản 180] Pool đi qua `withTenant` ở `khoi-tao.ts` (`khoiTao`), nên hai tín hiệu mất-không-ai-biết của nó
+  // gắn Ở ĐÂY — chỗ dựng pool, đúng ranh giới "cùng một tệp" của cổng `pool-nghe-du-tin-hieu` (nay quét cả `tools/`):
+  // ⑴ `release` mang `TenantError` SESSION_STATE_LEFT — `withTenant` huỷ kết nối vì trạng thái phiên còn sót sau giao
+  // dịch, không ném cho ai; ⑵ lỗi tới muộn sau trần `maxConnectWaitMs` (`khoiTao` không đặt trần; gắn để không phải nhớ).
+  // Chỉ TÊN và MÃ lỗi (`maLoi`), không `message` — cùng luật với dòng HONG ở dưới.
+  pool.on("release", (loi: unknown) => {
+    if (loi instanceof TenantError && loi.code === "SESSION_STATE_LEFT") {
+      stderr.write(`[khoi-tao] ket noi huy pool ${loi.name}${maLoi(loi)}\n`);
+    }
+  });
+  ngheLoiKetNoiToiMuon(pool, (loi: unknown) => {
+    stderr.write(`[khoi-tao] loi ket noi toi muon pool ${loi instanceof Error ? `${loi.name}${maLoi(loi)}` : "loi la"}\n`);
   });
   try {
     const kq = await khoiTao(pool, bk, ts.maToChuc === null ? {} : { maToChuc: ts.maToChuc });
