@@ -195,8 +195,9 @@ bản sao thứ hai để trôi. Theo ADR-029 ⑴, một con số không có l�
     cách thêm nó vào danh sách miễn trừ, và một mã đã phủ mà còn nằm trong danh sách cũng đỏ.
 - **Chưa triển khai.** ~~Chưa chọn hạ tầng đích, chưa chọn nhà cung cấp KMS.~~ Hạ tầng và KMS
   **đã chốt** (AWS, AWS KMS `ap-southeast-1` — ADR-009), nhưng ~~**chưa có tài khoản, chưa có CMK,
-  chưa có role nào được tạo**~~ **[S1.168] tài khoản AWS đã có từ S1.119, còn CMK và role thì chưa** (stack 30/50
-  chưa apply; stack `90-ecs` chưa apply; `deploy.yml` chưa chạy thật — hàng 15 của `docs/STATE.md`). Chốt trên giấy
+  chưa có role nào được tạo**~~ ~~**[S1.168] tài khoản AWS đã có từ S1.119, còn CMK và role thì chưa** (stack 30/50
+  chưa apply;~~ **[apply lần đầu 2026-09-30] CMK và role đã có** — stack 00–60 đã apply, phép đo ⒜ đạt
+  18/18 (stack `90-ecs` chưa apply; `deploy.yml` chưa chạy thật — hàng 15 của `docs/STATE.md`). Chốt trên giấy
   không phải triển khai.
 - **Chưa có khách hàng pilot.**
 
