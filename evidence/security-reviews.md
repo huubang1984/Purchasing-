@@ -22776,3 +22776,145 @@ nhiều yêu cầu cho một vòng.
   đã thu hồi, cùng hướng ADR-128. `pnpm t0` sạch; `pnpm test` 139 tệp, 2268 đạt, 1 bỏ qua; `cap-so --kiem` sạch; `pnpm evidence`
   toàn bộ T1–T3: 225 tệp, 4268 khẳng định, 4258 đạt, 10 bỏ qua (9 là bộ đo mở thầu cỡ lớn chỉ bật theo biến môi trường, của #221),
   0 đỏ — `lich-su-gia.int` 46/46, `db/migrations.int` 128/128, `hardening-khong-in-gia-tri` 11/11; **76/76**; ma trận không đổi.
+
+
+# §S1.9101 — S4.4b: ĐƯỜNG ĐỌC LỊCH SỬ GIÁ, KỊCH BẢN 41 CÓ DÒNG VÀ ĐƠN GIÁ, BỐN BỘ QUÉT TRÊN MỌI QUAN HỆ, `gieo:demo` BA GÓI ĐÃ MỞ (L6, VẾ LỊCH SỬ) — ADR-9201
+
+## 1. Vòng này là gì
+
+Nửa sau của S4.4 (spec S4 §9): route đọc lịch sử giá trên ba hàm của S4.4a, kịch bản 41 có dòng, hàng chuẩn, ánh xạ và kim đơn
+giá, bốn bộ quét giá trên mọi loại quan hệ, `gieo:demo` ba gói đã mở qua đường thật. Không migration. **L6** vào sổ đăng ký với vế
+lịch sử giá (77 bất biến); vế benchmark của L6 ở S4.5. Dựng trên `master` sau khi #220 (S4.4a) merge.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-10-01, bốn điểm, cả bốn theo đề xuất:
+
+1. Phản hồi: MỌI quan sát của hàng chuẩn kèm `trangThai`, `hoiTo`, `sauMoc`, cộng số đếm theo trạng thái; chỉ `supplierId`, không
+   tên nhà cung cấp, không `payload`; mốc `now()`, không `?moc=`, không phân trang.
+2. Không màn ở S4.4b (màn là S4.5, `/mo-thau`); sổ `PRICE_HISTORY_READ` mang `{itemId, soQuanSat, viewedBySessionId}` — không giá.
+3. Bộ quét: BỐN bộ quét giá (đo: `db/unique-oracle.int` không phải bộ quét giá) nhận kim đơn giá và quét cả view, materialized view,
+   kèm đối chứng dương trên đối tượng dựng lúc chạy; `unique-oracle` giữ nguyên; gạch câu *"năm bộ quét"* ở spec §2.1, §2.5 ⒅.
+4. `gieo:demo`: worker THẬT chạy làm tiến trình con; không nới G1/G8.
+
+## 3. Thay đổi
+
+- **Bộ đọc và route.** `packages/du-lieu-nen/src/lich-su-gia.ts` — `docLichSuGia`, `TRANG_THAI_QUAN_SAT`; `apps/api/src/routes/lich-su-gia.ts`
+  — `GET /items/:itemId/price-history` (`audience: BUYER`, `agent: false`), bộ đọc tham số dùng chung `itemIdParam` của
+  `routes/du-lieu.ts`; `apps/mcp` khai route ở `ROUTE_DOC_KHONG_PHOI`. Rổ `HAM_DOC_CO_QUYEN`, danh sách trắng barrel.
+- **Bộ quét giá chung.** `packages/test-support/src/quet-gia.ts` (`quetGiaMoiQuanHe`, `RELKIND_QUET_GIA`) cùng đối chứng dương
+  `quet-gia.int.test.ts`; bốn bộ quét (kịch bản 41 hai bản, `unseal-worker.int`, `luot-danh-gia.int`) gọi nó, mỗi bộ thêm một kim
+  đơn giá; phong bì của ba tệp ấy mang `lines`.
+- **Kịch bản 41 qua HTTP.** Người quản lý dữ liệu đăng nhập qua HTTP; hàng chuẩn, bí danh, quy đổi riêng khai ở bước 1; ánh xạ
+  `TU_DONG` khẳng định ở bước 2; bốn ca `[INV-L6]` (`UNSEALED`, `BAFO_OPEN`, `BAFO_CLOSED`, `BAFO_UNSEALED`); bước 12e tách hai
+  (`ĐÓNG`, `12e2`); ba lượt quét route hỏi `:itemId` thật; `rutSo` đọc số thập phân dài và lá số JSON; `quetDonGia`; bước 14 dùng
+  bộ quét chung, ba kim (tổng, đơn giá, đơn giá quy đổi) và một materialized view dựng lúc chạy.
+- **`gieo:demo`.** `tools/gieo-demo/src/goi-da-mo.ts` (ba gói, worker con, chốt việc của tổ chức khác); `index.ts` đọc hai biến môi
+  trường mới, bộ ký biên nhận, gom id hàng chuẩn và nhà cung cấp, in mục *LỊCH SỬ GIÁ*; hai phụ thuộc workspace (`bidding`, `unseal`).
+- **Cổng khai theo.** `ban-ro-liet-ke` (đường đọc duy nhất của hai hàm), `duong-sql-ngoai-with-tenant` (hai mục khai), sổ khai nhãn
+  (L6 — bốn tệp), `MOC_GHIM` 76 → 77, TEST-PLAN hàng L6 và dòng tổng, lời khai đếm (STATE, Handoff), spec S4 §2.1, §2.5 ⒅, §5.1 L6,
+  §9, PRODUCT, STATE, ADR-9201.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **`resourceType` `CANONICAL_ITEM`** cho hàng từ chối lẫn hàng đọc — phương án đã chốt viết `canonical_item`; `requirePermission`
+  đòi chữ hoa (đo), và hai hàng của cùng một tài nguyên dùng một mã. Lệch chữ, nói ra ở ADR-9201 ①.
+- **Không trả `canonical_item_id`** (bằng `itemId` ở mọi hàng); `soTheoTrangThai` mang đủ sáu khoá dù `CHUA_ANH_XA` luôn 0.
+- **Bộ quét chung ở `test-support`**, một câu dựng tên quan hệ phía máy chủ (`query_to_xml(format('%I'))`) — bản nội suy tên bảng
+  không qua cổng `PREPARE` của QT3 (đo: `FROM public.1`).
+- **Kim đơn giá mang dấu `.`** (`9300000.00`, `1860000.00`, `8273645.19`, `77712345.60`) — hex không có dấu ấy; thời điểm chỉ có
+  hai chữ số trước nó; chuỗi của đơn giá không là chuỗi con của tổng.
+- **Số lượng dòng 100 tấm, quy đổi riêng 847,8 kg/tấm** (tấm 1 500 × 6 000 × 12 mm) ở kịch bản HTTP — đơn giá mọi giá là số nguyên.
+- **`gieo:demo`**: ba nhà cung cấp đầu của gói demo được mời lại; dòng bu lông neo ánh xạ tay trước lần mở (gói demo chính vẫn để dòng
+  ấy ở hàng đợi); ngân sách 30/32/28 triệu và — với `--s3` — một nhóm hàng riêng `DA-MO` (tổng chạm cận 100 triệu, hay chung nhóm
+  `KET-CAU`, sẽ bắn K10a); một chữ ký mở gói, một (hay hai, nếu gói đòi) chữ ký mở thầu; pepper OTP riêng của lượt gieo.
+- **Tên trùng không phải bản chép thì đổi tên** (`WorkerGieo`, `dongThanhChuoi`, `docBoKyBienNhan`, `duoiLogWorker`) — cổng kiểm kê
+  mã chép bắt chúng ở lần chạy đầu; bản chép thật duy nhất (`moiTruongSach` của `pilot-gia-lap`) thôi là bản chép khi lượt soi L3
+  chuyển sang danh sách cho phép.
+
+## 5. Đo trước
+
+Trên cây `f0e7eef` (head của #220, sau khi hợp #222), Postgres 16:
+
+1. **`db/unique-oracle.int` không phải bộ quét giá** — nó đọc `relkind` để liệt kê bảng có `org_id` rồi dò oracle chỉ mục duy nhất
+   (H14). Bốn bộ còn lại chép cùng vòng lặp `t::text LIKE`; không phong bì nào của bốn tệp mang `lines`; kịch bản 41 không ánh xạ gói
+   chính (hàng chuẩn chỉ có trên gói hy sinh của lượt quét).
+2. **`public` có 58 quan hệ `r`, 0 `p`, 0 `v`, 0 `m`**; không quan hệ nào ngoài `public` (một test tạm, đã xoá).
+3. **`930000000.00 / 100.0000` in `9300000.000000000000`**; `rutSo` cho mẩu ấy 19 chữ số ở cả hai cách đọc — bộ quét route MÙ với
+   đơn giá của lịch sử.
+4. **`requirePermission` ném với `resourceType` `canonical_item`** (`^[A-Z][A-Z0-9_]{0,63}$`) — năm ca đầu của khối `[INV-L6]` đỏ đúng
+   ở đó.
+5. **Hai cổng QT3 đọc `packages/test-support`**; G1/G8 chặn `tools/` khỏi cửa giải mã; worker đòi `app_unseal_login`, vòng khoá,
+   thư mục cảnh báo — `tools/pilot-gia-lap/src/cum.ts` đã có khuôn bật worker làm tiến trình con.
+
+## 6. Đo
+
+- `packages/du-lieu-nen/src/lich-su-gia.int.test.ts` **51/51** (46 của S4.4a + 5 ca `[INV-L6]`: đọc được — hình dạng đóng, đơn giá,
+  `HOI_TO`, đếm theo trạng thái, đúng một hàng sổ không giá; người quản lý dữ liệu bị từ chối với một hàng `PERMISSION_DENIED`; hàng
+  chuẩn không có và hàng chuẩn của tổ chức khác ⇒ `null`; gói chưa mở ⇒ rỗng, vẫn một hàng sổ; fail-closed khi ghi sổ hỏng).
+- `apps/unseal-worker/src/kich-ban-41-http.int.test.ts` **77/77** (hai luồng; bốn ca `[INV-L6]` mỗi luồng, bước 14 với ba kim và
+  materialized view lúc chạy).
+- `kich-ban-41.int` **32/32**, `unseal-worker.int` **49/49**, `luot-danh-gia.int` **101/101**, `test-support/quet-gia.int` **1/1**,
+  `ban-ro-liet-ke` **7/7**.
+- **`gieo:demo` đo tay** trên một cụm Postgres 16 mới (migrate, vai `app_unseal_login`): chế độ mặc định và `--s3` mỗi lượt ~5 giây,
+  ba gói `UNSEALED`, mỗi gói ba bản rõ; `quan_sat_gia(now(), hàng chuẩn)` cho mỗi hàng chuẩn 9 quan sát `HOP_LE`, không nhãn hồi tố
+  (thép tấm 11 882 500–13 390 000 đ/tấm, thép hộp 251 909–283 868 đ/cây, bu lông 45 629–51 418 đ/bộ). Một việc `UNSEAL_RFQ` đang chờ
+  của tổ chức khác ⇒ công cụ từ chối TRƯỚC khi gieo (cụm vẫn một tổ chức); hai lượt xong sạch không để lại thư mục tạm.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy tệp test liên quan, khôi phục tệp từ bản sao. Mười lăm đỏ, một tương đương (M13).
+
+| # | Đột biến | Test | Kết quả |
+|---|---|---|---|
+| M1 | bỏ `requirePermission` trong `docLichSuGia` | `lich-su-gia.int`, kịch bản 41 HTTP | ĐỎ — 5 ca |
+| M2 | bỏ hàng sổ `PRICE_HISTORY_READ` | như trên | ĐỎ — 5 ca |
+| M3 | payload sổ mang thêm `thanh_tien` của hàng đầu | như trên | ĐỎ — 4 ca |
+| M4 | đọc `quan_sat_gia(now(), NULL)` (cả tổ chức) | `lich-su-gia.int` | ĐỎ — 3 ca |
+| M5 | quan sát mang thêm trường `payload` | `lich-su-gia.int` | ĐỎ — 1 ca (hình dạng đóng) |
+| M6 | bỏ phép hỏi hàng chuẩn tồn tại | `lich-su-gia.int`, kịch bản 41 HTTP | ĐỎ — 3 ca |
+| M7 | route `agent: true` | `apps/mcp` | ĐỎ — 2 ca |
+| M8 | route bỏ nhánh 404 | kịch bản 41 HTTP | ĐỎ — 2 ca (hai luồng) |
+| M9 | `RELKIND_QUET_GIA` bỏ `v` | `quet-gia.int` | ĐỎ |
+| M10 | `RELKIND_QUET_GIA` bỏ `m` | `quet-gia.int`, kịch bản 41 HTTP | ĐỎ — 3 ca (bước 14 cả hai luồng) |
+| M11 | bộ quét lọc bỏ `rfq_unsealed…` khỏi tập trả về | như trên | ĐỎ — 2 ca |
+| M12 | `rutSo` bỏ cách đọc số thập phân dài | kịch bản 41 HTTP | ĐỎ — 4 ca (đối chứng dương UNSEALED và BAFO_UNSEALED, hai luồng) |
+| M13 | mốc `'infinity'` thay `now()` | `lich-su-gia.int`, kịch bản 41 HTTP | **XANH — tương đương**: không hàng nền nào ghi sau `now()` của giao dịch đọc |
+| M14 | `gia_da_lo` bỏ vế BAFO (`… AND false`, ở `096` và mục ghim) | kịch bản 41 HTTP | ĐỎ — 4 ca (BAFO_OPEN, BAFO_CLOSED, hai luồng) |
+| M15 | thêm một câu `quan_sat_gia(now(), NULL)` vào `doc-bang-xep-hang.ts` | `ban-ro-liet-ke` | ĐỎ — 1 ca (sau lượt soi T2) |
+| M16 | `rutSo` bỏ đọc lá số JSON | kịch bản 41 HTTP | ĐỎ — 2 ca (đối chứng dương của bộ dò, hai luồng; sau lượt soi L1) |
+
+## 8. Lượt soi đối kháng
+
+Một agent đọc trọn diff (chỉ đọc). Không phát hiện CAO. Route không lộ giá cho sai vai, phiên khách, tổ chức khác, qua sổ hay
+thông điệp lỗi; thứ tự cổng đúng (người không giữ `bid.view` không dò được hàng chuẩn); sổ đọc ghi trên chính `client`, sau mọi câu đọc.
+
+- **T1 (TRUNG) — worker con của `gieo:demo` nhận việc của MỌI tổ chức** (mở khoá của họ bằng vòng khoá sai, giao cảnh báo break-glass
+  của họ vào thư mục tạm — D4). **Sửa:** từ chối trước khi gieo và trước khi bật worker khi có việc `UNSEAL_RFQ`/`BREAK_GLASS_UNSEAL_ALERT`
+  đang chờ của tổ chức khác; đo (mục 6). Cửa sổ trong lúc worker chạy — nói ra.
+- **T2 (TRUNG) — "đường đọc DUY NHẤT của `quan_sat_gia`" không có cổng canh.** **Sửa:** `ban-ro-liet-ke` đòi tập tệp gọi
+  `quan_sat_gia`/`gia_da_lo` đúng bằng `lich-su-gia.ts` (M15 đỏ).
+- **L1 — `rutSo` mù với mảng số trần.** **Sửa:** đọc mọi lá số của thân JSON (M16 đỏ). Cách viết `9.300.000,000000` — nói ra.
+- **L2 — kim đơn giá chỉ dạng `X.00`, không có kim cho đơn giá quy đổi.** **Sửa:** bước 14 quét thêm đơn giá quy đổi (tập rỗng). Kim
+  số nguyên trần không thêm: bảy chữ số trùng ngẫu nhiên trong hex của `bytea`.
+- **L3 — môi trường worker con là danh sách cấm.** **Sửa:** danh sách cho phép.
+- **L4 — worker mồ côi khi cha bị giết; thư mục tạm không xoá.** **Sửa:** giết con ở `exit`, hai tín hiệu thành một lần thoát có mã;
+  xoá thư mục tạm khi xong sạch.
+- **L5 — tài liệu khai quá.** Biên bản chưa có lúc soi (nay có); hàng L6 nói rõ phiên Passport chưa có route; *"bộ quét route THẤY"*
+  sửa thành *"cùng lần đọc qua HTTP THẤY"* — lượt quét route không có khẳng định dương cho lịch sử, nói ra ở ADR-9201.
+- **Thông tin.** `now()` là lúc bắt đầu giao dịch — cửa sổ vài mili giây quanh lần mở vòng BAFO, nói ra ở ADR-9201; `AWARDED` có
+  trong lịch sử — có chủ đích (ADR-136); hai ca L6 nay khẳng định trạng thái gói; `LIKE` không thoát `_` — chỉ khớp rộng hơn.
+
+## 9. Giới hạn, nói ra
+
+- Một vòng BAFO đang mở rút CẢ gói khỏi lịch sử (ADR-136 ③); kịch bản 41 ghim điều ấy.
+- Mốc `now()`: M13 tương đương trên dữ liệu đã commit; cửa sổ của commit đồng thời ở mục 8.
+- Ba lượt quét route hỏi hàng chuẩn thật nhưng không có khẳng định dương riêng; lời khai L6 dựa vào các ca `[INV-L6]`.
+- Bộ quét chỉ đọc `public`; `bytea` hiện dưới dạng hex; large object không được đọc.
+- `gieo:demo` không có test tự động — đo tay hai chế độ; pepper OTP riêng của lượt gieo để lại `pepper_version` mà `api` không biết
+  trên ba gói đã đóng.
+- Route không phân trang — giới hạn hiệu năng của ADR-136 ⑧ là giới hạn của route.
+
+## 10. Số đo
+
+(điền sau `pnpm evidence`)
