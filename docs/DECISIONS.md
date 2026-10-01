@@ -4384,7 +4384,7 @@ rút thêm hai công cụ (§2 điểm 3) — bảng còn **tám**.
    riêng canh đúng đường dẫn ấy:
    - `/rfqs/:rfqId/comparison` — bảng so sánh GIÁ sau mở thầu, thứ toàn bộ sản phẩm sinh ra để bảo vệ. Ai cần đọc giá thì
      đọc bằng giao diện người mua, dưới phiên có MFA của một con người;
-   - `/rfqs/:rfqId/bid-count` — số hồ sơ thầu đã nhận. Bản đầu phơi nó; lượt soi 69 M-6 hỏi vì sao hai hàm CÙNG rổ
+   - `/rfqs/:rfqId/bid-count` — số ~~hồ sơ thầu đã nhận~~ **[S1.249 / khoản 299]** báo giá sẽ dự thầu (không kể lời mời đã thu hồi). Bản đầu phơi nó; lượt soi 69 M-6 hỏi vì sao hai hàm CÙNG rổ
      `HAM_DOC_CO_QUYEN` — rổ tồn tại vì cả hai có mục đích duy nhất là kiểm soát tiết lộ — lại đi hai hướng, và chủ dự án
      rút nó. **Giá phải trả được nói ra:** đó là công cụ DUY NHẤT có cổng quyền thật và có ghi sổ kiểm toán, nên sau khi
      rút, không công cụ nào để lại dấu vết — khoản nợ 142;
@@ -8756,7 +8756,7 @@ sau mỗi lần nộp trên máy dùng chung.
    riêng (`POST /invitations/:invitationId/unlock`).
    **[S1.188 / ADR-113]** Lời mời *chưa gửi* của tổ chức đã bật — lần mở gói hay lần mời ở `OPEN` gửi hỏng — thành `SENT` khi
    lần gửi lại đi được; lời mời đã `SENT` không đổi.
-5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống **[S1.240 / khoản 276]** — *Thu hồi* không hiện sau lần mở thầu (sáu trạng thái của `RFQ_STATUSES_AFTER_UNSEAL`) ở cả hai luồng; *Gửi lại link* ở tổ chức chưa bật vẫn hiện ở mọi trạng thái — khoản 293; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
+5. **Trang.** `/tao-thau`: nút *Gửi lại link* cạnh *Thu hồi* ở mỗi lời mời còn sống **[S1.240 / khoản 276]** — *Thu hồi* không hiện sau lần mở thầu (sáu trạng thái của `RFQ_STATUSES_AFTER_UNSEAL`) ở cả hai luồng; *Gửi lại link* ở tổ chức chưa bật vẫn hiện ở mọi trạng thái — ~~khoản 293~~ **[S1.249 / khoản 293]** có chủ đích (chủ dự án chốt 2026-09-30, «máy chủ tự từ chối»): 409 của gói không nhận báo giá là câu người đọc nêu hai điều kiện, trang in nguyên văn; ~~câu báo sau khi thu hồi nói thẳng báo giá đã
    nộp theo lời mời ấy vẫn nằm trong gói thầu~~ **[S1.217 / ADR-128]** thu hồi nay LOẠI báo giá ấy khỏi cuộc thi và bị chặn sau lần mở thầu — câu báo của trang ~~sửa ở khoản 276~~ **[S1.240 / khoản 276]** nói thẳng *"báo giá đã nộp theo lời mời này (nếu có) không dự thầu nữa — nó không được mở thầu, so sánh hay xếp hạng"*, và chỉ đường gửi lại link thay vì *"mời lại được rồi"*. Trang nộp thầu: sau khi
    thoát hay khi phiên đã chết, *"xin bên mua gửi lại link mời — link gửi lại đưa về đúng báo giá đã nộp"*.
 6. **Không migration, không đổi quyền CSDL**: `app_api` đã có INSERT trên `rfq_invitation_tokens` (`010`, cột người phát ở `013`),
@@ -10100,12 +10100,17 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
        JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id
        JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id
       WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id
+        AND i.revoked_at IS NULL
       ORDER BY v.bid_id, v.version DESC) v
     WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u
                        WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)
     ORDER BY v.bid_id;
    ```
    Câu này là đúng vế phủ định của việc worker làm: phong bì (bản cuối mỗi luồng, đúng vòng) mà lượt mở thầu KHÔNG để lại hàng bản rõ.
+   **[S1.249 / khoản 298]** Từ ADR-128 (S1.217) worker chỉ mở luồng của lời mời CÒN SỐNG (`apps/unseal-worker/src/index.ts`, cùng
+   vế ở ba bộ đọc phong bì), nên câu mang thêm vế `AND i.revoked_at IS NULL`: thiếu nó, luồng bị thu hồi trước lần mở vòng một được
+   suy thành phong bì HỎNG trong khi sổ ghi `failedCount` 0 (đo §S1.243). Ở vòng BAFO vế này không đổi gì — thu hồi bị chặn từ
+   lần mở đầu (ADR-128 ⑶).
    `rfq_unsealed_bids` là bảng tenant có RLS sẵn (`019`); sổ chỉ ghi thêm nên hai hàng sổ cùng `failedCount` là mốc đối chiếu cho câu này.
 4. **Giá trị trả về trong tiến trình (`UnsealOutcome.failedBidVersionIds`) KHÔNG cắt** — nó không lưu; docstring nói thứ có trần là sổ.
 5. **Bản ghi cũ không sửa** (sổ chỉ ghi thêm): thiếu `failedCount` nghĩa là ghi trước vòng này, mảng khi ấy là đầy đủ.
@@ -10134,7 +10139,7 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 
 ## ADR-126 — Người đã đăng nhập tự xem link đăng nhập gần đây của chính mình: `GET /auth/login-links` là route đọc không mã quyền, đóng với chứng chỉ agent, không bao giờ trả `token_hash`; thông điệp gộp ba trạng thái ở đường vô danh giữ nguyên
 
-**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (khoản 195: mở đường cho người ĐÃ đăng nhập, không nới thông điệp ở route vô danh) · **[S1.216]** · **Khoản nợ liên quan:** 195 (đóng), 268 ~~(mở)~~ **[S1.240]** (đóng — cửa sổ 7 ngày, trần 100, `truncated`), 282 **[S1.240]** (đóng — bốn trang, một module), **[S1.240]** 291, 292 (mở) · **Liên quan:** ADR-020 mục 2 (đăng nhập người mua: magic link + TOTP, token dạng rõ không về client), ADR-039 (phạm vi chứng chỉ agent), ADR-038 (bề mặt MCP chỉ đọc — `ROUTE_DOC_KHONG_PHOI`), ADR-107 (hình dạng link đăng nhập), ADR-048 (mã do hệ thống phát) · **Biên bản:** `evidence/security-reviews.md` §S1.216, **[S1.240]** §S1.240
+**Ngày:** 2026-09-30 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt ngày 2026-09-30 (khoản 195: mở đường cho người ĐÃ đăng nhập, không nới thông điệp ở route vô danh) · **[S1.216]** · **Khoản nợ liên quan:** 195 (đóng), 268 ~~(mở)~~ **[S1.240]** (đóng — cửa sổ 7 ngày, trần 100, `truncated`), 282 **[S1.240]** (đóng — bốn trang, một module), **[S1.240]** 291, 292 ~~(mở)~~ **[S1.249]** (đóng — năm trang; lượt đổi mã), 310 (mở — `/auth/totp` về muộn) · **Liên quan:** ADR-020 mục 2 (đăng nhập người mua: magic link + TOTP, token dạng rõ không về client), ADR-039 (phạm vi chứng chỉ agent), ADR-038 (bề mặt MCP chỉ đọc — `ROUTE_DOC_KHONG_PHOI`), ADR-107 (hình dạng link đăng nhập), ADR-048 (mã do hệ thống phát) · **Biên bản:** `evidence/security-reviews.md` §S1.216, **[S1.240]** §S1.240
 
 ### Bối cảnh
 
@@ -10145,7 +10150,7 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 1. **Thông điệp gộp ở đường vô danh GIỮ NGUYÊN.** Không một ký tự của `LoginTokenError` đổi; `/auth/redeem` và `/auth/totp` không nói thêm gì.
 2. **Một hàm đọc của `identity`, `listRecentLoginTokens(client, orgId, userId)`**: `assertTenantBound`; `userId` là `actor.id` của phiên do bộ điều phối đưa vào, không phải lời khai từ thân; câu đọc liệt kê ĐÚNG bốn cột — không `SELECT *`, không bao giờ `token_hash` (băm của một token còn hiệu lực là thứ đối chiếu được với một token bị rò) — cộng `status` suy Ở CSDL (`CONSUMED` khi `consumed_at` có, `EXPIRED` khi `expires_at <= clock_timestamp()`, còn lại `PENDING`; cùng đồng hồ với `redeemLoginToken`; đã dùng thắng hết hạn); ~~tối đa 20 hàng, mới nhất trước~~ **[S1.240 / khoản 268]** chỉ các link tạo trong 7 ngày gần nhất (`created_at > now() - make_interval(days => 7)` — mốc `now()` của giao dịch, cùng đồng hồ với cửa sổ phát của `issueLoginToken`), mới nhất trước, trần cứng 100 hàng; hàm xin 101 hàng và trả `{ links, truncated }` — `truncated` đúng khi và chỉ khi trần cắt hàng TRONG cửa sổ, không câu đếm thứ hai (kiểu `RecentLoginTokens` không ra cửa). Ra cửa `index.ts` theo tiêu chí của cửa: không trả lời câu hỏi quyền nào, không mở đường ghi nào.
 3. **Route `GET /auth/login-links`** — route ĐỌC của người mua (`BuyerReadRoute`, `mutates: false`), không mã quyền, cùng khuôn `/me`: nó chỉ trả hàng của chính người gọi dưới RLS của tổ chức; phiên đã MFA là điều kiện của mọi route người mua (`resolveSessionByToken`). **`agent: false`**: lịch sử đăng nhập của một con người — lúc nào vào, link nào còn sống — không thuộc ngữ cảnh một chứng chỉ agent; MCP khai KHÔNG PHƠI kèm lý do (`ROUTE_DOC_KHONG_PHOI`). Thân: ~~`{ loginLinks: [{ createdAt, expiresAt, consumedAt, purpose, status }] }`~~ **[S1.240 / khoản 268]** `{ loginLinks: [{ createdAt, expiresAt, consumedAt, purpose, status }], truncated: boolean }` — hợp đồng đổi theo hướng THÊM: `loginLinks` giữ nguyên năm trường; trang chỉ coi `truncated === true` là «còn nữa», nên thân thiếu trường (API cũ) không làm trang nói sai.
-4. ~~**`/login` (`mo-thau`)**~~ **[S1.240 / khoản 282]** **Bốn trang người mua — `/login` (`mo-thau`), `/tao-thau`, `/nhom-hang`, `/chinh-sach` — qua một module `/lib/dang-nhap.js`** vẽ, ngay sau khi vào hay sau «Tiếp tục với phiên này», mỗi link một dòng — «Link lúc X» → «đã dùng lúc Y» / «hết hạn lúc Y, chưa dùng» / «còn hiệu lực tới Y, chưa dùng» — kèm câu *một link «đã dùng» vào lúc không phải bạn đăng nhập nghĩa là người khác đã dùng link của bạn — đăng xuất và báo ngay cho quản trị tổ chức*. Khối là trợ giúp, không phải cổng: máy chủ từ chối hay mất mạng ⇒ ẩn, các bước vẫn mở; về bước 1 ⇒ ẩn và rỗng; phản hồi về muộn bị bỏ. **[S1.240 / khoản 268]** Câu của khối nói cửa sổ 7 ngày ở mọi lần; thân mang `truncated: true` ⇒ nối *«Còn nữa: trong 7 ngày ấy bạn có nhiều link hơn số trang đang hiện — trang chỉ hiện N link mới nhất. Chừng ấy link trong một tuần là điều bất thường: báo quản trị tổ chức.»*
+4. ~~**`/login` (`mo-thau`)**~~ **[S1.240 / khoản 282]** **~~Bốn~~ [S1.249] Năm trang người mua — `/login` (`mo-thau`), `/tao-thau`, `/nhom-hang`, `/chinh-sach`, `/du-lieu` — qua một module `/lib/dang-nhap.js`** vẽ, ngay sau khi vào hay sau «Tiếp tục với phiên này», mỗi link một dòng — «Link lúc X» → «đã dùng lúc Y» / «hết hạn lúc Y, chưa dùng» / «còn hiệu lực tới Y, chưa dùng» — kèm câu *một link «đã dùng» vào lúc không phải bạn đăng nhập nghĩa là người khác đã dùng link của bạn — đăng xuất và báo ngay cho quản trị tổ chức*. Khối là trợ giúp, không phải cổng: máy chủ từ chối hay mất mạng ⇒ ẩn, các bước vẫn mở; về bước 1 ⇒ ẩn và rỗng; phản hồi về muộn bị bỏ. **[S1.240 / khoản 268]** Câu của khối nói cửa sổ 7 ngày ở mọi lần; thân mang `truncated: true` ⇒ nối *«Còn nữa: trong 7 ngày ấy bạn có nhiều link hơn số trang đang hiện — trang chỉ hiện N link mới nhất. Chừng ấy link trong một tuần là điều bất thường: báo quản trị tổ chức.»*
 5. **Không migration, không đổi quyền CSDL.**
 
 ### Phương án đã cân nhắc
@@ -10161,7 +10166,7 @@ duyệt lỗi, hay cố ý). Tức một bên ngoài chọn được kích thư�
 
 - Bề mặt người mua có thêm một route đọc; MCP có thêm một dòng KHÔNG PHƠI; barrel `identity` có thêm một symbol (danh sách trắng theo).
 - ~~Danh sách cắt ở 20 hàng, không theo thời gian: một người bị phát mã dày (5 tự phục vụ + 2 hệ thống mỗi 15 phút) đẩy một link «đã dùng» cũ hơn ~43 phút ra khỏi danh sách — khoản 268.~~ **[S1.240 / khoản 268]** Danh sách cắt theo thời gian (7 ngày) với trần 100 hàng, và nói khi trần cắt; nó KHÔNG phân trang — người bị phát ≥ 100 link trong 7 ngày (tự phục vụ: chừng 5 giờ phát dày, và `/auth/link` là route vô danh) thấy «còn nữa» mà không thấy phần bị cắt; link «đã dùng» cũ hơn 7 ngày không hiện, có chủ đích (§S1.240 mục 7).
-- ~~Chỉ `/login` có khối; ba trang người mua kia cùng ranh giới với khoản 282.~~ **[S1.240 / khoản 282]** Bốn trang người mua có khối, từ một module; `/du-lieu` (S4.2b) chưa có — khoản 291. Phản hồi `/auth/redeem` về muộn sau khi thẻ đổi mã vẫn gắn cho mã mới — khoản 292.
+- ~~Chỉ `/login` có khối; ba trang người mua kia cùng ranh giới với khoản 282.~~ **[S1.240 / khoản 282]** Bốn trang người mua có khối, từ một module; ~~`/du-lieu` (S4.2b) chưa có — khoản 291. Phản hồi `/auth/redeem` về muộn sau khi thẻ đổi mã vẫn gắn cho mã mới — khoản 292.~~ **[S1.249]** `/du-lieu` là trang thứ năm (291 đóng); phản hồi `/auth/redeem` của lượt đã qua bị bỏ (292 đóng); phản hồi `/auth/totp` về muộn — khoản 310.
 
 ### Đo
 

@@ -66,4 +66,29 @@ describe("[ADR-070] docCauHinh — public-keys", () => {
       expect((e as Error).message).not.toContain(giaTri);
     }
   });
+
+  // [S1.249 / kid] Phía CÔNG BỐ cùng tập với phía phát hành (`assertReceiptKid`): kid biên nhận thành tên đối tượng S3 khi job
+  // neo neo tài liệu khoá mà tiến trình này phát (`khoa-bien-nhan/<kid>.json`, tập `[A-Za-z0-9._-]`) — một kid công bố được
+  // thì neo được. Định dạng biên nhận vẫn cho `:` (ca "định dạng không đổi" ở `packages/bidding/src/receipt.test.ts`).
+  it("[S1.249 / kid] kid có `:` — khoá đang dùng hay một khoá CŨ trong danh sách — bị từ chối lúc khởi động, thông điệp nêu tên biến và tập ký tự", () => {
+    const cacCa: Record<string, string | undefined>[] = [
+      { TRUSTPROCURE_RECEIPT_PUBLIC_KEYS: JSON.stringify({ "kms:2027-01": b64(K2.publicKey) }), TRUSTPROCURE_RECEIPT_ACTIVE_KID: "kms:2027-01" },
+      { TRUSTPROCURE_RECEIPT_PUBLIC_KEYS: JSON.stringify({ "kms:2026-09": b64(K1.publicKey), "kms-2027-01": b64(K2.publicKey) }) },
+    ];
+    for (const ca of cacCa) {
+      let loi: unknown;
+      try {
+        docCauHinh(envHopLe(ca));
+      } catch (e) {
+        loi = e;
+      }
+      expect(loi, JSON.stringify(ca)).toBeInstanceOf(CauHinhError);
+      const msg = (loi as Error).message;
+      expect(msg).toContain("TRUSTPROCURE_RECEIPT_PUBLIC_KEYS");
+      expect(msg).toContain("[A-Za-z0-9._-]");
+      expect(msg, "không vọng lại kid bị từ chối").not.toMatch(/kms:20/u);
+    }
+    // Đối chứng: cùng hai khoá với `-` thay `:` ⇒ nhận (ca đầu tệp).
+    expect([...docCauHinh(envHopLe()).publicKeys.keys()]).toEqual(["kms-2026-09", "kms-2027-01"]);
+  });
 });

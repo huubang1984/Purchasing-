@@ -127,4 +127,17 @@ describe("[ADR-011] bộ ký biên nhận aws-kms", () => {
     expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: " ", kid: "k1" })).toThrow(ReceiptError);
     expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid: "kid\nalg=HMAC" })).toThrow(ReceiptError);
   });
+
+  // [S1.249 / kid] Phía phát hành hẹp hơn định dạng: kid biên nhận thành tên đối tượng S3 khi job neo neo tài liệu khoá
+  // (`taiLieuMotKhoa`, tập `[A-Za-z0-9._-]`). Định dạng vẫn cho `:` — ca "định dạng không đổi" ở `receipt.test.ts`.
+  it("[S1.249 / kid] kid có `:` bị từ chối lúc DỰNG bộ ký aws-kms — trước lời gọi KMS nào — và thông điệp nêu tập ký tự", () => {
+    const kms = new KmsKyGia();
+    for (const kid of ["kms:2026-09", "arn:kid", ":"]) {
+      expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid }), kid).toThrow(ReceiptError);
+      expect(() => createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid }), kid).toThrow("[A-Za-z0-9._-]");
+    }
+    expect(kms.lenh, "từ chối lúc dựng: không lệnh KMS nào đã gửi").toEqual([]);
+    // Đối chứng: giá trị mặc định của `receipt_kid` (stack 50) đi qua.
+    expect(createAwsKmsReceiptSigner({ client: kms, keyId: KEY_ID, kid: "kms-2026-09" }).activeKeyId).toBe("kms-2026-09");
+  });
 });
