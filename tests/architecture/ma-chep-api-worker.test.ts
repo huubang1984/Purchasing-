@@ -193,6 +193,17 @@ const BANG_TEN: readonly HangTen[] = [
       "năm `docCauHinh` (hàng `docCauHinh`), mỗi điểm vào `instanceof` lớp của CHÍNH app (hàng `moTaLoi`); năm bản trùng từng ký tự.",
   },
   {
+    ten: "moiTruongSach",
+    loai: "function",
+    tep: ["tools/gieo-demo/src/goi-da-mo.ts", `${PILOT}cum.ts`],
+    xuLy: "GIU",
+    doLuong: "VAN_BAN",
+    lyDo: "[S1.9101 / S4.4b] Môi trường SẠCH của tiến trình con: bỏ mọi `TRUSTPROCURE_*`, `PG*`, `DATABASE_URL` của người gọi để URL " +
+      "đặc quyền của công cụ không đi xuống worker. `gieo:demo` bật worker THẬT cho ba gói đã mở (chủ dự án chốt 2026-10-01: không nới " +
+      "G1/G8), `pilot-gia-lap` bật cả cụm; hai công cụ dev độc lập, không phụ thuộc nhau. Hai bản trùng từng ký tự — cổng giữ đúng thế: " +
+      "một bộ lọc nới ở một bản là một URL đặc quyền đi xuống tiến trình con.",
+  },
+  {
     ten: "VongBiMat",
     loai: "interface",
     tep: [CAU_HINH_API, CAU_HINH_WORKER],

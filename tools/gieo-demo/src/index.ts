@@ -49,9 +49,10 @@
 // hơn; một câu mà cổng đọc được ĐÚNG NHƯ NÓ CHẠY thì đáng hơn.
 // ==============================================================================================
 
-import { randomBytes } from "node:crypto";
+import { createPrivateKey, createPublicKey, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { ReceiptSigningKeyRing, createLocalDevReceiptSigner, type ReceiptKeyPair, type ReceiptSigner } from "@trustprocure/bidding";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
 import { chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
@@ -71,6 +72,7 @@ import {
 import { issueRfqKeyPair } from "@trustprocure/sealed-envelope";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import { BAC_DEMO, MUC_DEMO } from "./chinh-sach-demo.js";
+import { chayWorkerToiKhiMo, gieoBaGoiDaDieuPhoi, type NhaCungCapGieo } from "./goi-da-mo.js";
 
 const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 
@@ -103,6 +105,33 @@ function docVongKhoa(): MasterKeyRing {
   }
   if (!Object.hasOwn(keys, active)) throw new GieoError("TRUSTPROCURE_MASTER_KEY_ACTIVE: không có trong TRUSTPROCURE_MASTER_KEYS");
   return new MasterKeyRing(active, keys);
+}
+
+/**
+ * [S1.9101 / S4.4b] Bộ ký biên nhận — CÙNG hai biến, cùng định dạng `<kid>=<base64 PKCS8 DER>,...` với `apps/api/src/cau-hinh.ts`:
+ * biên nhận của ba gói đã mở (`goi-da-mo.ts`) ký bằng đúng khoá `api` công bố, nên kiểm chứng được như mọi biên nhận khác.
+ */
+function docBoKyBienNhan(): ReceiptSigner {
+  const tho = bat("TRUSTPROCURE_RECEIPT_SIGNING_KEYS");
+  const active = bat("TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE");
+  const keys: Record<string, ReceiptKeyPair> = {};
+  for (const muc of tho.split(",")) {
+    const m = muc.trim();
+    if (m === "") continue;
+    const dau = m.indexOf("=");
+    if (dau <= 0) throw new GieoError("TRUSTPROCURE_RECEIPT_SIGNING_KEYS: mỗi mục phải có dạng <kid>=<base64 PKCS8>");
+    const der = Buffer.from(m.slice(dau + 1).trim(), "base64");
+    let rieng;
+    try {
+      rieng = createPrivateKey({ key: der, format: "der", type: "pkcs8" });
+    } catch {
+      throw new GieoError(`TRUSTPROCURE_RECEIPT_SIGNING_KEYS: khoá "${m.slice(0, dau).trim()}" không đọc được theo PKCS8 DER`);
+    }
+    const congKhai = createPublicKey(rieng).export({ format: "der", type: "spki" });
+    keys[m.slice(0, dau).trim()] = { privateKey: new Uint8Array(der), publicKey: new Uint8Array(congKhai) };
+  }
+  if (!Object.hasOwn(keys, active)) throw new GieoError("TRUSTPROCURE_RECEIPT_SIGNING_ACTIVE: không có trong TRUSTPROCURE_RECEIPT_SIGNING_KEYS");
+  return createLocalDevReceiptSigner(new ReceiptSigningKeyRing(active, keys));
 }
 
 const HANG_MUC: readonly { readonly mo: string; readonly sl: string; readonly dvt: string }[] = [
@@ -183,6 +212,11 @@ const S3 = process.argv.slice(2).includes("--s3");
 async function chinh(): Promise<void> {
   const url = bat("TRUSTPROCURE_SEED_DATABASE_URL");
   const vong = docVongKhoa();
+  // [S1.9101 / S4.4b] Ba gói đã mở đi qua worker THẬT: worker kết nối bằng vai đăng nhập của CHÍNH nó (`app_unseal_login`), không
+  // bằng URL đặc quyền của công cụ; biên nhận ký bằng khoá của `api`. Đọc cả ba TRƯỚC khi gieo gì — thiếu thì dừng sớm, không để lại
+  // một tổ chức dở dang.
+  const urlWorker = bat("TRUSTPROCURE_SEED_WORKER_DATABASE_URL");
+  const boKy = docBoKyBienNhan();
   const gocWeb = process.env.TRUSTPROCURE_WEB_BASE?.trim() ?? "http://127.0.0.1:8090";
   const duoi = randomBytes(3).toString("hex");
   // Số điện thoại phải là SỐ: ràng buộc `supplier_contacts_phone_check` của 008 bác đuôi hex, và
@@ -270,6 +304,7 @@ async function chinh(): Promise<void> {
     // phán người ghi như ở màn.
     const phienDuLieu = nguoiMua.find((n) => n.email.startsWith("dulieu."))?.sessionId;
     if (phienDuLieu === undefined) throw new GieoError("thiếu người quản lý dữ liệu");
+    const hangChuanTheoMa = new Map<string, string>();
     await withTenant(pool, org, async (c) => {
       for (const h of HANG_CHUAN_DEMO) {
         const moi = await taoHangChuan(c, org, {
@@ -280,6 +315,7 @@ async function chinh(): Promise<void> {
           thuocTinhTrongYeu: h.thuocTinhTrongYeu,
           actorSessionId: phienDuLieu,
         });
+        hangChuanTheoMa.set(h.ma, moi.id);
         if (h.biDanh !== null) await khaiBiDanhHang(c, org, { hangChuanId: moi.id, biDanh: h.biDanh, actorSessionId: phienDuLieu });
         await khaiQuyDoiRieng(c, org, {
           hangChuanId: moi.id,
@@ -351,8 +387,8 @@ async function chinh(): Promise<void> {
     // [S1.190 / S3.2c1 / K4a · K4b · K6] Nhà cung cấp, người liên hệ và lời mời. Tổ chức đã bật S3 mời ở DRAFT — TRƯỚC khi nộp
     // duyệt —, vì chữ ký duyệt gói mang băm của danh sách mời lúc ký (K4b) và gói chỉ mở khi người ký ký đúng danh sách ấy; lời mời
     // là `UNSENT`, KHÔNG token (K6). Tổ chức chưa bật giữ thứ tự MVP1: mời sau khi mở, token ngay lúc mời.
-    const taoNccVaMoi = async (c: pg.PoolClient): Promise<{ readonly ten: string; readonly invitationId: string }[]> => {
-      const daMoi: { readonly ten: string; readonly invitationId: string }[] = [];
+    const taoNccVaMoi = async (c: pg.PoolClient): Promise<(NhaCungCapGieo & { readonly invitationId: string })[]> => {
+      const daMoi: (NhaCungCapGieo & { readonly invitationId: string })[] = [];
       for (const [i, ten] of [...NHA_CUNG_CAP, ...(S3 ? NHA_CUNG_CAP_THEM_S3 : [])].entries()) {
         const ncc = (await c.query<{ id: string }>(
           "INSERT INTO public.suppliers (org_id, legal_name, created_by, created_by_session_id) VALUES ($1, $2, $3, $4) RETURNING id",
@@ -370,11 +406,13 @@ async function chinh(): Promise<void> {
           linkChannel: "EMAIL",
           actorSessionId: phienGieo,
         }, pool);
-        daMoi.push({ ten, invitationId: lm.id });
+        daMoi.push({ ten, supplierId: ncc, contactId: lh, invitationId: lm.id });
       }
       return daMoi;
     };
     const moiTruocKhiKy = S3 ? await withTenant(pool, org, taoNccVaMoi) : [];
+    /** [S1.9101 / S4.4b] Nhà cung cấp của gói chính — ba người đầu được mời lại ở ba gói đã mở. */
+    const nhaCungCapGoiChinh: NhaCungCapGieo[] = [...moiTruocKhiKy];
 
     await pool.query(
       "UPDATE public.rfq_packages SET status = 'PENDING_APPROVAL', submitted_by = $2, submitted_by_session_id = $3 " +
@@ -432,6 +470,7 @@ async function chinh(): Promise<void> {
         return;
       }
       for (const lm of await taoNccVaMoi(c)) {
+        nhaCungCapGoiChinh.push(lm);
         const t = await issueMagicLinkToken(c, org, { invitationId: lm.invitationId, actorSessionId: phienGieo });
         loiMoi.push({ ten: lm.ten, token: t.token });
       }
@@ -489,6 +528,46 @@ async function chinh(): Promise<void> {
         })()
       : [];
 
+    // [S1.9101 / S4.4b] Ba gói đã mở niêm phong qua đường thật (`goi-da-mo.ts`), để lịch sử giá của ba hàng chuẩn có quan sát.
+    const nguoi = (dau: string): { readonly id: string; readonly sessionId: string } => {
+      const n = nguoiMua.find((x) => x.email.startsWith(dau));
+      if (n === undefined) throw new GieoError(`thiếu người ${dau}`);
+      return n;
+    };
+    const buLong = hangChuanTheoMa.get("BU-LONG-NEO-M24-8.8");
+    if (buLong === undefined) throw new GieoError("thiếu hàng chuẩn bu lông neo");
+    const nhomDaMo = S3
+      ? (await withTenant(pool, org, (c) =>
+          taoNhomHang(c, org, { ma: "DA-MO", ten: "Vat tu cac goi da mo", actorSessionId: nguoi("taichinh1.").sessionId }, pool),
+        )).id
+      : null;
+    const daMo = await gieoBaGoiDaDieuPhoi({
+      pool,
+      org,
+      duoi,
+      vong,
+      boKy,
+      s3: S3,
+      nhomHang: nhomDaMo,
+      soan: nguoi("soan."),
+      soan2: nguoi("soan2."),
+      duyet1: nguoi("duyet1."),
+      duyet2: nguoi("duyet2."),
+      duLieu: nguoi("dulieu."),
+      nhaCungCap: nhaCungCapGoiChinh.slice(0, 3),
+      dong: [
+        { mo: HANG_MUC[0]!.mo, dvt: HANG_MUC[0]!.dvt, donGiaGoc: 12_500_000 },
+        { mo: HANG_MUC[1]!.mo, dvt: HANG_MUC[1]!.dvt, donGiaGoc: 265_000 },
+        { mo: HANG_MUC[2]!.mo, dvt: HANG_MUC[2]!.dvt, donGiaGoc: 48_000 },
+      ],
+      anhXaTay: { lineNo: 3, hangChuanId: buLong },
+    });
+    await chayWorkerToiKhiMo(pool, org, daMo.map((g) => g.rfqId), {
+      databaseUrl: urlWorker,
+      masterKeys: bat("TRUSTPROCURE_MASTER_KEYS"),
+      masterKeyActive: bat("TRUSTPROCURE_MASTER_KEY_ACTIVE"),
+    });
+
     const tokenNguoiMua: { readonly email: string; readonly token: string }[] = [];
     for (const nm of nguoiMua) {
       const kq = await withTenant(pool, org, (c) => issueLoginToken(c, org, { email: nm.email }));
@@ -528,6 +607,12 @@ async function chinh(): Promise<void> {
         ra.push(`  ${nm.email.padEnd(24)} ${gocWeb}/chinh-sach#${org}:${nm.token}`);
       }
     }
+    ra.push("");
+    ra.push("LỊCH SỬ GIÁ (S4.4b) — ba gói đã mở niêm phong qua đường thật (niêm phong, nộp, đóng, mở thầu, worker giải mã), ba nhà");
+    ra.push("  cung cấp mỗi gói, mỗi gói ba dòng nối với ba hàng chuẩn ở trên. Chưa có màn (S4.5): người giữ bid.view đọc qua API");
+    ra.push("  GET /items/<hàng chuẩn>/price-history; người quản lý dữ liệu không giữ bid.view nên bị từ chối (L3).");
+    for (const g of daMo) ra.push(`  ${g.tieuDe.padEnd(24)} ${g.rfqId}`);
+    for (const [ma, id] of hangChuanTheoMa) ra.push(`  ${ma.padEnd(24)} ${id}`);
     if (chiaNho.length > 0) {
       ra.push("");
       ra.push("TÍN HIỆU CHIA NHỎ (K10a) — nhóm hàng THEP-TAM: soan tạo và nộp ba gói 480 / 470 / 490 triệu trong cửa sổ 30 ngày, mỗi gói");

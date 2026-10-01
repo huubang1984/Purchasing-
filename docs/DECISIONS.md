@@ -10819,3 +10819,88 @@ chức cho chuỗi `"t"` trỏ mã khác sẽ giải SAI gốc của hàng chu�
 `t`, tiền tệ của gói không ngân sách, phiên khách và tổ chức khác, gói X không thấy chính nó, ánh xạ/bí danh/quy đổi/phiên bản tại mốc
 với hai nhãn, băm hiện tại, hai nhánh trùng khít, tập hàm chạm bản rõ); `tests/architecture/ban-ro-liet-ke.test.ts`; hiệu năng:
 `tools/do-lich-su-gia`. Đột biến và lượt soi đối kháng: §S1.235.
+
+---
+
+## ADR-9201 — S4.4b: đường đọc lịch sử giá `GET /items/:itemId/price-history` (cổng `bid.view` trong hàm, một hàng sổ mỗi lần đọc, `agent: false`); bộ quét giá chung trên bốn loại quan hệ, có kim đơn giá; ba gói đã mở của `gieo:demo` qua worker thật
+
+**Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-01, cả bốn theo đề xuất: ⑴ phản hồi trả
+MỌI quan sát của hàng chuẩn kèm `trangThai`, `hoiTo`, `sauMoc`, cộng số đếm theo trạng thái; chỉ `supplierId`, không tên nhà cung cấp,
+không `payload`; mốc = `now()`, không `?moc=`, không phân trang; ⑵ không màn ở S4.4b (màn là việc của S4.5, `/mo-thau`); sổ: hành động
+`PRICE_HISTORY_READ`, payload `{itemId, soQuanSat, viewedBySessionId}` — không giá; ⑶ BỐN bộ quét giá (không phải năm — đo dưới) nhận
+kim đơn giá và quét cả view, materialized view, kèm đối chứng dương trên đối tượng dựng lúc chạy; `db/unique-oracle.int` giữ nguyên;
+⑷ ba gói đã mở của `gieo:demo` qua worker THẬT chạy làm tiến trình con, không nới hàng rào giải mã · **[S1.9101]** · **Liên quan:**
+ADR-136 (ba hàm của lịch sử giá, L5), ADR-095 (hàm as-of, không bảng thứ ba), ADR-102 (`COMPARISON_VIEWED` — hàng sổ trên chính giao
+dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`), ADR-039 (`agent`), ADR-054, ADR-044 (`gieo:demo`), ADR-006/062 (G1)
+· **Spec:** S4 §4.5, §3.5, §2.1, §2.5 ⒅ ㉑, §5.1 L6, §9 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — năm phép đo trước khi viết
+
+1. **Bộ quét thứ năm không phải bộ quét giá.** Spec §2.1 kê năm tệp dùng `relkind IN ('r', 'p')`. `db/unique-oracle.int.test.ts` đọc
+   `relkind` để liệt kê bảng có `org_id` rồi dò ORACLE qua chỉ mục duy nhất (H14) — không kim, không giá. View không có chỉ mục,
+   materialized view thì `app_api` không ghi được, nên nới tập của nó không đo gì. Bốn bộ còn lại (kịch bản 41 qua HTTP và không
+   qua HTTP, `unseal-worker.int`, `luot-danh-gia.int`) chép cùng một vòng lặp.
+2. **Hôm nay không có view hay materialized view nào.** Trên cây `f0e7eef` sau `migrate()`: `public` có 58 quan hệ `r`, 0 `p`, 0 `v`,
+   0 `m`; không quan hệ nào ngoài `public`. Nới tập không lật một kết quả nào — nó đóng chỗ hở cho đối tượng dựng lúc chạy, thứ mục
+   (C) `CAU_DOC_VONG` của hardening không thấy.
+3. **Bộ quét route mù với đơn giá.** Đơn giá của `quan_sat_gia` là thương của một phép chia `numeric`; Postgres 16 in
+   `9300000.000000000000` (đo). `rutSo` của kịch bản 41 đọc mỗi mẩu số theo hai cách — bỏ mọi dấu phân cách, hay bỏ hai chữ số lẻ cuối —
+   và cả hai ra 19 chữ số, vượt trần 15: mẩu ấy bị bỏ qua. Một lịch sử giá trả nguyên đơn giá đi qua bộ quét không một dòng đỏ.
+4. **`requirePermission` chỉ nhận `resourceType` viết hoa** (`^[A-Z][A-Z0-9_]{0,63}$` — nó đi vào chuỗi băm của sổ). Tám route ghi
+   của `/du-lieu` dùng `CANONICAL_ITEM`; hàng `ITEM_CREATED` dùng `canonical_item`.
+5. **Hai cổng QT3 đọc `packages/test-support`** (mọi tệp `src/` không phải test); cổng `PREPARE` thay mỗi chỗ nội suy bằng một số
+   nguyên, nên một câu `FROM public.${ten}` thành `FROM public.1` — hỏng cú pháp. Và hàng rào G1/G8 chỉ cho `apps/unseal-worker`
+   chạm cửa giải mã: `tools/gieo-demo` không gọi được `executeUnsealRequest`.
+
+### Quyết định
+
+1. **Bộ đọc `docLichSuGia(client, org, {itemId, actorSessionId}, auditPool)`** (`packages/du-lieu-nen/src/lich-su-gia.ts`), rổ
+   `HAM_DOC_CO_QUYEN`: cổng `bid.view` TRONG hàm, TRƯỚC phép hỏi hàng chuẩn có tồn tại (người không giữ quyền không dò được); hàng
+   chuẩn không có trong tổ chức ⇒ `null` ⇒ 404; đọc `quan_sat_gia(now(), itemId)` — LUÔN có `p_hang_chuan` (đọc hết tổ chức 84–88 s,
+   ADR-136 ⑧); hàng sổ `PRICE_HISTORY_READ` ghi trên CHÍNH `client` sau mọi câu đọc — ghi hỏng thì NÉM và không gì đi ra (khuôn
+   ADR-102). **`resourceType` là `CANONICAL_ITEM` ở cả hàng từ chối lẫn hàng đọc** — phương án chủ dự án chốt viết `canonical_item`
+   (theo `ITEM_CREATED`); phép đo ④ buộc chữ hoa cho hàng từ chối, và hai hàng của cùng một tài nguyên dùng một mã. Đây là một lệch chữ
+   so với phương án đã chốt, nói ra ở đây và ở biên bản.
+2. **Route `GET /items/:itemId/price-history`** (`apps/api/src/routes/lich-su-gia.ts`): `audience: "BUYER"`, `agent: false`, khai ở
+   `ROUTE_DOC_KHONG_PHOI` của `apps/mcp`; bộ đọc tham số dùng chung `itemIdParam` của `routes/du-lieu.ts`. Phản hồi
+   `{lichSuGia: {itemId, moc, quanSat[], soTheoTrangThai}}`; mỗi quan sát mang `rfqId, supplierId, bidVersionId, lineNo, ngayQuanSat,
+   anhXaId, thanhTien, soLuong, donVi, donGia, donViGoc, heSo, donGiaQuyDoi, tienTe, trangThai, hoiTo, sauMoc` — số là CHUỖI thập phân
+   của SQL. `canonical_item_id` không trả: nó bằng `itemId` ở mọi hàng. `CHUA_ANH_XA` không bao giờ xuất hiện (nhánh lọc theo hàng
+   chuẩn chỉ đọc dòng ĐÃ nối với nó); `soTheoTrangThai` vẫn mang đủ sáu khoá.
+3. **Bộ quét giá chung `quetGiaMoiQuanHe(pool, kim)`** (`packages/test-support/src/quet-gia.ts`): `relkind` ∈ {`r`, `p`, `v`, `m`},
+   schema `public`, MỘT câu — tên quan hệ dựng phía máy chủ bằng `format('%I')` trong `query_to_xml`, nên câu `PREPARE` được; cùng
+   ngữ nghĩa với bốn bản chép (`LIKE` trên `t::text`, dưới vai pool người gọi). Materialized view chưa nạp làm câu NÉM. Bốn bộ quét gọi
+   nó; mỗi bộ thêm một kim ĐƠN GIÁ mang dấu `.` (hex không có; thời điểm chỉ có hai chữ số trước dấu chấm) và đòi tập của kim ấy là
+   `["rfq_unsealed_bids"]` — lượt chấm đọc tổng và không để lại đơn giá. Đối chứng dương: tệp test của bộ quét dựng bảng, bảng cha
+   phân mảnh, view, materialized view chứa kim; bước 14 của kịch bản 41 qua HTTP dựng một materialized view lúc chạy chép `lines` ra.
+4. **`rutSo` đọc thêm số thập phân dài** (giá trị số, làm tròn tới đồng), và kịch bản 41 qua HTTP có bộ dò ĐƠN GIÁ `quetDonGia`.
+5. **Kịch bản 41 qua HTTP mang dòng, hàng chuẩn và ánh xạ thật:** phong bì `{totalAmount, currency, nhaCungCap, lines:[{lineNo,
+   unitPrice, amount}]}` như trình duyệt dựng; người quản lý dữ liệu (đăng nhập qua HTTP) khai hàng chuẩn, bí danh đúng mô tả dòng và
+   quy đổi riêng tấm → kg TRƯỚC lần nộp, nên lượt chuẩn hoá sau commit của lần nộp nối dòng `TU_DONG` — lịch sử không mang nhãn hồi
+   tố. L6 đo ở bốn trạng thái của gói, ở cả hai luồng (MVP1, S3): `UNSEALED` (người giữ `bid.view` THẤY năm đơn giá vị thế cuối, một
+   hàng sổ; người quản lý dữ liệu 403; phiên khách không 200; 404 cho hàng không có), `BAFO_OPEN` và `BAFO_CLOSED` (0 quan sát của gói,
+   không đơn giá nào), `BAFO_UNSEALED` (đơn giá BAFO của top-2, vòng một của ba người kia). Ba lượt quét route hỏi `:itemId` là hàng
+   chuẩn THẬT.
+6. **`gieo:demo`: ba gói đã mở qua đường gói thật** (`tools/gieo-demo/src/goi-da-mo.ts`) — tạo gói, ngân sách, ba dòng (mô tả trùng
+   ba dòng của gói demo, ba nhà cung cấp đầu của gói demo), lời mời (ở DRAFT với `--s3`), nộp duyệt, lượt chuẩn hoá sau nộp, ánh xạ
+   tay dòng bu lông neo bởi người quản lý dữ liệu, một chữ ký, mở gói kèm cặp khoá; nhà cung cấp đi link → OTP → phiên khách, niêm
+   phong bằng khoá công khai của gói, nộp lấy biên nhận đã ký; đóng sớm có lý do; yêu cầu mở thầu, duyệt, điều phối qua cổng bốn vế;
+   rồi `apps/unseal-worker/src/main.ts` chạy làm tiến trình con với môi trường SẠCH (khuôn `pilot-gia-lap`, hàm `moiTruongSach` khai
+   GIU ở bảng kiểm kê mã chép) tới khi ba gói `UNSEALED`. Ba gói dưới ngưỡng kép, tổng ngân sách dưới cận 100 triệu; với `--s3`, một
+   nhóm hàng RIÊNG — chung nhóm với gói 9 tỷ hay vượt cận ấy sẽ bắn tín hiệu chia nhỏ (K10a) chặn gói thứ ba. Hai biến môi trường mới
+   bắt buộc: `TRUSTPROCURE_SEED_WORKER_DATABASE_URL` (`app_unseal_login`, không phải URL đặc quyền) và cặp
+   `TRUSTPROCURE_RECEIPT_SIGNING_KEYS`/`_ACTIVE` của `api` (biên nhận kiểm chứng được như mọi biên nhận khác); đọc cả ba TRƯỚC khi gieo.
+
+### Hệ quả và giới hạn nói ra
+
+- **Một vòng BAFO đang mở rút CẢ gói khỏi lịch sử**, không chỉ vòng hai: `gia_da_lo` (ADR-136 ③) đòi mọi vòng mở trước mốc đã mở niêm
+  phong. Vị thế cuối của top-2 chưa biết, nên không quan sát nào của gói là vị thế cuối. Kịch bản 41 ghim điều ấy ở `BAFO_OPEN`.
+- **Mốc `now()` không đo được bằng một đột biến**: đọc tại `'infinity'` cho cùng kết quả trên dữ liệu đã commit — không hàng nền nào
+  ghi sau `now()` của giao dịch đọc. Tương đương, nói ra (§S1.9101).
+- **Lượt quét route hỏi hàng chuẩn thật, nhưng vế ấy không có khẳng định riêng** — trả về UUID giả thì lượt quét vẫn xanh (404). Lời
+  khai L6 dựa vào bốn ca `[INV-L6]` hỏi thẳng route, không vào lượt quét.
+- **Bộ quét chỉ đọc schema `public`** — như bốn bản chép cũ; hôm nay không quan hệ nào ở schema khác.
+- **`gieo:demo` không có test tự động**: đo tay cả hai chế độ trên một cụm Postgres 16 mới (biên bản §S1.9101 mục 5). Bộ OTP của ba gói
+  dùng một vòng pepper RIÊNG của lượt gieo — mã phát và mã đối chiếu cùng tiến trình, phiên khách dùng một lần rồi gói đóng.
+- **Không phân trang**: giới hạn hiệu năng của ADR-136 ⑧ (p95 dưới ngưỡng giả định 500 ms tới ~1.200 quan sát mỗi lần đọc) là giới
+  hạn của route. S4.5 đo lại trên dữ liệu pilot.

@@ -176,6 +176,11 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "hàng chuẩn và lý do. Cùng lý do với `/mapping-queue`: ánh xạ là khoá của lịch sử giá, và chủ dự án chốt ngày 2026-09-30 " +
     "chưa mở nó cho một tác tử. Người soạn gói đọc nó trên màn `/tao-thau`. Route khai `agent: false` và dòng này khai vì sao. " +
     "[S1.234 / S4.3b]",
+  "/items/:itemId/price-history":
+    "LỊCH SỬ GIÁ CỦA MỘT HÀNG CHUẨN — đơn giá, thành tiền và nhà cung cấp của MỌI gói đã mở niêm phong có dòng nối với hàng ấy, " +
+    "xuyên gói. Cùng hạng tiết lộ với `/rfqs/:rfqId/comparison` và hơn: nó gom giá của nhiều gói vào một lần đọc. Spec S4 §3.5 " +
+    "khai mọi route đọc lịch sử giá, benchmark và mốc ngoài là `agent: false`; cổng `bid.view` và hàng sổ `PRICE_HISTORY_READ` " +
+    "nằm trong `docLichSuGia`. Route khai `agent: false` và dòng này khai vì sao. [S1.9101 / S4.4b]",
   "/auth/login-links":
     "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
     "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +

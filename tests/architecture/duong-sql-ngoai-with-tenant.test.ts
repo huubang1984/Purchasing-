@@ -345,6 +345,13 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     cau: 0,
     lyDo: "hạ tầng test — pg.Client dựng CSDL của cụm thử",
   },
+  "packages/test-support/src/quet-gia.ts": {
+    lay: 0,
+    cau: 1,
+    lyDo:
+      "[S1.9101 / S4.4b] hạ tầng test — bộ quét giá dạng rõ của bốn kịch bản (A3, ADR-054): MỘT câu trên pool CHỦ CỤM người gọi " +
+      "truyền vào, đúng vế *kể cả bằng role quản trị* của A3; nó quét mọi tổ chức nên không có một tenant để đi qua withTenant",
+  },
   "packages/test-support/src/postgres-cuc-bo.ts": {
     lay: 1,
     cau: 0,

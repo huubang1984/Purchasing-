@@ -19,7 +19,7 @@ import { verifyAuditChain } from "@trustprocure/audit";
 import { migrate } from "@trustprocure/db";
 import { DenialAuditFailedError } from "@trustprocure/identity";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { issueRfqKeyPair, sealBid, getRfqPublicKeys } from "@trustprocure/sealed-envelope";
 import { buildComparisonTable, requestUnseal } from "@trustprocure/unseal";
 // [S1.217 / khoản 250] Hai gói cùng đọc phong bì/bản rõ với worker — kịch bản §S1.181 đo cả ba bộ đọc trên MỘT giàn cảnh thật.
@@ -1237,32 +1237,24 @@ describe("[S1.217 / khoản 250] báo giá của lời mời đã thu hồi khô
 // Mốc ở đây có chữ HOA và dấu gạch dưới, hai thứ không bao giờ có trong hex viết thường.
 // ===============================================================================================
 const MOC_GIA = "GIA_BI_MAT_9182736450";
-const TEN_BANG_HOP_LE = /^[a-z_][a-z0-9_]*$/;
+// [S1.9101 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅) — một con số, nhưng mang dấu `.`: hex không bao giờ có nó, và mọi thời điểm của
+// `::text` chỉ có HAI chữ số trước dấu chấm. Bản rõ mang nó như trình duyệt dựng: `lines[].unitPrice`.
+const DON_GIA_MOC = "8273645.19";
+const BAN_RO_MOC = JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA, lines: [{ lineNo: 1, unitPrice: DON_GIA_MOC, amount: "82736451.90" }] });
 
-/** Trả về tên các bảng có chứa `chuoi` ở BẤT KỲ cột nào của BẤT KỲ hàng nào. */
-async function quetRoRi(chuoi: string): Promise<{ dinh: string[]; soBangDaQuet: number }> {
-  const { rows: bang } = await db.pool.query<{ ten: string }>(
-    `SELECT c.relname AS ten
-       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
-      ORDER BY c.relname`,
-  );
-  const dinh: string[] = [];
-  for (const b of bang) {
-    if (!TEN_BANG_HOP_LE.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
-    const { rows } = await db.pool.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`,
-      [chuoi],
-    );
-    if (rows[0]?.n !== "0") dinh.push(b.ten);
-  }
-  return { dinh, soBangDaQuet: bang.length };
+/**
+ * Trả về tên các quan hệ có chứa `chuoi` ở BẤT KỲ cột nào của BẤT KỲ hàng nào. ~~`relkind IN ('r', 'p')`~~ [S1.9101] bộ quét
+ * chung của `@trustprocure/test-support` — bảng, bảng cha phân mảnh, view, materialized view.
+ */
+async function quetRoRi(chuoi: string): Promise<{ dinh: readonly string[]; soBangDaQuet: number }> {
+  const { dinh, soQuanHe } = await quetGiaMoiQuanHe(db.pool, chuoi);
+  return { dinh, soBangDaQuet: soQuanHe };
 }
 
 describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới được bảng nào khác", () => {
   it("[INV-A4] TRƯỚC mở thầu: mốc giá không có mặt ở MỘT bảng nào của schema", async () => {
     const rfqId = await taoRfqMo();
-    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA }));
+    await nopBaoGia(rfqId, BAN_RO_MOC);
     await dongVaXinMoThau(rfqId);
 
     const { dinh, soBangDaQuet } = await quetRoRi(MOC_GIA);
@@ -1270,6 +1262,7 @@ describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới
     // phải một con số ghim — thêm bảng ở S2 không được làm test này đỏ.
     expect(soBangDaQuet, "bộ quét phải nhìn thấy toàn bộ schema").toBeGreaterThan(20);
     expect(dinh, "mốc giá lọt ra ngoài phong bì trước khi mở thầu").toEqual([]);
+    expect((await quetRoRi(DON_GIA_MOC)).dinh, "đơn giá lọt ra ngoài phong bì trước khi mở thầu").toEqual([]);
 
     // ĐỐI CHỨNG DƯƠNG: cùng bộ quét, một chuỗi CÓ THẬT trong dữ liệu, và nó tìm ra.
     const { dinh: coThat } = await quetRoRi("Mua thep tam");
@@ -1285,7 +1278,7 @@ describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới
     // Vế này là đối chứng dương của vế trên ở mức mạnh nhất: nó chứng minh mốc giá THẬT SỰ đã đi
     // vào hệ thống, nên "không tìm thấy ở đâu" phía trên không phải vì gieo hụt.
     const rfqId = await taoRfqMo();
-    await nopBaoGia(rfqId, JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA }));
+    await nopBaoGia(rfqId, BAN_RO_MOC);
     const requestId = await dongVaXinMoThau(rfqId);
     const ketQua = await withTenant(unsealPool, orgA, (c) =>
       executeUnsealRequest(c, orgA, { unsealRequestId: requestId, unwrapper: boMoBocTest }, auditUnsealPool),
@@ -1294,6 +1287,7 @@ describe("[INV-A4] bộ quét rò rỉ — giá gieo vào phong bì không tới
 
     const { dinh } = await quetRoRi(MOC_GIA);
     expect(dinh, "bản rõ chỉ được phép tồn tại ở rfq_unsealed_bids").toEqual(["rfq_unsealed_bids"]);
+    expect((await quetRoRi(DON_GIA_MOC)).dinh, "đơn giá chỉ được phép tồn tại ở rfq_unsealed_bids").toEqual(["rfq_unsealed_bids"]);
   }, 120000);
 });
 

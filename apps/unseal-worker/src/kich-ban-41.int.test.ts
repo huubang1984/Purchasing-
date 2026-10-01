@@ -37,7 +37,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { createSupplier, addSupplierContact } from "@trustprocure/supplier";
 import {
   addRfqItem,
@@ -123,6 +123,15 @@ const NHA_CUNG_CAP = [
 /** Nhà cung cấp thứ tư SỬA GIÁ trước hạn — vế "có sửa giá trước deadline" của kịch bản. */
 const GIA_SUA_LAI = "930000000.00";
 const NGAN_SACH = "1000000000.00";
+/**
+ * [S1.9101 / S4.4b] Phong bì mang `lines` như trình duyệt dựng (`nop-thau.js`, spec S4 §2.5 ⒅): gói có MỘT dòng, 500 tấn, nên
+ * `amount` bằng tổng và `unitPrice` = tổng / 500. Kim ĐƠN GIÁ của bước 14 là đơn giá của bản sửa giá.
+ */
+const SO_LUONG = 500;
+const donGiaCua = (tong: string): string => (Number(tong) / SO_LUONG).toFixed(2);
+const DON_GIA_SUA_LAI = donGiaCua(GIA_SUA_LAI);
+const banRo = (tong: string, ten: string): string =>
+  JSON.stringify({ totalAmount: tong, currency: "VND", nhaCungCap: ten, lines: [{ lineNo: 1, unitPrice: donGiaCua(tong), amount: tong }] });
 
 let db: TestDatabase;
 let apiPool: pg.Pool;
@@ -452,9 +461,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
         rfqId: trangThai.rfqId,
         algorithm: "ECDH_P256",
         recipientPublicKey: p256.publicKey,
-        plaintext: new TextEncoder().encode(
-          JSON.stringify({ totalAmount: lm.gia, currency: "VND", nhaCungCap: lm.ten }),
-        ),
+        plaintext: new TextEncoder().encode(banRo(lm.gia, lm.ten)),
       });
       const bn = await withTenant(apiPool, orgA, (c) =>
         submitBid(c, orgA, {
@@ -517,9 +524,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
       rfqId: trangThai.rfqId,
       algorithm: "ECDH_P256",
       recipientPublicKey: p256.publicKey,
-      plaintext: new TextEncoder().encode(
-        JSON.stringify({ totalAmount: GIA_SUA_LAI, currency: "VND", nhaCungCap: lm.ten }),
-      ),
+      plaintext: new TextEncoder().encode(banRo(GIA_SUA_LAI, lm.ten)),
     });
     const bn2 = await withTenant(apiPool, orgA, (c) =>
       submitBid(c, orgA, {
@@ -700,21 +705,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
   });
 
   it("bước 14 — [A3/A4] sau tất cả, giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng", async () => {
-    // Cùng bộ quét của S1.7, chạy ở cuối một kịch bản THẬT thay vì trên một fixture hai dòng.
-    const { rows: bang } = await db.pool.query<{ ten: string }>(
-      "SELECT c.relname AS ten FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-        " WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY c.relname",
-    );
-    const dinh: string[] = [];
-    for (const b of bang) {
-      if (!/^[a-z_][a-z0-9_]*$/.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
-      const { rows } = await db.pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`,
-        [GIA_SUA_LAI],
-      );
-      if (rows[0]?.n !== "0") dinh.push(b.ten);
-    }
-    expect(bang.length).toBeGreaterThan(20);
+    // Cùng bộ quét của S1.7, chạy ở cuối một kịch bản THẬT thay vì trên một fixture hai dòng. ~~`relkind IN ('r', 'p')`~~
+    // [S1.9101] bộ quét chung (`@trustprocure/test-support`): cả view và materialized view; thêm kim ĐƠN GIÁ.
+    expect(DON_GIA_SUA_LAI).toBe("1860000.00");
+    const { dinh, soQuanHe } = await quetGiaMoiQuanHe(db.pool, GIA_SUA_LAI);
+    expect(soQuanHe).toBeGreaterThan(20);
+    expect((await quetGiaMoiQuanHe(db.pool, DON_GIA_SUA_LAI)).dinh, "đơn giá chỉ ở bảng bản rõ").toEqual(["rfq_unsealed_bids"]);
     expect(dinh).toEqual(["rfq_unsealed_bids"]);
   }, 120000);
 
