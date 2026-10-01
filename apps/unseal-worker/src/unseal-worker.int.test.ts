@@ -968,7 +968,8 @@ async function idTheoThuTuLuong(rfqId: string): Promise<readonly string[]> {
 /**
  * [ADR-129] Câu SUY phần không vào sổ: mọi phong bì (bản cuối mỗi luồng, đúng vòng) của gói mà yêu cầu
  * mở thầu `$1` KHÔNG để lại hàng bản rõ. Tập này là toàn bộ `failedBidVersionIds` — kể cả K id đã ghi —
- * theo cùng thứ tự luồng; `$2` là tổ chức.
+ * theo cùng thứ tự luồng; `$2` là tổ chức. [S1.249 / khoản 298] Bản chép của câu §3 mang cùng vế lời mời còn sống
+ * (`i.revoked_at IS NULL`, ADR-128) như ADR và như worker — khối khoản 275/298 của `kich-ban-41-http.int.test.ts` đo vế ấy.
  */
 const CAU_SUY_PHONG_BI_HONG =
   "SELECT v.id FROM (" +
@@ -977,6 +978,7 @@ const CAU_SUY_PHONG_BI_HONG =
   "    JOIN rfq_invitations i ON i.id = b.invitation_id AND i.org_id = b.org_id" +
   "    JOIN unseal_requests r ON r.rfq_id = i.rfq_id AND r.org_id = i.org_id" +
   "   WHERE r.id = $1 AND v.org_id = $2 AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id" +
+  "     AND i.revoked_at IS NULL" +
   "   ORDER BY v.bid_id, v.version DESC) v" +
   " WHERE NOT EXISTS (SELECT 1 FROM rfq_unsealed_bids u" +
   "   WHERE u.org_id = $2 AND u.unseal_request_id = $1 AND u.bid_version_id = v.id)" +

@@ -1917,15 +1917,18 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 //   ⑵ câu §3 — ĐỌC NGUYÊN VĂN từ `docs/DECISIONS.md` (ADR-129), không chép — trả ĐÚNG 21 id theo thứ tự luồng: 20 đầu bằng
 //      payload, cả 21 bằng mảng đủ trong tiến trình và bằng tập phong bì hỏng đã nộp; chạy dưới superuser (người vận
 //      hành) VÀ trong phiên `app_api` gắn tổ chức — hai nơi ADR-129 §3 nói câu chạy được;
-//   ⑶ ĐỐI CHỨNG vế vòng: cùng câu gỡ vế `IS NOT DISTINCT FROM r.bafo_round_id` trả 23 id — phong bì VÒNG MỘT của người
-//      thứ 23 và của luồng đã thu hồi (dưới), không có hàng bản rõ dưới yêu cầu vòng hai, lọt vào — tức vế ấy CHỊU LỰC ở
-//      vòng BAFO.
+//   ⑶ ĐỐI CHỨNG vế vòng: cùng câu gỡ vế `IS NOT DISTINCT FROM r.bafo_round_id` trả ~~23~~ [S1.249 / khoản 298] 22 id —
+//      phong bì VÒNG MỘT của người thứ 23 ~~và của luồng đã thu hồi (dưới)~~, không có hàng bản rõ dưới yêu cầu vòng hai, lọt
+//      vào — tức vế ấy CHỊU LỰC ở vòng BAFO. [S1.249] Luồng đã thu hồi (dưới) nay bị vế `i.revoked_at IS NULL` của câu §3 loại
+//      trước cả vế vòng.
 // Và một luồng THỨ 24: nộp vòng một rồi bị thu hồi ở `CLOSED`, trước lần mở (ADR-128 cho phép tới lần mở đầu tiên) —
-// worker không mở nó, lượt chấm không thấy nó, nó không vào top-N. Với YÊU CẦU VÒNG MỘT, câu §3 trả ĐÚNG id của luồng ấy
+// worker không mở nó, lượt chấm không thấy nó, nó không vào top-N. ~~Với YÊU CẦU VÒNG MỘT, câu §3 trả ĐÚNG id của luồng ấy
 // dù hai bản ghi sổ vòng một mang `failedCount` 0: câu §3 không mang vế `i.revoked_at IS NULL` của ADR-128 (hai ADR cùng đợt
 // 2, hai lô song song), nên luồng BỊ LOẠI được suy thành phong bì HỎNG. Lỗ kề, ngoài phạm vi khoản 275 (vòng một; ở vòng BAFO
 // luồng đã thu hồi không có phiên bản nào nên vế vòng đã loại nó) — khoản 298, GHIM ở ca cuối để lần sửa ADR-129 §3 đỏ đúng
-// đó.
+// đó.~~ [S1.249 / khoản 298] Câu §3 nay mang vế `i.revoked_at IS NULL` của ADR-128: với YÊU CẦU VÒNG MỘT nó trả 0 id, khớp
+// `failedCount` 0 của hai bản ghi sổ; gỡ vế ấy thì trả đúng id của luồng đã thu hồi (ca cuối — đo trước bản vá: câu cũ trả
+// đúng id ấy, ca ghim ở §S1.243).
 //
 // Hai điểm đồ gá, nói ra: ⒜ cụm test có MỘT địa chỉ người gọi, và `issueOtpChallenge` khoá người gọi sau
 // `OTP_MAX_PER_CALLER` = 10 lần mỗi 15 phút mỗi tổ chức — 24 nhà cung cấp thật đến từ 24 địa chỉ, nên ngay trước mỗi lần
@@ -2220,20 +2223,23 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
     expect(suyApi.map((r) => r.id), "cùng câu trong phiên `app_api` gắn tổ chức (RLS bật)").toEqual(id);
   });
 
-  it("⑶ ĐỐI CHỨNG vế vòng: gỡ `IS NOT DISTINCT FROM r.bafo_round_id` ⇒ 23 id (lọt phong bì VÒNG MỘT của người ngoài top-N và của luồng đã thu hồi) ≠ `failedCount` 21", async () => {
+  it("⑶ ĐỐI CHỨNG vế vòng: gỡ `IS NOT DISTINCT FROM r.bafo_round_id` ⇒ 22 id (lọt phong bì VÒNG MỘT của người ngoài top-N; luồng đã thu hồi bị vế lời mời còn sống loại) ≠ `failedCount` 21", async () => {
     const cau = await cauSuyCuaAdr129();
     const khongVeVong = cau.replace(" AND v.bafo_round_id IS NOT DISTINCT FROM r.bafo_round_id", "");
     expect(khongVeVong, "phép gỡ vế phải thật sự đổi câu").not.toBe(cau);
     const { rows: lech } = await db.pool.query<{ id: string }>(khongVeVong, [st.ycVongBafo, orgA]);
-    expect(lech.map((r) => r.id).sort(), "không vế vòng: 21 hỏng + bản vòng một của người không nộp lại + của luồng đã thu hồi").toEqual(
-      [...st.vBafoHong, st.v1NguoiNgoai, st.v1ThuHoi].sort(),
+    // [S1.249 / khoản 298] Không còn `st.v1ThuHoi`: vế `i.revoked_at IS NULL` của câu §3 loại luồng đã thu hồi dù vế vòng vắng.
+    expect(lech.map((r) => r.id).sort(), "không vế vòng: 21 hỏng + bản vòng một của người không nộp lại").toEqual(
+      [...st.vBafoHong, st.v1NguoiNgoai].sort(),
     );
   });
 
-  it("[S1.243 / khoản 298] GIỚI HẠN ĐÃ ĐO, ghim: ở YÊU CẦU VÒNG MỘT câu §3 trả ĐÚNG id của luồng bị thu hồi trước lần mở — 1 id trong khi hai bản ghi sổ vòng một mang `failedCount` 0", async () => {
-    // Câu §3 không mang vế `i.revoked_at IS NULL` (ADR-128) nên luồng BỊ LOẠI — không mở, không hỏng — được suy thành phong bì
-    // hỏng. Ngoài phạm vi khoản 275 (vòng một): khoản 298, không vá ở đây. Lần sửa ADR-129 §3 làm ca này ĐỎ đúng đây — lật nó.
+  it("[S1.249 / khoản 298] ở YÊU CẦU VÒNG MỘT câu §3 KHÔNG kể luồng bị thu hồi trước lần mở — 0 id, khớp `failedCount` 0 của hai bản ghi sổ; gỡ vế `i.revoked_at IS NULL` ⇒ đúng id của luồng ấy", async () => {
+    // ~~[S1.243] Câu §3 không mang vế `i.revoked_at IS NULL` (ADR-128) nên luồng BỊ LOẠI — không mở, không hỏng — được suy thành
+    // phong bì hỏng.~~ [S1.249] Ca ghim của §S1.243 (câu trả `[st.v1ThuHoi]`) đỏ đúng ở lần sửa ADR-129 §3 và được lật: câu mang
+    // vế lời mời còn sống như worker (`apps/unseal-worker/src/index.ts`), và vế ấy CHỊU LỰC — gỡ nó thì luồng đã thu hồi quay lại.
     const cau = await cauSuyCuaAdr129();
+    expect(cau, "câu §3 phải mang vế lời mời còn sống của ADR-128").toContain("AND i.revoked_at IS NULL");
     const { rows: so } = await db.pool.query<{ payload: PayloadMoThau }>(
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('RFQ_KEY_MATERIAL_UNWRAPPED', 'RFQ_UNSEALED') " +
         " AND payload->>'unsealRequestId' = $2 ORDER BY seq",
@@ -2244,6 +2250,10 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
       [null, SO_NCC, 0],
     ]);
     const { rows: vongMot } = await db.pool.query<{ id: string }>(cau, [st.ycVongMot, orgA]);
-    expect(vongMot.map((r) => r.id), "câu §3 kể luồng đã thu hồi là phong bì hỏng — lệch `failedCount` 0").toEqual([st.v1ThuHoi]);
+    expect(vongMot.map((r) => r.id), "câu §3 ở vòng một: 0 phong bì hỏng — khớp `failedCount` 0").toEqual([]);
+    const khongVeThuHoi = cau.replace(/\n\s*AND i\.revoked_at IS NULL/u, "");
+    expect(khongVeThuHoi, "phép gỡ vế phải thật sự đổi câu").not.toBe(cau);
+    const { rows: lech } = await db.pool.query<{ id: string }>(khongVeThuHoi, [st.ycVongMot, orgA]);
+    expect(lech.map((r) => r.id), "không vế lời mời còn sống: luồng đã thu hồi bị suy thành phong bì hỏng").toEqual([st.v1ThuHoi]);
   });
 });

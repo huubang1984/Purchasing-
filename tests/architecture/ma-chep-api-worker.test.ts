@@ -442,6 +442,22 @@ const BANG_TEN: readonly HangTen[] = [
     lyDo: "Đọc trường chuỗi BẮT BUỘC của thân yêu cầu ⇒ `HttpError(422)` nêu tên trường — hai tệp route cùng hợp đồng, trùng từng ký " +
       "tự. Năm bản cùng tên ở chỗ khác là họ khác (hàng RIENG dưới).",
   },
+  // [S1.249 / kid] Hàng `KID` ~~RIENG (ở nhóm riêng dưới)~~ nay GIU VAN_BAN — dời lên đây theo thứ tự của bảng.
+  {
+    ten: "KID",
+    loai: "const",
+    tep: [CAU_HINH_API, `${PUBLIC_KEYS}cau-hinh.ts`, "tools/neo-so-kiem-toan/src/aws.ts"],
+    xuLy: "GIU",
+    doLuong: "VAN_BAN",
+    lyDo: "~~RIENG — `public-keys`: hình dạng kid biên nhận (`assertReceiptKid` của `@trustprocure/bidding`, cho `:`); job neo: kid làm " +
+      "TÊN ĐỐI TƯỢNG S3 khi neo tài liệu khoá — bỏ `:` có chủ đích. Hệ quả nói ra: một kid hợp lệ mang `:` thì lệnh neo tài liệu khoá " +
+      "NÉM (không im).~~ [S1.249 / kid] Chủ dự án chốt 2026-09-30: phía PHÁT HÀNH và CÔNG BỐ thu hẹp về đúng tập của job neo, trước " +
+      "khi có biên nhận thật nào được ký. Ba bản — kid biên nhận ở cấu hình `api` (`TRUSTPROCURE_KMS_RECEIPT_KID`, tên phiên bản của " +
+      "`TRUSTPROCURE_RECEIPT_SIGNING_KEYS`), kid của tài liệu khoá mà `public-keys` công bố, kid làm tên đối tượng khi job neo neo tài " +
+      "liệu khoá — trùng từng ký tự; cổng giữ thế: một bản nới lại `:` là một kid phát hành hay công bố được mà neo không được. Bản " +
+      "thứ tư là `assertReceiptKid` của `@trustprocure/bidding` (gói — ngoài tầm bộ quét; đo hành vi ở `receipt.test.ts` và " +
+      "`signer-aws-kms.test.ts`). ĐỊNH DẠNG biên nhận (`KID_PATTERN` của `receipt.ts`) vẫn cho `:` — ADR-026 §1.",
+  },
   {
     ten: "ghiKetNoiHuy",
     loai: "const",
@@ -586,16 +602,7 @@ const BANG_TEN: readonly HangTen[] = [
     lyDo: "`api`: lỗi handler ném để bộ điều phối trả mã — `(status, message)`; bộ giả lập: lỗi của MÁY KHÁCH khi api trả mã lạ — " +
       "`(message, status)`. Hai hợp đồng ngược chiều; thứ tự tham số khác nhau.",
   },
-  {
-    ten: "KID",
-    loai: "const",
-    tep: [`${PUBLIC_KEYS}cau-hinh.ts`, "tools/neo-so-kiem-toan/src/aws.ts"],
-    xuLy: "RIENG",
-    doLuong: "KHONG",
-    lyDo: "`public-keys`: hình dạng kid biên nhận (`assertReceiptKid` của `@trustprocure/bidding`, cho `:`); job neo: kid làm TÊN ĐỐI " +
-      "TƯỢNG S3 khi neo tài liệu khoá — bỏ `:` có chủ đích (\"không an toàn cho một tên đối tượng\"). Hệ quả nói ra: một kid hợp lệ " +
-      "mang `:` thì lệnh neo tài liệu khoá NÉM (không im).",
-  },
+  // [S1.249 / kid] ~~Hàng `KID` RIENG (public-keys cho `:`, job neo bỏ `:`)~~ — nay GIU VAN_BAN, ba bản, ở nhóm giữ phía trên.
   {
     ten: "CONG_MAC_DINH",
     loai: "const",
@@ -890,13 +897,17 @@ const BANG_MAU: readonly HangMau[] = [
       "MCP chèn vào URL của api.",
   },
   {
-    mau: "/^[A-Za-z0-9._:-]{1,64}$/u",
-    ten: "nhãn khoá / kid biên nhận (`NHAN_KMS` của `api`; `KID` của `public-keys`)",
-    tep: [CAU_HINH_API, `${PUBLIC_KEYS}cau-hinh.ts`],
+    // [S1.249 / kid] ~~`/^[A-Za-z0-9._:-]{1,64}$/u` — nhãn khoá / kid biên nhận (`NHAN_KMS` của `api`; `KID` của `public-keys`)~~
+    mau: "/^[A-Za-z0-9._-]{1,64}$/u",
+    ten: "kid biên nhận (`KID` của `api`, của `public-keys` và của job neo)",
+    tep: [CAU_HINH_API, `${PUBLIC_KEYS}cau-hinh.ts`, "tools/neo-so-kiem-toan/src/aws.ts"],
     xuLy: "GIU",
-    lyDo: "`KID_PATTERN` của `@trustprocure/bidding` (`assertReceiptKid`): api kiểm nhãn KMS, gồm kid biên nhận " +
+    lyDo: "~~`KID_PATTERN` của `@trustprocure/bidding` (`assertReceiptKid`): api kiểm nhãn KMS, gồm kid biên nhận " +
       "`TRUSTPROCURE_KMS_RECEIPT_KID`; public-keys kiểm kid của tài liệu khoá công khai — một kid api ký được thì public-keys phải " +
-      "phát được. Kid của job neo (hàng `KID` RIENG của BANG_TEN) bỏ `:`.",
+      "phát được. Kid của job neo (hàng `KID` RIENG của BANG_TEN) bỏ `:`.~~ [S1.249 / kid] Tập PHÁT HÀNH của kid biên nhận " +
+      "(`assertReceiptKid` của `@trustprocure/bidding`, không `:`): api ký được thì public-keys công bố được và job neo neo được — ba " +
+      "đơn vị, một literal. Đo văn bản qua hàng `KID` của BANG_TEN. `NHAN_KMS` của `api` (hai nhãn phiên bản khoá, GIỮ `:` — chúng " +
+      "vào AAD và encryption context, không thành tên tệp hay tên đối tượng) nay chỉ ở một đơn vị: không còn hàng.",
   },
   {
     mau: "/^\\d{1,5}$/u",

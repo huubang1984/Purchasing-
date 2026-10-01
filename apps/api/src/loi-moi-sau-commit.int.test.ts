@@ -46,6 +46,16 @@ const MIGRATIONS_DIR = fileURLToPath(new URL("../../../db/migrations", import.me
 const THAN_502_LOI_MOI = { error: "khong gui duoc link moi, loi moi da thu hoi" };
 /** Thân `500` khi cả lần gửi lẫn lần thu hồi bù cùng hỏng — đi kèm `invitationId` (lượt soi 64a-1). */
 const THAN_500_BU_HONG = { error: "khong gui duoc link moi va chua thu hoi duoc loi moi" };
+/**
+ * [S1.249 / khoản 293] Thân `409` của gửi lại link khi gói không nhận báo giá (`RFQ_NOT_ACCEPTING`). Chủ dự án giữ nút *Gửi lại
+ * link* ở mọi trạng thái của tổ chức chưa bật (hợp đồng MVP1 «máy chủ tự từ chối»), nên câu từ chối là thứ người mua ĐỌC —
+ * `/tao-thau` in nguyên văn (`loiCua`). ~~`goi thau khong nhan bao gia`~~ — câu máy, không dấu, không nói khi nào gửi được.
+ */
+const THAN_409_GOI_KHONG_NHAN = {
+  error:
+    "Gói thầu này không nhận báo giá lúc này nên không gửi lại link được — chỉ gửi lại được khi gói đang mở và còn hạn nộp, " +
+    "hoặc khi vòng BAFO đang mở và còn hạn.",
+};
 const TRAN_NGAN_MS = 800;
 
 interface Nguoi {
@@ -867,7 +877,8 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
     );
     const nhap = await goi(gocMacDinh, "POST", `/invitations/${loiNhap.id}/reissue`, nguoiMoi.cookie);
     expect(nhap.status, nhap.body).toBe(409);
-    expect(JSON.parse(nhap.body)).toEqual({ error: "goi thau khong nhan bao gia" });
+    // ~~`{ error: "goi thau khong nhan bao gia" }`~~ [S1.249 / khoản 293] câu người đọc nêu điều kiện gửi lại được.
+    expect(JSON.parse(nhap.body)).toEqual(THAN_409_GOI_KHONG_NHAN);
 
     const taiChinh = await taoNguoi("gl-4-tc-k124@vidu.vn", "FINANCE");
     const { id: idSong } = await moiMot(nguoiMoi);
@@ -950,7 +961,9 @@ describe("[S1.181 / ADR-110] POST /invitations/:invitationId/reissue — gửi l
       const truocToken = await soToken();
       const r = await guiLai();
       expect(r.status, `${ca}: ${r.body}`).toBe(409);
-      expect(JSON.parse(r.body), ca).toEqual({ error: "goi thau khong nhan bao gia" });
+      // [S1.249 / khoản 293] Cùng MỘT câu cho mọi vế (quá hạn gói, quá hạn vòng, không vòng nào mở, gói chưa mở): câu nêu CẢ HAI
+      // điều kiện, không nội suy trạng thái hay hạn — cùng khuôn câu 422 của huỷ mở thầu (`packages/unseal/src/requests.ts`).
+      expect(JSON.parse(r.body), ca).toEqual(THAN_409_GOI_KHONG_NHAN);
       expect(daGui, ca).toHaveLength(truocGui);
       expect(await soToken(), ca).toBe(truocToken);
     };
