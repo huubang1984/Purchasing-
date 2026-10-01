@@ -23437,6 +23437,8 @@ Bản đầu (trên `4d801263`, không đẩy) có mười lăm đột biến kh
 - `pnpm evidence` trên `7b757853`: vitest thoát mã 0, 4437 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1609
   giây; `evidence/INV-matrix.md` không đổi.
 - Đột biến: 11/11 (mục 7). Lượt giả lập trên mã cuối: 10/10 ĐẠT, cô lập 2/2 (mục 2).
+- **[mục 11, khoản 328]** Trên `aff07f85`: `pnpm t0` xanh; `pnpm test` 141 tệp, 2394 đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence` vitest
+  thoát mã 0, 4439 khẳng định, 78/78 bất biến, 1593 giây, `evidence/INV-matrix.md` không đổi. Đột biến K1–K4: 4/4.
 
 ## 11. Khoản 328 — sửa theo lựa chọn của chủ dự án (2026-10-02)
 Sau báo cáo của vòng, chủ dự án: *"Bật auto-fix, sửa khoản 328"*.
