@@ -25,7 +25,7 @@ import { CHOT_VAO_SO, PermissionDeniedError, maChotTuLoi } from "@trustprocure/i
 import { withTenant } from "@trustprocure/tenancy";
 import { cancelRfq } from "@trustprocure/rfq";
 import { approveUnseal, requestUnseal } from "@trustprocure/unseal";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { docBangXepHang } from "./doc-bang-xep-hang.js";
 import { DanhGiaTuChoiError, taoLuotDanhGia } from "./luot-danh-gia.js";
 // Bí danh có chủ đích: tệp này đã có một FIXTURE tên `moVongBafo` (chèn hàng thẳng, dựng
@@ -361,11 +361,15 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
   });
 }
 
-/** Một gói thầu ở `UNSEALED` với các báo giá đã mở mang đúng những số tiền cho trước. */
+/**
+ * Một gói thầu ở `UNSEALED` với các báo giá đã mở mang đúng những số tiền cho trước. [S1.251] `donGia` khác `null`: mỗi phong bì
+ * mang thêm `lines` như trình duyệt dựng (`nop-thau.js`) — một dòng, `unitPrice` cho trước, `amount` bằng tổng.
+ */
 async function goiDaMo(
   soTien: readonly (readonly [string, string | null])[],
   evalComponents: string | null = TP_GIA,
   topN = 0,
+  donGia: string | null = null,
 ): Promise<{ rfqId: string; banRo: readonly string[]; csId: string }> {
   const csId = await taoChinhSach(evalComponents, topN);
   const rfqId = await taoRfqMo(csId);
@@ -374,7 +378,10 @@ async function goiDaMo(
   for (const [i, [tien, dv]] of soTien.entries()) {
     const versionId = await nopBaoGia(rfqId, `NCC ${String(i)} ${randomBytes(2).toString("hex")}`);
     ids.push(versionId);
-    ban.push([versionId, { totalAmount: tien, currency: dv }]);
+    ban.push([
+      versionId,
+      donGia === null ? { totalAmount: tien, currency: dv } : { totalAmount: tien, currency: dv, lines: [{ lineNo: 1, unitPrice: donGia, amount: tien }] },
+    ]);
   }
   await moThau(rfqId, ban);
   return { rfqId, banRo: ids, csId };
@@ -886,23 +893,16 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
     // Tập được viết VÉT CẠN và CHÍNH XÁC: dù chủ dự án chọn hướng nào, dòng này cũng đỏ và buộc
     // người sửa đọc lại quyết định. Xem khoản 224 — ĐANG MỞ, chờ quyết định của chủ dự án.
     const GIA = "777123456.00";
-    const { rfqId } = await goiDaMo([[GIA, "VND"]]);
+    // [S1.251 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅): dòng của gói có số lượng 10, nên đơn giá = tổng / 10. Lượt chấm đọc TỔNG; nó
+    // không được để lại đơn giá ở đâu — tập của kim này chỉ có bảng bản rõ, không có `rfq_evaluation_lines`.
+    const DON_GIA = "77712345.60";
+    const { rfqId } = await goiDaMo([[GIA, "VND"]], TP_GIA, 0, DON_GIA);
     await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
-    const { rows: bang } = await db.pool.query<{ ten: string }>(
-      "SELECT c.relname AS ten FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
-        "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY c.relname",
-    );
-    expect(bang.length, "chống rỗng ruột: không đọc được bảng nào").toBeGreaterThan(20);
-    const dinh: string[] = [];
-    for (const b of bang) {
-      if (!/^[a-z_][a-z0-9_]*$/u.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
-      const { rows } = await db.pool.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`,
-        [GIA],
-      );
-      if (rows[0]?.n !== "0") dinh.push(b.ten);
-    }
-    expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+    // ~~`relkind IN ('r', 'p')`~~ [S1.251] bộ quét chung, cả view và materialized view (`@trustprocure/test-support`, `quet-gia.ts`).
+    const tong = await quetGiaMoiQuanHe(db.pool, GIA);
+    expect(tong.soQuanHe, "chống rỗng ruột: không đọc được bảng nào").toBeGreaterThan(20);
+    expect(tong.dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+    expect((await quetGiaMoiQuanHe(db.pool, DON_GIA)).dinh).toEqual(["rfq_unsealed_bids"]);
   });
 });
 

@@ -1115,6 +1115,9 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docHangDoi",
   "ghiAnhXa",
   "taoHangChuanVaAnhXa",
+  // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — hàm đọc CÓ CỔNG `bid.view` và tập đóng sáu trạng thái của `quan_sat_gia`.
+  "TRANG_THAI_QUAN_SAT",
+  "docLichSuGia",
 ];
 
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
@@ -1190,6 +1193,10 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   "startPostgres",
   "taoBoKyNeoThuNghiem",
   "withMigratedDatabase",
+  // [S1.251 / S4.4b] Bộ quét giá dạng rõ trên MỌI quan hệ (bảng, bảng cha phân mảnh, view, materialized view) — một bản cho bốn
+  // kịch bản đo A3; chạy trên pool chủ cụm người gọi truyền vào.
+  "RELKIND_QUET_GIA",
+  "quetGiaMoiQuanHe",
 ];
 
 describe("bề mặt export công khai của bốn gói S0 còn lại", () => {

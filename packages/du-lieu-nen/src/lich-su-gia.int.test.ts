@@ -18,7 +18,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
 import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
-import { khaiBiDanhDonVi, khaiQuyDoiRieng, taoHangChuan, taoPhienBanHangChuan } from "./index.js";
+import { PermissionDeniedError } from "@trustprocure/identity";
+import { docLichSuGia, khaiBiDanhDonVi, khaiQuyDoiRieng, taoHangChuan, taoPhienBanHangChuan, type LichSuGia } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -853,5 +854,124 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
         "(SELECT prosecdef FROM pg_proc WHERE oid = to_regprocedure('public.quan_sat_gia(timestamptz, uuid)')) AS secdef",
     );
     expect(rows[0]).toEqual({ n: 0, secdef: false });
+  });
+});
+
+// ================================================================================================================================
+// [S1.251 / S4.4b] `docLichSuGia` — đường đọc DUY NHẤT của `quan_sat_gia` từ mã ứng dụng: cổng `bid.view` trong hàm, mốc
+// `now()`, LUÔN lọc theo hàng chuẩn, một hàng `PRICE_HISTORY_READ` không mang giá trong CÙNG giao dịch đọc (spec S4 §4.5; L6).
+// Mỗi ca dùng một hàng chuẩn RIÊNG — lịch sử của `hangThep` mang quan sát của mọi ca trên.
+// ================================================================================================================================
+describe("[INV-L6] docLichSuGia — cổng bid.view, một hàng sổ mỗi lần đọc, hình dạng", { timeout: 300_000 }, () => {
+  const hangMoi = async (ma: string): Promise<string> =>
+    (await trong(orgA, (c) => taoHangChuan(c, orgA, { ma, ten: `Hàng ${ma}`, donViGoc: "kg", actorSessionId: ql.phien }))).id;
+  const doc = (phien: string, itemId: string, org = orgA): Promise<LichSuGia | null> =>
+    trong(org, (c) => docLichSuGia(c, org, { itemId, actorSessionId: phien }, api));
+  const soHang = async (action: string, itemId: string): Promise<{ payload: unknown; resource_type: string; actor_id: string }[]> =>
+    (
+      await db.pool.query<{ payload: unknown; resource_type: string; actor_id: string }>(
+        "SELECT payload, resource_type, actor_id::text AS actor_id FROM audit_events WHERE org_id = $1 AND action = $2 AND resource_id = $3 ORDER BY seq",
+        [orgA, action, itemId],
+      )
+    ).rows;
+
+  it("người giữ bid.view đọc được: mọi quan sát của hàng chuẩn, đếm theo trạng thái, chỉ supplierId — và ĐÚNG MỘT hàng sổ không mang giá", async () => {
+    const item = await hangMoi("LSG-DOC-1");
+    const { rfqId, bg } = await goiDaMo(
+      [{ moTa: "Thép hình", soLuong: "10.0000", donVi: "kg" }],
+      [phongBi([[1, "123456.70"]]), phongBi([[1, "99.00"]], { tienTe: "USD" })],
+    );
+    await anhXa(rfqId, 1, item, "anh xa sau mo gia de do");
+    const ls = await doc(pm.phien, item);
+    expect(ls).not.toBeNull();
+    expect(ls!.itemId).toBe(item);
+    expect(ls!.moc).toBeInstanceOf(Date);
+    expect(ls!.quanSat).toHaveLength(2);
+    // Hình dạng ĐÓNG: không tên nhà cung cấp, không payload, không cột thừa — một trường mới phải làm dòng này đỏ.
+    for (const q of ls!.quanSat) {
+      expect(Object.keys(q).sort()).toEqual(
+        ["anhXaId", "bidVersionId", "donGia", "donGiaQuyDoi", "donVi", "donViGoc", "heSo", "hoiTo", "lineNo", "ngayQuanSat",
+          "rfqId", "sauMoc", "soLuong", "supplierId", "thanhTien", "tienTe", "trangThai"].sort(),
+      );
+    }
+    const a = ls!.quanSat.find((q) => q.supplierId === bg[0]!.supplierId)!;
+    expect([a.rfqId, a.bidVersionId, a.lineNo, a.trangThai, a.tienTe, a.donVi, a.donViGoc]).toEqual([rfqId, bg[0]!.versionId, 1, "HOP_LE", "VND", "kg", "kg"]);
+    // Số là CHUỖI thập phân của SQL: đơn giá = amount / số lượng NGƯỜI MUA viết.
+    expect([Number(a.thanhTien), Number(a.soLuong), Number(a.donGia), Number(a.donGiaQuyDoi)]).toEqual([123456.7, 10, 12345.67, 12345.67]);
+    expect(a.hoiTo).toEqual(["ANH_XA"]);
+    const b = ls!.quanSat.find((q) => q.supplierId === bg[1]!.supplierId)!;
+    expect([b.trangThai, b.donGiaQuyDoi]).toEqual(["LECH_TIEN_TE", null]);
+    expect(ls!.soTheoTrangThai).toEqual({ KHONG_DOC_DUOC: 0, LECH_TONG: 0, LECH_TIEN_TE: 1, CHUA_ANH_XA: 0, KHONG_QUY_DOI_DUOC: 0, HOP_LE: 1 });
+    // Cùng tập với hàm SQL gọi thẳng — bộ đọc không lọc, không thêm.
+    expect(ls!.quanSat.map((q) => q.bidVersionId).sort()).toEqual((await quanSat(rfqId, null, item)).map((q) => q.bid_version_id).sort());
+
+    const so = await soHang("PRICE_HISTORY_READ", item);
+    expect(so).toEqual([{ payload: { itemId: item, soQuanSat: 2, viewedBySessionId: pm.phien }, resource_type: "CANONICAL_ITEM", actor_id: pm.nguoi }]);
+    expect(JSON.stringify(so)).not.toMatch(/123456|12345\.67|99\.00/u);
+    // Lần đọc thứ hai: thêm đúng một hàng.
+    await doc(pm.phien, item);
+    expect(await soHang("PRICE_HISTORY_READ", item)).toHaveLength(2);
+  });
+
+  it("người KHÔNG giữ bid.view — người quản lý dữ liệu (L3) — bị từ chối: PermissionDeniedError, một hàng PERMISSION_DENIED, không hàng đọc", async () => {
+    const item = await hangMoi("LSG-DOC-2");
+    const { rfqId } = await goiDaMo([{ moTa: "Thép hình", soLuong: "1.0000", donVi: "kg" }], [phongBi([[1, "5.00"]])]);
+    await anhXa(rfqId, 1, item, "do");
+    await expect(doc(ql.phien, item)).rejects.toBeInstanceOf(PermissionDeniedError);
+    expect(await soHang("PRICE_HISTORY_READ", item)).toEqual([]);
+    const tuChoi = await soHang("PERMISSION_DENIED", item);
+    expect(tuChoi).toHaveLength(1);
+    expect(tuChoi[0]!.actor_id).toBe(ql.nguoi);
+    expect(JSON.stringify(tuChoi[0]!.payload)).toContain("bid.view");
+  });
+
+  it("hàng chuẩn không có trong tổ chức ⇒ null, không hàng đọc — kể cả hàng chuẩn THẬT của tổ chức khác", async () => {
+    const item = await hangMoi("LSG-DOC-3");
+    expect(await doc(pm.phien, randomUUID())).toBeNull();
+    const nguoiB = await taoNguoi(orgB, ["PROCUREMENT_MANAGER"]);
+    expect(await doc(nguoiB.phien, item, orgB)).toBeNull();
+    expect(await soHang("PRICE_HISTORY_READ", item)).toEqual([]);
+  });
+
+  it("gói chưa mở niêm phong: hàng chuẩn có dòng nối với nó mà lịch sử RỖNG — vị từ nằm trong thân hàm, không ở bộ đọc", async () => {
+    const item = await hangMoi("LSG-DOC-4");
+    const rfqId = await taoGoi([{ moTa: "Thép hình", soLuong: "1.0000", donVi: "kg" }]);
+    await nopBaoGia(rfqId);
+    await anhXa(rfqId, 1, item);
+    const ls = await doc(pm.phien, item);
+    expect(ls!.quanSat).toEqual([]);
+    expect(await soHang("PRICE_HISTORY_READ", item)).toEqual([
+      { payload: { itemId: item, soQuanSat: 0, viewedBySessionId: pm.phien }, resource_type: "CANONICAL_ITEM", actor_id: pm.nguoi },
+    ]);
+  });
+
+  it("fail-closed: lần ghi `PRICE_HISTORY_READ` hỏng ⇒ hàm NÉM chính lỗi ấy, không lịch sử nào đi ra, không hàng sổ nào", async () => {
+    const item = await hangMoi("LSG-DOC-5");
+    const { rfqId } = await goiDaMo([{ moTa: "Thép hình", soLuong: "1.0000", donVi: "kg" }], [phongBi([[1, "5.00"]])]);
+    await anhXa(rfqId, 1, item, "do");
+    let ra: unknown = "chua-goi";
+    let loi: unknown = null;
+    try {
+      await db.pool.query(
+        "CREATE FUNCTION public.l6_chan_ghi_so() RETURNS trigger LANGUAGE plpgsql AS " +
+          "$$BEGIN RAISE EXCEPTION 'l6 thong diep noi bo' USING ERRCODE = 'TPL06'; END$$",
+      );
+      await db.pool.query(
+        "CREATE TRIGGER l6_chan_ghi_so BEFORE INSERT ON public.audit_events FOR EACH ROW WHEN (NEW.action = 'PRICE_HISTORY_READ') " +
+          "EXECUTE FUNCTION public.l6_chan_ghi_so()",
+      );
+      ra = await doc(pm.phien, item);
+    } catch (e) {
+      loi = e;
+    } finally {
+      await db.pool.query("DROP TRIGGER IF EXISTS l6_chan_ghi_so ON public.audit_events");
+      await db.pool.query("DROP FUNCTION IF EXISTS public.l6_chan_ghi_so()");
+    }
+    expect(ra, "lịch sử đi ra dù sổ không ghi được").toBe("chua-goi");
+    expect((loi as { code?: unknown } | null)?.code).toBe("TPL06");
+    expect(await soHang("PRICE_HISTORY_READ", item)).toEqual([]);
+    // Đối chứng: gỡ lớp chặn thì cùng lời gọi đọc được và ghi đúng một hàng.
+    expect((await doc(pm.phien, item))!.quanSat).toHaveLength(1);
+    expect(await soHang("PRICE_HISTORY_READ", item)).toHaveLength(1);
   });
 });

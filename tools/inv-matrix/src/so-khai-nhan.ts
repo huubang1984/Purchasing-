@@ -460,6 +460,16 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   // nền tại mốc, hai nhãn, hai nhánh trùng khít) và tập hàm chạm bản rõ; `ban-ro-liet-ke` là ranh giới tĩnh — mọi tệp TypeScript
   // và hàm SQL chạm `rfq_unsealed_bids` có tên và lý do.
   L5: ["packages/du-lieu-nen/src/lich-su-gia.int.test.ts", "tests/architecture/ban-ro-liet-ke.test.ts"],
+  // L6 — [S1.251 / S4.4b] vế lịch sử giá. Kịch bản 41 qua HTTP đo route thật ở bốn trạng thái của gói (UNSEALED, BAFO_OPEN,
+  // BAFO_CLOSED, BAFO_UNSEALED) cùng đối chứng dương của bộ quét đơn giá; `lich-su-gia` đo `docLichSuGia` ở tầng gói (cổng, hình
+  // dạng đóng, hàng sổ, fail-closed); `quet-gia` là đối chứng dương của bộ quét giá chung trên bốn loại quan hệ.
+  L6: [
+    "apps/unseal-worker/src/kich-ban-41-http.int.test.ts",
+    "packages/du-lieu-nen/src/lich-su-gia.int.test.ts",
+    "packages/test-support/src/quet-gia.int.test.ts",
+    // [lượt soi §S1.251 — T2] đường đọc DUY NHẤT của `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất.
+    "tests/architecture/ban-ro-liet-ke.test.ts",
+  ],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],

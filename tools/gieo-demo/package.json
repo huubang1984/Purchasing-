@@ -5,6 +5,7 @@
   "type": "module",
   "//": "[ADR-044] Cong cu DEV gieo mot vong thau du de demo. Khong phai duong san xuat: no doi bien moi truong RIENG va in token dang ro ra stderr.",
   "dependencies": {
+    "@trustprocure/bidding": "workspace:*",
     "@trustprocure/crypto-keys": "workspace:*",
     "@trustprocure/db": "workspace:*",
     "@trustprocure/du-lieu-nen": "workspace:*",
@@ -13,6 +14,7 @@
     "@trustprocure/rfq": "workspace:*",
     "@trustprocure/sealed-envelope": "workspace:*",
     "@trustprocure/tenancy": "workspace:*",
+    "@trustprocure/unseal": "workspace:*",
     "pg": "^8.13.0"
   }
 }

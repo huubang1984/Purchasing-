@@ -64,7 +64,7 @@ function trangThaiTuyChon(body: unknown): "DANG_DUNG" | "NGUNG_DUNG" | undefined
   return v;
 }
 /** Tham số đường dẫn UUID; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). */
-function itemIdParam(req: ApiRequest): string {
+export function itemIdParam(req: ApiRequest): string {
   const v = req.params["itemId"] ?? "";
   if (!UUID_RE.test(v)) throw new HttpError(404, "khong co duong nay");
   return v;

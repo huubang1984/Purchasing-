@@ -38,7 +38,7 @@ import { migrate } from "@trustprocure/db";
 import { CHOT_VAO_SO, counterForTime, deriveTotpCode } from "@trustprocure/identity";
 import { sealBid } from "@trustprocure/sealed-envelope";
 import { withTenant } from "@trustprocure/tenancy";
-import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
+import { quetGiaMoiQuanHe, startPostgres, type TestDatabase } from "@trustprocure/test-support";
 // Import TƯƠNG ĐỐI xuyên app, có chủ đích: `@trustprocure/api` không có alias vitest và không nên
 // là dependency của worker (đường chạy của worker không chạm api). Test là nơi duy nhất nối hai app.
 import { createApiServer, createDispatcher, ROUTES } from "../../api/src/index.js";
@@ -76,6 +76,17 @@ const NGAN_SACH = "1000000000.00";
 const GIA_BAFO = ["911000000.00", "922000000.00"] as const;
 /** Mọi chuỗi giá đã đi vào hệ thống dưới dạng rõ — thứ bộ quét đi tìm. */
 const MOI_GIA: readonly string[] = [...NHA_CUNG_CAP.map((n) => n.gia), GIA_SUA_LAI, ...GIA_BAFO];
+/**
+ * [S1.251 / S4.4b] Gói chính có ĐÚNG MỘT dòng, 100 tấm (bước 1). Phong bì mang `lines` như trình duyệt dựng (`nop-thau.js`,
+ * spec S4 §2.5 ⒅): `amount` bằng tổng, `unitPrice` = tổng / 100 — đơn giá của mọi giá trên là một số NGUYÊN đồng, và chuỗi chữ
+ * số của nó không nằm trong chuỗi của tổng (`9300000.00` không là chuỗi con của `930000000.00`: sau bảy chữ số là `00.`).
+ */
+const SO_LUONG_DONG = 100;
+const donGiaCua = (tong: string): string => (Number(tong) / SO_LUONG_DONG).toFixed(2);
+const banRo = (tong: string, ten: string): string =>
+  JSON.stringify({ totalAmount: tong, currency: "VND", nhaCungCap: ten, lines: [{ lineNo: 1, unitPrice: donGiaCua(tong), amount: tong }] });
+/** Hàng chuẩn của dòng ấy (bước 1): gốc `kg`, tấm 1 500 × 6 000 × 12 mm thép 7 850 kg/m³ = 847,8 kg. */
+const HANG_CHUAN_CHINH = { ma: "THEP-TAM-SS400-12", ten: "Thep tam SS400 day 12mm", donViGoc: "kg", heSoTam: "847.8" } as const;
 
 /** Bộ mở bọc CẶP với `rfqKeyWrapper` của `dichVuTest()` (xor 0xff) — chỉ worker cầm. */
 // [ADR-062] Mở cặp khoá tổ chức mà bộ sinh của test "bọc" bằng xor 0xff.
@@ -179,6 +190,8 @@ async function moPhienKhach(tokenLink: string): Promise<string> {
 
 /** Giá dưới dạng SỐ NGUYÊN đồng (không phần thập phân) — thứ bộ dò so sánh, thay vì một cách viết. */
 const GIA_SO: ReadonlyMap<number, string> = new Map(MOI_GIA.map((g) => [Number(g), g]));
+/** [S1.251 / S4.4b] ĐƠN GIÁ của mỗi giá, dạng số nguyên đồng → giá (tổng) của nó. */
+const DON_GIA_SO: ReadonlyMap<number, string> = new Map(MOI_GIA.map((g) => [Number(g) / SO_LUONG_DONG, g]));
 
 /**
  * Rút mọi giá trị số có thể đọc ra từ một văn bản, theo MỌI cách viết thường gặp:
@@ -219,8 +232,40 @@ function rutSo(vanBan: string): ReadonlySet<number> {
     if (chiSo.length > 0 && chiSo.length <= 15) ra.add(Number(chiSo));
     const boThapPhan = t.replace(/[.,]\d{1,2}$/u, "").replace(/[^\d]/gu, "");
     if (boThapPhan.length > 0 && boThapPhan.length <= 15) ra.add(Number(boThapPhan));
+    // [S1.251 / S4.4b] SỐ THẬP PHÂN DÀI. Đơn giá của lịch sử giá là thương của một phép chia `numeric` — Postgres in
+    // `9300000.000000000000` (đo trên 16-alpine). Hai cách đọc trên đều ra 19 chữ số và BỎ QUA nó: bộ quét mù với mọi đơn giá
+    // ở `GET /items/:itemId/price-history`. Cách đọc thứ ba lấy giá trị số, làm tròn tới đồng.
+    if (/^\d{1,15}[.,]\d+$/u.test(t)) {
+      const n = Number(t.replace(",", "."));
+      if (Number.isFinite(n)) ra.add(Math.round(n));
+    }
+  }
+  // [lượt soi §S1.251 — L1] MẢNG SỐ TRẦN của JSON: `[9300000,9220000]` là MỘT mẩu cho biểu thức trên (dấu phẩy là dấu phân cách
+  // nghìn), và cả hai cách đọc đều sai. Thân là JSON thì đọc thêm mọi lá SỐ của nó theo giá trị.
+  const la = (v: unknown): void => {
+    if (typeof v === "number" && Number.isFinite(v)) ra.add(Math.round(v));
+    else if (Array.isArray(v)) v.forEach(la);
+    else if (v !== null && typeof v === "object") Object.values(v).forEach(la);
+  };
+  try {
+    la(JSON.parse(vanBan));
+  } catch {
+    // Không phải JSON — hai cách đọc trên là đủ.
   }
   return ra;
+}
+
+/**
+ * [S1.251 / S4.4b] Bộ quét ĐƠN GIÁ — cùng bộ rút số của `quetRoRi`, so với `DON_GIA_SO`; trả các GIÁ (tổng) mà đơn giá của
+ * chúng hiện ra. Không giải mã base64/hex: thứ nó soi là thân JSON của lịch sử giá, nơi đơn giá đứng dạng chữ số.
+ */
+function quetDonGia(vanBan: string): readonly string[] {
+  const thay = new Set<string>();
+  for (const so of rutSo(vanBan)) {
+    const g = DON_GIA_SO.get(so);
+    if (g !== undefined) thay.add(g);
+  }
+  return MOI_GIA.filter((g) => thay.has(g));
 }
 
 /**
@@ -278,6 +323,34 @@ async function soHangDoc(action: string): Promise<{ n: number; nguoiMoiNhat: str
   return { n: Number(rows[0]?.n ?? "0"), nguoiMoiNhat: rows[0]?.nguoi ?? null };
 }
 
+/** [S1.251 / S4.4b] Một quan sát của `GET /items/:itemId/price-history` — đúng những trường kịch bản này đọc. */
+interface QuanSatHttp {
+  readonly rfqId: string;
+  readonly supplierId: string;
+  readonly bidVersionId: string;
+  readonly thanhTien: string | null;
+  readonly donGia: string | null;
+  readonly trangThai: string;
+  readonly hoiTo: readonly string[];
+  readonly sauMoc: Readonly<Record<string, number>>;
+}
+
+/** [S1.251 / S4.4b] Lịch sử giá của hàng chuẩn chính qua HTTP, dưới một cookie: phản hồi, và các quan sát của GÓI CHÍNH. */
+async function docLichSuQuaHttp(cookie: string): Promise<{ ph: PhanHoi; tatCa: readonly QuanSatHttp[]; cuaGoi: readonly QuanSatHttp[] }> {
+  const ph = await goi("GET", `/items/${trangThai.hangChuanId}/price-history`, cookie);
+  const tatCa = ph.status === 200 ? (ph.body as { lichSuGia: { quanSat: QuanSatHttp[] } }).lichSuGia.quanSat : [];
+  return { ph, tatCa, cuaGoi: tatCa.filter((q) => q.rfqId === trangThai.rfqId) };
+}
+
+/** [S1.251 / S4.4b] Số hàng `PRICE_HISTORY_READ` của hàng chuẩn chính, và người ghi hàng MỚI NHẤT — đọc dưới vai superuser. */
+async function soHangLichSu(): Promise<{ n: number; nguoiMoiNhat: string | null }> {
+  const { rows } = await db.pool.query<{ n: string; nguoi: string | null }>(
+    "SELECT count(*) OVER ()::text AS n, actor_id AS nguoi FROM audit_events WHERE org_id = $1 AND action = 'PRICE_HISTORY_READ' AND resource_id = $2 ORDER BY seq DESC LIMIT 1",
+    [orgA, trangThai.hangChuanId],
+  );
+  return { n: Number(rows[0]?.n ?? "0"), nguoiMoiNhat: rows[0]?.nguoi ?? null };
+}
+
 const trangThai: {
   rfqId: string;
   /** [S1.201 / S3.6a] Luồng S3: nhóm hàng người tài chính dựng ở bước 1 — gói chính và hai gói hy sinh mang nó. */
@@ -299,6 +372,10 @@ const trangThai: {
   taiChinh2: Nguoi;
   /** [S1.157 / khoản 243] BUYER KHÔNG giữ `bid.view` — người bấm chấm ở bước 12b và 12g. */
   cham: Nguoi;
+  /** [S1.251 / S4.4b] Người quản lý dữ liệu (`DATA_STEWARD`) — khai hàng chuẩn của dòng 1 ở bước 1; KHÔNG giữ `bid.view` (L3). */
+  duLieu: Nguoi;
+  /** [S1.251 / S4.4b] Hàng chuẩn của dòng 1 — khoá của lịch sử giá. */
+  hangChuanId: string;
 } = trangThaiMoi();
 
 /** [S1.174 / S3.1d] Trạng thái rỗng của MỘT luồng — `dungToChuc` dựng lại nó trước mỗi luồng. */
@@ -321,6 +398,8 @@ function trangThaiMoi(): typeof trangThai {
   taiChinh: { id: "", cookie: "" },
   taiChinh2: { id: "", cookie: "" },
   cham: { id: "", cookie: "" },
+  duLieu: { id: "", cookie: "" },
+  hangChuanId: "",
   };
 }
 
@@ -365,6 +444,7 @@ async function dungToChuc(batS3: boolean): Promise<void> {
   // [033 / nợ 44] Ngưỡng phê duyệt kép do FINANCE đặt — PM (người đặt ước lượng, người duyệt) không được.
   trangThai.taiChinh = await dangNhap("taichinh@vidu.vn", "FINANCE");
   if (batS3) trangThai.taiChinh2 = await dangNhap("taichinh2@vidu.vn", "FINANCE");
+  trangThai.duLieu = await dangNhap("dulieu@vidu.vn", "DATA_STEWARD");
 }
 
 afterAll(async () => {
@@ -439,6 +519,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect((rfq.body as { rfq: { categoryId: string | null } }).rfq.categoryId).toBe(trangThai.nhomHangId);
     trangThai.rfqId = (rfq.body as { rfq: { id: string } }).rfq.id;
     expect((await goi("POST", `/rfqs/${trangThai.rfqId}/items`, m, { lineNo: 1, description: "Thep tam SS400 12mm", quantity: "100.0000", unit: "tam" })).status).toBe(201);
+    // [S1.251 / S4.4b] Hàng chuẩn của dòng 1, khai qua HTTP bởi người quản lý dữ liệu TRƯỚC lần nộp (spec S4 §2.5 ⒅): bí danh đúng
+    // mô tả của dòng ⇒ lượt chuẩn hoá sau commit của lần nộp ở bước 2 nối dòng ấy `TU_DONG`; quy đổi riêng tấm → kg.
+    const dl = trangThai.duLieu.cookie;
+    const hc = await goi("POST", "/items", dl, { ma: HANG_CHUAN_CHINH.ma, donViGoc: HANG_CHUAN_CHINH.donViGoc, ten: HANG_CHUAN_CHINH.ten });
+    expect(hc.status, hc.text).toBe(201);
+    trangThai.hangChuanId = (hc.body as { hangChuan: { id: string } }).hangChuan.id;
+    const bd = await goi("POST", `/items/${trangThai.hangChuanId}/aliases`, dl, { biDanh: "Thep tam SS400 12mm" });
+    expect(bd.status, bd.text).toBe(201);
+    const qd = await goi("POST", `/items/${trangThai.hangChuanId}/conversions`, dl, { tuDonVi: "tam", sangDonVi: "kg", heSo: HANG_CHUAN_CHINH.heSoTam });
+    expect(qd.status, qd.text).toBe(201);
     const ns = await goi("PUT", `/rfqs/${trangThai.rfqId}/budget`, m, { estimatedValue: NGAN_SACH, currency: "VND" });
     expect(ns.status, ns.text).toBe(200);
     expect((ns.body as { budget: { requiresDualApproval: boolean } }).budget.requiresDualApproval).toBe(true);
@@ -466,6 +556,13 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     }
     const nop = await goi("POST", `/rfqs/${trangThai.rfqId}/submit`, m);
     expect(nop.status).toBe(200);
+    // [S1.251 / S4.4b] Lượt chuẩn hoá sau commit của lần nộp đã nối dòng 1 với hàng chuẩn của bước 1 — TRƯỚC mọi mốc mở giá, nên
+    // lịch sử giá về sau không mang nhãn hồi tố nào.
+    const ax = await goi("GET", `/rfqs/${trangThai.rfqId}/mappings`, m);
+    expect(ax.status, ax.text).toBe(200);
+    expect((ax.body as { dong: { lineNo: number; trangThai: string; hangChuan: { id: string } | null }[] }).dong).toEqual([
+      { lineNo: 1, trangThai: "TU_DONG", hangChuan: { id: trangThai.hangChuanId, ma: HANG_CHUAN_CHINH.ma }, lyDo: null },
+    ]);
     // [S1.198 / khoản 256] Luồng S3: lời duyệt mang lần nộp người duyệt đã xem (thân `{lanNop}`). Luồng MVP1 giữ lời duyệt KHÔNG
     // thân — hợp đồng cũ, và đó là phép đo *tổ chức chưa bật không đổi*.
     const moc = batS3 ? { lanNop: (nop.body as { rfq: { lanNop: number } }).rfq.lanNop } : undefined;
@@ -529,7 +626,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         rfqId: trangThai.rfqId,
         algorithm: "ECDH_P256",
         recipientPublicKey: new Uint8Array(Buffer.from(khoa.publicKey, "base64")),
-        plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: lm.gia, currency: "VND", nhaCungCap: lm.ten })),
+        plaintext: new TextEncoder().encode(banRo(lm.gia, lm.ten)),
       });
       const bn = await goi("POST", "/guest/bids", lm.cookie, { envelope: Buffer.from(phongBi).toString("base64") });
       expect(bn.status, bn.text).toBe(201);
@@ -558,7 +655,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       rfqId: trangThai.rfqId,
       algorithm: "ECDH_P256",
       recipientPublicKey: new Uint8Array(Buffer.from(khoa.publicKey, "base64")),
-      plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: GIA_SUA_LAI, currency: "VND", nhaCungCap: lm.ten })),
+      plaintext: new TextEncoder().encode(banRo(GIA_SUA_LAI, lm.ten)),
     });
     const bn2 = await goi("POST", "/guest/bids", lm.cookie, { envelope: Buffer.from(phongBi).toString("base64") });
     expect(bn2.status, bn2.text).toBe(201);
@@ -884,8 +981,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     };
     const LOI_HINH_DANG = /thiếu trường|phải là|không phải ngày|không hợp lệ"?\s*$/u;
 
+    // [S1.251 / S4.4b] `:itemId` là hàng chuẩn THẬT của dòng 1: lịch sử giá được hỏi trên đúng hàng có báo giá đã nộp (L6).
     const thay = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":bidVersionId", trangThai.bienNhan[0]!.bidVersionId).replace(/:[A-Za-z]+/gu, UUID0);
+      path.replace(":rfqId", trangThai.rfqId).replace(":bidVersionId", trangThai.bienNhan[0]!.bidVersionId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
     const logTruoc = logLoi.length;
     const roRi: string[] = [];
     const loiHinhDang: string[] = [];
@@ -1010,6 +1108,50 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(quetRoRi(r.text).length).toBeGreaterThan(0);
   });
 
+  it("[INV-L6] LỊCH SỬ GIÁ qua HTTP NGAY khi gói UNSEALED — người giữ bid.view THẤY năm quan sát (vị thế cuối, đơn giá = tổng / 100), mỗi lần đọc một hàng sổ; người không giữ bid.view và phiên khách thì không", async () => {
+    // Đối chứng dương của bộ dò đơn giá, trên đúng cách Postgres in thương của phép chia `numeric` (đo trên 16-alpine).
+    expect(quetDonGia(JSON.stringify({ donGia: "9300000.000000000000" }))).toEqual([GIA_SUA_LAI]);
+    expect(quetRoRi(JSON.stringify({ donGia: "9300000.000000000000" }))).toEqual([]);
+    expect(quetDonGia(JSON.stringify({ donGia: [9300000, 9220000] })), "mảng số trần (lượt soi L1)").toEqual([GIA_SUA_LAI, GIA_BAFO[1]]);
+    expect(quetRoRi("[930000000,922000000]")).toEqual([GIA_SUA_LAI, GIA_BAFO[1]]);
+    expect(await trangThaiRfq()).toBe("UNSEALED");
+    const truoc = await soHangLichSu();
+    const { ph, tatCa, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
+    expect(ph.status, ph.text).toBe(200);
+    // Mỗi nhà cung cấp một quan sát, ở vị thế CUỐI: người thứ tư là bản sửa giá, không phải bản đầu.
+    const cuoi = trangThai.loiMoi.map((lm) => lm.gia).sort();
+    expect(tatCa, "lúc này chỉ gói chính đã mở niêm phong").toEqual(cuaGoi);
+    expect(cuaGoi.map((q) => q.thanhTien).sort()).toEqual(cuoi);
+    for (const q of cuaGoi) {
+      expect([q.trangThai, q.hoiTo, q.sauMoc], q.supplierId).toEqual(["HOP_LE", [], {}]);
+      expect(Number(q.donGia)).toBe(Number(q.thanhTien) / SO_LUONG_DONG);
+    }
+    expect([...quetDonGia(ph.text)].sort(), "bộ quét phải THẤY đơn giá ngay khi gói UNSEALED").toEqual(cuoi);
+    expect(quetDonGia(ph.text), "bản đầu của người sửa giá không phải một quan sát").not.toContain(NHA_CUNG_CAP[3].gia);
+    const sau = await soHangLichSu();
+    expect(sau.n - truoc.n, "một lần đọc lịch sử ⇒ đúng một hàng sổ").toBe(1);
+    expect(sau.nguoiMoiNhat).toBe(trangThai.mua.id);
+    const { rows: tai } = await db.pool.query<{ payload: unknown }>(
+      "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'PRICE_HISTORY_READ' AND resource_id = $2 ORDER BY seq DESC LIMIT 1",
+      [orgA, trangThai.hangChuanId],
+    );
+    expect(quetRoRi(JSON.stringify(tai)), "hàng sổ đọc không mang giá").toEqual([]);
+    expect(quetDonGia(JSON.stringify(tai))).toEqual([]);
+
+    // Người quản lý dữ liệu không giữ `bid.view` (L3): 403. Phiên khách: route của người mua không mở cho cookie khách.
+    const dl = await docLichSuQuaHttp(trangThai.duLieu.cookie);
+    expect(dl.ph.status).toBe(403);
+    for (const k of [dl.ph, ...(await Promise.all(trangThai.loiMoi.map((lm) => goi("GET", `/items/${trangThai.hangChuanId}/price-history`, lm.cookie))))]) {
+      expect(k.status).not.toBe(200);
+      expect([...quetRoRi(k.text), ...quetDonGia(k.text)]).toEqual([]);
+    }
+    expect((await soHangLichSu()).n, "lần bị từ chối không ghi hàng đọc").toBe(sau.n);
+    // Hàng chuẩn không có trong tổ chức ⇒ 404 sau cổng; đường dẫn sai hình dạng ⇒ 404 trước handler. Không hàng đọc nào.
+    expect((await goi("GET", "/items/3f2504e0-4f89-11d3-9a0c-0305e82c3301/price-history", trangThai.mua.cookie)).status).toBe(404);
+    expect((await goi("GET", "/items/khong-phai-uuid/price-history", trangThai.mua.cookie)).status).toBe(404);
+    expect((await soHangLichSu()).n).toBe(sau.n);
+  });
+
   it("bước 12b — CHẤM THẦU qua HTTP: `POST /evaluate` rồi `GET /ranking`, và THÀNH PHẦN đi ra tới người đọc", async () => {
     // [S1.107 / lượt soi ngang 77 — CAO ②] Bước này KHÔNG dựng được trước vòng này: không đường
     // sản xuất nào ghi `eval_components`, nên `POST /evaluate` của S1.106 luôn trả 422 ngoài cụm
@@ -1072,7 +1214,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const khongXem = await dangNhap("khongxem@vidu.vn", "BUYER"); // BUYER không có bid.view (005)
     const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
     const thay = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(/:[A-Za-z]+/gu, UUID0);
+      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
     const roRi: string[] = [];
     let soGoi = 0;
     for (const r of ROUTES) {
@@ -1200,7 +1342,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         rfqId: trangThai.rfqId,
         algorithm: "ECDH_P256",
         recipientPublicKey: new Uint8Array(Buffer.from(khoa.publicKey, "base64")),
-        plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: GIA_BAFO[i], currency: "VND", nhaCungCap: lm.ten })),
+        plaintext: new TextEncoder().encode(banRo(GIA_BAFO[i]!, lm.ten)),
       });
       const bn = await goi("POST", "/guest/bids", lm.cookie, { envelope: Buffer.from(phongBi).toString("base64") });
       expect(bn.status, `${ten}: ${bn.text}`).toBe(201);
@@ -1221,7 +1363,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       rfqId: trangThai.rfqId,
       algorithm: "ECDH_P256",
       recipientPublicKey: new Uint8Array(Buffer.from(khoa2.publicKey, "base64")),
-      plaintext: new TextEncoder().encode(JSON.stringify({ totalAmount: "888000000.00", currency: "VND", nhaCungCap: ngoai.ten })),
+      plaintext: new TextEncoder().encode(banRo("888000000.00", ngoai.ten)),
     });
     const bn2 = await goi("POST", "/guest/bids", ngoai.cookie, { envelope: Buffer.from(pb2).toString("base64") });
     expect(bn2.status, bn2.text).toBe(422);
@@ -1245,8 +1387,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(dem[0]?.n, "hai phong bì BAFO phải đã nằm trong CSDL trước khi quét").toBe("2");
 
     const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    // [S1.251 / S4.4b] `:itemId` là hàng chuẩn THẬT — lịch sử giá của nó được hỏi bởi người mua ĐỦ QUYỀN khi vòng hai còn niêm phong.
     const thayDuong = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(/:[A-Za-z]+/gu, UUID0);
+      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
     const roRi: string[] = [];
     let soGoi = 0;
     let thayGiaVongMot = 0;
@@ -1275,6 +1418,17 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // ĐỐI CHỨNG: bộ quét KHÔNG mù ở chính lượt chạy này — nó vẫn thấy giá vòng một (đã mở, và
     // người mua có `bid.view`). Thiếu vế này, một `quetRoRi` hỏng sẽ cho `roRi` rỗng và ca xanh.
     expect(thayGiaVongMot, "bộ quét phải VẪN thấy giá VÒNG MỘT ở chính lượt này").toBeGreaterThan(0);
+  });
+
+  it("[INV-L6] LỊCH SỬ GIÁ ở BAFO_OPEN — vòng hai đã nằm trong CSDL mà chưa mở niêm phong: người mua ĐỦ QUYỀN đọc được, và gói không cho một quan sát nào, không một đơn giá nào", async () => {
+    expect(await trangThaiRfq()).toBe("BAFO_OPEN");
+    const { ph, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
+    expect(ph.status, ph.text).toBe(200);
+    // ADR-136: `gia_da_lo` đòi MỌI vòng mở trước mốc có yêu cầu mở thầu `EXECUTED` — một vòng BAFO đang mở rút CẢ gói khỏi lịch sử,
+    // kể cả bản vòng một đã mở: vị thế cuối của top-2 chưa biết, nên không quan sát nào của gói là vị thế cuối.
+    expect(cuaGoi).toEqual([]);
+    expect(quetDonGia(ph.text), "không đơn giá nào của gói — vòng hai càng không").toEqual([]);
+    expect(quetRoRi(ph.text)).toEqual([]);
   });
 
   it("[INV-J4] ĐỘT BIẾN — gỡ lớp giữ J4 lúc chạy thì bộ quét THẤY giá BAFO ngay ở route ấy", async () => {
@@ -1371,10 +1525,25 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     ).rejects.toThrow(/permission denied/u);
   });
 
-  it("bước 12e — đóng vòng, cổng bốn vế LẦN HAI, và worker mở ĐÚNG hai phong bì của vòng hai", async () => {
-    const m = trangThai.mua.cookie;
-    const dong = await goi("POST", `/rfqs/${trangThai.rfqId}/bafo/close`, m);
+  it("bước 12e — ĐÓNG vòng BAFO qua HTTP", async () => {
+    const dong = await goi("POST", `/rfqs/${trangThai.rfqId}/bafo/close`, trangThai.mua.cookie);
     expect(dong.status, dong.text).toBe(200);
+    expect(await trangThaiRfq()).toBe("BAFO_CLOSED");
+  });
+
+  it("[INV-L6] LỊCH SỬ GIÁ ở BAFO_CLOSED — vòng đã đóng nhưng CHƯA mở niêm phong: vẫn không một quan sát nào của gói, không một đơn giá BAFO nào", async () => {
+    // Spec S4 §5.1 L6: đối chứng chạy ở CẢ `BAFO_OPEN` lẫn `BAFO_CLOSED` — ở `BAFO_CLOSED` phong bì vòng hai chưa vào bảng bản rõ, và
+    // một vị từ theo `status` (*"mọi vòng BAFO đã ĐÓNG"* của bản nháp) sẽ cho gói đi ra với giá vòng một làm vị thế cuối.
+    expect(await trangThaiRfq()).toBe("BAFO_CLOSED");
+    const { ph, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
+    expect(ph.status, ph.text).toBe(200);
+    expect(cuaGoi).toEqual([]);
+    expect(quetDonGia(ph.text)).toEqual([]);
+    expect(quetRoRi(ph.text)).toEqual([]);
+  });
+
+  it("bước 12e2 — cổng bốn vế LẦN HAI, và worker mở ĐÚNG hai phong bì của vòng hai", async () => {
+    const m = trangThai.mua.cookie;
 
     // Cổng bốn vế chạy LẠI, nguyên khuôn — mỗi vòng là một hàng `unseal_requests` mới, nên *hai
     // người khác nhau* được đo LẠI. Đây là phần lãi của phép ảnh mà S1.108 chọn: không khuôn thứ
@@ -1412,6 +1581,17 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(r.status, r.text).toBe(200);
     const thay = quetRoRi(r.text).filter((g) => (GIA_BAFO as readonly string[]).includes(g));
     expect(thay.sort(), "cùng bộ quét, cùng route, sau cổng — giá BAFO phải hiện ra").toEqual([...GIA_BAFO].sort());
+  });
+
+  it("[INV-L6] ĐỐI CHỨNG DƯƠNG — lịch sử giá THẤY quan sát vòng hai NGAY khi vòng ấy mở niêm phong: bản BAFO của top-2, bản vòng một của ba người còn lại", async () => {
+    expect(await trangThaiRfq()).toBe("BAFO_UNSEALED");
+    const { ph, cuaGoi } = await docLichSuQuaHttp(trangThai.mua.cookie);
+    expect(ph.status, ph.text).toBe(200);
+    const cuoi = trangThai.loiMoi.map((lm) => trangThai.giaBafo.get(lm.ten) ?? lm.gia).sort();
+    expect(cuaGoi.map((q) => q.thanhTien).sort()).toEqual(cuoi);
+    expect(cuaGoi.every((q) => q.trangThai === "HOP_LE")).toBe(true);
+    expect([...quetDonGia(ph.text)].sort(), "cùng bộ quét, cùng route — đơn giá BAFO phải hiện ra").toEqual(cuoi);
+    for (const g of GIA_BAFO) expect(quetDonGia(ph.text)).toContain(g);
   });
 
   it("bước 12f — BẢNG SO SÁNH sau BAFO: BẢY dòng lịch sử, nhưng phần TỔNG HỢP khử trùng còn NĂM", async () => {
@@ -1663,16 +1843,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
   });
 
   it("bước 14 — [INV-A3] sau tất cả, giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng", async () => {
-    const { rows: bang } = await db.pool.query<{ ten: string }>(
-      "SELECT c.relname AS ten FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') ORDER BY c.relname",
-    );
-    const dinh: string[] = [];
-    for (const b of bang) {
-      if (!/^[a-z_][a-z0-9_]*$/u.test(b.ten)) throw new Error(`ten bang la: ${b.ten}`);
-      const { rows } = await db.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM public.${b.ten} t WHERE t::text LIKE '%' || $1 || '%'`, [GIA_SUA_LAI]);
-      if (rows[0]?.n !== "0") dinh.push(b.ten);
-    }
-    expect(bang.length).toBeGreaterThan(20);
+    // ~~`relkind IN ('r', 'p')`~~ [S1.251 / S4.4b] bộ quét chung của `@trustprocure/test-support`: bảng, bảng cha phân mảnh, view,
+    // materialized view (spec S4 §2.1 — một đối tượng dựng lúc chạy chứa giá dạng rõ đi qua bản cũ mà không dòng nào đỏ).
+    const { dinh, soQuanHe } = await quetGiaMoiQuanHe(db.pool, GIA_SUA_LAI);
+    expect(soQuanHe).toBeGreaterThan(20);
     // [S1.107 / khoản 224 — QUYẾT ĐỊNH CỦA CHỦ DỰ ÁN] Lời khai cũ ở đây là *"giá dạng rõ chỉ tồn
     // tại ở ĐÚNG MỘT bảng"*, và nó ĐÚNG — trong một kịch bản KHÔNG CHẤM THẦU LẦN NÀO. `057` dựng
     // chỗ ở thứ hai từ S1.105 (`effective_cost` và `components.tien` của `rfq_evaluation_lines`),
@@ -1686,6 +1860,26 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     //                               (057), đọc qua `bid.view` ở `docBangXepHang`.
     // Tập viết VÉT CẠN chứ không "chứa": một bảng THỨ BA mai sau phải làm dòng này ĐỎ.
     expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+    // [S1.251 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅). Đơn giá chỉ đứng trong `lines[].unitPrice` của bản rõ: lượt chấm đọc TỔNG
+    // và không để lại đơn giá; lịch sử giá là một HÀM, không lưu gì (ADR-095) — dù đã được đọc bốn lần ở trên.
+    expect(donGiaCua(GIA_SUA_LAI)).toBe("9300000.00");
+    expect((await quetGiaMoiQuanHe(db.pool, donGiaCua(GIA_SUA_LAI))).dinh, "đơn giá chỉ ở bảng bản rõ").toEqual(["rfq_unsealed_bids"]);
+    expect((await quetGiaMoiQuanHe(db.pool, donGiaCua(GIA_BAFO[0]))).dinh).toEqual(["rfq_unsealed_bids"]);
+    // [lượt soi §S1.251 — L2] Đơn giá ĐÃ QUY ĐỔI (về kg) — đúng con số một bảng đệm của benchmark dễ lưu nhất — không ở đâu cả, kể
+    // cả bảng bản rõ: nó chỉ sinh ra trong thân `quan_sat_gia`. Kim là thương in đúng như Postgres in nó trong lịch sử.
+    const quyDoi = (
+      await db.pool.query<{ v: string }>("SELECT ($1::numeric / ($2::numeric * $3::numeric))::text AS v", [GIA_SUA_LAI, "100.0000", HANG_CHUAN_CHINH.heSoTam])
+    ).rows[0]!.v;
+    expect(quyDoi.startsWith("10969.568")).toBe(true);
+    expect((await quetGiaMoiQuanHe(db.pool, quyDoi)).dinh, "đơn giá quy đổi không được lưu ở đâu").toEqual([]);
+    // Đối chứng dương trên CỤM CỦA KỊCH BẢN: một materialized view dựng LÚC CHẠY, ngoài migration — đúng chỗ hở mục (C) của
+    // hardening không thấy — chép đơn giá ra; cùng bộ quét phải kể nó.
+    await db.pool.query("CREATE MATERIALIZED VIEW public.zz_doi_chung_don_gia AS SELECT payload -> 'lines' AS dong FROM public.rfq_unsealed_bids");
+    try {
+      expect((await quetGiaMoiQuanHe(db.pool, donGiaCua(GIA_SUA_LAI))).dinh).toEqual(["rfq_unsealed_bids", "zz_doi_chung_don_gia"]);
+    } finally {
+      await db.pool.query("DROP MATERIALIZED VIEW public.zz_doi_chung_don_gia");
+    }
   }, 120000);
 
   it("bước 15 — sổ kiểm toán kể lại toàn bộ kịch bản, kể cả năm lần đăng nhập qua TOTP, theo đúng thứ tự", async () => {
