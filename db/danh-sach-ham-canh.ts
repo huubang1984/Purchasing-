@@ -67,6 +67,9 @@ export const HAM_KHONG_PHAI_CANH: readonly string[] = [
   // chính sách đã ghim, và RAISE khi lệch. Một hàng HỢP LỆ đi qua nó, nên nó đòi một nhân chứng hành vi
   // — `dungKichBan()` dựng một lượt chấm thật ở cuối kịch bản.
   "public.kiem_thanh_phan_theo_chinh_sach",
+  // [S1.9101 / S4.5a / L14 / `9501_ghim_chinh_sach_luot_cham`] Lượt chấm phải mang phiên bản chính sách hiệu lực lúc gói MỞ. Chỉ gắn
+  // INSERT ⇒ không thể là hàm canh; một hàng HỢP LỆ đi qua nó — lượt chấm thật ở cuối `dungKichBan()`, dưới phiên bản ghim của gói.
+  "public.rfq_evaluations_kiem_phien_ban_ghim",
   // [S1.196 / S3.3a / K8a] Luật người, thứ tự dưới khoá, băm hồ sơ và hạn của xác minh. Chỉ gắn INSERT ⇒ không thể là hàm canh;
   // một hàng HỢP LỆ đi qua nó — `dungKichBan()` xác minh một nhà cung cấp có MST sau lần bật S3.
   "public.ncc_kiem_xac_minh",

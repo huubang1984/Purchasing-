@@ -470,6 +470,9 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     // [lượt soi §S1.251 — T2] đường đọc DUY NHẤT của `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất.
     "tests/architecture/ban-ro-liet-ke.test.ts",
   ],
+  // L14 — [S1.9101 / S4.5a] vế lượt chấm. `luot-danh-gia` đo phiên bản ghim lúc gói mở ở tầng gói và tầng CSDL (phiên bản khai sau
+  // lúc mở, hẹn giờ, lượt chấm lại sau BAFO, câu ghi thẳng, đột biến tắt trigger, đường ứng dụng ra `CONTROL_DENIED`).
+  L14: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],

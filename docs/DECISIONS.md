@@ -10920,3 +10920,71 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
   dùng một vòng pepper RIÊNG của lượt gieo — mã phát và mã đối chiếu cùng tiến trình, phiên khách dùng một lần rồi gói đóng.
 - **Không phân trang**: giới hạn hiệu năng của ADR-136 ⑧ (p95 dưới ngưỡng giả định 500 ms tới ~1.200 quan sát mỗi lần đọc) là giới
   hạn của route. S4.5 đo lại trên dữ liệu pilot.
+
+## ADR-9201 — S4.5a: lượt chấm dùng phiên bản chính sách hiệu lực lúc gói MỞ — `chinh_sach_hieu_luc(org, opened_at)`, trigger có tên trên `rfq_evaluations`, `CONTROL_DENIED` mã `L14_PHIEN_BAN_KHONG_GHIM`; S4.5 chia ba PR
+
+**Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-01, cả bốn theo đề xuất: ⑴ phiên bản áp
+cho gói X là `chinh_sach_hieu_luc(org, opened_at X)` — hàm ghim của S3.1, không một hàm `chinh_sach_tai` thứ hai, kèm một trigger trên
+`rfq_evaluations` mà lần vi phạm vào sổ `CONTROL_DENIED`; ⑵ S4.5 chia BA PR — S4.5a ghim chính sách (L14), S4.5b CSDL và lõi benchmark
+(L7), S4.5c phần hiện ở `/mo-thau`, bộ xuất ADR-059 và vế benchmark của L6; ⑶ bảng so sánh hiện benchmark ngay khi gói `UNSEALED`,
+tính as-of tại mốc mở giá của X ở mỗi lần đọc, còn lượt chấm ghi kết quả đúng một lần; ⑷ năm chi tiết phương pháp theo đề xuất (mục
+*Quyết định* 7) · **[S1.9101]** · **Liên quan:** ADR-097 ⑸ (ghim lúc `OPEN`), ADR-082 ⑺ (chữ ký thứ hai), ADR-085 (sàn một chữ ký),
+ADR-108 (từ chối có tên), ADR-060 (từ chối nào vào sổ), ADR-084 ⑷ (`CONTROL_DENIED`), ADR-052/053 (lượt chấm) · **Spec:** S4 §2.4 ⑸,
+§4.1, §5.1 L14, §8.11, §9 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — năm phép đo trước khi viết
+
+1. **Lượt chấm đọc phiên bản hiệu lực LÚC CHẤM.** `taoLuotDanhGia` gọi `docChinhSach`, và câu ấy chọn
+   `chinh_sach_hieu_luc(org, now())`. Lượt chấm chỉ chạy sau khi giá lộ, và `FINANCE` giữ cùng lúc `policy.manage`, `bid.view`,
+   `evaluation.perform`: thấy giá rồi khai một phiên bản mới là đổi được trọng số — góc C① của lượt soi S1.159. CSDL không ràng gì:
+   `rfq_evaluations` chỉ có trigger danh tính (`057`), và `policy_id` nằm trong `GRANT INSERT`.
+2. **`chinh_sach_hieu_luc(org, opened_at)` không chọn được phiên bản tạo sau lúc mở.** `effective_from >= created_at` (`hieu_luc_khong_lui`,
+   `022`), và `created_at` nằm ngoài `GRANT INSERT` (`014`). Một phiên bản tạo sau lúc mở có `effective_from > opened_at`. Luật chữ
+   của spec — *"mới nhất TẠO trước `opened_at`"* — khác luật này ở hai ca: phiên bản HẸN GIỜ (tạo trước, hiệu lực sau) và phiên bản có
+   bậc chưa ký trước lúc mở. Ở ca sau, luật chữ áp một phiên bản chưa có chữ ký thứ hai — trái ADR-082 ⑺.
+3. **`opened_at` chỉ đặt một lần** (`011`), nên phiên bản ghim không đổi suốt đời gói. Lượt chấm lại sau BAFO dùng cùng phiên bản, và
+   `bafo_kiem_vong` (`059`/`060`) đã buộc vòng BAFO theo chính sách của lượt chấm.
+4. **Ca lật đo trước bản vá.** `luot-danh-gia.int` — không ca nào: mọi giàn cảnh khai chính sách TRƯỚC khi mở gói. Kịch bản 41 qua
+   HTTP tạo phiên bản 2 SAU bước 2 (lượt quét route) — vẫn xanh vì phiên bản 1 đã khai trọng số, nhưng chú thích của nó nói phiên bản 2
+   là bản lượt chấm đọc. `gieo:demo` gieo phiên bản 1 KHÔNG trọng số: người demo chỉ chấm được bằng cách khai phiên bản mới SAU khi gói
+   mở — đúng đường bị đóng.
+5. **`CONTROL_DENIED` của tầng gói chỉ tới được bằng một đường thứ hai.** Tầng gói đọc đúng hàm tại đúng mốc, nên trigger không bao giờ
+   từ chối một câu của nó — cùng hình dạng J5 (`093`, khoản 231).
+
+### Quyết định
+
+1. **Tầng gói** (`packages/danh-gia/src/luot-danh-gia.ts`): `docChinhSach(client, org, rfqId)` đọc MỘT câu — hàng gói nối
+   `org_procurement_policies` theo `chinh_sach_hieu_luc(r.org_id, r.opened_at)`. Không phiên bản ghim, hay phiên bản ghim chưa khai trọng
+   số ⇒ `CHINH_SACH_CHUA_KHAI_TRONG_SO` (từ chối CẤU HÌNH, không vào sổ — ADR-060), thông điệp gọi tên phiên bản ghim và nói phiên bản
+   tạo sau lúc mở không áp cho gói. Mã giữ nguyên; dòng `VAO_SO` nói lại vì sao.
+2. **Lớp CSDL** (`9501_ghim_chinh_sach_luot_cham`): trigger `rfq_evaluations_kiem_phien_ban_ghim` BEFORE INSERT — `policy_id` phải bằng
+   `chinh_sach_hieu_luc(org, opened_at)` của gói; gói chưa mở hay không có phiên bản ghim ⇒ mọi `policy_id` bị từ chối. Nhánh mang tên
+   `l14_phien_ban_khong_ghim` (khuôn `074`, ADR-108). Thân và trigger ghim ở `hardening.always.sql` trong cùng commit; trigger vào
+   `TRIGGER_DUOC_PHEP`; hàm vào `HAM_KHONG_PHAI_CANH` (lượt chấm thật của `dungKichBan()` là nhân chứng).
+3. **Vào sổ:** mã `L14_PHIEN_BAN_KHONG_GHIM` ở `CHOT_VAO_SO` (`vaoSo: true`) và `CHOT_THEO_RANG_BUOC`; `taoLuotDanhGia` bắt lỗi của
+   trigger theo tên, ghi `CONTROL_DENIED {ma}` ở giao dịch độc lập rồi ném `ChotKiemSoatError` — khuôn J5 của `deXuatTraoThau`. Chốt đầu
+   tiên của nhóm L dùng từ vựng S3 (spec §5 L12); kiểu `DongChot.chot` nhận tiền tố `L`.
+4. **`gieo:demo`** khai phiên bản 1 kèm trọng số (`gia`, hệ số `1.0000`) và BAFO top-2 ở cả hai chế độ.
+5. **Không đổi** `rfq_che_do_nghiem`, `rfq_khoa_du_dieu_kien_xoa`, `rfq_key_material_bat_bien` (ghim tại `created_at`), `rfq_chot_ngan_sach`
+   (tại lần nộp), `quan_sat_gia` (tại `created_at` của gói chứa quan sát) — mỗi hàm ghim theo mốc của riêng nó (S3.1, S4.4a).
+6. **L14 vào sổ đăng ký với vế LƯỢT CHẤM.** Vế benchmark nới hàng ở S4.5b (nhóm khoá `benchmark` đọc từ phiên bản ghim). Vế TCO và form
+   nhà cung cấp tách thành một số L MỚI ở S4.7 — hôm nay không chỗ nào trong hai thứ ấy đọc chính sách (chủ dự án chốt ⑷ (5)).
+7. **Chốt cho S4.5b và S4.5c** (ghi ở đây vì chốt cùng lượt): tứ phân vị nội suy tuyến tính — cùng nghĩa `percentile_cont` —, trung vị của
+   tập chẵn là trung bình hai số giữa, số thập phân chính xác dạng chuỗi; chỉ so quan sát cùng tiền tệ với báo giá đang xét và loại đơn
+   giá `0`, cả hai đếm và hiện; lưu nhãn kèm CHIỀU (trên/dưới) mà không lưu tỷ lệ lệch — tỷ lệ cộng giá của chính dòng suy ra trung vị,
+   tức một giá; phiên bản ghim không có nhóm `benchmark` ⇒ không ghi hàng kết quả, hiện *"chưa cấu hình"*, lượt chấm vẫn chạy.
+
+### Hệ quả và giới hạn nói ra
+
+- **Đổi hành vi MVP1 cho mọi tổ chức** (spec §8.11, chủ dự án chọn khi biết giá): gói mở dưới phiên bản chưa khai trọng số không bao giờ
+  chấm được — lối ra là huỷ gói và mở lại. Hôm nay không có khách hàng thật (PRODUCT §10); cái giá rơi vào `gieo:demo` (sửa) và cụm test
+  (không ca nào lật kết quả — biên bản §S1.9101 kê từng tệp đã chạy).
+- **Hai phiên bản ghim cho một gói**: ngân sách, bậc và chế độ nghiêm ghim tại `created_at`/lần nộp (S3.1); lượt chấm ghim tại
+  `opened_at`. Một phiên bản khai giữa lúc tạo và lúc mở áp cho lượt chấm mà không áp cho bậc. Đó là hai mốc có chủ đích, không một
+  lỗi — nhưng người đọc bộ bằng chứng thấy hai `policy_id` khác nhau cho cùng gói.
+- **Cửa sổ của `created_at`**: `created_at` là `now()` của giao dịch TẠO phiên bản, tức lúc nó BẮT ĐẦU. Một giao dịch khai phiên bản bắt
+  đầu trước lần mở gói và commit sau nó có `created_at < opened_at` — phiên bản ấy thành phiên bản ghim dù lúc mở chưa ai thấy nó. Cửa
+  sổ là phần chồng của hai giao dịch, trước khi có giá nào lộ (giá lộ ở `UNSEALED`, sau hạn nộp) — không phải đường của góc C①.
+- **Lượt chấm đã ghi không được kiểm lại**: trigger chỉ `BEFORE INSERT`. Hàng cũ dưới phiên bản lúc chấm ở lại làm sự thật kiểm toán.
+- **Nhánh *không có phiên bản ghim* không có ca riêng ở tầng gói** — dựng nó cần một tổ chức không phiên bản nào trước lúc mở gói; vế
+  CSDL của nó (mọi `policy_id` bị từ chối khi phiên bản ghim là `NULL`) đi chung một vế `IS DISTINCT FROM` với ca đã đo.

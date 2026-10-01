@@ -28,7 +28,7 @@
 
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
-import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
+import { PERMISSIONS, maChotTuLoi, requirePermission, resolveSessionActor, tuChoiTheoChot } from "@trustprocure/identity";
 import { nemTuChoi, type MaTuChoiTrangThai } from "./tu-choi-vao-so.js";
 import {
   laTuChoi,
@@ -119,38 +119,59 @@ interface HangBaoGia {
 }
 
 /**
- * Đọc phiên bản chính sách HIỆN HÀNH và khẳng định nó đã khai trọng số.
+ * ~~Đọc phiên bản chính sách HIỆN HÀNH và khẳng định nó đã khai trọng số.~~
  *
- * **Vì sao là phiên bản hiện hành, không phải `rfq_budgets.policy_id`:** spec §4.1 viết câu từ
+ * ~~**Vì sao là phiên bản hiện hành, không phải `rfq_budgets.policy_id`:** spec §4.1 viết câu từ
  * chối là *"tạo PHIÊN BẢN MỚI trước khi chấm"*, và câu ấy chỉ có nghĩa nếu lượt chấm đọc bản mới
  * nhất. Ghim vào phiên bản của ngân sách thì tạo bản mới chẳng giúp gì, và mọi RFQ ra đời trước
- * S2 sẽ không bao giờ chấm được.
+ * S2 sẽ không bao giờ chấm được.~~
+ *
+ * [S1.9101 / S4.5a / L14 / ADR-9201] Đọc phiên bản chính sách GHIM của gói — `chinh_sach_hieu_luc(org, opened_at)` — và khẳng định
+ * nó đã khai trọng số. Lý lẽ *"đọc mới nhất"* ở trên là lỗ góc C① của lượt soi S1.159: lượt chấm chỉ chạy sau khi giá lộ, và
+ * `FINANCE` giữ cùng lúc `policy.manage`, `bid.view`, `evaluation.perform` — thấy giá rồi khai phiên bản mới là đổi được trọng
+ * số. Chủ dự án đảo lựa chọn ấy cho MỌI tổ chức, khi biết giá (spec S4 §2.4 ⑸, §8.11): gói mở dưới phiên bản chưa khai trọng số,
+ * hay mở trước khi tổ chức có phiên bản nào, thì không chấm được — và lời từ chối nói vì sao một phiên bản MỚI không cứu được nó.
+ * Không ghim vào `rfq_budgets.policy_id`: gói không ngân sách vẫn chấm được, và ngân sách ghim theo mốc của riêng nó (S3.1).
+ *
+ * Trigger `rfq_evaluations_kiem_phien_ban_ghim` (`9501`) đọc lại CHÍNH hàm ấy tại CHÍNH mốc ấy — lớp CSDL; câu này là lớp nói
+ * được VÌ SAO.
  */
-async function docChinhSach(client: pg.PoolClient, orgId: string): Promise<{
+async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string): Promise<{
   readonly id: string;
   readonly version: number;
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
 }> {
-  // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách hiện hành: một phiên bản có bậc chưa
-  // có chữ ký thứ hai không đổi được trọng số chấm (ADR-082 ⑺). Hệ quả phụ, nói ra: bản cũ bỏ qua
-  // `effective_from`, nên một phiên bản hẹn giờ được chấm theo TRƯỚC giờ hiệu lực của nó.
-  const { rows } = await client.query<HangChinhSach>(
+  // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách: một phiên bản có bậc chưa có chữ ký thứ hai TRƯỚC lúc gói mở
+  // không áp cho gói (ADR-082 ⑺). [S1.9101] Mốc là `opened_at` của gói, không `now()`: `effective_from >= created_at` (`022`) và
+  // `created_at` ngoài `GRANT INSERT`, nên không phiên bản nào tạo sau lúc mở lọt vào.
+  const { rows } = await client.query<{
+    readonly id: string | null;
+    readonly version: number | null;
+    readonly eval_components: HangChinhSach["eval_components"];
+  }>(
     `SELECT o.id, o.version, o.eval_components
-       FROM public.org_procurement_policies o
-      WHERE o.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now())`,
-    [orgId],
+       FROM public.rfq_packages r
+       LEFT JOIN public.org_procurement_policies o
+         ON o.org_id OPERATOR(pg_catalog.=) r.org_id
+        AND o.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc(r.org_id, r.opened_at)
+      WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, rfqId],
   );
-  const cs = rows[0];
-  if (cs === undefined) {
+  const hang = rows[0];
+  if (hang === undefined || hang.id === null || hang.version === null) {
     throw new DanhGiaTuChoiError(
       "CHINH_SACH_CHUA_KHAI_TRONG_SO",
-      "Tổ chức chưa có một phiên bản chính sách mua sắm nào; tạo chính sách trước khi chấm.",
+      "Gói thầu mở khi tổ chức chưa có phiên bản chính sách mua sắm nào hiệu lực, nên không có phiên bản để chấm; " +
+        "phiên bản tạo sau lúc mở không áp cho gói này (L14).",
     );
   }
+  const cs: HangChinhSach = { id: hang.id, version: hang.version, eval_components: hang.eval_components };
   if (cs.eval_components === null) {
     throw new DanhGiaTuChoiError(
       "CHINH_SACH_CHUA_KHAI_TRONG_SO",
-      `Chính sách phiên bản ${String(cs.version)} chưa khai trọng số đánh giá; tạo phiên bản mới trước khi chấm.`,
+      `Chính sách phiên bản ${String(cs.version)} chưa khai trọng số đánh giá. Gói thầu này ghim phiên bản ấy lúc mở; ` +
+        "phiên bản tạo sau lúc mở không áp cho gói này (L14).",
     );
   }
   const tp = cs.eval_components.map((t) => ({ ma: t.ma, donVi: t.don_vi, heSo: t.he_so }));
@@ -312,7 +333,7 @@ export async function taoLuotDanhGia(
     );
   }
 
-  const cs = await docChinhSach(client, orgId);
+  const cs = await docChinhSach(client, orgId, input.rfqId);
   const baoGia = await docBaoGia(client, orgId, input.rfqId);
 
   const docDuoc = baoGia.filter((b) => b.tien !== null);
@@ -365,14 +386,24 @@ export async function taoLuotDanhGia(
 
   const hang = xepHang(tinh.map((t) => t.gia));
 
-  const { rows: luot } = await client.query<{ id: string }>(
-    `INSERT INTO public.rfq_evaluations
-       (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id)
-     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.text,
-             $5::pg_catalog.uuid, $6::pg_catalog.uuid)
-     RETURNING id`,
-    [orgId, input.rfqId, cs.id, currency, actor.id, input.actorSessionId],
-  );
+  let luot: readonly { id: string }[];
+  try {
+    ({ rows: luot } = await client.query<{ id: string }>(
+      `INSERT INTO public.rfq_evaluations
+         (org_id, rfq_id, policy_id, currency, created_by, created_by_session_id)
+       VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.text,
+               $5::pg_catalog.uuid, $6::pg_catalog.uuid)
+       RETURNING id`,
+      [orgId, input.rfqId, cs.id, currency, actor.id, input.actorSessionId],
+    ));
+  } catch (loi) {
+    // [S1.9101 / S4.5a / L14] Trigger `rfq_evaluations_kiem_phien_ban_ghim` từ chối một `policy_id` khác phiên bản ghim, với tên
+    // `l14_phien_ban_khong_ghim` (ADR-108). `docChinhSach` đọc đúng hàm ấy tại đúng mốc ấy, nên đường này chỉ tới được khi có một
+    // bộ đọc lệch hay một đường ghi thứ hai — cùng khuôn J5 của `deXuatTraoThau`: hàng `CONTROL_DENIED` ở giao dịch độc lập rồi ném.
+    const ma = maChotTuLoi(loi);
+    if (ma !== null) await tuChoiTheoChot(auditPool, orgId, actor, input.rfqId, ma, loi);
+    throw loi;
+  }
   const evaluationId = luot[0]?.id;
   if (evaluationId === undefined) throw new Error("Không ghi được lượt đánh giá.");
 

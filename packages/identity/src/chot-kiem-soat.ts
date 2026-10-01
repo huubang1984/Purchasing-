@@ -36,6 +36,12 @@
 // tên ràng buộc `j5_luot_cham_khong_moi_nhat`. ADR-108 đòi tên hai phía khớp nhau (cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts`
 // đọc cả thân trigger ấy), nên tên ấy có dòng ở đây dù đường sản xuất không tới được nó: `deXuatTraoThau` tự suy lượt mới nhất.
 //
+// [S1.9101 / S4.5a / ADR-9201] `L14_PHIEN_BAN_KHONG_GHIM` — trigger `rfq_evaluations_kiem_phien_ban_ghim` (`9501_ghim_chinh_sach_luot_cham`)
+// từ chối một lượt chấm mang phiên bản chính sách KHÁC phiên bản hiệu lực lúc gói mở, với tên `l14_phien_ban_khong_ghim`. Chốt đầu
+// tiên của nhóm L (spec S4 §5 L12: S4 dùng lại từ vựng này, không dựng bản thứ hai). Cùng hình dạng J5: `taoLuotDanhGia` đọc đúng
+// hàm ghim tại đúng mốc, nên đường sản xuất không tới được; câu ghi nào tới được là một đường ghi thứ hai, và kiểm toán viên cần
+// thấy đúng lần ấy.
+//
 // ----------------------------------------------------------------------------------------------
 // BẢNG NÀY LÀ NGUỒN DUY NHẤT CỦA TỪ VỰNG
 // ----------------------------------------------------------------------------------------------
@@ -67,6 +73,7 @@ export type MaChotKiemSoat =
   | "K4A_THU_HOI_SAI_TRANG_THAI"
   | "K8A_NGUOI_MOI_XAC_MINH"
   | "K8A_NGUOI_TAO_TU_XAC_MINH"
+  | "L14_PHIEN_BAN_KHONG_GHIM"
   | "NGAN_SACH_GHIM_BAN_CU"
   | "K10A_TAC_GIA_CHINH_SACH"
   | "K10A_TU_GHI_NHAN"
@@ -80,7 +87,7 @@ export interface DongChot {
    * (`K4a`, `K8a`) cho chốt mà spec tách thành nhiều vế (spec S3 §5.1 K4a, K4b, K8a, K8b) — cùng khuôn mã của sổ bất biến
    * (`KHUON_MA`, khoản 246).
    */
-  readonly chot: `${"D" | "J" | "K"}${number}` | `K${number}${"a" | "b"}`;
+  readonly chot: `${"D" | "J" | "K" | "L"}${number}` | `K${number}${"a" | "b"}`;
   /** `true` ⇒ lần từ chối này để lại một hàng `CONTROL_DENIED` ở giao dịch ĐỘC LẬP. */
   readonly vaoSo: boolean;
   /** Vì sao — và nó phải trả lời được câu *"kiểm toán viên có hỏi tới ca này không"*. */
@@ -267,6 +274,16 @@ export const CHOT_VAO_SO: Readonly<Record<MaChotKiemSoat, DongChot>> = {
     thongDiep:
       "Bảng xếp hạng đã đổi từ khi chọn báo giá: gói thầu có một lượt chấm mới hơn — đọc lại bảng xếp hạng rồi đề xuất lại (J5).",
   },
+  L14_PHIEN_BAN_KHONG_GHIM: {
+    chot: "L14",
+    vaoSo: true,
+    lyDo:
+      "lượt chấm mang phiên bản chính sách KHÁC phiên bản hiệu lực lúc gói mở — đúng ca góc C① của S1.159: thấy giá rồi khai " +
+      "phiên bản mới để đổi trọng số (spec S4 §2.4 ⑸). Đường sản xuất không tới được (`taoLuotDanhGia` đọc hàm ghim tại `opened_at`); " +
+      "câu ghi nào tới được là một đường ghi thứ hai, và kiểm toán viên cần thấy đúng lần ấy — cùng lý lẽ J5",
+    thongDiep:
+      "Lượt chấm phải dùng phiên bản chính sách hiệu lực lúc gói thầu mở; phiên bản khai sau lúc ấy không áp cho gói này (L14).",
+  },
 };
 
 /**
@@ -289,6 +306,8 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
+  // [S1.9101 / S4.5a] Nhánh duy nhất của `rfq_evaluations_kiem_phien_ban_ghim` (`9501_ghim_chinh_sach_luot_cham`).
+  l14_phien_ban_khong_ghim: "L14_PHIEN_BAN_KHONG_GHIM",
 };
 
 /** Mã chốt của một lỗi `pg` do trigger ném — `check_violation` (23514) mang một tên có trong `CHOT_THEO_RANG_BUOC` — hay `null`. */

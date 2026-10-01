@@ -1079,7 +1079,10 @@ describe("[S1.221 / khoản 137] payload sổ của lượt mở thầu mang tr�
 // (đi sai thứ tự chuỗi, ADR-060/ADR-084 ⑸), lời mời còn sống. Đo ở đây trên gói đã mở bằng CHÍNH worker, không ép trạng thái.
 // ===============================================================================================
 describe("[S1.217 / khoản 250] báo giá của lời mời đã thu hồi không dự thầu; thu hồi sau lần mở thầu bị chặn", () => {
-  /** Chính sách có trọng số đánh giá — lượt chấm đọc phiên bản HIỆN HÀNH (`luot-danh-gia.ts`), nên nó phải là bản mới nhất. */
+  /**
+   * Chính sách có trọng số đánh giá — ~~lượt chấm đọc phiên bản HIỆN HÀNH (`luot-danh-gia.ts`), nên nó phải là bản mới nhất~~
+   * [S1.9101 / S4.5a / L14] lượt chấm đọc phiên bản hiệu lực lúc gói MỞ; bản này tạo trong `beforeAll`, trước mọi lần mở của khối.
+   */
   let csCham = "";
   const gia = (t: string): string => JSON.stringify({ totalAmount: t, currency: "VND" });
 
