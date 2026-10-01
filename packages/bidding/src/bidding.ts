@@ -27,7 +27,7 @@ import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { describeEnvelope } from "@trustprocure/sealed-envelope";
 import { ReceiptError, buildReceiptText, sha256Hex } from "./receipt.js";
-import type { ReceiptSigner } from "./signer.js";
+import { assertReceiptKid, type ReceiptSigner } from "./signer.js";
 
 /** `check_violation` — ba trigger `BEFORE INSERT` của `vendor_bid_versions` đều `RAISE` mã này. */
 const MA_CHECK_VIOLATION = "23514";
@@ -208,6 +208,13 @@ export async function submitBid(
 ): Promise<BidReceiptRecord> {
   await assertTenantBound(client, orgId, "submitBid");
   batBuocUuid(input.guestSessionId, "guestSessionId");
+  // [S1.9101 / kid] Kid của bộ ký đi vào dòng `kid=` của biên nhận sắp phát — kiểm bằng tập PHÁT HÀNH ở ĐÂY, trước MỌI lần ghi
+  // (luồng, phiên bản, hàng sổ). Hai factory đã kiểm (`ReceiptSigningKeyRing`, `createAwsKmsReceiptSigner`, S1.249), nhưng
+  // `ReceiptSigner` là một interface: một đối tượng tự dựng mang kid mà định dạng cho phép (`:`) từng đi thẳng vào
+  // `buildReceiptText` — và một kid định dạng cũng cấm (`\n`) từng ném ở đó, SAU câu ghi phiên bản. Chủ dự án chốt 2026-10-01.
+  // Đọc `activeKeyId` ĐÚNG MỘT lần (lượt soi đối kháng): nó có thể là một getter, và giá trị đã kiểm phải là giá trị đi vào văn bản.
+  const kid = input.signer.activeKeyId;
+  assertReceiptKid(kid);
 
   // Phong bì phải ĐỌC ĐƯỢC trước khi nó được cất. Một mảng byte bất kỳ cũng qua được `CHECK` độ
   // dài của 018, nhưng nó sẽ là một báo giá KHÔNG BAO GIỜ mở được — và điều đó chỉ lộ ra ở lần mở
@@ -347,7 +354,8 @@ export async function submitBid(
   }
 
   const canonicalText = buildReceiptText({
-    kid: input.signer.activeKeyId,
+    // ~~`input.signer.activeKeyId`~~ [S1.9101 / kid] giá trị đã kiểm ở đầu hàm.
+    kid,
     rfqId: p.rfq_id,
     bidId,
     version: b.version,

@@ -12,7 +12,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createPrivateKey, createSign, generateKeyPairSync } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath } from "node:process";
@@ -295,6 +295,40 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
       expect(chay("xuat", "--org", org).ma).toBe(0);
     } finally {
       bienMoiTruong["TRUSTPROCURE_NEO_KHO"] = cu;
+    }
+  });
+
+  // [S1.9101 / kid] Phía PHÁT HÀNH của mốc neo ở tiến trình thật: `TRUSTPROCURE_NEO_KID` có `:` (kèm nửa công khai khai đúng kid ấy,
+  // để không lỗi nào khác đứng trước) ⇒ `xuat` thoát mã 1 nêu TÊN biến và tập ký tự, và nơi cất (dựng mới bằng `khoi-tao`) không
+  // nhận một mốc neo nào — một mốc neo kid có `:` là một mốc neo `trich` không tách được (H11-11). Đối chứng: cùng khoá, kid `-`.
+  it("[S1.9101 / kid] TRUSTPROCURE_NEO_KID có `:` ⇒ xuat thoát mã 1 nêu tên biến và tập ký tự, KHÔNG mốc neo nào được ghi; kid hợp lệ ⇒ xuất được", async () => {
+    const kho = join(thuMuc, "kho-kid-hai-cham");
+    const cu = {
+      kho: bienMoiTruong["TRUSTPROCURE_NEO_KHO"]!,
+      kid: bienMoiTruong["TRUSTPROCURE_NEO_KID"]!,
+      congKhai: bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"]!,
+    };
+    const spki = cu.congKhai.slice(cu.congKhai.indexOf("=") + 1);
+    bienMoiTruong["TRUSTPROCURE_NEO_KHO"] = kho;
+    try {
+      expect(chay("khoi-tao").ma).toBe(0);
+      bienMoiTruong["TRUSTPROCURE_NEO_KID"] = "neo:cli";
+      bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"] = `neo:cli=${spki}`;
+      const hong = chay("xuat", "--org", org);
+      expect(hong.ma, hong.ra).toBe(1);
+      expect(hong.loi).toContain("TRUSTPROCURE_NEO_KID");
+      expect(hong.loi).toContain("[A-Za-z0-9._-]");
+      expect(await readdir(kho), "không mốc neo nào được ghi").toEqual([]);
+
+      bienMoiTruong["TRUSTPROCURE_NEO_KID"] = cu.kid;
+      bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"] = cu.congKhai;
+      const duoc = chay("xuat", "--org", org);
+      expect(duoc.ma, duoc.loi).toBe(0);
+      expect(await readdir(kho)).toEqual([`${org}.jsonl`]);
+    } finally {
+      bienMoiTruong["TRUSTPROCURE_NEO_KHO"] = cu.kho;
+      bienMoiTruong["TRUSTPROCURE_NEO_KID"] = cu.kid;
+      bienMoiTruong["TRUSTPROCURE_NEO_KHOA_CONG_KHAI"] = cu.congKhai;
     }
   });
 });
