@@ -188,7 +188,10 @@ trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngo�
 - `log/`: log bốn tiến trình.
 
 **Một thư mục trạng thái đi với MỘT CSDL.** `api` từ chối khởi động khi vòng khoá lệch dấu kiểm đã ghi (khoản 165), và
-công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới.
+công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới. **[S1.254]** Và hai lượt chạy ĐỒNG THỜI không được dùng chung một
+máy chủ Postgres, dù mỗi lượt một CSDL: hai vai đăng nhập `app_api_login`/`app_unseal_login` là của cả máy chủ, lượt sau đặt
+lại mật khẩu của chúng, và `api` của lượt trước mất kết nối với lỗi `28P01` (đo ở diễn tập ngày 2026-10-01 — lượt chế độ chậm
+hỏng giữa chừng vì thế). Mỗi lượt một container, như khối lệnh trên.
 
 **Trình diễn trên điện thoại thật cần HTTPS.** Cookie khách mang cờ `Secure` (ADR-044), nên cụm này chỉ nghe trên
 127.0.0.1. Khi trình diễn, mở `/nop-thau` trên máy người trình diễn với khung hẹp; điện thoại thật là việc của một cụm có
@@ -211,6 +214,14 @@ bấm **Đọc**. Không màn nào dưới đây cần gõ SQL.
 
 Lần tự duyệt phải đi TRƯỚC lần duyệt thật: sau khi đề xuất đã duyệt, trang `/mo-thau` chặn nút **Phê duyệt** ngay trên trình
 duyệt, và lần thử không bao giờ tới sản phẩm.
+
+**[S1.254] Ba điều đo ở lượt diễn tập ngày 2026-10-01:**
+- Link mời mở được tới lần xác minh OTP ĐẦU TIÊN rồi bị tiêu thụ ([H5]); `lien-ket` vẫn liệt kê nó vì công cụ không biết lần ấy.
+  Đừng diễn thử bằng link sẽ dùng khi gặp khách; lỡ dùng thì nộp tiếp trên cùng trình duyệt, hay bấm «Gửi lại link» ở `/tao-thau`.
+- Mỗi người mua chỉ nhận 5 link đăng nhập trong 15 phút; quá trần, `dang-nhap` đợi 20 giây rồi báo (nay nói rõ trần ấy). Diễn
+  thử trước buổi gặp thì giữ phiên — phiên sống 8 giờ — thay vì xin link mới cho mỗi màn.
+- Bước 7 của `/mo-thau`: lần bấm **Phê duyệt** đầu tiên hiện đề xuất (nhà cung cấp, chi phí hiệu dụng, lý do), lần thứ hai mới
+  ký — hay bấm **Đọc đề xuất** trước. Người đề xuất chọn báo giá bằng nút **Chọn** ở bảng xếp hạng (bước 5).
 
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 
@@ -258,6 +269,19 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    - thư mục trạng thái mới trên một CSDL cũ làm `api` chết lúc khởi động.
 4. **Lượt soi đối kháng năm lăng kính** (an ninh, đúng đắn, xanh giả, cổng CI, tài liệu) tìm thêm những chỗ công cụ nói
    nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.163 mục 9 kê từng điểm và cách sửa.
+
+## 6b. **[S1.254]** Lượt diễn tập ngày 2026-10-01 — trên `master` `fc0dcc75`, rồi trên mã đã sửa
+
+| Phép đo | Kết quả |
+|---|---|
+| Chế độ nhanh trên `fc0dcc75` | **10/10**, cô lập 2/2, chặn đúng 16/16, vào sổ 15/16, biên nhận 35/35, bộ bằng chứng 5/5 — khớp lượt S1.168 |
+| Kịch bản trình diễn §5 trên Chromium | đi hết: nộp ở 375px, số báo giá bị giấu, hai chữ ký mở thầu, bảng so sánh, duyệt trao thầu, bộ bằng chứng kiểm độc lập `ok=true` |
+| Trọn câu §11 trên Chromium (gói mới, ba nhà cung cấp mời qua thư, nộp ở 375px) | đi hết **trừ một bước**: đề xuất trao thầu đòi id phiên bản mà không bảng nào in — khoản 320 |
+| Phát hiện | 320 (id phiên bản), 321 (người duyệt ký lên khối trống), 322 (ô đơn giá bị cắt ở 320–414px), 323 (403 thô), 324 (công cụ trình diễn) |
+| Chế độ chậm SX-06 | lượt đầu hỏng với `28P01` vì chung máy chủ Postgres với cụm trình diễn (khoản 324 ⑶); chạy lại trên máy chủ riêng: **1/1**, 62 phút, đúng một hàng `BID_DEADLINE_DENIED` |
+| Sau khi sửa | chế độ nhanh 10/10; XD-03 đi từ mở thầu tới trao thầu CHỈ bằng chuột; ô đơn giá 252–346px ở 320–414px, không tràn ngang |
+
+Chi tiết: biên bản §S1.254.
 
 ## 7. Thang bậc tới pilot thật — trả lời thẳng cho "không ai nhận pilot"
 
