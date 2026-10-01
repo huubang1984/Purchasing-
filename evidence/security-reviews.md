@@ -22917,4 +22917,10 @@ thông điệp lỗi; thứ tự cổng đúng (người không giữ `bid.view`
 
 ## 10. Số đo
 
-(điền sau `pnpm evidence`)
+- Cây cuối (trên `master` `41a4cde` — #220 đã merge): `pnpm t0` sạch (512 module, không vi phạm phụ thuộc); `pnpm test` 139 tệp, 2310
+  đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.251, ADR-140).
+- `pnpm evidence` lần đầu trên `9cb4b83` đỏ ĐÚNG MỘT ca: `apps/api/src/du-lieu.int.test.ts` đếm route dưới tiền tố `/items`, `/uom` —
+  mười một của S4.2b, nay mười hai vì route lịch sử giá nằm dưới cùng tiền tố. Lời khai sửa thành mười hai route, tám ghi, bốn đọc
+  `agent: false`, và đòi route thứ mười hai đúng là `GET /items/:itemId/price-history` (`5ded942`); `apps/api` 29 tệp, 391/391.
+- `pnpm evidence` toàn bộ T1–T3 trên `5ded942`: 226 tệp, 4326 khẳng định, 4316 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo
+  biến môi trường), **0 đỏ**; **77/77 bất biến** (55 nghiệp vụ + 22 hàng rào); L6 đo bằng 15 khẳng định, L5 59.
