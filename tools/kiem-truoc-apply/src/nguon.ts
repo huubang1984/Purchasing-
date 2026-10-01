@@ -108,7 +108,7 @@ function chay(lenh: string, thamSo: readonly string[], vao?: string): string {
 }
 
 /**
- * [rà 2026-10-01 — đo trên Terraform 1.13.3] Biến trượt `validation` của stack (`ten_mien` còn `<…>`, `anh` ghi thẻ thay
+ * [S1.9101 — đo trên Terraform 1.13.3] Biến trượt `validation` của stack (`ten_mien` còn `<…>`, `anh` ghi thẻ thay
  * digest ở 6.3…) mà `terraform console` VẪN THOÁT 0: lý do ra stderr, còn stdout mở đầu bằng "Warning: Due to the problems
  * above…" rồi mới tới giá trị. Đọc riêng stdout thì người vận hành chỉ nghe "stdout không phải JSON" kèm lời gợi ý
  * `terraform init` — sai hướng, và lý do thật bị vứt. Lỗi này mang stderr ấy.

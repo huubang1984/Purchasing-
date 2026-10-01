@@ -32,6 +32,14 @@ describe("[ADR-069] kho token Zalo", () => {
     expect(lenh.every((l) => (l as { input: { SecretId: string } }).input.SecretId === "tp/api/zalo-oa")).toBe(true);
   });
 
+  it("[S1.9101] secret nạp từ tệp UTF-8 KÈM BOM (PowerShell 5.1 `-Encoding utf8`) vẫn đọc được; chỉ bỏ MỘT BOM ở đầu", () => {
+    const tep = `\uFEFF${JSON.stringify(HOP_LE)}\n`;
+    expect(phanTichSecretZalo(tep)).toEqual({ appId: "123", secretKey: "sk", accessToken: "", refreshToken: "rt", hetHanLuc: 0 });
+    expect(() => phanTichSecretZalo(`\uFEFF\uFEFF${JSON.stringify(HOP_LE)}`)).toThrow(/JSON/u);
+    // Đối chứng: chính `JSON.parse` từ chối BOM — phép đo trên không xanh nhờ một bộ đọc tự bỏ qua nó.
+    expect(() => JSON.parse(tep) as unknown).toThrow(SyntaxError);
+  });
+
   it("secret hỏng ⇒ ném nêu tên trường, không nội dung", () => {
     expect(() => phanTichSecretZalo(undefined)).toThrow(/JSON/u);
     expect(() => phanTichSecretZalo("[]")).toThrow(/đối tượng/u);

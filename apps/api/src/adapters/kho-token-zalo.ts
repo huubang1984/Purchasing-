@@ -33,7 +33,10 @@ function chuoi(o: Record<string, unknown>, ten: string, choRong: boolean): strin
 export function phanTichSecretZalo(s: string | undefined): TokenZalo {
   let o: unknown;
   try {
-    o = JSON.parse(s ?? "");
+    // [S1.9101] Bỏ MỘT dấu BOM ở đầu, như `docBanKhai` của tools/khoi-tao-to-chuc: README stack 85 bước 3 nạp tệp bằng
+    // `file://`, và Windows PowerShell 5.1 ghi `-Encoding utf8` KÈM BOM — `JSON.parse` từ chối nó, kênh Zalo chết.
+    const t = s ?? "";
+    o = JSON.parse(t.startsWith("\uFEFF") ? t.slice(1) : t);
   } catch {
     throw new GuiKenhError("secret Zalo: không phải JSON");
   }
