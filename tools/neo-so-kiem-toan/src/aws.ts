@@ -155,7 +155,7 @@ export async function taoBoKyNeoAwsKms(t: {
   readonly keyId: string;
   readonly kid: string;
 }): Promise<{ readonly boKy: BoKyNeo; readonly khoaCongKhai: Uint8Array }> {
-  // [S1.9101 / kid] Bộ ký KMS là phía PHÁT HÀNH của mốc neo: kid của nó đi vào dòng `kid=` và thành `khoa-<kid>.pem` khi `trich`
+  // [S1.250 / kid] Bộ ký KMS là phía PHÁT HÀNH của mốc neo: kid của nó đi vào dòng `kid=` và thành `khoa-<kid>.pem` khi `trich`
   // tách mốc neo (H11-11). Kiểm bằng tập phát hành TRƯỚC mọi lời gọi KMS — cùng vòng khoá local-dev (`anchor-sign.ts`), cùng
   // `neo_kid` của stack 40. `buildAnchorText` dưới chỉ giữ tập rộng của ĐỊNH DẠNG (cho `:`). Đọc kid của tham số ĐÚNG MỘT lần
   // (lượt soi đối kháng): nó có thể là một getter, và giá trị đã kiểm phải là giá trị bộ ký dùng ở mọi chỗ dưới.
@@ -198,13 +198,13 @@ export async function taoBoKyNeoAwsKms(t: {
 // ---------------------------------------------------------------------------------------------
 /**
  * Kid làm tên đối tượng `khoa-bien-nhan/<kid>.json` — từ S1.249 cùng chữ với tập phát hành kid biên nhận (hàng `KID` GIU
- * VAN_BAN của `tests/architecture/ma-chep-api-worker.test.ts`). [S1.9101 / kid] Và là tập phát hành của kid KÝ MỐC NEO trong công
+ * VAN_BAN của `tests/architecture/ma-chep-api-worker.test.ts`). [S1.250 / kid] Và là tập phát hành của kid KÝ MỐC NEO trong công
  * cụ này (`laKidPhatHanh` — bộ ký KMS ở trên, `TRUSTPROCURE_NEO_KID` ở `index.ts`): một tập, không thêm bản chép.
  */
 const KID = /^[A-Za-z0-9._-]{1,64}$/u;
 
 /**
- * [S1.9101 / kid] `kid` thuộc tập PHÁT HÀNH `[A-Za-z0-9._-]{1,64}` — kid biên nhận (S1.249) và kid ký mốc neo (chủ dự án chốt
+ * [S1.250 / kid] `kid` thuộc tập PHÁT HÀNH `[A-Za-z0-9._-]{1,64}` — kid biên nhận (S1.249) và kid ký mốc neo (chủ dự án chốt
  * 2026-10-01) dùng chung. Phía KIỂM không gọi hàm này: nó đọc tập rộng của định dạng (`anchor-text.ts`, `receipt.ts`).
  */
 export function laKidPhatHanh(kid: string): boolean {

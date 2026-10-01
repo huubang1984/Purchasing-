@@ -168,7 +168,7 @@ describe("bộ ký mốc neo", () => {
 });
 
 // ==============================================================================================
-// [S1.9101 / kid] PHÍA PHÁT HÀNH MỐC NEO HẸP HƠN ĐỊNH DẠNG: KID KÝ MỐC NEO KHÔNG MANG `:`
+// [S1.250 / kid] PHÍA PHÁT HÀNH MỐC NEO HẸP HƠN ĐỊNH DẠNG: KID KÝ MỐC NEO KHÔNG MANG `:`
 //
 // Cùng nguyên tắc với kid biên nhận (S1.249), chủ dự án chốt 2026-10-01: kid ký mốc neo đi vào dòng `kid=` của văn bản đã ký VÀ
 // thành tên tệp `khoa-<kid>.pem` khi `pnpm neo trich` tách mốc neo cho kiểm toán viên — `kidAnToanChoTenTep` của
@@ -177,8 +177,8 @@ describe("bộ ký mốc neo", () => {
 // của `anchor-text.ts` vẫn cho `:` — đổi định dạng đã ký là thứ ADR-026 §1 cấm (cùng lập luận H11-11), và phía KIỂM vẫn phải đọc
 // được mọi mốc neo định dạng cho phép.
 // ==============================================================================================
-describe("[S1.9101 / kid] phía phát hành mốc neo không nhận kid có `:`; định dạng đã ký thì không đổi", () => {
-  it("[S1.9101 / kid] vòng khoá ký mốc neo TỪ CHỐI kid có `:` — khoá đang dùng hay khoá cũ — thông điệp nêu tập ký tự", () => {
+describe("[S1.250 / kid] phía phát hành mốc neo không nhận kid có `:`; định dạng đã ký thì không đổi", () => {
+  it("[S1.250 / kid] vòng khoá ký mốc neo TỪ CHỐI kid có `:` — khoá đang dùng hay khoá cũ — thông điệp nêu tập ký tự", () => {
     for (const kid of ["kms:neo-2026", "a:b", ":"]) {
       expect(() => new AnchorSigningKeyRing(kid, { [kid]: generateAnchorKeyPair() }), kid).toThrow(AnchorError);
       expect(() => new AnchorSigningKeyRing(kid, { [kid]: generateAnchorKeyPair() }), kid).toThrow("[A-Za-z0-9._-]");
@@ -196,7 +196,7 @@ describe("[S1.9101 / kid] phía phát hành mốc neo không nhận kid có `:`;
     expect(() => new AnchorSigningKeyRing(`${k64}x`, { [`${k64}x`]: generateAnchorKeyPair() })).toThrow(AnchorError);
   });
 
-  it("[S1.9101 / kid] ĐỊNH DẠNG vẫn nhận kid có `:` — mốc neo `kid=kms:neo-2025` ký bằng bộ ký THỬ NGHIỆM độc lập dựng được, đọc ngược được và KIỂM được", () => {
+  it("[S1.250 / kid] ĐỊNH DẠNG vẫn nhận kid có `:` — mốc neo `kid=kms:neo-2025` ký bằng bộ ký THỬ NGHIỆM độc lập dựng được, đọc ngược được và KIỂM được", () => {
     // `taoBoKyNeoThuNghiem` ký bằng `createSign` trần qua `buildAnchorText` — không qua vòng khoá của file này: đây là một mốc neo
     // mà định dạng cho phép dù phía phát hành hôm nay không phát nó nữa (một mốc neo ký trước vòng này) — phía kiểm phải đọc được.
     const bo = taoBoKyNeoThuNghiem("kms:neo-2025");

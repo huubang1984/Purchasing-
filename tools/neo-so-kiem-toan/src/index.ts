@@ -110,7 +110,7 @@ function batBuoc(ten: string): string {
 }
 
 /**
- * [S1.9101 / kid] `TRUSTPROCURE_NEO_KID` — kid KÝ mốc neo, phía PHÁT HÀNH: tập `[A-Za-z0-9._-]{1,64}` (`laKidPhatHanh`), cùng
+ * [S1.250 / kid] `TRUSTPROCURE_NEO_KID` — kid KÝ mốc neo, phía PHÁT HÀNH: tập `[A-Za-z0-9._-]{1,64}` (`laKidPhatHanh`), cùng
  * `neo_kid` của terraform stack 40 và vòng khoá local-dev (`anchor-sign.ts`). Một chỗ đọc cho cả hai chế độ ký (local-dev, KMS),
  * kiểm trước khi dựng bộ ký — trước khi đọc khoá, trước lời gọi KMS nào —, lỗi nêu TÊN biến. Vòng khoá CÔNG KHAI
  * (`TRUSTPROCURE_NEO_KHOA_CONG_KHAI`, đường KIỂM) vẫn nhận tập rộng của định dạng: một mốc neo kid có `:` ký trước vòng này vẫn
@@ -184,7 +184,7 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
     throw new Error("TRUSTPROCURE_NEO_KMS_KEY_ID và TRUSTPROCURE_NEO_KHOA_RIENG loại trừ nhau.");
   }
   if (aws === undefined) throw new Error("Ký bằng KMS cần bộ biến S3/role của job neo (TRUSTPROCURE_NEO_S3_BUCKET…).");
-  // ~~`batBuoc`~~ [S1.9101 / kid] tập phát hành của kid ký mốc neo.
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo.
   const kid = docKidNeo();
   const kms = new KMSClient({ region: aws.region, credentials: aws.dangNhap });
   const { boKy, khoaCongKhai } = await taoBoKyNeoAwsKms({ client: kms, keyId, kid });
@@ -198,7 +198,7 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
 }
 
 function docBoKy(): AnchorSigner {
-  // ~~`batBuoc`~~ [S1.9101 / kid] tập phát hành của kid ký mốc neo — trước cả phép tra nửa công khai.
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo — trước cả phép tra nửa công khai.
   const kid = docKidNeo();
   const congKhai = docKhoaCongKhai().get(kid);
   if (congKhai === undefined) {
@@ -515,7 +515,7 @@ function pemTuSpkiDer(der: Uint8Array): string {
  * KÝ, siết nó sẽ làm những mốc neo cũ mang `kid` có `:` không còn kiểm được — đổi định dạng để
  * sửa một vấn đề tên tệp là đúng thứ ADR-026 §1 cấm.
  *
- * [S1.9101 / kid] Phía PHÁT HÀNH nay cùng tập (`KID_PHAT_HANH` của `anchor-sign.ts`, `docKidNeo`, bộ ký KMS của `aws.ts`): một kid
+ * [S1.250 / kid] Phía PHÁT HÀNH nay cùng tập (`KID_PHAT_HANH` của `anchor-sign.ts`, `docKidNeo`, bộ ký KMS của `aws.ts`): một kid
  * có `:` chỉ còn tới được đây từ một mốc neo ký TRƯỚC vòng này. Vế này giữ nguyên — nó là chỗ duy nhất phía KIỂM dùng kid làm tên
  * tệp.
  */

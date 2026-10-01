@@ -570,7 +570,7 @@ describe("bề mặt tệp", () => {
       interface PhanHoi { status: number; body: unknown }
       type Trang = Awaited<ReturnType<typeof dungTrang>>;
       /**
-       * Giữ mọi `/auth/redeem`: `ds[i]` là lời gọi thứ i — `tha` trả phản hồi, `nem` là mất mạng. [S1.9101 / khoản 310] ~~Chỉ
+       * Giữ mọi `/auth/redeem`: `ds[i]` là lời gọi thứ i — `tha` trả phản hồi, `nem` là mất mạng. [S1.250 / khoản 310] ~~Chỉ
        * `/auth/redeem`~~ Mọi lời gọi mang lệnh `lenh` (`giuLenh`); `giuRedeem` là `giuLenh("POST /auth/redeem")`.
        */
       const giuLenh = (lenh: string) => {
@@ -831,7 +831,7 @@ describe("bề mặt tệp", () => {
         });
 
         // ====================================================================================
-        // [S1.9101 / khoản 310] NÚT VÀO CỦA LƯỢT CŨ DỪNG Ở MỌI `await` — VÀ PHIÊN NÓ ĐÃ MỞ THÌ ĐÓNG
+        // [S1.250 / khoản 310] NÚT VÀO CỦA LƯỢT CŨ DỪNG Ở MỌI `await` — VÀ PHIÊN NÓ ĐÃ MỞ THÌ ĐÓNG
         //
         // Khoản 292 dừng phản hồi `/auth/redeem` của lượt đã qua; nút Vào còn hai `await` nữa — `/auth/totp`, `/me` — không kiểm
         // lượt. Đo ở §S1.249: `/auth/totp` 200 của mã A về sau khi thẻ đã sang link của B ⇒ trang xoá `#<org>:maCuaB` khỏi thanh
@@ -842,7 +842,7 @@ describe("bề mặt tệp", () => {
         // (`POST /auth/logout`, route đăng xuất sẵn có) thay vì để nó sống ngầm; từ chối hay mất mạng ở `/auth/totp` không chứng
         // minh phiên nào đã mở, nên không gọi gì. Bốn cảnh, bốn ca; khuôn bốn ca 292.
         // ====================================================================================
-        it(`[S1.9101 / khoản 310] ${trang}: ⑴ hashchange — /auth/totp 200 cho mã A về MUỘN ⇒ mảnh link của B còn nguyên, không /me, không «Đã vào…», các bước không mở; phiên A vừa mở bị đóng (POST /auth/logout); Tiếp lại đổi mã B`, async () => {
+        it(`[S1.250 / khoản 310] ${trang}: ⑴ hashchange — /auth/totp 200 cho mã A về MUỘN ⇒ mảnh link của B còn nguyên, không /me, không «Đã vào…», các bước không mở; phiên A vừa mở bị đóng (POST /auth/logout); Tiếp lại đổi mã B`, async () => {
           const g = giuLenh("POST /auth/totp");
           // Lệnh đóng phiên A cũng bị giữ: nút Vào phải đợi nó xong mới bật lại.
           const gx = giuLenh("POST /auth/logout");
@@ -877,7 +877,7 @@ describe("bề mặt tệp", () => {
           expect(maDaGui(p), "Tiếp lại đổi mã của B").toEqual(["maCuaA", "maCuaB"]);
         });
 
-        it(`[S1.9101 / khoản 310] ${trang}: ⑵ hashchange — /me của lượt A về MUỘN (sau /auth/totp 200) ⇒ không daVao: các bước không mở, không «Đã vào…», mảnh link của B còn nguyên; phiên A bị đóng`, async () => {
+        it(`[S1.250 / khoản 310] ${trang}: ⑵ hashchange — /me của lượt A về MUỘN (sau /auth/totp 200) ⇒ không daVao: các bước không mở, không «Đã vào…», mảnh link của B còn nguyên; phiên A bị đóng`, async () => {
           const g = giuLenh("GET /me");
           const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, nguoiVao: A, thay: g.thay });
           await p.bam("nut-ghi-danh");
@@ -899,7 +899,7 @@ describe("bề mặt tệp", () => {
           expect(p.trangThai.cookie, "phiên A sống ngầm trong trình duyệt").toBeNull();
         });
 
-        it(`[S1.9101 / khoản 310] ${trang}: ⑶ lời từ chối hay mất mạng của lượt cũ ⇒ không câu nào đè lên lượt mới; /auth/totp không mở phiên nào thì không gọi /auth/logout, /me mất mạng sau /auth/totp 200 thì có`, async () => {
+        it(`[S1.250 / khoản 310] ${trang}: ⑶ lời từ chối hay mất mạng của lượt cũ ⇒ không câu nào đè lên lượt mới; /auth/totp không mở phiên nào thì không gọi /auth/logout, /me mất mạng sau /auth/totp 200 thì có`, async () => {
           // ⓐ hashchange, rồi /auth/totp của A bị từ chối (401): không «Mã sáu số không đúng» dưới mã của B; không phiên nào để đóng.
           {
             const g = giuLenh("POST /auth/totp");
@@ -958,7 +958,7 @@ describe("bề mặt tệp", () => {
           }
         });
 
-        it(`[S1.9101 / khoản 310] ${trang}: ⑷ dán mã khác vào ô mà CHƯA bấm — /auth/redeem của mã A về sau ⇒ không bí mật của A; /auth/totp 200 của mã A về sau ⇒ không /me, các bước không mở, phiên A bị đóng; lần bấm kế đổi mã B`, async () => {
+        it(`[S1.250 / khoản 310] ${trang}: ⑷ dán mã khác vào ô mà CHƯA bấm — /auth/redeem của mã A về sau ⇒ không bí mật của A; /auth/totp 200 của mã A về sau ⇒ không /me, các bước không mở, phiên A bị đóng; lần bấm kế đổi mã B`, async () => {
           // ⓐ Tiếp với mã A bị giữ; B dán mã của mình vào ô (chưa bấm); lời «cần ghi danh» cho mã A về.
           {
             const g = giuRedeem();

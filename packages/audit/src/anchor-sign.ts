@@ -40,7 +40,7 @@ export interface AnchorKeyPair {
 }
 
 /**
- * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `anchor-text.ts`.~~ [S1.9101 / kid] Tập PHÁT
+ * ~~`KID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/` — cùng tập với `KID_PATTERN` của `anchor-text.ts`.~~ [S1.250 / kid] Tập PHÁT
  * HÀNH của kid ký mốc neo, HẸP hơn tập của ĐỊNH DẠNG: không `:`. Kid đi vào dòng `kid=` của mốc neo VÀ thành tên tệp
  * `khoa-<kid>.pem` khi `pnpm neo trich` tách mốc neo cho kiểm toán viên — `kidAnToanChoTenTep` của
  * `tools/neo-so-kiem-toan/src/index.ts` chỉ nhận `[A-Za-z0-9._-]` (H11-11), nên một kid mang `:` mà vòng khoá nhận là một mốc neo
@@ -68,7 +68,7 @@ export class AnchorSigningKeyRing {
       throw new AnchorError("Vòng khoá ký mốc neo phải có ít nhất một khoá.");
     }
     for (const [kid, k] of cap) {
-      // [S1.9101 / kid] Thông điệp nêu tập ký tự; kid đi qua `antoanChoBaoCao` (H9-6) — nó có thể mang ký tự điều khiển.
+      // [S1.250 / kid] Thông điệp nêu tập ký tự; kid đi qua `antoanChoBaoCao` (H9-6) — nó có thể mang ký tự điều khiển.
       if (!KID_PHAT_HANH.test(kid)) {
         throw new AnchorError(
           `Định danh khoá "${antoanChoBaoCao(kid)}" không hợp lệ: phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — nó đi ` +

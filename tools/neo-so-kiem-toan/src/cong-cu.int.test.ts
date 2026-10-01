@@ -298,10 +298,10 @@ describe("công cụ neo sổ kiểm toán — tiến trình thật", () => {
     }
   });
 
-  // [S1.9101 / kid] Phía PHÁT HÀNH của mốc neo ở tiến trình thật: `TRUSTPROCURE_NEO_KID` có `:` (kèm nửa công khai khai đúng kid ấy,
+  // [S1.250 / kid] Phía PHÁT HÀNH của mốc neo ở tiến trình thật: `TRUSTPROCURE_NEO_KID` có `:` (kèm nửa công khai khai đúng kid ấy,
   // để không lỗi nào khác đứng trước) ⇒ `xuat` thoát mã 1 nêu TÊN biến và tập ký tự, và nơi cất (dựng mới bằng `khoi-tao`) không
   // nhận một mốc neo nào — một mốc neo kid có `:` là một mốc neo `trich` không tách được (H11-11). Đối chứng: cùng khoá, kid `-`.
-  it("[S1.9101 / kid] TRUSTPROCURE_NEO_KID có `:` ⇒ xuat thoát mã 1 nêu tên biến và tập ký tự, KHÔNG mốc neo nào được ghi; kid hợp lệ ⇒ xuất được", async () => {
+  it("[S1.250 / kid] TRUSTPROCURE_NEO_KID có `:` ⇒ xuat thoát mã 1 nêu tên biến và tập ký tự, KHÔNG mốc neo nào được ghi; kid hợp lệ ⇒ xuất được", async () => {
     const kho = join(thuMuc, "kho-kid-hai-cham");
     const cu = {
       kho: bienMoiTruong["TRUSTPROCURE_NEO_KHO"]!,

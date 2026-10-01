@@ -456,7 +456,7 @@ const BANG_TEN: readonly HangTen[] = [
       "`TRUSTPROCURE_RECEIPT_SIGNING_KEYS`), kid của tài liệu khoá mà `public-keys` công bố, kid làm tên đối tượng khi job neo neo tài " +
       "liệu khoá — trùng từng ký tự; cổng giữ thế: một bản nới lại `:` là một kid phát hành hay công bố được mà neo không được. Bản " +
       "thứ tư là `assertReceiptKid` của `@trustprocure/bidding` (gói — ngoài tầm bộ quét; đo hành vi ở `receipt.test.ts` và " +
-      "`signer-aws-kms.test.ts`). ĐỊNH DẠNG biên nhận (`KID_PATTERN` của `receipt.ts`) vẫn cho `:` — ADR-026 §1. [S1.9101 / kid] " +
+      "`signer-aws-kms.test.ts`). ĐỊNH DẠNG biên nhận (`KID_PATTERN` của `receipt.ts`) vẫn cho `:` — ADR-026 §1. [S1.250 / kid] " +
       "Bản của job neo nay cũng là tập phát hành của kid KÝ MỐC NEO trong công cụ (`laKidPhatHanh`: bộ ký KMS `taoBoKyNeoAwsKms`, " +
       "`TRUSTPROCURE_NEO_KID` ở `index.ts`) — một tập, không thêm bản chép; vòng khoá local-dev giữ cùng tập ở `KID_PHAT_HANH` của " +
       "`packages/audit/src/anchor-sign.ts` (gói — đo hành vi ở `anchor-sign.test.ts`).",

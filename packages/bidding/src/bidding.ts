@@ -208,7 +208,7 @@ export async function submitBid(
 ): Promise<BidReceiptRecord> {
   await assertTenantBound(client, orgId, "submitBid");
   batBuocUuid(input.guestSessionId, "guestSessionId");
-  // [S1.9101 / kid] Kid của bộ ký đi vào dòng `kid=` của biên nhận sắp phát — kiểm bằng tập PHÁT HÀNH ở ĐÂY, trước MỌI lần ghi
+  // [S1.250 / kid] Kid của bộ ký đi vào dòng `kid=` của biên nhận sắp phát — kiểm bằng tập PHÁT HÀNH ở ĐÂY, trước MỌI lần ghi
   // (luồng, phiên bản, hàng sổ). Hai factory đã kiểm (`ReceiptSigningKeyRing`, `createAwsKmsReceiptSigner`, S1.249), nhưng
   // `ReceiptSigner` là một interface: một đối tượng tự dựng mang kid mà định dạng cho phép (`:`) từng đi thẳng vào
   // `buildReceiptText` — và một kid định dạng cũng cấm (`\n`) từng ném ở đó, SAU câu ghi phiên bản. Chủ dự án chốt 2026-10-01.
@@ -354,7 +354,7 @@ export async function submitBid(
   }
 
   const canonicalText = buildReceiptText({
-    // ~~`input.signer.activeKeyId`~~ [S1.9101 / kid] giá trị đã kiểm ở đầu hàm.
+    // ~~`input.signer.activeKeyId`~~ [S1.250 / kid] giá trị đã kiểm ở đầu hàm.
     kid,
     rfqId: p.rfq_id,
     bidId,

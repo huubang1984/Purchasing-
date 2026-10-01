@@ -61,7 +61,7 @@ const THOI_GIAN_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 /**
  * `kid` đi vào một dòng `khoa=gia-tri`, nên nó không được mang `\n` hay `=`.
  *
- * [S1.9101 / kid] Đây là tập của ĐỊNH DẠNG ĐÃ KÝ và nó KHÔNG đổi: phía PHÁT HÀNH hẹp hơn (`KID_PHAT_HANH` của `anchor-sign.ts`
+ * [S1.250 / kid] Đây là tập của ĐỊNH DẠNG ĐÃ KÝ và nó KHÔNG đổi: phía PHÁT HÀNH hẹp hơn (`KID_PHAT_HANH` của `anchor-sign.ts`
  * bỏ `:` — kid thành tên tệp `khoa-<kid>.pem` khi `pnpm neo trich` tách mốc neo), còn phía KIỂM — đường ĐỌC dùng chung hằng này
  * — phải đọc được mọi mốc neo định dạng cho phép, kể cả một mốc neo kid có `:` ký trước vòng này. Siết hằng này là đổi định dạng —
  * thứ ADR-026 §1 cấm (H11-11); ca "định dạng không đổi" ở `anchor-sign.test.ts` ghim chiều ấy.

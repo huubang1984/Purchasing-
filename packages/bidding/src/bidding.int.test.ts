@@ -908,7 +908,7 @@ describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để 
 
 
 // ==============================================================================================
-// [S1.9101 / kid] `submitBid` KIỂM KID CỦA BỘ KÝ TRƯỚC MỌI LẦN GHI — LỖ Ở CẤP INTERFACE `ReceiptSigner`
+// [S1.250 / kid] `submitBid` KIỂM KID CỦA BỘ KÝ TRƯỚC MỌI LẦN GHI — LỖ Ở CẤP INTERFACE `ReceiptSigner`
 //
 // Hai factory (`createLocalDevReceiptSigner` qua `ReceiptSigningKeyRing`, `createAwsKmsReceiptSigner`) giữ tập phát hành
 // `[A-Za-z0-9._-]` từ S1.249; nhưng `ReceiptSigner` là một INTERFACE — một đối tượng tự dựng mang kid bất kỳ mà định dạng cho
@@ -917,7 +917,7 @@ describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để 
 // bản hay hàng sổ rồi mới ném. Đo hai vế: lỗi có tên và tập ký tự, VÀ giao dịch chưa được cấp mã giao dịch lúc ném
 // (`pg_current_xact_id_if_assigned()` NULL — Postgres chỉ cấp mã khi có một câu ghi); sau COMMIT không còn gì.
 // ==============================================================================================
-describe("[S1.9101 / kid] submitBid kiểm kid của bộ ký trước mọi lần ghi", () => {
+describe("[S1.250 / kid] submitBid kiểm kid của bộ ký trước mọi lần ghi", () => {
   /** Bộ ký TỰ DỰNG — không qua hai factory; ký bằng đúng khoá của `boKy` nên một biên nhận hợp lệ của nó kiểm được. */
   function boKyTuDung(kid: string): ReceiptSigner & { soLanKy: number } {
     const o: ReceiptSigner & { soLanKy: number } = {
@@ -940,7 +940,7 @@ describe("[S1.9101 / kid] submitBid kiểm kid của bộ ký trước mọi l�
   it.each([
     { nhan: "kid có `:`", kid: "kms:2026-09" },
     { nhan: "kid có xuống dòng", kid: "k\nalg=HMAC" },
-  ])("[S1.9101 / kid] $nhan ⇒ ReceiptError nêu tập ký tự; giao dịch CHƯA ghi gì lúc ném; commit để lại 0 luồng, 0 hàng sổ", async ({ kid }) => {
+  ])("[S1.250 / kid] $nhan ⇒ ReceiptError nêu tập ký tự; giao dịch CHƯA ghi gì lúc ném; commit để lại 0 luồng, 0 hàng sổ", async ({ kid }) => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
     const ky = boKyTuDung(kid);
@@ -972,7 +972,7 @@ describe("[S1.9101 / kid] submitBid kiểm kid của bộ ký trước mọi l�
     expect(await demSo(), "không hàng sổ nào").toBe(soTruoc);
   });
 
-  it("[S1.9101 / kid] ĐỐI CHỨNG: bộ ký tự dựng với kid hợp lệ vẫn nộp được — biên nhận mang đúng kid ấy và kiểm được bằng khoá công khai", async () => {
+  it("[S1.250 / kid] ĐỐI CHỨNG: bộ ký tự dựng với kid hợp lệ vẫn nộp được — biên nhận mang đúng kid ấy và kiểm được bằng khoá công khai", async () => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
     const ky = boKyTuDung("kms-2026-09");
@@ -982,10 +982,10 @@ describe("[S1.9101 / kid] submitBid kiểm kid của bộ ký trước mọi l�
     await expect(verifyReceipt({ canonicalText: bn.canonicalText, signature: bn.signature, publicKey: khoaKy.publicKey })).resolves.toBe(true);
   });
 
-  // [S1.9101 / kid — lượt soi đối kháng] `activeKeyId` của một interface có thể là một GETTER: đọc hai lần (một lần để kiểm, một lần
+  // [S1.250 / kid — lượt soi đối kháng] `activeKeyId` của một interface có thể là một GETTER: đọc hai lần (một lần để kiểm, một lần
   // để dựng văn bản) là cho nó trả kid hợp lệ cho phép kiểm và kid có `:` cho biên nhận. Hàm phải đọc ĐÚNG MỘT lần và dùng chính
   // giá trị đã kiểm.
-  it("[S1.9101 / kid] bộ ký có `activeKeyId` là getter đổi giá trị sau lần đọc đầu ⇒ biên nhận mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
+  it("[S1.250 / kid] bộ ký có `activeKeyId` là getter đổi giá trị sau lần đọc đầu ⇒ biên nhận mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
     const bc = await dungBoiCanh();
     const phongBi = await niemPhong(bc.rfqId);
     let soLanDoc = 0;

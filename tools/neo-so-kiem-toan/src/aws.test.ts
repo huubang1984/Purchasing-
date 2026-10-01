@@ -137,10 +137,10 @@ describe("[ADR-071] nơi cất S3 + bộ ký KMS", () => {
     await expect(taoBoKyNeoAwsKms({ client: lech, keyId: "k", kid: "kms-neo-1" })).rejects.toThrow(/không kiểm được/u);
   });
 
-  // [S1.9101 / kid] Bộ ký mốc neo KMS là phía PHÁT HÀNH: kid của nó đi vào dòng `kid=` của mốc neo và thành `khoa-<kid>.pem` khi
+  // [S1.250 / kid] Bộ ký mốc neo KMS là phía PHÁT HÀNH: kid của nó đi vào dòng `kid=` của mốc neo và thành `khoa-<kid>.pem` khi
   // `trich` tách mốc neo — tập `[A-Za-z0-9._-]` (cùng `neo_kid` của stack 40, cùng vòng khoá local-dev ở `anchor-sign.ts`).
   // Định dạng mốc neo vẫn cho `:` (ca "định dạng không đổi" ở `packages/audit/src/anchor-sign.test.ts`).
-  it("[S1.9101 / kid] kid có `:` ⇒ AnchorError nêu tập ký tự, TRƯỚC mọi lời gọi KMS", async () => {
+  it("[S1.250 / kid] kid có `:` ⇒ AnchorError nêu tập ký tự, TRƯỚC mọi lời gọi KMS", async () => {
     const lenh: string[] = [];
     const kmsGhi: KmsKyNeo = {
       send(l: SignCommand | GetPublicKeyCommand): Promise<never> {
@@ -158,9 +158,9 @@ describe("[ADR-071] nơi cất S3 + bộ ký KMS", () => {
     expect(boKy.activeKeyId).toBe("kms-neo-2026-09");
   });
 
-  // [S1.9101 / kid — lượt soi đối kháng] `kid` đọc nhiều lần (kiểm, `activeKeyId`, văn bản, tự kiểm) cho một getter trả kid hợp lệ
+  // [S1.250 / kid — lượt soi đối kháng] `kid` đọc nhiều lần (kiểm, `activeKeyId`, văn bản, tự kiểm) cho một getter trả kid hợp lệ
   // cho phép kiểm và kid có `:` cho mốc neo. Bộ ký phải đọc ĐÚNG MỘT lần và ký bằng chính giá trị đã kiểm.
-  it("[S1.9101 / kid] `kid` là getter đổi giá trị sau lần đọc đầu ⇒ mốc neo mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
+  it("[S1.250 / kid] `kid` là getter đổi giá trị sau lần đọc đầu ⇒ mốc neo mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
     let soLanDoc = 0;
     const t = {
       client: kmsGia(),
