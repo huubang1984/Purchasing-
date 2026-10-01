@@ -216,3 +216,56 @@ export function canhBaoBenchmark(nhom: NhomBenchmark | null): readonly string[] 
   }
   return ra;
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.9101 / khoản 329] TRỌNG SỐ CHẤM VÀ BAFO TOP-N — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH
+// ----------------------------------------------------------------------------------------------
+// Trước vòng này màn không gửi `evalComponents`/`bafoTopN`, nên mọi phiên bản tạo trên màn không chấm được, và từ S4.5a (ADR-141)
+// gói mở dưới phiên bản ấy không bao giờ chấm được. Chủ dự án chốt 2026-10-01: thành phần là CỐ ĐỊNH — đúng vế hẹp mà lượt chấm đọc
+// được hôm nay (`luot-danh-gia.ts`: một thành phần, mã `MA_THANH_PHAN_GIA`, đơn vị `TIEN`) — màn hiện nó chỉ-đọc; BAFO top-N là ô
+// sửa được. Mẫu là bản chép của `TRONG_SO_DEMO`/`BAFO_TOP_N_DEMO` (`tools/gieo-demo/src/chinh-sach-demo.ts`), khoá với nó và với
+// mã của lượt chấm ở `tests/architecture/bac-mac-dinh-dong-bo.test.ts`. Cảnh báo không chặn: hình dạng là của `CHECK` `057`, cặp
+// đi cùng nhau là của `056`, và máy chủ nói điều ấy.
+
+/** Một thành phần trọng số như CSDL cất (`057`): khoá viết theo lối CSDL, cùng lý do `Bac`. */
+export interface ThanhPhanTrongSo {
+  readonly ma: string;
+  readonly don_vi: string;
+  readonly he_so: string;
+}
+
+export const TRONG_SO_MAC_DINH: readonly ThanhPhanTrongSo[] = [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }];
+
+/** Số nhà thầu vào vòng BAFO; `0` là quy ước *"tổ chức không dùng BAFO"* (`056`). */
+export const BAFO_TOP_N_MAC_DINH = 2;
+
+/** Vế hẹp mà lượt chấm đọc được hôm nay — đúng phép kiểm của `docChinhSach` ở `luot-danh-gia.ts`. */
+export function trongSoChamDuoc(thanhPhan: readonly ThanhPhanTrongSo[]): boolean {
+  const [dau] = thanhPhan;
+  return thanhPhan.length === 1 && dau?.ma === "gia" && dau.don_vi === "TIEN";
+}
+
+/** Cảnh báo tĩnh cho trọng số đang soạn. `null`: phiên bản KHÔNG khai trọng số. */
+export function canhBaoTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null): readonly string[] {
+  if (thanhPhan === null) {
+    return [
+      "Phiên bản này KHÔNG khai trọng số chấm: mọi gói mở dưới nó không chấm được, nên cũng không đề xuất trao thầu được — " +
+        "và phiên bản tạo sau lúc gói mở không áp cho gói ấy.",
+    ];
+  }
+  if (!trongSoChamDuoc(thanhPhan)) {
+    return [
+      "Trọng số ngoài dạng một thành phần giá (gia, đơn vị tiền): lượt chấm hôm nay chỉ đọc được dạng ấy, nên gói mở dưới " +
+        "phiên bản này bị từ chối khi chấm.",
+    ];
+  }
+  return [];
+}
+
+/** Một dòng cho trọng số của một phiên bản — bảng phiên bản và khối trọng số dùng chung. */
+export function moTaTrongSo(thanhPhan: readonly ThanhPhanTrongSo[] | null, bafoTopN: number | null): string {
+  if (thanhPhan === null) return "chưa khai";
+  const tp = thanhPhan.map((t) => `${t.ma}/${t.don_vi} ×${t.he_so}`).join(", ");
+  const bafo = bafoTopN === null ? "" : bafoTopN === 0 ? " · không BAFO" : ` · BAFO top-${String(bafoTopN)}`;
+  return `${tp}${bafo}`;
+}

@@ -23648,3 +23648,84 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
 - Hợp `master` #231 (S1.255 — khoản 325–328; chỉ chạm màn web, công cụ `pilot-gia-lap`, cổng câu cấm mới) trước khi mở PR: xung đột
   chỉ ở ba tệp sổ (gỡ tay, `cap-so --dem` viết lại số đếm; số của nhánh không đổi); `pnpm t0` sạch (522 module); `pnpm test` 144 tệp, 2447
   đạt, 1 bỏ qua — gồm `cau-cam-tren-giao-dien` trên màn `/chinh-sach` đã thêm nhóm khoá; `cap-so --kiem` sạch.
+
+# §S1.9101 — KHOẢN 329: MÀN `/chinh-sach` KHAI TRỌNG SỐ CHẤM VÀ BAFO TOP-N — PHIÊN BẢN TẠO TRÊN MÀN CHẤM ĐƯỢC
+
+## 1. Vòng này là gì
+
+Khoản 329 (đo ở §S1.256, rổ A vế ⒜): thân `POST /policy` mà màn `/chinh-sach` gửi không mang `evalComponents`/`bafoTopN`, và
+`lietKePhienBanChinhSach` không trả hai cột ấy nên *Chép phiên bản mới nhất* cũng không chép được. Màn là giao diện DUY NHẤT của
+`POST /policy` trên hạ tầng thật; từ S4.5a (ADR-141) gói mở dưới một phiên bản không trọng số không bao giờ chấm được, nên bước *người
+mua chọn nhà cung cấp* của `docs/PRODUCT.md` §11 không đi được bằng giao diện. Một PR riêng, dựng chồng trên nhánh S4.5b (#232): hàng
+khoản 329 và nhóm khoá `benchmark` của màn sống ở đó. Không migration, không route mới.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+
+1. Khoản 329 vào rổ A, sửa ở một PR riêng ngay (§S1.256 mục 2.6).
+2. Thành phần trọng số CỐ ĐỊNH, hiện chỉ-đọc — đúng vế hẹp lượt chấm đọc được hôm nay; BAFO top-N là ô sửa được (≥ 0). Ô *Khai trọng số
+   chấm* bật sẵn ở mẫu; bỏ chọn thì cảnh báo tĩnh. *Chép* mang nguyên trọng số của bản mới nhất; dạng lạ hiện chỉ-đọc kèm cảnh báo.
+3. Nhánh mới xếp chồng trên nhánh S4.5b; PR nhắm nhánh S4.5b, đổi base sang `master` khi #232 merge.
+
+## 3. Đo trước
+
+1. Lượt chấm (`luot-danh-gia.ts`, `docChinhSach`) nhận đúng MỘT thành phần, mã `MA_THANH_PHAN_GIA` (`gia`), đơn vị `TIEN`; mọi dạng
+   khác dừng ở `THANH_PHAN_CHUA_CO_NGUON`. Với một thành phần, hệ số không đổi thứ hạng.
+2. `bafo_top_n = 0` là quy ước *"không dùng BAFO"* (`056`); `vong-bafo.ts` từ chối mở vòng ở `0` hay `null`.
+3. `056` đòi `(eval_components IS NULL) = (bafo_top_n IS NULL)`; `packages/rfq` ném lỗi có tên khi chỉ một trong hai có mặt.
+4. `gieo:demo` khai `TRONG_SO_DEMO = [{gia, TIEN, 1.0000}]`, `BAFO_TOP_N_DEMO = 2` (S4.5a) — kịch bản 41 và lượt diễn tập chấm được nhờ nó.
+
+## 4. Thay đổi
+
+- **`packages/rfq/src/procurement-policy.ts`**: `lietKePhienBanChinhSach` đọc `eval_components`, `bafo_top_n`; `PhienBanChinhSach` có
+  `evalComponents`, `bafoTopN`.
+- **`apps/web/src/chinh-sach.ts`**: `TRONG_SO_MAC_DINH`, `BAFO_TOP_N_MAC_DINH` (bản chép của mẫu `gieo:demo`), `trongSoChamDuoc` (vế
+  hẹp), `canhBaoTrongSo` (không khai; ngoài vế hẹp), `moTaTrongSo`.
+- **Màn** (`chinh-sach.html`, `chinh-sach.js`): khối *Chấm thầu* — ô chọn, thành phần chỉ-đọc, ô BAFO top-N; *Điền mẫu*, *Chép* mang cặp;
+  chọn lại ô khi top-N trống thì ô nhận mẫu (hiện trong ô, sửa được); thân `POST /policy` mang cặp, hay cặp `null` khi bỏ chọn; bảng
+  phiên bản có cột *Chấm thầu*; cảnh báo gộp vào khối cảnh báo không chặn.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Top-N gửi đúng như người gõ (`Number`), ô trống ⇒ `null`: luật là của `packages/rfq` và `056`, máy chủ nói bằng lời của nó.
+- Không cảnh báo cho top-N = 0 hay 1: cả hai là cấu hình hợp lệ, không có căn cứ trong spec để gọi chúng rỗng ruột.
+- Phép kiểm vế hẹp của màn là bản chép của phép kiểm trong `docChinhSach`; neo mã vào `MA_THANH_PHAN_GIA` ở `bac-mac-dinh-dong-bo`.
+
+## 6. Đo
+
+- **Trang** (`apps/web/src/phuc-vu.test.ts`, chạy chính `chinh-sach.js` trên DOM giả): ⑴ mẫu ⇒ thân mang `[{gia, TIEN, 1.0000}]` và
+  top-2, khối chỉ-đọc đúng hai ô, không cảnh báo trọng số; ⑵ *Chép* bản có trọng số top-3 ⇒ thân mang đúng cặp ấy, bảng phiên bản hiện
+  *"gia/TIEN ×1.0000 · BAFO top-3"*; chép bản không trọng số ⇒ ô bỏ chọn, thân cặp `null`, cảnh báo; ⑶ bỏ chọn ⇒ cặp `null` và cảnh báo;
+  chọn lại khi ô trống ⇒ `2`; top-N `0` gửi `0`; trọng số hai thành phần chép NGUYÊN VĂN, kèm cảnh báo *"bị từ chối khi chấm"*.
+- **Đơn vị** (`apps/web/src/chinh-sach.test.ts`): vế hẹp, bốn dạng ngoài vế hẹp, hệ số khác 1 vẫn là vế hẹp, mô tả ba ca.
+- **Đồng bộ** (`tests/architecture/bac-mac-dinh-dong-bo.test.ts`): mẫu = `TRONG_SO_DEMO`, top-N = `BAFO_TOP_N_DEMO`, mã/đơn vị =
+  `[MA_THANH_PHAN_GIA, TIEN]`, và `trongSoChamDuoc` theo `MA_THANH_PHAN_GIA`.
+- **Tích hợp** (`apps/api/src/buyer.int.test.ts`, ca *cờ TẮT*): phiên bản 2 khai qua HTTP với `bafoTopN: 0`; `GET /policy/versions`
+  trả `[TRONG_SO, 0]` cho bản 2 và `[null, null]` cho bản 1.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích hợp), khôi phục tệp từ bản sao trong bộ nhớ. 10 đột biến, 10 đỏ.
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | thân `POST /policy` không mang cặp | ĐỎ — 3 |
+| M2 | *Chép* không mang cặp | ĐỎ — 2 |
+| M3 | *Điền mẫu* không đặt cặp | ĐỎ — 1 |
+| M4 | không gộp cảnh báo trọng số | ĐỎ — 2 |
+| M5 | bỏ chọn vẫn gửi trọng số | ĐỎ — 2 |
+| M6 | vế hẹp bỏ kiểm đơn vị | ĐỎ — 1 |
+| M7 | hệ số mẫu `1.00` thay `1.0000` | ĐỎ — 4 |
+| M8 | chọn lại không điền mẫu top-N | ĐỎ — 1 |
+| M9 | bảng phiên bản không hiện cột | ĐỎ — 1 |
+| M10 | `lietKePhienBanChinhSach` trả `evalComponents: null`, `bafoTopN: x \|\| null` | ĐỎ — `buyer.int` |
+
+## 8. Giới hạn, nói ra
+
+- Thành phần không sửa được trên màn. `docs/PRODUCT.md` nguyên tắc 5 đòi trọng số chấm cấu hình được theo doanh nghiệp: với MỘT thành phần
+  thì không có lựa chọn trọng số nào để cấu hình, và `POST /policy` vẫn nhận mọi dạng `057` cho phép. Ngày điểm phi giá có nguồn (màn
+  chấm của S2.4), màn phải cho sửa thành phần.
+- Không test nào nối thân trang với lượt chấm trong MỘT lượt chạy: chuỗi là trang → `TRONG_SO_MAC_DINH` (test trang) → `TRONG_SO_DEMO`
+  và `MA_THANH_PHAN_GIA` (đồng bộ) → lượt chấm chấm được trên đúng giá trị ấy (kịch bản 41 qua HTTP, với thân viết tay cùng giá trị
+  `[{gia, TIEN, 1.0000}]`, top-2 — không import mẫu; `gieo:demo` import `TRONG_SO_DEMO`).
+- Phiên bản đã tạo trên màn TRƯỚC vòng này vẫn không trọng số; gói đã mở dưới chúng không chấm được (ADR-141). Lối ra là phiên bản mới
+  cho gói mở SAU nó.

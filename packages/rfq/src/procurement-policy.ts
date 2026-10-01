@@ -324,6 +324,13 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly thamDinhHieuLucThang: number | null;
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
   readonly benchmark: Readonly<Record<string, string>> | null;
+  /**
+   * [S1.9101 / khoản 329] Trọng số chấm và BAFO top-N, đúng như CSDL cất; cả hai `null` khi phiên bản không khai (`056` đòi chúng đi
+   * cùng nhau). Màn `/chinh-sach` cần chúng để HIỆN và để *Chép phiên bản mới nhất* mang chúng sang phiên bản kế — trước vòng này
+   * câu dưới không đọc hai cột ấy, nên một phiên bản chép trên màn luôn mất trọng số.
+   */
+  readonly evalComponents: readonly ThanhPhanTrongSoVao[] | null;
+  readonly bafoTopN: number | null;
   readonly createdBy: string;
   readonly signedBy: string | null;
   readonly signedAt: Date | null;
@@ -343,6 +350,8 @@ interface HangPhienBan extends HangChinhSach {
   chia_nho_cua_so_ngay: number | null;
   tham_dinh_hieu_luc_thang: number | null;
   benchmark: Record<string, string> | null;
+  eval_components: ThanhPhanTrongSoVao[] | null;
+  bafo_top_n: number | null;
   created_by: string;
   signed_by: string | null;
   signed_at: Date | null;
@@ -362,7 +371,8 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
 
   const { rows } = await client.query<HangPhienBan>(
     `SELECT p.id, p.version, p.dual_approval_threshold, p.currency, p.effective_from, p.tiers,
-            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.benchmark, p.created_by, s.signed_by, s.signed_at,
+            p.chia_nho_cua_so_ngay, p.tham_dinh_hieu_luc_thang, p.benchmark, p.eval_components, p.bafo_top_n, p.created_by,
+            s.signed_by, s.signed_at,
             p.id OPERATOR(pg_catalog.=) public.chinh_sach_hieu_luc($1::pg_catalog.uuid, pg_catalog.now()) AS hieu_luc
        FROM public.org_procurement_policies p
        LEFT JOIN public.org_policy_signatures s
@@ -382,6 +392,8 @@ export async function lietKePhienBanChinhSach(client: pg.PoolClient, orgId: stri
       chiaNhoCuaSoNgay: h.chia_nho_cua_so_ngay,
       thamDinhHieuLucThang: h.tham_dinh_hieu_luc_thang,
       benchmark: h.benchmark,
+      evalComponents: h.eval_components,
+      bafoTopN: h.bafo_top_n,
       createdBy: h.created_by,
       signedBy: h.signed_by,
       signedAt: h.signed_at,

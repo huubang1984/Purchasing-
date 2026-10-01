@@ -2385,6 +2385,80 @@ describe("bề mặt tệp", () => {
       expect(await taoVoi(false, "c-thep")).not.toHaveProperty("categoryId");
     });
 
+    // [S1.9101 / khoản 329] Màn `/chinh-sach` là giao diện DUY NHẤT của `POST /policy`; trước vòng này thân nó gửi không mang
+    // `evalComponents`/`bafoTopN`, nên mọi phiên bản tạo trên màn không chấm được. Đo đúng thân trang GỬI, ở ba đường: mẫu, chép,
+    // bỏ chọn — và bảng phiên bản hiện trọng số.
+    const moChinhSach = async (phienBan: unknown[]) => {
+      const p = await dungTrang("chinh-sach", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan, daBat: false, choKy: false } })
+            : l === "POST /policy" ? Promise.resolve({ status: 201, body: { policy: { version: 9 } } })
+            : undefined,
+      });
+      await p.bam("nut-dung-phien");
+      const gui = async () => {
+        await p.bam("nut-tao-pb");
+        return p.trangThai.than.filter((t) => t.lenh === "POST /policy").at(-1)?.than as Record<string, unknown> | undefined;
+      };
+      const doiO = async (id: string, chon: boolean) => {
+        p.el(id).checked = chon;
+        for (const f of p.el(id).nghe["change"] ?? []) await f();
+      };
+      return { p, gui, doiO };
+    };
+    const PHIEN_BAN_CO = {
+      id: "p-1", version: 1, effectiveFrom: "2026-10-01T00:00:00Z", dualApprovalThreshold: "500000000.00", currency: "VND",
+      tiers: null, chiaNhoCuaSoNgay: null, thamDinhHieuLucThang: null, benchmark: null,
+      evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 3,
+      createdBy: "u-1", signedBy: null, signedAt: null, hieuLuc: true,
+    };
+
+    it("[S1.9101 / khoản 329] chinh-sach: mẫu mặc định gửi trọng số gia/TIEN/1.0000 và BAFO top-2; không cảnh báo trọng số", async () => {
+      const { p, gui } = await moChinhSach([]);
+      expect(p.el("co-trong-so").checked).toBe(true);
+      expect(p.el("khoi-trong-so").hidden).toBe(false);
+      expect(p.el("bafo-top-n").value).toBe("2");
+      expect(p.el("tt-trong-so").con.map((x) => x.textContent)).toEqual(["Thành phần gia", "đơn vị TIEN, hệ số 1.0000"]);
+      expect(await gui()).toMatchObject({ version: 1, evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 });
+      expect(p.el("canh-bao").textContent).not.toContain("trọng số");
+    });
+
+    it("[S1.9101 / khoản 329] chinh-sach: «Chép phiên bản mới nhất» mang trọng số và top-N; bảng phiên bản hiện chúng", async () => {
+      const { p, gui } = await moChinhSach([PHIEN_BAN_CO]);
+      const hang = p.el("bang-pb").querySelector("tbody").con[0];
+      expect(hang?.con.map((x) => x.textContent)).toContain("gia/TIEN ×1.0000 · BAFO top-3");
+      await p.bam("nut-chep");
+      expect(p.el("bafo-top-n").value).toBe("3");
+      expect(await gui()).toMatchObject({ version: 2, evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 3 });
+      // Phiên bản chép không có trọng số ⇒ ô bỏ chọn, thân gửi cặp `null`, và màn nói hậu quả.
+      const { p: q, gui: guiQ } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: null, bafoTopN: null }]);
+      expect(q.el("bang-pb").querySelector("tbody").con[0]?.con.map((x) => x.textContent)).toContain("chưa khai");
+      await q.bam("nut-chep");
+      expect(q.el("co-trong-so").checked).toBe(false);
+      expect(q.el("khoi-trong-so").hidden).toBe(true);
+      expect(await guiQ()).toMatchObject({ evalComponents: null, bafoTopN: null });
+      expect(q.el("canh-bao").textContent).toContain("KHÔNG khai trọng số chấm");
+    });
+
+    it("[S1.9101 / khoản 329] chinh-sach: bỏ chọn ⇒ gửi cặp null và cảnh báo; chọn lại khi top-N trống ⇒ ô nhận mẫu; trọng số ngoài vế hẹp chép nguyên văn kèm cảnh báo", async () => {
+      const { p, gui, doiO } = await moChinhSach([]);
+      await doiO("co-trong-so", false);
+      expect(p.el("khoi-trong-so").hidden).toBe(true);
+      expect(p.el("canh-bao").textContent).toContain("KHÔNG khai trọng số chấm");
+      expect(await gui()).toMatchObject({ evalComponents: null, bafoTopN: null });
+      p.el("bafo-top-n").value = "";
+      await doiO("co-trong-so", true);
+      expect(p.el("bafo-top-n").value).toBe("2");
+      p.el("bafo-top-n").value = "0";
+      expect(await gui()).toMatchObject({ evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 0 });
+      const LA = [{ ma: "gia", don_vi: "TIEN", he_so: "1" }, { ma: "ky_thuat", don_vi: "DIEM", he_so: "0.5" }];
+      const { p: q, gui: guiQ } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: LA }]);
+      await q.bam("nut-chep");
+      expect(q.el("canh-bao").textContent).toContain("bị từ chối khi chấm");
+      expect(await guiQ()).toMatchObject({ evalComponents: LA, bafoTopN: 3 });
+    });
+
     it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
       const { p } = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1" } } }) : undefined));
       p.el("nhom-hang").value = "";

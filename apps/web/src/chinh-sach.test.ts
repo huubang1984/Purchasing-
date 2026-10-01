@@ -11,9 +11,13 @@ import {
   BAC_MAC_DINH,
   BENCHMARK_MAC_DINH,
   NGUONG_KEP_MAC_DINH,
+  TRONG_SO_MAC_DINH,
   canhBaoBenchmark,
   canhBaoChinhSach,
+  canhBaoTrongSo,
+  moTaTrongSo,
   soNguoiToiThieu,
+  trongSoChamDuoc,
   type Bac,
   type KetQuaBac,
 } from "./chinh-sach.js";
@@ -121,5 +125,35 @@ describe("[S1.256 / S4.5b] cảnh báo tĩnh của nhóm khoá `benchmark` — k
     expect(canhBaoBenchmark({ ...BENCHMARK_MAC_DINH, nguong_lech_vua: "0.1999", nguong_lech_cao: "0.3", cua_so_thang: "24" })).toEqual([]);
     expect(canhBaoBenchmark({ ...BENCHMARK_MAC_DINH, cua_so_thang: "3" })).toEqual([]);
     expect(canhBaoBenchmark({ ...BENCHMARK_MAC_DINH, nguong_lech_vua: "abc", san_goi: "x", cua_so_thang: "" })).toEqual([]);
+  });
+});
+
+describe("[S1.9101 / khoản 329] trọng số chấm — vế hẹp, cảnh báo tĩnh, mô tả", () => {
+  it("mẫu là vế hẹp lượt chấm đọc được và không cảnh báo; không khai thì nói hậu quả", () => {
+    expect(trongSoChamDuoc(TRONG_SO_MAC_DINH)).toBe(true);
+    expect(canhBaoTrongSo(TRONG_SO_MAC_DINH)).toEqual([]);
+    expect(canhBaoTrongSo(null)).toEqual([expect.stringContaining("KHÔNG khai trọng số chấm")]);
+  });
+
+  it.each([
+    ["mã khác", [{ ma: "diem", don_vi: "TIEN", he_so: "1" }]],
+    ["đơn vị điểm", [{ ma: "gia", don_vi: "DIEM", he_so: "1" }]],
+    ["hai thành phần", [{ ma: "gia", don_vi: "TIEN", he_so: "1" }, { ma: "ky_thuat", don_vi: "DIEM", he_so: "0.5" }]],
+    ["mảng rỗng", []],
+  ])("ngoài vế hẹp (%s) ⇒ một câu, và trongSoChamDuoc nói không", (_ten, tp) => {
+    expect(trongSoChamDuoc(tp)).toBe(false);
+    const c = canhBaoTrongSo(tp);
+    expect(c).toHaveLength(1);
+    expect(c[0]).toContain("bị từ chối khi chấm");
+  });
+
+  it("hệ số khác 1 vẫn là vế hẹp — lượt chấm không đọc hệ số để chọn vế", () => {
+    expect(canhBaoTrongSo([{ ma: "gia", don_vi: "TIEN", he_so: "2.5" }])).toEqual([]);
+  });
+
+  it("mô tả: chưa khai, top-N, top 0 là không BAFO", () => {
+    expect(moTaTrongSo(null, null)).toBe("chưa khai");
+    expect(moTaTrongSo(TRONG_SO_MAC_DINH, 2)).toBe("gia/TIEN ×1.0000 · BAFO top-2");
+    expect(moTaTrongSo(TRONG_SO_MAC_DINH, 0)).toBe("gia/TIEN ×1.0000 · không BAFO");
   });
 });
