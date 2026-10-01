@@ -1323,10 +1323,10 @@ describe("bề mặt tệp", () => {
         }
       });
 
-      // [S1.9101 / khoản 9403] Khoản 321 làm đề xuất ĐỌC ĐƯỢC trước khi ký — và từ đó người DUYỆT cũng thấy nút «Rút đề xuất»
+      // [S1.255 / khoản 327] Khoản 321 làm đề xuất ĐỌC ĐƯỢC trước khi ký — và từ đó người DUYỆT cũng thấy nút «Rút đề xuất»
       // cạnh «Phê duyệt» (đo trên trình duyệt thật: Tổng Giám đốc ở XD-04). Rút là đường của CHÍNH người đề xuất (khoản 232,
       // trigger `094` từ chối người khác); trước S1.254 nút không bao giờ hiện cho người duyệt chỉ vì đề xuất không được đọc.
-      it("khoản 9403: người xem KHÔNG phải người đề xuất ⇒ nút «Rút đề xuất» ẩn; chính người đề xuất ⇒ hiện", async () => {
+      it("khoản 327: người xem KHÔNG phải người đề xuất ⇒ nút «Rút đề xuất» ẩn; chính người đề xuất ⇒ hiện", async () => {
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
         await p.bam("nut-doc-award");
         expect(ttAward(p), "đối chứng: đề xuất của A đã hiện cho B").toMatch(/PROPOSED/u);
@@ -3118,7 +3118,7 @@ el.textContent = location.hash;
 });
 
 // ================================================================================================
-// [S1.9101 / khoản 9402] 403 MANG HẰNG CỦA MÁY CHỦ KHÔNG ĐI THẲNG RA MÀN — CẢ BẢY BẢN `loiCua`
+// [S1.255 / khoản 326] 403 MANG HẰNG CỦA MÁY CHỦ KHÔNG ĐI THẲNG RA MÀN — CẢ BẢY BẢN `loiCua`
 //
 // Thân 403 của `apps/api` là MỘT hằng (`THAN_403 = { error: "khong co quyen" }`, `apps/api/src/dispatch.ts`) và nó phải ở
 // nguyên như thế (khoản 191: nói thiếu quyền nào là dựng bản đồ mô hình quyền cho người dò). Khoản 191 sửa bước 3 của
@@ -3133,7 +3133,7 @@ el.textContent = location.hash;
 // API (`phien khong hop le`, `qua nhieu yeu cau`, `khong co duong nay`, `loi noi bo`) và câu không dấu của trigger vẫn đi ra
 // nguyên văn; lớp này không dịch chúng.
 // ================================================================================================
-describe("[S1.9101 / khoản 9402] 403 mang hằng của máy chủ không đi thẳng ra màn — bảy bản `loiCua`", () => {
+describe("[S1.255 / khoản 326] 403 mang hằng của máy chủ không đi thẳng ra màn — bảy bản `loiCua`", () => {
   const TEP: readonly string[] = [
     "trang/mo-thau.js", "trang/tao-thau.js", "trang/chinh-sach.js", "trang/nhom-hang.js",
     "trang/du-lieu.js", "trang/nop-thau.js", "src/dang-nhap.ts",

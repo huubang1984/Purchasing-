@@ -187,7 +187,7 @@ export interface DangNhap {
 }
 
 /** Câu `error` của máy chủ nếu thân mang nó, không thì câu mặc định kèm mã trạng thái — khuôn `loiCua` của các trang. */
-// [S1.9101 / khoản 9402] Khuôn khoản 323 (S1.254): thân 403 hằng của `apps/api` không phải một câu cho người đọc; mọi thân
+// [S1.255 / khoản 326] Khuôn khoản 323 (S1.254): thân 403 hằng của `apps/api` không phải một câu cho người đọc; mọi thân
 // lỗi khác — kể cả 403 `nguon khong duoc phep` của lớp chống CSRF theo origin, thứ duy nhất trang này thật sự gặp — in nguyên văn.
 const THAN_403 = "khong co quyen";
 

@@ -332,7 +332,7 @@ const BANG_TEN: readonly HangTen[] = [
     tep: [`${API}dispatch.ts`, `${WEB}dang-nhap.ts`],
     xuLy: "RIENG",
     doLuong: "KHONG",
-    lyDo: "[S1.9101 / khoản 9402] `api`: THÂN phản hồi 403 (một object, khoản 191 — không nói thiếu quyền nào). `/lib/dang-nhap.js`: " +
+    lyDo: "[S1.255 / khoản 326] `api`: THÂN phản hồi 403 (một object, khoản 191 — không nói thiếu quyền nào). `/lib/dang-nhap.js`: " +
       "CHUỖI mà `loiCua` của trang nhận ra để nói thay bằng câu đọc được (khuôn khoản 323; `apps/web/trang/*.js` cũng khai, ngoài tầm " +
       "cổng này). Khác kiểu, khác việc — không phải bản chép để giữ giống mã. Phụ thuộc GIÁ TRỊ thì có, và nói ra: `api` đổi chuỗi " +
       "thì trang trở về in nguyên văn (hành vi trước S1.254) — không test nào nối hai bên; test của `api` chỉ đo mã 403.",

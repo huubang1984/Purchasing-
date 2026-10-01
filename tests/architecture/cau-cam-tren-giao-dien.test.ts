@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / khoản 9401] NHỮNG ĐIỀU KHÔNG ĐƯỢC TUYÊN BỐ — TRÊN CHÍNH GIAO DIỆN SẢN PHẨM
+// [S1.255 / khoản 325] NHỮNG ĐIỀU KHÔNG ĐƯỢC TUYÊN BỐ — TRÊN CHÍNH GIAO DIỆN SẢN PHẨM
 //
 // `docs/PRODUCT.md` §5 cấm một danh sách câu, và nói rõ ràng buộc ấy *"áp cho cả marketing lẫn giao diện
 // sản phẩm. Vi phạm là lỗi sản phẩm, không phải chuyện câu chữ."* Tới vòng này không lớp nào đọc giao diện
@@ -7,7 +7,7 @@
 // (kế hoạch pilot giả lập §5; phút 5–25 của buổi bậc 1, `docs/BUOI-BAC-1.md` §3) — viết từ S1.89: *"giá được
 // mã hoá trong trình duyệt, máy chủ không đọc được"*. Đó là hàng *"Kể cả chúng tôi cũng không xem được"* nói
 // bằng chữ khác: ADR-002 chọn mô hình đe doạ tầng 1+2, và nhà vận hành vẫn giải mã được. Người phát hiện là
-// lượt đi thử bậc 1 trên trình duyệt thật (biên bản §S1.9101), không phải một cổng.
+// lượt đi thử bậc 1 trên trình duyệt thật (biên bản §S1.255), không phải một cổng.
 //
 // Lớp này đòi: không văn bản nào người dùng thấy ở `apps/web` khớp một luật dưới đây, MỖI hàng của bảng §5
 // có ĐÚNG MỘT luật (thêm hàng mà không thêm luật ⇒ đỏ), và mỗi luật khớp chính câu cấm của hàng mình.
@@ -185,7 +185,7 @@ function doanKhop(cau: string, bat: RegExp): string {
   return cau.slice(Math.max(0, m.index - 60), m.index + m[0].length + 40);
 }
 
-describe("[S1.9101 / khoản 9401] giao diện không mang câu cấm của PRODUCT.md §5", () => {
+describe("[S1.255 / khoản 325] giao diện không mang câu cấm của PRODUCT.md §5", () => {
   it("không văn bản nào người dùng thấy ở apps/web khớp một luật", () => {
     const sai: string[] = [];
     for (const duong of tepGiaoDien()) {

@@ -21,7 +21,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 // `/lib/dang-nhap.js` (bước 1 chung của bốn trang người mua). Phiên của trang chỉ còn hai con trỏ của các bước sau.
 let phien = { rfqId: "", unsealRequestId: "" };
 /**
- * [S1.9101 / khoản 9403] Người đang vào (`/me`.userId): nút «Rút đề xuất» chỉ hiện cho CHÍNH người đề xuất. Mọi lối mở các
+ * [S1.255 / khoản 327] Người đang vào (`/me`.userId): nút «Rút đề xuất» chỉ hiện cho CHÍNH người đề xuất. Mọi lối mở các
  * bước đi qua `moSauDangNhap`, nơi nó được đặt lại.
  */
 let nguoiDangVao = null;
@@ -631,7 +631,7 @@ async function veTraoThau() {
   if (timHang() === null) await veXepHang();
   // [S1.231 / khoản 232 / ADR-133] Nút RÚT chỉ hiện khi rút được: đề xuất đang PROPOSED và CHƯA chữ ký. Trang
   // đọc hai thứ ấy từ máy chủ, không tự đếm — và lớp có thẩm quyền vẫn là trigger `094`, kể cả khi nút hiện sai.
-  // [S1.9101 / khoản 9403] …và CHỈ cho chính người đề xuất (`actedBy` của hàng PROPOSED): từ khoản 321 người duyệt cũng đọc
+  // [S1.255 / khoản 327] …và CHỈ cho chính người đề xuất (`actedBy` của hàng PROPOSED): từ khoản 321 người duyệt cũng đọc
   // được đề xuất, và nút rút hiện cạnh «Phê duyệt» cho cả Tổng Giám đốc (đo trên trình duyệt thật).
   hien($("nut-rut-de-xuat"), a.status === "PROPOSED" && (a.approvals ?? []).length === 0 && a.actedBy === nguoiDangVao);
   // [S1.254 / khoản 321] Id phiên bản không nói được với người duyệt là AI thắng: gọi tên từ hàng xếp hạng cùng id, của ĐÚNG
