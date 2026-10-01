@@ -12,7 +12,7 @@
 #      nosniff`, KHÔNG có header `server` (ADR-075); `/nop-thau` có `content-security-policy`; `http://` ⇒ 301 sang https;
 #   ⑶ tài liệu khoá: `activeKeyId` = RECEIPT_KID, mục của kid ấy có `fingerprint` = RECEIPT_FINGERPRINT (con số in vào
 #      hợp đồng — README, stack 50), và `fingerprint` = SHA-256 của chính `spki` trong tài liệu.
-# `worker` cần AWS_REGION, CLUSTER, BAT_DAU_MS (mốc ms lúc bắt đầu deploy): chờ 2 phút, rồi desiredCount > 0 **[S1.9101]**,
+# `worker` cần AWS_REGION, CLUSTER, BAT_DAU_MS (mốc ms lúc bắt đầu deploy): chờ 2 phút, rồi desiredCount > 0 **[S1.252]**,
 #   runningCount = desiredCount, và `/tp/unseal-worker` không có dòng `khong khoi dong duoc` / `cau hinh khong hop le` kể từ
 #   BAT_DAU_MS.
 #
@@ -90,7 +90,7 @@ worker() {
     --query 'services[0].{chay: runningCount, muon: desiredCount}' --output json)
   chay=$(jq -r .chay <<<"$ra")
   muon=$(jq -r .muon <<<"$ra")
-  # [S1.9101] Pipeline chỉ thay task definition, không đổi số task — 0/0 là worker CHƯA BẬT, không phải "đủ task".
+  # [S1.252] Pipeline chỉ thay task definition, không đổi số task — 0/0 là worker CHƯA BẬT, không phải "đủ task".
   [[ $muon =~ ^[1-9][0-9]*$ ]] ||
     hong "tp-unseal-worker muốn $muon task — worker chưa bật: đặt so_ban_worker = 1 ở stack 90 rồi plan + apply (APPLY-LAN-DAU 8.2)"
   [[ $chay == "$muon" ]] || hong "tp-unseal-worker chạy $chay/$muon task"

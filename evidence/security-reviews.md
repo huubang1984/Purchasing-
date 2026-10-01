@@ -22966,9 +22966,9 @@ thông điệp lỗi; thứ tự cổng đúng (người không giữ `bid.view`
 - `pnpm evidence` toàn bộ T1–T3 trên `5ded942`: 226 tệp, 4326 khẳng định, 4316 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo
   biến môi trường), **0 đỏ**; **77/77 bất biến** (55 nghiệp vụ + 22 hàng rào); L6 đo bằng 15 khẳng định, L5 59.
 
-# §S1.9101 — TRƯỚC APPLY STACK 90: `kiem-truoc-apply` IN LÝ DO CỦA TERRAFORM; OUTPUT `xac_minh_acm` CHO 6.2; BĂM BẢN KHAI CRLF; BOM CỦA SECRET ZALO; MÃ VAI `DATA_STEWARD`; WORKER 0/0; BẢNG THƯ DỰ KIẾN — KHOẢN 9401–9408 ĐÓNG; CÁCH ĐO `ClockDrift` GHIM PHẦN KHÔNG CẦN AWS
+# §S1.252 — TRƯỚC APPLY STACK 90: `kiem-truoc-apply` IN LÝ DO CỦA TERRAFORM; OUTPUT `xac_minh_acm` CHO 6.2; BĂM BẢN KHAI CRLF; BOM CỦA SECRET ZALO; MÃ VAI `DATA_STEWARD`; WORKER 0/0; BẢNG THƯ DỰ KIẾN — KHOẢN 311–318 ĐÓNG; CÁCH ĐO `ClockDrift` GHIM PHẦN KHÔNG CẦN AWS
 
-**Rổ và mảnh (ADR-043 ⒞):** tám khoản mới, sinh và đóng trong vòng — để mở thì bốn lỗi chặn (9402–9405) là rổ A vì chúng chặn
+**Rổ và mảnh (ADR-043 ⒞):** tám khoản mới, sinh và đóng trong vòng — để mở thì bốn lỗi chặn (312–315) là rổ A vì chúng chặn
 khoản 15, tức mảnh 3 của `docs/PRODUCT.md` §11 (*triển khai thật*). Khoản 15 vẫn mở. Không migration, không ADR mới, không route,
 không màn.
 
@@ -22988,15 +22988,15 @@ bốn chỗ nhỏ; lô (a) (diễn tập §11) làm sau, PR riêng.
   (tài khoản prod, secret có AWSCURRENT, image có, SES đã xác minh, còn sandbox). `prod.tfvars` mẫu của 6.1 điền đủ, digest thật
   ⇒ `0 do, 5 vang`, thoát 0 — đúng năm `[VANG]` mà 6.4 hứa (`so_ban_api`, `so_ban_worker`, `che_do_dns`, `kenh_otp`, `ses.sandbox`);
   digest còn `000…` ⇒ bảy `[DO]`, thoát 1; placeholder của `ses` ⇒ `[DO]` đúng chỗ.
-- **9401:** biến trượt validation ⇒ `terraform console` THOÁT 0, lý do ra stderr, stdout mở đầu bằng *"Warning: Due to the problems
+- **311:** biến trượt validation ⇒ `terraform console` THOÁT 0, lý do ra stderr, stdout mở đầu bằng *"Warning: Due to the problems
   above…"*; tool in *"khong doc duoc bien qua terraform console (da terraform init trong 90-ecs chua?): stdout cua terraform
   console khong phai chuoi JSON"*, thoát 2, không in lý do. Đo ở hai ca: `ten_mien = "<app.domain>"` và `anh.api` ghi thẻ.
-- **9402:** cấu hình `terraform_data` cùng hình dạng (output đọc một tài nguyên được target và một không) — sau `apply -target`,
+- **312:** cấu hình `terraform_data` cùng hình dạng (output đọc một tài nguyên được target và một không) — sau `apply -target`,
   `terraform output ban_ghi_dns` ⇒ *Output not found*; output chỉ đọc tài nguyên đã target ⇒ có giá trị.
-- **9403:** `awscli` 1.42.0 (`pip download`): `LOCAL_PREFIX_MAP = {'file://': (get_file, {'mode': 'r'}) …}`, `compat_open` ⇒
+- **313:** `awscli` 1.42.0 (`pip download`): `LOCAL_PREFIX_MAP = {'file://': (get_file, {'mode': 'r'}) …}`, `compat_open` ⇒
   `open(filename, 'r', encoding=…)` — chế độ văn bản, newline mặc định. Mô phỏng: tệp CRLF ⇒ băm byte trên đĩa `fa7071c4…`, băm
   chuỗi CLI đọc `f7596088…`.
-- **9404, 9405, 9406:** đo bằng test mới trên mã cũ — ca BOM của secret Zalo đỏ; năm ca `DATA_STEWARD` ⇒ ba ca lệch giữa script và
+- **314, 315, 316:** đo bằng test mới trên mã cũ — ca BOM của secret Zalo đỏ; năm ca `DATA_STEWARD` ⇒ ba ca lệch giữa script và
   `docThamSo` ở cả hai locale, phép ghim mảng đỏ; ca 0/0 của `kiem-sau-deploy.sh worker` đỏ.
 - **Ghim tài liệu** (`hinh-dang-apply-lan-dau.test.ts`) chạy trên tệp của `fc0dcc75`: 3/3 đỏ.
 
@@ -23017,23 +23017,23 @@ bốn chỗ nhỏ; lô (a) (diễn tập §11) làm sau, PR riêng.
 - Test mới: `tests/architecture/hinh-dang-apply-lan-dau.test.ts` (3), `tests/architecture/hinh-dang-clockdrift.test.ts` (3),
   `tests/deploy/kiem-sau-deploy-sh.test.ts` (3); thêm vào `tools/kiem-truoc-apply/src/nguon.test.ts` (4),
   `apps/api/src/adapters/kho-token-zalo.test.ts` (1), `tests/deploy/khoi-tao-sh.test.ts` (năm ca + một phép ghim).
-- Sổ: mốc đầu `docs/STATE.md`, hàng 9401–9408, dòng trỏ ở khoản 15; `Handoff.md` 310 → 318 khoản, 48 còn mở.
+- Sổ: mốc đầu `docs/STATE.md`, hàng 311–318, dòng trỏ ở khoản 15; `Handoff.md` 310 → 318 khoản, 48 còn mở.
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
-- 9401 thoát 2 (không đọc được biến), không 1: hợp đồng của tool đã định nghĩa 1 là *có `[DO]`*, và ở ca này tool chưa đọc được
+- 311 thoát 2 (không đọc được biến), không 1: hợp đồng của tool đã định nghĩa 1 là *có `[DO]`*, và ở ca này tool chưa đọc được
   biến nào để xếp mức.
-- 9402 thêm output mới thay vì đổi `ban_ghi_dns`: `ban_ghi_dns` vẫn đúng cho 6.5 (CNAME `cong_khai`), và người vận hành đã quen nó.
-- 9403 sửa ở tài liệu, không ở công cụ: băm phải là băm của đúng byte đã duyệt; nới phép so (chuẩn hoá xuống dòng) là nới chính
+- 312 thêm output mới thay vì đổi `ban_ghi_dns`: `ban_ghi_dns` vẫn đúng cho 6.5 (CNAME `cong_khai`), và người vận hành đã quen nó.
+- 313 sửa ở tài liệu, không ở công cụ: băm phải là băm của đúng byte đã duyệt; nới phép so (chuẩn hoá xuống dòng) là nới chính
   điều người duyệt ký.
-- 9404 sửa cả hai phía: tài liệu (không ghi BOM) và `api` (bỏ một BOM) — `docBanKhai` đã có tiền lệ, và một secret Zalo hỏng làm
+- 314 sửa cả hai phía: tài liệu (không ghi BOM) và `api` (bỏ một BOM) — `docBanKhai` đã có tiền lệ, và một secret Zalo hỏng làm
   chết kênh OTP chỉ để lộ ra khi nhà cung cấp đầu tiên bấm *Gửi mã*.
-- 9407 chỉ sửa tài liệu: đổi rule ⑹ (`previousState`) cần thêm một lần apply stack 60 của chủ dự án; bảng thư dự kiến đủ cho lần
+- 317 chỉ sửa tài liệu: đổi rule ⑹ (`previousState`) cần thêm một lần apply stack 60 của chủ dự án; bảng thư dự kiến đủ cho lần
   dựng đầu.
 
 ## 6. Đo
-- 9401: cùng hai tệp ⇒ tool in *"terraform tu choi bien trong … - sua tep roi chay lai, khong plan:"* rồi nguyên lời Terraform
+- 311: cùng hai tệp ⇒ tool in *"terraform tu choi bien trong … - sua tep roi chay lai, khong plan:"* rồi nguyên lời Terraform
   (*"ten_mien phải là một domain chữ thường hợp lệ."*, *"Mỗi image phải ghim theo digest (@sha256:…), không theo thẻ."*), thoát 2.
-- 9402: cấu hình `terraform_data` thêm output chỉ đọc chứng chỉ ⇒ có giá trị ngay sau `apply -target`; stack 90 sau sửa:
+- 312: cấu hình `terraform_data` thêm output chỉ đọc chứng chỉ ⇒ có giá trị ngay sau `apply -target`; stack 90 sau sửa:
   `terraform validate` sạch, `terraform fmt -check` sạch.
 - Ghim tài liệu 3/3, ClockDrift 3/3, `kiem-sau-deploy` 3/3, `khoi-tao-sh` 10/10, `kho-token-zalo` 4/4, `kiem-truoc-apply` 27/27.
 - `ClockDrift` (6.7): đúng argv của `clockdrift.json` (không shell) chạy trên Node 22.22 với endpoint metadata v4 giả — có trường
@@ -23058,8 +23058,8 @@ máy người vận hành; build image lần đầu (CI không build — `ADD --
 ## 9. Giới hạn, nói ra
 - Không lệnh nào ở đây chạy trên AWS. `terraform validate` không thay `plan`: nó không đọc remote state của stack 40/50 hay
   secret.
-- 9403 còn dựa vào việc người vận hành làm theo tài liệu; hỏng thì vẫn hỏng an toàn (task dừng TRƯỚC CSDL).
-- 9404 ca cp1252 (không đặt `AWS_CLI_FILE_ENCODING`) chỉ chữa bằng tài liệu — `api` bỏ `\uFEFF`, không bỏ ba ký tự cp1252.
+- 313 còn dựa vào việc người vận hành làm theo tài liệu; hỏng thì vẫn hỏng an toàn (task dừng TRƯỚC CSDL).
+- 314 ca cp1252 (không đặt `AWS_CLI_FILE_ENCODING`) chỉ chữa bằng tài liệu — `api` bỏ `\uFEFF`, không bỏ ba ký tự cp1252.
 
 ## 10. Số đo
 - `pnpm typecheck` sạch; ESLint trên mọi tệp TS đổi sạch.

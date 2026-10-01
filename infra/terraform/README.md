@@ -162,7 +162,7 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
    aws secretsmanager put-secret-value --profile tp-prod --secret-id tp/api/zalo-oa --secret-string "file://$f"
    Remove-Item $f
    ```
-   **[S1.9101]** ~~`Set-Content -Encoding utf8 zalo.json`~~ — Windows PowerShell 5.1 ghi `-Encoding utf8` KÈM BOM, và `api` từng
+   **[S1.252]** ~~`Set-Content -Encoding utf8 zalo.json`~~ — Windows PowerShell 5.1 ghi `-Encoding utf8` KÈM BOM, và `api` từng
    từ chối secret ấy (*"secret Zalo: không phải JSON"* — kênh Zalo chết). `WriteAllText` ghi UTF-8 không BOM; `api` nay cũng bỏ
    một BOM ở đầu (`kho-token-zalo.ts`). Tệp ở `$env:TEMP`, không trong thư mục kho: nó mang khoá ứng dụng và refresh token.
    Từ đó `api` tự làm mới token và ghi lại. Refresh token dùng MỘT lần: đừng thử nó bằng tay sau khi nạp.
@@ -175,13 +175,13 @@ terraform output bien_moi_truong    # giá trị TRUSTPROCURE_SES_* cho api và 
 của VPC chỉ phân giải `local.ten_duoc_phan_giai` ở stack 90 (endpoint AWS đang dùng, bucket lớp ECR, bucket neo, RDS, hai tên
 Zalo) — mọi tên khác NXDOMAIN, ghi `/tp/dns`, alarm `tp-dns-bi-chan` ⇒ email ⑸ của stack 60 (60 bắt theo TÊN — apply trước hay sau 90 đều được).
 - Thêm một đích ngoài mới: thêm tên vào danh sách (và URL hằng vào adapter — `hinh-dang-dns.test.ts` đòi hai bên khớp).
-- Không chắc danh sách đủ (lần apply đầu, một dịch vụ mới): `-var che_do_dns=ALERT` — ~~chỉ ghi log~~ **[S1.9101]** không chặn,
+- Không chắc danh sách đủ (lần apply đầu, một dịch vụ mới): `-var che_do_dns=ALERT` — ~~chỉ ghi log~~ **[S1.252]** không chặn,
   nhưng bộ lọc `tp-dns-bi-chan` đếm cả ALERT nên mỗi tên ngoài danh sách vẫn ra thư ⑸; xem `/tp/dns` rồi đặt
-  lại `BLOCK`. ~~Lọc `{ $.firewall_rule_action = "ALERT" }` trong Logs Insights.~~ **[S1.9101]** Logs Insights:
+  lại `BLOCK`. ~~Lọc `{ $.firewall_rule_action = "ALERT" }` trong Logs Insights.~~ **[S1.252]** Logs Insights:
   `filter firewall_rule_action = "ALERT" | stats count() by query_name` — cú pháp `{ $.… }` là của metric filter.
 - Trước khi apply: kiểm `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.ap-southeast-1.sms-voice`
   có dịch vụ ở region; không có thì bỏ `sms-voice` khỏi `dich_vu_endpoint` và giữ tên SMS trong danh sách (đi qua NAT).
-  **[S1.9101]** `dich_vu_endpoint` là `local` của `main.tf` — bỏ nó là sửa mã qua PR, không có biến.
+  **[S1.252]** `dich_vu_endpoint` là `local` của `main.tf` — bỏ nó là sửa mã qua PR, không có biến.
 
 **[ADR-079] Chính sách VPC endpoint.** Endpoint giao diện chỉ nhận người gọi thuộc prod/audit gọi tới tài nguyên thuộc
 prod/audit; S3 gateway chỉ cho bucket lớp image ECR (GetObject) và bucket neo (Get/Put/List), và nay gắn cả bảng định
@@ -201,12 +201,12 @@ task (Container Insights; service `so_ban_* = 0` không có alarm), RDS CPU > 80
 Stack 60 ⑹ chuyển mọi alarm mang tiền tố ấy — cả lúc vào ALARM lẫn lúc trở về OK — sang audit ⇒ email tới hộp thư VẬN HÀNH
 (`email_van_hanh`, topic riêng `tp-canh-bao-van-hanh` — ADR-088), không tới `email_canh_bao`. Stack 60 bắt theo TIỀN TỐ, không phụ
 thuộc 90. Lần apply đầu, trước khi service có task: "không còn target khoẻ"/"thiếu task" vào ALARM rồi trở về OK — hai thư dự
-kiến mỗi service. Đổi `so_ban_worker` từ 0 lên 1 (ADR-040) tự thêm alarm thiếu task của worker. **[S1.9101]** Cộng một thư OK
+kiến mỗi service. Đổi `so_ban_worker` từ 0 lên 1 (ADR-040) tự thêm alarm thiếu task của worker. **[S1.252]** Cộng một thư OK
 cho MỖI alarm mới ở lần đánh giá đầu: rule ⑹ bắt mọi lần vào OK, kể cả từ INSUFFICIENT_DATA (APPLY-LAN-DAU, bảng thư dự kiến).
 
 ## Chạy thật — stack `90-ecs` (ADR-066)
 
-**1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên). **[S1.9101]** Mật khẩu chỉ
+**1. Bí mật — tạo TRƯỚC khi apply** (giá trị không bao giờ vào state; mật khẩu ≥ 24 ký tự ngẫu nhiên). **[S1.252]** Mật khẩu chỉ
 gồm chữ và số — `/ ? # % @ :` phá URL, `$` và dấu huyền bị nội suy trong nháy kép dưới (APPLY-LAN-DAU 6.1 có lệnh sinh).
 Host RDS chưa có ở lần đầu: tạo secret với host tạm rồi `put-secret-value` lại sau bước 3.
 
@@ -234,7 +234,7 @@ terraform plan -var-file prod.tfvars -out plan.tfplan                   # bướ
 terraform apply plan.tfplan                                             # chờ ACM xác minh rồi tạo ALB
 ```
 
-**[S1.9101]** Sau bước A chỉ đọc `xac_minh_acm`: ~~`ban_ghi_dns`~~ còn đọc ALB nên chưa có trong state (*Output not found*, đo trên
+**[S1.252]** Sau bước A chỉ đọc `xac_minh_acm`: ~~`ban_ghi_dns`~~ còn đọc ALB nên chưa có trong state (*Output not found*, đo trên
 Terraform 1.13.3); nó dùng ở bước 3 cho CNAME `cong_khai`.
 
 `prod.tfvars` (không commit): `sms`, `zalo` (tuỳ chọn, stack 85 — bỏ trống là tắt kênh), `ten_mien` (tên miền công khai DUY NHẤT — trang và `/api/*`; `TRUSTPROCURE_PUBLIC_BASE_URL`
@@ -259,12 +259,12 @@ foreach ($t in "api","worker","migrate","web","public-keys","neo","khoi-tao") {
 }
 ```
 
-**[S1.9101]** `<ecr>` là registry `942091277863.dkr.ecr.ap-southeast-1.amazonaws.com` — không phải URL từng kho mà `terraform output
+**[S1.252]** `<ecr>` là registry `942091277863.dkr.ecr.ap-southeast-1.amazonaws.com` — không phải URL từng kho mà `terraform output
 ecr` in. Digest cho `prod.tfvars`, lọc theo thẻ như pipeline: `aws ecr describe-images --profile tp-prod --repository-name <kho>
 --image-ids imageTag=<git-sha> --query 'imageDetails[0].imageDigest' --output text`.
 
-**5. Migrate** — ~~`terraform output lenh_chay_migrate`~~ **[S1.9101]** `terraform output -raw lenh_chay_migrate`, chạy, đọc `/tp/migrate` trong CloudWatch: phải thấy
-`da ap N migration` và ~~hai~~ **[S1.9101]** bốn dòng `vai …` (`app_api_login`, `app_unseal_login`, `app_neo_login`,
+**5. Migrate** — ~~`terraform output lenh_chay_migrate`~~ **[S1.252]** `terraform output -raw lenh_chay_migrate`, chạy, đọc `/tp/migrate` trong CloudWatch: phải thấy
+`da ap N migration` và ~~hai~~ **[S1.252]** bốn dòng `vai …` (`app_api_login`, `app_unseal_login`, `app_neo_login`,
 `app_khoi_tao_login`). **Đây cũng là phép đo ADR-061 trên RDS** (vai master RDS không
 phải superuser); nếu `migrate()` từ chối, dừng lại và đọc thông điệp — không sửa bằng tay trong CSDL.
 
@@ -276,7 +276,7 @@ header `content-security-policy`; log `/tp/api` có dòng `khoa: aws-kms, bo gui
 `https://<ten_mien>/.well-known/trustprocure-receipt-keys` ⇒ 200, và `sha256` in trong log `/tp/public-keys` TRÙNG dấu vân
 tay tính độc lập từ output của stack 50 (mục "Khoá công khai biên nhận" dưới). **[ADR-075]** Mọi phản hồi HTTPS mang
 `strict-transport-security: max-age=31536000; includeSubDomains`, `x-frame-options: DENY`, `x-content-type-options: nosniff`,
-không có header `server` (~~`curl -sI https://<ten_mien>/api/health`~~ **[S1.9101]** `curl.exe -s -D - -o NUL https://<ten_mien>/api/health`
+không có header `server` (~~`curl -sI https://<ten_mien>/api/health`~~ **[S1.252]** `curl.exe -s -D - -o NUL https://<ten_mien>/api/health`
 — trên Windows PowerShell 5.1 `curl` là bí danh của `Invoke-WebRequest`, và `-I` gửi HEAD mà `api` trả 405); `http://<ten_mien>/` ⇒ 301 sang HTTPS.
 
 ## Khoá công khai biên nhận — service `tp-public-keys` (ADR-070)
@@ -305,11 +305,11 @@ ký được bằng `alias/tp-anchor-sign`), không service. Stack 40 xuất `ne
 đọc state ấy. **Thứ tự: 40 và 50 trước 90.**
 
 - **Neo khoá biên nhận** — lệnh mặc định của image, pipeline chạy nó sau MỖI lần deploy `tp-public-keys`
-  (`terraform output lenh_chay_neo` để chạy tay — **[S1.9101]** output là một đối tượng hai lệnh; in đúng lệnh bằng
+  (`terraform output lenh_chay_neo` để chạy tay — **[S1.252]** output là một đối tượng hai lệnh; in đúng lệnh bằng
   `(terraform output -json lenh_chay_neo | ConvertFrom-Json).khoa_bien_nhan`). Ghi `khoa-bien-nhan/<kid>.json` — **đúng byte** của
   `GET https://<ten_mien>/.well-known/trustprocure-receipt-keys/<kid>`. Chạy lại cùng khoá là không làm gì; một kid bị đổi
   khoá làm job thoát mã 1.
-- **Mốc neo sổ kiểm toán** — `lenh_chay_neo.xuat`, thay `<uuid>` (lặp `--org` cho nhiều tổ chức). **[S1.9101]** Trên Windows
+- **Mốc neo sổ kiểm toán** — `lenh_chay_neo.xuat`, thay `<uuid>` (lặp `--org` cho nhiều tổ chức). **[S1.252]** Trên Windows
   PowerShell 5.1, chuỗi JSON trong nháy đơn của `--overrides` mất nháy kép khi tới `aws` (chưa đo trên Windows): ghi phần ấy vào
   một tệp UTF-8 rồi dùng `--overrides file://<tệp>`, như `clockdrift.json` ở mục "Nguồn thời gian". Ghi
   `so-kiem-toan/<org>/<thời điểm>-<băm>.json`, ký bằng KMS. **[ADR-072] Có lịch:** EventBridge Scheduler
@@ -470,7 +470,7 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
 1. ~~Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒~~ **[rà 2026-10-01]** Không vào được một task đang
    chạy: stack 90 không bật ECS Exec, và image `node:22-bookworm-slim` không có `curl`. Thay bằng một task `tp-migrate` chạy một
    lần với lệnh ghi đè — cùng cụm Fargate, cùng subnet ứng dụng; nó đọc metadata bằng `fetch` của Node, **chưa đo trên AWS**.
-   **[S1.9101]** Phần không cần AWS đã đo và ghim (`tests/architecture/hinh-dang-clockdrift.test.ts`): tên container khớp task
+   **[S1.252]** Phần không cần AWS đã đo và ghim (`tests/architecture/hinh-dang-clockdrift.test.ts`): tên container khớp task
    `migrate` của stack 90, đích `migrate` của `deploy/Dockerfile` chỉ có `CMD` nên `command` thay trọn lệnh, và trên một endpoint
    metadata v4 giả lệnh in đúng một dòng `CLOCKDRIFT {…}`. Tệp
    `clockdrift.json`, lưu UTF-8 bằng trình soạn (không bằng `Out-File` của PowerShell 5):
@@ -480,7 +480,7 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
    Chạy lệnh in bởi `terraform output lenh_chay_migrate`, thêm `--overrides file://clockdrift.json`, rồi tìm `CLOCKDRIFT` trong
    `/tp/migrate` ⇒ trường `ClockDrift` có
    `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
-   **[S1.9101]** Ba kết quả khác: `CLOCKDRIFT undefined` (đo trên endpoint giả: task VẪN thoát 0) ⇒ metadata không mang
+   **[S1.252]** Ba kết quả khác: `CLOCKDRIFT undefined` (đo trên endpoint giả: task VẪN thoát 0) ⇒ metadata không mang
    trường ấy — CHƯA đo, không phải đạt, đừng chép vào STATE; `NOT_SYNCHRONIZED` ⇒ dừng trước dữ liệu thật; task thoát 1 với
    `fetch failed` (đo: endpoint không trả lời) ⇒ không với tới endpoint metadata — chạy lại một lần, lặp lại thì dừng và đọc
    `/tp/migrate`.

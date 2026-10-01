@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [ADR-078 / S1.9101] `deploy/kiem-sau-deploy.sh worker` — ĐO BẰNG `aws` GIẢ
+// [ADR-078 / S1.252] `deploy/kiem-sau-deploy.sh worker` — ĐO BẰNG `aws` GIẢ
 //
 // Job `worker` của pipeline chỉ thay task definition (`update-service`), KHÔNG đổi số task: số task là `so_ban_worker` của
 // stack 90 (APPLY-LAN-DAU 8.2). Bản trước chỉ so `runningCount = desiredCount`, nên một worker CHƯA BẬT (0/0) qua kiểm — job
@@ -55,7 +55,7 @@ describe.skipIf(process.platform === "win32")("[ADR-078] kiem-sau-deploy.sh work
     expect(r.stderr).toContain("dat: tp-unseal-worker 1/1 task");
   });
 
-  it("[S1.9101] muốn 0 task (worker chưa bật) ⇒ HỎNG và nói cách bật — không còn là 0/0 xanh", () => {
+  it("[S1.252] muốn 0 task (worker chưa bật) ⇒ HỎNG và nói cách bật — không còn là 0/0 xanh", () => {
     const r = worker("0", "0");
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("so_ban_worker");

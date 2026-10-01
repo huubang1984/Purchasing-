@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101] LỆNH CỦA LẦN APPLY ĐẦU STACK 90 — BA CHỖ HỎNG ĐO ĐƯỢC TRƯỚC KHI NGƯỜI VẬN HÀNH CHẠY THẬT
+// [S1.252] LỆNH CỦA LẦN APPLY ĐẦU STACK 90 — BA CHỖ HỎNG ĐO ĐƯỢC TRƯỚC KHI NGƯỜI VẬN HÀNH CHẠY THẬT
 //
 // Lượt rà `docs/APPLY-LAN-DAU.md` mục 6–8 tìm ba lệnh viết đúng cú pháp mà vẫn hỏng trên đường thật; mỗi cái hỏng KHÔNG ồn:
 //   ⑴ 6.2: sau `apply -target aws_acm_certificate.api`, Terraform chỉ ghi output mà MỌI phụ thuộc nằm trong tập target —
@@ -32,7 +32,7 @@ function khoiMa(van: string, moc: string, can: string): string {
   return khoi ?? "";
 }
 
-describe("[S1.9101] lệnh của lần apply đầu", () => {
+describe("[S1.252] lệnh của lần apply đầu", () => {
   it("⑴ output xac_minh_acm chỉ đọc chứng chỉ; 6.2 và README bước 2 đọc nó ngay sau apply -target", () => {
     const batDau = TF90.indexOf('output "xac_minh_acm" {\n');
     expect(batDau).toBeGreaterThan(-1);

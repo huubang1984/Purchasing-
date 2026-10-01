@@ -1491,7 +1491,7 @@ resource "aws_cloudwatch_metric_alarm" "ton_dong" {
   depends_on          = [aws_cloudwatch_log_metric_filter.ton_dong]
 }
 
-# [S1.9101] Đọc được NGAY sau `apply -target aws_acm_certificate.api` (README bước 2, APPLY-LAN-DAU 6.2): với `-target`,
+# [S1.252] Đọc được NGAY sau `apply -target aws_acm_certificate.api` (README bước 2, APPLY-LAN-DAU 6.2): với `-target`,
 # Terraform chỉ ghi output mà MỌI phụ thuộc nằm trong tập target, và `ban_ghi_dns` còn đọc ALB — đo trên 1.13.3, lúc ấy
 # `terraform output ban_ghi_dns` báo "Output not found". Chỉ được đọc chứng chỉ.
 output "xac_minh_acm" {

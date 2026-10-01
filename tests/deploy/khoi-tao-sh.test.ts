@@ -180,7 +180,7 @@ describe.skipIf(process.platform === "win32")("[S1.183] trien-khai.sh — kiem-k
       { VAI: "BUYER=3 " }, { VAI: "" }, { VAI: "BUYER" }, { VAI: "=3" }, { VAI: "BUYER==3" }, { VAI: "BUYER=٣" },
       { VAI: "REQUESTER=3,BUYER=3,TECHNICAL=3,PROCUREMENT_MANAGER=3,FINANCE=3,DIRECTOR=3" },
       { VAI: "REQUESTER=1,BUYER=1,TECHNICAL=1,PROCUREMENT_MANAGER=1,FINANCE=1,DIRECTOR=1" },
-      // [S1.9101] Mã vai thứ bảy (S4.2a) — phía bash từng thiếu nó: bản khai gán được, workflow không duyệt được.
+      // [S1.252] Mã vai thứ bảy (S4.2a) — phía bash từng thiếu nó: bản khai gán được, workflow không duyệt được.
       { VAI: "BUYER=2,DATA_STEWARD=1" }, { VAI: "DATA_STEWARD=3" }, { VAI: "DATA_STEWARD=1,BUYER=2" }, { VAI: "data_steward=3" },
       { VAI: "REQUESTER=1,BUYER=1,TECHNICAL=1,PROCUREMENT_MANAGER=1,FINANCE=1,DIRECTOR=1,DATA_STEWARD=1" },
     ];
@@ -209,7 +209,7 @@ describe.skipIf(process.platform === "win32")("[S1.183] trien-khai.sh — kiem-k
     expect(ca.length - nhan).toBeGreaterThanOrEqual(50);
   });
 
-  it("[S1.9101] mảng MA_VAI của script là MA_VAI của ban-khai.ts — cùng mã, cùng thứ tự", () => {
+  it("[S1.252] mảng MA_VAI của script là MA_VAI của ban-khai.ts — cùng mã, cùng thứ tự", () => {
     const m = /^MA_VAI=\(([A-Z_ ]+)\)/mu.exec(readFileSync(SCRIPT, "utf8"));
     expect(m, "không đọc được MA_VAI của trien-khai.sh").not.toBeNull();
     expect((m?.[1] ?? "").trim().split(/ +/u)).toEqual([...MA_VAI]);
