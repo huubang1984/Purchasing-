@@ -358,7 +358,7 @@ async function chinh(): Promise<void> {
         })()
       : (await q<{ id: string }>(
           "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
-            "created_by, created_by_session_id) VALUES ($1, 1, '1000000000.00', 'VND', $2::jsonb, $3, $4, $5) RETURNING id",
+            "created_by, created_by_session_id) VALUES ($1, 1, '1000000000.00', 'VND', $2::pg_catalog.jsonb, $3::pg_catalog.int4, $4, $5) RETURNING id",
           [org, JSON.stringify(TRONG_SO_DEMO), BAFO_TOP_N_DEMO, nguoiGieo, phienGieo],
         )).id;
 

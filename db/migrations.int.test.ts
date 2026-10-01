@@ -2398,6 +2398,10 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
     // lần nộp đang bị trả. Con trỏ dời theo quy tắc *migration CUỐI CÙNG*.
     { ham: "rfq_kiem_tra_ve_nhap", migration: "087_lan_nop_da_xem.sql", trigger: ["rfq_packages_tra_ve_nhap_chi_khi_bat_s3"] },
     { ham: "rfq_invitation_tokens_ghi_goi_da_mo", migration: "077_tra_ve_nhap.sql", trigger: ["rfq_invitation_tokens_ghi_goi_da_mo"] },
+    // [S1.9101 / S4.5a / L14] Gói CHỤP phiên bản chính sách hiệu lực ở cạnh vào OPEN, và lượt chấm phải mang đúng phiên bản ấy. Thân
+    // `RETURN NEW` ở hàm đầu để mọi gói mới không phiên bản ghim; ở hàm sau mở lại đường chấm dưới phiên bản khai SAU khi thấy giá.
+    { ham: "rfq_ghim_chinh_sach_khi_mo", migration: "9501_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_packages_ghim_chinh_sach_khi_mo"] },
+    { ham: "rfq_evaluations_kiem_phien_ban_ghim", migration: "9501_ghim_chinh_sach_luot_cham.sql", trigger: ["rfq_evaluations_kiem_phien_ban_ghim"] },
     // [S1.192 / S4.1 / L1] Hàm trigger khuôn của MỌI bảng dữ liệu nền. Một thân bỏ khoá tư vấn cho hai hàng cùng `seq` dưới ghi
     // đồng thời; một thân để ứng dụng đặt `ghi_luc` làm vế *"trước mốc"* của L1 thành lời khai của người ghi.
     // [S1.197 / S4.2a] Bốn bảng hàng chuẩn dùng ĐÚNG hàm khuôn này — thân không đổi, nên con trỏ ở lại `079`.

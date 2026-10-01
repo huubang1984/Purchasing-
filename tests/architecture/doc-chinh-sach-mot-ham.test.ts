@@ -18,7 +18,9 @@ type Lop = "GHI" | "QUA_HAM" | "THEO_ID";
 function lopCua(sql: string): Lop | null {
   if (/^\s*INSERT\s+INTO\s+public\.org_procurement_policies\b/iu.test(sql)) return "GHI";
   if (/\bpublic\.chinh_sach_hieu_luc\s*\(/u.test(sql)) return "QUA_HAM";
-  if (/\bJOIN\s+public\.org_procurement_policies\s+(\w+)\s+ON\s+\1\.id\s+OPERATOR\(pg_catalog\.=\)\s+\w+\.policy_id\b/iu.test(sql)) {
+  // [S1.9101 / S4.5a] Cột phiên bản ghim của GÓI (`rfq_packages.chinh_sach_ghim_id`) cũng là một id đã ghim: trigger cạnh vào OPEN
+  // chụp nó bằng `chinh_sach_hieu_luc` (`9501`), và không vai ứng dụng nào ghi được nó.
+  if (/\bJOIN\s+public\.org_procurement_policies\s+(\w+)\s+ON\s+\1\.id\s+OPERATOR\(pg_catalog\.=\)\s+\w+\.(?:policy_id|chinh_sach_ghim_id)\b/iu.test(sql)) {
     return "THEO_ID";
   }
   return null;
@@ -45,10 +47,14 @@ describe("[S1.156] đọc chính sách mua sắm qua MỘT hàm", () => {
         "tức nó tự chọn phiên bản, và một phiên bản có bậc chưa ký sẽ có hiệu lực ở đây (ADR-082 ⑺).",
     ).toEqual([]);
     expect([...new Set(cau.map((c) => c.tep))].sort()).toEqual([...TEP_DA_KHAI].sort());
-    // Hai chỗ đọc chính sách HIỆN HÀNH của TypeScript — đúng hai chỗ mà S3.1a hợp nhất.
-    for (const tep of ["packages/rfq/src/procurement-policy.ts", "packages/danh-gia/src/luot-danh-gia.ts"]) {
-      expect(cau.some((c) => c.tep === tep && lopCua(c.sql) === "QUA_HAM"), tep).toBe(true);
-    }
+    // ~~Hai chỗ đọc chính sách HIỆN HÀNH của TypeScript — đúng hai chỗ mà S3.1a hợp nhất.~~ [S1.9101 / S4.5a] Một chỗ: lượt chấm
+    // thôi đọc phiên bản hiện hành — nó đọc phiên bản gói đã CHỤP lúc mở (L14), theo id đã ghim.
+    expect(cau.some((c) => c.tep === "packages/rfq/src/procurement-policy.ts" && lopCua(c.sql) === "QUA_HAM")).toBe(true);
+    expect(
+      cau.some((c) => c.tep === "packages/danh-gia/src/luot-danh-gia.ts" && lopCua(c.sql) === "THEO_ID" && c.sql.includes("chinh_sach_ghim_id")),
+      "lượt chấm đọc phiên bản gói đã chụp lúc mở",
+    ).toBe(true);
+    expect(cau.some((c) => c.tep === "packages/danh-gia/src/luot-danh-gia.ts" && lopCua(c.sql) === "QUA_HAM")).toBe(false);
   });
 
   it("đối chứng: hai câu TRƯỚC S3.1a — `getActiveProcurementPolicy` và `docChinhSach` — bị bộ phân loại bắt", () => {
