@@ -23457,4 +23457,11 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
 
 ## 10. Số đo
 
-- (điền sau lần chạy cuối)
+- Cây cuối (sau khi hợp `master` #228 — S1.254; cấp số `99ba914`): `pnpm t0` sạch (521 module, không vi phạm phụ thuộc); `pnpm test` 143 tệp,
+  2399 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.256, ADR-142, khoản 329–331, migration `103`).
+- Lô tích hợp chạm vòng này, chạy riêng trên mã giữa vòng: `benchmark.int` 38/38, `rls-coverage.int` 61/61, `check-an-ninh.int` 4/4,
+  `hardening-suy-tu-tinh-chat.int` 38/38; `migrations.int` 124/128 ở lượt giữa vòng — ba danh sách migration viết tay thiếu `9501`
+  (sửa) và một ca lệch checksum do sửa migration giữa lúc chạy —, xanh trong lượt `pnpm evidence` dưới đây.
+- `pnpm evidence` toàn bộ T1–T3: lượt một trên `99ba914` — 4469 khẳng định, **1 đỏ** (ca lật `anh-xa.int` L1, mục 6); lượt hai trên `3660b41`
+  (`7063bc8` chỉ thêm dòng biên bản): 231 tệp, 4469 khẳng định, 4459 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi trường),
+  **0 đỏ**; **79/79 bất biến** (57 nghiệp vụ + 22 hàng rào); L7 đo bằng 66 khẳng định, L14 bằng 13.
