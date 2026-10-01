@@ -61,6 +61,7 @@ import { createPool } from "@trustprocure/db";
 import { TenantError, ngheLoiKetNoiToiMuon, withTenant } from "@trustprocure/tenancy";
 import {
   createS3AnchorStore,
+  laKidPhatHanh,
   muonNguoiGhiNeo,
   neoKhoaBienNhan,
   taoBoKyNeoAwsKms,
@@ -86,7 +87,7 @@ const CACH_DUNG = `Cách dùng:
 Biến môi trường:
   DATABASE_URL                     bắt buộc (trừ "trich", "khoa-bien-nhan") — đăng nhập bằng app_neo_login
   TRUSTPROCURE_NEO_KHO             thư mục nơi cất — HOẶC bộ S3 dưới, không cả hai
-  TRUSTPROCURE_NEO_KID             định danh khoá ký (chỉ cần cho "xuat")
+  TRUSTPROCURE_NEO_KID             định danh khoá ký, 1–64 ký tự [A-Za-z0-9._-] (chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_RIENG      PKCS8 DER, base64 (local-dev, chỉ cần cho "xuat")
   TRUSTPROCURE_NEO_KHOA_CONG_KHAI  SPKI DER, base64 — "<kid>=<base64>", lặp lại bằng dấu phẩy
 
@@ -106,6 +107,24 @@ function batBuoc(ten: string): string {
   const gt = env[ten];
   if (gt === undefined || gt.trim() === "") throw new Error(`Thiếu biến môi trường ${ten}.`);
   return gt.trim();
+}
+
+/**
+ * [S1.250 / kid] `TRUSTPROCURE_NEO_KID` — kid KÝ mốc neo, phía PHÁT HÀNH: tập `[A-Za-z0-9._-]{1,64}` (`laKidPhatHanh`), cùng
+ * `neo_kid` của terraform stack 40 và vòng khoá local-dev (`anchor-sign.ts`). Một chỗ đọc cho cả hai chế độ ký (local-dev, KMS),
+ * kiểm trước khi dựng bộ ký — trước khi đọc khoá, trước lời gọi KMS nào —, lỗi nêu TÊN biến. Vòng khoá CÔNG KHAI
+ * (`TRUSTPROCURE_NEO_KHOA_CONG_KHAI`, đường KIỂM) vẫn nhận tập rộng của định dạng: một mốc neo kid có `:` ký trước vòng này vẫn
+ * phải `kiem` được.
+ */
+function docKidNeo(): string {
+  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  if (!laKidPhatHanh(kid)) {
+    throw new Error(
+      'TRUSTPROCURE_NEO_KID phải dài 1–64 ký tự [A-Za-z0-9._-] (không ":") — kid ký mốc neo thành tên tệp khi "pnpm neo trich" ' +
+        "tách mốc neo. Định dạng mốc neo vẫn đọc được kid cũ có \":\"; chỉ đường KÝ từ chối nó.",
+    );
+  }
+  return kid;
 }
 
 /**
@@ -165,7 +184,8 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
     throw new Error("TRUSTPROCURE_NEO_KMS_KEY_ID và TRUSTPROCURE_NEO_KHOA_RIENG loại trừ nhau.");
   }
   if (aws === undefined) throw new Error("Ký bằng KMS cần bộ biến S3/role của job neo (TRUSTPROCURE_NEO_S3_BUCKET…).");
-  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo.
+  const kid = docKidNeo();
   const kms = new KMSClient({ region: aws.region, credentials: aws.dangNhap });
   const { boKy, khoaCongKhai } = await taoBoKyNeoAwsKms({ client: kms, keyId, kid });
   const vong = new Map(tuyChon("TRUSTPROCURE_NEO_KHOA_CONG_KHAI") === undefined ? [] : docKhoaCongKhai());
@@ -178,7 +198,8 @@ async function docBoKyTheoCheDo(aws: CauHinhAws | undefined): Promise<{ boKy: Bo
 }
 
 function docBoKy(): AnchorSigner {
-  const kid = batBuoc("TRUSTPROCURE_NEO_KID");
+  // ~~`batBuoc`~~ [S1.250 / kid] tập phát hành của kid ký mốc neo — trước cả phép tra nửa công khai.
+  const kid = docKidNeo();
   const congKhai = docKhoaCongKhai().get(kid);
   if (congKhai === undefined) {
     // Bộ ký cần cả hai nửa để dựng vòng khoá, và đòi nửa công khai ở đây mua thêm một thứ: người
@@ -493,6 +514,10 @@ function pemTuSpkiDer(der: Uint8Array): string {
  * theo hỏng. Siết ở ĐÂY chứ không ở `anchor-text.ts`: `KID_PATTERN` là một hằng của ĐỊNH DẠNG ĐÃ
  * KÝ, siết nó sẽ làm những mốc neo cũ mang `kid` có `:` không còn kiểm được — đổi định dạng để
  * sửa một vấn đề tên tệp là đúng thứ ADR-026 §1 cấm.
+ *
+ * [S1.250 / kid] Phía PHÁT HÀNH nay cùng tập (`KID_PHAT_HANH` của `anchor-sign.ts`, `docKidNeo`, bộ ký KMS của `aws.ts`): một kid
+ * có `:` chỉ còn tới được đây từ một mốc neo ký TRƯỚC vòng này. Vế này giữ nguyên — nó là chỗ duy nhất phía KIỂM dùng kid làm tên
+ * tệp.
  */
 function kidAnToanChoTenTep(kid: string): string {
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(kid)) {

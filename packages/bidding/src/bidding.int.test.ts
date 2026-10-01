@@ -22,6 +22,7 @@ import { getRfqPublicKeys, issueRfqKeyPair, sealBid } from "@trustprocure/sealed
 import {
   BiddingError,
   NopBiTuChoiError,
+  ReceiptError,
   ReceiptSigningKeyRing,
   createLocalDevReceiptSigner,
   getBidReceipt,
@@ -905,3 +906,99 @@ describe("[S1.167 / khoản 247] lần nộp bị chặn không vì hạn để 
   });
 });
 
+
+// ==============================================================================================
+// [S1.250 / kid] `submitBid` KIỂM KID CỦA BỘ KÝ TRƯỚC MỌI LẦN GHI — LỖ Ở CẤP INTERFACE `ReceiptSigner`
+//
+// Hai factory (`createLocalDevReceiptSigner` qua `ReceiptSigningKeyRing`, `createAwsKmsReceiptSigner`) giữ tập phát hành
+// `[A-Za-z0-9._-]` từ S1.249; nhưng `ReceiptSigner` là một INTERFACE — một đối tượng tự dựng mang kid bất kỳ mà định dạng cho
+// phép (kể cả `:`) đi thẳng vào `buildReceiptText` và ra một biên nhận đã ký mà job neo không neo được tài liệu khoá của nó.
+// Chủ dự án chốt (2026-10-01): kiểm ở `submitBid`, TRƯỚC mọi lần ghi — không để giao dịch của người gọi đã ghi luồng, phiên
+// bản hay hàng sổ rồi mới ném. Đo hai vế: lỗi có tên và tập ký tự, VÀ giao dịch chưa được cấp mã giao dịch lúc ném
+// (`pg_current_xact_id_if_assigned()` NULL — Postgres chỉ cấp mã khi có một câu ghi); sau COMMIT không còn gì.
+// ==============================================================================================
+describe("[S1.250 / kid] submitBid kiểm kid của bộ ký trước mọi lần ghi", () => {
+  /** Bộ ký TỰ DỰNG — không qua hai factory; ký bằng đúng khoá của `boKy` nên một biên nhận hợp lệ của nó kiểm được. */
+  function boKyTuDung(kid: string): ReceiptSigner & { soLanKy: number } {
+    const o: ReceiptSigner & { soLanKy: number } = {
+      name: "tu-dung",
+      activeKeyId: kid,
+      soLanKy: 0,
+      sign: (van: string) => {
+        o.soLanKy += 1;
+        return boKy.sign(van);
+      },
+    };
+    return o;
+  }
+
+  const demSo = async (): Promise<number> =>
+    (await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1", [orgA])).rows[0]?.n ?? -1;
+
+  // Hai vế, hai ca: `:` — định dạng NHẬN, chỉ tập phát hành chặn; `\n` — định dạng cũng chặn, nhưng ở `buildReceiptText`, tức SAU
+  // câu ghi phiên bản: ca này đo chiều "trước mọi lần ghi", không chỉ chiều "có chặn".
+  it.each([
+    { nhan: "kid có `:`", kid: "kms:2026-09" },
+    { nhan: "kid có xuống dòng", kid: "k\nalg=HMAC" },
+  ])("[S1.250 / kid] $nhan ⇒ ReceiptError nêu tập ký tự; giao dịch CHƯA ghi gì lúc ném; commit để lại 0 luồng, 0 hàng sổ", async ({ kid }) => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    const ky = boKyTuDung(kid);
+    const soTruoc = await demSo();
+    let loi: unknown = null;
+    let xid: string | null = "chua-do";
+    let loiCommit: unknown = null;
+    await withTenant(apiPool, orgA, async (c) => {
+      try {
+        await submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: ky });
+      } catch (e) {
+        loi = e;
+      }
+      // Giao dịch còn lành và CHƯA có mã giao dịch: không một câu ghi nào đã chạy trong nó. Callback trả về ⇒ COMMIT.
+      const { rows } = await c.query<{ xid: string | null }>(
+        "SELECT pg_catalog.pg_current_xact_id_if_assigned()::pg_catalog.text AS xid",
+      );
+      xid = rows[0]?.xid ?? null;
+    }).catch((e: unknown) => {
+      loiCommit = e;
+    });
+    expect(loi, "submitBid phải ném").toBeInstanceOf(ReceiptError);
+    expect(xid, "giao dịch của người gọi đã GHI trước khi submitBid ném").toBeNull();
+    expect(loiCommit, "COMMIT của giao dịch không ghi gì không được hỏng").toBeNull();
+    expect((loi as Error).message).toContain("[A-Za-z0-9._-]");
+    expect(ky.soLanKy, "bộ ký không được gọi").toBe(0);
+    const { rows: luong } = await db.pool.query("SELECT 1 FROM vendor_bids WHERE invitation_id = $1", [bc.invitationId]);
+    expect(luong, "không luồng báo giá nào").toHaveLength(0);
+    expect(await demSo(), "không hàng sổ nào").toBe(soTruoc);
+  });
+
+  it("[S1.250 / kid] ĐỐI CHỨNG: bộ ký tự dựng với kid hợp lệ vẫn nộp được — biên nhận mang đúng kid ấy và kiểm được bằng khoá công khai", async () => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    const ky = boKyTuDung("kms-2026-09");
+    const bn = await withTenant(apiPool, orgA, (c) => submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: ky }));
+    expect(ky.soLanKy).toBe(1);
+    expect(parseReceiptText(bn.canonicalText).kid).toBe("kms-2026-09");
+    await expect(verifyReceipt({ canonicalText: bn.canonicalText, signature: bn.signature, publicKey: khoaKy.publicKey })).resolves.toBe(true);
+  });
+
+  // [S1.250 / kid — lượt soi đối kháng] `activeKeyId` của một interface có thể là một GETTER: đọc hai lần (một lần để kiểm, một lần
+  // để dựng văn bản) là cho nó trả kid hợp lệ cho phép kiểm và kid có `:` cho biên nhận. Hàm phải đọc ĐÚNG MỘT lần và dùng chính
+  // giá trị đã kiểm.
+  it("[S1.250 / kid] bộ ký có `activeKeyId` là getter đổi giá trị sau lần đọc đầu ⇒ biên nhận mang ĐÚNG kid đã kiểm, getter đọc một lần", async () => {
+    const bc = await dungBoiCanh();
+    const phongBi = await niemPhong(bc.rfqId);
+    let soLanDoc = 0;
+    const kyDoi: ReceiptSigner = {
+      name: "doi-kid",
+      get activeKeyId(): string {
+        soLanDoc += 1;
+        return soLanDoc === 1 ? "kms-2026-09" : "kms:2026-09";
+      },
+      sign: (van: string) => boKy.sign(van),
+    };
+    const bn = await withTenant(apiPool, orgA, (c) => submitBid(c, orgA, { guestSessionId: bc.guestSessionId, envelope: phongBi, signer: kyDoi }));
+    expect(parseReceiptText(bn.canonicalText).kid, "biên nhận phải mang kid ĐÃ KIỂM").toBe("kms-2026-09");
+    expect(soLanDoc, "submitBid đọc `activeKeyId` đúng một lần").toBe(1);
+  });
+});
