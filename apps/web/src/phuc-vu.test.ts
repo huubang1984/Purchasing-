@@ -569,15 +569,19 @@ describe("bề mặt tệp", () => {
       // [S1.249 / khoản 292] Dụng cụ của bốn ca «phản hồi về muộn» ở cuối vòng dưới.
       interface PhanHoi { status: number; body: unknown }
       type Trang = Awaited<ReturnType<typeof dungTrang>>;
-      /** Giữ mọi `/auth/redeem`: `ds[i]` là lời gọi thứ i — `tha` trả phản hồi, `nem` là mất mạng. */
-      const giuRedeem = () => {
+      /**
+       * Giữ mọi `/auth/redeem`: `ds[i]` là lời gọi thứ i — `tha` trả phản hồi, `nem` là mất mạng. [S1.9101 / khoản 310] ~~Chỉ
+       * `/auth/redeem`~~ Mọi lời gọi mang lệnh `lenh` (`giuLenh`); `giuRedeem` là `giuLenh("POST /auth/redeem")`.
+       */
+      const giuLenh = (lenh: string) => {
         const ds: { tha: (r: PhanHoi) => void; nem: () => void }[] = [];
         const thay = (l: string): Promise<PhanHoi> | undefined =>
-          l === "POST /auth/redeem"
+          l === lenh
             ? new Promise<PhanHoi>((tha, nem) => { ds.push({ tha, nem: () => { nem(new Error("mat mang")); } }); })
             : undefined;
         return { ds, thay };
       };
+      const giuRedeem = () => giuLenh("POST /auth/redeem");
       /** Bấm mà KHÔNG đợi trình nghe xong — lời gọi của nó đang bị giữ; trả lượt bấm để đợi sau khi thả. */
       const bamGiu = (p: Trang, id: string): Promise<unknown> => Promise.resolve(p.el(id).nghe["click"]?.[0]?.());
       const maDaGui = (p: Trang): unknown[] =>
@@ -824,6 +828,180 @@ describe("bề mặt tệp", () => {
           expect(p.el("ghi-danh").textContent).toContain("BIMATCUAC");
           expect(p.el("khoi-ma").hidden).toBe(false);
           expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/redeem", "POST /auth/redeem"]);
+        });
+
+        // ====================================================================================
+        // [S1.9101 / khoản 310] NÚT VÀO CỦA LƯỢT CŨ DỪNG Ở MỌI `await` — VÀ PHIÊN NÓ ĐÃ MỞ THÌ ĐÓNG
+        //
+        // Khoản 292 dừng phản hồi `/auth/redeem` của lượt đã qua; nút Vào còn hai `await` nữa — `/auth/totp`, `/me` — không kiểm
+        // lượt. Đo ở §S1.249: `/auth/totp` 200 của mã A về sau khi thẻ đã sang link của B ⇒ trang xoá `#<org>:maCuaB` khỏi thanh
+        // địa chỉ, hỏi `/me` rồi mở các bước dưới phiên A («Đã vào với người dùng aaaaaaaa…») trong khi ô giữ mã của B. Nay sau
+        // MỖI `await` của nút Vào và trong `catch`, lượt đã qua thì im: không xoá mảnh link, không `/me`, không `daVao`, không câu.
+        // Phản hồi chỉ được nhận khi ô mã đăng nhập còn mang ĐÚNG mã đã gửi — nên cảnh «dán mã khác mà chưa bấm» (bí mật của mã cũ
+        // hiện tới lần bấm kế) cũng dừng. Và vì `/auth/totp` 200 đã đặt cookie phiên của A vào trình duyệt, trang đóng phiên ấy
+        // (`POST /auth/logout`, route đăng xuất sẵn có) thay vì để nó sống ngầm; từ chối hay mất mạng ở `/auth/totp` không chứng
+        // minh phiên nào đã mở, nên không gọi gì. Bốn cảnh, bốn ca; khuôn bốn ca 292.
+        // ====================================================================================
+        it(`[S1.9101 / khoản 310] ${trang}: ⑴ hashchange — /auth/totp 200 cho mã A về MUỘN ⇒ mảnh link của B còn nguyên, không /me, không «Đã vào…», các bước không mở; phiên A vừa mở bị đóng (POST /auth/logout); Tiếp lại đổi mã B`, async () => {
+          const g = giuLenh("POST /auth/totp");
+          // Lệnh đóng phiên A cũng bị giữ: nút Vào phải đợi nó xong mới bật lại.
+          const gx = giuLenh("POST /auth/logout");
+          const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: (l) => g.thay(l) ?? gx.thay(l) });
+          await p.bam("nut-ghi-danh");
+          expect(p.el("khoi-ma").hidden).toBe(false);
+          p.el("ma").value = "123456";
+          const lanA = bamGiu(p, "nut-vao");
+          await cho();
+          expect(g.ds).toHaveLength(1);
+          await p.doiFragment(`#${ORG}:maCuaB`);
+          // Máy chủ đã mở phiên cho A: cookie của nó vào trình duyệt cùng phản hồi.
+          p.trangThai.cookie = A;
+          g.ds[0]?.tha({ status: 200, body: { ok: true } });
+          await cho();
+          expect(gx.ds, "phiên A mở ở máy chủ mà trang bỏ thì phải đóng").toHaveLength(1);
+          expect(p.el("nut-vao").disabled, "nút Vào bật lại trước khi lệnh đóng phiên A xong — lần Vào kế chạy đua với lệnh xoá cookie").toBe(true);
+          p.trangThai.cookie = null;
+          gx.ds[0]?.tha({ status: 200, body: { ok: true } });
+          await lanA;
+          await cho();
+          expect(p.loc.hash, "mảnh link (mã CHƯA dùng) của B bị xoá khỏi thanh địa chỉ").toBe(`#${ORG}:maCuaB`);
+          expect(p.trangThai.thayUrl).toEqual([]);
+          expect(p.trangThai.goi, "trang hỏi /me cho phiên của lượt cũ").not.toContain("GET /me");
+          expect(p.buocMo(), "các bước mở dưới phiên A").toEqual([]);
+          expect(p.el("ok1").textContent).not.toMatch(/Đã vào/u);
+          khongVeGi(p);
+          expect(p.trangThai.goi, "phiên A mở ở máy chủ mà trang bỏ thì phải đóng").toEqual(["POST /auth/redeem", "POST /auth/totp", "POST /auth/logout"]);
+          expect(p.trangThai.cookie, "phiên A sống ngầm trong trình duyệt").toBeNull();
+          expect(p.el("nut-vao").disabled).toBe(false);
+          await p.bam("nut-ghi-danh");
+          expect(maDaGui(p), "Tiếp lại đổi mã của B").toEqual(["maCuaA", "maCuaB"]);
+        });
+
+        it(`[S1.9101 / khoản 310] ${trang}: ⑵ hashchange — /me của lượt A về MUỘN (sau /auth/totp 200) ⇒ không daVao: các bước không mở, không «Đã vào…», mảnh link của B còn nguyên; phiên A bị đóng`, async () => {
+          const g = giuLenh("GET /me");
+          const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, nguoiVao: A, thay: g.thay });
+          await p.bam("nut-ghi-danh");
+          p.el("ma").value = "123456";
+          const lanA = bamGiu(p, "nut-vao");
+          await cho();
+          expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me"]);
+          expect(p.trangThai.thayUrl, "mảnh link của A xoá sau /auth/totp 200 — mã A đã tiêu thụ (ADR-020 mục 3)").toEqual([p.loc.pathname]);
+          await p.doiFragment(`#${ORG}:maCuaB`);
+          g.ds[0]?.tha({ status: 200, body: A });
+          await lanA;
+          await cho();
+          expect(p.loc.hash).toBe(`#${ORG}:maCuaB`);
+          expect(p.trangThai.thayUrl, "mảnh link của B bị xoá").toHaveLength(1);
+          expect(p.buocMo(), "các bước mở dưới phiên A").toEqual([]);
+          expect(p.el("ok1").textContent).not.toMatch(/Đã vào/u);
+          khongVeGi(p);
+          expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me", "POST /auth/logout"]);
+          expect(p.trangThai.cookie, "phiên A sống ngầm trong trình duyệt").toBeNull();
+        });
+
+        it(`[S1.9101 / khoản 310] ${trang}: ⑶ lời từ chối hay mất mạng của lượt cũ ⇒ không câu nào đè lên lượt mới; /auth/totp không mở phiên nào thì không gọi /auth/logout, /me mất mạng sau /auth/totp 200 thì có`, async () => {
+          // ⓐ hashchange, rồi /auth/totp của A bị từ chối (401): không «Mã sáu số không đúng» dưới mã của B; không phiên nào để đóng.
+          {
+            const g = giuLenh("POST /auth/totp");
+            const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: g.thay });
+            await p.bam("nut-ghi-danh");
+            p.el("ma").value = "123456";
+            const lanA = bamGiu(p, "nut-vao");
+            await cho();
+            await p.doiFragment(`#${ORG}:maCuaB`);
+            g.ds[0]?.tha({ status: 401, body: { ok: false, reason: "WRONG_CODE", lockedUntil: null } });
+            await lanA;
+            await cho();
+            expect(p.el("loi1").textContent, "câu từ chối của lượt A in dưới mã của B").not.toMatch(/Mã sáu số không đúng/u);
+            khongVeGi(p);
+            expect(p.trangThai.goi, "từ chối không mở phiên nào — không có gì để đóng").toEqual(["POST /auth/redeem", "POST /auth/totp"]);
+          }
+          // ⓑ Trình duyệt giữ phiên của người khác (B); A gõ mã của mình, Tiếp, Vào, rồi bấm Đăng xuất trước khi máy chủ trả; lời
+          // gọi /auth/totp của A mất mạng ⇒ không «Không kết nối» đè lên «Đã đăng xuất»; mất mạng không chứng minh phiên nào đã mở.
+          {
+            const g = giuLenh("POST /auth/totp");
+            const p = await dungTrang(trang, { hash: "", cookie: B, thay: g.thay });
+            expect(p.el("nut-dang-xuat").hidden).toBe(false);
+            p.el("org").value = ORG;
+            p.el("token").value = "maCuaA";
+            await p.bam("nut-ghi-danh");
+            p.el("ma").value = "123456";
+            const lanA = bamGiu(p, "nut-vao");
+            await cho();
+            await p.bam("nut-dang-xuat");
+            expect(p.el("ok1").textContent).toMatch(/Đã đăng xuất/u);
+            g.ds[0]?.nem();
+            await lanA;
+            await cho();
+            expect(p.el("loi1").textContent, "câu mất mạng của lượt trước đè lên lượt sau đăng xuất").not.toMatch(/Không kết nối/u);
+            khongVeGi(p);
+            expect(p.el("ok1").textContent, "câu của lượt mới đứng nguyên").toMatch(/Đã đăng xuất/u);
+            expect(p.trangThai.goi).toEqual(["GET /me", "POST /auth/redeem", "POST /auth/totp", "POST /auth/logout"]);
+          }
+          // ⓒ /auth/totp 200 (lượt còn hiện tại), hashchange trong lúc /me còn bay, /me mất mạng ⇒ không câu nào; phiên A đã mở
+          // chắc chắn, nên trang đóng nó.
+          {
+            const g = giuLenh("GET /me");
+            const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, nguoiVao: A, thay: g.thay });
+            await p.bam("nut-ghi-danh");
+            p.el("ma").value = "123456";
+            const lanA = bamGiu(p, "nut-vao");
+            await cho();
+            await p.doiFragment(`#${ORG}:maCuaB`);
+            g.ds[0]?.nem();
+            await lanA;
+            await cho();
+            expect(p.el("loi1").textContent, "câu mất mạng của lượt A in dưới mã của B").not.toMatch(/Không kết nối/u);
+            khongVeGi(p);
+            expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "GET /me", "POST /auth/logout"]);
+            expect(p.trangThai.cookie).toBeNull();
+          }
+        });
+
+        it(`[S1.9101 / khoản 310] ${trang}: ⑷ dán mã khác vào ô mà CHƯA bấm — /auth/redeem của mã A về sau ⇒ không bí mật của A; /auth/totp 200 của mã A về sau ⇒ không /me, các bước không mở, phiên A bị đóng; lần bấm kế đổi mã B`, async () => {
+          // ⓐ Tiếp với mã A bị giữ; B dán mã của mình vào ô (chưa bấm); lời «cần ghi danh» cho mã A về.
+          {
+            const g = giuRedeem();
+            const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: g.thay });
+            const lanA = bamGiu(p, "nut-ghi-danh");
+            await cho();
+            p.el("token").value = "maCuaB";
+            g.ds[0]?.tha(canGhiDanh("BIMATCUAA"));
+            await lanA;
+            await cho();
+            expect(p.el("ghi-danh").textContent, "bí mật của mã A hiện khi ô đã mang mã B").not.toContain("BIMATCUAA");
+            khongVeGi(p);
+            expect(p.el("ok1").hidden).toBe(true);
+            const lanB = bamGiu(p, "nut-ghi-danh");
+            await cho();
+            expect(maDaGui(p)).toEqual(["maCuaA", "maCuaB"]);
+            g.ds[1]?.tha(canGhiDanh("BIMATCUAB"));
+            await lanB;
+            await cho();
+            expect(p.el("ghi-danh").textContent).toContain("BIMATCUAB");
+            expect(p.el("khoi-ma").hidden).toBe(false);
+          }
+          // ⓑ Vào với mã A, /auth/totp bị giữ; B dán mã của mình vào ô (chưa bấm); 200 của A về (cookie của A đã đặt).
+          {
+            const g = giuLenh("POST /auth/totp");
+            const p = await dungTrang(trang, { hash: `#${ORG}:maCuaA`, cookie: null, thay: g.thay });
+            await p.bam("nut-ghi-danh");
+            p.el("ma").value = "123456";
+            const lanA = bamGiu(p, "nut-vao");
+            await cho();
+            p.el("token").value = "maCuaB";
+            p.trangThai.cookie = A;
+            g.ds[0]?.tha({ status: 200, body: { ok: true } });
+            await lanA;
+            await cho();
+            expect(p.trangThai.goi, "trang hỏi /me cho mã A khi ô đã mang mã B").not.toContain("GET /me");
+            expect(p.buocMo(), "các bước mở dưới phiên A khi ô đã mang mã B").toEqual([]);
+            expect(p.el("ok1").textContent).not.toMatch(/Đã vào/u);
+            expect(p.trangThai.goi).toEqual(["POST /auth/redeem", "POST /auth/totp", "POST /auth/logout"]);
+            expect(p.trangThai.cookie, "phiên A sống ngầm trong trình duyệt").toBeNull();
+            await p.bam("nut-ghi-danh");
+            expect(maDaGui(p), "lần bấm kế đổi mã của B").toEqual(["maCuaA", "maCuaB"]);
+          }
         });
       }
     });

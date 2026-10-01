@@ -15,7 +15,8 @@
 //      đổi mã nếu chưa đổi (dừng nếu vừa nhận bí mật), gọi `/auth/totp`, xoá mảnh link khỏi thanh địa chỉ (ADR-020 mục 3), hỏi
 //      `/me` rồi TRAO cho trang mở các bước của nó (`daVao`). Ô tổ chức đọc bằng `docMaToChuc` (ADR-107: nhận nguyên link cũ).
 //      [S1.249 / khoản 292] Mỗi lần đổi mã (`datLai`, dán mã khác) là một lượt mới: phản hồi `/auth/redeem` của lượt cũ về muộn
-//      bị bỏ trọn, không gắn cho mã đang giữ;
+//      bị bỏ trọn, không gắn cho mã đang giữ. [S1.9101 / khoản 310] Cả `/auth/totp` và `/me` của nút Vào — và một phản hồi chỉ được
+//      nhận khi ô còn mang đúng mã đã gửi; phiên mà một lượt đã qua vừa mở ở máy chủ thì trang đóng (`/auth/logout`);
 //   ⑵ khối «link đăng nhập gần đây» của khoản 195 (ADR-126) — mỗi link một dòng, bộ đếm lượt bỏ phản hồi về muộn;
 //   ⑶ câu «còn nữa» của khoản 268 — thân `GET /auth/login-links` mang `truncated`.
 // Phần còn lại của bước 1 ở lại MỖI trang, có chủ đích: đọc mảnh link (`docLink`), hỏi lại phiên lúc tải và «Tiếp tục với phiên
@@ -165,7 +166,8 @@ export interface TuyChonDangNhap {
   readonly viTri: { readonly pathname: string; readonly search: string };
   /**
    * Sau `/auth/totp` thành công và `/me`: trang mở các bước của nó (thân `/me`, mã tổ chức vừa dùng). Module đợi nó — nút Vào tắt tới
-   * khi trang mở xong — và nó ném thì bước 1 nói câu mất kết nối, như trước ở cả bốn trang.
+   * khi trang mở xong — và nó ném thì bước 1 nói câu mất kết nối, như trước ở cả bốn trang. [S1.9101 / khoản 310] Chỉ gọi khi lần bấm
+   * Vào còn là lượt hiện tại và ô còn mang đúng mã đã gửi.
    */
   readonly daVao: (me: unknown, orgId: string) => unknown;
 }
@@ -174,7 +176,8 @@ export interface DangNhap {
   /**
    * Về bước 1 (đăng xuất, đổi mảnh link): mã đăng nhập đang ở ô phải đổi lại ở máy chủ trước khi vào, ô mã sáu số đóng và rỗng, bí
    * mật của người trước đi. Trang gọi SAU `docLink()` — lúc ô mã đã mang mã mới. [S1.249 / khoản 292] Và một lượt đổi mã mới bắt
-   * đầu: phản hồi `/auth/redeem` còn bay của lượt trước bị bỏ khi về, kể cả khi ô vẫn mang cùng mã.
+   * đầu: phản hồi `/auth/redeem` còn bay của lượt trước bị bỏ khi về, kể cả khi ô vẫn mang cùng mã. [S1.9101 / khoản 310] Cả lần
+   * Vào còn bay: nó dừng ở `await` kế, và phiên nó đã kịp mở ở máy chủ bị đóng.
    */
   datLai(): void;
   /** [khoản 195 / 268] Hỏi link gần đây của chính mình và vẽ; lỗi hay 401 ⇒ khối ẩn. Trang gọi ngay khi các bước mở. */
@@ -221,6 +224,14 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
   // [S1.249 / khoản 292] Lượt đổi mã: tăng MỖI lần `dangGiu` đổi chủ (`doiMa` — kể cả qua `datLai`). `doiMaDangNhap` chụp nó trước
   // `await` và bỏ phản hồi của lượt đã qua — cùng khuôn `luotLinkGanDay` của khối link gần đây (khoản 195).
   let luotDoiMa = 0;
+  /**
+   * [S1.9101 / khoản 310] Phản hồi của một lời gọi đi ở lượt `luot`, cho mã `token`, còn được NHẬN không: cùng lượt, VÀ ô mã đăng nhập
+   * còn mang đúng mã ấy. Vế thứ hai bắt cảnh mà bộ đếm không thấy: người sau dán mã của mình vào ô mà CHƯA bấm — module chỉ biết mã
+   * đổi khi một nút đọc ô (`docHaiO`), nên trước vòng này phản hồi của mã cũ vẫn vẽ (đo ở §S1.249: bí mật ghi danh của mã cũ hiện
+   * dưới mã mới tới lần bấm kế). So ô LÚC PHẢN HỒI VỀ, không nghe sự kiện `input`: nghe thì một phím gõ nhầm vào ô sau khi bí mật đã
+   * hiện sẽ đóng nó, và lần Tiếp sau đó sinh bí mật MỚI trong khi ứng dụng xác thực đã giữ bí mật cũ.
+   */
+  const conHieuLuc = (luot: number, token: string): boolean => luot === luotDoiMa && $("token").value.trim() === token;
 
   /** Ô mã sáu số chỉ có nghĩa sau khi máy chủ đã nói tài khoản cần ghi danh hay không — đóng nó cùng lúc `daRedeem` về false. */
   function dongKhoiMa(giuMaSauSo: boolean): void {
@@ -243,8 +254,8 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
    * Đổi mã đăng nhập ở máy chủ, ĐÚNG MỘT LẦN cho mỗi mã — mỗi lần gọi lại, máy chủ sinh một bí mật TOTP MỚI cho tài khoản chưa ghi
    * danh, và mã sáu số của người vừa gõ bí mật cũ không bao giờ đúng nữa (lượt chạy thử đầu tiên của `/login` đo đúng thế).
    * Trả `"ghi-danh"` khi vừa nhận bí mật, `"san-sang"` khi ô mã sáu số dùng được, `null` khi máy chủ từ chối (câu đã ở `loi1`)
-   * [S1.249 / khoản 292] hay khi phản hồi thuộc một lượt đã qua (không vẽ gì). Ném khi mất mạng — [S1.249 / khoản 292] chỉ khi
-   * lượt còn là lượt hiện tại.
+   * [S1.249 / khoản 292] hay khi phản hồi thuộc một lượt đã qua (không vẽ gì) — [S1.9101 / khoản 310] hay ô đã mang mã khác. Ném
+   * khi mất mạng — [S1.249 / khoản 292] chỉ khi lượt còn là lượt hiện tại.
    */
   async function doiMaDangNhap(orgId: string, token: string): Promise<"ghi-danh" | "san-sang" | null> {
     if (dangGiu.daRedeem) {
@@ -261,10 +272,11 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
     try {
       r1 = await tc.goi("POST", "/auth/redeem", { orgId, token });
     } catch (loi) {
-      if (luot !== luotDoiMa) return null;
+      // [S1.9101 / khoản 310] ~~`luot !== luotDoiMa`~~ — cùng phép kiểm, cộng ô còn mang mã đã gửi (`conHieuLuc`).
+      if (!conHieuLuc(luot, token)) return null;
       throw loi;
     }
-    if (luot !== luotDoiMa) return null;
+    if (!conHieuLuc(luot, token)) return null;
     if (r1.status !== 200) {
       bao($("loi1"), loiCua(r1, "Mã đăng nhập không dùng được"));
       return null;
@@ -293,6 +305,24 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
       tc.lichSu.replaceState(null, "", tc.viTri.pathname + tc.viTri.search);
     } catch {
       /* không xoá được thì thôi */
+    }
+  }
+
+  /**
+   * [S1.9101 / khoản 310] Đóng phiên mà một lần Vào ĐÃ QUA vừa mở ở máy chủ: `/auth/totp` trả 200 nên cookie phiên của người trước
+   * đã vào trình duyệt, nhưng thẻ đã sang lượt khác (`hashchange`, đăng xuất, dán mã khác) trước khi trang trao phiên ấy cho các bước.
+   * Bỏ phản hồi mà để cookie nằm lại là để một phiên KHÔNG AI THẤY sống tới hết hạn trong trình duyệt: dưới câu «Đã đăng xuất. Trình
+   * duyệt này không còn giữ phiên của bạn.» của chính trang, hay sau lời hỏi `/me` của lượt mới về một phiên khác — lúc ấy «Tiếp tục
+   * với phiên này» mở các bước mang tên người này mà thao tác dưới cookie của người kia. Nên trang thu hồi nó bằng chính route đăng
+   * xuất sẵn có (`POST /auth/logout`: thu hồi phiên của cookie đang gửi và xoá cookie), im lặng, và lỗi thì thôi. Nút Vào đợi lời gọi
+   * này xong mới bật lại: lần Vào kế của người sau không chạy đua với lệnh xoá cookie. Giá: mã đăng nhập của người trước đã tiêu thụ
+   * (`/auth/totp` 200) — họ xin link mới.
+   */
+  async function dongPhienBoDo(): Promise<void> {
+    try {
+      await tc.goi("POST", "/auth/logout");
+    } catch {
+      /* mất mạng: không đóng được thì thôi — lần đăng nhập sau thay cookie, phiên tự hết hạn ở máy chủ */
     }
   }
 
@@ -333,6 +363,13 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
     // Đổi sang người thứ hai = dán một mã đăng nhập khác: phải đổi lại cho mã mới. Mã sáu số vừa gõ đi cùng mã vừa dán, nên giữ.
     const o = docHaiO(true);
     if (o === null) return;
+    // [S1.9101 / khoản 310] Lượt của lần bấm này — chụp SAU `docHaiO` (nó vừa mở lượt mới nếu ô vừa đổi mã), TRƯỚC `await` đầu. Sau
+    // MỖI `await` dưới và trong `catch`: lượt đã qua (hay ô đã mang mã khác) thì im — không xoá mảnh link (nó là link của người sau),
+    // không `/me`, không `daVao`, không câu nào đè lên lượt mới.
+    const luot = luotDoiMa;
+    const daQua = (): boolean => !conHieuLuc(luot, o.token);
+    // [S1.9101 / khoản 310] Phiên lần bấm này đã mở ở máy chủ (`/auth/totp` 200) mà chưa trao cho trang (`daVao`).
+    let phienChuaTrao = false;
     const nut = $("nut-vao");
     nut.disabled = true;
     try {
@@ -345,6 +382,10 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
         return;
       }
       const r2 = await tc.goi("POST", "/auth/totp", { orgId: o.orgId, token: o.token, code });
+      phienChuaTrao = r2.status === 200;
+      // [S1.9101 / khoản 310] Đo ở §S1.249: thiếu dòng này thì 200 của lượt cũ xoá `#<org>:<mã>` CHƯA dùng của người sau, hỏi `/me`
+      // và mở các bước dưới phiên người trước. Phiên đã mở thì `finally` đóng nó.
+      if (daQua()) return;
       if (r2.status !== 200) {
         bao($("loi1"), truong(r2.body, "reason") === "LOCKED_OUT" ? "Tài khoản đang bị khoá tạm thời" : "Mã sáu số không đúng");
         return;
@@ -353,11 +394,20 @@ export function ganDangNhap(tc: TuyChonDangNhap): DangNhap {
       // `/me` trả `{userId, sessionId, orgId, kind}` — CỐ Ý không trả email hay tên (một route "tôi là ai" trả dữ liệu cá nhân là
       // một route mà mọi lỗ IDOR đều muốn có). Trang đọc nó để nói ai đang vào.
       const me = await tc.goi("GET", "/me");
+      // [S1.9101 / khoản 310] Kiểm cuối, ngay trước `daVao`: từ đây phiên đã TRAO cho trang — một lần về bước 1 sau đó là việc của
+      // trang (đóng các bước, `datLai`), không phải lý do đóng phiên.
+      if (daQua()) return;
+      phienChuaTrao = false;
       await tc.daVao(me.body, o.orgId);
     } catch {
-      // `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa.
-      bao($("loi1"), MAT_KET_NOI);
+      // `goi` ném khi mất mạng: không có câu nào thì người dùng không biết đã vào hay chưa. [S1.9101 / khoản 310] Trừ khi lượt đã
+      // qua: câu ấy nói về lần Vào của người trước, không phải của người đang đứng trước màn.
+      if (!daQua()) bao($("loi1"), MAT_KET_NOI);
     } finally {
+      // [S1.9101 / khoản 310] Lượt đã qua mà phiên đã mở chưa trao ⇒ đóng (`dongPhienBoDo`), rồi mới bật nút. Từ chối hay mất mạng
+      // ở `/auth/totp` không chứng minh phiên nào đã mở — không gọi gì: một lệnh đăng xuất lúc ấy thu hồi phiên nào đang nằm trong
+      // trình duyệt, kể cả phiên mà lượt mới đang hỏi «Tiếp tục với phiên này».
+      if (phienChuaTrao && daQua()) await dongPhienBoDo();
       nut.disabled = false;
     }
   });
