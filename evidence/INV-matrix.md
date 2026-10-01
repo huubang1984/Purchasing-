@@ -13,11 +13,11 @@
 Dự án có **hai cách đếm bất biến**, cả hai đều đúng trong phạm vi của mình, và việc lẫn lộn
 chúng đã sinh ra ba con số khác nhau trong ba tài liệu. Bảng này chốt cách đếm:
 
-- **55 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
+- **56 bất biến nghiệp vụ** (nhóm A–G): mệnh đề về hành vi của sản phẩm với
   dữ liệu của khách hàng. Đây là con số `docs/STATE.md` dùng khi nói S0 *nhắm tới* bao nhiêu.
 - **22 bất biến hàng rào** (nhóm H): mệnh đề về việc một biện pháp kiểm soát của
   chính dự án — hai hook, các họ quy tắc biên giới của dependency-cruiser — có còn răng hay không.
-- **Tổng 77 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
+- **Tổng 78 mã** cùng chảy vào bảng này. Tiêu chí phân nhóm là *cái này canh CÁI GÌ*.
 
 Con số cũ **44** (34 + 10) trong bản kế hoạch S0 đã **thiu**: nhóm H có thêm H11/H12 (Task 9)
 và H13 (Task 10). Sổ đăng ký `docs/TEST-PLAN.md` là nguồn sự thật duy nhất; bảng này đọc thẳng
@@ -27,9 +27,9 @@ từ đó và **ném** nếu số hàng đọc được lệch với một phép
 
 | Nhóm | Đã phủ | Tổng |
 |---|---|---|
-| Nghiệp vụ (A–G) | **55** | 55 |
+| Nghiệp vụ (A–G) | **56** | 56 |
 | Hàng rào (H) | **22** | 22 |
-| **Cộng** | **77** | **77** |
+| **Cộng** | **78** | **78** |
 
 **0 mã chưa phủ**, tất cả đều nằm trong danh sách được phép ở §3, mỗi mã một lý do đọc được.
 
@@ -38,7 +38,7 @@ G1, G2, G3, G4). **S0 giao được 11** — G2 và G4 không có lớp. Hai con
 định. `docs/TEST-PLAN.md` là nơi ghi vì sao, và §3 dưới đây ghi ra rằng các hàng trống là
 trống *có lý do*, không phải vì quên.
 
-Hôm nay: **55/55** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
+Hôm nay: **56/56** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số còn chưa phủ: không còn mã nào.
 
 ## 2. Ma trận
 
@@ -99,6 +99,7 @@ Hôm nay: **55/55** mã nghiệp vụ. Trong 13 mã mục tiêu của S0, số c
 | L13 | Ánh xạ ghi cho một gói đã có ít nhất một hàng `rfq_unsealed_bids` đòi lý do không rỗng; `TU_DONG` ở đó mang đúng mã `CHUAN_HOA_HOI_TO`, mã dành riêng mà người duyệt không khai được — khoá theo SỰ TỒN TẠI của hàng bản rõ, không theo `status`; không đua được với giao dịch mở thầu: một ánh xạ ghi trong lúc nó chạy thì chờ nó commit rồi thấy bản rõ; giao dịch mở thầu gặp một ánh xạ chưa commit thì chờ nó | Trigger `anh_xa_kiem_luat` khoá hàng gói `FOR SHARE` trước phép kiểm bản rõ — câu `UPDATE rfq_packages` của giao dịch mở thầu giữ `FOR NO KEY UPDATE` tới commit — `089_anh_xa_hang_muc`; ca đo hai chiều đua dưới hai kết nối thật (`anh-xa.int.test.ts`), chiều đầu đo cả bằng câu ghi thẳng không qua hàm gói | T3 | 8 | ✅ ĐẠT |  |
 | L5 | Nguồn quan sát giá: mỗi hàng `HOP_LE` của `quan_sat_gia(p_moc)` là vị thế CUỐI của một nhà cung cấp — phiên bản nộp muộn nhất trong những phiên bản đã mở niêm phong trước mốc, xét trên mọi lời mời CÒN SỐNG TẠI MỐC của nhà cung cấp ấy (**[S1.235]** ADR-128: thu hồi loại báo giá, `revoked_at` đọc tại mốc) — trong một gói mà mọi vòng (vòng một, mọi vòng BAFO mở trước mốc) có yêu cầu mở thầu `EXECUTED` trước mốc, chưa huỷ tại mốc; `status` không được đọc. Đơn giá = `amount / quantity`, `unitPrice` không được tin; phép kiểm dòng duy nhất là Σ `amount` = `totalAmount` CHÍNH XÁC; bộ đọc dòng từ chối đúng SÁU ca của `bid_so_tien` và không bao giờ ném. Dòng không đọc được, lệch tổng, khác tiền tệ của chính sách của CHÍNH gói, chưa ánh xạ hay không quy đổi được về MÃ gốc của hàng chuẩn mang đúng mã lý do, không có đơn giá đã quy đổi. Mọi hàng nền đọc TẠI MỐC; loại hàng nền ghi sau mốc mở giá của gói chứa quan sát mang `HOI_TO`, hàng mới hơn `p_moc` bị bỏ qua được đếm ở `SAU_MOC`. Mọi tệp TypeScript sản xuất, mọi hàm SQL chạm `rfq_unsealed_bids` có tên trong một danh sách kèm lý do (spec §4.5: vị từ trong thân là một luật một chỗ, không phải ranh giới) | **[S1.235 / S4.4a]** Ba hàm của `096_lich_su_gia` — `bid_dong_tho` (`IMMUTABLE`), `gia_da_lo`, `quan_sat_gia` (`SECURITY INVOKER STABLE`) — cùng lõi quy đổi theo mã `quy_doi_da_giai` mà `quy_doi_don_vi` gọi lại, cả năm ghim ở `hardening.always.sql`; danh sách tĩnh `tests/architecture/ban-ro-liet-ke.test.ts` cộng phép đo `pg_get_functiondef` ở mọi schema trên cụm thật; đột biến trên từng vế (§S1.235). Hiệu năng là phép đo có biên bản (`tools/do-lich-su-gia`), không phải một vế của hàng này. Vế HTTP — route đọc lịch sử, đối chứng dương của bộ quét — là L6, S4.4b | T1, T3 | 59 | ✅ ĐẠT |  |
 | L6 | Bí mật giá không lan sang dữ liệu nền — vế LỊCH SỬ GIÁ: không route nào trả lịch sử giá cho phiên khách (phiên Passport dùng chính GUC khách, ADR-081, và chưa có route nào); đường đọc duy nhất của `quan_sat_gia` và `gia_da_lo` từ mã TypeScript sản xuất (`GET /items/:itemId/price-history`) khai `agent: false`, chịu cổng `bid.view` trong chính hàm đọc (từ chối vào sổ `PERMISSION_DENIED`), luôn lọc theo một hàng chuẩn, và mỗi lần đọc thành công để lại ĐÚNG MỘT hàng `PRICE_HISTORY_READ` không mang giá trong cùng giao dịch — ghi hỏng thì không trả gì; nó không trả quan sát nào của gói chưa mở niêm phong hay của gói có vòng BAFO đang mở hoặc đã đóng mà chưa mở niêm phong (`BAFO_OPEN`, `BAFO_CLOSED`) — và cùng lần đọc qua HTTP THẤY đơn giá của gói ngay khi gói `UNSEALED`, và đơn giá vòng hai ngay khi vòng ấy mở niêm phong (bộ dò đơn giá theo giá trị). Bốn bộ quét giá dạng rõ của A3 quét cả view và materialized view và mang một kim ĐƠN GIÁ: đơn giá chỉ đứng ở bảng bản rõ. Vế benchmark, mốc ngoài, màn nhà cung cấp và bộ bằng chứng vào hàng này ở S4.5 | **[S1.251 / S4.4b]** `docLichSuGia` (`packages/du-lieu-nen/src/lich-su-gia.ts`, rổ `HAM_DOC_CO_QUYEN`), route `apps/api/src/routes/lich-su-gia.ts` (`audience: BUYER`, khai ở `ROUTE_DOC_KHONG_PHOI` của `apps/mcp`); vị từ bí mật là `gia_da_lo` trong thân `quan_sat_gia` (L5, `096`); cổng tĩnh `tests/architecture/ban-ro-liet-ke.test.ts` đòi tập tệp TypeScript sản xuất gọi hai hàm ấy đúng bằng `lich-su-gia.ts`. Đo trên đường HTTP thật ở kịch bản 41 qua HTTP (hai luồng: `UNSEALED`, `BAFO_OPEN`, `BAFO_CLOSED`, `BAFO_UNSEALED`; ba lượt quét route hỏi đúng hàng chuẩn có báo giá), ở tầng gói (`lich-su-gia.int`: cổng, hình dạng đóng, hàng sổ, fail-closed), bộ quét chung `quetGiaMoiQuanHe` của `test-support` kèm đối chứng dương trên bảng, bảng cha phân mảnh, view và materialized view dựng lúc chạy; đột biến trên từng vế (§S1.251) | T1, T3 | 15 | ✅ ĐẠT |  |
+| L14 | Phiên bản chính sách áp cho gói X là phiên bản HIỆU LỰC lúc X mở — luật `chinh_sach_hieu_luc` (`version` cao nhất có `effective_from` đã tới và, ở phiên bản có bậc, chữ ký thứ hai đã có) —, CHỤP vào gói ở cạnh vào `OPEN` dưới khoá tư vấn chính sách: lần mở chờ một phiên bản đang ghi dở rồi chụp nó; không giá trị nào người gọi gửi lên (`opened_at`) và không phiên bản nào chèn sau lần chụp — kể cả phiên bản lùi mốc `created_at` bằng một giao dịch giữ lâu — đổi được phiên bản ghim; vai ứng dụng không ghi được cột ghim. Vế LƯỢT CHẤM: mọi lượt chấm của X — kể cả lượt chấm lại sau BAFO — mang đúng phiên bản ấy; phiên bản khai SAU lúc mở, hay phiên bản hẹn giờ tạo trước mà hiệu lực sau, không đổi được trọng số; gói mở dưới phiên bản chưa khai trọng số bị từ chối bằng câu gọi tên phiên bản ghim (từ chối cấu hình, không vào sổ); một lượt chấm mang phiên bản khác bị CSDL từ chối, và qua tầng gói để lại ĐÚNG MỘT hàng `CONTROL_DENIED` mã `L14_PHIEN_BAN_KHONG_GHIM`. Vế benchmark nới hàng ở S4.5b; vế TCO và form nhà cung cấp là một số L mới ở S4.7 | **[S1.253 / S4.5a]** Cột `rfq_packages.chinh_sach_ghim_id` ngoài `GRANT` ghi, trigger `rfq_ghim_chinh_sach_khi_mo` ở cạnh vào `OPEN` (khoá tư vấn `hashtextextended(org, 2)` của lần tạo và lần ký phiên bản), trigger `rfq_evaluations_kiem_phien_ban_ghim` (BEFORE INSERT, tên `l14_phien_ban_khong_ghim`, khuôn ADR-108) — `102_ghim_chinh_sach_luot_cham`, hai thân ghim ở `hardening.always.sql`; tầng gói `docChinhSach` đọc cùng cột, `taoLuotDanhGia` bắt lỗi của trigger theo tên (khuôn J5). Đo ở `luot-danh-gia.int` (mười một ca: phiên bản khai sau lúc mở với đối chứng dương, phiên bản ghim không trọng số, phiên bản hẹn giờ, lượt chấm lại sau BAFO, câu ghi thẳng với đối chứng dương, đột biến tắt trigger, đường ứng dụng ra `CONTROL_DENIED`, phiên bản lùi mốc, `opened_at` năm 2100 đặt dưới `app_api`, quyền cột, khoá tư vấn dưới hai kết nối); cổng tên hai chiều ở `rfq.int`; đột biến trên từng vế (§S1.253) | T3 | 11 | ✅ ĐẠT |  |
 | H1 | `git reset --hard` bị chặn với mã thoát 2 | Hook `git-safety` | T1 | 2 | ✅ ĐẠT |  |
 | H2 | `git clean -f*` bị chặn | Hook `git-safety` | T1 | 3 | ✅ ĐẠT |  |
 | H3 | Đẩy ép buộc (`--force`, `-f`, `--force-with-lease`, cờ ngắn gộp) bị chặn | Hook `git-safety` | T1 | 5 | ✅ ĐẠT |  |
@@ -141,7 +142,7 @@ lời nhắc gỡ nó ra.
 Chỗ trống câu trên để lại được lấp bằng **hai con số ghim** trong cùng file, đỏ khi lệch về
 **bất kỳ chiều nào**:
 
-- `MOC_GHIM.soPhuToiThieu = 77` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
+- `MOC_GHIM.soPhuToiThieu = 78` — tử số của bảng §1. Tụt xuống là **hồi quy độ phủ**;
   lên thì phải **nâng mốc bằng tay**, thành một dòng có chữ ký trong diff.
 - `MOC_GHIM.coDanhSachToiDa = 0` — số dòng của chính bảng dưới đây. Nở ra là **đỏ**.
 

@@ -1824,14 +1824,14 @@ $ham$;
        ('public.rfq_bafo_rounds', ARRAY['rfq_bafo_rounds_kiem_danh_tinh', 'rfq_bafo_rounds_kiem_vong']),
        ('public.rfq_budgets', ARRAY['rfq_budgets_chi_sua_khi_soan', 'rfq_budgets_khong_ghim_ban_chua_ky', 'rfq_budgets_kiem_danh_tinh', 'rfq_budgets_xep_bac']),
        ('public.rfq_evaluation_lines', ARRAY['rfq_evaluation_lines_kiem_thanh_phan']),
-       ('public.rfq_evaluations', ARRAY['rfq_evaluations_kiem_danh_tinh']),
+       ('public.rfq_evaluations', ARRAY['rfq_evaluations_kiem_danh_tinh', 'rfq_evaluations_kiem_phien_ban_ghim']),
        ('public.rfq_invitation_tokens', ARRAY['rfq_invitation_tokens_ghi_goi_da_mo', 'rfq_invitation_tokens_kiem_danh_tinh', 'rfq_invitation_tokens_kiem_goi_da_mo', 'rfq_invitation_tokens_thu_hoi_don_dieu']),
        ('public.rfq_invitations', ARRAY['rfq_invitations_khong_song_lai', 'rfq_invitations_kiem_danh_sach', 'rfq_invitations_kiem_danh_tinh', 'rfq_invitations_kiem_nguoi_thu_hoi', 'rfq_invitations_thu_hoi_don_dieu']),
        ('public.rfq_item_goi_y', ARRAY['rfq_item_goi_y_bat_bien', 'rfq_item_goi_y_chan_truncate', 'rfq_item_goi_y_chi_ghi_them', 'rfq_item_goi_y_dat_thu_tu', 'rfq_item_goi_y_kiem_danh_tinh']),
        ('public.rfq_item_mappings', ARRAY['rfq_item_mappings_bat_bien', 'rfq_item_mappings_chan_truncate', 'rfq_item_mappings_chi_ghi_them', 'rfq_item_mappings_dat_thu_tu', 'rfq_item_mappings_kiem_danh_tinh']),
        ('public.rfq_items', ARRAY['rfq_items_cam_truncate', 'rfq_items_chi_sua_khi_soan', 'rfq_items_kiem_danh_tinh']),
        ('public.rfq_key_material', ARRAY['rfq_key_material_bat_bien', 'rfq_key_material_chi_sinh_luc_mo', 'rfq_key_material_chi_thu_hoi_khi_huy', 'rfq_key_material_kiem_danh_tinh', 'rfq_key_material_kiem_nguoi_thu_hoi', 'rfq_key_material_kiem_nguoi_xoa', 'rfq_key_material_phai_di_kem_lan_mo']),
-       ('public.rfq_packages', ARRAY['rfq_packages_dem_lan_nop', 'rfq_packages_gia_han_khong_hoi_sinh', 'rfq_packages_kiem_chuyen_trang_thai', 'rfq_packages_kiem_danh_sach_khi_mo', 'rfq_packages_kiem_khoa_khi_mo', 'rfq_packages_kiem_ngan_sach_khi_nop', 'rfq_packages_kiem_nguoi_dong', 'rfq_packages_kiem_nguoi_huy', 'rfq_packages_kiem_nguoi_mo', 'rfq_packages_kiem_nguoi_nop', 'rfq_packages_kiem_nguoi_tao', 'rfq_packages_kiem_nguong_phe_duyet_kep', 'rfq_packages_kiem_nhom_hang_khi_nop', 'rfq_packages_kiem_tin_hieu_khi_mo', 'rfq_packages_kiem_yeu_cau_mo_thau', 'rfq_packages_nhom_hang', 'rfq_packages_tra_ve_nhap_chi_khi_bat_s3']),
+       ('public.rfq_packages', ARRAY['rfq_packages_dem_lan_nop', 'rfq_packages_ghim_chinh_sach_khi_mo', 'rfq_packages_gia_han_khong_hoi_sinh', 'rfq_packages_kiem_chuyen_trang_thai', 'rfq_packages_kiem_danh_sach_khi_mo', 'rfq_packages_kiem_khoa_khi_mo', 'rfq_packages_kiem_ngan_sach_khi_nop', 'rfq_packages_kiem_nguoi_dong', 'rfq_packages_kiem_nguoi_huy', 'rfq_packages_kiem_nguoi_mo', 'rfq_packages_kiem_nguoi_nop', 'rfq_packages_kiem_nguoi_tao', 'rfq_packages_kiem_nguong_phe_duyet_kep', 'rfq_packages_kiem_nhom_hang_khi_nop', 'rfq_packages_kiem_tin_hieu_khi_mo', 'rfq_packages_kiem_yeu_cau_mo_thau', 'rfq_packages_nhom_hang', 'rfq_packages_tra_ve_nhap_chi_khi_bat_s3']),
        ('public.rfq_tra_ve', ARRAY['rfq_tra_ve_chan_truncate', 'rfq_tra_ve_chi_ghi_them', 'rfq_tra_ve_dat_lan_nop', 'rfq_tra_ve_kiem_danh_tinh', 'rfq_tra_ve_phai_di_kem_canh']),
        ('public.rfq_unsealed_bids', ARRAY['rfq_unsealed_bids_chan_truncate', 'rfq_unsealed_bids_chi_ghi_them', 'rfq_unsealed_bids_kiem_yeu_cau']),
        ('public.role_permissions', ARRAY['role_permissions_ma_tran_quyen', 'role_permissions_nguong_khong_cung_tay', 'role_permissions_quan_ly_du_lieu_mu_gia']),
@@ -11029,6 +11029,139 @@ $ham$$q$,
                     FROM pg_proc p WHERE p.oid = to_regprocedure('public.quan_sat_gia(timestamptz, uuid)')),
                   'hàm public.quan_sat_gia(timestamptz, uuid) không tồn tại')$q$,
       $q$quyền sở hữu hàm quan_sat_gia(timestamptz, uuid) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.253 / S4.5a / L14] Goi CHUP phien ban chinh sach hieu luc o canh vao OPEN, duoi khoa tu van chinh sach. Than `RETURN NEW` (khong dat cot) de moi goi moi khong co phien ban ghim — luot cham bi tu choi; than doc `NEW.opened_at` mo lai duong ⑵ cua luot soi §S1.253.
+    ARRAY[
+      $q$hàm + trigger rfq_ghim_chinh_sach_khi_mo (102_ghim_chinh_sach_luot_cham)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '102_ghim_chinh_sach_luot_cham.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_ghim_chinh_sach_khi_mo()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_ghim_chinh_sach_khi_mo();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_ghim_chinh_sach_khi_mo() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 2));
+  NEW.chinh_sach_ghim_id := public.chinh_sach_hieu_luc(NEW.org_id, pg_catalog.clock_timestamp());
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_packages') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                                 AND t.tgname = 'rfq_packages_ghim_chinh_sach_khi_mo'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_ghim_chinh_sach_khi_mo()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_ghim_chinh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION rfq_ghim_chinh_sach_khi_mo()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_packages_ghim_chinh_sach_khi_mo ON public.rfq_packages;
+             CREATE TRIGGER rfq_packages_ghim_chinh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (OLD.status = 'PENDING_APPROVAL' AND NEW.status = 'OPEN') EXECUTE FUNCTION public.rfq_ghim_chinh_sach_khi_mo();
+             ALTER TABLE public.rfq_packages ENABLE ALWAYS TRIGGER rfq_packages_ghim_chinh_sach_khi_mo;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$BEGIN PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::pg_catalog.text, 2)); NEW.chinh_sach_ghim_id := public.chinh_sach_hieu_luc(NEW.org_id, pg_catalog.clock_timestamp()); RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_packages')
+                           AND t.tgname = 'rfq_packages_ghim_chinh_sach_khi_mo'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_ghim_chinh_sach_khi_mo()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_packages_ghim_chinh_sach_khi_mo BEFORE UPDATE ON public.rfq_packages FOR EACH ROW WHEN (((old.status = 'PENDING_APPROVAL'::text) AND (new.status = 'OPEN'::text))) EXECUTE FUNCTION rfq_ghim_chinh_sach_khi_mo()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_ghim_chinh_sach_khi_mo()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_ghim_chinh_sach_khi_mo()')),
+                  'hàm public.rfq_ghim_chinh_sach_khi_mo() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_ghim_chinh_sach_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
+    ],
+
+    -- [S1.253 / S4.5a / L14] Luot cham mang dung phien ban chinh sach goi da CHUP luc mo (`rfq_packages.chinh_sach_ghim_id`). Than `RETURN NEW` mo lai duong cham duoi phien ban khai SAU khi thay gia (goc C① cua S1.159).
+    ARRAY[
+      $q$hàm + trigger rfq_evaluations_kiem_phien_ban_ghim (102_ghim_chinh_sach_luot_cham)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '102_ghim_chinh_sach_luot_cham.sql')$q$,
+      $q$DO $fn91$
+         BEGIN
+           IF EXISTS (SELECT 1 FROM pg_proc p
+                       WHERE p.oid = to_regprocedure('public.rfq_evaluations_kiem_phien_ban_ghim()')
+                         AND p.prorettype <> 'pg_catalog.trigger'::regtype) THEN
+             DROP FUNCTION public.rfq_evaluations_kiem_phien_ban_ghim();
+           END IF;
+           CREATE OR REPLACE FUNCTION public.rfq_evaluations_kiem_phien_ban_ghim() RETURNS trigger
+           LANGUAGE plpgsql SET search_path = pg_catalog, public AS $ham$
+DECLARE
+  v_ghim uuid;
+BEGIN
+  SELECT p.chinh_sach_ghim_id INTO v_ghim
+    FROM public.rfq_packages p
+   WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id;
+  IF v_ghim IS NULL OR NEW.policy_id IS DISTINCT FROM v_ghim THEN
+    RAISE EXCEPTION 'Luot cham phai dung phien ban chinh sach goi thau da ghim luc mo (L14)'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'l14_phien_ban_khong_ghim';
+  END IF;
+  RETURN NEW;
+END
+$ham$;
+           IF to_regclass('public.rfq_evaluations') IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM pg_trigger t
+                               WHERE t.tgrelid = to_regclass('public.rfq_evaluations')
+                                 AND t.tgname = 'rfq_evaluations_kiem_phien_ban_ghim'
+                                 AND NOT t.tgisinternal
+                                 AND t.tgfoid = to_regprocedure('public.rfq_evaluations_kiem_phien_ban_ghim()')
+                                 AND t.tgenabled = 'A'
+                                 AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluations_kiem_phien_ban_ghim BEFORE INSERT ON public.rfq_evaluations FOR EACH ROW EXECUTE FUNCTION rfq_evaluations_kiem_phien_ban_ghim()$def$) THEN
+             DROP TRIGGER IF EXISTS rfq_evaluations_kiem_phien_ban_ghim ON public.rfq_evaluations;
+             CREATE TRIGGER rfq_evaluations_kiem_phien_ban_ghim BEFORE INSERT ON public.rfq_evaluations FOR EACH ROW EXECUTE FUNCTION public.rfq_evaluations_kiem_phien_ban_ghim();
+             ALTER TABLE public.rfq_evaluations ENABLE ALWAYS TRIGGER rfq_evaluations_kiem_phien_ban_ghim;
+           END IF;
+         END
+         $fn91$$q$,
+      $q$(SELECT btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g'))
+                = $than$DECLARE v_ghim uuid; BEGIN SELECT p.chinh_sach_ghim_id INTO v_ghim FROM public.rfq_packages p WHERE p.org_id = NEW.org_id AND p.id = NEW.rfq_id; IF v_ghim IS NULL OR NEW.policy_id IS DISTINCT FROM v_ghim THEN RAISE EXCEPTION 'Luot cham phai dung phien ban chinh sach goi thau da ghim luc mo (L14)' USING ERRCODE = 'check_violation', CONSTRAINT = 'l14_phien_ban_khong_ghim'; END IF; RETURN NEW; END$than$
+            AND p.prosecdef IS FALSE
+            AND p.proconfig = ARRAY['search_path=pg_catalog, public']
+            AND p.pronargs = 0
+            AND p.prorettype = 'pg_catalog.trigger'::regtype
+            AND p.prolang = (SELECT oid FROM pg_language WHERE lanname = 'plpgsql')
+            AND EXISTS (SELECT 1 FROM pg_trigger t
+                         WHERE t.tgrelid = to_regclass('public.rfq_evaluations')
+                           AND t.tgname = 'rfq_evaluations_kiem_phien_ban_ghim'
+                           AND NOT t.tgisinternal
+                           AND t.tgfoid = to_regprocedure('public.rfq_evaluations_kiem_phien_ban_ghim()')
+                           AND t.tgenabled = 'A'
+                           AND pg_get_triggerdef(t.oid) = $def$CREATE TRIGGER rfq_evaluations_kiem_phien_ban_ghim BEFORE INSERT ON public.rfq_evaluations FOR EACH ROW EXECUTE FUNCTION rfq_evaluations_kiem_phien_ban_ghim()$def$)
+           FROM pg_proc p WHERE p.oid = to_regprocedure('public.rfq_evaluations_kiem_phien_ban_ghim()'))$q$,
+      $q$coalesce((SELECT 'thân/thuộc tính hàm hoặc trigger khác bản chuẩn — vân tay prosrc: '
+                          || left(encode(pg_catalog.sha256(pg_catalog.convert_to(btrim(regexp_replace(p.prosrc, '\s+', ' ', 'g')), 'UTF8')), 'hex'), 16)
+                          || ' | secdef=' || p.prosecdef::text
+                          || ' | config(chỉ tên GUC)=' || coalesce((SELECT string_agg(split_part(c.x, '=', 1), ',' ORDER BY c.k) FROM unnest(p.proconfig) WITH ORDINALITY AS c(x, k)), '(null)')
+                          || ' | trigger=' || coalesce((SELECT string_agg(t.tgname || ':enabled=' || t.tgenabled::text
+                                                                           || ':vân tay def=' || left(encode(pg_catalog.sha256(pg_catalog.convert_to(pg_get_triggerdef(t.oid), 'UTF8')), 'hex'), 16), '; ' ORDER BY t.tgname)
+                                                          FROM pg_trigger t
+                                                         WHERE t.tgfoid = p.oid AND NOT t.tgisinternal),
+                                                       '(KHÔNG CÓ)')
+                     FROM pg_proc p
+                    WHERE p.oid = to_regprocedure('public.rfq_evaluations_kiem_phien_ban_ghim()')),
+                  'hàm public.rfq_evaluations_kiem_phien_ban_ghim() không tồn tại')$q$,
+      $q$quyền sở hữu hàm public.rfq_evaluations_kiem_phien_ban_ghim() và bảng public.rfq_evaluations (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
     -- [S1.201 / S3.6a] Nguoi tao nhom hang giu category.manage (ADR-084). Than `RETURN NEW` cho vai tao goi dung nhom hang — tuc chinh khoa cua tin hieu soi minh.

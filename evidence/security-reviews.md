@@ -23066,6 +23066,142 @@ máy người vận hành; build image lần đầu (CI không build — `ADD --
 - Đơn vị trên các thư mục chạm tới (`tests/architecture`, `tests/deploy`, `apps/api/src/adapters`, `tools/kiem-truoc-apply`,
   `ban-khai.test.ts`): 55 tệp, 737 đạt, 1 bỏ qua; `qt3-cu-phap.int` + `qt3-ngu-phap.int` trên Postgres 16 cục bộ: 8/8.
 
+# §S1.253 — S4.5a: GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH Ở CẠNH VÀO OPEN; LƯỢT CHẤM DÙNG ĐÚNG PHIÊN BẢN ẤY (L14, VẾ LƯỢT CHẤM) — ADR-141
+
+## 1. Vòng này là gì
+
+PR đầu trong ba PR của S4.5 (spec S4 §9): lượt chấm thôi đọc phiên bản chính sách hiệu lực LÚC CHẤM, và đọc phiên bản gói đã CHỤP lúc
+mở. Một migration (`102_ghim_chinh_sach_luot_cham`), không route mới, không màn. **L14** vào sổ đăng ký với vế lượt chấm (78 bất
+biến); vế benchmark ở S4.5b, vế TCO và form nhà cung cấp tách số mới ở S4.7. Dựng trên `master` sau khi #225 (S4.4b) merge.
+
+## 2. Quyết định của chủ dự án
+
+Chốt ngày 2026-10-01, sáu điểm, cả sáu theo đề xuất. Lượt đầu (trước khi viết mã):
+
+1. Luật ghim: phiên bản HIỆU LỰC lúc gói mở — luật `chinh_sach_hieu_luc` của S3.1, không một hàm `chinh_sach_tai` thứ hai —, kèm trigger
+   trên `rfq_evaluations` mà lần vi phạm vào sổ `CONTROL_DENIED`.
+2. S4.5 chia ba PR: S4.5a ghim chính sách (L14); S4.5b CSDL và lõi benchmark (L7); S4.5c phần hiện ở `/mo-thau`, bộ xuất ADR-059, vế
+   benchmark của L6.
+3. Bảng so sánh hiện benchmark ngay khi gói `UNSEALED`, tính as-of tại mốc mở giá ở mỗi lần đọc; lượt chấm ghi kết quả đúng một lần.
+4. Năm chi tiết phương pháp benchmark (ADR-141, *Quyết định* 8).
+
+Lượt sau lượt soi đối kháng (mục 8):
+
+5. CHỤP phiên bản vào gói ở cạnh vào OPEN, không tính lại `chinh_sach_hieu_luc(org, opened_at)` về sau.
+6. `opened_at` do người gọi đặt thành khoản 319 (rổ B), không sửa trong S4.5a.
+
+## 3. Thay đổi
+
+- **Migration `102_ghim_chinh_sach_luot_cham`.** Cột `rfq_packages.chinh_sach_ghim_id` (khoá ngoại hợp thành tới
+  `org_procurement_policies`, ngoài mọi `GRANT` ghi; gói đã mở được điền bằng phép tính lại tại `opened_at`); trigger
+  `rfq_ghim_chinh_sach_khi_mo` (BEFORE UPDATE `WHEN` cạnh `PENDING_APPROVAL→OPEN`: khoá tư vấn `hashtextextended(org, 2)` rồi
+  `chinh_sach_hieu_luc(org, clock_timestamp())`); trigger `rfq_evaluations_kiem_phien_ban_ghim` (BEFORE INSERT, tên
+  `l14_phien_ban_khong_ghim`). Hai thân và hai trigger ghim ở `hardening.always.sql`; `TRIGGER_DUOC_PHEP` nhận hai tên.
+- **Tầng gói.** `docChinhSach` đọc cột ghim; `taoLuotDanhGia` bắt lỗi của trigger theo tên ⇒ `CONTROL_DENIED`; thông điệp từ chối cấu
+  hình gọi tên phiên bản ghim. Mã chốt `L14_PHIEN_BAN_KHONG_GHIM` ở `CHOT_VAO_SO` (`vaoSo: true`), `CHOT_THEO_RANG_BUOC`,
+  `DANH_MUC_VE_CONG`; `DongChot.chot` nhận tiền tố `L`; dòng `VAO_SO` của `CHINH_SACH_CHUA_KHAI_TRONG_SO` nói lại vì sao.
+- **`gieo:demo`.** Phiên bản 1 khai trọng số (`gia`, `1.0000`) và BAFO top-2 ở cả hai chế độ (`TRONG_SO_DEMO`, `BAFO_TOP_N_DEMO`).
+- **Test.** Mười một ca `[INV-L14]` ở `luot-danh-gia.int` (giàn cảnh mở gói tách hai nửa `taoRfqChoMo` / `moGoiDaDuyet`); cổng tên hai
+  chiều ở `rfq.int` gom thân trigger L14; hai chú thích nói lượt chấm đọc bản mới nhất (kịch bản 41 HTTP, `unseal-worker.int`) sửa.
+- **Cổng khai theo.** `HAM_KHONG_PHAI_CANH` (hai hàm), `HAM_GHIM` và ba danh sách migration viết cứng của `migrations.int`, cổng
+  `doc-chinh-sach-mot-ham` (lớp `THEO_ID` nhận cột ghim; lượt chấm thôi là chỗ đọc *chính sách hiện hành*), sổ khai nhãn (L14),
+  `MOC_GHIM` 77 → 78, TEST-PLAN hàng L14 và dòng tổng, lời khai đếm, spec S4 §4.1, §5.1 L14, §9, PRODUCT, STATE (mốc và khoản 319),
+  ADR-141.
+
+## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- **Lần chọn lượt chấm dưới phiên bản khác là `CONTROL_DENIED`; gói không có phiên bản ghim có trọng số là từ chối CẤU HÌNH** (không vào
+  sổ, mã cũ `CHINH_SACH_CHUA_KHAI_TRONG_SO` giữ nguyên) — đúng luật ADR-060 và spec S4 §5 L12. Một phiên bản MỚI không cứu được gói đã
+  mở; thông điệp nói ra.
+- **`clock_timestamp()` trong trigger chụp**, không `NEW.opened_at` (người gọi gửi) và không `now()` (lúc giao dịch mở bắt đầu).
+- **Khoá tư vấn dùng chung** với lần tạo và lần ký phiên bản — không dựng khoá thứ hai.
+- **Trigger chụp mới, nhỏ, ở đúng cạnh** — không sửa thân `rfq_kiem_chuyen_trang_thai`.
+- **Khoá ngoại hợp thành** cho cột ghim (khuôn `org_id` của kho).
+- **Không ca riêng cho nhánh *không có phiên bản ghim* ở tầng gói** — dựng nó cần một tổ chức không phiên bản nào trước lúc mở; nói ra
+  ở ADR-141.
+
+## 5. Đo trước
+
+Trên `fc0dcc7` (master sau #225), Postgres 16:
+
+1. `taoLuotDanhGia` → `docChinhSach` chọn `chinh_sach_hieu_luc(org, now())`; `rfq_evaluations` chỉ có trigger danh tính (`057`),
+   `policy_id` trong `GRANT INSERT`. Đột biến M1 (mục 7) dựng lại đúng hành vi ấy trên mã mới: các ca phiên bản khai sau lúc mở đỏ.
+2. `effective_from >= created_at` (`022`), `created_at` ngoài `GRANT INSERT` (`014`); `opened_at` chỉ đặt một lần (`011`).
+3. Ca lật: không ca nào trong `luot-danh-gia.int` (108/108 trên mã của bản đầu); kịch bản 41 HTTP khai phiên bản 2 sau bước 2 —
+   chú thích sai tiền đề; `gieo:demo` gieo phiên bản 1 không trọng số.
+4. Lượt soi đối kháng (mục 8) đo thêm hai đường lùi mốc của phép tính lại — cả hai thành tiền đề khẳng định trong ca đo (phép tính lại
+   tại `opened_at` chọn phiên bản lùi mốc; tại `opened_at` năm 2100 chọn phiên bản mới nhất).
+
+## 6. Đo
+
+- **`luot-danh-gia.int` — mười một ca `[INV-L14]`**: phiên bản khai SAU lúc mở không đổi trọng số (hệ số 1 chứ không 2) kèm đối chứng
+  dương (gói mở sau phiên bản hệ số 2 thì dùng nó); phiên bản ghim không trọng số ⇒ câu gọi tên phiên bản ghim, không hàng sổ, không
+  lượt, gói đứng yên; phiên bản HẸN GIỜ tạo trước lúc mở không áp; lượt chấm lại sau BAFO cùng phiên bản dù một phiên bản mới hơn khai
+  giữa hai lượt; câu ghi thẳng dưới `app_api` mang phiên bản khác ⇒ 23514 `l14_phien_ban_khong_ghim`, đối chứng dương với phiên bản
+  ghim; đột biến tắt trigger lúc chạy ⇒ câu ấy đi lọt; đường ứng dụng (client bọc thay `policy_id` của câu INSERT) ⇒ `ChotKiemSoatError`
+  mang lỗi trigger ở `cause`, đúng một hàng `CONTROL_DENIED {ma}`, không lượt, gói đứng yên; đường ⑴ phiên bản lùi mốc; đường ⑵
+  `opened_at` năm 2100 đặt dưới `app_api`; `app_api` ghi cột ghim ⇒ 42501 (UPDATE và INSERT); lần mở CHỜ một phiên bản đang ghi dở
+  dưới hai kết nối rồi chụp đúng phiên bản ấy.
+- **Toàn tệp** `luot-danh-gia.int` 112/112, `rfq.int` 60/60, `bac-chinh-sach.int` 42/42, `guest.int` 26/26, `lich-su-gia.int` 51/51,
+  `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128 (ba danh sách migration viết cứng nhận
+  `102` sau lượt chạy đầu đỏ đúng ba ca ấy).
+- **`gieo:demo` đo tay** trên cụm Postgres 16 mới, hai chế độ: MVP1 và `--s3` đều thoát 0; mọi gói đã mở ghim phiên bản 1 có trọng số, cột ghim bằng `chinh_sach_hieu_luc(org, opened_at)` (ba gói đã mở và gói demo chính ở MVP1; thêm ba gói `Thep tam cong trinh` ở `--s3`, gói `PENDING_APPROVAL` không có phiên bản ghim — đúng, chưa mở). Lượt đo của bản đầu (trước cột chụp) cho cùng kết quả về trọng số.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ (thân SQL sửa cả ở migration lẫn hai dạng của mục ghim hardening), chạy khối `[INV-L14]` (M5 thêm cổng tên hai
+chiều), khôi phục tệp từ bản sao.
+
+Mười một đỏ, không đột biến nào sống (M9 sống ở lượt đầu — xem dưới).
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | `docChinhSach` đọc phiên bản hiệu lực `now()` thay cột ghim (hành vi trước vòng) | ĐỎ — 4 ca |
+| M2 | `docChinhSach` tính lại `chinh_sach_hieu_luc(org, opened_at)` (bản đầu của vòng này) | ĐỎ — 1 ca (đường ⑴) |
+| M3 | trigger lượt chấm bỏ phép so | ĐỎ — 4 ca |
+| M4 | trigger lượt chấm so với phiên bản hiệu lực `now()` thay cột ghim | ĐỎ — 6 ca |
+| M5 | trigger lượt chấm bỏ tên ràng buộc | ĐỎ — 4 ca, cộng cổng tên hai chiều ở `rfq.int` |
+| M6 | `L14_PHIEN_BAN_KHONG_GHIM` `vaoSo: false` | ĐỎ — 1 ca (đường ứng dụng) |
+| M7 | `taoLuotDanhGia` không bắt lỗi trigger theo tên | ĐỎ — 1 ca (đường ứng dụng) |
+| M8 | trigger chụp không đặt cột | ĐỎ — 9 ca |
+| M9 | trigger chụp đọc `NEW.opened_at` thay `clock_timestamp()` | lượt đầu **XANH** — ca đường ⑵ chỉ khai phiên bản mới SAU lúc mở, nên hai cách chụp cho cùng kết quả. Ca nay mang một phiên bản HẸN GIỜ có sẵn lúc mở ⇒ **ĐỎ — 1 ca** |
+| M10 | trigger chụp bỏ khoá tư vấn chính sách | ĐỎ — 1 ca (khoá dưới hai kết nối) |
+| M11 | cấp `UPDATE (chinh_sach_ghim_id)` cho `app_api` | ĐỎ — 1 ca (quyền cột) |
+
+## 8. Lượt soi đối kháng
+
+Một agent đọc trọn diff của bản đầu (`14b0337`, chỉ đọc). Không CAO trên đường HTTP của sản phẩm.
+
+- **TRUNG-1 — giao dịch giữ lâu lùi được `created_at`** (`014`: `DEFAULT now()`, lúc giao dịch BẮT ĐẦU): một phiên `app_api` `BEGIN`
+  trước lúc gói mở, chèn phiên bản sau khi giá lộ ⇒ `created_at = effective_from < opened_at`, phép tính lại chọn nó, trigger nhận nó.
+  Bản đầu của ADR viết cửa sổ ấy *"trước khi giá lộ"* — sai. **Đóng** bằng cột chụp (quyết định 5); ca *đường ⑴*.
+- **TRUNG-2 — `opened_at` do người gọi đặt** (`009` cấp `UPDATE (opened_at)`): mở gói với `opened_at` năm 2100 ⇒ phép tính lại thành
+  *"mới nhất lúc chấm"*. **Đóng cho L14** bằng cột chụp; phần còn lại (K6, bộ bằng chứng) là **khoản 319**, rổ B (quyết định 6).
+- **THẤP-3 — tài liệu trích bằng chứng chưa có** (biên bản này, ma trận): đóng ở vòng này.
+- **THẤP-4 — số tạm và `CREATE TRIGGER` không idempotent**: `pnpm cap-so` đổi tên mọi chỗ tham chiếu cùng lúc (mục ghim hardening khoá
+  theo đúng tên tệp); khuôn của mọi migration trong kho — không đổi.
+- **INFO**: dữ liệu cũ (gói đã chấm lần đầu dưới phiên bản lúc chấm rồi mở BAFO; cụm demo gieo trước vòng này) và nhãn sổ của nhánh
+  *không thấy gói* — nói ra ở ADR-141.
+- Lượt soi xác nhận: ba thân của mục ghim khớp sau chuẩn hoá; BAFO, trao thầu, bộ bằng chứng đọc `e.policy_id`; `opened_at` NOT NULL ở
+  hai trạng thái chấm được; `signed_at` ngoài `GRANT`; ca client bọc không xanh rỗng ruột; quy ước sổ khớp.
+
+## 9. Giới hạn, nói ra
+
+- Đổi hành vi MVP1 cho mọi tổ chức (spec §8.11): gói mở dưới phiên bản chưa khai trọng số không chấm được; cụm demo cũ phải gieo lại.
+- Phiên bản ghim là phiên bản hiệu lực lúc trigger chụp chạy, không lúc `opened_at`; khoá tư vấn chính sách giữ tới hết giao dịch mở.
+- Hai mốc ghim cho một gói (bậc/ngân sách ở S3.1, lượt chấm ở đây).
+- Lượt chấm đã ghi không kiểm lại; nhánh *không phiên bản ghim* không có ca riêng ở tầng gói.
+- Khoản 319: `opened_at` vẫn do người gọi đặt cho mọi chỗ khác đọc nó.
+
+## 10. Số đo
+
+- Cây cuối (trên `master` `fc0dcc7` — #225 đã merge; master không đổi trong vòng): `pnpm t0` sạch (512 module, không vi phạm phụ thuộc);
+  `pnpm test` 139 tệp, 2337 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.253, ADR-141, khoản 319, migration `102`).
+- Lô tích hợp chạm vòng này trên mã chụp: `luot-danh-gia.int` 112/112, `rfq.int` 60/60, `bac-chinh-sach.int` 42/42, `guest.int` 26/26,
+  `lich-su-gia.int` 51/51, `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128.
+- `pnpm evidence` toàn bộ T1–T3 trên `e283e09`: 226 tệp, 4369 khẳng định, 4359 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi
+  trường), **0 đỏ**; **78/78 bất biến** (56 nghiệp vụ + 22 hàng rào); L14 đo bằng 11 khẳng định.
+
 # §S1.254 — DIỄN TẬP §11: `pilot:gia-lap` TRÊN `fc0dcc75`, KỊCH BẢN TRÌNH DIỄN VÀ TRỌN CÂU §11 TRÊN CHROMIUM — BƯỚC CHỌN NHÀ CUNG CẤP NAY ĐI ĐƯỢC BẰNG CHUỘT; KHOẢN 320–324 ĐÓNG
 
 **Rổ và mảnh (ADR-043 ⒞):** 320 và 322 chạm thẳng câu của `docs/PRODUCT.md` §11 (*người mua chọn nhà cung cấp*; *trên điện
