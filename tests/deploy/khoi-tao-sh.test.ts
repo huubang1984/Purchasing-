@@ -20,6 +20,7 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { docThamSo } from "../../tools/khoi-tao-to-chuc/src/index.js";
+import { MA_VAI } from "../../tools/khoi-tao-to-chuc/src/ban-khai.js";
 
 const SCRIPT = fileURLToPath(new URL("../../deploy/trien-khai.sh", import.meta.url));
 const PB = "0f1e2d3c-4b5a-4968-8776-655443322110";
@@ -179,6 +180,9 @@ describe.skipIf(process.platform === "win32")("[S1.183] trien-khai.sh — kiem-k
       { VAI: "BUYER=3 " }, { VAI: "" }, { VAI: "BUYER" }, { VAI: "=3" }, { VAI: "BUYER==3" }, { VAI: "BUYER=٣" },
       { VAI: "REQUESTER=3,BUYER=3,TECHNICAL=3,PROCUREMENT_MANAGER=3,FINANCE=3,DIRECTOR=3" },
       { VAI: "REQUESTER=1,BUYER=1,TECHNICAL=1,PROCUREMENT_MANAGER=1,FINANCE=1,DIRECTOR=1" },
+      // [S1.252] Mã vai thứ bảy (S4.2a) — phía bash từng thiếu nó: bản khai gán được, workflow không duyệt được.
+      { VAI: "BUYER=2,DATA_STEWARD=1" }, { VAI: "DATA_STEWARD=3" }, { VAI: "DATA_STEWARD=1,BUYER=2" }, { VAI: "data_steward=3" },
+      { VAI: "REQUESTER=1,BUYER=1,TECHNICAL=1,PROCUREMENT_MANAGER=1,FINANCE=1,DIRECTOR=1,DATA_STEWARD=1" },
     ];
     const lech: string[] = [];
     let nhan = 0;
@@ -203,6 +207,12 @@ describe.skipIf(process.platform === "win32")("[S1.183] trien-khai.sh — kiem-k
     // Bộ ca phải có cả hai phía — một bộ toàn từ chối thì phép so rỗng nghĩa.
     expect(nhan).toBeGreaterThanOrEqual(15);
     expect(ca.length - nhan).toBeGreaterThanOrEqual(50);
+  });
+
+  it("[S1.252] mảng MA_VAI của script là MA_VAI của ban-khai.ts — cùng mã, cùng thứ tự", () => {
+    const m = /^MA_VAI=\(([A-Z_ ]+)\)/mu.exec(readFileSync(SCRIPT, "utf8"));
+    expect(m, "không đọc được MA_VAI của trien-khai.sh").not.toBeNull();
+    expect((m?.[1] ?? "").trim().split(/ +/u)).toEqual([...MA_VAI]);
   });
 
   it("⑶ khoi-tao thành công: lệnh mang đúng các đầu vào; run → chờ → mã thoát → xoá (không khôi phục); kết quả từ đầu vào, không log", () => {

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { congAwsCli, DocBienError, giaiMaConsole, maLoiAws, TienTrinhError } from "./nguon.js";
+import { BIEU_THUC_CONSOLE, congAwsCli, DocBienError, docBienTerraform, giaiMaConsole, maLoiAws, TerraformTuChoiBienError, TienTrinhError } from "./nguon.js";
 
 /** Đúng dạng terraform 1.x in ra cho `jsonencode(...)`: một chuỗi HCL có ngoặc kép. */
 const consoleIn = (v: unknown): string => `${JSON.stringify(JSON.stringify(v))}\n`;
@@ -114,5 +114,62 @@ else loi("LenhLa");
 
   it("lỗi không phải 'không tồn tại' (hết phiên SSO) ⇒ ném, không bao giờ coi là thiếu", () => {
     expect(() => aws.moTaSecret("het-phien")).toThrow(TienTrinhError);
+  });
+});
+
+describe("docBienTerraform trên một terraform giả", () => {
+  const thuMuc = mkdtempSync(join(tmpdir(), "terraform-gia-"));
+  afterAll(() => rmSync(thuMuc, { recursive: true, force: true }));
+  const tep = join(thuMuc, "terraform-gia.mjs");
+  // Ca `hong` chép đúng hình dạng Terraform 1.13.3 in ra khi `ten_mien` còn `<app.domain>` (đo ngày 2026-10-01 trên
+  // bản sao stack 90): THOÁT 0, lý do ở stderr, stdout mở đầu bằng một dòng Warning rồi mới tới giá trị.
+  writeFileSync(
+    tep,
+    `import { readFileSync } from "node:fs";
+const a = process.argv.slice(2);
+const vao = readFileSync(0, "utf8");
+const bien = (a.find((x) => x.startsWith("-var-file=")) ?? "").slice("-var-file=".length);
+if (!a[0]?.startsWith("-chdir=") || a[1] !== "console" || a[2] !== "-no-color" || vao !== ${JSON.stringify(`${BIEU_THUC_CONSOLE}
+`)}) process.exit(3);
+const gt = ${JSON.stringify(consoleIn(BIEN))};
+if (bien === "tot.tfvars") { process.stderr.write("\\nWarning: Value for undeclared variable\\n"); process.stdout.write(gt); }
+else if (bien === "hong.tfvars") {
+  process.stderr.write("\\nError: Invalid value for variable\\n\\n  on hong.tfvars line 1:\\n   1: ten_mien = \\"<app.domain>\\"\\n\\nten_mien phải là một domain chữ thường hợp lệ.\\n");
+  process.stdout.write("\\nWarning: Due to the problems above, some expressions may produce unexpected results.\\n\\n\\n" + gt);
+} else { process.stderr.write("\\nError: Backend initialization required, please run \\"terraform init\\"\\n"); process.exit(1); }
+`,
+  );
+  const tf = [process.execPath, tep] as const;
+
+  it("thoát 0, stderr chỉ có Warning ⇒ đọc được biến", () => {
+    expect(docBienTerraform(thuMuc, "tot.tfvars", tf).bien.ten_mien).toBe("app.thu-mua.vn");
+  });
+
+  it("biến trượt validation mà console vẫn thoát 0 ⇒ TerraformTuChoiBienError MANG lý do của Terraform", () => {
+    let loi: unknown;
+    try {
+      docBienTerraform(thuMuc, "hong.tfvars", tf);
+    } catch (e) {
+      loi = e;
+    }
+    expect(loi).toBeInstanceOf(TerraformTuChoiBienError);
+    expect((loi as TerraformTuChoiBienError).stderr).toContain("ten_mien phải là một domain chữ thường hợp lệ.");
+  });
+
+  it("đối chứng: stdout của ca ấy, đọc riêng, chỉ ra DocBienError không lý do — đúng chỗ hỏng trước khi đọc stderr", () => {
+    const stdout = "\nWarning: Due to the problems above, some expressions may produce unexpected results.\n\n\n" + consoleIn(BIEN);
+    expect(() => giaiMaConsole(stdout)).toThrow(DocBienError);
+  });
+
+  it("thoát khác 0 (chưa init) ⇒ TienTrinhError thường, không phải lỗi biến", () => {
+    let loi: unknown;
+    try {
+      docBienTerraform(thuMuc, "chua-init.tfvars", tf);
+    } catch (e) {
+      loi = e;
+    }
+    expect(loi).toBeInstanceOf(TienTrinhError);
+    expect(loi).not.toBeInstanceOf(TerraformTuChoiBienError);
+    expect((loi as TienTrinhError).stderr).toContain("terraform init");
   });
 });

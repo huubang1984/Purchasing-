@@ -14,6 +14,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 ### 0.1 Công cụ và quyền
 
 - [ ] Terraform ≥ 1.10, AWS CLI v2, Docker Desktop, Git (`terraform version`, `aws --version`, `docker version`).
+- [ ] **[S1.252]** Node 22 (từ 22.13; Node 26 không chạy) và pnpm ≥ 9, rồi `pnpm install` ở gốc kho — `pnpm kiem-truoc-apply`
+      (6.4) chạy từ mã của kho (`node --version`, `pnpm --version`).
 - [ ] Ba tài khoản trong tổ chức AWS `o-u0xp6p6auq` **đang hoạt động**: management `243714547276`, audit `528657840905`,
       prod `942091277863` (khai ở `infra/terraform/chung/main.tf`).
 - [ ] IAM Identity Center bật ở management; bạn có AdministratorAccess trên cả ba tài khoản.
@@ -186,9 +188,14 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
     --service-names com.amazonaws.ap-southeast-1.sms-voice com.amazonaws.ap-southeast-1.email --query 'ServiceNames'
   ```
   Thiếu `sms-voice` ⇒ bỏ nó khỏi `dich_vu_endpoint` (README, "Lọc tên miền"). Thiếu `email` ⇒ đổi `ses_endpoint_service`.
+  **[S1.252]** `dich_vu_endpoint` là một `local` của `90-ecs/main.tf`, không phải biến — bỏ `sms-voice` là một PR sửa mã. Một tên
+  không có ở region có thể làm CẢ lệnh báo `InvalidServiceName` thay vì trả danh sách ngắn hơn (chưa đo): khi ấy hỏi từng tên một.
 - [ ] **Tạo ~~bốn~~ [S1.182] năm secret** với host RDS TẠM (README, stack 90 bước 1): `tp/api/otp-peppers`, `tp/api/database-url`,
       `tp/worker/database-url`, `tp/neo/database-url`, **[S1.182 / ADR-111]** `tp/khoi-tao/database-url` (vai
       `app_khoi_tao_login` — task migrate đọc nó để dựng vai). Mật khẩu ≥ 24 ký tự ngẫu nhiên, mỗi vai một mật khẩu.
+      **[S1.252]** Mật khẩu CHỈ gồm chữ và số: `/ ? # % @ :` phá URL (`chay-migrate` đọc vai bằng `new URL`), còn `$` và dấu
+      huyền bị PowerShell nội suy trong nháy kép của README. Sinh 48 ký tự hex: `$b = New-Object byte[] 24;
+      [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | % { $_.ToString('x2') })`.
 - [ ] **`prod.tfvars`** (không commit) — lần đầu KHÔNG chạy api và chỉ ghi log DNS:
   ```hcl
   ten_mien           = "<app.domain>"
@@ -215,14 +222,22 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 - [ ] ```powershell
   cd infra\terraform\90-ecs; terraform init
   terraform apply -var-file prod.tfvars -target aws_acm_certificate.api -target 'aws_ecr_repository.tp'
-  terraform output ban_ghi_dns     # thêm CNAME xac_minh_acm ở DNS
+  terraform output xac_minh_acm    # thêm CNAME này ở DNS
   terraform output ecr
   ```
+  **[S1.252]** ~~`terraform output ban_ghi_dns`~~ — sau `apply -target`, output ấy chưa có trong state vì nó còn đọc ALB (đo trên
+  Terraform 1.13.3: *Output not found*), nên không lấy được CNAME xác minh và 6.4 chờ ACM tới hết hạn. `xac_minh_acm` chỉ đọc
+  chứng chỉ; `ban_ghi_dns` dùng ở 6.5 cho CNAME `cong_khai`.
 
 ### 6.3 Build và đẩy image
 
 - [ ] Theo README stack 90 bước 4 (~~sáu~~ **[S1.183]** bảy target: api, worker, migrate, web, public-keys, neo, khoi-tao), thẻ = SHA commit.
-- [ ] Điền `anh` trong `prod.tfvars` bằng URI **@sha256:** (`aws ecr describe-images ... --query 'imageDetails[0].imageDigest'`).
+- [ ] Điền `anh` trong `prod.tfvars` bằng URI **@sha256:** (~~`aws ecr describe-images ... --query 'imageDetails[0].imageDigest'`~~
+      **[S1.252]** `aws ecr describe-images --profile tp-prod --repository-name <kho> --image-ids imageTag=<git-sha> --query
+      'imageDetails[0].imageDigest' --output text` — lọc theo thẻ như pipeline (`deploy/trien-khai.sh`): kho có thể giữ thêm
+      manifest khác, và `[0]` không lọc thì không chắc là image vừa đẩy). URI là
+      `942091277863.dkr.ecr.ap-southeast-1.amazonaws.com/<kho>@sha256:…` — `<ecr>` ở README bước 4 là REGISTRY ấy, không phải URL
+      từng kho mà `terraform output ecr` in.
 
 ### 6.4 Phần còn lại
 
@@ -232,19 +247,27 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   ```
   Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
   `000…`; image nằm đúng kho ECR của prod và có thật; ~~bốn~~ **[S1.182]** năm secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
-  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
+  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. **[S1.252]** Một biến
+  trượt validation của stack (vd. `anh` ghi thẻ thay digest) ⇒ tool in nguyên lời Terraform và thoát 2 — trước đó nó chỉ báo
+  "đã terraform init chưa?" vì `terraform console` thoát 0 ở ca ấy (đo trên 1.13.3). Ở bước này
   `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt;
   **[rà 2026-10-01]** `[VANG] kenh_otp` là đúng tới khi stack 85 xong (5.3) — nhưng tới lúc ấy nhà cung cấp thật chưa nộp được (0.3).
   Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
-- [ ] `terraform plan -var-file prod.tfvars -out plan.tfplan` — đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
-      policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. `terraform apply plan.tfplan` (chờ ACM xác minh).
+- [ ] ~~`terraform plan -var-file prod.tfvars -out plan.tfplan`~~ **[S1.252]** `terraform -chdir=infra\terraform\90-ecs plan
+      -var-file prod.tfvars -out plan.tfplan` — kiểm trước apply chạy từ gốc kho, còn `prod.tfvars` và `plan.tfplan` nằm trong
+      `90-ecs`; `-chdir` đặt mọi đường dẫn tương đối vào đó. Đọc kỹ: VPC, RDS, ALB, DNS Firewall (ALERT), endpoint có
+      policy, alarm `tp-van-hanh-*`, lịch `tp-neo-hang-ngay`. ~~`terraform apply plan.tfplan`~~ `terraform -chdir=infra\terraform\90-ecs
+      apply plan.tfplan` (chờ ACM xác minh). 6.6, 6.8 và 8.2 plan + apply bằng đúng hai lệnh này.
 - [ ] Dự kiến: vài thư ⑹ `…khong-con-target-khoe` cho `api` (0 task) — đúng, vì api chưa chạy; về OK ở 6.6.
+      **[S1.252]** Và một thư ⑹ OK cho MỖI alarm `tp-van-hanh-*` mới ở lần đánh giá đầu (khoảng 19, đếm trên mã), thư ⑸ trong
+      lúc DNS còn ALERT, và có thể một thư ⑶ — bảng thư dự kiến cuối tệp.
 
 ### 6.5 Nối CSDL và migrate
 
 - [ ] `terraform output rds_endpoint` ⇒ `put-secret-value` lại ~~ba~~ **[S1.182]** bốn secret `*/database-url` với host thật.
 - [ ] Thêm CNAME `cong_khai` (output `ban_ghi_dns`) trỏ tới ALB.
-- [ ] `terraform output lenh_chay_migrate` ⇒ chạy; `/tp/migrate` phải có `da ap N migration` và các dòng `vai …`
+- [ ] ~~`terraform output lenh_chay_migrate`~~ **[S1.252]** `terraform output -raw lenh_chay_migrate` (không `-raw` thì chuỗi in
+      kèm nháy và ký tự thoát) ⇒ chạy; `/tp/migrate` phải có `da ap N migration` và các dòng `vai …`
       (gồm `app_neo_login`, **[S1.182]** và `app_khoi_tao_login`). Từ chối ⇒ **dừng**, đọc thông điệp, không sửa tay trong CSDL (ADR-061).
 
 ### 6.6 Bật api
@@ -254,19 +277,23 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 
 ### 6.7 Neo khoá biên nhận và kiểm công khai
 
-- [ ] `terraform output lenh_chay_neo` ⇒ chạy lệnh `khoa_bien_nhan`; so byte với endpoint bằng tài khoản audit (README,
+- [ ] `terraform output lenh_chay_neo` ⇒ chạy lệnh `khoa_bien_nhan` (**[S1.252]** output là một đối tượng hai lệnh; in đúng lệnh
+      bằng `(terraform output -json lenh_chay_neo | ConvertFrom-Json).khoa_bien_nhan`); so byte với endpoint bằng tài khoản audit (README,
       "Job neo" — ba dòng `Get-FileHash`, phải `True`).
 - [ ] README stack 90 bước 7: `/api/health`, `/nop-thau` (CSP), `/.well-known/trustprocure-receipt-keys` (sha256 trùng 2.4),
-      header ADR-075 (`curl.exe -sI`), `http://` ⇒ 301.
+      header ADR-075 (~~`curl.exe -sI`~~ **[S1.252]** `curl.exe -s -D - -o NUL https://<ten_mien>/api/health` — `-I` gửi HEAD, và
+      `api` trả 405 cho HEAD: header của ALB vẫn có nhưng dòng trạng thái gây nhầm), `http://` ⇒ 301.
 - [ ] Nguồn thời gian (README, "Nguồn thời gian"): `ClockDrift` SYNCHRONIZED trong một task api; chép vào STATE khoản 15.
       **[rà 2026-10-01]** Lệnh `curl` "trong một task" của README không chạy được — stack 90 không bật ECS Exec và image
-      `node:22-bookworm-slim` không có `curl`; README nay đề một task `tp-migrate` chạy một lần với lệnh ghi đè (chưa đo).
+      `node:22-bookworm-slim` không có `curl`; README nay đề một task `tp-migrate` chạy một lần với lệnh ghi đè ~~(chưa đo)~~ **[S1.252]** (chưa đo trên
+      AWS; phần cục bộ đã đo và ghim — README nói cách đọc `CLOCKDRIFT undefined`: task vẫn thoát 0 nhưng CHƯA phải kết quả).
 
 ### 6.8 DNS Firewall: ALERT ⇒ BLOCK
 
 - [ ] Sau ít nhất một ngày chạy (gồm một lượt `lich` 02:15 và một lần deploy ở 7.3), Logs Insights trên `/tp/dns`:
       `filter firewall_rule_action = "ALERT" | stats count() by query_name`. Mỗi tên hợp lệ còn thiếu ⇒ thêm vào
-      `ten_duoc_phan_giai` (và test `hinh-dang-dns`), PR, deploy lại.
+      `ten_duoc_phan_giai` (và test `hinh-dang-dns`), PR, ~~deploy lại~~ **[S1.252]** rồi plan + apply stack 90 như 6.4 — danh
+      sách nằm trong Terraform, và pipeline không apply Terraform.
 - [ ] Không còn tên hợp lệ nào ⇒ `che_do_dns = "BLOCK"`, plan + apply. Mỗi truy vấn lạ về sau ⇒ thư ⑸.
 
 ## 7. GitHub — pipeline deploy
@@ -315,24 +342,35 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
        — KHÔNG bằng `>` hay `Out-File` của PowerShell 5 (UTF-16). Nó mang email và họ tên, nên chỉ ở máy người vận hành, và XOÁ
        tệp ngay sau các lệnh dưới. **[lượt soi]** AWS CLI v2 đọc `file://` theo code page của Windows (cp1252) nếu không đặt
        biến dưới — tiếng Việt thành chữ vỡ mà không báo lỗi:
+       **[S1.252]** Lưu tệp ở `$env:TEMP`, không trong thư mục kho (kho công khai, `.gitignore` không bỏ qua nó), và xuống dòng
+       **LF**: AWS CLI đọc `file://` ở chế độ văn bản nên BỎ `\r`, còn `Get-FileHash` băm byte trên đĩa — tệp CRLF (mặc định của VS
+       Code và Notepad trên Windows) cho hai băm khác nhau và task dừng ở *"bản khai không khớp băm SHA-256 đã duyệt"*, chạy lại
+       vẫn vậy. VS Code: bấm `CRLF` ở thanh trạng thái → `LF`, lưu lại.
        ```powershell
        $env:AWS_CLI_FILE_ENCODING = "UTF-8"
-       (Get-FileHash ban-khai.json -Algorithm SHA256).Hash.ToLower()                 # ghi lại: bam
+       $f = "$env:TEMP\ban-khai.json"
+       (Get-Content -Raw $f).Contains("`r")                                         # [S1.252] phải ra False
+       (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()                            # ghi lại: bam
        aws secretsmanager create-secret --profile tp-prod --name tp/khoi-tao/ban-khai/<slug> `
-         --secret-string file://ban-khai.json --query VersionId --output text      # ghi lại: phien_ban
+         --secret-string "file://$f" --query VersionId --output text                 # ghi lại: phien_ban
+       Remove-Item $f
        ```
        Tên bí mật là `tp/khoi-tao/ban-khai/` + một slug (a-z, 0-9, gạch nối) — kho là kho CÔNG KHAI, tên và mọi đầu vào của
        run ai cũng đọc được: đừng đặt email hay tên khách vào đó nếu danh sách khách là bí mật kinh doanh.
+       **[S1.252]** Slug: 3–63 ký tự, không mở hay đóng bằng gạch nối. Ở `che_do = tao`, đầu vào `to_chuc` phải TRÙNG
+       `toChuc.slug` của bản khai (task so hai bên); dùng chính slug ấy cho tên bí mật là cách ít nhầm nhất.
        **[rà 2026-10-01]** `create-secret` này ra một thư ⑼ tới hộp thư an ninh — đối chứng dương của ⑼ (3.7). Không có thư ⇒ ⑼
        chưa chạy (stack 60 trên prod còn là bản trước khoản 252 — 2.0b): dừng, đừng bấm workflow.
     2. Actions → *Khoi tao to chuc — prod (bam tay)* → Run workflow trên `master`: `che_do = tao`, `bi_mat`, `phien_ban`,
        `bam`, `to_chuc = <slug>`, `so_nguoi`, `vai` (số người mang từng mã vai theo thứ tự `REQUESTER, BUYER, TECHNICAL,
-       PROCUREMENT_MANAGER, FINANCE, DIRECTOR`, vd `BUYER=1,PROCUREMENT_MANAGER=2,DIRECTOR=1`).
+       PROCUREMENT_MANAGER, FINANCE, DIRECTOR`, **[S1.252]** `DATA_STEWARD` — workflow trước vòng này không nhận mã thứ bảy, vd
+       `BUYER=1,PROCUREMENT_MANAGER=2,DIRECTOR=1`).
     3. Người KHÁC người bấm đọc bảng *điều người duyệt duyệt* ở tóm tắt của job `build` — người bấm, tên, phiên bản, băm, slug,
        mã tổ chức, số người, số theo vai —, đối chiếu với YÊU CẦU mở tổ chức (khách nào, bao nhiêu người, ai mang vai gì; có tệp
        bản khai qua kênh khác thì đối chiếu cả băm), rồi duyệt ở `prod-khoi-tao`.
     4. Job `chay` xanh ⇒ tóm tắt có *Người duyệt: @…*, dòng kết quả (mã tổ chức, số người, vai) và *đã xoá*. Gửi `/login#<mã>`
-       cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107).
+       cho từng người; mỗi người tự xin link ở ô của `/login` (ADR-107). **[S1.252]** SES còn sandbox (`[VANG] ses.sandbox`) thì
+       chỉ địa chỉ ĐÃ XÁC MINH nhận được thư — chờ production access (5.2) hay xác minh từng địa chỉ trước bước này.
        **[rà 2026-10-01]** Lần chạy ra thêm thư ⑼: `RunTask` họ `tp-khoi-tao` bởi `assumed-role/tp-deploy/khoi-tao-<run id>` — đối
        chiếu `<run id>` với run — và `DeleteSecret` bản khai.
     5. **[lượt soi]** Job `chay` KHÔNG xanh — hỏng, bị từ chối, bị huỷ, hay artifact hết hạn — ⇒ bí mật CÒN; job `nhac` nói điều
@@ -342,7 +380,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
        'SecretList[].Name'`. Bản khai lệch bảng đã duyệt — băm, tổ chức, số người, số theo vai — thì task dừng TRƯỚC khi chạm
        CSDL.
     Thêm người về sau: như trên với `che_do = them-nguoi`, `to_chuc = <mã tổ chức>`.
-- [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply (hoặc deploy `worker` qua pipeline sau khi đặt biến). Job `worker` của
+- [ ] **8.2** `so_ban_worker = 1` ⇒ `pnpm kiem-truoc-apply` như 6.4 ⇒ plan + apply ~~(hoặc deploy `worker` qua pipeline sau khi đặt biến)~~.
+      **[S1.252]** Chỉ apply đổi được số task: pipeline chỉ thay image (`update-service`), và job `worker` của nó từng coi 0/0 task
+      là đạt — nay nó đỏ khi muốn 0 task. Job `worker` của
       pipeline kiểm đủ task và log sạch; alarm `tp-van-hanh-worker-thieu-task` xuất hiện.
 - [ ] **8.3** Sáng hôm sau: `/tp/neo` có lượt `lich` với ~~`xuat=0 kiem=0`~~ **[ghi muộn ngày 2026-09-27]** dòng
       `lich: xuat=OK kiem=OK` — lệnh in `OK`/`HONG`, không in mã số (`tools/neo-so-kiem-toan/src/index.ts`, hàm `lich`);
@@ -367,6 +407,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
 | 3.2 | ⑻ đăng ký hỏng — ALARM rồi OK, tới cả hai hộp | Lambda chạy trước khi bạn bấm xác nhận; thư ALARM có thể không tới ai |
 | 3.3, ~~3.4,~~ 4.2 | ⑴, ⑵ | chính là đối chứng dương — **thiếu thư mới là sự cố** |
 | 6.4 → 6.6 | ⑹ api không còn target khoẻ — ALARM rồi OK | api chạy 0 task tới 6.6 |
+| 6.4 | **[S1.252]** ⑹ OK cho từng alarm `tp-van-hanh-*` mới — khoảng 19 (đếm trên mã); thêm một ở 6.6, một ở 8.2 | rule ⑹ bắt MỌI lần vào OK, kể cả lần đánh giá đầu từ INSUFFICIENT_DATA |
+| 6.4 → 6.8 | **[S1.252]** ⑸ `tp-dns-bi-chan` | bộ lọc đếm cả ALERT: mỗi tên ngoài danh sách là một lần đếm — đọc tên ở `/tp/dns`, thêm ở 6.8 |
+| 6.4 → 6.5 | **[S1.252]** ⑶ job neo hỏng — chỉ khi 02:15 rơi vào giữa hai bước | lịch `tp-neo-hang-ngay` có từ 6.4, CSDL chưa migrate tới 6.5 |
 | 8.1 | **[rà 2026-10-01]** ⑼ — `CreateSecret`, rồi `RunTask` và `DeleteSecret` của workflow | chính là đối chứng dương của ⑼ (3.7) — **thiếu thư mới là sự cố**; thư ⑼ KHÔNG khớp một run đã duyệt thì dừng task (README, khoản 252) |
 | 8.2 | ⑹ worker thiếu task — có thể ALARM rồi OK | alarm sinh ra trước khi task đầu lên |
 

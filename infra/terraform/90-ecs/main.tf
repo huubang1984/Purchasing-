@@ -1491,6 +1491,16 @@ resource "aws_cloudwatch_metric_alarm" "ton_dong" {
   depends_on          = [aws_cloudwatch_log_metric_filter.ton_dong]
 }
 
+# [S1.252] Đọc được NGAY sau `apply -target aws_acm_certificate.api` (README bước 2, APPLY-LAN-DAU 6.2): với `-target`,
+# Terraform chỉ ghi output mà MỌI phụ thuộc nằm trong tập target, và `ban_ghi_dns` còn đọc ALB — đo trên 1.13.3, lúc ấy
+# `terraform output ban_ghi_dns` báo "Output not found". Chỉ được đọc chứng chỉ.
+output "xac_minh_acm" {
+  description = "CNAME xác minh ACM — thêm ở DNS ngoài ngay sau bước A của lần apply hai bước."
+  value = [for o in aws_acm_certificate.api.domain_validation_options : {
+    loai = o.resource_record_type, ten = o.resource_record_name, gia_tri = o.resource_record_value
+  }]
+}
+
 output "ban_ghi_dns" {
   description = "Thêm ở DNS ngoài: CNAME xác minh ACM (bước 1), rồi CNAME tên miền công khai tới ALB (bước 2)."
   value = {
