@@ -482,7 +482,7 @@ const LUONG = [
 ] as const;
 
 /**
- * [S1.9101 / S4.5b] Nhóm khoá `benchmark` đi qua `POST /policy` thật — mẫu của spec S4 §4.1. Lượt chấm của bước 12b vì thế GHI hàng
+ * [S1.256 / S4.5b] Nhóm khoá `benchmark` đi qua `POST /policy` thật — mẫu của spec S4 §4.1. Lượt chấm của bước 12b vì thế GHI hàng
  * kết quả benchmark, và bộ quét giá ở cuối kịch bản chạy SAU một lần ghi thật (spec §2.5 ⒅).
  */
 const BENCHMARK_KB41 = {
@@ -1875,8 +1875,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     //                               (057), đọc qua `bid.view` ở `docBangXepHang`.
     // Tập viết VÉT CẠN chứ không "chứa": một bảng THỨ BA mai sau phải làm dòng này ĐỎ.
     expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
-    // [S1.9101 / S4.5b] Phép quét trên chạy SAU một lần ghi benchmark thật — hai bảng kết quả có hàng, và không bảng nào trong hai
-    // bảng ấy mang giá (spec §2.5 ⒅; ADR-9201: không cột tiền).
+    // [S1.256 / S4.5b] Phép quét trên chạy SAU một lần ghi benchmark thật — hai bảng kết quả có hàng, và không bảng nào trong hai
+    // bảng ấy mang giá (spec §2.5 ⒅; ADR-142: không cột tiền).
     const bm = (
       await db.pool.query<{ a: string }>("SELECT count(*)::text AS a FROM public.price_benchmark_results")
     ).rows[0]!;

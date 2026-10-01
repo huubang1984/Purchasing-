@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5b] ĐỌC BENCHMARK CỦA MỘT GÓI — cổng `bid.view`, một hàng sổ mỗi lần đọc (spec S4 §4.6; L6, L7; ADR-140 ⑦, ADR-9201).
+// [S1.256 / S4.5b] ĐỌC BENCHMARK CỦA MỘT GÓI — cổng `bid.view`, một hàng sổ mỗi lần đọc (spec S4 §4.6; L6, L7; ADR-140 ⑦, ADR-142).
 //
 // HAI NGUỒN, chủ dự án chốt 2026-10-01 (ADR-141 ⑶):
 //   • gói đang `UNSEALED` hay `BAFO_UNSEALED` — giá mới lộ, lượt chấm cho đúng giá ấy chưa có ⇒ TÍNH as-of ở mỗi lần đọc
@@ -47,8 +47,8 @@ export type BenchmarkCuaGoi =
   | { readonly trangThai: "CHUA_CO_KET_QUA"; readonly rfqStatus: string }
   /**
    * Lượt chấm mới nhất mang phiên bản CÓ cấu hình benchmark mà không có hàng kết quả nào — trái phép ghi một lần của `taoLuotDanhGia`,
-   * tức lượt ấy đến từ một đường ghi khác (SQL thô dưới `app_api`, khoản 9402). Không nhãn nào đi ra; không ném, để một lượt chấm thô
-   * không khoá vĩnh viễn mọi lần đọc của gói (lượt soi §S1.9101, TRUNG-2).
+   * tức lượt ấy đến từ một đường ghi khác (SQL thô dưới `app_api`, khoản 330). Không nhãn nào đi ra; không ném, để một lượt chấm thô
+   * không khoá vĩnh viễn mọi lần đọc của gói (lượt soi §S1.256, TRUNG-2).
    */
   | {
       readonly trangThai: "THIEU_KET_QUA";

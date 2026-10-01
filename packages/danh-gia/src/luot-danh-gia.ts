@@ -142,7 +142,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   readonly id: string;
   readonly version: number;
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
-  /** [S1.9101 / S4.5b] Nhóm khoá `benchmark` của CÙNG phiên bản ghim — vế benchmark của L14. `null`: chưa cấu hình. */
+  /** [S1.256 / S4.5b] Nhóm khoá `benchmark` của CÙNG phiên bản ghim — vế benchmark của L14. `null`: chưa cấu hình. */
   readonly benchmark: NhomBenchmark | null;
 }> {
   // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách: một phiên bản có bậc chưa có chữ ký thứ hai TRƯỚC lúc gói mở
@@ -429,8 +429,8 @@ export async function taoLuotDanhGia(
     });
   }
 
-  // [S1.9101 / S4.5b / L7, L14] Benchmark ghi ĐÚNG MỘT LẦN, ở đây, trong giao dịch tạo lượt chấm — khoá ngoại `ghi_luc →
-  // rfq_evaluations.created_at` (`9501`) từ chối mọi lần ghi ở giao dịch khác. Ngưỡng đọc từ CÙNG phiên bản ghim với trọng số, và
+  // [S1.256 / S4.5b / L7, L14] Benchmark ghi ĐÚNG MỘT LẦN, ở đây, trong giao dịch tạo lượt chấm — khoá ngoại `ghi_luc →
+  // rfq_evaluations.created_at` (`103`) từ chối mọi lần ghi ở giao dịch khác. Ngưỡng đọc từ CÙNG phiên bản ghim với trọng số, và
   // khoá ngoại `(evaluation_id, rfq_id, policy_id)` buộc điều ấy ở CSDL. Phiên bản ghim chưa cấu hình nhóm `benchmark` ⇒ không
   // hàng nào, lượt chấm vẫn chạy (ADR-141 ⑧). Tập báo giá đem so là ĐÚNG tập vừa xếp hạng.
   let soDongBenchmark: number | null = null;
@@ -486,7 +486,7 @@ export async function taoLuotDanhGia(
       currency,
       soBaoGia: lines.length,
       soDocDuoc: docDuoc.length,
-      // [S1.9101 / S4.5b] Số dòng benchmark đã ghi; `null` khi phiên bản ghim chưa cấu hình. Không nhãn, không con số.
+      // [S1.256 / S4.5b] Số dòng benchmark đã ghi; `null` khi phiên bản ghim chưa cấu hình. Không nhãn, không con số.
       soDongBenchmark,
       evaluatedBySessionId: input.actorSessionId,
     },

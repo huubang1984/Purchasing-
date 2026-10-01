@@ -1,4 +1,4 @@
-// [S1.9101 / S4.5b] [INV-L7] Lõi thuần của benchmark: số thập phân chính xác, phân vị, cửa sổ tháng, dải, nhãn — bảng ca của spec S4
+// [S1.256 / S4.5b] [INV-L7] Lõi thuần của benchmark: số thập phân chính xác, phân vị, cửa sổ tháng, dải, nhãn — bảng ca của spec S4
 // §6 (*"tập lẻ, tập chẵn, dưới sàn, có quan sát của chính gói, …"*) cộng phép so với một bản cài tham chiếu bằng phân số.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

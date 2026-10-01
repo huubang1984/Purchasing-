@@ -23285,11 +23285,11 @@ gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhã
 - 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
 - Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
 
-# §S1.9101 — S4.5b: BENCHMARK GIÁ `TRUNG_VI_THEO_GOI_V1` — NHÓM KHOÁ `benchmark`, HAI BẢNG KẾT QUẢ GHI MỘT LẦN CÙNG LƯỢT CHẤM, BỘ ĐỌC CÓ CỔNG (L7; VẾ BENCHMARK CỦA L14) — ADR-9201
+# §S1.256 — S4.5b: BENCHMARK GIÁ `TRUNG_VI_THEO_GOI_V1` — NHÓM KHOÁ `benchmark`, HAI BẢNG KẾT QUẢ GHI MỘT LẦN CÙNG LƯỢT CHẤM, BỘ ĐỌC CÓ CỔNG (L7; VẾ BENCHMARK CỦA L14) — ADR-142
 
 ## 1. Vòng này là gì
 
-PR thứ hai trong ba PR của S4.5 (spec S4 §9, ADR-141 ⑵): CSDL và lõi benchmark. Một migration (`9501_benchmark_gia`), không route mới,
+PR thứ hai trong ba PR của S4.5 (spec S4 §9, ADR-141 ⑵): CSDL và lõi benchmark. Một migration (`103_benchmark_gia`), không route mới,
 màn `/chinh-sach` thêm nhóm khoá. **L7** vào sổ đăng ký (79 bất biến), **L14** nhận vế benchmark. Phần hiện ở `/mo-thau`, bộ xuất
 ADR-059 và vế benchmark của L6 ở S4.5c. Dựng trên `master` `6fedfc1` (#229 — S4.5a — đã merge).
 
@@ -23319,11 +23319,11 @@ hai đếm; lưu nhãn + chiều, không tỉ lệ; phiên bản không nhóm be
    15 mẫu hỏng (số mũ, `NaN`, số JSON, thiếu/thừa khoá, ngoài biên, năm chữ số lẻ, `00.10`, `03`, ngưỡng bằng nhau, phương pháp lạ, mảng,
    xuống dòng) bị từ chối.
 7. Ba trong năm vai giữ `evaluation.perform` không giữ `bid.view` (khoản 220).
-8. **[ĐO TRONG VÒNG] Màn `/chinh-sach` không gửi trọng số chấm** — khoản 9401 (mục 9).
+8. **[ĐO TRONG VÒNG] Màn `/chinh-sach` không gửi trọng số chấm** — khoản 329 (mục 9).
 
 ## 4. Thay đổi
 
-- **`9501_benchmark_gia`**: cột `org_procurement_policies.benchmark` + `CHECK` jsonpath `strict` dạng dương + `GRANT INSERT (benchmark)`;
+- **`103_benchmark_gia`**: cột `org_procurement_policies.benchmark` + `CHECK` jsonpath `strict` dạng dương + `GRANT INSERT (benchmark)`;
   `price_benchmark_results`, `price_benchmark_inputs` (RLS + `FORCE`, policy tenant, policy khách đóng hẳn, `SELECT` mức bảng, `INSERT` theo
   cột không `id`/`ghi_luc`); khoá ngoại `price_benchmark_results_cua_luot_cham_fk` `(org_id, evaluation_id, rfq_id, policy_id, ghi_luc) →
   rfq_evaluations (org_id, id, rfq_id, policy_id, created_at)` và `price_benchmark_inputs_cua_luot_cham_fk` `(org_id, evaluation_id, ghi_luc)
@@ -23426,29 +23426,29 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
   từ chối giá trị không phải chuỗi), SQL thô dưới `app_api` tới được; gói ghim phiên bản ấy không bao giờ chấm được. **Đóng**: hai jsonpath
   chạy `strict` (đo trên Postgres 16: hai mẫu hợp lệ vào, 11 mẫu hỏng gồm năm dạng mảng bị từ chối); sáu ca mới; đột biến M25.
 - **TRUNG-2 — `rfq_evaluations` không cổng trạng thái**: một giao dịch thô dưới `app_api` tạo lượt chấm mới ở `EVALUATING`, ở `CANCELLED`, kèm
-  nhãn tuỳ ý; bộ đọc lấy lượt mới nhất. Có từ S2.3 (bảng xếp hạng giả được y hệt). **Khoản 9402** (rổ đề xuất B). Phần của vòng này **đóng**:
-  lượt thô không hàng benchmark từng làm `docBenchmark` ném mãi ⇒ nay `THIEU_KET_QUA`; câu giới hạn của ADR-9201 sửa.
+  nhãn tuỳ ý; bộ đọc lấy lượt mới nhất. Có từ S2.3 (bảng xếp hạng giả được y hệt). **Khoản 330** (rổ đề xuất B). Phần của vòng này **đóng**:
+  lượt thô không hàng benchmark từng làm `docBenchmark` ném mãi ⇒ nay `THIEU_KET_QUA`; câu giới hạn của ADR-142 sửa.
 - **TRUNG-3 — chi phí lượt chấm** (2k + số hàng chuẩn đã bị thay lần quét toàn lịch sử hàng chuẩn, trong giao dịch giữ khoá gói): số đo ở mục 6;
   quyết định của chủ dự án (mục 9).
-- **THẤP–TRUNG-4 — `cancelled_at` do người gọi đặt** lùi mốc huỷ của gói lịch sử và đổi kết quả tính lại. **Khoản 9403** (rổ đề xuất B, cùng lớp
+- **THẤP–TRUNG-4 — `cancelled_at` do người gọi đặt** lùi mốc huỷ của gói lịch sử và đổi kết quả tính lại. **Khoản 331** (rổ đề xuất B, cùng lớp
   khoản 319).
 - **THẤP-5 — `he_so 'NaN'` qua `CHECK > 0` của `083`**, một quy đổi `NaN` trong dải làm lượt chấm ném mãi. **Đóng**: ràng buộc
   `item_uom_conversions_he_so_huu_han`; đột biến M26.
-- **GHI CHÚ-6** — đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn vòng một (không giá vòng hai): chốt trước route của S4.5c (ADR-9201).
-- **GHI CHÚ-7** — cửa sổ tháng theo lịch UTC (0/20.000 lệch với Postgres UTC; 1.110/20.000 lệch một ngày với giờ Việt Nam): ghi ở ADR-9201,
+- **GHI CHÚ-6** — đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn vòng một (không giá vòng hai): chốt trước route của S4.5c (ADR-142).
+- **GHI CHÚ-7** — cửa sổ tháng theo lịch UTC (0/20.000 lệch với Postgres UTC; 1.110/20.000 lệch một ngày với giờ Việt Nam): ghi ở ADR-142,
   `DAC-TA.md` của S4.5c phải nói UTC.
 - **GHI CHÚ-8** — cổng chỗ gọi bị vượt bằng import đổi tên. **Đóng**: ghim theo mọi tệp nhắc tên hàm, cả `ghiBenchmarkLuotCham`.
 
 ## 9. Giới hạn, nói ra
 
 - Lệch chữ spec §4.6: bảng con mang id ánh xạ, không mang id quy đổi, bí danh, phiên bản hàng chuẩn (tái lập as-of).
-- CSDL không kiểm đủ hàng hay đúng nhãn; khoản 9402. Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi hỏng ở trục khác.
-- Cuộc đua as-of chung của L1; khoản 9403 (`cancelled_at`); gói huỷ sau mốc của X vẫn vào dải.
+- CSDL không kiểm đủ hàng hay đúng nhãn; khoản 330. Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi hỏng ở trục khác.
+- Cuộc đua as-of chung của L1; khoản 331 (`cancelled_at`); gói huỷ sau mốc của X vẫn vào dải.
 - **Hiệu năng** (mục 6) — tuyến tính theo hàng chuẩn × quan sát; ở 5.000 gói, 20 dòng ⇒ ~22 s cho lượt chấm và ~19 s cho mỗi lần đọc as-of.
   Phương án cho chủ dự án: ⑴ nhận cho S4.5b, S4.5c không tính as-of ở mỗi lần đọc (tính một lần lúc `UNSEALED`, hay lưu dải); ⑵ thêm tham số
   gói cho `quan_sat_gia` — lần đọc giá của chính X thôi quét toàn lịch sử (đổi chốt *không sửa `quan_sat_gia`*); ⑶ trần số hàng chuẩn mỗi lượt
   chấm. Chưa sửa gì.
-- **Khoản 9401** — màn `/chinh-sach` không gửi trọng số chấm; trên hạ tầng thật bước trao thầu của kịch bản §11 không đi được bằng giao diện.
+- **Khoản 329** — màn `/chinh-sach` không gửi trọng số chấm; trên hạ tầng thật bước trao thầu của kịch bản §11 không đi được bằng giao diện.
   Rổ đề xuất A; chủ dự án xác nhận.
 
 ## 10. Số đo

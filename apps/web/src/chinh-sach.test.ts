@@ -99,7 +99,7 @@ describe("[S1.169 / S3.1c] ba cảnh báo của §8.1 ⑵ — không chặn", ()
   });
 });
 
-describe("[S1.9101 / S4.5b] cảnh báo tĩnh của nhóm khoá `benchmark` — không chặn", () => {
+describe("[S1.256 / S4.5b] cảnh báo tĩnh của nhóm khoá `benchmark` — không chặn", () => {
   it("mẫu mặc định không cảnh báo gì; không cấu hình thì nói ra", () => {
     expect(canhBaoBenchmark(BENCHMARK_MAC_DINH)).toEqual([]);
     expect(canhBaoBenchmark(null)).toEqual([expect.stringContaining("KHÔNG cấu hình benchmark")]);

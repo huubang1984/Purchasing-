@@ -96,7 +96,7 @@ export {
   type TraoThauBundle,
   type XuatBoBangChungInput,
 } from "./bo-bang-chung.js";
-// [S1.9101 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, một hàng sổ `BENCHMARK_READ` mỗi lần đọc.
+// [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, một hàng sổ `BENCHMARK_READ` mỗi lần đọc.
 export {
   TRANG_THAI_BENCHMARK_AS_OF,
   docBenchmark,

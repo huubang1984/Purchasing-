@@ -347,7 +347,7 @@ async function chinh(): Promise<void> {
               tiers: BAC_DEMO,
               evalComponents: TRONG_SO_DEMO,
               bafoTopN: BAFO_TOP_N_DEMO,
-              // [S1.9101 / S4.5b] Nhóm khoá `benchmark` — MẪU của spec S4 §4.1, cùng mẫu màn `/chinh-sach` điền sẵn.
+              // [S1.256 / S4.5b] Nhóm khoá `benchmark` — MẪU của spec S4 §4.1, cùng mẫu màn `/chinh-sach` điền sẵn.
               benchmark: NHOM_BENCHMARK_MAU,
               chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
               thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,

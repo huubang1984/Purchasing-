@@ -164,7 +164,7 @@ function mangObjectTuyChon(body: unknown, ten: string): readonly Readonly<Record
   return v as readonly Readonly<Record<string, unknown>>[];
 }
 
-/** [S1.9101 / S4.5b] Object các chuỗi, TUỲ CHỌN — nhóm khoá `benchmark`; tập khoá và biên là của CSDL. */
+/** [S1.256 / S4.5b] Object các chuỗi, TUỲ CHỌN — nhóm khoá `benchmark`; tập khoá và biên là của CSDL. */
 function objectChuoiTuyChon(body: unknown, ten: string): Readonly<Record<string, string>> | undefined {
   const v = truong(body, ten);
   if (v === undefined || v === null) return undefined;
@@ -891,7 +891,7 @@ const ghi: readonly BuyerWriteRoute[] = [
         tiers: mangObjectTuyChon(ctx.req.body, "tiers"),
         chiaNhoCuaSoNgay: soNguyenTuyChon(ctx.req.body, "chiaNhoCuaSoNgay"),
         thamDinhHieuLucThang: soNguyenTuyChon(ctx.req.body, "thamDinhHieuLucThang"),
-        // [S1.9101 / S4.5b] Nhóm khoá `benchmark` — cửa này kiểm hình dạng ngoài, `CHECK` của `9501` phán phần còn lại.
+        // [S1.256 / S4.5b] Nhóm khoá `benchmark` — cửa này kiểm hình dạng ngoài, `CHECK` của `103` phán phần còn lại.
         benchmark: objectChuoiTuyChon(ctx.req.body, "benchmark"),
         actorSessionId: ctx.actor.sessionId,
       });

@@ -29,7 +29,7 @@ function lopCua(sql: string): Lop | null {
 /** Tệp sản xuất có câu chạm bảng chính sách — tập KHAI, để một tệp mới phải trả lời câu hỏi của lớp. */
 const TEP_DA_KHAI: readonly string[] = [
   "packages/danh-gia/src/bo-bang-chung.ts",
-  // [S1.9101 / S4.5b] Benchmark: nhóm khoá `benchmark` của phiên bản GHIM (as-of) hay của phiên bản lượt chấm (đã ghi) — theo id.
+  // [S1.256 / S4.5b] Benchmark: nhóm khoá `benchmark` của phiên bản GHIM (as-of) hay của phiên bản lượt chấm (đã ghi) — theo id.
   "packages/danh-gia/src/doc-benchmark.ts",
   "packages/danh-gia/src/doc-bang-xep-hang.ts",
   "packages/danh-gia/src/luot-danh-gia.ts",

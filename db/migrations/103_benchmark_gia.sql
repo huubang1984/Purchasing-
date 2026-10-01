@@ -1,6 +1,6 @@
 -- ==============================================================================================
--- 9501_benchmark_gia — [S1.9101 / S4.5b của spec S4] BENCHMARK GIÁ: NHÓM KHOÁ `benchmark` CỦA CHÍNH SÁCH, BẢNG KẾT QUẢ VÀ
--- BẢNG ĐẦU VÀO (spec S4 §4.1, §4.6, §2.4 ⑾, §2.5 ⑿ ㉒; §5.1 L7, L14; ADR-9201)
+-- 103_benchmark_gia — [S1.256 / S4.5b của spec S4] BENCHMARK GIÁ: NHÓM KHOÁ `benchmark` CỦA CHÍNH SÁCH, BẢNG KẾT QUẢ VÀ
+-- BẢNG ĐẦU VÀO (spec S4 §4.1, §4.6, §2.4 ⑾, §2.5 ⑿ ㉒; §5.1 L7, L14; ADR-142)
 --
 -- Chủ dự án chốt ngày 2026-10-01 (ADR-141 ⑧ và bốn điểm của S4.5b): phương pháp `TRUNG_VI_THEO_GOI_V1` — mỗi gói một trung vị
 -- trên báo giá vị thế cuối, mốc so là trung vị của các trung vị gói; nhãn trong tập ĐÓNG năm phần tử, kể cả `KHONG_DO_DUOC` cho
@@ -14,14 +14,14 @@
 --     CHUỖI trước, nên `.double()` không bao giờ nhận `"1e3"`, `"NaN"` hay một số JSON. Cả hai vế viết DẠNG DƯƠNG
 --     (`jsonb_path_exists(... ? (điều kiện))`): dạng phủ định để lọt khoá vắng mặt (biên bản an ninh, M5 của S1.235). Và ở chế độ
 --     `strict`: chế độ `lax` mặc định tự MỞ MẢNG cho cả `like_regex` lẫn `.double()`, nên `"cua_so_thang": ["12", "99"]` qua cả biên
---     ≤ 60 rồi làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi (lượt soi đối kháng §S1.9101, TRUNG-1).
+--     ≤ 60 rồi làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi (lượt soi đối kháng §S1.256, TRUNG-1).
 -- (2) `price_benchmark_results` — MỘT hàng cho MỖI (báo giá của lượt chấm, dòng của gói). Không cột tiền: nhãn, chiều, lý do không
 --     đo được, khoá dải (hàng chuẩn, tiền tệ, cửa sổ), số đếm thành phần (n gói · m nhà cung cấp · k gói cùng người tạo · h quan sát
 --     hồi tố · số quan sát bị loại vì khác tiền tệ và vì đơn giá 0), cờ hồi tố của chính dòng.
 -- (3) `price_benchmark_inputs` — MỘT hàng cho MỖI quan sát đã vào một dải: (báo giá, dòng) khoá ngoại tới `rfq_unsealed_bids`, kèm
 --     id hàng ánh xạ đã dùng và cờ hồi tố của quan sát. Dải là của (lượt chấm, hàng chuẩn, tiền tệ) — mọi báo giá của gói X trên
 --     cùng hàng chuẩn và cùng tiền tệ so với CÙNG một dải, nên đầu vào lưu một lần cho dải, không một lần cho mỗi báo giá.
---     Lệch khỏi chữ của spec §4.6 *"cùng id mọi hàng nền đã dùng"*, nói ra (ADR-9201): bí danh đơn vị toàn cục không có id, và quy
+--     Lệch khỏi chữ của spec §4.6 *"cùng id mọi hàng nền đã dùng"*, nói ra (ADR-142): bí danh đơn vị toàn cục không có id, và quy
 --     đổi, phiên bản hàng chuẩn tái lập được bằng phép đọc as-of tại `moc_mo_gia` — hàng nền là chỉ-ghi-thêm có `ghi_luc` (L1).
 --     `quan_sat_gia` không đổi.
 -- (4) GHI ĐÚNG MỘT LẦN, TRONG GIAO DỊCH TẠO LƯỢT CHẤM — cưỡng chế bằng KHOÁ NGOẠI, không trigger: `ghi_luc` của hai bảng mới và
@@ -213,7 +213,7 @@ GRANT INSERT (org_id, evaluation_id, canonical_item_id, tien_te, bid_version_id,
 -- ============================================================================================
 -- (6) HỆ SỐ QUY ĐỔI RIÊNG PHẢI HỮU HẠN
 -- ============================================================================================
--- [lượt soi đối kháng §S1.9101 — THẤP-5] `item_uom_conversions_rut_khong_he_so` (`083`) đòi `he_so > 0`, và `'NaN' > 0` là ĐÚNG
+-- [lượt soi đối kháng §S1.256 — THẤP-5] `item_uom_conversions_rut_khong_he_so` (`083`) đòi `he_so > 0`, và `'NaN' > 0` là ĐÚNG
 -- trong Postgres — đúng lỗ `rfq_items.quantity` đã đóng ở `011`. Dưới `app_api` với phiên người quản lý dữ liệu, `he_so 'NaN'` VÀO;
 -- `quan_sat_gia` khi ấy trả đơn giá quy đổi `NaN` mang trạng thái `HOP_LE`, và lượt chấm có benchmark của mọi gói mà dải đọc tới quy
 -- đổi ấy NÉM — gói kẹt ở `UNSEALED`, không trao thầu được; khai một quy đổi đúng SAU lúc mở không cứu, vì dải đọc tại mốc. Tầng gói

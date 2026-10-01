@@ -82,7 +82,7 @@ export interface CreateProcurementPolicyInput {
   readonly chiaNhoCuaSoNgay?: number | null;
   readonly thamDinhHieuLucThang?: number | null;
   /**
-   * [S1.9101 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): sáu khoá, mọi giá trị là CHUỖI. `undefined` hay `null` ⇒ phiên bản
+   * [S1.256 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): sáu khoá, mọi giá trị là CHUỖI. `undefined` hay `null` ⇒ phiên bản
    * KHÔNG cấu hình benchmark — benchmark của gói ghim phiên bản này hiện *"chưa cấu hình"*, lượt chấm vẫn chạy. Tầng này chỉ kiểm
    * hình dạng NGOÀI (một object các chuỗi); tập khoá, biên và thứ tự ngưỡng là của `CHECK` `org_procurement_policies_benchmark_hinh_dang`.
    */
@@ -180,7 +180,7 @@ function bacJson(input: CreateProcurementPolicyInput): { bac: string | null; chi
   return { bac: JSON.stringify(mang), chiaNho, thamDinh };
 }
 
-/** [S1.9101 / S4.5b] Hình dạng NGOÀI của nhóm khoá `benchmark` — object, mọi giá trị là chuỗi. */
+/** [S1.256 / S4.5b] Hình dạng NGOÀI của nhóm khoá `benchmark` — object, mọi giá trị là chuỗi. */
 function benchmarkJson(input: CreateProcurementPolicyInput): string | null {
   const tho: unknown = input.benchmark ?? null;
   if (tho === null) return null;
@@ -247,7 +247,7 @@ export async function createProcurementPolicy(
       // [S1.169] Cùng lý do `soThanhPhan`: sổ nói phiên bản có bậc hay không và bao nhiêu bậc; ma trận nằm ở chính hàng
       // chính sách, bất biến, xuất được.
       soBac: input.tiers?.length ?? 0,
-      // [S1.9101 / S4.5b] Có cấu hình benchmark hay không — ngưỡng nằm ở chính hàng chính sách, bất biến, xuất được.
+      // [S1.256 / S4.5b] Có cấu hình benchmark hay không — ngưỡng nằm ở chính hàng chính sách, bất biến, xuất được.
       coBenchmark: benchmark !== null,
     },
   });
@@ -322,7 +322,7 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   readonly tiers: readonly Readonly<Record<string, unknown>>[] | null;
   readonly chiaNhoCuaSoNgay: number | null;
   readonly thamDinhHieuLucThang: number | null;
-  /** [S1.9101 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
+  /** [S1.256 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
   readonly benchmark: Readonly<Record<string, string>> | null;
   readonly createdBy: string;
   readonly signedBy: string | null;

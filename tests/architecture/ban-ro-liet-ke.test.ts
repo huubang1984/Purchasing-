@@ -31,7 +31,7 @@ const TEP_TS: Readonly<Record<string, string>> = {
   "packages/danh-gia/src/luot-danh-gia.ts": "ĐỌC — lượt chấm của MỘT gói (`docBaoGia`), cổng `evaluation.perform`",
   "packages/danh-gia/src/doc-bang-xep-hang.ts": "ĐỌC — bảng xếp hạng của MỘT gói, cổng `bid.view`",
   "packages/du-lieu-nen/src/anh-xa.ts": "TỒN TẠI — chỉ hỏi gói đã có hàng bản rõ chưa (L13), không đọc `payload`",
-  // [S1.9101 / S4.5b] Mốc mở giá của gói X — đúng định nghĩa `moc_goi` của `quan_sat_gia`; giá đi qua `quan_sat_gia` (dưới).
+  // [S1.256 / S4.5b] Mốc mở giá của gói X — đúng định nghĩa `moc_goi` của `quan_sat_gia`; giá đi qua `quan_sat_gia` (dưới).
   "packages/du-lieu-nen/src/benchmark-goi.ts": "MỐC — `min(unsealed_at)` của gói đang xét, không đọc `payload`",
 };
 
@@ -85,14 +85,14 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     const HAM = /\b(?:quan_sat_gia|gia_da_lo)\s*\(/u;
     const tep = [...new Set(moiCauSql().filter((c) => HAM.test(c.sql)).map((c) => c.tep))].sort();
     expect(tep, "tệp mới gọi hàm lịch sử giá: đi qua `docLichSuGia`, hay thêm tệp vào đây kèm cổng và hàng sổ của nó").toEqual([
-      // [S1.9101 / S4.5b] Benchmark của MỘT gói — không cổng trong tệp: hai chỗ gọi có cổng, ghim ở ca ngay dưới.
+      // [S1.256 / S4.5b] Benchmark của MỘT gói — không cổng trong tệp: hai chỗ gọi có cổng, ghim ở ca ngay dưới.
       "packages/du-lieu-nen/src/benchmark-goi.ts",
       "packages/du-lieu-nen/src/lich-su-gia.ts",
     ]);
   });
 
-  it("[INV-L6] [S1.9101 / S4.5b] `tinhBenchmarkGoi` chỉ được dùng ở hai chỗ có cổng — lượt chấm (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ); `ghiBenchmarkLuotCham` chỉ ở lượt chấm", () => {
-    // [lượt soi §S1.9101 — GHI CHÚ-8] Quét theo KÝ HIỆU, không theo mẫu lời gọi: `import { tinhBenchmarkGoi as t }` hay
+  it("[INV-L6] [S1.256 / S4.5b] `tinhBenchmarkGoi` chỉ được dùng ở hai chỗ có cổng — lượt chấm (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ); `ghiBenchmarkLuotCham` chỉ ở lượt chấm", () => {
+    // [lượt soi §S1.256 — GHI CHÚ-8] Quét theo KÝ HIỆU, không theo mẫu lời gọi: `import { tinhBenchmarkGoi as t }` hay
     // `const f = tinhBenchmarkGoi` vượt được một mẫu `tinhBenchmarkGoi(` — nhưng không vượt được việc tên ấy xuất hiện trong tệp.
     const goc = fileURLToPath(new URL("../../", import.meta.url));
     const tepSanXuat = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })

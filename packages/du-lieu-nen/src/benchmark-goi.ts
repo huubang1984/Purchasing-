@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5b] BENCHMARK CỦA MỘT GÓI — tầng có trạng thái quanh lõi thuần `benchmark.ts` (spec S4 §4.6, §2.5 ⑿; L7; ADR-9201).
+// [S1.256 / S4.5b] BENCHMARK CỦA MỘT GÓI — tầng có trạng thái quanh lõi thuần `benchmark.ts` (spec S4 §4.6, §2.5 ⑿; L7; ADR-142).
 //
 // KHÔNG CỔNG Ở ĐÂY, nói ra: hai hàm của tệp này là phép TÍNH và phép GHI, gọi từ đúng hai chỗ có cổng — `taoLuotDanhGia` (cổng
 // `evaluation.perform`, ghi nhãn trong giao dịch tạo lượt chấm, không trả con số nào cho người gọi) và `docBenchmark` (cổng
@@ -286,7 +286,7 @@ export interface GhiBenchmarkInput {
 
 /**
  * Ghi kết quả của MỘT lượt chấm — hai câu `INSERT`, trong giao dịch của người gọi. Khoá ngoại `ghi_luc → rfq_evaluations.created_at`
- * (`9501`) từ chối mọi lần gọi ngoài giao dịch tạo lượt chấm ấy.
+ * (`103`) từ chối mọi lần gọi ngoài giao dịch tạo lượt chấm ấy.
  */
 export async function ghiBenchmarkLuotCham(client: pg.PoolClient, orgId: string, input: GhiBenchmarkInput): Promise<void> {
   const kq = input.ketQua;

@@ -1,4 +1,4 @@
-// [S1.9101 / S4.5b] LÕI THUẦN CỦA BENCHMARK GIÁ — phương pháp `TRUNG_VI_THEO_GOI_V1` (spec S4 §4.6, §2.4 ⑾; ADR-141 ⑧; ADR-9201).
+// [S1.256 / S4.5b] LÕI THUẦN CỦA BENCHMARK GIÁ — phương pháp `TRUNG_VI_THEO_GOI_V1` (spec S4 §4.6, §2.4 ⑾; ADR-141 ⑧; ADR-142).
 //
 // Tất định: không I/O, không đồng hồ, không `double` trên giá. Đầu vào là các hàng `quan_sat_gia(mốc mở giá của X, hàng chuẩn)`
 // đã đọc — MỌI trạng thái — và mọi phép lọc nằm ở đây, không ở câu SQL: lõi này là thứ phép tính lại L7 và bộ kiểm ngoại tuyến của
@@ -63,7 +63,7 @@ const NGUONG = /^(0|[1-9][0-9]?)(\.[0-9]{1,4})?$/u;
 
 /**
  * Đọc cột `benchmark` của phiên bản chính sách. `null` ⇔ chưa cấu hình. Hình dạng có thẩm quyền là `CHECK`
- * `org_procurement_policies_benchmark_hinh_dang` (jsonpath `strict` — `lax` để lọt mảng, §S1.9101); ở đây NÉM khi giá trị lệch khỏi
+ * `org_procurement_policies_benchmark_hinh_dang` (jsonpath `strict` — `lax` để lọt mảng, §S1.256); ở đây NÉM khi giá trị lệch khỏi
  * nó — một hàng đã qua `CHECK` không tới nhánh ấy, nên nó chỉ nổ khi `CHECK` bị gỡ hay nới (fail-closed thay vì một nhãn tính trên
  * ngưỡng lạ).
  */

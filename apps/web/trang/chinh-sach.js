@@ -216,7 +216,7 @@ async function napPhienBan() {
   }
 }
 
-/** [S1.9101 / S4.5b] Một dòng cho nhóm khoá `benchmark` của một phiên bản. */
+/** [S1.256 / S4.5b] Một dòng cho nhóm khoá `benchmark` của một phiên bản. */
 function moTaBenchmark(b) {
   if (b === null || b === undefined) return "chưa cấu hình";
   return `${b.cua_so_thang} tháng · sàn ${b.san_goi} gói/${b.san_ncc} NCC · lệch ${b.nguong_lech_vua}/${b.nguong_lech_cao}`;
@@ -247,7 +247,7 @@ function bacThuong(tuSoTien) {
   return { tu_so_tien: tuSoTien, so_ncc_toi_thieu: 3, award_vai_khac_nhau: false, ky_danh_sach_moi: true, xoay_vong_n: 0, award_so_chu_ky: 1, award_vai: ["FINANCE", "DIRECTOR"], tham_dinh_truoc_trao: false, khai_xung_dot: true, dau_thau_chinh_thuc: false };
 }
 
-// [S1.9101 / S4.5b] Năm ô của nhóm khoá `benchmark`; `phuong_phap` không có ô — một phương pháp duy nhất (`9501`).
+// [S1.256 / S4.5b] Năm ô của nhóm khoá `benchmark`; `phuong_phap` không có ô — một phương pháp duy nhất (`103`).
 const O_BENCHMARK = [
   ["bm-cua-so", "cua_so_thang"],
   ["bm-san-goi", "san_goi"],

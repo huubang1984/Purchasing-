@@ -805,7 +805,7 @@ describe("phủ RLS", () => {
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
-      // [S1.9101 / S4.5b] Kết quả và đầu vào benchmark: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột (không `id`, không
+      // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột (không `id`, không
       // `ghi_luc`), không UPDATE/DELETE. `app_unseal` không có dòng nào.
       { grantee: "app_api", bang: "price_benchmark_inputs", quyen: "SELECT" },
       { grantee: "app_api", bang: "price_benchmark_results", quyen: "SELECT" },
@@ -1231,7 +1231,7 @@ describe("phủ RLS", () => {
       // UPDATE, cùng lý do đã ghi cho `strict_blind_mode`: bảng chỉ ghi thêm, đổi chính sách là thêm
       // một phiên bản.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "bafo_top_n", quyen: "INSERT" },
-      // [S1.9101 / S4.5b] Nhóm khoá `benchmark` — cùng lý do: INSERT, không UPDATE.
+      // [S1.256 / S4.5b] Nhóm khoá `benchmark` — cùng lý do: INSERT, không UPDATE.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "benchmark", quyen: "INSERT" },
       // [S1.156 / S3.1a] Bậc giá trị và hai cột mức chính sách — cùng lý do: INSERT, không UPDATE.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "chia_nho_cua_so_ngay", quyen: "INSERT" },
@@ -1281,7 +1281,7 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
-      // [S1.9101 / S4.5b] Kết quả và đầu vào benchmark: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cua_luot_cham_fk`).
+      // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cua_luot_cham_fk`).
       { grantee: "app_api", bang: "price_benchmark_inputs", cot: "anh_xa_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_inputs", cot: "bid_version_id", quyen: "INSERT" },
       { grantee: "app_api", bang: "price_benchmark_inputs", cot: "canonical_item_id", quyen: "INSERT" },
@@ -2103,7 +2103,7 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",
-      // [S1.9101 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
+      // [S1.256 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
       "price_benchmark_inputs", "price_benchmark_results",
       // [S1.201 / S3.6a] Nhóm hàng là việc nội bộ bên mua — nhà cung cấp không đọc được gói mình dự thuộc nhóm nào, hay nhóm nào
       // đã ngừng dùng.

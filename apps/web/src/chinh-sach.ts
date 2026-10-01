@@ -152,7 +152,7 @@ export function soNguoiToiThieu(bac: readonly Bac[], nguongKep: string): readonl
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.5b] NHÓM KHOÁ `benchmark` — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH (spec S4 §4.1, §2.5 ㉒)
+// [S1.256 / S4.5b] NHÓM KHOÁ `benchmark` — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH (spec S4 §4.1, §2.5 ㉒)
 // ----------------------------------------------------------------------------------------------
 // Mẫu là mặc định GIẢ ĐỊNH của spec S4 §4.1 — bản chép của `NHOM_BENCHMARK_MAU` (`packages/du-lieu-nen/src/benchmark.ts`), khoá
 // với nó ở `tests/architecture/bac-mac-dinh-dong-bo.test.ts`: màn không import được gói. Cảnh báo là lời nói với người khai, không
@@ -178,7 +178,7 @@ export const BENCHMARK_MAC_DINH: NhomBenchmark = {
   phuong_phap: "TRUNG_VI_THEO_GOI_V1",
 };
 
-/** Biên của cảnh báo — GIẢ ĐỊNH, cùng hạng mặc định: hiệu chỉnh sau pilot. Ngưỡng tỉ lệ 10^4 (bốn chữ số lẻ, `9501`). */
+/** Biên của cảnh báo — GIẢ ĐỊNH, cùng hạng mặc định: hiệu chỉnh sau pilot. Ngưỡng tỉ lệ 10^4 (bốn chữ số lẻ, `103`). */
 const SAN_TOI_THIEU = 3;
 const NGUONG_VUA_RONG = 2000n;
 const CUA_SO_DAI = 24;

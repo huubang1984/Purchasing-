@@ -582,7 +582,7 @@ describe("hình dạng file migration", () => {
       "organizations",
       "otp_rate_limits",
       "outbox_jobs",
-      // [S1.9101 / S4.5b / `9501_benchmark_gia`] Kết quả và đầu vào benchmark — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới lượt
+      // [S1.256 / S4.5b / `103_benchmark_gia`] Kết quả và đầu vào benchmark — chỉ-ghi-thêm bằng quyền, khoá ngoại hợp thành tới lượt
       // chấm (cùng giao dịch), policy khách ĐÓNG HẲN.
       "price_benchmark_inputs",
       "price_benchmark_results",

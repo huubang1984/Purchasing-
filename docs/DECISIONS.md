@@ -11010,17 +11010,17 @@ sau; ⑹ `opened_at` do người gọi đặt thành khoản 319, không sửa t
 - **Nhánh *không có phiên bản ghim* không có ca riêng ở tầng gói** — dựng nó cần một tổ chức không phiên bản nào trước lúc mở gói; vế CSDL
   của nó đi chung một vế `v_ghim IS NULL OR … IS DISTINCT FROM` với ca đã đo.
 
-## ADR-9201 — S4.5b: benchmark giá `TRUNG_VI_THEO_GOI_V1` — nhóm khoá `benchmark` của phiên bản chính sách; kết quả và đầu vào ghi đúng một lần trong giao dịch tạo lượt chấm (khoá ngoại tới `created_at`), không cột tiền; mỗi (báo giá, dòng) một nhãn, kể cả `KHONG_DO_DUOC`; giá của chính dòng đọc lúc tính
+## ADR-142 — S4.5b: benchmark giá `TRUNG_VI_THEO_GOI_V1` — nhóm khoá `benchmark` của phiên bản chính sách; kết quả và đầu vào ghi đúng một lần trong giao dịch tạo lượt chấm (khoá ngoại tới `created_at`), không cột tiền; mỗi (báo giá, dòng) một nhãn, kể cả `KHONG_DO_DUOC`; giá của chính dòng đọc lúc tính
 
 **Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-01, cả bốn theo đề xuất: ⑴ bảng con lưu
 THAM CHIẾU quan sát — (báo giá, dòng) khoá ngoại tới `rfq_unsealed_bids` — cùng id hàng ánh xạ và cờ hồi tố; quy đổi, bí danh và phiên
 bản hàng chuẩn tái lập bằng phép đọc as-of tại mốc đã lưu; `quan_sat_gia` không đổi; ⑵ nhãn thứ năm `KHONG_DO_DUOC` kèm lý do, một hàng
 cho MỌI dòng của MỌI báo giá; ⑶ đơn giá của chính dòng đọc LÚC TÍNH, lưu kèm cờ hồi tố (ngoại lệ `SAU_MO_GIA` của L1), còn dải đọc tại mốc
 mở giá của gói; ⑷ chi tiết theo đề xuất — luật nhãn, biên ngưỡng, nhóm khoá trên `/chinh-sach` có mẫu và cảnh báo tĩnh, bộ đọc có cổng,
-phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 1. Chốt phương pháp của ADR-141 ⑧ áp nguyên · **[S1.9101]** ·
+phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 1. Chốt phương pháp của ADR-141 ⑧ áp nguyên · **[S1.256]** ·
 **Liên quan:** ADR-141 (phiên bản ghim, chốt phương pháp), ADR-136 (`quan_sat_gia`), ADR-140 ⑦ (bộ đọc có cổng, hàng sổ), ADR-095
 (lịch sử giá là hàm as-of), ADR-053 ⑴ (số là chuỗi), ADR-017 (ứng dụng tính, CSDL lưu) · **Spec:** S4 §4.1, §4.6, §2.4 ⑾, §2.5 ⑿ ㉒,
-§5.1 L7, L14, §9 S4.5b · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§5.1 L7, L14, §9 S4.5b · **Biên bản:** `evidence/security-reviews.md` §S1.256
 
 ### Bối cảnh — bảy phép đo trước khi viết
 
@@ -11041,7 +11041,7 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
 
 ### Quyết định
 
-1. **Nhóm khoá `org_procurement_policies.benchmark jsonb`** (`9501_benchmark_gia`) — sáu khoá, mọi giá trị là CHUỖI: `cua_so_thang`
+1. **Nhóm khoá `org_procurement_policies.benchmark jsonb`** (`103_benchmark_gia`) — sáu khoá, mọi giá trị là CHUỖI: `cua_so_thang`
    [1, 60], `san_goi` [1, 50], `san_ncc` [1, 50], `nguong_lech_vua`/`nguong_lech_cao` dương tối đa bốn chữ số lẻ với
    `0 < vừa < cao ≤ 10`, `phuong_phap` = `TRUNG_VI_THEO_GOI_V1`. `CHECK` `org_procurement_policies_benchmark_hinh_dang` ở dạng dương: tập khoá
    đúng sáu (`benchmark - ARRAY[…] = '{}'`), `like_regex` trên chuỗi, rồi `.double()` cho biên và thứ tự (spec §2.5 ㉒ — ngưỡng, không phải
@@ -11087,16 +11087,16 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
   hàng chuẩn — các hàng ấy tái lập bằng phép đọc as-of tại `moc_mo_gia`, vì mọi bảng nền là chỉ-ghi-thêm có `ghi_luc` do trigger đặt (L1).
 - **CSDL không kiểm ĐỦ hàng hay ĐÚNG nhãn.** Khoá ngoại buộc *cùng giao dịch, cùng gói, cùng phiên bản* với MỘT hàng `rfq_evaluations` —
   không buộc hàng ấy là của `taoLuotDanhGia`. ~~Một đường ghi thứ hai dưới `app_api` TRONG CHÍNH giao dịch tạo lượt chấm vẫn ghi được nhãn
-  tuỳ ý.~~ **[lượt soi §S1.9101, TRUNG-2] Câu vừa gạch hẹp hơn thực tế:** `rfq_evaluations` không có cổng trạng thái (`057`), nên một
+  tuỳ ý.~~ **[lượt soi §S1.256, TRUNG-2] Câu vừa gạch hẹp hơn thực tế:** `rfq_evaluations` không có cổng trạng thái (`057`), nên một
   giao dịch thô dưới `app_api` TẠO được một lượt chấm mới ở bất kỳ trạng thái nào, kèm hàng xếp hạng và nhãn tuỳ ý, và mọi bộ đọc lấy lượt
-  mới nhất — **khoản 9402** (có từ S2.3; bảng xếp hạng giả được y hệt). Phép tính lại L7 là lớp phát hiện. Lượt chấm thô không hàng
+  mới nhất — **khoản 330** (có từ S2.3; bảng xếp hạng giả được y hệt). Phép tính lại L7 là lớp phát hiện. Lượt chấm thô không hàng
   benchmark dưới phiên bản có cấu hình đọc ra `THIEU_KET_QUA`, không ném.
 - **Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi nó còn hỏng ở trục khác** (dòng bỏ trống, lệch tổng) — trạng thái thật cần đọc hết tổ chức.
 - **Cuộc đua as-of chung của L1**: một hàng nền ghi ở giao dịch khác với `ghi_luc` trước `now()` của lượt chấm mà commit SAU lần đọc thì phép
   tính lại về sau thấy nó.
 - **Gói huỷ sau mốc của X vẫn vào dải** — luật một chỗ của `quan_sat_gia` (ADR-136 ③: loại TỪ LÚC huỷ). Mốc huỷ do người gọi đặt dưới
-  `app_api` lùi được về trước mốc của X và đổi kết quả tính lại — **khoản 9403** (cùng lớp khoản 319).
-- **[lượt soi §S1.9101, TRUNG-1, đóng trong vòng]** `CHECK` nhóm khoá ở chế độ jsonpath `lax` để lọt giá trị dạng MẢNG (`["12", "99"]`
+  `app_api` lùi được về trước mốc của X và đổi kết quả tính lại — **khoản 331** (cùng lớp khoản 319).
+- **[lượt soi §S1.256, TRUNG-1, đóng trong vòng]** `CHECK` nhóm khoá ở chế độ jsonpath `lax` để lọt giá trị dạng MẢNG (`["12", "99"]`
   qua cả biên) và làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi; nay `strict`. **[THẤP-5, đóng trong vòng]** `item_uom_conversions.he_so`
   nhận `'NaN'` (`'NaN' > 0` là đúng) — một quy đổi `NaN` trong dải làm lượt chấm ném mãi; nay có ràng buộc hữu hạn.
 - **Cửa sổ tháng tính theo lịch UTC** — khớp Postgres khi `TimeZone = UTC` (0/20.000 lệch, lượt soi); theo giờ `Asia/Ho_Chi_Minh` lệch một
@@ -11106,6 +11106,6 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
 - **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn ỨNG VIÊN của gói (giá của X tại mốc đọc, dải tại mốc mở giá). Đo ở 5.000 gói
   × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
-  18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.9101). Hướng xử lý chờ chủ dự án trước S4.5c — đọc
+  18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.256). Hướng xử lý chờ chủ dự án trước S4.5c — đọc
   as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy.
-- **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 9401) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.
+- **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.

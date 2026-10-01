@@ -1,4 +1,4 @@
-// [S1.9101 / S4.5b] SỐ THẬP PHÂN CHÍNH XÁC cho lõi benchmark (ADR-141 ⑧: *"số thập phân chính xác dạng chuỗi"*).
+// [S1.256 / S4.5b] SỐ THẬP PHÂN CHÍNH XÁC cho lõi benchmark (ADR-141 ⑧: *"số thập phân chính xác dạng chuỗi"*).
 //
 // Đơn giá quy đổi của `quan_sat_gia` là `numeric` với số chữ số lẻ THAY ĐỔI (`thanh_tien / (so_luong * he_so)`), nên lối bigint
 // co giãn theo một số chữ số lẻ cố định của `chi-phi-hieu-dung.ts` không đủ. Ở đây một số là `m / 10^s` — `m` bigint, `s` số
