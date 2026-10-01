@@ -270,6 +270,19 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
 4. **Lượt soi đối kháng năm lăng kính** (an ninh, đúng đắn, xanh giả, cổng CI, tài liệu) tìm thêm những chỗ công cụ nói
    nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.163 mục 9 kê từng điểm và cách sửa.
 
+## 6b. **[S1.9102]** Lượt diễn tập ngày 2026-10-01 — trên `master` `fc0dcc75`, rồi trên mã đã sửa
+
+| Phép đo | Kết quả |
+|---|---|
+| Chế độ nhanh trên `fc0dcc75` | **10/10**, cô lập 2/2, chặn đúng 16/16, vào sổ 15/16, biên nhận 35/35, bộ bằng chứng 5/5 — khớp lượt S1.168 |
+| Kịch bản trình diễn §5 trên Chromium | đi hết: nộp ở 375px, số báo giá bị giấu, hai chữ ký mở thầu, bảng so sánh, duyệt trao thầu, bộ bằng chứng kiểm độc lập `ok=true` |
+| Trọn câu §11 trên Chromium (gói mới, ba nhà cung cấp mời qua thư, nộp ở 375px) | đi hết **trừ một bước**: đề xuất trao thầu đòi id phiên bản mà không bảng nào in — khoản 9401 |
+| Phát hiện | 9401 (id phiên bản), 9402 (người duyệt ký lên khối trống), 9403 (ô đơn giá bị cắt ở 320–414px), 9404 (403 thô), 9405 (công cụ trình diễn) |
+| Chế độ chậm SX-06 | lượt đầu hỏng với `28P01` vì chung máy chủ Postgres với cụm trình diễn (khoản 9405 ⑶); chạy lại trên máy chủ riêng: **1/1**, 62 phút, đúng một hàng `BID_DEADLINE_DENIED` |
+| Sau khi sửa | chế độ nhanh 10/10; XD-03 đi từ mở thầu tới trao thầu CHỈ bằng chuột; ô đơn giá 252–346px ở 320–414px, không tràn ngang |
+
+Chi tiết: biên bản §S1.9102.
+
 ## 7. Thang bậc tới pilot thật — trả lời thẳng cho "không ai nhận pilot"
 
 Người ta từ chối pilot vì nó đòi *dữ liệu thật + nhà cung cấp thật + quy trình thật* cùng một lúc. Thang dưới tách ba thứ
