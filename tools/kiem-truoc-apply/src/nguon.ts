@@ -7,7 +7,7 @@
 // Vì sao AWS CLI chứ không SDK: người vận hành đã có CLI và profile SSO (APPLY-LAN-DAU 0.1); tool không thêm phụ thuộc.
 // ==============================================================================================
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { TEN_ANH, type BienStack90, type CongAws, type HangSo, type MoTaSecret, type TenAnh } from "./luat.js";
 
 /** Biểu thức đưa vào `terraform console`: một chuỗi JSON gồm biến cần kiểm và hằng số của `module.chung`. */
@@ -107,8 +107,31 @@ function chay(lenh: string, thamSo: readonly string[], vao?: string): string {
   }
 }
 
-export function docBienTerraform(terraform: string, thuMucStack: string, varFile: string): { bien: BienStack90; hang: HangSo } {
-  return giaiMaConsole(chay(terraform, [`-chdir=${thuMucStack}`, "console", "-no-color", `-var-file=${varFile}`], `${BIEU_THUC_CONSOLE}\n`));
+/**
+ * [S1.252 — đo trên Terraform 1.13.3] Biến trượt `validation` của stack (`ten_mien` còn `<…>`, `anh` ghi thẻ thay
+ * digest ở 6.3…) mà `terraform console` VẪN THOÁT 0: lý do ra stderr, còn stdout mở đầu bằng "Warning: Due to the problems
+ * above…" rồi mới tới giá trị. Đọc riêng stdout thì người vận hành chỉ nghe "stdout không phải JSON" kèm lời gợi ý
+ * `terraform init` — sai hướng, và lý do thật bị vứt. Lỗi này mang stderr ấy.
+ */
+export class TerraformTuChoiBienError extends TienTrinhError {}
+
+/** `lenh`: chương trình và các tham số đứng trước `-chdir` — mặc định `terraform`; test đưa `[node, terraform-gia.mjs]`. */
+export function docBienTerraform(
+  thuMucStack: string,
+  varFile: string,
+  lenh: readonly [string, ...string[]] = ["terraform"],
+): { bien: BienStack90; hang: HangSo } {
+  const [chuongTrinh, ...truoc] = lenh;
+  // spawnSync thay `chay`: lần thoát 0 vẫn phải đọc được stderr.
+  const r = spawnSync(chuongTrinh, [...truoc, `-chdir=${thuMucStack}`, "console", "-no-color", `-var-file=${varFile}`], {
+    encoding: "utf8",
+    input: `${BIEU_THUC_CONSOLE}\n`,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  const stderr = (r.stderr ?? "").trim().slice(0, 2000);
+  if (r.error !== undefined || r.status !== 0) throw new TienTrinhError(`${chuongTrinh} console that bai`, stderr);
+  if (/^Error: /mu.test(r.stderr)) throw new TerraformTuChoiBienError("terraform tu choi bien", stderr);
+  return giaiMaConsole(r.stdout);
 }
 
 /** Tên lỗi AWS trong stderr của CLI: `An error occurred (ResourceNotFoundException) when calling …`. */
