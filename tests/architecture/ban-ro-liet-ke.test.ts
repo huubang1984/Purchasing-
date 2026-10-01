@@ -77,7 +77,7 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     );
   });
 
-  it("[INV-L6] [S1.9101 / lượt soi T2] chỉ `docLichSuGia` gọi `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất — đường đọc DUY NHẤT, sau cổng `bid.view` và kèm hàng sổ", () => {
+  it("[INV-L6] [S1.251 / lượt soi T2] chỉ `docLichSuGia` gọi `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất — đường đọc DUY NHẤT, sau cổng `bid.view` và kèm hàng sổ", () => {
     // `app_api` có EXECUTE trên hai hàm (`096`), và `quan_sat_gia(now(), NULL)` trả giá của CẢ tổ chức. Một bộ đọc thứ hai — benchmark
     // của S4.5, một báo cáo — gọi hàm mà không có cổng thì mọi lớp khác vẫn xanh: lớp liệt kê ở trên chỉ thấy tên BẢNG bản rõ.
     const HAM = /\b(?:quan_sat_gia|gia_da_lo)\s*\(/u;

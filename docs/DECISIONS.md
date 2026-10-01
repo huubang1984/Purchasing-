@@ -10822,17 +10822,17 @@ với hai nhãn, băm hiện tại, hai nhánh trùng khít, tập hàm chạm b
 
 ---
 
-## ADR-9201 — S4.4b: đường đọc lịch sử giá `GET /items/:itemId/price-history` (cổng `bid.view` trong hàm, một hàng sổ mỗi lần đọc, `agent: false`); bộ quét giá chung trên bốn loại quan hệ, có kim đơn giá; ba gói đã mở của `gieo:demo` qua worker thật
+## ADR-140 — S4.4b: đường đọc lịch sử giá `GET /items/:itemId/price-history` (cổng `bid.view` trong hàm, một hàng sổ mỗi lần đọc, `agent: false`); bộ quét giá chung trên bốn loại quan hệ, có kim đơn giá; ba gói đã mở của `gieo:demo` qua worker thật
 
 **Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-01, cả bốn theo đề xuất: ⑴ phản hồi trả
 MỌI quan sát của hàng chuẩn kèm `trangThai`, `hoiTo`, `sauMoc`, cộng số đếm theo trạng thái; chỉ `supplierId`, không tên nhà cung cấp,
 không `payload`; mốc = `now()`, không `?moc=`, không phân trang; ⑵ không màn ở S4.4b (màn là việc của S4.5, `/mo-thau`); sổ: hành động
 `PRICE_HISTORY_READ`, payload `{itemId, soQuanSat, viewedBySessionId}` — không giá; ⑶ BỐN bộ quét giá (không phải năm — đo dưới) nhận
 kim đơn giá và quét cả view, materialized view, kèm đối chứng dương trên đối tượng dựng lúc chạy; `db/unique-oracle.int` giữ nguyên;
-⑷ ba gói đã mở của `gieo:demo` qua worker THẬT chạy làm tiến trình con, không nới hàng rào giải mã · **[S1.9101]** · **Liên quan:**
+⑷ ba gói đã mở của `gieo:demo` qua worker THẬT chạy làm tiến trình con, không nới hàng rào giải mã · **[S1.251]** · **Liên quan:**
 ADR-136 (ba hàm của lịch sử giá, L5), ADR-095 (hàm as-of, không bảng thứ ba), ADR-102 (`COMPARISON_VIEWED` — hàng sổ trên chính giao
 dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`), ADR-039 (`agent`), ADR-054, ADR-044 (`gieo:demo`), ADR-006/062 (G1)
-· **Spec:** S4 §4.5, §3.5, §2.1, §2.5 ⒅ ㉑, §5.1 L6, §9 · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+· **Spec:** S4 §4.5, §3.5, §2.1, §2.5 ⒅ ㉑, §5.1 L6, §9 · **Biên bản:** `evidence/security-reviews.md` §S1.251
 
 ### Bối cảnh — năm phép đo trước khi viết
 
@@ -10889,12 +10889,12 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
    nhóm hàng RIÊNG — chung nhóm với gói 9 tỷ hay vượt cận ấy sẽ bắn tín hiệu chia nhỏ (K10a) chặn gói thứ ba. Hai biến môi trường mới
    bắt buộc: `TRUSTPROCURE_SEED_WORKER_DATABASE_URL` (`app_unseal_login`, không phải URL đặc quyền) và cặp
    `TRUSTPROCURE_RECEIPT_SIGNING_KEYS`/`_ACTIVE` của `api` (biên nhận kiểm chứng được như mọi biên nhận khác); đọc cả ba TRƯỚC khi gieo.
-   **[lượt soi §S1.9101]** Worker liệt kê MỌI tổ chức của cụm, nên công cụ từ chối — trước khi gieo gì, và lần nữa ngay trước khi bật
+   **[lượt soi §S1.251]** Worker liệt kê MỌI tổ chức của cụm, nên công cụ từ chối — trước khi gieo gì, và lần nữa ngay trước khi bật
    worker — khi cụm có việc `UNSEAL_RFQ` hay `BREAK_GLASS_UNSEAL_ALERT` đang chờ của tổ chức khác (worker con sẽ mở khoá của họ bằng
    vòng khoá của lượt gieo, và giao cảnh báo break-glass của họ vào một thư mục tạm). Môi trường của tiến trình con là danh sách CHO
    PHÉP (đường dẫn, thư mục nhà và tạm, ngôn ngữ, múi giờ) cộng đúng các biến worker đòi — không mang bí mật nào khác của người gọi;
    cha thoát thì worker bị giết; thư mục tạm bị xoá khi xong sạch.
-7. **Đường đọc DUY NHẤT** (lượt soi §S1.9101): `tests/architecture/ban-ro-liet-ke.test.ts` đòi tập tệp TypeScript sản xuất có câu SQL
+7. **Đường đọc DUY NHẤT** (lượt soi §S1.251): `tests/architecture/ban-ro-liet-ke.test.ts` đòi tập tệp TypeScript sản xuất có câu SQL
    gọi `quan_sat_gia` hay `gia_da_lo` đúng bằng `packages/du-lieu-nen/src/lich-su-gia.ts`. `app_api` có `EXECUTE` trên cả hai, và
    `quan_sat_gia(now(), NULL)` trả giá của cả tổ chức: một bộ đọc thứ hai không cổng (benchmark của S4.5, một báo cáo) sẽ đi qua mọi
    lớp khác. Bộ dò số của kịch bản 41 đọc thêm mọi lá SỐ của thân JSON (một mảng số trần là một mẩu cho biểu thức chính quy), và
@@ -10905,9 +10905,9 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
 - **Một vòng BAFO đang mở rút CẢ gói khỏi lịch sử**, không chỉ vòng hai: `gia_da_lo` (ADR-136 ③) đòi mọi vòng mở trước mốc đã mở niêm
   phong. Vị thế cuối của top-2 chưa biết, nên không quan sát nào của gói là vị thế cuối. Kịch bản 41 ghim điều ấy ở `BAFO_OPEN`.
 - **Mốc `now()` không đo được bằng một đột biến**: đọc tại `'infinity'` cho cùng kết quả trên dữ liệu đã commit — không hàng nền nào
-  ghi sau `now()` của giao dịch đọc. Tương đương, nói ra (§S1.9101). Và `now()` là lúc BẮT ĐẦU giao dịch đọc: một lần mở vòng BAFO
+  ghi sau `now()` của giao dịch đọc. Tương đương, nói ra (§S1.251). Và `now()` là lúc BẮT ĐẦU giao dịch đọc: một lần mở vòng BAFO
   commit giữa `BEGIN` của người đọc và câu `quan_sat_gia` có `opened_at` ≥ mốc, nên lần đọc ấy còn trả quan sát vòng một của gói —
-  vài mili giây, và là giá chính người giữ `bid.view` đã đọc được ngay trước lần mở vòng (lượt soi §S1.9101).
+  vài mili giây, và là giá chính người giữ `bid.view` đã đọc được ngay trước lần mở vòng (lượt soi §S1.251).
 - **`AWARDED` có trong lịch sử** dù bảng so sánh đóng ở trạng thái ấy — có chủ đích (ADR-136 ③: đóng bảng so sánh là luồng màn, không
   canh một bí mật nào).
 - **Bộ quét giá dùng `LIKE`** mà không thoát `_`, `%`: một kim chứa chúng chỉ khớp RỘNG hơn (không mù); các kim hôm nay không có `%`.
@@ -10916,7 +10916,7 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
 - **Lượt quét route hỏi hàng chuẩn thật, nhưng vế ấy không có khẳng định riêng** — trả về UUID giả thì lượt quét vẫn xanh (404). Lời
   khai L6 dựa vào bốn ca `[INV-L6]` hỏi thẳng route, không vào lượt quét.
 - **Bộ quét chỉ đọc schema `public`** — như bốn bản chép cũ; hôm nay không quan hệ nào ở schema khác.
-- **`gieo:demo` không có test tự động**: đo tay cả hai chế độ trên một cụm Postgres 16 mới (biên bản §S1.9101 mục 5). Bộ OTP của ba gói
+- **`gieo:demo` không có test tự động**: đo tay cả hai chế độ trên một cụm Postgres 16 mới (biên bản §S1.251 mục 5). Bộ OTP của ba gói
   dùng một vòng pepper RIÊNG của lượt gieo — mã phát và mã đối chiếu cùng tiến trình, phiên khách dùng một lần rồi gói đóng.
 - **Không phân trang**: giới hạn hiệu năng của ADR-136 ⑧ (p95 dưới ngưỡng giả định 500 ms tới ~1.200 quan sát mỗi lần đọc) là giới
   hạn của route. S4.5 đo lại trên dữ liệu pilot.

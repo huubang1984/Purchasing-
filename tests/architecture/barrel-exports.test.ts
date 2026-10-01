@@ -1115,7 +1115,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docHangDoi",
   "ghiAnhXa",
   "taoHangChuanVaAnhXa",
-  // [S1.9101 / S4.4b] Lịch sử giá của một hàng chuẩn — hàm đọc CÓ CỔNG `bid.view` và tập đóng sáu trạng thái của `quan_sat_gia`.
+  // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — hàm đọc CÓ CỔNG `bid.view` và tập đóng sáu trạng thái của `quan_sat_gia`.
   "TRANG_THAI_QUAN_SAT",
   "docLichSuGia",
 ];
@@ -1193,7 +1193,7 @@ const DANH_SACH_TRANG_TEST_SUPPORT = [
   "startPostgres",
   "taoBoKyNeoThuNghiem",
   "withMigratedDatabase",
-  // [S1.9101 / S4.4b] Bộ quét giá dạng rõ trên MỌI quan hệ (bảng, bảng cha phân mảnh, view, materialized view) — một bản cho bốn
+  // [S1.251 / S4.4b] Bộ quét giá dạng rõ trên MỌI quan hệ (bảng, bảng cha phân mảnh, view, materialized view) — một bản cho bốn
   // kịch bản đo A3; chạy trên pool chủ cụm người gọi truyền vào.
   "RELKIND_QUET_GIA",
   "quetGiaMoiQuanHe",

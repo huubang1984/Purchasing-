@@ -64,7 +64,7 @@ export {
   type GhiAnhXaInput,
   type KetQuaLuotChuanHoa,
 } from "./anh-xa.js";
-// [S1.9101 / S4.4b] Lịch sử giá của một hàng chuẩn — cổng `bid.view`, mỗi lần đọc một hàng sổ (L6 vế lịch sử).
+// [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — cổng `bid.view`, mỗi lần đọc một hàng sổ (L6 vế lịch sử).
 export {
   TRANG_THAI_QUAN_SAT,
   docLichSuGia,

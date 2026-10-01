@@ -362,7 +362,7 @@ async function moThau(rfqId: string, banRo: readonly (readonly [string, unknown]
 }
 
 /**
- * Một gói thầu ở `UNSEALED` với các báo giá đã mở mang đúng những số tiền cho trước. [S1.9101] `donGia` khác `null`: mỗi phong bì
+ * Một gói thầu ở `UNSEALED` với các báo giá đã mở mang đúng những số tiền cho trước. [S1.251] `donGia` khác `null`: mỗi phong bì
  * mang thêm `lines` như trình duyệt dựng (`nop-thau.js`) — một dòng, `unitPrice` cho trước, `amount` bằng tổng.
  */
 async function goiDaMo(
@@ -893,12 +893,12 @@ describe("[S1.106 / S2.4] đọc bảng xếp hạng", { timeout: 180000 }, () =
     // Tập được viết VÉT CẠN và CHÍNH XÁC: dù chủ dự án chọn hướng nào, dòng này cũng đỏ và buộc
     // người sửa đọc lại quyết định. Xem khoản 224 — ĐANG MỞ, chờ quyết định của chủ dự án.
     const GIA = "777123456.00";
-    // [S1.9101 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅): dòng của gói có số lượng 10, nên đơn giá = tổng / 10. Lượt chấm đọc TỔNG; nó
+    // [S1.251 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅): dòng của gói có số lượng 10, nên đơn giá = tổng / 10. Lượt chấm đọc TỔNG; nó
     // không được để lại đơn giá ở đâu — tập của kim này chỉ có bảng bản rõ, không có `rfq_evaluation_lines`.
     const DON_GIA = "77712345.60";
     const { rfqId } = await goiDaMo([[GIA, "VND"]], TP_GIA, 0, DON_GIA);
     await withTenant(apiPool, orgA, (c) => taoLuotDanhGia(c, orgA, { rfqId, actorSessionId: sYc }, apiPool));
-    // ~~`relkind IN ('r', 'p')`~~ [S1.9101] bộ quét chung, cả view và materialized view (`@trustprocure/test-support`, `quet-gia.ts`).
+    // ~~`relkind IN ('r', 'p')`~~ [S1.251] bộ quét chung, cả view và materialized view (`@trustprocure/test-support`, `quet-gia.ts`).
     const tong = await quetGiaMoiQuanHe(db.pool, GIA);
     expect(tong.soQuanHe, "chống rỗng ruột: không đọc được bảng nào").toBeGreaterThan(20);
     expect(tong.dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);

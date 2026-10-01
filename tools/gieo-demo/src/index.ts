@@ -108,7 +108,7 @@ function docVongKhoa(): MasterKeyRing {
 }
 
 /**
- * [S1.9101 / S4.4b] Bộ ký biên nhận — CÙNG hai biến, cùng định dạng `<kid>=<base64 PKCS8 DER>,...` với `apps/api/src/cau-hinh.ts`:
+ * [S1.251 / S4.4b] Bộ ký biên nhận — CÙNG hai biến, cùng định dạng `<kid>=<base64 PKCS8 DER>,...` với `apps/api/src/cau-hinh.ts`:
  * biên nhận của ba gói đã mở (`goi-da-mo.ts`) ký bằng đúng khoá `api` công bố, nên kiểm chứng được như mọi biên nhận khác.
  */
 function docBoKyBienNhan(): ReceiptSigner {
@@ -212,7 +212,7 @@ const S3 = process.argv.slice(2).includes("--s3");
 async function chinh(): Promise<void> {
   const url = bat("TRUSTPROCURE_SEED_DATABASE_URL");
   const vong = docVongKhoa();
-  // [S1.9101 / S4.4b] Ba gói đã mở đi qua worker THẬT: worker kết nối bằng vai đăng nhập của CHÍNH nó (`app_unseal_login`), không
+  // [S1.251 / S4.4b] Ba gói đã mở đi qua worker THẬT: worker kết nối bằng vai đăng nhập của CHÍNH nó (`app_unseal_login`), không
   // bằng URL đặc quyền của công cụ; biên nhận ký bằng khoá của `api`. Đọc cả ba TRƯỚC khi gieo gì — thiếu thì dừng sớm, không để lại
   // một tổ chức dở dang.
   const urlWorker = bat("TRUSTPROCURE_SEED_WORKER_DATABASE_URL");
@@ -238,7 +238,7 @@ async function chinh(): Promise<void> {
   });
   try {
     await migrate(pool, MIGRATIONS_DIR);
-    // [S1.9101 / lượt soi T1] Trước khi gieo GÌ: worker con của ba gói đã mở nhận việc của mọi tổ chức (`goi-da-mo.ts`).
+    // [S1.251 / lượt soi T1] Trước khi gieo GÌ: worker con của ba gói đã mở nhận việc của mọi tổ chức (`goi-da-mo.ts`).
     await tuChoiKhiCoViecCuaToChucKhac(pool, null);
 
     const q = async <T extends Record<string, unknown>>(sql: string, tham: readonly unknown[] = []): Promise<T> => {
@@ -413,7 +413,7 @@ async function chinh(): Promise<void> {
       return daMoi;
     };
     const moiTruocKhiKy = S3 ? await withTenant(pool, org, taoNccVaMoi) : [];
-    /** [S1.9101 / S4.4b] Nhà cung cấp của gói chính — ba người đầu được mời lại ở ba gói đã mở. */
+    /** [S1.251 / S4.4b] Nhà cung cấp của gói chính — ba người đầu được mời lại ở ba gói đã mở. */
     const nhaCungCapGoiChinh: NhaCungCapGieo[] = [...moiTruocKhiKy];
 
     await pool.query(
@@ -530,7 +530,7 @@ async function chinh(): Promise<void> {
         })()
       : [];
 
-    // [S1.9101 / S4.4b] Ba gói đã mở niêm phong qua đường thật (`goi-da-mo.ts`), để lịch sử giá của ba hàng chuẩn có quan sát.
+    // [S1.251 / S4.4b] Ba gói đã mở niêm phong qua đường thật (`goi-da-mo.ts`), để lịch sử giá của ba hàng chuẩn có quan sát.
     const nguoi = (dau: string): { readonly id: string; readonly sessionId: string } => {
       const n = nguoiMua.find((x) => x.email.startsWith(dau));
       if (n === undefined) throw new GieoError(`thiếu người ${dau}`);

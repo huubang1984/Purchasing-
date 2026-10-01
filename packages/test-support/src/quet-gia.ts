@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.4b] BỘ QUÉT GIÁ DẠNG RÕ TRÊN MỌI QUAN HỆ — một bản, bốn người gọi (spec S4 §2.1, §2.5 ⒅; ADR-054; ADR-9201).
+// [S1.251 / S4.4b] BỘ QUÉT GIÁ DẠNG RÕ TRÊN MỌI QUAN HỆ — một bản, bốn người gọi (spec S4 §2.1, §2.5 ⒅; ADR-054; ADR-140).
 //
 // Trước vòng này bốn tệp chép cùng một vòng lặp — kịch bản 41 qua HTTP và không qua HTTP, `unseal-worker.int`, `luot-danh-gia.int`
 // — và cả bốn chỉ đọc `relkind IN ('r', 'p')`. Một view hay materialized view chứa giá dạng rõ đi qua cả bốn mà không dòng nào
@@ -12,7 +12,7 @@
 // chốt 2026-10-01 để nguyên nó.
 //
 // PHẠM VI: schema `public` — như bốn bản chép trước. Quan hệ ở schema khác không được quét (hôm nay không có quan hệ nào ngoài
-// `public`, cùng phép đo); nói ra ở biên bản §S1.9101. Phép quét là `t::text LIKE '%kim%'` dưới vai người gọi pool — mọi người
+// `public`, cùng phép đo); nói ra ở biên bản §S1.251. Phép quét là `t::text LIKE '%kim%'` dưới vai người gọi pool — mọi người
 // gọi dùng pool CHỦ CỤM, tức đúng vế *"kể cả bằng role quản trị"* của A3, và view chạy dưới quyền chủ cụm. Một materialized view
 // chưa nạp (`WITH NO DATA`) làm câu quét NÉM: đỏ, không lặng lẽ bỏ qua.
 // ==============================================================================================

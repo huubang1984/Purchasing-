@@ -1,6 +1,6 @@
 // ==============================================================================================
-// [S1.9101 / S4.4b] ĐỌC LỊCH SỬ GIÁ CỦA MỘT HÀNG CHUẨN — đường đọc DUY NHẤT của `public.quan_sat_gia` từ mã ứng dụng (spec S4 §4.5,
-// §3.5; §5.1 L6; ADR-9201).
+// [S1.251 / S4.4b] ĐỌC LỊCH SỬ GIÁ CỦA MỘT HÀNG CHUẨN — đường đọc DUY NHẤT của `public.quan_sat_gia` từ mã ứng dụng (spec S4 §4.5,
+// §3.5; §5.1 L6; ADR-140).
 //
 // CỔNG `bid.view` (spec §4.5): lịch sử giá là giá SAU mở thầu, và cổng của dữ liệu ấy đã là `bid.view` — cùng cổng của
 // `buildComparisonTable` và `docBangXepHang`. Cổng nằm TRONG hàm (rổ `HAM_DOC_CO_QUYEN` của `cong-quyen-route.test.ts`): mục

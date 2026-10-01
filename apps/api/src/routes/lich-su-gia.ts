@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.4b] Route LỊCH SỬ GIÁ của một hàng chuẩn (spec S4 §4.5, §3.5; §5.1 L6; ADR-9201).
+// [S1.251 / S4.4b] Route LỊCH SỬ GIÁ của một hàng chuẩn (spec S4 §4.5, §3.5; §5.1 L6; ADR-140).
 //
 // Đường đọc CÓ CỔNG, khuôn `/rfqs/:rfqId/comparison` và `/rfqs/:rfqId/ranking`: route không khai mã quyền vì nó là GET, và cổng
 // `bid.view` nằm TRONG `docLichSuGia` (rổ `HAM_DOC_CO_QUYEN`) — lần từ chối vào sổ qua `auditPool`, lần cho qua để lại một hàng

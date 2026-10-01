@@ -124,7 +124,7 @@ const NHA_CUNG_CAP = [
 const GIA_SUA_LAI = "930000000.00";
 const NGAN_SACH = "1000000000.00";
 /**
- * [S1.9101 / S4.4b] Phong bì mang `lines` như trình duyệt dựng (`nop-thau.js`, spec S4 §2.5 ⒅): gói có MỘT dòng, 500 tấn, nên
+ * [S1.251 / S4.4b] Phong bì mang `lines` như trình duyệt dựng (`nop-thau.js`, spec S4 §2.5 ⒅): gói có MỘT dòng, 500 tấn, nên
  * `amount` bằng tổng và `unitPrice` = tổng / 500. Kim ĐƠN GIÁ của bước 14 là đơn giá của bản sửa giá.
  */
 const SO_LUONG = 500;
@@ -706,7 +706,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 · %s] RFQ 1 tỷ, 5 nhà cung cấp, s�
 
   it("bước 14 — [A3/A4] sau tất cả, giá dạng rõ chỉ tồn tại ở ĐÚNG MỘT bảng", async () => {
     // Cùng bộ quét của S1.7, chạy ở cuối một kịch bản THẬT thay vì trên một fixture hai dòng. ~~`relkind IN ('r', 'p')`~~
-    // [S1.9101] bộ quét chung (`@trustprocure/test-support`): cả view và materialized view; thêm kim ĐƠN GIÁ.
+    // [S1.251] bộ quét chung (`@trustprocure/test-support`): cả view và materialized view; thêm kim ĐƠN GIÁ.
     expect(DON_GIA_SUA_LAI).toBe("1860000.00");
     const { dinh, soQuanHe } = await quetGiaMoiQuanHe(db.pool, GIA_SUA_LAI);
     expect(soQuanHe).toBeGreaterThan(20);

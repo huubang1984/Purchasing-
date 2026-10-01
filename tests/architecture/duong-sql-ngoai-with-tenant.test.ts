@@ -302,7 +302,7 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 0,
     cau: 1,
     lyDo:
-      "[S1.9101 / lượt soi T1] MỘT câu chỉ đọc trước khi bật worker con: đếm việc mở thầu và cảnh báo break-glass đang chờ của tổ " +
+      "[S1.251 / lượt soi T1] MỘT câu chỉ đọc trước khi bật worker con: đếm việc mở thầu và cảnh báo break-glass đang chờ của tổ " +
       "chức KHÁC — worker liệt kê mọi tổ chức, nên công cụ từ chối bật nó khi nó sẽ nhận việc của người khác. Câu hỏi 'những tổ " +
       "chức nào' đứng trước câu hỏi 'tổ chức nào', không gắn được tenant. Mọi bước nghiệp vụ của ba gói đi qua withTenant",
   },
@@ -357,7 +357,7 @@ const DUONG_KHAI: Record<string, { readonly lay: number; readonly cau: number; r
     lay: 0,
     cau: 1,
     lyDo:
-      "[S1.9101 / S4.4b] hạ tầng test — bộ quét giá dạng rõ của bốn kịch bản (A3, ADR-054): MỘT câu trên pool CHỦ CỤM người gọi " +
+      "[S1.251 / S4.4b] hạ tầng test — bộ quét giá dạng rõ của bốn kịch bản (A3, ADR-054): MỘT câu trên pool CHỦ CỤM người gọi " +
       "truyền vào, đúng vế *kể cả bằng role quản trị* của A3; nó quét mọi tổ chức nên không có một tenant để đi qua withTenant",
   },
   "packages/test-support/src/postgres-cuc-bo.ts": {

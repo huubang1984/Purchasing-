@@ -22778,7 +22778,7 @@ nhiều yêu cầu cho một vòng.
   0 đỏ — `lich-su-gia.int` 46/46, `db/migrations.int` 128/128, `hardening-khong-in-gia-tri` 11/11; **76/76**; ma trận không đổi.
 
 
-# §S1.9101 — S4.4b: ĐƯỜNG ĐỌC LỊCH SỬ GIÁ, KỊCH BẢN 41 CÓ DÒNG VÀ ĐƠN GIÁ, BỐN BỘ QUÉT TRÊN MỌI QUAN HỆ, `gieo:demo` BA GÓI ĐÃ MỞ (L6, VẾ LỊCH SỬ) — ADR-9201
+# §S1.251 — S4.4b: ĐƯỜNG ĐỌC LỊCH SỬ GIÁ, KỊCH BẢN 41 CÓ DÒNG VÀ ĐƠN GIÁ, BỐN BỘ QUÉT TRÊN MỌI QUAN HỆ, `gieo:demo` BA GÓI ĐÃ MỞ (L6, VẾ LỊCH SỬ) — ADR-140
 
 ## 1. Vòng này là gì
 
@@ -22813,12 +22813,12 @@ Chốt ngày 2026-10-01, bốn điểm, cả bốn theo đề xuất:
   trường mới, bộ ký biên nhận, gom id hàng chuẩn và nhà cung cấp, in mục *LỊCH SỬ GIÁ*; hai phụ thuộc workspace (`bidding`, `unseal`).
 - **Cổng khai theo.** `ban-ro-liet-ke` (đường đọc duy nhất của hai hàm), `duong-sql-ngoai-with-tenant` (hai mục khai), sổ khai nhãn
   (L6 — bốn tệp), `MOC_GHIM` 76 → 77, TEST-PLAN hàng L6 và dòng tổng, lời khai đếm (STATE, Handoff), spec S4 §2.1, §2.5 ⒅, §5.1 L6,
-  §9, PRODUCT, STATE, ADR-9201.
+  §9, PRODUCT, STATE, ADR-140.
 
 ## 4. Điểm tôi tự chốt trong phạm vi đã duyệt
 
 - **`resourceType` `CANONICAL_ITEM`** cho hàng từ chối lẫn hàng đọc — phương án đã chốt viết `canonical_item`; `requirePermission`
-  đòi chữ hoa (đo), và hai hàng của cùng một tài nguyên dùng một mã. Lệch chữ, nói ra ở ADR-9201 ①.
+  đòi chữ hoa (đo), và hai hàng của cùng một tài nguyên dùng một mã. Lệch chữ, nói ra ở ADR-140 ①.
 - **Không trả `canonical_item_id`** (bằng `itemId` ở mọi hàng); `soTheoTrangThai` mang đủ sáu khoá dù `CHUA_ANH_XA` luôn 0.
 - **Bộ quét chung ở `test-support`**, một câu dựng tên quan hệ phía máy chủ (`query_to_xml(format('%I'))`) — bản nội suy tên bảng
   không qua cổng `PREPARE` của QT3 (đo: `FROM public.1`).
@@ -22901,8 +22901,8 @@ thông điệp lỗi; thứ tự cổng đúng (người không giữ `bid.view`
 - **L4 — worker mồ côi khi cha bị giết; thư mục tạm không xoá.** **Sửa:** giết con ở `exit`, hai tín hiệu thành một lần thoát có mã;
   xoá thư mục tạm khi xong sạch.
 - **L5 — tài liệu khai quá.** Biên bản chưa có lúc soi (nay có); hàng L6 nói rõ phiên Passport chưa có route; *"bộ quét route THẤY"*
-  sửa thành *"cùng lần đọc qua HTTP THẤY"* — lượt quét route không có khẳng định dương cho lịch sử, nói ra ở ADR-9201.
-- **Thông tin.** `now()` là lúc bắt đầu giao dịch — cửa sổ vài mili giây quanh lần mở vòng BAFO, nói ra ở ADR-9201; `AWARDED` có
+  sửa thành *"cùng lần đọc qua HTTP THẤY"* — lượt quét route không có khẳng định dương cho lịch sử, nói ra ở ADR-140.
+- **Thông tin.** `now()` là lúc bắt đầu giao dịch — cửa sổ vài mili giây quanh lần mở vòng BAFO, nói ra ở ADR-140; `AWARDED` có
   trong lịch sử — có chủ đích (ADR-136); hai ca L6 nay khẳng định trạng thái gói; `LIKE` không thoát `_` — chỉ khớp rộng hơn.
 
 ## 9. Giới hạn, nói ra

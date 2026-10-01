@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.4b] BA GÓI ĐÃ MỞ NIÊM PHONG — QUA ĐƯỜNG THẬT (spec S4 §9 dòng S4.4b; ADR-9201)
+// [S1.251 / S4.4b] BA GÓI ĐÃ MỞ NIÊM PHONG — QUA ĐƯỜNG THẬT (spec S4 §9 dòng S4.4b; ADR-140)
 //
 // Lịch sử giá (`GET /items/:itemId/price-history`) chỉ có quan sát từ gói đã mở niêm phong, và hàng bản rõ chỉ có MỘT bộ ghi:
 // worker mở thầu, vai `app_unseal` (`019`). Nên ba gói ở đây đi trọn đường sản phẩm bằng HÀM GÓI — tạo gói, ngân sách, dòng, lời
@@ -10,7 +10,7 @@
 // VÌ SAO TIẾN TRÌNH CON, không gọi `executeUnsealRequest` trong tiến trình: hàng rào G1/G8 (`.dependency-cruiser.cjs`) chỉ cho
 // `apps/unseal-worker` chạm cửa giải mã. Chủ dự án chốt 2026-10-01: worker thật, không nới hàng rào. Tiến trình con nhận môi
 // trường theo danh sách CHO PHÉP — URL đặc quyền và mọi bí mật khác của người gọi không đi xuống worker —, rồi đặt đúng những biến
-// worker đòi. Trước khi bật, công cụ từ chối nếu cụm có việc worker sẽ nhận của tổ chức khác (lượt soi §S1.9101).
+// worker đòi. Trước khi bật, công cụ từ chối nếu cụm có việc worker sẽ nhận của tổ chức khác (lượt soi §S1.251).
 //
 // HAI CHỖ DỰNG BỐI CẢNH KHÔNG ĐI ĐƯỜNG CỦA MÀN, nói ra: ⑴ ánh xạ dòng bu lông neo do người quản lý dữ liệu ghi bằng `ghiAnhXa`
 // TRƯỚC lần mở (dòng ấy không có bí danh — gói demo chính để nó ở hàng đợi); ⑵ bộ OTP dùng một vòng pepper RIÊNG của lượt gieo:
@@ -237,7 +237,7 @@ export async function gieoBaGoiDaDieuPhoi(b: BoiCanhGoiDaMo): Promise<readonly G
 }
 
 /**
- * [lượt soi §S1.9101 — L3] Môi trường của tiến trình con theo danh sách CHO PHÉP: chỉ những biến một tiến trình Node cần để chạy
+ * [lượt soi §S1.251 — L3] Môi trường của tiến trình con theo danh sách CHO PHÉP: chỉ những biến một tiến trình Node cần để chạy
  * (đường dẫn, thư mục nhà và tạm, ngôn ngữ, múi giờ), rồi đúng những biến worker đòi được đặt tường minh. Một danh sách CẤM (khuôn
  * `pilot-gia-lap`) để lọt mọi bí mật đặt tên khác (`POSTGRES_PASSWORD`, `AWS_*`, token CI) xuống tiến trình cầm cửa giải mã — trái
  * lời hứa G1 *"worker không cầm lối vào bí mật nào khác"* (`apps/unseal-worker/src/cau-hinh.ts`).
@@ -253,7 +253,7 @@ function moiTruongChoWorker(goc: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 /**
- * [lượt soi §S1.9101 — T1] Hai loại việc worker nhận (`apps/unseal-worker/src/composition.ts`) — cộng sổ `kind` mồ côi
+ * [lượt soi §S1.251 — T1] Hai loại việc worker nhận (`apps/unseal-worker/src/composition.ts`) — cộng sổ `kind` mồ côi
  * (`KIND_KHONG_NGUOI_NHAN`, rỗng hôm nay). Worker liệt kê MỌI tổ chức của cụm, nên worker con của công cụ này nhận cả việc của tổ
  * chức khác: mở khoá của họ bằng vòng khoá của lượt gieo, giao cảnh báo break-glass của họ vào một thư mục tạm (người nhận thật
  * không bao giờ được báo — D4).
@@ -261,10 +261,10 @@ function moiTruongChoWorker(goc: NodeJS.ProcessEnv): Record<string, string> {
 const KIND_WORKER_GIEO = ["UNSEAL_RFQ", "BREAK_GLASS_UNSEAL_ALERT"];
 
 /**
- * [lượt soi §S1.9101 — T1] Từ chối khi cụm có việc worker sẽ nhận của tổ chức KHÁC `org` (`null`: của bất kỳ tổ chức nào — lần kiểm
+ * [lượt soi §S1.251 — T1] Từ chối khi cụm có việc worker sẽ nhận của tổ chức KHÁC `org` (`null`: của bất kỳ tổ chức nào — lần kiểm
  * TRƯỚC khi gieo, lúc tổ chức của lượt chưa tồn tại). Một câu chỉ đọc trên kết nối đặc quyền: câu hỏi "những tổ chức nào" đứng trước
  * câu hỏi "tổ chức nào", không gắn được tenant. Còn một cửa sổ — việc của tổ chức khác xếp TRONG lúc worker con chạy —, nói ra ở
- * ADR-9201.
+ * ADR-140.
  */
 export async function tuChoiKhiCoViecCuaToChucKhac(pool: pg.Pool, org: string | null): Promise<void> {
   const n = (
@@ -340,7 +340,7 @@ export async function chayWorkerToiKhiMo(
       return "(không đọc được log)";
     }
   };
-  // [lượt soi §S1.9101 — L4] Cha thoát giữa chừng (lỗi không bắt, Ctrl-C) thì worker không được sống tiếp, cầm vòng khoá và phục vụ
+  // [lượt soi §S1.251 — L4] Cha thoát giữa chừng (lỗi không bắt, Ctrl-C) thì worker không được sống tiếp, cầm vòng khoá và phục vụ
   // mọi tổ chức: giết nó ĐỒNG BỘ ở `exit`, và biến hai tín hiệu thành một lần thoát có mã.
   const gietCon = (): void => {
     if (con.exitCode === null && con.signalCode === null) con.kill("SIGKILL");

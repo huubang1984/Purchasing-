@@ -270,7 +270,7 @@ const HAM_DOC_CO_QUYEN = [
   // [S1.200 / khoản 258] Ngân sách dự tính neo giá nếu rò xuống bên bán — `setRfqBudget` cố ý không ghi số tiền vào sổ. Cổng
   // đứng THẲNG trong thân `getRfqBudget`: người tạo gói `rfq.create`, người khác `rfq.approve`.
   "getRfqBudget",
-  // [S1.9101 / S4.4b] Lịch sử giá là giá SAU mở thầu, gom từ nhiều gói — cổng `bid.view` đứng THẲNG trong thân `docLichSuGia`
+  // [S1.251 / S4.4b] Lịch sử giá là giá SAU mở thầu, gom từ nhiều gói — cổng `bid.view` đứng THẲNG trong thân `docLichSuGia`
   // (spec S4 §4.5), cùng cổng của bảng so sánh và bảng xếp hạng.
   "docLichSuGia",
 ] as const;

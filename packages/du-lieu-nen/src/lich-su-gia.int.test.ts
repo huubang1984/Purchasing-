@@ -858,7 +858,7 @@ describe("[INV-L5] ranh giới ở tầng CSDL", { timeout: 120_000 }, () => {
 });
 
 // ================================================================================================================================
-// [S1.9101 / S4.4b] `docLichSuGia` — đường đọc DUY NHẤT của `quan_sat_gia` từ mã ứng dụng: cổng `bid.view` trong hàm, mốc
+// [S1.251 / S4.4b] `docLichSuGia` — đường đọc DUY NHẤT của `quan_sat_gia` từ mã ứng dụng: cổng `bid.view` trong hàm, mốc
 // `now()`, LUÔN lọc theo hàng chuẩn, một hàng `PRICE_HISTORY_READ` không mang giá trong CÙNG giao dịch đọc (spec S4 §4.5; L6).
 // Mỗi ca dùng một hàng chuẩn RIÊNG — lịch sử của `hangThep` mang quan sát của mọi ca trên.
 // ================================================================================================================================

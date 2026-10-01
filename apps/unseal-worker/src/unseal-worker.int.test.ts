@@ -1237,13 +1237,13 @@ describe("[S1.217 / khoản 250] báo giá của lời mời đã thu hồi khô
 // Mốc ở đây có chữ HOA và dấu gạch dưới, hai thứ không bao giờ có trong hex viết thường.
 // ===============================================================================================
 const MOC_GIA = "GIA_BI_MAT_9182736450";
-// [S1.9101 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅) — một con số, nhưng mang dấu `.`: hex không bao giờ có nó, và mọi thời điểm của
+// [S1.251 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅) — một con số, nhưng mang dấu `.`: hex không bao giờ có nó, và mọi thời điểm của
 // `::text` chỉ có HAI chữ số trước dấu chấm. Bản rõ mang nó như trình duyệt dựng: `lines[].unitPrice`.
 const DON_GIA_MOC = "8273645.19";
 const BAN_RO_MOC = JSON.stringify({ donGia: 9182736450, ghiChu: MOC_GIA, lines: [{ lineNo: 1, unitPrice: DON_GIA_MOC, amount: "82736451.90" }] });
 
 /**
- * Trả về tên các quan hệ có chứa `chuoi` ở BẤT KỲ cột nào của BẤT KỲ hàng nào. ~~`relkind IN ('r', 'p')`~~ [S1.9101] bộ quét
+ * Trả về tên các quan hệ có chứa `chuoi` ở BẤT KỲ cột nào của BẤT KỲ hàng nào. ~~`relkind IN ('r', 'p')`~~ [S1.251] bộ quét
  * chung của `@trustprocure/test-support` — bảng, bảng cha phân mảnh, view, materialized view.
  */
 async function quetRoRi(chuoi: string): Promise<{ dinh: readonly string[]; soBangDaQuet: number }> {

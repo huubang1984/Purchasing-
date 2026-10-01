@@ -1,10 +1,10 @@
 // ==============================================================================================
-// [S1.9101 / S4.4b] ĐỐI CHỨNG DƯƠNG CỦA BỘ QUÉT GIÁ — nó THẤY kim ở cả bốn loại quan hệ, kể cả đối tượng dựng lúc chạy
+// [S1.251 / S4.4b] ĐỐI CHỨNG DƯƠNG CỦA BỘ QUÉT GIÁ — nó THẤY kim ở cả bốn loại quan hệ, kể cả đối tượng dựng lúc chạy
 //
 // Bốn bộ quét giá (kịch bản 41 hai bản, `unseal-worker.int`, `luot-danh-gia.int`) khẳng định tập quan hệ chứa giá bằng `toEqual`
 // vét cạn; một bộ quét MÙ với view hay materialized view vẫn cho đúng tập ấy. Ca này dựng mỗi loại một quan hệ chứa kim — bảng,
 // bảng cha phân mảnh, view, materialized view — cộng một bảng KHÔNG chứa kim, rồi đòi bộ quét kể đúng bốn cái đầu. Gỡ một chữ
-// khỏi `RELKIND_QUET_GIA` thì ca đỏ (đột biến ở biên bản §S1.9101).
+// khỏi `RELKIND_QUET_GIA` thì ca đỏ (đột biến ở biên bản §S1.251).
 // ==============================================================================================
 import { describe, expect, it } from "vitest";
 import { startPostgres } from "./postgres.js";
@@ -12,7 +12,7 @@ import { RELKIND_QUET_GIA, quetGiaMoiQuanHe } from "./quet-gia.js";
 
 const KIM = "4321987.65";
 
-describe("[INV-L6] [S1.9101 / S4.4b] bộ quét giá trên mọi quan hệ", { timeout: 120_000 }, () => {
+describe("[INV-L6] [S1.251 / S4.4b] bộ quét giá trên mọi quan hệ", { timeout: 120_000 }, () => {
   it("thấy kim ở bảng, bảng cha phân mảnh, view và materialized view dựng lúc chạy — không ở bảng không chứa nó", async () => {
     const db = await startPostgres();
     try {
