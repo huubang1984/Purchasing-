@@ -23430,4 +23430,9 @@ Bản đầu (trên `4d801263`, không đẩy) có mười lăm đột biến kh
   vòng này; ghi để không ai đọc nhầm.
 
 ## 10. Số đo
-(điền sau lượt đo trên HEAD)
+- `pnpm t0` (typecheck, lint, depcruise) xanh trên `7b757853`, 36 giây.
+- `pnpm test` xanh trên `ced7037b` (cùng mã, trước lần cấp số): 141 tệp, 2392 đạt, 14 bỏ qua, 0 đỏ, 114 giây. Lượt trước đó đỏ
+  ba ca của `tests/architecture/ma-chep-api-worker.test.ts` — hằng `THAN_403` mới ở `apps/web/src/dang-nhap.ts` chưa khai; mục 4.
+- `pnpm evidence` trên `7b757853`: vitest thoát mã 0, 4437 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1609
+  giây; `evidence/INV-matrix.md` không đổi.
+- Đột biến: 11/11 (mục 7). Lượt giả lập trên mã cuối: 10/10 ĐẠT, cô lập 2/2 (mục 2).
