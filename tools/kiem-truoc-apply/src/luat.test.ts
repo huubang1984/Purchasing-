@@ -20,7 +20,8 @@ const TOT: BienStack90 = {
   so_ban_api: 1,
   so_ban_worker: 1,
   ses: { tu_api: "khong-tra-loi@thu-mua.vn", tu_canh_bao: "canh-bao@thu-mua.vn", nhan_canh_bao: ["van-hanh@thu-mua.vn"], configuration_set: "tp-thu" },
-  sms: null,
+  // [rà 2026-10-01] Bộ biến ĐỦ có một kênh OTP ngoài thư — không có thì `kenh_otp` VANG (ADR-015 mục 1).
+  sms: { danh_tinh_gui: "THUMUA", configuration_set: "tp-sms" },
   zalo: null,
   che_do_dns: "BLOCK",
   ses_endpoint_service: "email",
@@ -35,12 +36,15 @@ describe("kiemBien", () => {
     expect(muc(kq, "VANG")).toEqual([]);
   });
 
-  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho ~~sáu~~ [S1.183] bảy image và mọi chỗ <...>; VANG cho api, worker, DNS", () => {
+  it("mẫu prod.tfvars của APPLY-LAN-DAU 6.1 ⇒ DO cho ~~sáu~~ [S1.183] bảy image và mọi chỗ <...>; VANG cho api, worker, DNS, [rà 2026-10-01] kênh OTP", () => {
     const tam = "tam@sha256:" + "0".repeat(64);
     const kq = kiemBien(
       {
         ...TOT,
         ten_mien: "<app.domain>",
+        // Mẫu để `sms`, `zalo` trong chú thích ⇒ null.
+        sms: null,
+        zalo: null,
         anh: { api: tam, worker: tam, migrate: tam, web: tam, public_keys: tam, neo: tam, khoi_tao: tam },
         ses: { tu_api: "<dia_chi_gui>@<domain>", tu_canh_bao: "<dia_chi_canh_bao>@<domain>", nhan_canh_bao: ["<email>"], configuration_set: "tp-thu" },
         so_ban_api: 0,
@@ -62,7 +66,15 @@ describe("kiemBien", () => {
       "ses.tu_canh_bao",
       "ses.nhan_canh_bao",
     ]);
-    expect(muc(kq, "VANG")).toEqual(["so_ban_api", "so_ban_worker", "che_do_dns"]);
+    expect(muc(kq, "VANG")).toEqual(["so_ban_api", "so_ban_worker", "che_do_dns", "kenh_otp"]);
+  });
+
+  it("[rà 2026-10-01] kênh OTP: sms và zalo đều null ⇒ VANG kenh_otp, không DO; một trong hai bật ⇒ không (ADR-015 mục 1)", () => {
+    const khongKenh = kiemBien({ ...TOT, sms: null, zalo: null }, HANG);
+    expect(muc(khongKenh, "VANG")).toEqual(["kenh_otp"]);
+    expect(muc(khongKenh, "DO")).toEqual([]);
+    expect(muc(kiemBien({ ...TOT, sms: null, zalo: { template_otp: "1", template_invitation: "2", template_deadline: "3" } }, HANG), "VANG")).toEqual([]);
+    expect(muc(kiemBien({ ...TOT, zalo: null }, HANG), "VANG")).toEqual([]);
   });
 
   it("image: digest toàn số 0, kho sai, tài khoản sai, region sai, thẻ thay digest ⇒ DO", () => {

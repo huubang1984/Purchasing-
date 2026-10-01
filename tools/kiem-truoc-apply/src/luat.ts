@@ -138,6 +138,11 @@ export function kiemBien(bien: BienStack90, hang: HangSo): KetQua[] {
   if (bien.so_ban_api === 0) kq.push(vang("so_ban_api", "= 0: api khong chay - chi dung o lan apply dau (APPLY-LAN-DAU 6.4)"));
   if (bien.so_ban_worker === 0) kq.push(vang("so_ban_worker", "= 0: worker khong chay - dung toi khi co to chuc dau tien (buoc 8.2)"));
   if (bien.che_do_dns !== "BLOCK") kq.push(vang("che_do_dns", `= ${bien.che_do_dns}: ten mien la chi ghi log, khong chan (buoc 6.8)`));
+  // [rà 2026-10-01] OTP không bao giờ đi cùng kênh với link (ADR-015 mục 1): `/guest/redeem` chỉ mời chọn OTP ở kênh KHÁC kênh
+  // link, link mời mặc định đi bằng thư, và kênh chưa bật thì ném (ADR-069 mục 1). Không SMS, không Zalo ⇒ nhà cung cấp mở được
+  // link mà không nộp được thầu. Hợp lệ ở lần apply đầu (brandname tính bằng tuần) nên chỉ VANG — APPLY-LAN-DAU 0.3, 9.
+  if (bien.sms === null && bien.zalo === null)
+    kq.push(vang("kenh_otp", "sms va zalo deu null: nha cung cap khong nhan duoc OTP nen khong nop thau duoc (ADR-015 muc 1; APPLY-LAN-DAU 0.3)"));
   if (bien.ses_endpoint_service === "") kq.push(vang("ses_endpoint_service", "rong: task khong gui duoc thu"));
 
   return kq;
