@@ -359,7 +359,7 @@ repo:huubang1984@234519700/Purchasing-@1350087523:environment:<tên>:job_workflo
 - **[rà 2026-10-01] Nửa `repo:` đã khớp một nguồn của GitHub** (API cấu hình, chưa phải token thật):
   `gh api repos/huubang1984/Purchasing-/actions/oidc/customization/sub` trả `use_immutable_subject: true` và `sub_claim_prefix`
   `repo:huubang1984@234519700/Purchasing-@1350087523` — trùng hai hằng ở `chung`. Cùng lượt ấy còn `use_default: true`: bước 2
-  dưới chưa làm.
+  dưới chưa làm. **[mục C 2026-10-01]** Bước 2 và 3 đã làm (APPLY-LAN-DAU 2.0b); vế `job_workflow_ref` và token thật vẫn chờ bước 4.
 
 **Thứ tự — làm liền tay trong một buổi.** Giữa bước 2 và bước 3, mọi job deploy xin role đều bị AWS từ chối (đỏ ở bước
 `configure-aws-credentials`, trước mọi lệnh AWS): KHOÁ chứ không MỞ. Quên bước 2 rồi apply, hay làm bước 2 rồi quên apply, cũng chỉ
@@ -369,9 +369,13 @@ khoá; gỡ tuỳ biến (`{"use_default":true}`) khi policy đã đòi dạng m
    đúng hai chuỗi `sub` (`prod` với `job_workflow_ref:*`, `prod-khoi-tao` với `khoi-tao.yml@refs/heads/master`), `tp-deploy-worker` một.
 2. Tuỳ biến claim — quyền admin của kho, `gh auth login` trước (`gh` là GitHub CLI; API `PUT /repos/{owner}/{repo}/actions/oidc/customization/sub`):
    ```powershell
-   '{"use_default":false,"include_claim_keys":["repo","context","job_workflow_ref"]}' | gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub --input -
+   gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub -F use_default=false -f "include_claim_keys[]=repo" -f "include_claim_keys[]=context" -f "include_claim_keys[]=job_workflow_ref"
    gh api repos/huubang1984/Purchasing-/actions/oidc/customization/sub    # phải in lại use_default=false và ĐÚNG ba khoá, ĐÚNG thứ tự ấy
    ```
+   **[mục C 2026-10-01]** `gh` dựng thân request `{"use_default":false,"include_claim_keys":["repo","context","job_workflow_ref"]}` từ
+   các trường (`-F` đổi `false` thành boolean, `key[]=` giữ thứ tự mảng). Bản trước pipe chuỗi JSON ấy vào `gh api … --input -` và
+   GitHub trả `Problems parsing JSON` (HTTP 400) trên PowerShell của máy vận hành: chuỗi không tới nguyên vẹn — nguyên nhân chưa đo,
+   nghi BOM do `$OutputEncoding`. Lệnh trên đã chạy trên kho ngày ấy: `GET` trả `use_default: false` và đúng ba khoá theo thứ tự.
    Thứ tự khoá QUYẾT ĐỊNH hình dạng `sub` (`repo:…:environment:…:job_workflow_ref:…`). `context` là đoạn sau `repo` của dạng mặc định:
    với job có environment nó là `environment:<tên>` (đúng ví dụ *Requiring a reusable workflow and other claims* của tài liệu); dùng
    `context` thay `environment` để job không có environment vẫn được cấp token (chỉ không khớp policy nào), thay vì bị GitHub từ chối

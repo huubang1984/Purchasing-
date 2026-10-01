@@ -91,6 +91,13 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       topic `tp-canh-bao-khoa` — cộng `-1 → 1` ở hai Lambda nếu đã xoá `tam_override.tf`. `canh-bao.tfvars` và `tam_override.tf`
       bị git bỏ qua: apply từ một checkout khác thì chép chúng theo. Ngày 2026-10-01 `gh api …/oidc/customization/sub` còn trả
       `use_default: true`.
+      **[mục C 2026-10-01] Đã làm** (chủ dự án, máy vận hành): quota Lambda của audit 40; plan 30 `0 to add, 2 to change, 0 to
+      destroy`; PUT tuỳ biến bằng lệnh trường của README — lệnh pipe JSON trả HTTP 400 —, `GET` trả `use_default: false` và đúng
+      ba khoá theo thứ tự; apply 30; `aws iam get-role`: `tp-deploy` hai chuỗi `sub` (`prod` với `job_workflow_ref:*`,
+      `prod-khoi-tao` với `khoi-tao.yml@refs/heads/master`), `tp-deploy-worker` một (`prod-worker`), cả ba mở đầu bằng
+      `repo:huubang1984@234519700/Purchasing-@1350087523`. Plan 60 `8 to add, 1 to change, 0 to destroy`, bốn rule ⑼ `ENABLED`;
+      xoá `tam_override.tf` rồi plan và apply `0 added, 2 changed, 0 destroyed`, concurrency của hai Lambda bằng 1. Lần đo `sub`
+      trên token thật vẫn là 7.3.
 - [ ] **2.1 `30-prod-iam`** (`tp-prod`) — OIDC GitHub, task role, execution role, hai role deploy. **Trước 50**: KMS từ chối
       key policy trỏ tới role chưa tồn tại.
 - [ ] **2.2 `40-kms-audit`** (`tp-audit-keyadmin`) — khoá ký mốc neo `alias/tp-anchor-sign`.
@@ -114,11 +121,14 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   **[apply lần đầu 2026-09-30]** Apply phải kết thúc bằng `Apply complete!` KHÔNG kèm dòng `Error`. Lần đầu, quota Lambda 5
   (0.3) làm hai `aws_lambda_function` hỏng (`tainted`) và Terraform BỎ QUA mọi thứ phụ thuộc — lịch của hai Lambda, và cả hai
   `aws_sns_topic_policy`: hai topic giữ policy mặc định, EventBridge publish thất bại (`FailedInvocations`), nên ⑴ ⑵ ⑶ ⑸ ⑹
-  im lặng trong khi thư từ CloudWatch alarm (⑷, ⑻) vẫn tới — trông như đã chạy. Kiểm cả hai topic, mỗi lệnh phải ra `True`:
+  im lặng trong khi thư từ CloudWatch alarm (⑷, ⑻) vẫn tới — trông như đã chạy. ~~Kiểm cả hai topic, mỗi lệnh phải ra `True`:~~
+  **[mục C 2026-10-01]** Kiểm cả hai topic — mỗi dòng phải kết thúc bằng `True`. Bản trước tìm `EventBridgeGuiCanhBao` ở cả hai,
+  mà statement của topic vận hành tên `EventBridgeGuiVanHanh` từ 2026-09-26 (tách hộp thư vận hành): lệnh cũ chỉ ra MỘT `True`
+  dù hai policy đều đúng, và `Select-String -Quiet` không in gì khi không khớp (đo 2026-10-01):
   ```powershell
-  foreach ($t in "tp-canh-bao-khoa","tp-canh-bao-van-hanh") {
-    aws sns get-topic-attributes --profile tp-audit --topic-arn "arn:aws:sns:ap-southeast-1:528657840905:$t" `
-      --query Attributes.Policy --output text | Select-String EventBridgeGuiCanhBao -Quiet
+  foreach ($p in @("tp-canh-bao-khoa","EventBridgeGuiCanhBao"), @("tp-canh-bao-van-hanh","EventBridgeGuiVanHanh")) {
+    "$($p[0]) : " + [bool](aws sns get-topic-attributes --profile tp-audit --topic-arn "arn:aws:sns:ap-southeast-1:528657840905:$($p[0])" `
+      --query Attributes.Policy --output text | Select-String $p[1] -Quiet)
   }
   ```
   Quota chưa được nâng thì tạm chạy không có concurrency đặt trước: tạo `infra\terraform\60-canh-bao\tam_override.tf` (khớp
