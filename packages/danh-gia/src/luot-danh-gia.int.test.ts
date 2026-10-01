@@ -3754,6 +3754,18 @@ describe("[S1.9101 / S4.5a] L14 — lượt chấm dùng phiên bản chính sá
   it("[INV-L14] đường ⑵: mở gói với `opened_at` ở năm 2100 không đổi được phiên bản ghim — cột chụp theo đồng hồ của cạnh, không theo giá trị người gọi gửi; câu ghi thẳng mang phiên bản mới nhất bị từ chối", async () => {
     const csId = await taoChinhSach(TP_GIA);
     const rfqId = await taoRfqChoMo(csId);
+    // Một phiên bản HẸN GIỜ có sẵn lúc mở (hiệu lực sau một ngày): chụp theo `NEW.opened_at` năm 2100 sẽ chọn nó, chụp theo đồng hồ
+    // của cạnh thì không — vế này là thứ phân biệt hai cách chụp (đột biến M9, §S1.9101).
+    const { rows: ke } = await db.pool.query<{ n: number }>(
+      "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
+      [orgA],
+    );
+    await db.pool.query(
+      "INSERT INTO org_procurement_policies (org_id, version, dual_approval_threshold, currency, effective_from, " +
+        "eval_components, bafo_top_n, created_by, created_by_session_id) " +
+        "VALUES ($1, $2, '100000000.00', 'VND', now() + interval '1 day', $3::jsonb, 0, $4, $5)",
+      [orgA, ke[0]?.n ?? 0, TP_GIA_GAP_DOI, uYc, sYc],
+    );
     // Dưới `app_api`, không dưới vai chủ cụm: `opened_at` nằm trong `GRANT UPDATE` của vai ứng dụng (`009`) — đó là đường ghi thứ hai.
     await withTenant(apiPool, orgA, async (c) => {
       await c.query(
