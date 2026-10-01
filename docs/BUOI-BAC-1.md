@@ -28,8 +28,15 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
   Node 26**: từ bản ấy, không script nào của kho chạy. Công cụ tự từ chối các bản làm trang `web` chết.
 - [ ] `pnpm install` ở gốc kho.
 - [ ] **Docker Desktop đã chạy**, rồi chạy trọn khối lệnh PowerShell của kế hoạch §4 **một lần trên chính máy này**.
-  Khối ấy đã đo trên PowerShell 7 cho Linux, **chưa ai đo trên Windows PowerShell 5.1 và Docker Desktop**. Lỗi lộ ra ở
-  bước này thì sửa trước ngày gặp, không phải trong phòng họp.
+  Khối ấy đã đo trên PowerShell 7 cho Linux, ~~**chưa ai đo trên Windows PowerShell 5.1 và Docker Desktop**~~ **[S1.255] và
+  trên một máy Windows 11 (Windows PowerShell 5.1, Docker Desktop 29.7.2): chưa có container, container đang chạy, container
+  đã dừng — cả ba 10/10** (kế hoạch §4). Đường dẫn và ACL vẫn là của từng máy, nên vẫn chạy một lần trên CHÍNH máy này. Lỗi
+  lộ ra ở bước này thì sửa trước ngày gặp, không phải trong phòng họp.
+- [ ] **[S1.255] Máy có nhiều tài khoản Windows:** chạy `icacls` trên thư mục kho. Thấy `Users` hay `Authenticated Users`
+  thì tài khoản khác trên máy đọc được `cum.json`, bí mật TOTP của người mua giả lập (`trang-thai.json`) và link đăng nhập
+  còn hạn trong `hop-thu/` — đặt kho dưới `C:\Users\<tên>\` (mặc định chỉ chủ hồ sơ đọc được), hay thêm
+  `--thu-muc "$env:USERPROFILE\.pilot-gia-lap"` vào MỌI lệnh `pnpm pilot:gia-lap`. Công cụ in một câu *CẢNH BÁO (khoản 328)*
+  lúc dựng cụm khi thư mục trạng thái nằm ngoài hồ sơ người dùng — theo đường dẫn, không đọc ACL, nên vẫn chạy `icacls`.
 - [ ] Đi thử một lượt kịch bản §5 của kế hoạch, bấm đủ các nút, để biết mỗi màn mất bao lâu trên máy này.
 - [ ] In mục 4 của tệp này — hai bản: một cho người hỏi, một để trống ghi tay.
 
@@ -43,6 +50,8 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
 - [ ] Ghi lại ba mã gói in ở cuối lượt: **SX-04**, **XD-03**, **XD-04**.
 - [ ] Mở sẵn `bao-cao-moi-nhat.md` trong thư mục trạng thái.
 - [ ] Thử một lần `pnpm pilot:gia-lap lien-ket` và `pnpm pilot:gia-lap dang-nhap hung.nv@…`, để chắc cụm đang chạy.
+  **[S1.255]** `dang-nhap` cần email đầy đủ (`hung.nv@tan-phu-minh.gia-lap.invalid`); gõ thiếu thì lời từ chối liệt kê mọi
+  email của các lượt. Mỗi lần gọi phát một link mới — gọi lại chỉ để lấy mã TOTP thì link cũ vẫn còn hạn 15 phút.
 - [ ] Để cửa sổ trình duyệt ở khung hẹp cho phần nhà cung cấp: điện thoại thật chưa dùng được, vì nó cần HTTPS (kế hoạch
   §9 mục 4).
 
@@ -51,7 +60,7 @@ Nguồn của từng mục: kế hoạch pilot giả lập §4.
 | Phút | Việc | Ghi chú |
 |---|---|---|
 | 0–5 | Mở đầu. Nói thẳng: đây là **dữ liệu giả lập**, không phải khách hàng thật; buổi này để hỏi ba câu, và câu trả lời sẽ quyết phần mềm đi tiếp thế nào | Chỉ vào nhãn GIẢ LẬP và mục 7 *"Điều báo cáo này KHÔNG chứng minh"* của báo cáo |
-| 5–25 | Trình diễn các hàng **2–7 tới 13–17** của kịch bản ở **kế hoạch §5** (SX-04 nộp thầu → SX-04 số báo giá bị giấu → XD-03 → XD-04), từng bước và từng nút như ở đó. Hàng 0–2 đã làm ở phút 0–5; hàng 17–20 là phút 25–45 dưới đây. Phút dư dành cho câu hỏi của khách về màn hình | **Lần tự duyệt phải đi TRƯỚC lần duyệt thật** ở XD-03 và XD-04 — ngược lại thì trang chặn nút ngay trên trình duyệt, và khách không thấy cổng quyền chặn gì |
+| 5–25 | Trình diễn các hàng **2–7 tới 13–17** của kịch bản ở **kế hoạch §5** (SX-04 nộp thầu → SX-04 số báo giá bị giấu → XD-03 → XD-04), từng bước và từng nút như ở đó. Hàng 0–2 đã làm ở phút 0–5; hàng 17–20 là phút 25–45 dưới đây. Phút dư dành cho câu hỏi của khách về màn hình | **Lần tự duyệt phải đi TRƯỚC lần duyệt thật** ở XD-03 và XD-04 — ngược lại thì trang chặn nút ngay trên trình duyệt, và khách không thấy cổng quyền chặn gì. **[S1.255]** Ở bước 7 của XD-04, cả hai người bấm **Đọc đề xuất** trước **Phê duyệt**: chưa đọc thì lần bấm **Phê duyệt** đầu chỉ hiện đề xuất và câu *"Đề xuất sắp ký hiện ở dưới — … bấm Phê duyệt lần nữa để ký"*, chưa tới cổng quyền |
 | 25–45 | **Ba câu nặng nhất: B4 → A1 → B1** (mục 4.1). Ghi vào phiếu ngay khi khách nói | Hỏi đúng câu, không gợi ý câu trả lời |
 | 45–55 | Các câu thêm nếu còn giờ (mục 4.2), theo thứ tự ghi ở đó | Bỏ được; ba câu ở trên thì không |
 | 55–60 | **Câu hỏi của bậc 2** (mục 4.3) | Đây là điều kiện ra của buổi này |

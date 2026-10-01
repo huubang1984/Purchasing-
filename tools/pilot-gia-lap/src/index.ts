@@ -21,12 +21,13 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomInt } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { stderr, stdout } from "node:process";
 import { dungBaoCaoJson, dungBaoCaoMarkdown, type KiemCoLap, type ToChucBaoCao } from "./bao-cao.js";
 import { chayKichBan, type BoiCanhChay, type DongBoCham, type KetQuaKichBan, type NhaCungCapChay, type ToChucChay } from "./chay-kich-ban.js";
 import { CsdlDacQuyen, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
-import { CONG_MAC_DINH, GOC_KHO, docBiMat, khoiDongCum, kiemThuMucTrangThai, taoBiMat, type Cum } from "./cum.js";
+import { CONG_MAC_DINH, GOC_KHO, canhBaoAclWindows, docBiMat, khoiDongCum, kiemThuMucTrangThai, taoBiMat, type Cum } from "./cum.js";
 import { NguoiMua, maTotpHienTai } from "./dien-vien.js";
 import { emailLienHe, emailNguoi, hoSo, type HoSoToChuc, type MaToChuc } from "./ho-so.js";
 import { HopThu, HopThuError, tokenTuLink } from "./hop-thu.js";
@@ -202,6 +203,9 @@ async function chuanBiCum(ts: ThamSo, thuMuc: string): Promise<{ readonly cum: C
   try {
     const soMigration = await db.apMigration();
     bao(`migrate: áp ${soMigration} migration mới`);
+    // [S1.255 / khoản 328] Trên Windows, bit 0700 của thư mục trạng thái không có tác dụng — nói ra khi nó nằm ngoài hồ sơ người dùng.
+    const canhBao = canhBaoAclWindows(process.platform, thuMuc, homedir());
+    if (canhBao !== null) bao(canhBao);
     let biMat = await docBiMat(thuMuc);
     if (biMat === null) {
       if (await db.coDauKiemVongKhoa()) {

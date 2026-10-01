@@ -187,8 +187,15 @@ export interface DangNhap {
 }
 
 /** Câu `error` của máy chủ nếu thân mang nó, không thì câu mặc định kèm mã trạng thái — khuôn `loiCua` của các trang. */
+// [S1.255 / khoản 326] Khuôn khoản 323 (S1.254): thân 403 hằng của `apps/api` không phải một câu cho người đọc; mọi thân
+// lỗi khác — kể cả 403 `nguon khong duoc phep` của lớp chống CSRF theo origin, thứ duy nhất trang này thật sự gặp — in nguyên văn.
+const THAN_403 = "khong co quyen";
+
 function loiCua(r: PhanHoiDangNhap, macDinh: string): string {
   const b = r.body;
+  if (r.status === 403 && b !== null && typeof b === "object" && (b as { error?: unknown }).error === THAN_403) {
+    return `${macDinh}: máy chủ từ chối vì quyền — tài khoản này không được làm việc ấy.`;
+  }
   if (b !== null && typeof b === "object" && typeof (b as { error?: unknown }).error === "string") return (b as { error: string }).error;
   return `${macDinh} (mã ${String(r.status)})`;
 }

@@ -23284,3 +23284,177 @@ gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhã
 - `lien-ket` vẫn KHÔNG biết link nào đã tiêu thụ — nó chỉ nói cách xử lý.
 - 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
 - Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
+
+# §S1.255 — BẬC 1 CỦA THANG PILOT, PHẦN TRÊN MÁY: KHỐI LỆNH CHẠY NGUYÊN VĂN TRÊN WINDOWS THẬT; CHÂN TRANG `/nop-thau` VÀ CỔNG CÂU CẤM; PHẦN CÒN LẠI CỦA KHOẢN 321 VÀ 323; CẢNH BÁO ACL TRÊN WINDOWS — KHOẢN 325–328 ĐÓNG
+
+**Rổ và mảnh (ADR-043):** bốn khoản sinh và đóng trong vòng — để mở thì 325, 327 là rổ A ⒜ (một bước của kịch bản trình diễn
+chạy ra thứ người dùng thấy là sai: một lời khai sai trên màn, một nút mời hành động sẽ bị từ chối), 326 và 328 rổ B. Khoản 328
+lúc đầu chỉ ghi sổ; chủ dự án chọn sửa ngay (2026-10-02) — mục 11. Không migration, không ADR, không route; không mảnh nào của `docs/PRODUCT.md` §11 đổi. Thang năm bậc vẫn là đề xuất (ADR-101).
+
+## 1. Vòng này là gì — và vì sao nó dựng hai lần
+Chủ dự án, 2026-10-01: *"Chạy bậc 1 của thang pilot"*. Bậc 1 (`docs/BUOI-BAC-1.md`) là sáu mươi phút với một trưởng phòng mua
+hàng thật — việc ấy không ai làm thay được. Vòng làm phần làm được trên máy, tức mục 1 của tệp ấy: chạy khối PowerShell của kế
+hoạch pilot giả lập §4 trên Windows PowerShell 5.1 và Docker Desktop (kế hoạch ghi *"chưa đo trên Windows thật"*), rồi đi thử kịch
+bản §5 trên trình duyệt, bấm đủ các nút. Lượt đi thử thấy ba lỗi (mục 3). Chủ dự án chọn *"Làm A"*: sửa ba lỗi và ghi số đo Windows.
+
+Bản đầu dựng trên `4d801263` và sửa cả ba. Lượt soi đối kháng của bản ấy (mục 8) thấy `origin/master` đã tiến lên `6b73a4ad`:
+S1.254 (PR #228, diễn tập §11, merge 23:23 cùng ngày) sửa song song hai trong ba lỗi — khoản 321 (người duyệt ký lên khối trống)
+và 323 (403 thô, ở `/login` và `/tao-thau`) — cùng khoản 320 (nút *Chọn* ở bảng xếp hạng), trong đúng các tệp ấy và với thiết kế
+khác. Chủ dự án đã chốt thiết kế của S1.254 ở phiên kia, nên vòng này KHÔNG ghi đè nó: bản đầu giữ thành một commit cục bộ không
+đẩy (`697986c0`), và vòng dựng lại trên `6b73a4ad`, chỉ mang theo phần đo được là còn thiếu trên master mới.
+
+## 2. Đo trên Windows thật
+Máy: Windows 11 Pro 10.0.26200, Windows PowerShell 5.1.26100.9444, Docker Desktop (server 29.7.2), Node 24.18.0, pnpm 11.24.0.
+Worktree mới từ `origin/master`. Khối PowerShell trích NGUYÊN VĂN từ tệp kế hoạch (giữa hai rào `powershell`), bọc thêm
+`Set-Location` và một dòng in thời lượng, ghi thành `.ps1` UTF-8 có BOM, chạy bằng `powershell.exe -NoProfile -File`. Không dán
+vào cửa sổ console: chỗ khác duy nhất có thể lộ ra là cách đọc câu tiếng Việt của `throw`, và câu ấy chỉ hiện khi Docker không chạy.
+
+| Tình huống | Mã | Kết quả | Từ lệnh tới cụm sẵn sàng |
+|---|---|---|---|
+| Chưa có container | `4d801263` | 10/10 ĐẠT, cô lập 2/2 (đối chứng 2/2); áp 100 migration; `pg_isready` qua ở vòng thứ hai | không bấm giờ chính xác — dưới hai phút |
+| Container đang chạy | `4d801263` | 10/10 ĐẠT, 2/2; 0 migration, dùng lại `cum.json` | 34 giây |
+| Container đã dừng (`docker stop`) | `4d801263` | 10/10 ĐẠT, 2/2 | 34 giây |
+| Container đang chạy | mã cuối của vòng | 10/10 ĐẠT, 2/2 | 31 giây |
+| Docker không chạy | — | KHÔNG đo — phải tắt Docker Desktop | — |
+
+- Ba báo cáo trên `4d801263`: 268 bước người dùng · 155 phép kiểm · 16/16 lần thử sai bị chặn · 15/16 vào sổ · 35/35 biên nhận ·
+  5/5 bộ bằng chứng — trùng từng con với lượt Linux của §S1.168.
+- Dừng cụm theo cây tiến trình (`taskkill /T /F` trên tiến trình PowerShell), đo hai lần: 0 cổng còn nghe, 0 tiến trình con.
+- Ba lệnh hỗ trợ chạy từ một tiến trình PowerShell mới, không có `TRUSTPROCURE_SEED_DATABASE_URL`: `lien-ket` đạt; `otp` đạt
+  (0,9 giây); `dang-nhap` đạt với email đầy đủ, còn `dang-nhap hung.nv` ⇒ `PilotError` liệt kê mọi email của các lượt, thoát 1.
+- `pnpm bang-chung kiem --bo` trên bộ SX-01 và XD-01 do công cụ xuất: `ok=true hang=4 dat=4 lech=0`, 0,8 giây mỗi bộ, không CSDL.
+- ACL: kho nằm trên `D:\`; `icacls` cho thư mục kho và gốc ổ: `Authenticated Users:(M)`, `Users:(RX)` thừa hưởng; máy có hai tài
+  khoản bật. Công cụ tạo thư mục trạng thái `mode: 0o700`, Windows bỏ qua, và không cảnh báo — khoản 328.
+
+## 3. Đi thử kịch bản §5 trên trình duyệt (trình duyệt dựng sẵn của ứng dụng, Chromium)
+Trên `4d801263`:
+- **2–7, `/nop-thau` khung 375×812:** mở lời mời SX-04 → *Gửi mã* (SMS) → `otp` → *Xác minh* → ba đơn giá → *Niêm phong và nộp* ⇒
+  biên nhận `version=1`, `kid=k1`, X25519, `ciphertext_sha256`; 41 giây máy bấm. Chân trang ghi *"máy chủ không đọc được"* — ⑴.
+- **7–9, `/mo-thau`, Hùng:** SX-04 *"Số báo giá đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"* — kể cả sau khi vừa nộp thêm một báo giá.
+- **9–13, XD-03:** Nam tự duyệt ⇒ câu hai vế của khoản 191; Tú duyệt ⇒ `APPROVED 2/2`; Nam điều phối ⇒ worker giải mã; bảng so
+  sánh 3 đọc được, 0 không đọc được, không lệch tiền tệ. Câu báo sau chữ ký thứ hai vẫn nói *"Thiếu người thứ hai thì điều phối sẽ
+  bị từ chối"* dù đã đủ — chỗ nhỏ, không sửa.
+- **13–17, XD-04:** Lan bấm *Phê duyệt* ⇒ màn in đúng ba chữ `khong co quyen` — ⑵. Vinh bấm *Phê duyệt* khi bước 7 không hiện gì;
+  đề xuất hiện SAU khi ký, dưới dạng một UUID — ⑶. Bước 8 *Tải bộ bằng chứng* KHÔNG bấm (tải tệp xuống cần người dùng cho phép);
+  lệnh kiểm chạy ở mục 2.
+
+Trên bản đầu (đã sửa ⑶ theo cách riêng): Tổng Giám đốc đọc được đề xuất thì thấy cả nút *Rút đề xuất* cạnh *Phê duyệt* — khoản
+327. Trên master `6b73a4ad` lỗi ấy có y nguyên: nút hiện khi đề xuất PROPOSED chưa chữ ký, không xét người xem.
+
+Trên mã cuối của vòng (lượt giả lập thứ tư, gói XD-04 mới): chân trang `/nop-thau` mang câu mới. Lan bấm *Phê duyệt* lần đầu ⇒
+đề xuất hiện (nhà cung cấp, chi phí hiệu dụng, hạng) kèm câu *"Đề xuất sắp ký hiện ở dưới — … bấm Phê duyệt lần nữa để ký"*,
+nút *Rút đề xuất* hiện cho chính Lan; lần hai ⇒ *"Không duyệt được: tài khoản đang đăng nhập không có quyền làm việc này — …"*.
+Vinh *Đọc đề xuất* ⇒ đề xuất hiện, nút *Rút đề xuất* ẨN. Vinh không bấm *Phê duyệt*: XD-04 để nguyên cho chủ dự án đi thử.
+
+## 4. Thay đổi (trên `6b73a4ad`)
+- `apps/web/trang/nop-thau.html`: chân trang dùng nguyên cột *"Nói thay bằng"* của §5 (khoản 325).
+- `tests/architecture/cau-cam-tren-giao-dien.test.ts` (mới, 30 ca): đọc văn bản người dùng thấy ở `apps/web` theo `git ls-files`
+  — chữ HTML, `placeholder`/`title`/`aria-label`/`alt`/`value`, chuỗi JS/TS qua `ts.createSourceFile`, chuỗi nối `+` (kể cả trong
+  ngoặc, kể cả ngoặc lồng) thành một câu — với MỘT luật cho mỗi hàng của bảng §5; số luật khoá bằng số hàng, mỗi luật bắt chính
+  câu của hàng mình; mẫu dương, mẫu âm (câu thật của giao diện), đối chứng dương trên tệp thật và hai ca tự kiểm của bộ đọc.
+- Năm bản `loiCua` (`chinh-sach`, `nhom-hang`, `du-lieu`, `nop-thau`, `/lib/dang-nhap`) theo khuôn khoản 323: đổi ĐÚNG thân hằng
+  `khong co quyen`, mọi thân khác in nguyên văn; câu 403 chết của `du-lieu.js` thay bằng nhánh ấy (khoản 326).
+- `apps/web/trang/mo-thau.js`: `nguoiDangVao` (đặt ở `moSauDangNhap` từ `/me`); nút *Rút đề xuất* chỉ hiện khi `actedBy` của đề
+  xuất là người đang vào (khoản 327).
+- Kế hoạch §5 hàng 13–17 và hướng dẫn XD-04 của `tools/pilot-gia-lap/src/chay-kich-ban.ts`: người đề xuất bấm *Đọc đề xuất* rồi
+  *Phê duyệt* — từ khoản 321 lần bấm *Phê duyệt* đầu khi chưa đọc chỉ hiện đề xuất; lời khai *"bấm Phê duyệt ⇒ bị chặn"* thiu từ
+  S1.254, đo ở mục 3.
+- Test: khối bảy bản `loiCua` (15 ca) và một ca khoản 327 trong khối S1.254 của `apps/web/src/phuc-vu.test.ts`.
+- `tests/architecture/ma-chep-api-worker.test.ts`: hàng `BANG_TEN` cho `THAN_403` (`apps/api/src/dispatch.ts`, `apps/web/src/dang-nhap.ts`),
+  `RIENG` — thân phản hồi ở `api`, chuỗi để nhận ra ở trang. Lượt `pnpm test` đầu đỏ ba ca của cổng kiểm kê vì hằng mới chưa khai;
+  lý do của hàng nói ra phụ thuộc giá trị mà không test nào nối hai bên (test của `api` chỉ đo mã 403).
+- Tài liệu: kế hoạch §4 (số đo Windows, ACL); `docs/BUOI-BAC-1.md` §1 (số đo, bước kiểm `icacls`), §2 (`dang-nhap` cần email đầy
+  đủ), §3; `docs/STATE.md` mốc đầu, hàng 325–328, rổ B; lời khai đếm do `pnpm cap-so --dem` viết.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **Không ghi đè thiết kế của S1.254.** Bản đầu có một mô hình bước 7 khác (bắt buộc *Đọc đề xuất*, xoá đề xuất khi người khác vào
+  ở bước 1, bỏ phản hồi về muộn). Chủ dự án đã chốt cách của khoản 321 ở phiên kia; vòng này chỉ sửa chỗ đo được là sai TRÊN cách
+  ấy (nút rút).
+- **403 theo khuôn khoản 323, không theo bản đầu.** Bản đầu đổi MỌI 403, nên nuốt cả 403 `nguon khong duoc phep` của lớp chống
+  CSRF theo origin — lỗi cấu hình hay gặp nhất khi dựng thật — rồi chẩn đoán nhầm thành lỗi quyền (lượt soi, TRUNG-1).
+- **328** lúc đầu chỉ ghi khoản và thêm bước kiểm `icacls` vào `BUOI-BAC-1.md` §1 — mọi dữ liệu là giả lập. Chủ dự án chọn sửa
+  sau khi nghe báo cáo (mục 11).
+
+## 6. Đo
+- **Đỏ trước trên `6b73a4ad`** (chạy test mới trên mã master): cổng câu cấm đỏ đúng ca *"không văn bản nào…"*, tại chân trang;
+  khối `loiCua` đỏ 5/15 — đúng năm ca 403 của năm bản chưa sửa, hai bản khoản 323 xanh; ca khoản 327 đỏ (*"B (người duyệt) thấy
+  nút rút đề xuất của A"*).
+- Lượt chạy đầu của cổng (trên bản đầu) bắt một dương tính giả — *"hệ thống không thấy vòng nào đang mở"* (`nop-thau.js`, gói BAFO
+  lệch dữ liệu), câu về dữ liệu chứ không về năng lực — nên luật bỏ động từ *"thấy"* và câu ấy thành mẫu âm.
+- Sau sửa: `apps/web/src/phuc-vu.test.ts` + cổng + ba tệp test của `tools/pilot-gia-lap`: 327/327.
+
+## 7. Đột biến
+Trên mã cuối: mười một đột biến, mỗi cái áp đúng một chỗ, chạy TRỌN hai tệp test (276 ca) bằng `--reporter=json`, so tập đỏ với
+tập dự kiến, khôi phục rồi tự kiểm sha256. Bản gốc trước lượt: 0 đỏ; bản sau lượt: 0 đỏ.
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| M1 | Chân trang trả câu cũ | 1 — cổng câu cấm |
+| M2a–M2e | Bỏ nhánh 403 ở `chinh-sach`, `nhom-hang`, `du-lieu`, `nop-thau`, `/lib/dang-nhap` (mỗi bản một lượt) | 1 mỗi lượt — đúng ca 403 của bản ấy |
+| M3 | `chinh-sach.js` đổi MỌI 403 (bỏ phép so thân) | 1 — ca *403 thân khác in nguyên văn* của bản ấy |
+| M4 | Nút rút không so người đề xuất | 1 — ca khoản 327 |
+| M5 | `moSauDangNhap` không ghi người đang vào | 3 — ca khoản 327 và hai ca của khoản 232 |
+| M6 | Cổng: gốc chuỗi `+` không leo qua ngoặc (bản đầu) | 1 — ca tự kiểm chuỗi trong ngoặc |
+| M7 | Cổng: bỏ thuộc tính `value` | 1 — cùng ca tự kiểm |
+
+Bản đầu (trên `4d801263`, không đẩy) có mười lăm đột biến khác cho mô hình bước 7 riêng của nó; chúng không còn áp được.
+
+## 8. Lượt soi đối kháng (năm lăng kính, trên bản đầu)
+- **CAO-1** — master đã có S1.254 sửa song song: đúng; xử lý ở mục 1 (dựng lại, không ghi đè). Các số *"đỏ trước"* của bản đầu đo
+  trên master cũ — mục 6 là số đo lại trên `6b73a4ad`.
+- **TRUNG-1** — 403 nuốt `nguon khong duoc phep`: đúng; nay theo khuôn khoản 323, và test lớp đòi 403 thân khác in nguyên văn ở cả
+  bảy bản (đột biến M3).
+- **TRUNG-2** — `veTraoThau` lỗi xoá câu thành công của hành động vừa xong: lỗi của mô hình bản đầu; bản cuối không đổi `veTraoThau`
+  của master (nhánh lỗi chỉ ghi `loi7`).
+- **TRUNG-3** — cổng không nối chuỗi `+` trong ngoặc (`apps/web/src/dong-ho-may-chu.ts`): đúng; sửa, kèm ca tự kiểm (ngoặc lồng) và
+  đối chứng trên chính tệp ấy (đột biến M6).
+- **THẤP:** T6 — thêm `value` (M7); `+=` và thông điệp của `packages/sealed-envelope` ghi vào phạm vi của cổng; T7 — các hằng không
+  dấu khác của API ghi vào giới hạn của 326; T8 — *"phút 2–7"* sửa thành hàng của kịch bản; T9 — trích nguyên văn câu trên màn;
+  T10 — `hop-thu/` thêm vào 328 và `BUOI-BAC-1.md` §1. T1, T2, T3, T5 là lỗi của mô hình bản đầu — master có chốt cho T2, T3. T4
+  (*Huỷ trao thầu* tác động theo gói, không cần đề xuất đang hiện; ô lý do có thể còn chữ của người trước) chỉ đọc từ mã, chưa đo
+  trên trình duyệt — ghi ở mục 9, không mở khoản. T11 (hàng 191 không nhắc lớp còn sống tới 326) — tuỳ chọn, không làm.
+
+## 9. Giới hạn, nói ra
+- Không đo trên Windows: tình huống Docker không chạy; khối dán vào cửa sổ console thay vì chạy từ tệp; một cụm đã chạy quá hai
+  ngày. Bước 8 trên trình duyệt (tải hai tệp) không bấm.
+- Cổng câu cấm chỉ đọc `apps/web`; câu lỗi do API trả, thông điệp của `packages/sealed-envelope`, tài liệu, README, tin nhắn do bộ
+  gửi dựng và câu dựng qua nhiều lệnh `+=` nằm ngoài. Luật là biểu thức chính quy: bắt câu cấm và các biến thể đã gặp, không bắt
+  MỌI cách nói cùng ý.
+- `loiCua`: chỉ thân 403 hằng được đổi; `phien khong hop le`, `qua nhieu yeu cau`, `khong co duong nay`, `loi noi bo` và câu không
+  dấu của trigger vẫn đi ra nguyên văn.
+- Mô hình bước 7 của master (khoản 321) chưa xoá đề xuất đã đọc khi người khác vào ở bước 1 mà không đổi link, và một phản hồi
+  *Đọc đề xuất* về muộn sau khi đổi gói hay đổi link vẫn vẽ ra màn — đọc từ mã; lần ký vẫn đọc lại đề xuất mới nhất của gói đang
+  nạp ngay trước khi ký và so với đề xuất đã hiện (cũng đọc từ mã). Không sửa: thiết kế đã chốt ở S1.254.
+- T4 ở mục 8; `dang-nhap` phát một link mới mỗi lần gọi; câu *"Thiếu người thứ hai"* sau chữ ký thứ hai — không sửa.
+- Một lượt `pnpm test` trọn trên Windows (bản đầu) đỏ thêm ca *"HAI TIẾN TRÌNH THẬT"* của `tests/architecture/khoa-depcruise.test.ts`
+  (khoản 249): `EPERM` ở `mkdir` thư mục khoá ngay sau khi tiến trình kia xoá nó. Chạy riêng tệp ấy bốn lần: 4/4 xanh. Không thuộc
+  vòng này; ghi để không ai đọc nhầm.
+
+## 10. Số đo
+- `pnpm t0` (typecheck, lint, depcruise) xanh trên `7b757853`, 36 giây.
+- `pnpm test` xanh trên `ced7037b` (cùng mã, trước lần cấp số): 141 tệp, 2392 đạt, 14 bỏ qua, 0 đỏ, 114 giây. Lượt trước đó đỏ
+  ba ca của `tests/architecture/ma-chep-api-worker.test.ts` — hằng `THAN_403` mới ở `apps/web/src/dang-nhap.ts` chưa khai; mục 4.
+- `pnpm evidence` trên `7b757853`: vitest thoát mã 0, 4437 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1609
+  giây; `evidence/INV-matrix.md` không đổi.
+- Đột biến: 11/11 (mục 7). Lượt giả lập trên mã cuối: 10/10 ĐẠT, cô lập 2/2 (mục 2).
+- **[mục 11, khoản 328]** Trên `aff07f85`: `pnpm t0` xanh; `pnpm test` 141 tệp, 2394 đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence` vitest
+  thoát mã 0, 4439 khẳng định, 78/78 bất biến, 1593 giây, `evidence/INV-matrix.md` không đổi. Đột biến K1–K4: 4/4.
+
+## 11. Khoản 328 — sửa theo lựa chọn của chủ dự án (2026-10-02)
+Sau báo cáo của vòng, chủ dự án: *"Bật auto-fix, sửa khoản 328"*.
+- **Cách sửa:** `canhBaoAclWindows(nenTang, thuMuc, hoSo)` trong `tools/pilot-gia-lap/src/cum.ts` trả một câu cảnh báo khi nền tảng
+  là Windows và thư mục trạng thái nằm NGOÀI hồ sơ người dùng (`win32.relative` ra `..`, `..\…` hay một đường dẫn tuyệt đối — ổ
+  khác); `chuanBiCum` (lệnh chạy và `cum`) gọi nó với `process.platform` và `homedir()` rồi in ra stderr. Các lệnh hỗ trợ
+  (`lien-ket`, `otp`, `dang-nhap`) không in, để buổi trình diễn không ồn.
+- **Điểm tôi tự chốt:** kiểm theo ĐƯỜNG DẪN thay vì đọc ACL (`Get-Acl` qua PowerShell): hồ sơ người dùng mặc định chỉ chủ đọc
+  được, nên điều kiện ấy đúng là điều kế hoạch §4 khuyên, kiểm được trên mọi máy chạy test, và không thêm một tiến trình con mỗi lần
+  dựng cụm. Cái giá, nói ra: thư mục ngoài hồ sơ mà ACL đã siết vẫn bị cảnh báo, và một hồ sơ bị nới ACL thì không. Cảnh báo,
+  không từ chối — mọi dữ liệu của cụm là giả lập. So bằng `path.win32` tường minh, nên test chạy được trên CI Linux.
+- **Đỏ trước:** hai ca mới trong `tools/pilot-gia-lap/src/phu-tro.test.ts` đỏ trên mã trước khi sửa (*"canhBaoAclWindows is not a
+  function"*; `chuanBiCum` chưa gọi).
+- **Đột biến** (trọn `phu-tro.test.ts`, 22 ca, cùng khuôn mục 7; bản gốc và bản sau: 0 đỏ): K1 luôn trả `null` ⇒ 1 đỏ; K2 bỏ vế
+  `..` (chỉ xét ổ khác) ⇒ 1 đỏ (bẫy `C:\Users\nguye2`, `..\rdp`); K3 `chuanBiCum` không gọi ⇒ 1 đỏ; K4 cảnh báo cả trên POSIX ⇒ 1 đỏ.
+- **Đo trên máy thật:** lượt giả lập thứ năm (kho trên `D:\`) in *"CẢNH BÁO (khoản 328): trên Windows, thư mục trạng thái
+  D:\Claude\TrustProcure\.claude\worktrees\bac-1-pilot\.pilot-gia-lap thừa hưởng ACL của thư mục cha — … nằm ngoài hồ sơ người dùng
+  C:\Users\nguye …"* trước khi sinh bí mật; lượt vẫn 10/10 ĐẠT, cô lập 2/2. Nhánh không cảnh báo (thư mục dưới hồ sơ) chỉ đo bằng
+  test — chạy thật với `--thu-muc` mới trên cùng CSDL thì công cụ từ chối đúng như khoản 165, và một CSDL mới thì vòng không dựng.
