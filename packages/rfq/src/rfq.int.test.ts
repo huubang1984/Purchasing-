@@ -1730,13 +1730,15 @@ describe("[S1.167 / khoản 247] lần vi phạm D2 khi duyệt gói để lại
   // CSDL: mọi tên ràng buộc mà ba trigger J3/D2 đặt đều có mã chốt, và mọi dòng của bảng tên → mã đều có một nhánh đặt nó.
   // [S1.194 / S3.2d / khoản 255] Trigger K4a (`rfq_invitations_kiem_danh_sach`) cũng đặt tên ràng buộc — bảng có hai dòng `k4a_…`.
   // [S1.196 / S3.3a] Và trigger K8a: `ncc_kiem_xac_minh` (`082`) đặt hai tên K8a — phép so gom cả năm thân.
-  it("tên ràng buộc ở ba trigger J3/D2, trigger K4a, trigger K8a và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
+  // [S1.253 / S4.5a] Và trigger L14: `rfq_evaluations_kiem_phien_ban_ghim` (`102`) đặt một tên — phép so gom cả sáu thân.
+  it("tên ràng buộc ở ba trigger J3/D2, trigger K4a, trigger K8a, trigger L14 và bảng `CHOT_THEO_RANG_BUOC` khớp nhau cả hai chiều", async () => {
     const { rows } = await db.pool.query<{ prosrc: string }>(
       "SELECT prosrc FROM pg_proc WHERE oid IN ('public.rfq_kiem_nguoi_duyet()'::regprocedure, " +
         "'public.award_kiem_de_xuat()'::regprocedure, 'public.award_kiem_nguoi_duyet()'::regprocedure, " +
-        "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure)",
+        "'public.rfq_invitations_kiem_danh_sach()'::regprocedure, 'public.ncc_kiem_xac_minh()'::regprocedure, " +
+        "'public.rfq_evaluations_kiem_phien_ban_ghim()'::regprocedure)",
     );
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     const trongThan = rows.flatMap((r) => [...r.prosrc.matchAll(/CONSTRAINT = '(\w+)'/gu)].map((m) => m[1])).sort();
     expect(trongThan).toEqual(Object.keys(CHOT_THEO_RANG_BUOC).sort());
   });
