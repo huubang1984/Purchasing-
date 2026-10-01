@@ -222,7 +222,9 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
   ```
   Đọc biến qua `terraform console` (gồm mặc định) và hỏi tài khoản prod, **chỉ đọc**: không còn `<...>` hay digest
   `000…`; image nằm đúng kho ECR của prod và có thật; ~~bốn~~ **[S1.182]** năm secret (thêm `tp/api/zalo-oa` khi bật Zalo) tồn tại và đã có
-  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. Ở bước này
+  giá trị; domain gửi thư đã xác minh ở SES. Thoát 1 khi có `[DO]` — sửa rồi chạy lại, **không plan**. **[2026-10-01]** Một biến
+  trượt validation của stack (vd. `anh` ghi thẻ thay digest) ⇒ tool in nguyên lời Terraform và thoát 2 — trước đó nó chỉ báo
+  "đã terraform init chưa?" vì `terraform console` thoát 0 ở ca ấy (đo trên 1.13.3). Ở bước này
   `[VANG]` cho `so_ban_api`, `so_ban_worker`, `che_do_dns` là đúng; `[VANG] ses.sandbox` là đúng tới khi SES duyệt;
   **[rà 2026-10-01]** `[VANG] kenh_otp` là đúng tới khi stack 85 xong (5.3) — nhưng tới lúc ấy nhà cung cấp thật chưa nộp được (0.3).
   Tool không thấy được host TẠM trong secret `*/database-url` — việc đó của 6.5.
@@ -250,7 +252,8 @@ Quy ước: `<...>` là giá trị bạn điền; **không commit** `*.tfvars`, 
       header ADR-075 (`curl.exe -sI`), `http://` ⇒ 301.
 - [ ] Nguồn thời gian (README, "Nguồn thời gian"): `ClockDrift` SYNCHRONIZED trong một task api; chép vào STATE khoản 15.
       **[rà 2026-10-01]** Lệnh `curl` "trong một task" của README không chạy được — stack 90 không bật ECS Exec và image
-      `node:22-bookworm-slim` không có `curl`; README nay đề một task `tp-migrate` chạy một lần với lệnh ghi đè (chưa đo).
+      `node:22-bookworm-slim` không có `curl`; README nay đề một task `tp-migrate` chạy một lần với lệnh ghi đè ~~(chưa đo)~~ **[2026-10-01]** (chưa đo trên
+      AWS; phần cục bộ đã đo và ghim — README nói cách đọc `CLOCKDRIFT undefined`: task vẫn thoát 0 nhưng CHƯA phải kết quả).
 
 ### 6.8 DNS Firewall: ALERT ⇒ BLOCK
 

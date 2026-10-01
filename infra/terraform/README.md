@@ -449,7 +449,10 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
 
 1. ~~Trong một task `tp-api`: `curl "$ECS_CONTAINER_METADATA_URI_V4/task"` ⇒~~ **[rà 2026-10-01]** Không vào được một task đang
    chạy: stack 90 không bật ECS Exec, và image `node:22-bookworm-slim` không có `curl`. Thay bằng một task `tp-migrate` chạy một
-   lần với lệnh ghi đè — cùng cụm Fargate, cùng subnet ứng dụng; nó đọc metadata bằng `fetch` của Node, **chưa đo**. Tệp
+   lần với lệnh ghi đè — cùng cụm Fargate, cùng subnet ứng dụng; nó đọc metadata bằng `fetch` của Node, **chưa đo trên AWS**.
+   **[2026-10-01]** Phần không cần AWS đã đo và ghim (`tests/architecture/hinh-dang-clockdrift.test.ts`): tên container khớp task
+   `migrate` của stack 90, đích `migrate` của `deploy/Dockerfile` chỉ có `CMD` nên `command` thay trọn lệnh, và trên một endpoint
+   metadata v4 giả lệnh in đúng một dòng `CLOCKDRIFT {…}`. Tệp
    `clockdrift.json`, lưu UTF-8 bằng trình soạn (không bằng `Out-File` của PowerShell 5):
    ```json
    {"containerOverrides":[{"name":"tp-migrate","command":["node","-e","fetch(process.env.ECS_CONTAINER_METADATA_URI_V4+'/task').then(r=>r.json()).then(j=>console.log('CLOCKDRIFT '+JSON.stringify(j.ClockDrift)))"]}]}
@@ -457,6 +460,10 @@ Kiểm sau khi stack RDS và `90-ecs` được apply (đối chứng dương, b�
    Chạy lệnh in bởi `terraform output lenh_chay_migrate`, thêm `--overrides file://clockdrift.json`, rồi tìm `CLOCKDRIFT` trong
    `/tp/migrate` ⇒ trường `ClockDrift` có
    `ClockSynchronizationStatus = SYNCHRONIZED` và `ClockErrorBound` cỡ mili-giây.
+   **[2026-10-01]** Ba kết quả khác: `CLOCKDRIFT undefined` (đo trên endpoint giả: task VẪN thoát 0) ⇒ metadata không mang
+   trường ấy — CHƯA đo, không phải đạt, đừng chép vào STATE; `NOT_SYNCHRONIZED` ⇒ dừng trước dữ liệu thật; task thoát 1 với
+   `fetch failed` (đo: endpoint không trả lời) ⇒ không với tới endpoint metadata — chạy lại một lần, lặp lại thì dừng và đọc
+   `/tp/migrate`.
 2. Log khởi động của `tp-api` và `tp-unseal-worker` KHÔNG có `LechDongHoError`; và trong một giờ chạy,
    không có dòng `canh bao LechDongHo`.
 3. Chép hai kết quả ấy vào `docs/STATE.md` khoản 15 cùng bảng KMS.
