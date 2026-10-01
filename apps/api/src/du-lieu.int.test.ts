@@ -104,9 +104,12 @@ afterAll(async () => {
 const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
 describe("[S1.199 / S4.2b] ⑴ cổng ghi `item.manage` ở tầng ứng dụng", () => {
-  it("mười một route, đúng tám route ghi khai `item.manage`, ba route đọc khai `agent: false`", () => {
+  it("mười hai route, đúng tám route ghi khai `item.manage`, bốn route đọc khai `agent: false`", () => {
+    // [S1.251 / S4.4b] Route thứ mười hai là `GET /items/:itemId/price-history` (lịch sử giá, `apps/api/src/routes/lich-su-gia.ts`):
+    // một route ĐỌC dưới cùng tiền tố, cổng `bid.view` nằm trong bộ đọc. Mười một route của S4.2b giữ nguyên.
     const cuaDuLieu = ROUTES.filter((r) => /^\/(?:items|uom)(?:\/|$)/u.test(r.path));
-    expect(cuaDuLieu).toHaveLength(11);
+    expect(cuaDuLieu).toHaveLength(12);
+    expect(cuaDuLieu.filter((r) => r.path === "/items/:itemId/price-history").map((r) => r.method)).toEqual(["GET"]);
     expect(cuaDuLieu.every((r) => r.audience === "BUYER")).toBe(true);
     const ghi = cuaDuLieu.filter((r) => "mutates" in r && r.mutates);
     expect(ghi).toHaveLength(8);
