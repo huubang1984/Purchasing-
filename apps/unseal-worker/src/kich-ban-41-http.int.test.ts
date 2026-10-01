@@ -2205,7 +2205,9 @@ describe("[S1.243 / khoản 275] câu suy phong bì hỏng của ADR-129 §3 tr�
 
   /** Câu §3 của ADR-129, đọc NGUYÊN VĂN từ `docs/DECISIONS.md`: khối ```sql DUY NHẤT của mục ADR-129, bỏ thụt lề danh sách. */
   async function cauSuyCuaAdr129(): Promise<string> {
-    const vanBan = await readFile(fileURLToPath(new URL("../../../docs/DECISIONS.md", import.meta.url)), "utf8");
+    // [Windows, 2026-10-01] Checkout Windows (`core.autocrlf=true`; `.gitattributes` không ghim `.md`) cho tệp này CRLF, và khối
+    // ```sql dưới khớp bằng `\n` — chuẩn hoá xuống dòng trước khi tách, chữ của câu §3 không đổi.
+    const vanBan = (await readFile(fileURLToPath(new URL("../../../docs/DECISIONS.md", import.meta.url)), "utf8")).replace(/\r\n/gu, "\n");
     const dau = vanBan.indexOf("\n## ADR-129 ");
     expect(dau, "không thấy mục ADR-129 trong docs/DECISIONS.md").toBeGreaterThan(0);
     const cuoi = vanBan.indexOf("\n## ADR-", dau + 1);
