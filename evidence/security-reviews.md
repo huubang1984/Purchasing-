@@ -23649,7 +23649,7 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
   chỉ ở ba tệp sổ (gỡ tay, `cap-so --dem` viết lại số đếm; số của nhánh không đổi); `pnpm t0` sạch (522 module); `pnpm test` 144 tệp, 2447
   đạt, 1 bỏ qua — gồm `cau-cam-tren-giao-dien` trên màn `/chinh-sach` đã thêm nhóm khoá; `cap-so --kiem` sạch.
 
-# §S1.9101 — KHOẢN 329: MÀN `/chinh-sach` KHAI TRỌNG SỐ CHẤM VÀ BAFO TOP-N — PHIÊN BẢN TẠO TRÊN MÀN CHẤM ĐƯỢC
+# §S1.258 — KHOẢN 329: MÀN `/chinh-sach` KHAI TRỌNG SỐ CHẤM VÀ BAFO TOP-N — PHIÊN BẢN TẠO TRÊN MÀN CHẤM ĐƯỢC
 
 ## 1. Vòng này là gì
 
@@ -23729,3 +23729,11 @@ Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích
   `[{gia, TIEN, 1.0000}]`, top-2 — không import mẫu; `gieo:demo` import `TRONG_SO_DEMO`).
 - Phiên bản đã tạo trên màn TRƯỚC vòng này vẫn không trọng số; gói đã mở dưới chúng không chấm được (ADR-141). Lối ra là phiên bản mới
   cho gói mở SAU nó.
+
+## 9. Số đo và số hiệu
+
+- `pnpm t0` sạch (522 module); `pnpm test` 144 tệp, 2458 đạt, 1 bỏ qua; ca `buyer.int` *cờ TẮT* xanh trên Postgres 16; `cap-so --kiem` sạch.
+- Số: `pnpm cap-so --base origin/claude/s4-4b-price-history-l5g5lj` (nhánh chồng) cấp S1.258 — S1.257 do nhánh khác giữ. Lần chạy
+  đầu với base mặc định `origin/master` thu hồi cả số của S4.5b (cùng số tạm vòng 9101), từ chối ghi vì hai đầu mục trùng, nhưng đã đẩy
+  lời giữ lên remote cho ADR-143, khoản 334–336, migration 104 — nhánh này không dùng số nào trong đó. Nhả chúng là xoá năm nhánh
+  `cap-so/*` trên remote: chờ chủ dự án.

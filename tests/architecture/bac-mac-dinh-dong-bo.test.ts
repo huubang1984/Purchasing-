@@ -47,9 +47,9 @@ describe("[S1.174 / S3.1d] mặc định §4.1 — màn /chinh-sach và gieo:dem
     expect(docNhomBenchmark(BENCHMARK_MAC_DINH)).not.toBeNull();
   });
 
-  // [S1.9101 / khoản 329] Trọng số chấm: mẫu của màn trùng mẫu `gieo:demo` khai (mà kịch bản 41 và lượt diễn tập chấm được), và
+  // [S1.258 / khoản 329] Trọng số chấm: mẫu của màn trùng mẫu `gieo:demo` khai (mà kịch bản 41 và lượt diễn tập chấm được), và
   // phép kiểm vế hẹp của màn neo vào mã thành phần của chính lượt chấm — đổi mã ở `luot-danh-gia.ts` mà quên màn thì đỏ ở đây.
-  it("[S1.9101 / khoản 329] mẫu trọng số và BAFO top-N của màn trùng gieo:demo, và vế hẹp của màn dùng đúng mã của lượt chấm", () => {
+  it("[S1.258 / khoản 329] mẫu trọng số và BAFO top-N của màn trùng gieo:demo, và vế hẹp của màn dùng đúng mã của lượt chấm", () => {
     expect(TRONG_SO_MAC_DINH).toEqual(TRONG_SO_DEMO);
     expect(BAFO_TOP_N_MAC_DINH).toBe(BAFO_TOP_N_DEMO);
     expect(TRONG_SO_MAC_DINH.map((t) => [t.ma, t.don_vi])).toEqual([[MA_THANH_PHAN_GIA, "TIEN"]]);

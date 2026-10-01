@@ -128,7 +128,7 @@ describe("[S1.256 / S4.5b] cảnh báo tĩnh của nhóm khoá `benchmark` — k
   });
 });
 
-describe("[S1.9101 / khoản 329] trọng số chấm — vế hẹp, cảnh báo tĩnh, mô tả", () => {
+describe("[S1.258 / khoản 329] trọng số chấm — vế hẹp, cảnh báo tĩnh, mô tả", () => {
   it("mẫu là vế hẹp lượt chấm đọc được và không cảnh báo; không khai thì nói hậu quả", () => {
     expect(trongSoChamDuoc(TRONG_SO_MAC_DINH)).toBe(true);
     expect(canhBaoTrongSo(TRONG_SO_MAC_DINH)).toEqual([]);

@@ -325,7 +325,7 @@ export interface PhienBanChinhSach extends ProcurementPolicyRecord {
   /** [S1.256 / S4.5b] Nhóm khoá `benchmark`, đúng như CSDL cất; `null`: chưa cấu hình. */
   readonly benchmark: Readonly<Record<string, string>> | null;
   /**
-   * [S1.9101 / khoản 329] Trọng số chấm và BAFO top-N, đúng như CSDL cất; cả hai `null` khi phiên bản không khai (`056` đòi chúng đi
+   * [S1.258 / khoản 329] Trọng số chấm và BAFO top-N, đúng như CSDL cất; cả hai `null` khi phiên bản không khai (`056` đòi chúng đi
    * cùng nhau). Màn `/chinh-sach` cần chúng để HIỆN và để *Chép phiên bản mới nhất* mang chúng sang phiên bản kế — trước vòng này
    * câu dưới không đọc hai cột ấy, nên một phiên bản chép trên màn luôn mất trọng số.
    */

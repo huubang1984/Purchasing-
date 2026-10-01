@@ -11114,4 +11114,4 @@ khoản 329 vào rổ A, sửa ở một PR riêng ngay; khoản 330, 331 vào r
   × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
   18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.256). Đọc
   as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy. **Chủ dự án chốt: tính một lần, lưu lại (mục 9).**
-- ~~**Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329, rổ A — PR riêng) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.~~ **[S1.9101] Đóng:** màn khai trọng số (thành phần cố định, chỉ-đọc) và BAFO top-N (sửa được) — biên bản §S1.9101.
+- ~~**Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329, rổ A — PR riêng) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.~~ **[S1.258] Đóng:** màn khai trọng số (thành phần cố định, chỉ-đọc) và BAFO top-N (sửa được) — biên bản §S1.258.

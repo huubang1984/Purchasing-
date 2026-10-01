@@ -218,7 +218,7 @@ export function canhBaoBenchmark(nhom: NhomBenchmark | null): readonly string[] 
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / khoản 329] TRỌNG SỐ CHẤM VÀ BAFO TOP-N — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH
+// [S1.258 / khoản 329] TRỌNG SỐ CHẤM VÀ BAFO TOP-N — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH
 // ----------------------------------------------------------------------------------------------
 // Trước vòng này màn không gửi `evalComponents`/`bafoTopN`, nên mọi phiên bản tạo trên màn không chấm được, và từ S4.5a (ADR-141)
 // gói mở dưới phiên bản ấy không bao giờ chấm được. Chủ dự án chốt 2026-10-01: thành phần là CỐ ĐỊNH — đúng vế hẹp mà lượt chấm đọc

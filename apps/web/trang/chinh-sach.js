@@ -33,7 +33,7 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 // `/lib/dang-nhap.js`.
 let trangThai = { phienBan: [], daBat: false, choKy: false };
 let bac = [];
-// [S1.9101 / khoản 329] Thành phần trọng số sẽ gửi khi ô "Khai trọng số" được chọn — không có ô sửa: mẫu, hoặc nguyên văn của
+// [S1.258 / khoản 329] Thành phần trọng số sẽ gửi khi ô "Khai trọng số" được chọn — không có ô sửa: mẫu, hoặc nguyên văn của
 // phiên bản vừa chép (kể cả khi nó ngoài vế hẹp — màn hiện và cảnh báo, không tự đổi).
 let trongSo = TRONG_SO_MAC_DINH;
 
@@ -287,7 +287,7 @@ function benchmarkGuiLen() {
   return ra;
 }
 
-/** [S1.9101 / khoản 329] Đặt khối trọng số: `thanhPhan` `null` ⇒ bỏ chọn (ô top-N trống); ngược lại hiện thành phần chỉ-đọc. */
+/** [S1.258 / khoản 329] Đặt khối trọng số: `thanhPhan` `null` ⇒ bỏ chọn (ô top-N trống); ngược lại hiện thành phần chỉ-đọc. */
 function datTrongSo(thanhPhan, topN) {
   const co = thanhPhan !== null && thanhPhan !== undefined;
   trongSo = co ? thanhPhan.map((t) => ({ ...t })) : TRONG_SO_MAC_DINH;

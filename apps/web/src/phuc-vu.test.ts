@@ -2385,7 +2385,7 @@ describe("bề mặt tệp", () => {
       expect(await taoVoi(false, "c-thep")).not.toHaveProperty("categoryId");
     });
 
-    // [S1.9101 / khoản 329] Màn `/chinh-sach` là giao diện DUY NHẤT của `POST /policy`; trước vòng này thân nó gửi không mang
+    // [S1.258 / khoản 329] Màn `/chinh-sach` là giao diện DUY NHẤT của `POST /policy`; trước vòng này thân nó gửi không mang
     // `evalComponents`/`bafoTopN`, nên mọi phiên bản tạo trên màn không chấm được. Đo đúng thân trang GỬI, ở ba đường: mẫu, chép,
     // bỏ chọn — và bảng phiên bản hiện trọng số.
     const moChinhSach = async (phienBan: unknown[]) => {
@@ -2414,7 +2414,7 @@ describe("bề mặt tệp", () => {
       createdBy: "u-1", signedBy: null, signedAt: null, hieuLuc: true,
     };
 
-    it("[S1.9101 / khoản 329] chinh-sach: mẫu mặc định gửi trọng số gia/TIEN/1.0000 và BAFO top-2; không cảnh báo trọng số", async () => {
+    it("[S1.258 / khoản 329] chinh-sach: mẫu mặc định gửi trọng số gia/TIEN/1.0000 và BAFO top-2; không cảnh báo trọng số", async () => {
       const { p, gui } = await moChinhSach([]);
       expect(p.el("co-trong-so").checked).toBe(true);
       expect(p.el("khoi-trong-so").hidden).toBe(false);
@@ -2424,7 +2424,7 @@ describe("bề mặt tệp", () => {
       expect(p.el("canh-bao").textContent).not.toContain("trọng số");
     });
 
-    it("[S1.9101 / khoản 329] chinh-sach: «Chép phiên bản mới nhất» mang trọng số và top-N; bảng phiên bản hiện chúng", async () => {
+    it("[S1.258 / khoản 329] chinh-sach: «Chép phiên bản mới nhất» mang trọng số và top-N; bảng phiên bản hiện chúng", async () => {
       const { p, gui } = await moChinhSach([PHIEN_BAN_CO]);
       const hang = p.el("bang-pb").querySelector("tbody").con[0];
       expect(hang?.con.map((x) => x.textContent)).toContain("gia/TIEN ×1.0000 · BAFO top-3");
@@ -2441,7 +2441,7 @@ describe("bề mặt tệp", () => {
       expect(q.el("canh-bao").textContent).toContain("KHÔNG khai trọng số chấm");
     });
 
-    it("[S1.9101 / khoản 329] chinh-sach: bỏ chọn ⇒ gửi cặp null và cảnh báo; chọn lại khi top-N trống ⇒ ô nhận mẫu; trọng số ngoài vế hẹp chép nguyên văn kèm cảnh báo", async () => {
+    it("[S1.258 / khoản 329] chinh-sach: bỏ chọn ⇒ gửi cặp null và cảnh báo; chọn lại khi top-N trống ⇒ ô nhận mẫu; trọng số ngoài vế hẹp chép nguyên văn kèm cảnh báo", async () => {
       const { p, gui, doiO } = await moChinhSach([]);
       await doiO("co-trong-so", false);
       expect(p.el("khoi-trong-so").hidden).toBe(true);
