@@ -29,7 +29,7 @@ import { CsdlDacQuyen, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
 import { CONG_MAC_DINH, GOC_KHO, docBiMat, khoiDongCum, kiemThuMucTrangThai, taoBiMat, type Cum } from "./cum.js";
 import { NguoiMua, maTotpHienTai } from "./dien-vien.js";
 import { emailLienHe, emailNguoi, hoSo, type HoSoToChuc, type MaToChuc } from "./ho-so.js";
-import { HopThu, tokenTuLink } from "./hop-thu.js";
+import { HopThu, HopThuError, tokenTuLink } from "./hop-thu.js";
 import { diaChiGiaLap, layChuoi, PhienHttp } from "./http.js";
 import { DANH_MUC, kiemDanhMuc, type KichBan } from "./kich-ban.js";
 import { layKhoaBienNhan } from "./kiem-doc-lap.js";
@@ -451,7 +451,16 @@ async function dangNhap(ts: ThamSo, thuMuc: string): Promise<number> {
   const http = new PhienHttp(`http://127.0.0.1:${ts.cong.api}`, "127.0.0.1");
   const r = await http.goi("POST", "/auth/link", { orgId: tc.orgId, email });
   if (r.status !== 200) throw new PilotError(`/auth/link trả ${r.status} — cụm có đang chạy không?`);
-  const tin = await hopThu.cho(`link đăng nhập của ${email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === tc.orgId && t.den === email);
+  // [S1.9102 / khoản 9405] `/auth/link` LUÔN trả 200 cùng một thân (chống dò email); quá trần 5 link mỗi người trong 15 phút
+  // (`issueLoginToken`) thì nó không gửi gì. Đo ở diễn tập §11: lệnh chỉ nói "hộp thư chưa có link" — người trình diễn không
+  // biết phải đợi, hay dùng lại phiên còn hạn.
+  const tin = await hopThu.cho(`link đăng nhập của ${email}`, (t) => t.loai === "LOGIN_LINK" && t.orgId === tc.orgId && t.den === email).catch((e: unknown) => {
+    if (!(e instanceof HopThuError)) throw e;
+    throw new PilotError(
+      `${e.message} — sản phẩm gửi tối đa 5 link đăng nhập cho một người trong 15 phút, và quá trần thì vẫn trả 200 mà không gửi. ` +
+        "Đợi rồi chạy lại, hoặc dùng phiên còn hạn: mở trang KHÔNG kèm # và bấm \"Tiếp tục với phiên này\" (phiên sống 8 giờ).",
+    );
+  });
   if (tin.loai !== "LOGIN_LINK") throw new PilotError("tin sai loại");
   const token = tokenTuLink(tin.duongLink, tin.orgId);
   const web = `http://127.0.0.1:${ts.cong.web}`;
@@ -520,6 +529,12 @@ async function lienKet(ts: ThamSo, thuMuc: string): Promise<number> {
     }
   }
   if (n === 0) viet("không còn lời mời nào chờ nộp");
+  else {
+    // [S1.9102 / khoản 9405] Link mời bị TIÊU THỤ ở lần xác minh OTP đầu tiên ([H5]), mà trạng thái của công cụ không biết lần ấy:
+    // một link đã xác minh nhưng chưa nộp vẫn được liệt kê, và mở nó ở trình duyệt khác ra 422. Đo ở diễn tập §11.
+    viet("Mỗi link mở được tới lần xác minh OTP ĐẦU TIÊN. Đã xác minh mà chưa nộp: nộp tiếp bằng phiên cũ trên CÙNG trình duyệt, hoặc");
+    viet("bên mua bấm «Gửi lại link» ở /tao-thau bước 5. Đừng diễn thử bằng link sẽ dùng khi gặp khách.");
+  }
   return 0;
 }
 

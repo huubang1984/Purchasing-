@@ -647,7 +647,7 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
           // TRƯỚC lần duyệt thật: trang chặn nút "Phê duyệt" ngay trên trình duyệt khi đề xuất không còn
           // PROPOSED, nên một lần thử SAU sẽ không bao giờ tới sản phẩm (lượt soi tài liệu của vòng này).
           `Trước khi duyệt: đăng nhập bằng ${moTaNguoi(nguoiDeXuat.hoSo)} (người đề xuất) ở /mo-thau, ${NAP_GOI}, bước 7 bấm "Phê duyệt": sản phẩm từ chối — ${lopTuChoi(nguoiDeXuat.hoSo, "po.approve", "J3")}.`,
-          `Đăng nhập bằng ${moTaNguoi(gd)}, ${NAP_GOI}, bước 7: đọc đề xuất rồi bấm "Phê duyệt".`,
+          `Đăng nhập bằng ${moTaNguoi(gd)}, ${NAP_GOI}, bước 7: bấm "Đọc đề xuất" — nhà cung cấp, chi phí, lý do — rồi bấm "Phê duyệt".`,
           "Bước 8: bấm \"Tải bộ bằng chứng\" (hai tệp) và kiểm bằng `pnpm bang-chung kiem --bo <thư mục>` KHÔNG cần CSDL.",
         ],
         loiMoiConLai: [],

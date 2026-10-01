@@ -146,6 +146,19 @@ tr.thap td { background: var(--luc-nen); }
    phải con số đang có hiệu lực, nên nó không được trông ngang hàng. */
 tr.mo td { opacity: 0.55; font-style: italic; }
 
+/* [S1.9102 / khoản 9403] Bảng hạng mục của /nop-thau trên màn hẹp: mỗi hạng mục là một khối — mô tả trên, số lượng và đơn vị
+   giữa, ô đơn giá rộng hết dòng dưới. Đo trên Chromium trước vòng này: ở 320–414px ô đơn giá của bảng bốn cột chỉ rộng 40–79px
+   và cắt mọi giá từ 6 chữ số, nên nhà cung cấp không đọc lại được con số mình sắp niêm phong. */
+@media (max-width: 480px) {
+  table.hang-gia thead { display: none; }
+  table.hang-gia, table.hang-gia tbody, table.hang-gia tr, table.hang-gia td { display: block; }
+  table.hang-gia tr { padding: 10px 0; border-bottom: 1px solid var(--vien); }
+  table.hang-gia td { border-bottom: 0; padding: 3px 0; text-align: left; }
+  table.hang-gia td.sl, table.hang-gia td.dvt { display: inline-block; margin-right: 18px; }
+  table.hang-gia td[data-nhan]::before { content: attr(data-nhan) ": "; color: var(--chu-mo); font-size: 0.85em; }
+  table.hang-gia td.gia::before { display: block; margin-bottom: 2px; }
+}
+
 /* [S1.106 / S2.4] Thành phần của một hàng xếp hạng nằm NGAY TRONG ô, không sau một cú bấm:
    spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */
 ul.tp { margin: 0; padding: 0; list-style: none; }

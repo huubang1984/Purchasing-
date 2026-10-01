@@ -123,7 +123,7 @@
     </div>
     <dl class="tt" id="tt-luot"></dl>
     <table id="bang-hang">
-      <thead><tr><th class="so">Hạng</th><th>Nhà cung cấp</th><th class="so">Chi phí hiệu dụng</th><th>Thành phần</th></tr></thead>
+      <thead><tr><th class="so">Hạng</th><th>Nhà cung cấp</th><th class="so">Chi phí hiệu dụng</th><th>Thành phần</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="bao loi" id="loi5" hidden></div>
@@ -160,12 +160,14 @@
     <p class="ghi">Lượt chấm mà đề xuất dựa trên <strong>không gõ tay</strong>: nó là lượt
       <strong>mới nhất</strong>, nên sau một chu kỳ BAFO thì award nói về bảng xếp hạng SAU BAFO.
       Báo giá được chọn phải có <strong>chi phí hiệu dụng đọc được</strong> ở đúng lượt ấy.</p>
-    <label for="bao-gia-thang">Báo giá được chọn (id phiên bản, lấy từ bảng xếp hạng ở bước 5)</label>
+    <!-- [S1.9102 / khoản 9401] Trước vòng này nhãn bảo lấy id «từ bảng xếp hạng», mà bảng không in id nào. -->
+    <label for="bao-gia-thang">Báo giá được chọn — bấm «Chọn» ở bảng xếp hạng (bước 5), hay dán id phiên bản</label>
     <input id="bao-gia-thang" type="text" placeholder="uuid của bid version">
     <label for="ly-do-award">Lý do — <strong>bắt buộc</strong>, ở cả lần đề xuất, lần rút và lần huỷ</label>
     <input id="ly-do-award" type="text" placeholder="vì sao chọn báo giá này">
     <div class="doi">
       <button id="nut-de-xuat">Đề xuất trao thầu</button>
+      <button id="nut-doc-award" class="phu">Đọc đề xuất</button>
       <button id="nut-duyet-award" class="phu">Phê duyệt</button>
       <button id="nut-rut-de-xuat" class="phu" hidden>Rút đề xuất</button>
       <button id="nut-huy-award" class="phu">Huỷ trao thầu</button>

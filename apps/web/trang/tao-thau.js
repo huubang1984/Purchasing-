@@ -50,7 +50,15 @@ async function goi(method, duong, than) {
   return { status: res.status, body, chu };
 }
 
+// [S1.9102 / khoản 9404] Cùng câu với `/mo-thau`: thân 403 của `apps/api` là hằng `khong co quyen` (`dispatch.ts`), in nguyên
+// văn là một chuỗi không dấu — đo ở diễn tập §11: người mua vai BUYER bấm «Tạo nhà cung cấp». Thân lỗi khác in nguyên văn.
+const THAN_403 = "khong co quyen";
+
 function loiCua(r, macDinh) {
+  if (r.status === 403 && r.body?.error === THAN_403) {
+    return `${macDinh}: tài khoản đang đăng nhập không có quyền làm việc này — vai hiện tại không được cấp quyền ấy. ` +
+      "Đổi sang người phù hợp ở bước 1.";
+  }
   if (r.body !== null && typeof r.body === "object" && typeof r.body.error === "string") return r.body.error;
   return `${macDinh} (mã ${r.status})`;
 }

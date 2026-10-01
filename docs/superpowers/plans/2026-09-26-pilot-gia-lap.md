@@ -188,7 +188,10 @@ trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngo�
 - `log/`: log bốn tiến trình.
 
 **Một thư mục trạng thái đi với MỘT CSDL.** `api` từ chối khởi động khi vòng khoá lệch dấu kiểm đã ghi (khoản 165), và
-công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới.
+công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới. **[S1.9102]** Và hai lượt chạy ĐỒNG THỜI không được dùng chung một
+máy chủ Postgres, dù mỗi lượt một CSDL: hai vai đăng nhập `app_api_login`/`app_unseal_login` là của cả máy chủ, lượt sau đặt
+lại mật khẩu của chúng, và `api` của lượt trước mất kết nối với lỗi `28P01` (đo ở diễn tập ngày 2026-10-01 — lượt chế độ chậm
+hỏng giữa chừng vì thế). Mỗi lượt một container, như khối lệnh trên.
 
 **Trình diễn trên điện thoại thật cần HTTPS.** Cookie khách mang cờ `Secure` (ADR-044), nên cụm này chỉ nghe trên
 127.0.0.1. Khi trình diễn, mở `/nop-thau` trên máy người trình diễn với khung hẹp; điện thoại thật là việc của một cụm có
@@ -211,6 +214,14 @@ bấm **Đọc**. Không màn nào dưới đây cần gõ SQL.
 
 Lần tự duyệt phải đi TRƯỚC lần duyệt thật: sau khi đề xuất đã duyệt, trang `/mo-thau` chặn nút **Phê duyệt** ngay trên trình
 duyệt, và lần thử không bao giờ tới sản phẩm.
+
+**[S1.9102] Ba điều đo ở lượt diễn tập ngày 2026-10-01:**
+- Link mời mở được tới lần xác minh OTP ĐẦU TIÊN rồi bị tiêu thụ ([H5]); `lien-ket` vẫn liệt kê nó vì công cụ không biết lần ấy.
+  Đừng diễn thử bằng link sẽ dùng khi gặp khách; lỡ dùng thì nộp tiếp trên cùng trình duyệt, hay bấm «Gửi lại link» ở `/tao-thau`.
+- Mỗi người mua chỉ nhận 5 link đăng nhập trong 15 phút; quá trần, `dang-nhap` đợi 20 giây rồi báo (nay nói rõ trần ấy). Diễn
+  thử trước buổi gặp thì giữ phiên — phiên sống 8 giờ — thay vì xin link mới cho mỗi màn.
+- Bước 7 của `/mo-thau`: lần bấm **Phê duyệt** đầu tiên hiện đề xuất (nhà cung cấp, chi phí hiệu dụng, lý do), lần thứ hai mới
+  ký — hay bấm **Đọc đề xuất** trước. Người đề xuất chọn báo giá bằng nút **Chọn** ở bảng xếp hạng (bước 5).
 
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 

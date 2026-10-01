@@ -263,8 +263,12 @@ async function napGoiThau() {
     const o = document.createElement("input");
     o.inputMode = "numeric"; o.autocomplete = "off"; o.placeholder = "0"; o.dataset.lineNo = String(it.lineNo);
     o.addEventListener("input", tinhLai);
-    const tdGia = document.createElement("td"); tdGia.className = "so"; tdGia.append(o);
-    tr.append(td(`${it.lineNo}. ${it.description}`), td(String(Number(it.quantity)), "so"), td(it.unit ?? ""), tdGia);
+    const tdGia = document.createElement("td"); tdGia.className = "so gia"; tdGia.append(o);
+    // [S1.9102 / khoản 9403] Nhãn của từng ô cho màn hẹp: dưới 480px (`chung.css`) mỗi hạng mục là một khối và đầu bảng ẩn đi.
+    const sl = td(String(Number(it.quantity)), "so sl"); sl.dataset.nhan = "SL";
+    const dvt = td(it.unit ?? "", "dvt"); dvt.dataset.nhan = "ĐVT";
+    tdGia.dataset.nhan = "Đơn giá";
+    tr.append(td(`${it.lineNo}. ${it.description}`), sl, dvt, tdGia);
     tbody.append(tr);
   }
   tinhLai();
