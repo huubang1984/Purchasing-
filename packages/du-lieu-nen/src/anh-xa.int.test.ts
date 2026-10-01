@@ -838,7 +838,10 @@ describe("[INV-L1] khuôn nền của hai bảng mới", () => {
     for (const bang of ["rfq_item_mappings", "rfq_item_goi_y"]) {
       await expect(db.pool.query(`UPDATE ${bang} SET line_no = line_no WHERE rfq_id = $1`, [rfqId])).rejects.toThrow(/chi duoc ghi them/iu);
       await expect(db.pool.query(`DELETE FROM ${bang} WHERE rfq_id = $1`, [rfqId])).rejects.toThrow(/chi duoc ghi them/iu);
-      await expect(db.pool.query(`TRUNCATE ${bang}`)).rejects.toThrow(/chi duoc ghi them/iu);
+      // [S1.256 / S4.5b] `CASCADE`: từ `103_benchmark_gia`, hai bảng benchmark có khoá ngoại tới `rfq_item_mappings`, và `TRUNCATE` trần
+      // dừng ở lời *"cannot truncate a table referenced in a foreign key constraint"* TRƯỚC khi chốt chỉ-ghi-thêm chạy. Bảng vẫn không bị
+      // xoá trắng, nhưng ca này đo CHỐT — `CASCADE` đưa câu qua phép kiểm khoá ngoại tới trigger `BEFORE TRUNCATE`.
+      await expect(db.pool.query(`TRUNCATE ${bang} CASCADE`)).rejects.toThrow(/chi duoc ghi them/iu);
     }
     expect(
       await maLoi(
