@@ -10927,7 +10927,8 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
 bản áp cho gói X là phiên bản HIỆU LỰC lúc X mở — luật `chinh_sach_hieu_luc` của S3.1, không một hàm `chinh_sach_tai` thứ hai —, kèm
 một trigger trên `rfq_evaluations` mà lần vi phạm vào sổ `CONTROL_DENIED`; ⑵ S4.5 chia BA PR — S4.5a ghim chính sách (L14), S4.5b CSDL
 và lõi benchmark (L7), S4.5c phần hiện ở `/mo-thau`, bộ xuất ADR-059 và vế benchmark của L6; ⑶ bảng so sánh hiện benchmark ngay khi gói
-`UNSEALED`, tính as-of tại mốc mở giá của X ở mỗi lần đọc, còn lượt chấm ghi kết quả đúng một lần; ⑷ năm chi tiết phương pháp theo đề
+`UNSEALED`, ~~tính as-of tại mốc mở giá của X ở mỗi lần đọc~~ **[S1.256 / ADR-142 ⑼] tính as-of MỘT lần khi gói vào `UNSEALED` rồi lưu —
+đo: 18–19 s mỗi lần đọc ở 5.000 gói**, còn lượt chấm ghi kết quả đúng một lần; ⑷ năm chi tiết phương pháp theo đề
 xuất (mục *Quyết định* 8). Lượt sau lượt soi đối kháng: ⑸ CHỤP phiên bản ấy vào gói ở cạnh vào OPEN, không tính lại từ dấu thời gian về
 sau; ⑹ `opened_at` do người gọi đặt thành khoản 319, không sửa trong S4.5a · **[S1.253]** · **Liên quan:** ADR-097 ⑸ (ghim lúc
 `OPEN`), ADR-082 ⑺ (chữ ký thứ hai), ADR-080 (khoá tư vấn chính sách), ADR-085 (sàn một chữ ký), ADR-108 (từ chối có tên), ADR-060
@@ -11017,7 +11018,9 @@ THAM CHIẾU quan sát — (báo giá, dòng) khoá ngoại tới `rfq_unsealed_
 bản hàng chuẩn tái lập bằng phép đọc as-of tại mốc đã lưu; `quan_sat_gia` không đổi; ⑵ nhãn thứ năm `KHONG_DO_DUOC` kèm lý do, một hàng
 cho MỌI dòng của MỌI báo giá; ⑶ đơn giá của chính dòng đọc LÚC TÍNH, lưu kèm cờ hồi tố (ngoại lệ `SAU_MO_GIA` của L1), còn dải đọc tại mốc
 mở giá của gói; ⑷ chi tiết theo đề xuất — luật nhãn, biên ngưỡng, nhóm khoá trên `/chinh-sach` có mẫu và cảnh báo tĩnh, bộ đọc có cổng,
-phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 1. Chốt phương pháp của ADR-141 ⑧ áp nguyên · **[S1.256]** ·
+phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 1. Chốt phương pháp của ADR-141 ⑧ áp nguyên. Lượt sau số đo và lượt soi
+đối kháng (2026-10-01): ⑸ S4.5c TÍNH benchmark as-of MỘT LẦN khi gói vào `UNSEALED` và lưu, bảng so sánh đọc bản lưu — đổi ADR-141 ⑶; ⑹
+khoản 329 vào rổ A, sửa ở một PR riêng ngay; khoản 330, 331 vào rổ B · **[S1.256]** ·
 **Liên quan:** ADR-141 (phiên bản ghim, chốt phương pháp), ADR-136 (`quan_sat_gia`), ADR-140 ⑦ (bộ đọc có cổng, hàng sổ), ADR-095
 (lịch sử giá là hàm as-of), ADR-053 ⑴ (số là chuỗi), ADR-017 (ứng dụng tính, CSDL lưu) · **Spec:** S4 §4.1, §4.6, §2.4 ⑾, §2.5 ⑿ ㉒,
 §5.1 L7, L14, §9 S4.5b · **Biên bản:** `evidence/security-reviews.md` §S1.256
@@ -11080,6 +11083,9 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
    `bac-mac-dinh-dong-bo.test.ts` —, cảnh báo tĩnh không chặn (sàn dưới 3, ngưỡng vừa từ 20%, cửa sổ trên 24 hay dưới 3 tháng, phiên bản
    không cấu hình); *"tác động trên lịch sử thật"* chờ S4.5c. Bảng phiên bản có cột benchmark. `gieo:demo` khai mẫu ở phiên bản 1.
 8. **L7 vào sổ đăng ký; L14 nhận vế benchmark.**
+9. **[Chốt sau số đo hiệu năng] S4.5c tính một lần, lưu lại.** Ở 5.000 gói, đọc as-of một gói 20 dòng tốn 18–19 s; ADR-141 ⑶ (*"tính as-of tại
+   mốc mở giá ở mỗi lần đọc"*) không chịu nổi. S4.5c tính MỘT lần khi gói vào `UNSEALED` (và vào `BAFO_UNSEALED`) rồi lưu; bảng so sánh đọc
+   bản lưu. Nhánh as-of của `docBenchmark` ở S4.5b là phép tính ấy và sẽ đổi đích ở S4.5c; lượt chấm vẫn ghi một lần như mục 5.
 
 ### Hệ quả và giới hạn nói ra
 
@@ -11106,6 +11112,6 @@ phép đo hiệu năng có biên bản, `gieo:demo` khai mẫu ở phiên bản 
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
 - **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn ỨNG VIÊN của gói (giá của X tại mốc đọc, dải tại mốc mở giá). Đo ở 5.000 gói
   × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
-  18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.256). Hướng xử lý chờ chủ dự án trước S4.5c — đọc
-  as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy.
-- **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.
+  18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.256). Đọc
+  as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy. **Chủ dự án chốt: tính một lần, lưu lại (mục 9).**
+- **Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329, rổ A — PR riêng) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.

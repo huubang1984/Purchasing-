@@ -23307,6 +23307,13 @@ Bốn điểm, cả bốn theo đề xuất, sau khi đọc phép đo trước:
 Chốt phương pháp của ADR-141 ⑧ (tứ phân vị nội suy tuyến tính, trung vị tập chẵn, số thập phân chính xác; chỉ cùng tiền tệ, loại giá 0, cả
 hai đếm; lưu nhãn + chiều, không tỉ lệ; phiên bản không nhóm benchmark ⇒ không hàng) áp nguyên.
 
+Lượt sau số đo hiệu năng và lượt soi đối kháng (2026-10-01), cả bốn theo đề xuất:
+
+5. S4.5c tính benchmark as-of MỘT lần khi gói vào `UNSEALED` và lưu; bảng so sánh đọc bản lưu (đổi ADR-141 ⑶; ADR-142 ⑼).
+6. Khoản 329 (màn `/chinh-sach` không gửi trọng số chấm) vào rổ A, sửa ở một PR riêng ngay.
+7. Khoản 330, 331 vào rổ B.
+8. Mở PR cho S4.5b và theo dõi CI.
+
 ## 3. Đo trước
 
 1. `quan_sat_gia` trả `anh_xa_id`, không trả id quy đổi, bí danh, phiên bản hàng chuẩn; `uom_aliases_chung` không có cột id.
@@ -23430,11 +23437,11 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
   từ chối giá trị không phải chuỗi), SQL thô dưới `app_api` tới được; gói ghim phiên bản ấy không bao giờ chấm được. **Đóng**: hai jsonpath
   chạy `strict` (đo trên Postgres 16: hai mẫu hợp lệ vào, 11 mẫu hỏng gồm năm dạng mảng bị từ chối); sáu ca mới; đột biến M25.
 - **TRUNG-2 — `rfq_evaluations` không cổng trạng thái**: một giao dịch thô dưới `app_api` tạo lượt chấm mới ở `EVALUATING`, ở `CANCELLED`, kèm
-  nhãn tuỳ ý; bộ đọc lấy lượt mới nhất. Có từ S2.3 (bảng xếp hạng giả được y hệt). **Khoản 330** (rổ đề xuất B). Phần của vòng này **đóng**:
+  nhãn tuỳ ý; bộ đọc lấy lượt mới nhất. Có từ S2.3 (bảng xếp hạng giả được y hệt). **Khoản 330** (rổ B). Phần của vòng này **đóng**:
   lượt thô không hàng benchmark từng làm `docBenchmark` ném mãi ⇒ nay `THIEU_KET_QUA`; câu giới hạn của ADR-142 sửa.
 - **TRUNG-3 — chi phí lượt chấm** (2k + số hàng chuẩn đã bị thay lần quét toàn lịch sử hàng chuẩn, trong giao dịch giữ khoá gói): số đo ở mục 6;
-  quyết định của chủ dự án (mục 9).
-- **THẤP–TRUNG-4 — `cancelled_at` do người gọi đặt** lùi mốc huỷ của gói lịch sử và đổi kết quả tính lại. **Khoản 331** (rổ đề xuất B, cùng lớp
+  quyết định của chủ dự án: tính một lần, lưu lại ở S4.5c (mục 2.5).
+- **THẤP–TRUNG-4 — `cancelled_at` do người gọi đặt** lùi mốc huỷ của gói lịch sử và đổi kết quả tính lại. **Khoản 331** (rổ B, cùng lớp
   khoản 319).
 - **THẤP-5 — `he_so 'NaN'` qua `CHECK > 0` của `083`**, một quy đổi `NaN` trong dải làm lượt chấm ném mãi. **Đóng**: ràng buộc
   `item_uom_conversions_he_so_huu_han`; đột biến M26.
@@ -23449,11 +23456,10 @@ mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.0
 - CSDL không kiểm đủ hàng hay đúng nhãn; khoản 330. Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi hỏng ở trục khác.
 - Cuộc đua as-of chung của L1; khoản 331 (`cancelled_at`); gói huỷ sau mốc của X vẫn vào dải.
 - **Hiệu năng** (mục 6) — tuyến tính theo hàng chuẩn × quan sát; ở 5.000 gói, 20 dòng ⇒ ~22 s cho lượt chấm và ~19 s cho mỗi lần đọc as-of.
-  Phương án cho chủ dự án: ⑴ nhận cho S4.5b, S4.5c không tính as-of ở mỗi lần đọc (tính một lần lúc `UNSEALED`, hay lưu dải); ⑵ thêm tham số
-  gói cho `quan_sat_gia` — lần đọc giá của chính X thôi quét toàn lịch sử (đổi chốt *không sửa `quan_sat_gia`*); ⑶ trần số hàng chuẩn mỗi lượt
-  chấm. Chưa sửa gì.
+  Ba phương án đưa chủ dự án: ⑴ nhận cho S4.5b, S4.5c tính một lần lúc `UNSEALED` và lưu; ⑵ thêm tham số gói cho `quan_sat_gia`; ⑶ trần số
+  hàng chuẩn mỗi lượt chấm. **Chủ dự án chọn ⑴** (mục 2.5) — S4.5b không đổi mã.
 - **Khoản 329** — màn `/chinh-sach` không gửi trọng số chấm; trên hạ tầng thật bước trao thầu của kịch bản §11 không đi được bằng giao diện.
-  Rổ đề xuất A; chủ dự án xác nhận.
+  Rổ A, PR riêng (mục 2.6).
 
 ## 10. Số đo
 
