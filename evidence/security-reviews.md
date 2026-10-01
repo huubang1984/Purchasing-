@@ -22541,7 +22541,7 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 ## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
 - Không lượt trình duyệt thật cho 291, 292, 293, 299 (máy không có trình duyệt): DOM giả của `phuc-vu.test.ts`, ca bộ id tĩnh, test HTTP của route.
 - Cảnh hẹp của 292 còn lại: dán mã khác vào ô mà chưa bấm trong lúc `/auth/redeem` còn bay ⇒ bí mật của mã cũ hiện tới lần bấm kế (module chỉ biết mã đổi khi có lần bấm) — ghi ở hàng 310. Có từ trước, không đổi: nút Tiếp tắt tới khi lời gọi của lượt cũ xong; `ok1` của mã trước còn đứng sau khi dán mã khác rồi bấm.
-- Kid: kiểu `ReceiptSigner` là interface — một đối tượng không dựng qua hai factory có thể mang kid có `:` vào `buildReceiptText` (định dạng cho phép); mã sản xuất chỉ có `apps/api/src/co-han.ts` chép kid của bộ ký đã kiểm. Kid mốc neo (`packages/audit/src/anchor-sign.ts`, `TRUSTPROCURE_NEO_KID` cục bộ) vẫn cho `:` (prod — stack 40 — đã hẹp). Tên thiết bị Windows (`NUL`, `CON`) thuộc tập hẹp — nơi neo kiểu tệp trên Windows vẫn có thể gặp; S3 không.
+- Kid: ~~kiểu `ReceiptSigner` là interface — một đối tượng không dựng qua hai factory có thể mang kid có `:` vào `buildReceiptText` (định dạng cho phép); mã sản xuất chỉ có `apps/api/src/co-han.ts` chép kid của bộ ký đã kiểm. Kid mốc neo (`packages/audit/src/anchor-sign.ts`, `TRUSTPROCURE_NEO_KID` cục bộ) vẫn cho `:` (prod — stack 40 — đã hẹp).~~ **[S1.9101]** cả hai đóng — `submitBid` kiểm kid của bộ ký trước mọi lần ghi; kid ký mốc neo hẹp ở vòng khoá, bộ ký KMS và `TRUSTPROCURE_NEO_KID`. Tên thiết bị Windows (`NUL`, `CON`) thuộc tập hẹp — nơi neo kiểu tệp trên Windows vẫn có thể gặp; S3 không.
 - 293: bốn câu máy khác của hai route gửi lại link / mời giữ nguyên.
 - Câu hỏi còn chờ: ⑴ rổ của 310 (lô W đề xuất B, hệ quả nặng hơn 292 — thao tác dưới phiên người trước); ⑵ gọi `assertReceiptKid` trong `submitBid` (`packages/bidding/src/bidding.ts`) để đóng lỗ ở cấp interface — mở khoản hay không; ⑶ thu hẹp kid mốc neo theo cùng quyết định hay không. **[S1.9101 — chủ dự án trả lời 2026-10-01]** ⑴ 310 SỬA NGAY (không xếp rổ); ⑵ CÓ gọi `assertReceiptKid` trong `submitBid`; ⑶ CÓ thu hẹp kid mốc neo ở phía phát hành (định dạng đã ký không đổi) — làm ở §S1.9101.
 
@@ -22552,3 +22552,42 @@ Bước 2 của đề xuất sau đợt 3 (§S1.237): dừng trả nợ diện r
 - Cây gộp (ba nhánh lô trên `master` sau #221): `pnpm cap-so --dem` khớp; `so-no-tu-doi-chieu` + `tep-van-ban-git` 52/52; `pnpm t0` xanh (505 module, 2130 phụ thuộc, 0 vi phạm); `pnpm test` 138 tệp, 2303 xanh, 1 bỏ qua.
 - Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `a1fd8bb4`): vòng → S1.249; khoản mới → 309, 310; `--kiem` sạch.
 - `pnpm evidence` trên `a1fd8bb4` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, gồm `db/migrations.int.test.ts` trọn tệp): 4257 khẳng định — 4247 xanh, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo khoản 272 sau cờ); ma trận 75/75 (53 nghiệp vụ + 22 hàng rào); một dòng ma trận đổi — mô tả A6 chép từ `docs/TEST-PLAN.md` (khoản 299).
+
+# §S1.9101 — SAU #222: PHẢN HỒI `/auth/totp` VÀ `/me` CỦA LƯỢT CŨ BỊ BỎ, PHIÊN BỊ BỎ ĐƯỢC ĐÓNG; `submitBid` KIỂM KID TRƯỚC MỌI LẦN GHI; KID KÝ MỐC NEO KHÔNG `:` Ở PHÍA PHÁT HÀNH — KHOẢN 310 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** khoản 310 (rổ B đề xuất; chủ dự án chốt sửa ngay) và hai câu hỏi của §S1.249 mục 7. Không migration, không ADR mới (ADR-126 ghi tại chỗ). Không chạm mảnh nào của `docs/PRODUCT.md` §11.
+
+## 1. Vòng này là gì
+Ba câu trả lời của chủ dự án (2026-10-01) cho §S1.249 mục 7, sau khi #222 merge: 310 sửa ngay; gọi `assertReceiptKid` trong `submitBid`; thu hẹp kid mốc neo theo cùng quyết định với kid biên nhận. Hai agent tiếp nối (lô W, lô K của §S1.249) trên nhánh dựng từ `master` `834661ff`; người tích hợp ghi sổ.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+"Merge #222; khoản 310 sửa ngay; gọi thêm `assertReceiptKid` trong `submitBid`; có thu hẹp kid mốc neo theo cùng quyết định."
+
+## 3. Đo trước
+- 310 (lô W, nguồn cũ, test mới): 20 đỏ — bốn cảnh × năm trang: ⑴ «phiên A mở ở máy chủ mà trang bỏ thì phải đóng» (bản đầu của ca: mảnh link chưa dùng của B bị xoá); ⑵ «các bước mở dưới phiên A»; ⑶ «câu từ chối của lượt A in dưới mã của B»; ⑷ «bí mật của mã A hiện khi ô đã mang mã B».
+- Kid (lô K, bốn tệp): 5 đỏ / 64 xanh — `submitBid` nhận kid có `:` (ra biên nhận); kid có `\n` ném SAU câu ghi phiên bản (giao dịch đã có mã giao dịch lúc ném); vòng khoá ký mốc neo nhận `kms:neo-2026`; bộ ký neo KMS gọi KMS với kid có `:`; `pnpm neo xuat` với `TRUSTPROCURE_NEO_KID=neo:cli` ký được `seq=3`. Ca "định dạng không đổi" xanh trước vá — nó ghim hành vi không đổi. Lượt soi đối kháng sau vá đầu: getter `activeKeyId` / `t.kid` đổi giá trị sau lần đọc đầu thì lọt — 2 đỏ, đóng bằng đọc một lần.
+
+## 4. Thay đổi
+- 310: `apps/web/src/dang-nhap.ts` — `conHieuLuc(luot, token)` (cùng lượt VÀ ô còn mang mã đã gửi) cho mọi phản hồi của bước 1; nút Vào kiểm sau `/auth/totp`, sau `/me` (ngay trước `daVao`) và trong `catch`; `dongPhienBoDo()` gọi `POST /auth/logout` khi lượt đã qua mà phiên đã mở ở máy chủ, nút Vào bật lại sau khi lệnh đóng xong. `apps/web/src/phuc-vu.test.ts` — `giuLenh` (giữ lời gọi bất kỳ), bốn ca `[S1.9101 / khoản 310]` × năm trang.
+- Kid ⑴: `packages/bidding/src/bidding.ts` — `submitBid` đọc `activeKeyId` đúng một lần, `assertReceiptKid` ngay sau `assertTenantBound`/`batBuocUuid`, trước luồng báo giá, phiên bản và hàng sổ; `buildReceiptText` dùng giá trị đã kiểm.
+- Kid ⑵: `packages/audit/src/anchor-sign.ts` (`KID_PHAT_HANH`), `tools/neo-so-kiem-toan/src/aws.ts` (`taoBoKyNeoAwsKms` kiểm trước mọi lời gọi KMS, đọc kid một lần; `laKidPhatHanh` dùng lại regex `KID` sẵn có), `tools/neo-so-kiem-toan/src/index.ts` (`docKidNeo` — chỗ đọc `TRUSTPROCURE_NEO_KID` duy nhất, lỗi nêu tên biến); `packages/audit/src/anchor-text.ts` chỉ thêm chú thích — định dạng không đổi; terraform stack 40 (`neo_kid`) đã cùng tập.
+- Tệp của người tích hợp: hàng 310 ĐÓNG; ADR-126 (dòng khoản nợ, hệ quả); §S1.249 mục 7 (câu trả lời; giới hạn kid gạch); dòng CÒN MỞ, RỔ B 23 → 22, đoạn đếm.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- Phiên bị bỏ ĐÓNG bằng `POST /auth/logout` sẵn có (lô W, đọc `apps/api/src/routes/auth.ts`): bỏ phản hồi mà không đóng thì câu «Đã đăng xuất…» thành sai, và nút «Tiếp tục với phiên này» của lượt mới có thể mở các bước mang tên người này dưới cookie của người trước. Chỉ đóng khi biết chắc phiên đã mở (`/auth/totp` 200, hay `/me` về muộn sau 200 ấy); đợi lệnh đóng xong mới bật nút. Cái giá: mã đăng nhập của người trước đã tiêu thụ — họ xin link mới; lần đóng không ghi sổ, như nút Đăng xuất. Ghi ở ADR-126 (nơi lịch sử 292/310 nằm), không ở ADR-020.
+- So ô lúc phản hồi về, không nghe sự kiện `input`: một phím gõ nhầm sau khi bí mật đã hiện không được đóng nó.
+- "Trước mọi lần ghi" đo bằng `pg_current_xact_id_if_assigned()` NULL lúc ném, cộng COMMIT để lại 0 luồng, 0 hàng sổ và bộ ký không bị gọi (lô K) — đếm hàng sau rollback thì không phân biệt được trước hay sau khi ghi.
+- Đọc kid đúng một lần ở `submitBid` và ở bộ ký neo KMS (phép kiểm mới của chính vòng bị lách được bằng getter — trong phạm vi).
+
+## 6. Đột biến
+- 310: 9/9 đỏ đúng vế — bỏ kiểm sau `/auth/totp` ⇒ 15; sau `/me` ⇒ 5; `catch` luôn in ⇒ 5; không đóng phiên ⇒ 20; đóng ở mọi lối ra ⇒ 10; không đợi lệnh đóng ⇒ 5; coi đã trao sau `/auth/totp` ⇒ 10; `/auth/redeem` không so ô ⇒ 5; nút Vào không so ô ⇒ 5.
+- Kid: 8/8 đỏ đúng vế — bỏ `assertReceiptKid`; dời phép kiểm xuống sau câu ghi; trả `:` vào `KID_PHAT_HANH`; siết `KID_PATTERN` của định dạng; bỏ phép kiểm của bộ ký KMS; bỏ phép kiểm ở `docKidNeo`; đọc `activeKeyId` lần hai; bộ ký KMS đọc `t.kid` lần hai.
+
+## 7. Giới hạn, nói ra — và câu hỏi còn chờ chủ dự án
+- 310: không lượt trình duyệt thật. `/auth/totp` ném ở lượt đã qua ⇒ trang không đóng phiên (nếu `Set-Cookie` đã về mà thân hỏng, cookie của người trước nằm lại; khối hỏi phiên của S1.177 sẽ hỏi lại). Lệnh đóng mất mạng ⇒ phiên sống tới hết hạn. Khác thẻ: một thẻ khác đăng nhập đúng vào khe giữa lúc cookie vào và lúc lệnh đóng chạy thì phiên của thẻ ấy bị thu hồi (401, đăng nhập lại). Chính người trước sửa ô mã trong lúc lần Vào còn bay thì mất phiên và link — hỏng an toàn.
+- Kid: `createAwsKmsReceiptSigner` vẫn đọc `cfg.kid` hai lần — một getter có thể cho bộ ký mang `activeKeyId` có `:`, nhưng `submitBid` chặn trước mọi lần ghi. Kid sai (`ReceiptError`) qua HTTP rơi vào 500 thân cố định — lỗi cấu hình máy chủ, không đo ở tầng HTTP. Mốc neo cũ có kid `:` trên máy dev vẫn `kiem` được, `trich` từ chối như H11-11. Tên thiết bị Windows như §S1.249.
+- Câu hỏi còn chờ: ⑴ `createAwsKmsReceiptSigner` đọc `cfg.kid` một lần cho đồng bộ (một dòng)? ⑵ bộ ký cấu hình sai ở `submitBid` giữ HTTP 500 thân cố định hay một mã riêng?
+
+## 8. Số đo
+- Lô W trên cây của lô: `apps/web` 10 tệp 378/378 (trước 358); `pnpm test` 138 tệp, 2323 xanh, 1 bỏ qua; typecheck, lint, depcruise sạch.
+- Lô K: 15 tệp 357/357, gồm `bidding.int` 26, `chain.int` 24, `tenant-guard.int` 11, `cong-cu.int` 20 trên cụm Postgres cục bộ; `pnpm test` 138 tệp, 2307 xanh, 1 bỏ qua.
