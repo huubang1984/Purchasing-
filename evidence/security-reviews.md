@@ -22591,3 +22591,6 @@ Ba câu trả lời của chủ dự án (2026-10-01) cho §S1.249 mục 7, sau 
 ## 8. Số đo
 - Lô W trên cây của lô: `apps/web` 10 tệp 378/378 (trước 358); `pnpm test` 138 tệp, 2323 xanh, 1 bỏ qua; typecheck, lint, depcruise sạch.
 - Lô K: 15 tệp 357/357, gồm `bidding.int` 26, `chain.int` 24, `tenant-guard.int` 11, `cong-cu.int` 20 trên cụm Postgres cục bộ; `pnpm test` 138 tệp, 2307 xanh, 1 bỏ qua.
+- Cây gộp (hai nhánh lô trên `master` sau #222): `pnpm cap-so --dem` khớp; `so-no-tu-doi-chieu` + `tep-van-ban-git` 52/52; `pnpm t0` xanh (505 module, 2130 phụ thuộc, 0 vi phạm); `pnpm test` 138 tệp, 2327 xanh, 1 bỏ qua.
+- Cấp số (`pnpm cap-so`, trailer `Cap-So:` ở `36add6ff`): vòng → S1.250; `--kiem` sạch.
+- `pnpm evidence` trên `36add6ff` (đơn vị + tích hợp, cụm Postgres 16 cục bộ, gồm `db/migrations.int.test.ts` trọn tệp): 4286 khẳng định — 4276 xanh, 0 đỏ, 10 bỏ qua (1 có sẵn, 9 khối đo khoản 272 sau cờ); ma trận 75/75, trùng từng byte với bản đã commit.
