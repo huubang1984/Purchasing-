@@ -468,12 +468,18 @@ describe("[S1.223 / khoản 252 ⑶] trust policy tp-deploy ghim job_workflow_re
     const muc = README.slice(dau, README.indexOf("\n## ", dau));
     expect(muc).toContain('{"use_default":false,"include_claim_keys":["repo","context","job_workflow_ref"]}');
     expect([...muc.matchAll(/include_claim_keys/gu)].length).toBeGreaterThanOrEqual(1);
-    expect(muc).toContain("gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub --input -");
+    // [mục C 2026-10-01] PUT dựng thân từ các trường của `gh api`: pipe chuỗi JSON vào `--input -` trả HTTP 400 trên PowerShell của
+    // máy vận hành, còn lệnh trường đã chạy trên kho (`GET` trả đúng ba khoá theo thứ tự).
+    const lenhPut =
+      'gh api -X PUT repos/huubang1984/Purchasing-/actions/oidc/customization/sub -F use_default=false -f "include_claim_keys[]=repo" ' +
+      '-f "include_claim_keys[]=context" -f "include_claim_keys[]=job_workflow_ref"';
+    expect(muc).toContain(lenhPut);
+    expect(muc).not.toContain("customization/sub --input -");
     expect(muc).toContain("gh api repos/huubang1984/Purchasing-/actions/oidc/customization/sub");
     const sub = `repo:huubang1984@${giaTriChung("github_owner_id")}/Purchasing-@${giaTriChung("github_repo_id")}:environment:prod-khoi-tao:job_workflow_ref:huubang1984/Purchasing-/.github/workflows/khoi-tao.yml@refs/heads/master`;
     expect(muc).toContain(sub);
     expect(muc).toContain("actions-oidc-debugger");
-    expect(muc.indexOf("customization/sub --input -")).toBeLessThan(muc.indexOf("terraform apply"));
+    expect(muc.indexOf(lenhPut)).toBeLessThan(muc.indexOf("terraform apply"));
     expect(muc).toMatch(/KHOÁ/u);
     const hd = doc("docs/APPLY-LAN-DAU.md");
     const muc20 = hd.slice(hd.indexOf("- [ ] **2.0"), hd.indexOf("- [ ] **2.1"));
