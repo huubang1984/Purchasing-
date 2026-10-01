@@ -126,14 +126,14 @@ interface HangBaoGia {
  * nhất. Ghim vào phiên bản của ngân sách thì tạo bản mới chẳng giúp gì, và mọi RFQ ra đời trước
  * S2 sẽ không bao giờ chấm được.~~
  *
- * [S1.9101 / S4.5a / L14 / ADR-9201] Đọc phiên bản chính sách GHIM của gói — `rfq_packages.chinh_sach_ghim_id`, phiên bản hiệu
- * lực mà trigger `rfq_ghim_chinh_sach_khi_mo` chụp ở cạnh vào OPEN (`9501`) — và khẳng định nó đã khai trọng số. Lý lẽ *"đọc mới nhất"* ở trên là lỗ góc C① của lượt soi S1.159: lượt chấm chỉ chạy sau khi giá lộ, và
+ * [S1.253 / S4.5a / L14 / ADR-141] Đọc phiên bản chính sách GHIM của gói — `rfq_packages.chinh_sach_ghim_id`, phiên bản hiệu
+ * lực mà trigger `rfq_ghim_chinh_sach_khi_mo` chụp ở cạnh vào OPEN (`102`) — và khẳng định nó đã khai trọng số. Lý lẽ *"đọc mới nhất"* ở trên là lỗ góc C① của lượt soi S1.159: lượt chấm chỉ chạy sau khi giá lộ, và
  * `FINANCE` giữ cùng lúc `policy.manage`, `bid.view`, `evaluation.perform` — thấy giá rồi khai phiên bản mới là đổi được trọng
  * số. Chủ dự án đảo lựa chọn ấy cho MỌI tổ chức, khi biết giá (spec S4 §2.4 ⑸, §8.11): gói mở dưới phiên bản chưa khai trọng số,
  * hay mở trước khi tổ chức có phiên bản nào, thì không chấm được — và lời từ chối nói vì sao một phiên bản MỚI không cứu được nó.
  * Không ghim vào `rfq_budgets.policy_id`: gói không ngân sách vẫn chấm được, và ngân sách ghim theo mốc của riêng nó (S3.1).
  *
- * Chụp, không tính lại `chinh_sach_hieu_luc(org, opened_at)` về sau (lượt soi §S1.9101): `created_at` của phiên bản là lúc giao
+ * Chụp, không tính lại `chinh_sach_hieu_luc(org, opened_at)` về sau (lượt soi §S1.253): `created_at` của phiên bản là lúc giao
  * dịch tạo BẮT ĐẦU, và `opened_at` nằm trong `GRANT UPDATE` của `app_api` — cả hai cho một đường ghi thứ hai lùi được mốc. Trigger
  * `rfq_evaluations_kiem_phien_ban_ghim` đọc lại CHÍNH cột ấy — lớp CSDL; câu này là lớp nói được VÌ SAO.
  */
@@ -143,7 +143,7 @@ async function docChinhSach(client: pg.PoolClient, orgId: string, rfqId: string)
   readonly thanhPhan: readonly ThanhPhanChinhSach[];
 }> {
   // [S1.156] Qua `chinh_sach_hieu_luc` như mọi chỗ đọc chính sách: một phiên bản có bậc chưa có chữ ký thứ hai TRƯỚC lúc gói mở
-  // không áp cho gói (ADR-082 ⑺). [S1.9101] Hàm ấy chạy MỘT lần, lúc gói mở, dưới khoá tư vấn chính sách; câu này đọc kết quả.
+  // không áp cho gói (ADR-082 ⑺). [S1.253] Hàm ấy chạy MỘT lần, lúc gói mở, dưới khoá tư vấn chính sách; câu này đọc kết quả.
   const { rows } = await client.query<{
     readonly id: string | null;
     readonly version: number | null;
@@ -397,7 +397,7 @@ export async function taoLuotDanhGia(
       [orgId, input.rfqId, cs.id, currency, actor.id, input.actorSessionId],
     ));
   } catch (loi) {
-    // [S1.9101 / S4.5a / L14] Trigger `rfq_evaluations_kiem_phien_ban_ghim` từ chối một `policy_id` khác phiên bản ghim, với tên
+    // [S1.253 / S4.5a / L14] Trigger `rfq_evaluations_kiem_phien_ban_ghim` từ chối một `policy_id` khác phiên bản ghim, với tên
     // `l14_phien_ban_khong_ghim` (ADR-108). `docChinhSach` đọc đúng hàm ấy tại đúng mốc ấy, nên đường này chỉ tới được khi có một
     // bộ đọc lệch hay một đường ghi thứ hai — cùng khuôn J5 của `deXuatTraoThau`: hàng `CONTROL_DENIED` ở giao dịch độc lập rồi ném.
     const ma = maChotTuLoi(loi);

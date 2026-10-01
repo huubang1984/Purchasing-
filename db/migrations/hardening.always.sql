@@ -11031,10 +11031,10 @@ $ham$$q$,
       $q$quyền sở hữu hàm quan_sat_gia(timestamptz, uuid) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.5a / L14] Goi CHUP phien ban chinh sach hieu luc o canh vao OPEN, duoi khoa tu van chinh sach. Than `RETURN NEW` (khong dat cot) de moi goi moi khong co phien ban ghim — luot cham bi tu choi; than doc `NEW.opened_at` mo lai duong ⑵ cua luot soi §S1.9101.
+    -- [S1.253 / S4.5a / L14] Goi CHUP phien ban chinh sach hieu luc o canh vao OPEN, duoi khoa tu van chinh sach. Than `RETURN NEW` (khong dat cot) de moi goi moi khong co phien ban ghim — luot cham bi tu choi; than doc `NEW.opened_at` mo lai duong ⑵ cua luot soi §S1.253.
     ARRAY[
-      $q$hàm + trigger rfq_ghim_chinh_sach_khi_mo (9501_ghim_chinh_sach_luot_cham)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ghim_chinh_sach_luot_cham.sql')$q$,
+      $q$hàm + trigger rfq_ghim_chinh_sach_khi_mo (102_ghim_chinh_sach_luot_cham)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '102_ghim_chinh_sach_luot_cham.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p
@@ -11094,10 +11094,10 @@ $ham$;
       $q$quyền sở hữu hàm public.rfq_ghim_chinh_sach_khi_mo() và bảng public.rfq_packages (hoặc CREATE trên schema public khi hàm chưa tồn tại) hoặc SUPERUSER$q$
     ],
 
-    -- [S1.9101 / S4.5a / L14] Luot cham mang dung phien ban chinh sach goi da CHUP luc mo (`rfq_packages.chinh_sach_ghim_id`). Than `RETURN NEW` mo lai duong cham duoi phien ban khai SAU khi thay gia (goc C① cua S1.159).
+    -- [S1.253 / S4.5a / L14] Luot cham mang dung phien ban chinh sach goi da CHUP luc mo (`rfq_packages.chinh_sach_ghim_id`). Than `RETURN NEW` mo lai duong cham duoi phien ban khai SAU khi thay gia (goc C① cua S1.159).
     ARRAY[
-      $q$hàm + trigger rfq_evaluations_kiem_phien_ban_ghim (9501_ghim_chinh_sach_luot_cham)$q$,
-      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '9501_ghim_chinh_sach_luot_cham.sql')$q$,
+      $q$hàm + trigger rfq_evaluations_kiem_phien_ban_ghim (102_ghim_chinh_sach_luot_cham)$q$,
+      $q$to_regclass('public.schema_migrations') IS NOT NULL AND EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '102_ghim_chinh_sach_luot_cham.sql')$q$,
       $q$DO $fn91$
          BEGIN
            IF EXISTS (SELECT 1 FROM pg_proc p

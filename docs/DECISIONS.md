@@ -10921,7 +10921,7 @@ dịch đọc), ADR-016 (cổng ở tầng ứng dụng; rổ `HAM_DOC_CO_QUYEN`
 - **Không phân trang**: giới hạn hiệu năng của ADR-136 ⑧ (p95 dưới ngưỡng giả định 500 ms tới ~1.200 quan sát mỗi lần đọc) là giới
   hạn của route. S4.5 đo lại trên dữ liệu pilot.
 
-## ADR-9201 — S4.5a: gói CHỤP phiên bản chính sách hiệu lực ở cạnh vào OPEN (`rfq_packages.chinh_sach_ghim_id`); lượt chấm dùng đúng phiên bản ấy, trigger có tên trên `rfq_evaluations`, `CONTROL_DENIED` mã `L14_PHIEN_BAN_KHONG_GHIM`; S4.5 chia ba PR
+## ADR-141 — S4.5a: gói CHỤP phiên bản chính sách hiệu lực ở cạnh vào OPEN (`rfq_packages.chinh_sach_ghim_id`); lượt chấm dùng đúng phiên bản ấy, trigger có tên trên `rfq_evaluations`, `CONTROL_DENIED` mã `L14_PHIEN_BAN_KHONG_GHIM`; S4.5 chia ba PR
 
 **Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt sáu điểm ngày 2026-10-01, cả sáu theo đề xuất. Lượt đầu: ⑴ phiên
 bản áp cho gói X là phiên bản HIỆU LỰC lúc X mở — luật `chinh_sach_hieu_luc` của S3.1, không một hàm `chinh_sach_tai` thứ hai —, kèm
@@ -10929,10 +10929,10 @@ một trigger trên `rfq_evaluations` mà lần vi phạm vào sổ `CONTROL_DEN
 và lõi benchmark (L7), S4.5c phần hiện ở `/mo-thau`, bộ xuất ADR-059 và vế benchmark của L6; ⑶ bảng so sánh hiện benchmark ngay khi gói
 `UNSEALED`, tính as-of tại mốc mở giá của X ở mỗi lần đọc, còn lượt chấm ghi kết quả đúng một lần; ⑷ năm chi tiết phương pháp theo đề
 xuất (mục *Quyết định* 8). Lượt sau lượt soi đối kháng: ⑸ CHỤP phiên bản ấy vào gói ở cạnh vào OPEN, không tính lại từ dấu thời gian về
-sau; ⑹ `opened_at` do người gọi đặt thành khoản 9401, không sửa trong S4.5a · **[S1.9101]** · **Liên quan:** ADR-097 ⑸ (ghim lúc
+sau; ⑹ `opened_at` do người gọi đặt thành khoản 319, không sửa trong S4.5a · **[S1.253]** · **Liên quan:** ADR-097 ⑸ (ghim lúc
 `OPEN`), ADR-082 ⑺ (chữ ký thứ hai), ADR-080 (khoá tư vấn chính sách), ADR-085 (sàn một chữ ký), ADR-108 (từ chối có tên), ADR-060
 (từ chối nào vào sổ), ADR-084 ⑷ (`CONTROL_DENIED`), ADR-052/053 (lượt chấm) · **Spec:** S4 §2.4 ⑸, §4.1, §5.1 L14, §8.11, §9 ·
-**Biên bản:** `evidence/security-reviews.md` §S1.9101
+**Biên bản:** `evidence/security-reviews.md` §S1.253
 
 ### Bối cảnh — sáu phép đo trước khi viết
 
@@ -10960,7 +10960,7 @@ sau; ⑹ `opened_at` do người gọi đặt thành khoản 9401, không sửa 
 
 ### Quyết định
 
-1. **Cột `rfq_packages.chinh_sach_ghim_id`** (`9501_ghim_chinh_sach_luot_cham`), khoá ngoại hợp thành tới `org_procurement_policies`,
+1. **Cột `rfq_packages.chinh_sach_ghim_id`** (`102_ghim_chinh_sach_luot_cham`), khoá ngoại hợp thành tới `org_procurement_policies`,
    NGOÀI mọi `GRANT` ghi (`SELECT` của `app_api` trên bảng là mức bảng). Gói đã mở trước migration được điền bằng phép tính lại tại
    `opened_at`.
 2. **Trigger `rfq_ghim_chinh_sach_khi_mo`** BEFORE UPDATE `WHEN` cạnh `PENDING_APPROVAL→OPEN`: lấy khoá tư vấn chính sách — lần mở chờ
@@ -10985,14 +10985,14 @@ sau; ⑹ `opened_at` do người gọi đặt thành khoản 9401, không sửa 
    tập chẵn là trung bình hai số giữa, số thập phân chính xác dạng chuỗi; chỉ so quan sát cùng tiền tệ với báo giá đang xét và loại đơn
    giá `0`, cả hai đếm và hiện; lưu nhãn kèm CHIỀU (trên/dưới) mà không lưu tỷ lệ lệch — tỷ lệ cộng giá của chính dòng suy ra trung vị,
    tức một giá; phiên bản ghim không có nhóm `benchmark` ⇒ không ghi hàng kết quả, hiện *"chưa cấu hình"*, lượt chấm vẫn chạy.
-9. **Không đổi** `opened_at` hay quyền của nó (khoản 9401), `rfq_che_do_nghiem`, `rfq_khoa_du_dieu_kien_xoa`, `rfq_key_material_bat_bien`
+9. **Không đổi** `opened_at` hay quyền của nó (khoản 319), `rfq_che_do_nghiem`, `rfq_khoa_du_dieu_kien_xoa`, `rfq_key_material_bat_bien`
    (ghim tại `created_at`), `rfq_chot_ngan_sach` (tại lần nộp), `quan_sat_gia` (tại `created_at` của gói chứa quan sát).
 
 ### Hệ quả và giới hạn nói ra
 
 - **Đổi hành vi MVP1 cho mọi tổ chức** (spec §8.11, chủ dự án chọn khi biết giá): gói mở dưới phiên bản chưa khai trọng số không bao giờ
   chấm được — lối ra là huỷ gói và mở lại. Hôm nay không có khách hàng thật (PRODUCT §10). Cụm test: không ca nào lật kết quả (biên bản
-  §S1.9101 kê từng tệp đã chạy). Cụm demo gieo TRƯỚC vòng này có phiên bản 1 không trọng số — gói đã mở của nó không chấm được nữa,
+  §S1.253 kê từng tệp đã chạy). Cụm demo gieo TRƯỚC vòng này có phiên bản 1 không trọng số — gói đã mở của nó không chấm được nữa,
   phải gieo lại.
 - **Phiên bản ghim là phiên bản hiệu lực lúc cạnh vào OPEN CHẠY, không lúc `opened_at`**: một phiên bản commit trong lúc lần mở chờ khoá
   là phiên bản đã hiệu lực khi gói thực sự mở (ca đo khoá ở `luot-danh-gia.int`). Hai mốc lệch nhau đúng bằng thời gian giao dịch mở chạy

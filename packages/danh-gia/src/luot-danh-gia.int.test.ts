@@ -123,7 +123,7 @@ async function taoRfqMo(policyId: string): Promise<string> {
   return rfqId;
 }
 
-/** [S1.9101 / S4.5a] Nửa đầu của `taoRfqMo`: gói ở `PENDING_APPROVAL`, đủ một chữ ký — mọi khoá tư vấn chính sách của cạnh nộp đã nhả. */
+/** [S1.253 / S4.5a] Nửa đầu của `taoRfqMo`: gói ở `PENDING_APPROVAL`, đủ một chữ ký — mọi khoá tư vấn chính sách của cạnh nộp đã nhả. */
 async function taoRfqChoMo(policyId: string): Promise<string> {
   const { rows } = await db.pool.query<{ id: string }>(
     "INSERT INTO rfq_packages (org_id, title, deadline_at, requires_dual_approval, " +
@@ -154,7 +154,7 @@ async function taoRfqChoMo(policyId: string): Promise<string> {
   return rfqId;
 }
 
-/** [S1.9101 / S4.5a] Nửa sau: khoá gói rồi đi cạnh vào `OPEN` — ca đo khoá tư vấn chạy nó song song với một lần ghi phiên bản. */
+/** [S1.253 / S4.5a] Nửa sau: khoá gói rồi đi cạnh vào `OPEN` — ca đo khoá tư vấn chạy nó song song với một lần ghi phiên bản. */
 async function moGoiDaDuyet(rfqId: string): Promise<void> {
   const c = await db.pool.connect();
   try {
@@ -3507,12 +3507,12 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
 });
 
 // ================================================================================================
-// [S1.9101 / S4.5a / L14 / ADR-9201] LƯỢT CHẤM DÙNG PHIÊN BẢN CHÍNH SÁCH GHIM LÚC GÓI MỞ
+// [S1.253 / S4.5a / L14 / ADR-141] LƯỢT CHẤM DÙNG PHIÊN BẢN CHÍNH SÁCH GHIM LÚC GÓI MỞ
 //
 // Trước vòng này `taoLuotDanhGia` đọc `chinh_sach_hieu_luc(org, now())`: một phiên bản khai SAU lúc giá lộ đổi được trọng số
 // của lượt chấm (góc C① của lượt soi S1.159). Chủ dự án chốt 2026-10-01: phiên bản của gói X là phiên bản HIỆU LỰC lúc X mở —
 // luật `chinh_sach_hieu_luc` của S3.1 —, CHỤP vào `rfq_packages.chinh_sach_ghim_id` ở cạnh vào OPEN dưới khoá tư vấn chính sách
-// (trigger `rfq_ghim_chinh_sach_khi_mo`, `9501`), không tính lại từ dấu thời gian về sau: lượt soi §S1.9101 đo hai đường lùi mốc
+// (trigger `rfq_ghim_chinh_sach_khi_mo`, `102`), không tính lại từ dấu thời gian về sau: lượt soi §S1.253 đo hai đường lùi mốc
 // dưới `app_api` (⑴ giao dịch giữ lâu, ⑵ `opened_at` do người gọi đặt). Hai lớp đọc cột ấy: tầng gói, và trigger
 // `rfq_evaluations_kiem_phien_ban_ghim` từ chối mọi `policy_id` khác, với tên `l14_phien_ban_khong_ghim`.
 //
@@ -3520,7 +3520,7 @@ describe("[S1.217 / khoản 250] bản rõ của lời mời đã thu hồi khô
 // bằng "1"): nó làm phiên bản nào đã áp đọc được ngay trên con số — gấp đôi hay không.
 // ================================================================================================
 
-describe("[S1.9101 / S4.5a] L14 — lượt chấm dùng phiên bản chính sách hiệu lực lúc gói mở", { timeout: 300000 }, () => {
+describe("[S1.253 / S4.5a] L14 — lượt chấm dùng phiên bản chính sách hiệu lực lúc gói mở", { timeout: 300000 }, () => {
   const TP_GIA_GAP_DOI = '[{"ma":"gia","don_vi":"TIEN","he_so":"2.0000"}]';
 
   async function chinhSachCuaLuot(rfqId: string): Promise<readonly string[]> {
@@ -3724,7 +3724,7 @@ describe("[S1.9101 / S4.5a] L14 — lượt chấm dùng phiên bản chính sá
     );
   });
 
-  // ---- Lượt soi §S1.9101: hai đường lùi mốc của phép TÍNH LẠI `chinh_sach_hieu_luc(org, opened_at)`, và cột chụp đóng cả hai ----
+  // ---- Lượt soi §S1.253: hai đường lùi mốc của phép TÍNH LẠI `chinh_sach_hieu_luc(org, opened_at)`, và cột chụp đóng cả hai ----
 
   it("[INV-L14] đường ⑴: phiên bản LÙI MỐC — `created_at = effective_from` trước lúc mở, chèn SAU lúc mở (giao dịch giữ lâu) — không đổi được phiên bản ghim; phép tính lại tại `opened_at` thì chọn nó", async () => {
     const { rfqId, csId } = await goiDaMo([["100.00", "VND"]]);
@@ -3755,7 +3755,7 @@ describe("[S1.9101 / S4.5a] L14 — lượt chấm dùng phiên bản chính sá
     const csId = await taoChinhSach(TP_GIA);
     const rfqId = await taoRfqChoMo(csId);
     // Một phiên bản HẸN GIỜ có sẵn lúc mở (hiệu lực sau một ngày): chụp theo `NEW.opened_at` năm 2100 sẽ chọn nó, chụp theo đồng hồ
-    // của cạnh thì không — vế này là thứ phân biệt hai cách chụp (đột biến M9, §S1.9101).
+    // của cạnh thì không — vế này là thứ phân biệt hai cách chụp (đột biến M9, §S1.253).
     const { rows: ke } = await db.pool.query<{ n: number }>(
       "SELECT max(version) + 1 AS n FROM org_procurement_policies WHERE org_id = $1",
       [orgA],
@@ -3779,7 +3779,7 @@ describe("[S1.9101 / S4.5a] L14 — lượt chấm dùng phiên bản chính sá
       );
     });
     const { rows: mo } = await db.pool.query<{ nam: number }>("SELECT extract(year FROM opened_at)::int AS nam FROM rfq_packages WHERE id = $1", [rfqId]);
-    expect(mo[0]?.nam, "tiền đề: `app_api` đặt được `opened_at` ở năm 2100 (khoản 9401)").toBe(2100);
+    expect(mo[0]?.nam, "tiền đề: `app_api` đặt được `opened_at` ở năm 2100 (khoản 319)").toBe(2100);
     const moi = await taoChinhSach(TP_GIA_GAP_DOI);
     expect(await hieuLucTaiMoLuc(rfqId), "tiền đề: tại `opened_at` năm 2100, phép tính lại chọn phiên bản khai SAU lúc mở").toBe(moi);
     expect(await phienBanGhim(rfqId)).toBe(csId);

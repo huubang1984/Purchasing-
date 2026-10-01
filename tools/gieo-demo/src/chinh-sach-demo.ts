@@ -26,8 +26,8 @@ export const BAC_DEMO: readonly BacDemo[] = [
 export const MUC_DEMO = { chiaNhoCuaSoNgay: 30, thamDinhHieuLucThang: 12, nguongKep: "1000000000.00" } as const;
 
 /**
- * [S1.9101 / S4.5a / L14] Trọng số chấm của phiên bản 1 — đúng vế hẹp mà lượt chấm đọc được hôm nay (`luot-danh-gia.ts`: một
- * thành phần, mã `gia`, đơn vị `TIEN`), và BAFO top-2. Lượt chấm dùng phiên bản hiệu lực lúc gói MỞ (ADR-9201), nên phiên bản 1
+ * [S1.253 / S4.5a / L14] Trọng số chấm của phiên bản 1 — đúng vế hẹp mà lượt chấm đọc được hôm nay (`luot-danh-gia.ts`: một
+ * thành phần, mã `gia`, đơn vị `TIEN`), và BAFO top-2. Lượt chấm dùng phiên bản hiệu lực lúc gói MỞ (ADR-141), nên phiên bản 1
  * phải mang trọng số từ đầu: phiên bản khai sau lúc mở không áp cho gói nào đã mở.
  */
 export const TRONG_SO_DEMO: readonly { readonly ma: string; readonly don_vi: string; readonly he_so: string }[] = [

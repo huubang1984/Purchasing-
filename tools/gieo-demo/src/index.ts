@@ -331,7 +331,7 @@ async function chinh(): Promise<void> {
 
     // [S1.174 / S3.1d] `--s3`: F1 khai phiên bản có bậc, F2 ký — hai giao dịch, hai phiên, đúng như hai người trên màn
     // `/chinh-sach`. Ngân sách phía dưới ghim chính phiên bản ấy: nó là bản hiệu lực ngay sau lần ký.
-    // [S1.9101 / S4.5a / L14] Phiên bản 1 khai LUÔN trọng số chấm (`gia`, hệ số 1) và BAFO top-2: lượt chấm của mọi gói gieo dưới
+    // [S1.253 / S4.5a / L14] Phiên bản 1 khai LUÔN trọng số chấm (`gia`, hệ số 1) và BAFO top-2: lượt chấm của mọi gói gieo dưới
     // đây dùng phiên bản hiệu lực lúc gói MỞ, nên một phiên bản khai trọng số SAU lúc mở — cách người demo chấm được trước vòng
     // này — không còn áp cho gói nào đã mở.
     const chinhSach = S3

@@ -36,7 +36,7 @@
 // tên ràng buộc `j5_luot_cham_khong_moi_nhat`. ADR-108 đòi tên hai phía khớp nhau (cổng hai chiều ở `packages/rfq/src/rfq.int.test.ts`
 // đọc cả thân trigger ấy), nên tên ấy có dòng ở đây dù đường sản xuất không tới được nó: `deXuatTraoThau` tự suy lượt mới nhất.
 //
-// [S1.9101 / S4.5a / ADR-9201] `L14_PHIEN_BAN_KHONG_GHIM` — trigger `rfq_evaluations_kiem_phien_ban_ghim` (`9501_ghim_chinh_sach_luot_cham`)
+// [S1.253 / S4.5a / ADR-141] `L14_PHIEN_BAN_KHONG_GHIM` — trigger `rfq_evaluations_kiem_phien_ban_ghim` (`102_ghim_chinh_sach_luot_cham`)
 // từ chối một lượt chấm mang phiên bản chính sách KHÁC phiên bản hiệu lực lúc gói mở, với tên `l14_phien_ban_khong_ghim`. Chốt đầu
 // tiên của nhóm L (spec S4 §5 L12: S4 dùng lại từ vựng này, không dựng bản thứ hai). Cùng hình dạng J5: `taoLuotDanhGia` đọc đúng
 // hàm ghim tại đúng mốc, nên đường sản xuất không tới được; câu ghi nào tới được là một đường ghi thứ hai, và kiểm toán viên cần
@@ -306,7 +306,7 @@ export const CHOT_THEO_RANG_BUOC: Readonly<Record<string, MaChotKiemSoat>> = {
   // [S1.196 / S3.3a] Hai nhánh K8a của `ncc_kiem_xac_minh`.
   k8a_nguoi_moi_xac_minh: "K8A_NGUOI_MOI_XAC_MINH",
   k8a_nguoi_tao_tu_xac_minh: "K8A_NGUOI_TAO_TU_XAC_MINH",
-  // [S1.9101 / S4.5a] Nhánh duy nhất của `rfq_evaluations_kiem_phien_ban_ghim` (`9501_ghim_chinh_sach_luot_cham`).
+  // [S1.253 / S4.5a] Nhánh duy nhất của `rfq_evaluations_kiem_phien_ban_ghim` (`102_ghim_chinh_sach_luot_cham`).
   l14_phien_ban_khong_ghim: "L14_PHIEN_BAN_KHONG_GHIM",
 };
 

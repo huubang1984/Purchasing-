@@ -784,7 +784,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         case "POST /policy":
           // ~~[S1.107] Bản v2 mà bộ quét tạo THÀNH bản hiệu lực, nên nó phải khai trọng số — nếu không,
           // bước 12b chấm thầu trên một chính sách không khai và dừng ở `CHINH_SACH_CHUA_KHAI_TRONG_SO`.~~
-          // [S1.9101 / S4.5a / L14] Tiền đề trên thôi đúng: lượt chấm đọc phiên bản hiệu lực lúc gói MỞ, và bản v2 này ra đời sau
+          // [S1.253 / S4.5a / L14] Tiền đề trên thôi đúng: lượt chấm đọc phiên bản hiệu lực lúc gói MỞ, và bản v2 này ra đời sau
           // bước 2 — bước 12b và 12g chấm dưới bản 1 (khai trọng số ở bước 1). Thân giữ trọng số để lời gọi tới được 201.
           return {
             path: r.path,

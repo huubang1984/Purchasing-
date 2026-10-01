@@ -121,7 +121,7 @@ export const VAO_SO: Readonly<Record<MaTuChoiTrangThai, DongVaoSo>> = {
   // ---- NĂM mã CẤU HÌNH — KHÔNG vào sổ
   CHINH_SACH_CHUA_KHAI_TRONG_SO: {
     vaoSo: false,
-    lyDo: "~~tổ chức chưa khai trọng số đánh giá — một sự cố VẬN HÀNH, sửa bằng cách tạo phiên bản chính sách mới~~ [S1.9101 / S4.5a / L14] phiên bản chính sách GHIM của gói (hiệu lực lúc gói mở) chưa khai trọng số, hay gói mở khi tổ chức chưa có phiên bản nào — một sự cố CẤU HÌNH có trước lần chấm; phiên bản mới chỉ sửa được cho gói MỞ SAU nó. Kiểm toán viên không hỏi tới nó, và nó lặp lại đúng bằng số lần người dùng thử. Lần cố chấm dưới một phiên bản KHÁC phiên bản ghim là chốt `L14_PHIEN_BAN_KHONG_GHIM` (`CONTROL_DENIED`), không phải mã này",
+    lyDo: "~~tổ chức chưa khai trọng số đánh giá — một sự cố VẬN HÀNH, sửa bằng cách tạo phiên bản chính sách mới~~ [S1.253 / S4.5a / L14] phiên bản chính sách GHIM của gói (hiệu lực lúc gói mở) chưa khai trọng số, hay gói mở khi tổ chức chưa có phiên bản nào — một sự cố CẤU HÌNH có trước lần chấm; phiên bản mới chỉ sửa được cho gói MỞ SAU nó. Kiểm toán viên không hỏi tới nó, và nó lặp lại đúng bằng số lần người dùng thử. Lần cố chấm dưới một phiên bản KHÁC phiên bản ghim là chốt `L14_PHIEN_BAN_KHONG_GHIM` (`CONTROL_DENIED`), không phải mã này",
   },
   THANH_PHAN_CHUA_CO_NGUON: {
     vaoSo: false,

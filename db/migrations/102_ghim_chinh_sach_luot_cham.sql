@@ -1,9 +1,9 @@
 -- ==============================================================================================
--- 9501_ghim_chinh_sach_luot_cham — [S1.9101 / S4.5a của spec S4] GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH LÚC MỞ; LƯỢT CHẤM DÙNG ĐÚNG
+-- 102_ghim_chinh_sach_luot_cham — [S1.253 / S4.5a của spec S4] GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH LÚC MỞ; LƯỢT CHẤM DÙNG ĐÚNG
 -- PHIÊN BẢN ẤY (L14)
 --
 -- Spec: `docs/superpowers/specs/2026-09-26-trustprocure-s4-nen-du-lieu-tri-tue.md` §2.4 ⑸, §4.1, §5.1 L14, §8.11, §9 S4.5.
--- ADR-9201. Chủ dự án chốt 2026-10-01: phiên bản áp cho gói X là phiên bản HIỆU LỰC lúc X mở — luật `chinh_sach_hieu_luc` của
+-- ADR-141. Chủ dự án chốt 2026-10-01: phiên bản áp cho gói X là phiên bản HIỆU LỰC lúc X mở — luật `chinh_sach_hieu_luc` của
 -- S3.1 (`069`), không một hàm thứ hai; rồi, sau lượt soi đối kháng, phiên bản ấy được CHỤP vào gói ở cạnh vào OPEN thay vì tính
 -- lại từ dấu thời gian về sau.
 --
@@ -12,7 +12,7 @@
 -- `evaluation.perform`: thấy giá rồi khai một phiên bản mới là đổi được trọng số, tức đảo được hạng. CSDL không ràng gì
 -- `rfq_evaluations.policy_id` (`057` chỉ có trigger danh tính, và `policy_id` nằm trong `GRANT INSERT`).
 --
--- VÌ SAO CHỤP, KHÔNG TÍNH LẠI `chinh_sach_hieu_luc(org, opened_at)` (lượt soi §S1.9101, hai đường đo được dưới `app_api`):
+-- VÌ SAO CHỤP, KHÔNG TÍNH LẠI `chinh_sach_hieu_luc(org, opened_at)` (lượt soi §S1.253, hai đường đo được dưới `app_api`):
 --   ⑴ `created_at` của phiên bản là `now()` — lúc giao dịch tạo BẮT ĐẦU. Một phiên mở giao dịch trước lúc gói mở, ngồi chờ, rồi
 --      sau khi giá lộ mới chèn phiên bản với trọng số tuỳ ý: hàng mang `created_at = effective_from < opened_at`, và phép tính
 --      lại chọn nó.
@@ -32,7 +32,7 @@
 --
 -- THỨ MIGRATION NÀY KHÔNG LÀM: không đụng hàng `rfq_evaluations` đã ghi (trigger chỉ `BEFORE INSERT`) — lượt chấm cũ dưới phiên
 -- bản lúc chấm ở lại làm sự thật kiểm toán, và hôm nay không tổ chức thật nào (PRODUCT §10). Không đổi `opened_at` hay quyền của
--- nó (khoản 9401 — các chỗ khác đọc mốc ấy). Không đổi `rfq_che_do_nghiem`, `rfq_chot_ngan_sach` hay `quan_sat_gia`: chúng ghim
+-- nó (khoản 319 — các chỗ khác đọc mốc ấy). Không đổi `rfq_che_do_nghiem`, `rfq_chot_ngan_sach` hay `quan_sat_gia`: chúng ghim
 -- theo mốc của RIÊNG chúng (S3.1, S4.4a). Vế TCO và form nhà cung cấp của L14 chờ S4.7 — hôm nay không chỗ nào đọc chính sách.
 -- ==============================================================================================
 
