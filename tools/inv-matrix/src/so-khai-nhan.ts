@@ -472,7 +472,11 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   ],
   // L14 — [S1.253 / S4.5a] vế lượt chấm. `luot-danh-gia` đo phiên bản ghim lúc gói mở ở tầng gói và tầng CSDL (phiên bản khai sau
   // lúc mở, hẹn giờ, lượt chấm lại sau BAFO, câu ghi thẳng, đột biến tắt trigger, đường ứng dụng ra `CONTROL_DENIED`).
-  L14: ["packages/danh-gia/src/luot-danh-gia.int.test.ts"],
+  // [S1.256 / S4.5b] vế benchmark — ngưỡng của phiên bản ghim, khoá ngoại `policy_id` của hàng kết quả.
+  L14: ["packages/danh-gia/src/luot-danh-gia.int.test.ts", "packages/danh-gia/src/benchmark.int.test.ts"],
+  // L7 — [S1.256 / S4.5b] benchmark tái lập, không tự so. Lõi thuần đo bằng bảng ca và bản cài phân số; tầng CSDL đo nhãn, đầu vào,
+  // tái lập, ghi một lần và chỉ-ghi-thêm trên dữ liệu thiết kế.
+  L7: ["packages/du-lieu-nen/src/benchmark.test.ts", "packages/danh-gia/src/benchmark.int.test.ts"],
   // K8a — [S1.196 / S3.3a] xác minh nội bộ nhà cung cấp. `xac-minh` đo ở tầng gói và tầng CSDL: mỗi luật người một ca kèm hàng
   // `CONTROL_DENIED`, băm hồ sơ đổi thì thôi hiệu lực, hạn, thu hồi, đua dưới khoá tư vấn, và chỉ ghi thêm.
   K8a: ["packages/supplier/src/xac-minh.int.test.ts"],

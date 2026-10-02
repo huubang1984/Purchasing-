@@ -9,7 +9,19 @@
 // Trang không chèn chuỗi nào của máy chủ vào HTML: mọi ô đi qua `textContent`.
 // ==============================================================================================
 
-import { BAC_MAC_DINH, MUC_MAC_DINH, NGUONG_KEP_MAC_DINH, canhBaoChinhSach, soNguoiToiThieu } from "/lib/chinh-sach.js";
+import {
+  BAC_MAC_DINH,
+  BAFO_TOP_N_MAC_DINH,
+  BENCHMARK_MAC_DINH,
+  MUC_MAC_DINH,
+  NGUONG_KEP_MAC_DINH,
+  TRONG_SO_MAC_DINH,
+  canhBaoBenchmark,
+  canhBaoChinhSach,
+  canhBaoTrongSo,
+  moTaTrongSo,
+  soNguoiToiThieu,
+} from "/lib/chinh-sach.js";
 import { nhomSo, tien } from "/lib/so-tien.js";
 import { ganDangNhap } from "/lib/dang-nhap.js";
 
@@ -21,6 +33,9 @@ const bao = (el, chu) => { el.textContent = chu; hien(el, chu !== ""); };
 // `/lib/dang-nhap.js`.
 let trangThai = { phienBan: [], daBat: false, choKy: false };
 let bac = [];
+// [S1.258 / khoản 329] Thành phần trọng số sẽ gửi khi ô "Khai trọng số" được chọn — không có ô sửa: mẫu, hoặc nguyên văn của
+// phiên bản vừa chép (kể cả khi nó ngoài vế hẹp — màn hiện và cảnh báo, không tự đổi).
+let trongSo = TRONG_SO_MAC_DINH;
 
 async function goi(method, duong, than) {
   const res = await fetch(`/api${duong}`, {
@@ -199,6 +214,8 @@ async function napPhienBan() {
       o(new Date(p.effectiveFrom).toLocaleString("vi-VN")),
       o(tien(p.dualApprovalThreshold), "so"),
       o(p.tiers === null ? "không bậc" : `${p.tiers.length} bậc`),
+      o(moTaTrongSo(p.evalComponents ?? null, p.bafoTopN ?? null)),
+      o(moTaBenchmark(p.benchmark)),
       o(p.signedBy === null ? (p.tiers === null ? "không cần" : "chưa ký") : `đã ký ${new Date(p.signedAt).toLocaleString("vi-VN")}`),
       o(p.hieuLuc ? "đang hiệu lực" : ""),
     );
@@ -214,6 +231,12 @@ async function napPhienBan() {
     $("nut-ky").disabled = true;
     $("nut-ky").dataset.policyId = moiNhat.id;
   }
+}
+
+/** [S1.256 / S4.5b] Một dòng cho nhóm khoá `benchmark` của một phiên bản. */
+function moTaBenchmark(b) {
+  if (b === null || b === undefined) return "chưa cấu hình";
+  return `${b.cua_so_thang} tháng · sàn ${b.san_goi} gói/${b.san_ncc} NCC · lệch ${b.nguong_lech_vua}/${b.nguong_lech_cao}`;
 }
 
 $("nut-doc-pb").addEventListener("click", () => { void napPhienBan(); });
@@ -241,11 +264,58 @@ function bacThuong(tuSoTien) {
   return { tu_so_tien: tuSoTien, so_ncc_toi_thieu: 3, award_vai_khac_nhau: false, ky_danh_sach_moi: true, xoay_vong_n: 0, award_so_chu_ky: 1, award_vai: ["FINANCE", "DIRECTOR"], tham_dinh_truoc_trao: false, khai_xung_dot: true, dau_thau_chinh_thuc: false };
 }
 
+// [S1.256 / S4.5b] Năm ô của nhóm khoá `benchmark`; `phuong_phap` không có ô — một phương pháp duy nhất (`103`).
+const O_BENCHMARK = [
+  ["bm-cua-so", "cua_so_thang"],
+  ["bm-san-goi", "san_goi"],
+  ["bm-san-ncc", "san_ncc"],
+  ["bm-vua", "nguong_lech_vua"],
+  ["bm-cao", "nguong_lech_cao"],
+];
+
+function datBenchmark(b) {
+  $("co-benchmark").checked = b !== null && b !== undefined;
+  hien($("khoi-benchmark"), $("co-benchmark").checked);
+  for (const [id, khoa] of O_BENCHMARK) $(id).value = b === null || b === undefined ? "" : (b[khoa] ?? "");
+}
+
+/** Nhóm khoá gửi lên: `null` khi bỏ chọn; giá trị là CHUỖI đúng như người gõ (cắt khoảng trắng) — CSDL phán. */
+function benchmarkGuiLen() {
+  if (!$("co-benchmark").checked) return null;
+  const ra = { phuong_phap: BENCHMARK_MAC_DINH.phuong_phap };
+  for (const [id, khoa] of O_BENCHMARK) ra[khoa] = $(id).value.trim();
+  return ra;
+}
+
+/** [S1.258 / khoản 329] Đặt khối trọng số: `thanhPhan` `null` ⇒ bỏ chọn (ô top-N trống); ngược lại hiện thành phần chỉ-đọc. */
+function datTrongSo(thanhPhan, topN) {
+  const co = thanhPhan !== null && thanhPhan !== undefined;
+  trongSo = co ? thanhPhan.map((t) => ({ ...t })) : TRONG_SO_MAC_DINH;
+  $("co-trong-so").checked = co;
+  $("bafo-top-n").value = co && topN !== null && topN !== undefined ? String(topN) : "";
+  veTrongSo();
+}
+
+function veTrongSo() {
+  const co = $("co-trong-so").checked;
+  hien($("khoi-trong-so"), co);
+  dienDl($("tt-trong-so"), trongSo.map((t) => [`Thành phần ${t.ma}`, `đơn vị ${t.don_vi}, hệ số ${t.he_so}`]));
+}
+
+/** Cặp gửi lên: cả hai `null` khi bỏ chọn (`056` đòi chúng đi cùng nhau); top-N là số như người gõ — máy chủ phán. */
+function trongSoGuiLen() {
+  if (!$("co-trong-so").checked) return { evalComponents: null, bafoTopN: null };
+  const v = $("bafo-top-n").value.trim();
+  return { evalComponents: trongSo.map((t) => ({ ...t })), bafoTopN: v === "" ? null : Number(v) };
+}
+
 function dienMau() {
   bac = BAC_MAC_DINH.map((b) => ({ ...b, award_vai: b.award_vai === undefined ? undefined : [...b.award_vai] }));
   $("nguong").value = NGUONG_KEP_MAC_DINH;
   $("chia-nho").value = String(MUC_MAC_DINH.chiaNhoCuaSoNgay);
   $("tham-dinh").value = String(MUC_MAC_DINH.thamDinhHieuLucThang);
+  datTrongSo(TRONG_SO_MAC_DINH, BAFO_TOP_N_MAC_DINH);
+  datBenchmark(BENCHMARK_MAC_DINH);
   veBac();
 }
 
@@ -257,6 +327,8 @@ function chepMoiNhat() {
   $("tien-te").value = p.currency;
   $("chia-nho").value = p.chiaNhoCuaSoNgay === null ? "" : String(p.chiaNhoCuaSoNgay);
   $("tham-dinh").value = p.thamDinhHieuLucThang === null ? "" : String(p.thamDinhHieuLucThang);
+  datTrongSo(p.evalComponents ?? null, p.bafoTopN ?? null);
+  datBenchmark(p.benchmark);
   veBac();
 }
 
@@ -339,7 +411,7 @@ function tinhLai() {
     }
     tb.append(tr);
   }
-  const cb = canhBaoChinhSach(bac);
+  const cb = [...canhBaoChinhSach(bac), ...canhBaoTrongSo(trongSoGuiLen().evalComponents), ...canhBaoBenchmark(benchmarkGuiLen())];
   bao($("canh-bao"), cb.length === 0 ? "" : `Cảnh báo (không chặn): ${cb.join(" ")}`);
 }
 
@@ -368,6 +440,14 @@ $("nut-them-bac").addEventListener("click", () => {
 });
 $("nut-xoa-bac").addEventListener("click", () => { bac.pop(); veBac(); });
 $("nguong").addEventListener("input", () => tinhLai());
+// Chọn lại ô khi top-N đang trống thì ô nhận mẫu — hiện ra trong ô, người khai sửa được; không mặc định ngầm nào lúc gửi.
+$("co-trong-so").addEventListener("change", () => {
+  if ($("co-trong-so").checked && $("bafo-top-n").value.trim() === "") $("bafo-top-n").value = String(BAFO_TOP_N_MAC_DINH);
+  veTrongSo();
+  tinhLai();
+});
+$("co-benchmark").addEventListener("change", () => { hien($("khoi-benchmark"), $("co-benchmark").checked); tinhLai(); });
+for (const [id] of O_BENCHMARK) $(id).addEventListener("input", () => tinhLai());
 
 $("nut-tao-pb").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
@@ -380,6 +460,8 @@ $("nut-tao-pb").addEventListener("click", async () => {
     tiers: bac.length === 0 ? null : bacGuiLen(),
     chiaNhoCuaSoNgay: soNguyenHoacNull($("chia-nho").value),
     thamDinhHieuLucThang: soNguyenHoacNull($("tham-dinh").value),
+    ...trongSoGuiLen(),
+    benchmark: benchmarkGuiLen(),
   };
   $("nut-tao-pb").disabled = true;
   try {

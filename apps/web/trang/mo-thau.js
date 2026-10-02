@@ -408,7 +408,7 @@ $("nut-yeu-cau").addEventListener("click", async () => {
 });
 
 /**
- * [S1.257 / khoản 332] Câu báo sau một chữ ký mở thầu, đọc từ yêu cầu VỪA NẠP LẠI. Trước vòng này câu là một hằng — *"Thiếu
+ * [S1.259 / khoản 332] Câu báo sau một chữ ký mở thầu, đọc từ yêu cầu VỪA NẠP LẠI. Trước vòng này câu là một hằng — *"Thiếu
  * người thứ hai thì điều phối sẽ bị từ chối"* — kể cả khi chính chữ ký ấy làm yêu cầu đủ (đo trên trình duyệt ở §S1.255: XD-03
  * đã `APPROVED 2 / 2`, câu vẫn nói thiếu). Ngưỡng lấy từ máy chủ (`requiredApprovals`, khoản 192) — trang không tự suy ra "hai".
  */
@@ -734,7 +734,7 @@ $("nut-huy-award").addEventListener("click", async () => {
   bao($("loi7"), ""); bao($("ok7"), "");
   const lyDo = $("ly-do-award").value.trim();
   if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần huỷ — một lần huỷ không lý do là đúng thứ D5 cấm."); return; }
-  // [S1.257 / khoản 333] Huỷ lên trao thầu ĐÃ HIỆN TRÊN MÀN — khuôn khoản 321 của «Phê duyệt». Trước vòng này nút huỷ theo GÓI
+  // [S1.259 / khoản 333] Huỷ lên trao thầu ĐÃ HIỆN TRÊN MÀN — khuôn khoản 321 của «Phê duyệt». Trước vòng này nút huỷ theo GÓI
   // (route không nhận id trao thầu) khi bước 7 còn trống: đo trên trình duyệt, Tổng Giám đốc nạp XD-04, gõ lý do, bấm Huỷ ⇒
   // `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Lần bấm đầu — hay khi trao thầu mới nhất đã đổi từ lúc đọc — chỉ vẽ nó ra. Giới hạn,
   // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.

@@ -203,6 +203,9 @@ importers:
       '@trustprocure/audit':
         specifier: workspace:*
         version: link:../audit
+      '@trustprocure/du-lieu-nen':
+        specifier: workspace:*
+        version: link:../du-lieu-nen
       '@trustprocure/identity':
         specifier: workspace:*
         version: link:../identity
