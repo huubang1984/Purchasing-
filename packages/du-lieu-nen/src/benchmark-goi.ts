@@ -354,3 +354,206 @@ export async function ghiBenchmarkLuotCham(client: pg.PoolClient, orgId: string,
     [orgId, input.evaluationId, JSON.stringify(dauVao)],
   );
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.9101 / S4.5c1] BẢN LƯU CỦA BẢNG SO SÁNH VÀ DẢI CỦA MỘT DÒNG (ADR-9201)
+// ----------------------------------------------------------------------------------------------
+// Chủ dự án chốt 2026-10-01 sau phép đo: bản benchmark của bảng so sánh TÍNH ở lần đọc ĐẦU TIÊN sau một lần mở thầu rồi lưu — một bản
+// cho mỗi lần mở thầu (`price_benchmark_snapshots`, khoá `UNIQUE (org_id, unseal_request_id)`); bản lưu KHÔNG mang số nào có đơn vị
+// tiền (spec §4.6). Số của dải và `SAU_MOC` tính khi người dùng bấm *Xem dải* MỘT dòng — `tinhDaiDong`, một lần đọc `quan_sat_gia` tại
+// mốc mở giá cho dải và một tại `ghi_luc` của bản lưu cho giá quy đổi của chính các báo giá. Cùng tư thế với hai hàm trên: không cổng
+// ở đây, chỗ gọi duy nhất là `packages/danh-gia/src/doc-benchmark.ts` (cổng `bid.view`, hàng sổ) — ghim ở `ban-ro-liet-ke.test.ts`.
+
+export interface GhiBanLuuInput {
+  /** Lần mở thầu (vòng một hay một vòng BAFO) mà bản lưu thuộc về — đã `EXECUTED`, mới nhất của gói. */
+  readonly unsealRequestId: string;
+  /** Phiên bản ghim của gói — khoá ngoại `price_benchmark_snapshots_phien_ban_ghim_fk` từ chối mọi phiên bản khác. */
+  readonly policyId: string;
+  /** Kết quả `tinhBenchmarkGoi` với `mocDoc` MẶC ĐỊNH (`now()` của chính giao dịch này — tức `ghi_luc`). */
+  readonly ketQua: BenchmarkGoi;
+}
+
+/**
+ * Ghi bản lưu của MỘT lần mở thầu — hai câu `INSERT` trong giao dịch của người gọi. Trả id bản vừa ghi, hay `null` khi giao dịch
+ * khác đã ghi bản cho cùng lần mở thầu (`ON CONFLICT DO NOTHING` chờ giao dịch ấy xong; người gọi đọc lại bản đã có). NÉM khi
+ * `ketQua.mocDoc` không phải `now()` của giao dịch: giá của chính các dòng phải đọc đúng tại `ghi_luc` thì bản lưu mới tái lập được.
+ */
+export async function ghiBanLuuBenchmark(client: pg.PoolClient, orgId: string, input: GhiBanLuuInput): Promise<string | null> {
+  const kq = input.ketQua;
+  const { rows: dau } = await client.query<{ id: string; ghi_luc: string }>(
+    `INSERT INTO public.price_benchmark_snapshots (org_id, rfq_id, unseal_request_id, policy_id, phuong_phap, moc_mo_gia)
+     VALUES ($1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid, $5::pg_catalog.text,
+             'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+)
+               ($6::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval))
+     ON CONFLICT (org_id, unseal_request_id) DO NOTHING
+     RETURNING id,
+               (pg_catalog.extract('epoch', ghi_luc) OPERATOR(pg_catalog.*) 1000000)::pg_catalog.int8::pg_catalog.text AS ghi_luc`,
+    [orgId, kq.rfqId, input.unsealRequestId, input.policyId, kq.phuongPhap, kq.mocMoGia.toString()],
+  );
+  const hang = dau[0];
+  if (hang === undefined) return null;
+  if (BigInt(hang.ghi_luc) !== kq.mocDoc) {
+    throw new Error("bản lưu benchmark phải tính với mốc đọc là now() của chính giao dịch ghi");
+  }
+  const dong = kq.dong.map((d) => ({
+    bid_version_id: d.bidVersionId,
+    line_no: d.lineNo,
+    anh_xa_id: d.anhXaId,
+    canonical_item_id: d.canonicalItemId,
+    tien_te: d.tienTe,
+    cua_so_tu: d.cuaSoTu === null ? null : d.cuaSoTu.toString(),
+    nhan: d.nhan,
+    chieu: d.chieu,
+    ly_do: d.lyDo,
+    so_quan_sat: d.soQuanSat,
+    so_goi: d.soGoi,
+    so_ncc: d.soNcc,
+    so_goi_cung_nguoi_tao: d.soGoiCungNguoiTao,
+    so_quan_sat_hoi_to: d.soQuanSatHoiTo,
+    so_loai_tien_te: d.soLoaiTienTe,
+    so_loai_gia_0: d.soLoaiGia0,
+    hoi_to: d.hoiTo,
+  }));
+  if (dong.length > 0) {
+    await client.query(
+      `INSERT INTO public.price_benchmark_snapshot_lines
+         (org_id, snapshot_id, rfq_id, policy_id, bid_version_id, line_no, anh_xa_id, canonical_item_id, tien_te, cua_so_tu, nhan,
+          chieu, ly_do, so_quan_sat, so_goi, so_ncc, so_goi_cung_nguoi_tao, so_quan_sat_hoi_to, so_loai_tien_te, so_loai_gia_0, hoi_to)
+       SELECT $1::pg_catalog.uuid, $2::pg_catalog.uuid, $3::pg_catalog.uuid, $4::pg_catalog.uuid, d.bid_version_id, d.line_no,
+              d.anh_xa_id, d.canonical_item_id, d.tien_te,
+              'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+)
+                (d.cua_so_tu::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval),
+              d.nhan, d.chieu, d.ly_do, d.so_quan_sat, d.so_goi, d.so_ncc, d.so_goi_cung_nguoi_tao, d.so_quan_sat_hoi_to,
+              d.so_loai_tien_te, d.so_loai_gia_0, d.hoi_to
+         FROM pg_catalog.jsonb_to_recordset($5::pg_catalog.jsonb) AS d(
+                bid_version_id pg_catalog.uuid, line_no pg_catalog.int4, anh_xa_id pg_catalog.uuid,
+                canonical_item_id pg_catalog.uuid, tien_te pg_catalog.text, cua_so_tu pg_catalog.int8, nhan pg_catalog.text,
+                chieu pg_catalog.text, ly_do pg_catalog.text, so_quan_sat pg_catalog.int4, so_goi pg_catalog.int4,
+                so_ncc pg_catalog.int4, so_goi_cung_nguoi_tao pg_catalog.int4, so_quan_sat_hoi_to pg_catalog.int4,
+                so_loai_tien_te pg_catalog.int4, so_loai_gia_0 pg_catalog.int4, hoi_to pg_catalog.text[])`,
+      [orgId, hang.id, kq.rfqId, input.policyId, JSON.stringify(dong)],
+    );
+  }
+  return hang.id;
+}
+
+export interface TinhDaiDongInput {
+  readonly rfqId: string;
+  readonly canonicalItemId: string;
+  /** Tiền tệ của các báo giá trên dòng — mỗi tiền tệ một dải. */
+  readonly tienTe: readonly string[];
+  readonly nhom: NhomBenchmark;
+  /** Mốc mở giá đã lưu, micro giây. */
+  readonly mocMoGia: bigint;
+  /** `ghi_luc` của bản lưu, micro giây — giá quy đổi của chính các báo giá đọc tại đây, đúng mốc mà nhãn đã dùng. */
+  readonly mocDoc: bigint;
+}
+
+/** Một dải tính lại khi bấm *Xem dải*: số của dải (khi đủ sàn) và `SAU_MOC` cộng trên mọi quan sát đã vào dải. */
+export interface DaiDong extends DaiBenchmark {
+  readonly canonicalItemId: string;
+  /** Hàng nền mới hơn mốc mà lần đọc tại mốc đã BỎ QUA, đếm theo loại, tới LÚC ĐỌC này (spec §2.5 ⑿). */
+  readonly sauMoc: Readonly<Record<string, number>>;
+}
+
+/** Giá quy đổi của một báo giá của gói X trên dòng — tại `mocDoc`. */
+export interface GiaQuyDoiCuaX {
+  readonly bidVersionId: string;
+  readonly lineNo: number;
+  readonly trangThai: string;
+  readonly donGiaQuyDoi: string | null;
+  readonly tienTe: string | null;
+}
+
+export interface KetQuaDaiDong {
+  /** Đơn vị gốc của hàng chuẩn — dải và giá quy đổi tính theo nó (vd. `kg`). `null` khi không quan sát nào ra. */
+  readonly donViGoc: string | null;
+  readonly dai: readonly DaiDong[];
+  readonly giaCuaX: readonly GiaQuyDoiCuaX[];
+}
+
+interface HangDaiDong {
+  readonly rfq_id: string;
+  readonly supplier_id: string;
+  readonly bid_version_id: string;
+  readonly line_no: number;
+  readonly anh_xa_id: string | null;
+  readonly trang_thai: string;
+  readonly don_gia_quy_doi: string | null;
+  readonly tien_te: string | null;
+  readonly don_vi_goc: string | null;
+  readonly hoi_to: string[];
+  readonly sau_moc: Record<string, number> | null;
+  readonly ngay: string;
+  readonly cung_nguoi_tao: boolean;
+}
+
+/**
+ * Dải của MỘT hàng chuẩn tại mốc mở giá đã lưu, cho từng tiền tệ, cùng giá quy đổi của các báo giá của X trên hàng chuẩn ấy. Hai lần
+ * đọc `quan_sat_gia` — đúng chi phí *"bấm từng dòng"* mà chủ dự án chọn. Tính lại bằng CÙNG lõi `tinhDai` của bản lưu, nên số đếm phải
+ * trùng bản lưu (L7); người gọi so.
+ */
+export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: TinhDaiDongInput): Promise<KetQuaDaiDong> {
+  const { rows: goi } = await client.query<{ created_by: string }>(
+    `SELECT r.created_by FROM public.rfq_packages r
+      WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
+    [orgId, input.rfqId],
+  );
+  const nguoiTao = goi[0]?.created_by;
+  if (nguoiTao === undefined) throw new Error("không tìm thấy gói thầu để tính dải");
+
+  const docTai = async (moc: bigint): Promise<readonly HangDaiDong[]> =>
+    (
+      await client.query<HangDaiDong>(
+        `SELECT q.rfq_id, q.supplier_id, q.bid_version_id, q.line_no, q.anh_xa_id, q.trang_thai,
+                q.don_gia_quy_doi::pg_catalog.text AS don_gia_quy_doi, q.tien_te, q.don_vi_goc, q.hoi_to, q.sau_moc,
+                (pg_catalog.extract('epoch', q.ngay_quan_sat) OPERATOR(pg_catalog.*) 1000000)::pg_catalog.int8::pg_catalog.text AS ngay,
+                (r.created_by OPERATOR(pg_catalog.=) $3::pg_catalog.uuid) AS cung_nguoi_tao
+           FROM public.quan_sat_gia(
+                  'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+)
+                    ($1::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval),
+                  $2::pg_catalog.uuid) q
+           JOIN public.rfq_packages r ON r.id OPERATOR(pg_catalog.=) q.rfq_id
+                                     AND r.org_id OPERATOR(pg_catalog.=) $4::pg_catalog.uuid
+          ORDER BY q.rfq_id, q.supplier_id, q.line_no`,
+        [moc.toString(), input.canonicalItemId, nguoiTao, orgId],
+      )
+    ).rows;
+
+  const tapDai = await docTai(input.mocMoGia);
+  const quanSat: QuanSatBenchmark[] = tapDai.map((r) => ({
+    rfqId: r.rfq_id,
+    supplierId: r.supplier_id,
+    bidVersionId: r.bid_version_id,
+    lineNo: r.line_no,
+    anhXaId: r.anh_xa_id,
+    ngayQuanSat: BigInt(r.ngay),
+    trangThai: r.trang_thai,
+    donGiaQuyDoi: r.don_gia_quy_doi,
+    tienTe: r.tien_te,
+    hoiTo: r.hoi_to,
+    goiCungNguoiTao: r.cung_nguoi_tao,
+  }));
+  const sauMocCua = new Map(tapDai.map((r) => [`${r.bid_version_id}:${String(r.line_no)}`, r.sau_moc ?? {}]));
+  const dai: DaiDong[] = [...new Set(input.tienTe)].sort().map((tienTe) => {
+    const d = tinhDai(quanSat, { rfqId: input.rfqId, tienTe, mocMoGia: input.mocMoGia, nhom: input.nhom });
+    const sauMoc: Record<string, number> = {};
+    for (const q of d.dauVao) {
+      for (const [loai, n] of Object.entries(sauMocCua.get(`${q.bidVersionId}:${String(q.lineNo)}`) ?? {})) {
+        sauMoc[loai] = (sauMoc[loai] ?? 0) + n;
+      }
+    }
+    return { ...d, canonicalItemId: input.canonicalItemId, sauMoc };
+  });
+
+  const tapX = (await docTai(input.mocDoc)).filter((r) => r.rfq_id === input.rfqId);
+  const giaCuaX: GiaQuyDoiCuaX[] = tapX.map((r) => ({
+    bidVersionId: r.bid_version_id,
+    lineNo: r.line_no,
+    trangThai: r.trang_thai,
+    donGiaQuyDoi: r.don_gia_quy_doi,
+    tienTe: r.tien_te,
+  }));
+  const donViGoc = tapX.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? tapDai.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? null;
+  return { donViGoc, dai, giaCuaX };
+}

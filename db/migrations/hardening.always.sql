@@ -3796,6 +3796,8 @@ $ham$;
          ('public', 'outbox_jobs', '007_outbox'),
          ('public', 'price_benchmark_inputs', '103_benchmark_gia'),
          ('public', 'price_benchmark_results', '103_benchmark_gia'),
+         ('public', 'price_benchmark_snapshot_lines', '9501_ban_luu_benchmark'),
+         ('public', 'price_benchmark_snapshots', '9501_ban_luu_benchmark'),
          ('public', 'procurement_categories', '085_nhom_hang'),
          ('public', 'procurement_category_changes', '085_nhom_hang'),
          ('public', 'rfq_approvals', '009_rfq'),

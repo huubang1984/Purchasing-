@@ -11,6 +11,7 @@
 // ==============================================================================================
 
 import { tien } from "/lib/so-tien.js";
+import { chuDai, chuNhan, chuThanhPhan, chuTrangThai, doPhu, soDai, tomTatNhan } from "/lib/benchmark.js";
 import { LA_UUID, SAI_TO_CHUC, docMaToChuc, ganDangNhap } from "/lib/dang-nhap.js";
 
 const $ = (id) => document.getElementById(id);
@@ -429,11 +430,13 @@ $("nut-dieu-phoi").addEventListener("click", async () => {
 // Bước 4 — bảng so sánh
 // ---------------------------------------------------------------------------------------------
 
-$("nut-bang").addEventListener("click", async () => {
+/** [S1.9101 / S4.5c1] Đọc và vẽ bảng so sánh; trả `false` khi máy chủ từ chối. Benchmark theo dòng dùng lại các hàng của nó. */
+async function docBangSoSanh() {
   bao($("loi4"), "");
   const r = await goi("GET", `/rfqs/${phien.rfqId}/comparison`);
-  if (r.status !== 200) { bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh")); return; }
+  if (r.status !== 200) { bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh")); return false; }
   const c = r.body.comparison;
+  phien = { ...phien, soSanh: Array.isArray(c.rows) ? c.rows : [] };
   const tbody = $("bang").querySelector("tbody");
   tbody.replaceChildren();
   const reNhoNhat = c.aggregates?.min ?? null;
@@ -461,7 +464,126 @@ $("nut-bang").addEventListener("click", async () => {
     ["Trung bình", tien(a.average)],
     ["Lệch tiền tệ", a.currencyMismatch === true ? "CÓ — không so sánh thẳng được" : "không"],
   ]);
-});
+  return true;
+}
+
+$("nut-bang").addEventListener("click", () => docBangSoSanh());
+
+// ---------------------------------------------------------------------------------------------
+// [S1.9101 / S4.5c1] Bước 4 — benchmark theo dòng (spec S4 §4.6; ADR-9201)
+//
+// Một bản cho mỗi lần mở thầu: lần đọc đầu tiên tính và lưu, các lần sau đọc bản lưu. Bản lưu không mang số tiền nào — số của dải
+// và hàng nền ghi sau mốc chỉ tính khi bấm «Xem dải» một dòng. Ở vòng chào lại đang mở, máy chủ trả trạng thái có tên và không nhãn
+// nào; trang in câu ấy.
+// ---------------------------------------------------------------------------------------------
+
+/** Benchmark có nhãn lần đọc gần nhất (`trangThai: "CO"`), hay `null`. Bảng xếp hạng đọc nó cho cột Benchmark. */
+let benchmarkHien = null;
+
+const tenBaoGia = (id) => (phien.soSanh ?? []).find((h) => h.bidVersionId === id)?.supplierLegalName ?? `báo giá ${id.slice(0, 8)}…`;
+const dongCuaBaoGia = (id) => {
+  const h = (phien.soSanh ?? []).find((x) => x.bidVersionId === id);
+  return Array.isArray(h?.payload?.lines) ? h.payload.lines : [];
+};
+
+async function veBenchmark() {
+  bao($("loi4b"), "");
+  hien($("khoi-dai"), false);
+  if (phien.soSanh === undefined && !(await docBangSoSanh())) return;
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/benchmark`);
+  if (r.status !== 200) { bao($("loi4b"), loiCua(r, "Chưa đọc được benchmark")); return; }
+  const b = r.body.benchmark;
+  const tbody = $("bang-benchmark").querySelector("tbody");
+  tbody.replaceChildren();
+  const cau = chuTrangThai(b);
+  if (cau !== null) {
+    benchmarkHien = null;
+    dienDl($("tt-benchmark"), [["Benchmark", cau]]);
+    veCotBenchmark();
+    return;
+  }
+  benchmarkHien = b;
+  const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
+  const baoGia = [...new Set(b.dong.map((d) => d.bidVersionId))];
+  const phu = baoGia.map((id) => [id, doPhu(b.dong.filter((d) => d.bidVersionId === id), dongCuaBaoGia(id))]);
+  const tongDo = phu.reduce((t, [, p]) => t + p.soDoDuoc, 0);
+  const tongDong = phu.reduce((t, [, p]) => t + p.soDong, 0);
+  dienDl($("tt-benchmark"), [
+    ["Phương pháp", b.phuongPhap],
+    ["Chính sách phiên bản (ghim lúc mở)", b.policyVersion],
+    ["Lần mở thầu", b.bafoRoundId === null ? "vòng 1" : "vòng chào lại (BAFO)"],
+    ["Mốc mở giá", new Date(b.mocMoGia).toLocaleString("vi-VN")],
+    ["Tính lúc", `${new Date(b.tinhLuc).toLocaleString("vi-VN")}${b.nguon === "TINH_MOI" ? " — lần đọc này vừa tính" : ""}`],
+    ["Độ phủ của gói", `${String(tongDo)}/${String(tongDong)} (báo giá × dòng) đo được`],
+    ...phu.map(([id, p]) => [
+      `Độ phủ — ${tenBaoGia(id)}`,
+      `${String(p.soDoDuoc)}/${String(p.soDong)} dòng${p.phanTramGiaTri === null ? "" : ` · ${p.phanTramGiaTri}% giá trị`}`,
+    ]),
+  ]);
+  const dongSo = [...new Set(b.dong.map((d) => d.lineNo))].sort((x, y) => x - y);
+  for (const lineNo of dongSo) {
+    const cuaDong = b.dong.filter((d) => d.lineNo === lineNo);
+    for (const [i, d] of cuaDong.entries()) {
+      const tr = document.createElement("tr");
+      const o = document.createElement("td");
+      if (i === 0) {
+        const chu = document.createElement("span");
+        chu.textContent = `Dòng ${String(lineNo)} `;
+        const nut = document.createElement("button");
+        nut.className = "phu";
+        nut.textContent = "Xem dải";
+        nut.addEventListener("click", () => veDai(lineNo));
+        o.append(chu, nut);
+      }
+      const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
+      tr.append(o, td(tenBaoGia(d.bidVersionId)), td(gia === null ? "—" : tien(String(gia)), "so"), td(chuNhan(d)), td(chuThanhPhan(d)));
+      if (d.nhan === "LECH_CAO") tr.className = "lech";
+      tbody.append(tr);
+    }
+  }
+  veCotBenchmark();
+}
+
+async function veDai(lineNo) {
+  bao($("loi4b"), "");
+  const r = await goi("GET", `/rfqs/${phien.rfqId}/items/${String(lineNo)}/benchmark`);
+  if (r.status !== 200) { bao($("loi4b"), loiCua(r, "Chưa tính được dải")); return; }
+  const d = r.body.dai;
+  if (d.trangThai !== "CO") {
+    const cau = d.trangThai === "CHUA_CO_BAN_LUU" ? "Chưa có bản benchmark của lần mở thầu này — bấm Đọc benchmark trước."
+      : d.trangThai === "KHONG_CO_DAI" ? `Dòng ${String(lineNo)} không có báo giá nào đo được — không có dải.`
+      : chuTrangThai(d);
+    dienDl($("tt-dai"), [[`Dòng ${String(lineNo)}`, cau]]);
+    hien($("khoi-dai"), true);
+    return;
+  }
+  dienDl($("tt-dai"), [
+    ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),
+    ...d.giaCuaGoi.map((g) => [
+      `Đơn giá quy đổi — ${tenBaoGia(g.bidVersionId)}`,
+      g.donGiaQuyDoi === null ? `không quy đổi được (${g.trangThai})` : `${soDai(g.donGiaQuyDoi)} ${g.tienTe ?? ""}/${d.donViGoc ?? "đơn vị gốc"}`,
+    ]),
+  ]);
+  hien($("khoi-dai"), true);
+}
+
+$("nut-benchmark").addEventListener("click", veBenchmark);
+
+/** Ô cột Benchmark của bảng xếp hạng đang vẽ — `veXepHang` đặt lại, `veCotBenchmark` viết lại chữ sau mỗi lần đọc benchmark. */
+let oCotBenchmark = [];
+
+/** Cột Benchmark của bảng xếp hạng: tóm tắt nhãn và độ phủ của từng báo giá theo lần đọc benchmark gần nhất. */
+function veCotBenchmark() {
+  for (const o of oCotBenchmark) o.textContent = chuCotBenchmark(o.dataset.bidVersionId ?? "");
+}
+
+function chuCotBenchmark(bidVersionId) {
+  if (benchmarkHien === null) return "—";
+  const dong = benchmarkHien.dong.filter((d) => d.bidVersionId === bidVersionId);
+  if (dong.length === 0) return "—";
+  const p = doPhu(dong, dongCuaBaoGia(bidVersionId));
+  return `${tomTatNhan(dong)} · phủ ${String(p.soDoDuoc)}/${String(p.soDong)} dòng`;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Bước 5 — chấm thầu và bảng xếp hạng
@@ -502,6 +624,7 @@ async function veXepHang() {
   if (r.status !== 200) { bao($("loi5"), loiCua(r, "Chưa đọc được bảng xếp hạng")); return; }
   const tbody = $("bang-hang").querySelector("tbody");
   tbody.replaceChildren();
+  oCotBenchmark = [];
   const b = r.body.ranking ?? null;
   // `null` là câu trả lời ĐÚNG cho "chưa chấm lần nào", cùng khuôn `veYeuCau` ở bước 3. Một bảng
   // rỗng thì nói dối: "đã chấm, và không ai trong bảng" khác hẳn "chưa chấm".
@@ -529,6 +652,11 @@ async function veXepHang() {
     const o = document.createElement("td");
     o.append(veThanhPhan(h.components ?? []));
     tr.append(o);
+    // [S1.9101 / S4.5c1] Nhãn ở bảng xếp hạng (spec S4 §4.6): tóm tắt theo lần đọc benchmark gần nhất ở bước 4.
+    const bm = td(typeof h.bidVersionId === "string" ? chuCotBenchmark(h.bidVersionId) : "—", "cot-benchmark");
+    bm.dataset.bidVersionId = typeof h.bidVersionId === "string" ? h.bidVersionId : "";
+    oCotBenchmark.push(bm);
+    tr.append(bm);
     // [S1.254 / khoản 320] Bước 7 đề xuất trên ĐÚNG id phiên bản báo giá, mà trước vòng này không bảng nào in id ấy — người
     // mua thật không đề xuất trao thầu được bằng giao diện. Nút chỉ có ở hàng có hạng: báo giá không có chi phí hiệu dụng đọc
     // được ở lượt chấm này thì `award_kiem_de_xuat` từ chối nó.

@@ -84,12 +84,20 @@ export {
   type NhomBenchmark,
   type QuanSatBenchmark,
 } from "./benchmark.js";
+// [S1.9101 / S4.5c1] Bản lưu của bảng so sánh (một bản mỗi lần mở thầu) và dải của một dòng khi bấm *Xem dải* (ADR-9201).
 export {
+  ghiBanLuuBenchmark,
   ghiBenchmarkLuotCham,
   tinhBenchmarkGoi,
+  tinhDaiDong,
   type BenchmarkGoi,
   type DaiCuaGoi,
+  type DaiDong,
   type DongBenchmark,
+  type GhiBanLuuInput,
   type GhiBenchmarkInput,
+  type GiaQuyDoiCuaX,
+  type KetQuaDaiDong,
   type TinhBenchmarkGoiInput,
+  type TinhDaiDongInput,
 } from "./benchmark-goi.js";

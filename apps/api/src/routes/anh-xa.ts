@@ -77,13 +77,16 @@ function trongYeuTuyChon(body: unknown): readonly string[] | undefined {
   if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new HttpError(422, 'trường "thuocTinhTrongYeu" phải là mảng chuỗi');
   return v as readonly string[];
 }
-/** Tham số đường dẫn; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). */
-function rfqIdParam(req: ApiRequest): string {
+/**
+ * Tham số đường dẫn; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). [S1.9101 / S4.5c1] Xuất cho route benchmark — cùng
+ * bộ đọc cho cùng hai tham số `:rfqId`, `:lineNo`.
+ */
+export function rfqIdParam(req: ApiRequest): string {
   const v = req.params["rfqId"] ?? "";
   if (!UUID_RE.test(v)) throw new HttpError(404, "khong co duong nay");
   return v;
 }
-function lineNoParam(req: ApiRequest): number {
+export function lineNoParam(req: ApiRequest): number {
   const v = req.params["lineNo"] ?? "";
   if (!/^[1-9][0-9]{0,8}$/u.test(v)) throw new HttpError(404, "khong co duong nay");
   return Number(v);

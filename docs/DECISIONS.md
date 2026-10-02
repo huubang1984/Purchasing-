@@ -11106,12 +11106,85 @@ khoản 329 vào rổ A, sửa ở một PR riêng ngay; khoản 330, 331 vào r
   qua cả biên) và làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi; nay `strict`. **[THẤP-5, đóng trong vòng]** `item_uom_conversions.he_so`
   nhận `'NaN'` (`'NaN' > 0` là đúng) — một quy đổi `NaN` trong dải làm lượt chấm ném mãi; nay có ràng buộc hữu hạn.
 - **Cửa sổ tháng tính theo lịch UTC** — khớp Postgres khi `TimeZone = UTC` (0/20.000 lệch, lượt soi); theo giờ `Asia/Ho_Chi_Minh` lệch một
-  ngày quanh cuối tháng ở ~5,5% mốc. Bộ kiểm ngoại tuyến và `DAC-TA.md` của S4.5c phải nói UTC.
-- **Đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn của lượt chấm vòng một** (không có giá vòng hai — phong bì chưa vào bản rõ), cùng tư
-  thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.
+  ngày quanh cuối tháng ở ~5,5% mốc. Bộ kiểm ngoại tuyến và `DAC-TA.md` của S4.5c phải nói UTC. **[S1.9101] Chủ dự án chốt 2026-10-01:
+  giữ UTC, ghi rõ** (ADR-9201 ⑷).
+- ~~**Đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn của lượt chấm vòng một** (không có giá vòng hai — phong bì chưa vào bản rõ), cùng tư
+  thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.~~ **[S1.9101]
+  Chủ dự án chốt 2026-10-01: ĐÓNG ở hai trạng thái ấy, như bảng so sánh** — trạng thái có tên `VONG_CHAO_LAI_DANG_MO`, không nhãn (ADR-9201 ⑶).
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
 - **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn ỨNG VIÊN của gói (giá của X tại mốc đọc, dải tại mốc mở giá). Đo ở 5.000 gói
   × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
   18–19 s, đọc hàng đã ghi 10–23 ms; tuyến tính theo hàng chuẩn × quan sát (biên bản §S1.256). Đọc
   as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy. **Chủ dự án chốt: tính một lần, lưu lại (mục 9).**
 - ~~**Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329, rổ A — PR riêng) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.~~ **[S1.258] Đóng:** màn khai trọng số (thành phần cố định, chỉ-đọc) và BAFO top-N (sửa được) — biên bản §S1.258.
+
+## ADR-9201 — S4.5c1: bản lưu benchmark của bảng so sánh — tính ở lần đọc ĐẦU sau mỗi lần mở thầu rồi lưu; đóng ở vòng chào lại; số của dải và `SAU_MOC` chỉ khi bấm *Xem dải*
+
+**Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm điểm ngày 2026-10-01, cả năm theo đề xuất, sau phép đo:
+⑴ bản benchmark "một lần" của bảng so sánh TÍNH ở lần đọc ĐẦU TIÊN sau một lần mở thầu, bởi người giữ `bid.view`, rồi lưu; ⑵ — hệ quả
+của ⑴ — một bản cho MỖI lần mở thầu (vòng một và mỗi vòng BAFO); ⑶ ở `BAFO_OPEN`/`BAFO_CLOSED` benchmark ĐÓNG, như route bảng so sánh;
+⑷ cửa sổ tháng giữ lịch UTC, ghi rõ ở `DAC-TA.md` và bộ kiểm ngoại tuyến (S4.5c2); ⑸ số của dải (Q1, trung vị, Q3) và `SAU_MOC` KHÔNG lưu
+— tính khi người dùng bấm *Xem dải* từng dòng. Thực thi tách hai PR: S4.5c1 (bản lưu, route, màn, L6, `gieo:demo`) và S4.5c2 (bộ xuất
+ADR-059, `DAC-TA.md`, bộ kiểm ngoại tuyến) · **[S1.9101]** · **Liên quan:** ADR-142 ⑼ (đổi đích), ADR-141 ⑶, ADR-140 ⑦ (bộ đọc có cổng,
+hàng sổ), ADR-136 (`quan_sat_gia`, `gia_da_lo`), ADR-095 (lịch sử giá là hàm, không bảng giá thứ ba), ADR-054 (nơi mang giá) · **Spec:**
+S4 §3.1–3.2, §4.6, §2.5 ⑿ ⒁, §5.1 L6, L7, L14, §9 S4.5c · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+
+### Bối cảnh — phép đo trước khi viết mã
+
+ADR-142 ⑼ chốt *"S4.5c tính MỘT lần khi gói vào `UNSEALED` (và vào `BAFO_UNSEALED`) rồi lưu"*. Đo trên mã:
+
+1. **Cạnh ấy không mang được phép tính.** Cả hai cạnh do MỘT hàm làm — `executeUnsealRequest` của `apps/unseal-worker`, vai `app_unseal`,
+   trong giao dịch của bộ chạy job. Spec S4 §3.1–3.2 cấm *"thêm dòng nào vào đường `CLOSED→UNSEALED`"*. `app_unseal` không có quyền nào trên
+   đầu vào của benchmark (`quan_sat_gia` chỉ `GRANT EXECUTE` cho `app_api`; không quyền trên ánh xạ, hàng chuẩn, chính sách, hai bảng kết
+   quả) và không xếp được job (`025`: không `INSERT` trên `outbox_jobs`). Trong chính giao dịch mở thầu gói chưa thấy giá của mình:
+   `quan_sat_gia` so `unsealed_at < p_moc` ngặt và `p_moc = now()` của cùng giao dịch. Giao dịch ấy còn giữ khoá chuỗi sổ (`050`) — mọi lần
+   ghi sổ khác của tổ chức hỏng sau 2 s.
+2. **Bảng kết quả của S4.5b gắn cứng vào lượt chấm** (khoá ngoại `…_cua_luot_cham_fk` tới `rfq_evaluations.created_at`) — bản lưu "lúc mở
+   thầu" cần bảng riêng.
+3. **Ở `BAFO_OPEN`/`BAFO_CLOSED`** route bảng so sánh đóng (`COMPARISON_ALLOWED_STATUSES`); `quan_sat_gia` không trả gì của gói (ADR-136:
+   `gia_da_lo` sai) nên phép tính as-of ở đó ra toàn `CHUA_ANH_XA`; bảng xếp hạng vẫn hiện hạng vòng một, không nhãn vòng.
+4. **Spec §4.6 cấm lưu số**: *"Kết quả benchmark KHÔNG được lưu dưới dạng số"* — trung vị của tập lẻ LÀ một giá có thật; một bảng lưu số là
+   bảng giá thứ ba, cần dòng khai mới ở ADR-054. `quan_sat_gia` có mệnh đề `SET` nên không nội tuyến được — lọc theo tham chiếu đã lưu không
+   rẻ hơn một lần đọc đầy đủ (~0,45 s mỗi hàng chuẩn ở 5.000 gói, §S1.256).
+5. **UTC so với +07:00**: 200.000 mốc ngẫu nhiên 2024–2027, cửa sổ 12 tháng — 0,04% mốc ra cửa sổ khác, lệch tối đa 24 giờ; cửa sổ 1 tháng —
+   0,95%, tối đa 72 giờ (khác ở mốc trong bảy giờ quanh nửa đêm cuối tháng, khi ngày bị kẹp về cuối tháng đích).
+
+### Quyết định
+
+1. **Bản lưu** `price_benchmark_snapshots` + `price_benchmark_snapshot_lines` (`9501_ban_luu_benchmark`): MỘT hàng đầu cho MỖI lần mở
+   thầu (`UNIQUE (org_id, unseal_request_id)`), một hàng mỗi (báo giá, dòng) — cùng cột nhãn, chiều, lý do, khoá dải, số đếm của `103`, KHÔNG
+   cột tiền. Khoá ngoại hợp thành: lần mở thầu thuộc đúng gói; phiên bản = phiên bản GHIM của gói (vế L14 của bản lưu ở CSDL); hàng con cùng
+   giao dịch với hàng đầu (`ghi_luc`, khuôn `103`). Chỉ-ghi-thêm bằng quyền; policy khách đóng hẳn.
+2. **`docBenchmark` đổi đích.** Benchmark hiện ĐÚNG ở trạng thái bảng so sánh mở (`UNSEALED`, `EVALUATING`, `BAFO_UNSEALED` — khoá với
+   `COMPARISON_ALLOWED_STATUSES` bằng test). Lần mở thầu hiện tại = lần `EXECUTED` mới nhất của gói. Có bản lưu ⇒ đọc (`BAN_LUU`); chưa có ⇒
+   tính trên `docBaoGia` dưới phiên bản ghim, ghi bằng `INSERT … ON CONFLICT DO NOTHING` — hai lần đọc đồng thời: lần sau chờ lần trước
+   commit rồi đọc bản ấy (`TINH_MOI` / `BAN_LUU`). Hàng của LƯỢT CHẤM (`103`) không đổi và không còn đọc ở đây: chúng là hồ sơ của lượt chấm,
+   cho bộ bằng chứng của S4.5c2.
+3. **Vòng chào lại:** `BAFO_OPEN`, `BAFO_CLOSED` ⇒ `VONG_CHAO_LAI_DANG_MO`, không nhãn, không dải. Mọi trạng thái khác ngoài tập hiện ⇒
+   `KHONG_HIEN`. Mở niêm phong vòng ấy ⇒ lần mở thầu mới ⇒ bản lưu MỚI, trên vị thế sau BAFO; bản vòng một ở lại.
+4. **UTC** — lõi S4.5b không đổi; `DAC-TA.md` và bộ kiểm ngoại tuyến của S4.5c2 nói rõ.
+5. ***Xem dải*** `docDaiBenchmark` (`GET /rfqs/:rfqId/items/:lineNo/benchmark`): một dòng, cổng `bid.view`, hàng sổ `BENCHMARK_BAND_READ`
+   không giá. Tính lại dải tại `moc_mo_gia` đã lưu bằng CÙNG lõi `tinhDai` — Q1/trung vị/Q3 theo đơn vị gốc của hàng chuẩn, `SAU_MOC` cộng trên
+   mọi quan sát đã vào dải, đếm tới LÚC BẤM — cùng giá quy đổi của từng báo giá của gói tại `ghi_luc` của bản lưu. Số đếm tính lại phải trùng
+   bản lưu (`khopBanLuu`); lệch thì màn nói ra.
+6. **Màn `/mo-thau`:** bước 4 thêm *Benchmark theo dòng* (nút *Đọc benchmark*, không tự gọi khi nạp gói): nhãn theo chữ spec §4.6, thành
+   phần dải, độ phủ theo báo giá (phần GIÁ TRỊ trên dòng đo được) và theo gói (số báo giá × dòng đo được); *Xem dải* ở hàng đầu mỗi dòng.
+   Bảng xếp hạng có cột *Benchmark* — tóm tắt nhãn và độ phủ của từng báo giá theo lần đọc gần nhất.
+7. **Route** `GET /rfqs/:rfqId/benchmark` và `GET /rfqs/:rfqId/items/:lineNo/benchmark`: `BUYER`, `mutates: false`, `agent: false` (spec
+   §3.5), khai lý do ở `apps/mcp/src/cong-cu.ts`. Route đầu có thể GHI bản lưu ở lần đọc đầu — dữ liệu dẫn xuất, một lần cho mỗi lần mở thầu,
+   không đổi trạng thái nghiệp vụ nào — cùng tư thế hàng sổ của mọi route đọc.
+
+### Hệ quả và giới hạn nói ra
+
+- **Người đọc ĐẦU chờ.** Lần đọc đầu sau mỗi lần mở thầu tốn đúng một phép tính as-of: < 1 s ở quy mô pilot (50 gói, §S1.256), 18–19 s cho
+  gói 20 dòng ở 5.000 gói — dưới `statement_timeout` 15 s mỗi câu và dưới trần nhàn rỗi 60 s của ALB; gói ~66 hàng chuẩn ở quy mô ấy vượt
+  60 s. *Xem dải* tốn hai lần đọc `quan_sat_gia` cho hàng chuẩn của dòng (~1 s ở 5.000 gói).
+- **Hai bản cho một lần mở thầu, hai mốc đọc.** Bản lưu đọc giá của chính gói tại lúc lần đọc đầu; lượt chấm đọc tại lúc chấm. Ánh xạ
+  ghi giữa hai lúc ấy làm nhãn của hai bản khác nhau (cờ hồi tố nói ra). Bảng so sánh và cột của bảng xếp hạng đọc BẢN LƯU.
+- **Ánh xạ duyệt SAU lần đọc đầu không vào bản lưu** của lần mở thầu ấy: dòng chưa ánh xạ lúc ấy mang `KHONG_DO_DUOC`/`CHUA_ANH_XA` tới lần
+  mở thầu sau. Đó là nghĩa của "tính một lần".
+- **CSDL không kiểm lần mở thầu đã `EXECUTED` hay là lần MỚI NHẤT** — tầng gói chọn nó; không kiểm ĐỦ hàng hay ĐÚNG nhãn (cùng giới hạn
+  của `103`, khoản 330).
+- **Bản lưu không có bảng đầu vào** — tham chiếu quan sát cho L7 và bộ bằng chứng là của lượt chấm (`103`); nhãn của bản lưu tái lập bằng
+  phép đọc as-of tại `moc_mo_gia` (tính chất L1).
+

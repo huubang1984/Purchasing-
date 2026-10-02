@@ -110,6 +110,22 @@
     <p class="ghi">Giá thấp nhất không đồng nghĩa nhà cung cấp tốt nhất. Bảng này so GIÁ CHÀO;
       xếp hạng theo chi phí hiệu dụng là bước 5.</p>
     <div class="bao loi" id="loi4" hidden></div>
+    <!-- [S1.9101 / S4.5c1] Benchmark theo dòng (spec S4 §4.6): nhãn so với dải lịch sử NỘI BỘ, thành phần dải, độ phủ. Bản lưu một lần
+         mỗi lần mở thầu — lần đọc đầu tính, có thể mất vài giây ở tổ chức nhiều lịch sử. Số của dải chỉ tính khi bấm «Xem dải». -->
+    <h3>Benchmark theo dòng</h3>
+    <p class="ghi">So đơn giá của từng dòng với dải lịch sử NỘI BỘ của tổ chức — các gói đã mở trước gói này. Nhãn chỉ là tín hiệu
+      để xem xét: «thấp bất thường» dẫn tới một yêu cầu làm rõ, không bao giờ là căn cứ loại một báo giá; «trong dải» không có
+      nghĩa là sạch — dải có thể là dải của chính những người quen báo giá.</p>
+    <button id="nut-benchmark" class="phu">Đọc benchmark</button>
+    <dl class="tt" id="tt-benchmark"></dl>
+    <table id="bang-benchmark">
+      <thead><tr><th>Dòng</th><th>Nhà cung cấp</th><th class="so">Đơn giá chào</th><th>Benchmark</th><th>Thành phần dải</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="khoi-dai" hidden>
+      <dl class="tt" id="tt-dai"></dl>
+    </div>
+    <div class="bao loi" id="loi4b" hidden></div>
   </section>
 
   <section class="buoc" id="b5" hidden>
@@ -123,7 +139,7 @@
     </div>
     <dl class="tt" id="tt-luot"></dl>
     <table id="bang-hang">
-      <thead><tr><th class="so">Hạng</th><th>Nhà cung cấp</th><th class="so">Chi phí hiệu dụng</th><th>Thành phần</th><th></th></tr></thead>
+      <thead><tr><th class="so">Hạng</th><th>Nhà cung cấp</th><th class="so">Chi phí hiệu dụng</th><th>Thành phần</th><th>Benchmark</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="bao loi" id="loi5" hidden></div>

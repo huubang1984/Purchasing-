@@ -619,10 +619,17 @@ async function chinh(): Promise<void> {
     }
     ra.push("");
     ra.push("LỊCH SỬ GIÁ (S4.4b) — ba gói đã mở niêm phong qua đường thật (niêm phong, nộp, đóng, mở thầu, worker giải mã), ba nhà");
-    ra.push("  cung cấp mỗi gói, mỗi gói ba dòng nối với ba hàng chuẩn ở trên. Chưa có màn (S4.5): người giữ bid.view đọc qua API");
+    ra.push("  cung cấp mỗi gói, mỗi gói ba dòng nối với ba hàng chuẩn ở trên. Lịch sử chưa có màn riêng: người giữ bid.view đọc qua API");
     ra.push("  GET /items/<hàng chuẩn>/price-history; người quản lý dữ liệu không giữ bid.view nên bị từ chối (L3).");
     for (const g of daMo) ra.push(`  ${g.tieuDe.padEnd(24)} ${g.rfqId}`);
     for (const [ma, id] of hangChuanTheoMa) ra.push(`  ${ma.padEnd(24)} ${id}`);
+    // [S1.9101 / S4.5c1] Benchmark ở màn /mo-thau (spec S4 §4.6): ba gói trên là lịch sử của gói chính — đúng sàn 3 gói × 3 nhà cung
+    // cấp của mẫu `NHOM_BENCHMARK_MAU` mà phiên bản 1 khai.
+    ra.push("");
+    ra.push("BENCHMARK (S4.5c1) — phiên bản 1 khai mẫu benchmark (12 tháng, sàn 3 gói / 3 nhà cung cấp, lệch 5% / 10%). Ba gói trên là");
+    ra.push("  lịch sử nội bộ: khi gói chính được mở niêm phong, người giữ bid.view mở /mo-thau, bước 4, bấm «Đọc benchmark» — lần đọc");
+    ra.push("  đầu tính và lưu nhãn từng dòng, «Xem dải» tính Q1/trung vị/Q3 của một dòng. Dòng bu lông neo còn ở hàng đợi ánh xạ nên ra");
+    ra.push("  «không đo được» tới khi người quản lý dữ liệu duyệt nó TRƯỚC lần đọc đầu (bản lưu tính một lần cho mỗi lần mở thầu).");
     if (chiaNho.length > 0) {
       ra.push("");
       ra.push("TÍN HIỆU CHIA NHỎ (K10a) — nhóm hàng THEP-TAM: soan tạo và nộp ba gói 480 / 470 / 490 triệu trong cửa sổ 30 ngày, mỗi gói");

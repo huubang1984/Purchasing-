@@ -105,9 +105,14 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
       [...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts", "packages/danh-gia/src/luot-danh-gia.ts"].sort(),
     );
     expect(nhac("ghiBenchmarkLuotCham")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/luot-danh-gia.ts"].sort());
+    // [S1.9101 / S4.5c1] Bản lưu của bảng so sánh và *Xem dải* một dòng: chỗ dùng DUY NHẤT là `doc-benchmark.ts` — hai hàm đọc có cổng
+    // `bid.view` và hàng sổ của riêng mình.
+    expect(nhac("ghiBanLuuBenchmark")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());
+    expect(nhac("tinhDaiDong")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());
     const docBm = readFileSync(`${goc}packages/danh-gia/src/doc-benchmark.ts`, "utf8");
-    expect(docBm).toMatch(/permission: PERMISSIONS\.BID_VIEW/u);
+    expect(docBm.match(/permission: PERMISSIONS\.BID_VIEW/gu)?.length).toBe(2);
     expect(docBm).toMatch(/action: "BENCHMARK_READ"/u);
+    expect(docBm).toMatch(/action: "BENCHMARK_BAND_READ"/u);
   });
 
   it.each(["packages/du-lieu-nen/src/anh-xa.ts", "packages/du-lieu-nen/src/benchmark-goi.ts"])(

@@ -99,8 +99,10 @@ export const MODULE_TRINH_DUYET = ["browser", "seal", "format"] as const;
  * tách nhau (khoản 193), khối link đăng nhập gần đây (khoản 195) và câu «còn nữa» (khoản 268). Module ĐẦU TIÊN của danh sách này chạm
  * DOM — qua `document` mà trang trao vào, không qua tên toàn cục —, nên `phuc-vu.test.ts` quét mã đã gỡ kiểu của mọi module ở đây để
  * không sink HTML nào lọt vào.
+ *
+ * [S1.9101 / S4.5c1] `benchmark` — chữ của nhãn, thành phần dải, độ phủ và chữ của dải ở `/mo-thau` (spec S4 §4.6).
  */
-export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap"] as const;
+export const MODULE_WEB = ["so-tien", "dong-ho-may-chu", "chinh-sach", "tao-thau", "nhom-hang", "du-lieu", "dang-nhap", "benchmark"] as const;
 
 /** Trang tĩnh: đường dẫn URL → tên tệp trong `apps/web/trang/`. Bản đồ ĐÓNG. */
 export const TRANG: Readonly<Record<string, string>> = {

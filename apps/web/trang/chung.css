@@ -145,6 +145,9 @@ tr.thap td { background: var(--luc-nen); }
    BAFO. Nó ở lại trong bảng có chủ đích (người mua cần thấy ai hạ bao nhiêu), nhưng nó không
    phải con số đang có hiệu lực, nên nó không được trông ngang hàng. */
 tr.mo td { opacity: 0.55; font-style: italic; }
+/* [S1.9101 / S4.5c1] Dòng benchmark mang nhãn `LECH_CAO` (cả hai chiều) — tín hiệu để xem xét, nên nó phải nổi lên; màu không mang
+   nghĩa "xấu hơn" cho phía thấp: chữ của nhãn nói đó là một yêu cầu làm rõ. */
+tr.lech td { background: var(--vang-nen); }
 
 /* [S1.254 / khoản 322] Bảng hạng mục của /nop-thau trên màn hẹp: mỗi hạng mục là một khối — mô tả trên, số lượng và đơn vị
    giữa, ô đơn giá rộng hết dòng dưới. Đo trên Chromium trước vòng này: ở 320–414px ô đơn giá của bảng bốn cột chỉ rộng 40–79px

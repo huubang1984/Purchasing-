@@ -1124,6 +1124,10 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docNhomBenchmark",
   "ghiBenchmarkLuotCham",
   "tinhBenchmarkGoi",
+  // [S1.9101 / S4.5c1] Phép ghi bản lưu của bảng so sánh và phép tính dải một dòng — không cổng, chỗ gọi duy nhất là `docBenchmark`/
+  // `docDaiBenchmark` (có cổng), ghim ở `ban-ro-liet-ke.test.ts`.
+  "ghiBanLuuBenchmark",
+  "tinhDaiDong",
 ];
 
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
@@ -1177,10 +1181,14 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "TEP_DU_LIEU",
   "dungBoBangChung",
   "xuatBoBangChung",
-  // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, hàng sổ `BENCHMARK_READ`; hằng là tập
-  // trạng thái gói mà benchmark tính as-of ở mỗi lần đọc.
-  "TRANG_THAI_BENCHMARK_AS_OF",
+  // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, hàng sổ `BENCHMARK_READ`; ~~hằng là tập
+  // trạng thái gói mà benchmark tính as-of ở mỗi lần đọc~~.
+  // [S1.9101 / S4.5c1] Hai hằng là tập trạng thái benchmark hiện (đúng tập bảng so sánh mở) và tập vòng chào lại (đóng, L6);
+  // `docDaiBenchmark` là *Xem dải* một dòng — cổng `bid.view`, hàng sổ `BENCHMARK_BAND_READ`.
+  "TRANG_THAI_BENCHMARK_HIEN",
+  "TRANG_THAI_VONG_CHAO_LAI",
   "docBenchmark",
+  "docDaiBenchmark",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [
