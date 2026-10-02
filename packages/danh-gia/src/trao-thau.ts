@@ -414,7 +414,7 @@ export async function deXuatTraoThau(
  * được. Hai chữ ký cần chữ ký sống độc lập với hàng `APPROVED` (S3.5). Không có phép đếm nào ở lớp
  * này — hai bản đếm là hai bản trôi.
  *
- * **[S1.9102 / khoản 9402]** Câu *"bị chặn ngay vì hàng ấy không còn `PROPOSED`"* ở trên nói về một hàng không bao giờ đổi —
+ * **[S1.263 / khoản 338]** Câu *"bị chặn ngay vì hàng ấy không còn `PROPOSED`"* ở trên nói về một hàng không bao giờ đổi —
  * `rfq_awards` chỉ-ghi-thêm, hàng đề xuất mang `PROPOSED` mãi mãi; thứ chặn là trigger `award_kiem_mot_award_song` đọc hàng MỚI
  * NHẤT, và nó chặn bằng một lỗi thô 23514 không tên, không hàng sổ. Nay hàm giữ khoá hàng RFQ (`FOR NO KEY UPDATE`) như rút, huỷ
  * và đề xuất, rồi đòi đề xuất được nêu là hàng mới nhất của gói; khác ⇒ `KHONG_CO_DE_XUAT_DANG_CHO` có tên. Khoá ấy là thứ đóng
@@ -476,7 +476,7 @@ export async function duyetTraoThau(
     auditPool,
   );
 
-  // [S1.9102 / khoản 9402] Khoá hàng RFQ suốt hàm — cùng khuôn `deXuatTraoThau`/`huyTraoThau`/`rutDeXuatTraoThau` — rồi đề xuất
+  // [S1.263 / khoản 338] Khoá hàng RFQ suốt hàm — cùng khuôn `deXuatTraoThau`/`huyTraoThau`/`rutDeXuatTraoThau` — rồi đề xuất
   // được nêu phải là hàng MỚI NHẤT của gói: một lần huỷ (hay rút rồi đề xuất lại) commit trước thì lần duyệt này từ chối có tên.
   await client.query(
     `SELECT p.id FROM public.rfq_packages p
@@ -568,7 +568,7 @@ export async function duyetTraoThau(
  * (`FOR NO KEY UPDATE`), nên rút, huỷ và đề xuất của người khác (cả ba giữ cùng khoá) không chen được vào giữa phép so và câu
  * `INSERT`. ~~Giới hạn, đọc từ mã chứ không đo: `duyetTraoThau` KHÔNG giữ khoá hàng RFQ, nên một lần duyệt CHÍNH đề xuất ấy chen
  * được vào khe ấy — khi đó hàng huỷ ăn vào hàng `APPROVED` vừa ghi, cùng báo giá (`award_kiem_mot_award_song` buộc hàng huỷ
- * nói về đúng báo giá của hàng mới nhất); không bao giờ vào một đề xuất hay báo giá khác.~~ **[S1.9102 / khoản 9402]** Đo bằng
+ * nói về đúng báo giá của hàng mới nhất); không bao giờ vào một đề xuất hay báo giá khác.~~ **[S1.263 / khoản 338]** Đo bằng
  * hai lời gọi thật cùng lúc: đúng thế, và nay đóng — `duyetTraoThau` giữ cùng khoá ấy (ca ⑴ của `luot-danh-gia.int`).
  */
 export async function huyTraoThau(

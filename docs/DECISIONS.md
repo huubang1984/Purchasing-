@@ -5983,10 +5983,10 @@ xuất rút rồi đề xuất lại, hay vừa được duyệt, giữa lần �
 giữ khoá hàng RFQ, nên một lần duyệt CHÍNH đề xuất được nêu chen được vào khe giữa phép so và câu ghi — lần huỷ khi ấy ăn
 vào hàng `APPROVED` của cùng báo giá, không bao giờ vào đề xuất khác.~~ Biên bản §S1.261.
 
-**[S1.9102 / khoản 9402] Duyệt giữ cùng khoá.** Chủ dự án chọn ngày 2026-10-02. Giới hạn vừa gạch là thật — đo bằng hai lời
+**[S1.263 / khoản 338] Duyệt giữ cùng khoá.** Chủ dự án chọn ngày 2026-10-02. Giới hạn vừa gạch là thật — đo bằng hai lời
 gọi sản xuất cùng lúc, lần huỷ ăn vào hàng `APPROVED` chưa commit — và nay đóng: `duyetTraoThau` khoá hàng RFQ như rút, huỷ
 và đề xuất, rồi đòi đề xuất được nêu là hàng mới nhất; khác ⇒ `KHONG_CO_DE_XUAT_DANG_CHO`, một hàng `RFQ_STATE_DENIED`, thay
-cho lỗi thô của trigger. Biên bản §S1.9102.
+cho lỗi thô của trigger. Biên bản §S1.263.
 
 ### Điều ADR này KHÔNG nói
 

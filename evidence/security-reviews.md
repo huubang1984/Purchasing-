@@ -24061,7 +24061,7 @@ ra giới hạn: giữa lần trang đọc lại trao thầu và lần huỷ, m�
   `composition.int` khoản 277 ý ③: job chèn thẳng đã xong mà tin chưa có trong hộp thư dev lúc đếm; cùng tệp xanh trong lượt
   evidence ở máy trên `2b63ff59`.
 
-# §S1.9102 — `duyetTraoThau` GIỮ KHOÁ HÀNG RFQ: GIỚI HẠN CỦA KHOẢN 335 ĐO ĐƯỢC BẰNG HAI LỜI GỌI CÙNG LÚC, VÀ ĐÓNG — KHOẢN 9402
+# §S1.263 — `duyetTraoThau` GIỮ KHOÁ HÀNG RFQ: GIỚI HẠN CỦA KHOẢN 335 ĐO ĐƯỢC BẰNG HAI LỜI GỌI CÙNG LÚC, VÀ ĐÓNG — KHOẢN 338
 
 **Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (huỷ trao thầu không nằm trên kịch bản §11).
 Không migration, không route, không ADR mới — một đoạn bổ sung ở ADR-057; không mảnh nào của `docs/PRODUCT.md` §11 đổi.

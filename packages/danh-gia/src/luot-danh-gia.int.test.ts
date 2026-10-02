@@ -3525,12 +3525,12 @@ describe("[S1.261 / khoản 335] huyTraoThau huỷ ĐÚNG trao thầu được n
   });
 });
 
-// [S1.9102 / khoản 9402] Khoản 335 khai giới hạn: `duyetTraoThau` KHÔNG giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên lần
+// [S1.263 / khoản 338] Khoản 335 khai giới hạn: `duyetTraoThau` KHÔNG giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên lần
 // duyệt và lần huỷ CÙNG một đề xuất không xếp hàng ở cùng một khoá. Hai ca dưới chạy HAI hàm sản xuất thật trên hai kết nối: một
 // bên ghi xong mà CHƯA commit, bên kia tới sau. Trước vòng này, ⑴ lần huỷ đọc hàng mới nhất là đề xuất (hàng APPROVED chưa
 // commit nên không thấy), qua phép so id, rồi chờ ở khoá tư vấn của trigger và ăn vào hàng APPROVED; ⑵ lần duyệt chờ ở khoá tư
 // vấn rồi chết bằng lỗi thô 23514 của trigger, không tên, không hàng sổ. Nay cả hai chờ ở khoá hàng RFQ và từ chối có tên.
-describe("[S1.9102 / khoản 9402] duyệt và huỷ CÙNG LÚC trên một đề xuất — `duyetTraoThau` giữ khoá hàng RFQ như rút, huỷ, đề xuất", { timeout: 300000 }, () => {
+describe("[S1.263 / khoản 338] duyệt và huỷ CÙNG LÚC trên một đề xuất — `duyetTraoThau` giữ khoá hàng RFQ như rút, huỷ, đề xuất", { timeout: 300000 }, () => {
   /** Chờ tới khi có một khoá CHƯA cấp; trả về các loại khoá đang chờ, hay `null` nếu hết hạn hoặc lời gọi đã xong trước. */
   async function doiChoKhoa(daXong: () => boolean): Promise<readonly string[] | null> {
     for (let i = 0; i < 100; i += 1) {
