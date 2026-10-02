@@ -23863,4 +23863,8 @@ ra giới hạn: giữa lần trang đọc lại trao thầu và lần huỷ, m�
   chỉ có thể là một đề xuất khác của chính họ.
 
 ## 6. Số đo
-- ‹SỐ-ĐO›
+- `cap-so`: vòng 9101 ⇒ S1.261, khoản 9401 ⇒ 335; một số tạm trần ngắt dòng trong chú thích của `mo-thau.js` sửa tay;
+  `cap-so --kiem` sạch; Handoff 334 khoản, 51 còn mở.
+- Trên `2b63ff59`: `pnpm t0` xanh; `pnpm test` 144 tệp (142 đạt, 2 bỏ qua), 2448 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`:
+  vitest thoát mã 0, 4534 khẳng định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 2373 giây; `evidence/INV-matrix.md`
+  không đổi.
