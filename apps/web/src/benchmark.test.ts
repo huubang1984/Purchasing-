@@ -78,6 +78,14 @@ describe("[S1.260 / S4.5c1] độ phủ — phần giá trị trên dòng đo đ
     expect(doPhu(ba, [{ lineNo: 1, amount: "abc" }]).phanTramGiaTri).toBeNull();
     expect(doPhu(ba, [{ lineNo: 1, amount: "0.00" }]).phanTramGiaTri).toBeNull();
   });
+
+  it("[rà soát S4.5c1] phong bì là chữ của nhà cung cấp: thành tiền dạng số đọc qua chữ của nó; dạng khác không phần trăm, không ném", () => {
+    expect(doPhu(ba, [{ lineNo: 1, amount: 600 }, { lineNo: 2, amount: "300.00" }, { lineNo: 3, amount: 100 }]).phanTramGiaTri).toBe("70,0");
+    for (const amount of [null, undefined, { x: 1 }, true, 1e21, -5]) {
+      expect(doPhu(ba, [{ lineNo: 1, amount }]).phanTramGiaTri, JSON.stringify(amount) ?? "undefined").toBeNull();
+    }
+    expect(doPhu(ba, [{ lineNo: "1", amount: "600.00" }, { lineNo: 2, amount: "400.00" }]).phanTramGiaTri, "số dòng dạng chữ không khớp dòng nào").toBe("0,0");
+  });
 });
 
 describe("[S1.260 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái không nhãn, chữ của dải", () => {
@@ -88,8 +96,9 @@ describe("[S1.260 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái kh
     expect(tomTatNhan([])).toBe("—");
   });
 
-  it("bốn trạng thái không nhãn có câu; CO thì null", () => {
+  it("năm trạng thái không nhãn có câu; CO thì null", () => {
     expect(chuTrangThai({ trangThai: "CO" })).toBeNull();
+    expect(chuTrangThai({ trangThai: "THU_LAI", rfqStatus: "UNSEALED" })).toContain("Bấm đọc lại");
     expect(chuTrangThai({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_OPEN" })).toContain("Vòng chào lại");
     expect(chuTrangThai({ trangThai: "KHONG_HIEN", rfqStatus: "AWARDED" })).toContain("AWARDED");
     expect(chuTrangThai({ trangThai: "CHUA_CAU_HINH", policyVersion: 3 })).toContain("Phiên bản chính sách 3");

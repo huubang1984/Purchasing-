@@ -23830,7 +23830,7 @@ Và cách thực thi: S4.5c1 trước, S4.5c2 PR sau.
   Postgres in). Lượt quét GET sau mở thầu (người không có `bid.view`, phiên khách) và lượt J4 ở `BAFO_OPEN` nay dò cả đơn giá thô lẫn quy
   đổi, và `:lineNo` của hai lượt chỉ-GET thay bằng dòng 1 có thật để chúng hỏi đúng *Xem dải*.
 - **Màn** (`apps/web/src/phuc-vu.test.ts`, bốn ca trên chính `mo-thau.js`; `apps/web/src/benchmark.test.ts`, 11 ca): nạp gói không tự gọi
-  benchmark; *Đọc benchmark* đọc bảng so sánh rồi benchmark; chữ nhãn theo spec, thành phần, độ phủ 1/2 dòng · 60,0% giá trị; *Xem dải*
+  benchmark; ~~*Đọc benchmark* đọc bảng so sánh rồi benchmark~~ (§9: benchmark trước, bảng so sánh sau và chỉ khi có nhãn); chữ nhãn theo spec, thành phần, độ phủ 1/2 dòng · 60,0% giá trị; *Xem dải*
   đúng route của dòng, in Q1/trung vị/Q3 theo `VND/kg`, `SAU_MOC`, đơn giá quy đổi; vòng chào lại in câu có tên, không hàng, không lời gọi
   dải; cột *Benchmark* của bảng xếp hạng là gạch trước khi đọc và tóm tắt sau — kể cả khi bảng xếp hạng vẽ trước.
 - **Cổng tĩnh:** `benchmark-trang-thai-dong-bo` (tập hiện = `COMPARISON_ALLOWED_STATUSES`; hai trạng thái vòng chào lại là trạng thái thật,
@@ -23861,7 +23861,7 @@ Mỗi lần sửa một chỗ, chạy tệp test chỉ định, khôi phục t�
 | M14 | độ phủ tính cả `CHUA_DU_LICH_SU` | ĐỎ — `benchmark.test` |
 | M15 | cột bảng xếp hạng không vẽ lại sau lần đọc | ĐỎ — `phuc-vu.test` |
 | M16 | nút *Xem dải* ở mọi hàng | ĐỎ — `phuc-vu.test` |
-| M17 | *Đọc benchmark* dừng khi bảng so sánh từ chối (bản trước lượt đi thử) | ĐỎ — `phuc-vu.test` |
+| M17 | *Đọc benchmark* dừng khi bảng so sánh từ chối (bản trước lượt đi thử) | ĐỎ — `phuc-vu.test` (§9: thứ tự đọc đổi; ca nay đo rằng bảng so sánh KHÔNG được hỏi) |
 
 ## 8. Đi thử 375×812 trên Chromium (spec S4 §2 — mọi hạng mục chạm `/mo-thau`)
 

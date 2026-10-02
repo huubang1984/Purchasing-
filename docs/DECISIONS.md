@@ -11188,3 +11188,36 @@ ADR-142 ⑼ chốt *"S4.5c tính MỘT lần khi gói vào `UNSEALED` (và vào 
 - **Bản lưu không có bảng đầu vào** — tham chiếu quan sát cho L7 và bộ bằng chứng là của lượt chấm (`103`); nhãn của bản lưu tái lập bằng
   phép đọc as-of tại `moc_mo_gia` (tính chất L1).
 
+
+### Rà soát đối kháng sau lượt đầu (2026-10-02) — sửa trong phạm vi, và giới hạn nói thêm
+
+Không phát hiện CAO. Sửa:
+
+- **TRUNG — phong bì là chữ của nhà cung cấp.** Một `amount` dạng SỐ hay một dòng `null` trong `payload.lines` làm hàm độ phủ ném và bảng
+  benchmark lẫn bảng xếp hạng dừng giữa chừng. `doPhu` nay đọc số qua chữ của nó và coi mọi dạng khác là không đọc được (không phần trăm);
+  trang chỉ giữ phần tử là đối tượng.
+- **Cuộc đua với lần mở thầu:** lần mở thầu commit SAU lúc giao dịch đọc bắt đầu mà TRƯỚC câu bối cảnh có `unsealed_at ≥ now()` của người
+  đọc; tính bây giờ thì `quan_sat_gia` không thấy các báo giá ấy (`<` chặt) — bản lưu ghi-một-lần mang `KHONG_DO_DUOC` mãi cho bản BAFO, hay
+  vỡ `…_moc_truoc_ghi` ở vòng một. Trả trạng thái có tên **`THU_LAI`**, không ghi.
+- **Cuộc đua với cạnh trạng thái:** sau phép tính và trước khi ghi hay trả con số (ở cả `docBenchmark` lẫn `docDaiBenchmark`), khoá hàng gói
+  `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất bằng một câu RIÊNG (ảnh chụp mới dưới READ COMMITTED). Đã đổi ⇒ trạng thái mới
+  (không nhãn) hay `THU_LAI`. Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit trạng thái vẫn là trạng thái đã hỏi.
+- **`khopBanLuu` so cả NHÃN:** nhãn tính lại từ giá của chính dòng tại `ghi_luc` trên dải tính lại phải trùng nhãn đã lưu — một giá lịch
+  sử sửa ngoài luật dời trung vị mà không đổi số đếm nào.
+- **Màn:** đọc gói khác xoá benchmark của gói trước; *Đọc benchmark* đọc benchmark TRƯỚC, bảng so sánh SAU, chỉ khi có nhãn, và LẠI mỗi lần
+  (không một lần từ chối và một hàng sổ từ chối mỗi cú bấm ở trạng thái bảng so sánh đóng; tên, đơn giá, độ phủ là của đúng tập báo giá đã
+  gắn nhãn); dải của một bản lưu khác bảng đang hiện thì nói ra.
+
+Giới hạn nói thêm:
+
+- **Dải gồm cả gói đang ở vòng chào lại** — giá vòng một của chúng đã lộ trước mốc; đó là nghĩa as-of của `quan_sat_gia`.
+- **Hàng của bản lưu không bị CSDL buộc vào báo giá của CHÍNH gói** — khoá ngoại tới `rfq_unsealed_bids` nói báo giá đã mở, không nói đã
+  mở trong lần mở thầu của bản lưu; tầng gói chọn tập (`docBaoGia`), như giới hạn đầu vào của `103`.
+- **`UNIQUE (org_id, id, chinh_sach_ghim_id)` của `rfq_packages` đổi khoá ở cạnh `PENDING_APPROVAL → OPEN`:** cạnh ấy đặt
+  `chinh_sach_ghim_id`, nay là cột của một khoá duy nhất, nên lần `UPDATE` ấy lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là
+  cập nhật HOT — một lần chèn đồng thời có khoá ngoại tới gói chờ tới lúc commit. Một lần mỗi gói.
+- **Cột *Benchmark* của bảng xếp hạng là nhãn của BẢN LƯU**, không của lượt chấm đang xếp hạng (hai mốc đọc, mục "Hai bản" ở trên).
+- **Hai lần đọc đầu đồng thời cùng tính** — không khoá thử trước phép tính; lần sau chờ ở `ON CONFLICT` rồi đọc bản của lần trước.
+- **Route *Xem dải* không có hạn mức** — mỗi cú bấm hai lần đọc `quan_sat_gia` và một hàng sổ; trần theo phiên của `dispatch.ts` chỉ áp
+  cho phiên `AGENT_READONLY`, mà hai route này `agent: false`. Người giữ `bid.view` bấm liên tục là tải của chính tổ chức, có hàng sổ.
+- **Đột biến M4 (luôn tính lại) vẫn sống** — chỉ đổi chi phí.

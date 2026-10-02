@@ -1226,8 +1226,8 @@ describe("bề mặt tệp", () => {
     });
 
     // [S1.260 / S4.5c1] Benchmark theo dòng ở bước 4 và cột Benchmark của bảng xếp hạng (spec S4 §4.6; ADR-143). Đo đúng thứ trang
-    // GỌI (không tự gọi khi nạp gói; Đọc benchmark đọc bảng so sánh trước khi chưa có), chữ trang IN (nhãn theo spec, độ phủ, dải khi
-    // bấm Xem dải), và tư thế ở vòng chào lại (không nhãn nào, không lời gọi dải nào).
+    // GỌI (không tự gọi khi nạp gói; Đọc benchmark đọc benchmark TRƯỚC rồi bảng so sánh, mỗi lần, chỉ khi có nhãn — rà soát S4.5c1), chữ
+    // trang IN (nhãn theo spec, độ phủ, dải khi bấm Xem dải), và tư thế ở vòng chào lại (không nhãn nào, không lời gọi dải nào).
     describe("[S1.260 / S4.5c1] mo-thau: benchmark theo dòng, Xem dải, cột Benchmark của bảng xếp hạng", () => {
       const RFQ = "44444444-4444-4444-8444-444444444444";
       const SO_SANH = {
@@ -1263,16 +1263,16 @@ describe("bề mặt tệp", () => {
           { rank: 2, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [] },
         ],
       };
-      const dung = async (bm: unknown) => {
+      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI) => {
         const p = await dungTrang("mo-thau", {
           hash: "", cookie: B,
           thay: (l) => {
             if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "UNSEALED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
             if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 2 } } });
             if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
-            if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 200, body: { comparison: SO_SANH } });
+            if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 200, body: { comparison: soSanh } });
             if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: bm } });
-            if (l === `GET /rfqs/${RFQ}/items/1/benchmark`) return Promise.resolve({ status: 200, body: { dai: DAI } });
+            if (l === `GET /rfqs/${RFQ}/items/1/benchmark`) return Promise.resolve({ status: 200, body: { dai } });
             if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
             return undefined;
           },
@@ -1286,12 +1286,12 @@ describe("bề mặt tệp", () => {
         p.el(id).querySelector("tbody").con.map((tr) => tr.con.map((td) => td.textContent).join("|"));
       const ttChu = (p: Awaited<ReturnType<typeof dung>>, id: string) => p.el(id).con.map((x) => x.textContent).join("|");
 
-      it("nạp gói KHÔNG tự đọc benchmark; Đọc benchmark đọc bảng so sánh trước rồi benchmark, vẽ nhãn theo chữ spec, thành phần và độ phủ", async () => {
+      it("nạp gói KHÔNG tự đọc benchmark; Đọc benchmark đọc benchmark rồi bảng so sánh — LẠI mỗi lần bấm — vẽ nhãn theo chữ spec, thành phần và độ phủ", async () => {
         const p = await dung(BM_CO);
         expect(p.trangThai.goi.filter((g) => g.includes("benchmark"))).toEqual([]);
         await p.bam("nut-benchmark");
         expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([
-          `GET /rfqs/${RFQ}/comparison`, `GET /rfqs/${RFQ}/benchmark`,
+          `GET /rfqs/${RFQ}/benchmark`, `GET /rfqs/${RFQ}/comparison`,
         ]);
         const hang = chuHang(p, "bang-benchmark");
         expect(hang).toHaveLength(4);
@@ -1304,6 +1304,61 @@ describe("bề mặt tệp", () => {
         expect(tt).toMatch(/Độ phủ của gói\|2\/4 \(báo giá × dòng\) đo được/u);
         expect(tt).toMatch(/Độ phủ — Công ty Thép Một\|1\/2 dòng · 60,0% giá trị/u);
         expect(tt).toMatch(/Tính lúc\|.* — lần đọc này vừa tính/u);
+        await p.bam("nut-benchmark");
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison")), "bấm lần hai đọc bảng so sánh lần hai").toHaveLength(2);
+      });
+
+      it("[rà soát S4.5c1] phong bì mang `amount` dạng SỐ và một dòng `null` ⇒ bảng benchmark và cột Benchmark vẫn vẽ, độ phủ đọc số", async () => {
+        const hong = {
+          ...SO_SANH,
+          rows: [
+            { ...SO_SANH.rows[0], payload: { lines: [{ lineNo: 1, unitPrice: 100, amount: 600 }, null, { lineNo: 2, unitPrice: "40", amount: "400.00" }] } },
+            { ...SO_SANH.rows[1], payload: { lines: [null, { lineNo: 1, unitPrice: "90", amount: { x: 1 } }] } },
+          ],
+        };
+        const p = await dung(BM_CO, hong);
+        await p.bam("nut-benchmark");
+        expect(p.el("loi4b").hidden).toBe(true);
+        const hang = chuHang(p, "bang-benchmark");
+        expect(hang).toHaveLength(4);
+        expect(hang[0]).toMatch(/^\|Công ty Thép Một\|.*\|trong dải lịch sử nội bộ/u);
+        const tt = ttChu(p, "tt-benchmark");
+        expect(tt, "600 dạng số đọc như \"600\"").toMatch(/Độ phủ — Công ty Thép Một\|1\/2 dòng · 60,0% giá trị/u);
+        expect(tt, "thành tiền là đối tượng ⇒ không phần trăm").toMatch(/Độ phủ — Công ty Thép Hai\|1\/2 dòng(\||$)/u);
+        await p.bam("nut-xep-hang");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual([
+          "1 bất thường (cao) · 1 không đo được · phủ 1/2 dòng",
+          "1 trong dải · 1 không đo được · phủ 1/2 dòng",
+        ]);
+      });
+
+      it("[rà soát S4.5c1] đọc gói KHÁC xoá benchmark của gói trước — bảng, khối thông tin, cột Benchmark", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-xep-hang");
+        await p.bam("nut-benchmark");
+        expect(chuHang(p, "bang-benchmark")).toHaveLength(4);
+        await p.bam("nut-doc");
+        expect(chuHang(p, "bang-benchmark")).toEqual([]);
+        expect(ttChu(p, "tt-benchmark")).toBe("");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual(["—", "—"]);
+      });
+
+      it("[rà soát S4.5c1] THU_LAI in câu đọc lại, không hàng nào, không đọc bảng so sánh", async () => {
+        const p = await dung({ trangThai: "THU_LAI", rfqStatus: "BAFO_UNSEALED" });
+        await p.bam("nut-benchmark");
+        expect(ttChu(p, "tt-benchmark")).toMatch(/^Benchmark\|Gói vừa đổi trạng thái .* Bấm đọc lại\.$/u);
+        expect(chuHang(p, "bang-benchmark")).toEqual([]);
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison"))).toEqual([]);
+      });
+
+      it("[rà soát S4.5c1] dải của một bản lưu KHÁC bảng đang hiện ⇒ nói ra, vẫn in dải", async () => {
+        const p = await dung(BM_CO, SO_SANH, { ...DAI, snapshotId: "s-2" });
+        await p.bam("nut-benchmark");
+        const nut = p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        for (const f of nut?.nghe["click"] ?? []) await f();
+        const tt = ttChu(p, "tt-dai");
+        expect(tt).toMatch(/^Lưu ý\|Dải này của lần mở thầu MỚI hơn bảng benchmark đang hiện/u);
+        expect(tt).toContain("Q1 18.000,00 · trung vị 18.500,00 · Q3 19.000,00 VND/kg");
       });
 
       it("Xem dải gọi đúng route của dòng và in Q1/trung vị/Q3 theo đơn vị gốc, SAU_MOC, đơn giá quy đổi của từng báo giá", async () => {
@@ -1331,7 +1386,7 @@ describe("bề mặt tệp", () => {
         expect(p.trangThai.goi.filter((g) => g.includes("/items/"))).toEqual([]);
       });
 
-      it("[đi thử 375×812] bảng so sánh từ chối (gói AWARDED) ⇒ vẫn hỏi benchmark và in câu trạng thái của nó; ô của bảng benchmark mang nhãn cột cho màn hẹp", async () => {
+      it("[đi thử 375×812] gói AWARDED ⇒ hỏi benchmark, in câu trạng thái của nó, KHÔNG hỏi bảng so sánh (rà soát S4.5c1: không một lần từ chối mỗi cú bấm); ô của bảng benchmark mang nhãn cột cho màn hẹp", async () => {
         const p = await dungTrang("mo-thau", {
           hash: "", cookie: B,
           thay: (l) => {
@@ -1347,9 +1402,7 @@ describe("bề mặt tệp", () => {
         p.el("rfq").value = RFQ;
         await p.bam("nut-doc");
         await p.bam("nut-benchmark");
-        expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([
-          `GET /rfqs/${RFQ}/comparison`, `GET /rfqs/${RFQ}/benchmark`,
-        ]);
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([`GET /rfqs/${RFQ}/benchmark`]);
         expect(ttChu(p, "tt-benchmark")).toBe("Benchmark|Benchmark chỉ hiện khi bảng so sánh mở — gói đang ở trạng thái AWARDED.");
         const q = await dung(BM_CO);
         await q.bam("nut-benchmark");

@@ -1027,8 +1027,16 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const LOI_HINH_DANG = /thiếu trường|phải là|không phải ngày|không hợp lệ"?\s*$/u;
 
     // [S1.251 / S4.4b] `:itemId` là hàng chuẩn THẬT của dòng 1: lịch sử giá được hỏi trên đúng hàng có báo giá đã nộp (L6).
+    // [rà soát S4.5c1] `:lineNo` là dòng THẬT `1`, không `UUID0`: *Xem dải* trước đây dừng ở 422 hình dạng của tham số — tức không
+    // tới nghiệp vụ, và lượt quét trước mở thầu đo một thế giới rỗng. Chỉ route ĐỌC đi qua đây; route ghi mang `:lineNo` ở `thanHopLe`.
     const thay = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":bidVersionId", trangThai.bienNhan[0]!.bidVersionId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
+      path
+        .replace(":rfqId", trangThai.rfqId)
+        .replace(":bidVersionId", trangThai.bienNhan[0]!.bidVersionId)
+        .replace(":itemId", trangThai.hangChuanId)
+        .replace(":lineNo", "1")
+        .replace(/:[A-Za-z]+/gu, UUID0);
+    const phanHoiDoc = new Map<string, PhanHoi>();
     const logTruoc = logLoi.length;
     const roRi: string[] = [];
     const loiHinhDang: string[] = [];
@@ -1049,6 +1057,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       for (const ca of cacCa) {
         const ph = await goi(r.method, ca.path, ca.cookie, r.method === "GET" ? undefined : (ca.body ?? {}));
         soGoi += 1;
+        if (!laGhi) phanHoiDoc.set(`${r.method} ${r.path}`, ph);
         ca.sau?.(ph);
         if (laGhi && ph.status < 300) soThanhCong += 1;
         if (laGhi && ph.status === 422 && LOI_HINH_DANG.test(ph.text)) loiHinhDang.push(`${r.method} ${r.path}: ${ph.text}`);
@@ -1068,6 +1077,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect(soThanhCong).toBeGreaterThanOrEqual(10);
     for (const dong of logLoi.slice(logTruoc)) for (const g of quetRoRi(dong)) roRi.push(`log: ${g}`);
     expect(roRi, "giá dạng rõ lọt ra trước khi mở thầu").toEqual([]);
+    // [rà soát S4.5c1] Hai route benchmark TỚI nghiệp vụ trên gói thật và trả trạng thái đóng có tên — không 422 hình dạng nào.
+    for (const [duong, khoa] of [["GET /rfqs/:rfqId/benchmark", "benchmark"], ["GET /rfqs/:rfqId/items/:lineNo/benchmark", "dai"]] as const) {
+      const ph = phanHoiDoc.get(duong);
+      expect(ph?.status, `${duong}: ${ph?.text ?? "không gọi"}`).toBe(200);
+      expect((ph?.body as Record<string, unknown>)[khoa]).toEqual({ trangThai: "KHONG_HIEN", rfqStatus: "OPEN" });
+    }
     // Và trạng thái nghiệp vụ không bị bộ quét làm hỏng: RFQ vẫn OPEN, vẫn 5 lời mời.
     const r = await goi("GET", `/rfqs/${trangThai.rfqId}`, m);
     expect((r.body as { rfq: { status: string } }).rfq.status).toBe("OPEN");

@@ -87,10 +87,14 @@ function chuHoiTo(hoiTo: readonly string[]): string {
 
 const DO_DUOC = new Set(["BINH_THUONG", "LECH_VUA", "LECH_CAO"]);
 
-/** Một dòng của phong bì như bảng so sánh trả (`payload.lines[]`) — chỉ hai trường màn đọc. */
+/**
+ * Một dòng của phong bì như bảng so sánh trả (`payload.lines[]`) — chỉ hai trường màn đọc. Phong bì là chữ của nhà cung cấp, không
+ * qua lược đồ nào trước khi tới đây (bảng so sánh trả nguyên `payload`), nên cả hai trường là `unknown`: rà soát S4.5c1 đo một
+ * `amount` dạng SỐ làm `sangNguyen` ném và bảng xếp hạng dừng giữa chừng.
+ */
 export interface DongBaoGia {
-  readonly lineNo: number;
-  readonly amount: string;
+  readonly lineNo: unknown;
+  readonly amount: unknown;
 }
 
 export interface DoPhu {
@@ -108,10 +112,11 @@ export function doPhu(dong: readonly DongBenchmark[], dongBaoGia: readonly DongB
   let tong = 0n;
   let phu = 0n;
   for (const l of dongBaoGia) {
-    const v = sangNguyen(l.amount, 2);
+    // Số thì đọc qua chữ của nó (`600` → `"600"`); mọi dạng khác — `null`, đối tượng, `1e+21` — là không đọc được, không phần trăm.
+    const v = typeof l.amount === "string" || typeof l.amount === "number" ? sangNguyen(String(l.amount), 2) : null;
     if (v === null) return { soDoDuoc, soDong: dong.length, phanTramGiaTri: null };
     tong += v;
-    if (doDuoc.has(l.lineNo)) phu += v;
+    if (typeof l.lineNo === "number" && doDuoc.has(l.lineNo)) phu += v;
   }
   if (tong === 0n) return { soDoDuoc, soDong: dong.length, phanTramGiaTri: null };
   const phanNghin = (phu * 1000n) / tong;
@@ -133,13 +138,15 @@ export function tomTatNhan(dong: readonly DongBenchmark[]): string {
   return chu.length === 0 ? "—" : chu.join(" · ");
 }
 
-/** Câu của các trạng thái không có nhãn — `null` khi trạng thái là `CO`. */
+/** Câu của các trạng thái không có nhãn — `null` khi trạng thái là `CO`. `THU_LAI` ([rà soát S4.5c1]): bối cảnh đổi giữa lần đọc. */
 export function chuTrangThai(b: { readonly trangThai: string; readonly rfqStatus?: string; readonly policyVersion?: number | null }): string | null {
   switch (b.trangThai) {
     case "CO":
       return null;
     case "VONG_CHAO_LAI_DANG_MO":
       return "Vòng chào lại đang mở hay chưa mở niêm phong — benchmark đóng tới khi vòng ấy mở niêm phong.";
+    case "THU_LAI":
+      return "Gói vừa đổi trạng thái hay vừa mở niêm phong một vòng trong lúc đọc — chưa có nhãn nào ở lần này. Bấm đọc lại.";
     case "KHONG_HIEN":
       return `Benchmark chỉ hiện khi bảng so sánh mở — gói đang ở trạng thái ${b.rfqStatus ?? "?"}.`;
     case "CHUA_CAU_HINH":

@@ -110,4 +110,5 @@ export {
   type DocDaiBenchmarkInput,
   type DongBenchmarkHien,
   type NguonBenchmark,
+  type ThuLai,
 } from "./doc-benchmark.js";

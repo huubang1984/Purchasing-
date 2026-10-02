@@ -463,6 +463,12 @@ export interface GiaQuyDoiCuaX {
   readonly trangThai: string;
   readonly donGiaQuyDoi: string | null;
   readonly tienTe: string | null;
+  /**
+   * Nhãn tính lại của dòng trên dải tính lại của tiền tệ nó (`ganNhan`, cùng lõi bản lưu) — để người gọi so với nhãn đã lưu (L7).
+   * `null` khi dòng không đo được hay tiền tệ của nó không nằm trong `input.tienTe`.
+   */
+  readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC"> | null;
+  readonly chieu: ChieuLech | null;
 }
 
 export interface KetQuaDaiDong {
@@ -547,13 +553,19 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
   });
 
   const tapX = (await docTai(input.mocDoc)).filter((r) => r.rfq_id === input.rfqId);
-  const giaCuaX: GiaQuyDoiCuaX[] = tapX.map((r) => ({
-    bidVersionId: r.bid_version_id,
-    lineNo: r.line_no,
-    trangThai: r.trang_thai,
-    donGiaQuyDoi: r.don_gia_quy_doi,
-    tienTe: r.tien_te,
-  }));
+  const giaCuaX: GiaQuyDoiCuaX[] = tapX.map((r) => {
+    const d = dai.find((x) => x.tienTe === r.tien_te);
+    const gan = r.trang_thai === "HOP_LE" && r.don_gia_quy_doi !== null && d !== undefined ? ganNhan(r.don_gia_quy_doi, d, input.nhom) : null;
+    return {
+      bidVersionId: r.bid_version_id,
+      lineNo: r.line_no,
+      trangThai: r.trang_thai,
+      donGiaQuyDoi: r.don_gia_quy_doi,
+      tienTe: r.tien_te,
+      nhan: gan?.nhan ?? null,
+      chieu: gan?.chieu ?? null,
+    };
+  });
   const donViGoc = tapX.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? tapDai.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? null;
   return { donViGoc, dai, giaCuaX };
 }

@@ -11,6 +11,13 @@
 //   • bản lưu KHÔNG mang số nào có đơn vị tiền (spec §4.6). Số của dải và `SAU_MOC` là của `docDaiBenchmark` — bấm *Xem dải* MỘT dòng.
 // Hàng kết quả của LƯỢT CHẤM (`103`) không đổi và không còn đọc ở đây: chúng là hồ sơ của lượt chấm (bộ bằng chứng, S4.5c2).
 // Phiên bản ghim chưa cấu hình nhóm `benchmark` ⇒ `CHUA_CAU_HINH`, không mặc định ngầm.
+// [rà soát S4.5c1] HAI CUỘC ĐUA, đo ở lượt rà soát đối kháng:
+//   • lần mở thầu thực thi SAU lúc giao dịch đọc bắt đầu mà commit TRƯỚC câu đọc bối cảnh — `unsealed_at ≥ now()`: `quan_sat_gia` tại
+//     `now()` (mốc đọc của bản lưu) không thấy báo giá vừa mở (`gia_da_lo` so `<` chặt), nên bản lưu GHI MỘT LẦN sẽ mang
+//     `KHONG_DO_DUOC` vĩnh viễn cho các báo giá ấy (vòng BAFO), hay vỡ ràng buộc `moc_truoc_ghi` (vòng một). Trả `THU_LAI`, không ghi.
+//   • trạng thái gói đổi TRONG lúc tính (vd. `EVALUATING → BAFO_OPEN`): trước khi ghi hay trả nhãn, khoá hàng gói `FOR SHARE` rồi hỏi
+//     lại trạng thái và lần mở thầu mới nhất (`kiemLaiDuoiKhoa`). Mọi cạnh trạng thái khoá hàng gói trước khi ghi, nên tới lúc commit
+//     trạng thái vẫn là trạng thái đã hỏi; đổi rồi thì trả trạng thái mới (không nhãn, không ghi) hay `THU_LAI`.
 //
 // Cổng nằm THẲNG trong thân hàm (khoản 33; `cong-quyen-route.test.ts`). Kết quả của `docBenchmark` không mang con số nào có đơn vị
 // tiền — nhãn, chiều, lý do, số đếm — nhưng nhãn là thông tin về giá, nên cổng là `bid.view` như bảng so sánh và lịch sử giá.
@@ -64,6 +71,8 @@ export interface DongBenchmarkHien {
 export type BenchmarkCuaGoi =
   | { readonly trangThai: "KHONG_HIEN"; readonly rfqStatus: string }
   | { readonly trangThai: "VONG_CHAO_LAI_DANG_MO"; readonly rfqStatus: string }
+  /** Lần mở thầu hay trạng thái gói đổi giữa lúc giao dịch này bắt đầu và lúc trả — không nhãn, không ghi; đọc lại là đủ. */
+  | ThuLai
   | {
       readonly trangThai: "CHUA_CAU_HINH";
       readonly policyId: string | null;
@@ -127,6 +136,8 @@ interface BoiCanh {
   readonly nhom: NhomBenchmark | null;
   readonly unsealRequestId: string | null;
   readonly bafoRoundId: string | null;
+  /** Lần mở thầu mới nhất có phong bì mở lúc `≥ now()` của giao dịch này — tính bản lưu bây giờ thì không thấy chúng. */
+  readonly moHonGiaoDich: boolean;
 }
 
 async function docBoiCanh(client: pg.PoolClient, orgId: string, rfqId: string): Promise<BoiCanh | null> {
@@ -137,14 +148,20 @@ async function docBoiCanh(client: pg.PoolClient, orgId: string, rfqId: string): 
     benchmark: unknown;
     unseal_request_id: string | null;
     bafo_round_id: string | null;
+    mo_hon: boolean | null;
   }>(
-    `SELECT p.status, o.id AS policy_id, o.version, o.benchmark, q.id AS unseal_request_id, q.bafo_round_id
+    `SELECT p.status, o.id AS policy_id, o.version, o.benchmark, q.id AS unseal_request_id, q.bafo_round_id, q.mo_hon
        FROM public.rfq_packages p
        LEFT JOIN public.org_procurement_policies o
          ON o.id OPERATOR(pg_catalog.=) p.chinh_sach_ghim_id
         AND o.org_id OPERATOR(pg_catalog.=) p.org_id
        LEFT JOIN LATERAL (
-         SELECT r.id, r.bafo_round_id FROM public.unseal_requests r
+         SELECT r.id, r.bafo_round_id,
+                EXISTS (SELECT 1 FROM public.rfq_unsealed_bids u
+                         WHERE u.org_id OPERATOR(pg_catalog.=) r.org_id
+                           AND u.unseal_request_id OPERATOR(pg_catalog.=) r.id
+                           AND u.unsealed_at OPERATOR(pg_catalog.>=) pg_catalog.now()) AS mo_hon
+           FROM public.unseal_requests r
           WHERE r.org_id OPERATOR(pg_catalog.=) p.org_id
             AND r.rfq_id OPERATOR(pg_catalog.=) p.id
             AND r.status OPERATOR(pg_catalog.=) 'EXECUTED'
@@ -163,6 +180,7 @@ async function docBoiCanh(client: pg.PoolClient, orgId: string, rfqId: string): 
     nhom: docNhomBenchmark(g.benchmark),
     unsealRequestId: g.unseal_request_id,
     bafoRoundId: g.bafo_round_id,
+    moHonGiaoDich: g.mo_hon === true,
   };
 }
 
@@ -228,6 +246,85 @@ function trangThaiKhongHien(status: string): KhongHien | undefined {
   return undefined;
 }
 
+/** Bối cảnh đổi giữa lúc giao dịch bắt đầu và lúc trả — người đọc bấm lại là đủ. */
+export type ThuLai = { readonly trangThai: "THU_LAI"; readonly rfqStatus: string };
+
+/**
+ * Khoá hàng gói `FOR SHARE` rồi hỏi lại trạng thái và lần mở thầu mới nhất — ngay TRƯỚC khi ghi bản lưu hay trả con số, SAU phép tính
+ * dài (khuôn `kiemGoiDaNop` của `anh-xa.ts`; khoản 126: khoá hàng trước mọi lần ghi sổ của giao dịch). Hai câu, không một: dưới READ
+ * COMMITTED, câu chờ khoá thấy phiên bản MỚI của hàng gói nhưng một truy vấn con trong cùng câu vẫn đọc ảnh chụp lúc câu bắt đầu — có
+ * thể thiếu lần mở thầu mà chính giao dịch vừa nhả khoá đã ghi. Câu thứ hai chụp ảnh mới, và từ đây không cạnh trạng thái nào commit
+ * được tới hết giao dịch này. `undefined` khi vẫn là bối cảnh cũ.
+ */
+async function kiemLaiDuoiKhoa(
+  client: pg.PoolClient,
+  orgId: string,
+  rfqId: string,
+  unsealRequestId: string,
+): Promise<KhongHien | ThuLai | undefined> {
+  const { rows } = await client.query<{ status: string }>(
+    "SELECT p.status FROM public.rfq_packages p WHERE p.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid " +
+      "AND p.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid FOR SHARE",
+    [orgId, rfqId],
+  );
+  const status = rows[0]?.status;
+  if (status === undefined) throw new Error("gói thầu không còn đọc được giữa giao dịch benchmark");
+  const khongHien = trangThaiKhongHien(status);
+  if (khongHien !== undefined) return khongHien;
+  const { rows: moiNhat } = await client.query<{ id: string }>(
+    `SELECT r.id FROM public.unseal_requests r
+      WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
+        AND r.rfq_id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid
+        AND r.status OPERATOR(pg_catalog.=) 'EXECUTED'
+      ORDER BY r.executed_at DESC, r.id DESC
+      LIMIT 1`,
+    [orgId, rfqId],
+  );
+  return moiNhat[0]?.id === unsealRequestId ? undefined : { trangThai: "THU_LAI", rfqStatus: status };
+}
+
+/** Bối cảnh đã qua cổng trạng thái và cấu hình: có lần mở thầu, có phiên bản ghim cấu hình benchmark. */
+interface BoiCanhHien extends BoiCanh {
+  readonly unsealRequestId: string;
+  readonly policyId: string;
+  readonly version: number;
+  readonly nhom: NhomBenchmark;
+}
+
+/** Đọc bản lưu của lần mở thầu mới nhất, hay tính và ghi nó ở lần đọc đầu — dưới khoá hàng gói (`kiemLaiDuoiKhoa`). */
+async function docHayTinh(client: pg.PoolClient, orgId: string, rfqId: string, bc: BoiCanhHien): Promise<BenchmarkCuaGoi> {
+  let dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
+  let nguon: NguonBenchmark = "BAN_LUU";
+  if (dau === undefined) {
+    if (bc.moHonGiaoDich) return { trangThai: "THU_LAI", rfqStatus: bc.status };
+    const baoGia = await docBaoGia(client, orgId, rfqId);
+    const kq = await tinhBenchmarkGoi(client, orgId, { rfqId, bidVersionIds: baoGia.map((b) => b.bid_version_id), nhom: bc.nhom });
+    const doi = await kiemLaiDuoiKhoa(client, orgId, rfqId, bc.unsealRequestId);
+    if (doi !== undefined) return doi;
+    const id = await ghiBanLuuBenchmark(client, orgId, { unsealRequestId: bc.unsealRequestId, policyId: bc.policyId, ketQua: kq });
+    if (id !== null) nguon = "TINH_MOI";
+    dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
+    if (dau === undefined) throw new Error("bản lưu benchmark vừa ghi (hay do giao dịch khác ghi) không đọc lại được");
+  } else {
+    const doi = await kiemLaiDuoiKhoa(client, orgId, rfqId, bc.unsealRequestId);
+    if (doi !== undefined) return doi;
+  }
+  const dong = await docDongBanLuu(client, orgId, dau.id);
+  return {
+    trangThai: "CO",
+    nguon,
+    snapshotId: dau.id,
+    unsealRequestId: bc.unsealRequestId,
+    bafoRoundId: bc.bafoRoundId,
+    policyId: bc.policyId,
+    policyVersion: bc.version,
+    phuongPhap: dau.phuong_phap,
+    mocMoGia: dau.moc_mo_gia,
+    tinhLuc: dau.ghi_luc,
+    dong: dong.map(dongHien),
+  };
+}
+
 /** Benchmark của gói tại lần đọc này. `null` khi gói không có trong tổ chức — sau cổng quyền. */
 export async function docBenchmark(
   client: pg.PoolClient,
@@ -254,34 +351,7 @@ export async function docBenchmark(
   } else {
     // Ba trạng thái hiện đều đến SAU một lần mở thầu đã thực thi; không có lần nào là dữ liệu lệch — NÉM, không đoán.
     if (bc.unsealRequestId === null) throw new Error("gói ở trạng thái sau mở thầu mà không có lần mở thầu nào đã thực thi");
-    let nguon: NguonBenchmark = "BAN_LUU";
-    let dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
-    if (dau === undefined) {
-      const baoGia = await docBaoGia(client, orgId, input.rfqId);
-      const kq = await tinhBenchmarkGoi(client, orgId, {
-        rfqId: input.rfqId,
-        bidVersionIds: baoGia.map((b) => b.bid_version_id),
-        nhom: bc.nhom,
-      });
-      const id = await ghiBanLuuBenchmark(client, orgId, { unsealRequestId: bc.unsealRequestId, policyId: bc.policyId, ketQua: kq });
-      if (id !== null) nguon = "TINH_MOI";
-      dau = await docDauBanLuu(client, orgId, bc.unsealRequestId);
-      if (dau === undefined) throw new Error("bản lưu benchmark vừa ghi (hay do giao dịch khác ghi) không đọc lại được");
-    }
-    const dong = await docDongBanLuu(client, orgId, dau.id);
-    ketQua = {
-      trangThai: "CO",
-      nguon,
-      snapshotId: dau.id,
-      unsealRequestId: bc.unsealRequestId,
-      bafoRoundId: bc.bafoRoundId,
-      policyId: bc.policyId,
-      policyVersion: bc.version,
-      phuongPhap: dau.phuong_phap,
-      mocMoGia: dau.moc_mo_gia,
-      tinhLuc: dau.ghi_luc,
-      dong: dong.map(dongHien),
-    };
+    ketQua = await docHayTinh(client, orgId, input.rfqId, { ...bc, unsealRequestId: bc.unsealRequestId, policyId: bc.policyId, version: bc.version, nhom: bc.nhom });
   }
 
   await appendAuditEvent(client, orgId, {
@@ -337,6 +407,7 @@ export type DaiCuaDong =
   | { readonly trangThai: "KHONG_HIEN"; readonly rfqStatus: string }
   | { readonly trangThai: "VONG_CHAO_LAI_DANG_MO"; readonly rfqStatus: string }
   | { readonly trangThai: "CHUA_CAU_HINH"; readonly policyId: string | null; readonly policyVersion: number | null }
+  | ThuLai
   /** Chưa có bản lưu của lần mở thầu hiện tại — mở bảng benchmark trước (`docBenchmark` tính nó). */
   | { readonly trangThai: "CHUA_CO_BAN_LUU" }
   /** Dòng không có trên gói, hay không báo giá nào của dòng đo được (mọi hàng `KHONG_DO_DUOC`). */
@@ -385,8 +456,9 @@ export async function docDaiBenchmark(
   } else if (bc.nhom === null || bc.policyId === null || bc.version === null) {
     ketQua = { trangThai: "CHUA_CAU_HINH", policyId: bc.policyId, policyVersion: bc.version };
   } else {
-    const dau = bc.unsealRequestId === null ? undefined : await docDauBanLuu(client, orgId, bc.unsealRequestId);
-    if (dau === undefined) {
+    const uid = bc.unsealRequestId;
+    const dau = uid === null ? undefined : await docDauBanLuu(client, orgId, uid);
+    if (uid === null || dau === undefined) {
       ketQua = { trangThai: "CHUA_CO_BAN_LUU" };
     } else {
       const dong = (await docDongBanLuu(client, orgId, dau.id, input.lineNo)).filter(
@@ -413,16 +485,22 @@ export async function docDaiBenchmark(
           donViGoc ??= kq.donViGoc;
           for (const d of kq.dai) {
             const luu = cuaHang.filter((r) => r.tien_te === d.tienTe);
-            const khop = luu.every(
-              (r) =>
+            // [rà soát S4.5c1] So cả NHÃN, không chỉ số đếm: một giá lịch sử bị sửa ngoài luật chỉ-ghi-thêm dời trung vị mà không đổi
+            // số đếm nào — nhãn tính lại từ giá của chính dòng (tại `ghi_luc`) trên dải tính lại phải trùng nhãn đã lưu.
+            const khop = luu.every((r) => {
+              const x = kq.giaCuaX.find((g) => g.bidVersionId === r.bid_version_id && g.lineNo === r.line_no);
+              return (
                 r.so_quan_sat === d.soQuanSat &&
                 r.so_goi === d.soGoi &&
                 r.so_ncc === d.soNcc &&
                 r.so_goi_cung_nguoi_tao === d.soGoiCungNguoiTao &&
                 r.so_quan_sat_hoi_to === d.soQuanSatHoiTo &&
                 r.so_loai_tien_te === d.soLoaiTienTe &&
-                r.so_loai_gia_0 === d.soLoaiGia0,
-            );
+                r.so_loai_gia_0 === d.soLoaiGia0 &&
+                x?.nhan === r.nhan &&
+                x.chieu === r.chieu
+              );
+            });
             dai.push({
               canonicalItemId: hang,
               tienTe: d.tienTe,
@@ -447,7 +525,9 @@ export async function docDaiBenchmark(
             giaCuaGoi.push({ bidVersionId: g.bidVersionId, trangThai: g.trangThai, donGiaQuyDoi: g.donGiaQuyDoi, tienTe: g.tienTe });
           }
         }
-        ketQua = {
+        // Số của dải và giá quy đổi của gói chỉ trả khi, dưới khoá hàng gói, gói VẪN ở trạng thái hiện của CÙNG lần mở thầu (L6).
+        const doi = await kiemLaiDuoiKhoa(client, orgId, input.rfqId, uid);
+        ketQua = doi ?? {
           trangThai: "CO",
           snapshotId: dau.id,
           lineNo: input.lineNo,

@@ -297,7 +297,9 @@ $("nut-doc").addEventListener("click", async () => {
   bao($("loi2"), "");
   const id = $("rfq").value.trim();
   if (id === "") { bao($("loi2"), "Cần mã gói thầu."); return; }
-  phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "" };
+  phien = { ...phien, rfqId: id, xepHang: [], xepHangLuot: "", awardDaDoc: "", soSanh: undefined };
+  // [rà soát S4.5c1] Benchmark của gói TRƯỚC không được sống sang gói này: cột Benchmark của bảng xếp hạng đọc `benchmarkHien`.
+  datLaiBenchmark();
   const r = await goi("GET", `/rfqs/${id}`);
   if (r.status !== 200) { bao($("loi2"), loiCua(r, "Không đọc được gói thầu")); return; }
   const rfq = r.body.rfq;
@@ -434,7 +436,11 @@ $("nut-dieu-phoi").addEventListener("click", async () => {
 async function docBangSoSanh() {
   bao($("loi4"), "");
   const r = await goi("GET", `/rfqs/${phien.rfqId}/comparison`);
-  if (r.status !== 200) { bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh")); return false; }
+  if (r.status !== 200) {
+    phien = { ...phien, soSanh: undefined };
+    bao($("loi4"), loiCua(r, "Chưa đọc được bảng so sánh"));
+    return false;
+  }
   const c = r.body.comparison;
   phien = { ...phien, soSanh: Array.isArray(c.rows) ? c.rows : [] };
   const tbody = $("bang").querySelector("tbody");
@@ -480,18 +486,30 @@ $("nut-bang").addEventListener("click", () => docBangSoSanh());
 /** Benchmark có nhãn lần đọc gần nhất (`trangThai: "CO"`), hay `null`. Bảng xếp hạng đọc nó cho cột Benchmark. */
 let benchmarkHien = null;
 
+/** Xoá benchmark đang hiện — đổi gói thì nhãn của gói cũ không được ở lại trên màn. */
+function datLaiBenchmark() {
+  benchmarkHien = null;
+  $("bang-benchmark").querySelector("tbody").replaceChildren();
+  dienDl($("tt-benchmark"), []);
+  hien($("khoi-dai"), false);
+  bao($("loi4b"), "");
+  veCotBenchmark();
+}
+
 const tenBaoGia = (id) => (phien.soSanh ?? []).find((h) => h.bidVersionId === id)?.supplierLegalName ?? `báo giá ${id.slice(0, 8)}…`;
+/** Các dòng phong bì của một báo giá — CHỈ phần tử là đối tượng: phong bì là chữ của nhà cung cấp, một dòng `null` không được làm vỡ bảng. */
 const dongCuaBaoGia = (id) => {
   const h = (phien.soSanh ?? []).find((x) => x.bidVersionId === id);
-  return Array.isArray(h?.payload?.lines) ? h.payload.lines : [];
+  return Array.isArray(h?.payload?.lines) ? h.payload.lines.filter((l) => l !== null && typeof l === "object") : [];
 };
 
 async function veBenchmark() {
   bao($("loi4b"), "");
   hien($("khoi-dai"), false);
-  // Bảng so sánh đóng ở trạng thái này thì vẫn hỏi benchmark: nó trả câu trạng thái của chính nó (đo ở lượt đi thử 375×812 trên gói
-  // `AWARDED` — bản trước dừng ở lỗi của bảng so sánh, khối benchmark im).
-  if (phien.soSanh === undefined) await docBangSoSanh();
+  // Benchmark TRƯỚC, bảng so sánh SAU và chỉ khi có nhãn ([rà soát S4.5c1]): ở trạng thái bảng so sánh đóng (đo ở lượt đi thử 375×812
+  // trên gói `AWARDED`), hỏi bảng so sánh chỉ để nhận một lần từ chối — và một hàng sổ từ chối — mỗi cú bấm. Khi có nhãn, bảng so sánh
+  // đọc LẠI mỗi lần: tên nhà cung cấp, đơn giá chào và độ phủ phải là của đúng tập báo giá bản lưu đã gắn nhãn, không của một lần đọc
+  // trước một vòng chào lại.
   const r = await goi("GET", `/rfqs/${phien.rfqId}/benchmark`);
   if (r.status !== 200) { bao($("loi4b"), loiCua(r, "Chưa đọc được benchmark")); return; }
   const b = r.body.benchmark;
@@ -504,6 +522,7 @@ async function veBenchmark() {
     veCotBenchmark();
     return;
   }
+  await docBangSoSanh();
   benchmarkHien = b;
   const td = (chu, lop) => { const x = document.createElement("td"); x.textContent = chu; if (lop) x.className = lop; return x; };
   const baoGia = [...new Set(b.dong.map((d) => d.bidVersionId))];
@@ -559,6 +578,9 @@ async function veDai(lineNo) {
   const r = await goi("GET", `/rfqs/${phien.rfqId}/items/${String(lineNo)}/benchmark`);
   if (r.status !== 200) { bao($("loi4b"), loiCua(r, "Chưa tính được dải")); return; }
   const d = r.body.dai;
+  // Dải tính trên bản lưu MỚI NHẤT; bảng đang hiện có thể là của một lần mở thầu trước (một vòng chào lại vừa mở niêm phong).
+  const cu = d.trangThai === "CO" && benchmarkHien !== null && d.snapshotId !== benchmarkHien.snapshotId
+    ? [["Lưu ý", "Dải này của lần mở thầu MỚI hơn bảng benchmark đang hiện — bấm Đọc benchmark để đọc lại nhãn."]] : [];
   if (d.trangThai !== "CO") {
     const cau = d.trangThai === "CHUA_CO_BAN_LUU" ? "Chưa có bản benchmark của lần mở thầu này — bấm Đọc benchmark trước."
       : d.trangThai === "KHONG_CO_DAI" ? `Dòng ${String(lineNo)} không có báo giá nào đo được — không có dải.`
@@ -568,6 +590,7 @@ async function veDai(lineNo) {
     return;
   }
   dienDl($("tt-dai"), [
+    ...cu,
     ...d.dai.map((x) => [`Dòng ${String(lineNo)} — dải lịch sử nội bộ (${x.tienTe})`, chuDai(x, d.donViGoc)]),
     ...d.giaCuaGoi.map((g) => [
       `Đơn giá quy đổi — ${tenBaoGia(g.bidVersionId)}`,
