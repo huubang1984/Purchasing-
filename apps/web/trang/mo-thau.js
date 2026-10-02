@@ -737,8 +737,8 @@ $("nut-huy-award").addEventListener("click", async () => {
   // [S1.259 / khoản 333] Huỷ lên trao thầu ĐÃ HIỆN TRÊN MÀN — khuôn khoản 321 của «Phê duyệt». Trước vòng này nút huỷ theo GÓI
   // (route không nhận id trao thầu) khi bước 7 còn trống: đo trên trình duyệt, Tổng Giám đốc nạp XD-04, gõ lý do, bấm Huỷ ⇒
   // `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Lần bấm đầu — hay khi trao thầu mới nhất đã đổi từ lúc đọc — chỉ vẽ nó ra. ~~Giới hạn,
-  // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.~~ [S1.9101 / khoản
-  // 9401] Route huỷ nay mang id trao thầu, cùng khuôn «Phê duyệt»: máy chủ từ chối khi nó không còn là trao thầu mới nhất của gói.
+  // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.~~ [S1.261 / khoản
+  // 335] Route huỷ nay mang id trao thầu, cùng khuôn «Phê duyệt»: máy chủ từ chối khi nó không còn là trao thầu mới nhất của gói.
   const doc = await goi("GET", `/rfqs/${phien.rfqId}/award`);
   if (doc.status !== 200) { bao($("loi7"), loiCua(doc, "Chưa đọc được trao thầu sắp huỷ")); return; }
   const a = doc.body.award ?? null;

@@ -808,7 +808,7 @@ const ghi: readonly BuyerWriteRoute[] = [
       },
     }),
   },
-  // [S1.9101 / khoản 9401] ~~`/rfqs/:rfqId/award/cancel`~~ — huỷ theo GÓI: hàng mới nhất của gói, bất kể người huỷ đã đọc hàng
+  // [S1.261 / khoản 335] ~~`/rfqs/:rfqId/award/cancel`~~ — huỷ theo GÓI: hàng mới nhất của gói, bất kể người huỷ đã đọc hàng
   // nào. Nay `awardId` đi trong ĐƯỜNG DẪN, cùng lý do với route duyệt ở trên: người huỷ huỷ đúng trao thầu họ đã đọc, và
   // `huyTraoThau` từ chối khi nó không còn là hàng mới nhất của gói (rút rồi đề xuất lại, hay vừa được duyệt).
   {

@@ -158,7 +158,7 @@ export interface DuyetTraoThauInput {
 export interface HuyTraoThauInput {
   readonly rfqId: string;
   /**
-   * [S1.9101 / khoản 9401] Hàng award mà người huỷ ĐÃ ĐỌC — phải là hàng MỚI NHẤT của gói lúc huỷ, cùng khuôn
+   * [S1.261 / khoản 335] Hàng award mà người huỷ ĐÃ ĐỌC — phải là hàng MỚI NHẤT của gói lúc huỷ, cùng khuôn
    * `DuyetTraoThauInput.awardId`. Trước vòng này hàm huỷ hàng mới nhất bất kể người gọi đã đọc hàng nào: giữa lần đọc và lần
    * huỷ, đề xuất kia rút được rồi một đề xuất KHÁC dựng lên, hay được duyệt — và lần huỷ ăn vào thứ người huỷ chưa thấy.
    * Hàng của gói KHÁC không bao giờ là hàng mới nhất của gói này, nên cùng một phép so cũng chặn id lạc gói.
@@ -170,7 +170,7 @@ export interface HuyTraoThauInput {
 
 /**
  * [S1.231 / khoản 232] Rút đề xuất — một lý do BẮT BUỘC, không `awardId` (hàng mới nhất là đích; `094` chỉ cho rút `PROPOSED`
- * của CHÍNH người gọi, 0 chữ ký). ~~Cùng hình dạng với huỷ.~~ **[S1.9101 / khoản 9401]** Huỷ nay mang `awardId`.
+ * của CHÍNH người gọi, 0 chữ ký). ~~Cùng hình dạng với huỷ.~~ **[S1.261 / khoản 335]** Huỷ nay mang `awardId`.
  */
 export interface RutDeXuatTraoThauInput {
   readonly rfqId: string;
@@ -533,7 +533,7 @@ export async function duyetTraoThau(
  * Cổng là `po.approve` — xem khối đầu tệp. `reason` BẮT BUỘC: `061` đặt `CHECK` *không rỗng* trên
  * MỌI hàng, kể cả hàng huỷ, và một lần huỷ không có lý do là đúng thứ D5 tồn tại để cấm.
  *
- * **[S1.9101 / khoản 9401]** Nhận `awardId` và chỉ huỷ khi nó là hàng MỚI NHẤT của gói — phép so đứng SAU khoá hàng RFQ
+ * **[S1.261 / khoản 335]** Nhận `awardId` và chỉ huỷ khi nó là hàng MỚI NHẤT của gói — phép so đứng SAU khoá hàng RFQ
  * (`FOR NO KEY UPDATE`), nên rút, huỷ và đề xuất của người khác (cả ba giữ cùng khoá) không chen được vào giữa phép so và câu
  * `INSERT`. Giới hạn, đọc từ mã chứ không đo: `duyetTraoThau` KHÔNG giữ khoá hàng RFQ, nên một lần duyệt CHÍNH đề xuất ấy chen
  * được vào khe ấy — khi đó hàng huỷ ăn vào hàng `APPROVED` vừa ghi, cùng báo giá (`award_kiem_mot_award_song` buộc hàng huỷ
@@ -595,7 +595,7 @@ export async function huyTraoThau(
       ),
     );
   }
-  // [S1.9101 / khoản 9401] Huỷ ĐÚNG hàng người huỷ đã đọc — xem `HuyTraoThauInput.awardId`.
+  // [S1.261 / khoản 335] Huỷ ĐÚNG hàng người huỷ đã đọc — xem `HuyTraoThauInput.awardId`.
   if (truoc.id !== input.awardId) {
     return nemTuChoi(
       auditPool,

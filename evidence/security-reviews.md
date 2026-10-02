@@ -23803,7 +23803,7 @@ Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa 
   tệp (142 đạt, 2 bỏ qua), 2447 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4530 khẳng định, 79/79 bất
   biến (57/57 nghiệp vụ + 22/22 hàng rào), 2283 giây; `evidence/INV-matrix.md` không đổi.
 
-# §S1.9101 — ROUTE HUỶ TRAO THẦU MANG `awardId`: CHỈ HUỶ KHI ID ẤY LÀ TRAO THẦU MỚI NHẤT CỦA GÓI — KHOẢN 9401 ĐÓNG
+# §S1.261 — ROUTE HUỶ TRAO THẦU MANG `awardId`: CHỈ HUỶ KHI ID ẤY LÀ TRAO THẦU MỚI NHẤT CỦA GÓI — KHOẢN 335 ĐÓNG
 
 **Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (huỷ trao thầu không nằm trên kịch bản §11).
 Không migration; không ADR mới — một đoạn bổ sung ở ADR-057 (mục *Cổng HUỶ*); một route đổi đường dẫn, số route không đổi;

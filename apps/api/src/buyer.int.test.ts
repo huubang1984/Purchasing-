@@ -1783,7 +1783,7 @@ describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => 
     expect(rutSauDuyet.text).toContain("hàng mới nhất đang ở APPROVED");
     const awardIdDuyet = (duyet.body as { award: { awardId: string } }).award.awardId;
     expect((await goi("POST", `/rfqs/${rfqId}/award/${awardIdDuyet}/cancel`, buyer, { reason: "buyer huy" })).status, "cổng huỷ vẫn là po.approve").toBe(403);
-    // [S1.9101 / khoản 9401] Huỷ theo id của hàng PROPOSED — thứ màn đọc TRƯỚC lần duyệt — ⇒ 422 nói vì sao, gói đứng yên.
+    // [S1.261 / khoản 335] Huỷ theo id của hàng PROPOSED — thứ màn đọc TRƯỚC lần duyệt — ⇒ 422 nói vì sao, gói đứng yên.
     const huyCu = await goi("POST", `/rfqs/${rfqId}/award/${awardId2}/cancel`, tc, { reason: "huy theo id cu" });
     expect(huyCu.status, huyCu.text).toBe(422);
     expect(huyCu.text).toContain("không phải trao thầu mới nhất");
@@ -1793,7 +1793,7 @@ describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => 
     expect(await trangThai()).toBe("EVALUATING");
 
     // Sổ: một hàng RFQ_AWARD_WITHDRAWN; hai hàng RFQ_STATE_DENIED của đường rút mang đúng mã và đúng người, đúng thứ tự —
-    // [S1.9101 / khoản 9401] và hàng thứ ba của lần huỷ theo id cũ.
+    // [S1.261 / khoản 335] và hàng thứ ba của lần huỷ theo id cũ.
     const { rows: so } = await db.pool.query<{ action: string; actor_id: string; payload: { ma?: string } }>(
       "SELECT action, actor_id, payload FROM audit_events WHERE org_id = $1 AND action IN ('RFQ_AWARD_WITHDRAWN', 'RFQ_STATE_DENIED') ORDER BY seq",
       [org],

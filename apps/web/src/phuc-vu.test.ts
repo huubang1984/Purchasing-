@@ -1342,7 +1342,7 @@ describe("bề mặt tệp", () => {
       // trình duyệt thật: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ ⇒ `CANCELLED`, và thứ vừa huỷ chỉ hiện SAU đó.
       // Khuôn khoản 321 của «Phê duyệt»: lần bấm đầu — hay khi trao thầu đã đổi từ lúc đọc — chỉ vẽ nó ra.
       it("khoản 333: «Huỷ trao thầu» khi chưa đọc ⇒ lần bấm đầu chỉ HIỆN trao thầu sắp huỷ; lần hai mới huỷ; đổi giữa chừng ⇒ không huỷ; lý do trống ⇒ không gọi gì", async () => {
-        // [S1.9101 / khoản 9401] Route huỷ mang id trao thầu: `…/award/<id>/cancel`.
+        // [S1.261 / khoản 335] Route huỷ mang id trao thầu: `…/award/<id>/cancel`.
         const daHuy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g.startsWith(`POST /rfqs/${RFQ}/award/`) && g.endsWith("/cancel"));
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
         p.el("ly-do-award").value = "nha cung cap rut bao gia";
@@ -1381,9 +1381,9 @@ describe("bề mặt tệp", () => {
         }
       });
 
-      // [S1.9101 / khoản 9401] Giữa lần đọc lại của trang và lần huỷ, trao thầu đổi được (rút rồi đề xuất lại, hay được duyệt);
+      // [S1.261 / khoản 335] Giữa lần đọc lại của trang và lần huỷ, trao thầu đổi được (rút rồi đề xuất lại, hay được duyệt);
       // máy chủ nay từ chối theo id thay vì huỷ thứ mới. Thân 422 là `{ error: <câu> }` — hình dạng thật của `TraoThauTuChoiError`.
-      it("[S1.9101 / khoản 9401] «Huỷ trao thầu» gửi id của trao thầu ĐANG HIỆN; máy chủ từ chối vì nó không còn mới nhất ⇒ in nguyên câu, không báo đã huỷ", async () => {
+      it("[S1.261 / khoản 335] «Huỷ trao thầu» gửi id của trao thầu ĐANG HIỆN; máy chủ từ chối vì nó không còn mới nhất ⇒ in nguyên câu, không báo đã huỷ", async () => {
         const cau = "Trao thầu được nêu không phải trao thầu mới nhất của gói này — gói đã đổi từ lúc đọc (hàng mới nhất đang ở APPROVED), " +
           "hoặc id thuộc gói khác. Lần huỷ này không được ghi nhận; đọc lại trao thầu của gói rồi mới huỷ.";
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-7") } }), { status: 422, body: { error: cau } });

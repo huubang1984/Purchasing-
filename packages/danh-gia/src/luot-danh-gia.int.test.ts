@@ -2367,7 +2367,7 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
     ).resolves.toBeNull();
     await expect(
       withTenant(apiPool, orgB, (c) =>
-        // [S1.9101 / khoản 9401] Biết đúng `awardId` của tổ chức A cũng không đủ.
+        // [S1.261 / khoản 335] Biết đúng `awardId` của tổ chức A cũng không đủ.
         huyTraoThau(c, orgB, { rfqId, awardId: dx.awardId, reason: "to chuc khac huy", actorSessionId: sB }, apiPool),
       ),
     ).rejects.toThrow();
@@ -3458,10 +3458,10 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
   });
 });
 
-// [S1.9101 / khoản 9401] Trước vòng này `huyTraoThau` nhận `rfqId` rồi huỷ hàng MỚI NHẤT của gói, bất kể người gọi đã đọc hàng
+// [S1.261 / khoản 335] Trước vòng này `huyTraoThau` nhận `rfqId` rồi huỷ hàng MỚI NHẤT của gói, bất kể người gọi đã đọc hàng
 // nào — giới hạn mà khoản 333 nói ra ở màn `/login`. Giữa lần đọc và lần huỷ, đề xuất kia rút được rồi một đề xuất KHÁC dựng lên,
 // hay được duyệt: lần huỷ ăn vào thứ người huỷ chưa thấy. Nay hàm nhận `awardId`, cùng khuôn `duyetTraoThau`.
-describe("[S1.9101 / khoản 9401] huyTraoThau huỷ ĐÚNG trao thầu được nêu — `awardId` phải là hàng mới nhất của gói", { timeout: 300000 }, () => {
+describe("[S1.261 / khoản 335] huyTraoThau huỷ ĐÚNG trao thầu được nêu — `awardId` phải là hàng mới nhất của gói", { timeout: 300000 }, () => {
   it("đề xuất bị RÚT rồi đề xuất LẠI ⇒ huỷ theo id CŨ bị từ chối `KHONG_CO_AWARD_CON_SONG`: không hàng CANCELLED, đề xuất mới đứng nguyên, gói vẫn AWARDED, một hàng sổ; ĐỐI CHỨNG DƯƠNG: id của đề xuất mới thì đi qua", async () => {
     const { rfqId, banRo, dx } = await coDeXuat();
     await withTenant(apiPool, orgA, (c) =>
