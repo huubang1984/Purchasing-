@@ -3525,6 +3525,89 @@ describe("[S1.261 / khoản 335] huyTraoThau huỷ ĐÚNG trao thầu được n
   });
 });
 
+// [S1.9102 / khoản 9402] Khoản 335 khai giới hạn: `duyetTraoThau` KHÔNG giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên lần
+// duyệt và lần huỷ CÙNG một đề xuất không xếp hàng ở cùng một khoá. Hai ca dưới chạy HAI hàm sản xuất thật trên hai kết nối: một
+// bên ghi xong mà CHƯA commit, bên kia tới sau. Trước vòng này, ⑴ lần huỷ đọc hàng mới nhất là đề xuất (hàng APPROVED chưa
+// commit nên không thấy), qua phép so id, rồi chờ ở khoá tư vấn của trigger và ăn vào hàng APPROVED; ⑵ lần duyệt chờ ở khoá tư
+// vấn rồi chết bằng lỗi thô 23514 của trigger, không tên, không hàng sổ. Nay cả hai chờ ở khoá hàng RFQ và từ chối có tên.
+describe("[S1.9102 / khoản 9402] duyệt và huỷ CÙNG LÚC trên một đề xuất — `duyetTraoThau` giữ khoá hàng RFQ như rút, huỷ, đề xuất", { timeout: 300000 }, () => {
+  /** Chờ tới khi có một khoá CHƯA cấp; trả về các loại khoá đang chờ, hay `null` nếu hết hạn hoặc lời gọi đã xong trước. */
+  async function doiChoKhoa(daXong: () => boolean): Promise<readonly string[] | null> {
+    for (let i = 0; i < 100; i += 1) {
+      const { rows } = await db.pool.query<{ locktype: string }>("SELECT locktype FROM pg_locks WHERE NOT granted");
+      if (rows.length > 0) return rows.map((r) => r.locktype).sort();
+      if (daXong()) return null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  }
+
+  async function soChuKy(awardId: string): Promise<number> {
+    const { rows } = await db.pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM rfq_award_approvals WHERE org_id = $1 AND award_id = $2",
+      [orgA, awardId],
+    );
+    return rows[0]?.n ?? -1;
+  }
+
+  it("⑴ DUYỆT ghi trước, chưa commit; HUỶ theo id của đề xuất tới sau ⇒ lần huỷ CHỜ ở khoá hàng RFQ — không ở khoá tư vấn của trigger — rồi bị từ chối `KHONG_CO_AWARD_CON_SONG`; không hàng CANCELLED nào ăn vào hàng APPROVED", async () => {
+    const { rfqId, dx } = await coDeXuat();
+    const { huy, khoa } = await withTenant(apiPool, orgA, async (c) => {
+      await duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool);
+      let xong = false;
+      const p = withTenant(apiPool, orgA, (c2) =>
+        huyTraoThau(c2, orgA, { rfqId, awardId: dx.awardId, reason: "huy de xuat da doc", actorSessionId: sDuyet }, apiPool),
+      ).finally(() => {
+        xong = true;
+      });
+      p.catch(() => undefined);
+      return { huy: p, khoa: await doiChoKhoa(() => xong) };
+    });
+    await expect(huy).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_AWARD_CON_SONG" });
+    expect(khoa, "lần huỷ phải CHỜ lần duyệt đang giữ gói").not.toBeNull();
+    expect(khoa, "...ở khoá hàng RFQ — chờ ở khoá tư vấn của trigger là đã qua phép so id trên một thế giới cũ").not.toContain("advisory");
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+    expect(await trangThaiRfq(rfqId)).toBe("AWARDED");
+  });
+
+  it("⑵ HUỶ ghi trước, chưa commit; DUYỆT tới sau ⇒ lần duyệt CHỜ ở khoá hàng RFQ rồi bị từ chối `KHONG_CO_DE_XUAT_DANG_CHO` có tên, một hàng sổ — không lỗi thô của trigger, không chữ ký nào còn lại", async () => {
+    const { rfqId, dx } = await coDeXuat();
+    const { duyet, khoa } = await withTenant(apiPool, orgA, async (c) => {
+      await huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool);
+      let xong = false;
+      const p = withTenant(apiPool, orgA, (c2) =>
+        duyetTraoThau(c2, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+      ).finally(() => {
+        xong = true;
+      });
+      p.catch(() => undefined);
+      return { duyet: p, khoa: await doiChoKhoa(() => xong) };
+    });
+    await expect(duyet).rejects.toMatchObject({
+      name: "TraoThauTuChoiError",
+      lyDo: "KHONG_CO_DE_XUAT_DANG_CHO",
+      message: expect.stringContaining("không còn là trao thầu mới nhất") as unknown,
+    });
+    expect(khoa, "lần duyệt phải CHỜ lần huỷ đang giữ gói").not.toBeNull();
+    expect(khoa, "...ở khoá hàng RFQ, không ở khoá tư vấn của trigger").not.toContain("advisory");
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "CANCELLED"]);
+    expect(await soChuKy(dx.awardId), "không chữ ký nào trên đề xuất đã huỷ").toBe(0);
+    expect(await hangSoTuChoiTrangThai(rfqId)).toEqual([[uDuyet, { ma: "KHONG_CO_DE_XUAT_DANG_CHO" }]]);
+  });
+
+  it("tuần tự: duyệt một đề xuất ĐÃ HUỶ ⇒ `KHONG_CO_DE_XUAT_DANG_CHO` có tên trước cả câu ghi chữ ký — không lỗi thô của trigger", async () => {
+    const { rfqId, dx } = await coDeXuat();
+    await withTenant(apiPool, orgA, (c) =>
+      huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) => duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool)),
+    ).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_DE_XUAT_DANG_CHO" });
+    expect(await soChuKy(dx.awardId)).toBe(0);
+    expect(await hangSoTuChoiTrangThai(rfqId)).toEqual([[uDuyet, { ma: "KHONG_CO_DE_XUAT_DANG_CHO" }]]);
+  });
+});
+
 // ===============================================================================================
 // [S1.217 / khoản 250 / ADR-128] BẢN RÕ CỦA LỜI MỜI ĐÃ THU HỒI KHÔNG VÀO LƯỢT CHẤM
 //

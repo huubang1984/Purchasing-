@@ -23872,3 +23872,54 @@ ra giới hạn: giữa lần trang đọc lại trao thầu và lần huỷ, m�
   máy không gồm bước ấy); viết lại dòng, chạy `cap-so --kiem` ở máy trước khi đẩy. T3 đỏ đúng một ca không chạm vòng này —
   `composition.int` khoản 277 ý ③: job chèn thẳng đã xong mà tin chưa có trong hộp thư dev lúc đếm; cùng tệp xanh trong lượt
   evidence ở máy trên `2b63ff59`.
+
+# §S1.9102 — `duyetTraoThau` GIỮ KHOÁ HÀNG RFQ: GIỚI HẠN CỦA KHOẢN 335 ĐO ĐƯỢC BẰNG HAI LỜI GỌI CÙNG LÚC, VÀ ĐÓNG — KHOẢN 9402
+
+**Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (huỷ trao thầu không nằm trên kịch bản §11).
+Không migration, không route, không ADR mới — một đoạn bổ sung ở ADR-057; không mảnh nào của `docs/PRODUCT.md` §11 đổi.
+
+## 1. Vòng này là gì
+Bước 2 của đề xuất sau §S1.261; chủ dự án, 2026-10-02: *"Làm 2: khoá hàng RFQ ở duyetTraoThau"*. §S1.261 mục 5 khai, đọc từ
+mã chứ không đo: `duyetTraoThau` không giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên một lần duyệt CHÍNH đề xuất được nêu
+chen được vào khe giữa phép so id và câu ghi của lần huỷ.
+
+## 2. Đo trước — giới hạn ấy là thật, và rộng hơn lời khai
+Ba ca mới trong `luot-danh-gia.int`, chạy HAI hàm sản xuất thật trên hai kết nối của `app_api`: bên trước ghi xong trong một
+giao dịch chưa commit, bên sau tới, test chờ tới khi `pg_locks` có một khoá chưa cấp rồi mới commit bên trước. Trên `172279e5`:
+- ⑴ duyệt trước, huỷ theo id của đề xuất tới sau ⇒ lần huỷ khoá được hàng RFQ ngay (lần duyệt không giữ), đọc hàng mới nhất là
+  đề xuất (hàng `APPROVED` chưa commit nên không thấy), qua phép so id, chờ ở khoá tư vấn của trigger, rồi THÀNH CÔNG — hàng
+  `CANCELLED` nằm sau hàng `APPROVED`. Đúng điều khoản 335 khai, đo bằng mã thật chứ không suy.
+- ⑵ huỷ trước, duyệt tới sau ⇒ lần duyệt chờ ở khoá tư vấn rồi chết bằng *"Chi duyet duoc mot de xuat dang o …"* — lỗi thô
+  23514 không tên, không mã lý do, không hàng sổ. Không có trao thầu sai nào, nhưng lời từ chối không đọc được và không vào sổ.
+- tuần tự — duyệt một đề xuất đã huỷ — cũng ra đúng lỗi thô ấy. Rộng hơn lời khai: chú thích của `duyetTraoThau` nói lời gọi
+  theo `awardId` *"bị chặn ngay vì hàng ấy không còn `PROPOSED`"*, nhưng `rfq_awards` chỉ-ghi-thêm — hàng đề xuất mang
+  `PROPOSED` mãi mãi; thứ chặn là trigger.
+
+## 3. Thay đổi
+`duyetTraoThau` (`packages/danh-gia/src/trao-thau.ts`), sau cổng quyền và TRƯỚC câu ghi chữ ký: khoá hàng RFQ
+(`FOR NO KEY UPDATE`, cùng câu với `huyTraoThau`), rồi đọc hàng mới nhất của gói; không phải đề xuất được nêu ⇒
+`TraoThauTuChoiError` `KHONG_CO_DE_XUAT_DANG_CHO` qua `nemTuChoi` (422, một hàng `RFQ_STATE_DENIED` {ma}) với câu *"Đề xuất
+này không còn là trao thầu mới nhất của gói — gói đã đổi từ lúc đọc (hàng mới nhất đang ở …). …"*.
+
+## 4. Điểm tôi tự chốt
+- Khoá đứng SAU cổng quyền, cùng thứ tự với `huyTraoThau`: người không giữ `po.approve` không giữ được hàng RFQ dù một khắc.
+- Phép so hàng mới nhất đứng SAU khoá — đột biến đảo thứ tự (so rồi mới khoá) đỏ ở ca ⑵.
+- Mã lý do dùng lại `KHONG_CO_DE_XUAT_DANG_CHO` — đúng nghĩa của nó, và cùng mã với hai lời từ chối sẵn có của hàm.
+- Không đổi trigger: nó vẫn là lớp có thẩm quyền; lớp gói nay chỉ làm lời từ chối có tên và xếp hàng đúng khoá.
+
+## 5. Đo
+- **Đỏ trước:** ba ca mới đỏ trên `172279e5` như mục 2. **Trọn tệp trên mã cuối:** `luot-danh-gia.int` 118/118, `buyer.int`
+  29/29, `loi-giao-thuc.int` 20/20, `kich-ban-41-http.int` 77/77, `bo-xuat.int` 9/9; câu SQL mới qua `qt3-cu-phap.int` 1/1 và
+  `qt3-ngu-phap.int` 7/7.
+- **Đột biến** (trọn `luot-danh-gia.int`, 118 ca; bản gốc và bản sau 0 đỏ; khôi phục kiểm sha256): K1 bỏ `FOR NO KEY UPDATE`
+  ⇒ ⑴ ⑵ đỏ; K2 khoá yếu `FOR KEY SHARE` ⇒ ⑴ ⑵ đỏ; K3 bỏ phép so hàng mới nhất ⇒ ⑵ và ca tuần tự đỏ; K4 so RỒI mới khoá ⇒ ⑵
+  đỏ; K5 câu từ chối không nói vì sao ⇒ ⑵ đỏ — 5/5 đúng tập dự kiến. K4 là phép đo của thứ tự: một phép so đứng trước khoá
+  đọc thế giới trước khi lần huỷ commit.
+
+## 6. Giới hạn, nói ra
+- Cái giá: lần duyệt xếp hàng sau mọi đường đang giữ cùng hàng RFQ (rút, huỷ, đề xuất, và các đường khác khoá gói). Không đo
+  thời gian chờ dưới tải.
+- Câu từ chối mới đi qua API nguyên văn; trang `/login` in nó ở bước 7 qua `loiCua` — không đi lại trên trình duyệt ở vòng này.
+
+## 7. Số đo
+- ‹SỐ-ĐO›
