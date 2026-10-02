@@ -146,7 +146,7 @@ const HAM_CHI_DOC = [
   "tinhBenchmarkGoi",
   // [S1.260 / S4.5c1] `tinhDaiDong` cùng tư thế: phép TÍNH dải một dòng, chỗ gọi duy nhất là `docDaiBenchmark` (`bid.view`, hàng sổ).
   "tinhDaiDong",
-  // [S1.9101 / S4.5c2] `docQuanSatTaiMoc` — một lần đọc `quan_sat_gia` cho một hàng chuẩn tại một mốc; hai chỗ gọi: `tinhDaiDong` và
+  // [S1.262 / S4.5c2] `docQuanSatTaiMoc` — một lần đọc `quan_sat_gia` cho một hàng chuẩn tại một mốc; hai chỗ gọi: `tinhDaiDong` và
   // lớp dữ liệu nền của bộ bằng chứng (`dungBoBangChung`, cùng tư thế không cổng của nó). `ban-ro-liet-ke.test.ts` ghim tập chỗ gọi.
   "docQuanSatTaiMoc",
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
@@ -314,7 +314,7 @@ const HAM_THUAN_TUY = [
   "chuanHoa",
   // [S1.256 / S4.5b] Bộ đọc nhóm khoá `benchmark` của phiên bản chính sách — không I/O.
   "docNhomBenchmark",
-  // [S1.9101 / S4.5c2] Nhãn của một dòng từ quan sát đã đọc (lớp ⑴ của bộ kiểm bộ bằng chứng) và phép lùi tháng UTC — không I/O.
+  // [S1.262 / S4.5c2] Nhãn của một dòng từ quan sát đã đọc (lớp ⑴ của bộ kiểm bộ bằng chứng) và phép lùi tháng UTC — không I/O.
   "nhanMotDong",
   "truThang",
   "vietSo",

@@ -5743,10 +5743,10 @@ tệ), nên cổng đọc lại đúng như bảng khai. Hệ quả cho người
 `apps/api/src/than-luot-cham.test.ts`; T3 bước 12b và 12g của `kich-ban-41-http.int.test.ts`, người bấm chấm
 là một BUYER không giữ `bid.view`. Việc ba vai ấy vẫn bấm chấm được là lõi của khoản 220, ~~chưa quyết~~ **[S1.219]** đã quyết ⒝: cổng là lớp nông, ghi ở ADR-051.
 
-**[S1.9101 / S4.5c2 / ADR-9201] Bộ bằng chứng là một nơi mang giá — không phải bảng, nên khai ở đây theo đúng câu trên (*mọi đường
+**[S1.262 / S4.5c2 / ADR-144] Bộ bằng chứng là một nơi mang giá — không phải bảng, nên khai ở đây theo đúng câu trên (*mọi đường
 đưa giá ra khỏi tiến trình*).** Nó mang giá của chính gói (lớp chấm thầu, từ S2.7) và, từ vòng này, đơn giá đã quy đổi của các gói
 KHÁC đã lộ trước mốc mở giá (lớp dữ liệu nền) — định danh gói và nhà cung cấp của chúng chỉ ra dạng băm với muối ngẫu nhiên của lần
-xuất. Mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, giá) với lịch sử giá của chính tổ chức (ADR-9201 ⑸). Vai ghi: không vai CSDL nào — bundle là artefact dựng lúc xuất. Cổng đọc: `audit.read` + `bid.view` ở `xuatBoBangChung`
+xuất. Mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, giá) với lịch sử giá của chính tổ chức (ADR-144 ⑸). Vai ghi: không vai CSDL nào — bundle là artefact dựng lúc xuất. Cổng đọc: `audit.read` + `bid.view` ở `xuatBoBangChung`
 (`GET /rfqs/:rfqId/evidence-bundle`, một hàng sổ `EVIDENCE_BUNDLE_EXPORTED`); công cụ vận hành `pnpm bang-chung xuat` giữ
 `DATABASE_URL`, tức đã đứng ngoài mọi cổng ứng dụng (spec S4 §2.5 ㉑).
 
@@ -6175,7 +6175,7 @@ hai là một người KIỂM độc lập thì nó là chính giá trị. S2.7 
 quy sớm. Thứ ADR này cấm là **để bảo đảm của bundle PHỤ THUỘC vào nó**. Hai lớp, hai chủ thể — cùng hình
 dạng với ADR-044 §*Đo bằng gì* và với khuôn `[INV-B4]`.
 
-**[S1.9101 / S4.5c2 / ADR-9201]** Bundle phiên bản 2 thêm lớp DỮ LIỆU NỀN — nhãn benchmark của mọi lượt chấm, tính lại được từ đơn giá
+**[S1.262 / S4.5c2 / ADR-144]** Bundle phiên bản 2 thêm lớp DỮ LIỆU NỀN — nhãn benchmark của mọi lượt chấm, tính lại được từ đơn giá
 đã quy đổi — cùng khuôn hai lớp: lớp ⑴ gọi `nhanMotDong`, lớp ⑵ `doc-lap/benchmark-lai.ts` cài lại từ `DAC-TA.md` §8, `g17-` canh
 cả `packages/du-lieu-nen`.
 
@@ -11198,7 +11198,7 @@ ADR-142 ⑼ chốt *"S4.5c tính MỘT lần khi gói vào `UNSEALED` (và vào 
   của `103`, khoản 330).
 - **Bản lưu không có bảng đầu vào** — tham chiếu quan sát cho L7 và bộ bằng chứng là của lượt chấm (`103`); nhãn của bản lưu tái lập bằng
   phép đọc as-of tại `moc_mo_gia` (tính chất L1).
-- **[S1.9101] S4.5c2 đã làm — ADR-9201:** bộ xuất ADR-059 mang lớp dữ liệu nền của lượt chấm; `DAC-TA.md` §8 nói UTC; bộ kiểm ngoại
+- **[S1.262] S4.5c2 đã làm — ADR-144:** bộ xuất ADR-059 mang lớp dữ liệu nền của lượt chấm; `DAC-TA.md` §8 nói UTC; bộ kiểm ngoại
   tuyến hai lớp. Bản lưu của bảng so sánh không vào bundle (chủ dự án chốt 2026-10-02).
 
 
@@ -11237,15 +11237,15 @@ Giới hạn nói thêm:
 
 ---
 
-## ADR-9201 — S4.5c2: lớp dữ liệu nền trong bộ bằng chứng ADR-059 — benchmark của mọi lượt chấm tính lại được khi đã ngắt CSDL, từ đơn giá đã quy đổi; định danh gói và nhà cung cấp băm với muối ngẫu nhiên mỗi lần xuất
+## ADR-144 — S4.5c2: lớp dữ liệu nền trong bộ bằng chứng ADR-059 — benchmark của mọi lượt chấm tính lại được khi đã ngắt CSDL, từ đơn giá đã quy đổi; định danh gói và nhà cung cấp băm với muối ngẫu nhiên mỗi lần xuất
 
 **Ngày:** 2026-10-02 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt bốn điểm ngày 2026-10-02, cả bốn theo đề xuất, sau phép đo:
 ⑴ muối của định danh băm NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle; ⑵ bộ kiểm tính lại TỪ ĐƠN GIÁ ĐÃ QUY ĐỔI — phép quy
 đổi đơn vị không tính lại; ⑶ chỉ lớp LƯỢT CHẤM (`103`) — bản lưu của bảng so sánh (`104`) không vào bundle; ⑷ người ánh xạ: mã người
 dùng + họ tên. Sau lượt rà soát đối kháng, chủ dự án chốt thêm hai điểm, cùng ngày, theo đề xuất: ⑸ làm thô `ngay` của quan sát về
-NGÀY UTC (trừ ngày biên) và SỬA lời hứa riêng tư cho đúng; ⑹ giữ xuất ĐỒNG BỘ, nói ra giới hạn thời gian và mở khoản nợ 9401 · **[S1.9101]** · **Liên quan:** ADR-059 (bộ xuất tự đủ, hai lớp kiểm), ADR-054 (nơi mang giá), ADR-142 (phương pháp,
+NGÀY UTC (trừ ngày biên) và SỬA lời hứa riêng tư cho đúng; ⑹ giữ xuất ĐỒNG BỘ, nói ra giới hạn thời gian và mở khoản nợ 337 · **[S1.262]** · **Liên quan:** ADR-059 (bộ xuất tự đủ, hai lớp kiểm), ADR-054 (nơi mang giá), ADR-142 (phương pháp,
 bảng kết quả và đầu vào của lượt chấm), ADR-143 (bản lưu, UTC), ADR-136 (`quan_sat_gia`) · **Spec:** S4 §2.5 ㉑, §4.6, §5.1 L6, L7,
-§9 S4.5c · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+§9 S4.5c · **Biên bản:** `evidence/security-reviews.md` §S1.262
 
 ### Bối cảnh — phép đo trước khi viết mã
 
@@ -11304,17 +11304,17 @@ bảng kết quả và đầu vào của lượt chấm), ADR-143 (bản lưu, U
 - **Bản lưu của bảng so sánh không vào bundle** (chủ dự án chốt ⑶) — hàng sổ `BENCHMARK_READ` vẫn mang `snapshotId`.
 - **Họ tên người ánh xạ đi ra trong một artefact xuất** (chủ dự án chốt ⑷) — cùng tư thế tên pháp nhân nhà cung cấp đã có. Đó là họ
   tên HIỆN TẠI lúc xuất, không phải lúc ghi; mã người dùng là thứ không đổi.
-- **Chi phí ở quy mô lớn — ĐO** (biên bản §S1.9101 mục 6, `gieo.sql` 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, gói X mới
+- **Chi phí ở quy mô lớn — ĐO** (biên bản §S1.262 mục 6, `gieo.sql` 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, gói X mới
   nhất, một lượt chấm): lượt chấm 17,0 s; xuất 14,1–14,6 s (40 lần đọc `quan_sat_gia`); bundle **11,07 MB** — 29.940 quan sát, 60 hàng
   benchmark; `kiem` ngoại tuyến 1,0–1,2 s, ĐẠT 60/60. Ước lượng trước khi đo (7–10 MB) THẤP hơn số đo. Đo lại sau rà soát: chấm 17,1 s,
   xuất 13,9–15,1 s, 11,08 MB, `kiem` 1,13 s — dữ liệu gieo mở mọi gói trong cùng ngày với mốc của X nên mọi `ngay` giữ micro giây; phần
   bớt của ngày trơn (≤ 17 byte mỗi quan sát) chưa đo. Hai lượt chấm (BAFO) thêm 20
   lần đọc — ~21 s theo chi phí mỗi lần đã đo, dưới trần 60 s của ALB; chưa đo trực tiếp.
-- **Thời gian xuất qua HTTP có trần — khoản 9401** (chủ dự án chốt ⑹). Xuất là đồng bộ và tất-cả-hoặc-không: chi phí ~0,35–0,45 s cho
+- **Thời gian xuất qua HTTP có trần — khoản 337** (chủ dự án chốt ⑹). Xuất là đồng bộ và tất-cả-hoặc-không: chi phí ~0,35–0,45 s cho
   mỗi lần đọc `quan_sat_gia`, (1 + E) × H lần (E lượt chấm, H hàng chuẩn). Suy từ số đo: H = 50 sau BAFO (E = 2) ⇒ 150 lần ≈ 53–63 s,
   chạm trần 60 s của ALB, bundle ~28 MB; E = 3 ⇒ ~70–84 s, luôn hỏng — và khi hỏng thì mất luôn lớp chấm thầu vốn xuất dưới 1 s. Công cụ
   vận hành `pnpm bang-chung xuat` không chịu trần ấy. Vòng này chỉ gỡ các phép bậc hai (tra kết quả theo `Map`, bộ kiểm `push` thay
-  trải mảng, cộng/trừ chữ số không `unshift`); xuất nền bất đồng bộ là khoản 9401.
+  trải mảng, cộng/trừ chữ số không `unshift`); xuất nền bất đồng bộ là khoản 337.
 
 ### Rà soát đối kháng
 
@@ -11322,6 +11322,6 @@ Một agent đọc trọn thay đổi và ĐO bằng tệp thăm dò tạm (đã
 20.000 ca so trọn trường giữa lõi, lớp ⑴ và lớp ⑵ — 0 lệch; không cảnh báo nhầm nào trên hệ thống đúng; không đường mới nào lách cổng.
 Không CAO. Ba TRUNG: ⑴ lời hứa riêng tư bị `ngay` micro giây và phá hoà bằng UUID thô phá — chủ dự án chốt ⑸, sửa như quyết định 1–2;
 ⑵ bộ kiểm cho qua bundle bị bớt hay nhân đôi dòng, và `duLieuNen: null` — sửa bằng luật đủ dòng và cờ `coBenchmark` (§8, §8.5); ⑶ thời
-gian xuất sau BAFO — chủ dự án chốt ⑹, khoản 9401. Năm THẤP sửa trong phạm vi: hàng ánh xạ và hàng chuẩn đã lưu nay đối chiếu với
+gian xuất sau BAFO — chủ dự án chốt ⑹, khoản 337. Năm THẤP sửa trong phạm vi: hàng ánh xạ và hàng chuẩn đã lưu nay đối chiếu với
 `giaDong.anhXaId`; lề một tháng bỏ; hàng sổ `EVIDENCE_BUNDLE_EXPORTED` mang `soDongBenchmark`, `soQuanSat`; phép bậc hai gỡ, số dài bị
-chặn; bộ đọc kiểm nhóm chính sách và `phuong_phap`. Chi tiết và đột biến: biên bản §S1.9101.
+chặn; bộ đọc kiểm nhóm chính sách và `phuong_phap`. Chi tiết và đột biến: biên bản §S1.262.

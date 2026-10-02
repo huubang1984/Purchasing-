@@ -75,7 +75,7 @@ export {
 } from "./lich-su-gia.js";
 // [S1.256 / S4.5b] Benchmark giá: mẫu và bộ đọc nhóm khoá `benchmark`, phép tính của một gói, phép ghi của lượt chấm (L7). Lõi
 // thuần (`tinhDai`, `ganNhan`) không ra cửa: người dùng của nó là hai hàm dưới và bộ kiểm ngoại tuyến của S4.5c cài lại từ đặc tả.
-// [S1.9101 / S4.5c2] Ra cửa đúng hai hàm thuần cho bộ bằng chứng: `nhanMotDong` — lớp ⑴ (gọi hàm thuần) của bộ kiểm, ADR-059 — và
+// [S1.262 / S4.5c2] Ra cửa đúng hai hàm thuần cho bộ bằng chứng: `nhanMotDong` — lớp ⑴ (gọi hàm thuần) của bộ kiểm, ADR-059 — và
 // `truThang` — biên dưới của bảng quan sát mà bộ xuất mang. Lớp ⑵ (độc lập) vẫn cài lại từ `DAC-TA.md`, không import gói này.
 export {
   NHOM_BENCHMARK_MAU,

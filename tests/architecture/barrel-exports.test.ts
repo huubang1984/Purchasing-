@@ -1128,7 +1128,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   // `docDaiBenchmark` (có cổng), ghim ở `ban-ro-liet-ke.test.ts`.
   "ghiBanLuuBenchmark",
   "tinhDaiDong",
-  // [S1.9101 / S4.5c2] Bộ bằng chứng: tên phương pháp, một lần đọc `quan_sat_gia` dùng chung cho *Xem dải* và lớp dữ liệu nền (không
+  // [S1.262 / S4.5c2] Bộ bằng chứng: tên phương pháp, một lần đọc `quan_sat_gia` dùng chung cho *Xem dải* và lớp dữ liệu nền (không
   // cổng — chỗ gọi ghim ở `ban-ro-liet-ke.test.ts`), và hai hàm thuần — nhãn một dòng (lớp ⑴ của bộ kiểm) và phép lùi tháng UTC.
   "PHUONG_PHAP_BENCHMARK",
   "docQuanSatTaiMoc",
@@ -1181,7 +1181,7 @@ const DANH_SACH_TRANG_DANH_GIA = [
   // ghi ra cùng byte. `xuatBoBangChung` là đường có cổng; `dungBoBangChung` không cổng, chỉ công
   // cụ vận hành gọi. Năm hằng số là hình dạng của bundle mà nửa KIỂM ở `tools/` đối chiếu.
   "DAC_TA",
-  // [S1.9101 / S4.5c2] Phiên bản đặc tả (2: lớp dữ liệu nền) và câu nguồn thời gian của lớp ấy.
+  // [S1.262 / S4.5c2] Phiên bản đặc tả (2: lớp dữ liệu nền) và câu nguồn thời gian của lớp ấy.
   "DAC_TA_PHIEN_BAN",
   "NGUON_THOI_GIAN_DU_LIEU_NEN",
   "DANG_BUNDLE",

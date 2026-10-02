@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c2] LỚP TÍNH LẠI ĐỘC LẬP CỦA NHÃN BENCHMARK — đo trên DỮ LIỆU THIẾT KẾ của `DAC-TA.md` §8, không trên đầu ra của lõi
+// [S1.262 / S4.5c2] LỚP TÍNH LẠI ĐỘC LẬP CỦA NHÃN BENCHMARK — đo trên DỮ LIỆU THIẾT KẾ của `DAC-TA.md` §8, không trên đầu ra của lõi
 //
 // Bộ dữ liệu là bộ của S4.5b (`benchmark.int.test.ts`): ba gói lịch sử có trung vị {110, 105, 100} ⇒ mốc so 105; một gói đơn giá 0
 // (đếm), một quan sát USD (đếm), một quan sát ngoài cửa sổ, một quan sát của chính gói X. Tệp test nằm trong `doc-lap/` nên cũng dưới
@@ -33,7 +33,7 @@ const BANG: readonly QuanSatTinh[] = [
 const VAO = { goiX: "gX", mocMoGia: MOC, nhom: NHOM };
 const gia = (p: string) => ({ trangThai: "HOP_LE", gia: p, tienTe: "VND" });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] §8.3 — lùi tháng theo lịch UTC, kẹp ngày cuối tháng", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] §8.3 — lùi tháng theo lịch UTC, kẹp ngày cuối tháng", () => {
   it("ba ca của bảng trong DAC-TA, năm nhuận theo luật 4/100/400, qua ranh năm", () => {
     expect(luiThang("2026-03-31T09:15:00.123456Z", 1)).toBe("2026-02-28T09:15:00.123456Z");
     expect(luiThang("2024-03-31T00:00:00.000000Z", 1)).toBe("2024-02-29T00:00:00.000000Z");
@@ -45,7 +45,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] §8.3 — lùi tháng theo lịch UTC, k�
   });
 });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] §8.5 — một dòng trên dữ liệu thiết kế", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] §8.5 — một dòng trên dữ liệu thiết kế", () => {
   const SO_DEM = {
     tienTe: "VND",
     cuaSoTu: "2025-09-30T00:00:00.000000Z",

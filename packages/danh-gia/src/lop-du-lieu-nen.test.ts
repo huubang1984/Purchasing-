@@ -1,9 +1,9 @@
-// [S1.9101 / S4.5c2] Hai phép thuần của lớp dữ liệu nền: mốc micro giây → ISO sáu chữ số lẻ, và dạng `ngay` đã làm thô (`DAC-TA.md`
+// [S1.262 / S4.5c2] Hai phép thuần của lớp dữ liệu nền: mốc micro giây → ISO sáu chữ số lẻ, và dạng `ngay` đã làm thô (`DAC-TA.md`
 // §8.2 — ngày UTC, trừ trên ngày biên).
 import { describe, expect, it } from "vitest";
 import { isoMicro, ngayXuat } from "./lop-du-lieu-nen.js";
 
-describe("[INV-L7] [S1.9101 / S4.5c2] mốc của lớp dữ liệu nền", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] mốc của lớp dữ liệu nền", () => {
   it("`isoMicro`: đúng sáu chữ số lẻ, không làm tròn, qua ranh mili giây và ranh ngày", () => {
     expect(isoMicro(0n)).toBe("1970-01-01T00:00:00.000000Z");
     const ms = (y: number, mo: number, d: number, h: number, mi: number, se: number, milli: number): bigint =>

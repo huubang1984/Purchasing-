@@ -23991,7 +23991,7 @@ bản lưu, không của lượt chấm đang xếp hạng; hai lần đọc đ�
   Lượt ấy ĐỎ ở cổng sổ khai nhãn: hai cặp `[INV-L6]` của vòng này (`benchmark.int`, `benchmark-trang-thai-dong-bo`) chưa khai ở
   `tools/inv-matrix/src/so-khai-nhan.ts` — khai, dựng lại ma trận từ cùng báo cáo: cổng evidence XANH. `evidence/INV-matrix.md` dựng lại.
 
-# §S1.9101 — S4.5c2: BỘ BẰNG CHỨNG MANG LỚP DỮ LIỆU NỀN — NHÃN BENCHMARK CỦA MỌI LƯỢT CHẤM TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT CSDL (L7 vế ngoại tuyến) — ADR-9201
+# §S1.262 — S4.5c2: BỘ BẰNG CHỨNG MANG LỚP DỮ LIỆU NỀN — NHÃN BENCHMARK CỦA MỌI LƯỢT CHẤM TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT CSDL (L7 vế ngoại tuyến) — ADR-144
 
 ## 1. Vòng này là gì
 
@@ -24008,7 +24008,7 @@ không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm
 
 Sau rà soát đối kháng (mục 8), hai câu nữa, cùng ngày, theo đề xuất: ⑸ *"Làm thô ngày, sửa lời hứa"* — `ngay` của quan sát về ngày UTC
 trừ ngày biên, thứ tự theo nội dung, bỏ lề một tháng, và văn bản nói đúng giới hạn của phép băm; ⑹ *"Giữ đồng bộ, nói ra + khoản nợ"* —
-xuất qua HTTP giữ đồng bộ, giới hạn thời gian ghi bằng số ở ADR-9201, khoản 9401 cho xuất nền; vòng này chỉ gỡ phép bậc hai.
+xuất qua HTTP giữ đồng bộ, giới hạn thời gian ghi bằng số ở ADR-144, khoản 337 cho xuất nền; vòng này chỉ gỡ phép bậc hai.
 
 ## 3. Đo trước
 
@@ -24042,7 +24042,7 @@ xuất qua HTTP giữ đồng bộ, giới hạn thời gian ghi bằng số ở
   `supports-color` không liên quan; ba dòng được pnpm 9 thật kiểm bằng `--frozen-lockfile` trên một bản sao sạch.
 - Sổ: barrel (`du-lieu-nen` 4, `danh-gia` 2), phân loại cổng quyền (`docQuanSatTaiMoc` đọc không cổng; `nhanMotDong`, `truThang` thuần),
   chỗ gọi theo ký hiệu (`docQuanSatTaiMoc`, `docLopDuLieuNen`), tệp đọc bảng chính sách (`lop-du-lieu-nen.ts`).
-- Tài liệu: ADR-9201; ADR-054 (bộ bằng chứng là nơi mang giá); ADR-059 và ADR-143 một dòng; spec §9; STATE; PRODUCT; TEST-PLAN L7.
+- Tài liệu: ADR-144; ADR-054 (bộ bằng chứng là nơi mang giá); ADR-059 và ADR-143 một dòng; spec §9; STATE; PRODUCT; TEST-PLAN L7.
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
@@ -24147,15 +24147,15 @@ tháng, biên ±1 µs, tiền tệ trước giá 0, loại X, ngưỡng) — 0 l
 - **TRUNG-1 — lời hứa riêng tư sai.** `ngay` là `min(unsealed_at)` của gói khác, chính xác tới micro giây — tự nó định danh gói; thứ tự
   quan sát phá hoà bằng UUID thô. Người giữ `bid.view` ghép (`ngay`, `gia`) với lịch sử giá đọc thẳng là ra mọi `goi`/`ncc`; hai bundle
   của cùng tổ chức nối được. **Chủ dự án chốt** *"Làm thô ngày, sửa lời hứa"*: `ngay` về ngày UTC trừ ngày biên (ngày của mốc mở giá
-  hay của một biên cửa sổ — ở đó bộ kiểm cần đủ micro giây), xếp theo nội dung, bỏ lề một tháng, và `DAC-TA.md` §8.1, ADR-9201 ⑸,
+  hay của một biên cửa sổ — ở đó bộ kiểm cần đủ micro giây), xếp theo nội dung, bỏ lề một tháng, và `DAC-TA.md` §8.1, ADR-144 ⑸,
   ADR-054 nói đúng: mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, giá) với lịch sử giá của chính tổ chức, không chặn NỐI hai
   bundle. Bộ kiểm độc lập ném có tên khi một ngày trơn rơi trên ngày biên của dòng (§8.2).
 - **TRUNG-2 — bộ kiểm cho qua bundle bị bớt hay nhân đôi dòng, và `duLieuNen: null`** (probe: `dat=true`). **Đóng**: luật ĐỦ dòng — mỗi
   (báo giá có hạng, dòng của `hangMuc[]`) đúng một hàng; cờ `luotCham[].coBenchmark` ở lớp chấm thầu (phiên bản chính sách cấu hình
   nhóm `benchmark`) — lớp `null` hay thiếu lượt khi cờ bật là ĐỎ, lớp mang lượt có cờ tắt cũng ĐỎ; §8 và §8.5 ghi luật.
 - **TRUNG-3 — xuất qua HTTP vượt trần 60 s của ALB sau BAFO ở gói nhiều hàng chuẩn**: (1 + E) × H lần đọc, ~0,35–0,45 s mỗi lần; H = 50,
-  E = 2 ⇒ ~53–63 s, bundle ~28 MB; hỏng thì mất cả lớp chấm thầu. **Chủ dự án chốt** *"Giữ đồng bộ, nói ra + khoản nợ"*: ADR-9201 nói
-  giới hạn bằng số, **khoản 9401** (xuất nền bất đồng bộ); vòng này chỉ gỡ phép bậc hai.
+  E = 2 ⇒ ~53–63 s, bundle ~28 MB; hỏng thì mất cả lớp chấm thầu. **Chủ dự án chốt** *"Giữ đồng bộ, nói ra + khoản nợ"*: ADR-144 nói
+  giới hạn bằng số, **khoản 337** (xuất nền bất đồng bộ); vòng này chỉ gỡ phép bậc hai.
 - **THẤP-4 — trường của hàng đã lưu không đối chiếu** (`hangChuan`, `anhXa` trỏ hàng chuẩn khác, cờ hồi tố trên dòng `CHUA_ANH_XA`,
   `dauVaoThieu` âm — probe: cả bốn `dat=true`). **Đóng**: `giaDong.anhXaId`; `anhXa.anhXaId` = `giaDong.anhXaId`; ba `hangChuan` bằng
   nhau; dòng không ánh xạ thì không ánh xạ, không hàng chuẩn, không cờ; bộ đọc từ chối `dauVaoThieu` âm; §8.5, §8.7.
@@ -24176,8 +24176,8 @@ tháng, biên ±1 µs, tiền tệ trước giá 0, loại X, ngưỡng) — 0 l
 ## 9. Giới hạn, nói ra
 
 - **Riêng tư** — mã băm chặn đọc ra định danh, không chặn khớp (ngày, giá) với lịch sử giá của chính tổ chức, không chặn nối hai bundle
-  (ADR-9201 ⑸). Ngày làm thô giảm phép khớp, không xoá nó: trên ngày biên `ngay` vẫn đủ micro giây.
-- **Xuất qua HTTP đồng bộ, tất-cả-hoặc-không** — khoản 9401 (ADR-9201 ⑹).
+  (ADR-144 ⑸). Ngày làm thô giảm phép khớp, không xoá nó: trên ngày biên `ngay` vẫn đủ micro giây.
+- **Xuất qua HTTP đồng bộ, tất-cả-hoặc-không** — khoản 337 (ADR-144 ⑹).
 - **Phép quy đổi đơn vị và cờ hồi tố không tính lại**; **tính đầy đủ của bảng quan sát** chỉ chứng được qua phép so với đầu vào đã lưu.
 - **Chưa đo**: bộ xuất khi ánh xạ đổi GIỮA hai lượt chấm; bộ xuất tự sinh `dauVaoThieu > 0` (cần sửa dữ liệu ngoài luật chỉ-ghi-thêm);
   hai lượt chấm (BAFO) ở quy mô 5.000 gói. Bộ kiểm không chặn số quan sát của một bundle độc (chỉ chặn độ dài từng số).

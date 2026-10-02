@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c2 / ADR-059 ⒝] TÍNH LẠI NHÃN BENCHMARK — VIẾT TỪ `DAC-TA.md` §8, KHÔNG IMPORT `@trustprocure/du-lieu-nen`
+// [S1.262 / S4.5c2 / ADR-059 ⒝] TÍNH LẠI NHÃN BENCHMARK — VIẾT TỪ `DAC-TA.md` §8, KHÔNG IMPORT `@trustprocure/du-lieu-nen`
 // HAY `@trustprocure/danh-gia`
 //
 // Cùng vai `tinh-lai.ts` cho lớp chấm thầu: một người kiểm ĐỘC LẬP, giữ bằng `g17-` (cả thư mục `doc-lap/`, `reachable: true`).

@@ -430,7 +430,7 @@ module.exports = {
       to: { path: DANH_GIA_SRC_PREFIX, reachable: true },
     },
     {
-      // [S1.9101 / S4.5c2] Lop du lieu nen cua bo bang chung: ban cai DOC LAP cua nhan benchmark (doc-lap/benchmark-lai.ts) viet tu
+      // [S1.262 / S4.5c2] Lop du lieu nen cua bo bang chung: ban cai DOC LAP cua nhan benchmark (doc-lap/benchmark-lai.ts) viet tu
       // DAC-TA.md §8. Loi benchmark (tinhDai, ganNhan) song o packages/du-lieu-nen — cung ly do, cung khuon reachable.
       name: "g17-kiem-doc-lap-khong-cham-du-lieu-nen",
       comment:

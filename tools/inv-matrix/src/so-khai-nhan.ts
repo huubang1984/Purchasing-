@@ -482,7 +482,7 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
   L14: ["packages/danh-gia/src/luot-danh-gia.int.test.ts", "packages/danh-gia/src/benchmark.int.test.ts"],
   // L7 — [S1.256 / S4.5b] benchmark tái lập, không tự so. Lõi thuần đo bằng bảng ca và bản cài phân số; tầng CSDL đo nhãn, đầu vào,
   // tái lập, ghi một lần và chỉ-ghi-thêm trên dữ liệu thiết kế.
-  // [S1.9101 / S4.5c2] vế NGOẠI TUYẾN: bản cài độc lập từ `DAC-TA.md` §8 đo trên dữ liệu thiết kế và biên; bộ kiểm hai lớp đo từng
+  // [S1.262 / S4.5c2] vế NGOẠI TUYẾN: bản cài độc lập từ `DAC-TA.md` §8 đo trên dữ liệu thiết kế và biên; bộ kiểm hai lớp đo từng
   // đột biến của bundle, một lỗi trong lõi chỉ lớp độc lập bắt được, và 400 bộ ngẫu nhiên hai lớp đồng ý (`benchmark.int` ⑼ đo đầu-cuối
   // bằng CLI thật khi đã ngắt CSDL). [rà soát S4.5c2] `lop-du-lieu-nen` đo hai dạng mốc của bộ xuất (§8.2).
   L7: [

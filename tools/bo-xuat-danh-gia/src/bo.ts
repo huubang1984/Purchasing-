@@ -31,7 +31,7 @@
 import type { ThanhPhanChinhSachDoc } from "./doc-lap/tinh-lai.js";
 
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
-/** [S1.9101 / S4.5c2] `2`: lớp dữ liệu nền (`duLieuNen`). */
+/** [S1.262 / S4.5c2] `2`: lớp dữ liệu nền (`duLieuNen`). */
 export const PHIEN_BAN_BUNDLE = 2;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
 export const TEP_DAC_TA = "DAC-TA.md";
@@ -80,7 +80,7 @@ export interface LuotChamBundle {
   readonly currency: string;
   /** `eval_components` của ĐÚNG phiên bản chính sách lượt chấm ấy dùng, chép nguyên văn. */
   readonly chinhSachThanhPhan: readonly ThanhPhanChinhSachDoc[];
-  /** [S1.9101] Phiên bản chính sách của lượt chấm cấu hình nhóm `benchmark` — lớp dữ liệu nền PHẢI mang lượt chấm này. */
+  /** [S1.262] Phiên bản chính sách của lượt chấm cấu hình nhóm `benchmark` — lớp dữ liệu nền PHẢI mang lượt chấm này. */
   readonly coBenchmark: boolean;
   readonly taoLuc: MocThoiGian;
   readonly hang: readonly HangBundle[];
@@ -107,12 +107,12 @@ export interface BoBangChung {
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
   readonly traoThau: readonly TraoThauBundle[];
-  /** [S1.9101 / S4.5c2] Lớp dữ liệu nền — `DAC-TA.md` §8. `null` khi không lượt chấm nào có nhãn benchmark. */
+  /** [S1.262 / S4.5c2] Lớp dữ liệu nền — `DAC-TA.md` §8. `null` khi không lượt chấm nào có nhãn benchmark. */
   readonly duLieuNen: DuLieuNenDoc | null;
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.5c2] LỚP DỮ LIỆU NỀN — HÌNH DẠNG PHÍA NGƯỜI KIỂM (`DAC-TA.md` §8)
+// [S1.262 / S4.5c2] LỚP DỮ LIỆU NỀN — HÌNH DẠNG PHÍA NGƯỜI KIỂM (`DAC-TA.md` §8)
 //
 // Định nghĩa RIÊNG, không mượn `packages/danh-gia/src/lop-du-lieu-nen.ts`: người kiểm không mượn hình dạng của người bị kiểm (khối
 // đầu tệp). Mốc là chuỗi ISO UTC sáu chữ số lẻ (§8.2) — bộ đọc ĐÒI đúng dạng ấy, vì phép so thứ tự từ điển của lớp độc lập chỉ đúng
@@ -331,7 +331,7 @@ function docTraoThau(gt: unknown, duong: string): TraoThauBundle {
   };
 }
 
-// ---- [S1.9101 / S4.5c2] bộ đọc lớp dữ liệu nền ---------------------------------------------------
+// ---- [S1.262 / S4.5c2] bộ đọc lớp dữ liệu nền ---------------------------------------------------
 
 const KHUON_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
 /** [rà soát S4.5c2] `ngay` của quan sát: ngày UTC, hay mốc đủ micro giây trên một ngày biên (§8.2). */

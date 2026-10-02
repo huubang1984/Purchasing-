@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c2] KIỂM LỚP DỮ LIỆU NỀN — HAI LỚP, CÙNG KHUÔN `kiem.ts` (ADR-059)
+// [S1.262 / S4.5c2] KIỂM LỚP DỮ LIỆU NỀN — HAI LỚP, CÙNG KHUÔN `kiem.ts` (ADR-059)
 //
 // ⑴ Lớp gọi hàm thuần — `nhanMotDong` của `@trustprocure/du-lieu-nen` (đúng `tinhDai` + `ganNhan` của lượt chấm). Rẻ, bắt hồi quy.
 // ⑵ Lớp độc lập — `./doc-lap/benchmark-lai.ts`, viết từ `DAC-TA.md` §8. KẾT LUẬN của lớp dữ liệu nền là kết luận của lớp ⑵; hai lớp

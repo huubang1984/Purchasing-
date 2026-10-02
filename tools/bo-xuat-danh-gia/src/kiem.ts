@@ -104,7 +104,7 @@ export interface KetQuaKiem {
   readonly loiBo: readonly string[];
   /** Hạng của báo giá được trao thầu — BÁO, không phán xử. Xem `DAC-TA.md` §7. */
   readonly hangTraoThau: readonly { readonly awardId: string; readonly rank: number | null }[];
-  /** [S1.9101 / S4.5c2] Lớp dữ liệu nền (`DAC-TA.md` §8); `null` khi bundle không mang lớp ấy. */
+  /** [S1.262 / S4.5c2] Lớp dữ liệu nền (`DAC-TA.md` §8); `null` khi bundle không mang lớp ấy. */
   readonly duLieuNen: KetQuaKiemDuLieuNen | null;
 }
 
@@ -253,7 +253,7 @@ export function kiemBo(
       `KHÔNG một hàng nào tái lập được (${String(hang.length)} hàng) — một lượt kiểm không đo được gì thì không ĐẠT`,
     );
   }
-  // [S1.9101 / S4.5c2] ⑶ Lớp dữ liệu nền: có thì phải ĐẠT trọn — một nhãn benchmark không tái lập được là một lần bundle nói sai.
+  // [S1.262 / S4.5c2] ⑶ Lớp dữ liệu nền: có thì phải ĐẠT trọn — một nhãn benchmark không tái lập được là một lần bundle nói sai.
   const duLieuNen = kiemDuLieuNen(bo, hamThuanBenchmark);
   const duLieuNenDat = duLieuNen === null || (duLieuNen.loi.length === 0 && duLieuNen.soLech === 0 && duLieuNen.soDong > 0);
   return {

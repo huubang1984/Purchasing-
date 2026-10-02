@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c2] KIỂM LỚP DỮ LIỆU NỀN — hai lớp, và phép đo rằng lớp độc lập không phải trang trí (ADR-059 ⒞)
+// [S1.262 / S4.5c2] KIỂM LỚP DỮ LIỆU NỀN — hai lớp, và phép đo rằng lớp độc lập không phải trang trí (ADR-059 ⒞)
 //
 // Bundle dựng tay trên dữ liệu thiết kế của `DAC-TA.md` §8 (bộ của S4.5b): mốc so 105, dòng 105 trong dải, dòng 130 bất thường trên,
 // một dòng chưa ánh xạ. Mỗi đột biến sửa MỘT chỗ của bundle và phải đỏ ở đúng lời báo của nó. Ca cuối dựng một thế giới mà LÕI có lỗi
@@ -163,7 +163,7 @@ const suaLuot = (f: (l: DuLieuNenDoc["luotCham"][number]) => DuLieuNenDoc["luotC
   luotCham: d.luotCham.map(f),
 });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] lớp dữ liệu nền — bundle lành", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] lớp dữ liệu nền — bundle lành", () => {
   it("ba dòng ĐẠT, không lời báo; kết luận của cả bundle ĐẠT", () => {
     const kq = kiemBo(boVoi(), DAC_TA);
     expect(kq.duLieuNen).toMatchObject({ soDong: 3, soDat: 3, soLech: 0, loi: [] });
@@ -178,7 +178,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] lớp dữ liệu nền — bundle lành",
   });
 });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] lớp dữ liệu nền — mỗi đột biến đỏ ở đúng lời báo", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] lớp dữ liệu nền — mỗi đột biến đỏ ở đúng lời báo", () => {
   const lech = (bo: BoBangChung): string => {
     const kq = kiemBo(bo, DAC_TA);
     expect(kq.dat).toBe(false);
@@ -241,7 +241,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] lớp dữ liệu nền — mỗi đột b
   });
 });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] ADR-059 ⒞ — một lỗi NẰM TRONG lõi chỉ lớp độc lập bắt được", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] ADR-059 ⒞ — một lỗi NẰM TRONG lõi chỉ lớp độc lập bắt được", () => {
   // Thế giới có lỗi: lõi lấy trung vị gói bằng TRUNG BÌNH. Gói g1 {100, 120} vẫn 110, nhưng thêm một gói {100, 100, 160} ⇒ trung vị
   // thật 100, trung bình 120. Bốn gói {110, 105, 100, 100} ⇒ mốc thật 102,5; bản lỗi {110, 105, 100, 120} ⇒ 107,5. Dòng 112: thật
   // |9,5| > 5,125 ⇒ LECH_VUA TREN; bản lỗi |4,5| ≤ 5,375 ⇒ BINH_THUONG. Hàng đã lưu mang nhãn CỦA BẢN LỖI.
@@ -291,7 +291,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] ADR-059 ⒞ — một lỗi NẰM TRONG l�
   });
 });
 
-describe("[INV-L7] [S1.9101 / S4.5c2] trên dữ liệu lành, hai lớp đồng ý — 400 bộ ngẫu nhiên", () => {
+describe("[INV-L7] [S1.262 / S4.5c2] trên dữ liệu lành, hai lớp đồng ý — 400 bộ ngẫu nhiên", () => {
   const giaArb = fc
     .tuple(fc.integer({ min: 0, max: 400 }), fc.integer({ min: 0, max: 9999 }))
     .map(([n, l]) => `${String(n)}.${String(l).padStart(4, "0")}`);
@@ -350,7 +350,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] trên dữ liệu lành, hai lớp đồng
   });
 });
 
-describe("[INV-L7] [S1.9101 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, ngày biên, bộ đọc", () => {
+describe("[INV-L7] [S1.262 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, ngày biên, bộ đọc", () => {
   const baoLoi = (bo: BoBangChung): string => {
     const kq = kiemBo(bo, DAC_TA);
     expect(kq.dat).toBe(false);

@@ -96,7 +96,7 @@ export {
   type TraoThauBundle,
   type XuatBoBangChungInput,
 } from "./bo-bang-chung.js";
-// [S1.9101 / S4.5c2] Lớp dữ liệu nền của bộ bằng chứng — hình dạng phía XUẤT (người kiểm có bản riêng ở `tools/bo-xuat-danh-gia/src/bo.ts`).
+// [S1.262 / S4.5c2] Lớp dữ liệu nền của bộ bằng chứng — hình dạng phía XUẤT (người kiểm có bản riêng ở `tools/bo-xuat-danh-gia/src/bo.ts`).
 export {
   NGUON_THOI_GIAN_DU_LIEU_NEN,
   type AnhXaBundle,

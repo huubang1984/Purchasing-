@@ -160,7 +160,7 @@ async function kiem(thamSo: readonly string[]): Promise<number> {
   for (const t of kq.hangTraoThau) {
     stdout.write(`trao-thau\t${t.awardId}\thang=${t.rank === null ? "khong-co" : String(t.rank)}\n`);
   }
-  // [S1.9101 / S4.5c2] Lớp dữ liệu nền: mọi lời lệch, rồi một dòng tổng.
+  // [S1.262 / S4.5c2] Lớp dữ liệu nền: mọi lời lệch, rồi một dòng tổng.
   if (kq.duLieuNen !== null) {
     for (const d of kq.duLieuNen.loi) stdout.write(`LOI-BENCHMARK\t${d}\n`);
     for (const d of kq.duLieuNen.dong) for (const n of d.noi) stdout.write(`LECH-BENCHMARK\t${d.bidVersionId}\t${n}\n`);

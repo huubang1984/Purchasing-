@@ -479,7 +479,7 @@ export interface KetQuaDaiDong {
 }
 
 /**
- * [S1.9101 / S4.5c2] Một hàng của `quan_sat_gia(mốc, hàng chuẩn)` — MỌI trạng thái — cộng cờ *"gói của hàng do chính người tạo gói X
+ * [S1.262 / S4.5c2] Một hàng của `quan_sat_gia(mốc, hàng chuẩn)` — MỌI trạng thái — cộng cờ *"gói của hàng do chính người tạo gói X
  * lập"*, mốc ở micro giây. Chung cho *Xem dải* (`tinhDaiDong`) và bộ bằng chứng (`dungBoBangChung` của `packages/danh-gia`): hai bộ
  * đọc cùng một câu thì không trôi khỏi nhau.
  */

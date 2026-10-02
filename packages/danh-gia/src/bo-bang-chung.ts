@@ -53,7 +53,7 @@ import { DAC_TA, DAC_TA_PHIEN_BAN } from "./dac-ta.js";
 import { docLopDuLieuNen, type DuLieuNenBundle } from "./lop-du-lieu-nen.js";
 
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
-/** [S1.9101 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài. */
+/** [S1.262 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài. */
 export const PHIEN_BAN_BUNDLE = 2;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
 export const TEP_DAC_TA = "DAC-TA.md";
@@ -95,7 +95,7 @@ export interface LuotChamBundle {
   readonly currency: string;
   readonly chinhSachThanhPhan: readonly ThanhPhanChinhSachBundle[];
   /**
-   * [S1.9101 / rà soát S4.5c2] Phiên bản chính sách của lượt chấm CÓ cấu hình nhóm `benchmark` — khi ấy lớp dữ liệu nền PHẢI mang
+   * [S1.262 / rà soát S4.5c2] Phiên bản chính sách của lượt chấm CÓ cấu hình nhóm `benchmark` — khi ấy lớp dữ liệu nền PHẢI mang
    * lượt chấm này; bộ kiểm đỏ nếu thiếu (một bundle bỏ cả lớp không được qua như một bundle không có gì để kiểm).
    */
   readonly coBenchmark: boolean;
@@ -125,7 +125,7 @@ export interface BoBangChung {
   readonly luotCham: readonly LuotChamBundle[];
   readonly traoThau: readonly TraoThauBundle[];
   /**
-   * [S1.9101 / S4.5c2] Lớp dữ liệu nền — benchmark giá của mọi lượt chấm, tính lại được từ đơn giá đã quy đổi (`DAC-TA.md` §8).
+   * [S1.262 / S4.5c2] Lớp dữ liệu nền — benchmark giá của mọi lượt chấm, tính lại được từ đơn giá đã quy đổi (`DAC-TA.md` §8).
    * `null` khi không lượt chấm nào có hàng benchmark (phiên bản ghim chưa cấu hình nhóm `benchmark`).
    */
   readonly duLieuNen: DuLieuNenBundle | null;
@@ -313,7 +313,7 @@ export interface BoBangChungDaXuat {
   readonly soLuotCham: number;
   readonly soHang: number;
   readonly soTraoThau: number;
-  /** [S1.9101 / S4.5c2] Số hàng kết quả benchmark (mọi lượt chấm) và số quan sát mang theo — 0 khi lớp dữ liệu nền rỗng. */
+  /** [S1.262 / S4.5c2] Số hàng kết quả benchmark (mọi lượt chấm) và số quan sát mang theo — 0 khi lớp dữ liệu nền rỗng. */
   readonly soDongBenchmark: number;
   readonly soQuanSat: number;
 }
@@ -332,7 +332,7 @@ export async function dungBoBangChung(
   orgId: string,
   rfqId: string,
   xuatLuc: Date,
-  // [S1.9101 / S4.5c2] Muối của các định danh băm ở lớp dữ liệu nền: NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle
+  // [S1.262 / S4.5c2] Muối của các định danh băm ở lớp dữ liệu nền: NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle
   // (chủ dự án chốt 2026-10-02). Tham số chỉ để test dựng được hai lần xuất cùng muối.
   muoi: Buffer = randomBytes(32),
 ): Promise<BoBangChungDaXuat | null> {

@@ -2350,7 +2350,7 @@ describe("họ g11- — khả năng ký mốc neo ngoài", () => {
     }
   }, 60000);
 
-  // [S1.9101 / S4.5c2] Lớp dữ liệu nền: `doc-lap/benchmark-lai.ts` cài lại nhãn benchmark từ `DAC-TA.md` §8 — lõi của nó sống ở
+  // [S1.262 / S4.5c2] Lớp dữ liệu nền: `doc-lap/benchmark-lai.ts` cài lại nhãn benchmark từ `DAC-TA.md` §8 — lõi của nó sống ở
   // `packages/du-lieu-nen`, nên `g17-` có quy tắc thứ hai. Cùng hai đối chứng: cạnh trực tiếp và cạnh qua một tệp trung gian.
   it("[INV-G1] `doc-lap/` của bộ bằng chứng KHÔNG với tới packages/du-lieu-nen — trực tiếp và gián tiếp", () => {
     const truc = "tools/bo-xuat-danh-gia/src/doc-lap/zprobe-cau-noi-dln.ts";
@@ -2378,7 +2378,7 @@ describe("họ g11- — khả năng ký mốc neo ngoài", () => {
     // Nếu `g17-` chặn cả tệp ngoài `doc-lap/` thì lớp ⑴ của ADR-059 (bộ kiểm rẻ, gọi hàm thuần)
     // không tồn tại được — và hai bài đo trên sẽ ĐỎ vì một lý do sai. `kiem.ts` import
     // `@trustprocure/danh-gia` THẬT, nên lượt cruise dưới đây là một phép đo trên mã thật.
-    // [S1.9101 / S4.5c2] `kiem-du-lieu-nen.ts` import `@trustprocure/du-lieu-nen` THẬT (lớp ⑴ của lớp dữ liệu nền) — cùng phép đo.
+    // [S1.262 / S4.5c2] `kiem-du-lieu-nen.ts` import `@trustprocure/du-lieu-nen` THẬT (lớp ⑴ của lớp dữ liệu nền) — cùng phép đo.
     const { status, output } = depcruise(["tools/bo-xuat-danh-gia", "packages/danh-gia", "packages/du-lieu-nen"]);
     expect(output).not.toContain("g17-");
     expect(status, `lớp gọi hàm thuần bị chặn nhầm:\n${output}`).toBe(0);

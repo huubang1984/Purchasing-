@@ -21,7 +21,7 @@
 // các bundle cũ vẫn khớp tệp CỦA CHÍNH CHÚNG — băm nằm trong bundle, không nằm ở đây.
 // ==============================================================================================
 
-/** [S1.9101 / S4.5c2] `2`: thêm §8 — lớp dữ liệu nền (benchmark giá); §6 nói rõ lớp ấy CÓ đọc mốc thời gian. */
+/** [S1.262 / S4.5c2] `2`: thêm §8 — lớp dữ liệu nền (benchmark giá); §6 nói rõ lớp ấy CÓ đọc mốc thời gian. */
 export const DAC_TA_PHIEN_BAN = 2;
 
 /**

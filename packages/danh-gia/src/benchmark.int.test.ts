@@ -13,7 +13,7 @@
 //      giao dịch, một lần; chỉ-ghi-thêm; khách không thấy;
 //   ⑺ [S1.260 / S4.5c1] *Xem dải*: số của dải đúng dữ liệu thiết kế, số đếm trùng bản lưu, `SAU_MOC` đếm tới lúc đọc (đối chứng dương),
 //      cổng và hàng sổ; vòng chào lại đang mở hay đã đóng ⇒ không nhãn, không dải; mở niêm phong vòng ấy ⇒ bản lưu MỚI cho lần mở thầu mới.
-//   ⑼ [S1.9101 / S4.5c2] bộ bằng chứng mang lớp dữ liệu nền của gói X: bộ kiểm NGOẠI TUYẾN (CLI thật, `DATABASE_URL` đã xoá) tính lại
+//   ⑼ [S1.262 / S4.5c2] bộ bằng chứng mang lớp dữ liệu nền của gói X: bộ kiểm NGOẠI TUYẾN (CLI thật, `DATABASE_URL` đã xoá) tính lại
 //      đủ chín nhãn từ đơn giá đã quy đổi; định danh của gói khác và nhà cung cấp chỉ ra dạng băm, muối mỗi lần xuất; người ánh xạ.
 //
 // Giàn cảnh: gói đã mở niêm phong dựng bằng SQL thô dưới vai chủ cụm, đúng thứ tự cạnh của đường thật (khuôn
@@ -1335,7 +1335,7 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
   });
 });
 
-// ---- [S1.9101 / S4.5c2] lớp dữ liệu nền của bộ bằng chứng — xuất trên dữ liệu thiết kế, kiểm bằng CLI THẬT khi đã ngắt CSDL ----------
+// ---- [S1.262 / S4.5c2] lớp dữ liệu nền của bộ bằng chứng — xuất trên dữ liệu thiết kế, kiểm bằng CLI THẬT khi đã ngắt CSDL ----------
 const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
 const CLI_DANG_KY = pathToFileURL(join(GOC_KHO, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href;
 const CLI_BO = join(GOC_KHO, "tools", "bo-xuat-danh-gia", "src", "index.ts");

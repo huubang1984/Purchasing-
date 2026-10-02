@@ -1,6 +1,6 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c2] LỚP DỮ LIỆU NỀN CỦA BỘ BẰNG CHỨNG — benchmark giá của MỌI lượt chấm, tính lại được khi đã ngắt CSDL
-// (spec S4 §2.5 ㉑, §4.6, §9 S4.5c; ADR-059; ADR-9201)
+// [S1.262 / S4.5c2] LỚP DỮ LIỆU NỀN CỦA BỘ BẰNG CHỨNG — benchmark giá của MỌI lượt chấm, tính lại được khi đã ngắt CSDL
+// (spec S4 §2.5 ㉑, §4.6, §9 S4.5c; ADR-059; ADR-144)
 //
 // Chủ dự án chốt 2026-10-02, cả bốn theo đề xuất:
 //   ⑴ định danh gói và nhà cung cấp của các quan sát BĂM với một muối NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle —

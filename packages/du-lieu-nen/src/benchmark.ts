@@ -248,7 +248,7 @@ export function ganNhan(
 }
 
 /**
- * [S1.9101 / S4.5c2] Nhãn của MỘT dòng `HOP_LE` từ các quan sát đã đọc — đúng hai bước `tinhDai` rồi `ganNhan` mà phép tính của lượt
+ * [S1.262 / S4.5c2] Nhãn của MỘT dòng `HOP_LE` từ các quan sát đã đọc — đúng hai bước `tinhDai` rồi `ganNhan` mà phép tính của lượt
  * chấm làm cho dòng ấy. Thuần. Người dùng: lớp ⑴ (*gọi hàm thuần*, rẻ, bắt hồi quy) của bộ kiểm bộ bằng chứng (ADR-059) — lớp ⑵ cài lại
  * từ `DAC-TA.md` và không với tới gói này (`g17-`).
  */
