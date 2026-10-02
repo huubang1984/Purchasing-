@@ -23737,3 +23737,69 @@ Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích
   đầu với base mặc định `origin/master` thu hồi cả số của S4.5b (cùng số tạm vòng 9101), từ chối ghi vì hai đầu mục trùng, nhưng đã đẩy
   lời giữ lên remote cho ADR-143, khoản 334–336, migration 104 — nhánh này không dùng số nào trong đó. Nhả chúng là xoá năm nhánh
   `cap-so/*` trên remote: chờ chủ dự án.
+
+# §S1.9101 — S4.5c1: BENCHMARK HIỆN Ở `/mo-thau` — MỘT BẢN LƯU CHO MỖI LẦN MỞ THẦU, TÍNH Ở LẦN ĐỌC ĐẦU; ĐÓNG Ở VÒNG CHÀO LẠI; SỐ CỦA DẢI CHỈ KHI BẤM *XEM DẢI* (L6 vế benchmark) — ADR-9201
+
+## 1. Vòng này là gì
+
+PR đầu trong hai PR của S4.5c (spec S4 §9; ADR-142 ⑼): bản lưu benchmark của bảng so sánh, route, màn `/mo-thau`, vế benchmark của L6,
+`gieo:demo`. Bộ xuất ADR-059, `DAC-TA.md` và bộ kiểm ngoại tuyến là S4.5c2. Một migration (`9501_ban_luu_benchmark`), hai route đọc. Dựng
+trên `master` `5afec41` (#232 — S4.5b — và #233 — khoản 329 — đã merge).
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+
+Hai lượt hỏi, cả năm điểm theo đề xuất, sau phép đo ở mục 3:
+
+1. Bản "một lần" tính ở lần đọc ĐẦU sau mỗi lần mở thầu, bởi người giữ `bid.view`, rồi lưu (không job nền, không chạm đường mở thầu).
+2. Ở `BAFO_OPEN`/`BAFO_CLOSED` benchmark ĐÓNG, như route bảng so sánh.
+3. Cửa sổ tháng giữ lịch UTC, ghi rõ (ở `DAC-TA.md` của S4.5c2).
+4. Số của dải (Q1, trung vị, Q3) chỉ tính khi bấm *Xem dải* từng dòng — không lưu (spec §4.6).
+5. `SAU_MOC` đếm khi bấm *Xem dải*, tới lúc bấm.
+
+Và cách thực thi: S4.5c1 trước, S4.5c2 PR sau.
+
+## 3. Đo trước
+
+1. **Cạnh mở thầu không mang được phép tính.** `executeUnsealRequest` (`apps/unseal-worker/src/index.ts`) làm cả hai cạnh `CLOSED→UNSEALED`
+   và `BAFO_CLOSED→BAFO_UNSEALED`, vai `app_unseal`, trong giao dịch của bộ chạy job (trần 60 s). Spec S4 §3.1–3.2 cấm thêm dòng vào đường ấy.
+   `app_unseal` không có quyền nào trên đầu vào của benchmark: `quan_sat_gia` chỉ `GRANT EXECUTE` cho `app_api` (`096:409,413`); không quyền
+   trên ánh xạ, hàng chuẩn, chính sách, hai bảng của `103`; không `INSERT` trên `outbox_jobs` (`025`). Trong chính giao dịch mở thầu gói
+   chưa thấy giá của mình — `quan_sat_gia` so `unsealed_at < p_moc` ngặt. Giao dịch ấy giữ khoá chuỗi sổ (`050`, `lock_timeout` 2 s).
+2. **Bảng của `103` gắn cứng vào lượt chấm** (`…_cua_luot_cham_fk`) — bản lưu cần bảng riêng.
+3. **Vòng chào lại:** `COMPARISON_ALLOWED_STATUSES = UNSEALED, EVALUATING, BAFO_UNSEALED`; ở `BAFO_OPEN`/`BAFO_CLOSED` `gia_da_lo` sai nên
+   tính as-of ra toàn `CHUA_ANH_XA`; `docBangXepHang` hiện hạng vòng một không nhãn vòng.
+4. **Spec §4.6 cấm lưu số của dải;** `quan_sat_gia` có `SET search_path` nên không nội tuyến — lọc theo tham chiếu không rẻ hơn một lần
+   đọc đầy đủ (~0,45 s mỗi hàng chuẩn ở 5.000 gói, §S1.256). `SAU_MOC` của spec đếm tới lúc đọc — một lần đọc như thế.
+5. **UTC so với +07:00** (200.000 mốc ngẫu nhiên 2024–2027, cùng phép trừ tháng của lõi): cửa sổ 12 tháng 0,04% mốc khác, lệch tối đa
+   24 giờ; 3 tháng 0,70%, 48 giờ; 1 tháng 0,95%, 72 giờ.
+6. Phía API có bộ chạy job (`apps/api/src/composition.ts`) — phương án job nền được đưa ra và không được chọn.
+
+## 4. Thay đổi
+
+- **`9501_ban_luu_benchmark`**: `price_benchmark_snapshots` (một hàng mỗi lần mở thầu — `UNIQUE (org_id, unseal_request_id)`; khoá ngoại
+  `…_cua_lan_mo_fk` tới `unseal_requests (org_id, id, rfq_id)`, `…_phien_ban_ghim_fk` tới `rfq_packages (org_id, id, chinh_sach_ghim_id)`;
+  `CHECK` mốc trước lúc ghi) và `price_benchmark_snapshot_lines` (cột của `103` trừ lượt chấm; `…_cung_ban_luu_fk` cùng giao dịch; báo giá
+  khoá ngoại tới `rfq_unsealed_bids`). Hai `UNIQUE` đích mới trên `unseal_requests`, `rfq_packages` — siêu tập của `(org_id, id)`, không
+  cột nào của chúng bị `UPDATE` ở đường mở thầu. RLS + `FORCE`, policy khách đóng hẳn, `SELECT` mức bảng, `INSERT` theo cột không `id`/`ghi_luc`.
+- **`packages/du-lieu-nen/src/benchmark-goi.ts`**: `ghiBanLuuBenchmark` (`INSERT … ON CONFLICT DO NOTHING`, kiểm `mocDoc = ghi_luc`),
+  `tinhDaiDong` (dải một hàng chuẩn tại mốc đã lưu bằng `tinhDai`, `SAU_MOC` cộng trên đầu vào, giá quy đổi của X tại `ghi_luc`).
+- **`packages/danh-gia/src/doc-benchmark.ts`**: `docBenchmark` đổi đích (trạng thái hiện = bảng so sánh mở; lần mở thầu `EXECUTED` mới
+  nhất; đọc bản lưu hay tính rồi ghi; `VONG_CHAO_LAI_DANG_MO`, `KHONG_HIEN`, `CHUA_CAU_HINH`); `docDaiBenchmark` (*Xem dải*, cổng `bid.view`,
+  hàng sổ `BENCHMARK_BAND_READ` không giá, `khopBanLuu`).
+- **Route** `apps/api/src/routes/benchmark.ts`: `GET /rfqs/:rfqId/benchmark`, `GET /rfqs/:rfqId/items/:lineNo/benchmark` — `BUYER`,
+  `mutates: false`, `agent: false`, khai lý do ở `apps/mcp/src/cong-cu.ts`.
+- **Màn `/mo-thau`** và `apps/web/src/benchmark.ts` (`/lib/benchmark.js`): bảng benchmark theo dòng ở bước 4 (nút *Đọc benchmark*), độ phủ
+  theo báo giá và theo gói, *Xem dải* ở hàng đầu mỗi dòng, cột *Benchmark* ở bảng xếp hạng; dòng `LECH_CAO` nền vàng.
+- **`gieo:demo`**: lời chỉ đường tới benchmark ở `/mo-thau`.
+- **Sổ và cổng**: `check-an-ninh` (11 dòng miễn), `migration-shape`, `BANG_TENANT_KHAI`, `rls-coverage` (quyền bảng, 27 quyền cột, policy
+  khách), `migrations.int` (ba danh sách), `ban-ro-liet-ke` (chỗ dùng hai hàm mới theo ký hiệu; hai cổng, hai hàng sổ), `cong-quyen-route`,
+  `barrel-exports`, `benchmark-trang-thai-dong-bo` (MỚI: tập hiện = `COMPARISON_ALLOWED_STATUSES`), `MODULE_WEB`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Khoá bản lưu là LẦN MỞ THẦU (`unseal_request_id`), không phải (gói, vòng): mỗi lần mở thầu đã thực thi là một tập vị thế cuối.
+- Không bảng đầu vào cho bản lưu — tham chiếu quan sát của L7 và bộ bằng chứng là của lượt chấm (`103`).
+- `docBenchmark` không còn đọc hàng của lượt chấm: bảng so sánh và cột của bảng xếp hạng đọc bản lưu; lượt chấm vẫn ghi một lần (`103`).
+- Trạng thái ngoài tập hiện và ngoài vòng chào lại ⇒ `KHONG_HIEN` (kể cả `AWARDED`), theo đúng tập của bảng so sánh.
+- *Xem dải* trả cả giá quy đổi của các báo giá của gói (theo đơn vị gốc) — để so được với dải khi đơn vị của dòng khác đơn vị gốc.
+- Cột *Benchmark* của bảng xếp hạng đọc lần đọc benchmark gần nhất ở bước 4 — không tự gọi route (không hàng sổ ngầm, không tính ngầm).
