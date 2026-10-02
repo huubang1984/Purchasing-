@@ -153,7 +153,10 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
   cửa sổ console): ba tình huống — chưa có container, container đang chạy, container đã dừng — đều đi tới lượt giả lập 10/10
   ĐẠT, cô lập 2/2, số đo trùng từng con với lượt Linux. Từ lệnh tới cụm sẵn sàng: 34 giây ở hai lần chạy lại; lần đầu (áp 100
   migration) không bấm giờ chính xác — dưới hai phút. Dừng cụm theo cây tiến trình trả hết cổng, không tiến trình mồ côi.
-  Tình huống *Docker không chạy* KHÔNG đo trên Windows: phải tắt Docker Desktop. Người trình diễn vẫn chạy khối một lần trên
+  ~~Tình huống *Docker không chạy* KHÔNG đo trên Windows: phải tắt Docker Desktop.~~ **[S1.259]** Tình huống *Docker không
+  chạy* đo trên cùng máy (`docker desktop stop`): khối dừng sau 69 giây với *"Postgres chưa nhận kết nối sau 60 giây — Docker
+  Desktop đã chạy chưa?"*, dấu tiếng Việt nguyên vẹn (khối chạy từ tệp `.ps1` UTF-8 có BOM). Bật lại Docker (`docker desktop
+  start`, 10 giây) để container ở trạng thái dừng; khối chạy lại 10/10 trong 32 giây. Người trình diễn vẫn chạy khối một lần trên
   chính máy của buổi gặp — đường dẫn và ACL là của từng máy (đoạn *Thư mục trạng thái* dưới).
 
 Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:

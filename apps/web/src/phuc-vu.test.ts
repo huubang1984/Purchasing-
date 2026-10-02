@@ -1538,6 +1538,83 @@ describe("bề mặt tệp", () => {
         await q.bam("nut-doc-award");
         expect(q.el("nut-rut-de-xuat").hidden, "chính người đề xuất (B) mở lại trang ⇒ rút được").toBe(false);
       });
+
+      // [S1.259 / khoản 333] «Huỷ trao thầu» gọi `POST …/award/cancel` theo GÓI, không cần trao thầu nào đang hiện — đo trên
+      // trình duyệt thật: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ ⇒ `CANCELLED`, và thứ vừa huỷ chỉ hiện SAU đó.
+      // Khuôn khoản 321 của «Phê duyệt»: lần bấm đầu — hay khi trao thầu đã đổi từ lúc đọc — chỉ vẽ nó ra.
+      it("khoản 333: «Huỷ trao thầu» khi chưa đọc ⇒ lần bấm đầu chỉ HIỆN trao thầu sắp huỷ; lần hai mới huỷ; đổi giữa chừng ⇒ không huỷ; lý do trống ⇒ không gọi gì", async () => {
+        const daHuy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g === `POST /rfqs/${RFQ}/award/cancel`);
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
+        p.el("ly-do-award").value = "nha cung cap rut bao gia";
+        await p.bam("nut-huy-award");
+        expect(daHuy(p), "huỷ một trao thầu chưa hiện trên màn").toEqual([]);
+        expect(ttAward(p)).toMatch(/Nhà cung cấp\|Công ty Thép Một/u);
+        expect(p.el("ok7").textContent).toMatch(/bấm Huỷ trao thầu lần nữa/u);
+        await p.bam("nut-huy-award");
+        expect(daHuy(p)).toEqual([`POST /rfqs/${RFQ}/award/cancel`]);
+        expect(p.el("ok7").textContent).toMatch(/^Đã huỷ trao thầu/u);
+
+        let lan = 0;
+        const q = await dung(() => ({ status: 200, body: { award: deXuat((lan += 1) <= 1 ? "aw-1" : "aw-2") } }));
+        q.el("ly-do-award").value = "x";
+        await q.bam("nut-doc-award");
+        await q.bam("nut-huy-award");
+        expect(daHuy(q), "trao thầu lúc bấm khác trao thầu đã đọc").toEqual([]);
+
+        const r = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
+        await r.bam("nut-doc-award");
+        r.el("ly-do-award").value = "   ";
+        await r.bam("nut-huy-award");
+        expect(r.trangThai.goi.filter((g) => g.includes("/award/cancel")), "lý do trống").toEqual([]);
+        expect(r.el("loi7").textContent).toMatch(/Lý do là BẮT BUỘC/u);
+
+        // Đọc lại trao thầu bị từ chối (người không giữ `bid.view`) hay gói chưa có trao thầu nào ⇒ nói ra, không huỷ.
+        for (const [ten, tra, cau] of [
+          ["403", { status: 403, body: { error: "khong co quyen" } }, /^Chưa đọc được trao thầu sắp huỷ: tài khoản đang đăng nhập không có quyền/u],
+          ["chưa có", { status: 200, body: { award: null } }, /chưa có trao thầu nào để huỷ/u],
+        ] as const) {
+          const s = await dung(() => tra);
+          s.el("ly-do-award").value = "ly do";
+          await s.bam("nut-huy-award");
+          expect(s.trangThai.goi.filter((g) => g.includes("/award/cancel")), ten).toEqual([]);
+          expect(s.el("loi7").textContent, ten).toMatch(cau);
+        }
+      });
+    });
+
+    // [S1.259 / khoản 332] Bước 3: câu báo sau mỗi chữ ký mở thầu là MỘT hằng — *"Thiếu người thứ hai thì điều phối sẽ bị từ chối"* —
+    // kể cả khi chính chữ ký ấy làm yêu cầu đủ (đo trên trình duyệt ở §S1.255: Phó Tổng Giám đốc ký XD-03 ⇒ `APPROVED 2 / 2`, câu
+    // vẫn nói thiếu). Câu nay đọc yêu cầu vừa nạp lại: đủ ⇒ nói đủ và chỉ sang «Điều phối giải mã»; chưa đủ ⇒ nói thiếu, kèm số.
+    it("[S1.259 / khoản 332] mo-thau bước 3: chữ ký làm yêu cầu ĐỦ ⇒ câu báo nói đủ và chỉ sang Điều phối; chưa đủ ⇒ nói chưa đủ, kèm số", async () => {
+      const RFQ = "55555555-5555-4555-8555-555555555555";
+      const yc = (status: string, dem: number) => ({ id: "yc-1", status, approvalCount: dem, requiredApprovals: 2, breakGlass: false });
+      // Cột cuối: lần nạp lại SAU khi ký hỏng (500) — câu dựa vào `status` của phản hồi lần ký, không đoán "chưa đủ".
+      for (const [ten, sau, phai, khong, napLaiHong] of [
+        ["đủ", yc("APPROVED", 2), /đã đủ 2 \/ 2 chữ ký.*Điều phối giải mã/u, /Thiếu|Chưa đủ/u, false],
+        ["chưa đủ", yc("PENDING", 1), /Chưa đủ chữ ký \(1 \/ 2\)/u, /đã đủ/u, false],
+        ["đủ, nạp lại hỏng", yc("APPROVED", 2), /đã đủ chữ ký.*Điều phối giải mã/u, /Thiếu|Chưa đủ/u, true],
+      ] as const) {
+        let daKy = false;
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Bê tông", status: "CLOSED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: true } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal` && daKy && napLaiHong) return Promise.resolve({ status: 500, body: { error: "loi noi bo" } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: daKy ? sau : yc("PENDING", sau.approvalCount - 1) } });
+            // Hình dạng THẬT (đo trên trình duyệt): phản hồi của lần ký không mang hai con số — chỉ `GET …/unseal` mang.
+            if (l === "POST /unseal/yc-1/approve") { daKy = true; return Promise.resolve({ status: 200, body: { unsealRequest: { id: sau.id, status: sau.status } } }); }
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-duyet");
+        expect(p.trangThai.goi, `${ten}: đối chứng — lần ký thật sự đã đi`).toContain("POST /unseal/yc-1/approve");
+        expect(p.el("ok3").textContent, ten).toMatch(phai);
+        expect(p.el("ok3").textContent, ten).not.toMatch(khong);
+      }
     });
 
     it("[S1.254 / khoản 323] tao-thau: 403 hằng của api ở «Tạo nhà cung cấp» (vai BUYER) ⇒ câu đọc được; lỗi khác in nguyên văn", async () => {
