@@ -23797,3 +23797,8 @@ Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa 
 - `pnpm t0` xanh; `pnpm test` 141 tệp, 2396 đạt, 14 bỏ qua, 0 đỏ (trên `62045598`, cùng mã, trước lần cấp số).
 - `pnpm evidence` trên `e0ab81be`: vitest thoát mã 0, 4441 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1712
   giây; `evidence/INV-matrix.md` không đổi.
+- Hợp `master` #232 (S1.256) và #233 (S1.258) ở `22043f47`: xung đột chỉ ở ba tệp sổ (gỡ tay, giữ cả hai bên). #233 vào
+  trước nên `cap-so` dán lại vòng của nhánh từ S1.257 thành S1.259 (remote giữ cả hai số cho nhánh); khoản 332–333 giữ
+  nguyên; số đếm Handoff thành 333 khoản, 51 còn mở; `cap-so --kiem` sạch. Trên `22043f47`: `pnpm t0` xanh; `pnpm test` 144
+  tệp (142 đạt, 2 bỏ qua), 2447 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4530 khẳng định, 79/79 bất
+  biến (57/57 nghiệp vụ + 22/22 hàng rào), 2283 giây; `evidence/INV-matrix.md` không đổi.
