@@ -23737,3 +23737,68 @@ Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích
   đầu với base mặc định `origin/master` thu hồi cả số của S4.5b (cùng số tạm vòng 9101), từ chối ghi vì hai đầu mục trùng, nhưng đã đẩy
   lời giữ lên remote cho ADR-143, khoản 334–336, migration 104 — nhánh này không dùng số nào trong đó. Nhả chúng là xoá năm nhánh
   `cap-so/*` trên remote: chờ chủ dự án.
+
+# §S1.259 — BẬC 1: DOCKER TẮT ĐO TRÊN WINDOWS; CÂU BÁO SAU CHỮ KÝ MỞ THẦU VÀ «HUỶ TRAO THẦU» CỦA `/login` — KHOẢN 332, 333 ĐÓNG
+
+**Rổ và mảnh (ADR-043):** hai khoản sinh và đóng trong vòng — để mở thì 332 là rổ A ⒜ (câu sai trên màn của phút 5–25 buổi
+bậc 1), 333 rổ B (huỷ trao thầu không nằm trên kịch bản §11). Không migration, không ADR, không route; không mảnh nào của
+`docs/PRODUCT.md` §11 đổi.
+
+## 1. Vòng này là gì
+Đề xuất sau §S1.255 có ba việc; chủ dự án, 2026-10-02: *"Làm bước 2 và 3 trước"* — bước 2 là đo tình huống *Docker không chạy*
+trên Windows (cần tắt Docker Desktop), bước 3 là hai chỗ nhỏ biên bản §S1.255 ghi mà không sửa.
+
+## 2. Docker tắt, đo trên Windows thật
+Cùng máy với §S1.255 (Windows 11, Windows PowerShell 5.1.26100, Docker Desktop 29.7.2). Trước khi tắt: không tiến trình vitest
+nào, chỉ container của cụm demo. `docker desktop stop` ⇒ `docker info` thoát 1 sau 17 giây. Khối PowerShell của kế hoạch §4,
+nguyên văn như §S1.255 (tệp `.ps1` UTF-8 có BOM, `powershell.exe -NoProfile -File`):
+- dừng sau **69 giây**, thoát 1; 62 dòng *"failed to connect to the docker API at npipe:…"* (một của `docker run`, còn lại của
+  `docker exec … pg_isready` ở mỗi vòng), rồi `throw` *"Postgres chưa nhận kết nối sau 60 giây — Docker Desktop đã chạy chưa?"* —
+  dấu tiếng Việt nguyên vẹn trong đầu ra. Linux ở §S1.168: 62 giây.
+- `docker desktop start` ⇒ `docker info` thoát 0 sau 10 giây; container ở trạng thái dừng; khối chạy lại ⇒ 10/10 ĐẠT, cô lập 2/2,
+  32 giây, kèm câu cảnh báo của khoản 328.
+Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa sổ ấy vẽ câu tiếng Việt).
+
+## 3. Hai chỗ nhỏ
+- **Khoản 332 — câu báo sau chữ ký mở thầu.** §S1.255 mục 3 đo: Phó Tổng Giám đốc ký XD-03 ⇒ `APPROVED 2 / 2`, câu vẫn *"Thiếu
+  người thứ hai thì điều phối sẽ bị từ chối"*. Nay `cauSauChuKy` (`apps/web/trang/mo-thau.js`) đọc yêu cầu vừa nạp lại: `APPROVED`
+  ⇒ *"Đã ghi chữ ký phê duyệt — yêu cầu đã đủ 2 / 2 chữ ký. Người xin mở bấm «Điều phối giải mã»."*; khác ⇒ *"Đã ghi một chữ ký
+  phê duyệt. Chưa đủ chữ ký (1 / 2) — điều phối sẽ bị từ chối cho tới khi đủ."*; lần nạp lại hỏng ⇒ dựa vào `status` của phản hồi
+  lần ký. Ngưỡng lấy từ máy chủ (khoản 192).
+- **Khoản 333 — «Huỷ trao thầu».** Đo trước khi sửa, trên trình duyệt: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ
+  ⇒ *"Đã huỷ trao thầu…"*, `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Nay theo khuôn khoản 321: trang đọc lại trao thầu mới nhất;
+  chưa hiện, hay đã đổi từ lúc đọc ⇒ chỉ vẽ ra kèm *"Trao thầu sắp huỷ hiện ở dưới — … bấm Huỷ trao thầu lần nữa để huỷ."*;
+  đọc lại bị từ chối ⇒ câu 403 của khoản 323; gói chưa có trao thầu ⇒ nói ra. Lý do trống vẫn chặn trước mọi lời gọi.
+
+## 4. Điểm tôi tự chốt
+- 333 theo đúng khuôn khoản 321 (lần bấm đầu chỉ hiện) chứ không thêm id trao thầu vào route: route nhận id là một thay đổi API
+  và một ADR, cho một đường không nằm trên kịch bản §11. Cái giá, nói ra: giữa lần đọc lại và lần huỷ, máy chủ huỷ trao thầu còn
+  sống lúc ấy, không theo id.
+- 332: bản đầu dùng phản hồi của lần ký và bỏ lần nạp lại vì nghĩ hai thứ cùng hình dạng — lượt đi lại trên trình duyệt cho câu
+  *"…đã đủ chữ ký"* KHÔNG số: phản hồi của `POST /unseal/:id/approve` không mang `approvalCount`/`requiredApprovals`. Bản cuối đọc
+  yêu cầu nạp lại, và stub của test mang đúng hình dạng thật (đột biến H7 đỏ nhờ đó).
+
+## 5. Đo
+- **Đỏ trước trên `master` (`830ffdc4`):** ca 332 đỏ ở ca *đủ* (*"…Thiếu ng…"* không khớp *"đã đủ 2 / 2"*); ca 333 đỏ ở khẳng định
+  đầu (*"huỷ một trao thầu chưa hiện trên màn"*).
+- **Đột biến** (trọn `apps/web/src/phuc-vu.test.ts` + cổng câu cấm, 278 ca; bản gốc và bản sau 0 đỏ): H1 câu luôn nói chưa đủ;
+  H2 trả hằng cũ; H3 huỷ không cần trao thầu đang hiện; H4 chỉ đòi đã đọc một trao thầu nào đó; H5 bỏ nhánh 403 của lần đọc lại;
+  H6 bỏ nhánh chưa có trao thầu; H7 chỉ dùng phản hồi của lần ký; H8 bỏ nhánh dự phòng khi nạp lại hỏng — 8/8, mỗi cái đúng 1 ca đỏ.
+- **Trình duyệt thật trên mã cuối** (cụm dựng lại, lượt giả lập 10/10): Tú ký XD-03 ⇒ *"…đã đủ 2 / 2 chữ ký. Người xin mở bấm
+  «Điều phối giải mã»."*; Vinh gõ lý do và bấm Huỷ ở XD-04 khi bước 7 trống ⇒ trao thầu hiện (`PROPOSED`, nhà cung cấp, chi phí,
+  hạng) kèm câu dặn bấm lần nữa; không bấm lần hai — XD-04 để nguyên cho chủ dự án.
+
+## 6. Giới hạn, nói ra
+- Huỷ theo gói ở máy chủ (mục 4). Ô lý do của bước 7 dùng chung cho đề xuất, rút và huỷ, và giữ chữ của người trước khi người
+  khác vào ở bước 1 — không sửa.
+- Khối dán vào console tương tác vẫn chưa đo.
+
+## 7. Số đo
+- `pnpm t0` xanh; `pnpm test` 141 tệp, 2396 đạt, 14 bỏ qua, 0 đỏ (trên `62045598`, cùng mã, trước lần cấp số).
+- `pnpm evidence` trên `e0ab81be`: vitest thoát mã 0, 4441 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1712
+  giây; `evidence/INV-matrix.md` không đổi.
+- Hợp `master` #232 (S1.256) và #233 (S1.258) ở `22043f47`: xung đột chỉ ở ba tệp sổ (gỡ tay, giữ cả hai bên). #233 vào
+  trước nên `cap-so` dán lại vòng của nhánh từ S1.257 thành S1.259 (remote giữ cả hai số cho nhánh); khoản 332–333 giữ
+  nguyên; số đếm Handoff thành 333 khoản, 51 còn mở; `cap-so --kiem` sạch. Trên `22043f47`: `pnpm t0` xanh; `pnpm test` 144
+  tệp (142 đạt, 2 bỏ qua), 2447 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4530 khẳng định, 79/79 bất
+  biến (57/57 nghiệp vụ + 22/22 hàng rào), 2283 giây; `evidence/INV-matrix.md` không đổi.

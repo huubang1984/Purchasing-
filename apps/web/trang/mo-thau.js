@@ -407,14 +407,31 @@ $("nut-yeu-cau").addEventListener("click", async () => {
   bao($("ok3"), "Đã tạo yêu cầu. Người tạo KHÔNG tự phê duyệt thay cho người thứ hai được.");
 });
 
+/**
+ * [S1.259 / khoản 332] Câu báo sau một chữ ký mở thầu, đọc từ yêu cầu VỪA NẠP LẠI. Trước vòng này câu là một hằng — *"Thiếu
+ * người thứ hai thì điều phối sẽ bị từ chối"* — kể cả khi chính chữ ký ấy làm yêu cầu đủ (đo trên trình duyệt ở §S1.255: XD-03
+ * đã `APPROVED 2 / 2`, câu vẫn nói thiếu). Ngưỡng lấy từ máy chủ (`requiredApprovals`, khoản 192) — trang không tự suy ra "hai".
+ */
+function cauSauChuKy(yc) {
+  const dem = yc?.approvalCount;
+  const can = yc?.requiredApprovals;
+  const coSo = typeof dem === "number" && typeof can === "number";
+  if (yc?.status === "APPROVED") {
+    return `Đã ghi chữ ký phê duyệt — yêu cầu đã đủ${coSo ? ` ${dem} / ${can}` : ""} chữ ký. Người xin mở bấm «Điều phối giải mã».`;
+  }
+  return `Đã ghi một chữ ký phê duyệt. Chưa đủ chữ ký${coSo ? ` (${dem} / ${can})` : ""} — điều phối sẽ bị từ chối cho tới khi đủ.`;
+}
+
 $("nut-duyet").addEventListener("click", async () => {
   bao($("loi3"), ""); bao($("ok3"), "");
   if (phien.unsealRequestId === "") { bao($("loi3"), CHUA_CO_YEU_CAU); return; }
   const r = await goi("POST", `/unseal/${phien.unsealRequestId}/approve`);
   if (r.status !== 200) { bao($("loi3"), loiTuChoiDuyet(r)); return; }
   veYeuCau(r.body.unsealRequest);
-  await napYeuCau(phien.rfqId);
-  bao($("ok3"), "Đã ghi một chữ ký phê duyệt. Thiếu người thứ hai thì điều phối sẽ bị từ chối.");
+  const doc = await napYeuCau(phien.rfqId);
+  // Phản hồi của lần ký KHÔNG mang `approvalCount`/`requiredApprovals` (đo trên trình duyệt: câu ra "đã đủ chữ ký" không số);
+  // `GET /rfqs/:id/unseal` vừa nạp lại thì có. Nạp lại hỏng ⇒ dùng phản hồi của lần ký (vẫn có `status`).
+  bao($("ok3"), cauSauChuKy(doc?.status === 200 ? (doc.body.unsealRequest ?? null) : (r.body.unsealRequest ?? null)));
 });
 
 $("nut-dieu-phoi").addEventListener("click", async () => {
@@ -717,6 +734,21 @@ $("nut-huy-award").addEventListener("click", async () => {
   bao($("loi7"), ""); bao($("ok7"), "");
   const lyDo = $("ly-do-award").value.trim();
   if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần huỷ — một lần huỷ không lý do là đúng thứ D5 cấm."); return; }
+  // [S1.259 / khoản 333] Huỷ lên trao thầu ĐÃ HIỆN TRÊN MÀN — khuôn khoản 321 của «Phê duyệt». Trước vòng này nút huỷ theo GÓI
+  // (route không nhận id trao thầu) khi bước 7 còn trống: đo trên trình duyệt, Tổng Giám đốc nạp XD-04, gõ lý do, bấm Huỷ ⇒
+  // `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Lần bấm đầu — hay khi trao thầu mới nhất đã đổi từ lúc đọc — chỉ vẽ nó ra. Giới hạn,
+  // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.
+  const doc = await goi("GET", `/rfqs/${phien.rfqId}/award`);
+  if (doc.status !== 200) { bao($("loi7"), loiCua(doc, "Chưa đọc được trao thầu sắp huỷ")); return; }
+  const a = doc.body.award ?? null;
+  if (a === null) { bao($("loi7"), "Gói thầu này chưa có trao thầu nào để huỷ."); return; }
+  if (phien.awardDaDoc !== a.awardId) {
+    await veTraoThau();
+    if (phien.awardDaDoc !== "") {
+      bao($("ok7"), "Trao thầu sắp huỷ hiện ở dưới — đọc nhà cung cấp, trạng thái và lý do, rồi bấm Huỷ trao thầu lần nữa để huỷ.");
+    }
+    return;
+  }
   const r = await goi("POST", `/rfqs/${phien.rfqId}/award/cancel`, { reason: lyDo });
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không huỷ được")); return; }
   bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
