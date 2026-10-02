@@ -49,6 +49,12 @@ import {
   type ThanhPhanChinhSachDoc,
 } from "./doc-lap/tinh-lai.js";
 import type { BoBangChung, HangBundle, LuotChamBundle } from "./bo.js";
+import {
+  HAM_THUAN_BENCHMARK_THAT,
+  kiemDuLieuNen,
+  type KetQuaKiemDuLieuNen,
+  type TinhBenchmarkHamThuan,
+} from "./kiem-du-lieu-nen.js";
 
 /** Chữ ký của lớp ⑴. Mặc định bọc `tinhChiPhiHieuDung`; test tiêm một bản CÓ LỖI vào đây. */
 export type TinhHamThuan = (
@@ -98,6 +104,8 @@ export interface KetQuaKiem {
   readonly loiBo: readonly string[];
   /** Hạng của báo giá được trao thầu — BÁO, không phán xử. Xem `DAC-TA.md` §7. */
   readonly hangTraoThau: readonly { readonly awardId: string; readonly rank: number | null }[];
+  /** [S1.262 / S4.5c2] Lớp dữ liệu nền (`DAC-TA.md` §8); `null` khi bundle không mang lớp ấy. */
+  readonly duLieuNen: KetQuaKiemDuLieuNen | null;
 }
 
 /** Đầu vào của phép tính lại cho một hàng: `ma` + `giaTri` đã lưu, KHÔNG lấy `tien` hay `heSo`. */
@@ -201,6 +209,7 @@ export function kiemBo(
   bo: BoBangChung,
   dacTaDiKem: string,
   hamThuan: TinhHamThuan = HAM_THUAN_THAT,
+  hamThuanBenchmark: TinhBenchmarkHamThuan = HAM_THUAN_BENCHMARK_THAT,
 ): KetQuaKiem {
   const loiBo: string[] = [];
 
@@ -244,8 +253,11 @@ export function kiemBo(
       `KHÔNG một hàng nào tái lập được (${String(hang.length)} hàng) — một lượt kiểm không đo được gì thì không ĐẠT`,
     );
   }
+  // [S1.262 / S4.5c2] ⑶ Lớp dữ liệu nền: có thì phải ĐẠT trọn — một nhãn benchmark không tái lập được là một lần bundle nói sai.
+  const duLieuNen = kiemDuLieuNen(bo, hamThuanBenchmark);
+  const duLieuNenDat = duLieuNen === null || (duLieuNen.loi.length === 0 && duLieuNen.soLech === 0 && duLieuNen.soDong > 0);
   return {
-    dat: loiBo.length === 0 && soLech === 0 && soDat > 0,
+    dat: loiBo.length === 0 && soLech === 0 && soDat > 0 && duLieuNenDat,
     soHang: hang.length,
     soDat,
     soLech,
@@ -253,5 +265,6 @@ export function kiemBo(
     hang,
     loiBo,
     hangTraoThau,
+    duLieuNen,
   };
 }

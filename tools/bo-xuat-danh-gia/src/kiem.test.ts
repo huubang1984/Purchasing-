@@ -72,8 +72,8 @@ function boVoi(
 ): BoBangChung {
   return {
     dang: "trustprocure/bo-bang-chung-danh-gia",
-    phienBan: 1,
-    dacTaPhienBan: 1,
+    phienBan: 2,
+    dacTaPhienBan: 2,
     dacTaSha256: "khong-doc-o-tang-nay",
     orgId: "org-1",
     rfqId: "rfq-1",
@@ -85,11 +85,13 @@ function boVoi(
         policyVersion: 3,
         currency: "VND",
         chinhSachThanhPhan: chinhSach,
+        coBenchmark: false,
         taoLuc: { giaTri: "2026-09-22T00:00:00.000Z", nguon: NGUON },
         hang: hangs,
       },
     ],
     traoThau,
+    duLieuNen: null,
   };
 }
 

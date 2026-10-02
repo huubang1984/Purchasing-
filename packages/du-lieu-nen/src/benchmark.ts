@@ -246,3 +246,16 @@ export function ganNhan(
   if (soSanh(lech, nhan(docThapPhan(nhom.nguongLechCao), m)) <= 0) return { nhan: "LECH_VUA", chieu };
   return { nhan: "LECH_CAO", chieu };
 }
+
+/**
+ * [S1.262 / S4.5c2] Nhãn của MỘT dòng `HOP_LE` từ các quan sát đã đọc — đúng hai bước `tinhDai` rồi `ganNhan` mà phép tính của lượt
+ * chấm làm cho dòng ấy. Thuần. Người dùng: lớp ⑴ (*gọi hàm thuần*, rẻ, bắt hồi quy) của bộ kiểm bộ bằng chứng (ADR-059) — lớp ⑵ cài lại
+ * từ `DAC-TA.md` và không với tới gói này (`g17-`).
+ */
+export function nhanMotDong(
+  quanSat: readonly QuanSatBenchmark[],
+  vao: DaiInput & { readonly gia: string },
+): { readonly dai: DaiBenchmark; readonly nhan: Exclude<NhanBenchmark, "KHONG_DO_DUOC">; readonly chieu: ChieuLech | null } {
+  const dai = tinhDai(quanSat, vao);
+  return { dai, ...ganNhan(vao.gia, dai, vao.nhom) };
+}
