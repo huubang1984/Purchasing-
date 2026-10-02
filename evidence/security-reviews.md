@@ -23863,8 +23863,12 @@ ra giới hạn: giữa lần trang đọc lại trao thầu và lần huỷ, m�
   chỉ có thể là một đề xuất khác của chính họ.
 
 ## 6. Số đo
-- `cap-so`: vòng 9101 ⇒ S1.261, khoản 9401 ⇒ 335; một số tạm trần ngắt dòng trong chú thích của `mo-thau.js` sửa tay;
-  `cap-so --kiem` sạch; Handoff 334 khoản, 51 còn mở.
+- `cap-so` cấp S1.261 và khoản 335 (trailer `Cap-So` ở `2b63ff59`); một số tạm trần bị ngắt dòng trong chú thích của
+  `mo-thau.js` mà lệnh để nguyên — sửa tay; `cap-so --kiem` sạch; Handoff 334 khoản, 51 còn mở.
 - Trên `2b63ff59`: `pnpm t0` xanh; `pnpm test` 144 tệp (142 đạt, 2 bỏ qua), 2448 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`:
   vitest thoát mã 0, 4534 khẳng định, 79/79 bất biến (57/57 nghiệp vụ + 22/22 hàng rào), 2373 giây; `evidence/INV-matrix.md`
   không đổi.
+- CI lượt đầu trên `9515a1a2`: T0 đỏ ở bước `cap-so --kiem` — dòng số đo ngay trên viết lại số tạm của lần cấp (`pnpm t0` ở
+  máy không gồm bước ấy); viết lại dòng, chạy `cap-so --kiem` ở máy trước khi đẩy. T3 đỏ đúng một ca không chạm vòng này —
+  `composition.int` khoản 277 ý ③: job chèn thẳng đã xong mà tin chưa có trong hộp thư dev lúc đếm; cùng tệp xanh trong lượt
+  evidence ở máy trên `2b63ff59`.
