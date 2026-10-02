@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // giẫm lên lượt cruise toàn kho của `tests/architecture/boundaries.test.ts` — xem khối lý do đầy
 // đủ trong chính tệp khoá, và xem mục 7c của §S1.107 để biết vì sao dòng này có mặt.
 import { TRAN_TEST_GIU_KHOA_MS, voiKhoaDepcruiseAsync } from "../../../tests/architecture/khoa-depcruise.js";
+import * as benchmarkWeb from "./benchmark.js";
 import * as chinhSach from "./chinh-sach.js";
 import * as dangNhap from "./dang-nhap.js";
 import * as duLieu from "./du-lieu.js";
@@ -280,6 +281,8 @@ describe("bề mặt tệp", () => {
       ...taoThau,
       // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
       ...duLieu,
+      // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
+      ...benchmarkWeb,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
       ...dangNhap,
@@ -1219,6 +1222,204 @@ describe("bề mặt tệp", () => {
         expect(p.el("loi7").textContent).toBe("Chỉ người đã đề xuất mới rút được đề xuất của mình; người khác thì huỷ qua cổng po.approve.");
         expect(p.el("ok7").hidden).toBe(true);
         expect(p.el("nut-rut-de-xuat").hidden, "từ chối thì trạng thái đề xuất không đổi, nút vẫn hiện").toBe(false);
+      });
+    });
+
+    // [S1.260 / S4.5c1] Benchmark theo dòng ở bước 4 và cột Benchmark của bảng xếp hạng (spec S4 §4.6; ADR-143). Đo đúng thứ trang
+    // GỌI (không tự gọi khi nạp gói; Đọc benchmark đọc benchmark TRƯỚC rồi bảng so sánh, mỗi lần, chỉ khi có nhãn — rà soát S4.5c1), chữ
+    // trang IN (nhãn theo spec, độ phủ, dải khi bấm Xem dải), và tư thế ở vòng chào lại (không nhãn nào, không lời gọi dải nào).
+    describe("[S1.260 / S4.5c1] mo-thau: benchmark theo dòng, Xem dải, cột Benchmark của bảng xếp hạng", () => {
+      const RFQ = "44444444-4444-4444-8444-444444444444";
+      const SO_SANH = {
+        rows: [
+          { bidVersionId: "bv-1", supplierLegalName: "Công ty Thép Một", totalAmount: "1000.00", currency: "VND", version: 1, bafoRoundNo: null,
+            isLatestForBid: true, payload: { lines: [{ lineNo: 1, unitPrice: "100", amount: "600.00" }, { lineNo: 2, unitPrice: "40", amount: "400.00" }] } },
+          { bidVersionId: "bv-2", supplierLegalName: "Công ty Thép Hai", totalAmount: "900.00", currency: "VND", version: 1, bafoRoundNo: null,
+            isLatestForBid: true, payload: { lines: [{ lineNo: 1, unitPrice: "90", amount: "540.00" }, { lineNo: 2, unitPrice: "36", amount: "360.00" }] } },
+        ],
+        aggregates: { parsed: 2, unparsed: 0, min: "900.00", max: "1000.00", average: "950.00", currencyMismatch: false },
+      };
+      const dongBm = (bidVersionId: string, lineNo: number, nhan: string, chieu: string | null = null) => ({
+        bidVersionId, lineNo, canonicalItemId: nhan === "KHONG_DO_DUOC" ? null : "ci-1", anhXaId: null, nhan, chieu,
+        lyDo: nhan === "KHONG_DO_DUOC" ? "CHUA_ANH_XA" : null, tienTe: "VND", cuaSoTu: null,
+        soQuanSat: 9, soGoi: 3, soNcc: 5, soGoiCungNguoiTao: 1, soQuanSatHoiTo: 9, soLoaiTienTe: 0, soLoaiGia0: 0, hoiTo: [],
+      });
+      const BM_CO = {
+        trangThai: "CO", nguon: "TINH_MOI", snapshotId: "s-1", unsealRequestId: "u-1", bafoRoundId: null, policyId: "p-1", policyVersion: 1,
+        phuongPhap: "TRUNG_VI_THEO_GOI_V1", mocMoGia: "2026-10-01T00:00:00Z", tinhLuc: "2026-10-01T01:00:00Z",
+        dong: [dongBm("bv-1", 1, "BINH_THUONG"), dongBm("bv-2", 1, "LECH_CAO", "TREN"), dongBm("bv-1", 2, "KHONG_DO_DUOC"), dongBm("bv-2", 2, "KHONG_DO_DUOC")],
+      };
+      const DAI = {
+        trangThai: "CO", snapshotId: "s-1", lineNo: 1, mocMoGia: "2026-10-01T00:00:00Z", tinhLuc: "2026-10-01T01:00:00Z", donViGoc: "kg",
+        dai: [{ canonicalItemId: "ci-1", tienTe: "VND", cuaSoTu: "2025-10-01T00:00:00Z", duSan: true, q1: "18000", trungVi: "18500", q3: "19000",
+          soQuanSat: 9, soGoi: 3, soNcc: 5, soGoiCungNguoiTao: 1, soQuanSatHoiTo: 9, soLoaiTienTe: 0, soLoaiGia0: 0, sauMoc: { ANH_XA: 1 }, khopBanLuu: true }],
+        giaCuaGoi: [{ bidVersionId: "bv-1", trangThai: "HOP_LE", donGiaQuyDoi: "18600", tienTe: "VND" },
+          { bidVersionId: "bv-2", trangThai: "HOP_LE", donGiaQuyDoi: "25000.125", tienTe: "VND" }],
+      };
+      const XEP_HANG = {
+        evaluationId: "e-1", policyVersion: 1, currency: "VND", evaluatedAt: "2026-10-01T02:00:00Z",
+        rows: [
+          { rank: 1, supplierName: "Công ty Thép Hai", effectiveCost: "900.00", bidVersionId: "bv-2", components: [] },
+          { rank: 2, supplierName: "Công ty Thép Một", effectiveCost: "1000.00", bidVersionId: "bv-1", components: [] },
+        ],
+      };
+      const dung = async (bm: unknown, soSanh: unknown = SO_SANH, dai: unknown = DAI) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "UNSEALED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 200, body: { comparison: soSanh } });
+            if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: bm } });
+            if (l === `GET /rfqs/${RFQ}/items/1/benchmark`) return Promise.resolve({ status: 200, body: { dai } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        return p;
+      };
+      const chuHang = (p: Awaited<ReturnType<typeof dung>>, id: string) =>
+        p.el(id).querySelector("tbody").con.map((tr) => tr.con.map((td) => td.textContent).join("|"));
+      const ttChu = (p: Awaited<ReturnType<typeof dung>>, id: string) => p.el(id).con.map((x) => x.textContent).join("|");
+
+      it("nạp gói KHÔNG tự đọc benchmark; Đọc benchmark đọc benchmark rồi bảng so sánh — LẠI mỗi lần bấm — vẽ nhãn theo chữ spec, thành phần và độ phủ", async () => {
+        const p = await dung(BM_CO);
+        expect(p.trangThai.goi.filter((g) => g.includes("benchmark"))).toEqual([]);
+        await p.bam("nut-benchmark");
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([
+          `GET /rfqs/${RFQ}/benchmark`, `GET /rfqs/${RFQ}/comparison`,
+        ]);
+        const hang = chuHang(p, "bang-benchmark");
+        expect(hang).toHaveLength(4);
+        expect(p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con.map((x) => x.textContent)).toEqual(["Dòng 1 ", "Xem dải"]);
+        expect(hang[0]).toMatch(/^\|Công ty Thép Một\|.*\|trong dải lịch sử nội bộ \(3 gói, 5 nhà cung cấp\)\|3 gói · 5 nhà cung cấp · 1 gói do chính người tạo gói này lập · 9 quan sát ánh xạ hồi tố$/u);
+        expect(hang[1]).toMatch(/^\|Công ty Thép Hai\|.*\|Giá bất thường — nên xem xét\|/u);
+        expect(p.el("bang-benchmark").querySelector("tbody").con[1]?.className).toBe("lech");
+        expect(hang[2]).toMatch(/không đo được — dòng chưa ánh xạ về hàng chuẩn nào/u);
+        const tt = ttChu(p, "tt-benchmark");
+        expect(tt).toMatch(/Độ phủ của gói\|2\/4 \(báo giá × dòng\) đo được/u);
+        expect(tt).toMatch(/Độ phủ — Công ty Thép Một\|1\/2 dòng · 60,0% giá trị/u);
+        expect(tt).toMatch(/Tính lúc\|.* — lần đọc này vừa tính/u);
+        await p.bam("nut-benchmark");
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison")), "bấm lần hai đọc bảng so sánh lần hai").toHaveLength(2);
+      });
+
+      it("[rà soát S4.5c1] phong bì mang `amount` dạng SỐ và một dòng `null` ⇒ bảng benchmark và cột Benchmark vẫn vẽ, độ phủ đọc số", async () => {
+        const hong = {
+          ...SO_SANH,
+          rows: [
+            { ...SO_SANH.rows[0], payload: { lines: [{ lineNo: 1, unitPrice: 100, amount: 600 }, null, { lineNo: 2, unitPrice: "40", amount: "400.00" }] } },
+            { ...SO_SANH.rows[1], payload: { lines: [null, { lineNo: 1, unitPrice: "90", amount: { x: 1 } }] } },
+          ],
+        };
+        const p = await dung(BM_CO, hong);
+        await p.bam("nut-benchmark");
+        expect(p.el("loi4b").hidden).toBe(true);
+        const hang = chuHang(p, "bang-benchmark");
+        expect(hang).toHaveLength(4);
+        expect(hang[0]).toMatch(/^\|Công ty Thép Một\|.*\|trong dải lịch sử nội bộ/u);
+        const tt = ttChu(p, "tt-benchmark");
+        expect(tt, "600 dạng số đọc như \"600\"").toMatch(/Độ phủ — Công ty Thép Một\|1\/2 dòng · 60,0% giá trị/u);
+        expect(tt, "thành tiền là đối tượng ⇒ không phần trăm").toMatch(/Độ phủ — Công ty Thép Hai\|1\/2 dòng(\||$)/u);
+        await p.bam("nut-xep-hang");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual([
+          "1 bất thường (cao) · 1 không đo được · phủ 1/2 dòng",
+          "1 trong dải · 1 không đo được · phủ 1/2 dòng",
+        ]);
+      });
+
+      it("[rà soát S4.5c1] đọc gói KHÁC xoá benchmark của gói trước — bảng, khối thông tin, cột Benchmark", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-xep-hang");
+        await p.bam("nut-benchmark");
+        expect(chuHang(p, "bang-benchmark")).toHaveLength(4);
+        await p.bam("nut-doc");
+        expect(chuHang(p, "bang-benchmark")).toEqual([]);
+        expect(ttChu(p, "tt-benchmark")).toBe("");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual(["—", "—"]);
+      });
+
+      it("[rà soát S4.5c1] THU_LAI in câu đọc lại, không hàng nào, không đọc bảng so sánh", async () => {
+        const p = await dung({ trangThai: "THU_LAI", rfqStatus: "BAFO_UNSEALED" });
+        await p.bam("nut-benchmark");
+        expect(ttChu(p, "tt-benchmark")).toMatch(/^Benchmark\|Gói vừa đổi trạng thái .* Bấm đọc lại\.$/u);
+        expect(chuHang(p, "bang-benchmark")).toEqual([]);
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison"))).toEqual([]);
+      });
+
+      it("[rà soát S4.5c1] dải của một bản lưu KHÁC bảng đang hiện ⇒ nói ra, vẫn in dải", async () => {
+        const p = await dung(BM_CO, SO_SANH, { ...DAI, snapshotId: "s-2" });
+        await p.bam("nut-benchmark");
+        const nut = p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        for (const f of nut?.nghe["click"] ?? []) await f();
+        const tt = ttChu(p, "tt-dai");
+        expect(tt).toMatch(/^Lưu ý\|Dải này của lần mở thầu MỚI hơn bảng benchmark đang hiện/u);
+        expect(tt).toContain("Q1 18.000,00 · trung vị 18.500,00 · Q3 19.000,00 VND/kg");
+      });
+
+      it("Xem dải gọi đúng route của dòng và in Q1/trung vị/Q3 theo đơn vị gốc, SAU_MOC, đơn giá quy đổi của từng báo giá", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-benchmark");
+        const nut = p.el("bang-benchmark").querySelector("tbody").con[0]?.con[0]?.con[1];
+        expect(nut?.textContent).toBe("Xem dải");
+        for (const f of nut?.nghe["click"] ?? []) await f();
+        expect(p.trangThai.goi.at(-1)).toBe(`GET /rfqs/${RFQ}/items/1/benchmark`);
+        expect(p.el("khoi-dai").hidden).toBe(false);
+        const tt = ttChu(p, "tt-dai");
+        expect(tt).toContain("Q1 18.000,00 · trung vị 18.500,00 · Q3 19.000,00 VND/kg (3 gói, 5 nhà cung cấp)");
+        expect(tt).toContain("1 ánh xạ");
+        expect(tt).toContain("Đơn giá quy đổi — Công ty Thép Hai|25.000,13 VND/kg");
+        expect(p.el("bang-benchmark").querySelector("tbody").con[1]?.con[0]?.con, "chỉ hàng đầu của một dòng mang nút").toEqual([]);
+      });
+
+      it("vòng chào lại đang mở: in câu có tên, không hàng nào, cột Benchmark của bảng xếp hạng là gạch", async () => {
+        const p = await dung({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_OPEN" });
+        await p.bam("nut-benchmark");
+        expect(ttChu(p, "tt-benchmark")).toMatch(/^Benchmark\|Vòng chào lại đang mở/u);
+        expect(chuHang(p, "bang-benchmark")).toEqual([]);
+        await p.bam("nut-xep-hang");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual(["—", "—"]);
+        expect(p.trangThai.goi.filter((g) => g.includes("/items/"))).toEqual([]);
+      });
+
+      it("[đi thử 375×812] gói AWARDED ⇒ hỏi benchmark, in câu trạng thái của nó, KHÔNG hỏi bảng so sánh (rà soát S4.5c1: không một lần từ chối mỗi cú bấm); ô của bảng benchmark mang nhãn cột cho màn hẹp", async () => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 422, body: { error: "Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở AWARDED (A4)." } });
+            if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: { trangThai: "KHONG_HIEN", rfqStatus: "AWARDED" } } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-benchmark");
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([`GET /rfqs/${RFQ}/benchmark`]);
+        expect(ttChu(p, "tt-benchmark")).toBe("Benchmark|Benchmark chỉ hiện khi bảng so sánh mở — gói đang ở trạng thái AWARDED.");
+        const q = await dung(BM_CO);
+        await q.bam("nut-benchmark");
+        expect(q.el("bang-benchmark").querySelector("tbody").con[0]?.con.slice(1).map((td) => td.dataset["nhan"])).toEqual([
+          "Nhà cung cấp", "Đơn giá chào", "Benchmark", "Thành phần dải",
+        ]);
+      });
+
+      it("cột Benchmark của bảng xếp hạng: gạch trước khi đọc benchmark, tóm tắt nhãn và độ phủ sau — kể cả khi bảng xếp hạng vẽ TRƯỚC", async () => {
+        const p = await dung(BM_CO);
+        await p.bam("nut-xep-hang");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual(["—", "—"]);
+        await p.bam("nut-benchmark");
+        expect(chuHang(p, "bang-hang").map((h) => h.split("|")[4])).toEqual([
+          "1 bất thường (cao) · 1 không đo được · phủ 1/2 dòng",
+          "1 trong dải · 1 không đo được · phủ 1/2 dòng",
+        ]);
       });
     });
 
