@@ -1959,12 +1959,29 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       const kiem = chayCli(null, "kiem", "--bo", quaHttp);
       expect(kiem.ma, `${kiem.ra}\n${kiem.loi}`).toBe(0);
       expect(kiem.ra).toContain("ok=true");
+      // [S1.9101 / S4.5c2] Phiên bản chính sách của kịch bản khai nhóm `benchmark` (`BENCHMARK_KB41`): bundle mang lớp dữ liệu nền
+      // của CẢ HAI lượt chấm, và bộ kiểm ngoại tuyến tính lại MỌI nhãn — không một hàng lệch.
+      const dong = /benchmark\tdong=(\d+)\tdat=(\d+)\tlech=(\d+)/u.exec(kiem.ra);
+      expect(dong, kiem.ra).not.toBeNull();
+      expect(Number(dong?.[1])).toBeGreaterThan(0);
+      expect([dong?.[2], dong?.[3]]).toEqual([dong?.[1], "0"]);
+      const dln = (JSON.parse(eb.tep["bo-bang-chung.json"] ?? "") as { duLieuNen: { luotCham: unknown[] } | null }).duLieuNen;
+      expect(dln?.luotCham).toHaveLength(2);
 
       const xuat = chayCli(db.connectionString, "xuat", "--org", orgA, "--rfq", trangThai.rfqId, "--ra", quaCli);
       expect(xuat.ma, `${xuat.ra}\n${xuat.loi}`).toBe(0);
       expect(await readFile(join(quaCli, "DAC-TA.md"), "utf8")).toBe(eb.tep["DAC-TA.md"]);
       // `xuatLuc` là đồng hồ của TIẾN TRÌNH xuất — hai tiến trình, hai mốc. Mọi dòng khác bằng nhau.
-      const boQua = (v: string): string => v.replace(/"xuatLuc": \{[^}]*\}/u, '"xuatLuc": {}');
+      // [S1.9101 / S4.5c2] ~~Mọi dòng khác bằng nhau~~ — trừ mã băm của lớp dữ liệu nền: muối NGẪU NHIÊN mỗi lần xuất (chủ dự án chốt
+      // 2026-10-02), nên hai lần xuất khác nhau ở mã băm và BẰNG nhau sau khi đổi mỗi mã thành số thứ tự lần gặp đầu.
+      const doiTenBam = (v: string): string => {
+        const thu = new Map<string, string>();
+        return v.replace(/"[0-9a-f]{32}"/gu, (m) => {
+          if (!thu.has(m)) thu.set(m, `"#${String(thu.size)}"`);
+          return thu.get(m)!;
+        });
+      };
+      const boQua = (v: string): string => doiTenBam(v.replace(/"xuatLuc": \{[^}]*\}/u, '"xuatLuc": {}'));
       expect(boQua(await readFile(join(quaCli, "bo-bang-chung.json"), "utf8"))).toBe(boQua(eb.tep["bo-bang-chung.json"] ?? ""));
     } finally {
       await rm(thuMuc, { recursive: true, force: true });

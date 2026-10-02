@@ -13,11 +13,18 @@
 //      giao dịch, một lần; chỉ-ghi-thêm; khách không thấy;
 //   ⑺ [S1.260 / S4.5c1] *Xem dải*: số của dải đúng dữ liệu thiết kế, số đếm trùng bản lưu, `SAU_MOC` đếm tới lúc đọc (đối chứng dương),
 //      cổng và hàng sổ; vòng chào lại đang mở hay đã đóng ⇒ không nhãn, không dải; mở niêm phong vòng ấy ⇒ bản lưu MỚI cho lần mở thầu mới.
+//   ⑼ [S1.9101 / S4.5c2] bộ bằng chứng mang lớp dữ liệu nền của gói X: bộ kiểm NGOẠI TUYẾN (CLI thật, `DATABASE_URL` đã xoá) tính lại
+//      đủ chín nhãn từ đơn giá đã quy đổi; định danh của gói khác và nhà cung cấp chỉ ra dạng băm, muối mỗi lần xuất; người ánh xạ.
 //
 // Giàn cảnh: gói đã mở niêm phong dựng bằng SQL thô dưới vai chủ cụm, đúng thứ tự cạnh của đường thật (khuôn
 // `packages/du-lieu-nen/src/lich-su-gia.int.test.ts`) — mọi trigger ENABLE ALWAYS vẫn chạy, kể cả trigger ghim chính sách lúc OPEN.
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execPath } from "node:process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "@trustprocure/db";
@@ -25,7 +32,7 @@ import { withTenant } from "@trustprocure/tenancy";
 import { startPostgres, type TestDatabase } from "@trustprocure/test-support";
 import { PermissionDeniedError } from "@trustprocure/identity";
 import { NHOM_BENCHMARK_MAU, docNhomBenchmark, taoHangChuan, tinhBenchmarkGoi } from "@trustprocure/du-lieu-nen";
-import { docBenchmark, docDaiBenchmark, taoLuotDanhGia, type BenchmarkCuaGoi } from "./index.js";
+import { TEP_DAC_TA, TEP_DU_LIEU, docBenchmark, docDaiBenchmark, dungBoBangChung, taoLuotDanhGia, type BenchmarkCuaGoi } from "./index.js";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../db/migrations", import.meta.url));
 const MAI_SAU = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -1313,5 +1320,154 @@ describe("[INV-L6] [INV-L7] ⑻ rà soát S4.5c1 — cuộc đua, khoá hàng g�
     const [moi, chieu] = nhan === "BINH_THUONG" ? ["LECH_CAO", "TREN"] : ["BINH_THUONG", null];
     await db.pool.query("UPDATE price_benchmark_snapshot_lines SET nhan = $2, chieu = $3 WHERE rfq_id = $1 AND line_no = 1", [rfqId, moi, chieu]);
     expect(await dai(rfqId, 1)).toMatchObject({ trangThai: "CO", dai: [{ khopBanLuu: false }] });
+  });
+});
+
+// ---- [S1.9101 / S4.5c2] lớp dữ liệu nền của bộ bằng chứng — xuất trên dữ liệu thiết kế, kiểm bằng CLI THẬT khi đã ngắt CSDL ----------
+const GOC_KHO = fileURLToPath(new URL("../../../", import.meta.url));
+const CLI_DANG_KY = pathToFileURL(join(GOC_KHO, "tools", "bo-xuat-danh-gia", "register-ts-resolve.mjs")).href;
+const CLI_BO = join(GOC_KHO, "tools", "bo-xuat-danh-gia", "src", "index.ts");
+
+/** `pnpm bang-chung kiem` như một tiến trình THẬT, `DATABASE_URL` xoá khỏi môi trường — ADR-059 §*Đo bằng gì* ⒜. */
+function kiemNgoaiTuyen(thuMuc: string): { ma: number; ra: string } {
+  const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "test" };
+  delete env["DATABASE_URL"];
+  const kq = spawnSync(execPath, ["--experimental-transform-types", "--import", CLI_DANG_KY, CLI_BO, "kiem", "--bo", thuMuc], {
+    env,
+    encoding: "utf8",
+    cwd: GOC_KHO,
+  });
+  return { ma: kq.status ?? -1, ra: `${kq.stdout ?? ""}${kq.stderr ?? ""}` };
+}
+
+/** Đổi mọi mã băm 32 hex thành số thứ tự lần gặp đầu — hai lần xuất với hai muối phải bằng nhau sau phép này. */
+const doiTenBam = (vanBan: string): string => {
+  const thu = new Map<string, string>();
+  return vanBan.replace(/"[0-9a-f]{32}"/gu, (m) => {
+    if (!thu.has(m)) thu.set(m, `"#${String(thu.size)}"`);
+    return thu.get(m)!;
+  });
+};
+const boXuatLuc = (v: string): string => v.replace(/"xuatLuc": \{[^}]*\}/u, '"xuatLuc": {}');
+
+describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền, tính lại ngoại tuyến", { timeout: 300_000 }, () => {
+  let thuMuc = "";
+  let json = "";
+  let bo: {
+    duLieuNen: {
+      goiX: string;
+      hangMuc: unknown[];
+      bangQuanSat: { mocMoGia: string; hangChuan: string; tuNgay: string; quanSat: { goi: string; ncc: string; gia: string }[] }[];
+      luotCham: {
+        evaluationId: string;
+        mocMoGia: string;
+        dong: {
+          bidVersionId: string;
+          lineNo: number;
+          nhan: string;
+          lyDo: string | null;
+          hoiTo: string[];
+          giaDong: unknown;
+          anhXa: { tacGia: { userId: string; hoTen: string | null }; ghiLuc: string; lyDo: string | null } | null;
+        }[];
+        dauVao: { hangChuan: string; quanSat: string[] }[];
+        dauVaoThieu: number;
+      }[];
+    } | null;
+  };
+  const muoi = randomBytes(32);
+
+  beforeAll(async () => {
+    const xuat = await trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date(), muoi));
+    if (xuat === null) throw new Error("gói X đã chấm mà không xuất được");
+    json = xuat.tep[TEP_DU_LIEU];
+    bo = JSON.parse(json) as typeof bo;
+    thuMuc = await mkdtemp(join(tmpdir(), "tp-bc-dln-"));
+    for (const [ten, noiDung] of Object.entries(xuat.tep)) await writeFile(join(thuMuc, ten), Buffer.from(noiDung, "utf8"));
+  });
+
+  afterAll(async () => {
+    if (thuMuc !== "") await rm(thuMuc, { recursive: true, force: true });
+  });
+
+  it("lớp mang chín hàng của lượt chấm của X, đúng nhãn đã ghi; dòng chưa ánh xạ không giá, không người ánh xạ", () => {
+    const luot = bo.duLieuNen?.luotCham.find((l) => l.evaluationId === evaluationId);
+    expect(luot?.dong).toHaveLength(9);
+    expect(luot?.dauVaoThieu).toBe(0);
+    const nhanCua = (bv: number, line: number) => luot?.dong.find((d) => d.bidVersionId === bgX[bv]!.versionId && d.lineNo === line);
+    expect([nhanCua(0, 1)?.nhan, nhanCua(1, 1)?.nhan, nhanCua(2, 1)?.nhan]).toEqual(["BINH_THUONG", "LECH_CAO", "LECH_VUA"]);
+    expect(nhanCua(0, 2)).toMatchObject({ nhan: "KHONG_DO_DUOC", lyDo: "CHUA_ANH_XA", giaDong: null, anhXa: null });
+    expect(nhanCua(0, 3)?.nhan).toBe("CHUA_DU_LICH_SU");
+    expect(bo.duLieuNen?.hangMuc).toHaveLength(3);
+  });
+
+  it("*dòng ấy do ai ánh xạ, lúc nào, trước hay sau khi giá lộ*: thép ánh xạ TRƯỚC mốc, cát SAU mốc (hồi tố), người ghi có tên", () => {
+    const luot = bo.duLieuNen!.luotCham.find((l) => l.evaluationId === evaluationId)!;
+    const thep = luot.dong.find((d) => d.lineNo === 1)!;
+    const cat = luot.dong.find((d) => d.lineNo === 3 && d.bidVersionId === bgX[0]!.versionId)!;
+    expect(thep.anhXa?.tacGia).toEqual({ userId: ql.nguoi, hoTen: "Nguoi" });
+    expect(thep.anhXa!.ghiLuc < luot.mocMoGia).toBe(true);
+    expect(cat.anhXa!.ghiLuc >= luot.mocMoGia).toBe(true);
+    expect(cat.anhXa?.lyDo).toBe("anh xa sau khi mo de do hoi to cua chinh dong");
+    expect(cat.hoiTo).toContain("ANH_XA");
+  });
+
+  it("[INV-L6] bảng quan sát: sáu quan sát thép (gói 26 tháng trước nằm ngoài biên dưới), hai cát; KHÔNG định danh thô nào của gói khác", () => {
+    const bang = bo.duLieuNen!.bangQuanSat;
+    expect(bang.find((b) => b.hangChuan === hangThep)?.quanSat).toHaveLength(6);
+    expect(bang.find((b) => b.hangChuan === hangCat)?.quanSat).toHaveLength(2);
+    const tho = [...lichSuThep, ...lichSuCat].flatMap((g) => [g.rfqId, ...g.bg.flatMap((b) => [b.versionId, b.supplierId, b.bidId])]);
+    expect(tho.length).toBeGreaterThan(10);
+    for (const id of tho) expect(json, `định danh thô ${id} lọt vào bộ bằng chứng`).not.toContain(id);
+    // Hai quan sát của H1 (cùng gói, hai nhà cung cấp) cùng mã gói, khác mã nhà cung cấp; mã là 32 hex.
+    const thep = bang.find((b) => b.hangChuan === hangThep)!.quanSat;
+    const h1 = thep.filter((q) => q.gia.startsWith("100.") || q.gia.startsWith("120."));
+    expect(h1).toHaveLength(2);
+    expect(h1[0]!.goi).toBe(h1[1]!.goi);
+    expect(h1[0]!.ncc).not.toBe(h1[1]!.ncc);
+    expect(h1[0]!.goi).toMatch(/^[0-9a-f]{32}$/u);
+    expect(new Set(thep.map((q) => q.goi)).size).toBe(4);
+  });
+
+  it("muối mỗi lần xuất: cùng muối ⇒ cùng byte; muối mới ⇒ khác ở mã băm, BẰNG sau khi đổi tên mã băm", async () => {
+    const lai = await trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date(), muoi));
+    expect(boXuatLuc(lai!.tep[TEP_DU_LIEU])).toBe(boXuatLuc(json));
+    const moi = await trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date()));
+    expect(boXuatLuc(moi!.tep[TEP_DU_LIEU])).not.toBe(boXuatLuc(json));
+    expect(doiTenBam(boXuatLuc(moi!.tep[TEP_DU_LIEU]))).toBe(doiTenBam(boXuatLuc(json)));
+  });
+
+  it("[INV-J2] [INV-L7] CLI `kiem` khi đã ngắt CSDL: ok=true, chín hàng benchmark ĐẠT", () => {
+    const kq = kiemNgoaiTuyen(thuMuc);
+    expect(kq.ma, kq.ra).toBe(0);
+    expect(kq.ra).toContain("ok=true");
+    expect(kq.ra).toMatch(/benchmark\tdong=9\tdat=9\tlech=0/u);
+  });
+
+  it("sửa MỘT nhãn đã lưu trong bundle ⇒ CLI đỏ, gọi tên dòng; bớt một đầu vào đã lưu ⇒ đỏ ở lời báo §8.6", async () => {
+    const thu = async (sua: (b: typeof bo) => void, mau: RegExp): Promise<void> => {
+      const ban = JSON.parse(json) as typeof bo;
+      sua(ban);
+      const tm = await mkdtemp(join(tmpdir(), "tp-bc-dln-sua-"));
+      try {
+        await writeFile(join(tm, TEP_DU_LIEU), Buffer.from(`${JSON.stringify(ban, null, 2)}\n`, "utf8"));
+        await writeFile(join(tm, TEP_DAC_TA), Buffer.from(await readFile(join(thuMuc, TEP_DAC_TA), "utf8"), "utf8"));
+        const kq = kiemNgoaiTuyen(tm);
+        expect(kq.ma, kq.ra).toBe(1);
+        expect(kq.ra).toMatch(mau);
+      } finally {
+        await rm(tm, { recursive: true, force: true });
+      }
+    };
+    await thu((b) => {
+      const d = b.duLieuNen!.luotCham.find((l) => l.evaluationId === evaluationId)!.dong.find(
+        (x) => x.bidVersionId === bgX[0]!.versionId && x.lineNo === 1,
+      )!;
+      d.nhan = "LECH_CAO";
+    }, /LECH-BENCHMARK\t.*`nhan` đã lưu "LECH_CAO", tính lại ra "BINH_THUONG"/u);
+    await thu((b) => {
+      const dv = b.duLieuNen!.luotCham.find((l) => l.evaluationId === evaluationId)!.dauVao.find((x) => x.hangChuan === hangThep)!;
+      dv.quanSat = dv.quanSat.slice(1);
+    }, /LOI-BENCHMARK\t.*hai tập khác nhau/u);
   });
 });
