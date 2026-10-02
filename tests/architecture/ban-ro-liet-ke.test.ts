@@ -33,6 +33,8 @@ const TEP_TS: Readonly<Record<string, string>> = {
   "packages/du-lieu-nen/src/anh-xa.ts": "TỒN TẠI — chỉ hỏi gói đã có hàng bản rõ chưa (L13), không đọc `payload`",
   // [S1.256 / S4.5b] Mốc mở giá của gói X — đúng định nghĩa `moc_goi` của `quan_sat_gia`; giá đi qua `quan_sat_gia` (dưới).
   "packages/du-lieu-nen/src/benchmark-goi.ts": "MỐC — `min(unsealed_at)` của gói đang xét, không đọc `payload`",
+  // [rà soát S4.5c1] Lần mở thầu commit sau lúc giao dịch đọc bắt đầu thì phép tính bây giờ không thấy báo giá của nó ⇒ `THU_LAI`.
+  "packages/danh-gia/src/doc-benchmark.ts": "MỐC — có phong bì của lần mở thầu mới nhất mở lúc `≥ now()` không (`THU_LAI`), không đọc `payload`",
 };
 
 /** Hàm SQL có thân chạm bảng bản rõ. */
