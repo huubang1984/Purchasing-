@@ -366,6 +366,12 @@ describe("[INV-L7] [S1.9101 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, n
     expect(baoLoi({ ...bo, luotCham: bo.luotCham.map((l) => ({ ...l, coBenchmark: false })) })).toMatch(/KHÔNG cấu hình benchmark/u);
   });
 
+  it("lượt chấm thứ hai (sau BAFO) cấu hình benchmark mà lớp chỉ mang lượt đầu ⇒ ĐỎ gọi tên lượt thiếu", () => {
+    const bo = boVoi();
+    const hai = { ...bo.luotCham[0]!, evaluationId: "ev-2" };
+    expect(baoLoi({ ...bo, luotCham: [...bo.luotCham, hai] })).toMatch(/lượt chấm ev-2 có phiên bản chính sách cấu hình benchmark mà lớp dữ liệu nền không mang nó/u);
+  });
+
   it("bớt một hàng (dòng LECH_CAO của báo giá) ⇒ THIẾU; nhân đôi một hàng ⇒ TRÙNG", () => {
     expect(baoLoi(boVoi(suaLuot((l) => ({ ...l, dong: l.dong.filter((d) => d.lineNo !== 3) }))))).toMatch(/THIẾU hàng benchmark cho \(báo giá:dòng\) bv-1:3/u);
     expect(baoLoi(boVoi(suaLuot((l) => ({ ...l, dong: [...l.dong, l.dong[0]!] }))))).toMatch(/hàng benchmark TRÙNG \(bv-1:1\)/u);
@@ -389,7 +395,7 @@ describe("[INV-L7] [S1.9101 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, n
     expect(baoLoi(bo)).toMatch(/quan sát q9 mang ngày trơn 2026-09-30 trên một ngày biên/u);
   });
 
-  it("bộ đọc từ chối có địa chỉ: phương pháp lạ, sàn 0, ngưỡng vừa ≥ cao, `dauVaoThieu` âm, đơn giá quá 64 ký tự, ngày sai dạng", () => {
+  it("bộ đọc từ chối có địa chỉ: phương pháp lạ, sàn 0 hay quá 50, cửa sổ quá 60 tháng, ngưỡng vừa ≥ cao, `dauVaoThieu` âm, đơn giá quá 64 ký tự, ngày sai dạng", () => {
     const tho = (): unknown => JSON.parse(JSON.stringify(boVoi())) as unknown;
     expect(() => docBo(tho())).not.toThrow();
     /** Đặt (hay xoá, `gt === undefined`) giá trị tại một đường dẫn của bản JSON — không ép kiểu `any`. */
@@ -406,6 +412,8 @@ describe("[INV-L7] [S1.9101 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, n
     thu([...NHOM_DUONG, "phuong_phap"], "KHAC", /chinhSachBenchmark\.phuong_phap/u);
     thu(["duLieuNen", "phuongPhap"], "KHAC", /duLieuNen\.phuongPhap/u);
     thu([...NHOM_DUONG, "san_goi"], "0", /san_goi.*số nguyên 1–50/u);
+    thu([...NHOM_DUONG, "san_ncc"], "51", /san_ncc.*số nguyên 1–50/u);
+    thu([...NHOM_DUONG, "cua_so_thang"], "61", /cua_so_thang.*số nguyên 1–60/u);
     thu([...NHOM_DUONG, "nguong_lech_vua"], "0.10", /0 < nguong_lech_vua < nguong_lech_cao/u);
     thu(["duLieuNen", "luotCham", 0, "dauVaoThieu"], -1, /dauVaoThieu.*không âm/u);
     thu(["duLieuNen", "bangQuanSat", 0, "quanSat", 0, "gia"], "1".repeat(65), /quanSat\[0\]\.gia/u);

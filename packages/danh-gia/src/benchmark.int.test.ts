@@ -335,7 +335,7 @@ async function dauVao(org: string, evaluationId: string): Promise<{ bid_version_
 
 // ---- Dữ liệu thiết kế ----------------------------------------------------------------------------------------------------------
 // Thép (gốc kg), dòng 10 kg, đơn giá = số tiền / 10:
-//   H1 {100, 120} → trung vị 110 · H2 {105} → 105 (do pm2 lập) · H3 {90, 110} → 100, ánh xạ HỒI TỐ, mở 3 tháng trước · H4 {0} → loại, đếm ·
+//   H1 {100, 120} → trung vị 110 · H2 {105} → 105 (do pm2 lập) · H3 {90, 110} → 100, ánh xạ HỒI TỐ, mở 3 tháng trước · H4 {0} → loại, đếm, mở ngay sau biên cửa sổ ·
 //   H5 {500} mở 26 tháng trước → ngoài cửa sổ 12 tháng.
 //   Trung vị các trung vị gói {100, 105, 110} = 105; 0.05·105 = 5.25; 0.10·105 = 10.5.
 // Cát (gốc kg): H6 {50}, H7 {55} → hai gói, dưới sàn.
@@ -382,11 +382,14 @@ beforeAll(async () => {
   // [rà soát S4.5c2] H3 mở 3 tháng trước — trong cửa sổ, ngoài mọi ngày biên — để bộ bằng chứng có quan sát mang `ngay` dạng NGÀY
   // TRƠN (§8.2). H3 vốn ánh xạ hồi tố, nên mốc lùi không đổi cờ hồi tố hay số đếm nào.
   const luc3Thang = (await db.pool.query<{ t: string }>("SELECT (now() - interval '3 months')::text AS t")).rows[0]!.t;
+  // [rà soát S4.5c2] H4 (đơn giá 0 — bị loại TRƯỚC dải, nên số đếm nào cũng không đổi) mở mười phút SAU biên cửa sổ 12 tháng của X:
+  // trong cửa sổ, trên NGÀY BIÊN của biên ấy — §8.2 đòi đủ micro giây ở đó. X mở vài giây sau dòng này, nên biên của X còn trước H4.
+  const lucBienCuaSo = (await db.pool.query<{ t: string }>("SELECT (now() - interval '12 months' + interval '10 minutes')::text AS t")).rows[0]!.t;
   lichSuThep = [
     await goiLichSu(boA, hangThep, ["1000", "1200"]),
     await goiLichSu(boA2, hangThep, ["1050"]),
     await goiLichSu(boA, hangThep, ["900", "1100"], { hoiTo: true, luc: luc3Thang }),
-    await goiLichSu(boA, hangThep, ["0"]),
+    await goiLichSu(boA, hangThep, ["0"], { luc: lucBienCuaSo }),
     await goiLichSu(boA, hangThep, ["5000"], { luc: luc26Thang }),
   ];
   lichSuCat = [await goiLichSu(boA, hangCat, ["500"]), await goiLichSu(boA, hangCat, ["550"])];
@@ -1463,6 +1466,11 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
       }
     }
     expect(tron).toBeGreaterThan(0);
+    // H4 nằm trên ngày của biên cửa sổ — không phải ngày của mốc — nên đủ micro giây ở đó chỉ đến từ biên cửa sổ trong tập ngày biên.
+    const thep = ban.duLieuNen.bangQuanSat.find((b) => b.quanSat.some((q) => Number(q.gia) === 0))!;
+    const h4 = thep.quanSat.find((q) => Number(q.gia) === 0)!;
+    expect(h4.ngay.length, `H4 mang ${h4.ngay}`).toBeGreaterThan(10);
+    expect(h4.ngay.slice(0, 10)).not.toBe(thep.mocMoGia.slice(0, 10));
   });
 
   it("muối mỗi lần xuất: cùng muối ⇒ cùng byte; muối mới ⇒ khác ở mã băm, BẰNG sau khi đổi tên mã băm", async () => {
