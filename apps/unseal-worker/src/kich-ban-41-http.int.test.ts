@@ -1965,8 +1965,24 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       expect(dong, kiem.ra).not.toBeNull();
       expect(Number(dong?.[1])).toBeGreaterThan(0);
       expect([dong?.[2], dong?.[3]]).toEqual([dong?.[1], "0"]);
-      const dln = (JSON.parse(eb.tep["bo-bang-chung.json"] ?? "") as { duLieuNen: { luotCham: unknown[] } | null }).duLieuNen;
+      const boDln = JSON.parse(eb.tep["bo-bang-chung.json"] ?? "") as {
+        luotCham: { coBenchmark: boolean }[];
+        duLieuNen: { luotCham: { dong: unknown[] }[]; bangQuanSat: { quanSat: unknown[] }[] } | null;
+      };
+      const dln = boDln.duLieuNen;
       expect(dln?.luotCham).toHaveLength(2);
+      // [rà soát S4.5c2] Cờ của lớp chấm thầu nói lớp dữ liệu nền PHẢI có mặt; hàng sổ của lần xuất mang số hàng benchmark và số quan
+      // sát của gói KHÁC đã đi ra (THẤP-6) — đúng bằng thứ trong bundle.
+      expect(boDln.luotCham.map((l) => l.coBenchmark)).toEqual([true, true]);
+      const { rows: soKiem } = await db.pool.query<{ payload: Record<string, unknown> }>(
+        "SELECT payload FROM audit_events WHERE org_id = $1 AND action = 'EVIDENCE_BUNDLE_EXPORTED' AND resource_id = $2 ORDER BY seq DESC LIMIT 1",
+        [orgA, trangThai.rfqId],
+      );
+      expect(soKiem[0]?.payload).toEqual({
+        exportedBySessionId: expect.any(String) as unknown,
+        soDongBenchmark: dln!.luotCham.reduce((t, l) => t + l.dong.length, 0),
+        soQuanSat: dln!.bangQuanSat.reduce((t, b) => t + b.quanSat.length, 0),
+      });
 
       const xuat = chayCli(db.connectionString, "xuat", "--org", orgA, "--rfq", trangThai.rfqId, "--ra", quaCli);
       expect(xuat.ma, `${xuat.ra}\n${xuat.loi}`).toBe(0);

@@ -335,7 +335,7 @@ async function dauVao(org: string, evaluationId: string): Promise<{ bid_version_
 
 // ---- Dữ liệu thiết kế ----------------------------------------------------------------------------------------------------------
 // Thép (gốc kg), dòng 10 kg, đơn giá = số tiền / 10:
-//   H1 {100, 120} → trung vị 110 · H2 {105} → 105 (do pm2 lập) · H3 {90, 110} → 100, ánh xạ HỒI TỐ · H4 {0} → loại, đếm ·
+//   H1 {100, 120} → trung vị 110 · H2 {105} → 105 (do pm2 lập) · H3 {90, 110} → 100, ánh xạ HỒI TỐ, mở 3 tháng trước · H4 {0} → loại, đếm ·
 //   H5 {500} mở 26 tháng trước → ngoài cửa sổ 12 tháng.
 //   Trung vị các trung vị gói {100, 105, 110} = 105; 0.05·105 = 5.25; 0.10·105 = 10.5.
 // Cát (gốc kg): H6 {50}, H7 {55} → hai gói, dưới sàn.
@@ -379,10 +379,13 @@ beforeAll(async () => {
   hangCat = await tao("CAT-VANG", "Cát vàng");
 
   const luc26Thang = (await db.pool.query<{ t: string }>("SELECT (now() - interval '26 months')::text AS t")).rows[0]!.t;
+  // [rà soát S4.5c2] H3 mở 3 tháng trước — trong cửa sổ, ngoài mọi ngày biên — để bộ bằng chứng có quan sát mang `ngay` dạng NGÀY
+  // TRƠN (§8.2). H3 vốn ánh xạ hồi tố, nên mốc lùi không đổi cờ hồi tố hay số đếm nào.
+  const luc3Thang = (await db.pool.query<{ t: string }>("SELECT (now() - interval '3 months')::text AS t")).rows[0]!.t;
   lichSuThep = [
     await goiLichSu(boA, hangThep, ["1000", "1200"]),
     await goiLichSu(boA2, hangThep, ["1050"]),
-    await goiLichSu(boA, hangThep, ["900", "1100"], { hoiTo: true }),
+    await goiLichSu(boA, hangThep, ["900", "1100"], { hoiTo: true, luc: luc3Thang }),
     await goiLichSu(boA, hangThep, ["0"]),
     await goiLichSu(boA, hangThep, ["5000"], { luc: luc26Thang }),
   ];
@@ -1429,12 +1432,48 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
     expect(new Set(thep.map((q) => q.goi)).size).toBe(4);
   });
 
+  it("[rà soát S4.5c2] §8.2 `ngay` là NGÀY UTC trừ trên ngày biên; quan sát xếp theo NỘI DUNG; lớp chấm thầu mang cờ `coBenchmark`", () => {
+    const ban = JSON.parse(json) as {
+      luotCham: { evaluationId: string; coBenchmark: boolean }[];
+      duLieuNen: {
+        bangQuanSat: { mocMoGia: string; tuNgay: string; quanSat: { ngay: string; gia: string }[] }[];
+        luotCham: { mocMoGia: string; dong: { cuaSoTu: string | null }[] }[];
+      };
+    };
+    expect(ban.luotCham.find((l) => l.evaluationId === evaluationId)?.coBenchmark).toBe(true);
+    let tron = 0;
+    for (const b of ban.duLieuNen.bangQuanSat) {
+      const bien = new Set([b.mocMoGia, b.tuNgay].map((t) => t.slice(0, 10)));
+      for (const l of ban.duLieuNen.luotCham.filter((x) => x.mocMoGia === b.mocMoGia)) {
+        for (const d of l.dong) if (d.cuaSoTu !== null) bien.add(d.cuaSoTu.slice(0, 10));
+      }
+      for (const q of b.quanSat) {
+        if (q.ngay.length === 10) {
+          tron += 1;
+          expect(bien.has(q.ngay), `ngày trơn ${q.ngay} trên một ngày biên`).toBe(false);
+        } else {
+          expect(q.ngay).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u);
+          expect(bien.has(q.ngay.slice(0, 10)), `mốc đủ micro giây ${q.ngay} ngoài mọi ngày biên`).toBe(true);
+        }
+      }
+      // Thứ tự theo nội dung: (ngày, đơn giá) không giảm — định danh thô không quyết định vị trí nào ngoài phép phá hoà.
+      for (let i = 1; i < b.quanSat.length; i += 1) {
+        const [t, s] = [b.quanSat[i - 1]!, b.quanSat[i]!];
+        expect(t.ngay < s.ngay || (t.ngay === s.ngay && Number(t.gia) <= Number(s.gia)), `${t.ngay}/${t.gia} trước ${s.ngay}/${s.gia}`).toBe(true);
+      }
+    }
+    expect(tron).toBeGreaterThan(0);
+  });
+
   it("muối mỗi lần xuất: cùng muối ⇒ cùng byte; muối mới ⇒ khác ở mã băm, BẰNG sau khi đổi tên mã băm", async () => {
     const lai = await trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date(), muoi));
     expect(boXuatLuc(lai!.tep[TEP_DU_LIEU])).toBe(boXuatLuc(json));
     const moi = await trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date()));
     expect(boXuatLuc(moi!.tep[TEP_DU_LIEU])).not.toBe(boXuatLuc(json));
     expect(doiTenBam(boXuatLuc(moi!.tep[TEP_DU_LIEU]))).toBe(doiTenBam(boXuatLuc(json)));
+    // [rà soát S4.5c2] Muối là tham số công khai của `dungBoBangChung`: một người gọi truyền muối ngắn (hay hằng) thì mã băm dò ngược
+    // được bằng vét cạn — ném, không xuất.
+    await expect(trong(orgA, (c) => dungBoBangChung(c, orgA, rfqX, new Date(), Buffer.alloc(16)))).rejects.toThrow(/32 byte/u);
   });
 
   it("[INV-L7] CLI `kiem` khi đã ngắt CSDL: ok=true, chín hàng benchmark ĐẠT", () => {
