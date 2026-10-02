@@ -54,7 +54,7 @@
       phiên bản. Một phiên bản có bậc chỉ có hiệu lực khi một người KHÁC người khai đã ký nó.</p>
     <dl class="tt" id="tt-to-chuc"></dl>
     <table id="bang-pb">
-      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Benchmark</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
+      <thead><tr><th class="so">Bản</th><th>Hiệu lực từ</th><th class="so">Ngưỡng kép</th><th>Bậc</th><th>Chấm thầu</th><th>Benchmark</th><th>Chữ ký</th><th>Trạng thái</th></tr></thead>
       <tbody></tbody>
     </table>
     <button id="nut-doc-pb" class="phu">Đọc lại</button>
@@ -104,6 +104,17 @@
       <thead><tr><th class="so">Từ số tiền</th><th class="so">Tài chính</th><th class="so">Mua sắm</th><th class="so">Giám đốc</th><th class="so">Tổng</th></tr></thead>
       <tbody></tbody>
     </table>
+    <!-- [S1.258 / khoản 329] Trọng số chấm và BAFO top-N (`056`, `057`). Thành phần CỐ ĐỊNH, hiện chỉ-đọc — đúng vế hẹp mà lượt chấm
+         đọc được hôm nay; BAFO top-N sửa được. Bỏ chọn thì phiên bản không khai trọng số, và màn nói hậu quả. -->
+    <h3>Chấm thầu</h3>
+    <p class="ghi">Lượt chấm xếp các báo giá theo một thành phần: giá, tính bằng tiền. Gói ghim phiên bản hiệu lực lúc nó mở —
+      phiên bản không khai trọng số thì gói mở dưới nó không chấm được, và phiên bản tạo sau không cứu gói ấy.</p>
+    <label><input type="checkbox" id="co-trong-so"> Khai trọng số chấm cho phiên bản này</label>
+    <div id="khoi-trong-so" hidden>
+      <dl class="tt" id="tt-trong-so"></dl>
+      <label for="bafo-top-n">Số nhà thầu vào vòng chào giá lại (BAFO top-N; 0 là không dùng BAFO)</label>
+      <input id="bafo-top-n" inputmode="numeric" autocomplete="off" placeholder="2">
+    </div>
     <!-- [S1.256 / S4.5b] Nhóm khoá `benchmark` (spec S4 §4.1): so đơn giá của một gói với lịch sử NỘI BỘ của tổ chức, theo
          phương pháp `TRUNG_VI_THEO_GOI_V1`. Bỏ chọn thì phiên bản không cấu hình benchmark — không mặc định ngầm. -->
     <h3>Benchmark giá</h3>
