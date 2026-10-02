@@ -24108,6 +24108,12 @@ này không còn là trao thầu mới nhất của gói — gói đã đổi t�
 - Cái giá: lần duyệt xếp hàng sau mọi đường đang giữ cùng hàng RFQ (rút, huỷ, đề xuất, và các đường khác khoá gói). Không đo
   thời gian chờ dưới tải.
 - Câu từ chối mới đi qua API nguyên văn; trang `/login` in nó ở bước 7 qua `loiCua` — không đi lại trên trình duyệt ở vòng này.
+- Từ §S1.260, lần đọc benchmark ở `/mo-thau` giữ `FOR SHARE` trên hàng gói rồi hỏi lại trước khi ghi; khoá ấy xung khắc với
+  `FOR NO KEY UPDATE`, nên lần duyệt nay cũng chờ một lần đọc benchmark đang chạy, và ngược lại. Đọc từ mã, không đo.
 
 ## 7. Số đo
+- Nhánh xếp chồng trên #237 (§S1.261). #237 gộp master #235 (§S1.260) ở `8e20f2b6`: xung đột chỉ ở ba tệp sổ, giữ cả hai vế;
+  `pnpm t0`, `cap-so --kiem` xanh; `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4582 khẳng
+  định, 79/79 bất biến, 2181 giây, `evidence/INV-matrix.md` không đổi — số đo của lượt gộp ấy ghi ở đây để #237 không phải
+  đẩy thêm một commit chỉ chứa số đo.
 - ‹SỐ-ĐO›
