@@ -515,6 +515,7 @@ Tạo lại một đăng ký đã mất: `terraform apply` stack 60 lần nữa,
   KeyAdmin. Kiểm sau apply (đối chứng dương, bắt buộc): bằng KeyAdmin, `aws kms get-key-policy`
   rồi `aws kms put-key-policy` lại ĐÚNG policy ấy trên một khoá của prod ⇒ phải có thư trong vài
   phút. Không có thư thì cảnh báo chưa chạy, dù `apply` xanh.
+  **[2026-10-02 / khoản 336, rổ A]** Cảnh báo ấy chỉ bắt `PutKeyPolicy`. KeyAdmin còn `DisableKey`, `ScheduleKeyDeletion` (người gọi chọn thời gian chờ, thấp nhất 7 ngày), `UpdateAlias`, `DeleteAlias`, `DisableKeyRotation` — và chưa thao tác nào trong số ấy phát thư. Tới khi khoản ấy đóng, người giữ khoá thứ hai chỉ thấy chúng qua CloudTrail.
 - **`tp-deploy-worker` PassRole được role của worker**, tức pipeline ấy chạy được một task mang
   quyền `Decrypt`. Tách role + environment `prod-worker` **có duyệt tay** trên GitHub là giảm
   nhẹ; cảnh báo trên task mang role worker ngoài service chính thức là stack `60-canh-bao` ⑵:
