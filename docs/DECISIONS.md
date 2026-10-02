@@ -11306,7 +11306,9 @@ bảng kết quả và đầu vào của lượt chấm), ADR-143 (bản lưu, U
   tên HIỆN TẠI lúc xuất, không phải lúc ghi; mã người dùng là thứ không đổi.
 - **Chi phí ở quy mô lớn — ĐO** (biên bản §S1.9101 mục 6, `gieo.sql` 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn, gói X mới
   nhất, một lượt chấm): lượt chấm 17,0 s; xuất 14,1–14,6 s (40 lần đọc `quan_sat_gia`); bundle **11,07 MB** — 29.940 quan sát, 60 hàng
-  benchmark; `kiem` ngoại tuyến 1,0–1,2 s, ĐẠT 60/60. Ước lượng trước khi đo (7–10 MB) THẤP hơn số đo. Hai lượt chấm (BAFO) thêm 20
+  benchmark; `kiem` ngoại tuyến 1,0–1,2 s, ĐẠT 60/60. Ước lượng trước khi đo (7–10 MB) THẤP hơn số đo. Đo lại sau rà soát: chấm 17,1 s,
+  xuất 13,9–15,1 s, 11,08 MB, `kiem` 1,13 s — dữ liệu gieo mở mọi gói trong cùng ngày với mốc của X nên mọi `ngay` giữ micro giây; phần
+  bớt của ngày trơn (≤ 17 byte mỗi quan sát) chưa đo. Hai lượt chấm (BAFO) thêm 20
   lần đọc — ~21 s theo chi phí mỗi lần đã đo, dưới trần 60 s của ALB; chưa đo trực tiếp.
 - **Thời gian xuất qua HTTP có trần — khoản 9401** (chủ dự án chốt ⑹). Xuất là đồng bộ và tất-cả-hoặc-không: chi phí ~0,35–0,45 s cho
   mỗi lần đọc `quan_sat_gia`, (1 + E) × H lần (E lượt chấm, H hàng chuẩn). Suy từ số đo: H = 50 sau BAFO (E = 2) ⇒ 150 lần ≈ 53–63 s,

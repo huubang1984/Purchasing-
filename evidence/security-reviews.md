@@ -24006,6 +24006,10 @@ Bốn câu, cả bốn theo đề xuất, sau phép đo ở mục 3: ⑴ muối 
 GIÁ ĐÃ QUY ĐỔI — phép quy đổi đơn vị không tính lại, `DAC-TA.md` nói ra; ⑶ chỉ lớp LƯỢT CHẤM (`103`) — bản lưu của bảng so sánh (`104`)
 không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm lúc ghi, nguồn, lý do.
 
+Sau rà soát đối kháng (mục 8), hai câu nữa, cùng ngày, theo đề xuất: ⑸ *"Làm thô ngày, sửa lời hứa"* — `ngay` của quan sát về ngày UTC
+trừ ngày biên, thứ tự theo nội dung, bỏ lề một tháng, và văn bản nói đúng giới hạn của phép băm; ⑹ *"Giữ đồng bộ, nói ra + khoản nợ"* —
+xuất qua HTTP giữ đồng bộ, giới hạn thời gian ghi bằng số ở ADR-9201, khoản 9401 cho xuất nền; vòng này chỉ gỡ phép bậc hai.
+
 ## 3. Đo trước
 
 1. Bộ xuất (`dungBoBangChung`) chỉ mang lớp chấm thầu; lớp governance S3.9 chưa làm. Kịch bản 41 bước 12j đòi CLI và HTTP ra cùng byte
@@ -24023,8 +24027,10 @@ không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm
   `nhanMotDong` (thuần: `tinhDai` + `ganNhan`) và `truThang` ra cửa; `PHUONG_PHAP_BENCHMARK` ra cửa.
 - `packages/danh-gia/src/lop-du-lieu-nen.ts`: đọc hàng kết quả và đầu vào `103`, hạng mục, hàng ánh xạ + họ tên người ghi; giá của chính
   dòng tại LÚC CHẤM (ứng viên: hàng chuẩn của mọi ánh xạ ghi trước lúc chấm); bảng quan sát mỗi (mốc mở giá, hàng chuẩn) — `HOP_LE`, từ
-  một tháng trước biên cửa sổ rộng nhất tới mốc; định danh `HMAC-SHA256(muối, "goi:"/"ncc:" + id)` 128 bit; mã quan sát `q1…` trong
-  bundle; mốc ISO UTC sáu chữ số lẻ. `dungBoBangChung` nhận muối (mặc định `randomBytes(32)`); bundle phiên bản 2.
+  ~~một tháng trước~~ biên cửa sổ rộng nhất tới mốc (lề bỏ ở rà soát, mục 8); định danh `HMAC-SHA256(muối, "goi:"/"ncc:" + id)` 128
+  bit; mã quan sát `q1…` trong bundle; mốc ISO UTC sáu chữ số lẻ; **[rà soát]** `ngay` của quan sát là ngày UTC, đủ micro giây chỉ
+  trên ngày biên, quan sát xếp theo nội dung. `dungBoBangChung` nhận muối (mặc định `randomBytes(32)`, ngắn hơn 32 byte ⇒ ném); bundle
+  phiên bản 2; lớp chấm thầu thêm cờ `coBenchmark`; hàng sổ `EVIDENCE_BUNDLE_EXPORTED` thêm `soDongBenchmark`, `soQuanSat`.
 - `DAC-TA.md` phiên bản 2: §6 nói lớp dữ liệu nền CÓ đọc mốc thời gian; §8 — định danh băm, thời điểm, cửa sổ UTC (bảng ba ca), đầu
   vào, tám bước của một dòng, đầu vào đã lưu, ánh xạ, thứ KHÔNG tính lại.
 - `tools/bo-xuat-danh-gia`: bộ đọc phán xử lớp mới (mốc đúng dạng §8.2, nhóm khoá đúng sáu khoá); `doc-lap/benchmark-lai.ts` — bản cài
@@ -24040,31 +24046,41 @@ không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm
 
 ## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
 
-- Lề một tháng trước biên cửa sổ trong bảng quan sát: để biên thấy được từ cả hai phía (đột biến D4 đo nó là phép NHÌN, không phải
-  phép đúng — mục 7).
+- ~~Lề một tháng trước biên cửa sổ trong bảng quan sát: để biên thấy được từ cả hai phía~~ — đột biến D4 của lượt đầu đo nó là phép
+  NHÌN, không phải phép đúng; rà soát THẤP-5 chỉ ra nó chỉ thêm giá của gói không lượt chấm nào dùng. **Bỏ** (mục 8).
 - Tập ứng viên giá của chính dòng giới hạn ở ánh xạ ghi TRƯỚC lúc chấm — ánh xạ ghi sau không hiệu lực tại mốc ấy, đọc nó chỉ tốn một
   lần quét.
-- Thứ tự quan sát theo mốc của gói, định danh thô chỉ phá hoà — hai lần xuất cùng thứ tự dù khác muối.
+- ~~Thứ tự quan sát theo mốc của gói, định danh thô chỉ phá hoà~~ **[rà soát]** thứ tự theo NỘI DUNG (`ngay`, đơn giá theo giá trị,
+  tiền tệ, cùng người tạo, cờ hồi tố), định danh thô chỉ phá hoà giữa hai quan sát giống hệt nhau — hai lần xuất cùng thứ tự dù khác
+  muối, và thứ tự không kể thứ tự UUID.
 - `hangMuc[]` (mô tả, đơn vị, số lượng mỗi dòng) vào lớp để câu *"dòng D10-HP"* đọc được không cần CSDL.
 - Bộ kiểm chỉ đọc bundle phiên bản 2.
 
 ## 6. Đo
 
-- **Đơn vị** (`tools/bo-xuat-danh-gia`): `doc-lap/benchmark-lai.test.ts` 8 ca — lùi tháng (bảng DAC-TA, 2100 không nhuận, 2000 nhuận,
+- **Đơn vị** (`tools/bo-xuat-danh-gia`; số của mã SAU rà soát): `doc-lap/benchmark-lai.test.ts` 9 ca — lùi tháng (bảng DAC-TA, 2100 không nhuận, 2000 nhuận,
   qua ranh năm, 60 tháng), dữ liệu thiết kế (mốc 105: 105/130/96, bảy số đếm), biên ngưỡng hai phía (110,25 trong dải, 110,2501 lệch
   vừa; 94,5 lệch vừa, 94,4999 lệch cao), biên cửa sổ (đúng `cuaSoTu` vào, mốc mở giá không), dưới sàn, phân vị nội suy bốn gói, không đo
-  được, dòng USD (luật tiền tệ đứng trước luật giá 0). `kiem-du-lieu-nen.test.ts` 12 ca — bundle lành ĐẠT; bảy đột biến bundle đỏ ở đúng
+  được, dòng USD (luật tiền tệ đứng trước luật giá 0), ngày trơn ngoài ngày biên phán xử bằng ngày và ngày trơn TRÊN ngày biên ném có
+  tên. `kiem-du-lieu-nen.test.ts` 19 ca — bundle lành ĐẠT; bảy đột biến bundle đỏ ở đúng
   lời báo (nhãn, giá quan sát dời mốc — và đổi giá ở gói ngoài KHÔNG dời mốc nên ĐẠT, tập đầu vào, `dauVaoThieu`, số đếm, cờ hồi tố, báo
   giá lạ, lượt chấm lạ, thiếu bảng); lớp hàm thuần có lỗi ⇒ *HAI LỚP BẤT ĐỒNG*; ADR-059 ⒞ trong thế giới lõi lỗi; 400 bộ ngẫu nhiên hai
-  lớp đồng ý (nhãn, chiều, tập đầu vào).
-- **Tích hợp** (`packages/danh-gia/src/benchmark.int.test.ts` ⑼, Postgres 16, 61/61 cả tệp): xuất gói X của dữ liệu thiết kế bằng
+  lớp đồng ý (nhãn, chiều, cửa sổ, bảy số đếm, tập đầu vào — bốn mốc, kể cả cuối tháng); **[rà soát]** bảy ca mới: lớp `null` khi
+  lượt chấm cấu hình benchmark, lớp mang lượt có cờ tắt, lượt thứ hai thiếu ở lớp, THIẾU/TRÙNG dòng, ánh xạ đã lưu khác ánh xạ hiệu lực
+  và dòng không ánh xạ mang ánh xạ/cờ/hàng chuẩn, ngày trơn trên ngày biên, mười một lần từ chối có địa chỉ của bộ đọc.
+  `packages/danh-gia/src/lop-du-lieu-nen.test.ts` 2 ca — `isoMicro` (qua ranh mili giây, ranh ngày), `ngayXuat` (hai dạng).
+- **Tích hợp** (`packages/danh-gia/src/benchmark.int.test.ts` ⑼, Postgres 16, 62/62 cả tệp, ⑼ 7 ca): xuất gói X của dữ liệu thiết kế bằng
   `dungBoBangChung`; chín hàng đúng nhãn đã ghi; dòng chưa ánh xạ không giá, không người ánh xạ; thép ánh xạ TRƯỚC mốc, cát SAU mốc với
   lý do và cờ `ANH_XA`, người ghi `{userId, hoTen}`; bảng thép sáu quan sát (gói 26 tháng ngoài biên dưới), cát hai; không định danh thô
   nào (gói, báo giá, nhà cung cấp, bid — hơn mười id) của gói khác trong JSON; hai quan sát cùng gói cùng mã gói, khác mã nhà cung cấp;
   cùng muối ⇒ cùng byte, muối mới ⇒ khác, bằng sau đổi tên mã băm; **CLI `kiem` THẬT, `DATABASE_URL` đã xoá: ok=true, `dong=9 dat=9
-  lech=0`**; sửa một nhãn hay bớt một đầu vào ⇒ CLI đỏ ở đúng dòng.
+  lech=0`**; sửa một nhãn hay bớt một đầu vào ⇒ CLI đỏ ở đúng dòng. **[rà soát]** Dữ liệu thiết kế dời hai mốc mà không đổi số đếm
+  nào: H3 (hồi tố sẵn) mở 3 tháng trước — quan sát ngày trơn; H4 (đơn giá 0, loại trước dải) mở mười phút sau biên cửa sổ của X —
+  quan sát đủ micro giây trên ngày biên cửa sổ. Ca mới: mọi `ngay` đúng một trong hai dạng §8.2 theo tập ngày biên, có ít nhất một
+  ngày trơn, H4 đủ micro giây; quan sát không giảm theo (ngày, đơn giá); cờ `coBenchmark`; muối 16 byte ⇒ ném.
 - **Kịch bản 41 qua HTTP** (85/85): bundle tải qua HTTP mang lớp dữ liệu nền của HAI lượt chấm (trước và sau BAFO); `kiem` ngoại tuyến
-  tính lại mọi nhãn, lệch 0; CLI = HTTP sau đổi tên mã băm. `bo-xuat.int` 9/9 (bundle không lớp dữ liệu nền vẫn kiểm được).
+  tính lại mọi nhãn, lệch 0 — luật ĐỦ dòng giữ trên dữ liệu thật của kịch bản; CLI = HTTP sau đổi tên mã băm; **[rà soát]** hai cờ
+  `coBenchmark` bật; hàng sổ `EVIDENCE_BUNDLE_EXPORTED` mang đúng `soDongBenchmark`, `soQuanSat` của bundle. `bo-xuat.int` 9/9 (bundle không lớp dữ liệu nền vẫn kiểm được).
 - **Kiến trúc**: `boundaries` (đối chứng trực tiếp và gián tiếp của `g17-…-du-lieu-nen`; phần còn lại của bộ kiểm vẫn gọi được hàm thuần),
   `ban-ro-liet-ke`, `cong-quyen-route`, `barrel-exports`, `doc-chinh-sach-mot-ham`, `ma-chep-api-worker` (tên `so` trùng một đơn vị khác
   — đổi thành `thapPhan`), `hang-so-khop`.
@@ -24073,3 +24089,100 @@ không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm
   gieo 430 s; lượt chấm **17,0 s**; xuất **14,6 / 14,1 / 14,2 s**; bundle **11,07 MB** — 60 hàng benchmark, **29.940** quan sát; `kiem`
   ngoại tuyến **1,2 / 1,0 s**, ok=true, `dong=60 dat=60 lech=0`. Ước lượng trước khi đo (7–10 MB) THẤP hơn số đo. Lượt chấm thứ hai
   (BAFO) không đo được trên dữ liệu gieo (gói đã `EVALUATING` — cạnh BAFO không gieo); ước ~21 s theo chi phí mỗi lần đọc.
+  **[rà soát] Đo lại trên mã sau rà soát** (gieo lại cùng tham số, cùng máy): lượt chấm **17,1 s**; xuất **14,4 / 13,9 / 15,1 s**; bundle
+  **11,08 MB** — 60 hàng, 29.940 quan sát; `kiem` **1,13 / 1,13 s**, ok=true, lệch 0. Kích thước KHÔNG giảm, và đó là tính chất của
+  dữ liệu gieo, không của mã: `gieo.sql` mở mọi gói trong chính lượt gieo (~7 phút, cùng ngày UTC với mốc của X), nên cả 29.940 `ngay`
+  nằm trên ngày biên và giữ đủ micro giây, và không quan sát nào nằm trong vùng lề cũ. Trên dữ liệu thật trải nhiều tháng, ngày trơn bớt
+  17 byte mỗi quan sát (≤ ~0,5 MB ở quy mô này); chưa đo.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy tệp test chỉ định (đơn vị: `tools/bo-xuat-danh-gia/src` trừ tích hợp; tích hợp: `benchmark.int` ⑼), khôi
+phục tệp từ bản sao. Lượt đầu (mã trước rà soát): 14 đột biến, 13 đỏ, **D4 sống** — *biên dưới bảng = biên cửa sổ (không lề)*: lề chỉ
+là phép nhìn; rà soát THẤP-5 cùng kết luận, lề bỏ (mục 8), D4 không còn chỗ đặt. Lượt cuối (mã sau rà soát): **32 đột biến** — chạy
+một lần, 29 đỏ, 3 sống (N3, N8, N16: thiếu ca, không phải luật sai); thêm ba ca, chạy lại ba đột biến ấy: **32/32 đỏ**.
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| D1 | băm = định danh thô | ĐỎ — `benchmark.int` ⑼ (định danh thô lọt; muối mới không đổi byte) |
+| D2 | giá của dòng đọc tại mốc mở giá thay lúc chấm | ĐỎ — ⑼ |
+| D3 | bỏ cờ hồi tố của quan sát | ĐỎ — ⑼ (CLI: số đếm hồi tố lệch) |
+| C1 | lùi tháng không kẹp ngày cuối tháng | ĐỎ — đơn vị |
+| C2 | phân vị không nội suy | ĐỎ — đơn vị (7 ca) |
+| C3 | biên ngưỡng tính về phía nặng | ĐỎ — đơn vị |
+| C4 | không loại quan sát của chính gói | ĐỎ — đơn vị (7 ca) |
+| C5 | luật giá 0 đứng trước luật tiền tệ | ĐỎ — đơn vị |
+| C6 | bỏ phép so tập đầu vào đã lưu | ĐỎ — đơn vị |
+| C7 | bỏ lời báo *HAI LỚP BẤT ĐỒNG* | ĐỎ — đơn vị |
+| C8 | kết luận bundle bỏ qua lớp dữ liệu nền | ĐỎ — đơn vị (13 ca) |
+| C9 | bộ đọc bỏ lớp dữ liệu nền | ĐỎ — ⑼ |
+| K1 | lõi lấy trung vị gói = giá nhỏ nhất (lỗi NẰM TRONG lõi) | ĐỎ — ⑼ (lớp độc lập) |
+| N1 | `ngay` luôn đủ micro giây | ĐỎ — ⑼ |
+| N2 | `ngay` luôn ngày trơn, kể cả ngày biên | ĐỎ — ⑼ (3 ca: dạng, CLI ném có tên ở lớp độc lập) |
+| N3 | tập ngày biên bỏ biên cửa sổ (chỉ ngày của mốc) | lượt đầu **SỐNG** — không quan sát nào trên ngày biên cửa sổ; H4 dời tới đó ⇒ ĐỎ — ⑼ (3 ca) |
+| N4 | xếp quan sát theo định danh thô | ĐỎ — ⑼ |
+| N5 | bỏ kiểm độ dài muối | ĐỎ — ⑼ |
+| N6 | cờ `coBenchmark` luôn `false` | ĐỎ — ⑼ |
+| N7 | lớp `null` luôn qua | ĐỎ — đơn vị |
+| N8 | bỏ kiểm lượt cần benchmark mà lớp không mang | lượt đầu **SỐNG** — thêm ca *lượt thứ hai thiếu ở lớp* ⇒ ĐỎ — đơn vị |
+| N9 | bỏ luật THIẾU dòng | ĐỎ — đơn vị |
+| N10 | bỏ luật TRÙNG dòng | ĐỎ — đơn vị |
+| N11 | bỏ đối chiếu ánh xạ đã lưu với ánh xạ hiệu lực | ĐỎ — đơn vị |
+| N12 | bỏ luật dòng không ánh xạ | ĐỎ — đơn vị |
+| N13 | bỏ chặn ngày trơn trên ngày biên (lớp độc lập) | ĐỎ — đơn vị (2 ca) |
+| N14 | bộ đọc nhận `dauVaoThieu` âm | ĐỎ — đơn vị |
+| N15a | bộ đọc nhận `phuong_phap` lạ ở nhóm chính sách | ĐỎ — đơn vị |
+| N15b | bộ đọc nhận `phuongPhap` lạ ở lớp | ĐỎ — đơn vị |
+| N16 | bộ đọc bỏ trần `cua_so_thang` 60 / sàn 50 | lượt đầu **SỐNG** — ca chỉ thử sàn 0; thêm sàn 51 và cửa sổ 61 ⇒ ĐỎ — đơn vị |
+| N17 | bộ đọc bỏ trần 64 ký tự của số | ĐỎ — đơn vị |
+| N18 | bỏ luật dòng của báo giá không hạng | ĐỎ — đơn vị |
+
+## 8. Rà soát đối kháng
+
+Một agent đọc trọn thay đổi (ba commit đầu) và ĐO bằng tệp thăm dò tạm trong scratchpad (không vào kho): 200.000 ca `truThang` so
+`luiThang` (1980–2100, lùi 1–61 tháng) — 0 lệch; 20.000 ca so trọn trường giữa `tinhDai` + `ganNhan`, `tinhLaiDong` và lớp ⑴ (mốc cuối
+tháng, biên ±1 µs, tiền tệ trước giá 0, loại X, ngưỡng) — 0 lệch; các đột biến bundle. Không cảnh báo nhầm nào trên hệ thống đúng; không
+đường mới nào lách cổng `audit.read` + `bid.view` (`docLopDuLieuNen` không ra barrel, `docQuanSatTaiMoc` ghim theo ký hiệu). Không CAO.
+
+- **TRUNG-1 — lời hứa riêng tư sai.** `ngay` là `min(unsealed_at)` của gói khác, chính xác tới micro giây — tự nó định danh gói; thứ tự
+  quan sát phá hoà bằng UUID thô. Người giữ `bid.view` ghép (`ngay`, `gia`) với lịch sử giá đọc thẳng là ra mọi `goi`/`ncc`; hai bundle
+  của cùng tổ chức nối được. **Chủ dự án chốt** *"Làm thô ngày, sửa lời hứa"*: `ngay` về ngày UTC trừ ngày biên (ngày của mốc mở giá
+  hay của một biên cửa sổ — ở đó bộ kiểm cần đủ micro giây), xếp theo nội dung, bỏ lề một tháng, và `DAC-TA.md` §8.1, ADR-9201 ⑸,
+  ADR-054 nói đúng: mã băm chặn ĐỌC RA định danh, không chặn KHỚP (ngày, giá) với lịch sử giá của chính tổ chức, không chặn NỐI hai
+  bundle. Bộ kiểm độc lập ném có tên khi một ngày trơn rơi trên ngày biên của dòng (§8.2).
+- **TRUNG-2 — bộ kiểm cho qua bundle bị bớt hay nhân đôi dòng, và `duLieuNen: null`** (probe: `dat=true`). **Đóng**: luật ĐỦ dòng — mỗi
+  (báo giá có hạng, dòng của `hangMuc[]`) đúng một hàng; cờ `luotCham[].coBenchmark` ở lớp chấm thầu (phiên bản chính sách cấu hình
+  nhóm `benchmark`) — lớp `null` hay thiếu lượt khi cờ bật là ĐỎ, lớp mang lượt có cờ tắt cũng ĐỎ; §8 và §8.5 ghi luật.
+- **TRUNG-3 — xuất qua HTTP vượt trần 60 s của ALB sau BAFO ở gói nhiều hàng chuẩn**: (1 + E) × H lần đọc, ~0,35–0,45 s mỗi lần; H = 50,
+  E = 2 ⇒ ~53–63 s, bundle ~28 MB; hỏng thì mất cả lớp chấm thầu. **Chủ dự án chốt** *"Giữ đồng bộ, nói ra + khoản nợ"*: ADR-9201 nói
+  giới hạn bằng số, **khoản 9401** (xuất nền bất đồng bộ); vòng này chỉ gỡ phép bậc hai.
+- **THẤP-4 — trường của hàng đã lưu không đối chiếu** (`hangChuan`, `anhXa` trỏ hàng chuẩn khác, cờ hồi tố trên dòng `CHUA_ANH_XA`,
+  `dauVaoThieu` âm — probe: cả bốn `dat=true`). **Đóng**: `giaDong.anhXaId`; `anhXa.anhXaId` = `giaDong.anhXaId`; ba `hangChuan` bằng
+  nhau; dòng không ánh xạ thì không ánh xạ, không hàng chuẩn, không cờ; bộ đọc từ chối `dauVaoThieu` âm; §8.5, §8.7.
+- **THẤP-5 — lề một tháng chỉ thêm giá của gói không lượt chấm nào dùng.** **Đóng**: bỏ lề.
+- **THẤP-6 — hàng sổ của lần xuất không thấy giá liên gói đi ra.** **Đóng**: payload thêm `soDongBenchmark`, `soQuanSat` (không đổi byte
+  của bundle).
+- **THẤP-7 — phép bậc hai.** **Đóng**: bộ xuất tra hàng kết quả theo lượt bằng `Map`; lớp độc lập `push` thay trải mảng (đo của agent: 20k
+  quan sát một gói 1,46 s mỗi dòng); `tinh-lai.ts` cộng/trừ chữ số `push` rồi đảo một lần thay `unshift`; bộ đọc chặn số dài quá 64 ký
+  tự. Không cache dải theo (lượt, hàng chuẩn, tiền tệ): `kiem` ở quy mô đo vẫn ~1 s.
+- **THẤP-8 — lớp ⑵ không tự kiểm nhóm chính sách** (`san_goi = ""` ⇒ `Number("") = 0`, sàn luôn đạt; `duLieuNen.phuongPhap` không kiểm
+  ở đâu). **Đóng**: bộ đọc đòi `cua_so_thang` 1–60, sàn 1–50, `0 < vừa < cao ≤ 10` tối đa bốn chữ số lẻ, `phuong_phap` và
+  `duLieuNen.phuongPhap` = `TRUNG_VI_THEO_GOI_V1`; §8.4 ghi biên.
+- **GHI CHÚ** — muối là tham số công khai của `dungBoBangChung`: nay ngắn hơn 32 byte ⇒ ném (muối hằng đủ dài thì không chặn được — người
+  gọi duy nhất ngoài test là mặc định `randomBytes(32)`). `hoTen` là họ tên HIỆN TẠI — §8.7 nói ra. §8.5 nói cờ hồi tố của dòng không đo
+  được. Phép thử ngẫu nhiên nay chạy trên bốn mốc (kể cả cuối tháng) và so cả cửa sổ và bảy số đếm. `isoMicro`, `ngayXuat` có test đơn vị.
+  Chưa có test bộ xuất khi ánh xạ đổi giữa hai lượt chấm, hay bộ xuất tự sinh `dauVaoThieu > 0` — nói ra ở mục 9.
+
+## 9. Giới hạn, nói ra
+
+- **Riêng tư** — mã băm chặn đọc ra định danh, không chặn khớp (ngày, giá) với lịch sử giá của chính tổ chức, không chặn nối hai bundle
+  (ADR-9201 ⑸). Ngày làm thô giảm phép khớp, không xoá nó: trên ngày biên `ngay` vẫn đủ micro giây.
+- **Xuất qua HTTP đồng bộ, tất-cả-hoặc-không** — khoản 9401 (ADR-9201 ⑹).
+- **Phép quy đổi đơn vị và cờ hồi tố không tính lại**; **tính đầy đủ của bảng quan sát** chỉ chứng được qua phép so với đầu vào đã lưu.
+- **Chưa đo**: bộ xuất khi ánh xạ đổi GIỮA hai lượt chấm; bộ xuất tự sinh `dauVaoThieu > 0` (cần sửa dữ liệu ngoài luật chỉ-ghi-thêm);
+  hai lượt chấm (BAFO) ở quy mô 5.000 gói. Bộ kiểm không chặn số quan sát của một bundle độc (chỉ chặn độ dài từng số).
+- **Muối hằng đủ dài** đi qua kiểm độ dài — chỉ người gọi trong mã (mặc định `randomBytes(32)`) chặn được nó.
+- **Dữ liệu thiết kế dựa vào giờ chạy**: H4 mở mười phút sau biên cửa sổ tính từ `now()`, kẹp về cuối ngày UTC của biên ấy (bản đầu
+  không kẹp — một lượt chạy trong mười phút trước nửa đêm UTC sẽ đặt H4 sang ngày sau và làm ca *H4 đủ micro giây* đỏ, ~0,7 % số lượt;
+  sửa trước khi commit). Còn lại một ca: lượt dựng VẮT qua nửa đêm UTC giữa lúc tính mốc của H4 và lúc X mở (vài giây) đặt biên cửa sổ
+  sau H4 — xác suất cỡ thời gian dựng / 86.400 s.
