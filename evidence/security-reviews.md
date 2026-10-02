@@ -24186,3 +24186,13 @@ tháng, biên ±1 µs, tiền tệ trước giá 0, loại X, ngưỡng) — 0 l
   không kẹp — một lượt chạy trong mười phút trước nửa đêm UTC sẽ đặt H4 sang ngày sau và làm ca *H4 đủ micro giây* đỏ, ~0,7 % số lượt;
   sửa trước khi commit). Còn lại một ca: lượt dựng VẮT qua nửa đêm UTC giữa lúc tính mốc của H4 và lúc X mở (vài giây) đặt biên cửa sổ
   sau H4 — xác suất cỡ thời gian dựng / 86.400 s.
+
+## 10. Số của lượt cuối (mã sau rà soát, sau khi gộp master #236)
+
+- `pnpm typecheck`, `pnpm lint`, `pnpm depcruise` (533 mô-đun): sạch.
+- `pnpm test` (không tích hợp): 149 tệp, 2514 ca qua, 1 bỏ qua.
+- `benchmark.int`: 62/62 (⑼ 7 ca). Kịch bản 41 qua HTTP: 85/85. `bo-xuat.int`: 9/9.
+- Đột biến: 32/32 đỏ (mục 7).
+- `pnpm evidence` toàn bộ: vitest thoát 0, 4616 khẳng định (4606 qua, 10 bỏ qua có khai), 79/79 bất biến (57 nghiệp vụ + 22 hàng rào),
+  cổng evidence XANH; `evidence/INV-matrix.md` dựng lại.
+- Quy mô (mục 6): chấm 17,1 s; xuất 13,9–15,1 s; bundle 11,08 MB; `kiem` 1,13 s, lệch 0.
