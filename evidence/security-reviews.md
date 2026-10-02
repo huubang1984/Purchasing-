@@ -23881,3 +23881,36 @@ của bộ giả lập; đo `scrollWidth` của trang và từng bảng.
    từ S1.106), cả trang 852 px — trang `/mo-thau` cuộn ngang ở màn điện thoại từ trước vòng này. Cột *Benchmark* thêm 107 px (giới hạn
    `max-width: 9rem`). Không sửa trong vòng này — chờ chủ dự án xếp rổ. Một lần thử cho thành phần xuống dòng bằng style chèn lúc chạy KHÔNG
    đo được gì: CSP của trang (`style-src 'self'`) chặn style ấy — nói ra để không ai đọc nó như một phép đo.
+
+## 9. Rà soát đối kháng sau lượt đầu (2026-10-02)
+
+Một lượt rà soát độc lập trên toàn bộ diff của vòng. Không CAO. Sửa trong phạm vi:
+
+| Mức | Phát hiện | Sửa | Đo |
+|---|---|---|---|
+| TRUNG | Phong bì là chữ của nhà cung cấp, bảng so sánh trả nguyên `payload`: một `amount` dạng SỐ hay một dòng `null` làm `doPhu`/`dongCuaBaoGia` ném — bảng benchmark và cột *Benchmark* của bảng xếp hạng dừng giữa chừng | `doPhu` đọc số qua chữ của nó, dạng khác không phần trăm; trang chỉ giữ phần tử là đối tượng | `benchmark.test` (số, `null`, đối tượng, `1e21`, số âm, `lineNo` dạng chữ); `phuc-vu.test` (phong bì `amount: 600`, dòng `null`, thành tiền là đối tượng — bảng và cột vẫn vẽ). Gỡ từng vế ⇒ ĐỎ |
+| THẤP | Lần mở thầu commit SAU lúc giao dịch đọc bắt đầu mà TRƯỚC câu bối cảnh: `unsealed_at ≥ now()` của người đọc, `quan_sat_gia` (`<` chặt) không thấy các báo giá ấy — bản lưu ghi-một-lần mang `KHONG_DO_DUOC` mãi cho bản BAFO; ở vòng một vỡ `…_moc_truoc_ghi` (500) | `docBoiCanh` hỏi cờ ấy; có ⇒ `THU_LAI`, không ghi | `benchmark.int` ⑻ vòng một (giao dịch đọc mở trước `moThau`) và ⑺ vòng BAFO (giao dịch đọc mở trước lần mở vòng): `THU_LAI`, không bản lưu, hàng sổ nói `THU_LAI`; đọc lại ⇒ `CO`, bản BAFO được ĐO |
+| THẤP | Trạng thái gói đổi TRONG lúc tính (lần đọc đầu tốn tới 18–19 s ở 5.000 gói): `EVALUATING → BAFO_OPEN` giữa câu bối cảnh và lần ghi ⇒ nhãn trả ra và bản lưu ghi khi vòng chào lại đã mở (L6) | `kiemLaiDuoiKhoa`: khoá hàng gói `FOR SHARE` (khuôn `kiemGoiDaNop` của `anh-xa.ts`), rồi câu RIÊNG hỏi lần mở thầu mới nhất (ảnh chụp mới dưới READ COMMITTED); đổi ⇒ trạng thái mới hay `THU_LAI`. Ở cả `docBenchmark` (hai nguồn) và `docDaiBenchmark` | `benchmark.int` ⑻: một giao dịch mở vòng chào lại giữ hàng gói; lần đọc đầu và *Xem dải* được đo là đang CHỜ ở câu `FOR SHARE` (`pg_stat_activity`), nhả ⇒ `VONG_CHAO_LAI_DANG_MO`, không bản lưu; một vòng chào lại TRỌN VẸN commit trong lúc lần đọc bị chặn ở bảng ánh xạ (trạng thái lại hiện, lần mở thầu đã khác) ⇒ `THU_LAI` |
+| THẤP | `khopBanLuu` chỉ so số đếm — một giá lịch sử sửa ngoài luật dời trung vị mà không đổi số đếm nào | `tinhDaiDong` trả nhãn tính lại của từng dòng của X (`ganNhan`, cùng lõi); `docDaiBenchmark` so nhãn và chiều | `benchmark.int` ⑻: nhãn của bản lưu sửa ngoài luật (vai chủ cụm), số đếm giữ ⇒ `khopBanLuu: false` |
+| THẤP | Trang: đọc gói khác giữ `phien.soSanh` và `benchmarkHien` của gói trước (cột *Benchmark* in nhãn của gói cũ); *Đọc benchmark* hỏi bảng so sánh ở mọi trạng thái — một lần từ chối và một hàng sổ từ chối mỗi cú bấm khi bảng đóng; bảng so sánh đọc một lần, thiu sau một vòng chào lại | Đổi gói xoá benchmark; benchmark TRƯỚC, bảng so sánh SAU, chỉ khi có nhãn, và LẠI mỗi lần; *Xem dải* của một bản lưu khác bảng đang hiện thì nói ra | `phuc-vu.test`: bốn ca mới (đổi gói, `THU_LAI`, dải của bản lưu khác, phong bì hỏng) và hai ca sửa (thứ tự đọc; gói `AWARDED` không hỏi bảng so sánh) |
+| THẤP | Lượt quét trước mở thầu của kịch bản 41 thay `:lineNo` bằng `UUID0` — *Xem dải* dừng ở 422 hình dạng, không tới nghiệp vụ | `:lineNo` là dòng 1 thật, chỉ ở route đọc; hai route benchmark phải trả 200 `KHONG_HIEN` | kịch bản 41 (mục 10) |
+
+**Đột biến của vòng rà soát** (cùng cách làm mục 7) — 9 đột biến, 9 đỏ:
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| R1 | trang không lọc dòng phong bì `null` | ĐỎ — `phuc-vu.test` |
+| R2 | `doPhu` gọi thẳng `sangNguyen` trên `amount` | ĐỎ — `benchmark.test`, `phuc-vu.test` |
+| R3 | bỏ `THU_LAI` trước phép tính | ĐỎ — `benchmark.int` ⑺ (vòng BAFO), ⑻ (vòng một) |
+| R4 | bỏ phép hỏi lại dưới khoá ở đường tính | ĐỎ — `benchmark.int` ⑻ (hai ca) |
+| R5 | dưới khoá chỉ hỏi trạng thái, không hỏi lần mở thầu | ĐỎ — `benchmark.int` ⑻ (vòng trọn vẹn) |
+| R6 | bỏ phép hỏi lại ở *Xem dải* | ĐỎ — `benchmark.int` ⑻ |
+| R7 | `khopBanLuu` bỏ so nhãn | ĐỎ — `benchmark.int` ⑻ |
+| R8 | bỏ `FOR SHARE` (giữ câu hỏi lại) | ĐỎ — `benchmark.int` ⑻ (hai ca chờ khoá). Lượt đầu của đột biến này làm tệp test TREO: phép chờ khoá trượt thì giao dịch giữ hàng gói không được nhả. Sửa test: nhả trong `finally` (cả ca đồng thời của ⑹); đo lại ⇒ đỏ sạch |
+| R9 | nhãn tính lại của X luôn `null` | ĐỎ — `benchmark.int` ⑺ (ba ca), ⑻ |
+
+**Giới hạn nói thêm** (ADR-143, mục rà soát): dải gồm cả gói đang ở vòng chào lại (giá vòng một đã lộ trước mốc — nghĩa as-of); hàng của
+bản lưu không bị CSDL buộc vào báo giá của CHÍNH gói (tầng gói chọn tập, như `103`); `UNIQUE (org_id, id, chinh_sach_ghim_id)` làm cạnh
+`PENDING_APPROVAL → OPEN` lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là cập nhật HOT — một lần mỗi gói; cột *Benchmark* là nhãn của
+bản lưu, không của lượt chấm đang xếp hạng; hai lần đọc đầu đồng thời cùng tính; *Xem dải* không có hạn mức (trần theo phiên chỉ áp cho phiên
+`AGENT_READONLY`); đột biến M4 vẫn sống. Khoá `FOR SHARE` ghi lên hàng gói ở MỌI lần đọc có nhãn — cùng chi phí khoá hàng của `anh-xa.ts`.
