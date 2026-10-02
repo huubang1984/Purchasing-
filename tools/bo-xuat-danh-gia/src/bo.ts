@@ -80,6 +80,8 @@ export interface LuotChamBundle {
   readonly currency: string;
   /** `eval_components` của ĐÚNG phiên bản chính sách lượt chấm ấy dùng, chép nguyên văn. */
   readonly chinhSachThanhPhan: readonly ThanhPhanChinhSachDoc[];
+  /** [S1.9101] Phiên bản chính sách của lượt chấm cấu hình nhóm `benchmark` — lớp dữ liệu nền PHẢI mang lượt chấm này. */
+  readonly coBenchmark: boolean;
   readonly taoLuc: MocThoiGian;
   readonly hang: readonly HangBundle[];
 }
@@ -145,6 +147,7 @@ export interface AnhXaDoc {
 }
 
 export interface GiaDongDoc {
+  readonly anhXaId: string | null;
   readonly trangThai: string;
   readonly gia: string | null;
   readonly tienTe: string | null;
@@ -310,6 +313,7 @@ function docLuotCham(gt: unknown, duong: string): LuotChamBundle {
     chinhSachThanhPhan: mang(o, "chinhSachThanhPhan", duong).map((x, i) =>
       docThanhPhanChinhSach(x, `${duong}.chinhSachThanhPhan[${String(i)}]`),
     ),
+    coBenchmark: logic(o, "coBenchmark", duong),
     taoLuc: docMoc(o["taoLuc"], `${duong}.taoLuc`),
     hang: mang(o, "hang", duong).map((x, i) => docHang(x, `${duong}.hang[${String(i)}]`)),
   };
@@ -330,11 +334,21 @@ function docTraoThau(gt: unknown, duong: string): TraoThauBundle {
 // ---- [S1.9101 / S4.5c2] bộ đọc lớp dữ liệu nền ---------------------------------------------------
 
 const KHUON_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u;
-const KHUON_SO_KHONG_AM = /^\d+(?:\.\d+)?$/u;
+/** [rà soát S4.5c2] `ngay` của quan sát: ngày UTC, hay mốc đủ micro giây trên một ngày biên (§8.2). */
+const KHUON_NGAY = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}\.\d{6}Z)?$/u;
+/** Tối đa 64 ký tự: phép nhân dài của lớp độc lập là bậc hai theo số chữ số — một bundle độc không được làm bộ kiểm treo. */
+const KHUON_SO_KHONG_AM = /^(?=.{1,64}$)\d+(?:\.\d+)?$/u;
+const KHUON_NGUONG = /^(0|[1-9][0-9]?)(\.[0-9]{1,4})?$/u;
 
 function moc6(o: Record<string, unknown>, ten: string, duong: string): string {
   const gt = chuoi(o, ten, duong);
   if (!KHUON_MOC.test(gt)) throw new BoHongError(`${duong}.${ten}`, "cần một mốc ISO UTC đúng sáu chữ số lẻ (DAC-TA §8.2)");
+  return gt;
+}
+
+function ngayQuanSat(o: Record<string, unknown>, ten: string, duong: string): string {
+  const gt = chuoi(o, ten, duong);
+  if (!KHUON_NGAY.test(gt)) throw new BoHongError(`${duong}.${ten}`, "cần một ngày UTC hay một mốc ISO UTC sáu chữ số lẻ (DAC-TA §8.2)");
   return gt;
 }
 
@@ -367,7 +381,7 @@ function docQuanSat(gt: unknown, duong: string): QuanSatDoc {
     ma: chuoi(o, "ma", duong),
     goi: chuoi(o, "goi", duong),
     ncc: chuoi(o, "ncc", duong),
-    ngay: moc6(o, "ngay", duong),
+    ngay: ngayQuanSat(o, "ngay", duong),
     gia: soKhongAm(o, "gia", duong),
     tienTe: chuoi(o, "tienTe", duong),
     cungNguoiTao: logic(o, "cungNguoiTao", duong),
@@ -405,6 +419,7 @@ function docGiaDong(gt: unknown, duong: string): GiaDongDoc | null {
   const gia = chuoiHayNull(o, "gia", duong);
   if (gia !== null && !KHUON_SO_KHONG_AM.test(gia)) throw new BoHongError(`${duong}.gia`, "cần một chuỗi thập phân không âm");
   return {
+    anhXaId: chuoiHayNull(o, "anhXaId", duong),
     trangThai: chuoi(o, "trangThai", duong),
     gia,
     tienTe: chuoiHayNull(o, "tienTe", duong),
@@ -437,18 +452,38 @@ function docDongBenchmark(gt: unknown, duong: string): DongBenchmarkDoc {
   };
 }
 
+/** Số nguyên dạng chuỗi trong [1, tran] — §8.4. */
+function nguyenTrongBien(o: Record<string, unknown>, ten: string, duong: string, tran: number): string {
+  const gt = chuoi(o, ten, duong);
+  if (!/^[1-9][0-9]?$/u.test(gt) || Number(gt) > tran) throw new BoHongError(`${duong}.${ten}`, `cần số nguyên 1–${String(tran)} (DAC-TA §8.4)`);
+  return gt;
+}
+
 function docNhomBenchmark(gt: unknown, duong: string): NhomBenchmarkDoc {
   const o = doiTuong(gt, duong);
   const khoa = Object.keys(o).sort().join(",");
   const can = "cua_so_thang,nguong_lech_cao,nguong_lech_vua,phuong_phap,san_goi,san_ncc";
   if (khoa !== can) throw new BoHongError(duong, `cần đúng sáu khoá ${can}, gặp ${khoa}`);
+  const nguong = (ten: string): string => {
+    const g = chuoi(o, ten, duong);
+    if (!KHUON_NGUONG.test(g)) throw new BoHongError(`${duong}.${ten}`, "cần ngưỡng dạng thập phân tối đa bốn chữ số lẻ (DAC-TA §8.4)");
+    return g;
+  };
+  const vua = nguong("nguong_lech_vua");
+  const cao = nguong("nguong_lech_cao");
+  // Ngưỡng tối đa bốn chữ số lẻ, ≤ 10 — so bằng số học máy là chính xác ở miền này.
+  if (!(Number(vua) > 0 && Number(vua) < Number(cao) && Number(cao) <= 10)) {
+    throw new BoHongError(duong, "cần 0 < nguong_lech_vua < nguong_lech_cao ≤ 10 (DAC-TA §8.4)");
+  }
+  const phuongPhap = chuoi(o, "phuong_phap", duong);
+  if (phuongPhap !== "TRUNG_VI_THEO_GOI_V1") throw new BoHongError(`${duong}.phuong_phap`, `bộ kiểm này chỉ cài TRUNG_VI_THEO_GOI_V1`);
   return {
-    cua_so_thang: chuoi(o, "cua_so_thang", duong),
-    san_goi: chuoi(o, "san_goi", duong),
-    san_ncc: chuoi(o, "san_ncc", duong),
-    nguong_lech_vua: soKhongAm(o, "nguong_lech_vua", duong),
-    nguong_lech_cao: soKhongAm(o, "nguong_lech_cao", duong),
-    phuong_phap: chuoi(o, "phuong_phap", duong),
+    cua_so_thang: nguyenTrongBien(o, "cua_so_thang", duong, 60),
+    san_goi: nguyenTrongBien(o, "san_goi", duong, 50),
+    san_ncc: nguyenTrongBien(o, "san_ncc", duong, 50),
+    nguong_lech_vua: vua,
+    nguong_lech_cao: cao,
+    phuong_phap: phuongPhap,
   };
 }
 
@@ -465,15 +500,21 @@ function docLuotChamDuLieuNen(gt: unknown, duong: string): LuotChamDuLieuNenDoc 
       const p = `${duong}.dauVao[${String(i)}]`;
       return { hangChuan: chuoi(d, "hangChuan", p), tienTe: chuoi(d, "tienTe", p), quanSat: mangChuoi(d, "quanSat", p) };
     }),
-    dauVaoThieu: soNguyen(o, "dauVaoThieu", duong),
+    dauVaoThieu: (() => {
+      const n = soNguyen(o, "dauVaoThieu", duong);
+      if (n < 0) throw new BoHongError(`${duong}.dauVaoThieu`, "cần một số nguyên không âm");
+      return n;
+    })(),
   };
 }
 
 function docDuLieuNen(gt: unknown, duong: string): DuLieuNenDoc | null {
   if (gt === null) return null;
   const o = doiTuong(gt, duong);
+  const phuongPhap = chuoi(o, "phuongPhap", duong);
+  if (phuongPhap !== "TRUNG_VI_THEO_GOI_V1") throw new BoHongError(`${duong}.phuongPhap`, "bộ kiểm này chỉ cài TRUNG_VI_THEO_GOI_V1");
   return {
-    phuongPhap: chuoi(o, "phuongPhap", duong),
+    phuongPhap,
     nguonThoiGian: chuoi(o, "nguonThoiGian", duong),
     goiX: chuoi(o, "goiX", duong),
     hangMuc: mang(o, "hangMuc", duong).map((x, i) => {

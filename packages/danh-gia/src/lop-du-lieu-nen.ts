@@ -4,8 +4,12 @@
 //
 // Chủ dự án chốt 2026-10-02, cả bốn theo đề xuất:
 //   ⑴ định danh gói và nhà cung cấp của các quan sát BĂM với một muối NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle —
-//      hai mã băm bằng nhau ⇔ cùng một gói (hay nhà cung cấp) TRONG bundle này; không ai, kể cả người trong tổ chức có danh sách mã
-//      gói, dò ngược được; hai bundle không nối được với nhau;
+//      hai mã băm bằng nhau ⇔ cùng một gói (hay nhà cung cấp) TRONG bundle này; không ai đọc ra được định danh thô từ mã băm.
+//      [rà soát S4.5c2 — chủ dự án chốt 2026-10-02] Mã băm KHÔNG chặn được phép khớp: mốc mở giá của một gói chính xác tới micro giây
+//      tự nó là định danh của gói, và (ngày, giá) khớp được với lịch sử giá mà người giữ `bid.view` đọc thẳng. Nên: `ngay` ra ở dạng
+//      NGÀY UTC, trừ quan sát nằm trên một NGÀY BIÊN (ngày của mốc mở giá hay của một biên cửa sổ) — ở đó bộ kiểm cần đủ micro giây
+//      để phán xử luật cửa sổ; thứ tự quan sát theo NỘI DUNG; lời hứa còn lại, nói thật: mã băm chặn ĐỌC RA định danh, không chặn
+//      KHỚP (ngày, giá) với lịch sử giá của chính tổ chức, và hai bundle của cùng tổ chức nối được qua các quan sát chung;
 //   ⑵ bộ kiểm tính lại TỪ ĐƠN GIÁ ĐÃ QUY ĐỔI — cửa sổ, trung vị theo gói, tứ phân vị, sàn, ngưỡng, nhãn, chiều, số đếm; phép quy đổi
 //      đơn vị KHÔNG tính lại (`DAC-TA.md` nói ra);
 //   ⑶ chỉ lớp LƯỢT CHẤM (`103`): bản lưu của bảng so sánh (`104`) là thứ màn hiện, không vào bundle;
@@ -15,8 +19,9 @@
 //   • hàng kết quả và hàng đầu vào của lượt chấm (`price_benchmark_results`, `price_benchmark_inputs`) — nhãn, chiều, lý do, số đếm,
 //     và tham chiếu (báo giá, dòng) của các quan sát đã vào dải. Không cột tiền nào: đơn giá đọc LẠI ở dưới;
 //   • `quan_sat_gia(mốc mở giá, hàng chuẩn)` qua `docQuanSatTaiMoc` — một lần cho mỗi (mốc, hàng chuẩn); mốc mở giá là
-//     `min(unsealed_at)` của gói nên mọi lượt chấm của gói dùng chung — bảng quan sát mang các hàng `HOP_LE` từ một tháng TRƯỚC biên
-//     cửa sổ tới mốc, để người kiểm thấy biên cửa sổ từ cả hai phía;
+//     `min(unsealed_at)` của gói nên mọi lượt chấm của gói dùng chung — bảng quan sát mang các hàng `HOP_LE` từ biên cửa sổ rộng nhất
+//     tới mốc. ~~Lề một tháng trước biên~~ [rà soát S4.5c2] bỏ: nó không thêm phép phát hiện nào — một cửa sổ sai của lõi lộ ra ở
+//     `cuaSoTu` đã lưu, mà bộ kiểm tính lại và so — chỉ thêm giá của gói không lượt chấm nào dùng;
 //   • `quan_sat_gia(lúc chấm, hàng chuẩn)` lọc theo gói X — giá của chính các dòng tại đúng mốc lượt chấm đã đọc — cho mọi hàng chuẩn
 //     mà một ánh xạ ghi TRƯỚC lúc chấm của gói trỏ tới (cùng tập ứng viên của phép tính benchmark của lượt chấm);
 //   • hàng ánh xạ mà hàng kết quả trỏ tới, nối tên người ghi.
@@ -40,7 +45,10 @@ export interface QuanSatBundle {
   readonly ma: string;
   readonly goi: string;
   readonly ncc: string;
-  /** Mốc mở giá của gói chứa quan sát, ISO 8601 UTC, sáu chữ số micro giây. */
+  /**
+   * Mốc mở giá của gói chứa quan sát: NGÀY UTC (`2026-03-01`) — hay ISO đủ sáu chữ số micro giây khi ngày ấy là một ngày biên (ngày
+   * của mốc mở giá hay của một biên cửa sổ). `DAC-TA.md` §8.2.
+   */
   readonly ngay: string;
   /** Đơn giá đã quy đổi về đơn vị gốc của hàng chuẩn — chuỗi thập phân. */
   readonly gia: string;
@@ -50,7 +58,7 @@ export interface QuanSatBundle {
   readonly hoiTo: readonly string[];
 }
 
-/** Mọi quan sát `HOP_LE` của một hàng chuẩn tại một mốc mở giá, từ `tuNgay` (một tháng trước biên cửa sổ) tới mốc. */
+/** Mọi quan sát `HOP_LE` của một hàng chuẩn tại một mốc mở giá, từ `tuNgay` (biên cửa sổ rộng nhất) tới mốc. */
 export interface BangQuanSatBundle {
   readonly mocMoGia: string;
   readonly hangChuan: string;
@@ -70,6 +78,8 @@ export interface AnhXaBundle {
 
 /** Giá của chính dòng tại lúc chấm — một hàng `quan_sat_gia(lúc chấm, …)` của gói X; `null` khi không ánh xạ hiệu lực nào trỏ ra. */
 export interface GiaDongBundle {
+  /** Hàng ánh xạ hiệu lực của dòng tại lúc chấm — bộ kiểm đòi nó trùng `anhXa` của hàng kết quả. */
+  readonly anhXaId: string | null;
   readonly trangThai: string;
   readonly gia: string | null;
   readonly tienTe: string | null;
@@ -177,6 +187,8 @@ export async function docLopDuLieuNen(
   evaluationIds: readonly string[],
   muoi: Buffer,
 ): Promise<DuLieuNenBundle | null> {
+  // [rà soát S4.5c2] Muối ngắn hay cố định là mã băm dò ngược được — chặn ở đây, không trông vào người gọi.
+  if (muoi.length < 32) throw new RangeError("muối của định danh băm phải đủ 32 byte ngẫu nhiên");
   const bam = (loai: string, id: string): string => createHmac("sha256", muoi).update(`${loai}:${id}`).digest("hex").slice(0, 32);
 
   const { rows: ketQua } = await client.query<HangKetQua>(
@@ -195,6 +207,8 @@ export async function docLopDuLieuNen(
     [orgId, rfqId],
   );
   if (ketQua.length === 0) return null;
+  const ketQuaTheoLuot = new Map<string, HangKetQua[]>();
+  for (const r of ketQua) ketQuaTheoLuot.set(r.evaluation_id, [...(ketQuaTheoLuot.get(r.evaluation_id) ?? []), r]);
 
   const { rows: dauVaoLuu } = await client.query<{
     evaluation_id: string;
@@ -255,10 +269,10 @@ export async function docLopDuLieuNen(
 
   // ⑴ Giá của chính các dòng tại lúc chấm của từng lượt — đúng tập ứng viên của phép tính lượt chấm, giới hạn ở ánh xạ ghi TRƯỚC lúc
   //    chấm (ánh xạ ghi sau không hiệu lực tại mốc ấy, đọc nó chỉ tốn một lần quét).
-  const luotIds = evaluationIds.filter((id) => ketQua.some((r) => r.evaluation_id === id));
+  const luotIds = evaluationIds.filter((id) => ketQuaTheoLuot.has(id));
   const giaCuaLuot = new Map<string, Map<string, GiaDongBundle>>();
   for (const id of luotIds) {
-    const cham = BigInt(ketQua.find((r) => r.evaluation_id === id)!.cham);
+    const cham = BigInt(ketQuaTheoLuot.get(id)![0]!.cham);
     const { rows: ungVien } = await client.query<{ canonical_item_id: string }>(
       `SELECT DISTINCT m.canonical_item_id FROM public.rfq_item_mappings m
         WHERE m.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid
@@ -274,6 +288,7 @@ export async function docLopDuLieuNen(
       for (const r of await docQuanSatTaiMoc(client, orgId, { rfqId, canonicalItemId: hang, mocMicro: cham })) {
         if (r.rfqId !== rfqId) continue;
         gia.set(`${r.bidVersionId}:${String(r.lineNo)}`, {
+          anhXaId: r.anhXaId,
           trangThai: r.trangThai,
           gia: r.donGiaQuyDoi,
           tienTe: r.tienTe,
@@ -287,11 +302,12 @@ export async function docLopDuLieuNen(
 
   // ⑵ Bảng quan sát: một cho mỗi (mốc mở giá, hàng chuẩn) mà một dòng đo được hay một hàng đầu vào cần. Biên dưới: một tháng trước
   //    biên cửa sổ rộng nhất trong các lượt chấm dùng bảng ấy.
-  const canBang = new Map<string, { moc: bigint; hang: string; cuaSoThang: number }>();
+  const canBang = new Map<string, { moc: bigint; hang: string; cuaSo: Set<number> }>();
   const can = (moc: bigint, hang: string, cuaSoThang: number): void => {
     const khoa = `${moc.toString()}|${hang}`;
-    const co = canBang.get(khoa);
-    canBang.set(khoa, { moc, hang, cuaSoThang: Math.max(co?.cuaSoThang ?? 0, cuaSoThang) });
+    const co = canBang.get(khoa) ?? { moc, hang, cuaSo: new Set<number>() };
+    co.cuaSo.add(cuaSoThang);
+    canBang.set(khoa, co);
   };
   const cuaSoCua = (r: HangKetQua): number => {
     const n = Number(r.benchmark?.["cua_so_thang"]);
@@ -304,7 +320,7 @@ export async function docLopDuLieuNen(
     if (g !== undefined && g.trangThai === "HOP_LE") can(BigInt(r.moc), g.hangChuan, cuaSo);
   }
   for (const i of dauVaoLuu) {
-    const r = ketQua.find((k) => k.evaluation_id === i.evaluation_id);
+    const r = ketQuaTheoLuot.get(i.evaluation_id)?.[0];
     if (r !== undefined) can(BigInt(r.moc), i.canonical_item_id, cuaSoCua(r));
   }
 
@@ -312,26 +328,31 @@ export async function docLopDuLieuNen(
   /** (mốc|hàng chuẩn) → (báo giá:dòng) → mã trong bundle. */
   const maCua = new Map<string, Map<string, string>>();
   let dem = 0;
-  for (const { moc, hang, cuaSoThang } of [...canBang.values()].sort((a, b) =>
+  for (const { moc, hang, cuaSo } of [...canBang.values()].sort((a, b) =>
     a.moc === b.moc ? (a.hang < b.hang ? -1 : a.hang > b.hang ? 1 : 0) : a.moc < b.moc ? -1 : 1,
   )) {
-    const tu = truThang(moc, cuaSoThang + 1);
+    const bien = [...cuaSo].map((n) => truThang(moc, n));
+    const tu = bien.reduce((a, b) => (b < a ? b : a));
+    const ngayBien = new Set([moc, ...bien].map((t) => isoMicro(t).slice(0, 10)));
     const hangs = (await docQuanSatTaiMoc(client, orgId, { rfqId, canonicalItemId: hang, mocMicro: moc }))
       .filter((r) => r.trangThai === "HOP_LE" && r.ngayMicro >= tu)
+      .map((r) => {
+        if (r.donGiaQuyDoi === null || r.tienTe === null) throw new Error("quan sát HOP_LE không có đơn giá quy đổi hay tiền tệ");
+        return { r, ngay: ngayXuat(r.ngayMicro, ngayBien), gia: r.donGiaQuyDoi, tienTe: r.tienTe };
+      })
       .sort(soQuanSat);
     const ma = new Map<string, string>();
-    const quanSat = hangs.map((r): QuanSatBundle => {
+    const quanSat = hangs.map(({ r, ngay, gia, tienTe }): QuanSatBundle => {
       dem += 1;
       const m = `q${String(dem)}`;
       ma.set(`${r.bidVersionId}:${String(r.lineNo)}`, m);
-      if (r.donGiaQuyDoi === null || r.tienTe === null) throw new Error("quan sát HOP_LE không có đơn giá quy đổi hay tiền tệ");
       return {
         ma: m,
         goi: bam("goi", r.rfqId),
         ncc: bam("ncc", r.supplierId),
-        ngay: isoMicro(r.ngayMicro),
-        gia: r.donGiaQuyDoi,
-        tienTe: r.tienTe,
+        ngay,
+        gia,
+        tienTe,
         cungNguoiTao: r.cungNguoiTao,
         hoiTo: r.hoiTo,
       };
@@ -341,7 +362,7 @@ export async function docLopDuLieuNen(
   }
 
   const luotCham: LuotChamDuLieuNen[] = luotIds.map((id) => {
-    const cuaLuot = ketQua.filter((r) => r.evaluation_id === id);
+    const cuaLuot = ketQuaTheoLuot.get(id)!;
     const dau = cuaLuot[0]!;
     const gia = giaCuaLuot.get(id)!;
     const nhomDauVao = new Map<string, { hangChuan: string; tienTe: string; quanSat: string[] }>();
@@ -395,19 +416,50 @@ export async function docLopDuLieuNen(
 }
 
 /**
- * Thứ tự quan sát trong bảng: theo NỘI DUNG (mốc của gói) trước, định danh thô chỉ để phá hoà — hai lần xuất của cùng một gói ra cùng
- * thứ tự dù muối khác, và thứ tự không kể gì thêm về định danh ngoài thứ mốc đã kể.
+ * [rà soát S4.5c2] `ngay` của một quan sát: NGÀY UTC, trừ khi ngày ấy là một ngày biên — ở đó đủ micro giây (`DAC-TA.md` §8.2). Một
+ * quan sát ngoài ngày biên phán xử được luật cửa sổ bằng ngày; quan sát TRÊN ngày biên thì không.
  */
-function soQuanSat(a: HangQuanSatTaiMoc, b: HangQuanSatTaiMoc): number {
-  if (a.ngayMicro !== b.ngayMicro) return a.ngayMicro < b.ngayMicro ? -1 : 1;
+export function ngayXuat(micro: bigint, ngayBien: ReadonlySet<string>): string {
+  const iso = isoMicro(micro);
+  return ngayBien.has(iso.slice(0, 10)) ? iso : iso.slice(0, 10);
+}
+
+/** So hai chuỗi thập phân không âm theo GIÁ TRỊ. */
+function soGia(a: string, b: string): number {
+  const [na = "", la = ""] = a.split(".");
+  const [nb = "", lb = ""] = b.split(".");
+  const x = na.replace(/^0+(?=\d)/u, "");
+  const y = nb.replace(/^0+(?=\d)/u, "");
+  if (x.length !== y.length) return x.length - y.length;
+  if (x !== y) return x < y ? -1 : 1;
+  const n = Math.max(la.length, lb.length);
+  const u = la.padEnd(n, "0");
+  const v = lb.padEnd(n, "0");
+  return u === v ? 0 : u < v ? -1 : 1;
+}
+
+/**
+ * Thứ tự quan sát trong bảng: theo NỘI DUNG ĐÃ XUẤT — ngày (dạng đã làm thô), giá, tiền tệ, cờ — để thứ tự không kể gì thêm ngoài thứ
+ * nội dung đã kể. Định danh thô chỉ phá hoà giữa các quan sát GIỐNG HỆT nhau về nội dung — hai lần xuất cùng thứ tự dù khác muối.
+ */
+function soQuanSat(
+  a: { readonly r: HangQuanSatTaiMoc; readonly ngay: string; readonly gia: string; readonly tienTe: string },
+  b: { readonly r: HangQuanSatTaiMoc; readonly ngay: string; readonly gia: string; readonly tienTe: string },
+): number {
+  if (a.ngay !== b.ngay) return a.ngay < b.ngay ? -1 : 1;
+  const g = soGia(a.gia, b.gia);
+  if (g !== 0) return g;
   for (const [x, y] of [
-    [a.rfqId, b.rfqId],
-    [a.supplierId, b.supplierId],
-    [a.bidVersionId, b.bidVersionId],
+    [a.tienTe, b.tienTe],
+    [String(a.r.cungNguoiTao), String(b.r.cungNguoiTao)],
+    [a.r.hoiTo.join(","), b.r.hoiTo.join(",")],
+    [a.r.rfqId, b.r.rfqId],
+    [a.r.supplierId, b.r.supplierId],
+    [a.r.bidVersionId, b.r.bidVersionId],
   ] as const) {
     if (x !== y) return x < y ? -1 : 1;
   }
-  return a.lineNo - b.lineNo;
+  return a.r.lineNo - b.r.lineNo;
 }
 
 /** `q2` trước `q10`. */

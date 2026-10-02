@@ -10,13 +10,14 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { DAC_TA } from "@trustprocure/danh-gia";
-import type { BoBangChung, DongBenchmarkDoc, DuLieuNenDoc, QuanSatDoc } from "./bo.js";
+import { docBo, type BoBangChung, type DongBenchmarkDoc, type DuLieuNenDoc, type QuanSatDoc } from "./bo.js";
 import { kiemBo } from "./kiem.js";
 import { HAM_THUAN_BENCHMARK_THAT, type TinhBenchmarkHamThuan } from "./kiem-du-lieu-nen.js";
 import { tinhLaiDong } from "./doc-lap/benchmark-lai.js";
 
 const MOC = "2026-09-30T00:00:00.000000Z";
-const NGAY = "2026-03-01T08:00:00.000000Z";
+/** Ngày trơn — §8.2: quan sát ngoài ngày biên ra ở dạng NGÀY. */
+const NGAY = "2026-03-01";
 const NHOM = {
   cua_so_thang: "12",
   san_goi: "3",
@@ -48,6 +49,15 @@ const BANG: readonly QuanSatDoc[] = [
   qs("q6", "g4", "n6", "0"),
 ];
 
+const AX = {
+  anhXaId: "ax-1",
+  hangChuan: HC,
+  nguon: "NGUOI_DUYET",
+  lyDo: null,
+  tacGia: { userId: "u-ql", hoTen: "Nguoi quan ly" },
+  ghiLuc: "2026-09-01T00:00:00.000000Z",
+} as const;
+
 const DO_DUOC = {
   lyDo: null,
   hangChuan: HC,
@@ -61,7 +71,7 @@ const DO_DUOC = {
   soLoaiTienTe: 0,
   soLoaiGia0: 1,
   hoiTo: [],
-  anhXa: null,
+  anhXa: AX,
 } as const;
 
 const dong = (lineNo: number, sua: Partial<DongBenchmarkDoc>): DongBenchmarkDoc => ({
@@ -70,7 +80,7 @@ const dong = (lineNo: number, sua: Partial<DongBenchmarkDoc>): DongBenchmarkDoc 
   nhan: "BINH_THUONG",
   chieu: null,
   ...DO_DUOC,
-  giaDong: { trangThai: "HOP_LE", gia: "105", tienTe: "VND", hangChuan: HC, hoiTo: [] },
+  giaDong: { anhXaId: "ax-1", trangThai: "HOP_LE", gia: "105", tienTe: "VND", hangChuan: HC, hoiTo: [] },
   ...sua,
 });
 
@@ -89,6 +99,7 @@ const KHONG_DO = {
   soLoaiTienTe: null,
   soLoaiGia0: null,
   giaDong: null,
+  anhXa: null,
 } as const;
 
 function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
@@ -96,8 +107,8 @@ function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
     phuongPhap: "TRUNG_VI_THEO_GOI_V1",
     nguonThoiGian: "đồng hồ CSDL",
     goiX: "gX",
-    hangMuc: [{ lineNo: 1, moTa: "Thep D10", donVi: "kg", soLuong: "10.0000" }],
-    bangQuanSat: [{ mocMoGia: MOC, hangChuan: HC, tuNgay: "2025-08-30T00:00:00.000000Z", quanSat: BANG }],
+    hangMuc: [1, 2, 3].map((lineNo) => ({ lineNo, moTa: `Dong ${String(lineNo)}`, donVi: "kg", soLuong: "10.0000" })),
+    bangQuanSat: [{ mocMoGia: MOC, hangChuan: HC, tuNgay: "2025-09-30T00:00:00.000000Z", quanSat: BANG }],
     luotCham: [
       {
         evaluationId: "ev-1",
@@ -107,7 +118,7 @@ function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
         dong: [
           dong(1, {}),
           dong(2, { ...KHONG_DO }),
-          dong(3, { nhan: "LECH_CAO", chieu: "TREN", giaDong: { trangThai: "HOP_LE", gia: "130", tienTe: "VND", hangChuan: HC, hoiTo: [] } }),
+          dong(3, { nhan: "LECH_CAO", chieu: "TREN", giaDong: { anhXaId: "ax-1", trangThai: "HOP_LE", gia: "130", tienTe: "VND", hangChuan: HC, hoiTo: [] } }),
         ],
         dauVao: [{ hangChuan: HC, tienTe: "VND", quanSat: ["q1", "q2", "q3", "q4", "q5"] }],
         dauVaoThieu: 0,
@@ -129,6 +140,7 @@ function boVoi(sua: (d: DuLieuNenDoc) => DuLieuNenDoc = (d) => d): BoBangChung {
         policyVersion: 1,
         currency: "VND",
         chinhSachThanhPhan: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }],
+        coBenchmark: true,
         taoLuc: { giaTri: "2026-10-01T00:00:00.000Z", nguon: "đồng hồ CSDL" },
         hang: [
           {
@@ -158,8 +170,9 @@ describe("[INV-L7] [S1.9101 / S4.5c2] lớp dữ liệu nền — bundle lành",
     expect(kq.dat).toBe(true);
   });
 
-  it("bundle không mang lớp này (`null`) ⇒ kết luận chỉ của lớp chấm thầu", () => {
-    const kq = kiemBo({ ...boVoi(), duLieuNen: null }, DAC_TA);
+  it("bundle không mang lớp này (`null`) và không lượt chấm nào cấu hình benchmark ⇒ kết luận chỉ của lớp chấm thầu", () => {
+    const bo = boVoi();
+    const kq = kiemBo({ ...bo, luotCham: bo.luotCham.map((l) => ({ ...l, coBenchmark: false })), duLieuNen: null }, DAC_TA);
     expect(kq.duLieuNen).toBeNull();
     expect(kq.dat).toBe(true);
   });
@@ -238,15 +251,18 @@ describe("[INV-L7] [S1.9101 / S4.5c2] ADR-059 ⒞ — một lỗi NẰM TRONG l�
     nhan: "BINH_THUONG",
     chieu: null,
     dauVao: ["q1", "q2", "q3", "q4", "q5", "q7", "q8", "q9"],
+    cuaSoTu: "2025-09-30T00:00:00.000000Z",
+    soDem: [8, 4, 8, 1, 2, 0, 1],
   });
   const boLoi = boVoi((d) => ({
     ...d,
+    hangMuc: d.hangMuc.slice(0, 1),
     bangQuanSat: d.bangQuanSat.map((b) => ({ ...b, quanSat: [...b.quanSat, ...them] })),
     luotCham: d.luotCham.map((l) => ({
       ...l,
       dong: [
         dong(1, {
-          giaDong: { trangThai: "HOP_LE", gia: "112", tienTe: "VND", hangChuan: HC, hoiTo: [] },
+          giaDong: { anhXaId: "ax-1", trangThai: "HOP_LE", gia: "112", tienTe: "VND", hangChuan: HC, hoiTo: [] },
           soQuanSat: 8,
           soGoi: 4,
           soNcc: 8,
@@ -280,8 +296,15 @@ describe("[INV-L7] [S1.9101 / S4.5c2] trên dữ liệu lành, hai lớp đồng
     .tuple(fc.integer({ min: 0, max: 400 }), fc.integer({ min: 0, max: 9999 }))
     .map(([n, l]) => `${String(n)}.${String(l).padStart(4, "0")}`);
   const ngayArb = fc
-    .tuple(fc.integer({ min: 2024, max: 2026 }), fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 28 }))
-    .map(([y, m, d]) => `${String(y)}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T12:00:00.000001Z`);
+    .tuple(fc.integer({ min: 2023, max: 2026 }), fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 28 }))
+    .chain(([y, m, d]) =>
+      fc
+        .tuple(fc.integer({ min: 0, max: 23 }), fc.integer({ min: 0, max: 999999 }))
+        .map(
+          ([h, us]) =>
+            `${String(y)}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:15:00.${String(us).padStart(6, "0")}Z`,
+        ),
+    );
   const quanSatArb = fc.array(
     fc.record({
       goi: fc.constantFrom("a", "b", "c", "d", "e", "gX"),
@@ -295,7 +318,7 @@ describe("[INV-L7] [S1.9101 / S4.5c2] trên dữ liệu lành, hai lớp đồng
     { maxLength: 25 },
   );
 
-  it("nhãn, chiều và tập đầu vào của lớp gọi hàm thuần BẰNG của bản cài độc lập", () => {
+  it("nhãn, chiều, cửa sổ, bảy số đếm và tập đầu vào của lớp gọi hàm thuần BẰNG của bản cài độc lập — bốn mốc, kể cả cuối tháng", () => {
     fc.assert(
       fc.property(
         quanSatArb,
@@ -303,16 +326,90 @@ describe("[INV-L7] [S1.9101 / S4.5c2] trên dữ liệu lành, hai lớp đồng
         fc.constantFrom("0.05", "0.1", "0.0001"),
         fc.integer({ min: 1, max: 24 }),
         fc.integer({ min: 1, max: 3 }),
-        (ds, gia, vua, cuaSo, san) => {
+        fc.constantFrom(MOC, "2026-03-31T09:15:00.123456Z", "2024-02-29T23:59:59.999999Z", "2025-12-31T00:00:00.000000Z"),
+        (ds, gia, vua, cuaSo, san, moc) => {
           const quanSat = ds.map((q, i) => ({ ...q, ma: `q${String(i)}` }));
           const nhom = { ...NHOM, cua_so_thang: String(cuaSo), san_goi: String(san), san_ncc: String(san), nguong_lech_vua: vua, nguong_lech_cao: "0.5" };
-          const tinh = tinhLaiDong({ trangThai: "HOP_LE", gia, tienTe: "VND" }, quanSat, { goiX: "gX", mocMoGia: MOC, nhom });
-          const ht = HAM_THUAN_BENCHMARK_THAT(quanSat, { goiX: "gX", mocMoGia: MOC, nhom, tienTe: "VND", gia });
-          expect([ht.nhan, ht.chieu]).toEqual([tinh.nhan, tinh.chieu]);
+          const tinh = tinhLaiDong({ trangThai: "HOP_LE", gia, tienTe: "VND" }, quanSat, { goiX: "gX", mocMoGia: moc, nhom });
+          const ht = HAM_THUAN_BENCHMARK_THAT(quanSat, { goiX: "gX", mocMoGia: moc, nhom, tienTe: "VND", gia });
+          expect([ht.nhan, ht.chieu, ht.cuaSoTu]).toEqual([tinh.nhan, tinh.chieu, tinh.cuaSoTu]);
+          expect(ht.soDem).toEqual([
+            tinh.soQuanSat,
+            tinh.soGoi,
+            tinh.soNcc,
+            tinh.soGoiCungNguoiTao,
+            tinh.soQuanSatHoiTo,
+            tinh.soLoaiTienTe,
+            tinh.soLoaiGia0,
+          ]);
           expect([...ht.dauVao].sort()).toEqual([...(tinh.dauVao ?? [])].sort());
         },
       ),
       { numRuns: 400 },
     );
+  });
+});
+
+describe("[INV-L7] [S1.9101 / rà soát S4.5c2] đủ hàng, ánh xạ khớp, ngày biên, bộ đọc", () => {
+  const baoLoi = (bo: BoBangChung): string => {
+    const kq = kiemBo(bo, DAC_TA);
+    expect(kq.dat).toBe(false);
+    return [...(kq.duLieuNen?.loi ?? []), ...(kq.duLieuNen?.dong.flatMap((d) => d.noi) ?? [])].join("\n");
+  };
+
+  it("lượt chấm cấu hình benchmark mà bundle bỏ cả lớp (`null`) ⇒ ĐỎ — không qua như một bundle không có gì để kiểm", () => {
+    expect(baoLoi({ ...boVoi(), duLieuNen: null })).toMatch(/lớp dữ liệu nền VẮNG mà 1 lượt chấm/u);
+  });
+
+  it("lớp mang lượt chấm mà chính sách của nó KHÔNG cấu hình benchmark ⇒ ĐỎ", () => {
+    const bo = boVoi();
+    expect(baoLoi({ ...bo, luotCham: bo.luotCham.map((l) => ({ ...l, coBenchmark: false })) })).toMatch(/KHÔNG cấu hình benchmark/u);
+  });
+
+  it("bớt một hàng (dòng LECH_CAO của báo giá) ⇒ THIẾU; nhân đôi một hàng ⇒ TRÙNG", () => {
+    expect(baoLoi(boVoi(suaLuot((l) => ({ ...l, dong: l.dong.filter((d) => d.lineNo !== 3) }))))).toMatch(/THIẾU hàng benchmark cho \(báo giá:dòng\) bv-1:3/u);
+    expect(baoLoi(boVoi(suaLuot((l) => ({ ...l, dong: [...l.dong, l.dong[0]!] }))))).toMatch(/hàng benchmark TRÙNG \(bv-1:1\)/u);
+  });
+
+  it("hàng ánh xạ đã lưu khác hàng hiệu lực tại lúc chấm; dòng không ánh xạ mà mang ánh xạ hay cờ hồi tố; hàng chuẩn lệch ⇒ ĐỎ", () => {
+    const sua = (f: (d: DongBenchmarkDoc) => DongBenchmarkDoc) => boVoi(suaLuot((l) => ({ ...l, dong: l.dong.map(f) })));
+    expect(baoLoi(sua((d) => (d.lineNo === 1 ? { ...d, anhXa: { ...AX, anhXaId: "ax-khac" } } : d)))).toMatch(
+      /dòng 1: hàng ánh xạ đã lưu ax-khac KHÁC hàng hiệu lực tại lúc chấm ax-1/u,
+    );
+    expect(baoLoi(sua((d) => (d.lineNo === 2 ? { ...d, anhXa: AX } : d)))).toMatch(/dòng 2: dòng không có ánh xạ hiệu lực/u);
+    expect(baoLoi(sua((d) => (d.lineNo === 2 ? { ...d, hoiTo: ["ANH_XA"] } : d)))).toMatch(/dòng 2: dòng không có ánh xạ hiệu lực/u);
+    expect(baoLoi(sua((d) => (d.lineNo === 1 ? { ...d, hangChuan: "hc-khac" } : d)))).toMatch(/dòng 1: hàng chuẩn của hàng đã lưu/u);
+  });
+
+  it("§8.2: một quan sát mang NGÀY TRƠN trên ngày biên (ngày của mốc mở giá) ⇒ không tính lại được — ĐỎ có tên", () => {
+    const bo = boVoi((d) => ({
+      ...d,
+      bangQuanSat: d.bangQuanSat.map((b) => ({ ...b, quanSat: [...b.quanSat, qs("q9", "g9", "n9", "100", { ngay: MOC.slice(0, 10) })] })),
+    }));
+    expect(baoLoi(bo)).toMatch(/quan sát q9 mang ngày trơn 2026-09-30 trên một ngày biên/u);
+  });
+
+  it("bộ đọc từ chối có địa chỉ: phương pháp lạ, sàn 0, ngưỡng vừa ≥ cao, `dauVaoThieu` âm, đơn giá quá 64 ký tự, ngày sai dạng", () => {
+    const tho = (): unknown => JSON.parse(JSON.stringify(boVoi())) as unknown;
+    expect(() => docBo(tho())).not.toThrow();
+    /** Đặt (hay xoá, `gt === undefined`) giá trị tại một đường dẫn của bản JSON — không ép kiểu `any`. */
+    const thu = (duong: readonly (string | number)[], gt: unknown, mau: RegExp): void => {
+      const goc = tho();
+      let o = goc as Record<string | number, unknown>;
+      for (const k of duong.slice(0, -1)) o = o[k] as Record<string | number, unknown>;
+      const cuoi = duong.at(-1)!;
+      if (gt === undefined) delete o[cuoi];
+      else o[cuoi] = gt;
+      expect(() => docBo(goc)).toThrow(mau);
+    };
+    const NHOM_DUONG = ["duLieuNen", "luotCham", 0, "chinhSachBenchmark"] as const;
+    thu([...NHOM_DUONG, "phuong_phap"], "KHAC", /chinhSachBenchmark\.phuong_phap/u);
+    thu(["duLieuNen", "phuongPhap"], "KHAC", /duLieuNen\.phuongPhap/u);
+    thu([...NHOM_DUONG, "san_goi"], "0", /san_goi.*số nguyên 1–50/u);
+    thu([...NHOM_DUONG, "nguong_lech_vua"], "0.10", /0 < nguong_lech_vua < nguong_lech_cao/u);
+    thu(["duLieuNen", "luotCham", 0, "dauVaoThieu"], -1, /dauVaoThieu.*không âm/u);
+    thu(["duLieuNen", "bangQuanSat", 0, "quanSat", 0, "gia"], "1".repeat(65), /quanSat\[0\]\.gia/u);
+    thu(["duLieuNen", "bangQuanSat", 0, "quanSat", 0, "ngay"], "2026-03-01T08:00Z", /quanSat\[0\]\.ngay/u);
+    thu(["luotCham", 0, "coBenchmark"], undefined, /coBenchmark/u);
   });
 });

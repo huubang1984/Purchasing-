@@ -114,6 +114,7 @@ export interface QuanSatTinh {
   readonly ma: string;
   readonly goi: string;
   readonly ncc: string;
+  /** Ngày UTC (`YYYY-MM-DD`) hay mốc đủ micro giây trên một ngày biên — §8.2. */
   readonly ngay: string;
   readonly gia: string;
   readonly tienTe: string;
@@ -185,7 +186,13 @@ export function tinhLaiDong(
   const dai: QuanSatTinh[] = [];
   let soLoaiTienTe = 0;
   let soLoaiGia0 = 0;
+  // §8.2: `ngay` là NGÀY (10 ký tự) hay mốc đủ micro giây. Ngày trơn phán xử được cửa sổ bằng phép so chuỗi CHỈ KHI nó không phải
+  // một ngày biên — một ngày trơn trên ngày biên là bundle sai (§8.2), không phải một quan sát để xếp vào hay ra.
+  const ngayBien = new Set([vao.mocMoGia.slice(0, 10), cuaSoTu.slice(0, 10)]);
   for (const q of quanSat) {
+    if (q.ngay.length === 10 && ngayBien.has(q.ngay)) {
+      throw new RangeError(`quan sát ${q.ma} mang ngày trơn ${q.ngay} trên một ngày biên — §8.2 đòi đủ micro giây ở ngày ấy`);
+    }
     if (q.goi === vao.goiX) continue;
     if (q.ngay >= vao.mocMoGia || q.ngay < cuaSoTu) continue;
     if (q.tienTe !== tienTe) {
@@ -200,7 +207,11 @@ export function tinhLaiDong(
   }
 
   const goi = new Map<string, SoThapPhan[]>();
-  for (const q of dai) goi.set(q.goi, [...(goi.get(q.goi) ?? []), thapPhan(q.gia)]);
+  for (const q of dai) {
+    const ds = goi.get(q.goi);
+    if (ds === undefined) goi.set(q.goi, [thapPhan(q.gia)]);
+    else ds.push(thapPhan(q.gia));
+  }
   const soGoi = goi.size;
   const soNcc = new Set(dai.map((q) => q.ncc)).size;
   const dem = {

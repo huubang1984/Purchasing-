@@ -85,6 +85,7 @@ function boVoi(
         policyVersion: 3,
         currency: "VND",
         chinhSachThanhPhan: chinhSach,
+        coBenchmark: false,
         taoLuc: { giaTri: "2026-09-22T00:00:00.000Z", nguon: NGUON },
         hang: hangs,
       },

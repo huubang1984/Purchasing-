@@ -94,6 +94,11 @@ export interface LuotChamBundle {
   readonly policyVersion: number;
   readonly currency: string;
   readonly chinhSachThanhPhan: readonly ThanhPhanChinhSachBundle[];
+  /**
+   * [S1.9101 / rà soát S4.5c2] Phiên bản chính sách của lượt chấm CÓ cấu hình nhóm `benchmark` — khi ấy lớp dữ liệu nền PHẢI mang
+   * lượt chấm này; bộ kiểm đỏ nếu thiếu (một bundle bỏ cả lớp không được qua như một bundle không có gì để kiểm).
+   */
+  readonly coBenchmark: boolean;
   readonly taoLuc: MocThoiGian;
   readonly hang: readonly HangBundle[];
 }
@@ -142,6 +147,7 @@ interface HangLuot {
   readonly currency: string;
   readonly created_at: Date;
   readonly eval_components: readonly ThanhPhanChinhSachBundle[] | null;
+  readonly co_benchmark: boolean;
 }
 
 interface HangDong {
@@ -200,7 +206,8 @@ export async function docMoiLuotCham(
             o.version,
             e.currency,
             e.created_at,
-            o.eval_components
+            o.eval_components,
+            (o.benchmark IS NOT NULL) AS co_benchmark
        FROM public.rfq_evaluations e
        JOIN public.org_procurement_policies o ON o.id OPERATOR(pg_catalog.=) e.policy_id
                                             AND o.org_id OPERATOR(pg_catalog.=) e.org_id
@@ -244,6 +251,7 @@ export async function docMoiLuotCham(
         don_vi: t.don_vi,
         he_so: t.he_so,
       })),
+      coBenchmark: l.co_benchmark,
       taoLuc: moc(l.created_at),
       hang: dong.map((d) => ({
         bidVersionId: d.bid_version_id,
@@ -416,7 +424,8 @@ export async function xuatBoBangChung(
       action: "EVIDENCE_BUNDLE_EXPORTED",
       resourceType: "RFQ",
       resourceId: input.rfqId,
-      payload: { exportedBySessionId: input.actorSessionId },
+      // [rà soát S4.5c2] Bộ nay mang đơn giá của các gói KHÁC (lớp dữ liệu nền) — sổ ghi quy mô của lần lộ ấy, không giá nào.
+      payload: { exportedBySessionId: input.actorSessionId, soDongBenchmark: bo.soDongBenchmark, soQuanSat: bo.soQuanSat },
     });
   }
   return bo;

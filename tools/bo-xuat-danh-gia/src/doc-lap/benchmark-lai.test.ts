@@ -109,6 +109,16 @@ describe("[INV-L7] [S1.9101 / S4.5c2] §8.5 — một dòng trên dữ liệu th
     expect(tinhLaiDong(gia("107.11"), bon, VAO)).toMatchObject({ nhan: "LECH_VUA", chieu: "TREN" });
   });
 
+  it("[rà soát S4.5c2] §8.2: ngày TRƠN ngoài ngày biên phán xử cửa sổ bằng ngày; ngày trơn TRÊN ngày biên ⇒ ném có tên", () => {
+    const tron = [...BANG, q("g9", "n12", "104", { ngay: "2026-03-02" }), q("g10", "n13", "999", { ngay: "2025-09-29" })];
+    const kq = tinhLaiDong(gia("105"), tron, VAO);
+    expect(kq.dauVao).toContain(tron.at(-2)!.ma);
+    expect(kq.dauVao).not.toContain(tron.at(-1)!.ma);
+    expect(kq.soGoi).toBe(4);
+    expect(() => tinhLaiDong(gia("105"), [...BANG, q("g11", "n14", "100", { ngay: "2026-09-30" })], VAO)).toThrow(/ngày trơn 2026-09-30 trên một ngày biên/u);
+    expect(() => tinhLaiDong(gia("105"), [...BANG, q("g11", "n14", "100", { ngay: "2025-09-30" })], VAO)).toThrow(/ngày biên/u);
+  });
+
   it("dòng không đo được: không ánh xạ ⇒ CHUA_ANH_XA; trạng thái khác HOP_LE ⇒ lý do là trạng thái; không số đếm nào", () => {
     expect(tinhLaiDong(null, BANG, VAO)).toEqual({
       nhan: "KHONG_DO_DUOC",
