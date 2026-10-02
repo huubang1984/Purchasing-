@@ -1543,7 +1543,8 @@ describe("bề mặt tệp", () => {
       // trình duyệt thật: Tổng Giám đốc nạp XD-04, bước 7 trống, gõ lý do, bấm Huỷ ⇒ `CANCELLED`, và thứ vừa huỷ chỉ hiện SAU đó.
       // Khuôn khoản 321 của «Phê duyệt»: lần bấm đầu — hay khi trao thầu đã đổi từ lúc đọc — chỉ vẽ nó ra.
       it("khoản 333: «Huỷ trao thầu» khi chưa đọc ⇒ lần bấm đầu chỉ HIỆN trao thầu sắp huỷ; lần hai mới huỷ; đổi giữa chừng ⇒ không huỷ; lý do trống ⇒ không gọi gì", async () => {
-        const daHuy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g === `POST /rfqs/${RFQ}/award/cancel`);
+        // [S1.261 / khoản 335] Route huỷ mang id trao thầu: `…/award/<id>/cancel`.
+        const daHuy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g.startsWith(`POST /rfqs/${RFQ}/award/`) && g.endsWith("/cancel"));
         const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
         p.el("ly-do-award").value = "nha cung cap rut bao gia";
         await p.bam("nut-huy-award");
@@ -1551,7 +1552,7 @@ describe("bề mặt tệp", () => {
         expect(ttAward(p)).toMatch(/Nhà cung cấp\|Công ty Thép Một/u);
         expect(p.el("ok7").textContent).toMatch(/bấm Huỷ trao thầu lần nữa/u);
         await p.bam("nut-huy-award");
-        expect(daHuy(p)).toEqual([`POST /rfqs/${RFQ}/award/cancel`]);
+        expect(daHuy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-1/cancel`]);
         expect(p.el("ok7").textContent).toMatch(/^Đã huỷ trao thầu/u);
 
         let lan = 0;
@@ -1565,7 +1566,7 @@ describe("bề mặt tệp", () => {
         await r.bam("nut-doc-award");
         r.el("ly-do-award").value = "   ";
         await r.bam("nut-huy-award");
-        expect(r.trangThai.goi.filter((g) => g.includes("/award/cancel")), "lý do trống").toEqual([]);
+        expect(r.trangThai.goi.filter((g) => g.endsWith("/cancel")), "lý do trống").toEqual([]);
         expect(r.el("loi7").textContent).toMatch(/Lý do là BẮT BUỘC/u);
 
         // Đọc lại trao thầu bị từ chối (người không giữ `bid.view`) hay gói chưa có trao thầu nào ⇒ nói ra, không huỷ.
@@ -1576,9 +1577,23 @@ describe("bề mặt tệp", () => {
           const s = await dung(() => tra);
           s.el("ly-do-award").value = "ly do";
           await s.bam("nut-huy-award");
-          expect(s.trangThai.goi.filter((g) => g.includes("/award/cancel")), ten).toEqual([]);
+          expect(s.trangThai.goi.filter((g) => g.endsWith("/cancel")), ten).toEqual([]);
           expect(s.el("loi7").textContent, ten).toMatch(cau);
         }
+      });
+
+      // [S1.261 / khoản 335] Giữa lần đọc lại của trang và lần huỷ, trao thầu đổi được (rút rồi đề xuất lại, hay được duyệt);
+      // máy chủ nay từ chối theo id thay vì huỷ thứ mới. Thân 422 là `{ error: <câu> }` — hình dạng thật của `TraoThauTuChoiError`.
+      it("[S1.261 / khoản 335] «Huỷ trao thầu» gửi id của trao thầu ĐANG HIỆN; máy chủ từ chối vì nó không còn mới nhất ⇒ in nguyên câu, không báo đã huỷ", async () => {
+        const cau = "Trao thầu được nêu không phải trao thầu mới nhất của gói này — gói đã đổi từ lúc đọc (hàng mới nhất đang ở APPROVED), " +
+          "hoặc id thuộc gói khác. Lần huỷ này không được ghi nhận; đọc lại trao thầu của gói rồi mới huỷ.";
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-7") } }), { status: 422, body: { error: cau } });
+        await p.bam("nut-doc-award");
+        p.el("ly-do-award").value = "ly do";
+        await p.bam("nut-huy-award");
+        expect(p.trangThai.goi.filter((g) => g.endsWith("/cancel"))).toEqual([`POST /rfqs/${RFQ}/award/aw-7/cancel`]);
+        expect(p.el("loi7").textContent).toBe(cau);
+        expect(p.el("ok7").textContent).toBe("");
       });
     });
 

@@ -897,8 +897,9 @@ $("nut-huy-award").addEventListener("click", async () => {
   if (lyDo === "") { bao($("loi7"), "Lý do là BẮT BUỘC ở cả lần huỷ — một lần huỷ không lý do là đúng thứ D5 cấm."); return; }
   // [S1.259 / khoản 333] Huỷ lên trao thầu ĐÃ HIỆN TRÊN MÀN — khuôn khoản 321 của «Phê duyệt». Trước vòng này nút huỷ theo GÓI
   // (route không nhận id trao thầu) khi bước 7 còn trống: đo trên trình duyệt, Tổng Giám đốc nạp XD-04, gõ lý do, bấm Huỷ ⇒
-  // `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Lần bấm đầu — hay khi trao thầu mới nhất đã đổi từ lúc đọc — chỉ vẽ nó ra. Giới hạn,
-  // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.
+  // `CANCELLED`, và thứ vừa huỷ chỉ hiện sau đó. Lần bấm đầu — hay khi trao thầu mới nhất đã đổi từ lúc đọc — chỉ vẽ nó ra. ~~Giới hạn,
+  // nói ra: giữa lần đọc lại dưới đây và lần huỷ, máy chủ vẫn huỷ trao thầu CÒN SỐNG lúc ấy, không theo id.~~ [S1.261 / khoản
+  // 335] Route huỷ nay mang id trao thầu, cùng khuôn «Phê duyệt»: máy chủ từ chối khi nó không còn là trao thầu mới nhất của gói.
   const doc = await goi("GET", `/rfqs/${phien.rfqId}/award`);
   if (doc.status !== 200) { bao($("loi7"), loiCua(doc, "Chưa đọc được trao thầu sắp huỷ")); return; }
   const a = doc.body.award ?? null;
@@ -910,7 +911,7 @@ $("nut-huy-award").addEventListener("click", async () => {
     }
     return;
   }
-  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/cancel`, { reason: lyDo });
+  const r = await goi("POST", `/rfqs/${phien.rfqId}/award/${a.awardId}/cancel`, { reason: lyDo });
   if (r.status !== 201) { bao($("loi7"), loiCua(r, "Không huỷ được")); return; }
   bao($("ok7"), "Đã huỷ trao thầu — một hàng trạng thái MỚI, lịch sử còn nguyên. Gói thầu về EVALUATING.");
   await veTraoThau();

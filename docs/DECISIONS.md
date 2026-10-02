@@ -5974,6 +5974,15 @@ ký, chỉ người đề xuất ghi được (so `acted_by`), và không phải
 đúng cạnh của huỷ, J7 mở lại. Route `POST /rfqs/:rfqId/award/withdraw` dưới `award.recommend`. Cổng huỷ
 giữ nguyên `po.approve`.
 
+**[S1.261 / khoản 335] Huỷ nêu ĐÚNG award được huỷ.** Chủ dự án chọn ngày 2026-10-02 (*"thêm id trao thầu vào route
+huỷ"*). ~~Route `POST /rfqs/:rfqId/award/cancel`~~ huỷ hàng mới nhất của gói, bất kể người huỷ đã đọc hàng nào — một đề
+xuất rút rồi đề xuất lại, hay vừa được duyệt, giữa lần đọc và lần huỷ thì bị huỷ dù người huỷ chưa thấy. Nay route là
+`POST /rfqs/:rfqId/award/:awardId/cancel` — cùng khuôn `…/award/:awardId/approve`, cùng lý do — và `huyTraoThau` chỉ huỷ khi
+`awardId` là hàng mới nhất của gói, phép so đứng sau khoá hàng RFQ; khác ⇒ `KHONG_CO_AWARD_CON_SONG`, một hàng
+`RFQ_STATE_DENIED`. Cổng, nghĩa của `AWARDED` và cạnh về `EVALUATING` không đổi. Giới hạn, đọc từ mã: `duyetTraoThau` không
+giữ khoá hàng RFQ, nên một lần duyệt CHÍNH đề xuất được nêu chen được vào khe giữa phép so và câu ghi — lần huỷ khi ấy ăn
+vào hàng `APPROVED` của cùng báo giá, không bao giờ vào đề xuất khác. Biên bản §S1.261.
+
 ### Điều ADR này KHÔNG nói
 
 Nó **không** nói J3 đã trọn. Vế *người điều phối mở thầu* đọc `unseal_requests.dispatched_by`, cột

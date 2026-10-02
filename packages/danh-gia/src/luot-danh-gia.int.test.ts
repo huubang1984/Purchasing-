@@ -1642,11 +1642,11 @@ describe("[S1.110 / S2.6] trao thầu đi trọn chuỗi PROPOSED → APPROVED �
         apiPool,
       ),
     );
-    await withTenant(apiPool, orgA, (c) =>
+    const duyet = await withTenant(apiPool, orgA, (c) =>
       duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
     );
     const huy = await withTenant(apiPool, orgA, (c) =>
-      huyTraoThau(c, orgA, { rfqId, reason: "ncc rut lai cam ket giao hang", actorSessionId: sDuyet }, apiPool),
+      huyTraoThau(c, orgA, { rfqId, awardId: duyet.awardId, reason: "ncc rut lai cam ket giao hang", actorSessionId: sDuyet }, apiPool),
     );
     expect(huy.status).toBe("CANCELLED");
     expect(huy.reason).toBe("ncc rut lai cam ket giao hang");
@@ -2155,7 +2155,7 @@ describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi 
 
   it("huỷ HAI LẦN: lần thứ hai bị từ chối ở cả lớp gói và lớp CSDL", async () => {
     const { rfqId, banRo, luotId } = await sanSangTraoThau();
-    await withTenant(apiPool, orgA, (c) =>
+    const dx = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
         c, orgA,
         { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat", actorSessionId: sDeXuat },
@@ -2163,11 +2163,11 @@ describe("[S1.110 / S2.6] J7 — tối đa MỘT award còn sống, và chuỗi 
       ),
     );
     await withTenant(apiPool, orgA, (c) =>
-      huyTraoThau(c, orgA, { rfqId, reason: "huy lan mot", actorSessionId: sDuyet }, apiPool),
+      huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "huy lan mot", actorSessionId: sDuyet }, apiPool),
     );
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        huyTraoThau(c, orgA, { rfqId, reason: "huy lan hai", actorSessionId: sDuyet }, apiPool),
+        huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "huy lan hai", actorSessionId: sDuyet }, apiPool),
       ),
     ).rejects.toThrow(/Chỉ huỷ được khi gói thầu đang ở AWARDED; gói này đang ở EVALUATING/u);
 
@@ -2314,7 +2314,7 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
 
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        huyTraoThau(c, orgA, { rfqId, reason: "khong co po.approve", actorSessionId: sDeXuat }, apiPool),
+        huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "khong co po.approve", actorSessionId: sDeXuat }, apiPool),
       ),
     ).rejects.toBeInstanceOf(PermissionDeniedError);
 
@@ -2353,7 +2353,7 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
 
   it("một phiên của tổ chức KHÁC không thấy và không chạm được award của tổ chức này", async () => {
     const { rfqId, banRo } = await sanSangTraoThau();
-    await withTenant(apiPool, orgA, (c) =>
+    const dx = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
         c, orgA,
         { rfqId, bidVersionId: banRo[1] ?? "", reason: "de xuat cua to chuc A", actorSessionId: sDeXuat },
@@ -2367,7 +2367,8 @@ describe("[S1.110 / S2.6] cổng quyền và ranh giới tổ chức của ba đ
     ).resolves.toBeNull();
     await expect(
       withTenant(apiPool, orgB, (c) =>
-        huyTraoThau(c, orgB, { rfqId, reason: "to chuc khac huy", actorSessionId: sB }, apiPool),
+        // [S1.261 / khoản 335] Biết đúng `awardId` của tổ chức A cũng không đủ.
+        huyTraoThau(c, orgB, { rfqId, awardId: dx.awardId, reason: "to chuc khac huy", actorSessionId: sB }, apiPool),
       ),
     ).rejects.toThrow();
     // Và award của tổ chức A còn nguyên.
@@ -3243,7 +3244,7 @@ describe("[S1.231 / khoản 232 / 094] WITHDRAWN ở tầng CSDL — ba vế c�
 
     // ⑵ đã APPROVED.
     const { rfqId, banRo, dx } = await coDeXuat();
-    await withTenant(apiPool, orgA, (c) =>
+    const duyet = await withTenant(apiPool, orgA, (c) =>
       duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
     );
     await expect(
@@ -3259,7 +3260,7 @@ describe("[S1.231 / khoản 232 / 094] WITHDRAWN ở tầng CSDL — ba vế c�
 
     // ⑶ đã CANCELLED.
     await withTenant(apiPool, orgA, (c) =>
-      huyTraoThau(c, orgA, { rfqId, reason: "ncc rut", actorSessionId: sDuyet }, apiPool),
+      huyTraoThau(c, orgA, { rfqId, awardId: duyet.awardId, reason: "ncc rut", actorSessionId: sDuyet }, apiPool),
     );
     await expect(
       chenAwardTho({
@@ -3375,7 +3376,7 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
     // (chữ ký của `uDuyet` đã chèn thẳng) cùng người duyệt lại sẽ vấp `UNIQUE (org, award, approver_user)` — đúng luật
     // một người một chữ ký của `061`, không phải thứ ca này đo.
     const hai = await coDeXuat();
-    await withTenant(apiPool, orgA, (c) =>
+    const duyetHai = await withTenant(apiPool, orgA, (c) =>
       duyetTraoThau(c, orgA, { rfqId: hai.rfqId, awardId: hai.dx.awardId, actorSessionId: sDuyet }, apiPool),
     );
     await expect(
@@ -3388,11 +3389,11 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
     // Cổng huỷ KHÔNG đổi: người duyệt huỷ được award đã duyệt (ADR-057), người đề xuất thì không giữ `po.approve`.
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        huyTraoThau(c, orgA, { rfqId: hai.rfqId, reason: "de xuat huy", actorSessionId: sDeXuat }, apiPool),
+        huyTraoThau(c, orgA, { rfqId: hai.rfqId, awardId: duyetHai.awardId, reason: "de xuat huy", actorSessionId: sDeXuat }, apiPool),
       ),
     ).rejects.toBeInstanceOf(PermissionDeniedError);
     const huy = await withTenant(apiPool, orgA, (c) =>
-      huyTraoThau(c, orgA, { rfqId: hai.rfqId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
+      huyTraoThau(c, orgA, { rfqId: hai.rfqId, awardId: duyetHai.awardId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
     );
     expect(huy.status).toBe("CANCELLED");
     expect((await hangAward(hai.rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED", "CANCELLED"]);
@@ -3402,11 +3403,11 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
     // Trước vá: câu đọc chữ ký JOIN MỌI hàng `PROPOSED` không muộn hơn hàng mới nhất, nên đề xuất thứ hai
     // "thừa hưởng" chữ ký của chu kỳ trước — `approvals` ≠ [] dù trigger (đếm theo `truoc_id`) thấy 0 chữ ký.
     const { rfqId, banRo, dx } = await coDeXuat();
-    await withTenant(apiPool, orgA, (c) =>
+    const duyet = await withTenant(apiPool, orgA, (c) =>
       duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
     );
     await withTenant(apiPool, orgA, (c) =>
-      huyTraoThau(c, orgA, { rfqId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
+      huyTraoThau(c, orgA, { rfqId, awardId: duyet.awardId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
     );
     const lai = await withTenant(apiPool, orgA, (c) =>
       deXuatTraoThau(
@@ -3437,12 +3438,12 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
     ).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_DE_XUAT_DANG_CHO" });
 
     const { rfqId: r2 } = await coDeXuat();
-    await withTenant(apiPool, orgA, (c) =>
+    const rut2 = await withTenant(apiPool, orgA, (c) =>
       rutDeXuatTraoThau(c, orgA, { rfqId: r2, reason: "rut", actorSessionId: sDeXuat }, apiPool),
     );
     await expect(
       withTenant(apiPool, orgA, (c) =>
-        huyTraoThau(c, orgA, { rfqId: r2, reason: "huy sau khi rut", actorSessionId: sDuyet }, apiPool),
+        huyTraoThau(c, orgA, { rfqId: r2, awardId: rut2.awardId, reason: "huy sau khi rut", actorSessionId: sDuyet }, apiPool),
       ),
     ).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_AWARD_CON_SONG" });
 
@@ -3454,6 +3455,73 @@ describe("[S1.231 / khoản 232] rutDeXuatTraoThau — đường sản xuất c�
       ),
     ).rejects.toBeInstanceOf(PermissionDeniedError);
     expect((await hangAward(r3)).map((h) => h.status)).toEqual(["PROPOSED"]);
+  });
+});
+
+// [S1.261 / khoản 335] Trước vòng này `huyTraoThau` nhận `rfqId` rồi huỷ hàng MỚI NHẤT của gói, bất kể người gọi đã đọc hàng
+// nào — giới hạn mà khoản 333 nói ra ở màn `/login`. Giữa lần đọc và lần huỷ, đề xuất kia rút được rồi một đề xuất KHÁC dựng lên,
+// hay được duyệt: lần huỷ ăn vào thứ người huỷ chưa thấy. Nay hàm nhận `awardId`, cùng khuôn `duyetTraoThau`.
+describe("[S1.261 / khoản 335] huyTraoThau huỷ ĐÚNG trao thầu được nêu — `awardId` phải là hàng mới nhất của gói", { timeout: 300000 }, () => {
+  it("đề xuất bị RÚT rồi đề xuất LẠI ⇒ huỷ theo id CŨ bị từ chối `KHONG_CO_AWARD_CON_SONG`: không hàng CANCELLED, đề xuất mới đứng nguyên, gói vẫn AWARDED, một hàng sổ; ĐỐI CHỨNG DƯƠNG: id của đề xuất mới thì đi qua", async () => {
+    const { rfqId, banRo, dx } = await coDeXuat();
+    await withTenant(apiPool, orgA, (c) =>
+      rutDeXuatTraoThau(c, orgA, { rfqId, reason: "rut de chon lai", actorSessionId: sDeXuat }, apiPool),
+    );
+    const lai = await withTenant(apiPool, orgA, (c) =>
+      deXuatTraoThau(c, orgA, { rfqId, bidVersionId: banRo[2] ?? "", reason: "chon lai", actorSessionId: sDeXuat }, apiPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "huy de xuat da doc", actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toMatchObject({
+      name: "TraoThauTuChoiError",
+      lyDo: "KHONG_CO_AWARD_CON_SONG",
+      message: expect.stringContaining("không phải trao thầu mới nhất") as unknown,
+    });
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "WITHDRAWN", "PROPOSED"]);
+    expect(await trangThaiRfq(rfqId)).toBe("AWARDED");
+    expect(await hangSoTuChoiTrangThai(rfqId)).toEqual([[uDuyet, { ma: "KHONG_CO_AWARD_CON_SONG" }]]);
+
+    const huy = await withTenant(apiPool, orgA, (c) =>
+      huyTraoThau(c, orgA, { rfqId, awardId: lai.awardId, reason: "huy de xuat moi", actorSessionId: sDuyet }, apiPool),
+    );
+    expect(huy).toMatchObject({ status: "CANCELLED", bidVersionId: banRo[2] });
+    expect(await trangThaiRfq(rfqId)).toBe("EVALUATING");
+  });
+
+  it("đề xuất được DUYỆT sau lần đọc ⇒ huỷ theo id của hàng PROPOSED bị từ chối; id của hàng APPROVED — thứ một lần đọc lại thấy — thì đi qua", async () => {
+    const { rfqId, dx } = await coDeXuat();
+    const duyet = await withTenant(apiPool, orgA, (c) =>
+      duyetTraoThau(c, orgA, { rfqId, awardId: dx.awardId, actorSessionId: sDuyet }, apiPool),
+    );
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        huyTraoThau(c, orgA, { rfqId, awardId: dx.awardId, reason: "huy de xuat chua duyet", actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_AWARD_CON_SONG" });
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED"]);
+    expect(await trangThaiRfq(rfqId)).toBe("AWARDED");
+
+    const huy = await withTenant(apiPool, orgA, (c) =>
+      huyTraoThau(c, orgA, { rfqId, awardId: duyet.awardId, reason: "ncc rut cam ket", actorSessionId: sDuyet }, apiPool),
+    );
+    expect(huy.status).toBe("CANCELLED");
+    expect((await hangAward(rfqId)).map((h) => h.status)).toEqual(["PROPOSED", "APPROVED", "CANCELLED"]);
+  });
+
+  it("id của trao thầu CÒN SỐNG thuộc GÓI KHÁC cùng tổ chức ⇒ từ chối; cả hai gói đứng nguyên", async () => {
+    const mot = await coDeXuat();
+    const hai = await coDeXuat();
+    await expect(
+      withTenant(apiPool, orgA, (c) =>
+        huyTraoThau(c, orgA, { rfqId: mot.rfqId, awardId: hai.dx.awardId, reason: "id goi khac", actorSessionId: sDuyet }, apiPool),
+      ),
+    ).rejects.toMatchObject({ name: "TraoThauTuChoiError", lyDo: "KHONG_CO_AWARD_CON_SONG" });
+    for (const g of [mot, hai]) {
+      expect((await hangAward(g.rfqId)).map((h) => h.status)).toEqual(["PROPOSED"]);
+      expect(await trangThaiRfq(g.rfqId)).toBe("AWARDED");
+    }
   });
 });
 
