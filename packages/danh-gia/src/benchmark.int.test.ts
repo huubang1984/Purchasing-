@@ -382,9 +382,15 @@ beforeAll(async () => {
   // [rà soát S4.5c2] H3 mở 3 tháng trước — trong cửa sổ, ngoài mọi ngày biên — để bộ bằng chứng có quan sát mang `ngay` dạng NGÀY
   // TRƠN (§8.2). H3 vốn ánh xạ hồi tố, nên mốc lùi không đổi cờ hồi tố hay số đếm nào.
   const luc3Thang = (await db.pool.query<{ t: string }>("SELECT (now() - interval '3 months')::text AS t")).rows[0]!.t;
-  // [rà soát S4.5c2] H4 (đơn giá 0 — bị loại TRƯỚC dải, nên số đếm nào cũng không đổi) mở mười phút SAU biên cửa sổ 12 tháng của X:
-  // trong cửa sổ, trên NGÀY BIÊN của biên ấy — §8.2 đòi đủ micro giây ở đó. X mở vài giây sau dòng này, nên biên của X còn trước H4.
-  const lucBienCuaSo = (await db.pool.query<{ t: string }>("SELECT (now() - interval '12 months' + interval '10 minutes')::text AS t")).rows[0]!.t;
+  // [rà soát S4.5c2] H4 (đơn giá 0 — bị loại TRƯỚC dải, nên số đếm nào cũng không đổi) mở mười phút SAU biên cửa sổ 12 tháng của X,
+  // kẹp về cuối NGÀY UTC của biên ấy: trong cửa sổ, trên ngày biên — §8.2 đòi đủ micro giây ở đó. X mở vài giây sau dòng này nên biên
+  // của X còn trước H4; chỉ một lượt dựng VẮT qua nửa đêm UTC mới đặt biên ấy sau H4. Lịch tính trên giờ tường UTC, không múi giờ phiên.
+  const lucBienCuaSo = (
+    await db.pool.query<{ t: string }>(
+      "SELECT (LEAST(n - interval '12 months' + interval '10 minutes', date_trunc('day', n - interval '12 months') + interval '1 day' - " +
+        "interval '1 microsecond') AT TIME ZONE 'UTC')::text AS t FROM (SELECT now() AT TIME ZONE 'UTC' AS n) x",
+    )
+  ).rows[0]!.t;
   lichSuThep = [
     await goiLichSu(boA, hangThep, ["1000", "1200"]),
     await goiLichSu(boA2, hangThep, ["1050"]),
