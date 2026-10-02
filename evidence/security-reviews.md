@@ -23914,3 +23914,14 @@ bản lưu không bị CSDL buộc vào báo giá của CHÍNH gói (tầng gói
 `PENDING_APPROVAL → OPEN` lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là cập nhật HOT — một lần mỗi gói; cột *Benchmark* là nhãn của
 bản lưu, không của lượt chấm đang xếp hạng; hai lần đọc đầu đồng thời cùng tính; *Xem dải* không có hạn mức (trần theo phiên chỉ áp cho phiên
 `AGENT_READONLY`); đột biến M4 vẫn sống. Khoá `FOR SHARE` ghi lên hàng gói ở MỌI lần đọc có nhãn — cùng chi phí khoá hàng của `anh-xa.ts`.
+
+## 10. Số của lượt cuối (mã sau rà soát)
+
+- `pnpm typecheck`, `pnpm lint`: sạch.
+- `pnpm test` (không tích hợp): 146 tệp, 2481 ca qua, 1 bỏ qua — lượt đầu ĐỎ một ca: `ban-ro-liet-ke` bắt `doc-benchmark.ts` mới chạm
+  `rfq_unsealed_bids` (cờ `THU_LAI`); khai có lý do, xanh.
+- `benchmark.int`: 55/55 (6 ca mới ở ⑻, ca vòng BAFO của ⑺ thêm vế `THU_LAI` và vế bản BAFO được đo).
+- Kịch bản 41 qua HTTP: 85/85 — lượt quét trước mở thầu nay đi tới nghiệp vụ của cả hai route benchmark (200 `KHONG_HIEN`).
+- `pnpm evidence` toàn bộ: vitest thoát 0, 4576 khẳng định (4566 qua, 10 bỏ qua có khai), 79/79 bất biến (57 nghiệp vụ + 22 hàng rào).
+  Lượt ấy ĐỎ ở cổng sổ khai nhãn: hai cặp `[INV-L6]` của vòng này (`benchmark.int`, `benchmark-trang-thai-dong-bo`) chưa khai ở
+  `tools/inv-matrix/src/so-khai-nhan.ts` — khai, dựng lại ma trận từ cùng báo cáo: cổng evidence XANH. `evidence/INV-matrix.md` dựng lại.
