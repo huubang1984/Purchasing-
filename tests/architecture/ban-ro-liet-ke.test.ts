@@ -111,6 +111,10 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     // `bid.view` và hàng sổ của riêng mình.
     expect(nhac("ghiBanLuuBenchmark")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());
     expect(nhac("tinhDaiDong")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());
+    // [S1.262 / S4.5c2] Một lần đọc `quan_sat_gia` dùng chung: `tinhDaiDong` (cùng tệp định nghĩa) và lớp dữ liệu nền của bộ bằng
+    // chứng — rồi lớp ấy chỉ `dungBoBangChung` gọi (sau cổng `audit.read` + `bid.view` của `xuatBoBangChung`, hay CLI vận hành).
+    expect(nhac("docQuanSatTaiMoc")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/lop-du-lieu-nen.ts"].sort());
+    expect(nhac("docLopDuLieuNen")).toEqual(["packages/danh-gia/src/bo-bang-chung.ts", "packages/danh-gia/src/lop-du-lieu-nen.ts"]);
     const docBm = readFileSync(`${goc}packages/danh-gia/src/doc-benchmark.ts`, "utf8");
     expect(docBm.match(/permission: PERMISSIONS\.BID_VIEW/gu)?.length).toBe(2);
     expect(docBm).toMatch(/action: "BENCHMARK_READ"/u);

@@ -103,18 +103,21 @@ function canTrai(a: readonly number[], b: readonly number[]): readonly [number[]
   return [dem(a), dem(b)];
 }
 
-/** Cộng hai dãy chữ số không dấu. */
+/**
+ * Cộng hai dãy chữ số không dấu. Chữ số ghi từ hàng đơn vị lên rồi đảo một lần — [rà soát S4.5c2 THẤP-7] `unshift` mỗi chữ số là
+ * bậc hai theo độ dài, và một bundle độc vài trăm KB làm bộ kiểm treo.
+ */
 function congDay(a: readonly number[], b: readonly number[]): number[] {
   const [x, y] = canTrai(a, b);
   const ra: number[] = [];
   let nho = 0;
   for (let i = x.length - 1; i >= 0; i -= 1) {
     const t = (x[i] ?? 0) + (y[i] ?? 0) + nho;
-    ra.unshift(t % 10);
+    ra.push(t % 10);
     nho = t >= 10 ? 1 : 0;
   }
-  if (nho > 0) ra.unshift(nho);
-  return ra;
+  if (nho > 0) ra.push(nho);
+  return ra.reverse();
 }
 
 /** Trừ hai dãy chữ số không dấu, `a >= b`. */
@@ -130,9 +133,9 @@ function truDay(a: readonly number[], b: readonly number[]): number[] {
     } else {
       muon = 0;
     }
-    ra.unshift(t);
+    ra.push(t);
   }
-  return ra;
+  return ra.reverse();
 }
 
 /**
