@@ -1437,7 +1437,7 @@ describe("[INV-L7] [INV-L6] ⑼ bộ bằng chứng — lớp dữ liệu nền,
     expect(doiTenBam(boXuatLuc(moi!.tep[TEP_DU_LIEU]))).toBe(doiTenBam(boXuatLuc(json)));
   });
 
-  it("[INV-J2] [INV-L7] CLI `kiem` khi đã ngắt CSDL: ok=true, chín hàng benchmark ĐẠT", () => {
+  it("[INV-L7] CLI `kiem` khi đã ngắt CSDL: ok=true, chín hàng benchmark ĐẠT", () => {
     const kq = kiemNgoaiTuyen(thuMuc);
     expect(kq.ma, kq.ra).toBe(0);
     expect(kq.ra).toContain("ok=true");

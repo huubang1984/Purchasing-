@@ -23990,3 +23990,86 @@ bản lưu, không của lượt chấm đang xếp hạng; hai lần đọc đ�
 - `pnpm evidence` toàn bộ: vitest thoát 0, 4576 khẳng định (4566 qua, 10 bỏ qua có khai), 79/79 bất biến (57 nghiệp vụ + 22 hàng rào).
   Lượt ấy ĐỎ ở cổng sổ khai nhãn: hai cặp `[INV-L6]` của vòng này (`benchmark.int`, `benchmark-trang-thai-dong-bo`) chưa khai ở
   `tools/inv-matrix/src/so-khai-nhan.ts` — khai, dựng lại ma trận từ cùng báo cáo: cổng evidence XANH. `evidence/INV-matrix.md` dựng lại.
+
+# §S1.9101 — S4.5c2: BỘ BẰNG CHỨNG MANG LỚP DỮ LIỆU NỀN — NHÃN BENCHMARK CỦA MỌI LƯỢT CHẤM TÍNH LẠI ĐƯỢC KHI ĐÃ NGẮT CSDL (L7 vế ngoại tuyến) — ADR-9201
+
+## 1. Vòng này là gì
+
+Nửa thứ hai của S4.5c (spec S4 §9): bộ xuất ADR-059 mang lớp dữ liệu nền, `DAC-TA.md` mang mục đặc tả của nó (lịch UTC), bộ kiểm ngoại
+tuyến tính lại mọi nhãn benchmark của mọi lượt chấm. Spec §2.5 ㉑: bộ bằng chứng mang quan sát với định danh gói và nhà cung cấp băm có
+muối theo từng bundle, ADR-054 khai bundle là nơi mang giá; spec §11-kịch bản: *bộ bằng chứng tính lại được, khi đã ngắt CSDL, cả nhãn
+benchmark lẫn Effective Cost — và trả lời được dòng ấy do ai ánh xạ, lúc nào, trước hay sau khi giá của chính nó lộ*.
+
+## 2. Quyết định của chủ dự án (2026-10-02)
+
+Bốn câu, cả bốn theo đề xuất, sau phép đo ở mục 3: ⑴ muối NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle; ⑵ tính lại TỪ ĐƠN
+GIÁ ĐÃ QUY ĐỔI — phép quy đổi đơn vị không tính lại, `DAC-TA.md` nói ra; ⑶ chỉ lớp LƯỢT CHẤM (`103`) — bản lưu của bảng so sánh (`104`)
+không vào bundle; ⑷ người ánh xạ: mã người dùng + họ tên, kèm lúc ghi, nguồn, lý do.
+
+## 3. Đo trước
+
+1. Bộ xuất (`dungBoBangChung`) chỉ mang lớp chấm thầu; lớp governance S3.9 chưa làm. Kịch bản 41 bước 12j đòi CLI và HTTP ra cùng byte
+   (trừ `xuatLuc`) — muối ngẫu nhiên buộc phép so ấy đổi.
+2. `price_benchmark_inputs` giữ tham chiếu quan sát, không giá ⇒ bộ xuất đọc lại `quan_sat_gia` tại `moc_mo_gia`; mốc ấy là
+   `min(unsealed_at)` — chung cho mọi lượt chấm của gói.
+3. Chi phí ước lượng: pilot ~0,06 MB; 5.000 gói × 20 dòng ~30.000 quan sát, 7–10 MB; (1 + số lượt chấm) × số hàng chuẩn lần đọc.
+4. Câu *"do ai ánh xạ"* đi qua `anh_xa_id` của hàng kết quả tới `rfq_item_mappings`; cờ hồi tố `ANH_XA` của `quan_sat_gia` đếm MỌI hàng
+   ánh xạ của khoá ghi trong [mốc của gói, mốc đọc) — không chỉ hàng hiệu lực — nên bộ kiểm không suy cờ ấy từ `ghiLuc` của hàng ánh xạ:
+   cờ là dữ liệu, `ghiLuc` so `mocMoGia` là câu trả lời đọc được.
+
+## 4. Thay đổi
+
+- `packages/du-lieu-nen`: `docQuanSatTaiMoc` — MỘT bộ đọc `quan_sat_gia` cho *Xem dải* (`tinhDaiDong` viết lại trên nó) và bộ xuất;
+  `nhanMotDong` (thuần: `tinhDai` + `ganNhan`) và `truThang` ra cửa; `PHUONG_PHAP_BENCHMARK` ra cửa.
+- `packages/danh-gia/src/lop-du-lieu-nen.ts`: đọc hàng kết quả và đầu vào `103`, hạng mục, hàng ánh xạ + họ tên người ghi; giá của chính
+  dòng tại LÚC CHẤM (ứng viên: hàng chuẩn của mọi ánh xạ ghi trước lúc chấm); bảng quan sát mỗi (mốc mở giá, hàng chuẩn) — `HOP_LE`, từ
+  một tháng trước biên cửa sổ rộng nhất tới mốc; định danh `HMAC-SHA256(muối, "goi:"/"ncc:" + id)` 128 bit; mã quan sát `q1…` trong
+  bundle; mốc ISO UTC sáu chữ số lẻ. `dungBoBangChung` nhận muối (mặc định `randomBytes(32)`); bundle phiên bản 2.
+- `DAC-TA.md` phiên bản 2: §6 nói lớp dữ liệu nền CÓ đọc mốc thời gian; §8 — định danh băm, thời điểm, cửa sổ UTC (bảng ba ca), đầu
+  vào, tám bước của một dòng, đầu vào đã lưu, ánh xạ, thứ KHÔNG tính lại.
+- `tools/bo-xuat-danh-gia`: bộ đọc phán xử lớp mới (mốc đúng dạng §8.2, nhóm khoá đúng sáu khoá); `doc-lap/benchmark-lai.ts` — bản cài
+  độc lập từ §8 (lịch trên TRƯỜNG chữ với bảng ngày-trong-tháng tự viết; số học trên mảng chữ số của `tinh-lai.ts`; phân vị bằng nhân
+  dài với `0.25/0.5/0.75`); `kiem-du-lieu-nen.ts` — hai lớp, so nhãn/chiều/lý do/tiền tệ/cửa sổ/bảy số đếm/cờ hồi tố mỗi dòng và tập
+  đầu vào mỗi (lượt, hàng chuẩn, tiền tệ); CLI in `LOI-BENCHMARK`, `LECH-BENCHMARK` và dòng tổng `benchmark\tdong=…`.
+- `depcruise`: `g17-kiem-doc-lap-khong-cham-du-lieu-nen` (`reachable: true`).
+- Lockfile: đúng ba dòng importer — `pnpm install` của pnpm 10 cục bộ (và pnpm 9 khi sinh lại từ đầu) viết lại các phân giải
+  `supports-color` không liên quan; ba dòng được pnpm 9 thật kiểm bằng `--frozen-lockfile` trên một bản sao sạch.
+- Sổ: barrel (`du-lieu-nen` 4, `danh-gia` 2), phân loại cổng quyền (`docQuanSatTaiMoc` đọc không cổng; `nhanMotDong`, `truThang` thuần),
+  chỗ gọi theo ký hiệu (`docQuanSatTaiMoc`, `docLopDuLieuNen`), tệp đọc bảng chính sách (`lop-du-lieu-nen.ts`).
+- Tài liệu: ADR-9201; ADR-054 (bộ bằng chứng là nơi mang giá); ADR-059 và ADR-143 một dòng; spec §9; STATE; PRODUCT; TEST-PLAN L7.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Lề một tháng trước biên cửa sổ trong bảng quan sát: để biên thấy được từ cả hai phía (đột biến D4 đo nó là phép NHÌN, không phải
+  phép đúng — mục 7).
+- Tập ứng viên giá của chính dòng giới hạn ở ánh xạ ghi TRƯỚC lúc chấm — ánh xạ ghi sau không hiệu lực tại mốc ấy, đọc nó chỉ tốn một
+  lần quét.
+- Thứ tự quan sát theo mốc của gói, định danh thô chỉ phá hoà — hai lần xuất cùng thứ tự dù khác muối.
+- `hangMuc[]` (mô tả, đơn vị, số lượng mỗi dòng) vào lớp để câu *"dòng D10-HP"* đọc được không cần CSDL.
+- Bộ kiểm chỉ đọc bundle phiên bản 2.
+
+## 6. Đo
+
+- **Đơn vị** (`tools/bo-xuat-danh-gia`): `doc-lap/benchmark-lai.test.ts` 8 ca — lùi tháng (bảng DAC-TA, 2100 không nhuận, 2000 nhuận,
+  qua ranh năm, 60 tháng), dữ liệu thiết kế (mốc 105: 105/130/96, bảy số đếm), biên ngưỡng hai phía (110,25 trong dải, 110,2501 lệch
+  vừa; 94,5 lệch vừa, 94,4999 lệch cao), biên cửa sổ (đúng `cuaSoTu` vào, mốc mở giá không), dưới sàn, phân vị nội suy bốn gói, không đo
+  được, dòng USD (luật tiền tệ đứng trước luật giá 0). `kiem-du-lieu-nen.test.ts` 12 ca — bundle lành ĐẠT; bảy đột biến bundle đỏ ở đúng
+  lời báo (nhãn, giá quan sát dời mốc — và đổi giá ở gói ngoài KHÔNG dời mốc nên ĐẠT, tập đầu vào, `dauVaoThieu`, số đếm, cờ hồi tố, báo
+  giá lạ, lượt chấm lạ, thiếu bảng); lớp hàm thuần có lỗi ⇒ *HAI LỚP BẤT ĐỒNG*; ADR-059 ⒞ trong thế giới lõi lỗi; 400 bộ ngẫu nhiên hai
+  lớp đồng ý (nhãn, chiều, tập đầu vào).
+- **Tích hợp** (`packages/danh-gia/src/benchmark.int.test.ts` ⑼, Postgres 16, 61/61 cả tệp): xuất gói X của dữ liệu thiết kế bằng
+  `dungBoBangChung`; chín hàng đúng nhãn đã ghi; dòng chưa ánh xạ không giá, không người ánh xạ; thép ánh xạ TRƯỚC mốc, cát SAU mốc với
+  lý do và cờ `ANH_XA`, người ghi `{userId, hoTen}`; bảng thép sáu quan sát (gói 26 tháng ngoài biên dưới), cát hai; không định danh thô
+  nào (gói, báo giá, nhà cung cấp, bid — hơn mười id) của gói khác trong JSON; hai quan sát cùng gói cùng mã gói, khác mã nhà cung cấp;
+  cùng muối ⇒ cùng byte, muối mới ⇒ khác, bằng sau đổi tên mã băm; **CLI `kiem` THẬT, `DATABASE_URL` đã xoá: ok=true, `dong=9 dat=9
+  lech=0`**; sửa một nhãn hay bớt một đầu vào ⇒ CLI đỏ ở đúng dòng.
+- **Kịch bản 41 qua HTTP** (85/85): bundle tải qua HTTP mang lớp dữ liệu nền của HAI lượt chấm (trước và sau BAFO); `kiem` ngoại tuyến
+  tính lại mọi nhãn, lệch 0; CLI = HTTP sau đổi tên mã băm. `bo-xuat.int` 9/9 (bundle không lớp dữ liệu nền vẫn kiểm được).
+- **Kiến trúc**: `boundaries` (đối chứng trực tiếp và gián tiếp của `g17-…-du-lieu-nen`; phần còn lại của bộ kiểm vẫn gọi được hàm thuần),
+  `ban-ro-liet-ke`, `cong-quyen-route`, `barrel-exports`, `doc-chinh-sach-mot-ham`, `ma-chep-api-worker` (tên `so` trùng một đơn vị khác
+  — đổi thành `thapPhan`), `hang-so-khop`.
+- **Quy mô** (tệp thăm dò tạm, không commit; Postgres 16 trong container; `tools/do-lich-su-gia/gieo.sql` 5.000 gói × 20 dòng × 3 nhà
+  cung cấp, 200 hàng chuẩn, chính sách có trọng số và nhóm benchmark; gói X = gói mới nhất, mỗi dòng một hàng chuẩn; vai `app_api`):
+  gieo 430 s; lượt chấm **17,0 s**; xuất **14,6 / 14,1 / 14,2 s**; bundle **11,07 MB** — 60 hàng benchmark, **29.940** quan sát; `kiem`
+  ngoại tuyến **1,2 / 1,0 s**, ok=true, `dong=60 dat=60 lech=0`. Ước lượng trước khi đo (7–10 MB) THẤP hơn số đo. Lượt chấm thứ hai
+  (BAFO) không đo được trên dữ liệu gieo (gói đã `EVALUATING` — cạnh BAFO không gieo); ước ~21 s theo chi phí mỗi lần đọc.
