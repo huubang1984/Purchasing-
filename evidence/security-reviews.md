@@ -23802,3 +23802,191 @@ Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa 
   nguyên; số đếm Handoff thành 333 khoản, 51 còn mở; `cap-so --kiem` sạch. Trên `22043f47`: `pnpm t0` xanh; `pnpm test` 144
   tệp (142 đạt, 2 bỏ qua), 2447 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4530 khẳng định, 79/79 bất
   biến (57/57 nghiệp vụ + 22/22 hàng rào), 2283 giây; `evidence/INV-matrix.md` không đổi.
+
+# §S1.260 — S4.5c1: BENCHMARK HIỆN Ở `/mo-thau` — MỘT BẢN LƯU CHO MỖI LẦN MỞ THẦU, TÍNH Ở LẦN ĐỌC ĐẦU; ĐÓNG Ở VÒNG CHÀO LẠI; SỐ CỦA DẢI CHỈ KHI BẤM *XEM DẢI* (L6 vế benchmark) — ADR-143
+
+## 1. Vòng này là gì
+
+PR đầu trong hai PR của S4.5c (spec S4 §9; ADR-142 ⑼): bản lưu benchmark của bảng so sánh, route, màn `/mo-thau`, vế benchmark của L6,
+`gieo:demo`. Bộ xuất ADR-059, `DAC-TA.md` và bộ kiểm ngoại tuyến là S4.5c2. Một migration (`104_ban_luu_benchmark`), hai route đọc. Dựng
+trên `master` `5afec41` (#232 — S4.5b — và #233 — khoản 329 — đã merge).
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+
+Hai lượt hỏi, cả năm điểm theo đề xuất, sau phép đo ở mục 3:
+
+1. Bản "một lần" tính ở lần đọc ĐẦU sau mỗi lần mở thầu, bởi người giữ `bid.view`, rồi lưu (không job nền, không chạm đường mở thầu).
+2. Ở `BAFO_OPEN`/`BAFO_CLOSED` benchmark ĐÓNG, như route bảng so sánh.
+3. Cửa sổ tháng giữ lịch UTC, ghi rõ (ở `DAC-TA.md` của S4.5c2).
+4. Số của dải (Q1, trung vị, Q3) chỉ tính khi bấm *Xem dải* từng dòng — không lưu (spec §4.6).
+5. `SAU_MOC` đếm khi bấm *Xem dải*, tới lúc bấm.
+
+Và cách thực thi: S4.5c1 trước, S4.5c2 PR sau.
+
+## 3. Đo trước
+
+1. **Cạnh mở thầu không mang được phép tính.** `executeUnsealRequest` (`apps/unseal-worker/src/index.ts`) làm cả hai cạnh `CLOSED→UNSEALED`
+   và `BAFO_CLOSED→BAFO_UNSEALED`, vai `app_unseal`, trong giao dịch của bộ chạy job (trần 60 s). Spec S4 §3.1–3.2 cấm thêm dòng vào đường ấy.
+   `app_unseal` không có quyền nào trên đầu vào của benchmark: `quan_sat_gia` chỉ `GRANT EXECUTE` cho `app_api` (`096:409,413`); không quyền
+   trên ánh xạ, hàng chuẩn, chính sách, hai bảng của `103`; không `INSERT` trên `outbox_jobs` (`025`). Trong chính giao dịch mở thầu gói
+   chưa thấy giá của mình — `quan_sat_gia` so `unsealed_at < p_moc` ngặt. Giao dịch ấy giữ khoá chuỗi sổ (`050`, `lock_timeout` 2 s).
+2. **Bảng của `103` gắn cứng vào lượt chấm** (`…_cua_luot_cham_fk`) — bản lưu cần bảng riêng.
+3. **Vòng chào lại:** `COMPARISON_ALLOWED_STATUSES = UNSEALED, EVALUATING, BAFO_UNSEALED`; ở `BAFO_OPEN`/`BAFO_CLOSED` `gia_da_lo` sai nên
+   tính as-of ra toàn `CHUA_ANH_XA`; `docBangXepHang` hiện hạng vòng một không nhãn vòng.
+4. **Spec §4.6 cấm lưu số của dải;** `quan_sat_gia` có `SET search_path` nên không nội tuyến — lọc theo tham chiếu không rẻ hơn một lần
+   đọc đầy đủ (~0,45 s mỗi hàng chuẩn ở 5.000 gói, §S1.256). `SAU_MOC` của spec đếm tới lúc đọc — một lần đọc như thế.
+5. **UTC so với +07:00** (200.000 mốc ngẫu nhiên 2024–2027, cùng phép trừ tháng của lõi): cửa sổ 12 tháng 0,04% mốc khác, lệch tối đa
+   24 giờ; 3 tháng 0,70%, 48 giờ; 1 tháng 0,95%, 72 giờ.
+6. Phía API có bộ chạy job (`apps/api/src/composition.ts`) — phương án job nền được đưa ra và không được chọn.
+
+## 4. Thay đổi
+
+- **`104_ban_luu_benchmark`**: `price_benchmark_snapshots` (một hàng mỗi lần mở thầu — `UNIQUE (org_id, unseal_request_id)`; khoá ngoại
+  `…_cua_lan_mo_fk` tới `unseal_requests (org_id, id, rfq_id)`, `…_phien_ban_ghim_fk` tới `rfq_packages (org_id, id, chinh_sach_ghim_id)`;
+  `CHECK` mốc trước lúc ghi) và `price_benchmark_snapshot_lines` (cột của `103` trừ lượt chấm; `…_cung_ban_luu_fk` cùng giao dịch; báo giá
+  khoá ngoại tới `rfq_unsealed_bids`). Hai `UNIQUE` đích mới trên `unseal_requests`, `rfq_packages` — siêu tập của `(org_id, id)`, không
+  cột nào của chúng bị `UPDATE` ở đường mở thầu. RLS + `FORCE`, policy khách đóng hẳn, `SELECT` mức bảng, `INSERT` theo cột không `id`/`ghi_luc`.
+- **`packages/du-lieu-nen/src/benchmark-goi.ts`**: `ghiBanLuuBenchmark` (`INSERT … ON CONFLICT DO NOTHING`, kiểm `mocDoc = ghi_luc`),
+  `tinhDaiDong` (dải một hàng chuẩn tại mốc đã lưu bằng `tinhDai`, `SAU_MOC` cộng trên đầu vào, giá quy đổi của X tại `ghi_luc`).
+- **`packages/danh-gia/src/doc-benchmark.ts`**: `docBenchmark` đổi đích (trạng thái hiện = bảng so sánh mở; lần mở thầu `EXECUTED` mới
+  nhất; đọc bản lưu hay tính rồi ghi; `VONG_CHAO_LAI_DANG_MO`, `KHONG_HIEN`, `CHUA_CAU_HINH`); `docDaiBenchmark` (*Xem dải*, cổng `bid.view`,
+  hàng sổ `BENCHMARK_BAND_READ` không giá, `khopBanLuu`).
+- **Route** `apps/api/src/routes/benchmark.ts`: `GET /rfqs/:rfqId/benchmark`, `GET /rfqs/:rfqId/items/:lineNo/benchmark` — `BUYER`,
+  `mutates: false`, `agent: false`, khai lý do ở `apps/mcp/src/cong-cu.ts`.
+- **Màn `/mo-thau`** và `apps/web/src/benchmark.ts` (`/lib/benchmark.js`): bảng benchmark theo dòng ở bước 4 (nút *Đọc benchmark*), độ phủ
+  theo báo giá và theo gói, *Xem dải* ở hàng đầu mỗi dòng, cột *Benchmark* ở bảng xếp hạng; dòng `LECH_CAO` nền vàng.
+- **`gieo:demo`**: lời chỉ đường tới benchmark ở `/mo-thau`.
+- **Sổ và cổng**: `check-an-ninh` (11 dòng miễn), `migration-shape`, `BANG_TENANT_KHAI`, `rls-coverage` (quyền bảng, 27 quyền cột, policy
+  khách), `migrations.int` (ba danh sách), `ban-ro-liet-ke` (chỗ dùng hai hàm mới theo ký hiệu; hai cổng, hai hàng sổ), `cong-quyen-route`,
+  `barrel-exports`, `benchmark-trang-thai-dong-bo` (MỚI: tập hiện = `COMPARISON_ALLOWED_STATUSES`), `MODULE_WEB`.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Khoá bản lưu là LẦN MỞ THẦU (`unseal_request_id`), không phải (gói, vòng): mỗi lần mở thầu đã thực thi là một tập vị thế cuối.
+- Không bảng đầu vào cho bản lưu — tham chiếu quan sát của L7 và bộ bằng chứng là của lượt chấm (`103`).
+- `docBenchmark` không còn đọc hàng của lượt chấm: bảng so sánh và cột của bảng xếp hạng đọc bản lưu; lượt chấm vẫn ghi một lần (`103`).
+- Trạng thái ngoài tập hiện và ngoài vòng chào lại ⇒ `KHONG_HIEN` (kể cả `AWARDED`), theo đúng tập của bảng so sánh.
+- *Xem dải* trả cả giá quy đổi của các báo giá của gói (theo đơn vị gốc) — để so được với dải khi đơn vị của dòng khác đơn vị gốc.
+- Cột *Benchmark* của bảng xếp hạng đọc lần đọc benchmark gần nhất ở bước 4 — không tự gọi route (không hàng sổ ngầm, không tính ngầm).
+
+## 6. Đo
+
+- **Tầng gói** (`packages/danh-gia/src/benchmark.int.test.ts`, 49 ca trên Postgres 16; 11 ca mới hay viết lại cho S4.5c1):
+  - ⑸ `docBenchmark`: lần đọc ĐẦU lúc `UNSEALED` (`TINH_MOI`) ra đúng nhãn mà lượt chấm ghi sau đó, cùng chín hàng; đọc sau lượt chấm ra
+    `BAN_LUU` cùng `snapshotId`; cổng `bid.view` có hàng `PERMISSION_DENIED`; payload `BENCHMARK_READ` đúng sáu khoá, không giá; gói
+    `EVALUATING` chưa ai đọc ⇒ bản lưu cho lần mở thầu mới nhất dưới phiên bản ghim; gói `OPEN` ⇒ `KHONG_HIEN`, không bản lưu; phiên bản
+    ghim không có nhóm khoá ⇒ `CHUA_CAU_HINH` trước và sau lượt chấm, không bản lưu.
+  - ⑹ bản lưu: gói X đúng một bản, chín hàng; **hai lần đọc đồng thời** — lần một giữ giao dịch mở sau khi ghi, lần hai được đo là đang CHỜ
+    khoá ở `INSERT` bản lưu (`pg_stat_activity`), rồi ra `BAN_LUU` cùng `snapshotId`; một hàng đầu; bốn lần từ chối có tên
+    (`…_phien_ban_ghim_fk`, `…_cua_lan_mo_fk`, `…_mot_lan_mo_key`, `…_moc_truoc_ghi`) cộng đối chứng dương; hàng con ở giao dịch khác ⇒
+    `…_cung_ban_luu_fk`, cùng giao dịch ⇒ vào; `app_api` không `UPDATE`/`DELETE`/tự đặt `ghi_luc`; khách và tổ chức khác 0 hàng (đối chứng
+    dương).
+  - ⑺ *Xem dải*: dòng thép của X ra Q1 102,5 · trung vị 105 · Q3 107,5 (trung vị các gói {100, 105, 110}, nội suy tuyến tính) với số đếm
+    trùng bản lưu và giá quy đổi 105 / 130 / 96; dòng cát dưới sàn không con số; dòng chưa ánh xạ và dòng không có ⇒ `KHONG_CO_DAI`; ánh xạ
+    lại một gói của dải SAU mốc ⇒ `SAU_MOC.ANH_XA` tăng đúng 1, dải không đổi; số đếm của bản lưu sửa ngoài luật (vai chủ cụm) ⇒
+    `khopBanLuu: false`; cổng và hàng `BENCHMARK_BAND_READ` không giá; vòng chào lại: `BAFO_OPEN`, `BAFO_CLOSED` ⇒ trạng thái có tên ở cả hai
+    hàm, không bản lưu mới; `BAFO_UNSEALED` ⇒ bản lưu MỚI cho lần mở thầu của vòng ấy, mang bản BAFO của người nộp lại và bản vòng một của
+    người không; bản vòng một ở lại.
+- **Kịch bản 41 qua HTTP** (85/85, hai luồng MVP1 và S3): ở `UNSEALED` hai route trả 200, bản lưu tính ở lần đầu và đọc lại ở lần sau, nhãn
+  không mang số tiền; *Xem dải* THẤY năm đơn giá quy đổi vị thế cuối (đối chứng dương); mỗi lần đọc một hàng sổ không giá; người quản lý
+  dữ liệu 403, phiên khách không 200, không rò. `BAFO_OPEN`, `BAFO_CLOSED`: trạng thái có tên ở cả hai route, không giá. `BAFO_UNSEALED`:
+  bản lưu mới mang `bafoRoundId`, *Xem dải* THẤY đơn giá BAFO quy đổi. **Bộ quét mới `quetDonGiaQuyDoi`:** *Xem dải* trả đơn giá theo đơn vị
+  gốc (dòng tính theo tấm, hàng chuẩn theo kg, hệ số 847,8) — con số không nguyên mà `quetDonGia` MÙ (đo bằng đối chứng trên đúng chuỗi
+  Postgres in). Lượt quét GET sau mở thầu (người không có `bid.view`, phiên khách) và lượt J4 ở `BAFO_OPEN` nay dò cả đơn giá thô lẫn quy
+  đổi, và `:lineNo` của hai lượt chỉ-GET thay bằng dòng 1 có thật để chúng hỏi đúng *Xem dải*.
+- **Màn** (`apps/web/src/phuc-vu.test.ts`, bốn ca trên chính `mo-thau.js`; `apps/web/src/benchmark.test.ts`, 11 ca): nạp gói không tự gọi
+  benchmark; ~~*Đọc benchmark* đọc bảng so sánh rồi benchmark~~ (§9: benchmark trước, bảng so sánh sau và chỉ khi có nhãn); chữ nhãn theo spec, thành phần, độ phủ 1/2 dòng · 60,0% giá trị; *Xem dải*
+  đúng route của dòng, in Q1/trung vị/Q3 theo `VND/kg`, `SAU_MOC`, đơn giá quy đổi; vòng chào lại in câu có tên, không hàng, không lời gọi
+  dải; cột *Benchmark* của bảng xếp hạng là gạch trước khi đọc và tóm tắt sau — kể cả khi bảng xếp hạng vẽ trước.
+- **Cổng tĩnh:** `benchmark-trang-thai-dong-bo` (tập hiện = `COMPARISON_ALLOWED_STATUSES`; hai trạng thái vòng chào lại là trạng thái thật,
+  ngoài tập hiện), `ban-ro-liet-ke` (chỗ dùng `ghiBanLuuBenchmark`, `tinhDaiDong` theo ký hiệu; hai cổng `bid.view`, hai hàng sổ),
+  `cong-quyen-route`, `barrel-exports`, `routes.test`, `cong-cu.test`.
+- **Sổ CSDL** (lượt riêng, 4 tệp, 231 ca): `check-an-ninh.int` 4/4, `rls-coverage.int` 61/61, `hardening-suy-tu-tinh-chat.int` 38/38,
+  `migrations.int` 128/128.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy tệp test chỉ định, khôi phục tệp từ bản sao trong bộ nhớ. 17 đột biến: 16 đỏ, 1 sống.
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | vòng chào lại không đóng | ĐỎ — `benchmark.int` |
+| M2 | tập hiện thêm `AWARDED` | ĐỎ — `benchmark-trang-thai-dong-bo` |
+| M3 | bỏ `ON CONFLICT DO NOTHING` | ĐỎ — `benchmark.int` (ca đồng thời) |
+| M4 | luôn tính lại, không đọc bản lưu có sẵn | **SỐNG** — kết quả, nguồn và hàng sổ không đổi (lần ghi gặp `ON CONFLICT`, đọc lại bản cũ); chỉ chi phí đổi. Không ca nào quan sát được chi phí — nói ra |
+| M5 | chọn lần mở thầu CŨ nhất | ĐỎ — `benchmark.int` (vòng chào lại) |
+| M6 | `khopBanLuu` bỏ so `so_quan_sat` | ĐỎ — `benchmark.int` |
+| M7 | `SAU_MOC` không cộng | ĐỎ — `benchmark.int` |
+| M8 | giá của X đọc tại mốc mở giá thay vì `ghi_luc` | ĐỎ — `benchmark.int` (gói không thấy giá của chính mình tại mốc ấy) |
+| M9 | bỏ cổng `bid.view` ở `docDaiBenchmark` | ĐỎ — `benchmark.int`, `cong-quyen-route`, `ban-ro-liet-ke` |
+| M10 | migration bỏ khoá ngoại phiên bản ghim | ĐỎ — `benchmark.int` |
+| M11 | migration bỏ `UNIQUE (org_id, unseal_request_id)` | ĐỎ — `ON CONFLICT` mất chỗ dựa, lần đọc đầu NÉM (`benchmark.int` dừng ở bước dựng) |
+| M12 | route benchmark `agent: true` | ĐỎ — `routes.test`, `cong-cu.test` |
+| M13 | chữ "thấp bất thường" thành "giá tốt" | ĐỎ — `benchmark.test` |
+| M14 | độ phủ tính cả `CHUA_DU_LICH_SU` | ĐỎ — `benchmark.test` |
+| M15 | cột bảng xếp hạng không vẽ lại sau lần đọc | ĐỎ — `phuc-vu.test` |
+| M16 | nút *Xem dải* ở mọi hàng | ĐỎ — `phuc-vu.test` |
+| M17 | *Đọc benchmark* dừng khi bảng so sánh từ chối (bản trước lượt đi thử) | ĐỎ — `phuc-vu.test` (§9: thứ tự đọc đổi; ca nay đo rằng bảng so sánh KHÔNG được hỏi) |
+
+## 8. Đi thử 375×812 trên Chromium (spec S4 §2 — mọi hạng mục chạm `/mo-thau`)
+
+Cụm `pnpm pilot:gia-lap` (Postgres 16 trong container, bốn tiến trình) chạy trên chính mã của nhánh: 10/10 kịch bản ĐẠT, cô lập 2/2. Hai tổ
+chức giả lập không cấu hình gì của S4 — đúng điều kiện spec đòi. Playwright 1.56 + Chromium ở khung 375×812, đăng nhập bằng link và TOTP
+của bộ giả lập; đo `scrollWidth` của trang và từng bảng.
+
+1. **Gói thật XD-04 (`AWARDED`)**, người mua có `bid.view`: bước 2 nạp gói; bảng so sánh trả 422 đúng (`A4`); *Đọc benchmark* — **lượt đầu
+   tìm ra một lỗi**: trang dừng ở lỗi của bảng so sánh, khối benchmark im. Sửa: trang vẫn hỏi benchmark, in *"Benchmark chỉ hiện khi bảng so
+   sánh mở — gói đang ở trạng thái AWARDED."* (đo lại trên cụm dựng lại; ca `phuc-vu.test`, đột biến M17). Bảng xếp hạng ba hàng, cột
+   *Benchmark* là gạch.
+2. **Cùng trang, API benchmark/so sánh/xếp hạng trả dữ liệu dựng sẵn** (chặn bằng `page.route`, ba nhà cung cấp tên thật của bộ giả lập,
+   sáu hàng benchmark đủ năm nhãn): **lượt đầu tìm ra bảng benchmark rộng 421 px** trên khung 375. Sửa: dưới 480 px bảng xếp thành khối, mỗi
+   ô mang nhãn cột (khuôn `hang-gia` của `/nop-thau`) — đo lại: 309 px. *Xem dải* in Q1/trung vị/Q3 theo `VND/kg`, `SAU_MOC`, ba đơn giá quy
+   đổi; cột *Benchmark* của bảng xếp hạng in tóm tắt nhãn và độ phủ.
+3. **Đo ra một khoản có từ trước — khoản 334:** bảng xếp hạng rộng 712 px khi ẩn cột *Benchmark* mới (cột *Thành phần* 369 px, `nowrap`
+   từ S1.106), cả trang 852 px — trang `/mo-thau` cuộn ngang ở màn điện thoại từ trước vòng này. Cột *Benchmark* thêm 107 px (giới hạn
+   `max-width: 9rem`). Không sửa trong vòng này — chờ chủ dự án xếp rổ. Một lần thử cho thành phần xuống dòng bằng style chèn lúc chạy KHÔNG
+   đo được gì: CSP của trang (`style-src 'self'`) chặn style ấy — nói ra để không ai đọc nó như một phép đo.
+
+## 9. Rà soát đối kháng sau lượt đầu (2026-10-02)
+
+Một lượt rà soát độc lập trên toàn bộ diff của vòng. Không CAO. Sửa trong phạm vi:
+
+| Mức | Phát hiện | Sửa | Đo |
+|---|---|---|---|
+| TRUNG | Phong bì là chữ của nhà cung cấp, bảng so sánh trả nguyên `payload`: một `amount` dạng SỐ hay một dòng `null` làm `doPhu`/`dongCuaBaoGia` ném — bảng benchmark và cột *Benchmark* của bảng xếp hạng dừng giữa chừng | `doPhu` đọc số qua chữ của nó, dạng khác không phần trăm; trang chỉ giữ phần tử là đối tượng | `benchmark.test` (số, `null`, đối tượng, `1e21`, số âm, `lineNo` dạng chữ); `phuc-vu.test` (phong bì `amount: 600`, dòng `null`, thành tiền là đối tượng — bảng và cột vẫn vẽ). Gỡ từng vế ⇒ ĐỎ |
+| THẤP | Lần mở thầu commit SAU lúc giao dịch đọc bắt đầu mà TRƯỚC câu bối cảnh: `unsealed_at ≥ now()` của người đọc, `quan_sat_gia` (`<` chặt) không thấy các báo giá ấy — bản lưu ghi-một-lần mang `KHONG_DO_DUOC` mãi cho bản BAFO; ở vòng một vỡ `…_moc_truoc_ghi` (500) | `docBoiCanh` hỏi cờ ấy; có ⇒ `THU_LAI`, không ghi | `benchmark.int` ⑻ vòng một (giao dịch đọc mở trước `moThau`) và ⑺ vòng BAFO (giao dịch đọc mở trước lần mở vòng): `THU_LAI`, không bản lưu, hàng sổ nói `THU_LAI`; đọc lại ⇒ `CO`, bản BAFO được ĐO |
+| THẤP | Trạng thái gói đổi TRONG lúc tính (lần đọc đầu tốn tới 18–19 s ở 5.000 gói): `EVALUATING → BAFO_OPEN` giữa câu bối cảnh và lần ghi ⇒ nhãn trả ra và bản lưu ghi khi vòng chào lại đã mở (L6) | `kiemLaiDuoiKhoa`: khoá hàng gói `FOR SHARE` (khuôn `kiemGoiDaNop` của `anh-xa.ts`), rồi câu RIÊNG hỏi lần mở thầu mới nhất (ảnh chụp mới dưới READ COMMITTED); đổi ⇒ trạng thái mới hay `THU_LAI`. Ở cả `docBenchmark` (hai nguồn) và `docDaiBenchmark` | `benchmark.int` ⑻: một giao dịch mở vòng chào lại giữ hàng gói; lần đọc đầu và *Xem dải* được đo là đang CHỜ ở câu `FOR SHARE` (`pg_stat_activity`), nhả ⇒ `VONG_CHAO_LAI_DANG_MO`, không bản lưu; một vòng chào lại TRỌN VẸN commit trong lúc lần đọc bị chặn ở bảng ánh xạ (trạng thái lại hiện, lần mở thầu đã khác) ⇒ `THU_LAI` |
+| THẤP | `khopBanLuu` chỉ so số đếm — một giá lịch sử sửa ngoài luật dời trung vị mà không đổi số đếm nào | `tinhDaiDong` trả nhãn tính lại của từng dòng của X (`ganNhan`, cùng lõi); `docDaiBenchmark` so nhãn và chiều | `benchmark.int` ⑻: nhãn của bản lưu sửa ngoài luật (vai chủ cụm), số đếm giữ ⇒ `khopBanLuu: false` |
+| THẤP | Trang: đọc gói khác giữ `phien.soSanh` và `benchmarkHien` của gói trước (cột *Benchmark* in nhãn của gói cũ); *Đọc benchmark* hỏi bảng so sánh ở mọi trạng thái — một lần từ chối và một hàng sổ từ chối mỗi cú bấm khi bảng đóng; bảng so sánh đọc một lần, thiu sau một vòng chào lại | Đổi gói xoá benchmark; benchmark TRƯỚC, bảng so sánh SAU, chỉ khi có nhãn, và LẠI mỗi lần; *Xem dải* của một bản lưu khác bảng đang hiện thì nói ra | `phuc-vu.test`: bốn ca mới (đổi gói, `THU_LAI`, dải của bản lưu khác, phong bì hỏng) và hai ca sửa (thứ tự đọc; gói `AWARDED` không hỏi bảng so sánh) |
+| THẤP | Lượt quét trước mở thầu của kịch bản 41 thay `:lineNo` bằng `UUID0` — *Xem dải* dừng ở 422 hình dạng, không tới nghiệp vụ | `:lineNo` là dòng 1 thật, chỉ ở route đọc; hai route benchmark phải trả 200 `KHONG_HIEN` | kịch bản 41 (mục 10) |
+
+**Đột biến của vòng rà soát** (cùng cách làm mục 7) — 9 đột biến, 9 đỏ:
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| R1 | trang không lọc dòng phong bì `null` | ĐỎ — `phuc-vu.test` |
+| R2 | `doPhu` gọi thẳng `sangNguyen` trên `amount` | ĐỎ — `benchmark.test`, `phuc-vu.test` |
+| R3 | bỏ `THU_LAI` trước phép tính | ĐỎ — `benchmark.int` ⑺ (vòng BAFO), ⑻ (vòng một) |
+| R4 | bỏ phép hỏi lại dưới khoá ở đường tính | ĐỎ — `benchmark.int` ⑻ (hai ca) |
+| R5 | dưới khoá chỉ hỏi trạng thái, không hỏi lần mở thầu | ĐỎ — `benchmark.int` ⑻ (vòng trọn vẹn) |
+| R6 | bỏ phép hỏi lại ở *Xem dải* | ĐỎ — `benchmark.int` ⑻ |
+| R7 | `khopBanLuu` bỏ so nhãn | ĐỎ — `benchmark.int` ⑻ |
+| R8 | bỏ `FOR SHARE` (giữ câu hỏi lại) | ĐỎ — `benchmark.int` ⑻ (hai ca chờ khoá). Lượt đầu của đột biến này làm tệp test TREO: phép chờ khoá trượt thì giao dịch giữ hàng gói không được nhả. Sửa test: nhả trong `finally` (cả ca đồng thời của ⑹); đo lại ⇒ đỏ sạch |
+| R9 | nhãn tính lại của X luôn `null` | ĐỎ — `benchmark.int` ⑺ (ba ca), ⑻ |
+
+**Giới hạn nói thêm** (ADR-143, mục rà soát): dải gồm cả gói đang ở vòng chào lại (giá vòng một đã lộ trước mốc — nghĩa as-of); hàng của
+bản lưu không bị CSDL buộc vào báo giá của CHÍNH gói (tầng gói chọn tập, như `103`); `UNIQUE (org_id, id, chinh_sach_ghim_id)` làm cạnh
+`PENDING_APPROVAL → OPEN` lấy `FOR UPDATE` thay `FOR NO KEY UPDATE` và không là cập nhật HOT — một lần mỗi gói; cột *Benchmark* là nhãn của
+bản lưu, không của lượt chấm đang xếp hạng; hai lần đọc đầu đồng thời cùng tính; *Xem dải* không có hạn mức (trần theo phiên chỉ áp cho phiên
+`AGENT_READONLY`); đột biến M4 vẫn sống. Khoá `FOR SHARE` ghi lên hàng gói ở MỌI lần đọc có nhãn — cùng chi phí khoá hàng của `anh-xa.ts`.
+
+## 10. Số của lượt cuối (mã sau rà soát)
+
+- `pnpm typecheck`, `pnpm lint`: sạch.
+- `pnpm test` (không tích hợp): 146 tệp, 2481 ca qua, 1 bỏ qua — lượt đầu ĐỎ một ca: `ban-ro-liet-ke` bắt `doc-benchmark.ts` mới chạm
+  `rfq_unsealed_bids` (cờ `THU_LAI`); khai có lý do, xanh.
+- `benchmark.int`: 55/55 (6 ca mới ở ⑻, ca vòng BAFO của ⑺ thêm vế `THU_LAI` và vế bản BAFO được đo).
+- Kịch bản 41 qua HTTP: 85/85 — lượt quét trước mở thầu nay đi tới nghiệp vụ của cả hai route benchmark (200 `KHONG_HIEN`).
+- `pnpm evidence` toàn bộ: vitest thoát 0, 4576 khẳng định (4566 qua, 10 bỏ qua có khai), 79/79 bất biến (57 nghiệp vụ + 22 hàng rào).
+  Lượt ấy ĐỎ ở cổng sổ khai nhãn: hai cặp `[INV-L6]` của vòng này (`benchmark.int`, `benchmark-trang-thai-dong-bo`) chưa khai ở
+  `tools/inv-matrix/src/so-khai-nhan.ts` — khai, dựng lại ma trận từ cùng báo cáo: cổng evidence XANH. `evidence/INV-matrix.md` dựng lại.

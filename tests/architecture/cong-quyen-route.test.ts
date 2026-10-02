@@ -104,6 +104,9 @@ const HAM_DOI_TRANG_THAI = [
   // [S1.256 / S4.5b] Ghi kết quả benchmark — chỉ `taoLuotDanhGia` gọi, trong giao dịch tạo lượt chấm (cổng `evaluation.perform`);
   // khoá ngoại `…_cua_luot_cham_fk` (`103`) từ chối mọi lần ghi ở giao dịch khác.
   "ghiBenchmarkLuotCham",
+  // [S1.260 / S4.5c1] Ghi bản lưu của bảng so sánh — chỉ `docBenchmark` gọi (cổng `bid.view`, hàng sổ), ở lần đọc đầu sau một lần
+  // mở thầu; khoá ngoại `…_cung_ban_luu_fk`, `…_phien_ban_ghim_fk` (`104`) ghim cùng giao dịch và phiên bản ghim.
+  "ghiBanLuuBenchmark",
   "khaiBiDanhDonVi",
   "khaiBiDanhHang",
   "khaiQuyDoiRieng",
@@ -141,6 +144,8 @@ const HAM_CHI_DOC = [
   // [S1.256 / S4.5b] `tinhBenchmarkGoi` KHÔNG mang cổng: nó là phép TÍNH, và đúng hai chỗ gọi có cổng — lượt chấm
   // (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ). `ban-ro-liet-ke.test.ts` ghim tập chỗ gọi.
   "tinhBenchmarkGoi",
+  // [S1.260 / S4.5c1] `tinhDaiDong` cùng tư thế: phép TÍNH dải một dòng, chỗ gọi duy nhất là `docDaiBenchmark` (`bid.view`, hàng sổ).
+  "tinhDaiDong",
   // [khoản nợ 33] `auditStoredCiphertexts` là một JOB VẬN HÀNH: nó chạy theo lịch, dưới role
   // `app_unseal`, và KHÔNG có người dùng nào để hỏi quyền. Cùng lý do đã ghi cho `listSuppliers`.
   "auditStoredCiphertexts",
@@ -282,6 +287,8 @@ const HAM_DOC_CO_QUYEN = [
   // [S1.256 / S4.5b] Benchmark là thông tin về giá SAU mở thầu — cổng `bid.view` đứng THẲNG trong thân `docBenchmark`, hàng sổ
   // `BENCHMARK_READ` mỗi lần đọc.
   "docBenchmark",
+  // [S1.260 / S4.5c1] *Xem dải* một dòng: số của dải và giá quy đổi — cổng `bid.view` THẲNG trong thân, hàng sổ `BENCHMARK_BAND_READ`.
+  "docDaiBenchmark",
 ] as const;
 
 /**
