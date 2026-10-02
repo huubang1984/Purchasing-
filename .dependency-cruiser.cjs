@@ -429,6 +429,18 @@ module.exports = {
       from: { path: DOC_LAP_SRC_PREFIX },
       to: { path: DANH_GIA_SRC_PREFIX, reachable: true },
     },
+    {
+      // [S1.9101 / S4.5c2] Lop du lieu nen cua bo bang chung: ban cai DOC LAP cua nhan benchmark (doc-lap/benchmark-lai.ts) viet tu
+      // DAC-TA.md §8. Loi benchmark (tinhDai, ganNhan) song o packages/du-lieu-nen — cung ly do, cung khuon reachable.
+      name: "g17-kiem-doc-lap-khong-cham-du-lieu-nen",
+      comment:
+        "tools/bo-xuat-danh-gia/src/doc-lap/ la ban cai DOC LAP cua nhan benchmark, viet tu DAC-TA.md §8. No khong duoc VOI " +
+        "TOI packages/du-lieu-nen (noi song loi tinhDai/ganNhan) qua bat ky duong nao - ke ca gian tiep. Neu no import duoc, mot " +
+        "loi trong loi benchmark tu tai lap chinh no qua bo kiem, va ADR-059 mat ve chiu luc o lop du lieu nen.",
+      severity: "error",
+      from: { path: DOC_LAP_SRC_PREFIX },
+      to: { path: DU_LIEU_NEN_SRC_PREFIX, reachable: true },
+    },
     // ------------------------------------------------------------------------------------------
     // [ADR-020 muc 4 / S1.10.2] HO "g9-" — handler cua apps/api chi nhan `ctx.client` DA GAN phien.
     //

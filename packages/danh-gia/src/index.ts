@@ -78,7 +78,7 @@ export {
 // `tools/bo-xuat-danh-gia` xuống đây để CLI và `apps/api` ghi ra cùng byte. `xuatBoBangChung` là
 // đường dưới phiên người dùng, mang hai cổng `audit.read` + `bid.view` trong thân; `dungBoBangChung`
 // KHÔNG hỏi quyền và chỉ công cụ vận hành gọi nó.
-export { DAC_TA } from "./dac-ta.js";
+export { DAC_TA, DAC_TA_PHIEN_BAN } from "./dac-ta.js";
 export {
   DANG_BUNDLE,
   PHIEN_BAN_BUNDLE,
@@ -96,6 +96,18 @@ export {
   type TraoThauBundle,
   type XuatBoBangChungInput,
 } from "./bo-bang-chung.js";
+// [S1.9101 / S4.5c2] Lớp dữ liệu nền của bộ bằng chứng — hình dạng phía XUẤT (người kiểm có bản riêng ở `tools/bo-xuat-danh-gia/src/bo.ts`).
+export {
+  NGUON_THOI_GIAN_DU_LIEU_NEN,
+  type AnhXaBundle,
+  type BangQuanSatBundle,
+  type DauVaoBundle,
+  type DongBenchmarkBundle,
+  type DuLieuNenBundle,
+  type GiaDongBundle,
+  type LuotChamDuLieuNen,
+  type QuanSatBundle,
+} from "./lop-du-lieu-nen.js";
 // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, một hàng sổ `BENCHMARK_READ` mỗi lần đọc.
 // [S1.260 / S4.5c1] Bản lưu một lần mỗi lần mở thầu (tính ở lần đọc đầu); *Xem dải* một dòng — hàng sổ `BENCHMARK_BAND_READ`.
 export {

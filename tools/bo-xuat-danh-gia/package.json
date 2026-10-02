@@ -6,6 +6,7 @@
   "dependencies": {
     "@trustprocure/danh-gia": "workspace:*",
     "@trustprocure/db": "workspace:*",
+    "@trustprocure/du-lieu-nen": "workspace:*",
     "@trustprocure/tenancy": "workspace:*"
   },
   "devDependencies": {

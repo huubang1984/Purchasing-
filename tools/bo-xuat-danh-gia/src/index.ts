@@ -127,7 +127,8 @@ async function xuat(thamSo: readonly string[]): Promise<number> {
     await writeFile(join(ra, TEP_DAC_TA), Buffer.from(daXuat.tep[TEP_DAC_TA], "utf8"));
 
     stdout.write(
-      `da xuat\t${ra}\tluot-cham=${String(daXuat.soLuotCham)}\thang=${String(daXuat.soHang)}\ttrao-thau=${String(daXuat.soTraoThau)}\n`,
+      `da xuat\t${ra}\tluot-cham=${String(daXuat.soLuotCham)}\thang=${String(daXuat.soHang)}\ttrao-thau=${String(daXuat.soTraoThau)}` +
+        `\tdong-benchmark=${String(daXuat.soDongBenchmark)}\tquan-sat=${String(daXuat.soQuanSat)}\n`,
     );
     return 0;
   } finally {
@@ -158,6 +159,14 @@ async function kiem(thamSo: readonly string[]): Promise<number> {
   }
   for (const t of kq.hangTraoThau) {
     stdout.write(`trao-thau\t${t.awardId}\thang=${t.rank === null ? "khong-co" : String(t.rank)}\n`);
+  }
+  // [S1.9101 / S4.5c2] Lớp dữ liệu nền: mọi lời lệch, rồi một dòng tổng.
+  if (kq.duLieuNen !== null) {
+    for (const d of kq.duLieuNen.loi) stdout.write(`LOI-BENCHMARK\t${d}\n`);
+    for (const d of kq.duLieuNen.dong) for (const n of d.noi) stdout.write(`LECH-BENCHMARK\t${d.bidVersionId}\t${n}\n`);
+    stdout.write(
+      `benchmark\tdong=${String(kq.duLieuNen.soDong)}\tdat=${String(kq.duLieuNen.soDat)}\tlech=${String(kq.duLieuNen.soLech)}\n`,
+    );
   }
   stdout.write(
     `${kq.dat ? "ok=true" : "ok=false"}` +

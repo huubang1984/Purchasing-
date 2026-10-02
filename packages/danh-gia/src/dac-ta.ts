@@ -21,6 +21,9 @@
 // các bundle cũ vẫn khớp tệp CỦA CHÍNH CHÚNG — băm nằm trong bundle, không nằm ở đây.
 // ==============================================================================================
 
+/** [S1.9101 / S4.5c2] `2`: thêm §8 — lớp dữ liệu nền (benchmark giá); §6 nói rõ lớp ấy CÓ đọc mốc thời gian. */
+export const DAC_TA_PHIEN_BAN = 2;
+
 /**
  * Đặc tả phép tính, đủ để một người ngoài dự án cài lại bằng công cụ của họ.
  *
@@ -29,7 +32,7 @@
  */
 export const DAC_TA = `# Đặc tả phép tính của bộ bằng chứng đánh giá — TrustProcure
 
-Phiên bản đặc tả: **1**
+Phiên bản đặc tả: **2**
 
 Văn bản này đủ để tính lại mọi con số trong \`bo-bang-chung.json\` **mà không cần một dòng mã nào
 của TrustProcure** và **không cần truy cập cơ sở dữ liệu của nó**. Nếu một chỗ nào dưới đây không
@@ -101,10 +104,14 @@ Kết quả \`-0.00\` viết là \`0.00\`: bảng xếp hạng không có hai s�
 4. Hàng không có \`effectiveCost\` nhận hạng \`null\`. Nó **không** lên đầu bảng và **không**
    chiếm một hạng.
 
-## 6. Phép tính KHÔNG đọc đồng hồ
+## 6. Chi phí hiệu dụng và xếp hạng KHÔNG đọc đồng hồ
 
-Không một bước nào ở trên dùng thời gian. Mọi trường thời gian trong bundle là **tin về sự kiện**,
-không phải đầu vào của phép tính — nên một đồng hồ lệch không đổi được một con số nào ở đây.
+Không một bước nào ở §3–§5 dùng thời gian. Mọi trường thời gian của lớp chấm thầu là **tin về sự
+kiện**, không phải đầu vào của phép tính — nên một đồng hồ lệch không đổi được một con số nào ở đó.
+
+Lớp dữ liệu nền ở §8 thì **CÓ**: cửa sổ lịch sử và thứ tự "trước hay sau mốc" là đầu vào của nhãn.
+Mọi mốc ở lớp ấy đến từ CÙNG đồng hồ của cơ sở dữ liệu, nên nhãn tính lại đúng **tương đối với các
+mốc trong bundle** — không với thời gian thực.
 
 Điều ấy được nói ra vì hệ thống sinh ra bundle này **có** một khiếm khuyết đồng hồ đã đo và đã
 ghi: mọi mốc thời gian dưới đây đến từ đồng hồ của cơ sở dữ liệu lúc ghi, và **nguồn thời gian ấy
@@ -120,4 +127,107 @@ của báo giá được chọn để người đọc **thấy** điều đó, k
 
 Nó cũng không nói chuỗi sổ kiểm toán có bị sửa hay không — câu hỏi ấy do mốc neo ngoài trả lời
 (\`pnpm neo\`), một artefact khác, ký bằng một khoá khác.
+
+## 8. Lớp dữ liệu nền — benchmark giá \`TRUNG_VI_THEO_GOI_V1\`
+
+Trường \`duLieuNen\` của \`bo-bang-chung.json\`. \`null\` khi không lượt chấm nào của gói có nhãn
+benchmark (phiên bản chính sách chưa cấu hình nhóm \`benchmark\`). Mục này đủ để tính lại **nhãn,
+chiều, lý do và mọi số đếm** của từng dòng của từng báo giá trong từng lượt chấm, từ đơn giá đã quy
+đổi mang trong bundle.
+
+### 8.1 Định danh băm
+
+\`goi\` và \`ncc\` của một quan sát là định danh gói thầu và nhà cung cấp, **băm với một muối
+ngẫu nhiên sinh cho riêng lần xuất này rồi vứt**. Muối không nằm trong bundle. Hai mã bằng nhau
+⇔ cùng một gói (hay một nhà cung cấp) **trong bundle này**; không so được mã giữa hai bundle, và
+không dò ngược được ra định danh thật. \`goiX\` là mã của chính gói thầu của bundle, cùng muối.
+
+### 8.2 Thời điểm
+
+Mọi mốc của lớp này là chuỗi ISO 8601 UTC với **đúng sáu** chữ số lẻ của giây:
+\`2026-03-31T09:15:00.123456Z\`. Mọi mốc cùng dạng, nên **so hai chuỗi theo thứ tự từ điển là so
+hai thời điểm**.
+
+### 8.3 Cửa sổ
+
+\`cuaSoTu\` = \`mocMoGia\` lùi \`cua_so_thang\` tháng **theo lịch UTC**: lùi (năm, tháng) đi
+\`cua_so_thang\` tháng; giữ ngày, nhưng nếu tháng đích ngắn hơn thì **kẹp về ngày cuối của tháng
+đích**; giữ nguyên giờ, phút, giây và micro giây. Năm nhuận: chia hết cho 4 và (không chia hết cho
+100 hoặc chia hết cho 400).
+
+| \`mocMoGia\` | \`cua_so_thang\` | \`cuaSoTu\` |
+|---|---|---|
+| \`2026-03-31T09:15:00.123456Z\` | 1 | \`2026-02-28T09:15:00.123456Z\` |
+| \`2024-03-31T00:00:00.000000Z\` | 1 | \`2024-02-29T00:00:00.000000Z\` |
+| \`2026-01-15T23:59:59.999999Z\` | 12 | \`2025-01-15T23:59:59.999999Z\` |
+
+Đây là lịch **UTC**, không phải giờ Việt Nam: một mốc trong bảy giờ quanh nửa đêm cuối tháng có thể
+ra cửa sổ khác với phép tính theo +07:00. Đó là quyết định đã đo, không phải sơ suất.
+
+### 8.4 Đầu vào
+
+* \`chinhSachBenchmark\` của lượt chấm — \`cua_so_thang\`, \`san_goi\`, \`san_ncc\` (số nguyên),
+  \`nguong_lech_vua\`, \`nguong_lech_cao\` (chuỗi thập phân), \`phuong_phap\`.
+* \`bangQuanSat[]\` — với mỗi (\`mocMoGia\`, \`hangChuan\`): mọi quan sát hợp lệ có \`ngay\` từ
+  \`tuNgay\` (một tháng trước biên cửa sổ, để biên ấy thấy được từ cả hai phía) tới trước
+  \`mocMoGia\`. Mỗi quan sát: \`goi\`, \`ncc\`, \`ngay\` (mốc mở giá của gói chứa nó), \`gia\` (đơn
+  giá đã quy đổi về đơn vị gốc của hàng chuẩn), \`tienTe\`, \`cungNguoiTao\`, \`hoiTo\`.
+* \`dong[].giaDong\` — giá của CHÍNH dòng ấy tại \`docLuc\` (lúc chấm): \`trangThai\`, \`gia\`,
+  \`tienTe\`, \`hangChuan\`, \`hoiTo\`; \`null\` khi lúc ấy không ánh xạ hiệu lực nào trỏ dòng về
+  một hàng chuẩn.
+
+### 8.5 Một dòng
+
+1. \`giaDong = null\` ⇒ nhãn \`KHONG_DO_DUOC\`, \`lyDo = "CHUA_ANH_XA"\`.
+2. \`giaDong.trangThai ≠ "HOP_LE"\` ⇒ nhãn \`KHONG_DO_DUOC\`, \`lyDo = giaDong.trangThai\`.
+   Ở cả hai trường hợp, \`tienTe\`, \`cuaSoTu\` và bảy số đếm là \`null\`.
+3. Còn lại: \`p = giaDong.gia\`, \`T = giaDong.tienTe\`. Lấy bảng quan sát của (\`mocMoGia\`,
+   \`giaDong.hangChuan\`). Duyệt từng quan sát:
+   * \`goi = goiX\` ⇒ bỏ (không quan sát nào của chính gói này);
+   * \`ngay ≥ mocMoGia\` hay \`ngay < cuaSoTu\` ⇒ bỏ;
+   * \`tienTe ≠ T\` ⇒ bỏ, **đếm** vào \`soLoaiTienTe\`;
+   * \`gia = 0\` ⇒ bỏ, **đếm** vào \`soLoaiGia0\`;
+   * còn lại: vào **dải**.
+4. Số đếm trên dải: \`soQuanSat\` = số quan sát; \`soGoi\` = số \`goi\` khác nhau; \`soNcc\` = số
+   \`ncc\` khác nhau; \`soGoiCungNguoiTao\` = số \`goi\` khác nhau có \`cungNguoiTao = true\`;
+   \`soQuanSatHoiTo\` = số quan sát có \`hoiTo\` khác rỗng.
+5. **Sàn:** \`soGoi ≥ san_goi\` **và** \`soNcc ≥ san_ncc\`. Không đạt ⇒ nhãn
+   \`CHUA_DU_LICH_SU\`, \`chieu = null\` (số đếm vẫn báo).
+6. **Mốc so:** với mỗi \`goi\`, trung vị các \`gia\` của nó; \`m\` = trung vị của các trung vị gói.
+   "Trung vị" và "tứ phân vị" ở đây là phân vị **nội suy tuyến tính**: sắp tăng \`x[0..n-1]\`, vị
+   trí \`h = (n − 1) · k / 4\` (\`k = 2\` cho trung vị, \`1\`/\`3\` cho Q1/Q3), giá trị
+   \`x[⌊h⌋] + (h − ⌊h⌋) · (x[⌊h⌋+1] − x[⌊h⌋])\` — cùng nghĩa \`percentile_cont\` của PostgreSQL. Phép
+   tính là **thập phân chính xác**: \`h − ⌊h⌋\` chỉ là \`0\`, \`0,25\`, \`0,5\` hay \`0,75\`.
+   (Q1 và Q3 là dải màn hình hiện; chúng không lưu và không đổi nhãn.)
+7. **Nhãn:** \`d = |p − m|\`.
+   * \`d ≤ nguong_lech_vua · m\` ⇒ \`BINH_THUONG\`, \`chieu = null\`;
+   * ngược lại \`chieu = "TREN"\` nếu \`p > m\`, \`"DUOI"\` nếu \`p < m\`; rồi
+     \`d ≤ nguong_lech_cao · m\` ⇒ \`LECH_VUA\`, không thì \`LECH_CAO\`.
+   So bằng phép nhân, không chia. Biên tính về phía nhẹ hơn: \`d\` bằng đúng ngưỡng là chưa vượt.
+8. \`cuaSoTu\` của dòng đo được (kể cả \`CHUA_DU_LICH_SU\`) là cửa sổ ở §8.3; \`tienTe = T\`;
+   \`hoiTo\` của dòng là \`giaDong.hoiTo\`.
+
+### 8.6 Đầu vào đã lưu
+
+\`dauVao[]\` của lượt chấm liệt kê, cho mỗi (\`hangChuan\`, \`tienTe\`), mã các quan sát mà lượt chấm
+ĐÃ đưa vào dải lúc chấm. Tập ấy phải **bằng** tập ở bước 3 của §8.5. \`dauVaoThieu > 0\` nghĩa là có
+đầu vào đã lưu không còn trong bảng quan sát đọc lại — dữ liệu đã đổi ngoài luật chỉ-ghi-thêm, và
+lượt chấm ấy không tái lập được.
+
+### 8.7 Ánh xạ
+
+\`dong[].anhXa\` là hàng ánh xạ mà dòng dùng: \`tacGia\` (mã người dùng và họ tên), \`ghiLuc\`,
+\`nguon\`, \`lyDo\`. *"Dòng ấy do ai ánh xạ, lúc nào, trước hay sau khi giá của chính nó lộ"* là
+\`tacGia\`, \`ghiLuc\`, và \`ghiLuc\` so với \`mocMoGia\`. \`hangMuc[]\` mang mô tả, đơn vị, số
+lượng của từng dòng của gói. Đây là thông tin, không phải đầu vào của phép tính.
+
+### 8.8 Thứ lớp này KHÔNG tính lại
+
+* **Phép quy đổi đơn vị:** \`gia\` của một quan sát (thành tiền chia cho số lượng nhân hệ số quy
+  đổi, qua bí danh đơn vị và phiên bản hàng chuẩn) là dữ liệu của hệ thống, không tính lại ở đây.
+* **Cờ \`hoiTo\`** — hàng nền nào được ghi sau khi giá của gói chứa quan sát đã lộ — là dữ liệu.
+* **Tính đầy đủ của bảng quan sát:** bundle cho thấy thứ đã vào dải; nó không chứng được rằng một
+  quan sát nào đó KHÔNG bị bỏ sót — ngoài phép so với đầu vào đã lưu ở §8.6.
+* **Bản lưu benchmark của bảng so sánh** (thứ màn mở thầu hiện) không nằm trong bundle; bundle mang
+  hồ sơ benchmark của **lượt chấm**.
 `;

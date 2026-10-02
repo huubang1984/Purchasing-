@@ -72,8 +72,8 @@ function boVoi(
 ): BoBangChung {
   return {
     dang: "trustprocure/bo-bang-chung-danh-gia",
-    phienBan: 1,
-    dacTaPhienBan: 1,
+    phienBan: 2,
+    dacTaPhienBan: 2,
     dacTaSha256: "khong-doc-o-tang-nay",
     orgId: "org-1",
     rfqId: "rfq-1",
@@ -90,6 +90,7 @@ function boVoi(
       },
     ],
     traoThau,
+    duLieuNen: null,
   };
 }
 

@@ -32,6 +32,8 @@ const TEP_DA_KHAI: readonly string[] = [
   // [S1.256 / S4.5b] Benchmark: nhóm khoá `benchmark` của phiên bản GHIM (as-of) hay của phiên bản lượt chấm (đã ghi) — theo id.
   "packages/danh-gia/src/doc-benchmark.ts",
   "packages/danh-gia/src/doc-bang-xep-hang.ts",
+  // [S1.9101 / S4.5c2] Lớp dữ liệu nền của bộ bằng chứng: nhóm khoá `benchmark` của phiên bản mà hàng kết quả đã ghi trỏ tới — theo id.
+  "packages/danh-gia/src/lop-du-lieu-nen.ts",
   "packages/danh-gia/src/luot-danh-gia.ts",
   "packages/danh-gia/src/vong-bafo.ts",
   "packages/rfq/src/procurement-policy.ts",

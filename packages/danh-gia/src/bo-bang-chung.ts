@@ -45,14 +45,16 @@
 // đọc tin vào thứ dự án chưa dám tin.
 // ==============================================================================================
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type pg from "pg";
 import { appendAuditEvent, assertTenantBound } from "@trustprocure/audit";
 import { PERMISSIONS, requirePermission, resolveSessionActor } from "@trustprocure/identity";
-import { DAC_TA } from "./dac-ta.js";
+import { DAC_TA, DAC_TA_PHIEN_BAN } from "./dac-ta.js";
+import { docLopDuLieuNen, type DuLieuNenBundle } from "./lop-du-lieu-nen.js";
 
 export const DANG_BUNDLE = "trustprocure/bo-bang-chung-danh-gia";
-export const PHIEN_BAN_BUNDLE = 1;
+/** [S1.9101 / S4.5c2] `2`: thêm lớp dữ liệu nền (`duLieuNen`). Bộ kiểm chỉ đọc đúng phiên bản nó cài. */
+export const PHIEN_BAN_BUNDLE = 2;
 export const TEP_DU_LIEU = "bo-bang-chung.json";
 export const TEP_DAC_TA = "DAC-TA.md";
 
@@ -117,6 +119,11 @@ export interface BoBangChung {
   /** Mọi lượt chấm của gói thầu, cũ trước mới sau — KHÔNG chỉ lượt mới nhất. */
   readonly luotCham: readonly LuotChamBundle[];
   readonly traoThau: readonly TraoThauBundle[];
+  /**
+   * [S1.9101 / S4.5c2] Lớp dữ liệu nền — benchmark giá của mọi lượt chấm, tính lại được từ đơn giá đã quy đổi (`DAC-TA.md` §8).
+   * `null` khi không lượt chấm nào có hàng benchmark (phiên bản ghim chưa cấu hình nhóm `benchmark`).
+   */
+  readonly duLieuNen: DuLieuNenBundle | null;
 }
 
 /** Câu đi kèm MỌI mốc thời gian đọc từ cơ sở dữ liệu. Xem khối đầu tệp và khoản 196. */
@@ -298,6 +305,9 @@ export interface BoBangChungDaXuat {
   readonly soLuotCham: number;
   readonly soHang: number;
   readonly soTraoThau: number;
+  /** [S1.9101 / S4.5c2] Số hàng kết quả benchmark (mọi lượt chấm) và số quan sát mang theo — 0 khi lớp dữ liệu nền rỗng. */
+  readonly soDongBenchmark: number;
+  readonly soQuanSat: number;
 }
 
 /**
@@ -314,15 +324,25 @@ export async function dungBoBangChung(
   orgId: string,
   rfqId: string,
   xuatLuc: Date,
+  // [S1.9101 / S4.5c2] Muối của các định danh băm ở lớp dữ liệu nền: NGẪU NHIÊN mỗi lần xuất, không lưu, không ghi vào bundle
+  // (chủ dự án chốt 2026-10-02). Tham số chỉ để test dựng được hai lần xuất cùng muối.
+  muoi: Buffer = randomBytes(32),
 ): Promise<BoBangChungDaXuat | null> {
   const luotCham = await docMoiLuotCham(client, orgId, rfqId);
   if (luotCham.length === 0) return null;
   const traoThau = await docMoiTraoThau(client, orgId, rfqId);
+  const duLieuNen = await docLopDuLieuNen(
+    client,
+    orgId,
+    rfqId,
+    luotCham.map((l) => l.evaluationId),
+    muoi,
+  );
 
   const bo: BoBangChung = {
     dang: DANG_BUNDLE,
     phienBan: PHIEN_BAN_BUNDLE,
-    dacTaPhienBan: 1,
+    dacTaPhienBan: DAC_TA_PHIEN_BAN,
     // Băm của BYTE UTF-8, không của chuỗi JS: kho chạy `core.autocrlf=true`, và người ghi đĩa phải
     // ghi đúng `Buffer.from(…, "utf8")` của văn bản này — cùng bài học với `trich`.
     dacTaSha256: createHash("sha256").update(Buffer.from(DAC_TA, "utf8")).digest("hex"),
@@ -331,6 +351,7 @@ export async function dungBoBangChung(
     xuatLuc: { giaTri: xuatLuc.toISOString(), nguon: NGUON_DONG_HO_XUAT },
     luotCham,
     traoThau,
+    duLieuNen,
   };
 
   return {
@@ -341,6 +362,8 @@ export async function dungBoBangChung(
     soLuotCham: luotCham.length,
     soHang: luotCham.reduce((t, l) => t + l.hang.length, 0),
     soTraoThau: traoThau.length,
+    soDongBenchmark: duLieuNen?.luotCham.reduce((t, l) => t + l.dong.length, 0) ?? 0,
+    soQuanSat: duLieuNen?.bangQuanSat.reduce((t, b) => t + b.quanSat.length, 0) ?? 0,
   };
 }
 

@@ -478,20 +478,92 @@ export interface KetQuaDaiDong {
   readonly giaCuaX: readonly GiaQuyDoiCuaX[];
 }
 
-interface HangDaiDong {
-  readonly rfq_id: string;
-  readonly supplier_id: string;
-  readonly bid_version_id: string;
-  readonly line_no: number;
-  readonly anh_xa_id: string | null;
-  readonly trang_thai: string;
-  readonly don_gia_quy_doi: string | null;
-  readonly tien_te: string | null;
-  readonly don_vi_goc: string | null;
-  readonly hoi_to: string[];
-  readonly sau_moc: Record<string, number> | null;
-  readonly ngay: string;
-  readonly cung_nguoi_tao: boolean;
+/**
+ * [S1.9101 / S4.5c2] Một hàng của `quan_sat_gia(mốc, hàng chuẩn)` — MỌI trạng thái — cộng cờ *"gói của hàng do chính người tạo gói X
+ * lập"*, mốc ở micro giây. Chung cho *Xem dải* (`tinhDaiDong`) và bộ bằng chứng (`dungBoBangChung` của `packages/danh-gia`): hai bộ
+ * đọc cùng một câu thì không trôi khỏi nhau.
+ */
+export interface HangQuanSatTaiMoc {
+  readonly rfqId: string;
+  readonly supplierId: string;
+  readonly bidVersionId: string;
+  readonly lineNo: number;
+  readonly anhXaId: string | null;
+  readonly trangThai: string;
+  /** Chuỗi `numeric`; chỉ có khi `HOP_LE`. */
+  readonly donGiaQuyDoi: string | null;
+  readonly tienTe: string | null;
+  readonly donViGoc: string | null;
+  readonly hoiTo: readonly string[];
+  readonly sauMoc: Readonly<Record<string, number>>;
+  /** Mốc mở giá của gói chứa hàng, micro giây kể từ epoch. */
+  readonly ngayMicro: bigint;
+  readonly cungNguoiTao: boolean;
+}
+
+export interface DocQuanSatTaiMocInput {
+  /** Gói X — người tạo của nó định nghĩa cờ `cungNguoiTao`. */
+  readonly rfqId: string;
+  readonly canonicalItemId: string;
+  /** Mốc đọc, micro giây. */
+  readonly mocMicro: bigint;
+}
+
+/**
+ * Một lần đọc `quan_sat_gia` cho một hàng chuẩn tại một mốc. KHÔNG CỔNG ở đây (khối đầu tệp): người gọi là `tinhDaiDong` (sau cổng
+ * `bid.view` của `docDaiBenchmark`) và `dungBoBangChung` (sau cổng `audit.read` + `bid.view` của `xuatBoBangChung`, hay công cụ vận
+ * hành giữ `DATABASE_URL`). `ban-ro-liet-ke.test.ts` ghim hai chỗ gọi ấy theo ký hiệu.
+ */
+export async function docQuanSatTaiMoc(
+  client: pg.PoolClient,
+  orgId: string,
+  input: DocQuanSatTaiMocInput,
+): Promise<readonly HangQuanSatTaiMoc[]> {
+  const { rows } = await client.query<{
+    rfq_id: string;
+    supplier_id: string;
+    bid_version_id: string;
+    line_no: number;
+    anh_xa_id: string | null;
+    trang_thai: string;
+    don_gia_quy_doi: string | null;
+    tien_te: string | null;
+    don_vi_goc: string | null;
+    hoi_to: string[];
+    sau_moc: Record<string, number> | null;
+    ngay: string;
+    cung_nguoi_tao: boolean | null;
+  }>(
+    `SELECT q.rfq_id, q.supplier_id, q.bid_version_id, q.line_no, q.anh_xa_id, q.trang_thai,
+            q.don_gia_quy_doi::pg_catalog.text AS don_gia_quy_doi, q.tien_te, q.don_vi_goc, q.hoi_to, q.sau_moc,
+            (pg_catalog.extract('epoch', q.ngay_quan_sat) OPERATOR(pg_catalog.*) 1000000)::pg_catalog.int8::pg_catalog.text AS ngay,
+            (r.created_by OPERATOR(pg_catalog.=) x.created_by) AS cung_nguoi_tao
+       FROM public.quan_sat_gia(
+              'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+)
+                ($1::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval),
+              $2::pg_catalog.uuid) q
+       JOIN public.rfq_packages r ON r.id OPERATOR(pg_catalog.=) q.rfq_id
+                                 AND r.org_id OPERATOR(pg_catalog.=) $3::pg_catalog.uuid
+       JOIN public.rfq_packages x ON x.id OPERATOR(pg_catalog.=) $4::pg_catalog.uuid
+                                 AND x.org_id OPERATOR(pg_catalog.=) $3::pg_catalog.uuid
+      ORDER BY q.rfq_id, q.supplier_id, q.line_no, q.bid_version_id`,
+    [input.mocMicro.toString(), input.canonicalItemId, orgId, input.rfqId],
+  );
+  return rows.map((r) => ({
+    rfqId: r.rfq_id,
+    supplierId: r.supplier_id,
+    bidVersionId: r.bid_version_id,
+    lineNo: r.line_no,
+    anhXaId: r.anh_xa_id,
+    trangThai: r.trang_thai,
+    donGiaQuyDoi: r.don_gia_quy_doi,
+    tienTe: r.tien_te,
+    donViGoc: r.don_vi_goc,
+    hoiTo: r.hoi_to,
+    sauMoc: r.sau_moc ?? {},
+    ngayMicro: BigInt(r.ngay),
+    cungNguoiTao: r.cung_nguoi_tao === true,
+  }));
 }
 
 /**
@@ -505,42 +577,26 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
       WHERE r.org_id OPERATOR(pg_catalog.=) $1::pg_catalog.uuid AND r.id OPERATOR(pg_catalog.=) $2::pg_catalog.uuid`,
     [orgId, input.rfqId],
   );
-  const nguoiTao = goi[0]?.created_by;
-  if (nguoiTao === undefined) throw new Error("không tìm thấy gói thầu để tính dải");
+  if (goi[0] === undefined) throw new Error("không tìm thấy gói thầu để tính dải");
 
-  const docTai = async (moc: bigint): Promise<readonly HangDaiDong[]> =>
-    (
-      await client.query<HangDaiDong>(
-        `SELECT q.rfq_id, q.supplier_id, q.bid_version_id, q.line_no, q.anh_xa_id, q.trang_thai,
-                q.don_gia_quy_doi::pg_catalog.text AS don_gia_quy_doi, q.tien_te, q.don_vi_goc, q.hoi_to, q.sau_moc,
-                (pg_catalog.extract('epoch', q.ngay_quan_sat) OPERATOR(pg_catalog.*) 1000000)::pg_catalog.int8::pg_catalog.text AS ngay,
-                (r.created_by OPERATOR(pg_catalog.=) $3::pg_catalog.uuid) AS cung_nguoi_tao
-           FROM public.quan_sat_gia(
-                  'epoch'::pg_catalog.timestamptz OPERATOR(pg_catalog.+)
-                    ($1::pg_catalog.int8::pg_catalog.float8 OPERATOR(pg_catalog.*) '00:00:00.000001'::pg_catalog.interval),
-                  $2::pg_catalog.uuid) q
-           JOIN public.rfq_packages r ON r.id OPERATOR(pg_catalog.=) q.rfq_id
-                                     AND r.org_id OPERATOR(pg_catalog.=) $4::pg_catalog.uuid
-          ORDER BY q.rfq_id, q.supplier_id, q.line_no`,
-        [moc.toString(), input.canonicalItemId, nguoiTao, orgId],
-      )
-    ).rows;
+  const docTai = (moc: bigint): Promise<readonly HangQuanSatTaiMoc[]> =>
+    docQuanSatTaiMoc(client, orgId, { rfqId: input.rfqId, canonicalItemId: input.canonicalItemId, mocMicro: moc });
 
   const tapDai = await docTai(input.mocMoGia);
   const quanSat: QuanSatBenchmark[] = tapDai.map((r) => ({
-    rfqId: r.rfq_id,
-    supplierId: r.supplier_id,
-    bidVersionId: r.bid_version_id,
-    lineNo: r.line_no,
-    anhXaId: r.anh_xa_id,
-    ngayQuanSat: BigInt(r.ngay),
-    trangThai: r.trang_thai,
-    donGiaQuyDoi: r.don_gia_quy_doi,
-    tienTe: r.tien_te,
-    hoiTo: r.hoi_to,
-    goiCungNguoiTao: r.cung_nguoi_tao,
+    rfqId: r.rfqId,
+    supplierId: r.supplierId,
+    bidVersionId: r.bidVersionId,
+    lineNo: r.lineNo,
+    anhXaId: r.anhXaId,
+    ngayQuanSat: r.ngayMicro,
+    trangThai: r.trangThai,
+    donGiaQuyDoi: r.donGiaQuyDoi,
+    tienTe: r.tienTe,
+    hoiTo: r.hoiTo,
+    goiCungNguoiTao: r.cungNguoiTao,
   }));
-  const sauMocCua = new Map(tapDai.map((r) => [`${r.bid_version_id}:${String(r.line_no)}`, r.sau_moc ?? {}]));
+  const sauMocCua = new Map(tapDai.map((r) => [`${r.bidVersionId}:${String(r.lineNo)}`, r.sauMoc]));
   const dai: DaiDong[] = [...new Set(input.tienTe)].sort().map((tienTe) => {
     const d = tinhDai(quanSat, { rfqId: input.rfqId, tienTe, mocMoGia: input.mocMoGia, nhom: input.nhom });
     const sauMoc: Record<string, number> = {};
@@ -552,20 +608,20 @@ export async function tinhDaiDong(client: pg.PoolClient, orgId: string, input: T
     return { ...d, canonicalItemId: input.canonicalItemId, sauMoc };
   });
 
-  const tapX = (await docTai(input.mocDoc)).filter((r) => r.rfq_id === input.rfqId);
+  const tapX = (await docTai(input.mocDoc)).filter((r) => r.rfqId === input.rfqId);
   const giaCuaX: GiaQuyDoiCuaX[] = tapX.map((r) => {
-    const d = dai.find((x) => x.tienTe === r.tien_te);
-    const gan = r.trang_thai === "HOP_LE" && r.don_gia_quy_doi !== null && d !== undefined ? ganNhan(r.don_gia_quy_doi, d, input.nhom) : null;
+    const d = dai.find((x) => x.tienTe === r.tienTe);
+    const gan = r.trangThai === "HOP_LE" && r.donGiaQuyDoi !== null && d !== undefined ? ganNhan(r.donGiaQuyDoi, d, input.nhom) : null;
     return {
-      bidVersionId: r.bid_version_id,
-      lineNo: r.line_no,
-      trangThai: r.trang_thai,
-      donGiaQuyDoi: r.don_gia_quy_doi,
-      tienTe: r.tien_te,
+      bidVersionId: r.bidVersionId,
+      lineNo: r.lineNo,
+      trangThai: r.trangThai,
+      donGiaQuyDoi: r.donGiaQuyDoi,
+      tienTe: r.tienTe,
       nhan: gan?.nhan ?? null,
       chieu: gan?.chieu ?? null,
     };
   });
-  const donViGoc = tapX.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? tapDai.find((r) => r.don_vi_goc !== null)?.don_vi_goc ?? null;
+  const donViGoc = tapX.find((r) => r.donViGoc !== null)?.donViGoc ?? tapDai.find((r) => r.donViGoc !== null)?.donViGoc ?? null;
   return { donViGoc, dai, giaCuaX };
 }
