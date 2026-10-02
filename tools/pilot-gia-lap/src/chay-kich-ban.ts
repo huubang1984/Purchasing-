@@ -626,7 +626,9 @@ export async function chayKichBan(kb: KichBan, tc: ToChucChay, bc: BoiCanhChay, 
     trangThaiTraoThau = "PROPOSED";
     if (kb.huyTraoThau !== undefined) {
       const h = nguoi(kb.vai.huyTraoThau);
-      await lam(h, `huỷ đề xuất trao thầu — ${kb.huyTraoThau.lyDo}`, () => h.http.goi("POST", `/rfqs/${String(rfqId)}/award/cancel`, { reason: kb.huyTraoThau?.lyDo }), 201);
+      // [S1.9101 / khoản 9401] Huỷ ĐÚNG đề xuất vừa ghi — route mang `awardId`.
+      await lam(h, `huỷ đề xuất trao thầu — ${kb.huyTraoThau.lyDo}`, () =>
+        h.http.goi("POST", `/rfqs/${String(rfqId)}/award/${awardId}/cancel`, { reason: kb.huyTraoThau?.lyDo }), 201);
       const tt = await docGoi();
       kiem("huỷ trao thầu đưa gói về đang chấm", tt === "EVALUATING", tt, "EVALUATING");
       const moi = hang[kb.huyTraoThau.hangMoi - 1];

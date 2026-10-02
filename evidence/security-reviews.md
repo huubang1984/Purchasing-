@@ -23802,3 +23802,65 @@ Không đo: khối DÁN vào một cửa sổ console tương tác (cách cửa 
   nguyên; số đếm Handoff thành 333 khoản, 51 còn mở; `cap-so --kiem` sạch. Trên `22043f47`: `pnpm t0` xanh; `pnpm test` 144
   tệp (142 đạt, 2 bỏ qua), 2447 ca đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4530 khẳng định, 79/79 bất
   biến (57/57 nghiệp vụ + 22/22 hàng rào), 2283 giây; `evidence/INV-matrix.md` không đổi.
+
+# §S1.9101 — ROUTE HUỶ TRAO THẦU MANG `awardId`: CHỈ HUỶ KHI ID ẤY LÀ TRAO THẦU MỚI NHẤT CỦA GÓI — KHOẢN 9401 ĐÓNG
+
+**Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (huỷ trao thầu không nằm trên kịch bản §11).
+Không migration; không ADR mới — một đoạn bổ sung ở ADR-057 (mục *Cổng HUỶ*); một route đổi đường dẫn, số route không đổi;
+không mảnh nào của `docs/PRODUCT.md` §11 đổi.
+
+## 1. Vòng này là gì
+Bước 3 của đề xuất sau §S1.259; chủ dự án, 2026-10-02: *"Làm 3: thêm id trao thầu vào route huỷ"*. §S1.259 mục 4 và 6 đã nói
+ra giới hạn: giữa lần trang đọc lại trao thầu và lần huỷ, máy chủ huỷ trao thầu CÒN SỐNG của gói lúc ấy, không theo id.
+
+## 2. Thay đổi
+- `huyTraoThau` (`packages/danh-gia/src/trao-thau.ts`) nhận `awardId`. Sau khoá hàng RFQ (`FOR NO KEY UPDATE`) và hai phép kiểm
+  sẵn có (gói ở `AWARDED`, hàng mới nhất còn sống), hàm đòi `awardId` là id của hàng mới nhất; khác ⇒ `TraoThauTuChoiError`
+  `KHONG_CO_AWARD_CON_SONG` qua `nemTuChoi` — một hàng `RFQ_STATE_DENIED` {ma} ở giao dịch độc lập, 422 với câu *"Trao thầu
+  được nêu không phải trao thầu mới nhất của gói này — gói đã đổi từ lúc đọc (hàng mới nhất đang ở …), hoặc id thuộc gói
+  khác. …"*. Hàng của gói khác không bao giờ là hàng mới nhất của gói này, nên cùng phép so chặn id lạc gói.
+- Route: ~~`POST /rfqs/:rfqId/award/cancel`~~ ⇒ `POST /rfqs/:rfqId/award/:awardId/cancel` (`awardIdParam`, cùng khuôn route
+  duyệt). Đường cũ bỏ hẳn.
+- Bên gọi: bước 7 của `/login` (`mo-thau.js`) gửi id của trao thầu đang hiện — đúng id mà lần đọc lại của khoản 333 vừa so;
+  `pnpm pilot:gia-lap` gửi id của đề xuất vừa ghi; bộ quét route của `kich-ban-41-http.int` theo đường mới.
+
+## 3. Điểm tôi tự chốt
+- Id trong ĐƯỜNG DẪN, không trong thân — cùng khuôn route duyệt, mà chú thích của route ấy đã nói lý do.
+- Bỏ hẳn đường cũ thay vì giữ song song: mọi bên gọi nằm trong kho, và giữ đường cũ là giữ đúng lỗ vòng này đóng.
+- Không thêm mã lý do: `KHONG_CO_AWARD_CON_SONG` dùng lại, cùng cách `duyetTraoThau` dùng lại `KHONG_CO_DE_XUAT_DANG_CHO` cho
+  id lạc gói; câu từ chối nói vì sao.
+- Không ADR mới: §S1.259 mục 4 viết *"route nhận id là một thay đổi API và một ADR"*; quyết định được ghi thành đoạn bổ sung
+  của ADR-057, vì cổng, nghĩa của `AWARDED` và cạnh về `EVALUATING` không đổi — chỉ cách nêu đích, theo quyết định sẵn có của
+  route duyệt.
+- Trang giữ lần đọc lại của khoản 333: nó vẫn là thứ cho lần bấm đầu chỉ hiện, và ca thường (trao thầu đổi TRƯỚC lần bấm) không
+  để lại một hàng sổ từ chối; máy chủ đóng khe còn lại.
+- Không khoá hàng RFQ ở `duyetTraoThau` — mục 5.
+
+## 4. Đo
+- **Đỏ trước trên `master` (`9fe6dd96`):** ba ca mới của `luot-danh-gia.int` đều đỏ, cùng một lý do — *"promise resolved …
+  instead of rejecting"*: lần huỷ đi qua.
+- **Trọn tệp trên mã cuối:** `luot-danh-gia.int` 115/115, `buyer.int` 29/29, `kich-ban-41-http.int` 77/77,
+  `apps/web/src/phuc-vu.test.ts` cùng `tools/pilot-gia-lap` 305/305.
+- **Đột biến** (trọn `phuc-vu.test.ts`, `luot-danh-gia.int`, `buyer.int` — 396 ca; bản gốc và bản sau 0 đỏ; khôi phục kiểm
+  sha256): D1 bỏ phép so id ⇒ 4 đỏ (ba ca mới + ca HTTP); D2 so id chỉ khi hàng mới nhất là `PROPOSED` ⇒ 2 đỏ (ca *được duyệt
+  sau lần đọc* + ca HTTP); D3 route không chuyển id của đường dẫn ⇒ 1 đỏ (ca HTTP); D4 lời từ chối không nói vì sao ⇒ 2 đỏ; D5
+  trang gửi đường cũ ⇒ 2 đỏ (hai ca của trang) — 5/5 đúng tập dự kiến. Đường gọi của `pnpm pilot:gia-lap` không có test đơn
+  vị; lượt giả lập đo nó.
+- **Lượt giả lập trên mã cuối** (cụm dựng lại): 10/10 ĐẠT, cô lập 2/2; ở XD-01 *"huỷ trao thầu, trao lại"*, Kế toán trưởng huỷ
+  đề xuất qua đường mới ⇒ 201, gói về `EVALUATING`, trao lại cho hạng 2.
+- **Trình duyệt thật trên mã cuối** (trang tải lại sau khi dựng cụm — một lần đổi `#` không tải lại `mo-thau.js`): Kế toán
+  trưởng nạp XD-01, bước 7 *Đọc đề xuất* (`APPROVED`, Hoà Bình Xanh, hạng 2), gõ lý do, bấm *Huỷ trao thầu* ⇒
+  `POST /api/rfqs/44410bf9…/award/0252c877…/cancel` 201, *"Đã huỷ trao thầu…"*, `CANCELLED`. Cùng phiên, lời gọi tay lên API
+  thật: id trao thầu của XD-01 gửi vào gói XD-02 ⇒ 422 với câu từ chối, XD-02 vẫn `APPROVED` cùng id; đường cũ
+  `…/award/cancel` ⇒ 404 *khong co duong nay*. XD-04 để nguyên cho chủ dự án.
+
+## 5. Giới hạn, nói ra
+- Đọc từ mã, không đo: `duyetTraoThau` không giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên một lần duyệt CHÍNH đề xuất được
+  nêu chen được vào khe giữa phép so và câu `INSERT` của lần huỷ. Trigger `award_kiem_mot_award_song` (khoá tư vấn theo gói) khi
+  ấy đọc hàng `APPROVED` vừa ghi và cho huỷ — cùng báo giá, vì hàng huỷ chép báo giá của hàng đã so. Không bao giờ vào một đề
+  xuất khác: rút và đề xuất lại đều giữ khoá hàng RFQ. Đóng khe ấy là khoá hàng RFQ ở `duyetTraoThau` — không làm ở vòng này.
+- Rút đề xuất (`…/award/withdraw`) vẫn không nhận id: `094` chỉ cho rút `PROPOSED` 0 chữ ký của CHÍNH người gọi, nên đích lạc
+  chỉ có thể là một đề xuất khác của chính họ.
+
+## 6. Số đo
+- ‹SỐ-ĐO›

@@ -1781,12 +1781,19 @@ describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => 
     const rutSauDuyet = await goi("POST", `/rfqs/${rfqId}/award/withdraw`, buyer, { reason: "rut sau duyet" });
     expect(rutSauDuyet.status).toBe(422);
     expect(rutSauDuyet.text).toContain("hàng mới nhất đang ở APPROVED");
-    expect((await goi("POST", `/rfqs/${rfqId}/award/cancel`, buyer, { reason: "buyer huy" })).status, "cổng huỷ vẫn là po.approve").toBe(403);
-    const huy = await goi("POST", `/rfqs/${rfqId}/award/cancel`, tc, { reason: "ncc rut cam ket" });
+    const awardIdDuyet = (duyet.body as { award: { awardId: string } }).award.awardId;
+    expect((await goi("POST", `/rfqs/${rfqId}/award/${awardIdDuyet}/cancel`, buyer, { reason: "buyer huy" })).status, "cổng huỷ vẫn là po.approve").toBe(403);
+    // [S1.9101 / khoản 9401] Huỷ theo id của hàng PROPOSED — thứ màn đọc TRƯỚC lần duyệt — ⇒ 422 nói vì sao, gói đứng yên.
+    const huyCu = await goi("POST", `/rfqs/${rfqId}/award/${awardId2}/cancel`, tc, { reason: "huy theo id cu" });
+    expect(huyCu.status, huyCu.text).toBe(422);
+    expect(huyCu.text).toContain("không phải trao thầu mới nhất");
+    expect(await trangThai()).toBe("AWARDED");
+    const huy = await goi("POST", `/rfqs/${rfqId}/award/${awardIdDuyet}/cancel`, tc, { reason: "ncc rut cam ket" });
     expect(huy.status, huy.text).toBe(201);
     expect(await trangThai()).toBe("EVALUATING");
 
-    // Sổ: một hàng RFQ_AWARD_WITHDRAWN; hai hàng RFQ_STATE_DENIED của đường rút mang đúng mã và đúng người, đúng thứ tự.
+    // Sổ: một hàng RFQ_AWARD_WITHDRAWN; hai hàng RFQ_STATE_DENIED của đường rút mang đúng mã và đúng người, đúng thứ tự —
+    // [S1.9101 / khoản 9401] và hàng thứ ba của lần huỷ theo id cũ.
     const { rows: so } = await db.pool.query<{ action: string; actor_id: string; payload: { ma?: string } }>(
       "SELECT action, actor_id, payload FROM audit_events WHERE org_id = $1 AND action IN ('RFQ_AWARD_WITHDRAWN', 'RFQ_STATE_DENIED') ORDER BY seq",
       [org],
@@ -1795,6 +1802,7 @@ describe("[S1.231 / khoản 232] rút đề xuất trao thầu qua HTTP", () => 
       ["RFQ_STATE_DENIED", buyer2.id, "KHONG_PHAI_NGUOI_DE_XUAT"],
       ["RFQ_AWARD_WITHDRAWN", buyer.id, null],
       ["RFQ_STATE_DENIED", buyer.id, "KHONG_CO_DE_XUAT_DANG_CHO"],
+      ["RFQ_STATE_DENIED", tc.id, "KHONG_CO_AWARD_CON_SONG"],
     ]);
     // Bảng award chỉ-ghi-thêm: năm hàng, đúng thứ tự.
     const { rows: aw } = await db.pool.query<{ status: string }>(
