@@ -4130,6 +4130,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "102_ghim_chinh_sach_luot_cham.sql",
         // [S1.256 / S4.5b / L7] Nhóm khoá benchmark, hai bảng kết quả ghi một lần cùng lượt chấm (ADR-142).
         "103_benchmark_gia.sql",
+        // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
+        "104_ban_luu_benchmark.sql",
         ]);
         // Lần hai KHÔNG được áp lại gì — đó chính là tính chất bị vỡ.
         await expect(migrate(poolThuDich, MIGRATIONS_DIR)).resolves.toEqual([]);
@@ -8774,6 +8776,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "102_ghim_chinh_sach_luot_cham.sql",
         // [S1.256 / S4.5b / L7] Nhóm khoá benchmark, hai bảng kết quả ghi một lần cùng lượt chấm (ADR-142).
         "103_benchmark_gia.sql",
+        // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
+        "104_ban_luu_benchmark.sql",
       ]);
 
       // ~~(b) THÊM cột: an toàn, và trigger nối chuỗi vẫn ở nguyên chỗ.~~
@@ -9098,6 +9102,8 @@ describe("migration của dự án", { timeout: 180_000 }, () => {
         "102_ghim_chinh_sach_luot_cham.sql",
         // [S1.256 / S4.5b / L7] Nhóm khoá benchmark, hai bảng kết quả ghi một lần cùng lượt chấm (ADR-142).
         "103_benchmark_gia.sql",
+        // [S1.260 / S4.5c1 / L6] Bản lưu benchmark của bảng so sánh, một bản mỗi lần mở thầu (ADR-143).
+        "104_ban_luu_benchmark.sql",
       ]);
       expect(await trangThaiD3DungChuan(db)).toBe(true);
     } finally {
