@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c1] PHÉP ĐO CHO CHỮ BENCHMARK CỦA MÀN `/mo-thau` — nhãn theo đúng chữ spec S4 §4.6, thành phần dải, độ phủ theo giá
+// [S1.260 / S4.5c1] PHÉP ĐO CHO CHỮ BENCHMARK CỦA MÀN `/mo-thau` — nhãn theo đúng chữ spec S4 §4.6, thành phần dải, độ phủ theo giá
 // trị (§2.5 ⒁), chữ của dải và của các trạng thái không nhãn.
 // ==============================================================================================
 
@@ -22,7 +22,7 @@ const DONG: DongBenchmark = {
 };
 const voi = (doi: Partial<DongBenchmark>): DongBenchmark => ({ ...DONG, ...doi });
 
-describe("[S1.9101 / S4.5c1] chữ của nhãn — spec S4 §4.6", () => {
+describe("[S1.260 / S4.5c1] chữ của nhãn — spec S4 §4.6", () => {
   it("BINH_THUONG nói 'trong dải lịch sử nội bộ' kèm quy mô — không nói 'sạch' hay 'tốt'", () => {
     const c = chuNhan(DONG);
     expect(c).toBe("trong dải lịch sử nội bộ (5 gói, 4 nhà cung cấp)");
@@ -48,7 +48,7 @@ describe("[S1.9101 / S4.5c1] chữ của nhãn — spec S4 §4.6", () => {
   });
 });
 
-describe("[S1.9101 / S4.5c1] thành phần dải — n gói · m nhà cung cấp · k gói cùng người tạo · h quan sát hồi tố", () => {
+describe("[S1.260 / S4.5c1] thành phần dải — n gói · m nhà cung cấp · k gói cùng người tạo · h quan sát hồi tố", () => {
   it("đủ bốn vế đúng thứ tự spec; số bị loại và cờ hồi tố của chính dòng nói ra khi có", () => {
     expect(chuThanhPhan(DONG)).toBe("5 gói · 4 nhà cung cấp · 1 gói do chính người tạo gói này lập · 2 quan sát ánh xạ hồi tố");
     const c = chuThanhPhan(voi({ soLoaiTienTe: 3, soLoaiGia0: 1, hoiTo: ["ANH_XA", "QUY_DOI"] }));
@@ -61,7 +61,7 @@ describe("[S1.9101 / S4.5c1] thành phần dải — n gói · m nhà cung cấp
   });
 });
 
-describe("[S1.9101 / S4.5c1] độ phủ — phần giá trị trên dòng đo được (§2.5 ⒁)", () => {
+describe("[S1.260 / S4.5c1] độ phủ — phần giá trị trên dòng đo được (§2.5 ⒁)", () => {
   const ba = [voi({ lineNo: 1 }), voi({ lineNo: 2, nhan: "CHUA_DU_LICH_SU" }), voi({ lineNo: 3, nhan: "LECH_CAO", chieu: "TREN" })];
 
   it("đếm dòng đo được và tính phần trăm GIÁ TRỊ, không phần trăm số dòng; CHUA_DU_LICH_SU không phủ", () => {
@@ -80,7 +80,7 @@ describe("[S1.9101 / S4.5c1] độ phủ — phần giá trị trên dòng đo �
   });
 });
 
-describe("[S1.9101 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái không nhãn, chữ của dải", () => {
+describe("[S1.260 / S4.5c1] tóm tắt cho bảng xếp hạng, trạng thái không nhãn, chữ của dải", () => {
   it("tóm tắt đếm theo nhóm, tách bất thường cao và thấp, bỏ nhóm rỗng", () => {
     expect(
       tomTatNhan([voi({}), voi({ nhan: "LECH_CAO", chieu: "TREN" }), voi({ nhan: "LECH_CAO", chieu: "DUOI" }), voi({ nhan: "KHONG_DO_DUOC" })]),

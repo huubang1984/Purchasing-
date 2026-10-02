@@ -185,12 +185,12 @@ export const ROUTE_DOC_KHONG_PHOI: Readonly<Record<string, string>> = {
     "BENCHMARK CỦA MỘT GÓI SAU MỞ THẦU — nhãn lệch so với dải lịch sử nội bộ, chiều lệch và thành phần dải cho từng (báo giá, dòng). " +
     "Không con số tiền nào, nhưng nhãn là thông tin về giá của từng nhà cung cấp, cùng hạng tiết lộ với bảng so sánh. Spec S4 §3.5 " +
     "khai mọi route đọc benchmark là `agent: false`; cổng `bid.view` và hàng sổ `BENCHMARK_READ` nằm trong `docBenchmark`. Route " +
-    "khai `agent: false` và dòng này khai vì sao. [S1.9101 / S4.5c1]",
+    "khai `agent: false` và dòng này khai vì sao. [S1.260 / S4.5c1]",
   "/rfqs/:rfqId/items/:lineNo/benchmark":
     "DẢI LỊCH SỬ NỘI BỘ CỦA MỘT DÒNG — tứ phân vị và trung vị đơn giá quy đổi của các gói đã mở trước, cùng giá quy đổi của từng " +
     "báo giá của gói: con số tiền gom từ nhiều gói, cùng hạng với `/items/:itemId/price-history`. Spec S4 §3.5 khai `agent: false`; " +
     "cổng `bid.view` và hàng sổ `BENCHMARK_BAND_READ` nằm trong `docDaiBenchmark`. Route khai `agent: false` và dòng này khai vì sao. " +
-    "[S1.9101 / S4.5c1]",
+    "[S1.260 / S4.5c1]",
   "/auth/login-links":
     "LINK ĐĂNG NHẬP GẦN ĐÂY CỦA CHÍNH NGƯỜI GỌI — tạo lúc, hết hạn, dùng lúc, trạng thái (khoản 195, " +
     "ADR-126). Không giá, không bí mật, nhưng là LỊCH SỬ ĐĂNG NHẬP của một con người: đưa vào ngữ " +

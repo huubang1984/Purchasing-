@@ -11106,11 +11106,11 @@ khoản 329 vào rổ A, sửa ở một PR riêng ngay; khoản 330, 331 vào r
   qua cả biên) và làm lượt chấm của mọi gói ghim phiên bản ấy ném mãi; nay `strict`. **[THẤP-5, đóng trong vòng]** `item_uom_conversions.he_so`
   nhận `'NaN'` (`'NaN' > 0` là đúng) — một quy đổi `NaN` trong dải làm lượt chấm ném mãi; nay có ràng buộc hữu hạn.
 - **Cửa sổ tháng tính theo lịch UTC** — khớp Postgres khi `TimeZone = UTC` (0/20.000 lệch, lượt soi); theo giờ `Asia/Ho_Chi_Minh` lệch một
-  ngày quanh cuối tháng ở ~5,5% mốc. Bộ kiểm ngoại tuyến và `DAC-TA.md` của S4.5c phải nói UTC. **[S1.9101] Chủ dự án chốt 2026-10-01:
-  giữ UTC, ghi rõ** (ADR-9201 ⑷).
+  ngày quanh cuối tháng ở ~5,5% mốc. Bộ kiểm ngoại tuyến và `DAC-TA.md` của S4.5c phải nói UTC. **[S1.260] Chủ dự án chốt 2026-10-01:
+  giữ UTC, ghi rõ** (ADR-143 ⑷).
 - ~~**Đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn của lượt chấm vòng một** (không có giá vòng hai — phong bì chưa vào bản rõ), cùng tư
-  thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.~~ **[S1.9101]
-  Chủ dự án chốt 2026-10-01: ĐÓNG ở hai trạng thái ấy, như bảng so sánh** — trạng thái có tên `VONG_CHAO_LAI_DANG_MO`, không nhãn (ADR-9201 ⑶).
+  thế `docBangXepHang`. Chữ L6 viết *"không route nào trả dữ liệu từ … vòng BAFO đang mở"*: chốt trước khi S4.5c mở route.~~ **[S1.260]
+  Chủ dự án chốt 2026-10-01: ĐÓNG ở hai trạng thái ấy, như bảng so sánh** — trạng thái có tên `VONG_CHAO_LAI_DANG_MO`, không nhãn (ADR-143 ⑶).
 - **Khứ hồi micro giây** qua `float8` chính xác tới 2^53 µs (năm 2255).
 - **Hiệu năng**: hai lần đọc `quan_sat_gia` cho mỗi hàng chuẩn ỨNG VIÊN của gói (giá của X tại mốc đọc, dải tại mốc mở giá). Đo ở 5.000 gói
   × 20 dòng × 3 nhà cung cấp (1.500 quan sát mỗi hàng chuẩn): gói 20 dòng — lượt chấm 21,7 s (không benchmark: 14 ms), mỗi lần đọc as-of
@@ -11118,16 +11118,16 @@ khoản 329 vào rổ A, sửa ở một PR riêng ngay; khoản 330, 331 vào r
   as-of ở MỖI lần đọc bảng so sánh (ADR-141 ⑶) không chịu nổi ở quy mô ấy. **Chủ dự án chốt: tính một lần, lưu lại (mục 9).**
 - ~~**Màn `/chinh-sach` không gửi trọng số chấm** (khoản 329, rổ A — PR riêng) — có từ S3.1c, nặng hơn từ S4.5a; nhóm khoá `benchmark` thì màn gửi.~~ **[S1.258] Đóng:** màn khai trọng số (thành phần cố định, chỉ-đọc) và BAFO top-N (sửa được) — biên bản §S1.258.
 
-## ADR-9201 — S4.5c1: bản lưu benchmark của bảng so sánh — tính ở lần đọc ĐẦU sau mỗi lần mở thầu rồi lưu; đóng ở vòng chào lại; số của dải và `SAU_MOC` chỉ khi bấm *Xem dải*
+## ADR-143 — S4.5c1: bản lưu benchmark của bảng so sánh — tính ở lần đọc ĐẦU sau mỗi lần mở thầu rồi lưu; đóng ở vòng chào lại; số của dải và `SAU_MOC` chỉ khi bấm *Xem dải*
 
 **Ngày:** 2026-10-01 · **Trạng thái:** **Đã chấp nhận** — chủ dự án chốt năm điểm ngày 2026-10-01, cả năm theo đề xuất, sau phép đo:
 ⑴ bản benchmark "một lần" của bảng so sánh TÍNH ở lần đọc ĐẦU TIÊN sau một lần mở thầu, bởi người giữ `bid.view`, rồi lưu; ⑵ — hệ quả
 của ⑴ — một bản cho MỖI lần mở thầu (vòng một và mỗi vòng BAFO); ⑶ ở `BAFO_OPEN`/`BAFO_CLOSED` benchmark ĐÓNG, như route bảng so sánh;
 ⑷ cửa sổ tháng giữ lịch UTC, ghi rõ ở `DAC-TA.md` và bộ kiểm ngoại tuyến (S4.5c2); ⑸ số của dải (Q1, trung vị, Q3) và `SAU_MOC` KHÔNG lưu
 — tính khi người dùng bấm *Xem dải* từng dòng. Thực thi tách hai PR: S4.5c1 (bản lưu, route, màn, L6, `gieo:demo`) và S4.5c2 (bộ xuất
-ADR-059, `DAC-TA.md`, bộ kiểm ngoại tuyến) · **[S1.9101]** · **Liên quan:** ADR-142 ⑼ (đổi đích), ADR-141 ⑶, ADR-140 ⑦ (bộ đọc có cổng,
+ADR-059, `DAC-TA.md`, bộ kiểm ngoại tuyến) · **[S1.260]** · **Liên quan:** ADR-142 ⑼ (đổi đích), ADR-141 ⑶, ADR-140 ⑦ (bộ đọc có cổng,
 hàng sổ), ADR-136 (`quan_sat_gia`, `gia_da_lo`), ADR-095 (lịch sử giá là hàm, không bảng giá thứ ba), ADR-054 (nơi mang giá) · **Spec:**
-S4 §3.1–3.2, §4.6, §2.5 ⑿ ⒁, §5.1 L6, L7, L14, §9 S4.5c · **Biên bản:** `evidence/security-reviews.md` §S1.9101
+S4 §3.1–3.2, §4.6, §2.5 ⑿ ⒁, §5.1 L6, L7, L14, §9 S4.5c · **Biên bản:** `evidence/security-reviews.md` §S1.260
 
 ### Bối cảnh — phép đo trước khi viết mã
 
@@ -11151,7 +11151,7 @@ ADR-142 ⑼ chốt *"S4.5c tính MỘT lần khi gói vào `UNSEALED` (và vào 
 
 ### Quyết định
 
-1. **Bản lưu** `price_benchmark_snapshots` + `price_benchmark_snapshot_lines` (`9501_ban_luu_benchmark`): MỘT hàng đầu cho MỖI lần mở
+1. **Bản lưu** `price_benchmark_snapshots` + `price_benchmark_snapshot_lines` (`104_ban_luu_benchmark`): MỘT hàng đầu cho MỖI lần mở
    thầu (`UNIQUE (org_id, unseal_request_id)`), một hàng mỗi (báo giá, dòng) — cùng cột nhãn, chiều, lý do, khoá dải, số đếm của `103`, KHÔNG
    cột tiền. Khoá ngoại hợp thành: lần mở thầu thuộc đúng gói; phiên bản = phiên bản GHIM của gói (vế L14 của bản lưu ở CSDL); hàng con cùng
    giao dịch với hàng đầu (`ghi_luc`, khuôn `103`). Chỉ-ghi-thêm bằng quyền; policy khách đóng hẳn.

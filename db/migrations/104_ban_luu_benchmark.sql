@@ -1,8 +1,8 @@
 -- ==============================================================================================
--- 9501_ban_luu_benchmark — [S1.9101 / S4.5c1 của spec S4] BẢN LƯU BENCHMARK CỦA BẢNG SO SÁNH: TÍNH MỘT LẦN CHO MỖI LẦN MỞ THẦU,
--- Ở LẦN ĐỌC ĐẦU TIÊN, RỒI LƯU (spec S4 §4.6, §9 S4.5c; L6, L7, L14; ADR-142 ⑼, ADR-9201)
+-- 104_ban_luu_benchmark — [S1.260 / S4.5c1 của spec S4] BẢN LƯU BENCHMARK CỦA BẢNG SO SÁNH: TÍNH MỘT LẦN CHO MỖI LẦN MỞ THẦU,
+-- Ở LẦN ĐỌC ĐẦU TIÊN, RỒI LƯU (spec S4 §4.6, §9 S4.5c; L6, L7, L14; ADR-142 ⑼, ADR-143)
 --
--- Chủ dự án chốt 2026-10-01 sau phép đo (ADR-9201): ADR-142 ⑼ *"tính một lần khi gói vào `UNSEALED`"* không làm được trên CẠNH ấy —
+-- Chủ dự án chốt 2026-10-01 sau phép đo (ADR-143): ADR-142 ⑼ *"tính một lần khi gói vào `UNSEALED`"* không làm được trên CẠNH ấy —
 -- spec S4 §3.1–3.2 cấm thêm dòng nào vào đường `CLOSED→UNSEALED`, vai `app_unseal` không đọc được đầu vào nào của benchmark, và trong
 -- chính giao dịch mở thầu gói chưa thấy giá của mình (`quan_sat_gia` so `unsealed_at < p_moc` ngặt). Nên bản lưu được TÍNH ở lần đọc
 -- ĐẦU TIÊN sau mở thầu, bởi người giữ `bid.view`, dưới `app_api`, rồi GHI một lần; mọi lần đọc sau đọc bản lưu.

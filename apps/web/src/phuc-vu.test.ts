@@ -281,7 +281,7 @@ describe("bề mặt tệp", () => {
       ...taoThau,
       // [S1.199 / S4.2b] `/lib/du-lieu.js` cũng là bản thật: câu §8.10 và bộ lọc đọc từ nó.
       ...duLieu,
-      // [S1.9101 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
+      // [S1.260 / S4.5c1] `/lib/benchmark.js` là bản thật: chữ nhãn, thành phần, độ phủ và chữ dải của `/mo-thau` đọc từ nó.
       ...benchmarkWeb,
       // [S1.240 / khoản 282] `/lib/dang-nhap.js` là bản thật: bước 1 (Tiếp, Vào, khối link gần đây) của bốn trang người mua chạy từ
       // nó — nhận `document`, `goi`, `history`, `location` giả mà trang trao vào, nên chạy được ở realm của test.
@@ -1225,10 +1225,10 @@ describe("bề mặt tệp", () => {
       });
     });
 
-    // [S1.9101 / S4.5c1] Benchmark theo dòng ở bước 4 và cột Benchmark của bảng xếp hạng (spec S4 §4.6; ADR-9201). Đo đúng thứ trang
+    // [S1.260 / S4.5c1] Benchmark theo dòng ở bước 4 và cột Benchmark của bảng xếp hạng (spec S4 §4.6; ADR-143). Đo đúng thứ trang
     // GỌI (không tự gọi khi nạp gói; Đọc benchmark đọc bảng so sánh trước khi chưa có), chữ trang IN (nhãn theo spec, độ phủ, dải khi
     // bấm Xem dải), và tư thế ở vòng chào lại (không nhãn nào, không lời gọi dải nào).
-    describe("[S1.9101 / S4.5c1] mo-thau: benchmark theo dòng, Xem dải, cột Benchmark của bảng xếp hạng", () => {
+    describe("[S1.260 / S4.5c1] mo-thau: benchmark theo dòng, Xem dải, cột Benchmark của bảng xếp hạng", () => {
       const RFQ = "44444444-4444-4444-8444-444444444444";
       const SO_SANH = {
         rows: [

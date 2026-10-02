@@ -23738,12 +23738,12 @@ Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích
   lời giữ lên remote cho ADR-143, khoản 334–336, migration 104 — nhánh này không dùng số nào trong đó. Nhả chúng là xoá năm nhánh
   `cap-so/*` trên remote: chờ chủ dự án.
 
-# §S1.9101 — S4.5c1: BENCHMARK HIỆN Ở `/mo-thau` — MỘT BẢN LƯU CHO MỖI LẦN MỞ THẦU, TÍNH Ở LẦN ĐỌC ĐẦU; ĐÓNG Ở VÒNG CHÀO LẠI; SỐ CỦA DẢI CHỈ KHI BẤM *XEM DẢI* (L6 vế benchmark) — ADR-9201
+# §S1.260 — S4.5c1: BENCHMARK HIỆN Ở `/mo-thau` — MỘT BẢN LƯU CHO MỖI LẦN MỞ THẦU, TÍNH Ở LẦN ĐỌC ĐẦU; ĐÓNG Ở VÒNG CHÀO LẠI; SỐ CỦA DẢI CHỈ KHI BẤM *XEM DẢI* (L6 vế benchmark) — ADR-143
 
 ## 1. Vòng này là gì
 
 PR đầu trong hai PR của S4.5c (spec S4 §9; ADR-142 ⑼): bản lưu benchmark của bảng so sánh, route, màn `/mo-thau`, vế benchmark của L6,
-`gieo:demo`. Bộ xuất ADR-059, `DAC-TA.md` và bộ kiểm ngoại tuyến là S4.5c2. Một migration (`9501_ban_luu_benchmark`), hai route đọc. Dựng
+`gieo:demo`. Bộ xuất ADR-059, `DAC-TA.md` và bộ kiểm ngoại tuyến là S4.5c2. Một migration (`104_ban_luu_benchmark`), hai route đọc. Dựng
 trên `master` `5afec41` (#232 — S4.5b — và #233 — khoản 329 — đã merge).
 
 ## 2. Quyết định của chủ dự án (2026-10-01)
@@ -23776,7 +23776,7 @@ Và cách thực thi: S4.5c1 trước, S4.5c2 PR sau.
 
 ## 4. Thay đổi
 
-- **`9501_ban_luu_benchmark`**: `price_benchmark_snapshots` (một hàng mỗi lần mở thầu — `UNIQUE (org_id, unseal_request_id)`; khoá ngoại
+- **`104_ban_luu_benchmark`**: `price_benchmark_snapshots` (một hàng mỗi lần mở thầu — `UNIQUE (org_id, unseal_request_id)`; khoá ngoại
   `…_cua_lan_mo_fk` tới `unseal_requests (org_id, id, rfq_id)`, `…_phien_ban_ghim_fk` tới `rfq_packages (org_id, id, chinh_sach_ghim_id)`;
   `CHECK` mốc trước lúc ghi) và `price_benchmark_snapshot_lines` (cột của `103` trừ lượt chấm; `…_cung_ban_luu_fk` cùng giao dịch; báo giá
   khoá ngoại tới `rfq_unsealed_bids`). Hai `UNIQUE` đích mới trên `unseal_requests`, `rfq_packages` — siêu tập của `(org_id, id)`, không
@@ -23877,7 +23877,7 @@ của bộ giả lập; đo `scrollWidth` của trang và từng bảng.
    sáu hàng benchmark đủ năm nhãn): **lượt đầu tìm ra bảng benchmark rộng 421 px** trên khung 375. Sửa: dưới 480 px bảng xếp thành khối, mỗi
    ô mang nhãn cột (khuôn `hang-gia` của `/nop-thau`) — đo lại: 309 px. *Xem dải* in Q1/trung vị/Q3 theo `VND/kg`, `SAU_MOC`, ba đơn giá quy
    đổi; cột *Benchmark* của bảng xếp hạng in tóm tắt nhãn và độ phủ.
-3. **Đo ra một khoản có từ trước — khoản 9401:** bảng xếp hạng rộng 712 px khi ẩn cột *Benchmark* mới (cột *Thành phần* 369 px, `nowrap`
+3. **Đo ra một khoản có từ trước — khoản 334:** bảng xếp hạng rộng 712 px khi ẩn cột *Benchmark* mới (cột *Thành phần* 369 px, `nowrap`
    từ S1.106), cả trang 852 px — trang `/mo-thau` cuộn ngang ở màn điện thoại từ trước vòng này. Cột *Benchmark* thêm 107 px (giới hạn
    `max-width: 9rem`). Không sửa trong vòng này — chờ chủ dự án xếp rổ. Một lần thử cho thành phần xuống dòng bằng style chèn lúc chạy KHÔNG
    đo được gì: CSP của trang (`style-src 'self'`) chặn style ấy — nói ra để không ai đọc nó như một phép đo.

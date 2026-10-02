@@ -6,12 +6,12 @@
 //   ⑶ L14 vế benchmark: ngưỡng đọc từ phiên bản GHIM, không từ phiên bản mới hơn; CSDL buộc `policy_id` của hàng = của lượt chấm;
 //   ⑷ ghi một lần: khoá ngoại `ghi_luc → created_at` từ chối lần ghi ở giao dịch khác, có đối chứng dương cùng giao dịch;
 //      `app_api` không sửa, không xoá, không tự đặt `ghi_luc`; phiên khách thấy 0 hàng;
-//   ⑸ `docBenchmark`: ~~as-of khi `UNSEALED`~~ [S1.9101 / S4.5c1] lần đọc ĐẦU sau mở thầu tính và GHI bản lưu, ra đúng nhãn mà lượt
+//   ⑸ `docBenchmark`: ~~as-of khi `UNSEALED`~~ [S1.260 / S4.5c1] lần đọc ĐẦU sau mở thầu tính và GHI bản lưu, ra đúng nhãn mà lượt
 //      chấm ghi sau đó; lần sau đọc bản lưu; cổng `bid.view` có hàng sổ từ chối; mỗi lần đọc một hàng `BENCHMARK_READ` không mang giá;
 //      phiên bản không cấu hình ⇒ `CHUA_CAU_HINH` và lượt chấm vẫn chạy;
-//   ⑹ [S1.9101 / S4.5c1] bản lưu: một bản mỗi lần mở thầu, hai lần đọc đồng thời ghi MỘT bản; CSDL buộc phiên bản ghim, đúng gói, cùng
+//   ⑹ [S1.260 / S4.5c1] bản lưu: một bản mỗi lần mở thầu, hai lần đọc đồng thời ghi MỘT bản; CSDL buộc phiên bản ghim, đúng gói, cùng
 //      giao dịch, một lần; chỉ-ghi-thêm; khách không thấy;
-//   ⑺ [S1.9101 / S4.5c1] *Xem dải*: số của dải đúng dữ liệu thiết kế, số đếm trùng bản lưu, `SAU_MOC` đếm tới lúc đọc (đối chứng dương),
+//   ⑺ [S1.260 / S4.5c1] *Xem dải*: số của dải đúng dữ liệu thiết kế, số đếm trùng bản lưu, `SAU_MOC` đếm tới lúc đọc (đối chứng dương),
 //      cổng và hàng sổ; vòng chào lại đang mở hay đã đóng ⇒ không nhãn, không dải; mở niêm phong vòng ấy ⇒ bản lưu MỚI cho lần mở thầu mới.
 //
 // Giàn cảnh: gói đã mở niêm phong dựng bằng SQL thô dưới vai chủ cụm, đúng thứ tự cạnh của đường thật (khuôn
@@ -700,7 +700,7 @@ describe("[INV-L7] ⑷ ghi một lần, chỉ-ghi-thêm, khách không thấy", 
 });
 
 
-// ---- [S1.9101 / S4.5c1] Bản lưu của bảng so sánh ---------------------------------------------------------------------------------
+// ---- [S1.260 / S4.5c1] Bản lưu của bảng so sánh ---------------------------------------------------------------------------------
 const doc = (org: string, rfqId: string, phien = pm.phien) => trong(org, (c) => docBenchmark(c, org, { rfqId, actorSessionId: phien }, api));
 
 async function banLuuCua(rfqId: string): Promise<{ id: string; unseal_request_id: string; policy_id: string }[]> {

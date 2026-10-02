@@ -1124,7 +1124,7 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   "docNhomBenchmark",
   "ghiBenchmarkLuotCham",
   "tinhBenchmarkGoi",
-  // [S1.9101 / S4.5c1] Phép ghi bản lưu của bảng so sánh và phép tính dải một dòng — không cổng, chỗ gọi duy nhất là `docBenchmark`/
+  // [S1.260 / S4.5c1] Phép ghi bản lưu của bảng so sánh và phép tính dải một dòng — không cổng, chỗ gọi duy nhất là `docBenchmark`/
   // `docDaiBenchmark` (có cổng), ghim ở `ban-ro-liet-ke.test.ts`.
   "ghiBanLuuBenchmark",
   "tinhDaiDong",
@@ -1183,7 +1183,7 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "xuatBoBangChung",
   // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, hàng sổ `BENCHMARK_READ`; ~~hằng là tập
   // trạng thái gói mà benchmark tính as-of ở mỗi lần đọc~~.
-  // [S1.9101 / S4.5c1] Hai hằng là tập trạng thái benchmark hiện (đúng tập bảng so sánh mở) và tập vòng chào lại (đóng, L6);
+  // [S1.260 / S4.5c1] Hai hằng là tập trạng thái benchmark hiện (đúng tập bảng so sánh mở) và tập vòng chào lại (đóng, L6);
   // `docDaiBenchmark` là *Xem dải* một dòng — cổng `bid.view`, hàng sổ `BENCHMARK_BAND_READ`.
   "TRANG_THAI_BENCHMARK_HIEN",
   "TRANG_THAI_VONG_CHAO_LAI",

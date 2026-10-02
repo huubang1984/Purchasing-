@@ -84,7 +84,7 @@ export {
   type NhomBenchmark,
   type QuanSatBenchmark,
 } from "./benchmark.js";
-// [S1.9101 / S4.5c1] Bản lưu của bảng so sánh (một bản mỗi lần mở thầu) và dải của một dòng khi bấm *Xem dải* (ADR-9201).
+// [S1.260 / S4.5c1] Bản lưu của bảng so sánh (một bản mỗi lần mở thầu) và dải của một dòng khi bấm *Xem dải* (ADR-143).
 export {
   ghiBanLuuBenchmark,
   ghiBenchmarkLuotCham,

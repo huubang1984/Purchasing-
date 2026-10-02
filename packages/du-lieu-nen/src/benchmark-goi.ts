@@ -356,7 +356,7 @@ export async function ghiBenchmarkLuotCham(client: pg.PoolClient, orgId: string,
 }
 
 // ----------------------------------------------------------------------------------------------
-// [S1.9101 / S4.5c1] BẢN LƯU CỦA BẢNG SO SÁNH VÀ DẢI CỦA MỘT DÒNG (ADR-9201)
+// [S1.260 / S4.5c1] BẢN LƯU CỦA BẢNG SO SÁNH VÀ DẢI CỦA MỘT DÒNG (ADR-143)
 // ----------------------------------------------------------------------------------------------
 // Chủ dự án chốt 2026-10-01 sau phép đo: bản benchmark của bảng so sánh TÍNH ở lần đọc ĐẦU TIÊN sau một lần mở thầu rồi lưu — một bản
 // cho mỗi lần mở thầu (`price_benchmark_snapshots`, khoá `UNIQUE (org_id, unseal_request_id)`); bản lưu KHÔNG mang số nào có đơn vị

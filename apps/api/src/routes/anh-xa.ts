@@ -78,7 +78,7 @@ function trongYeuTuyChon(body: unknown): readonly string[] | undefined {
   return v as readonly string[];
 }
 /**
- * Tham số đường dẫn; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). [S1.9101 / S4.5c1] Xuất cho route benchmark — cùng
+ * Tham số đường dẫn; sai hình dạng ⇒ 404 (không phải 422: đường ấy không tồn tại). [S1.260 / S4.5c1] Xuất cho route benchmark — cùng
  * bộ đọc cho cùng hai tham số `:rfqId`, `:lineNo`.
  */
 export function rfqIdParam(req: ApiRequest): string {

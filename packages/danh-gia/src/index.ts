@@ -97,7 +97,7 @@ export {
   type XuatBoBangChungInput,
 } from "./bo-bang-chung.js";
 // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, một hàng sổ `BENCHMARK_READ` mỗi lần đọc.
-// [S1.9101 / S4.5c1] Bản lưu một lần mỗi lần mở thầu (tính ở lần đọc đầu); *Xem dải* một dòng — hàng sổ `BENCHMARK_BAND_READ`.
+// [S1.260 / S4.5c1] Bản lưu một lần mỗi lần mở thầu (tính ở lần đọc đầu); *Xem dải* một dòng — hàng sổ `BENCHMARK_BAND_READ`.
 export {
   TRANG_THAI_BENCHMARK_HIEN,
   TRANG_THAI_VONG_CHAO_LAI,

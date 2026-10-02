@@ -105,7 +105,7 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
       [...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts", "packages/danh-gia/src/luot-danh-gia.ts"].sort(),
     );
     expect(nhac("ghiBenchmarkLuotCham")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/luot-danh-gia.ts"].sort());
-    // [S1.9101 / S4.5c1] Bản lưu của bảng so sánh và *Xem dải* một dòng: chỗ dùng DUY NHẤT là `doc-benchmark.ts` — hai hàm đọc có cổng
+    // [S1.260 / S4.5c1] Bản lưu của bảng so sánh và *Xem dải* một dòng: chỗ dùng DUY NHẤT là `doc-benchmark.ts` — hai hàm đọc có cổng
     // `bid.view` và hàng sổ của riêng mình.
     expect(nhac("ghiBanLuuBenchmark")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());
     expect(nhac("tinhDaiDong")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts"].sort());

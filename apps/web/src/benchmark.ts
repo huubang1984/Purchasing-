@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c1] BENCHMARK Ở MÀN `/mo-thau` — CHỮ CỦA NHÃN, THÀNH PHẦN DẢI, ĐỘ PHỦ, CHỮ CỦA DẢI (spec S4 §4.6, §2.5 ⒁; ADR-9201)
+// [S1.260 / S4.5c1] BENCHMARK Ở MÀN `/mo-thau` — CHỮ CỦA NHÃN, THÀNH PHẦN DẢI, ĐỘ PHỦ, CHỮ CỦA DẢI (spec S4 §4.6, §2.5 ⒁; ADR-143)
 //
 // Phép tính THUẦN trên chính dữ liệu route trả về, nên chúng sống ở đây, được `tsc` gác và `benchmark.test.ts` đo, rồi phục vụ cho trình
 // duyệt ở `/lib/benchmark.js` — khuôn `chinh-sach.ts`. Không lớp nào ở máy chủ đọc chúng: chúng là lời nói với người đọc, không phải chốt.

@@ -430,7 +430,7 @@ $("nut-dieu-phoi").addEventListener("click", async () => {
 // Bước 4 — bảng so sánh
 // ---------------------------------------------------------------------------------------------
 
-/** [S1.9101 / S4.5c1] Đọc và vẽ bảng so sánh; trả `false` khi máy chủ từ chối. Benchmark theo dòng dùng lại các hàng của nó. */
+/** [S1.260 / S4.5c1] Đọc và vẽ bảng so sánh; trả `false` khi máy chủ từ chối. Benchmark theo dòng dùng lại các hàng của nó. */
 async function docBangSoSanh() {
   bao($("loi4"), "");
   const r = await goi("GET", `/rfqs/${phien.rfqId}/comparison`);
@@ -470,7 +470,7 @@ async function docBangSoSanh() {
 $("nut-bang").addEventListener("click", () => docBangSoSanh());
 
 // ---------------------------------------------------------------------------------------------
-// [S1.9101 / S4.5c1] Bước 4 — benchmark theo dòng (spec S4 §4.6; ADR-9201)
+// [S1.260 / S4.5c1] Bước 4 — benchmark theo dòng (spec S4 §4.6; ADR-143)
 //
 // Một bản cho mỗi lần mở thầu: lần đọc đầu tiên tính và lưu, các lần sau đọc bản lưu. Bản lưu không mang số tiền nào — số của dải
 // và hàng nền ghi sau mốc chỉ tính khi bấm «Xem dải» một dòng. Ở vòng chào lại đang mở, máy chủ trả trạng thái có tên và không nhãn
@@ -662,7 +662,7 @@ async function veXepHang() {
     const o = document.createElement("td");
     o.append(veThanhPhan(h.components ?? []));
     tr.append(o);
-    // [S1.9101 / S4.5c1] Nhãn ở bảng xếp hạng (spec S4 §4.6): tóm tắt theo lần đọc benchmark gần nhất ở bước 4.
+    // [S1.260 / S4.5c1] Nhãn ở bảng xếp hạng (spec S4 §4.6): tóm tắt theo lần đọc benchmark gần nhất ở bước 4.
     const bm = td(typeof h.bidVersionId === "string" ? chuCotBenchmark(h.bidVersionId) : "—", "cot-benchmark");
     bm.dataset.bidVersionId = typeof h.bidVersionId === "string" ? h.bidVersionId : "";
     oCotBenchmark.push(bm);

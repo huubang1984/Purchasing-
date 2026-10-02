@@ -623,7 +623,7 @@ async function chinh(): Promise<void> {
     ra.push("  GET /items/<hàng chuẩn>/price-history; người quản lý dữ liệu không giữ bid.view nên bị từ chối (L3).");
     for (const g of daMo) ra.push(`  ${g.tieuDe.padEnd(24)} ${g.rfqId}`);
     for (const [ma, id] of hangChuanTheoMa) ra.push(`  ${ma.padEnd(24)} ${id}`);
-    // [S1.9101 / S4.5c1] Benchmark ở màn /mo-thau (spec S4 §4.6): ba gói trên là lịch sử của gói chính — đúng sàn 3 gói × 3 nhà cung
+    // [S1.260 / S4.5c1] Benchmark ở màn /mo-thau (spec S4 §4.6): ba gói trên là lịch sử của gói chính — đúng sàn 3 gói × 3 nhà cung
     // cấp của mẫu `NHOM_BENCHMARK_MAU` mà phiên bản 1 khai.
     ra.push("");
     ra.push("BENCHMARK (S4.5c1) — phiên bản 1 khai mẫu benchmark (12 tháng, sàn 3 gói / 3 nhà cung cấp, lệch 5% / 10%). Ba gói trên là");

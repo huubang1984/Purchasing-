@@ -1,5 +1,5 @@
 // ==============================================================================================
-// [S1.9101 / S4.5c1] Route BENCHMARK của một gói và *Xem dải* một dòng (spec S4 §4.6, §3.5; §5.1 L6; ADR-142, ADR-9201).
+// [S1.260 / S4.5c1] Route BENCHMARK của một gói và *Xem dải* một dòng (spec S4 §4.6, §3.5; §5.1 L6; ADR-142, ADR-143).
 //
 // Đường đọc CÓ CỔNG, khuôn `/items/:itemId/price-history`: route không khai mã quyền vì nó là GET, và cổng `bid.view` nằm TRONG
 // `docBenchmark`/`docDaiBenchmark` (rổ `HAM_DOC_CO_QUYEN`) — lần từ chối vào sổ qua `auditPool`, lần cho qua để lại một hàng sổ trong

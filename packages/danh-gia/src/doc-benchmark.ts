@@ -1,6 +1,6 @@
 // ==============================================================================================
 // [S1.256 / S4.5b] ĐỌC BENCHMARK CỦA MỘT GÓI — cổng `bid.view`, một hàng sổ mỗi lần đọc (spec S4 §4.6; L6, L7; ADR-140 ⑦, ADR-142).
-// [S1.9101 / S4.5c1] ĐỔI ĐÍCH (ADR-142 ⑼, ADR-9201): ~~hai nguồn — as-of ở mỗi lần đọc khi `UNSEALED`/`BAFO_UNSEALED`, hàng của lượt chấm
+// [S1.260 / S4.5c1] ĐỔI ĐÍCH (ADR-142 ⑼, ADR-143): ~~hai nguồn — as-of ở mỗi lần đọc khi `UNSEALED`/`BAFO_UNSEALED`, hàng của lượt chấm
 // mới nhất ở mọi trạng thái khác~~ — đo ở S4.5b: đọc as-of một gói 20 dòng tốn 18–19 s ở 5.000 gói. Chủ dự án chốt 2026-10-01:
 //   • benchmark của bảng so sánh có MỘT bản cho MỖI lần mở thầu (vòng một, mỗi vòng BAFO). Lần đọc ĐẦU TIÊN sau lần mở thầu ấy TÍNH
 //     (trên đúng tập báo giá lượt chấm sẽ xếp hạng — `docBaoGia` — dưới phiên bản ghim) rồi GHI (`ghiBanLuuBenchmark`); mọi lần đọc sau

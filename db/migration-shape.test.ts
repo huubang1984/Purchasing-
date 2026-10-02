@@ -586,7 +586,7 @@ describe("hình dạng file migration", () => {
       // chấm (cùng giao dịch), policy khách ĐÓNG HẲN.
       "price_benchmark_inputs",
       "price_benchmark_results",
-      // [S1.9101 / S4.5c1 / `9501_ban_luu_benchmark`] Bản lưu benchmark của bảng so sánh — chỉ-ghi-thêm bằng quyền, một bản mỗi lần mở
+      // [S1.260 / S4.5c1 / `104_ban_luu_benchmark`] Bản lưu benchmark của bảng so sánh — chỉ-ghi-thêm bằng quyền, một bản mỗi lần mở
       // thầu, khoá ngoại hợp thành tới phiên bản ghim và cùng giao dịch, policy khách ĐÓNG HẲN.
       "price_benchmark_snapshot_lines",
       "price_benchmark_snapshots",
