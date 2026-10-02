@@ -808,9 +808,12 @@ const ghi: readonly BuyerWriteRoute[] = [
       },
     }),
   },
+  // [S1.261 / khoản 335] ~~`/rfqs/:rfqId/award/cancel`~~ — huỷ theo GÓI: hàng mới nhất của gói, bất kể người huỷ đã đọc hàng
+  // nào. Nay `awardId` đi trong ĐƯỜNG DẪN, cùng lý do với route duyệt ở trên: người huỷ huỷ đúng trao thầu họ đã đọc, và
+  // `huyTraoThau` từ chối khi nó không còn là hàng mới nhất của gói (rút rồi đề xuất lại, hay vừa được duyệt).
   {
     method: "POST",
-    path: "/rfqs/:rfqId/award/cancel",
+    path: "/rfqs/:rfqId/award/:awardId/cancel",
     audience: "BUYER",
     mutates: true,
     permission: PERMISSIONS.PO_APPROVE,
@@ -824,6 +827,7 @@ const ghi: readonly BuyerWriteRoute[] = [
           ctx.orgId,
           {
             rfqId: rfqIdParam(ctx.req),
+            awardId: awardIdParam(ctx.req),
             reason: chuoiBatBuoc(ctx.req.body, "reason"),
             actorSessionId: ctx.actor.sessionId,
           },
