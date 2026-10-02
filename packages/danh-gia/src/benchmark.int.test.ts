@@ -961,7 +961,7 @@ describe("[INV-L6] [INV-L7] ⑺ Xem dải và vòng chào lại", { timeout: 300
 
   it("số đếm của bản lưu bị sửa NGOÀI luật chỉ-ghi-thêm (vai chủ cụm) ⇒ `khopBanLuu: false` — màn nói ra, không giấu", async () => {
     const { rfqId } = await goiMoiDaMo();
-    await anhXa(orgA, rfqId, 1, hangThep);
+    await anhXa(orgA, rfqId, 1, hangThep, "anh xa sau khi mo de do khop ban luu");
     await doc(orgA, rfqId);
     const truoc = await dai(rfqId, 1);
     expect(truoc?.trangThai === "CO" && truoc.dai.every((d) => d.khopBanLuu)).toBe(true);

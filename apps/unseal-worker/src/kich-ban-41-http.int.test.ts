@@ -269,6 +269,19 @@ function quetDonGia(vanBan: string): readonly string[] {
 }
 
 /**
+ * [S1.9101 / S4.5c1] Bộ quét ĐƠN GIÁ QUY ĐỔI — đơn giá theo đơn vị gốc của hàng chuẩn chính (`thanhTien / (100 tấm · 847,8 kg/tấm)`), con
+ * số KHÔNG nguyên mà `rutSo` không đọc ra: `quetDonGia` mù với nó. *Xem dải* của benchmark trả đúng dạng này. So theo GIÁ TRỊ, sai số tương
+ * đối 1e-9, trên mọi số thập phân trong văn bản; trả các GIÁ (tổng) mà đơn giá quy đổi của chúng hiện ra. Hàm THUẦN để có đối chứng dương.
+ */
+function quetDonGiaQuyDoi(vanBan: string): readonly string[] {
+  const so = [...vanBan.matchAll(/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/gu)].map((m) => Number(m[0]));
+  return MOI_GIA.filter((g) => {
+    const k = Number(g) / (SO_LUONG_DONG * Number(HANG_CHUAN_CHINH.heSoTam));
+    return so.some((x) => Math.abs(x - k) <= 1e-9 * k);
+  });
+}
+
+/**
  * Bộ quét: mọi giá TÌM THẤY trong một văn bản, theo GIÁ TRỊ — không phải theo một chuỗi đã biết.
  * [sổ nợ 49 / review H2-4] Bản cũ là `includes` trên chuỗi thập phân: `980,000,000`, `9.8e8`, base64
  * đi lọt. Nay: rút số theo mọi cách viết; và mọi khối trông như base64 ~~(≥ 16 ký tự) được giải mã rồi
@@ -1193,12 +1206,18 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect([b.trangThai, b.nguon, b.bafoRoundId]).toEqual(["CO", "TINH_MOI", null]);
     expect(b.dong.length).toBeGreaterThan(0);
     for (const d of b.dong) expect(["BINH_THUONG", "LECH_VUA", "LECH_CAO", "CHUA_DU_LICH_SU", "KHONG_DO_DUOC"]).toContain(d.nhan);
-    expect([...quetRoRi(bm.text), ...quetDonGia(bm.text)], "bản lưu và nhãn không mang con số tiền nào").toEqual([]);
-    // Đối chứng dương: route *Xem dải* trả giá quy đổi của CHÍNH gói — cùng bộ quét phải THẤY năm đơn giá vị thế cuối.
+    expect([...quetRoRi(bm.text), ...quetDonGia(bm.text), ...quetDonGiaQuyDoi(bm.text)], "bản lưu và nhãn không mang con số tiền nào").toEqual([]);
+    // Đối chứng dương của bộ quét quy đổi, trên đúng cách Postgres in thương của phép chia `numeric` (đo trên 16-alpine).
+    const { rows: pg } = await db.pool.query<{ v: string }>("SELECT ($1::numeric / ($2::numeric * $3::numeric))::text AS v", [
+      GIA_SUA_LAI, "100.0000", HANG_CHUAN_CHINH.heSoTam,
+    ]);
+    expect(quetDonGiaQuyDoi(JSON.stringify({ donGiaQuyDoi: pg[0]!.v }))).toEqual([GIA_SUA_LAI]);
+    expect(quetDonGia(JSON.stringify({ donGiaQuyDoi: pg[0]!.v })), "bộ quét đơn giá thô MÙ với đơn giá quy đổi").toEqual([]);
+    // Đối chứng dương: route *Xem dải* trả giá quy đổi của CHÍNH gói — bộ quét quy đổi phải THẤY năm đơn giá vị thế cuối.
     expect(dai.status, dai.text).toBe(200);
     expect((dai.body as { dai: { trangThai: string } }).dai.trangThai).toBe("CO");
     const cuoi = trangThai.loiMoi.map((lm) => lm.gia).sort();
-    expect([...new Set(quetDonGia(dai.text))].sort(), "bộ quét phải THẤY đơn giá ở Xem dải ngay khi gói UNSEALED").toEqual(cuoi);
+    expect([...quetDonGiaQuyDoi(dai.text)].sort(), "bộ quét phải THẤY đơn giá quy đổi ở Xem dải ngay khi gói UNSEALED").toEqual(cuoi);
     expect(await soHangBenchmark(), "mỗi lần đọc một hàng sổ").toBe(truoc + 2);
     const { rows: tai } = await db.pool.query<{ payload: unknown }>(
       "SELECT payload FROM audit_events WHERE org_id = $1 AND action IN ('BENCHMARK_READ', 'BENCHMARK_BAND_READ') AND resource_id = $2",
@@ -1215,7 +1234,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
       const k = await docBenchmarkQuaHttp(lm.cookie);
       for (const ph of [k.bm, k.dai]) {
         expect(ph.status).not.toBe(200);
-        expect([...quetRoRi(ph.text), ...quetDonGia(ph.text)]).toEqual([]);
+        expect([...quetRoRi(ph.text), ...quetDonGia(ph.text), ...quetDonGiaQuyDoi(ph.text)]).toEqual([]);
       }
     }
   });
@@ -1281,8 +1300,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // thấy giá với người có `bid.view`.
     const khongXem = await dangNhap("khongxem@vidu.vn", "BUYER"); // BUYER không có bid.view (005)
     const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
+    // [S1.9101 / S4.5c1] `:lineNo` ⇒ dòng 1 có thật — để lượt quét hỏi đúng *Xem dải* của gói (lượt chỉ GET).
     const thay = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
+      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(":lineNo", "1").replace(/:[A-Za-z]+/gu, UUID0);
     const roRi: string[] = [];
     let soGoi = 0;
     for (const r of ROUTES) {
@@ -1299,6 +1319,8 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         soGoi += 1;
         const headerText = [...ph.headers.entries()].map(([a, b]) => `${a}: ${b}`).join("\n");
         for (const g of quetRoRi(ph.text + "\n" + headerText)) roRi.push(`${r.method} ${r.path} (${ph.status}): ${g}`);
+        // [S1.9101 / S4.5c1] Và đơn giá — thô và quy đổi về đơn vị gốc — không lọt qua route nào tới người không được xem.
+        for (const g of [...quetDonGia(ph.text), ...quetDonGiaQuyDoi(ph.text)]) roRi.push(`${r.method} ${r.path} (${ph.status}) đơn giá: ${g}`);
       }
     }
     expect(soGoi).toBeGreaterThan(5 * 4 + 8);
@@ -1456,8 +1478,9 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
 
     const UUID0 = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
     // [S1.251 / S4.4b] `:itemId` là hàng chuẩn THẬT — lịch sử giá của nó được hỏi bởi người mua ĐỦ QUYỀN khi vòng hai còn niêm phong.
+    // [S1.9101 / S4.5c1] `:lineNo` ⇒ dòng 1 có thật — lượt J4 hỏi đúng *Xem dải* của gói.
     const thayDuong = (path: string) =>
-      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(/:[A-Za-z]+/gu, UUID0);
+      path.replace(":rfqId", trangThai.rfqId).replace(":unsealRequestId", trangThai.unsealRequestId).replace(":itemId", trangThai.hangChuanId).replace(":lineNo", "1").replace(/:[A-Za-z]+/gu, UUID0);
     const roRi: string[] = [];
     let soGoi = 0;
     let thayGiaVongMot = 0;
@@ -1478,6 +1501,11 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
         for (const g of quetRoRi(ph.text + "\n" + headerText)) {
           if ((GIA_BAFO as readonly string[]).includes(g)) roRi.push(`${r.method} ${r.path} (${ph.status}): ${g}`);
           else thayGiaVongMot += 1;
+        }
+        // [S1.9101 / S4.5c1] Đơn giá BAFO, thô hay quy đổi về đơn vị gốc (*Xem dải*), cũng không lọt. Đối chứng dương của bộ quét quy
+        // đổi là ca benchmark ở `BAFO_UNSEALED`.
+        for (const g of [...quetDonGia(ph.text), ...quetDonGiaQuyDoi(ph.text)]) {
+          if ((GIA_BAFO as readonly string[]).includes(g)) roRi.push(`${r.method} ${r.path} (${ph.status}) đơn giá: ${g}`);
         }
       }
     }
@@ -1505,7 +1533,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     expect([bm.status, dai.status]).toEqual([200, 200]);
     expect((bm.body as { benchmark: unknown }).benchmark).toEqual({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_OPEN" });
     expect((dai.body as { dai: unknown }).dai).toEqual({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_OPEN" });
-    expect([...quetRoRi(bm.text + dai.text), ...quetDonGia(bm.text + dai.text)]).toEqual([]);
+    expect([...quetRoRi(bm.text + dai.text), ...quetDonGia(bm.text + dai.text), ...quetDonGiaQuyDoi(bm.text + dai.text)]).toEqual([]);
   });
 
   it("[INV-J4] ĐỘT BIẾN — gỡ lớp giữ J4 lúc chạy thì bộ quét THẤY giá BAFO ngay ở route ấy", async () => {
@@ -1624,7 +1652,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const { bm, dai } = await docBenchmarkQuaHttp(trangThai.mua.cookie);
     expect((bm.body as { benchmark: unknown }).benchmark).toEqual({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_CLOSED" });
     expect((dai.body as { dai: unknown }).dai).toEqual({ trangThai: "VONG_CHAO_LAI_DANG_MO", rfqStatus: "BAFO_CLOSED" });
-    expect([...quetRoRi(bm.text + dai.text), ...quetDonGia(bm.text + dai.text)]).toEqual([]);
+    expect([...quetRoRi(bm.text + dai.text), ...quetDonGia(bm.text + dai.text), ...quetDonGiaQuyDoi(bm.text + dai.text)]).toEqual([]);
   });
 
   it("bước 12e2 — cổng bốn vế LẦN HAI, và worker mở ĐÚNG hai phong bì của vòng hai", async () => {
@@ -1684,10 +1712,10 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     const { bm, dai } = await docBenchmarkQuaHttp(trangThai.mua.cookie);
     const b = (bm.body as { benchmark: { trangThai: string; nguon: string; bafoRoundId: string | null } }).benchmark;
     expect([b.trangThai, b.nguon, b.bafoRoundId]).toEqual(["CO", "TINH_MOI", trangThai.bafoRoundId]);
-    expect([...quetRoRi(bm.text), ...quetDonGia(bm.text)]).toEqual([]);
+    expect([...quetRoRi(bm.text), ...quetDonGia(bm.text), ...quetDonGiaQuyDoi(bm.text)]).toEqual([]);
     const cuoi = trangThai.loiMoi.map((lm) => trangThai.giaBafo.get(lm.ten) ?? lm.gia).sort();
-    expect([...new Set(quetDonGia(dai.text))].sort(), "cùng bộ quét, cùng route — đơn giá BAFO phải hiện ra").toEqual(cuoi);
-    for (const g of GIA_BAFO) expect(quetDonGia(dai.text)).toContain(g);
+    expect([...quetDonGiaQuyDoi(dai.text)].sort(), "cùng bộ quét, cùng route — đơn giá BAFO quy đổi phải hiện ra").toEqual(cuoi);
+    for (const g of GIA_BAFO) expect(quetDonGiaQuyDoi(dai.text)).toContain(g);
   });
 
   it("bước 12f — BẢNG SO SÁNH sau BAFO: BẢY dòng lịch sử, nhưng phần TỔNG HỢP khử trùng còn NĂM", async () => {
