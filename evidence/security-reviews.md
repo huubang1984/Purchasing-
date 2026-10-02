@@ -24116,4 +24116,9 @@ này không còn là trao thầu mới nhất của gói — gói đã đổi t�
   `pnpm t0`, `cap-so --kiem` xanh; `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4582 khẳng
   định, 79/79 bất biến, 2181 giây, `evidence/INV-matrix.md` không đổi — số đo của lượt gộp ấy ghi ở đây để #237 không phải
   đẩy thêm một commit chỉ chứa số đo.
-- ‹SỐ-ĐO›
+- `cap-so --base origin/huy-trao-thau-theo-id` (nhánh chồng) cấp S1.263 và khoản 338 (trailer `Cap-So` ở `4592fe57`);
+  `cap-so --kiem` sạch; Handoff 337 khoản, 53 còn mở.
+- Trên `f8db6d7d` (cùng mã, trước lần cấp số — lần cấp chỉ đổi nhãn số trong chú thích, tên test và tài liệu): `pnpm t0` xanh;
+  `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4585 khẳng định, 79/79 bất biến (57/57 nghiệp
+  vụ + 22/22 hàng rào), 1987 giây; `evidence/INV-matrix.md` không đổi. Trên `4592fe57`: `pnpm t0`, `cap-so --kiem` xanh;
+  `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ.
