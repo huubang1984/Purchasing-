@@ -162,6 +162,19 @@ tr.lech td { background: var(--vang-nen); }
   table.hang-gia td.gia::before { display: block; margin-bottom: 2px; }
 }
 
+/* [S1.9101 / S4.5c1] Bảng benchmark theo dòng của /mo-thau trên màn hẹp — khuôn `hang-gia` ở trên: mỗi (dòng, báo giá) một khối, mỗi ô
+   mang nhãn cột. Đo trên Chromium ở 375×812 trước khi sửa: năm cột rộng 421 px với tên nhà cung cấp và chữ nhãn thật. Cột Benchmark của
+   bảng xếp hạng giới hạn bề rộng — chữ của nó xuống dòng thay vì kéo bảng rộng thêm. */
+@media (max-width: 480px) {
+  #bang-benchmark thead { display: none; }
+  #bang-benchmark, #bang-benchmark tbody, #bang-benchmark tr, #bang-benchmark td { display: block; }
+  #bang-benchmark tr { padding: 8px 0; border-bottom: 1px solid var(--vien); }
+  #bang-benchmark td { border-bottom: 0; padding: 2px 0; text-align: left; }
+  #bang-benchmark td:empty { display: none; }
+  #bang-benchmark td[data-nhan]::before { content: attr(data-nhan) ": "; color: var(--chu-mo); font-size: 0.85em; }
+}
+#bang-hang td.cot-benchmark { max-width: 9rem; font-size: 0.82rem; }
+
 /* [S1.106 / S2.4] Thành phần của một hàng xếp hạng nằm NGAY TRONG ô, không sau một cú bấm:
    spec §8 đòi bảng xếp hạng LUÔN hiện thành phần, nên một `<details>` gập lại là sai ý. */
 ul.tp { margin: 0; padding: 0; list-style: none; }

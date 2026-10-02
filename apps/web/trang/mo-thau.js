@@ -489,7 +489,9 @@ const dongCuaBaoGia = (id) => {
 async function veBenchmark() {
   bao($("loi4b"), "");
   hien($("khoi-dai"), false);
-  if (phien.soSanh === undefined && !(await docBangSoSanh())) return;
+  // Bảng so sánh đóng ở trạng thái này thì vẫn hỏi benchmark: nó trả câu trạng thái của chính nó (đo ở lượt đi thử 375×812 trên gói
+  // `AWARDED` — bản trước dừng ở lỗi của bảng so sánh, khối benchmark im).
+  if (phien.soSanh === undefined) await docBangSoSanh();
   const r = await goi("GET", `/rfqs/${phien.rfqId}/benchmark`);
   if (r.status !== 200) { bao($("loi4b"), loiCua(r, "Chưa đọc được benchmark")); return; }
   const b = r.body.benchmark;
@@ -536,7 +538,15 @@ async function veBenchmark() {
         o.append(chu, nut);
       }
       const gia = dongCuaBaoGia(d.bidVersionId).find((l) => l.lineNo === lineNo)?.unitPrice ?? null;
-      tr.append(o, td(tenBaoGia(d.bidVersionId)), td(gia === null ? "—" : tien(String(gia)), "so"), td(chuNhan(d)), td(chuThanhPhan(d)));
+      // `data-nhan`: trên màn hẹp bảng xếp thành khối, mỗi ô mang nhãn cột của mình (`chung.css`, khuôn `hang-gia` của `/nop-thau`).
+      const coNhan = (x, nhan) => { x.dataset.nhan = nhan; return x; };
+      tr.append(
+        o,
+        coNhan(td(tenBaoGia(d.bidVersionId)), "Nhà cung cấp"),
+        coNhan(td(gia === null ? "—" : tien(String(gia)), "so"), "Đơn giá chào"),
+        coNhan(td(chuNhan(d)), "Benchmark"),
+        coNhan(td(chuThanhPhan(d)), "Thành phần dải"),
+      );
       if (d.nhan === "LECH_CAO") tr.className = "lech";
       tbody.append(tr);
     }

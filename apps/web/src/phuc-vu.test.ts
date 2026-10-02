@@ -1331,6 +1331,33 @@ describe("bề mặt tệp", () => {
         expect(p.trangThai.goi.filter((g) => g.includes("/items/"))).toEqual([]);
       });
 
+      it("[đi thử 375×812] bảng so sánh từ chối (gói AWARDED) ⇒ vẫn hỏi benchmark và in câu trạng thái của nó; ô của bảng benchmark mang nhãn cột cho màn hẹp", async () => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 2 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/comparison`) return Promise.resolve({ status: 422, body: { error: "Bảng so sánh chỉ tồn tại sau khi mở thầu; RFQ đang ở AWARDED (A4)." } });
+            if (l === `GET /rfqs/${RFQ}/benchmark`) return Promise.resolve({ status: 200, body: { benchmark: { trangThai: "KHONG_HIEN", rfqStatus: "AWARDED" } } });
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        await p.bam("nut-benchmark");
+        expect(p.trangThai.goi.filter((g) => g.includes("/comparison") || g.includes("benchmark"))).toEqual([
+          `GET /rfqs/${RFQ}/comparison`, `GET /rfqs/${RFQ}/benchmark`,
+        ]);
+        expect(ttChu(p, "tt-benchmark")).toBe("Benchmark|Benchmark chỉ hiện khi bảng so sánh mở — gói đang ở trạng thái AWARDED.");
+        const q = await dung(BM_CO);
+        await q.bam("nut-benchmark");
+        expect(q.el("bang-benchmark").querySelector("tbody").con[0]?.con.slice(1).map((td) => td.dataset["nhan"])).toEqual([
+          "Nhà cung cấp", "Đơn giá chào", "Benchmark", "Thành phần dải",
+        ]);
+      });
+
       it("cột Benchmark của bảng xếp hạng: gạch trước khi đọc benchmark, tóm tắt nhãn và độ phủ sau — kể cả khi bảng xếp hạng vẽ TRƯỚC", async () => {
         const p = await dung(BM_CO);
         await p.bam("nut-xep-hang");
