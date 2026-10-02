@@ -17,6 +17,7 @@ import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import ts from "typescript";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -1221,6 +1222,152 @@ describe("bề mặt tệp", () => {
       });
     });
 
+    // [S1.254 / khoản 320, 321, 323] Bước 5 và 7 của `/mo-thau` — đo ở diễn tập §11 trên Chromium: bảng xếp hạng không in id
+    // phiên bản mà bước 7 đòi gõ (người mua thật không đề xuất trao thầu được bằng giao diện), nút Phê duyệt ký lên một khối
+    // trống, và một lần thiếu quyền hiện nguyên chuỗi `khong co quyen`.
+    describe("[S1.254] mo-thau: Chọn ở bảng xếp hạng, đọc đề xuất trước khi ký, câu 403", () => {
+      const RFQ = "33333333-3333-4333-8333-333333333333";
+      const XEP_HANG = {
+        evaluationId: "e-7", policyVersion: 1, currency: "VND", evaluatedAt: "2026-10-01T00:00:00Z",
+        rows: [
+          { rank: 1, supplierName: "Công ty Thép Một", effectiveCost: "379570212.00", bidVersionId: "bv-1", components: [] },
+          { rank: null, supplierName: "Công ty Không Đọc Được", effectiveCost: null, bidVersionId: "bv-2", components: [] },
+        ],
+      };
+      const deXuat = (awardId: string, evaluationId = "e-7") => ({
+        awardId, rfqId: RFQ, evaluationId, bidVersionId: "bv-1", status: "PROPOSED", reason: "chi phí hiệu dụng thấp nhất",
+        actedBy: A.userId, actedAt: "2026-10-01T01:00:00Z", approvals: [],
+      });
+      const dung = async (traAward: () => { status: number; body: unknown }, duyet: { status: number; body: unknown } = { status: 201, body: {} }) => {
+        const p = await dungTrang("mo-thau", {
+          hash: "", cookie: B,
+          thay: (l) => {
+            if (l === `GET /rfqs/${RFQ}`) return Promise.resolve({ status: 200, body: { rfq: { title: "Mua thép", status: "AWARDED", deadlineAt: "2099-01-01T00:00:00Z", requiresDualApproval: false } } });
+            if (l === `GET /rfqs/${RFQ}/bid-count`) return Promise.resolve({ status: 200, body: { bidCount: { disclosed: true, count: 3 } } });
+            if (l === `GET /rfqs/${RFQ}/unseal`) return Promise.resolve({ status: 200, body: { unsealRequest: null } });
+            if (l === `GET /rfqs/${RFQ}/ranking`) return Promise.resolve({ status: 200, body: { ranking: XEP_HANG } });
+            if (l === `GET /rfqs/${RFQ}/award`) return Promise.resolve(traAward());
+            if (l.startsWith(`POST /rfqs/${RFQ}/award/`)) return Promise.resolve(duyet);
+            return undefined;
+          },
+        });
+        await p.bam("nut-dung-phien");
+        p.el("rfq").value = RFQ;
+        await p.bam("nut-doc");
+        return p;
+      };
+      const daKy = (p: Awaited<ReturnType<typeof dung>>) => p.trangThai.goi.filter((g) => g.startsWith(`POST /rfqs/${RFQ}/award/`));
+      const ttAward = (p: Awaited<ReturnType<typeof dung>>) => p.el("tt-award").con.map((x) => x.textContent).join("|");
+
+      it("khoản 320: hàng có hạng mang nút Chọn, bấm thì id phiên bản điền vào ô của bước 7; hàng không hạng thì không có nút", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: null } }));
+        expect(p.trangThai.goi.filter((g) => g.includes("/ranking") || g.includes("/award")), "nạp gói KHÔNG tự đọc bước 5 hay 7").toEqual([]);
+        await p.bam("nut-xep-hang");
+        const hang = p.el("bang-hang").querySelector("tbody").con;
+        expect(hang).toHaveLength(2);
+        const nut = hang[0]?.con.at(-1)?.con[0];
+        expect(nut?.textContent).toBe("Chọn");
+        expect(hang[1]?.con.at(-1)?.con, "báo giá không có chi phí hiệu dụng đọc được thì không chọn được").toEqual([]);
+        for (const f of nut?.nghe["click"] ?? []) await f();
+        expect(p.el("bao-gia-thang").value).toBe("bv-1");
+        expect(p.el("ok5").textContent).toMatch(/Đã chọn Công ty Thép Một \(hạng 1\)/u);
+      });
+
+      it("khoản 321: Phê duyệt lần đầu chỉ HIỆN đề xuất (tên nhà cung cấp, chi phí, lý do) — lần hai mới ký, đúng đề xuất đã hiện", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
+        await p.bam("nut-duyet-award");
+        expect(daKy(p), "lần bấm đầu không ký").toEqual([]);
+        expect(ttAward(p)).toMatch(/Nhà cung cấp\|Công ty Thép Một/u);
+        // `/lib/so-tien.js` của trang là hàm giả trả chuỗi rỗng ở đây (THU_VIEN) — đo nhãn và nguồn, không đo định dạng.
+        expect(ttAward(p)).toMatch(/Chi phí hiệu dụng\|.*\|Hạng ở lượt chấm\|1\|/u);
+        expect(ttAward(p)).toMatch(/Lý do\|chi phí hiệu dụng thấp nhất/u);
+        expect(p.el("ok7").textContent).toMatch(/bấm Phê duyệt lần nữa/u);
+        await p.bam("nut-duyet-award");
+        expect(daKy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-1/approve`]);
+        expect(p.el("ok7").textContent).toMatch(/^Đã phê duyệt trao thầu/u);
+      });
+
+      it("khoản 321: đề xuất đổi giữa lần đọc và lần bấm ⇒ không ký, hiện đề xuất mới; Đọc đề xuất rồi Phê duyệt thì ký một lần", async () => {
+        let lan = 0;
+        // Lần đọc thứ nhất (nút Đọc đề xuất) thấy aw-1; từ lần thứ hai máy chủ đã có aw-2.
+        const p = await dung(() => ({ status: 200, body: { award: deXuat((lan += 1) <= 1 ? "aw-1" : "aw-2") } }));
+        await p.bam("nut-doc-award");
+        expect(ttAward(p)).toMatch(/Công ty Thép Một/u);
+        await p.bam("nut-duyet-award");
+        expect(daKy(p), "đề xuất lúc bấm khác đề xuất đã đọc").toEqual([]);
+        await p.bam("nut-duyet-award");
+        expect(daKy(p)).toEqual([`POST /rfqs/${RFQ}/award/aw-2/approve`]);
+      });
+
+      it("khoản 321: đề xuất dựa trên một lượt chấm KHÁC lượt của bảng xếp hạng ⇒ chỉ hiện id, không gọi tên từ lượt khác", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1", "e-cu") } }));
+        await p.bam("nut-doc-award");
+        expect(ttAward(p)).not.toMatch(/Nhà cung cấp/u);
+        expect(ttAward(p)).toMatch(/Báo giá được chọn\|bv-1/u);
+      });
+
+      it("khoản 323: 403 hằng của api ⇒ câu đọc được mang tên việc; thân 403 khác và lỗi khác in nguyên văn", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }), { status: 403, body: { error: "khong co quyen" } });
+        await p.bam("nut-doc-award");
+        await p.bam("nut-duyet-award");
+        expect(p.el("loi7").textContent).toMatch(/^Không duyệt được: tài khoản đang đăng nhập không có quyền làm việc này/u);
+        expect(p.el("loi7").textContent).not.toMatch(/khong co quyen/u);
+        for (const [than, mong] of [
+          [{ status: 403, body: { error: "nguon khong duoc phep" } }, "nguon khong duoc phep"],
+          [{ status: 422, body: { error: "Người đề xuất trao thầu không được tự duyệt đề xuất của mình (J3)." } }, "Người đề xuất trao thầu không được tự duyệt đề xuất của mình (J3)."],
+        ] as const) {
+          const q = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }), than);
+          await q.bam("nut-doc-award");
+          await q.bam("nut-duyet-award");
+          expect(q.el("loi7").textContent).toBe(mong);
+        }
+      });
+
+      // [S1.255 / khoản 327] Khoản 321 làm đề xuất ĐỌC ĐƯỢC trước khi ký — và từ đó người DUYỆT cũng thấy nút «Rút đề xuất»
+      // cạnh «Phê duyệt» (đo trên trình duyệt thật: Tổng Giám đốc ở XD-04). Rút là đường của CHÍNH người đề xuất (khoản 232,
+      // trigger `094` từ chối người khác); trước S1.254 nút không bao giờ hiện cho người duyệt chỉ vì đề xuất không được đọc.
+      it("khoản 327: người xem KHÔNG phải người đề xuất ⇒ nút «Rút đề xuất» ẩn; chính người đề xuất ⇒ hiện", async () => {
+        const p = await dung(() => ({ status: 200, body: { award: deXuat("aw-1") } }));
+        await p.bam("nut-doc-award");
+        expect(ttAward(p), "đối chứng: đề xuất của A đã hiện cho B").toMatch(/PROPOSED/u);
+        expect(p.el("nut-rut-de-xuat").hidden, "B (người duyệt) thấy nút rút đề xuất của A").toBe(true);
+        await p.bam("nut-duyet-award");
+        expect(p.el("nut-rut-de-xuat").hidden, "sau lần bấm Phê duyệt đầu (chỉ hiện đề xuất) cũng vậy").toBe(true);
+        const q = await dung(() => ({ status: 200, body: { award: { ...deXuat("aw-1"), actedBy: B.userId } } }));
+        await q.bam("nut-doc-award");
+        expect(q.el("nut-rut-de-xuat").hidden, "chính người đề xuất (B) mở lại trang ⇒ rút được").toBe(false);
+      });
+    });
+
+    it("[S1.254 / khoản 323] tao-thau: 403 hằng của api ở «Tạo nhà cung cấp» (vai BUYER) ⇒ câu đọc được; lỗi khác in nguyên văn", async () => {
+      for (const [than, mong] of [
+        [{ status: 403, body: { error: "khong co quyen" } }, /^Không tạo được nhà cung cấp: tài khoản đang đăng nhập không có quyền làm việc này/u],
+        [{ status: 422, body: { error: "Mã số thuế đã có trong tổ chức" } }, /^Mã số thuế đã có trong tổ chức$/u],
+      ] as const) {
+        const p = await dungTrang("tao-thau", { hash: "", cookie: A, thay: (l) => (l === "POST /suppliers" ? Promise.resolve(than) : undefined) });
+        await p.bam("nut-dung-phien");
+        p.el("ncc-ten").value = "Thép Đông Anh";
+        p.el("ncc-mst").value = "0301234567";
+        await p.bam("nut-tao-ncc");
+        expect(p.el("loi5").textContent).toMatch(mong);
+      }
+    });
+
+    it("[S1.254 / khoản 322] nop-thau: mỗi ô của hàng hạng mục mang nhãn cho màn hẹp; bảng mang lớp `hang-gia` mà luật CSS dưới 480px đọc", async () => {
+      const p = await dungTrang("nop-thau", { hash: "", cookie: null, khach: true });
+      await p.bam("nut-dung-phien");
+      const o = p.el("bang-hang").querySelector("tbody").con[0]?.con ?? [];
+      expect(o.map((x) => x.dataset["nhan"] ?? "")).toEqual(["", "SL", "ĐVT", "Đơn giá"]);
+      expect(o.map((x) => x.className)).toEqual(["", "so sl", "dvt", "so gia"]);
+      const doc = (tep: string) => readFileSync(new URL(`../trang/${tep}`, import.meta.url), "utf8").replace(/\r\n/gu, "\n");
+      expect(doc("nop-thau.html")).toContain('<table id="bang-hang" class="hang-gia">');
+      expect(doc("mo-thau.html"), "bảng xếp hạng của /mo-thau cùng id — không được ăn luật màn hẹp").not.toContain('class="hang-gia"');
+      const css = doc("chung.css");
+      const khoi = css.slice(css.indexOf("@media (max-width: 480px) {"));
+      expect(khoi).toMatch(/table\.hang-gia thead \{ display: none; \}/u);
+      expect(khoi).toMatch(/table\.hang-gia td\[data-nhan\]::before \{ content: attr\(data-nhan\)/u);
+    });
+
     it("nop-thau: xoá fragment đúng MỘT lần sau /guest/otp/verify thành công; mã sai thì fragment ở lại", async () => {
       let lanXac = 0;
       const p = await dungTrang("nop-thau", {
@@ -2238,6 +2385,80 @@ describe("bề mặt tệp", () => {
       expect(await taoVoi(false, "c-thep")).not.toHaveProperty("categoryId");
     });
 
+    // [S1.258 / khoản 329] Màn `/chinh-sach` là giao diện DUY NHẤT của `POST /policy`; trước vòng này thân nó gửi không mang
+    // `evalComponents`/`bafoTopN`, nên mọi phiên bản tạo trên màn không chấm được. Đo đúng thân trang GỬI, ở ba đường: mẫu, chép,
+    // bỏ chọn — và bảng phiên bản hiện trọng số.
+    const moChinhSach = async (phienBan: unknown[]) => {
+      const p = await dungTrang("chinh-sach", {
+        hash: "", cookie: A,
+        thay: (l) =>
+          l === "GET /policy/versions" ? Promise.resolve({ status: 200, body: { phienBan, daBat: false, choKy: false } })
+            : l === "POST /policy" ? Promise.resolve({ status: 201, body: { policy: { version: 9 } } })
+            : undefined,
+      });
+      await p.bam("nut-dung-phien");
+      const gui = async () => {
+        await p.bam("nut-tao-pb");
+        return p.trangThai.than.filter((t) => t.lenh === "POST /policy").at(-1)?.than as Record<string, unknown> | undefined;
+      };
+      const doiO = async (id: string, chon: boolean) => {
+        p.el(id).checked = chon;
+        for (const f of p.el(id).nghe["change"] ?? []) await f();
+      };
+      return { p, gui, doiO };
+    };
+    const PHIEN_BAN_CO = {
+      id: "p-1", version: 1, effectiveFrom: "2026-10-01T00:00:00Z", dualApprovalThreshold: "500000000.00", currency: "VND",
+      tiers: null, chiaNhoCuaSoNgay: null, thamDinhHieuLucThang: null, benchmark: null,
+      evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 3,
+      createdBy: "u-1", signedBy: null, signedAt: null, hieuLuc: true,
+    };
+
+    it("[S1.258 / khoản 329] chinh-sach: mẫu mặc định gửi trọng số gia/TIEN/1.0000 và BAFO top-2; không cảnh báo trọng số", async () => {
+      const { p, gui } = await moChinhSach([]);
+      expect(p.el("co-trong-so").checked).toBe(true);
+      expect(p.el("khoi-trong-so").hidden).toBe(false);
+      expect(p.el("bafo-top-n").value).toBe("2");
+      expect(p.el("tt-trong-so").con.map((x) => x.textContent)).toEqual(["Thành phần gia", "đơn vị TIEN, hệ số 1.0000"]);
+      expect(await gui()).toMatchObject({ version: 1, evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2 });
+      expect(p.el("canh-bao").textContent).not.toContain("trọng số");
+    });
+
+    it("[S1.258 / khoản 329] chinh-sach: «Chép phiên bản mới nhất» mang trọng số và top-N; bảng phiên bản hiện chúng", async () => {
+      const { p, gui } = await moChinhSach([PHIEN_BAN_CO]);
+      const hang = p.el("bang-pb").querySelector("tbody").con[0];
+      expect(hang?.con.map((x) => x.textContent)).toContain("gia/TIEN ×1.0000 · BAFO top-3");
+      await p.bam("nut-chep");
+      expect(p.el("bafo-top-n").value).toBe("3");
+      expect(await gui()).toMatchObject({ version: 2, evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 3 });
+      // Phiên bản chép không có trọng số ⇒ ô bỏ chọn, thân gửi cặp `null`, và màn nói hậu quả.
+      const { p: q, gui: guiQ } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: null, bafoTopN: null }]);
+      expect(q.el("bang-pb").querySelector("tbody").con[0]?.con.map((x) => x.textContent)).toContain("chưa khai");
+      await q.bam("nut-chep");
+      expect(q.el("co-trong-so").checked).toBe(false);
+      expect(q.el("khoi-trong-so").hidden).toBe(true);
+      expect(await guiQ()).toMatchObject({ evalComponents: null, bafoTopN: null });
+      expect(q.el("canh-bao").textContent).toContain("KHÔNG khai trọng số chấm");
+    });
+
+    it("[S1.258 / khoản 329] chinh-sach: bỏ chọn ⇒ gửi cặp null và cảnh báo; chọn lại khi top-N trống ⇒ ô nhận mẫu; trọng số ngoài vế hẹp chép nguyên văn kèm cảnh báo", async () => {
+      const { p, gui, doiO } = await moChinhSach([]);
+      await doiO("co-trong-so", false);
+      expect(p.el("khoi-trong-so").hidden).toBe(true);
+      expect(p.el("canh-bao").textContent).toContain("KHÔNG khai trọng số chấm");
+      expect(await gui()).toMatchObject({ evalComponents: null, bafoTopN: null });
+      p.el("bafo-top-n").value = "";
+      await doiO("co-trong-so", true);
+      expect(p.el("bafo-top-n").value).toBe("2");
+      p.el("bafo-top-n").value = "0";
+      expect(await gui()).toMatchObject({ evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 0 });
+      const LA = [{ ma: "gia", don_vi: "TIEN", he_so: "1" }, { ma: "ky_thuat", don_vi: "DIEM", he_so: "0.5" }];
+      const { p: q, gui: guiQ } = await moChinhSach([{ ...PHIEN_BAN_CO, evalComponents: LA }]);
+      await q.bam("nut-chep");
+      expect(q.el("canh-bao").textContent).toContain("bị từ chối khi chấm");
+      expect(await guiQ()).toMatchObject({ evalComponents: LA, bafoTopN: 3 });
+    });
+
     it("[S1.201 / S3.6a] tao-thau: «Đặt nhóm hàng» gửi PUT /rfqs/r-1/category với nhóm đã chọn; chưa chọn ⇒ lỗi, không gọi; máy chủ từ chối ⇒ in đúng câu của máy chủ", async () => {
       const { p } = await moTaoThauNhom(true, "DRAFT", null, (l) => (l === "PUT /rfqs/r-1/category" ? Promise.resolve({ status: 200, body: { rfq: { id: "r-1" } } }) : undefined));
       p.el("nhom-hang").value = "";
@@ -2968,4 +3189,74 @@ el.textContent = location.hash;
       },
     );
   }, TRAN_TEST_GIU_KHOA_MS);
+});
+
+// ================================================================================================
+// [S1.255 / khoản 326] 403 MANG HẰNG CỦA MÁY CHỦ KHÔNG ĐI THẲNG RA MÀN — CẢ BẢY BẢN `loiCua`
+//
+// Thân 403 của `apps/api` là MỘT hằng (`THAN_403 = { error: "khong co quyen" }`, `apps/api/src/dispatch.ts`) và nó phải ở
+// nguyên như thế (khoản 191: nói thiếu quyền nào là dựng bản đồ mô hình quyền cho người dò). Khoản 191 sửa bước 3 của
+// `/login` (S1.90); khoản 323 (S1.254) sửa `loiCua` của `/login` và `/tao-thau` — đổi ĐÚNG thân hằng ấy, để 403 khác (như
+// `nguon khong duoc phep` của lớp chống CSRF theo origin, `apps/api/src/server.ts`) vẫn in nguyên văn. Năm bản còn lại —
+// `/chinh-sach`, `/nhom-hang`, `/du-lieu`, `/nop-thau` và `/lib/dang-nhap.js` — vẫn in ba chữ không dấu; `du-lieu.js` có sẵn
+// một câu 403 riêng đứng SAU dòng đọc `body.error`, tức mã chết từ lúc viết, vì API luôn gửi kèm hằng ấy.
+//
+// Lớp này đòi trên CẢ BẢY tệp: 403 mang đúng hằng ⇒ câu mở đầu bằng việc vừa bấm, nói vì quyền, không mang hằng; 403 thân
+// khác, 422 có tên ⇒ đúng câu của máy chủ; không thân ⇒ câu mặc định kèm mã. Và mọi lần đọc `.error` trong bảy tệp nằm TRONG
+// `loiCua` — một lối thứ hai in câu của máy chủ là một lối lớp này không đo. PHÁT BIỂU ĐÚNG MỨC: các hằng không dấu khác của
+// API (`phien khong hop le`, `qua nhieu yeu cau`, `khong co duong nay`, `loi noi bo`) và câu không dấu của trigger vẫn đi ra
+// nguyên văn; lớp này không dịch chúng.
+// ================================================================================================
+describe("[S1.255 / khoản 326] 403 mang hằng của máy chủ không đi thẳng ra màn — bảy bản `loiCua`", () => {
+  const TEP: readonly string[] = [
+    "trang/mo-thau.js", "trang/tao-thau.js", "trang/chinh-sach.js", "trang/nhom-hang.js",
+    "trang/du-lieu.js", "trang/nop-thau.js", "src/dang-nhap.ts",
+  ];
+  const nguon = (t: string) => readFileSync(new URL(`../${t}`, import.meta.url), "utf8");
+  const cay = (t: string) => ts.createSourceFile(t, nguon(t), ts.ScriptTarget.Latest, true, t.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  const hamLoiCua = (sf: ts.SourceFile) =>
+    sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === "loiCua");
+  type LoiCua = (r: { status: number; body: unknown }, macDinh: string) => string;
+  /** `loiCua` của một tệp, chạy riêng — kèm hằng `THAN_403` cấp tệp nếu tệp có (khuôn khoản 323). */
+  const layLoiCua = (t: string): LoiCua => {
+    const sf = cay(t);
+    const fn = hamLoiCua(sf);
+    if (fn === undefined) throw new Error(`${t}: không có \`function loiCua\` ở cấp tệp`);
+    const hang = sf.statements.filter((s) => ts.isVariableStatement(s) && s.declarationList.declarations.some((d) => ts.isIdentifier(d.name) && d.name.text === "THAN_403"));
+    const van = [...hang, fn].map((s) => s.getText(sf)).join("\n");
+    const js = ts.transpileModule(van, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    return runInNewContext(`${js}\nloiCua`) as LoiCua;
+  };
+
+  it.each(TEP)("%s: 403 mang hằng `khong co quyen` ⇒ câu mở đầu bằng việc vừa bấm, nói vì quyền, không mang hằng", (t) => {
+    const cau = layLoiCua(t)({ status: 403, body: { error: "khong co quyen" } }, "Không làm được việc thử");
+    expect(cau).not.toMatch(/khong co quyen/u);
+    expect(cau).toMatch(/^Không làm được việc thử/u);
+    expect(cau).toMatch(/quyền/u);
+  });
+
+  it.each(TEP)("%s: 403 thân khác (chống CSRF theo origin) và 422 có tên đi ra nguyên văn; không thân ⇒ câu mặc định kèm mã", (t) => {
+    const loiCua = layLoiCua(t);
+    expect(loiCua({ status: 403, body: { error: "nguon khong duoc phep" } }, "Không làm được")).toBe("nguon khong duoc phep");
+    expect(loiCua({ status: 422, body: { error: "Câu có tên của lớp gói." } }, "Không làm được")).toBe("Câu có tên của lớp gói.");
+    expect(loiCua({ status: 500, body: null }, "Không làm được")).toBe("Không làm được (mã 500)");
+  });
+
+  it("mọi lần đọc `.error` trong bảy tệp nằm TRONG `loiCua` — không lối thứ hai in câu của máy chủ", () => {
+    const ngoai: string[] = [];
+    for (const t of TEP) {
+      const sf = cay(t);
+      const fn = hamLoiCua(sf);
+      const dong = (n: ts.Node) => `${t}:${String(sf.getLineAndCharacterOfPosition(n.getStart()).line + 1)}`;
+      const di = (n: ts.Node): void => {
+        if (n === fn) return;
+        if (ts.isPropertyAccessExpression(n) && n.name.text === "error") ngoai.push(dong(n));
+        if (ts.isElementAccessExpression(n) && ts.isStringLiteral(n.argumentExpression) && n.argumentExpression.text === "error") ngoai.push(dong(n));
+        if (ts.isBindingElement(n) && ((n.propertyName !== undefined && ts.isIdentifier(n.propertyName) && n.propertyName.text === "error") || (n.propertyName === undefined && ts.isIdentifier(n.name) && n.name.text === "error"))) ngoai.push(dong(n));
+        ts.forEachChild(n, di);
+      };
+      di(sf);
+    }
+    expect(ngoai).toEqual([]);
+  });
 });

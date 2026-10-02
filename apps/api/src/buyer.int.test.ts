@@ -1205,6 +1205,8 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     readonly tiers: unknown;
     readonly chiaNhoCuaSoNgay: number | null;
     readonly thamDinhHieuLucThang: number | null;
+    readonly evalComponents: unknown;
+    readonly bafoTopN: number | null;
     readonly createdBy: string;
     readonly signedBy: string | null;
     readonly hieuLuc: boolean;
@@ -1234,7 +1236,12 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     const tc = await nguoi("tc-cs-tat@vidu.vn", ["FINANCE"], org);
     const tc2 = await nguoi("tc2-cs-tat@vidu.vn", ["FINANCE"], org);
     expect((await goi("POST", "/policy", tc, { version: 1, dualApprovalThreshold: "100000000.00", currency: "VND" })).status).toBe(201);
-    const v2 = await goi("POST", "/policy", tc, { version: 2, dualApprovalThreshold: "1000000000.00", currency: "VND", tiers: BAC, ...MUC });
+    // [S1.258 / khoản 329] Bản 2 mang trọng số với `bafoTopN: 0` — số 0 là quy ước *"không dùng BAFO"* (`056`), và là giá trị
+    // một phép đọc kiểu `x || null` đánh rơi.
+    const TRONG_SO = [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }];
+    const v2 = await goi("POST", "/policy", tc, {
+      version: 2, dualApprovalThreshold: "1000000000.00", currency: "VND", tiers: BAC, ...MUC, evalComponents: TRONG_SO, bafoTopN: 0,
+    });
     expect(v2.status, v2.text).toBe(201);
     const idV2 = (v2.body as { policy: { id: string } }).policy.id;
 
@@ -1257,6 +1264,9 @@ describe("[S1.169 / S3.1c] phiên bản chính sách qua HTTP — tạo có bậ
     expect(b.phienBan[0]?.tiers).toEqual(BAC);
     expect([b.phienBan[0]?.chiaNhoCuaSoNgay, b.phienBan[0]?.thamDinhHieuLucThang, b.phienBan[0]?.createdBy]).toEqual([30, 12, tc.id]);
     expect([b.phienBan[1]?.tiers, b.phienBan[1]?.chiaNhoCuaSoNgay]).toEqual([null, null]);
+    // [S1.258 / khoản 329] Trọng số và top-N đọc được — màn chép chúng sang phiên bản kế; bản 1 không khai ⇒ cặp `null`.
+    expect([b.phienBan[0]?.evalComponents, b.phienBan[0]?.bafoTopN]).toEqual([TRONG_SO, 0]);
+    expect([b.phienBan[1]?.evalComponents, b.phienBan[1]?.bafoTopN]).toEqual([null, null]);
     expect(((await goi("GET", "/policy", tc)).body as { policy: { version: number } }).policy.version).toBe(1);
 
     // ⑶ Phiên bản KẾ TIẾP tính theo bản MỚI NHẤT. RED THẬT trước vòng này: route đòi "hiện hành + 1" = 2, trigger `022`

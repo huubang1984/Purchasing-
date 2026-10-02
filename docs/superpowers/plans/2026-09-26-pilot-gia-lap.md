@@ -147,8 +147,14 @@ tạo mới khi chưa có, và đợi tối đa 60 giây. Đo trên Docker 29.3.
 - mỗi khối đo đủ bốn tình huống — chưa có container, container đã dừng, container đang chạy, Docker không chạy — và đều
   ra đúng: ba tình huống đầu đi tới lượt giả lập 10/10 ĐẠT; tình huống cuối dừng sau 62 giây, PowerShell kèm câu hỏi
   Docker Desktop đã chạy chưa, bash với `ECONNREFUSED` của công cụ;
-- **chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
-  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.
+- ~~**chưa đo trên Windows thật:** Windows PowerShell 5.1, Docker Desktop, đường dẫn và ACL của Windows. Người trình diễn
+  chạy khối này một lần trên chính máy của buổi gặp, trước ngày gặp.~~ **[S1.255] Đã đo trên Windows thật** (Windows 11,
+  Windows PowerShell 5.1.26100, Docker Desktop 29.7.2, Node 24.18.0; khối chạy từ một tệp `.ps1` UTF-8 có BOM, không dán vào
+  cửa sổ console): ba tình huống — chưa có container, container đang chạy, container đã dừng — đều đi tới lượt giả lập 10/10
+  ĐẠT, cô lập 2/2, số đo trùng từng con với lượt Linux. Từ lệnh tới cụm sẵn sàng: 34 giây ở hai lần chạy lại; lần đầu (áp 100
+  migration) không bấm giờ chính xác — dưới hai phút. Dừng cụm theo cây tiến trình trả hết cổng, không tiến trình mồ côi.
+  Tình huống *Docker không chạy* KHÔNG đo trên Windows: phải tắt Docker Desktop. Người trình diễn vẫn chạy khối một lần trên
+  chính máy của buổi gặp — đường dẫn và ACL là của từng máy (đoạn *Thư mục trạng thái* dưới).
 
 Container giữ dữ liệu giữa các lần chạy, và thư mục trạng thái giữ vòng khoá khớp với nó. Đo cả hai cách lệch:
 - xoá thư mục trạng thái mà giữ container: công cụ từ chối trước khi dựng cụm và nói cách sửa;
@@ -177,7 +183,10 @@ Làm lại từ đầu thì xoá cả hai: `docker rm -f tp-pilot-gia-lap` và t
 
 **Thư mục trạng thái** mặc định là `.pilot-gia-lap/` ở gốc kho và nằm trong `.gitignore`. Quyền 0700 chỉ có trên POSIX:
 trên Windows, Node bỏ qua bit quyền và thư mục thừa hưởng ACL của thư mục cha — nên để kho, hay `--thu-muc`, dưới hồ sơ
-người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. `--thu-muc` trỏ vào
+người dùng, không dưới một thư mục mà người dùng khác trên máy đọc được. **[S1.255] Đo trên máy của lượt đi thử
+Windows:** kho nằm trên `D:\`, và gốc ổ ấy cho `Authenticated Users` quyền sửa, `Users` quyền đọc; máy có hai tài khoản bật —
+thư mục trạng thái thừa hưởng đúng ACL ấy. Công cụ nay in một câu cảnh báo lúc dựng cụm khi thư mục trạng thái nằm ngoài
+hồ sơ người dùng (khoản 328 — theo đường dẫn, không đọc ACL). `--thu-muc` trỏ vào
 trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngoài kho thì chỗ nào cũng được. Nó chứa:
 - `cum.json`: bí mật cụm;
 - `trang-thai.json`: bí mật TOTP của người mua giả lập và token lời mời, GỘP qua các lượt chạy (lượt mới nhất trước) —
@@ -188,7 +197,10 @@ trong kho thì phải nằm dưới một thư mục tên `.pilot-gia-lap`; ngo�
 - `log/`: log bốn tiến trình.
 
 **Một thư mục trạng thái đi với MỘT CSDL.** `api` từ chối khởi động khi vòng khoá lệch dấu kiểm đã ghi (khoản 165), và
-công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới.
+công cụ tự chặn trường hợp ấy trước khi sinh bí mật mới. **[S1.254]** Và hai lượt chạy ĐỒNG THỜI không được dùng chung một
+máy chủ Postgres, dù mỗi lượt một CSDL: hai vai đăng nhập `app_api_login`/`app_unseal_login` là của cả máy chủ, lượt sau đặt
+lại mật khẩu của chúng, và `api` của lượt trước mất kết nối với lỗi `28P01` (đo ở diễn tập ngày 2026-10-01 — lượt chế độ chậm
+hỏng giữa chừng vì thế). Mỗi lượt một container, như khối lệnh trên.
 
 **Trình diễn trên điện thoại thật cần HTTPS.** Cookie khách mang cờ `Secure` (ADR-044), nên cụm này chỉ nghe trên
 127.0.0.1. Khi trình diễn, mở `/nop-thau` trên máy người trình diễn với khung hẹp; điện thoại thật là việc của một cụm có
@@ -206,11 +218,19 @@ bấm **Đọc**. Không màn nào dưới đây cần gõ SQL.
 | 2–7 | `/nop-thau` (khung hẹp) | `lien-ket` lấy link SX-04 → **Mở lời mời** → **Gửi mã** → `otp <số>` → **Xác minh** → nhập đơn giá → **Niêm phong và nộp** | Giá mã hoá ngay trong trình duyệt; biên nhận ký số hiện ra với `kid` và `ciphertext_sha256` |
 | 7–9 | `/mo-thau` | `dang-nhap hung.nv@…` → vào bằng mã TOTP → nạp gói SX-04 | *"Số báo giá đang bị giấu"* — kể cả trưởng phòng cũng không thấy **số** báo giá trước khi đóng |
 | 9–13 | `/mo-thau` bước 3–4 | Gói XD-03: TRƯỚC TIÊN người xin mở thầu bấm **Phê duyệt** ở bước 3 ⇒ bị chặn; rồi Phó Tổng Giám đốc bấm **Phê duyệt** — chữ ký thứ hai; người xin mở bấm **Điều phối giải mã**; bước 4 **Đọc bảng so sánh** | Lần tự duyệt bị cổng quyền chặn (403). Worker mở phong bì; bảng so sánh khớp tới từng đồng |
-| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: TRƯỚC TIÊN người đề xuất bấm **Phê duyệt** ở bước 7 ⇒ bị chặn; rồi Tổng Giám đốc bấm **Phê duyệt**; bước 8 **Tải bộ bằng chứng**; chạy `pnpm bang-chung kiem --bo <thư mục>` | Lần tự duyệt bị cổng quyền chặn (403). Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
+| 13–17 | `/mo-thau` bước 7–8 | Gói XD-04: TRƯỚC TIÊN người đề xuất bấm ~~**Phê duyệt** ở bước 7 ⇒ bị chặn~~ **[S1.255] Đọc đề xuất** rồi **Phê duyệt** ở bước 7 ⇒ bị chặn (từ khoản 321, lần bấm **Phê duyệt** đầu khi chưa đọc chỉ HIỆN đề xuất — chưa tới cổng quyền); rồi Tổng Giám đốc bấm ~~**Phê duyệt**~~ **[S1.255] Đọc đề xuất** rồi **Phê duyệt**; bước 8 **Tải bộ bằng chứng**; chạy `pnpm bang-chung kiem --bo <thư mục>` | Lần tự duyệt bị cổng quyền chặn (403). Bộ bằng chứng kiểm được **không cần CSDL**, tức kiểm toán viên tự kiểm |
 | 17–20 | Hỏi khách | Ba câu nặng nhất của `TIEN-DE-CHUA-DO.md`: B4 → A1 → B1 | Chuyển sang bậc 1–2 của mục 7 |
 
 Lần tự duyệt phải đi TRƯỚC lần duyệt thật: sau khi đề xuất đã duyệt, trang `/mo-thau` chặn nút **Phê duyệt** ngay trên trình
 duyệt, và lần thử không bao giờ tới sản phẩm.
+
+**[S1.254] Ba điều đo ở lượt diễn tập ngày 2026-10-01:**
+- Link mời mở được tới lần xác minh OTP ĐẦU TIÊN rồi bị tiêu thụ ([H5]); `lien-ket` vẫn liệt kê nó vì công cụ không biết lần ấy.
+  Đừng diễn thử bằng link sẽ dùng khi gặp khách; lỡ dùng thì nộp tiếp trên cùng trình duyệt, hay bấm «Gửi lại link» ở `/tao-thau`.
+- Mỗi người mua chỉ nhận 5 link đăng nhập trong 15 phút; quá trần, `dang-nhap` đợi 20 giây rồi báo (nay nói rõ trần ấy). Diễn
+  thử trước buổi gặp thì giữ phiên — phiên sống 8 giờ — thay vì xin link mới cho mỗi màn.
+- Bước 7 của `/mo-thau`: lần bấm **Phê duyệt** đầu tiên hiện đề xuất (nhà cung cấp, chi phí hiệu dụng, lý do), lần thứ hai mới
+  ký — hay bấm **Đọc đề xuất** trước. Người đề xuất chọn báo giá bằng nút **Chọn** ở bảng xếp hạng (bước 5).
 
 ## 6. Kết quả đo — lượt chạy ngày 2026-09-26
 
@@ -258,6 +278,19 @@ bản §S1.163 mục 9) sửa công cụ, rồi lượt nhanh chạy lại trên
    - thư mục trạng thái mới trên một CSDL cũ làm `api` chết lúc khởi động.
 4. **Lượt soi đối kháng năm lăng kính** (an ninh, đúng đắn, xanh giả, cổng CI, tài liệu) tìm thêm những chỗ công cụ nói
    nhiều hơn nó đo, hay hở ra ngoài phạm vi DEV — biên bản §S1.163 mục 9 kê từng điểm và cách sửa.
+
+## 6b. **[S1.254]** Lượt diễn tập ngày 2026-10-01 — trên `master` `fc0dcc75`, rồi trên mã đã sửa
+
+| Phép đo | Kết quả |
+|---|---|
+| Chế độ nhanh trên `fc0dcc75` | **10/10**, cô lập 2/2, chặn đúng 16/16, vào sổ 15/16, biên nhận 35/35, bộ bằng chứng 5/5 — khớp lượt S1.168 |
+| Kịch bản trình diễn §5 trên Chromium | đi hết: nộp ở 375px, số báo giá bị giấu, hai chữ ký mở thầu, bảng so sánh, duyệt trao thầu, bộ bằng chứng kiểm độc lập `ok=true` |
+| Trọn câu §11 trên Chromium (gói mới, ba nhà cung cấp mời qua thư, nộp ở 375px) | đi hết **trừ một bước**: đề xuất trao thầu đòi id phiên bản mà không bảng nào in — khoản 320 |
+| Phát hiện | 320 (id phiên bản), 321 (người duyệt ký lên khối trống), 322 (ô đơn giá bị cắt ở 320–414px), 323 (403 thô), 324 (công cụ trình diễn) |
+| Chế độ chậm SX-06 | lượt đầu hỏng với `28P01` vì chung máy chủ Postgres với cụm trình diễn (khoản 324 ⑶); chạy lại trên máy chủ riêng: **1/1**, 62 phút, đúng một hàng `BID_DEADLINE_DENIED` |
+| Sau khi sửa | chế độ nhanh 10/10; XD-03 đi từ mở thầu tới trao thầu CHỈ bằng chuột; ô đơn giá 252–346px ở 320–414px, không tràn ngang |
+
+Chi tiết: biên bản §S1.254.
 
 ## 7. Thang bậc tới pilot thật — trả lời thẳng cho "không ai nhận pilot"
 

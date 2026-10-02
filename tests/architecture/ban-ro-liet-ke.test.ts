@@ -31,6 +31,8 @@ const TEP_TS: Readonly<Record<string, string>> = {
   "packages/danh-gia/src/luot-danh-gia.ts": "ĐỌC — lượt chấm của MỘT gói (`docBaoGia`), cổng `evaluation.perform`",
   "packages/danh-gia/src/doc-bang-xep-hang.ts": "ĐỌC — bảng xếp hạng của MỘT gói, cổng `bid.view`",
   "packages/du-lieu-nen/src/anh-xa.ts": "TỒN TẠI — chỉ hỏi gói đã có hàng bản rõ chưa (L13), không đọc `payload`",
+  // [S1.256 / S4.5b] Mốc mở giá của gói X — đúng định nghĩa `moc_goi` của `quan_sat_gia`; giá đi qua `quan_sat_gia` (dưới).
+  "packages/du-lieu-nen/src/benchmark-goi.ts": "MỐC — `min(unsealed_at)` của gói đang xét, không đọc `payload`",
 };
 
 /** Hàm SQL có thân chạm bảng bản rõ. */
@@ -83,15 +85,39 @@ describe("[INV-L5] bảng bản rõ — mọi chỗ chạm có tên", () => {
     const HAM = /\b(?:quan_sat_gia|gia_da_lo)\s*\(/u;
     const tep = [...new Set(moiCauSql().filter((c) => HAM.test(c.sql)).map((c) => c.tep))].sort();
     expect(tep, "tệp mới gọi hàm lịch sử giá: đi qua `docLichSuGia`, hay thêm tệp vào đây kèm cổng và hàng sổ của nó").toEqual([
+      // [S1.256 / S4.5b] Benchmark của MỘT gói — không cổng trong tệp: hai chỗ gọi có cổng, ghim ở ca ngay dưới.
+      "packages/du-lieu-nen/src/benchmark-goi.ts",
       "packages/du-lieu-nen/src/lich-su-gia.ts",
     ]);
   });
 
-  it("[INV-L5] `anh-xa.ts` chỉ hỏi SỰ TỒN TẠI — không câu nào của nó đọc `payload`", () => {
-    const cau = moiCauSql().filter((c) => c.tep === "packages/du-lieu-nen/src/anh-xa.ts" && BANG.test(c.sql));
-    expect(cau.length).toBeGreaterThan(0);
-    for (const c of cau) expect(c.sql, `${c.tep}:${String(c.dong)}`).not.toMatch(/\bpayload\b/u);
+  it("[INV-L6] [S1.256 / S4.5b] `tinhBenchmarkGoi` chỉ được dùng ở hai chỗ có cổng — lượt chấm (`evaluation.perform`, không trả con số) và `docBenchmark` (`bid.view`, hàng sổ); `ghiBenchmarkLuotCham` chỉ ở lượt chấm", () => {
+    // [lượt soi §S1.256 — GHI CHÚ-8] Quét theo KÝ HIỆU, không theo mẫu lời gọi: `import { tinhBenchmarkGoi as t }` hay
+    // `const f = tinhBenchmarkGoi` vượt được một mẫu `tinhBenchmarkGoi(` — nhưng không vượt được việc tên ấy xuất hiện trong tệp.
+    const goc = fileURLToPath(new URL("../../", import.meta.url));
+    const tepSanXuat = execFileSync("git", ["ls-files"], { cwd: goc, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
+      .split(/\r?\n/u)
+      .filter((t) => /^(packages|apps|tools)\/.*\/src\/.*\.[cm]?[jt]s$/u.test(t) && !t.includes(".test."));
+    const nhac = (ten: string): string[] =>
+      tepSanXuat.filter((t) => new RegExp(`\\b${ten}\\b`, "u").test(readFileSync(`${goc}${t}`, "utf8"))).sort();
+    const NOI_DINH_NGHIA = ["packages/du-lieu-nen/src/benchmark-goi.ts", "packages/du-lieu-nen/src/index.ts"];
+    expect(nhac("tinhBenchmarkGoi")).toEqual(
+      [...NOI_DINH_NGHIA, "packages/danh-gia/src/doc-benchmark.ts", "packages/danh-gia/src/luot-danh-gia.ts"].sort(),
+    );
+    expect(nhac("ghiBenchmarkLuotCham")).toEqual([...NOI_DINH_NGHIA, "packages/danh-gia/src/luot-danh-gia.ts"].sort());
+    const docBm = readFileSync(`${goc}packages/danh-gia/src/doc-benchmark.ts`, "utf8");
+    expect(docBm).toMatch(/permission: PERMISSIONS\.BID_VIEW/u);
+    expect(docBm).toMatch(/action: "BENCHMARK_READ"/u);
   });
+
+  it.each(["packages/du-lieu-nen/src/anh-xa.ts", "packages/du-lieu-nen/src/benchmark-goi.ts"])(
+    "[INV-L5] `%s` không câu nào chạm bảng bản rõ mà đọc `payload`",
+    (tepTs) => {
+      const cau = moiCauSql().filter((c) => c.tep === tepTs && BANG.test(c.sql));
+      expect(cau.length).toBeGreaterThan(0);
+      for (const c of cau) expect(c.sql, `${c.tep}:${String(c.dong)}`).not.toMatch(/\bpayload\b/u);
+    },
+  );
 
   it("[INV-L5] hàm SQL có thân chạm `rfq_unsealed_bids` đúng bằng danh sách", () => {
     const ham = [...thanCuoiCung()].filter(([, t]) => BANG.test(t)).map(([ten]) => ten).sort();

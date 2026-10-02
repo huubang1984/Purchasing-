@@ -53,7 +53,8 @@
     <h2><span class="so">3</span> Gói thầu</h2>
     <dl class="tt" id="tt-rfq"></dl>
     <div class="bao luu" id="dem-nguoc" hidden></div>
-    <table id="bang-hang">
+    <!-- [S1.254 / khoản 322] `hang-gia`: bảng hạng mục của trang này xếp khối trên màn hẹp (`chung.css`). -->
+    <table id="bang-hang" class="hang-gia">
       <thead><tr><th>Hạng mục</th><th class="so">SL</th><th>ĐVT</th><th class="so">Đơn giá</th></tr></thead>
       <tbody></tbody>
     </table>
@@ -91,7 +92,10 @@
     <div class="bao loi" id="loi4" hidden></div>
   </section>
 
-  <footer class="chan">Lát cắt demo — giá được mã hoá trong trình duyệt, máy chủ không đọc được.</footer>
+  <!-- [S1.255 / khoản 325] Câu cũ "máy chủ không đọc được" là hàng "Kể cả chúng tôi cũng không xem được" của
+       docs/PRODUCT.md §5 nói bằng chữ khác (ADR-002: nhà vận hành vẫn giải mã được). Câu dưới dùng nguyên cột "Nói thay
+       bằng"; lớp canh: tests/architecture/cau-cam-tren-giao-dien.test.ts. -->
+  <footer class="chan">Lát cắt demo — giá được niêm phong ngay trong trình duyệt trước khi gửi đi. Mọi lần truy cập đều để lại dấu vết bất biến.</footer>
 </main>
 <script type="module" src="/nop-thau.js"></script>
 </body>

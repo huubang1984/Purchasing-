@@ -23065,6 +23065,7 @@ máy người vận hành; build image lần đầu (CI không build — `ADD --
 - `pnpm typecheck` sạch; ESLint trên mọi tệp TS đổi sạch.
 - Đơn vị trên các thư mục chạm tới (`tests/architecture`, `tests/deploy`, `apps/api/src/adapters`, `tools/kiem-truoc-apply`,
   `ban-khai.test.ts`): 55 tệp, 737 đạt, 1 bỏ qua; `qt3-cu-phap.int` + `qt3-ngu-phap.int` trên Postgres 16 cục bộ: 8/8.
+
 # §S1.253 — S4.5a: GÓI CHỤP PHIÊN BẢN CHÍNH SÁCH Ở CẠNH VÀO OPEN; LƯỢT CHẤM DÙNG ĐÚNG PHIÊN BẢN ẤY (L14, VẾ LƯỢT CHẤM) — ADR-141
 
 ## 1. Vòng này là gì
@@ -23200,3 +23201,539 @@ Một agent đọc trọn diff của bản đầu (`14b0337`, chỉ đọc). Kh�
   `lich-su-gia.int` 51/51, `hardening-suy-tu-tinh-chat.int` 38/38, `check-an-ninh.int` 4/4, `migrations.int` 128/128.
 - `pnpm evidence` toàn bộ T1–T3 trên `e283e09`: 226 tệp, 4369 khẳng định, 4359 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi
   trường), **0 đỏ**; **78/78 bất biến** (56 nghiệp vụ + 22 hàng rào); L14 đo bằng 11 khẳng định.
+
+# §S1.254 — DIỄN TẬP §11: `pilot:gia-lap` TRÊN `fc0dcc75`, KỊCH BẢN TRÌNH DIỄN VÀ TRỌN CÂU §11 TRÊN CHROMIUM — BƯỚC CHỌN NHÀ CUNG CẤP NAY ĐI ĐƯỢC BẰNG CHUỘT; KHOẢN 320–324 ĐÓNG
+
+**Rổ và mảnh (ADR-043 ⒞):** 320 và 322 chạm thẳng câu của `docs/PRODUCT.md` §11 (*người mua chọn nhà cung cấp*; *trên điện
+thoại của họ*) — rổ A nếu để mở; 321 cùng bước 7; 323, 324 theo luật là rổ B, chủ dự án chốt sửa luôn vì nằm trên kịch bản
+trình diễn. Không migration, không route mới, không ADR mới.
+
+## 1. Vòng này là gì
+Việc (a) của đề xuất ngày 2026-10-01: diễn tập kịch bản §11 bằng công cụ giả lập trên `master` hiện tại, để tìm chỗ chặn ở cụm
+cục bộ, rẻ hơn tìm trên AWS. Ba lớp đo: `pnpm pilot:gia-lap` (API thật, bốn tiến trình); kịch bản trình diễn §5 của kế hoạch
+pilot giả lập trên Chromium; và trọn câu §11 trên Chromium — một gói MỚI dựng bằng màn hình, không bằng API.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+*"làm a + b như đề xuất"*; sau khi nghe phát hiện: *"F1–F3 rổ A sửa ngay; F4, F5 sửa luôn"*; F3 *"màn hẹp: mỗi hạng mục thành
+một khối"*.
+
+## 3. Đo trước
+- **`pilot:gia-lap` chế độ nhanh trên `fc0dcc75`** (Postgres 16.13 cục bộ, Node 22.22): 10/10 kịch bản, cô lập 2/2 (đối chứng
+  2/2), 268 bước người dùng, 155 phép kiểm, chặn đúng 16/16, vào sổ 15/16, biên nhận 35/35, bộ bằng chứng 5/5, 28 giây — khớp
+  lượt S1.168; log bốn tiến trình sạch.
+- **Kịch bản trình diễn §5 trên Chromium** (Playwright 1.56, Chromium 1194): nộp SX-04 ở 375×812 (OTP qua SMS, biên nhận `kid=k1`,
+  `ciphertext_sha256`); trưởng phòng thấy *"Số báo giá đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"*; XD-03 người xin mở tự duyệt ⇒
+  403 với câu của S1.90, Phó TGĐ ký, điều phối, bảng so sánh ba dòng; XD-04 người đề xuất tự duyệt ⇒ **`khong co quyen`** nguyên văn
+  (323), TGĐ duyệt — **khối đề xuất rỗng lúc ký** (321); bộ bằng chứng tải về, `pnpm bang-chung kiem` ⇒ `ok=true hang=3 dat=3`.
+- **Trọn câu §11 trên Chromium, tổ chức SX:** nhân viên mua hàng tạo gói ba hạng mục (số lượng `20`, `262.5`, `12.3456`), ngân
+  sách, nộp duyệt; *Tạo nhà cung cấp* với vai BUYER ⇒ **`khong co quyen`** (323 — phân quyền đúng, câu thô); trưởng phòng duyệt, mở,
+  tạo ba nhà cung cấp và mời qua thư; ba nhà cung cấp mở đúng link `/i#…` trong hộp thư, OTP qua SMS, nộp ở 375px — tổng trên trang
+  khớp từng chữ số với phép tính độc lập bằng `BigInt` (`385.744.980,72`, `379.570.212,00`, `394.314.656,54` — dòng thứ ba sinh
+  chữ số thứ ba, `…,544` ⇒ `…,54`); đóng sớm có lý do, xin mở, giám đốc duyệt, điều phối; bảng so sánh khớp cả ba; chấm thầu;
+  **bảng xếp hạng không in id phiên bản mà bước 7 đòi** — quét UUID của trang chỉ ra mã lượt chấm, `/ranking` có `bidVersionId`
+  (320); id lấy từ API thì đề xuất, duyệt, bộ bằng chứng `ok=true`.
+- **Ô đơn giá** (322), đo bằng `clientWidth`/`scrollWidth` trên trang: 40 / 57 / 63 / 79px ở 320 / 360 / 375 / 414px, mọi giá
+  từ 6 chữ số bị cắt; 768px đủ.
+- **Công cụ** (324): link SX-04 đã xác minh OTP rồi đóng trình duyệt ⇒ mở lại ở trình duyệt khác ra 422 *"magic link … đã
+  dùng"* mà `lien-ket` vẫn liệt kê; sáu lần `dang-nhap` cho một người trong 15 phút ⇒ lần thứ sáu *"hết 20000 ms mà hộp thư chưa
+  có link"*; lượt chế độ chậm đầu tiên hỏng sau 62 phút với `28P01` ở `api` — nó chạy trên CSDL thứ hai của CÙNG máy chủ Postgres
+  với cụm trình diễn, và lần dựng lại cụm ấy đặt lại mật khẩu hai vai đăng nhập.
+
+## 4. Thay đổi
+- `apps/web/trang/mo-thau.js` + `.html`: cột **Chọn** ở bảng xếp hạng (hàng có hạng), điền id vào ô bước 7; nhãn ô sửa; nút
+  **Đọc đề xuất**; Phê duyệt: lần đầu (hay khi đề xuất đổi từ lúc đọc) chỉ vẽ đề xuất, lần hai ký; khối đề xuất gọi tên nhà cung
+  cấp, chi phí hiệu dụng, hạng từ hàng xếp hạng cùng `bidVersionId` và cùng `evaluationId`; `loiCua` đổi thân 403 hằng thành câu
+  đọc được.
+- `apps/web/trang/tao-thau.js`: cùng `loiCua`.
+- `apps/web/trang/nop-thau.js` + `.html`, `chung.css`: nhãn `data-nhan` cho SL, ĐVT, Đơn giá; bảng lớp `hang-gia`; luật dưới 480px.
+- `tools/pilot-gia-lap`: `lien-ket` in cách xử lý link đã dùng; `dang-nhap` nói trần 5 link/15 phút và cách dùng phiên còn hạn;
+  lời dặn XD-04 nói nút Đọc đề xuất.
+- Tài liệu: kế hoạch pilot giả lập §4 (hai lượt không chung một máy chủ Postgres), §5 (ba điều đo được), §6b (lượt này);
+  `docs/PRODUCT.md` (lời khai S1.113 sửa tại chỗ).
+- Test (`apps/web/src/phuc-vu.test.ts`): năm ca ở `/mo-thau`, một ở `/tao-thau`, một ở `/nop-thau`.
+- Sổ: mốc STATE, hàng 320–324; `Handoff.md` 318 → 323 khoản, 48 còn mở.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **321 đổi cách kích so với lúc chốt.** Chủ dự án chọn *"nạp gói thì vẽ đề xuất"*. `/me` không trả quyền, nên trang không biết
+  người dùng có `bid.view` không; tự đọc `/ranking` và `/award` lúc nạp gói làm người không giữ quyền ấy (vai BUYER) để lại hai hàng
+  PERMISSION_DENIED cho một lần xem họ không hề bấm — sổ từ chối thôi là chứng cứ của một lần thử. Cách đã làm giữ đúng mục đích
+  (không ai ký lên khối trống) mà không tự gọi gì: lần bấm Phê duyệt đầu hiện đề xuất, lần hai ký; đề xuất đổi giữa hai lần thì
+  phải đọc lại.
+- 320 không thêm nút ở bảng so sánh: đề xuất phải dựa trên lượt chấm MỚI NHẤT (khoản 231), và bảng so sánh là bảng lịch sử.
+- 322 dùng một lớp cho riêng bảng của `/nop-thau` vì bảng xếp hạng của `/mo-thau` mang cùng id `bang-hang`.
+- 323 chỉ đổi ĐÚNG thân hằng `khong co quyen`: 403 *"nguon khong duoc phep"* của `server.ts` là một lỗi khác, in nguyên văn.
+
+## 6. Đo
+- `phuc-vu.test.ts` 230/230.
+- Chế độ nhanh trên mã đã sửa (commit cục bộ `3fe7c457`): 10/10, cô lập 2/2.
+- Chromium, mã đã sửa: SX-04 ở 320/360/375/414px — ô đơn giá 252/292/307/346px, `185.000.000` hiện trọn, trang không tràn ngang;
+  768px vẫn là bảng 191px; nộp ở 375px ra biên nhận. XD-03 đi từ chữ ký mở thầu thứ hai tới trao thầu đã duyệt **chỉ bằng chuột**:
+  Chọn điền id, Phó phòng đề xuất; Tổng Giám đốc bấm Phê duyệt lần một — không ký, khối đề xuất hiện *"[GL] Công ty TNHH Bê tông
+  Phú Lộc Tiến · 2.444.646.875,00 · hạng 1"* và lý do — lần hai ký. XD-04: người đề xuất bấm Phê duyệt hai lần ⇒ *"Không duyệt
+  được: tài khoản đang đăng nhập không có quyền làm việc này…"*. Nạp gói không gọi `/ranking` hay `/award`.
+- Chế độ chậm SX-06, chạy lại trên một máy chủ Postgres RIÊNG (cổng 55434), mã `a6855822` cộng các thay đổi của lô (b) chưa commit
+  lúc bắt đầu — không tệp nào trên đường của SX-06: **1/1 ĐẠT**, 62 phút 6 giây — nộp sau hạn ⇒ 422 và đúng một hàng
+  `BID_DEADLINE_DENIED`; đóng đúng hạn; trao thầu đã duyệt; biên nhận 2/2; bộ bằng chứng 1/1; log `api` không có `28P01`.
+
+## 7. Đột biến
+Sáu đột biến trên mã đã sửa, mỗi cái đỏ đúng ca của nó: gỡ nút Chọn; gỡ chốt đọc-trước-khi-ký (hai ca); gỡ chốt lượt chấm;
+gỡ ánh xạ 403 ở `/mo-thau`; gỡ ánh xạ 403 ở `/tao-thau`; gỡ nhãn ô đơn giá.
+
+## 8. Giới hạn, nói ra
+- Bố cục màn hẹp đo trên Chromium, không trên Safari iOS hay máy Android thật.
+- `lien-ket` vẫn KHÔNG biết link nào đã tiêu thụ — nó chỉ nói cách xử lý.
+- 321 dựa trên id đề xuất: hai lần bấm trên CÙNG một đề xuất là ký; trang không đo người duyệt có ĐỌC khối ấy không.
+- Lượt §11 trên Chromium chạy trong một tổ chức giả lập, hai chế độ nhanh; không có người dùng thật nào.
+
+# §S1.255 — BẬC 1 CỦA THANG PILOT, PHẦN TRÊN MÁY: KHỐI LỆNH CHẠY NGUYÊN VĂN TRÊN WINDOWS THẬT; CHÂN TRANG `/nop-thau` VÀ CỔNG CÂU CẤM; PHẦN CÒN LẠI CỦA KHOẢN 321 VÀ 323; CẢNH BÁO ACL TRÊN WINDOWS — KHOẢN 325–328 ĐÓNG
+
+**Rổ và mảnh (ADR-043):** bốn khoản sinh và đóng trong vòng — để mở thì 325, 327 là rổ A ⒜ (một bước của kịch bản trình diễn
+chạy ra thứ người dùng thấy là sai: một lời khai sai trên màn, một nút mời hành động sẽ bị từ chối), 326 và 328 rổ B. Khoản 328
+lúc đầu chỉ ghi sổ; chủ dự án chọn sửa ngay (2026-10-02) — mục 11. Không migration, không ADR, không route; không mảnh nào của `docs/PRODUCT.md` §11 đổi. Thang năm bậc vẫn là đề xuất (ADR-101).
+
+## 1. Vòng này là gì — và vì sao nó dựng hai lần
+Chủ dự án, 2026-10-01: *"Chạy bậc 1 của thang pilot"*. Bậc 1 (`docs/BUOI-BAC-1.md`) là sáu mươi phút với một trưởng phòng mua
+hàng thật — việc ấy không ai làm thay được. Vòng làm phần làm được trên máy, tức mục 1 của tệp ấy: chạy khối PowerShell của kế
+hoạch pilot giả lập §4 trên Windows PowerShell 5.1 và Docker Desktop (kế hoạch ghi *"chưa đo trên Windows thật"*), rồi đi thử kịch
+bản §5 trên trình duyệt, bấm đủ các nút. Lượt đi thử thấy ba lỗi (mục 3). Chủ dự án chọn *"Làm A"*: sửa ba lỗi và ghi số đo Windows.
+
+Bản đầu dựng trên `4d801263` và sửa cả ba. Lượt soi đối kháng của bản ấy (mục 8) thấy `origin/master` đã tiến lên `6b73a4ad`:
+S1.254 (PR #228, diễn tập §11, merge 23:23 cùng ngày) sửa song song hai trong ba lỗi — khoản 321 (người duyệt ký lên khối trống)
+và 323 (403 thô, ở `/login` và `/tao-thau`) — cùng khoản 320 (nút *Chọn* ở bảng xếp hạng), trong đúng các tệp ấy và với thiết kế
+khác. Chủ dự án đã chốt thiết kế của S1.254 ở phiên kia, nên vòng này KHÔNG ghi đè nó: bản đầu giữ thành một commit cục bộ không
+đẩy (`697986c0`), và vòng dựng lại trên `6b73a4ad`, chỉ mang theo phần đo được là còn thiếu trên master mới.
+
+## 2. Đo trên Windows thật
+Máy: Windows 11 Pro 10.0.26200, Windows PowerShell 5.1.26100.9444, Docker Desktop (server 29.7.2), Node 24.18.0, pnpm 11.24.0.
+Worktree mới từ `origin/master`. Khối PowerShell trích NGUYÊN VĂN từ tệp kế hoạch (giữa hai rào `powershell`), bọc thêm
+`Set-Location` và một dòng in thời lượng, ghi thành `.ps1` UTF-8 có BOM, chạy bằng `powershell.exe -NoProfile -File`. Không dán
+vào cửa sổ console: chỗ khác duy nhất có thể lộ ra là cách đọc câu tiếng Việt của `throw`, và câu ấy chỉ hiện khi Docker không chạy.
+
+| Tình huống | Mã | Kết quả | Từ lệnh tới cụm sẵn sàng |
+|---|---|---|---|
+| Chưa có container | `4d801263` | 10/10 ĐẠT, cô lập 2/2 (đối chứng 2/2); áp 100 migration; `pg_isready` qua ở vòng thứ hai | không bấm giờ chính xác — dưới hai phút |
+| Container đang chạy | `4d801263` | 10/10 ĐẠT, 2/2; 0 migration, dùng lại `cum.json` | 34 giây |
+| Container đã dừng (`docker stop`) | `4d801263` | 10/10 ĐẠT, 2/2 | 34 giây |
+| Container đang chạy | mã cuối của vòng | 10/10 ĐẠT, 2/2 | 31 giây |
+| Docker không chạy | — | KHÔNG đo — phải tắt Docker Desktop | — |
+
+- Ba báo cáo trên `4d801263`: 268 bước người dùng · 155 phép kiểm · 16/16 lần thử sai bị chặn · 15/16 vào sổ · 35/35 biên nhận ·
+  5/5 bộ bằng chứng — trùng từng con với lượt Linux của §S1.168.
+- Dừng cụm theo cây tiến trình (`taskkill /T /F` trên tiến trình PowerShell), đo hai lần: 0 cổng còn nghe, 0 tiến trình con.
+- Ba lệnh hỗ trợ chạy từ một tiến trình PowerShell mới, không có `TRUSTPROCURE_SEED_DATABASE_URL`: `lien-ket` đạt; `otp` đạt
+  (0,9 giây); `dang-nhap` đạt với email đầy đủ, còn `dang-nhap hung.nv` ⇒ `PilotError` liệt kê mọi email của các lượt, thoát 1.
+- `pnpm bang-chung kiem --bo` trên bộ SX-01 và XD-01 do công cụ xuất: `ok=true hang=4 dat=4 lech=0`, 0,8 giây mỗi bộ, không CSDL.
+- ACL: kho nằm trên `D:\`; `icacls` cho thư mục kho và gốc ổ: `Authenticated Users:(M)`, `Users:(RX)` thừa hưởng; máy có hai tài
+  khoản bật. Công cụ tạo thư mục trạng thái `mode: 0o700`, Windows bỏ qua, và không cảnh báo — khoản 328.
+
+## 3. Đi thử kịch bản §5 trên trình duyệt (trình duyệt dựng sẵn của ứng dụng, Chromium)
+Trên `4d801263`:
+- **2–7, `/nop-thau` khung 375×812:** mở lời mời SX-04 → *Gửi mã* (SMS) → `otp` → *Xác minh* → ba đơn giá → *Niêm phong và nộp* ⇒
+  biên nhận `version=1`, `kid=k1`, X25519, `ciphertext_sha256`; 41 giây máy bấm. Chân trang ghi *"máy chủ không đọc được"* — ⑴.
+- **7–9, `/mo-thau`, Hùng:** SX-04 *"Số báo giá đang bị giấu (STRICT_BLIND_BEFORE_CLOSE)"* — kể cả sau khi vừa nộp thêm một báo giá.
+- **9–13, XD-03:** Nam tự duyệt ⇒ câu hai vế của khoản 191; Tú duyệt ⇒ `APPROVED 2/2`; Nam điều phối ⇒ worker giải mã; bảng so
+  sánh 3 đọc được, 0 không đọc được, không lệch tiền tệ. Câu báo sau chữ ký thứ hai vẫn nói *"Thiếu người thứ hai thì điều phối sẽ
+  bị từ chối"* dù đã đủ — chỗ nhỏ, không sửa.
+- **13–17, XD-04:** Lan bấm *Phê duyệt* ⇒ màn in đúng ba chữ `khong co quyen` — ⑵. Vinh bấm *Phê duyệt* khi bước 7 không hiện gì;
+  đề xuất hiện SAU khi ký, dưới dạng một UUID — ⑶. Bước 8 *Tải bộ bằng chứng* KHÔNG bấm (tải tệp xuống cần người dùng cho phép);
+  lệnh kiểm chạy ở mục 2.
+
+Trên bản đầu (đã sửa ⑶ theo cách riêng): Tổng Giám đốc đọc được đề xuất thì thấy cả nút *Rút đề xuất* cạnh *Phê duyệt* — khoản
+327. Trên master `6b73a4ad` lỗi ấy có y nguyên: nút hiện khi đề xuất PROPOSED chưa chữ ký, không xét người xem.
+
+Trên mã cuối của vòng (lượt giả lập thứ tư, gói XD-04 mới): chân trang `/nop-thau` mang câu mới. Lan bấm *Phê duyệt* lần đầu ⇒
+đề xuất hiện (nhà cung cấp, chi phí hiệu dụng, hạng) kèm câu *"Đề xuất sắp ký hiện ở dưới — … bấm Phê duyệt lần nữa để ký"*,
+nút *Rút đề xuất* hiện cho chính Lan; lần hai ⇒ *"Không duyệt được: tài khoản đang đăng nhập không có quyền làm việc này — …"*.
+Vinh *Đọc đề xuất* ⇒ đề xuất hiện, nút *Rút đề xuất* ẨN. Vinh không bấm *Phê duyệt*: XD-04 để nguyên cho chủ dự án đi thử.
+
+## 4. Thay đổi (trên `6b73a4ad`)
+- `apps/web/trang/nop-thau.html`: chân trang dùng nguyên cột *"Nói thay bằng"* của §5 (khoản 325).
+- `tests/architecture/cau-cam-tren-giao-dien.test.ts` (mới, 30 ca): đọc văn bản người dùng thấy ở `apps/web` theo `git ls-files`
+  — chữ HTML, `placeholder`/`title`/`aria-label`/`alt`/`value`, chuỗi JS/TS qua `ts.createSourceFile`, chuỗi nối `+` (kể cả trong
+  ngoặc, kể cả ngoặc lồng) thành một câu — với MỘT luật cho mỗi hàng của bảng §5; số luật khoá bằng số hàng, mỗi luật bắt chính
+  câu của hàng mình; mẫu dương, mẫu âm (câu thật của giao diện), đối chứng dương trên tệp thật và hai ca tự kiểm của bộ đọc.
+- Năm bản `loiCua` (`chinh-sach`, `nhom-hang`, `du-lieu`, `nop-thau`, `/lib/dang-nhap`) theo khuôn khoản 323: đổi ĐÚNG thân hằng
+  `khong co quyen`, mọi thân khác in nguyên văn; câu 403 chết của `du-lieu.js` thay bằng nhánh ấy (khoản 326).
+- `apps/web/trang/mo-thau.js`: `nguoiDangVao` (đặt ở `moSauDangNhap` từ `/me`); nút *Rút đề xuất* chỉ hiện khi `actedBy` của đề
+  xuất là người đang vào (khoản 327).
+- Kế hoạch §5 hàng 13–17 và hướng dẫn XD-04 của `tools/pilot-gia-lap/src/chay-kich-ban.ts`: người đề xuất bấm *Đọc đề xuất* rồi
+  *Phê duyệt* — từ khoản 321 lần bấm *Phê duyệt* đầu khi chưa đọc chỉ hiện đề xuất; lời khai *"bấm Phê duyệt ⇒ bị chặn"* thiu từ
+  S1.254, đo ở mục 3.
+- Test: khối bảy bản `loiCua` (15 ca) và một ca khoản 327 trong khối S1.254 của `apps/web/src/phuc-vu.test.ts`.
+- `tests/architecture/ma-chep-api-worker.test.ts`: hàng `BANG_TEN` cho `THAN_403` (`apps/api/src/dispatch.ts`, `apps/web/src/dang-nhap.ts`),
+  `RIENG` — thân phản hồi ở `api`, chuỗi để nhận ra ở trang. Lượt `pnpm test` đầu đỏ ba ca của cổng kiểm kê vì hằng mới chưa khai;
+  lý do của hàng nói ra phụ thuộc giá trị mà không test nào nối hai bên (test của `api` chỉ đo mã 403).
+- Tài liệu: kế hoạch §4 (số đo Windows, ACL); `docs/BUOI-BAC-1.md` §1 (số đo, bước kiểm `icacls`), §2 (`dang-nhap` cần email đầy
+  đủ), §3; `docs/STATE.md` mốc đầu, hàng 325–328, rổ B; lời khai đếm do `pnpm cap-so --dem` viết.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+- **Không ghi đè thiết kế của S1.254.** Bản đầu có một mô hình bước 7 khác (bắt buộc *Đọc đề xuất*, xoá đề xuất khi người khác vào
+  ở bước 1, bỏ phản hồi về muộn). Chủ dự án đã chốt cách của khoản 321 ở phiên kia; vòng này chỉ sửa chỗ đo được là sai TRÊN cách
+  ấy (nút rút).
+- **403 theo khuôn khoản 323, không theo bản đầu.** Bản đầu đổi MỌI 403, nên nuốt cả 403 `nguon khong duoc phep` của lớp chống
+  CSRF theo origin — lỗi cấu hình hay gặp nhất khi dựng thật — rồi chẩn đoán nhầm thành lỗi quyền (lượt soi, TRUNG-1).
+- **328** lúc đầu chỉ ghi khoản và thêm bước kiểm `icacls` vào `BUOI-BAC-1.md` §1 — mọi dữ liệu là giả lập. Chủ dự án chọn sửa
+  sau khi nghe báo cáo (mục 11).
+
+## 6. Đo
+- **Đỏ trước trên `6b73a4ad`** (chạy test mới trên mã master): cổng câu cấm đỏ đúng ca *"không văn bản nào…"*, tại chân trang;
+  khối `loiCua` đỏ 5/15 — đúng năm ca 403 của năm bản chưa sửa, hai bản khoản 323 xanh; ca khoản 327 đỏ (*"B (người duyệt) thấy
+  nút rút đề xuất của A"*).
+- Lượt chạy đầu của cổng (trên bản đầu) bắt một dương tính giả — *"hệ thống không thấy vòng nào đang mở"* (`nop-thau.js`, gói BAFO
+  lệch dữ liệu), câu về dữ liệu chứ không về năng lực — nên luật bỏ động từ *"thấy"* và câu ấy thành mẫu âm.
+- Sau sửa: `apps/web/src/phuc-vu.test.ts` + cổng + ba tệp test của `tools/pilot-gia-lap`: 327/327.
+
+## 7. Đột biến
+Trên mã cuối: mười một đột biến, mỗi cái áp đúng một chỗ, chạy TRỌN hai tệp test (276 ca) bằng `--reporter=json`, so tập đỏ với
+tập dự kiến, khôi phục rồi tự kiểm sha256. Bản gốc trước lượt: 0 đỏ; bản sau lượt: 0 đỏ.
+
+| # | Đột biến | Đỏ |
+|---|---|---|
+| M1 | Chân trang trả câu cũ | 1 — cổng câu cấm |
+| M2a–M2e | Bỏ nhánh 403 ở `chinh-sach`, `nhom-hang`, `du-lieu`, `nop-thau`, `/lib/dang-nhap` (mỗi bản một lượt) | 1 mỗi lượt — đúng ca 403 của bản ấy |
+| M3 | `chinh-sach.js` đổi MỌI 403 (bỏ phép so thân) | 1 — ca *403 thân khác in nguyên văn* của bản ấy |
+| M4 | Nút rút không so người đề xuất | 1 — ca khoản 327 |
+| M5 | `moSauDangNhap` không ghi người đang vào | 3 — ca khoản 327 và hai ca của khoản 232 |
+| M6 | Cổng: gốc chuỗi `+` không leo qua ngoặc (bản đầu) | 1 — ca tự kiểm chuỗi trong ngoặc |
+| M7 | Cổng: bỏ thuộc tính `value` | 1 — cùng ca tự kiểm |
+
+Bản đầu (trên `4d801263`, không đẩy) có mười lăm đột biến khác cho mô hình bước 7 riêng của nó; chúng không còn áp được.
+
+## 8. Lượt soi đối kháng (năm lăng kính, trên bản đầu)
+- **CAO-1** — master đã có S1.254 sửa song song: đúng; xử lý ở mục 1 (dựng lại, không ghi đè). Các số *"đỏ trước"* của bản đầu đo
+  trên master cũ — mục 6 là số đo lại trên `6b73a4ad`.
+- **TRUNG-1** — 403 nuốt `nguon khong duoc phep`: đúng; nay theo khuôn khoản 323, và test lớp đòi 403 thân khác in nguyên văn ở cả
+  bảy bản (đột biến M3).
+- **TRUNG-2** — `veTraoThau` lỗi xoá câu thành công của hành động vừa xong: lỗi của mô hình bản đầu; bản cuối không đổi `veTraoThau`
+  của master (nhánh lỗi chỉ ghi `loi7`).
+- **TRUNG-3** — cổng không nối chuỗi `+` trong ngoặc (`apps/web/src/dong-ho-may-chu.ts`): đúng; sửa, kèm ca tự kiểm (ngoặc lồng) và
+  đối chứng trên chính tệp ấy (đột biến M6).
+- **THẤP:** T6 — thêm `value` (M7); `+=` và thông điệp của `packages/sealed-envelope` ghi vào phạm vi của cổng; T7 — các hằng không
+  dấu khác của API ghi vào giới hạn của 326; T8 — *"phút 2–7"* sửa thành hàng của kịch bản; T9 — trích nguyên văn câu trên màn;
+  T10 — `hop-thu/` thêm vào 328 và `BUOI-BAC-1.md` §1. T1, T2, T3, T5 là lỗi của mô hình bản đầu — master có chốt cho T2, T3. T4
+  (*Huỷ trao thầu* tác động theo gói, không cần đề xuất đang hiện; ô lý do có thể còn chữ của người trước) chỉ đọc từ mã, chưa đo
+  trên trình duyệt — ghi ở mục 9, không mở khoản. T11 (hàng 191 không nhắc lớp còn sống tới 326) — tuỳ chọn, không làm.
+
+## 9. Giới hạn, nói ra
+- Không đo trên Windows: tình huống Docker không chạy; khối dán vào cửa sổ console thay vì chạy từ tệp; một cụm đã chạy quá hai
+  ngày. Bước 8 trên trình duyệt (tải hai tệp) không bấm.
+- Cổng câu cấm chỉ đọc `apps/web`; câu lỗi do API trả, thông điệp của `packages/sealed-envelope`, tài liệu, README, tin nhắn do bộ
+  gửi dựng và câu dựng qua nhiều lệnh `+=` nằm ngoài. Luật là biểu thức chính quy: bắt câu cấm và các biến thể đã gặp, không bắt
+  MỌI cách nói cùng ý.
+- `loiCua`: chỉ thân 403 hằng được đổi; `phien khong hop le`, `qua nhieu yeu cau`, `khong co duong nay`, `loi noi bo` và câu không
+  dấu của trigger vẫn đi ra nguyên văn.
+- Mô hình bước 7 của master (khoản 321) chưa xoá đề xuất đã đọc khi người khác vào ở bước 1 mà không đổi link, và một phản hồi
+  *Đọc đề xuất* về muộn sau khi đổi gói hay đổi link vẫn vẽ ra màn — đọc từ mã; lần ký vẫn đọc lại đề xuất mới nhất của gói đang
+  nạp ngay trước khi ký và so với đề xuất đã hiện (cũng đọc từ mã). Không sửa: thiết kế đã chốt ở S1.254.
+- T4 ở mục 8; `dang-nhap` phát một link mới mỗi lần gọi; câu *"Thiếu người thứ hai"* sau chữ ký thứ hai — không sửa.
+- Một lượt `pnpm test` trọn trên Windows (bản đầu) đỏ thêm ca *"HAI TIẾN TRÌNH THẬT"* của `tests/architecture/khoa-depcruise.test.ts`
+  (khoản 249): `EPERM` ở `mkdir` thư mục khoá ngay sau khi tiến trình kia xoá nó. Chạy riêng tệp ấy bốn lần: 4/4 xanh. Không thuộc
+  vòng này; ghi để không ai đọc nhầm.
+
+## 10. Số đo
+- `pnpm t0` (typecheck, lint, depcruise) xanh trên `7b757853`, 36 giây.
+- `pnpm test` xanh trên `ced7037b` (cùng mã, trước lần cấp số): 141 tệp, 2392 đạt, 14 bỏ qua, 0 đỏ, 114 giây. Lượt trước đó đỏ
+  ba ca của `tests/architecture/ma-chep-api-worker.test.ts` — hằng `THAN_403` mới ở `apps/web/src/dang-nhap.ts` chưa khai; mục 4.
+- `pnpm evidence` trên `7b757853`: vitest thoát mã 0, 4437 khẳng định, 78/78 bất biến (56/56 nghiệp vụ + 22/22 hàng rào), 1609
+  giây; `evidence/INV-matrix.md` không đổi.
+- Đột biến: 11/11 (mục 7). Lượt giả lập trên mã cuối: 10/10 ĐẠT, cô lập 2/2 (mục 2).
+- **[mục 11, khoản 328]** Trên `aff07f85`: `pnpm t0` xanh; `pnpm test` 141 tệp, 2394 đạt, 14 bỏ qua, 0 đỏ; `pnpm evidence` vitest
+  thoát mã 0, 4439 khẳng định, 78/78 bất biến, 1593 giây, `evidence/INV-matrix.md` không đổi. Đột biến K1–K4: 4/4.
+
+## 11. Khoản 328 — sửa theo lựa chọn của chủ dự án (2026-10-02)
+Sau báo cáo của vòng, chủ dự án: *"Bật auto-fix, sửa khoản 328"*.
+- **Cách sửa:** `canhBaoAclWindows(nenTang, thuMuc, hoSo)` trong `tools/pilot-gia-lap/src/cum.ts` trả một câu cảnh báo khi nền tảng
+  là Windows và thư mục trạng thái nằm NGOÀI hồ sơ người dùng (`win32.relative` ra `..`, `..\…` hay một đường dẫn tuyệt đối — ổ
+  khác); `chuanBiCum` (lệnh chạy và `cum`) gọi nó với `process.platform` và `homedir()` rồi in ra stderr. Các lệnh hỗ trợ
+  (`lien-ket`, `otp`, `dang-nhap`) không in, để buổi trình diễn không ồn.
+- **Điểm tôi tự chốt:** kiểm theo ĐƯỜNG DẪN thay vì đọc ACL (`Get-Acl` qua PowerShell): hồ sơ người dùng mặc định chỉ chủ đọc
+  được, nên điều kiện ấy đúng là điều kế hoạch §4 khuyên, kiểm được trên mọi máy chạy test, và không thêm một tiến trình con mỗi lần
+  dựng cụm. Cái giá, nói ra: thư mục ngoài hồ sơ mà ACL đã siết vẫn bị cảnh báo, và một hồ sơ bị nới ACL thì không. Cảnh báo,
+  không từ chối — mọi dữ liệu của cụm là giả lập. So bằng `path.win32` tường minh, nên test chạy được trên CI Linux.
+- **Đỏ trước:** hai ca mới trong `tools/pilot-gia-lap/src/phu-tro.test.ts` đỏ trên mã trước khi sửa (*"canhBaoAclWindows is not a
+  function"*; `chuanBiCum` chưa gọi).
+- **Đột biến** (trọn `phu-tro.test.ts`, 22 ca, cùng khuôn mục 7; bản gốc và bản sau: 0 đỏ): K1 luôn trả `null` ⇒ 1 đỏ; K2 bỏ vế
+  `..` (chỉ xét ổ khác) ⇒ 1 đỏ (bẫy `C:\Users\nguye2`, `..\rdp`); K3 `chuanBiCum` không gọi ⇒ 1 đỏ; K4 cảnh báo cả trên POSIX ⇒ 1 đỏ.
+- **Đo trên máy thật:** lượt giả lập thứ năm (kho trên `D:\`) in *"CẢNH BÁO (khoản 328): trên Windows, thư mục trạng thái
+  D:\Claude\TrustProcure\.claude\worktrees\bac-1-pilot\.pilot-gia-lap thừa hưởng ACL của thư mục cha — … nằm ngoài hồ sơ người dùng
+  C:\Users\nguye …"* trước khi sinh bí mật; lượt vẫn 10/10 ĐẠT, cô lập 2/2. Nhánh không cảnh báo (thư mục dưới hồ sơ) chỉ đo bằng
+  test — chạy thật với `--thu-muc` mới trên cùng CSDL thì công cụ từ chối đúng như khoản 165, và một CSDL mới thì vòng không dựng.
+
+# §S1.256 — S4.5b: BENCHMARK GIÁ `TRUNG_VI_THEO_GOI_V1` — NHÓM KHOÁ `benchmark`, HAI BẢNG KẾT QUẢ GHI MỘT LẦN CÙNG LƯỢT CHẤM, BỘ ĐỌC CÓ CỔNG (L7; VẾ BENCHMARK CỦA L14) — ADR-142
+
+## 1. Vòng này là gì
+
+PR thứ hai trong ba PR của S4.5 (spec S4 §9, ADR-141 ⑵): CSDL và lõi benchmark. Một migration (`103_benchmark_gia`), không route mới,
+màn `/chinh-sach` thêm nhóm khoá. **L7** vào sổ đăng ký (79 bất biến), **L14** nhận vế benchmark. Phần hiện ở `/mo-thau`, bộ xuất
+ADR-059 và vế benchmark của L6 ở S4.5c. Dựng trên `master` `6fedfc1` (#229 — S4.5a — đã merge).
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+
+Bốn điểm, cả bốn theo đề xuất, sau khi đọc phép đo trước:
+
+1. Bảng con lưu THAM CHIẾU quan sát — (báo giá, dòng) khoá ngoại tới `rfq_unsealed_bids` — cùng id hàng ánh xạ và cờ hồi tố; quy đổi, bí
+   danh, phiên bản hàng chuẩn tái lập as-of tại mốc đã lưu; `quan_sat_gia` không đổi. Lệch chữ spec §4.6 nói ra ở ADR.
+2. Nhãn thứ năm `KHONG_DO_DUOC` kèm lý do; một hàng cho MỌI dòng của MỌI báo giá.
+3. Đơn giá của chính dòng đọc LÚC TÍNH, lưu kèm cờ hồi tố; dải đọc tại mốc mở giá của gói.
+4. Chi tiết: luật nhãn và chiều; ngưỡng dương ≤ 4 chữ số lẻ, `0 < vừa < cao ≤ 10`; nhóm khoá trên `/chinh-sach` có mẫu và cảnh báo tĩnh
+   (*"tác động trên lịch sử thật"* ở S4.5c); bộ đọc `docBenchmark` có cổng và hàng sổ; đo hiệu năng có biên bản; `gieo:demo` khai mẫu.
+
+Chốt phương pháp của ADR-141 ⑧ (tứ phân vị nội suy tuyến tính, trung vị tập chẵn, số thập phân chính xác; chỉ cùng tiền tệ, loại giá 0, cả
+hai đếm; lưu nhãn + chiều, không tỉ lệ; phiên bản không nhóm benchmark ⇒ không hàng) áp nguyên.
+
+Lượt sau số đo hiệu năng và lượt soi đối kháng (2026-10-01), cả bốn theo đề xuất:
+
+5. S4.5c tính benchmark as-of MỘT lần khi gói vào `UNSEALED` và lưu; bảng so sánh đọc bản lưu (đổi ADR-141 ⑶; ADR-142 ⑼).
+6. Khoản 329 (màn `/chinh-sach` không gửi trọng số chấm) vào rổ A, sửa ở một PR riêng ngay.
+7. Khoản 330, 331 vào rổ B.
+8. Mở PR cho S4.5b và theo dõi CI.
+
+## 3. Đo trước
+
+1. `quan_sat_gia` trả `anh_xa_id`, không trả id quy đổi, bí danh, phiên bản hàng chuẩn; `uom_aliases_chung` không có cột id.
+2. Đơn giá quy đổi là `numeric` với số chữ số lẻ thay đổi (`thanh_tien / (so_luong · he_so)`).
+3. `withTenant` mở `BEGIN`; `rfq_evaluations.created_at` `DEFAULT now()` ngoài `GRANT INSERT` (`057`).
+4. `quan_sat_gia` không có tham số gói; đọc hết tổ chức 84–88 s (§S1.235).
+5. `Date` của JavaScript cắt micro giây. Khứ hồi `extract('epoch', t) · 10^6 → int8` rồi `'epoch' + n · 1 µs` trên Postgres 16 (TimeZone
+   `Asia/Ho_Chi_Minh`): 200.000 thời điểm ngẫu nhiên, 0 lệch.
+6. `CHECK` nhóm khoá bằng jsonpath dạng dương (`like_regex` trên chuỗi, rồi `.double()`), đo trên Postgres 16 ngoài kho: 2 mẫu hợp lệ vào,
+   15 mẫu hỏng (số mũ, `NaN`, số JSON, thiếu/thừa khoá, ngoài biên, năm chữ số lẻ, `00.10`, `03`, ngưỡng bằng nhau, phương pháp lạ, mảng,
+   xuống dòng) bị từ chối.
+7. Ba trong năm vai giữ `evaluation.perform` không giữ `bid.view` (khoản 220).
+8. **[ĐO TRONG VÒNG] Màn `/chinh-sach` không gửi trọng số chấm** — khoản 329 (mục 9).
+
+## 4. Thay đổi
+
+- **`103_benchmark_gia`**: cột `org_procurement_policies.benchmark` + `CHECK` jsonpath `strict` dạng dương + `GRANT INSERT (benchmark)`;
+  `price_benchmark_results`, `price_benchmark_inputs` (RLS + `FORCE`, policy tenant, policy khách đóng hẳn, `SELECT` mức bảng, `INSERT` theo
+  cột không `id`/`ghi_luc`); khoá ngoại `price_benchmark_results_cua_luot_cham_fk` `(org_id, evaluation_id, rfq_id, policy_id, ghi_luc) →
+  rfq_evaluations (org_id, id, rfq_id, policy_id, created_at)` và `price_benchmark_inputs_cua_luot_cham_fk` `(org_id, evaluation_id, ghi_luc)
+  → (org_id, id, created_at)`; ba `UNIQUE` đích mới (hai trên `rfq_evaluations`, `(org_id, id)` trên `rfq_item_mappings`); ràng buộc
+  `item_uom_conversions_he_so_huu_han` (vá lượt soi).
+- **Lõi thuần** `packages/du-lieu-nen/src/benchmark.ts` (đọc nhóm khoá, cửa sổ tháng, dải, nhãn) và `so-thap-phan.ts` (`m / 10^s`, phân vị
+  nội suy). **Tầng có trạng thái** `benchmark-goi.ts` (`tinhBenchmarkGoi`, `ghiBenchmarkLuotCham`).
+- **Lượt chấm** (`luot-danh-gia.ts`): `docChinhSach` đọc nhóm khoá của phiên bản ghim; tính và ghi sau hàng xếp hạng, trước cạnh `EVALUATING`;
+  sổ `RFQ_EVALUATED` thêm `soDongBenchmark`. **Bộ đọc** `doc-benchmark.ts` (`docBenchmark`, `TRANG_THAI_BENCHMARK_AS_OF`).
+- **Chính sách**: `createProcurementPolicy` nhận `benchmark` (hình dạng ngoài), `lietKePhienBanChinhSach` trả nó; `POST /policy` đọc trường
+  ấy; màn `/chinh-sach` có ô, mẫu, cảnh báo tĩnh, cột ở bảng phiên bản; `canhBaoBenchmark` + `BENCHMARK_MAC_DINH` ở `apps/web/src/chinh-sach.ts`.
+- **`gieo:demo`** khai `NHOM_BENCHMARK_MAU` ở phiên bản 1 (hai chế độ). **Kịch bản 41** gửi nhóm khoá qua `POST /policy` thật và khẳng định bộ
+  quét giá chạy sau một lần ghi benchmark thật.
+- **Sổ đăng ký và cổng**: `check-an-ninh` (17 dòng miễn), `migration-shape` + `BANG_TENANT_KHAI` (hai bảng), `rls-coverage` (quyền bảng, quyền
+  cột, hai policy khách), `ban-ro-liet-ke` (tệp chạm bảng bản rõ, tệp gọi `quan_sat_gia`, chỗ dùng hai hàm theo ký hiệu), `doc-chinh-sach-mot-ham`,
+  `barrel-exports`, `cong-quyen-route`, `bac-mac-dinh-dong-bo`; `so-khai-nhan` L7 + L14, `MOC_GHIM` 79.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Hai bảng chỉ-ghi-thêm BẰNG QUYỀN (khuôn `rfq_evaluation_lines`), không trigger chặn sửa — không hàm canh mới, không đổi sổ hardening.
+- Đầu vào lưu theo DẢI (lượt chấm, hàng chuẩn, tiền tệ), không theo từng báo giá — ở 20 dòng × 3 báo giá là 30.036 hàng thay vì ~90.000.
+- Ghi một lần bằng khoá ngoại tới `created_at`, không constraint trigger.
+- `docBenchmark` sống ở `danh-gia` để dùng lại `docBaoGia` (đúng tập báo giá lượt chấm xếp hạng), `du-lieu-nen` không biết lượt chấm.
+- Mốc mở giá đọc thẳng `min(unsealed_at)` (tệp vào sổ `ban-ro-liet-ke`, không đọc `payload`) và kiểm chéo với `ngay_quan_sat`.
+- Khứ hồi thời điểm bằng micro giây; cửa sổ tháng lịch UTC.
+- Ứng viên hàng chuẩn là MỌI hàng chuẩn từng được ánh xạ (tập bao, đúng do cấu tạo) — không chép luật *ánh xạ hiệu lực* ra TypeScript.
+
+## 6. Đo
+
+- **Đơn vị** (`packages/du-lieu-nen/src/benchmark.test.ts`, 30 ca `[INV-L7]`): số thập phân chính xác (đọc/viết, từ chối số mũ, `NaN`,
+  khoảng trắng), trung vị tập lẻ/chẵn, tứ phân vị khớp một bản cài PHÂN SỐ trên 500 dãy ngẫu nhiên (fast-check), cửa sổ tháng (kẹp cuối
+  tháng, năm nhuận, giữ micro giây), dải (trung vị theo gói, sàn gói VÀ sàn nhà cung cấp, loại/đếm, k và h), mười biên nhãn, đọc nhóm khoá.
+- **Tích hợp** (`packages/danh-gia/src/benchmark.int.test.ts`, 38 ca trên Postgres 16): dữ liệu thiết kế — năm gói thép (một do người tạo X
+  lập, một ánh xạ hồi tố, một giá 0, một mở 26 tháng trước), hai gói cát dưới sàn, một gói thép mở SAU mốc của X, một gói thép mở TRƯỚC X mà
+  ánh xạ SAU mốc của X; X ba dòng × ba báo giá ⇒ chín hàng đúng nhãn, chiều, lý do, số đếm, cờ hồi tố; đầu vào đúng bảy quan sát, không quan
+  sát nào của X hay của hai gói "sau mốc"; tái lập tại hai mốc đã lưu sau khi thêm gói mới và đổi ánh xạ, với đối chứng dương tại `now()`; L14
+  (phiên bản 2 ngưỡng rộng khai sau lúc mở; khoá ngoại `policy_id`, đối chứng dương cùng giao dịch); 21 ca `CHECK` nhóm khoá kể cả năm dạng
+  mảng, hai đối chứng biên; `he_so` `NaN`/`Infinity`; ghi ở giao dịch khác (hai bảng, tên ràng buộc); `app_api` không sửa/xoá/đặt `ghi_luc`;
+  khách và tổ chức khác 0 hàng với đối chứng dương; `docBenchmark` as-of trùng hàng đã ghi, cổng `bid.view` + hàng `PERMISSION_DENIED`, hàng
+  `BENCHMARK_READ` không giá, `CHUA_CO_KET_QUA`, `THIEU_KET_QUA`, `CHUA_CAU_HINH` ở hai nguồn.
+- **Web** (`apps/web/src/chinh-sach.test.ts`): bảy ca cảnh báo tĩnh, kể cả biên và giá trị không đọc được. **Đồng bộ mẫu**
+  (`bac-mac-dinh-dong-bo.test.ts`): mẫu của màn = mẫu của gói, và bộ đọc của lượt chấm nhận nó.
+- **Kịch bản 41 qua HTTP**: `POST /policy` mang nhóm khoá; bộ quét giá chung chạy SAU khi lượt chấm đã ghi hàng benchmark — tập bảng mang giá
+  vẫn đúng `rfq_evaluation_lines`, `rfq_unsealed_bids`.
+- **Hiệu năng** (tệp thăm dò tạm, không commit — `gieo.sql` của `tools/do-lich-su-gia` ở 5.000 gói × 20 dòng × 3 nhà cung cấp, 200 hàng chuẩn,
+  1.500 quan sát mỗi hàng chuẩn; gói X mới, mỗi dòng một hàng chuẩn; đo dưới `app_api` qua `withTenant`):
+
+  | Dòng của X | `docBenchmark` as-of (3 lần) | Lượt chấm có benchmark | Lượt chấm không benchmark | Đọc hàng đã ghi | Hàng đầu vào |
+  |---|---|---|---|---|---|
+  | 1 | 0,88 / 0,93 / 0,90 s | 1,19 s | 18 ms | 12–15 ms | 1.500 |
+  | 5 | 4,61 / 4,54 / 4,60 s | 5,40 s | 17 ms | 10–12 ms | 7.506 |
+  | 20 | 18,5 / 19,1 / 18,1 s | 21,7 s | 14 ms | 10–23 ms | 30.036 |
+
+  Ở 50 gói (9 quan sát mỗi hàng chuẩn): 20 dòng — as-of ~0,8 s, lượt chấm 0,87 s. Chi phí tuyến tính theo số hàng chuẩn × số quan sát: hai lần
+  gọi `quan_sat_gia` mỗi hàng chuẩn (~0,45 s mỗi lần ở 1.500 quan sát, khớp §S1.235), cộng chi phí cố định ~20 ms mỗi lần gọi. Mỗi câu dưới
+  `statement_timeout` 15 s; một lượt chấm ~66 hàng chuẩn ở quy mô này vượt 60 s — trần nhàn rỗi mặc định của ALB. Lượt soi đếm thêm: ứng viên
+  gồm cả hàng chuẩn của ánh xạ đã bị thay, mỗi cái một lần đọc nữa.
+- **Ca lật, kê tên.** `anh-xa.int` `[INV-L1]` — `TRUNCATE rfq_item_mappings` trần nay dừng ở phép kiểm khoá ngoại (hai bảng benchmark trỏ tới
+  nó) TRƯỚC chốt chỉ-ghi-thêm; bảng vẫn không bị xoá trắng, ca đổi sang `TRUNCATE … CASCADE` để đo đúng chốt (đo ở lượt `pnpm evidence` trên
+  `99ba914`: 1 đỏ / 4469). `luot-danh-gia.int` và kịch bản 41: không ca nào lật — phiên bản chính sách của `luot-danh-gia.int` không có nhóm
+  `benchmark`, kịch bản 41 nay có và vẫn xanh.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy `benchmark.test.ts` và/hoặc `benchmark.int.test.ts`, khôi phục tệp từ bản sao trong bộ nhớ. 27 đột biến, 27 đỏ
+(M12 sống ở lượt đầu — xem dưới).
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | lõi không loại quan sát của chính gói X | ĐỎ — đơn vị 1 |
+| M2 | cửa sổ nhận ngày quan sát bằng mốc | ĐỎ — đơn vị 1 |
+| M3 | đầu cửa sổ mở (loại ngày bằng đầu cửa sổ) | ĐỎ — đơn vị 1 |
+| M4 | không loại khác tiền tệ | ĐỎ — đơn vị 1 |
+| M5 | không loại đơn giá 0 | ĐỎ — đơn vị 1, tích hợp 2 |
+| M6 | sàn HOẶC thay VÀ | ĐỎ — đơn vị 1 |
+| M7 | trung vị trên mọi quan sát thay trung vị các trung vị gói | ĐỎ — đơn vị 1 (dữ liệu tích hợp cho cùng trung vị theo hai cách) |
+| M8 | biên `BINH_THUONG` mở | ĐỎ — đơn vị 2 |
+| M9 | chiều đảo | ĐỎ — đơn vị 7, tích hợp 1 |
+| M10 | phân vị không nội suy | ĐỎ — đơn vị 3 (kể cả phép so với bản cài phân số) |
+| M11 | tháng không kẹp ngày cuối | ĐỎ — đơn vị 1 |
+| M12 | dải đọc tại mốc đọc thay mốc mở giá | lượt đầu **XANH** — lõi tự cắt ngày quan sát ≥ mốc, nên khác biệt chỉ lộ khi một HÀNG NỀN của gói lịch sử ghi sau mốc của X. Thêm gói thép mở trước X mà ánh xạ sau mốc của X ⇒ ĐỎ — tích hợp 2 |
+| M13 | giá của X đọc tại mốc mở giá thay mốc đọc | ĐỎ — tích hợp 4 |
+| M14 | lý do của dòng không đo được luôn `CHUA_ANH_XA` | ĐỎ — tích hợp 1 |
+| M15 | lượt chấm không ghi benchmark | ĐỎ — tích hợp 6 |
+| M16 | lượt chấm đọc nhóm benchmark của phiên bản MỚI NHẤT | ĐỎ — tích hợp 4 |
+| M17 | không ghi bảng đầu vào | ĐỎ — tích hợp 3 |
+| M18 | `docBenchmark` đòi `evaluation.perform` thay `bid.view` | ĐỎ — tích hợp 1 |
+| M19 | `docBenchmark` ghi sổ sai mã hành động | ĐỎ — tích hợp 1 |
+| M20 | cấp `INSERT (ghi_luc)` cho `app_api` | ĐỎ — tích hợp 1 |
+| M21 | `CHECK` bỏ vế `vừa < cao` | ĐỎ — tích hợp 2 |
+| M22 | `CHECK` nhận khoá thừa | ĐỎ — tích hợp 1 |
+| M23 | cấp `UPDATE, DELETE` trên bảng đầu vào | ĐỎ — tích hợp 1 |
+| M24 | đếm hồi tố mọi quan sát | ĐỎ — đơn vị 1, tích hợp 1 |
+| M25 | `CHECK` vế hình dạng về jsonpath `lax` | ĐỎ — tích hợp 1 |
+| M26 | bỏ ràng buộc `he_so` hữu hạn | ĐỎ — tích hợp 2 |
+| M27 | `docBenchmark` ném thay `THIEU_KET_QUA` | ĐỎ — tích hợp 1 |
+
+## 8. Lượt soi đối kháng
+
+Một agent đọc trọn thay đổi và ĐO trên Postgres 16 bằng tệp thăm dò tạm (đã xoá). Không CAO. Rò giá theo vai, khứ hồi micro giây (300.000
+mẫu), tái lập qua thu hồi lời mời và qua BAFO, số học lõi (10.000 dãy so với bản cài phân số), quyền cột của L14 — đo và sạch.
+
+- **TRUNG-1 — `CHECK` nhóm khoá ở jsonpath `lax` lọt giá trị dạng MẢNG** (`["12", "99"]` qua cả biên ≤ 60): đường API không tới được (hai tầng
+  từ chối giá trị không phải chuỗi), SQL thô dưới `app_api` tới được; gói ghim phiên bản ấy không bao giờ chấm được. **Đóng**: hai jsonpath
+  chạy `strict` (đo trên Postgres 16: hai mẫu hợp lệ vào, 11 mẫu hỏng gồm năm dạng mảng bị từ chối); sáu ca mới; đột biến M25.
+- **TRUNG-2 — `rfq_evaluations` không cổng trạng thái**: một giao dịch thô dưới `app_api` tạo lượt chấm mới ở `EVALUATING`, ở `CANCELLED`, kèm
+  nhãn tuỳ ý; bộ đọc lấy lượt mới nhất. Có từ S2.3 (bảng xếp hạng giả được y hệt). **Khoản 330** (rổ B). Phần của vòng này **đóng**:
+  lượt thô không hàng benchmark từng làm `docBenchmark` ném mãi ⇒ nay `THIEU_KET_QUA`; câu giới hạn của ADR-142 sửa.
+- **TRUNG-3 — chi phí lượt chấm** (2k + số hàng chuẩn đã bị thay lần quét toàn lịch sử hàng chuẩn, trong giao dịch giữ khoá gói): số đo ở mục 6;
+  quyết định của chủ dự án: tính một lần, lưu lại ở S4.5c (mục 2.5).
+- **THẤP–TRUNG-4 — `cancelled_at` do người gọi đặt** lùi mốc huỷ của gói lịch sử và đổi kết quả tính lại. **Khoản 331** (rổ B, cùng lớp
+  khoản 319).
+- **THẤP-5 — `he_so 'NaN'` qua `CHECK > 0` của `083`**, một quy đổi `NaN` trong dải làm lượt chấm ném mãi. **Đóng**: ràng buộc
+  `item_uom_conversions_he_so_huu_han`; đột biến M26.
+- **GHI CHÚ-6** — đang `BAFO_OPEN`/`BAFO_CLOSED`, `docBenchmark` trả nhãn vòng một (không giá vòng hai): chốt trước route của S4.5c (ADR-142).
+- **GHI CHÚ-7** — cửa sổ tháng theo lịch UTC (0/20.000 lệch với Postgres UTC; 1.110/20.000 lệch một ngày với giờ Việt Nam): ghi ở ADR-142,
+  `DAC-TA.md` của S4.5c phải nói UTC.
+- **GHI CHÚ-8** — cổng chỗ gọi bị vượt bằng import đổi tên. **Đóng**: ghim theo mọi tệp nhắc tên hàm, cả `ghiBenchmarkLuotCham`.
+
+## 9. Giới hạn, nói ra
+
+- Lệch chữ spec §4.6: bảng con mang id ánh xạ, không mang id quy đổi, bí danh, phiên bản hàng chuẩn (tái lập as-of).
+- CSDL không kiểm đủ hàng hay đúng nhãn; khoản 330. Dòng chưa ánh xạ mang `CHUA_ANH_XA` kể cả khi hỏng ở trục khác.
+- Cuộc đua as-of chung của L1; khoản 331 (`cancelled_at`); gói huỷ sau mốc của X vẫn vào dải.
+- **Hiệu năng** (mục 6) — tuyến tính theo hàng chuẩn × quan sát; ở 5.000 gói, 20 dòng ⇒ ~22 s cho lượt chấm và ~19 s cho mỗi lần đọc as-of.
+  Ba phương án đưa chủ dự án: ⑴ nhận cho S4.5b, S4.5c tính một lần lúc `UNSEALED` và lưu; ⑵ thêm tham số gói cho `quan_sat_gia`; ⑶ trần số
+  hàng chuẩn mỗi lượt chấm. **Chủ dự án chọn ⑴** (mục 2.5) — S4.5b không đổi mã.
+- **Khoản 329** — màn `/chinh-sach` không gửi trọng số chấm; trên hạ tầng thật bước trao thầu của kịch bản §11 không đi được bằng giao diện.
+  Rổ A, PR riêng (mục 2.6).
+
+## 10. Số đo
+
+- Cây cuối (sau khi hợp `master` #228 — S1.254; cấp số `99ba914`): `pnpm t0` sạch (521 module, không vi phạm phụ thuộc); `pnpm test` 143 tệp,
+  2399 đạt, 1 bỏ qua; `pnpm cap-so --kiem` sạch (S1.256, ADR-142, khoản 329–331, migration `103`).
+- Lô tích hợp chạm vòng này, chạy riêng trên mã giữa vòng: `benchmark.int` 38/38, `rls-coverage.int` 61/61, `check-an-ninh.int` 4/4,
+  `hardening-suy-tu-tinh-chat.int` 38/38; `migrations.int` 124/128 ở lượt giữa vòng — ba danh sách migration viết tay thiếu `9501`
+  (sửa) và một ca lệch checksum do sửa migration giữa lúc chạy —, xanh trong lượt `pnpm evidence` dưới đây.
+- `pnpm evidence` toàn bộ T1–T3: lượt một trên `99ba914` — 4469 khẳng định, **1 đỏ** (ca lật `anh-xa.int` L1, mục 6); lượt hai trên `3660b41`
+  (`7063bc8` chỉ thêm dòng biên bản): 231 tệp, 4469 khẳng định, 4459 đạt, 10 bỏ qua (bộ đo mở thầu cỡ lớn chỉ bật theo biến môi trường),
+  **0 đỏ**; **79/79 bất biến** (57 nghiệp vụ + 22 hàng rào); L7 đo bằng 66 khẳng định, L14 bằng 13.
+- Hợp `master` #231 (S1.255 — khoản 325–328; chỉ chạm màn web, công cụ `pilot-gia-lap`, cổng câu cấm mới) trước khi mở PR: xung đột
+  chỉ ở ba tệp sổ (gỡ tay, `cap-so --dem` viết lại số đếm; số của nhánh không đổi); `pnpm t0` sạch (522 module); `pnpm test` 144 tệp, 2447
+  đạt, 1 bỏ qua — gồm `cau-cam-tren-giao-dien` trên màn `/chinh-sach` đã thêm nhóm khoá; `cap-so --kiem` sạch.
+
+# §S1.258 — KHOẢN 329: MÀN `/chinh-sach` KHAI TRỌNG SỐ CHẤM VÀ BAFO TOP-N — PHIÊN BẢN TẠO TRÊN MÀN CHẤM ĐƯỢC
+
+## 1. Vòng này là gì
+
+Khoản 329 (đo ở §S1.256, rổ A vế ⒜): thân `POST /policy` mà màn `/chinh-sach` gửi không mang `evalComponents`/`bafoTopN`, và
+`lietKePhienBanChinhSach` không trả hai cột ấy nên *Chép phiên bản mới nhất* cũng không chép được. Màn là giao diện DUY NHẤT của
+`POST /policy` trên hạ tầng thật; từ S4.5a (ADR-141) gói mở dưới một phiên bản không trọng số không bao giờ chấm được, nên bước *người
+mua chọn nhà cung cấp* của `docs/PRODUCT.md` §11 không đi được bằng giao diện. Một PR riêng, dựng chồng trên nhánh S4.5b (#232): hàng
+khoản 329 và nhóm khoá `benchmark` của màn sống ở đó. Không migration, không route mới.
+
+## 2. Quyết định của chủ dự án (2026-10-01)
+
+1. Khoản 329 vào rổ A, sửa ở một PR riêng ngay (§S1.256 mục 2.6).
+2. Thành phần trọng số CỐ ĐỊNH, hiện chỉ-đọc — đúng vế hẹp lượt chấm đọc được hôm nay; BAFO top-N là ô sửa được (≥ 0). Ô *Khai trọng số
+   chấm* bật sẵn ở mẫu; bỏ chọn thì cảnh báo tĩnh. *Chép* mang nguyên trọng số của bản mới nhất; dạng lạ hiện chỉ-đọc kèm cảnh báo.
+3. Nhánh mới xếp chồng trên nhánh S4.5b; PR nhắm nhánh S4.5b, đổi base sang `master` khi #232 merge.
+
+## 3. Đo trước
+
+1. Lượt chấm (`luot-danh-gia.ts`, `docChinhSach`) nhận đúng MỘT thành phần, mã `MA_THANH_PHAN_GIA` (`gia`), đơn vị `TIEN`; mọi dạng
+   khác dừng ở `THANH_PHAN_CHUA_CO_NGUON`. Với một thành phần, hệ số không đổi thứ hạng.
+2. `bafo_top_n = 0` là quy ước *"không dùng BAFO"* (`056`); `vong-bafo.ts` từ chối mở vòng ở `0` hay `null`.
+3. `056` đòi `(eval_components IS NULL) = (bafo_top_n IS NULL)`; `packages/rfq` ném lỗi có tên khi chỉ một trong hai có mặt.
+4. `gieo:demo` khai `TRONG_SO_DEMO = [{gia, TIEN, 1.0000}]`, `BAFO_TOP_N_DEMO = 2` (S4.5a) — kịch bản 41 và lượt diễn tập chấm được nhờ nó.
+
+## 4. Thay đổi
+
+- **`packages/rfq/src/procurement-policy.ts`**: `lietKePhienBanChinhSach` đọc `eval_components`, `bafo_top_n`; `PhienBanChinhSach` có
+  `evalComponents`, `bafoTopN`.
+- **`apps/web/src/chinh-sach.ts`**: `TRONG_SO_MAC_DINH`, `BAFO_TOP_N_MAC_DINH` (bản chép của mẫu `gieo:demo`), `trongSoChamDuoc` (vế
+  hẹp), `canhBaoTrongSo` (không khai; ngoài vế hẹp), `moTaTrongSo`.
+- **Màn** (`chinh-sach.html`, `chinh-sach.js`): khối *Chấm thầu* — ô chọn, thành phần chỉ-đọc, ô BAFO top-N; *Điền mẫu*, *Chép* mang cặp;
+  chọn lại ô khi top-N trống thì ô nhận mẫu (hiện trong ô, sửa được); thân `POST /policy` mang cặp, hay cặp `null` khi bỏ chọn; bảng
+  phiên bản có cột *Chấm thầu*; cảnh báo gộp vào khối cảnh báo không chặn.
+
+## 5. Điểm tôi tự chốt trong phạm vi đã duyệt
+
+- Top-N gửi đúng như người gõ (`Number`), ô trống ⇒ `null`: luật là của `packages/rfq` và `056`, máy chủ nói bằng lời của nó.
+- Không cảnh báo cho top-N = 0 hay 1: cả hai là cấu hình hợp lệ, không có căn cứ trong spec để gọi chúng rỗng ruột.
+- Phép kiểm vế hẹp của màn là bản chép của phép kiểm trong `docChinhSach`; neo mã vào `MA_THANH_PHAN_GIA` ở `bac-mac-dinh-dong-bo`.
+
+## 6. Đo
+
+- **Trang** (`apps/web/src/phuc-vu.test.ts`, chạy chính `chinh-sach.js` trên DOM giả): ⑴ mẫu ⇒ thân mang `[{gia, TIEN, 1.0000}]` và
+  top-2, khối chỉ-đọc đúng hai ô, không cảnh báo trọng số; ⑵ *Chép* bản có trọng số top-3 ⇒ thân mang đúng cặp ấy, bảng phiên bản hiện
+  *"gia/TIEN ×1.0000 · BAFO top-3"*; chép bản không trọng số ⇒ ô bỏ chọn, thân cặp `null`, cảnh báo; ⑶ bỏ chọn ⇒ cặp `null` và cảnh báo;
+  chọn lại khi ô trống ⇒ `2`; top-N `0` gửi `0`; trọng số hai thành phần chép NGUYÊN VĂN, kèm cảnh báo *"bị từ chối khi chấm"*.
+- **Đơn vị** (`apps/web/src/chinh-sach.test.ts`): vế hẹp, bốn dạng ngoài vế hẹp, hệ số khác 1 vẫn là vế hẹp, mô tả ba ca.
+- **Đồng bộ** (`tests/architecture/bac-mac-dinh-dong-bo.test.ts`): mẫu = `TRONG_SO_DEMO`, top-N = `BAFO_TOP_N_DEMO`, mã/đơn vị =
+  `[MA_THANH_PHAN_GIA, TIEN]`, và `trongSoChamDuoc` theo `MA_THANH_PHAN_GIA`.
+- **Tích hợp** (`apps/api/src/buyer.int.test.ts`, ca *cờ TẮT*): phiên bản 2 khai qua HTTP với `bafoTopN: 0`; `GET /policy/versions`
+  trả `[TRONG_SO, 0]` cho bản 2 và `[null, null]` cho bản 1.
+
+## 7. Đột biến
+
+Mỗi lần sửa một chỗ, chạy ba tệp test của mục 6 (M10: ca tích hợp), khôi phục tệp từ bản sao trong bộ nhớ. 10 đột biến, 10 đỏ.
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| M1 | thân `POST /policy` không mang cặp | ĐỎ — 3 |
+| M2 | *Chép* không mang cặp | ĐỎ — 2 |
+| M3 | *Điền mẫu* không đặt cặp | ĐỎ — 1 |
+| M4 | không gộp cảnh báo trọng số | ĐỎ — 2 |
+| M5 | bỏ chọn vẫn gửi trọng số | ĐỎ — 2 |
+| M6 | vế hẹp bỏ kiểm đơn vị | ĐỎ — 1 |
+| M7 | hệ số mẫu `1.00` thay `1.0000` | ĐỎ — 4 |
+| M8 | chọn lại không điền mẫu top-N | ĐỎ — 1 |
+| M9 | bảng phiên bản không hiện cột | ĐỎ — 1 |
+| M10 | `lietKePhienBanChinhSach` trả `evalComponents: null`, `bafoTopN: x \|\| null` | ĐỎ — `buyer.int` |
+
+## 8. Giới hạn, nói ra
+
+- Thành phần không sửa được trên màn. `docs/PRODUCT.md` nguyên tắc 5 đòi trọng số chấm cấu hình được theo doanh nghiệp: với MỘT thành phần
+  thì không có lựa chọn trọng số nào để cấu hình, và `POST /policy` vẫn nhận mọi dạng `057` cho phép. Ngày điểm phi giá có nguồn (màn
+  chấm của S2.4), màn phải cho sửa thành phần.
+- Không test nào nối thân trang với lượt chấm trong MỘT lượt chạy: chuỗi là trang → `TRONG_SO_MAC_DINH` (test trang) → `TRONG_SO_DEMO`
+  và `MA_THANH_PHAN_GIA` (đồng bộ) → lượt chấm chấm được trên đúng giá trị ấy (kịch bản 41 qua HTTP, với thân viết tay cùng giá trị
+  `[{gia, TIEN, 1.0000}]`, top-2 — không import mẫu; `gieo:demo` import `TRONG_SO_DEMO`).
+- Phiên bản đã tạo trên màn TRƯỚC vòng này vẫn không trọng số; gói đã mở dưới chúng không chấm được (ADR-141). Lối ra là phiên bản mới
+  cho gói mở SAU nó.
+
+## 9. Số đo và số hiệu
+
+- `pnpm t0` sạch (522 module); `pnpm test` 144 tệp, 2458 đạt, 1 bỏ qua; ca `buyer.int` *cờ TẮT* xanh trên Postgres 16; `cap-so --kiem` sạch.
+- Số: `pnpm cap-so --base origin/claude/s4-4b-price-history-l5g5lj` (nhánh chồng) cấp S1.258 — S1.257 do nhánh khác giữ. Lần chạy
+  đầu với base mặc định `origin/master` thu hồi cả số của S4.5b (cùng số tạm vòng 9101), từ chối ghi vì hai đầu mục trùng, nhưng đã đẩy
+  lời giữ lên remote cho ADR-143, khoản 334–336, migration 104 — nhánh này không dùng số nào trong đó. Nhả chúng là xoá năm nhánh
+  `cap-so/*` trên remote: chờ chủ dự án.

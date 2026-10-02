@@ -481,6 +481,19 @@ const LUONG = [
   ["S3 — tổ chức ĐÃ BẬT qua route ký, cờ ký bật", true],
 ] as const;
 
+/**
+ * [S1.256 / S4.5b] Nhóm khoá `benchmark` đi qua `POST /policy` thật — mẫu của spec S4 §4.1. Lượt chấm của bước 12b vì thế GHI hàng
+ * kết quả benchmark, và bộ quét giá ở cuối kịch bản chạy SAU một lần ghi thật (spec §2.5 ⒅).
+ */
+const BENCHMARK_KB41 = {
+  cua_so_thang: "12",
+  san_goi: "3",
+  san_ncc: "3",
+  nguong_lech_vua: "0.05",
+  nguong_lech_cao: "0.10",
+  phuong_phap: "TRUNG_VI_THEO_GOI_V1",
+} as const;
+
 /** [S1.174 / S3.1d] Ma trận bậc mặc định §4.1 và hai cột mức — thân `POST /policy` của luồng S3. */
 const BAC_S3 = { tiers: BAC_MAC_DINH, chiaNhoCuaSoNgay: MUC_MAC_DINH.chiaNhoCuaSoNgay, thamDinhHieuLucThang: MUC_MAC_DINH.thamDinhHieuLucThang };
 
@@ -493,7 +506,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     // [S1.107 / lượt soi ngang 77 — CAO ②] Chính sách NAY khai trọng số qua HTTP. Trước vòng này
     // `createProcurementPolicy` không có đường ghi `eval_components`, nên mọi tổ chức tạo qua
     // sản phẩm đều KHÔNG chấm thầu được — và không cổng nào thấy, vì mọi fixture ghi SQL thẳng.
-    const cs = await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) });
+    const cs = await goi("POST", "/policy", trangThai.taiChinh.cookie, { version: 1, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, benchmark: BENCHMARK_KB41, ...(batS3 ? BAC_S3 : {}) });
     expect(cs.status, cs.text).toBe(201);
     if (batS3) {
       // [S1.174 / S3.1d] Luồng S3: người tài chính THỨ HAI ký qua route ký (cờ bật) ⇒ lần ký đầu tiên của một phiên bản có
@@ -790,7 +803,7 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
             path: r.path,
             // [S1.174 / S3.1d] Tổ chức đã bật từ chối phiên bản không bậc (`069`), nên luồng S3 gửi kèm bậc. Bản v2 ấy CHƯA
             // KÝ nên không hiệu lực: luồng S3 chấm thầu trên bản 1 — cũng khai trọng số ở bước 1.
-            body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, ...(batS3 ? BAC_S3 : {}) },
+            body: { version: 2, dualApprovalThreshold: "500000000.00", currency: "VND", evalComponents: [{ ma: "gia", don_vi: "TIEN", he_so: "1.0000" }], bafoTopN: 2, benchmark: BENCHMARK_KB41, ...(batS3 ? BAC_S3 : {}) },
             cookie: trangThai.taiChinh.cookie,
             sau: (ph) => {
               if (ph.status === 201) hy.policyId = (ph.body as { policy: { id: string } }).policy.id;
@@ -1862,6 +1875,12 @@ describe.each(LUONG)("[KỊCH BẢN 41 — QUA HTTP · %s] RFQ 1 tỷ, 5 nhà cu
     //                               (057), đọc qua `bid.view` ở `docBangXepHang`.
     // Tập viết VÉT CẠN chứ không "chứa": một bảng THỨ BA mai sau phải làm dòng này ĐỎ.
     expect(dinh).toEqual(["rfq_evaluation_lines", "rfq_unsealed_bids"]);
+    // [S1.256 / S4.5b] Phép quét trên chạy SAU một lần ghi benchmark thật — hai bảng kết quả có hàng, và không bảng nào trong hai
+    // bảng ấy mang giá (spec §2.5 ⒅; ADR-142: không cột tiền).
+    const bm = (
+      await db.pool.query<{ a: string }>("SELECT count(*)::text AS a FROM public.price_benchmark_results")
+    ).rows[0]!;
+    expect(Number(bm.a), "lượt chấm của kịch bản đã ghi hàng benchmark").toBeGreaterThan(0);
     // [S1.251 / S4.4b] Kim ĐƠN GIÁ (spec S4 §2.5 ⒅). Đơn giá chỉ đứng trong `lines[].unitPrice` của bản rõ: lượt chấm đọc TỔNG
     // và không để lại đơn giá; lịch sử giá là một HÀM, không lưu gì (ADR-095) — dù đã được đọc bốn lần ở trên.
     expect(donGiaCua(GIA_SUA_LAI)).toBe("9300000.00");

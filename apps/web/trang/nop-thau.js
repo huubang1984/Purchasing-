@@ -49,7 +49,16 @@ async function goi(method, duong, than) {
   return { status: res.status, body, chu };
 }
 
+// [S1.255 / khoản 326] Khuôn khoản 323 (S1.254, `mo-thau.js`, `tao-thau.js`) cho trang này: thân 403 của `apps/api` là MỘT
+// hằng không dấu, cố ý không nói thiếu quyền nào (khoản 191); trang nói thay bằng việc vừa bấm. Mọi thân lỗi khác — kể cả
+// 403 `nguon khong duoc phep` của lớp chống CSRF theo origin — vẫn in nguyên văn.
+const THAN_403 = "khong co quyen";
+
 function loiCua(r, macDinh) {
+  if (r.status === 403 && r.body?.error === THAN_403) {
+    return `${macDinh}: phiên nộp thầu này không có quyền làm việc này. Mở lại đúng link mời bên mua gửi; ` +
+      "vẫn bị từ chối thì báo cho bên mua.";
+  }
   if (r.body !== null && typeof r.body === "object" && typeof r.body.error === "string") return r.body.error;
   return `${macDinh} (mã ${r.status})`;
 }
@@ -263,8 +272,12 @@ async function napGoiThau() {
     const o = document.createElement("input");
     o.inputMode = "numeric"; o.autocomplete = "off"; o.placeholder = "0"; o.dataset.lineNo = String(it.lineNo);
     o.addEventListener("input", tinhLai);
-    const tdGia = document.createElement("td"); tdGia.className = "so"; tdGia.append(o);
-    tr.append(td(`${it.lineNo}. ${it.description}`), td(String(Number(it.quantity)), "so"), td(it.unit ?? ""), tdGia);
+    const tdGia = document.createElement("td"); tdGia.className = "so gia"; tdGia.append(o);
+    // [S1.254 / khoản 322] Nhãn của từng ô cho màn hẹp: dưới 480px (`chung.css`) mỗi hạng mục là một khối và đầu bảng ẩn đi.
+    const sl = td(String(Number(it.quantity)), "so sl"); sl.dataset.nhan = "SL";
+    const dvt = td(it.unit ?? "", "dvt"); dvt.dataset.nhan = "ĐVT";
+    tdGia.dataset.nhan = "Đơn giá";
+    tr.append(td(`${it.lineNo}. ${it.description}`), sl, dvt, tdGia);
     tbody.append(tr);
   }
   tinhLai();

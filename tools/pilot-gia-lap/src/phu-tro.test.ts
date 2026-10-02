@@ -1,9 +1,10 @@
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CsdlError, kiemUrlCucBo, urlVaiDangNhap } from "./csdl.js";
-import { CONG_MAC_DINH, CumError, kiemThuMucTrangThai, moiTruongSach, moiTruongTienTrinh, type BiMatCum } from "./cum.js";
+import { CONG_MAC_DINH, CumError, canhBaoAclWindows, kiemThuMucTrangThai, moiTruongSach, moiTruongTienTrinh, type BiMatCum } from "./cum.js";
 import { giaiMaBase32, maTotpHienTai } from "./dien-vien.js";
 import { HopThu, docTin, tokenTuLink } from "./hop-thu.js";
 import { diaChiGiaLap } from "./http.js";
@@ -82,6 +83,38 @@ describe("trạng thái trình diễn", () => {
     for (const sai of ["/kho", "/kho/demo", "/kho/..la", "/kho/tools/pilot-gia-lap"]) {
       expect(() => kiemThuMucTrangThai("/kho", sai), sai).toThrow(CumError);
     }
+  });
+
+  // [S1.255 / khoản 328] Đo trên Windows thật: kho trên `D:\`, gốc ổ cho `Authenticated Users` quyền sửa và `Users` quyền đọc, máy có
+  // hai tài khoản — thư mục trạng thái thừa hưởng ACL ấy (`mode: 0o700` bị Windows bỏ qua), và công cụ không nói gì. Kế hoạch §4
+  // đã khuyên đặt kho dưới hồ sơ người dùng; nay công cụ nói ra khi dựng cụm ngoài hồ sơ ấy.
+  it("[khoản 328] Windows: thư mục trạng thái NGOÀI hồ sơ người dùng ⇒ câu cảnh báo nêu thư mục, `icacls`, `--thu-muc`; trong hồ sơ ⇒ không", () => {
+    const hoSo = String.raw`C:\Users\nguye`;
+    const ngoaiHoSo = String.raw`D:\Claude\TrustProcure\.pilot-gia-lap`;
+    const cb = canhBaoAclWindows("win32", ngoaiHoSo, hoSo);
+    expect(cb).not.toBeNull();
+    expect(cb).toContain(ngoaiHoSo);
+    expect(cb).toContain("icacls");
+    expect(cb).toContain("--thu-muc");
+    expect(cb).toContain("cum.json");
+    for (const trong of [String.raw`C:\Users\nguye\.pilot-gia-lap`, String.raw`C:\Users\nguye\code\kho\.pilot-gia-lap`, String.raw`c:\users\NGUYE\x`, hoSo]) {
+      expect(canhBaoAclWindows("win32", trong, hoSo), trong).toBeNull();
+    }
+    // Bẫy tiền tố: `C:\Users\nguye2` KHÔNG nằm dưới `C:\Users\nguye`; thư mục cha, ổ khác, hay `..` thoát ra cũng vậy.
+    for (const ngoai of [String.raw`C:\Users\nguye2\.pilot-gia-lap`, String.raw`C:\Users`, String.raw`E:\Users\nguye\x`, String.raw`C:\Users\nguye\..\rdp\x`]) {
+      expect(canhBaoAclWindows("win32", ngoai, hoSo), ngoai).not.toBeNull();
+    }
+    // POSIX: bit 0700 có tác dụng (`docBiMat` chmod) — không cảnh báo, dù thư mục ở đâu.
+    expect(canhBaoAclWindows("linux", "/srv/kho/.pilot-gia-lap", "/home/u")).toBeNull();
+    expect(canhBaoAclWindows("darwin", "/Volumes/x/.pilot-gia-lap", "/Users/u")).toBeNull();
+  });
+
+  it("[khoản 328] lúc dựng cụm (`chuanBiCum` — lệnh chạy và `cum`) cảnh báo đi ra stderr, với thư mục trạng thái và hồ sơ của MÁY", () => {
+    const ma = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const dau = ma.indexOf("async function chuanBiCum(");
+    expect(dau, "đối chứng: còn hàm chuanBiCum").toBeGreaterThan(0);
+    const than = ma.slice(dau, ma.indexOf("\n}\n", dau));
+    expect(than).toMatch(/const canhBao = canhBaoAclWindows\(process\.platform, thuMuc, homedir\(\)\);\s*if \(canhBao !== null\) bao\(canhBao\);/u);
   });
 });
 
