@@ -55,7 +55,7 @@ import pg from "pg";
 import { ReceiptSigningKeyRing, createLocalDevReceiptSigner, type ReceiptKeyPair, type ReceiptSigner } from "@trustprocure/bidding";
 import { createLocalDevOrgKeyProvisioner, MasterKeyRing } from "@trustprocure/crypto-keys";
 import { migrate } from "@trustprocure/db";
-import { chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
+import { NHOM_BENCHMARK_MAU, chuanHoaSauNop, khaiBiDanhHang, khaiQuyDoiRieng, taoHangChuan } from "@trustprocure/du-lieu-nen";
 import { issueLoginToken } from "@trustprocure/identity";
 import { createInvitation, danhDauDaGui, ducTokenKhiMoGoi, issueMagicLinkToken } from "@trustprocure/invitation";
 import {
@@ -347,6 +347,8 @@ async function chinh(): Promise<void> {
               tiers: BAC_DEMO,
               evalComponents: TRONG_SO_DEMO,
               bafoTopN: BAFO_TOP_N_DEMO,
+              // [S1.256 / S4.5b] Nhóm khoá `benchmark` — MẪU của spec S4 §4.1, cùng mẫu màn `/chinh-sach` điền sẵn.
+              benchmark: NHOM_BENCHMARK_MAU,
               chiaNhoCuaSoNgay: MUC_DEMO.chiaNhoCuaSoNgay,
               thamDinhHieuLucThang: MUC_DEMO.thamDinhHieuLucThang,
               actorSessionId: f1.sessionId,
@@ -358,8 +360,9 @@ async function chinh(): Promise<void> {
         })()
       : (await q<{ id: string }>(
           "INSERT INTO public.org_procurement_policies (org_id, version, dual_approval_threshold, currency, eval_components, bafo_top_n, " +
-            "created_by, created_by_session_id) VALUES ($1, 1, '1000000000.00', 'VND', $2::pg_catalog.jsonb, $3::pg_catalog.int4, $4, $5) RETURNING id",
-          [org, JSON.stringify(TRONG_SO_DEMO), BAFO_TOP_N_DEMO, nguoiGieo, phienGieo],
+            "benchmark, created_by, created_by_session_id) " +
+            "VALUES ($1, 1, '1000000000.00', 'VND', $2::pg_catalog.jsonb, $3::pg_catalog.int4, $4::pg_catalog.jsonb, $5, $6) RETURNING id",
+          [org, JSON.stringify(TRONG_SO_DEMO), BAFO_TOP_N_DEMO, JSON.stringify(NHOM_BENCHMARK_MAU), nguoiGieo, phienGieo],
         )).id;
 
     // [S1.201 / S3.6a] `--s3`: F1 (FINANCE, giữ `category.manage`) dựng nhóm hàng bằng hàm gói — tổ chức đã bật không nộp duyệt

@@ -150,3 +150,69 @@ export function soNguoiToiThieu(bac: readonly Bac[], nguongKep: string): readonl
     return { tuSoTien: b.tu_so_tien, loai: "NGUOI", nguoi: { finance, muaSam, giamDoc, tong: finance + muaSam + giamDoc, chuKyMoGoi: s } };
   });
 }
+
+// ----------------------------------------------------------------------------------------------
+// [S1.256 / S4.5b] NHÓM KHOÁ `benchmark` — MẪU ĐIỀN SẴN VÀ CẢNH BÁO TĨNH (spec S4 §4.1, §2.5 ㉒)
+// ----------------------------------------------------------------------------------------------
+// Mẫu là mặc định GIẢ ĐỊNH của spec S4 §4.1 — bản chép của `NHOM_BENCHMARK_MAU` (`packages/du-lieu-nen/src/benchmark.ts`), khoá
+// với nó ở `tests/architecture/bac-mac-dinh-dong-bo.test.ts`: màn không import được gói. Cảnh báo là lời nói với người khai, không
+// chặn: tập khoá, biên và thứ tự ngưỡng là của `CHECK` `org_procurement_policies_benchmark_hinh_dang`, và máy chủ nói điều ấy.
+// Phần *"tác động trên lịch sử thật"* (bao nhiêu gói của tổ chức sẽ đổi nhãn) chờ S4.5c — nó cần một đường đọc có cổng.
+
+/** Nhóm khoá `benchmark` như CSDL cất: sáu khoá, mọi giá trị là chuỗi. */
+export interface NhomBenchmark {
+  readonly cua_so_thang: string;
+  readonly san_goi: string;
+  readonly san_ncc: string;
+  readonly nguong_lech_vua: string;
+  readonly nguong_lech_cao: string;
+  readonly phuong_phap: string;
+}
+
+export const BENCHMARK_MAC_DINH: NhomBenchmark = {
+  cua_so_thang: "12",
+  san_goi: "3",
+  san_ncc: "3",
+  nguong_lech_vua: "0.05",
+  nguong_lech_cao: "0.10",
+  phuong_phap: "TRUNG_VI_THEO_GOI_V1",
+};
+
+/** Biên của cảnh báo — GIẢ ĐỊNH, cùng hạng mặc định: hiệu chỉnh sau pilot. Ngưỡng tỉ lệ 10^4 (bốn chữ số lẻ, `103`). */
+const SAN_TOI_THIEU = 3;
+const NGUONG_VUA_RONG = 2000n;
+const CUA_SO_DAI = 24;
+const CUA_SO_NGAN = 3;
+
+/** Chuỗi chữ số → số; mọi dạng khác (kể cả chuỗi rỗng) → `null`. */
+const nguyenTuChuoi = (chuoi: string): number | null => (/^[0-9]{1,4}$/u.test(chuoi.trim()) ? Number(chuoi.trim()) : null);
+
+/**
+ * Cảnh báo tĩnh cho nhóm khoá đang soạn — một câu mỗi điều. `null`: phiên bản KHÔNG cấu hình benchmark. Giá trị không đọc được
+ * thì im — máy chủ từ chối nó bằng lời của chính nó.
+ */
+export function canhBaoBenchmark(nhom: NhomBenchmark | null): readonly string[] {
+  if (nhom === null) {
+    return [
+      "Phiên bản này KHÔNG cấu hình benchmark: mọi gói mở dưới nó hiện «chưa cấu hình» ở bảng so sánh và lượt chấm, kể cả khi phiên bản trước có cấu hình.",
+    ];
+  }
+  const ra: string[] = [];
+  const goi = nguyenTuChuoi(nhom.san_goi);
+  const ncc = nguyenTuChuoi(nhom.san_ncc);
+  if ((goi !== null && goi < SAN_TOI_THIEU) || (ncc !== null && ncc < SAN_TOI_THIEU)) {
+    ra.push(`Sàn dưới ${String(SAN_TOI_THIEU)} gói hay ${String(SAN_TOI_THIEU)} nhà cung cấp: một hai người quen báo giá là đủ đặt cả dải mà gói sau bị so.`);
+  }
+  const vua = sangNguyen(nhom.nguong_lech_vua, 4);
+  if (vua !== null && vua >= NGUONG_VUA_RONG) {
+    ra.push("Ngưỡng lệch vừa từ 20% trở lên: một giá lệch tới mức ấy so với trung vị vẫn hiện «trong dải lịch sử».");
+  }
+  const cuaSo = nguyenTuChuoi(nhom.cua_so_thang);
+  if (cuaSo !== null && cuaSo > CUA_SO_DAI) {
+    ra.push(`Cửa sổ dài hơn ${String(CUA_SO_DAI)} tháng: giá cũ kéo trung vị, nhất là khi giá thị trường đã đổi.`);
+  }
+  if (cuaSo !== null && cuaSo < CUA_SO_NGAN) {
+    ra.push(`Cửa sổ ngắn hơn ${String(CUA_SO_NGAN)} tháng: ít gói vào dải, và nhãn thường là «chưa đủ lịch sử».`);
+  }
+  return ra;
+}

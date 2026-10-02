@@ -1118,6 +1118,12 @@ const DANH_SACH_TRANG_DU_LIEU_NEN = [
   // [S1.251 / S4.4b] Lịch sử giá của một hàng chuẩn — hàm đọc CÓ CỔNG `bid.view` và tập đóng sáu trạng thái của `quan_sat_gia`.
   "TRANG_THAI_QUAN_SAT",
   "docLichSuGia",
+  // [S1.256 / S4.5b] Benchmark: mẫu nhóm khoá (MẪU điền sẵn, không mặc định ngầm), bộ đọc nhóm khoá, phép tính của một gói (không
+  // cổng — hai chỗ gọi có cổng, ghim ở `ban-ro-liet-ke.test.ts`) và phép ghi trong giao dịch tạo lượt chấm.
+  "NHOM_BENCHMARK_MAU",
+  "docNhomBenchmark",
+  "ghiBenchmarkLuotCham",
+  "tinhBenchmarkGoi",
 ];
 
 // [S1.203 / S3.6b1] Lớp có trạng thái của các chốt S3 (spec S3 §3.2): hôm nay là tín hiệu chia nhỏ và lần ghi nhận của nó.
@@ -1171,6 +1177,10 @@ const DANH_SACH_TRANG_DANH_GIA = [
   "TEP_DU_LIEU",
   "dungBoBangChung",
   "xuatBoBangChung",
+  // [S1.256 / S4.5b] Đường ĐỌC benchmark của một gói — cổng `bid.view` thẳng trong thân, hàng sổ `BENCHMARK_READ`; hằng là tập
+  // trạng thái gói mà benchmark tính as-of ở mỗi lần đọc.
+  "TRANG_THAI_BENCHMARK_AS_OF",
+  "docBenchmark",
 ];
 
 const DANH_SACH_TRANG_TENANCY = [

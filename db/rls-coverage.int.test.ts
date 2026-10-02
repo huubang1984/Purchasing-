@@ -805,6 +805,10 @@ describe("phủ RLS", () => {
       // vì lý do sai — test đảo chiều đang canh nó vẫn đúng.
       { grantee: "app_api", bang: "outbox_jobs", quyen: "SELECT" },
       { grantee: "app_api", bang: "permissions", quyen: "SELECT" },
+      // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột (không `id`, không
+      // `ghi_luc`), không UPDATE/DELETE. `app_unseal` không có dòng nào.
+      { grantee: "app_api", bang: "price_benchmark_inputs", quyen: "SELECT" },
+      { grantee: "app_api", bang: "price_benchmark_results", quyen: "SELECT" },
       // [S1.201 / S3.6a] Nhóm hàng và lần đổi trạng thái: CHỈ ĐỌC ở mức bảng; ghi thêm bằng quyền theo cột, không UPDATE/DELETE.
       { grantee: "app_api", bang: "procurement_categories", quyen: "SELECT" },
       { grantee: "app_api", bang: "procurement_category_changes", quyen: "SELECT" },
@@ -1227,6 +1231,8 @@ describe("phủ RLS", () => {
       // UPDATE, cùng lý do đã ghi cho `strict_blind_mode`: bảng chỉ ghi thêm, đổi chính sách là thêm
       // một phiên bản.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "bafo_top_n", quyen: "INSERT" },
+      // [S1.256 / S4.5b] Nhóm khoá `benchmark` — cùng lý do: INSERT, không UPDATE.
+      { grantee: "app_api", bang: "org_procurement_policies", cot: "benchmark", quyen: "INSERT" },
       // [S1.156 / S3.1a] Bậc giá trị và hai cột mức chính sách — cùng lý do: INSERT, không UPDATE.
       { grantee: "app_api", bang: "org_procurement_policies", cot: "chia_nho_cua_so_ngay", quyen: "INSERT" },
       { grantee: "app_api", bang: "org_procurement_policies", cot: "created_by", quyen: "INSERT" },
@@ -1275,6 +1281,38 @@ describe("phủ RLS", () => {
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "INSERT" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "run_after", quyen: "UPDATE" },
       { grantee: "app_api", bang: "outbox_jobs", cot: "status", quyen: "UPDATE" },
+      // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: CHỈ INSERT, mọi cột trừ `id` và `ghi_luc` (khoá ngoại `…_cua_luot_cham_fk`).
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "anh_xa_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "hoi_to", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_inputs", cot: "tien_te", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "anh_xa_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "bid_version_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "canonical_item_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "chieu", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "cua_so_tu", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "evaluation_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "hoi_to", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "line_no", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "ly_do", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "moc_mo_gia", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "nhan", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "org_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "phuong_phap", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "policy_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "rfq_id", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_goi", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_goi_cung_nguoi_tao", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_loai_gia_0", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_loai_tien_te", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_ncc", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_quan_sat", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "so_quan_sat_hoi_to", quyen: "INSERT" },
+      { grantee: "app_api", bang: "price_benchmark_results", cot: "tien_te", quyen: "INSERT" },
       // [S1.2] `rfq_approvals` (009) — chi INSERT, dung bon cot. Khong UPDATE, khong DELETE.
       // [S1.201 / S3.6a] Nhóm hàng: CHỈ INSERT — không cột nào sửa tại chỗ; ngừng dùng và dùng lại là một hàng đổi mới, `thu_tu`
       // do CSDL đặt dưới khoá, người tạo và người đổi là dẫn xuất từ phiên (trigger `kiem_danh_tinh_theo_phien`).
@@ -2065,6 +2103,8 @@ const POLICY_RESTRICTIVE_DA_KHAI: Readonly<Record<string, PolicyRestrictiveKhai>
       "mfa_reset_requests", "org_key_pairs", "org_policy_signatures", "org_procurement_policies", "organizations",
       "otp_rate_limits",
       "outbox_jobs",
+      // [S1.256 / S4.5b] L6: không phiên khách nào đọc kết quả hay đầu vào benchmark — nhà cung cấp không thấy benchmark.
+      "price_benchmark_inputs", "price_benchmark_results",
       // [S1.201 / S3.6a] Nhóm hàng là việc nội bộ bên mua — nhà cung cấp không đọc được gói mình dự thuộc nhóm nào, hay nhóm nào
       // đã ngừng dùng.
       "procurement_categories", "procurement_category_changes",

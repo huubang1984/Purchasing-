@@ -54,6 +54,8 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   item_aliases_bi_danh_sach_da_lam_sach: "DINH_DANG",
   item_aliases_rut_khong_hang: "DINH_DANG",
   item_uom_conversions_hai_dau_khac: "DINH_DANG",
+  // [S1.256 / lượt soi S4.5b] Hệ số quy đổi riêng hữu hạn — `'NaN' > 0` là đúng trong Postgres.
+  item_uom_conversions_he_so_huu_han: "HUU_HAN",
   item_uom_conversions_rut_khong_he_so: "SO",
   item_uom_conversions_tu_don_vi_da_lam_sach: "DINH_DANG",
   master_key_check_values_kcv_check: "DO_DAI",
@@ -72,6 +74,9 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   // hàng, cùng khuôn `danh_gia_du_bo`. Bậc giá trị do trigger `chinh_sach_kiem_bac` phán xử, không ở đây.
   org_procurement_policies_bac_kem_muc_s3: "MOC",
   org_procurement_policies_bafo_top_n_khong_am: "SO",
+  // [S1.256 / S4.5b] Nhóm khoá `benchmark`: hình dạng và biên GIẢ ĐỊNH. Bộ đọc `docNhomBenchmark` phán lại từng khoá và NÉM khi lệch
+  // — gỡ ràng buộc này không làm nhãn nào tính trên ngưỡng lạ, chỉ làm lượt chấm dưới phiên bản ấy dừng.
+  org_procurement_policies_benchmark_hinh_dang: "JSON",
   org_procurement_policies_currency_check: "MIEN",
   org_procurement_policies_danh_gia_du_bo: "MOC",
   org_procurement_policies_dual_approval_threshold_check: "HUU_HAN",
@@ -91,6 +96,22 @@ const MIEN_TRU: Readonly<Record<string, keyof typeof LY_DO>> = {
   outbox_jobs_dedupe_key_check: "DO_DAI",
   outbox_jobs_kind_check: "DINH_DANG",
   outbox_jobs_last_failure_reason_check: "MIEN",
+  // [S1.256 / S4.5b] Kết quả và đầu vào benchmark: miền, đủ bộ, số. Luật chịu lực của L7 là phép tính lại; vế *"ghi một lần, cùng
+  // lượt chấm, cùng phiên bản ghim"* là khoá ngoại `…_cua_luot_cham_fk`, không phải `CHECK`.
+  price_benchmark_inputs_hoi_to_mien: "MIEN",
+  price_benchmark_inputs_line_no_duong: "SO",
+  price_benchmark_inputs_tien_te_mien: "MIEN",
+  price_benchmark_results_chieu_khi_lech: "MOC",
+  price_benchmark_results_chieu_mien: "MIEN",
+  price_benchmark_results_cua_so_truoc_moc: "MOC",
+  price_benchmark_results_do_duoc_du_bo: "MOC",
+  price_benchmark_results_hoi_to_mien: "MIEN",
+  price_benchmark_results_line_no_duong: "SO",
+  price_benchmark_results_ly_do_mien: "MIEN",
+  price_benchmark_results_nhan_mien: "MIEN",
+  price_benchmark_results_phuong_phap_mien: "MIEN",
+  price_benchmark_results_so_dem_khong_am: "SO",
+  price_benchmark_results_tien_te_mien: "MIEN",
   // [S1.201 / S3.6a] Mã và tên nhóm hàng — hình dạng dữ liệu. `loai` của lần đổi trạng thái nằm ở tập an ninh: bỏ nó thì một
   // hàng lạ làm `nhom_hang_con_dung` coi nhóm đã ngừng dùng là còn dùng.
   procurement_categories_ma_check: "DINH_DANG",
