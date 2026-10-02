@@ -469,6 +469,12 @@ export const SO_KHAI_NHAN: Readonly<Record<string, readonly string[]>> = {
     "packages/test-support/src/quet-gia.int.test.ts",
     // [lượt soi §S1.251 — T2] đường đọc DUY NHẤT của `quan_sat_gia`/`gia_da_lo` từ mã TypeScript sản xuất.
     "tests/architecture/ban-ro-liet-ke.test.ts",
+    // [S1.260 / S4.5c1] vế benchmark. `benchmark` đo ở tầng gói: đóng ở `BAFO_OPEN`/`BAFO_CLOSED` (cả bản lưu lẫn *Xem dải*), bản lưu
+    // của tầng CSDL buộc phiên bản ghim, và — sau rà soát — hai cuộc đua: cạnh trạng thái trong lúc tính (khoá hàng gói, đo bằng chờ
+    // khoá) và lần mở thầu commit sau lúc giao dịch đọc bắt đầu (`THU_LAI`). `benchmark-trang-thai-dong-bo` khoá tập trạng thái hiện
+    // với tập của bảng so sánh.
+    "packages/danh-gia/src/benchmark.int.test.ts",
+    "tests/architecture/benchmark-trang-thai-dong-bo.test.ts",
   ],
   // L14 — [S1.253 / S4.5a] vế lượt chấm. `luot-danh-gia` đo phiên bản ghim lúc gói mở ở tầng gói và tầng CSDL (phiên bản khai sau
   // lúc mở, hẹn giờ, lượt chấm lại sau BAFO, câu ghi thẳng, đột biến tắt trigger, đường ứng dụng ra `CONTROL_DENIED`).
