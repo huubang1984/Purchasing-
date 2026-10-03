@@ -24266,3 +24266,65 @@ tháng, biên ±1 µs, tiền tệ trước giá 0, loại X, ngưỡng) — 0 l
 - `pnpm evidence` toàn bộ: vitest thoát 0, 4616 khẳng định (4606 qua, 10 bỏ qua có khai), 79/79 bất biến (57 nghiệp vụ + 22 hàng rào),
   cổng evidence XANH; `evidence/INV-matrix.md` dựng lại.
 - Quy mô (mục 6): chấm 17,1 s; xuất 13,9–15,1 s; bundle 11,08 MB; `kiem` 1,13 s, lệch 0.
+
+# §S1.263 — `duyetTraoThau` GIỮ KHOÁ HÀNG RFQ: GIỚI HẠN CỦA KHOẢN 335 ĐO ĐƯỢC BẰNG HAI LỜI GỌI CÙNG LÚC, VÀ ĐÓNG — KHOẢN 338
+
+**Rổ và mảnh (ADR-043):** một khoản sinh và đóng trong vòng — để mở thì rổ B (huỷ trao thầu không nằm trên kịch bản §11).
+Không migration, không route, không ADR mới — một đoạn bổ sung ở ADR-057; không mảnh nào của `docs/PRODUCT.md` §11 đổi.
+
+## 1. Vòng này là gì
+Bước 2 của đề xuất sau §S1.261; chủ dự án, 2026-10-02: *"Làm 2: khoá hàng RFQ ở duyetTraoThau"*. §S1.261 mục 5 khai, đọc từ
+mã chứ không đo: `duyetTraoThau` không giữ khoá hàng RFQ (rút, huỷ, đề xuất đều giữ), nên một lần duyệt CHÍNH đề xuất được nêu
+chen được vào khe giữa phép so id và câu ghi của lần huỷ.
+
+## 2. Đo trước — giới hạn ấy là thật, và rộng hơn lời khai
+Ba ca mới trong `luot-danh-gia.int`, chạy HAI hàm sản xuất thật trên hai kết nối của `app_api`: bên trước ghi xong trong một
+giao dịch chưa commit, bên sau tới, test chờ tới khi `pg_locks` có một khoá chưa cấp rồi mới commit bên trước. Trên `172279e5`:
+- ⑴ duyệt trước, huỷ theo id của đề xuất tới sau ⇒ lần huỷ khoá được hàng RFQ ngay (lần duyệt không giữ), đọc hàng mới nhất là
+  đề xuất (hàng `APPROVED` chưa commit nên không thấy), qua phép so id, chờ ở khoá tư vấn của trigger, rồi THÀNH CÔNG — hàng
+  `CANCELLED` nằm sau hàng `APPROVED`. Đúng điều khoản 335 khai, đo bằng mã thật chứ không suy.
+- ⑵ huỷ trước, duyệt tới sau ⇒ lần duyệt chờ ở khoá tư vấn rồi chết bằng *"Chi duyet duoc mot de xuat dang o …"* — lỗi thô
+  23514 không tên, không mã lý do, không hàng sổ. Không có trao thầu sai nào, nhưng lời từ chối không đọc được và không vào sổ.
+- tuần tự — duyệt một đề xuất đã huỷ — cũng ra đúng lỗi thô ấy. Rộng hơn lời khai: chú thích của `duyetTraoThau` nói lời gọi
+  theo `awardId` *"bị chặn ngay vì hàng ấy không còn `PROPOSED`"*, nhưng `rfq_awards` chỉ-ghi-thêm — hàng đề xuất mang
+  `PROPOSED` mãi mãi; thứ chặn là trigger.
+
+## 3. Thay đổi
+`duyetTraoThau` (`packages/danh-gia/src/trao-thau.ts`), sau cổng quyền và TRƯỚC câu ghi chữ ký: khoá hàng RFQ
+(`FOR NO KEY UPDATE`, cùng câu với `huyTraoThau`), rồi đọc hàng mới nhất của gói; không phải đề xuất được nêu ⇒
+`TraoThauTuChoiError` `KHONG_CO_DE_XUAT_DANG_CHO` qua `nemTuChoi` (422, một hàng `RFQ_STATE_DENIED` {ma}) với câu *"Đề xuất
+này không còn là trao thầu mới nhất của gói — gói đã đổi từ lúc đọc (hàng mới nhất đang ở …). …"*.
+
+## 4. Điểm tôi tự chốt
+- Khoá đứng SAU cổng quyền, cùng thứ tự với `huyTraoThau`: người không giữ `po.approve` không giữ được hàng RFQ dù một khắc.
+- Phép so hàng mới nhất đứng SAU khoá — đột biến đảo thứ tự (so rồi mới khoá) đỏ ở ca ⑵.
+- Mã lý do dùng lại `KHONG_CO_DE_XUAT_DANG_CHO` — đúng nghĩa của nó, và cùng mã với hai lời từ chối sẵn có của hàm.
+- Không đổi trigger: nó vẫn là lớp có thẩm quyền; lớp gói nay chỉ làm lời từ chối có tên và xếp hàng đúng khoá.
+
+## 5. Đo
+- **Đỏ trước:** ba ca mới đỏ trên `172279e5` như mục 2. **Trọn tệp trên mã cuối:** `luot-danh-gia.int` 118/118, `buyer.int`
+  29/29, `loi-giao-thuc.int` 20/20, `kich-ban-41-http.int` 77/77, `bo-xuat.int` 9/9; câu SQL mới qua `qt3-cu-phap.int` 1/1 và
+  `qt3-ngu-phap.int` 7/7.
+- **Đột biến** (trọn `luot-danh-gia.int`, 118 ca; bản gốc và bản sau 0 đỏ; khôi phục kiểm sha256): K1 bỏ `FOR NO KEY UPDATE`
+  ⇒ ⑴ ⑵ đỏ; K2 khoá yếu `FOR KEY SHARE` ⇒ ⑴ ⑵ đỏ; K3 bỏ phép so hàng mới nhất ⇒ ⑵ và ca tuần tự đỏ; K4 so RỒI mới khoá ⇒ ⑵
+  đỏ; K5 câu từ chối không nói vì sao ⇒ ⑵ đỏ — 5/5 đúng tập dự kiến. K4 là phép đo của thứ tự: một phép so đứng trước khoá
+  đọc thế giới trước khi lần huỷ commit.
+
+## 6. Giới hạn, nói ra
+- Cái giá: lần duyệt xếp hàng sau mọi đường đang giữ cùng hàng RFQ (rút, huỷ, đề xuất, và các đường khác khoá gói). Không đo
+  thời gian chờ dưới tải.
+- Câu từ chối mới đi qua API nguyên văn; trang `/login` in nó ở bước 7 qua `loiCua` — không đi lại trên trình duyệt ở vòng này.
+- Từ §S1.260, lần đọc benchmark ở `/mo-thau` giữ `FOR SHARE` trên hàng gói rồi hỏi lại trước khi ghi; khoá ấy xung khắc với
+  `FOR NO KEY UPDATE`, nên lần duyệt nay cũng chờ một lần đọc benchmark đang chạy, và ngược lại. Đọc từ mã, không đo.
+
+## 7. Số đo
+- Nhánh xếp chồng trên #237 (§S1.261). #237 gộp master #235 (§S1.260) ở `8e20f2b6`: xung đột chỉ ở ba tệp sổ, giữ cả hai vế;
+  `pnpm t0`, `cap-so --kiem` xanh; `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4582 khẳng
+  định, 79/79 bất biến, 2181 giây, `evidence/INV-matrix.md` không đổi — số đo của lượt gộp ấy ghi ở đây để #237 không phải
+  đẩy thêm một commit chỉ chứa số đo.
+- `cap-so --base origin/huy-trao-thau-theo-id` (nhánh chồng) cấp S1.263 và khoản 338 (trailer `Cap-So` ở `4592fe57`);
+  `cap-so --kiem` sạch; Handoff 337 khoản, 53 còn mở.
+- Trên `f8db6d7d` (cùng mã, trước lần cấp số — lần cấp chỉ đổi nhãn số trong chú thích, tên test và tài liệu): `pnpm t0` xanh;
+  `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ; `pnpm evidence`: vitest thoát mã 0, 4585 khẳng định, 79/79 bất biến (57/57 nghiệp
+  vụ + 22/22 hàng rào), 1987 giây; `evidence/INV-matrix.md` không đổi. Trên `4592fe57`: `pnpm t0`, `cap-so --kiem` xanh;
+  `pnpm test` 146 tệp, 2471 ca đạt, 0 đỏ.
